@@ -9786,6 +9786,7 @@ window.onload=function(){
   if(typeof _fetchRealtimeNews === 'function') _fetchRealtimeNews();
   setTimeout(function(){ if(typeof initCommunityPosts==='function') initCommunityPosts(); }, 1500);
   setTimeout(function(){ if(typeof initLiveTalk==='function') initLiveTalk(); }, 800);  // ★ 실시간 톡 시작
+  setTimeout(function(){ if(typeof _startServerSync==='function') _startServerSync(); }, 1500);  // ★ 서버 동기화 시작
   setTimeout(function(){ if(typeof _renderFavRecent==='function') _renderFavRecent(); }, 500);  // ★ 즐겨찾기/최근경로
   setTimeout(function(){ if(typeof renderHorizontalTimeline==='function') renderHorizontalTimeline(); }, 600);  // ★ 경로 노선도 빈 상태 표시
   // 30분마다 실시간 뉴스 갱신
@@ -14462,6 +14463,107 @@ window._etaBus = _etaBus;
 // 동일 배열(_LIVE_TALK)을 공유하여 양쪽이 실시간 동기화
 // ══════════════════════════════════════════════════════════════
 var _LIVE_TALK = [];
+
+// ══════════════════════════════════════════════════════════════
+// ★ 서버 연동 (Cloudflare Worker + D1) — 톡/게시글 공유
+//   가짜 자동생성 글과 공존: 서버 글 + 로컬 가짜 글 함께 표시
+// ══════════════════════════════════════════════════════════════
+var _SERVER_URL = 'https://gentle-lab-7e47subway-api.phg0643.workers.dev';
+var _SERVER_ON = true;                  // 서버 연동 on/off
+var _lastTalkTs = 0;                    // 마지막으로 받은 톡 시각 (증분 조회용)
+var _serverTalkIds = {};                // 서버 톡 중복 방지
+var _serverPostIds = {};                // 서버 게시글 중복 방지
+
+// 서버에 톡 등록 (작성 시 호출)
+function _serverPostTalk(nick, text){
+  if(!_SERVER_ON) return;
+  try {
+    fetch(_SERVER_URL + '/talks', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ nick: nick, text: text })
+    }).catch(function(){});  // 실패해도 앱은 계속 작동 (로컬 표시는 됨)
+  } catch(e){}
+}
+
+// 서버에서 새 톡 가져오기 (폴링)
+function _serverFetchTalks(){
+  if(!_SERVER_ON) return;
+  try {
+    fetch(_SERVER_URL + '/talks?after=' + _lastTalkTs)
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if(!d || !d.talks || !d.talks.length) return;
+        var added = false;
+        d.talks.forEach(function(t){
+          if(_serverTalkIds[t.id]) return;       // 이미 받은 것 skip
+          if(t.nick === '나' || (typeof _getCommId==='function' && t.nick === _getCommId())) {
+            _serverTalkIds[t.id] = true;          // 내가 쓴 건 이미 로컬에 있음
+            if(t.ts > _lastTalkTs) _lastTalkTs = t.ts;
+            return;
+          }
+          _serverTalkIds[t.id] = true;
+          _LIVE_TALK.push({ nick: t.nick, text: t.text, time: t.ts, server: true });
+          if(t.ts > _lastTalkTs) _lastTalkTs = t.ts;
+          added = true;
+        });
+        if(_LIVE_TALK.length > 100) _LIVE_TALK.splice(0, _LIVE_TALK.length - 100);
+        if(added){
+          if(typeof _renderLiveTalk==='function') _renderLiveTalk();
+          if(typeof _renderChatTab==='function') _renderChatTab();
+        }
+      }).catch(function(){});
+  } catch(e){}
+}
+
+// 서버에 게시글 등록
+function _serverPostArticle(nick, title, body, cat){
+  if(!_SERVER_ON) return;
+  try {
+    fetch(_SERVER_URL + '/posts', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ nick:nick, title:title, body:body, cat:cat||'잡담' })
+    }).catch(function(){});
+  } catch(e){}
+}
+
+// 서버에서 게시글 가져오기
+function _serverFetchPosts(){
+  if(!_SERVER_ON) return;
+  try {
+    fetch(_SERVER_URL + '/posts')
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if(!d || !d.posts || !d.posts.length) return;
+        var added = false;
+        d.posts.forEach(function(p){
+          if(_serverPostIds[p.id]) return;
+          _serverPostIds[p.id] = true;
+          if(typeof _AI_POSTS !== 'undefined'){
+            _AI_POSTS.unshift({
+              nick: p.nick, title: p.title, body: p.body, cat: p.cat,
+              time: p.ts, server: true,
+              reactions: { like: p.likes||0, lol: p.lols||0, sad: p.sads||0 },
+              comments: []
+            });
+            added = true;
+          }
+        });
+        if(added && typeof renderCommList==='function') renderCommList();
+      }).catch(function(){});
+  } catch(e){}
+}
+
+// 서버 폴링 시작 (20초마다)
+function _startServerSync(){
+  if(!_SERVER_ON) return;
+  _serverFetchTalks();
+  _serverFetchPosts();
+  setInterval(_serverFetchTalks, 20000);   // 톡: 20초
+  setInterval(_serverFetchPosts, 60000);   // 게시글: 60초
+}
+
 // ══════════════════════════════════════════════════════════════
 // 욕설·비방 필터 (게시글/실시간 톡 공통)
 // ══════════════════════════════════════════════════════════════
@@ -14670,7 +14772,9 @@ function sendChatMsg(){
     return;
   }
   var myId = (typeof _getCommId==='function' && _getCommId()) || '나';
-  _ltAdd({ nick:myId, text:inp.value.trim(), time:Date.now(), mine:true });
+  var _txt = inp.value.trim();
+  _ltAdd({ nick:myId, text:_txt, time:Date.now(), mine:true });
+  if(typeof _serverPostTalk==='function') _serverPostTalk(myId, _txt);  // 서버 공유
   inp.value = '';
 }
 window.sendChatMsg = sendChatMsg;
@@ -14686,7 +14790,9 @@ function _homeTalkSend(){
     return;
   }
   var myId = (typeof _getCommId==='function' && _getCommId()) || '나';
-  _ltAdd({ nick:myId, text:inp.value.trim(), time:Date.now(), mine:true });
+  var _htxt = inp.value.trim();
+  _ltAdd({ nick:myId, text:_htxt, time:Date.now(), mine:true });
+  if(typeof _serverPostTalk==='function') _serverPostTalk(myId, _htxt);  // 서버 공유
   inp.value = '';
 }
 window._homeTalkSend = _homeTalkSend;
@@ -15785,6 +15891,10 @@ function submitPost() {
   };
   if(typeof _AI_POSTS !== 'undefined') {
     _AI_POSTS.unshift(userPost);
+  }
+  // ★ 서버에도 게시글 등록 (다른 사용자와 공유)
+  if(typeof _serverPostArticle === 'function') {
+    _serverPostArticle(userPost.nick, titleVal, bodyVal, catVal);
   }
 
   // 목록 즉시 갱신
