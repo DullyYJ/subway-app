@@ -7534,6 +7534,11 @@ const S={start:null,dest:null,route:null,routeFast:null,routeMin:null,routeMode:
 /* ── GPS 다중 역 후보 전역 보관 ── */
 var _gpsNearCandidates = [];
 
+/* 직선거리 → 도보거리 환산 (도시 격자 계수 1.35 적용) */
+function walkingDist(straightM) {
+  return Math.round((straightM || 0) * 1.35);
+}
+
 /* 2km 이내 후보 역 목록 반환 (중복 역명 제거, 거리순) */
 function nearestMulti(lat, lng, maxDist) {
   if(!lat || !lng || isNaN(lat) || isNaN(lng)) return [];
@@ -7541,13 +7546,14 @@ function nearestMulti(lat, lng, maxDist) {
   var seen = {};
   var results = [];
   STNDB.forEach(function(s){
-    if(s.lat === 0 && s.lng === 0) return;
-    var d = hav(lat, lng, s.lat, s.lng);
+    var sLat = parseFloat(s.lat), sLng = parseFloat(s.lng);  // ★ 타입 강제 변환
+    if(!sLat || !sLng || isNaN(sLat) || isNaN(sLng)) return; // 0, null, NaN 모두 제거
+    var d = hav(lat, lng, sLat, sLng);
     if(d <= maxDist){
       var key = s.name + '|' + s.line;
       if(!seen[key]){
         seen[key] = true;
-        results.push({name:s.name, line:s.line, lat:s.lat, lng:s.lng,
+        results.push({name:s.name, line:s.line, lat:sLat, lng:sLng,
                       color:s.color, sec:s.sec, dist:d});
       }
     }
@@ -7778,21 +7784,24 @@ function startWatch(){
       const path=S.route.path;
 
       // ── 실제 이동 검증: speed>=1.0m/s(3.6km/h) OR 이동거리>=5m ──
-      // ★ movedDist는 위에서 lastPos 갱신 전 계산된 정확한 값
       const rawSpd = pos.coords ? pos.coords.speed : null;
       const rawSpdValid = (rawSpd !== null && rawSpd !== undefined && !isNaN(rawSpd) && rawSpd >= 0);
       const avgSpd = S.speedSamples.length > 0
         ? S.speedSamples.reduce((a,b)=>a+b,0) / S.speedSamples.length : 0;
-      // speed 유효하면 순간속도, 무효하면 평균속도 or 이동거리로 실이동 판정
-      const isRealMove = (rawSpdValid && rawSpd >= 1.0)
+      // ★ boarding 상태(이미 탑승 확인됨)이면 GPS noise 관계없이 이동중 처리
+      const isRealMove = (S.boardingState === 'boarding')
+                      || (rawSpdValid && rawSpd >= 1.0)
                       || (!rawSpdValid && avgSpd >= 1.0)
-                      || (movedDist >= 5);  // ★ 10m→5m (지하철 저속 구간 대응)
+                      || (movedDist >= 5);
 
       if(!isRealMove) {
         // 정지 상태 — 역 전진 일체 차단, 시각적 업데이트만 허용
         updateCong(n);
         return;
       }
+
+      // ★ 실제 이동 확인됨 → watchdog 침묵 타이머 리셋 (자동 다음열차 전환 방지)
+      if(_trackingEngine) _trackingEngine.lastMoveMs = Date.now();
 
       // 실제 이동 확인 후 150m 반경 도착 판정
       if(S.boardingState === 'boarding' && S.curIdx < path.length - 1){
@@ -13417,7 +13426,7 @@ var _trackingEngine = {
   // ── 요구사항2: 30초 GPS 침묵 watchdog ──
   watchdogTimer: null,    // 30초 무반응 감시 타이머
   lastMoveMs:    null,    // 마지막 실제 이동 감지 시각
-  SILENCE_SEC:   30,      // 침묵 판정 임계(초)
+  SILENCE_SEC:   300,     // ★ 5분(300초)으로 완화 — 30초는 너무 짧아 오작동 빈발
   // ── 요구사항3: 동적 지연 오프셋 ──
   segStartMs:    null,    // 현재 구간 진입 시각
   // ── [방어1] Dead Reckoning(추측 항법) — 지하 GPS 음영 대비 ──
@@ -13498,6 +13507,9 @@ function _startSilenceWatchdog() {
     // ★ 조건1: GPS가 실제로 움직였으면(탑승 성공) 재계산 안 함
     var silent = Date.now() - (_trackingEngine.lastMoveMs || Date.now());
     if(silent < _trackingEngine.SILENCE_SEC * 1000) return;
+
+    // ★ 조건1-b: 이미 이동 중(boarding)이면 절대 다음열차 전환 안 함
+    if(S?.boardingState === 'boarding') return;
 
     // ★ 조건2: 아직 0번째 역(출발역)에 있을 때만 = 탑승 전 상태
     if(S?.curIdx > 0) return;  // 이미 출발했으면 재계산 불필요
