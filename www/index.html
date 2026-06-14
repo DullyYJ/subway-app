@@ -400,7 +400,7 @@ input[type=time]{color-scheme:dark;}
 /* GPS MODAL */
 .gm{position:absolute;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;z-index:300;padding:22px;}
 .gm.on{display:flex;}
-.gm-card{background:var(--card);border:1px solid var(--border2);border-radius:20px;width:100%;max-width:310px;padding:24px 18px;text-align:center;}
+.gm-card{background:var(--card);border:1px solid var(--border2);border-radius:20px;width:100%;max-width:340px;padding:24px 18px;text-align:center;max-height:80vh;overflow-y:auto;}
 .gm-icon{font-size:36px;margin-bottom:11px;}
 .gm-title{font-size:16px;font-weight:700;color:var(--text);margin-bottom:5px;}
 .gm-body{font-size:13px;color:var(--sub);line-height:1.7;margin-bottom:18px;}
@@ -7171,26 +7171,42 @@ function renderRegionSvg(region) {
     // ★ 역—역—역 일렬 연결 형태 (노선 색상 실선으로 연결)
     html += '<div style="padding:14px 12px;overflow-x:auto;-webkit-overflow-scrolling:touch;">';
     html += '<div style="display:inline-flex;align-items:flex-start;min-width:100%;">';
+
+    /* 레이아웃 상수
+       NAME_H = 역명 영역 높이(px), DOT_N = 일반역 점 지름, DOT_X = 환승역 점 지름, LINE_H = 연결선 두께
+       연결선 margin-top = (앞역 중심 + 뒷역 중심) / 2 - LINE_H/2
+       점 중심 y = NAME_H + dotSize/2
+    */
+    var _NH=40, _DN=12, _DX=16, _LH=4;
+
     arr.forEach(function(s, idx){
-      // 환승역 체크 (같은 역명이 다른 노선에도 있는지)
       var isXfer = stns.some(function(t){ return t.name===s.name && t.line!==s.line; });
-      // 역 노드 (점 + 역명)
+      var dotSz = isXfer ? _DX : _DN;
+
       html += '<div onclick="window._regionStnClick(\'' + s.name + '\',\'' + s.line + '\')"'
-        + ' style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;cursor:pointer;width:52px;">'
-        // 역명 (세로쓰기 방지, 위쪽)
-        + '<div style="font-size:11px;color:#fff;font-weight:' + (isXfer?'800':'500') + ';'
-        + 'text-align:center;height:30px;display:flex;align-items:flex-end;justify-content:center;'
-        + 'line-height:1.15;word-break:keep-all;margin-bottom:4px;">'
-        + (isXfer ? '🔄' : '') + s.name + '</div>'
-        // 점 (환승역은 크게)
-        + '<div style="width:' + (isXfer?'15px':'12px') + ';height:' + (isXfer?'15px':'12px') + ';'
-        + 'border-radius:50%;background:' + (isXfer?'#fff':col) + ';'
-        + 'border:' + (isXfer?'4px':'3px') + ' solid ' + col + ';box-sizing:border-box;"></div>'
-        + '</div>';
-      // 연결 실선 (마지막 역 제외)
+        + ' style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;cursor:pointer;width:54px;">';
+
+      // ① 역명 (고정 높이 _NH, 하단 정렬)
+      html += '<div style="font-size:10px;color:#fff;font-weight:' + (isXfer?'800':'500') + ';'
+        + 'text-align:center;height:' + _NH + 'px;display:flex;align-items:flex-end;'
+        + 'justify-content:center;line-height:1.2;word-break:keep-all;padding-bottom:4px;">'
+        + (isXfer ? '🔄' : '') + s.name + '</div>';
+
+      // ② 점
+      html += '<div style="width:' + dotSz + 'px;height:' + dotSz + 'px;'
+        + 'border-radius:50%;background:' + (isXfer ? '#fff' : col) + ';'
+        + 'border:' + (isXfer ? '4px' : '3px') + ' solid ' + col + ';'
+        + 'box-sizing:border-box;flex-shrink:0;"></div>';
+
+      html += '</div>';
+
+      // ③ 연결선 (마지막 역 제외) — margin-top으로 점 중앙에 정렬
       if(idx < arr.length-1){
-        html += '<div style="flex-shrink:0;height:3px;width:18px;background:' + col + ';'
-          + 'margin-top:36px;"></div>';
+        var nextXfer = stns.some(function(t){ return t.name===arr[idx+1].name && t.line!==arr[idx+1].line; });
+        var nextDot  = nextXfer ? _DX : _DN;
+        var mt = Math.round((_NH + dotSz/2 + _NH + nextDot/2) / 2) - Math.round(_LH/2);
+        html += '<div style="flex-shrink:0;width:20px;height:' + _LH + 'px;'
+          + 'background:' + col + ';margin-top:' + mt + 'px;align-self:flex-start;"></div>';
       }
     });
     html += '</div></div></div>';
@@ -7515,7 +7531,31 @@ const S={start:null,dest:null,route:null,routeFast:null,routeMin:null,routeMode:
   gpsStation:null,toastT:null,sugT:null,gpsWatch:null,
   shopTimerSec:600,shopTimerInterval:null,shopIdx:0};
 
-/* ══ GPS ══ */
+/* ── GPS 다중 역 후보 전역 보관 ── */
+var _gpsNearCandidates = [];
+
+/* 2km 이내 후보 역 목록 반환 (중복 역명 제거, 거리순) */
+function nearestMulti(lat, lng, maxDist) {
+  if(!lat || !lng || isNaN(lat) || isNaN(lng)) return [];
+  maxDist = maxDist || 2000;
+  var seen = {};
+  var results = [];
+  STNDB.forEach(function(s){
+    if(s.lat === 0 && s.lng === 0) return;
+    var d = hav(lat, lng, s.lat, s.lng);
+    if(d <= maxDist){
+      var key = s.name + '|' + s.line;
+      if(!seen[key]){
+        seen[key] = true;
+        results.push({name:s.name, line:s.line, lat:s.lat, lng:s.lng,
+                      color:s.color, sec:s.sec, dist:d});
+      }
+    }
+  });
+  results.sort(function(a,b){ return a.dist - b.dist; });
+  return results;
+}
+
 function triggerGPS(){
   const btn=document.getElementById('gpsBtn');
   if(btn) btn.classList.add('pulse');
@@ -7526,44 +7566,39 @@ function triggerGPS(){
     toast('GPS를 지원하지 않는 환경입니다.');
     return;
   }
-  // APK/웹뷰 환경 모두 대응: enableHighAccuracy + timeout 5000ms
   navigator.geolocation.getCurrentPosition(
     function(pos){
       resetGPS();
       var lat = pos.coords.latitude;
       var lng = pos.coords.longitude;
       var acc = pos.coords.accuracy || 300;
-      // NaN 방어
       if(isNaN(lat) || isNaN(lng)){
         toast('위치 좌표를 읽을 수 없습니다. 다시 시도해주세요.');
         return;
       }
-      var r = Math.min(600, Math.max(150, acc * 2));
-      var n = nearest(lat, lng, r);
-      if(!n){ toast('주변 역을 찾을 수 없습니다.'); return; }
-      var d = hav(lat, lng, n.lat, n.lng);
-      S.gpsStation = n;
-      var gmStn = document.getElementById('gmStn');
-      if(gmStn) gmStn.textContent = n.name+' ('+n.line+')';
-      var gmIcon  = document.getElementById('gmIcon');
-      var gmTitle = document.getElementById('gmTitle');
-      var gmBody  = document.getElementById('gmBody');
-      if(d <= r){
-        if(gmIcon)  gmIcon.textContent  = '📍';
-        if(gmTitle) gmTitle.textContent = '역 감지됨';
-        if(gmBody)  gmBody.innerHTML    = '현재 위치가 <b>'+n.name+' ('+n.line+')</b>으로 판단됩니다.<br>출발역으로 설정하시겠습니까?';
-      } else {
-        if(gmIcon)  gmIcon.textContent  = '🗺️';
-        if(gmTitle) gmTitle.textContent = '가장 가까운 역: '+n.name;
-        var dWalk = Math.round(walkingDist(d));
-        if(gmBody)  gmBody.innerHTML    = '도보 약 <b>'+dWalk+'m</b> 거리의<br><b>'+n.name+' ('+n.line+')</b>이 가장 가깝습니다.<br>출발역으로 설정하시겠습니까?';
+      console.log('[GPS] lat='+lat+' lng='+lng+' acc='+Math.round(acc)+'m');
+
+      /* 2km 이내 전체 후보 수집 */
+      var candidates = nearestMulti(lat, lng, 2000);
+      if(!candidates || candidates.length === 0){
+        toast('반경 2km 내 역을 찾을 수 없습니다.');
+        return;
       }
-      var gpsModal = document.getElementById('gpsModal');
-      if(gpsModal) gpsModal.classList.add('on');
+
+      _gpsNearCandidates = candidates;
+
+      /* ── 단일 역(1개) or 가장 가까운 역이 500m 이내 → 기존 단일 모달 ── */
+      var nearest1 = candidates[0];
+      if(candidates.length === 1 || nearest1.dist <= 500){
+        S.gpsStation = nearest1;
+        _showGpsSingleModal(nearest1, lat, lng, acc);
+      } else {
+        /* ── 복수 역 → 선택 목록 모달 ── */
+        _showGpsMultiModal(candidates, lat, lng);
+      }
       startWatch();
     },
     function(err){
-      // 에러 콜백 — 앱이 멈추지 않도록 안전 처리
       resetGPS();
       var msg = '위치 권한이 필요합니다.';
       if(err){
@@ -7573,10 +7608,104 @@ function triggerGPS(){
       }
       toast(msg);
     },
-    // APK 네이티브 웹뷰 필수 옵션
     { enableHighAccuracy: false, timeout: 30000, maximumAge: 15000 }
   );
 }
+
+/* ── 단일 역 모달 표시 (기존 gmBody 구조 재사용) ── */
+function _showGpsSingleModal(n, lat, lng, acc){
+  var d = hav(lat, lng, n.lat, n.lng);
+  var gmIcon  = document.getElementById('gmIcon');
+  var gmTitle = document.getElementById('gmTitle');
+  var gmBody  = document.getElementById('gmBody');
+  var gmBtns  = document.querySelector('#gpsModal .gm-btns');
+  /* 선택목록 있으면 제거 후 기본 버튼 복구 */
+  _restoreGpsModalBtns(gmBtns);
+  if(d <= 300){
+    if(gmIcon)  gmIcon.textContent  = '📍';
+    if(gmTitle) gmTitle.textContent = '역 감지됨';
+    if(gmBody)  gmBody.innerHTML    = '현재 위치가 <b>'+n.name+' ('+n.line+')</b>으로 판단됩니다.<br>출발역으로 설정하시겠습니까?';
+  } else {
+    var dWalk = Math.round(walkingDist(d));
+    if(gmIcon)  gmIcon.textContent  = '🗺️';
+    if(gmTitle) gmTitle.textContent = '가장 가까운 역';
+    if(gmBody)  gmBody.innerHTML    = '도보 약 <b>'+dWalk+'m</b> 거리의<br><b>'+n.name+' ('+n.line+')</b>이 가장 가깝습니다.<br>출발역으로 설정하시겠습니까?';
+  }
+  var gpsModal = document.getElementById('gpsModal');
+  if(gpsModal){ gpsModal.style.display=''; gpsModal.classList.add('on'); }
+}
+
+/* ── 복수 역 선택 모달 ── */
+function _showGpsMultiModal(candidates, lat, lng){
+  var gmIcon  = document.getElementById('gmIcon');
+  var gmTitle = document.getElementById('gmTitle');
+  var gmBody  = document.getElementById('gmBody');
+  var gmBtns  = document.querySelector('#gpsModal .gm-btns');
+
+  if(gmIcon)  gmIcon.textContent  = '📡';
+  if(gmTitle) gmTitle.textContent = '주변 역 선택';
+
+  /* 목록 최대 6개 */
+  var list = candidates.slice(0, 6);
+  var html = '<div style="font-size:11px;color:var(--sub);margin-bottom:8px;">출발역으로 설정할 역을 선택하세요</div>';
+  html += '<div id="gpsMultiList" style="display:flex;flex-direction:column;gap:7px;">';
+  list.forEach(function(s, i){
+    var d = Math.round(s.dist);
+    var walk = Math.round(walkingDist(s.dist));
+    var clr = s.color || '#888';
+    var distLabel = d <= 500
+      ? '<span style="color:var(--green);font-weight:700;">'+d+'m</span>'
+      : '<span style="color:var(--orange);">'+d+'m (도보 '+walk+'m)</span>';
+    html += '<button onclick="gpsSelectStation('+i+')" style="'
+      +'display:flex;align-items:center;gap:10px;'
+      +'background:#2c2c2e;border:1.5px solid '+clr+';border-radius:11px;'
+      +'padding:10px 12px;cursor:pointer;text-align:left;font-family:inherit;'
+      +'transition:background .15s;" '
+      +'onmousedown="this.style.background=\'#3a3a3c\'" '
+      +'onmouseup="this.style.background=\'#2c2c2e\'">'
+      +'<span style="font-size:18px;">🚇</span>'
+      +'<span style="flex:1;">'
+      +'<span style="display:block;font-size:13px;font-weight:700;color:var(--text);">'+s.name+'</span>'
+      +'<span style="display:block;font-size:11px;color:'+clr+';font-weight:600;margin-top:2px;">'+s.line+' · '+distLabel+'</span>'
+      +'</span>'
+      +'<span style="font-size:12px;color:var(--sub);">▶</span>'
+      +'</button>';
+  });
+  html += '</div>';
+  if(gmBody) gmBody.innerHTML = html;
+
+  /* 버튼 영역 → 취소만 */
+  if(gmBtns){
+    gmBtns.innerHTML = '<button class="gm-no" style="flex:1;" onclick="gpsNo()">취소</button>';
+  }
+
+  var gpsModal = document.getElementById('gpsModal');
+  if(gpsModal){ gpsModal.style.display=''; gpsModal.classList.add('on'); }
+}
+
+/* 복수 목록에서 역 선택 */
+function gpsSelectStation(idx){
+  var s = _gpsNearCandidates[idx];
+  if(!s) return;
+  S.gpsStation = s;
+  var m = document.getElementById('gpsModal');
+  if(m){ m.classList.remove('on'); m.style.display='none'; m.style.pointerEvents='none';
+    setTimeout(function(){ m.style.display=''; m.style.pointerEvents=''; },350); }
+  setStart(s);
+  toast('✅ '+s.name+' ('+s.line+') 출발역 설정 완료!');
+  if(S.dest) doRoute();
+}
+window.gpsSelectStation = gpsSelectStation;
+
+/* 단일→복수 전환 후 gm-btns 원복 헬퍼 */
+function _restoreGpsModalBtns(gmBtns){
+  if(!gmBtns) return;
+  if(!gmBtns.querySelector('.gm-yes')){
+    gmBtns.innerHTML = '<button class="gm-no" onclick="gpsNo()">아니요</button>'
+                     + '<button class="gm-yes" onclick="gpsYes()">네</button>';
+  }
+}
+
 function resetGPS(){const btn=document.getElementById('gpsBtn');btn.classList.remove('pulse');document.getElementById('gpsBtnTxt').textContent='위치로 역 감지';}
 function startWatch(){
   if(S.gpsWatch)navigator.geolocation.clearWatch(S.gpsWatch);
@@ -8208,8 +8337,13 @@ var _ptData = (function(){
 function addPoints(n, reason) {
   var today = new Date().toDateString();
   _ptData.total = (_ptData.total || 0) + n;
-  _ptData.today_str = today;
-  _ptData.today = (_ptData.today_str === today ? (_ptData.today || 0) : 0) + n;
+  // today 날짜가 바뀌었으면 0으로 리셋, 같은 날이면 누산
+  if(_ptData.today_str === today) {
+    _ptData.today = (_ptData.today || 0) + n;
+  } else {
+    _ptData.today_str = today;
+    _ptData.today = n;
+  }
   try { localStorage.setItem('mk_pt', JSON.stringify(_ptData)); } catch(e){}
   updatePointUI();
   if(reason) toast('🏅 +' + n + 'P ' + reason);
@@ -8256,10 +8390,52 @@ window._drawReportPoints = _drawReportPoints;
 
 function updatePointUI() {
   var total = _ptData.total || 0;
-  var el = document.getElementById('headerPoints');
-  if(el) el.textContent = total;
+  var today = new Date().toDateString();
+  var todayPts = (_ptData.today_str === today ? (_ptData.today || 0) : 0);
+
+  // ── 헤더 포인트 HUD (메인 표시) ──
+  var elTotal = document.getElementById('pointTotal');
+  if(elTotal) elTotal.textContent = total;
+
+  var elToday = document.getElementById('pointToday');
+  if(elToday) elToday.textContent = todayPts;
+
+  // 레벨 계산
+  var levels = [
+    {name:'입문자', min:0},   {name:'탑승객', min:50},
+    {name:'지하철러', min:150},{name:'환승왕', min:300},
+    {name:'노선장인', min:600},{name:'철도마스터', min:1000}
+  ];
+  var lv = levels[0];
+  var nextLv = levels[1];
+  for(var i=0; i<levels.length; i++){
+    if(total >= levels[i].min){
+      lv = levels[i];
+      nextLv = levels[i+1] || null;
+    }
+  }
+  var lvStr = 'Lv.'+(levels.indexOf(lv)+1)+' '+lv.name;
+  var elLevel = document.getElementById('pointLevel');
+  if(elLevel) elLevel.firstChild.textContent = lvStr;
+
+  // ── headerPoints (미션바) ──
+  var elHP = document.getElementById('headerPoints');
+  if(elHP) elHP.textContent = total;
+
+  // ── 미션 진행바 ──
   var fill = document.getElementById('missionFill');
-  if(fill) fill.style.width = Math.min(100, (total % 100)) + '%';
+  if(fill){
+    var base = lv.min;
+    var next = nextLv ? nextLv.min : base + 100;
+    var pct = Math.min(100, Math.round((total - base) / (next - base) * 100));
+    fill.style.width = pct + '%';
+  }
+
+  // ── 숨겨진 pointHud 구버전 ID도 동기화 ──
+  var elTotalOld = document.getElementById('pointTotalOld');
+  if(elTotalOld) elTotalOld.textContent = total;
+  var elTodayOld = document.getElementById('pointTodayOld');
+  if(elTodayOld) elTodayOld.textContent = todayPts;
 }
 window.updatePointUI = updatePointUI;
 
@@ -16099,6 +16275,8 @@ document.addEventListener('DOMContentLoaded', function() {
   if(ps) ps.style.display = 'none';
   if(bs) bs.style.display = 'none';
   setTimeout(function(){ if(typeof updateRouteUI==='function') updateRouteUI(); }, 300);
+  // ── 포인트 UI 초기 렌더 (헤더 표시) ──
+  setTimeout(function(){ if(typeof updatePointUI==='function') updatePointUI(); }, 200);
 });
 
 </script>
