@@ -1,0 +1,21 @@
+{
+  "appId": "com.dullyyj.subway",
+  "appName": "출근길 뭐라카노",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": true
+  },
+  "plugins": {
+    "Geolocation": {
+      "permissions": ["location"]
+    },
+    "StatusBar": {
+      "overlaysWebView": true,
+      "style": "DARK",
+      "backgroundColor": "#12121400"
+    }
+  }
+}
