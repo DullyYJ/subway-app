@@ -398,7 +398,7 @@ input[type=time]{color-scheme:dark;}
 .save-btn{background:linear-gradient(135deg,var(--gold2),var(--gold));color:#121214;border:none;padding:13px;border-radius:11px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;}
 
 /* GPS MODAL */
-.gm{position:absolute;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;z-index:300;padding:22px;}
+.gm{position:fixed;inset:0;background:rgba(0,0,0,.82);backdrop-filter:blur(8px);display:none;align-items:center;justify-content:center;z-index:9999;padding:22px;}
 .gm.on{display:flex;}
 .gm-card{background:var(--card);border:1px solid var(--border2);border-radius:20px;width:100%;max-width:340px;padding:24px 18px;text-align:center;max-height:80vh;overflow-y:auto;}
 .gm-icon{font-size:36px;margin-bottom:11px;}
@@ -849,7 +849,7 @@ window.calcETA = function calcETA() {
           style="flex:1;border:none;background:transparent;padding:0;font-size:15px;font-weight:600;color:var(--text);min-width:0;"
           placeholder="출발역 검색..." autocomplete="off"
           oninput="fmapSearch(this,'start')" onfocus="fmapSearch(this,'start')">
-        <button onclick="fmapGpsLocate()"
+        <button id="homeGpsBtn" onclick="fmapGpsLocate()"
           style="background:rgba(10,132,255,.12);border:1px solid rgba(10,132,255,.3);color:#0a84ff;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;padding:5px 9px;border-radius:14px;flex-shrink:0;">📍위치 감지</button>
         <div id="fmapStartSug" class="sug"
           style="bottom:auto;top:calc(100% + 4px);max-height:200px;z-index:300;left:0;right:0;"></div>
@@ -7556,19 +7556,38 @@ function nearestMulti(lat, lng, maxDist) {
   return results;
 }
 
+/* ── GPS 버튼 상태 헬퍼 ── */
+function _gpsSetBusy(busy) {
+  var hBtn = document.getElementById('homeGpsBtn');
+  var mBtn = document.getElementById('mapGpsBtn');
+  if (busy) {
+    if (hBtn) { hBtn.textContent = '⏳ 감지 중...'; hBtn.disabled = true; hBtn.style.opacity = '0.7'; }
+    if (mBtn) { mBtn.textContent = '⏳'; mBtn.disabled = true; mBtn.style.opacity = '0.7'; }
+  } else {
+    if (hBtn) { hBtn.textContent = '📍위치 감지'; hBtn.disabled = false; hBtn.style.opacity = ''; }
+    if (mBtn) { mBtn.textContent = '📍'; mBtn.disabled = false; mBtn.style.opacity = ''; }
+  }
+}
+
+/* ── GPS 모달 열기 헬퍼 ── */
+function _openGpsModal() {
+  var m = document.getElementById('gpsModal');
+  if (!m) return;
+  m.style.display = 'flex';   // none 해제 + flex 직접 지정
+  m.classList.add('on');
+}
+
 function triggerGPS(){
-  const btn=document.getElementById('gpsBtn');
-  if(btn) btn.classList.add('pulse');
-  var btnTxt = document.getElementById('gpsBtnTxt');
-  if(btnTxt) btnTxt.textContent='감지 중...';
+  _gpsSetBusy(true);
+
   if(!navigator.geolocation){
-    resetGPS();
+    _gpsSetBusy(false);
     toast('GPS를 지원하지 않는 환경입니다.');
     return;
   }
   navigator.geolocation.getCurrentPosition(
     function(pos){
-      resetGPS();
+      _gpsSetBusy(false);
       var lat = pos.coords.latitude;
       var lng = pos.coords.longitude;
       var acc = pos.coords.accuracy || 300;
@@ -7587,19 +7606,19 @@ function triggerGPS(){
 
       _gpsNearCandidates = candidates;
 
-      /* ── 단일 역(1개) or 가장 가까운 역이 500m 이내 → 기존 단일 모달 ── */
+      /* 단일 역(1개) or 가장 가까운 역 500m 이내 → 단일 모달 */
       var nearest1 = candidates[0];
       if(candidates.length === 1 || nearest1.dist <= 500){
         S.gpsStation = nearest1;
         _showGpsSingleModal(nearest1, lat, lng, acc);
       } else {
-        /* ── 복수 역 → 선택 목록 모달 ── */
+        /* 복수 역 → 선택 목록 모달 */
         _showGpsMultiModal(candidates, lat, lng);
       }
       startWatch();
     },
     function(err){
-      resetGPS();
+      _gpsSetBusy(false);
       var msg = '위치 권한이 필요합니다.';
       if(err){
         if(err.code === 1) msg = '위치 권한이 거부되었습니다. 설정에서 허용해주세요.';
@@ -7608,7 +7627,7 @@ function triggerGPS(){
       }
       toast(msg);
     },
-    { enableHighAccuracy: false, timeout: 30000, maximumAge: 15000 }
+    { enableHighAccuracy: true, timeout: 20000, maximumAge: 5000 }
   );
 }
 
@@ -7632,7 +7651,7 @@ function _showGpsSingleModal(n, lat, lng, acc){
     if(gmBody)  gmBody.innerHTML    = '도보 약 <b>'+dWalk+'m</b> 거리의<br><b>'+n.name+' ('+n.line+')</b>이 가장 가깝습니다.<br>출발역으로 설정하시겠습니까?';
   }
   var gpsModal = document.getElementById('gpsModal');
-  if(gpsModal){ gpsModal.style.display=''; gpsModal.classList.add('on'); }
+  if(gpsModal){ _openGpsModal(); }
 }
 
 /* ── 복수 역 선택 모달 ── */
@@ -7680,7 +7699,7 @@ function _showGpsMultiModal(candidates, lat, lng){
   }
 
   var gpsModal = document.getElementById('gpsModal');
-  if(gpsModal){ gpsModal.style.display=''; gpsModal.classList.add('on'); }
+  if(gpsModal){ _openGpsModal(); }
 }
 
 /* 복수 목록에서 역 선택 */
@@ -7689,8 +7708,7 @@ function gpsSelectStation(idx){
   if(!s) return;
   S.gpsStation = s;
   var m = document.getElementById('gpsModal');
-  if(m){ m.classList.remove('on'); m.style.display='none'; m.style.pointerEvents='none';
-    setTimeout(function(){ m.style.display=''; m.style.pointerEvents=''; },350); }
+  if(m){ m.classList.remove('on'); m.style.display='none'; }
   setStart(s);
   toast('✅ '+s.name+' ('+s.line+') 출발역 설정 완료!');
   if(S.dest) doRoute();
@@ -7706,7 +7724,7 @@ function _restoreGpsModalBtns(gmBtns){
   }
 }
 
-function resetGPS(){const btn=document.getElementById('gpsBtn');btn.classList.remove('pulse');document.getElementById('gpsBtnTxt').textContent='위치로 역 감지';}
+function resetGPS(){ _gpsSetBusy(false); }
 function startWatch(){
   if(S.gpsWatch)navigator.geolocation.clearWatch(S.gpsWatch);
   S.gpsWatch=navigator.geolocation.watchPosition(pos=>{
@@ -7730,25 +7748,25 @@ function startWatch(){
     const distToStation=hav(lat,lng,n.lat,n.lng);
 
     // ── 속도 샘플 수집 (탑승 감지용) ──
-    // [수정2] 지하/터널 GPS speed 누락 방어
-    //   하드웨어 센서가 터널/지하에서 coords.speed를 null/NaN으로 반환하는 경우 빈번
-    //   → coords.speed가 유효하면 그대로 쓰고, 무효하면 직전 좌표·시간 차이(Δt)로
-    //     기하학적 실거리 이동속도(m/s)를 역산해 백업 매핑 → 탑승감지 먹통 방지
+    // coords.speed null/NaN 방어: 무효 시 직전 좌표 이동거리로 백업
+    var movedDist = 0;  // ★ lastPos 갱신 전에 먼저 이동거리 계산
     if(S.lastPos){
       const dt=(now-S.lastPos.ts)/1000; // 초
-      if(dt>1){
-        const moved=hav(lat,lng,S.lastPos.lat,S.lastPos.lng);
-        const geoSpeed=moved/dt; // m/s (좌표 기반 자체 계산)
-        // coords.speed 유효성 검사 (null/undefined/NaN/음수 방어)
+      if(dt>0.5){
+        movedDist = hav(lat,lng,S.lastPos.lat,S.lastPos.lng); // ★ 갱신 전 좌표로 계산
+        const geoSpeed = dt > 0 ? movedDist/dt : 0; // m/s
         const hwSpeed = pos.coords ? pos.coords.speed : null;
         const hwValid = (hwSpeed !== null && hwSpeed !== undefined
                          && !isNaN(hwSpeed) && hwSpeed >= 0);
-        // 유효하면 하드웨어 속도, 아니면 좌표 기반 백업 속도 사용
         const speed = hwValid ? hwSpeed : geoSpeed;
-        S.speedSamples.push(speed);
-        if(S.speedSamples.length>5) S.speedSamples.shift();
+        if(speed > 0){
+          S.speedSamples.push(speed);
+          if(S.speedSamples.length>8) S.speedSamples.shift();
+        }
+        S.lastMoveDistM = movedDist; // 이동거리 보관
       }
     }
+    // ★ lastPos는 이동거리 계산 완료 후 갱신
     S.lastPos={lat,lng,ts:now};
     S.lastGPSFix={lat,lng,stn:n,ts:now};
     document.getElementById('curStnTxt').textContent=n.name;
@@ -7759,16 +7777,16 @@ function startWatch(){
     if(S.route){
       const path=S.route.path;
 
-      // ── 2) 실제 이동 검증: speed>=1.0m/s OR 이전좌표 dist>=10m ──
-      // ★ 수정1: 정지 상태에서는 역 전진 차단
-      // [수정2] coords.speed null/NaN 방어 — 무효 시 좌표 이동거리로 판정
-      const rawSpd = pos.coords ? pos.coords.speed : null;  // m/s (null if unavailable)
+      // ── 실제 이동 검증: speed>=1.0m/s(3.6km/h) OR 이동거리>=5m ──
+      // ★ movedDist는 위에서 lastPos 갱신 전 계산된 정확한 값
+      const rawSpd = pos.coords ? pos.coords.speed : null;
       const rawSpdValid = (rawSpd !== null && rawSpd !== undefined && !isNaN(rawSpd) && rawSpd >= 0);
-      const movedDist = S.lastPos
-        ? hav(lat, lng, S.lastPos.lat, S.lastPos.lng) : 0;
-      // speed 유효하면 속도로, 무효하면 이동거리(10m↑)로 실이동 판정
+      const avgSpd = S.speedSamples.length > 0
+        ? S.speedSamples.reduce((a,b)=>a+b,0) / S.speedSamples.length : 0;
+      // speed 유효하면 순간속도, 무효하면 평균속도 or 이동거리로 실이동 판정
       const isRealMove = (rawSpdValid && rawSpd >= 1.0)
-                      || (movedDist >= 10);
+                      || (!rawSpdValid && avgSpd >= 1.0)
+                      || (movedDist >= 5);  // ★ 10m→5m (지하철 저속 구간 대응)
 
       if(!isRealMove) {
         // 정지 상태 — 역 전진 일체 차단, 시각적 업데이트만 허용
@@ -7830,10 +7848,12 @@ function startWatch(){
     }
     updateCong(n);
   },{
-    // 지하철 실내/지하 환경: enableHighAccuracy:false → 와이파이/기지국 기반 허용
-    enableHighAccuracy: false,
-    maximumAge:         15000,   // 15초 캐시
-    timeout:            30000,   // 30초 타임아웃
+    // ★ 지하철 이동 감지: enableHighAccuracy true로 변경
+    //   - true: GPS 칩 우선 → coords.speed 신뢰도 대폭 향상
+    //   - 배터리 소모 증가하지만 이동/정지 판정 정확도 필수
+    enableHighAccuracy: true,
+    maximumAge:         3000,    // ★ 3초 캐시 (15초→3초: 지하철 이동속도에 맞춤)
+    timeout:            10000,   // 10초 타임아웃
   });
 }
 
@@ -7856,6 +7876,9 @@ function detectBoardingState(lat,lng,nearestStn,distToStn,acc){
   // WiFi/위치 정확도로 역사 진입 판단 (acc < 50m = WiFi 수준)
   const inStation = distToStn < 150 || acc < 50;
 
+  // ★ 이동거리 기반 보조 판정 (speed null 환경 대비)
+  const recentDist = S.lastMoveDistM || 0;
+
   if(S.boardingState==='idle' || S.boardingState==='station_enter'){
     if(inStation && S.boardingState==='idle'){
       // 역사 진입
@@ -7865,22 +7888,20 @@ function detectBoardingState(lat,lng,nearestStn,distToStn,acc){
       banner.classList.add('on');
       toast('🚉 '+nearestStn.name+' 역사 진입');
     }
-    else if(S.boardingState==='station_enter' && avgSpeed>=5){
-      // 속도 5m/s(18km/h) 이상 → 탑승 확인!
-      S.boardingState='boarding';
-      if(pin) pin.className='train-pin boarding';
-      if(bannerTxt) bannerTxt.textContent='🚇 탑승 확인 · 이동 중 ('+nearestStn.name+')';
-      toast('🚇 탑승 확인! 이동을 시작합니다.');
-      // ★ 수정1: startTrainAnim() 제거 — GPS 실제 이동만으로 진행
-      if(!S.lastGPSFix) startApiPoll();
-    }
-    else if(S.boardingState==='station_enter' && !inStation && avgSpeed>=2){
-      // 역사에서 벗어나며 이동 중 → 탑승으로 간주
-      S.boardingState='boarding';
-      if(pin) pin.className='train-pin boarding';
-      if(bannerTxt) bannerTxt.textContent='🚇 탑승 확인 · 이동 중';
-      toast('🚇 탑승 확인! 이동을 시작합니다.');
-      // ★ 수정1: startTrainAnim() 제거
+    else if(S.boardingState==='station_enter'){
+      // ★ 탑승 조건 완화:
+      //   1) 속도 3m/s(10.8km/h) 이상 — 기존 5m/s에서 완화
+      //   2) speed 없을 때 → 역사에서 벗어나며 최근 5m 이상 이동
+      //   3) 역사에서 벗어나며 평균속도 1.5m/s 이상
+      const spd3 = avgSpeed >= 3.0;
+      const moveOut = !inStation && (avgSpeed >= 1.5 || recentDist >= 5);
+      const fastMove = recentDist >= 15; // 1회 GPS 업데이트에 15m 이상 이동
+      if(spd3 || moveOut || fastMove){
+        S.boardingState='boarding';
+        if(pin) pin.className='train-pin boarding';
+        if(bannerTxt) bannerTxt.textContent='🚇 탑승 확인 · 이동 중 ('+nearestStn.name+')';
+        toast('🚇 탑승 확인! 이동을 시작합니다.');
+      }
     }
   }
   else if(S.boardingState==='boarding'){
@@ -10337,7 +10358,7 @@ function safeSetItem(key, val){
       <div id="fmapDestSug2" class="sug" style="bottom:100%;top:auto;max-height:150px;"></div>
     </div>
     <button onclick="calcFmapRouteMap()" style="background:var(--gold);color:#121214;border:none;padding:9px 14px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0;">검색</button>
-    <button onclick="fmapGpsLocate()" style="background:#1c3a5e;border:1.5px solid #0a84ff;color:#0a84ff;padding:9px 10px;border-radius:10px;font-size:13px;cursor:pointer;flex-shrink:0;">📍</button>
+    <button id="mapGpsBtn" onclick="fmapGpsLocate()" style="background:#1c3a5e;border:1.5px solid #0a84ff;color:#0a84ff;padding:9px 10px;border-radius:10px;font-size:13px;cursor:pointer;flex-shrink:0;">📍</button>
   </div>
 
 </div>
@@ -10761,7 +10782,7 @@ window.addEventListener('resize', function() {
 
 // ── GPS + SUBWAY_MASTER_DB 연동 150m 도착 검증 ────────────────
 function checkGpsArrivalWithMaster(lat, lng) {
-  if(!S.route || !S.boardingState === 'boarding') return;
+  if(!S.route || S.boardingState !== 'boarding') return;  // ★ 조건 오류 수정
   const path = S.route.path;
   if(S.curIdx >= path.length - 1) return;
   
@@ -11156,7 +11177,7 @@ function stopTrainAnim(){
 }
 function gpsYes(){
   var m=document.getElementById('gpsModal');
-  if(m){ m.classList.remove('on'); m.style.display='none'; m.style.pointerEvents='none'; setTimeout(function(){ m.style.display=''; m.style.pointerEvents=''; },350); }
+  if(m){ m.classList.remove('on'); m.style.display='none'; }
   if(!S.gpsStation)return;
   setStart(S.gpsStation);
   toast('✅ '+S.gpsStation.name+' 출발역 설정 완료!');
@@ -11164,8 +11185,8 @@ function gpsYes(){
 }
 function gpsNo(){
   var m=document.getElementById('gpsModal');
-  if(m){ m.classList.remove('on'); m.style.display='none'; m.style.pointerEvents='none'; setTimeout(function(){ m.style.display=''; m.style.pointerEvents=''; },350); }
-  toast('죄송합니다. 직접 출발역을 설정해 주세요.');
+  if(m){ m.classList.remove('on'); m.style.display='none'; }
+  toast('직접 출발역을 설정해 주세요.');
   setTimeout(openSheet,500);
 }
 function hav(la1,ln1,la2,ln2){const R=6371000,d=v=>v*Math.PI/180;const a=Math.sin(d(la2-la1)/2)**2+Math.cos(d(la1))*Math.cos(d(la2))*Math.sin(d(ln2-ln1)/2)**2;return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));}
