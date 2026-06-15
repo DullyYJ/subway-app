@@ -7998,16 +7998,14 @@ var _ttSegStartMs   = null;  // 현재 구간 실제 시작 ms (지연 측정용
 function _startTimetableAdvance() {
   _stopTimetableAdvance();
   if(!S.route || !S.boardedAt) return;
-  // ★ 타이머 기준: 실제 탑승 확인 시각 (현재 시각)
-  // boardedAt은 열차 출발 예정 ms이지만, 실제로 탑승한 시각이 다를 수 있음
-  // → 현재 시각 기준으로 첫 번째 구간 타이머를 설정
   _ttSegStartMs = Date.now();
 
-  // boardedAt과 현재 시각의 차이만큼 첫 구간 시간에서 빼기
-  // (이미 일부 구간이 경과했을 수 있음)
-  _scheduleTimetableSteps();
-  console.log('[시각표] 타이머 시작. 탑승확인=' + new Date().toLocaleTimeString()
-    + ' boardedAt=' + new Date(S.boardedAt).toLocaleTimeString());
+  // ★ 핵심: _runTrainAnim이 시각표 기반으로 progress + 역 전진을 모두 담당
+  // _scheduleTimetableSteps는 보조 백업 타이머 역할만
+  if(!S.trainAnimInterval) _runTrainAnim();
+  _scheduleTimetableSteps(); // 백업 타이머 (anim 실패 시 대비)
+
+  console.log('[시각표] 탑승 시작. boardedAt=' + new Date(S.boardedAt).toLocaleTimeString());
 }
 function _stopTimetableAdvance() {
   if(_timetableTimer) { clearTimeout(_timetableTimer); _timetableTimer = null; }
@@ -8040,12 +8038,13 @@ function _doTimetableAdvance() {
   if(S.curIdx >= S.route.path.length - 1) return;
 
   var accelSt = _accelState();
-  console.log('[시각표] 역 전진 실행 — 현재:' + (S.route.path[S.curIdx]||'?') + ' → 다음:' + (S.route.path[S.curIdx+1]||'?') + ' 가속도계:' + accelSt);
+  console.log('[시각표] 구간 타이머 완료 → _runTrainAnim이 역 전진 담당 (가속도계:' + accelSt + ')');
 
-  // 구간 소요시간 측정 → 지연 누적
+  // ★ 역 전진은 _runTrainAnim 내부에서 처리
+  // _doTimetableAdvance는 구간 소요시간 지연 측정만 담당
   if(_ttSegStartMs) {
     var actualSec = (Date.now() - _ttSegStartMs) / 1000;
-    var stdSec    = (S.route.tp || [])[S.curIdx + 1] || 120;
+    var stdSec    = (S.route.tp || [])[S.curIdx + 1] || 90;
     var delta     = actualSec - stdSec;
     if(delta > 30) {
       S._delayOffsetMs = (S._delayOffsetMs || 0) + delta * 1000;
@@ -8054,17 +8053,8 @@ function _doTimetableAdvance() {
       S._delayOffsetMs = Math.max(0, (S._delayOffsetMs || 0) + delta * 1000);
     }
   }
-
-  _ttSegStartMs = Date.now();
-
-  // ★ 시각표 기반 전진은 GPS 재확인 없이 바로 _doArrival 호출
-  // (GPS 재확인은 GPS가 실제로 잡힐 때만 의미있음 — 지하에서는 오히려 지연 유발)
-  if(typeof onStationArrival === 'function') {
-    // onStationArrival 내 GPS 재확인 플래그
-    onStationArrival(true); // true = 시각표 기반, GPS 재확인 생략
-  }
-
-  if(S.boardingState === 'boarding') _scheduleTimetableSteps();
+  // _runTrainAnim이 이미 실행 중이면 중복 실행 안 함
+  if(!S.trainAnimInterval) _runTrainAnim();
 }
 
 function detectBoardingState(lat,lng,nearestStn,distToStn,acc){
@@ -10022,9 +10012,10 @@ function _closeBoardConfirm() {
 }
 function _confirmBoard() {
   _closeBoardConfirm();
-  if(_boardAskTimer){ clearTimeout(_boardAskTimer); _boardAskTimer=null; } // 팝업 타이머 취소
-  // 실제 탑승 처리
+  if(_boardAskTimer){ clearTimeout(_boardAskTimer); _boardAskTimer = null; }
+
   S.boarded = true; S.boardAsked = true; S.boardingState = 'boarding';
+
   var btn = document.getElementById('quickBoardBtn');
   if(btn){ btn.textContent='🚉 하차하기'; btn.style.background='linear-gradient(135deg,#7a1a1a,#ff375f)'; btn.style.boxShadow='0 4px 16px rgba(255,55,95,.3)'; }
   var pin = document.getElementById('trainPin');
@@ -10034,15 +10025,50 @@ function _confirmBoard() {
   var bannerTxt = document.getElementById('boardBannerTxt');
   if(bannerTxt) bannerTxt.textContent='🚇 이동 중...';
   addPoints(10,'탑승 확인');
-  // boardedAt 설정
+
+  // ★ 탑승 누른 순간을 출발 기준시각으로 확정
+  // 예: 열차 15분 예정이었어도 13분에 탑승 누르면 → 13분 기준으로 경로 전체 재계산
   var nowMs = Date.now();
-  if(!S.boardedAt || S.boardedAt < nowMs - 300000) S.boardedAt = nowMs;
-  // 진동 알림 스케줄
+  var oldBoardedAt = S.boardedAt;
+  S.boardedAt = nowMs;  // ★ 항상 현재 시각으로 덮어씌움
+
+  var diffSec = oldBoardedAt ? Math.round((nowMs - oldBoardedAt) / 1000) : 0;
+  console.log('[탑승확인] boardedAt 재설정: '
+    + (oldBoardedAt ? new Date(oldBoardedAt).toLocaleTimeString() : '없음')
+    + ' → ' + new Date(nowMs).toLocaleTimeString()
+    + ' (차이 ' + diffSec + '초)');
+
+  // ★ 경로 연동 전체 재계산
+  _rebaseAllFromNow(nowMs);
+
+  // 진동 알림 재스케줄 (새 boardedAt 기준)
   _scheduleBoardAlerts();
-  // 시각표 타이머 시작
+  // 시각표 타이머 시작 (새 boardedAt 기준)
   if(typeof _startAccel==='function') _startAccel();
   if(typeof _startTimetableAdvance==='function') _startTimetableAdvance();
-  toast('🚇 탑승 시작! 환승·도착 2정거장 전 진동 알림이 설정되었습니다.');
+
+  toast('🚇 탑승 확인! 경로 시각이 현재 시각으로 업데이트됐습니다.');
+}
+
+// ★ 탑승 시각(nowMs) 기준으로 경로 전체 시각 재계산 + UI 업데이트
+function _rebaseAllFromNow(nowMs) {
+  if(!S.route) return;
+  nowMs = nowMs || Date.now();
+
+  // S.boardedAt이 이미 설정된 경우 보장
+  if(!S.boardedAt) S.boardedAt = nowMs;
+
+  // 타임라인/ETA/HUD 전체 갱신
+  if(typeof renderHorizontalTimeline === 'function') renderHorizontalTimeline();
+  if(typeof renderRouteSegCards === 'function') renderRouteSegCards(S.route);
+  if(typeof calcETA === 'function') calcETA();
+  if(typeof _updateTrackingHUD === 'function') _updateTrackingHUD();
+
+  // 타이머 재기준
+  if(typeof _ttSegStartMs !== 'undefined') _ttSegStartMs = nowMs;
+
+  console.log('[경로재계산] boardedAt=' + new Date(S.boardedAt).toLocaleTimeString()
+    + ' 기준으로 전체 경로 시각 재계산 완료');
 }
 
 // ── 진동 알림 스케줄 ─────────────────────────────────────
@@ -10201,7 +10227,7 @@ function _closeBoardAskModal() {
 }
 function _boardAskYes() {
   _closeBoardAskModal();
-  _confirmBoard();
+  _confirmBoard(); // ← _confirmBoard가 nowMs 기준으로 전부 처리
 }
 function _boardAskNo() {
   _closeBoardAskModal();
@@ -10313,7 +10339,8 @@ function manualBoard(){
 
 // ── _applyBoardZeroPoint: 탑승 제로포인트 적용 ─────────────
 function _applyBoardZeroPoint(dep, now){
-  S.boardedAt   = dep.ms;
+  // ★ boardedAt = 실제 탑승 시각(now). 열차 예정 시각(dep.ms) 아님
+  S.boardedAt   = now;
   S.departureMin = dep.depTime
     ? Math.floor((dep.ms - now)/60000) + kstMinutesAdj()
     : kstMinutesAdj();
@@ -10331,6 +10358,9 @@ function _applyBoardZeroPoint(dep, now){
     boardMsg='🚇 다음 열차 '+dep.depTime+' ('+dep.waitMin+'분 후)';
     toastMsg='⏱ 다음 열차 '+dep.waitMin+'분 후 · '+dep.depTime;
   }
+  // ★ 경로 전체 시각 즉시 재계산
+  if(typeof _rebaseAllFromNow === 'function') _rebaseAllFromNow(now);
+
   const bannerEl = document.getElementById('boardBannerTxt');
   if(bannerEl) bannerEl.textContent = boardMsg;
   toast(toastMsg);
@@ -10338,8 +10368,8 @@ function _applyBoardZeroPoint(dep, now){
   if(dep.depTime && S.route){
     const di = typeof calcRouteDistTime==='function' ? calcRouteDistTime(S.route) : null;
     if(di){
-      const off = Math.floor((dep.ms-now)/60000);
-      const arr = kstMinutesAdj() + off + di.min;
+      const off = 0;  // ★ boardedAt=now이므로 현재 시각 기준
+      const arr = kstMinutesAdj() + di.min;
       const el  = document.getElementById('arriveBtnTime');
       if(el) el.textContent = Math.floor(arr%1440/60).toString().padStart(2,'0')+':'+
                               (arr%60).toString().padStart(2,'0');
@@ -11638,34 +11668,116 @@ function _runTrainAnim(){
   stopTrainAnim();
   if(!S.route || S.curIdx >= S.route.path.length - 1) return;
 
-  const fps = 20;
-  // 시각적 핀 보간만 수행 — 역 전진은 GPS _onGPSUpdate에서만 처리
+  var _segStartMs = Date.now();
+  var _gpsArming  = false;
+  var _segLocked  = false;
+  var _atStation  = false;
+
+  function _getSegSec() {
+    var tp  = S.route.tp || [];
+    var idx = S.curIdx + 1;
+    return (tp[idx] && tp[idx] > 0) ? tp[idx] : 90;
+  }
+
   S.trainAnimInterval = setInterval(function(){
-    if(!S.route || S.curIdx >= S.route.path.length - 1) return;
+    if(!S.route || !S.boardedAt) return;
+    if(S.curIdx >= S.route.path.length - 1){ stopTrainAnim(); return; }
+    if(_atStation) return;
 
-    // ── GPS 실제 이동 감지: coords.speed OR 거리 기반 ───────
-    // speed: 1.0 m/s 이상(=3.6km/h) OR 거리: 10m 이상 이동했을 때만 진행
-    var isMoving = false;
+    var segSec    = _getSegSec();
+    var elapsed   = (Date.now() - _segStartMs) / 1000;
+    var progress  = Math.min(elapsed / segSec, 1.0);
+    S.trainProgress = progress;
+    if(typeof updateTrainPinInterp === 'function') updateTrainPinInterp(progress);
 
-    if(S.speedSamples && S.speedSamples.length >= 2) {
-      var avgSpd = S.speedSamples.reduce(function(a,b){return a+b;},0) / S.speedSamples.length;
-      isMoving = avgSpd >= 1.0;  // 1.0 m/s = 3.6 km/h (걷는 속도 이상)
-    }
-    // 거리 기반 이동 감지 (GPS fix 간격이 길어도 대응)
-    if(!isMoving && S.lastMoveDistM && S.lastMoveDistM >= 10) {
-      isMoving = true;
+    // 10초 전: GPS 사전 확인
+    var remainSec = segSec - elapsed;
+    if(!_gpsArming && remainSec <= 10 && remainSec > 0) {
+      _gpsArming = true;
+      _preCheckNextStation();
     }
 
-    // 이동 중일 때만 시각적 핀 진행률 갱신 (역 전진 X)
-    if(isMoving && S.mapPositions && S.curIdx < S.mapPositions.length - 1) {
-      // 핀 보간은 유지하되 역 전진은 GPS 지오펜싱에서만
-      var prog = Math.min(0.90, S.trainProgress + 0.01);
-      S.trainProgress = prog;
-      updateTrainPinInterp(prog);
+    // 구간 완료: 도착 처리
+    if(progress >= 1.0 && !_segLocked) {
+      _segLocked = true;
+      _arriveAtStation();
     }
-    // ★ 타이머 기반 자동 역 전진 완전 제거 ★
-    // 역 전진은 오직 GPS 지오펜싱(_onGPSUpdate → onStationArrival)에서만 발생
-  }, 1000 / fps);
+  }, 500);
+
+  function _preCheckNextStation() {
+    if(!navigator.geolocation || !S.route) return;
+    var nextIdx  = S.curIdx + 1;
+    var nextName = S.route.path[nextIdx];
+    var nextLine = (S.route.lp || [])[nextIdx] || '';
+    var nextStn  = STNDB.find(function(s){ return s.name===nextName && (s.line===nextLine||!nextLine); })
+                || STNDB.find(function(s){ return s.name===nextName; });
+    if(!nextStn || !nextStn.lat || nextStn.lat === 0) return;
+    console.log('[사전GPS] 10초 전 확인 → ' + nextName);
+    navigator.geolocation.getCurrentPosition(
+      function(pos) {
+        var d   = haversineM(pos.coords.latitude, pos.coords.longitude, nextStn.lat, nextStn.lng);
+        var acc = pos.coords.accuracy || 999;
+        console.log('[사전GPS] ' + nextName + ' 거리:' + Math.round(d) + 'm acc:' + Math.round(acc) + 'm');
+        if(d <= 150 && acc < 200 && !_segLocked) {
+          _segLocked = true;
+          console.log('[사전GPS] ★ 이미 도착권 → 즉시 전진');
+          _arriveAtStation();
+        }
+      },
+      function(){},
+      { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+    );
+  }
+
+  function _arriveAtStation() {
+    _atStation = true;
+    S.trainProgress = 1.0;
+    if(typeof updateTrainPinInterp === 'function') updateTrainPinInterp(1.0);
+    var arrivedName = (S.route.path[S.curIdx + 1]) || '';
+    console.log('[도착] ' + arrivedName + ' — GPS 검증');
+    var bannerTxt = document.getElementById('boardBannerTxt');
+    if(bannerTxt) bannerTxt.textContent = '🚉 ' + arrivedName + ' 도착';
+
+    _verifyArrivalGps(arrivedName, function(confirmed) {
+      console.log('[도착검증] ' + arrivedName + ': ' + (confirmed ? '✅' : '⚠️ 통과'));
+      if(typeof onStationArrival === 'function') onStationArrival(true);
+
+      // 10초 정차 후 다음 구간 시작
+      setTimeout(function() {
+        if(!S.route || S.boardingState !== 'boarding') return;
+        if(S.curIdx >= S.route.path.length - 1){ stopTrainAnim(); return; }
+        _atStation  = false;
+        _segLocked  = false;
+        _gpsArming  = false;
+        _segStartMs = Date.now();
+        S.trainProgress = 0;
+        var curName = S.route.path[S.curIdx]   || '';
+        var nxtName = S.route.path[S.curIdx+1] || '';
+        var banner  = document.getElementById('boardBannerTxt');
+        if(banner) banner.textContent = '🚇 ' + curName + ' → ' + nxtName + ' 이동 중';
+        console.log('[출발] ' + curName + ' → ' + nxtName);
+      }, 10000);
+    });
+  }
+
+  function _verifyArrivalGps(stnName, cb) {
+    if(!navigator.geolocation || !S.route) { cb(false); return; }
+    var idx  = S.curIdx + 1;
+    var line = (S.route.lp || [])[idx] || '';
+    var stn  = STNDB.find(function(s){ return s.name===stnName && (s.line===line||!line); })
+            || STNDB.find(function(s){ return s.name===stnName; });
+    if(!stn || !stn.lat || stn.lat === 0) { cb(false); return; }
+    navigator.geolocation.getCurrentPosition(
+      function(pos) {
+        var d   = haversineM(pos.coords.latitude, pos.coords.longitude, stn.lat, stn.lng);
+        var acc = pos.coords.accuracy || 999;
+        console.log('[도착검증GPS] ' + stnName + ' 거리:' + Math.round(d) + 'm acc:' + Math.round(acc) + 'm');
+        cb(d <= 400 || acc > 150);
+      },
+      function() { cb(false); },
+      { enableHighAccuracy: true, timeout: 6000, maximumAge: 0 }
+    );
+  }
 }
 function stopTrainAnim(){
   if(S.trainAnimInterval){ clearInterval(S.trainAnimInterval); S.trainAnimInterval=null; }
