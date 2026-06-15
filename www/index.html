@@ -5358,8 +5358,8 @@ function _realNextDep(lineName, stnName, dir, baseMin, isWeekend){
   var arr = day[dk] || day['상'] || day['하'];
   if(!arr || !arr.length) return null;
   var times = _rttDecode(arr);
-  // ★ 최소 2분 여유: 현재 시각 +2분 이후 열차만 (지금 막 떠나는 차는 못 탐)
-  var minMin = baseMin + 2;
+  // ★ 현재 시각 기준 가장 빠른 열차 (여유 제거)
+  var minMin = baseMin;
   for(var i=0;i<times.length;i++){
     if(times[i] >= minMin) return times[i];
   }
@@ -5439,8 +5439,8 @@ function getNextDepartureMins(lineName, stnName, direction, baseMin) {
         var vals   = dayData[dirKey];
         if(vals && vals.length) {
           var times = Array.isArray(vals) ? vals : (vals.t||[]);
-          // ★ 기준 시각 이후 가장 가까운 실제 열차 시각 (실제 시각표 기반)
-          var next  = times.find(function(t){ return t > curMin; });
+  // ★ 기준 시각 이후 가장 가까운 실제 열차 시각 (★ +2분 여유 제거 — 실제 출발 시각 그대로)
+          var next  = times.find(function(t){ return t >= curMin; });
           if(next != null) return next;
         }
       }
@@ -5452,41 +5452,36 @@ function getNextDepartureMins(lineName, stnName, direction, baseMin) {
     var _rn = _realNextDep(lineName, stnName, direction, curMin, _wkEnd);
     if(_rn != null) return _rn;
   }
-  // ★ 내장 시각표(_BUILTIN_TT) 사용 — 첫차 기준 실제 열차 격자 (현재시각 아님)
+  // ★ 내장 시각표(_BUILTIN_TT) 사용
   if(typeof _BUILTIN_TT !== 'undefined' && _BUILTIN_TT[lineName]){
     var grid = _BUILTIN_TT[lineName];
-    // ★ 최소 2분 여유: 현재 +2분 이후 열차만 (지금 막 떠나는 차 제외)
-    var gMin = curMin + 2;
+    // ★ 현재 시각 기준 가장 빠른 열차
+    var gMin = curMin;
     for(var gi=0; gi<grid.length; gi++){
       if(grid[gi] >= gMin) return grid[gi];
     }
-    // 오늘 막차 지남 → 다음날 첫차
     if(grid.length) return grid[0] + 1440;
   }
-  // fallback: 배차 간격 기반 (★ 시간대별 보정)
+  // fallback: 배차 간격 기반
   var sched = LINE_SCHEDULE[lineName];
   if(!sched) return null;
   var firstMin = timeToMin(sched.first);
   var lastMin  = timeToMin(sched.last);
   if(lastMin < firstMin) lastMin += 1440;
   if(curMin < firstMin || curMin > lastMin) return null;
-  // ★ 시간대별 실제 배차 반영 (실측 기반):
-  //   출퇴근(07~09, 18~20) 짧게, 평시 기본, 심야(22시~) 길게, 주말 가중
   var baseIv = sched.interval;
   var iv = baseIv;
   var hour = Math.floor((curMin % 1440) / 60);
   var isPeak = (hour >= 7 && hour < 9) || (hour >= 18 && hour < 20);
   var isNight = (hour >= 22 || hour < 6);
   var isWeekend = (typeof getDayCode === 'function') && (getDayCode() === '토' || getDayCode() === '일');
-  if(isPeak)        iv = Math.max(2, Math.round(baseIv * 0.6));  // 출퇴근 단축
-  else if(isNight)  iv = Math.round(baseIv * 2.2);                // 심야 증가
-  else if(isWeekend) iv = Math.round(baseIv * 1.4);              // 주말 증가
+  if(isPeak)        iv = Math.max(2, Math.round(baseIv * 0.6));
+  else if(isNight)  iv = Math.round(baseIv * 2.2);
+  else if(isWeekend) iv = Math.round(baseIv * 1.4);
   if(iv < 1) iv = 1;
-  // ★ 최소 2분 여유: 다음 배차가 2분 미만이면 그 다음 배차로
-  var gMin2 = curMin + 2;
+  // ★ 현재 시각 기준 바로 다음 배차
   var waited = (curMin - firstMin) % iv;
   var nextT = curMin + (iv - waited);
-  while(nextT < gMin2) nextT += iv;  // 2분 미만이면 다음 배차
   return nextT;
 }
 
@@ -7806,8 +7801,15 @@ function startWatch(){
       // 실제 이동 확인 후 150m 반경 도착 판정
       if(S.boardingState === 'boarding' && S.curIdx < path.length - 1){
         const nextStnName = path[S.curIdx + 1];
-        const nextStn = STNDB.find(s => s.name === nextStnName);
-        if(nextStn && nextStn.lat && nextStn.lng){
+        const nextLine    = S.route.lp ? S.route.lp[S.curIdx + 1] : '';
+        // ★ 노선 일치 우선, 없으면 이름만으로 폴백
+        const nextStn = (nextLine
+          ? STNDB.find(s => s.name === nextStnName && s.line === nextLine)
+          : null) || STNDB.find(s => s.name === nextStnName);
+        // ★ lat/lng 숫자 유효성 체크 (0 falsy 버그 수정)
+        if(nextStn && nextStn.lat != null && nextStn.lng != null
+           && !isNaN(nextStn.lat) && !isNaN(nextStn.lng)
+           && !(nextStn.lat === 0 && nextStn.lng === 0)){
           const distToNext = hav(lat, lng, nextStn.lat, nextStn.lng);
           if(distToNext <= 150){
             console.log('[GPS] 150m 도착 확인:', nextStnName, '거리:', Math.round(distToNext)+'m');
@@ -13488,6 +13490,73 @@ window.ExitTunnelMode  = ExitTunnelMode;
 // ══════════════════════════════════════════════════════════════
 // 요구사항2: 30초 GPS 침묵 watchdog — 미탑승/지연 시 다음 열차 기점 재연산
 // ══════════════════════════════════════════════════════════════
+// ── 열차 도착 임박 알림 타이머 ────────────────────────────
+var _trainAlertTimers = [];
+function _clearTrainAlerts() {
+  _trainAlertTimers.forEach(function(t){ clearTimeout(t); });
+  _trainAlertTimers = [];
+}
+function _scheduleTrainAlerts(depMs, waitMin, depTimeStr) {
+  _clearTrainAlerts();
+  if(!depMs || waitMin <= 0) return;
+  var nowMs = Date.now();
+  var msUntilDep = depMs - nowMs;
+  if(msUntilDep <= 0) return;
+
+  // ── 2~4분 전: '지금 뛰면 탈 수 있어요' ──
+  // 3분 전 시점에 알림 (2~4분 범위 커버)
+  var alert3Min = msUntilDep - 3 * 60 * 1000;
+  if(alert3Min > 0) {
+    _trainAlertTimers.push(setTimeout(function() {
+      if(S.boardingState === 'boarding') return; // 이미 탑승하면 무시
+      _showTrainUrgentModal('run', depTimeStr, null);
+    }, alert3Min));
+  }
+
+  // ── 1분 전: '다음 열차를 기다리세요' ──
+  var alert1Min = msUntilDep - 1 * 60 * 1000;
+  if(alert1Min > 0) {
+    _trainAlertTimers.push(setTimeout(function() {
+      if(S.boardingState === 'boarding') return; // 이미 탑승하면 무시
+      // 다음 열차 시각 계산
+      var nextMs = null, nextTimeStr = '-';
+      if(typeof _resolveTrainDepartMs === 'function') {
+        var nxt = _resolveTrainDepartMs(depMs + 60000); // 현 열차 1분 후 기준
+        if(nxt && nxt.waitMin > 0) {
+          nextMs = nxt.ms;
+          nextTimeStr = nxt.depTime || '-';
+          var nextWait = Math.round((nxt.ms - Date.now()) / 60000);
+          _showTrainUrgentModal('next', depTimeStr, nextWait + '분 후 (' + nextTimeStr + ')');
+        } else {
+          _showTrainUrgentModal('next', depTimeStr, '잠시 후');
+        }
+      }
+    }, alert1Min));
+  }
+}
+
+function _showTrainUrgentModal(type, depTimeStr, nextInfo) {
+  // 기존 gpsModal 구조 재활용
+  var m = document.getElementById('gpsModal');
+  if(!m) { toast(type === 'run' ? '🏃 지금 뛰면 탈 수 있어요!' : '⏳ 다음 열차를 기다리세요'); return; }
+  var icon  = document.getElementById('gmIcon');
+  var title = document.getElementById('gmTitle');
+  var body  = document.getElementById('gmBody');
+  var btns  = document.querySelector('#gpsModal .gm-btns');
+  if(type === 'run') {
+    if(icon)  icon.textContent  = '🏃';
+    if(title) title.textContent = '지금 뛰면 탈 수 있어요!';
+    if(body)  body.innerHTML    = '<b>' + (depTimeStr||'') + '</b> 출발 열차까지 약 3분 남았습니다.<br>서두르면 탑승 가능합니다!';
+    if(btns)  btns.innerHTML    = '<button class="gm-yes" onclick="document.getElementById(\'gpsModal\').classList.remove(\'on\');document.getElementById(\'gpsModal\').style.display=\'none\';">확인</button>';
+  } else {
+    if(icon)  icon.textContent  = '⏳';
+    if(title) title.textContent = '다음 열차를 기다리세요';
+    if(body)  body.innerHTML    = '<b>' + (depTimeStr||'') + '</b> 출발 열차까지 1분 남았습니다.<br>다음 열차: <b>' + (nextInfo||'잠시 후') + '</b> 도착 예정';
+    if(btns)  btns.innerHTML    = '<button class="gm-yes" onclick="document.getElementById(\'gpsModal\').classList.remove(\'on\');document.getElementById(\'gpsModal\').style.display=\'none\';">확인</button>';
+  }
+  _openGpsModal();
+}
+
 function _startSilenceWatchdog() {
   _stopSilenceWatchdog();
   _trackingEngine.lastMoveMs = Date.now();
@@ -13961,6 +14030,9 @@ function startTracking() {
       if(bannerEl) bannerEl.textContent = '🛰️ GPS 관제 모드 가동 중';
     }
 
+    // ★ 열차 도착 임박 알림 타이머 설정
+    _scheduleTrainAlerts(dep.ms, dep.waitMin || 0, dep.depTime || '');
+
     // renderRouteSegCards에도 출발시각 반영
     if(typeof renderRouteSegCards === 'function') renderRouteSegCards(S.route);
   })();
@@ -14060,6 +14132,7 @@ function stopTracking() {
 
   // ── [방어1+2] watchdog·가상주행 정지 + 지연 오프셋 Cleanup ──
   if(typeof _stopSilenceWatchdog === 'function') _stopSilenceWatchdog();
+  if(typeof _clearTrainAlerts === 'function') _clearTrainAlerts();
   if(typeof _exitDeadReckoning === 'function') _exitDeadReckoning();
   S._delayOffsetMs = 0;  // 도착 완료 → 누적 연착 초기화
   if(typeof window !== 'undefined') window.dynamicDelayOffset = 0;
