@@ -5552,6 +5552,13 @@ function _resolveTrainDepartMs(nowMs) {
   if(!S || !S.start) return {ms: nowMs||Date.now(), depTime:null, waitMin:0};
   var lineName  = S.start.line;
   var stnName   = S.start.name;
+  var _nowMs    = nowMs || Date.now();
+
+  // ★ nowMs → KST 분(minutes) 변환 (다음열차 계산 기준점)
+  var d = new Date(_nowMs);
+  var baseMin = (d.getUTCHours() + 9) * 60 + d.getUTCMinutes();
+  // 자정 넘김 처리
+  if(baseMin >= 1440) baseMin -= 1440;
 
   // 방향 판단
   var direction = '하행';
@@ -5567,15 +5574,16 @@ function _resolveTrainDepartMs(nowMs) {
   }
   S._nextTrainDir = direction;
 
-  var nextMins = getNextDepartureMins(lineName, stnName, direction);
-  if(nextMins === null) return {ms: nowMs||Date.now(), depTime:null, waitMin:0};
+  // ★ baseMin을 넘겨서 nowMs 이후 첫 열차를 정확히 계산
+  var nextMins = getNextDepartureMins(lineName, stnName, direction, baseMin);
+  if(nextMins === null) return {ms: _nowMs, depTime:null, waitMin:0};
 
   var cur = kstMinutesAdj();
-  if(nextMins < cur - 60) nextMins += 1440;
+  if(nextMins < baseMin) nextMins += 1440; // 자정 넘김
   var waitMin = Math.max(0, nextMins - cur);
-  if(waitMin > 120) return {ms: nowMs||Date.now(), depTime:null, waitMin:0};
+  if(waitMin > 120) return {ms: _nowMs, depTime:null, waitMin:0};
 
-  var depMs = (nowMs||Date.now()) + waitMin * 60000;
+  var depMs = Date.now() + waitMin * 60000;
   var depH  = Math.floor(nextMins%1440/60).toString().padStart(2,'0');
   var depM  = (nextMins%60).toString().padStart(2,'0');
   return { ms:depMs, depTime:depH+':'+depM, waitMin:waitMin, source:'static' };
@@ -5864,9 +5872,9 @@ edge('왕십리','한양대',90,'2호선');
 edge('한양대','뚝섬',90,'2호선');
 edge('뚝섬','성수',60,'2호선');
 edge('성수','건대입구',90,'2호선');
-edge('건대입구','구의',120,'2호선');
+edge('건대입구','구의',90,'2호선');
 edge('구의','강변',60,'2호선');
-edge('강변','잠실나루',120,'2호선');
+edge('강변','잠실나루',90,'2호선');
 edge('잠실나루','잠실',90,'2호선');
 edge('잠실','잠실새내',90,'2호선');
 edge('잠실새내','종합운동장',90,'2호선');
@@ -5876,13 +5884,13 @@ edge('선릉','역삼',90,'2호선');
 edge('역삼','강남',60,'2호선');
 edge('강남','교대',90,'2호선');
 edge('교대','서초',60,'2호선');
-edge('서초','방배',120,'2호선');
+edge('서초','방배',90,'2호선');
 edge('방배','사당',150,'2호선');
-edge('사당','낙성대',120,'2호선');
+edge('사당','낙성대',90,'2호선');
 edge('낙성대','서울대입구',90,'2호선');
 edge('서울대입구','봉천',60,'2호선');
 edge('봉천','신림',90,'2호선');
-edge('신림','신대방',120,'2호선');
+edge('신림','신대방',90,'2호선');
 edge('신대방','구로디지털단지',90,'2호선');
 edge('구로디지털단지','대림',90,'2호선');
 edge('대림','도림천',90,'2호선');
@@ -5891,7 +5899,7 @@ edge('문래','영등포구청',60,'2호선');
 edge('영등포구청','당산',90,'2호선');
 edge('당산','합정',150,'2호선');
 edge('합정','홍대입구',90,'2호선');
-edge('홍대입구','신촌',120,'2호선');
+edge('홍대입구','신촌',90,'2호선');
 edge('신촌','이대',60,'2호선');
 edge('이대','아현',60,'2호선');
 edge('아현','충정로',90,'2호선');
@@ -6351,76 +6359,76 @@ edge('삼성','수서',180,'GTX-A');
 edge('수서','성남',240,'GTX-A');
 edge('성남','구성',300,'GTX-A');
 edge('구성','동탄',420,'GTX-A');
-edge('솔밭공원','4.19민주묘지',120,'우이신설선');
-edge('4.19민주묘지','가오리',120,'우이신설선');
-edge('가오리','화계',120,'우이신설선');
-edge('화계','삼양',120,'우이신설선');
-edge('삼양','삼양사거리',120,'우이신설선');
-edge('삼양사거리','솔샘',120,'우이신설선');
-edge('솔샘','북한산보국문',120,'우이신설선');
-edge('북한산보국문','정릉',120,'우이신설선');
-edge('정릉','성신여대입구',120,'우이신설선');
-edge('성신여대입구','보문',120,'우이신설선');
-edge('보문','신설동',120,'우이신설선');
-edge('북한산우이','솔밭공원',120,'우이신설선');
-edge('검단오류','왕길',120,'인천2호선');
-edge('왕길','검단사거리',120,'인천2호선');
-edge('검단사거리','마전',120,'인천2호선');
-edge('마전','완정',120,'인천2호선');
-edge('완정','독정',120,'인천2호선');
-edge('독정','검암',120,'인천2호선');
-edge('검암','검바위',120,'인천2호선');
-edge('검바위','아시아드경기장',120,'인천2호선');
-edge('아시아드경기장','서구청',120,'인천2호선');
-edge('서구청','가정',120,'인천2호선');
-edge('가정','가정중앙시장',120,'인천2호선');
-edge('가정중앙시장','석남',120,'인천2호선');
-edge('석남','서부여성회관',120,'인천2호선');
-edge('서부여성회관','인천가좌',120,'인천2호선');
-edge('인천가좌','가재울',120,'인천2호선');
-edge('가재울','주안국가산단',120,'인천2호선');
-edge('주안국가산단','주안',120,'인천2호선');
-edge('주안','시민공원',120,'인천2호선');
-edge('시민공원','석바위시장',120,'인천2호선');
-edge('석바위시장','인천시청',120,'인천2호선');
-edge('인천시청','석천사거리',120,'인천2호선');
-edge('석천사거리','모래내시장',120,'인천2호선');
-edge('모래내시장','만수',120,'인천2호선');
-edge('만수','남동구청',120,'인천2호선');
-edge('남동구청','인천대공원',120,'인천2호선');
-edge('인천대공원','운연',120,'인천2호선');
-edge('검단호수공원','신검단중앙',120,'인천1호선');
-edge('신검단중앙','아라',120,'인천1호선');
-edge('아라','계양',120,'인천1호선');
-edge('계양','귤현',120,'인천1호선');
-edge('귤현','박촌',120,'인천1호선');
-edge('박촌','임학',120,'인천1호선');
-edge('임학','계산',120,'인천1호선');
-edge('계산','경인교대입구',120,'인천1호선');
-edge('경인교대입구','작전',120,'인천1호선');
-edge('작전','갈산',120,'인천1호선');
-edge('갈산','부평구청',120,'인천1호선');
-edge('부평구청','부평시장',120,'인천1호선');
-edge('부평시장','부평',120,'인천1호선');
-edge('부평','동수',120,'인천1호선');
-edge('동수','부평삼거리',120,'인천1호선');
-edge('부평삼거리','간석오거리',120,'인천1호선');
-edge('간석오거리','인천시청',120,'인천1호선');
-edge('인천시청','예술회관',120,'인천1호선');
-edge('예술회관','인천터미널',120,'인천1호선');
+edge('솔밭공원','4.19민주묘지',90,'우이신설선');
+edge('4.19민주묘지','가오리',90,'우이신설선');
+edge('가오리','화계',90,'우이신설선');
+edge('화계','삼양',90,'우이신설선');
+edge('삼양','삼양사거리',90,'우이신설선');
+edge('삼양사거리','솔샘',90,'우이신설선');
+edge('솔샘','북한산보국문',90,'우이신설선');
+edge('북한산보국문','정릉',90,'우이신설선');
+edge('정릉','성신여대입구',90,'우이신설선');
+edge('성신여대입구','보문',90,'우이신설선');
+edge('보문','신설동',90,'우이신설선');
+edge('북한산우이','솔밭공원',90,'우이신설선');
+edge('검단오류','왕길',90,'인천2호선');
+edge('왕길','검단사거리',90,'인천2호선');
+edge('검단사거리','마전',90,'인천2호선');
+edge('마전','완정',90,'인천2호선');
+edge('완정','독정',90,'인천2호선');
+edge('독정','검암',90,'인천2호선');
+edge('검암','검바위',90,'인천2호선');
+edge('검바위','아시아드경기장',90,'인천2호선');
+edge('아시아드경기장','서구청',90,'인천2호선');
+edge('서구청','가정',90,'인천2호선');
+edge('가정','가정중앙시장',90,'인천2호선');
+edge('가정중앙시장','석남',90,'인천2호선');
+edge('석남','서부여성회관',90,'인천2호선');
+edge('서부여성회관','인천가좌',90,'인천2호선');
+edge('인천가좌','가재울',90,'인천2호선');
+edge('가재울','주안국가산단',90,'인천2호선');
+edge('주안국가산단','주안',90,'인천2호선');
+edge('주안','시민공원',90,'인천2호선');
+edge('시민공원','석바위시장',90,'인천2호선');
+edge('석바위시장','인천시청',90,'인천2호선');
+edge('인천시청','석천사거리',90,'인천2호선');
+edge('석천사거리','모래내시장',90,'인천2호선');
+edge('모래내시장','만수',90,'인천2호선');
+edge('만수','남동구청',90,'인천2호선');
+edge('남동구청','인천대공원',90,'인천2호선');
+edge('인천대공원','운연',90,'인천2호선');
+edge('검단호수공원','신검단중앙',90,'인천1호선');
+edge('신검단중앙','아라',90,'인천1호선');
+edge('아라','계양',150,'인천1호선');
+edge('계양','귤현',90,'인천1호선');
+edge('귤현','박촌',90,'인천1호선');
+edge('박촌','임학',90,'인천1호선');
+edge('임학','계산',90,'인천1호선');
+edge('계산','경인교대입구',90,'인천1호선');
+edge('경인교대입구','작전',90,'인천1호선');
+edge('작전','갈산',90,'인천1호선');
+edge('갈산','부평구청',90,'인천1호선');
+edge('부평구청','부평시장',90,'인천1호선');
+edge('부평시장','부평',90,'인천1호선');
+edge('부평','동수',90,'인천1호선');
+edge('동수','부평삼거리',90,'인천1호선');
+edge('부평삼거리','간석오거리',90,'인천1호선');
+edge('간석오거리','인천시청',90,'인천1호선');
+edge('인천시청','예술회관',90,'인천1호선');
+edge('예술회관','인천터미널',90,'인천1호선');
 edge('인천터미널','문학경기장',120,'인천1호선');
 edge('문학경기장','선학',120,'인천1호선');
-edge('선학','신연수',120,'인천1호선');
-edge('신연수','원인재',120,'인천1호선');
-edge('원인재','동춘',120,'인천1호선');
-edge('동춘','동막',120,'인천1호선');
-edge('동막','캠퍼스타운',120,'인천1호선');
-edge('캠퍼스타운','테크노파크',120,'인천1호선');
-edge('테크노파크','지식정보단지',120,'인천1호선');
+edge('선학','신연수',90,'인천1호선');
+edge('신연수','원인재',90,'인천1호선');
+edge('원인재','동춘',90,'인천1호선');
+edge('동춘','동막',90,'인천1호선');
+edge('동막','캠퍼스타운',90,'인천1호선');
+edge('캠퍼스타운','테크노파크',90,'인천1호선');
+edge('테크노파크','지식정보단지',90,'인천1호선');
 edge('지식정보단지','인천대입구',120,'인천1호선');
-edge('인천대입구','센트럴파크',120,'인천1호선');
-edge('센트럴파크','국제업무지구',120,'인천1호선');
-edge('국제업무지구','송도달빛축제공원',120,'인천1호선');
+edge('인천대입구','센트럴파크',90,'인천1호선');
+edge('센트럴파크','국제업무지구',90,'인천1호선');
+edge('국제업무지구','송도달빛축제공원',90,'인천1호선');
 edge('일산','풍산',120,'서해선');
 edge('풍산','백마',120,'서해선');
 edge('백마','곡산',120,'서해선');
@@ -6517,25 +6525,25 @@ edge('동백','초당',120,'에버라인선');
 edge('초당','삼가',120,'에버라인선');
 edge('삼가','시청.용인대',120,'에버라인선');
 edge('시청.용인대','명지대',120,'에버라인선');
-edge('샛강','대방',120,'신림선');
-edge('대방','서울지방병무청',120,'신림선');
-edge('서울지방병무청','보라매',120,'신림선');
-edge('보라매','보라매공원',120,'신림선');
-edge('보라매공원','보라매병원',120,'신림선');
-edge('보라매병원','당곡',120,'신림선');
-edge('당곡','신림',120,'신림선');
-edge('신림','서원',120,'신림선');
-edge('서원','서울대벤처타운',120,'신림선');
-edge('서울대벤처타운','관악산',120,'신림선');
-edge('양촌','구래',120,'김포골드라인');
-edge('구래','마산',120,'김포골드라인');
-edge('마산','장기',120,'김포골드라인');
-edge('장기','운양',120,'김포골드라인');
-edge('운양','걸포북변',120,'김포골드라인');
-edge('걸포북변','사우',120,'김포골드라인');
-edge('사우','풍무',120,'김포골드라인');
-edge('풍무','고촌',120,'김포골드라인');
-edge('고촌','김포공항',120,'김포골드라인');
+edge('샛강','대방',90,'신림선');
+edge('대방','서울지방병무청',90,'신림선');
+edge('서울지방병무청','보라매',90,'신림선');
+edge('보라매','보라매공원',90,'신림선');
+edge('보라매공원','보라매병원',90,'신림선');
+edge('보라매병원','당곡',90,'신림선');
+edge('당곡','신림',90,'신림선');
+edge('신림','서원',90,'신림선');
+edge('서원','서울대벤처타운',90,'신림선');
+edge('서울대벤처타운','관악산',90,'신림선');
+edge('양촌','구래',90,'김포골드라인');
+edge('구래','마산',90,'김포골드라인');
+edge('마산','장기',90,'김포골드라인');
+edge('장기','운양',90,'김포골드라인');
+edge('운양','걸포북변',90,'김포골드라인');
+edge('걸포북변','사우',90,'김포골드라인');
+edge('사우','풍무',90,'김포골드라인');
+edge('풍무','고촌',90,'김포골드라인');
+edge('고촌','김포공항',90,'김포골드라인');
 edge('수원','수원',180,'수인분당선');
 edge('영등포구청','영등포구청',180,'5호선');
 edge('사당','사당',180,'4호선');
@@ -7990,9 +7998,16 @@ var _ttSegStartMs   = null;  // 현재 구간 실제 시작 ms (지연 측정용
 function _startTimetableAdvance() {
   _stopTimetableAdvance();
   if(!S.route || !S.boardedAt) return;
-  _ttSegStartMs = Date.now();  // 탑승 확인 시점 = 구간 시작
+  // ★ 타이머 기준: 실제 탑승 확인 시각 (현재 시각)
+  // boardedAt은 열차 출발 예정 ms이지만, 실제로 탑승한 시각이 다를 수 있음
+  // → 현재 시각 기준으로 첫 번째 구간 타이머를 설정
+  _ttSegStartMs = Date.now();
+
+  // boardedAt과 현재 시각의 차이만큼 첫 구간 시간에서 빼기
+  // (이미 일부 구간이 경과했을 수 있음)
   _scheduleTimetableSteps();
-  console.log('[시각표] 타이머 시작. boardedAt=' + new Date(S.boardedAt).toLocaleTimeString());
+  console.log('[시각표] 타이머 시작. 탑승확인=' + new Date().toLocaleTimeString()
+    + ' boardedAt=' + new Date(S.boardedAt).toLocaleTimeString());
 }
 function _stopTimetableAdvance() {
   if(_timetableTimer) { clearTimeout(_timetableTimer); _timetableTimer = null; }
@@ -8000,16 +8015,20 @@ function _stopTimetableAdvance() {
 function _scheduleTimetableSteps() {
   if(!S.route || S.boardingState !== 'boarding') return;
   var path = S.route.path || [];
-  if(S.curIdx >= path.length - 1) return; // 이미 목적지
+  if(S.curIdx >= path.length - 1) return;
   var tp  = S.route.tp || [];
-  // ★ 다음 역까지 소요시간: tp[curIdx+1] (tp[0]=출발역=0초이므로 +1 필요)
   var nextIdx = S.curIdx + 1;
-  var segSec  = tp[nextIdx] || 120;
+  var segSec  = tp[nextIdx] || 90; // ★ 기본값 90초 (120→90)
   var delayMs = (S._delayOffsetMs || 0);
   var waitMs  = segSec * 1000 + delayMs;
-  var elapsed = _ttSegStartMs ? (Date.now() - _ttSegStartMs) : 0;
-  var remaining = Math.max(waitMs - elapsed, 2000); // 최소 2초
-  console.log('[시각표] 다음역(' + path[nextIdx] + ')까지 ' + Math.round(remaining/1000) + '초 (tp['+nextIdx+']='+segSec+'s + 지연'+Math.round(delayMs/1000)+'s - 경과'+Math.round(elapsed/1000)+'s)');
+
+  // ★ 구간 시작 시각 기준으로 경과 시간 차감
+  var elapsed = _ttSegStartMs ? Math.max(0, Date.now() - _ttSegStartMs) : 0;
+  var remaining = Math.max(waitMs - elapsed, 1000); // 최소 1초
+
+  console.log('[시각표] ' + path[S.curIdx] + '→' + path[nextIdx]
+    + ' 구간:' + segSec + 's 지연:' + Math.round(delayMs/1000) + 's'
+    + ' 경과:' + Math.round(elapsed/1000) + 's → ' + Math.round(remaining/1000) + 's 후 전진');
 
   _timetableTimer = setTimeout(function() {
     _doTimetableAdvance();
@@ -10195,29 +10214,46 @@ function _boardAskNo() {
 function _boardAskNext() {
   _closeBoardAskModal();
   var prevDepMs = document.getElementById('boardAskModal')?._depMs || Date.now();
-  // 현재 열차 보내고 다음 열차 시각 계산
+
+  // ★ 현재 열차 출발 시각 + 1분 이후 기준으로 다음 열차 계산
+  // prevDepMs가 과거면 현재 시각 기준 사용
+  var searchFrom = Math.max(prevDepMs, Date.now()) + 60000;
   var nxt = (typeof _resolveTrainDepartMs === 'function')
-    ? _resolveTrainDepartMs(prevDepMs + 90000)
+    ? _resolveTrainDepartMs(searchFrom)
     : null;
-  if(nxt && nxt.ms) {
+
+  if(nxt && nxt.ms && nxt.depTime) {
     S.boardedAt = nxt.ms;
     S._delayOffsetMs = 0;
     var waitMin = Math.max(1, Math.round((nxt.ms - Date.now()) / 60000));
-    // UI 전체 업데이트
+
+    // 타임라인/ETA 전체 업데이트
     if(typeof renderRouteSegCards === 'function') renderRouteSegCards(S.route);
     if(typeof renderHorizontalTimeline === 'function') renderHorizontalTimeline();
     if(typeof calcETA === 'function') calcETA();
+
     // 배너 업데이트
     var bannerEl = document.getElementById('boardBannerTxt');
-    if(bannerEl) bannerEl.textContent = '🕐 다음 열차 ' + (nxt.depTime||'') + ' (' + waitMin + '분 후)';
-    // 새 출발시각 기준으로 팝업/알림 재스케줄
+    if(bannerEl) bannerEl.textContent = '🕐 다음 열차 ' + nxt.depTime + ' (' + waitMin + '분 후)';
+
+    // 새 출발시각 기준 팝업/알림 재스케줄
     _scheduleBoardAskPopup(nxt.ms);
-    _scheduleTrainAlerts(nxt.ms, waitMin, nxt.depTime||'');
-    toast('🕐 다음 열차 ' + (nxt.depTime ? nxt.depTime+' ' : '') + '(' + waitMin + '분 후) 로 변경됐어요.');
+    _scheduleTrainAlerts(nxt.ms, waitMin, nxt.depTime);
+
+    toast('🕐 다음 열차 ' + nxt.depTime + ' (' + waitMin + '분 후) 로 변경됐어요.');
+
     // 즉시 안내 팝업 (다음 열차 기준)
-    setTimeout(function(){ _showRouteReadyPopup(waitMin, nxt.depTime||'', nxt.ms); }, 600);
+    setTimeout(function(){ _showRouteReadyPopup(waitMin, nxt.depTime, nxt.ms); }, 500);
   } else {
-    toast('다음 열차 시각을 찾을 수 없습니다.');
+    // 다음 열차를 못 찾은 경우: 현재 시각 기준 재탐색
+    var fallback = _resolveTrainDepartMs(Date.now() + 120000);
+    if(fallback && fallback.depTime) {
+      toast('🕐 다음 열차: ' + fallback.depTime);
+      S.boardedAt = fallback.ms;
+      _scheduleBoardAskPopup(fallback.ms);
+    } else {
+      toast('다음 열차 시각을 찾을 수 없습니다. 직접 탑승 버튼을 눌러주세요.');
+    }
   }
 }
 
@@ -14231,6 +14267,7 @@ function onStationArrival(skipGpsCheck) {
       var bannerTxt = document.getElementById('boardBannerTxt');
       if(bannerTxt) bannerTxt.textContent = '🚇 이동 중 · ' + curStnName + (isXferArrival ? ' 환승' : ' 통과');
       console.log('[도착] ' + curStnName + ' (idx=' + S.curIdx + '/' + (S.route.path.length-1) + ')');
+
       if(S.curIdx >= S.route.path.length - 1) {
         stopTracking();
         if(typeof toast==='function') toast('🎉 목적지 ' + curStnName + ' 도착!');
@@ -14238,6 +14275,9 @@ function onStationArrival(skipGpsCheck) {
       } else {
         if(typeof startTrainAnim==='function') startTrainAnim();
         if(typeof startNextTrainPolling==='function' && stn) startNextTrainPolling(stn);
+
+        // ★ 문 열릴 때 GPS 위치 보정 (역 도착 후 20초 대기)
+        _scheduleStationGpsCorrection(S.curIdx);
       }
     } catch(e) { console.warn('[_doArrival 오류]', e.message); }
   }
@@ -14264,7 +14304,145 @@ function onStationArrival(skipGpsCheck) {
 }
 window.onStationArrival = onStationArrival;
 
-// ── _scheduleStationTimeout: ★ 수정1 — 타이머 자동 전진 완전 제거 ──
+// ══════════════════════════════════════════════════════════════
+// ★ 문 열릴 때 GPS 위치 보정
+//   역 도착 후 20초 대기(문 열림) → GPS 1회 확인 → 실제 역 특정
+//   타이머 오차 누적을 매 역마다 자동 교정
+// ══════════════════════════════════════════════════════════════
+var _stationGpsTimer = null;
+
+function _scheduleStationGpsCorrection(expectedIdx) {
+  // 기존 타이머 취소
+  if(_stationGpsTimer) { clearTimeout(_stationGpsTimer); _stationGpsTimer = null; }
+  if(!navigator.geolocation || !S.route) return;
+
+  // 20초 대기 (문 열리고 GPS 잡힐 시간)
+  _stationGpsTimer = setTimeout(function() {
+    _runStationGpsCorrection(expectedIdx);
+  }, 20000);
+  console.log('[GPS보정] 20초 후 역 위치 확인 예약 (예상역: ' + (S.route.path[expectedIdx]||'?') + ')');
+}
+
+function _runStationGpsCorrection(expectedIdx) {
+  if(!S.route || S.boardingState !== 'boarding') return;
+
+  navigator.geolocation.getCurrentPosition(
+    function(pos) {
+      var lat = pos.coords.latitude;
+      var lng = pos.coords.longitude;
+      var acc = pos.coords.accuracy || 999;
+
+      if(acc > 200) {
+        console.log('[GPS보정] acc=' + Math.round(acc) + 'm 불량 → 생략');
+        return;
+      }
+
+      // 경로상 ±2역 범위에서 가장 가까운 역 탐색
+      var path = S.route.path;
+      var lp   = S.route.lp || [];
+      var bestIdx = -1, bestDist = 999999;
+      var scanFrom = Math.max(0, expectedIdx - 2);
+      var scanTo   = Math.min(path.length - 1, expectedIdx + 2);
+
+      for(var i = scanFrom; i <= scanTo; i++) {
+        var stnName = path[i];
+        var stnLine = lp[i] || '';
+        var stn = STNDB.find(function(s){ return s.name===stnName && (s.line===stnLine||!stnLine); })
+               || STNDB.find(function(s){ return s.name===stnName; });
+        if(!stn || !stn.lat || stn.lat === 0) continue;
+        var d = haversineM(lat, lng, stn.lat, stn.lng);
+        if(d < bestDist) { bestDist = d; bestIdx = i; }
+      }
+
+      console.log('[GPS보정] acc=' + Math.round(acc) + 'm'
+        + ' 최근역: ' + (path[bestIdx]||'?') + '(' + Math.round(bestDist) + 'm)'
+        + ' 예상: ' + (path[expectedIdx]||'?'));
+
+      if(bestIdx < 0 || bestDist > 300) {
+        console.log('[GPS보정] 거리 초과 또는 역 없음 → 생략');
+        _correctTimeFromNow(); // 역 보정 없어도 시각은 현재 기준으로 보정
+        return;
+      }
+
+      var idxChanged = (bestIdx !== S.curIdx);
+
+      if(idxChanged) {
+        console.log('[GPS보정] ★ 역 보정: ' + (path[S.curIdx]||'?')
+          + ' → ' + path[bestIdx] + ' (오차 ' + (bestIdx - S.curIdx) + '역)');
+        S.curIdx = bestIdx;
+        S.trainProgress = 0;
+      } else {
+        console.log('[GPS보정] ✅ 역 일치: ' + path[S.curIdx]);
+      }
+
+      // ★ 역 일치 여부와 무관하게 현재 시각 기준으로 경로 시각 보정
+      _correctTimeFromNow();
+
+      if(idxChanged) {
+        // 타이머 재설정
+        _ttSegStartMs = Date.now();
+        _stopTimetableAdvance();
+        if(S.boardingState === 'boarding') _scheduleTimetableSteps();
+
+        // UI 전체 업데이트
+        if(typeof renderHorizontalTimeline === 'function') renderHorizontalTimeline();
+        if(typeof renderRouteSegCards === 'function') renderRouteSegCards(S.route);
+        if(typeof calcETA === 'function') calcETA();
+        if(typeof _updateTrackingHUD === 'function') _updateTrackingHUD();
+
+        var bannerTxt = document.getElementById('boardBannerTxt');
+        if(bannerTxt) bannerTxt.textContent = '📡 위치 보정 · ' + path[S.curIdx];
+        toast('📡 ' + path[S.curIdx] + ' 위치 보정됨');
+      }
+    },
+    function(err) {
+      console.log('[GPS보정] GPS 오류(' + (err && err.code) + ') → 시각만 보정');
+      _correctTimeFromNow();
+    },
+    { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+  );
+}
+
+// ★ 현재 시각 기준으로 남은 구간 도착 시각 전체 재계산
+// boardedAt을 역산해서 현재역 출발 시각을 현재 시각으로 맞춤
+function _correctTimeFromNow() {
+  if(!S.route || !S.route.tp || S.curIdx >= S.route.path.length - 1) return;
+
+  var tp  = S.route.tp || [];
+  var now = Date.now();
+
+  // 현재 역(curIdx)을 방금 떠난 것으로 가정
+  // boardedAt을 역산: now에서 curIdx까지의 누적 소요시간을 빼면 출발역 기준 boardedAt
+  var cumBefore = 0;
+  for(var i = 1; i <= S.curIdx; i++) {
+    cumBefore += (tp[i] || 90) * 1000;
+  }
+  var newBoardedAt = now - cumBefore;
+
+  // 실제로 크게 차이 날 때만 보정 (30초 이상 차이)
+  var diff = Math.abs(newBoardedAt - (S.boardedAt || now));
+  if(diff < 30000) {
+    console.log('[시각보정] 차이 ' + Math.round(diff/1000) + '초 → 보정 생략');
+    return;
+  }
+
+  console.log('[시각보정] boardedAt 재설정: '
+    + new Date(S.boardedAt||now).toLocaleTimeString()
+    + ' → ' + new Date(newBoardedAt).toLocaleTimeString()
+    + ' (차이 ' + Math.round(diff/1000) + '초)');
+
+  S.boardedAt = newBoardedAt;
+
+  // ETA/타임라인 갱신
+  if(typeof renderHorizontalTimeline === 'function') renderHorizontalTimeline();
+  if(typeof renderRouteSegCards === 'function') renderRouteSegCards(S.route);
+  if(typeof calcETA === 'function') calcETA();
+  if(typeof _updateTrackingHUD === 'function') _updateTrackingHUD();
+
+  console.log('[시각보정] ✅ 경로 시각 현재 기준으로 재계산 완료');
+}
+
+// stopTracking 시 GPS 보정 타이머도 정리
 // GPS 음영 지역에서도 타이머로 역을 전진하지 않음
 // 실제 GPS 이동(speed>=1.0m/s 또는 dist>=10m)만으로 역 전진
 function _scheduleStationTimeout() {
@@ -14646,6 +14824,9 @@ function stopTracking() {
   if(typeof _clearTrainAlerts === 'function') _clearTrainAlerts();
   if(typeof _stopAccel === 'function') _stopAccel();
   if(typeof _stopTimetableAdvance === 'function') _stopTimetableAdvance();
+  if(typeof _stationGpsTimer !== 'undefined' && _stationGpsTimer) {
+    clearTimeout(_stationGpsTimer); _stationGpsTimer = null;
+  }
   if(typeof _exitDeadReckoning === 'function') _exitDeadReckoning();
   S._delayOffsetMs = 0;  // 도착 완료 → 누적 연착 초기화
   if(typeof window !== 'undefined') window.dynamicDelayOffset = 0;
