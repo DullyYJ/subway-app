@@ -9,14 +9,14 @@
     "add:android": "cap add android"
   },
   "dependencies": {
-    "@capacitor/android": "6.2.1",
-    "@capacitor/app": "6.0.3",
-    "@capacitor/core": "6.2.1",
-    "@capacitor/geolocation": "6.1.1",
-    "@capacitor/network": "6.0.4",
-    "@capacitor/status-bar": "6.0.3"
+    "@capacitor/android": "^6.1.2",
+    "@capacitor/app": "^6.0.2",
+    "@capacitor/core": "^6.1.2",
+    "@capacitor/geolocation": "^6.0.1",
+    "@capacitor/network": "^6.0.3",
+    "@capacitor/status-bar": "^6.0.2"
   },
   "devDependencies": {
-    "@capacitor/cli": "6.2.1"
+    "@capacitor/cli": "^6.1.2"
   }
 }
