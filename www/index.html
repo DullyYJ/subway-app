@@ -8934,6 +8934,55 @@ function switchTab(tab,el){
 /* ══ 토스트 ══ */
 function toast(msg){const t=document.getElementById('toast');if(S.toastT)clearTimeout(S.toastT);t.textContent=msg;t.classList.add('on');S.toastT=setTimeout(()=>t.classList.remove('on'),2400);}
 
+// ── 디버그 토스트 (APK 환경에서 콘솔 대신 화면에 표시) ──────────
+var _debugEnabled = true; // 디버그 ON/OFF 토글
+var _debugLog = []; // 로그 기록
+
+function dlog(tag, msg, isWarn) {
+  if(!_debugEnabled) return;
+  var time = new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  var entry = '[' + time + '] ' + tag + ': ' + msg;
+  _debugLog.push(entry);
+  if(_debugLog.length > 50) _debugLog.shift(); // 최대 50개 유지
+
+  // 중요 이벤트만 토스트로 표시
+  if(isWarn) toast('⚠️ ' + tag + ': ' + msg);
+  
+  // 디버그 패널에 표시
+  var panel = document.getElementById('debugPanel');
+  if(panel && panel.style.display !== 'none') {
+    var list = document.getElementById('debugList');
+    if(list) {
+      var li = document.createElement('div');
+      li.style.cssText = 'font-size:10px;padding:2px 0;border-bottom:1px solid #333;color:'+(isWarn?'#ff9f0a':'#30d158');
+      li.textContent = entry;
+      list.insertBefore(li, list.firstChild);
+      // 최대 30개만 표시
+      while(list.children.length > 30) list.removeChild(list.lastChild);
+    }
+  }
+}
+
+// console.log/warn을 dlog로 연결
+(function(){
+  var _origLog = console.log;
+  var _origWarn = console.warn;
+  console.log = function(){
+    var msg = Array.prototype.slice.call(arguments).join(' ');
+    _origLog.apply(console, arguments);
+    // [태그] 형식이면 디버그 패널에 기록
+    var m = msg.match(/^\[([^\]]+)\]\s*(.*)/);
+    if(m) dlog(m[1], m[2], false);
+  };
+  console.warn = function(){
+    var msg = Array.prototype.slice.call(arguments).join(' ');
+    _origWarn.apply(console, arguments);
+    var m = msg.match(/^\[([^\]]+)\]\s*(.*)/);
+    if(m) dlog(m[1], m[2], true);
+    else dlog('경고', msg, true);
+  };
+})();
+
 /* ══ 초기화 ══ */
 
 
@@ -10749,6 +10798,49 @@ function _scheduleAutoBoard(depMs, depTime) {
 function _cancelAutoBoard() {
   if(_autoBoardTimer) { clearTimeout(_autoBoardTimer); _autoBoardTimer = null; }
 }
+// ── 디버그 패널 토글 ──
+function _toggleDebugPanel() {
+  var p = document.getElementById('debugPanel');
+  if(!p) return;
+  var isHidden = p.style.display === 'none' || !p.style.display;
+  p.style.display = isHidden ? 'flex' : 'none';
+  if(isHidden) {
+    dlog('앱상태', '경로=' + (S.route ? S.route.path[0]+'→'+S.route.path[S.route.path.length-1] : '없음'), false);
+    dlog('앱상태', '탑승=' + S.boardingState + ' curIdx=' + S.curIdx, false);
+    dlog('앱상태', 'boardedAt=' + (S.boardedAt ? new Date(S.boardedAt).toLocaleTimeString() : '없음'), false);
+    dlog('시각표', '_SEOUL_TT=' + (typeof _SEOUL_TT !== 'undefined' ? '✅로드됨 '+Object.keys(_SEOUL_TT).length+'개노선' : '❌없음'), false);
+    dlog('시각표', '_INCHEON_TT=' + (typeof _INCHEON_TT !== 'undefined' ? '✅로드됨' : '❌없음'), false);
+    dlog('시각표', 'TAGO캐시=' + Object.keys(typeof _tagoTTCache!=='undefined'?_tagoTTCache:{}).length + '개역', false);
+  }
+}
+
+// ── API 상태 체크 ──
+async function _checkApiStatus() {
+  dlog('API체크', '시작...', false);
+  // 1. 서울 실시간 API
+  try {
+    var r1 = await _fetchWithTimeout('https://swopenAPI.seoul.go.kr/api/subway/'+_SEOUL_API_KEY+'/json/realtimeStationArrival/0/1/%EC%84%9C%EC%9A%B8%EC%97%AD', 4000);
+    var j1 = await r1.json();
+    dlog('서울실시간', j1&&j1.realtimeArrivalList ? '✅ 정상' : '❌ 응답오류', !(j1&&j1.realtimeArrivalList));
+  } catch(e) { dlog('서울실시간', '❌ '+e.message, true); }
+  // 2. TAGO API
+  try {
+    var r2 = await _fetchWithTimeout('https://apis.data.go.kr/1613000/SubwayInfoService/getSubwaySttnList?serviceKey='+encodeURIComponent(_TAGO_KEY)+'&subwaySttnNm=%EA%B3%84%EC%96%91&numOfRows=1&pageNo=1&_type=json', 5000);
+    var j2 = await r2.json();
+    var code = j2&&j2.response&&j2.response.header&&j2.response.header.resultCode;
+    dlog('TAGO', code==='00' ? '✅ 정상' : '❌ code='+code, code!=='00');
+  } catch(e) { dlog('TAGO', '❌ '+e.message, true); }
+  // 3. 내장 시각표
+  dlog('서울시각표', typeof _SEOUL_TT!=='undefined' ? '✅ '+Object.keys(_SEOUL_TT).length+'개노선' : '❌ 없음', false);
+  dlog('인천시각표', typeof _INCHEON_TT!=='undefined' ? '✅ 2개노선' : '❌ 없음', false);
+  // 4. Cloudflare Worker
+  try {
+    var r3 = await _fetchWithTimeout(_SERVER_URL+'/ping', 3000);
+    dlog('CF Worker', r3.ok ? '✅ 정상' : '❌ HTTP '+r3.status, !r3.ok);
+  } catch(e) { dlog('CF Worker', '❌ '+e.message, true); }
+  toast('✅ API 체크 완료 — 패널 확인');
+}
+
 // 탑승 확인 시 현재 위치와 출발역 비교, 실제 위치로 curIdx 보정
 function _verifyDepartureStationGps(onPass) {
   if(!S.start || !navigator.geolocation) { onPass(); return; }
@@ -18234,6 +18326,21 @@ document.addEventListener('DOMContentLoaded', function() {
 </div>
 
 <div class="toast" id="toast"></div>
+
+<!-- ★ 디버그 패널 -->
+<div id="debugPanel" style="display:none;position:fixed;bottom:60px;left:0;right:0;height:42vh;background:#0a0a0a;border-top:2px solid #30d158;z-index:9999;flex-direction:column;">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:#1a1a1a;border-bottom:1px solid #333;">
+    <span style="color:#30d158;font-size:12px;font-weight:700;">🐛 디버그 로그</span>
+    <div style="display:flex;gap:6px;">
+      <button onclick="_checkApiStatus()" style="background:#1c3a5e;color:#0a84ff;border:none;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;">API체크</button>
+      <button onclick="document.getElementById('debugList').innerHTML='';_debugLog=[];" style="background:#3a1c1c;color:#ff375f;border:none;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;">지우기</button>
+      <button onclick="document.getElementById('debugPanel').style.display='none';" style="background:#2c2c2e;color:#aaa;border:none;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;">닫기</button>
+    </div>
+  </div>
+  <div id="debugList" style="overflow-y:auto;height:calc(100% - 38px);padding:4px 8px;font-family:monospace;"></div>
+</div>
+<!-- 디버그 토글 버튼 (우상단) -->
+<div onclick="_toggleDebugPanel()" style="position:fixed;top:10px;right:56px;width:26px;height:26px;background:rgba(48,209,88,0.12);border:1px solid rgba(48,209,88,0.25);border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:9998;font-size:13px;user-select:none;">🐛</div>
 
 <nav class="bnav">
   <div class="ni" id="ni-community" onclick="switchTab('community',this)">
