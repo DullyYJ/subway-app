@@ -10221,6 +10221,8 @@ function _closeBoardConfirm() {
 function _confirmBoard() {
   _closeBoardConfirm();
   if(_boardAskTimer){ clearTimeout(_boardAskTimer); _boardAskTimer = null; }
+  // ★ 수동 탑승 → 자동 탑승 타이머 취소
+  if(typeof _cancelAutoBoard === 'function') _cancelAutoBoard();
 
   S.boarded = true; S.boardAsked = true; S.boardingState = 'boarding';
 
@@ -10300,7 +10302,74 @@ function _rebaseAllFromNow(nowMs) {
   console.log('[경로재계산] boardedAt=' + new Date(S.boardedAt).toLocaleTimeString() + ' ETAs 재빌드 완료');
 }
 
-// ── 출발역 GPS 검증 ──────────────────────────────────────────
+// ── ★ 출발 시각 자동 탑승 ──────────────────────────────────
+// 사용자가 탑승 버튼을 안 눌러도 열차 출발 시각이 되면 자동으로 탑승 처리
+var _autoBoardTimer = null;
+
+function _scheduleAutoBoard(depMs, depTime) {
+  if(_autoBoardTimer) { clearTimeout(_autoBoardTimer); _autoBoardTimer = null; }
+  if(!depMs) return;
+
+  var delay = Math.max(0, depMs - Date.now());
+  console.log('[자동탑승] ' + (depTime||'') + ' 출발 예정, ' + Math.round(delay/1000) + '초 후 자동 탑승');
+
+  _autoBoardTimer = setTimeout(function() {
+    // 이미 수동으로 탑승했으면 무시
+    if(S.boarded || S.boardingState === 'boarding') {
+      console.log('[자동탑승] 이미 탑승 중 → 생략');
+      return;
+    }
+    if(!S.route) return;
+
+    console.log('[자동탑승] ★ 출발 시각 도달 → 자동 탑승 시작');
+
+    // 팝업 닫기
+    _closeBoardAskModal();
+
+    // boardedAt = 열차 출발 시각
+    S.boardedAt = depMs;
+
+    // 탑승 버튼 상태 변경
+    var qb = document.getElementById('quickBoardBtn');
+    if(qb) {
+      qb.textContent = '🚉 하차하기';
+      qb.style.background = 'linear-gradient(135deg,#7a1a1a,#ff375f)';
+      qb.style.boxShadow  = '0 4px 16px rgba(255,55,95,.3)';
+    }
+
+    // 배너
+    var bannerTxt = document.getElementById('boardBannerTxt');
+    if(bannerTxt) bannerTxt.textContent = '🚇 자동 탑승 완료 · 이동 시작';
+
+    // 탑승 상태 설정
+    S.boarded = true; S.boardAsked = true; S.boardingState = 'boarding';
+
+    // 포인트
+    if(typeof addPoints === 'function') addPoints(10, '자동 탑승');
+
+    // HTL 열차 레이어 표시 (출발역 고정)
+    if(typeof updateHtlMovingTrain === 'function') updateHtlMovingTrain(0, true);
+
+    // 출발역 GPS 검증 후 이동 시작
+    if(typeof _verifyDepartureStationGps === 'function') {
+      _verifyDepartureStationGps(function() {
+        if(typeof _rebaseAllFromNow === 'function') _rebaseAllFromNow(depMs);
+        if(typeof _scheduleBoardAlerts === 'function') _scheduleBoardAlerts();
+        if(typeof _startAccel === 'function') _startAccel();
+        if(typeof _startTimetableAdvance === 'function') _startTimetableAdvance();
+        toast('🚇 ' + (depTime||'') + ' 열차 자동 탑승! 이동을 시작합니다.');
+      });
+    } else {
+      if(typeof _rebaseAllFromNow === 'function') _rebaseAllFromNow(depMs);
+      if(typeof _startTimetableAdvance === 'function') _startTimetableAdvance();
+      toast('🚇 ' + (depTime||'') + ' 열차 자동 탑승!');
+    }
+  }, delay);
+}
+
+function _cancelAutoBoard() {
+  if(_autoBoardTimer) { clearTimeout(_autoBoardTimer); _autoBoardTimer = null; }
+}
 // 탑승 확인 시 현재 위치와 출발역 비교, 실제 위치로 curIdx 보정
 function _verifyDepartureStationGps(onPass) {
   if(!S.start || !navigator.geolocation) { onPass(); return; }
@@ -10518,8 +10587,11 @@ function _boardNextTrain() {
     var bannerEl = document.getElementById('boardBannerTxt');
     if(bannerEl) bannerEl.textContent = '🕐 다음 열차 ' + (nxtTime||'') + ' (' + waitMin + '분 후)';
 
-    // 탑승하기 버튼 상태 유지 (팝업 없이 대기)
-    toast('🕐 다음 열차 ' + (nxtTime ? nxtTime+' ' : '') + '(' + waitMin + '분 후) 로 변경됐어요. 탑승 버튼을 눌러주세요.');
+    // ★ 다음 열차 기준 자동 탑승 재스케줄
+    if(typeof _cancelAutoBoard === 'function') _cancelAutoBoard();
+    if(typeof _scheduleAutoBoard === 'function') _scheduleAutoBoard(nxtMs, nxtTime);
+
+    toast('🕐 다음 열차 ' + (nxtTime ? nxtTime+' ' : '') + '(' + waitMin + '분 후) — 출발 시각에 자동 탑승됩니다.');
   } else {
     toast('다음 열차 시각을 찾을 수 없습니다.');
   }
@@ -12911,6 +12983,7 @@ function doRoute(){
   S.curIdx         = 0;
   S.trainProgress  = 0;
   S.boarded_anim_started = false;
+  if(typeof _cancelAutoBoard === 'function') _cancelAutoBoard();
   if(typeof window !== 'undefined') window.dynamicDelayOffset = 0;
 
   // 타임라인 DOM 초기화 (이전 경로 표시 제거)
@@ -15248,6 +15321,9 @@ function startTracking() {
     // ★ 경로 설정 직후 1회 안내 팝업 (현재열차/다음열차 2버튼)
     _showRouteReadyPopup(waitMin, depTime, dep.ms);
 
+    // ★ 출발 시각 자동 탑승: 버튼 안 눌러도 출발 시각 되면 자동 탑승 처리
+    _scheduleAutoBoard(dep.ms, depTime);
+
     // renderRouteSegCards에도 출발시각 반영
     if(typeof renderRouteSegCards === 'function') renderRouteSegCards(S.route);
   })();
@@ -15354,6 +15430,7 @@ function stopTracking() {
     clearTimeout(_stationGpsTimer); _stationGpsTimer = null;
   }
   if(typeof _stopPeriodicVerification === 'function') _stopPeriodicVerification();
+  if(typeof _cancelAutoBoard === 'function') _cancelAutoBoard();
   S.boarded_anim_started = false;
   // ★ HTL 열차 레이어 숨김 (하차)
   var htlTrain = document.getElementById('htlMovingTrain');
