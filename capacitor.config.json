@@ -6,7 +6,8 @@
     "androidScheme": "https"
   },
   "android": {
-    "allowMixedContent": true
+    "allowMixedContent": true,
+    "webContentsDebuggingEnabled": false
   },
   "plugins": {
     "Geolocation": {
@@ -16,6 +17,9 @@
       "overlaysWebView": true,
       "style": "DARK",
       "backgroundColor": "#12121400"
+    },
+    "CapacitorHttp": {
+      "enabled": true
     }
   }
 }

@@ -5502,8 +5502,31 @@ window._realFirstDep = _realFirstDep;
 // ── 결정론적 내장 시각표 (첫차+시간대별 배차 격자, 노선 단위) ──
 
 
-// ── fetch 타임아웃 헬퍼 (Capacitor 환경) ────────────────────
-function _fetchWithTimeout(url, ms) {
+// ── fetch 헬퍼 (Capacitor 환경) ──────────────────────────────
+// CapacitorHttp 플러그인 사용 시 네이티브 레이어에서 직접 호출 → CORS 완전 우회
+async function _fetchWithTimeout(url, ms) {
+  // 1순위: CapacitorHttp (네이티브 레이어, CORS 없음)
+  try {
+    var CapHttp = (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.CapacitorHttp)
+               || (window.CapacitorHttp);
+    if(CapHttp) {
+      var ctrl = new AbortController();
+      var tid = setTimeout(function(){ ctrl.abort(); }, ms);
+      var resp = await CapHttp.get({ url: url });
+      clearTimeout(tid);
+      // CapacitorHttp 응답을 fetch Response처럼 래핑
+      return {
+        ok: resp.status >= 200 && resp.status < 300,
+        status: resp.status,
+        json: function(){ return Promise.resolve(typeof resp.data === 'string' ? JSON.parse(resp.data) : resp.data); },
+        text: function(){ return Promise.resolve(typeof resp.data === 'string' ? resp.data : JSON.stringify(resp.data)); }
+      };
+    }
+  } catch(e) {
+    console.log('[CapHttp] 실패, fetch로 폴백: ' + e.message);
+  }
+
+  // 2순위: 일반 fetch (웹 환경)
   return fetch(url, { signal: AbortSignal.timeout(ms) });
 }
 // ── 서울교통공사 1~9호선 공식 시각표 (2026.02 기준) ──────────────
