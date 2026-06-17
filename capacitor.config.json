@@ -7,19 +7,6 @@
   },
   "android": {
     "allowMixedContent": true,
-    "webContentsDebuggingEnabled": false
-  },
-  "plugins": {
-    "Geolocation": {
-      "permissions": ["location"]
-    },
-    "StatusBar": {
-      "overlaysWebView": true,
-      "style": "DARK",
-      "backgroundColor": "#12121400"
-    },
-    "CapacitorHttp": {
-      "enabled": true
-    }
+    "webContentsDebuggingEnabled": true
   }
 }
