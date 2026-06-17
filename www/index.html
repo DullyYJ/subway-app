@@ -838,6 +838,24 @@ window.calcETA = function calcETA() {
   } catch(e) {}
 };
 </script>
+
+<script>
+// ── 전역 에러 캐처 (크래시 원인 화면 표시) ──
+window.onerror = function(msg, src, line, col, err) {
+  var div = document.getElementById('_crash_overlay');
+  if(!div) {
+    div = document.createElement('div');
+    div.id = '_crash_overlay';
+    div.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:#1a0000;color:#ff6b6b;font-family:monospace;font-size:12px;padding:20px;z-index:99999;overflow:auto;white-space:pre-wrap;';
+    document.body.appendChild(div);
+  }
+  div.innerHTML += '\n❌ ' + msg + '\n  파일: ' + (src||'').split('/').pop() + ':' + line + ':' + col + '\n  ' + (err && err.stack ? err.stack.substring(0,300) : '') + '\n────────────\n';
+  return false;
+};
+window.addEventListener('unhandledrejection', function(e) {
+  window.onerror('Promise 에러: ' + (e.reason && e.reason.message || e.reason), '', 0, 0, e.reason);
+});
+</script>
 </head>
 <body>
 <div class="app">
