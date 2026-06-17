@@ -1,0 +1,80 @@
+name: Build APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Add Android platform
+        run: npx cap add android
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      - name: Add network security config
+        run: |
+          mkdir -p android/app/src/main/res/xml
+          cat > android/app/src/main/res/xml/network_security_config.xml << 'XMLEOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <network-security-config>
+            <base-config cleartextTrafficPermitted="true">
+              <trust-anchors>
+                <certificates src="system"/>
+              </trust-anchors>
+            </base-config>
+            <domain-config cleartextTrafficPermitted="true">
+              <domain includeSubdomains="true">apis.data.go.kr</domain>
+              <domain includeSubdomains="true">swopenapi.seoul.go.kr</domain>
+              <domain includeSubdomains="true">swopenAPI.seoul.go.kr</domain>
+              <domain includeSubdomains="true">gentle-lab-7e47subway-api.phg0643.workers.dev</domain>
+            </domain-config>
+          </network-security-config>
+          XMLEOF
+
+      - name: Patch AndroidManifest for network security
+        run: |
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
+          # networkSecurityConfig 추가
+          sed -i 's/<application/<application android:networkSecurityConfig="@xml\/network_security_config"/' $MANIFEST
+          # INTERNET 권한 확인
+          grep -q "INTERNET" $MANIFEST || sed -i '/<manifest/a \    <uses-permission android:name="android.permission.INTERNET" />' $MANIFEST
+          echo "✅ AndroidManifest 수정 완료"
+          cat $MANIFEST
+
+      - name: Make gradlew executable
+        run: chmod +x android/gradlew
+
+      - name: Build Debug APK
+        run: cd android && ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: subway-app-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
