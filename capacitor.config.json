@@ -6,7 +6,16 @@
     "androidScheme": "https"
   },
   "android": {
-    "allowMixedContent": true,
-    "webContentsDebuggingEnabled": true
+    "allowMixedContent": true
+  },
+  "plugins": {
+    "Geolocation": {
+      "permissions": ["location"]
+    },
+    "StatusBar": {
+      "overlaysWebView": true,
+      "style": "DARK",
+      "backgroundColor": "#12121400"
+    }
   }
 }
