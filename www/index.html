@@ -8115,7 +8115,7 @@ function _restoreGpsModalBtns(gmBtns){
 function resetGPS(){ _gpsSetBusy(false); }
 function startWatch(){
   if(S.gpsWatch)navigator.geolocation.clearWatch(S.gpsWatch);
-  S.gpsWatch=navigator.geolocation.watchPosition(pos=>{
+  S.gpsWatch=navigator.geolocation.watchPosition(function(pos){
     const rawLat=pos.coords.latitude, rawLng=pos.coords.longitude;
     const acc=pos.coords.accuracy||99;
     const now=Date.now();
@@ -8245,7 +8245,7 @@ function startWatch(){
       }
     }
     updateCong(n);
-  },{
+  },function(gpsErr){ if(gpsErr.code===1){console.warn("[GPS]권한차단");} else {console.log("[GPS]오류",gpsErr.code);} },{
     // ★ 지하철 이동 감지: enableHighAccuracy true로 변경
     //   - true: GPS 칩 우선 → coords.speed 신뢰도 대폭 향상
     //   - 배터리 소모 증가하지만 이동/정지 판정 정확도 필수
@@ -8998,70 +8998,32 @@ function _checkFirstLaunchGps() {
   }, 800);
 }
 
-async function _requestGpsPermission() {
-  try {
-    // 1순위: Capacitor Geolocation 플러그인 (네이티브 권한 다이얼로그)
-    var CapGeo = window.Capacitor
-      && window.Capacitor.Plugins
-      && window.Capacitor.Plugins.Geolocation;
+function _requestGpsPermission() {
+  var m = document.getElementById('gpsPermModal');
+  if(m) m.style.display = 'none';
 
-    if(CapGeo) {
-      // 현재 권한 상태 확인
-      var status = await CapGeo.checkPermissions();
-      console.log('[GPS] 현재 권한:', status.location);
-
-      if(status.location === 'granted') {
-        console.log('[GPS] 이미 허용됨');
-        var m = document.getElementById('gpsPermModal');
-        if(m) m.style.display = 'none';
-        return;
-      }
-
-      if(status.location === 'denied') {
-        // 거부된 경우 안내 모달 표시
-        var m = document.getElementById('gpsPermModal');
-        if(m) m.style.display = 'flex';
-        return;
-      }
-
-      // 권한 요청 → 시스템 다이얼로그 표시
-      var result = await CapGeo.requestPermissions({ permissions: ['location'] });
-      console.log('[GPS] 권한 결과:', result.location);
-
-      if(result.location === 'granted') {
-        toast('✅ GPS 권한 허용됨!');
-        var m = document.getElementById('gpsPermModal');
-        if(m) m.style.display = 'none';
-      } else {
-        // 거부된 경우 안내 모달
-        var m = document.getElementById('gpsPermModal');
-        if(m) m.style.display = 'flex';
-      }
-      return;
-    }
-
-    // 2순위: 일반 브라우저 (navigator.geolocation)
-    if(navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        function(pos) {
-          console.log('[GPS] 브라우저 권한 허용');
-          toast('✅ GPS 허용됨');
-          var m = document.getElementById('gpsPermModal');
-          if(m) m.style.display = 'none';
-        },
-        function(err) {
-          console.log('[GPS] 브라우저 권한 거부:', err.code);
-          if(err.code === 1) {
-            var m = document.getElementById('gpsPermModal');
-            if(m) m.style.display = 'flex';
-          }
-        },
-        { enableHighAccuracy: false, timeout: 15000, maximumAge: 0 }
-      );
-    }
-  } catch(e) {
-    console.log('[GPS] 권한 요청 오류:', e.message);
+  if(!navigator.geolocation) {
+    toast('⚠️ 이 기기는 GPS를 지원하지 않습니다.');
+    return;
   }
+
+  // 표준 Web API로 권한 요청 → Android 시스템 권한창 표시
+  navigator.geolocation.getCurrentPosition(
+    function(pos) {
+      console.log('[GPS] ✅ 권한 허용, 위치:', pos.coords.latitude, pos.coords.longitude);
+      toast('✅ GPS 권한 허용됨!');
+    },
+    function(err) {
+      console.log('[GPS] 권한 결과 코드:', err.code);
+      if(err.code === 1) {
+        // 거부된 경우 안내 모달
+        var m2 = document.getElementById('gpsPermModal');
+        if(m2) m2.style.display = 'flex';
+        toast('⚠️ GPS 권한이 거부됐습니다.');
+      }
+    },
+    { enableHighAccuracy: false, timeout: 30000, maximumAge: 0 }
+  );
 }
 
 function _openGpsSystemSettings() {
