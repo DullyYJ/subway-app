@@ -5531,6 +5531,87 @@ function _fetchWithTimeout(url, ms) {
 var _SEOUL_API_KEY = '757a596c51796a773130374f77675166';
 var _seoulArrCache = {};
 
+
+// ── 서울 실시간 열차 위치 API ─────────────────────────────────
+// http://swopenAPI.seoul.go.kr/api/subway/KEY/json/realtimePosition/0/60/LINE
+// trainSttus: 0=진입, 1=도착, 2=출발, 3=전역출발
+var _trainPosCache = {};
+var _trainPosTimer = null;
+
+async function fetchRealtimeTrainPos(lineName) {
+  var lineNum = lineName; // 예: '1호선', '2호선'
+  var cacheKey = lineNum;
+  var cached = _trainPosCache[cacheKey];
+  if(cached && Date.now() - cached.ts < 30000) return cached.data; // 30초 캐시
+
+  try {
+    var url = 'http://swopenAPI.seoul.go.kr/api/subway/' + _SEOUL_API_KEY +
+      '/json/realtimePosition/0/60/' + encodeURIComponent(lineNum);
+    var res = await _fetchWithTimeout(url, 5000);
+    var txt = await res.text();
+    if(!txt || txt.trim()[0] !== '{') return null;
+    var jd = JSON.parse(txt);
+    var errCode = jd.errorMessage && jd.errorMessage.code;
+    if(errCode && errCode !== 'INFO-000') return null;
+    var items = jd.realtimePositionList;
+    if(!items) return null;
+    _trainPosCache[cacheKey] = { ts: Date.now(), data: items };
+    return items;
+  } catch(e) {
+    console.log('[열차위치] 실패: ' + e.message);
+    return null;
+  }
+}
+
+// 경로 상의 현재 탑승 열차 위치 찾기
+async function updateRealtimeTrainPosition() {
+  if(!S.boarded || !S.route || !S.route.lp) return;
+  var lineName = S.route.lp[S.curIdx] || S.route.lp[0];
+  if(!lineName || !/^[1-9]호선$/.test(lineName)) return; // 서울 1~9호선만
+
+  var trains = await fetchRealtimeTrainPos(lineName);
+  if(!trains || !trains.length) return;
+
+  // 경로 상의 역들과 열차 위치 매칭
+  var pathStns = S.route.path;
+  var curStn = pathStns[S.curIdx];
+  var nextStn = pathStns[S.curIdx + 1];
+
+  // 현재역 또는 다음역에 있는 열차 찾기
+  var matched = trains.find(function(t) {
+    return (t.statnNm === curStn || t.statnNm === nextStn) &&
+           (t.trainSttus === '2' || t.trainSttus === '3' || t.trainSttus === '1');
+  });
+
+  if(matched) {
+    var sttusMap = {'0':'진입중','1':'도착','2':'출발','3':'전역출발'};
+    var msg = '[열차위치] ' + matched.statnNm + ' ' + (sttusMap[matched.trainSttus]||'');
+    console.log(msg);
+    // 열차 위치로 curIdx 보정 가능
+    var matchIdx = pathStns.indexOf(matched.statnNm);
+    if(matchIdx >= 0 && matchIdx > S.curIdx) {
+      console.log('[열차위치] curIdx 보정: ' + S.curIdx + ' → ' + matchIdx);
+      S.curIdx = matchIdx;
+      if(typeof _updateTrackingHUD === 'function') _updateTrackingHUD();
+      if(typeof updateHtlMovingTrain === 'function') updateHtlMovingTrain(matchIdx / pathStns.length, false);
+    }
+  }
+}
+
+// 탑승 후 30초마다 열차 위치 갱신
+function startRealtimeTrainPosPolling() {
+  if(_trainPosTimer) clearInterval(_trainPosTimer);
+  _trainPosTimer = setInterval(function() {
+    if(!S.boarded) { clearInterval(_trainPosTimer); _trainPosTimer = null; return; }
+    updateRealtimeTrainPosition().catch(function(){});
+  }, 30000);
+  updateRealtimeTrainPosition().catch(function(){});
+}
+
+function stopRealtimeTrainPosPolling() {
+  if(_trainPosTimer) { clearInterval(_trainPosTimer); _trainPosTimer = null; }
+}
+
 async function seoulFetchArrival(stnName, lineName) {
   var cacheKey = stnName + '|' + lineName;
   var cached = _seoulArrCache[cacheKey];
@@ -8908,6 +8989,47 @@ function switchTab(tab,el){
 }
 
 /* ══ 토스트 ══ */
+
+// ── GPS 권한 요청 (첫 실행) ─────────────────────────────────
+var _GPS_PERM_KEY = 'gpsPermAsked_v1';
+
+function _checkFirstLaunchGps() {
+  // 이미 물어봤으면 스킵
+  try { if(localStorage.getItem(_GPS_PERM_KEY)) return; } catch(e){}
+  // 1초 후 모달 표시
+  setTimeout(function() {
+    var m = document.getElementById('gpsPermModal');
+    if(m) m.style.display = 'flex';
+  }, 1000);
+}
+
+function _requestGpsPermission() {
+  var m = document.getElementById('gpsPermModal');
+  if(m) m.style.display = 'none';
+  try { localStorage.setItem(_GPS_PERM_KEY, '1'); } catch(e){}
+  // 실제 권한 요청 (OS 다이얼로그 트리거)
+  if(navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      function(pos) {
+        toast('✅ GPS 권한 허용됨!');
+        console.log('[GPS권한] 허용 완료');
+      },
+      function(err) {
+        if(err.code === 1) toast('⚠️ GPS 권한이 거부됐습니다. 시간 기반으로 동작합니다.');
+        else toast('⚠️ GPS 오류: ' + err.message);
+      },
+      { enableHighAccuracy: false, timeout: 10000 }
+    );
+  }
+}
+
+function _skipGpsPermission() {
+  var m = document.getElementById('gpsPermModal');
+  if(m) m.style.display = 'none';
+  try { localStorage.setItem(_GPS_PERM_KEY, '1'); } catch(e){}
+  toast('ℹ️ 나중에 앱 설정에서 위치 권한을 허용할 수 있습니다.');
+}
+
 function toast(msg){const t=document.getElementById('toast');if(S.toastT)clearTimeout(S.toastT);t.textContent=msg;t.classList.add('on');S.toastT=setTimeout(()=>t.classList.remove('on'),2400);}
 
 // ── 디버그 토스트 (APK 환경에서 콘솔 대신 화면에 표시) ──────────
@@ -10428,7 +10550,12 @@ function _confirmBoard() {
   // ★ 수동 탑승 → 자동 탑승 타이머 취소
   if(typeof _cancelAutoBoard === 'function') _cancelAutoBoard();
 
-  S.boarded = true; S.boardAsked = true; S.boardingState = 'boarding';
+  S.boarded = true;
+  // 서울 1~9호선 실시간 열차 위치 폴링 시작
+  if(typeof startRealtimeTrainPosPolling === 'function') {
+    var _bl = (S.route && S.route.lp && S.route.lp[S.curIdx||0]) || '';
+    if(/^[1-9]호선$/.test(_bl)) startRealtimeTrainPosPolling();
+  } S.boardAsked = true; S.boardingState = 'boarding';
 
   var btn = document.getElementById('quickBoardBtn');
   if(btn){ btn.textContent='🚉 하차하기'; btn.style.background='linear-gradient(135deg,#7a1a1a,#ff375f)'; btn.style.boxShadow='0 4px 16px rgba(255,55,95,.3)'; }
