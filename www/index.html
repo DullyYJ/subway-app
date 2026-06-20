@@ -8990,44 +8990,100 @@ function switchTab(tab,el){
 
 /* ══ 토스트 ══ */
 
-// ── GPS 권한 요청 (첫 실행) ─────────────────────────────────
-var _GPS_PERM_KEY = 'gpsPermAsked_v1';
-
+// ── GPS 권한 요청 (앱 시작 시 시스템 설정창 표시) ───────────
 function _checkFirstLaunchGps() {
-  // 이미 물어봤으면 스킵
-  try { if(localStorage.getItem(_GPS_PERM_KEY)) return; } catch(e){}
-  // 1초 후 모달 표시
+  // Capacitor Geolocation 플러그인으로 즉시 시스템 권한 요청
   setTimeout(function() {
-    var m = document.getElementById('gpsPermModal');
-    if(m) m.style.display = 'flex';
-  }, 1000);
+    _requestGpsPermission();
+  }, 800);
 }
 
-function _requestGpsPermission() {
+async function _requestGpsPermission() {
+  try {
+    // 1순위: Capacitor Geolocation 플러그인 (네이티브 권한 다이얼로그)
+    var CapGeo = window.Capacitor
+      && window.Capacitor.Plugins
+      && window.Capacitor.Plugins.Geolocation;
+
+    if(CapGeo) {
+      // 현재 권한 상태 확인
+      var status = await CapGeo.checkPermissions();
+      console.log('[GPS] 현재 권한:', status.location);
+
+      if(status.location === 'granted') {
+        console.log('[GPS] 이미 허용됨');
+        var m = document.getElementById('gpsPermModal');
+        if(m) m.style.display = 'none';
+        return;
+      }
+
+      if(status.location === 'denied') {
+        // 거부된 경우 안내 모달 표시
+        var m = document.getElementById('gpsPermModal');
+        if(m) m.style.display = 'flex';
+        return;
+      }
+
+      // 권한 요청 → 시스템 다이얼로그 표시
+      var result = await CapGeo.requestPermissions({ permissions: ['location'] });
+      console.log('[GPS] 권한 결과:', result.location);
+
+      if(result.location === 'granted') {
+        toast('✅ GPS 권한 허용됨!');
+        var m = document.getElementById('gpsPermModal');
+        if(m) m.style.display = 'none';
+      } else {
+        // 거부된 경우 안내 모달
+        var m = document.getElementById('gpsPermModal');
+        if(m) m.style.display = 'flex';
+      }
+      return;
+    }
+
+    // 2순위: 일반 브라우저 (navigator.geolocation)
+    if(navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        function(pos) {
+          console.log('[GPS] 브라우저 권한 허용');
+          toast('✅ GPS 허용됨');
+          var m = document.getElementById('gpsPermModal');
+          if(m) m.style.display = 'none';
+        },
+        function(err) {
+          console.log('[GPS] 브라우저 권한 거부:', err.code);
+          if(err.code === 1) {
+            var m = document.getElementById('gpsPermModal');
+            if(m) m.style.display = 'flex';
+          }
+        },
+        { enableHighAccuracy: false, timeout: 15000, maximumAge: 0 }
+      );
+    }
+  } catch(e) {
+    console.log('[GPS] 권한 요청 오류:', e.message);
+  }
+}
+
+function _openGpsSystemSettings() {
+  // 설정 앱 열기 (거부된 경우)
+  try {
+    var CapApp = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
+    if(CapApp && CapApp.openUrl) {
+      CapApp.openUrl({ url: 'app-settings:' });
+    } else {
+      toast('설정 → 앱 → 출근길 뭐라카노 → 권한 → 위치');
+    }
+  } catch(e) {
+    toast('설정 → 앱 → 출근길 뭐라카노 → 권한 → 위치');
+  }
   var m = document.getElementById('gpsPermModal');
   if(m) m.style.display = 'none';
-  try { localStorage.setItem(_GPS_PERM_KEY, '1'); } catch(e){}
-  // 실제 권한 요청 (OS 다이얼로그 트리거)
-  if(navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(
-      function(pos) {
-        toast('✅ GPS 권한 허용됨!');
-        console.log('[GPS권한] 허용 완료');
-      },
-      function(err) {
-        if(err.code === 1) toast('⚠️ GPS 권한이 거부됐습니다. 시간 기반으로 동작합니다.');
-        else toast('⚠️ GPS 오류: ' + err.message);
-      },
-      { enableHighAccuracy: false, timeout: 10000 }
-    );
-  }
 }
 
 function _skipGpsPermission() {
   var m = document.getElementById('gpsPermModal');
   if(m) m.style.display = 'none';
-  try { localStorage.setItem(_GPS_PERM_KEY, '1'); } catch(e){}
-  toast('ℹ️ 나중에 앱 설정에서 위치 권한을 허용할 수 있습니다.');
+  toast('ℹ️ 시간 기반 모드로 동작합니다');
 }
 
 function toast(msg){const t=document.getElementById('toast');if(S.toastT)clearTimeout(S.toastT);t.textContent=msg;t.classList.add('on');S.toastT=setTimeout(()=>t.classList.remove('on'),2400);}
