@@ -39,31 +39,32 @@ jobs:
       - name: Create network security config
         run: |
           mkdir -p android/app/src/main/res/xml
-          cat > android/app/src/main/res/xml/network_security_config.xml << 'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <network-security-config>
-              <base-config cleartextTrafficPermitted="true">
-                  <trust-anchors>
-                      <certificates src="system"/>
-                  </trust-anchors>
-              </base-config>
-              <domain-config cleartextTrafficPermitted="true">
-                  <domain includeSubdomains="true">workers.dev</domain>
-                  <domain includeSubdomains="true">phg0643.workers.dev</domain>
-                  <domain includeSubdomains="true">swopenapi.seoul.go.kr</domain>
-                  <domain includeSubdomains="true">swopenAPI.seoul.go.kr</domain>
-                  <domain includeSubdomains="true">apis.data.go.kr</domain>
-                  <domain includeSubdomains="true">tago.go.kr</domain>
-                  <domain includeSubdomains="true">allorigins.win</domain>
-                  <domain includeSubdomains="true">corsproxy.io</domain>
-                  <domain includeSubdomains="true">codetabs.com</domain>
-                  <domain includeSubdomains="true">thingproxy.freeboard.io</domain>
-                  <domain includeSubdomains="true">news.google.com</domain>
-              </domain-config>
-          </network-security-config>
-          EOF
-          echo "network_security_config.xml 생성 완료"
-          cat android/app/src/main/res/xml/network_security_config.xml
+          python3 << 'PYEOF'
+          xml = '<?xml version="1.0" encoding="utf-8"?>\n'
+          xml += '<network-security-config>\n'
+          xml += '    <base-config cleartextTrafficPermitted="true">\n'
+          xml += '        <trust-anchors>\n'
+          xml += '            <certificates src="system"/>\n'
+          xml += '        </trust-anchors>\n'
+          xml += '    </base-config>\n'
+          xml += '    <domain-config cleartextTrafficPermitted="true">\n'
+          xml += '        <domain includeSubdomains="true">workers.dev</domain>\n'
+          xml += '        <domain includeSubdomains="true">phg0643.workers.dev</domain>\n'
+          xml += '        <domain includeSubdomains="true">swopenapi.seoul.go.kr</domain>\n'
+          xml += '        <domain includeSubdomains="true">apis.data.go.kr</domain>\n'
+          xml += '        <domain includeSubdomains="true">tago.go.kr</domain>\n'
+          xml += '        <domain includeSubdomains="true">allorigins.win</domain>\n'
+          xml += '        <domain includeSubdomains="true">corsproxy.io</domain>\n'
+          xml += '        <domain includeSubdomains="true">codetabs.com</domain>\n'
+          xml += '        <domain includeSubdomains="true">thingproxy.freeboard.io</domain>\n'
+          xml += '        <domain includeSubdomains="true">news.google.com</domain>\n'
+          xml += '    </domain-config>\n'
+          xml += '</network-security-config>\n'
+          with open('android/app/src/main/res/xml/network_security_config.xml', 'w') as f:
+              f.write(xml)
+          print('생성 완료')
+          print(xml)
+          PYEOF
 
       - name: Patch AndroidManifest
         run: |
@@ -76,7 +77,7 @@ jobs:
             sed -i 's|android:label="@string/app_name"|android:label="@string/app_name" android:networkSecurityConfig="@xml/network_security_config"|' "$MANIFEST"
           fi
 
-          # 위치 권한 (정밀 + 대략)
+          # 위치 권한
           if ! grep -q "ACCESS_FINE_LOCATION" "$MANIFEST"; then
             sed -i '/<manifest/a\    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>' "$MANIFEST"
           fi
