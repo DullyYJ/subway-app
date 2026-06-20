@@ -5548,9 +5548,10 @@ async function seoulFetchArrival(stnName, lineName) {
       return null;
     }
     var jd = JSON.parse(txt);
-    // 에러코드 체크
-    if(jd.errorMessage) {
-      console.log('[서울실시간] 에러: ' + JSON.stringify(jd.errorMessage).substring(0,80));
+    // errorMessage.code가 INFO-000이면 정상 (서울 API 특성)
+    var _errCode = jd.errorMessage && jd.errorMessage.code;
+    if(_errCode && _errCode !== 'INFO-000') {
+      console.log('[서울실시간] 에러코드: ' + _errCode + ' - ' + (jd.errorMessage.message||''));
       return null;
     }
     var items = jd.realtimeArrivalList;
@@ -10602,13 +10603,12 @@ async function tagoGetNextDep(lineName, stnName, baseMin) {
     return _tagoFindNext(times, baseMin);
 
   } catch(e) {
-    console.log('[TAGO시각표] 네트워크 차단 → 정적 시각표 사용');
-    // 연속 실패 시 비활성화
+    // TAGO 404: 메서드 자체가 없음 → 즉시 비활성화
     if(!window._tagoFailCount) window._tagoFailCount = 0;
     window._tagoFailCount++;
-    if(window._tagoFailCount > 2) {
+    if(window._tagoFailCount >= 1) {
       _tagoEnabled = false;
-      console.warn('[TAGO] 반복 실패 → 비활성화 (정적 시각표로 폴백)');
+      console.log('[TAGO] 서비스 없음(404) → 비활성화, 내장 시각표 사용');
     }
     return null;
   }
