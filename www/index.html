@@ -5528,7 +5528,7 @@ function _fetchWithTimeout(url, ms) {
 }
 
 // ── 서울교통공사 실시간 도착 API ────────────────────────────
-var _SEOUL_API_KEY = '6d784a4364796a7739375a56646151';
+var _SEOUL_API_KEY = '757a596c51796a773130374f77675166';
 var _seoulArrCache = {};
 
 async function seoulFetchArrival(stnName, lineName) {
@@ -10546,7 +10546,7 @@ async function tagoGetNextDep(lineName, stnName, baseMin) {
   try {
     // STEP1: 역 ID 조회
     var sttnUrl = 'https://apis.data.go.kr/1613000/SubwayInfo/getSubwaySttnList' +
-      '?serviceKey=' + encodeURIComponent(_TAGO_KEY) +
+      '?serviceKey=' + _TAGO_KEY +
       '&subwaySttnNm=' + encodeURIComponent(stnName) +
       '&numOfRows=20&pageNo=1&_type=json';
 
@@ -10570,7 +10570,7 @@ async function tagoGetNextDep(lineName, stnName, baseMin) {
 
     // STEP2: 시간표 조회
     var ttUrl = 'https://apis.data.go.kr/1613000/SubwayInfo/getSubwaySttnAcctoArvlDprtTmtblList' +
-      '?serviceKey=' + encodeURIComponent(_TAGO_KEY) +
+      '?serviceKey=' + _TAGO_KEY +
       '&subwaySttnId=' + encodeURIComponent(sttnId) +
       '&numOfRows=200&pageNo=1&_type=json';
 
@@ -10748,43 +10748,43 @@ function _toggleDebugPanel() {
 
 // ── API 상태 체크 ──
 async function _checkApiStatus() {
-  dlog('API체크', '시작 (응답 전체 로깅 모드)...', false);
+  dlog('API체크', '시작...', false);
 
-  // 1. 서울 실시간 API - 응답 전체 출력
+  // 1. 서울 실시간 API (새 키 적용)
   try {
     var _sUrl = 'http://swopenAPI.seoul.go.kr/api/subway/'+_SEOUL_API_KEY+'/json/realtimeStationArrival/0/3/%EC%84%9C%EC%9A%B8%EC%97%AD';
-    dlog('서울실시간URL', _sUrl.substring(30,80), false);
     var r1 = await _fetchWithTimeout(_sUrl, 8000);
-    dlog('서울실시간HTTP', 'status=' + r1.status, r1.status !== 200);
     var _txt1 = await r1.text();
-    dlog('서울실시간RAW', (_txt1||'없음').substring(0, 100), false);
-    if(_txt1 && (_txt1.trim()[0]==='{' || _txt1.trim()[0]==='[')) {
+    dlog('서울실시간HTTP', 'status='+r1.status, r1.status!==200);
+    dlog('서울실시간RAW', (_txt1||'없음').substring(0,120), false);
+    if(_txt1 && _txt1.trim()[0]==='{') {
       var j1 = JSON.parse(_txt1);
-      if(j1.realtimeArrivalList) dlog('서울실시간', '✅ 정상 ('+j1.realtimeArrivalList.length+'개)', false);
-      else dlog('서울실시간', '❌ 키목록: ' + Object.keys(j1).join(','), true);
-    } else {
-      dlog('서울실시간', '❌ 비JSON: ' + (_txt1||'').substring(0,80), true);
+      if(j1.realtimeArrivalList) dlog('서울실시간', '✅ 정상 '+j1.realtimeArrivalList.length+'개', false);
+      else dlog('서울실시간', '❌ 키:'+Object.keys(j1).join(','), true);
     }
   } catch(e) { dlog('서울실시간', '❌ '+e.message, true); }
 
-  // 2. TAGO API - 두 가지 엔드포인트 모두 테스트
-  var _tagoUrls = [
-    'https://apis.data.go.kr/1613000/SubwayInfoService/getSubwaySttnList?serviceKey='+_TAGO_KEY+'&subwaySttnNm=%EA%B3%84%EC%96%91&numOfRows=1&pageNo=1&_type=json',
-    'https://apis.data.go.kr/1613000/SubwayInfo/getSubwaySttnList?serviceKey='+_TAGO_KEY+'&subwaySttnNm=%EA%B3%84%EC%96%91&numOfRows=1&pageNo=1&_type=json',
+  // 2. TAGO - 가능한 메서드 전부 탐색
+  var _tagoMethods = [
+    'getSubwaySttnList',
+    'getSubwaySttnAcctoArvlDprtTmtblList',
+    'getSubwayRouteList',
+    'getSubwaySttnAcctoThrghtnList',
   ];
-  for(var _ti=0; _ti<_tagoUrls.length; _ti++) {
+  for(var _ti=0; _ti<_tagoMethods.length; _ti++) {
     try {
-      dlog('TAGO테스트'+_ti, _tagoUrls[_ti].substring(40,90), false);
-      var _r = await _fetchWithTimeout(_tagoUrls[_ti], 6000);
-      dlog('TAGO'+_ti+'HTTP', 'status='+_r.status, _r.status!==200);
+      var _turl = 'https://apis.data.go.kr/1613000/SubwayInfo/'+_tagoMethods[_ti]
+        +'?serviceKey='+_TAGO_KEY+'&numOfRows=1&pageNo=1&_type=json';
+      var _r = await _fetchWithTimeout(_turl, 5000);
       var _tt = await _r.text();
-      dlog('TAGO'+_ti+'RAW', (_tt||'없음').substring(0,100), false);
-    } catch(e) { dlog('TAGO'+_ti, '❌ '+e.message, true); }
+      dlog('TAGO['+_ti+']'+_tagoMethods[_ti].substring(9,25),
+        'status='+_r.status+' '+(_tt||'').substring(0,50), _r.status!==200);
+    } catch(e) { dlog('TAGO['+_ti+']', '❌ '+e.message, true); }
   }
 
   // 3. 내장 시각표
-  var _incheonLoaded = typeof _INCHEON_TT !== 'undefined' && Object.keys(_INCHEON_TT).length > 0;
-  dlog('인천시각표', _incheonLoaded ? '✅ '+Object.keys(_INCHEON_TT).length+'개노선' : '⏳ 로딩중', false);
+  var _il = typeof _INCHEON_TT!=='undefined' && Object.keys(_INCHEON_TT).length>0;
+  dlog('인천시각표', _il ? '✅ '+Object.keys(_INCHEON_TT).length+'개노선' : '⏳ 로딩중', false);
 
   // 4. 네트워크
   try {
@@ -10792,7 +10792,7 @@ async function _checkApiStatus() {
     dlog('네트워크', r3.status===204 ? '✅ 연결됨' : '⚠️ '+r3.status, false);
   } catch(e) { dlog('네트워크', '❌ 오프라인', true); }
 
-  toast('✅ API 체크 완료 — 패널에서 RAW 응답 확인');
+  toast('✅ API 체크 완료');
 }
 
 // 탑승 확인 시 현재 위치와 출발역 비교, 실제 위치로 curIdx 보정
