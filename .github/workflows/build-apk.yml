@@ -36,37 +36,20 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync android
 
-      - name: Setup network security config
+      - name: Setup network security
         run: |
           mkdir -p android/app/src/main/res/xml
-          cat > android/app/src/main/res/xml/network_security_config.xml << 'XML'
-<?xml version="1.0" encoding="utf-8"?>
-<network-security-config>
-    <base-config cleartextTrafficPermitted="true">
-        <trust-anchors>
-            <certificates src="system"/>
-        </trust-anchors>
-    </base-config>
-</network-security-config>
-XML
-          echo "✅ network_security_config.xml 생성 완료"
+          printf '%s\n' '<?xml version="1.0" encoding="utf-8"?>' '<network-security-config>' '    <base-config cleartextTrafficPermitted="true">' '        <trust-anchors>' '            <certificates src="system"/>' '        </trust-anchors>' '    </base-config>' '</network-security-config>' > android/app/src/main/res/xml/network_security_config.xml
+          echo "network_security_config.xml 생성 완료:"
+          cat android/app/src/main/res/xml/network_security_config.xml
 
-      - name: Patch AndroidManifest.xml
+      - name: Patch AndroidManifest
         run: |
           MANIFEST="android/app/src/main/AndroidManifest.xml"
-          echo "=== 원본 AndroidManifest ==="
-          cat $MANIFEST
-          
-          # networkSecurityConfig 중복 방지 후 삽입
-          if grep -q "networkSecurityConfig" $MANIFEST; then
-            echo "⚠️ networkSecurityConfig 이미 존재"
-          else
-            sed -i 's|android:label="@string/app_name"|android:label="@string/app_name"\n        android:networkSecurityConfig="@xml/network_security_config"|' $MANIFEST
-            echo "✅ networkSecurityConfig 추가"
+          if ! grep -q "networkSecurityConfig" "$MANIFEST"; then
+            sed -i 's|android:label="@string/app_name"|android:label="@string/app_name" android:networkSecurityConfig="@xml/network_security_config"|' "$MANIFEST"
           fi
-          
-          echo "=== 수정된 AndroidManifest ==="
-          cat $MANIFEST
+          echo "AndroidManifest 완료"
 
       - name: Make gradlew executable
         run: chmod +x android/gradlew
