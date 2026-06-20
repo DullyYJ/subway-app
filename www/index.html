@@ -15730,9 +15730,11 @@ function startTracking() {
     }
 
     if(_refineFunc) {
-      // 최초 1회만 시도 (실패해도 내장 시각표 사용)
-      _refineFunc().catch(function(){});
-      // 반복 호출 제거 (실패 시 로그 스팸 방지)
+      // Promise.resolve로 감싸서 .catch 안전 처리
+      try {
+        var _p = _refineFunc();
+        if(_p && typeof _p.catch === 'function') _p.catch(function(){});
+      } catch(e) {}
     }
 
     // renderRouteSegCards에도 출발시각 반영
