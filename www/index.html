@@ -5537,20 +5537,32 @@ async function seoulFetchArrival(stnName, lineName) {
   if(cached && Date.now() - cached.ts < 60000) return cached.data;
   try {
     var lineNum = lineName.replace('호선','');
+    // 서울 열린데이터광장 실시간 도착 API
     var url = 'http://swopenAPI.seoul.go.kr/api/subway/' + _SEOUL_API_KEY +
       '/json/realtimeStationArrival/0/10/' + encodeURIComponent(stnName);
-    var res = await _fetchWithTimeout(url, 5000);
-    if(!res.ok) throw new Error('HTTP ' + res.status);
-    var jd = await res.json();
-    var items = jd && jd.realtimeArrivalList;
-    if(!items) return null;
+    var res = await _fetchWithTimeout(url, 6000);
+    var txt = await res.text();
+    // 응답이 JSON인지 확인
+    if(!txt || txt.trim()[0] !== '{') {
+      console.log('[서울실시간] 비정상 응답: ' + txt.substring(0,80));
+      return null;
+    }
+    var jd = JSON.parse(txt);
+    // 에러코드 체크
+    if(jd.errorMessage) {
+      console.log('[서울실시간] 에러: ' + JSON.stringify(jd.errorMessage).substring(0,80));
+      return null;
+    }
+    var items = jd.realtimeArrivalList;
+    if(!items || !items.length) return null;
     var filtered = items.filter(function(it){
-      return it.subwayId && it.subwayId.indexOf(lineNum) >= 0;
+      return !lineNum || (it.subwayId && it.subwayId.indexOf(lineNum) >= 0);
     });
     _seoulArrCache[cacheKey] = { ts: Date.now(), data: filtered };
+    console.log('[서울실시간] ✅ ' + stnName + ': ' + filtered.length + '개 열차');
     return filtered;
   } catch(e) {
-    console.log('[서울실시간] 네트워크 차단 → 정적 시각표 사용');
+    console.log('[서울실시간] 실패: ' + e.message);
     return null;
   }
 }
@@ -5563,15 +5575,22 @@ async function seoulRefineAll(lineName, stnName) {
     if(items && items.length) {
       var minDep = null;
       items.forEach(function(it) {
-        var barvlDt = parseInt(it.barvlDt || '0');
+        // barvlDt: 도착까지 남은 초
+        var barvlDt = parseInt(it.barvlDt || '-1');
         if(barvlDt >= 0) {
-          var dep = now + Math.round(barvlDt / 60);
+          var dep = now + Math.ceil(barvlDt / 60);
           if(minDep === null || dep < minDep) minDep = dep;
         }
-        var msg = it.arvlMsg2 || '';
-        if(msg.indexOf('곧 도착') >= 0) { if(minDep === null || now+1 < minDep) minDep = now+1; }
+        var msg = (it.arvlMsg2 || '') + (it.arvlMsg3 || '');
+        if(msg.indexOf('곧 도착') >= 0 || msg.indexOf('전역 출발') >= 0) {
+          if(minDep === null || now+2 < minDep) minDep = now+2;
+        }
       });
-      if(minDep !== null) { _applyTagoTime(lineName, stnName, minDep, '서울실시간'); return; }
+      if(minDep !== null) {
+        console.log('[서울실시간] ✅ ' + stnName + ' 다음 열차: ' + Math.floor(minDep/60) + ':' + String(minDep%60).padStart(2,'0'));
+        _applyTagoTime(lineName, stnName, minDep, '서울실시간');
+        return;
+      }
     }
     // 폴백: _BUILTIN_TT 기반 시각표
     var nextMin = getNextDepartureMins(lineName, stnName, '하', now);
@@ -10526,14 +10545,16 @@ async function tagoGetNextDep(lineName, stnName, baseMin) {
 
   try {
     // STEP1: 역 ID 조회
-    var sttnUrl = 'https://apis.data.go.kr/1613000/SubwayInfoService/getSubwaySttnList' +
+    var sttnUrl = 'https://apis.data.go.kr/1613000/SubwayInfo/getSubwaySttnList' +
       '?serviceKey=' + encodeURIComponent(_TAGO_KEY) +
       '&subwaySttnNm=' + encodeURIComponent(stnName) +
       '&numOfRows=20&pageNo=1&_type=json';
 
     var r1 = await _fetchWithTimeout(sttnUrl, 5000);
     if(!r1.ok) throw new Error('HTTP ' + r1.status);
-    var j1 = await r1.json();
+    var _t1 = await r1.text();
+    if(!_t1 || _t1.trim()[0] !== '{' && _t1.trim()[0] !== '[') throw new Error('비JSON 응답: ' + _t1.substring(0,50));
+    var j1 = JSON.parse(_t1);
     var stns = j1?.response?.body?.items?.item;
     if(!stns) return null;
     if(!Array.isArray(stns)) stns = [stns];
@@ -10548,14 +10569,16 @@ async function tagoGetNextDep(lineName, stnName, baseMin) {
     var sttnId = matched.subwaySttnId;
 
     // STEP2: 시간표 조회
-    var ttUrl = 'https://apis.data.go.kr/1613000/SubwayInfoService/getSubwaySttnAcctoArvlDprtTmtblList' +
+    var ttUrl = 'https://apis.data.go.kr/1613000/SubwayInfo/getSubwaySttnAcctoArvlDprtTmtblList' +
       '?serviceKey=' + encodeURIComponent(_TAGO_KEY) +
       '&subwaySttnId=' + encodeURIComponent(sttnId) +
       '&numOfRows=200&pageNo=1&_type=json';
 
     var r2 = await _fetchWithTimeout(ttUrl, 8000);
     if(!r2.ok) throw new Error('HTTP ' + r2.status);
-    var j2 = await r2.json();
+    var _t2 = await r2.text();
+    if(!_t2 || _t2.trim()[0] !== '{' && _t2.trim()[0] !== '[') throw new Error('비JSON 응답: ' + _t2.substring(0,50));
+    var j2 = JSON.parse(_t2);
     var items = j2?.response?.body?.items?.item;
     if(!items) return null;
     if(!Array.isArray(items)) items = [items];
@@ -10734,14 +10757,16 @@ async function _checkApiStatus() {
   } catch(e) { dlog('서울실시간', '❌ '+e.message, true); }
   // 2. TAGO API
   try {
-    var r2 = await _fetchWithTimeout('https://apis.data.go.kr/1613000/SubwayInfoService/getSubwaySttnList?serviceKey='+encodeURIComponent(_TAGO_KEY)+'&subwaySttnNm=%EA%B3%84%EC%96%91&numOfRows=1&pageNo=1&_type=json', 5000);
+    var r2 = await _fetchWithTimeout('https://apis.data.go.kr/1613000/SubwayInfo/getSubwaySttnList?serviceKey='+encodeURIComponent(_TAGO_KEY)+'&subwaySttnNm=%EA%B3%84%EC%96%91&numOfRows=1&pageNo=1&_type=json', 5000);
     var j2 = await r2.json();
     var code = j2&&j2.response&&j2.response.header&&j2.response.header.resultCode;
     dlog('TAGO', code==='00' ? '✅ 정상' : '❌ code='+code, code!=='00');
   } catch(e) { dlog('TAGO', '❌ '+e.message, true); }
   // 3. 내장 시각표
-  dlog('서울시각표', typeof _SEOUL_TT!=='undefined' ? '✅ '+Object.keys(_SEOUL_TT).length+'개노선' : '❌ 없음', false);
-  dlog('인천시각표', typeof _INCHEON_TT!=='undefined' ? '✅ 2개노선' : '❌ 없음', false);
+  var _seoulLoaded = typeof _SEOUL_TT !== 'undefined' && Object.keys(_SEOUL_TT).length > 0;
+  dlog('서울시각표', _seoulLoaded ? '✅ '+Object.keys(_SEOUL_TT).length+'개노선' : '⚠️ 미사용(TAGO+실시간으로 대체)', false);
+  var _incheonLoaded = typeof _INCHEON_TT !== 'undefined' && Object.keys(_INCHEON_TT).length > 0;
+  dlog('인천시각표', _incheonLoaded ? '✅ ' + Object.keys(_INCHEON_TT).length + '개노선' : '⏳ 로딩중(1초후)', false);
   // 4. 네트워크 기본 체크
   try {
     var r3 = await _fetchWithTimeout('https://www.google.com/generate_204', 3000);
@@ -15577,7 +15602,8 @@ function _onGPSUpdate(pos) {
 
     // HUD 거리 표시
     var distEl = document.getElementById('trackingDist');
-    var distTxt = isMoving ? (Math.round(distToNext) + 'm') : ('정지 ' + Math.round(distToNext) + 'm');
+    var _distVal = (distToNext && distToNext > 0 && isFinite(distToNext)) ? Math.round(distToNext) : 0;
+    var distTxt = isMoving ? (_distVal + 'm') : ('정지 ' + _distVal + 'm');
     if(distEl) distEl.textContent = distTxt;
     var rsDistEl = document.getElementById('rsDist');  // ★ 요약 거리 동기화
     if(rsDistEl) rsDistEl.textContent = distTxt;
