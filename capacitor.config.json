@@ -8,6 +8,10 @@
   "android": {
     "allowMixedContent": true,
     "webContentsDebuggingEnabled": false
+  },
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    }
   }
 }
-
