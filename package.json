@@ -1,22 +1,13 @@
 {
   "name": "subway-app",
   "version": "1.0.0",
-  "description": "출근길 뭐라카노 - 지하철 경로탐색 & GPS 관제",
+  "description": "출근길 뭐라카노",
   "private": true,
-  "scripts": {
-    "sync": "cap sync android",
-    "open": "cap open android",
-    "add:android": "cap add android"
-  },
   "dependencies": {
-    "@capacitor/android": "6.2.1",
-    "@capacitor/app": "6.0.3",
-    "@capacitor/core": "6.2.1",
-    "@capacitor/geolocation": "6.1.1",
-    "@capacitor/network": "6.0.4",
-    "@capacitor/status-bar": "6.0.3"
+    "@capacitor/android": "6.1.2",
+    "@capacitor/core": "6.1.2"
   },
   "devDependencies": {
-    "@capacitor/cli": "6.2.1"
+    "@capacitor/cli": "6.1.2"
   }
 }
