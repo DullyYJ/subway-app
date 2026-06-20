@@ -39,18 +39,31 @@ jobs:
       - name: Create network security config
         run: |
           mkdir -p android/app/src/main/res/xml
-          python3 -c "
-          xml = '''<?xml version=\"1.0\" encoding=\"utf-8\"?>
+          cat > android/app/src/main/res/xml/network_security_config.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
           <network-security-config>
-              <base-config cleartextTrafficPermitted=\"true\">
+              <base-config cleartextTrafficPermitted="true">
                   <trust-anchors>
-                      <certificates src=\"system\"/>
+                      <certificates src="system"/>
                   </trust-anchors>
               </base-config>
-          </network-security-config>'''
-          open('android/app/src/main/res/xml/network_security_config.xml','w').write(xml)
-          print('network_security_config.xml 생성 완료')
-          "
+              <domain-config cleartextTrafficPermitted="true">
+                  <domain includeSubdomains="true">workers.dev</domain>
+                  <domain includeSubdomains="true">phg0643.workers.dev</domain>
+                  <domain includeSubdomains="true">swopenapi.seoul.go.kr</domain>
+                  <domain includeSubdomains="true">swopenAPI.seoul.go.kr</domain>
+                  <domain includeSubdomains="true">apis.data.go.kr</domain>
+                  <domain includeSubdomains="true">tago.go.kr</domain>
+                  <domain includeSubdomains="true">allorigins.win</domain>
+                  <domain includeSubdomains="true">corsproxy.io</domain>
+                  <domain includeSubdomains="true">codetabs.com</domain>
+                  <domain includeSubdomains="true">thingproxy.freeboard.io</domain>
+                  <domain includeSubdomains="true">news.google.com</domain>
+              </domain-config>
+          </network-security-config>
+          EOF
+          echo "network_security_config.xml 생성 완료"
+          cat android/app/src/main/res/xml/network_security_config.xml
 
       - name: Patch AndroidManifest
         run: |
