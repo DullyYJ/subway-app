@@ -158,7 +158,7 @@ header h1 em{color:var(--gold);font-style:normal;}
 .livetalk-text{font-size:12px;color:var(--text);line-height:20px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .livetalk-time{font-size:9px;color:var(--sub);flex-shrink:0;}
 /* ── 커뮤니티 실시간 소통탭 (카카오톡 스타일) ── */
-.chat-tab-wrap{display:flex;flex-direction:column;height:100%;}
+.chat-tab-wrap{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;}
 .chat-scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px;display:flex;flex-direction:column;gap:10px;min-height:0;}
 .chat-scroll::-webkit-scrollbar{width:0;}
 .chat-bubble{display:flex;gap:8px;align-items:flex-start;animation:ltSlideUp .35s ease;}
@@ -749,34 +749,129 @@ window.addEventListener('offline', updateOnlineStatus);
 document.addEventListener('DOMContentLoaded', updateOnlineStatus);
 
 // ── 2) Android 뒤로가기 버튼 처리 ──────────────────
-// Median/GoNative 환경에서 뒤로가기 누르면 앱 종료 확인
+// 화면 스택 관리 + 4번 연속 시 종료 팝업
 var _backPressCount = 0;
 var _backPressTimer = null;
+var _screenStack = [];   // 화면 히스토리 스택
+
+// 화면 전환 시 스택에 push
+function _pushScreen(name) {
+  _screenStack.push(name);
+  if(_screenStack.length > 20) _screenStack.shift(); // 최대 20개
+}
+window._pushScreen = _pushScreen;
+
+// 종료 확인 팝업 표시
+function _showExitPopup(){
+  var pop = document.getElementById('exitConfirmPopup');
+  if(pop) pop.style.display = 'flex';
+}
+function _exitConfirm(){
+  // 앱 종료
+  try {
+    if(typeof median !== 'undefined' && median.device) median.device.exitApp();
+    else if(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App)
+      window.Capacitor.Plugins.App.exitApp();
+    else window.close();
+  } catch(e){ window.close(); }
+}
+function _exitCancel(){
+  var pop = document.getElementById('exitConfirmPopup');
+  if(pop) pop.style.display = 'none';
+  _backPressCount = 0;
+}
+window._exitConfirm = _exitConfirm;
+window._exitCancel  = _exitCancel;
 
 function handleBackPress(){
-  if(window.history.length > 1){
-    window.history.back();
+  // ① 종료 팝업이 열려있으면 팝업 닫기
+  var pop = document.getElementById('exitConfirmPopup');
+  if(pop && pop.style.display === 'flex'){
+    _exitCancel();
     return true;
   }
-  // 메인 페이지 - 두 번 누르면 종료
+
+  // ② 모달/시트가 열려있으면 닫기
+  var sheet = document.getElementById('writeSheet');
+  if(sheet && sheet.classList.contains('open')){
+    if(typeof closeWriteSheet === 'function') closeWriteSheet();
+    _backPressCount = 0;
+    return true;
+  }
+  var modal = document.querySelector('.modal-overlay[style*="flex"], .modal-wrap[style*="flex"]');
+  if(modal){
+    modal.style.display = 'none';
+    _backPressCount = 0;
+    return true;
+  }
+
+  // ③ 경로 결과 화면 → 홈으로
+  var pathSec = document.getElementById('pathSection');
+  if(pathSec && pathSec.style.display !== 'none'){
+    if(typeof clearRoute === 'function') clearRoute();
+    else pathSec.style.display = 'none';
+    _backPressCount = 0;
+    return true;
+  }
+
+  // ④ 화면 스택에서 이전 화면으로
+  if(_screenStack.length > 0){
+    var prev = _screenStack.pop();
+    if(typeof switchTab === 'function') switchTab(prev);
+    else {
+      // 탭 직접 전환
+      var tabs = ['home','comm','map','shop'];
+      tabs.forEach(function(t){
+        var el = document.getElementById('tab-'+t);
+        if(el) el.style.display = (t === prev) ? 'flex' : 'none';
+      });
+    }
+    _backPressCount = 0;
+    return true;
+  }
+
+  // ⑤ 커뮤니티 서브탭 (실시간소통/설정 → 전체로)
+  var chatView = document.getElementById('chatTabView');
+  var settView = document.getElementById('settingsTabView');
+  if((chatView && chatView.style.display === 'flex') ||
+     (settView && settView.style.display !== 'none')){
+    // 전체 탭으로 복귀
+    var allChip = document.querySelector('#filterRow .chip');
+    if(allChip && typeof filterCat === 'function') filterCat(allChip, 'all');
+    _backPressCount = 0;
+    return true;
+  }
+
+  // ⑥ 메인 화면 — 연속 4번 누르면 종료 팝업
   _backPressCount++;
-  if(_backPressCount === 1){
-    if(typeof toast === 'function') toast('뒤로 버튼을 한 번 더 누르면 종료됩니다');
-    _backPressTimer = setTimeout(function(){ _backPressCount = 0; }, 2000);
-    return true; // 종료 막기
-  } else {
+  clearTimeout(_backPressTimer);
+  _backPressTimer = setTimeout(function(){ _backPressCount = 0; }, 3000);
+
+  if(_backPressCount >= 4){
     clearTimeout(_backPressTimer);
     _backPressCount = 0;
-    // Median 앱 종료
-    if(typeof median !== 'undefined' && median.device){
-      try { median.device.exitApp(); } catch(e){}
-    }
-    return false;
+    _showExitPopup();
+    return true;
+  } else {
+    var remain = 4 - _backPressCount;
+    if(typeof toast === 'function')
+      toast('뒤로가기 ' + remain + '번 더 누르면 앱이 종료됩니다');
+    return true;
   }
 }
 
-// Median 뒤로가기 이벤트 핸들러
+// Median/Capacitor 뒤로가기 이벤트 핸들러
 window.median_back_pressed = handleBackPress;
+
+// Capacitor App 플러그인 backButton
+try {
+  if(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App){
+    window.Capacitor.Plugins.App.addListener('backButton', function(){
+      var handled = handleBackPress();
+      if(!handled) window.Capacitor.Plugins.App.exitApp();
+    });
+  }
+} catch(e){}
 
 // 브라우저 popstate
 window.addEventListener('popstate', function(){
@@ -1225,7 +1320,7 @@ window.addEventListener('unhandledrejection', function(e) {
     <!-- 카테고리 칩 -->
     <div class="filter-row" id="filterRow">
       <div class="chip on" onclick="filterCat(this,'all')">전체</div>
-      <div class="chip" onclick="filterCat(this,'잡담')">💬잡담</div>
+      <div class="chip" onclick="filterCat(this,'뉴스')">📰뉴스</div>
       <div class="chip" onclick="showChatTab(this)">🔴실시간소통</div>
       <div class="chip" onclick="showSettingsTab(this)">⚙️설정</div>
     </div>
@@ -1241,13 +1336,13 @@ window.addEventListener('unhandledrejection', function(e) {
   </div>
 
   <!-- 스크롤되는 게시글 목록 영역 -->
-  <div class="comm-scroll" id="commScrollView">
+  <div class="comm-scroll" id="commScrollView" style="flex:1;min-height:0;">
     <div id="commList"></div>
     <div id="commEmpty" class="comm-empty">아직 제보가 없습니다.<br>첫 번째 제보자가 되어보세요!</div>
   </div>
 
   <!-- ★ 실시간 소통탭 (카카오톡 스타일) — 기본 숨김 -->
-  <div class="chat-tab-wrap" id="chatTabView" style="display:none;">
+  <div class="chat-tab-wrap" id="chatTabView" style="display:none;flex:1;min-height:0;overflow:hidden;flex-direction:column;">
     <div class="chat-scroll" id="chatScroll"></div>
     <div class="chat-inputbar">
       <input id="chatInput" type="text" placeholder="메시지를 입력하세요..." maxlength="200"
@@ -9032,6 +9127,12 @@ function inlineDestSearch(q){
 
 /* ══ 탭 전환 ══ */
 function switchTab(tab,el){
+  // 현재 탭을 스택에 저장 (뒤로가기용)
+  var curActive = document.querySelector('.tab-body.active');
+  if(curActive){
+    var curId = curActive.id.replace('tab-','');
+    if(curId && curId !== tab && typeof _pushScreen === 'function') _pushScreen(curId);
+  }
   document.querySelectorAll('.tab-body').forEach(t=>t.classList.remove('active'));
   document.querySelectorAll('.ni').forEach(n=>n.classList.remove('on'));
   document.getElementById('tab-'+tab).classList.add('active');
@@ -9123,7 +9224,7 @@ function _requestGpsPermission() {
   navigator.geolocation.getCurrentPosition(
     function(pos) {
       console.log('[GPS] ✅ 권한 허용, 위치:', pos.coords.latitude, pos.coords.longitude);
-      toast('✅ GPS 권한 허용됨!');
+      console.log('[toast-hidden] '+'✅ GPS 권한 허용됨!');
     },
     function(err) {
       console.log('[GPS] 권한 결과 코드:', err.code);
@@ -9811,7 +9912,9 @@ function _renderPost(post){
   el.innerHTML=
     '<div class="dc-post-hdr">'
       +'<span class="dc-cat-badge" style="background:'+col+';">'+post.cat+'</span>'
-      +'<span class="dc-post-title">'+post.title+'</span>'
+      +(post.cat==='뉴스' && post.link
+        ? '<a class="dc-post-title" href="'+post.link+'" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation();" style="color:inherit;text-decoration:none;">'+post.title+' <span style="font-size:0.75em;color:#0a84ff;">↗</span></a>'
+        : '<span class="dc-post-title">'+post.title+'</span>')
     +'</div>'
     +'<div class="dc-post-meta">'
       +'<span class="dc-nick">'+post.nick+'</span>'
@@ -9823,7 +9926,7 @@ function _renderPost(post){
       +'<span class="dc-cmtcount" id="pcmt-'+post.id+'">💬 '+post.cmts.length+'</span>'
     +'</div>'
     +'<div class="dc-post-body" id="pbody-'+post.id+'" style="display:none;">'
-      +'<div class="dc-body-txt">'+post.body.replace(/\n/g,'<br>')+'</div>'
+      +'<div class="dc-body-txt">'+_linkifyBody(post.body)+'</div>'
       +'<div class="dc-reactions">'
         +'<button class="dc-react-btn" onclick="dcReact('+post.id+',\'like\',this)">👍 <span>'+post.like+'</span></button>'
         +'<button class="dc-react-btn" onclick="dcReact('+post.id+',\'lol\',this)">ㅋㅋ <span>'+post.lol+'</span></button>'
@@ -11142,7 +11245,7 @@ function _toggleDebugPanel() {
     dlog('앱상태', '경로=' + (S.route ? S.route.path[0]+'→'+S.route.path[S.route.path.length-1] : '없음'), false);
     dlog('앱상태', '탑승=' + S.boardingState + ' curIdx=' + S.curIdx, false);
     dlog('앱상태', 'boardedAt=' + (S.boardedAt ? new Date(S.boardedAt).toLocaleTimeString() : '없음'), false);
-    dlog('시각표', '_SEOUL_TT=' + (typeof _SEOUL_TT !== 'undefined' ? '✅로드됨 '+Object.keys(_SEOUL_TT).length+'개노선' : '❌없음'), false);
+    dlog('시각표', '_REAL_TT=' + (typeof _REAL_TT !== 'undefined' ? '✅로드됨 '+Object.keys(_REAL_TT).length+'개역' : '❌없음'), false);
     dlog('시각표', '_INCHEON_TT=' + (typeof _INCHEON_TT !== 'undefined' ? '✅로드됨' : '❌없음'), false);
     dlog('시각표', 'TAGO캐시=' + Object.keys(typeof _tagoTTCache!=='undefined'?_tagoTTCache:{}).length + '개역', false);
   }
@@ -11193,7 +11296,7 @@ async function _checkApiStatus() {
     dlog('네트워크', r3.status===204 ? '✅ 연결됨' : '⚠️ '+r3.status, false);
   } catch(e) { dlog('네트워크', '❌ 오프라인', true); }
 
-  toast('✅ API 체크 완료');
+  console.log('[toast-hidden] ✅ API 체크 완료');
 }
 
 // 탑승 확인 시 현재 위치와 출발역 비교, 실제 위치로 curIdx 보정
@@ -11234,7 +11337,7 @@ function _verifyDepartureStationGps(onPass) {
         if(bestIdx > 0) {
           console.log('[출발역검증] ★ 위치 보정 → ' + path[bestIdx] + '(' + Math.round(bestDist) + 'm)');
           S.curIdx = bestIdx;
-          toast('📍 실제 위치(' + path[bestIdx] + ')로 출발역 보정됨');
+          console.log('[toast-hidden] '+'📍 실제 위치(' + path[bestIdx] + ')로 출발역 보정됨');
         }
         onPass();
       }
@@ -11750,8 +11853,8 @@ window.onload=function(){
   setTimeout(function(){ if(typeof _startServerSync==='function') _startServerSync(); }, 1500);  // ★ 서버 동기화 시작
   setTimeout(function(){ if(typeof _renderFavRecent==='function') _renderFavRecent(); }, 500);  // ★ 즐겨찾기/최근경로
   setTimeout(function(){ if(typeof renderHorizontalTimeline==='function') renderHorizontalTimeline(); }, 600);  // ★ 경로 노선도 빈 상태 표시
-  // 30분마다 실시간 뉴스 갱신
-  setInterval(function(){ if(typeof _fetchRealtimeNews === 'function') _fetchRealtimeNews(); }, 15*60*1000);
+  // 10분마다 실시간 뉴스 갱신
+  setInterval(function(){ if(typeof _fetchRealtimeNews === 'function') _fetchRealtimeNews(); }, 10*60*1000);
   // 이후 5~10분 랜덤 간격으로 새 글 자동 생성
   setTimeout(function(){ if(typeof scheduleAutoPost==='function') scheduleAutoPost(); }, 20000);
 
@@ -11809,6 +11912,24 @@ function escHtml(str){
             .replace(/>/g,'&gt;').replace(/"/g,'&quot;')
             .replace(/'/g,'&#39;');
 }
+// ── URL → 하이퍼링크 변환 ─────────────────────────────────
+function _linkifyBody(text) {
+  // 줄바꿈 처리
+  var html = text.replace(/\n/g, '<br>');
+  // URL 패턴 → <a> 태그 (뉴스 링크, 일반 URL 모두)
+  html = html.replace(
+    /(🔗\s*)?(https?:\/\/[^\s<br>"']+)/g,
+    function(match, emoji, url) {
+      // 구글 뉴스 링크는 원문으로 표시
+      var label = emoji ? '📰 기사 원문 보기 →' : url;
+      return '<a href="' + url + '" target="_blank" rel="noopener noreferrer" '
+           + 'style="color:#0a84ff;text-decoration:underline;word-break:break-all;" '
+           + 'onclick="event.stopPropagation();">' + label + '</a>';
+    }
+  );
+  return html;
+}
+
 // Content Security Policy 강제 설정
 try {
   // 외부 스크립트 실행 차단 (Median 앱 환경)
@@ -12244,15 +12365,16 @@ function _makeNewsPostFromRealtime() {
     var pt = Date.parse(news.pubDate);
     if(!isNaN(pt)) pubMs = pt;
   }
-  var bodyText = news.title + '\n\n[' + news.source + '] 보도\n\n' +
-                 '자세한 내용은 기사 원문에서 확인하세요.\n' +
-                 (news.link ? '🔗 ' + news.link : '');
+  var bodyText = '[' + news.source + '] 보도\n\n' +
+                 '자세한 내용은 아래 링크에서 확인하세요.' +
+                 (news.link ? '\n\n🔗 ' + news.link : '');
   var post = {
     id:    _POST_ID++,
     cat:   '뉴스',
     tag:   '뉴스',
     title: news.title,
     body:  bodyText,
+    link:  news.link || '',
     nick:  _rnd(_NICK_POOL),
     line:  '',
     time:  pubMs,
@@ -12263,7 +12385,7 @@ function _makeNewsPostFromRealtime() {
     views: _rndInt(50, 500),
     cmts:  [],
     _realtimeNews: true,
-    _link: news.link,
+
   };
   // ★ 실제 기사 제목 주제 분석 기반 연관 댓글
   post.cmts = _initCmts(pubMs, post);
@@ -15520,7 +15642,7 @@ function _enterDeadReckoning() {
   if(!S?.route?.path || S.curIdx >= S.route.path.length - 1) return;
   _trackingEngine.deadReckon = true;
   console.log('[DeadReckoning] GPS 음영 감지 → 가상 주행 모드 진입');
-  if(typeof toast === 'function') toast('🛰️ GPS 음영 구간 — 추측 항법으로 운행 중');
+  if(typeof toast === 'function') console.log('[toast-hidden] '+'🛰️ GPS 음영 구간 — 추측 항법으로 운행 중');
   _scheduleDeadReckonStep();
 }
 function _scheduleDeadReckonStep() {
@@ -15545,7 +15667,7 @@ function _exitDeadReckoning() {
   _trackingEngine.deadReckon = false;
   if(_trackingEngine.drTimer) { clearTimeout(_trackingEngine.drTimer); _trackingEngine.drTimer = null; }
   console.log('[DeadReckoning] GPS 신호 복구 → 실측 모드 전환');
-  if(typeof toast === 'function') toast('🛰️ GPS 신호 복구됨');
+  if(typeof toast === 'function') console.log('[toast-hidden] '+'🛰️ GPS 신호 복구됨');
 }
 window._enterDeadReckoning = _enterDeadReckoning;
 window._exitDeadReckoning  = _exitDeadReckoning;
@@ -16837,6 +16959,14 @@ function filterCat(el,cat){
   if(sv) sv.style.display='';
   if(cv) cv.style.display='none';
   if(fab) fab.style.display='';
+  // 뉴스 탭 or 전체: 3분 이상 경과 시 최신 뉴스 갱신
+  if(cat==='뉴스'||cat==='all'){
+    if(typeof _fetchRealtimeNews==='function' &&
+       Date.now()-(_newsFetchedAt||0) > 3*60*1000){
+      _fetchRealtimeNews();
+      setTimeout(function(){ if(typeof renderCommList==='function') renderCommList(); }, 2000);
+    }
+  }
   if(typeof renderCommList==='function') renderCommList();
   else if(typeof renderFeed==='function') renderFeed();
 }
@@ -16849,7 +16979,7 @@ function showChatTab(el){
   var sv=document.getElementById('commScrollView'), cv=document.getElementById('chatTabView'), fab=document.getElementById('commFab');
   var stv=document.getElementById('settingsTabView'); if(stv) stv.style.display='none';
   if(sv) sv.style.display='none';
-  if(cv) cv.style.display='flex';
+  if(cv){ cv.style.display='flex'; cv.style.flexDirection='column'; cv.style.flex='1'; cv.style.minHeight='0'; }
   if(fab) fab.style.display='none';  // 채팅 입력창이 있으므로 글쓰기 FAB 숨김
   _renderChatTab();
   // 진입 시 하단으로 스크롤
@@ -18804,5 +18934,22 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
 </nav>
 
+
+  <!-- ★ 앱 종료 확인 팝업 -->
+  <div id="exitConfirmPopup" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;
+    background:rgba(0,0,0,0.7);z-index:99999;display:none;
+    align-items:center;justify-content:center;padding:20px;box-sizing:border-box;">
+    <div style="background:#1c1c1e;border-radius:18px;padding:28px 24px;width:100%;max-width:320px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.5);">
+      <div style="font-size:32px;margin-bottom:12px;">🚪</div>
+      <div style="font-size:18px;font-weight:800;color:#fff;margin-bottom:8px;">앱을 종료하시겠습니까?</div>
+      <div style="font-size:13px;color:#8e8e93;margin-bottom:24px;">출근길 뭐라카노를 종료합니다.</div>
+      <div style="display:flex;gap:10px;">
+        <button onclick="_exitCancel()" style="flex:1;padding:14px;border-radius:12px;border:1px solid #3a3a3c;
+          background:transparent;color:#8e8e93;font-size:15px;font-weight:600;cursor:pointer;">아니요</button>
+        <button onclick="_exitConfirm()" style="flex:1;padding:14px;border-radius:12px;border:none;
+          background:#ff3b30;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">종료</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>
