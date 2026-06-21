@@ -27,13 +27,20 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install dependencies
-        run: npm install
-
-      - name: Install Capacitor plugins (백그라운드 GPS + 로컬 알림)
+      - name: Add Capacitor plugins to package.json
         run: |
-          npm install @capacitor/local-notifications
-          npm install @capacitor-community/background-geolocation
+          node -e "
+          const fs = require('fs');
+          const pkg = JSON.parse(fs.readFileSync('package.json','utf8'));
+          pkg.dependencies['@capacitor/local-notifications'] = '6.1.2';
+          pkg.dependencies['@capacitor-community/background-geolocation'] = '1.2.26';
+          fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));
+          console.log('package.json 업데이트 완료');
+          console.log(JSON.stringify(pkg.dependencies, null, 2));
+          "
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
 
       - name: Add Android platform
         run: npx cap add android
@@ -73,8 +80,6 @@ jobs:
       - name: Patch AndroidManifest (권한 + 포그라운드 서비스)
         run: |
           MANIFEST="android/app/src/main/AndroidManifest.xml"
-          echo "=== 원본 ==="
-          cat $MANIFEST
 
           # networkSecurityConfig
           if ! grep -q "networkSecurityConfig" "$MANIFEST"; then
@@ -86,7 +91,7 @@ jobs:
             sed -i '/<manifest/a\    <uses-permission android:name="android.permission.INTERNET"/>' "$MANIFEST"
           fi
 
-          # 위치 권한 (포그라운드 + 백그라운드)
+          # 위치 권한
           if ! grep -q "ACCESS_FINE_LOCATION" "$MANIFEST"; then
             sed -i '/<manifest/a\    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>' "$MANIFEST"
           fi
@@ -97,8 +102,8 @@ jobs:
             sed -i '/<manifest/a\    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>' "$MANIFEST"
           fi
 
-          # 포그라운드 서비스 권한 (백그라운드 작동 필수)
-          if ! grep -q "FOREGROUND_SERVICE\"" "$MANIFEST"; then
+          # 포그라운드 서비스 권한
+          if ! grep -q 'FOREGROUND_SERVICE"' "$MANIFEST"; then
             sed -i '/<manifest/a\    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>' "$MANIFEST"
           fi
           if ! grep -q "FOREGROUND_SERVICE_LOCATION" "$MANIFEST"; then
@@ -110,22 +115,22 @@ jobs:
             sed -i '/<manifest/a\    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>' "$MANIFEST"
           fi
 
-          # 진동 권한
+          # 진동
           if ! grep -q "VIBRATE" "$MANIFEST"; then
             sed -i '/<manifest/a\    <uses-permission android:name="android.permission.VIBRATE"/>' "$MANIFEST"
           fi
 
-          # 배터리 최적화 제외 요청
+          # 배터리 최적화 제외
           if ! grep -q "REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" "$MANIFEST"; then
             sed -i '/<manifest/a\    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>' "$MANIFEST"
           fi
 
-          # 포그라운드 서비스 선언 (application 태그 안에)
+          # BackgroundGeolocationService 포그라운드 서비스 선언
           if ! grep -q "BackgroundGeolocationService" "$MANIFEST"; then
             sed -i 's|</application>|    <service android:name="com.equimaps.capacitor_background_geolocation.BackgroundGeolocationService" android:enabled="true" android:exported="false" android:foregroundServiceType="location"/>\n    </application>|' "$MANIFEST"
           fi
 
-          echo "=== 수정 후 ==="
+          echo "=== 최종 Manifest ==="
           cat $MANIFEST
 
       - name: Create notification icon (ic_stat_subway)
