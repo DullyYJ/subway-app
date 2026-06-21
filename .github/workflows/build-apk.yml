@@ -27,17 +27,37 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Add Capacitor plugins to package.json
+      - name: Add plugins to package.json & capacitor.config.json
         run: |
+          # package.json에 플러그인 추가
           node -e "
           const fs = require('fs');
           const pkg = JSON.parse(fs.readFileSync('package.json','utf8'));
           pkg.dependencies['@capacitor/local-notifications'] = '6.1.2';
           pkg.dependencies['@capacitor-community/background-geolocation'] = '1.2.26';
           fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));
-          console.log('package.json 업데이트 완료');
-          console.log(JSON.stringify(pkg.dependencies, null, 2));
+          console.log('package.json updated:', pkg.dependencies);
           "
+
+          # capacitor.config.json에 플러그인 설정 추가
+          node -e "
+          const fs = require('fs');
+          const cfg = JSON.parse(fs.readFileSync('capacitor.config.json','utf8'));
+          cfg.plugins = cfg.plugins || {};
+          cfg.plugins['LocalNotifications'] = {
+            smallIcon: 'ic_stat_subway',
+            iconColor: '#0066CC',
+            sound: 'default'
+          };
+          cfg.plugins['BackgroundGeolocation'] = {};
+          fs.writeFileSync('capacitor.config.json', JSON.stringify(cfg, null, 2));
+          console.log('capacitor.config.json updated');
+          "
+
+          echo "=== package.json ==="
+          cat package.json
+          echo "=== capacitor.config.json ==="
+          cat capacitor.config.json
 
       - name: Install dependencies
         run: npm install --legacy-peer-deps
@@ -51,105 +71,72 @@ jobs:
       - name: Create network security config
         run: |
           mkdir -p android/app/src/main/res/xml
-          python3 << 'PYEOF'
-          xml = '<?xml version="1.0" encoding="utf-8"?>\n'
+          python3 -c "
+          xml  = '<?xml version=\"1.0\" encoding=\"utf-8\"?>\n'
           xml += '<network-security-config>\n'
-          xml += '    <base-config cleartextTrafficPermitted="true">\n'
-          xml += '        <trust-anchors>\n'
-          xml += '            <certificates src="system"/>\n'
-          xml += '        </trust-anchors>\n'
+          xml += '    <base-config cleartextTrafficPermitted=\"true\">\n'
+          xml += '        <trust-anchors><certificates src=\"system\"/></trust-anchors>\n'
           xml += '    </base-config>\n'
-          xml += '    <domain-config cleartextTrafficPermitted="true">\n'
-          xml += '        <domain includeSubdomains="true">workers.dev</domain>\n'
-          xml += '        <domain includeSubdomains="true">phg0643.workers.dev</domain>\n'
-          xml += '        <domain includeSubdomains="true">swopenapi.seoul.go.kr</domain>\n'
-          xml += '        <domain includeSubdomains="true">apis.data.go.kr</domain>\n'
-          xml += '        <domain includeSubdomains="true">tago.go.kr</domain>\n'
-          xml += '        <domain includeSubdomains="true">allorigins.win</domain>\n'
-          xml += '        <domain includeSubdomains="true">corsproxy.io</domain>\n'
-          xml += '        <domain includeSubdomains="true">codetabs.com</domain>\n'
-          xml += '        <domain includeSubdomains="true">thingproxy.freeboard.io</domain>\n'
-          xml += '        <domain includeSubdomains="true">news.google.com</domain>\n'
+          xml += '    <domain-config cleartextTrafficPermitted=\"true\">\n'
+          for d in ['workers.dev','phg0643.workers.dev','swopenapi.seoul.go.kr',
+                    'apis.data.go.kr','tago.go.kr','allorigins.win',
+                    'corsproxy.io','codetabs.com','thingproxy.freeboard.io','news.google.com']:
+              xml += f'        <domain includeSubdomains=\"true\">{d}</domain>\n'
           xml += '    </domain-config>\n'
           xml += '</network-security-config>\n'
-          with open('android/app/src/main/res/xml/network_security_config.xml', 'w') as f:
-              f.write(xml)
-          print('생성 완료')
-          PYEOF
+          open('android/app/src/main/res/xml/network_security_config.xml','w').write(xml)
+          print('network_security_config.xml 생성 완료')
+          "
 
-      - name: Patch AndroidManifest (권한 + 포그라운드 서비스)
-        run: |
-          MANIFEST="android/app/src/main/AndroidManifest.xml"
-
-          # networkSecurityConfig
-          if ! grep -q "networkSecurityConfig" "$MANIFEST"; then
-            sed -i 's|android:label="@string/app_name"|android:label="@string/app_name" android:networkSecurityConfig="@xml/network_security_config"|' "$MANIFEST"
-          fi
-
-          # 인터넷
-          if ! grep -q "android.permission.INTERNET" "$MANIFEST"; then
-            sed -i '/<manifest/a\    <uses-permission android:name="android.permission.INTERNET"/>' "$MANIFEST"
-          fi
-
-          # 위치 권한
-          if ! grep -q "ACCESS_FINE_LOCATION" "$MANIFEST"; then
-            sed -i '/<manifest/a\    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>' "$MANIFEST"
-          fi
-          if ! grep -q "ACCESS_COARSE_LOCATION" "$MANIFEST"; then
-            sed -i '/<manifest/a\    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>' "$MANIFEST"
-          fi
-          if ! grep -q "ACCESS_BACKGROUND_LOCATION" "$MANIFEST"; then
-            sed -i '/<manifest/a\    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>' "$MANIFEST"
-          fi
-
-          # 포그라운드 서비스 권한
-          if ! grep -q 'FOREGROUND_SERVICE"' "$MANIFEST"; then
-            sed -i '/<manifest/a\    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>' "$MANIFEST"
-          fi
-          if ! grep -q "FOREGROUND_SERVICE_LOCATION" "$MANIFEST"; then
-            sed -i '/<manifest/a\    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>' "$MANIFEST"
-          fi
-
-          # 알림 권한 (Android 13+)
-          if ! grep -q "POST_NOTIFICATIONS" "$MANIFEST"; then
-            sed -i '/<manifest/a\    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>' "$MANIFEST"
-          fi
-
-          # 진동
-          if ! grep -q "VIBRATE" "$MANIFEST"; then
-            sed -i '/<manifest/a\    <uses-permission android:name="android.permission.VIBRATE"/>' "$MANIFEST"
-          fi
-
-          # 배터리 최적화 제외
-          if ! grep -q "REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" "$MANIFEST"; then
-            sed -i '/<manifest/a\    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>' "$MANIFEST"
-          fi
-
-          # BackgroundGeolocationService 포그라운드 서비스 선언
-          if ! grep -q "BackgroundGeolocationService" "$MANIFEST"; then
-            sed -i 's|</application>|    <service android:name="com.equimaps.capacitor_background_geolocation.BackgroundGeolocationService" android:enabled="true" android:exported="false" android:foregroundServiceType="location"/>\n    </application>|' "$MANIFEST"
-          fi
-
-          echo "=== 최종 Manifest ==="
-          cat $MANIFEST
-
-      - name: Create notification icon (ic_stat_subway)
+      - name: Create notification icon
         run: |
           mkdir -p android/app/src/main/res/drawable
-          cat > android/app/src/main/res/drawable/ic_stat_subway.xml << 'XMLEOF'
+          cat > android/app/src/main/res/drawable/ic_stat_subway.xml << 'SVGEOF'
           <vector xmlns:android="http://schemas.android.com/apk/res/android"
             android:width="24dp" android:height="24dp"
             android:viewportWidth="24" android:viewportHeight="24">
             <path android:fillColor="#FFFFFF"
-              android:pathData="M12,2C8,2 4,3.5 4,7V17C4,18.1 4.3,19 4.8,19.7L3,21.5L4.5,23L6.3,21.2C7,21.7 8,22 9,22H15C16,22 17,21.7 17.7,21.2L19.5,23L21,21.5L19.2,19.7C19.7,19 20,18.1 20,17V7C20,3.5 16,2 12,2ZM9,18C8.2,18 7.5,17.3 7.5,16.5S8.2,15 9,15 10.5,15.7 10.5,16.5 9.8,18 9,18ZM15,18C14.2,18 13.5,17.3 13.5,16.5S14.2,15 15,15 16.5,15.7 16.5,16.5 15.8,18 15,18ZM18,12H6V7H18V12Z"/>
+              android:pathData="M12,2C8,2 4,3.5 4,7v10c0,1.1 0.3,2 0.8,2.7L3,21.5L4.5,23l1.8-1.8C7,21.7 8,22 9,22h6c1,0 2-0.3 2.7-0.8L19.5,23L21,21.5l-1.8-1.8C19.7,19 20,18.1 20,17V7C20,3.5 16,2 12,2zM9,18c-0.8,0-1.5-0.7-1.5-1.5S8.2,15 9,15s1.5,0.7 1.5,1.5S9.8,18 9,18zM15,18c-0.8,0-1.5-0.7-1.5-1.5S14.2,15 15,15s1.5,0.7 1.5,1.5S15.8,18 15,18zM18,12H6V7h12v5z"/>
           </vector>
-          XMLEOF
+          SVGEOF
+
+      - name: Patch AndroidManifest
+        run: |
+          M="android/app/src/main/AndroidManifest.xml"
+
+          # networkSecurityConfig
+          grep -q "networkSecurityConfig" "$M" || \
+            sed -i 's|android:label="@string/app_name"|android:label="@string/app_name" android:networkSecurityConfig="@xml/network_security_config"|' "$M"
+
+          # 권한 목록
+          PERMS=(
+            "android.permission.INTERNET"
+            "android.permission.ACCESS_FINE_LOCATION"
+            "android.permission.ACCESS_COARSE_LOCATION"
+            "android.permission.ACCESS_BACKGROUND_LOCATION"
+            "android.permission.FOREGROUND_SERVICE"
+            "android.permission.FOREGROUND_SERVICE_LOCATION"
+            "android.permission.POST_NOTIFICATIONS"
+            "android.permission.VIBRATE"
+            "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
+          )
+          for PERM in "${PERMS[@]}"; do
+            grep -q "$PERM" "$M" || \
+              sed -i "/<manifest/a\\    <uses-permission android:name=\"$PERM\"/>" "$M"
+          done
+
+          # BackgroundGeolocationService 선언
+          grep -q "BackgroundGeolocationService" "$M" || \
+            sed -i 's|</application>|    <service android:name="com.equimaps.capacitor_background_geolocation.BackgroundGeolocationService" android:enabled="true" android:exported="false" android:foregroundServiceType="location"/>\n    </application>|' "$M"
+
+          echo "=== 최종 AndroidManifest ==="
+          cat "$M"
 
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
       - name: Build Debug APK
-        run: cd android && ./gradlew assembleDebug
+        run: cd android && ./gradlew assembleDebug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
