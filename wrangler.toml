@@ -10,4 +10,4 @@ crons = ["0 18 * * *"]
 [[d1_databases]]
 binding = "DB"
 database_name = "subway-db"
-database_id = "your-d1-database-id"
+database_id = "c06de2e6-d6bc-401c-be32-25fde0b5f747"
