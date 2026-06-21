@@ -155,7 +155,11 @@ jobs:
         run: chmod +x android/gradlew
 
       - name: Build Debug APK
-        run: cd android && ./gradlew assembleDebug --stacktrace 2>&1 | tail -60
+        run: cd android && ./gradlew assembleDebug
+
+      - name: List APK output (디버그)
+        if: always()
+        run: find android/app/build/outputs -name "*.apk" 2>/dev/null || echo "APK 없음"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
@@ -163,3 +167,4 @@ jobs:
           name: subway-app-debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
+          if-no-files-found: warn
