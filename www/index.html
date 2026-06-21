@@ -9505,7 +9505,25 @@ function _skipGpsPermission() {
   toast('ℹ️ 시간 기반 모드로 동작합니다');
 }
 
-function toast(msg){const t=document.getElementById('toast');if(S.toastT)clearTimeout(S.toastT);t.textContent=msg;t.classList.add('on');S.toastT=setTimeout(()=>t.classList.remove('on'),2400);}
+function toast(msg){
+  // 기술적/내부 메시지 필터 — 사용자에게 표시하지 않음
+  var _hiddenPhrases = [
+    'getShtrmPath','API 미응답','로컬 경로로 진행','정상)',
+    'DeadReckoning','추측 항법','GPS 신호 복구됨','GPS 음영',
+    'GPS 권한 허용됨','출발역 보정됨','API 체크 완료',
+    'TAGO','시각표 로드','캐시 사용','서버 동기화',
+    '[hidden]','console.log'
+  ];
+  if(_hiddenPhrases.some(function(p){ return String(msg).indexOf(p) !== -1; })){
+    console.log('[toast-hidden]', msg);
+    return;
+  }
+  const t=document.getElementById('toast');
+  if(S.toastT) clearTimeout(S.toastT);
+  t.textContent=msg;
+  t.classList.add('on');
+  S.toastT=setTimeout(function(){ t.classList.remove('on'); }, 2400);
+}
 
 // ── 디버그 토스트 (APK 환경에서 콘솔 대신 화면에 표시) ──────────
 var _debugEnabled = true; // 디버그 ON/OFF 토글
@@ -13245,18 +13263,22 @@ function advanceToNextStation(source){
 /* 도착/환승 알림 체크 */
 var _alertFired = {};   // 중복 알림 방지
 function checkArrivalAlerts(idx){
-  if(!S.route)return;
-  const path=S.route.path;
-  const totalStops=path.length-1;
+  if(!S.route) return;
+  var path       = S.route.path;
+  var lp         = S.route.lp;
+  var totalStops = path.length - 1;
+  var destNm     = path[totalStops];
 
-  // ── 목적지 도착 ──
-  if(idx===totalStops){
-    if(!_alertFired['arrive_'+idx]){
-      _alertFired['arrive_'+idx]=true;
-      toast('🎉 목적지 '+path[idx]+' 도착!');
+  // ══════════════════════════════════════════
+  // 목적지 도착
+  // ══════════════════════════════════════════
+  if(idx === totalStops){
+    if(!_alertFired['arrive']){
+      _alertFired['arrive'] = true;
+      toast('🎉 목적지 ' + destNm + ' 도착!');
       vibrateArrive();
       showNotification('🎉 목적지 도착!',
-        path[idx]+'에 도착했습니다. 수고하셨습니다!',
+        destNm + '에 도착했습니다. 수고하셨습니다!',
         {vibrate:[300,100,300,100,300], type:'arrive'});
       stopTrainAnim(); stopApiPoll();
     }
@@ -13270,55 +13292,89 @@ function checkArrivalAlerts(idx){
     return;
   }
 
-  // ── 목적지 1정거장 전 ──
-  if(idx===totalStops-1){
-    if(!_alertFired['near1_'+idx]){
-      _alertFired['near1_'+idx]=true;
-      toast('⚠️ 곧 목적지! 다음 역 '+path[totalStops]);
+  // ══════════════════════════════════════════
+  // 목적지 1정거장 전 — 딱 1회만
+  // ══════════════════════════════════════════
+  if(idx === totalStops - 1){
+    if(!_alertFired['near1']){
+      _alertFired['near1'] = true;
+      toast('⚠️ 다음 역 목적지! ' + destNm + ' 내릴 준비하세요');
       vibrateArrive();
       showNotification('⚠️ 1정거장 전 도착',
-        '다음 역: '+path[totalStops]+' — 내릴 준비하세요!',
+        '다음 역: ' + destNm + ' — 내릴 준비하세요!',
         {vibrate:[300,100,300,100,300], type:'near_arrive'});
     }
-    return;
+    // 환승도 체크 (도착역이 환승역일 수 있음)
   }
 
-  // ── 목적지 2정거장 전 ──
-  if(idx===totalStops-2){
-    if(!_alertFired['near2_'+idx]){
-      _alertFired['near2_'+idx]=true;
-      toast('🔔 2정거장 후 목적지! '+path[totalStops]);
+  // ══════════════════════════════════════════
+  // 목적지 2정거장 전 — 딱 1회만
+  // ══════════════════════════════════════════
+  if(idx === totalStops - 2){
+    if(!_alertFired['near2']){
+      _alertFired['near2'] = true;
+      toast('🔔 2정거장 후 목적지! ' + destNm);
       vibrateWarning();
       showNotification('🔔 2정거장 전 도착',
-        '목적지: '+path[totalStops]+' — 2정거장 남았습니다',
+        '목적지: ' + destNm + ' — 2정거장 남았습니다',
         {vibrate:[400,150,400], type:'near_arrive2'});
     }
-    // return 안 함 → 동시에 환승 예고도 처리
   }
 
-  // ── 현재 역이 환승역 (통과) ──
-  const isXfer=idx>0&&
-    S.route.lp[idx]!==S.route.lp[idx-1]&&
-    S.route.lp[idx]!==''&&S.route.lp[idx-1]!=='';
-  if(isXfer && S.boarded && !_alertFired['xfer_pass_'+idx]){
-    _alertFired['xfer_pass_'+idx]=true;
-    addPoints(5,'환승 통과');
-    toast('🔄 환승역 통과! +5P');
-    vibrateTransfer();
+  // ══════════════════════════════════════════
+  // 환승역 통과 — 해당 환승역 이름 기준으로 1회만
+  // ══════════════════════════════════════════
+  var isXfer = idx > 0 &&
+    lp[idx] !== lp[idx-1] &&
+    lp[idx] !== '' && lp[idx-1] !== '';
+  if(isXfer && S.boarded){
+    var xferKey = 'xfer_pass_' + path[idx];
+    if(!_alertFired[xferKey]){
+      _alertFired[xferKey] = true;
+      addPoints(5, '환승 통과');
+      toast('🔄 ' + path[idx] + ' 환승 통과! +5P');
+      vibrateTransfer();
+    }
   }
 
-  // ── 다음 역이 환승역 (예고) ──
-  const nextIsXfer=idx+1<path.length&&
-    S.route.lp[idx+1]!==S.route.lp[idx]&&
-    S.route.lp[idx+1]!==''&&S.route.lp[idx]!=='';
-  if(nextIsXfer && !_alertFired['xfer_next_'+idx]){
-    _alertFired['xfer_next_'+idx]=true;
-    const xl=S.route.lp[idx+1];
-    toast('🔄 다음 역 '+path[idx+1]+' 환승 준비 (→'+xl+')');
-    vibrateTransfer();
-    showNotification('🔄 환승 준비',
-      '다음 역: '+path[idx+1]+' → '+xl+' 환승하세요',
-      {vibrate:[200,100,200,100,200], type:'transfer'});
+  // ══════════════════════════════════════════
+  // 환승역 1정거장 전 예고 — 환승역 이름 기준으로 1회만
+  // ══════════════════════════════════════════
+  var next1IsXfer = idx + 1 <= totalStops &&
+    lp[idx+1] !== lp[idx] &&
+    lp[idx+1] !== '' && lp[idx] !== '';
+  if(next1IsXfer){
+    var xferNm   = path[idx+1];
+    var xferLine = lp[idx+1];
+    var xfer1Key = 'xfer_1_' + xferNm;
+    if(!_alertFired[xfer1Key]){
+      _alertFired[xfer1Key] = true;
+      toast('🔄 다음 역 ' + xferNm + ' 환승 (→' + xferLine + ')');
+      vibrateTransfer();
+      showNotification('🔄 1정거장 전 환승',
+        '다음 역: ' + xferNm + ' → ' + xferLine + ' 환승하세요',
+        {vibrate:[200,100,200,100,200], type:'transfer'});
+    }
+  }
+
+  // ══════════════════════════════════════════
+  // 환승역 2정거장 전 예고 — 환승역 이름 기준으로 1회만
+  // ══════════════════════════════════════════
+  var next2IsXfer = idx + 2 <= totalStops &&
+    lp[idx+2] !== lp[idx+1] &&
+    lp[idx+2] !== '' && lp[idx+1] !== '';
+  if(next2IsXfer){
+    var xferNm2   = path[idx+2];
+    var xferLine2 = lp[idx+2];
+    var xfer2Key  = 'xfer_2_' + xferNm2;
+    if(!_alertFired[xfer2Key]){
+      _alertFired[xfer2Key] = true;
+      toast('🔔 2정거장 후 환승역! ' + xferNm2 + ' (→' + xferLine2 + ')');
+      vibrateWarning();
+      showNotification('🔔 2정거장 전 환승',
+        xferNm2 + '에서 ' + xferLine2 + ' 환승 — 미리 준비하세요',
+        {vibrate:[400,150,400], type:'transfer2'});
+    }
   }
 }
 
