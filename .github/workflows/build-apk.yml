@@ -30,6 +30,11 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Install Capacitor plugins (백그라운드 GPS + 로컬 알림)
+        run: |
+          npm install @capacitor/local-notifications
+          npm install @capacitor-community/background-geolocation
+
       - name: Add Android platform
         run: npx cap add android
 
@@ -63,10 +68,9 @@ jobs:
           with open('android/app/src/main/res/xml/network_security_config.xml', 'w') as f:
               f.write(xml)
           print('생성 완료')
-          print(xml)
           PYEOF
 
-      - name: Patch AndroidManifest
+      - name: Patch AndroidManifest (권한 + 포그라운드 서비스)
         run: |
           MANIFEST="android/app/src/main/AndroidManifest.xml"
           echo "=== 원본 ==="
@@ -77,21 +81,64 @@ jobs:
             sed -i 's|android:label="@string/app_name"|android:label="@string/app_name" android:networkSecurityConfig="@xml/network_security_config"|' "$MANIFEST"
           fi
 
-          # 위치 권한
+          # 인터넷
+          if ! grep -q "android.permission.INTERNET" "$MANIFEST"; then
+            sed -i '/<manifest/a\    <uses-permission android:name="android.permission.INTERNET"/>' "$MANIFEST"
+          fi
+
+          # 위치 권한 (포그라운드 + 백그라운드)
           if ! grep -q "ACCESS_FINE_LOCATION" "$MANIFEST"; then
             sed -i '/<manifest/a\    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>' "$MANIFEST"
           fi
           if ! grep -q "ACCESS_COARSE_LOCATION" "$MANIFEST"; then
             sed -i '/<manifest/a\    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>' "$MANIFEST"
           fi
+          if ! grep -q "ACCESS_BACKGROUND_LOCATION" "$MANIFEST"; then
+            sed -i '/<manifest/a\    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>' "$MANIFEST"
+          fi
 
-          # 인터넷 권한
-          if ! grep -q "android.permission.INTERNET" "$MANIFEST"; then
-            sed -i '/<manifest/a\    <uses-permission android:name="android.permission.INTERNET"/>' "$MANIFEST"
+          # 포그라운드 서비스 권한 (백그라운드 작동 필수)
+          if ! grep -q "FOREGROUND_SERVICE\"" "$MANIFEST"; then
+            sed -i '/<manifest/a\    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>' "$MANIFEST"
+          fi
+          if ! grep -q "FOREGROUND_SERVICE_LOCATION" "$MANIFEST"; then
+            sed -i '/<manifest/a\    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>' "$MANIFEST"
+          fi
+
+          # 알림 권한 (Android 13+)
+          if ! grep -q "POST_NOTIFICATIONS" "$MANIFEST"; then
+            sed -i '/<manifest/a\    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>' "$MANIFEST"
+          fi
+
+          # 진동 권한
+          if ! grep -q "VIBRATE" "$MANIFEST"; then
+            sed -i '/<manifest/a\    <uses-permission android:name="android.permission.VIBRATE"/>' "$MANIFEST"
+          fi
+
+          # 배터리 최적화 제외 요청
+          if ! grep -q "REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" "$MANIFEST"; then
+            sed -i '/<manifest/a\    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>' "$MANIFEST"
+          fi
+
+          # 포그라운드 서비스 선언 (application 태그 안에)
+          if ! grep -q "BackgroundGeolocationService" "$MANIFEST"; then
+            sed -i 's|</application>|    <service android:name="com.equimaps.capacitor_background_geolocation.BackgroundGeolocationService" android:enabled="true" android:exported="false" android:foregroundServiceType="location"/>\n    </application>|' "$MANIFEST"
           fi
 
           echo "=== 수정 후 ==="
           cat $MANIFEST
+
+      - name: Create notification icon (ic_stat_subway)
+        run: |
+          mkdir -p android/app/src/main/res/drawable
+          cat > android/app/src/main/res/drawable/ic_stat_subway.xml << 'XMLEOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+            android:width="24dp" android:height="24dp"
+            android:viewportWidth="24" android:viewportHeight="24">
+            <path android:fillColor="#FFFFFF"
+              android:pathData="M12,2C8,2 4,3.5 4,7V17C4,18.1 4.3,19 4.8,19.7L3,21.5L4.5,23L6.3,21.2C7,21.7 8,22 9,22H15C16,22 17,21.7 17.7,21.2L19.5,23L21,21.5L19.2,19.7C19.7,19 20,18.1 20,17V7C20,3.5 16,2 12,2ZM9,18C8.2,18 7.5,17.3 7.5,16.5S8.2,15 9,15 10.5,15.7 10.5,16.5 9.8,18 9,18ZM15,18C14.2,18 13.5,17.3 13.5,16.5S14.2,15 15,15 16.5,15.7 16.5,16.5 15.8,18 15,18ZM18,12H6V7H18V12Z"/>
+          </vector>
+          XMLEOF
 
       - name: Make gradlew executable
         run: chmod +x android/gradlew
