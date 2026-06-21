@@ -29,35 +29,21 @@ jobs:
 
       - name: Add plugins to package.json & capacitor.config.json
         run: |
-          # package.json에 플러그인 추가
           node -e "
           const fs = require('fs');
           const pkg = JSON.parse(fs.readFileSync('package.json','utf8'));
           pkg.dependencies['@capacitor/local-notifications'] = '6.1.2';
           pkg.dependencies['@capacitor-community/background-geolocation'] = '1.2.26';
           fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));
-          console.log('package.json updated:', pkg.dependencies);
-          "
+          console.log('package.json updated');
 
-          # capacitor.config.json에 플러그인 설정 추가
-          node -e "
-          const fs = require('fs');
           const cfg = JSON.parse(fs.readFileSync('capacitor.config.json','utf8'));
           cfg.plugins = cfg.plugins || {};
-          cfg.plugins['LocalNotifications'] = {
-            smallIcon: 'ic_stat_subway',
-            iconColor: '#0066CC',
-            sound: 'default'
-          };
+          cfg.plugins['LocalNotifications'] = { smallIcon: 'ic_stat_subway', iconColor: '#0066CC' };
           cfg.plugins['BackgroundGeolocation'] = {};
           fs.writeFileSync('capacitor.config.json', JSON.stringify(cfg, null, 2));
           console.log('capacitor.config.json updated');
           "
-
-          echo "=== package.json ==="
-          cat package.json
-          echo "=== capacitor.config.json ==="
-          cat capacitor.config.json
 
       - name: Install dependencies
         run: npm install --legacy-peer-deps
@@ -67,6 +53,42 @@ jobs:
 
       - name: Sync Capacitor
         run: npx cap sync android
+
+      - name: Patch background-geolocation build.gradle (AGP 8.2.1 호환)
+        run: |
+          BG_GRADLE="android/capacitor-cordova-android-plugins/build/intermediates/res/merged/release/node_modules/@capacitor-community/background-geolocation/android/build.gradle"
+          # npx cap sync 후 실제 경로
+          BG_GRADLE2="node_modules/@capacitor-community/background-geolocation/android/build.gradle"
+
+          patch_gradle() {
+            local f="$1"
+            if [ -f "$f" ]; then
+              echo "패치 대상: $f"
+              # lintOptions → lint (AGP 8.0+ deprecated)
+              sed -i 's/lintOptions {/lint {/g' "$f"
+              # compileSdkVersion → compileSdk
+              sed -i 's/compileSdkVersion /compileSdk /g' "$f"
+              # targetSdkVersion → targetSdk
+              sed -i 's/targetSdkVersion /targetSdk /g' "$f"
+              # AGP 버전 통일 (8.0.0 → 8.2.1)
+              sed -i "s/com.android.tools.build:gradle:8.0.0/com.android.tools.build:gradle:8.2.1/g" "$f"
+              echo "패치 완료:"
+              cat "$f"
+            else
+              echo "파일 없음: $f"
+            fi
+          }
+
+          # node_modules 원본 패치
+          patch_gradle "$BG_GRADLE2"
+
+          # cap sync 후 android 프로젝트 내 복사본도 패치
+          find android -path "*/background-geolocation/android/build.gradle" 2>/dev/null | while read f; do
+            patch_gradle "$f"
+          done
+
+          echo "=== 패치된 파일 목록 ==="
+          find android -name "build.gradle" | grep -i "background" | head -5
 
       - name: Create network security config
         run: |
@@ -104,11 +126,9 @@ jobs:
         run: |
           M="android/app/src/main/AndroidManifest.xml"
 
-          # networkSecurityConfig
           grep -q "networkSecurityConfig" "$M" || \
             sed -i 's|android:label="@string/app_name"|android:label="@string/app_name" android:networkSecurityConfig="@xml/network_security_config"|' "$M"
 
-          # 권한 목록
           PERMS=(
             "android.permission.INTERNET"
             "android.permission.ACCESS_FINE_LOCATION"
@@ -125,9 +145,8 @@ jobs:
               sed -i "/<manifest/a\\    <uses-permission android:name=\"$PERM\"/>" "$M"
           done
 
-          # BackgroundGeolocationService 선언
-          grep -q "BackgroundGeolocationService" "$M" || \
-            sed -i 's|</application>|    <service android:name="com.equimaps.capacitor_background_geolocation.BackgroundGeolocationService" android:enabled="true" android:exported="false" android:foregroundServiceType="location"/>\n    </application>|' "$M"
+          # BackgroundGeolocationService는 플러그인 자체 Manifest에 이미 선언됨
+          # 중복 방지를 위해 앱 Manifest에는 추가 안 함
 
           echo "=== 최종 AndroidManifest ==="
           cat "$M"
@@ -136,7 +155,7 @@ jobs:
         run: chmod +x android/gradlew
 
       - name: Build Debug APK
-        run: cd android && ./gradlew assembleDebug --stacktrace
+        run: cd android && ./gradlew assembleDebug --stacktrace 2>&1 | tail -60
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
