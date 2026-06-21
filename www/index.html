@@ -437,13 +437,13 @@ input[type=time]{color-scheme:dark;}
 .gm-yes{flex:1;padding:12px;border-radius:11px;font-size:14px;font-weight:700;cursor:pointer;border:none;background:var(--blue);color:#fff;font-family:inherit;}
 
 /* BOTTOM NAV */
-.bnav{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;height:56px;flex-shrink:0;border-top:1px solid var(--border);background:#161618;z-index:50;
+.bnav{display:grid;grid-template-columns:repeat(5,1fr);height:56px;flex-shrink:0;border-top:1px solid var(--border);background:#161618;z-index:50;
   /* 모바일 키보드 팝업 시에도 하단 고정 유지 */
   position:fixed;bottom:0;left:0;right:0;
   padding-bottom:env(safe-area-inset-bottom,0px);
 }
-.ni{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--sub);font-size:10px;cursor:pointer;transition:color .2s;}
-.ni svg{fill:currentColor;}
+.ni{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--sub);font-size:9px;cursor:pointer;transition:color .2s;overflow:hidden;}
+.ni svg{fill:currentColor;width:20px;height:20px;flex-shrink:0;}
 .ni.on{color:var(--gold);font-weight:700;}
 
 /* TOAST */
@@ -780,6 +780,220 @@ function _exitCancel(){
   if(pop) pop.style.display = 'none';
   _backPressCount = 0;
 }
+
+// ══════════════════════════════════════════════════════════════
+// 🍽️ 도착역 맛집 탭 (카카오 로컬 API)
+// ══════════════════════════════════════════════════════════════
+var _KAKAO_REST_KEY = 'a420cd52d24c6380fb5d1a2287663495';
+var _foodCache     = {};   // { 역명: { ts, data } }
+var _foodAllData   = [];   // 현재 로드된 전체 맛집 목록
+var _foodCurFilter = '전체';
+
+// 카테고리 필터 클릭
+function foodFilterCat(el, cat) {
+  document.querySelectorAll('.food-chip').forEach(function(c){ c.classList.remove('on'); });
+  el.classList.add('on');
+  _foodCurFilter = cat;
+  _renderFoodList();
+}
+window.foodFilterCat = foodFilterCat;
+
+// 맛집 탭 진입 시 호출
+function loadFoodTab(force) {
+  var destStn = S.route ? S.route.path[S.route.path.length - 1] : null;
+  var label   = document.getElementById('foodDestLabel');
+
+  if(!destStn) {
+    if(label) label.textContent = '도착역을 설정하면 맛집을 추천해드려요';
+    document.getElementById('foodList').innerHTML =
+      '<div class="food-empty">🗺️<br>경로를 설정하면<br>도착역 주변 맛집을 추천해드려요!</div>';
+    return;
+  }
+
+  if(label) label.textContent = destStn + ' 역 주변 맛집';
+
+  // 캐시 확인 (10분)
+  var cache = _foodCache[destStn];
+  if(!force && cache && Date.now() - cache.ts < 10 * 60 * 1000) {
+    _foodAllData = cache.data;
+    _renderFoodList();
+    return;
+  }
+
+  // 도착역 좌표 가져오기
+  var stnInfo = (typeof STNDB !== 'undefined') ?
+    STNDB.find(function(s){ return s.name === destStn; }) : null;
+
+  if(!stnInfo || !stnInfo.lat || !stnInfo.lng) {
+    document.getElementById('foodList').innerHTML =
+      '<div class="food-error">⚠️ 도착역 좌표를 찾을 수 없습니다.<br>' + destStn + '</div>';
+    return;
+  }
+
+  _fetchKakaoFood(destStn, stnInfo.lat, stnInfo.lng);
+}
+window.loadFoodTab = loadFoodTab;
+
+// Worker D1 캐시에서 맛집 조회
+function _fetchKakaoFood(stnNm, lat, lng) {
+  var list = document.getElementById('foodList');
+  if(list) list.innerHTML =
+    '<div class="food-loading"><div class="food-spinner"></div>' + stnNm + ' 맛집 불러오는 중...</div>';
+
+  var workerUrl = 'https://gentle-lab-7e47subway-api.phg0643.workers.dev/kakao-food' +
+    '?station=' + encodeURIComponent(stnNm) +
+    '&cat=' + encodeURIComponent(_foodCurFilter || '전체');
+
+  fetch(workerUrl)
+    .then(function(r) {
+      if(!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
+    .then(function(data) {
+      // D1 결과 (cached) 또는 실시간 결과 모두 처리
+      var places = data.restaurants || data.documents || [];
+      if(!places.length) {
+        if(list) list.innerHTML =
+          '<div class="food-empty">😢<br>' + stnNm + ' 주변<br>검색된 맛집이 없습니다.<br>' +
+          '<small style="color:var(--sub)">새벽 3시 이후 자동 업데이트됩니다</small></div>';
+        return;
+      }
+      // D1 컬럼명 → 카카오 API 형식으로 정규화
+      _foodAllData = places.map(function(p) {
+        return {
+          id:                p.place_id   || p.id             || '',
+          place_name:        p.place_name                     || '',
+          category_name:     p.category_name                  || '',
+          address_name:      p.address_name                   || '',
+          road_address_name: p.road_address_name              || '',
+          distance:          String(p.distance                || 0),
+          place_url:         p.place_url                      || '',
+          x:                 String(p.lng || p.x              || 0),
+          y:                 String(p.lat || p.y              || 0),
+        };
+      });
+      _foodCache[stnNm] = { ts: Date.now(), data: _foodAllData };
+      _renderFoodList();
+    })
+    .catch(function(e) {
+      console.warn('[맛집] Worker 오류:', e);
+      if(list) list.innerHTML =
+        '<div class="food-error">⚠️ 맛집 정보를 불러오지 못했습니다.<br>잠시 후 다시 시도해주세요.</div>';
+    });
+}
+
+// 별점 텍스트 생성 (카카오는 별점 없음 → 인기도 기반 표시)
+function _foodStars(idx) {
+  // 인기순 정렬이므로 순위로 별점 추정
+  if(idx < 3)  return '⭐⭐⭐⭐⭐';
+  if(idx < 6)  return '⭐⭐⭐⭐';
+  if(idx < 10) return '⭐⭐⭐';
+  return '⭐⭐';
+}
+
+// 거리 포맷
+function _foodDist(m) {
+  m = parseInt(m) || 0;
+  return m >= 1000 ? (m/1000).toFixed(1) + 'km' : m + 'm';
+}
+
+// 카테고리 단순화
+function _foodCatSimple(cat) {
+  if(!cat) return '음식점';
+  var c = cat.split(' > ');
+  return c[c.length - 1] || c[0];
+}
+
+// 네이버 지도 링크
+function _naverMapUrl(place) {
+  var q = encodeURIComponent(place.place_name);
+  return 'naver://search?query=' + q +
+         '&appScheme=navermap&appStoreURL=' +
+         encodeURIComponent('https://map.naver.com/v5/search/' + q);
+}
+
+// 네이버 지도 웹 링크 (앱 없을 시 폴백)
+function _naverMapWebUrl(place) {
+  return 'https://map.naver.com/v5/search/' + encodeURIComponent(place.place_name);
+}
+
+// 맛집 목록 렌더링
+function _renderFoodList() {
+  var list = document.getElementById('foodList');
+  if(!list) return;
+
+  var data = _foodAllData;
+
+  // 카테고리 필터 적용
+  if(_foodCurFilter !== '전체') {
+    data = data.filter(function(p) {
+      var cat = (p.category_name || '').toLowerCase();
+      var filter = _foodCurFilter;
+      if(filter === '카페')   return cat.includes('카페') || cat.includes('커피');
+      if(filter === '일식')   return cat.includes('일식') || cat.includes('초밥') || cat.includes('라멘');
+      if(filter === '중식')   return cat.includes('중식') || cat.includes('중국');
+      if(filter === '양식')   return cat.includes('양식') || cat.includes('이탈리') || cat.includes('피자') || cat.includes('버거');
+      if(filter === '술집')   return cat.includes('술집') || cat.includes('바(bar)') || cat.includes('호프');
+      if(filter === '분식')   return cat.includes('분식') || cat.includes('떡볶이') || cat.includes('김밥');
+      if(filter === '음식점') return cat.includes('한식') || cat.includes('국밥') || cat.includes('고기') || cat.includes('한국');
+      return true;
+    });
+  }
+
+  if(!data.length) {
+    list.innerHTML = '<div class="food-empty">😢<br>해당 카테고리 음식점이 없습니다.</div>';
+    return;
+  }
+
+  // 카드 DOM 직접 생성 (onclick 문자열 문제 방지)
+  list.innerHTML = '';
+  data.forEach(function(p, i) {
+    var cat   = _foodCatSimple(p.category_name);
+    var dist  = _foodDist(p.distance);
+    var stars = _foodStars(i);
+    var addr  = p.road_address_name
+      ? ' · ' + p.road_address_name.split(' ').slice(-2).join(' ') : '';
+    var webUrl = _naverMapWebUrl(p);
+    var appUrl = 'naver://search?query=' + encodeURIComponent(p.place_name);
+
+    var card = document.createElement('div');
+    card.className = 'food-card';
+    card.innerHTML =
+      '<div class="food-card-inner">' +
+        '<div class="food-rank">' + (i+1) + '</div>' +
+        '<div class="food-info">' +
+          '<div class="food-name">' + _ltEsc(p.place_name) + '</div>' +
+          '<div class="food-cat">' + _ltEsc(cat) + _ltEsc(addr) + '</div>' +
+          '<div class="food-meta">' +
+            '<span class="food-stars">' + stars + '</span>' +
+            '<span class="food-dist">📍 ' + dist + '</span>' +
+            '<span class="food-naver">네이버 지도 →</span>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    card.addEventListener('click', (function(w, a){
+      return function(){ _openFoodLink(w, a); };
+    })(webUrl, appUrl));
+    list.appendChild(card);
+  });
+}
+window._renderFoodList = _renderFoodList;
+
+// 맛집 링크 열기 (네이버 지도 앱 → 웹 폴백)
+function _openFoodLink(webUrl, appUrl) {
+  // 네이버 지도 앱 열기 시도
+  var iframe = document.createElement('iframe');
+  iframe.style.display = 'none';
+  iframe.src = appUrl;
+  document.body.appendChild(iframe);
+  setTimeout(function() {
+    document.body.removeChild(iframe);
+    // 앱이 없으면 웹으로
+    window.open(webUrl, '_blank');
+  }, 1500);
+}
+window._openFoodLink = _openFoodLink;
+
 window._exitConfirm = _exitConfirm;
 window._exitCancel  = _exitCancel;
 
@@ -1379,6 +1593,36 @@ window.addEventListener('unhandledrejection', function(e) {
     <svg width="14" height="14" viewBox="0 0 24 24" fill="#121214"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
     제보 글쓰기
   </button>
+</div>
+
+
+<!-- ★ 맛집 탭 -->
+<div class="tab-body no-pad" id="tab-food" style="flex-direction:column;overflow-y:auto;">
+  <!-- 헤더 -->
+  <div class="food-header">
+    <div>
+      <div class="food-title">🍽️ 도착역 맛집</div>
+      <div class="food-dest" id="foodDestLabel">도착역을 설정하면 맛집을 추천해드려요</div>
+    </div>
+    <button class="food-refresh-btn" onclick="loadFoodTab(true)">🔄 새로고침</button>
+  </div>
+  <!-- 카테고리 필터 -->
+  <div class="food-filter" id="foodFilter">
+    <div class="food-chip on" onclick="foodFilterCat(this,'전체')">전체</div>
+    <div class="food-chip" onclick="foodFilterCat(this,'음식점')">🍚 한식</div>
+    <div class="food-chip" onclick="foodFilterCat(this,'카페')">☕ 카페</div>
+    <div class="food-chip" onclick="foodFilterCat(this,'일식')">🍣 일식</div>
+    <div class="food-chip" onclick="foodFilterCat(this,'중식')">🥢 중식</div>
+    <div class="food-chip" onclick="foodFilterCat(this,'양식')">🍝 양식</div>
+    <div class="food-chip" onclick="foodFilterCat(this,'술집')">🍺 술집</div>
+    <div class="food-chip" onclick="foodFilterCat(this,'분식')">🍜 분식</div>
+  </div>
+  <!-- 맛집 목록 -->
+  <div class="food-list" id="foodList">
+    <div class="food-empty">
+      🗺️<br>경로를 설정하면<br>도착역 주변 맛집을 추천해드려요!
+    </div>
+  </div>
 </div>
 
 <!-- SHOP TAB -->
@@ -9142,7 +9386,7 @@ function switchTab(tab,el){
   if(searchRow) searchRow.style.display = (tab==='map') ? 'flex' : 'none';
   if(baseTimeR) baseTimeR.style.display = (tab==='map') ? 'flex' : 'none';
   // 모든 탭 일괄 제어 (tab-map 포함)
-  ['home','community','shop','map'].forEach(function(name){
+  ['home','community','shop','map','food'].forEach(function(name){
     const t = document.getElementById('tab-'+name);
     if(!t) return;
     if(name === tab){
@@ -18875,6 +19119,41 @@ document.addEventListener('DOMContentLoaded', function() {
   from { transform: translateY(-100%); opacity:0; }
   to   { transform: translateY(0);     opacity:1; }
 }
+
+/* ══ 맛집 탭 ══ */
+.food-header{padding:16px 16px 8px;display:flex;align-items:center;justify-content:space-between;}
+.food-title{font-size:18px;font-weight:800;color:var(--text);}
+.food-dest{font-size:13px;color:var(--gold);font-weight:600;margin-top:2px;}
+.food-refresh-btn{background:var(--card);border:1px solid var(--border);border-radius:20px;
+  padding:6px 14px;font-size:12px;color:var(--sub);cursor:pointer;}
+.food-filter{display:flex;gap:8px;padding:0 16px 12px;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.food-filter::-webkit-scrollbar{display:none;}
+.food-chip{flex-shrink:0;padding:6px 14px;border-radius:20px;font-size:12px;font-weight:600;
+  background:var(--card);border:1px solid var(--border);color:var(--sub);cursor:pointer;}
+.food-chip.on{background:var(--gold);color:#121214;border-color:var(--gold);}
+.food-list{padding:0 12px 80px;display:flex;flex-direction:column;gap:10px;}
+.food-card{background:var(--card);border:1px solid var(--border);border-radius:16px;
+  overflow:hidden;cursor:pointer;transition:transform .15s;}
+.food-card:active{transform:scale(0.98);}
+.food-card-inner{display:flex;gap:12px;padding:14px;}
+.food-rank{width:24px;height:24px;border-radius:50%;background:var(--gold);color:#121214;
+  font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.food-info{flex:1;min-width:0;}
+.food-name{font-size:15px;font-weight:700;color:var(--text);margin-bottom:3px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.food-cat{font-size:12px;color:var(--sub);margin-bottom:5px;}
+.food-meta{display:flex;align-items:center;gap:8px;}
+.food-stars{color:#FFD60A;font-size:13px;font-weight:700;}
+.food-dist{font-size:11px;color:var(--sub);background:var(--bg);
+  padding:2px 8px;border-radius:10px;}
+.food-naver{font-size:11px;color:#03C75A;font-weight:600;}
+.food-empty{text-align:center;padding:60px 20px;color:var(--sub);font-size:14px;line-height:1.8;}
+.food-loading{text-align:center;padding:60px 20px;color:var(--sub);}
+.food-spinner{width:32px;height:32px;border:3px solid var(--border);
+  border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.food-error{background:#ff3b3020;border:1px solid #ff3b3040;border-radius:12px;
+  padding:16px;margin:0 12px;text-align:center;font-size:13px;color:#ff453a;}
 </style>
 
 
@@ -18920,17 +19199,21 @@ document.addEventListener('DOMContentLoaded', function() {
     <svg width="20" height="20" viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/></svg>
     <span>커뮤니티</span>
   </div>
-  <div class="ni on" id="ni-home" onclick="switchTab('home',this)">
-    <svg width="20" height="20" viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
-    <span>홈</span>
-  </div>
   <div class="ni" id="ni-map" onclick="switchTab('map',this)">
     <svg width="20" height="20" viewBox="0 0 24 24"><path d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z"/></svg>
     <span>노선도</span>
   </div>
+  <div class="ni on" id="ni-home" onclick="switchTab('home',this)">
+    <svg width="20" height="20" viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+    <span>홈</span>
+  </div>
   <div class="ni" id="ni-shop" onclick="switchTab('shop',this)">
     <svg width="20" height="20" viewBox="0 0 24 24"><path d="M19 6h-2c0-2.76-2.24-5-5-5S7 3.24 7 6H5c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-7-3c1.66 0 3 1.34 3 3H9c0-1.66 1.34-3 3-3zm7 17H5V8h14v12z"/></svg>
     <span>쇼핑센터</span>
+  </div>
+  <div class="ni" id="ni-food" onclick="switchTab('food',this)">
+    <svg width="20" height="20" viewBox="0 0 24 24"><path d="M18.06 22.99h1.66c.84 0 1.53-.64 1.63-1.46L23 5.05h-5V1h-1.97v4.05h-4.97l.3 2.34c1.71.47 3.31 1.32 4.27 2.26 1.44 1.42 2.43 2.89 2.43 5.29v8.05zM1 21.99V21h15.03v.99c0 .55-.45 1-1.01 1H2.01c-.56 0-1.01-.45-1.01-1zm15.03-7c0-4.5-6.72-5-8.03-5-1.31 0-8.03.5-8.03 5h16.06zm-4.7-9.5c-.7-.79-2.69-1.5-4.33-1.5C5.37 3.99 3 5 3 6.5h13.33c0-1-.46-2-4.97-3z"/></svg>
+    <span>맛집</span>
   </div>
 </nav>
 
@@ -18952,4 +19235,6 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   </div>
 </body>
-</html>
+</html
+  // 맛집 탭
+  if(tab==='food'){ if(typeof loadFoodTab==='function') loadFoodTab(false); }>
