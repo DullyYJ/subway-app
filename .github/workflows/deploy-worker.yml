@@ -4,9 +4,9 @@ on:
   push:
     branches: [ main ]
     paths:
-      - 'worker/index.js'   # Worker 코드 변경 시만 실행
+      - 'worker/index.js'
       - 'wrangler.toml'
-  workflow_dispatch:        # 수동 실행 가능
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -28,38 +28,23 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
         run: |
-          # D1 DB ID 자동 조회해서 wrangler.toml에 주입
           DB_ID=$(wrangler d1 list --json 2>/dev/null | \
             python3 -c "import sys,json; dbs=json.load(sys.stdin); \
             print(next((d['uuid'] for d in dbs if d['name']=='subway-db'), ''))" \
             || echo "")
           if [ -n "$DB_ID" ]; then
-            sed -i "s/your-d1-database-id/$DB_ID/" wrangler.toml
-            echo "✅ D1 DB ID: $DB_ID"
+            sed -i "s/c06de2e6-d6bc-401c-be32-25fde0b5f747/$DB_ID/" wrangler.toml
+            echo "D1 DB ID: $DB_ID"
           fi
 
-      - name: Create restaurants table (최초 1회)
+      - name: Create D1 tables
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
         run: |
-          wrangler d1 execute subway-db --remote --command "
-            CREATE TABLE IF NOT EXISTS restaurants (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              station_name TEXT NOT NULL,
-              place_id TEXT NOT NULL,
-              place_name TEXT NOT NULL,
-              category_name TEXT DEFAULT '',
-              address_name TEXT DEFAULT '',
-              road_address_name TEXT DEFAULT '',
-              distance INTEGER DEFAULT 0,
-              place_url TEXT DEFAULT '',
-              lat REAL DEFAULT 0,
-              lng REAL DEFAULT 0,
-              updated_at INTEGER NOT NULL,
-              UNIQUE(station_name, place_id)
-            );
-          " || echo "테이블 이미 존재"
+          wrangler d1 execute subway-db --remote --command "CREATE TABLE IF NOT EXISTS restaurants (id INTEGER PRIMARY KEY AUTOINCREMENT, station_name TEXT NOT NULL, place_id TEXT NOT NULL, place_name TEXT NOT NULL, category_name TEXT DEFAULT '', address_name TEXT DEFAULT '', road_address_name TEXT DEFAULT '', distance INTEGER DEFAULT 0, place_url TEXT DEFAULT '', lat REAL DEFAULT 0, lng REAL DEFAULT 0, updated_at INTEGER NOT NULL, UNIQUE(station_name, place_id));" || echo "테이블 이미 존재"
+          wrangler d1 execute subway-db --remote --command "CREATE TABLE IF NOT EXISTS ai_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, line TEXT NOT NULL, nick TEXT NOT NULL, emoji TEXT DEFAULT '🚇', msg TEXT NOT NULL, ts INTEGER NOT NULL);" || echo "테이블 이미 존재"
+          wrangler d1 execute subway-db --remote --command "CREATE TABLE IF NOT EXISTS ai_daily_counter (date TEXT PRIMARY KEY, count INTEGER DEFAULT 0);" || echo "테이블 이미 존재"
 
       - name: Deploy Worker
         env:
@@ -67,10 +52,20 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
         run: wrangler deploy
 
-      - name: Trigger initial food crawl
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+      - name: Trigger AI station master (initial run)
         run: |
-          echo "⏳ 첫 맛집 수집 시작 (최대 5분)..."
-          curl -s "https://gentle-lab-7e47subway-api.phg0643.workers.dev/admin/crawl-food" \
-            -m 300 || echo "크론 완료 (타임아웃은 정상)"
+          echo "AI 역무원 초기 실행..."
+          sleep 3
+          curl -s "https://gentle-lab-7e47subway-api.phg0643.workers.dev/admin/ai-run" | python3 -c "
+          import sys, json
+          try:
+            d = json.load(sys.stdin)
+            print('결과:', d)
+          except:
+            print('응답:', sys.stdin.read()[:200])
+          " || echo "완료"
+
+      - name: Trigger food crawl
+        run: |
+          echo "맛집 수집 시작..."
+          curl -s -m 60 "https://gentle-lab-7e47subway-api.phg0643.workers.dev/admin/crawl-food" || echo "완료"
