@@ -21,8 +21,8 @@ const KAKAO_KEY = 'a420cd52d24c6380fb5d1a2287663495';
 // 🚇 AI 역무원 시스템
 // ══════════════════════════════════════════════════════════
 
-const GEMINI_API_KEY = 'AQ.Ab8RN6LZI1YkngsVWyt6VU7iUNUpMfAUAeyrx-SZTtAyPNuQmg';
-const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite-preview-06-17:generateContent?key=' + GEMINI_API_KEY;
+const GEMINI_API_KEY = env.GEMINI_API_KEY; // Cloudflare 환경변수에서 주입
+// GEMINI_URL은 callGemini 함수에서 env.GEMINI_API_KEY로 동적 생성
 const DAILY_LIMIT = 1200;  // 하루 최대 Gemini 호출 횟수
 
 // 호선별 역무원 정보
@@ -50,8 +50,9 @@ async function incrementCount(env) {
 }
 
 // ── Gemini 호출 ──────────────────────────────────────────
-async function callGemini(prompt) {
-  const res = await fetch(GEMINI_URL, {
+async function callGemini(prompt, env) {
+  const geminiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite-preview-06-17:generateContent?key=' + env.GEMINI_API_KEY;
+  const res = await fetch(geminiUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -99,7 +100,7 @@ async function generateAIMessage(line, lineInfo, timeSlot, env) {
 - 50자 이내
 - 따옴표 없이 본문만`;
 
-  const text = await callGemini(prompt);
+  const text = await callGemini(prompt, env);
   await incrementCount(env);
   return text.trim();
 }
