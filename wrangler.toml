@@ -2,14 +2,9 @@ name = "gentle-lab-7e47subway-api"
 main = "worker/index.js"
 compatibility_date = "2024-01-01"
 
-# 크론 스케줄
 [triggers]
-crons = [
-  "0 18 * * *",   # 매일 새벽 3시 KST (UTC 18:00) — 맛집 수집
-  "* * * * *"     # 매분 실행 — AI 역무원 대화 생성
-]
+crons = ["0 18 * * *", "* * * * *"]
 
-# D1 데이터베이스
 [[d1_databases]]
 binding = "DB"
 database_name = "subway-db"
