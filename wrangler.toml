@@ -1,0 +1,13 @@
+name = "gentle-lab-7e47subway-api"
+main = "worker/index.js"
+compatibility_date = "2024-01-01"
+
+# 크론: 매일 새벽 3시 KST (= UTC 18:00)
+[triggers]
+crons = ["0 18 * * *"]
+
+# D1 데이터베이스 바인딩
+[[d1_databases]]
+binding = "DB"
+database_name = "subway-db"
+database_id = "your-d1-database-id"
