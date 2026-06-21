@@ -56,39 +56,47 @@ jobs:
 
       - name: Patch background-geolocation build.gradle (AGP 8.2.1 호환)
         run: |
-          BG_GRADLE="android/capacitor-cordova-android-plugins/build/intermediates/res/merged/release/node_modules/@capacitor-community/background-geolocation/android/build.gradle"
-          # npx cap sync 후 실제 경로
-          BG_GRADLE2="node_modules/@capacitor-community/background-geolocation/android/build.gradle"
+          python3 << 'PYEOF'
+          import os
 
-          patch_gradle() {
-            local f="$1"
-            if [ -f "$f" ]; then
-              echo "패치 대상: $f"
-              # lintOptions → lint (AGP 8.0+ deprecated)
-              sed -i 's/lintOptions {/lint {/g' "$f"
-              # compileSdkVersion → compileSdk
-              sed -i 's/compileSdkVersion /compileSdk /g' "$f"
-              # targetSdkVersion → targetSdk
-              sed -i 's/targetSdkVersion /targetSdk /g' "$f"
-              # AGP 버전 통일 (8.0.0 → 8.2.1)
-              sed -i "s/com.android.tools.build:gradle:8.0.0/com.android.tools.build:gradle:8.2.1/g" "$f"
-              echo "패치 완료:"
-              cat "$f"
-            else
-              echo "파일 없음: $f"
-            fi
-          }
+          target = 'node_modules/@capacitor-community/background-geolocation/android/build.gradle'
+          if not os.path.exists(target):
+              print(f'파일 없음: {target}')
+              exit(0)
 
-          # node_modules 원본 패치
-          patch_gradle "$BG_GRADLE2"
+          with open(target, 'r') as f:
+              c = f.read()
 
-          # cap sync 후 android 프로젝트 내 복사본도 패치
-          find android -path "*/background-geolocation/android/build.gradle" 2>/dev/null | while read f; do
-            patch_gradle "$f"
-          done
+          # 1. AGP 버전 통일 (8.0.0 → 8.2.1)
+          c = c.replace(
+              "classpath 'com.android.tools.build:gradle:8.0.0'",
+              "classpath 'com.android.tools.build:gradle:8.2.1'"
+          )
+          # 2. compileSdkVersion 선언부만 정확히 교체 (hasProperty 참조는 유지)
+          c = c.replace(
+              "    compileSdkVersion project.hasProperty('compileSdkVersion') ? rootProject.ext.compileSdkVersion : 33",
+              "    compileSdk project.hasProperty('compileSdkVersion') ? rootProject.ext.compileSdkVersion : 33"
+          )
+          # 3. targetSdkVersion 선언부만 정확히 교체
+          c = c.replace(
+              "        targetSdkVersion project.hasProperty('targetSdkVersion') ? rootProject.ext.targetSdkVersion : 33",
+              "        targetSdk project.hasProperty('targetSdkVersion') ? rootProject.ext.targetSdkVersion : 33"
+          )
+          # 4. lintOptions → lint
+          c = c.replace('    lintOptions {', '    lint {')
+          # 5. compileOptions 추가 (Java 17)
+          if 'compileOptions' not in c:
+              c = c.replace(
+                  '    lint {\n        abortOnError false\n    }\n}',
+                  '    lint {\n        abortOnError false\n    }\n    compileOptions {\n        sourceCompatibility JavaVersion.VERSION_17\n        targetCompatibility JavaVersion.VERSION_17\n    }\n}'
+              )
 
-          echo "=== 패치된 파일 목록 ==="
-          find android -name "build.gradle" | grep -i "background" | head -5
+          with open(target, 'w') as f:
+              f.write(c)
+
+          print('패치 완료!')
+          print(c)
+          PYEOF
 
       - name: Create network security config
         run: |
