@@ -39,12 +39,13 @@
 }
 *{box-sizing:border-box;margin:0;padding:0;font-family:'Noto Sans KR',sans-serif;-webkit-tap-highlight-color:transparent;}
 html,body{width:100%;height:100%;overflow:hidden;background:#121214;}
-body{display:flex;flex-direction:column;height:100%;padding-top:env(safe-area-inset-top,24px);box-sizing:border-box;}
+body{height:100%;box-sizing:border-box;}
 .app{
-  width:100%;
-  height:calc(100% - 56px - env(safe-area-inset-bottom,0px));
-  flex:none;
-  min-height:0;
+  position:fixed;
+  top:0;
+  left:0;
+  right:0;
+  bottom:56px;
   display:flex;
   flex-direction:column;
   background:var(--bg);
@@ -65,9 +66,9 @@ header h1 em{color:var(--gold);font-style:normal;}
 .mission-fill{height:100%;background:linear-gradient(90deg,var(--gold2),var(--gold));transition:width .4s;}
 .cfg-btn{font-size:11px;font-weight:700;color:#121214;background:var(--gold);padding:5px 10px;border-radius:20px;cursor:pointer;white-space:nowrap;}
 
-.tab-body{display:none;flex-direction:column;gap:14px;padding:14px;padding-bottom:calc(20px + env(safe-area-inset-bottom,0px));overflow-y:auto;overflow-x:hidden;min-height:0;-webkit-overflow-scrolling:touch;}
-.tab-body.active{display:flex;flex:1;position:relative;}
-.tab-body.active.no-pad{padding:0;gap:0;overflow:hidden;display:flex;flex-direction:column;align-items:stretch;}
+.tab-body{display:none;flex-direction:column;gap:14px;padding:14px;padding-bottom:14px;overflow-x:hidden;min-height:0;-webkit-overflow-scrolling:touch;}
+.tab-body.active{display:flex;flex:none;position:relative;}
+.tab-body.active.no-pad{padding:0;gap:0;overflow:hidden;flex:1;display:flex;flex-direction:column;align-items:stretch;min-height:0;}
 .tab-body::-webkit-scrollbar{width:0;}
 
 /* SECTION TITLE */
@@ -437,12 +438,10 @@ input[type=time]{color-scheme:dark;}
 .gm-yes{flex:1;padding:12px;border-radius:11px;font-size:14px;font-weight:700;cursor:pointer;border:none;background:var(--blue);color:#fff;font-family:inherit;}
 
 /* BOTTOM NAV */
-.bnav{display:grid;grid-template-columns:repeat(5,1fr);height:56px;flex-shrink:0;border-top:1px solid var(--border);background:#161618;z-index:50;
-  /* 모바일 키보드 팝업 시에도 하단 고정 유지 */
+.bnav{display:grid;grid-template-columns:repeat(5,1fr);height:56px;border-top:1px solid var(--border);background:#161618;z-index:50;
   position:fixed;bottom:0;left:0;right:0;
-  padding-bottom:env(safe-area-inset-bottom,0px);
 }
-.ni{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--sub);font-size:9px;cursor:pointer;transition:color .2s;overflow:hidden;}
+.ni{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--sub);font-size:10px;cursor:pointer;transition:color .2s;}
 .ni svg{fill:currentColor;width:20px;height:20px;flex-shrink:0;}
 .ni.on{color:var(--gold);font-weight:700;}
 
@@ -1047,19 +1046,51 @@ function aiFilterLine(el, line) {
 }
 window.aiFilterLine = aiFilterLine;
 
+// 경로에서 사용된 호선 추출
+function _getRouteLines() {
+  if(!S.route || !S.route.lp) return null;
+  var lines = [];
+  S.route.lp.forEach(function(l) {
+    if(l && lines.indexOf(l) === -1) lines.push(l);
+  });
+  return lines.length > 0 ? lines : null;
+}
+
 // 메시지 로드
 function loadAIMessages() {
-  var url = _SERVER_URL + '/ai-messages?limit=30';
-  if(_aiCurLine !== 'all') url += '&line=' + encodeURIComponent(_aiCurLine);
+  var apiUrl = _SERVER_URL + '/ai-messages?limit=30';
 
-  fetch(url)
+  if(_aiCurLine !== 'all') {
+    // 특정 호선 선택
+    apiUrl += '&line=' + encodeURIComponent(_aiCurLine);
+  } else {
+    // 전체 탭: 경로 설정된 호선만 (없으면 전체)
+    var routeLines = _getRouteLines();
+    if(routeLines && routeLines.length > 0) {
+      apiUrl += '&lines=' + encodeURIComponent(routeLines.join(','));
+    }
+  }
+
+  // 경로 라벨 업데이트
+  var destLabel = document.getElementById('aiDestLabel');
+  if(destLabel) {
+    if(S.route) {
+      var dest = S.route.path[S.route.path.length-1];
+      var routeLines2 = _getRouteLines();
+      destLabel.textContent = '📍 ' + (S.route.path[0]||'') + ' → ' + dest +
+        (routeLines2 ? ' (' + routeLines2.join('·') + ')' : '');
+      destLabel.style.display = '';
+    } else {
+      destLabel.textContent = '경로를 설정하면 해당 호선 역무원 소식을 볼 수 있어요';
+    }
+  }
+
+  fetch(apiUrl)
     .then(function(r){ return r.json(); })
     .then(function(data){
       _aiMsgs = data.messages || [];
-      // 호출 현황 업데이트
       var badge = document.getElementById('aiCountBadge');
       if(badge) badge.textContent = (data.count || 0);
-
       renderAIMessages();
     })
     .catch(function(e){
@@ -1104,6 +1135,1078 @@ function _aiTimeAgo(ts) {
   if(h  < 24) return h + '시간 전';
   return Math.floor(h / 24) + '일 전';
 }
+
+
+// ══════════════════════════════════════════════════════════════
+// 📋 커뮤니티 서버 기반 관리
+// ══════════════════════════════════════════════════════════════
+var _commLoading  = false;
+var _commPage     = 0;
+var _commHasMore  = true;
+var _serverPosts  = [];   // 서버에서 받은 게시글
+
+// 서버에서 게시글 로드
+function _loadServerPosts(cat, reset) {
+  if(_commLoading) return;
+  if(reset) { _commPage = 0; _commHasMore = true; _serverPosts = []; }
+  if(!_commHasMore) return;
+
+  _commLoading = true;
+  var url = _SERVER_URL + '/posts?limit=50';
+  if(cat && cat !== 'all') url += '&cat=' + encodeURIComponent(cat);
+
+  fetch(url)
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      var posts = data.posts || [];
+      _commLoading = false;
+      _commHasMore = posts.length >= 50;
+
+      // 서버 포스트를 _AI_POSTS 형식으로 변환
+      var converted = posts.map(function(p){
+        return {
+          id:    p.id,
+          cat:   p.cat || '잡담',
+          title: p.title || '',
+          body:  p.body  || '',
+          nick:  p.nick  || '익명',
+          time:  p.ts    || Date.now(),
+          views: p.views || 0,
+          like:  p.likes || 0,
+          lol:   p.lols  || 0,
+          sad:   p.sads  || 0,
+          cmts:  [],
+          link:  p.link  || '',
+          isServer: true,
+        };
+      });
+
+      // AI 로컬 게시글 + 서버 게시글 합치기
+      // (서버 게시글이 없으면 AI 로컬 유지)
+      if(converted.length > 0) {
+        // 서버 게시글로 교체
+        _AI_POSTS = converted;
+        renderCommList();
+      } else if(_AI_POSTS.length === 0) {
+        // 서버도 없고 로컬도 없으면 AI 생성
+        if(typeof initCommunityPosts === 'function') initCommunityPosts();
+      }
+    })
+    .catch(function(e){
+      console.warn('[커뮤니티] 서버 로드 실패:', e);
+      _commLoading = false;
+      // 폴백: 로컬 AI 게시글 사용
+      if(_AI_POSTS.length === 0 && typeof initCommunityPosts === 'function') {
+        initCommunityPosts();
+      }
+    });
+}
+window._loadServerPosts = _loadServerPosts;
+
+// 서버에 게시글 저장
+function _serverPostArticle(nick, title, body, cat) {
+  fetch(_SERVER_URL + '/posts', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nick: nick, title: title, body: body, cat: cat || '잡담' })
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(data){
+    if(data.ok) {
+      console.log('[커뮤니티] 서버 저장 완료, id:', data.id);
+      // 2초 후 서버에서 최신 목록 다시 로드
+      setTimeout(function(){ _loadServerPosts(_commFilter, true); }, 2000);
+    }
+  })
+  .catch(function(e){ console.warn('[커뮤니티] 서버 저장 실패:', e); });
+}
+window._serverPostArticle = _serverPostArticle;
+
+// 서버에서 반응(좋아요 등) 저장
+function _serverReact(postId, type) {
+  if(!postId || isNaN(postId)) return;  // 로컬 AI 게시글은 서버 반응 불필요
+  fetch(_SERVER_URL + '/react', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: postId, type: type })
+  }).catch(function(){});
+}
+window._serverReact = _serverReact;
+
+// 댓글 서버 저장 (추후 확장용)
+function _serverPostComment(postId, nick, body) {
+  // 현재는 로컬 저장, 추후 서버 엔드포인트 추가 시 활성화
+  console.log('[댓글] 로컬 저장:', postId, nick, body);
+}
+window._serverPostComment = _serverPostComment;
+
+
+// ══════════════════════════════════════════════════════════════
+// 🚌 버스 탭 (TAGO 공공데이터 API)
+// ══════════════════════════════════════════════════════════════
+var _BUS_TAGO_KEY = 'fbdaeef19e93c7490ee53f87ae076ba752ff4fb89183d1e34d9798306d7b652d';
+var _busStops     = [];    // 주변 정류장 목록
+var _busCache     = {};    // 정류장별 도착 정보 캐시
+var _busGpsLat    = null;
+var _busGpsLng    = null;
+var _busLoaded    = false;
+
+// 버스 번호 타입별 색상
+function _busNumClass(routeNo) {
+  var n = String(routeNo || '');
+  if(/^[0-9]+$/.test(n)) {
+    var num = parseInt(n);
+    if(num < 100)  return 'express';   // 광역/급행
+    if(num < 200)  return 'trunk';     // 간선
+    if(num < 500)  return 'branch';    // 지선
+    if(num < 1000) return 'circular';  // 순환
+  }
+  if(n.startsWith('N')) return 'other'; // 심야
+  return 'other';
+}
+
+// 혼잡도 텍스트
+function _busCongText(code) {
+  var map = {'1':'여유','2':'보통','3':'혼잡','4':'매우혼잡'};
+  return map[String(code)] || '';
+}
+
+// 도착 시간 포맷
+function _busArrFmt(sec) {
+  if(!sec || sec <= 0) return '곧 도착';
+  if(sec < 60) return sec + '초';
+  var min = Math.round(sec / 60);
+  if(min <= 1) return '곧 도착';
+  return min + '분';
+}
+
+// 거리 포맷
+function _busDist(m) {
+  m = parseInt(m) || 0;
+  return m >= 1000 ? (m/1000).toFixed(1) + 'km' : m + 'm';
+}
+
+// ── TAGO API: 주변 정류장 조회 ────────────────────────────────
+function _fetchNearStops(lat, lng, callback) {
+  // TAGO 버스정류소 좌표기반 조회
+  var url = 'https://apis.data.go.kr/1613000/BusSttnInfoInqireService/getCrdntPrxmtSttnList' +
+    '?serviceKey=' + encodeURIComponent(_BUS_TAGO_KEY) +
+    '&gpsLati=' + lat +
+    '&gpsLong=' + lng +
+    '&_type=json';
+
+  // Cloudflare Worker 프록시 경유 (CORS 해결)
+  var proxyUrl = _SERVER_URL + '/bus-proxy?url=' + encodeURIComponent(url);
+
+  fetch(proxyUrl)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var items = [];
+      try {
+        items = data.response.body.items.item || [];
+        if(!Array.isArray(items)) items = [items];
+      } catch(e) {}
+      callback(null, items);
+    })
+    .catch(function(e) {
+      // 직접 호출 폴백
+      fetch(url)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          var items = [];
+          try {
+            items = data.response.body.items.item || [];
+            if(!Array.isArray(items)) items = [items];
+          } catch(e) {}
+          callback(null, items);
+        })
+        .catch(function(e2) { callback(e2, []); });
+    });
+}
+
+// ── TAGO API: 정류장 도착 정보 조회 ──────────────────────────
+function _fetchBusArrival(cityCode, nodeId, callback) {
+  var cacheKey = cityCode + '_' + nodeId;
+  var cached   = _busCache[cacheKey];
+  if(cached && Date.now() - cached.ts < 30000) { // 30초 캐시
+    callback(null, cached.data);
+    return;
+  }
+
+  var url = 'https://apis.data.go.kr/1613000/ArvlInfoInqireService/getSttnAcctoArvlPrearngeInfoList' +
+    '?serviceKey=' + encodeURIComponent(_BUS_TAGO_KEY) +
+    '&cityCode=' + cityCode +
+    '&nodeId=' + nodeId +
+    '&_type=json';
+
+  var proxyUrl = _SERVER_URL + '/bus-proxy?url=' + encodeURIComponent(url);
+
+  fetch(proxyUrl)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var items = [];
+      try {
+        items = data.response.body.items.item || [];
+        if(!Array.isArray(items)) items = [items];
+      } catch(e) {}
+      _busCache[cacheKey] = { ts: Date.now(), data: items };
+      callback(null, items);
+    })
+    .catch(function(e) {
+      fetch(url)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          var items = [];
+          try {
+            items = data.response.body.items.item || [];
+            if(!Array.isArray(items)) items = [items];
+          } catch(e2) {}
+          _busCache[cacheKey] = { ts: Date.now(), data: items };
+          callback(null, items);
+        })
+        .catch(function(e2) { callback(e2, []); });
+    });
+}
+
+// ── 정류장 카드 렌더링 ────────────────────────────────────────
+function _renderBusStop(stop, arrivals) {
+  var card = document.createElement('div');
+  card.className = 'bus-stop-card';
+
+  var arrHtml = '';
+  if(arrivals && arrivals.length > 0) {
+    arrHtml = arrivals.slice(0, 5).map(function(a) {
+      var sec1   = parseInt(a.arrtime || a.arrTime || 0);
+      var sec2   = parseInt(a.arrtime2 || a.arrTime2 || 0);
+      var cnt1   = parseInt(a.arrprevstationcnt || a.arrPrevStationCnt || 0);
+      var cong   = _busCongText(a.congestion || a.congestionCase);
+      var isSoon = sec1 > 0 && sec1 <= 60;
+      var numCls = _busNumClass(a.routeno || a.routeNo);
+      return '<div class="bus-row">' +
+        '<div class="bus-num ' + numCls + '">' + (a.routeno || a.routeNo || '-') + '</div>' +
+        '<div class="bus-dest">' + _ltEsc(a.routeDestName || a.nodeName || '') + '</div>' +
+        '<div class="bus-arr">' +
+          '<div class="bus-arr-time' + (isSoon?' soon':'') + '">' +
+            (sec1 > 0 ? _busArrFmt(sec1) : '정보없음') + '</div>' +
+          (cnt1 > 0 ? '<div class="bus-arr-cnt">' + cnt1 + '정거장 전</div>' : '') +
+          (cong ? '<div class="bus-congestion ' + cong + '">' + cong + '</div>' : '') +
+          (sec2 > 0 ? '<div class="bus-arr-cnt" style="margin-top:2px;">다음 ' + _busArrFmt(sec2) + '</div>' : '') +
+        '</div>' +
+      '</div>';
+    }).join('');
+  } else {
+    arrHtml = '<div style="padding:10px 14px;font-size:12px;color:var(--sub);">운행 정보 없음</div>';
+  }
+
+  var hdr = document.createElement('div');
+  hdr.className = 'bus-stop-hdr';
+  hdr.innerHTML =
+    '<div class="bus-stop-icon">🚌</div>' +
+    '<div class="bus-stop-name">' + _ltEsc(stop.nodenm || stop.nodeName || '정류장') + '</div>' +
+    '<div class="bus-stop-dist">' + _busDist(stop.dist || stop.distance || 0) + '</div>';
+  var busListDiv = document.createElement('div');
+  busListDiv.className = 'bus-list';
+  busListDiv.innerHTML = arrHtml;
+  hdr.addEventListener('click', function(){
+    busListDiv.style.display = busListDiv.style.display === 'none' ? 'block' : 'none';
+  });
+  card.appendChild(hdr);
+  card.appendChild(busListDiv);
+
+  return card;
+}
+
+// ── 버스 탭 메인 로드 ─────────────────────────────────────────
+function loadBusTab(force) {
+  var loading  = document.getElementById('busLoading');
+  var noGps    = document.getElementById('busNoGps');
+  var stopList = document.getElementById('busStopList');
+  var locLabel = document.getElementById('busLocLabel');
+
+  if(loading)  loading.style.display = 'block';
+  if(noGps)    noGps.style.display   = 'none';
+  if(stopList) stopList.innerHTML     = '';
+
+  // GPS 위치 가져오기
+  if(!navigator.geolocation) {
+    if(loading) loading.style.display = 'none';
+    if(noGps)   noGps.style.display   = 'block';
+    return;
+  }
+
+  // 현재 앱 GPS 위치 우선 사용
+  var lat = _busGpsLat || (typeof S !== 'undefined' && S.lastGPSFix && S.lastGPSFix.lat);
+  var lng = _busGpsLng || (typeof S !== 'undefined' && S.lastGPSFix && S.lastGPSFix.lng);
+
+  if(lat && lng && !force) {
+    _doLoadBusStops(lat, lng);
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    function(pos) {
+      _busGpsLat = pos.coords.latitude;
+      _busGpsLng = pos.coords.longitude;
+      _doLoadBusStops(_busGpsLat, _busGpsLng);
+    },
+    function(err) {
+      console.warn('[버스] GPS 오류:', err);
+      if(loading) loading.style.display = 'none';
+      if(noGps)   noGps.style.display   = 'block';
+    },
+    { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 }
+  );
+}
+window.loadBusTab = loadBusTab;
+
+function _doLoadBusStops(lat, lng) {
+  var loading  = document.getElementById('busLoading');
+  var stopList = document.getElementById('busStopList');
+  var locLabel = document.getElementById('busLocLabel');
+
+  if(locLabel) locLabel.textContent = '📍 ' + lat.toFixed(4) + ', ' + lng.toFixed(4) + ' 기준';
+
+  _fetchNearStops(lat, lng, function(err, stops) {
+    if(loading) loading.style.display = 'none';
+
+    if(err || !stops || stops.length === 0) {
+      if(stopList) stopList.innerHTML =
+        '<div class="bus-empty">😢<br>주변 300m 내<br>버스 정류장이 없습니다</div>';
+      return;
+    }
+
+    // 거리순 정렬, 최대 5개
+    stops.sort(function(a,b) {
+      return (parseInt(a.dist||0)) - (parseInt(b.dist||0));
+    });
+    var nearStops = stops.slice(0, 5);
+    if(locLabel) locLabel.textContent = '📍 반경 300m 내 정류장 ' + nearStops.length + '개';
+
+    // 정류장별 도착 정보 순차 로드
+    var loaded = 0;
+    nearStops.forEach(function(stop, idx) {
+      var card = _renderBusStop(stop, []);
+      if(stopList) stopList.appendChild(card);
+
+      var cityCode = stop.citycode || stop.cityCode || '25'; // 기본 부산
+      var nodeId   = stop.nodeid  || stop.nodeId  || '';
+      if(!nodeId) { loaded++; return; }
+
+      _fetchBusArrival(cityCode, nodeId, function(err2, arrivals) {
+        loaded++;
+        // 카드 업데이트
+        var newCard = _renderBusStop(stop, arrivals || []);
+        if(stopList && stopList.children[idx]) {
+          stopList.replaceChild(newCard, stopList.children[idx]);
+        }
+      });
+    });
+  });
+}
+
+// switchTab에서 bus 탭 처리
+
+
+// ══════════════════════════════════════════════════════════════
+// 🗺️ 출발/도착 위치 설정 (지하철역 or 버스정류장)
+// ══════════════════════════════════════════════════════════════
+var _fmapStart = null;  // {type, name, lat, lng, line/nodeId/cityCode}
+var _fmapDest  = null;
+
+function _fmapSetLocation(type, loc) {
+  if(type === 'start') {
+    _fmapStart = loc;
+    var inp = document.getElementById('fmapStartInp');
+    if(inp) inp.value = loc.name;
+    // 버스정류장이면 노선도 버스탭에 자동 저장
+    if(loc.type === 'bus' && typeof saveMapBusStop === 'function') {
+      saveMapBusStop(loc);
+    }
+    console.log('[경로] 출발 설정:', loc);
+  } else {
+    _fmapDest = loc;
+    var inp2 = document.getElementById('fmapDestInp');
+    if(inp2) inp2.value = loc.name;
+    // 도착지 버스정류장도 저장
+    if(loc.type === 'bus' && typeof saveMapBusStop === 'function') {
+      saveMapBusStop(loc);
+    }
+    console.log('[경로] 도착 설정:', loc);
+  }
+  // 출발+도착 모두 설정되면 경로 탐색 버튼 활성화
+  _updateRouteBtn();
+}
+window._fmapSetLocation = _fmapSetLocation;
+
+function _updateRouteBtn() {
+  var btn = document.getElementById('fmapRouteBtn');
+  if(!btn) return;
+  var ready = _fmapStart && _fmapDest;
+  btn.style.opacity = ready ? '1' : '0.5';
+  btn.style.pointerEvents = ready ? 'auto' : 'none';
+
+  // 경로 유형 힌트 표시
+  var hint = document.getElementById('fmapRouteHint');
+  if(!hint || !ready) return;
+  if(_fmapStart.type === 'subway' && _fmapDest.type === 'subway') {
+    hint.textContent = '🚇 지하철 경로 탐색';
+    hint.style.color = '#0a84ff';
+  } else if(_fmapStart.type === 'bus' || _fmapDest.type === 'bus') {
+    hint.textContent = '🚌+🚇 복합 경로 탐색 (카카오)';
+    hint.style.color = '#00b341';
+  }
+  hint.style.display = 'block';
+}
+
+// ── GPS로 주변 역/정류장 검색 ─────────────────────────────────
+function fmapGpsLocate() {
+  var btn  = document.getElementById('homeGpsBtn');
+  var box  = document.getElementById('fmapStartSug');
+  if(btn)  btn.textContent = '📍 검색 중...';
+  if(box)  { box.style.display = 'block'; box.innerHTML = '<div style="padding:10px;color:var(--sub);font-size:13px;">주변 검색 중...</div>'; }
+
+  if(!navigator.geolocation) {
+    toast('GPS를 지원하지 않는 기기입니다.');
+    if(btn) btn.textContent = '📍위치 감지';
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(function(pos) {
+    var lat = pos.coords.latitude;
+    var lng = pos.coords.longitude;
+    if(btn) btn.textContent = '📍위치 감지';
+    _showNearbyLocations(lat, lng, box, 'start');
+  }, function(err) {
+    toast('GPS 오류: ' + (err.message || '위치를 가져올 수 없습니다'));
+    if(btn) btn.textContent = '📍위치 감지';
+    if(box) box.style.display = 'none';
+  }, { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 });
+}
+window.fmapGpsLocate = fmapGpsLocate;
+
+// 주변 역+정류장 목록 표시
+function _showNearbyLocations(lat, lng, box, type) {
+  if(!box) return;
+  box.style.display = 'block';
+  box.innerHTML = '';
+
+  // ① 주변 지하철역 (STNDB에서 거리 계산)
+  var nearStns = STNDB
+    .filter(function(s){ return s.lat && s.lng; })
+    .map(function(s){
+      var dlat = s.lat - lat, dlng = s.lng - lng;
+      var dist = Math.round(Math.sqrt(dlat*dlat + dlng*dlng) * 111000);
+      return { s: s, dist: dist };
+    })
+    .filter(function(x){ return x.dist < 1000; })
+    .sort(function(a,b){ return a.dist - b.dist; });
+
+  // 중복 역명 제거
+  var seenNames = new Set();
+  nearStns = nearStns.filter(function(x){
+    if(seenNames.has(x.s.name)) return false;
+    seenNames.add(x.s.name); return true;
+  }).slice(0, 5);
+
+  nearStns.forEach(function(x){
+    var d = document.createElement('div');
+    d.className = 'sug-item';
+    d.innerHTML =
+      '<span style="font-size:11px;background:#0a84ff20;color:#0a84ff;padding:1px 6px;border-radius:8px;margin-right:6px;">🚇지하철</span>' +
+      '<b>' + x.s.name + '</b>' +
+      '<span style="font-size:11px;color:var(--sub);margin-left:6px;">' + x.s.line + '</span>' +
+      '<span style="font-size:11px;color:var(--gold);margin-left:auto;">' + x.dist + 'm</span>';
+    d.onmousedown = d.ontouchend = function(e){
+      e.preventDefault();
+      var inp = document.getElementById(type==='start'?'fmapStartInp':'fmapDestInp');
+      if(inp) inp.value = x.s.name;
+      box.style.display = 'none';
+      _fmapSetLocation(type, {
+        type:'subway', name:x.s.name, line:x.s.line, lat:x.s.lat, lng:x.s.lng
+      });
+    };
+    box.appendChild(d);
+  });
+
+  // ② 주변 버스정류장 (TAGO API)
+  _fetchNearStops(lat, lng, function(err, stops){
+    if(err || !stops || !stops.length) return;
+    stops.slice(0, 4).forEach(function(stop){
+      var d = document.createElement('div');
+      d.className = 'sug-item';
+      d.innerHTML =
+        '<span style="font-size:11px;background:#00b34120;color:#00b341;padding:1px 6px;border-radius:8px;margin-right:6px;">🚌버스</span>' +
+        '<b>' + _ltEsc(stop.nodenm||stop.nodeName||'') + '</b>' +
+        '<span style="font-size:11px;color:var(--gold);margin-left:auto;">' + _busDist(stop.dist||0) + '</span>';
+      d.onmousedown = d.ontouchend = function(e){
+        e.preventDefault();
+        var inp = document.getElementById(type==='start'?'fmapStartInp':'fmapDestInp');
+        if(inp) inp.value = stop.nodenm || stop.nodeName || '';
+        box.style.display = 'none';
+        _fmapSetLocation(type, {
+          type:'bus',
+          name: stop.nodenm || stop.nodeName || '',
+          nodeId: stop.nodeid || stop.nodeId,
+          cityCode: stop.citycode || stop.cityCode || '25',
+          lat: parseFloat(stop.gpslati || stop.gpsLati || lat),
+          lng: parseFloat(stop.gpslong || stop.gpsLong || lng)
+        });
+      };
+      box.appendChild(d);
+    });
+    if(!nearStns.length && !stops.length) {
+      box.innerHTML = '<div style="padding:10px;color:var(--sub);font-size:13px;">주변 역/정류장 없음</div>';
+    }
+  });
+
+  if(!nearStns.length) {
+    box.innerHTML = '<div style="padding:10px;color:var(--sub);font-size:13px;">주변 지하철역 검색 중...</div>';
+  }
+}
+
+// 버스정류장 이름으로 검색 (TAGO)
+function _busStopSearchByName(q, callback) {
+  var url = 'https://apis.data.go.kr/1613000/BusSttnInfoInqireService/getSttnNoList' +
+    '?serviceKey=' + encodeURIComponent(_BUS_TAGO_KEY) +
+    '&nodeNm=' + encodeURIComponent(q) +
+    '&_type=json';
+  var proxyUrl = _SERVER_URL + '/bus-proxy?url=' + encodeURIComponent(url);
+  fetch(proxyUrl)
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      var items = [];
+      try {
+        items = data.response.body.items.item || [];
+        if(!Array.isArray(items)) items = [items];
+      } catch(e){}
+      callback(items);
+    })
+    .catch(function(){ callback([]); });
+}
+window._busStopSearchByName = _busStopSearchByName;
+
+
+// ══════════════════════════════════════════════════════════════
+// 🗺️ 카카오 대중교통 경로 API (버스 포함 경로)
+// ══════════════════════════════════════════════════════════════
+var _KAKAO_MOBILITY_KEY = 'a420cd52d24c6380fb5d1a2287663495';
+
+function _fetchKakaoTransitRoute(startLat, startLng, endLat, endLng, callback) {
+  // 카카오 모빌리티 대중교통 경로 API
+  var url = 'https://apis-navi.kakaomobility.com/v1/directions' +
+    '?origin=' + startLng + ',' + startLat +
+    '&destination=' + endLng + ',' + endLat +
+    '&waypoints=' +
+    '&priority=RECOMMEND' +
+    '&car_fuel=GASOLINE' +
+    '&car_hipass=false' +
+    '&alternatives=false' +
+    '&road_details=false';
+
+  // 대중교통은 별도 API
+  var transitUrl = 'https://apis-navi.kakaomobility.com/v1/future/directions/transit' +
+    '?origin=' + startLng + ',' + startLat +
+    '&destination=' + endLng + ',' + endLat +
+    '&departure_time=' + new Date().toISOString().replace('T',' ').slice(0,16);
+
+  fetch(transitUrl, {
+    headers: {
+      'Authorization': 'KakaoAK ' + _KAKAO_MOBILITY_KEY,
+      'Content-Type': 'application/json'
+    }
+  })
+  .then(function(r){
+    if(!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  })
+  .then(function(data){ callback(null, data); })
+  .catch(function(e){
+    console.warn('[카카오경로]', e);
+    // 카카오 대중교통 API 실패시 Worker 프록시로 재시도
+    var proxyUrl = _SERVER_URL + '/kakao-transit' +
+      '?slat=' + startLat + '&slng=' + startLng +
+      '&elat=' + endLat   + '&elng=' + endLng;
+    fetch(proxyUrl)
+      .then(function(r2){ return r2.json(); })
+      .then(function(d2){ callback(null, d2); })
+      .catch(function(e2){ callback(e2, null); });
+  });
+}
+
+// 카카오 경로 결과를 앱 표시 형식으로 변환
+function _renderKakaoRoute(data, startName, endName) {
+  if(!data || !data.routes || !data.routes.length) {
+    toast('경로를 찾을 수 없습니다.');
+    return;
+  }
+  var route = data.routes[0];
+  var sections = route.sections || [];
+
+  // 경로 요약 표시
+  var totalTime = Math.round(route.summary.duration / 60);
+  var totalDist = Math.round(route.summary.distance / 1000 * 10) / 10;
+
+  var html = '<div style="padding:14px;background:var(--card);border-radius:16px;margin-bottom:10px;">' +
+    '<div style="font-size:16px;font-weight:800;color:var(--text);margin-bottom:8px;">' +
+    startName + ' → ' + endName + '</div>' +
+    '<div style="font-size:14px;color:var(--gold);font-weight:700;">' +
+    '총 ' + totalTime + '분 · ' + totalDist + 'km</div>' +
+    '</div>';
+
+  // 구간별 표시
+  sections.forEach(function(sec) {
+    var type = sec.transportation || {};
+    var isSubway = type.type === 1;
+    var isBus    = type.type === 2;
+    var isWalk   = type.type === 3;
+
+    var icon  = isWalk ? '🚶' : (isSubway ? '🚇' : '🚌');
+    var color = isWalk ? 'var(--sub)' : (isSubway ? '#0a84ff' : '#00b341');
+    var timeMin = Math.round((sec.duration || 0) / 60);
+
+    html += '<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">' +
+      '<div style="font-size:20px;flex-shrink:0;">' + icon + '</div>' +
+      '<div style="flex:1;">' +
+        '<div style="font-size:13px;font-weight:700;color:' + color + ';">' +
+          (isWalk ? '도보' : (type.name || sec.name || '이동')) + '</div>' +
+        '<div style="font-size:12px;color:var(--sub);">' + timeMin + '분</div>' +
+      '</div>' +
+    '</div>';
+  });
+
+  var pathSection = document.getElementById('pathSection');
+  if(pathSection) {
+    pathSection.style.display = 'block';
+    var content = pathSection.querySelector('#pathContent') ||
+                  pathSection.querySelector('.path-content');
+    if(content) content.innerHTML = html;
+    else pathSection.innerHTML = html;
+  }
+}
+
+// ── 경로 탐색 통합 함수 ─────────────────────────────────────
+
+// ══════════════════════════════════════════════════════════════
+// 🗺️ 하이브리드 경로 탐색 시스템 (BFS + 카카오 + 3단계 캐시)
+// ══════════════════════════════════════════════════════════════
+
+// 앱 메모리 캐시 (30분)
+var _memRouteCache = {};
+
+// 노선 → 도시 매핑
+var _LINE_CITY = {
+  '부산1호선':'부산','부산2호선':'부산','부산3호선':'부산','부산4호선':'부산',
+  '대구1호선':'대구','대구2호선':'대구','대구3호선':'대구',
+  '광주1호선':'광주',
+  '대전1호선':'대전',
+  '인천1호선':'인천','인천2호선':'인천',
+  '김포골드라인':'경기',
+};
+function _getCity(lineName) {
+  return _LINE_CITY[lineName] || '서울'; // 기본값 서울/수도권
+}
+
+// 카카오 API 필요 여부 판단
+function _needKakao(start, dest) {
+  // 1. 버스정류장 포함
+  if(start.type === 'bus' || dest.type === 'bus') return true;
+  // 2. 다른 도시 간 이동
+  if(start.line && dest.line) {
+    var sc = _getCity(start.line), dc = _getCity(dest.line);
+    if(sc !== dc) return true;
+  }
+  return false;
+}
+
+// 캐시 키 생성 (좌표 소수점 3자리)
+function _makeRouteCacheKey(slat, slng, elat, elng) {
+  var s = Math.round(slat*1000)/1000 + ',' + Math.round(slng*1000)/1000;
+  var e = Math.round(elat*1000)/1000 + ',' + Math.round(elng*1000)/1000;
+  return s + '→' + e;
+}
+
+// ── 1단계: 메모리 캐시 (즉시, 30분) ────────────────────────
+function _getMemCache(key) {
+  var c = _memRouteCache[key];
+  if(!c) return null;
+  if(Date.now() - c.ts > 30*60*1000) { delete _memRouteCache[key]; return null; }
+  return c.data;
+}
+function _setMemCache(key, data) {
+  _memRouteCache[key] = { ts: Date.now(), data: data };
+  // 메모리 캐시 최대 20개 (오래된 것 삭제)
+  var keys = Object.keys(_memRouteCache);
+  if(keys.length > 20) {
+    keys.sort(function(a,b){ return _memRouteCache[a].ts - _memRouteCache[b].ts; });
+    delete _memRouteCache[keys[0]];
+  }
+}
+
+// ── 2단계: D1 서버 캐시 (하루) ─────────────────────────────
+function _getD1Cache(slat, slng, elat, elng, callback) {
+  var url = _SERVER_URL + '/route-cache?slat=' + slat + '&slng=' + slng +
+            '&elat=' + elat + '&elng=' + elng;
+  fetch(url)
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(d.cached && d.data) callback(null, d.data);
+      else callback(null, null);
+    })
+    .catch(function(){ callback(null, null); });
+}
+
+// ── D1 캐시 저장 ─────────────────────────────────────────
+function _saveD1Cache(slat, slng, elat, elng, sname, ename, data) {
+  fetch(_SERVER_URL + '/route-cache', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      slat: slat, slng: slng, elat: elat, elng: elng,
+      sname: sname, ename: ename, data: data
+    })
+  }).catch(function(){});
+}
+
+// ── 3단계: 카카오 API 호출 (캐시 미스 시) ──────────────────
+function _callKakaoWithCache(start, dest, callback) {
+  var slat = start.lat, slng = start.lng;
+  var elat = dest.lat,  elng = dest.lng;
+  var cKey = _makeRouteCacheKey(slat, slng, elat, elng);
+
+  // 1단계: 메모리 캐시
+  var mem = _getMemCache(cKey);
+  if(mem) {
+    console.log('[경로캐시] 메모리HIT:', start.name, '→', dest.name);
+    callback(null, mem, 'memory');
+    return;
+  }
+
+  // 2단계: D1 서버 캐시
+  _getD1Cache(slat, slng, elat, elng, function(err, d1data) {
+    if(d1data) {
+      console.log('[경로캐시] D1HIT:', start.name, '→', dest.name);
+      _setMemCache(cKey, d1data); // 메모리에도 올림
+      callback(null, d1data, 'd1');
+      return;
+    }
+
+    // 3단계: 카카오 API (실제 호출)
+    console.log('[경로캐시] MISS → 카카오API 호출:', start.name, '→', dest.name);
+    var apiUrl = _SERVER_URL + '/kakao-transit' +
+      '?slat=' + slat + '&slng=' + slng +
+      '&elat=' + elat + '&elng=' + elng +
+      '&sname=' + encodeURIComponent(start.name) +
+      '&ename=' + encodeURIComponent(dest.name);
+
+    fetch(apiUrl)
+      .then(function(r){ return r.json(); })
+      .then(function(data) {
+        // 메모리 캐시 저장
+        _setMemCache(cKey, data);
+        // D1 캐시는 Worker가 자동 저장
+        callback(null, data, 'api');
+      })
+      .catch(function(e){ callback(e, null, 'error'); });
+  });
+}
+
+// ── 카카오 경로 결과 렌더링 ──────────────────────────────────
+function _renderKakaoTransitResult(data, startName, endName, cacheSource) {
+  if(!data) { toast('경로를 찾을 수 없습니다.'); return; }
+
+  var routes = data.routes || [];
+  if(!routes.length) { toast('해당 경로가 없습니다.'); return; }
+
+  var route     = routes[0];
+  var summary   = route.summary || {};
+  var sections  = route.sections || [];
+  var totalMin  = Math.round((summary.duration || 0) / 60);
+  var totalDist = Math.round((summary.distance || 0) / 1000 * 10) / 10;
+
+  // 경로 타입 분류
+  var hasSubway = sections.some(function(s){ return (s.transportation||{}).type === 1; });
+  var hasBus    = sections.some(function(s){ return (s.transportation||{}).type === 2; });
+  var typeLabel = hasSubway && hasBus ? '🚇+🚌 복합' : (hasBus ? '🚌 버스' : '🚇 지하철');
+  var apiSource  = (data && data._source) || 'kakao';
+  var apiLabel   = apiSource === 'odsay' ? '🔄ODsay' : (apiSource === 'kakao' ? '🟡카카오' : '🌐실시간');
+  var cacheLabel = cacheSource === 'memory' ? '⚡메모리캐시' : (cacheSource === 'd1' ? '💾서버캐시' : apiLabel);
+
+  var html = '<div style="padding:14px 16px;border-bottom:1px solid var(--border);">' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">' +
+      '<span style="font-size:13px;font-weight:700;color:var(--gold);">' + typeLabel + '</span>' +
+      '<span style="font-size:11px;color:var(--sub);">' + cacheLabel + '</span>' +
+    '</div>' +
+    '<div style="font-size:16px;font-weight:800;color:var(--text);">' +
+      startName + ' → ' + endName + '</div>' +
+    '<div style="font-size:14px;color:var(--gold);font-weight:700;margin-top:4px;">' +
+      '총 ' + totalMin + '분' + (totalDist ? ' · ' + totalDist + 'km' : '') + '</div>' +
+  '</div>';
+
+  // 구간별 표시
+  html += '<div style="padding:8px 0;">';
+  sections.forEach(function(sec) {
+    var trans  = sec.transportation || {};
+    var type   = trans.type;
+    var isWalk = type === 3;
+    var isSub  = type === 1;
+    var isBus  = type === 2;
+    var icon   = isWalk ? '🚶' : (isSub ? '🚇' : (isBus ? '🚌' : '🔄'));
+    var color  = isWalk ? 'var(--sub)' : (isSub ? '#0a84ff' : '#00b341');
+    var secMin = Math.round((sec.duration || 0) / 60);
+    var name   = isWalk ? ('도보 ' + Math.round((sec.distance||0)) + 'm') :
+                 (trans.name || sec.name || '이동');
+    var stops  = sec.passStopList ? (sec.passStopList.stationList||[]).length : 0;
+
+    html += '<div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border);">' +
+      '<div style="font-size:18px;flex-shrink:0;">' + icon + '</div>' +
+      '<div style="flex:1;">' +
+        '<div style="font-size:13px;font-weight:700;color:' + color + ';">' + _ltEsc(name) + '</div>' +
+        (stops > 0 ? '<div style="font-size:11px;color:var(--sub);">' + stops + '정거장</div>' : '') +
+      '</div>' +
+      '<div style="font-size:13px;font-weight:700;color:var(--text);">' + secMin + '분</div>' +
+    '</div>';
+  });
+  html += '</div>';
+
+  // pathSection에 표시
+  var ps = document.getElementById('pathSection');
+  if(ps) {
+    ps.style.display = 'block';
+    // 기존 내용 찾아서 교체 또는 prepend
+    var existing = ps.querySelector('.kakao-route-result');
+    if(existing) existing.innerHTML = html;
+    else {
+      var div = document.createElement('div');
+      div.className = 'kakao-route-result';
+      div.style.cssText = 'background:var(--card);border:1px solid var(--border);border-radius:16px;margin:12px;overflow:hidden;';
+      div.innerHTML = html;
+      ps.insertBefore(div, ps.firstChild);
+    }
+    ps.scrollIntoView({ behavior: 'smooth' });
+  }
+}
+
+// ── fmapDoRoute 최종 버전 (하이브리드) ──────────────────────
+function fmapDoRoute() {
+  if(!_fmapStart || !_fmapDest) {
+    toast('출발지와 도착지를 선택해주세요.');
+    return;
+  }
+
+  var start = _fmapStart, dest = _fmapDest;
+
+  // ── 하이브리드 판단 ──────────────────────────────────────
+  var useKakao = _needKakao(start, dest);
+
+  if(!useKakao) {
+    // ① 지하철 BFS (같은 도시, 둘 다 역)
+    console.log('[경로] BFS 사용:', start.name, '→', dest.name);
+    // inpStart/inpDest (노선도탭 입력창)에도 동기화
+    var inpStart = document.getElementById('inpStart');
+    var inpDest  = document.getElementById('inpDest');
+    if(inpStart) inpStart.value = start.name;
+    if(inpDest)  inpDest.value  = dest.name;
+    // fmapStartInp2/fmapDestInp2 (노선도탭 2번 입력창)에도 동기화
+    var inpStart2 = document.getElementById('fmapStartInp2');
+    var inpDest2  = document.getElementById('fmapDestInp2');
+    if(inpStart2) inpStart2.value = start.name;
+    if(inpDest2)  inpDest2.value  = dest.name;
+    if(typeof saveRoute === 'function') saveRoute();
+    return;
+  }
+
+  // ② 카카오 API (3단계 캐시)
+  if(!start.lat || !dest.lat) {
+    toast('위치 정보가 없습니다. 다시 선택해주세요.');
+    return;
+  }
+
+  toast('🗺️ 경로 탐색 중...');
+  _callKakaoWithCache(start, dest, function(err, data, source) {
+    if(err || !data) {
+      toast('경로 탐색 실패. 잠시 후 다시 시도해주세요.');
+      return;
+    }
+    _renderKakaoTransitResult(data, start.name, dest.name, source);
+  });
+}
+window.fmapDoRoute = fmapDoRoute;
+
+
+// ══════════════════════════════════════════════════════════════
+// 🗺️ 노선도 탭 내부 탭 (지하철/버스)
+// ══════════════════════════════════════════════════════════════
+var _savedBusStops = [];  // 저장된 버스 정류장 목록
+
+// 내부 탭 전환
+function switchMapInnerTab(tab) {
+  var subway = document.getElementById('mapSubwayPanel');
+  var bus    = document.getElementById('mapBusPanel');
+  var stab   = document.getElementById('mapItabSubway');
+  var btab   = document.getElementById('mapItabBus');
+
+  if(tab === 'subway') {
+    if(subway) subway.style.display = 'flex';
+    if(bus)    bus.style.display    = 'none';
+    if(stab)   stab.classList.add('on');
+    if(btab)   btab.classList.remove('on');
+  } else {
+    if(subway) subway.style.display = 'none';
+    if(bus)    { bus.style.display = 'flex'; bus.style.flexDirection = 'column'; }
+    if(stab)   stab.classList.remove('on');
+    if(btab)   btab.classList.add('on');
+    // 버스 탭 열릴 때 정류장 로드
+    loadMapBusStops();
+  }
+}
+window.switchMapInnerTab = switchMapInnerTab;
+
+// 버스 정류장 저장 (출발지 설정 시 자동 호출)
+function saveMapBusStop(stop) {
+  // 중복 확인
+  var exists = _savedBusStops.some(function(s) {
+    return (s.nodeId || s.nodeid) === (stop.nodeId || stop.nodeid);
+  });
+  if(exists) return;
+
+  _savedBusStops.push(stop);
+  // localStorage 저장
+  try {
+    localStorage.setItem('savedBusStops', JSON.stringify(_savedBusStops));
+  } catch(e) {}
+  console.log('[버스정류장 저장]', stop.name);
+}
+window.saveMapBusStop = saveMapBusStop;
+
+// 저장된 버스 정류장 로드
+function loadMapBusStops() {
+  // localStorage에서 복원
+  try {
+    var saved = localStorage.getItem('savedBusStops');
+    if(saved) _savedBusStops = JSON.parse(saved);
+  } catch(e) {}
+
+  var listEl = document.getElementById('mapBusStopList');
+  var empty  = document.getElementById('mapBusEmpty');
+  if(!listEl) return;
+
+  if(!_savedBusStops || _savedBusStops.length === 0) {
+    if(empty) empty.style.display = 'block';
+    return;
+  }
+  if(empty) empty.style.display = 'none';
+
+  listEl.innerHTML = '<div style="padding:10px 12px;font-size:12px;color:var(--sub);">저장된 정류장 ' + _savedBusStops.length + '개 · 30초마다 자동 갱신</div>';
+
+  _savedBusStops.forEach(function(stop, idx) {
+    var card = document.createElement('div');
+    card.className = 'map-bus-stop-card';
+    card.id = 'mapBusCard_' + idx;
+    card.innerHTML =
+      '<div class="map-bus-stop-name">' +
+        '🚌 ' + _ltEsc(stop.name || stop.nodenm || '') +
+        '<button onclick="removeMapBusStop(' + idx + ')" style="margin-left:auto;background:none;border:none;color:var(--sub);font-size:18px;cursor:pointer;">×</button>' +
+      '</div>' +
+      '<div class="map-bus-row" style="color:var(--sub);font-size:12px;">도착 정보 불러오는 중...</div>';
+    listEl.appendChild(card);
+
+    // 실시간 도착 정보 로드
+    _loadMapBusArrival(stop, idx);
+  });
+}
+window.loadMapBusStops = loadMapBusStops;
+
+// 버스 정류장 삭제
+function removeMapBusStop(idx) {
+  _savedBusStops.splice(idx, 1);
+  try { localStorage.setItem('savedBusStops', JSON.stringify(_savedBusStops)); } catch(e) {}
+  loadMapBusStops();
+}
+window.removeMapBusStop = removeMapBusStop;
+
+// 실시간 버스 도착 정보 로드
+function _loadMapBusArrival(stop, cardIdx) {
+  var cityCode = stop.cityCode || stop.citycode || '25';
+  var nodeId   = stop.nodeId   || stop.nodeid   || '';
+  if(!nodeId) return;
+
+  var proxyUrl = _SERVER_URL + '/bus-proxy?url=' +
+    encodeURIComponent(
+      'https://apis.data.go.kr/1613000/ArvlInfoInqireService/getSttnAcctoArvlPrearngeInfoList' +
+      '?serviceKey=' + encodeURIComponent(_BUS_TAGO_KEY) +
+      '&cityCode=' + cityCode + '&nodeId=' + nodeId + '&_type=json'
+    );
+
+  fetch(proxyUrl)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var items = [];
+      try {
+        items = data.response.body.items.item || [];
+        if(!Array.isArray(items)) items = [items];
+      } catch(e) {}
+
+      var card = document.getElementById('mapBusCard_' + cardIdx);
+      if(!card) return;
+
+      var busListEl = card.querySelector('.map-bus-stop-name').nextSibling ||
+                     card.querySelector('.map-bus-row');
+
+      // 기존 rows 제거 후 새로 렌더링
+      var rows = card.querySelectorAll('.map-bus-row');
+      rows.forEach(function(r) { r.remove(); });
+
+      if(!items.length) {
+        var empty = document.createElement('div');
+        empty.className = 'map-bus-row';
+        empty.style.cssText = 'color:var(--sub);font-size:12px;';
+        empty.textContent = '운행 정보 없음';
+        card.appendChild(empty);
+        return;
+      }
+
+      items.slice(0, 5).forEach(function(a) {
+        var row  = document.createElement('div');
+        row.className = 'map-bus-row';
+        var sec  = parseInt(a.arrtime || a.arrTime || 0);
+        var cnt  = parseInt(a.arrprevstationcnt || a.arrPrevStationCnt || 0);
+        var soon = sec > 0 && sec <= 60;
+        var min  = sec > 0 ? (sec < 60 ? '곧 도착' : Math.round(sec/60) + '분') : '-';
+        var numCls = _busNumClass ? _busNumClass(a.routeno || a.routeNo) : 'other';
+
+        row.innerHTML =
+          '<div class="bus-num ' + numCls + '" style="min-width:50px;font-size:12px;">' +
+            (a.routeno || a.routeNo || '-') + '</div>' +
+          '<div style="flex:1;font-size:12px;color:var(--sub);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' +
+            _ltEsc(a.routeDestName || '') + '</div>' +
+          '<div style="text-align:right;flex-shrink:0;">' +
+            '<div style="font-size:14px;font-weight:700;color:' + (soon?'#ff453a':'var(--gold)') + ';">' + min + '</div>' +
+            (cnt > 0 ? '<div style="font-size:10px;color:var(--sub);">' + cnt + '정거장 전</div>' : '') +
+          '</div>';
+        card.appendChild(row);
+      });
+    })
+    .catch(function() {
+      var card = document.getElementById('mapBusCard_' + cardIdx);
+      if(card) {
+        var rows = card.querySelectorAll('.map-bus-row');
+        rows.forEach(function(r) { r.remove(); });
+        var err = document.createElement('div');
+        err.className = 'map-bus-row';
+        err.style.cssText = 'color:var(--sub);font-size:12px;';
+        err.textContent = '정보 불러오기 실패';
+        card.appendChild(err);
+      }
+    });
+}
+
+// 30초마다 버스 도착 정보 자동 갱신
+setInterval(function() {
+  var busPanel = document.getElementById('mapBusPanel');
+  if(busPanel && busPanel.style.display !== 'none') {
+    loadMapBusStops();
+  }
+}, 30000);
 
 window._exitConfirm = _exitConfirm;
 window._exitCancel  = _exitCancel;
@@ -1300,6 +2403,9 @@ window.addEventListener('unhandledrejection', function(e) {
   </div>
 </header>
 
+<!-- 탭 콘텐츠 영역 (flex:1 — bnav 위 공간 전체) -->
+<div id="tabContentWrap" style="flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column;-webkit-overflow-scrolling:touch;">
+
 <!-- HOME TAB -->
 <div class="tab-body" id="tab-home">
 
@@ -1307,12 +2413,12 @@ window.addEventListener('unhandledrejection', function(e) {
   <div style="padding:0 0 4px;">
     <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:visible;position:relative;">
 
-      <!-- 출발역 행 -->
+      <!-- 출발지 행 -->
       <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border2);position:relative;">
         <div style="width:10px;height:10px;border-radius:50%;background:#0a84ff;flex-shrink:0;"></div>
         <input id="fmapStartInp" class="inp"
           style="flex:1;border:none;background:transparent;padding:0;font-size:15px;font-weight:600;color:var(--text);min-width:0;"
-          placeholder="출발역 검색..." autocomplete="off"
+          placeholder="출발지 검색 or 📍위치 감지" autocomplete="off"
           oninput="fmapSearch(this,'start')" onfocus="fmapSearch(this,'start')">
         <button id="homeGpsBtn" onclick="fmapGpsLocate()"
           style="background:rgba(10,132,255,.12);border:1px solid rgba(10,132,255,.3);color:#0a84ff;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;padding:5px 9px;border-radius:14px;flex-shrink:0;">📍위치 감지</button>
@@ -1329,17 +2435,17 @@ window.addEventListener('unhandledrejection', function(e) {
         </div>
       </div>
 
-      <!-- 도착역 행 -->
+      <!-- 도착지 행 -->
       <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;position:relative;">
         <svg width="10" height="13" viewBox="0 0 24 24" fill="#ff2d55" style="flex-shrink:0;">
           <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
         </svg>
         <input id="fmapDestInp" class="inp"
           style="flex:1;border:none;background:transparent;padding:0;font-size:15px;font-weight:600;color:var(--text);min-width:0;"
-          placeholder="도착역 검색..." autocomplete="off"
+          placeholder="도착지 검색..." autocomplete="off"
           oninput="fmapSearch(this,'dest')" onfocus="fmapSearch(this,'dest')">
-        <button onclick="calcFmapRoute()"
-          style="background:var(--gold);color:#121214;border:none;padding:8px 16px;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0;">경로 탐색</button>
+        <button onclick="fmapDoRoute()"
+          style="background:var(--gold);color:#121214;border:none;padding:8px 16px;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0;" id="fmapRouteBtn">경로 탐색</button>
         <div id="fmapDestSug" class="sug"
           style="bottom:auto;top:calc(100% + 4px);max-height:200px;z-index:300;left:0;right:0;"></div>
       </div>
@@ -1357,7 +2463,7 @@ window.addEventListener('unhandledrejection', function(e) {
   </div>
 
   <!-- ★ 신규: 가로 풀-스크롤 타임라인 (기존 실시간 데이터 매핑) -->
-  <div id="hTimelineWrap" style="margin-bottom:8px;">
+  <div id="hTimelineWrap" style="margin-bottom:8px;display:none;">
     <div class="sec">🚇 경로 노선도
       <span style="display:flex;align-items:center;gap:8px;">
         <span id="htlTotalTime" style="font-size:12px;font-weight:800;color:var(--gold);"></span>
@@ -1425,7 +2531,7 @@ window.addEventListener('unhandledrejection', function(e) {
         <span id="ntpLineBadge" style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;color:#fff;background:#555;">-</span>
       </div>
       <div class="ntp-body" id="ntpBody">
-        <div class="ntp-empty">출발역과 도착역을 설정하면 표시됩니다</div>
+        <div class="ntp-empty">출발지와 도착지를 설정하면 표시됩니다</div>
       </div>
     </div>
   </div>
@@ -1495,7 +2601,7 @@ window.addEventListener('unhandledrejection', function(e) {
       <span class="bdot"></span>
       <span id="boardBannerTxt">탑승 감지됨 · 이동 중</span>
     </div>
-    <div class="metro-wrap" id="metroWrap">
+    <div class="metro-wrap" id="metroWrap" style="display:none;">
       <div class="metro-canvas" id="metroCanvas">
         <svg class="metro-svg" id="metroSvg"></svg>
         <div class="train-pin" id="trainPin" style="left:0px;top:50%;">
@@ -1585,7 +2691,7 @@ window.addEventListener('unhandledrejection', function(e) {
   <div id="setupNotice">
     <div class="setup-notice">
       <svg width="40" height="40" viewBox="0 0 24 24" fill="#3a3a3c"><path d="M4 15.5C4 17.43 5.57 19 7.5 19L6 20.5v.5h12v-.5L16.5 19c1.93 0 3.5-1.57 3.5-3.5V5c0-3.5-3.58-4-8-4s-8 .5-8 4v10.5zm8 1.5c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm6-7H6V5h12v5z"/></svg>
-      <p>출발역과 도착역을 설정하면<br>BFS 최단 경로와 혼잡도를 확인할 수 있습니다.</p>
+      <p>출발지와 도착지를 설정하면<br>BFS 최단 경로와 혼잡도를 확인할 수 있습니다.</p>
       <button class="setup-cta" onclick="openSheet()">지금 설정하기</button>
     </div>
   </div>
@@ -1707,6 +2813,28 @@ window.addEventListener('unhandledrejection', function(e) {
   </button>
 </div>
 
+
+<!-- ★ 버스 탭 -->
+<div class="tab-body no-pad" id="tab-bus" style="flex-direction:column;overflow:hidden;">
+  <div class="bus-header">
+    <div>
+      <div class="bus-title">🚌 내 주변 버스</div>
+      <div class="bus-loc" id="busLocLabel">위치 확인 중...</div>
+    </div>
+    <button class="bus-refresh-btn" onclick="loadBusTab(true)">🔄 새로고침</button>
+  </div>
+  <div class="bus-scroll" id="busScroll">
+    <div class="bus-no-gps" id="busNoGps" style="display:none;">
+      📍<br>위치 정보가 필요합니다<br>
+      <button class="bus-gps-btn" onclick="loadBusTab(true)">위치 허용하기</button>
+    </div>
+    <div class="bus-loading" id="busLoading">
+      <div class="bus-spinner"></div>주변 버스 정류장 검색 중...
+    </div>
+    <div id="busStopList"></div>
+  </div>
+
+</div>
 
 <!-- ★ 맛집 탭 -->
 <div class="tab-body no-pad" id="tab-food" style="flex-direction:column;overflow-y:auto;">
@@ -2001,6 +3129,15 @@ window.addEventListener('unhandledrejection', function(e) {
 
 <!-- MAP TAB -->
 <div class="tab-body no-pad" id="tab-map" style="display:none;flex-direction:column;flex:1;min-height:0;overflow:hidden;">
+
+  <!-- 내부 탭: 지하철 / 버스 -->
+  <div class="map-inner-tabs">
+    <div class="map-itab on" id="mapItabSubway" onclick="switchMapInnerTab('subway')">🚇 지하철</div>
+    <div class="map-itab"   id="mapItabBus"    onclick="switchMapInnerTab('bus')">🚌 버스</div>
+  </div>
+
+  <!-- 지하철 패널 -->
+  <div id="mapSubwayPanel" style="flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;">
 
   <!-- 지역 선택 탭 -->
   <div class="region-tabs" style="flex-shrink:0;">
@@ -10328,6 +11465,10 @@ function dcReact(id,type,btn){
   var span=btn.querySelector('span');
   if(span) span.textContent=post[type];
   btn.classList.toggle('dc-react-on');
+  // 서버 반응 저장 (서버에서 불러온 게시글만)
+  if(post.isServer && typeof _serverReact==='function') {
+    _serverReact(id, type);
+  }
 }
 window.dcReact=dcReact;
 
@@ -10336,6 +11477,18 @@ function renderCommList(){
   var list=document.getElementById('commList');
   var empty=document.getElementById('commEmpty');
   if(!list) return;
+
+  // 서버에서 최신 게시글 로드 (처음이거나 비어있으면)
+  if(_AI_POSTS.length === 0 || typeof _commNeedRefresh !== 'undefined' && _commNeedRefresh) {
+    _commNeedRefresh = false;
+    if(typeof _loadServerPosts === 'function') {
+      _loadServerPosts(_commFilter, true);
+      // 로딩 표시
+      list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--sub);">게시글 불러오는 중...</div>';
+      return;
+    }
+  }
+
   list.innerHTML='';
   var visible=_AI_POSTS.filter(function(p){
     if(_commFilter==='all') return true;
@@ -10347,6 +11500,9 @@ function renderCommList(){
   visible.forEach(function(post){ list.appendChild(_renderPost(post)); });
 }
 window.renderCommList=renderCommList;
+
+// 커뮤니티 탭 진입 시 서버에서 새로고침
+var _commNeedRefresh = true;
 
 // ── 댓글 자동 누적 타이머 ──────────────────────────────────
 // 30~90초마다 랜덤 게시글에 댓글 추가 (또는 대댓글)
@@ -12243,6 +13399,13 @@ window.onload=function(){
   try { startAutoRefresh(); } catch(e) {}    // 5분 주기 API 자동갱신
   // startGPSCorrection() — 수동 위치감지 시에만 활성화
 
+  // ── 앱 시작 시 서버에서 커뮤니티 게시글 로드 ───────
+  setTimeout(function(){
+    if(typeof _loadServerPosts === 'function') {
+      _loadServerPosts('all', true);
+    }
+  }, 1500);
+
   // ── 백그라운드 추적 + 알림 초기화 ──────────────────
   setTimeout(function(){
     _initLocalNotifications();    // 알림 채널 생성 + 권한 요청
@@ -12437,6 +13600,10 @@ function safeSetItem(key, val){
 .rmc-badge-fast{background:#0a84ff;color:#fff;}
 .rmc-badge-min {background:#30d158;color:#fff;}
 
+#routeModal {
+  display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);
+  z-index:9999;align-items:flex-end;justify-content:center;
+}
 #routeModal.open { display: flex; }
 #routeModalCard {
   background: #1c1c1e;
@@ -12640,7 +13807,21 @@ function safeSetItem(key, val){
     <button id="mapGpsBtn" onclick="fmapGpsLocate()" style="background:#1c3a5e;border:1.5px solid #0a84ff;color:#0a84ff;padding:9px 10px;border-radius:10px;font-size:13px;cursor:pointer;flex-shrink:0;">📍</button>
   </div>
 
-</div>
+  </div><!-- /mapSubwayPanel -->
+
+  <!-- 버스 패널 -->
+  <div id="mapBusPanel" style="display:none;flex:1;min-height:0;flex-direction:column;">
+    <div class="map-bus-panel" id="mapBusStopList">
+      <div class="map-bus-empty" id="mapBusEmpty">
+        🚌<br>
+        설정된 버스 정류장이 없습니다<br>
+        <small>홈 탭에서 출발지를 버스정류장으로<br>설정하면 자동으로 등록됩니다</small><br>
+        <button class="map-bus-set-btn" onclick="switchTab('home',document.getElementById('ni-home'))">홈에서 설정하기</button>
+      </div>
+    </div>
+  </div><!-- /mapBusPanel -->
+
+</div><!-- /tab-map -->
 
 
 <script>
@@ -12952,7 +14133,16 @@ function _pzFit() {
   var wr = document.getElementById('gmSvgView');
   if (!co) return;
   var w = (wr && wr.offsetWidth > 10) ? wr.offsetWidth : (window.innerWidth || 390);
-  var h = (wr && wr.offsetHeight > 10) ? wr.offsetHeight : (window.innerHeight || 700);
+  var h = (wr && wr.offsetHeight > 10) ? wr.offsetHeight : 0;
+  // 컨테이너 높이를 못 잡으면 부모(seoulMapView)에서 필터바 높이를 뺀 값으로 보강
+  if (h <= 10) {
+    var sv = document.getElementById('seoulMapView');
+    var lf = document.getElementById('lineFilterBar');
+    if (sv && sv.offsetHeight > 10) {
+      h = sv.offsetHeight - (lf ? lf.offsetHeight : 0);
+    }
+  }
+  if (h <= 10) h = Math.max(300, (window.innerHeight || 700) * 0.55);
 
   // ★ 최소 축소 스케일 = 세로(높이) 기준 맞춤
   //   화면 높이에 노선도 전체 높이를 맞춰 세로로 꽉 차게 (둘째 사진)
@@ -13924,42 +15114,72 @@ function pickBestCandidate(candidates){
 // ── fmapSearch: 홈탭 출발/도착 입력 자동완성 ──────────────────
 // 홈탭 fmapStartInp / fmapDestInp 전용
 function fmapSearch(inp, type) {
-  var q = inp.value.trim();
+  var q     = inp.value.trim();
   var boxId = (type === 'start') ? 'fmapStartSug' : 'fmapDestSug';
-  var box = document.getElementById(boxId);
+  var box   = document.getElementById(boxId);
   if(!box) return;
   if(!q){ box.style.display='none'; return; }
+
+  box.style.display='block';
+  box.innerHTML = '';
+
+  // ① 지하철역 검색
   var seen = new Set();
-  var matches = STNDB.filter(function(s){
+  var stnMatches = STNDB.filter(function(s){
     var k = s.name+'|'+s.line;
     if(s.name.indexOf(q)>=0 && !seen.has(k)){ seen.add(k); return true; }
     return false;
-  });
-  if(!matches.length){ box.style.display='none'; return; }
-  box.style.display='block'; box.innerHTML='';
-  matches.slice(0,10).forEach(function(s){
+  }).slice(0, 8);
+
+  stnMatches.forEach(function(s){
     var d = document.createElement('div');
-    d.style.cssText='display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--border2);';
-    d.innerHTML='<span style="width:8px;height:8px;border-radius:50%;background:'+s.color+';flex-shrink:0;"></span>'
-      +'<span style="flex:1;font-size:14px;font-weight:600;">'+s.name+'</span>'
-      +'<span style="font-size:11px;color:var(--sub);">'+s.line+'</span>';
-    d.onmousedown = function(e){
+    d.className = 'sug-item';
+    d.innerHTML = '<span style="font-size:11px;background:#0a84ff20;color:#0a84ff;padding:1px 6px;border-radius:8px;margin-right:6px;">🚇지하철</span>' +
+      '<b>' + s.name + '</b> <span style="font-size:11px;color:var(--sub);">' + s.line + '</span>';
+    d.onmousedown = d.ontouchend = function(e){
       e.preventDefault();
       inp.value = s.name;
-      box.style.display='none';
-      // 즉시 역 설정 연동
-      if(type==='start'){
-        if(typeof setStart==='function') setStart(s);
-        // 도착역도 있으면 자동 경로탐색
-        if(S.dest) setTimeout(function(){ if(typeof doRoute==='function') doRoute(); }, 150);
-      } else {
-        if(typeof setDest==='function') setDest(s);
-        // setDest 내부에서 doRoute 자동 호출됨
-      }
+      box.style.display = 'none';
+      // 출발/도착 설정 (지하철역)
+      _fmapSetLocation(type, {
+        type: 'subway', name: s.name, line: s.line,
+        lat: s.lat, lng: s.lng
+      });
     };
-    d.ontouchend = d.onmousedown;
     box.appendChild(d);
   });
+
+  // ② 버스정류장 검색 (입력 2글자 이상일 때만)
+  if(q.length >= 2 && typeof _busStopSearchByName === 'function') {
+    _busStopSearchByName(q, function(stops) {
+      stops.slice(0, 5).forEach(function(stop) {
+        var d = document.createElement('div');
+        d.className = 'sug-item';
+        d.innerHTML = '<span style="font-size:11px;background:#00b34120;color:#00b341;padding:1px 6px;border-radius:8px;margin-right:6px;">🚌버스</span>' +
+          '<b>' + _ltEsc(stop.nodenm||stop.nodeName||'') + '</b>' +
+          '<span style="font-size:11px;color:var(--sub);margin-left:4px;">' +
+          (stop.dist ? _busDist(stop.dist) : '') + '</span>';
+        d.onmousedown = d.ontouchend = function(e) {
+          e.preventDefault();
+          inp.value = stop.nodenm || stop.nodeName || '';
+          box.style.display = 'none';
+          _fmapSetLocation(type, {
+            type: 'bus',
+            name: stop.nodenm || stop.nodeName || '',
+            nodeId: stop.nodeid || stop.nodeId,
+            cityCode: stop.citycode || stop.cityCode || '25',
+            lat: parseFloat(stop.gpslati || stop.gpsLati || 0),
+            lng: parseFloat(stop.gpslong || stop.gpsLong || 0)
+          });
+        };
+        box.appendChild(d);
+      });
+    });
+  }
+
+  if(!stnMatches.length && q.length < 2) {
+    box.style.display = 'none';
+  }
 }
 window.fmapSearch = fmapSearch;
 
@@ -14099,13 +15319,22 @@ function openWriteSheet(){
 window.openWriteSheet = openWriteSheet;
 
 function saveRoute(){
+  // 홈탭 입력창(fmapStartInp)도 체크
+  const fmapS = document.getElementById('fmapStartInp');
+  const fmapD = document.getElementById('fmapDestInp');
+  const inpS  = document.getElementById('inpStart');
+  const inpD  = document.getElementById('inpDest');
+  // 홈탭 값이 있으면 inpStart/inpDest에 동기화
+  if(fmapS && fmapS.value.trim() && inpS) inpS.value = fmapS.value.trim();
+  if(fmapD && fmapD.value.trim() && inpD) inpD.value = fmapD.value.trim();
+
   const sn=document.getElementById('inpStart').value.trim();
   const dn=document.getElementById('inpDest').value.trim();
-  if(!sn){toast('출발역을 입력하세요.');return;}
-  if(!dn){toast('도착역을 입력하세요.');return;}
+  if(!sn){toast('출발지를 입력하세요.');return;}
+  if(!dn){toast('도착지를 입력하세요.');return;}
   const ss=STNDB.find(s=>s.name===sn),ds=STNDB.find(s=>s.name===dn);
-  if(!ss){toast('출발역을 확인해주세요.');return;}
-  if(!ds){toast('도착역을 확인해주세요.');return;}
+  if(!ss){toast('출발지를 확인해주세요.');return;}
+  if(!ds){toast('도착지를 확인해주세요.');return;}
 
   // 출근 시간 적용 (기준시각 연동)
   const tInp = document.getElementById('inpCommute');
@@ -15379,7 +16608,6 @@ function closeFullMap(){ }
    전국 노선도 — iframe(수도권) + SVG(지방) 방식
 ════════════════════════════════════════════════════ */
 
-let _fmapStart=null, _fmapDest=null;
 
 /* ── 수도권: 카카오맵 iframe ── */
 /* ══════════════════════════════════════════════════════
@@ -15665,11 +16893,14 @@ function renderSeoulMap() {
   if(sv) { sv.style.display='flex'; sv.style.flex='1'; }
   if(rv) { rv.style.display='none'; }
   if(gv) { gv.style.display='block'; }
-  // 화면에 맞게 스케일 적용
+  // 화면에 맞게 스케일 적용 — 레이아웃이 실제로 잡힌 뒤 호출되도록 다중 보강
   requestAnimationFrame(function(){
     if(typeof _pzFit === 'function') _pzFit();
     if(typeof initSvgInteraction === 'function') initSvgInteraction();
   });
+  // 일부 환경에서 첫 RAF 시점에 높이가 0이라 다시 한 번 보정
+  setTimeout(function(){ if(typeof _pzFit === 'function') _pzFit(); }, 120);
+  setTimeout(function(){ if(typeof _pzFit === 'function') _pzFit(); }, 350);
 }
 window.renderSeoulMap = renderSeoulMap;
 
@@ -17371,12 +18602,15 @@ function filterCat(el,cat){
   if(sv) sv.style.display='';
   if(cv) cv.style.display='none';
   if(fab) fab.style.display='';
-  // 뉴스 탭 or 전체: 3분 이상 경과 시 최신 뉴스 갱신
+  // 카테고리 변경 시 서버에서 다시 로드
+  _AI_POSTS = [];
+  _commNeedRefresh = true;
+
+  // 뉴스 탭: 실시간 뉴스도 갱신
   if(cat==='뉴스'||cat==='all'){
     if(typeof _fetchRealtimeNews==='function' &&
        Date.now()-(_newsFetchedAt||0) > 3*60*1000){
       _fetchRealtimeNews();
-      setTimeout(function(){ if(typeof renderCommList==='function') renderCommList(); }, 2000);
     }
   }
   if(typeof renderCommList==='function') renderCommList();
@@ -18801,8 +20035,8 @@ function calcFmapRoute() {
   if(!destName) { toast('도착역을 입력해주세요.');  dn.focus(); return; }
   var ss = STNDB.find(function(s){ return s.name===startName; });
   var ds = STNDB.find(function(s){ return s.name===destName; });
-  if(!ss){ toast('출발역을 확인해주세요.'); return; }
-  if(!ds){ toast('도착역을 확인해주세요.'); return; }
+  if(!ss){ toast('출발지를 확인해주세요.'); return; }
+  if(!ds){ toast('도착지를 확인해주세요.'); return; }
 
   S.start = ss; S.dest = ds;
 
@@ -18866,6 +20100,11 @@ function clearFmapRoute() {
   var dn = document.getElementById('fmapDestInp');
   if(sn) sn.value='';
   if(dn) dn.value='';
+  // 경로 초기화 시 노선도 영역 숨기기
+  var htlWrap   = document.getElementById('hTimelineWrap');
+  var metroWrap = document.getElementById('metroWrap');
+  if(htlWrap)   htlWrap.style.display   = 'none';
+  if(metroWrap) metroWrap.style.display = 'none';
 }
 window.clearFmapRoute = clearFmapRoute;
 
@@ -19347,6 +20586,70 @@ document.addEventListener('DOMContentLoaded', function() {
 .ai-status span{color:var(--gold);font-weight:600;}
 .ai-empty{text-align:center;padding:60px 20px;color:var(--sub);font-size:14px;line-height:1.8;}
 .ai-loading{text-align:center;padding:40px;color:var(--sub);}
+
+/* ══ 버스 탭 ══ */
+.bus-header{padding:14px 16px 8px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+.bus-title{font-size:18px;font-weight:800;color:var(--text);}
+.bus-loc{font-size:12px;color:var(--sub);margin-top:2px;}
+.bus-refresh-btn{background:var(--card);border:1px solid var(--border);border-radius:20px;
+  padding:6px 14px;font-size:12px;color:var(--sub);cursor:pointer;}
+.bus-scroll{flex:1;overflow-y:auto;padding:0 12px 80px;-webkit-overflow-scrolling:touch;}
+.bus-stop-card{background:var(--card);border:1px solid var(--border);border-radius:16px;
+  margin-bottom:10px;overflow:hidden;}
+.bus-stop-hdr{padding:12px 14px;display:flex;align-items:center;gap:10px;cursor:pointer;
+  border-bottom:1px solid var(--border);}
+.bus-stop-icon{width:32px;height:32px;border-radius:50%;background:#0066FF20;
+  display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;}
+.bus-stop-name{font-size:14px;font-weight:700;color:var(--text);flex:1;}
+.bus-stop-dist{font-size:11px;color:var(--sub);background:var(--bg);
+  padding:2px 8px;border-radius:10px;flex-shrink:0;}
+.bus-list{padding:8px 0;}
+.bus-row{display:flex;align-items:center;gap:10px;padding:8px 14px;
+  border-bottom:1px solid var(--border);}
+.bus-row:last-child{border-bottom:none;}
+.bus-num{min-width:54px;padding:3px 8px;border-radius:8px;font-size:13px;
+  font-weight:800;text-align:center;color:#fff;}
+.bus-num.express{background:#e74c3c;}
+.bus-num.trunk{background:#0066FF;}
+.bus-num.branch{background:#00b341;}
+.bus-num.circular{background:#9b59b6;}
+.bus-num.other{background:#7f8c8d;}
+.bus-dest{flex:1;font-size:12px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.bus-arr{text-align:right;flex-shrink:0;}
+.bus-arr-time{font-size:14px;font-weight:700;color:var(--gold);}
+.bus-arr-time.soon{color:#ff453a;animation:blink 1s infinite;}
+.bus-arr-cnt{font-size:10px;color:var(--sub);}
+.bus-congestion{font-size:10px;padding:1px 5px;border-radius:6px;margin-top:2px;display:inline-block;}
+.bus-congestion.여유{background:#00b34120;color:#00b341;}
+.bus-congestion.보통{background:#ff9f0a20;color:#ff9f0a;}
+.bus-congestion.혼잡{background:#ff453a20;color:#ff453a;}
+.bus-congestion.매우혼잡{background:#ff453a;color:#fff;}
+.bus-empty{text-align:center;padding:60px 20px;color:var(--sub);font-size:14px;line-height:1.8;}
+.bus-loading{text-align:center;padding:40px;color:var(--sub);}
+.bus-spinner{width:28px;height:28px;border:3px solid var(--border);
+  border-top-color:#0066FF;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 10px;}
+.bus-no-gps{text-align:center;padding:40px 20px;color:var(--sub);line-height:1.8;}
+.bus-gps-btn{margin-top:16px;padding:12px 24px;background:#0066FF;color:#fff;
+  border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;}
+@keyframes blink{0%,100%{opacity:1;}50%{opacity:0.3;}}
+
+/* ══ 노선도 탭 내부 탭 (지하철/버스) ══ */
+.map-inner-tabs{display:flex;background:#1c1c1e;border-bottom:1px solid #2c2c2e;flex-shrink:0;}
+.map-itab{flex:1;padding:10px;font-size:14px;font-weight:600;color:var(--sub);
+  cursor:pointer;text-align:center;border-bottom:2px solid transparent;transition:all .2s;}
+.map-itab.on{color:#fff;border-bottom-color:var(--gold);}
+.map-bus-panel{flex:1;overflow-y:auto;background:var(--bg);-webkit-overflow-scrolling:touch;}
+.map-bus-stop-card{background:var(--card);border:1px solid var(--border);
+  border-radius:14px;margin:10px 12px;overflow:hidden;}
+.map-bus-stop-name{padding:12px 14px;font-size:14px;font-weight:700;color:var(--text);
+  border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;}
+.map-bus-row{display:flex;align-items:center;gap:10px;padding:10px 14px;
+  border-bottom:1px solid var(--border);}
+.map-bus-row:last-child{border-bottom:none;}
+.map-bus-empty{text-align:center;padding:50px 20px;color:var(--sub);font-size:14px;line-height:2;}
+.map-bus-set-btn{display:block;margin:16px auto;padding:12px 28px;
+  background:var(--gold);color:#121214;border:none;border-radius:20px;
+  font-size:14px;font-weight:700;cursor:pointer;}
 </style>
 
 
@@ -19387,6 +20690,9 @@ document.addEventListener('DOMContentLoaded', function() {
 <!-- 디버그 토글 버튼 (우상단) -->
 <div onclick="_toggleDebugPanel()" style="position:fixed;top:10px;right:56px;width:26px;height:26px;background:rgba(48,209,88,0.12);border:1px solid rgba(48,209,88,0.25);border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:9998;font-size:13px;user-select:none;">🐛</div>
 
+</div><!-- /tabContentWrap -->
+
+<!-- ★ 하단 내비게이션 -->
 <nav class="bnav">
   <div class="ni" id="ni-community" onclick="switchTab('community',this)">
     <svg width="20" height="20" viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/></svg>
@@ -19427,7 +20733,35 @@ document.addEventListener('DOMContentLoaded', function() {
       </div>
     </div>
   </div>
+</div><!-- /app -->
+<script>
+/* ── DOM 구조 복구: map 탭 UI 요소가 빌드 과정에서 tab-map 밖으로 누출되는 문제 보정 ── */
+(function(){
+  function fixMapTabStructure(){
+    try{
+      var tabMap = document.getElementById('tab-map');
+      var subwayPanel = document.getElementById('mapSubwayPanel');
+      if(!tabMap || !subwayPanel) return;
+      // subwayPanel 안에 들어가야 할 요소들
+      ['status-msg','baseTimeRow','stnInputRow'].forEach(function(id){
+        var el = document.getElementById(id);
+        if(el && el.parentElement !== subwayPanel){
+          subwayPanel.appendChild(el);
+        }
+      });
+      // tab-map 직속이어야 할 버스 패널
+      var busPanel = document.getElementById('mapBusPanel');
+      if(busPanel && busPanel.parentElement !== tabMap){
+        tabMap.appendChild(busPanel);
+      }
+    }catch(e){ console.warn('fixMapTabStructure', e); }
+  }
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', fixMapTabStructure);
+  } else {
+    fixMapTabStructure();
+  }
+})();
+</script>
 </body>
-</html
-  // 맛집 탭
-  if(tab==='food'){ if(typeof loadFoodTab==='function') loadFoodTab(false); }>
+</html>
