@@ -30,7 +30,9 @@ const LINES_INFO = {"1호선":{"name":"일호씨","emoji":"🔵","peak_stations"
 
 // ── 오늘 호출 횟수 조회 ──────────────────────────────────
 async function getTodayCount(env) {
-  const today = new Date().toISOString().slice(0,10); // YYYY-MM-DD
+  // KST 기준 날짜 (UTC+9)
+  const kstDate = new Date(Date.now() + 9*60*60*1000);
+  const today   = kstDate.toISOString().slice(0,10); // YYYY-MM-DD KST
   try {
     const row = await env.DB.prepare(
       'SELECT count FROM ai_daily_counter WHERE date = ?'
@@ -41,7 +43,8 @@ async function getTodayCount(env) {
 
 // ── 오늘 호출 횟수 증가 ──────────────────────────────────
 async function incrementCount(env) {
-  const today = new Date().toISOString().slice(0,10);
+  const kstDate = new Date(Date.now() + 9*60*60*1000);
+  const today   = kstDate.toISOString().slice(0,10);
   await env.DB.prepare(`
     INSERT INTO ai_daily_counter (date, count)
     VALUES (?, 1)
@@ -68,24 +71,38 @@ async function callGemini(prompt, env) {
   return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 
-// ── 시간대 분류 ──────────────────────────────────────────
+// ── KST 시간 반환 (UTC+9) ──────────────────────────────
+function getKSTHour() {
+  const now = new Date();
+  // UTC + 9시간 = KST
+  return (now.getUTCHours() + 9) % 24;
+}
+function getKSTMin() {
+  return new Date().getUTCMinutes();
+}
+function getKSTTimeStr() {
+  const h = getKSTHour();
+  const m = getKSTMin();
+  return h + '시 ' + m + '분';
+}
+
+// ── 시간대 분류 (KST 기준) ───────────────────────────────
 function getTimeSlot(hour) {
-  if (hour >= 0  && hour < 5)  return { name:'심야',    freq: 120 }; // 2시간마다
+  if (hour >= 0  && hour < 5)  return { name:'심야',    freq: 60  }; // 1시간마다
   if (hour >= 5  && hour < 7)  return { name:'아침준비', freq: 30  }; // 30분마다
-  if (hour >= 7  && hour < 9)  return { name:'출근피크', freq: 10  }; // 10분마다
-  if (hour >= 9  && hour < 12) return { name:'오전',    freq: 20  }; // 20분마다
-  if (hour >= 12 && hour < 13) return { name:'점심',    freq: 10  }; // 10분마다
-  if (hour >= 13 && hour < 17) return { name:'오후',    freq: 20  }; // 20분마다
-  if (hour >= 17 && hour < 20) return { name:'퇴근피크', freq: 10  }; // 10분마다
-  if (hour >= 20 && hour < 22) return { name:'저녁',    freq: 20  }; // 20분마다
+  if (hour >= 7  && hour < 9)  return { name:'출근피크', freq: 15  }; // 15분마다
+  if (hour >= 9  && hour < 12) return { name:'오전',    freq: 30  }; // 30분마다
+  if (hour >= 12 && hour < 13) return { name:'점심',    freq: 15  }; // 15분마다
+  if (hour >= 13 && hour < 17) return { name:'오후',    freq: 30  }; // 30분마다
+  if (hour >= 17 && hour < 20) return { name:'퇴근피크', freq: 15  }; // 15분마다
+  if (hour >= 20 && hour < 22) return { name:'저녁',    freq: 30  }; // 30분마다
   return { name:'밤', freq: 60 }; // 1시간마다
 }
 
 // ── AI 역무원 메시지 생성 ────────────────────────────────
 async function generateAIMessage(line, lineInfo, timeSlot, env) {
-  const hour = new Date().getHours();
-  const min  = new Date().getMinutes();
-  const timeStr = `${hour}시 ${min}분`;
+  const hour    = getKSTHour();
+  const timeStr = getKSTTimeStr();
   const peakStr = lineInfo.peak_stations.join(', ');
 
   const prompt = `당신은 ${line} 지하철 역무원 "${lineInfo.name}"입니다.
@@ -113,55 +130,62 @@ async function saveAIMessage(env, line, nick, emoji, msg) {
     VALUES (?, ?, ?, ?, ?)
   `).bind(line, nick, emoji, msg, ts).run();
 
-  // 호선별 최근 50개만 유지
+  // 호선별 최근 20개만 유지
   await env.DB.prepare(`
     DELETE FROM ai_messages
     WHERE line = ? AND id NOT IN (
-      SELECT id FROM ai_messages WHERE line = ? ORDER BY ts DESC LIMIT 50
+      SELECT id FROM ai_messages WHERE line = ? ORDER BY ts DESC LIMIT 20
     )
   `).bind(line, line).run();
 }
 
 // ── 크론: AI 역무원 대화 생성 ────────────────────────────
 async function runAIStationMaster(env) {
-  // ① 오늘 호출 횟수 확인
+  // ── D1 테이블 자동 생성 (없으면) ──
+  try {
+    await env.DB.prepare(`CREATE TABLE IF NOT EXISTS ai_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      line TEXT NOT NULL, nick TEXT NOT NULL,
+      emoji TEXT DEFAULT '🚇', msg TEXT NOT NULL, ts INTEGER NOT NULL
+    )`).run();
+    await env.DB.prepare(`CREATE TABLE IF NOT EXISTS ai_daily_counter (
+      date TEXT PRIMARY KEY, count INTEGER DEFAULT 0
+    )`).run();
+  } catch(e) { console.error('[AI역무원] 테이블 생성 오류:', e.message); }
+
+  // ① 오늘 KST 날짜 기준 호출 횟수 확인
   const todayCount = await getTodayCount(env);
   if (todayCount >= DAILY_LIMIT) {
     console.log(`[AI역무원] 오늘 한도 도달 (${todayCount}/${DAILY_LIMIT}) — 중단`);
     return { skipped: true, count: todayCount };
   }
 
-  // ② 현재 시간대 확인
-  const now  = new Date();
-  const hour = now.getHours();
-  const min  = now.getMinutes();
+  // ② KST 기준 시간대
+  const hour = getKSTHour();
+  const min  = getKSTMin();
   const slot = getTimeSlot(hour);
 
-  // ③ 이번 크론 주기에 생성할 호선 선택
-  // (크론은 1분마다 실행, freq분 간격으로만 실제 생성)
-  const lineKeys = Object.keys(LINES_INFO);
-  // 이 크론 실행에서 처리할 호선 (분 기준으로 분배)
-  // 예: 25개 호선, freq=10분 → 10분에 25개 = 1분마다 2~3개
-  const linesPerRun = Math.ceil(lineKeys.length / slot.freq);
+  // ③ 이번 크론에서 처리할 호선 선택
+  // freq=15이면 15분에 25개 호선 모두 처리 → 1분마다 ceil(25/15)=2개
+  const lineKeys    = Object.keys(LINES_INFO);
+  const linesPerRun = Math.max(1, Math.ceil(lineKeys.length / slot.freq));
   const startIdx    = (min % slot.freq) * linesPerRun;
-  const thisRunLines = lineKeys.slice(startIdx, startIdx + linesPerRun);
+  const thisRun     = lineKeys.slice(startIdx, startIdx + linesPerRun);
 
-  if (thisRunLines.length === 0) return { skipped: true, reason: 'no lines this run' };
+  // startIdx 범위 초과 시 첫 번째 호선이라도 처리
+  const toProcess = thisRun.length > 0 ? thisRun : [lineKeys[min % lineKeys.length]];
 
-  // ④ 남은 한도 체크
   const remaining = DAILY_LIMIT - todayCount;
-  if (remaining <= 0) return { skipped: true, count: todayCount };
+  const results   = [];
 
-  const results = [];
-  for (const line of thisRunLines.slice(0, Math.min(remaining, thisRunLines.length))) {
+  for (const line of toProcess.slice(0, Math.min(remaining, toProcess.length))) {
     try {
       const info = LINES_INFO[line];
       const msg  = await generateAIMessage(line, info, slot, env);
-      if (msg) {
+      if (msg && msg.length > 0) {
         await saveAIMessage(env, line, info.name, info.emoji, msg);
         results.push({ line, msg });
-        // API 과부하 방지: 호출 사이 500ms 대기
-        await new Promise(r => setTimeout(r, 500));
+        await new Promise(r => setTimeout(r, 300));
       }
     } catch(e) {
       console.error(`[AI역무원] ${line} 실패:`, e.message);
@@ -169,8 +193,8 @@ async function runAIStationMaster(env) {
   }
 
   const newCount = await getTodayCount(env);
-  console.log(`[AI역무원] 생성 ${results.length}개, 오늘 총 ${newCount}/${DAILY_LIMIT}회`);
-  return { generated: results.length, count: newCount, lines: results };
+  console.log(`[AI역무원] KST ${hour}시, 생성 ${results.length}개 (${toProcess.join(',')}), 총 ${newCount}/${DAILY_LIMIT}`);
+  return { generated: results.length, count: newCount, slot: slot.name, lines: results };
 }
 
 // ── 전국 역 좌표 목록 (크론 순회용) ─────────────────────────
@@ -313,6 +337,307 @@ async function crawlAllStations(env) {
 // ══════════════════════════════════════════════════════════
 // fetch 핸들러
 // ══════════════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════════════════
+// 🗄️ 경로 캐시 시스템 (D1 기반)
+// ══════════════════════════════════════════════════════════════
+
+// 캐시 키 생성 (좌표 소수점 3자리 반올림으로 근접 위치 묶기)
+function makeCacheKey(slat, slng, elat, elng) {
+  var s = Math.round(slat*1000)/1000 + ',' + Math.round(slng*1000)/1000;
+  var e = Math.round(elat*1000)/1000 + ',' + Math.round(elng*1000)/1000;
+  return s + '→' + e;
+}
+
+// D1 캐시 테이블 초기화
+async function initRouteCacheTable(env) {
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS route_cache (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      cache_key  TEXT NOT NULL UNIQUE,
+      start_name TEXT NOT NULL,
+      end_name   TEXT NOT NULL,
+      route_data TEXT NOT NULL,
+      hit_count  INTEGER DEFAULT 1,
+      created_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL
+    )
+  `).run();
+
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS popular_routes (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      cache_key  TEXT NOT NULL UNIQUE,
+      start_name TEXT NOT NULL,
+      end_name   TEXT NOT NULL,
+      start_lat  REAL, start_lng REAL,
+      end_lat    REAL, end_lng   REAL,
+      hit_count  INTEGER DEFAULT 0,
+      last_hit   INTEGER NOT NULL
+    )
+  `).run();
+}
+
+// D1에서 캐시 조회
+async function getRouteCache(env, cacheKey) {
+  try {
+    const row = await env.DB.prepare(
+      'SELECT route_data, expires_at FROM route_cache WHERE cache_key = ?'
+    ).bind(cacheKey).first();
+
+    if (!row) return null;
+
+    // 만료 확인 (하루)
+    if (Date.now() > row.expires_at) {
+      await env.DB.prepare('DELETE FROM route_cache WHERE cache_key = ?')
+        .bind(cacheKey).run();
+      return null;
+    }
+
+    // 히트 카운트 증가
+    await env.DB.prepare(
+      'UPDATE route_cache SET hit_count = hit_count + 1 WHERE cache_key = ?'
+    ).bind(cacheKey).run();
+
+    return JSON.parse(row.route_data);
+  } catch(e) { return null; }
+}
+
+// D1에 캐시 저장
+async function setRouteCache(env, cacheKey, startName, endName, routeData) {
+  const now    = Date.now();
+  const expire = now + 24 * 60 * 60 * 1000; // 24시간
+
+  try {
+    await env.DB.prepare(`
+      INSERT OR REPLACE INTO route_cache
+        (cache_key, start_name, end_name, route_data, hit_count, created_at, expires_at)
+      VALUES (?, ?, ?, ?, 1, ?, ?)
+    `).bind(cacheKey, startName, endName, JSON.stringify(routeData), now, expire).run();
+
+    // popular_routes 히트 카운트 업데이트
+    await env.DB.prepare(`
+      INSERT INTO popular_routes (cache_key, start_name, end_name, hit_count, last_hit)
+      VALUES (?, ?, ?, 1, ?)
+      ON CONFLICT(cache_key) DO UPDATE SET
+        hit_count = hit_count + 1,
+        last_hit  = ?
+    `).bind(cacheKey, startName, endName, now, now).run();
+  } catch(e) { console.error('[캐시저장]', e); }
+}
+
+// 인기 경로 TOP 50 배치 예열
+async function warmupPopularRoutes(env) {
+  try {
+    const { results } = await env.DB.prepare(`
+      SELECT * FROM popular_routes
+      WHERE start_lat IS NOT NULL AND end_lat IS NOT NULL
+      ORDER BY hit_count DESC LIMIT 50
+    `).all();
+
+    if (!results || results.length === 0) {
+      console.log('[예열] 인기 경로 없음');
+      return { warmed: 0 };
+    }
+
+    let warmed = 0;
+    for (const r of results) {
+      const key = makeCacheKey(r.start_lat, r.start_lng, r.end_lat, r.end_lng);
+      const cached = await getRouteCache(env, key);
+      if (cached) continue; // 이미 캐시됨
+
+      try {
+        const data = await callKakaoTransit(r.start_lat, r.start_lng, r.end_lat, r.end_lng);
+        if (data) {
+          await setRouteCache(env, key, r.start_name, r.end_name, data);
+          warmed++;
+          await new Promise(res => setTimeout(res, 200));
+        }
+      } catch(e) { console.error('[예열]', r.start_name, '→', r.end_name, e); }
+    }
+
+    console.log(`[예열] ${warmed}개 경로 캐시 갱신`);
+    return { warmed, total: results.length };
+  } catch(e) {
+    console.error('[예열] 오류:', e);
+    return { warmed: 0, error: e.message };
+  }
+}
+
+
+// ══════════════════════════════════════════════════════════════
+// 🔄 멀티 API 폴백 시스템
+// 카카오(10만) → ODsay(1천) → 네이버검색보완(2.5만)
+// ══════════════════════════════════════════════════════════════
+
+const ODSAY_KEY  = 'TIZm4dwMq1Uw4UgWJhhstA';
+const NAVER_ID   = 'hA4NRbssAZ_MvYBElOTQ';
+const NAVER_SEC  = 'RmqMQ8whot';
+
+// API 일일 사용량 한도
+const API_LIMITS = {
+  kakao:  100000,
+  odsay:  1000,
+  naver:  25000,
+};
+
+// D1 API 사용량 추적
+async function getApiUsage(env, apiName) {
+  const kstDate = new Date(Date.now() + 9*60*60*1000);
+  const today   = kstDate.toISOString().slice(0,10);
+  try {
+    const row = await env.DB.prepare(
+      'SELECT count FROM api_usage WHERE api_name=? AND date=?'
+    ).bind(apiName, today).first();
+    return row ? row.count : 0;
+  } catch(e) { return 0; }
+}
+
+async function incrementApiUsage(env, apiName) {
+  const kstDate = new Date(Date.now() + 9*60*60*1000);
+  const today   = kstDate.toISOString().slice(0,10);
+  try {
+    await env.DB.prepare(`
+      CREATE TABLE IF NOT EXISTS api_usage (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        api_name TEXT NOT NULL,
+        date TEXT NOT NULL,
+        count INTEGER DEFAULT 0,
+        UNIQUE(api_name, date)
+      )
+    `).run();
+    await env.DB.prepare(`
+      INSERT INTO api_usage (api_name, date, count) VALUES (?,?,1)
+      ON CONFLICT(api_name, date) DO UPDATE SET count = count + 1
+    `).bind(apiName, today).run();
+  } catch(e) {}
+}
+
+// API 사용 가능 여부 확인
+async function canUseApi(env, apiName) {
+  const usage = await getApiUsage(env, apiName);
+  const limit = API_LIMITS[apiName] || 999999;
+  return usage < limit * 0.95; // 95% 도달 시 전환
+}
+
+// ── ODsay 대중교통 경로 ──────────────────────────────────────
+async function callODsayTransit(slat, slng, elat, elng) {
+  const url = 'https://api.odsay.com/v1/api/searchPubTransPathT' +
+    '?SX=' + slng + '&SY=' + slat +
+    '&EX=' + elng + '&EY=' + elat +
+    '&apiKey=' + encodeURIComponent(ODSAY_KEY);
+
+  const res  = await fetch(url);
+  if(!res.ok) throw new Error('ODsay HTTP ' + res.status);
+  const data = await res.json();
+  if(data.error) throw new Error('ODsay: ' + data.error.msg);
+
+  // ODsay 결과를 카카오 형식으로 변환
+  return convertODsayToKakao(data);
+}
+
+// ODsay 응답 → 카카오 형식 변환
+function convertODsayToKakao(odsayData) {
+  const paths = odsayData?.result?.path || [];
+  if(!paths.length) return { routes: [] };
+
+  const routes = paths.slice(0, 3).map(function(path) {
+    const info     = path.info || {};
+    const sections = (path.subPath || []).map(function(sub) {
+      const type = sub.trafficType; // 1=지하철, 2=버스, 3=도보
+      return {
+        transportation: {
+          type: type,
+          name: sub.lane?.[0]?.name || sub.name || ''
+        },
+        duration: (sub.sectionTime || 0) * 60,
+        distance: sub.distance || 0,
+        passStopList: sub.passStopList ? {
+          stationList: sub.passStopList.stations || []
+        } : null
+      };
+    });
+
+    return {
+      summary: {
+        duration: (info.totalTime || 0) * 60,
+        distance: info.totalDistance || 0,
+        fare: { taxi: 0, payment: info.payment || 0 }
+      },
+      sections: sections,
+      _source: 'odsay'
+    };
+  });
+
+  return { routes };
+}
+
+// ── 네이버 검색 API (장소 보완용) ───────────────────────────
+async function searchNaverPlace(query) {
+  const url = 'https://openapi.naver.com/v1/search/local.json' +
+    '?query=' + encodeURIComponent(query) +
+    '&display=5&sort=comment';
+
+  const res = await fetch(url, {
+    headers: {
+      'X-Naver-Client-Id':     NAVER_ID,
+      'X-Naver-Client-Secret': NAVER_SEC
+    }
+  });
+  if(!res.ok) throw new Error('Naver HTTP ' + res.status);
+  return await res.json();
+}
+
+// ── 멀티 API 폴백 경로 탐색 ─────────────────────────────────
+async function callTransitWithFallback(env, slat, slng, elat, elng, sname, ename) {
+  // 1순위: 카카오
+  const kakaoOk = await canUseApi(env, 'kakao');
+  if(kakaoOk) {
+    try {
+      const data = await callKakaoTransit(slat, slng, elat, elng);
+      await incrementApiUsage(env, 'kakao');
+      return { data, source: 'kakao' };
+    } catch(e) {
+      console.warn('[폴백] 카카오 실패:', e.message);
+    }
+  } else {
+    console.log('[폴백] 카카오 한도 95% 도달 → ODsay로 전환');
+  }
+
+  // 2순위: ODsay
+  const odsayOk = await canUseApi(env, 'odsay');
+  if(odsayOk) {
+    try {
+      const data = await callODsayTransit(slat, slng, elat, elng);
+      await incrementApiUsage(env, 'odsay');
+      return { data, source: 'odsay' };
+    } catch(e) {
+      console.warn('[폴백] ODsay 실패:', e.message);
+    }
+  } else {
+    console.log('[폴백] ODsay 한도 95% 도달');
+  }
+
+  // 3순위: 안내 메시지 (네이버는 대중교통 경로 없음)
+  // 네이버로 출발지/도착지 장소 정보는 보완
+  return { data: null, source: 'none' };
+}
+
+// 카카오 대중교통 API 호출 (공통 함수)
+async function callKakaoTransit(slat, slng, elat, elng) {
+  const kakaoKey = 'a420cd52d24c6380fb5d1a2287663495';
+  const now      = new Date();
+  const depTime  = now.toISOString().slice(0,16).replace('T',' ');
+  const url      = `https://apis-navi.kakaomobility.com/v1/future/directions/transit` +
+    `?origin=${slng},${slat}&destination=${elng},${elat}&departure_time=${encodeURIComponent(depTime)}`;
+
+  const res = await fetch(url, {
+    headers: { 'Authorization': `KakaoAK ${kakaoKey}`, 'Content-Type': 'application/json' }
+  });
+  if (!res.ok) throw new Error('카카오 HTTP ' + res.status);
+  return await res.json();
+}
+
 export default {
 
   // ── 크론 트리거 (매일 새벽 3시 KST = UTC 18:00) ──────────
@@ -320,8 +645,10 @@ export default {
     // 맛집 수집 크론 (매일 새벽 3시 UTC 18:00)
     if (event.cron === '0 18 * * *') {
       ctx.waitUntil(crawlAllStations(env));
+      // 인기 경로 캐시 예열 (새벽 3시에 함께)
+      ctx.waitUntil(warmupPopularRoutes(env));
     }
-    // AI 역무원 크론 (매분 실행, 내부에서 시간대별 조절)
+    // AI 역무원 크론 (매분 실행)
     ctx.waitUntil(runAIStationMaster(env));
   },
 
@@ -467,14 +794,23 @@ export default {
       // 📋 게시글 목록
       // ══════════════════════════════════════════════════
       if (path === '/posts' && method === 'GET') {
-        const cat = url.searchParams.get('cat');
+        const cat   = url.searchParams.get('cat');
+        const limit = Math.min(parseInt(url.searchParams.get('limit') || '50'), 200);
         let q, binds;
+
+        // 뉴스는 30일 지난 것 자동 삭제
+        if (cat === '뉴스') {
+          const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+          await env.DB.prepare('DELETE FROM posts WHERE cat = ? AND ts < ?')
+            .bind('뉴스', cutoff).run().catch(() => {});
+        }
+
         if (cat && cat !== 'all') {
-          q = 'SELECT * FROM posts WHERE cat = ? ORDER BY ts DESC LIMIT 50';
-          binds = [cat];
+          q = 'SELECT * FROM posts WHERE cat = ? ORDER BY ts DESC LIMIT ?';
+          binds = [cat, limit];
         } else {
-          q = 'SELECT * FROM posts ORDER BY ts DESC LIMIT 50';
-          binds = [];
+          q = 'SELECT * FROM posts ORDER BY ts DESC LIMIT ?';
+          binds = [limit];
         }
         const stmt = env.DB.prepare(q);
         const { results } = await (binds.length ? stmt.bind(...binds) : stmt).all();
@@ -496,6 +832,10 @@ export default {
           String(nick).slice(0, 12), String(title).slice(0, 100),
           String(body).slice(0, 2000), cat || '잡담', ts
         ).run();
+        // 게시글 최대 500개 유지 (오래된 것 삭제)
+        await env.DB.prepare(
+          'DELETE FROM posts WHERE id NOT IN (SELECT id FROM posts ORDER BY ts DESC LIMIT 500)'
+        ).run();
         return json({ ok: true, id: r.meta.last_row_id, ts });
       }
 
@@ -516,18 +856,33 @@ export default {
       // GET /ai-messages?line=2호선&limit=20
       // ══════════════════════════════════════════════════
       if (path === '/ai-messages' && method === 'GET') {
-        const line  = url.searchParams.get('line');
-        const limit = Math.min(parseInt(url.searchParams.get('limit') || '20'), 50);
+        const line   = url.searchParams.get('line');    // 단일 호선
+        const lines  = url.searchParams.get('lines');   // 콤마 구분 복수 호선 (경로 설정 시)
+        const limit  = Math.min(parseInt(url.searchParams.get('limit') || '30'), 100);
         let q, binds;
-        if (line && line !== 'all') {
+
+        if (lines && lines !== 'all') {
+          // 경로 설정된 호선들만 (e.g. "인천1호선,공항철도,9호선")
+          const lineArr = lines.split(',').map(l => l.trim()).filter(Boolean);
+          const placeholders = lineArr.map(() => '?').join(',');
+          q = `SELECT * FROM ai_messages WHERE line IN (${placeholders}) ORDER BY ts DESC LIMIT ?`;
+          binds = [...lineArr, limit];
+        } else if (line && line !== 'all') {
           q = 'SELECT * FROM ai_messages WHERE line = ? ORDER BY ts DESC LIMIT ?';
           binds = [line, limit];
         } else {
           q = 'SELECT * FROM ai_messages ORDER BY ts DESC LIMIT ?';
           binds = [limit];
         }
-        const { results } = await env.DB.prepare(q).bind(...binds).all();
-        // 오늘 남은 호출 횟수도 함께 반환
+
+        let results = [];
+        try {
+          const res = await env.DB.prepare(q).bind(...binds).all();
+          results = res.results || [];
+        } catch(e) {
+          // 테이블 없으면 빈 배열
+          results = [];
+        }
         const todayCount = await getTodayCount(env);
         return json({ messages: results.reverse(), count: todayCount, limit: DAILY_LIMIT });
       }
@@ -556,6 +911,148 @@ export default {
         `).run();
         const result = await runAIStationMaster(env);
         return json({ ok: true, ...result });
+      }
+
+      // ══════════════════════════════════════════════════
+      // ══════════════════════════════════════════════════
+      // 🗄️ 경로 캐시 조회/저장
+      // GET  /route-cache?slat=&slng=&elat=&elng=&sname=&ename=
+      // POST /route-cache {slat,slng,elat,elng,sname,ename,data}
+      // ══════════════════════════════════════════════════
+      if (path === '/route-cache') {
+        await initRouteCacheTable(env);
+
+        if (method === 'GET') {
+          const slat  = parseFloat(url.searchParams.get('slat') || 0);
+          const slng  = parseFloat(url.searchParams.get('slng') || 0);
+          const elat  = parseFloat(url.searchParams.get('elat') || 0);
+          const elng  = parseFloat(url.searchParams.get('elng') || 0);
+          if (!slat || !elat) return json({ cached: false }, 200);
+
+          const key    = makeCacheKey(slat, slng, elat, elng);
+          const cached = await getRouteCache(env, key);
+          if (cached) return json({ cached: true, data: cached });
+          return json({ cached: false });
+        }
+
+        if (method === 'POST') {
+          const body  = await request.json();
+          const { slat, slng, elat, elng, sname, ename, data } = body;
+          if (!slat || !elat || !data) return json({ error: '파라미터 부족' }, 400);
+
+          const key = makeCacheKey(slat, slng, elat, elng);
+          await setRouteCache(env, key, sname || '', ename || '', data);
+
+          // popular_routes에 좌표도 저장 (예열용)
+          try {
+            await env.DB.prepare(`
+              UPDATE popular_routes SET start_lat=?, start_lng=?, end_lat=?, end_lng=?
+              WHERE cache_key=?
+            `).bind(slat, slng, elat, elng, key).run();
+          } catch(e) {}
+
+          return json({ ok: true, key });
+        }
+      }
+
+      // 카카오 대중교통 경로 (캐시 우선)
+      if (path === '/kakao-transit' && method === 'GET') {
+        await initRouteCacheTable(env);
+
+        const slat = parseFloat(url.searchParams.get('slat') || 0);
+        const slng = parseFloat(url.searchParams.get('slng') || 0);
+        const elat = parseFloat(url.searchParams.get('elat') || 0);
+        const elng = parseFloat(url.searchParams.get('elng') || 0);
+        const sname = url.searchParams.get('sname') || '';
+        const ename = url.searchParams.get('ename') || '';
+        if (!slat || !elat) return json({ error: '좌표 파라미터 필요' }, 400);
+
+        // ① D1 캐시 확인 (API 호출 전)
+        const cacheKey = makeCacheKey(slat, slng, elat, elng);
+        const cached   = await getRouteCache(env, cacheKey);
+        if (cached) {
+          console.log(`[캐시HIT] ${sname}→${ename}`);
+          return new Response(JSON.stringify({ ...cached, _cached: true }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*',
+                       'X-Cache': 'HIT' }
+          });
+        }
+
+        // ② 캐시 미스 → 멀티 API 폴백 호출
+        try {
+          const { data, source } = await callTransitWithFallback(
+            env, slat, slng, elat, elng, sname, ename
+          );
+
+          if(!data) {
+            return json({ error: '모든 경로 API 한도 초과. 잠시 후 시도해주세요.', source: 'none' }, 503);
+          }
+
+          // ③ 결과 D1에 저장
+          await setRouteCache(env, cacheKey, sname, ename, { ...data, _source: source });
+
+          // API 사용량 현황 로그
+          const kakaoUsage = await getApiUsage(env, 'kakao');
+          const odsayUsage = await getApiUsage(env, 'odsay');
+          console.log(`[경로] ${sname}→${ename} | 소스:${source} | 카카오:${kakaoUsage}/100000 | ODsay:${odsayUsage}/1000`);
+
+          return new Response(JSON.stringify({ ...data, _cached: false, _source: source }), {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*',
+              'X-Cache': 'MISS',
+              'X-Api-Source': source
+            }
+          });
+        } catch(e) {
+          return json({ error: '경로 API 오류: ' + e.message }, 500);
+        }
+      }
+
+      // API 사용량 현황 조회
+      if (path === '/admin/api-status' && method === 'GET') {
+        const kakaoUsage = await getApiUsage(env, 'kakao');
+        const odsayUsage = await getApiUsage(env, 'odsay');
+        const naverUsage = await getApiUsage(env, 'naver');
+        return json({
+          kakao:  { used: kakaoUsage,  limit: 100000, pct: Math.round(kakaoUsage/1000)  },
+          odsay:  { used: odsayUsage,  limit: 1000,   pct: Math.round(odsayUsage/10)    },
+          naver:  { used: naverUsage,  limit: 25000,  pct: Math.round(naverUsage/250)   },
+          date:   new Date(Date.now() + 9*60*60*1000).toISOString().slice(0,10)
+        });
+      }
+
+      // 인기 경로 예열 (크론 + 수동)
+      if (path === '/admin/warmup-routes' && method === 'GET') {
+        await initRouteCacheTable(env);
+        const result = await warmupPopularRoutes(env);
+        return json({ ok: true, ...result });
+      }
+
+      // 버스 API 프록시
+      // 🚌 버스 API 프록시 (TAGO CORS 우회)
+      // GET /bus-proxy?url=<encoded_url>
+      // ══════════════════════════════════════════════════
+      if (path === '/bus-proxy' && method === 'GET') {
+        const targetUrl = url.searchParams.get('url');
+        if (!targetUrl) return json({ error: 'url 파라미터 필요' }, 400);
+
+        try {
+          const res  = await fetch(decodeURIComponent(targetUrl));
+          const data = await res.json();
+          return new Response(JSON.stringify(data), {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*',
+              'Cache-Control': 'public, max-age=30'  // 30초 캐시
+            }
+          });
+        } catch(e) {
+          return json({ error: '버스 API 오류: ' + e.message }, 500);
+        }
       }
 
       return json({ error: 'Not found' }, 404);
