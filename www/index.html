@@ -1375,34 +1375,51 @@ function _renderBusStop(stop, arrivals) {
 
   var arrHtml = '';
   if(arrivals && arrivals.length > 0) {
-    arrHtml = arrivals.slice(0, 5).map(function(a) {
+    arrHtml = arrivals.slice(0, 8).map(function(a) {
       var sec1   = parseInt(a.arrtime || a.arrTime || 0);
       var sec2   = parseInt(a.arrtime2 || a.arrTime2 || 0);
       var cnt1   = parseInt(a.arrprevstationcnt || a.arrPrevStationCnt || 0);
+      var cnt2   = parseInt(a.arrprevstationcnt2 || a.arrPrevStationCnt2 || 0);
       var cong   = _busCongText(a.congestion || a.congestionCase);
       var isSoon = sec1 > 0 && sec1 <= 60;
       var numCls = _busNumClass(a.routeno || a.routeNo);
+      var routeNo = a.routeno || a.routeNo || '-';
+
+      // 1번째 도착
+      var line1 = '<div class="bus-arr-line">' +
+        '<span class="bus-arr-time' + (isSoon?' soon':'') + '">' +
+          (sec1 > 0 ? _busArrFmt(sec1) : '정보없음') + '</span>' +
+        (cnt1 > 0 ? '<span class="bus-arr-cnt">' + cnt1 + '번째전</span>' : '') +
+        (cong ? '<span class="bus-congestion ' + cong + '">' + cong + '</span>' : '') +
+      '</div>';
+      // 2번째 도착
+      var line2 = '';
+      if(sec2 > 0) {
+        line2 = '<div class="bus-arr-line">' +
+          '<span class="bus-arr-time">' + _busArrFmt(sec2) + '</span>' +
+          (cnt2 > 0 ? '<span class="bus-arr-cnt">' + cnt2 + '번째전</span>' : '') +
+        '</div>';
+      } else if(sec1 > 0) {
+        line2 = '<div class="bus-arr-line"><span class="bus-arr-noinfo">도착정보 없음</span></div>';
+      }
+
       return '<div class="bus-row">' +
-        '<div class="bus-num ' + numCls + '">' + (a.routeno || a.routeNo || '-') + '</div>' +
-        '<div class="bus-dest">' + _ltEsc(a.routeDestName || a.nodeName || '') + '</div>' +
-        '<div class="bus-arr">' +
-          '<div class="bus-arr-time' + (isSoon?' soon':'') + '">' +
-            (sec1 > 0 ? _busArrFmt(sec1) : '정보없음') + '</div>' +
-          (cnt1 > 0 ? '<div class="bus-arr-cnt">' + cnt1 + '정거장 전</div>' : '') +
-          (cong ? '<div class="bus-congestion ' + cong + '">' + cong + '</div>' : '') +
-          (sec2 > 0 ? '<div class="bus-arr-cnt" style="margin-top:2px;">다음 ' + _busArrFmt(sec2) + '</div>' : '') +
-        '</div>' +
+        '<div class="bus-num ' + numCls + '">' + routeNo + '</div>' +
+        '<div class="bus-arr">' + line1 + line2 + '</div>' +
+        '<svg class="bus-bell" viewBox="0 0 24 24" fill="currentColor"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>' +
       '</div>';
     }).join('');
   } else {
-    arrHtml = '<div style="padding:10px 14px;font-size:12px;color:var(--sub);">운행 정보 없음</div>';
+    arrHtml = '<div style="padding:14px 16px;font-size:13px;color:var(--sub);">도착 정보 없음</div>';
   }
 
   var hdr = document.createElement('div');
   hdr.className = 'bus-stop-hdr';
   hdr.innerHTML =
-    '<div class="bus-stop-icon">🚌</div>' +
-    '<div class="bus-stop-name">' + _ltEsc(stop.nodenm || stop.nodeName || '정류장') + '</div>' +
+    '<div class="bus-stop-titlewrap">' +
+      '<div class="bus-stop-name">' + _ltEsc(stop.nodenm || stop.nodeName || '정류장') + '</div>' +
+      (stop.nodeDir || stop.dir ? '<div class="bus-stop-sub">' + _ltEsc(stop.nodeDir || stop.dir) + ' 방면</div>' : '') +
+    '</div>' +
     '<div class="bus-stop-dist">' + _busDist(stop.dist || stop.distance || 0) + '</div>';
   var busListDiv = document.createElement('div');
   busListDiv.className = 'bus-list';
@@ -2104,10 +2121,11 @@ function loadMapBusStops() {
     card.id = 'mapBusCard_' + idx;
     card.innerHTML =
       '<div class="map-bus-stop-name">' +
-        '🚌 ' + _ltEsc(stop.name || stop.nodenm || '') +
-        '<button onclick="removeMapBusStop(' + idx + ')" style="margin-left:auto;background:none;border:none;color:var(--sub);font-size:18px;cursor:pointer;">×</button>' +
+        _ltEsc(stop.name || stop.nodenm || '') +
+        '<button onclick="removeMapBusStop(' + idx + ')" style="margin-left:auto;background:none;border:none;color:var(--sub);font-size:20px;cursor:pointer;line-height:1;">×</button>' +
       '</div>' +
-      '<div class="map-bus-row" style="color:var(--sub);font-size:12px;">도착 정보 불러오는 중...</div>';
+      (stop.nodeDir || stop.dir ? '<div class="map-bus-stop-sub">' + _ltEsc(stop.nodeDir || stop.dir) + ' 방면</div>' : '') +
+      '<div class="map-bus-row" style="color:var(--sub);font-size:13px;">도착 정보 불러오는 중...</div>';
     listEl.appendChild(card);
 
     // 실시간 도착 정보 로드
@@ -2165,24 +2183,33 @@ function _loadMapBusArrival(stop, cardIdx) {
         return;
       }
 
-      items.slice(0, 5).forEach(function(a) {
+      items.slice(0, 8).forEach(function(a) {
         var row  = document.createElement('div');
         row.className = 'map-bus-row';
         var sec  = parseInt(a.arrtime || a.arrTime || 0);
+        var sec2 = parseInt(a.arrtime2 || a.arrTime2 || 0);
         var cnt  = parseInt(a.arrprevstationcnt || a.arrPrevStationCnt || 0);
+        var cnt2 = parseInt(a.arrprevstationcnt2 || a.arrPrevStationCnt2 || 0);
         var soon = sec > 0 && sec <= 60;
-        var min  = sec > 0 ? (sec < 60 ? '곧 도착' : Math.round(sec/60) + '분') : '-';
+        var fmt  = function(s){ return s > 0 ? (s < 60 ? '곧 도착' : Math.round(s/60) + '분') : '-'; };
         var numCls = _busNumClass ? _busNumClass(a.routeno || a.routeNo) : 'other';
+        var routeNo = a.routeno || a.routeNo || '-';
+
+        var line1 = '<div class="map-bus-arr-line">' +
+          '<span class="map-bus-arr-time' + (soon?' soon':'') + '">' + fmt(sec) + '</span>' +
+          (cnt > 0 ? '<span class="map-bus-arr-cnt">' + cnt + '번째전</span>' : '') +
+        '</div>';
+        var line2 = sec2 > 0
+          ? '<div class="map-bus-arr-line">' +
+              '<span class="map-bus-arr-time">' + fmt(sec2) + '</span>' +
+              (cnt2 > 0 ? '<span class="map-bus-arr-cnt">' + cnt2 + '번째전</span>' : '') +
+            '</div>'
+          : '<div class="map-bus-arr-line"><span class="map-bus-arr-sub">도착정보 없음</span></div>';
 
         row.innerHTML =
-          '<div class="bus-num ' + numCls + '" style="min-width:50px;font-size:12px;">' +
-            (a.routeno || a.routeNo || '-') + '</div>' +
-          '<div style="flex:1;font-size:12px;color:var(--sub);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' +
-            _ltEsc(a.routeDestName || '') + '</div>' +
-          '<div style="text-align:right;flex-shrink:0;">' +
-            '<div style="font-size:14px;font-weight:700;color:' + (soon?'#ff453a':'var(--gold)') + ';">' + min + '</div>' +
-            (cnt > 0 ? '<div style="font-size:10px;color:var(--sub);">' + cnt + '정거장 전</div>' : '') +
-          '</div>';
+          '<div class="bus-num ' + numCls + '">' + routeNo + '</div>' +
+          '<div class="map-bus-arr">' + line1 + line2 + '</div>' +
+          '<svg class="map-bus-bell" viewBox="0 0 24 24" fill="currentColor"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>';
         card.appendChild(row);
       });
     })
@@ -20594,36 +20621,41 @@ document.addEventListener('DOMContentLoaded', function() {
 .bus-refresh-btn{background:var(--card);border:1px solid var(--border);border-radius:20px;
   padding:6px 14px;font-size:12px;color:var(--sub);cursor:pointer;}
 .bus-scroll{flex:1;overflow-y:auto;padding:0 12px 80px;-webkit-overflow-scrolling:touch;}
-.bus-stop-card{background:var(--card);border:1px solid var(--border);border-radius:16px;
-  margin-bottom:10px;overflow:hidden;}
-.bus-stop-hdr{padding:12px 14px;display:flex;align-items:center;gap:10px;cursor:pointer;
-  border-bottom:1px solid var(--border);}
-.bus-stop-icon{width:32px;height:32px;border-radius:50%;background:#0066FF20;
-  display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;}
-.bus-stop-name{font-size:14px;font-weight:700;color:var(--text);flex:1;}
+/* ── 카카오버스 스타일 정류장 카드 ── */
+.bus-stop-card{background:var(--card);border:1px solid var(--border);border-radius:18px;
+  margin-bottom:12px;overflow:hidden;}
+.bus-stop-hdr{padding:16px 16px 12px;display:flex;align-items:flex-start;gap:10px;cursor:pointer;}
+.bus-stop-icon{display:none;}
+.bus-stop-titlewrap{flex:1;min-width:0;}
+.bus-stop-name{font-size:17px;font-weight:800;color:var(--text);line-height:1.3;}
+.bus-stop-sub{font-size:12px;color:var(--sub);margin-top:3px;}
 .bus-stop-dist{font-size:11px;color:var(--sub);background:var(--bg);
-  padding:2px 8px;border-radius:10px;flex-shrink:0;}
-.bus-list{padding:8px 0;}
-.bus-row{display:flex;align-items:center;gap:10px;padding:8px 14px;
-  border-bottom:1px solid var(--border);}
-.bus-row:last-child{border-bottom:none;}
-.bus-num{min-width:54px;padding:3px 8px;border-radius:8px;font-size:13px;
-  font-weight:800;text-align:center;color:#fff;}
-.bus-num.express{background:#e74c3c;}
-.bus-num.trunk{background:#0066FF;}
-.bus-num.branch{background:#00b341;}
-.bus-num.circular{background:#9b59b6;}
-.bus-num.other{background:#7f8c8d;}
-.bus-dest{flex:1;font-size:12px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.bus-arr{text-align:right;flex-shrink:0;}
-.bus-arr-time{font-size:14px;font-weight:700;color:var(--gold);}
+  padding:3px 9px;border-radius:11px;flex-shrink:0;align-self:center;}
+.bus-list{padding:0;}
+.bus-row{display:flex;align-items:center;gap:12px;padding:14px 16px;
+  border-top:1px solid var(--border);}
+.bus-num{min-width:50px;font-size:16px;font-weight:800;text-align:left;
+  background:none;padding:0;color:#0066FF;}
+.bus-num.express{color:#e74c3c;}
+.bus-num.trunk{color:#0066FF;}
+.bus-num.branch{color:#00b341;}
+.bus-num.circular{color:#9b59b6;}
+.bus-num.other{color:#7f8c8d;}
+.bus-dest{display:none;}
+.bus-arr{flex:1;text-align:left;min-width:0;}
+.bus-arr-line{display:flex;align-items:center;gap:7px;margin-bottom:4px;}
+.bus-arr-line:last-child{margin-bottom:0;}
+.bus-arr-time{font-size:17px;font-weight:800;color:var(--text);white-space:nowrap;}
 .bus-arr-time.soon{color:#ff453a;animation:blink 1s infinite;}
-.bus-arr-cnt{font-size:10px;color:var(--sub);}
-.bus-congestion{font-size:10px;padding:1px 5px;border-radius:6px;margin-top:2px;display:inline-block;}
+.bus-arr-cnt{font-size:11px;color:var(--sub);background:var(--bg);
+  padding:2px 8px;border-radius:8px;white-space:nowrap;}
+.bus-arr-noinfo{font-size:13px;color:var(--sub);}
+.bus-congestion{font-size:11px;padding:2px 7px;border-radius:8px;display:inline-block;font-weight:700;}
 .bus-congestion.여유{background:#00b34120;color:#00b341;}
 .bus-congestion.보통{background:#ff9f0a20;color:#ff9f0a;}
 .bus-congestion.혼잡{background:#ff453a20;color:#ff453a;}
 .bus-congestion.매우혼잡{background:#ff453a;color:#fff;}
+.bus-bell{flex-shrink:0;width:24px;height:24px;color:var(--sub);cursor:pointer;opacity:.5;}
 .bus-empty{text-align:center;padding:60px 20px;color:var(--sub);font-size:14px;line-height:1.8;}
 .bus-loading{text-align:center;padding:40px;color:var(--sub);}
 .bus-spinner{width:28px;height:28px;border:3px solid var(--border);
@@ -20640,12 +20672,28 @@ document.addEventListener('DOMContentLoaded', function() {
 .map-itab.on{color:#fff;border-bottom-color:var(--gold);}
 .map-bus-panel{flex:1;overflow-y:auto;background:var(--bg);-webkit-overflow-scrolling:touch;}
 .map-bus-stop-card{background:var(--card);border:1px solid var(--border);
-  border-radius:14px;margin:10px 12px;overflow:hidden;}
-.map-bus-stop-name{padding:12px 14px;font-size:14px;font-weight:700;color:var(--text);
-  border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;}
-.map-bus-row{display:flex;align-items:center;gap:10px;padding:10px 14px;
-  border-bottom:1px solid var(--border);}
-.map-bus-row:last-child{border-bottom:none;}
+  border-radius:18px;margin:12px;overflow:hidden;}
+.map-bus-stop-name{padding:16px 16px 12px;font-size:17px;font-weight:800;color:var(--text);
+  display:flex;align-items:center;gap:8px;}
+.map-bus-stop-sub{font-size:12px;color:var(--sub);padding:0 16px 6px;margin-top:-4px;}
+.map-bus-row{display:flex;align-items:center;gap:12px;padding:14px 16px;
+  border-top:1px solid var(--border);}
+.map-bus-row .bus-num{min-width:48px;font-size:16px;font-weight:800;text-align:left;
+  background:none !important;padding:0 !important;color:#0066FF;}
+.map-bus-row .bus-num.express{color:#e74c3c;}
+.map-bus-row .bus-num.trunk{color:#0066FF;}
+.map-bus-row .bus-num.branch{color:#00b341;}
+.map-bus-row .bus-num.circular{color:#9b59b6;}
+.map-bus-row .bus-num.other{color:#7f8c8d;}
+.map-bus-arr{flex:1;min-width:0;}
+.map-bus-arr-line{display:flex;align-items:center;gap:7px;margin-bottom:4px;}
+.map-bus-arr-line:last-child{margin-bottom:0;}
+.map-bus-arr-time{font-size:17px;font-weight:800;color:var(--text);white-space:nowrap;}
+.map-bus-arr-time.soon{color:#ff453a;}
+.map-bus-arr-cnt{font-size:11px;color:var(--sub);background:var(--bg);
+  padding:2px 8px;border-radius:8px;white-space:nowrap;}
+.map-bus-arr-sub{font-size:13px;color:var(--sub);}
+.map-bus-bell{flex-shrink:0;width:22px;height:22px;color:var(--sub);opacity:.5;cursor:pointer;}
 .map-bus-empty{text-align:center;padding:50px 20px;color:var(--sub);font-size:14px;line-height:2;}
 .map-bus-set-btn{display:block;margin:16px auto;padding:12px 28px;
   background:var(--gold);color:#121214;border:none;border-radius:20px;
