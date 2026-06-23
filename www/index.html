@@ -10157,6 +10157,7 @@ function triggerGPS(){
 
       /* 주변 버스정류장도 함께 조회 → 통합 목록 */
       _fetchNearStops(lat, lng, function(err, stops) {
+        console.log('[GPS-BUS] err=', err, 'stops=', stops ? stops.length : 0, stops ? JSON.stringify(stops[0]||{}) : '');
         var busCandidates = [];
         if(!err && stops && stops.length) {
           busCandidates = stops.slice(0, 5).map(function(s) {
@@ -10190,10 +10191,10 @@ function triggerGPS(){
 
         _gpsNearCandidates = combined;
 
-        /* 가장 가까운 것 500m 이내 + 목록 1개 → 단일 모달 */
-        var nearest1 = combined[0];
-        if(combined.length === 1 || nearest1.dist <= 300) {
-          _showGpsSingleModal2(nearest1, lat, lng, acc);
+        // 항상 목록 모달로 표시 (역+버스 통합 선택)
+        // 단, 목록이 1개뿐이면 단일 모달
+        if(combined.length === 1) {
+          _showGpsSingleModal2(combined[0], lat, lng, acc);
         } else {
           _showGpsMultiModal2(combined, lat, lng);
         }
