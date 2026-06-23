@@ -783,7 +783,8 @@ function _exitCancel(){
 // ══════════════════════════════════════════════════════════════
 // 🍽️ 도착역 맛집 탭 (카카오 로컬 API)
 // ══════════════════════════════════════════════════════════════
-var _KAKAO_REST_KEY = 'a420cd52d24c6380fb5d1a2287663495';
+var _KAKAO_REST_KEY   = 'a420cd52d24c6380fb5d1a2287663495';
+var _NAVER_CLIENT_ID  = 'hA4NRbssAZ_MvYBElOTQ';  // 네이버 Static Map
 var _foodCache     = {};   // { 역명: { ts, data } }
 var _foodAllData   = [];   // 현재 로드된 전체 맛집 목록
 var _foodCurFilter = '전체';
@@ -2287,15 +2288,23 @@ function openTransitDetail() {
   // 제목
   if(title) title.textContent = totalMin + '분 · ' + _ltEsc((start||{}).name||'') + ' → ' + _ltEsc((dest||{}).name||'');
 
-  // 카카오맵 인앱 WebView (출발지 → 목적지 도보경로)
+  // 네이버 Static Map (출발지 + 목적지 마커)
   if(mapImg && start && dest && start.lat && dest.lat) {
-    var mapUrl = 'https://map.kakao.com/link/from/'
-      + encodeURIComponent((start.name||'출발지').replace(/📍\s*/,'')) + ',' + start.lat + ',' + start.lng
-      + '/to/' + encodeURIComponent(dest.name||'목적지') + ',' + dest.lat + ',' + dest.lng;
-    mapImg.src = mapUrl;
+    var sLat = start.lat, sLng = start.lng;
+    var dLat2 = dest.lat, dLng2 = dest.lng;
+    var dist2 = typeof haversineM==='function' ? haversineM(sLat,sLng,dLat2,dLng2) : 1000;
+    var cLat2 = (sLat+dLat2)/2, cLng2 = (sLng+dLng2)/2;
+    var lvl2  = dist2<300?14:dist2<700?13:dist2<1500?12:dist2<3000?11:10;
+    var w2    = Math.min(window.innerWidth-24, 492);
+    var naverUrl = _SERVER_URL + '/naver-map'
+      + '?center=' + cLng2 + ',' + cLat2
+      + '&level=' + lvl2 + '&w=' + w2 + '&h=360'
+      + '&markers=' + encodeURIComponent('type:d|size:mid|pos:' + sLng + ' ' + sLat + '|color:red')
+      + '&markers=' + encodeURIComponent('type:d|size:mid|pos:' + dLng2 + ' ' + dLat2 + '|color:blue');
+    mapImg.src = naverUrl;
     mapImg.style.display = 'block';
   } else if(mapImg) {
-    mapImg.src = '';
+    mapImg.style.display = 'none';
   }
 
   // 구간 상세 목록
@@ -2832,21 +2841,6 @@ window.addEventListener('unhandledrejection', function(e) {
 <!-- HOME TAB -->
 <div class="tab-body" id="tab-home">
 
-  <!-- ── 현재 위치 지도 버튼 ── -->
-  <div style="padding:0 0 8px;">
-    <button onclick="openWalkModal('manual')"
-      style="width:100%;display:flex;align-items:center;gap:10px;padding:12px 16px;
-             background:var(--card);border:1px solid var(--border);border-radius:14px;
-             cursor:pointer;text-align:left;">
-      <span style="font-size:22px;flex-shrink:0;">📍</span>
-      <div style="flex:1;min-width:0;">
-        <div style="font-size:13px;font-weight:700;color:var(--text);">현재 내 위치</div>
-        <div id="myLocLabel" style="font-size:11px;color:var(--sub);margin-top:1px;">탭해서 지도에서 확인</div>
-      </div>
-      <span style="font-size:11px;color:var(--sub);flex-shrink:0;">🗺️ 지도 열기</span>
-    </button>
-  </div>
-
   <!-- ── 출발/도착 검색 카드 (항상 표시) ── -->
   <div style="padding:0 0 4px;">
     <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:visible;position:relative;">
@@ -2856,10 +2850,10 @@ window.addEventListener('unhandledrejection', function(e) {
         <div style="width:10px;height:10px;border-radius:50%;background:#0a84ff;flex-shrink:0;"></div>
         <input id="fmapStartInp" class="inp"
           style="flex:1;border:none;background:transparent;padding:0;font-size:15px;font-weight:600;color:var(--text);min-width:0;"
-          placeholder="출발지 검색 or 📍위치 감지" autocomplete="off"
+          placeholder="출발지 검색" autocomplete="off"
           oninput="fmapSearch(this,'start')" onfocus="fmapSearch(this,'start')">
         <button id="homeGpsBtn" onclick="fmapGpsLocate()"
-          style="background:rgba(10,132,255,.12);border:1px solid rgba(10,132,255,.3);color:#0a84ff;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;padding:5px 9px;border-radius:14px;flex-shrink:0;">📍위치 감지</button>
+          style="background:#0a84ff;color:#fff;border:none;padding:8px 16px;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0;">위치 감지</button>
         <div id="fmapStartSug" class="sug"
           style="bottom:auto;top:calc(100% + 4px);max-height:200px;z-index:300;left:0;right:0;"></div>
         <!-- 스왑 버튼 — 출발/도착 행 경계 정중앙 -->
@@ -2880,7 +2874,7 @@ window.addEventListener('unhandledrejection', function(e) {
         </svg>
         <input id="fmapDestInp" class="inp"
           style="flex:1;border:none;background:transparent;padding:0;font-size:15px;font-weight:600;color:var(--text);min-width:0;"
-          placeholder="도착지 검색..." autocomplete="off"
+          placeholder="도착지 검색" autocomplete="off"
           oninput="fmapSearch(this,'dest')" onfocus="fmapSearch(this,'dest')">
         <button onclick="fmapDoRoute()"
           style="background:var(--gold);color:#121214;border:none;padding:8px 16px;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0;" id="fmapRouteBtn">경로 탐색</button>
@@ -3179,10 +3173,7 @@ window.addEventListener('unhandledrejection', function(e) {
           <button onclick="closeTransitDetail()" style="background:rgba(255,255,255,.1);border:none;border-radius:50%;width:28px;height:28px;color:#fff;font-size:15px;cursor:pointer;">×</button>
         </div>
       </div>
-      <!-- 카카오맵 인앱 WebView -->
-      <div style="padding:0 12px 10px;flex-shrink:0;">
-        <iframe id="transitDetailMapImg" src="" style="width:100%;height:200px;border:none;border-radius:12px;display:block;background:#2c2c2e;" scrolling="no"></iframe>
-      </div>
+
       <!-- 구간 목록 스크롤 -->
       <div id="transitDetailSections" style="flex:1;overflow-y:auto;padding:0 0 20px;"></div>
       <!-- 외부 지도 버튼 -->
@@ -3500,29 +3491,25 @@ window.addEventListener('unhandledrejection', function(e) {
       </div>
       <button onclick="closeWalkModal()" style="background:rgba(255,255,255,.1);border:none;border-radius:50%;width:30px;height:30px;color:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;">×</button>
     </div>
-    <!-- 스크롤 영역 -->
-    <div style="flex:1;overflow-y:auto;padding:0 12px;">
-      <!-- 카카오맵 인앱 WebView -->
-      <div style="position:relative;border-radius:12px;overflow:hidden;margin-bottom:10px;">
-        <iframe id="walkMapFrame" src="" style="width:100%;height:220px;border:none;border-radius:12px;display:block;background:#2c2c2e;" scrolling="no"></iframe>
-        <div id="walkMapRefresh" style="position:absolute;bottom:6px;right:8px;background:rgba(0,0,0,.6);color:#fff;font-size:10px;padding:2px 6px;border-radius:6px;pointer-events:none;"></div>
-      </div>
+    <!-- 거리/시간 + 지도 버튼 -->
+    <div style="padding:4px 12px 24px;">
       <!-- 거리/시간 -->
-      <div style="display:flex;gap:8px;margin-bottom:12px;">
-        <div style="flex:1;background:#2c2c2e;border-radius:10px;padding:10px;text-align:center;">
-          <div style="font-size:10px;color:var(--sub);margin-bottom:2px;">직선거리</div>
-          <div id="walkDistVal" style="font-size:16px;font-weight:700;color:#fff;">-</div>
+      <div style="display:flex;gap:8px;margin-bottom:14px;">
+        <div style="flex:1;background:#2c2c2e;border-radius:10px;padding:12px;text-align:center;">
+          <div style="font-size:10px;color:var(--sub);margin-bottom:3px;">직선거리</div>
+          <div id="walkDistVal" style="font-size:18px;font-weight:700;color:#fff;">-</div>
         </div>
-        <div style="flex:1;background:#2c2c2e;border-radius:10px;padding:10px;text-align:center;">
-          <div style="font-size:10px;color:var(--sub);margin-bottom:2px;">도보 예상</div>
-          <div id="walkTimeVal" style="font-size:16px;font-weight:700;color:var(--green);">-</div>
+        <div style="flex:1;background:#2c2c2e;border-radius:10px;padding:12px;text-align:center;">
+          <div style="font-size:10px;color:var(--sub);margin-bottom:3px;">도보 예상</div>
+          <div id="walkTimeVal" style="font-size:18px;font-weight:700;color:var(--green);">-</div>
         </div>
       </div>
-    </div>
-    <!-- 버튼 (항상 하단 고정) -->
-    <div style="display:flex;gap:8px;padding:10px 12px 24px;flex-shrink:0;border-top:1px solid #2c2c2e;">
-      <button onclick="openKakaoNav()" style="flex:1;padding:13px;border:none;border-radius:12px;background:#FEE500;color:#3A1D1D;font-size:13px;font-weight:700;cursor:pointer;">🗺️ 카카오맵 길안내</button>
-      <button onclick="openNaverNav()" style="flex:1;padding:13px;border:none;border-radius:12px;background:#03C75A;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">🗺️ 네이버지도 길안내</button>
+      <!-- 지도 앱 버튼 -->
+      <div style="display:flex;gap:8px;">
+        <button onclick="openKakaoNav()" style="flex:1;padding:14px;border:none;border-radius:14px;background:#FEE500;color:#3A1D1D;font-size:14px;font-weight:700;cursor:pointer;">🗺️ 카카오맵</button>
+        <button onclick="openNaverNav()" style="flex:1;padding:14px;border:none;border-radius:14px;background:#03C75A;color:#fff;font-size:14px;font-weight:700;cursor:pointer;">🗺️ 네이버지도</button>
+      </div>
+      <div id="walkMapRefresh" style="text-align:center;font-size:10px;color:var(--sub);margin-top:8px;"></div>
     </div>
   </div>
 </div>
@@ -12749,6 +12736,9 @@ function _startBgGeolocation(){
           console.log('[BG-GPS] 역 갱신:', n.name);
         }
       }
+
+      // ── 경로 중 역/정류장 300m 진입 → 앱으로 돌아오도록 알림 ──
+      _checkRouteProximityAlert(filtered.lat, filtered.lng);
     }).then(function(watchId){
       _bgGeoActive = true;
       S._bgWatchId = watchId;
@@ -12758,6 +12748,80 @@ function _startBgGeolocation(){
     });
   } catch(e){ console.warn('[BG-GPS] 예외:', e); }
 }
+
+/* ── 경로 중 역/정류장 근처 도달 → 앱 복귀 알림 ──────────────
+   - 경로 상의 다음 역/정류장 300m 이내 진입 시 시스템 알림 발송
+   - 알림 탭하면 앱이 포그라운드로 복귀
+   - 같은 역 중복 알림 방지 (_proximityFired 세트)
+*/
+var _proximityFired = new Set();
+
+function _checkRouteProximityAlert(lat, lng) {
+  if(!S.route || !S.route.path || !S.route.path.length) return;
+  if(!S.boarded) return;
+
+  // 현재 인덱스 이후 앞으로 3개 역만 체크 (배터리 절약)
+  var path     = S.route.path;
+  var startIdx = Math.max(0, S.curIdx);
+  var endIdx   = Math.min(path.length - 1, startIdx + 3);
+
+  for(var i = startIdx; i <= endIdx; i++) {
+    var stnName = path[i];
+    if(_proximityFired.has(stnName)) continue;
+
+    var stn = STNDB.find(function(s){ return s.name === stnName; });
+    if(!stn || !stn.lat) continue;
+
+    var dist = haversineM(lat, lng, stn.lat, stn.lng);
+    if(dist <= 300) {
+      _proximityFired.add(stnName);
+
+      var isDestination = (i === path.length - 1);
+      var isTransfer    = S.route.transfers && S.route.transfers.indexOf(stnName) >= 0;
+
+      var title, body;
+      if(isDestination) {
+        title = '🎯 목적지 근처 도착!';
+        body  = stnName + ' 300m 이내입니다. 앱을 확인하세요.';
+      } else if(isTransfer) {
+        title = '🔄 환승역 근처!';
+        body  = stnName + ' 환승 준비하세요. (300m 이내)';
+      } else {
+        title = '🚉 ' + stnName + ' 근처';
+        body  = '300m 이내 진입. 탑승 준비하세요!';
+      }
+
+      // 시스템 알림 발송 (탭하면 앱 포그라운드로)
+      try {
+        var LN = window.Capacitor &&
+                 window.Capacitor.Plugins &&
+                 window.Capacitor.Plugins.LocalNotifications;
+        if(LN) {
+          LN.schedule({ notifications:[{
+            id:        9000 + i,
+            title:     title,
+            body:      body,
+            smallIcon: 'ic_stat_subway',
+            channelId: 'subway_alerts',
+            extra:     { type: 'proximity', station: stnName },
+            // Android: 탭하면 앱 포그라운드로 복귀
+            actionTypeId: 'OPEN_APP'
+          }]});
+          if('vibrate' in navigator) navigator.vibrate([200, 100, 200]);
+          console.log('[PROX] 알림 발송:', stnName, Math.round(dist) + 'm');
+        }
+      } catch(e) { console.warn('[PROX] 알림 오류:', e); }
+    }
+  }
+}
+
+/* 경로 재설정 시 근접 알림 기록 초기화 */
+function _resetProximityFired() {
+  _proximityFired.clear();
+}
+
+window._checkRouteProximityAlert = _checkRouteProximityAlert;
+window._resetProximityFired      = _resetProximityFired;
 
 /* BackgroundGeolocation 중지 */
 function _stopBgGeolocation(){
@@ -13755,36 +13819,21 @@ function _walkRefresh() {
   }, { timeout: 8000, maximumAge: 20000 });
 }
 
-/* ── 카카오맵 인앱 WebView 지도 업데이트 ── */
+/* ── 도보 안내 모달 정보 업데이트 (지도 이미지 없음) ── */
 function _walkUpdateMap() {
   var myLat = _walkState.myLat, myLng = _walkState.myLng;
   var dLat  = _walkState.destLat, dLng = _walkState.destLng;
   if(!myLat || !myLng) return;
 
-  var frame  = document.getElementById('walkMapFrame');
   var refEl  = document.getElementById('walkMapRefresh');
   var distEl = document.getElementById('walkDistVal');
   var timeEl = document.getElementById('walkTimeVal');
 
-  // 직선거리 계산
   var dist    = haversineM(myLat, myLng, dLat || myLat, dLng || myLng);
   var walkMin = Math.round(dist / 67);
   if(distEl) distEl.textContent = dist < 1000 ? Math.round(dist) + 'm' : (dist/1000).toFixed(1) + 'km';
   if(timeEl) timeEl.textContent = dLat ? (walkMin < 1 ? '1분 미만' : walkMin + '분') : '-';
-
-  // 카카오맵 웹 URL (인앱 iframe)
-  var mapUrl;
-  if(dLat && dLng) {
-    // 출발지 → 목적지 도보경로 뷰
-    mapUrl = 'https://map.kakao.com/link/from/내위치,' + myLat + ',' + myLng
-      + '/to/' + encodeURIComponent(_walkState.destName || '목적지') + ',' + dLat + ',' + dLng;
-  } else {
-    // 현재위치만 표시
-    mapUrl = 'https://map.kakao.com/?map_type=TYPE_MAP&from=' + myLng + ',' + myLat + '&zoom=3';
-  }
-
-  if(frame) frame.src = mapUrl;
-  if(refEl) refEl.textContent = '📍 ' + new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}) + ' 갱신';
+  if(refEl)  refEl.textContent  = '📍 ' + new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}) + ' 기준';
 }
 
 /* ── 카카오맵 길안내 딥링크 ── */
@@ -15431,7 +15480,7 @@ function checkArrivalAlerts(idx){
 }
 
 // 경로 재설정 시 알림 중복 방지 초기화
-function _resetAlertFired(){ _alertFired = {}; _walkAutoFired = {}; }
+function _resetAlertFired(){ _alertFired = {}; _walkAutoFired = {}; if(typeof _resetProximityFired==='function') _resetProximityFired(); }
 
 /* 시간 기반 핀 애니메이션 (시각 이동 전용)
    구간 시간 만료 시 → advanceToNextStation 호출 */
