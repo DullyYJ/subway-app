@@ -1308,23 +1308,24 @@ function _fetchNearStops(lat, lng, callback) {
   }
 
   function _tryKakao() {
-    // 2차: 카카오 로컬 API로 주변 버스정류장 검색
-    var kakaoUrl = 'https://dapi.kakao.com/v2/local/search/keyword.json'
-      + '?query=버스정류장&x=' + lng + '&y=' + lat + '&radius=500&size=10&category_group_code=BK9';
-    // BK9=은행이 아니라 버스정류장용 다른 방법: keyword로 검색
-    var kakaoUrl2 = 'https://dapi.kakao.com/v2/local/search/category.json'
-      + '?category_group_code=SW8&x=' + lng + '&y=' + lat + '&radius=500&size=10';
-    // SW8 = 지하철역, CT1 = 문화시설... 버스정류장 카테고리 코드 없음
-    // → keyword 검색 사용
-    fetch('https://dapi.kakao.com/v2/local/search/keyword.json?query=버스정류장&x=' + lng + '&y=' + lat + '&radius=500&size=15', {
+    // 2차: 카카오 좌표→주소 변환 후 주소 기반 버스정류장 검색
+    // 방법: 반경 1km로 넓히고 "정류장" 키워드 사용
+    var searchUrl = 'https://dapi.kakao.com/v2/local/search/keyword.json'
+      + '?query=정류장&x=' + lng + '&y=' + lat
+      + '&radius=1000&size=15&sort=distance';
+
+    fetch(searchUrl, {
       headers: { 'Authorization': 'KakaoAK ' + _KAKAO_REST_KEY }
     })
     .then(function(r){ return r.json(); })
     .then(function(data){
-      var docs = (data.documents || []).filter(function(d){
-        return d.category_name && d.category_name.indexOf('버스') >= 0;
+      var docs = data.documents || [];
+      // "버스" 또는 "정류장" 포함된 것만 필터
+      var filtered = docs.filter(function(d){
+        var nm = (d.place_name || '') + (d.category_name || '');
+        return nm.indexOf('정류장') >= 0 || nm.indexOf('버스') >= 0 || nm.indexOf('승강장') >= 0;
       });
-      var stops = docs.map(function(d){
+      var stops = filtered.map(function(d){
         return {
           nodenm: d.place_name,
           nodeid: d.id,
@@ -1335,7 +1336,28 @@ function _fetchNearStops(lat, lng, callback) {
         };
       });
       toast('🚌카카오 stops=' + stops.length);
-      callback(null, stops);
+      if(stops.length > 0) {
+        callback(null, stops);
+      } else {
+        // 3차: "버스" 키워드로 재시도
+        fetch('https://dapi.kakao.com/v2/local/search/keyword.json?query=버스&x=' + lng + '&y=' + lat + '&radius=1000&size=15&sort=distance', {
+          headers: { 'Authorization': 'KakaoAK ' + _KAKAO_REST_KEY }
+        })
+        .then(function(r2){ return r2.json(); })
+        .then(function(data2){
+          var docs2 = (data2.documents || []).filter(function(d){
+            var nm = (d.place_name||'') + (d.category_name||'');
+            return nm.indexOf('정류장') >= 0 || nm.indexOf('승강장') >= 0;
+          });
+          var stops2 = docs2.map(function(d){
+            return { nodenm:d.place_name, nodeid:d.id, citycode:'0',
+              gpslati:parseFloat(d.y), gpslong:parseFloat(d.x), dist:parseFloat(d.distance||0) };
+          });
+          toast('🚌버스 stops=' + stops2.length);
+          callback(null, stops2);
+        })
+        .catch(function(){ callback(null, []); });
+      }
     })
     .catch(function(){ callback(null, []); });
   }
