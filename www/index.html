@@ -2036,15 +2036,65 @@ function fmapDoRoute() {
   if(errBox) errBox.style.display = 'none';
   if(box) box.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
-  _callKakaoWithCache(start, dest, function(err, data, source) {
-    if(loading) loading.style.display = 'none';
-    if(err || !data || data.error) {
-      if(box) box.style.display = 'none';  // 에러 시 박스 아예 숨김
-      return;
-    }
-    _renderTransitResultCard(data, start, dest, source);
-  });
+  // ODsay 직접 호출 (앱 URI로 인증 → Worker IP 우회)
+  var odsayKey = 'TIZm4dwMq1Uw4UgWJhhstA';
+  var odsayUrl = 'https://api.odsay.com/v1/api/searchPubTransPathT'
+    + '?SX=' + start.lng + '&SY=' + start.lat
+    + '&EX=' + dest.lng  + '&EY=' + dest.lat
+    + '&SearchPathType=0&SearchType=0'
+    + '&apiKey=' + encodeURIComponent(odsayKey);
+
+  fetch(odsayUrl)
+    .then(function(r){ return r.json(); })
+    .then(function(odsayData){
+      if(loading) loading.style.display = 'none';
+      if(odsayData.error || !odsayData.result || !odsayData.result.path || !odsayData.result.path.length) {
+        if(box) box.style.display = 'none';
+        toast('경로를 찾을 수 없습니다.');
+        return;
+      }
+      var converted = _convertODsayToRoutes(odsayData);
+      _renderTransitResultCard(converted, start, dest, 'odsay');
+    })
+    .catch(function(e){
+      if(loading) loading.style.display = 'none';
+      if(box) box.style.display = 'none';
+    });
 }
+
+// ODsay 응답 → 렌더링용 routes 형식 변환
+function _convertODsayToRoutes(odsayData) {
+  var paths = (odsayData.result || {}).path || [];
+  var routes = paths.slice(0, 3).map(function(path) {
+    var info = path.info || {};
+    var sections = (path.subPath || []).map(function(sp) {
+      var ttype = sp.trafficType; // 1=지하철, 2=버스, 3=도보
+      var lane  = (sp.lane || [])[0] || {};
+      var stops = (sp.passStopList || {}).stations || [];
+      return {
+        transportation: {
+          type: ttype,
+          name: ttype === 1 ? (lane.name || lane.subwayCode || '') :
+                ttype === 2 ? (lane.busNo || lane.busID || '') : '도보'
+        },
+        duration: (sp.sectionTime || 0) * 60,
+        distance: sp.distance || 0,
+        passStopList: stops.length ? {
+          stationList: stops.map(function(s){ return { stationName: s.stationName }; })
+        } : null
+      };
+    });
+    return {
+      summary: {
+        duration: (info.totalTime || 0) * 60,
+        distance: info.totalDistance || 0
+      },
+      sections: sections
+    };
+  });
+  return { routes: routes };
+}
+window._convertODsayToRoutes = _convertODsayToRoutes;
 
 // ══════════════════════════════════════════════════════════
 // 복합경로 결과 렌더링 (가로 타임라인 + 세부팝업)
