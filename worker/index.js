@@ -477,7 +477,7 @@ const NAVER_SEC  = 'RmqMQ8whot';
 // API 일일 사용량 한도
 const API_LIMITS = {
   kakao:  100000,
-  odsay:  1000,
+  odsay:  5000,
   naver:  25000,
 };
 
@@ -517,7 +517,7 @@ async function incrementApiUsage(env, apiName) {
 async function canUseApi(env, apiName) {
   const usage = await getApiUsage(env, apiName);
   const limit = API_LIMITS[apiName] || 999999;
-  return usage < limit * 0.95; // 95% 도달 시 전환
+  return usage < limit * 0.99; // 99% 도달 시 전환
 }
 
 // ── ODsay 대중교통 경로 ──────────────────────────────────────
