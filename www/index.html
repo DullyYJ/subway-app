@@ -493,13 +493,13 @@ input[type=time]{color-scheme:dark;}
 
 /* ── 게시글 상세 시트 ── */
 .post-sheet-backdrop{
-  position:absolute;inset:0;
+  position:fixed;inset:0;
   background:rgba(0,0,0,.7);backdrop-filter:blur(6px);
   opacity:0;pointer-events:none;transition:opacity .3s;z-index:800;
 }
 .post-sheet-backdrop.on{opacity:1;pointer-events:auto;}
 .post-sheet{
-  position:absolute;bottom:0;left:0;width:100%;
+  position:fixed;bottom:0;left:0;width:100%;
   background:var(--card);
   border-radius:22px 22px 0 0;
   border-top:1px solid var(--border2);
@@ -2027,9 +2027,16 @@ function fmapDoRoute() {
   _callKakaoWithCache(start, dest, function(err, data, source) {
     if(loading) loading.style.display = 'none';
     if(err || !data) {
-      if(errBox) { errBox.style.display = 'block'; errBox.textContent = '😢 경로를 찾을 수 없습니다. 잠시 후 다시 시도해주세요.'; }
-      toast('경로 탐색 실패');
+      var errMsg = err ? err.message : '경로 없음';
+      if(errBox) { errBox.style.display = 'block'; errBox.textContent = '😢 경로를 찾을 수 없습니다. (' + errMsg + ')'; }
+      toast('경로 탐색 실패: ' + errMsg);
       return;
+    }
+    // 응답 데이터 구조 디버그
+    var routes = data.routes || data.result || data.path || [];
+    if(!routes.length) {
+      // 원시 응답 확인용
+      toast('⚠️ 응답: ' + JSON.stringify(data).slice(0,80));
     }
     _renderTransitResultCard(data, start, dest, source);
   });
