@@ -604,22 +604,26 @@ async function searchNaverPlace(query) {
 
 // ── 멀티 API 폴백 경로 탐색 ─────────────────────────────────
 async function callTransitWithFallback(env, slat, slng, elat, elng, sname, ename) {
-  // 1순위: 카카오 (한도 체크 없이 무조건 시도)
+  // 1순위: ODsay (대중교통 전문 API)
   try {
-    const data = await callKakaoTransit(slat, slng, elat, elng);
-    try { await incrementApiUsage(env, 'kakao'); } catch(e) {}
-    return { data, source: 'kakao' };
-  } catch(e) {
-    console.warn('[폴백] 카카오 실패:', e.message);
-  }
-
-  // 2순위: ODsay
-  try {
+    console.log('[경로] ODsay 호출:', slat, slng, '->', elat, elng);
     const data = await callODsayTransit(slat, slng, elat, elng);
+    console.log('[경로] ODsay 성공, routes:', data?.routes?.length);
     try { await incrementApiUsage(env, 'odsay'); } catch(e) {}
     return { data, source: 'odsay' };
   } catch(e) {
-    console.warn('[폴백] ODsay 실패:', e.message);
+    console.warn('[경로] ODsay 실패:', e.message);
+  }
+
+  // 2순위: 카카오 모빌리티 (자동차 경로지만 폴백)
+  try {
+    console.log('[경로] 카카오 호출');
+    const data = await callKakaoTransit(slat, slng, elat, elng);
+    console.log('[경로] 카카오 성공');
+    try { await incrementApiUsage(env, 'kakao'); } catch(e) {}
+    return { data, source: 'kakao' };
+  } catch(e) {
+    console.warn('[경로] 카카오 실패:', e.message);
   }
 
   return { data: null, source: 'none' };
