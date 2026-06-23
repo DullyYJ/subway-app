@@ -10194,13 +10194,8 @@ function triggerGPS(){
 
         _gpsNearCandidates = combined;
 
-        // 항상 목록 모달로 표시 (역+버스 통합 선택)
-        // 단, 목록이 1개뿐이면 단일 모달
-        if(combined.length === 1) {
-          _showGpsSingleModal2(combined[0], lat, lng, acc);
-        } else {
-          _showGpsMultiModal2(combined, lat, lng);
-        }
+        // 버스 포함 여부와 관계없이 항상 목록 모달
+        _showGpsMultiModal2(combined, lat, lng);
         startWatch();
       });
     },
@@ -10322,10 +10317,12 @@ function _showGpsMultiModal2(combined, lat, lng) {
   var gmBtns  = document.querySelector('#gpsModal .gm-btns');
 
   if(gmIcon)  gmIcon.textContent  = '📡';
-  if(gmTitle) gmTitle.textContent = '주변 역/정류장 선택';
+  if(gmTitle) gmTitle.textContent = combined.length === 1 ? '가장 가까운 역/정류장' : '주변 역/정류장 선택';
 
   var list = combined.slice(0, 7);
-  var html = '<div style="font-size:11px;color:var(--sub);margin-bottom:8px;">출발지로 설정할 곳을 선택하세요</div>';
+  var html = '<div style="font-size:11px;color:var(--sub);margin-bottom:8px;">'
+    + (combined.length === 1 ? '출발지로 설정하시겠습니까?' : '출발지로 설정할 곳을 선택하세요')
+    + '</div>';
   html += '<div style="display:flex;flex-direction:column;gap:7px;">';
 
   list.forEach(function(s, i) {
