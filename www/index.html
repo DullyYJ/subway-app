@@ -13921,8 +13921,8 @@ function _updateMyLocLabel() {
 (function(){
   var _origSwitchTab = window.switchTab;
   if(typeof _origSwitchTab === 'function') {
-    window.switchTab = function(tab) {
-      _origSwitchTab(tab);
+    window.switchTab = function(tab, el) {
+      _origSwitchTab(tab, el);
       if(tab === 'home') setTimeout(_updateMyLocLabel, 500);
     };
   }
