@@ -2027,16 +2027,8 @@ function fmapDoRoute() {
   _callKakaoWithCache(start, dest, function(err, data, source) {
     if(loading) loading.style.display = 'none';
     if(err || !data) {
-      var errMsg = err ? err.message : '경로 없음';
-      if(errBox) { errBox.style.display = 'block'; errBox.textContent = '😢 경로를 찾을 수 없습니다. (' + errMsg + ')'; }
-      toast('경로 탐색 실패: ' + errMsg);
+      if(errBox) { errBox.style.display = 'block'; errBox.textContent = '😢 경로를 찾을 수 없습니다. 잠시 후 다시 시도해주세요.'; }
       return;
-    }
-    // 응답 데이터 구조 디버그
-    var routes = data.routes || data.result || data.path || [];
-    if(!routes.length) {
-      // 원시 응답 확인용
-      toast('⚠️ 응답: ' + JSON.stringify(data).slice(0,80));
     }
     _renderTransitResultCard(data, start, dest, source);
   });
