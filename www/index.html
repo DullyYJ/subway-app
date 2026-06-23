@@ -2000,10 +2000,12 @@ function fmapDoRoute() {
   var start = _fmapStart, dest = _fmapDest;
 
   // 디버그
-  toast('출발:' + start.name + '(' + start.type + ')lat=' + start.lat + ' 도착:' + dest.name + '(' + dest.type + ')lat=' + dest.lat);
+  console.warn('[경로DEBUG] 출발:' + start.name + '(' + start.type + ')lat=' + start.lat + ',lng=' + start.lng + ' | 도착:' + dest.name + '(' + dest.type + ')lat=' + dest.lat + ',lng=' + dest.lng);
+  toast('출발:' + start.name + '(' + start.type + ')' + (start.lat||'좌표없음'));
 
   // ── 하이브리드 판단 ──────────────────────────────────────
   var useKakao = _needKakao(start, dest);
+  console.warn('[경로DEBUG] useKakao=' + useKakao);
 
   if(!useKakao) {
     // ① 지하철 BFS (같은 도시, 둘 다 역)
@@ -2054,7 +2056,8 @@ function fmapDoRoute() {
       if(loading) loading.style.display = 'none';
       if(odsayData.error || !odsayData.result || !odsayData.result.path || !odsayData.result.path.length) {
         if(box) box.style.display = 'none';
-        toast('경로를 찾을 수 없습니다.');
+        var errMsg = odsayData.error ? JSON.stringify(odsayData.error).slice(0,60) : '경로없음';
+        toast('ODsay실패:' + errMsg);
         return;
       }
       var converted = _convertODsayToRoutes(odsayData);
