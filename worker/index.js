@@ -1089,6 +1089,44 @@ export default {
         }
       }
 
+      // ── 주변 버스정류장 D1 조회 ──────────────────────────────
+      // GET /bus-stops?lat=37.58&lng=126.70&radius=1000
+      if (path === '/bus-stops' && method === 'GET') {
+        const lat    = parseFloat(url.searchParams.get('lat') || '0');
+        const lng    = parseFloat(url.searchParams.get('lng') || '0');
+        const radius = parseFloat(url.searchParams.get('radius') || '500'); // 미터
+
+        if (!lat || !lng) return json({ error: 'lat/lng 파라미터 필요' }, 400);
+
+        // 위경도 범위 계산 (1도 ≈ 111km)
+        const latDelta = radius / 111000;
+        const lngDelta = radius / (111000 * Math.cos(lat * Math.PI / 180));
+
+        try {
+          const rows = await env.DB.prepare(
+            `SELECT node_id, node_nm, lat, lng, city_code,
+                    ((lat - ?) * (lat - ?) + (lng - ?) * (lng - ?)) AS dist_sq
+             FROM bus_stops
+             WHERE lat BETWEEN ? AND ? AND lng BETWEEN ? AND ?
+             ORDER BY dist_sq ASC
+             LIMIT 10`
+          ).bind(lat, lat, lng, lng,
+                 lat - latDelta, lat + latDelta,
+                 lng - lngDelta, lng + lngDelta)
+           .all();
+
+          return new Response(JSON.stringify({ stops: rows.results || [] }), {
+            headers: {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*',
+              'Cache-Control': 'public, max-age=60'
+            }
+          });
+        } catch(e) {
+          return json({ error: 'DB 오류: ' + e.message }, 500);
+        }
+      }
+
       return json({ error: 'Not found' }, 404);
 
     } catch (e) {
