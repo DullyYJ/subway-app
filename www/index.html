@@ -1578,85 +1578,8 @@ function _updateRouteBtn() {
 
 // ── GPS로 주변 역/정류장 검색 ─────────────────────────────────
 function fmapGpsLocate() {
-  // triggerGPS(gpsModal 팝업) 우선 호출
   if(typeof triggerGPS === 'function') { triggerGPS(); return; }
-
-  var btn  = document.getElementById('homeGpsBtn');
-  var box  = document.getElementById('fmapStartSug');
-  if(btn)  btn.textContent = '📍 검색 중...';
-  if(box)  { box.style.display = 'block'; box.innerHTML = '<div style="padding:10px;color:var(--sub);font-size:13px;">주변 검색 중...</div>'; }
-
-  if(!navigator.geolocation) {
-    toast('GPS를 지원하지 않는 기기입니다.');
-    if(btn) btn.textContent = '위치 감지';
-    return;
-  }
-
-  navigator.geolocation.getCurrentPosition(function(pos) {
-    var lat = pos.coords.latitude;
-    var lng = pos.coords.longitude;
-    if(btn) btn.textContent = '위치 감지';
-    // 역지오코딩으로 현재위치 주소 가져오기
-    fetch('https://dapi.kakao.com/v2/local/geo/coord2regioncode.json?x=' + lng + '&y=' + lat, {
-      headers: { 'Authorization': 'KakaoAK ' + _KAKAO_REST_KEY }
-    })
-    .then(function(r){ return r.json(); })
-    .then(function(d){
-      var addr = (d.documents && d.documents[1]) ? d.documents[1] : null;
-      var addrName = addr
-        ? ((addr.region_2depth_name||'') + ' ' + (addr.region_3depth_name||'')).trim()
-        : '현재 위치';
-      // "현재위치" 항목을 목록 맨 위에 추가
-      if(box) {
-        var cur = document.createElement('div');
-        cur.className = 'sug-item';
-        cur.style.cssText = 'border-bottom:1px solid var(--border2);';
-        cur.innerHTML =
-          '<span style="font-size:16px;flex-shrink:0;">📍</span>' +
-          '<div style="flex:1;">' +
-            '<div style="font-size:13px;font-weight:700;color:#0a84ff;">현재 위치 사용</div>' +
-            '<div style="font-size:11px;color:var(--sub);">' + addrName + '</div>' +
-          '</div>';
-        cur.onmousedown = cur.ontouchend = function(e) {
-          e.preventDefault();
-          var inp = document.getElementById('fmapStartInp');
-          if(inp) inp.value = '📍 ' + addrName;
-          if(box) box.style.display = 'none';
-          _fmapSetLocation('start', {
-            type: 'gps', name: '📍 ' + addrName,
-            lat: lat, lng: lng
-          });
-        };
-        // 목록 맨 위에 삽입
-        if(box.firstChild) box.insertBefore(cur, box.firstChild);
-        else box.appendChild(cur);
-      }
-    })
-    .catch(function(){
-      // 역지오코딩 실패해도 GPS 좌표로 출발지 설정 가능하게
-      if(box) {
-        var cur2 = document.createElement('div');
-        cur2.className = 'sug-item';
-        cur2.innerHTML =
-          '<span style="font-size:16px;">📍</span>' +
-          '<div style="flex:1;"><div style="font-size:13px;font-weight:700;color:#0a84ff;">현재 위치 사용</div></div>';
-        cur2.onmousedown = cur2.ontouchend = function(e) {
-          e.preventDefault();
-          var inp = document.getElementById('fmapStartInp');
-          if(inp) inp.value = '📍 현재 위치';
-          if(box) box.style.display = 'none';
-          _fmapSetLocation('start', { type:'gps', name:'📍 현재 위치', lat:lat, lng:lng });
-        };
-        if(box.firstChild) box.insertBefore(cur2, box.firstChild);
-        else box.appendChild(cur2);
-      }
-    });
-    _showNearbyLocations(lat, lng, box, 'start');
-  }, function(err) {
-    toast('GPS 오류: ' + (err.message || '위치를 가져올 수 없습니다'));
-    if(btn) btn.textContent = '📍위치 감지';
-    if(box) box.style.display = 'none';
-  }, { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 });
+  toast('GPS 초기화 중... 잠시 후 다시 시도해주세요.');
 }
 window.fmapGpsLocate = fmapGpsLocate;
 
