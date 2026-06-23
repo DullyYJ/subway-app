@@ -539,14 +539,25 @@ async function callODsayTransit(slat, slng, elat, elng) {
   const url = 'https://api.odsay.com/v1/api/searchPubTransPathT' +
     '?SX=' + slng + '&SY=' + slat +
     '&EX=' + elng + '&EY=' + elat +
+    '&SearchPathType=0&SearchType=0' +
     '&apiKey=' + encodeURIComponent(ODSAY_KEY);
 
   const res  = await fetch(url);
   if(!res.ok) throw new Error('ODsay HTTP ' + res.status);
   const data = await res.json();
-  if(data.error) throw new Error('ODsay: ' + data.error.msg);
 
-  // ODsay 결과를 카카오 형식으로 변환
+  // ODsay 에러 응답 처리 (다양한 구조)
+  if(data.error) {
+    const msg = data.error.msg || data.error.message || JSON.stringify(data.error);
+    console.warn('[ODsay] 에러응답:', msg, '| 전체:', JSON.stringify(data).slice(0,200));
+    throw new Error('ODsay: ' + msg);
+  }
+  if(!data.result) {
+    console.warn('[ODsay] result 없음:', JSON.stringify(data).slice(0,200));
+    throw new Error('ODsay: 결과 없음');
+  }
+
+  console.log('[ODsay] 성공, path수:', data.result?.path?.length || 0);
   return convertODsayToKakao(data);
 }
 
@@ -630,6 +641,8 @@ async function callTransitWithFallback(env, slat, slng, elat, elng, sname, ename
 }
 
 // 카카오 대중교통 API 호출 (공통 함수)
+// ※ kakaomobility API는 자동차 경로용 → 대중교통은 ODsay 사용
+// 폴백용으로만 유지하되 실질적으로 ODsay가 주력
 async function callKakaoTransit(slat, slng, elat, elng) {
   const kakaoKey = 'a420cd52d24c6380fb5d1a2287663495';
   const now      = new Date();
