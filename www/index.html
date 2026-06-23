@@ -2063,13 +2063,48 @@ function _renderTransitResultCard(data, start, dest, cacheSource) {
   var errBox = document.getElementById('transitResultErr');
   if(!card) return;
 
-  var routes = data.routes || [];
+  // 카카오/ODsay 다양한 응답 구조 처리
+  var routes = data.routes || data.result?.path || [];
+  // ODsay 구조: data.result.path[]
+  if(!routes.length && data.result && data.result.path) {
+    routes = data.result.path;
+  }
+  // 카카오 구조가 다를 경우
+  if(!routes.length && data.routes) routes = data.routes;
+
   if(!routes.length) {
     if(errBox){ errBox.style.display='block'; errBox.textContent='😢 경로 정보가 없습니다.'; }
+    console.warn('[경로렌더] 데이터:', JSON.stringify(data).slice(0,200));
     return;
   }
 
   var route    = routes[0];
+  console.log('[경로렌더] route keys:', Object.keys(route||{}).join(','));
+
+  // ODsay 구조 변환 (info/subPath → summary/sections)
+  if(route.info && route.subPath) {
+    var info = route.info;
+    route = {
+      summary: {
+        duration: (info.totalTime || 0) * 60,
+        distance: info.totalDistance || 0
+      },
+      sections: (route.subPath || []).map(function(sp) {
+        var ttype = sp.trafficType; // 1=지하철, 2=버스, 3=도보
+        return {
+          transportation: { type: ttype, name: sp.lane ? (sp.lane[0]||{}).name || '' : '' },
+          duration: (sp.sectionTime || 0) * 60,
+          distance: sp.distance || 0,
+          passStopList: sp.passStopList ? {
+            stationList: (sp.passStopList.stations || []).map(function(s){
+              return { stationName: s.stationName };
+            })
+          } : null
+        };
+      })
+    };
+  }
+
   var summary  = route.summary || {};
   var sections = route.sections || [];
   var totalMin = Math.round((summary.duration || 0) / 60);
