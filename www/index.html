@@ -2031,7 +2031,7 @@ function fmapDoRoute() {
   var card = document.getElementById('transitResultCard');
   var errBox = document.getElementById('transitResultErr');
   if(box) box.style.display = 'block';
-  if(loading) loading.style.display = 'block';
+  if(loading) { loading.style.display = 'flex'; }
   if(card) card.style.display = 'none';
   if(errBox) errBox.style.display = 'none';
   if(box) box.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -3102,10 +3102,13 @@ window.addEventListener('unhandledrejection', function(e) {
 
   <!-- ══ 복합경로 결과 (가로 타임라인 스타일) ══ -->
   <div id="transitResultBox" style="display:none;margin-bottom:8px;">
-    <!-- 로딩 -->
-    <div id="transitLoading" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;text-align:center;">
-      <div style="font-size:24px;margin-bottom:6px;">🗺️</div>
-      <div style="font-size:13px;color:var(--sub);">복합경로 탐색 중...</div>
+    <!-- 로딩 (화면 중앙 오버레이) -->
+    <div id="transitLoading" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9000;align-items:center;justify-content:center;flex-direction:column;">
+      <div style="background:var(--card);border-radius:20px;padding:28px 36px;text-align:center;">
+        <div style="font-size:36px;margin-bottom:10px;">🗺️</div>
+        <div style="font-size:14px;font-weight:700;color:var(--text);">복합경로 탐색 중...</div>
+        <div style="font-size:11px;color:var(--sub);margin-top:4px;">잠시만 기다려주세요</div>
+      </div>
     </div>
     <!-- 결과 -->
     <div id="transitResultCard" style="display:none;">
