@@ -1539,8 +1539,11 @@ function _fmapSetLocation(type, loc) {
     }
     console.log('[경로] 도착 설정:', loc);
   }
-  // 출발+도착 모두 설정되면 경로 탐색 버튼 활성화
+  // 출발+도착 모두 설정되면 자동 경로탐색
   _updateRouteBtn();
+  if(_fmapStart && _fmapDest) {
+    setTimeout(function(){ fmapDoRoute(); }, 200);
+  }
 }
 window._fmapSetLocation = _fmapSetLocation;
 
@@ -10286,14 +10289,24 @@ function gpsSelectStation(idx){
       nodeId: s.nodeId, cityCode: s.cityCode || '25',
       lat: s.lat, lng: s.lng
     });
-    toast('✅ ' + s.name + ' 버스정류장 출발지 설정 완료!');
+    toast('✅ ' + s.name + ' 출발지 설정 완료!');
+    // 도착지 입력창으로 포커스
+    setTimeout(function(){
+      var destInp = document.getElementById('fmapDestInp');
+      if(destInp) destInp.focus();
+    }, 300);
   } else {
     // 지하철역 선택
     S.gpsStation = s;
     setStart(s);
     toast('✅ ' + s.name + ' (' + (s.line||'') + ') 출발역 설정 완료!');
+    setTimeout(function(){
+      var destInp = document.getElementById('fmapDestInp');
+      if(destInp) destInp.focus();
+    }, 300);
   }
-  if(S.dest) doRoute();
+  if(_fmapDest) fmapDoRoute();
+  else if(S.dest) doRoute();
 }
 window.gpsSelectStation = gpsSelectStation;
 
@@ -15792,12 +15805,17 @@ function gpsYes(){
     var inp = document.getElementById('fmapStartInp');
     if(inp) inp.value = s.name;
     _fmapSetLocation('start', { type:'bus', name:s.name, nodeId:s.nodeId, cityCode:s.cityCode||'25', lat:s.lat, lng:s.lng });
-    toast('✅ ' + s.name + ' 버스정류장 출발지 설정 완료!');
+    toast('✅ ' + s.name + ' 출발지 설정 완료!');
   } else {
     setStart(s);
     toast('✅ ' + s.name + ' 출발지 설정 완료!');
   }
-  if(S.dest) doRoute();
+  setTimeout(function(){
+    var destInp = document.getElementById('fmapDestInp');
+    if(destInp) destInp.focus();
+  }, 300);
+  if(_fmapDest) fmapDoRoute();
+  else if(S.dest) doRoute();
 }
 function gpsNo(){
   var m=document.getElementById('gpsModal');
@@ -16010,6 +16028,45 @@ function fmapSearch(inp, type) {
         box.appendChild(d);
       });
     });
+  }
+
+  // ③ 카카오 주소/장소 검색 (2글자 이상)
+  if(q.length >= 2) {
+    fetch('https://dapi.kakao.com/v2/local/search/keyword.json?query=' + encodeURIComponent(q) + '&size=5', {
+      headers: { 'Authorization': 'KakaoAK ' + _KAKAO_REST_KEY }
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      var docs = data.documents || [];
+      // 이미 역/버스 결과에 있는 것 제외
+      docs.forEach(function(doc) {
+        var name = doc.place_name || '';
+        var addr = doc.road_address_name || doc.address_name || '';
+        var lat  = parseFloat(doc.y || 0);
+        var lng  = parseFloat(doc.x || 0);
+        if(!lat || !lng) return;
+
+        var d = document.createElement('div');
+        d.className = 'sug-item';
+        d.innerHTML =
+          '<span style="font-size:11px;background:#5e5ce620;color:#5e5ce6;padding:1px 6px;border-radius:8px;margin-right:6px;flex-shrink:0;">📍장소</span>' +
+          '<div style="flex:1;min-width:0;">' +
+            '<div style="font-size:13px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _ltEsc(name) + '</div>' +
+            '<div style="font-size:10px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _ltEsc(addr) + '</div>' +
+          '</div>';
+        d.onmousedown = d.ontouchend = function(e) {
+          e.preventDefault();
+          inp.value = name;
+          box.style.display = 'none';
+          _fmapSetLocation(type, {
+            type: 'address', name: name,
+            lat: lat, lng: lng
+          });
+        };
+        box.appendChild(d);
+      });
+    })
+    .catch(function(){});
   }
 
   if(!stnMatches.length && q.length < 2) {
