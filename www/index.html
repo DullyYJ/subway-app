@@ -2072,8 +2072,8 @@ function switchMapInnerTab(tab) {
     if(bus)    { bus.style.display = 'flex'; bus.style.flexDirection = 'column'; }
     if(stab)   stab.classList.remove('on');
     if(btab)   btab.classList.add('on');
-    // 버스 탭 열릴 때 정류장 로드
-    loadMapBusStops();
+    // 버스 탭 열릴 때 기본: 주변 정류장
+    switchBusView(_busViewMode || 'near');
   }
 }
 window.switchMapInnerTab = switchMapInnerTab;
@@ -2113,26 +2113,106 @@ function loadMapBusStops() {
   }
   if(empty) empty.style.display = 'none';
 
-  listEl.innerHTML = '<div style="padding:10px 12px;font-size:12px;color:var(--sub);">저장된 정류장 ' + _savedBusStops.length + '개 · 30초마다 자동 갱신</div>';
+  listEl.innerHTML = '<div style="padding:10px 12px;font-size:12px;color:var(--sub);">⭐ 즐겨찾기 ' + _savedBusStops.length + '개 · 30초마다 자동 갱신</div>';
 
   _savedBusStops.forEach(function(stop, idx) {
-    var card = document.createElement('div');
-    card.className = 'map-bus-stop-card';
-    card.id = 'mapBusCard_' + idx;
-    card.innerHTML =
-      '<div class="map-bus-stop-name">' +
-        _ltEsc(stop.name || stop.nodenm || '') +
-        '<button onclick="removeMapBusStop(' + idx + ')" style="margin-left:auto;background:none;border:none;color:var(--sub);font-size:20px;cursor:pointer;line-height:1;">×</button>' +
-      '</div>' +
-      (stop.nodeDir || stop.dir ? '<div class="map-bus-stop-sub">' + _ltEsc(stop.nodeDir || stop.dir) + ' 방면</div>' : '') +
-      '<div class="map-bus-row" style="color:var(--sub);font-size:13px;">도착 정보 불러오는 중...</div>';
+    var card = _renderMapBusCard(stop, idx, 'fav');
     listEl.appendChild(card);
-
     // 실시간 도착 정보 로드
-    _loadMapBusArrival(stop, idx);
+    _loadMapBusArrival(stop, 'fav_' + idx);
   });
 }
 window.loadMapBusStops = loadMapBusStops;
+
+// ── 버스 뷰 토글 (주변/즐겨찾기) ──────────────────────────
+var _busViewMode = 'near';  // 'near' | 'fav'
+function switchBusView(mode) {
+  _busViewMode = mode;
+  var tn = document.getElementById('busvTabNear');
+  var tf = document.getElementById('busvTabFav');
+  if(tn) tn.classList.toggle('on', mode === 'near');
+  if(tf) tf.classList.toggle('on', mode === 'fav');
+  if(mode === 'near') loadMapNearStops();
+  else loadMapBusStops();
+}
+window.switchBusView = switchBusView;
+
+function refreshBusView() {
+  if(_busViewMode === 'near') loadMapNearStops(true);
+  else loadMapBusStops();
+}
+window.refreshBusView = refreshBusView;
+
+// ── 주변 정류장 로드 (GPS) — 카카오 스타일 ────────────────
+function loadMapNearStops(force) {
+  var listEl = document.getElementById('mapBusStopList');
+  var empty  = document.getElementById('mapBusEmpty');
+  if(!listEl) return;
+  if(empty) empty.style.display = 'none';
+
+  listEl.innerHTML = '<div class="map-bus-loading"><div class="bus-spinner"></div>주변 정류장 검색 중...</div>';
+
+  if(!navigator.geolocation) {
+    listEl.innerHTML = '<div class="map-bus-empty">📍<br>위치 정보를 사용할 수 없습니다</div>';
+    return;
+  }
+
+  var lat = _busGpsLat || (typeof S !== 'undefined' && S.lastGPSFix && S.lastGPSFix.lat);
+  var lng = _busGpsLng || (typeof S !== 'undefined' && S.lastGPSFix && S.lastGPSFix.lng);
+
+  function go(la, ln) {
+    if(typeof _fetchNearStops !== 'function') {
+      listEl.innerHTML = '<div class="map-bus-empty">😢<br>주변 정류장 기능을 사용할 수 없습니다</div>';
+      return;
+    }
+    _fetchNearStops(la, ln, function(err, stops) {
+      if(err || !stops || !stops.length) {
+        listEl.innerHTML = '<div class="map-bus-empty">😢<br>주변 300m 내<br>버스 정류장이 없습니다</div>';
+        return;
+      }
+      stops.sort(function(a,b){ return (parseInt(a.dist||0)) - (parseInt(b.dist||0)); });
+      var near = stops.slice(0, 6);
+      listEl.innerHTML = '<div style="padding:10px 14px;font-size:12px;color:var(--sub);">📍 주변 정류장 ' + near.length + '개 · 가까운 순</div>';
+      near.forEach(function(stop, idx) {
+        var card = _renderMapBusCard(stop, idx, 'near');
+        listEl.appendChild(card);
+        _loadMapBusArrival({
+          name: stop.nodenm || stop.nodeName,
+          nodeId: stop.nodeid || stop.nodeId,
+          cityCode: stop.citycode || stop.cityCode || '25',
+          nodeDir: stop.nodeDir || stop.dir
+        }, 'near_' + idx);
+      });
+    });
+  }
+
+  if(lat && lng && !force) { go(lat, lng); return; }
+  navigator.geolocation.getCurrentPosition(
+    function(pos){ _busGpsLat = pos.coords.latitude; _busGpsLng = pos.coords.longitude; go(_busGpsLat, _busGpsLng); },
+    function(){ listEl.innerHTML = '<div class="map-bus-empty">📍<br>위치 권한이 필요합니다<br><button class="map-bus-set-btn" onclick="loadMapNearStops(true)">위치 허용하기</button></div>'; },
+    { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 }
+  );
+}
+window.loadMapNearStops = loadMapNearStops;
+
+// 정류장 카드 생성 (카카오 스타일) - near/fav 공용
+function _renderMapBusCard(stop, idx, mode) {
+  var card = document.createElement('div');
+  card.className = 'map-bus-stop-card';
+  card.id = 'mapBusCard_' + mode + '_' + idx;
+  var name = stop.nodenm || stop.nodeName || stop.name || '정류장';
+  var dir  = stop.nodeDir || stop.dir || '';
+  var dist = stop.dist || stop.distance;
+  var rightBtn = (mode === 'fav')
+    ? '<button onclick="removeMapBusStop(' + idx + ')" style="margin-left:auto;background:none;border:none;color:var(--sub);font-size:20px;cursor:pointer;line-height:1;">×</button>'
+    : (dist ? '<span class="map-bus-dist">' + _busDist(dist) + '</span>' : '');
+  card.innerHTML =
+    '<div class="map-bus-stop-name">' + _ltEsc(name) + rightBtn + '</div>' +
+    (dir ? '<div class="map-bus-stop-sub">' + _ltEsc(dir) + ' 방면</div>' : '') +
+    '<div class="map-bus-row" style="color:var(--sub);font-size:13px;">도착 정보 불러오는 중...</div>';
+  return card;
+}
+window._renderMapBusCard = _renderMapBusCard;
 
 // 버스 정류장 삭제
 function removeMapBusStop(idx) {
@@ -2231,7 +2311,8 @@ function _loadMapBusArrival(stop, cardIdx) {
 setInterval(function() {
   var busPanel = document.getElementById('mapBusPanel');
   if(busPanel && busPanel.style.display !== 'none') {
-    loadMapBusStops();
+    if(_busViewMode === 'near') loadMapNearStops();
+    else loadMapBusStops();
   }
 }, 30000);
 
@@ -13836,8 +13917,15 @@ function safeSetItem(key, val){
 
   </div><!-- /mapSubwayPanel -->
 
-  <!-- 버스 패널 -->
+  <!-- 버스 패널 (카카오버스 스타일) -->
   <div id="mapBusPanel" style="display:none;flex:1;min-height:0;flex-direction:column;">
+    <!-- 주변/즐겨찾기 토글 -->
+    <div class="busv-toggle">
+      <button class="busv-tab on" id="busvTabNear" onclick="switchBusView('near')">📍 주변 정류장</button>
+      <button class="busv-tab" id="busvTabFav" onclick="switchBusView('fav')">⭐ 즐겨찾기</button>
+      <button class="busv-refresh" onclick="refreshBusView()" title="새로고침">🔄</button>
+    </div>
+    <!-- 정류장 목록 -->
     <div class="map-bus-panel" id="mapBusStopList">
       <div class="map-bus-empty" id="mapBusEmpty">
         🚌<br>
@@ -20671,11 +20759,20 @@ document.addEventListener('DOMContentLoaded', function() {
   cursor:pointer;text-align:center;border-bottom:2px solid transparent;transition:all .2s;}
 .map-itab.on{color:#fff;border-bottom-color:var(--gold);}
 .map-bus-panel{flex:1;overflow-y:auto;background:var(--bg);-webkit-overflow-scrolling:touch;}
+/* 주변/즐겨찾기 토글 */
+.busv-toggle{display:flex;align-items:center;gap:8px;padding:10px 12px;flex-shrink:0;border-bottom:1px solid var(--border);background:var(--bg);}
+.busv-tab{flex:1;padding:9px;border-radius:12px;border:1px solid var(--border);background:var(--card);
+  color:var(--sub);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .15s;}
+.busv-tab.on{background:#0066FF;border-color:#0066FF;color:#fff;}
+.busv-refresh{flex-shrink:0;width:38px;height:38px;border-radius:12px;border:1px solid var(--border);
+  background:var(--card);font-size:15px;cursor:pointer;}
 .map-bus-stop-card{background:var(--card);border:1px solid var(--border);
   border-radius:18px;margin:12px;overflow:hidden;}
 .map-bus-stop-name{padding:16px 16px 12px;font-size:17px;font-weight:800;color:var(--text);
   display:flex;align-items:center;gap:8px;}
 .map-bus-stop-sub{font-size:12px;color:var(--sub);padding:0 16px 6px;margin-top:-4px;}
+.map-bus-dist{margin-left:auto;font-size:11px;color:var(--sub);background:var(--bg);padding:3px 9px;border-radius:11px;white-space:nowrap;}
+.map-bus-loading{text-align:center;padding:40px;color:var(--sub);}
 .map-bus-row{display:flex;align-items:center;gap:12px;padding:14px 16px;
   border-top:1px solid var(--border);}
 .map-bus-row .bus-num{min-width:48px;font-size:16px;font-weight:800;text-align:left;
