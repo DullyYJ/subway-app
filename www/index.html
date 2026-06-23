@@ -404,7 +404,7 @@ header h1 em{color:var(--gold);font-style:normal;}
   transition:opacity .25s;opacity:0;
 }
 .backdrop.on{display:block;pointer-events:auto;opacity:1;}
-.sheet{position:absolute;bottom:0;left:0;width:100%;background:var(--card);border-top:1px solid var(--border2);border-radius:22px 22px 0 0;padding:18px 16px 28px;transform:translateY(100%);transition:transform .3s cubic-bezier(.25,1,.5,1);z-index:101;display:flex;flex-direction:column;gap:13px;max-height:88vh;overflow-y:auto;}
+.sheet{position:fixed;bottom:0;left:0;width:100%;background:var(--card);border-top:1px solid var(--border2);border-radius:22px 22px 0 0;padding:18px 16px 28px;transform:translateY(100%);transition:transform .3s cubic-bezier(.25,1,.5,1);z-index:1002;display:flex;flex-direction:column;gap:13px;max-height:88vh;overflow-y:auto;}
 .sheet.on{transform:translateY(0);}
 .sheet-handle{width:38px;height:4px;background:var(--border2);border-radius:2px;align-self:center;margin-bottom:2px;}
 .sheet-hdr{display:flex;justify-content:space-between;align-items:center;}
