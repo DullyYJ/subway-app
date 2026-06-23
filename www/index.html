@@ -1289,93 +1289,27 @@ function _busDist(m) {
 
 // ── TAGO API: 주변 정류장 조회 ────────────────────────────────
 function _fetchNearStops(lat, lng, callback) {
-  // 1차: TAGO 버스정류소 좌표기반 조회
-  var tagoUrl = 'https://apis.data.go.kr/1613000/BusSttnInfoInqireService/getCrdntPrxmtSttnList' +
-    '?serviceKey=' + encodeURIComponent(_BUS_TAGO_KEY) +
-    '&gpsLati=' + lat +
-    '&gpsLong=' + lng +
-    '&_type=json';
-  var proxyUrl = _SERVER_URL + '/bus-proxy?url=' + encodeURIComponent(tagoUrl);
+  // D1 데이터베이스 기반 주변 버스정류장 조회 (전국 버스정류장 CSV 적재)
+  var url = _SERVER_URL + '/bus-stops?lat=' + lat + '&lng=' + lng + '&radius=800';
 
-  function _parseTago(data) {
-    try {
-      var body = data.response.body;
-      if(!body || body.totalCount === 0) return [];
-      var item = body.items.item;
-      if(!item) return [];
-      return Array.isArray(item) ? item : [item];
-    } catch(e) { return []; }
-  }
-
-  function _tryKakao() {
-    // 2차: 카카오 좌표→주소 변환 후 주소 기반 버스정류장 검색
-    // 방법: 반경 1km로 넓히고 "정류장" 키워드 사용
-    var searchUrl = 'https://dapi.kakao.com/v2/local/search/keyword.json'
-      + '?query=정류장&x=' + lng + '&y=' + lat
-      + '&radius=1000&size=15&sort=distance';
-
-    fetch(searchUrl, {
-      headers: { 'Authorization': 'KakaoAK ' + _KAKAO_REST_KEY }
-    })
+  fetch(url)
     .then(function(r){ return r.json(); })
     .then(function(data){
-      var docs = data.documents || [];
-      // "버스" 또는 "정류장" 포함된 것만 필터
-      var filtered = docs.filter(function(d){
-        var nm = (d.place_name || '') + (d.category_name || '');
-        return nm.indexOf('정류장') >= 0 || nm.indexOf('버스') >= 0 || nm.indexOf('승강장') >= 0;
-      });
-      var stops = filtered.map(function(d){
+      var stops = (data.stops || []).map(function(s){
         return {
-          nodenm: d.place_name,
-          nodeid: d.id,
-          citycode: '0',
-          gpslati: parseFloat(d.y),
-          gpslong: parseFloat(d.x),
-          dist: parseFloat(d.distance || 0)
+          nodenm:   s.node_nm,
+          nodeid:   s.node_id,
+          citycode: s.city_code || '0',
+          gpslati:  s.lat,
+          gpslong:  s.lng,
+          dist:     haversineM(lat, lng, s.lat, s.lng)
         };
       });
-      toast('🚌카카오 stops=' + stops.length);
-      if(stops.length > 0) {
-        callback(null, stops);
-      } else {
-        // 3차: "버스" 키워드로 재시도
-        fetch('https://dapi.kakao.com/v2/local/search/keyword.json?query=버스&x=' + lng + '&y=' + lat + '&radius=1000&size=15&sort=distance', {
-          headers: { 'Authorization': 'KakaoAK ' + _KAKAO_REST_KEY }
-        })
-        .then(function(r2){ return r2.json(); })
-        .then(function(data2){
-          var docs2 = (data2.documents || []).filter(function(d){
-            var nm = (d.place_name||'') + (d.category_name||'');
-            return nm.indexOf('정류장') >= 0 || nm.indexOf('승강장') >= 0;
-          });
-          var stops2 = docs2.map(function(d){
-            return { nodenm:d.place_name, nodeid:d.id, citycode:'0',
-              gpslati:parseFloat(d.y), gpslong:parseFloat(d.x), dist:parseFloat(d.distance||0) };
-          });
-          toast('🚌버스 stops=' + stops2.length);
-          callback(null, stops2);
-        })
-        .catch(function(){ callback(null, []); });
-      }
+      stops.sort(function(a,b){ return a.dist - b.dist; });
+      callback(null, stops);
     })
-    .catch(function(){ callback(null, []); });
-  }
-
-  fetch(proxyUrl)
-    .then(function(r){ return r.json(); })
-    .then(function(data){
-      var items = _parseTago(data);
-      toast('🚌TAGO stops=' + items.length);
-      if(items.length > 0) {
-        callback(null, items);
-      } else {
-        toast('🚌TAGO 없음→카카오 재시도');
-        _tryKakao();
-      }
-    })
-    .catch(function(){
-      _tryKakao();
+    .catch(function(e){
+      callback(e, []);
     });
 }
 
