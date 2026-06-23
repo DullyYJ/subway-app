@@ -1334,7 +1334,7 @@ function _fetchNearStops(lat, lng, callback) {
           dist: parseFloat(d.distance || 0)
         };
       });
-      console.log('[GPS-BUS-KAKAO] stops=', stops.length);
+      toast('🚌카카오 stops=' + stops.length);
       callback(null, stops);
     })
     .catch(function(){ callback(null, []); });
@@ -1344,12 +1344,11 @@ function _fetchNearStops(lat, lng, callback) {
     .then(function(r){ return r.json(); })
     .then(function(data){
       var items = _parseTago(data);
-      console.log('[GPS-BUS] err= stops=', items.length, JSON.stringify(items[0]||{}));
+      toast('🚌TAGO stops=' + items.length);
       if(items.length > 0) {
         callback(null, items);
       } else {
-        // TAGO 빈 결과 → 카카오로 재시도
-        console.log('[GPS-BUS] TAGO 결과 없음 → 카카오 재시도');
+        toast('🚌TAGO 없음→카카오 재시도');
         _tryKakao();
       }
     })
