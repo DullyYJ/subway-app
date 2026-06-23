@@ -1824,6 +1824,10 @@ function _getMemCache(key) {
   if(Date.now() - c.ts > 30*60*1000) { delete _memRouteCache[key]; return null; }
   return c.data;
 }
+function _clearMemCache(key) {
+  try { delete _memRouteCache[key]; } catch(e) {}
+}
+
 function _setMemCache(key, data) {
   _memRouteCache[key] = { ts: Date.now(), data: data };
   // 메모리 캐시 최대 20개 (오래된 것 삭제)
@@ -1868,9 +1872,13 @@ function _callKakaoWithCache(start, dest, callback) {
   // 1단계: 메모리 캐시
   var mem = _getMemCache(cKey);
   if(mem) {
-    console.log('[경로캐시] 메모리HIT:', start.name, '→', dest.name);
-    callback(null, mem, 'memory');
-    return;
+    // 캐시된 에러 응답은 무시
+    if(mem.error) {
+      _clearMemCache(cKey);
+    } else {
+      callback(null, mem, 'memory');
+      return;
+    }
   }
 
   // 2단계: D1 서버 캐시
@@ -1893,9 +1901,13 @@ function _callKakaoWithCache(start, dest, callback) {
     fetch(apiUrl)
       .then(function(r){ return r.json(); })
       .then(function(data) {
+        // 에러 응답은 캐시하지 않음
+        if(data && data.error) {
+          callback(null, data, 'error');
+          return;
+        }
         // 메모리 캐시 저장
         _setMemCache(cKey, data);
-        // D1 캐시는 Worker가 자동 저장
         callback(null, data, 'api');
       })
       .catch(function(e){ callback(e, null, 'error'); });
@@ -2026,8 +2038,8 @@ function fmapDoRoute() {
 
   _callKakaoWithCache(start, dest, function(err, data, source) {
     if(loading) loading.style.display = 'none';
-    if(err || !data) {
-      if(errBox) { errBox.style.display = 'block'; errBox.textContent = '😢 경로를 찾을 수 없습니다. 잠시 후 다시 시도해주세요.'; }
+    if(err || !data || data.error) {
+      if(box) box.style.display = 'none';  // 에러 시 박스 아예 숨김
       return;
     }
     _renderTransitResultCard(data, start, dest, source);
