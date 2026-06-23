@@ -542,7 +542,12 @@ async function callODsayTransit(slat, slng, elat, elng) {
     '&SearchPathType=0&SearchType=0' +
     '&apiKey=' + encodeURIComponent(ODSAY_KEY);
 
-  const res  = await fetch(url);
+  const res  = await fetch(url, {
+    headers: {
+      'Referer': 'https://gentle-lab-7e47subway-api.phg0643.workers.dev',
+      'Origin':  'https://gentle-lab-7e47subway-api.phg0643.workers.dev',
+    }
+  });
   if(!res.ok) throw new Error('ODsay HTTP ' + res.status);
   const data = await res.json();
 
