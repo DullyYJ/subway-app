@@ -604,36 +604,24 @@ async function searchNaverPlace(query) {
 
 // ── 멀티 API 폴백 경로 탐색 ─────────────────────────────────
 async function callTransitWithFallback(env, slat, slng, elat, elng, sname, ename) {
-  // 1순위: 카카오
-  const kakaoOk = await canUseApi(env, 'kakao');
-  if(kakaoOk) {
-    try {
-      const data = await callKakaoTransit(slat, slng, elat, elng);
-      await incrementApiUsage(env, 'kakao');
-      return { data, source: 'kakao' };
-    } catch(e) {
-      console.warn('[폴백] 카카오 실패:', e.message);
-    }
-  } else {
-    console.log('[폴백] 카카오 한도 95% 도달 → ODsay로 전환');
+  // 1순위: 카카오 (한도 체크 없이 무조건 시도)
+  try {
+    const data = await callKakaoTransit(slat, slng, elat, elng);
+    try { await incrementApiUsage(env, 'kakao'); } catch(e) {}
+    return { data, source: 'kakao' };
+  } catch(e) {
+    console.warn('[폴백] 카카오 실패:', e.message);
   }
 
   // 2순위: ODsay
-  const odsayOk = await canUseApi(env, 'odsay');
-  if(odsayOk) {
-    try {
-      const data = await callODsayTransit(slat, slng, elat, elng);
-      await incrementApiUsage(env, 'odsay');
-      return { data, source: 'odsay' };
-    } catch(e) {
-      console.warn('[폴백] ODsay 실패:', e.message);
-    }
-  } else {
-    console.log('[폴백] ODsay 한도 95% 도달');
+  try {
+    const data = await callODsayTransit(slat, slng, elat, elng);
+    try { await incrementApiUsage(env, 'odsay'); } catch(e) {}
+    return { data, source: 'odsay' };
+  } catch(e) {
+    console.warn('[폴백] ODsay 실패:', e.message);
   }
 
-  // 3순위: 안내 메시지 (네이버는 대중교통 경로 없음)
-  // 네이버로 출발지/도착지 장소 정보는 보완
   return { data: null, source: 'none' };
 }
 
