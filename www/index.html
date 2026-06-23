@@ -1578,6 +1578,9 @@ function _updateRouteBtn() {
 
 // ── GPS로 주변 역/정류장 검색 ─────────────────────────────────
 function fmapGpsLocate() {
+  // triggerGPS(gpsModal 팝업) 우선 호출
+  if(typeof triggerGPS === 'function') { triggerGPS(); return; }
+
   var btn  = document.getElementById('homeGpsBtn');
   var box  = document.getElementById('fmapStartSug');
   if(btn)  btn.textContent = '📍 검색 중...';
@@ -1585,14 +1588,14 @@ function fmapGpsLocate() {
 
   if(!navigator.geolocation) {
     toast('GPS를 지원하지 않는 기기입니다.');
-    if(btn) btn.textContent = '📍위치 감지';
+    if(btn) btn.textContent = '위치 감지';
     return;
   }
 
   navigator.geolocation.getCurrentPosition(function(pos) {
     var lat = pos.coords.latitude;
     var lng = pos.coords.longitude;
-    if(btn) btn.textContent = '📍위치 감지';
+    if(btn) btn.textContent = '위치 감지';
     // 역지오코딩으로 현재위치 주소 가져오기
     fetch('https://dapi.kakao.com/v2/local/geo/coord2regioncode.json?x=' + lng + '&y=' + lat, {
       headers: { 'Authorization': 'KakaoAK ' + _KAKAO_REST_KEY }
