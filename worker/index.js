@@ -486,6 +486,16 @@ async function getApiUsage(env, apiName) {
   const kstDate = new Date(Date.now() + 9*60*60*1000);
   const today   = kstDate.toISOString().slice(0,10);
   try {
+    // 테이블 먼저 생성
+    await env.DB.prepare(`
+      CREATE TABLE IF NOT EXISTS api_usage (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        api_name TEXT NOT NULL,
+        date TEXT NOT NULL,
+        count INTEGER DEFAULT 0,
+        UNIQUE(api_name, date)
+      )
+    `).run();
     const row = await env.DB.prepare(
       'SELECT count FROM api_usage WHERE api_name=? AND date=?'
     ).bind(apiName, today).first();
@@ -515,9 +525,13 @@ async function incrementApiUsage(env, apiName) {
 
 // API 사용 가능 여부 확인
 async function canUseApi(env, apiName) {
-  const usage = await getApiUsage(env, apiName);
-  const limit = API_LIMITS[apiName] || 999999;
-  return usage < limit * 0.99; // 99% 도달 시 전환
+  try {
+    const usage = await getApiUsage(env, apiName);
+    const limit = API_LIMITS[apiName] || 999999;
+    return usage < limit * 0.99; // 99% 도달 시 전환
+  } catch(e) {
+    return true; // 에러(테이블 없음 등)면 사용 가능으로 처리
+  }
 }
 
 // ── ODsay 대중교통 경로 ──────────────────────────────────────
