@@ -1999,6 +1999,9 @@ function fmapDoRoute() {
 
   var start = _fmapStart, dest = _fmapDest;
 
+  // 디버그
+  toast('출발:' + start.name + '(' + start.type + ')lat=' + start.lat + ' 도착:' + dest.name + '(' + dest.type + ')lat=' + dest.lat);
+
   // ── 하이브리드 판단 ──────────────────────────────────────
   var useKakao = _needKakao(start, dest);
 
