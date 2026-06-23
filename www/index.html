@@ -13805,30 +13805,34 @@ function _walkUpdateMap() {
       + '&level=3&w=' + w + '&h=' + h
       + '&markers=' + markers;
   }
-  // Worker 프록시를 통해 호출 (APK WebView file:// → Referer 없어서 직접 호출 실패 방지)
-  var url = _SERVER_URL + '/kakao-staticmap?url=' + encodeURIComponent(kakaoUrl);
+  // 직접 호출 먼저, 실패하면 Worker 프록시로 재시도
+  var url = kakaoUrl;
 
   if(img) {
     img.style.display = 'block';
     if(errEl) errEl.style.display = 'none';
-    // 로드 실패 시 카카오맵 웹 링크 버튼으로 대체
     img.onload = function() {
       img.style.display = 'block';
       if(errEl) errEl.style.display = 'none';
     };
     img.onerror = function() {
-      img.style.display = 'none';
-      if(errEl) {
-        errEl.style.display = 'flex';
-        // 카카오맵 웹으로 열기 버튼 제공
-        var webUrl = dLat && dLng
-          ? 'https://map.kakao.com/link/from/내위치,' + myLat + ',' + myLng + '/to/' + encodeURIComponent(_walkState.destName||'목적지') + ',' + dLat + ',' + dLng
-          : 'https://map.kakao.com/?map_type=TYPE_MAP&from=' + myLng + ',' + myLat;
-        errEl.innerHTML =
-          '<div style="font-size:24px;margin-bottom:6px;">🗺️</div>' +
-          '<div style="font-size:12px;color:var(--sub);margin-bottom:10px;">정적지도 로드 실패</div>' +
-          '<a href="' + webUrl + '" target="_blank" style="background:#FEE500;color:#3A1D1D;font-size:12px;font-weight:700;padding:8px 16px;border-radius:10px;text-decoration:none;">카카오맵에서 보기 →</a>';
-      }
+      // 직접 호출 실패 → Worker 프록시로 재시도
+      var proxyUrl = _SERVER_URL + '/kakao-staticmap?url=' + encodeURIComponent(kakaoUrl);
+      img.onerror = function() {
+        // 프록시도 실패 → 카카오맵 웹 링크 버튼
+        img.style.display = 'none';
+        if(errEl) {
+          errEl.style.display = 'flex';
+          var webUrl = dLat && dLng
+            ? 'https://map.kakao.com/link/from/내위치,' + myLat + ',' + myLng + '/to/' + encodeURIComponent(_walkState.destName||'목적지') + ',' + dLat + ',' + dLng
+            : 'https://map.kakao.com/?map_type=TYPE_MAP&from=' + myLng + ',' + myLat;
+          errEl.innerHTML =
+            '<div style="font-size:24px;margin-bottom:6px;">🗺️</div>' +
+            '<div style="font-size:12px;color:var(--sub);margin-bottom:10px;">정적지도 로드 실패</div>' +
+            '<a href="' + webUrl + '" target="_blank" style="background:#FEE500;color:#3A1D1D;font-size:12px;font-weight:700;padding:8px 16px;border-radius:10px;text-decoration:none;">카카오맵에서 보기 →</a>';
+        }
+      };
+      img.src = proxyUrl;
     };
     img.src = url;
   }
