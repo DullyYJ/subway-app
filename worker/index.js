@@ -1055,6 +1055,40 @@ export default {
         }
       }
 
+      // ── 카카오 정적지도 이미지 프록시 ──────────────────────
+      // APK WebView(file://)에서 직접 호출 시 Referer 없어서 403 발생
+      // Worker가 서버 측에서 호출해서 이미지 바이너리를 그대로 전달
+      if (path === '/kakao-staticmap' && method === 'GET') {
+        const kakaoUrl = url.searchParams.get('url');
+        if (!kakaoUrl) return json({ error: 'url 파라미터 필요' }, 400);
+
+        try {
+          const decoded = decodeURIComponent(kakaoUrl);
+          const res = await fetch(decoded, {
+            headers: {
+              'Referer': 'https://dapi.kakao.com',
+              'User-Agent': 'Mozilla/5.0 (compatible; SubwayApp/1.0)',
+            }
+          });
+
+          if (!res.ok) {
+            return json({ error: '카카오 지도 오류: ' + res.status }, res.status);
+          }
+
+          const contentType = res.headers.get('Content-Type') || 'image/png';
+          return new Response(res.body, {
+            status: 200,
+            headers: {
+              'Content-Type': contentType,
+              'Access-Control-Allow-Origin': '*',
+              'Cache-Control': 'public, max-age=300',  // 5분 캐시
+            }
+          });
+        } catch(e) {
+          return json({ error: '정적지도 프록시 오류: ' + e.message }, 500);
+        }
+      }
+
       return json({ error: 'Not found' }, 404);
 
     } catch (e) {
