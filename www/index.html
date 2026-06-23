@@ -2287,21 +2287,15 @@ function openTransitDetail() {
   // 제목
   if(title) title.textContent = totalMin + '분 · ' + _ltEsc((start||{}).name||'') + ' → ' + _ltEsc((dest||{}).name||'');
 
-  // 정적지도: 출발지+목적지 마커
+  // 카카오맵 인앱 WebView (출발지 → 목적지 도보경로)
   if(mapImg && start && dest && start.lat && dest.lat) {
-    var myLat = start.lat, myLng = start.lng;
-    var dLat  = dest.lat,  dLng  = dest.lng;
-    var cLat  = (myLat+dLat)/2, cLng = (myLng+dLng)/2;
-    var dist  = typeof haversineM==='function' ? haversineM(myLat,myLng,dLat,dLng) : 1000;
-    var lvl   = dist<300?3:dist<700?4:dist<1500?5:dist<3000?6:7;
-    var w     = Math.min(window.innerWidth-24, 492);
-    mapImg.src = 'https://dapi.kakao.com/v2/maps/staticmap?appkey=' + _KAKAO_REST_KEY +
-      '&center=' + cLng + ',' + cLat + '&level=' + lvl + '&w=' + w + '&h=360' +
-      '&markers=type=d,size=medium,pos=' + myLng + '%20' + myLat + '%7Ccolor=red' +
-      '&markers=type=d,size=medium,pos=' + dLng  + '%20' + dLat  + '%7Ccolor=blue';
+    var mapUrl = 'https://map.kakao.com/link/from/'
+      + encodeURIComponent((start.name||'출발지').replace(/📍\s*/,'')) + ',' + start.lat + ',' + start.lng
+      + '/to/' + encodeURIComponent(dest.name||'목적지') + ',' + dest.lat + ',' + dest.lng;
+    mapImg.src = mapUrl;
     mapImg.style.display = 'block';
   } else if(mapImg) {
-    mapImg.style.display = 'none';
+    mapImg.src = '';
   }
 
   // 구간 상세 목록
@@ -3185,9 +3179,9 @@ window.addEventListener('unhandledrejection', function(e) {
           <button onclick="closeTransitDetail()" style="background:rgba(255,255,255,.1);border:none;border-radius:50%;width:28px;height:28px;color:#fff;font-size:15px;cursor:pointer;">×</button>
         </div>
       </div>
-      <!-- 정적 지도 -->
+      <!-- 카카오맵 인앱 WebView -->
       <div style="padding:0 12px 10px;flex-shrink:0;">
-        <img id="transitDetailMapImg" src="" alt="지도" style="width:100%;height:180px;object-fit:cover;border-radius:12px;display:block;" onerror="this.style.display='none'">
+        <iframe id="transitDetailMapImg" src="" style="width:100%;height:200px;border:none;border-radius:12px;display:block;background:#2c2c2e;" scrolling="no"></iframe>
       </div>
       <!-- 구간 목록 스크롤 -->
       <div id="transitDetailSections" style="flex:1;overflow-y:auto;padding:0 0 20px;"></div>
@@ -3508,15 +3502,10 @@ window.addEventListener('unhandledrejection', function(e) {
     </div>
     <!-- 스크롤 영역 -->
     <div style="flex:1;overflow-y:auto;padding:0 12px;">
-      <!-- 정적 지도 이미지 -->
-      <div style="position:relative;background:#2c2c2e;border-radius:12px;overflow:hidden;margin-bottom:10px;">
-        <img id="walkMapImg" src="" alt="지도" style="width:100%;height:180px;object-fit:cover;display:block;"
-          onerror="this.style.display='none';document.getElementById('walkMapErr').style.display='flex'">
-        <div id="walkMapErr" style="display:none;width:100%;height:180px;align-items:center;justify-content:center;flex-direction:column;background:#2c2c2e;color:var(--sub);font-size:13px;">
-          <div style="font-size:28px;margin-bottom:6px;">🗺️</div>
-          지도 로드 실패
-        </div>
-        <div id="walkMapRefresh" style="position:absolute;bottom:6px;right:8px;background:rgba(0,0,0,.6);color:#fff;font-size:10px;padding:2px 6px;border-radius:6px;"></div>
+      <!-- 카카오맵 인앱 WebView -->
+      <div style="position:relative;border-radius:12px;overflow:hidden;margin-bottom:10px;">
+        <iframe id="walkMapFrame" src="" style="width:100%;height:220px;border:none;border-radius:12px;display:block;background:#2c2c2e;" scrolling="no"></iframe>
+        <div id="walkMapRefresh" style="position:absolute;bottom:6px;right:8px;background:rgba(0,0,0,.6);color:#fff;font-size:10px;padding:2px 6px;border-radius:6px;pointer-events:none;"></div>
       </div>
       <!-- 거리/시간 -->
       <div style="display:flex;gap:8px;margin-bottom:12px;">
@@ -13766,76 +13755,35 @@ function _walkRefresh() {
   }, { timeout: 8000, maximumAge: 20000 });
 }
 
-/* ── 정적 지도 이미지 업데이트 ── */
+/* ── 카카오맵 인앱 WebView 지도 업데이트 ── */
 function _walkUpdateMap() {
   var myLat = _walkState.myLat, myLng = _walkState.myLng;
   var dLat  = _walkState.destLat, dLng = _walkState.destLng;
   if(!myLat || !myLng) return;
 
-  var img    = document.getElementById('walkMapImg');
-  var errEl  = document.getElementById('walkMapErr');
+  var frame  = document.getElementById('walkMapFrame');
   var refEl  = document.getElementById('walkMapRefresh');
   var distEl = document.getElementById('walkDistVal');
   var timeEl = document.getElementById('walkTimeVal');
 
   // 직선거리 계산
-  var dist = haversineM(myLat, myLng, dLat || myLat, dLng || myLng);
-  var walkMin = Math.round(dist / 67);  // 도보 약 4km/h = 67m/min
+  var dist    = haversineM(myLat, myLng, dLat || myLat, dLng || myLng);
+  var walkMin = Math.round(dist / 67);
   if(distEl) distEl.textContent = dist < 1000 ? Math.round(dist) + 'm' : (dist/1000).toFixed(1) + 'km';
   if(timeEl) timeEl.textContent = dLat ? (walkMin < 1 ? '1분 미만' : walkMin + '분') : '-';
 
-  // 카카오 정적지도 URL 생성 (Worker 프록시 경유 — APK file:// Referer 문제 우회)
-  var w = Math.min(window.innerWidth - 24, 496);
-  var h = 360;
-  var key = _KAKAO_REST_KEY;
-  var markers = 'type=d,size=medium,pos=' + myLng + '%20' + myLat + '%7Ccolor=red';
-  var kakaoUrl;
+  // 카카오맵 웹 URL (인앱 iframe)
+  var mapUrl;
   if(dLat && dLng) {
-    var cLat = (myLat + dLat) / 2;
-    var cLng = (myLng + dLng) / 2;
-    var lvl = dist < 200 ? 3 : dist < 500 ? 4 : dist < 1000 ? 5 : dist < 2000 ? 6 : 7;
-    markers += '&markers=type=d,size=medium,pos=' + dLng + '%20' + dLat + '%7Ccolor=blue';
-    kakaoUrl = 'https://dapi.kakao.com/v2/maps/staticmap?appkey=' + key
-      + '&center=' + cLng + ',' + cLat
-      + '&level=' + lvl + '&w=' + w + '&h=' + h
-      + '&markers=' + markers;
+    // 출발지 → 목적지 도보경로 뷰
+    mapUrl = 'https://map.kakao.com/link/from/내위치,' + myLat + ',' + myLng
+      + '/to/' + encodeURIComponent(_walkState.destName || '목적지') + ',' + dLat + ',' + dLng;
   } else {
-    kakaoUrl = 'https://dapi.kakao.com/v2/maps/staticmap?appkey=' + key
-      + '&center=' + myLng + ',' + myLat
-      + '&level=3&w=' + w + '&h=' + h
-      + '&markers=' + markers;
+    // 현재위치만 표시
+    mapUrl = 'https://map.kakao.com/?map_type=TYPE_MAP&from=' + myLng + ',' + myLat + '&zoom=3';
   }
-  // 직접 호출 먼저, 실패하면 Worker 프록시로 재시도
-  var url = kakaoUrl;
 
-  if(img) {
-    img.style.display = 'block';
-    if(errEl) errEl.style.display = 'none';
-    img.onload = function() {
-      img.style.display = 'block';
-      if(errEl) errEl.style.display = 'none';
-    };
-    img.onerror = function() {
-      // 직접 호출 실패 → Worker 프록시로 재시도
-      var proxyUrl = _SERVER_URL + '/kakao-staticmap?url=' + encodeURIComponent(kakaoUrl);
-      img.onerror = function() {
-        // 프록시도 실패 → 카카오맵 웹 링크 버튼
-        img.style.display = 'none';
-        if(errEl) {
-          errEl.style.display = 'flex';
-          var webUrl = dLat && dLng
-            ? 'https://map.kakao.com/link/from/내위치,' + myLat + ',' + myLng + '/to/' + encodeURIComponent(_walkState.destName||'목적지') + ',' + dLat + ',' + dLng
-            : 'https://map.kakao.com/?map_type=TYPE_MAP&from=' + myLng + ',' + myLat;
-          errEl.innerHTML =
-            '<div style="font-size:24px;margin-bottom:6px;">🗺️</div>' +
-            '<div style="font-size:12px;color:var(--sub);margin-bottom:10px;">정적지도 로드 실패</div>' +
-            '<a href="' + webUrl + '" target="_blank" style="background:#FEE500;color:#3A1D1D;font-size:12px;font-weight:700;padding:8px 16px;border-radius:10px;text-decoration:none;">카카오맵에서 보기 →</a>';
-        }
-      };
-      img.src = proxyUrl;
-    };
-    img.src = url;
-  }
+  if(frame) frame.src = mapUrl;
   if(refEl) refEl.textContent = '📍 ' + new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}) + ' 갱신';
 }
 
