@@ -1289,39 +1289,72 @@ function _busDist(m) {
 
 // ── TAGO API: 주변 정류장 조회 ────────────────────────────────
 function _fetchNearStops(lat, lng, callback) {
-  // TAGO 버스정류소 좌표기반 조회
-  var url = 'https://apis.data.go.kr/1613000/BusSttnInfoInqireService/getCrdntPrxmtSttnList' +
+  // 1차: TAGO 버스정류소 좌표기반 조회
+  var tagoUrl = 'https://apis.data.go.kr/1613000/BusSttnInfoInqireService/getCrdntPrxmtSttnList' +
     '?serviceKey=' + encodeURIComponent(_BUS_TAGO_KEY) +
     '&gpsLati=' + lat +
     '&gpsLong=' + lng +
     '&_type=json';
+  var proxyUrl = _SERVER_URL + '/bus-proxy?url=' + encodeURIComponent(tagoUrl);
 
-  // Cloudflare Worker 프록시 경유 (CORS 해결)
-  var proxyUrl = _SERVER_URL + '/bus-proxy?url=' + encodeURIComponent(url);
+  function _parseTago(data) {
+    try {
+      var body = data.response.body;
+      if(!body || body.totalCount === 0) return [];
+      var item = body.items.item;
+      if(!item) return [];
+      return Array.isArray(item) ? item : [item];
+    } catch(e) { return []; }
+  }
+
+  function _tryKakao() {
+    // 2차: 카카오 로컬 API로 주변 버스정류장 검색
+    var kakaoUrl = 'https://dapi.kakao.com/v2/local/search/keyword.json'
+      + '?query=버스정류장&x=' + lng + '&y=' + lat + '&radius=500&size=10&category_group_code=BK9';
+    // BK9=은행이 아니라 버스정류장용 다른 방법: keyword로 검색
+    var kakaoUrl2 = 'https://dapi.kakao.com/v2/local/search/category.json'
+      + '?category_group_code=SW8&x=' + lng + '&y=' + lat + '&radius=500&size=10';
+    // SW8 = 지하철역, CT1 = 문화시설... 버스정류장 카테고리 코드 없음
+    // → keyword 검색 사용
+    fetch('https://dapi.kakao.com/v2/local/search/keyword.json?query=버스정류장&x=' + lng + '&y=' + lat + '&radius=500&size=15', {
+      headers: { 'Authorization': 'KakaoAK ' + _KAKAO_REST_KEY }
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      var docs = (data.documents || []).filter(function(d){
+        return d.category_name && d.category_name.indexOf('버스') >= 0;
+      });
+      var stops = docs.map(function(d){
+        return {
+          nodenm: d.place_name,
+          nodeid: d.id,
+          citycode: '0',
+          gpslati: parseFloat(d.y),
+          gpslong: parseFloat(d.x),
+          dist: parseFloat(d.distance || 0)
+        };
+      });
+      console.log('[GPS-BUS-KAKAO] stops=', stops.length);
+      callback(null, stops);
+    })
+    .catch(function(){ callback(null, []); });
+  }
 
   fetch(proxyUrl)
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-      var items = [];
-      try {
-        items = data.response.body.items.item || [];
-        if(!Array.isArray(items)) items = [items];
-      } catch(e) {}
-      callback(null, items);
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      var items = _parseTago(data);
+      console.log('[GPS-BUS] err= stops=', items.length, JSON.stringify(items[0]||{}));
+      if(items.length > 0) {
+        callback(null, items);
+      } else {
+        // TAGO 빈 결과 → 카카오로 재시도
+        console.log('[GPS-BUS] TAGO 결과 없음 → 카카오 재시도');
+        _tryKakao();
+      }
     })
-    .catch(function(e) {
-      // 직접 호출 폴백
-      fetch(url)
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-          var items = [];
-          try {
-            items = data.response.body.items.item || [];
-            if(!Array.isArray(items)) items = [items];
-          } catch(e) {}
-          callback(null, items);
-        })
-        .catch(function(e2) { callback(e2, []); });
+    .catch(function(){
+      _tryKakao();
     });
 }
 
