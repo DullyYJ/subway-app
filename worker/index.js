@@ -1151,6 +1151,38 @@ export default {
         }
       }
 
+      // ── ODsay 대중교통 경로 프록시 ─────────────────────────
+      if (path === '/odsay-transit' && method === 'GET') {
+        const sx = url.searchParams.get('SX');
+        const sy = url.searchParams.get('SY');
+        const ex = url.searchParams.get('EX');
+        const ey = url.searchParams.get('EY');
+        if (!sx || !sy || !ex || !ey) return json({ error: '좌표 파라미터 필요' }, 400);
+
+        const odsayUrl = 'https://api.odsay.com/v1/api/searchPubTransPathT'
+          + '?SX=' + sx + '&SY=' + sy
+          + '&EX=' + ex + '&EY=' + ey
+          + '&SearchPathType=0&SearchType=0'
+          + '&apiKey=' + encodeURIComponent(ODSAY_KEY);
+
+        try {
+          const res = await fetch(odsayUrl, {
+            headers: {
+              'Referer': 'https://gentle-lab-7e47subway-api.phg0643.workers.dev',
+              'Origin':  'https://gentle-lab-7e47subway-api.phg0643.workers.dev',
+              'User-Agent': 'Mozilla/5.0'
+            }
+          });
+          const data = await res.json();
+          console.log('[ODsay프록시] 응답:', JSON.stringify(data).slice(0,100));
+          return new Response(JSON.stringify(data), {
+            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+          });
+        } catch(e) {
+          return json({ error: 'ODsay 프록시 오류: ' + e.message }, 500);
+        }
+      }
+
       return json({ error: 'Not found' }, 404);
 
     } catch (e) {
