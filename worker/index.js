@@ -544,8 +544,8 @@ async function callODsayTransit(slat, slng, elat, elng) {
 
   const res  = await fetch(url, {
     headers: {
-      'Referer': 'https://gentle-lab-7e47subway-api.phg0643.workers.dev',
-      'Origin':  'https://gentle-lab-7e47subway-api.phg0643.workers.dev',
+      'x-odsay-application-package': 'com.dullyyj.subway',
+      'User-Agent': 'Dalvik/2.1.0 (Linux; Android 10)'
     }
   });
   if(!res.ok) throw new Error('ODsay HTTP ' + res.status);
@@ -649,17 +649,30 @@ async function callTransitWithFallback(env, slat, slng, elat, elng, sname, ename
 // ※ kakaomobility API는 자동차 경로용 → 대중교통은 ODsay 사용
 // 폴백용으로만 유지하되 실질적으로 ODsay가 주력
 async function callKakaoTransit(slat, slng, elat, elng) {
+  // 카카오 Mobility 대중교통 경로 API (POST)
   const kakaoKey = 'a420cd52d24c6380fb5d1a2287663495';
-  const now      = new Date();
-  const depTime  = now.toISOString().slice(0,16).replace('T',' ');
-  const url      = `https://apis-navi.kakaomobility.com/v1/future/directions/transit` +
-    `?origin=${slng},${slat}&destination=${elng},${elat}&departure_time=${encodeURIComponent(depTime)}`;
+  const url = 'https://apis-navi.kakaomobility.com/v1/directions/transit';
+
+  const body = JSON.stringify({
+    origin: { x: slng, y: slat },
+    destination: { x: elng, y: elat },
+    priority: 'TIME',
+    car_fuel: 'GASOLINE'
+  });
 
   const res = await fetch(url, {
-    headers: { 'Authorization': `KakaoAK ${kakaoKey}`, 'Content-Type': 'application/json' }
+    method: 'POST',
+    headers: {
+      'Authorization': `KakaoAK ${kakaoKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: body
   });
+  console.log('[카카오] 응답 status:', res.status);
   if (!res.ok) throw new Error('카카오 HTTP ' + res.status);
-  return await res.json();
+  const data = await res.json();
+  console.log('[카카오] 응답:', JSON.stringify(data).slice(0,200));
+  return data;
 }
 
 export default {
@@ -1168,9 +1181,8 @@ export default {
         try {
           const res = await fetch(odsayUrl, {
             headers: {
-              'Referer': 'https://gentle-lab-7e47subway-api.phg0643.workers.dev',
-              'Origin':  'https://gentle-lab-7e47subway-api.phg0643.workers.dev',
-              'User-Agent': 'Mozilla/5.0'
+              'x-odsay-application-package': 'com.dullyyj.subway',
+              'User-Agent': 'Dalvik/2.1.0 (Linux; Android 10)'
             }
           });
           const data = await res.json();
