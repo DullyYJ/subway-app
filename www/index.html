@@ -2283,6 +2283,15 @@ function _renderTransitResultCard(data, start, dest, cacheSource) {
   if(track) track.innerHTML = html;
   card.style.display = 'block';
 
+  // ★ transitResultBox 표시 + hTimelineWrap 노출
+  var tbox = document.getElementById('transitResultBox');
+  if(tbox) tbox.style.display = 'block';
+  var htlW = document.getElementById('hTimelineWrap');
+  if(htlW) htlW.style.display = 'block';
+
+  // ★ 복합경로 지하철 구간 탑승 시간대 혼잡도 예측
+  _renderTransitCongestion(sections);
+
   // 첫 노드로 스크롤
   if(track) track.scrollLeft = 0;
 }
@@ -3029,6 +3038,31 @@ window.addEventListener('unhandledrejection', function(e) {
         🚇 탑승하기
       </button>
     </div>
+
+    <!-- ══ 복합경로 결과 (경로노선도 하단 통합) ══ -->
+    <div id="transitResultBox" style="display:none;margin-top:10px;border-top:1px solid var(--border2);padding-top:10px;">
+      <!-- 로딩 -->
+      <div id="transitLoading" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9000;align-items:center;justify-content:center;flex-direction:column;">
+        <div style="background:var(--card);border-radius:20px;padding:28px 36px;text-align:center;">
+          <div style="font-size:36px;margin-bottom:10px;">🗺️</div>
+          <div style="font-size:14px;font-weight:700;color:var(--text);">복합경로 탐색 중...</div>
+          <div style="font-size:11px;color:var(--sub);margin-top:4px;">잠시만 기다려주세요</div>
+        </div>
+      </div>
+      <!-- 결과 -->
+      <div id="transitResultCard" style="display:none;">
+        <div style="font-size:11px;font-weight:700;color:var(--sub);margin-bottom:6px;letter-spacing:.3px;">🗺️ 복합경로 (버스+지하철)</div>
+        <div id="transitResultHeader" style="display:flex;align-items:center;justify-content:space-between;padding:4px 0 6px;"></div>
+        <div class="htl-wrap" id="transitHtlWrap" style="position:relative;">
+          <div class="htl-track" id="transitHtlTrack"></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px;">
+          <button onclick="openTransitDetail()" style="flex:1;padding:10px;background:var(--card);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:12px;font-weight:700;cursor:pointer;">🗺️ 세부경로 보기</button>
+          <button onclick="document.getElementById('transitResultBox').style.display='none'" style="padding:10px 13px;border:1px solid var(--border);border-radius:12px;background:transparent;color:var(--sub);font-size:12px;cursor:pointer;">✕</button>
+        </div>
+      </div>
+      <div id="transitResultErr" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;text-align:center;color:var(--sub);font-size:13px;"></div>
+    </div>
   </div>
 
   <!-- 경로 상태 요약 (역 설정 후 표시) -->
@@ -3146,6 +3180,12 @@ window.addEventListener('unhandledrejection', function(e) {
     </div>
   </div>
 
+  <!-- ★ 복합경로 지하철 구간 혼잡 예측 (복합경로 탐색 시 표시) -->
+  <div id="transitCongCard" style="display:none;">
+    <div class="sec">🚇 탑승 시간대 혼잡 예측</div>
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;gap:10px;display:flex;flex-direction:column;" id="transitCongList"></div>
+  </div>
+
   <!-- 3순위: 집단지성 혼잡 분석 -->
   <div>
     <div class="sec">혼잡도 분석<span id="congBadge" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;color:#fff;background:var(--arex);">-</span></div>
@@ -3238,33 +3278,7 @@ window.addEventListener('unhandledrejection', function(e) {
     </div>
   </div>
 
-  <!-- ══ 복합경로 결과 (가로 타임라인 스타일) ══ -->
-  <div id="transitResultBox" style="display:none;margin-bottom:8px;">
-    <!-- 로딩 (화면 중앙 오버레이) -->
-    <div id="transitLoading" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9000;align-items:center;justify-content:center;flex-direction:column;">
-      <div style="background:var(--card);border-radius:20px;padding:28px 36px;text-align:center;">
-        <div style="font-size:36px;margin-bottom:10px;">🗺️</div>
-        <div style="font-size:14px;font-weight:700;color:var(--text);">복합경로 탐색 중...</div>
-        <div style="font-size:11px;color:var(--sub);margin-top:4px;">잠시만 기다려주세요</div>
-      </div>
-    </div>
-    <!-- 결과 -->
-    <div id="transitResultCard" style="display:none;">
-      <!-- 요약 헤더 -->
-      <div id="transitResultHeader" style="display:flex;align-items:center;justify-content:space-between;padding:6px 2px 6px;"></div>
-      <!-- 가로 스크롤 타임라인 -->
-      <div class="htl-wrap" id="transitHtlWrap" style="position:relative;">
-        <div class="htl-track" id="transitHtlTrack"></div>
-      </div>
-      <!-- 세부경로 버튼 -->
-      <div style="display:flex;gap:8px;margin-top:8px;">
-        <button onclick="openTransitDetail()" style="flex:1;padding:11px;background:var(--card);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:12px;font-weight:700;cursor:pointer;">🗺️ 세부경로 보기</button>
-        <button onclick="document.getElementById('transitResultBox').style.display='none'" style="padding:11px 14px;border:1px solid var(--border);border-radius:12px;background:transparent;color:var(--sub);font-size:12px;cursor:pointer;">✕</button>
-      </div>
-    </div>
-    <!-- 오류 -->
-    <div id="transitResultErr" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;text-align:center;color:var(--sub);font-size:13px;"></div>
-  </div>
+
 
   <!-- ══ 세부경로 팝업 ══ -->
   <div id="transitDetailModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:10001;align-items:flex-end;justify-content:center;" onclick="if(event.target===this)closeTransitDetail()">
@@ -19415,6 +19429,94 @@ function getCongPct(stnName, lineName) {
   return Math.max(5, Math.min(100, pct));
 }
 window.getCongPct = getCongPct;
+
+// ★ 복합경로 지하철 구간 탑승 시간대 혼잡도 예측
+function _renderTransitCongestion(sections) {
+  var card = document.getElementById('transitCongCard');
+  var list = document.getElementById('transitCongList');
+  if(!card || !list) return;
+
+  // 지하철 구간만 추출
+  var subwaySecs = (sections || []).filter(function(sec) {
+    return (sec.transportation || {}).type === 1;
+  });
+  if(!subwaySecs.length) { card.style.display='none'; return; }
+
+  // 현재 시각 기준 누적 탑승 시간 계산
+  var nowMs = Date.now();
+  // 복합경로 전체 시작 = 도보(type3) 첫 구간 소요시간 더해서 지하철 탑승 시각 추정
+  var elapsed = 0;
+  var html = '';
+
+  sections.forEach(function(sec) {
+    var trans  = sec.transportation || {};
+    var type   = trans.type;
+    var secSec = Math.round((sec.duration || 0)); // 초 단위
+
+    if(type !== 1) {
+      elapsed += secSec;
+      return;
+    }
+
+    // 지하철 탑승 예상 시각
+    var boardMs  = nowMs + elapsed * 1000;
+    var boardH   = new Date(boardMs).getHours();
+    var boardMin = new Date(boardMs).getMinutes();
+    var boardHHMM = (boardH<10?'0':'')+boardH+':'+(boardMin<10?'0':'')+boardMin;
+
+    var lineName = trans.name || '';
+    var stops    = [];
+    try { stops = sec.passStopList ? (sec.passStopList.stationList||[]) : []; } catch(e){}
+    var fromStn  = stops.length ? (stops[0].stationName||'') : lineName;
+    var toStn    = stops.length>1 ? (stops[stops.length-1].stationName||'') : '';
+
+    // 탑승 역 이름 정리 (끝 '역' 제거)
+    var stnKey = fromStn;
+    if(stnKey.length>1 && stnKey.slice(-1)==='역') stnKey=stnKey.slice(0,-1);
+
+    // 혼잡도 — 탑승 시간대(boardH) 기준
+    var pct = 0;
+    if(typeof _REAL_CONG !== 'undefined' && _REAL_CONG[stnKey] && _REAL_CONG[stnKey][boardH]>0) {
+      pct = Math.round(_REAL_CONG[stnKey][boardH]);
+    } else {
+      // 통계 기반
+      var base = (typeof CONG_PROFILE !== 'undefined') ? (CONG_PROFILE[boardH]||50) : 50;
+      var w    = (typeof LINE_CONG_W !== 'undefined') ? (LINE_CONG_W[lineName]||0.80) : 0.80;
+      var isPk = (boardH>=7&&boardH<=9)||(boardH>=18&&boardH<=20);
+      pct = Math.max(5, Math.min(100, Math.round(base*w*(isPk?1.0:0.95))));
+    }
+
+    var col  = pct>=75?'#ff453a':pct>=50?'#ff9f0a':'#30d158';
+    var txt  = pct>=75?'혼잡':pct>=50?'보통':'여유';
+    var secMin = Math.round(secSec/60);
+
+    html += '<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border2);">'
+      + '<div style="width:36px;height:36px;border-radius:50%;background:'+col+'22;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">🚇</div>'
+      + '<div style="flex:1;min-width:0;">'
+        + '<div style="font-size:13px;font-weight:700;color:'+col+';">'+_ltEsc(lineName)+'</div>'
+        + '<div style="font-size:11px;color:var(--sub);margin-top:1px;">'
+          + _ltEsc(fromStn)+(toStn?' → '+_ltEsc(toStn):'')
+        + '</div>'
+        + '<div style="font-size:10px;color:var(--sub);margin-top:2px;">🕐 '+boardHHMM+' 탑승 예정 · '+secMin+'분</div>'
+      + '</div>'
+      + '<div style="text-align:right;flex-shrink:0;">'
+        + '<div style="font-size:14px;font-weight:800;color:'+col+';">'+pct+'%</div>'
+        + '<div style="font-size:10px;color:'+col+';font-weight:700;">'+txt+'</div>'
+        + '<div style="width:48px;height:4px;background:#2c2c2e;border-radius:2px;margin-top:4px;">'
+          + '<div style="width:'+pct+'%;height:100%;background:'+col+';border-radius:2px;"></div>'
+        + '</div>'
+      + '</div>'
+    + '</div>';
+
+    elapsed += secSec;
+  });
+
+  // 마지막 border-bottom 제거
+  html = html.replace(/border-bottom:1px solid var\(--border2\);"(?=[^>]*><\/div><\/div><\/div>$)/,'";');
+  list.innerHTML = html;
+  card.style.display = 'block';
+}
+window._renderTransitCongestion = _renderTransitCongestion;
 
 // 24시간 혼잡도 배열 반환
 function getCong24(stnName, lineName) {
