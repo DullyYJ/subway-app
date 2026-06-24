@@ -137,7 +137,10 @@ header h1 em{color:var(--gold);font-style:normal;}
 .htl-stn.htl-is-xfer .htl-name{font-weight:800;}
 /* 현재역 train 이모지: dot과 동일 위치 */
 .htl-train{position:absolute;font-size:17px;z-index:3;top:3px;left:50%;transform:translateX(-50%);line-height:1;}
-.htl-time{font-size:10px;font-weight:700;color:var(--gold);text-align:center;height:16px;margin-top:3px;}
+.htl-time{font-size:9px;font-weight:600;color:var(--sub);text-align:center;height:16px;margin-top:3px;white-space:nowrap;}
+/* 첫/마지막 노드 시각은 골드 강조 */
+#transitHtlTrack .htl-stn:first-child .htl-time,
+#transitHtlTrack .htl-stn:last-child .htl-time{color:var(--gold);font-weight:700;}
 .htl-stn.htl-passed .htl-name,.htl-stn.htl-passed .htl-time,.htl-stn.htl-passed .htl-line{opacity:.35;}
 .htl-stn.htl-passed .htl-dot{opacity:.35;}
 .htl-stn.htl-current .htl-name{color:var(--gold);font-weight:800;}
@@ -2023,17 +2026,30 @@ function fmapDoRoute() {
   if(!useKakao) {
     // ① 지하철 BFS (같은 도시, 둘 다 역)
     console.log('[경로] BFS 사용:', start.name, '→', dest.name);
-    // inpStart/inpDest (노선도탭 입력창)에도 동기화
+    // inpStart/inpDest 동기화
     var inpStart = document.getElementById('inpStart');
     var inpDest  = document.getElementById('inpDest');
     if(inpStart) inpStart.value = start.name;
     if(inpDest)  inpDest.value  = dest.name;
-    // fmapStartInp2/fmapDestInp2 (노선도탭 2번 입력창)에도 동기화
     var inpStart2 = document.getElementById('fmapStartInp2');
     var inpDest2  = document.getElementById('fmapDestInp2');
     if(inpStart2) inpStart2.value = start.name;
     if(inpDest2)  inpDest2.value  = dest.name;
-    if(typeof saveRoute === 'function') saveRoute();
+
+    // BFS 실행: S.start/S.dest 직접 설정 → doRoute → transitResultBox 렌더
+    if(typeof STNDB !== 'undefined') {
+      var ss2 = STNDB.find(function(s){ return s.name===start.name; });
+      var ds2 = STNDB.find(function(s){ return s.name===dest.name; });
+      if(ss2) { S.start = ss2; if(typeof setStart==='function') setStart(ss2); }
+      if(ds2) { S.dest  = ds2; if(typeof setDest==='function')  setDest(ds2); }
+    }
+    if(typeof doRoute === 'function') {
+      setTimeout(function() { doRoute(); }, 100);
+    }
+    // doRoute 완료(~300ms) 후 transitResultBox 렌더
+    setTimeout(function() {
+      _renderBfsToTransitBox(start, dest);
+    }, 600);
     return;
   }
 
@@ -2192,7 +2208,7 @@ function _renderTransitResultCard(data, start, dest, cacheSource) {
   var totalMin = Math.round((summary.duration || 0) / 60);
 
   // ── 헤더: 총 시간 + 출발→도착 ──
-  var cacheTag = cacheSource==='memory'?'⚡':cacheSource==='d1'?'💾':'🔄';
+  var cacheTag = cacheSource==='memory'?'⚡':cacheSource==='d1'?'💾':cacheSource==='bfs'?'🚇 BFS':'🔄';
   header.innerHTML =
     '<div style="font-size:22px;font-weight:900;color:var(--text);">' + totalMin + '<span style="font-size:13px;font-weight:500;color:var(--sub);margin-left:2px;">분</span></div>' +
     '<div style="font-size:11px;color:var(--sub);text-align:right;">' +
@@ -2203,44 +2219,72 @@ function _renderTransitResultCard(data, start, dest, cacheSource) {
   // ── 가로 타임라인 노드 생성 ──
   // 구간을 풀어서 "구간 노드" 배열 생성
   // 도보: 🚶 아이콘 노드 / 지하철·버스: 탑승~하차 역 노드들
-  var nodes = [];  // { label, icon, color, time, isStop, isWalk, isStart, isEnd }
+  var nodes = [];  // { label, icon, color, time, arrTime, isStop, isWalk, ... }
+
+  // 현재 시각 기준 누적 경과 (ms)
+  var _nowMs = Date.now();
+  var _elapsedSec = 0;  // 구간별 누적 소요 초
+
+  // HH:MM 포맷 헬퍼
+  function _fmtHHMM(ms) {
+    var d = new Date(ms);
+    var h = d.getHours(), m = d.getMinutes();
+    return (h<10?'0':'')+h+':'+(m<10?'0':'')+m;
+  }
 
   sections.forEach(function(sec, si) {
-    var trans  = sec.transportation || {};
-    var type   = trans.type;
-    var isWalk = type === 3;
-    var isSub  = type === 1;
-    var col    = _transitColor(type, trans.name);
-    var secMin = Math.round((sec.duration || 0) / 60);
-    var secDist= Math.round(sec.distance || 0);
+    var trans   = sec.transportation || {};
+    var type    = trans.type;
+    var isWalk  = type === 3;
+    var isSub   = type === 1;
+    var col     = _transitColor(type, trans.name);
+    var secSec  = Math.round((sec.duration || 0));  // 초 단위
+    var secMin  = Math.round(secSec / 60);
+    var secDist = Math.round(sec.distance || 0);
 
     if(isWalk) {
-      // 도보 구간: 아이콘 하나로 표시
+      var arrMs = _nowMs + _elapsedSec * 1000;
       nodes.push({
         label: secDist >= 1000 ? (secDist/1000).toFixed(1)+'km' : secDist+'m',
-        icon: '🚶', color: col, time: secMin < 1 ? '<1분' : secMin+'분',
-        isWalk: true, isSep: true, col: col
+        icon: '🚶', color: col,
+        time: secMin < 1 ? '<1분' : secMin+'분',
+        arrTime: _fmtHHMM(arrMs),
+        isWalk: true, isSep: true, col: col,
+        secSec: secSec
       });
+      _elapsedSec += secSec;
     } else {
       // 지하철/버스: 정류장 목록
       var stops = [];
       try { stops = sec.passStopList ? (sec.passStopList.stationList || []) : []; } catch(e) {}
       var lineName = trans.name || sec.name || '';
+      var stopCount = stops.length || 1;
+      var perStopSec = Math.round(secSec / Math.max(stopCount - 1, 1));  // 정거장 간 소요
 
       if(stops.length) {
         stops.forEach(function(st, stIdx) {
+          var arrMs = _nowMs + _elapsedSec * 1000;
           nodes.push({
             label: st.stationName || '',
             icon: isSub ? '🚇' : '🚌',
             color: col, lineName: lineName,
-            time: (stIdx === 0 ? (secMin+'분') : ''),
+            time: stIdx === 0 ? (secMin+'분') : '',
+            arrTime: _fmtHHMM(arrMs),
             isStop: true, isFirst: stIdx===0, isLast: stIdx===stops.length-1,
-            col: col, isSub: isSub
+            col: col, isSub: isSub,
+            secSec: stIdx < stops.length-1 ? perStopSec : 0
           });
+          if(stIdx < stops.length - 1) _elapsedSec += perStopSec;
         });
+        // 마지막 정거장까지 남은 오차 보정
+        var usedSec = perStopSec * (stopCount - 1);
+        _elapsedSec += Math.max(0, secSec - usedSec);
       } else {
-        // 정류장 정보 없을 때
-        nodes.push({ label: lineName, icon: isSub?'🚇':'🚌', color: col, time: secMin+'분', isStop:true, col:col });
+        var arrMs = _nowMs + _elapsedSec * 1000;
+        nodes.push({ label: lineName, icon: isSub?'🚇':'🚌', color: col,
+          time: secMin+'분', arrTime: _fmtHHMM(arrMs),
+          isStop:true, col:col, secSec: secSec });
+        _elapsedSec += secSec;
       }
     }
   });
@@ -2261,7 +2305,7 @@ function _renderTransitResultCard(data, start, dest, cacheSource) {
           '<span style="position:absolute;top:2px;left:50%;transform:translateX(-50%);font-size:15px;">🚶</span>' +
           (!isLast ? '<div class="htl-line-seg" style="left:50%;right:0;top:12px;background:#3a3a3c;"></div>' : '') +
         '</div>' +
-        '<div class="htl-time" style="font-size:9px;">' + n.time + '</div>' +
+        '<div class="htl-time" style="font-size:9px;color:var(--sub);">' + (n.arrTime||'') + '</div>' +
       '</div>';
     } else {
       // 역/정류장 노드
@@ -2296,7 +2340,7 @@ function _renderTransitResultCard(data, start, dest, cacheSource) {
           dot +
           (!isLast ? '<div class="htl-line-seg" style="left:50%;right:0;top:12px;background:' + nextCol + ';"></div>' : '') +
         '</div>' +
-        '<div class="htl-time">' + n.time + '</div>' +
+        '<div class="htl-time">' + (n.arrTime||n.time||'') + '</div>' +
       '</div>';
     }
   }
@@ -2510,6 +2554,63 @@ window.openTransitDetail        = openTransitDetail;
 window.closeTransitDetail       = closeTransitDetail;
 
 window.fmapDoRoute = fmapDoRoute;
+
+// ══════════════════════════════════════════════════════════════
+// 🚇 BFS 경로 → transitResultBox 렌더 브릿지
+// S.route(BFS 결과)를 _renderTransitResultCard 포맷으로 변환해서 표시
+// ══════════════════════════════════════════════════════════════
+function _renderBfsToTransitBox(start, dest) {
+  if(!S || !S.route || !S.route.path || !S.route.path.length) {
+    console.warn('[BFS→transit] S.route 없음, 재시도 대기');
+    return;
+  }
+
+  var path = S.route.path;
+  var lp   = S.route.lp || [];
+  var tp   = S.route.tp || [];
+
+  // 총 소요시간(초)
+  var totalSec = tp.reduce(function(a,b){ return a+(b>0?b:0); }, 0);
+
+  // 노선 변경 지점으로 구간(section) 분리
+  var sections = [];
+  var segStart = 0;
+  for(var i=1; i<=path.length; i++) {
+    var lineChanged = i===path.length || (lp[i] && lp[i-1] && lp[i] !== lp[i-1]);
+    if(lineChanged || i===path.length) {
+      var segPath = path.slice(segStart, i);
+      var segLp   = lp[segStart] || lp[segStart+1] || '';
+      var segSec  = tp.slice(segStart, i).reduce(function(a,b){ return a+(b>0?b:0); }, 0);
+
+      // 노선 색상 확인용 — _transitColor에 type=1(지하철) 전달
+      sections.push({
+        transportation: { type: 1, name: segLp },
+        duration: segSec,
+        distance: Math.round(segSec / 60 * 700),  // 0.7km/min 추정
+        passStopList: {
+          stationList: segPath.map(function(nm){ return { stationName: nm }; })
+        }
+      });
+      segStart = i;
+    }
+  }
+
+  // routes 포맷으로 감싸기
+  var bfsRouteData = {
+    routes: [{
+      summary: { duration: totalSec, distance: Math.round(totalSec/60*700) },
+      sections: sections
+    }]
+  };
+
+  _transitResultStart = start;
+  _transitResultDest  = dest;
+
+  // 홈탭으로 이동 없이 바로 복합경로 카드에 렌더
+  _renderTransitResultCard(bfsRouteData, start, dest, 'bfs');
+
+}
+window._renderBfsToTransitBox = _renderBfsToTransitBox;
 
 // ══════════════════════════════════════════════════════════════
 // 📍 복합경로 GPS 현재위치 표시
@@ -12943,6 +13044,10 @@ function svgSetRoute(type) {
     if(inp) inp.value = stn.name;
     if(typeof updateCong==='function') setTimeout(function(){ updateCong(stn); }, 100);
 
+    // _fmapStart 동기화
+    _fmapStart = { type:'subway', name:stn.name, lat:stn.lat, lng:stn.lng, line:stn.line };
+    _fmapDest  = null;  // 도착지 초기화
+
     // 홈탭으로 이동하지 않음 — 도착역 선택 대기
     toast('🚉 출발역: ' + name + '  ·  이제 도착역을 선택하세요');
     // (S.dest가 null이므로 _goHome 호출 안 함)
@@ -12958,8 +13063,12 @@ function svgSetRoute(type) {
     if(sc)  sc.style.display = 'block';
     if(inpD) inpD.value = stn.name;
     if(typeof toast==='function') toast('🏁 도착역: ' + name);
-    if(S.start && S.dest) _goHome();
-    else if(typeof toast==='function') toast('⚠️ 출발역을 먼저 선택하세요');
+    if(S.start && S.dest) {
+      // ★ _fmapStart/_fmapDest 동기화 (fmapDoRoute / _renderBfsToTransitBox용)
+      _fmapStart = { type:'subway', name:S.start.name, lat:S.start.lat, lng:S.start.lng, line:S.start.line };
+      _fmapDest  = { type:'subway', name:S.dest.name,  lat:S.dest.lat,  lng:S.dest.lng,  line:S.dest.line  };
+      _goHome();
+    } else if(typeof toast==='function') toast('⚠️ 출발역을 먼저 선택하세요');
   }
 }
 window.svgSetRoute = svgSetRoute;
@@ -17067,6 +17176,12 @@ function updateRouteDetailUI() {
   } catch(e) {
     console.warn('[updateRouteDetailUI 오류]', e.message);
   }
+  // ★ BFS 결과를 transitResultBox에도 동기화
+  try {
+    if(typeof _renderBfsToTransitBox === 'function' && typeof _fmapStart !== 'undefined' && _fmapStart && _fmapDest && S && S.route && S.route.path) {
+      _renderBfsToTransitBox(_fmapStart, _fmapDest);
+    }
+  } catch(e2) { console.warn('[BFS→transit sync]', e2.message); }
 }
 window.updateRouteDetailUI = updateRouteDetailUI;
 
