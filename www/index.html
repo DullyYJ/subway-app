@@ -2613,6 +2613,141 @@ function _renderBfsToTransitBox(start, dest) {
 window._renderBfsToTransitBox = _renderBfsToTransitBox;
 
 // ══════════════════════════════════════════════════════════════
+// 🗺️ 노선도 탭 경로 결과 시트 표시
+// ══════════════════════════════════════════════════════════════
+function _showMapRouteSheet(startStn, destStn) {
+  var sheet    = document.getElementById('mapRouteSheet');
+  var title    = document.getElementById('mapRouteSheetTitle');
+  var track    = document.getElementById('mapRouteSheetTrack');
+  var sections = document.getElementById('mapRouteSheetSections');
+  if(!sheet || !track || !sections) return;
+
+  if(!S || !S.route || !S.route.path || !S.route.path.length) {
+    toast('경로를 찾을 수 없습니다.');
+    return;
+  }
+
+  var path = S.route.path;
+  var lp   = S.route.lp || [];
+  var tp   = S.route.tp || [];
+  var totalSec = tp.reduce(function(a,b){ return a+(b>0?b:0); }, 0);
+  var totalMin = Math.round(totalSec / 60);
+
+  // 제목
+  if(title) title.textContent = totalMin + '분 · ' + startStn.name + ' → ' + destStn.name;
+
+  // 노선 구간 분리
+  var segs = [];
+  var segStart = 0;
+  for(var i=1; i<=path.length; i++) {
+    var changed = i===path.length || (lp[i] && lp[i-1] && lp[i] !== lp[i-1]);
+    if(changed) {
+      var segPath = path.slice(segStart, i);
+      var segLp   = lp[segStart] || lp[segStart+1] || '';
+      var segSec  = tp.slice(segStart, i).reduce(function(a,b){ return a+(b>0?b:0); }, 0);
+      segs.push({ path: segPath, line: segLp, sec: segSec });
+      segStart = i;
+    }
+  }
+
+  // HH:MM 헬퍼
+  var _nowMs2 = Date.now(), _el2 = 0;
+  function _fmt2(ms){ var d=new Date(ms),h=d.getHours(),m=d.getMinutes(); return (h<10?'0':'')+h+':'+(m<10?'0':'')+m; }
+
+  // 타임라인 렌더
+  var tHtml = '';
+  segs.forEach(function(seg, si) {
+    var col = (typeof _transitColor==='function') ? _transitColor(1, seg.line) : '#0a84ff';
+    var perSec = seg.path.length > 1 ? Math.round(seg.sec / (seg.path.length-1)) : seg.sec;
+
+    seg.path.forEach(function(nm, ni) {
+      var arrT  = _fmt2(_nowMs2 + _el2 * 1000);
+      var isF   = (si===0 && ni===0);
+      var isL   = (si===segs.length-1 && ni===seg.path.length-1);
+      var isXfer= (ni===0 && si>0);
+      var short = nm.length > 5 ? nm.slice(0,4)+'…' : nm;
+      var prevC = (si>0 && ni===0) ? (typeof _transitColor==='function' ? _transitColor(1, segs[si-1].line) : '#0a84ff') : col;
+
+      var dot = isF ? '<span class="htl-dot" style="border-color:#ffd60a;background:#ffd60a;width:14px;height:14px;top:6px;"></span>'
+              : isL ? '<span class="htl-dot" style="border-color:#ff2d55;background:#ff2d55;width:14px;height:14px;top:6px;"></span>'
+              : isXfer ? '<span class="htl-dot htl-xfer-dot" style="border-color:'+col+';background:'+col+'22;box-shadow:0 0 0 3px '+col+'44;"></span>'
+              : '<span class="htl-dot" style="border-color:'+col+';background:'+col+';"></span>';
+
+      var badge = (ni===0) ? '<div class="htl-line" style="color:'+col+';font-size:7.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+seg.line+'</div>' : '<div class="htl-line"></div>';
+
+      tHtml += '<div class="htl-stn'+(isXfer?' htl-is-xfer':'')+'" style="--line-color:'+col+';width:52px;flex-shrink:0;">'
+        + '<div class="htl-name" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;height:28px;line-height:28px;font-size:9px;display:block;text-align:center;padding:0 2px;">'+nm.replace(/</g,'&lt;')+'</div>'
+        + badge
+        + '<div class="htl-axis">'
+          + (!isF ? '<div class="htl-line-seg" style="left:0;right:50%;top:12px;background:'+(ni===0?prevC:col)+';"></div>' : '')
+          + dot
+          + (!isL ? '<div class="htl-line-seg" style="left:50%;right:0;top:12px;background:'+col+';"></div>' : '')
+        + '</div>'
+        + '<div class="htl-time" style="font-size:9px;color:var(--sub);text-align:center;height:16px;margin-top:3px;white-space:nowrap;">'+arrT+'</div>'
+        + '</div>';
+
+      if(ni < seg.path.length - 1) _el2 += perSec;
+    });
+    _el2 += 0; // 환승 대기 (추후 반영 가능)
+  });
+  track.innerHTML = tHtml;
+
+  // 구간 상세
+  var secHtml = '';
+  segs.forEach(function(seg) {
+    var col = (typeof _transitColor==='function') ? _transitColor(1, seg.line) : '#0a84ff';
+    var min = Math.round(seg.sec / 60);
+    var from = seg.path[0], to = seg.path[seg.path.length-1];
+    var cnt  = seg.path.length > 2 ? (seg.path.length-2)+'정거장 경유' : '';
+    secHtml += '<div style="display:flex;align-items:flex-start;padding:13px 16px;border-bottom:1px solid #2c2c2e;gap:12px;">'
+      + '<div style="width:34px;height:34px;border-radius:50%;background:'+col+'22;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;">🚇</div>'
+      + '<div style="flex:1;min-width:0;">'
+        + '<div style="font-size:13px;font-weight:700;color:'+col+';margin-bottom:2px;">'+seg.line+'</div>'
+        + '<div style="font-size:12px;color:var(--sub);">'+from+' → '+to+'</div>'
+        + (cnt ? '<div style="font-size:11px;color:var(--sub);margin-top:1px;">'+cnt+'</div>' : '')
+      + '</div>'
+      + '<div style="font-size:14px;font-weight:700;color:var(--text);flex-shrink:0;">'+(min<1?'1분 미만':min+'분')+'</div>'
+    + '</div>';
+  });
+  sections.innerHTML = secHtml;
+
+  // _transitResultStart/Dest 세팅 (세부경로 팝업용)
+  _transitResultStart = { name: startStn.name, lat: startStn.lat, lng: startStn.lng };
+  _transitResultDest  = { name: destStn.name,  lat: destStn.lat,  lng: destStn.lng };
+  // _transitResultData는 openTransitDetail이 S.route로 구성
+  _transitResultData = {
+    routes:[{ summary:{ duration: totalSec }, sections: segs.map(function(sg){
+      return { transportation:{type:1,name:sg.line}, duration:sg.sec, distance:Math.round(sg.sec/60*700),
+        passStopList:{ stationList: sg.path.map(function(n){return{stationName:n};}) } };
+    })}]
+  };
+
+  sheet.style.display = 'flex';
+  // 첫 노드로 스크롤
+  var tw = sheet.querySelector('.htl-wrap');
+  if(tw) tw.scrollLeft = 0;
+}
+window._showMapRouteSheet = _showMapRouteSheet;
+
+function closeMapRouteSheet() {
+  var sheet = document.getElementById('mapRouteSheet');
+  if(sheet) sheet.style.display = 'none';
+}
+window.closeMapRouteSheet = closeMapRouteSheet;
+
+function applyMapRouteToHome() {
+  // 홈탭으로 전환하고 이미 계산된 경로 표시
+  closeMapRouteSheet();
+  // transitResultBox에도 렌더
+  if(typeof _renderBfsToTransitBox === 'function' && _fmapStart && _fmapDest) {
+    _renderBfsToTransitBox(_fmapStart, _fmapDest);
+  }
+  var homeNi = document.getElementById('ni-home');
+  if(typeof switchTab === 'function') switchTab('home', homeNi);
+}
+window.applyMapRouteToHome = applyMapRouteToHome;
+
+// ══════════════════════════════════════════════════════════════
 // 📍 복합경로 GPS 현재위치 표시
 // ══════════════════════════════════════════════════════════════
 var _transitGpsTimer = null;
@@ -3952,7 +4087,7 @@ window.addEventListener('unhandledrejection', function(e) {
 </div>
 
 <!-- MAP TAB -->
-<div class="tab-body no-pad" id="tab-map" style="display:none;flex-direction:column;flex:1;min-height:0;overflow:hidden;">
+<div class="tab-body no-pad" id="tab-map" style="display:none;flex-direction:column;flex:1;min-height:0;overflow:hidden;position:relative;">
 
   <!-- 내부 탭: 지하철 / 버스 -->
   <div class="map-inner-tabs">
@@ -13064,10 +13199,19 @@ function svgSetRoute(type) {
     if(inpD) inpD.value = stn.name;
     if(typeof toast==='function') toast('🏁 도착역: ' + name);
     if(S.start && S.dest) {
-      // ★ _fmapStart/_fmapDest 동기화 (fmapDoRoute / _renderBfsToTransitBox용)
+      // ★ _fmapStart/_fmapDest 동기화
       _fmapStart = { type:'subway', name:S.start.name, lat:S.start.lat, lng:S.start.lng, line:S.start.line };
       _fmapDest  = { type:'subway', name:S.dest.name,  lat:S.dest.lat,  lng:S.dest.lng,  line:S.dest.line  };
-      _goHome();
+      // 노선도 탭 활성 상태면 시트로, 아니면 홈탭으로
+      var mapTab = document.getElementById('tab-map');
+      var isMapActive = mapTab && mapTab.style.display !== 'none';
+      if(isMapActive) {
+        // BFS 실행 후 노선도 시트에 표시
+        if(typeof doRoute === 'function') doRoute();
+        setTimeout(function() { _showMapRouteSheet(S.start, S.dest); }, 450);
+      } else {
+        _goHome();
+      }
     } else if(typeof toast==='function') toast('⚠️ 출발역을 먼저 선택하세요');
   }
 }
@@ -15038,6 +15182,38 @@ function safeSetItem(key, val){
     <button id="mapGpsBtn" onclick="fmapGpsLocate()" style="background:#1c3a5e;border:1.5px solid #0a84ff;color:#0a84ff;padding:9px 10px;border-radius:10px;font-size:13px;cursor:pointer;flex-shrink:0;">📍</button>
   </div>
 
+  <!-- ★ 노선도 탭 전용: 경로 결과 슬라이드업 시트 -->
+  <div id="mapRouteSheet" style="display:none;position:absolute;bottom:0;left:0;right:0;
+    background:#1c1c1e;border-radius:18px 18px 0 0;border-top:1px solid #3a3a3c;
+    z-index:200;max-height:72vh;display:none;flex-direction:column;overflow:hidden;
+    box-shadow:0 -4px 24px rgba(0,0,0,.5);">
+    <!-- 핸들 + 헤더 -->
+    <div style="padding:10px 16px 0;flex-shrink:0;">
+      <div style="width:36px;height:4px;background:#3a3a3c;border-radius:2px;margin:0 auto 10px;"></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <div id="mapRouteSheetTitle" style="font-size:14px;font-weight:700;color:#fff;"></div>
+        <button onclick="closeMapRouteSheet()" style="background:rgba(255,255,255,.1);border:none;border-radius:50%;width:26px;height:26px;color:#fff;font-size:14px;cursor:pointer;">×</button>
+      </div>
+    </div>
+    <!-- GPS 위치 -->
+    <div id="mapRouteSheetGps" style="display:none;padding:4px 16px 6px;font-size:11px;color:var(--sub);flex-shrink:0;">
+      <span id="mapRouteSheetGpsTxt">📍 위치 확인 중...</span>
+    </div>
+    <!-- 타임라인 -->
+    <div style="flex-shrink:0;padding:0 0 4px;">
+      <div class="htl-wrap" style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
+        <div id="mapRouteSheetTrack" style="display:inline-flex;min-width:100%;padding:0 12px;"></div>
+      </div>
+    </div>
+    <!-- 구간 상세 -->
+    <div id="mapRouteSheetSections" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;border-top:1px solid #2c2c2e;"></div>
+    <!-- 하단 버튼 -->
+    <div style="display:flex;gap:8px;padding:10px 14px;padding-bottom:max(14px,env(safe-area-inset-bottom,14px));flex-shrink:0;border-top:1px solid #2c2c2e;background:#1c1c1e;">
+      <button onclick="applyMapRouteToHome()" style="flex:1;padding:11px;border:none;border-radius:12px;background:var(--gold);color:#121214;font-size:13px;font-weight:700;cursor:pointer;">🏠 홈에 적용</button>
+      <button onclick="openTransitDetail()" style="flex:1;padding:11px;border:none;border-radius:12px;background:linear-gradient(135deg,#1a1a2e,#16213e);border:1px solid var(--border);color:#fff;font-size:13px;font-weight:700;cursor:pointer;">🗺️ 세부경로</button>
+    </div>
+  </div>
+
   </div><!-- /mapSubwayPanel -->
 
   <!-- 버스 패널 (카카오버스 스타일) -->
@@ -16501,25 +16677,62 @@ function fmapSearchMap(inp, type) {
       e.preventDefault();
       inp.value = s.name;
       box.style.display='none';
-      if(type==='start') _mspStnName=s.name, svgSetRoute('start');
-      else               _mspStnName=s.name, svgSetRoute('dest');
+      // fmapStartInp2/fmapDestInp2 반영 후 _fmapStart/_fmapDest 즉시 설정
+      if(type==='start') {
+        _fmapStart = { type:'subway', name:s.name, lat:s.lat, lng:s.lng, line:s.line };
+        var si2 = document.getElementById('fmapStartInp2');
+        if(si2) si2.value = s.name;
+        toast('🚉 출발: ' + s.name + ' · 도착역을 선택하세요');
+      } else {
+        _fmapDest = { type:'subway', name:s.name, lat:s.lat, lng:s.lng, line:s.line };
+        var di2 = document.getElementById('fmapDestInp2');
+        if(di2) di2.value = s.name;
+        // 출발도 있으면 자동 탐색
+        if(_fmapStart) {
+          setTimeout(function(){ calcFmapRouteMap(); }, 100);
+        } else {
+          toast('🏁 도착: ' + s.name + ' · 출발역을 먼저 선택하세요');
+        }
+      }
     };
     box.appendChild(d);
   });
 }
 window.fmapSearchMap = fmapSearchMap;
 
-// ── calcFmapRouteMap: 노선도 탭 검색 실행 ───────────────────
+// ── calcFmapRouteMap: 노선도 탭 검색 실행 → 시트에 렌더 ────
 function calcFmapRouteMap() {
   var si = document.getElementById('fmapStartInp2');
   var di = document.getElementById('fmapDestInp2');
   if(!si||!di) return;
-  // 홈탭 fmapStartInp 에도 동기화
+  var startName = si.value.trim();
+  var destName  = di.value.trim();
+  if(!startName){ toast('출발역을 입력해주세요.'); return; }
+  if(!destName){ toast('도착역을 입력해주세요.'); return; }
+
+  var ss = STNDB.find(function(s){ return s.name===startName; });
+  var ds = STNDB.find(function(s){ return s.name===destName; });
+  if(!ss){ toast('출발지를 확인해주세요.'); return; }
+  if(!ds){ toast('도착지를 확인해주세요.'); return; }
+
+  // 홈탭 입력창 동기화 (홈에 적용 시 필요)
   var hsi = document.getElementById('fmapStartInp');
   var hdi = document.getElementById('fmapDestInp');
-  if(hsi) hsi.value = si.value;
-  if(hdi) hdi.value = di.value;
-  calcFmapRoute();
+  if(hsi) hsi.value = startName;
+  if(hdi) hdi.value = destName;
+
+  // _fmapStart/_fmapDest 설정
+  _fmapStart = { type:'subway', name:ss.name, lat:ss.lat, lng:ss.lng, line:ss.line };
+  _fmapDest  = { type:'subway', name:ds.name, lat:ds.lat, lng:ds.lng, line:ds.line };
+
+  // S.start/S.dest 설정 + BFS 실행
+  S.start = ss; S.dest = ds;
+  if(typeof doRoute === 'function') doRoute();
+
+  // BFS 완료 후 노선도 탭 시트에 렌더
+  setTimeout(function() {
+    _showMapRouteSheet(ss, ds);
+  }, 450);
 }
 window.calcFmapRouteMap = calcFmapRouteMap;
 
