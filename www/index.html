@@ -106,10 +106,10 @@ header h1 em{color:var(--gold);font-style:normal;}
 .htl-track{display:inline-flex;align-items:flex-start;min-width:100%;padding:0 14px;}
 /* ── 복합경로 전용 트랙 ── */
 #transitHtlTrack{display:inline-flex;align-items:flex-start;min-width:100%;padding:0 8px;gap:0;}
-#transitHtlTrack .htl-stn{width:auto;min-width:44px;max-width:70px;}
-#transitHtlTrack .htl-name{white-space:normal;word-break:keep-all;height:auto;min-height:28px;font-size:9.5px;line-height:1.25;padding:0 3px;}
+#transitHtlTrack .htl-stn{width:52px;flex-shrink:0;}
+#transitHtlTrack .htl-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;height:28px;font-size:9px;line-height:28px;padding:0 2px;display:block;text-align:center;}
 #transitHtlTrack .htl-line{font-size:7.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-#transitHtlTrack .htl-walk-node{min-width:36px;max-width:44px;}
+#transitHtlTrack .htl-walk-node{width:36px !important;}
 /* 복합경로 GPS 현재위치 마커 */
 #transitHtlTrack .htl-gps-here .htl-dot{background:#ffd60a !important;border-color:#ffd60a !important;box-shadow:0 0 0 5px rgba(255,214,10,.35) !important;animation:gps-pulse 1.4s ease-in-out infinite;}
 #transitHtlTrack .htl-gps-here .htl-name{color:#ffd60a !important;font-weight:800 !important;}
@@ -2264,15 +2264,14 @@ function _renderTransitResultCard(data, start, dest, cacheSource) {
         '<div class="htl-time" style="font-size:9px;">' + n.time + '</div>' +
       '</div>';
     } else {
-      // 역/정류장 노드 — 역명은 줄바꿈 허용(white-space:normal), 고정폭 없음
+      // 역/정류장 노드
       var prevCol = (i > 0 && nodes[i-1].col) ? nodes[i-1].col : n.col;
       var nextCol = (i < nodes.length-1 && nodes[i+1].col) ? nodes[i+1].col : n.col;
       var isXfer  = i > 0 && !nodes[i-1].isWalk && nodes[i-1].col !== n.col;
-      // 중간역(출발/도착/환승 아닌 경유역)은 역명 생략 → dot + 호선만
-      var isMidStop = !isFirst && !isLast && !isXfer && !n.isFirst && !n.isLast;
-      var nameHtml = isMidStop
-        ? '<div class="htl-name" style="font-size:0;min-height:28px;"></div>'
-        : '<div class="htl-name">' + _ltEsc(n.label) + '</div>';
+      // 역명 최대 5글자로 자르고 … 처리 (긴 정류장명 겹침 방지)
+      var rawLabel = n.label || '';
+      var shortLabel = rawLabel.length > 6 ? rawLabel.slice(0,5) + '…' : rawLabel;
+      var nameHtml = '<div class="htl-name">' + _ltEsc(shortLabel) + '</div>';
       var lineBadge = (n.isFirst || isXfer)
         ? '<div class="htl-line" style="color:' + n.col + ';font-size:7.5px;">' + _ltEsc(n.lineName||'') + '</div>'
         : '<div class="htl-line"></div>';
@@ -2284,15 +2283,12 @@ function _renderTransitResultCard(data, start, dest, cacheSource) {
         dot = '<span class="htl-dot" style="border-color:#ff2d55;background:#ff2d55;width:14px;height:14px;top:6px;"></span>';
       else if(isXfer)
         dot = '<span class="htl-dot htl-xfer-dot" style="border-color:' + n.col + ';background:' + n.col + '22;box-shadow:0 0 0 3px ' + n.col + '44;"></span>';
-      else if(isMidStop)
-        dot = '<span class="htl-dot" style="border-color:' + n.col + ';background:' + n.col + ';width:7px;height:7px;top:9.5px;"></span>';
       else
         dot = '<span class="htl-dot" style="border-color:' + n.col + ';background:' + n.col + ';"></span>';
 
-      // GPS 현재위치 마커 (나중에 JS에서 .htl-gps-here 클래스 추가)
       var gpsId = 'tnode_' + i;
-      html += '<div class="htl-stn' + (isXfer?' htl-is-xfer':'') + (isMidStop?' htl-mid':'') +
-        '" id="' + gpsId + '" data-stnname="' + _ltEsc(n.label) + '" style="--line-color:' + n.col + ';">' +
+      html += '<div class="htl-stn' + (isXfer?' htl-is-xfer':'') +
+        '" id="' + gpsId + '" data-stnname="' + _ltEsc(rawLabel) + '" style="--line-color:' + n.col + ';">' +
         nameHtml +
         lineBadge +
         '<div class="htl-axis">' +
@@ -3372,7 +3368,7 @@ window.addEventListener('unhandledrejection', function(e) {
 
   <!-- ══ 세부경로 팝업 ══ -->
   <div id="transitDetailModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:10001;align-items:flex-end;justify-content:center;" onclick="if(event.target===this)closeTransitDetail()">
-    <div style="background:#1c1c1e;border-radius:20px 20px 0 0;width:100%;max-width:520px;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;">
+    <div style="background:#1c1c1e;border-radius:20px 20px 0 0;width:100%;max-width:520px;height:92vh;display:flex;flex-direction:column;overflow:hidden;">
       <!-- 핸들 + 헤더 -->
       <div style="padding:10px 18px 0;flex-shrink:0;">
         <div style="width:36px;height:4px;background:#3a3a3c;border-radius:2px;margin:0 auto 12px;"></div>
@@ -3388,11 +3384,11 @@ window.addEventListener('unhandledrejection', function(e) {
       </div>
 
       <!-- 구간 목록 스크롤 -->
-      <div id="transitDetailSections" style="flex:1;overflow-y:auto;padding:0 0 20px;"></div>
-      <!-- 외부 지도 버튼 -->
-      <div style="display:flex;gap:8px;padding:12px 14px 24px;flex-shrink:0;border-top:1px solid #2c2c2e;">
-        <button onclick="openKakaoNavFromResult()" style="flex:1;padding:12px;border:none;border-radius:12px;background:#FEE500;color:#3A1D1D;font-size:13px;font-weight:700;cursor:pointer;">🗺️ 카카오맵 길안내</button>
-        <button onclick="openNaverNavFromResult()" style="flex:1;padding:12px;border:none;border-radius:12px;background:#03C75A;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">🗺️ 네이버지도</button>
+      <div id="transitDetailSections" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 0 8px;min-height:0;"></div>
+      <!-- 외부 지도 버튼 — flex-shrink:0 + safe-area padding -->
+      <div style="display:flex;gap:8px;padding:12px 14px;padding-bottom:max(16px,env(safe-area-inset-bottom,16px));flex-shrink:0;border-top:1px solid #2c2c2e;background:#1c1c1e;">
+        <button onclick="openKakaoNavFromResult()" style="flex:1;padding:13px;border:none;border-radius:12px;background:#FEE500;color:#3A1D1D;font-size:13px;font-weight:700;cursor:pointer;">🗺️ 카카오맵 길안내</button>
+        <button onclick="openNaverNavFromResult()" style="flex:1;padding:13px;border:none;border-radius:12px;background:#03C75A;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">🗺️ 네이버지도</button>
       </div>
     </div>
   </div>
