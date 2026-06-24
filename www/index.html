@@ -2327,6 +2327,87 @@ function openTransitDetail() {
     mapImg.style.display = 'none';
   }
 
+  // ── ★ 가로 타임라인 노선도 렌더 ──
+  var tlTrack = document.getElementById('transitDetailTimelineTrack');
+  if(tlTrack) {
+    var tlNodes = [];
+    sections.forEach(function(sec) {
+      var trans   = sec.transportation || {};
+      var type    = trans.type;
+      var isWalk  = type === 3;
+      var isSub   = type === 1;
+      var col     = _transitColor(type, trans.name);
+      var secMin  = Math.round((sec.duration || 0) / 60);
+      var secDist = Math.round(sec.distance || 0);
+      if(isWalk) {
+        tlNodes.push({ isWalk:true, col:'#636366',
+          label: secDist>=1000?(secDist/1000).toFixed(1)+'km':secDist+'m',
+          time: secMin<1?'<1분':secMin+'분' });
+      } else {
+        var stops = [];
+        try { stops = sec.passStopList ? (sec.passStopList.stationList||[]) : []; } catch(e){}
+        var lineName = trans.name || sec.name || '';
+        if(stops.length) {
+          stops.forEach(function(st, si) {
+            tlNodes.push({ isWalk:false, col:col, lineName:lineName, isSub:isSub,
+              label: st.stationName||'',
+              time: si===0 ? (secMin+'분') : '',
+              isFirst: si===0, isLast: si===stops.length-1 });
+          });
+        } else {
+          tlNodes.push({ isWalk:false, col:col, lineName:lineName, isSub:isSub,
+            label:lineName, time:secMin+'분', isFirst:true, isLast:true });
+        }
+      }
+    });
+
+    var tlHtml = '';
+    for(var ti=0; ti<tlNodes.length; ti++) {
+      var tn = tlNodes[ti];
+      var isF = (ti===0), isL = (ti===tlNodes.length-1);
+      var prevCol2 = ti>0 ? tlNodes[ti-1].col : tn.col;
+      var nextCol2 = ti<tlNodes.length-1 ? tlNodes[ti+1].col : tn.col;
+      var isXfer2 = ti>0 && !tlNodes[ti-1].isWalk && !tn.isWalk && tlNodes[ti-1].col !== tn.col;
+
+      if(tn.isWalk) {
+        tlHtml += '<div style="display:flex;flex-direction:column;align-items:center;min-width:40px;position:relative;">'
+          + '<div style="font-size:9px;color:#636366;text-align:center;height:18px;line-height:18px;white-space:nowrap;">'+_ltEsc(tn.label)+'</div>'
+          + '<div style="font-size:8px;color:#636366;height:14px;line-height:14px;text-align:center;">도보</div>'
+          + '<div style="position:relative;height:26px;width:100%;display:flex;align-items:center;justify-content:center;">'
+            + (!isF?'<div style="position:absolute;left:0;right:50%;top:12px;height:2px;background:#3a3a3c;"></div>':'')
+            + '<span style="font-size:14px;position:relative;z-index:1;">🚶</span>'
+            + (!isL?'<div style="position:absolute;left:50%;right:0;top:12px;height:2px;background:#3a3a3c;"></div>':'')
+          + '</div>'
+          + '<div style="font-size:9px;color:#636366;height:14px;line-height:14px;text-align:center;">'+tn.time+'</div>'
+          + '</div>';
+      } else {
+        var dot2;
+        if(isF) dot2 = '<span style="width:10px;height:10px;border-radius:50%;background:#ffd60a;border:2px solid #ffd60a;display:inline-block;position:relative;z-index:1;flex-shrink:0;"></span>';
+        else if(isL) dot2 = '<span style="width:10px;height:10px;border-radius:50%;background:#ff2d55;border:2px solid #ff2d55;display:inline-block;position:relative;z-index:1;flex-shrink:0;"></span>';
+        else if(isXfer2) dot2 = '<span style="width:10px;height:10px;border-radius:50%;background:'+tn.col+'44;border:2px solid '+tn.col+';display:inline-block;position:relative;z-index:1;flex-shrink:0;box-shadow:0 0 0 3px '+tn.col+'44;"></span>';
+        else dot2 = '<span style="width:8px;height:8px;border-radius:50%;background:'+tn.col+';border:2px solid '+tn.col+';display:inline-block;position:relative;z-index:1;flex-shrink:0;"></span>';
+
+        var badge2 = tn.isFirst
+          ? '<div style="font-size:8px;color:'+tn.col+';height:14px;line-height:14px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:64px;">'+_ltEsc(tn.lineName)+'</div>'
+          : '<div style="height:14px;"></div>';
+
+        tlHtml += '<div style="display:flex;flex-direction:column;align-items:center;min-width:56px;max-width:72px;position:relative;">'
+          + '<div style="font-size:10px;color:#fff;text-align:center;height:18px;line-height:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:64px;padding:0 2px;">'+_ltEsc(tn.label)+'</div>'
+          + badge2
+          + '<div style="position:relative;height:26px;width:100%;display:flex;align-items:center;justify-content:center;">'
+            + (!isF?'<div style="position:absolute;left:0;right:50%;top:12px;height:3px;background:'+prevCol2+';"></div>':'')
+            + dot2
+            + (!isL?'<div style="position:absolute;left:50%;right:0;top:12px;height:3px;background:'+nextCol2+';"></div>':'')
+          + '</div>'
+          + '<div style="font-size:9px;color:#8e8e93;height:14px;line-height:14px;text-align:center;">'+tn.time+'</div>'
+          + '</div>';
+      }
+    }
+    tlTrack.innerHTML = tlHtml;
+    var tlWrap = document.getElementById('transitDetailTimeline');
+    if(tlWrap) tlWrap.scrollLeft = 0;
+  }
+
   // 구간 상세 목록
   var html = '';
   sections.forEach(function(sec) {
@@ -3195,6 +3276,11 @@ window.addEventListener('unhandledrejection', function(e) {
           <div id="transitDetailTitle" style="font-size:15px;font-weight:700;color:#fff;"></div>
           <button onclick="closeTransitDetail()" style="background:rgba(255,255,255,.1);border:none;border-radius:50%;width:28px;height:28px;color:#fff;font-size:15px;cursor:pointer;">×</button>
         </div>
+      </div>
+
+      <!-- ★ 가로 타임라인 노선도 -->
+      <div id="transitDetailTimeline" style="flex-shrink:0;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;padding:10px 0 4px;background:#141416;border-bottom:1px solid #2c2c2e;">
+        <div id="transitDetailTimelineTrack" style="display:inline-flex;align-items:stretch;min-width:100%;padding:0 16px;gap:0;"></div>
       </div>
 
       <!-- 구간 목록 스크롤 -->
