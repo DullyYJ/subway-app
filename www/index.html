@@ -247,19 +247,8 @@ header h1 em{color:var(--gold);font-style:normal;}
 @keyframes pin-blink{0%,100%{opacity:1;transform:translate(-11px,-50%) scale(1);}50%{opacity:.5;transform:translate(-11px,-50%) scale(0.85);}}
 @keyframes pin-pulse{0%,100%{box-shadow:0 0 12px #ffcc00;}50%{box-shadow:0 0 22px #ffcc00,0 0 36px rgba(255,204,0,.5);}}
 /* 탑승 상태 배너 */
-.board-banner{
-  display:none;
-  /* metro-wrap 위에 고정 — 스크롤해도 위치 유지 */
-  position:relative;top:auto;left:auto;right:auto;
-  background:linear-gradient(90deg,rgba(48,209,88,.15),rgba(48,209,88,.05));
-  border:1px solid rgba(48,209,88,.3);
-  border-bottom:none;
-  border-radius:10px 10px 0 0;
-  padding:5px 12px;font-size:10px;font-weight:700;
-  color:var(--green);z-index:25;letter-spacing:.3px;
-  align-items:center;gap:5px;
-}
-.board-banner.on{display:flex;}
+.board-banner{display:none !important;}
+.board-banner.on{display:none !important;}
 .board-banner .bdot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:blink 1s infinite;}
 
 /* CONGESTION CARD */
@@ -2210,11 +2199,14 @@ function _renderTransitResultCard(data, start, dest, cacheSource) {
   // ── 헤더: 총 시간 + 출발→도착 ──
   var cacheTag = cacheSource==='memory'?'⚡':cacheSource==='d1'?'💾':cacheSource==='bfs'?'🚇 BFS':'🔄';
   header.innerHTML =
-    '<div style="font-size:22px;font-weight:900;color:var(--text);">' + totalMin + '<span style="font-size:13px;font-weight:500;color:var(--sub);margin-left:2px;">분</span></div>' +
-    '<div style="font-size:11px;color:var(--sub);text-align:right;">' +
-      _ltEsc(start.name) + ' → ' + _ltEsc(dest.name) + '<br>' +
-      '<span style="font-size:10px;">' + cacheTag + ' 카카오 경로</span>' +
-    '</div>';
+    '<div style="display:flex;flex-direction:column;">'
+    + '<div style="font-size:28px;font-weight:900;color:var(--text);line-height:1;">' + totalMin
+    + '<span style="font-size:14px;font-weight:500;color:var(--sub);margin-left:3px;">분</span></div>'
+    + '<div style="font-size:11px;color:var(--sub);margin-top:3px;">' + cacheTag + '</div>'
+    + '</div>'
+    + '<div style="text-align:right;">'
+    + '<div style="font-size:13px;font-weight:700;color:var(--text);">' + _ltEsc(start.name) + ' → ' + _ltEsc(dest.name) + '</div>'
+    + '</div>';
 
   // ── 가로 타임라인 노드 생성 ──
   // 구간을 풀어서 "구간 노드" 배열 생성
@@ -2309,9 +2301,14 @@ function _renderTransitResultCard(data, start, dest, cacheSource) {
       '</div>';
     } else {
       // 역/정류장 노드
-      var prevCol = (i > 0 && nodes[i-1].col) ? nodes[i-1].col : n.col;
-      var nextCol = (i < nodes.length-1 && nodes[i+1].col) ? nodes[i+1].col : n.col;
-      var isXfer  = i > 0 && !nodes[i-1].isWalk && nodes[i-1].col !== n.col;
+      // 이전 실제 역 노드의 col (도보 노드는 건너뜀)
+      var prevActual = n.col;
+      for(var pi=i-1; pi>=0; pi--){ if(!nodes[pi].isWalk){ prevActual=nodes[pi].col; break; } }
+      var nextActual = n.col;
+      for(var ni2=i+1; ni2<nodes.length; ni2++){ if(!nodes[ni2].isWalk){ nextActual=nodes[ni2].col; break; } }
+      var prevCol = prevActual;
+      var nextCol = nextActual;
+      var isXfer  = i > 0 && !nodes[i-1].isWalk && prevActual !== n.col;
       // 역명 최대 5글자로 자르고 … 처리 (긴 정류장명 겹침 방지)
       var rawLabel = n.label || '';
       var shortLabel = rawLabel.length > 6 ? rawLabel.slice(0,5) + '…' : rawLabel;
@@ -2573,20 +2570,30 @@ function _renderBfsToTransitBox(start, dest) {
   var totalSec = tp.reduce(function(a,b){ return a+(b>0?b:0); }, 0);
 
   // 노선 변경 지점으로 구간(section) 분리
+  // 같은 역이 연속으로 2번 등장(환승)하면 하나 제거 후 구간 분리
+  var cleanedPath = [], cleanedLp = [], cleanedTp = [];
+  for(var ci=0; ci<path.length; ci++){
+    if(ci>0 && path[ci]===path[ci-1]) {
+      // 환승역: 이미 이전에 추가됨, lp만 교체
+      cleanedLp[cleanedLp.length-1] = lp[ci] || cleanedLp[cleanedLp.length-1];
+    } else {
+      cleanedPath.push(path[ci]);
+      cleanedLp.push(lp[ci]||'');
+      cleanedTp.push(tp[ci]||0);
+    }
+  }
   var sections = [];
   var segStart = 0;
-  for(var i=1; i<=path.length; i++) {
-    var lineChanged = i===path.length || (lp[i] && lp[i-1] && lp[i] !== lp[i-1]);
-    if(lineChanged || i===path.length) {
-      var segPath = path.slice(segStart, i);
-      var segLp   = lp[segStart] || lp[segStart+1] || '';
-      var segSec  = tp.slice(segStart, i).reduce(function(a,b){ return a+(b>0?b:0); }, 0);
-
-      // 노선 색상 확인용 — _transitColor에 type=1(지하철) 전달
+  for(var i=1; i<=cleanedPath.length; i++) {
+    var lineChanged = i===cleanedPath.length || (cleanedLp[i] && cleanedLp[i-1] && cleanedLp[i] !== cleanedLp[i-1]);
+    if(lineChanged) {
+      var segPath = cleanedPath.slice(segStart, i);
+      var segLp   = cleanedLp[segStart+1] || cleanedLp[segStart] || '';
+      var segSec  = cleanedTp.slice(segStart, i).reduce(function(a,b){ return a+(b>0?b:0); }, 0);
       sections.push({
         transportation: { type: 1, name: segLp },
         duration: segSec,
-        distance: Math.round(segSec / 60 * 700),  // 0.7km/min 추정
+        distance: Math.round(segSec / 60 * 700),
         passStopList: {
           stationList: segPath.map(function(nm){ return { stationName: nm }; })
         }
@@ -2665,8 +2672,10 @@ function _showMapRouteSheet(startStn, destStn) {
       var isF   = (si===0 && ni===0);
       var isL   = (si===segs.length-1 && ni===seg.path.length-1);
       var isXfer= (ni===0 && si>0);
-      var short = nm.length > 5 ? nm.slice(0,4)+'…' : nm;
-      var prevC = (si>0 && ni===0) ? (typeof _transitColor==='function' ? _transitColor(1, segs[si-1].line) : '#0a84ff') : col;
+      // 환승역: 왼쪽은 이전 노선 색, 오른쪽은 현재 노선 색
+      var prevSegCol = (si>0) ? (typeof _transitColor==='function' ? _transitColor(1, segs[si-1].line) : '#0a84ff') : col;
+      var leftCol  = (ni===0 && si>0) ? prevSegCol : col;
+      var rightCol = col;
 
       var dot = isF ? '<span class="htl-dot" style="border-color:#ffd60a;background:#ffd60a;width:14px;height:14px;top:6px;"></span>'
               : isL ? '<span class="htl-dot" style="border-color:#ff2d55;background:#ff2d55;width:14px;height:14px;top:6px;"></span>'
@@ -2679,9 +2688,9 @@ function _showMapRouteSheet(startStn, destStn) {
         + '<div class="htl-name" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;height:28px;line-height:28px;font-size:9px;display:block;text-align:center;padding:0 2px;">'+nm.replace(/</g,'&lt;')+'</div>'
         + badge
         + '<div class="htl-axis">'
-          + (!isF ? '<div class="htl-line-seg" style="left:0;right:50%;top:12px;background:'+(ni===0?prevC:col)+';"></div>' : '')
+          + (!isF ? '<div class="htl-line-seg" style="left:0;right:50%;top:12px;background:'+leftCol+';"></div>' : '')
           + dot
-          + (!isL ? '<div class="htl-line-seg" style="left:50%;right:0;top:12px;background:'+col+';"></div>' : '')
+          + (!isL ? '<div class="htl-line-seg" style="left:50%;right:0;top:12px;background:'+rightCol+';"></div>' : '')
         + '</div>'
         + '<div class="htl-time" style="font-size:9px;color:var(--sub);text-align:center;height:16px;margin-top:3px;white-space:nowrap;">'+arrT+'</div>'
         + '</div>';
@@ -3346,7 +3355,7 @@ window.addEventListener('unhandledrejection', function(e) {
     <div id="htlTrackWrap" style="display:none;"><div class="htl-track" id="hTimelineTrack"></div></div>
     <div id="htlMovingTrain" style="display:none;"></div>
     <div id="rideSummary" style="display:none;"><b id="rsCurStn"></b><b id="rsNextStn"></b><b id="rsDist"></b><b id="rsETA"></b><b id="rsRemain"></b></div>
-    <div id="quickBoardWrap" style="display:none;"><button id="quickBoardBtn" onclick="quickBoardToggle()"></button></div>
+    <div id="quickBoardWrap" style="display:none !important;"><button id="quickBoardBtn" onclick="quickBoardToggle()"></button></div>
     <span id="htlTotalTime" style="display:none;"></span>
     <span id="favToggleBtn" style="display:none;"></span>
   </div>
@@ -3362,7 +3371,7 @@ window.addEventListener('unhandledrejection', function(e) {
       </div>
     </div>
     <!-- 결과 -->
-    <div id="transitResultCard" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:14px;">
+    <div id="transitResultCard" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;">
       <!-- 헤더 -->
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
         <div style="font-size:12px;font-weight:700;color:var(--sub);">🗺️ 복합경로
@@ -3370,9 +3379,9 @@ window.addEventListener('unhandledrejection', function(e) {
         </div>
         <button onclick="document.getElementById('transitResultBox').style.display='none'" style="background:none;border:none;color:var(--sub);font-size:18px;cursor:pointer;padding:0 2px;line-height:1;">×</button>
       </div>
-      <div id="transitResultHeader" style="display:flex;align-items:center;justify-content:space-between;padding:0 0 10px;border-bottom:1px solid var(--border2);margin-bottom:10px;"></div>
+      <div id="transitResultHeader" style="display:flex;align-items:baseline;justify-content:space-between;padding:0 0 12px;border-bottom:1px solid var(--border2);margin-bottom:12px;"></div>
       <!-- GPS 위치 상태 -->
-      <div id="transitGpsStatus" style="display:none;margin-bottom:8px;padding:7px 10px;background:#1c1c1e;border-radius:9px;font-size:11px;color:var(--sub);display:flex;align-items:center;gap:6px;">
+      <div id="transitGpsStatus" style="display:none;margin-bottom:8px;padding:7px 10px;background:#1c1c1e;border-radius:9px;font-size:11px;color:var(--sub);align-items:center;gap:6px;">
         <span id="transitGpsStatusTxt">📍 위치 확인 중...</span>
       </div>
       <!-- 가로 스크롤 타임라인 -->
@@ -3438,8 +3447,8 @@ window.addEventListener('unhandledrejection', function(e) {
     </div>
   </div>
 
-  <!-- 탑승 버튼 (경로 설정 후 표시) -->
-  <div id="boardSection" style="display:none;">
+  <!-- 탑승 버튼 (경로 설정 후 표시) — GPS 자동 관제로 대체, 숨김 -->
+  <div id="boardSection" style="display:none !important;">
     <div class="sec">🚇 탑승 관리</div>
     <div class="board-btn-wrap">
       <!-- 주행 관제는 경로 검색 완료 시 자동 시작 — 수동 버튼 비표시 -->
@@ -3486,10 +3495,9 @@ window.addEventListener('unhandledrejection', function(e) {
   <div id="metroSection" style="display:none;">
     <div class="sec">경로 노선도<span id="mapStatus" style="font-size:10px;"></span></div>
     <!-- 배너: metro-wrap 밖에 위치 → 스크롤해도 고정 -->
-    <div class="board-banner" id="boardBanner" style="position:relative;top:auto;left:auto;right:auto;border-radius:10px 10px 0 0;">
+    <div class="board-banner" id="boardBanner" style="display:none;position:relative;top:auto;left:auto;right:auto;border-radius:10px 10px 0 0;">
       <span class="bdot"></span>
       <span id="boardBannerTxt">탑승 감지됨 · 이동 중</span>
-      <button onclick="openWalkModal('manual')" style="margin-left:auto;background:rgba(255,255,255,.15);border:none;border-radius:8px;color:#fff;font-size:11px;font-weight:700;padding:4px 10px;cursor:pointer;white-space:nowrap;">🗺️ 지도</button>
     </div>
     <div class="metro-wrap" id="metroWrap" style="display:none;">
       <div class="metro-canvas" id="metroCanvas">
@@ -3504,7 +3512,7 @@ window.addEventListener('unhandledrejection', function(e) {
 
   <!-- ★ 복합경로 지하철 구간 혼잡 예측 (복합경로 탐색 시 표시) -->
   <div id="transitCongCard" style="display:none;">
-    <div class="sec">🚇 탑승 시간대 혼잡 예측</div>
+    <div class="sec" style="font-size:12px;">🚇 탑승 시간대 혼잡 예측</div>
     <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;gap:10px;display:flex;flex-direction:column;" id="transitCongList"></div>
   </div>
 
@@ -13203,15 +13211,15 @@ function svgSetRoute(type) {
       _fmapStart = { type:'subway', name:S.start.name, lat:S.start.lat, lng:S.start.lng, line:S.start.line };
       _fmapDest  = { type:'subway', name:S.dest.name,  lat:S.dest.lat,  lng:S.dest.lng,  line:S.dest.line  };
       // 노선도 탭 활성 상태면 시트로, 아니면 홈탭으로
-      var mapTab = document.getElementById('tab-map');
-      var isMapActive = mapTab && mapTab.style.display !== 'none';
-      if(isMapActive) {
-        // BFS 실행 후 노선도 시트에 표시
-        if(typeof doRoute === 'function') doRoute();
-        setTimeout(function() { _showMapRouteSheet(S.start, S.dest); }, 450);
-      } else {
-        _goHome();
-      }
+      // 항상 홈 적용 (탭 전환 + transitResultBox 렌더)
+      if(typeof doRoute === 'function') doRoute();
+      setTimeout(function() {
+        if(typeof _renderBfsToTransitBox === 'function') {
+          _renderBfsToTransitBox(_fmapStart, _fmapDest);
+        }
+      }, 450);
+      var homeNi = document.getElementById('ni-home');
+      if(typeof switchTab === 'function') switchTab('home', homeNi);
     } else if(typeof toast==='function') toast('⚠️ 출발역을 먼저 선택하세요');
   }
 }
@@ -15968,11 +15976,16 @@ function advanceToNextStation(source){
     startTrainAnim();
     if(!S.lastGPSFix) startApiPoll();
   } else {
-    // 목적지 도착 → 탑승 종료
+    // 목적지 도착 → 자동 하차 처리
     S.boardingState='arrived';
+    S.boarded = false;
+    S.boardAsked = false;
     const pin=document.getElementById('trainPin');
     if(pin) pin.className='train-pin';
-    document.getElementById('boardBanner').classList.remove('on');
+    var bb=document.getElementById('boardBanner');
+    if(bb) bb.classList.remove('on');
+    // 도착 알림 토스트
+    if(S.dest) toast('🎯 목적지 ' + S.dest.name + ' 도착! 수고하셨습니다.');
   }
 }
 
@@ -16729,10 +16742,15 @@ function calcFmapRouteMap() {
   S.start = ss; S.dest = ds;
   if(typeof doRoute === 'function') doRoute();
 
-  // BFS 완료 후 노선도 탭 시트에 렌더
+  // BFS 완료 후 홈탭 transitResultBox에 즉시 렌더
   setTimeout(function() {
-    _showMapRouteSheet(ss, ds);
+    if(typeof _renderBfsToTransitBox === 'function') {
+      _renderBfsToTransitBox(_fmapStart, _fmapDest);
+    }
   }, 450);
+  // 홈탭 전환
+  var homeNi2 = document.getElementById('ni-home');
+  if(typeof switchTab === 'function') switchTab('home', homeNi2);
 }
 window.calcFmapRouteMap = calcFmapRouteMap;
 
