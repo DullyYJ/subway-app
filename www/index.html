@@ -2042,13 +2042,13 @@ function fmapDoRoute() {
   if(box) box.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
   // ODsay → Worker 프록시 경유 (Referer 헤더 포함)
+  // ODsay 직접 호출 (localhost URI 인증)
   var odsayKey = 'TIZm4dwMq1Uw4UgWJhhstA';
-  var odsayDirect = 'https://api.odsay.com/v1/api/searchPubTransPathT'
+  var odsayUrl = 'https://api.odsay.com/v1/api/searchPubTransPathT'
     + '?SX=' + start.lng + '&SY=' + start.lat
     + '&EX=' + dest.lng  + '&EY=' + dest.lat
     + '&SearchPathType=0&SearchType=0'
     + '&apiKey=' + encodeURIComponent(odsayKey);
-  var odsayUrl = _SERVER_URL + '/bus-proxy?url=' + encodeURIComponent(odsayDirect);
 
   fetch(odsayUrl)
     .then(function(r){ return r.json(); })
