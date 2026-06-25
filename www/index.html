@@ -2141,8 +2141,9 @@ function _getCity(lineName) {
 
 // 카카오 API 필요 여부 판단
 function _needKakao(start, dest) {
-  // 1. GPS 좌표 출발지 (현재위치) — 항상 복합경로
+  // 1. 장소/주소/GPS 출발지 또는 도착지 → 항상 복합경로
   if(start.type === 'gps' || start.type === 'address') return true;
+  if(dest.type  === 'gps' || dest.type  === 'address') return true;
   // 2. 버스정류장 포함
   if(start.type === 'bus' || dest.type === 'bus') return true;
   // 3. 다른 도시 간 이동
@@ -2333,102 +2334,96 @@ function _renderKakaoTransitResult(data, startName, endName, cacheSource) {
   }
 }
 
-// ── fmapDoRoute 최종 버전 (하이브리드) ──────────────────────
+// ── fmapDoRoute: 지하철역/버스정류장/일반장소 모두 지원 ──────
 function fmapDoRoute() {
-  // 입력창 텍스트로 _fmapStart/_fmapDest 보강
   var inpS = document.getElementById('fmapStartInp');
   var inpD = document.getElementById('fmapDestInp');
-  if(inpS && inpS.value.trim() && (!_fmapStart || _fmapStart.name !== inpS.value.trim())) {
-    var nm = inpS.value.trim();
-    var stn = (typeof STNDB !== 'undefined')
-      ? (STNDB.find(function(s){ return s.name===nm; })
-      || STNDB.find(function(s){ return s.name.replace(/역$/,'')===nm; }))
-      : null;
-    if(stn) _fmapStart = { type:'subway', name:stn.name, line:stn.line, lat:stn.lat, lng:stn.lng };
-  }
-  if(inpD && inpD.value.trim() && (!_fmapDest || _fmapDest.name !== inpD.value.trim())) {
-    var nm2 = inpD.value.trim();
-    var stn2 = (typeof STNDB !== 'undefined')
-      ? (STNDB.find(function(s){ return s.name===nm2; })
-      || STNDB.find(function(s){ return s.name.replace(/역$/,'')===nm2; }))
-      : null;
-    if(stn2) _fmapDest = { type:'subway', name:stn2.name, line:stn2.line, lat:stn2.lat, lng:stn2.lng };
-  }
+  var qS   = inpS ? inpS.value.trim() : '';
+  var qD   = inpD ? inpD.value.trim() : '';
 
-  if(!_fmapStart || !_fmapDest) {
-    toast('출발지와 도착지를 선택해주세요.');
+  if(!qS && !qD && !_fmapStart && !_fmapDest) {
+    toast('출발지와 도착지를 입력해주세요.');
     return;
   }
 
-  var start = _fmapStart, dest = _fmapDest;
+  // ── 이름으로 위치 해석: STNDB → 카카오 순으로 폴백 ──
+  function _resolveLocation(q, existing, cb) {
+    // 이미 좌표 있으면 그대로
+    if(existing && existing.lat && existing.lng && existing.name === q) { cb(existing); return; }
+    if(!q) { cb(existing || null); return; }
 
-  // 디버그
-  console.warn('[경로DEBUG] 출발:' + start.name + '(' + start.type + ')lat=' + start.lat + ',lng=' + start.lng + ' | 도착:' + dest.name + '(' + dest.type + ')lat=' + dest.lat + ',lng=' + dest.lng);
-  toast('출발:' + start.name + '(' + start.type + ')' + (start.lat||'좌표없음'));
-
-  // ── 하이브리드 판단 ──────────────────────────────────────
-  var useKakao = _needKakao(start, dest);
-  console.warn('[경로DEBUG] useKakao=' + useKakao);
-
-  if(!useKakao) {
-    // ① 지하철 BFS (같은 도시, 둘 다 역)
-    console.log('[경로] BFS 사용:', start.name, '→', dest.name);
-    // inpStart/inpDest 동기화
-    var inpStart = document.getElementById('inpStart');
-    var inpDest  = document.getElementById('inpDest');
-    if(inpStart) inpStart.value = start.name;
-    if(inpDest)  inpDest.value  = dest.name;
-    var inpStart2 = document.getElementById('fmapStartInp2');
-    var inpDest2  = document.getElementById('fmapDestInp2');
-    if(inpStart2) inpStart2.value = start.name;
-    if(inpDest2)  inpDest2.value  = dest.name;
-
-    // BFS 실행: S.start/S.dest 직접 설정
+    // 1) STNDB 역명 매칭
     if(typeof STNDB !== 'undefined') {
-      // 역명 정확 매칭 → 부분 매칭 순으로 폴백
-      var ss2 = STNDB.find(function(s){ return s.name===start.name; })
-             || STNDB.find(function(s){ return s.name===start.name+'역' || s.name.replace(/역$/,'')===start.name; });
-      var ds2 = STNDB.find(function(s){ return s.name===dest.name; })
-             || STNDB.find(function(s){ return s.name===dest.name+'역' || s.name.replace(/역$/,'')===dest.name; });
-
-      // STNDB에 없으면 _fmapStart 좌표 기반으로 생성
-      if(!ss2 && start.lat && start.lng) {
-        ss2 = { name: start.name, line: start.line||'기타', lat: start.lat, lng: start.lng };
-      }
-      if(!ds2 && dest.lat && dest.lng) {
-        ds2 = { name: dest.name, line: dest.line||'기타', lat: dest.lat, lng: dest.lng };
-      }
-
-      if(ss2) { S.start = ss2; if(typeof setStart==='function') setStart(ss2); }
-      else { console.warn('[경로] 출발역 STNDB 매칭 실패:', start.name); }
-      if(ds2) { S.dest  = ds2; if(typeof setDest==='function')  setDest(ds2); }
-      else { console.warn('[경로] 도착역 STNDB 매칭 실패:', dest.name); }
+      var s = STNDB.find(function(s){ return s.name===q || s.name===q+'역' || s.name.replace(/역$/,'')===q; });
+      if(s) { cb({ type:'subway', name:s.name, line:s.line, lat:s.lat, lng:s.lng }); return; }
     }
-    if(typeof doRoute === 'function') {
-      setTimeout(function() { doRoute(); }, 100);
-    }
-    setTimeout(function() {
-      _renderBfsToTransitBox(start, dest);
-    }, 600);
-    return;
+
+    // 2) 기존 좌표 있으면 사용 (타입 무관)
+    if(existing && existing.lat && existing.lng) { cb(existing); return; }
+
+    // 3) 카카오 키워드 검색
+    fetch('https://dapi.kakao.com/v2/local/search/keyword.json?query=' + encodeURIComponent(q) + '&size=1', {
+      headers: { 'Authorization': 'KakaoAK ' + _KAKAO_REST_KEY }
+    }).then(function(r){ return r.json(); })
+    .then(function(data){
+      var doc = (data.documents||[])[0];
+      if(doc) { cb({ type:'address', name:q, lat:parseFloat(doc.y), lng:parseFloat(doc.x) }); }
+      else    { cb(null); }
+    }).catch(function(){ cb(null); });
   }
 
-  // ② 카카오 API (3단계 캐시)
-  if(!start.lat || !dest.lat) {
-    toast('위치 정보가 없습니다. 다시 선택해주세요.');
-    return;
-  }
-
-  // 로딩 표시
-  var box = document.getElementById('transitResultBox');
+  // 로딩 즉시 표시
+  var box     = document.getElementById('transitResultBox');
   var loading = document.getElementById('transitLoading');
-  var card = document.getElementById('transitResultCard');
-  var errBox = document.getElementById('transitResultErr');
-  if(box) box.style.display = 'block';
-  if(loading) { loading.style.display = 'flex'; }
-  if(card) card.style.display = 'none';
-  if(errBox) errBox.style.display = 'none';
-  if(box) box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  var card    = document.getElementById('transitResultCard');
+  var errBox  = document.getElementById('transitResultErr');
+  if(box)     { box.style.display='block'; box.scrollIntoView({behavior:'smooth',block:'start'}); }
+  if(loading) loading.style.display='flex';
+  if(card)    card.style.display='none';
+  if(errBox)  errBox.style.display='none';
+
+  // 출발지/도착지 동시 해석
+  var resolved = { start: null, dest: null, count: 0 };
+  function _onResolved() {
+    resolved.count++;
+    if(resolved.count < 2) return;
+    var start = resolved.start, dest = resolved.dest;
+
+    if(!start || !dest) {
+      if(loading) loading.style.display='none';
+      toast('위치를 찾을 수 없습니다. 다른 검색어를 입력해주세요.');
+      return;
+    }
+
+    // 해석 결과 저장
+    _fmapStart = start; _fmapDest = dest;
+
+    // 입력창 동기화
+    if(inpS) inpS.value = start.name;
+    if(inpD) inpD.value = dest.name;
+
+    // S.start / S.dest 동기화
+    var ss = (start.type==='subway') ? start : { name:start.name, line:'', lat:start.lat, lng:start.lng };
+    var ds = (dest.type==='subway')  ? dest  : { name:dest.name,  line:'', lat:dest.lat,  lng:dest.lng  };
+    S.start = ss; if(typeof setStart==='function') setStart(ss);
+    S.dest  = ds; if(typeof setDest==='function')  setDest(ds);
+
+    console.log('[경로] 출발:', start.name, '('+start.type+')', '→ 도착:', dest.name, '('+dest.type+')');
+
+    // ── 경로 탐색 ──
+    var useKakao = _needKakao(start, dest);
+    console.log('[경로] useKakao=' + useKakao);
+
+    if(!useKakao) {
+      // ① 지하철 BFS
+      if(loading) loading.style.display = 'none';
+      if(typeof doRoute === 'function') setTimeout(function(){ doRoute(); }, 100);
+      setTimeout(function(){ _renderBfsToTransitBox(start, dest); }, 600);
+      return;
+    }
+
+    // ② ODsay 복합경로 (지하철+버스+도보+일반장소)
+    if(loading) loading.style.display = 'flex';
 
   // ODsay → Worker 프록시 경유 (Referer 헤더 포함)
   // ODsay 직접 호출 (localhost URI 인증)
@@ -2454,8 +2449,13 @@ function fmapDoRoute() {
     })
     .catch(function(e){
       if(loading) loading.style.display = 'none';
-      if(box) box.style.display = 'none';
+      toast('경로 탐색 실패: ' + (e.message || '네트워크 오류'));
     });
+  }  // end _onResolved
+
+  // ── 위치 해석 실행 (중복 호출 방지) ──
+  _resolveLocation(qS || (resolved.start&&resolved.start.name) || '', _fmapStart, function(s){ resolved.start=s; _onResolved(); });
+  _resolveLocation(qD || (resolved.dest&&resolved.dest.name)   || '', _fmapDest,  function(d){ resolved.dest=d;  _onResolved(); });
 }
 
 // ODsay 응답 → 렌더링용 routes 형식 변환
