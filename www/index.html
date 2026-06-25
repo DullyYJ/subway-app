@@ -258,6 +258,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);}
 
 /* 탑승시간대 혼잡 리스트 */
 [data-theme="pastel"] #transitCongList{background:var(--card) !important;border-color:var(--border) !important;}
+[data-theme="pastel"] #transitResultCard button{background:var(--card2) !important;border-color:var(--border) !important;color:var(--text) !important;}
+[data-theme="pastel"] .cong-bar-bg,[data-theme="pastel"] .bar-bg{background:var(--border2) !important;}
 
 /* 혼잡 분석 */
 [data-theme="pastel"] #congCard{background:var(--card) !important;}
@@ -942,7 +944,7 @@ input[type=time]{color-scheme:dark;}
 .full-map-btn{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:11px;background:#2c2c2e;border:1px solid var(--border2);border-radius:12px;font-size:12px;font-weight:700;color:var(--text);cursor:pointer;}
 .full-map-btn:active{background:var(--border);}
 /* 전국 노선도 오버레이 */
-.map-overlay{position:absolute;inset:0;background:#0e0e11;z-index:600;display:none;flex-direction:column;}
+.map-overlay{position:absolute;inset:0;background:var(--bg);z-index:600;display:none;flex-direction:column;}
 .map-overlay.on{display:flex;}
 .map-overlay-hdr{padding:12px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border);flex-shrink:0;background:#0e0e11;}
 .map-overlay-hdr h3{font-size:15px;font-weight:700;flex:1;color:var(--text);}
@@ -3901,7 +3903,7 @@ window.addEventListener('unhandledrejection', function(e) {
       </div>
       <!-- 세부경로 버튼 -->
       <div style="margin-top:10px;">
-        <button onclick="openTransitDetail()" style="width:100%;padding:11px;background:linear-gradient(135deg,#1a1a2e,#16213e);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:13px;font-weight:700;cursor:pointer;">🗺️ 세부경로 보기</button>
+        <button onclick="openTransitDetail()" style="width:100%;padding:11px;background:var(--card2);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:13px;font-weight:700;cursor:pointer;">🗺️ 세부경로 보기</button>
       </div>
     </div>
     <div id="transitResultErr" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;text-align:center;color:var(--sub);font-size:13px;"></div>
@@ -4059,7 +4061,7 @@ window.addEventListener('unhandledrejection', function(e) {
       </button>
     </div>
     <!-- 관제 모드 상태 HUD -->
-    <div id="trackingHUD" style="display:none;background:#1c1c1e;border-radius:12px;
+    <div id="trackingHUD" style="display:none;background:var(--card);border-radius:12px;
       padding:12px 14px;margin-top:8px;border:1px solid #30d15855;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
         <span style="color:#30d158;font-size:12px;font-weight:800;">🛰️ GPS 관제 모드 가동 중</span>
@@ -4123,7 +4125,7 @@ window.addEventListener('unhandledrejection', function(e) {
 
   <!-- ══ 세부경로 팝업 ══ -->
   <div id="transitDetailModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:10001;align-items:flex-end;justify-content:center;" onclick="if(event.target===this)closeTransitDetail()">
-    <div style="background:#1c1c1e;border-radius:20px 20px 0 0;width:100%;max-width:520px;height:92vh;display:flex;flex-direction:column;overflow:hidden;">
+    <div style="background:var(--card);border-radius:20px 20px 0 0;width:100%;max-width:520px;height:92vh;display:flex;flex-direction:column;overflow:hidden;">
       <!-- 핸들 + 헤더 -->
       <div style="padding:10px 18px 0;flex-shrink:0;">
         <div style="width:36px;height:4px;background:#3a3a3c;border-radius:2px;margin:0 auto 12px;"></div>
@@ -4134,14 +4136,14 @@ window.addEventListener('unhandledrejection', function(e) {
       </div>
 
       <!-- ★ 가로 타임라인 노선도 -->
-      <div id="transitDetailTimeline" style="flex-shrink:0;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;padding:10px 0 4px;background:#141416;border-bottom:1px solid #2c2c2e;">
+      <div id="transitDetailTimeline" style="flex-shrink:0;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;padding:10px 0 4px;background:var(--card2);border-bottom:1px solid var(--border);">
         <div id="transitDetailTimelineTrack" style="display:inline-flex;align-items:stretch;min-width:100%;padding:0 16px;gap:0;"></div>
       </div>
 
       <!-- 구간 목록 스크롤 -->
       <div id="transitDetailSections" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 0 8px;min-height:0;"></div>
       <!-- 외부 지도 버튼 — flex-shrink:0 + safe-area padding -->
-      <div style="display:flex;gap:8px;padding:12px 14px;padding-bottom:max(16px,env(safe-area-inset-bottom,16px));flex-shrink:0;border-top:1px solid #2c2c2e;background:#1c1c1e;">
+      <div style="display:flex;gap:8px;padding:12px 14px;padding-bottom:max(16px,env(safe-area-inset-bottom,16px));flex-shrink:0;border-top:1px solid var(--border);background:var(--card);">
         <button onclick="openKakaoNavFromResult()" style="flex:1;padding:13px;border:none;border-radius:12px;background:#FEE500;color:#3A1D1D;font-size:13px;font-weight:700;cursor:pointer;">🗺️ 카카오맵 길안내</button>
         <button onclick="openNaverNavFromResult()" style="flex:1;padding:13px;border:none;border-radius:12px;background:#03C75A;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">🗺️ 네이버지도</button>
       </div>
@@ -4469,7 +4471,7 @@ window.addEventListener('unhandledrejection', function(e) {
     <svg onclick="_closeFavPopup()" width="22" height="22" viewBox="0 0 24 24" fill="#8e8e93" style="cursor:pointer"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
   </div>
   <!-- 신규 등록 폼 -->
-  <div style="background:#1c1c1e;border-radius:12px;padding:12px;margin-bottom:14px;">
+  <div style="background:var(--card);border-radius:12px;padding:12px;margin-bottom:14px;">
     <p style="font-size:12px;color:var(--gold);font-weight:700;margin-bottom:10px;">＋ 새 즐겨찾기 등록</p>
     <input id="favNameInp" type="text" placeholder="이름 (예: 출근길, 집→회사)" maxlength="20"
       style="width:100%;background:var(--card);border:1px solid var(--border2);border-radius:9px;padding:10px 12px;color:var(--text);font-size:13px;outline:none;margin-bottom:8px;box-sizing:border-box;">
@@ -4495,7 +4497,7 @@ window.addEventListener('unhandledrejection', function(e) {
 
 <!-- ══ 도보 안내 모달 ══ -->
 <div id="walkModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:10000;align-items:flex-end;justify-content:center;" onclick="if(event.target===this)closeWalkModal()">
-  <div id="walkModalCard" style="background:#1c1c1e;border-radius:20px 20px 0 0;width:100%;max-width:520px;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;">
+  <div id="walkModalCard" style="background:var(--card);border-radius:20px 20px 0 0;width:100%;max-width:520px;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;">
     <!-- 헤더 (고정) -->
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px 10px;flex-shrink:0;">
       <div>
@@ -4508,11 +4510,11 @@ window.addEventListener('unhandledrejection', function(e) {
     <div style="padding:4px 12px 24px;">
       <!-- 거리/시간 -->
       <div style="display:flex;gap:8px;margin-bottom:14px;">
-        <div style="flex:1;background:#2c2c2e;border-radius:10px;padding:12px;text-align:center;">
+        <div style="flex:1;background:var(--card2);border-radius:10px;padding:12px;text-align:center;">
           <div style="font-size:10px;color:var(--sub);margin-bottom:3px;">직선거리</div>
           <div id="walkDistVal" style="font-size:18px;font-weight:700;color:#fff;">-</div>
         </div>
-        <div style="flex:1;background:#2c2c2e;border-radius:10px;padding:12px;text-align:center;">
+        <div style="flex:1;background:var(--card2);border-radius:10px;padding:12px;text-align:center;">
           <div style="font-size:10px;color:var(--sub);margin-bottom:3px;">도보 예상</div>
           <div id="walkTimeVal" style="font-size:18px;font-weight:700;color:var(--green);">-</div>
         </div>
@@ -7483,7 +7485,7 @@ window.addEventListener('unhandledrejection', function(e) {
 
   <!-- 역 선택 팝업 -->
   <div id="gmPop" style="position:fixed;bottom:-160px;left:0;right:0;
-    background:#1c1c1e;border-top:1px solid #2c2c2e;border-radius:16px 16px 0 0;
+    background:var(--card);border-top:1px solid var(--border);border-radius:16px 16px 0 0;
     padding:14px 16px 30px;transition:bottom .28s cubic-bezier(.25,.46,.45,.94);
     z-index:9999;box-shadow:0 -8px 32px rgba(0,0,0,.8);">
     <div style="width:32px;height:4px;background:#3a3a3c;border-radius:2px;margin:0 auto 10px;"></div>
@@ -10720,14 +10722,14 @@ function renderRegionSvg(region) {
 
   // 지역명 헤더
   html += '<div style="color:#f5a623;font-weight:800;font-size:16px;margin-bottom:16px;padding:10px;'
-    + 'background:#1c1c1e;border-radius:10px;border-left:4px solid #f5a623;text-align:center;">'
+    + 'background:var(--card);border-radius:10px;border-left:4px solid #f5a623;text-align:center;">'
     + '🗺️ ' + (_REGION_NAMES[region]||region) + ' 지하철 노선도</div>';
 
   // 노선별 역 목록 카드
   Object.keys(lineGroups).forEach(function(line){
     var arr = lineGroups[line];
     var col = _REGION_LINE_COLORS[line] || '#888';
-    html += '<div style="margin-bottom:16px;background:#1c1c1e;border-radius:12px;overflow:hidden;">';
+    html += '<div style="margin-bottom:16px;background:var(--card);border-radius:12px;overflow:hidden;">';
     html += '<div style="background:' + col + ';padding:10px 14px;font-weight:800;font-size:13px;color:#fff;">'
       + '● ' + line + ' (' + arr.length + '개 역)</div>';
     // ★ 역—역—역 일렬 연결 형태 (노선 색상 실선으로 연결)
@@ -10775,7 +10777,7 @@ function renderRegionSvg(region) {
   });
 
   // 홈 검색 안내
-  html += '<div style="padding:16px;background:#1c1c1e;border-radius:12px;'
+  html += '<div style="padding:16px;background:var(--card);border-radius:12px;'
     + 'border:1px solid #3a3a3c;text-align:center;color:#888;font-size:12px;line-height:1.8;">'
     + '💡 역명을 탭하거나 <span style="color:#f5a623;">홈 탭 검색창</span>에서 역명을 입력하면<br>'
     + '전국 최단 경로를 탐색할 수 있습니다.</div>';
@@ -11269,7 +11271,7 @@ function _showGpsMultiModal(candidates, lat, lng){
       : '<span style="color:var(--orange);">'+d+'m (도보 '+walk+'m)</span>';
     html += '<button onclick="gpsSelectStation('+i+')" style="'
       +'display:flex;align-items:center;gap:10px;'
-      +'background:#2c2c2e;border:1.5px solid '+clr+';border-radius:11px;'
+      +'background:var(--card2);border:1.5px solid '+clr+';border-radius:11px;'
       +'padding:10px 12px;cursor:pointer;text-align:left;font-family:inherit;'
       +'transition:background .15s;" '
       +'onmousedown="this.style.background=\'#3a3a3c\'" '
@@ -20498,7 +20500,7 @@ function _renderTransitCongestion(sections) {
       + '<div style="text-align:right;flex-shrink:0;">'
         + '<div style="font-size:13px;font-weight:800;color:'+col+';">'+pct+'%</div>'
         + '<div style="font-size:9px;color:'+col+';font-weight:700;">'+txt+'</div>'
-        + '<div style="width:40px;height:3px;background:#2c2c2e;border-radius:2px;margin-top:3px;">'
+        + '<div style="width:40px;height:3px;background:var(--border2,#2c2c2e);border-radius:2px;margin-top:3px;">'
           + '<div style="width:'+pct+'%;height:100%;background:'+col+';border-radius:2px;"></div>'
         + '</div>'
       + '</div>'
