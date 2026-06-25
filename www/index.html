@@ -40,6 +40,7 @@
   --arex:#0090d2;
   --input-bg:#0e0e10;--nav-bg:#1c1c1e;--nav-border:#2c2c2e;
   --chip-bg:#2c2c2e;--chip-on-bg:var(--gold);--chip-on-txt:#121214;
+  --start-dot:#d4af37;--end-dot:#ff2d55;--gps-dot:#ffd60a;
   --theme-id:dark;
 }
 /* ── 화이트 파스텔 테마 (카카오 스타일 하늘색) ── */
@@ -54,6 +55,7 @@
   --card-dark:#e8f0f8;
   --prod-img-bg:#e8f4ff;
   --map-bg:#f5f9ff;
+  --start-dot:#1d9bf0;--end-dot:#e0455a;--gps-dot:#f0a500;
   --map-bar-bg:rgba(240,244,248,.98);
   --gps-btn-bg:rgba(29,155,240,.12);
   --theme-id:pastel;
@@ -392,11 +394,11 @@ header h1 em{color:var(--gold);font-style:normal;}
 .htl-time{font-size:9px;font-weight:600;color:var(--sub);text-align:center;height:16px;margin-top:3px;white-space:nowrap;}
 /* 첫/마지막 노드 시각은 골드 강조 */
 #transitHtlTrack .htl-stn:first-child .htl-time,
-#transitHtlTrack .htl-stn:last-child .htl-time{color:var(--gold);font-weight:700;}
+#transitHtlTrack .htl-stn:last-child .htl-time{color:var(--end-dot,var(--red));font-weight:700;}
 .htl-stn.htl-passed .htl-name,.htl-stn.htl-passed .htl-time,.htl-stn.htl-passed .htl-line{opacity:.35;}
 .htl-stn.htl-passed .htl-dot{opacity:.35;}
-.htl-stn.htl-current .htl-name{color:var(--gold);font-weight:800;}
-.htl-stn.htl-current .htl-dot{background:var(--gold);border-color:var(--gold);box-shadow:0 0 0 4px rgba(212,175,55,.25);}
+.htl-stn.htl-current .htl-name{color:var(--start-dot,var(--gold));font-weight:800;}
+.htl-stn.htl-current .htl-dot{background:var(--start-dot,var(--gold));border-color:var(--start-dot,var(--gold));box-shadow:0 0 0 4px rgba(212,175,55,.25);}
 /* ── htl-track: position:relative (이동 열차 레이어 기준) */
 .htl-track{position:relative;}
 /* ── 환승 구분자 ── */
@@ -2681,7 +2683,7 @@ function _renderTransitResultCard(data, start, dest, cacheSource) {
 
       var dot;
       if(isFirst)
-        dot = '<span class="htl-dot" style="border-color:var(--gold);background:var(--gold);width:14px;height:14px;top:6px;"></span>';
+        dot = '<span class="htl-dot" style="border-color:var(--start-dot);background:var(--start-dot);width:14px;height:14px;top:6px;"></span>';
       else if(isLast)
         dot = '<span class="htl-dot" style="border-color:#ff2d55;background:#ff2d55;width:14px;height:14px;top:6px;"></span>';
       else
@@ -2820,7 +2822,7 @@ function openTransitDetail() {
           + '</div>';
       } else {
         var dot2;
-        if(isF) dot2 = '<span style="width:10px;height:10px;border-radius:50%;background:#ffd60a;border:2px solid #ffd60a;display:inline-block;position:relative;z-index:1;flex-shrink:0;"></span>';
+        if(isF) dot2 = '<span style="width:10px;height:10px;border-radius:50%;background:var(--start-dot);border:2px solid var(--start-dot);display:inline-block;position:relative;z-index:1;flex-shrink:0;"></span>';
         else if(isL) dot2 = '<span style="width:10px;height:10px;border-radius:50%;background:#ff2d55;border:2px solid #ff2d55;display:inline-block;position:relative;z-index:1;flex-shrink:0;"></span>';
         else if(isXfer2) dot2 = '<span style="width:10px;height:10px;border-radius:50%;background:'+tn.col+'44;border:2px solid '+tn.col+';display:inline-block;position:relative;z-index:1;flex-shrink:0;box-shadow:0 0 0 3px '+tn.col+'44;"></span>';
         else dot2 = '<span style="width:8px;height:8px;border-radius:50%;background:'+tn.col+';border:2px solid '+tn.col+';display:inline-block;position:relative;z-index:1;flex-shrink:0;"></span>';
@@ -3071,7 +3073,7 @@ function _showMapRouteSheet(startStn, destStn) {
       var leftCol  = col;
       var rightCol = col;
 
-      var dot = isF ? '<span class="htl-dot" style="border-color:#ffd60a;background:#ffd60a;width:14px;height:14px;top:6px;"></span>'
+      var dot = isF ? '<span class="htl-dot" style="border-color:var(--start-dot);background:var(--start-dot);width:14px;height:14px;top:6px;"></span>'
               : isL ? '<span class="htl-dot" style="border-color:#ff2d55;background:#ff2d55;width:14px;height:14px;top:6px;"></span>'
               : '<span class="htl-dot" style="border-color:'+col+';background:'+col+';"></span>';
 
