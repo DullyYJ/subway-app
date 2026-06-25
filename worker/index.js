@@ -974,6 +974,60 @@ export default {
 
       // ══════════════════════════════════════════════════
       // 🚇 AI 역무원 메시지 조회
+      // ══════════════════════════════════════════════════
+      // 🤖 개인 경로 AI 브리핑 (사용자별, D1 저장 없음)
+      // POST /ai-brief
+      // body: { from, to, lines[], hour, congPct, transfers }
+      // ══════════════════════════════════════════════════
+      if (path === '/ai-brief' && method === 'POST') {
+        let body;
+        try { body = await request.json(); } catch(e) { return json({ error: 'invalid body' }, 400); }
+
+        const { from, to, lines = [], hour = 12, congPct = 40, transfers = 0, totalMin = 60, destName } = body;
+        if (!from || !to) return json({ error: 'from/to 필요' }, 400);
+
+        const kstH = getKSTHour();
+        const kstTimeStr = getKSTTimeStr();
+        const timeSlot = getTimeSlot(kstH).name;
+
+        // 혼잡도 텍스트
+        const congTxt = congPct >= 80 ? '매우 혼잡 🔴' : congPct >= 60 ? '혼잡 🟠' : congPct >= 40 ? '보통 🟡' : '여유 🟢';
+        // 경유 노선
+        const linesTxt = lines.length > 0 ? lines.join(' → ') : '직통';
+        // 환승 표현
+        const xferTxt = transfers > 0 ? `${transfers}회 환승` : '직통';
+
+        const prompt = `당신은 개인 전용 지하철 AI 역무원입니다.
+현재 시각: ${kstTimeStr} (${timeSlot})
+사용자 경로: ${from} → ${to} (${totalMin}분, ${xferTxt})
+경유 노선: ${linesTxt}
+현재 혼잡도: ${congTxt} (${congPct}%)
+
+위 경로를 이용하는 사용자에게 지금 이 순간 꼭 필요한 실시간 브리핑을 해주세요.
+- 2~3문장, 친근한 존댓말
+- 혼잡도·환승 팁·소요시간 중 가장 중요한 것 언급
+- 시간대에 맞는 멘트 (출근/점심/퇴근/심야)
+- 이모지 2~3개
+- 따옴표 없이 본문만`;
+
+        try {
+          const text = await callGemini(prompt, env);
+          await incrementCount(env);
+          const kstMin = getKSTMin();
+          return json({
+            msg: text.trim(),
+            from, to,
+            lines,
+            congPct,
+            ts: Date.now(),
+            nextAt: Date.now() + 10 * 60 * 1000  // 다음 브리핑 10분 후
+          });
+        } catch(e) {
+          console.error('[ai-brief]', e.message);
+          return json({ error: 'AI 호출 실패', detail: e.message }, 500);
+        }
+      }
+
       // GET /ai-messages?line=2호선&limit=20
       // ══════════════════════════════════════════════════
       if (path === '/ai-messages' && method === 'GET') {
