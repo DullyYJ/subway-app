@@ -2341,667 +2341,103 @@ function fmapDoRoute() {
   var qS   = inpS ? inpS.value.trim() : '';
   var qD   = inpD ? inpD.value.trim() : '';
 
-  if(!qS && !qD && !_fmapStart && !_fmapDest) {
-    toast('출발지와 도착지를 입력해주세요.');
-    return;
-  }
-
-  // ── 이름으로 위치 해석: STNDB → 카카오 순으로 폴백 ──
-  function _resolveLocation(q, existing, cb) {
-    // 이미 좌표 있으면 그대로
-    if(existing && existing.lat && existing.lng && existing.name === q) { cb(existing); return; }
-    if(!q) { cb(existing || null); return; }
-
-    // 1) STNDB 역명 매칭
-    if(typeof STNDB !== 'undefined') {
-      var s = STNDB.find(function(s){ return s.name===q || s.name===q+'역' || s.name.replace(/역$/,'')===q; });
-      if(s) { cb({ type:'subway', name:s.name, line:s.line, lat:s.lat, lng:s.lng }); return; }
-    }
-
-    // 2) 기존 좌표 있으면 사용 (타입 무관)
-    if(existing && existing.lat && existing.lng) { cb(existing); return; }
-
-    // 3) 카카오 키워드 검색
-    fetch('https://dapi.kakao.com/v2/local/search/keyword.json?query=' + encodeURIComponent(q) + '&size=1', {
-      headers: { 'Authorization': 'KakaoAK ' + _KAKAO_REST_KEY }
-    }).then(function(r){ return r.json(); })
-    .then(function(data){
-      var doc = (data.documents||[])[0];
-      if(doc) { cb({ type:'address', name:q, lat:parseFloat(doc.y), lng:parseFloat(doc.x) }); }
-      else    { cb(null); }
-    }).catch(function(){ cb(null); });
+  // 최소 하나는 있어야 함
+  if(!qS && !_fmapStart && !qD && !_fmapDest) {
+    toast('출발지와 도착지를 입력해주세요.'); return;
   }
 
   // 로딩 즉시 표시
   var box     = document.getElementById('transitResultBox');
   var loading = document.getElementById('transitLoading');
   var card    = document.getElementById('transitResultCard');
-  var errBox  = document.getElementById('transitResultErr');
   if(box)     { box.style.display='block'; box.scrollIntoView({behavior:'smooth',block:'start'}); }
   if(loading) loading.style.display='flex';
   if(card)    card.style.display='none';
-  if(errBox)  errBox.style.display='none';
 
-  // 출발지/도착지 동시 해석
-  var resolved = { start: null, dest: null, count: 0 };
-  function _onResolved() {
-    resolved.count++;
-    if(resolved.count < 2) return;
-    var start = resolved.start, dest = resolved.dest;
+  // ── 위치 해석: STNDB → 기존좌표 → 카카오 순 ──
+  function _resolve(q, existing, cb) {
+    if(existing && existing.lat && existing.lng && existing.name === q) { cb(existing); return; }
+    if(!q) { cb(existing || null); return; }
+    // STNDB
+    if(typeof STNDB !== 'undefined') {
+      var stn = STNDB.find(function(s){ return s.name===q||s.name===q+'역'||s.name.replace(/역$/,'')===q; });
+      if(stn) { cb({type:'subway',name:stn.name,line:stn.line,lat:stn.lat,lng:stn.lng}); return; }
+    }
+    // 기존 좌표
+    if(existing && existing.lat && existing.lng) { cb(existing); return; }
+    // 카카오 키워드
+    fetch('https://dapi.kakao.com/v2/local/search/keyword.json?query='+encodeURIComponent(q)+'&size=1',
+      {headers:{'Authorization':'KakaoAK '+_KAKAO_REST_KEY}})
+    .then(function(r){return r.json();})
+    .then(function(d){
+      var doc=(d.documents||[])[0];
+      cb(doc ? {type:'address',name:q,lat:parseFloat(doc.y),lng:parseFloat(doc.x)} : null);
+    }).catch(function(){ cb(null); });
+  }
+
+  var _done = {s:false, d:false, start:null, dest:null};
+
+  function _run() {
+    if(!_done.s || !_done.d) return;
+    var start = _done.start, dest = _done.dest;
 
     if(!start || !dest) {
       if(loading) loading.style.display='none';
-      toast('위치를 찾을 수 없습니다. 다른 검색어를 입력해주세요.');
-      return;
+      toast('위치를 찾을 수 없습니다. 다른 검색어를 입력해주세요.'); return;
     }
 
-    // 해석 결과 저장
+    // 결과 저장 및 UI 동기화
     _fmapStart = start; _fmapDest = dest;
-
-    // 입력창 동기화
     if(inpS) inpS.value = start.name;
     if(inpD) inpD.value = dest.name;
-
-    // S.start / S.dest 동기화
-    var ss = (start.type==='subway') ? start : { name:start.name, line:'', lat:start.lat, lng:start.lng };
-    var ds = (dest.type==='subway')  ? dest  : { name:dest.name,  line:'', lat:dest.lat,  lng:dest.lng  };
+    var ss = {name:start.name, line:start.line||'', lat:start.lat, lng:start.lng};
+    var ds = {name:dest.name,  line:dest.line||'',  lat:dest.lat,  lng:dest.lng};
     S.start = ss; if(typeof setStart==='function') setStart(ss);
     S.dest  = ds; if(typeof setDest==='function')  setDest(ds);
+    if(typeof _resetAIBrief==='function') _resetAIBrief();
 
-    console.log('[경로] 출발:', start.name, '('+start.type+')', '→ 도착:', dest.name, '('+dest.type+')');
+    console.log('[경로]', start.name, '('+start.type+') →', dest.name, '('+dest.type+')');
 
-    // ── 경로 탐색 ──
     var useKakao = _needKakao(start, dest);
-    console.log('[경로] useKakao=' + useKakao);
 
     if(!useKakao) {
-      // ① 지하철 BFS
-      if(loading) loading.style.display = 'none';
-      if(typeof doRoute === 'function') setTimeout(function(){ doRoute(); }, 100);
-      setTimeout(function(){ _renderBfsToTransitBox(start, dest); }, 600);
+      // BFS (지하철역 → 지하철역 동일 도시)
+      if(loading) loading.style.display='none';
+      if(typeof doRoute==='function') setTimeout(function(){doRoute();}, 100);
+      setTimeout(function(){_renderBfsToTransitBox(start, dest);}, 600);
       return;
     }
 
-    // ② ODsay 복합경로 (지하철+버스+도보+일반장소)
-    if(loading) loading.style.display = 'flex';
+    // ODsay 복합경로
+    if(!start.lat || !dest.lat) {
+      if(loading) loading.style.display='none';
+      toast('좌표 정보가 없습니다.'); return;
+    }
+    var odsayUrl = 'https://api.odsay.com/v1/api/searchPubTransPathT'
+      +'?SX='+start.lng+'&SY='+start.lat
+      +'&EX='+dest.lng +'&EY='+dest.lat
+      +'&SearchPathType=0&SearchType=0'
+      +'&apiKey='+encodeURIComponent('TIZm4dwMq1Uw4UgWJhhstA');
 
-  // ODsay → Worker 프록시 경유 (Referer 헤더 포함)
-  // ODsay 직접 호출 (localhost URI 인증)
-  var odsayKey = 'TIZm4dwMq1Uw4UgWJhhstA';
-  var odsayUrl = 'https://api.odsay.com/v1/api/searchPubTransPathT'
-    + '?SX=' + start.lng + '&SY=' + start.lat
-    + '&EX=' + dest.lng  + '&EY=' + dest.lat
-    + '&SearchPathType=0&SearchType=0'
-    + '&apiKey=' + encodeURIComponent(odsayKey);
-
-  fetch(odsayUrl)
-    .then(function(r){ return r.json(); })
-    .then(function(odsayData){
-      if(loading) loading.style.display = 'none';
-      if(odsayData.error || !odsayData.result || !odsayData.result.path || !odsayData.result.path.length) {
-        if(box) box.style.display = 'none';
-        var errMsg = odsayData.error ? JSON.stringify(odsayData.error).slice(0,60) : '경로없음';
-        toast('ODsay실패:' + errMsg);
-        return;
+    fetch(odsayUrl)
+    .then(function(r){return r.json();})
+    .then(function(data){
+      if(loading) loading.style.display='none';
+      if(data.error||!data.result||!data.result.path||!data.result.path.length) {
+        var em = data.error?JSON.stringify(data.error).slice(0,60):'경로 없음';
+        toast('경로 탐색 실패: '+em); return;
       }
-      var converted = _convertODsayToRoutes(odsayData);
-      _renderTransitResultCard(converted, start, dest, 'odsay');
+      _renderTransitResultCard(_convertODsayToRoutes(data), start, dest, 'odsay');
     })
     .catch(function(e){
-      if(loading) loading.style.display = 'none';
-      toast('경로 탐색 실패: ' + (e.message || '네트워크 오류'));
+      if(loading) loading.style.display='none';
+      toast('네트워크 오류: '+(e.message||''));
     });
-  }  // end _onResolved
-
-  // ── 위치 해석 실행 (중복 호출 방지) ──
-  _resolveLocation(qS || (resolved.start&&resolved.start.name) || '', _fmapStart, function(s){ resolved.start=s; _onResolved(); });
-  _resolveLocation(qD || (resolved.dest&&resolved.dest.name)   || '', _fmapDest,  function(d){ resolved.dest=d;  _onResolved(); });
-}
-
-// ODsay 응답 → 렌더링용 routes 형식 변환
-function _convertODsayToRoutes(odsayData) {
-  var paths = (odsayData.result || {}).path || [];
-  var routes = paths.slice(0, 3).map(function(path) {
-    var info = path.info || {};
-    var sections = (path.subPath || []).map(function(sp) {
-      var ttype = sp.trafficType; // 1=지하철, 2=버스, 3=도보
-      var lane  = (sp.lane || [])[0] || {};
-      var stops = (sp.passStopList || {}).stations || [];
-      return {
-        transportation: {
-          type: ttype,
-          name: ttype === 1 ? (lane.name || lane.subwayCode || '') :
-                ttype === 2 ? (lane.busNo || lane.busID || '') : '도보'
-        },
-        duration: (sp.sectionTime || 0) * 60,
-        distance: sp.distance || 0,
-        passStopList: stops.length ? {
-          stationList: stops.map(function(s){ return { stationName: s.stationName }; })
-        } : null
-      };
-    });
-    return {
-      summary: {
-        duration: (info.totalTime || 0) * 60,
-        distance: info.totalDistance || 0
-      },
-      sections: sections
-    };
-  });
-  return { routes: routes };
-}
-window._convertODsayToRoutes = _convertODsayToRoutes;
-
-// ══════════════════════════════════════════════════════════
-// 복합경로 결과 렌더링 (가로 타임라인 + 세부팝업)
-// ══════════════════════════════════════════════════════════
-var _transitResultDest  = null;
-var _transitResultStart = null;
-var _transitResultData  = null;  // 세부팝업용 저장
-
-/* 노선/교통수단 색상 */
-function _transitColor(type, name) {
-  if(type === 3) return '#8e8e93';          // 도보
-  if(type === 1) {                          // 지하철
-    if(typeof LC === 'undefined' || !name) return '#0a84ff';
-    if(LC[name]) return LC[name];
-    // "수도권 N호선" / "광역 N호선" 접두사 제거 후 재시도
-    var bare = name.replace(/^(수도권|광역|서울|인천|경기)\s+/, '');
-    if(LC[bare]) return LC[bare];
-    // "경인선" → "1호선" 계열 등 별칭 매핑
-    var alias = {
-      '경인선':'#0052a4','경부선':'#0052a4','경원선':'#0052a4',
-      '일산선':'#0052a4','과천선':'#0052a4','안산선':'#0052a4',
-      '장항선':'#0052a4','중앙선':'#0052a4',
-      '분당선':'#f5a200','수인선':'#f5a200',
-      '공항철도1호선':'#0090d2',
-      '7호선(인천)':'#747f00','9호선(연장)':'#bdb092',
-      '9호선(연장2)':'#bdb092','별내선':'#e6186c',
-      '신분당선(연장)':'#d31145','신분당선(연장2)':'#d31145',
-      '에버라인선':'#74a842','의정부선':'#fb8f36',
-      '진접선':'#00a5de',
-    };
-    if(alias[name]) return alias[name];
-    if(alias[bare]) return alias[bare];
-    return '#0a84ff';
-  }
-  return '#00b341';                         // 버스
-}
-
-// 노선명 정규화 헬퍼
-function _normalizeLine(name) {
-  if(!name) return '';
-  var bare = name.replace(/^(수도권|광역|서울|인천|경기)\s+/, '');
-  // 동일 계통 노선 통합
-  var map = {
-    '경인선':'1호선','경부선':'1호선','경원선':'1호선',
-    '일산선':'1호선','과천선':'4호선','안산선':'4호선',
-    '장항선':'1호선','분당선':'수인분당선','수인선':'수인분당선',
-    '공항철도1호선':'공항철도',
-    '7호선(인천)':'7호선','9호선(연장)':'9호선','9호선(연장2)':'9호선',
-    '별내선':'8호선','신분당선(연장)':'신분당선','신분당선(연장2)':'신분당선',
-  };
-  return map[bare] || map[name] || bare || name;
-}
-window._normalizeLine = _normalizeLine;
-
-/* ── 가로 타임라인 렌더링 ── */
-function _renderTransitResultCard(data, start, dest, cacheSource) {
-  _transitResultStart = start;
-  _transitResultDest  = dest;
-  _transitResultData  = data;
-
-  var card   = document.getElementById('transitResultCard');
-  var header = document.getElementById('transitResultHeader');
-  var track  = document.getElementById('transitHtlTrack');
-  var errBox = document.getElementById('transitResultErr');
-  if(!card) return;
-
-  // 카카오/ODsay 다양한 응답 구조 처리
-  var routes = data.routes || data.result?.path || [];
-  // ODsay 구조: data.result.path[]
-  if(!routes.length && data.result && data.result.path) {
-    routes = data.result.path;
-  }
-  // 카카오 구조가 다를 경우
-  if(!routes.length && data.routes) routes = data.routes;
-
-  if(!routes.length) {
-    if(errBox){ errBox.style.display='block'; errBox.textContent='😢 경로 정보가 없습니다.'; }
-    console.warn('[경로렌더] 데이터:', JSON.stringify(data).slice(0,200));
-    return;
   }
 
-  var route    = routes[0];
-  console.log('[경로렌더] route keys:', Object.keys(route||{}).join(','));
-
-  // ODsay 구조 변환 (info/subPath → summary/sections)
-  if(route.info && route.subPath) {
-    var info = route.info;
-    route = {
-      summary: {
-        duration: (info.totalTime || 0) * 60,
-        distance: info.totalDistance || 0
-      },
-      sections: (route.subPath || []).map(function(sp) {
-        var ttype = sp.trafficType; // 1=지하철, 2=버스, 3=도보
-        return {
-          transportation: { type: ttype, name: sp.lane ? (sp.lane[0]||{}).name || '' : '' },
-          duration: (sp.sectionTime || 0) * 60,
-          distance: sp.distance || 0,
-          passStopList: sp.passStopList ? {
-            stationList: (sp.passStopList.stations || []).map(function(s){
-              return { stationName: s.stationName,
-                lat: s.y || s.lat || null,
-                lon: s.x || s.lon || s.lng || null };
-            })
-          } : null
-        };
-      })
-    };
-  }
-
-  var summary  = route.summary || {};
-  var sections = route.sections || [];
-  var totalMin = Math.round((summary.duration || 0) / 60);
-
-  // ── 헤더: 총 시간 + 출발→도착 ──
-  var cacheTag = cacheSource==='memory'?'⚡':cacheSource==='d1'?'💾':cacheSource==='bfs'?'🚇 BFS':'🔄';
-  header.innerHTML =
-    '<div style="display:flex;flex-direction:column;">'
-    + '<div style="font-size:28px;font-weight:900;color:var(--text);line-height:1;">' + totalMin
-    + '<span style="font-size:14px;font-weight:500;color:var(--sub);margin-left:3px;">분</span></div>'
-    + '</div>'
-    + '<div style="text-align:right;">'
-    + '<div style="font-size:13px;font-weight:700;color:var(--text);">' + _ltEsc(start.name) + ' → ' + _ltEsc(dest.name) + '</div>'
-    + '</div>';
-
-  // ── 가로 타임라인 노드 생성 ──
-  // 구간을 풀어서 "구간 노드" 배열 생성
-  // 도보: 🚶 아이콘 노드 / 지하철·버스: 탑승~하차 역 노드들
-  var nodes = [];  // { label, icon, color, time, arrTime, isStop, isWalk, ... }
-
-  // 현재 시각 기준 누적 경과 (ms)
-  var _nowMs = Date.now();
-  var _elapsedSec = 0;  // 구간별 누적 소요 초
-
-  // HH:MM 포맷 헬퍼
-  function _fmtHHMM(ms) {
-    var d = new Date(ms);
-    var h = d.getHours(), m = d.getMinutes();
-    return (h<10?'0':'')+h+':'+(m<10?'0':'')+m;
-  }
-
-  sections.forEach(function(sec, si) {
-    var trans   = sec.transportation || {};
-    var type    = trans.type;
-    var isWalk  = type === 3;
-    var isSub   = type === 1;
-    var col     = _transitColor(type, trans.name);
-    var secSec  = Math.round((sec.duration || 0));  // 초 단위
-    var secMin  = Math.round(secSec / 60);
-    var secDist = Math.round(sec.distance || 0);
-
-    if(isWalk) {
-      var arrMs = _nowMs + _elapsedSec * 1000;
-      nodes.push({
-        label: secDist >= 1000 ? (secDist/1000).toFixed(1)+'km' : secDist+'m',
-        icon: '🚶', color: col,
-        time: secMin < 1 ? '<1분' : secMin+'분',
-        arrTime: _fmtHHMM(arrMs),
-        isWalk: true, isSep: true, col: col,
-        secSec: secSec
-      });
-      _elapsedSec += secSec;
-    } else {
-      // 지하철/버스: 정류장 목록
-      var stops = [];
-      try { stops = sec.passStopList ? (sec.passStopList.stationList || []) : []; } catch(e) {}
-      var lineName = trans.name || sec.name || '';
-      var stopCount = stops.length || 1;
-      var perStopSec = Math.round(secSec / Math.max(stopCount - 1, 1));  // 정거장 간 소요
-
-      if(stops.length) {
-        stops.forEach(function(st, stIdx) {
-          var arrMs = _nowMs + _elapsedSec * 1000;
-          nodes.push({
-            label: st.stationName || '',
-            icon: isSub ? '🚇' : '🚌',
-            color: col, lineName: lineName,
-            time: stIdx === 0 ? (secMin+'분') : '',
-            arrTime: _fmtHHMM(arrMs),
-            isStop: true, isFirst: stIdx===0, isLast: stIdx===stops.length-1,
-            col: col, isSub: isSub, isBus: !isSub, secIdx: si,
-            lat: st.lat || st.y || null, lng: st.lon || st.lng || st.x || null,
-            secSec: stIdx < stops.length-1 ? perStopSec : 0
-          });
-          if(stIdx < stops.length - 1) _elapsedSec += perStopSec;
-        });
-        // 마지막 정거장까지 남은 오차 보정
-        var usedSec = perStopSec * (stopCount - 1);
-        _elapsedSec += Math.max(0, secSec - usedSec);
-      } else {
-        var arrMs = _nowMs + _elapsedSec * 1000;
-        nodes.push({ label: lineName, icon: isSub?'🚇':'🚌', color: col,
-          time: secMin+'분', arrTime: _fmtHHMM(arrMs),
-          isStop:true, col:col, secSec: secSec });
-        _elapsedSec += secSec;
-      }
-    }
-  });
-
-  // HTML 생성 — 환승 구분자 삽입
-  var html = '';
-  for(var i = 0; i < nodes.length; i++) {
-    var n = nodes[i];
-    var isFirst = (i === 0), isLast = (i === nodes.length-1);
-
-    if(n.isWalk) {
-      // 도보 구간: 점선 구간 + 거리 표시
-      html += '<div class="htl-stn htl-walk-node" style="--line-color:#636366;min-width:40px;max-width:52px;position:relative;">' +
-        '<div class="htl-name" style="color:#8e8e93;font-size:8px;min-height:28px;text-align:center;">' + _ltEsc(n.label) + '</div>' +
-        '<div class="htl-line" style="color:#636366;font-size:7px;text-align:center;">도보</div>' +
-        '<div class="htl-axis" style="position:relative;">' +
-          (!isFirst ? '<div class="htl-line-seg" style="left:0;right:50%;top:12px;background:repeating-linear-gradient(to right,#636366 0,#636366 4px,transparent 4px,transparent 8px);"></div>' : '') +
-          // 중앙: 도보 이모지
-          '<span style="position:absolute;top:2px;left:50%;transform:translateX(-50%);font-size:15px;z-index:2;line-height:1;">🚶‍➡️</span>' +
-          (!isLast ? '<div class="htl-line-seg" style="left:50%;right:0;top:12px;background:repeating-linear-gradient(to right,#636366 0,#636366 4px,transparent 4px,transparent 8px);"></div>' : '') +
-        '</div>' +
-        '<div class="htl-time" style="font-size:9px;color:var(--sub);text-align:center;">' + (n.arrTime||'') + '</div>' +
-      '</div>';
-    } else {
-      // 이전 실제 역 col
-      var prevActual = n.col;
-      for(var pi=i-1; pi>=0; pi--){ if(!nodes[pi].isWalk){ prevActual=nodes[pi].col; break; } }
-      var nextActual = n.col;
-      for(var ni2=i+1; ni2<nodes.length; ni2++){ if(!nodes[ni2].isWalk){ nextActual=nodes[ni2].col; break; } }
-      var prevCol = prevActual;
-      var nextCol = nextActual;
-      // 이전 실제 역 정보
-      var _prevStnName = '', _prevLineName = '';
-      for(var pni=i-1; pni>=0; pni--){
-        if(!nodes[pni].isWalk){
-          _prevStnName = nodes[pni].label;
-          _prevLineName = nodes[pni].lineName || '';
-          break;
-        }
-      }
-      // 노선 정규화 후 비교: 같은 노선 계통이면 환승 아님
-      var _curLineNorm  = typeof _normalizeLine==='function' ? _normalizeLine(n.lineName||'') : n.lineName;
-      var _prevLineNorm = typeof _normalizeLine==='function' ? _normalizeLine(_prevLineName) : _prevLineName;
-      var isXfer = i > 0 && !nodes[i-1].isWalk
-        && !n.isFirst
-        && _prevStnName !== n.label           // 같은 역명이면 환승 아님
-        && _curLineNorm !== _prevLineNorm;    // 정규화된 노선이 달라야 환승
-
-      // ── 환승 구분자: 수직 점선 구분선 형태 ──
-      if(isXfer) {
-        html += '<div class="htl-xfer-sep" style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;width:28px;position:relative;">'
-          // 세로 점선
-          + '<div style="position:absolute;top:0;bottom:0;left:50%;width:0;border-left:2px dashed #3a3a3c;transform:translateX(-50%);z-index:0;"></div>'
-          // 환승 이모지
-          + '<div style="position:relative;z-index:1;height:28px;display:flex;align-items:flex-end;justify-content:center;padding-bottom:2px;">'
-            + '<span style="font-size:13px;line-height:1;">🔄</span>'
-          + '</div>'
-          // 다음 노선 색 배지
-          + '<div style="position:relative;z-index:1;height:18px;display:flex;align-items:center;justify-content:center;">'
-            + '<div style="width:6px;height:6px;border-radius:50%;background:'+n.col+';box-shadow:0 0 0 2px '+n.col+'44;"></div>'
-          + '</div>'
-          // 가로 연결선 (이전색→다음색)
-          + '<div style="position:relative;height:26px;width:100%;display:flex;align-items:center;justify-content:center;">'
-            + '<div style="position:absolute;left:0;right:50%;top:12px;height:3px;background:'+prevCol+';z-index:1;"></div>'
-            + '<div style="position:absolute;left:50%;right:0;top:12px;height:3px;background:'+n.col+';z-index:1;"></div>'
-          + '</div>'
-          + '<div style="position:relative;z-index:1;font-size:9px;color:var(--sub);height:16px;line-height:16px;text-align:center;">'+(n.arrTime||'')+'</div>'
-        + '</div>';
-      }
-
-      var rawLabel = n.label || '';
-      var shortLabel = rawLabel.length > 6 ? rawLabel.slice(0,5) + '…' : rawLabel;
-      var nameHtml = '<div class="htl-name">' + _ltEsc(shortLabel) + '</div>';
-      // 환승역은 노선 배지 없음 (구분자에서 이미 표시), 첫 역은 배지 표시
-      var lineBadge = (!isXfer && n.isFirst)
-        ? '<div class="htl-line" style="color:' + n.col + ';font-size:7.5px;">' + _ltEsc(n.lineName||'') + '</div>'
-        : '<div class="htl-line"></div>';
-
-      var dot;
-      if(isFirst)
-        dot = '<span class="htl-dot" style="border-color:var(--start-dot);background:var(--start-dot);width:14px;height:14px;top:6px;"></span>';
-      else if(isLast)
-        dot = '<span class="htl-dot" style="border-color:#ff2d55;background:#ff2d55;width:14px;height:14px;top:6px;"></span>';
-      else
-        dot = '<span class="htl-dot" style="border-color:' + n.col + ';background:' + n.col + ';"></span>';
-
-      // 환승역은 왼쪽 선을 현재 노선색으로 (구분자가 이미 이전색→다음색 연결)
-      var leftLine  = isXfer ? n.col : prevCol;
-
-      var gpsId = 'tnode_' + i;
-      html += '<div class="htl-stn" id="' + gpsId + '" data-stnname="' + _ltEsc(rawLabel) + '" style="--line-color:' + n.col + ';">' +
-        nameHtml +
-        lineBadge +
-        '<div class="htl-axis">' +
-          (!isFirst ? '<div class="htl-line-seg" style="left:0;right:50%;top:12px;background:' + leftLine + ';"></div>' : '') +
-          dot +
-          (!isLast ? '<div class="htl-line-seg" style="left:50%;right:0;top:12px;background:' + nextCol + ';"></div>' : '') +
-        '</div>' +
-        '<div class="htl-time">' + (n.arrTime||n.time||'') + '</div>' +
-      '</div>';
-    }
-  }
-
-  if(track) track.innerHTML = html;
-  card.style.display = 'block';
-
-  // ★ transitResultBox 표시
-  var tbox = document.getElementById('transitResultBox');
-  if(tbox) tbox.style.display = 'block';
-
-  // GPS 상태바 숨김
-
-  // ★ 복합경로 지하철 구간 탑승 시간대 혼잡도 예측
-  _renderTransitCongestion(sections);
-
-  // ★ GPS 위치 추적 시작
-  if(typeof _startTransitGpsTracking === 'function') {
-    _startTransitGpsTracking(nodes);
-  }
-
-  // 첫 노드로 스크롤
-  if(track) track.scrollLeft = 0;
+  _resolve(qS, _fmapStart, function(r){ _done.start=r; _done.s=true; _run(); });
+  _resolve(qD, _fmapDest,  function(r){ _done.dest=r;  _done.d=true; _run(); });
 }
-
-/* ── 세부경로 팝업 열기 ── */
-function openTransitDetail() {
-  var modal  = document.getElementById('transitDetailModal');
-  var title  = document.getElementById('transitDetailTitle');
-  var sects  = document.getElementById('transitDetailSections');
-  var mapImg = document.getElementById('transitDetailMapImg');
-  if(!modal || !_transitResultData) return;
-
-  var data = _transitResultData;
-  var start = _transitResultStart, dest = _transitResultDest;
-  var routes   = data.routes || [];
-  if(!routes.length) return;
-
-  var route    = routes[0];
-  var summary  = route.summary || {};
-  var sections = route.sections || [];
-  var totalMin = Math.round((summary.duration || 0) / 60);
-
-  // 제목
-  if(title) title.textContent = totalMin + '분 · ' + _ltEsc((start||{}).name||'') + ' → ' + _ltEsc((dest||{}).name||'');
-
-  // 네이버 Static Map (출발지 + 목적지 마커)
-  if(mapImg && start && dest && start.lat && dest.lat) {
-    var sLat = start.lat, sLng = start.lng;
-    var dLat2 = dest.lat, dLng2 = dest.lng;
-    var dist2 = typeof haversineM==='function' ? haversineM(sLat,sLng,dLat2,dLng2) : 1000;
-    var cLat2 = (sLat+dLat2)/2, cLng2 = (sLng+dLng2)/2;
-    var lvl2  = dist2<300?14:dist2<700?13:dist2<1500?12:dist2<3000?11:10;
-    var w2    = Math.min(window.innerWidth-24, 492);
-    var naverUrl = _SERVER_URL + '/naver-map'
-      + '?center=' + cLng2 + ',' + cLat2
-      + '&level=' + lvl2 + '&w=' + w2 + '&h=360'
-      + '&markers=' + encodeURIComponent('type:d|size:mid|pos:' + sLng + ' ' + sLat + '|color:red')
-      + '&markers=' + encodeURIComponent('type:d|size:mid|pos:' + dLng2 + ' ' + dLat2 + '|color:blue');
-    mapImg.src = naverUrl;
-    mapImg.style.display = 'block';
-  } else if(mapImg) {
-    mapImg.style.display = 'none';
-  }
-
-  // ── ★ 가로 타임라인 노선도 렌더 ──
-  var tlTrack = document.getElementById('transitDetailTimelineTrack');
-  if(tlTrack) {
-    var tlNodes = [];
-    sections.forEach(function(sec) {
-      var trans   = sec.transportation || {};
-      var type    = trans.type;
-      var isWalk  = type === 3;
-      var isSub   = type === 1;
-      var col     = _transitColor(type, trans.name);
-      var secMin  = Math.round((sec.duration || 0) / 60);
-      var secDist = Math.round(sec.distance || 0);
-      if(isWalk) {
-        tlNodes.push({ isWalk:true, col:'#636366',
-          label: secDist>=1000?(secDist/1000).toFixed(1)+'km':secDist+'m',
-          time: secMin<1?'<1분':secMin+'분' });
-      } else {
-        var stops = [];
-        try { stops = sec.passStopList ? (sec.passStopList.stationList||[]) : []; } catch(e){}
-        var lineName = trans.name || sec.name || '';
-        if(stops.length) {
-          stops.forEach(function(st, si) {
-            tlNodes.push({ isWalk:false, col:col, lineName:lineName, isSub:isSub,
-              label: st.stationName||'',
-              time: si===0 ? (secMin+'분') : '',
-              isFirst: si===0, isLast: si===stops.length-1 });
-          });
-        } else {
-          tlNodes.push({ isWalk:false, col:col, lineName:lineName, isSub:isSub,
-            label:lineName, time:secMin+'분', isFirst:true, isLast:true });
-        }
-      }
-    });
-
-    var tlHtml = '';
-    for(var ti=0; ti<tlNodes.length; ti++) {
-      var tn = tlNodes[ti];
-      var isF = (ti===0), isL = (ti===tlNodes.length-1);
-      var prevCol2 = ti>0 ? tlNodes[ti-1].col : tn.col;
-      var nextCol2 = ti<tlNodes.length-1 ? tlNodes[ti+1].col : tn.col;
-      var isXfer2 = ti>0 && !tlNodes[ti-1].isWalk && !tn.isWalk && tlNodes[ti-1].col !== tn.col;
-
-      if(tn.isWalk) {
-        tlHtml += '<div style="display:flex;flex-direction:column;align-items:center;min-width:40px;position:relative;">'
-          + '<div style="font-size:9px;color:#636366;text-align:center;height:18px;line-height:18px;white-space:nowrap;">'+_ltEsc(tn.label)+'</div>'
-          + '<div style="font-size:8px;color:#636366;height:14px;line-height:14px;text-align:center;">도보</div>'
-          + '<div style="position:relative;height:26px;width:100%;display:flex;align-items:center;justify-content:center;">'
-            + (!isF?'<div style="position:absolute;left:0;right:50%;top:12px;height:2px;background:repeating-linear-gradient(to right,#555 0,#555 3px,transparent 3px,transparent 7px);"></div>':'')
-            + '<span style="font-size:14px;position:relative;z-index:1;">🚶‍➡️</span>'
-            + (!isL?'<div style="position:absolute;left:50%;right:0;top:12px;height:2px;background:repeating-linear-gradient(to right,#555 0,#555 3px,transparent 3px,transparent 7px);"></div>':'')
-          + '</div>'
-          + '<div style="font-size:9px;color:#636366;height:14px;line-height:14px;text-align:center;">'+tn.time+'</div>'
-          + '</div>';
-      } else {
-        var dot2;
-        if(isF) dot2 = '<span style="width:10px;height:10px;border-radius:50%;background:var(--start-dot);border:2px solid var(--start-dot);display:inline-block;position:relative;z-index:1;flex-shrink:0;"></span>';
-        else if(isL) dot2 = '<span style="width:10px;height:10px;border-radius:50%;background:#ff2d55;border:2px solid #ff2d55;display:inline-block;position:relative;z-index:1;flex-shrink:0;"></span>';
-        else if(isXfer2) dot2 = '<span style="width:10px;height:10px;border-radius:50%;background:'+tn.col+'44;border:2px solid '+tn.col+';display:inline-block;position:relative;z-index:1;flex-shrink:0;box-shadow:0 0 0 3px '+tn.col+'44;"></span>';
-        else dot2 = '<span style="width:8px;height:8px;border-radius:50%;background:'+tn.col+';border:2px solid '+tn.col+';display:inline-block;position:relative;z-index:1;flex-shrink:0;"></span>';
-
-        var badge2 = tn.isFirst
-          ? '<div style="font-size:8px;color:'+tn.col+';height:14px;line-height:14px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:64px;">'+_ltEsc(tn.lineName)+'</div>'
-          : '<div style="height:14px;"></div>';
-
-        tlHtml += '<div style="display:flex;flex-direction:column;align-items:center;min-width:56px;max-width:72px;position:relative;">'
-          + '<div style="font-size:10px;color:#fff;text-align:center;height:18px;line-height:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:64px;padding:0 2px;">'+_ltEsc(tn.label)+'</div>'
-          + badge2
-          + '<div style="position:relative;height:26px;width:100%;display:flex;align-items:center;justify-content:center;">'
-            + (!isF?'<div style="position:absolute;left:0;right:50%;top:12px;height:3px;background:'+prevCol2+';"></div>':'')
-            + dot2
-            + (!isL?'<div style="position:absolute;left:50%;right:0;top:12px;height:3px;background:'+nextCol2+';"></div>':'')
-          + '</div>'
-          + '<div style="font-size:9px;color:#8e8e93;height:14px;line-height:14px;text-align:center;">'+tn.time+'</div>'
-          + '</div>';
-      }
-    }
-    tlTrack.innerHTML = tlHtml;
-    var tlWrap = document.getElementById('transitDetailTimeline');
-    if(tlWrap) tlWrap.scrollLeft = 0;
-  }
-
-  // 구간 상세 목록
-  var html = '';
-  sections.forEach(function(sec) {
-    var trans  = sec.transportation || {};
-    var type   = trans.type;
-    var isWalk = type===3, isSub=type===1, isBus=type===2;
-    var icon   = isWalk?'🚶':isSub?'🚇':'🚌';
-    var col    = _transitColor(type, trans.name);
-    var secMin = Math.round((sec.duration||0)/60);
-    var secDist= Math.round(sec.distance||0);
-    var label  = isWalk
-      ? '도보 ' + (secDist>=1000?(secDist/1000).toFixed(1)+'km':secDist+'m')
-      : (trans.name || sec.name || '이동');
-
-    var stops = [];
-    try { stops = sec.passStopList?(sec.passStopList.stationList||[]):[]; } catch(e){}
-    var fromStop = stops.length ? stops[0].stationName : '';
-    var toStop   = stops.length>1 ? stops[stops.length-1].stationName : '';
-    var stopCnt  = stops.length>2 ? (stops.length-2)+'정거장 경유' : '';
-
-    html += '<div style="display:flex;align-items:flex-start;padding:14px 18px;border-bottom:1px solid #2c2c2e;gap:14px;">' +
-      '<div style="width:36px;height:36px;border-radius:50%;background:' + col + '22;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">' + icon + '</div>' +
-      '<div style="flex:1;min-width:0;">' +
-        '<div style="font-size:14px;font-weight:700;color:' + col + ';margin-bottom:3px;">' + _ltEsc(label) + '</div>' +
-        (fromStop ? '<div style="font-size:12px;color:var(--sub);">' + _ltEsc(fromStop) + (toStop?' → '+_ltEsc(toStop):'') + '</div>' : '') +
-        (stopCnt  ? '<div style="font-size:11px;color:var(--sub);margin-top:2px;">' + stopCnt + '</div>' : '') +
-      '</div>' +
-      '<div style="font-size:14px;font-weight:700;color:var(--text);flex-shrink:0;">' + (secMin<1?'1분 미만':secMin+'분') + '</div>' +
-    '</div>';
-  });
-
-  if(sects) sects.innerHTML = html;
-  modal.style.display = 'flex';
-}
-
-function closeTransitDetail() {
-  var modal = document.getElementById('transitDetailModal');
-  if(modal) modal.style.display = 'none';
-}
-
-/* 길안내 버튼 */
-function openKakaoNavFromResult() {
-  if(!_transitResultDest) return;
-  _walkState.destLat  = _transitResultDest.lat;
-  _walkState.destLng  = _transitResultDest.lng;
-  _walkState.destName = _transitResultDest.name;
-  if(S.lastGPSFix){ _walkState.myLat=S.lastGPSFix.lat; _walkState.myLng=S.lastGPSFix.lng; }
-  if(typeof openKakaoNav==='function') openKakaoNav();
-}
-function openNaverNavFromResult() {
-  if(!_transitResultDest) return;
-  _walkState.destLat  = _transitResultDest.lat;
-  _walkState.destLng  = _transitResultDest.lng;
-  _walkState.destName = _transitResultDest.name;
-  if(S.lastGPSFix){ _walkState.myLat=S.lastGPSFix.lat; _walkState.myLng=S.lastGPSFix.lng; }
-  if(typeof openNaverNav==='function') openNaverNav();
-}
-
-window._renderTransitResultCard = _renderTransitResultCard;
-
-// 경로 변경 시 AI 브리핑 캐시 리셋
-var _origRenderTransit = window._renderTransitResultCard;
-window._renderTransitResultCard = function(data, start, dest, src) {
-  if(typeof _resetAIBrief === 'function') _resetAIBrief();
-  return _origRenderTransit(data, start, dest, src);
-};
-window.openKakaoNavFromResult   = openKakaoNavFromResult;
-window.openNaverNavFromResult   = openNaverNavFromResult;
-window.openTransitDetail        = openTransitDetail;
-window.closeTransitDetail       = closeTransitDetail;
-
 window.fmapDoRoute = fmapDoRoute;
 
 // ══════════════════════════════════════════════════════════════
