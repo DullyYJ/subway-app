@@ -171,7 +171,7 @@ header h1 em{color:var(--gold);font-style:normal;}
 /* ── htl-track: position:relative (이동 열차 레이어 기준) */
 .htl-track{position:relative;}
 /* ── 환승 구분자 ── */
-.htl-xfer-sep{display:flex;flex-direction:column;align-items:center;flex-shrink:0;width:40px;}
+.htl-xfer-sep{display:flex;flex-direction:column;align-items:center;flex-shrink:0;width:28px;position:relative;}
 .htl-xfer-sep .xfer-label{font-size:8px;font-weight:800;color:#fff;background:#3a3a3c;border-radius:4px;padding:1px 5px;white-space:nowrap;letter-spacing:.2px;}
 /* ★ 역간 이동 열차 레이어 */
 #htlMovingTrain{
@@ -2336,24 +2336,25 @@ function _renderTransitResultCard(data, start, dest, cacheSource) {
       var nextCol = nextActual;
       var isXfer  = i > 0 && !nodes[i-1].isWalk && prevActual !== n.col && !n.isFirst;
 
-      // ── 환승 구분자 삽입 ──
+      // ── 환승 구분자: 수직 점선 구분선 형태 ──
       if(isXfer) {
-        html += '<div class="htl-xfer-sep" style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;width:40px;">'
-          + '<div style="height:28px;display:flex;align-items:center;justify-content:center;">'
-            + '<div style="background:rgba(255,255,255,.1);border-radius:6px;padding:2px 5px;text-align:center;">'
-              + '<div style="font-size:7px;font-weight:800;color:#aaa;letter-spacing:.3px;line-height:1.2;">환승</div>'
-              + '<div style="font-size:6.5px;color:'+n.col+';font-weight:700;white-space:nowrap;overflow:hidden;max-width:36px;text-overflow:ellipsis;">'+_ltEsc(n.lineName||'')+'</div>'
-            + '</div>'
+        html += '<div class="htl-xfer-sep" style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;width:28px;position:relative;">'
+          // 세로 점선
+          + '<div style="position:absolute;top:0;bottom:0;left:50%;width:0;border-left:2px dashed #3a3a3c;transform:translateX(-50%);z-index:0;"></div>'
+          // 환승 라벨 (세로 텍스트)
+          + '<div style="position:relative;z-index:1;height:28px;display:flex;align-items:flex-end;justify-content:center;">'
+            + '<span style="writing-mode:vertical-rl;font-size:8px;font-weight:700;color:#636366;letter-spacing:1px;line-height:1;">환승</span>'
           + '</div>'
-          + '<div style="height:18px;"></div>'
+          // 다음 노선 색 배지
+          + '<div style="position:relative;z-index:1;height:18px;display:flex;align-items:center;justify-content:center;">'
+            + '<div style="width:6px;height:6px;border-radius:50%;background:'+n.col+';box-shadow:0 0 0 2px '+n.col+'44;"></div>'
+          + '</div>'
+          // 가로 연결선 (이전색→다음색)
           + '<div style="position:relative;height:26px;width:100%;display:flex;align-items:center;justify-content:center;">'
-            + '<div style="position:absolute;left:0;right:50%;top:12px;height:3px;background:'+prevCol+';"></div>'
-            + '<div style="width:20px;height:20px;border-radius:50%;background:#2c2c2e;border:2px solid #3a3a3c;display:flex;align-items:center;justify-content:center;position:relative;z-index:2;flex-shrink:0;">'
-              + '<svg width="10" height="10" viewBox="0 0 24 24" fill="#aaa"><path d="M6.99 11L3 15l3.99 4v-3H14v-2H6.99v-3zM21 9l-3.99-4v3H10v2h7.01v3L21 9z"/></svg>'
-            + '</div>'
-            + '<div style="position:absolute;left:50%;right:0;top:12px;height:3px;background:'+n.col+';"></div>'
+            + '<div style="position:absolute;left:0;right:50%;top:12px;height:3px;background:'+prevCol+';z-index:1;"></div>'
+            + '<div style="position:absolute;left:50%;right:0;top:12px;height:3px;background:'+n.col+';z-index:1;"></div>'
           + '</div>'
-          + '<div style="font-size:9px;color:var(--sub);height:16px;line-height:16px;text-align:center;">'+(n.arrTime||'')+'</div>'
+          + '<div style="position:relative;z-index:1;font-size:9px;color:var(--sub);height:16px;line-height:16px;text-align:center;">'+(n.arrTime||'')+'</div>'
         + '</div>';
       }
 
@@ -2725,24 +2726,21 @@ function _showMapRouteSheet(startStn, destStn) {
       var isXfer= (ni===0 && si>0);
       var prevSegCol = (si>0) ? (typeof _transitColor==='function' ? _transitColor(1, segs[si-1].line) : '#0a84ff') : col;
 
-      // ── 환승 구분자 삽입 ──
+      // ── 환승 구분자: 수직 점선 구분선 형태 ──
       if(isXfer) {
-        tHtml += '<div class="htl-xfer-sep" style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;width:40px;">'
-          + '<div style="height:28px;display:flex;align-items:center;justify-content:center;">'
-            + '<div style="background:rgba(255,255,255,.1);border-radius:6px;padding:2px 5px;text-align:center;">'
-              + '<div style="font-size:7px;font-weight:800;color:#aaa;letter-spacing:.3px;line-height:1.2;">환승</div>'
-              + '<div style="font-size:6.5px;color:'+col+';font-weight:700;white-space:nowrap;overflow:hidden;max-width:36px;text-overflow:ellipsis;">'+seg.line+'</div>'
-            + '</div>'
+        tHtml += '<div class="htl-xfer-sep" style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;width:28px;position:relative;">'
+          + '<div style="position:absolute;top:0;bottom:0;left:50%;width:0;border-left:2px dashed #3a3a3c;transform:translateX(-50%);z-index:0;"></div>'
+          + '<div style="position:relative;z-index:1;height:28px;display:flex;align-items:flex-end;justify-content:center;">'
+            + '<span style="writing-mode:vertical-rl;font-size:8px;font-weight:700;color:#636366;letter-spacing:1px;line-height:1;">환승</span>'
           + '</div>'
-          + '<div style="height:18px;"></div>'
+          + '<div style="position:relative;z-index:1;height:18px;display:flex;align-items:center;justify-content:center;">'
+            + '<div style="width:6px;height:6px;border-radius:50%;background:'+col+';box-shadow:0 0 0 2px '+col+'44;"></div>'
+          + '</div>'
           + '<div style="position:relative;height:26px;width:100%;display:flex;align-items:center;justify-content:center;">'
-            + '<div style="position:absolute;left:0;right:50%;top:12px;height:3px;background:'+prevSegCol+';"></div>'
-            + '<div style="width:20px;height:20px;border-radius:50%;background:#2c2c2e;border:2px solid #3a3a3c;display:flex;align-items:center;justify-content:center;position:relative;z-index:2;flex-shrink:0;">'
-              + '<svg width="10" height="10" viewBox="0 0 24 24" fill="#aaa"><path d="M6.99 11L3 15l3.99 4v-3H14v-2H6.99v-3zM21 9l-3.99-4v3H10v2h7.01v3L21 9z"/></svg>'
-            + '</div>'
-            + '<div style="position:absolute;left:50%;right:0;top:12px;height:3px;background:'+col+';"></div>'
+            + '<div style="position:absolute;left:0;right:50%;top:12px;height:3px;background:'+prevSegCol+';z-index:1;"></div>'
+            + '<div style="position:absolute;left:50%;right:0;top:12px;height:3px;background:'+col+';z-index:1;"></div>'
           + '</div>'
-          + '<div style="font-size:9px;color:var(--sub);height:16px;line-height:16px;text-align:center;">'+arrT+'</div>'
+          + '<div style="position:relative;z-index:1;font-size:9px;color:var(--sub);height:16px;line-height:16px;text-align:center;">'+arrT+'</div>'
         + '</div>';
       }
 
@@ -2875,6 +2873,36 @@ function _startTransitGpsTracking(nodes) {
 
   if(_transitGpsTimer) clearInterval(_transitGpsTimer);
   _transitGpsTimer = setInterval(_updateTransitGps, 3000);
+
+  // ── 타임라인 스크롤 후 30초 뒤 현재 위치로 리스프링 ──
+  var htlWrap = document.getElementById('transitHtlWrap');
+  if(htlWrap && !htlWrap._gpsScrollBound) {
+    htlWrap._gpsScrollBound = true;
+    htlWrap._userScrolling  = false;
+    htlWrap._springTimer    = null;
+    htlWrap.addEventListener('touchstart', function() {
+      htlWrap._userScrolling = true;
+      clearTimeout(htlWrap._springTimer);
+    }, { passive: true });
+    htlWrap.addEventListener('scroll', function() {
+      htlWrap._userScrolling = true;
+      clearTimeout(htlWrap._springTimer);
+      htlWrap._springTimer = setTimeout(function() {
+        htlWrap._userScrolling = false;
+        // 30초 후 현재 위치 역으로 부드럽게 복귀
+        var best = null;
+        (_transitNodeData || []).forEach(function(nd) {
+          if(nd.el && nd.el.classList.contains('htl-gps-here')) best = nd;
+        });
+        if(best && best.el) {
+          var elCenter = best.el.offsetLeft + best.el.offsetWidth / 2;
+          var target   = Math.max(0, elCenter - htlWrap.offsetWidth / 2);
+          htlWrap.scrollTo({ left: target, behavior: 'smooth' });
+        }
+      }, 30000);  // 30초
+    }, { passive: true });
+  }
+
   _updateTransitGps();
 }
 window._startTransitGpsTracking = _startTransitGpsTracking;
@@ -2942,11 +2970,9 @@ function _updateTransitGps() {
     _transitNodeData.forEach(function(nd, idx) {
       if(idx < bestIdx && nd.el) nd.el.classList.add('htl-passed');
     });
-    // 현재 위치 역으로 자동 스크롤
+    // 사용자 스크롤 중이 아닐 때만 자동 스크롤
     var wrap = document.getElementById('transitHtlWrap');
-    if(wrap) {
-      var elRect = best.el.getBoundingClientRect();
-      var wrapRect = wrap.getBoundingClientRect();
+    if(wrap && !wrap._userScrolling) {
       var elCenter = best.el.offsetLeft + best.el.offsetWidth/2;
       var targetScroll = elCenter - wrap.offsetWidth/2;
       wrap.scrollTo({ left: Math.max(0, targetScroll), behavior:'smooth' });
