@@ -620,29 +620,72 @@ async function searchNaverPlace(query) {
 
 // ── 멀티 API 폴백 경로 탐색 ─────────────────────────────────
 async function callTransitWithFallback(env, slat, slng, elat, elng, sname, ename) {
-  // 1순위: ODsay (대중교통 전문 API)
+  // TAGO 대중교통 환승 경로 API (서버 호출 자유)
   try {
-    console.log('[경로] ODsay 호출:', slat, slng, '->', elat, elng);
+    console.log('[경로] TAGO 호출:', slat, slng, '->', elat, elng);
+    const data = await callTAGOTransit(slat, slng, elat, elng);
+    if(data && data.routes && data.routes.length) {
+      console.log('[경로] TAGO 성공, routes:', data.routes.length);
+      return { data, source: 'tago' };
+    }
+    console.warn('[경로] TAGO 결과 없음');
+  } catch(e) {
+    console.warn('[경로] TAGO 실패:', e.message);
+  }
+
+  // 폴백: ODsay
+  try {
     const data = await callODsayTransit(slat, slng, elat, elng);
-    console.log('[경로] ODsay 성공, routes:', data?.routes?.length);
-    try { await incrementApiUsage(env, 'odsay'); } catch(e) {}
-    return { data, source: 'odsay' };
+    if(data && data.routes && data.routes.length) {
+      return { data, source: 'odsay' };
+    }
   } catch(e) {
     console.warn('[경로] ODsay 실패:', e.message);
   }
 
-  // 2순위: 카카오 모빌리티 (자동차 경로지만 폴백)
-  try {
-    console.log('[경로] 카카오 호출');
-    const data = await callKakaoTransit(slat, slng, elat, elng);
-    console.log('[경로] 카카오 성공');
-    try { await incrementApiUsage(env, 'kakao'); } catch(e) {}
-    return { data, source: 'kakao' };
-  } catch(e) {
-    console.warn('[경로] 카카오 실패:', e.message);
-  }
-
   return { data: null, source: 'none' };
+}
+
+// TAGO 대중교통 환승경로 API
+async function callTAGOTransit(slat, slng, elat, elng) {
+  const key = 'fbdaeef19e93c7490ee53f87ae076ba752ff4fb89183d1e34d9798306d7b652d';
+  const url = 'https://apis.data.go.kr/1613000/SubwayInfoService/getTransferRoute'
+    + '?serviceKey=' + encodeURIComponent(key)
+    + '&startX=' + slng + '&startY=' + slat
+    + '&endX=' + elng   + '&endY=' + elat
+    + '&_type=json';
+
+  const res  = await fetch(url);
+  if(!res.ok) throw new Error('TAGO HTTP ' + res.status);
+  const data = await res.json();
+  console.log('[TAGO경로] 응답:', JSON.stringify(data).slice(0,300));
+
+  // TAGO 응답 → routes 형식 변환
+  const body  = data?.response?.body;
+  const items = body?.items?.item;
+  if(!items) return { routes: [] };
+
+  const arr = Array.isArray(items) ? items : [items];
+  const routes = arr.slice(0,3).map(function(item) {
+    return {
+      summary: {
+        duration: (item.totalTime || 0) * 60,
+        distance: item.totalDistance || 0
+      },
+      sections: (item.pathList || []).map(function(p) {
+        return {
+          transportation: { type: p.trafficType === 1 ? 1 : p.trafficType === 2 ? 2 : 3, name: p.name || '' },
+          duration: (p.sectionTime || 0) * 60,
+          distance: p.distance || 0,
+          passStopList: p.stationList ? {
+            stationList: (p.stationList || []).map(function(s){ return { stationName: s.stationName }; })
+          } : null
+        };
+      })
+    };
+  });
+
+  return { routes };
 }
 
 // 카카오 대중교통 API 호출 (공통 함수)
@@ -703,6 +746,47 @@ export default {
       // 🍽️ 맛집 조회 (D1 캐시)
       // GET /kakao-food?station=계산
       // ══════════════════════════════════════════════════
+      // ══════════════════════════════════════════════════
+      // 🌟 라이프스타일 꿀팁: 목적지 맛집 TOP5 (D1 캐시)
+      // GET /lifestyle-tips?station=<역명>&hour=<시간>
+      // ══════════════════════════════════════════════════
+      if (path === '/lifestyle-tips' && method === 'GET') {
+        const stationName = url.searchParams.get('station');
+        const hour        = parseInt(url.searchParams.get('hour') || '12');
+        if (!stationName) return json({ error: 'station 필요' }, 400);
+
+        // D1에서 가까운 순으로 TOP5 조회
+        let places = [];
+        try {
+          const { results } = await env.DB.prepare(
+            `SELECT place_name, category_name, distance, place_url, lat, lng
+             FROM restaurants WHERE station_name = ?
+             ORDER BY distance ASC LIMIT 5`
+          ).bind(stationName).all();
+          places = results || [];
+        } catch(e) { console.error('lifestyle-tips D1:', e); }
+
+        // D1 없으면 실시간 카카오 호출
+        if (!places.length) {
+          const stn = ALL_STATIONS.find(s => s.name === stationName);
+          if (stn) {
+            try {
+              const raw = await fetchKakaoPlaces(stn.lat, stn.lng);
+              places = raw.slice(0, 5).map(p => ({
+                place_name: p.place_name, category_name: p.category_name,
+                distance: parseInt(p.distance)||0, place_url: p.place_url,
+              }));
+            } catch(e) {}
+          }
+        }
+
+        // 시간대별 태그
+        const tag = hour < 10 ? '아침 추천' : hour < 14 ? '점심 추천'
+                  : hour < 18 ? '오후 추천' : '저녁 추천';
+
+        return json({ places, tag, station: stationName, cached: true });
+      }
+
       if (path === '/kakao-food' && method === 'GET') {
         const stationName = url.searchParams.get('station');
         const category    = url.searchParams.get('cat') || '전체';
