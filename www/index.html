@@ -32,13 +32,243 @@
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#121214;--card:#1c1c1e;--gold:#d4af37;--gold2:#b8922f;
+  /* ── 다크 테마 (기본) ── */
+  --bg:#121214;--card:#1c1c1e;--card2:#2c2c2e;
+  --gold:#d4af37;--gold2:#b8922f;
   --text:#f2f2f7;--sub:#8e8e93;--border:#2c2c2e;--border2:#3a3a3c;
   --blue:#0a84ff;--red:#ff2d55;--green:#34c759;--orange:#ff9f0a;--hell:#ff453a;
   --arex:#0090d2;
+  --input-bg:#0e0e10;--nav-bg:#1c1c1e;--nav-border:#2c2c2e;
+  --chip-bg:#2c2c2e;--chip-on-bg:var(--gold);--chip-on-txt:#121214;
+  --theme-id:dark;
+}
+/* ── 화이트 파스텔 테마 (카카오 스타일 하늘색) ── */
+[data-theme="pastel"]{
+  --bg:#f0f4f8;--card:#ffffff;--card2:#e8f0f8;
+  --gold:#1d9bf0;--gold2:#0e7dd6;
+  --text:#1a2533;--sub:#6b8299;--border:#dce8f0;--border2:#c8dcea;
+  --blue:#1d9bf0;--red:#e0455a;--green:#29b96a;--orange:#f07830;--hell:#e0455a;
+  --arex:#1d9bf0;
+  --input-bg:#e8f0f8;--nav-bg:#fff;--nav-border:#dce8f0;
+  --chip-bg:#e8f0f8;--chip-on-bg:#1d9bf0;--chip-on-txt:#fff;
+  --card-dark:#e8f0f8;
+  --prod-img-bg:#e8f4ff;
+  --map-bg:#f5f9ff;
+  --map-bar-bg:rgba(240,244,248,.98);
+  --gps-btn-bg:rgba(29,155,240,.12);
+  --theme-id:pastel;
 }
 *{box-sizing:border-box;margin:0;padding:0;font-family:'Noto Sans KR',sans-serif;-webkit-tap-highlight-color:transparent;}
-html,body{width:100%;height:100%;overflow:hidden;background:#121214;}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);}
+/* ══════════════════════════════════════════
+   파스텔 테마 오버라이드 (카카오 하늘색)
+   ══════════════════════════════════════════ */
+
+/* 전역 배경 */
+[data-theme="pastel"] body,[data-theme="pastel"] html{background:var(--bg);}
+[data-theme="pastel"] header{background:var(--bg) !important;border-color:var(--border) !important;}
+[data-theme="pastel"] #tabContentWrap{background:var(--bg) !important;}
+[data-theme="pastel"] .tab-body{background:var(--bg) !important;}
+
+/* 네비게이션 */
+[data-theme="pastel"] .bnav{background:var(--nav-bg) !important;border-color:var(--nav-border) !important;}
+[data-theme="pastel"] .ni{color:var(--sub) !important;}
+[data-theme="pastel"] .ni.on{color:var(--gold) !important;}
+
+/* 카드/컨테이너 */
+[data-theme="pastel"] .card{background:var(--card);border-color:var(--border);}
+[data-theme="pastel"] .rrow{background:var(--card2);border-color:var(--border2);}
+[data-theme="pastel"] .htl-wrap{background:var(--card);border-color:var(--border);}
+[data-theme="pastel"] #transitResultCard{background:var(--card) !important;border-color:var(--border) !important;}
+[data-theme="pastel"] #transitCongCard{background:var(--card) !important;border-color:var(--border) !important;}
+[data-theme="pastel"] .next-train-panel{background:var(--card) !important;}
+[data-theme="pastel"] .livetalk-board{background:var(--card);border-color:var(--border);}
+[data-theme="pastel"] .post-card{background:var(--card);border-color:var(--border);}
+
+/* 텍스트 */
+[data-theme="pastel"] .htl-name{color:var(--text);}
+[data-theme="pastel"] .htl-time{color:var(--sub);}
+[data-theme="pastel"] .htl-line{color:var(--sub);}
+
+/* 입력/검색 */
+[data-theme="pastel"] .inp{background:var(--input-bg) !important;color:var(--text) !important;border-color:var(--border) !important;}
+[data-theme="pastel"] .sug{background:var(--card) !important;}
+[data-theme="pastel"] .search-card{background:var(--card) !important;border-color:var(--border) !important;}
+
+/* 칩/필터 버튼 */
+[data-theme="pastel"] .chip{background:var(--chip-bg);color:var(--sub);border-color:var(--border);}
+[data-theme="pastel"] .chip.on{background:var(--chip-on-bg) !important;color:var(--chip-on-txt) !important;border-color:var(--chip-on-bg) !important;}
+[data-theme="pastel"] .food-chip{background:var(--chip-bg);color:var(--sub);}
+[data-theme="pastel"] .food-chip.on{background:var(--chip-on-bg);color:var(--chip-on-txt);}
+[data-theme="pastel"] .line-filter-btn{background:rgba(29,155,240,.1);color:var(--gold);border-color:rgba(29,155,240,.3);}
+[data-theme="pastel"] .line-filter-btn.active{background:var(--gold);color:#fff;}
+
+/* 쇼핑탭 */
+[data-theme="pastel"] .shop-hero{background:linear-gradient(135deg,#daeeff,#eef6ff);border-color:rgba(29,155,240,.2);}
+[data-theme="pastel"] .shop-hero h2{color:var(--gold);}
+[data-theme="pastel"] .shop-timer{background:rgba(29,155,240,.08);border-color:rgba(29,155,240,.2);}
+[data-theme="pastel"] .prod-img{background:#e8f4ff !important;}
+[data-theme="pastel"] .prod-card{background:var(--card);border-color:var(--border);}
+[data-theme="pastel"] .shop-refresh{background:var(--card2);color:var(--gold);}
+
+/* 맛집탭 */
+[data-theme="pastel"] .food-card{background:var(--card);border-color:var(--border);}
+[data-theme="pastel"] .deal-card{background:var(--card);border-color:var(--border);}
+[data-theme="pastel"] .tip-card{background:var(--card);border-color:var(--border);}
+
+/* 채팅/커뮤니티 */
+[data-theme="pastel"] .comm-scroll{background:var(--bg);}
+[data-theme="pastel"] .chat-bub-txt{background:var(--card2) !important;color:var(--text) !important;}
+[data-theme="pastel"] .chat-bubble.mine .chat-bub-txt{background:var(--gold) !important;color:#fff !important;}
+[data-theme="pastel"] .chat-inputbar{background:var(--bg) !important;border-color:var(--border) !important;}
+
+/* 시트/모달 */
+[data-theme="pastel"] .sheet{background:var(--card) !important;}
+[data-theme="pastel"] .backdrop{background:rgba(0,0,0,.3);}
+
+/* 버튼 */
+[data-theme="pastel"] .cfg-btn{background:var(--gold);color:#fff;}
+[data-theme="pastel"] .setup-cta{background:var(--gold);color:#fff;}
+[data-theme="pastel"] .fab{background:linear-gradient(135deg,var(--gold2),var(--gold)) !important;color:#fff !important;}
+[data-theme="pastel"] .gps-btn{color:var(--gold);background:rgba(29,155,240,.1);border-color:rgba(29,155,240,.3);}
+
+/* 노선도 */
+[data-theme="pastel"] .metro-wrap{background:#e8f4ff !important;}
+[data-theme="pastel"] .svg-map-wrap{background:#fff !important;}
+[data-theme="pastel"] .gmSvgView{background:#fff !important;}
+[data-theme="pastel"] #gmSvgView{background:#fff !important;}
+
+/* ntp 패널 어두운 행 */
+[data-theme="pastel"] .ntp-row{background:var(--card2) !important;border-color:var(--border) !important;}
+[data-theme="pastel"] .ntp-header{background:rgba(29,155,240,.06) !important;}
+
+/* GPS/passed 역 */
+[data-theme="pastel"] .htl-stn.htl-passed .htl-dot{background:#b0c8e0 !important;border-color:#b0c8e0 !important;}
+[data-theme="pastel"] .htl-stn.htl-passed .htl-name{opacity:.4 !important;}
+[data-theme="pastel"] .htl-stn.htl-passed .htl-time{opacity:.4 !important;}
+
+/* 홈탭 검색카드 */
+[data-theme="pastel"] #fmapCard,[data-theme="pastel"] .fmap-card{background:var(--card) !important;border-color:var(--border) !important;}
+[data-theme="pastel"] #fmapStartInp,[data-theme="pastel"] #fmapDestInp{background:var(--input-bg) !important;color:var(--text) !important;border-color:var(--border) !important;}
+
+/* 혼잡 분석 */
+[data-theme="pastel"] .cong-bar-wrap{background:var(--card2) !important;}
+
+/* 설정탭 테마 카드 배경 보정 */
+[data-theme="pastel"] #themeCardPastel{background:#e8f4ff !important;border-color:var(--gold) !important;}
+[data-theme="pastel"] #themeCardDark{background:#e0ecf6 !important;border-color:var(--border) !important;}
+
+/* 지역 버튼 */
+[data-theme="pastel"] .region-btn{background:var(--chip-bg);color:var(--sub);}
+[data-theme="pastel"] .region-btn.on{background:var(--chip-on-bg);color:var(--chip-on-txt);}
+/* 노선도 탭 */
+[data-theme="pastel"] .map-inner-tabs{background:var(--card) !important;border-color:var(--border) !important;}
+[data-theme="pastel"] .map-itab{color:var(--sub) !important;}
+[data-theme="pastel"] .map-itab.on{color:var(--gold) !important;border-bottom-color:var(--gold) !important;}
+[data-theme="pastel"] .region-tabs{background:var(--card) !important;border-color:var(--border) !important;}
+[data-theme="pastel"] .rtab{background:var(--chip-bg) !important;color:var(--sub) !important;border-color:var(--border) !important;}
+[data-theme="pastel"] .rtab.on{background:var(--gold) !important;color:#fff !important;border-color:var(--gold) !important;}
+[data-theme="pastel"] .svg-map-wrap{background:var(--map-bg) !important;}
+[data-theme="pastel"] #baseTimeRow{background:var(--map-bar-bg) !important;border-color:var(--border) !important;}
+[data-theme="pastel"] #stnInputRow{background:var(--map-bar-bg) !important;border-color:var(--border) !important;}
+[data-theme="pastel"] #baseTimeInp2{background:var(--input-bg) !important;color:var(--text) !important;}
+[data-theme="pastel"] #mapGpsBtn{background:var(--gps-btn-bg) !important;border-color:var(--gold) !important;color:var(--gold) !important;}
+[data-theme="pastel"] #mapRouteSheet{background:var(--card) !important;border-color:var(--border) !important;}
+[data-theme="pastel"] #mapRouteSheetTitle{color:var(--text) !important;}
+[data-theme="pastel"] #mapRouteSheetTrack .htl-wrap{background:var(--card2) !important;}
+[data-theme="pastel"] #mapRouteSheetSections{background:var(--bg) !important;}
+[data-theme="pastel"] #status-msg{background:var(--card2) !important;}
+[data-theme="pastel"] #fmapRouteBanner{background:rgba(29,155,240,.06) !important;border-color:rgba(29,155,240,.2) !important;}
+[data-theme="pastel"] .line-filter-wrap{background:var(--card) !important;}
+[data-theme="pastel"] #lineFilterBar{background:var(--card) !important;border-color:var(--border) !important;}
+[data-theme="pastel"] .lf-btn{background:transparent !important;}
+[data-theme="pastel"] .lf-btn.active{color:#121214 !important;}
+
+/* ── 파스텔: 동적/인라인 요소 추가 보정 ── */
+/* 현장 제보 버튼 */
+[data-theme="pastel"] .rpt-btn{background:#fff !important;border-color:var(--border) !important;color:var(--text) !important;}
+[data-theme="pastel"] .rpt-btn:active{background:var(--card2) !important;}
+/* 혼잡 카드 */
+[data-theme="pastel"] .cong-card{background:var(--card) !important;border-color:var(--border) !important;}
+[data-theme="pastel"] .chart-wrap{background:var(--card2) !important;border-color:var(--border) !important;}
+/* post/게시글 */
+[data-theme="pastel"] .post,[data-theme="pastel"] .dc-card{background:var(--card) !important;}
+[data-theme="pastel"] .post:active{background:var(--card2) !important;}
+/* 탑승 추적 HUD */
+[data-theme="pastel"] #trackingHUD{background:var(--card) !important;}
+/* 세부경로 팝업 */
+[data-theme="pastel"] #transitDetailModal > div{background:var(--card) !important;}
+[data-theme="pastel"] #transitDetailTimeline{background:var(--card2) !important;border-color:var(--border) !important;}
+/* 지도 시트 */
+[data-theme="pastel"] #mapRouteSheet > div{background:var(--card) !important;}
+/* 아이디 박스 */
+[data-theme="pastel"] #curIdBox{background:var(--card2) !important;}
+/* 도보 모달 */
+[data-theme="pastel"] #walkModalCard{background:var(--card) !important;}
+/* 버스 즐겨찾기 시트 */
+[data-theme="pastel"] .fav-sheet > div{background:var(--card) !important;}
+/* regionMapView */
+[data-theme="pastel"] #regionMapView{background:var(--bg) !important;}
+/* status-msg */
+[data-theme="pastel"] #status-msg{background:var(--card2) !important;}
+/* 지하철 탭 내부 바 */
+[data-theme="pastel"] .map-tab-bar{background:var(--card) !important;border-color:var(--border) !important;}
+/* ntp-row 어두운 배경 */
+[data-theme="pastel"] .ntp-row{background:var(--card2) !important;border-color:var(--border) !important;}
+/* 즐겨찾기 시트 */
+[data-theme="pastel"] #favSheet > *{background:var(--card) !important;}
+/* 스크롤바 */
+[data-theme="pastel"] .metro-wrap::-webkit-scrollbar-track{background:var(--card2) !important;}
+[data-theme="pastel"] #tabHome{background:var(--bg);}
+[data-theme="pastel"] .htl-line-seg{/* 노선색은 유지 */}
+[data-theme="pastel"] .htl-axis{/* axis 투명 */}
+
+/* 홈탭 검색 영역 */
+[data-theme="pastel"] #fmapCard,
+[data-theme="pastel"] [id^="fmap"]{background:var(--card);}
+[data-theme="pastel"] #baseTimeBar{background:var(--card) !important;border-color:var(--border) !important;}
+[data-theme="pastel"] .time-sel{background:var(--card2) !important;color:var(--text) !important;}
+
+/* 혼잡 분석 카드 */
+[data-theme="pastel"] .cong-card{background:var(--card) !important;border-color:var(--border) !important;}
+[data-theme="pastel"] .cong-bar-bg{background:var(--card2) !important;}
+[data-theme="pastel"] .cong-time-bar{background:var(--card2) !important;}
+
+/* 복합경로 카드 안 어두운 bg */
+[data-theme="pastel"] #transitResultCard .htl-axis::after{filter:none;}
+[data-theme="pastel"] .transitLocBar{color:var(--sub) !important;}
+
+/* 세부경로 팝업 */
+[data-theme="pastel"] #transitDetailModal{background:var(--bg) !important;}
+[data-theme="pastel"] #transitDetailTimeline{background:var(--card) !important;border-color:var(--border) !important;}
+[data-theme="pastel"] #transitDetailSections{background:var(--bg);}
+
+/* 즐겨찾기/경로 시트 */
+[data-theme="pastel"] #mapRouteSheet{background:var(--card) !important;}
+[data-theme="pastel"] #mapRouteSheetTrack{/* 내부 노선 유지 */}
+
+/* 버스탭 */
+[data-theme="pastel"] .bus-stop-card{background:var(--card) !important;border-color:var(--border) !important;}
+[data-theme="pastel"] .bus-route-item{background:var(--card2) !important;}
+[data-theme="pastel"] #busScroll{background:var(--bg) !important;}
+
+/* 톡/게시글 */
+[data-theme="pastel"] .dc-card{background:var(--card) !important;border-color:var(--border) !important;}
+[data-theme="pastel"] .comm-input{background:var(--input-bg) !important;color:var(--text) !important;border-color:var(--border) !important;}
+
+/* 탭 내부 구분선 */
+[data-theme="pastel"] #foodTabBtnFood,[data-theme="pastel"] #foodTabBtnLife{background:var(--card) !important;color:var(--sub);}
+
+/* 탑승시간대 혼잡 리스트 */
+[data-theme="pastel"] #transitCongList{background:var(--card) !important;border-color:var(--border) !important;}
+
+/* 혼잡 분석 */
+[data-theme="pastel"] #congCard{background:var(--card) !important;}
+[data-theme="pastel"] .cong-prog-bg{background:var(--card2) !important;}
+
+/* GPS 박스 */
+[data-theme="pastel"] .gps-box{background:rgba(29,155,240,.06) !important;border-color:rgba(29,155,240,.3) !important;}
+[data-theme="pastel"] .setup-notice{background:rgba(29,155,240,.06) !important;border-color:rgba(29,155,240,.3) !important;}
 body{height:100%;box-sizing:border-box;}
 .app{
   position:fixed;
@@ -214,7 +444,7 @@ header h1 em{color:var(--gold);font-style:normal;}
 .chat-inputbar{flex-shrink:0;display:flex;gap:8px;padding:10px 12px;background:var(--bg);border-top:1px solid var(--border);align-items:center;}
 .chat-inputbar input{flex:1;background:var(--card);border:1px solid var(--border2);border-radius:20px;padding:10px 14px;color:var(--text);font-size:13px;outline:none;font-family:inherit;}
 .chat-send-btn{background:var(--gold);color:#121214;border:none;border-radius:50%;width:38px;height:38px;font-size:16px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
-.rpt-btn{background:#2c2c2e;border:1px solid var(--border);border-radius:12px;padding:9px 4px;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;font-size:11px;color:var(--text);}
+.rpt-btn{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:9px 4px;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;font-size:11px;color:var(--text);}
 .rpt-btn:active{background:var(--border2);}
 
 /* PATH STEPS */
@@ -280,13 +510,13 @@ header h1 em{color:var(--gold);font-style:normal;}
 #boardBannerTxt{color:#fff !important;}
 
 /* CONGESTION CARD */
-.cong-card{background:linear-gradient(135deg,#1c1c1e,#252528);border:1px solid var(--border);border-radius:16px;padding:14px;border-left-width:4px;}
+.cong-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:14px;border-left-width:4px;}
 .cong-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;}
 .cong-stn{font-size:13px;color:var(--sub);}
 .cong-stn b{color:var(--gold);}
 .cong-meta{font-size:11px;color:var(--sub);}
 .cong-status{font-size:17px;font-weight:700;margin-bottom:10px;}
-.chart-wrap{background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:11px;padding:11px 0 11px 11px;overflow:hidden;}
+.chart-wrap{background:var(--card2,rgba(0,0,0,.3));border:1px solid var(--border);border-radius:11px;padding:11px 0 11px 11px;overflow:hidden;}
 .chart-hdr{display:flex;justify-content:space-between;font-size:11px;color:var(--sub);margin-bottom:9px;padding-right:11px;}
 /* 24h 스크롤 차트 */
 .chart-scroll-wrap{overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;cursor:grab;padding-bottom:4px;}
@@ -408,7 +638,7 @@ header h1 em{color:var(--gold);font-style:normal;}
 .lf-item.on .lf-name{color:var(--gold);}
 
 /* ── SHOP ── */
-.shop-hero{background:linear-gradient(135deg,#1a1208,#252010);border:1px solid rgba(212,175,55,.2);border-radius:16px;padding:16px;display:flex;justify-content:space-between;align-items:center;}
+.shop-hero{background:var(--shop-hero-bg,linear-gradient(135deg,#1a1208,#252010));border:1px solid var(--shop-hero-border,rgba(212,175,55,.2));border-radius:16px;padding:16px;display:flex;justify-content:space-between;align-items:center;}
 .shop-hero h2{font-size:14px;font-weight:900;color:var(--gold);}
 .shop-hero p{font-size:11px;color:var(--sub);margin-top:3px;}
 .shop-timer{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--sub);padding:7px 10px;background:rgba(255,159,10,.08);border:1px solid rgba(255,159,10,.2);border-radius:10px;}
@@ -417,7 +647,7 @@ header h1 em{color:var(--gold);font-style:normal;}
 .shop-sec span{font-size:10px;color:var(--sub);}
 .prod-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
 .prod{background:var(--card);border:1px solid var(--border);border-radius:13px;padding:11px;display:flex;flex-direction:column;}
-.prod-img{width:100%;height:58px;border-radius:9px;background:#252528;display:flex;align-items:center;justify-content:center;font-size:24px;margin-bottom:6px;}
+.prod-img{width:100%;height:58px;border-radius:9px;background:var(--prod-img-bg,#252528);display:flex;align-items:center;justify-content:center;font-size:24px;margin-bottom:6px;}
 .prod-tag{font-size:9px;color:var(--green);background:rgba(52,199,89,.1);padding:2px 5px;border-radius:4px;display:inline-block;margin-bottom:3px;align-self:flex-start;}
 .prod-brand{font-size:9px;color:var(--sub);margin-bottom:2px;}
 .prod-name{font-size:11px;font-weight:700;color:var(--text);margin-bottom:2px;line-height:1.35;}
@@ -471,7 +701,7 @@ input[type=time]{color-scheme:dark;}
 .gm-yes{flex:1;padding:12px;border-radius:11px;font-size:14px;font-weight:700;cursor:pointer;border:none;background:var(--blue);color:#fff;font-family:inherit;}
 
 /* BOTTOM NAV */
-.bnav{display:grid;grid-template-columns:repeat(5,1fr);height:56px;border-top:1px solid var(--border);background:#161618;z-index:50;
+.bnav{display:grid;grid-template-columns:repeat(5,1fr);height:56px;border-top:1px solid var(--border);background:var(--nav-bg,#161618);z-index:50;
   position:fixed;bottom:0;left:0;right:0;
 }
 .ni{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--sub);font-size:10px;cursor:pointer;transition:color .2s;}
@@ -493,7 +723,7 @@ input[type=time]{color-scheme:dark;}
 .ntp-title{font-size:12px;font-weight:700;color:var(--text);flex:1;}
 .ntp-live{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--green);}
 .ntp-body{padding:10px 14px;display:flex;flex-direction:column;gap:8px;}
-.ntp-row{display:flex;align-items:center;gap:10px;padding:9px 12px;background:#2c2c2e;border-radius:11px;border:1px solid var(--border2);}
+.ntp-row{display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--card2,#2c2c2e);border-radius:11px;border:1px solid var(--border2);}
 .ntp-dir{font-size:10px;font-weight:700;color:var(--sub);width:55px;flex-shrink:0;}
 .ntp-info{flex:1;}
 .ntp-time{font-size:16px;font-weight:900;color:var(--text);line-height:1;}
@@ -585,7 +815,7 @@ input[type=time]{color-scheme:dark;}
   padding-bottom:max(10px, env(safe-area-inset-bottom));
 }
 .ps-input{
-  flex:1;padding:9px 13px;background:#2c2c2e;
+  flex:1;padding:9px 13px;background:var(--card2,#2c2c2e);
   border:1px solid var(--border);color:var(--text);
   border-radius:20px;outline:none;font-size:13px;font-family:inherit;
 }
@@ -599,7 +829,7 @@ input[type=time]{color-scheme:dark;}
 .ps-send-btn:active{opacity:.7;}
 /* 게시글 카드 클릭 커서 */
 .post{cursor:pointer;transition:background .15s;}
-.post:active{background:#252528;}
+.post:active{background:var(--border,#252528);}
 
 /* ── 포인트 HUD ── */
 .point-hud{
@@ -719,12 +949,12 @@ input[type=time]{color-scheme:dark;}
 .map-overlay.on{display:flex;}
 .map-overlay-hdr{padding:12px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border);flex-shrink:0;background:#0e0e11;}
 .map-overlay-hdr h3{font-size:15px;font-weight:700;flex:1;color:var(--text);}
-.region-tabs{display:flex;gap:6px;padding:8px 14px;background:#0e0e11;border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;}
+.region-tabs{display:flex;gap:6px;padding:8px 14px;background:var(--card);border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;}
 .region-tabs::-webkit-scrollbar{display:none;}
-.rtab{flex-shrink:0;padding:5px 14px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;background:var(--border);color:var(--sub);border:1px solid var(--border2);transition:all .15s;}
-.rtab.on{background:var(--gold);color:#121214;border-color:var(--gold);}
+.rtab{flex-shrink:0;padding:5px 14px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;background:var(--chip-bg,var(--border));color:var(--sub);border:1px solid var(--border2);transition:all .15s;}
+.rtab.on{background:var(--gold);color:var(--chip-on-txt,#121214);border-color:var(--gold);}
 /* SVG 노선도 뷰 */
-.svg-map-wrap{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;background:#0e0e11;position:relative;}
+.svg-map-wrap{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;background:var(--map-bg,#0e0e11);position:relative;}
 .svg-map-wrap svg{display:block;}
 /* 역 클릭 팝업 */
 .stn-popup{
@@ -866,6 +1096,245 @@ function loadFoodTab(force) {
   _fetchKakaoFood(destStn, stnInfo.lat, stnInfo.lng);
 }
 window.loadFoodTab = loadFoodTab;
+
+// ══════════════════════════════════════════════════════════════
+// ✨ 맞춤 라이프스타일 탭
+// ══════════════════════════════════════════════════════════════
+
+// 내부 탭 전환
+function switchFoodInnerTab(tab) {
+  var panelFood = document.getElementById('foodPanelFood');
+  var panelLife = document.getElementById('foodPanelLife');
+  var btnFood   = document.getElementById('foodTabBtnFood');
+  var btnLife   = document.getElementById('foodTabBtnLife');
+  if(!panelFood || !panelLife) return;
+
+  if(tab === 'food') {
+    panelFood.style.display = 'flex';
+    panelLife.style.display = 'none';
+    if(btnFood){ btnFood.style.color='var(--text)'; btnFood.style.borderBottomColor='var(--gold)'; btnFood.style.fontWeight='700'; }
+    if(btnLife){ btnLife.style.color='var(--sub)';  btnLife.style.borderBottomColor='transparent'; btnLife.style.fontWeight='600'; }
+  } else {
+    panelFood.style.display = 'none';
+    panelLife.style.display = 'flex';
+    if(btnFood){ btnFood.style.color='var(--sub)';  btnFood.style.borderBottomColor='transparent'; btnFood.style.fontWeight='600'; }
+    if(btnLife){ btnLife.style.color='var(--text)'; btnLife.style.borderBottomColor='var(--gold)'; btnLife.style.fontWeight='700'; }
+    // 진입 시 데이터 로드
+    loadLifestyleDeals(false);
+    loadLifestyleFood(false);
+  }
+}
+window.switchFoodInnerTab = switchFoodInnerTab;
+
+// ── 출퇴근 특가(쇼핑) ─────────────────────────────────────
+var _dealCache = null;  // { ts, data }
+
+// 시간대·노선별 맞춤 키워드 생성
+function _dealKeywords() {
+  var h = new Date().getHours();
+  var line = (typeof S !== 'undefined' && S.start && S.start.line) ? S.start.line : '';
+  var isPeak = (h>=7&&h<=9)||(h>=18&&h<=20);
+
+  // 시간대별 추천 카테고리
+  var timeKw = h < 10 ? ['텀블러','에어팟','무선이어폰','충전기','보조배터리']
+    : h < 14 ? ['점심도시락','에코백','우산','핸드크림','립밤']
+    : h < 18 ? ['간식','음료수','마스크','손소독제','편의점']
+    : ['맥주','와인','야식','족욕기','마사지볼'];
+
+  // 노선별 보너스
+  var lineKw = [];
+  if(line.includes('1호선')||line.includes('수도권')) lineKw = ['출퇴근가방','롱패딩'];
+  else if(line.includes('2호선')) lineKw = ['홍대패션','스타벅스텀블러'];
+  else if(line.includes('9호선')||line.includes('공항')) lineKw = ['여행용품','네크쿠션'];
+
+  return timeKw.concat(lineKw).slice(0, 5);
+}
+
+// 출퇴근 특가 상품 목록 (쿠팡/네이버 링크)
+var _DEAL_ITEMS = [
+  // 출근길
+  { name:'스타벅스 텀블러 480ml', cat:'☕ 커피용품', price:'28,900원', badge:'hot', kw:'텀블러',
+    url:'https://search.shopping.naver.com/search/all?query=텀블러+스타벅스' },
+  { name:'무선 이어폰 노이즈캔슬링', cat:'🎧 이어폰', price:'89,000원', badge:'hot', kw:'무선이어폰',
+    url:'https://search.shopping.naver.com/search/all?query=무선이어폰' },
+  { name:'10000mAh 보조배터리', cat:'🔋 배터리', price:'19,900원', badge:'time', kw:'보조배터리',
+    url:'https://search.shopping.naver.com/search/all?query=보조배터리' },
+  { name:'USB-C 고속충전 케이블', cat:'⚡ 충전', price:'6,900원', badge:'new', kw:'충전기',
+    url:'https://search.shopping.naver.com/search/all?query=usbc충전케이블' },
+  { name:'출퇴근 백팩 방수 경량', cat:'🎒 가방', price:'39,900원', badge:'hot', kw:'출퇴근가방',
+    url:'https://search.shopping.naver.com/search/all?query=출퇴근백팩' },
+  { name:'핸드크림 무향 촉촉', cat:'🤲 스킨케어', price:'5,900원', badge:'time', kw:'핸드크림',
+    url:'https://search.shopping.naver.com/search/all?query=핸드크림' },
+  { name:'편의점 간식 3종 세트', cat:'🍫 간식', price:'4,500원', badge:'new', kw:'간식',
+    url:'https://search.shopping.naver.com/search/all?query=편의점간식' },
+  { name:'접이식 우산 초경량', cat:'☂️ 우산', price:'12,900원', badge:'time', kw:'우산',
+    url:'https://search.shopping.naver.com/search/all?query=접이식우산' },
+  { name:'지하철 목베개 메모리폼', cat:'😴 수면용품', price:'14,900원', badge:'hot', kw:'목베개',
+    url:'https://search.shopping.naver.com/search/all?query=네크쿠션+목베개' },
+  { name:'네이버플러스 월정액', cat:'🟢 구독', price:'4,900원/월', badge:'new', kw:'구독',
+    url:'https://www.navermembership.naver.com' },
+  // 퇴근길
+  { name:'수제 맥주 4캔 세트', cat:'🍺 주류', price:'9,800원', badge:'hot', kw:'맥주',
+    url:'https://search.shopping.naver.com/search/all?query=수제맥주' },
+  { name:'족욕기 자동온도유지', cat:'🦶 힐링', price:'29,900원', badge:'time', kw:'족욕기',
+    url:'https://search.shopping.naver.com/search/all?query=족욕기' },
+  { name:'편의점 야식 라면 박스', cat:'🍜 야식', price:'18,500원', badge:'hot', kw:'야식',
+    url:'https://search.shopping.naver.com/search/all?query=라면박스' },
+  { name:'마사지볼 근육이완', cat:'💆 마사지', price:'8,900원', badge:'new', kw:'마사지볼',
+    url:'https://search.shopping.naver.com/search/all?query=마사지볼' },
+];
+
+function loadLifestyleDeals(force) {
+  var el = document.getElementById('lifeDealsList');
+  if(!el) return;
+
+  // 5분 캐시
+  if(!force && _dealCache && Date.now() - _dealCache.ts < 5*60*1000) {
+    _renderDeals(_dealCache.data);
+    return;
+  }
+
+  var kws = _dealKeywords();
+  // 키워드 매칭으로 상품 필터링
+  var matched = _DEAL_ITEMS.filter(function(item) {
+    return kws.some(function(k){ return item.kw.includes(k) || k.includes(item.kw); });
+  });
+  // 매칭 없으면 전체에서 랜덤 5개
+  if(matched.length < 3) {
+    var shuffled = _DEAL_ITEMS.slice().sort(function(){ return Math.random()-.5; });
+    matched = shuffled.slice(0, 5);
+  }
+
+  _dealCache = { ts: Date.now(), data: matched };
+  _renderDeals(matched);
+}
+window.loadLifestyleDeals = loadLifestyleDeals;
+
+function _renderDeals(items) {
+  var el = document.getElementById('lifeDealsList');
+  if(!el) return;
+  var h = new Date().getHours();
+  var timeTag = h<10?'출근 추천':h<18?'점심 추천':'퇴근 추천';
+  el.innerHTML = '';
+
+  var hdr = document.createElement('div');
+  hdr.style.cssText = 'font-size:10px;color:var(--sub);margin-bottom:8px;font-weight:600;';
+  hdr.textContent = '⏰ ' + timeTag;
+  el.appendChild(hdr);
+
+  items.forEach(function(item) {
+    var badgeClass = item.badge === 'hot' ? 'hot' : item.badge === 'new' ? 'new' : 'time';
+    var badgeTxt   = item.badge === 'hot' ? '🔥 HOT' : item.badge === 'new' ? '✨ NEW' : '⏱ 특가';
+    var card = document.createElement('div');
+    card.className = 'deal-card';
+    card.innerHTML =
+      '<div style="flex:1;min-width:0;">'
+      + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">'
+        + '<span class="deal-badge ' + badgeClass + '">' + badgeTxt + '</span>'
+        + '<span class="deal-name">' + _ltEsc(item.name) + '</span>'
+      + '</div>'
+      + '<span class="deal-sub">' + _ltEsc(item.cat) + '</span>'
+      + '</div>'
+      + '<div class="deal-price">' + _ltEsc(item.price) + '</div>'
+      + '<svg width="14" height="14" viewBox="0 0 24 24" fill="var(--sub)"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6z"/></svg>';
+    card.addEventListener('click', (function(u){ return function(){ window.open(u,'_blank'); }; })(item.url));
+    el.appendChild(card);
+  });
+}
+
+// ── 도착역 꿀팁(맛집) ─────────────────────────────────────
+var _lifeFoodCache = {};  // { 역명: { ts, data } }
+
+function loadLifestyleFood(force) {
+  var el    = document.getElementById('lifeFoodList');
+  var label = document.getElementById('lifeFoodDestLabel');
+  var more  = document.getElementById('lifeFoodMoreBtn');
+  if(!el) return;
+
+  // 목적지 역 결정 (복합경로 or BFS)
+  var destStn = null;
+  if(typeof _transitResultDest !== 'undefined' && _transitResultDest && _transitResultDest.name) {
+    destStn = _transitResultDest.name;
+  } else if(typeof S !== 'undefined' && S.dest && S.dest.name) {
+    destStn = S.dest.name;
+  }
+
+  if(!destStn) {
+    el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--sub);font-size:13px;">🗺️ 경로를 설정하면<br>도착역 꿀팁을 알려드려요</div>';
+    return;
+  }
+
+  if(label) label.textContent = destStn + ' 역 맛집 TOP 5';
+  if(more)  more.style.display = 'block';
+
+  // 메모리 캐시 (15분)
+  var cache = _lifeFoodCache[destStn];
+  if(!force && cache && Date.now() - cache.ts < 15*60*1000) {
+    _renderLifeFood(cache.data, destStn);
+    return;
+  }
+
+  el.innerHTML = '<div style="text-align:center;padding:16px;color:var(--sub);font-size:12px;">'
+    + '<div style="width:20px;height:20px;border:2px solid var(--gold);border-top-color:transparent;'
+    + 'border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 8px;"></div>'
+    + destStn + ' 꿀팁 불러오는 중...</div>';
+
+  // Worker D1 캐시 → 카카오 API 순으로 조회
+  // Worker D1 캐시 우선 (/lifestyle-tips), 실패 시 /kakao-food 폴백
+  var h2 = new Date().getHours();
+  var url = _SERVER_URL + '/lifestyle-tips?station=' + encodeURIComponent(destStn) + '&hour=' + h2;
+
+  fetch(url)
+    .then(function(r){ return r.json(); })
+    .then(function(data) {
+      var places = (data.places || data.restaurants || data.documents || []).slice(0, 5);
+      _lifeFoodCache[destStn] = { ts: Date.now(), data: places };
+      _renderLifeFood(places, destStn);
+    })
+    .catch(function() {
+      el.innerHTML = '<div style="text-align:center;padding:16px;color:var(--sub);font-size:12px;">⚠️ 불러오기 실패<br>잠시 후 다시 시도해주세요</div>';
+    });
+}
+window.loadLifestyleFood = loadLifestyleFood;
+
+function _renderLifeFood(places, stnNm) {
+  var el = document.getElementById('lifeFoodList');
+  if(!el) return;
+
+  if(!places || !places.length) {
+    el.innerHTML = '<div style="text-align:center;padding:16px;color:var(--sub);font-size:12px;">😢 ' + stnNm + ' 주변 맛집 정보가 없어요</div>';
+    return;
+  }
+
+  // 시간대별 추천 태그
+  var h = new Date().getHours();
+  var timeTag = h < 10 ? '☀️ 아침 추천' : h < 14 ? '🌞 점심 추천' : h < 18 ? '🌤 오후 추천' : '🌙 저녁 추천';
+
+  var html = '<div style="font-size:10px;color:var(--sub);margin-bottom:8px;font-weight:600;">' + timeTag + ' · ' + stnNm + ' 역 근처</div>';
+
+  var frag = document.createDocumentFragment();
+  places.forEach(function(p, i) {
+    var cat  = (p.category_name || '').split('>').pop().trim();
+    var dist = p.distance ? (parseInt(p.distance) >= 1000
+      ? (parseInt(p.distance)/1000).toFixed(1)+'km' : p.distance+'m') : '';
+    var pUrl = p.place_url || ('https://map.naver.com/v5/search/' + encodeURIComponent(p.place_name||''));
+    var isTop = i < 3;
+    var card = document.createElement('div');
+    card.className = 'tip-card';
+    card.innerHTML =
+      '<div class="tip-rank' + (isTop?' top':'') + '">' + (i+1) + '</div>'
+      + '<div style="flex:1;min-width:0;">'
+        + '<div class="tip-name">' + _ltEsc(p.place_name||'') + '</div>'
+        + '<div class="tip-cat">' + _ltEsc(cat) + '</div>'
+      + '</div>'
+      + (dist ? '<div class="tip-dist">📍 ' + dist + '</div>' : '')
+      + '<svg width="14" height="14" viewBox="0 0 24 24" fill="var(--sub)"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6z"/></svg>';
+    card.addEventListener('click', (function(u){ return function(){ window.open(u,'_blank'); }; })(pUrl));
+    frag.appendChild(card);
+  });
+  el.innerHTML = html;
+  el.appendChild(frag);
+}
 
 // Worker D1 캐시에서 맛집 조회
 function _fetchKakaoFood(stnNm, lat, lng) {
@@ -2290,7 +2759,7 @@ function _renderTransitResultCard(data, start, dest, cacheSource) {
             time: stIdx === 0 ? (secMin+'분') : '',
             arrTime: _fmtHHMM(arrMs),
             isStop: true, isFirst: stIdx===0, isLast: stIdx===stops.length-1,
-            col: col, isSub: isSub,
+            col: col, isSub: isSub, secIdx: si,
             secSec: stIdx < stops.length-1 ? perStopSec : 0
           });
           if(stIdx < stops.length - 1) _elapsedSec += perStopSec;
@@ -2315,16 +2784,17 @@ function _renderTransitResultCard(data, start, dest, cacheSource) {
     var isFirst = (i === 0), isLast = (i === nodes.length-1);
 
     if(n.isWalk) {
-      // 도보 구간: 컴팩트 노드
-      html += '<div class="htl-stn htl-walk-node" style="--line-color:#636366;min-width:36px;max-width:44px;">' +
-        '<div class="htl-name" style="color:#8e8e93;font-size:8.5px;min-height:28px;">' + _ltEsc(n.label) + '</div>' +
-        '<div class="htl-line" style="color:#636366;font-size:7px;">도보</div>' +
-        '<div class="htl-axis">' +
-          (!isFirst ? '<div class="htl-line-seg" style="left:0;right:50%;top:12px;background:#3a3a3c;"></div>' : '') +
-          '<span style="position:absolute;top:2px;left:50%;transform:translateX(-50%);font-size:15px;">🚶</span>' +
-          (!isLast ? '<div class="htl-line-seg" style="left:50%;right:0;top:12px;background:#3a3a3c;"></div>' : '') +
+      // 도보 구간: 점선 구간 + 거리 표시
+      html += '<div class="htl-stn htl-walk-node" style="--line-color:#636366;min-width:40px;max-width:52px;position:relative;">' +
+        '<div class="htl-name" style="color:#8e8e93;font-size:8px;min-height:28px;text-align:center;">' + _ltEsc(n.label) + '</div>' +
+        '<div class="htl-line" style="color:#636366;font-size:7px;text-align:center;">도보</div>' +
+        '<div class="htl-axis" style="position:relative;">' +
+          (!isFirst ? '<div class="htl-line-seg" style="left:0;right:50%;top:12px;background:repeating-linear-gradient(to right,#636366 0,#636366 4px,transparent 4px,transparent 8px);"></div>' : '') +
+          // 중앙: 도보 이모지
+          '<span style="position:absolute;top:2px;left:50%;transform:translateX(-50%);font-size:15px;z-index:2;line-height:1;">🚶‍➡️</span>' +
+          (!isLast ? '<div class="htl-line-seg" style="left:50%;right:0;top:12px;background:repeating-linear-gradient(to right,#636366 0,#636366 4px,transparent 4px,transparent 8px);"></div>' : '') +
         '</div>' +
-        '<div class="htl-time" style="font-size:9px;color:var(--sub);">' + (n.arrTime||'') + '</div>' +
+        '<div class="htl-time" style="font-size:9px;color:var(--sub);text-align:center;">' + (n.arrTime||'') + '</div>' +
       '</div>';
     } else {
       // 이전 실제 역 col
@@ -2334,16 +2804,22 @@ function _renderTransitResultCard(data, start, dest, cacheSource) {
       for(var ni2=i+1; ni2<nodes.length; ni2++){ if(!nodes[ni2].isWalk){ nextActual=nodes[ni2].col; break; } }
       var prevCol = prevActual;
       var nextCol = nextActual;
-      var isXfer  = i > 0 && !nodes[i-1].isWalk && prevActual !== n.col && !n.isFirst;
+      // 이전 실제 역명과 현재 역명이 같으면 환승 구분자 없음 (부평→부평 등)
+      var _prevStnName = '';
+      for(var pni=i-1; pni>=0; pni--){ if(!nodes[pni].isWalk){ _prevStnName=nodes[pni].label; break; } }
+      var isXfer = i > 0 && !nodes[i-1].isWalk
+        && prevActual !== n.col
+        && !n.isFirst
+        && _prevStnName !== n.label;  // 같은 역명이면 환승 구분자 제거
 
       // ── 환승 구분자: 수직 점선 구분선 형태 ──
       if(isXfer) {
         html += '<div class="htl-xfer-sep" style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;width:28px;position:relative;">'
           // 세로 점선
           + '<div style="position:absolute;top:0;bottom:0;left:50%;width:0;border-left:2px dashed #3a3a3c;transform:translateX(-50%);z-index:0;"></div>'
-          // 환승 라벨 (세로 텍스트)
-          + '<div style="position:relative;z-index:1;height:28px;display:flex;align-items:flex-end;justify-content:center;">'
-            + '<span style="writing-mode:vertical-rl;font-size:8px;font-weight:700;color:#636366;letter-spacing:1px;line-height:1;">환승</span>'
+          // 환승 이모지
+          + '<div style="position:relative;z-index:1;height:28px;display:flex;align-items:flex-end;justify-content:center;padding-bottom:2px;">'
+            + '<span style="font-size:13px;line-height:1;">🔄</span>'
           + '</div>'
           // 다음 노선 색 배지
           + '<div style="position:relative;z-index:1;height:18px;display:flex;align-items:center;justify-content:center;">'
@@ -2499,9 +2975,9 @@ function openTransitDetail() {
           + '<div style="font-size:9px;color:#636366;text-align:center;height:18px;line-height:18px;white-space:nowrap;">'+_ltEsc(tn.label)+'</div>'
           + '<div style="font-size:8px;color:#636366;height:14px;line-height:14px;text-align:center;">도보</div>'
           + '<div style="position:relative;height:26px;width:100%;display:flex;align-items:center;justify-content:center;">'
-            + (!isF?'<div style="position:absolute;left:0;right:50%;top:12px;height:2px;background:#3a3a3c;"></div>':'')
-            + '<span style="font-size:14px;position:relative;z-index:1;">🚶</span>'
-            + (!isL?'<div style="position:absolute;left:50%;right:0;top:12px;height:2px;background:#3a3a3c;"></div>':'')
+            + (!isF?'<div style="position:absolute;left:0;right:50%;top:12px;height:2px;background:repeating-linear-gradient(to right,#555 0,#555 3px,transparent 3px,transparent 7px);"></div>':'')
+            + '<span style="font-size:14px;position:relative;z-index:1;">🚶‍➡️</span>'
+            + (!isL?'<div style="position:absolute;left:50%;right:0;top:12px;height:2px;background:repeating-linear-gradient(to right,#555 0,#555 3px,transparent 3px,transparent 7px);"></div>':'')
           + '</div>'
           + '<div style="font-size:9px;color:#636366;height:14px;line-height:14px;text-align:center;">'+tn.time+'</div>'
           + '</div>';
@@ -2629,30 +3105,37 @@ function _renderBfsToTransitBox(start, dest) {
       cleanedTp.push(tp[ci]||0);
     }
   }
-  var sections = [];
+  var rawSections = [];
   var segStart = 0;
   for(var i=1; i<=cleanedPath.length; i++) {
     var lineChanged = i===cleanedPath.length || (cleanedLp[i] && cleanedLp[i-1] && cleanedLp[i] !== cleanedLp[i-1]);
     if(lineChanged) {
       var segPath = cleanedPath.slice(segStart, i);
-      // 구간의 노선: segStart 위치의 lp (첫 역 노선이 아닌 구간 노선 기준)
       var segLp = '';
       for(var sli=segStart; sli<i; sli++){
         if(cleanedLp[sli]){ segLp=cleanedLp[sli]; break; }
       }
       if(!segLp && i<cleanedLp.length) segLp = cleanedLp[i] || '';
-      var segSec  = cleanedTp.slice(segStart, i).reduce(function(a,b){ return a+(b>0?b:0); }, 0);
-      sections.push({
-        transportation: { type: 1, name: segLp },
-        duration: segSec,
-        distance: Math.round(segSec / 60 * 700),
-        passStopList: {
-          stationList: segPath.map(function(nm){ return { stationName: nm }; })
-        }
-      });
+      var segSec = cleanedTp.slice(segStart, i).reduce(function(a,b){ return a+(b>0?b:0); }, 0);
+      rawSections.push({ lp: segLp, path: segPath, sec: segSec });
       segStart = i;
     }
   }
+  // 인접 구간의 마지막역 == 다음 구간 첫역이면 역 중복 제거 (부평→부평 등)
+  var sections = rawSections.map(function(rs, ri) {
+    var path = rs.path.slice();
+    // 이전 구간 마지막 역과 같으면 첫 역 제거
+    if(ri > 0 && rawSections[ri-1].path.length > 0) {
+      var prevLast = rawSections[ri-1].path[rawSections[ri-1].path.length-1];
+      if(path.length > 0 && path[0] === prevLast) path = path.slice(1);
+    }
+    return {
+      transportation: { type: 1, name: rs.lp },
+      duration: rs.sec,
+      distance: Math.round(rs.sec / 60 * 700),
+      passStopList: { stationList: path.map(function(nm){ return { stationName: nm }; }) }
+    };
+  }).filter(function(s){ return (s.passStopList.stationList.length > 0); });
 
   // routes 포맷으로 감싸기
   var bfsRouteData = {
@@ -2723,15 +3206,16 @@ function _showMapRouteSheet(startStn, destStn) {
       var arrT  = _fmt2(_nowMs2 + _el2 * 1000);
       var isF   = (si===0 && ni===0);
       var isL   = (si===segs.length-1 && ni===seg.path.length-1);
-      var isXfer= (ni===0 && si>0);
+      var prevLast = (si>0 && segs[si-1].path.length>0) ? segs[si-1].path[segs[si-1].path.length-1] : null;
+      var isXfer= (ni===0 && si>0 && nm !== prevLast);  // 같은 역명이면 환승 구분자 없음
       var prevSegCol = (si>0) ? (typeof _transitColor==='function' ? _transitColor(1, segs[si-1].line) : '#0a84ff') : col;
 
       // ── 환승 구분자: 수직 점선 구분선 형태 ──
       if(isXfer) {
         tHtml += '<div class="htl-xfer-sep" style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;width:28px;position:relative;">'
           + '<div style="position:absolute;top:0;bottom:0;left:50%;width:0;border-left:2px dashed #3a3a3c;transform:translateX(-50%);z-index:0;"></div>'
-          + '<div style="position:relative;z-index:1;height:28px;display:flex;align-items:flex-end;justify-content:center;">'
-            + '<span style="writing-mode:vertical-rl;font-size:8px;font-weight:700;color:#636366;letter-spacing:1px;line-height:1;">환승</span>'
+          + '<div style="position:relative;z-index:1;height:28px;display:flex;align-items:flex-end;justify-content:center;padding-bottom:2px;">'
+            + '<span style="font-size:13px;line-height:1;">🔄</span>'
           + '</div>'
           + '<div style="position:relative;z-index:1;height:18px;display:flex;align-items:center;justify-content:center;">'
             + '<div style="width:6px;height:6px;border-radius:50%;background:'+col+';box-shadow:0 0 0 2px '+col+'44;"></div>'
@@ -3476,7 +3960,7 @@ window.addEventListener('unhandledrejection', function(e) {
 </header>
 
 <!-- 탭 콘텐츠 영역 (flex:1 — bnav 위 공간 전체) -->
-<div id="tabContentWrap" style="flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column;-webkit-overflow-scrolling:touch;">
+<div id="tabContentWrap" style="flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column;-webkit-overflow-scrolling:touch;background:var(--bg);">
 
 <!-- HOME TAB -->
 <div class="tab-body" id="tab-home">
@@ -3927,6 +4411,55 @@ window.addEventListener('unhandledrejection', function(e) {
       <p style="font-size:11px;color:var(--sub);text-align:center;margin-top:14px;line-height:1.5;">
         아이디는 이 기기에만 저장되며,<br>작성한 글·채팅에 표시됩니다.
       </p>
+
+      <!-- ★ 테마 설정 -->
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
+        <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:4px;">🎨 테마 설정</div>
+        <p style="font-size:12px;color:var(--sub);margin-bottom:14px;">앱 전체 색상 테마를 변경할 수 있어요.</p>
+
+        <!-- 다크 테마 -->
+        <div id="themeCardDark" onclick="applyTheme('dark')"
+          style="display:flex;align-items:center;gap:14px;padding:14px;border-radius:12px;border:2px solid var(--gold);background:#18181a;margin-bottom:10px;cursor:pointer;transition:all .2s;">
+          <!-- 미리보기 -->
+          <div style="width:52px;height:52px;border-radius:10px;overflow:hidden;flex-shrink:0;border:1px solid #3a3a3c;position:relative;">
+            <div style="background:#121214;width:100%;height:55%;"></div>
+            <div style="background:#1c1c1e;width:100%;height:45%;border-top:1px solid #2c2c2e;display:flex;align-items:center;justify-content:center;gap:3px;padding:0 4px;">
+              <div style="flex:1;height:4px;border-radius:2px;background:#d4af37;"></div>
+              <div style="flex:1;height:4px;border-radius:2px;background:#3a3a3c;"></div>
+              <div style="flex:1;height:4px;border-radius:2px;background:#3a3a3c;"></div>
+            </div>
+          </div>
+          <div style="flex:1;">
+            <div style="font-size:14px;font-weight:700;color:#f2f2f7;margin-bottom:2px;">🌑 다크 블랙</div>
+            <div style="font-size:11px;color:#8e8e93;">깊고 선명한 다크 테마</div>
+          </div>
+          <div id="themeCheckDark" style="width:22px;height:22px;border-radius:50%;background:#d4af37;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="#121214"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+          </div>
+        </div>
+
+        <!-- 화이트 파스텔 테마 -->
+        <div id="themeCardPastel" onclick="applyTheme('pastel')"
+          style="display:flex;align-items:center;gap:14px;padding:14px;border-radius:12px;border:2px solid var(--border);background:var(--card);cursor:pointer;transition:all .2s;">
+          <!-- 미리보기 -->
+          <div style="width:52px;height:52px;border-radius:10px;overflow:hidden;flex-shrink:0;border:1px solid #dce8f0;position:relative;">
+            <div style="background:#f0f4f8;width:100%;height:55%;"></div>
+            <div style="background:#fff;width:100%;height:45%;border-top:1px solid #dce8f0;display:flex;align-items:center;justify-content:center;gap:3px;padding:0 4px;">
+              <div style="flex:1;height:4px;border-radius:2px;background:#1d9bf0;"></div>
+              <div style="flex:1;height:4px;border-radius:2px;background:#dce8f0;"></div>
+              <div style="flex:1;height:4px;border-radius:2px;background:#dce8f0;"></div>
+            </div>
+          </div>
+          <div style="flex:1;">
+            <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:2px;">🌤️ 하늘 파스텔</div>
+            <div style="font-size:11px;color:var(--sub);">맑고 시원한 하늘색 테마</div>
+          </div>
+          <div id="themeCheckPastel" style="width:22px;height:22px;border-radius:50%;background:#1d9bf0;display:flex;align-items:center;justify-content:center;flex-shrink:0;display:none;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="#fff"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+          </div>
+        </div>
+
+      </div>
     </div>
   </div>
 
@@ -3960,31 +4493,84 @@ window.addEventListener('unhandledrejection', function(e) {
 </div>
 
 <!-- ★ 맛집 탭 -->
-<div class="tab-body no-pad" id="tab-food" style="flex-direction:column;overflow-y:auto;">
-  <!-- 헤더 -->
-  <div class="food-header">
+<div class="tab-body no-pad" id="tab-food" style="flex-direction:column;overflow-y:hidden;">
+
+  <!-- 내부 탭: 맛집 / 라이프스타일 -->
+  <div style="display:flex;gap:0;flex-shrink:0;background:var(--card);border-bottom:1px solid var(--border2);">
+    <button id="foodTabBtnFood" onclick="switchFoodInnerTab('food')"
+      style="flex:1;padding:11px 0;border:none;background:transparent;font-size:13px;font-weight:700;
+      color:var(--text);border-bottom:2px solid var(--gold);cursor:pointer;">🍽️ 도착역 맛집</button>
+    <button id="foodTabBtnLife" onclick="switchFoodInnerTab('life')"
+      style="flex:1;padding:11px 0;border:none;background:transparent;font-size:13px;font-weight:600;
+      color:var(--sub);border-bottom:2px solid transparent;cursor:pointer;">✨ 맞춤 라이프스타일</button>
+  </div>
+
+  <!-- 맛집 패널 -->
+  <div id="foodPanelFood" style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
+    <div class="food-header">
+      <div>
+        <div class="food-title">🍽️ 도착역 맛집</div>
+        <div class="food-dest" id="foodDestLabel">도착역을 설정하면 맛집을 추천해드려요</div>
+      </div>
+      <button class="food-refresh-btn" onclick="loadFoodTab(true)">🔄 새로고침</button>
+    </div>
+    <div class="food-filter" id="foodFilter">
+      <div class="food-chip on" onclick="foodFilterCat(this,'전체')">전체</div>
+      <div class="food-chip" onclick="foodFilterCat(this,'음식점')">🍚 한식</div>
+      <div class="food-chip" onclick="foodFilterCat(this,'카페')">☕ 카페</div>
+      <div class="food-chip" onclick="foodFilterCat(this,'일식')">🍣 일식</div>
+      <div class="food-chip" onclick="foodFilterCat(this,'중식')">🥢 중식</div>
+      <div class="food-chip" onclick="foodFilterCat(this,'양식')">🍝 양식</div>
+      <div class="food-chip" onclick="foodFilterCat(this,'술집')">🍺 술집</div>
+      <div class="food-chip" onclick="foodFilterCat(this,'분식')">🍜 분식</div>
+    </div>
+    <div class="food-list" id="foodList" style="flex:1;overflow-y:auto;">
+      <div class="food-empty">🗺️<br>경로를 설정하면<br>도착역 주변 맛집을 추천해드려요!</div>
+    </div>
+  </div>
+
+  <!-- 라이프스타일 패널 -->
+  <div id="foodPanelLife" style="display:none;flex:1;flex-direction:column;overflow-y:auto;padding:12px 14px;gap:16px;">
+
+    <!-- 출퇴근 특가(쇼핑) -->
     <div>
-      <div class="food-title">🍽️ 도착역 맛집</div>
-      <div class="food-dest" id="foodDestLabel">도착역을 설정하면 맛집을 추천해드려요</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <div>
+          <div style="font-size:15px;font-weight:800;color:var(--text);">🛍️ 출퇴근 특가</div>
+          <div style="font-size:11px;color:var(--sub);margin-top:2px;">노선·시간대 맞춤 추천 상품</div>
+        </div>
+        <button onclick="loadLifestyleDeals(true)" style="background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--sub);font-size:11px;padding:4px 10px;cursor:pointer;">🔄</button>
+      </div>
+      <div id="lifeDealsList" style="display:flex;flex-direction:column;gap:8px;">
+        <div style="text-align:center;padding:20px;color:var(--sub);font-size:13px;">
+          🛍️ 경로를 설정하면<br>맞춤 특가를 추천해드려요
+        </div>
+      </div>
     </div>
-    <button class="food-refresh-btn" onclick="loadFoodTab(true)">🔄 새로고침</button>
-  </div>
-  <!-- 카테고리 필터 -->
-  <div class="food-filter" id="foodFilter">
-    <div class="food-chip on" onclick="foodFilterCat(this,'전체')">전체</div>
-    <div class="food-chip" onclick="foodFilterCat(this,'음식점')">🍚 한식</div>
-    <div class="food-chip" onclick="foodFilterCat(this,'카페')">☕ 카페</div>
-    <div class="food-chip" onclick="foodFilterCat(this,'일식')">🍣 일식</div>
-    <div class="food-chip" onclick="foodFilterCat(this,'중식')">🥢 중식</div>
-    <div class="food-chip" onclick="foodFilterCat(this,'양식')">🍝 양식</div>
-    <div class="food-chip" onclick="foodFilterCat(this,'술집')">🍺 술집</div>
-    <div class="food-chip" onclick="foodFilterCat(this,'분식')">🍜 분식</div>
-  </div>
-  <!-- 맛집 목록 -->
-  <div class="food-list" id="foodList">
-    <div class="food-empty">
-      🗺️<br>경로를 설정하면<br>도착역 주변 맛집을 추천해드려요!
+
+    <!-- 구분선 -->
+    <div style="height:1px;background:var(--border2);"></div>
+
+    <!-- 도착역 꿀팁(맛집) -->
+    <div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <div>
+          <div style="font-size:15px;font-weight:800;color:var(--text);">🍜 도착역 꿀팁</div>
+          <div style="font-size:11px;color:var(--sub);margin-top:2px;" id="lifeFoodDestLabel">목적지 맛집 TOP 5</div>
+        </div>
+        <button onclick="loadLifestyleFood(true)" style="background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--sub);font-size:11px;padding:4px 10px;cursor:pointer;">🔄</button>
+      </div>
+      <div id="lifeFoodList" style="display:flex;flex-direction:column;gap:8px;">
+        <div style="text-align:center;padding:20px;color:var(--sub);font-size:13px;">
+          🗺️ 경로를 설정하면<br>도착역 꿀팁을 알려드려요
+        </div>
+      </div>
+      <!-- 전체보기 버튼 -->
+      <button id="lifeFoodMoreBtn" onclick="switchFoodInnerTab('food')" style="display:none;width:100%;margin-top:8px;padding:11px;background:transparent;border:1px solid var(--border);border-radius:12px;color:var(--sub);font-size:12px;font-weight:700;cursor:pointer;">
+        🍽️ 맛집 전체 보기 →
+      </button>
     </div>
+
   </div>
 </div>
 
@@ -4331,7 +4917,7 @@ window.addEventListener('unhandledrejection', function(e) {
 
   <!-- 호선 필터 바 -->
   <div id="lineFilterBar" style="display:flex;gap:5px;padding:7px 12px;overflow-x:auto;flex-shrink:0;
-    background:#1c1c1e;border-bottom:1px solid #2c2c2e;-webkit-overflow-scrolling:touch;scrollbar-width:none;">
+    background:var(--card);border-bottom:1px solid var(--border);-webkit-overflow-scrolling:touch;scrollbar-width:none;">
     <style>#lineFilterBar::-webkit-scrollbar{display:none}</style>
     <style>
       .lf-btn { flex-shrink:0; padding:5px 11px; border-radius:14px; font-size:11px; font-weight:600; cursor:pointer; font-family:inherit; transition:all .2s; }
@@ -13790,7 +14376,7 @@ window._testRouteAPI = async function(from, to) {
   console.log('=== 테스트 완료 ===');
 };
 // WebView 환경 감지 시 간단한 상태 표시
-if (_IS_WEBVIEW_BLOCKED) {
+if (typeof _IS_WEBVIEW_BLOCKED !== 'undefined' && _IS_WEBVIEW_BLOCKED) {
   console.log('[앱] 오프라인/WebView 모드: 정적 시각표 기반으로 동작');
 } else {
   console.log('[앱] 온라인 모드: 실시간 API 활성화');
@@ -15347,20 +15933,20 @@ function safeSetItem(key, val){
   </div>
 
   <!-- GPS 상태 메시지 영역 (위치 오류 시 표시) -->
-  <div id="status-msg" style="display:none;background:#2c2c2e;color:#ff9f0a;
-    border-top:1px solid #ff9f0a;padding:8px 14px;font-size:12px;font-weight:600;
+  <div id="status-msg" style="display:none;background:var(--card2);color:var(--orange);
+    border-top:1px solid var(--orange);padding:8px 14px;font-size:12px;font-weight:600;
     text-align:center;flex-shrink:0;"></div>
 
   <!-- 하단 역 검색바 (map 탭 전용 — 홈탭은 자체 UI 사용) -->
-  <div id="baseTimeRow" style="display:none;background:rgba(17,17,19,.97);border-top:1px solid var(--border2);padding:6px 12px;align-items:center;gap:8px;flex-shrink:0;">
+  <div id="baseTimeRow" style="display:none;background:var(--map-bar-bg,rgba(17,17,19,.97));border-top:1px solid var(--border2);padding:6px 12px;align-items:center;gap:8px;flex-shrink:0;">
     <span style="font-size:10px;color:var(--sub);white-space:nowrap;font-weight:600;">🕐 기준시각</span>
     <input id="baseTimeInp2" type="time" value=""
-      style="background:#1c1c1e;color:#fff;border:1.5px solid var(--border2);border-radius:8px;padding:4px 8px;font-size:12px;font-family:inherit;cursor:pointer;flex:1;"
+      style="background:var(--input-bg,#1c1c1e);color:var(--text);border:1.5px solid var(--border2);border-radius:8px;padding:4px 8px;font-size:12px;font-family:inherit;cursor:pointer;flex:1;"
       onchange="applyBaseTime(this.value)">
     <button onclick="clearBaseTime()" style="background:transparent;border:1px solid var(--border2);color:var(--sub);border-radius:8px;padding:4px 8px;font-size:10px;cursor:pointer;white-space:nowrap;">현재</button>
   </div>
 
-  <div id="stnInputRow" style="display:none;background:rgba(17,17,19,.97);border-top:1px solid var(--border2);padding:10px 12px;flex;gap:8px;align-items:flex-end;flex-shrink:0;z-index:10;position:relative;">
+  <div id="stnInputRow" style="display:none;background:var(--map-bar-bg,rgba(17,17,19,.97));border-top:1px solid var(--border2);padding:10px 12px;flex;gap:8px;align-items:flex-end;flex-shrink:0;z-index:10;position:relative;">
     <div style="flex:1;position:relative;">
       <div style="font-size:9px;color:var(--sub);margin-bottom:3px;font-weight:600;">출발역</div>
       <input id="fmapStartInp2" class="inp" style="padding:8px 10px;font-size:12px;"
@@ -15377,20 +15963,20 @@ function safeSetItem(key, val){
       <div id="fmapDestSug2" class="sug" style="bottom:100%;top:auto;max-height:150px;"></div>
     </div>
     <button onclick="calcFmapRouteMap()" style="background:var(--gold);color:#121214;border:none;padding:9px 14px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0;">검색</button>
-    <button id="mapGpsBtn" onclick="fmapGpsLocate()" style="background:#1c3a5e;border:1.5px solid #0a84ff;color:#0a84ff;padding:9px 10px;border-radius:10px;font-size:13px;cursor:pointer;flex-shrink:0;">📍</button>
+    <button id="mapGpsBtn" onclick="fmapGpsLocate()" style="background:var(--gps-btn-bg,#1c3a5e);border:1.5px solid var(--gold);color:var(--gold);padding:9px 10px;border-radius:10px;font-size:13px;cursor:pointer;flex-shrink:0;">📍</button>
   </div>
 
   <!-- ★ 노선도 탭 전용: 경로 결과 슬라이드업 시트 -->
   <div id="mapRouteSheet" style="display:none;position:absolute;bottom:0;left:0;right:0;
-    background:#1c1c1e;border-radius:18px 18px 0 0;border-top:1px solid #3a3a3c;
+    background:var(--card);border-radius:18px 18px 0 0;border-top:1px solid var(--border);
     z-index:200;max-height:72vh;display:none;flex-direction:column;overflow:hidden;
-    box-shadow:0 -4px 24px rgba(0,0,0,.5);">
+    box-shadow:0 -4px 24px rgba(0,0,0,.3);">
     <!-- 핸들 + 헤더 -->
     <div style="padding:10px 16px 0;flex-shrink:0;">
       <div style="width:36px;height:4px;background:#3a3a3c;border-radius:2px;margin:0 auto 10px;"></div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-        <div id="mapRouteSheetTitle" style="font-size:14px;font-weight:700;color:#fff;"></div>
-        <button onclick="closeMapRouteSheet()" style="background:rgba(255,255,255,.1);border:none;border-radius:50%;width:26px;height:26px;color:#fff;font-size:14px;cursor:pointer;">×</button>
+        <div id="mapRouteSheetTitle" style="font-size:14px;font-weight:700;color:var(--text);"></div>
+        <button onclick="closeMapRouteSheet()" style="background:var(--card2);border:1px solid var(--border);border-radius:50%;width:26px;height:26px;color:var(--text);font-size:14px;cursor:pointer;">×</button>
       </div>
     </div>
     <!-- GPS 위치 -->
@@ -20457,6 +21043,8 @@ window._getCommId = _getCommId;
 function showSettingsTab(el){
   document.querySelectorAll('#filterRow .chip').forEach(function(c){c.classList.remove('on');});
   if(el) el.classList.add('on');
+  // 테마 카드 현재 상태 반영
+  try { var _ct=localStorage.getItem('app_theme')||'dark'; _updateThemeCards(_ct); } catch(e){}
   var sv=document.getElementById('commScrollView'), cv=document.getElementById('chatTabView'),
       stv=document.getElementById('settingsTabView'), fab=document.getElementById('commFab');
   if(sv) sv.style.display='none';
@@ -20466,6 +21054,138 @@ function showSettingsTab(el){
   _renderIdBox();
 }
 window.showSettingsTab = showSettingsTab;
+
+// ══════════════════════════════════════════════════════════════
+// 🎨 테마 시스템
+// ══════════════════════════════════════════════════════════════
+function applyTheme(theme) {
+  var root = document.documentElement;
+
+  // data-theme 속성 적용
+  if(theme === 'pastel') {
+    root.setAttribute('data-theme', 'pastel');
+  } else {
+    root.removeAttribute('data-theme');
+  }
+
+  // localStorage 저장
+  try { localStorage.setItem('app_theme', theme); } catch(e) {}
+
+  // 선택 카드 UI 업데이트
+  _updateThemeCards(theme);
+
+  // 노선도 SVG 배경색 업데이트
+  var metroWrap = document.getElementById('metroWrap');
+  if(metroWrap) metroWrap.style.background = theme === 'pastel' ? '#e8f4ff' : '#151518';
+
+  // 추가 배경 요소 업데이트
+  var isPastel = theme === 'pastel';
+  var lightBg  = isPastel ? '#fff' : '';
+  var lightBg2 = isPastel ? '#e8f4ff' : '';
+  var mainBg   = isPastel ? '#f0f4f8' : '';
+
+  // 상품 이미지
+  document.querySelectorAll('.prod-img').forEach(function(el){ el.style.background = lightBg2; });
+  // 현장 제보 버튼
+  document.querySelectorAll('.rpt-btn').forEach(function(el){ el.style.background = isPastel ? '#fff' : ''; el.style.borderColor = isPastel ? '#dce8f0' : ''; });
+  // cong-card
+  var congCard = document.getElementById('congCard');
+  if(congCard) congCard.style.background = isPastel ? '#fff' : '';
+  // chart-wrap
+  var chartWrap = document.getElementById('chart24Wrap');
+  if(chartWrap) chartWrap.style.background = isPastel ? '#e8f4ff' : '';
+  // 탭 배경
+  document.querySelectorAll('.tab-body').forEach(function(el){ el.style.background = mainBg; });
+  // 노선도
+  var metroWrap = document.getElementById('metroWrap');
+  if(metroWrap) metroWrap.style.background = isPastel ? '#e8f4ff' : '#151518';
+  // 스크롤 영역
+  ['busScroll','foodList','foodPanelLife','tabContentWrap'].forEach(function(id){
+    var el = document.getElementById(id);
+    if(el) el.style.background = mainBg;
+  });
+  // 세부경로 팝업 내부
+  var dtModal = document.getElementById('transitDetailModal');
+  if(dtModal) {
+    var inner = dtModal.querySelector('div');
+    if(inner) inner.style.background = isPastel ? '#fff' : '';
+  }
+  var dtTimeline = document.getElementById('transitDetailTimeline');
+  if(dtTimeline) dtTimeline.style.background = isPastel ? '#e8f4ff' : '';
+  // 노선도 탭 요소
+  var svgMapWrap = document.querySelector('.svg-map-wrap');
+  if(svgMapWrap) svgMapWrap.style.background = isPastel ? 'var(--map-bg)' : '';
+  var baseTimeRow = document.getElementById('baseTimeRow');
+  if(baseTimeRow) baseTimeRow.style.background = isPastel ? 'var(--map-bar-bg)' : '';
+  var stnInputRow = document.getElementById('stnInputRow');
+  if(stnInputRow) stnInputRow.style.background = isPastel ? 'var(--map-bar-bg)' : '';
+  var baseTimeInp = document.getElementById('baseTimeInp2');
+  if(baseTimeInp) { baseTimeInp.style.background = isPastel ? 'var(--input-bg)' : ''; baseTimeInp.style.color = isPastel ? 'var(--text)' : ''; }
+  document.querySelectorAll('.map-inner-tabs').forEach(function(el){ el.style.background = isPastel ? 'var(--card)' : ''; });
+  document.querySelectorAll('.region-tabs').forEach(function(el){ el.style.background = isPastel ? 'var(--card)' : ''; });
+  // 호선 필터 바
+  var lfBar = document.getElementById('lineFilterBar');
+  if(lfBar) lfBar.style.background = isPastel ? 'var(--card)' : '';
+  if(lfBar) lfBar.style.borderBottomColor = isPastel ? 'var(--border)' : '';
+
+
+  // 메타 테마 색상 업데이트
+  var metaTheme = document.querySelector('meta[name="theme-color"]');
+  if(metaTheme) metaTheme.content = theme === 'pastel' ? '#f0f4f8' : '#121214';
+
+  toast(theme === 'pastel' ? '🌸 화이트 파스텔 테마 적용' : '🌑 다크 블랙 테마 적용');
+}
+window.applyTheme = applyTheme;
+
+function _updateThemeCards(theme) {
+  var cardDark   = document.getElementById('themeCardDark');
+  var cardPastel = document.getElementById('themeCardPastel');
+  var chkDark    = document.getElementById('themeCheckDark');
+  var chkPastel  = document.getElementById('themeCheckPastel');
+  if(!cardDark || !cardPastel) return;
+
+  if(theme === 'pastel') {
+    // 파스텔 선택
+    cardDark.style.borderColor   = 'var(--border)';
+    cardPastel.style.borderColor = '#1d9bf0';
+    if(chkDark)   chkDark.style.display   = 'none';
+    if(chkPastel) chkPastel.style.display = 'flex';
+  } else {
+    // 다크 선택
+    cardDark.style.borderColor   = '#d4af37';
+    cardPastel.style.borderColor = 'var(--border)';
+    if(chkDark)   chkDark.style.display   = 'flex';
+    if(chkPastel) chkPastel.style.display = 'none';
+  }
+}
+
+// 앱 시작 시 저장된 테마 복원
+(function _restoreTheme() {
+  try {
+    var saved = localStorage.getItem('app_theme') || 'dark';
+    if(saved === 'pastel') {
+      document.documentElement.setAttribute('data-theme', 'pastel');
+      var metaTheme = document.querySelector('meta[name="theme-color"]');
+      if(metaTheme) metaTheme.content = '#f0f4f8';
+    }
+    function _doRestoreApply() {
+      _updateThemeCards(saved);
+      if(saved === 'pastel') {
+        document.querySelectorAll('.prod-img').forEach(function(el){ el.style.background='#e8f4ff'; });
+        document.querySelectorAll('.rpt-btn').forEach(function(el){ el.style.background='#fff'; el.style.borderColor='#dce8f0'; });
+        document.querySelectorAll('.tab-body').forEach(function(el){ el.style.background='#f0f4f8'; });
+        var mw=document.getElementById('metroWrap'); if(mw) mw.style.background='#e8f4ff';
+        var cg=document.getElementById('congCard');  if(cg) cg.style.background='#fff';
+        var cw=document.getElementById('chart24Wrap'); if(cw) cw.style.background='#e8f4ff';
+      }
+    }
+    if(document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', _doRestoreApply);
+    } else {
+      _doRestoreApply();
+    }
+  } catch(e) {}
+})();
 
 // 현재 아이디 표시 갱신
 function _renderIdBox(){
@@ -22336,6 +23056,24 @@ document.addEventListener('DOMContentLoaded', function() {
 }
 
 /* ══ 맛집 탭 ══ */
+/* 라이프스타일 딜 카드 */
+.deal-card{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px 14px;cursor:pointer;transition:background .15s;}
+.deal-card:active{background:var(--border);}
+.deal-badge{font-size:9px;font-weight:800;padding:2px 6px;border-radius:6px;white-space:nowrap;flex-shrink:0;}
+.deal-badge.hot{background:#ff375f22;color:#ff375f;}
+.deal-badge.new{background:#30d15822;color:#30d158;}
+.deal-badge.time{background:#ff9f0a22;color:#ff9f0a;}
+.deal-name{font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.deal-sub{font-size:11px;color:var(--sub);}
+.deal-price{font-size:13px;font-weight:800;color:var(--gold);white-space:nowrap;flex-shrink:0;}
+/* 라이프스타일 꿀팁 카드 */
+.tip-card{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:10px 14px;cursor:pointer;transition:background .15s;}
+.tip-card:active{background:var(--border);}
+.tip-rank{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;background:var(--border2);color:var(--sub);}
+.tip-rank.top{background:var(--gold);color:#121214;}
+.tip-name{font-size:13px;font-weight:700;color:var(--text);margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.tip-cat{font-size:10px;color:var(--sub);}
+.tip-dist{font-size:10px;color:var(--sub);white-space:nowrap;flex-shrink:0;}
 .food-header{padding:16px 16px 8px;display:flex;align-items:center;justify-content:space-between;}
 .food-title{font-size:18px;font-weight:800;color:var(--text);}
 .food-dest{font-size:13px;color:var(--gold);font-weight:600;margin-top:2px;}
@@ -22447,10 +23185,10 @@ document.addEventListener('DOMContentLoaded', function() {
 @keyframes blink{0%,100%{opacity:1;}50%{opacity:0.3;}}
 
 /* ══ 노선도 탭 내부 탭 (지하철/버스) ══ */
-.map-inner-tabs{display:flex;background:#1c1c1e;border-bottom:1px solid #2c2c2e;flex-shrink:0;}
+.map-inner-tabs{display:flex;background:var(--card);border-bottom:1px solid var(--border);flex-shrink:0;}
 .map-itab{flex:1;padding:10px;font-size:14px;font-weight:600;color:var(--sub);
   cursor:pointer;text-align:center;border-bottom:2px solid transparent;transition:all .2s;}
-.map-itab.on{color:#fff;border-bottom-color:var(--gold);}
+.map-itab.on{color:var(--text);border-bottom-color:var(--gold);}
 .map-bus-panel{flex:1;overflow-y:auto;background:var(--bg);-webkit-overflow-scrolling:touch;}
 /* 주변/즐겨찾기 토글 */
 .busv-toggle{display:flex;align-items:center;gap:8px;padding:10px 12px;flex-shrink:0;border-bottom:1px solid var(--border);background:var(--bg);}
