@@ -116,7 +116,7 @@ header h1 em{color:var(--gold);font-style:normal;}
 #transitHtlTrack .htl-mid .htl-name{height:0;overflow:hidden;margin:0;padding:0;}
 @keyframes gps-pulse{0%,100%{box-shadow:0 0 0 3px rgba(255,214,10,.4);}50%{box-shadow:0 0 0 7px rgba(255,214,10,.1);}}
 /* 복합경로 GPS 상태바 */
-#transitGpsStatus{background:#1c1c1e;border-radius:9px;padding:7px 10px;font-size:11px;color:var(--sub);align-items:center;gap:6px;margin-bottom:8px;}
+#transitGpsStatus{display:none !important;}
 /* ── 역 셀: 고정폭 column ── */
 .htl-stn{display:flex;flex-direction:column;align-items:center;flex-shrink:0;width:54px;}
 /* 역명: 고정 높이 */
@@ -250,6 +250,8 @@ header h1 em{color:var(--gold);font-style:normal;}
 .board-banner{display:none !important;}
 .board-banner.on{display:none !important;}
 .board-banner .bdot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:blink 1s infinite;}
+/* 혹시 표시되더라도 텍스트는 흰색 */
+#boardBannerTxt{color:#fff !important;}
 
 /* CONGESTION CARD */
 .cong-card{background:linear-gradient(135deg,#1c1c1e,#252528);border:1px solid var(--border);border-radius:16px;padding:14px;border-left-width:4px;}
@@ -2202,7 +2204,6 @@ function _renderTransitResultCard(data, start, dest, cacheSource) {
     '<div style="display:flex;flex-direction:column;">'
     + '<div style="font-size:28px;font-weight:900;color:var(--text);line-height:1;">' + totalMin
     + '<span style="font-size:14px;font-weight:500;color:var(--sub);margin-left:3px;">분</span></div>'
-    + '<div style="font-size:11px;color:var(--sub);margin-top:3px;">' + cacheTag + '</div>'
     + '</div>'
     + '<div style="text-align:right;">'
     + '<div style="font-size:13px;font-weight:700;color:var(--text);">' + _ltEsc(start.name) + ' → ' + _ltEsc(dest.name) + '</div>'
@@ -2308,7 +2309,8 @@ function _renderTransitResultCard(data, start, dest, cacheSource) {
       for(var ni2=i+1; ni2<nodes.length; ni2++){ if(!nodes[ni2].isWalk){ nextActual=nodes[ni2].col; break; } }
       var prevCol = prevActual;
       var nextCol = nextActual;
-      var isXfer  = i > 0 && !nodes[i-1].isWalk && prevActual !== n.col;
+      // isXfer: 이전 실제 역과 현재 역의 노선 색이 다를 때만
+      var isXfer  = i > 0 && !nodes[i-1].isWalk && prevActual !== n.col && !n.isFirst;
       // 역명 최대 5글자로 자르고 … 처리 (긴 정류장명 겹침 방지)
       var rawLabel = n.label || '';
       var shortLabel = rawLabel.length > 6 ? rawLabel.slice(0,5) + '…' : rawLabel;
@@ -2349,9 +2351,7 @@ function _renderTransitResultCard(data, start, dest, cacheSource) {
   var tbox = document.getElementById('transitResultBox');
   if(tbox) tbox.style.display = 'block';
 
-  // ★ GPS 상태바 초기 표시
-  var gpsEl = document.getElementById('transitGpsStatus');
-  if(gpsEl) gpsEl.style.display = 'flex';
+  // GPS 상태바 숨김
 
   // ★ 복합경로 지하철 구간 탑승 시간대 혼잡도 예측
   _renderTransitCongestion(sections);
@@ -2588,7 +2588,12 @@ function _renderBfsToTransitBox(start, dest) {
     var lineChanged = i===cleanedPath.length || (cleanedLp[i] && cleanedLp[i-1] && cleanedLp[i] !== cleanedLp[i-1]);
     if(lineChanged) {
       var segPath = cleanedPath.slice(segStart, i);
-      var segLp   = cleanedLp[segStart+1] || cleanedLp[segStart] || '';
+      // 구간의 노선: segStart 위치의 lp (첫 역 노선이 아닌 구간 노선 기준)
+      var segLp = '';
+      for(var sli=segStart; sli<i; sli++){
+        if(cleanedLp[sli]){ segLp=cleanedLp[sli]; break; }
+      }
+      if(!segLp && i<cleanedLp.length) segLp = cleanedLp[i] || '';
       var segSec  = cleanedTp.slice(segStart, i).reduce(function(a,b){ return a+(b>0?b:0); }, 0);
       sections.push({
         transportation: { type: 1, name: segLp },
@@ -3380,10 +3385,8 @@ window.addEventListener('unhandledrejection', function(e) {
         <button onclick="document.getElementById('transitResultBox').style.display='none'" style="background:none;border:none;color:var(--sub);font-size:18px;cursor:pointer;padding:0 2px;line-height:1;">×</button>
       </div>
       <div id="transitResultHeader" style="display:flex;align-items:baseline;justify-content:space-between;padding:0 0 12px;border-bottom:1px solid var(--border2);margin-bottom:12px;"></div>
-      <!-- GPS 위치 상태 -->
-      <div id="transitGpsStatus" style="display:none;margin-bottom:8px;padding:7px 10px;background:#1c1c1e;border-radius:9px;font-size:11px;color:var(--sub);align-items:center;gap:6px;">
-        <span id="transitGpsStatusTxt">📍 위치 확인 중...</span>
-      </div>
+      <!-- GPS 위치 상태: 숨김 -->
+      <div id="transitGpsStatus" style="display:none !important;"><span id="transitGpsStatusTxt"></span></div>
       <!-- 가로 스크롤 타임라인 -->
       <div class="htl-wrap" id="transitHtlWrap" style="position:relative;overflow-x:auto;">
         <div id="transitHtlTrack" style="display:inline-flex;min-width:100%;padding:0 8px;"></div>
@@ -3399,7 +3402,7 @@ window.addEventListener('unhandledrejection', function(e) {
   <!-- ★ 복합경로 지하철 구간 혼잡 예측 (복합경로 탐색 시 표시) -->
   <div id="transitCongCard" style="display:none;">
     <div class="sec" style="font-size:12px;">🚇 탑승 시간대 혼잡 예측</div>
-    <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;gap:10px;display:flex;flex-direction:column;" id="transitCongList"></div>
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:8px 12px;gap:0;display:flex;flex-direction:column;" id="transitCongList"></div>
   </div>
 
   <!-- 3순위: 집단지성 혼잡 분석 -->
@@ -19922,19 +19925,19 @@ function _renderTransitCongestion(sections) {
     var txt  = pct>=75?'혼잡':pct>=50?'보통':'여유';
     var secMin = Math.round(secSec/60);
 
-    html += '<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border2);">'
-      + '<div style="width:36px;height:36px;border-radius:50%;background:'+col+'22;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">🚇</div>'
+    html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border2);">'
+      + '<div style="width:28px;height:28px;border-radius:50%;background:'+col+'22;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;">🚇</div>'
       + '<div style="flex:1;min-width:0;">'
-        + '<div style="font-size:13px;font-weight:700;color:'+col+';">'+_ltEsc(lineName)+'</div>'
-        + '<div style="font-size:11px;color:var(--sub);margin-top:1px;">'
+        + '<div style="font-size:12px;font-weight:700;color:'+col+';">'+_ltEsc(lineName)+'</div>'
+        + '<div style="font-size:10px;color:var(--sub);">'
           + _ltEsc(fromStn)+(toStn?' → '+_ltEsc(toStn):'')
+          + ' · 🕐 '+boardHHMM+' · '+secMin+'분'
         + '</div>'
-        + '<div style="font-size:10px;color:var(--sub);margin-top:2px;">🕐 '+boardHHMM+' 탑승 예정 · '+secMin+'분</div>'
       + '</div>'
       + '<div style="text-align:right;flex-shrink:0;">'
-        + '<div style="font-size:14px;font-weight:800;color:'+col+';">'+pct+'%</div>'
-        + '<div style="font-size:10px;color:'+col+';font-weight:700;">'+txt+'</div>'
-        + '<div style="width:48px;height:4px;background:#2c2c2e;border-radius:2px;margin-top:4px;">'
+        + '<div style="font-size:13px;font-weight:800;color:'+col+';">'+pct+'%</div>'
+        + '<div style="font-size:9px;color:'+col+';font-weight:700;">'+txt+'</div>'
+        + '<div style="width:40px;height:3px;background:#2c2c2e;border-radius:2px;margin-top:3px;">'
           + '<div style="width:'+pct+'%;height:100%;background:'+col+';border-radius:2px;"></div>'
         + '</div>'
       + '</div>'
@@ -19944,7 +19947,9 @@ function _renderTransitCongestion(sections) {
   });
 
   // 마지막 border-bottom 제거
-  html = html.replace(/border-bottom:1px solid var\(--border2\);"(?=[^>]*><\/div><\/div><\/div>$)/,'";');
+  // 마지막 항목 border 제거
+  var lastIdx = html.lastIndexOf('border-bottom:1px solid var(--border2);');
+  if(lastIdx >= 0) html = html.slice(0,lastIdx) + 'border-bottom:none;' + html.slice(lastIdx+39);
   list.innerHTML = html;
   card.style.display = 'block';
 }
@@ -21557,8 +21562,8 @@ function _applyRoute(r) {
   calcETA();
   updateCong(S.start);
   setTimeout(function(){ highlightRouteSVG(r); }, 200);
-  document.getElementById('boardSection').style.display = 'block';
-  if(typeof _showQuickBoardBtn === 'function') _showQuickBoardBtn(true);
+  // boardSection 숨김 유지 (GPS 자동 관제)
+  document.getElementById('boardSection').style.display = 'none';
   if(typeof _clearBoardAlerts === 'function') _clearBoardAlerts();
 
   // ★ 탑승 버튼 항상 '탑승하기' 초기화
@@ -22057,16 +22062,14 @@ function updateRouteUI() {
   if(!pathSec && !htl) return;
 
   if(S.start && S.dest && S.route) {
-    // ★ 세로(pathSection) 대신 가로 타임라인(hTimelineWrap) 표시
     if(pathSec) pathSec.style.display = 'none';
-    if(htl){ htl.style.display = 'block'; if(typeof renderHorizontalTimeline==='function') renderHorizontalTimeline(); }
-    if(boardSec)  boardSec.style.display  = 'block';
+    if(htl)     htl.style.display     = 'none';   // 복합경로 카드로 대체
+    if(boardSec)  boardSec.style.display  = 'none'; // 탑승버튼 숨김
     if(setupNtc)  setupNtc.style.display  = 'none';
-    if(sumCard)   sumCard.style.display   = 'block';
+    if(sumCard)   sumCard.style.display   = 'none'; // 경로요약카드 숨김
   } else {
     if(pathSec) pathSec.style.display  = 'none';
-    // ★ 경로 없어도 노선도 박스는 표시 (빈 레일 렌더) — 통일성
-    if(htl){ htl.style.display = 'block'; if(typeof renderHorizontalTimeline==='function') renderHorizontalTimeline(); }
+    if(htl)     htl.style.display      = 'none';
     if(boardSec)  boardSec.style.display  = 'none';
     if(setupNtc && !S.start) setupNtc.style.display = 'block';
   }
