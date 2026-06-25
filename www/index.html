@@ -4231,6 +4231,39 @@ window.addEventListener('unhandledrejection', function(e) {
     </div>
   </div>
 
+  <!-- ★ AI 역무원 탭 (기본 숨김) -->
+  <div class="ai-tab-wrap" id="aiTabView" style="display:none;">
+    <!-- 상태 표시 -->
+    <div class="ai-status">
+      🚇 AI 역무원 실시간 소식 &nbsp;|&nbsp;
+      오늘 <span id="aiCountBadge">-</span>개 메시지
+    </div>
+    <!-- 목적지 라벨 -->
+    <div id="aiDestLabel" style="display:none;font-size:11px;color:var(--sub);
+      padding:6px 14px;background:var(--card2);border-bottom:1px solid var(--border);
+      white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0;"></div>
+    <!-- 호선 필터 -->
+    <div class="ai-line-filter">
+      <div class="ai-line-chip on" onclick="aiFilterLine(this,'all')">전체</div>
+      <div class="ai-line-chip" onclick="aiFilterLine(this,'1호선')"  style="border-color:#0052a4;color:#0052a4;">1호선</div>
+      <div class="ai-line-chip" onclick="aiFilterLine(this,'2호선')"  style="border-color:#00a84d;color:#00a84d;">2호선</div>
+      <div class="ai-line-chip" onclick="aiFilterLine(this,'3호선')"  style="border-color:#ef7c1c;color:#ef7c1c;">3호선</div>
+      <div class="ai-line-chip" onclick="aiFilterLine(this,'4호선')"  style="border-color:#00a5de;color:#00a5de;">4호선</div>
+      <div class="ai-line-chip" onclick="aiFilterLine(this,'5호선')"  style="border-color:#996cac;color:#996cac;">5호선</div>
+      <div class="ai-line-chip" onclick="aiFilterLine(this,'6호선')"  style="border-color:#cd7c2f;color:#cd7c2f;">6호선</div>
+      <div class="ai-line-chip" onclick="aiFilterLine(this,'7호선')"  style="border-color:#747f00;color:#747f00;">7호선</div>
+      <div class="ai-line-chip" onclick="aiFilterLine(this,'수인분당선')" style="border-color:#f5a200;color:#f5a200;">수인분당</div>
+      <div class="ai-line-chip" onclick="aiFilterLine(this,'신분당선')"  style="border-color:#d31145;color:#d31145;">신분당</div>
+      <div class="ai-line-chip" onclick="aiFilterLine(this,'공항철도')"  style="border-color:#0090d2;color:#0090d2;">공항철도</div>
+      <div class="ai-line-chip" onclick="aiFilterLine(this,'인천1호선')" style="border-color:#7ca8d5;color:#7ca8d5;">인천1</div>
+      <div class="ai-line-chip" onclick="aiFilterLine(this,'인천2호선')" style="border-color:#f4a62c;color:#f4a62c;">인천2</div>
+    </div>
+    <!-- 메시지 목록 -->
+    <div class="ai-msg-scroll" id="aiMsgScroll">
+      <div class="ai-empty">🚇<br>AI 역무원이 대화 준비 중입니다<br><small>잠시 후 다시 확인해주세요</small></div>
+    </div>
+  </div>
+
   <!-- ★ 설정 탭 — 커뮤니티 아이디 등록 (기본 숨김) -->
   <div class="comm-scroll" id="settingsTabView" style="display:none;">
     <div style="padding:4px 2px;">
