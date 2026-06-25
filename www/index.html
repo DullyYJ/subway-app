@@ -3396,6 +3396,87 @@ window.addEventListener('unhandledrejection', function(e) {
     <div id="transitResultErr" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;text-align:center;color:var(--sub);font-size:13px;"></div>
   </div>
 
+  <!-- ★ 복합경로 지하철 구간 혼잡 예측 (복합경로 탐색 시 표시) -->
+  <div id="transitCongCard" style="display:none;">
+    <div class="sec" style="font-size:12px;">🚇 탑승 시간대 혼잡 예측</div>
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;gap:10px;display:flex;flex-direction:column;" id="transitCongList"></div>
+  </div>
+
+  <!-- 3순위: 집단지성 혼잡 분석 -->
+  <div>
+    <div class="sec">혼잡도 분석<span id="congBadge" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;color:#fff;background:var(--arex);">-</span></div>
+    <div class="cong-card" id="congCard" style="border-left-color:var(--arex);">
+      <div class="cong-top">
+        <div>
+          <div class="cong-stn">지하철 <b id="congStn">-</b></div>
+          <div class="cong-meta" id="congMeta">시간표 기반</div>
+        </div>
+        
+      </div>
+      <div class="cong-status" id="congStatusTxt" style="color:var(--sub);">출발역을 설정하세요</div>
+      <!-- 혼잡도 게이지 -->
+      <div class="cong-gauge-wrap" id="congGaugeWrap" style="display:none;">
+        <div class="cong-gauge-label">
+          <span>혼잡도</span>
+          <span id="congGaugePct">-</span>
+        </div>
+        <div class="cong-gauge-bar">
+          <div class="cong-gauge-fill" id="congGaugeFill" style="width:0%;background:var(--green);"></div>
+        </div>
+      </div>
+      <!-- 24시간 스크롤 차트 -->
+      <div class="chart-wrap" id="chart24Wrap">
+        <div class="chart-hdr">
+          <span>24시간 혼잡도 <span id="chartSourceLabel" style="font-size:9px;color:var(--sub);">(통계 기반)</span></span>
+          <span id="peakLbl" style="color:var(--gold);font-weight:700;">-</span>
+        </div>
+        <div class="chart-tooltip">
+          <span class="chart-tooltip-time" id="chartTooltipTime">현재 시각</span>
+          <span class="chart-tooltip-val" id="chartTooltipVal">-</span>
+        </div>
+        <div class="chart-scroll-wrap" id="chart24Scroll">
+          <div class="bars-24" id="bars24"></div>
+        </div>
+      </div>
+      <div class="car-ttl">칸별 혼잡 예상도</div>
+      <div class="car-grid" id="carGrid"><div style="font-size:11px;color:var(--sub);padding:6px 0;">출발역 설정 후 표시됩니다</div></div>
+      <div class="gps-box" style="display:none;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="var(--blue)"><path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3c-.46-4.17-3.77-7.48-7.94-7.94V1h-2v2.06C6.83 3.52 3.52 6.83 3.06 11H1v2h2.06c.46 4.17 3.77 7.48 7.94 7.94V23h2v-2.06c4.17-.46 7.48-3.77 7.94-7.94H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/></svg>
+        <div class="gps-box-txt">현재 위치 <b id="curStnTxt">-</b> 판정<br>목적지까지 <span class="eta-txt" id="etaTxt">-</span><br><span style="font-size:11px;color:var(--sub);" id="routeDistInfo"></span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4순위: 실시간 현장 생존 제보 -->
+  <div>
+    <div class="sec">⚡ 현장 제보</div>
+    <div class="rpt-grid">
+      <div class="rpt-btn" onclick="report('쾌적해요')">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="#34c759"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z"/></svg>쾌적해요
+      </div>
+      <div class="rpt-btn" onclick="report('혼잡해요')">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="#ff9f0a"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm-5-6h10v2H7zm3-4c0 .83-.67 1.5-1.5 1.5S7 10.83 7 10s.67-1.5 1.5-1.5S10 9.17 10 10zm6 0c0 .83-.67 1.5-1.5 1.5S13 10.83 13 10s.67-1.5 1.5-1.5S16 9.17 16 10z"/></svg>혼잡해요
+      </div>
+      <div class="rpt-btn" onclick="report('지옥이에요')">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="#ff453a"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>지옥이에요
+      </div>
+    </div>
+  </div>
+
+  <!-- ★ 실시간 지하철 톡 (하단, 입력 가능 — 홈/커뮤니티 데이터 공유) -->
+  <div class="livetalk-board">
+    <div class="livetalk-hdr"><span class="ldot-live"></span>🚇 실시간 지하철 톡</div>
+    <div class="livetalk-list" id="liveTalkList"></div>
+    <div class="livetalk-input-row">
+      <input id="homeTalkInput" type="text" placeholder="실시간 톡 남기기..." maxlength="100"
+        onkeydown="if(event.key==='Enter')_homeTalkSend()"
+        style="flex:1;background:var(--card);border:1px solid var(--border2);border-radius:18px;padding:9px 14px;color:var(--text);font-size:13px;outline:none;">
+      <button onclick="_homeTalkSend()" style="flex-shrink:0;width:38px;height:38px;border-radius:50%;border:none;background:var(--accent);cursor:pointer;display:flex;align-items:center;justify-content:center;">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="#fff"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+      </button>
+    </div>
+  </div>
+
   <!-- 경로 상태 요약 (역 설정 후 표시) -->
   <div id="routeSummaryCard" style="display:none;">
     <div class="sec">경로<span id="routeStatus" style="font-size:10px;color:var(--sub);">설정 필요</span></div>
@@ -3507,87 +3588,6 @@ window.addEventListener('unhandledrejection', function(e) {
         </div>
       </div>
       <div class="api-badge" id="apiBadge" style="display:none;"></div>
-    </div>
-  </div>
-
-  <!-- ★ 복합경로 지하철 구간 혼잡 예측 (복합경로 탐색 시 표시) -->
-  <div id="transitCongCard" style="display:none;">
-    <div class="sec" style="font-size:12px;">🚇 탑승 시간대 혼잡 예측</div>
-    <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;gap:10px;display:flex;flex-direction:column;" id="transitCongList"></div>
-  </div>
-
-  <!-- 3순위: 집단지성 혼잡 분석 -->
-  <div>
-    <div class="sec">혼잡도 분석<span id="congBadge" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;color:#fff;background:var(--arex);">-</span></div>
-    <div class="cong-card" id="congCard" style="border-left-color:var(--arex);">
-      <div class="cong-top">
-        <div>
-          <div class="cong-stn">지하철 <b id="congStn">-</b></div>
-          <div class="cong-meta" id="congMeta">시간표 기반</div>
-        </div>
-        
-      </div>
-      <div class="cong-status" id="congStatusTxt" style="color:var(--sub);">출발역을 설정하세요</div>
-      <!-- 혼잡도 게이지 -->
-      <div class="cong-gauge-wrap" id="congGaugeWrap" style="display:none;">
-        <div class="cong-gauge-label">
-          <span>혼잡도</span>
-          <span id="congGaugePct">-</span>
-        </div>
-        <div class="cong-gauge-bar">
-          <div class="cong-gauge-fill" id="congGaugeFill" style="width:0%;background:var(--green);"></div>
-        </div>
-      </div>
-      <!-- 24시간 스크롤 차트 -->
-      <div class="chart-wrap" id="chart24Wrap">
-        <div class="chart-hdr">
-          <span>24시간 혼잡도 <span id="chartSourceLabel" style="font-size:9px;color:var(--sub);">(통계 기반)</span></span>
-          <span id="peakLbl" style="color:var(--gold);font-weight:700;">-</span>
-        </div>
-        <div class="chart-tooltip">
-          <span class="chart-tooltip-time" id="chartTooltipTime">현재 시각</span>
-          <span class="chart-tooltip-val" id="chartTooltipVal">-</span>
-        </div>
-        <div class="chart-scroll-wrap" id="chart24Scroll">
-          <div class="bars-24" id="bars24"></div>
-        </div>
-      </div>
-      <div class="car-ttl">칸별 혼잡 예상도</div>
-      <div class="car-grid" id="carGrid"><div style="font-size:11px;color:var(--sub);padding:6px 0;">출발역 설정 후 표시됩니다</div></div>
-      <div class="gps-box" style="display:none;">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="var(--blue)"><path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3c-.46-4.17-3.77-7.48-7.94-7.94V1h-2v2.06C6.83 3.52 3.52 6.83 3.06 11H1v2h2.06c.46 4.17 3.77 7.48 7.94 7.94V23h2v-2.06c4.17-.46 7.48-3.77 7.94-7.94H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/></svg>
-        <div class="gps-box-txt">현재 위치 <b id="curStnTxt">-</b> 판정<br>목적지까지 <span class="eta-txt" id="etaTxt">-</span><br><span style="font-size:11px;color:var(--sub);" id="routeDistInfo"></span></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- 4순위: 실시간 현장 생존 제보 -->
-  <div>
-    <div class="sec">⚡ 현장 제보</div>
-    <div class="rpt-grid">
-      <div class="rpt-btn" onclick="report('쾌적해요')">
-        <svg width="19" height="19" viewBox="0 0 24 24" fill="#34c759"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z"/></svg>쾌적해요
-      </div>
-      <div class="rpt-btn" onclick="report('혼잡해요')">
-        <svg width="19" height="19" viewBox="0 0 24 24" fill="#ff9f0a"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm-5-6h10v2H7zm3-4c0 .83-.67 1.5-1.5 1.5S7 10.83 7 10s.67-1.5 1.5-1.5S10 9.17 10 10zm6 0c0 .83-.67 1.5-1.5 1.5S13 10.83 13 10s.67-1.5 1.5-1.5S16 9.17 16 10z"/></svg>혼잡해요
-      </div>
-      <div class="rpt-btn" onclick="report('지옥이에요')">
-        <svg width="19" height="19" viewBox="0 0 24 24" fill="#ff453a"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>지옥이에요
-      </div>
-    </div>
-  </div>
-
-  <!-- ★ 실시간 지하철 톡 (하단, 입력 가능 — 홈/커뮤니티 데이터 공유) -->
-  <div class="livetalk-board">
-    <div class="livetalk-hdr"><span class="ldot-live"></span>🚇 실시간 지하철 톡</div>
-    <div class="livetalk-list" id="liveTalkList"></div>
-    <div class="livetalk-input-row">
-      <input id="homeTalkInput" type="text" placeholder="실시간 톡 남기기..." maxlength="100"
-        onkeydown="if(event.key==='Enter')_homeTalkSend()"
-        style="flex:1;background:var(--card);border:1px solid var(--border2);border-radius:18px;padding:9px 14px;color:var(--text);font-size:13px;outline:none;">
-      <button onclick="_homeTalkSend()" style="flex-shrink:0;width:38px;height:38px;border-radius:50%;border:none;background:var(--accent);cursor:pointer;display:flex;align-items:center;justify-content:center;">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="#fff"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
-      </button>
     </div>
   </div>
 
