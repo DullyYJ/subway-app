@@ -113,8 +113,6 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);}
 
 /* 맛집탭 */
 [data-theme="pastel"] .food-card{background:var(--card);border-color:var(--border);}
-[data-theme="pastel"] .deal-card{background:var(--card);border-color:var(--border);}
-[data-theme="pastel"] .tip-card{background:var(--card);border-color:var(--border);}
 
 /* 채팅/커뮤니티 */
 [data-theme="pastel"] .comm-scroll{background:var(--bg);}
@@ -257,7 +255,6 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);}
 [data-theme="pastel"] .comm-input{background:var(--input-bg) !important;color:var(--text) !important;border-color:var(--border) !important;}
 
 /* 탭 내부 구분선 */
-[data-theme="pastel"] #foodTabBtnFood,[data-theme="pastel"] #foodTabBtnLife{background:var(--card) !important;color:var(--sub);}
 
 /* 탑승시간대 혼잡 리스트 */
 [data-theme="pastel"] #transitCongList{background:var(--card) !important;border-color:var(--border) !important;}
@@ -1063,13 +1060,30 @@ window.foodFilterCat = foodFilterCat;
 
 // 맛집 탭 진입 시 호출
 function loadFoodTab(force) {
-  var destStn = S.route ? S.route.path[S.route.path.length - 1] : null;
-  var label   = document.getElementById('foodDestLabel');
+  // 도착역 이름 취득 (BFS / 카카오 복합경로 / S.dest 모두 지원)
+  var destStn = null;
+
+  // 1) BFS 경로
+  if(!destStn && S.route && S.route.path && S.route.path.length)
+    destStn = S.route.path[S.route.path.length - 1];
+
+  // 2) 복합경로 결과 (ODsay/카카오)
+  if(!destStn && typeof _transitResultDest !== 'undefined' && _transitResultDest && _transitResultDest.name)
+    destStn = _transitResultDest.name;
+
+  // 3) S.dest
+  if(!destStn && typeof S !== 'undefined' && S.dest && S.dest.name)
+    destStn = S.dest.name;
+
+  // '역' 접미사 제거 정규화
+  if(destStn && destStn.slice(-1) === '역') destStn = destStn.slice(0, -1);
+
+  var label = document.getElementById('foodDestLabel');
+  var list  = document.getElementById('foodList');
 
   if(!destStn) {
     if(label) label.textContent = '도착역을 설정하면 맛집을 추천해드려요';
-    document.getElementById('foodList').innerHTML =
-      '<div class="food-empty">🗺️<br>경로를 설정하면<br>도착역 주변 맛집을 추천해드려요!</div>';
+    if(list)  list.innerHTML = '<div class="food-empty">🗺️<br>경로를 설정하면<br>도착역 주변 맛집을 추천해드려요!</div>';
     return;
   }
 
@@ -1083,258 +1097,34 @@ function loadFoodTab(force) {
     return;
   }
 
-  // 도착역 좌표 가져오기
-  var stnInfo = (typeof STNDB !== 'undefined') ?
-    STNDB.find(function(s){ return s.name === destStn; }) : null;
+  // 좌표 취득: STNDB → _REAL_COORDS 순으로 폴백
+  var lat = null, lng = null;
+  if(typeof STNDB !== 'undefined') {
+    var stnInfo = STNDB.find(function(s){
+      var n = s.name; if(n.slice(-1)==='역') n=n.slice(0,-1);
+      return n === destStn;
+    });
+    if(stnInfo) { lat = stnInfo.lat; lng = stnInfo.lng; }
+  }
+  if((!lat || !lng) && typeof _REAL_COORDS !== 'undefined' && _REAL_COORDS[destStn]) {
+    lat = _REAL_COORDS[destStn][0]; lng = _REAL_COORDS[destStn][1];
+  }
+  // S.dest 좌표
+  if((!lat || !lng) && S.dest && S.dest.lat) { lat = S.dest.lat; lng = S.dest.lng; }
+  // _transitResultDest 좌표
+  if((!lat || !lng) && typeof _transitResultDest !== 'undefined' && _transitResultDest && _transitResultDest.lat) {
+    lat = _transitResultDest.lat; lng = _transitResultDest.lng;
+  }
 
-  if(!stnInfo || !stnInfo.lat || !stnInfo.lng) {
-    document.getElementById('foodList').innerHTML =
-      '<div class="food-error">⚠️ 도착역 좌표를 찾을 수 없습니다.<br>' + destStn + '</div>';
+  if(!lat || !lng) {
+    if(list) list.innerHTML = '<div class="food-error">⚠️ 도착역 좌표를 찾을 수 없습니다.<br>' + destStn + '</div>';
     return;
   }
 
-  _fetchKakaoFood(destStn, stnInfo.lat, stnInfo.lng);
+  _fetchKakaoFood(destStn, lat, lng);
 }
 window.loadFoodTab = loadFoodTab;
 
-// ══════════════════════════════════════════════════════════════
-// ✨ 맞춤 라이프스타일 탭
-// ══════════════════════════════════════════════════════════════
-
-// 내부 탭 전환
-function switchFoodInnerTab(tab) {
-  var panelFood = document.getElementById('foodPanelFood');
-  var panelLife = document.getElementById('foodPanelLife');
-  var btnFood   = document.getElementById('foodTabBtnFood');
-  var btnLife   = document.getElementById('foodTabBtnLife');
-  if(!panelFood || !panelLife) return;
-
-  if(tab === 'food') {
-    panelFood.style.display = 'flex';
-    panelLife.style.display = 'none';
-    if(btnFood){ btnFood.style.color='var(--text)'; btnFood.style.borderBottomColor='var(--gold)'; btnFood.style.fontWeight='700'; }
-    if(btnLife){ btnLife.style.color='var(--sub)';  btnLife.style.borderBottomColor='transparent'; btnLife.style.fontWeight='600'; }
-  } else {
-    panelFood.style.display = 'none';
-    panelLife.style.display = 'flex';
-    if(btnFood){ btnFood.style.color='var(--sub)';  btnFood.style.borderBottomColor='transparent'; btnFood.style.fontWeight='600'; }
-    if(btnLife){ btnLife.style.color='var(--text)'; btnLife.style.borderBottomColor='var(--gold)'; btnLife.style.fontWeight='700'; }
-    // 진입 시 데이터 로드
-    loadLifestyleDeals(false);
-    loadLifestyleFood(false);
-  }
-}
-window.switchFoodInnerTab = switchFoodInnerTab;
-
-// ── 출퇴근 특가(쇼핑) ─────────────────────────────────────
-var _dealCache = null;  // { ts, data }
-
-// 시간대·노선별 맞춤 키워드 생성
-function _dealKeywords() {
-  var h = new Date().getHours();
-  var line = (typeof S !== 'undefined' && S.start && S.start.line) ? S.start.line : '';
-  var isPeak = (h>=7&&h<=9)||(h>=18&&h<=20);
-
-  // 시간대별 추천 카테고리
-  var timeKw = h < 10 ? ['텀블러','에어팟','무선이어폰','충전기','보조배터리']
-    : h < 14 ? ['점심도시락','에코백','우산','핸드크림','립밤']
-    : h < 18 ? ['간식','음료수','마스크','손소독제','편의점']
-    : ['맥주','와인','야식','족욕기','마사지볼'];
-
-  // 노선별 보너스
-  var lineKw = [];
-  if(line.includes('1호선')||line.includes('수도권')) lineKw = ['출퇴근가방','롱패딩'];
-  else if(line.includes('2호선')) lineKw = ['홍대패션','스타벅스텀블러'];
-  else if(line.includes('9호선')||line.includes('공항')) lineKw = ['여행용품','네크쿠션'];
-
-  return timeKw.concat(lineKw).slice(0, 5);
-}
-
-// 출퇴근 특가 상품 목록 (쿠팡/네이버 링크)
-var _DEAL_ITEMS = [
-  // 출근길
-  { name:'스타벅스 텀블러 480ml', cat:'☕ 커피용품', price:'28,900원', badge:'hot', kw:'텀블러',
-    url:'https://search.shopping.naver.com/search/all?query=텀블러+스타벅스' },
-  { name:'무선 이어폰 노이즈캔슬링', cat:'🎧 이어폰', price:'89,000원', badge:'hot', kw:'무선이어폰',
-    url:'https://search.shopping.naver.com/search/all?query=무선이어폰' },
-  { name:'10000mAh 보조배터리', cat:'🔋 배터리', price:'19,900원', badge:'time', kw:'보조배터리',
-    url:'https://search.shopping.naver.com/search/all?query=보조배터리' },
-  { name:'USB-C 고속충전 케이블', cat:'⚡ 충전', price:'6,900원', badge:'new', kw:'충전기',
-    url:'https://search.shopping.naver.com/search/all?query=usbc충전케이블' },
-  { name:'출퇴근 백팩 방수 경량', cat:'🎒 가방', price:'39,900원', badge:'hot', kw:'출퇴근가방',
-    url:'https://search.shopping.naver.com/search/all?query=출퇴근백팩' },
-  { name:'핸드크림 무향 촉촉', cat:'🤲 스킨케어', price:'5,900원', badge:'time', kw:'핸드크림',
-    url:'https://search.shopping.naver.com/search/all?query=핸드크림' },
-  { name:'편의점 간식 3종 세트', cat:'🍫 간식', price:'4,500원', badge:'new', kw:'간식',
-    url:'https://search.shopping.naver.com/search/all?query=편의점간식' },
-  { name:'접이식 우산 초경량', cat:'☂️ 우산', price:'12,900원', badge:'time', kw:'우산',
-    url:'https://search.shopping.naver.com/search/all?query=접이식우산' },
-  { name:'지하철 목베개 메모리폼', cat:'😴 수면용품', price:'14,900원', badge:'hot', kw:'목베개',
-    url:'https://search.shopping.naver.com/search/all?query=네크쿠션+목베개' },
-  { name:'네이버플러스 월정액', cat:'🟢 구독', price:'4,900원/월', badge:'new', kw:'구독',
-    url:'https://www.navermembership.naver.com' },
-  // 퇴근길
-  { name:'수제 맥주 4캔 세트', cat:'🍺 주류', price:'9,800원', badge:'hot', kw:'맥주',
-    url:'https://search.shopping.naver.com/search/all?query=수제맥주' },
-  { name:'족욕기 자동온도유지', cat:'🦶 힐링', price:'29,900원', badge:'time', kw:'족욕기',
-    url:'https://search.shopping.naver.com/search/all?query=족욕기' },
-  { name:'편의점 야식 라면 박스', cat:'🍜 야식', price:'18,500원', badge:'hot', kw:'야식',
-    url:'https://search.shopping.naver.com/search/all?query=라면박스' },
-  { name:'마사지볼 근육이완', cat:'💆 마사지', price:'8,900원', badge:'new', kw:'마사지볼',
-    url:'https://search.shopping.naver.com/search/all?query=마사지볼' },
-];
-
-function loadLifestyleDeals(force) {
-  var el = document.getElementById('lifeDealsList');
-  if(!el) return;
-
-  // 5분 캐시
-  if(!force && _dealCache && Date.now() - _dealCache.ts < 5*60*1000) {
-    _renderDeals(_dealCache.data);
-    return;
-  }
-
-  var kws = _dealKeywords();
-  // 키워드 매칭으로 상품 필터링
-  var matched = _DEAL_ITEMS.filter(function(item) {
-    return kws.some(function(k){ return item.kw.includes(k) || k.includes(item.kw); });
-  });
-  // 매칭 없으면 전체에서 랜덤 5개
-  if(matched.length < 3) {
-    var shuffled = _DEAL_ITEMS.slice().sort(function(){ return Math.random()-.5; });
-    matched = shuffled.slice(0, 5);
-  }
-
-  _dealCache = { ts: Date.now(), data: matched };
-  _renderDeals(matched);
-}
-window.loadLifestyleDeals = loadLifestyleDeals;
-
-function _renderDeals(items) {
-  var el = document.getElementById('lifeDealsList');
-  if(!el) return;
-  var h = new Date().getHours();
-  var timeTag = h<10?'출근 추천':h<18?'점심 추천':'퇴근 추천';
-  el.innerHTML = '';
-
-  var hdr = document.createElement('div');
-  hdr.style.cssText = 'font-size:10px;color:var(--sub);margin-bottom:8px;font-weight:600;';
-  hdr.textContent = '⏰ ' + timeTag;
-  el.appendChild(hdr);
-
-  items.forEach(function(item) {
-    var badgeClass = item.badge === 'hot' ? 'hot' : item.badge === 'new' ? 'new' : 'time';
-    var badgeTxt   = item.badge === 'hot' ? '🔥 HOT' : item.badge === 'new' ? '✨ NEW' : '⏱ 특가';
-    var card = document.createElement('div');
-    card.className = 'deal-card';
-    card.innerHTML =
-      '<div style="flex:1;min-width:0;">'
-      + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">'
-        + '<span class="deal-badge ' + badgeClass + '">' + badgeTxt + '</span>'
-        + '<span class="deal-name">' + _ltEsc(item.name) + '</span>'
-      + '</div>'
-      + '<span class="deal-sub">' + _ltEsc(item.cat) + '</span>'
-      + '</div>'
-      + '<div class="deal-price">' + _ltEsc(item.price) + '</div>'
-      + '<svg width="14" height="14" viewBox="0 0 24 24" fill="var(--sub)"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6z"/></svg>';
-    card.addEventListener('click', (function(u){ return function(){ window.open(u,'_blank'); }; })(item.url));
-    el.appendChild(card);
-  });
-}
-
-// ── 도착역 꿀팁(맛집) ─────────────────────────────────────
-var _lifeFoodCache = {};  // { 역명: { ts, data } }
-
-function loadLifestyleFood(force) {
-  var el    = document.getElementById('lifeFoodList');
-  var label = document.getElementById('lifeFoodDestLabel');
-  var more  = document.getElementById('lifeFoodMoreBtn');
-  if(!el) return;
-
-  // 목적지 역 결정 (복합경로 or BFS)
-  var destStn = null;
-  if(typeof _transitResultDest !== 'undefined' && _transitResultDest && _transitResultDest.name) {
-    destStn = _transitResultDest.name;
-  } else if(typeof S !== 'undefined' && S.dest && S.dest.name) {
-    destStn = S.dest.name;
-  }
-
-  if(!destStn) {
-    el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--sub);font-size:13px;">🗺️ 경로를 설정하면<br>도착역 꿀팁을 알려드려요</div>';
-    return;
-  }
-
-  if(label) label.textContent = destStn + ' 역 맛집 TOP 5';
-  if(more)  more.style.display = 'block';
-
-  // 메모리 캐시 (15분)
-  var cache = _lifeFoodCache[destStn];
-  if(!force && cache && Date.now() - cache.ts < 15*60*1000) {
-    _renderLifeFood(cache.data, destStn);
-    return;
-  }
-
-  el.innerHTML = '<div style="text-align:center;padding:16px;color:var(--sub);font-size:12px;">'
-    + '<div style="width:20px;height:20px;border:2px solid var(--gold);border-top-color:transparent;'
-    + 'border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 8px;"></div>'
-    + destStn + ' 꿀팁 불러오는 중...</div>';
-
-  // Worker D1 캐시 → 카카오 API 순으로 조회
-  // Worker D1 캐시 우선 (/lifestyle-tips), 실패 시 /kakao-food 폴백
-  var h2 = new Date().getHours();
-  var url = _SERVER_URL + '/lifestyle-tips?station=' + encodeURIComponent(destStn) + '&hour=' + h2;
-
-  fetch(url)
-    .then(function(r){ return r.json(); })
-    .then(function(data) {
-      var places = (data.places || data.restaurants || data.documents || []).slice(0, 5);
-      _lifeFoodCache[destStn] = { ts: Date.now(), data: places };
-      _renderLifeFood(places, destStn);
-    })
-    .catch(function() {
-      el.innerHTML = '<div style="text-align:center;padding:16px;color:var(--sub);font-size:12px;">⚠️ 불러오기 실패<br>잠시 후 다시 시도해주세요</div>';
-    });
-}
-window.loadLifestyleFood = loadLifestyleFood;
-
-function _renderLifeFood(places, stnNm) {
-  var el = document.getElementById('lifeFoodList');
-  if(!el) return;
-
-  if(!places || !places.length) {
-    el.innerHTML = '<div style="text-align:center;padding:16px;color:var(--sub);font-size:12px;">😢 ' + stnNm + ' 주변 맛집 정보가 없어요</div>';
-    return;
-  }
-
-  // 시간대별 추천 태그
-  var h = new Date().getHours();
-  var timeTag = h < 10 ? '☀️ 아침 추천' : h < 14 ? '🌞 점심 추천' : h < 18 ? '🌤 오후 추천' : '🌙 저녁 추천';
-
-  var html = '<div style="font-size:10px;color:var(--sub);margin-bottom:8px;font-weight:600;">' + timeTag + ' · ' + stnNm + ' 역 근처</div>';
-
-  var frag = document.createDocumentFragment();
-  places.forEach(function(p, i) {
-    var cat  = (p.category_name || '').split('>').pop().trim();
-    var dist = p.distance ? (parseInt(p.distance) >= 1000
-      ? (parseInt(p.distance)/1000).toFixed(1)+'km' : p.distance+'m') : '';
-    var pUrl = p.place_url || ('https://map.naver.com/v5/search/' + encodeURIComponent(p.place_name||''));
-    var isTop = i < 3;
-    var card = document.createElement('div');
-    card.className = 'tip-card';
-    card.innerHTML =
-      '<div class="tip-rank' + (isTop?' top':'') + '">' + (i+1) + '</div>'
-      + '<div style="flex:1;min-width:0;">'
-        + '<div class="tip-name">' + _ltEsc(p.place_name||'') + '</div>'
-        + '<div class="tip-cat">' + _ltEsc(cat) + '</div>'
-      + '</div>'
-      + (dist ? '<div class="tip-dist">📍 ' + dist + '</div>' : '')
-      + '<svg width="14" height="14" viewBox="0 0 24 24" fill="var(--sub)"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6z"/></svg>';
-    card.addEventListener('click', (function(u){ return function(){ window.open(u,'_blank'); }; })(pUrl));
-    frag.appendChild(card);
-  });
-  el.innerHTML = html;
-  el.appendChild(frag);
-}
 
 // Worker D1 캐시에서 맛집 조회
 function _fetchKakaoFood(stnNm, lat, lng) {
@@ -2628,12 +2418,48 @@ var _transitResultData  = null;  // 세부팝업용 저장
 /* 노선/교통수단 색상 */
 function _transitColor(type, name) {
   if(type === 3) return '#8e8e93';          // 도보
-  if(type === 1) {                           // 지하철
-    if(typeof LC !== 'undefined' && name && LC[name]) return LC[name];
+  if(type === 1) {                          // 지하철
+    if(typeof LC === 'undefined' || !name) return '#0a84ff';
+    if(LC[name]) return LC[name];
+    // "수도권 N호선" / "광역 N호선" 접두사 제거 후 재시도
+    var bare = name.replace(/^(수도권|광역|서울|인천|경기)\s+/, '');
+    if(LC[bare]) return LC[bare];
+    // "경인선" → "1호선" 계열 등 별칭 매핑
+    var alias = {
+      '경인선':'#0052a4','경부선':'#0052a4','경원선':'#0052a4',
+      '일산선':'#0052a4','과천선':'#0052a4','안산선':'#0052a4',
+      '장항선':'#0052a4','중앙선':'#0052a4',
+      '분당선':'#f5a200','수인선':'#f5a200',
+      '공항철도1호선':'#0090d2',
+      '7호선(인천)':'#747f00','9호선(연장)':'#bdb092',
+      '9호선(연장2)':'#bdb092','별내선':'#e6186c',
+      '신분당선(연장)':'#d31145','신분당선(연장2)':'#d31145',
+      '에버라인선':'#74a842','의정부선':'#fb8f36',
+      '진접선':'#00a5de',
+    };
+    if(alias[name]) return alias[name];
+    if(alias[bare]) return alias[bare];
     return '#0a84ff';
   }
-  return '#00b341';                          // 버스
+  return '#00b341';                         // 버스
 }
+
+// 노선명 정규화 헬퍼
+function _normalizeLine(name) {
+  if(!name) return '';
+  var bare = name.replace(/^(수도권|광역|서울|인천|경기)\s+/, '');
+  // 동일 계통 노선 통합
+  var map = {
+    '경인선':'1호선','경부선':'1호선','경원선':'1호선',
+    '일산선':'1호선','과천선':'4호선','안산선':'4호선',
+    '장항선':'1호선','분당선':'수인분당선','수인선':'수인분당선',
+    '공항철도1호선':'공항철도',
+    '7호선(인천)':'7호선','9호선(연장)':'9호선','9호선(연장2)':'9호선',
+    '별내선':'8호선','신분당선(연장)':'신분당선','신분당선(연장2)':'신분당선',
+  };
+  return map[bare] || map[name] || bare || name;
+}
+window._normalizeLine = _normalizeLine;
 
 /* ── 가로 타임라인 렌더링 ── */
 function _renderTransitResultCard(data, start, dest, cacheSource) {
@@ -2804,13 +2630,22 @@ function _renderTransitResultCard(data, start, dest, cacheSource) {
       for(var ni2=i+1; ni2<nodes.length; ni2++){ if(!nodes[ni2].isWalk){ nextActual=nodes[ni2].col; break; } }
       var prevCol = prevActual;
       var nextCol = nextActual;
-      // 이전 실제 역명과 현재 역명이 같으면 환승 구분자 없음 (부평→부평 등)
-      var _prevStnName = '';
-      for(var pni=i-1; pni>=0; pni--){ if(!nodes[pni].isWalk){ _prevStnName=nodes[pni].label; break; } }
+      // 이전 실제 역 정보
+      var _prevStnName = '', _prevLineName = '';
+      for(var pni=i-1; pni>=0; pni--){
+        if(!nodes[pni].isWalk){
+          _prevStnName = nodes[pni].label;
+          _prevLineName = nodes[pni].lineName || '';
+          break;
+        }
+      }
+      // 노선 정규화 후 비교: 같은 노선 계통이면 환승 아님
+      var _curLineNorm  = typeof _normalizeLine==='function' ? _normalizeLine(n.lineName||'') : n.lineName;
+      var _prevLineNorm = typeof _normalizeLine==='function' ? _normalizeLine(_prevLineName) : _prevLineName;
       var isXfer = i > 0 && !nodes[i-1].isWalk
-        && prevActual !== n.col
         && !n.isFirst
-        && _prevStnName !== n.label;  // 같은 역명이면 환승 구분자 제거
+        && _prevStnName !== n.label           // 같은 역명이면 환승 아님
+        && _curLineNorm !== _prevLineNorm;    // 정규화된 노선이 달라야 환승
 
       // ── 환승 구분자: 수직 점선 구분선 형태 ──
       if(isXfer) {
@@ -3207,7 +3042,9 @@ function _showMapRouteSheet(startStn, destStn) {
       var isF   = (si===0 && ni===0);
       var isL   = (si===segs.length-1 && ni===seg.path.length-1);
       var prevLast = (si>0 && segs[si-1].path.length>0) ? segs[si-1].path[segs[si-1].path.length-1] : null;
-      var isXfer= (ni===0 && si>0 && nm !== prevLast);  // 같은 역명이면 환승 구분자 없음
+      var _curLN  = typeof _normalizeLine==='function' ? _normalizeLine(seg.line) : seg.line;
+      var _prevLN = (si>0 && typeof _normalizeLine==='function') ? _normalizeLine(segs[si-1].line) : (si>0?segs[si-1].line:'');
+      var isXfer = (ni===0 && si>0 && nm !== prevLast && _curLN !== _prevLN);
       var prevSegCol = (si>0) ? (typeof _transitColor==='function' ? _transitColor(1, segs[si-1].line) : '#0a84ff') : col;
 
       // ── 환승 구분자: 수직 점선 구분선 형태 ──
@@ -4493,84 +4330,31 @@ window.addEventListener('unhandledrejection', function(e) {
 </div>
 
 <!-- ★ 맛집 탭 -->
-<div class="tab-body no-pad" id="tab-food" style="flex-direction:column;overflow-y:hidden;">
-
-  <!-- 내부 탭: 맛집 / 라이프스타일 -->
-  <div style="display:flex;gap:0;flex-shrink:0;background:var(--card);border-bottom:1px solid var(--border2);">
-    <button id="foodTabBtnFood" onclick="switchFoodInnerTab('food')"
-      style="flex:1;padding:11px 0;border:none;background:transparent;font-size:13px;font-weight:700;
-      color:var(--text);border-bottom:2px solid var(--gold);cursor:pointer;">🍽️ 도착역 맛집</button>
-    <button id="foodTabBtnLife" onclick="switchFoodInnerTab('life')"
-      style="flex:1;padding:11px 0;border:none;background:transparent;font-size:13px;font-weight:600;
-      color:var(--sub);border-bottom:2px solid transparent;cursor:pointer;">✨ 맞춤 라이프스타일</button>
-  </div>
-
-  <!-- 맛집 패널 -->
-  <div id="foodPanelFood" style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
-    <div class="food-header">
-      <div>
-        <div class="food-title">🍽️ 도착역 맛집</div>
-        <div class="food-dest" id="foodDestLabel">도착역을 설정하면 맛집을 추천해드려요</div>
-      </div>
-      <button class="food-refresh-btn" onclick="loadFoodTab(true)">🔄 새로고침</button>
-    </div>
-    <div class="food-filter" id="foodFilter">
-      <div class="food-chip on" onclick="foodFilterCat(this,'전체')">전체</div>
-      <div class="food-chip" onclick="foodFilterCat(this,'음식점')">🍚 한식</div>
-      <div class="food-chip" onclick="foodFilterCat(this,'카페')">☕ 카페</div>
-      <div class="food-chip" onclick="foodFilterCat(this,'일식')">🍣 일식</div>
-      <div class="food-chip" onclick="foodFilterCat(this,'중식')">🥢 중식</div>
-      <div class="food-chip" onclick="foodFilterCat(this,'양식')">🍝 양식</div>
-      <div class="food-chip" onclick="foodFilterCat(this,'술집')">🍺 술집</div>
-      <div class="food-chip" onclick="foodFilterCat(this,'분식')">🍜 분식</div>
-    </div>
-    <div class="food-list" id="foodList" style="flex:1;overflow-y:auto;">
-      <div class="food-empty">🗺️<br>경로를 설정하면<br>도착역 주변 맛집을 추천해드려요!</div>
-    </div>
-  </div>
-
-  <!-- 라이프스타일 패널 -->
-  <div id="foodPanelLife" style="display:none;flex:1;flex-direction:column;overflow-y:auto;padding:12px 14px;gap:16px;">
-
-    <!-- 출퇴근 특가(쇼핑) -->
+<div class="tab-body no-pad" id="tab-food" style="flex-direction:column;overflow-y:auto;">
+  <!-- 헤더 -->
+  <div class="food-header">
     <div>
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-        <div>
-          <div style="font-size:15px;font-weight:800;color:var(--text);">🛍️ 출퇴근 특가</div>
-          <div style="font-size:11px;color:var(--sub);margin-top:2px;">노선·시간대 맞춤 추천 상품</div>
-        </div>
-        <button onclick="loadLifestyleDeals(true)" style="background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--sub);font-size:11px;padding:4px 10px;cursor:pointer;">🔄</button>
-      </div>
-      <div id="lifeDealsList" style="display:flex;flex-direction:column;gap:8px;">
-        <div style="text-align:center;padding:20px;color:var(--sub);font-size:13px;">
-          🛍️ 경로를 설정하면<br>맞춤 특가를 추천해드려요
-        </div>
-      </div>
+      <div class="food-title">🍽️ 도착역 맛집</div>
+      <div class="food-dest" id="foodDestLabel">도착역을 설정하면 맛집을 추천해드려요</div>
     </div>
-
-    <!-- 구분선 -->
-    <div style="height:1px;background:var(--border2);"></div>
-
-    <!-- 도착역 꿀팁(맛집) -->
-    <div>
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-        <div>
-          <div style="font-size:15px;font-weight:800;color:var(--text);">🍜 도착역 꿀팁</div>
-          <div style="font-size:11px;color:var(--sub);margin-top:2px;" id="lifeFoodDestLabel">목적지 맛집 TOP 5</div>
-        </div>
-        <button onclick="loadLifestyleFood(true)" style="background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--sub);font-size:11px;padding:4px 10px;cursor:pointer;">🔄</button>
-      </div>
-      <div id="lifeFoodList" style="display:flex;flex-direction:column;gap:8px;">
-        <div style="text-align:center;padding:20px;color:var(--sub);font-size:13px;">
-          🗺️ 경로를 설정하면<br>도착역 꿀팁을 알려드려요
-        </div>
-      </div>
-      <!-- 전체보기 버튼 -->
-      <button id="lifeFoodMoreBtn" onclick="switchFoodInnerTab('food')" style="display:none;width:100%;margin-top:8px;padding:11px;background:transparent;border:1px solid var(--border);border-radius:12px;color:var(--sub);font-size:12px;font-weight:700;cursor:pointer;">
-        🍽️ 맛집 전체 보기 →
-      </button>
+    <button class="food-refresh-btn" onclick="loadFoodTab(true)">🔄 새로고침</button>
+  </div>
+  <!-- 카테고리 필터 -->
+  <div class="food-filter" id="foodFilter">
+    <div class="food-chip on" onclick="foodFilterCat(this,'전체')">전체</div>
+    <div class="food-chip" onclick="foodFilterCat(this,'음식점')">🍚 한식</div>
+    <div class="food-chip" onclick="foodFilterCat(this,'카페')">☕ 카페</div>
+    <div class="food-chip" onclick="foodFilterCat(this,'일식')">🍣 일식</div>
+    <div class="food-chip" onclick="foodFilterCat(this,'중식')">🥢 중식</div>
+    <div class="food-chip" onclick="foodFilterCat(this,'양식')">🍝 양식</div>
+    <div class="food-chip" onclick="foodFilterCat(this,'술집')">🍺 술집</div>
+    <div class="food-chip" onclick="foodFilterCat(this,'분식')">🍜 분식</div>
+  </div>
+  <!-- 맛집 목록 -->
+  <div class="food-list" id="foodList">
+    <div class="food-empty">
+      🗺️<br>경로를 설정하면<br>도착역 주변 맛집을 추천해드려요!
     </div>
-
   </div>
 </div>
 
@@ -12559,6 +12343,10 @@ function switchTab(tab,el){
     if(gv) gv.style.display='none';
   }
 
+  // 맛집 탭 진입 시 자동 로드
+  if(tab === 'food') {
+    setTimeout(function(){ if(typeof loadFoodTab === 'function') loadFoodTab(false); }, 100);
+  }
   // CSS로 비활성 탭 높이 제어 (flex:0 + max-height:0)
 }
 
@@ -21100,7 +20888,7 @@ function applyTheme(theme) {
   var metroWrap = document.getElementById('metroWrap');
   if(metroWrap) metroWrap.style.background = isPastel ? '#e8f4ff' : '#151518';
   // 스크롤 영역
-  ['busScroll','foodList','foodPanelLife','tabContentWrap'].forEach(function(id){
+  ['busScroll','foodList','tabContentWrap'].forEach(function(id){
     var el = document.getElementById(id);
     if(el) el.style.background = mainBg;
   });
@@ -23056,24 +22844,7 @@ document.addEventListener('DOMContentLoaded', function() {
 }
 
 /* ══ 맛집 탭 ══ */
-/* 라이프스타일 딜 카드 */
-.deal-card{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px 14px;cursor:pointer;transition:background .15s;}
-.deal-card:active{background:var(--border);}
-.deal-badge{font-size:9px;font-weight:800;padding:2px 6px;border-radius:6px;white-space:nowrap;flex-shrink:0;}
-.deal-badge.hot{background:#ff375f22;color:#ff375f;}
-.deal-badge.new{background:#30d15822;color:#30d158;}
-.deal-badge.time{background:#ff9f0a22;color:#ff9f0a;}
-.deal-name{font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.deal-sub{font-size:11px;color:var(--sub);}
-.deal-price{font-size:13px;font-weight:800;color:var(--gold);white-space:nowrap;flex-shrink:0;}
-/* 라이프스타일 꿀팁 카드 */
-.tip-card{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:10px 14px;cursor:pointer;transition:background .15s;}
-.tip-card:active{background:var(--border);}
-.tip-rank{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;background:var(--border2);color:var(--sub);}
-.tip-rank.top{background:var(--gold);color:#121214;}
-.tip-name{font-size:13px;font-weight:700;color:var(--text);margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.tip-cat{font-size:10px;color:var(--sub);}
-.tip-dist{font-size:10px;color:var(--sub);white-space:nowrap;flex-shrink:0;}
+
 .food-header{padding:16px 16px 8px;display:flex;align-items:center;justify-content:space-between;}
 .food-title{font-size:18px;font-weight:800;color:var(--text);}
 .food-dest{font-size:13px;color:var(--gold);font-weight:600;margin-top:2px;}
