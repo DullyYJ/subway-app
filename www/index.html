@@ -342,8 +342,10 @@ header h1 em{color:var(--gold);font-style:normal;}
 #transitHtlTrack{display:inline-flex;align-items:flex-start;min-width:100%;padding:0 8px;gap:0;}
 #transitHtlTrack .htl-stn{width:68px;flex-shrink:0;}
 #transitResultCard{display:flex;flex-direction:column;}
+#routeOptionTabs{display:flex !important;gap:6px;}
+#routeOptionTabs button{transition:all .15s;}
 #transitResultHeader{display:flex;align-items:baseline;gap:6px;flex:1;min-width:0;overflow:hidden;}
-#transitHtlTrack .htl-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;height:32px;font-size:10px;line-height:16px;padding:0 3px;display:block;text-align:center;}
+#transitHtlTrack .htl-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;height:30px;font-size:10px;line-height:15px;padding:0 2px;display:block;text-align:center;max-width:68px;}
 #transitHtlTrack .htl-line{font-size:7.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 #transitHtlTrack .htl-walk-node{width:48px !important;}
 /* ── 복합경로 GPS 현재위치 ── */
@@ -2401,60 +2403,108 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
   var track = document.getElementById('transitHtlTrack');
   if(!track) return;
 
+  // ── 전처리: 각 구간에서 첫역/마지막역 중복 제거 ──
+  // 예) 굴현(인천1호선 끝) + 도보 + 굴현(인천1호선 재탑승) → 굴현이 3번 나오는 문제 해결
+  var cleanSecs = [];
+  sections.forEach(function(sec, si) {
+    var trans = sec.transportation || {};
+    var type  = trans.type;
+    var stops = [];
+    try { stops = sec.passStopList ? (sec.passStopList.stationList || []).slice() : []; } catch(e) {}
+    // 도보 구간은 stops 없음 → 그대로
+    if(type === 3) { cleanSecs.push({ sec: sec, stops: [], si: si }); return; }
+    // 앞 구간의 마지막 역명과 내 첫 역명이 같으면 내 첫 역 제거
+    if(si > 0 && cleanSecs.length > 0) {
+      var prevStops = cleanSecs[cleanSecs.length-1].stops;
+      if(prevStops.length > 0 && stops.length > 0) {
+        var prevLast = (prevStops[prevStops.length-1].stationName||'').replace(/역$/,'');
+        var myFirst  = (stops[0].stationName||'').replace(/역$/,'');
+        if(prevLast === myFirst) stops = stops.slice(1);
+      }
+    }
+    cleanSecs.push({ sec: sec, stops: stops, si: si });
+  });
+
   var now = Date.now();
   var tHtml = '';
   var nodes = [];
   var nodeIdx = 0;
+  var totalSecs = cleanSecs.length;
 
-  sections.forEach(function(sec, si) {
-    var trans  = sec.transportation || {};
-    var type   = trans.type;   // 1=지하철, 2=버스, 3=도보
-    var isSub  = type === 1;
-    var isBus  = type === 2;
-    var isWalk = type === 3;
-    var col    = _transitColor(type, trans.name);
-    var lineName = trans.name || '';
-    var secMin = Math.round((sec.duration || 0) / 60);
-    var stops  = [];
-    try { stops = sec.passStopList ? (sec.passStopList.stationList || []) : []; } catch(e) {}
-    var perStopSec = stops.length > 1 ? (sec.duration / (stops.length - 1)) : 0;
+  // 전체 실제 역 수 계산 (isFirst/isLast 판단용)
+  var allStops = [];
+  cleanSecs.forEach(function(cs){ allStops = allStops.concat(cs.stops); });
+  var totalStopCount = allStops.length;
+
+  var globalStopIdx = 0;
+
+  cleanSecs.forEach(function(cs, csi) {
+    var sec     = cs.sec;
+    var stops   = cs.stops;
+    var trans   = sec.transportation || {};
+    var type    = trans.type;
+    var isSub   = type === 1;
+    var isBus   = type === 2;
+    var isWalk  = type === 3;
+    var col     = _transitColor(type, trans.name);
+    var lineName= trans.name || '';
+    var secMin  = Math.round((sec.duration || 0) / 60);
 
     if(isWalk) {
-      // 도보 구간: 작은 노드
-      var distM = Math.round(sec.distance || 0);
-      var distStr = distM >= 1000 ? (distM/1000).toFixed(1)+'km' : distM+'m';
-      tHtml += '<div class="htl-stn htl-walk-node" id="tnode_w'+si+'" style="--line-color:#8e8e93;">'
+      // 이전 구간 색상과 다음 구간 색상으로 연결선 처리
+      var prevCol = '#8e8e93', nextCol = '#8e8e93';
+      if(csi > 0 && cleanSecs[csi-1].sec.transportation) {
+        prevCol = _transitColor(cleanSecs[csi-1].sec.transportation.type, cleanSecs[csi-1].sec.transportation.name);
+      }
+      if(csi < totalSecs-1 && cleanSecs[csi+1].sec.transportation) {
+        nextCol = _transitColor(cleanSecs[csi+1].sec.transportation.type, cleanSecs[csi+1].sec.transportation.name);
+      }
+      tHtml += '<div class="htl-stn htl-walk-node" id="tnode_w'+csi+'" style="--line-color:#8e8e93;">'
         + '<div class="htl-name" style="font-size:9px;color:var(--sub);text-align:center;line-height:16px;">도보</div>'
         + '<div class="htl-axis">'
-          + '<div class="htl-line-seg" style="left:0;right:50%;top:12px;background:#8e8e93;opacity:.4;"></div>'
-          + '<span style="position:absolute;top:2px;left:50%;transform:translateX(-50%);font-size:13px;z-index:2;">🚶‍➡️</span>'
-          + '<div class="htl-line-seg" style="left:50%;right:0;top:12px;background:#8e8e93;opacity:.4;"></div>'
+          + '<div class="htl-line-seg" style="left:0;right:50%;top:12px;background:'+prevCol+';opacity:.5;"></div>'
+          + '<span style="position:absolute;top:2px;left:50%;transform:translateX(-50%);font-size:13px;z-index:2;line-height:1;">🚶‍➡️</span>'
+          + '<div class="htl-line-seg" style="left:50%;right:0;top:12px;background:'+nextCol+';opacity:.5;"></div>'
         + '</div>'
-        + '<div class="htl-time" style="font-size:9px;color:var(--sub);text-align:center;">' + secMin + '분</div>'
+        + '<div style="font-size:9px;color:var(--sub);text-align:center;height:16px;line-height:16px;">' + secMin + '분</div>'
         + '</div>';
       return;
     }
 
+    var perStopSec = stops.length > 1 ? (sec.duration / (stops.length - 1)) : 0;
     var arrMs = now;
+
     stops.forEach(function(st, ni) {
-      var nm = st.stationName || '';
+      var nm      = st.stationName || '';
       var shortNm = nm.replace(/역$/, '');
-      var isF = (si === 0 && ni === 0);
-      var isL = (si === sections.length-1 && ni === stops.length-1);
+      var isF = (globalStopIdx === 0);
+      var isL = (globalStopIdx === totalStopCount - 1);
       arrMs += (ni > 0 ? perStopSec * 1000 : 0);
       var arrT = ni === 0 ? (secMin > 0 ? secMin+'분' : '') : _fmtHHMM(arrMs);
 
-      var leftCol  = col, rightCol = col;
+      // 이전 구간 색 (연결선)
+      var leftCol  = col;
+      var rightCol = col;
+      // 구간 첫 역 → 왼쪽 선은 이전 구간 색 or 도보 회색
+      if(ni === 0 && csi > 0) {
+        var prevSec = cleanSecs[csi-1].sec;
+        leftCol = _transitColor(prevSec.transportation.type, prevSec.transportation.name);
+      }
+
       var dot = '<span class="htl-dot" style="border-color:'+col+';background:'+col+';"></span>';
       if(isF) dot = '<span class="htl-dot" style="border-color:var(--start-dot);background:var(--start-dot);width:14px;height:14px;top:6px;"></span>';
       if(isL) dot = '<span class="htl-dot" style="border-color:var(--end-dot);background:var(--end-dot);width:14px;height:14px;top:6px;"></span>';
 
+      // 노선 뱃지: 구간 첫 역에만 표시 (출발역 아닐 때)
       var badge = '';
-      if(ni === 0 && si > 0) badge = '<div class="htl-line" style="color:'+col+';font-size:7px;text-align:center;white-space:nowrap;overflow:hidden;">'+_ltEsc(lineName)+'</div>';
+      if(ni === 0 && !isF) {
+        badge = '<div class="htl-line" style="color:'+col+';font-size:7px;text-align:center;'
+          + 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;">'+_ltEsc(lineName)+'</div>';
+      }
 
       var gpsId = 'tnode_' + nodeIdx;
-      tHtml += '<div class="htl-stn" id="'+gpsId+'" data-stnname="'+shortNm+'" style="--line-color:'+col+';">'
-        + '<div class="htl-name" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+_ltEsc(shortNm)+'</div>'
+      tHtml += '<div class="htl-stn" id="'+gpsId+'" data-stnname="'+_ltEsc(shortNm)+'" style="--line-color:'+col+';">'
+        + '<div class="htl-name">'+_ltEsc(shortNm)+'</div>'
         + badge
         + '<div class="htl-axis">'
           + (!isF ? '<div class="htl-line-seg" style="left:0;right:50%;top:12px;background:'+leftCol+';"></div>' : '')
@@ -2472,18 +2522,19 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
         lat: st.lat || null, lng: st.lon || st.lng || null
       });
       nodeIdx++;
+      globalStopIdx++;
     });
   });
 
   track.innerHTML = tHtml;
   window._lastHtlNodes = nodes;
+  window._lastHtlSections = sections;
 
   // GPS 추적 시작
   if(typeof _startTransitGpsTracking === 'function') {
     _startTransitGpsTracking(nodes);
   }
 
-  // 카드 표시
   var htlWrap = document.getElementById('transitHtlWrap');
   if(htlWrap) htlWrap.style.display = 'block';
 }
@@ -2791,7 +2842,15 @@ function fmapDoRoute() {
         toast('경로 탐색 실패: ' + em);
         return;
       }
-      _renderTransitResultCard(_convertODsayToRoutes(data), start, dest, 'odsay');
+      // 경로 옵션 파싱 및 저장
+      _allRouteResults = _parseODsayAllOptions(data);
+      // 경로 탭 표시 (2개 이상 경로일 때)
+      var tabDiv = document.getElementById('routeOptionTabs');
+      if(tabDiv) tabDiv.style.display = (data.result&&data.result.path&&data.result.path.length>1) ? 'flex' : 'none';
+      // 기본: 최단시간 경로 렌더
+      var fastRoute = _allRouteResults ? _allRouteResults.fast : null;
+      var routeData = fastRoute ? { routes: [_convertSinglePathToRoute(fastRoute)] } : _convertODsayToRoutes(data);
+      _renderTransitResultCard(routeData, start, dest, 'odsay');
     })
     .catch(function(e){
       if(loading) loading.style.display = 'none';
@@ -2802,6 +2861,103 @@ function fmapDoRoute() {
   _resolve(qS, _fmapStart, function(r){ _done.start = r; _done.s = true; _run(); });
   _resolve(qD, _fmapDest,  function(r){ _done.dest  = r; _done.d = true; _run(); });
 }
+// ── 경로 결과 저장 (옵션 선택용) ──
+var _allRouteResults = null;  // { fast, less, bus } 세 가지 경로
+
+// ODsay 응답에서 최단/최소환승/버스우선 경로 분리
+function _parseODsayAllOptions(odsayData) {
+  var paths = (odsayData.result || {}).path || [];
+  if(!paths.length) return null;
+
+  // ODsay는 이미 최단시간 순으로 정렬해서 줌
+  // pathType: 1=지하철우선, 2=버스우선, 3=지하철+버스
+  var byType = { 1: [], 2: [], 3: [] };
+  paths.forEach(function(p) {
+    var pt = (p.info || {}).pathType || 3;
+    byType[pt].push(p);
+  });
+
+  // 최단시간: 전체에서 totalTime 가장 짧은 것
+  var sorted = paths.slice().sort(function(a,b){
+    return ((a.info||{}).totalTime||999) - ((b.info||{}).totalTime||999);
+  });
+
+  // 최소환승: transferCount 가장 적은 것
+  var lessXfer = paths.slice().sort(function(a,b){
+    return ((a.info||{}).transferCount||99) - ((b.info||{}).transferCount||99);
+  });
+
+  // 버스우선: pathType=2 있으면 우선, 없으면 버스 구간 많은 것
+  var busFirst = byType[2].length > 0 ? byType[2][0]
+    : paths.slice().sort(function(a,b){
+        var aBus = (a.subPath||[]).filter(function(s){return s.trafficType===2;}).length;
+        var bBus = (b.subPath||[]).filter(function(s){return s.trafficType===2;}).length;
+        return bBus - aBus;
+      })[0];
+
+  return {
+    fast: sorted[0] || paths[0],
+    less: lessXfer[0] || paths[0],
+    bus:  busFirst || paths[0],
+    all:  paths
+  };
+}
+
+// 경로 옵션 탭 선택
+function selectRouteOption(type) {
+  if(!_allRouteResults) return;
+  var path = _allRouteResults[type] || _allRouteResults.fast;
+  var data = { routes: [_convertSinglePathToRoute(path)] };
+  _renderTransitResultCard(data, _transitResultStart, _transitResultDest, 'odsay_' + type);
+
+  // 탭 UI 업데이트
+  ['fast','less','bus'].forEach(function(t) {
+    var btn = document.getElementById('routeTab' + t.charAt(0).toUpperCase() + t.slice(1));
+    if(!btn) return;
+    if(t === type) {
+      btn.style.background = 'var(--gold)';
+      btn.style.color = '#fff';
+      btn.style.borderColor = 'var(--gold)';
+    } else {
+      btn.style.background = 'var(--card2)';
+      btn.style.color = 'var(--sub)';
+      btn.style.borderColor = 'var(--border)';
+    }
+  });
+}
+window.selectRouteOption = selectRouteOption;
+
+// 단일 ODsay path → route 형식
+function _convertSinglePathToRoute(path) {
+  var info = path.info || {};
+  var sections = (path.subPath || []).map(function(sp) {
+    var ttype = sp.trafficType;
+    var lane  = (sp.lane || [])[0] || {};
+    var stops = ((sp.passStopList || {}).stations || []).map(function(s){
+      return { stationName: s.stationName||s.name||'',
+        lat: s.y||s.lat||null, lon: s.x||s.lon||null };
+    });
+    return {
+      transportation: {
+        type: ttype,
+        name: ttype===1?(lane.name||lane.subwayCode||''):
+              ttype===2?(lane.busNo||lane.busID||''):'도보'
+      },
+      duration: (sp.sectionTime||0)*60,
+      distance: sp.distance||0,
+      passStopList: stops.length ? { stationList: stops } : null
+    };
+  });
+  return {
+    summary: {
+      duration: (info.totalTime||0)*60,
+      distance: info.totalDistance||0,
+      transfers: info.transferCount||0
+    },
+    sections: sections
+  };
+}
+
 // ODsay 응답 → _renderTransitResultCard용 routes 형식 변환
 function _convertODsayToRoutes(odsayData) {
   var paths = (odsayData.result || {}).path || [];
@@ -3266,7 +3422,8 @@ function _updateTransitGps() {
 
   // isOrigin(출발지 가상 노드): 출발 대기 중 → 마커 없이 상태바만
   if(best.isOrigin) {
-    if(locBar) locBar.style.display = 'flex';
+    if(locBar) { locBar.style.display = 'flex'; }
+    var miEl = document.getElementById('transitLocModeIcon'); if(miEl) miEl.textContent='📍';
     if(locCur) locCur.textContent = best.name + ' 근처 (출발 대기 중)';
     if(locArrow) locArrow.style.display='none';
     if(locNext)  locNext.style.display='none';
@@ -3322,7 +3479,9 @@ function _updateTransitGps() {
   if(locCur) {
     var distStr = bestDist < 50 ? '도착' : Math.round(bestDist)+'m 근처';
     var modeStr = best.isBus ? '🚌' : best.isOrigin ? '📍' : '🚃';
-    locCur.textContent = modeStr + ' ' + best.name + ' (' + distStr + ')';
+    if(locCur) locCur.textContent = best.name + ' (' + distStr + ')';
+    var modeIcon = document.getElementById('transitLocModeIcon');
+    if(modeIcon) modeIcon.textContent = modeStr;
   }
   // 다음 역 표시
   var nextNd = bestIdx < _transitNodeData.length-1 ? _transitNodeData[bestIdx+1] : null;
@@ -3896,32 +4055,50 @@ window.addEventListener('unhandledrejection', function(e) {
     <!-- 결과 -->
     <div id="transitResultCard" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:14px;flex-direction:column;">
 
-      <!-- ── 헤더 행: 복합경로 | 소요시간 + 구간 | 즐겨찾기 | 닫기 ── -->
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:nowrap;">
-        <!-- 소요시간 + 구간 -->
-        <div id="transitResultHeader" style="flex:1;min-width:0;display:flex;align-items:baseline;gap:6px;flex-wrap:nowrap;overflow:hidden;"></div>
-        <!-- 즐겨찾기 버튼 -->
+      <!-- ── 헤더 행 ── -->
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+        <div id="transitResultHeader" style="flex:1;min-width:0;display:flex;align-items:baseline;gap:5px;overflow:hidden;"></div>
         <span id="favToggleBtn2" onclick="_openFavPopup()"
           style="flex-shrink:0;cursor:pointer;font-size:11px;font-weight:700;color:var(--gold);
-          border:1px solid var(--gold);border-radius:12px;padding:3px 9px;white-space:nowrap;">⭐ 즐겨찾기</span>
-        <!-- 닫기 버튼 -->
+          border:1px solid var(--gold);border-radius:12px;padding:3px 8px;white-space:nowrap;">⭐ 즐겨찾기</span>
         <button onclick="document.getElementById('transitResultBox').style.display='none'"
-          style="flex-shrink:0;background:none;border:none;color:var(--sub);font-size:20px;cursor:pointer;padding:0;line-height:1;width:24px;">×</button>
+          style="flex-shrink:0;background:none;border:none;color:var(--sub);font-size:20px;cursor:pointer;padding:0;line-height:1;">×</button>
       </div>
 
-      <!-- ── GPS 위치 상태바 ── -->
-      <div id="transitLocBar" style="display:none;">
-        <span>📍</span>
-        <span id="transitLocCur" class="loc-cur">위치 확인 중...</span>
-        <span id="transitLocArrow" style="display:none;color:var(--sub);">→</span>
-        <span id="transitLocNext" class="loc-next" style="display:none;"></span>
-        <span id="transitLocEta" style="font-size:10px;color:var(--sub);margin-left:2px;display:none;"></span>
+      <!-- ── 경로 옵션 탭 (최단시간/최소환승) ── -->
+      <div id="routeOptionTabs" style="display:none;gap:6px;margin-bottom:10px;flex-wrap:nowrap;">
+        <button id="routeTabFast" onclick="selectRouteOption('fast')"
+          style="flex:1;padding:7px 0;border-radius:10px;border:1.5px solid var(--gold);
+          background:var(--gold);color:#fff;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">
+          ⚡ 최단시간
+        </button>
+        <button id="routeTabLess" onclick="selectRouteOption('less')"
+          style="flex:1;padding:7px 0;border-radius:10px;border:1.5px solid var(--border);
+          background:var(--card2);color:var(--sub);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">
+          🔀 최소환승
+        </button>
+        <button id="routeTabBus" onclick="selectRouteOption('bus')"
+          style="flex:1;padding:7px 0;border-radius:10px;border:1.5px solid var(--border);
+          background:var(--card2);color:var(--sub);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">
+          🚌 버스우선
+        </button>
+      </div>
+
+      <!-- ── GPS 현재위치 상태바 ── -->
+      <div id="transitLocBar" style="display:none;align-items:center;gap:6px;
+        background:rgba(29,155,240,.08);border:1px solid rgba(29,155,240,.25);
+        border-radius:10px;padding:7px 10px;margin-bottom:8px;font-size:12px;">
+        <span id="transitLocModeIcon">📍</span>
+        <span id="transitLocCur" style="font-weight:700;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">위치 확인 중...</span>
+        <span id="transitLocArrow" style="display:none;color:var(--sub);flex-shrink:0;">→</span>
+        <span id="transitLocNext" style="display:none;color:var(--gold);font-weight:700;flex-shrink:0;font-size:11px;"></span>
+        <span id="transitLocEta" style="display:none;font-size:10px;color:var(--sub);flex-shrink:0;"></span>
       </div>
       <div id="transitGpsStatus" style="display:none !important;"><span id="transitGpsStatusTxt"></span></div>
 
       <!-- ── 가로 스크롤 타임라인 ── -->
       <div class="htl-wrap" id="transitHtlWrap" style="position:relative;overflow-x:auto;-webkit-overflow-scrolling:touch;">
-        <div id="transitHtlTrack" style="display:inline-flex;min-width:100%;padding:4px 12px;"></div>
+        <div id="transitHtlTrack" style="display:inline-flex;min-width:100%;padding:6px 14px 4px;gap:0;"></div>
       </div>
 
       <!-- ── 세부경로 버튼 ── -->
