@@ -2514,8 +2514,11 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
       var isF     = (globalStopIdx === 0);
       var isL     = (globalStopIdx === totalStopCount - 1);
       arrMs += (ni > 0 ? perStopSec * 1000 : 0);
-      var arrT = (ni === 0 && !isF) ? (secMin > 0 ? secMin+'분' : '') : _fmtHHMM(arrMs);
-      if(isF) arrT = '';  // 출발역은 시간 숨김
+      // 출발역: 빈 값, 첫 역: 탑승까지 소요, 나머지: 도착시각
+      var arrT = '';
+      if(!isF && ni === 0 && csi === 0) arrT = '';
+      else if(!isF && ni === 0)         arrT = secMin > 0 ? secMin+'분' : '';
+      else if(!isF)                     arrT = _fmtHHMM(arrMs);
 
       // 연결선 색: 왼쪽=이전구간색, 오른쪽=현재구간색
       var leftCol = col;
@@ -2930,13 +2933,20 @@ function _parseODsayAllOptions(odsayData) {
         return bBus - aBus;
       })[0];
 
-  // 지하철 우선: pathType=1 (지하철 위주) 또는 지하철 구간이 많은 것
-  var subFirst = byType[1].length > 0 ? byType[1][0]
-    : paths.slice().sort(function(a,b) {
-        var aSub = (a.subPath||[]).filter(function(s){return s.trafficType===1;}).length;
-        var bSub = (b.subPath||[]).filter(function(s){return s.trafficType===1;}).length;
-        return bSub - aSub;
-      })[0];
+  // 지하철 우선: 지하철 탑승 시간이 가장 빠른 경로 (도보/버스로 가장 가까운 지하철역 접근)
+  // 즉 첫 지하철 탑승역까지의 소요 시간이 가장 짧은 경로
+  var subFirst = paths.slice().sort(function(a,b) {
+    function firstSubTime(path) {
+      var t = 0;
+      for(var i=0; i<(path.subPath||[]).length; i++) {
+        if(path.subPath[i].trafficType === 1) return t;
+        t += (path.subPath[i].sectionTime || 0);
+      }
+      return 9999;
+    }
+    return firstSubTime(a) - firstSubTime(b);
+  })[0];
+  if(!subFirst) subFirst = byType[1].length > 0 ? byType[1][0] : paths[0];
 
   return {
     fast: sorted[0]  || paths[0],
@@ -11619,7 +11629,7 @@ function _showGpsSingleModal2(n, lat, lng, acc) {
   if(gpsModal) _openGpsModal();
 }
 
-/* ── 복수 역/정류장 선택 모달 (버스 포함 버전) ── */
+/* ── 복수 역/정류장 선택 모달 (버스 도착정보 + 상행/하행 구분) ── */
 function _showGpsMultiModal2(combined, lat, lng) {
   var gmIcon  = document.getElementById('gmIcon');
   var gmTitle = document.getElementById('gmTitle');
@@ -11627,46 +11637,130 @@ function _showGpsMultiModal2(combined, lat, lng) {
   var gmBtns  = document.querySelector('#gpsModal .gm-btns');
 
   if(gmIcon)  gmIcon.textContent  = '📡';
-  if(gmTitle) gmTitle.textContent = combined.length === 1 ? '가장 가까운 역/정류장' : '주변 역/정류장 선택';
+  if(gmTitle) gmTitle.textContent = '주변 역/정류장 선택';
 
-  var list = combined.slice(0, 7);
-  var html = '<div style="font-size:11px;color:var(--sub);margin-bottom:8px;">'
-    + (combined.length === 1 ? '출발지로 설정하시겠습니까?' : '출발지로 설정할 곳을 선택하세요')
-    + '</div>';
-  html += '<div style="display:flex;flex-direction:column;gap:7px;">';
+  var list = combined.slice(0, 8);
 
-  list.forEach(function(s, i) {
+  // 지하철역 / 버스정류장 분리
+  var subItems = list.filter(function(s){ return s.type !== 'bus'; });
+  var busItems = list.filter(function(s){ return s.type === 'bus'; });
+
+  function makeItem(s, i) {
     var isBus = s.type === 'bus';
     var icon  = isBus ? '🚌' : '🚇';
     var clr   = isBus ? '#00b341' : (s.color || '#0a84ff');
     var tag   = isBus ? '버스' : (s.line || '지하철');
     var d     = Math.round(s.dist || 0);
-    var distLabel = d <= 500
-      ? '<span style="color:var(--green);font-weight:700;">' + d + 'm</span>'
-      : '<span style="color:var(--orange);">' + d + 'm</span>';
-
-    html += '<button onclick="gpsSelectStation(' + i + ')" style="'
-      + 'display:flex;align-items:center;gap:10px;'
+    var distTxt = d <= 500 ? '<b style="color:#30d158;">'+d+'m</b>'
+                           : '<span style="color:var(--orange);">'+d+'m</span>';
+    var arrId = 'busArr_' + i;
+    return '<button onclick="gpsSelectStation(' + i + ')" id="gpsBtn_'+i+'" style="'
+      + 'display:flex;align-items:center;gap:10px;width:100%;'
       + 'background:var(--card2);border:1.5px solid ' + clr + ';border-radius:11px;'
-      + 'padding:10px 12px;cursor:pointer;text-align:left;font-family:inherit;">'
-      + '<span style="font-size:18px;">' + icon + '</span>'
-      + '<span style="flex:1;">'
-      + '<span style="display:block;font-size:13px;font-weight:700;color:var(--text);">' + _ltEsc(s.name) + '</span>'
-      + '<span style="display:block;font-size:11px;color:' + clr + ';font-weight:600;margin-top:2px;">' + _ltEsc(tag) + ' · ' + distLabel + '</span>'
+      + 'padding:10px 12px;cursor:pointer;text-align:left;font-family:inherit;margin-bottom:6px;">'
+      + '<span style="font-size:20px;">' + icon + '</span>'
+      + '<span style="flex:1;min-width:0;">'
+      + '<span style="display:block;font-size:13px;font-weight:700;color:var(--text);'
+        + 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _ltEsc(s.name) + '</span>'
+      + '<span style="display:block;font-size:11px;color:'+clr+';font-weight:600;margin-top:1px;">'
+        + _ltEsc(tag) + ' · ' + distTxt
+        + (isBus ? ' <span id="'+arrId+'" style="color:var(--sub);">도착정보 조회중...</span>' : '')
       + '</span>'
-      + '<span style="font-size:12px;color:var(--sub);">▶</span>'
+      + '</span>'
+      + '<span style="font-size:11px;color:var(--sub);">▶</span>'
       + '</button>';
+  }
+
+  var html = '<div style="font-size:11px;color:var(--sub);margin-bottom:10px;">출발지로 설정할 곳을 선택하세요</div>';
+
+  // 상행/하행 표시: 같은 정류장명이 2개 있으면 상행/하행으로 구분
+  var busGroups = {};
+  busItems.forEach(function(s, bi) {
+    var realIdx = list.indexOf(s);
+    var nm = s.name || '';
+    if(!busGroups[nm]) busGroups[nm] = [];
+    busGroups[nm].push({ s: s, idx: realIdx });
   });
 
-  html += '</div>';
-  if(gmBody) gmBody.innerHTML = html;
-
-  if(gmBtns) {
-    gmBtns.innerHTML = '<button class="gm-no" style="flex:1;" onclick="gpsNo()">취소</button>';
+  // 버스 섹션
+  if(busItems.length > 0) {
+    html += '<div style="font-size:10px;font-weight:700;color:var(--sub);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">🚌 버스정류장</div>';
+    Object.keys(busGroups).forEach(function(nm) {
+      var group = busGroups[nm];
+      if(group.length >= 2) {
+        // 상행/하행 가로 배열
+        html += '<div style="display:flex;gap:6px;margin-bottom:6px;">';
+        group.forEach(function(item, gi) {
+          var s = item.s; var i = item.idx;
+          var clr = '#00b341';
+          var d = Math.round(s.dist||0);
+          var arrId = 'busArr_' + i;
+          var dirLabel = gi === 0 ? '상행' : '하행';
+          html += '<button onclick="gpsSelectStation('+i+')" style="'
+            + 'flex:1;display:flex;flex-direction:column;align-items:flex-start;gap:3px;'
+            + 'background:var(--card2);border:1.5px solid '+clr+';border-radius:11px;'
+            + 'padding:9px 10px;cursor:pointer;font-family:inherit;">'
+            + '<div style="display:flex;align-items:center;gap:5px;width:100%;">'
+              + '<span style="font-size:11px;font-weight:800;color:#fff;background:'+clr+';border-radius:5px;padding:1px 6px;">'+dirLabel+'</span>'
+              + '<span style="font-size:12px;font-weight:700;color:var(--text);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _ltEsc(nm) + '</span>'
+            + '</div>'
+            + '<div style="font-size:10px;color:var(--sub);">🚶 '+d+'m</div>'
+            + '<div id="'+arrId+'" style="font-size:10px;color:var(--gold);">도착정보 로딩중...</div>'
+            + '</button>';
+        });
+        html += '</div>';
+      } else {
+        // 단일 정류장
+        group.forEach(function(item) { html += makeItem(item.s, item.idx); });
+      }
+    });
   }
+
+  // 지하철 섹션
+  if(subItems.length > 0) {
+    html += '<div style="font-size:10px;font-weight:700;color:var(--sub);margin:8px 0 6px;letter-spacing:.5px;">🚇 지하철역</div>';
+    subItems.forEach(function(s) {
+      var realIdx = list.indexOf(s);
+      html += makeItem(s, realIdx);
+    });
+  }
+
+  if(gmBody) gmBody.innerHTML = html;
+  if(gmBtns) gmBtns.innerHTML = '<button class="gm-no" style="flex:1;" onclick="gpsNo()">취소</button>';
 
   var gpsModal = document.getElementById('gpsModal');
   if(gpsModal) _openGpsModal();
+
+  // 버스 도착정보 비동기 조회
+  setTimeout(function() {
+    busItems.forEach(function(s) {
+      var realIdx = list.indexOf(s);
+      var arrId = 'busArr_' + realIdx;
+      var el = document.getElementById(arrId);
+      if(!el || !s.nodeId) {
+        if(el) el.textContent = '';
+        return;
+      }
+      _fetchBusArrival(s.cityCode || '25', s.nodeId, function(err, arrivals) {
+        if(!el) return;
+        if(err || !arrivals || !arrivals.length) {
+          el.textContent = '도착정보 없음';
+          return;
+        }
+        var arr = arrivals[0];
+        var min = Math.round((arr.arrtime || arr.ARRTIME || 0) / 60);
+        var veh = arr.vehicletp || arr.routeno || '';
+        var txt = min <= 0 ? '곧 도착' : min + '분 후';
+        if(veh) txt = _ltEsc(veh) + ' · ' + txt;
+        el.textContent = '🔴 ' + txt;
+        // 2번째 버스
+        if(arrivals[1]) {
+          var min2 = Math.round((arrivals[1].arrtime || arrivals[1].ARRTIME || 0) / 60);
+          el.textContent += '  |  ' + min2 + '분';
+        }
+      });
+    });
+  }, 300);
 }
 
 /* 복수 목록에서 역/정류장 선택 */
