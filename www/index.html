@@ -369,8 +369,8 @@ header h1 em{color:var(--gold);font-style:normal;}
 /* 현재 위치 기차 이모지 */
 /* GPS 현위치 dot 깜박임 */
 @keyframes htl-gps-blink {
-  0%,100%{box-shadow:0 0 0 3px rgba(255,214,10,.6),0 0 0 6px rgba(255,214,10,.2);}
-  50%{box-shadow:0 0 0 6px rgba(255,214,10,.2),0 0 0 12px rgba(255,214,10,.05);}
+  0%,100%{box-shadow:0 0 0 3px rgba(255,214,10,.7),0 0 10px rgba(255,214,10,.5);opacity:1;}
+  50%{box-shadow:0 0 0 8px rgba(255,214,10,.1),0 0 18px rgba(255,214,10,.1);opacity:.7;}
 }
 .htl-gps-blink{animation:htl-gps-blink 1.2s ease-in-out infinite;}
 @keyframes gps-pulse{0%,100%{box-shadow:0 0 0 3px rgba(255,214,10,.4);}50%{box-shadow:0 0 0 8px rgba(255,214,10,.08);}}
@@ -2510,13 +2510,18 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
     // dot: 중앙, z-index:3
     var lColor, rColor;
     if(isWalk){
-      lColor=pt.pC; rColor=pt.nC;
+      lColor=pt.pC||'#8e8e93'; rColor=pt.nC||'#8e8e93';
     } else {
-      lColor=pt.lC||pt.col; rColor=pt.col;
+      // 첫 역(isF): 왼쪽 선 색 = 출발지 색 (회색 또는 도보 색)
+      // 구간 첫 역(ni===0, isF 아님): 이전 구간 색
+      // 구간 중간 역: 현재 구간 색
+      lColor = pt.isF ? '#8e8e93' : (pt.lC||pt.col);
+      rColor = pt.col;
     }
 
-    var leftLine  = (!isWalk&&pt.isF) ? '' : '<div style="position:absolute;top:12px;left:0;width:50%;height:3px;background:'+lColor+';z-index:1;"></div>';
-    var rightLine = (!isWalk&&pt.isL) ? '' : '<div style="position:absolute;top:12px;left:50%;width:50%;height:3px;background:'+rColor+';z-index:1;"></div>';
+    // 선은 항상 그림 (dot z-index:3이 위에 가림) - isF/isL 구분 없음
+    var leftLine  = '<div style="position:absolute;top:12px;left:0;width:50%;height:3px;background:'+lColor+';z-index:1;"></div>';
+    var rightLine = (pt.isL&&!isWalk) ? '' : '<div style="position:absolute;top:12px;left:50%;width:50%;height:3px;background:'+rColor+';z-index:1;"></div>';
 
     var dot='';
     if(!isWalk){
@@ -2563,6 +2568,26 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
   if(wrap) wrap.style.display='block';
 
   if(typeof _startTransitGpsTracking==='function') _startTransitGpsTracking(nodes);
+
+  // GPS 마커 dot 초기 생성 (첫 번째 노드에 숨김 상태로)
+  var existGps = document.getElementById('htl-gps-marker-dot');
+  if(existGps) existGps.remove();
+  if(nodes.length > 0) {
+    var firstEl = document.getElementById('tnode_0');
+    if(firstEl) {
+      var axisEl = firstEl.querySelector('div[style*="position:relative"]');
+      if(axisEl) {
+        var gpsDot = document.createElement('div');
+        gpsDot.id = 'htl-gps-marker-dot';
+        gpsDot.style.cssText = 'display:none;position:absolute;width:14px;height:14px;'
+          + 'border-radius:50%;background:#ffd60a;border:2px solid #fff;'
+          + 'top:6px;left:50%;transform:translateX(-50%);z-index:10;'
+          + 'box-shadow:0 0 0 4px rgba(255,214,10,.35);';
+        gpsDot.className = 'htl-gps-blink';
+        axisEl.appendChild(gpsDot);
+      }
+    }
+  }
 }
 window._renderHtlTrack = _renderHtlTrack;
 
@@ -3532,6 +3557,19 @@ function _updateTransitGps() {
   }
 
   // GPS 현위치 dot 이동
+  // GPS 마커 dot 현재 위치 노드로 이동
+  var gpsDot2 = document.getElementById('htl-gps-marker-dot');
+  if(gpsDot2) {
+    var targetEl = best.el || document.getElementById('tnode_'+bestIdx);
+    if(targetEl) {
+      var targetAxis = targetEl.querySelector('div[style*="position:relative"]');
+      if(targetAxis && gpsDot2.parentNode !== targetAxis) {
+        targetAxis.appendChild(gpsDot2);
+      }
+      gpsDot2.style.display = 'block';
+    }
+  }
+
   var gpsDot = document.getElementById('htl-gps-dot');
   if(gpsDot) {
     // 현재 best 노드에서 dot 제거하고 새 위치에 표시
