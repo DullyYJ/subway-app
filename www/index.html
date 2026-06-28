@@ -3246,19 +3246,19 @@ function selectRouteOption(type) {
     return null;
   }
 
-  // 1) 요청 타입 경로 우선 시도
+  // 지하철 탭 특별 처리: 출발지에서 가장 가까운 역에서 타는 경로 강제
+  if(type === 'sub'){
+    // 출발지에서 가장 가까운 지하철역을 찾아 그 역 기준으로 재요청
+    _selectSubwayNearestRoute();
+    // 탭 UI만 즉시 활성화 (결과는 비동기로 채워짐)
+    _highlightRouteTab('sub');
+    return;
+  }
+
+  // 1) 요청 타입 경로 우선 시도 (sub 외)
   var routeObj = _tryConvert(_allRouteResults[type]);
 
-  // 지하철 탭 특별 처리: 지하철 포함 경로만 안내 (버스 경로로 폴백하지 않음)
-  if(type === 'sub'){
-    if(!routeObj){
-      // 지하철 포함 경로가 없음 → 안내만, 다른 경로로 대체하지 않음
-      toast('지하철로 가는 경로가 없어요. 다른 수단을 이용해주세요.');
-      // 탭 활성화는 유지하되 화면은 기존 경로 그대로 둠
-      return;
-    }
-    // 지하철 경로 있으면 그대로 표시 (폴백 건너뜀)
-  } else {
+  {
     // 2) 실패 시: less(최소환승) → fast → sub → bus → all[0..] 순으로 폴백
     //    (요청대로 최단시간이 비면 최소환승 경로를 대신 사용)
     if(!routeObj){
@@ -3281,7 +3281,12 @@ function selectRouteOption(type) {
   var data = { routes: [routeObj] };
   _renderTransitResultCard(data, _transitResultStart, _transitResultDest, 'odsay_' + type);
 
-  // 탭 UI 업데이트
+  _highlightRouteTab(type);
+}
+window.selectRouteOption = selectRouteOption;
+
+// 경로 탭 하이라이트 (활성/비활성 스타일)
+function _highlightRouteTab(type){
   ['fast','less','sub','bus'].forEach(function(t) {
     var btn = document.getElementById('routeTab' + t.charAt(0).toUpperCase() + t.slice(1));
     if(!btn) return;
@@ -3296,7 +3301,78 @@ function selectRouteOption(type) {
     }
   });
 }
-window.selectRouteOption = selectRouteOption;
+window._highlightRouteTab = _highlightRouteTab;
+
+// ── 지하철 탭: 출발지에서 가장 가까운 역에서 타는 경로 ──
+// 출발지 좌표로 가장 가까운 지하철역을 찾아, 그 역→도착지 ODsay 지하철 경로를 재요청
+function _selectSubwayNearestRoute(){
+  var start = _transitResultStart, dest = _transitResultDest;
+  if(!start || !dest || start.lat==null || dest.lat==null){
+    // 좌표 없으면 기존 sub 경로라도 시도
+    var fb = _allRouteResults && _allRouteResults.sub;
+    if(fb){ var r=_convertSinglePathToRoute(fb); if(r&&r.sections&&r.sections.length){ _renderTransitResultCard({routes:[r]}, start, dest, 'odsay_sub'); return; } }
+    toast('출발지 위치를 확인할 수 없어요.');
+    return;
+  }
+
+  // 1) 출발지에서 가장 가까운 지하철역 찾기
+  var nearStns = (typeof nearestMulti==='function') ? nearestMulti(start.lat, start.lng, 3000) : [];
+  if(!nearStns || !nearStns.length){
+    toast('근처에 지하철역이 없어요.');
+    return;
+  }
+  var nearestStn = nearStns[0]; // 가장 가까운 역
+  toast('🚇 ' + nearestStn.name + '에서 타는 경로 검색 중...');
+
+  // 2) 가까운 역 → 도착지 ODsay 지하철우선 경로 요청
+  var apiKey = 'TIZm4dwMq1Uw4UgWJhhstA';
+  var url = 'https://api.odsay.com/v1/api/searchPubTransPathT'
+    + '?SX=' + nearestStn.lng + '&SY=' + nearestStn.lat
+    + '&EX=' + dest.lng + '&EY=' + dest.lat
+    + '&SearchType=0&SearchPathType=1'  // 지하철 우선
+    + '&apiKey=' + encodeURIComponent(apiKey);
+
+  fetch(url).then(function(r){ return r.json(); }).then(function(odsayData){
+    var paths = ((odsayData||{}).result||{}).path || [];
+    // 지하철 포함 경로만 필터
+    var subPaths = paths.filter(function(p){
+      return (p.subPath||[]).some(function(s){return s.trafficType===1;});
+    });
+    if(!subPaths.length){
+      toast('지하철로 가는 경로가 없어요.');
+      return;
+    }
+    // 가장 빠른 지하철 경로 선택
+    subPaths.sort(function(a,b){ return ((a.info||{}).totalTime||999)-((b.info||{}).totalTime||999); });
+    var best = subPaths[0];
+
+    // 3) 출발지 → 가까운 역 도보 구간을 맨 앞에 추가
+    var walkDist = (typeof haversineM==='function')
+      ? haversineM(start.lat, start.lng, nearestStn.lat, nearestStn.lng)
+      : Math.round(Math.sqrt(Math.pow((start.lat-nearestStn.lat)*111000,2)+Math.pow((start.lng-nearestStn.lng)*88000,2)));
+    var routeObj = _convertSinglePathToRoute(best);
+    if(routeObj && routeObj.sections){
+      // 도보 구간 prepend (출발지 → 가까운 역)
+      routeObj.sections.unshift({
+        transportation: { type: 3, name: '도보' },
+        duration: Math.round(walkDist/67)*60 || 60,  // 약 67m/분
+        distance: Math.round(walkDist),
+        passStopList: null
+      });
+      // summary 시간/거리 보정
+      if(routeObj.summary){
+        routeObj.summary.duration = (routeObj.summary.duration||0) + (Math.round(walkDist/67)*60||60);
+        routeObj.summary.distance = (routeObj.summary.distance||0) + Math.round(walkDist);
+      }
+      _renderTransitResultCard({routes:[routeObj]}, start, dest, 'odsay_sub');
+    } else {
+      toast('지하철 경로를 표시할 수 없어요.');
+    }
+  }).catch(function(e){
+    toast('지하철 경로 검색 실패: ' + (e&&e.message||''));
+  });
+}
+window._selectSubwayNearestRoute = _selectSubwayNearestRoute;
 
 // 단일 ODsay path → route 형식
 function _convertSinglePathToRoute(path) {
