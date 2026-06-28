@@ -368,17 +368,7 @@ header h1 em{color:var(--gold);font-style:normal;}
 #transitHtlTrack .htl-stn.htl-passed .htl-line{opacity:.3 !important;}
 #transitHtlTrack .htl-stn.htl-passed .htl-line-seg{opacity:.3;}
 /* 현재 위치 기차 이모지 */
-#transitHtlTrack .htl-gps-here .htl-axis::after{
-  content:'🚃';font-size:14px;position:absolute;top:-18px;left:50%;
-  transform:translateX(-50%);animation:train-bounce .8s ease-in-out infinite alternate;
-  z-index:10;filter:drop-shadow(0 2px 4px rgba(0,0,0,.5));
-}
-/* 버스 구간 마커 */
-#transitHtlTrack .htl-gps-here.htl-mode-bus .htl-axis::after{ content:'🚌'; }
-/* 도보 구간 마커 */
-#transitHtlTrack .htl-gps-here.htl-mode-walk .htl-axis::after{ content:'🚶‍➡️'; }
-/* 출발지 마커 */
-#transitHtlTrack .htl-gps-here.htl-mode-origin .htl-axis::after{ content:'📍'; }
+/* GPS 마커: SVG 레이어로 대체 - htl-gps-here는 passed 처리용으로만 유지 */
 @keyframes gps-pulse{0%,100%{box-shadow:0 0 0 3px rgba(255,214,10,.4);}50%{box-shadow:0 0 0 8px rgba(255,214,10,.08);}}
 @keyframes train-bounce{from{top:-18px;}to{top:-14px;}}
 /* GPS 상태바 */
@@ -402,6 +392,15 @@ header h1 em{color:var(--gold);font-style:normal;}
 .htl-dot{position:absolute;width:12px;height:12px;border-radius:50%;
   background:var(--card);border:3px solid var(--line-color,#0a84ff);
   z-index:3;top:7px;left:50%;transform:translateX(-50%);}
+/* GPS 현위치 pulse 애니메이션 */
+@keyframes htl-gps-pulse{
+  0%{r:6;opacity:.8;}
+  50%{r:11;opacity:.2;}
+  100%{r:6;opacity:.8;}
+}
+.gps-pulse-ring{animation:htl-gps-pulse 1.4s ease-in-out infinite;}
+/* 도보 노드 사람 이모지 영역 제거 */
+#transitHtlTrack .htl-walk-node .htl-axis{height:26px;}
 /* 환승 dot: 크기 동일 12px (크기 다르면 어긋남) */
 .htl-xfer-dot{width:12px !important;height:12px !important;border-width:3px !important;}
 .htl-stn.htl-is-xfer .htl-name{font-weight:800;}
@@ -2544,8 +2543,11 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
     var centers = [];
     stnEls.forEach(function(el) {
       var r = el.getBoundingClientRect();
+      var axEl = el.querySelector('.htl-axis');
+      var axR = axEl ? axEl.getBoundingClientRect() : r;
       centers.push({
         x: r.left - trackRect.left + r.width/2,
+        y: axR.top - trackRect.top + 13,
         col: el.dataset.col || '#888',
         leftCol: el.dataset.leftcol || (el.dataset.col || '#888'),
         isWalk: el.classList.contains('htl-walk-node'),
@@ -2569,8 +2571,9 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
       // htl-axis는 htl-name(30px) + htl-line(18px) 아래에 있음
       // axis 내 선은 top:12px
       var axisEl = track.querySelector('.htl-axis');
+      // dot 중앙 = axis top + 7(dot-top) + 6(dot-height/2) = +13
       var y = axisEl
-        ? (axisEl.getBoundingClientRect().top - trackRect.top + 12)
+        ? (axisEl.getBoundingClientRect().top - trackRect.top + 13)
         : 60;
 
       // 색 결정: cA가 도보면 cA.nC, cB가 도보면 cB.pC, 둘 다 역이면 cA→cB 색
@@ -2579,15 +2582,40 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
       else if(cB.isWalk) lineCol = cB.pC || cA.col || '#888';
       else lineCol = cB.leftCol || cA.col || '#888';
 
+      // 각 노드의 실제 y 사용 (일관성)
+      var yA = cA.y || y, yB = cB.y || y;
+      var lineY = (yA + yB) / 2;  // 평균 y (대부분 동일)
       var line = document.createElementNS(svgNS,'line');
       line.setAttribute('x1', cA.x);
-      line.setAttribute('y1', y);
+      line.setAttribute('y1', lineY);
       line.setAttribute('x2', cB.x);
-      line.setAttribute('y2', y);
+      line.setAttribute('y2', lineY);
       line.setAttribute('stroke', lineCol);
       line.setAttribute('stroke-width', '3');
       svg.appendChild(line);
     }
+
+    // GPS 마커 원소 (초기엔 숨김, GPS 추적 시 위치 업데이트)
+    var gpsMarker = document.createElementNS(svgNS, 'g');
+    gpsMarker.setAttribute('id', 'htl-gps-marker');
+    gpsMarker.setAttribute('display', 'none');
+    // 바깥 pulse 원
+    var pulse = document.createElementNS(svgNS, 'circle');
+    pulse.setAttribute('r', '10');
+    pulse.setAttribute('fill', 'rgba(255,214,10,0.3)');
+    pulse.setAttribute('class', 'gps-pulse-ring');
+    // 안쪽 현위치 원
+    var dot = document.createElementNS(svgNS, 'circle');
+    dot.setAttribute('r', '6');
+    dot.setAttribute('fill', '#ffd60a');
+    dot.setAttribute('stroke', '#fff');
+    dot.setAttribute('stroke-width', '2');
+    gpsMarker.appendChild(pulse);
+    gpsMarker.appendChild(dot);
+    svg.appendChild(gpsMarker);
+    window._htlGpsMarker = gpsMarker;
+    window._htlSvgCenters = centers;
+    window._htlSvgY = y;
 
     // wrap의 position:relative 안에 삽입
     var htlWrap = document.getElementById('transitHtlWrap');
@@ -3576,15 +3604,30 @@ function _updateTransitGps() {
     return;
   }
 
+  // SVG GPS 마커 위치 업데이트
+  if(window._htlGpsMarker && window._htlSvgCenters) {
+    var svgCenters = window._htlSvgCenters;
+    var nonWalkIdx2 = 0, svgTarget = null;
+    for(var sc2=0; sc2<svgCenters.length; sc2++) {
+      if(!svgCenters[sc2].isWalk) {
+        if(nonWalkIdx2 === bestIdx) { svgTarget = svgCenters[sc2]; break; }
+        nonWalkIdx2++;
+      }
+    }
+    if(svgTarget) {
+      window._htlGpsMarker.setAttribute('display','block');
+      window._htlGpsMarker.setAttribute('transform',
+        'translate('+svgTarget.x+','+(svgTarget.y||window._htlSvgY||60)+')');
+    }
+  }
+
   if(best.el && inRange) {
-    // 수단별 마커 클래스
     best.el.classList.add('htl-gps-here');
     best.el.classList.remove('htl-mode-bus','htl-mode-walk','htl-mode-origin');
     if(best.isBus)  best.el.classList.add('htl-mode-bus');
     else if(best.isOrigin) best.el.classList.add('htl-mode-origin');
-    // 지하철은 기본 🚃
 
-    // 지나간 노드 처리 (isOrigin 제외, bestIdx 이전)
+    // 지나간 노드 처리
     _transitNodeData.forEach(function(nd, idx) {
       if(idx < bestIdx && !nd.isOrigin && nd.el) nd.el.classList.add('htl-passed');
     });
