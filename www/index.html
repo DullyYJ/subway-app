@@ -369,17 +369,11 @@ header h1 em{color:var(--gold);font-style:normal;}
 /* 현재 위치 기차 이모지 */
 /* GPS 현위치 dot 깜박임 */
 @keyframes htl-gps-blink {
-  0%  { box-shadow:0 0 0 0px rgba(10,132,255,.9), 0 0 0 0px rgba(10,132,255,.4); opacity:1; }
-  50% { box-shadow:0 0 0 5px rgba(10,132,255,.0), 0 0 0 9px rgba(10,132,255,.0); opacity:.85; }
-  100%{ box-shadow:0 0 0 0px rgba(10,132,255,.9), 0 0 0 0px rgba(10,132,255,.4); opacity:1; }
+  0%,100%{box-shadow:0 0 0 3px rgba(255,214,10,.7),0 0 10px rgba(255,214,10,.5);opacity:1;}
+  50%{box-shadow:0 0 0 8px rgba(255,214,10,.1),0 0 18px rgba(255,214,10,.1);opacity:.7;}
 }
-@keyframes htl-gps-ring {
-  0%  { transform:translateX(-50%) scale(.6); opacity:.9; }
-  100%{ transform:translateX(-50%) scale(2.2); opacity:0; }
-}
-.htl-gps-blink { animation: htl-gps-blink 1.4s ease-in-out infinite; }
-.htl-gps-ring  { animation: htl-gps-ring  1.4s ease-out infinite; }
-@keyframes gps-pulse{0%,100%{box-shadow:0 0 0 3px rgba(10,132,255,.4);}50%{box-shadow:0 0 0 8px rgba(10,132,255,.08);}}
+.htl-gps-blink{animation:htl-gps-blink 1.2s ease-in-out infinite;}
+@keyframes gps-pulse{0%,100%{box-shadow:0 0 0 3px rgba(255,214,10,.4);}50%{box-shadow:0 0 0 8px rgba(255,214,10,.08);}}
 @keyframes train-bounce{from{top:-18px;}to{top:-14px;}}
 /* GPS 상태바 */
 #transitGpsStatus{display:none !important;}
@@ -2474,16 +2468,32 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
   var segMs=segs.map(function(sg){var t=cumMs;cumMs+=sg.dur*1000;return t;});
   var gIdx=0;
 
+  // 노선/번호 라벨 생성 헬퍼
+  // 지하철(type1): "N호선" 형태 그대로, 버스(type2): "N번" 형태
+  function _lineLabel(type, name){
+    var nm = (name||'').trim();
+    if(!nm) return type===1?'지하철':type===2?'버스':'';
+    if(type===2){
+      // 버스: 숫자만 있으면 "번" 붙임, 이미 텍스트면 그대로
+      return /^[0-9-]+$/.test(nm) ? nm+'번' : nm;
+    }
+    return nm; // 지하철은 노선명 그대로 (N호선/공항철도 등)
+  }
+
   var pts=[];
+  var _firstDep = segMs[0]; // 전체 출발 시각 (첫 세그 시작)
   segs.forEach(function(sg,si){
     var col=_transitColor(sg.type,sg.name);
     var secMin=Math.round(sg.dur/60);
 
     if(sg.type===3){
       var pC='#8e8e93',nC='#8e8e93';
+      var nextType=0, nextName='';
       for(var a=si-1;a>=0;a--){ if(segs[a].type!==3){pC=_transitColor(segs[a].type,segs[a].name);break;} }
-      for(var b=si+1;b<segs.length;b++){ if(segs[b].type!==3){nC=_transitColor(segs[b].type,segs[b].name);break;} }
+      for(var b=si+1;b<segs.length;b++){ if(segs[b].type!==3){nC=_transitColor(segs[b].type,segs[b].name);nextType=segs[b].type;nextName=segs[b].name;break;} }
+      // 도보 다음에 탈 교통수단의 노선/번호 라벨 (환승 표시용)
       pts.push({type:'walk',pC:pC,nC:nC,
+                nextType:nextType, nextLabel:_lineLabel(nextType,nextName), nextCol:nC,
                 lbl:secMin>0?secMin+'분':(Math.round(sg.dist)+'m')});
       return;
     }
@@ -2492,15 +2502,23 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
     sg.stops.forEach(function(st,ni){
       var isF=(gIdx===0),isL=(gIdx===totalCnt-1);
       var arrT='';
-      if(!isF&&ni===0) arrT=secMin>0?secMin+'분':'';
-      else if(!isF)    arrT=_fmtHHMM(segMs[si]+ni*perMs);
+      if(isF){
+        // 전체 첫 역: 출발 시각 표시
+        arrT=_fmtHHMM(_firstDep);
+      } else if(ni===0){
+        // 구간 첫역(환승역): 소요시간(N분) 표시
+        arrT=secMin>0?secMin+'분':'';
+      } else {
+        arrT=_fmtHHMM(segMs[si]+ni*perMs);
+      }
       var lC=col;
       if(ni===0&&si>0){
         for(var a=si-1;a>=0;a--){ if(segs[a].type!==3){lC=_transitColor(segs[a].type,segs[a].name);break;} }
       }
       pts.push({type:'stn',nm:_nm(st.stationName||''),col:col,lC:lC,
-                lineNm:sg.name,arrT:arrT,isF:isF,isL:isL,ni:ni,
-                isSub:sg.type===1,isBus:sg.type===2,
+                lineNm:sg.name, lineLabel:_lineLabel(sg.type,sg.name),
+                arrT:arrT,isF:isF,isL:isL,ni:ni,
+                segType:sg.type, isSub:sg.type===1,isBus:sg.type===2,
                 lat:st.lat||null,lng:st.lon||st.lng||null});
       gIdx++;
     });
@@ -2525,67 +2543,94 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
       ? '<div style="height:30px;display:flex;align-items:flex-end;justify-content:center;font-size:9px;color:var(--sub);padding-bottom:2px;">도보</div>'
       : '<div style="height:30px;display:flex;align-items:flex-end;justify-content:center;font-size:10px;font-weight:600;color:var(--text);text-align:center;overflow:hidden;width:100%;padding:0 2px;box-sizing:border-box;">'+_ltEsc(pt.nm)+'</div>';
 
-    // 행2: 환승배지 or 노선명 or 빈칸
-    // 환승 조건: 구간 첫역(ni===0) + 출발역 아님 + 직전 stn 대비 노선 다름
-    //   도보를 거쳐도(도보→지하철) 노선이 바뀌면 환승 배지 표시
+    // 행2: 환승배지 / 노선라벨 / 빈칸
     var row2;
     if(isWalk){
-      row2='<div style="height:18px;"></div>';
-    } else if(pt.ni===0 && !pt.isF){
-      // 직전 실제 stn의 노선명 탐색
+      // 도보 노드: 다음에 탈 교통수단으로 환승하는 경우 ↔환승 + 노선/번호 배지
+      // (도보 앞에 교통수단이 있었으면 = 환승, 없었으면 = 첫 탑승 진입 도보)
+      var _hadTransitBefore = pts.slice(0,pi).some(function(p){return p.type==='stn';});
+      if(_hadTransitBefore && pt.nextLabel){
+        // 환승: ↔ + 노선/번호
+        row2='<div style="height:18px;display:flex;align-items:center;justify-content:center;gap:2px;">'
+          +'<span style="font-size:6.5px;font-weight:800;color:#fff;background:'+(pt.nextCol||'#0a84ff')
+          +';border-radius:4px;padding:1px 4px;white-space:nowrap;letter-spacing:.2px;">↔ '+_ltEsc(pt.nextLabel)+'</span>'
+          +'</div>';
+      } else {
+        row2='<div style="height:18px;"></div>';
+      }
+    } else if(pt.isF){
+      // 전체 첫 탑승역: 노선/번호 라벨 표시
+      row2='<div style="height:18px;line-height:18px;font-size:7px;font-weight:700;color:'+pt.col+';text-align:center;overflow:hidden;width:100%;">'+_ltEsc(pt.lineLabel||pt.lineNm)+'</div>';
+    } else if(pt.ni===0){
+      // 구간 첫역: 직전 stn과 노선 다른지 확인 (도보 없는 직접 환승)
+      var _prevPt = (pi>0)?pts[pi-1]:null;
+      var _prevWasWalk = _prevPt && _prevPt.type==='walk';
       var _prevLn='';
       for(var _pli=pi-1;_pli>=0;_pli--){
         if(pts[_pli].type==='stn'){_prevLn=pts[_pli].lineNm||'';break;}
       }
-      var _isXfer = _prevLn && _prevLn!==pt.lineNm;
-      if(_isXfer){
-        // 환승 배지: 현재 노선 색 배경
+      if(!_prevWasWalk && _prevLn && _prevLn!==pt.lineNm){
+        // 도보 없는 직접 환승: ↔환승 + 노선라벨
         row2='<div style="height:18px;display:flex;align-items:center;justify-content:center;">'
           +'<span style="font-size:6.5px;font-weight:800;color:#fff;background:'+pt.col
-          +';border-radius:4px;padding:1px 4px;white-space:nowrap;letter-spacing:.3px;">↔ 환승</span>'
+          +';border-radius:4px;padding:1px 4px;white-space:nowrap;letter-spacing:.2px;">↔ '+_ltEsc(pt.lineLabel||pt.lineNm)+'</span>'
           +'</div>';
+      } else if(_prevWasWalk){
+        // 도보 후 첫역: 도보 노드에 이미 환승/노선 배지를 표시한 경우 중복 방지
+        // 단, 도보가 "첫 진입 도보"(앞에 교통수단 없음)였다면 도보엔 배지가 없으므로 여기서 노선라벨 표시
+        var _walkHadTransitBefore = pts.slice(0,pi-1).some(function(p){return p.type==='stn';});
+        if(_walkHadTransitBefore){
+          // 도보가 환승 도보 → 이미 배지 표시됨 → 빈칸
+          row2='<div style="height:18px;"></div>';
+        } else {
+          // 첫 진입 도보 → 여기서 노선라벨 표시
+          row2='<div style="height:18px;line-height:18px;font-size:7px;font-weight:700;color:'+pt.col+';text-align:center;overflow:hidden;width:100%;">'+_ltEsc(pt.lineLabel||pt.lineNm)+'</div>';
+        }
       } else {
-        // 같은 노선 계속 or 첫 구간: 노선명 표시
-        row2='<div style="height:18px;line-height:18px;font-size:7px;font-weight:700;color:'+pt.col+';text-align:center;overflow:hidden;width:100%;">'+_ltEsc(pt.lineNm)+'</div>';
+        row2='<div style="height:18px;"></div>';
       }
     } else {
       row2='<div style="height:18px;"></div>';
     }
 
     // 행3: axis (선 + dot)
-    // ── 색상 규칙 ──
-    // stn.rColor  = 자신의 구간색  (해당 구간 색이 오른쪽으로 뻗음)
-    // walk.rColor = '#8e8e93' 회색  (도보 구간은 항상 회색)
-    // lColor      = 이전 pt의 rColor (항상 연속)
-    //   → 도보 뒤 stn 첫역: lColor=회색(walk.rColor), rColor=stn.col
-    //   → 직접 환승 stn 첫역: lColor=이전stn.col, rColor=현재stn.col (경계에서 색 바뀜)
+    // 선: 왼쪽 50% + 오른쪽 50%, z-index:1
+    // dot: 중앙, z-index:3
     var lColor, rColor;
     if(isWalk){
-      lColor = (pi>0) ? pts[pi-1].rColor : '#8e8e93';
-      rColor = '#8e8e93'; // 도보 오른쪽은 회색
+      // 도보: 왼쪽=이전구간색, 오른쪽=다음구간색
+      lColor=pt.pC||'#8e8e93'; rColor=pt.nC||'#8e8e93';
     } else {
-      rColor = pt.col;
-      lColor = (pi>0) ? pts[pi-1].rColor : '#8e8e93';
+      rColor = pt.col;  // 오른쪽은 항상 현재 구간 색
+      if(pt.isF) {
+        // 출발역: 왼쪽선 회색 (출발지에서 오는 선)
+        lColor = '#8e8e93';
+      } else if(pt.ni === 0) {
+        // 구간 첫역: 이전 pts에 walk가 있으면 walk의 nC 사용 (색상 연속성)
+        var prevWalk = null;
+        for(var _pw=pi-1;_pw>=0;_pw--){
+          if(pts[_pw].type==='walk'){prevWalk=pts[_pw];break;}
+          if(pts[_pw].type==='stn') break;
+        }
+        lColor = prevWalk ? (prevWalk.nC||pt.col) : (pt.lC||pt.col);
+      } else {
+        // 구간 중간/마지막 역: 양쪽 모두 현재 구간 색
+        lColor = pt.col;
+      }
     }
-    // rColor를 pt에 저장 (다음 노드 lColor 계산용)
-    pt.rColor = rColor;
 
-    // isRealLast: 뒤에 walk가 있으면 진짜 마지막 아님
-    var _hasWalkAfter = pt.isL && pts.slice(pi+1).some(function(p){return p.type==='walk';});
-    var isRealLast = pt.isL && !_hasWalkAfter;
-
-    var drawRight = !(!isWalk && isRealLast);
+    // 선은 항상 그림 (dot z-index:3이 위에 가림) - isF/isL 구분 없음
     var leftLine  = '<div style="position:absolute;top:12px;left:0;width:50%;height:3px;background:'+lColor+';z-index:1;"></div>';
-    var rightLine = drawRight
-      ? '<div style="position:absolute;top:12px;left:50%;width:50%;height:3px;background:'+rColor+';z-index:1;"></div>'
-      : '';
+    var rightLine = (pt.isL&&!isWalk) ? '' : '<div style="position:absolute;top:12px;left:50%;width:50%;height:3px;background:'+rColor+';z-index:1;"></div>';
 
     var dot='';
     if(!isWalk){
       var dSz=12,dTop=7,dBd=3;
+      if(pt.isF||pt.isL){ dSz=14;dTop=6; }
+      // 앞에 도보가 있으면 진짜 출발역 아님 → 일반 dot
       var hasWalkBefore = pts.slice(0,pi).some(function(p){return p.type==='walk';});
       var isRealFirst = pt.isF && !hasWalkBefore;
-      if(isRealFirst||isRealLast){dSz=14;dTop=6;}
+      var isRealLast  = pt.isL;
       var dBg=isRealFirst?'var(--start-dot)':isRealLast?'var(--end-dot)':'var(--card)';
       var dBr=isRealFirst?'var(--start-dot)':isRealLast?'var(--end-dot)':pt.col;
       dot='<div style="position:absolute;width:'+dSz+'px;height:'+dSz+'px;border-radius:50%;'
@@ -2632,31 +2677,24 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
 
   if(typeof _startTransitGpsTracking==='function') _startTransitGpsTracking(nodes);
 
-  // ── GPS 마커 초기화 ──
-  // 기존 마커 전부 제거 (중복 방지)
-  document.querySelectorAll('#htl-gps-marker-dot, #htl-gps-ring, .htl-gps-blink').forEach(function(e){e.remove();});
-  // 단일 마커 구조: ring(파문) + dot(파란 원) — body에 고정 후 JS로 위치 이동
-  window._htlGpsDot  = null;
-  window._htlGpsRing = null;
+  // GPS 마커 dot 초기 생성 (첫 번째 노드에 숨김 상태로)
+  var existGps = document.getElementById('htl-gps-marker-dot');
+  if(existGps) existGps.remove();
   if(nodes.length > 0) {
-    // 마커를 track 컨테이너 기준 position:absolute로 관리
-    var _mkRing = document.createElement('div');
-    _mkRing.id = 'htl-gps-ring';
-    _mkRing.className = 'htl-gps-ring';
-    _mkRing.style.cssText = 'display:none;position:absolute;width:14px;height:14px;'
-      +'border-radius:50%;border:2px solid rgba(10,132,255,.7);'
-      +'top:6px;left:0;z-index:9;pointer-events:none;';
-    var _mkDot = document.createElement('div');
-    _mkDot.id = 'htl-gps-marker-dot';
-    _mkDot.className = 'htl-gps-blink';
-    _mkDot.style.cssText = 'display:none;position:absolute;width:14px;height:14px;'
-      +'border-radius:50%;background:#0a84ff;border:2px solid #fff;'
-      +'top:6px;left:0;z-index:10;pointer-events:none;';
-    // track의 첫 번째 axis에 붙여둠 (이후 JS가 이동)
-    var _firstAxis = track.querySelector('div[style*="position:relative"]');
-    if(_firstAxis){ _firstAxis.appendChild(_mkRing); _firstAxis.appendChild(_mkDot); }
-    window._htlGpsDot  = _mkDot;
-    window._htlGpsRing = _mkRing;
+    var firstEl = document.getElementById('tnode_0');
+    if(firstEl) {
+      var axisEl = firstEl.querySelector('div[style*="position:relative"]');
+      if(axisEl) {
+        var gpsDot = document.createElement('div');
+        gpsDot.id = 'htl-gps-marker-dot';
+        gpsDot.style.cssText = 'display:none;position:absolute;width:14px;height:14px;'
+          + 'border-radius:50%;background:#ffd60a;border:2px solid #fff;'
+          + 'top:6px;left:50%;transform:translateX(-50%);z-index:10;'
+          + 'box-shadow:0 0 0 4px rgba(255,214,10,.35);';
+        gpsDot.className = 'htl-gps-blink';
+        axisEl.appendChild(gpsDot);
+      }
+    }
   }
 }
 window._renderHtlTrack = _renderHtlTrack;
@@ -3626,26 +3664,56 @@ function _updateTransitGps() {
     return;
   }
 
-  // ── GPS 마커 단일 이동 ──
-  // window._htlGpsDot / window._htlGpsRing 을 best 역의 axis로 이동
-  var _gpsDot  = window._htlGpsDot  || document.getElementById('htl-gps-marker-dot');
-  var _gpsRing = window._htlGpsRing || document.getElementById('htl-gps-ring');
-  var _targetEl = best.el || document.getElementById('tnode_'+bestIdx);
-  if(_gpsDot && _targetEl) {
-    var _axis = _targetEl.querySelector('div[style*="position:relative"]');
-    if(_axis) {
-      // axis로 이동 (부모가 다를 때만)
-      if(_gpsDot.parentNode !== _axis)  _axis.appendChild(_gpsDot);
-      if(_gpsRing && _gpsRing.parentNode !== _axis) _axis.appendChild(_gpsRing);
-      // 중앙 정렬 (left:50%, transform)
-      _gpsDot.style.left  = '50%';
-      _gpsDot.style.transform = 'translateX(-50%)';
-      _gpsDot.style.display   = 'block';
-      if(_gpsRing) {
-        _gpsRing.style.left    = '50%';
-        _gpsRing.style.transform = 'translateX(-50%)';
-        _gpsRing.style.display = 'block';
+  // GPS 현위치 dot 이동
+  // GPS 마커 dot 현재 위치 노드로 이동
+  var gpsDot2 = document.getElementById('htl-gps-marker-dot');
+  if(gpsDot2) {
+    var targetEl = best.el || document.getElementById('tnode_'+bestIdx);
+    if(targetEl) {
+      var targetAxis = targetEl.querySelector('div[style*="position:relative"]');
+      if(targetAxis && gpsDot2.parentNode !== targetAxis) {
+        targetAxis.appendChild(gpsDot2);
       }
+      gpsDot2.style.display = 'block';
+    }
+  }
+
+  var gpsDot = document.getElementById('htl-gps-dot');
+  if(gpsDot) {
+    // 현재 best 노드에서 dot 제거하고 새 위치에 표시
+    var allDots = document.querySelectorAll('.htl-gps-blink');
+    allDots.forEach(function(d){ d.style.display='none'; });
+    var bestEl = best.el || document.getElementById('tnode_'+bestIdx);
+    if(bestEl) {
+      var existDot = bestEl.querySelector('.htl-gps-blink');
+      if(!existDot) {
+        // 새 dot 생성
+        var nd = document.createElement('div');
+        nd.className = 'htl-gps-blink';
+        nd.style.cssText = 'position:absolute;top:6px;left:50%;transform:translateX(-50%);'
+          +'width:14px;height:14px;border-radius:50%;background:#ffd60a;'
+          +'border:2px solid #fff;z-index:10;';
+        var axis = bestEl.querySelector('div[style*="position:relative"]');
+        if(axis) axis.appendChild(nd);
+        else bestEl.appendChild(nd);
+      } else {
+        existDot.style.display = 'block';
+      }
+    }
+  }
+
+  // ── GPS 현위치 깜박임 dot ──
+  document.querySelectorAll('.htl-gps-blink').forEach(function(d){d.style.display='none';});
+  var _bestEl=(best&&best.el)?best.el:document.getElementById('tnode_'+bestIdx);
+  if(_bestEl){
+    var _axis=_bestEl.querySelector('div[style*="position:relative"]');
+    if(_axis){
+      var _gd=_axis.querySelector('.htl-gps-blink');
+      if(!_gd){_gd=document.createElement('div');_gd.className='htl-gps-blink';
+        _gd.style.cssText='position:absolute;width:14px;height:14px;border-radius:50%;'
+          +'background:#ffd60a;border:2px solid #fff;top:6px;left:50%;'
+          +'transform:translateX(-50%);z-index:10;';_axis.appendChild(_gd);}
+      _gd.style.display='block';
     }
   }
 
@@ -4284,7 +4352,7 @@ window.addEventListener('unhandledrejection', function(e) {
         <span id="favToggleBtn2" onclick="_openFavPopup()"
           style="flex-shrink:0;cursor:pointer;font-size:11px;font-weight:700;color:var(--gold);
           border:1px solid var(--gold);border-radius:12px;padding:3px 8px;white-space:nowrap;">⭐ 즐겨찾기</span>
-        <button onclick="document.getElementById('transitResultBox').style.display='none';if(window._htlGpsDot)window._htlGpsDot.style.display='none';if(window._htlGpsRing)window._htlGpsRing.style.display='none';"
+        <button onclick="document.getElementById('transitResultBox').style.display='none'"
           style="flex-shrink:0;background:none;border:none;color:var(--sub);font-size:20px;cursor:pointer;padding:0;line-height:1;">×</button>
       </div>
 
