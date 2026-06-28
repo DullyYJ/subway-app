@@ -2542,8 +2542,13 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
         // 출발역: 왼쪽선 회색 (출발지에서 오는 선)
         lColor = '#8e8e93';
       } else if(pt.ni === 0) {
-        // 구간 첫역(환승 합류점): 왼쪽=이전구간색, 오른쪽=현재구간색
-        lColor = pt.lC || pt.col;
+        // 구간 첫역: 이전 pts에 walk가 있으면 walk의 nC 사용 (색상 연속성)
+        var prevWalk = null;
+        for(var _pw=pi-1;_pw>=0;_pw--){
+          if(pts[_pw].type==='walk'){prevWalk=pts[_pw];break;}
+          if(pts[_pw].type==='stn') break;
+        }
+        lColor = prevWalk ? (prevWalk.nC||pt.col) : (pt.lC||pt.col);
       } else {
         // 구간 중간/마지막 역: 양쪽 모두 현재 구간 색
         lColor = pt.col;
@@ -2558,16 +2563,24 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
     if(!isWalk){
       var dSz=12,dTop=7,dBd=3;
       if(pt.isF||pt.isL){ dSz=14;dTop=6; }
-      var dBg=pt.isF?'var(--start-dot)':pt.isL?'var(--end-dot)':'var(--card)';
-      var dBr=pt.isF?'var(--start-dot)':pt.isL?'var(--end-dot)':pt.col;
+      // 앞에 도보가 있으면 진짜 출발역 아님 → 일반 dot
+      var hasWalkBefore = pts.slice(0,pi).some(function(p){return p.type==='walk';});
+      var isRealFirst = pt.isF && !hasWalkBefore;
+      var isRealLast  = pt.isL;
+      var dBg=isRealFirst?'var(--start-dot)':isRealLast?'var(--end-dot)':'var(--card)';
+      var dBr=isRealFirst?'var(--start-dot)':isRealLast?'var(--end-dot)':pt.col;
       dot='<div style="position:absolute;width:'+dSz+'px;height:'+dSz+'px;border-radius:50%;'
         +'top:'+dTop+'px;left:50%;transform:translateX(-50%);'
         +'background:'+dBg+';border:'+dBd+'px solid '+dBr+';z-index:3;"></div>';
     }
 
     var gpsId=isWalk?'':'tnode_'+ni2;
+    var walkCenter = isWalk
+      ? '<div style="position:absolute;top:10px;left:50%;transform:translateX(-50%);'
+        +'width:6px;height:6px;border-radius:50%;background:#8e8e93;z-index:2;"></div>'
+      : '';
     var row3='<div style="position:relative;width:100%;height:26px;overflow:visible;">'
-      +leftLine+rightLine+dot+'</div>';
+      +leftLine+rightLine+walkCenter+dot+'</div>';
 
     // 행4: 시간
     var row4=isWalk
