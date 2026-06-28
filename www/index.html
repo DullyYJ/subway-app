@@ -400,8 +400,8 @@ header h1 em{color:var(--gold);font-style:normal;}
 .htl-line-seg{position:absolute;top:12px;height:3px;z-index:0;min-width:0;}
 /* dot: 크기 12px, position:absolute로 정중앙 고정 */
 .htl-dot{position:absolute;width:12px;height:12px;border-radius:50%;
-  background:#1c1c1e;border:3px solid var(--line-color,#0a84ff);
-  z-index:2;top:7px;left:50%;transform:translateX(-50%);}
+  background:var(--card);border:3px solid var(--line-color,#0a84ff);
+  z-index:3;top:7px;left:50%;transform:translateX(-50%);}
 /* 환승 dot: 크기 동일 12px (크기 다르면 어긋남) */
 .htl-xfer-dot{width:12px !important;height:12px !important;border-width:3px !important;}
 .htl-stn.htl-is-xfer .htl-name{font-weight:800;}
@@ -2479,9 +2479,9 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
       tHtml+='<div class="htl-stn htl-walk-node" style="--line-color:#8e8e93;">'
         +'<div class="htl-name" style="font-size:9px;color:var(--sub);text-align:center;line-height:15px;">도보</div>'
         +'<div class="htl-axis">'
-          +'<div class="htl-line-seg" style="left:-32px;width:calc(50% + 32px);top:12px;right:auto;background:'+pC+';"></div>'
-          +'<span style="position:absolute;top:2px;left:50%;transform:translateX(-50%);font-size:12px;z-index:2;line-height:1;">🚶‍➡️</span>'
-          +'<div class="htl-line-seg" style="left:50%;width:calc(50% + 32px);top:12px;right:auto;background:'+nC+';"></div>'
+          +'<div class="htl-line-seg" style="left:0;width:50%;top:12px;right:auto;background:'+pC+';"></div>'
+          +'<div class="htl-line-seg" style="left:50%;width:calc(50% + 64px);top:12px;right:auto;background:'+nC+';z-index:0;"></div>'
+          +'<span style="position:absolute;top:2px;left:50%;transform:translateX(-50%);font-size:12px;z-index:3;line-height:1;">🚶‍➡️</span>'
         +'</div>'
         +'<div class="htl-time">'+wLabel+'</div>'
         +'</div>';
@@ -2512,8 +2512,8 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
 
       // dot
       var dot;
-      if(isF)      dot='<span class="htl-dot" style="border-color:var(--start-dot);background:var(--start-dot);width:14px;height:14px;top:6px;"></span>';
-      else if(isL) dot='<span class="htl-dot" style="border-color:var(--end-dot);background:var(--end-dot);width:14px;height:14px;top:6px;"></span>';
+      if(isF)      dot='<span class="htl-dot" style="border-color:var(--start-dot);background:var(--start-dot);width:14px;height:14px;top:6px;z-index:4;"></span>';
+      else if(isL) dot='<span class="htl-dot" style="border-color:var(--end-dot);background:var(--end-dot);width:14px;height:14px;top:6px;z-index:4;"></span>';
       else         dot='<span class="htl-dot" style="border-color:'+col+';background:'+col+';"></span>';
 
       // 노선 뱃지
@@ -2526,9 +2526,8 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
         +'<div class="htl-name">'+_ltEsc(shortNm)+'</div>'
         +badge
         +'<div class="htl-axis">'
-          +(!isF?'<div class="htl-line-seg" style="left:-32px;width:calc(50% + 32px);top:12px;right:auto;background:'+leftCol+';"></div>':'')
           +dot
-          +(!isL?'<div class="htl-line-seg" style="left:50%;width:calc(50% + 32px);top:12px;right:auto;background:'+col+';"></div>':'')
+          +(!isL?'<div class="htl-line-seg" style="left:50%;width:calc(50% + 64px);top:12px;right:auto;background:'+col+';z-index:0;"></div>':'')
         +'</div>'
         +'<div class="htl-time">'+_ltEsc(arrT)+'</div>'
         +'</div>';
@@ -3235,7 +3234,7 @@ function _showMapRouteSheet(startStn, destStn) {
       var leftCol  = col;
       var rightCol = col;
 
-      var dot = isF ? '<span class="htl-dot" style="border-color:var(--start-dot);background:var(--start-dot);width:14px;height:14px;top:6px;"></span>'
+      var dot = isF ? '<span class="htl-dot" style="border-color:var(--start-dot);background:var(--start-dot);width:14px;height:14px;top:6px;z-index:4;"></span>'
               : isL ? '<span class="htl-dot" style="border-color:#ff2d55;background:#ff2d55;width:14px;height:14px;top:6px;"></span>'
               : '<span class="htl-dot" style="border-color:'+col+';background:'+col+';"></span>';
 
@@ -3247,9 +3246,9 @@ function _showMapRouteSheet(startStn, destStn) {
         + '<div class="htl-name" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;height:28px;line-height:28px;font-size:9px;display:block;text-align:center;padding:0 2px;">'+shortNm.replace(/</g,'&lt;')+'</div>'
         + badge
         + '<div class="htl-axis">'
-          + (!isF ? '<div class="htl-line-seg" style="left:-32px;width:calc(50% + 32px);right:auto;top:12px;background:'+leftCol+';"></div>' : '')
+          + (!isF ? '<div class="htl-line-seg" style="left:0;width:0;right:auto;top:12px;background:'+leftCol+';"></div>' : '')
           + dot
-          + (!isL ? '<div class="htl-line-seg" style="left:50%;width:calc(50% + 32px);right:auto;top:12px;background:'+rightCol+';"></div>' : '')
+          + (!isL ? '<div class="htl-line-seg" style="left:50%;width:calc(50% + 64px);right:auto;top:12px;background:'+rightCol+';"></div>' : '')
         + '</div>'
         + '<div class="htl-time" style="font-size:9px;color:var(--sub);text-align:center;height:16px;margin-top:3px;white-space:nowrap;">'+arrT+'</div>'
         + '</div>';
