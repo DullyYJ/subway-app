@@ -2500,6 +2500,39 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
     });
   });
 
+  // ── 각 pt의 left/right 색상 사전 계산 ──
+  // 규칙: 두 인접 노드가 공유하는 "엣지"의 색은 항상 동일해야 함
+  // pt[i].rightColor === pt[i+1].leftColor (연속성 보장)
+  //
+  // 색상 결정 우선순위:
+  //   stn.right = pt.col (현재 구간색)
+  //   walk.left  = 왼쪽 인접 stn.right
+  //   walk.right = 오른쪽 인접 stn(첫역).col
+  //   stn.left   = 바로 이전 pt의 right 색 (=연속성)
+  //   첫 stn.left = '#8e8e93' (출발선 없음)
+  //   마지막 stn.right = 없음(선 생략)
+
+  pts.forEach(function(pt,pi){
+    if(pt.type==='stn'){
+      pt.rColor = pt.col; // stn 오른쪽은 항상 자신의 구간색
+    } else {
+      // walk: 오른쪽 = 다음 stn의 구간색
+      var nextStn = null;
+      for(var _n=pi+1;_n<pts.length;_n++){
+        if(pts[_n].type==='stn'){nextStn=pts[_n];break;}
+      }
+      pt.rColor = nextStn ? nextStn.col : '#8e8e93';
+    }
+  });
+  // left = 이전 pt의 right (첫 노드만 '#8e8e93')
+  pts.forEach(function(pt,pi){
+    if(pi===0){
+      pt.lColor = '#8e8e93';
+    } else {
+      pt.lColor = pts[pi-1].rColor;
+    }
+  });
+
   // ── HTML 생성 ──
   // 모든 노드: 동일 너비(64px) + 동일 5행 구조
   // 행1: 역명(30px high)
@@ -2513,6 +2546,8 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
 
   pts.forEach(function(pt,pi){
     var isWalk=(pt.type==='walk');
+    var lColor = pt.lColor;
+    var rColor = pt.rColor;
 
     // 행1: 역명 / "도보"
     var row1=isWalk
@@ -2530,32 +2565,7 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
     }
 
     // 행3: axis (선 + dot)
-    // 선: 왼쪽 50% + 오른쪽 50%, z-index:1
-    // dot: 중앙, z-index:3
-    var lColor, rColor;
-    if(isWalk){
-      // 도보: 왼쪽=이전구간색, 오른쪽=다음구간색
-      lColor=pt.pC||'#8e8e93'; rColor=pt.nC||'#8e8e93';
-    } else {
-      rColor = pt.col;  // 오른쪽은 항상 현재 구간 색
-      if(pt.isF) {
-        // 출발역: 왼쪽선 회색 (출발지에서 오는 선)
-        lColor = '#8e8e93';
-      } else if(pt.ni === 0) {
-        // 구간 첫역: 이전 pts에 walk가 있으면 walk의 nC 사용 (색상 연속성)
-        var prevWalk = null;
-        for(var _pw=pi-1;_pw>=0;_pw--){
-          if(pts[_pw].type==='walk'){prevWalk=pts[_pw];break;}
-          if(pts[_pw].type==='stn') break;
-        }
-        lColor = prevWalk ? (prevWalk.nC||pt.col) : (pt.lC||pt.col);
-      } else {
-        // 구간 중간/마지막 역: 양쪽 모두 현재 구간 색
-        lColor = pt.col;
-      }
-    }
-
-    // 선은 항상 그림 (dot z-index:3이 위에 가림) - isF/isL 구분 없음
+    // 선은 항상 그림 (dot z-index:3이 위에 가림)
     var leftLine  = '<div style="position:absolute;top:12px;left:0;width:50%;height:3px;background:'+lColor+';z-index:1;"></div>';
     var rightLine = (pt.isL&&!isWalk) ? '' : '<div style="position:absolute;top:12px;left:50%;width:50%;height:3px;background:'+rColor+';z-index:1;"></div>';
 
@@ -2575,9 +2585,11 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
     }
 
     var gpsId=isWalk?'':'tnode_'+ni2;
+    // walk 노드 중앙 dot: 좌우 색 중간값으로 표현
     var walkCenter = isWalk
       ? '<div style="position:absolute;top:10px;left:50%;transform:translateX(-50%);'
-        +'width:6px;height:6px;border-radius:50%;background:#8e8e93;z-index:2;"></div>'
+        +'width:6px;height:6px;border-radius:50%;'
+        +'background:linear-gradient(90deg,'+lColor+','+rColor+');z-index:2;"></div>'
       : '';
     var row3='<div style="position:relative;width:100%;height:26px;overflow:visible;">'
       +leftLine+rightLine+walkCenter+dot+'</div>';
@@ -3096,6 +3108,11 @@ function _convertSinglePathToRoute(path) {
       return { stationName: s.stationName||s.name||'',
         lat: s.y||s.lat||null, lon: s.x||s.lon||null };
     });
+    // stops 없으면 출발/도착역 최소 2개 생성
+    if(!stops.length && ttype !== 3) {
+      if(sp.startName) stops.push({ stationName: sp.startName, lat: sp.startY||null, lon: sp.startX||null });
+      if(sp.endName)   stops.push({ stationName: sp.endName,   lat: sp.endY||null,   lon: sp.endX||null });
+    }
     return {
       transportation: {
         type: ttype,
@@ -3126,6 +3143,14 @@ function _convertODsayToRoutes(odsayData) {
       var ttype = sp.trafficType; // 1=지하철, 2=버스, 3=도보
       var lane  = (sp.lane || [])[0] || {};
       var stops = (sp.passStopList || {}).stations || [];
+      // stops 없으면 출발/도착역 최소 2개 생성
+      var stationList = stops.map(function(s){
+        return { stationName: s.stationName||s.name||'', lat: s.y||s.lat||null, lon: s.x||s.lon||s.lng||null };
+      });
+      if(!stationList.length && ttype !== 3) {
+        if(sp.startName) stationList.push({ stationName: sp.startName, lat: sp.startY||null, lon: sp.startX||null });
+        if(sp.endName)   stationList.push({ stationName: sp.endName,   lat: sp.endY||null,   lon: sp.endX||null });
+      }
       return {
         transportation: {
           type: ttype,
@@ -3134,15 +3159,7 @@ function _convertODsayToRoutes(odsayData) {
         },
         duration: (sp.sectionTime || 0) * 60,
         distance: sp.distance || 0,
-        passStopList: stops.length ? {
-          stationList: stops.map(function(s){
-            return {
-              stationName: s.stationName || s.name || '',
-              lat: s.y || s.lat || null,
-              lon: s.x || s.lon || s.lng || null
-            };
-          })
-        } : null
+        passStopList: stationList.length ? { stationList: stationList } : null
       };
     });
     return {
