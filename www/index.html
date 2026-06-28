@@ -3158,20 +3158,59 @@ function _parseODsayAllOptions(odsayData) {
         return bBus - aBus;
       })[0];
 
-  // 지하철 우선: 지하철 탑승 시간이 가장 빠른 경로 (도보/버스로 가장 가까운 지하철역 접근)
-  // 즉 첫 지하철 탑승역까지의 소요 시간이 가장 짧은 경로
-  var subFirst = paths.slice().sort(function(a,b) {
-    function firstSubTime(path) {
-      var t = 0;
-      for(var i=0; i<(path.subPath||[]).length; i++) {
-        if(path.subPath[i].trafficType === 1) return t;
-        t += (path.subPath[i].sectionTime || 0);
+  // ── 지하철 우선 경로 ──
+  // 요청: "현재 위치에서 가장 가까운 역에서 지하철을 타는 경로"
+  // 1) 지하철 구간이 실제로 포함된 경로만 후보
+  // 2) 그중 출발지~첫 지하철역 거리가 가장 짧은 경로 선택
+  //    (= 가장 가까운 역에서 타는 경로)
+  var startLat=null, startLng=null;
+  if(typeof _fmapStart!=='undefined' && _fmapStart && _fmapStart.lat){ startLat=_fmapStart.lat; startLng=_fmapStart.lng; }
+
+  function _hasSubway(p){ return (p.subPath||[]).some(function(s){return s.trafficType===1;}); }
+  function _firstSubStation(p){
+    // 첫 지하철 구간의 승차역 좌표 반환
+    var subs=p.subPath||[];
+    for(var i=0;i<subs.length;i++){
+      if(subs[i].trafficType===1){
+        var st=(subs[i].startX!=null)?{lat:subs[i].startY,lng:subs[i].startX}:null;
+        // passStopList 첫 정류장으로도 보강
+        if(!st){
+          var ss=((subs[i].passStopList||{}).stations||[])[0];
+          if(ss) st={lat:ss.y, lng:ss.x};
+        }
+        return st;
       }
-      return 9999;
     }
-    return firstSubTime(a) - firstSubTime(b);
-  })[0];
-  if(!subFirst) subFirst = byType[1].length > 0 ? byType[1][0] : paths[0];
+    return null;
+  }
+  function _distToFirstSub(p){
+    if(startLat==null) {
+      // 좌표 없으면 첫 지하철 탑승까지 소요시간으로 대체
+      var t=0; var subs=p.subPath||[];
+      for(var i=0;i<subs.length;i++){ if(subs[i].trafficType===1) return t; t+=(subs[i].sectionTime||0); }
+      return 999999;
+    }
+    var fs=_firstSubStation(p);
+    if(!fs || fs.lat==null) return 999999;
+    return (typeof haversineM==='function')
+      ? haversineM(startLat,startLng,fs.lat,fs.lng)
+      : Math.sqrt(Math.pow((startLat-fs.lat)*111000,2)+Math.pow((startLng-fs.lng)*88000,2));
+  }
+
+  // 지하철 포함 경로만 필터
+  var subwayPaths = paths.filter(_hasSubway);
+  var subFirst;
+  if(subwayPaths.length > 0){
+    // 가장 가까운 역에서 타는 순으로 정렬
+    subFirst = subwayPaths.slice().sort(function(a,b){
+      return _distToFirstSub(a) - _distToFirstSub(b);
+    })[0];
+  } else if(byType[1].length > 0){
+    subFirst = byType[1][0];
+  } else {
+    // 지하철 포함 경로가 아예 없음 → null 표시 (탭에서 안내)
+    subFirst = null;
+  }
 
   // ── fast(최단시간) 결정 ──
   // 경로가 1개이거나 모든 경로의 totalTime이 같으면 → 최소환승 경로를 최단시간으로 사용
@@ -3185,10 +3224,11 @@ function _parseODsayAllOptions(odsayData) {
   return {
     fast: _fastPath,
     less: lessXfer[0] || paths[0],
-    sub:  subFirst   || paths[0],
+    sub:  subFirst,   // 지하철 포함 경로 없으면 null
     bus:  busFirst   || paths[0],
     all:  paths,
-    count: paths.length
+    count: paths.length,
+    hasSubwayRoute: subwayPaths.length > 0
   };
 }
 
@@ -3209,20 +3249,31 @@ function selectRouteOption(type) {
   // 1) 요청 타입 경로 우선 시도
   var routeObj = _tryConvert(_allRouteResults[type]);
 
-  // 2) 실패 시: less(최소환승) → fast → sub → bus → all[0..] 순으로 폴백
-  //    (요청대로 최단시간이 비면 최소환승 경로를 대신 사용)
-  if(!routeObj){
-    var fbOrder = (type==='fast')
-      ? ['less','sub','bus','fast']   // 최단시간 실패 → 최소환승 우선
-      : ['fast','less','sub','bus'];
-    for(var _i=0;_i<fbOrder.length && !routeObj;_i++){
-      routeObj = _tryConvert(_allRouteResults[fbOrder[_i]]);
+  // 지하철 탭 특별 처리: 지하철 포함 경로만 안내 (버스 경로로 폴백하지 않음)
+  if(type === 'sub'){
+    if(!routeObj){
+      // 지하철 포함 경로가 없음 → 안내만, 다른 경로로 대체하지 않음
+      toast('지하철로 가는 경로가 없어요. 다른 수단을 이용해주세요.');
+      // 탭 활성화는 유지하되 화면은 기존 경로 그대로 둠
+      return;
     }
-  }
-  // 3) 그래도 없으면 all 배열 전체 순회
-  if(!routeObj && _allRouteResults.all){
-    for(var _j=0;_j<_allRouteResults.all.length && !routeObj;_j++){
-      routeObj = _tryConvert(_allRouteResults.all[_j]);
+    // 지하철 경로 있으면 그대로 표시 (폴백 건너뜀)
+  } else {
+    // 2) 실패 시: less(최소환승) → fast → sub → bus → all[0..] 순으로 폴백
+    //    (요청대로 최단시간이 비면 최소환승 경로를 대신 사용)
+    if(!routeObj){
+      var fbOrder = (type==='fast')
+        ? ['less','sub','bus','fast']   // 최단시간 실패 → 최소환승 우선
+        : ['fast','less','sub','bus'];
+      for(var _i=0;_i<fbOrder.length && !routeObj;_i++){
+        routeObj = _tryConvert(_allRouteResults[fbOrder[_i]]);
+      }
+    }
+    // 3) 그래도 없으면 all 배열 전체 순회
+    if(!routeObj && _allRouteResults.all){
+      for(var _j=0;_j<_allRouteResults.all.length && !routeObj;_j++){
+        routeObj = _tryConvert(_allRouteResults.all[_j]);
+      }
     }
   }
 
