@@ -2534,13 +2534,20 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
     // dot: 중앙, z-index:3
     var lColor, rColor;
     if(isWalk){
+      // 도보: 왼쪽=이전구간색, 오른쪽=다음구간색
       lColor=pt.pC||'#8e8e93'; rColor=pt.nC||'#8e8e93';
     } else {
-      // 첫 역(isF): 왼쪽 선 색 = 출발지 색 (회색 또는 도보 색)
-      // 구간 첫 역(ni===0, isF 아님): 이전 구간 색
-      // 구간 중간 역: 현재 구간 색
-      lColor = pt.isF ? '#8e8e93' : (pt.lC||pt.col);
-      rColor = pt.col;
+      rColor = pt.col;  // 오른쪽은 항상 현재 구간 색
+      if(pt.isF) {
+        // 출발역: 왼쪽선 회색 (출발지에서 오는 선)
+        lColor = '#8e8e93';
+      } else if(pt.ni === 0) {
+        // 구간 첫역(환승 합류점): 왼쪽=이전구간색, 오른쪽=현재구간색
+        lColor = pt.lC || pt.col;
+      } else {
+        // 구간 중간/마지막 역: 양쪽 모두 현재 구간 색
+        lColor = pt.col;
+      }
     }
 
     // 선은 항상 그림 (dot z-index:3이 위에 가림) - isF/isL 구분 없음
@@ -3615,6 +3622,21 @@ function _updateTransitGps() {
       } else {
         existDot.style.display = 'block';
       }
+    }
+  }
+
+  // ── GPS 현위치 깜박임 dot ──
+  document.querySelectorAll('.htl-gps-blink').forEach(function(d){d.style.display='none';});
+  var _bestEl=(best&&best.el)?best.el:document.getElementById('tnode_'+bestIdx);
+  if(_bestEl){
+    var _axis=_bestEl.querySelector('div[style*="position:relative"]');
+    if(_axis){
+      var _gd=_axis.querySelector('.htl-gps-blink');
+      if(!_gd){_gd=document.createElement('div');_gd.className='htl-gps-blink';
+        _gd.style.cssText='position:absolute;width:14px;height:14px;border-radius:50%;'
+          +'background:#ffd60a;border:2px solid #fff;top:6px;left:50%;'
+          +'transform:translateX(-50%);z-index:10;';_axis.appendChild(_gd);}
+      _gd.style.display='block';
     }
   }
 
