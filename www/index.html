@@ -347,7 +347,10 @@ header h1 em{color:var(--gold);font-style:normal;}
 #transitResultHeader{display:flex;align-items:baseline;gap:6px;flex:1;min-width:0;overflow:hidden;}
 #transitHtlTrack .htl-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;height:30px;font-size:10px;line-height:15px;padding:0 2px;display:block;text-align:center;max-width:68px;}
 #transitHtlTrack .htl-line{font-size:7.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-#transitHtlTrack .htl-walk-node{width:48px !important;}
+#transitHtlTrack .htl-walk-node{width:56px !important;}
+/* 연결선: overflow visible로 다음 노드까지 연장 */
+#transitHtlTrack .htl-stn .htl-axis{overflow:visible;}
+#transitHtlTrack{overflow-x:auto;overflow-y:visible;}
 /* ── 복합경로 GPS 현재위치 ── */
 /* 현재 위치 역: 금색 dot + 이름 강조 */
 #transitHtlTrack .htl-gps-here .htl-dot{
@@ -394,7 +397,7 @@ header h1 em{color:var(--gold);font-style:normal;}
 /* ── axis: 라인+dot 영역. height 고정 26px ── */
 .htl-axis{position:relative;width:100%;height:26px;flex-shrink:0;}
 /* 라인: top 고정 = (26-3)/2 = 11.5 → 12px */
-.htl-line-seg{position:absolute;top:12px;height:3px;z-index:0;}
+.htl-line-seg{position:absolute;top:12px;height:3px;z-index:0;min-width:0;}
 /* dot: 크기 12px, position:absolute로 정중앙 고정 */
 .htl-dot{position:absolute;width:12px;height:12px;border-radius:50%;
   background:#1c1c1e;border:3px solid var(--line-color,#0a84ff);
@@ -2476,9 +2479,9 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
       tHtml+='<div class="htl-stn htl-walk-node" style="--line-color:#8e8e93;">'
         +'<div class="htl-name" style="font-size:9px;color:var(--sub);text-align:center;line-height:15px;">도보</div>'
         +'<div class="htl-axis">'
-          +'<div class="htl-line-seg" style="left:0;right:50%;top:12px;background:'+pC+';"></div>'
+          +'<div class="htl-line-seg" style="left:0;width:50%;top:12px;right:auto;background:'+pC+';"></div>'
           +'<span style="position:absolute;top:2px;left:50%;transform:translateX(-50%);font-size:12px;z-index:2;line-height:1;">🚶‍➡️</span>'
-          +'<div class="htl-line-seg" style="left:50%;right:0;top:12px;background:'+nC+';opacity:.7;"></div>'
+          +'<div class="htl-line-seg" style="left:50%;width:50%;top:12px;right:auto;background:'+nC+';"></div>'
         +'</div>'
         +'<div class="htl-time">'+wLabel+'</div>'
         +'</div>';
@@ -2523,9 +2526,9 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
         +'<div class="htl-name">'+_ltEsc(shortNm)+'</div>'
         +badge
         +'<div class="htl-axis">'
-          +(!isF?'<div class="htl-line-seg" style="left:0;right:50%;top:12px;background:'+leftCol+';"></div>':'')
+          +(!isF?'<div class="htl-line-seg" style="left:0;width:50%;top:12px;right:auto;background:'+leftCol+';"></div>':'')
           +dot
-          +(!isL?'<div class="htl-line-seg" style="left:50%;right:0;top:12px;background:'+col+';"></div>':'')
+          +(!isL?'<div class="htl-line-seg" style="left:50%;width:50%;top:12px;right:auto;background:'+col+';"></div>':'')
         +'</div>'
         +'<div class="htl-time">'+_ltEsc(arrT)+'</div>'
         +'</div>';
@@ -2676,13 +2679,25 @@ function openTransitDetail() {
 
   if(title) title.textContent = totalMin + '분 · ' + _ltEsc((start||{}).name||'') + ' → ' + _ltEsc((dest||{}).name||'');
 
+  // 현재 테마 확인
+  var _isDark = (document.documentElement.getAttribute('data-theme') !== 'pastel');
+
   var html = '';
   sections.forEach(function(sec) {
     var trans  = sec.transportation || {};
     var type   = trans.type;
     var isWalk = type===3, isSub=type===1, isBus=type===2;
     var icon   = isWalk?'🚶':isSub?'🚇':'🚌';
-    var col    = _transitColor(type, trans.name);
+
+    // 지하철: LC 노선 고유색, 버스: 테마에 따라 흰색/검정, 도보: 회색
+    var col;
+    if(isSub)       col = _transitColor(1, trans.name);  // LC 노선색
+    else if(isBus)  col = _isDark ? '#ffffff' : '#1a1a1a';  // 버스: 다크=흰색, 라이트=검정
+    else            col = 'var(--sub)';  // 도보: 서브 색상
+
+    // 아이콘 배경: 지하철은 노선색, 버스는 중립색
+    var iconBg = isSub ? col+'28' : 'var(--card2)';
+
     var secMin = Math.round((sec.duration||0)/60);
     var secDist= Math.round(sec.distance||0);
     var label  = isWalk
@@ -2695,14 +2710,20 @@ function openTransitDetail() {
     var toStop   = stops.length>1 ? stops[stops.length-1].stationName : '';
     var stopCnt  = stops.length>2 ? (stops.length-2)+'정거장 경유' : '';
 
-    html += '<div style="display:flex;align-items:flex-start;padding:14px 18px;border-bottom:1px solid var(--border);gap:14px;">'
-      + '<div style="width:36px;height:36px;border-radius:50%;background:'+col+'22;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">'+icon+'</div>'
+    // 지하철: 왼쪽 노선 컬러바
+    var lineBar = isSub
+      ? '<div style="width:4px;border-radius:2px;background:'+col+';align-self:stretch;flex-shrink:0;margin-right:2px;"></div>'
+      : '';
+
+    html += '<div style="display:flex;align-items:flex-start;padding:13px 16px;border-bottom:1px solid var(--border);gap:12px;">'
+      + lineBar
+      + '<div style="width:34px;height:34px;border-radius:50%;background:'+iconBg+';display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;">'+icon+'</div>'
       + '<div style="flex:1;min-width:0;">'
         + '<div style="font-size:14px;font-weight:700;color:'+col+';margin-bottom:3px;">'+_ltEsc(label)+'</div>'
         + (fromStop ? '<div style="font-size:12px;color:var(--sub);">'+_ltEsc(fromStop)+(toStop?' → '+_ltEsc(toStop):'')+'</div>' : '')
         + (stopCnt  ? '<div style="font-size:11px;color:var(--sub);margin-top:2px;">'+stopCnt+'</div>' : '')
       + '</div>'
-      + '<div style="font-size:14px;font-weight:700;color:var(--text);flex-shrink:0;">'+(secMin<1?'1분 미만':secMin+'분')+'</div>'
+      + '<div style="font-size:13px;font-weight:700;color:var(--sub);flex-shrink:0;white-space:nowrap;">'+(secMin<1?'1분 미만':secMin+'분')+'</div>'
       + '</div>';
   });
 
@@ -3203,8 +3224,8 @@ function _showMapRouteSheet(startStn, destStn) {
             + '<div style="width:6px;height:6px;border-radius:50%;background:'+col+';box-shadow:0 0 0 2px '+col+'44;"></div>'
           + '</div>'
           + '<div style="position:relative;height:26px;width:100%;display:flex;align-items:center;justify-content:center;">'
-            + '<div style="position:absolute;left:0;right:50%;top:12px;height:3px;background:'+prevSegCol+';z-index:1;"></div>'
-            + '<div style="position:absolute;left:50%;right:0;top:12px;height:3px;background:'+col+';z-index:1;"></div>'
+            + '<div style="position:absolute;left:0;width:50%;top:12px;height:3px;right:auto;background:'+prevSegCol+';z-index:1;"></div>'
+            + '<div style="position:absolute;left:50%;width:50%;top:12px;height:3px;right:auto;background:'+col+';z-index:1;"></div>'
           + '</div>'
           + '<div style="position:relative;z-index:1;font-size:9px;color:var(--sub);height:16px;line-height:16px;text-align:center;">'+arrT+'</div>'
         + '</div>';
@@ -3226,9 +3247,9 @@ function _showMapRouteSheet(startStn, destStn) {
         + '<div class="htl-name" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;height:28px;line-height:28px;font-size:9px;display:block;text-align:center;padding:0 2px;">'+shortNm.replace(/</g,'&lt;')+'</div>'
         + badge
         + '<div class="htl-axis">'
-          + (!isF ? '<div class="htl-line-seg" style="left:0;right:50%;top:12px;background:'+leftCol+';"></div>' : '')
+          + (!isF ? '<div class="htl-line-seg" style="left:0;width:50%;right:auto;top:12px;background:'+leftCol+';"></div>' : '')
           + dot
-          + (!isL ? '<div class="htl-line-seg" style="left:50%;right:0;top:12px;background:'+rightCol+';"></div>' : '')
+          + (!isL ? '<div class="htl-line-seg" style="left:50%;width:50%;right:auto;top:12px;background:'+rightCol+';"></div>' : '')
         + '</div>'
         + '<div class="htl-time" style="font-size:9px;color:var(--sub);text-align:center;height:16px;margin-top:3px;white-space:nowrap;">'+arrT+'</div>'
         + '</div>';
@@ -21989,8 +22010,8 @@ function renderHorizontalTimeline(){
     var leftCol  = isPassed ? passedCol2 : prevCol;
     var rightCol = isPassed ? passedCol2 : col;
     var lineSeg = '';
-    if(!isFirst) lineSeg += '<div class="htl-line-seg" style="left:0;right:50%;top:12px;background:'+leftCol+';"></div>';
-    if(!isLast)  lineSeg += '<div class="htl-line-seg" style="left:50%;right:0;top:12px;background:'+rightCol+';"></div>';
+    if(!isFirst) lineSeg += '<div class="htl-line-seg" style="left:0;width:50%;right:auto;top:12px;background:'+leftCol+';"></div>';
+    if(!isLast)  lineSeg += '<div class="htl-line-seg" style="left:50%;width:50%;right:auto;top:12px;background:'+rightCol+';"></div>';
 
     html += '<div class="htl-stn'+(isCur?' htl-current':'')+(isPassed?' htl-passed':'')+(isXfer?' htl-is-xfer':'')+'" style="--line-color:'+col+';">'
       + '<div class="htl-name">'+_ltEsc(cleanPath[i])+'</div>'
