@@ -2468,30 +2468,25 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
   var segMs=segs.map(function(sg){var t=cumMs;cumMs+=sg.dur*1000;return t;});
   var gIdx=0;
 
-  // 노선/번호 라벨 생성 헬퍼
-  // 지하철(type1): "N호선" 형태 그대로, 버스(type2): "N번" 형태
+  // 노선/번호 라벨 헬퍼: 지하철=노선명, 버스=숫자면 "N번"
   function _lineLabel(type, name){
-    var nm = (name||'').trim();
+    var nm=(name||'').trim();
     if(!nm) return type===1?'지하철':type===2?'버스':'';
-    if(type===2){
-      // 버스: 숫자만 있으면 "번" 붙임, 이미 텍스트면 그대로
-      return /^[0-9-]+$/.test(nm) ? nm+'번' : nm;
-    }
-    return nm; // 지하철은 노선명 그대로 (N호선/공항철도 등)
+    if(type===2) return /^[0-9-]+$/.test(nm) ? nm+'번' : nm;
+    return nm;
   }
 
   var pts=[];
-  var _firstDep = segMs[0]; // 전체 출발 시각 (첫 세그 시작)
+  var _firstDep=segMs[0]; // 전체 출발 시각
   segs.forEach(function(sg,si){
     var col=_transitColor(sg.type,sg.name);
     var secMin=Math.round(sg.dur/60);
 
     if(sg.type===3){
       var pC='#8e8e93',nC='#8e8e93';
-      var nextType=0, nextName='';
+      var nextType=0,nextName='';
       for(var a=si-1;a>=0;a--){ if(segs[a].type!==3){pC=_transitColor(segs[a].type,segs[a].name);break;} }
       for(var b=si+1;b<segs.length;b++){ if(segs[b].type!==3){nC=_transitColor(segs[b].type,segs[b].name);nextType=segs[b].type;nextName=segs[b].name;break;} }
-      // 도보 다음에 탈 교통수단의 노선/번호 라벨 (환승 표시용)
       pts.push({type:'walk',pC:pC,nC:nC,
                 nextType:nextType, nextLabel:_lineLabel(nextType,nextName), nextCol:nC,
                 lbl:secMin>0?secMin+'분':(Math.round(sg.dist)+'m')});
@@ -2502,15 +2497,9 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
     sg.stops.forEach(function(st,ni){
       var isF=(gIdx===0),isL=(gIdx===totalCnt-1);
       var arrT='';
-      if(isF){
-        // 전체 첫 역: 출발 시각 표시
-        arrT=_fmtHHMM(_firstDep);
-      } else if(ni===0){
-        // 구간 첫역(환승역): 소요시간(N분) 표시
-        arrT=secMin>0?secMin+'분':'';
-      } else {
-        arrT=_fmtHHMM(segMs[si]+ni*perMs);
-      }
+      if(isF)            arrT=_fmtHHMM(_firstDep);      // 첫역: 출발 시각
+      else if(ni===0)    arrT=secMin>0?secMin+'분':'';  // 환승역: 소요시간
+      else               arrT=_fmtHHMM(segMs[si]+ni*perMs); // 중간역: 도착시각
       var lC=col;
       if(ni===0&&si>0){
         for(var a=si-1;a>=0;a--){ if(segs[a].type!==3){lC=_transitColor(segs[a].type,segs[a].name);break;} }
@@ -2546,12 +2535,10 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
     // 행2: 환승배지 / 노선라벨 / 빈칸
     var row2;
     if(isWalk){
-      // 도보 노드: 다음에 탈 교통수단으로 환승하는 경우 ↔환승 + 노선/번호 배지
-      // (도보 앞에 교통수단이 있었으면 = 환승, 없었으면 = 첫 탑승 진입 도보)
+      // 도보: 앞에 교통수단이 있었으면 환승 → ↔ + 노선/번호
       var _hadTransitBefore = pts.slice(0,pi).some(function(p){return p.type==='stn';});
       if(_hadTransitBefore && pt.nextLabel){
-        // 환승: ↔ + 노선/번호
-        row2='<div style="height:18px;display:flex;align-items:center;justify-content:center;gap:2px;">'
+        row2='<div style="height:18px;display:flex;align-items:center;justify-content:center;">'
           +'<span style="font-size:6.5px;font-weight:800;color:#fff;background:'+(pt.nextCol||'#0a84ff')
           +';border-radius:4px;padding:1px 4px;white-space:nowrap;letter-spacing:.2px;">↔ '+_ltEsc(pt.nextLabel)+'</span>'
           +'</div>';
@@ -2559,31 +2546,25 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
         row2='<div style="height:18px;"></div>';
       }
     } else if(pt.isF){
-      // 전체 첫 탑승역: 노선/번호 라벨 표시
+      // 첫 탑승역: 노선/번호 라벨
       row2='<div style="height:18px;line-height:18px;font-size:7px;font-weight:700;color:'+pt.col+';text-align:center;overflow:hidden;width:100%;">'+_ltEsc(pt.lineLabel||pt.lineNm)+'</div>';
     } else if(pt.ni===0){
-      // 구간 첫역: 직전 stn과 노선 다른지 확인 (도보 없는 직접 환승)
-      var _prevPt = (pi>0)?pts[pi-1]:null;
-      var _prevWasWalk = _prevPt && _prevPt.type==='walk';
+      var _prevPt=(pi>0)?pts[pi-1]:null;
+      var _prevWasWalk=_prevPt&&_prevPt.type==='walk';
       var _prevLn='';
-      for(var _pli=pi-1;_pli>=0;_pli--){
-        if(pts[_pli].type==='stn'){_prevLn=pts[_pli].lineNm||'';break;}
-      }
+      for(var _pli=pi-1;_pli>=0;_pli--){ if(pts[_pli].type==='stn'){_prevLn=pts[_pli].lineNm||'';break;} }
       if(!_prevWasWalk && _prevLn && _prevLn!==pt.lineNm){
-        // 도보 없는 직접 환승: ↔환승 + 노선라벨
+        // 도보 없는 직접 환승: ↔ + 노선라벨
         row2='<div style="height:18px;display:flex;align-items:center;justify-content:center;">'
           +'<span style="font-size:6.5px;font-weight:800;color:#fff;background:'+pt.col
           +';border-radius:4px;padding:1px 4px;white-space:nowrap;letter-spacing:.2px;">↔ '+_ltEsc(pt.lineLabel||pt.lineNm)+'</span>'
           +'</div>';
       } else if(_prevWasWalk){
-        // 도보 후 첫역: 도보 노드에 이미 환승/노선 배지를 표시한 경우 중복 방지
-        // 단, 도보가 "첫 진입 도보"(앞에 교통수단 없음)였다면 도보엔 배지가 없으므로 여기서 노선라벨 표시
-        var _walkHadTransitBefore = pts.slice(0,pi-1).some(function(p){return p.type==='stn';});
+        // 도보 후 첫역: 도보가 환승도보였으면 중복방지(빈칸), 첫진입도보였으면 노선라벨
+        var _walkHadTransitBefore=pts.slice(0,pi-1).some(function(p){return p.type==='stn';});
         if(_walkHadTransitBefore){
-          // 도보가 환승 도보 → 이미 배지 표시됨 → 빈칸
           row2='<div style="height:18px;"></div>';
         } else {
-          // 첫 진입 도보 → 여기서 노선라벨 표시
           row2='<div style="height:18px;line-height:18px;font-size:7px;font-weight:700;color:'+pt.col+';text-align:center;overflow:hidden;width:100%;">'+_ltEsc(pt.lineLabel||pt.lineNm)+'</div>';
         }
       } else {
@@ -2596,41 +2577,39 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
     // 행3: axis (선 + dot)
     // 선: 왼쪽 50% + 오른쪽 50%, z-index:1
     // dot: 중앙, z-index:3
-    var lColor, rColor;
+    // ── 색상 규칙 (순차 계산: lColor=이전pt.rColor 로 완벽 연속) ──
+    //   stn.rColor  = 자신의 구간색
+    //   walk.rColor = 회색(#8e8e93)
+    //   첫 노드의 lColor = 회색
+    var lColor = (pi>0) ? pts[pi-1]._rColor : '#8e8e93';
+    var rColor;
     if(isWalk){
-      // 도보: 왼쪽=이전구간색, 오른쪽=다음구간색
-      lColor=pt.pC||'#8e8e93'; rColor=pt.nC||'#8e8e93';
+      rColor = '#8e8e93'; // 도보 구간은 회색
     } else {
-      rColor = pt.col;  // 오른쪽은 항상 현재 구간 색
-      if(pt.isF) {
-        // 출발역: 왼쪽선 회색 (출발지에서 오는 선)
-        lColor = '#8e8e93';
-      } else if(pt.ni === 0) {
-        // 구간 첫역: 이전 pts에 walk가 있으면 walk의 nC 사용 (색상 연속성)
-        var prevWalk = null;
-        for(var _pw=pi-1;_pw>=0;_pw--){
-          if(pts[_pw].type==='walk'){prevWalk=pts[_pw];break;}
-          if(pts[_pw].type==='stn') break;
-        }
-        lColor = prevWalk ? (prevWalk.nC||pt.col) : (pt.lC||pt.col);
-      } else {
-        // 구간 중간/마지막 역: 양쪽 모두 현재 구간 색
-        lColor = pt.col;
-      }
+      rColor = pt.col;
     }
+    pt._rColor = rColor; // 다음 노드 lColor 계산용 저장
 
-    // 선은 항상 그림 (dot z-index:3이 위에 가림) - isF/isL 구분 없음
-    var leftLine  = '<div style="position:absolute;top:12px;left:0;width:50%;height:3px;background:'+lColor+';z-index:1;"></div>';
-    var rightLine = (pt.isL&&!isWalk) ? '' : '<div style="position:absolute;top:12px;left:50%;width:50%;height:3px;background:'+rColor+';z-index:1;"></div>';
+    // 진짜 출발/도착 판정 (도보 유무 고려)
+    var hasWalkBefore = pts.slice(0,pi).some(function(p){return p.type==='walk';});
+    var hasWalkAfter  = pts.slice(pi+1).some(function(p){return p.type==='walk';});
+    var isRealFirst = !isWalk && pt.isF && !hasWalkBefore;
+    var isRealLast  = !isWalk && pt.isL && !hasWalkAfter;
+
+    // 선은 항상 그림. 단, 진짜 출발점 왼쪽 / 진짜 도착점 오른쪽만 생략
+    var drawLeft  = !isRealFirst;
+    var drawRight = !isRealLast;
+    var leftLine  = drawLeft
+      ? '<div style="position:absolute;top:12px;left:0;width:50%;height:3px;background:'+lColor+';z-index:1;"></div>'
+      : '';
+    var rightLine = drawRight
+      ? '<div style="position:absolute;top:12px;left:50%;width:50%;height:3px;background:'+rColor+';z-index:1;"></div>'
+      : '';
 
     var dot='';
     if(!isWalk){
       var dSz=12,dTop=7,dBd=3;
-      if(pt.isF||pt.isL){ dSz=14;dTop=6; }
-      // 앞에 도보가 있으면 진짜 출발역 아님 → 일반 dot
-      var hasWalkBefore = pts.slice(0,pi).some(function(p){return p.type==='walk';});
-      var isRealFirst = pt.isF && !hasWalkBefore;
-      var isRealLast  = pt.isL;
+      if(isRealFirst||isRealLast){ dSz=14;dTop=6; }
       var dBg=isRealFirst?'var(--start-dot)':isRealLast?'var(--end-dot)':'var(--card)';
       var dBr=isRealFirst?'var(--start-dot)':isRealLast?'var(--end-dot)':pt.col;
       dot='<div style="position:absolute;width:'+dSz+'px;height:'+dSz+'px;border-radius:50%;'
@@ -2641,7 +2620,8 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
     var gpsId=isWalk?'':'tnode_'+ni2;
     var walkCenter = isWalk
       ? '<div style="position:absolute;top:10px;left:50%;transform:translateX(-50%);'
-        +'width:6px;height:6px;border-radius:50%;background:#8e8e93;z-index:2;"></div>'
+        +'width:6px;height:6px;border-radius:50%;'
+        +'background:linear-gradient(90deg,'+lColor+','+rColor+');z-index:2;"></div>'
       : '';
     var row3='<div style="position:relative;width:100%;height:26px;overflow:visible;">'
       +leftLine+rightLine+walkCenter+dot+'</div>';
