@@ -3178,15 +3178,25 @@ function _parseODsayAllOptions(odsayData) {
     less: lessXfer[0] || paths[0],
     sub:  subFirst   || paths[0],
     bus:  busFirst   || paths[0],
-    all:  paths
+    all:  paths,
+    count: paths.length
   };
 }
 
 // 경로 옵션 탭 선택
 function selectRouteOption(type) {
   if(!_allRouteResults) return;
-  var path = _allRouteResults[type] || _allRouteResults.fast;
-  var data = { routes: [_convertSinglePathToRoute(path)] };
+  // 해당 타입 경로가 없으면 fast(=항상 존재)로 폴백
+  var path = _allRouteResults[type] || _allRouteResults.fast || (_allRouteResults.all && _allRouteResults.all[0]);
+  if(!path) { toast('경로를 찾을 수 없습니다.'); return; }
+  var routeObj = _convertSinglePathToRoute(path);
+  // 변환 결과가 비었으면 첫 경로로 재시도
+  if(!routeObj || !routeObj.sections || !routeObj.sections.length) {
+    var fb = _allRouteResults.fast || (_allRouteResults.all && _allRouteResults.all[0]);
+    if(fb) routeObj = _convertSinglePathToRoute(fb);
+  }
+  if(!routeObj || !routeObj.sections || !routeObj.sections.length) { toast('경로를 찾을 수 없습니다.'); return; }
+  var data = { routes: [routeObj] };
   _renderTransitResultCard(data, _transitResultStart, _transitResultDest, 'odsay_' + type);
 
   // 탭 UI 업데이트
@@ -4643,8 +4653,8 @@ window.addEventListener('unhandledrejection', function(e) {
 
 
   <!-- ══ 세부경로 팝업 ══ -->
-  <div id="transitDetailModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:10001;align-items:flex-end;justify-content:center;" onclick="if(event.target===this)closeTransitDetail()">
-    <div id="transitDetailSheet" style="background:var(--card);border-radius:20px 20px 0 0;width:100%;max-width:520px;height:88vh;height:88dvh;max-height:88vh;max-height:88dvh;display:flex;flex-direction:column;overflow:hidden;transition:transform .25s ease;will-change:transform;">
+  <div id="transitDetailModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.82);z-index:10001;align-items:flex-end;justify-content:center;" onclick="if(event.target===this)closeTransitDetail()">
+    <div id="transitDetailSheet" style="background:var(--card);border-radius:20px 20px 0 0;width:100%;max-width:520px;height:82vh;height:82dvh;max-height:82vh;max-height:82dvh;display:flex;flex-direction:column;overflow:hidden;transition:transform .25s ease;will-change:transform;margin-bottom:calc(56px + env(safe-area-inset-bottom,0px));">
       <!-- 핸들 + 헤더 (드래그 영역) -->
       <div id="transitDetailHandle" style="padding:10px 18px 0;flex-shrink:0;touch-action:none;cursor:grab;">
         <div style="width:40px;height:5px;background:#5a5a5e;border-radius:3px;margin:0 auto 12px;"></div>
@@ -4661,8 +4671,8 @@ window.addEventListener('unhandledrejection', function(e) {
 
       <!-- 구간 목록 스크롤 -->
       <div id="transitDetailSections" style="flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 0 8px;min-height:0;"></div>
-      <!-- 외부 지도 버튼 — 항상 보이도록 flex-shrink:0 + 넉넉한 하단 여백 -->
-      <div style="display:flex;gap:8px;padding:12px 14px;padding-bottom:calc(18px + env(safe-area-inset-bottom,0px));flex-shrink:0;border-top:1px solid var(--border);background:var(--card);position:relative;z-index:2;">
+      <!-- 외부 지도 버튼 — 시트가 탭바 위에 있으므로 일반 패딩 -->
+      <div style="display:flex;gap:8px;padding:12px 14px 16px;flex-shrink:0;border-top:1px solid var(--border);background:var(--card);position:relative;z-index:2;">
         <button onclick="openKakaoNavFromResult()" style="flex:1;padding:14px;border:none;border-radius:12px;background:#FEE500;color:#3A1D1D;font-size:13px;font-weight:700;cursor:pointer;">🗺️ 카카오맵 길안내</button>
         <button onclick="openNaverNavFromResult()" style="flex:1;padding:14px;border:none;border-radius:12px;background:#03C75A;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">🗺️ 네이버지도</button>
       </div>
