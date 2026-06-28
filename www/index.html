@@ -340,17 +340,17 @@ header h1 em{color:var(--gold);font-style:normal;}
 .htl-track{display:inline-flex;align-items:flex-start;min-width:100%;padding:0 14px;}
 /* ── 복합경로 전용 트랙 ── */
 #transitHtlTrack{display:inline-flex;align-items:flex-start;min-width:100%;padding:0 8px;gap:0;}
-#transitHtlTrack .htl-stn{width:68px;flex-shrink:0;}
+#transitHtlTrack .htl-stn{width:64px;flex-shrink:0;}
+#transitHtlTrack .htl-walk-node{width:64px !important;}
 #transitResultCard{display:flex;flex-direction:column;}
 #routeOptionTabs{display:flex !important;gap:6px;}
 #routeOptionTabs button{transition:all .15s;}
 #transitResultHeader{display:flex;align-items:baseline;gap:6px;flex:1;min-width:0;overflow:hidden;}
 #transitHtlTrack .htl-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;height:30px;font-size:10px;line-height:15px;padding:0 2px;display:block;text-align:center;max-width:68px;}
 #transitHtlTrack .htl-line{font-size:7.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-#transitHtlTrack .htl-walk-node{width:56px !important;}
-/* 연결선: overflow visible로 다음 노드까지 연장 */
+/* 연결선 overflow visible */
 #transitHtlTrack .htl-stn .htl-axis{overflow:visible;}
-#transitHtlTrack{overflow-x:auto;overflow-y:visible;}
+#transitHtlTrack .htl-axis{overflow:visible;}
 /* ── 복합경로 GPS 현재위치 ── */
 /* 현재 위치 역: 금색 dot + 이름 강조 */
 #transitHtlTrack .htl-gps-here .htl-dot{
@@ -388,14 +388,14 @@ header h1 em{color:var(--gold);font-style:normal;}
 #transitLocBar .loc-cur{color:#ffd60a;font-weight:700;}
 #transitLocBar .loc-next{color:var(--text);font-weight:600;}
 /* ── 역 셀: 고정폭 column ── */
-.htl-stn{display:flex;flex-direction:column;align-items:center;flex-shrink:0;width:54px;}
+.htl-stn{display:flex;flex-direction:column;align-items:center;flex-shrink:0;width:54px;overflow:visible;}
 /* 역명: 고정 높이 */
 .htl-name{font-size:10px;font-weight:600;color:var(--text);text-align:center;height:28px;display:flex;align-items:flex-end;justify-content:center;line-height:1.2;word-break:keep-all;white-space:nowrap;padding:0 2px;}
 /* 호선 배지: 모든 역 완전 동일 높이 18px */
 .htl-line{font-size:8px;font-weight:700;text-align:center;width:100%;height:18px;line-height:18px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .htl-line.htl-xfer{border:1px solid;border-radius:5px;padding:0 3px;height:18px;line-height:16px;font-size:7.5px;display:block;white-space:nowrap;box-sizing:border-box;}
 /* ── axis: 라인+dot 영역. height 고정 26px ── */
-.htl-axis{position:relative;width:100%;height:26px;flex-shrink:0;}
+.htl-axis{position:relative;width:100%;height:26px;flex-shrink:0;overflow:visible;}
 /* 라인: top 고정 = (26-3)/2 = 11.5 → 12px */
 .htl-line-seg{position:absolute;top:12px;height:3px;z-index:0;min-width:0;}
 /* dot: 크기 12px, position:absolute로 정중앙 고정 */
@@ -2479,9 +2479,9 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
       tHtml+='<div class="htl-stn htl-walk-node" style="--line-color:#8e8e93;">'
         +'<div class="htl-name" style="font-size:9px;color:var(--sub);text-align:center;line-height:15px;">도보</div>'
         +'<div class="htl-axis">'
-          +'<div class="htl-line-seg" style="left:0;width:50%;top:12px;right:auto;background:'+pC+';"></div>'
+          +'<div class="htl-line-seg" style="left:-32px;width:calc(50% + 32px);top:12px;right:auto;background:'+pC+';"></div>'
           +'<span style="position:absolute;top:2px;left:50%;transform:translateX(-50%);font-size:12px;z-index:2;line-height:1;">🚶‍➡️</span>'
-          +'<div class="htl-line-seg" style="left:50%;width:50%;top:12px;right:auto;background:'+nC+';"></div>'
+          +'<div class="htl-line-seg" style="left:50%;width:calc(50% + 32px);top:12px;right:auto;background:'+nC+';"></div>'
         +'</div>'
         +'<div class="htl-time">'+wLabel+'</div>'
         +'</div>';
@@ -2526,9 +2526,9 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
         +'<div class="htl-name">'+_ltEsc(shortNm)+'</div>'
         +badge
         +'<div class="htl-axis">'
-          +(!isF?'<div class="htl-line-seg" style="left:0;width:50%;top:12px;right:auto;background:'+leftCol+';"></div>':'')
+          +(!isF?'<div class="htl-line-seg" style="left:-32px;width:calc(50% + 32px);top:12px;right:auto;background:'+leftCol+';"></div>':'')
           +dot
-          +(!isL?'<div class="htl-line-seg" style="left:50%;width:50%;top:12px;right:auto;background:'+col+';"></div>':'')
+          +(!isL?'<div class="htl-line-seg" style="left:50%;width:calc(50% + 32px);top:12px;right:auto;background:'+col+';"></div>':'')
         +'</div>'
         +'<div class="htl-time">'+_ltEsc(arrT)+'</div>'
         +'</div>';
@@ -3247,9 +3247,9 @@ function _showMapRouteSheet(startStn, destStn) {
         + '<div class="htl-name" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;height:28px;line-height:28px;font-size:9px;display:block;text-align:center;padding:0 2px;">'+shortNm.replace(/</g,'&lt;')+'</div>'
         + badge
         + '<div class="htl-axis">'
-          + (!isF ? '<div class="htl-line-seg" style="left:0;width:50%;right:auto;top:12px;background:'+leftCol+';"></div>' : '')
+          + (!isF ? '<div class="htl-line-seg" style="left:-32px;width:calc(50% + 32px);right:auto;top:12px;background:'+leftCol+';"></div>' : '')
           + dot
-          + (!isL ? '<div class="htl-line-seg" style="left:50%;width:50%;right:auto;top:12px;background:'+rightCol+';"></div>' : '')
+          + (!isL ? '<div class="htl-line-seg" style="left:50%;width:calc(50% + 32px);right:auto;top:12px;background:'+rightCol+';"></div>' : '')
         + '</div>'
         + '<div class="htl-time" style="font-size:9px;color:var(--sub);text-align:center;height:16px;margin-top:3px;white-space:nowrap;">'+arrT+'</div>'
         + '</div>';
@@ -22010,8 +22010,8 @@ function renderHorizontalTimeline(){
     var leftCol  = isPassed ? passedCol2 : prevCol;
     var rightCol = isPassed ? passedCol2 : col;
     var lineSeg = '';
-    if(!isFirst) lineSeg += '<div class="htl-line-seg" style="left:0;width:50%;right:auto;top:12px;background:'+leftCol+';"></div>';
-    if(!isLast)  lineSeg += '<div class="htl-line-seg" style="left:50%;width:50%;right:auto;top:12px;background:'+rightCol+';"></div>';
+    if(!isFirst) lineSeg += '<div class="htl-line-seg" style="left:-32px;width:calc(50% + 32px);right:auto;top:12px;background:'+leftCol+';"></div>';
+    if(!isLast)  lineSeg += '<div class="htl-line-seg" style="left:50%;width:calc(50% + 32px);right:auto;top:12px;background:'+rightCol+';"></div>';
 
     html += '<div class="htl-stn'+(isCur?' htl-current':'')+(isPassed?' htl-passed':'')+(isXfer?' htl-is-xfer':'')+'" style="--line-color:'+col+';">'
       + '<div class="htl-name">'+_ltEsc(cleanPath[i])+'</div>'
