@@ -369,11 +369,14 @@ header h1 em{color:var(--gold);font-style:normal;}
 /* 현재 위치 기차 이모지 */
 /* GPS 현위치 dot 깜박임 */
 @keyframes htl-gps-blink {
-  0%,100%{box-shadow:0 0 0 3px rgba(255,214,10,.7),0 0 10px rgba(255,214,10,.5);opacity:1;}
-  50%{box-shadow:0 0 0 8px rgba(255,214,10,.1),0 0 18px rgba(255,214,10,.1);opacity:.7;}
+  0%  { box-shadow:0 0 0 0 rgba(10,132,255,.85), 0 0 6px rgba(10,132,255,.6); opacity:1; }
+  50% { box-shadow:0 0 0 6px rgba(10,132,255,0), 0 0 6px rgba(10,132,255,.3); opacity:.9; }
+  100%{ box-shadow:0 0 0 0 rgba(10,132,255,.85), 0 0 6px rgba(10,132,255,.6); opacity:1; }
 }
-.htl-gps-blink{animation:htl-gps-blink 1.2s ease-in-out infinite;}
-@keyframes gps-pulse{0%,100%{box-shadow:0 0 0 3px rgba(255,214,10,.4);}50%{box-shadow:0 0 0 8px rgba(255,214,10,.08);}}
+.htl-gps-blink{animation:htl-gps-blink 1.3s ease-in-out infinite;}
+@keyframes htl-gps-ring{ 0%{transform:translateX(-50%) scale(.5);opacity:.85;} 100%{transform:translateX(-50%) scale(2.4);opacity:0;} }
+.htl-gps-ring{animation:htl-gps-ring 1.4s ease-out infinite;}
+@keyframes gps-pulse{0%,100%{box-shadow:0 0 0 3px rgba(10,132,255,.4);}50%{box-shadow:0 0 0 8px rgba(10,132,255,.08);}}
 @keyframes train-bounce{from{top:-18px;}to{top:-14px;}}
 /* GPS 상태바 */
 #transitGpsStatus{display:none !important;}
@@ -2643,22 +2646,30 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
 
   if(typeof _startTransitGpsTracking==='function') _startTransitGpsTracking(nodes);
 
-  // GPS 마커 dot 초기 생성 (첫 번째 노드에 숨김 상태로)
-  var existGps = document.getElementById('htl-gps-marker-dot');
-  if(existGps) existGps.remove();
+  // ── GPS 마커 초기화 (단일 dot + ring 구조) ──
+  document.querySelectorAll('#htl-gps-marker-dot, #htl-gps-marker-ring, .htl-gps-blink, .htl-gps-ring').forEach(function(e){e.remove();});
+  window._htlGpsDot = null; window._htlGpsRing = null;
   if(nodes.length > 0) {
     var firstEl = document.getElementById('tnode_0');
     if(firstEl) {
       var axisEl = firstEl.querySelector('div[style*="position:relative"]');
       if(axisEl) {
+        var gpsRing = document.createElement('div');
+        gpsRing.id = 'htl-gps-marker-ring';
+        gpsRing.className = 'htl-gps-ring';
+        gpsRing.style.cssText = 'display:none;position:absolute;width:14px;height:14px;'
+          + 'border-radius:50%;border:2px solid rgba(10,132,255,.7);'
+          + 'top:6px;left:50%;z-index:9;pointer-events:none;';
         var gpsDot = document.createElement('div');
         gpsDot.id = 'htl-gps-marker-dot';
-        gpsDot.style.cssText = 'display:none;position:absolute;width:14px;height:14px;'
-          + 'border-radius:50%;background:#ffd60a;border:2px solid #fff;'
-          + 'top:6px;left:50%;transform:translateX(-50%);z-index:10;'
-          + 'box-shadow:0 0 0 4px rgba(255,214,10,.35);';
         gpsDot.className = 'htl-gps-blink';
+        gpsDot.style.cssText = 'display:none;position:absolute;width:14px;height:14px;'
+          + 'border-radius:50%;background:#0a84ff;border:2px solid #fff;'
+          + 'top:6px;left:50%;transform:translateX(-50%);z-index:10;pointer-events:none;';
+        axisEl.appendChild(gpsRing);
         axisEl.appendChild(gpsDot);
+        window._htlGpsDot = gpsDot;
+        window._htlGpsRing = gpsRing;
       }
     }
   }
@@ -3638,6 +3649,8 @@ function _updateTransitGps() {
   var lat = null, lng = null;
   if(typeof S !== 'undefined' && S.lastGPSFix && S.lastGPSFix.lat) {
     lat = S.lastGPSFix.lat; lng = S.lastGPSFix.lng;
+  } else if(typeof window._lastGPSLat !== 'undefined' && window._lastGPSLat) {
+    lat = window._lastGPSLat; lng = window._lastGPSLng;
   } else if(typeof _lastGPSLat !== 'undefined' && _lastGPSLat) {
     lat = _lastGPSLat; lng = _lastGPSLng;
   } else if(typeof S !== 'undefined' && S.lastPos && S.lastPos.lat) {
@@ -3709,56 +3722,17 @@ function _updateTransitGps() {
     return;
   }
 
-  // GPS 현위치 dot 이동
-  // GPS 마커 dot 현재 위치 노드로 이동
-  var gpsDot2 = document.getElementById('htl-gps-marker-dot');
-  if(gpsDot2) {
-    var targetEl = best.el || document.getElementById('tnode_'+bestIdx);
-    if(targetEl) {
-      var targetAxis = targetEl.querySelector('div[style*="position:relative"]');
-      if(targetAxis && gpsDot2.parentNode !== targetAxis) {
-        targetAxis.appendChild(gpsDot2);
-      }
-      gpsDot2.style.display = 'block';
-    }
-  }
-
-  var gpsDot = document.getElementById('htl-gps-dot');
-  if(gpsDot) {
-    // 현재 best 노드에서 dot 제거하고 새 위치에 표시
-    var allDots = document.querySelectorAll('.htl-gps-blink');
-    allDots.forEach(function(d){ d.style.display='none'; });
-    var bestEl = best.el || document.getElementById('tnode_'+bestIdx);
-    if(bestEl) {
-      var existDot = bestEl.querySelector('.htl-gps-blink');
-      if(!existDot) {
-        // 새 dot 생성
-        var nd = document.createElement('div');
-        nd.className = 'htl-gps-blink';
-        nd.style.cssText = 'position:absolute;top:6px;left:50%;transform:translateX(-50%);'
-          +'width:14px;height:14px;border-radius:50%;background:#ffd60a;'
-          +'border:2px solid #fff;z-index:10;';
-        var axis = bestEl.querySelector('div[style*="position:relative"]');
-        if(axis) axis.appendChild(nd);
-        else bestEl.appendChild(nd);
-      } else {
-        existDot.style.display = 'block';
-      }
-    }
-  }
-
-  // ── GPS 현위치 깜박임 dot ──
-  document.querySelectorAll('.htl-gps-blink').forEach(function(d){d.style.display='none';});
-  var _bestEl=(best&&best.el)?best.el:document.getElementById('tnode_'+bestIdx);
-  if(_bestEl){
-    var _axis=_bestEl.querySelector('div[style*="position:relative"]');
-    if(_axis){
-      var _gd=_axis.querySelector('.htl-gps-blink');
-      if(!_gd){_gd=document.createElement('div');_gd.className='htl-gps-blink';
-        _gd.style.cssText='position:absolute;width:14px;height:14px;border-radius:50%;'
-          +'background:#ffd60a;border:2px solid #fff;top:6px;left:50%;'
-          +'transform:translateX(-50%);z-index:10;';_axis.appendChild(_gd);}
-      _gd.style.display='block';
+  // ── GPS 마커(dot+ring) 단일 이동 ──
+  var _gpsDot  = window._htlGpsDot  || document.getElementById('htl-gps-marker-dot');
+  var _gpsRing = window._htlGpsRing || document.getElementById('htl-gps-marker-ring');
+  var _targetEl = best.el || document.getElementById('tnode_'+bestIdx);
+  if(_gpsDot && _targetEl) {
+    var _axis = _targetEl.querySelector('div[style*="position:relative"]');
+    if(_axis) {
+      if(_gpsDot.parentNode !== _axis)  _axis.appendChild(_gpsDot);
+      if(_gpsRing && _gpsRing.parentNode !== _axis) _axis.appendChild(_gpsRing);
+      _gpsDot.style.left='50%'; _gpsDot.style.transform='translateX(-50%)'; _gpsDot.style.display='block';
+      if(_gpsRing){ _gpsRing.style.left='50%'; _gpsRing.style.display='block'; }
     }
   }
 
@@ -4670,7 +4644,7 @@ window.addEventListener('unhandledrejection', function(e) {
 
   <!-- ══ 세부경로 팝업 ══ -->
   <div id="transitDetailModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:10001;align-items:flex-end;justify-content:center;" onclick="if(event.target===this)closeTransitDetail()">
-    <div id="transitDetailSheet" style="background:var(--card);border-radius:20px 20px 0 0;width:100%;max-width:520px;height:88vh;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;transition:transform .25s ease;will-change:transform;">
+    <div id="transitDetailSheet" style="background:var(--card);border-radius:20px 20px 0 0;width:100%;max-width:520px;height:88vh;height:88dvh;max-height:88vh;max-height:88dvh;display:flex;flex-direction:column;overflow:hidden;transition:transform .25s ease;will-change:transform;">
       <!-- 핸들 + 헤더 (드래그 영역) -->
       <div id="transitDetailHandle" style="padding:10px 18px 0;flex-shrink:0;touch-action:none;cursor:grab;">
         <div style="width:40px;height:5px;background:#5a5a5e;border-radius:3px;margin:0 auto 12px;"></div>
@@ -4687,10 +4661,10 @@ window.addEventListener('unhandledrejection', function(e) {
 
       <!-- 구간 목록 스크롤 -->
       <div id="transitDetailSections" style="flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 0 8px;min-height:0;"></div>
-      <!-- 외부 지도 버튼 — flex-shrink:0 + safe-area padding -->
-      <div style="display:flex;gap:8px;padding:12px 14px;padding-bottom:max(16px,env(safe-area-inset-bottom,16px));flex-shrink:0;border-top:1px solid var(--border);background:var(--card);">
-        <button onclick="openKakaoNavFromResult()" style="flex:1;padding:13px;border:none;border-radius:12px;background:#FEE500;color:#3A1D1D;font-size:13px;font-weight:700;cursor:pointer;">🗺️ 카카오맵 길안내</button>
-        <button onclick="openNaverNavFromResult()" style="flex:1;padding:13px;border:none;border-radius:12px;background:#03C75A;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">🗺️ 네이버지도</button>
+      <!-- 외부 지도 버튼 — 항상 보이도록 flex-shrink:0 + 넉넉한 하단 여백 -->
+      <div style="display:flex;gap:8px;padding:12px 14px;padding-bottom:calc(18px + env(safe-area-inset-bottom,0px));flex-shrink:0;border-top:1px solid var(--border);background:var(--card);position:relative;z-index:2;">
+        <button onclick="openKakaoNavFromResult()" style="flex:1;padding:14px;border:none;border-radius:12px;background:#FEE500;color:#3A1D1D;font-size:13px;font-weight:700;cursor:pointer;">🗺️ 카카오맵 길안내</button>
+        <button onclick="openNaverNavFromResult()" style="flex:1;padding:14px;border:none;border-radius:12px;background:#03C75A;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">🗺️ 네이버지도</button>
       </div>
     </div>
   </div>
@@ -11756,6 +11730,10 @@ function triggerGPS(){
         return;
       }
       console.log('[GPS] lat='+lat+' lng='+lng+' acc='+Math.round(acc)+'m');
+
+      // 전역 GPS 좌표 저장 (세부경로 현위치 마커가 사용)
+      window._lastGPSLat = lat; window._lastGPSLng = lng;
+      if(typeof S !== 'undefined') S.lastGPSFix = { lat: lat, lng: lng, ts: Date.now() };
 
       /* 2km 이내 지하철역 후보 수집 */
       var stnCandidates = nearestMulti(lat, lng, 2000);
@@ -20624,7 +20602,9 @@ function _onGPSUpdate(pos) {
     // 이전 좌표 갱신
     _trackingEngine.lastLat = lat;
     _trackingEngine.lastLng = lng;
-    S.lastGPSFix = Date.now();
+    // GPS 좌표 객체 유지 (마커용) + 타임스탬프는 별도 보관
+    S.lastGPSFix = { lat: lat, lng: lng, ts: Date.now() };
+    S.lastGPSFixTs = Date.now();
     S.lastMoveDistM = distFromLast;
 
     // HUD 거리 표시
