@@ -2501,39 +2501,44 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
   });
 
   // ── HTML 생성 ──
-  // 모든 노드: 동일 너비(64px) + 동일 5행 구조
-  // 행1: 역명(30px high)
-  // 행2: 노선배지(18px high)  
-  // 행3: axis - 선+dot (26px high, overflow:visible)
-  // 행4: 시간(16px high)
-  var W=64;
-  // ── 각 pt에 lColor/rColor 사전 계산 (완벽 연속성 보장) ──
-  // rColor: stn=자신의 구간색, walk=다음stn의 구간색
-  // lColor: 항상 이전pt의 rColor (첫 노드만 회색)
+  // 색상 규칙:
+  //   stn.rColor = 자신의 구간색 (오른쪽으로 뻗는 선)
+  //   walk.rColor = 다음 stn의 구간색
+  //   모든 lColor = 이전 pt의 rColor (완벽 연속성)
+  //
+  // 단, "도보 직후 첫 역"의 lColor는 도보 선(회색)이어야 함:
+  //   walk.rColor = '#8e8e93' (회색) → 다음 stn의 lColor도 회색
+  //   즉 도보가 낀 경계에서 stn 첫역의 왼쪽선은 회색으로 표현
+  //
+  // 환승 배지 조건: seg이 바뀌는 첫역(ni===0, !isF) + 직전 non-walk역과 노선명 다름
+  //   도보가 낀 환승(지하철→도보→지하철)은 도보 노드 자체가 시각적 구분이므로 배지 불필요
+  //   도보 없는 직접 환승(지하철→지하철)만 배지 표시
+
+  // 1단계: rColor 계산
   pts.forEach(function(pt,pi){
     if(pt.type==='stn'){
       pt.rColor = pt.col;
     } else {
-      var nextStn=null;
-      for(var _n=pi+1;_n<pts.length;_n++){ if(pts[_n].type==='stn'){nextStn=pts[_n];break;} }
-      pt.rColor = nextStn ? nextStn.col : '#8e8e93';
+      // walk: 오른쪽은 회색 (도보 끝나면 다음역 왼쪽도 회색으로 시작)
+      pt.rColor = '#8e8e93';
     }
   });
+
+  // 2단계: lColor = 이전 pt의 rColor
   pts.forEach(function(pt,pi){
     pt.lColor = (pi===0) ? '#8e8e93' : pts[pi-1].rColor;
   });
 
-  // isL 판정 재정의: 뒤에 walk가 오는 stn은 "진짜 마지막"이 아님
+  // 3단계: isRealLast 판정 (뒤에 walk가 있으면 진짜 마지막 아님)
   pts.forEach(function(pt,pi){
-    if(pt.type!=='stn') return;
+    if(pt.type!=='stn'){ return; }
     if(pt.isL){
       var hasWalkAfter = pts.slice(pi+1).some(function(p){return p.type==='walk';});
       pt.isRealLast = !hasWalkAfter;
-    } else {
-      pt.isRealLast = false;
-    }
+    } else { pt.isRealLast = false; }
   });
 
+  var W=64;
   var html='';
   var nodes=[];
   var ni2=0;
@@ -2547,36 +2552,36 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
       ? '<div style="height:30px;display:flex;align-items:flex-end;justify-content:center;font-size:9px;color:var(--sub);padding-bottom:2px;">도보</div>'
       : '<div style="height:30px;display:flex;align-items:flex-end;justify-content:center;font-size:10px;font-weight:600;color:var(--text);text-align:center;overflow:hidden;width:100%;padding:0 2px;box-sizing:border-box;">'+_ltEsc(pt.nm)+'</div>';
 
-    // 행2: 환승배지 or 노선배지
-    // 환승: 직전 non-walk 역과 노선명이 다른 구간 첫역 (isF 제외)
+    // 행2: 환승배지 or 노선명 or 빈칸
+    // 환승 배지 조건: ni===0, !isF, 직전 stn과 노선 다름, 직전 pt가 walk가 아님
     var row2;
     if(isWalk){
       row2='<div style="height:18px;"></div>';
-    } else {
-      var isXfer = false;
-      if(pt.ni===0 && !pt.isF){
-        // 직전 stn의 노선명 찾기
-        var prevStnLn='';
-        for(var _pv=pi-1;_pv>=0;_pv--){
-          if(pts[_pv].type==='stn'){prevStnLn=pts[_pv].lineNm||'';break;}
-        }
-        isXfer = prevStnLn && prevStnLn!==pt.lineNm;
+    } else if(pt.ni===0 && !pt.isF){
+      // 직전 pt 확인
+      var prevPt = (pi>0) ? pts[pi-1] : null;
+      var prevIsWalk = prevPt && prevPt.type==='walk';
+      // 직전 stn 노선명 찾기
+      var prevStnLine='';
+      for(var _pv=pi-1;_pv>=0;_pv--){
+        if(pts[_pv].type==='stn'){prevStnLine=pts[_pv].lineNm||'';break;}
       }
-      if(isXfer){
-        // 환승 배지: "↔ 환승" 라벨
+      // 도보 없는 직접 환승이고 노선이 다를 때만 배지
+      var isDirectXfer = !prevIsWalk && prevStnLine && prevStnLine!==pt.lineNm;
+      if(isDirectXfer){
         row2='<div style="height:18px;display:flex;align-items:center;justify-content:center;">'
-          +'<span style="font-size:7px;font-weight:800;color:#fff;background:'+pt.col+';border-radius:4px;padding:1px 5px;white-space:nowrap;letter-spacing:.2px;">↔ 환승</span>'
+          +'<span style="font-size:7px;font-weight:800;color:#fff;background:'+pt.col
+          +';border-radius:4px;padding:1px 5px;white-space:nowrap;letter-spacing:.2px;">↔ 환승</span>'
           +'</div>';
-      } else if(pt.ni===0 && !pt.isF){
-        // 환승 아닌 구간 첫역: 노선명 표시
-        row2='<div style="height:18px;line-height:18px;font-size:7px;font-weight:700;color:'+pt.col+';text-align:center;overflow:hidden;width:100%;">'+_ltEsc(pt.lineNm)+'</div>';
       } else {
-        row2='<div style="height:18px;"></div>';
+        // 도보 후 첫역 or 같은노선 → 노선명 표시
+        row2='<div style="height:18px;line-height:18px;font-size:7px;font-weight:700;color:'+pt.col+';text-align:center;overflow:hidden;width:100%;">'+_ltEsc(pt.lineNm)+'</div>';
       }
+    } else {
+      row2='<div style="height:18px;"></div>';
     }
 
     // 행3: axis (선 + dot)
-    // isL이더라도 뒤에 walk가 있으면 rightLine 그림
     var drawRight = !isWalk && pt.isRealLast ? false : true;
     var leftLine  = '<div style="position:absolute;top:12px;left:0;width:50%;height:3px;background:'+lColor+';z-index:1;"></div>';
     var rightLine = drawRight
@@ -2586,9 +2591,9 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
     var dot='';
     if(!isWalk){
       var dSz=12,dTop=7,dBd=3;
-      var hasWalkBefore = pts.slice(0,pi).some(function(p){return p.type==='walk';});
-      var isRealFirst = pt.isF && !hasWalkBefore;
-      if(isRealFirst||pt.isRealLast){ dSz=14;dTop=6; }
+      var hasWalkBefore=pts.slice(0,pi).some(function(p){return p.type==='walk';});
+      var isRealFirst=pt.isF&&!hasWalkBefore;
+      if(isRealFirst||pt.isRealLast){dSz=14;dTop=6;}
       var dBg=isRealFirst?'var(--start-dot)':pt.isRealLast?'var(--end-dot)':'var(--card)';
       var dBr=isRealFirst?'var(--start-dot)':pt.isRealLast?'var(--end-dot)':pt.col;
       dot='<div style="position:absolute;width:'+dSz+'px;height:'+dSz+'px;border-radius:50%;'
@@ -2597,10 +2602,10 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
     }
 
     var gpsId=isWalk?'':'tnode_'+ni2;
+    // walk 노드 중앙 점: 회색 (도보 구간이므로)
     var walkCenter = isWalk
       ? '<div style="position:absolute;top:10px;left:50%;transform:translateX(-50%);'
-        +'width:6px;height:6px;border-radius:50%;'
-        +'background:linear-gradient(90deg,'+lColor+','+rColor+');z-index:2;"></div>'
+        +'width:6px;height:6px;border-radius:50%;background:#8e8e93;z-index:2;"></div>'
       : '';
     var row3='<div style="position:relative;width:100%;height:26px;overflow:visible;">'
       +leftLine+rightLine+walkCenter+dot+'</div>';
