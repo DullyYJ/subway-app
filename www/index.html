@@ -11483,39 +11483,44 @@ function renderRegionSvg(region) {
     arr.forEach(function(s, idx){
       var isXfer = stns.some(function(t){ return t.name===s.name && t.line!==s.line; });
       var dotSz = isXfer ? _DX : _DN;
+      var isFirst = (idx===0), isLast = (idx===arr.length-1);
 
       html += '<div onclick="window._regionStnClick(\'' + s.name + '\',\'' + s.line + '\')"'
         + ' style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;cursor:pointer;width:54px;">';
 
-      // ① 역명 (고정 높이 _NH, 하단 정렬)
-      html += '<div style="font-size:10px;color:#fff;font-weight:' + (isXfer?'800':'500') + ';'
+      // ① 역명 (고정 높이 _NH, 하단 정렬) — 테마 대응 색상
+      html += '<div style="font-size:10px;color:var(--text);font-weight:' + (isXfer?'800':'500') + ';'
         + 'text-align:center;height:' + _NH + 'px;display:flex;align-items:flex-end;'
         + 'justify-content:center;line-height:1.2;word-break:keep-all;padding-bottom:4px;">'
         + (isXfer ? '🔄' : '') + s.name + '</div>';
 
-      // ② 점
-      html += '<div style="width:' + dotSz + 'px;height:' + dotSz + 'px;'
-        + 'border-radius:50%;background:' + (isXfer ? '#fff' : col) + ';'
+      // ② 점 + 좌우 연결선 (한 행에 배치 → 직선 연결)
+      //    좌측선: 첫 역이 아니면 표시 / 우측선: 마지막 역이 아니면 표시
+      //    선은 셀 절반 너비(27px)로 깔아 인접 셀과 만나 끊김 없이 이어짐
+      html += '<div style="position:relative;width:54px;height:' + _DX + 'px;display:flex;align-items:center;justify-content:center;">';
+      // 좌측 연결선
+      if(!isFirst){
+        html += '<div style="position:absolute;left:0;top:50%;transform:translateY(-50%);width:28px;height:' + _LH + 'px;background:' + col + ';"></div>';
+      }
+      // 우측 연결선
+      if(!isLast){
+        html += '<div style="position:absolute;right:0;top:50%;transform:translateY(-50%);width:28px;height:' + _LH + 'px;background:' + col + ';"></div>';
+      }
+      // 점 (선 위에 겹쳐 그림)
+      html += '<div style="position:relative;z-index:2;width:' + dotSz + 'px;height:' + dotSz + 'px;'
+        + 'border-radius:50%;background:' + (isXfer ? 'var(--card)' : col) + ';'
         + 'border:' + (isXfer ? '4px' : '3px') + ' solid ' + col + ';'
-        + 'box-sizing:border-box;flex-shrink:0;"></div>';
-
+        + 'box-sizing:border-box;"></div>';
       html += '</div>';
 
-      // ③ 연결선 (마지막 역 제외) — margin-top으로 점 중앙에 정렬
-      if(idx < arr.length-1){
-        var nextXfer = stns.some(function(t){ return t.name===arr[idx+1].name && t.line!==arr[idx+1].line; });
-        var nextDot  = nextXfer ? _DX : _DN;
-        var mt = Math.round((_NH + dotSz/2 + _NH + nextDot/2) / 2) - Math.round(_LH/2);
-        html += '<div style="flex-shrink:0;width:20px;height:' + _LH + 'px;'
-          + 'background:' + col + ';margin-top:' + mt + 'px;align-self:flex-start;"></div>';
-      }
+      html += '</div>';
     });
     html += '</div></div></div>';
   });
 
   // 홈 검색 안내
   html += '<div style="padding:16px;background:var(--card);border-radius:12px;'
-    + 'border:1px solid #3a3a3c;text-align:center;color:#888;font-size:12px;line-height:1.8;">'
+    + 'border:1px solid var(--border);text-align:center;color:var(--sub);font-size:12px;line-height:1.8;">'
     + '💡 역명을 탭하거나 <span style="color:#f5a623;">홈 탭 검색창</span>에서 역명을 입력하면<br>'
     + '전국 최단 경로를 탐색할 수 있습니다.</div>';
 
