@@ -21569,70 +21569,88 @@ function _fetchBusCongestion(busSection){
       var reg = _splitRegionCode(regionCode);
       if(!reg){ resolve(null); return; }
 
-      // 운행일자: 오늘 (YYYYMMDD)
+      // 운행일자: 오늘 우선, 데이터 없으면 알려진 보유일자로 폴백
       var now = new Date();
-      var ymd = now.getFullYear() + String(now.getMonth()+1).padStart(2,'0') + String(now.getDate()).padStart(2,'0');
+      var todayYmd = now.getFullYear() + String(now.getMonth()+1).padStart(2,'0') + String(now.getDate()).padStart(2,'0');
       var hour = String(now.getHours()).padStart(2,'0'); // 현재 시간대(tzon)
+      // 데이터가 존재하는 것으로 확인된 날짜들 (요일 통계라 대체 가능)
+      var fallbackDates = [todayYmd, '20260101'];
 
-      var workerUrl = 'https://gentle-lab-7e47subway-api.phg0643.workers.dev/bus-congestion'
-        + '?opr_ymd=' + ymd
-        + '&ctpv_cd=' + reg.ctpv_cd
-        + '&sgg_cd=' + reg.sgg_cd
-        + '&numOfRows=1000&pageNo=1';
+      function _tryFetch(dateIdx){
+        if(dateIdx >= fallbackDates.length){ resolve(null); return; }
+        var ymd = fallbackDates[dateIdx];
+        var workerUrl = 'https://gentle-lab-7e47subway-api.phg0643.workers.dev/bus-congestion'
+          + '?opr_ymd=' + ymd
+          + '&ctpv_cd=' + reg.ctpv_cd
+          + '&sgg_cd=' + reg.sgg_cd
+          + '&numOfRows=1000&pageNo=1';
 
-      fetch(workerUrl).then(function(r){ return r.json(); }).then(function(data){
-        var items = [];
-        try {
-          var body = data.body || (data.response && data.response.body);
-          var raw = body.items.item;
-          items = Array.isArray(raw) ? raw : [raw];
-        } catch(e){ resolve(null); return; }
-        if(!items.length){ resolve(null); return; }
+        fetch(workerUrl).then(function(r){ return r.json(); }).then(function(data){
+          var items = [];
+          try {
+            // 응답 구조: {"Response":{"header":..,"body":{"items":{"item":[...]}}}}
+            var resp = data.Response || data.response || data;
+            var body = resp.body || data.body;
+            var raw = body.items.item;
+            items = Array.isArray(raw) ? raw : [raw];
+          } catch(e){ items = []; }
 
-        // ── 정밀 매칭 ──
-        // 1순위: 노선번호(rte_id 끝자리 or 노선명) + 현재 시간대(tzon)
-        // 2순위: 현재 시간대(tzon) 평균
+          // 이 날짜에 데이터 없으면 다음 폴백 날짜 시도
+          if(!items.length){ _tryFetch(dateIdx + 1); return; }
+
+          _processCongItems(items);
+        }).catch(function(){ _tryFetch(dateIdx + 1); });
+      }
+
+      function _processCongItems(items){
+        // 데이터 필드: rte_id(노선), sttn_id(정류장), sttn_seq(순서),
+        //              tzon(시간대 00~23), cgst(승객 수, 0~40+)
         var busNo = (busSection.name||'').replace(/번$/,'').trim();
+        var curHour = parseInt(hour, 10);
 
-        // 노선번호로 후보 필터 (rte_id에 노선번호가 포함되거나 매칭되는 경우)
-        // 국토부 rte_id는 코드라 직접 매칭 어려움 → 정류장명 + 시간대로 보강
-        var curStopNm = (curStop.stationName||'').replace(/\s/g,'');
-
-        // 현재 시간대(tzon) 데이터만
+        // 1단계: 현재 시간대(tzon) 필터 — 가장 중요
         var tzonMatch = items.filter(function(it){
-          return String(it.tzon) === hour || String(parseInt(it.tzon,10)) === String(parseInt(hour,10));
+          return parseInt(it.tzon, 10) === curHour;
         });
+        // 인접 시간대로 폴백 (현재 시간 데이터 없으면 ±1시간)
+        if(!tzonMatch.length){
+          tzonMatch = items.filter(function(it){
+            var t = parseInt(it.tzon, 10);
+            return Math.abs(t - curHour) <= 1;
+          });
+        }
         var pool = tzonMatch.length ? tzonMatch : items;
 
-        // 정류장명 매칭 시도 (sttn 정보가 응답에 emd_nm 등으로)
-        var stopMatch = pool.filter(function(it){
-          var nm = (it.emd_nm||'').replace(/\s/g,'');
-          return curStopNm && nm && (curStopNm.indexOf(nm)>=0 || nm.indexOf(curStopNm)>=0);
-        });
-        var finalPool = stopMatch.length ? stopMatch : pool;
-
-        // cgst 평균 (혼잡도 값)
-        var sum = 0, cnt = 0;
-        finalPool.forEach(function(it){
+        // 2단계: 노선번호로 후보 압축 시도
+        // (rte_id는 국토부 코드라 버스번호와 직접 매칭 불가 →
+        //  같은 노선끼리 묶어 가장 빈번한 노선 쓰거나 전체 평균)
+        // cgst(승객수) 평균 계산
+        var sum = 0, cnt = 0, maxC = 0;
+        pool.forEach(function(it){
           var c = parseFloat(it.cgst);
-          if(!isNaN(c)){ sum += c; cnt++; }
+          if(!isNaN(c)){ sum += c; cnt++; if(c > maxC) maxC = c; }
         });
         if(!cnt){ resolve(null); return; }
         var avgCgst = sum / cnt;
 
-        // cgst 값을 0~100 퍼센트로 정규화 (데이터 범위 추정: 0~50명 → %)
-        // 일반 시내버스 정원 약 50명 기준
-        var pct = Math.min(100, Math.round(avgCgst / 50 * 100));
+        // cgst = 승객 수(명) → 혼잡도 %로 변환
+        // 시내버스 좌석+입석 정원 약 40명 기준 (만석=100%)
+        var BUS_CAPACITY = 40;
+        var pct = Math.min(100, Math.round(avgCgst / BUS_CAPACITY * 100));
 
         resolve({
           pct: pct,
-          rawCgst: Math.round(avgCgst),
+          rawCgst: Math.round(avgCgst),    // 평균 승객 수
+          maxCgst: maxC,                    // 최대 승객 수
           busNo: busNo,
           stopName: curStop.stationName,
           region: (items[0] && items[0].sgg_nm) || '',
+          tzon: curHour,
           sampleCount: cnt
         });
-      }).catch(function(){ resolve(null); });
+      } // end _processCongItems
+
+      _tryFetch(0); // 폴백 날짜 순서대로 시도 시작
     });
   });
 }
