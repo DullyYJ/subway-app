@@ -539,30 +539,14 @@ async function callODsayTransit(slat, slng, elat, elng) {
   const url = 'https://api.odsay.com/v1/api/searchPubTransPathT' +
     '?SX=' + slng + '&SY=' + slat +
     '&EX=' + elng + '&EY=' + elat +
-    '&SearchPathType=0&SearchType=0' +
     '&apiKey=' + encodeURIComponent(ODSAY_KEY);
 
-  const res  = await fetch(url, {
-    headers: {
-      'x-odsay-application-package': 'com.dullyyj.subway',
-      'User-Agent': 'Dalvik/2.1.0 (Linux; Android 10)'
-    }
-  });
+  const res  = await fetch(url);
   if(!res.ok) throw new Error('ODsay HTTP ' + res.status);
   const data = await res.json();
+  if(data.error) throw new Error('ODsay: ' + data.error.msg);
 
-  // ODsay 에러 응답 처리 (다양한 구조)
-  if(data.error) {
-    const msg = data.error.msg || data.error.message || JSON.stringify(data.error);
-    console.warn('[ODsay] 에러응답:', msg, '| 전체:', JSON.stringify(data).slice(0,200));
-    throw new Error('ODsay: ' + msg);
-  }
-  if(!data.result) {
-    console.warn('[ODsay] result 없음:', JSON.stringify(data).slice(0,200));
-    throw new Error('ODsay: 결과 없음');
-  }
-
-  console.log('[ODsay] 성공, path수:', data.result?.path?.length || 0);
+  // ODsay 결과를 카카오 형식으로 변환
   return convertODsayToKakao(data);
 }
 
@@ -620,102 +604,44 @@ async function searchNaverPlace(query) {
 
 // ── 멀티 API 폴백 경로 탐색 ─────────────────────────────────
 async function callTransitWithFallback(env, slat, slng, elat, elng, sname, ename) {
-  // TAGO 대중교통 환승 경로 API (서버 호출 자유)
+  // 1순위: ODsay (대중교통 전문 API)
   try {
-    console.log('[경로] TAGO 호출:', slat, slng, '->', elat, elng);
-    const data = await callTAGOTransit(slat, slng, elat, elng);
-    if(data && data.routes && data.routes.length) {
-      console.log('[경로] TAGO 성공, routes:', data.routes.length);
-      return { data, source: 'tago' };
-    }
-    console.warn('[경로] TAGO 결과 없음');
-  } catch(e) {
-    console.warn('[경로] TAGO 실패:', e.message);
-  }
-
-  // 폴백: ODsay
-  try {
+    console.log('[경로] ODsay 호출:', slat, slng, '->', elat, elng);
     const data = await callODsayTransit(slat, slng, elat, elng);
-    if(data && data.routes && data.routes.length) {
-      return { data, source: 'odsay' };
-    }
+    console.log('[경로] ODsay 성공, routes:', data?.routes?.length);
+    try { await incrementApiUsage(env, 'odsay'); } catch(e) {}
+    return { data, source: 'odsay' };
   } catch(e) {
     console.warn('[경로] ODsay 실패:', e.message);
+  }
+
+  // 2순위: 카카오 모빌리티 (자동차 경로지만 폴백)
+  try {
+    console.log('[경로] 카카오 호출');
+    const data = await callKakaoTransit(slat, slng, elat, elng);
+    console.log('[경로] 카카오 성공');
+    try { await incrementApiUsage(env, 'kakao'); } catch(e) {}
+    return { data, source: 'kakao' };
+  } catch(e) {
+    console.warn('[경로] 카카오 실패:', e.message);
   }
 
   return { data: null, source: 'none' };
 }
 
-// TAGO 대중교통 환승경로 API
-async function callTAGOTransit(slat, slng, elat, elng) {
-  const key = 'fbdaeef19e93c7490ee53f87ae076ba752ff4fb89183d1e34d9798306d7b652d';
-  const url = 'https://apis.data.go.kr/1613000/SubwayInfoService/getTransferRoute'
-    + '?serviceKey=' + encodeURIComponent(key)
-    + '&startX=' + slng + '&startY=' + slat
-    + '&endX=' + elng   + '&endY=' + elat
-    + '&_type=json';
-
-  const res  = await fetch(url);
-  if(!res.ok) throw new Error('TAGO HTTP ' + res.status);
-  const data = await res.json();
-  console.log('[TAGO경로] 응답:', JSON.stringify(data).slice(0,300));
-
-  // TAGO 응답 → routes 형식 변환
-  const body  = data?.response?.body;
-  const items = body?.items?.item;
-  if(!items) return { routes: [] };
-
-  const arr = Array.isArray(items) ? items : [items];
-  const routes = arr.slice(0,3).map(function(item) {
-    return {
-      summary: {
-        duration: (item.totalTime || 0) * 60,
-        distance: item.totalDistance || 0
-      },
-      sections: (item.pathList || []).map(function(p) {
-        return {
-          transportation: { type: p.trafficType === 1 ? 1 : p.trafficType === 2 ? 2 : 3, name: p.name || '' },
-          duration: (p.sectionTime || 0) * 60,
-          distance: p.distance || 0,
-          passStopList: p.stationList ? {
-            stationList: (p.stationList || []).map(function(s){ return { stationName: s.stationName }; })
-          } : null
-        };
-      })
-    };
-  });
-
-  return { routes };
-}
-
 // 카카오 대중교통 API 호출 (공통 함수)
-// ※ kakaomobility API는 자동차 경로용 → 대중교통은 ODsay 사용
-// 폴백용으로만 유지하되 실질적으로 ODsay가 주력
 async function callKakaoTransit(slat, slng, elat, elng) {
-  // 카카오 Mobility 대중교통 경로 API (POST)
   const kakaoKey = 'a420cd52d24c6380fb5d1a2287663495';
-  const url = 'https://apis-navi.kakaomobility.com/v1/directions/transit';
-
-  const body = JSON.stringify({
-    origin: { x: slng, y: slat },
-    destination: { x: elng, y: elat },
-    priority: 'TIME',
-    car_fuel: 'GASOLINE'
-  });
+  const now      = new Date();
+  const depTime  = now.toISOString().slice(0,16).replace('T',' ');
+  const url      = `https://apis-navi.kakaomobility.com/v1/future/directions/transit` +
+    `?origin=${slng},${slat}&destination=${elng},${elat}&departure_time=${encodeURIComponent(depTime)}`;
 
   const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Authorization': `KakaoAK ${kakaoKey}`,
-      'Content-Type': 'application/json'
-    },
-    body: body
+    headers: { 'Authorization': `KakaoAK ${kakaoKey}`, 'Content-Type': 'application/json' }
   });
-  console.log('[카카오] 응답 status:', res.status);
   if (!res.ok) throw new Error('카카오 HTTP ' + res.status);
-  const data = await res.json();
-  console.log('[카카오] 응답:', JSON.stringify(data).slice(0,200));
-  return data;
+  return await res.json();
 }
 
 export default {
@@ -746,47 +672,6 @@ export default {
       // 🍽️ 맛집 조회 (D1 캐시)
       // GET /kakao-food?station=계산
       // ══════════════════════════════════════════════════
-      // ══════════════════════════════════════════════════
-      // 🌟 라이프스타일 꿀팁: 목적지 맛집 TOP5 (D1 캐시)
-      // GET /lifestyle-tips?station=<역명>&hour=<시간>
-      // ══════════════════════════════════════════════════
-      if (path === '/lifestyle-tips' && method === 'GET') {
-        const stationName = url.searchParams.get('station');
-        const hour        = parseInt(url.searchParams.get('hour') || '12');
-        if (!stationName) return json({ error: 'station 필요' }, 400);
-
-        // D1에서 가까운 순으로 TOP5 조회
-        let places = [];
-        try {
-          const { results } = await env.DB.prepare(
-            `SELECT place_name, category_name, distance, place_url, lat, lng
-             FROM restaurants WHERE station_name = ?
-             ORDER BY distance ASC LIMIT 5`
-          ).bind(stationName).all();
-          places = results || [];
-        } catch(e) { console.error('lifestyle-tips D1:', e); }
-
-        // D1 없으면 실시간 카카오 호출
-        if (!places.length) {
-          const stn = ALL_STATIONS.find(s => s.name === stationName);
-          if (stn) {
-            try {
-              const raw = await fetchKakaoPlaces(stn.lat, stn.lng);
-              places = raw.slice(0, 5).map(p => ({
-                place_name: p.place_name, category_name: p.category_name,
-                distance: parseInt(p.distance)||0, place_url: p.place_url,
-              }));
-            } catch(e) {}
-          }
-        }
-
-        // 시간대별 태그
-        const tag = hour < 10 ? '아침 추천' : hour < 14 ? '점심 추천'
-                  : hour < 18 ? '오후 추천' : '저녁 추천';
-
-        return json({ places, tag, station: stationName, cached: true });
-      }
-
       if (path === '/kakao-food' && method === 'GET') {
         const stationName = url.searchParams.get('station');
         const category    = url.searchParams.get('cat') || '전체';
@@ -974,60 +859,6 @@ export default {
 
       // ══════════════════════════════════════════════════
       // 🚇 AI 역무원 메시지 조회
-      // ══════════════════════════════════════════════════
-      // 🤖 개인 경로 AI 브리핑 (사용자별, D1 저장 없음)
-      // POST /ai-brief
-      // body: { from, to, lines[], hour, congPct, transfers }
-      // ══════════════════════════════════════════════════
-      if (path === '/ai-brief' && method === 'POST') {
-        let body;
-        try { body = await request.json(); } catch(e) { return json({ error: 'invalid body' }, 400); }
-
-        const { from, to, lines = [], hour = 12, congPct = 40, transfers = 0, totalMin = 60, destName } = body;
-        if (!from || !to) return json({ error: 'from/to 필요' }, 400);
-
-        const kstH = getKSTHour();
-        const kstTimeStr = getKSTTimeStr();
-        const timeSlot = getTimeSlot(kstH).name;
-
-        // 혼잡도 텍스트
-        const congTxt = congPct >= 80 ? '매우 혼잡 🔴' : congPct >= 60 ? '혼잡 🟠' : congPct >= 40 ? '보통 🟡' : '여유 🟢';
-        // 경유 노선
-        const linesTxt = lines.length > 0 ? lines.join(' → ') : '직통';
-        // 환승 표현
-        const xferTxt = transfers > 0 ? `${transfers}회 환승` : '직통';
-
-        const prompt = `당신은 개인 전용 지하철 AI 역무원입니다.
-현재 시각: ${kstTimeStr} (${timeSlot})
-사용자 경로: ${from} → ${to} (${totalMin}분, ${xferTxt})
-경유 노선: ${linesTxt}
-현재 혼잡도: ${congTxt} (${congPct}%)
-
-위 경로를 이용하는 사용자에게 지금 이 순간 꼭 필요한 실시간 브리핑을 해주세요.
-- 2~3문장, 친근한 존댓말
-- 혼잡도·환승 팁·소요시간 중 가장 중요한 것 언급
-- 시간대에 맞는 멘트 (출근/점심/퇴근/심야)
-- 이모지 2~3개
-- 따옴표 없이 본문만`;
-
-        try {
-          const text = await callGemini(prompt, env);
-          await incrementCount(env);
-          const kstMin = getKSTMin();
-          return json({
-            msg: text.trim(),
-            from, to,
-            lines,
-            congPct,
-            ts: Date.now(),
-            nextAt: Date.now() + 10 * 60 * 1000  // 다음 브리핑 10분 후
-          });
-        } catch(e) {
-          console.error('[ai-brief]', e.message);
-          return json({ error: 'AI 호출 실패', detail: e.message }, 500);
-        }
-      }
-
       // GET /ai-messages?line=2호선&limit=20
       // ══════════════════════════════════════════════════
       if (path === '/ai-messages' && method === 'GET') {
@@ -1299,37 +1130,6 @@ export default {
           });
         } catch(e) {
           return json({ error: 'DB 오류: ' + e.message }, 500);
-        }
-      }
-
-      // ── ODsay 대중교통 경로 프록시 ─────────────────────────
-      if (path === '/odsay-transit' && method === 'GET') {
-        const sx = url.searchParams.get('SX');
-        const sy = url.searchParams.get('SY');
-        const ex = url.searchParams.get('EX');
-        const ey = url.searchParams.get('EY');
-        if (!sx || !sy || !ex || !ey) return json({ error: '좌표 파라미터 필요' }, 400);
-
-        const odsayUrl = 'https://api.odsay.com/v1/api/searchPubTransPathT'
-          + '?SX=' + sx + '&SY=' + sy
-          + '&EX=' + ex + '&EY=' + ey
-          + '&SearchPathType=0&SearchType=0'
-          + '&apiKey=' + encodeURIComponent(ODSAY_KEY);
-
-        try {
-          const res = await fetch(odsayUrl, {
-            headers: {
-              'x-odsay-application-package': 'com.dullyyj.subway',
-              'User-Agent': 'Dalvik/2.1.0 (Linux; Android 10)'
-            }
-          });
-          const data = await res.json();
-          console.log('[ODsay프록시] 응답:', JSON.stringify(data).slice(0,100));
-          return new Response(JSON.stringify(data), {
-            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
-          });
-        } catch(e) {
-          return json({ error: 'ODsay 프록시 오류: ' + e.message }, 500);
         }
       }
 
