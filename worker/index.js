@@ -1133,6 +1133,45 @@ export default {
         }
       }
 
+// ══════════════════════════════════════════════════
+      // 🚌 버스 노선별 혼잡도 (국토부 RouteCongestionLevel)
+      // GET /bus-congestion?opr_ymd=&ctpv_cd=&sgg_cd=&numOfRows=&pageNo=
+      // ══════════════════════════════════════════════════
+      if (path === '/bus-congestion' && method === 'GET') {
+        const CONG_KEY  = 'fbdaeef19e93c7490ee53f87ae076ba752ff4fb89183d1e34d9798306d7b652d';
+        const CONG_BASE = 'https://apis.data.go.kr/1613000/RouteCongestionLevel/getRouteCongestionLevel';
+
+        const p  = url.searchParams;
+        const qs = new URLSearchParams({
+          serviceKey: CONG_KEY,
+          pageNo:    p.get('pageNo')    || '1',
+          numOfRows: p.get('numOfRows') || '100',
+          opr_ymd:   p.get('opr_ymd')   || '',
+          ctpv_cd:   p.get('ctpv_cd')   || '',
+          sgg_cd:    p.get('sgg_cd')    || '',
+          dataType:  'JSON'
+        });
+        if (p.get('rte_id'))  qs.set('rte_id',  p.get('rte_id'));
+        if (p.get('sttn_id')) qs.set('sttn_id', p.get('sttn_id'));
+
+        try {
+          const res  = await fetch(CONG_BASE + '?' + qs.toString(), {
+            headers: { 'User-Agent': 'Mozilla/5.0' }
+          });
+          const text = await res.text();
+          return new Response(text, {
+            status: res.status,
+            headers: {
+              'Content-Type': 'application/json; charset=utf-8',
+              'Access-Control-Allow-Origin': '*',
+              'Cache-Control': 'public, max-age=300'
+            }
+          });
+        } catch(e) {
+          return json({ error: '버스 혼잡도 API 오류: ' + e.message }, 502);
+        }
+      }
+
       return json({ error: 'Not found' }, 404);
 
     } catch (e) {
