@@ -17685,7 +17685,7 @@ function advanceToNextStation(source){
   stopTrainAnim();
   renderMap();
   calcETA();
-  updateTimelineCurrentStation(); // 타임라인 현재역 표시
+  if(typeof updateTimelineCurrentStation === 'function') updateTimelineCurrentStation(); // 타임라인 현재역 표시(있을 때만)
   const stn=STNDB.find(s=>s.name===S.route.path[S.curIdx]&&(s.line===S.route.lp[S.curIdx]||true))
             ||STNDB.find(s=>s.name===S.route.path[S.curIdx]);
   if(stn){
