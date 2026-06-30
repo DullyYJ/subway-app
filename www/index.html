@@ -3408,18 +3408,46 @@ function selectRouteOption(type) {
     return;
   }
 
-  // 확인 팝업 → 확인 시 경로 고정
-  var _ok = confirm(_optName + ' 방법으로 진행하겠습니다.\n\n이 경로로 안내를 시작할까요?');
-  if(!_ok) return;
-
-  // 경로 고정 플래그
-  window._routeLocked = true;
-  window._lockedRouteType = type;
-  window._lastCongNodeIdx = -1; // 혼잡도 추적 리셋
-
-  _doSelectRouteOption(type);
+  // 커스텀 확인 모달 → 확인 시 경로 고정
+  _showRouteConfirm(_optName, function(){
+    window._routeLocked = true;
+    window._lockedRouteType = type;
+    window._lastCongNodeIdx = -1; // 혼잡도 추적 리셋
+    _doSelectRouteOption(type);
+  });
 }
 window.selectRouteOption = selectRouteOption;
+
+// 경로 확인 커스텀 모달 (APK WebView에서 confirm() 차단 대응)
+function _showRouteConfirm(optName, onConfirm){
+  var ov = document.getElementById('routeConfirmOverlay');
+  if(!ov){
+    ov = document.createElement('div');
+    ov.id = 'routeConfirmOverlay';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.5);'
+      + 'display:flex;align-items:center;justify-content:center;padding:32px;';
+    ov.innerHTML =
+      '<div style="background:var(--bg,#fff);border-radius:18px;max-width:340px;width:100%;'
+      + 'padding:24px 22px;box-shadow:0 12px 40px rgba(0,0,0,0.3);text-align:center;">'
+      + '<div id="rcfTitle" style="font-size:17px;font-weight:800;color:var(--text);margin-bottom:8px;line-height:1.4;"></div>'
+      + '<div style="font-size:13px;color:var(--sub);margin-bottom:20px;">이 경로로 안내를 시작할까요?</div>'
+      + '<div style="display:flex;gap:10px;">'
+      + '<button id="rcfCancel" style="flex:1;padding:13px;border-radius:11px;border:1px solid var(--border);'
+      + 'background:var(--card2,#f2f2f2);color:var(--sub);font-size:15px;font-weight:700;cursor:pointer;">취소</button>'
+      + '<button id="rcfOk" style="flex:1;padding:13px;border-radius:11px;border:none;'
+      + 'background:#2f7cf6;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">확인</button>'
+      + '</div></div>';
+    document.body.appendChild(ov);
+  }
+  document.getElementById('rcfTitle').textContent = optName + ' 방법으로 진행하겠습니다';
+  ov.style.display = 'flex';
+  var okBtn = document.getElementById('rcfOk');
+  var cancelBtn = document.getElementById('rcfCancel');
+  okBtn.onclick = function(){ ov.style.display='none'; if(onConfirm) onConfirm(); };
+  cancelBtn.onclick = function(){ ov.style.display='none'; };
+  ov.onclick = function(e){ if(e.target===ov) ov.style.display='none'; };
+}
+window._showRouteConfirm = _showRouteConfirm;
 
 // 실제 경로 선택/렌더 (팝업 확인 후 호출)
 function _doSelectRouteOption(type) {
