@@ -1994,13 +1994,23 @@ window._fmapSetLocation = _fmapSetLocation;
 function _updateRouteBtn() {
   var btn = document.getElementById('fmapRouteBtn');
   if(!btn) return;
-  var ready = _fmapStart && _fmapDest;
+  // 내부 변수 OR 화면 입력값 기준으로 활성화 판단
+  var ready = !!(_fmapStart && _fmapDest);
+  if(!ready){
+    // 입력창에 출발/도착 텍스트가 있으면 활성화 허용
+    var si = document.getElementById('fmapStartInp');
+    var di = document.getElementById('fmapDestInp');
+    var sv = si ? (si.value||'').trim() : '';
+    var dv = di ? (di.value||'').trim() : '';
+    if(sv && dv) ready = true;
+  }
   btn.style.opacity = ready ? '1' : '0.5';
   btn.style.pointerEvents = ready ? 'auto' : 'none';
+  btn.disabled = !ready;
 
   // 경로 유형 힌트 표시
   var hint = document.getElementById('fmapRouteHint');
-  if(!hint || !ready) return;
+  if(!hint || !ready || !_fmapStart || !_fmapDest) return;
   if(_fmapStart.type === 'subway' && _fmapDest.type === 'subway') {
     hint.textContent = '🚇 지하철 경로 탐색';
     hint.style.color = '#0a84ff';
@@ -4812,7 +4822,7 @@ window.addEventListener('unhandledrejection', function(e) {
         <input id="fmapStartInp" class="inp"
           style="flex:1;border:none;background:transparent;padding:0;font-size:15px;font-weight:600;color:var(--text);min-width:0;"
           placeholder="출발지 검색" autocomplete="off"
-          oninput="fmapSearch(this,'start')" onfocus="fmapSearch(this,'start')">
+          oninput="fmapSearch(this,'start'); if(typeof _updateRouteBtn==='function')_updateRouteBtn();" onfocus="fmapSearch(this,'start')">
         <button id="homeGpsBtn" onclick="fmapGpsLocate()"
           style="background:#0a84ff;color:#fff;border:none;padding:8px 16px;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0;">위치 감지</button>
         <div id="fmapStartSug" class="sug"
@@ -4836,7 +4846,7 @@ window.addEventListener('unhandledrejection', function(e) {
         <input id="fmapDestInp" class="inp"
           style="flex:1;border:none;background:transparent;padding:0;font-size:15px;font-weight:600;color:var(--text);min-width:0;"
           placeholder="도착지 검색" autocomplete="off"
-          oninput="fmapSearch(this,'dest')" onfocus="fmapSearch(this,'dest')">
+          oninput="fmapSearch(this,'dest'); if(typeof _updateRouteBtn==='function')_updateRouteBtn();" onfocus="fmapSearch(this,'dest')">
         <button onclick="fmapDoRoute()"
           style="background:var(--gold);color:#121214;border:none;padding:8px 16px;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0;" id="fmapRouteBtn">경로 탐색</button>
         <div id="fmapDestSug" class="sug"
