@@ -4701,8 +4701,9 @@ window.addEventListener('unhandledrejection', function(e) {
           <div class="bars-24" id="bars24"></div>
         </div>
       </div>
-      <div class="car-ttl">칸별 혼잡 예상도</div>
+      <div class="car-ttl" id="carTtl">칸별 혼잡 예상도</div>
       <div class="car-grid" id="carGrid"><div style="font-size:11px;color:var(--sub);padding:6px 0;">출발역 설정 후 표시됩니다</div></div>
+      <div class="bus-cong-note" id="busCongNote" style="display:none;font-size:12px;color:var(--sub);padding:10px 12px;background:var(--card2,rgba(255,255,255,0.03));border-radius:10px;margin-top:4px;line-height:1.5;"></div>
       <div class="gps-box" style="display:none;">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="var(--blue)"><path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3c-.46-4.17-3.77-7.48-7.94-7.94V1h-2v2.06C6.83 3.52 3.52 6.83 3.06 11H1v2h2.06c.46 4.17 3.77 7.48 7.94 7.94V23h2v-2.06c4.17-.46 7.48-3.77 7.94-7.94H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/></svg>
         <div class="gps-box-txt">현재 위치 <b id="curStnTxt">-</b> 판정<br>목적지까지 <span class="eta-txt" id="etaTxt">-</span><br><span style="font-size:11px;color:var(--sub);" id="routeDistInfo"></span></div>
@@ -21549,6 +21550,16 @@ function updateCong(stn) {
   // 24시간 차트
   renderChart24(stn.name, stn.line);
 
+  // 🚇 지하철 → 칸별 혼잡도 복원 (버스 안내 숨김)
+  var _carTtl  = document.getElementById('carTtl');
+  var _carGrid = document.getElementById('carGrid');
+  var _busNote = document.getElementById('busCongNote');
+  if(_carTtl)  _carTtl.style.display = '';
+  if(_carGrid) _carGrid.style.display = '';
+  if(_busNote) _busNote.style.display = 'none';
+  var _chartWrap = document.getElementById('chart24Wrap');
+  if(_chartWrap) _chartWrap.style.opacity = '1';
+
   // 칸별 혼잡도
   renderCarGrid(stn.name, stn.line);
 
@@ -21732,7 +21743,24 @@ function updateBusCong(busSection){
     if(gFill){ gFill.style.width = Math.min(100,pct) + '%'; gFill.style.background = col; }
     if(gPct)  gPct.textContent = pct + '%';
 
-    // 버스는 24시간 차트/칸별 혼잡도 대신 간단 표시 (데이터 한계)
+    // 🚌 버스는 칸이 없음 → 칸별 혼잡도 숨기고 승객 수 안내로 대체
+    var carTtl  = document.getElementById('carTtl');
+    var carGrid = document.getElementById('carGrid');
+    var busNote = document.getElementById('busCongNote');
+    if(carTtl)  carTtl.style.display = 'none';
+    if(carGrid) carGrid.style.display = 'none';
+    if(busNote){
+      busNote.style.display = 'block';
+      var _avg = res.rawCgst != null ? res.rawCgst : '-';
+      var _max = res.maxCgst != null ? res.maxCgst : '-';
+      busNote.innerHTML =
+        '🚌 버스는 차량 1대 기준이에요<br>'
+        + '평균 탑승 <b style="color:'+col+';">' + _avg + '명</b>'
+        + ' · 최대 <b style="color:'+col+';">' + _max + '명</b>'
+        + ' (정원 약 40명 기준)';
+    }
+
+    // 버스는 24시간 차트도 통계 신뢰도 낮음 → 살짝 흐리게
     var chartWrap = document.getElementById('chart24Wrap');
     if(chartWrap) chartWrap.style.opacity = '0.4';
   });
