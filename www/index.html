@@ -4788,6 +4788,8 @@ function _loadMapBusArrival(stop, cardIdx) {
         var fmt  = function(s){ return s > 0 ? (s < 60 ? '곧 도착' : Math.round(s/60) + '분') : '-'; };
         var numCls = _busNumClass ? _busNumClass(a.routeno || a.routeNo) : 'other';
         var routeNo = a.routeno || a.routeNo || '-';
+        var routeId = a.routeid || a.routeId || '';
+        var routeTp = a.routetp || a.routeTp || '';
 
         var line1 = '<div class="map-bus-arr-line">' +
           '<span class="map-bus-arr-time' + (soon?' soon':'') + '">' + fmt(sec) + '</span>' +
@@ -4802,8 +4804,19 @@ function _loadMapBusArrival(stop, cardIdx) {
 
         row.innerHTML =
           '<div class="bus-num ' + numCls + '">' + routeNo + '</div>' +
-          '<div class="map-bus-arr">' + line1 + line2 + '</div>' +
+          '<div class="map-bus-arr">' + line1 + line2 +
+            '<div class="bus-row-track">🗺️ 노선·현위치 보기 ›</div>' +
+          '</div>' +
           '<svg class="map-bus-bell" viewBox="0 0 24 24" fill="currentColor"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>';
+        // 노선 추적: 버스 행 탭
+        if(routeId){
+          row.classList.add('bus-row-tap');
+          row.style.cursor = 'pointer';
+          row.addEventListener('click', function(ev){
+            if(ev.target.closest && ev.target.closest('.map-bus-bell')) return;
+            openBusRoute(cityCode, routeId, routeNo, routeTp);
+          });
+        }
         card.appendChild(row);
       });
     })
