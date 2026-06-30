@@ -1811,6 +1811,9 @@ function _renderBusStop(stop, arrivals) {
       var isSoon = sec1 > 0 && sec1 <= 60;
       var numCls = _busNumClass(a.routeno || a.routeNo);
       var routeNo = a.routeno || a.routeNo || '-';
+      var routeId = a.routeid || a.routeId || '';
+      var routeTp = a.routetp || a.routeTp || '';
+      var cityCd  = stop.citycode || stop.cityCode || '';
 
       // 1번째 도착
       var line1 = '<div class="bus-arr-line">' +
@@ -1830,9 +1833,13 @@ function _renderBusStop(stop, arrivals) {
         line2 = '<div class="bus-arr-line"><span class="bus-arr-noinfo">도착정보 없음</span></div>';
       }
 
-      return '<div class="bus-row">' +
+      var attrs = ' data-rid="' + _ltEsc(routeId) + '" data-rno="' + _ltEsc(routeNo) +
+                  '" data-rtp="' + _ltEsc(routeTp) + '" data-cc="' + _ltEsc(cityCd) + '"';
+      return '<div class="bus-row bus-row-tap"' + attrs + '>' +
         '<div class="bus-num ' + numCls + '">' + routeNo + '</div>' +
-        '<div class="bus-arr">' + line1 + line2 + '</div>' +
+        '<div class="bus-arr">' + line1 + line2 +
+          '<div class="bus-row-track">🗺️ 노선·현위치 보기 ›</div>' +
+        '</div>' +
         '<svg class="bus-bell" viewBox="0 0 24 24" fill="currentColor"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>' +
       '</div>';
     }).join('');
@@ -1851,6 +1858,13 @@ function _renderBusStop(stop, arrivals) {
   var busListDiv = document.createElement('div');
   busListDiv.className = 'bus-list';
   busListDiv.innerHTML = arrHtml;
+  // 버스 행 탭 → 노선 추적 모달
+  busListDiv.addEventListener('click', function(ev){
+    var row = ev.target.closest ? ev.target.closest('.bus-row-tap') : null;
+    if(!row) return;
+    if(ev.target.closest('.bus-bell')) return; // 벨은 별도 동작
+    openBusRoute(row.dataset.cc, row.dataset.rid, row.dataset.rno, row.dataset.rtp);
+  });
   hdr.addEventListener('click', function(){
     busListDiv.style.display = busListDiv.style.display === 'none' ? 'block' : 'none';
   });
@@ -1859,6 +1873,162 @@ function _renderBusStop(stop, arrivals) {
 
   return card;
 }
+
+// ════════════════════════════════════════════════════════════
+// 🚌 버스 노선 추적 (전체 정류장 + 현재 버스 위치)
+// ════════════════════════════════════════════════════════════
+
+// TAGO 프록시 GET 헬퍼 (Worker /bus-proxy 우선, 실패 시 직접)
+function _busProxyGet(apiUrl, cb){
+  var proxyUrl = _SERVER_URL + '/bus-proxy?url=' + encodeURIComponent(apiUrl);
+  fetch(proxyUrl)
+    .then(function(r){ return r.json(); })
+    .then(function(d){ cb(null, d); })
+    .catch(function(){
+      fetch(apiUrl).then(function(r){ return r.json(); })
+        .then(function(d){ cb(null, d); })
+        .catch(function(e){ cb(e, null); });
+    });
+}
+
+function _busItems(data){
+  var items = [];
+  try {
+    items = data.response.body.items.item || [];
+    if(!Array.isArray(items)) items = [items];
+  } catch(e){}
+  return items;
+}
+
+// ① 노선 전체 경유 정류장 목록
+function _fetchRouteStations(cityCode, routeId, cb){
+  var url = 'https://apis.data.go.kr/1613000/BusRouteInfoInqireService/getRouteAcctoThrghSttnList' +
+    '?serviceKey=' + encodeURIComponent(_BUS_TAGO_KEY) +
+    '&cityCode=' + cityCode +
+    '&routeId='  + encodeURIComponent(routeId) +
+    '&numOfRows=300&pageNo=1&_type=json';
+  _busProxyGet(url, function(err, data){
+    if(err){ cb(err, []); return; }
+    var items = _busItems(data);
+    // nodeord 오름차순 정렬
+    items.sort(function(a,b){ return (parseInt(a.nodeord)||0) - (parseInt(b.nodeord)||0); });
+    cb(null, items);
+  });
+}
+
+// ② 노선별 현재 버스 위치 목록
+function _fetchBusLocations(cityCode, routeId, cb){
+  var url = 'https://apis.data.go.kr/1613000/BusLcInfoInqireService/getRouteAcctoBusLcList' +
+    '?serviceKey=' + encodeURIComponent(_BUS_TAGO_KEY) +
+    '&cityCode=' + cityCode +
+    '&routeId='  + encodeURIComponent(routeId) +
+    '&numOfRows=100&pageNo=1&_type=json';
+  _busProxyGet(url, function(err, data){
+    if(err){ cb(err, []); return; }
+    cb(null, _busItems(data));
+  });
+}
+
+// 버스 행 탭 → 노선 추적 모달 열기
+function openBusRoute(cityCode, routeId, routeNo, routeTp){
+  if(!routeId || routeId === 'undefined' || routeId === ''){
+    if(typeof toast==='function') toast('이 버스는 노선 정보가 없어요');
+    return;
+  }
+  var modal = document.getElementById('busRouteModal');
+  var body  = document.getElementById('busRouteBody');
+  var titleEl = document.getElementById('busRouteTitle');
+  if(!modal) return;
+  titleEl.innerHTML = '<span class="bus-num ' + _busNumClass(routeNo) + '" style="display:inline-block;">' + _ltEsc(routeNo||'-') + '</span> ' +
+                      '<span style="font-size:13px;color:var(--sub);">' + _ltEsc(routeTp||'') + '</span>';
+  body.innerHTML = '<div style="padding:40px;text-align:center;color:var(--sub);font-size:13px;">🚌 노선 정보 불러오는 중...</div>';
+  modal.style.display = 'flex';
+  modal.dataset.cityCode = cityCode;
+  modal.dataset.routeId  = routeId;
+
+  _loadBusRouteData(cityCode, routeId);
+}
+
+function _loadBusRouteData(cityCode, routeId){
+  var body = document.getElementById('busRouteBody');
+  // 정류장 목록 + 버스 위치 동시 요청
+  _fetchRouteStations(cityCode, routeId, function(err, stations){
+    if(err || !stations.length){
+      body.innerHTML = '<div style="padding:40px;text-align:center;color:var(--sub);font-size:13px;">노선 정류장 정보를 불러올 수 없어요.<br>(API 응답 없음)</div>';
+      return;
+    }
+    _fetchBusLocations(cityCode, routeId, function(err2, buses){
+      _renderBusRoute(stations, buses || []);
+    });
+  });
+}
+
+// 현재 위치 새로고침 (버스만 다시 조회)
+function refreshBusRoute(){
+  var modal = document.getElementById('busRouteModal');
+  if(!modal) return;
+  var cityCode = modal.dataset.cityCode, routeId = modal.dataset.routeId;
+  var btn = document.getElementById('busRouteRefreshBtn');
+  if(btn){ btn.style.transform='rotate(360deg)'; setTimeout(function(){ if(btn) btn.style.transform='';}, 500); }
+  _loadBusRouteData(cityCode, routeId);
+}
+
+function closeBusRoute(){
+  var modal = document.getElementById('busRouteModal');
+  if(modal) modal.style.display = 'none';
+}
+
+// 정류장 목록 + 버스 위치 마커 렌더
+function _renderBusRoute(stations, buses){
+  var body = document.getElementById('busRouteBody');
+  // 버스가 위치한 nodeord 집합
+  var busAtOrd = {};
+  buses.forEach(function(b){
+    var ord = parseInt(b.nodeord)||0;
+    if(!busAtOrd[ord]) busAtOrd[ord] = [];
+    busAtOrd[ord].push(b);
+  });
+
+  var runningTxt = buses.length > 0
+    ? ('🚌 현재 ' + buses.length + '대 운행 중')
+    : '🚌 현재 운행 중인 버스 없음 (막차 이후이거나 배차 간격)';
+
+  var rows = stations.map(function(s){
+    var ord  = parseInt(s.nodeord)||0;
+    var here = busAtOrd[ord];
+    var dot  = here ? '🚌' : '';
+    var hereCls = here ? ' bus-route-here' : '';
+    var busInfo = '';
+    if(here){
+      var vno = here.map(function(b){ return b.vehicleno || ''; }).filter(Boolean).join(', ');
+      busInfo = '<div class="bus-route-businfo">🚌 버스 도착' + (vno ? ' · ' + _ltEsc(vno) : '') + '</div>';
+    }
+    return '<div class="bus-route-stop' + hereCls + '">' +
+      '<div class="bus-route-line">' +
+        '<div class="bus-route-marker">' + (here ? '<span class="bus-route-busdot">🚌</span>' : '<span class="bus-route-dot"></span>') + '</div>' +
+      '</div>' +
+      '<div class="bus-route-info">' +
+        '<div class="bus-route-name">' + _ltEsc(s.nodenm || '') + '</div>' +
+        '<div class="bus-route-no">' + _ltEsc(s.nodeno || s.nodeid || '') + '</div>' +
+        busInfo +
+      '</div>' +
+    '</div>';
+  }).join('');
+
+  body.innerHTML =
+    '<div class="bus-route-status">' + runningTxt + '</div>' +
+    '<div class="bus-route-list">' + rows + '</div>';
+
+  // 첫 버스 위치로 스크롤
+  setTimeout(function(){
+    var hereEl = body.querySelector('.bus-route-here');
+    if(hereEl) hereEl.scrollIntoView({ block:'center', behavior:'smooth' });
+  }, 100);
+}
+
+window.openBusRoute    = openBusRoute;
+window.refreshBusRoute = refreshBusRoute;
+window.closeBusRoute   = closeBusRoute;
 
 // ── 버스 탭 메인 로드 ─────────────────────────────────────────
 function loadBusTab(force) {
@@ -16903,6 +17073,18 @@ function safeSetItem(key, val){
   </div>
 </div>
 
+<!-- 🚌 버스 노선 추적 모달 (전체 정류장 + 현재 버스 위치) -->
+<div id="busRouteModal" class="bus-route-modal" onclick="if(event.target===this)closeBusRoute()">
+  <div class="bus-route-sheet">
+    <div class="bus-route-head">
+      <div id="busRouteTitle" style="font-size:18px;font-weight:800;color:var(--text);">🚌</div>
+      <button id="busRouteRefreshBtn" class="bus-route-refresh" onclick="refreshBusRoute()">🔄</button>
+      <button class="bus-route-x" onclick="closeBusRoute()">✕</button>
+    </div>
+    <div id="busRouteBody" class="bus-route-body"></div>
+  </div>
+</div>
+
 <div id="routeModal" onclick="if(event.target===this)closeRouteModal()">
   <div id="routeModalCard">
     <div class="rm-handle"></div>
@@ -24467,6 +24649,42 @@ document.addEventListener('DOMContentLoaded', function() {
 .bus-congestion.혼잡{background:#ff453a20;color:#ff453a;}
 .bus-congestion.매우혼잡{background:#ff453a;color:#fff;}
 .bus-bell{flex-shrink:0;width:24px;height:24px;color:var(--sub);cursor:pointer;opacity:.5;}
+/* 버스 행 탭 가능 표시 */
+.bus-row-tap{cursor:pointer;transition:background .15s;}
+.bus-row-tap:active{background:var(--card2);}
+.bus-row-track{font-size:11px;color:#2f7cf6;font-weight:700;margin-top:3px;}
+/* 버스 노선 추적 모달 */
+.bus-route-modal{display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.5);
+  align-items:flex-end;justify-content:center;}
+.bus-route-sheet{background:var(--bg);width:100%;max-width:560px;height:85vh;border-radius:20px 20px 0 0;
+  display:flex;flex-direction:column;overflow:hidden;box-shadow:0 -4px 24px rgba(0,0,0,.3);}
+.bus-route-head{flex-shrink:0;display:flex;align-items:center;gap:10px;padding:16px;
+  border-bottom:1px solid var(--border);}
+.bus-route-head .bus-route-x{margin-left:auto;background:none;border:none;color:var(--sub);
+  font-size:22px;cursor:pointer;line-height:1;padding:4px 8px;}
+.bus-route-refresh{background:var(--card2);border:1px solid var(--border);border-radius:50%;
+  width:36px;height:36px;color:var(--text);font-size:16px;cursor:pointer;transition:transform .5s;}
+.bus-route-status{flex-shrink:0;padding:10px 16px;font-size:12.5px;font-weight:700;
+  color:var(--text);background:var(--card);border-bottom:1px solid var(--border);}
+.bus-route-body{flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;min-height:0;}
+.bus-route-list{padding:8px 0;}
+.bus-route-stop{display:flex;gap:12px;padding:0 16px;min-height:54px;position:relative;}
+.bus-route-line{position:relative;width:22px;flex-shrink:0;display:flex;justify-content:center;}
+.bus-route-line::before{content:'';position:absolute;top:0;bottom:0;width:4px;
+  background:var(--border);border-radius:2px;}
+.bus-route-stop:first-child .bus-route-line::before{top:50%;}
+.bus-route-stop:last-child .bus-route-line::before{bottom:50%;}
+.bus-route-marker{position:relative;z-index:1;display:flex;align-items:center;height:100%;}
+.bus-route-dot{width:11px;height:11px;border-radius:50%;background:var(--sub);
+  border:2px solid var(--bg);}
+.bus-route-busdot{font-size:20px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.4));}
+.bus-route-info{flex:1;padding:8px 0;border-bottom:1px solid var(--border);}
+.bus-route-stop:last-child .bus-route-info{border-bottom:none;}
+.bus-route-name{font-size:14.5px;font-weight:600;color:var(--text);}
+.bus-route-no{font-size:11.5px;color:var(--sub);margin-top:2px;}
+.bus-route-here{background:rgba(47,124,246,.10);}
+.bus-route-here .bus-route-name{font-weight:800;color:#2f7cf6;}
+.bus-route-businfo{font-size:12px;font-weight:700;color:#2f7cf6;margin-top:3px;}
 .bus-empty{text-align:center;padding:60px 20px;color:var(--sub);font-size:14px;line-height:1.8;}
 .bus-loading{text-align:center;padding:40px;color:var(--sub);}
 .bus-spinner{width:28px;height:28px;border:3px solid var(--border);
