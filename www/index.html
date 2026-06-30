@@ -3407,26 +3407,31 @@ function _parseODsayAllOptions(odsayData) {
 function selectRouteOption(type) {
   if(!_allRouteResults) return;
 
-  // 탑승방법 한글 이름
-  var _optName = {
-    fast: '최단시간', less: '최소환승', sub: '지하철', bus: '버스'
-  }[type] || '선택한';
-
-  // 이미 같은 방법으로 고정돼 있으면 팝업 생략
-  if(window._routeLocked && window._lockedRouteType === type){
-    _highlightRouteTab(type);
-    return;
-  }
-
-  // 커스텀 확인 모달 → 확인 시 경로 고정
-  _showRouteConfirm(_optName, function(){
-    window._routeLocked = true;
-    window._lockedRouteType = type;
-    window._lastCongNodeIdx = -1; // 혼잡도 추적 리셋
-    _doSelectRouteOption(type);
-  });
+  // 팝업 없이 바로 경로 표시 (미확정 상태 — 확정은 세부경로의 '경로 확정' 버튼)
+  window._pendingRouteType = type;   // 현재 보고 있는 경로 타입
+  window._lastCongNodeIdx = -1;      // 혼잡도 추적 리셋
+  _doSelectRouteOption(type);
 }
 window.selectRouteOption = selectRouteOption;
+
+// 세부경로에서 현재 보고 있는 경로를 확정 → GPS 추적 시작
+function confirmSelectedRoute(){
+  var type = window._pendingRouteType || 'fast';
+  var optName = { fast:'최단시간', less:'최소환승', sub:'지하철', bus:'버스' }[type] || '선택한';
+  window._routeLocked = true;
+  window._lockedRouteType = type;
+  window._lastCongNodeIdx = -1;
+  // 확정 버튼 시각 피드백
+  var btn = document.getElementById('confirmRouteBtn');
+  if(btn){
+    btn.textContent = '✅ ' + optName + ' 경로로 확정됨';
+    btn.style.background = '#30a14e';
+  }
+  if(typeof toast === 'function') toast(optName + ' 경로로 확정했어요');
+  // 세부경로 닫고 메인 카드에서 추적 진행
+  setTimeout(function(){ if(typeof closeTransitDetail==='function') closeTransitDetail(); }, 600);
+}
+window.confirmSelectedRoute = confirmSelectedRoute;
 
 // 경로 확인 커스텀 모달 (APK WebView에서 confirm() 차단 대응)
 function _showRouteConfirm(optName, onConfirm){
@@ -3542,19 +3547,13 @@ function _selectSubwayNearestRoute(){
     return;
   }
 
-  // 1) 출발지에서 가장 가까운 지하철역 찾기
-  var nearStns = (typeof nearestMulti==='function') ? nearestMulti(start.lat, start.lng, 3000) : [];
-  if(!nearStns || !nearStns.length){
-    toast('근처에 지하철역이 없어요.');
-    return;
-  }
-  var nearestStn = nearStns[0]; // 가장 가까운 역
-  toast('🚇 ' + nearestStn.name + '에서 타는 경로 검색 중...');
+  toast('🚇 지하철 경로 검색 중...');
 
-  // 2) 가까운 역 → 도착지 ODsay 지하철우선 경로 요청
+  // 출발지 좌표로 직접 ODsay 지하철우선 요청
+  // → ODsay가 출발지→역 접근을 버스(있으면)/도보로 자동 구성
   var apiKey = 'TIZm4dwMq1Uw4UgWJhhstA';
   var url = 'https://api.odsay.com/v1/api/searchPubTransPathT'
-    + '?SX=' + nearestStn.lng + '&SY=' + nearestStn.lat
+    + '?SX=' + start.lng + '&SY=' + start.lat
     + '&EX=' + dest.lng + '&EY=' + dest.lat
     + '&SearchType=0&SearchPathType=1'  // 지하철 우선
     + '&apiKey=' + encodeURIComponent(apiKey);
@@ -3572,25 +3571,9 @@ function _selectSubwayNearestRoute(){
     // 가장 빠른 지하철 경로 선택
     subPaths.sort(function(a,b){ return ((a.info||{}).totalTime||999)-((b.info||{}).totalTime||999); });
     var best = subPaths[0];
-
-    // 3) 출발지 → 가까운 역 도보 구간을 맨 앞에 추가
-    var walkDist = (typeof haversineM==='function')
-      ? haversineM(start.lat, start.lng, nearestStn.lat, nearestStn.lng)
-      : Math.round(Math.sqrt(Math.pow((start.lat-nearestStn.lat)*111000,2)+Math.pow((start.lng-nearestStn.lng)*88000,2)));
     var routeObj = _convertSinglePathToRoute(best);
-    if(routeObj && routeObj.sections){
-      // 도보 구간 prepend (출발지 → 가까운 역)
-      routeObj.sections.unshift({
-        transportation: { type: 3, name: '도보' },
-        duration: Math.round(walkDist/67)*60 || 60,  // 약 67m/분
-        distance: Math.round(walkDist),
-        passStopList: null
-      });
-      // summary 시간/거리 보정
-      if(routeObj.summary){
-        routeObj.summary.duration = (routeObj.summary.duration||0) + (Math.round(walkDist/67)*60||60);
-        routeObj.summary.distance = (routeObj.summary.distance||0) + Math.round(walkDist);
-      }
+    if(routeObj && routeObj.sections && routeObj.sections.length){
+      // ODsay가 출발지→역 접근(버스/도보)을 이미 포함하므로 그대로 표시
       _renderTransitResultCard({routes:[routeObj]}, start, dest, 'odsay_sub');
     } else {
       toast('지하철 경로를 표시할 수 없어요.');
@@ -4255,14 +4238,19 @@ function _updateTransitGps() {
       // 출발 대기 중 혼잡도를 첫 실제 구간 교통수단에 맞춤
       if(window._lastCongNodeIdx !== _firstIdx){
         window._lastCongNodeIdx = _firstIdx;
-        if(_firstReal.isBus && _firstReal.lineName){
+        // 지하철 우선 판정 (isSub가 true면 무조건 지하철로)
+        if(_firstReal.isSub && _firstReal.name){
+          window._congMode='subway';
+          if(typeof updateCong==='function') updateCong({ name:_firstReal.name, line:_firstReal.lineName||'' });
+        } else if(_firstReal.isBus && _firstReal.lineName){
           var _bs = [];
           _transitNodeData.forEach(function(nd){
             if(nd.isBus && nd.lineName===_firstReal.lineName && nd.lat)
               _bs.push({ stationName: nd.name, lat: nd.lat, lon: nd.lng });
           });
           if(typeof updateBusCong==='function') updateBusCong({ name:_firstReal.lineName, stops:_bs, curStopIdx:0 });
-        } else if(_firstReal.isSub && _firstReal.name){
+        } else if(_firstReal.name){
+          // 둘 다 애매하면 지하철역으로 시도 (잔상 방지)
           window._congMode='subway';
           if(typeof updateCong==='function') updateCong({ name:_firstReal.name, line:_firstReal.lineName||'' });
         }
@@ -5221,6 +5209,10 @@ window.addEventListener('unhandledrejection', function(e) {
 
       <!-- 구간 목록 스크롤 -->
       <div id="transitDetailSections" style="flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 0 8px;min-height:0;"></div>
+      <!-- 경로 확정 버튼 -->
+      <div style="padding:10px 14px 0;flex-shrink:0;background:var(--card);">
+        <button id="confirmRouteBtn" onclick="confirmSelectedRoute()" style="width:100%;padding:14px;border:none;border-radius:12px;background:#2f7cf6;color:#fff;font-size:15px;font-weight:800;cursor:pointer;">✅ 이 경로로 확정하기</button>
+      </div>
       <!-- 외부 지도 버튼 — 시트가 탭바 위에 있으므로 일반 패딩 -->
       <div style="display:flex;gap:8px;padding:12px 14px 16px;flex-shrink:0;border-top:1px solid var(--border);background:var(--card);position:relative;z-index:2;">
         <button onclick="openKakaoNavFromResult()" style="flex:1;padding:14px;border:none;border-radius:12px;background:#FEE500;color:#3A1D1D;font-size:13px;font-weight:700;cursor:pointer;">🗺️ 카카오맵 길안내</button>
