@@ -1171,6 +1171,196 @@ export default {
           return json({ error: '버스 혼잡도 API 오류: ' + e.message }, 502);
         }
       }
+═══════════════════════════════════════════════════════════════
+🍽️ Worker에 "좌표 기반 5km 맛집 조회" 추가
+═══════════════════════════════════════════════════════════════
+
+worker/index.js 에서 이 줄을 찾으세요 (맨 끝부분, 딱 한 번 나옴):
+
+      return json({ error: 'Not found' }, 404);
+
+
+그 줄을 아래 전체로 교체하세요:
+───────────────────────────────────────────────────────────────
+
+      // ══════════════════════════════════════════════════
+      // 🍽️ 맛집 좌표 기반 조회 (5km 반경) - 어떤 목적지든 작동
+      // GET /kakao-food-geo?lat=&lng=&radius=5000&cat=전체
+      // ══════════════════════════════════════════════════
+      if (path === '/kakao-food-geo' && method === 'GET') {
+        const lat    = parseFloat(url.searchParams.get('lat') || '0');
+        const lng    = parseFloat(url.searchParams.get('lng') || '0');
+        const radius = Math.min(parseInt(url.searchParams.get('radius') || '5000'), 20000);
+        const category = url.searchParams.get('cat') || '전체';
+
+        if (!lat || !lng) return json({ error: 'lat/lng 파라미터 필요' }, 400);
+
+        // 카카오 카테고리 검색 (FD4=음식점, CE7=카페) - 좌표+반경
+        const cats = (category === '카페') ? ['CE7'] : ['FD4', 'CE7'];
+        let all = [];
+        for (const cat of cats) {
+          // 카카오는 radius 최대 20000m, 페이지당 15개, 최대 3페이지
+          for (let page = 1; page <= 3; page++) {
+            const kurl = `https://dapi.kakao.com/v2/local/search/category.json` +
+              `?category_group_code=${cat}` +
+              `&x=${lng}&y=${lat}` +
+              `&radius=${radius}` +
+              `&sort=distance` +
+              `&size=15&page=${page}`;
+            try {
+              const res = await fetch(kurl, {
+                headers: { 'Authorization': `KakaoAK ${KAKAO_KEY}` }
+              });
+              if (!res.ok) break;
+              const d = await res.json();
+              if (d.documents && d.documents.length) all = all.concat(d.documents);
+              if (!d.meta || d.meta.is_end) break;  // 마지막 페이지면 중단
+            } catch (e) { break; }
+          }
+        }
+
+        // 카테고리 필터 (전체가 아니면)
+        if (category !== '전체' && category !== '카페') {
+          const catMap = {
+            '일식':'%일식%','중식':'%중식%','양식':'%양식%',
+            '술집':'%술집%','분식':'%분식%','한식':'%한식%'
+          };
+          const kw = category;
+          all = all.filter(p => (p.category_name||'').includes(kw));
+        }
+
+        // 중복 제거 + 거리순
+        const seen = new Set();
+        const places = all
+          .filter(p => { if (seen.has(p.id)) return false; seen.add(p.id); return true; })
+          .sort((a,b) => parseInt(a.distance) - parseInt(b.distance))
+          .slice(0, 30)
+          .map(p => ({
+            place_id: p.id,
+            place_name: p.place_name,
+            category_name: p.category_name || '',
+            address_name: p.address_name || '',
+            road_address_name: p.road_address_name || '',
+            distance: parseInt(p.distance) || 0,
+            place_url: p.place_url || '',
+            lat: parseFloat(p.y) || 0,
+            lng: parseFloat(p.x) || 0
+          }));
+
+        return new Response(JSON.stringify({ restaurants: places }), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+            'Cache-Control': 'public, max-age=600'  // 10분 캐시
+          }
+        });
+      }
+
+      return json({ error: 'Not found' }, 404);
+
+───────────────────────────────────────────────────────────────
+✅ 저장 후 배포하세요.
+═══════════════════════════════════════════════════════════════
+
+      ═══════════════════════════════════════════════════════════════
+🍽️ Worker에 "네이버 리뷰많은순 맛집 조회" 추가
+═══════════════════════════════════════════════════════════════
+
+worker/index.js 에서 이 줄을 찾으세요 (맨 끝부분, 딱 한 번 나옴):
+
+      return json({ error: 'Not found' }, 404);
+
+
+그 줄을 아래 전체로 교체하세요:
+───────────────────────────────────────────────────────────────
+
+      // ══════════════════════════════════════════════════
+      // 🍽️ 네이버 맛집 조회 (리뷰많은순, 최대 100개 시도)
+      // GET /naver-food?region=의왕&cat=전체
+      // ══════════════════════════════════════════════════
+      if (path === '/naver-food' && method === 'GET') {
+        const region   = url.searchParams.get('region') || '';
+        const category  = url.searchParams.get('cat') || '전체';
+        if (!region) return json({ error: 'region 파라미터 필요' }, 400);
+
+        // 카테고리별 검색어 구성 (여러 검색어로 최대한 많이 수집)
+        let queries;
+        if (category !== '전체') {
+          queries = [region + ' ' + category, region + ' ' + category + ' 맛집'];
+        } else {
+          queries = [
+            region + ' 맛집', region + ' 한식', region + ' 카페',
+            region + ' 일식', region + ' 중식', region + ' 양식',
+            region + ' 분식', region + ' 술집', region + ' 고기'
+          ];
+        }
+
+        const seen = new Map(); // title(상호) 중복 제거
+        for (const q of queries) {
+          // 네이버는 display 최대 5, start 최대 5 → 검색어당 최대 25개
+          for (let start = 1; start <= 21; start += 5) {
+            const nurl = 'https://openapi.naver.com/v1/search/local.json' +
+              '?query=' + encodeURIComponent(q) +
+              '&display=5&start=' + start + '&sort=comment'; // comment=리뷰많은순
+            try {
+              const res = await fetch(nurl, {
+                headers: {
+                  'X-Naver-Client-Id':     NAVER_ID,
+                  'X-Naver-Client-Secret': NAVER_SEC
+                }
+              });
+              if (!res.ok) break;
+              const d = await res.json();
+              const items = d.items || [];
+              if (!items.length) break;
+              for (const it of items) {
+                // title의 <b> 태그 제거
+                const name = (it.title || '').replace(/<[^>]+>/g, '');
+                if (!name || seen.has(name)) continue;
+                // 네이버 좌표는 KATEC(TM) → mapx/mapy를 경위도로 변환 불필요하게
+                // mapx/mapy는 1e7 스케일 WGS84 (신규 API 기준)
+                const lng = it.mapx ? parseFloat(it.mapx) / 1e7 : 0;
+                const lat = it.mapy ? parseFloat(it.mapy) / 1e7 : 0;
+                seen.set(name, {
+                  place_id: name,
+                  place_name: name,
+                  category_name: it.category || '',
+                  address_name: it.address || '',
+                  road_address_name: it.roadAddress || '',
+                  distance: 0,
+                  place_url: it.link || ('https://search.naver.com/search.naver?query=' + encodeURIComponent(name)),
+                  lat: lat,
+                  lng: lng,
+                  telephone: it.telephone || ''
+                });
+              }
+              if (items.length < 5) break; // 마지막 페이지
+            } catch (e) { break; }
+          }
+          if (seen.size >= 100) break; // 100개 모이면 중단
+        }
+
+        const places = Array.from(seen.values()).slice(0, 100);
+        return new Response(JSON.stringify({ restaurants: places, source: 'naver' }), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+            'Cache-Control': 'public, max-age=600'
+          }
+        });
+      }
+
+      return json({ error: 'Not found' }, 404);
+
+───────────────────────────────────────────────────────────────
+✅ 저장 후 배포하세요.
+
+⚠️ 참고: 네이버 지역검색은 리뷰많은순(sort=comment)을 지원하지만,
+   검색어당 최대 25개 제한이라 여러 카테고리 검색어로 합쳐서
+   최대 100개까지 수집합니다. 실제 개수는 지역 규모에 따라 달라집니다.
+═══════════════════════════════════════════════════════════════
 
       return json({ error: 'Not found' }, 404);
 
