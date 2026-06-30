@@ -3433,6 +3433,22 @@ function confirmSelectedRoute(){
 }
 window.confirmSelectedRoute = confirmSelectedRoute;
 
+// 메인 화면 '경로 확정' 버튼용 (세부경로 안 열고 바로 확정)
+function confirmCurrentRoute(){
+  var type = window._pendingRouteType || window._lockedRouteType || 'fast';
+  var optName = { fast:'최단시간', less:'최소환승', sub:'지하철', bus:'버스' }[type] || '선택한';
+  window._routeLocked = true;
+  window._lockedRouteType = type;
+  window._lastCongNodeIdx = -1;
+  var btn = document.getElementById('mainConfirmRouteBtn');
+  if(btn){
+    btn.textContent = '✅ ' + optName + ' 확정됨';
+    btn.style.background = '#30a14e';
+  }
+  if(typeof toast === 'function') toast(optName + ' 경로로 확정했어요');
+}
+window.confirmCurrentRoute = confirmCurrentRoute;
+
 // 경로 확인 커스텀 모달 (APK WebView에서 confirm() 차단 대응)
 function _showRouteConfirm(optName, onConfirm){
   var ov = document.getElementById('routeConfirmOverlay');
@@ -3514,6 +3530,15 @@ function _doSelectRouteOption(type) {
   _renderTransitResultCard(data, _transitResultStart, _transitResultDest, 'odsay_' + type);
 
   _highlightRouteTab(type);
+
+  // 새 경로 선택 시 메인 확정 버튼 초기화
+  window._pendingRouteType = type;
+  var _mcBtn = document.getElementById('mainConfirmRouteBtn');
+  if(_mcBtn){
+    var _locked = (window._routeLocked && window._lockedRouteType === type);
+    _mcBtn.textContent = _locked ? '✅ 확정됨' : '✅ 경로 확정';
+    _mcBtn.style.background = _locked ? '#30a14e' : '#2f7cf6';
+  }
 }
 window._doSelectRouteOption = _doSelectRouteOption;
 
@@ -4963,12 +4988,17 @@ window.addEventListener('unhandledrejection', function(e) {
         <div id="transitHtlTrack"></div>
       </div>
 
-      <!-- ── 세부경로 버튼 ── -->
-      <div style="margin-top:10px;">
+      <!-- ── 세부경로 / 경로확정 버튼 ── -->
+      <div style="margin-top:10px;display:flex;gap:8px;">
         <button onclick="openTransitDetail()"
-          style="width:100%;padding:11px;background:var(--card2);border:1px solid var(--border);
+          style="flex:1;padding:11px;background:var(--card2);border:1px solid var(--border);
           border-radius:12px;color:var(--text);font-size:13px;font-weight:700;cursor:pointer;">
           🗺️ 세부경로 보기
+        </button>
+        <button id="mainConfirmRouteBtn" onclick="confirmCurrentRoute()"
+          style="flex:1;padding:11px;background:#2f7cf6;border:none;
+          border-radius:12px;color:#fff;font-size:13px;font-weight:800;cursor:pointer;">
+          ✅ 경로 확정
         </button>
       </div>
     </div>
@@ -5448,17 +5478,17 @@ window.addEventListener('unhandledrejection', function(e) {
 </div>
 
 <!-- ★ 맛집 탭 -->
-<div class="tab-body no-pad" id="tab-food" style="flex-direction:column;overflow-y:auto;">
-  <!-- 헤더 -->
-  <div class="food-header">
+<div class="tab-body no-pad" id="tab-food" style="flex-direction:column;overflow:hidden;">
+  <!-- 헤더 (고정) -->
+  <div class="food-header" style="flex-shrink:0;">
     <div>
       <div class="food-title">🍽️ 도착역 맛집</div>
       <div class="food-dest" id="foodDestLabel">도착역을 설정하면 맛집을 추천해드려요</div>
     </div>
     <button class="food-refresh-btn" onclick="loadFoodTab(true)">🔄 새로고침</button>
   </div>
-  <!-- 카테고리 필터 -->
-  <div class="food-filter" id="foodFilter">
+  <!-- 카테고리 필터 (고정) -->
+  <div class="food-filter" id="foodFilter" style="flex-shrink:0;">
     <div class="food-chip on" onclick="foodFilterCat(this,'전체')">전체</div>
     <div class="food-chip" onclick="foodFilterCat(this,'음식점')">🍚 한식</div>
     <div class="food-chip" onclick="foodFilterCat(this,'카페')">☕ 카페</div>
@@ -5468,8 +5498,8 @@ window.addEventListener('unhandledrejection', function(e) {
     <div class="food-chip" onclick="foodFilterCat(this,'술집')">🍺 술집</div>
     <div class="food-chip" onclick="foodFilterCat(this,'분식')">🍜 분식</div>
   </div>
-  <!-- 맛집 목록 -->
-  <div class="food-list" id="foodList">
+  <!-- 맛집 목록 (이 영역만 스크롤) -->
+  <div class="food-list" id="foodList" style="flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;min-height:0;">
     <div class="food-empty">
       🗺️<br>경로를 설정하면<br>도착역 주변 맛집을 추천해드려요!
     </div>
