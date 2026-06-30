@@ -4224,7 +4224,7 @@ function _updateTransitGps() {
   var inRange = bestDist < 300;
   var elapsedMin = _transitStartTime ? (Date.now() - _transitStartTime) / 60000 : 0;
 
-  // isOrigin(출발지 가상 노드): 출발 대기 중 → 마커 없이 상태바만
+  // isOrigin(출발지 가상 노드): 출발 대기 중 → 첫 역에 마커 표시
   if(best.isOrigin) {
     if(locBar) { locBar.style.display = 'flex'; }
     var miEl = document.getElementById('transitLocModeIcon'); if(miEl) miEl.textContent='📍';
@@ -4232,6 +4232,42 @@ function _updateTransitGps() {
     if(locArrow) locArrow.style.display='none';
     if(locNext)  locNext.style.display='none';
     if(locEta)   locEta.style.display='none';
+
+    // 출발 대기 중에도 첫 실제 역(다음 노드)에 마커 표시
+    var _firstReal = null, _firstIdx = -1;
+    for(var _fi=0; _fi<_transitNodeData.length; _fi++){
+      if(!_transitNodeData[_fi].isOrigin && _transitNodeData[_fi].el){
+        _firstReal = _transitNodeData[_fi]; _firstIdx = _fi; break;
+      }
+    }
+    if(_firstReal){
+      var _od = window._htlGpsDot || document.getElementById('htl-gps-marker-dot');
+      var _or = window._htlGpsRing || document.getElementById('htl-gps-marker-ring');
+      var _oax = _firstReal.el.querySelector('div[style*="position:relative"]');
+      if(_od && _oax){
+        if(_od.parentNode !== _oax) _oax.appendChild(_od);
+        if(_or && _or.parentNode !== _oax) _oax.appendChild(_or);
+        _od.style.left='50%'; _od.style.transform='translateX(-50%)'; _od.style.display='block';
+        if(_or){ _or.style.left='50%'; _or.style.display='block'; }
+      }
+      _firstReal.el.classList.add('htl-gps-here');
+
+      // 출발 대기 중 혼잡도를 첫 실제 구간 교통수단에 맞춤
+      if(window._lastCongNodeIdx !== _firstIdx){
+        window._lastCongNodeIdx = _firstIdx;
+        if(_firstReal.isBus && _firstReal.lineName){
+          var _bs = [];
+          _transitNodeData.forEach(function(nd){
+            if(nd.isBus && nd.lineName===_firstReal.lineName && nd.lat)
+              _bs.push({ stationName: nd.name, lat: nd.lat, lon: nd.lng });
+          });
+          if(typeof updateBusCong==='function') updateBusCong({ name:_firstReal.lineName, stops:_bs, curStopIdx:0 });
+        } else if(_firstReal.isSub && _firstReal.name){
+          window._congMode='subway';
+          if(typeof updateCong==='function') updateCong({ name:_firstReal.name, line:_firstReal.lineName||'' });
+        }
+      }
+    }
     return;
   }
 
