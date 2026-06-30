@@ -21684,6 +21684,25 @@ function _fetchBusCongestion(busSection){
         var BUS_CAPACITY = 40;
         var pct = Math.min(100, Math.round(avgCgst / BUS_CAPACITY * 100));
 
+        // 24시간 시간대별 혼잡도 배열 생성 (0~23시)
+        // 각 시간대(tzon)의 평균 승객 수 → %
+        var hourSum = {}, hourCnt = {};
+        items.forEach(function(it){
+          var t = parseInt(it.tzon, 10);
+          var c = parseFloat(it.cgst);
+          if(isNaN(t) || isNaN(c)) return;
+          hourSum[t] = (hourSum[t]||0) + c;
+          hourCnt[t] = (hourCnt[t]||0) + 1;
+        });
+        var hourly = [];
+        for(var h=0; h<24; h++){
+          if(hourCnt[h]){
+            hourly[h] = Math.min(100, Math.round((hourSum[h]/hourCnt[h]) / BUS_CAPACITY * 100));
+          } else {
+            hourly[h] = 0;
+          }
+        }
+
         resolve({
           pct: pct,
           rawCgst: Math.round(avgCgst),    // 평균 승객 수
@@ -21692,6 +21711,7 @@ function _fetchBusCongestion(busSection){
           stopName: curStop.stationName,
           region: (items[0] && items[0].sgg_nm) || '',
           tzon: curHour,
+          hourly: hourly,                   // 24시간 혼잡도 배열
           sampleCount: cnt
         });
       } // end _processCongItems
@@ -21760,12 +21780,65 @@ function updateBusCong(busSection){
         + ' (정원 약 40명 기준)';
     }
 
-    // 버스는 24시간 차트도 통계 신뢰도 낮음 → 살짝 흐리게
+    // 버스도 시간대별 통계는 유효 → 차트 선명하게 유지
     var chartWrap = document.getElementById('chart24Wrap');
-    if(chartWrap) chartWrap.style.opacity = '0.4';
+    if(chartWrap) chartWrap.style.opacity = '1';
+
+    // 🚌 버스 24시간 혼잡도 차트 렌더 (정류장 시간대별 데이터 기반)
+    if(res.hourly && res.hourly.length === 24){
+      _renderBusChart24(res.hourly);
+    }
   });
 }
 window.updateBusCong = updateBusCong;
+
+// 🚌 버스 24시간 혼잡도 차트 렌더 (정류장 시간대별 데이터)
+function _renderBusChart24(hourly){
+  var bars    = document.getElementById('bars24');
+  var peakLbl = document.getElementById('peakLbl');
+  var srcLbl  = document.getElementById('chartSourceLabel');
+  if(!bars) return;
+
+  var curH = new Date().getHours();
+
+  // 데이터 있는 시간대 중 피크 계산
+  var maxV = 0, peakH = curH;
+  for(var h=0; h<24; h++){
+    if((hourly[h]||0) > maxV){ maxV = hourly[h]||0; peakH = h; }
+  }
+  if(srcLbl)  srcLbl.textContent = '(버스 통계 기반)';
+  if(peakLbl) peakLbl.textContent = peakH + '시 피크';
+
+  bars.innerHTML = hourly.map(function(v, h){
+    var isActive = (v > 0);
+    var isCur    = (h === curH);
+    if(!isActive){
+      return '<div class="bar24-col bar24-off" onclick="showChartTooltip(' + h + ',0)">'
+        + '<div class="bar24-fill-off"></div>'
+        + '<div class="bar24-lbl bar24-lbl-off">' + h + '</div>'
+        + '</div>';
+    }
+    var col   = v<30 ? '#34c759' : v<60 ? '#ff9f0a' : v<80 ? '#ff6b35' : '#ff3b30';
+    var ht    = Math.max(4, Math.round(v * 0.6));
+    var alpha = isCur ? '1' : '0.75';
+    return '<div class="bar24-col' + (isCur ? ' cur' : '') + '"'
+      + ' onclick="showChartTooltip(' + h + ',' + v + ')">'
+      + '<div class="bar24-fill" style="height:' + ht + 'px;background:' + col
+      + ';opacity:' + alpha + ';"></div>'
+      + '<div class="bar24-lbl' + (isCur ? ' cur-lbl' : '') + '">' + h + '</div>'
+      + '</div>';
+  }).join('');
+
+  // 현재 시각 막대를 중앙으로 스크롤
+  setTimeout(function(){
+    var scroll = document.getElementById('chart24Scroll');
+    if(scroll){
+      var BAR_W = 30;
+      scroll.scrollTo({ left: Math.max(0, curH*BAR_W - scroll.clientWidth/2 + BAR_W/2), behavior:'smooth' });
+    }
+  }, 300);
+}
+window._renderBusChart24 = _renderBusChart24;
 
 
 
