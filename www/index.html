@@ -1152,8 +1152,96 @@ function loadFoodTab(force) {
 window.loadFoodTab = loadFoodTab;
 
 
-// Worker D1 캐시에서 맛집 조회
+// Worker D1 캐시에서 맛집 조회 (네이버 리뷰많은순 우선)
 function _fetchKakaoFood(stnNm, lat, lng) {
+  var list = document.getElementById('foodList');
+  if(list) list.innerHTML =
+    '<div class="food-loading"><div class="food-spinner"></div>' + stnNm + ' 맛집 불러오는 중...</div>';
+
+  // 1순위: 네이버 리뷰많은순 (목적지명 기반, 최대 100개)
+  var naverUrl = 'https://gentle-lab-7e47subway-api.phg0643.workers.dev/naver-food' +
+    '?region=' + encodeURIComponent(stnNm) +
+    '&cat=' + encodeURIComponent(_foodCurFilter || '전체');
+
+  fetch(naverUrl)
+    .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+    .then(function(data){
+      var places = data.restaurants || [];
+      if(!places.length){
+        // 네이버 결과 없으면 카카오 좌표 5km 폴백
+        _fetchKakaoFoodGeo(stnNm, lat, lng);
+        return;
+      }
+      _foodAllData = places.map(function(p){
+        return {
+          id:                p.place_id   || p.place_name    || '',
+          place_name:        p.place_name                     || '',
+          category_name:     p.category_name                  || '',
+          address_name:      p.address_name                   || '',
+          road_address_name: p.road_address_name              || '',
+          distance:          String(p.distance                || 0),
+          place_url:         p.place_url                       || '',
+          x:                 String(p.lng || p.x              || 0),
+          y:                 String(p.lat || p.y              || 0),
+        };
+      });
+      _foodCache[stnNm] = { ts: Date.now(), data: _foodAllData };
+      _renderFoodList();
+    })
+    .catch(function(e){
+      console.warn('[맛집] 네이버 오류, 카카오 폴백:', e);
+      _fetchKakaoFoodGeo(stnNm, lat, lng);
+    });
+}
+window._fetchKakaoFood = _fetchKakaoFood;
+
+// 카카오 좌표 기반 5km 조회 (폴백)
+function _fetchKakaoFoodGeo(stnNm, lat, lng) {
+  var list = document.getElementById('foodList');
+
+  // 좌표 기반 5km 반경 조회 (어떤 목적지든 작동)
+  var workerUrl = 'https://gentle-lab-7e47subway-api.phg0643.workers.dev/kakao-food-geo' +
+    '?lat=' + lat + '&lng=' + lng +
+    '&radius=5000' +
+    '&cat=' + encodeURIComponent(_foodCurFilter || '전체');
+
+  fetch(workerUrl)
+    .then(function(r) {
+      if(!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
+    .then(function(data) {
+      var places = data.restaurants || data.documents || [];
+      if(!places.length) {
+        // 좌표 조회 실패 시 역명 기반으로 폴백
+        _fetchKakaoFoodByName(stnNm);
+        return;
+      }
+      _foodAllData = places.map(function(p) {
+        return {
+          id:                p.place_id   || p.id             || '',
+          place_name:        p.place_name                     || '',
+          category_name:     p.category_name                  || '',
+          address_name:      p.address_name                   || '',
+          road_address_name: p.road_address_name              || '',
+          distance:          String(p.distance                || 0),
+          place_url:         p.place_url                      || '',
+          x:                 String(p.lng || p.x              || 0),
+          y:                 String(p.lat || p.y              || 0),
+        };
+      });
+      _foodCache[stnNm] = { ts: Date.now(), data: _foodAllData };
+      _renderFoodList();
+    })
+    .catch(function(e) {
+      console.warn('[맛집] 좌표 조회 오류, 역명 폴백:', e);
+      _fetchKakaoFoodByName(stnNm);
+    });
+}
+window._fetchKakaoFoodGeo = _fetchKakaoFoodGeo;
+
+// 역명 기반 조회 (최종 폴백)
+function _fetchKakaoFoodByName(stnNm) {
   var list = document.getElementById('foodList');
   if(list) list.innerHTML =
     '<div class="food-loading"><div class="food-spinner"></div>' + stnNm + ' 맛집 불러오는 중...</div>';
@@ -2910,8 +2998,9 @@ function openTransitDetail() {
     var _clickAttr = _expandable ? ' onclick="_toggleDetailSec(\''+_secId+'\')" style="cursor:pointer;"' : '';
     var _chevron = _expandable ? '<span id="'+_secId+'_chev" style="font-size:10px;color:var(--sub);transition:transform .2s;margin-left:4px;">▼</span>' : '';
 
-    html += '<div'+_clickAttr+'>'
-      + '<div style="display:flex;align-items:flex-start;padding:13px 16px;border-bottom:1px solid var(--border);gap:12px;">'
+    html += '<div'+_clickAttr+' id="tdseccard_'+_si+'" data-dep="'+_depMs+'" data-arr="'+_arrMs+'" data-walk="'+(isWalk?1:0)+'">'
+      + '<div class="tdsec-row" style="display:flex;align-items:flex-start;padding:13px 16px;border-bottom:1px solid var(--border);gap:12px;position:relative;">'
+      + '<div class="tdsec-prog" id="tdprog_'+_si+'" style="position:absolute;left:0;top:0;bottom:0;width:3px;background:'+col+';transform:scaleY(0);transform-origin:top;transition:transform .5s linear;"></div>'
       + lineBar
       + '<div style="width:34px;height:34px;border-radius:50%;background:'+iconBg+';display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;">'+icon+'</div>'
       + '<div style="flex:1;min-width:0;">'
@@ -2931,7 +3020,45 @@ function openTransitDetail() {
   modal.style.display = 'flex';
   if(typeof window._setupDetailSheetDrag==='function') window._setupDetailSheetDrag();
   if(sects) sects.scrollTop=0;
+
+  // 현재 진행 위치 갱신 시작 (시간 기반)
+  _updateDetailProgress();
+  if(window._detailProgTimer) clearInterval(window._detailProgTimer);
+  window._detailProgTimer = setInterval(_updateDetailProgress, 2000);
 }
+
+// 세부경로 모달의 현재 진행 위치를 시간 기반으로 갱신
+function _updateDetailProgress(){
+  var modal = document.getElementById('transitDetailModal');
+  if(!modal || modal.style.display==='none'){
+    if(window._detailProgTimer){ clearInterval(window._detailProgTimer); window._detailProgTimer=null; }
+    return;
+  }
+  var now = Date.now();
+  var i = 0;
+  while(true){
+    var card = document.getElementById('tdseccard_'+i);
+    if(!card) break;
+    var dep = parseInt(card.getAttribute('data-dep'),10);
+    var arr = parseInt(card.getAttribute('data-arr'),10);
+    var prog = document.getElementById('tdprog_'+i);
+    if(prog && dep && arr){
+      var ratio;
+      if(now <= dep) ratio = 0;
+      else if(now >= arr) ratio = 1;
+      else ratio = (now - dep) / (arr - dep);
+      prog.style.transform = 'scaleY(' + ratio + ')';
+      // 현재 진행 중인 구간 카드 하이라이트
+      if(now >= dep && now < arr){
+        card.style.background = 'var(--card2,rgba(255,200,0,0.06))';
+      } else {
+        card.style.background = '';
+      }
+    }
+    i++;
+  }
+}
+window._updateDetailProgress = _updateDetailProgress;
 function _toggleDetailSec(secId){
   var list=document.getElementById(secId+'_list');
   var chev=document.getElementById(secId+'_chev');
@@ -2946,6 +3073,7 @@ function closeTransitDetail() {
   var sheet = document.getElementById('transitDetailSheet');
   if(sheet) sheet.style.transform='';
   if(modal) modal.style.display = 'none';
+  if(window._detailProgTimer){ clearInterval(window._detailProgTimer); window._detailProgTimer=null; }
 }
 // 세부경로 시트 드래그 닫기
 (function _initDetailSheetDrag(){
@@ -3143,8 +3271,10 @@ function fmapDoRoute() {
       var routeData = fastRoute ? { routes: [_convertSinglePathToRoute(fastRoute)] } : _convertODsayToRoutes(combinedData);
       _renderTransitResultCard(routeData, start, dest, 'odsay');
 
-      // 최단시간 탭 활성화
-      selectRouteOption('fast');
+      // 최단시간 탭 기본 표시 (팝업 없이 — 사용자가 탭 선택 시에만 고정)
+      window._routeLocked = false;
+      window._lockedRouteType = null;
+      _doSelectRouteOption('fast');
     })
     .catch(function(e){
       if(loading) loading.style.display = 'none';
@@ -3267,6 +3397,34 @@ function _parseODsayAllOptions(odsayData) {
 function selectRouteOption(type) {
   if(!_allRouteResults) return;
 
+  // 탑승방법 한글 이름
+  var _optName = {
+    fast: '최단시간', less: '최소환승', sub: '지하철', bus: '버스'
+  }[type] || '선택한';
+
+  // 이미 같은 방법으로 고정돼 있으면 팝업 생략
+  if(window._routeLocked && window._lockedRouteType === type){
+    _highlightRouteTab(type);
+    return;
+  }
+
+  // 확인 팝업 → 확인 시 경로 고정
+  var _ok = confirm(_optName + ' 방법으로 진행하겠습니다.\n\n이 경로로 안내를 시작할까요?');
+  if(!_ok) return;
+
+  // 경로 고정 플래그
+  window._routeLocked = true;
+  window._lockedRouteType = type;
+  window._lastCongNodeIdx = -1; // 혼잡도 추적 리셋
+
+  _doSelectRouteOption(type);
+}
+window.selectRouteOption = selectRouteOption;
+
+// 실제 경로 선택/렌더 (팝업 확인 후 호출)
+function _doSelectRouteOption(type) {
+  if(!_allRouteResults) return;
+
   // 변환 성공하는(sections 있는) 첫 경로를 찾는 헬퍼
   function _tryConvert(p){
     if(!p) return null;
@@ -3314,7 +3472,7 @@ function selectRouteOption(type) {
 
   _highlightRouteTab(type);
 }
-window.selectRouteOption = selectRouteOption;
+window._doSelectRouteOption = _doSelectRouteOption;
 
 // 경로 탭 하이라이트 (활성/비활성 스타일)
 function _highlightRouteTab(type){
@@ -3846,10 +4004,70 @@ function _startTransitGpsTracking(nodes) {
 }
 window._startTransitGpsTracking = _startTransitGpsTracking;
 
+// "HH:MM" → 분(0~1439). 자정 넘김 보정 포함
+function _arrTimeToMin(s){
+  if(!s || typeof s !== 'string') return null;
+  var m = s.match(/(\d{1,2}):(\d{2})/);
+  if(!m) return null;
+  return parseInt(m[1],10)*60 + parseInt(m[2],10);
+}
+
+// 현재 시각 기준, 경로 시간표상 어느 구간에 있는지 추정
+// 반환: { fromIdx, toIdx, ratio(0~1), curLat, curLng } 또는 null
+function _estimateTimeBasedPos(){
+  if(!_transitNodeData || !_transitNodeData.length) return null;
+
+  // arrTime 있는 노드만 인덱스+분으로 수집
+  var timed = [];
+  _transitNodeData.forEach(function(nd, idx){
+    var mn = _arrTimeToMin(nd.arrTime);
+    if(mn != null && nd.lat != null){
+      timed.push({ idx: idx, min: mn, lat: nd.lat, lng: nd.lng, nd: nd });
+    }
+  });
+  if(timed.length < 2) return null;
+
+  // 자정 넘김 보정: 이전보다 작아지면 +1440
+  for(var i=1;i<timed.length;i++){
+    if(timed[i].min < timed[i-1].min) timed[i].min += 1440;
+  }
+
+  var now = new Date();
+  var nowMin = now.getHours()*60 + now.getMinutes() + now.getSeconds()/60;
+  // 시간표 기준에 맞춰 자정 보정
+  if(nowMin < timed[0].min - 60) nowMin += 1440;
+
+  // 출발 전
+  if(nowMin <= timed[0].min){
+    return { fromIdx: timed[0].idx, toIdx: timed[0].idx, ratio: 0,
+             curLat: timed[0].lat, curLng: timed[0].lng };
+  }
+  // 도착 후
+  var last = timed[timed.length-1];
+  if(nowMin >= last.min){
+    return { fromIdx: last.idx, toIdx: last.idx, ratio: 1,
+             curLat: last.lat, curLng: last.lng };
+  }
+  // 두 노드 사이 보간
+  for(var j=0;j<timed.length-1;j++){
+    var a = timed[j], b = timed[j+1];
+    if(nowMin >= a.min && nowMin <= b.min){
+      var span = (b.min - a.min) || 1;
+      var r = (nowMin - a.min) / span;
+      return {
+        fromIdx: a.idx, toIdx: b.idx, ratio: r,
+        curLat: a.lat + (b.lat - a.lat) * r,
+        curLng: a.lng + (b.lng - a.lng) * r
+      };
+    }
+  }
+  return null;
+}
+window._estimateTimeBasedPos = _estimateTimeBasedPos;
+
 function _updateTransitGps() {
   var card = document.getElementById('transitResultCard');
   if(!card || card.style.display==='none') { clearInterval(_transitGpsTimer); return; }
-
   // ── GPS 좌표 취득 (여러 소스 순서대로 시도) ──
   var lat = null, lng = null;
   if(typeof S !== 'undefined' && S.lastGPSFix && S.lastGPSFix.lat) {
@@ -3870,10 +4088,35 @@ function _updateTransitGps() {
   var locArrow= document.getElementById('transitLocArrow');
   var locEta  = document.getElementById('transitLocEta');
 
-  // GPS 없으면 상태바만 숨김, 기존 마커 유지
+  // ── GPS 좌표 유효성 검증 (한국 영역: 위도 33~39, 경도 124~132) ──
+  // test 환경/에뮬레이터에서 (0,0)이나 깨진 좌표가 들어오면 무시
+  var _validGps = (lat != null && lng != null
+    && lat >= 33 && lat <= 39.5 && lng >= 124 && lng <= 132
+    && !isNaN(lat) && !isNaN(lng));
+  if(!_validGps){
+    lat = null; lng = null;
+  }
+
+  // ── GPS 없으면 시간 기반 추정 위치 사용 (지하철 지하구간 등) ──
+  var _usingTimeEst = false;
+  if(lat == null){
+    var est = _estimateTimeBasedPos();
+    if(est){
+      lat = est.curLat; lng = est.curLng;
+      _usingTimeEst = true;
+      // 마지막 정상 GPS도 갱신 (다음 폴백용)
+      window._lastEstLat = lat; window._lastEstLng = lng;
+    } else if(window._lastEstLat){
+      // 추정도 안되면 마지막 추정 위치 유지
+      lat = window._lastEstLat; lng = window._lastEstLng;
+      _usingTimeEst = true;
+    }
+  }
+
+  // GPS도 추정도 없으면 상태바만
   if(lat==null) {
     if(locBar) { locBar.style.display='flex'; }
-    if(locCur) locCur.textContent='GPS 신호 대기 중...';
+    if(locCur) locCur.textContent='경로 안내 준비 중...';
     if(locArrow) locArrow.style.display='none';
     if(locNext)  locNext.style.display='none';
     if(locEta)   locEta.style.display='none';
@@ -3900,6 +4143,17 @@ function _updateTransitGps() {
   if(!best) {
     if(locBar) locBar.style.display='none';
     return;
+  }
+
+  // ── 거리 안전장치: best 노드가 50km 이상 멀면 GPS 비정상 ──
+  // (test 환경/깨진 좌표로 엉뚱한 노드가 잡히는 것 방지)
+  if(bestDist > 50000){
+    if(locBar) { locBar.style.display='flex'; }
+    if(locCur) locCur.textContent='GPS 신호 확인 중...';
+    if(locArrow) locArrow.style.display='none';
+    if(locNext)  locNext.style.display='none';
+    if(locEta)   locEta.style.display='none';
+    return; // 혼잡도 갱신도 건너뜀 → 경로 첫 구간 표시 유지
   }
 
   // ── 현재 구간 교통수단에 따라 혼잡도 카드 자동 전환 ──
