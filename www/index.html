@@ -2781,6 +2781,37 @@ function _renderTransitResultCard(data, start, dest, cacheSource) {
   // 탑승 시간대 혼잡 예측
   _renderCongPrediction(sections);
 
+  // ── 혼잡도 카드: 경로 첫 교통수단에 맞춰 표시 ──
+  // 첫 번째 교통수단(도보 제외) 구간이 버스면 버스 혼잡도, 지하철이면 지하철 혼잡도
+  try {
+    var firstTransit = null;
+    for(var _si=0; _si<sections.length; _si++){
+      var _t = (sections[_si].transportation||{}).type;
+      if(_t === 1 || _t === 2){ firstTransit = sections[_si]; break; }
+    }
+    window._lastCongNodeIdx = -1; // GPS 추적 초기화 (구간 진입 시 재갱신)
+    if(firstTransit){
+      var _ft = firstTransit.transportation.type;
+      if(_ft === 2 && typeof updateBusCong === 'function'){
+        // 버스 구간 → 버스 혼잡도 (updateBusCong 내부에서 _congMode='bus' 설정)
+        var _stops = ((firstTransit.passStopList||{}).stationList||[]).map(function(s){
+          return { stationName: s.stationName||'', lat: s.lat||s.y||null, lon: s.lon||s.lng||s.x||null };
+        });
+        updateBusCong({
+          name: firstTransit.transportation.name || '',
+          stops: _stops,
+          curStopIdx: 0
+        });
+      } else if(_ft === 1 && typeof updateCong === 'function'){
+        // 지하철 구간 → 지하철 모드로 리셋 후 지하철역 혼잡도
+        window._congMode = 'subway';
+        var _stops2 = (firstTransit.passStopList||{}).stationList||[];
+        var _firstSubStn = _stops2.length ? (_stops2[0].stationName||'') : ((start||{}).name||'');
+        updateCong({ name: _firstSubStn, line: firstTransit.transportation.name||'' });
+      }
+    }
+  } catch(e){ console.warn('[혼잡도 초기화]', e); }
+
   // AI 브리핑 캐시 리셋
   if(typeof _resetAIBrief === 'function') _resetAIBrief();
 }
@@ -21484,6 +21515,10 @@ window.renderCarGrid = renderCarGrid;
 // updateCong — 혼잡도 UI 전체 갱신 (기존 함수 대체)
 function updateCong(stn) {
   if(!stn || !stn.name) return;
+  // 🚌 버스 혼잡도가 현재 표시 중이면 지하철로 덮어쓰지 않음
+  // (버스 탭/버스 구간에서 updateCong가 호출되어도 무시)
+  if(window._congMode === 'bus') return;
+  window._congMode = 'subway';
   var pct  = getCongPct(stn.name, stn.line);
   var col  = pct<30?'#34c759':pct<60?'#ff9f0a':pct<80?'#ff6b35':'#ff3b30';
   var lvl  = pct<30?'원활 😊':pct<60?'보통 😐':pct<80?'혼잡 😰':'매우혼잡 😱';
@@ -21658,10 +21693,15 @@ window._fetchBusCongestion = _fetchBusCongestion;
 
 // 버스 혼잡도로 카드 갱신
 function updateBusCong(busSection){
+  // 🚌 즉시 버스 모드로 잠금 (비동기 fetch 전에 지하철 덮어쓰기 방지)
+  window._congMode = 'bus';
+  // 라벨 즉시 "버스 N번"으로 (데이터 로딩 전에도 지하철 → 버스 전환)
+  var _labelEl0 = document.querySelector('.cong-stn');
+  if(_labelEl0) _labelEl0.innerHTML = '버스 <b id="congStn">' + (busSection.name||'-') + '</b>';
+
   _fetchBusCongestion(busSection).then(function(res){
     if(!res){
-      // 데이터 없으면 카드에 안내 (지하철 혼잡도 자리)
-      var stnEl = document.getElementById('congStn');
+      // 데이터 없으면 라벨만 버스로 유지 (수치는 비움)
       var labelEl = document.querySelector('.cong-stn');
       if(labelEl) labelEl.innerHTML = '버스 <b id="congStn">' + (busSection.name||'-') + '</b>';
       return;
