@@ -1034,4 +1034,194 @@ export default {
             headers: {
               'Content-Type': 'application/json',
               'Access-Control-Allow-Origin': '*',
-            
+              'Cache-Control': 'public, max-age=60'
+            }
+          });
+        } catch(e) {
+          return json({ error: 'DB 오류: ' + e.message }, 500);
+        }
+      }
+
+      // ══════════════════════════════════════════════════
+      // 🚌 버스 노선별 혼잡도 (국토부 RouteCongestionLevel)
+      // GET /bus-congestion?opr_ymd=&ctpv_cd=&sgg_cd=&numOfRows=&pageNo=
+      // ══════════════════════════════════════════════════
+      if (path === '/bus-congestion' && method === 'GET') {
+        const CONG_KEY  = 'fbdaeef19e93c7490ee53f87ae076ba752ff4fb89183d1e34d9798306d7b652d';
+        const CONG_BASE = 'https://apis.data.go.kr/1613000/RouteCongestionLevel/getRouteCongestionLevel';
+
+        const p  = url.searchParams;
+        const qs = new URLSearchParams({
+          serviceKey: CONG_KEY,
+          pageNo:    p.get('pageNo')    || '1',
+          numOfRows: p.get('numOfRows') || '100',
+          opr_ymd:   p.get('opr_ymd')   || '',
+          ctpv_cd:   p.get('ctpv_cd')   || '',
+          sgg_cd:    p.get('sgg_cd')    || '',
+          dataType:  'JSON'
+        });
+        if (p.get('rte_id'))  qs.set('rte_id',  p.get('rte_id'));
+        if (p.get('sttn_id')) qs.set('sttn_id', p.get('sttn_id'));
+
+        try {
+          const res  = await fetch(CONG_BASE + '?' + qs.toString(), {
+            headers: { 'User-Agent': 'Mozilla/5.0' }
+          });
+          const text = await res.text();
+          return new Response(text, {
+            status: res.status,
+            headers: {
+              'Content-Type': 'application/json; charset=utf-8',
+              'Access-Control-Allow-Origin': '*',
+              'Cache-Control': 'public, max-age=300'
+            }
+          });
+        } catch(e) {
+          return json({ error: '버스 혼잡도 API 오류: ' + e.message }, 502);
+        }
+      }
+
+      // ══════════════════════════════════════════════════
+      // 🍽️ 네이버 맛집 조회 (리뷰많은순, 최대 100개)  ★추가
+      // GET /naver-food?region=의왕&cat=전체
+      // ══════════════════════════════════════════════════
+      if (path === '/naver-food' && method === 'GET') {
+        const region   = url.searchParams.get('region') || '';
+        const category = url.searchParams.get('cat') || '전체';
+        if (!region) return json({ error: 'region 파라미터 필요' }, 400);
+
+        let queries;
+        if (category !== '전체') {
+          queries = [region + ' ' + category, region + ' ' + category + ' 맛집'];
+        } else {
+          queries = [
+            region + ' 맛집', region + ' 한식', region + ' 카페',
+            region + ' 일식', region + ' 중식', region + ' 양식',
+            region + ' 분식', region + ' 술집', region + ' 고기'
+          ];
+        }
+
+        const seen = new Map();
+        for (const q of queries) {
+          for (let start = 1; start <= 21; start += 5) {
+            const nurl = 'https://openapi.naver.com/v1/search/local.json' +
+              '?query=' + encodeURIComponent(q) +
+              '&display=5&start=' + start + '&sort=comment';
+            try {
+              const res = await fetch(nurl, {
+                headers: {
+                  'X-Naver-Client-Id':     NAVER_ID,
+                  'X-Naver-Client-Secret': NAVER_SEC
+                }
+              });
+              if (!res.ok) break;
+              const d = await res.json();
+              const items = d.items || [];
+              if (!items.length) break;
+              for (const it of items) {
+                const name = (it.title || '').replace(/<[^>]+>/g, '');
+                if (!name || seen.has(name)) continue;
+                const lng = it.mapx ? parseFloat(it.mapx) / 1e7 : 0;
+                const lat = it.mapy ? parseFloat(it.mapy) / 1e7 : 0;
+                seen.set(name, {
+                  place_id: name,
+                  place_name: name,
+                  category_name: it.category || '',
+                  address_name: it.address || '',
+                  road_address_name: it.roadAddress || '',
+                  distance: 0,
+                  place_url: it.link || ('https://search.naver.com/search.naver?query=' + encodeURIComponent(name)),
+                  lat: lat,
+                  lng: lng,
+                  telephone: it.telephone || ''
+                });
+              }
+              if (items.length < 5) break;
+            } catch (e) { break; }
+          }
+          if (seen.size >= 100) break;
+        }
+
+        const places = Array.from(seen.values()).slice(0, 100);
+        return new Response(JSON.stringify({ restaurants: places, source: 'naver' }), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+            'Cache-Control': 'public, max-age=600'
+          }
+        });
+      }
+
+      // ══════════════════════════════════════════════════
+      // 🍽️ 맛집 좌표 기반 조회 (5km 반경)  ★추가
+      // GET /kakao-food-geo?lat=&lng=&radius=5000&cat=전체
+      // ══════════════════════════════════════════════════
+      if (path === '/kakao-food-geo' && method === 'GET') {
+        const lat      = parseFloat(url.searchParams.get('lat') || '0');
+        const lng      = parseFloat(url.searchParams.get('lng') || '0');
+        const radius   = Math.min(parseInt(url.searchParams.get('radius') || '5000'), 20000);
+        const category = url.searchParams.get('cat') || '전체';
+
+        if (!lat || !lng) return json({ error: 'lat/lng 파라미터 필요' }, 400);
+
+        const cats = (category === '카페') ? ['CE7'] : ['FD4', 'CE7'];
+        let all = [];
+        for (const cat of cats) {
+          for (let page = 1; page <= 3; page++) {
+            const kurl = `https://dapi.kakao.com/v2/local/search/category.json` +
+              `?category_group_code=${cat}` +
+              `&x=${lng}&y=${lat}` +
+              `&radius=${radius}` +
+              `&sort=distance` +
+              `&size=15&page=${page}`;
+            try {
+              const res = await fetch(kurl, {
+                headers: { 'Authorization': `KakaoAK ${KAKAO_KEY}` }
+              });
+              if (!res.ok) break;
+              const d = await res.json();
+              if (d.documents && d.documents.length) all = all.concat(d.documents);
+              if (!d.meta || d.meta.is_end) break;
+            } catch (e) { break; }
+          }
+        }
+
+        if (category !== '전체' && category !== '카페') {
+          all = all.filter(p => (p.category_name || '').includes(category));
+        }
+
+        const seen2 = new Set();
+        const places = all
+          .filter(p => { if (seen2.has(p.id)) return false; seen2.add(p.id); return true; })
+          .sort((a, b) => parseInt(a.distance) - parseInt(b.distance))
+          .slice(0, 30)
+          .map(p => ({
+            place_id: p.id,
+            place_name: p.place_name,
+            category_name: p.category_name || '',
+            address_name: p.address_name || '',
+            road_address_name: p.road_address_name || '',
+            distance: parseInt(p.distance) || 0,
+            place_url: p.place_url || '',
+            lat: parseFloat(p.y) || 0,
+            lng: parseFloat(p.x) || 0
+          }));
+
+        return new Response(JSON.stringify({ restaurants: places }), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+            'Cache-Control': 'public, max-age=600'
+          }
+        });
+      }
+
+      return json({ error: 'Not found' }, 404);
+
+    } catch (e) {
+      return json({ error: String(e) }, 500);
+    }
+  },
+};
