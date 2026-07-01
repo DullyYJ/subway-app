@@ -1805,7 +1805,8 @@ function requestHomeBrief(force){
     lines = [here.line];
   }
   var totalMin = (typeof S !== 'undefined' && S.route)
-    ? Math.round((S.route.tp||[]).reduce(function(a,b){ return a+(b>0?b:0); },0)/60) : 0;
+    ? Math.round((S.route.tp||[]).reduce(function(a,b){ return a+(b>0?b:0); },0)/60)
+    : (window._homeRouteBaseMin || 0);
 
   // 현재 혼잡도(있으면 반영)
   var congPct = 40;
@@ -3516,6 +3517,7 @@ function _renderTransitResultCard(data, start, dest, cacheSource) {
   var summary  = route.summary || {};
   var sections = route.sections || [];
   var totalMin = Math.round((summary.duration || 0) / 60);
+  window._homeRouteBaseMin = totalMin;  // AI 승무원 예상시간 기준값 (S.route 없는 복합경로 대비)
 
   // 카드 표시
   if(box) box.style.display = 'block';
@@ -5622,7 +5624,7 @@ window.addEventListener('unhandledrejection', function(e) {
         <span id="favToggleBtn2" onclick="_openFavPopup()"
           style="flex-shrink:0;cursor:pointer;font-size:11px;font-weight:700;color:var(--gold);
           border:1px solid var(--gold);border-radius:12px;padding:3px 8px;white-space:nowrap;">⭐ 즐겨찾기</span>
-        <button onclick="document.getElementById('transitResultBox').style.display='none'"
+        <button onclick="closeTransitResult()"
           style="flex-shrink:0;background:none;border:none;color:var(--sub);font-size:20px;cursor:pointer;padding:0;line-height:1;">×</button>
       </div>
 
@@ -22911,6 +22913,55 @@ function updateBusCong(busSection){
   });
 }
 window.updateBusCong = updateBusCong;
+
+// ── 혼잡도 카드를 '출발역 설정 전' 대기 상태로 리셋 ──
+function _resetCongToWaiting(){
+  window._congMode = null;
+  var labelEl = document.querySelector('.cong-stn');
+  if(labelEl) labelEl.innerHTML = '지하철 <b id="congStn">-</b>';
+  var badge = document.getElementById('congBadge');
+  if(badge){ badge.textContent = '-'; badge.style.background = 'var(--arex)'; }
+  var card = document.getElementById('congCard');
+  if(card) card.style.borderLeftColor = 'var(--arex)';
+  var meta = document.getElementById('congMeta'); if(meta) meta.textContent = '시간표 기반';
+  var stEl = document.getElementById('congStatusTxt');
+  if(stEl){ stEl.textContent = '출발역을 설정하세요'; stEl.style.color = 'var(--sub)'; }
+  var gWrap = document.getElementById('congGaugeWrap'); if(gWrap) gWrap.style.display = 'none';
+  var gFill = document.getElementById('congGaugeFill'); if(gFill) gFill.style.width = '0%';
+  var gPct  = document.getElementById('congGaugePct'); if(gPct) gPct.textContent = '-';
+  var carTtl = document.getElementById('carTtl'); if(carTtl) carTtl.style.display = '';
+  var carGrid = document.getElementById('carGrid');
+  if(carGrid){ carGrid.style.display=''; carGrid.innerHTML = '<div style="font-size:11px;color:var(--sub);padding:6px 0;">출발역 설정 후 표시됩니다</div>'; }
+  var busNote = document.getElementById('busCongNote'); if(busNote){ busNote.style.display='none'; busNote.innerHTML=''; }
+  var bars = document.getElementById('bars24'); if(bars) bars.innerHTML = '';
+  var peakLbl = document.getElementById('peakLbl'); if(peakLbl) peakLbl.textContent = '-';
+  var srcLbl = document.getElementById('chartSourceLabel'); if(srcLbl) srcLbl.textContent = '(통계 기반)';
+}
+window._resetCongToWaiting = _resetCongToWaiting;
+
+// ── 경로 결과 X 닫기: 경로 설정 전 대기상태로 완전 복귀 ──
+function closeTransitResult(){
+  // 1) GPS 추적 타이머 정지 (이게 살아있으면 혼잡도가 3초마다 다시 채워짐)
+  try { if(typeof _transitGpsTimer !== 'undefined' && _transitGpsTimer){ clearInterval(_transitGpsTimer); _transitGpsTimer = null; } } catch(e){}
+  // 2) 결과 박스/카드 숨김
+  var box = document.getElementById('transitResultBox'); if(box) box.style.display = 'none';
+  var card = document.getElementById('transitResultCard'); if(card) card.style.display = 'none';
+  var lb = document.getElementById('transitLocBar'); if(lb) lb.style.display = 'none';
+  var tcc = document.getElementById('transitCongCard'); if(tcc) tcc.style.display = 'none';
+  // 3) 혼잡도 카드 대기 상태로
+  _resetCongToWaiting();
+  // 4) 경로 관련 전역 초기화 → AI 승무원도 경로 없음 상태로
+  window._congMode = null;
+  window._lastCongPct = 0;
+  window._homeRouteBaseMin = 0;
+  window._lastCongNodeIdx = -1;
+  try { _transitResultDest = null; _transitResultStart = null; _transitResultData = null; } catch(e){}
+  try { if(typeof S !== 'undefined'){ S.dest = null; S.route = null; } } catch(e){}
+  var rs = document.getElementById('routeStatus'); if(rs) rs.textContent = '설정 필요';
+  // 5) AI 승무원 즉시 갱신 (경로 없음 브리핑)
+  try { if(typeof requestHomeBrief === 'function') requestHomeBrief(false); } catch(e){}
+}
+window.closeTransitResult = closeTransitResult;
 
 // 🚌 버스 24시간 혼잡도 차트 렌더 (정류장 시간대별 데이터)
 function _renderBusChart24(hourly){
