@@ -12481,6 +12481,70 @@ function _openGpsModal() {
   m.classList.add('on');
 }
 
+// ── 앱 진입 시: GPS로 출발지 자동 지정 → 목적지 입력으로 유도 ──
+function autoSetStartFromGPS() {
+  // 이미 출발지가 있으면 건드리지 않음 (사용자 수정 존중)
+  if(_fmapStart) return;
+  if(!navigator.geolocation) return;
+
+  var startInp = document.getElementById('fmapStartInp');
+  if(startInp && !startInp.value){
+    startInp.value = '📍 내 위치 찾는 중...';
+    startInp.style.opacity = '0.6';
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    function(pos){
+      var lat = pos.coords.latitude, lng = pos.coords.longitude;
+      if(isNaN(lat) || isNaN(lng)){ _autoStartFail(); return; }
+      window._lastGPSLat = lat; window._lastGPSLng = lng;
+      if(typeof S !== 'undefined') S.lastGPSFix = { lat: lat, lng: lng, ts: Date.now() };
+
+      // 가장 가까운 지하철역 후보
+      var stn = null;
+      try {
+        var cands = nearestMulti(lat, lng, 2000);
+        if(cands && cands.length) stn = cands[0];
+      } catch(e){}
+
+      // 사용자가 그새 직접 입력했으면 덮어쓰지 않음
+      if(_fmapStart) return;
+      var si = document.getElementById('fmapStartInp');
+      if(si && si.value && si.value.indexOf('내 위치 찾는 중') === -1) return;
+
+      if(stn){
+        _fmapSetLocation('start', {
+          type:'subway', name: stn.name, line: stn.line||'',
+          lat: stn.lat, lng: stn.lng
+        });
+      } else {
+        // 역이 멀면 좌표 자체를 출발지로 (현재위치 복합경로)
+        _fmapStart = { type:'gps', name:'📍 내 위치', lat: lat, lng: lng };
+        if(si) si.value = '📍 내 위치';
+        if(typeof _updateRouteBtn === 'function') _updateRouteBtn();
+      }
+      if(si) si.style.opacity = '';
+
+      // 목적지 입력으로 유도 (자동 포커스)
+      var di = document.getElementById('fmapDestInp');
+      if(di && !di.value){
+        setTimeout(function(){ try{ di.focus(); }catch(e){} }, 300);
+      }
+    },
+    function(){ _autoStartFail(); },
+    { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 }
+  );
+}
+function _autoStartFail(){
+  var si = document.getElementById('fmapStartInp');
+  if(si && si.value.indexOf('내 위치 찾는 중') !== -1){
+    si.value = '';
+    si.style.opacity = '';
+    si.placeholder = '출발지 검색 (또는 위치 감지)';
+  }
+}
+window.autoSetStartFromGPS = autoSetStartFromGPS;
+
 function triggerGPS(){
   _gpsSetBusy(true);
 
@@ -16776,6 +16840,11 @@ window.onload=function(){
   });
   try { startAutoRefresh(); } catch(e) {}    // 5분 주기 API 자동갱신
   // startGPSCorrection() — 수동 위치감지 시에만 활성화
+
+  // ── 앱 진입 시 GPS로 출발지 자동 지정 → 목적지 입력 유도 ──
+  setTimeout(function(){
+    try { if(typeof autoSetStartFromGPS === 'function') autoSetStartFromGPS(); } catch(e){}
+  }, 800);
 
   // ── 앱 시작 시 서버에서 커뮤니티 게시글 로드 ───────
   setTimeout(function(){
