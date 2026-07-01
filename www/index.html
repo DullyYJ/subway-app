@@ -468,6 +468,17 @@ header h1 em{color:var(--gold);font-style:normal;}
 .chat-inputbar input{flex:1;background:var(--card);border:1px solid var(--border2);border-radius:20px;padding:10px 14px;color:var(--text);font-size:13px;outline:none;font-family:inherit;}
 .chat-send-btn{background:var(--gold);color:#121214;border:none;border-radius:50%;width:38px;height:38px;font-size:16px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
 .rpt-btn{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:9px 4px;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;font-size:11px;color:var(--text);}
+/* 홈 AI 역무원 카드 */
+.home-ai-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:14px 16px;}
+.home-ai-head{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+.home-ai-badge{font-size:20px;}
+.home-ai-title{font-size:13.5px;font-weight:800;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.home-ai-next{font-size:11px;font-weight:700;color:#2f7cf6;background:rgba(47,124,246,.12);padding:2px 8px;border-radius:8px;font-variant-numeric:tabular-nums;}
+.home-ai-refresh{background:var(--card2);border:1px solid var(--border);border-radius:9px;width:30px;height:28px;font-size:14px;cursor:pointer;color:var(--text);flex-shrink:0;}
+.home-ai-body{font-size:14px;line-height:1.75;color:var(--text);}
+.home-ai-msg{font-size:14px;line-height:1.8;color:var(--text);}
+.home-ai-msg b{color:#2f7cf6;font-weight:800;}
+.home-ai-empty{text-align:center;padding:18px 8px;color:var(--sub);font-size:13px;line-height:1.7;}
 .rpt-btn:active{background:var(--border2);}
 
 /* PATH STEPS */
@@ -1549,6 +1560,152 @@ function _renderAIBrief(data, fromName, toName, lines) {
 // ── 경로 변경 시 캐시 리셋 ──
 function _resetAIBrief() { _aiNextBriefAt = 0; }
 window._resetAIBrief = _resetAIBrief;
+
+// ══════════════════════════════════════════════════════════════
+// 🏠 홈 AI 역무원 — 현재 위치·시간 기준 10분마다 브리핑
+// ══════════════════════════════════════════════════════════════
+var _homeAiPollInt   = null;
+var _homeAiCountdown = null;
+var _homeAiNextAt    = 0;
+
+function _homeNearStationName(){
+  // 현재 위치 → 가장 가까운 역명 (없으면 출발역/현위치)
+  try {
+    var lat = window._lastGPSLat, lng = window._lastGPSLng;
+    if(lat && lng && typeof nearestMulti === 'function'){
+      var c = nearestMulti(lat, lng, 3000);
+      if(c && c.length) return { name: c[0].name, line: c[0].line || '' };
+    }
+  } catch(e){}
+  if(typeof S !== 'undefined' && S.start && S.start.name) return { name: S.start.name, line: (S.start.line||'') };
+  return null;
+}
+
+// 홈 브리핑 요청
+function requestHomeBrief(force){
+  var body = document.getElementById('homeAiBody');
+  if(!body) return;
+
+  var here = _homeNearStationName();
+  var hour = new Date().getHours();
+
+  // 목적지가 있으면 함께 (경로 예상시간 포함)
+  var toName = '';
+  if(typeof S !== 'undefined' && S.dest && S.dest.name) toName = S.dest.name;
+  else if(typeof _transitResultDest !== 'undefined' && _transitResultDest && _transitResultDest.name) toName = _transitResultDest.name;
+
+  var lines = [];
+  if(typeof S !== 'undefined' && S.route && S.route.lp){
+    S.route.lp.forEach(function(l){ if(l && lines.indexOf(l)===-1) lines.push(l); });
+  } else if(here && here.line){
+    lines = [here.line];
+  }
+  var totalMin = (typeof S !== 'undefined' && S.route)
+    ? Math.round((S.route.tp||[]).reduce(function(a,b){ return a+(b>0?b:0); },0)/60) : 0;
+
+  // 현재 혼잡도(있으면 반영)
+  var congPct = 40;
+  try { if(window._lastCongPct) congPct = window._lastCongPct; } catch(e){}
+
+  if(force){
+    body.innerHTML = '<div class="home-ai-empty">🤖 브리핑 생성 중...</div>';
+    var b = document.getElementById('homeAiRefreshBtn');
+    if(b){ b.disabled = true; b.textContent = '⏳'; }
+  }
+
+  var fromName = here ? here.name : '현위치';
+
+  fetch(_SERVER_URL + '/ai-brief', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from: fromName, to: toName || fromName, lines: lines,
+      hour: hour, congPct: congPct, transfers: Math.max(0, lines.length-1),
+      totalMin: totalMin, mode: 'home'
+    })
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(data){
+    if(data.error) throw new Error(data.error);
+    _renderHomeBrief(data, fromName, toName, hour, congPct);
+    _homeAiNextAt = data.nextAt || (Date.now() + 10*60*1000);
+    _startHomeCountdown();
+    var b = document.getElementById('homeAiRefreshBtn');
+    if(b){ b.disabled = false; b.textContent = '🔄'; }
+  })
+  .catch(function(e){
+    console.warn('[홈AI브리핑]', e);
+    // 서버 실패 시 로컬 간이 브리핑
+    _renderHomeBriefLocal(fromName, toName, hour, congPct);
+    _homeAiNextAt = Date.now() + 10*60*1000;
+    _startHomeCountdown();
+    var b = document.getElementById('homeAiRefreshBtn');
+    if(b){ b.disabled = false; b.textContent = '🔄'; }
+  });
+}
+window.requestHomeBrief = requestHomeBrief;
+
+function _renderHomeBrief(data, fromName, toName, hour, congPct){
+  var body = document.getElementById('homeAiBody');
+  if(!body) return;
+  var timeStr = new Date().toLocaleTimeString('ko-KR', {hour:'2-digit',minute:'2-digit'});
+  var titleEl = document.getElementById('homeAiTitle');
+  if(titleEl) titleEl.textContent = '📍 ' + fromName + ' · ' + timeStr + ' 기준';
+  body.innerHTML =
+    '<div class="home-ai-msg">' + _ltEsc(data.msg) + '</div>';
+}
+
+// 서버 실패 시 로컬 간이 브리핑 (시간·혼잡도 기반)
+function _renderHomeBriefLocal(fromName, toName, hour, congPct){
+  var body = document.getElementById('homeAiBody');
+  if(!body) return;
+  var timeStr = new Date().toLocaleTimeString('ko-KR', {hour:'2-digit',minute:'2-digit'});
+  var titleEl = document.getElementById('homeAiTitle');
+  if(titleEl) titleEl.textContent = '📍 ' + fromName + ' · ' + timeStr + ' 기준';
+
+  var peak = (hour>=7&&hour<=9) || (hour>=17&&hour<=19);
+  var congTxt = congPct>=70 ? '매우 혼잡' : congPct>=45 ? '다소 혼잡' : '여유로운 편';
+  var emoji   = congPct>=70 ? '🥵' : congPct>=45 ? '😐' : '😊';
+  var advice  = peak
+    ? '지금은 피크 시간대라 열차·버스가 붐빌 수 있어요. 한 대 보내고 다음 편을 노리면 조금 더 여유로워요.'
+    : (hour>=22 || hour<6)
+      ? '심야 시간대예요. 막차 시간을 꼭 확인하세요.'
+      : '지금은 비교적 한산한 시간대예요. 이동하기 좋아요.';
+  var future = peak
+    ? '앞으로 30분간은 계속 붐빌 전망이에요.'
+    : '앞으로 30분간 큰 변화 없이 원활할 것으로 보여요.';
+
+  var msg = emoji + ' 현재 ' + fromName + ' 일대는 <b>' + congTxt + '</b>이에요 (혼잡도 약 ' + congPct + '%).<br><br>'
+    + advice + '<br><br>⏱️ ' + future;
+  body.innerHTML = '<div class="home-ai-msg">' + msg + '</div>';
+}
+
+function _startHomeCountdown(){
+  if(_homeAiCountdown) clearInterval(_homeAiCountdown);
+  _homeAiCountdown = setInterval(function(){
+    var el = document.getElementById('homeAiNext');
+    if(!el) return;
+    var rem = Math.max(0, Math.round((_homeAiNextAt - Date.now())/1000));
+    if(!rem){ el.textContent = '갱신 중...'; return; }
+    var m = Math.floor(rem/60), s = rem%60;
+    el.textContent = m + ':' + (s<10?'0':'') + s;
+  }, 1000);
+}
+
+// 홈 탭 진입 시 시작 / 다른 탭 가면 정지
+function startHomeAI(){
+  requestHomeBrief(false);
+  if(_homeAiPollInt) clearInterval(_homeAiPollInt);
+  _homeAiPollInt = setInterval(function(){ requestHomeBrief(false); }, 10*60*1000);
+  _startHomeCountdown();
+}
+function stopHomeAI(){
+  if(_homeAiPollInt){ clearInterval(_homeAiPollInt); _homeAiPollInt = null; }
+  if(_homeAiCountdown){ clearInterval(_homeAiCountdown); _homeAiCountdown = null; }
+}
+window.startHomeAI = startHomeAI;
+window.stopHomeAI  = stopHomeAI;
+
 
 // ── filterCat 시 AI탭 정리 ──
 var _origFilterCat = window.filterCat;
@@ -5240,18 +5397,18 @@ window.addEventListener('unhandledrejection', function(e) {
     </div>
   </div>
 
-  <!-- 4순위: 실시간 현장 생존 제보 -->
+  <!-- 4순위: 🚇 AI 역무원 (현재 위치·시간 기준 10분마다 브리핑) -->
   <div>
-    <div class="sec">⚡ 현장 제보</div>
-    <div class="rpt-grid">
-      <div class="rpt-btn" onclick="report('쾌적해요')">
-        <svg width="19" height="19" viewBox="0 0 24 24" fill="#34c759"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z"/></svg>쾌적해요
+    <div class="sec">🚇 AI 역무원</div>
+    <div class="home-ai-card" id="homeAiCard">
+      <div class="home-ai-head">
+        <span class="home-ai-badge">🤖</span>
+        <span class="home-ai-title" id="homeAiTitle">AI 역무원 브리핑</span>
+        <span class="home-ai-next" id="homeAiNext"></span>
+        <button class="home-ai-refresh" id="homeAiRefreshBtn" onclick="requestHomeBrief(true)">🔄</button>
       </div>
-      <div class="rpt-btn" onclick="report('혼잡해요')">
-        <svg width="19" height="19" viewBox="0 0 24 24" fill="#ff9f0a"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm-5-6h10v2H7zm3-4c0 .83-.67 1.5-1.5 1.5S7 10.83 7 10s.67-1.5 1.5-1.5S10 9.17 10 10zm6 0c0 .83-.67 1.5-1.5 1.5S13 10.83 13 10s.67-1.5 1.5-1.5S16 9.17 16 10z"/></svg>혼잡해요
-      </div>
-      <div class="rpt-btn" onclick="report('지옥이에요')">
-        <svg width="19" height="19" viewBox="0 0 24 24" fill="#ff453a"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>지옥이에요
+      <div class="home-ai-body" id="homeAiBody">
+        <div class="home-ai-empty">🤖 현재 위치와 시간을 기준으로<br>예상 상황을 분석해드릴게요.</div>
       </div>
     </div>
   </div>
@@ -5482,7 +5639,6 @@ window.addEventListener('unhandledrejection', function(e) {
     <div class="filter-row" id="filterRow">
       <div class="chip on" onclick="filterCat(this,'all')">전체</div>
       <div class="chip" onclick="filterCat(this,'뉴스')">📰뉴스</div>
-      <div class="chip" onclick="showAITab(this)">🚇AI역무원</div>
       <div class="chip" onclick="showChatTab(this)">🔴실시간소통</div>
       <div class="chip" onclick="showSettingsTab(this)">⚙️설정</div>
     </div>
@@ -13807,9 +13963,12 @@ function switchTab(tab,el){
           startNextTrainPolling(S.start);
       }, 300);
     }
+    // 🚇 홈 AI 역무원 시작 (현재 위치·시간 기준 10분 브리핑)
+    setTimeout(function(){ if(typeof startHomeAI==='function') startHomeAI(); }, 400);
   } else {
     // 다른 탭 이동 시 폴링 중지
     if(typeof stopNextTrainPolling==='function') stopNextTrainPolling();
+    if(typeof stopHomeAI==='function') stopHomeAI();
   }
   // FAB 가시성 (홈/노선도)
   if(typeof updateFabVisibility==='function') updateFabVisibility(tab);
@@ -16845,6 +17004,11 @@ window.onload=function(){
   setTimeout(function(){
     try { if(typeof autoSetStartFromGPS === 'function') autoSetStartFromGPS(); } catch(e){}
   }, 800);
+
+  // ── 홈 AI 역무원 시작 (앱 시작 시 홈이 기본 탭) ──
+  setTimeout(function(){
+    try { if(typeof startHomeAI === 'function') startHomeAI(); } catch(e){}
+  }, 1600);
 
   // ── 앱 시작 시 서버에서 커뮤니티 게시글 로드 ───────
   setTimeout(function(){
