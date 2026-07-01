@@ -53,6 +53,18 @@ jobs:
 
       - name: Sync Capacitor
         run: npx cap sync android
+        
+      - name: Generate launcher icons & splash
+        run: |
+          npm install --no-save @capacitor/assets@3 --legacy-peer-deps
+          npx @capacitor/assets generate \
+            --android \
+            --iconBackgroundColor '#f0f4f8' \
+            --iconBackgroundColorDark '#121214' \
+            --splashBackgroundColor '#f0f4f8' \
+            --splashBackgroundColorDark '#121214'
+          echo "=== 생성된 아이콘 확인 ==="
+          ls -R android/app/src/main/res/mipmap-anydpi-v26 2>/dev/null || true
 
       - name: Patch background-geolocation build.gradle (AGP 8.2.1 호환)
         run: |
