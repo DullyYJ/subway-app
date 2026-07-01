@@ -352,7 +352,7 @@ header h1 em{color:var(--gold);font-style:normal;}
 .htl-wrap::-webkit-scrollbar{height:0;}
 .htl-track{display:inline-flex;align-items:flex-start;min-width:100%;padding:0 14px;}
 /* ── 복합경로 전용 트랙 ── */
-#transitHtlTrack{display:inline-flex;flex-wrap:nowrap;align-items:flex-start;min-width:max-content;padding:6px 14px;gap:0;}
+#transitHtlTrack{display:inline-flex;flex-wrap:nowrap;align-items:flex-start;min-width:max-content;padding:6px 14px;gap:0;position:relative;}
 /* htl-stn 너비는 inline style로 처리 */
 #transitResultCard{display:flex;flex-direction:column;}
 #routeOptionTabs{display:flex !important;gap:6px;}
@@ -1905,7 +1905,6 @@ function _buildRouteBrief(){
   }
   var totalMin=0; segs.forEach(function(sg){ totalMin += sg.min; });
   if(!totalMin){ totalMin = Math.round(tp.reduce(function(a,b){ return a+(b>0?b:0); },0)/60) || (window._homeRouteBaseMin||0); }
-  window._homeRouteBaseMin = totalMin;
   return { segments:segs, from:cp[0], to:cp[cp.length-1], totalMin:totalMin, transfers:Math.max(0, segs.length-1) };
 }
 
@@ -1913,14 +1912,15 @@ function _buildRouteBrief(){
 function _routeStatusHtml(rb, congPct){
   if(!rb) return '';
   var now = new Date();
-  var arr = new Date(now.getTime() + (rb.totalMin||0)*60000);
+  var mins = (window._homeRouteBaseMin && window._homeRouteBaseMin>0) ? window._homeRouteBaseMin : (rb.totalMin||0);
+  var arr = new Date(now.getTime() + mins*60000);
   var pad = function(n){ return (n<10?'0':'')+n; };
   var arrStr = pad(arr.getHours()) + ':' + pad(arr.getMinutes());
   var hour = now.getHours();
   var peak = (hour>=7&&hour<=9) || (hour>=17&&hour<=19);
   var congTxt = _congLabel(congPct);
   var ps = [];
-  ps.push('지금 <b>' + rb.from + '</b> 출발 → <b>' + arrStr + '</b>쯤 <b>' + rb.to + '</b> 도착 · 약 <b>' + rb.totalMin + '분</b> (환승 ' + rb.transfers + '회)');
+  ps.push('지금 <b>' + rb.from + '</b> 출발 → <b>' + arrStr + '</b>쯤 <b>' + rb.to + '</b> 도착 · 약 <b>' + mins + '분</b> (환승 ' + rb.transfers + '회)');
   rb.segments.forEach(function(sg, idx){
     var stopTxt = sg.stops>0 ? (' · ' + sg.stops + '개역') : '';
     ps.push((idx+1) + '. <b>' + (sg.line||'이동') + '</b> ' + sg.from + ' → ' + sg.to + ' (' + sg.min + '분' + stopTxt + ')');
@@ -3530,7 +3530,7 @@ function _renderTransitResultCard(data, start, dest, cacheSource) {
     var sName = _ltEsc(((start||{}).name||'').replace(/역$/,''));
     var dName = _ltEsc(((dest||{}).name||'').replace(/역$/,''));
     header.innerHTML =
-      '<span style="font-size:28px;font-weight:900;color:var(--text);line-height:1;">' + totalMin + '</span>'
+      '<span id="transitResultMinNum" style="font-size:28px;font-weight:900;color:var(--text);line-height:1;">' + totalMin + '</span>'
       + '<span style="font-size:14px;color:var(--sub);margin-right:8px;">분</span>'
       + '<span style="font-size:12px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;">'
       + sName + ' → ' + dName
@@ -4779,9 +4779,141 @@ function _estimateTimeBasedPos(){
 }
 window._estimateTimeBasedPos = _estimateTimeBasedPos;
 
+var _HTL_MARKER_MS = 3000; // 마커 이동 트랜지션(=틱 주기)
+
+// 타임라인 arrTime 기반 현재 진행 위치 (fromIdx/toIdx/ratio) — 좌표 불필요
+function _estimateTimelinePos(){
+  if(!_transitNodeData || !_transitNodeData.length) return null;
+  var timed = [];
+  _transitNodeData.forEach(function(nd, idx){
+    var mn = _arrTimeToMin(nd.arrTime);
+    if(mn != null) timed.push({ idx: idx, min: mn });
+  });
+  if(timed.length < 2) return null;
+  for(var i=1;i<timed.length;i++){ if(timed[i].min < timed[i-1].min) timed[i].min += 1440; }
+  var now = new Date();
+  var nowMin = now.getHours()*60 + now.getMinutes() + now.getSeconds()/60;
+  if(nowMin < timed[0].min - 60) nowMin += 1440;
+  if(nowMin <= timed[0].min) return { fromIdx: timed[0].idx, toIdx: timed[0].idx, ratio: 0 };
+  var last = timed[timed.length-1];
+  if(nowMin >= last.min) return { fromIdx: last.idx, toIdx: last.idx, ratio: 1 };
+  for(var j=0;j<timed.length-1;j++){
+    var a = timed[j], b = timed[j+1];
+    if(nowMin >= a.min && nowMin <= b.min){
+      var span = (b.min - a.min) || 1;
+      return { fromIdx: a.idx, toIdx: b.idx, ratio: (nowMin - a.min)/span };
+    }
+  }
+  return null;
+}
+
+// GPS 좌표를 bestIdx 주변 인접 구간에 투영 → 거리 기반 진행도
+function _gpsSegment(lat, lng, bestIdx){
+  function proj(ai, bi){
+    var A = _transitNodeData[ai], B = _transitNodeData[bi];
+    if(!A || !B || A.lat==null || B.lat==null) return null;
+    var ax=A.lng, ay=A.lat, bx=B.lng, by=B.lat;
+    var dx=bx-ax, dy=by-ay, len2=dx*dx+dy*dy;
+    if(len2 < 1e-12) return null;
+    var t = ((lng-ax)*dx + (lat-ay)*dy) / len2;
+    var tc = Math.max(0, Math.min(1, t));
+    var px = ax+dx*tc, py = ay+dy*tc;
+    var dist = Math.sqrt(Math.pow((lat-py)*111000,2) + Math.pow((lng-px)*88000,2));
+    return { fromIdx:ai, toIdx:bi, ratio:tc, dist:dist, inside:(t>=-0.05 && t<=1.05) };
+  }
+  var cands = [];
+  var p1 = proj(bestIdx, bestIdx+1); if(p1) cands.push(p1);
+  var p2 = proj(bestIdx-1, bestIdx); if(p2) cands.push(p2);
+  if(!cands.length) return null;
+  cands.sort(function(a,b){ if(a.inside!==b.inside) return a.inside?-1:1; return a.dist-b.dist; });
+  return cands[0];
+}
+
+// GPS 마커(dot+ring)를 두 노드 사이 ratio 위치에 부드럽게 배치
+function _placeGpsMarkerSmooth(fromNd, toNd, ratio){
+  var track = document.getElementById('transitHtlTrack');
+  var dot  = window._htlGpsDot  || document.getElementById('htl-gps-marker-dot');
+  var ring = window._htlGpsRing || document.getElementById('htl-gps-marker-ring');
+  if(!track || !dot || !fromNd || !fromNd.el) return;
+  var fEl = fromNd.el, tEl = (toNd && toNd.el) ? toNd.el : fromNd.el;
+  var tr  = track.getBoundingClientRect();
+  var fr  = fEl.getBoundingClientRect();
+  var trc = tEl.getBoundingClientRect();
+  var cxF = (fr.left  - tr.left) + fr.width/2;
+  var cxT = (trc.left - tr.left) + trc.width/2;
+  var r   = Math.max(0, Math.min(1, ratio||0));
+  var cx  = cxF + (cxT - cxF) * r;
+  var yTop = 6;
+  var axis = fEl.querySelector('div[style*="position:relative"]');
+  if(axis){ var ar = axis.getBoundingClientRect(); yTop = (ar.top - tr.top) + 6; }
+  // 트랙 직속으로 이동 — 첫 배치는 애니메이션 없이(점프 방지), 이후 틱부터 부드럽게
+  var firstDot = (dot.parentNode !== track);
+  if(firstDot) track.appendChild(dot);
+  dot.style.transition = firstDot ? 'none' : ('left ' + _HTL_MARKER_MS + 'ms linear, top .25s ease');
+  dot.style.left = cx + 'px'; dot.style.top = yTop + 'px';
+  dot.style.transform = 'translateX(-50%)'; dot.style.display = 'block';
+  if(ring){
+    var firstRing = (ring.parentNode !== track);
+    if(firstRing) track.appendChild(ring);
+    ring.style.transition = firstRing ? 'none' : ('left ' + _HTL_MARKER_MS + 'ms linear, top .25s ease');
+    ring.style.left = cx + 'px'; ring.style.top = yTop + 'px';
+    ring.style.transform = 'translateX(-50%)'; ring.style.display = 'block';
+  }
+}
+window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
+
+// 남은 소요시간(분) — 마지막 arrTime 기준 (시간 경과에 따라 감소)
+function _routeRemainingMin(){
+  if(!_transitNodeData || !_transitNodeData.length) return null;
+  var lastMin = null;
+  for(var i=_transitNodeData.length-1;i>=0;i--){
+    var m = _arrTimeToMin(_transitNodeData[i].arrTime);
+    if(m != null){ lastMin = m; break; }
+  }
+  if(lastMin == null) return null;
+  var now = new Date();
+  var nowMin = now.getHours()*60 + now.getMinutes() + now.getSeconds()/60;
+  if(lastMin < nowMin - 720) lastMin += 1440; // 자정 보정
+  var rem = Math.round(lastMin - nowMin);
+  return rem > 0 ? rem : 0;
+}
+
+// 홈 AI 승무원 예상시간을 남은시간으로 로컬 동기화 (서버 호출 없음)
+function _syncHomeBriefRemaining(rem){
+  window._homeRouteBaseMin = rem;
+  var body = document.getElementById('homeAiBody');
+  if(!body) return;
+  var toName = (typeof _transitResultDest!=='undefined' && _transitResultDest && _transitResultDest.name) ? _transitResultDest.name
+             : (typeof S!=='undefined' && S.dest && S.dest.name) ? S.dest.name : '';
+  if(!toName) return;
+  var fromName = '현위치';
+  try {
+    if(typeof _homeNearStationName==='function'){ var h=_homeNearStationName(); if(h && h.name) fromName=h.name; }
+    else if(typeof _transitResultStart!=='undefined' && _transitResultStart && _transitResultStart.name){ fromName=_transitResultStart.name; }
+    else if(typeof S!=='undefined' && S.start && S.start.name){ fromName=S.start.name; }
+  } catch(e){}
+  if(toName === fromName) return;
+  var congPct = 40; try { if(window._lastCongPct) congPct = window._lastCongPct; } catch(e){}
+  try { if(typeof _renderHomeBriefLocal==='function') _renderHomeBriefLocal(fromName, toName, new Date().getHours(), congPct); } catch(e){}
+}
+
+// 매 틱: 헤더 소요분 + AI 승무원 예상시간 갱신
+function _updateRouteRemaining(){
+  var rem = _routeRemainingMin();
+  if(rem == null) return;
+  var numEl = document.getElementById('transitResultMinNum');
+  if(numEl) numEl.textContent = rem;
+  if(window._lastRemMin !== rem){
+    window._lastRemMin = rem;
+    _syncHomeBriefRemaining(rem);
+  }
+}
+
 function _updateTransitGps() {
   var card = document.getElementById('transitResultCard');
   if(!card || card.style.display==='none') { clearInterval(_transitGpsTimer); return; }
+  // ★ 예상 남은시간(시간 기반) 갱신 → 경로카드 헤더 + AI 승무원 반영
+  try { _updateRouteRemaining(); } catch(e){}
   // ── GPS 좌표 취득 (여러 소스 순서대로 시도) ──
   var lat = null, lng = null;
   if(typeof S !== 'undefined' && S.lastGPSFix && S.lastGPSFix.lat) {
@@ -4917,15 +5049,7 @@ function _updateTransitGps() {
       }
     }
     if(_firstReal){
-      var _od = window._htlGpsDot || document.getElementById('htl-gps-marker-dot');
-      var _or = window._htlGpsRing || document.getElementById('htl-gps-marker-ring');
-      var _oax = _firstReal.el.querySelector('div[style*="position:relative"]');
-      if(_od && _oax){
-        if(_od.parentNode !== _oax) _oax.appendChild(_od);
-        if(_or && _or.parentNode !== _oax) _oax.appendChild(_or);
-        _od.style.left='50%'; _od.style.transform='translateX(-50%)'; _od.style.display='block';
-        if(_or){ _or.style.left='50%'; _or.style.display='block'; }
-      }
+      _placeGpsMarkerSmooth(_firstReal, null, 0);
       _firstReal.el.classList.add('htl-gps-here');
 
       // 출발 대기 중 혼잡도를 첫 실제 구간 교통수단에 맞춤
@@ -4962,19 +5086,24 @@ function _updateTransitGps() {
     return;
   }
 
-  // ── GPS 마커(dot+ring) 단일 이동 ──
-  var _gpsDot  = window._htlGpsDot  || document.getElementById('htl-gps-marker-dot');
-  var _gpsRing = window._htlGpsRing || document.getElementById('htl-gps-marker-ring');
-  var _targetEl = best.el || document.getElementById('tnode_'+bestIdx);
-  if(_gpsDot && _targetEl) {
-    var _axis = _targetEl.querySelector('div[style*="position:relative"]');
-    if(_axis) {
-      if(_gpsDot.parentNode !== _axis)  _axis.appendChild(_gpsDot);
-      if(_gpsRing && _gpsRing.parentNode !== _axis) _axis.appendChild(_gpsRing);
-      _gpsDot.style.left='50%'; _gpsDot.style.transform='translateX(-50%)'; _gpsDot.style.display='block';
-      if(_gpsRing){ _gpsRing.style.left='50%'; _gpsRing.style.display='block'; }
+  // ── GPS 마커: 시간·거리 기반 부드러운 이동 (스냅 X, 두 노드 사이 보간) ──
+  (function(){
+    var fromNd = best, toNd = null, ratio = 0;
+    // 1) 시간 기반 진행도 (타임라인 arrTime)
+    var tpos = _estimateTimelinePos();
+    if(tpos){
+      fromNd = _transitNodeData[tpos.fromIdx] || best;
+      toNd   = _transitNodeData[tpos.toIdx]   || null;
+      ratio  = tpos.ratio;
     }
-  }
+    // 2) 실측 GPS가 있으면 현재 구간 내에서 거리 기반으로 보정
+    if(_validGps && _transitNodeData[bestIdx] && _transitNodeData[bestIdx].lat != null){
+      var seg = _gpsSegment(lat, lng, bestIdx);
+      if(seg){ fromNd = _transitNodeData[seg.fromIdx]; toNd = _transitNodeData[seg.toIdx]; ratio = seg.ratio; }
+    }
+    if(toNd === fromNd) toNd = null;
+    _placeGpsMarkerSmooth(fromNd, toNd, ratio);
+  })();
 
   // SVG GPS 마커 위치 업데이트 (SVG 방식 하위 호환)
   if(window._htlGpsMarker && window._htlSvgCenters) {
