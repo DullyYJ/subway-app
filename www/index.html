@@ -3189,6 +3189,31 @@ function _getCoords(sName) {
 window._getCoords = _getCoords;
 
 // HTL 트랙 렌더링 v3 - 완전 단순화
+function _htlOriginCoord(){
+  try{
+    if(typeof _fmapStart!=='undefined' && _fmapStart && _fmapStart.lat) return {lat:+_fmapStart.lat,lng:+_fmapStart.lng};
+    if(typeof _transitResultStart!=='undefined' && _transitResultStart && _transitResultStart.lat) return {lat:+_transitResultStart.lat,lng:+_transitResultStart.lng};
+    if(typeof S!=='undefined' && S.start && S.start.lat) return {lat:+S.start.lat,lng:+S.start.lng};
+    if(window._lastGPSLat) return {lat:+window._lastGPSLat,lng:+window._lastGPSLng};
+  }catch(e){}
+  return null;
+}
+function _htlDestCoord(){
+  try{
+    if(typeof _transitResultDest!=='undefined' && _transitResultDest && _transitResultDest.lat) return {lat:+_transitResultDest.lat,lng:+_transitResultDest.lng};
+    if(typeof S!=='undefined' && S.dest && S.dest.lat) return {lat:+S.dest.lat,lng:+S.dest.lng};
+  }catch(e){}
+  return null;
+}
+function _htlAddMin(hhmm, min){
+  if(!hhmm || typeof hhmm!=='string') return '';
+  var m=hhmm.match(/(\d{1,2}):(\d{2})/); if(!m) return '';
+  var t=parseInt(m[1],10)*60+parseInt(m[2],10)+(min||0);
+  t=((t%1440)+1440)%1440;
+  var h=Math.floor(t/60), mm=t%60;
+  return (h<10?'0':'')+h+':'+(mm<10?'0':'')+mm;
+}
+
 function _renderHtlTrack(sections, start, dest, totalMin) {
   var track = document.getElementById('transitHtlTrack');
   if(!track) return;
@@ -3238,6 +3263,7 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
 
   var pts=[];
   var _firstDep=segMs[0];
+  var _lastStnArr='';
   segs.forEach(function(sg,si){
     var col=_transitColor(sg.type,sg.name);
     var secMin=Math.round(sg.dur/60);
@@ -3247,7 +3273,7 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
       var nextType=0,nextName='';
       for(var a=si-1;a>=0;a--){ if(segs[a].type!==3){pC=_transitColor(segs[a].type,segs[a].name);break;} }
       for(var b=si+1;b<segs.length;b++){ if(segs[b].type!==3){nC=_transitColor(segs[b].type,segs[b].name);nextType=segs[b].type;nextName=segs[b].name;break;} }
-      pts.push({type:'walk',pC:pC,nC:nC,
+      pts.push({type:'walk',pC:pC,nC:nC, durSec:sg.dur,
                 nextType:nextType, nextLabel:_lineLabel(nextType,nextName), nextCol:nC,
                 lbl:secMin>0?secMin+'분':(Math.round(sg.dist)+'m')});
       return;
@@ -3338,13 +3364,12 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
     var rColor = isWalk ? '#8e8e93' : pt.col;
     pt._rColor = rColor;
 
-    var hasWalkBefore = pts.slice(0,pi).some(function(p){return p.type==='walk';});
-    var hasWalkAfter  = pts.slice(pi+1).some(function(p){return p.type==='walk';});
-    var isRealFirst = !isWalk && pt.isF && !hasWalkBefore;
-    var isRealLast  = !isWalk && pt.isL && !hasWalkAfter;
-
-    var drawLeft  = !isRealFirst;
-    var drawRight = !isRealLast;
+    // ★ 맨앞/맨뒤는 바깥쪽 선 없이 포인트 하나로 시작·마무리 (도보든 역이든)
+    var isAbsFirst = (pi === 0);
+    var isAbsLast  = (pi === pts.length - 1);
+    var isEndpoint = (isAbsFirst || isAbsLast);
+    var drawLeft  = !isAbsFirst;
+    var drawRight = !isAbsLast;
     var leftLine  = drawLeft
       ? '<div style="position:absolute;top:12px;left:0;width:50%;height:3px;background:'+lColor+';z-index:1;"></div>'
       : '';
@@ -3353,18 +3378,22 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
       : '';
 
     var dot='';
-    if(!isWalk){
-      var dSz=12,dTop=7,dBd=3;
-      if(isRealFirst||isRealLast){ dSz=14;dTop=6; }
-      var dBg=isRealFirst?'var(--start-dot)':isRealLast?'var(--end-dot)':'var(--card)';
-      var dBr=isRealFirst?'var(--start-dot)':isRealLast?'var(--end-dot)':pt.col;
-      dot='<div style="position:absolute;width:'+dSz+'px;height:'+dSz+'px;border-radius:50%;'
-        +'top:'+dTop+'px;left:50%;transform:translateX(-50%);'
-        +'background:'+dBg+';border:'+dBd+'px solid '+dBr+';z-index:3;"></div>';
+    if(isEndpoint){
+      // 시작/끝 = 포인트원
+      var eCol = isAbsFirst ? 'var(--start-dot)' : 'var(--end-dot)';
+      dot='<div style="position:absolute;width:14px;height:14px;border-radius:50%;'
+        +'top:6px;left:50%;transform:translateX(-50%);'
+        +'background:'+eCol+';border:3px solid '+eCol+';z-index:3;"></div>';
+    } else if(!isWalk){
+      dot='<div style="position:absolute;width:12px;height:12px;border-radius:50%;'
+        +'top:7px;left:50%;transform:translateX(-50%);'
+        +'background:var(--card);border:3px solid '+pt.col+';z-index:3;"></div>';
     }
 
-    var gpsId=isWalk?'':'tnode_'+ni2;
-    var walkCenter = isWalk
+    // 끝점 도보도 추적 대상(마커가 도보로 시작/마무리)
+    var trackThis = (!isWalk || isEndpoint);
+    var gpsId = trackThis ? ('tnode_'+ni2) : '';
+    var walkCenter = (isWalk && !isEndpoint)
       ? '<div style="position:absolute;top:10px;left:50%;transform:translateX(-50%);'
         +'width:6px;height:6px;border-radius:50%;'
         +'background:linear-gradient(90deg,'+lColor+','+rColor+');z-index:2;"></div>'
@@ -3381,12 +3410,18 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
     html+='<div'+id+' style="width:'+W+'px;flex:0 0 '+W+'px;display:flex;flex-direction:column;align-items:center;overflow:visible;">'
       +row1+row2+row3+row4+'</div>';
 
-    if(!isWalk){
-      nodes.push({label:pt.nm,col:pt.col,lineName:pt.lineNm,
-        arrTime:pt.arrT,isWalk:false,isFirst:pt.isF,isLast:pt.isL,
-        isSub:pt.isSub,isBus:pt.isBus,
-        icon:pt.isSub?'🚇':pt.isBus?'🚌':'📍',
-        lat:pt.lat,lng:pt.lng,el:null});
+    if(!isWalk){ _lastStnArr = pt.arrT || _lastStnArr; }
+    if(trackThis){
+      var _nlat=(pt.lat!=null?pt.lat:null), _nlng=(pt.lng!=null?pt.lng:null), _narr=isWalk?'':pt.arrT;
+      if(isWalk){
+        if(isAbsFirst){ var _oc=_htlOriginCoord(); if(_oc){ _nlat=_oc.lat; _nlng=_oc.lng; } _narr=''; }
+        else { var _dc=_htlDestCoord(); if(_dc){ _nlat=_dc.lat; _nlng=_dc.lng; } _narr=_htlAddMin(_lastStnArr, Math.round((pt.durSec||0)/60)); }
+      }
+      nodes.push({label:isWalk?'도보':pt.nm, col:(isWalk?'#8e8e93':pt.col), lineName:(pt.lineNm||''),
+        arrTime:_narr, isWalk:isWalk, isFirst:isAbsFirst, isLast:isAbsLast,
+        isSub:!!pt.isSub, isBus:!!pt.isBus,
+        icon:isWalk?'🚶':(pt.isSub?'🚇':pt.isBus?'🚌':'📍'),
+        lat:_nlat, lng:_nlng, el:null});
       ni2++;
     }
   });
@@ -4636,33 +4671,25 @@ function _startTransitGpsTracking(nodes) {
     startName = S.start.name || '출발';
   }
 
-  // 첫 지하철역 el 찾기
-  var firstStnEl = null;
-  for(var _fi=0; _fi<nodes.length; _fi++) {
-    if(!nodes[_fi].isWalk) {
-      firstStnEl = document.getElementById('tnode_'+_fi);
-      if(firstStnEl) break;
-    }
-  }
-
-  // 출발지 가상 노드 (el=첫 역, 좌표=출발지) → 출발지 근처에 있으면 첫 역에 마커
-  if(startLat && firstStnEl) {
+  // 출발점 el = 절대 첫 노드(도보/역)
+  var originEl = document.getElementById('tnode_0');
+  for(var _fi=0; !originEl && _fi<nodes.length; _fi++){ originEl = document.getElementById('tnode_'+_fi); }
+  if(startLat && originEl) {
     _transitNodeData.push({
-      el: firstStnEl, lat: startLat, lng: startLng,
+      el: originEl, lat: startLat, lng: startLng,
       name: startName, arrTime: '', isOrigin: true
     });
   }
 
   nodes.forEach(function(n, i) {
-    if(n.isWalk) return;
     var el = document.getElementById('tnode_'+i);
-    if(!el) return;
+    if(!el) return;                 // 중간 도보(id 없음) 스킵
 
-    // 좌표: node에 직접 포함된 것 우선, 없으면 STNDB/_REAL_COORDS
+    // 좌표: node에 직접 포함된 것 우선(끝점 도보=출발/도착 좌표), 없으면 역 좌표 DB
     var lat = null, lng = null;
     if(n.lat && n.lng) {
       lat = parseFloat(n.lat); lng = parseFloat(n.lng);
-    } else {
+    } else if(!n.isWalk) {
       var coords = _getCoords(n.label || '');
       lat = coords.lat; lng = coords.lng;
     }
@@ -4674,6 +4701,7 @@ function _startTransitGpsTracking(nodes) {
       arrTime: n.arrTime || '',
       isSub: !!n.isSub,
       isBus: !!n.isBus,
+      isWalk: !!n.isWalk,
       icon: n.icon || (n.isSub ? '🚇' : n.isBus ? '🚌' : '📍'),
       lineName: n.lineName || ''
     });
@@ -5041,16 +5069,17 @@ function _updateTransitGps() {
     if(locNext)  locNext.style.display='none';
     if(locEta)   locEta.style.display='none';
 
-    // 출발 대기 중에도 첫 실제 역(다음 노드)에 마커 표시
+    // 출발 대기 중 → 출발점(도보/역)에 마커
+    _placeGpsMarkerSmooth(best, null, 0);
+    if(best.el) best.el.classList.add('htl-gps-here');
+    // 혼잡도 기준용 첫 실제 교통수단(도보 제외) 노드
     var _firstReal = null, _firstIdx = -1;
     for(var _fi=0; _fi<_transitNodeData.length; _fi++){
-      if(!_transitNodeData[_fi].isOrigin && _transitNodeData[_fi].el){
+      if(!_transitNodeData[_fi].isOrigin && !_transitNodeData[_fi].isWalk && _transitNodeData[_fi].el){
         _firstReal = _transitNodeData[_fi]; _firstIdx = _fi; break;
       }
     }
     if(_firstReal){
-      _placeGpsMarkerSmooth(_firstReal, null, 0);
-      _firstReal.el.classList.add('htl-gps-here');
 
       // 출발 대기 중 혼잡도를 첫 실제 구간 교통수단에 맞춤
       if(window._lastCongNodeIdx !== _firstIdx){
@@ -5157,7 +5186,7 @@ function _updateTransitGps() {
   if(locBar) locBar.style.display = 'flex';
   if(locCur) {
     var distStr = bestDist < 50 ? '도착' : Math.round(bestDist)+'m 근처';
-    var modeStr = best.isBus ? '🚌' : best.isOrigin ? '' : '🚃';
+    var modeStr = best.isBus ? '🚌' : best.isOrigin ? '' : best.isWalk ? '🚶' : '🚃';
     if(locCur) locCur.textContent = best.name + ' (' + distStr + ')';
     var modeIcon = document.getElementById('transitLocModeIcon');
     if(modeIcon) modeIcon.textContent = modeStr;
@@ -13106,6 +13135,16 @@ function _openGpsModal() {
   m.classList.add('on');
 }
 
+// ── GPS 좌표를 그대로 출발지("내 위치")로 설정 ──
+function _setStartToMyLocation(lat, lng){
+  _fmapStart = { type:'gps', name:'내 위치', lat: lat, lng: lng };
+  window._lastGPSLat = lat; window._lastGPSLng = lng;
+  var si = document.getElementById('fmapStartInp');
+  if(si){ si.value = '내 위치'; si.style.opacity = ''; }
+  if(typeof _updateRouteBtn === 'function') _updateRouteBtn();
+}
+window._setStartToMyLocation = _setStartToMyLocation;
+
 // ── 앱 진입 시: GPS로 출발지 자동 지정 → 목적지 입력으로 유도 ──
 function autoSetStartFromGPS() {
   // 이미 출발지가 있으면 건드리지 않음 (사용자 수정 존중)
@@ -13125,30 +13164,13 @@ function autoSetStartFromGPS() {
       window._lastGPSLat = lat; window._lastGPSLng = lng;
       if(typeof S !== 'undefined') S.lastGPSFix = { lat: lat, lng: lng, ts: Date.now() };
 
-      // 가장 가까운 지하철역 후보
-      var stn = null;
-      try {
-        var cands = nearestMulti(lat, lng, 2000);
-        if(cands && cands.length) stn = cands[0];
-      } catch(e){}
-
       // 사용자가 그새 직접 입력했으면 덮어쓰지 않음
       if(_fmapStart) return;
       var si = document.getElementById('fmapStartInp');
       if(si && si.value && si.value.indexOf('내 위치 찾는 중') === -1) return;
 
-      if(stn){
-        _fmapSetLocation('start', {
-          type:'subway', name: stn.name, line: stn.line||'',
-          lat: stn.lat, lng: stn.lng
-        });
-      } else {
-        // 역이 멀면 좌표 자체를 출발지로 (현재위치 복합경로)
-        _fmapStart = { type:'gps', name:'내 위치', lat: lat, lng: lng };
-        if(si) si.value = '내 위치';
-        if(typeof _updateRouteBtn === 'function') _updateRouteBtn();
-      }
-      if(si) si.style.opacity = '';
+      // ★ 가장 가까운 역이 아니라 GPS "내 위치" 자체를 출발지로
+      _setStartToMyLocation(lat, lng);
 
       // 목적지 입력으로 유도 (자동 포커스)
       var di = document.getElementById('fmapDestInp');
@@ -13194,10 +13216,14 @@ function triggerGPS(){
       window._lastGPSLat = lat; window._lastGPSLng = lng;
       if(typeof S !== 'undefined') S.lastGPSFix = { lat: lat, lng: lng, ts: Date.now() };
 
-      /* 2km 이내 지하철역 후보 수집 */
-      var stnCandidates = nearestMulti(lat, lng, 2000);
+      /* ★ 역/정류장 선택 없이 GPS "내 위치"를 출발지로 */
+      _setStartToMyLocation(lat, lng);
+      toast('📍 내 위치로 설정했어요');
+      try { startWatch(); } catch(e){}
+      return;
 
-      /* 주변 버스정류장도 함께 조회 → 통합 목록 */
+      /* (아래 역/정류장 목록 로직은 더 이상 사용하지 않음) */
+      var stnCandidates = nearestMulti(lat, lng, 2000);
       _fetchNearStops(lat, lng, function(err, stops) {
         console.log('[GPS-BUS] err=', err, 'stops=', stops ? stops.length : 0, stops ? JSON.stringify(stops[0]||{}) : '');
         var busCandidates = [];
