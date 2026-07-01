@@ -475,8 +475,10 @@ header h1 em{color:var(--gold);font-style:normal;}
 .home-ai-title{font-size:13.5px;font-weight:800;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .home-ai-next{font-size:11px;font-weight:700;color:#2f7cf6;background:rgba(47,124,246,.12);padding:2px 8px;border-radius:8px;font-variant-numeric:tabular-nums;}
 .home-ai-refresh{background:var(--card2);border:1px solid var(--border);border-radius:9px;width:30px;height:28px;font-size:14px;cursor:pointer;color:var(--text);flex-shrink:0;}
-.home-ai-body{font-size:14px;line-height:1.75;color:var(--text);}
-.home-ai-msg{font-size:14px;line-height:1.8;color:var(--text);}
+.home-ai-body{font-size:14px;line-height:1.5;color:var(--text);}
+.home-ai-msg{font-size:14px;line-height:1.5;color:var(--text);}
+.home-ai-msg p{margin:0 0 7px;}
+.home-ai-msg p:last-child{margin-bottom:0;}
 .home-ai-msg b{color:#2f7cf6;font-weight:800;}
 .home-ai-empty{text-align:center;padding:18px 8px;color:var(--sub);font-size:13px;line-height:1.7;}
 .rpt-btn:active{background:var(--border2);}
@@ -1628,7 +1630,8 @@ function requestHomeBrief(force){
   .then(function(data){
     if(data.error) throw new Error(data.error);
     _renderHomeBrief(data, fromName, toName, hour, congPct);
-    _homeAiNextAt = data.nextAt || (Date.now() + 10*60*1000);
+    var iv = (toName && toName !== fromName) ? 5*60*1000 : 10*60*1000;
+    _homeAiNextAt = Date.now() + iv;
     _startHomeCountdown();
     var b = document.getElementById('homeAiRefreshBtn');
     if(b){ b.disabled = false; b.textContent = '🔄'; }
@@ -1637,7 +1640,8 @@ function requestHomeBrief(force){
     console.warn('[홈AI브리핑]', e);
     // 서버 실패 시 로컬 간이 브리핑
     _renderHomeBriefLocal(fromName, toName, hour, congPct);
-    _homeAiNextAt = Date.now() + 10*60*1000;
+    var iv2 = (toName && toName !== fromName) ? 5*60*1000 : 10*60*1000;
+    _homeAiNextAt = Date.now() + iv2;
     _startHomeCountdown();
     var b = document.getElementById('homeAiRefreshBtn');
     if(b){ b.disabled = false; b.textContent = '🔄'; }
@@ -1650,23 +1654,79 @@ function _renderHomeBrief(data, fromName, toName, hour, congPct){
   if(!body) return;
   var timeStr = new Date().toLocaleTimeString('ko-KR', {hour:'2-digit',minute:'2-digit'});
   var titleEl = document.getElementById('homeAiTitle');
-  if(titleEl) titleEl.textContent = '📍 ' + fromName + ' · ' + timeStr + ' 기준';
-  body.innerHTML =
-    '<div class="home-ai-msg">' + _ltEsc(data.msg) + '</div>';
+  var hasRoute = toName && toName !== fromName;
+  if(titleEl) titleEl.textContent = hasRoute
+    ? '🚉 ' + fromName + ' → ' + toName + ' · ' + timeStr
+    : '📍 ' + fromName + ' · ' + timeStr + ' 기준';
+  // 서버 msg를 문단 단위로 (줄바꿈 촘촘하게)
+  body.innerHTML = '<div class="home-ai-msg">' + _msgToParas(data.msg) + '</div>';
 }
 
-// 서버 실패 시 로컬 간이 브리핑 (시간·혼잡도 기반)
+// <br><br> 또는 \n\n 을 <p>로 변환 (줄간격 촘촘)
+function _msgToParas(msg){
+  if(!msg) return '';
+  var parts = String(msg).split(/<br>\s*<br>|\n\n|\n/).map(function(s){ return s.trim(); }).filter(Boolean);
+  return parts.map(function(p){ return '<p>' + p + '</p>'; }).join('');
+}
+
+// 서버 실패 시 로컬 간이 브리핑 (경로 있으면 소요시간+예상변화 / 없으면 현위치)
 function _renderHomeBriefLocal(fromName, toName, hour, congPct){
   var body = document.getElementById('homeAiBody');
   if(!body) return;
   var timeStr = new Date().toLocaleTimeString('ko-KR', {hour:'2-digit',minute:'2-digit'});
   var titleEl = document.getElementById('homeAiTitle');
-  if(titleEl) titleEl.textContent = '📍 ' + fromName + ' · ' + timeStr + ' 기준';
+  var hasRoute = toName && toName !== fromName;
 
   var peak = (hour>=7&&hour<=9) || (hour>=17&&hour<=19);
   var congTxt = congPct>=70 ? '매우 혼잡' : congPct>=45 ? '다소 혼잡' : '여유로운 편';
   var emoji   = congPct>=70 ? '🥵' : congPct>=45 ? '😐' : '😊';
-  var advice  = peak
+
+  if(hasRoute){
+    // 경로 소요시간 계산
+    var totalMin = 0;
+    try {
+      if(typeof S !== 'undefined' && S.route && S.route.tp){
+        totalMin = Math.round(S.route.tp.reduce(function(a,b){ return a+(b>0?b:0); },0)/60);
+      }
+    } catch(e){}
+    if(!totalMin) totalMin = window._homeRouteBaseMin || 0;
+    window._homeRouteBaseMin = totalMin;
+
+    // 도착 예정 시각
+    var arr = new Date(Date.now() + totalMin*60000);
+    var arrStr = arr.toLocaleTimeString('ko-KR', {hour:'2-digit',minute:'2-digit'});
+
+    // 앞으로 예상 변화 (피크 진입/이탈 판단)
+    var trend, trendEmoji;
+    if(peak){
+      trend = '지금은 피크 시간대라 앞으로 10~20분은 더 붐빌 수 있어요. 서두르시는 게 좋아요.';
+      trendEmoji = '📈';
+    } else if(hour===6 || hour===16){
+      trend = '곧 혼잡 시간대로 접어들어요. 지금 출발하면 비교적 수월해요.';
+      trendEmoji = '📈';
+    } else if(hour===9 || hour===19){
+      trend = '혼잡 피크가 막 지나가는 중이에요. 조금만 기다리면 더 여유로워져요.';
+      trendEmoji = '📉';
+    } else {
+      trend = '앞으로 30분간 소요시간은 큰 변화 없이 안정적일 전망이에요.';
+      trendEmoji = '⏱️';
+    }
+
+    if(titleEl) titleEl.textContent = '🚉 ' + fromName + ' → ' + toName + ' · ' + timeStr;
+    var pAs = [
+      '🚉 <b>' + fromName + '</b>에서 <b>' + toName + '</b>까지 지금 출발하면 약 <b>' + (totalMin||'?') + '분</b> 예상돼요.',
+      (totalMin ? '🕐 ' + arrStr + ' 쯤 도착 예정이에요.' : ''),
+      emoji + ' 현재 구간 혼잡도는 <b>' + congTxt + '</b>이에요 (약 ' + congPct + '%).',
+      trendEmoji + ' ' + trend,
+      '<span style="color:var(--sub);font-size:12px;">5분마다 예상 시간을 업데이트할게요.</span>'
+    ].filter(Boolean);
+    body.innerHTML = '<div class="home-ai-msg">' + pAs.map(function(p){ return '<p>'+p+'</p>'; }).join('') + '</div>';
+    return;
+  }
+
+  // 경로 없음: 현위치 기준
+  if(titleEl) titleEl.textContent = '📍 ' + fromName + ' · ' + timeStr + ' 기준';
+  var advice = peak
     ? '지금은 피크 시간대라 열차·버스가 붐빌 수 있어요. 한 대 보내고 다음 편을 노리면 조금 더 여유로워요.'
     : (hour>=22 || hour<6)
       ? '심야 시간대예요. 막차 시간을 꼭 확인하세요.'
@@ -1674,10 +1734,12 @@ function _renderHomeBriefLocal(fromName, toName, hour, congPct){
   var future = peak
     ? '앞으로 30분간은 계속 붐빌 전망이에요.'
     : '앞으로 30분간 큰 변화 없이 원활할 것으로 보여요.';
-
-  var msg = emoji + ' 현재 ' + fromName + ' 일대는 <b>' + congTxt + '</b>이에요 (혼잡도 약 ' + congPct + '%).<br><br>'
-    + advice + '<br><br>⏱️ ' + future;
-  body.innerHTML = '<div class="home-ai-msg">' + msg + '</div>';
+  var pB = [
+    emoji + ' 현재 <b>' + fromName + '</b> 일대는 <b>' + congTxt + '</b>이에요 (혼잡도 약 ' + congPct + '%).',
+    advice,
+    '⏱️ ' + future
+  ];
+  body.innerHTML = '<div class="home-ai-msg">' + pB.map(function(p){ return '<p>'+p+'</p>'; }).join('') + '</div>';
 }
 
 function _startHomeCountdown(){
@@ -1692,11 +1754,37 @@ function _startHomeCountdown(){
   }, 1000);
 }
 
+// 경로 유무 판단
+function _homeHasRoute(){
+  var toName = (typeof S !== 'undefined' && S.dest && S.dest.name) ? S.dest.name
+             : (typeof _transitResultDest !== 'undefined' && _transitResultDest && _transitResultDest.name)
+               ? _transitResultDest.name : '';
+  return !!toName;
+}
+
 // 홈 탭 진입 시 시작 / 다른 탭 가면 정지
+// 경로 있으면 5분 주기, 없으면 10분 주기
+function _homeInterval(){ return _homeHasRoute() ? 5*60*1000 : 10*60*1000; }
+
+function _homeTick(){
+  requestHomeBrief(false);
+  var iv = _homeInterval();
+  _homeAiNextAt = Date.now() + iv;
+  // 주기가 바뀌었으면 타이머 재설정
+  if(iv !== _homeCurIv){
+    _homeCurIv = iv;
+    if(_homeAiPollInt) clearInterval(_homeAiPollInt);
+    _homeAiPollInt = setInterval(_homeTick, iv);
+  }
+}
+var _homeCurIv = 0;
+
 function startHomeAI(){
   requestHomeBrief(false);
   if(_homeAiPollInt) clearInterval(_homeAiPollInt);
-  _homeAiPollInt = setInterval(function(){ requestHomeBrief(false); }, 10*60*1000);
+  _homeCurIv = _homeInterval();
+  _homeAiNextAt = Date.now() + _homeCurIv;
+  _homeAiPollInt = setInterval(_homeTick, _homeCurIv);
   _startHomeCountdown();
 }
 function stopHomeAI(){
@@ -3160,6 +3248,14 @@ function _renderTransitResultCard(data, start, dest, cacheSource) {
   _transitResultData  = data;
 
   if(typeof _resetAIBrief === 'function') _resetAIBrief();
+
+  // 경로가 새로 지정됨 → 홈 AI 역무원 즉시 갱신 (소요시간+5분 업데이트)
+  if(typeof startHomeAI === 'function'){
+    setTimeout(function(){
+      var homeTab = document.getElementById('tab-home');
+      if(homeTab && homeTab.classList.contains('active')) startHomeAI();
+    }, 300);
+  }
 
   var card   = document.getElementById('transitResultCard');
   var track  = document.getElementById('transitHtlTrack');
