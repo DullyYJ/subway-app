@@ -5706,6 +5706,34 @@ function _fetchBusDir(cityCode, routeId, cb){
 }
 window._fetchBusDir = _fetchBusDir;
 
+// 현재 정류장 기준 '다음 정류장' 조회 (○○방향 표시용)
+window._busNextCache = window._busNextCache || {};
+function _fetchBusNextStop(cityCode, routeId, curNodeId, cb){
+  var key = cityCode + '_' + routeId + '_' + curNodeId;
+  if(window._busNextCache[key] !== undefined){ cb(window._busNextCache[key]); return; }
+  if(typeof _fetchRouteStations !== 'function'){ cb(''); return; }
+  _fetchRouteStations(cityCode, routeId, function(err, stations){
+    var next = '';
+    if(!err && stations && stations.length){
+      var idx = -1;
+      for(var i=0;i<stations.length;i++){
+        var nid = stations[i].nodeid || stations[i].nodeId;
+        if(nid && curNodeId && String(nid) === String(curNodeId)){ idx = i; break; }
+      }
+      if(idx >= 0){
+        var nx = stations[(idx + 1) % stations.length];   // 다음 정류장(마지막이면 순환 처음)
+        next = (nx && (nx.nodenm || nx.nodeNm)) || '';
+      } else {
+        var last = stations[stations.length - 1];
+        next = (last && (last.nodenm || last.nodeNm)) || '';
+      }
+    }
+    window._busNextCache[key] = next;
+    cb(next);
+  });
+}
+window._fetchBusNextStop = _fetchBusNextStop;
+
 function _loadMapBusArrival(stop, cardIdx) {
   var cityCode = stop.cityCode || stop.citycode || '25';
   var nodeId   = stop.nodeId   || stop.nodeid   || '';
@@ -5746,39 +5774,54 @@ function _loadMapBusArrival(stop, cardIdx) {
         return;
       }
 
-      // 카카오 스타일: 노선타입 그룹 → 색상 번호 + 방면 + 2회차 도착 + 벨
+      // 같은 정류장·같은 노선은 한 칸으로 합치고, 도착시간 2개까지 표시
       var _tpOrder = function(tp){ tp = tp||'';
         if(/간선/.test(tp)) return 1; if(/지선/.test(tp)) return 2; if(/광역|급행/.test(tp)) return 3;
         if(/마을/.test(tp)) return 4; if(/순환/.test(tp)) return 5; return 6; };
-      items.sort(function(a,b){
-        var d = _tpOrder(a.routetp||a.routeTp) - _tpOrder(b.routetp||b.routeTp);
-        if(d !== 0) return d;
-        return (parseInt(a.arrtime||a.arrTime||99999)||99999) - (parseInt(b.arrtime||b.arrTime||99999)||99999);
+      var byRoute = {};
+      items.forEach(function(a){
+        var rid = String(a.routeid||a.routeId||a.routeno||a.routeNo||'');
+        if(!rid) return;
+        if(!byRoute[rid]) byRoute[rid] = { info:a, arrs:[] };
+        var s1=parseInt(a.arrtime ||a.arrTime ||0)||0, c1=parseInt(a.arrprevstationcnt ||a.arrPrevStationCnt ||0)||0;
+        var s2=parseInt(a.arrtime2||a.arrTime2||0)||0, c2=parseInt(a.arrprevstationcnt2||a.arrPrevStationCnt2||0)||0;
+        if(s1>0) byRoute[rid].arrs.push({sec:s1,cnt:c1});
+        if(s2>0) byRoute[rid].arrs.push({sec:s2,cnt:c2});
+      });
+      var routes = Object.keys(byRoute).map(function(k){
+        var g=byRoute[k];
+        g.arrs.sort(function(x,y){ return x.sec - y.sec; });
+        var seen2={}; g.arrs = g.arrs.filter(function(x){ if(seen2[x.sec]) return false; seen2[x.sec]=1; return true; });
+        return g;
+      });
+      routes.sort(function(A,B){
+        var d = _tpOrder(A.info.routetp||A.info.routeTp) - _tpOrder(B.info.routetp||B.info.routeTp);
+        if(d!==0) return d;
+        var aa=A.arrs.length?A.arrs[0].sec:99999, bb=B.arrs.length?B.arrs[0].sec:99999;
+        return aa-bb;
       });
       var _fmt = function(sec){ return sec>0 ? (sec<=60 ? '곧 도착' : Math.round(sec/60)+'분') : '-'; };
-      var lastGrp = null;
-      items.slice(0, 12).forEach(function(a, i) {
+      routes.slice(0, 12).forEach(function(g, i) {
+        var a = g.info;
         var routeNo = a.routeno || a.routeNo || '-';
         var routeId = a.routeid || a.routeId || '';
         var routeTp = a.routetp || a.routeTp || '';
-        var sec  = parseInt(a.arrtime  || a.arrTime  || 0) || 0;
-        var sec2 = parseInt(a.arrtime2 || a.arrTime2 || 0) || 0;
-        var cnt  = parseInt(a.arrprevstationcnt  || a.arrPrevStationCnt  || 0) || 0;
-        var cnt2 = parseInt(a.arrprevstationcnt2 || a.arrPrevStationCnt2 || 0) || 0;
         var numCls = _busNumClass ? _busNumClass(routeNo) : 'other';
+        var a1 = g.arrs[0], a2 = g.arrs[1];
 
-        var arr1 = '<div class="kbus-arr' + (sec>0&&sec<=60?' soon':'') + '">' + _fmt(sec) +
-          (cnt>0 ? '<span class="kbus-cnt">' + cnt + '번째전</span>' : '') + '</div>';
-        var arr2 = sec2>0
-          ? '<div class="kbus-arr">' + _fmt(sec2) + (cnt2>0 ? '<span class="kbus-cnt">' + cnt2 + '번째전</span>' : '') + '</div>'
+        var arr1 = a1
+          ? '<div class="kbus-arr' + (a1.sec<=60?' soon':'') + '">' + _fmt(a1.sec) + (a1.cnt>0 ? '<span class="kbus-cnt">' + a1.cnt + '번째전</span>' : '') + '</div>'
           : '<div class="kbus-arr kbus-none">도착정보 없음</div>';
+        var arr2 = a2
+          ? '<div class="kbus-arr' + (a2.sec<=60?' soon':'') + '">' + _fmt(a2.sec) + (a2.cnt>0 ? '<span class="kbus-cnt">' + a2.cnt + '번째전</span>' : '') + '</div>'
+          : '';
 
         var row = document.createElement('div');
         row.className = 'map-bus-row kbus-row';
         row.innerHTML =
           '<div class="kbus-left">' +
             '<div class="bus-num ' + numCls + '">' + _ltEsc(routeNo) + '</div>' +
-            '<div class="kbus-dir" id="busdir_' + cardIdx + '_' + i + '">방면 확인 중…</div>' +
+            '<div class="kbus-dir" id="busdir_' + cardIdx + '_' + i + '">방향 확인 중…</div>' +
           '</div>' +
           '<div class="kbus-arrs">' + arr1 + arr2 + '</div>' +
           '<svg class="map-bus-bell" viewBox="0 0 24 24" fill="currentColor"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>';
@@ -5792,14 +5835,15 @@ function _loadMapBusArrival(stop, cardIdx) {
         }
         card.appendChild(row);
 
-        (function(_cc, _rid, _did){
+        // 다음 정류장 방향 표시
+        (function(_cc, _rid, _nid, _did){
           if(!_rid){ var e0=document.getElementById(_did); if(e0) e0.textContent=''; return; }
-          _fetchBusDir(_cc, _rid, function(dest){
+          _fetchBusNextStop(_cc, _rid, _nid, function(next){
             var el = document.getElementById(_did);
             if(!el) return;
-            el.textContent = dest ? (dest === '순환' ? '🔄 순환' : ('→ ' + dest + ' 방면')) : '';
+            el.textContent = next ? ('→ ' + next + '방향') : '';
           });
-        })(cityCode, routeId, 'busdir_' + cardIdx + '_' + i);
+        })(cityCode, routeId, nodeId, 'busdir_' + cardIdx + '_' + i);
       });
     })
     .catch(function() {
