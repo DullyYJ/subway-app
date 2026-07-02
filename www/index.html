@@ -13287,7 +13287,7 @@ function triggerGPS(){
       /* ★ 역/정류장 선택 없이 GPS "내 위치"를 출발지로 */
       _setStartToMyLocation(lat, lng);
       toast('📍 내 위치로 설정했어요');
-      try { startWatch(); } catch(e){}
+      // ★ 위치 감지는 GPS "내 위치" 설정만. 가까운 역 감지(startWatch→updateCong)는 하지 않음
       return;
 
       /* (아래 역/정류장 목록 로직은 더 이상 사용하지 않음) */
