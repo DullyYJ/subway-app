@@ -5353,9 +5353,11 @@ function loadMapBusStops() {
 
   listEl.innerHTML = '<div style="padding:10px 12px;font-size:12px;color:var(--sub);">⭐ 즐겨찾기 ' + _savedBusStops.length + '개 · 30초마다 자동 갱신</div>';
 
+  window._mapBusCards = [];
   _savedBusStops.forEach(function(stop, idx) {
     var card = _renderMapBusCard(stop, idx, 'fav');
     listEl.appendChild(card);
+    window._mapBusCards.push({ stop: stop, cardIdx: 'fav_' + idx });
     // 실시간 도착 정보 로드
     _loadMapBusArrival(stop, 'fav_' + idx);
   });
@@ -5411,15 +5413,18 @@ function loadMapNearStops(force) {
       stops.sort(function(a,b){ return (parseInt(a.dist||0)) - (parseInt(b.dist||0)); });
       var near = stops.slice(0, 6);
       listEl.innerHTML = '<div style="padding:10px 14px;font-size:12px;color:var(--sub);">📍 주변 정류장 ' + near.length + '개 · 가까운 순</div>';
+      window._mapBusCards = [];
       near.forEach(function(stop, idx) {
         var card = _renderMapBusCard(stop, idx, 'near');
         listEl.appendChild(card);
-        _loadMapBusArrival({
+        var arrStop = {
           name: stop.nodenm || stop.nodeName,
           nodeId: stop.nodeid || stop.nodeId,
           cityCode: stop.citycode || stop.cityCode || '25',
           nodeDir: stop.nodeDir || stop.dir
-        }, 'near_' + idx);
+        };
+        window._mapBusCards.push({ stop: arrStop, cardIdx: 'near_' + idx });
+        _loadMapBusArrival(arrStop, 'near_' + idx);
       });
     });
   }
@@ -5461,6 +5466,28 @@ function removeMapBusStop(idx) {
 window.removeMapBusStop = removeMapBusStop;
 
 // 실시간 버스 도착 정보 로드
+// 노선 종점(방면) 조회 + 캐시 (경유정류장 마지막 = 종점)
+window._busDirCache = window._busDirCache || {};
+function _fetchBusDir(cityCode, routeId, cb){
+  var key = cityCode + '_' + routeId;
+  if(window._busDirCache[key] !== undefined){ cb(window._busDirCache[key]); return; }
+  if(typeof _fetchRouteStations !== 'function'){ cb(''); return; }
+  _fetchRouteStations(cityCode, routeId, function(err, stations){
+    var dest = '';
+    if(!err && stations && stations.length){
+      var last  = stations[stations.length - 1];
+      var first = stations[0];
+      var ln = (last  && (last.nodenm  || last.nodeNm))  || '';
+      var fn = (first && (first.nodenm || first.nodeNm)) || '';
+      if(ln && fn && ln === fn) dest = '순환';   // 기점=종점 → 순환
+      else dest = ln;
+    }
+    window._busDirCache[key] = dest;
+    cb(dest);
+  });
+}
+window._fetchBusDir = _fetchBusDir;
+
 function _loadMapBusArrival(stop, cardIdx) {
   var cityCode = stop.cityCode || stop.citycode || '25';
   var nodeId   = stop.nodeId   || stop.nodeid   || '';
@@ -5501,7 +5528,7 @@ function _loadMapBusArrival(stop, cardIdx) {
         return;
       }
 
-      items.slice(0, 8).forEach(function(a) {
+      items.slice(0, 8).forEach(function(a, i) {
         var row  = document.createElement('div');
         row.className = 'map-bus-row';
         var sec  = parseInt(a.arrtime || a.arrTime || 0);
@@ -5529,6 +5556,7 @@ function _loadMapBusArrival(stop, cardIdx) {
         row.innerHTML =
           '<div class="bus-num ' + numCls + '">' + routeNo + '</div>' +
           '<div class="map-bus-arr">' + line1 + line2 +
+            '<div class="map-bus-dir" id="busdir_' + cardIdx + '_' + i + '" style="font-size:11px;color:var(--blue);font-weight:600;margin-top:1px;"></div>' +
             '<div class="bus-row-track">🗺️ 노선·현위치 보기 ›</div>' +
           '</div>' +
           '<svg class="map-bus-bell" viewBox="0 0 24 24" fill="currentColor"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>';
@@ -5542,6 +5570,15 @@ function _loadMapBusArrival(stop, cardIdx) {
           });
         }
         card.appendChild(row);
+        // ★ 이 버스의 방향(종점 방면) 표시
+        (function(_cc, _rid, _did){
+          if(!_rid) return;
+          _fetchBusDir(_cc, _rid, function(dest){
+            var el = document.getElementById(_did);
+            if(!el) return;
+            el.textContent = dest ? (dest === '순환' ? '🔄 순환 노선' : ('→ ' + dest + ' 방면')) : '';
+          });
+        })(cityCode, routeId, 'busdir_' + cardIdx + '_' + i);
       });
     })
     .catch(function() {
@@ -5558,12 +5595,29 @@ function _loadMapBusArrival(stop, cardIdx) {
     });
 }
 
-// 30초마다 버스 도착 정보 자동 갱신
+// 목록/카드는 유지하고 도착정보만 제자리 갱신 (전체 재로딩 깜빡임 제거)
+function _refreshMapBusArrivals(){
+  var cards = window._mapBusCards;
+  if(!cards || !cards.length) return;
+  cards.forEach(function(c){
+    if(document.getElementById('mapBusCard_' + c.cardIdx)){
+      _loadMapBusArrival(c.stop, c.cardIdx);
+    }
+  });
+}
+window._refreshMapBusArrivals = _refreshMapBusArrivals;
+
+// 30초마다 버스 "도착 정보만" 자동 갱신 (목록 재로딩/스피너 없음)
 setInterval(function() {
   var busPanel = document.getElementById('mapBusPanel');
   if(busPanel && busPanel.style.display !== 'none') {
-    if(_busViewMode === 'near') loadMapNearStops();
-    else loadMapBusStops();
+    if(window._mapBusCards && window._mapBusCards.length){
+      _refreshMapBusArrivals();
+    } else {
+      // 아직 목록이 없으면 최초 1회 로드
+      if(_busViewMode === 'near') loadMapNearStops();
+      else loadMapBusStops();
+    }
   }
 }, 30000);
 
@@ -22834,13 +22888,18 @@ function renderChart24(stnName, lineName) {
       + '</div>';
   }).join('');
 
-  setTimeout(function(){
-    var scroll = document.getElementById('chart24Scroll');
-    if(scroll){
-      var BAR_W = 30;
-      scroll.scrollTo({ left: Math.max(0, curH*BAR_W - scroll.clientWidth/2 + BAR_W/2), behavior:'smooth' });
-    }
-  }, 300);
+  // ★ 막대 내용이 바뀐 경우에만 재정렬 (반복 갱신 때 그래프가 혼자 움직이는 것 방지)
+  var _chartSig = bars.innerHTML;
+  if(bars._chartSig !== _chartSig){
+    bars._chartSig = _chartSig;
+    setTimeout(function(){
+      var scroll = document.getElementById('chart24Scroll');
+      if(scroll){
+        var BAR_W = 30;
+        scroll.scrollTo({ left: Math.max(0, curH*BAR_W - scroll.clientWidth/2 + BAR_W/2), behavior:'smooth' });
+      }
+    }, 300);
+  }
 }
 window.renderChart24 = renderChart24;
 
@@ -23085,19 +23144,27 @@ function _fetchBusCongestion(busSection){
 }
 window._fetchBusCongestion = _fetchBusCongestion;
 
+// 버스 라벨 일관화: 순수 숫자만 '번' 부여, '43(순환)' 등은 그대로 (깜빡임 방지)
+function _busCongLabel(nm){
+  nm = (nm||'').replace(/번$/,'').trim();
+  if(!nm) return '-';
+  return /^[0-9-]+$/.test(nm) ? nm+'번' : nm;
+}
+window._busCongLabel = _busCongLabel;
+
 // 버스 혼잡도로 카드 갱신
 function updateBusCong(busSection){
   // 🚌 즉시 버스 모드로 잠금 (비동기 fetch 전에 지하철 덮어쓰기 방지)
   window._congMode = 'bus';
   // 라벨 즉시 "버스 N번"으로 (데이터 로딩 전에도 지하철 → 버스 전환)
   var _labelEl0 = document.querySelector('.cong-stn');
-  if(_labelEl0) _labelEl0.innerHTML = '버스 <b id="congStn">' + (busSection.name||'-') + '</b>';
+  if(_labelEl0) _labelEl0.innerHTML = '버스 <b id="congStn">' + _busCongLabel(busSection.name) + '</b>';
 
   _fetchBusCongestion(busSection).then(function(res){
     if(!res){
       // 데이터 없으면 라벨만 버스로 유지 (수치는 비움)
       var labelEl = document.querySelector('.cong-stn');
-      if(labelEl) labelEl.innerHTML = '버스 <b id="congStn">' + (busSection.name||'-') + '</b>';
+      if(labelEl) labelEl.innerHTML = '버스 <b id="congStn">' + _busCongLabel(busSection.name) + '</b>';
       return;
     }
     var pct = res.pct;
@@ -23107,7 +23174,7 @@ function updateBusCong(busSection){
 
     // 라벨을 "버스 N번"으로 변경
     var labelEl = document.querySelector('.cong-stn');
-    if(labelEl) labelEl.innerHTML = '버스 <b id="congStn">' + res.busNo + '번</b>';
+    if(labelEl) labelEl.innerHTML = '버스 <b id="congStn">' + _busCongLabel(res.busNo) + '</b>';
 
     var badge = document.getElementById('congBadge');
     var card  = document.getElementById('congCard');
@@ -23243,13 +23310,18 @@ function _renderBusChart24(hourly){
   }).join('');
 
   // 현재 시각 막대를 중앙으로 스크롤
-  setTimeout(function(){
-    var scroll = document.getElementById('chart24Scroll');
-    if(scroll){
-      var BAR_W = 30;
-      scroll.scrollTo({ left: Math.max(0, curH*BAR_W - scroll.clientWidth/2 + BAR_W/2), behavior:'smooth' });
-    }
-  }, 300);
+  // ★ 막대 내용이 바뀐 경우에만 재정렬 (반복 갱신 때 그래프가 혼자 움직이는 것 방지)
+  var _chartSig = bars.innerHTML;
+  if(bars._chartSig !== _chartSig){
+    bars._chartSig = _chartSig;
+    setTimeout(function(){
+      var scroll = document.getElementById('chart24Scroll');
+      if(scroll){
+        var BAR_W = 30;
+        scroll.scrollTo({ left: Math.max(0, curH*BAR_W - scroll.clientWidth/2 + BAR_W/2), behavior:'smooth' });
+      }
+    }, 300);
+  }
 }
 window._renderBusChart24 = _renderBusChart24;
 
