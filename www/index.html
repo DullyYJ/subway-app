@@ -5746,41 +5746,53 @@ function _loadMapBusArrival(stop, cardIdx) {
         return;
       }
 
-      items.slice(0, 8).forEach(function(a, i) {
-        var row  = document.createElement('div');
-        row.className = 'map-bus-row';
-        var sec  = parseInt(a.arrtime || a.arrTime || 0);
-        var sec2 = parseInt(a.arrtime2 || a.arrTime2 || 0);
-        var cnt  = parseInt(a.arrprevstationcnt || a.arrPrevStationCnt || 0);
-        var cnt2 = parseInt(a.arrprevstationcnt2 || a.arrPrevStationCnt2 || 0);
-        var soon = sec > 0 && sec <= 60;
-        var fmt  = function(s){ return s > 0 ? (s < 60 ? '곧 도착' : Math.round(s/60) + '분') : '-'; };
-        var numCls = _busNumClass ? _busNumClass(a.routeno || a.routeNo) : 'other';
+      // 카카오 스타일: 노선타입 그룹 → 색상 번호 + 방면 + 2회차 도착 + 벨
+      var _tpOrder = function(tp){ tp = tp||'';
+        if(/간선/.test(tp)) return 1; if(/지선/.test(tp)) return 2; if(/광역|급행/.test(tp)) return 3;
+        if(/마을/.test(tp)) return 4; if(/순환/.test(tp)) return 5; return 6; };
+      items.sort(function(a,b){
+        var d = _tpOrder(a.routetp||a.routeTp) - _tpOrder(b.routetp||b.routeTp);
+        if(d !== 0) return d;
+        return (parseInt(a.arrtime||a.arrTime||99999)||99999) - (parseInt(b.arrtime||b.arrTime||99999)||99999);
+      });
+      var _fmt = function(sec){ return sec>0 ? (sec<=60 ? '곧 도착' : Math.round(sec/60)+'분') : '-'; };
+      var lastGrp = null;
+      items.slice(0, 12).forEach(function(a, i) {
         var routeNo = a.routeno || a.routeNo || '-';
         var routeId = a.routeid || a.routeId || '';
         var routeTp = a.routetp || a.routeTp || '';
+        var sec  = parseInt(a.arrtime  || a.arrTime  || 0) || 0;
+        var sec2 = parseInt(a.arrtime2 || a.arrTime2 || 0) || 0;
+        var cnt  = parseInt(a.arrprevstationcnt  || a.arrPrevStationCnt  || 0) || 0;
+        var cnt2 = parseInt(a.arrprevstationcnt2 || a.arrPrevStationCnt2 || 0) || 0;
+        var numCls = _busNumClass ? _busNumClass(routeNo) : 'other';
 
-        var line1 = '<div class="map-bus-arr-line">' +
-          '<span class="map-bus-arr-time' + (soon?' soon':'') + '">' + fmt(sec) + '</span>' +
-          (cnt > 0 ? '<span class="map-bus-arr-cnt">' + cnt + '번째전</span>' : '') +
-        '</div>';
-        var line2 = sec2 > 0
-          ? '<div class="map-bus-arr-line">' +
-              '<span class="map-bus-arr-time">' + fmt(sec2) + '</span>' +
-              (cnt2 > 0 ? '<span class="map-bus-arr-cnt">' + cnt2 + '번째전</span>' : '') +
-            '</div>'
-          : '<div class="map-bus-arr-line"><span class="map-bus-arr-sub">도착정보 없음</span></div>';
+        var grp = routeTp || '버스';
+        if(grp !== lastGrp){
+          lastGrp = grp;
+          var h = document.createElement('div');
+          h.className = 'map-bus-row kbus-grp';
+          h.textContent = grp;
+          card.appendChild(h);
+        }
 
+        var arr1 = '<div class="kbus-arr' + (sec>0&&sec<=60?' soon':'') + '">' + _fmt(sec) +
+          (cnt>0 ? '<span class="kbus-cnt">' + cnt + '번째전</span>' : '') + '</div>';
+        var arr2 = sec2>0
+          ? '<div class="kbus-arr">' + _fmt(sec2) + (cnt2>0 ? '<span class="kbus-cnt">' + cnt2 + '번째전</span>' : '') + '</div>'
+          : '<div class="kbus-arr kbus-none">도착정보 없음</div>';
+
+        var row = document.createElement('div');
+        row.className = 'map-bus-row kbus-row';
         row.innerHTML =
-          '<div class="bus-num ' + numCls + '">' + routeNo + '</div>' +
-          '<div class="map-bus-arr">' + line1 + line2 +
-            '<div class="map-bus-dir" id="busdir_' + cardIdx + '_' + i + '" style="font-size:11px;color:var(--blue);font-weight:600;margin-top:1px;"></div>' +
-            '<div class="bus-row-track">🗺️ 노선·현위치 보기 ›</div>' +
+          '<div class="kbus-left">' +
+            '<div class="bus-num ' + numCls + '">' + _ltEsc(routeNo) + '</div>' +
+            '<div class="kbus-dir" id="busdir_' + cardIdx + '_' + i + '">방면 확인 중…</div>' +
           '</div>' +
+          '<div class="kbus-arrs">' + arr1 + arr2 + '</div>' +
           '<svg class="map-bus-bell" viewBox="0 0 24 24" fill="currentColor"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>';
-        // 노선 추적: 버스 행 탭
+
         if(routeId){
-          row.classList.add('bus-row-tap');
           row.style.cursor = 'pointer';
           row.addEventListener('click', function(ev){
             if(ev.target.closest && ev.target.closest('.map-bus-bell')) return;
@@ -5788,13 +5800,13 @@ function _loadMapBusArrival(stop, cardIdx) {
           });
         }
         card.appendChild(row);
-        // ★ 이 버스의 방향(종점 방면) 표시
+
         (function(_cc, _rid, _did){
-          if(!_rid) return;
+          if(!_rid){ var e0=document.getElementById(_did); if(e0) e0.textContent=''; return; }
           _fetchBusDir(_cc, _rid, function(dest){
             var el = document.getElementById(_did);
             if(!el) return;
-            el.textContent = dest ? (dest === '순환' ? '🔄 순환 노선' : ('→ ' + dest + ' 방면')) : '';
+            el.textContent = dest ? (dest === '순환' ? '🔄 순환' : ('→ ' + dest + ' 방면')) : '';
           });
         })(cityCode, routeId, 'busdir_' + cardIdx + '_' + i);
       });
@@ -25804,6 +25816,18 @@ document.addEventListener('DOMContentLoaded', function() {
 .bus-num.branch{color:#00b341;}
 .bus-num.circular{color:#9b59b6;}
 .bus-num.other{color:#7f8c8d;}
+/* 카카오 스타일 버스 도착 */
+.kbus-grp{font-size:11px;font-weight:800;color:var(--sub);padding:9px 14px 2px;letter-spacing:.02em;border:none;background:none;}
+.kbus-row{display:flex;align-items:center;gap:10px;padding:11px 14px;border-top:1px solid var(--border2);}
+.kbus-left{display:flex;flex-direction:column;gap:2px;min-width:60px;flex-shrink:0;}
+.kbus-left .bus-num{min-width:0;font-size:17px;line-height:1.1;}
+.kbus-dir{font-size:11px;color:var(--sub);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px;}
+.kbus-arrs{flex:1;display:flex;flex-direction:column;gap:3px;align-items:flex-end;justify-content:center;}
+.kbus-arr{font-size:14px;font-weight:800;color:var(--text);white-space:nowrap;}
+.kbus-arr.soon{color:#e74c3c;}
+.kbus-arr.kbus-none{font-size:12px;font-weight:600;color:#a0a0a5;}
+.kbus-cnt{font-size:11px;font-weight:600;color:var(--sub);margin-left:6px;}
+.kbus-row .map-bus-bell{flex-shrink:0;width:22px;height:22px;color:var(--sub);opacity:.55;}
 .bus-dest{display:none;}
 .bus-arr{flex:1;text-align:left;min-width:0;}
 .bus-arr-line{display:flex;align-items:center;gap:7px;margin-bottom:4px;}
