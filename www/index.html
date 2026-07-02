@@ -1456,8 +1456,8 @@ function _foodDist(m) {
 // 카테고리 단순화
 function _foodCatSimple(cat) {
   if(!cat) return '음식점';
-  var c = cat.split(' > ');
-  return c[c.length - 1] || c[0];
+  var c = String(cat).split(/\s*>\s*/);   // '>' 기준 분리 (공백 유무 무관)
+  return c[c.length - 1] || c[0] || '음식점';
 }
 
 // 네이버 지도 링크
