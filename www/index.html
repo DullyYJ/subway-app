@@ -1508,7 +1508,7 @@ function _renderFoodList() {
   // ── 하단: 공공데이터 ──
   if(pub.length){
     var dv = document.createElement('div');
-    dv.style.cssText = 'padding:12px 14px 6px;font-size:12px;color:var(--sub);font-weight:700;border-top:1px solid var(--border,rgba(0,0,0,.08));margin-top:8px;';
+    dv.style.cssText = 'flex-shrink:0;padding:12px 14px 6px;font-size:12px;color:var(--sub);font-weight:700;border-top:1px solid var(--border,rgba(0,0,0,.08));margin-top:8px;';
     dv.textContent = '📋 공공데이터 · 주변 ' + (_foodCurFilter==='전체'?'음식점':_foodCurFilter) + ' ' + pub.length + '곳';
     list.appendChild(dv);
     _appendCards(pub, true);
@@ -25633,7 +25633,7 @@ document.addEventListener('DOMContentLoaded', function() {
 .food-chip.on{background:var(--gold);color:#121214;border-color:var(--gold);}
 .food-list{padding:0 12px 80px;display:flex;flex-direction:column;gap:10px;}
 .food-card{background:var(--card);border:1px solid var(--border);border-radius:16px;
-  overflow:hidden;cursor:pointer;transition:transform .15s;}
+  overflow:hidden;cursor:pointer;transition:transform .15s;flex-shrink:0;}
 .food-card:active{transform:scale(0.98);}
 .food-card-inner{display:flex;gap:12px;padding:14px;}
 .food-rank{width:24px;height:24px;border-radius:50%;background:var(--gold);color:#121214;
