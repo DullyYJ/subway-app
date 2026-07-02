@@ -1168,6 +1168,9 @@ window._fetchPublicFood = _fetchPublicFood;
 
 // 맛집 카드 DOM 생성 (상단=네이버 추천 / 하단=공공데이터)
 function _foodMakeCard(p, i, isPublic){
+  var nm = String((p&&p.place_name)||'').replace(/<[^>]*>/g,'').trim();
+  if(!nm) return null;   // 이름 없는 항목은 카드 생성 안 함 (빈 카드 방지)
+  p.place_name = nm;
   var cat=_foodCatSimple(p.category_name);
   var dist=_foodDist(p.distance);
   var addr=p.road_address_name ? ' · '+p.road_address_name.split(' ').slice(-2).join(' ') : '';
@@ -1286,16 +1289,18 @@ window.loadFoodTab = loadFoodTab;
 // 맛집 조회: 네이버(우선) + 카카오 좌표/역명 병렬 통합 (최대한 많이, 중복 제거)
 var _WORKER_FOOD = 'https://gentle-lab-7e47subway-api.phg0643.workers.dev';
 function _foodMapItem(p){
+  var nm = p.place_name || p.name || p.title || p.bizesNm || '';
+  nm = String(nm).replace(/<[^>]*>/g,'').trim();   // 혹시 모를 태그 제거
   return {
-    id: p.place_id || p.id || p.place_name || '',
-    place_name: p.place_name || '',
-    category_name: p.category_name || '',
+    id: p.place_id || p.id || nm || '',
+    place_name: nm,
+    category_name: p.category_name || p.category || p.indsMclsNm || '',
     address_name: p.address_name || '',
-    road_address_name: p.road_address_name || '',
+    road_address_name: p.road_address_name || p.roadAddress || p.address || '',
     distance: String(p.distance || 0),
-    place_url: p.place_url || '',
-    x: String(p.lng || p.x || 0),
-    y: String(p.lat || p.y || 0)
+    place_url: p.place_url || p.link || '',
+    x: String(p.lng || p.x || p.mapx || 0),
+    y: String(p.lat || p.y || p.mapy || 0)
   };
 }
 function _fetchKakaoFood(stnNm, lat, lng) {
@@ -1488,8 +1493,17 @@ function _renderFoodList() {
 
   list.innerHTML = '';
 
+  function _appendCards(arr, isPublic){
+    var n = 0;
+    for(var i=0; i<arr.length && n<60; i++){
+      var el = _foodMakeCard(arr[i], n, isPublic);
+      if(el){ list.appendChild(el); n++; }
+    }
+    return n;
+  }
+
   // ── 상단: 네이버/카카오 추천 ──
-  curated.forEach(function(p, i){ list.appendChild(_foodMakeCard(p, i, false)); });
+  var nCur = _appendCards(curated, false);
 
   // ── 하단: 공공데이터 ──
   if(pub.length){
@@ -1497,7 +1511,12 @@ function _renderFoodList() {
     dv.style.cssText = 'padding:12px 14px 6px;font-size:12px;color:var(--sub);font-weight:700;border-top:1px solid var(--border,rgba(0,0,0,.08));margin-top:8px;';
     dv.textContent = '📋 공공데이터 · 주변 ' + (_foodCurFilter==='전체'?'음식점':_foodCurFilter) + ' ' + pub.length + '곳';
     list.appendChild(dv);
-    pub.forEach(function(p, i){ list.appendChild(_foodMakeCard(p, i, true)); });
+    _appendCards(pub, true);
+  }
+
+  // 렌더 결과가 0개면 빈 상태 표시
+  if(!list.children.length){
+    list.innerHTML = '<div class="food-empty">😢<br>해당 카테고리 음식점이 없습니다.</div>';
   }
 }
 window._renderFoodList = _renderFoodList;
