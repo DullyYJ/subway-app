@@ -3508,7 +3508,7 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
     // 행4: 시간
     var row4=isWalk
       ? '<div style="height:16px;font-size:9px;font-weight:600;color:var(--gold);text-align:center;margin-top:3px;">'+_ltEsc(pt.lbl)+'</div>'
-      : '<div style="height:16px;font-size:9px;font-weight:600;color:var(--sub);text-align:center;margin-top:3px;white-space:nowrap;">'+_ltEsc(pt.arrT)+'</div>';
+      : '<div class="htl-time-lbl" style="height:16px;font-size:9px;font-weight:600;color:var(--sub);text-align:center;margin-top:3px;white-space:nowrap;">'+_ltEsc(pt.arrT)+'</div>';
 
     var id=gpsId ? ' id="'+gpsId+'"' : '';
     html+='<div'+id+' style="width:'+W+'px;flex:0 0 '+W+'px;display:flex;flex-direction:column;align-items:center;overflow:visible;">'
@@ -4832,6 +4832,17 @@ function _startTransitGpsTracking(nodes) {
     });
   });
 
+  // 스케줄 도착(분) 저장 + 실측 통과시각 초기화 (도착시간 보정용)
+  var _prevSched = null;
+  _transitNodeData.forEach(function(nd){
+    var mn = _arrTimeToMin(nd.arrTime);
+    if(mn != null){
+      if(_prevSched != null && mn < _prevSched) mn += 1440;  // 자정 넘김 보정
+      nd._schedMin = mn; _prevSched = mn;
+    } else { nd._schedMin = null; }
+  });
+  window._nodePassMs = {};
+
   // 경로 시작 시각 기록 (출발 후 경과 시간 계산용)
   _transitStartTime = Date.now();
 
@@ -4932,6 +4943,53 @@ function _estimateTimeBasedPos(){
   return null;
 }
 window._estimateTimeBasedPos = _estimateTimeBasedPos;
+
+// ── 실측 도착시간 보정 ──────────────────────────────
+// GPS로 정류장/역 통과가 확인되면 실제 시각을 기록하고,
+// 관측된 이동 속도(pace)로 이후 노드의 도착시간을 다시 계산한다.
+function _recalcArrivalsFrom(anchorIdx){
+  var passes = [];
+  var pm = window._nodePassMs || {};
+  for(var key in pm){
+    var ii = +key; var nd = _transitNodeData[ii];
+    if(nd && nd._schedMin != null) passes.push({ idx:ii, ms:pm[key], sched:nd._schedMin });
+  }
+  if(!passes.length) return;
+  passes.sort(function(a,b){ return a.idx - b.idx; });
+  var anchor = passes[passes.length - 1];
+  // pace = 실제경과 / 스케줄경과 (관측 통과가 2개 이상일 때)
+  var pace = 1;
+  if(passes.length >= 2){
+    var first = passes[0];
+    var schedElapsed  = anchor.sched - first.sched;          // 분
+    var actualElapsed = (anchor.ms - first.ms) / 60000;      // 분
+    if(schedElapsed > 0.5 && actualElapsed > 0) pace = actualElapsed / schedElapsed;
+  }
+  pace = Math.max(0.4, Math.min(1.8, pace));   // 이상치 방지
+  var anchorMs = anchor.ms;
+  _transitNodeData.forEach(function(nd, idx){
+    if(idx <= anchor.idx || nd._schedMin == null) return;
+    var newMs = anchorMs + (nd._schedMin - anchor.sched) * pace * 60000;
+    var d = new Date(newMs);
+    var hh = ('0'+d.getHours()).slice(-2), mm = ('0'+d.getMinutes()).slice(-2);
+    nd.arrTime = hh + ':' + mm;
+    if(nd.el){ var t = nd.el.querySelector('.htl-time-lbl'); if(t) t.textContent = nd.arrTime; }
+  });
+  // 헤더 남은시간/브리핑 갱신
+  try { if(typeof _updateRouteRemaining === 'function') _updateRouteRemaining(); } catch(e){}
+}
+// GPS가 특정 정류장/역 70m 이내이면 '통과'로 보고 실제 시각 기록
+function _maybeRecordPass(idx, dist){
+  if(idx == null || idx < 0) return;
+  var nd = _transitNodeData[idx];
+  if(!nd || nd.isOrigin || nd.isWalk || nd._schedMin == null) return;
+  if(dist != null && dist > 70) return;
+  window._nodePassMs = window._nodePassMs || {};
+  if(window._nodePassMs[idx] != null) return;   // 이미 기록됨
+  window._nodePassMs[idx] = Date.now();
+  _recalcArrivalsFrom(idx);
+}
+window._maybeRecordPass = _maybeRecordPass;
 
 var _HTL_MARKER_MS = 3000; // 마커 이동 트랜지션(=틱 주기)
 
@@ -5179,6 +5237,9 @@ function _updateTransitGps() {
     if(d <= 50 && d < _snapD){ _snapD=d; _snapNd=nd; _snapIdx=idx; }
   });
   if(_snapNd){ best=_snapNd; bestDist=_snapD; bestIdx=_snapIdx; }
+
+  // ★ 실측 도착시간 보정: GPS로 정류장 통과 확인 시 실제 시각 기록 → 이후 도착시간 재계산
+  if(_validGps) { try { _maybeRecordPass(bestIdx, bestDist); } catch(e){} }
 
   // ★ 미탑승 감지: 예정 출발시각이 지났는데 아직 첫 정류장/역 근처면 다음 시간표로 재설정
   try {
