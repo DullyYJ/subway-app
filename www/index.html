@@ -1124,8 +1124,8 @@ var _foodPubCache   = {};   // 공공데이터 캐시
 // 카테고리 판별: 밥집 / 카페 / 술집
 function _foodKind(cat){
   cat = (cat||'').toLowerCase();
-  if(/카페|커피|디저트|베이커리|제과|빵|브런치|티하우스|아이스크림|빙수/.test(cat)) return '카페';
-  if(/술집|주점|호프|맥주|바\(bar\)|포차|와인|칵테일|유흥|이자카야|펍|바(?!이)/.test(cat)) return '술집';
+  if(/카페|커피|디저트|베이커리|제과|빵집|브런치|티하우스|아이스크림|빙수|도넛|스무디|밀크티/.test(cat)) return '카페';
+  if(/술집|주점|호프|생맥주|맥주|포장마차|포차|와인|칵테일|위스키|사케|이자카야|펍|유흥|bar|바\(/.test(cat)) return '술집';
   return '밥집';
 }
 function _foodValid(p){ return p && p.place_name && String(p.place_name).trim(); }
@@ -1321,7 +1321,7 @@ function _fetchKakaoFood(stnNm, lat, lng) {
   if(list && (!_foodAllData || !_foodAllData.length)) list.innerHTML =
     '<div class="food-loading"><div class="food-spinner"></div>' + stnNm + ' 맛집 불러오는 중...</div>';
 
-  var cat = encodeURIComponent(_foodQueryCat());
+  // ★ 필터와 무관하게 밥집·카페·술집을 각각 조회해 합침 → 모든 탭이 골고루 나옴
   var collected = [];
   var seen = {};
   function _k(p){ return String(p.place_name||'').replace(/\s/g,''); }
@@ -1331,23 +1331,27 @@ function _fetchKakaoFood(stnNm, lat, lng) {
     if(_foodAllData.length) _foodCache[stnNm] = { ts: Date.now(), data: _foodAllData };
     _renderFoodList();
   }
-  // 1) 네이버 (리뷰 기반, 우선 표시)
-  _fetchT(_WORKER_FOOD + '/naver-food?region=' + encodeURIComponent(stnNm) + '&cat=' + cat, {}, 8000)
-    .then(function(r){ return r.ok ? r.json() : null; })
-    .then(function(d){ if(d){ var pl=d.restaurants||[]; if(pl.length) _merge(pl.map(_foodMapItem)); } })
-    .catch(function(){});
-  // 2) 카카오 좌표 5km (보강 — 최대한 많이)
+  function _pull(d){ if(!d) return; var pl=d.restaurants||d.documents||[]; if(pl.length) _merge(pl.map(_foodMapItem)); }
+  function _getJSON(u){ return _fetchT(u, {}, 8000).then(function(r){ return r.ok ? r.json() : null; }); }
+
+  // 카테고리별 검색어 (밥집=broad 맛집, 카페, 술집)
+  var _catList = ['', '맛집', '카페', '술집'];
+
+  // 1) 네이버 (리뷰 기반, 우선) — 카테고리별
+  _catList.forEach(function(c){
+    _getJSON(_WORKER_FOOD + '/naver-food?region=' + encodeURIComponent(stnNm) + '&cat=' + encodeURIComponent(c))
+      .then(_pull).catch(function(){});
+  });
+  // 2) 카카오 좌표 5km — 카테고리별 (골고루 보강)
   if(lat && lng){
-    _fetchT(_WORKER_FOOD + '/kakao-food-geo?lat=' + lat + '&lng=' + lng + '&radius=5000&cat=' + cat, {}, 8000)
-      .then(function(r){ return r.ok ? r.json() : null; })
-      .then(function(d){ if(d){ var pl=d.restaurants||d.documents||[]; if(pl.length) _merge(pl.map(_foodMapItem)); } })
-      .catch(function(){});
+    _catList.forEach(function(c){
+      _getJSON(_WORKER_FOOD + '/kakao-food-geo?lat=' + lat + '&lng=' + lng + '&radius=5000&cat=' + encodeURIComponent(c))
+        .then(_pull).catch(function(){});
+    });
   }
-  // 3) 역명 기반 (D1 캐시/폴백 — 좌표 실패 대비)
-  _fetchT(_WORKER_FOOD + '/kakao-food?station=' + encodeURIComponent(stnNm) + '&cat=' + cat, {}, 8000)
-    .then(function(r){ return r.ok ? r.json() : null; })
-    .then(function(d){ if(d){ var pl=d.restaurants||d.documents||[]; if(pl.length) _merge(pl.map(_foodMapItem)); } })
-    .catch(function(){});
+  // 3) 역명 기반 (D1 캐시/폴백)
+  _getJSON(_WORKER_FOOD + '/kakao-food?station=' + encodeURIComponent(stnNm) + '&cat=')
+    .then(_pull).catch(function(){});
   // 아무 소스도 결과 없을 때만 빈 상태 표시
   setTimeout(function(){
     if((!_foodAllData||!_foodAllData.length) && (!_foodPublicData||!_foodPublicData.length)){
