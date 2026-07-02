@@ -1322,19 +1322,19 @@ function _fetchKakaoFood(stnNm, lat, lng) {
     _renderFoodList();
   }
   // 1) 네이버 (리뷰 기반, 우선 표시)
-  fetch(_WORKER_FOOD + '/naver-food?region=' + encodeURIComponent(stnNm) + '&cat=' + cat)
+  _fetchT(_WORKER_FOOD + '/naver-food?region=' + encodeURIComponent(stnNm) + '&cat=' + cat, {}, 8000)
     .then(function(r){ return r.ok ? r.json() : null; })
     .then(function(d){ if(d){ var pl=d.restaurants||[]; if(pl.length) _merge(pl.map(_foodMapItem)); } })
     .catch(function(){});
   // 2) 카카오 좌표 5km (보강 — 최대한 많이)
   if(lat && lng){
-    fetch(_WORKER_FOOD + '/kakao-food-geo?lat=' + lat + '&lng=' + lng + '&radius=5000&cat=' + cat)
+    _fetchT(_WORKER_FOOD + '/kakao-food-geo?lat=' + lat + '&lng=' + lng + '&radius=5000&cat=' + cat, {}, 8000)
       .then(function(r){ return r.ok ? r.json() : null; })
       .then(function(d){ if(d){ var pl=d.restaurants||d.documents||[]; if(pl.length) _merge(pl.map(_foodMapItem)); } })
       .catch(function(){});
   }
   // 3) 역명 기반 (D1 캐시/폴백 — 좌표 실패 대비)
-  fetch(_WORKER_FOOD + '/kakao-food?station=' + encodeURIComponent(stnNm) + '&cat=' + cat)
+  _fetchT(_WORKER_FOOD + '/kakao-food?station=' + encodeURIComponent(stnNm) + '&cat=' + cat, {}, 8000)
     .then(function(r){ return r.ok ? r.json() : null; })
     .then(function(d){ if(d){ var pl=d.restaurants||d.documents||[]; if(pl.length) _merge(pl.map(_foodMapItem)); } })
     .catch(function(){});
@@ -1596,7 +1596,7 @@ function _updateAITabState() {
 
   // 10분 자동갱신
   if(_aiPollInt) clearInterval(_aiPollInt);
-  _aiPollInt = setInterval(function(){ requestAIBrief(false); }, 10 * 60 * 1000);
+  _aiPollInt = setInterval(function(){ if(document.hidden) return; requestAIBrief(false); }, 10 * 60 * 1000);
   _startBriefCountdown();
 }
 
@@ -2118,6 +2118,7 @@ function _homeHasRoute(){
 function _homeInterval(){ return 5*60*1000; }
 
 function _homeTick(){
+  if(document.hidden) return;   // 백그라운드에서는 스킵 (배터리 절약)
   requestHomeBrief(false);
   var iv = _homeInterval();
   _homeAiNextAt = Date.now() + iv;
@@ -2475,6 +2476,20 @@ function _renderBusStop(stop, arrivals) {
 // ════════════════════════════════════════════════════════════
 
 // TAGO 프록시 GET 헬퍼 (Worker /bus-proxy 우선, 실패 시 직접)
+// ④ fetch 타임아웃 래퍼 (기본 8초) — 응답 지연 시 무한 스피너 방지
+function _fetchT(url, opts, ms){
+  opts = opts || {};
+  var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+  if(ctrl) opts.signal = ctrl.signal;
+  var done = false;
+  var to = setTimeout(function(){ if(!done && ctrl){ try{ ctrl.abort(); }catch(e){} } }, ms || 8000);
+  return fetch(url, opts).then(
+    function(r){ done=true; clearTimeout(to); return r; },
+    function(e){ done=true; clearTimeout(to); throw e; }
+  );
+}
+window._fetchT = _fetchT;
+
 function _busProxyGet(apiUrl, cb){
   var proxyUrl = _SERVER_URL + '/bus-proxy?url=' + encodeURIComponent(apiUrl);
   fetch(proxyUrl)
@@ -5155,9 +5170,9 @@ function _updateTransitGps() {
   // ★ 예상 남은시간(시간 기반) 갱신 → 경로카드 헤더 + AI 승무원 반영
   try { _updateRouteRemaining(); } catch(e){}
   // ── GPS 좌표 취득 (여러 소스 순서대로 시도) ──
-  var lat = null, lng = null;
+  var lat = null, lng = null, _gpsTs = 0;
   if(typeof S !== 'undefined' && S.lastGPSFix && S.lastGPSFix.lat) {
-    lat = S.lastGPSFix.lat; lng = S.lastGPSFix.lng;
+    lat = S.lastGPSFix.lat; lng = S.lastGPSFix.lng; _gpsTs = S.lastGPSFix.ts || 0;
   } else if(typeof window._lastGPSLat !== 'undefined' && window._lastGPSLat) {
     lat = window._lastGPSLat; lng = window._lastGPSLng;
   } else if(typeof _lastGPSLat !== 'undefined' && _lastGPSLat) {
@@ -5176,9 +5191,12 @@ function _updateTransitGps() {
 
   // ── GPS 좌표 유효성 검증 (한국 영역: 위도 33~39, 경도 124~132) ──
   // test 환경/에뮬레이터에서 (0,0)이나 깨진 좌표가 들어오면 무시
+  // 오래된 좌표(15초 초과)는 지하 등에서 stale → 무효 처리하고 시간 기반으로 흐르게 함
+  var _gpsStale = (_gpsTs > 0) && (Date.now() - _gpsTs > 15000);
   var _validGps = (lat != null && lng != null
     && lat >= 33 && lat <= 39.5 && lng >= 124 && lng <= 132
-    && !isNaN(lat) && !isNaN(lng));
+    && !isNaN(lat) && !isNaN(lng)
+    && !_gpsStale);
   if(!_validGps){
     lat = null; lng = null;
   }
@@ -5802,6 +5820,7 @@ window._refreshMapBusArrivals = _refreshMapBusArrivals;
 
 // 30초마다 버스 "도착 정보만" 자동 갱신 (목록 재로딩/스피너 없음)
 setInterval(function() {
+  if(document.hidden) return;   // 백그라운드 스킵
   var busPanel = document.getElementById('mapBusPanel');
   if(busPanel && busPanel.style.display !== 'none') {
     if(window._mapBusCards && window._mapBusCards.length){
@@ -17791,7 +17810,7 @@ window.onload=function(){
   setTimeout(function(){ if(typeof _renderFavRecent==='function') _renderFavRecent(); }, 500);  // ★ 즐겨찾기/최근경로
   setTimeout(function(){ if(typeof renderHorizontalTimeline==='function') renderHorizontalTimeline(); }, 600);  // ★ 경로 노선도 빈 상태 표시
   // 10분마다 실시간 뉴스 갱신
-  setInterval(function(){ if(typeof _fetchRealtimeNews === 'function') _fetchRealtimeNews(); }, 10*60*1000);
+  setInterval(function(){ if(document.hidden) return; if(typeof _fetchRealtimeNews === 'function') _fetchRealtimeNews(); }, 10*60*1000);
   // 이후 5~10분 랜덤 간격으로 새 글 자동 생성
   setTimeout(function(){ if(typeof scheduleAutoPost==='function') scheduleAutoPost(); }, 20000);
 
@@ -17818,7 +17837,7 @@ window.onload=function(){
 
   // ── 감성 마퀴 메시지 초기화 + 5분마다 시간대 반영 ──
   try { if(typeof updateMarquee === 'function') updateMarquee(); } catch(e){}
-  setInterval(function(){ try { updateMarquee(); } catch(e){} }, 5*60*1000);
+  setInterval(function(){ if(document.hidden) return; try { updateMarquee(); } catch(e){} }, 5*60*1000);
 
   // ── 앱 시작 시 서버에서 커뮤니티 게시글 로드 ───────
   setTimeout(function(){
@@ -19642,6 +19661,9 @@ function fmapSearch(inp, type) {
     box.appendChild(d);
   });
 
+  // ②③ 네트워크 검색(버스+장소)은 300ms 디바운스 → 글자마다 호출 방지
+  clearTimeout(box._netTimer);
+  box._netTimer = setTimeout(function(){
   // ② 버스정류장 검색 (입력 2글자 이상일 때만)
   if(q.length >= 2 && typeof _busStopSearchByName === 'function') {
     _busStopSearchByName(q, function(stops) {
@@ -19673,9 +19695,9 @@ function fmapSearch(inp, type) {
 
   // ③ 카카오 주소/장소 검색 (2글자 이상)
   if(q.length >= 2) {
-    fetch('https://dapi.kakao.com/v2/local/search/keyword.json?query=' + encodeURIComponent(q) + '&size=5', {
+    _fetchT('https://dapi.kakao.com/v2/local/search/keyword.json?query=' + encodeURIComponent(q) + '&size=5', {
       headers: { 'Authorization': 'KakaoAK ' + _KAKAO_REST_KEY }
-    })
+    }, 8000)
     .then(function(r){ return r.json(); })
     .then(function(data){
       var docs = data.documents || [];
@@ -19710,6 +19732,7 @@ function fmapSearch(inp, type) {
     })
     .catch(function(){});
   }
+  }, 300);
 
   if(!stnMatches.length && q.length < 2) {
     box.style.display = 'none';
