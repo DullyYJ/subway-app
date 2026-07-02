@@ -1103,7 +1103,17 @@ function _exitCancel(){
 // ══════════════════════════════════════════════════════════════
 // 🍽️ 도착역 맛집 탭 (카카오 로컬 API)
 // ══════════════════════════════════════════════════════════════
-var _KAKAO_REST_KEY   = 'a420cd52d24c6380fb5d1a2287663495';
+// 카카오 키는 서버(Cloudflare Worker)로 이전 — 클라이언트에 노출하지 않음
+var _KAKAO_PROXY_BASE = 'https://gentle-lab-7e47subway-api.phg0643.workers.dev';
+// dapi.kakao.com/v2/local/* 프록시
+function _kakaoLocal(path, qs){
+  return _fetchT(_KAKAO_PROXY_BASE + '/kakao-local?path=' + encodeURIComponent(path) + '&qs=' + encodeURIComponent(qs || ''), {}, 8000);
+}
+// apis-navi.kakaomobility.com/* 프록시
+function _kakaoNavi(path, qs){
+  return _fetchT(_KAKAO_PROXY_BASE + '/kakao-navi?path=' + encodeURIComponent(path) + '&qs=' + encodeURIComponent(qs || ''), {}, 8000);
+}
+window._kakaoLocal = _kakaoLocal; window._kakaoNavi = _kakaoNavi;
 var _NAVER_CLIENT_ID  = 'hA4NRbssAZ_MvYBElOTQ';  // 네이버 Static Map
 var _foodCache     = {};   // { 역명: { ts, data } }
 var _foodAllData   = [];   // 현재 로드된 전체 맛집 목록
@@ -2914,32 +2924,15 @@ window._busStopSearchByName = _busStopSearchByName;
 // ══════════════════════════════════════════════════════════════
 // 🗺️ 카카오 대중교통 경로 API (버스 포함 경로)
 // ══════════════════════════════════════════════════════════════
-var _KAKAO_MOBILITY_KEY = 'a420cd52d24c6380fb5d1a2287663495';
+// 모빌리티 키도 서버(Worker)로 이전
 
 function _fetchKakaoTransitRoute(startLat, startLng, endLat, endLng, callback) {
-  // 카카오 모빌리티 대중교통 경로 API
-  var url = 'https://apis-navi.kakaomobility.com/v1/directions' +
-    '?origin=' + startLng + ',' + startLat +
+  // 카카오 모빌리티 대중교통 경로 API (Worker 프록시 경유 — 키 노출 없음)
+  var _naviQs = 'origin=' + startLng + ',' + startLat +
     '&destination=' + endLng + ',' + endLat +
-    '&waypoints=' +
-    '&priority=RECOMMEND' +
-    '&car_fuel=GASOLINE' +
-    '&car_hipass=false' +
-    '&alternatives=false' +
-    '&road_details=false';
+    '&departure_time=' + encodeURIComponent(new Date().toISOString().replace('T',' ').slice(0,16));
 
-  // 대중교통은 별도 API
-  var transitUrl = 'https://apis-navi.kakaomobility.com/v1/future/directions/transit' +
-    '?origin=' + startLng + ',' + startLat +
-    '&destination=' + endLng + ',' + endLat +
-    '&departure_time=' + new Date().toISOString().replace('T',' ').slice(0,16);
-
-  fetch(transitUrl, {
-    headers: {
-      'Authorization': 'KakaoAK ' + _KAKAO_MOBILITY_KEY,
-      'Content-Type': 'application/json'
-    }
-  })
+  _kakaoNavi('v1/future/directions/transit', _naviQs)
   .then(function(r){
     if(!r.ok) throw new Error('HTTP ' + r.status);
     return r.json();
@@ -4012,8 +4005,7 @@ function fmapDoRoute() {
     // 기존 좌표 있으면 사용
     if(existing && existing.lat && existing.lng) { cb(existing); return; }
     // 카카오 키워드 검색
-    fetch('https://dapi.kakao.com/v2/local/search/keyword.json?query=' + encodeURIComponent(q) + '&size=1',
-      {headers: {'Authorization': 'KakaoAK ' + _KAKAO_REST_KEY}})
+    _kakaoLocal('search/keyword.json', 'query=' + encodeURIComponent(q) + '&size=1')
     .then(function(r){ return r.json(); })
     .then(function(d){
       var doc = (d.documents || [])[0];
@@ -17549,9 +17541,7 @@ function _updateMyLocLabel() {
   navigator.geolocation.getCurrentPosition(function(pos) {
     var lat = pos.coords.latitude, lng = pos.coords.longitude;
     // 카카오 좌표→주소 역지오코딩
-    fetch('https://dapi.kakao.com/v2/local/geo/coord2regioncode.json?x=' + lng + '&y=' + lat, {
-      headers: { 'Authorization': 'KakaoAK ' + _KAKAO_REST_KEY }
-    })
+    _kakaoLocal('geo/coord2regioncode.json', 'x=' + lng + '&y=' + lat)
     .then(function(r){ return r.json(); })
     .then(function(d){
       if(d.documents && d.documents[1]) {
@@ -19706,9 +19696,7 @@ function fmapSearch(inp, type) {
 
   // ③ 카카오 주소/장소 검색 (2글자 이상)
   if(q.length >= 2) {
-    _fetchT('https://dapi.kakao.com/v2/local/search/keyword.json?query=' + encodeURIComponent(q) + '&size=5', {
-      headers: { 'Authorization': 'KakaoAK ' + _KAKAO_REST_KEY }
-    }, 8000)
+    _kakaoLocal('search/keyword.json', 'query=' + encodeURIComponent(q) + '&size=5')
     .then(function(r){ return r.json(); })
     .then(function(data){
       var docs = data.documents || [];
@@ -23233,10 +23221,8 @@ function _splitRegionCode(code){
 // 좌표 → 행정구역 코드 (카카오 coord2regioncode)
 function _coordToRegionCode(lat, lng){
   return new Promise(function(resolve){
-    var kakaoKey = 'a420cd52d24c6380fb5d1a2287663495';
-    fetch('https://dapi.kakao.com/v2/local/geo/coord2regioncode.json?x=' + lng + '&y=' + lat, {
-      headers: { 'Authorization': 'KakaoAK ' + kakaoKey }
-    }).then(function(r){ return r.json(); }).then(function(d){
+    _kakaoLocal('geo/coord2regioncode.json', 'x=' + lng + '&y=' + lat)
+    .then(function(r){ return r.json(); }).then(function(d){
       var docs = d.documents || [];
       // 법정동(B) 우선, 없으면 행정동(H)
       var b = docs.find(function(x){ return x.region_type==='B'; }) || docs[0];
