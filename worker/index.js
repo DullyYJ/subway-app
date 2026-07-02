@@ -972,7 +972,50 @@ export default {
           return json({ error: '버스 API 오류: ' + e.message }, 500);
         }
       }
+// ── 카카오 로컬(dapi) 프록시 — 키는 서버에만 ──
+if (path === '/kakao-local' && method === 'GET') {
+  const kpath = url.searchParams.get('path') || '';
+  const kqs   = url.searchParams.get('qs')   || '';
+  try {
+    const res = await fetch('https://dapi.kakao.com/v2/local/' + kpath + '?' + kqs, {
+      headers: { 'Authorization': 'KakaoAK ' + env.KAKAO_REST_KEY }
+    });
+    const body = await res.text();
+    return new Response(body, {
+      status: res.status,
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Access-Control-Allow-Origin': '*'
+      }
+    });
+  } catch (e) {
+    return json({ error: '카카오 로컬 오류: ' + e.message }, 500);
+  }
+}
 
+// ── 카카오 모빌리티(navi) 프록시 ──
+if (path === '/kakao-navi' && method === 'GET') {
+  const kpath = url.searchParams.get('path') || '';
+  const kqs   = url.searchParams.get('qs')   || '';
+  try {
+    const res = await fetch('https://apis-navi.kakaomobility.com/' + kpath + '?' + kqs, {
+      headers: {
+        'Authorization': 'KakaoAK ' + env.KAKAO_MOBILITY_KEY,
+        'Content-Type': 'application/json'
+      }
+    });
+    const body = await res.text();
+    return new Response(body, {
+      status: res.status,
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Access-Control-Allow-Origin': '*'
+      }
+    });
+  } catch (e) {
+    return json({ error: '카카오 모빌리티 오류: ' + e.message }, 500);
+  }
+}
       // ── 카카오 정적지도 이미지 프록시 ──────────────────────
       if (path === '/kakao-staticmap' && method === 'GET') {
         const kakaoUrl = url.searchParams.get('url');
