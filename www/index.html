@@ -736,6 +736,9 @@ input[type=time]{color-scheme:dark;}
 .sel-wrap::after{content:'▾';position:absolute;right:11px;top:50%;transform:translateY(-50%);color:var(--sub);pointer-events:none;font-size:12px;}
 .sel-wrap select{width:100%;padding:11px 12px;background:#2c2c2e;border:1px solid var(--border);color:var(--text);border-radius:11px;outline:none;font-size:13px;font-family:inherit;appearance:none;}
 .sug{position:absolute;top:calc(100% + 3px);left:0;width:100%;background:#222224;border:1px solid var(--border2);border-radius:11px;max-height:300px;overflow-y:auto;-webkit-overflow-scrolling:touch;scrollbar-gutter:stable;z-index:500;display:none;box-shadow:0 8px 24px rgba(0,0,0,.8);}
+.sug-item{display:flex;align-items:center;gap:2px;padding:11px 14px;min-height:46px;box-sizing:border-box;border-bottom:1px solid var(--border2);font-size:14px;color:var(--text);cursor:pointer;}
+.sug-item:last-child{border-bottom:none;}
+.sug-item:active{background:rgba(120,120,128,.16);}
 .sug div{padding:10px 13px;font-size:13px;color:var(--text);cursor:pointer;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;}
 .sug div:last-child{border-bottom:none;}
 .sug div:active{background:var(--border);}
@@ -4967,8 +4970,9 @@ function _recalcArrivalsFrom(anchorIdx){
   }
   pace = Math.max(0.4, Math.min(1.8, pace));   // 이상치 방지
   var anchorMs = anchor.ms;
+  // 앵커(최근 실측 통과) 기준으로 앞·뒤 모든 노드를 재계산 → 순서 꼬임 방지, 전체 일관
   _transitNodeData.forEach(function(nd, idx){
-    if(idx <= anchor.idx || nd._schedMin == null) return;
+    if(nd._schedMin == null) return;
     var newMs = anchorMs + (nd._schedMin - anchor.sched) * pace * 60000;
     var d = new Date(newMs);
     var hh = ('0'+d.getHours()).slice(-2), mm = ('0'+d.getMinutes()).slice(-2);
@@ -5376,7 +5380,7 @@ function _updateTransitGps() {
       ratio  = tpos.ratio;
     }
     // 2) 실측 GPS가 있으면 현재 구간 내에서 거리 기반으로 보정
-    if(_validGps && _transitNodeData[bestIdx] && _transitNodeData[bestIdx].lat != null){
+    if(_validGps && bestDist < 200 && _transitNodeData[bestIdx] && _transitNodeData[bestIdx].lat != null){
       var seg = _gpsSegment(lat, lng, bestIdx);
       if(seg){ fromNd = _transitNodeData[seg.fromIdx]; toNd = _transitNodeData[seg.toIdx]; ratio = seg.ratio; }
     }
@@ -5401,24 +5405,32 @@ function _updateTransitGps() {
     }
   }
 
-  if(best.el && inRange) {
-    best.el.classList.add('htl-gps-here');
-    best.el.classList.remove('htl-mode-bus','htl-mode-walk','htl-mode-origin');
-    if(best.isBus)  best.el.classList.add('htl-mode-bus');
-    else if(best.isOrigin) best.el.classList.add('htl-mode-origin');
-
-    // 지나간 노드 처리
-    _transitNodeData.forEach(function(nd, idx) {
-      if(idx < bestIdx && !nd.isOrigin && nd.el) nd.el.classList.add('htl-passed');
+  // 진행 위치 = 시간 기반과 GPS 기반 중 더 앞선 것 (지하철 등 GPS 미약해도 자연스럽게 흐름)
+  (function(){
+    var tp = _estimateTimelinePos();
+    var timeHere = tp ? ((tp.ratio >= 0.5) ? tp.toIdx : tp.fromIdx) : -1;
+    var gpsHere  = (inRange && bestIdx >= 0) ? bestIdx : -1;
+    var hereIdx  = Math.max(timeHere, gpsHere);
+    if(hereIdx < 0) return;
+    _transitNodeData.forEach(function(nd, idx){
+      if(!nd.el || nd.isOrigin) return;
+      if(idx < hereIdx) nd.el.classList.add('htl-passed');
+      else nd.el.classList.remove('htl-passed');
+      if(idx === hereIdx){
+        nd.el.classList.add('htl-gps-here');
+        nd.el.classList.remove('htl-mode-bus','htl-mode-walk','htl-mode-origin');
+        if(nd.isBus) nd.el.classList.add('htl-mode-bus');
+      } else {
+        nd.el.classList.remove('htl-gps-here');
+      }
     });
-    // 사용자 스크롤 중이 아닐 때만 자동 스크롤
     var wrap = document.getElementById('transitHtlWrap');
-    if(wrap && !wrap._userScrolling) {
-      var elCenter = best.el.offsetLeft + best.el.offsetWidth/2;
-      var targetScroll = elCenter - wrap.offsetWidth/2;
-      wrap.scrollTo({ left: Math.max(0, targetScroll), behavior:'smooth' });
+    var hereEl = _transitNodeData[hereIdx] && _transitNodeData[hereIdx].el;
+    if(wrap && !wrap._userScrolling && hereEl){
+      var c = hereEl.offsetLeft + hereEl.offsetWidth/2;
+      wrap.scrollTo({ left: Math.max(0, c - wrap.offsetWidth/2), behavior:'smooth' });
     }
-  }
+  })();
 
   // ── 상태바 업데이트 ──
   if(!inRange) {
@@ -19679,10 +19691,10 @@ function fmapSearch(inp, type) {
         d.className = 'sug-item';
         d.innerHTML =
           '<span style="font-size:11px;background:#5e5ce620;color:#5e5ce6;padding:1px 6px;border-radius:8px;margin-right:6px;flex-shrink:0;">📍장소</span>' +
-          '<div style="flex:1;min-width:0;">' +
-            '<div style="font-size:13px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _ltEsc(name) + '</div>' +
-            '<div style="font-size:10px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _ltEsc(addr) + '</div>' +
-          '</div>';
+          '<span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' +
+            '<b>' + _ltEsc(name) + '</b>' +
+            (addr ? ' <span style="font-size:11px;color:var(--sub);">' + _ltEsc(addr) + '</span>' : '') +
+          '</span>';
         d.onmousedown = d.ontouchend = function(e) {
           if(e.type==='touchend' && box._sugMoved){ return; }
           e.preventDefault();
