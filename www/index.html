@@ -5264,8 +5264,9 @@ function _updateTransitGps() {
   if(_validGps) { try { _maybeRecordPass(bestIdx, bestDist); } catch(e){} }
 
   // ★ 미탑승 감지: 예정 출발시각이 지났는데 아직 첫 정류장/역 근처면 다음 시간표로 재설정
+  //   단, 사용자가 '경로 확정'한 경우엔 자동 재라우팅하지 않음 (확정 경로 풀림 방지)
   try {
-    if(_validGps){
+    if(_validGps && !window._routeLocked){
       var _frIdx=-1, _frNd=null;
       for(var _mi=0;_mi<_transitNodeData.length;_mi++){
         var _nd=_transitNodeData[_mi];
