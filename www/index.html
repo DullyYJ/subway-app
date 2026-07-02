@@ -5767,15 +5767,6 @@ function _loadMapBusArrival(stop, cardIdx) {
         var cnt2 = parseInt(a.arrprevstationcnt2 || a.arrPrevStationCnt2 || 0) || 0;
         var numCls = _busNumClass ? _busNumClass(routeNo) : 'other';
 
-        var grp = routeTp || '버스';
-        if(grp !== lastGrp){
-          lastGrp = grp;
-          var h = document.createElement('div');
-          h.className = 'map-bus-row kbus-grp';
-          h.textContent = grp;
-          card.appendChild(h);
-        }
-
         var arr1 = '<div class="kbus-arr' + (sec>0&&sec<=60?' soon':'') + '">' + _fmt(sec) +
           (cnt>0 ? '<span class="kbus-cnt">' + cnt + '번째전</span>' : '') + '</div>';
         var arr2 = sec2>0
