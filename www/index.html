@@ -305,7 +305,7 @@ header{padding:8px 14px;display:flex;justify-content:space-between;align-items:c
   -webkit-text-fill-color:transparent;animation:hdrGrad 6s linear infinite;}
 @keyframes hdrMarquee{0%{transform:translateX(0);}100%{transform:translateX(-100%);}}
 @keyframes hdrGrad{0%{background-position:0% 50%;}100%{background-position:300% 50%;}}
-.hdr-marquee:hover .hdr-marquee-track{animation-play-state:paused;}
+/* 마퀴는 터치해도 멈추지 않음 (모바일 hover 고정 방지) */
 header h1{font-size:14px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:1;min-width:0;}
 header h1 em{color:var(--gold);font-style:normal;}
 .hdr-r{display:flex;align-items:center;gap:6px;flex-shrink:0;}
