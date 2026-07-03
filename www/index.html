@@ -739,6 +739,8 @@ input[type=time]{color-scheme:dark;}
 .sug-item{display:flex;align-items:center;gap:2px;padding:11px 14px;min-height:46px;box-sizing:border-box;border-bottom:1px solid var(--border2);font-size:14px;color:var(--text);cursor:pointer;}
 .sug-item:last-child{border-bottom:none;}
 .sug-item:active{background:rgba(120,120,128,.16);}
+/* 노선도 지하철 하단 검색바 제거 */
+#baseTimeRow,#stnInputRow{display:none !important;}
 .sug div{padding:10px 13px;font-size:13px;color:var(--text);cursor:pointer;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;}
 .sug div:last-child{border-bottom:none;}
 .sug div:active{background:var(--border);}
@@ -3737,8 +3739,70 @@ function _renderTransitResultCard(data, start, dest, cacheSource) {
 
   // ★ 목적지 확정 → 맛집 미리 로드(프리페치): 탭 열 때 로딩 없이 표시
   try { if(typeof prefetchFoodForDest==='function') setTimeout(prefetchFoodForDest, 300); } catch(e){}
+  // ★ 실제 다음 차 시각으로 타임라인 보정
+  try { if(typeof _applyRealBoardTime==='function') setTimeout(_applyRealBoardTime, 400); } catch(e){}
 }
 window._renderTransitResultCard = _renderTransitResultCard;
+
+// ── 실제 다음 차(버스 도착/지하철 시각표) 시각으로 타임라인 보정 ──
+function _applyRealBoardTime(){
+  try{
+    if(!_transitNodeData || !_transitNodeData.length) return;
+    var idx=-1, nd=null;
+    for(var i=0;i<_transitNodeData.length;i++){ var n=_transitNodeData[i]; if(!n.isOrigin && !n.isWalk && (n.isBus||n.isSub)){ idx=i; nd=n; break; } }
+    if(!nd || nd._schedMin==null) return;
+    var nowMin = (typeof kstMinutesAdj==='function') ? kstMinutesAdj() : (new Date().getHours()*60+new Date().getMinutes());
+    var arriveStopMin = nd._schedMin;   // 현재 계산상 탑승(정류장 도착) 시각
+
+    var applyDelay = function(nextDepMin){
+      if(nextDepMin==null) return;
+      var wait = nextDepMin - arriveStopMin; if(wait < -720) wait += 1440;
+      if(wait <= 0.5) return;            // 이미 탈 수 있으면 보정 안 함
+      _transitNodeData.forEach(function(n2, i2){
+        if(i2 < idx || n2._schedMin==null) return;
+        n2._schedMin += wait;
+        var t=((n2._schedMin%1440)+1440)%1440;
+        var hh=('0'+Math.floor(t/60)).slice(-2), mm=('0'+Math.round(t%60)).slice(-2);
+        n2.arrTime = hh+':'+mm;
+        if(n2.el){ var lbl=n2.el.querySelector('.htl-time-lbl'); if(lbl) lbl.textContent=n2.arrTime; }
+      });
+      if(typeof window._homeRouteBaseMin==='number') window._homeRouteBaseMin += wait;
+      try{ if(typeof _updateRouteRemaining==='function') _updateRouteRemaining(); }catch(e){}
+      try{ if(typeof _syncHomeBriefRemaining==='function') _syncHomeBriefRemaining(); }catch(e){}
+    };
+
+    if(nd.isBus){
+      var o = (typeof _htlOriginCoord==='function') ? _htlOriginCoord() : null;
+      if(!o) return;
+      var wantNm = (typeof _nm==='function') ? _nm(nd.name) : nd.name;
+      var wantNo = String(nd.lineName||'').replace(/\(.*?\)/g,'').replace(/번/g,'').trim();
+      _fetchNearStops(o.lat, o.lng, function(err, stops){
+        if(err||!stops||!stops.length) return;
+        var target=null, best=1e9;
+        stops.forEach(function(st){ var snm=(typeof _nm==='function')?_nm(st.nodenm):st.nodenm; if(snm===wantNm && st.dist<best){ best=st.dist; target=st; } });
+        if(!target) return;
+        _fetchBusArrival(target.citycode, target.nodeid, function(e2, data){
+          if(e2||!data) return;
+          var items = data.items || data.arrivals || data || [];
+          if(!Array.isArray(items)) items = items ? [items] : [];
+          var sec=null;
+          items.forEach(function(a){
+            var rno=String(a.routeno||a.routeNo||'').replace(/\(.*?\)/g,'').replace(/번/g,'').trim();
+            if(rno && (rno===wantNo || (wantNo && wantNo.indexOf(rno)>=0) || (rno.indexOf(wantNo)>=0))){
+              var sv=parseInt(a.arrtime||a.arrTime||0)||0; if(sv>0 && (sec==null||sv<sec)) sec=sv;
+            }
+          });
+          if(sec==null) return;
+          applyDelay(nowMin + sec/60);
+        });
+      });
+    } else if(nd.isSub){
+      var mins = (typeof getNextDepartureMins==='function') ? getNextDepartureMins(nd.lineName, nd.name, '', nowMin) : null;
+      if(mins!=null) applyDelay(mins);
+    }
+  }catch(e){}
+}
+window._applyRealBoardTime = _applyRealBoardTime;
 
 // 목적지 맛집 프리페치 (백그라운드 → _foodCache 채움)
 function prefetchFoodForDest(){
@@ -26003,7 +26067,7 @@ document.addEventListener('DOMContentLoaded', function() {
   <div id="debugList" style="overflow-y:auto;height:calc(100% - 38px);padding:4px 8px;font-family:monospace;"></div>
 </div>
 <!-- 디버그 토글 버튼 (우상단) -->
-<div onclick="_toggleDebugPanel()" style="position:fixed;top:10px;right:56px;width:26px;height:26px;background:rgba(48,209,88,0.12);border:1px solid rgba(48,209,88,0.25);border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:9998;font-size:13px;user-select:none;">🐛</div>
+<div onclick="_toggleDebugPanel()" style="display:none !important;pointer-events:none;position:fixed;top:10px;right:56px;width:26px;height:26px;background:rgba(48,209,88,0.12);border:1px solid rgba(48,209,88,0.25);border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:9998;font-size:13px;user-select:none;">🐛</div>
 
 </div><!-- /tabContentWrap -->
 
