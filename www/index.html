@@ -3404,7 +3404,7 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
     sg.stops.forEach(function(st,ni){
       var isF=(gIdx===0),isL=(gIdx===totalCnt-1);
       var arrT='';
-      if(isF)         arrT=_fmtHHMM(_firstDep);
+      if(isF)         arrT=_fmtHHMM(segMs[si]);   // 도보 시간 포함(세그먼트 시작 = 정류장 도착/탑승)
       else if(ni===0) arrT=secMin>0?secMin+'분':'';
       else            arrT=_fmtHHMM(segMs[si]+ni*perMs);
       var lC=col;
@@ -3797,7 +3797,19 @@ function _applyRealBoardTime(){
         });
       });
     } else if(nd.isSub){
-      var mins = (typeof getNextDepartureMins==='function') ? getNextDepartureMins(nd.lineName, nd.name, '', nowMin) : null;
+      var line = nd.lineName || '';
+      // 다음 지하철 역으로 상/하행 판별 (BFS 경로와 동일 방식)
+      var nextNd = null;
+      for(var j=idx+1;j<_transitNodeData.length;j++){ var m=_transitNodeData[j]; if(!m.isWalk && m.isSub){ nextNd=m; break; } }
+      var dir = '하행';
+      if(typeof STNDB!=='undefined' && nextNd){
+        var _norm = (typeof _nm==='function') ? _nm : function(x){return x;};
+        var ls = STNDB.filter(function(st){ return st.line===line; });
+        var ci = ls.findIndex(function(st){ return _norm(st.name)===_norm(nd.name); });
+        var ni3 = ls.findIndex(function(st){ return _norm(st.name)===_norm(nextNd.name); });
+        if(ci>=0 && ni3>=0) dir = (ci<ni3) ? '하행' : '상행';
+      }
+      var mins = (typeof getNextDepartureMins==='function') ? getNextDepartureMins(line, nd.name, dir, nowMin) : null;
       if(mins!=null) applyDelay(mins);
     }
   }catch(e){}
