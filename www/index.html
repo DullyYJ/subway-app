@@ -5158,11 +5158,10 @@ function _placeGpsMarkerSmooth(fromNd, toNd, ratio){
   var ring = window._htlGpsRing || document.getElementById('htl-gps-marker-ring');
   if(!track || !dot || !fromNd || !fromNd.el) return;
   var fEl = fromNd.el, tEl = (toNd && toNd.el) ? toNd.el : fromNd.el;
-  var tr  = track.getBoundingClientRect();
-  var fr  = fEl.getBoundingClientRect();
-  var trc = tEl.getBoundingClientRect();
-  var cxF = (fr.left  - tr.left) + fr.width/2;
-  var cxT = (trc.left - tr.left) + trc.width/2;
+  // 트랙 기준 콘텐츠 x좌표 (스크롤/변환 무관) — 마커가 노드 정중앙에 오도록
+  function _trkX(el){ var x=0, n=el; while(n && n!==track){ x+=n.offsetLeft; n=n.offsetParent; } return x + el.offsetWidth/2; }
+  var cxF = _trkX(fEl);
+  var cxT = _trkX(tEl);
   var r   = Math.max(0, Math.min(1, ratio||0));
   var cx  = cxF + (cxT - cxF) * r;
   var yTop = 6;
@@ -24366,15 +24365,15 @@ function _ltGenerate(){
   // 3) 시간대별 멘트
   if(!text) text = _rnd(_ltPickPool());
 
-  // ★ 최근 8개와 겹치면 다시 뽑기 (반복 체감 제거)
+  // ★ 최근 20개와 겹치면 다시 뽑기 (매시간·매분 다르게, 반복 체감 제거)
   var t2 = 0;
-  while(_ltRecentTexts.indexOf(text) >= 0 && t2++ < 12){
+  while(_ltRecentTexts.indexOf(text) >= 0 && t2++ < 25){
     text = _rnd(_ltPickPool());
   }
 
   _ltLastNick = nick;
   _ltRecentTexts.push(text);
-  if(_ltRecentTexts.length > 8) _ltRecentTexts.shift();  // 최근 8개 유지
+  if(_ltRecentTexts.length > 20) _ltRecentTexts.shift();  // 최근 20개 유지
   _ltAdd({ nick: nick, text: text, time: Date.now(), mine: false });
 }
 function _renderLiveTalk(){
