@@ -5166,7 +5166,7 @@ function _placeGpsMarkerSmooth(fromNd, toNd, ratio){
   var cx  = cxF + (cxT - cxF) * r;
   var yTop = 6;
   var axis = fEl.querySelector('div[style*="position:relative"]');
-  if(axis){ var ar = axis.getBoundingClientRect(); yTop = (ar.top - tr.top) + 6; }
+  if(axis){ var _y=0, _n=axis; while(_n && _n!==track){ _y+=_n.offsetTop; _n=_n.offsetParent; } yTop = _y + 6; }
   // 트랙 직속으로 이동 — 첫 배치는 애니메이션 없이(점프 방지), 이후 틱부터 부드럽게
   var firstDot = (dot.parentNode !== track);
   if(firstDot) track.appendChild(dot);
