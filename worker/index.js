@@ -1047,7 +1047,45 @@ if (path === '/kakao-navi' && method === 'GET') {
           return json({ error: '정적지도 프록시 오류: ' + e.message }, 500);
         }
       }
-
+// ── 실시간 채팅 대화 생성 (Gemini) ──
+if (path === '/ai-talk' && method === 'POST') {
+  try {
+    const b = await request.json();
+    const recent = (b.recent || []).map(m => `${m.nick}: ${m.text}`).join('\n');
+    const nicks = (b.nicks || []).join(', ');
+    const when = `${b.hour}시 ${b.minute||0}분${b.weekend ? ' · 주말/공휴일' : ' · 평일'}`;
+    const prompt =
+`너는 한국 수도권 대중교통 이용자들의 익명 오픈채팅방 대화를 만든다.
+지금은 ${when}. 여러 사람이 서로 주고받는 자연스러운 대화 10줄을 만들어라.
+- 주제: 출퇴근/지하철·버스/환승/지연/날씨/점심·저녁/퇴근/주말/일상
+- 앞 사람 말에 맞장구·질문·공감·농담으로 이어가기 (독백 나열 금지)
+- 한 줄 4~15자, 반말·구어체, 이모지 가끔
+- 같은 닉 연속 금지, 닉네임은 이 목록에서만: ${nicks}
+${recent ? '지금까지 대화(이어서):\n' + recent : ''}
+아래 JSON 배열로만 출력(설명 금지):
+[{"nick":"닉","text":"내용"}]`;
+    const gRes = await fetch(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=' + env.GEMINI_API_KEY,
+      { method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          contents:[{ parts:[{ text: prompt }] }],
+          generationConfig:{ temperature:1.15, topP:0.95, maxOutputTokens:640, responseMimeType:'application/json' }
+        }) }
+    );
+    const gData = await gRes.json();
+    let txt = (gData?.candidates?.[0]?.content?.parts?.[0]?.text || '[]').replace(/```json|```/g,'').trim();
+    let messages = [];
+    try { messages = JSON.parse(txt); } catch(e) { messages = []; }
+    if (!Array.isArray(messages)) messages = [];
+    return new Response(JSON.stringify({ messages }), {
+      headers: { 'Content-Type':'application/json', 'Access-Control-Allow-Origin':'*' }
+    });
+  } catch (e) {
+    return new Response(JSON.stringify({ messages: [], error: e.message }), {
+      status: 200, headers: { 'Content-Type':'application/json', 'Access-Control-Allow-Origin':'*' }
+    });
+  }
+}
       // ── 주변 버스정류장 D1 조회 ──────────────────────────────
       // GET /bus-stops?lat=37.58&lng=126.70&radius=1000
       if (path === '/bus-stops' && method === 'GET') {
