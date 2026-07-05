@@ -3404,7 +3404,7 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
   // ── 포인트 목록 ──
   var allStops=[]; segs.forEach(function(sg){ if(sg.type!==3) allStops=allStops.concat(sg.stops); });
   var totalCnt=allStops.length;
-  var cumMs=Date.now();
+  var cumMs=(typeof getBaseTimeMs==='function')?getBaseTimeMs():Date.now();   // 기준시각 반영
   var segMs=segs.map(function(sg){var t=cumMs;cumMs+=sg.dur*1000;return t;});
   var gIdx=0;
 
@@ -3784,12 +3784,14 @@ function _renderTransitResultCard(data, start, dest, cacheSource) {
   try { if(typeof prefetchFoodForDest==='function') setTimeout(prefetchFoodForDest, 300); } catch(e){}
   // ★ 실제 다음 차 시각으로 타임라인 보정
   try { if(typeof _applyRealBoardTime==='function') setTimeout(_applyRealBoardTime, 400); } catch(e){}
+  try { if(typeof _updatePreviewHighlight==='function') _updatePreviewHighlight(); } catch(e){}
 }
 window._renderTransitResultCard = _renderTransitResultCard;
 
 // ── 실제 다음 차(버스 도착/지하철 시각표) 시각으로 타임라인 보정 ──
 function _applyRealBoardTime(){
   try{
+    if(_baseTimeMs != null) return;   // 예상(미래 기준시각)일 땐 실시간 도착 보정 안 함
     if(!_transitNodeData || !_transitNodeData.length) return;
     var idx=-1, nd=null;
     for(var i=0;i<_transitNodeData.length;i++){ var n=_transitNodeData[i]; if(!n.isOrigin && !n.isWalk && (n.isBus||n.isSub)){ idx=i; nd=n; break; } }
@@ -23214,7 +23216,7 @@ var _CONG_CHART = null; // {stnName, data:[0..23], source}
 
 // 현재 혼잡도 퍼센트 계산
 function getCongPct(stnName, lineName) {
-  var h = new Date().getHours();
+  var h = new Date((typeof getBaseTimeMs==='function'?getBaseTimeMs():Date.now())).getHours();
   // 1) 외부 실시간 JSON (_CONG) 로드된 경우 최우선
   if(_CONG && _CONG_loaded) {
     var entry = _CONG[stnName] || _CONG[lineName + '_' + stnName];
@@ -23471,7 +23473,7 @@ function updateCong(stn) {
   var meta  = document.getElementById('congMeta');
   if(stnEl) stnEl.textContent = stn.name;
   if(stEl)  { stEl.textContent = lvl; stEl.style.color = col; }
-  if(meta)  meta.textContent = new Date().getHours() + '시 기준';
+  if(meta)  meta.textContent = new Date((typeof getBaseTimeMs==='function'?getBaseTimeMs():Date.now())).getHours() + '시 기준';
 
   // 게이지
   var gWrap = document.getElementById('congGaugeWrap');
@@ -23694,7 +23696,7 @@ function updateBusCong(busSection){
     var stEl = document.getElementById('congStatusTxt');
     var meta = document.getElementById('congMeta');
     if(stEl){ stEl.textContent = lvl; stEl.style.color = col; }
-    if(meta) meta.textContent = new Date().getHours() + '시 기준 · ' + (res.stopName||'') + ' 정류장';
+    if(meta) meta.textContent = new Date((typeof getBaseTimeMs==='function'?getBaseTimeMs():Date.now())).getHours() + '시 기준 · ' + (res.stopName||'') + ' 정류장';
 
     var gWrap = document.getElementById('congGaugeWrap');
     var gFill = document.getElementById('congGaugeFill');
@@ -24302,8 +24304,12 @@ function applyBaseTime(val) {
   toast('🕐 기준시각: ' + val.replace('T',' ') + ' 설정됨');
   _updateDayTypeBadge();
   if(typeof _updateBaseTimeDisplay==='function') _updateBaseTimeDisplay();
-  if(typeof S !== 'undefined' && S.start && S.dest) {
-    setTimeout(function(){ if(typeof doRoute==='function') doRoute(); }, 100);
+  if(typeof _updatePreviewHighlight==='function') _updatePreviewHighlight();
+  // 기준시각 바뀌면 경로 재탐색 (홈 경로: _fmapStart/_fmapDest 기반)
+  if(typeof _fmapStart!=='undefined' && _fmapStart && _fmapDest && typeof fmapDoRoute==='function'){
+    setTimeout(function(){ fmapDoRoute(); }, 120);
+  } else if(typeof S !== 'undefined' && S.start && S.dest && typeof doRoute==='function') {
+    setTimeout(function(){ doRoute(); }, 120);
   }
 }
 window.applyBaseTime = applyBaseTime;
@@ -24314,6 +24320,10 @@ function clearBaseTime() {
   if(inp) inp.value = '';
   _updateDayTypeBadge();
   if(typeof _updateBaseTimeDisplay==='function') _updateBaseTimeDisplay();
+  if(typeof _updatePreviewHighlight==='function') _updatePreviewHighlight();
+  if(typeof _fmapStart!=='undefined' && _fmapStart && _fmapDest && typeof fmapDoRoute==='function'){
+    setTimeout(function(){ fmapDoRoute(); }, 120);
+  }
   toast('🕐 기준시각: 현재 시각 사용');
   if(typeof S !== 'undefined' && S.start && S.dest) {
     setTimeout(function(){ if(typeof doRoute==='function') doRoute(); }, 100);
@@ -24327,6 +24337,40 @@ function getBaseTimeMs() {
   return Date.now() + off;
 }
 window.getBaseTimeMs = getBaseTimeMs;
+
+// ── 기준시각을 미래로 설정 시: 경로/혼잡도에 '예상' 하이라이트 ──
+function _updatePreviewHighlight(){
+  var custom = (_baseTimeMs != null);
+  var lblTxt = (document.getElementById('baseTimeDisplay') || {}).textContent || '';
+  // 경로 카드
+  var card = document.getElementById('transitResultCard');
+  if(card){
+    card.style.border = custom ? '2px solid #ff9500' : '1px solid var(--border)';
+    card.style.boxShadow = custom ? '0 0 0 3px rgba(255,149,0,.12)' : 'none';
+    var lbl = document.getElementById('routePreviewLabel');
+    if(custom){
+      if(!lbl){ lbl = document.createElement('div'); lbl.id='routePreviewLabel';
+        lbl.style.cssText='font-size:11px;font-weight:800;color:#ff9500;background:rgba(255,149,0,.14);padding:4px 11px;border-radius:9px;margin-bottom:10px;display:inline-block;';
+        card.insertBefore(lbl, card.firstChild); }
+      lbl.textContent = '🔮 예상 경로 · ' + lblTxt;
+      lbl.style.display='inline-block';
+    } else if(lbl){ lbl.style.display='none'; }
+  }
+  // 혼잡도 카드
+  var cong = document.getElementById('congCard');
+  if(cong){ cong.style.outline = custom ? '2px solid #ff9500' : 'none'; cong.style.outlineOffset='2px'; }
+  var congBadge = document.getElementById('congBadge');
+  if(congBadge && congBadge.parentNode){
+    var cpl = document.getElementById('congPreviewLabel');
+    if(custom){
+      if(!cpl){ cpl=document.createElement('span'); cpl.id='congPreviewLabel';
+        cpl.style.cssText='font-size:11px;font-weight:800;color:#ff9500;background:rgba(255,149,0,.14);padding:2px 8px;border-radius:6px;margin-left:6px;';
+        congBadge.parentNode.insertBefore(cpl, congBadge); }
+      cpl.textContent='🔮 예상 혼잡도'; cpl.style.display='inline';
+    } else if(cpl){ cpl.style.display='none'; }
+  }
+}
+window._updatePreviewHighlight = _updatePreviewHighlight;
 
 // ── 기준시각 기반 타겟 열차 매칭 + 전 경유지 도착 예측 (지시사항 1번 핵심) ──
 // ── triggerRealtimeChain: 기준시각 기반 열차 매칭 + 도미노 도착 예측 (지시사항 2번) ──
