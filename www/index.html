@@ -2621,24 +2621,57 @@ function _renderBusRoute(stations, buses){
     ? ('🚌 현재 ' + buses.length + '대 운행 중')
     : '🚌 현재 운행 중인 버스 없음 (막차 이후이거나 배차 간격)';
 
+  // ★ 내 위치에서 가장 가까운 정류장 찾기
+  var myLat = (typeof _busGpsLat!=='undefined' && _busGpsLat) || (typeof S!=='undefined' && S.lastGPSFix && S.lastGPSFix.lat) || null;
+  var myLng = (typeof _busGpsLng!=='undefined' && _busGpsLng) || (typeof S!=='undefined' && S.lastGPSFix && S.lastGPSFix.lng) || null;
+  var myOrd = null, myBd = 1e18;
+  if(myLat && myLng && typeof haversineM==='function'){
+    stations.forEach(function(s){
+      var la=parseFloat(s.gpslati), ln=parseFloat(s.gpslong);
+      if(isNaN(la)||isNaN(ln)) return;
+      var d = haversineM(myLat, myLng, la, ln);
+      if(d < myBd){ myBd = d; myOrd = parseInt(s.nodeord)||0; }
+    });
+  }
+  // ★ 내 정류장으로 접근 중인 가장 가까운 버스 → 몇 정거장/몇 분 남았는지
+  var myEtaTxt = '';
+  if(myOrd != null){
+    var approaching = buses.filter(function(b){ return (parseInt(b.nodeord)||0) <= myOrd; })
+      .sort(function(a,b){ return (parseInt(b.nodeord)||0) - (parseInt(a.nodeord)||0); })[0];
+    if(approaching){
+      var away = myOrd - (parseInt(approaching.nodeord)||0);
+      if(away <= 0) myEtaTxt = '🚌 곧 도착';
+      else myEtaTxt = '🚌 ' + away + '정거장 전 · 약 ' + Math.max(1, Math.round(away*1.5)) + '분';
+    } else {
+      myEtaTxt = '접근 중인 버스 없음';
+    }
+  }
+
   var rows = stations.map(function(s){
     var ord  = parseInt(s.nodeord)||0;
     var here = busAtOrd[ord];
-    var dot  = here ? '🚌' : '';
+    var isMine = (myOrd != null && ord === myOrd);
     var hereCls = here ? ' bus-route-here' : '';
-    var busInfo = '';
+    var mineCls = isMine ? ' bus-route-mine' : '';
+    var marker = isMine
+      ? '<span class="bus-route-mymarker">📍</span>'
+      : (here ? '<span class="bus-route-busdot">🚌</span>' : '<span class="bus-route-dot"></span>');
+    var info = '';
     if(here){
       var vno = here.map(function(b){ return b.vehicleno || ''; }).filter(Boolean).join(', ');
-      busInfo = '<div class="bus-route-businfo">🚌 버스 도착' + (vno ? ' · ' + _ltEsc(vno) : '') + '</div>';
+      info += '<div class="bus-route-businfo">🚌 ' + (vno ? _ltEsc(vno) : '버스') + '</div>';
     }
-    return '<div class="bus-route-stop' + hereCls + '">' +
+    if(isMine){
+      info += '<div class="bus-route-myinfo">📍 내 위치' + (myEtaTxt ? ' · ' + myEtaTxt : '') + '</div>';
+    }
+    return '<div class="bus-route-stop' + hereCls + mineCls + '">' +
       '<div class="bus-route-line">' +
-        '<div class="bus-route-marker">' + (here ? '<span class="bus-route-busdot">🚌</span>' : '<span class="bus-route-dot"></span>') + '</div>' +
+        '<div class="bus-route-marker">' + marker + '</div>' +
       '</div>' +
       '<div class="bus-route-info">' +
         '<div class="bus-route-name">' + _ltEsc(s.nodenm || '') + '</div>' +
         '<div class="bus-route-no">' + _ltEsc(s.nodeno || s.nodeid || '') + '</div>' +
-        busInfo +
+        info +
       '</div>' +
     '</div>';
   }).join('');
@@ -2647,10 +2680,10 @@ function _renderBusRoute(stations, buses){
     '<div class="bus-route-status">' + runningTxt + '</div>' +
     '<div class="bus-route-list">' + rows + '</div>';
 
-  // 첫 버스 위치로 스크롤
+  // ★ 내 위치로 스크롤 (없으면 첫 버스)
   setTimeout(function(){
-    var hereEl = body.querySelector('.bus-route-here');
-    if(hereEl) hereEl.scrollIntoView({ block:'center', behavior:'smooth' });
+    var el = body.querySelector('.bus-route-mine') || body.querySelector('.bus-route-here');
+    if(el) el.scrollIntoView({ block:'center', behavior:'smooth' });
   }, 100);
 }
 
@@ -6553,11 +6586,11 @@ window.addEventListener('unhandledrejection', function(e) {
   <div id="transitDetailModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.82);z-index:10001;align-items:flex-end;justify-content:center;" onclick="if(event.target===this)closeTransitDetail()">
     <div id="transitDetailSheet" style="background:var(--card);border-radius:20px 20px 0 0;width:100%;max-width:520px;height:82vh;height:82dvh;max-height:82vh;max-height:82dvh;display:flex;flex-direction:column;overflow:hidden;transition:transform .25s ease;will-change:transform;margin-bottom:calc(56px + env(safe-area-inset-bottom,0px));">
       <!-- 핸들 + 헤더 (드래그 영역) -->
-      <div id="transitDetailHandle" style="padding:10px 18px 0;flex-shrink:0;touch-action:none;cursor:grab;">
-        <div style="width:40px;height:5px;background:#5a5a5e;border-radius:3px;margin:0 auto 12px;"></div>
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-          <div id="transitDetailTitle" style="font-size:15px;font-weight:700;color:#fff;flex:1;min-width:0;padding-right:8px;"></div>
-          <button onclick="closeTransitDetail()" style="background:rgba(255,255,255,.1);border:none;border-radius:50%;width:28px;height:28px;color:#fff;font-size:15px;cursor:pointer;flex-shrink:0;">×</button>
+      <div id="transitDetailHandle" style="padding:8px 18px 0;flex-shrink:0;touch-action:none;cursor:grab;">
+        <div style="width:40px;height:5px;background:var(--border2,#5a5a5e);border-radius:3px;margin:0 auto 8px;"></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <div id="transitDetailTitle" style="font-size:15px;font-weight:800;color:var(--text);flex:1;min-width:0;padding-right:8px;"></div>
+          <button onclick="closeTransitDetail()" style="background:rgba(120,120,128,.16);border:none;border-radius:50%;width:28px;height:28px;color:var(--text);font-size:15px;cursor:pointer;flex-shrink:0;">×</button>
         </div>
       </div>
 
@@ -26286,6 +26319,10 @@ document.addEventListener('DOMContentLoaded', function() {
 .bus-route-here{background:rgba(47,124,246,.10);}
 .bus-route-here .bus-route-name{font-weight:800;color:#2f7cf6;}
 .bus-route-businfo{font-size:12px;font-weight:700;color:#2f7cf6;margin-top:3px;}
+.bus-route-mine{background:rgba(255,59,48,.12);border-left:3px solid #ff3b30;}
+.bus-route-mine .bus-route-name{font-weight:800;color:#ff3b30;}
+.bus-route-mymarker{font-size:20px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.35));}
+.bus-route-myinfo{font-size:12px;font-weight:800;color:#ff3b30;margin-top:3px;}
 .bus-empty{text-align:center;padding:60px 20px;color:var(--sub);font-size:14px;line-height:1.8;}
 .bus-loading{text-align:center;padding:40px;color:var(--sub);}
 .bus-spinner{width:28px;height:28px;border:3px solid var(--border);
