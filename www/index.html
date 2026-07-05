@@ -23231,8 +23231,12 @@ function getCongPct(stnName, lineName) {
     var re = _REAL_CONG[nm];
     if(re && re[h] !== undefined && re[h] > 0) return Math.round(re[h]);
   }
-  // 3) 통계 기반 프로파일
+  // 3) 통계 기반 프로파일 (평일/주말·공휴일 반영)
   var base = CONG_PROFILE[h] || 50;
+  // ★ 기준 날짜가 주말·공휴일이면 혼잡도 완화
+  if(typeof _isHolidayOrWeekend==='function' && _isHolidayOrWeekend()){
+    base = base * (h>=10 && h<=20 ? 0.7 : 0.55);   // 주말은 출퇴근 피크가 약함
+  }
   var w    = LINE_CONG_W[lineName] || 0.80;
   // 출근(7~9), 퇴근(18~20) 피크 보정
   var isPeak = (h>=7&&h<=9)||(h>=18&&h<=20);
@@ -23550,7 +23554,7 @@ function _fetchBusCongestion(busSection){
       if(!reg){ resolve(null); return; }
 
       // 운행일자: 오늘 우선, 데이터 없으면 알려진 보유일자로 폴백
-      var now = new Date();
+      var now = new Date((typeof getBaseTimeMs==='function'?getBaseTimeMs():Date.now()));
       var todayYmd = now.getFullYear() + String(now.getMonth()+1).padStart(2,'0') + String(now.getDate()).padStart(2,'0');
       var hour = String(now.getHours()).padStart(2,'0'); // 현재 시간대(tzon)
       // 데이터가 존재하는 것으로 확인된 날짜들 (요일 통계라 대체 가능)
@@ -23680,6 +23684,11 @@ function updateBusCong(busSection){
       return;
     }
     var pct = res.pct;
+    // ★ 기준 날짜가 주말·공휴일이면 혼잡도 완화
+    if(typeof _isHolidayOrWeekend==='function' && _isHolidayOrWeekend()){
+      var _bh2 = new Date((typeof getBaseTimeMs==='function'?getBaseTimeMs():Date.now())).getHours();
+      pct = Math.round(pct * (_bh2>=10 && _bh2<=20 ? 0.7 : 0.55));
+    }
     var col = pct<30?'#34c759':pct<60?'#ff9f0a':pct<80?'#ff6b35':'#ff3b30';
     var lvl = pct<30?'원활 😊':pct<60?'보통 😐':pct<80?'혼잡 😰':'매우혼잡 😱';
     var lvlS= pct<30?'쾌적해요':pct<60?'적당해요':pct<80?'혼잡해요':'지옥이에요';
@@ -24358,15 +24367,14 @@ function _updatePreviewHighlight(){
   }
   // 혼잡도 카드
   var cong = document.getElementById('congCard');
-  if(cong){ cong.style.boxShadow = custom ? _ring : 'none'; }
-  var congBadge = document.getElementById('congBadge');
-  if(congBadge && congBadge.parentNode){
+  if(cong){
+    cong.style.boxShadow = custom ? _ring : 'none';
     var cpl = document.getElementById('congPreviewLabel');
     if(custom){
-      if(!cpl){ cpl=document.createElement('span'); cpl.id='congPreviewLabel';
-        cpl.style.cssText='font-size:11px;font-weight:800;color:#ff9500;background:rgba(255,149,0,.14);padding:2px 8px;border-radius:6px;margin-left:6px;';
-        congBadge.parentNode.insertBefore(cpl, congBadge); }
-      cpl.textContent='🔮 예상 혼잡도'; cpl.style.display='inline';
+      if(!cpl){ cpl=document.createElement('div'); cpl.id='congPreviewLabel';
+        cpl.style.cssText='font-size:11px;font-weight:800;color:#ff9500;background:rgba(255,149,0,.14);padding:4px 11px;border-radius:9px;margin-bottom:10px;display:inline-block;';
+        cong.insertBefore(cpl, cong.firstChild); }
+      cpl.textContent='🔮 예상 혼잡도 · ' + lblTxt; cpl.style.display='inline-block';
     } else if(cpl){ cpl.style.display='none'; }
   }
   // 차트 기본 툴팁 라벨
