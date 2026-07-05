@@ -21461,20 +21461,45 @@ function _extractStnNameFromEl(el) {
 // ── SVG text 직접 클릭 방식 (참조 index-9.html) ─────────────
 
 // ── 노선도: 특정 역으로 스크롤 + 하이라이트 ──
-function _mapGoToStation(name){
+function _mapGoToStation(name, opts){
+  opts = opts || {};
   var view = document.getElementById('gmSvgView');
   var svg  = document.querySelector('#svgContainer svg');
-  if(!view || !svg){ return false; }
+  var cont = document.getElementById('svgContainer');
+  if(!view || !svg || !cont){ return false; }
   if(view.style.display === 'none'){ return false; }
   var nn = String(name||'').replace(/\s+/g,'');
   var texts = svg.querySelectorAll('text'), target = null;
   for(var i=0;i<texts.length;i++){ if(svgExtractName(texts[i]).replace(/\s+/g,'') === nn){ target = texts[i]; break; } }
   if(!target){ for(var j=0;j<texts.length;j++){ var en=svgExtractName(texts[j]).replace(/\s+/g,''); if(en && en.indexOf(nn)>=0){ target=texts[j]; break; } } }
   if(!target){ return false; }
-  var vr = view.getBoundingClientRect(), tr = target.getBoundingClientRect();
-  view.scrollLeft += (tr.left + tr.width/2) - (vr.left + vr.width/2);
-  view.scrollTop  += (tr.top  + tr.height/2) - (vr.top  + vr.height/2);
-  _flashStation(target);
+
+  // ★ 확대: 역이 잘 보이도록 줌인 (기존 핀치줌과 동일 방식 — SVG/컨테이너 크기 조정)
+  var doZoom = (opts.zoom !== false) && (typeof _pz !== 'undefined');
+  if(doZoom){
+    var targetZoom = opts.zoom || 0.55;                 // 읽기 좋은 확대 수준
+    if(targetZoom > _pz){                               // 축소는 하지 않음
+      _pz = targetZoom;
+      svg.setAttribute('width',  Math.round(SVG_W * _pz));
+      svg.setAttribute('height', Math.round(SVG_H * _pz));
+      cont.style.width  = Math.round(SVG_W * _pz) + 'px';
+      cont.style.height = Math.round(SVG_H * _pz) + 'px';
+    }
+  }
+
+  // 줌 반영 후 다음 프레임에 위치 계산(중앙 정렬) + 하이라이트 + 팝업
+  requestAnimationFrame(function(){
+    var vr2 = view.getBoundingClientRect(), tr2 = target.getBoundingClientRect();
+    view.scrollLeft += (tr2.left + tr2.width/2) - (vr2.left + vr2.width/2);
+    view.scrollTop  += (tr2.top  + tr2.height/2) - (vr2.top  + vr2.height/2);
+    _flashStation(target);
+    // ★ 기존 출발/도착 선택 팝업 띄우기
+    if(opts.popup !== false){
+      var nm = svgExtractName(target).replace(/\s+/g,'').trim();
+      var lines = (typeof MSM !== 'undefined') ? (MSM[nm] || null) : null;
+      if(typeof svgShowPopup === 'function') svgShowPopup(nm, lines);
+    }
+  });
   return true;
 }
 function _flashStation(target){
@@ -21505,7 +21530,7 @@ function mapGoToMyLocation(){
     if(typeof STNDB==='undefined'){ toast('역 정보를 불러오지 못했어요'); return; }
     var best=null, bd=1e18;
     STNDB.forEach(function(st){ if(st.lat==null||st.lng==null) return; var dx=st.lat-la, dy=st.lng-ln, d=dx*dx+dy*dy; if(d<bd){ bd=d; best=st; } });
-    if(best && _mapGoToStation(best.name)) toast('📍 ' + best.name + ' (가장 가까운 역)');
+    if(best && _mapGoToStation(best.name, {zoom:0.55, popup:true})) toast('📍 ' + best.name + ' (가장 가까운 역)');
     else toast('가까운 역을 지도에서 찾지 못했어요');
   }, function(){ toast('위치 권한이 필요해요'); }, {enableHighAccuracy:true, timeout:8000, maximumAge:30000});
 }
@@ -21518,7 +21543,7 @@ function mapSearchStation(q){
   var m = STNDB.find(function(s){ return s.name.replace(/\s+/g,'')===q; })
        || STNDB.find(function(s){ return s.name.replace(/\s+/g,'').indexOf(q)>=0; });
   var nm = m ? m.name : q;
-  if(_mapGoToStation(nm)) toast('🔍 ' + nm);
+  if(_mapGoToStation(nm, {zoom:0.55, popup:true})) toast('🔍 ' + nm);
   else toast('\'' + q + '\' 역을 찾지 못했어요');
 }
 window.mapSearchStation = mapSearchStation;
