@@ -3925,7 +3925,7 @@ function openTransitDetail() {
       var _cumMs2 = 0;
       var _offMs = stops.map(function(s2,_k2){
         if(_k2===0) return 0;
-        var _a=_nm(stops[_k2-1].stationName||''), _b=_nm(stops[_k2].stationName||'');
+        var _a=String(stops[_k2-1].stationName||'').replace(/역$/,'').trim(), _b=String(stops[_k2].stationName||'').replace(/역$/,'').trim();
         var _real = (isSub && typeof _REAL_SEG!=='undefined') ? _REAL_SEG[trans.name+'|'+_a+'|'+_b] : null;
         _cumMs2 += (_real!=null ? _real*1000 : _evenMs);
         return _cumMs2;
@@ -4305,13 +4305,21 @@ function _parseODsayAllOptions(odsayData) {
       : Math.sqrt(Math.pow((startLat-fs.lat)*111000,2)+Math.pow((startLng-fs.lng)*88000,2));
   }
 
+  // 첫 지하철 탑승까지 '걸리는 시간'(도보+버스) — 버스로 가면 도보보다 짧음
+  function _accessTimeToFirstSub(p){
+    var subs=p.subPath||[], t=0;
+    for(var i=0;i<subs.length;i++){ if(subs[i].trafficType===1) return t; t+=(subs[i].sectionTime||0); }
+    return 999999;
+  }
   // 지하철 포함 경로만 필터
   var subwayPaths = paths.filter(_hasSubway);
   var subFirst;
   if(subwayPaths.length > 0){
-    // 가장 가까운 역에서 타는 순으로 정렬
+    // ★ 가까운 역 우선, 단 같은 역(±500m)이면 '가장 빨리 닿는(버스 포함)' 경로 선택
     subFirst = subwayPaths.slice().sort(function(a,b){
-      return _distToFirstSub(a) - _distToFirstSub(b);
+      var da=_distToFirstSub(a), db=_distToFirstSub(b);
+      if(Math.abs(da-db) > 500) return da - db;                       // 역이 확연히 다르면 가까운 역
+      return _accessTimeToFirstSub(a) - _accessTimeToFirstSub(b);      // 같은 역이면 버스 등 빠른 접근 우선
     })[0];
   } else if(byType[1].length > 0){
     subFirst = byType[1][0];
@@ -18178,8 +18186,9 @@ function safeSetItem(key, val){
 #routeModePopup.open { display:flex; }
 #routeModeCard {
   background:#1c1c1e;border-radius:24px 24px 0 0;
-  padding:24px 20px 36px;width:100%;max-width:480px;
+  padding:24px 20px calc(90px + env(safe-area-inset-bottom));width:100%;max-width:480px;
   transform:translateY(100%);transition:transform .28s cubic-bezier(.4,0,.2,1);
+  max-height:85vh;overflow-y:auto;
 }
 #routeModePopup.open #routeModeCard { transform:translateY(0); }
 .rmc-handle{width:36px;height:4px;border-radius:2px;background:#444;margin:0 auto 20px;}
