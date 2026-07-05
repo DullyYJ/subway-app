@@ -16473,23 +16473,51 @@ function svgSetRoute(type) {
     if(inpD) inpD.value = stn.name;
     if(typeof toast==='function') toast('🏁 도착역: ' + name);
     if(S.start && S.dest) {
-      // ★ _fmapStart/_fmapDest 동기화
-      _fmapStart = { type:'subway', name:S.start.name, lat:S.start.lat, lng:S.start.lng, line:S.start.line };
-      _fmapDest  = { type:'subway', name:S.dest.name,  lat:S.dest.lat,  lng:S.dest.lng,  line:S.dest.line  };
-      // 노선도 탭 활성 상태면 시트로, 아니면 홈탭으로
-      // 항상 홈 적용 (탭 전환 + transitResultBox 렌더)
-      if(typeof doRoute === 'function') doRoute();
-      setTimeout(function() {
-        if(typeof _renderBfsToTransitBox === 'function') {
-          _renderBfsToTransitBox(_fmapStart, _fmapDest);
-        }
-      }, 450);
+      // ★ 전체 경로: 현위치 → (출발역 경유) → 도착역
+      var _myLat = window._lastGPSLat || (typeof S!=='undefined' && S.lastGPSFix && S.lastGPSFix.lat) || null;
+      var _myLng = window._lastGPSLng || (typeof S!=='undefined' && S.lastGPSFix && S.lastGPSFix.lng) || null;
+      var fs = document.getElementById('fmapStartInp');
+      if(_myLat && _myLng){
+        // 출발점을 내 위치로 → ODsay가 현위치→출발역 접근 + 지하철 전체 경로 생성
+        _fmapStart = { type:'gps', name:'내 위치', lat:_myLat, lng:_myLng };
+        if(fs) fs.value = '내 위치';
+        window._preferBoardStn = S.start.name;   // 선택한 출발역(탑승역 힌트)
+      } else {
+        _fmapStart = { type:'subway', name:S.start.name, lat:S.start.lat, lng:S.start.lng, line:S.start.line };
+        if(fs) fs.value = S.start.name;
+        window._preferBoardStn = null;
+      }
+      _fmapDest = { type:'subway', name:S.dest.name, lat:S.dest.lat, lng:S.dest.lng, line:S.dest.line };
       var homeNi = document.getElementById('ni-home');
       if(typeof switchTab === 'function') switchTab('home', homeNi);
+      // 홈에서 ODsay 전체 경로 탐색 → 지하철 모드 자동 선택
+      setTimeout(function(){ if(typeof fmapDoRoute==='function') fmapDoRoute(); }, 300);
+      setTimeout(function(){
+        if(typeof _highlightRouteTab==='function') _highlightRouteTab('sub');
+        if(typeof selectRouteOption==='function'){ try{ selectRouteOption('sub'); }catch(e){} }
+      }, 1300);
     } else if(typeof toast==='function') toast('⚠️ 출발역을 먼저 선택하세요');
   }
 }
 window.svgSetRoute = svgSetRoute;
+
+// 현위치 → 출발역 접근(거리·도보시간) 표시
+function _showStartAccess(startStn){
+  try{
+    if(!startStn || startStn.lat==null || startStn.lng==null) return;
+    var la = window._lastGPSLat || (typeof S!=='undefined' && S.lastGPSFix && S.lastGPSFix.lat) || null;
+    var ln = window._lastGPSLng || (typeof S!=='undefined' && S.lastGPSFix && S.lastGPSFix.lng) || null;
+    if(!la || !ln || typeof haversineM!=='function') return;
+    var d = Math.round(haversineM(la, ln, startStn.lat, startStn.lng));
+    var walkMin = Math.max(1, Math.round(d/67));   // 도보 약 67m/분
+    var distTxt = d>=1000 ? (d/1000).toFixed(1)+'km' : d+'m';
+    var txt = '📍 내 위치 → ' + startStn.name + ' 약 ' + distTxt + ' · 도보 ' + walkMin + '분';
+    var el = document.getElementById('transitLocCur');
+    if(el){ el.textContent = txt; }
+    else if(typeof toast==='function') toast(txt);
+  }catch(e){}
+}
+window._showStartAccess = _showStartAccess;
 
 
 
