@@ -488,6 +488,12 @@ header h1 em{color:var(--gold);font-style:normal;}
 .rpt-btn{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:9px 4px;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;font-size:11px;color:var(--text);}
 /* 홈 AI 역무원 카드 */
 .home-ai-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:14px 16px;}
+/* 🔮 예상 하이라이트: 테두리를 따라 흐르는 레인보우 */
+@property --pvang{syntax:'<angle>';initial-value:0deg;inherits:false;}
+@keyframes pv-flow{to{--pvang:360deg;}}
+@keyframes pv-flow-fallback{to{transform:rotate(360deg);}}
+.preview-glow{position:relative;}
+.preview-glow::before{content:'';position:absolute;inset:-2px;border-radius:inherit;padding:2.5px;pointer-events:none;z-index:5;background:conic-gradient(from var(--pvang),#ff9500,#ff3b30,#ff2d95,#a24bff,#0a84ff,#30d158,#ffd60a,#ff9500);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude;animation:pv-flow 3s linear infinite;}
 .home-ai-head{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
 .home-ai-badge{font-size:20px;}
 .home-ai-title{font-size:13.5px;font-weight:800;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -1915,7 +1921,10 @@ function requestHomeBrief(force){
   if(!body) return;
 
   var here = _homeNearStationName();
-  var hour = new Date().getHours();
+  var _briefMs = (typeof getBaseTimeMs==='function') ? getBaseTimeMs() : Date.now();
+  var hour = new Date(_briefMs).getHours();
+  var _preview = (typeof _baseTimeMs!=='undefined' && _baseTimeMs != null);
+  var _whenLabel = (document.getElementById('baseTimeDisplay')||{}).textContent || '';
 
   // 목적지가 있으면 함께 (경로 예상시간 포함)
   var toName = '';
@@ -1951,6 +1960,7 @@ function requestHomeBrief(force){
       from: fromName, to: toName || fromName, lines: lines,
       hour: hour, congPct: congPct, transfers: Math.max(0, lines.length-1),
       totalMin: totalMin, mode: 'home',
+      preview: _preview, whenLabel: _whenLabel,
       segments: (function(){ try { var _r=_buildRouteBrief(); return _r?_r.segments:[]; } catch(e){ return []; } })()
     })
   })
@@ -1980,12 +1990,15 @@ window.requestHomeBrief = requestHomeBrief;
 function _renderHomeBrief(data, fromName, toName, hour, congPct){
   var body = document.getElementById('homeAiBody');
   if(!body) return;
-  var timeStr = new Date().toLocaleTimeString('ko-KR', {hour:'2-digit',minute:'2-digit'});
+  var _bMs = (typeof getBaseTimeMs==='function') ? getBaseTimeMs() : Date.now();
+  var _preview = (typeof _baseTimeMs!=='undefined' && _baseTimeMs != null);
+  var timeStr = new Date(_bMs).toLocaleTimeString('ko-KR', {hour:'2-digit',minute:'2-digit'});
+  var _pre = _preview ? '🔮 예상 · ' : '';
   var titleEl = document.getElementById('homeAiTitle');
   var hasRoute = toName && toName !== fromName;
-  if(titleEl) titleEl.textContent = hasRoute
+  if(titleEl) titleEl.textContent = _pre + (hasRoute
     ? fromName + ' → ' + toName + ' · ' + timeStr
-    : fromName + ' · ' + timeStr + ' 기준';
+    : fromName + ' · ' + timeStr + ' 기준');
   // 실시간 경로 현황(로컬 계산) + AI 코멘트(서버) 결합
   var _rb = _buildRouteBrief();
   var _head = (hasRoute && _rb) ? _routeStatusHtml(_rb, congPct) : '';
@@ -2064,7 +2077,10 @@ function _msgToParas(msg){
 function _renderHomeBriefLocal(fromName, toName, hour, congPct){
   var body = document.getElementById('homeAiBody');
   if(!body) return;
-  var timeStr = new Date().toLocaleTimeString('ko-KR', {hour:'2-digit',minute:'2-digit'});
+  var _bMs = (typeof getBaseTimeMs==='function') ? getBaseTimeMs() : Date.now();
+  var _preview = (typeof _baseTimeMs!=='undefined' && _baseTimeMs != null);
+  var timeStr = (_preview ? '🔮 예상 · ' : '') + new Date(_bMs).toLocaleTimeString('ko-KR', {hour:'2-digit',minute:'2-digit'});
+  var _whenTxt = _preview ? ('설정하신 ' + timeStr.replace('🔮 예상 · ','') + '경엔 ') : '지금은 ';
   var titleEl = document.getElementById('homeAiTitle');
   var hasRoute = toName && toName !== fromName;
 
@@ -2082,7 +2098,7 @@ function _renderHomeBriefLocal(fromName, toName, hour, congPct){
     }
     // 예상 변화(트렌드)
     var trend;
-    if(peak) trend = '지금은 피크 시간대라 앞으로 10~20분은 더 붐빌 수 있어요. 서두르시는 게 좋아요.';
+    if(peak) trend = _whenTxt + '피크 시간대라 다소 붐빌 수 있어요. 여유 있게 움직이세요.';
     else if(hour===6 || hour===16) trend = '곳 혼잡 시간대로 접어들어요. 지금 출발하면 비교적 수월해요.';
     else if(hour===9 || hour===19) trend = '혼잡 피크가 막 지나가는 중이에요. 조금만 기다리면 더 여유로워져요.';
     else trend = '앞으로 30분간 소요시간은 큰 변화 없이 안정적일 전망이에요.';
@@ -24353,10 +24369,10 @@ function _updatePreviewHighlight(){
   var custom = (_baseTimeMs != null);
   var lblTxt = (document.getElementById('baseTimeDisplay') || {}).textContent || '';
   // 경로 카드
-  var _ring = '0 0 0 2px #ff9500, 0 0 0 6px rgba(255,149,0,.16)';
+  function _glow(el){ if(!el) return; if(custom) el.classList.add('preview-glow'); else el.classList.remove('preview-glow'); }
   var card = document.getElementById('transitResultCard');
+  _glow(card);
   if(card){
-    card.style.boxShadow = custom ? _ring : 'none';
     var lbl = document.getElementById('routePreviewLabel');
     if(custom){
       if(!lbl){ lbl = document.createElement('div'); lbl.id='routePreviewLabel';
@@ -24368,8 +24384,8 @@ function _updatePreviewHighlight(){
   }
   // 혼잡도 카드
   var cong = document.getElementById('congCard');
+  _glow(cong);
   if(cong){
-    cong.style.boxShadow = custom ? _ring : 'none';
     var cpl = document.getElementById('congPreviewLabel');
     if(custom){
       if(!cpl){ cpl=document.createElement('div'); cpl.id='congPreviewLabel';
@@ -24377,6 +24393,18 @@ function _updatePreviewHighlight(){
         cong.insertBefore(cpl, cong.firstChild); }
       cpl.textContent='🔮 예상 혼잡도 · ' + lblTxt; cpl.style.display='inline-block';
     } else if(cpl){ cpl.style.display='none'; }
+  }
+  // AI 승무원 카드
+  var aiCard = document.getElementById('homeAiCard');
+  _glow(aiCard);
+  if(aiCard){
+    var apl = document.getElementById('aiPreviewLabel');
+    if(custom){
+      if(!apl){ apl=document.createElement('div'); apl.id='aiPreviewLabel';
+        apl.style.cssText='font-size:11px;font-weight:800;color:#ff9500;background:rgba(255,149,0,.14);padding:4px 11px;border-radius:9px;margin-bottom:10px;display:inline-block;';
+        aiCard.insertBefore(apl, aiCard.firstChild); }
+      apl.textContent='🔮 예상 브리핑 · ' + lblTxt; apl.style.display='inline-block';
+    } else if(apl){ apl.style.display='none'; }
   }
   // 차트 기본 툴팁 라벨
   var ctt = document.getElementById('chartTooltipTime');
