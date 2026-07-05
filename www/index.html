@@ -739,6 +739,7 @@ input[type=time]{color-scheme:dark;}
 .sug-item{display:flex;align-items:center;gap:2px;padding:11px 14px;min-height:46px;box-sizing:border-box;border-bottom:1px solid var(--border2);font-size:14px;color:var(--text);cursor:pointer;}
 .sug-item:last-child{border-bottom:none;}
 .sug-item:active{background:rgba(120,120,128,.16);}
+.dt-select{background:var(--card2,#2c2c2e);color:var(--text);border:1px solid var(--border2);border-radius:12px;padding:12px 16px;font-size:16px;font-weight:700;font-family:inherit;outline:none;min-width:110px;text-align:center;-webkit-appearance:none;appearance:none;cursor:pointer;}
 /* 노선도 지하철 하단 검색바 제거 */
 #baseTimeRow,#stnInputRow{display:none !important;}
 .sug div{padding:10px 13px;font-size:13px;color:var(--text);cursor:pointer;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;}
@@ -3414,7 +3415,7 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
       var isF=(gIdx===0),isL=(gIdx===totalCnt-1);
       var arrT='';
       if(isF)         arrT=_fmtHHMM(segMs[si]);   // 도보 시간 포함(세그먼트 시작 = 정류장 도착/탑승)
-      else if(ni===0) arrT=secMin>0?secMin+'분':'';
+      // 환승 후 첫 역도 '분'이 아니라 실제 도착/탑승 시각으로 표시
       else            arrT=_fmtHHMM(segMs[si]+_offSec[ni]*1000);
       var lC=col;
       if(ni===0&&si>0){
@@ -6225,9 +6226,9 @@ window.addEventListener('unhandledrejection', function(e) {
       <!-- 기준 시각 행 -->
       <div style="display:flex;align-items:center;gap:8px;padding:8px 14px;background:rgba(255,255,255,.03);border-top:1px solid var(--border2);">
         <span style="font-size:10px;color:var(--sub);white-space:nowrap;">🕐 기준시각</span>
-        <input id="baseTimeInp" type="datetime-local" value=""
-          style="background:transparent;color:var(--text);border:none;font-size:12px;font-family:inherit;flex:1;min-width:0;outline:none;"
-          onchange="applyBaseTime(this.value)">
+        <input id="baseTimeInp" type="hidden" value="">
+        <div id="baseTimeDisplay" onclick="openDtPicker()"
+          style="color:var(--text);font-size:12px;flex:1;min-width:0;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">현재</div>
         <span id="dayTypeBadge" style="font-size:10px;font-weight:700;white-space:nowrap;padding:2px 7px;border-radius:8px;"></span>
         <button onclick="clearBaseTime()"
           style="background:none;border:none;color:var(--sub);font-size:10px;cursor:pointer;white-space:nowrap;padding:0;">현재</button>
@@ -7161,6 +7162,15 @@ window.addEventListener('unhandledrejection', function(e) {
     <!-- ══ 수도권 인터랙티브 그리드 맵 (v1) ══ -->
 <!-- ══ 수도권 인터랙티브 그리드 맵 v2 ══ -->
 <div id="seoulMapView" style="flex:1;overflow:hidden;position:relative;background:#f5f5f5;display:flex;flex-direction:column;">
+
+  <!-- 역 검색 + 내 위치로 -->
+  <div style="display:flex;gap:6px;padding:7px 12px;flex-shrink:0;background:var(--card);border-bottom:1px solid var(--border);">
+    <input id="mapStnSearch" type="text" placeholder="🔍 역 검색 (예: 부평)" autocomplete="off"
+      oninput="_mapSearchDebounced(this.value)" onkeydown="if(event.key==='Enter'){mapSearchStation(this.value);this.blur();}"
+      style="flex:1;min-width:0;background:var(--card2,#f0f0f3);border:1px solid var(--border2);border-radius:10px;padding:8px 12px;font-size:13px;color:var(--text);outline:none;font-family:inherit;">
+    <button onclick="mapGoToMyLocation()"
+      style="flex-shrink:0;background:#0a84ff;color:#fff;border:none;border-radius:10px;padding:8px 13px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">📍 내 위치</button>
+  </div>
 
   <!-- 호선 필터 바 -->
   <div id="lineFilterBar" style="display:flex;gap:5px;padding:7px 12px;overflow-x:auto;flex-shrink:0;
@@ -17956,6 +17966,7 @@ window.onload=function(){
   setTimeout(function(){ if(typeof initCommunityPosts==='function') initCommunityPosts(); }, 1500);
   setTimeout(function(){ if(typeof initLiveTalk==='function') initLiveTalk(); }, 800);  // ★ 실시간 톡 시작
   setTimeout(function(){ if(typeof _updateDayTypeBadge==='function') _updateDayTypeBadge(); }, 300);  // 평일/주말 배지
+  setTimeout(function(){ if(typeof _updateBaseTimeDisplay==='function') _updateBaseTimeDisplay(); }, 300);
   setTimeout(function(){ if(typeof _startServerSync==='function') _startServerSync(); }, 1500);  // ★ 서버 동기화 시작
   setTimeout(function(){ if(typeof _renderFavRecent==='function') _renderFavRecent(); }, 500);  // ★ 즐겨찾기/최근경로
   setTimeout(function(){ if(typeof renderHorizontalTimeline==='function') renderHorizontalTimeline(); }, 600);  // ★ 경로 노선도 빈 상태 표시
@@ -21449,6 +21460,72 @@ function _extractStnNameFromEl(el) {
 
 // ── SVG text 직접 클릭 방식 (참조 index-9.html) ─────────────
 
+// ── 노선도: 특정 역으로 스크롤 + 하이라이트 ──
+function _mapGoToStation(name){
+  var view = document.getElementById('gmSvgView');
+  var svg  = document.querySelector('#svgContainer svg');
+  if(!view || !svg){ return false; }
+  if(view.style.display === 'none'){ return false; }
+  var nn = String(name||'').replace(/\s+/g,'');
+  var texts = svg.querySelectorAll('text'), target = null;
+  for(var i=0;i<texts.length;i++){ if(svgExtractName(texts[i]).replace(/\s+/g,'') === nn){ target = texts[i]; break; } }
+  if(!target){ for(var j=0;j<texts.length;j++){ var en=svgExtractName(texts[j]).replace(/\s+/g,''); if(en && en.indexOf(nn)>=0){ target=texts[j]; break; } } }
+  if(!target){ return false; }
+  var vr = view.getBoundingClientRect(), tr = target.getBoundingClientRect();
+  view.scrollLeft += (tr.left + tr.width/2) - (vr.left + vr.width/2);
+  view.scrollTop  += (tr.top  + tr.height/2) - (vr.top  + vr.height/2);
+  _flashStation(target);
+  return true;
+}
+function _flashStation(target){
+  try{
+    var svg = target.ownerSVGElement; if(!svg) return;
+    var bb = target.getBBox();
+    var cx = bb.x + bb.width/2, cy = bb.y + bb.height/2;
+    var c = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    c.setAttribute('cx', cx); c.setAttribute('cy', cy); c.setAttribute('r', 45);
+    c.setAttribute('fill','none'); c.setAttribute('stroke','#ff2d55'); c.setAttribute('stroke-width','10');
+    svg.appendChild(c);
+    var origW = target.style.fontWeight, origF = target.getAttribute('fill');
+    target.style.fontWeight='900'; target.setAttribute('fill','#ff2d55');
+    var t0 = Date.now();
+    var iv = setInterval(function(){
+      var e = (Date.now()-t0)/1000, ph = e % 1;
+      c.setAttribute('r', 45 + ph*70); c.style.opacity = String(0.9 - ph*0.75);
+      if(e > 2.4){ clearInterval(iv); if(c.parentNode) c.parentNode.removeChild(c); target.style.fontWeight=origW; if(origF) target.setAttribute('fill',origF); }
+    }, 40);
+  }catch(e){}
+}
+// 내 위치에서 가장 가까운 역으로
+function mapGoToMyLocation(){
+  if(!navigator.geolocation){ toast('위치를 사용할 수 없어요'); return; }
+  toast('📍 내 위치 확인 중...');
+  navigator.geolocation.getCurrentPosition(function(pos){
+    var la=pos.coords.latitude, ln=pos.coords.longitude;
+    if(typeof STNDB==='undefined'){ toast('역 정보를 불러오지 못했어요'); return; }
+    var best=null, bd=1e18;
+    STNDB.forEach(function(st){ if(st.lat==null||st.lng==null) return; var dx=st.lat-la, dy=st.lng-ln, d=dx*dx+dy*dy; if(d<bd){ bd=d; best=st; } });
+    if(best && _mapGoToStation(best.name)) toast('📍 ' + best.name + ' (가장 가까운 역)');
+    else toast('가까운 역을 지도에서 찾지 못했어요');
+  }, function(){ toast('위치 권한이 필요해요'); }, {enableHighAccuracy:true, timeout:8000, maximumAge:30000});
+}
+window.mapGoToMyLocation = mapGoToMyLocation;
+// 역 검색 → 이동
+function mapSearchStation(q){
+  q = String(q||'').replace(/\s+/g,'').trim();
+  if(q.length < 2){ return; }
+  if(typeof STNDB==='undefined') return;
+  var m = STNDB.find(function(s){ return s.name.replace(/\s+/g,'')===q; })
+       || STNDB.find(function(s){ return s.name.replace(/\s+/g,'').indexOf(q)>=0; });
+  var nm = m ? m.name : q;
+  if(_mapGoToStation(nm)) toast('🔍 ' + nm);
+  else toast('\'' + q + '\' 역을 찾지 못했어요');
+}
+window.mapSearchStation = mapSearchStation;
+var _mapSearchTimer = null;
+function _mapSearchDebounced(v){ clearTimeout(_mapSearchTimer); if(String(v||'').replace(/\s+/g,'').length<2) return; _mapSearchTimer = setTimeout(function(){ mapSearchStation(v); }, 500); }
+window._mapSearchDebounced = _mapSearchDebounced;
+
 function svgExtractName(el) {
   var t = el;
   while (t && t.tagName === 'tspan') t = t.parentElement;
@@ -24046,6 +24123,99 @@ window._requireCommId = _requireCommId;
 // ══════════════════════════════════════════════════════════════
 var _baseTimeMs = null;
 
+// ── 테마 커스텀 날짜·시간 피커 ──
+var _dtSel = { y:0, mo:0, d:0, h:9, mi:0 };
+function _dtWeekday(y,mo,d){ return ['일','월','화','수','목','금','토'][new Date(y,mo,d).getDay()]; }
+function openDtPicker(){
+  var base = (_baseTimeMs!=null) ? new Date(_baseTimeMs) : new Date();
+  _dtSel = { y:base.getFullYear(), mo:base.getMonth(), d:base.getDate(), h:base.getHours(), mi:Math.round(base.getMinutes()/5)*5%60 };
+  var ov = document.getElementById('dtPickerOverlay');
+  if(!ov){ ov = _buildDtPicker(); document.body.appendChild(ov); }
+  _renderDtChips(); _renderDtTime();
+  ov.style.display = 'flex';
+  requestAnimationFrame(function(){ ov.style.opacity='1'; var sh=ov.querySelector('.dt-sheet'); if(sh) sh.style.transform='translateY(0)'; });
+}
+function closeDtPicker(){
+  var ov = document.getElementById('dtPickerOverlay'); if(!ov) return;
+  ov.style.opacity='0'; var sh=ov.querySelector('.dt-sheet'); if(sh) sh.style.transform='translateY(20px)';
+  setTimeout(function(){ ov.style.display='none'; }, 200);
+}
+window.openDtPicker = openDtPicker; window.closeDtPicker = closeDtPicker;
+function _buildDtPicker(){
+  var ov = document.createElement('div');
+  ov.id = 'dtPickerOverlay';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:9999;display:none;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.45);opacity:0;transition:opacity .2s;';
+  ov.addEventListener('click', function(e){ if(e.target===ov) closeDtPicker(); });
+  ov.innerHTML =
+    '<div class="dt-sheet" style="width:100%;max-width:480px;background:var(--card,#1c1c1e);border-radius:20px 20px 0 0;padding:18px 16px calc(16px + env(safe-area-inset-bottom));box-shadow:0 -8px 30px rgba(0,0,0,.4);transform:translateY(20px);transition:transform .22s;">'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">'+
+        '<div style="font-size:16px;font-weight:800;color:var(--text);">🕐 기준 시각 설정</div>'+
+        '<div onclick="closeDtPicker()" style="font-size:20px;color:var(--sub);cursor:pointer;padding:2px 6px;">×</div>'+
+      '</div>'+
+      '<div style="font-size:11px;font-weight:700;color:var(--sub);margin:2px 2px 7px;">날짜</div>'+
+      '<div id="dtChips" style="display:flex;gap:7px;overflow-x:auto;padding-bottom:6px;-webkit-overflow-scrolling:touch;"></div>'+
+      '<div style="font-size:11px;font-weight:700;color:var(--sub);margin:12px 2px 7px;">시간</div>'+
+      '<div style="display:flex;align-items:center;justify-content:center;gap:10px;">'+
+        '<select id="dtHour" class="dt-select"></select>'+
+        '<span style="font-size:20px;font-weight:800;color:var(--text);">:</span>'+
+        '<select id="dtMin" class="dt-select"></select>'+
+      '</div>'+
+      '<div style="display:flex;gap:10px;margin-top:18px;">'+
+        '<button onclick="clearBaseTime();closeDtPicker();" style="flex:1;padding:13px;border-radius:12px;border:1px solid var(--border2);background:transparent;color:var(--sub);font-size:14px;font-weight:700;cursor:pointer;">현재로</button>'+
+        '<button onclick="confirmDtPicker()" style="flex:2;padding:13px;border-radius:12px;border:none;background:#0a84ff;color:#fff;font-size:14px;font-weight:800;cursor:pointer;">설정</button>'+
+      '</div>'+
+    '</div>';
+  return ov;
+}
+function _renderDtChips(){
+  var box = document.getElementById('dtChips'); if(!box) return;
+  var html = ''; var today = new Date(); today.setHours(0,0,0,0);
+  for(var i=0;i<14;i++){
+    var dt = new Date(today.getTime() + i*86400000);
+    var y=dt.getFullYear(), mo=dt.getMonth(), d=dt.getDate();
+    var sel = (y===_dtSel.y && mo===_dtSel.mo && d===_dtSel.d);
+    var wd = _dtWeekday(y,mo,d);
+    var label = (i===0?'오늘':(i===1?'내일':(mo+1)+'/'+d));
+    var isWk = (dt.getDay()===0 || dt.getDay()===6);
+    var wc = dt.getDay()===0 ? '#ff453a' : (dt.getDay()===6 ? '#0a84ff' : 'var(--sub)');
+    html += '<div onclick="_pickDtDate('+y+','+mo+','+d+')" style="flex-shrink:0;min-width:52px;text-align:center;padding:9px 6px;border-radius:12px;cursor:pointer;border:1.5px solid '+(sel?'#0a84ff':'var(--border2)')+';background:'+(sel?'rgba(10,132,255,.15)':'transparent')+';">'+
+      '<div style="font-size:13px;font-weight:800;color:'+(sel?'#0a84ff':'var(--text)')+';">'+label+'</div>'+
+      '<div style="font-size:10px;font-weight:700;color:'+(sel?'#0a84ff':wc)+';margin-top:2px;">'+wd+'</div>'+
+    '</div>';
+  }
+  box.innerHTML = html;
+}
+function _pickDtDate(y,mo,d){ _dtSel.y=y; _dtSel.mo=mo; _dtSel.d=d; _renderDtChips(); }
+window._pickDtDate = _pickDtDate;
+function _renderDtTime(){
+  var hs=document.getElementById('dtHour'), ms=document.getElementById('dtMin'); if(!hs||!ms) return;
+  var ho=''; for(var h=0;h<24;h++){ var lab=(h<12?'오전 ':'오후 ')+((h%12)||12)+'시'; ho+='<option value="'+h+'"'+(h===_dtSel.h?' selected':'')+'>'+lab+'</option>'; }
+  hs.innerHTML=ho;
+  var mo=''; for(var m=0;m<60;m+=5){ mo+='<option value="'+m+'"'+(m===_dtSel.mi?' selected':'')+'>'+(m<10?'0'+m:m)+'분</option>'; }
+  ms.innerHTML=mo;
+}
+function confirmDtPicker(){
+  var hs=document.getElementById('dtHour'), ms=document.getElementById('dtMin');
+  var h = hs?parseInt(hs.value):9, mi = ms?parseInt(ms.value):0;
+  var mm=('0'+(_dtSel.mo+1)).slice(-2), dd=('0'+_dtSel.d).slice(-2), hh=('0'+h).slice(-2), mn=('0'+mi).slice(-2);
+  applyBaseTime(_dtSel.y+'-'+mm+'-'+dd+'T'+hh+':'+mn);
+  closeDtPicker();
+}
+window.confirmDtPicker = confirmDtPicker;
+// 기준시각 표시 텍스트 갱신
+function _updateBaseTimeDisplay(){
+  var el = document.getElementById('baseTimeDisplay'); if(!el) return;
+  if(_baseTimeMs==null){ el.textContent='현재'; el.style.color='var(--sub)'; return; }
+  var d=new Date(_baseTimeMs), today=new Date(); today.setHours(0,0,0,0);
+  var dd=new Date(d); dd.setHours(0,0,0,0);
+  var dayLabel; var diff=Math.round((dd-today)/86400000);
+  if(diff===0) dayLabel='오늘'; else if(diff===1) dayLabel='내일'; else dayLabel=(d.getMonth()+1)+'/'+d.getDate()+'('+_dtWeekday(d.getFullYear(),d.getMonth(),d.getDate())+')';
+  var h=d.getHours(), mi=d.getMinutes();
+  el.textContent = dayLabel+' '+(h<12?'오전':'오후')+' '+((h%12)||12)+':'+('0'+mi).slice(-2);
+  el.style.color='var(--text)';
+}
+window._updateBaseTimeDisplay = _updateBaseTimeDisplay;
+
 function applyBaseTime(val) {
   if(!val) { _baseTimeMs = null; _updateDayTypeBadge(); return; }
   var d;
@@ -24062,6 +24232,7 @@ function applyBaseTime(val) {
   _baseTimeMs = d.getTime();
   toast('🕐 기준시각: ' + val.replace('T',' ') + ' 설정됨');
   _updateDayTypeBadge();
+  if(typeof _updateBaseTimeDisplay==='function') _updateBaseTimeDisplay();
   if(typeof S !== 'undefined' && S.start && S.dest) {
     setTimeout(function(){ if(typeof doRoute==='function') doRoute(); }, 100);
   }
@@ -24073,6 +24244,7 @@ function clearBaseTime() {
   var inp = document.getElementById('baseTimeInp');
   if(inp) inp.value = '';
   _updateDayTypeBadge();
+  if(typeof _updateBaseTimeDisplay==='function') _updateBaseTimeDisplay();
   toast('🕐 기준시각: 현재 시각 사용');
   if(typeof S !== 'undefined' && S.start && S.dest) {
     setTimeout(function(){ if(typeof doRoute==='function') doRoute(); }, 100);
