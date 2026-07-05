@@ -5236,7 +5236,8 @@ function _routeRemainingMin(){
     if(m != null){ lastMin = m; break; }
   }
   if(lastMin == null) return null;
-  var now = new Date();
+  // ★ 기준시각(미설정 시 현재) 기준으로 남은시간 계산 → 미래 예상 경로도 소요시간 정상
+  var now = new Date((typeof getBaseTimeMs==='function') ? getBaseTimeMs() : Date.now());
   var nowMin = now.getHours()*60 + now.getMinutes() + now.getSeconds()/60;
   if(lastMin < nowMin - 720) lastMin += 1440; // 자정 보정
   var rem = Math.round(lastMin - nowMin);
