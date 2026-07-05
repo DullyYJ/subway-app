@@ -23365,7 +23365,7 @@ function renderChart24(stnName, lineName) {
   if(!bars) return;
 
   var data  = getCong24(stnName, lineName);
-  var curH  = new Date().getHours();
+  var curH  = new Date((typeof getBaseTimeMs==='function'?getBaseTimeMs():Date.now())).getHours();
   var svc   = LINE_SERVICE_HOURS[lineName] || { first: 5, last: 24 };
   var first = svc.first;
   var last  = svc.last;
@@ -23791,7 +23791,7 @@ function _renderBusChart24(hourly){
   var srcLbl  = document.getElementById('chartSourceLabel');
   if(!bars) return;
 
-  var curH = new Date().getHours();
+  var curH = new Date((typeof getBaseTimeMs==='function'?getBaseTimeMs():Date.now())).getHours();
 
   // 데이터 있는 시간대 중 피크 계산
   var maxV = 0, peakH = curH;
@@ -24343,10 +24343,10 @@ function _updatePreviewHighlight(){
   var custom = (_baseTimeMs != null);
   var lblTxt = (document.getElementById('baseTimeDisplay') || {}).textContent || '';
   // 경로 카드
+  var _ring = '0 0 0 2px #ff9500, 0 0 0 6px rgba(255,149,0,.16)';
   var card = document.getElementById('transitResultCard');
   if(card){
-    card.style.border = custom ? '2px solid #ff9500' : '1px solid var(--border)';
-    card.style.boxShadow = custom ? '0 0 0 3px rgba(255,149,0,.12)' : 'none';
+    card.style.boxShadow = custom ? _ring : 'none';
     var lbl = document.getElementById('routePreviewLabel');
     if(custom){
       if(!lbl){ lbl = document.createElement('div'); lbl.id='routePreviewLabel';
@@ -24358,7 +24358,7 @@ function _updatePreviewHighlight(){
   }
   // 혼잡도 카드
   var cong = document.getElementById('congCard');
-  if(cong){ cong.style.outline = custom ? '2px solid #ff9500' : 'none'; cong.style.outlineOffset='2px'; }
+  if(cong){ cong.style.boxShadow = custom ? _ring : 'none'; }
   var congBadge = document.getElementById('congBadge');
   if(congBadge && congBadge.parentNode){
     var cpl = document.getElementById('congPreviewLabel');
@@ -24368,6 +24368,12 @@ function _updatePreviewHighlight(){
         congBadge.parentNode.insertBefore(cpl, congBadge); }
       cpl.textContent='🔮 예상 혼잡도'; cpl.style.display='inline';
     } else if(cpl){ cpl.style.display='none'; }
+  }
+  // 차트 기본 툴팁 라벨
+  var ctt = document.getElementById('chartTooltipTime');
+  if(ctt){
+    if(custom){ var _bh = new Date(getBaseTimeMs()).getHours(); ctt.textContent = '🔮 예상 ' + _bh + '시'; }
+    else ctt.textContent = '현재 시각';
   }
 }
 window._updatePreviewHighlight = _updatePreviewHighlight;
