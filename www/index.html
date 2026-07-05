@@ -4317,9 +4317,9 @@ function _parseODsayAllOptions(odsayData) {
   if(subwayPaths.length > 0){
     // ★ 가까운 역 우선, 단 같은 역(±500m)이면 '가장 빨리 닿는(버스 포함)' 경로 선택
     subFirst = subwayPaths.slice().sort(function(a,b){
-      var da=_distToFirstSub(a), db=_distToFirstSub(b);
-      if(Math.abs(da-db) > 500) return da - db;                       // 역이 확연히 다르면 가까운 역
-      return _accessTimeToFirstSub(a) - _accessTimeToFirstSub(b);      // 같은 역이면 버스 등 빠른 접근 우선
+      var ta=_accessTimeToFirstSub(a), tb=_accessTimeToFirstSub(b);
+      if(Math.abs(ta-tb) > 60) return ta - tb;                        // 지하철 빨리 타는(버스 포함) 경로 우선
+      return _distToFirstSub(a) - _distToFirstSub(b);                 // 비슷하면 가까운 역
     })[0];
   } else if(byType[1].length > 0){
     subFirst = byType[1][0];
@@ -6561,8 +6561,8 @@ window.addEventListener('unhandledrejection', function(e) {
         </div>
       </div>
 
-      <!-- ★ 가로 타임라인 노선도 -->
-      <div id="transitDetailTimeline" style="flex-shrink:0;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;padding:10px 0 4px;background:var(--card2);border-bottom:1px solid var(--border);">
+      <!-- ★ 가로 타임라인 노선도 (미사용 → 숨김) -->
+      <div id="transitDetailTimeline" style="display:none;flex-shrink:0;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;padding:10px 0 4px;background:var(--card2);border-bottom:1px solid var(--border);">
         <div id="transitDetailTimelineTrack" style="display:inline-flex;align-items:stretch;min-width:100%;padding:0 16px;gap:0;"></div>
       </div>
 
@@ -13656,30 +13656,32 @@ function autoSetStartFromGPS() {
     startInp.style.opacity = '0.6';
   }
 
-  navigator.geolocation.getCurrentPosition(
-    function(pos){
-      var lat = pos.coords.latitude, lng = pos.coords.longitude;
-      if(isNaN(lat) || isNaN(lng)){ _autoStartFail(); return; }
-      window._lastGPSLat = lat; window._lastGPSLng = lng;
-      if(typeof S !== 'undefined') S.lastGPSFix = { lat: lat, lng: lng, ts: Date.now() };
-
-      // 사용자가 그새 직접 입력했으면 덮어쓰지 않음
-      if(_fmapStart) return;
-      var si = document.getElementById('fmapStartInp');
-      if(si && si.value && si.value.indexOf('내 위치 찾는 중') === -1) return;
-
-      // ★ 가장 가까운 역이 아니라 GPS "내 위치" 자체를 출발지로
-      _setStartToMyLocation(lat, lng);
-
-      // 목적지 입력으로 유도 (자동 포커스)
-      var di = document.getElementById('fmapDestInp');
-      if(di && !di.value){
-        setTimeout(function(){ try{ di.focus(); }catch(e){} }, 300);
-      }
-    },
-    function(){ _autoStartFail(); },
-    { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 }
-  );
+  var _gpsTried = 0;
+  function _onFix(pos){
+    var lat = pos.coords.latitude, lng = pos.coords.longitude;
+    var acc = pos.coords.accuracy || 9999;
+    if(isNaN(lat) || isNaN(lng)){ _autoStartFail(); return; }
+    // 정확도가 너무 낮으면(>150m) 1회 재시도 후 채택
+    if(acc > 150 && _gpsTried < 1){
+      _gpsTried++;
+      navigator.geolocation.getCurrentPosition(_onFix, function(){ _acceptFix(lat,lng); }, { enableHighAccuracy:true, timeout:10000, maximumAge:0 });
+      return;
+    }
+    _acceptFix(lat, lng);
+  }
+  function _acceptFix(lat, lng){
+    window._lastGPSLat = lat; window._lastGPSLng = lng;
+    if(typeof S !== 'undefined') S.lastGPSFix = { lat: lat, lng: lng, ts: Date.now() };
+    if(_fmapStart) return;
+    var si = document.getElementById('fmapStartInp');
+    if(si && si.value && si.value.indexOf('내 위치 찾는 중') === -1) return;
+    _setStartToMyLocation(lat, lng);
+    var di = document.getElementById('fmapDestInp');
+    if(di && !di.value){ setTimeout(function(){ try{ di.focus(); }catch(e){} }, 300); }
+  }
+  // ★ 신선한 고정밀 위치 (캐시 미사용)
+  navigator.geolocation.getCurrentPosition(_onFix, function(){ _autoStartFail(); },
+    { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 });
 }
 function _autoStartFail(){
   var si = document.getElementById('fmapStartInp');
