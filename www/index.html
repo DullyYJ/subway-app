@@ -5124,20 +5124,13 @@ function _recalcArrivalsFrom(anchorIdx){
   if(!passes.length) return;
   passes.sort(function(a,b){ return a.idx - b.idx; });
   var anchor = passes[passes.length - 1];
-  // pace = 실제경과 / 스케줄경과 (관측 통과가 2개 이상일 때)
-  var pace = 1;
-  if(passes.length >= 2){
-    var first = passes[0];
-    var schedElapsed  = anchor.sched - first.sched;          // 분
-    var actualElapsed = (anchor.ms - first.ms) / 60000;      // 분
-    if(schedElapsed > 0.5 && actualElapsed > 0) pace = actualElapsed / schedElapsed;
-  }
-  pace = Math.max(0.4, Math.min(1.8, pace));   // 이상치 방지
+  // ★ 역간 소요는 실측(_REAL_SEG 기반 _schedMin)을 고정 유지 — pace 배율 없이 '시각만 이동'
+  //   (관측 속도로 역간 시간을 늘리거나 줄이지 않음 → 계양-아라 4분 등 하드코딩 값 보존)
   var anchorMs = anchor.ms;
   // 앵커(최근 실측 통과) 기준으로 앞·뒤 모든 노드를 재계산 → 순서 꼬임 방지, 전체 일관
   _transitNodeData.forEach(function(nd, idx){
     if(nd._schedMin == null) return;
-    var newMs = anchorMs + (nd._schedMin - anchor.sched) * pace * 60000;
+    var newMs = anchorMs + (nd._schedMin - anchor.sched) * 60000;
     var d = new Date(newMs);
     var hh = ('0'+d.getHours()).slice(-2), mm = ('0'+d.getMinutes()).slice(-2);
     nd.arrTime = hh + ':' + mm;
