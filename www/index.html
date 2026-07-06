@@ -1954,7 +1954,7 @@ function requestHomeBrief(force){
     if(b){ b.disabled = true; b.textContent = '⏳'; }
   }
 
-  var fromName = here ? here.name : '현위치';
+  var fromName = here ? (typeof here === 'string' ? here : here.name) : '현위치';
 
   fetch(_SERVER_URL + '/ai-brief', {
     method: 'POST',
@@ -6193,7 +6193,7 @@ function handleBackPress(){
   if((chatView && chatView.style.display === 'flex') ||
      (settView && settView.style.display !== 'none')){
     // 전체 탭으로 복귀
-    var allChip = document.querySelector('#filterRow .chip');
+    var allChip = document.getElementById('chipBoard') || document.querySelector('#filterRow .chip');
     if(allChip && typeof filterCat === 'function') filterCat(allChip, 'all');
     _backPressCount = 0;
     return true;
@@ -6774,9 +6774,9 @@ window.addEventListener('unhandledrejection', function(e) {
 
     <!-- 카테고리 칩 -->
     <div class="filter-row" id="filterRow">
-      <div class="chip on" onclick="filterCat(this,'all')">전체</div>
-      <div class="chip" onclick="filterCat(this,'뉴스')">📰뉴스</div>
       <div class="chip" onclick="showChatTab(this)">🔴실시간소통</div>
+      <div class="chip on" id="chipBoard" onclick="filterCat(this,'all')">게시판</div>
+      <div class="chip" onclick="filterCat(this,'뉴스')">📰뉴스</div>
       <div class="chip" onclick="showSettingsTab(this)">⚙️설정</div>
     </div>
 
@@ -15950,14 +15950,17 @@ function renderCommList(){
   var empty=document.getElementById('commEmpty');
   if(!list) return;
 
-  // 서버에서 최신 게시글 로드 (처음이거나 비어있으면)
-  if(_AI_POSTS.length === 0 || typeof _commNeedRefresh !== 'undefined' && _commNeedRefresh) {
+  // 서버에서 최신 게시글 로드 (캐시 있으면 즉시 렌더 + 백그라운드 갱신)
+  if(_AI_POSTS.length === 0 || (typeof _commNeedRefresh !== 'undefined' && _commNeedRefresh)) {
     _commNeedRefresh = false;
     if(typeof _loadServerPosts === 'function') {
       _loadServerPosts(_commFilter, true);
-      // 로딩 표시
-      list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--sub);">게시글 불러오는 중...</div>';
-      return;
+      if(_AI_POSTS.length === 0){
+        // 캐시가 없을 때만 로딩 화면
+        list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--sub);">게시글 불러오는 중...</div>';
+        return;
+      }
+      // 캐시가 있으면 아래로 진행해 기존 글 즉시 표시 (서버 응답 오면 renderCommList 재호출됨)
     }
   }
 
@@ -17532,6 +17535,8 @@ function _vibratePattern(pat) {
 var _boardAskTimer = null;
 // ── ★ 경로 설정 직후 즉시 안내 팝업 ─────────────────────
 function _showRouteReadyPopup(waitMin, depTime, depMs) {
+  // ★ 수동 출발지(내 위치 아님) 모드: 실시간 탑승 안내 팝업 없음
+  if(typeof _isManualStart==='function' && _isManualStart()) return;
   var m = document.getElementById('boardAskModal');
   if(!m) return;
   m._depMs   = depMs;
@@ -17659,6 +17664,7 @@ function _scheduleBoardAskPopup(depMs) {
 }
 
 function _openBoardAskModal(depMs) {
+  if(typeof _isManualStart==='function' && _isManualStart()) return;
   var m = document.getElementById('boardAskModal');
   if(!m) return;
   m._depMs = depMs;
@@ -24114,8 +24120,7 @@ function filterCat(el,cat){
   if(sv) sv.style.display='';
   if(cv) cv.style.display='none';
   if(fab) fab.style.display='';
-  // 카테고리 변경 시 서버에서 다시 로드
-  _AI_POSTS = [];
+  // 카테고리 변경 시 서버에서 다시 로드 (★ 기존 글 유지, 백그라운드 갱신 — 빈 화면 방지)
   _commNeedRefresh = true;
 
   // 뉴스 탭: 실시간 뉴스도 갱신
