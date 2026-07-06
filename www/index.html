@@ -5215,6 +5215,8 @@ function _placeGpsMarkerSmooth(fromNd, toNd, ratio){
   var dot  = window._htlGpsDot  || document.getElementById('htl-gps-marker-dot');
   var ring = window._htlGpsRing || document.getElementById('htl-gps-marker-ring');
   if(!track || !dot || !fromNd || !fromNd.el) return;
+  // ★ 트랙이 숨겨져 있으면(다른 탭 등) offset이 0 → 이동하지 말고 복귀 시 스냅하도록 표시
+  if(track.offsetParent === null || track.offsetWidth === 0){ window._gpsMarkerNeedsSnap = true; return; }
   var fEl = fromNd.el, tEl = (toNd && toNd.el) ? toNd.el : fromNd.el;
   // 트랙 기준 콘텐츠 x좌표 (스크롤/변환 무관) — 마커가 노드 정중앙에 오도록
   function _trkX(el){ var x=0, n=el; while(n && n!==track){ x+=n.offsetLeft; n=n.offsetParent; } return x + el.offsetWidth/2; }
@@ -5227,17 +5229,19 @@ function _placeGpsMarkerSmooth(fromNd, toNd, ratio){
   if(axis){ var _y=0, _n=axis; while(_n && _n!==track){ _y+=_n.offsetTop; _n=_n.offsetParent; } yTop = _y + 6; }
   // 트랙 직속으로 이동 — 첫 배치는 애니메이션 없이(점프 방지), 이후 틱부터 부드럽게
   var firstDot = (dot.parentNode !== track);
+  var snap = firstDot || window._gpsMarkerNeedsSnap;   // 첫 배치 또는 탭 복귀 시 점프 없이 스냅
   if(firstDot) track.appendChild(dot);
-  dot.style.transition = firstDot ? 'none' : ('left ' + _HTL_MARKER_MS + 'ms linear, top .25s ease');
+  dot.style.transition = snap ? 'none' : ('left ' + _HTL_MARKER_MS + 'ms linear, top .25s ease');
   dot.style.left = cx + 'px'; dot.style.top = yTop + 'px';
   dot.style.transform = 'translateX(-50%)'; dot.style.display = 'block';
   if(ring){
     var firstRing = (ring.parentNode !== track);
     if(firstRing) track.appendChild(ring);
-    ring.style.transition = firstRing ? 'none' : ('left ' + _HTL_MARKER_MS + 'ms linear, top .25s ease');
+    ring.style.transition = snap ? 'none' : ('left ' + _HTL_MARKER_MS + 'ms linear, top .25s ease');
     ring.style.left = cx + 'px'; ring.style.top = yTop + 'px';
     ring.style.transform = 'translateX(-50%)'; ring.style.display = 'block';
   }
+  window._gpsMarkerNeedsSnap = false;   // 스냅 완료
 }
 window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
 
@@ -5410,6 +5414,21 @@ function _updateTransitGps() {
   if(_snapNd){ best=_snapNd; bestDist=_snapD; bestIdx=_snapIdx; }
 
   // ★ 실측 도착시간 보정: GPS로 정류장 통과 확인 시 실제 시각 기록 → 이후 도착시간 재계산
+  // ★ 마커 역행 방지(지하철은 전진만) + 과도한 전진 억제 — GPS 노이즈로 앞뒤 퍼 차단
+  if(_validGps && best && !best.isOrigin && !best.isWalk){
+    var _pMax = (window._gpsMaxIdx==null ? -1 : window._gpsMaxIdx);
+    if(bestIdx < _pMax){
+      bestIdx = _pMax;
+      if(_transitNodeData[_pMax]){ best = _transitNodeData[_pMax];
+        bestDist = (best.lat!=null && typeof haversineM==='function') ? haversineM(lat,lng,best.lat,best.lng) : bestDist; }
+    } else if(bestIdx > _pMax + 1 && bestDist > 250){
+      bestIdx = _pMax + 1;
+      if(_transitNodeData[bestIdx]){ best = _transitNodeData[bestIdx];
+        bestDist = (best.lat!=null && typeof haversineM==='function') ? haversineM(lat,lng,best.lat,best.lng) : bestDist; }
+    }
+    window._gpsMaxIdx = Math.max(_pMax, bestIdx);
+  }
+
   if(_validGps) { try { _maybeRecordPass(bestIdx, bestDist); } catch(e){} }
 
   // ★ 미탑승 감지: 예정 출발시각이 지났는데 아직 첫 정류장/역 근처면 다음 시간표로 재설정
