@@ -1921,6 +1921,9 @@ function requestHomeBrief(force){
   if(!body) return;
 
   var here = _homeNearStationName();
+  // ★ 수동 출발지면 브리핑 기준을 그 출발지로 (현위치 아님)
+  var _manual = (typeof _isManualStart==='function' && _isManualStart());
+  if(_manual && _fmapStart && _fmapStart.name) here = _fmapStart.name;
   var _briefMs = (typeof getBaseTimeMs==='function') ? getBaseTimeMs() : Date.now();
   var hour = new Date(_briefMs).getHours();
   var _preview = (typeof _baseTimeMs!=='undefined' && _baseTimeMs != null);
@@ -1961,6 +1964,7 @@ function requestHomeBrief(force){
       hour: hour, congPct: congPct, transfers: Math.max(0, lines.length-1),
       totalMin: totalMin, mode: 'home',
       preview: _preview, whenLabel: _whenLabel,
+      manualStart: _manual, manualLabel: (_manual ? ('수동설정경로: ' + new Date(_briefMs).toLocaleDateString('ko-KR',{month:'numeric',day:'numeric'}) + ' ' + new Date(_briefMs).getHours() + '시') : ''),
       segments: (function(){ try { var _r=_buildRouteBrief(); return _r?_r.segments:[]; } catch(e){ return []; } })()
     })
   })
@@ -1994,6 +1998,9 @@ function _renderHomeBrief(data, fromName, toName, hour, congPct){
   var _preview = (typeof _baseTimeMs!=='undefined' && _baseTimeMs != null);
   var timeStr = new Date(_bMs).toLocaleTimeString('ko-KR', {hour:'2-digit',minute:'2-digit'});
   var _pre = _preview ? '🔮 예상 · ' : '';
+  if(typeof _isManualStart==='function' && _isManualStart()){
+    _pre = '📌 수동설정 · ' + _pre;
+  }
   var titleEl = document.getElementById('homeAiTitle');
   var hasRoute = toName && toName !== fromName;
   if(titleEl) titleEl.textContent = _pre + (hasRoute
@@ -2079,8 +2086,10 @@ function _renderHomeBriefLocal(fromName, toName, hour, congPct){
   if(!body) return;
   var _bMs = (typeof getBaseTimeMs==='function') ? getBaseTimeMs() : Date.now();
   var _preview = (typeof _baseTimeMs!=='undefined' && _baseTimeMs != null);
-  var timeStr = (_preview ? '🔮 예상 · ' : '') + new Date(_bMs).toLocaleTimeString('ko-KR', {hour:'2-digit',minute:'2-digit'});
-  var _whenTxt = _preview ? ('설정하신 ' + timeStr.replace('🔮 예상 · ','') + '경엔 ') : '지금은 ';
+  var _manualL = (typeof _isManualStart==='function' && _isManualStart());
+  var _mLabel = _manualL ? ('📌 수동설정경로: ' + new Date(_bMs).toLocaleDateString('ko-KR',{month:'numeric',day:'numeric'}) + ' ' + new Date(_bMs).getHours() + '시 · ') : '';
+  var timeStr = _mLabel + (_preview ? '🔮 예상 · ' : '') + new Date(_bMs).toLocaleTimeString('ko-KR', {hour:'2-digit',minute:'2-digit'});
+  var _whenTxt = (_manualL || _preview) ? ('설정하신 ' + new Date(_bMs).getHours() + '시경엔 ') : '지금은 ';
   var titleEl = document.getElementById('homeAiTitle');
   var hasRoute = toName && toName !== fromName;
 
@@ -3807,6 +3816,7 @@ window._renderTransitResultCard = _renderTransitResultCard;
 function _applyRealBoardTime(){
   try{
     if(_baseTimeMs != null) return;   // 예상(미래 기준시각)일 땐 실시간 도착 보정 안 함
+    if(typeof _isManualStart==='function' && _isManualStart()) return;   // 수동 출발지: 보정 안 함
     if(!_transitNodeData || !_transitNodeData.length) return;
     var idx=-1, nd=null;
     for(var i=0;i<_transitNodeData.length;i++){ var n=_transitNodeData[i]; if(!n.isOrigin && !n.isWalk && (n.isBus||n.isSub)){ idx=i; nd=n; break; } }
@@ -5009,13 +5019,19 @@ function _startTransitGpsTracking(nodes) {
   });
   window._nodePassMs = {};
   window._gpsMaxIdx = -1;   // GPS로 확인된 최대 진행 역 인덱스
+  window._timeMaxIdx = -1;  // 시간으로 soft-확인된 최대 진행 역 인덱스
 
   // 경로 시작 시각 기록 (출발 후 경과 시간 계산용)
   _transitStartTime = Date.now();
 
   if(_transitGpsTimer) clearInterval(_transitGpsTimer);
-  _transitGpsTimer = setInterval(_updateTransitGps, 3000);
-  _startTransitWatch();   // ★ 연속 GPS 갱신 시작 (좌표 고정 방지)
+  // ★ 수동 출발지(내 위치 아님) 모드: GPS 추적·마커 갱신 금지 — 사용자가 설정한 경로 그대로 표시
+  if(!_isManualStart()){
+    _transitGpsTimer = setInterval(_updateTransitGps, 3000);
+    _startTransitWatch();   // ★ 연속 GPS 갱신 시작 (좌표 고정 방지)
+  } else {
+    try{ _stopTransitWatch(); }catch(e){}
+  }
 
   // ── 타임라인 스크롤 후 30초 뒤 현재 위치로 리스프링 ──
   var htlWrap = document.getElementById('transitHtlWrap');
@@ -5287,6 +5303,12 @@ function _updateRouteRemaining(){
 }
 
 // ── 경로 추적용 연속 GPS watch: 좌표를 실시간으로 갱신 (고정 방지) ──
+// 수동 출발지 모드: 출발지가 '내 위치(gps)'가 아니면 true → GPS 추적/보정 금지
+function _isManualStart(){
+  try{ return !!(_fmapStart && _fmapStart.type && _fmapStart.type !== 'gps'); }catch(e){ return false; }
+}
+window._isManualStart = _isManualStart;
+
 function _startTransitWatch(){
   if(!navigator.geolocation) return;
   function _apply(pos){
@@ -5313,26 +5335,54 @@ function _startTransitWatch(){
 // GPS 없이(또는 끊겼을 때) 시간표 기준으로 마커를 다음 역 방향으로 이동
 function _tickTimelineMarker(){
   if(typeof _transitNodeData==='undefined' || !_transitNodeData || !_transitNodeData.length) return;
-  if(_baseTimeMs != null) return;                       // 예상(미래 기준)일 땐 이동 안 함
+  if(_baseTimeMs != null) return;
+  if(typeof _isManualStart==='function' && _isManualStart()) return;   // 수동 출발지: 마커 이동 안 함                       // 예상(미래 기준)일 땐 이동 안 함
   var track = document.getElementById('transitHtlTrack');
   if(!track || track.offsetParent === null) return;     // 숨겨진 탭이면 스킵
-  // 신선한 GPS(8초 이내)가 있으면 watchPosition이 처리 → 시간틱은 쉼
   var fixTs = (typeof S!=='undefined' && S.lastGPSFix) ? S.lastGPSFix.ts : 0;
-  if(fixTs && (Date.now() - fixTs) < 8000) return;
-  if(typeof _estimateTimelinePos!=='function') return;
-  var tpos = _estimateTimelinePos();
-  if(!tpos) return;
-  var fromIdx = tpos.fromIdx, toIdx = tpos.toIdx, ratio = tpos.ratio;
-  // 역행 방지: 확인된 최대 진행 노드보다 뒤로 가지 않음
-  var pMax = (window._gpsMaxIdx==null ? -1 : window._gpsMaxIdx);
-  if(fromIdx < pMax){ fromIdx = pMax; toIdx = pMax+1; ratio = ratio; }
-  var fromNd = _transitNodeData[fromIdx] || null;
-  var toNd   = _transitNodeData[toIdx]   || null;
+  if(fixTs && (Date.now() - fixTs) < 8000) return;      // 신선한 GPS 있으면 watch가 처리
+  var nodes = _transitNodeData;
+
+  // ── 현재까지 '확인된' 최대 진행 인덱스 = max(GPS확인, 시간확인) ──
+  var pMax = Math.max(
+    (window._gpsMaxIdx==null?-1:window._gpsMaxIdx),
+    (window._timeMaxIdx==null?-1:window._timeMaxIdx)
+  );
+  // 마커는 '마지막 확인역 → 바로 다음역' 한 구간으로만 제한 (절대 다다음역으로 안 넘어감)
+  var fromIdx = (pMax < 0) ? 0 : pMax;
+  var toIdx   = fromIdx + 1;
+  if(toIdx >= nodes.length) toIdx = fromIdx;   // 마지막 노드
+  var fromNd = nodes[fromIdx] || null;
+  var toNd   = nodes[toIdx]   || null;
   if(!fromNd) return;
-  // GPS 미확인 구간에서는 다음 역에 완전히 도착하지 않고 중간~접근까지만 (최대 90%)
+
+  // 이 구간의 '시간 진행도' 계산 (arrTime 기반)
+  var now = new Date();
+  var nowMin = now.getHours()*60 + now.getMinutes() + now.getSeconds()/60;
+  var aMin = _arrTimeToMin(fromNd.arrTime);
+  var bMin = toNd ? _arrTimeToMin(toNd.arrTime) : null;
+  var ratio = 0;
+  if(aMin != null && bMin != null){
+    var span = bMin - aMin; if(span < 0) span += 1440;
+    if(span > 0){ var el = nowMin - aMin; if(el < -720) el += 1440; ratio = el / span; }
+  } else {
+    // arrTime 없으면(도보 등) 전역 추정으로 폴백하되 이 구간을 넘지 않음
+    var tp = (typeof _estimateTimelinePos==='function') ? _estimateTimelinePos() : null;
+    if(tp && tp.fromIdx === fromIdx) ratio = tp.ratio;
+  }
+  // 다음역에 완전히 '도착'하진 않음 — 최대 90%까지만 접근 (GPS/시간확인 전)
   ratio = Math.min(Math.max(0, ratio), 0.9);
+
   if(toNd === fromNd) toNd = null;
   if(typeof _placeGpsMarkerSmooth==='function') _placeGpsMarkerSmooth(fromNd, toNd, ratio);
+
+  // ── soft-confirm: 다음역 '예정 도착시각'이 지났고 구간 끝까지 왔으면 → 한 칸만 전진 ──
+  if(bMin != null){
+    var late = nowMin - bMin; if(late < -720) late += 1440;
+    if(late >= 0 && ratio >= 0.88){
+      window._timeMaxIdx = Math.max((window._timeMaxIdx==null?-1:window._timeMaxIdx), toIdx);
+    }
+  }
 }
 window._tickTimelineMarker = _tickTimelineMarker;
 function _stopTransitWatch(){
@@ -5585,23 +5635,25 @@ function _updateTransitGps() {
 
   // ── GPS 마커: 거리·남은시간 기반 서서히 이동, GPS 잡히면 GPS에 맞춤 ──
   (function(){
-    var fromNd = best, toNd = null, ratio = 0, usedGps = false;
-    // 1) 시간 기반 진행도 (타임라인 arrTime)
-    var tpos = _estimateTimelinePos();
-    if(tpos){
-      fromNd = _transitNodeData[tpos.fromIdx] || best;
-      toNd   = _transitNodeData[tpos.toIdx]   || null;
-      ratio  = tpos.ratio;
-    }
-    // 2) 실측 GPS가 가까우면 거리 기반으로 정확히 보정 (GPS 우선)
+    // ★ 마커는 '마지막 확인역 → 바로 다음역' 한 구간으로만 제한 (다다음역 스킵/왕복 방지)
+    var pMax = Math.max((window._gpsMaxIdx==null?-1:window._gpsMaxIdx),(window._timeMaxIdx==null?-1:window._timeMaxIdx));
+    var fromIdx = (pMax < 0) ? 0 : pMax, toIdx = fromIdx + 1;
+    if(toIdx >= _transitNodeData.length) toIdx = fromIdx;
+    var fromNd = _transitNodeData[fromIdx] || best, toNd = _transitNodeData[toIdx] || null, ratio = 0, usedGps = false;
+    // 이 구간의 시간 진행도
+    var _now = new Date(), _nowMin = _now.getHours()*60 + _now.getMinutes() + _now.getSeconds()/60;
+    var aMin = _arrTimeToMin(fromNd.arrTime), bMin = toNd ? _arrTimeToMin(toNd.arrTime) : null;
+    if(aMin != null && bMin != null){ var span = bMin - aMin; if(span<0) span+=1440; if(span>0){ var el=_nowMin-aMin; if(el<-720) el+=1440; ratio = el/span; } }
+    // 실측 GPS가 가까우면 거리 기반 정확 보정 (GPS 우선, 이 구간 내에서)
     if(_validGps && bestDist < 200 && _transitNodeData[bestIdx] && _transitNodeData[bestIdx].lat != null){
       var seg = _gpsSegment(lat, lng, bestIdx);
       if(seg){ fromNd = _transitNodeData[seg.fromIdx]; toNd = _transitNodeData[seg.toIdx]; ratio = seg.ratio; usedGps = true; }
     }
-    // GPS 없으면 다음 역에 미리 "도착"하지 않도록 접근만(최대 85%) — 실제보다 앞서가는 것 방지
-    if(!usedGps) ratio = Math.min(ratio, 0.85);
+    if(!usedGps) ratio = Math.min(Math.max(0, ratio), 0.85);
     if(toNd === fromNd) toNd = null;
     _placeGpsMarkerSmooth(fromNd, toNd, ratio);
+    // soft-confirm: 다음역 예정시각 지나고 구간 끝까지 왔으면 한 칸만 전진
+    if(!usedGps && bMin != null){ var late=_nowMin-bMin; if(late<-720) late+=1440; if(late>=0 && ratio>=0.85){ window._timeMaxIdx = Math.max((window._timeMaxIdx==null?-1:window._timeMaxIdx), toIdx); } }
   })();
 
   // SVG GPS 마커 위치 업데이트 (SVG 방식 하위 호환)
@@ -13786,7 +13838,7 @@ function autoSetStartFromGPS() {
   function _acceptFix(lat, lng){
     window._lastGPSLat = lat; window._lastGPSLng = lng;
     if(typeof S !== 'undefined') S.lastGPSFix = { lat: lat, lng: lng, ts: Date.now() };
-    if(_fmapStart) return;
+    if(_fmapStart) return;   // ★ 수동/기존 출발지 절대 덮지 않음
     var si = document.getElementById('fmapStartInp');
     if(si && si.value && si.value.indexOf('내 위치 찾는 중') === -1) return;
     _setStartToMyLocation(lat, lng);
