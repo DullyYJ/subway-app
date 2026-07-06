@@ -5309,10 +5309,43 @@ function _startTransitWatch(){
   try {
     window._transitWatchId = navigator.geolocation.watchPosition(_apply, function(){}, {enableHighAccuracy:true, maximumAge:1500, timeout:20000});
   } catch(e){}
+  // ★ 시간 기반 주기 틱: GPS가 끊겨도 시간표대로 다음 역 방향으로 서서히 전진 (진짜 가는 느낌)
+  if(window._transitTimeTickInt == null){
+    window._transitTimeTickInt = setInterval(function(){
+      if(document.hidden) return;
+      try { _tickTimelineMarker(); } catch(e){}
+    }, 3000);
+  }
 }
+// GPS 없이(또는 끊겼을 때) 시간표 기준으로 마커를 다음 역 방향으로 이동
+function _tickTimelineMarker(){
+  if(typeof _transitNodeData==='undefined' || !_transitNodeData || !_transitNodeData.length) return;
+  if(_baseTimeMs != null) return;                       // 예상(미래 기준)일 땐 이동 안 함
+  var track = document.getElementById('transitHtlTrack');
+  if(!track || track.offsetParent === null) return;     // 숨겨진 탭이면 스킵
+  // 신선한 GPS(8초 이내)가 있으면 watchPosition이 처리 → 시간틱은 쉼
+  var fixTs = (typeof S!=='undefined' && S.lastGPSFix) ? S.lastGPSFix.ts : 0;
+  if(fixTs && (Date.now() - fixTs) < 8000) return;
+  if(typeof _estimateTimelinePos!=='function') return;
+  var tpos = _estimateTimelinePos();
+  if(!tpos) return;
+  var fromIdx = tpos.fromIdx, toIdx = tpos.toIdx, ratio = tpos.ratio;
+  // 역행 방지: 확인된 최대 진행 노드보다 뒤로 가지 않음
+  var pMax = (window._gpsMaxIdx==null ? -1 : window._gpsMaxIdx);
+  if(fromIdx < pMax){ fromIdx = pMax; toIdx = pMax+1; ratio = ratio; }
+  var fromNd = _transitNodeData[fromIdx] || null;
+  var toNd   = _transitNodeData[toIdx]   || null;
+  if(!fromNd) return;
+  // GPS 미확인 구간에서는 다음 역에 완전히 도착하지 않고 중간~접근까지만 (최대 90%)
+  ratio = Math.min(Math.max(0, ratio), 0.9);
+  if(toNd === fromNd) toNd = null;
+  if(typeof _placeGpsMarkerSmooth==='function') _placeGpsMarkerSmooth(fromNd, toNd, ratio);
+}
+window._tickTimelineMarker = _tickTimelineMarker;
 function _stopTransitWatch(){
   try { if(window._transitWatchId!=null && navigator.geolocation){ navigator.geolocation.clearWatch(window._transitWatchId); } } catch(e){}
   window._transitWatchId=null;
+  if(window._transitTimeTickInt != null){ clearInterval(window._transitTimeTickInt); window._transitTimeTickInt = null; }
 }
 window._startTransitWatch=_startTransitWatch;
 window._stopTransitWatch=_stopTransitWatch;
