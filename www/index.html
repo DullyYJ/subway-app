@@ -3455,8 +3455,7 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
     var _cumSec = 0;
     var _offSec = sg.stops.map(function(st2, k2){
       if(k2===0) return 0;
-      var _a=_nm(sg.stops[k2-1].stationName||''), _b=_nm(st2.stationName||'');
-      var _real = (sg.type===1 && typeof _REAL_SEG!=='undefined') ? _REAL_SEG[sg.name+'|'+_a+'|'+_b] : null;
+      var _real = (sg.type===1) ? _realSeg(sg.name, sg.stops[k2-1].stationName, st2.stationName) : null;
       _cumSec += (_real!=null ? _real : _evenSec);
       return _cumSec;
     });
@@ -3976,8 +3975,7 @@ function openTransitDetail() {
       var _cumMs2 = 0;
       var _offMs = stops.map(function(s2,_k2){
         if(_k2===0) return 0;
-        var _a=String(stops[_k2-1].stationName||'').replace(/역$/,'').trim(), _b=String(stops[_k2].stationName||'').replace(/역$/,'').trim();
-        var _real = (isSub && typeof _REAL_SEG!=='undefined') ? _REAL_SEG[trans.name+'|'+_a+'|'+_b] : null;
+        var _real = isSub ? _realSeg(trans.name, stops[_k2-1].stationName, stops[_k2].stationName) : null;
         _cumMs2 += (_real!=null ? _real*1000 : _evenMs);
         return _cumMs2;
       });
@@ -5417,7 +5415,8 @@ function _updateTransitGps() {
   // ★ 미탑승 감지: 예정 출발시각이 지났는데 아직 첫 정류장/역 근처면 다음 시간표로 재설정
   //   단, 사용자가 '경로 확정'한 경우엔 자동 재라우팅하지 않음 (확정 경로 풀림 방지)
   try {
-    if(_validGps && !window._routeLocked){
+    // ★ 예상(미래 기준시각) 모드에선 미탑승 감지/재라우팅 안 함 (기준시각 유지)
+    if(_validGps && !window._routeLocked && _baseTimeMs == null){
       var _frIdx=-1, _frNd=null;
       for(var _mi=0;_mi<_transitNodeData.length;_mi++){
         var _nd=_transitNodeData[_mi];
@@ -11094,6 +11093,26 @@ function _rttDecode(arr){
   for(var i=1;i<arr.length;i++) out.push(out[i-1]+arr[i]);
   return out;
 }
+// ── 실측 역간소요(_REAL_SEG) 강건 조회: 표기차 무시 + 라인무관 역쌍 폴백 ──
+function _rsNorm(x){ return String(x||'').replace(/\(.*?\)/g,'').replace(/역$/,'').replace(/\s+/g,'').trim(); }
+function _realSeg(lineName, a, b){
+  if(typeof _REAL_SEG === 'undefined') return null;
+  if(!window._RS_NORM){
+    window._RS_NORM = {}; window._RS_PAIR = {};
+    for(var k in _REAL_SEG){
+      var pr = k.split('|'); if(pr.length!==3) continue;
+      var L=_rsNorm(pr[0]), A=_rsNorm(pr[1]), B=_rsNorm(pr[2]);
+      window._RS_NORM[L+'|'+A+'|'+B] = _REAL_SEG[k];
+      window._RS_PAIR[A+'|'+B] = _REAL_SEG[k];   // 라인 무관 역쌍
+    }
+  }
+  var na=_rsNorm(a), nb=_rsNorm(b);
+  var v = window._RS_NORM[_rsNorm(lineName)+'|'+na+'|'+nb];   // 1) 라인+역쌍 정확
+  if(v==null) v = window._RS_PAIR[na+'|'+nb];                 // 2) 라인무관 역쌍
+  return (v==null ? null : v);
+}
+window._realSeg = _realSeg;
+
 // 실제 시각표에서 기준시각 이후 다음 열차 (분) 조회
 function _realNextDep(lineName, stnName, dir, baseMin, isWeekend){
   if(typeof _REAL_TT==='undefined') return null;
@@ -11669,10 +11688,8 @@ function edge(a,b,w,ln){
   var weight = w;
   // ★ 사용자가 넣은 실측 역간소요(_REAL_SEG)를 무조건 최우선 사용
   var _hasReal = false;
-  if(typeof _REAL_SEG !== 'undefined'){
-    var rk = ln + '|' + a + '|' + b;
-    if(_REAL_SEG[rk]){ weight = _REAL_SEG[rk]; _hasReal = true; }
-  }
+  var _rsv = _realSeg(ln, a, b);
+  if(_rsv != null){ weight = _rsv; _hasReal = true; }
   // 실측이 없고 기본값(120)이면 좌표 기반 추정으로 보정
   if(!_hasReal && weight === 120 && typeof _estSegSec === 'function'){
     var est = _estSegSec(a, b);
@@ -20787,8 +20804,7 @@ function _applyApiRouteData(apiSec) {
     for(var j=1;j<path.length;j++){
       if(path[j] === path[j-1]){ newTp.push(0); continue; }
       var _ln = _lp[j] || _lp[j-1] || '';
-      var _rk = _ln + '|' + _nm(path[j-1]) + '|' + _nm(path[j]);
-      var _rv = (typeof _REAL_SEG !== 'undefined' && _REAL_SEG[_rk]) ? _REAL_SEG[_rk] : null;
+      var _rv = _realSeg(_ln, path[j-1], path[j]);
       newTp.push(_rv != null ? _rv : perSeg);
     }
     S.route.tp = newTp;          // 전역 경로 객체 오버라이딩
