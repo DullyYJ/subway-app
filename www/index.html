@@ -1956,6 +1956,16 @@ function requestHomeBrief(force){
 
   var fromName = here ? (typeof here === 'string' ? here : here.name) : '현위치';
 
+  // ★ 예상(미래 기준시각)·수동설정 모드: 서버 대신 미래 요약(로컬)로 즉시 브리핑
+  if(_preview || _manual){
+    _renderHomeBriefLocal(fromName, toName, hour, congPct);
+    var _ivP = 5*60*1000;
+    _homeAiNextAt = Date.now() + _ivP;
+    _startHomeCountdown();
+    var _bp = document.getElementById('homeAiRefreshBtn');
+    if(_bp){ _bp.disabled = false; _bp.textContent = '🔄'; }
+    return;
+  }
   fetch(_SERVER_URL + '/ai-brief', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -2099,10 +2109,28 @@ function _renderHomeBriefLocal(fromName, toName, hour, congPct){
 
   if(hasRoute){
     if(titleEl) titleEl.textContent = fromName + ' → ' + toName + ' · ' + timeStr;
+    var tmin = window._homeRouteBaseMin || 0;
+    var html;
+    if(_preview || _manualL){
+      // ★ 미래/수동 설정: "00월 00일 00시 출발지→도착지 경로는 ~" 미래 요약
+      var _d2 = new Date(_bMs);
+      var _dateTxt = (_d2.getMonth()+1) + '월 ' + _d2.getDate() + '일(' + ['일','월','화','수','목','금','토'][_d2.getDay()] + ') '
+                   + (_d2.getHours()<12?'오전 ':'오후 ') + ((_d2.getHours()%12)||12) + '시' + (_d2.getMinutes()? ' '+_d2.getMinutes()+'분':'');
+      var _hol = (typeof _isHolidayOrWeekend==='function' && _isHolidayOrWeekend());
+      html = '<p><b>' + _dateTxt + '</b> <b>' + fromName + '</b>에서 <b>' + toName + '</b>까지의 경로는 약 <b>' + (tmin||'?') + '분</b>이 걸릴 것으로 보여요.</p>';
+      var _fc;
+      if(peak)            _fc = '그 시간대는 ' + (_hol?'주말이지만 ':'') + '출퇴근 피크라 <b>' + congTxt + '</b>' + emoji + ' 수준의 혼잡이 예상돼요. 여유 있게 출발하시는 걸 추천해요.';
+      else if(hour>=22||hour<6) _fc = '심야 시간대라 한산하겠지만, <b>막차 시간</b>을 꼭 확인하세요.';
+      else if(_hol)       _fc = '주말·공휴일이라 평일보다 여유로울 전망이에요. 혼잡도는 <b>' + congTxt + '</b> ' + emoji + ' 수준으로 예상돼요.';
+      else                _fc = '해당 시간대 혼잡도는 <b>' + congTxt + '</b> ' + emoji + ' 수준으로 예상돼요. 무난하게 이동할 수 있을 거예요.';
+      html += '<p>' + _fc + '</p>';
+      html += '<p style="color:var(--sub);font-size:12px;">🔮 설정하신 시각 기준 예측이에요. 실제 상황과 다를 수 있어요.</p>';
+      body.innerHTML = '<div class="home-ai-msg">' + html + '</div>';
+      return;
+    }
     var rb = _buildRouteBrief();
-    var html = rb ? _routeStatusHtml(rb, congPct) : '';
+    html = rb ? _routeStatusHtml(rb, congPct) : '';
     if(!rb){
-      var tmin = window._homeRouteBaseMin || 0;
       html = '<p><b>' + fromName + '</b> → <b>' + toName + '</b> 약 <b>' + (tmin||'?') + '분</b> 예상돼요.</p>';
     }
     // 예상 변화(트렌드)
