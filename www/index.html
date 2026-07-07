@@ -17301,6 +17301,7 @@ var _autoBoardTimer = null;
 function _scheduleAutoBoard(depMs, depTime) {
   if(_autoBoardTimer) { clearTimeout(_autoBoardTimer); _autoBoardTimer = null; }
   if(!depMs) return;
+  if(typeof _isManualStart === 'function' && _isManualStart()) return;   // 수동 모드: 자동 탑승 없음
 
   var delay = Math.max(0, depMs - Date.now());
   console.log('[자동탑승] ' + (depTime||'') + ' 출발 예정, ' + Math.round(delay/1000) + '초 후 자동 탑승');
@@ -23007,6 +23008,13 @@ window.toggleTracking = toggleTracking;
 function startTracking() {
   if(!S?.route?.path || S.route.path.length < 2) {
     if(typeof toast === 'function') toast('먼저 경로를 검색하세요.');
+    return;
+  }
+  // ★ 수동 출발지(내 위치 아님) 모드: 실시간 추적/자동탑승/알림 미가동 — 경로 표시만
+  if(typeof _isManualStart === 'function' && _isManualStart()) {
+    var _bt = document.getElementById('boardBannerTxt');
+    if(_bt) _bt.textContent = '📌 수동설정 경로 · 실시간 추적 없음';
+    console.log('[관제] 수동 출발지 모드 → 추적 엔진 미가동');
     return;
   }
   // ★ 중복 실행 방지: 이미 관제 중이면 재시작·알림 안 함 (1분마다 알림 반복 차단)
