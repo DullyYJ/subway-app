@@ -7,12 +7,12 @@
 //   GET  /posts?cat=<cat>               게시글 목록
 //   POST /posts {nick,title,body,cat}   게시글 등록
 //   POST /react {id,type}               반응 +1
-//   GET  /kakao-food?station=<역명>     도착역 맛집 조회 (D1 캐시)
+//   GET  /kakao-food?station=<역명>     도착역 맛집 조회 (실시간, 반경 1km)
 //   GET  /naver-food?region=<지역>      맛집 리뷰많은순 (네이버)   ★추가
 //   GET  /kakao-food-geo?lat=&lng=      맛집 좌표 5km (카카오)     ★추가
 //
-// 크론 (매일 새벽 3시):
-//   전국 225개 역 맛집 카카오 API로 수집 → D1 저장
+// 주의: 카카오 로컬 API 결과는 이용약관상 저장이 금지되어 있어
+//       모든 맛집 조회는 매 요청마다 실시간 호출만 합니다 (D1 저장 없음).
 // ══════════════════════════════════════════════════════════
 
 // ── 카카오 REST API 키 ────────────────────────────────────
@@ -193,103 +193,71 @@ function json(data, status = 200) {
 // ══════════════════════════════════════════════════════════
 async function fetchKakaoPlaces(lat, lng) {
   const categories = ['FD4', 'CE7'];
-  let all = [];
+  const RADIUS = 1000; // 반경 1km 고정
+  const PAGES = 3;     // 카테고리당 최대 3페이지(45개)까지 조회
 
+  // 카테고리 × 페이지 조합을 전부 동시에(병렬) 호출 → 응답 시간 단축
+  const requests = [];
   for (const cat of categories) {
-    const url = `https://dapi.kakao.com/v2/local/search/category.json` +
-      `?category_group_code=${cat}` +
-      `&x=${lng}&y=${lat}` +
-      `&radius=500` +
-      `&sort=popularity` +
-      `&size=10`;
+    for (let page = 1; page <= PAGES; page++) {
+      const url = `https://dapi.kakao.com/v2/local/search/category.json` +
+        `?category_group_code=${cat}` +
+        `&x=${lng}&y=${lat}` +
+        `&radius=${RADIUS}` +
+        `&sort=distance` +
+        `&size=15&page=${page}`;
 
-    try {
-      const res = await fetch(url, {
-        headers: { 'Authorization': `KakaoAK ${KAKAO_KEY}` }
-      });
-      if (!res.ok) continue;
-      const data = await res.json();
-      if (data.documents) all = all.concat(data.documents);
-    } catch (e) {
-      console.error(`카카오 API 오류 (${cat}):`, e);
+      requests.push(
+        fetch(url, { headers: { 'Authorization': `KakaoAK ${KAKAO_KEY}` } })
+          .then(res => (res.ok ? res.json() : null))
+          .catch(e => { console.error(`카카오 API 오류 (${cat}, page ${page}):`, e); return null; })
+      );
     }
+  }
+
+  const responses = await Promise.all(requests);
+  let all = [];
+  for (const data of responses) {
+    if (data && data.documents) all = all.concat(data.documents);
   }
 
   const seen = new Set();
   return all
     .filter(p => { if (seen.has(p.id)) return false; seen.add(p.id); return true; })
-    .sort((a, b) => parseInt(a.distance) - parseInt(b.distance))
-    .slice(0, 15);
+    .sort((a, b) => parseInt(a.distance) - parseInt(b.distance));
+    // 개수 제한 없음 — 중복만 제거하고 반경 1km 안의 결과 전부 반환
 }
 
-// ══════════════════════════════════════════════════════════
-// 크론: 매일 새벽 3시 — 전국 역 맛집 수집
-// ══════════════════════════════════════════════════════════
-async function crawlAllStations(env) {
-  console.log(`[크론] 맛집 수집 시작: ${ALL_STATIONS.length}개 역`);
+// 네이버 지역검색(리뷰 많은 순)에서 가게 이름 순위만 가볍게 가져옴.
+// timeoutMs 안에 응답 없으면 빈 배열 반환 → 호출부에서 거리순으로 자연 폴백됨.
+async function fetchNaverReviewRanked(stationName, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-  await env.DB.prepare(`
-    CREATE TABLE IF NOT EXISTS restaurants (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      station_name TEXT NOT NULL,
-      place_id TEXT NOT NULL,
-      place_name TEXT NOT NULL,
-      category_name TEXT,
-      address_name TEXT,
-      road_address_name TEXT,
-      distance INTEGER DEFAULT 0,
-      place_url TEXT,
-      lat REAL,
-      lng REAL,
-      updated_at INTEGER NOT NULL,
-      UNIQUE(station_name, place_id)
-    )
-  `).run();
+  try {
+    const nurl = 'https://openapi.naver.com/v1/search/local.json' +
+      '?query=' + encodeURIComponent(stationName + ' 맛집') +
+      '&display=30&sort=comment';
 
-  let success = 0, fail = 0;
-
-  for (const stn of ALL_STATIONS) {
-    try {
-      const places = await fetchKakaoPlaces(stn.lat, stn.lng);
-      const now = Date.now();
-
-      await env.DB.prepare(
-        'DELETE FROM restaurants WHERE station_name = ?'
-      ).bind(stn.name).run();
-
-      for (const p of places) {
-        await env.DB.prepare(`
-          INSERT OR REPLACE INTO restaurants
-            (station_name, place_id, place_name, category_name,
-             address_name, road_address_name, distance, place_url,
-             lat, lng, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).bind(
-          stn.name,
-          p.id,
-          p.place_name,
-          p.category_name || '',
-          p.address_name || '',
-          p.road_address_name || '',
-          parseInt(p.distance) || 0,
-          p.place_url || '',
-          parseFloat(p.y) || 0,
-          parseFloat(p.x) || 0,
-          now
-        ).run();
+    const res = await fetch(nurl, {
+      signal: controller.signal,
+      headers: {
+        'X-Naver-Client-Id':     NAVER_ID,
+        'X-Naver-Client-Secret': NAVER_SEC
       }
+    });
+    clearTimeout(timer);
+    if (!res.ok) return [];
 
-      success++;
-      await new Promise(r => setTimeout(r, 50));
-
-    } catch (e) {
-      console.error(`[크론] ${stn.name} 실패:`, e);
-      fail++;
-    }
+    const d = await res.json();
+    return (d.items || []).map((it, idx) => ({
+      name: (it.title || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ''),
+      rank: idx
+    }));
+  } catch (e) {
+    clearTimeout(timer);
+    return []; // 타임아웃/오류 시 조용히 빈 배열 (거리순 결과는 항상 정상 반환됨)
   }
-
-  console.log(`[크론] 완료 — 성공: ${success}, 실패: ${fail}`);
-  return { success, fail, total: ALL_STATIONS.length };
 }
 
 // ══════════════════════════════════════════════════════════
@@ -586,7 +554,6 @@ export default {
   // ── 크론 트리거 (매일 새벽 3시 KST = UTC 18:00) ──────────
   async scheduled(event, env, ctx) {
     if (event.cron === '0 18 * * *') {
-      ctx.waitUntil(crawlAllStations(env));
       ctx.waitUntil(warmupPopularRoutes(env));
     }
     ctx.waitUntil(runAIStationMaster(env));
@@ -602,8 +569,12 @@ export default {
     try {
 
       // ══════════════════════════════════════════════════
-      // 🍽️ 맛집 조회 (D1 캐시)
+      // 🍽️ 맛집 조회 (실시간, 저장 없음)
       // GET /kakao-food?station=계산
+      // 카카오 로컬 API 결과는 저장하지 않고 매번 실시간 호출만 합니다.
+      // 카카오(정확한 반경) + 네이버(리뷰 많은 순 신호)를 병렬로 불러와
+      // 리뷰 많은 곳을 먼저, 나머지는 거리순으로 배치합니다.
+      // 네이버가 1.5초 안에 응답 없으면 자동으로 거리순만 적용됩니다.
       // ══════════════════════════════════════════════════
       if (path === '/kakao-food' && method === 'GET') {
         const stationName = url.searchParams.get('station');
@@ -611,89 +582,51 @@ export default {
 
         if (!stationName) return json({ error: 'station 파라미터 필요' }, 400);
 
-        let q, binds;
+        const stn = ALL_STATIONS.find(s => s.name === stationName);
+        if (!stn) return json({ restaurants: [], error: '역 정보 없음' });
+
+        const [placesRaw, naverRanked] = await Promise.all([
+          fetchKakaoPlaces(stn.lat, stn.lng),
+          fetchNaverReviewRanked(stationName, 1500)
+        ]);
+
+        let places = placesRaw;
+
         if (category !== '전체') {
           const catMap = {
-            '카페':  '%카페%',
-            '일식':  '%일식%',
-            '중식':  '%중식%',
-            '양식':  '%양식%',
-            '술집':  '%술집%',
-            '분식':  '%분식%',
-            '한식':  '%한식%',
+            '카페':  '카페',
+            '일식':  '일식',
+            '중식':  '중식',
+            '양식':  '양식',
+            '술집':  '술집',
+            '분식':  '분식',
+            '한식':  '한식',
           };
-          const like = catMap[category] || '%' + category + '%';
-          q = `SELECT * FROM restaurants
-               WHERE station_name = ? AND category_name LIKE ?
-               ORDER BY distance ASC LIMIT 15`;
-          binds = [stationName, like];
-        } else {
-          q = `SELECT * FROM restaurants
-               WHERE station_name = ?
-               ORDER BY distance ASC LIMIT 15`;
-          binds = [stationName];
+          const keyword = catMap[category] || category;
+          places = places.filter(p => (p.category_name || '').includes(keyword));
         }
 
-        const { results } = await env.DB.prepare(q).bind(...binds).all();
+        if (naverRanked.length > 0) {
+          const rankMap = new Map();
+          naverRanked.forEach(r => { if (!rankMap.has(r.name)) rankMap.set(r.name, r.rank); });
 
-        if (!results || results.length === 0) {
-          const stn = ALL_STATIONS.find(s => s.name === stationName);
-          if (!stn) return json({ restaurants: [], cached: false, error: '역 정보 없음' });
-
-          const places = await fetchKakaoPlaces(stn.lat, stn.lng);
-          const now = Date.now();
-
-          try {
-            await env.DB.prepare(`
-              CREATE TABLE IF NOT EXISTS restaurants (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                station_name TEXT NOT NULL,
-                place_id TEXT NOT NULL,
-                place_name TEXT NOT NULL,
-                category_name TEXT,
-                address_name TEXT,
-                road_address_name TEXT,
-                distance INTEGER DEFAULT 0,
-                place_url TEXT,
-                lat REAL,
-                lng REAL,
-                updated_at INTEGER NOT NULL,
-                UNIQUE(station_name, place_id)
-              )
-            `).run();
-
-            for (const p of places) {
-              await env.DB.prepare(`
-                INSERT OR REPLACE INTO restaurants
-                  (station_name, place_id, place_name, category_name,
-                   address_name, road_address_name, distance, place_url,
-                   lat, lng, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-              `).bind(
-                stationName, p.id, p.place_name, p.category_name || '',
-                p.address_name || '', p.road_address_name || '',
-                parseInt(p.distance) || 0, p.place_url || '',
-                parseFloat(p.y) || 0, parseFloat(p.x) || 0, now
-              ).run();
-            }
-          } catch (e) { console.error('D1 저장 오류:', e); }
-
-          return json({ restaurants: places, cached: false });
+          const withRank = [];
+          const withoutRank = [];
+          for (const p of places) {
+            const norm = (p.place_name || '').replace(/\s+/g, '');
+            if (rankMap.has(norm)) withRank.push(p); else withoutRank.push(p);
+          }
+          withRank.sort((a, b) => {
+            const an = (a.place_name || '').replace(/\s+/g, '');
+            const bn = (b.place_name || '').replace(/\s+/g, '');
+            return rankMap.get(an) - rankMap.get(bn);
+          });
+          // withoutRank는 fetchKakaoPlaces에서 이미 거리순 정렬된 상태 유지
+          places = withRank.concat(withoutRank);
         }
+        // naverRanked가 비어있으면(타임아웃/오류) 원래의 거리순 그대로 반환됨
 
-        return json({
-          restaurants: results,
-          cached: true,
-          updated_at: results[0]?.updated_at
-        });
-      }
-
-      // ══════════════════════════════════════════════════
-      // 🔧 수동 크롤링 트리거 (관리자용)
-      // ══════════════════════════════════════════════════
-      if (path === '/admin/crawl-food' && method === 'GET') {
-        const result = await crawlAllStations(env);
-        return json({ ok: true, ...result });
+        return json({ restaurants: places });
       }
 
       // ══════════════════════════════════════════════════
