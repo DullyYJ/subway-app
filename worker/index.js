@@ -980,6 +980,48 @@ if (path === '/kakao-navi' && method === 'GET') {
           return json({ error: '정적지도 프록시 오류: ' + e.message }, 500);
         }
       }
+
+      // ── 🌤 날씨 (격자 캐시: 같은 지역 30분간 API 1회만) ──
+if (path === '/weather' && method === 'GET') {
+  const lat = parseFloat(url.searchParams.get('lat'));
+  const lng = parseFloat(url.searchParams.get('lng'));
+  if (isNaN(lat) || isNaN(lng)) return json({ error: 'lat/lng 필요' }, 400);
+
+  // 0.1° 격자(약 11km) — 같은 격자는 캐시 공유
+  const grid = (Math.round(lat*10)/10).toFixed(1) + ',' + (Math.round(lng*10)/10).toFixed(1);
+  const TTL = 30 * 60 * 1000;   // 30분
+
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS weather_cache (
+    grid TEXT PRIMARY KEY, data TEXT, ts INTEGER)`).run();
+
+  // 1) 캐시 조회
+  const row = await env.DB.prepare(
+    'SELECT data, ts FROM weather_cache WHERE grid = ?').bind(grid).first();
+  if (row && (Date.now() - row.ts) < TTL) {
+    return new Response(row.data, { headers: { 'Content-Type':'application/json', 'Access-Control-Allow-Origin':'*', 'X-Cache':'HIT' } });
+  }
+
+  // 2) Open-Meteo 호출 (격자 중심 좌표)
+  const [gla, gln] = grid.split(',');
+  const r = await fetch('https://api.open-meteo.com/v1/forecast?latitude=' + gla + '&longitude=' + gln
+    + '&current=temperature_2m,weather_code&hourly=precipitation_probability&forecast_days=1&timezone=Asia%2FSeoul');
+  if (!r.ok) {
+    // API 실패 시 만료된 캐시라도 반환 (없으면 에러)
+    if (row) return new Response(row.data, { headers: { 'Content-Type':'application/json', 'Access-Control-Allow-Origin':'*', 'X-Cache':'STALE' } });
+    return json({ error: 'weather fetch fail' }, 502);
+  }
+  const txt = await r.text();
+
+  // 3) 캐시 저장 + 오래된 격자 정리(200개 초과 시)
+  await env.DB.prepare(
+    'INSERT INTO weather_cache (grid, data, ts) VALUES (?, ?, ?) ON CONFLICT(grid) DO UPDATE SET data=excluded.data, ts=excluded.ts')
+    .bind(grid, txt, Date.now()).run();
+  await env.DB.prepare(
+    'DELETE FROM weather_cache WHERE grid NOT IN (SELECT grid FROM weather_cache ORDER BY ts DESC LIMIT 200)').run();
+
+  return new Response(txt, { headers: { 'Content-Type':'application/json', 'Access-Control-Allow-Origin':'*', 'X-Cache':'MISS' } });
+}
+      
 // ── 실시간 채팅 대화 생성 (Gemini) ──
 if (path === '/ai-talk' && method === 'POST') {
   try {
