@@ -6901,6 +6901,32 @@ window.addEventListener('unhandledrejection', function(e) {
         아이디는 이 기기에만 저장되며,<br>작성한 글·채팅에 표시됩니다.
       </p>
 
+      <!-- ★ 출퇴근 브리핑 알림 -->
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+          <div style="font-size:15px;font-weight:800;color:var(--text);">⏰ 출퇴근 브리핑 알림</div>
+          <label style="position:relative;display:inline-block;width:46px;height:26px;">
+            <input type="checkbox" id="cmAlarmOn" onchange="_cmToggle(this.checked)" style="opacity:0;width:0;height:0;">
+            <span id="cmAlarmKnob" style="position:absolute;inset:0;border-radius:13px;background:var(--border2);transition:.2s;cursor:pointer;"></span>
+            <span id="cmAlarmDot" style="position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.3);"></span>
+          </label>
+        </div>
+        <p style="font-size:12px;color:var(--sub);margin-bottom:14px;line-height:1.5;">설정한 시각에 <b style="color:var(--text);">날씨 + AI 역무원 요약</b>을 알림으로 보내드려요.</p>
+        <div style="display:flex;gap:10px;">
+          <div style="flex:1;">
+            <div style="font-size:11px;font-weight:700;color:var(--sub);margin-bottom:5px;">🌅 출근 브리핑</div>
+            <input type="time" id="cmMornTime" value="07:30" onchange="_cmSaveTimes()"
+              style="width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:9px;padding:10px;color:var(--text);font-size:14px;outline:none;box-sizing:border-box;font-family:inherit;">
+          </div>
+          <div style="flex:1;">
+            <div style="font-size:11px;font-weight:700;color:var(--sub);margin-bottom:5px;">🌆 퇴근 브리핑</div>
+            <input type="time" id="cmEveTime" value="18:30" onchange="_cmSaveTimes()"
+              style="width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:9px;padding:10px;color:var(--text);font-size:14px;outline:none;box-sizing:border-box;font-family:inherit;">
+          </div>
+        </div>
+        <button onclick="_cmTestFire()" style="width:100%;margin-top:12px;padding:11px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);">🔔 지금 미리보기</button>
+      </div>
+
       <!-- ★ 테마 설정 -->
       <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
         <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:4px;">🎨 테마 설정</div>
@@ -15047,6 +15073,136 @@ function showNotification(title, body, opts){
   if('vibrate' in navigator) navigator.vibrate(vibPat);
 }
 
+// ══════════ ⏰ 출퇴근 날씨+AI 브리핑 알림 ══════════
+var _cmAlarm = { on:false, morn:'07:30', eve:'18:30', lastKey:'' };
+try { var _cmSaved = JSON.parse(localStorage.getItem('commuteAlarm')||'null'); if(_cmSaved) _cmAlarm = Object.assign(_cmAlarm, _cmSaved); } catch(e){}
+function _cmPersist(){ try{ localStorage.setItem('commuteAlarm', JSON.stringify(_cmAlarm)); }catch(e){} }
+
+// Open-Meteo 날씨 (키 불필요) — WMO 코드 → 텍스트/이모지
+function _wmoTxt(c){
+  if(c===0) return ['맑음','☀️']; if(c<=2) return ['대체로 맑음','🌤'];
+  if(c===3) return ['흐림','☁️']; if(c<=48) return ['안개','🌫'];
+  if(c<=57) return ['이슬비','🌦']; if(c<=67) return ['비','🌧'];
+  if(c<=77) return ['눈','🌨']; if(c<=82) return ['소나기','🌦'];
+  if(c<=86) return ['소낙눈','🌨']; return ['뇌우','⛈'];
+}
+// 날씨 캐시: ① 메모리(10분) → ② Worker D1 격자 캐시(/weather, 30분 공유) → ③ Open-Meteo 직접 (폴백)
+var _wxMem = {};   // { gridKey: { ts, data } }
+function _wxGrid(lat, lng){ return (Math.round(lat*10)/10).toFixed(1) + ',' + (Math.round(lng*10)/10).toFixed(1); }
+function _wxParse(d){
+  if(!d || !d.current) return null;
+  var h = new Date().getHours();
+  var pp = (d.hourly && d.hourly.precipitation_probability) ? (d.hourly.precipitation_probability[h]||0) : 0;
+  var wt = _wmoTxt(d.current.weather_code||0);
+  return { temp: Math.round(d.current.temperature_2m), txt: wt[0], emo: wt[1], rain: pp };
+}
+function _fetchWeather(lat, lng, cb){
+  var key = _wxGrid(lat, lng);
+  // ① 메모리 캐시 10분
+  var m = _wxMem[key];
+  if(m && (Date.now() - m.ts) < 10*60*1000){ cb(m.data); return; }
+  function _done(parsed){
+    if(parsed) _wxMem[key] = { ts: Date.now(), data: parsed };
+    cb(parsed);
+  }
+  // ② Worker D1 격자 캐시 (지역 공유, API 호출 절감)
+  fetch(_SERVER_URL + '/weather?lat=' + lat + '&lng=' + lng)
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(d){
+      var parsed = _wxParse(d && (d.data || d));
+      if(parsed){ _done(parsed); return; }
+      throw new Error('no worker cache');
+    })
+    .catch(function(){
+      // ③ Open-Meteo 직접 폴백
+      var u = 'https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lng
+            + '&current=temperature_2m,weather_code&hourly=precipitation_probability&forecast_days=1&timezone=Asia%2FSeoul';
+      fetch(u).then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(d){ _done(_wxParse(d)); })
+        .catch(function(){ _done(null); });
+    });
+}
+
+// 브리핑 생성 + 알림 발사
+function _fireCommuteBriefing(type){
+  var isMorn = (type==='morn');
+  var la = window._lastGPSLat || (typeof S!=='undefined' && S.lastGPSFix && S.lastGPSFix.lat) || 37.45;
+  var ln = window._lastGPSLng || (typeof S!=='undefined' && S.lastGPSFix && S.lastGPSFix.lng) || 126.70;
+  _fetchWeather(la, ln, function(w){
+    var h = new Date().getHours();
+    // AI 역무원 요약 (로컬): 혼잡도 + 피크 판단
+    var stn = (typeof _homeNearStationName==='function') ? _homeNearStationName() : null;
+    var stnNm = stn ? (typeof stn==='string' ? stn : stn.name) : '내 주변';
+    var pct = 50; try{ if(typeof getCongPct==='function') pct = getCongPct(stnNm, (stn&&stn.line)||''); }catch(e){}
+    var peak = (h>=7&&h<=9)||(h>=17&&h<=19);
+    var congTxt = pct<40?'여유':pct<65?'보통':'혼잡';
+    var lines = [];
+    if(w){
+      lines.push(w.emo+' '+w.temp+'° '+w.txt + (w.rain>=40 ? ' · 강수 '+w.rain+'% ☔ 우산 챙기세요!' : (w.rain>=20?' · 강수 '+w.rain+'%':'')));
+    }
+    lines.push('🚇 '+stnNm+' 혼잡도 '+pct+'% ('+congTxt+')' + (peak?' · 피크 시간대예요':''));
+    lines.push(isMorn ? (peak?'조금 서두르시면 좋아요. 오늘도 화이팅!':'여유로운 출근길 되세요!') : (peak?'퇴근길 붐벼요. 안전하게 들어가세요!':'수고하셨어요. 편안한 귀가 되세요!'));
+    var title = isMorn ? '🌅 출근길 브리핑' : '🌆 퇴근길 브리핑';
+    var body = lines.join('\n');
+    if(typeof showNotification==='function') showNotification(title, body, {});
+    if(typeof toast==='function' && !document.hidden) toast(title+' 발송됨');
+  });
+}
+window._cmTestFire = function(){ _fireCommuteBriefing(new Date().getHours()<12?'morn':'eve'); };
+
+// 분 단위 체크 스케줄러 (앱 실행 중)
+function _cmTick(){
+  if(!_cmAlarm.on) return;
+  var n = new Date();
+  var cur = ('0'+n.getHours()).slice(-2)+':'+('0'+n.getMinutes()).slice(-2);
+  var key = n.toDateString()+'|'+cur;
+  if(_cmAlarm.lastKey === key) return;
+  if(cur === _cmAlarm.morn){ _cmAlarm.lastKey = key; _cmPersist(); _fireCommuteBriefing('morn'); }
+  else if(cur === _cmAlarm.eve){ _cmAlarm.lastKey = key; _cmPersist(); _fireCommuteBriefing('eve'); }
+}
+setInterval(_cmTick, 30000);
+
+// OS 반복 알림 (앱 종료 시 백업 — 고정 문구, 탭하면 앱 열림)
+function _cmScheduleOS(){
+  try{
+    var LN = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications;
+    if(!LN) return;
+    LN.cancel({ notifications:[{id:9101},{id:9102}] }).catch(function(){});
+    if(!_cmAlarm.on) return;
+    var mh = parseInt(_cmAlarm.morn.split(':')[0]), mm = parseInt(_cmAlarm.morn.split(':')[1]);
+    var eh = parseInt(_cmAlarm.eve.split(':')[0]),  em = parseInt(_cmAlarm.eve.split(':')[1]);
+    LN.schedule({ notifications:[
+      { id:9101, title:'🌅 출근길 브리핑', body:'날씨와 혼잡도 요약이 준비됐어요 — 탭해서 확인하세요', schedule:{ on:{ hour:mh, minute:mm }, repeats:true }, smallIcon:'ic_stat_icon' },
+      { id:9102, title:'🌆 퇴근길 브리핑', body:'퇴근길 날씨·혼잡도 요약 — 탭해서 확인하세요', schedule:{ on:{ hour:eh, minute:em }, repeats:true }, smallIcon:'ic_stat_icon' }
+    ]}).catch(function(){});
+  }catch(e){}
+}
+
+// 설정 UI 바인딩
+window._cmToggle = function(on){
+  _cmAlarm.on = !!on; _cmPersist(); _cmRenderKnob(); _cmScheduleOS();
+  if(on && typeof toast==='function') toast('⏰ 출퇴근 브리핑 알림 켜짐');
+};
+window._cmSaveTimes = function(){
+  var m = document.getElementById('cmMornTime'), e = document.getElementById('cmEveTime');
+  if(m && m.value) _cmAlarm.morn = m.value;
+  if(e && e.value) _cmAlarm.eve = e.value;
+  _cmPersist(); _cmScheduleOS();
+};
+function _cmRenderKnob(){
+  var k = document.getElementById('cmAlarmKnob'), d = document.getElementById('cmAlarmDot'), c = document.getElementById('cmAlarmOn');
+  if(c) c.checked = _cmAlarm.on;
+  if(k) k.style.background = _cmAlarm.on ? '#30d158' : 'var(--border2)';
+  if(d) d.style.left = _cmAlarm.on ? '23px' : '3px';
+}
+function initCommuteAlarm(){
+  var m = document.getElementById('cmMornTime'), e = document.getElementById('cmEveTime');
+  if(m) m.value = _cmAlarm.morn;
+  if(e) e.value = _cmAlarm.eve;
+  _cmRenderKnob();
+}
+window.initCommuteAlarm = initCommuteAlarm;
+
 // LocalNotifications 채널 + 권한 초기화
 function _initLocalNotifications(){
   try {
@@ -15997,6 +16153,25 @@ function renderCommList(){
     if(_commFilter==='all') return true;
     return p.cat===_commFilter;
   });
+  // ★ 뉴스 탭: 서버/로컬 글에 뉴스가 없으면 실시간 RSS 기사로 직접 렌더 (빈 화면 방지)
+  if(_commFilter==='뉴스' && visible.length===0){
+    if(typeof _REALTIME_NEWS!=='undefined' && _REALTIME_NEWS.length){
+      visible = _REALTIME_NEWS.slice(0, 20).map(function(nw, i){
+        var pubMs = Date.now() - (i+1)*600000;
+        if(nw.pubDate){ var pt = Date.parse(nw.pubDate); if(!isNaN(pt)) pubMs = pt; }
+        return { id: 'rss_'+i, cat:'뉴스', tag:'뉴스', title: nw.title,
+                 body: '['+(nw.source||'뉴스')+'] 보도\n\n자세한 내용은 아래 링크에서 확인하세요.'+(nw.link?'\n\n🔗 '+nw.link:''),
+                 link: nw.link||'', nick: (nw.source||'뉴스'), line:'', time: pubMs,
+                 views: 50 + ((i*37)%300), likes:0, kk:0, sad:0, comments:[] };
+      });
+    } else {
+      // RSS 아직 미수신 → 즉시 가져오고 로딩 표시 후 재렌더
+      try{ if(typeof _fetchRealtimeNews==='function') _fetchRealtimeNews(); }catch(e){}
+      list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--sub);">📰 뉴스 불러오는 중...</div>';
+      setTimeout(function(){ if(_commFilter==='뉴스') renderCommList(); }, 3000);
+      return;
+    }
+  }
   if(!visible.length){ if(empty) empty.style.display='block'; return; }
   if(empty) empty.style.display='none';
   visible.sort(function(a,b){return b.time-a.time;});
@@ -18206,6 +18381,7 @@ window.onload=function(){
   setTimeout(function(){ if(typeof initLiveTalk==='function') initLiveTalk(); }, 800);  // ★ 실시간 톡 시작
   setTimeout(function(){ if(typeof _updateDayTypeBadge==='function') _updateDayTypeBadge(); }, 300);  // 평일/주말 배지
   setTimeout(function(){ if(typeof _updateBaseTimeDisplay==='function') _updateBaseTimeDisplay(); }, 300);
+  setTimeout(function(){ if(typeof initCommuteAlarm==='function') initCommuteAlarm(); }, 500);
   setTimeout(function(){ if(typeof _startServerSync==='function') _startServerSync(); }, 1500);  // ★ 서버 동기화 시작
   setTimeout(function(){ if(typeof _renderFavRecent==='function') _renderFavRecent(); }, 500);  // ★ 즐겨찾기/최근경로
   setTimeout(function(){ if(typeof renderHorizontalTimeline==='function') renderHorizontalTimeline(); }, 600);  // ★ 경로 노선도 빈 상태 표시
