@@ -6912,6 +6912,20 @@ window.addEventListener('unhandledrejection', function(e) {
           </label>
         </div>
         <p style="font-size:12px;color:var(--sub);margin-bottom:14px;line-height:1.5;">설정한 시각에 <b style="color:var(--text);">날씨 + AI 역무원 요약</b>을 알림으로 보내드려요.</p>
+        <div style="display:flex;gap:10px;margin-bottom:12px;">
+          <div style="flex:1;">
+            <div style="font-size:11px;font-weight:700;color:var(--sub);margin-bottom:5px;">🏠 출발지 (집 근처 역)</div>
+            <input type="text" id="cmFromStn" list="cmStnList" placeholder="예: 아라" onchange="_cmSaveTimes()"
+              style="width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:9px;padding:10px;color:var(--text);font-size:14px;outline:none;box-sizing:border-box;font-family:inherit;">
+          </div>
+          <div style="flex:1;">
+            <div style="font-size:11px;font-weight:700;color:var(--sub);margin-bottom:5px;">🏢 도착지 (회사 근처 역)</div>
+            <input type="text" id="cmToStn" list="cmStnList" placeholder="예: 강남" onchange="_cmSaveTimes()"
+              style="width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:9px;padding:10px;color:var(--text);font-size:14px;outline:none;box-sizing:border-box;font-family:inherit;">
+          </div>
+        </div>
+        <datalist id="cmStnList"></datalist>
+        <p style="font-size:11px;color:var(--sub);margin:0 0 12px;line-height:1.5;">출근은 출발지→도착지, 퇴근은 자동으로 반대 방향 브리핑이에요.<br>비워두면 현재 위치 기준으로 알려드려요.</p>
         <div style="display:flex;gap:10px;">
           <div style="flex:1;">
             <div style="font-size:11px;font-weight:700;color:var(--sub);margin-bottom:5px;">🌅 출근 브리핑</div>
@@ -15074,7 +15088,7 @@ function showNotification(title, body, opts){
 }
 
 // ══════════ ⏰ 출퇴근 날씨+AI 브리핑 알림 ══════════
-var _cmAlarm = { on:false, morn:'07:30', eve:'18:30', lastKey:'' };
+var _cmAlarm = { on:false, morn:'07:30', eve:'18:30', from:'', to:'', lastKey:'' };
 try { var _cmSaved = JSON.parse(localStorage.getItem('commuteAlarm')||'null'); if(_cmSaved) _cmAlarm = Object.assign(_cmAlarm, _cmSaved); } catch(e){}
 function _cmPersist(){ try{ localStorage.setItem('commuteAlarm', JSON.stringify(_cmAlarm)); }catch(e){} }
 
@@ -15126,26 +15140,50 @@ function _fetchWeather(lat, lng, cb){
 // 브리핑 생성 + 알림 발사
 function _fireCommuteBriefing(type){
   var isMorn = (type==='morn');
-  var la = window._lastGPSLat || (typeof S!=='undefined' && S.lastGPSFix && S.lastGPSFix.lat) || 37.45;
-  var ln = window._lastGPSLng || (typeof S!=='undefined' && S.lastGPSFix && S.lastGPSFix.lng) || 126.70;
-  _fetchWeather(la, ln, function(w){
+  // ★ 설정된 출발/도착역 (퇴근은 자동 반대 방향)
+  var fromStn = _cmFindStn(isMorn ? _cmAlarm.from : _cmAlarm.to);
+  var toStn   = _cmFindStn(isMorn ? _cmAlarm.to   : _cmAlarm.from);
+  // 출발 좌표: 설정역 우선, 없으면 GPS
+  var la = fromStn ? fromStn.lat : (window._lastGPSLat || (typeof S!=='undefined' && S.lastGPSFix && S.lastGPSFix.lat) || 37.45);
+  var ln = fromStn ? fromStn.lng : (window._lastGPSLng || (typeof S!=='undefined' && S.lastGPSFix && S.lastGPSFix.lng) || 126.70);
+
+  function _compose(wF, wT){
     var h = new Date().getHours();
-    // AI 역무원 요약 (로컬): 혼잡도 + 피크 판단
-    var stn = (typeof _homeNearStationName==='function') ? _homeNearStationName() : null;
+    var peak = (h>=7&&h<=9)||(h>=17&&h<=19);
+    // 혼잡도: 출발역(설정) 우선, 없으면 주변역
+    var stn = fromStn || ((typeof _homeNearStationName==='function') ? _homeNearStationName() : null);
     var stnNm = stn ? (typeof stn==='string' ? stn : stn.name) : '내 주변';
     var pct = 50; try{ if(typeof getCongPct==='function') pct = getCongPct(stnNm, (stn&&stn.line)||''); }catch(e){}
-    var peak = (h>=7&&h<=9)||(h>=17&&h<=19);
     var congTxt = pct<40?'여유':pct<65?'보통':'혼잡';
+
     var lines = [];
-    if(w){
-      lines.push(w.emo+' '+w.temp+'° '+w.txt + (w.rain>=40 ? ' · 강수 '+w.rain+'% ☔ 우산 챙기세요!' : (w.rain>=20?' · 강수 '+w.rain+'%':'')));
+    // 경로 라인
+    if(fromStn && toStn) lines.push('🚇 ' + fromStn.name + ' → ' + toStn.name);
+    // 날씨: 출발지 (도착지 날씨가 유의미하게 다르면 함께)
+    if(wF){
+      lines.push((fromStn?fromStn.name+' ':'') + wF.emo+' '+wF.temp+'° '+wF.txt
+        + (wF.rain>=40 ? ' · 강수 '+wF.rain+'% ☔ 우산!' : (wF.rain>=20?' · 강수 '+wF.rain+'%':'')));
+    }
+    if(wT && wF && toStn && (Math.abs(wT.temp - wF.temp) >= 2 || Math.abs((wT.rain||0)-(wF.rain||0)) >= 20 || wT.txt !== wF.txt)){
+      lines.push(toStn.name + ' ' + wT.emo+' '+wT.temp+'° '+wT.txt + (wT.rain>=40 ? ' · 강수 '+wT.rain+'% ☔' : ''));
     }
     lines.push('🚇 '+stnNm+' 혼잡도 '+pct+'% ('+congTxt+')' + (peak?' · 피크 시간대예요':''));
     lines.push(isMorn ? (peak?'조금 서두르시면 좋아요. 오늘도 화이팅!':'여유로운 출근길 되세요!') : (peak?'퇴근길 붐벼요. 안전하게 들어가세요!':'수고하셨어요. 편안한 귀가 되세요!'));
-    var title = isMorn ? '🌅 출근길 브리핑' : '🌆 퇴근길 브리핑';
+
+    var title = (isMorn ? '🌅 출근길 브리핑' : '🌆 퇴근길 브리핑')
+              + (fromStn && toStn ? ' · ' + fromStn.name + '→' + toStn.name : '');
     var body = lines.join('\n');
     if(typeof showNotification==='function') showNotification(title, body, {});
     if(typeof toast==='function' && !document.hidden) toast(title+' 발송됨');
+  }
+
+  _fetchWeather(la, ln, function(wF){
+    // 도착지가 설정되어 있고 좌표가 있으면 도착지 날씨도 (격자 캐시라 부담 적음)
+    if(toStn && toStn.lat != null){
+      _fetchWeather(toStn.lat, toStn.lng, function(wT){ _compose(wF, wT); });
+    } else {
+      _compose(wF, null);
+    }
   });
 }
 window._cmTestFire = function(){ _fireCommuteBriefing(new Date().getHours()<12?'morn':'eve'); };
@@ -15187,8 +15225,19 @@ window._cmSaveTimes = function(){
   var m = document.getElementById('cmMornTime'), e = document.getElementById('cmEveTime');
   if(m && m.value) _cmAlarm.morn = m.value;
   if(e && e.value) _cmAlarm.eve = e.value;
+  var f = document.getElementById('cmFromStn'), t = document.getElementById('cmToStn');
+  if(f) _cmAlarm.from = f.value.trim();
+  if(t) _cmAlarm.to = t.value.trim();
   _cmPersist(); _cmScheduleOS();
 };
+// 역명 → STNDB 매칭 (정확 → 부분)
+function _cmFindStn(nm){
+  if(!nm || typeof STNDB==='undefined') return null;
+  var q = nm.replace(/\s+/g,'').replace(/역$/,'');
+  return STNDB.find(function(s){ return s.name.replace(/\s+/g,'')===q; })
+      || STNDB.find(function(s){ return s.name.replace(/\s+/g,'').indexOf(q)===0; })
+      || STNDB.find(function(s){ return s.name.replace(/\s+/g,'').indexOf(q)>=0; }) || null;
+}
 function _cmRenderKnob(){
   var k = document.getElementById('cmAlarmKnob'), d = document.getElementById('cmAlarmDot'), c = document.getElementById('cmAlarmOn');
   if(c) c.checked = _cmAlarm.on;
@@ -15199,6 +15248,16 @@ function initCommuteAlarm(){
   var m = document.getElementById('cmMornTime'), e = document.getElementById('cmEveTime');
   if(m) m.value = _cmAlarm.morn;
   if(e) e.value = _cmAlarm.eve;
+  var f = document.getElementById('cmFromStn'), t = document.getElementById('cmToStn');
+  if(f) f.value = _cmAlarm.from || '';
+  if(t) t.value = _cmAlarm.to || '';
+  // 역 자동완성 datalist (한 번만)
+  var dl = document.getElementById('cmStnList');
+  if(dl && !dl.childElementCount && typeof STNDB!=='undefined'){
+    var seen = {}, html = '';
+    STNDB.forEach(function(st){ if(!seen[st.name]){ seen[st.name]=1; html += '<option value="'+st.name+'">'; } });
+    dl.innerHTML = html;
+  }
   _cmRenderKnob();
 }
 window.initCommuteAlarm = initCommuteAlarm;
