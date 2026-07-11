@@ -15065,6 +15065,9 @@ function showNotification(title, body, opts){
         id:      _notifId++,
         title:   title,
         body:    body,
+        largeBody: body,                      // ★ 알림 펼치면(∨) 전체 내용 표시 (BigTextStyle)
+        summaryText: '길동무',
+        actionTypeId: 'briefing_actions',     // ★ 하단 [닫기] [앱으로 가기] 버튼
         sound:   opts.sound || null,
         smallIcon: 'ic_stat_subway',
         channelId: 'subway_alerts',
@@ -15279,6 +15282,25 @@ function _initLocalNotifications(){
       sound: 'default',
       visibility: 1        // VISIBILITY_PUBLIC
     }).catch(function(){});
+    // ★ 알림 하단 액션 버튼 등록: [닫기] [앱으로 가기]
+    try {
+      LN.registerActionTypes({ types: [{
+        id: 'briefing_actions',
+        actions: [
+          { id: 'dismiss', title: '닫기', foreground: false, destructive: true },
+          { id: 'open',    title: '앱으로 가기', foreground: true }
+        ]
+      }]}).catch(function(){});
+      LN.addListener('localNotificationActionPerformed', function(ev){
+        try {
+          var nid = ev && ev.notification && ev.notification.id;
+          if(ev.actionId === 'dismiss' && nid != null){
+            LN.cancel({ notifications: [{ id: nid }] }).catch(function(){});
+          }
+          // 'open' 또는 본문 탭('tap')은 앱이 열리며 자동 처리
+        } catch(e){}
+      });
+    } catch(e){}
     // 권한 요청 (프라미스 저장 → GPS 요청 체이닝용)
     window._notifPermDone = LN.requestPermissions().then(function(res){
       console.log('[알림권한]', res.display);
