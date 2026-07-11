@@ -15220,11 +15220,12 @@ function _initLocalNotifications(){
       sound: 'default',
       visibility: 1        // VISIBILITY_PUBLIC
     }).catch(function(){});
-    // 권한 요청
-    LN.requestPermissions().then(function(res){
+    // 권한 요청 (프라미스 저장 → GPS 요청 체이닝용)
+    window._notifPermDone = LN.requestPermissions().then(function(res){
       console.log('[알림권한]', res.display);
     }).catch(function(){});
-  } catch(e){}
+  } catch(e){ window._notifPermDone = Promise.resolve(); }
+  if(!window._notifPermDone) window._notifPermDone = Promise.resolve();
 }
 
 /* ══ 인라인 목적지 검색 ══ */
@@ -15441,8 +15442,7 @@ function dlog(tag, msg, isWarn) {
   _debugLog.push(entry);
   if(_debugLog.length > 50) _debugLog.shift(); // 최대 50개 유지
 
-  // 중요 이벤트만 토스트로 표시
-  if(isWarn) toast('⚠️ ' + tag + ': ' + msg);
+  // 내부 경고는 디버그 패널에만 기록 (사용자 토스트 노출 안 함)
   
   // 디버그 패널에 표시
   var panel = document.getElementById('debugPanel');
@@ -18401,10 +18401,14 @@ window.onload=function(){
   try { startAutoRefresh(); } catch(e) {}    // 5분 주기 API 자동갱신
   // startGPSCorrection() — 수동 위치감지 시에만 활성화
 
-  // ── 앱 진입 시 GPS로 출발지 자동 지정 → 목적지 입력 유도 ──
+  // ── ★ 첫 실행: 알림 권한 먼저 요청 → 응답(허용/거부) 후 GPS 권한 순차 요청 ──
+  setTimeout(function(){ try { _initLocalNotifications(); } catch(e){} }, 100);
   setTimeout(function(){
-    try { if(typeof autoSetStartFromGPS === 'function') autoSetStartFromGPS(); } catch(e){}
-  }, 800);
+    var p = (window._notifPermDone && window._notifPermDone.then) ? window._notifPermDone : Promise.resolve();
+    p.then(function(){
+      setTimeout(function(){ try { if(typeof autoSetStartFromGPS === 'function') autoSetStartFromGPS(); } catch(e){} }, 300);
+    });
+  }, 400);
 
   // ── 홈 AI 승무원 시작 (앱 시작 시 홈이 기본 탭) ──
   setTimeout(function(){
@@ -18424,7 +18428,7 @@ window.onload=function(){
 
   // ── 백그라운드 추적 + 알림 초기화 ──────────────────
   setTimeout(function(){
-    _initLocalNotifications();    // 알림 채널 생성 + 권한 요청
+    // _initLocalNotifications()는 앱 시작 직후(100ms) 선요청으로 이동
     _initAppStateListener();      // 포그라운드/백그라운드 전환 감지
     // 포그라운드 서비스용 알림 채널 추가 생성
     try {
