@@ -6919,34 +6919,38 @@ window.addEventListener('unhandledrejection', function(e) {
           .cm-sug-item:active{background:var(--bg);}
           .cm-sug-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
           .cm-sug-line{font-size:10px;font-weight:700;color:var(--sub);margin-left:auto;white-space:nowrap;}
+          .cm-timebtn{width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:9px;padding:11px 10px;color:var(--text);font-size:15px;font-weight:700;box-sizing:border-box;cursor:pointer;text-align:center;letter-spacing:.5px;}
+          .cm-timebtn:active{opacity:.7;}
+          .cm-tp-seg{flex:1;padding:10px 0;border-radius:10px;font-size:13px;font-weight:800;text-align:center;cursor:pointer;border:1px solid var(--border2);color:var(--sub);background:transparent;}
+          .cm-tp-seg.on{background:var(--chip-on-bg);color:var(--chip-on-txt);border-color:var(--chip-on-bg);}
+          .cm-tp-cell{padding:10px 0;border-radius:9px;font-size:14px;font-weight:700;text-align:center;cursor:pointer;border:1px solid var(--border);color:var(--text);background:var(--bg);}
+          .cm-tp-cell.on{background:var(--chip-on-bg);color:var(--chip-on-txt);border-color:var(--chip-on-bg);font-weight:800;}
         </style>
         <div style="display:flex;gap:10px;margin-bottom:12px;">
           <div style="flex:1;position:relative;">
             <div style="font-size:11px;font-weight:700;color:var(--sub);margin-bottom:5px;">🏠 출발지 (집 근처 역)</div>
-            <input type="text" id="cmFromStn" placeholder="예: 아라" autocomplete="off"
-              oninput="_cmSug(this,'cmFromSug')" onfocus="_cmSug(this,'cmFromSug')" onblur="_cmSugBlur('cmFromSug')" onchange="_cmSaveTimes()"
+            <input type="text" id="cmFromStn" placeholder="지하철·버스 (예: 아라)" autocomplete="off"
+              oninput="_cmSug(this,'cmFromSug',1)" onfocus="_cmSug(this,'cmFromSug')" onblur="_cmSugBlur('cmFromSug')" onchange="_cmSaveTimes()"
               style="width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:9px;padding:10px;color:var(--text);font-size:14px;outline:none;box-sizing:border-box;font-family:inherit;">
             <div id="cmFromSug" class="cm-sug"></div>
           </div>
           <div style="flex:1;position:relative;">
             <div style="font-size:11px;font-weight:700;color:var(--sub);margin-bottom:5px;">🏢 도착지 (회사 근처 역)</div>
-            <input type="text" id="cmToStn" placeholder="예: 강남" autocomplete="off"
-              oninput="_cmSug(this,'cmToSug')" onfocus="_cmSug(this,'cmToSug')" onblur="_cmSugBlur('cmToSug')" onchange="_cmSaveTimes()"
+            <input type="text" id="cmToStn" placeholder="지하철·버스 (예: 강남)" autocomplete="off"
+              oninput="_cmSug(this,'cmToSug',1)" onfocus="_cmSug(this,'cmToSug')" onblur="_cmSugBlur('cmToSug')" onchange="_cmSaveTimes()"
               style="width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:9px;padding:10px;color:var(--text);font-size:14px;outline:none;box-sizing:border-box;font-family:inherit;">
             <div id="cmToSug" class="cm-sug"></div>
           </div>
         </div>
-        <p style="font-size:11px;color:var(--sub);margin:0 0 12px;line-height:1.5;">출근은 출발지→도착지, 퇴근은 자동으로 반대 방향 브리핑이에요.<br>비워두면 현재 위치 기준으로 알려드려요.</p>
+        <p style="font-size:11px;color:var(--sub);margin:0 0 12px;line-height:1.5;">지하철역과 버스정류장 모두 입력할 수 있어요. 검색 목록의 지하철/버스 표시로 구분돼요.<br>출근은 출발지→도착지, 퇴근은 자동 반대 방향 · 비워두면 현재 위치 기준이에요.</p>
         <div style="display:flex;gap:10px;">
           <div style="flex:1;">
             <div style="font-size:11px;font-weight:700;color:var(--sub);margin-bottom:5px;">🌅 출근 브리핑</div>
-            <input type="time" id="cmMornTime" value="07:30" onchange="_cmSaveTimes()"
-              style="width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:9px;padding:10px;color:var(--text);font-size:14px;outline:none;box-sizing:border-box;font-family:inherit;">
+            <div class="cm-timebtn" id="cmMornTime" data-time="07:30" onclick="_cmTimePick('cmMornTime','🌅 출근 브리핑 시간')">오전 7:30</div>
           </div>
           <div style="flex:1;">
             <div style="font-size:11px;font-weight:700;color:var(--sub);margin-bottom:5px;">🌆 퇴근 브리핑</div>
-            <input type="time" id="cmEveTime" value="18:30" onchange="_cmSaveTimes()"
-              style="width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:9px;padding:10px;color:var(--text);font-size:14px;outline:none;box-sizing:border-box;font-family:inherit;">
+            <div class="cm-timebtn" id="cmEveTime" data-time="18:30" onclick="_cmTimePick('cmEveTime','🌆 퇴근 브리핑 시간')">오후 6:30</div>
           </div>
         </div>
         <button onclick="_cmTestFire()" style="width:100%;margin-top:12px;padding:11px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);">🔔 지금 미리보기</button>
@@ -15176,13 +15180,78 @@ function _fetchWeather(lat, lng, cb){
     });
 }
 
+// ── ★ 리치 날씨: 습도·체감·최저최고·자외선·바람 (브리핑용, 하루 2~3회라 직접 호출 OK) ──
+function _wxParseRich(d){
+  if(!d || !d.current) return null;
+  var c = d.current;
+  var h = new Date().getHours();
+  var pp = (d.hourly && d.hourly.precipitation_probability) ? (d.hourly.precipitation_probability[h]||0) : 0;
+  var wt = _wmoTxt(c.weather_code||0);
+  var o = { temp: Math.round(c.temperature_2m), txt: wt[0], emo: wt[1], rain: pp };
+  if(c.relative_humidity_2m != null) o.hum = Math.round(c.relative_humidity_2m);
+  if(c.apparent_temperature != null) o.feel = Math.round(c.apparent_temperature);
+  if(c.wind_speed_10m != null) o.wind = Math.round(c.wind_speed_10m);
+  if(d.daily && d.daily.temperature_2m_max && d.daily.temperature_2m_max[0] != null) o.tmax = Math.round(d.daily.temperature_2m_max[0]);
+  if(d.daily && d.daily.temperature_2m_min && d.daily.temperature_2m_min[0] != null) o.tmin = Math.round(d.daily.temperature_2m_min[0]);
+  if(d.daily && d.daily.uv_index_max && d.daily.uv_index_max[0] != null) o.uv = Math.round(d.daily.uv_index_max[0]);
+  return o;
+}
+function _fetchWeatherRich(lat, lng, cb){
+  var key = 'R' + _wxGrid(lat, lng);
+  var m = _wxMem[key];
+  if(m && (Date.now() - m.ts) < 10*60*1000){ cb(m.data); return; }
+  var u = 'https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lng
+        + '&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m'
+        + '&hourly=precipitation_probability&daily=temperature_2m_max,temperature_2m_min,uv_index_max'
+        + '&forecast_days=1&timezone=Asia%2FSeoul';
+  fetch(u).then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(d){
+      var p = _wxParseRich(d);
+      if(p){ _wxMem[key] = { ts: Date.now(), data: p }; cb(p); return; }
+      throw new Error('rich parse fail');
+    })
+    .catch(function(){ _fetchWeather(lat, lng, cb); });   // 기존 캐시 경로 폴백
+}
+
+// ── ★ 요일별 마무리 멘트 (주차에 따라 매주 로테이션) ──
+var _CM_CLOSING = {
+  morn: [
+    ['일요일 이동, 여유롭게 다녀오세요','일요일엔 서두르지 않아도 괜찮아요','한 주 재충전하며 무사히 다녀오세요'],
+    ['한 주의 시작, 가볍게 출발해요','월요일 아침, 커피 한 잔의 여유 챙기세요','새로운 한 주, 무리하지 말고 차근차근'],
+    ['화요일, 리듬 타기 좋은 날이에요','어제보다 한결 수월할 거예요','화요일 아침, 오늘 할 일 하나만 확실히'],
+    ['벌써 수요일, 반환점이에요','한 주의 한가운데, 페이스 유지하세요','수요일, 점심 메뉴 미리 정해두면 기분 좋아요'],
+    ['목요일, 내일이면 금요일이에요','고비만 넘기면 주말이 보여요','목요일 아침, 조금만 더 힘내요'],
+    ['금요일이에요, 마무리 잘하고 즐겨요','금요일 아침은 발걸음도 가볍죠','오늘만 지나면 주말, 화이팅'],
+    ['토요일에도 나서는 당신, 멋져요','주말 이동, 오늘은 일찍 마치길','토요일, 갈 길은 짧게 마음은 가볍게']
+  ],
+  eve: [
+    ['일요일까지 수고했어요, 내일을 위해 일찍 쉬어요','한 주 잘 마쳤어요','일요일 저녁, 따뜻하게 마무리하세요'],
+    ['월요일 무사히 끝, 푹 쉬세요','한 주의 첫 고비 통과, 수고했어요','월요일 퇴근, 저녁은 맛있는 걸로'],
+    ['화요일도 클리어, 잘하고 있어요','오늘 하루도 수고 많았어요','화요일 저녁, 일찍 쉬어두면 내일이 편해요'],
+    ['절반 왔어요, 남은 이틀도 가볍게','수요일 퇴근, 고생 많았어요','반환점 통과, 오늘은 좀 쉬세요'],
+    ['내일만 버티면 금요일이에요','목요일까지 달려온 당신, 대단해요','오늘 저녁은 좋아하는 것 하나 하세요'],
+    ['한 주 마무리, 즐거운 주말 보내세요','금요일 퇴근, 안전하게 들어가세요','금요일 퇴근길이 제일 가볍죠'],
+    ['주말 근무까지 정말 수고했어요','토요일까지 일한 당신, 내일은 푹 쉬어요','오늘은 정말 고생 많았어요']
+  ]
+};
+function _cmClosing(isMorn){
+  var n = new Date();
+  var pool = _CM_CLOSING[isMorn ? 'morn' : 'eve'][n.getDay()] || [];
+  if(!pool.length) return isMorn ? '좋은 하루 되세요' : '편안한 저녁 되세요';
+  // 연중 주차 번호 → 매주 다른 멘트
+  var week = Math.floor((n - new Date(n.getFullYear(), 0, 1)) / (7 * 24 * 3600 * 1000));
+  return pool[week % pool.length];
+}
+
 // 브리핑 생성 + 알림 발사
 function _fireCommuteBriefing(type, opts){
   opts = opts || {};
   var isMorn = (type==='morn');
-  // ★ 설정된 출발/도착역 (퇴근은 자동 반대 방향)
-  var fromStn = _cmFindStn(isMorn ? _cmAlarm.from : _cmAlarm.to);
-  var toStn   = _cmFindStn(isMorn ? _cmAlarm.to   : _cmAlarm.from);
+  // ★ 설정된 출발/도착 (지하철역 또는 버스정류장, 퇴근은 자동 반대 방향)
+  var _pF = { nm:_cmAlarm.from, lat:_cmAlarm.fromLat, lng:_cmAlarm.fromLng, bus:_cmAlarm.fromBus };
+  var _pT = { nm:_cmAlarm.to,   lat:_cmAlarm.toLat,   lng:_cmAlarm.toLng,   bus:_cmAlarm.toBus };
+  var fromStn = _cmResolvePlace(isMorn ? _pF : _pT);
+  var toStn   = _cmResolvePlace(isMorn ? _pT : _pF);
   // 출발 좌표: 설정역 우선, 없으면 GPS
   var la = fromStn ? fromStn.lat : (window._lastGPSLat || (typeof S!=='undefined' && S.lastGPSFix && S.lastGPSFix.lat) || 37.45);
   var ln = fromStn ? fromStn.lng : (window._lastGPSLng || (typeof S!=='undefined' && S.lastGPSFix && S.lastGPSFix.lng) || 126.70);
@@ -15198,17 +15267,42 @@ function _fireCommuteBriefing(type, opts){
 
     var lines = [];
     // 경로 라인
-    if(fromStn && toStn) lines.push('🚇 ' + fromStn.name + ' → ' + toStn.name);
-    // 날씨: 출발지 (도착지 날씨가 유의미하게 다르면 함께)
+    if(fromStn && toStn) lines.push(fromStn.name + ' → ' + toStn.name);
+    // 날씨: 출발지 리치 정보 (온도·체감·습도·일교차)
     if(wF){
-      lines.push((fromStn?fromStn.name+' ':'') + wF.emo+' '+wF.temp+'° '+wF.txt
-        + (wF.rain>=40 ? ' · 강수 '+wF.rain+'% ☔ 우산!' : (wF.rain>=20?' · 강수 '+wF.rain+'%':'')));
+      var wl = (fromStn?fromStn.name+' ':'') + wF.emo+' '+wF.temp+'° '+wF.txt;
+      if(wF.feel != null && Math.abs(wF.feel - wF.temp) >= 2) wl += ' · 체감 '+wF.feel+'°';
+      if(wF.hum != null) wl += ' · 습도 '+wF.hum+'%';
+      lines.push(wl);
+      if(wF.tmax != null && wF.tmin != null){
+        lines.push('오늘 '+wF.tmin+'°~'+wF.tmax+'°' + (wF.rain>0 ? ' · 강수 '+wF.rain+'%' : ''));
+      } else if(wF.rain >= 20){
+        lines.push('강수확률 '+wF.rain+'%');
+      }
     }
     if(wT && wF && toStn && (Math.abs(wT.temp - wF.temp) >= 2 || Math.abs((wT.rain||0)-(wF.rain||0)) >= 20 || wT.txt !== wF.txt)){
-      lines.push(toStn.name + ' ' + wT.emo+' '+wT.temp+'° '+wT.txt + (wT.rain>=40 ? ' · 강수 '+wT.rain+'% ☔' : ''));
+      lines.push(toStn.name + ' ' + wT.emo+' '+wT.temp+'° '+wT.txt + (wT.rain>=40 ? ' · 강수 '+wT.rain+'%' : ''));
     }
-    lines.push('🚇 '+stnNm+' 혼잡도 '+pct+'% ('+congTxt+')' + (peak?' · 피크 시간대예요':''));
-    lines.push(isMorn ? (peak?'조금 서두르시면 좋아요. 오늘도 화이팅!':'여유로운 출근길 되세요!') : (peak?'퇴근길 붐벼요. 안전하게 들어가세요!':'수고하셨어요. 편안한 귀가 되세요!'));
+    if(!(fromStn && fromStn.bus)) lines.push(stnNm+' 혼잡도 '+pct+'% ('+congTxt+')' + (peak?' · 피크 시간대예요':''));
+    // ★ 출퇴근길 추천사항 (최대 3개, 깔끔한 텍스트)
+    var recs = [];
+    if(wF){
+      if(wF.rain >= 40) recs.push('우산 꼭 챙기세요');
+      else if(wF.rain >= 20) recs.push('접이식 우산 있으면 안심이에요');
+      var ft = (wF.feel != null ? wF.feel : wF.temp);
+      if(ft >= 33) recs.push('무더위예요, 시원한 옷차림에 수분 챙기세요');
+      else if(ft >= 28) recs.push('더워요, 시원한 옷차림 추천');
+      else if(ft <= 0) recs.push('강추위예요, 목도리·장갑 필수');
+      else if(ft <= 5) recs.push('추워요, 두꺼운 외투 입으세요');
+      else if(ft <= 11) recs.push('쌀쌀해요, 겉옷 챙기세요');
+      if(isMorn && wF.tmax != null && wF.tmin != null && (wF.tmax - wF.tmin) >= 10) recs.push('일교차 '+(wF.tmax-wF.tmin)+'°, 겉옷 하나 챙기면 좋아요');
+      if(wF.hum != null && wF.hum >= 80 && wF.temp >= 24) recs.push('습도 높아 후텁지근해요');
+      if(isMorn && wF.uv != null && wF.uv >= 8) recs.push('자외선 강해요, 선크림 잊지 마세요');
+      if(wF.wind != null && wF.wind >= 30) recs.push('바람 강해요, 우산·모자 주의');
+    }
+    if(peak) recs.push(isMorn ? '피크 시간이에요, 5분만 일찍 나서면 여유로워요' : '퇴근 피크예요, 한 정거장 늦은 열차가 한산할 수 있어요');
+    recs.slice(0, 3).forEach(function(r){ lines.push('· ' + r); });
+    lines.push(_cmClosing(isMorn));
 
     var title = (isMorn ? '🌅 출근길 브리핑' : '🌆 퇴근길 브리핑')
               + (fromStn && toStn ? ' · ' + fromStn.name + '→' + toStn.name : '');
@@ -15221,10 +15315,10 @@ function _fireCommuteBriefing(type, opts){
     }
   }
 
-  _fetchWeather(la, ln, function(wF){
+  _fetchWeatherRich(la, ln, function(wF){
     // 도착지가 설정되어 있고 좌표가 있으면 도착지 날씨도 (격자 캐시라 부담 적음)
     if(toStn && toStn.lat != null){
-      _fetchWeather(toStn.lat, toStn.lng, function(wT){ _compose(wF, wT); });
+      _fetchWeatherRich(toStn.lat, toStn.lng, function(wT){ _compose(wF, wT); });
     } else {
       _compose(wF, null);
     }
@@ -15267,11 +15361,21 @@ window._cmToggle = function(on){
 };
 window._cmSaveTimes = function(){
   var m = document.getElementById('cmMornTime'), e = document.getElementById('cmEveTime');
-  if(m && m.value) _cmAlarm.morn = m.value;
-  if(e && e.value) _cmAlarm.eve = e.value;
+  if(m && m.dataset.time) _cmAlarm.morn = m.dataset.time;
+  if(e && e.dataset.time) _cmAlarm.eve = e.dataset.time;
   var f = document.getElementById('cmFromStn'), t = document.getElementById('cmToStn');
-  if(f) _cmAlarm.from = f.value.trim();
-  if(t) _cmAlarm.to = t.value.trim();
+  if(f){
+    _cmAlarm.from = f.value.trim();
+    _cmAlarm.fromLat = (f.dataset.lat != null && f.dataset.lat !== '') ? +f.dataset.lat : null;
+    _cmAlarm.fromLng = (f.dataset.lng != null && f.dataset.lng !== '') ? +f.dataset.lng : null;
+    _cmAlarm.fromBus = f.dataset.bus === '1';
+  }
+  if(t){
+    _cmAlarm.to = t.value.trim();
+    _cmAlarm.toLat = (t.dataset.lat != null && t.dataset.lat !== '') ? +t.dataset.lat : null;
+    _cmAlarm.toLng = (t.dataset.lng != null && t.dataset.lng !== '') ? +t.dataset.lng : null;
+    _cmAlarm.toBus = t.dataset.bus === '1';
+  }
   _cmPersist(); _cmScheduleOS();
 };
 // 역명 → STNDB 매칭 (정확 → 부분)
@@ -15282,6 +15386,16 @@ function _cmFindStn(nm){
       || STNDB.find(function(s){ return s.name.replace(/\s+/g,'').indexOf(q)===0; })
       || STNDB.find(function(s){ return s.name.replace(/\s+/g,'').indexOf(q)>=0; }) || null;
 }
+// 저장된 장소 → 지하철역(STNDB) 우선, 버스정류장이면 저장 좌표 사용
+function _cmResolvePlace(p){
+  if(!p || !p.nm) return null;
+  if(!p.bus){
+    var s = _cmFindStn(p.nm);
+    if(s) return s;
+  }
+  if(p.lat != null && p.lng != null) return { name: p.nm, lat: +p.lat, lng: +p.lng, line: '', bus: !!p.bus };
+  return _cmFindStn(p.nm);
+}
 function _cmRenderKnob(){
   var k = document.getElementById('cmAlarmKnob'), d = document.getElementById('cmAlarmDot'), c = document.getElementById('cmAlarmOn');
   if(c) c.checked = _cmAlarm.on;
@@ -15290,22 +15404,32 @@ function _cmRenderKnob(){
 }
 function initCommuteAlarm(){
   var m = document.getElementById('cmMornTime'), e = document.getElementById('cmEveTime');
-  if(m) m.value = _cmAlarm.morn;
-  if(e) e.value = _cmAlarm.eve;
+  if(m){ m.dataset.time = _cmAlarm.morn; m.textContent = _cmFmtTime(_cmAlarm.morn); }
+  if(e){ e.dataset.time = _cmAlarm.eve; e.textContent = _cmFmtTime(_cmAlarm.eve); }
   var f = document.getElementById('cmFromStn'), t = document.getElementById('cmToStn');
-  if(f) f.value = _cmAlarm.from || '';
-  if(t) t.value = _cmAlarm.to || '';
+  if(f){
+    f.value = _cmAlarm.from || '';
+    if(_cmAlarm.fromLat != null){ f.dataset.lat = _cmAlarm.fromLat; f.dataset.lng = _cmAlarm.fromLng; f.dataset.bus = _cmAlarm.fromBus ? '1' : ''; }
+  }
+  if(t){
+    t.value = _cmAlarm.to || '';
+    if(_cmAlarm.toLat != null){ t.dataset.lat = _cmAlarm.toLat; t.dataset.lng = _cmAlarm.toLng; t.dataset.bus = _cmAlarm.toBus ? '1' : ''; }
+  }
   // 역 자동완성: 커스텀 드롭다운(_cmSug) 사용 — 시스템 datalist 제거됨
   _cmRenderKnob();
 }
 window.initCommuteAlarm = initCommuteAlarm;
 
 // ── ★ 출발/도착 역 커스텀 자동완성 (테마 일치 드롭다운) ──
-window._cmSug = function(inp, boxId){
+window._cmSug = function(inp, boxId, typed){
   var box = document.getElementById(boxId);
   if(!box) return;
+  if(typed){ inp.dataset.lat=''; inp.dataset.lng=''; inp.dataset.bus=''; }
   var q = (inp.value||'').replace(/\s+/g,'').replace(/역$/,'');
-  if(!q || typeof STNDB === 'undefined'){ box.style.display='none'; box.innerHTML=''; return; }
+  box.dataset.q = q;
+  if(!q){ box.style.display='none'; box.innerHTML=''; return; }
+  _cmSugBus(inp, box, q);   // ★ 버스정류장 검색 (2자 이상, 디바운스)
+  if(typeof STNDB === 'undefined'){ box.innerHTML=''; box.style.display='none'; return; }
   // 이름 기준 dedupe + 노선/색상 수집 (최초 1회 캐시)
   if(!window._cmSugIdx){
     var map = {}, order = [];
@@ -15330,7 +15454,7 @@ window._cmSug = function(inp, boxId){
     html += '<div class="cm-sug-item" onmousedown="event.preventDefault();_cmSugPick(\''+inp.id+'\',\''+boxId+'\',\''+safeNm+'\')">'
           + '<span class="cm-sug-dot" style="background:'+(it.colors[0]||'#888')+';"></span>'
           + '<span>'+it.name+'</span>'
-          + '<span class="cm-sug-line">'+it.lines.slice(0,2).join('·')+(it.lines.length>2?' 외':'')+'</span>'
+          + '<span class="cm-sug-line">지하철 · '+it.lines.slice(0,2).join('·')+(it.lines.length>2?' 외':'')+'</span>'
           + '</div>';
   });
   box.innerHTML = html;
@@ -15338,7 +15462,38 @@ window._cmSug = function(inp, boxId){
 };
 window._cmSugPick = function(inpId, boxId, name){
   var inp = document.getElementById(inpId), box = document.getElementById(boxId);
-  if(inp) inp.value = name;
+  if(inp){ inp.value = name; inp.dataset.lat=''; inp.dataset.lng=''; inp.dataset.bus=''; }
+  if(box){ box.style.display='none'; box.innerHTML=''; }
+  if(typeof _cmSaveTimes === 'function') _cmSaveTimes();
+};
+// ── 버스정류장 자동완성 (TAGO, 디바운스 350ms) ──
+function _cmSugBus(inp, box, q){
+  if(q.length < 2 || typeof _busStopSearchByName !== 'function') return;
+  if(window._cmBusTm) clearTimeout(window._cmBusTm);
+  window._cmBusTm = setTimeout(function(){
+    _busStopSearchByName(inp.value.trim(), function(items){
+      if(box.dataset.q !== q) return;   // 입력이 이미 바뀜 → 무시
+      var seen = {}, added = 0, bhtml = '';
+      (items||[]).forEach(function(it){
+        if(added >= 5) return;
+        var nm = it.nodenm || it.nodeNm || '';
+        var la = parseFloat(it.gpslati), lo = parseFloat(it.gpslong);
+        if(!nm || seen[nm] || isNaN(la) || isNaN(lo)) return;
+        seen[nm] = 1; added++;
+        var safeNm = String(nm).replace(/</g,'&lt;').replace(/'/g, "\\'");
+        bhtml += '<div class="cm-sug-item" onmousedown="event.preventDefault();_cmSugPickBus(\''+inp.id+'\',\''+box.id+'\',\''+safeNm+'\','+la+','+lo+')">'
+              + '<span class="cm-sug-dot" style="background:var(--green);border-radius:3px;"></span>'
+              + '<span>'+String(nm).replace(/</g,'&lt;')+'</span>'
+              + '<span class="cm-sug-line">버스</span>'
+              + '</div>';
+      });
+      if(bhtml){ box.innerHTML += bhtml; box.style.display = 'block'; }
+    });
+  }, 350);
+}
+window._cmSugPickBus = function(inpId, boxId, name, lat, lng){
+  var inp = document.getElementById(inpId), box = document.getElementById(boxId);
+  if(inp){ inp.value = name; inp.dataset.lat = lat; inp.dataset.lng = lng; inp.dataset.bus = '1'; }
   if(box){ box.style.display='none'; box.innerHTML=''; }
   if(typeof _cmSaveTimes === 'function') _cmSaveTimes();
 };
@@ -15347,6 +15502,71 @@ window._cmSugBlur = function(boxId){
     var box = document.getElementById(boxId);
     if(box) box.style.display='none';
   }, 180);
+};
+
+// ── ★ 테마 일치 커스텀 시간 선택기 (바텀시트) ──
+function _cmFmtTime(hm){
+  var p = String(hm||'07:30').split(':'), h = parseInt(p[0],10)||0, mi = p[1]||'00';
+  var ap = h < 12 ? '오전' : '오후';
+  var h12 = h % 12; if(h12 === 0) h12 = 12;
+  return ap + ' ' + h12 + ':' + mi;
+}
+window._cmFmtTime = _cmFmtTime;
+window._cmTimePick = function(targetId, label){
+  var el = document.getElementById(targetId);
+  if(!el) return;
+  var cur = el.dataset.time || '07:30';
+  var parts = cur.split(':');
+  var H = parseInt(parts[0],10)||7, M = parseInt(parts[1],10)||0;
+  var st = { pm: H >= 12, h12: (H%12===0?12:H%12), m: (Math.round(M/5)*5) % 60 };
+  var old = document.getElementById('cmTpOv'); if(old) old.remove();
+  var ov = document.createElement('div');
+  ov.id = 'cmTpOv';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:flex-end;justify-content:center;';
+  var hours = '', mins = '', i, j;
+  for(i=1;i<=12;i++) hours += '<div class="cm-tp-cell" data-h="'+i+'">'+i+'</div>';
+  for(j=0;j<60;j+=5) mins += '<div class="cm-tp-cell" data-m="'+j+'">'+('0'+j).slice(-2)+'</div>';
+  ov.innerHTML =
+    '<div style="background:var(--card);border:1px solid var(--border);border-radius:20px 20px 0 0;width:100%;max-width:520px;padding:20px 18px calc(20px + env(safe-area-inset-bottom));box-sizing:border-box;">'
+    + '<div style="font-size:14px;font-weight:800;color:var(--sub);margin-bottom:4px;">'+label+'</div>'
+    + '<div id="cmTpNow" style="font-size:28px;font-weight:800;color:var(--gold);margin-bottom:14px;letter-spacing:1px;"></div>'
+    + '<div style="display:flex;gap:8px;margin-bottom:14px;">'
+    +   '<div class="cm-tp-seg" data-ap="am">오전</div><div class="cm-tp-seg" data-ap="pm">오후</div>'
+    + '</div>'
+    + '<div style="font-size:11px;font-weight:700;color:var(--sub);margin-bottom:6px;">시</div>'
+    + '<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:7px;margin-bottom:14px;">'+hours+'</div>'
+    + '<div style="font-size:11px;font-weight:700;color:var(--sub);margin-bottom:6px;">분</div>'
+    + '<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:7px;margin-bottom:18px;">'+mins+'</div>'
+    + '<div style="display:flex;gap:10px;">'
+    +   '<button id="cmTpCancel" style="flex:1;padding:13px;border-radius:11px;border:1px solid var(--border2);cursor:pointer;font-size:14px;font-weight:700;background:transparent;color:var(--sub);font-family:inherit;">취소</button>'
+    +   '<button id="cmTpOk" style="flex:2;padding:13px;border-radius:11px;border:none;cursor:pointer;font-size:14px;font-weight:800;background:var(--chip-on-bg);color:var(--chip-on-txt);font-family:inherit;">확인</button>'
+    + '</div></div>';
+  function _paint(){
+    ov.querySelectorAll('.cm-tp-seg').forEach(function(b){ b.classList.toggle('on', (b.dataset.ap==='pm') === st.pm); });
+    ov.querySelectorAll('[data-h]').forEach(function(b){ b.classList.toggle('on', parseInt(b.dataset.h,10) === st.h12); });
+    ov.querySelectorAll('[data-m]').forEach(function(b){ b.classList.toggle('on', parseInt(b.dataset.m,10) === st.m); });
+    var nowEl = ov.querySelector('#cmTpNow');
+    if(nowEl) nowEl.textContent = (st.pm?'오후':'오전') + ' ' + st.h12 + ':' + ('0'+st.m).slice(-2);
+  }
+  ov.addEventListener('click', function(e){
+    var t = e.target;
+    if(t === ov){ ov.remove(); return; }
+    if(t.dataset && t.dataset.ap){ st.pm = (t.dataset.ap==='pm'); _paint(); return; }
+    if(t.dataset && t.dataset.h){ st.h12 = parseInt(t.dataset.h,10); _paint(); return; }
+    if(t.dataset && t.dataset.m != null && t.dataset.m !== ''){ st.m = parseInt(t.dataset.m,10); _paint(); return; }
+    if(t.id === 'cmTpCancel'){ ov.remove(); return; }
+    if(t.id === 'cmTpOk'){
+      var h24 = st.h12 % 12 + (st.pm ? 12 : 0);
+      var hm = ('0'+h24).slice(-2) + ':' + ('0'+st.m).slice(-2);
+      el.dataset.time = hm;
+      el.textContent = _cmFmtTime(hm);
+      ov.remove();
+      if(typeof _cmSaveTimes === 'function') _cmSaveTimes();
+      return;
+    }
+  });
+  document.body.appendChild(ov);
+  _paint();
 };
 
 // LocalNotifications 채널 + 권한 초기화
