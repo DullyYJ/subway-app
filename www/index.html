@@ -15082,7 +15082,7 @@ function showNotification(title, body, opts){
         sound:   opts.sound || null,
         smallIcon: 'ic_stat_subway',
         channelId: 'subway_alerts',
-        extra:   { type: opts.type || 'general' }
+        extra:   { type: opts.type || 'general', title: title, body: body }   // ★ 탭 시 상세 팝업 복원용
       }]});
       // 진동은 별도 (LocalNotifications가 채널 진동 설정 따름)
       if('vibrate' in navigator) navigator.vibrate(vibPat);
@@ -15100,6 +15100,31 @@ function showNotification(title, body, opts){
   }
   if('vibrate' in navigator) navigator.vibrate(vibPat);
 }
+
+// ── ★ 알림 탭 → 앱 내 브리핑 상세 팝업 ──
+function _showBriefingModal(title, body){
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function _render(){
+    try {
+      var old = document.getElementById('briefModalOv');
+      if(old) old.remove();
+      var ov = document.createElement('div');
+      ov.id = 'briefModalOv';
+      ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:24px;';
+      ov.innerHTML =
+        '<div style="background:var(--card);border:1px solid var(--border);border-radius:18px;max-width:420px;width:100%;padding:22px 20px;box-shadow:0 16px 48px rgba(0,0,0,.35);">'
+        + '<div style="font-size:17px;font-weight:800;color:var(--text);margin-bottom:12px;line-height:1.4;">' + esc(title) + '</div>'
+        + '<div style="font-size:14px;color:var(--text);line-height:1.7;white-space:pre-line;">' + esc(body) + '</div>'
+        + '<button onclick="document.getElementById(\'briefModalOv\').remove()" style="width:100%;margin-top:18px;padding:12px;border-radius:11px;border:none;cursor:pointer;font-size:14px;font-weight:700;background:var(--gold);color:#121214;">확인</button>'
+        + '</div>';
+      ov.addEventListener('click', function(e){ if(e.target === ov) ov.remove(); });
+      document.body.appendChild(ov);
+    } catch(e){}
+  }
+  if(document.body) _render();
+  else document.addEventListener('DOMContentLoaded', _render);
+}
+window._showBriefingModal = _showBriefingModal;
 
 // ══════════ ⏰ 출퇴근 날씨+AI 브리핑 알림 ══════════
 var _cmAlarm = { on:false, morn:'07:30', eve:'18:30', from:'', to:'', lastKey:'' };
@@ -15152,7 +15177,8 @@ function _fetchWeather(lat, lng, cb){
 }
 
 // 브리핑 생성 + 알림 발사
-function _fireCommuteBriefing(type){
+function _fireCommuteBriefing(type, opts){
+  opts = opts || {};
   var isMorn = (type==='morn');
   // ★ 설정된 출발/도착역 (퇴근은 자동 반대 방향)
   var fromStn = _cmFindStn(isMorn ? _cmAlarm.from : _cmAlarm.to);
@@ -15187,8 +15213,12 @@ function _fireCommuteBriefing(type){
     var title = (isMorn ? '🌅 출근길 브리핑' : '🌆 퇴근길 브리핑')
               + (fromStn && toStn ? ' · ' + fromStn.name + '→' + toStn.name : '');
     var body = lines.join('\n');
-    if(typeof showNotification==='function') showNotification(title, body, {});
-    if(typeof toast==='function' && !document.hidden) toast(title+' 발송됨');
+    if(opts.modal){
+      _showBriefingModal(title, body);   // ★ 알림 탭 진입 → 팝업으로 표시
+    } else {
+      if(typeof showNotification==='function') showNotification(title, body, {});
+      if(typeof toast==='function' && !document.hidden) toast(title+' 발송됨');
+    }
   }
 
   _fetchWeather(la, ln, function(wF){
@@ -15350,8 +15380,16 @@ function _initLocalNotifications(){
           var nid = ev && ev.notification && ev.notification.id;
           if(ev.actionId === 'dismiss' && nid != null){
             LN.cancel({ notifications: [{ id: nid }] }).catch(function(){});
+            return;
           }
-          // 'open' 또는 본문 탭('tap')은 앱이 열리며 자동 처리
+          // ★ 본문 탭('tap') 또는 [앱으로 가기]('open') → 앱 안에서 상세 팝업 표시
+          var ex = ev && ev.notification && ev.notification.extra;
+          if(ex && ex.title && ex.body){
+            setTimeout(function(){ _showBriefingModal(ex.title, ex.body); }, 350);
+          } else if(nid === 9101 || nid === 9102){
+            // OS 예약 백업 알림(고정 문구) → 탭 시 최신 브리핑 생성해 팝업으로 표시
+            setTimeout(function(){ _fireCommuteBriefing(nid === 9101 ? 'morn' : 'eve', { modal:true }); }, 350);
+          }
         } catch(e){}
       });
     } catch(e){}
