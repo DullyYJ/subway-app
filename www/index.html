@@ -2290,7 +2290,10 @@ function _loadServerPosts(cat, reset) {
       // AI 로컬 게시글 + 서버 게시글 합치기
       // (서버 게시글이 없으면 AI 로컬 유지)
       if(converted.length > 0) {
-        // 서버 게시글로 교체
+        // ★ 서버 게시글이 소스 → 로컬 자동 생성 완전 중단
+        window._serverPostsActive = true;
+        try { if(typeof _newPostTimer !== 'undefined' && _newPostTimer) clearTimeout(_newPostTimer); } catch(e){}
+        try { if(typeof _autoPostTimer !== 'undefined' && _autoPostTimer) clearTimeout(_autoPostTimer); } catch(e){}
         _AI_POSTS = converted;
         renderCommList();
       } else if(_AI_POSTS.length === 0) {
@@ -16649,6 +16652,7 @@ window._scheduleAutoComment=_scheduleAutoComment;
 
 // ── 게시글 자동 생성 ───────────────────────────────────────
 function autoGeneratePost(){
+  if(window._serverPostsActive) return;   // ★ 서버 게시글 사용 중 → 로컬 생성 중단
   var post=_generatePost();
   _AI_POSTS.unshift(post);
   if(_AI_POSTS.length>60) _AI_POSTS.pop();
@@ -16690,6 +16694,7 @@ function _scheduleNewPost(){
   // ★ 20초마다 새 글 생성
   var delay = 20000;
   _newPostTimer = setTimeout(function(){
+    if(window._serverPostsActive) return;   // ★ 서버 게시글 사용 중 → 로컬 생성 중단
     try {
       var p = _generatePost();
       p.time = Date.now();              // 방금 올라온 글
@@ -17007,7 +17012,7 @@ function _renderPost(post) {
   el.setAttribute('data-cat', post.cat);
   el.setAttribute('data-id', post.id);
 
-  var cmtHtml = post.cmts.map(function(c){
+  var cmtHtml = (post.cmts || []).map(function(c){
     return '<div class="dc-cmt">'
       + '<span class="dc-cmt-nick">' + c.nick + '</span>'
       + '<span class="dc-cmt-txt">' + c.text + '</span>'
@@ -17025,14 +17030,14 @@ function _renderPost(post) {
       + '<span class="dc-dot">·</span>'
       + '<span class="dc-time">' + _timeAgo(post.time) + '</span>'
       + '<span class="dc-dot">·</span>'
-      + '<span class="dc-views">👁 ' + post.views + '</span>'
+      + '<span class="dc-views">👁 ' + (post.views || 0) + '</span>'
     + '</div>'
     + '<div class="dc-post-body" style="display:none;">'
-      + '<div class="dc-body-txt">' + post.body.replace(/\n/g,'<br>') + '</div>'
+      + '<div class="dc-body-txt">' + (post.body || '').replace(/\n/g,'<br>') + '</div>'
       + '<div class="dc-reactions">'
-        + '<button class="dc-react-btn" onclick="dcReact(' + post.id + ',\'like\',this)">👍 <span>' + post.like + '</span></button>'
-        + '<button class="dc-react-btn" onclick="dcReact(' + post.id + ',\'lol\',this)">ㅋㅋ <span>' + post.lol + '</span></button>'
-        + '<button class="dc-react-btn" onclick="dcReact(' + post.id + ',\'sad\',this)">ㅠㅠ <span>' + post.sad + '</span></button>'
+        + '<button class="dc-react-btn" onclick="dcReact(' + post.id + ',\'like\',this)">👍 <span>' + (post.like || 0) + '</span></button>'
+        + '<button class="dc-react-btn" onclick="dcReact(' + post.id + ',\'lol\',this)">ㅋㅋ <span>' + (post.lol || 0) + '</span></button>'
+        + '<button class="dc-react-btn" onclick="dcReact(' + post.id + ',\'sad\',this)">ㅠㅠ <span>' + (post.sad || 0) + '</span></button>'
       + '</div>'
       + (cmtHtml ? '<div class="dc-cmts">' + cmtHtml + '</div>' : '')
     + '</div>';
@@ -17088,6 +17093,7 @@ window.renderCommList = renderCommList;
 
 // ── autoGeneratePost: 게시글 1개 생성 후 목록 갱신 ────────
 function autoGeneratePost() {
+  if(window._serverPostsActive) return;   // ★ 서버 게시글 사용 중 → 로컬 생성 중단
   var post = _generatePost();
   _AI_POSTS.unshift(post);
   if(_AI_POSTS.length > 50) _AI_POSTS.pop();  // 최대 50개 유지
@@ -18790,10 +18796,9 @@ window.onload=function(){
 
   // GPS 자동 감지 제거 — 수동으로만 동작
 
-  // 커뮤니티 초기 게시글 즉시 생성 (앱 시작 시 12개)
-  // ★ 먼저 실시간 뉴스를 가져온 뒤 게시글 생성 (현재 날짜/시간 기준 외부 데이터)
+  // ★ 게시판은 서버(D1) 누적분이 기본 소스 — 로컬 생성은 서버 실패 시 폴백만
+  // (기존: initCommunityPosts 무조건 실행 → 앱 켤 때마다 리셋되던 원인 제거)
   if(typeof _fetchRealtimeNews === 'function') _fetchRealtimeNews();
-  setTimeout(function(){ if(typeof initCommunityPosts==='function') initCommunityPosts(); }, 1500);
   setTimeout(function(){ if(typeof initLiveTalk==='function') initLiveTalk(); }, 800);  // ★ 실시간 톡 시작
   setTimeout(function(){ if(typeof _updateDayTypeBadge==='function') _updateDayTypeBadge(); }, 300);  // 평일/주말 배지
   setTimeout(function(){ if(typeof _updateBaseTimeDisplay==='function') _updateBaseTimeDisplay(); }, 300);
@@ -18804,7 +18809,7 @@ window.onload=function(){
   // 10분마다 실시간 뉴스 갱신
   setInterval(function(){ if(document.hidden) return; if(typeof _fetchRealtimeNews === 'function') _fetchRealtimeNews(); }, 10*60*1000);
   // 이후 5~10분 랜덤 간격으로 새 글 자동 생성
-  setTimeout(function(){ if(typeof scheduleAutoPost==='function') scheduleAutoPost(); }, 20000);
+  setTimeout(function(){ if(!window._serverPostsActive && typeof scheduleAutoPost==='function') scheduleAutoPost(); }, 20000);
 
 
   // ── [삽입 위치: window.onload 하단] 자동갱신 시스템 시작 ──
@@ -18835,12 +18840,13 @@ window.onload=function(){
   try { if(typeof updateMarquee === 'function') updateMarquee(); } catch(e){}
   setInterval(function(){ if(document.hidden) return; try { updateMarquee(); } catch(e){} }, 5*60*1000);
 
-  // ── 앱 시작 시 서버에서 커뮤니티 게시글 로드 ───────
+  // ── 앱 시작 시 서버에서 커뮤니티 게시글 로드 + 3분 주기 갱신 ───────
   setTimeout(function(){
     if(typeof _loadServerPosts === 'function') {
       _loadServerPosts('all', true);
     }
   }, 1500);
+  // (게시글 주기 갱신은 _startServerSync 내 _serverFetchPosts 3분 폴링으로 일원화)
 
   // ── 백그라운드 추적 + 알림 초기화 ──────────────────
   setTimeout(function(){
@@ -25284,29 +25290,13 @@ function _serverPostArticle(nick, title, body, cat){
 }
 
 // 서버에서 게시글 가져오기
+// ★ 옛 형식(cmts/id/views 누락) 직접 주입이 렌더 크래시 원인이었음
+//    → 표준 변환을 거치는 _loadServerPosts로 일원화
 function _serverFetchPosts(){
   if(!_SERVER_ON) return;
   try {
-    fetch(_SERVER_URL + '/posts')
-      .then(function(r){ return r.json(); })
-      .then(function(d){
-        if(!d || !d.posts || !d.posts.length) return;
-        var added = false;
-        d.posts.forEach(function(p){
-          if(_serverPostIds[p.id]) return;
-          _serverPostIds[p.id] = true;
-          if(typeof _AI_POSTS !== 'undefined'){
-            _AI_POSTS.unshift({
-              nick: p.nick, title: p.title, body: p.body, cat: p.cat,
-              time: p.ts, server: true,
-              reactions: { like: p.likes||0, lol: p.lols||0, sad: p.sads||0 },
-              comments: []
-            });
-            added = true;
-          }
-        });
-        if(added && typeof renderCommList==='function') renderCommList();
-      }).catch(function(){});
+    if(typeof _loadServerPosts === 'function')
+      _loadServerPosts((typeof _commFilter !== 'undefined' && _commFilter) || 'all', true);
   } catch(e){}
 }
 
@@ -25316,7 +25306,7 @@ function _startServerSync(){
   _serverFetchTalks();
   _serverFetchPosts();
   setInterval(_serverFetchTalks, 20000);   // 톡: 20초
-  setInterval(_serverFetchPosts, 60000);   // 게시글: 60초
+  setInterval(_serverFetchPosts, 180000);  // 게시글: 3분
 }
 
 // ══════════════════════════════════════════════════════════════
