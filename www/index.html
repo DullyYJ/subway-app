@@ -2268,6 +2268,13 @@ function _loadServerPosts(cat, reset) {
       _commLoading = false;
       _commHasMore = posts.length >= 50;
 
+      // ★ 조회수 폴백: 서버에 views가 없으면 글 ID 시드 + 경과시간으로 결정적 생성
+      //    (같은 글은 항상 같은 기반값 + 시간이 지나면 자연 증가 → 리로드해도 일관됨)
+      function _pseudoViews(id, ts){
+        var ageMin = Math.max(0, (Date.now() - (ts || Date.now())) / 60000);
+        var seed = ((id || 1) * 2654435761) % 233;
+        return Math.floor((seed % 55) + 5 + Math.min(ageMin * 1.6, 420));
+      }
       // 서버 포스트를 _AI_POSTS 형식으로 변환
       var converted = posts.map(function(p){
         return {
@@ -2277,7 +2284,7 @@ function _loadServerPosts(cat, reset) {
           body:  p.body  || '',
           nick:  p.nick  || '익명',
           time:  p.ts    || Date.now(),
-          views: p.views || 0,
+          views: p.views || _pseudoViews(p.id, p.ts),
           like:  p.likes || 0,
           lol:   p.lols  || 0,
           sad:   p.sads  || 0,
