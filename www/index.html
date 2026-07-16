@@ -25243,6 +25243,7 @@ var _serverTalkIds = {};                // 서버 톡 중복 방지
 var _serverPostIds = {};                // 서버 게시글 중복 방지
 
 // 서버에 톡 등록 (작성 시 호출)
+var _BOARD_WRITER_URL = 'https://board-writer.phg0643.workers.dev';
 function _serverPostTalk(nick, text){
   if(!_SERVER_ON) return;
   try {
@@ -25251,6 +25252,17 @@ function _serverPostTalk(nick, text){
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ nick: nick, text: text })
     }).catch(function(){});  // 실패해도 앱은 계속 작동 (로컬 표시는 됨)
+
+    // ★ 사용자 개입 → AI 참여자들이 이 메시지에 직접 반응 (6~45초 뒤 등장)
+    fetch(_BOARD_WRITER_URL + '/react?token=328574', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ nick: nick, text: text })
+    }).catch(function(){});
+    // 반응이 빨리 보이도록 후속 폴링 예약
+    [8000, 20000, 45000].forEach(function(d){
+      setTimeout(function(){ try { _serverFetchTalks(); } catch(e){} }, d);
+    });
   } catch(e){}
 }
 
@@ -25263,8 +25275,11 @@ function _serverFetchTalks(){
       .then(function(d){
         if(!d || !d.talks || !d.talks.length) return;
         var added = false;
+        var _nowMs = Date.now();
         d.talks.forEach(function(t){
           if(_serverTalkIds[t.id]) return;       // 이미 받은 것 skip
+          // ★ 미래 예약 메시지(서버 대본)는 그 시각이 지나면 다음 폴링에서 수신 → 라이브처럼 순차 등장
+          if(t.ts > _nowMs + 5000) return;       // 마킹/커서 전진 없이 보류
           if(t.nick === '나' || (typeof _getCommId==='function' && t.nick === _getCommId())) {
             _serverTalkIds[t.id] = true;          // 내가 쓴 건 이미 로컬에 있음
             if(t.ts > _lastTalkTs) _lastTalkTs = t.ts;
@@ -25274,6 +25289,7 @@ function _serverFetchTalks(){
           _LIVE_TALK.push({ nick: t.nick, text: t.text, time: t.ts, server: true });
           if(t.ts > _lastTalkTs) _lastTalkTs = t.ts;
           added = true;
+          window._serverTalksActive = true;      // ★ 서버 대화 수신 중 → 로컬 생성 중단
         });
         if(_LIVE_TALK.length > 100) _LIVE_TALK.splice(0, _LIVE_TALK.length - 100);
         if(added){
@@ -25312,7 +25328,7 @@ function _startServerSync(){
   if(!_SERVER_ON) return;
   _serverFetchTalks();
   _serverFetchPosts();
-  setInterval(_serverFetchTalks, 20000);   // 톡: 20초
+  setInterval(_serverFetchTalks, 12000);   // 톡: 12초 (라이브 체감)
   setInterval(_serverFetchPosts, 180000);  // 게시글: 3분
 }
 
@@ -25603,15 +25619,14 @@ function _scheduleLiveTalk(){
   if(_ltTimer) clearTimeout(_ltTimer);
   // 실제 채팅 리듬: Gemini 대화 큐가 있으면 8~16초(활발), 폴백이면 15~26초(잔잔)
   var _d = (typeof _ltAiQueue!=='undefined' && _ltAiQueue.length) ? _rndInt(8000,16000) : _rndInt(15000,26000);
-  _ltTimer = setTimeout(function(){ _ltGenerate(); _scheduleLiveTalk(); }, _d);
+  _ltTimer = setTimeout(function(){ if(!window._serverTalksActive) _ltGenerate(); _scheduleLiveTalk(); }, _d);
 }
 function initLiveTalk(){
   if(_LIVE_TALK.length) return;  // 중복 방지
-  for(var i=0;i<3;i++){
-    _LIVE_TALK.push({nick:_rnd(_LT_NICKS),text:_rnd(_ltPickPool()),time:Date.now()-_rndInt(30000,180000),mine:false});
-  }
+  // ★ 가짜 시드 3개 제거 — 서버 누적 대화가 이력을 채움 (껐다 켜도 유지)
   _renderLiveTalk(); _renderChatTab(); _scheduleLiveTalk();
-  try { _ltFetchAi(); } catch(e){}   // Gemini 대화 초기 로드
+  try { if(typeof _serverFetchTalks === 'function') _serverFetchTalks(); } catch(e){}
+  try { _ltFetchAi(); } catch(e){}   // Gemini 대화 초기 로드 (서버 폴백용)
 }
 window.initLiveTalk = initLiveTalk;
 
