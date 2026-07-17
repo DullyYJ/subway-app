@@ -707,7 +707,8 @@ header h1 em{color:var(--gold);font-style:normal;}
 .shop-sec span{font-size:10px;color:var(--sub);}
 .prod-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
 .prod{background:var(--card);border:1px solid var(--border);border-radius:13px;padding:11px;display:flex;flex-direction:column;}
-.prod-img{width:100%;height:58px;border-radius:9px;background:var(--prod-img-bg,#252528);display:flex;align-items:center;justify-content:center;font-size:24px;margin-bottom:6px;}
+.prod-img{width:100%;height:96px;border-radius:9px;background:var(--prod-img-bg,#252528);display:flex;align-items:center;justify-content:center;font-size:28px;margin-bottom:6px;overflow:hidden;}
+.prod-img img{width:100%;height:100%;object-fit:contain;background:#fff;border-radius:9px;}
 .prod-tag{font-size:9px;color:var(--green);background:rgba(52,199,89,.1);padding:2px 5px;border-radius:4px;display:inline-block;margin-bottom:3px;align-self:flex-start;}
 .prod-brand{font-size:9px;color:var(--sub);margin-bottom:2px;}
 .prod-name{font-size:11px;font-weight:700;color:var(--text);margin-bottom:2px;line-height:1.35;}
@@ -7091,6 +7092,8 @@ window.addEventListener('unhandledrejection', function(e) {
     <span id="shopTimeLabel"></span>
   </div>
   <div class="prod-grid" id="shopGrid"></div>
+
+  <p style="font-size:10px;color:var(--sub);margin:10px 2px 0;line-height:1.5;opacity:.8;">이 페이지의 상품 링크는 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</p>
 
   <div class="shop-refresh" onclick="refreshShop()">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
@@ -24699,18 +24702,45 @@ function initChart24Scroll(){
 window.initChart24Scroll = initChart24Scroll;
 
 // ── 쇼핑 시스템 ─────────────────────────────────────────────
+// ── 쿠팡 파트너스 실제 상품 (카테고리: 아침대용식 / 우천대비 / 출근룩소품) ──
 var SHOP_ITEMS=[
-  {emoji:'☕',name:'스타벅스 아메리카노',sub:'출근길 必템',price:'4,500원',tag:'인기',url:'https://www.coupang.com/np/search?q=아메리카노'},
-  {emoji:'🥛',name:'바나나맛 우유',sub:'편의점 픽업',price:'1,200원',tag:'추천',url:'https://www.coupang.com/np/search?q=바나나우유'},
-  {emoji:'😴',name:'목쿠션 안대 세트',sub:'지하철 꿀잠',price:'8,900원',tag:'특가',url:'https://www.coupang.com/np/search?q=목쿠션'},
-  {emoji:'🎧',name:'무선 이어폰',sub:'출근길 음악',price:'29,900원',tag:'HOT',url:'https://www.coupang.com/np/search?q=무선이어폰'},
-  {emoji:'💊',name:'종합 비타민',sub:'피곤한 직장인',price:'19,900원',tag:'건강',url:'https://www.coupang.com/np/search?q=종합비타민'},
-  {emoji:'📖',name:'아침 자기계발서',sub:'베스트셀러',price:'13,500원',tag:'신상',url:'https://www.coupang.com/np/search?q=자기계발'},
-  {emoji:'🧤',name:'터치 스크린 장갑',sub:'겨울 출근',price:'6,900원',tag:'시즌',url:'https://www.coupang.com/np/search?q=터치장갑'},
-  {emoji:'🥤',name:'단백질 쉐이크',sub:'헬스 출근러',price:'32,000원',tag:'건강',url:'https://www.coupang.com/np/search?q=단백질쉐이크'},
+  // 아침대용식
+  {cat:'아침대용식',emoji:'🌾',name:'그래놀라바',sub:'든든한 한 입',tag:'인기',url:'https://link.coupang.com/a/frJXdssgii'},
+  {cat:'아침대용식',emoji:'💪',name:'프로틴바',sub:'단백질 충전',tag:'HOT',url:'https://link.coupang.com/a/frJ4GfqEzQ'},
+  {cat:'아침대용식',emoji:'🥣',name:'오버나이트오츠',sub:'전날 밤 준비 끝',tag:'추천',url:'https://link.coupang.com/a/frJ5NDdyPA'},
+  {cat:'아침대용식',emoji:'🍜',name:'컵누들',sub:'저칼로리 간편식',tag:'가성비',url:'https://link.coupang.com/a/frJ8pCMscm'},
+  {cat:'아침대용식',emoji:'🍚',name:'즉석죽',sub:'속 편한 아침',tag:'추천',url:'https://link.coupang.com/a/frJ9maGPzo'},
+  {cat:'아침대용식',emoji:'🥜',name:'견과류바',sub:'고소한 에너지',tag:'인기',url:'https://link.coupang.com/a/frKbBjzkL6'},
+  {cat:'아침대용식',emoji:'🥛',name:'두유',sub:'아침 한 팩',tag:'국룰',url:'https://link.coupang.com/a/frKcxIEy5c'},
+  {cat:'아침대용식',emoji:'🥄',name:'떠먹는 요거트',sub:'장 건강 챙기기',tag:'건강',url:'https://link.coupang.com/a/frKdNsWk3g'},
+  {cat:'아침대용식',emoji:'🥚',name:'삶은계란 팩',sub:'단백질 국룰',tag:'HOT',url:'https://link.coupang.com/a/frKeOrq58e'},
+  {cat:'아침대용식',emoji:'🍠',name:'고구마말랭이',sub:'달달한 간식',tag:'간식',url:'https://link.coupang.com/a/frKfYeqJSm'},
+  // 우천대비
+  {cat:'우천대비',emoji:'☂️',name:'3단 자동우산',sub:'가방 속 필수',tag:'필수',url:'https://link.coupang.com/a/frKgZ5N4Wi'},
+  {cat:'우천대비',emoji:'🌂',name:'완전자동 장우산',sub:'버튼 하나로',tag:'인기',url:'https://link.coupang.com/a/frKuLa8j3k'},
+  {cat:'우천대비',emoji:'🧥',name:'우비 판초',sub:'폭우엔 이거',tag:'장마',url:'https://link.coupang.com/a/frKxt4mrvM'},
+  {cat:'우천대비',emoji:'👟',name:'신발 방수커버',sub:'신발 사수',tag:'꿀템',url:'https://link.coupang.com/a/frKyQXyJj2'},
+  {cat:'우천대비',emoji:'💧',name:'우산 빗물제거 커버',sub:'지하철 매너템',tag:'매너',url:'https://link.coupang.com/a/frKz9eUW9k'},
+  {cat:'우천대비',emoji:'🌫',name:'실내 제습제',sub:'꿉꿉함 제거',tag:'장마',url:'https://link.coupang.com/a/frLpqxzcHs'},
+  {cat:'우천대비',emoji:'🧴',name:'신발 탈취제',sub:'비 온 뒤 케어',tag:'케어',url:'https://link.coupang.com/a/frLqalSQw0'},
+  {cat:'우천대비',emoji:'👝',name:'우산 파우치',sub:'가방 젖음 방지',tag:'꿀템',url:'https://link.coupang.com/a/frLrgi6UcC'},
+  {cat:'우천대비',emoji:'🎒',name:'방수 백팩커버',sub:'가방 지킴이',tag:'필수',url:'https://link.coupang.com/a/frLr6e3bqu'},
+  {cat:'우천대비',emoji:'👢',name:'접이식 레인부츠',sub:'장마철 필수',tag:'시즌',url:'https://link.coupang.com/a/frLtjpZZxQ'},
+  // 출근룩소품
+  {cat:'출근룩소품',emoji:'👔',name:'넥타이',sub:'깔끔한 마무리',tag:'클래식',url:'https://link.coupang.com/a/frLwo4sEr6'},
+  {cat:'출근룩소품',emoji:'🤍',name:'손수건',sub:'센스 한 장',tag:'센스',url:'https://link.coupang.com/a/frLxMtbZJs'},
+  {cat:'출근룩소품',emoji:'👖',name:'남성 벨트',sub:'핏 완성',tag:'인기',url:'https://link.coupang.com/a/frLyBzw1zE'},
+  {cat:'출근룩소품',emoji:'💄',name:'쿠션팩트',sub:'지하철 광 수정',tag:'뷰티',url:'https://link.coupang.com/a/frLzSJI7xJ'},
+  {cat:'출근룩소품',emoji:'🌸',name:'미니 향수',sub:'은은한 잔향',tag:'HOT',url:'https://link.coupang.com/a/frLACem64O'},
+  {cat:'출근룩소품',emoji:'🧴',name:'데오드란트',sub:'여름 필수',tag:'여름',url:'https://link.coupang.com/a/frLBpQHgXs'},
+  {cat:'출근룩소품',emoji:'💋',name:'립밤',sub:'건조 방지',tag:'케어',url:'https://link.coupang.com/a/frLCbYyChE'},
+  {cat:'출근룩소품',emoji:'🧼',name:'휴대용 손소독제',sub:'출퇴근 위생',tag:'위생',url:'https://link.coupang.com/a/frLCZkbhi8'},
+  {cat:'출근룩소품',emoji:'🧦',name:'여분 양말',sub:'비 오는 날 구세주',tag:'꿀템',url:'https://link.coupang.com/a/frLDPcY1uK'}
 ];
-var SHOP_CATS=['아침 필수템','점심 추천','건강/피트니스','최저가 특가'];
-var _shopCatIdx=0, _shopTimerFn=null;
+var SHOP_CATS=['아침대용식','우천대비','출근룩소품'];
+// 시간대별 기본 카테고리: 새벽~오전엔 아침대용식, 그 외 출근룩소품 시작
+var _shopCatIdx=(function(){ var h=new Date().getHours(); return (h>=4 && h<11) ? 0 : 2; })();
+var _shopTimerFn=null;
 
 function getShopCat(){ return SHOP_CATS[_shopCatIdx%SHOP_CATS.length]; }
 window.getShopCat = getShopCat;
@@ -24720,14 +24750,20 @@ function renderShop(cat){
   var catLbl=document.getElementById('shopCatLabel');
   if(!grid) return;
   if(catLbl) catLbl.textContent=cat||getShopCat();
-  var items=SHOP_ITEMS.slice().sort(function(){return Math.random()-.5;}).slice(0,6);
+  var _cat = cat || getShopCat();
+  var _pool = SHOP_ITEMS.filter(function(it){ return it.cat === _cat; });
+  if(!_pool.length) _pool = SHOP_ITEMS;
+  var items=_pool.slice().sort(function(){return Math.random()-.5;}).slice(0,6);
   grid.innerHTML=items.map(function(it){
+    var _imgHtml = it.img
+      ? '<img src="'+it.img+'" loading="lazy" alt="'+it.name+'" data-e="'+it.emoji+'" onerror="this.outerHTML=this.dataset.e">'
+      : it.emoji;
     return '<div class="prod" data-url="'+it.url+'" onclick="openExternalApp(this.dataset.url)" style="cursor:pointer;">'
-      +'<div class="prod-img">'+it.emoji+'</div>'
+      +'<div class="prod-img">'+_imgHtml+'</div>'
       +'<div class="prod-tag">'+it.tag+'</div>'
       +'<div style="font-size:12px;font-weight:700;color:var(--text);margin:3px 0 2px;">'+it.name+'</div>'
       +'<div style="font-size:10px;color:var(--sub);">'+it.sub+'</div>'
-      +'<div style="font-size:12px;color:var(--gold);font-weight:700;margin-top:5px;">'+it.price+'</div>'
+      +'<div style="font-size:12px;color:var(--gold);font-weight:700;margin-top:5px;">'+(it.price||'쿠팡 최저가 ›')+'</div>'
       +'</div>';
   }).join('');
 }
