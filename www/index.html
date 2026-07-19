@@ -6038,54 +6038,103 @@ function _busEditAlias(nodeId, orgName, mode){
 }
 window._busEditAlias = _busEditAlias;
 
-// ── 정류장 랜드마크 방향: 노선 경유지에서 지하철역>시청>구청>동사무소 우선 탐색 ──
+// ── 정류장 랜드마크 방향: 진행 방향 앞쪽 "첫 번째" 역 (지하철역>시청>구청>동사무소) ──
 window._busLandmarkCache = window._busLandmarkCache || {};
 function _busLmRank(nm){
-  if(/역$/.test(nm) || nm.indexOf('역입구') >= 0 || nm.indexOf('역환승') >= 0) return 1;
+  if(/역$/.test(nm) || nm.indexOf('역입구') >= 0 || nm.indexOf('역환승') >= 0 || nm.indexOf('역광역환승') >= 0) return 1;
   if(nm.indexOf('시청') >= 0) return 2;
   if(nm.indexOf('구청') >= 0) return 3;
-  if(nm.indexOf('동사무소') >= 0 || nm.indexOf('주민센터') >= 0 || nm.indexOf('행정복지센터') >= 0) return 4;
+  if(nm.indexOf('동사무소') >= 0 || nm.indexOf('주민센터') >= 0 || nm.indexOf('주민자치센터') >= 0 || nm.indexOf('행정복지센터') >= 0) return 4;
   return 99;
+}
+// 영구 캐시 (7일): 앱 재시작 후에도 즉시 표시
+function _busLmCached(nodeId){
+  if(window._busLandmarkCache[nodeId] !== undefined) return window._busLandmarkCache[nodeId];
+  try {
+    var m = JSON.parse(localStorage.getItem('busLmCache') || '{}');
+    var e = m[nodeId];
+    if(e && Date.now() - e.t < 7 * 24 * 3600 * 1000){
+      window._busLandmarkCache[nodeId] = e.l;
+      return e.l;
+    }
+  } catch(err){}
+  return undefined;
+}
+function _busLmSave(nodeId, label){
+  window._busLandmarkCache[nodeId] = label;
+  try {
+    var m = JSON.parse(localStorage.getItem('busLmCache') || '{}');
+    m[nodeId] = { l: label, t: Date.now() };
+    localStorage.setItem('busLmCache', JSON.stringify(m));
+  } catch(err){}
+}
+// 노선 경유지 영구 캐시 (7일): 재조회 없이 즉시 계산
+function _busRouteStnsCached(cityCode, rid, cb){
+  var key = 'busRt_' + cityCode + '_' + rid;
+  try {
+    var e = JSON.parse(localStorage.getItem(key) || 'null');
+    if(e && Date.now() - e.t < 7 * 24 * 3600 * 1000){ cb(null, e.s); return; }
+  } catch(err){}
+  _fetchRouteStations(cityCode, rid, function(err, stations){
+    if(!err && stations && stations.length){
+      try {
+        var slim = stations.map(function(s){ return { nodeid: String(s.nodeid || s.nodeId || ''), nodenm: String(s.nodenm || s.nodeNm || '') }; });
+        localStorage.setItem(key, JSON.stringify({ t: Date.now(), s: slim }));
+        cb(null, slim); return;
+      } catch(e2){}
+    }
+    cb(err, stations);
+  });
 }
 function _busFindLandmark(stop, arrivals, cb){
   var nodeId = String(stop.nodeId || stop.nodeid || '');
-  if(!nodeId || !arrivals || !arrivals.length){ cb(''); return; }
-  if(window._busLandmarkCache[nodeId] !== undefined){ cb(window._busLandmarkCache[nodeId]); return; }
-  if(typeof _fetchRouteStations !== 'function'){ cb(''); return; }
+  if(!nodeId){ cb(''); return; }
+  var cached = _busLmCached(nodeId);
+  if(cached !== undefined){ cb(cached); return; }
+  if(!arrivals || !arrivals.length || typeof _fetchRouteStations !== 'function'){ cb(''); return; }
   var cityCode = stop.cityCode || stop.citycode || '25';
+  var norm = function(s){ return String(s || '').replace(/\s+/g, '').split('(')[0]; };
+  var myNm = norm(stop.name || stop.nodenm || stop.nodeName || '');
   var routes = [];
   arrivals.slice(0, 6).forEach(function(a){
     var rid = a.routeid || a.routeId;
-    if(rid && routes.indexOf(rid) < 0 && routes.length < 3) routes.push(rid);
+    if(rid && routes.indexOf(rid) < 0 && routes.length < 2) routes.push(rid);   // 속도: 2개 노선만
   });
   if(!routes.length){ cb(''); return; }
   var results = [], pending = routes.length;
   routes.forEach(function(rid){
-    _fetchRouteStations(cityCode, rid, function(err, stations){
+    _busRouteStnsCached(cityCode, rid, function(err, stations){
       pending--;
       if(!err && stations && stations.length){
-        var myIdx = -1;
-        for(var i = 0; i < stations.length; i++){
-          if(String(stations[i].nodeid || stations[i].nodeId || '') === nodeId){ myIdx = i; break; }
+        // 내 정류장 위치: ID 우선, 실패 시 이름 매칭 (ID 체계 불일치 대비)
+        var myIdx = -1, i;
+        for(i = 0; i < stations.length; i++){
+          if(nodeId && String(stations[i].nodeid || '') === nodeId){ myIdx = i; break; }
         }
-        function scan(from, to){
-          var best = null, bestRank = 99;
-          for(var j = from; j < to; j++){
-            var nm = String(stations[j].nodenm || stations[j].nodeNm || '').split('(')[0].trim();
+        if(myIdx < 0 && myNm){
+          for(i = 0; i < stations.length; i++){
+            if(norm(stations[i].nodenm) === myNm){ myIdx = i; break; }
+          }
+        }
+        // ★ 내 위치를 못 찾으면 이 노선은 스킵 (지나온 방향 오표시 방지)
+        if(myIdx >= 0){
+          var found = {};   // rank → {nm, rank, ahead}
+          for(var j = myIdx + 1; j < stations.length; j++){
+            var nm = String(stations[j].nodenm || '').split('(')[0].trim();
             if(!nm) continue;
             var r = _busLmRank(nm);
-            if(r < bestRank){ bestRank = r; best = nm; if(r === 1) break; }
+            if(r < 99 && !found[r]) found[r] = { nm: nm, rank: r, ahead: j - myIdx };
+            if(found[1]) break;   // 진행 방향 첫 역 발견 → 즉시 종료
           }
-          return best ? { nm: best, rank: bestRank } : null;
+          var best = found[1] || found[2] || found[3] || found[4] || null;
+          if(best) results.push(best);
         }
-        // 진행 방향(내 정류장 이후) 우선, 없으면 전체 노선에서 탐색
-        var found = (myIdx >= 0 ? scan(myIdx + 1, stations.length) : null) || scan(0, stations.length);
-        if(found) results.push(found);
       }
       if(pending === 0){
-        results.sort(function(a, b){ return a.rank - b.rank; });
+        // 여러 노선 중: 우선순위 높은 것 → 같은 순위면 더 가까운(정거장 수 적은) 것
+        results.sort(function(a, b){ return (a.rank - b.rank) || (a.ahead - b.ahead); });
         var label = results.length ? results[0].nm : '';
-        window._busLandmarkCache[nodeId] = label;
+        _busLmSave(nodeId, label);
         cb(label);
       }
     });
@@ -6110,7 +6159,8 @@ function _renderMapBusCard(stop, idx, mode) {
     : _ltEsc(name);
   card.innerHTML =
     '<div class="map-bus-stop-name">' + nameHtml +
-      ' <span class="bus-lm" style="font-size:11px;font-weight:700;color:var(--gold);white-space:nowrap;"></span>' +
+      ' <span class="bus-lm" style="font-size:11px;font-weight:700;color:var(--gold);white-space:nowrap;">' +
+        (function(){ var c = (typeof _busLmCached === 'function') ? _busLmCached(nodeId) : undefined; return c ? '(' + _ltEsc(c) + ' 방향)' : ''; })() + '</span>' +
       '<button class="bus-alias-edit" title="이름 설정" style="background:none;border:none;cursor:pointer;font-size:12px;padding:0 3px;line-height:1;opacity:.55;">✏️</button>' +
       rightBtn + '</div>' +
     (dir ? '<div class="map-bus-stop-sub">' + _ltEsc(dir) + ' 방면</div>' : '') +
@@ -16747,24 +16797,14 @@ function renderCommList(){
     if(_commFilter==='all') return true;
     return p.cat===_commFilter;
   });
-  // ★ 뉴스 탭: 서버/로컬 글에 뉴스가 없으면 실시간 RSS 기사로 직접 렌더 (빈 화면 방지)
-  if(_commFilter==='뉴스' && visible.length===0){
-    if(typeof _REALTIME_NEWS!=='undefined' && _REALTIME_NEWS.length){
-      visible = _REALTIME_NEWS.slice(0, 20).map(function(nw, i){
-        var pubMs = Date.now() - (i+1)*600000;
-        if(nw.pubDate){ var pt = Date.parse(nw.pubDate); if(!isNaN(pt)) pubMs = pt; }
-        return { id: 'rss_'+i, cat:'뉴스', tag:'뉴스', title: nw.title,
-                 body: '['+(nw.source||'뉴스')+'] 보도\n\n자세한 내용은 아래 링크에서 확인하세요.'+(nw.link?'\n\n🔗 '+nw.link:''),
-                 link: nw.link||'', nick: (nw.source||'뉴스'), line:'', time: pubMs,
-                 views: 50 + ((i*37)%300), likes:0, kk:0, sad:0, comments:[] };
-      });
-    } else {
-      // RSS 아직 미수신 → 즉시 가져오고 로딩 표시 후 재렌더
-      try{ if(typeof _fetchRealtimeNews==='function') _fetchRealtimeNews(); }catch(e){}
-      list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--sub);">📰 뉴스 불러오는 중...</div>';
-      setTimeout(function(){ if(_commFilter==='뉴스') renderCommList(); }, 3000);
-      return;
+  // ★ 뉴스 탭: 헤드라인 리스트 (카테고리 칩 + 최근 3일 + 탭하면 원문 이동)
+  if(_commFilter==='뉴스'){
+    if(empty) empty.style.display='none';
+    _renderNewsTab(list);
+    if(!_NEWSFEED.items.length || Date.now() - _NEWSFEED.ts > 10*60*1000){
+      _fetchNewsFeed(function(){ if(_commFilter==='뉴스') _renderNewsTab(list); });
     }
+    return;
   }
   if(!visible.length){ if(empty) empty.style.display='block'; return; }
   if(empty) empty.style.display='none';
@@ -16772,6 +16812,61 @@ function renderCommList(){
   visible.forEach(function(post){ list.appendChild(_renderPost(post)); });
 }
 window.renderCommList=renderCommList;
+
+// ── 📰 뉴스 탭: 실시간 헤드라인 (사회/정치/경제/연예/스포츠/IT, 최근 3일, 원문 링크) ──
+var _NEWSFEED = { items: [], ts: 0 };
+var _newsCatSel = '전체';
+function _fetchNewsFeed(cb){
+  fetch(_BOARD_WRITER_URL + '/newsfeed')
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(d && d.ok && d.items && d.items.length){ _NEWSFEED.items = d.items; _NEWSFEED.ts = Date.now(); }
+      if(cb) cb();
+    }).catch(function(){ if(cb) cb(); });
+}
+function _newsAgo(ts){
+  var m = Math.floor((Date.now() - ts) / 60000);
+  if(m < 1) return '방금';
+  if(m < 60) return m + '분 전';
+  var h = Math.floor(m / 60);
+  if(h < 24) return h + '시간 전';
+  return Math.floor(h / 24) + '일 전';
+}
+function _renderNewsTab(list){
+  var cats = ['전체','사회','정치','경제','연예','스포츠','IT'];
+  var chips = cats.map(function(c){
+    var on = (c === _newsCatSel);
+    return '<button data-cat="' + c + '" class="news-cat-chip" style="padding:7px 13px;border-radius:999px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0;'
+      + (on ? 'background:var(--chip-on-bg);color:var(--chip-on-txt);border:1px solid var(--chip-on-bg);'
+            : 'background:transparent;color:var(--sub);border:1px solid var(--border2);')
+      + '">' + c + '</button>';
+  }).join('');
+  var cut = Date.now() - 3 * 24 * 3600 * 1000;
+  var items = (_NEWSFEED.items || []).filter(function(it){
+    if(it.ts && it.ts < cut) return false;
+    return _newsCatSel === '전체' || it.cat === _newsCatSel;
+  }).slice(0, 60);
+  var esc = function(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); };
+  var rows = items.map(function(it){
+    return '<div class="news-row" data-url="' + esc(it.link) + '" onclick="openExternalApp(this.dataset.url)"'
+      + ' style="display:flex;gap:10px;padding:13px 4px;border-bottom:1px solid var(--border);cursor:pointer;align-items:flex-start;">'
+      + '<div style="width:3px;align-self:stretch;border-radius:2px;background:var(--gold);flex-shrink:0;margin-top:2px;"></div>'
+      + '<div style="flex:1;min-width:0;">'
+      +   '<div style="font-size:14px;font-weight:700;color:var(--text);line-height:1.45;">' + esc(it.title) + '</div>'
+      +   '<div style="font-size:11px;color:var(--sub);margin-top:4px;">' + esc(it.cat) + (it.ts ? ' · ' + _newsAgo(it.ts) : '') + '</div>'
+      + '</div>'
+      + '<div style="color:var(--sub);font-size:13px;flex-shrink:0;margin-top:3px;">›</div>'
+      + '</div>';
+  }).join('');
+  list.innerHTML =
+    '<div style="display:flex;gap:6px;overflow-x:auto;padding:4px 2px 10px;-webkit-overflow-scrolling:touch;">' + chips + '</div>'
+    + (items.length ? rows : '<div style="text-align:center;padding:40px;color:var(--sub);">📰 뉴스 불러오는 중...</div>');
+  // 칩 클릭 → 카테고리 전환
+  list.querySelectorAll('.news-cat-chip').forEach(function(b){
+    b.addEventListener('click', function(){ _newsCatSel = b.dataset.cat; _renderNewsTab(list); });
+  });
+}
+window._fetchNewsFeed = _fetchNewsFeed;
 
 // 커뮤니티 탭 진입 시 서버에서 새로고침
 var _commNeedRefresh = true;
@@ -17208,7 +17303,7 @@ function _renderPost(post) {
       + '<span class="dc-views">👁 ' + (post.views || 0) + '</span>'
     + '</div>'
     + '<div class="dc-post-body" style="display:none;">'
-      + '<div class="dc-body-txt">' + (post.body || '').replace(/\n/g,'<br>') + '</div>'
+      + '<div class="dc-body-txt">' + (post.body || '').replace(/\n{2,}/g,'\n').replace(/\n/g,'<br>') + '</div>'
       + '<div class="dc-reactions">'
         + '<button class="dc-react-btn" onclick="dcReact(' + post.id + ',\'like\',this)">👍 <span>' + (post.like || 0) + '</span></button>'
         + '<button class="dc-react-btn" onclick="dcReact(' + post.id + ',\'lol\',this)">ㅋㅋ <span>' + (post.lol || 0) + '</span></button>'
