@@ -24702,44 +24702,71 @@ function initChart24Scroll(){
 window.initChart24Scroll = initChart24Scroll;
 
 // ── 쇼핑 시스템 ─────────────────────────────────────────────
-// ── 쿠팡 파트너스 실제 상품 (카테고리: 아침대용식 / 우천대비 / 출근룩소품) ──
+// ── 쿠팡 파트너스 실제 상품 (엑셀 시트 연동, 이미지 포함) ──
 var SHOP_ITEMS=[
   // 아침대용식
-  {cat:'아침대용식',emoji:'🌾',name:'그래놀라바',sub:'든든한 한 입',tag:'인기',url:'https://link.coupang.com/a/frJXdssgii'},
-  {cat:'아침대용식',emoji:'💪',name:'프로틴바',sub:'단백질 충전',tag:'HOT',url:'https://link.coupang.com/a/frJ4GfqEzQ'},
-  {cat:'아침대용식',emoji:'🥣',name:'오버나이트오츠',sub:'전날 밤 준비 끝',tag:'추천',url:'https://link.coupang.com/a/frJ5NDdyPA'},
-  {cat:'아침대용식',emoji:'🍜',name:'컵누들',sub:'저칼로리 간편식',tag:'가성비',url:'https://link.coupang.com/a/frJ8pCMscm'},
-  {cat:'아침대용식',emoji:'🍚',name:'즉석죽',sub:'속 편한 아침',tag:'추천',url:'https://link.coupang.com/a/frJ9maGPzo'},
-  {cat:'아침대용식',emoji:'🥜',name:'견과류바',sub:'고소한 에너지',tag:'인기',url:'https://link.coupang.com/a/frKbBjzkL6'},
-  {cat:'아침대용식',emoji:'🥛',name:'두유',sub:'아침 한 팩',tag:'국룰',url:'https://link.coupang.com/a/frKcxIEy5c'},
-  {cat:'아침대용식',emoji:'🥄',name:'떠먹는 요거트',sub:'장 건강 챙기기',tag:'건강',url:'https://link.coupang.com/a/frKdNsWk3g'},
-  {cat:'아침대용식',emoji:'🥚',name:'삶은계란 팩',sub:'단백질 국룰',tag:'HOT',url:'https://link.coupang.com/a/frKeOrq58e'},
-  {cat:'아침대용식',emoji:'🍠',name:'고구마말랭이',sub:'달달한 간식',tag:'간식',url:'https://link.coupang.com/a/frKfYeqJSm'},
+  {cat:'아침대용식',emoji:'🌾',name:'그래놀라바',sub:'든든한 한 입',tag:'인기',url:'https://link.coupang.com/a/frJXdssgii',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/vendor_inventory/d44a/efe4eac105fd7d398cda313de9ccf62c723a61cbf022f4f8719aa6bc1086.jpg'},
+  {cat:'아침대용식',emoji:'💪',name:'프로틴바',sub:'단백질 충전',tag:'HOT',url:'https://link.coupang.com/a/frJ4GfqEzQ',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/retail/images/177907901097832-fe8f4f23-f90d-46bc-9dbb-16c433382853.jpg'},
+  {cat:'아침대용식',emoji:'🥣',name:'오버나이트오츠',sub:'전날 밤 준비 끝',tag:'추천',url:'https://link.coupang.com/a/frJ5NDdyPA',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/retail/images/103543102884151-7700b97b-2a67-4e37-a18b-6ae5ee99d6da.jpg'},
+  {cat:'아침대용식',emoji:'🍜',name:'컵누들',sub:'저칼로리 간편식',tag:'가성비',url:'https://link.coupang.com/a/frJ8pCMscm',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/retail/images/236629279350126-8d797f64-b686-454e-adaf-72bbe5efe854.jpg'},
+  {cat:'아침대용식',emoji:'🍚',name:'즉석죽',sub:'속 편한 아침',tag:'추천',url:'https://link.coupang.com/a/frJ9maGPzo',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/retail/images/214977530215262-ad61dc51-dbc2-472f-9055-3bb28428e405.png'},
+  {cat:'아침대용식',emoji:'🥜',name:'견과류바',sub:'고소한 에너지',tag:'인기',url:'https://link.coupang.com/a/frKbBjzkL6',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/retail/images/2025/07/24/14/7/53f0fce0-65cf-42d0-9c65-b0803ca0ac12.jpg'},
+  {cat:'아침대용식',emoji:'🥛',name:'두유',sub:'아침 한 팩',tag:'국룰',url:'https://link.coupang.com/a/frKcxIEy5c',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/vendor_inventory/2bad/33d2c941f971b3a4b917817e96681e64e47dce27d0c21600456a89e5414f.png'},
+  {cat:'아침대용식',emoji:'🥄',name:'떠먹는요거트',sub:'장 건강 챙기기',tag:'건강',url:'https://link.coupang.com/a/frKdNsWk3g',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/retail/images/1762477266929312-375489cc-2e1a-4f09-a0a5-a3334a9210c5.jpg'},
+  {cat:'아침대용식',emoji:'🥚',name:'삶은계란(팩)',sub:'단백질 국룰',tag:'HOT',url:'https://link.coupang.com/a/frKeOrq58e',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/retail/images/1147310876361-66d4b381-bf7a-4d98-b28a-007daaf78c51.jpg'},
+  {cat:'아침대용식',emoji:'🍠',name:'고구마말랭이',sub:'달달한 간식',tag:'간식',url:'https://link.coupang.com/a/frKfYeqJSm',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/retail/images/208540767149137-bece5127-3848-412c-a115-d7f8838a798d.jpg'},
   // 우천대비
-  {cat:'우천대비',emoji:'☂️',name:'3단 자동우산',sub:'가방 속 필수',tag:'필수',url:'https://link.coupang.com/a/frKgZ5N4Wi'},
-  {cat:'우천대비',emoji:'🌂',name:'완전자동 장우산',sub:'버튼 하나로',tag:'인기',url:'https://link.coupang.com/a/frKuLa8j3k'},
-  {cat:'우천대비',emoji:'🧥',name:'우비 판초',sub:'폭우엔 이거',tag:'장마',url:'https://link.coupang.com/a/frKxt4mrvM'},
-  {cat:'우천대비',emoji:'👟',name:'신발 방수커버',sub:'신발 사수',tag:'꿀템',url:'https://link.coupang.com/a/frKyQXyJj2'},
-  {cat:'우천대비',emoji:'💧',name:'우산 빗물제거 커버',sub:'지하철 매너템',tag:'매너',url:'https://link.coupang.com/a/frKz9eUW9k'},
-  {cat:'우천대비',emoji:'🌫',name:'실내 제습제',sub:'꿉꿉함 제거',tag:'장마',url:'https://link.coupang.com/a/frLpqxzcHs'},
-  {cat:'우천대비',emoji:'🧴',name:'신발 탈취제',sub:'비 온 뒤 케어',tag:'케어',url:'https://link.coupang.com/a/frLqalSQw0'},
-  {cat:'우천대비',emoji:'👝',name:'우산 파우치',sub:'가방 젖음 방지',tag:'꿀템',url:'https://link.coupang.com/a/frLrgi6UcC'},
-  {cat:'우천대비',emoji:'🎒',name:'방수 백팩커버',sub:'가방 지킴이',tag:'필수',url:'https://link.coupang.com/a/frLr6e3bqu'},
-  {cat:'우천대비',emoji:'👢',name:'접이식 레인부츠',sub:'장마철 필수',tag:'시즌',url:'https://link.coupang.com/a/frLtjpZZxQ'},
+  {cat:'우천대비',emoji:'☂️',name:'3단 자동우산',sub:'가방 속 필수',tag:'필수',url:'https://link.coupang.com/a/frKgZ5N4Wi',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/retail/images/383357038799588-69271c9c-fd2c-4b2b-aeb2-7a8bb8062a38.jpg'},
+  {cat:'우천대비',emoji:'🌂',name:'완전자동 장우산',sub:'버튼 하나로',tag:'인기',url:'https://link.coupang.com/a/frKuLa8j3k',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/1025_amir_coupang_oct_80k/44c9/e03e91f17cd75e02f5a849eb54dc2a085d0f11a9c6305749331433d6fd3c.jpg'},
+  {cat:'우천대비',emoji:'🧥',name:'우비 판초',sub:'폭우엔 이거',tag:'장마',url:'https://link.coupang.com/a/frKxt4mrvM',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/retail/images/2802918639065186-2fe898bf-8db5-49d5-bcb6-9bf1b384ca0d.jpg'},
+  {cat:'우천대비',emoji:'👟',name:'신발 방수커버',sub:'신발 사수',tag:'꿀템',url:'https://link.coupang.com/a/frKyQXyJj2',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/retail/images/2979882736766255-5f1852d3-ced5-4474-a1a2-158bbdc71663.png'},
+  {cat:'우천대비',emoji:'💧',name:'우산 빗물제거 커버',sub:'지하철 매너템',tag:'매너',url:'https://link.coupang.com/a/frKz9eUW9k',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/retail/images/2025/06/12/13/3/421e099b-082f-49c7-9a2a-f19092b4da84.jpg'},
+  {cat:'우천대비',emoji:'🌫',name:'실내 제습제',sub:'꿉꿉함 제거',tag:'장마',url:'https://link.coupang.com/a/frLpqxzcHs',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/retail/images/1904347052090840-9cbe65c5-4e06-4961-a51e-3693a89e5f8b.jpg'},
+  {cat:'우천대비',emoji:'🧴',name:'신발 탈취제',sub:'비 온 뒤 케어',tag:'케어',url:'https://link.coupang.com/a/frLqalSQw0',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/retail/images/2026/05/14/13/3/b9be8368-eb8a-405c-a44b-b774a521cd03.png'},
+  {cat:'우천대비',emoji:'👝',name:'우산 파우치',sub:'가방 젖음 방지',tag:'꿀템',url:'https://link.coupang.com/a/frLrgi6UcC',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/retail/images/28033769107145-80a91416-0034-4e43-99cc-d15d9e8ee963.jpg'},
+  {cat:'우천대비',emoji:'🎒',name:'방수 백팩커버',sub:'가방 지킴이',tag:'필수',url:'https://link.coupang.com/a/frLr6e3bqu',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/retail/images/2023/06/28/9/1/e29a957b-623d-4e98-8977-18551a4b2b39.jpg'},
+  {cat:'우천대비',emoji:'👢',name:'접이식 레인부츠',sub:'장마철 필수',tag:'시즌',url:'https://link.coupang.com/a/frLtjpZZxQ',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/retail/images/3179418445914-f1bf5a74-2406-4110-a42a-27e1ddbb3a30.jpg'},
   // 출근룩소품
-  {cat:'출근룩소품',emoji:'👔',name:'넥타이',sub:'깔끔한 마무리',tag:'클래식',url:'https://link.coupang.com/a/frLwo4sEr6'},
-  {cat:'출근룩소품',emoji:'🤍',name:'손수건',sub:'센스 한 장',tag:'센스',url:'https://link.coupang.com/a/frLxMtbZJs'},
-  {cat:'출근룩소품',emoji:'👖',name:'남성 벨트',sub:'핏 완성',tag:'인기',url:'https://link.coupang.com/a/frLyBzw1zE'},
-  {cat:'출근룩소품',emoji:'💄',name:'쿠션팩트',sub:'지하철 광 수정',tag:'뷰티',url:'https://link.coupang.com/a/frLzSJI7xJ'},
-  {cat:'출근룩소품',emoji:'🌸',name:'미니 향수',sub:'은은한 잔향',tag:'HOT',url:'https://link.coupang.com/a/frLACem64O'},
-  {cat:'출근룩소품',emoji:'🧴',name:'데오드란트',sub:'여름 필수',tag:'여름',url:'https://link.coupang.com/a/frLBpQHgXs'},
-  {cat:'출근룩소품',emoji:'💋',name:'립밤',sub:'건조 방지',tag:'케어',url:'https://link.coupang.com/a/frLCbYyChE'},
-  {cat:'출근룩소품',emoji:'🧼',name:'휴대용 손소독제',sub:'출퇴근 위생',tag:'위생',url:'https://link.coupang.com/a/frLCZkbhi8'},
-  {cat:'출근룩소품',emoji:'🧦',name:'여분 양말',sub:'비 오는 날 구세주',tag:'꿀템',url:'https://link.coupang.com/a/frLDPcY1uK'}
+  {cat:'출근룩소품',emoji:'👔',name:'넥타이',sub:'깔끔한 마무리',tag:'클래식',url:'https://link.coupang.com/a/frLwo4sEr6',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/retail/images/2025/07/14/18/2/9f6e926f-0311-4525-8a76-332db699473b.jpg'},
+  {cat:'출근룩소품',emoji:'🤍',name:'손수건',sub:'센스 한 장',tag:'센스',url:'https://link.coupang.com/a/frLxMtbZJs',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/rs_quotation_api/kwmkgtbq/176d377aff8249d9b18b7a21da768ed3.jpg'},
+  {cat:'출근룩소품',emoji:'👖',name:'남성 벨트',sub:'핏 완성',tag:'인기',url:'https://link.coupang.com/a/frLyBzw1zE',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/retail/images/80010895277088-b8e989bf-8d3d-4e1c-ab47-0378c50182b0.jpg'},
+  {cat:'출근룩소품',emoji:'💄',name:'쿠션팩트',sub:'지하철 광 수정',tag:'뷰티',url:'https://link.coupang.com/a/frLzSJI7xJ',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/retail/images/2025/01/31/17/3/7793e327-bde5-4d1d-9864-cb61e2153744.jpg'},
+  {cat:'출근룩소품',emoji:'🌸',name:'미니 향수',sub:'은은한 잔향',tag:'HOT',url:'https://link.coupang.com/a/frLACem64O',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/1025_amir_coupang_oct_80k/3a41/e83ec90bcc92734c609f2f353e9e9b6613e69f53a8635a5730262a25d55f.jpg'},
+  {cat:'출근룩소품',emoji:'🧴',name:'데오드란트',sub:'여름 필수',tag:'여름',url:'https://link.coupang.com/a/frLBpQHgXs',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/retail/images/2025/10/02/9/7/917424b0-3954-4662-a714-37cab82c0ccc.png'},
+  {cat:'출근룩소품',emoji:'💋',name:'립밤',sub:'건조 방지',tag:'케어',url:'https://link.coupang.com/a/frLCbYyChE',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/retail/images/2025/09/10/9/7/5cf6b30d-c478-4483-aa4d-09d5d63096ca.jpg'},
+  {cat:'출근룩소품',emoji:'🧼',name:'휴대용 손소독제',sub:'출퇴근 위생',tag:'위생',url:'https://link.coupang.com/a/frLCZkbhi8',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/retail/images/66299765726946-e121ae6c-dd94-4542-95eb-ec5c2ca26a9c.jpg'},
+  {cat:'출근룩소품',emoji:'🧦',name:'여분 양말',sub:'비 오는 날 구세주',tag:'꿀템',url:'https://link.coupang.com/a/frLDPcY1uK',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/retail/images/72270590409257-12ab8887-1e62-4a4a-a927-7b5da20dfa48.jpg'},
+  // 커피음료
+  {cat:'커피음료',emoji:'☕',name:'맥심 모카골드 스틱',sub:'국민 믹스커피',tag:'국룰',url:'https://link.coupang.com/a/fu88pp048O',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/retail/images/244742320479202-bf1b3c4a-2f0a-417d-9cc6-5250439af455.jpg'},
+  {cat:'커피음료',emoji:'☕',name:'카누 아메리카노 스틱',sub:'사무실 국룰',tag:'인기',url:'https://link.coupang.com/a/fu89qjiMW4',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/vendor_inventory/e795/6c53ce7d8e7bf227153d8a421e4a4579323a1f337758974fe989cc26d6cf.jpg'},
+  {cat:'커피음료',emoji:'🥫',name:'캔커피(RTD)',sub:'따서 바로 한 캔',tag:'간편',url:'https://link.coupang.com/a/fu9avg1Thc',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/retail/images/69396715735281-cf4da70e-caf9-412c-80d9-e14b7b13c469.jpg'},
+  {cat:'커피음료',emoji:'🧊',name:'콜드브루 파우치',sub:'진하게 한 잔',tag:'HOT',url:'https://link.coupang.com/a/fu9bT4uUrQ',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/retail/images/2025/06/30/14/8/da61ee17-b2e9-4400-ba90-15f2c131af96.jpg'},
+  {cat:'커피음료',emoji:'🍵',name:'티백 녹차',sub:'따뜻한 오전',tag:'추천',url:'https://link.coupang.com/a/fu9cIT8LF6',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/vendor_inventory/image_audit/prod/79d6eb72-5000-45ab-8941-4777d8f30ff2_fixing_v2.png'},
+  {cat:'커피음료',emoji:'💧',name:'이온음료',sub:'수분 충전',tag:'운동',url:'https://link.coupang.com/a/fu9h6TmeE8',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/retail/images/2026/01/21/12/8/d56ab80a-0568-4828-8b35-17062ff3ede1.jpg'},
+  {cat:'커피음료',emoji:'🫧',name:'탄산수',sub:'칼로리 제로',tag:'인기',url:'https://link.coupang.com/a/fu9iJABKZU',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/retail/images/729077036752739-33071492-7a55-44b9-9f0f-474ba015a7b0.jpg'},
+  {cat:'커피음료',emoji:'🥛',name:'두유라떼',sub:'고소한 라떼',tag:'추천',url:'https://link.coupang.com/a/fu9lxlmzuu',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/retail/images/2026/06/05/17/2/7a65e9f4-b38f-4e9d-93ee-200226d4772d.jpg'},
+  {cat:'커피음료',emoji:'🍫',name:'핫초코 스틱',sub:'달달 충전',tag:'간식',url:'https://link.coupang.com/a/fu9mYxhwDQ',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/retail/images/3121369087394910-aea2bc0e-4d14-4955-b68d-4ee5636c877d.jpg'},
+  {cat:'커피음료',emoji:'🌾',name:'보리차 티백',sub:'물 대신 구수하게',tag:'국룰',url:'https://link.coupang.com/a/fu9nJiKF0S',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/retail/images/199157620439949-16818691-5ff0-4c10-90ff-93d35017dc06.png'},
+  // 사무용품
+  {cat:'사무용품',emoji:'📦',name:'믹스커피 박스',sub:'탕비실 채우기',tag:'대용량',url:'https://link.coupang.com/a/fu9wajwDg4',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/retail/images/911798290632177-237771f1-bce3-44df-a48d-9d3a19ee195d.jpg'},
+  {cat:'사무용품',emoji:'☕',name:'캡슐커피',sub:'내 자리가 카페',tag:'HOT',url:'https://link.coupang.com/a/fu9wKpj8Tc',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/retail/images/1383670484099284-71dc4299-107e-417d-bbda-29c726af3681.jpg'},
+  {cat:'사무용품',emoji:'🥤',name:'종이컵',sub:'탕비실 필수',tag:'필수',url:'https://link.coupang.com/a/fu9xp7BsRw',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/1025_amir_coupang_oct_80k/f7b6/4aa098afb2e7d3bc8f02de8f6384772771cab4e73f975f50f0d62df2234e.jpg'},
+  {cat:'사무용품',emoji:'🥤',name:'스테인리스 텀블러',sub:'텀블러 할인 받기',tag:'에코',url:'https://link.coupang.com/a/fu9yDgy44q',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/retail/images/2849633657372996-bcd9b1ee-ad66-43c3-9682-ce568d3cd3b4.jpg'},
+  {cat:'사무용품',emoji:'🖊',name:'볼펜 세트',sub:'필기감 좋은 것',tag:'인기',url:'https://link.coupang.com/a/fu9Am0SNae',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/retail/images/2542195498582850-e0172f33-a363-4a3c-be4d-22fd85d0263a.jpg'},
+  {cat:'사무용품',emoji:'📌',name:'포스트잇',sub:'책상 정리 필수',tag:'필수',url:'https://link.coupang.com/a/fu9A0CKEwu',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/1025_amir_coupang_oct_80k/934d/5ac2027840c574446cd6d58a5020580ff08c3eeb1ee1ea9f443098e60894.jpg'},
+  {cat:'사무용품',emoji:'📅',name:'탁상 다이어리',sub:'일정 관리',tag:'추천',url:'https://link.coupang.com/a/fu9BLTZVRc',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/1025_amir_coupang_oct_80k/defe/c968e72ad40bb5954bef1b457ac95f1c6ef1e281e48bf504166cbde20785.jpg'},
+  {cat:'사무용품',emoji:'🖱',name:'마우스패드',sub:'손목 편하게',tag:'꿀템',url:'https://link.coupang.com/a/fu9CKl5IgC',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/retail/images/294925483669651-f9b99419-f0eb-4154-b913-301a9a6db86d.jpg'},
+  {cat:'사무용품',emoji:'🖱',name:'무선마우스',sub:'선 없는 자유',tag:'HOT',url:'https://link.coupang.com/a/fu9Dv58kHk',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/retail/images/492991105074972-4a1d435b-b30b-4282-9d76-aaf033d90cb6.jpg'},
+  {cat:'사무용품',emoji:'🩹',name:'손목보호대',sub:'터널증후군 예방',tag:'건강',url:'https://link.coupang.com/a/fu9Ee7TEOq',img:'https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/retail/images/100692866906998-475b92b5-edd5-483b-874e-63fc46c8eea8.jpg'}
 ];
-var SHOP_CATS=['아침대용식','우천대비','출근룩소품'];
-// 시간대별 기본 카테고리: 새벽~오전엔 아침대용식, 그 외 출근룩소품 시작
-var _shopCatIdx=(function(){ var h=new Date().getHours(); return (h>=4 && h<11) ? 0 : 2; })();
+var SHOP_CATS=["아침대용식", "우천대비", "출근룩소품", "커피음료", "사무용품"];
+// 시간대별 기본 카테고리: 새벽~아침 아침대용식 → 오전 커피음료 → 낮 사무용품 → 저녁 출근룩소품
+var _shopCatIdx=(function(){
+  var h=new Date().getHours();
+  var want = (h>=4&&h<9) ? '아침대용식' : (h>=9&&h<12) ? '커피음료' : (h>=12&&h<18) ? '사무용품' : '출근룩소품';
+  var i = SHOP_CATS.indexOf(want);
+  return i >= 0 ? i : 0;
+})();
 var _shopTimerFn=null;
 
 function getShopCat(){ return SHOP_CATS[_shopCatIdx%SHOP_CATS.length]; }
