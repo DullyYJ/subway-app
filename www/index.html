@@ -1161,8 +1161,8 @@ function _fetchPublicFood(stnNm, lat, lng){
   if(c && Date.now()-c.ts < 10*60*1000){ _foodPublicData=c.data; _renderFoodList(); return; }
   var url='https://apis.data.go.kr/B553077/api/open/sdsc2/storeListInRadius'
     +'?serviceKey='+encodeURIComponent(_BUS_TAGO_KEY)
-    +'&radius=500&cx='+lng+'&cy='+lat
-    +'&indsLclsCd=Q&type=json&numOfRows=80&pageNo=1';
+    +'&radius=2000&cx='+lng+'&cy='+lat
+    +'&indsLclsCd=Q&type=json&numOfRows=120&pageNo=1';
   if(typeof _busProxyGet!=='function') return;
   _busProxyGet(url, function(err, data){
     if(err) return;
@@ -1237,6 +1237,46 @@ function foodFilterCat(el, cat) {
 window.foodFilterCat = foodFilterCat;
 
 // 맛집 탭 진입 시 호출
+// ★ 도착역 미설정 시: GPS 현재 위치 기준 주변 맛집 (가장 가까운 역명으로 지역 검색 보강)
+function _foodLoadNearby(force){
+  function _go(lat, lng){
+    var near = null, best = 1e12;
+    if(typeof STNDB !== 'undefined' && typeof haversineM === 'function'){
+      STNDB.forEach(function(s){
+        var d = haversineM(lat, lng, s.lat, s.lng);
+        if(d < best){ best = d; near = s; }
+      });
+    }
+    var key = near ? near.name.replace(/역$/,'') : '내주변';
+    var label = document.getElementById('foodDestLabel');
+    if(label) label.textContent = near ? ('📍 내 주변 맛집 (' + key + '역 인근)') : '📍 내 주변 맛집';
+    var cache = _foodCache[key];
+    if(!force && cache && Date.now() - cache.ts < 10 * 60 * 1000){
+      _foodAllData = cache.data;
+      _foodPublicData = [];
+      _fetchPublicFood(key, lat, lng);
+      _renderFoodList();
+      return;
+    }
+    _foodAllData = [];
+    _fetchKakaoFood(key, lat, lng);   // 카카오 좌표 5km + 네이버 인근역 지역검색
+    _fetchPublicFood(key, lat, lng);  // 공공데이터 반경검색
+  }
+  try {
+    navigator.geolocation.getCurrentPosition(
+      function(pos){ _go(pos.coords.latitude, pos.coords.longitude); },
+      function(){
+        var label = document.getElementById('foodDestLabel');
+        var list = document.getElementById('foodList');
+        if(label) label.textContent = '도착역을 설정하면 맛집을 추천해드려요';
+        if(list) list.innerHTML = '<div class="food-empty">📍<br>위치 권한을 허용하거나<br>경로를 설정하면 맛집을 추천해드려요!</div>';
+      },
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 5 * 60 * 1000 }
+    );
+  } catch(e){}
+}
+window._foodLoadNearby = _foodLoadNearby;
+
 function loadFoodTab(force) {
   // 도착역 이름 취득 (BFS / 카카오 복합경로 / S.dest 모두 지원)
   var destStn = null;
@@ -1260,8 +1300,11 @@ function loadFoodTab(force) {
   var list  = document.getElementById('foodList');
 
   if(!destStn) {
-    if(label) label.textContent = '도착역을 설정하면 맛집을 추천해드려요';
-    if(list)  list.innerHTML = '<div class="food-empty">🗺️<br>경로를 설정하면<br>도착역 주변 맛집을 추천해드려요!</div>';
+    // ★ 도착역 미설정 → 현재 위치(GPS) 기준 주변 맛집
+    if(label) label.textContent = '내 주변 맛집 찾는 중...';
+    if(list && (!_foodAllData || !_foodAllData.length))
+      list.innerHTML = '<div class="food-loading"><div class="food-spinner"></div>내 위치 확인 중...</div>';
+    _foodLoadNearby(force);
     return;
   }
 
@@ -2529,7 +2572,11 @@ function _renderBusStop(stop, arrivals) {
   hdr.className = 'bus-stop-hdr';
   hdr.innerHTML =
     '<div class="bus-stop-titlewrap">' +
-      '<div class="bus-stop-name">' + _ltEsc(stop.nodenm || stop.nodeName || '정류장') + '</div>' +
+      '<div class="bus-stop-name">' + (function(){
+        var nm = stop.nodenm || stop.nodeName || '정류장';
+        var al = (typeof _busGetAlias === 'function') ? _busGetAlias(String(stop.nodeid || stop.nodeId || '')) : '';
+        return al ? _ltEsc(al) + ' <span style="font-size:11px;color:var(--sub);font-weight:600;">' + _ltEsc(nm) + '</span>' : _ltEsc(nm);
+      })() + '</div>' +
       (stop.nodeDir || stop.dir ? '<div class="bus-stop-sub">' + _ltEsc(stop.nodeDir || stop.dir) + ' 방면</div>' : '') +
     '</div>' +
     '<div class="bus-stop-dist">' + _busDist(stop.dist || stop.distance || 0) + '</div>';
@@ -5946,20 +5993,130 @@ function loadMapNearStops(force) {
 window.loadMapNearStops = loadMapNearStops;
 
 // 정류장 카드 생성 (카카오 스타일) - near/fav 공용
+// ── 정류장 별명 (사용자 지정: 출근/퇴근/친구 등, 기기 저장) ──
+function _busAliasMap(){ try { return JSON.parse(localStorage.getItem('busStopAlias')||'{}'); } catch(e){ return {}; } }
+function _busGetAlias(nodeId){ if(!nodeId) return ''; return _busAliasMap()[nodeId] || ''; }
+function _busSetAlias(nodeId, alias){
+  var m = _busAliasMap();
+  if(alias) m[nodeId] = alias; else delete m[nodeId];
+  try { localStorage.setItem('busStopAlias', JSON.stringify(m)); } catch(e){}
+}
+function _busAliasRefresh(mode){
+  try {
+    if(mode === 'fav' && typeof loadMapBusStops === 'function') loadMapBusStops();
+    else if(typeof loadMapNearStops === 'function') loadMapNearStops(false);
+  } catch(e){}
+}
+function _busEditAlias(nodeId, orgName, mode){
+  var old = document.getElementById('busAliasOv'); if(old) old.remove();
+  var cur = _busGetAlias(nodeId);
+  var ov = document.createElement('div');
+  ov.id = 'busAliasOv';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:24px;';
+  ov.innerHTML =
+    '<div style="background:var(--card);border:1px solid var(--border);border-radius:16px;max-width:340px;width:100%;padding:20px 18px;">'
+    + '<div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:4px;">정류장 이름 설정</div>'
+    + '<div style="font-size:12px;color:var(--sub);margin-bottom:12px;">' + _ltEsc(orgName) + '</div>'
+    + '<input id="busAliasInp" type="text" maxlength="10" placeholder="예: 출근, 퇴근, 친구집" value="' + _ltEsc(cur) + '"'
+    + ' style="width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:11px;color:var(--text);font-size:14px;outline:none;box-sizing:border-box;font-family:inherit;margin-bottom:14px;">'
+    + '<div style="display:flex;gap:8px;">'
+    + (cur ? '<button id="busAliasDel" style="flex:1;padding:12px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:#ff5b5b;font-family:inherit;">삭제</button>' : '')
+    + '<button id="busAliasCancel" style="flex:1;padding:12px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--sub);font-family:inherit;">취소</button>'
+    + '<button id="busAliasOk" style="flex:2;padding:12px;border-radius:10px;border:none;cursor:pointer;font-size:13px;font-weight:800;background:var(--chip-on-bg);color:var(--chip-on-txt);font-family:inherit;">저장</button>'
+    + '</div></div>';
+  ov.addEventListener('click', function(e){
+    if(e.target === ov || e.target.id === 'busAliasCancel'){ ov.remove(); return; }
+    if(e.target.id === 'busAliasDel'){ _busSetAlias(nodeId, ''); ov.remove(); _busAliasRefresh(mode); return; }
+    if(e.target.id === 'busAliasOk'){
+      var v = (document.getElementById('busAliasInp').value || '').trim();
+      _busSetAlias(nodeId, v);
+      ov.remove(); _busAliasRefresh(mode);
+    }
+  });
+  document.body.appendChild(ov);
+  setTimeout(function(){ var i = document.getElementById('busAliasInp'); if(i) i.focus(); }, 50);
+}
+window._busEditAlias = _busEditAlias;
+
+// ── 정류장 랜드마크 방향: 노선 경유지에서 지하철역>시청>구청>동사무소 우선 탐색 ──
+window._busLandmarkCache = window._busLandmarkCache || {};
+function _busLmRank(nm){
+  if(/역$/.test(nm) || nm.indexOf('역입구') >= 0 || nm.indexOf('역환승') >= 0) return 1;
+  if(nm.indexOf('시청') >= 0) return 2;
+  if(nm.indexOf('구청') >= 0) return 3;
+  if(nm.indexOf('동사무소') >= 0 || nm.indexOf('주민센터') >= 0 || nm.indexOf('행정복지센터') >= 0) return 4;
+  return 99;
+}
+function _busFindLandmark(stop, arrivals, cb){
+  var nodeId = String(stop.nodeId || stop.nodeid || '');
+  if(!nodeId || !arrivals || !arrivals.length){ cb(''); return; }
+  if(window._busLandmarkCache[nodeId] !== undefined){ cb(window._busLandmarkCache[nodeId]); return; }
+  if(typeof _fetchRouteStations !== 'function'){ cb(''); return; }
+  var cityCode = stop.cityCode || stop.citycode || '25';
+  var routes = [];
+  arrivals.slice(0, 6).forEach(function(a){
+    var rid = a.routeid || a.routeId;
+    if(rid && routes.indexOf(rid) < 0 && routes.length < 3) routes.push(rid);
+  });
+  if(!routes.length){ cb(''); return; }
+  var results = [], pending = routes.length;
+  routes.forEach(function(rid){
+    _fetchRouteStations(cityCode, rid, function(err, stations){
+      pending--;
+      if(!err && stations && stations.length){
+        var myIdx = -1;
+        for(var i = 0; i < stations.length; i++){
+          if(String(stations[i].nodeid || stations[i].nodeId || '') === nodeId){ myIdx = i; break; }
+        }
+        function scan(from, to){
+          var best = null, bestRank = 99;
+          for(var j = from; j < to; j++){
+            var nm = String(stations[j].nodenm || stations[j].nodeNm || '').split('(')[0].trim();
+            if(!nm) continue;
+            var r = _busLmRank(nm);
+            if(r < bestRank){ bestRank = r; best = nm; if(r === 1) break; }
+          }
+          return best ? { nm: best, rank: bestRank } : null;
+        }
+        // 진행 방향(내 정류장 이후) 우선, 없으면 전체 노선에서 탐색
+        var found = (myIdx >= 0 ? scan(myIdx + 1, stations.length) : null) || scan(0, stations.length);
+        if(found) results.push(found);
+      }
+      if(pending === 0){
+        results.sort(function(a, b){ return a.rank - b.rank; });
+        var label = results.length ? results[0].nm : '';
+        window._busLandmarkCache[nodeId] = label;
+        cb(label);
+      }
+    });
+  });
+}
+
 function _renderMapBusCard(stop, idx, mode) {
   var card = document.createElement('div');
   card.className = 'map-bus-stop-card';
   card.id = 'mapBusCard_' + mode + '_' + idx;
   var name = stop.nodenm || stop.nodeName || stop.name || '정류장';
+  var nodeId = String(stop.nodeid || stop.nodeId || '');
+  var alias = (typeof _busGetAlias === 'function') ? _busGetAlias(nodeId) : '';
   var dir  = stop.nodeDir || stop.dir || '';
   var dist = stop.dist || stop.distance;
   var rightBtn = (mode === 'fav')
     ? '<button onclick="removeMapBusStop(' + idx + ')" style="margin-left:auto;background:none;border:none;color:var(--sub);font-size:20px;cursor:pointer;line-height:1;">×</button>'
     : (dist ? '<span class="map-bus-dist">' + _busDist(dist) + '</span>' : '');
+  // ★ 별명이 있으면 별명 크게 + 원래 이름 작게
+  var nameHtml = alias
+    ? _ltEsc(alias) + ' <span style="font-size:11px;font-weight:600;color:var(--sub);">' + _ltEsc(name) + '</span>'
+    : _ltEsc(name);
   card.innerHTML =
-    '<div class="map-bus-stop-name">' + _ltEsc(name) + rightBtn + '</div>' +
+    '<div class="map-bus-stop-name">' + nameHtml +
+      ' <span class="bus-lm" style="font-size:11px;font-weight:700;color:var(--gold);white-space:nowrap;"></span>' +
+      '<button class="bus-alias-edit" title="이름 설정" style="background:none;border:none;cursor:pointer;font-size:12px;padding:0 3px;line-height:1;opacity:.55;">✏️</button>' +
+      rightBtn + '</div>' +
     (dir ? '<div class="map-bus-stop-sub">' + _ltEsc(dir) + ' 방면</div>' : '') +
     '<div class="map-bus-row" style="color:var(--sub);font-size:13px;">도착 정보 불러오는 중...</div>';
+  var eb = card.querySelector('.bus-alias-edit');
+  if(eb) eb.addEventListener('click', function(ev){ ev.stopPropagation(); _busEditAlias(nodeId, name, mode); });
   return card;
 }
 window._renderMapBusCard = _renderMapBusCard;
@@ -6046,6 +6203,14 @@ function _loadMapBusArrival(stop, cardIdx) {
 
       var card = document.getElementById('mapBusCard_' + cardIdx);
       if(!card) return;
+
+      // ★ 정류장명 옆 랜드마크 방향 (지하철역>시청>구청>동사무소, 노선별 캐시)
+      if(typeof _busFindLandmark === 'function'){
+        _busFindLandmark(stop, items, function(lm){
+          var el = card.querySelector('.bus-lm');
+          if(el && lm) el.textContent = '(' + lm + ' 방향)';
+        });
+      }
 
       var busListEl = card.querySelector('.map-bus-stop-name').nextSibling ||
                      card.querySelector('.map-bus-row');
