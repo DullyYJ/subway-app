@@ -32,6 +32,7 @@ jobs:
           node -e "
           const fs = require('fs');
           const pkg = JSON.parse(fs.readFileSync('package.json','utf8'));
+          pkg.dependencies['@capacitor/app'] = '6.0.2';
           pkg.dependencies['@capacitor/local-notifications'] = '6.1.2';
           pkg.dependencies['@capacitor-community/background-geolocation'] = '1.2.26';
           fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));
