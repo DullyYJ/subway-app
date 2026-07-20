@@ -16658,8 +16658,9 @@ function _renderNewsTab(list){
     return _newsCatSel === '전체' || it.cat === _newsCatSel;
   }).slice(0, 60);
   var esc = function(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); };
-  var rows = items.map(function(it){
-    return '<div class="news-row" data-url="' + esc(it.link) + '" onclick="openExternalApp(this.dataset.url)"'
+  window._NEWS_SHOWN = items;   // 상세 팝업 참조용
+  var rows = items.map(function(it, i){
+    return '<div class="news-row" data-i="' + i + '" onclick="_openNewsDetail(this.dataset.i)"'
       + ' style="display:flex;gap:10px;padding:13px 4px;border-bottom:1px solid var(--border);cursor:pointer;align-items:flex-start;">'
       + '<div style="width:3px;align-self:stretch;border-radius:2px;background:var(--gold);flex-shrink:0;margin-top:2px;"></div>'
       + '<div style="flex:1;min-width:0;">'
@@ -16678,6 +16679,32 @@ function _renderNewsTab(list){
   });
 }
 window._fetchNewsFeed = _fetchNewsFeed;
+
+// 뉴스 상세 팝업 (제목 + 카테고리·시간 + 언론사 요약 + 원문 링크)
+window._openNewsDetail = function(idx){
+  var it = (window._NEWS_SHOWN || [])[+idx];
+  if(!it) return;
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  var old = document.getElementById('newsDetailOv'); if(old) old.remove();
+  var ov = document.createElement('div');
+  ov.id = 'newsDetailOv';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:flex-end;justify-content:center;';
+  var hasDesc = it.desc && it.desc.length > 0;
+  ov.innerHTML =
+    '<div style="background:var(--card);border-radius:20px 20px 0 0;width:100%;max-width:560px;max-height:85vh;overflow-y:auto;padding:22px 20px calc(20px + env(safe-area-inset-bottom));box-sizing:border-box;">'
+    + '<div style="width:36px;height:4px;border-radius:2px;background:var(--border2);margin:0 auto 16px;"></div>'
+    + '<div style="display:inline-block;font-size:11px;font-weight:800;color:var(--chip-on-txt);background:var(--chip-on-bg);padding:3px 9px;border-radius:6px;margin-bottom:10px;">' + esc(it.cat) + '</div>'
+    + '<div style="font-size:18px;font-weight:800;color:var(--text);line-height:1.45;margin-bottom:8px;">' + esc(it.title) + '</div>'
+    + '<div style="font-size:12px;color:var(--sub);margin-bottom:16px;">' + (it.ts ? _newsAgo(it.ts) + ' · ' : '') + '연합뉴스/전자신문</div>'
+    + (hasDesc
+        ? '<div style="font-size:14px;color:var(--text);line-height:1.75;margin-bottom:20px;white-space:pre-line;">' + esc(it.desc) + '</div>'
+        : '<div style="font-size:14px;color:var(--sub);line-height:1.7;margin-bottom:20px;">기사 요약을 제공하지 않는 매체예요. 아래 버튼으로 원문에서 전체 내용을 확인하세요.</div>')
+    + '<button onclick="openExternalApp(\'' + esc(it.link).replace(/'/g, "\\'") + '\')" style="width:100%;padding:14px;border-radius:12px;border:none;cursor:pointer;font-size:15px;font-weight:800;background:var(--gold);color:#121214;font-family:inherit;">원문 전체 보기 ›</button>'
+    + '<button onclick="document.getElementById(\'newsDetailOv\').remove()" style="width:100%;padding:12px;margin-top:8px;border-radius:12px;border:none;cursor:pointer;font-size:14px;font-weight:700;background:transparent;color:var(--sub);font-family:inherit;">닫기</button>'
+    + '</div>';
+  ov.addEventListener('click', function(e){ if(e.target === ov) ov.remove(); });
+  document.body.appendChild(ov);
+};
 
 // 커뮤니티 탭 진입 시 서버에서 새로고침
 var _commNeedRefresh = true;
