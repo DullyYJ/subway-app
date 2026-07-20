@@ -2364,23 +2364,7 @@ function _loadServerPosts(cat, reset) {
 window._loadServerPosts = _loadServerPosts;
 
 // 서버에 게시글 저장
-function _serverPostArticle(nick, title, body, cat) {
-  fetch(_SERVER_URL + '/posts', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ nick: nick, title: title, body: body, cat: cat || '잡담' })
-  })
-  .then(function(r){ return r.json(); })
-  .then(function(data){
-    if(data.ok) {
-      console.log('[커뮤니티] 서버 저장 완료, id:', data.id);
-      // 2초 후 서버에서 최신 목록 다시 로드
-      setTimeout(function(){ _loadServerPosts(_commFilter, true); }, 2000);
-    }
-  })
-  .catch(function(e){ console.warn('[커뮤니티] 서버 저장 실패:', e); });
-}
-window._serverPostArticle = _serverPostArticle;
+// [정리] 중복 정의 제거: _serverPostArticle (아래쪽 정의 사용, 등록도 그쪽에서)
 
 // 서버에서 반응(좋아요 등) 저장
 function _serverReact(postId, type) {
@@ -2964,11 +2948,7 @@ function _updateRouteBtn() {
 }
 
 // ── GPS로 주변 역/정류장 검색 ─────────────────────────────────
-function fmapGpsLocate() {
-  if(typeof triggerGPS === 'function') { triggerGPS(); return; }
-  toast('GPS 초기화 중... 잠시 후 다시 시도해주세요.');
-}
-window.fmapGpsLocate = fmapGpsLocate;
+// [정리] 중복 정의 제거: fmapGpsLocate (아래쪽 정의 사용, 등록도 그쪽에서)
 
 // 주변 역+정류장 목록 표시
 function _showNearbyLocations(lat, lng, box, type) {
@@ -6040,8 +6020,14 @@ window._busEditAlias = _busEditAlias;
 
 // ── 정류장 랜드마크 방향: 진행 방향 앞쪽 "첫 번째" 역 (지하철역>시청>구청>동사무소) ──
 window._busLandmarkCache = window._busLandmarkCache || {};
+// 정류장명에서 역명 추출: "아라역4번출구"→"아라역", "계양역환승센터"→"계양역", "완정역(2번)"→"완정역"
+// 역곡/역촌처럼 '역'으로 시작하거나, '서울역사박물관'처럼 단어 중간인 경우는 제외
+function _busLmStation(nm){
+  var m = String(nm).match(/^(.{1,15}?역)(?:$|[0-9(.\s·]|번출구|출구|입구|환승|광역|사거리|삼거리|오거리|앞|후문|정문|건너)/);
+  return m ? m[1] : null;
+}
 function _busLmRank(nm){
-  if(/역$/.test(nm) || nm.indexOf('역입구') >= 0 || nm.indexOf('역환승') >= 0 || nm.indexOf('역광역환승') >= 0) return 1;
+  if(_busLmStation(nm)) return 1;
   if(nm.indexOf('시청') >= 0) return 2;
   if(nm.indexOf('구청') >= 0) return 3;
   if(nm.indexOf('동사무소') >= 0 || nm.indexOf('주민센터') >= 0 || nm.indexOf('주민자치센터') >= 0 || nm.indexOf('행정복지센터') >= 0) return 4;
@@ -6051,7 +6037,7 @@ function _busLmRank(nm){
 function _busLmCached(nodeId){
   if(window._busLandmarkCache[nodeId] !== undefined) return window._busLandmarkCache[nodeId];
   try {
-    var m = JSON.parse(localStorage.getItem('busLmCache') || '{}');
+    var m = JSON.parse(localStorage.getItem('busLmCache2') || '{}');
     var e = m[nodeId];
     if(e && Date.now() - e.t < 7 * 24 * 3600 * 1000){
       window._busLandmarkCache[nodeId] = e.l;
@@ -6063,9 +6049,9 @@ function _busLmCached(nodeId){
 function _busLmSave(nodeId, label){
   window._busLandmarkCache[nodeId] = label;
   try {
-    var m = JSON.parse(localStorage.getItem('busLmCache') || '{}');
+    var m = JSON.parse(localStorage.getItem('busLmCache2') || '{}');
     m[nodeId] = { l: label, t: Date.now() };
-    localStorage.setItem('busLmCache', JSON.stringify(m));
+    localStorage.setItem('busLmCache2', JSON.stringify(m));
   } catch(err){}
 }
 // 노선 경유지 영구 캐시 (7일): 재조회 없이 즉시 계산
@@ -6123,7 +6109,7 @@ function _busFindLandmark(stop, arrivals, cb){
             var nm = String(stations[j].nodenm || '').split('(')[0].trim();
             if(!nm) continue;
             var r = _busLmRank(nm);
-            if(r < 99 && !found[r]) found[r] = { nm: nm, rank: r, ahead: j - myIdx };
+            if(r < 99 && !found[r]) found[r] = { nm: (r === 1 ? (_busLmStation(nm) || nm) : nm), rank: r, ahead: j - myIdx };
             if(found[1]) break;   // 진행 방향 첫 역 발견 → 즉시 종료
           }
           var best = found[1] || found[2] || found[3] || found[4] || null;
@@ -11602,9 +11588,7 @@ window._realFirstDep = _realFirstDep;
 // ── fetch 헬퍼 ────────────────────────────────────────────────
 // Capacitor 6: CapacitorHttp.enabled=true 시 fetch()가 자동으로 네이티브로 패치됨
 // 별도 CapacitorHttp 직접 호출 불필요
-function _fetchWithTimeout(url, ms) {
-  return fetch(url, { signal: AbortSignal.timeout(ms) });
-}
+// [정리] 중복 정의 제거: _fetchWithTimeout (아래쪽 정의 사용)
 
 // ── 서울교통공사 실시간 도착 API ────────────────────────────
 var _SEOUL_API_KEY = '757a596c51796a773130374f77675166';
@@ -13848,73 +13832,7 @@ var _REGION_COMM = {
 
 // 커뮤니티 AI 글 생성 시 지역 분기
 var _origGeneratePost = (typeof _generatePost === 'function') ? _generatePost : null;
-function _generatePost(forceCat) {
-  var region = S.currentRegion || 'seoul';
-
-  // 지방 지역이면 지역별 템플릿 사용
-  if(region !== 'seoul' && _REGION_COMM[region]) {
-    var rc = _REGION_COMM[region];
-    var isReport = forceCat==='현장제보' || (!forceCat && Math.random()<0.3);
-    var pool = isReport ? rc.report : rc.chat;
-    if(!pool || !pool.length) pool = rc.chat;
-    var tpl = _rnd(pool);
-    var nick = _rnd(rc.nicks);
-    var now = Date.now();
-    var _rp = {
-      id:    _POST_ID++,
-      cat:   isReport ? '현장제보' : '잡담',
-      title: tpl.title,
-      body:  tpl.body,
-      nick:  nick,
-      time:  now - _rndInt(0, 7200000),
-      views: _rndInt(5, 200),
-      like:  _rndInt(0, 25),
-      lol:   _rndInt(0, 15),
-      sad:   _rndInt(0, 8),
-      cmts:  [],
-      isAI:  true,
-    };
-    _rp.cmts = _initCmts(now - _rndInt(0,3600000), _rp);
-    return _rp;
-  }
-
-  // 수도권은 기존 로직
-  var isReport = forceCat==='현장제보' || (!forceCat && Math.random()<0.3);
-  var tpl = isReport ? _rnd(_REPORT_TOPICS) : _rnd(_CHAT_TOPICS);
-  var cat = isReport ? '현장제보' : '잡담';
-  var line=_rnd(_LINE_LIST);
-  var stns=_STN_MAP[line]||['서울역'];
-  var stn=_rnd(stns);
-  var stn2=_rnd(stns.filter(function(s){return s!==stn;})||stns);
-  var nick=_rnd(_NICK_POOL);
-  var now=Date.now();
-  var h=_rndInt(7,22), min=_rndInt(5,55), n=_rndInt(1,4), m=_rndInt(1,10);
-  var price=[3800,5500,8000,12000,15000][_rndInt(0,4)];
-  function fill(s){
-    return (s||'')
-      .replace(/\{line\}/g,line).replace(/\{stn\}/g,stn).replace(/\{stn2\}/g,stn2)
-      .replace(/\{h\}/g,String(h)).replace(/\{min\}/g,String(min))
-      .replace(/\{n\}/g,String(n)).replace(/\{m\}/g,String(m))
-      .replace(/\{price\}/g,String(price)+'원');
-  }
-  var postTime = now - _rndInt(0, 7200000);
-  var _post = {
-    id:   _POST_ID++,
-    cat:  cat,
-    title:fill(tpl.title),
-    body: fill(tpl.body),
-    nick: nick,
-    time: postTime,
-    views:_rndInt(8,320),
-    like: _rndInt(0,35),
-    lol:  _rndInt(0,20),
-    sad:  _rndInt(0,12),
-    cmts: [],
-    isAI: true,
-  };
-  _post.cmts = _initCmts(postTime, _post);
-  return _post;
-}
+// [정리] 중복 정의 제거: _generatePost (아래쪽 정의 사용)
 window._generatePost = _generatePost;
 
 // ══════════════════════════════════════════════════════════════
@@ -16545,24 +16463,9 @@ var _REPLY_TEMPLATES = [
   ['ㅋㅋㅋㅋ','ㄷㄷ','이게 맞냐','웃픔','공감 ㅠ','힘내요 같이 힘내요'],
 ];
 
-function _rnd(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
-function _rndInt(a,b){ return Math.floor(Math.random()*(b-a+1))+a; }
-function _timeAgo(ms){
-  var d=Date.now()-ms;
-  if(d<30000)  return '방금';
-  if(d<60000)  return '1분 전';
-  if(d<120000) return '2분 전';
-  if(d<3600000){
-    var m=Math.floor(d/60000);
-    return m+'분 전';
-  }
-  if(d<86400000){
-    var h=Math.floor(d/3600000);
-    var lm=Math.floor((d%3600000)/60000);
-    return lm>0 ? h+'시간 '+lm+'분 전' : h+'시간 전';
-  }
-  return Math.floor(d/86400000)+'일 전';
-}
+// [정리] 중복 정의 제거: _rnd (아래쪽 정의 사용)
+// [정리] 중복 정의 제거: _rndInt (아래쪽 정의 사용)
+// [정리] 중복 정의 제거: _timeAgo (아래쪽 정의 사용)
 
 var _LINE_LIST=['2호선','1호선','4호선','7호선','3호선','5호선','9호선','수인분당선','경의중앙선','신분당선'];
 var _STN_MAP={
@@ -16646,43 +16549,7 @@ function _initCmts(postTime, post){
 }
 
 // ── 게시글 생성 ────────────────────────────────────────────
-function _generatePost(forceCat){
-  var isReport = forceCat==='현장제보' || (!forceCat && Math.random()<0.3);
-  var tpl = isReport ? _rnd(_REPORT_TOPICS) : _rnd(_CHAT_TOPICS);
-  var cat = isReport ? '현장제보' : '잡담';
-  var line=_rnd(_LINE_LIST);
-  var stns=_STN_MAP[line]||['서울역'];
-  var stn=_rnd(stns);
-  var stn2=_rnd(stns.filter(function(s){return s!==stn;})||stns);
-  var nick=_rnd(_NICK_POOL);
-  var now=Date.now();
-  var h=_rndInt(7,22), min=_rndInt(5,55), n=_rndInt(1,4), m=_rndInt(1,10);
-  var price=[3800,5500,8000,12000,15000][_rndInt(0,4)];
-  function fill(s){
-    return (s||'')
-      .replace(/\{line\}/g,line).replace(/\{stn\}/g,stn).replace(/\{stn2\}/g,stn2)
-      .replace(/\{h\}/g,String(h)).replace(/\{min\}/g,String(min))
-      .replace(/\{n\}/g,String(n)).replace(/\{m\}/g,String(m))
-      .replace(/\{price\}/g,String(price)+'원');
-  }
-  var postTime = now - _rndInt(0, 7200000);
-  var _post = {
-    id:   _POST_ID++,
-    cat:  cat,
-    title:fill(tpl.title),
-    body: fill(tpl.body),
-    nick: nick,
-    time: postTime,
-    views:_rndInt(8,320),
-    like: _rndInt(0,35),
-    lol:  _rndInt(0,20),
-    sad:  _rndInt(0,12),
-    cmts: [],
-    isAI: true,
-  };
-  _post.cmts = _initCmts(postTime, _post);
-  return _post;
-}
+// [정리] 중복 정의 제거: _generatePost (아래쪽 정의 사용)
 
 // ── 댓글 렌더 헬퍼 ────────────────────────────────────────
 function _renderCmts(post){
@@ -16712,65 +16579,9 @@ function _renderCmts(post){
 }
 
 // ── 게시글 DOM 렌더 ────────────────────────────────────────
-function _renderPost(post){
-  var CAT_COLOR={'잡담':'#34c759','현장제보':'#ff375f','지연':'#ff9f0a','혼잡':'#ff6b35','정보':'#5e5ce6','뉴스':'#0a84ff','일상':'#34c759','제보':'#ff375f'};
-  var col=CAT_COLOR[post.cat]||'var(--sub)';
-  var el=document.createElement('div');
-  el.className='dc-post';
-  el.setAttribute('data-cat',post.cat);
-  el.setAttribute('data-id',post.id);
+// [정리] 중복 정의 제거: _renderPost (아래쪽 정의 사용)
 
-  el.innerHTML=
-    '<div class="dc-post-hdr">'
-      +'<span class="dc-cat-badge" style="background:'+col+';">'+post.cat+'</span>'
-      +(post.cat==='뉴스' && post.link
-        ? '<a class="dc-post-title" href="'+post.link+'" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation();" style="color:inherit;text-decoration:none;">'+post.title+' <span style="font-size:0.75em;color:#0a84ff;">↗</span></a>'
-        : '<span class="dc-post-title">'+post.title+'</span>')
-    +'</div>'
-    +'<div class="dc-post-meta">'
-      +'<span class="dc-nick">'+post.nick+'</span>'
-      +'<span class="dc-dot">·</span>'
-      +'<span class="dc-time" id="ptime-'+post.id+'">'+_timeAgo(post.time)+'</span>'
-      +'<span class="dc-dot">·</span>'
-      +'<span class="dc-views" id="pview-'+post.id+'">👁 '+post.views+'</span>'
-      +'<span class="dc-dot">·</span>'
-      +'<span class="dc-cmtcount" id="pcmt-'+post.id+'">💬 '+post.cmts.length+'</span>'
-    +'</div>'
-    +'<div class="dc-post-body" id="pbody-'+post.id+'" style="display:none;">'
-      +'<div class="dc-body-txt">'+_linkifyBody(post.body)+'</div>'
-      +'<div class="dc-reactions">'
-        +'<button class="dc-react-btn" onclick="dcReact('+post.id+',\'like\',this)">👍 <span>'+post.like+'</span></button>'
-        +'<button class="dc-react-btn" onclick="dcReact('+post.id+',\'lol\',this)">ㅋㅋ <span>'+post.lol+'</span></button>'
-        +'<button class="dc-react-btn" onclick="dcReact('+post.id+',\'sad\',this)">ㅠㅠ <span>'+post.sad+'</span></button>'
-      +'</div>'
-      +'<div class="dc-cmts-wrap" id="cmtwrap-'+post.id+'">'
-        +_renderCmts(post)
-      +'</div>'
-    +'</div>';
-
-  el.querySelector('.dc-post-hdr').addEventListener('click',function(){
-    var body=document.getElementById('pbody-'+post.id);
-    if(!body) return;
-    var open=body.style.display!=='none';
-    body.style.display=open?'none':'block';
-    if(!open){ post.views++; var v=document.getElementById('pview-'+post.id); if(v) v.textContent='👁 '+post.views; }
-  });
-  return el;
-}
-
-function dcReact(id,type,btn){
-  var post=_AI_POSTS.find(function(p){return p.id===id;});
-  if(!post) return;
-  post[type]=(post[type]||0)+1;
-  var span=btn.querySelector('span');
-  if(span) span.textContent=post[type];
-  btn.classList.toggle('dc-react-on');
-  // 서버 반응 저장 (서버에서 불러온 게시글만)
-  if(post.isServer && typeof _serverReact==='function') {
-    _serverReact(id, type);
-  }
-}
-window.dcReact=dcReact;
+// [정리] 중복 정의 제거: dcReact (아래쪽 정의 사용)
 
 // ── 목록 렌더 ─────────────────────────────────────────────
 function renderCommList(){
@@ -16921,25 +16732,10 @@ function _scheduleAutoComment(){
 window._scheduleAutoComment=_scheduleAutoComment;
 
 // ── 게시글 자동 생성 ───────────────────────────────────────
-function autoGeneratePost(){
-  if(window._serverPostsActive) return;   // ★ 서버 게시글 사용 중 → 로컬 생성 중단
-  var post=_generatePost();
-  _AI_POSTS.unshift(post);
-  if(_AI_POSTS.length>60) _AI_POSTS.pop();
-  var commTab=document.getElementById('tab-community');
-  if(commTab && commTab.style.display!=='none') renderCommList();
-}
-window.autoGeneratePost=autoGeneratePost;
+// [정리] 중복 정의 제거: autoGeneratePost (아래쪽 정의 사용)
 
 var _autoPostTimer=null;
-function scheduleAutoPost(){
-  clearTimeout(_autoPostTimer);
-  _autoPostTimer=setTimeout(function(){
-    autoGeneratePost();
-    scheduleAutoPost();
-  },_rndInt(5*60000,10*60000));
-}
-window.scheduleAutoPost=scheduleAutoPost;
+// [정리] 중복 정의 제거: scheduleAutoPost (아래쪽 정의 사용)
 
 // ── 초기 게시글 생성 ──────────────────────────────────────
 function initCommunityPosts(){
@@ -17337,29 +17133,7 @@ function dcReact(id, type, btn) {
 window.dcReact = dcReact;
 
 // ── 게시글 목록 렌더 ──────────────────────────────────────
-function renderCommList() {
-  var list = document.getElementById('commList');
-  var empty = document.getElementById('commEmpty');
-  if(!list) return;
-
-  list.innerHTML = '';
-  var visible = _AI_POSTS.filter(function(p){
-    return _commFilter === 'all' || p.cat === _commFilter;
-  });
-
-  if(visible.length === 0) {
-    if(empty) empty.style.display = 'block';
-    return;
-  }
-  if(empty) empty.style.display = 'none';
-
-  // 최신순 정렬
-  visible.sort(function(a,b){ return b.time - a.time; });
-  visible.forEach(function(post){
-    list.appendChild(_renderPost(post));
-  });
-}
-window.renderCommList = renderCommList;
+// [정리] 중복 정의 제거: renderCommList (아래쪽 정의 사용)
 
 // ── autoGeneratePost: 게시글 1개 생성 후 목록 갱신 ────────
 function autoGeneratePost() {
@@ -19723,6 +19497,8 @@ function _xhrRequest(urlStr, ms) {
 }
 
 function _fetchWithTimeout(urlStr, opts, timeoutMs) {
+  // ★ 구버전 시그니처 호환: (url, ms) 형태로 부르면 2번째 인자를 timeout으로 해석
+  if(typeof opts === 'number'){ timeoutMs = opts; opts = null; }
   var _url=String(urlStr), _ms=Number(timeoutMs)||8000;
   // WebView 차단 환경 → 즉시 오류
   if(typeof _IS_WEBVIEW_BLOCKED!=='undefined' && _IS_WEBVIEW_BLOCKED) {
@@ -25896,15 +25672,22 @@ function _serverFetchTalks(){
 
 // 서버에 게시글 등록
 function _serverPostArticle(nick, title, body, cat){
-  if(!_SERVER_ON) return;
+  if(typeof _SERVER_ON !== 'undefined' && !_SERVER_ON) return;
   try {
     fetch(_SERVER_URL + '/posts', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ nick:nick, title:title, body:body, cat:cat||'잡담' })
-    }).catch(function(){});
+    }).then(function(r){ return r.json(); })
+      .then(function(data){
+        if(data && data.ok){
+          // 등록 직후 서버 목록 새로고침 → 내가 쓴 글 즉시 반영
+          setTimeout(function(){ if(typeof _loadServerPosts==='function') _loadServerPosts(_commFilter, true); }, 2000);
+        }
+      }).catch(function(){});
   } catch(e){}
 }
+window._serverPostArticle = _serverPostArticle;
 
 // 서버에서 게시글 가져오기
 // ★ 옛 형식(cmts/id/views 누락) 직접 주입이 렌더 크래시 원인이었음
@@ -27223,7 +27006,8 @@ function clearFmapRoute() {
 window.clearFmapRoute = clearFmapRoute;
 
 function fmapGpsLocate() {
-  if(typeof triggerGPS==='function') triggerGPS();
+  if(typeof triggerGPS === 'function'){ triggerGPS(); return; }
+  if(typeof toast === 'function') toast('GPS 초기화 중... 잠시 후 다시 시도해주세요.');
 }
 window.fmapGpsLocate = fmapGpsLocate;
 
