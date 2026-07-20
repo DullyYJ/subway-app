@@ -6485,6 +6485,74 @@ var _IS_WEBVIEW_BLOCKED = (function() {
 // ── timeOffset 초기화 (NaN 방지) ─────────────────────────
 if(typeof window.timeOffset !== 'number') window.timeOffset = 0;
 
+// ── 🛰 백그라운드 진단 로그 캡처 (console.log/warn을 화면 패널에도 미러링) ──
+window._bgLogBuf = window._bgLogBuf || [];
+function _bgLogPush(level, args){
+  try {
+    var msg = Array.prototype.map.call(args, function(a){
+      if(typeof a === 'object'){ try { return JSON.stringify(a); } catch(e){ return String(a); } }
+      return String(a);
+    }).join(' ');
+    // 관심 로그만 저장 (BG/GPS/도착/알림/권한)
+    if(/\[BG-GPS\]|\[도착알림\]|\[알림|\[탑승|권한|geolocation|Notification|watchId/i.test(msg)){
+      var t = new Date();
+      var ts = ('0'+t.getHours()).slice(-2)+':'+('0'+t.getMinutes()).slice(-2)+':'+('0'+t.getSeconds()).slice(-2);
+      window._bgLogBuf.push('[' + ts + '] ' + (level==='w'?'⚠ ':'') + msg);
+      if(window._bgLogBuf.length > 200) window._bgLogBuf.shift();
+      var el = document.getElementById('bgDiagLog');
+      if(el){ el.textContent = window._bgLogBuf.join('\n'); el.scrollTop = el.scrollHeight; }
+    }
+  } catch(e){}
+}
+(function(){
+  var _cl = console.log, _cw = console.warn;
+  console.log = function(){ _bgLogPush('l', arguments); return _cl.apply(console, arguments); };
+  console.warn = function(){ _bgLogPush('w', arguments); return _cw.apply(console, arguments); };
+})();
+window._bgLogClear = function(){
+  window._bgLogBuf = [];
+  var el = document.getElementById('bgDiagLog');
+  if(el) el.textContent = '(지워짐)';
+};
+// 진단 실행: 플러그인 존재·권한·상태를 즉시 점검
+window._bgDiag = async function(){
+  var out = [];
+  function add(s){ out.push(s); }
+  add('=== 진단 ' + new Date().toLocaleTimeString('ko-KR') + ' ===');
+  var C = window.Capacitor;
+  add('Capacitor: ' + (C ? '있음' : '없음 (웹 브라우저?)'));
+  add('네이티브 플랫폼: ' + (C && C.isNativePlatform ? C.isNativePlatform() : '?'));
+  var P = (C && C.Plugins) || {};
+  add('플러그인 App: ' + (P.App ? 'O' : 'X'));
+  add('플러그인 LocalNotifications: ' + (P.LocalNotifications ? 'O' : 'X'));
+  add('플러그인 BackgroundGeolocation: ' + (P.BackgroundGeolocation ? 'O' : 'X ← 없으면 백그라운드 불가'));
+  // 알림 권한
+  try {
+    if(P.LocalNotifications && P.LocalNotifications.checkPermissions){
+      var np = await P.LocalNotifications.checkPermissions();
+      add('알림 권한: ' + (np && np.display));
+    }
+  } catch(e){ add('알림 권한 확인 실패: ' + e); }
+  // 상태 변수
+  add('탑승 상태(S.boarded): ' + (typeof S!=='undefined' ? !!S.boarded : '?'));
+  add('경로 있음(S.route): ' + (typeof S!=='undefined' ? !!S.route : '?'));
+  add('BG 추적 활성(_bgGeoActive): ' + (typeof _bgGeoActive!=='undefined' ? _bgGeoActive : '?'));
+  add('watchId: ' + (typeof S!=='undefined' && S._bgWatchId ? S._bgWatchId : '없음'));
+  // 즉시 시작 시도
+  if(P.BackgroundGeolocation){
+    add('→ _startBgGeolocation() 호출 시도...');
+    try { _startBgGeolocation(); } catch(e){ add('시작 예외: ' + e); }
+  } else {
+    add('→ 플러그인이 없어 시작 불가. APK에 background-geolocation이 안 들어간 상태.');
+  }
+  var el = document.getElementById('bgDiagLog');
+  if(el){
+    window._bgLogBuf.push(out.join('\n'));
+    el.textContent = window._bgLogBuf.join('\n');
+    el.scrollTop = el.scrollHeight;
+  }
+};
+
 // ── syncTimeWithServer: 서버 시간 동기화 ─────────────────
 // WebView 환경에서는 로컬 시간 사용
 window.syncTimeWithServer = function syncTimeWithServer() {
@@ -7166,6 +7234,17 @@ window.addEventListener('unhandledrejection', function(e) {
           </div>
         </div>
         <button onclick="_cmTestFire()" style="width:100%;margin-top:12px;padding:11px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);">🔔 지금 미리보기</button>
+      </div>
+
+      <!-- ★ 백그라운드 위치추적 진단 -->
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
+        <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:4px;">🛰 백그라운드 추적 진단</div>
+        <p style="font-size:12px;color:var(--sub);margin-bottom:12px;">플러그인·권한 상태와 실시간 로그를 확인해요.</p>
+        <div style="display:flex;gap:8px;margin-bottom:10px;">
+          <button onclick="_bgDiag()" style="flex:1;padding:11px;border-radius:10px;border:none;cursor:pointer;font-size:13px;font-weight:800;background:var(--gold);color:#121214;font-family:inherit;">진단 실행</button>
+          <button onclick="_bgLogClear()" style="padding:11px 14px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--sub);font-family:inherit;">지우기</button>
+        </div>
+        <div id="bgDiagLog" style="background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:10px;font-size:11px;line-height:1.6;color:var(--text);font-family:monospace;max-height:280px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;">로그가 여기 표시됩니다. '진단 실행'을 눌러 상태를 확인하세요.</div>
       </div>
 
       <!-- ★ 테마 설정 -->
