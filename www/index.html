@@ -17517,7 +17517,7 @@ function _startBgGeolocation(){
       });
     } catch(e){}
 
-    BG.addWatcher({
+    var _watchId = BG.addWatcher({
       backgroundMessage: '경로 안내 중 · 도착 전에 알려드릴게요',
       backgroundTitle:   '길동무 경로 안내',
       requestPermissions: true,
@@ -17558,13 +17558,19 @@ function _startBgGeolocation(){
 
       // ── 경로 중 역/정류장 300m 진입 → 앱으로 돌아오도록 알림 ──
       _checkRouteProximityAlert(filtered.lat, filtered.lng);
-    }).then(function(watchId){
-      _bgGeoActive = true;
-      S._bgWatchId = watchId;
-      console.log('[BG-GPS] 백그라운드 GPS 시작, watchId:', watchId);
-    }).catch(function(e){
-      console.warn('[BG-GPS] 시작실패:', (e && (e.message || e.code)) || JSON.stringify(e) || String(e));
     });
+    // addWatcher는 watchId를 직접(또는 Promise로) 반환 — 둘 다 대응
+    if(_watchId && typeof _watchId.then === 'function'){
+      _watchId.then(function(id){
+        _bgGeoActive = true; S._bgWatchId = id;
+        console.log('[BG-GPS] 백그라운드 GPS 시작(P), watchId:', id);
+      }).catch(function(e){
+        console.warn('[BG-GPS] 시작실패:', (e && (e.message || e.code)) || String(e));
+      });
+    } else {
+      _bgGeoActive = true; S._bgWatchId = _watchId;
+      console.log('[BG-GPS] 백그라운드 GPS 시작, watchId:', _watchId);
+    }
   } catch(e){
     console.warn('[BG-GPS] 예외:', (e && (e.message || e.code)) || JSON.stringify(e) || String(e));
   }
