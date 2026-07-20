@@ -14552,7 +14552,7 @@ function startWatch(){
                 S.boardedAt -= diff;
               }
             }
-            S.curIdx = Math.max(0, path.indexOf(nextStnName) - 1);
+            S.curIdx = Math.max(S.curIdx, Math.max(0, path.indexOf(nextStnName) - 1));   // ★ 역행 차단
             stopApiPoll();
             advanceToNextStation('GPS_150M');
             return;
@@ -19821,7 +19821,7 @@ function checkGpsArrivalWithMaster(lat, lng) {
         S.boardedAt -= diff;
       }
     }
-    S.curIdx = Math.max(0, path.indexOf(nextStnName) - 1);
+    S.curIdx = Math.max(S.curIdx, Math.max(0, path.indexOf(nextStnName) - 1));   // ★ 역행 차단
     advanceToNextStation('GPS_MASTER');
   }
 }
@@ -20312,6 +20312,14 @@ function _runTrainAnim(){
   S.trainAnimInterval = setInterval(function(){
     if(!S.route || !S.boardedAt) return;
     if(S.curIdx >= S.route.path.length - 1){ stopTrainAnim(); return; }
+    // ★ 전역 역행 감시: 어떤 코드가 curIdx를 뒤로 돌려도 즉시 복원 (지하철은 후진 불가)
+    var _sig = S.route.path.join('|');
+    if(S._monoSig !== _sig){ S._monoSig = _sig; S._monoMax = S.curIdx; }
+    if(S.curIdx > S._monoMax){ S._monoMax = S.curIdx; }
+    else if(S.curIdx < S._monoMax){
+      console.log('[역행차단] curIdx ' + S.curIdx + ' → ' + S._monoMax + ' 복원');
+      S.curIdx = S._monoMax;
+    }
     if(_atStation) return;
 
     var segSec   = _getSegSec();
@@ -20405,20 +20413,14 @@ function _runTrainAnim(){
           }
 
           if(acc < 200 && d > 350) {
-            // ★ GPS 양호 + 아직 도착 전 = 열차 지연. 시간표보다 GPS(실제 위치)를 신뢰.
-            //   강제 전진하지 않고, 핀을 실제 위치 비율로 되돌린 뒤 도착까지 대기
+            // ★ 지하철은 후진하지 않음 — 핀은 도착 지점(1.0)에 그대로 두고
+            //   GPS가 실제 도착을 확인할 때까지 "다음 구간 전진"만 제한 (지연 대기)
             var elapsed = Date.now() - arrStartMs;
-            var prevStn = _getStnObj(S.curIdx);
-            var liveProg = 0.85;
-            if(prevStn && prevStn.lat){
-              var dPrev = haversineM(pos.coords.latitude, pos.coords.longitude, prevStn.lat, prevStn.lng);
-              liveProg = Math.max(0.05, Math.min(0.95, dPrev / (dPrev + d)));
-            }
-            S.trainProgress = liveProg;
-            if(typeof updateTrainPinInterp === 'function') updateTrainPinInterp(liveProg);
-            if(typeof updateHtlMovingTrain === 'function') updateHtlMovingTrain(liveProg, false);
-            console.log('[도착GPS] 지연 감지(' + Math.round(d) + 'm) → 실측 진행 ' + Math.round(liveProg*100) + '%로 보정, 대기 (' + _retryCount + '회)');
-            if(bannerTxt) bannerTxt.textContent = '🕐 ' + arrivedName + ' 접근 중 · 열차 지연';
+            S.trainProgress = 1.0;
+            if(typeof updateTrainPinInterp === 'function') updateTrainPinInterp(1.0);
+            if(typeof updateHtlMovingTrain === 'function') updateHtlMovingTrain(1.0, true);
+            console.log('[도착GPS] 지연 감지(' + Math.round(d) + 'm) → ' + arrivedName + ' 대기, 전진 제한 (' + _retryCount + '회)');
+            if(bannerTxt) bannerTxt.textContent = '🕐 ' + arrivedName + ' 도착 확인 중 · 열차 지연';
             // 극단 안전장치: 구간×6배(최소 5분) 초과 시에만 전진 (GPS 오판 대비)
             var ULTRA_MS = Math.max(300000, _getSegSec() * 6000);
             if(elapsed < ULTRA_MS) {
@@ -23415,26 +23417,15 @@ function _runStationGpsCorrection(expectedIdx) {
 
       if(idxChanged) {
         if(bestIdx < S.curIdx) {
-          // ★ 역행 보정은 오탐 가능성이 크므로: 2회 연속 감지 + 150m 이내일 때만 수용
-          //   (마커가 앞뒤로 튀는 왕복 현상 방지)
-          window._gpsBackCnt = (window._gpsBackCnt || 0) + 1;
-          if(window._gpsBackCnt >= 2 && bestDist < 150) {
-            console.log('[GPS보정] ★ 역행 확정(2회 연속): ' + (path[S.curIdx]||'?') + ' → ' + path[bestIdx]);
-            S.curIdx = bestIdx;
-            S.trainProgress = 0;
-            window._gpsBackCnt = 0;
-          } else {
-            console.log('[GPS보정] 역행 감지 보류(' + window._gpsBackCnt + '/2, ' + Math.round(bestDist) + 'm) → 유지');
-          }
+          // ★ 지하철은 후진하지 않음 — 역행 보정 완전 차단
+          console.log('[GPS보정] 역행 감지(' + (path[bestIdx]||'?') + ', ' + Math.round(bestDist) + 'm) → 차단, 현재 위치 유지');
         } else {
           console.log('[GPS보정] ★ 전진 보정: ' + (path[S.curIdx]||'?')
             + ' → ' + path[bestIdx] + ' (+' + (bestIdx - S.curIdx) + '역)');
           S.curIdx = bestIdx;
           S.trainProgress = 0;
-          window._gpsBackCnt = 0;
         }
       } else {
-        window._gpsBackCnt = 0;
         console.log('[GPS보정] ✅ 역 일치: ' + path[S.curIdx]);
       }
 
