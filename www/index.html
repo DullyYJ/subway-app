@@ -4498,6 +4498,7 @@ function confirmSelectedRoute(){
     btn.style.background = '#30a14e';
   }
   if(typeof toast === 'function') toast(optName + ' 경로로 확정했어요');
+  if(typeof _beginJourneyTracking === 'function') _beginJourneyTracking();   // ★ 백그라운드 추적 시작
   // 세부경로 닫고 메인 카드에서 추적 진행
   setTimeout(function(){ if(typeof closeTransitDetail==='function') closeTransitDetail(); }, 600);
 }
@@ -4516,6 +4517,7 @@ function confirmCurrentRoute(){
     btn.style.background = '#30a14e';
   }
   if(typeof toast === 'function') toast(optName + ' 경로로 확정했어요');
+  if(typeof _beginJourneyTracking === 'function') _beginJourneyTracking();   // ★ 백그라운드 추적 시작
 }
 window.confirmCurrentRoute = confirmCurrentRoute;
 
@@ -17501,6 +17503,28 @@ function _askBgPermOnce(){
 }
 window._askBgPermOnce = _askBgPermOnce;
 
+// ★ 경로 확정 시 호출: 백그라운드 추적 + 상시 알림 시작 (도착까지 유지)
+function _beginJourneyTracking(){
+  try {
+    if(!S.route){ return; }
+    S.boarded = true;              // 추적/알림 로직이 boarded 기준이므로 확정=추적시작
+    S.boardingState = 'boarding';
+    window._bgAlertFired = {};
+    if(typeof _startBgGeolocation === 'function') _startBgGeolocation();
+    if(typeof _askBgPermOnce === 'function') _askBgPermOnce();
+    // 상시 알림 즉시 1회 표시
+    if(S.route.path){
+      var total = S.route.path.length - 1;
+      var rem = Math.max(1, total - S.curIdx);
+      var cur = S.route.path[Math.min(S.curIdx, total)] || '출발';
+      var dest = S.route.path[total] || '목적지';
+      if(typeof _showForegroundNotif === 'function') _showForegroundNotif(cur, dest, rem);
+    }
+    console.log('[탑승] 경로 확정 → 백그라운드 추적 시작');
+  } catch(e){ console.warn('[탑승] 시작 예외:', (e&&e.message)||e); }
+}
+window._beginJourneyTracking = _beginJourneyTracking;
+
 /* BackgroundGeolocation 플러그인으로 백그라운드 위치 추적 시작 */
 function _startBgGeolocation(){
   try {
@@ -17738,13 +17762,14 @@ function _showForegroundNotif(currentStn, destStn, remainStops){
              window.Capacitor.Plugins.LocalNotifications;
     if(!LN) return;
     LN.schedule({ notifications:[{
-      id:        1,   // 고정 ID — 업데이트 시 같은 ID로 덮어씀
-      title:     '🚇 지하철 경로 안내 중',
-      body:      '현재: '+currentStn+' → 목적지: '+destStn+' ('+remainStops+'정거장)',
-      ongoing:   true,      // 사용자가 스와이프로 못 지움
-      channelId: 'subway_fg',
-      smallIcon: 'ic_stat_subway',
-      extra:     { type: 'fg_service' }
+      id:          1,   // 고정 ID — 업데이트 시 같은 ID로 덮어씀
+      title:       '🚇 지하철 경로 안내 중',
+      body:        '현재: '+currentStn+' → 목적지: '+destStn+' ('+remainStops+'정거장)',
+      ongoing:     true,       // 스와이프 방지 (One UI 일부 무시)
+      autoCancel:  false,      // 탭해도 자동 삭제 안 됨
+      channelId:   'subway_fg',
+      smallIcon:   'ic_stat_subway',
+      extra:       { type: 'fg_service' }
     }]});
   } catch(e){}
 }
