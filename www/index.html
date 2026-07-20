@@ -20405,15 +20405,26 @@ function _runTrainAnim(){
           }
 
           if(acc < 200 && d > 350) {
-            // GPS 양호하지만 역 반경 밖 → 5초 후 재시도
+            // ★ GPS 양호 + 아직 도착 전 = 열차 지연. 시간표보다 GPS(실제 위치)를 신뢰.
+            //   강제 전진하지 않고, 핀을 실제 위치 비율로 되돌린 뒤 도착까지 대기
             var elapsed = Date.now() - arrStartMs;
-            if(elapsed < MAX_RETRY_MS) {
-              console.log('[도착GPS] 미감지(' + Math.round(d) + 'm) → 5초 후 재시도 (' + _retryCount + '회)');
-              if(bannerTxt) bannerTxt.textContent = '🔍 ' + arrivedName + ' 확인 중... (' + _retryCount + ')';
+            var prevStn = _getStnObj(S.curIdx);
+            var liveProg = 0.85;
+            if(prevStn && prevStn.lat){
+              var dPrev = haversineM(pos.coords.latitude, pos.coords.longitude, prevStn.lat, prevStn.lng);
+              liveProg = Math.max(0.05, Math.min(0.95, dPrev / (dPrev + d)));
+            }
+            S.trainProgress = liveProg;
+            if(typeof updateTrainPinInterp === 'function') updateTrainPinInterp(liveProg);
+            if(typeof updateHtlMovingTrain === 'function') updateHtlMovingTrain(liveProg, false);
+            console.log('[도착GPS] 지연 감지(' + Math.round(d) + 'm) → 실측 진행 ' + Math.round(liveProg*100) + '%로 보정, 대기 (' + _retryCount + '회)');
+            if(bannerTxt) bannerTxt.textContent = '🕐 ' + arrivedName + ' 접근 중 · 열차 지연';
+            // 극단 안전장치: 구간×6배(최소 5분) 초과 시에만 전진 (GPS 오판 대비)
+            var ULTRA_MS = Math.max(300000, _getSegSec() * 6000);
+            if(elapsed < ULTRA_MS) {
               _retryTimer = setTimeout(_tryVerify, 5000);
             } else {
-              // 최대 대기 초과 → 강제 전진
-              console.log('[도착GPS] ★ 최대대기 초과(' + Math.round(elapsed/1000) + 's) → 강제 전진');
+              console.log('[도착GPS] 안전장치 초과(' + Math.round(elapsed/1000) + 's) → 전진');
               _doAdvance(false);
             }
           } else {
@@ -23403,11 +23414,27 @@ function _runStationGpsCorrection(expectedIdx) {
       var idxChanged = (bestIdx !== S.curIdx);
 
       if(idxChanged) {
-        console.log('[GPS보정] ★ 역 보정: ' + (path[S.curIdx]||'?')
-          + ' → ' + path[bestIdx] + ' (오차 ' + (bestIdx - S.curIdx) + '역)');
-        S.curIdx = bestIdx;
-        S.trainProgress = 0;
+        if(bestIdx < S.curIdx) {
+          // ★ 역행 보정은 오탐 가능성이 크므로: 2회 연속 감지 + 150m 이내일 때만 수용
+          //   (마커가 앞뒤로 튀는 왕복 현상 방지)
+          window._gpsBackCnt = (window._gpsBackCnt || 0) + 1;
+          if(window._gpsBackCnt >= 2 && bestDist < 150) {
+            console.log('[GPS보정] ★ 역행 확정(2회 연속): ' + (path[S.curIdx]||'?') + ' → ' + path[bestIdx]);
+            S.curIdx = bestIdx;
+            S.trainProgress = 0;
+            window._gpsBackCnt = 0;
+          } else {
+            console.log('[GPS보정] 역행 감지 보류(' + window._gpsBackCnt + '/2, ' + Math.round(bestDist) + 'm) → 유지');
+          }
+        } else {
+          console.log('[GPS보정] ★ 전진 보정: ' + (path[S.curIdx]||'?')
+            + ' → ' + path[bestIdx] + ' (+' + (bestIdx - S.curIdx) + '역)');
+          S.curIdx = bestIdx;
+          S.trainProgress = 0;
+          window._gpsBackCnt = 0;
+        }
       } else {
+        window._gpsBackCnt = 0;
         console.log('[GPS보정] ✅ 역 일치: ' + path[S.curIdx]);
       }
 
