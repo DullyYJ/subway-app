@@ -17571,6 +17571,25 @@ function _startBgGeolocation(){
       _bgGeoActive = true; S._bgWatchId = _watchId;
       console.log('[BG-GPS] 백그라운드 GPS 시작, watchId:', _watchId);
     }
+    // ★ 상시 알림 유지 감시: 이동 중인데 알림/watcher가 사라지면 30초마다 되살림
+    if(!window._fgKeepAliveTimer){
+      window._fgKeepAliveTimer = setInterval(function(){
+        try {
+          if(!(S.route && S.boarded)){ return; }   // 이동 중이 아니면 아무것도 안 함
+          // 1) watcher가 죽었으면 재시작
+          if(!_bgGeoActive){ console.log('[BG-GPS] watcher 끊김 감지 → 재시작'); _startBgGeolocation(); }
+          // 2) 상시 알림 다시 띄우기 (지워졌어도 같은 ID로 복원)
+          if(S.route && S.route.path){
+            var path = S.route.path;
+            var total = path.length - 1;
+            var rem = Math.max(0, total - S.curIdx);
+            var cur = path[Math.min(S.curIdx, total)] || '이동 중';
+            var dest = path[total] || '목적지';
+            if(rem > 0 && typeof _showForegroundNotif === 'function') _showForegroundNotif(cur, dest, rem);
+          }
+        } catch(e){}
+      }, 30000);
+    }
   } catch(e){
     console.warn('[BG-GPS] 예외:', (e && (e.message || e.code)) || JSON.stringify(e) || String(e));
   }
@@ -17790,6 +17809,7 @@ function _cleanupBgTracking(){
   _clearForegroundNotif();
   _resetAlertFired && _resetAlertFired();
   window._bgAlertFired = {};
+  if(window._fgKeepAliveTimer){ clearInterval(window._fgKeepAliveTimer); window._fgKeepAliveTimer = null; }
 }
 
 window.stopWatch = stopWatch;
@@ -18211,6 +18231,9 @@ function _scheduleAutoBoard(depMs, depTime) {
 
     // 탑승 상태 설정
     S.boarded = true; S.boardAsked = true; S.boardingState = 'boarding';
+    // ★ 백그라운드 추적 시작 (앱 꺼도 도착 알림)
+    try { if(typeof _startBgGeolocation === 'function') _startBgGeolocation(); } catch(e){}
+    window._bgAlertFired = {};
 
     // 포인트
     if(typeof addPoints === 'function') addPoints(10, '자동 탑승');
@@ -18824,6 +18847,10 @@ function manualBoard(){
   if(!S.boarded){
     // 탑승 상태 즉시 설정
     S.boarded = true; S.boardAsked = true; S.boardingState = 'boarding';
+    // ★ 백그라운드 추적 시작 (앱 꺼도 도착 알림)
+    try { if(typeof _startBgGeolocation === 'function') _startBgGeolocation(); } catch(e){}
+    try { if(typeof _askBgPermOnce === 'function') _askBgPermOnce(); } catch(e){}
+    window._bgAlertFired = {};
     document.getElementById('boardManualBtn').classList.add('active');
     document.getElementById('boardManualTxt').textContent = '하차하기';
     document.getElementById('trainPin').className = 'train-pin boarding';
