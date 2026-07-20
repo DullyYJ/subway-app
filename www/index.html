@@ -17398,6 +17398,30 @@ function stopWatch() {
 
 var _bgGeoActive = false;   // BackgroundGeolocation 플러그인 작동 중
 
+// 최초 1회: 백그라운드 추적을 위한 권한 안내 (항상 허용 + 배터리 최적화 제외)
+function _askBgPermOnce(){
+  try {
+    if(localStorage.getItem('bgPermGuided') === '1') return;
+    var hasBG = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.BackgroundGeolocation;
+    if(!hasBG) return;   // 네이티브 앱에서만 안내
+    localStorage.setItem('bgPermGuided', '1');
+  } catch(e){ return; }
+  var old = document.getElementById('bgPermOv'); if(old) old.remove();
+  var ov = document.createElement('div');
+  ov.id = 'bgPermOv';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:24px;';
+  ov.innerHTML =
+    '<div style="background:var(--card);border-radius:18px;max-width:360px;width:100%;padding:22px 20px;">'
+    + '<div style="font-size:17px;font-weight:800;color:var(--text);margin-bottom:12px;">🔔 앱을 꺼도 도착 알림 받기</div>'
+    + '<div style="font-size:14px;color:var(--text);line-height:1.7;margin-bottom:8px;">앱을 닫아도 2정거장·1정거장 전에 알려드리려면 두 가지만 확인해주세요:</div>'
+    + '<div style="font-size:13px;color:var(--sub);line-height:1.9;margin-bottom:18px;">① 위치 권한을 <b style="color:var(--text);">항상 허용</b>으로<br>② 배터리 설정에서 이 앱 <b style="color:var(--text);">최적화 제외</b></div>'
+    + '<button onclick="document.getElementById(\'bgPermOv\').remove()" style="width:100%;padding:13px;border-radius:11px;border:none;cursor:pointer;font-size:14px;font-weight:800;background:var(--gold);color:#121214;font-family:inherit;">알겠어요</button>'
+    + '</div>';
+  ov.addEventListener('click', function(e){ if(e.target === ov) ov.remove(); });
+  document.body.appendChild(ov);
+}
+window._askBgPermOnce = _askBgPermOnce;
+
 /* BackgroundGeolocation 플러그인으로 백그라운드 위치 추적 시작 */
 function _startBgGeolocation(){
   try {
@@ -17405,6 +17429,14 @@ function _startBgGeolocation(){
              window.Capacitor.Plugins &&
              window.Capacitor.Plugins.BackgroundGeolocation;
     if(!BG){ console.log('[BG-GPS] 플러그인 없음, 웹 GPS 유지'); return; }
+    if(_bgGeoActive){ console.log('[BG-GPS] 이미 작동 중'); return; }   // 중복 시작 방지
+    // 도착 알림용 채널 보장 (최초 1회)
+    try {
+      var LN = window.Capacitor.Plugins.LocalNotifications;
+      if(LN && LN.createChannel) LN.createChannel({
+        id:'subway_alerts', name:'경로 안내', importance:5, visibility:1, vibration:true
+      });
+    } catch(e){}
 
     BG.addWatcher({
       backgroundMessage: '길동무 — 경로 안내 중',
@@ -17432,8 +17464,9 @@ function _startBgGeolocation(){
         var newIdx = S.route.path.indexOf(n.name);
         if(newIdx > S.curIdx){
           S.curIdx = newIdx;
-          checkArrivalAlerts(newIdx);
           console.log('[BG-GPS] 역 갱신:', n.name);
+          // ★ 백그라운드에서도 정거장 기반 도착 임박 알림 (네이티브)
+          _bgArrivalNotify(newIdx);
         }
       }
 
@@ -17455,6 +17488,52 @@ function _startBgGeolocation(){
    - 같은 역 중복 알림 방지 (_proximityFired 세트)
 */
 var _proximityFired = new Set();
+
+// ★ 백그라운드/포그라운드 공통: 남은 정거장 수 기반 네이티브 알림 (2역·1역·도착)
+window._bgAlertFired = window._bgAlertFired || {};
+function _bgArrivalNotify(idx){
+  if(!S.route || !S.route.path) return;
+  var path = S.route.path;
+  var total = path.length - 1;
+  var destNm = path[total];
+  var remain = total - idx;
+  var fired = window._bgAlertFired;
+
+  var LN = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications;
+
+  function fire(key, id, title, body, vib){
+    if(fired[key]) return;
+    fired[key] = true;
+    try {
+      if(LN){
+        LN.schedule({ notifications:[{
+          id: id, title: title, body: body,
+          smallIcon: 'ic_stat_subway', channelId: 'subway_alerts',
+          extra:{ type:'arrival', station: destNm }, actionTypeId:'OPEN_APP'
+        }]});
+      }
+    } catch(e){}
+    try { if('vibrate' in navigator) navigator.vibrate(vib); } catch(e){}
+    // 포그라운드면 인앱 토스트도
+    try { if(!document.hidden && typeof toast === 'function') toast(body); } catch(e){}
+    console.log('[도착알림]', key, body);
+  }
+
+  // 환승역 임박 (경로 중간 환승)
+  var transfers = (S.route.transfers || []);
+  for(var k = idx + 1; k <= Math.min(total, idx + 2); k++){
+    if(transfers.indexOf(path[k]) >= 0){
+      var tr = k - idx;
+      fire('tf_' + path[k], 9200 + k, '🔄 환승 ' + tr + '정거장 전',
+           path[k] + ' 환승 준비하세요 (' + tr + '정거장 전)', [400,150,400]);
+    }
+  }
+
+  if(remain === 2) fire('near2', 9002, '🔔 2정거장 전', destNm + '까지 2정거장 남았어요', [400,150,400]);
+  else if(remain === 1) fire('near1', 9001, '⚠️ 다음 역 하차', '다음 역 ' + destNm + ' — 내릴 준비하세요!', [300,100,300,100,300]);
+  else if(remain <= 0) fire('arrive', 9000, '🎯 목적지 도착', destNm + '에 도착했습니다. 수고하셨어요!', [300,100,300,100,300]);
+}
+window._bgArrivalNotify = _bgArrivalNotify;
 
 function _checkRouteProximityAlert(lat, lng) {
   if(!S.route || !S.route.path || !S.route.path.length) return;
@@ -17616,6 +17695,7 @@ function _cleanupBgTracking(){
   _stopBgGeolocation();
   _clearForegroundNotif();
   _resetAlertFired && _resetAlertFired();
+  window._bgAlertFired = {};
 }
 
 window.stopWatch = stopWatch;
@@ -17757,6 +17837,11 @@ function _confirmBoard() {
   if(typeof _cancelAutoBoard === 'function') _cancelAutoBoard();
 
   S.boarded = true;
+  // ★ 탑승 즉시 백그라운드 위치 추적 시작 (앱을 꺼도 계속 추적 → 도착 임박 알림)
+  try { if(typeof _startBgGeolocation === 'function') _startBgGeolocation(); } catch(e){}
+  try { if(typeof _askBgPermOnce === 'function') _askBgPermOnce(); } catch(e){}
+  if(typeof _resetProximityFired === 'function') _resetProximityFired();
+  window._bgAlertFired = {};   // 정거장 알림 기록 초기화
   // 서울 1~9호선 실시간 열차 위치 폴링 시작
   if(typeof startRealtimeTrainPosPolling === 'function') {
     var _bl = (S.route && S.route.lp && S.route.lp[S.curIdx||0]) || '';
