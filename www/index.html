@@ -16292,6 +16292,33 @@ function getTransferCarPopup(route, destName) {
 window.getTransferCarPopup = getTransferCarPopup;
 
 // ── openExternalApp: 외부 링크 열기 ─────────────────────────
+// 뉴스 원문 열기 (언론사 도메인 허용)
+function openNewsUrl(url){
+  if(!url || typeof url !== 'string') return;
+  var NEWS_OK = ['yna.co.kr','etnews.com','news.google.com','google.com','naver.com','daum.net','chosun.com','donga.com','joongang.co.kr','hani.co.kr','khan.co.kr','mk.co.kr','hankyung.com','sedaily.com','edaily.co.kr','ytn.co.kr','sbs.co.kr','kbs.co.kr','mbc.co.kr','jtbc.co.kr','newsis.com','news1.kr','nocutnews.co.kr','ohmynews.com','pressian.com','mt.co.kr','fnnews.com','asiae.co.kr','heraldcorp.com','seoul.co.kr','kmib.co.kr','munhwa.com','segye.com','hankookilbo.com','imaeil.com','kookje.co.kr'];
+  try {
+    var host = new URL(url).hostname.toLowerCase();
+    var ok = NEWS_OK.some(function(h){ return host === h || host.endsWith('.' + h); });
+    if(!ok) console.log('[뉴스] 미등록 도메인이지만 열기 시도:', host);
+  } catch(e){ return; }
+  // Capacitor 네이티브: 시스템 브라우저로
+  try {
+    if(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App){
+      // App 플러그인엔 openUrl이 없으므로 a.click 폴백 사용
+    }
+  } catch(e){}
+  if(typeof median !== 'undefined' && median.open){
+    try { median.open.inBrowser(url); return; } catch(e){}
+  }
+  var a = document.createElement('a');
+  a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  try { a.click(); } catch(e){ try { location.href = url; } catch(e2){} }
+  setTimeout(function(){ try{ a.remove(); }catch(e){} }, 300);
+}
+window.openNewsUrl = openNewsUrl;
+
 function openExternalApp(url) {
   if(!url || typeof url !== 'string') return;
   // URL 유효성 검사
@@ -16780,11 +16807,15 @@ window._openNewsDetail = function(idx){
     + (hasDesc
         ? '<div style="font-size:14px;color:var(--text);line-height:1.75;margin-bottom:20px;white-space:pre-line;">' + esc(it.desc) + '</div>'
         : '<div style="font-size:14px;color:var(--sub);line-height:1.7;margin-bottom:20px;">기사 요약을 제공하지 않는 매체예요. 아래 버튼으로 원문에서 전체 내용을 확인하세요.</div>')
-    + '<button onclick="openExternalApp(\'' + esc(it.link).replace(/'/g, "\\'") + '\')" style="width:100%;padding:14px;border-radius:12px;border:none;cursor:pointer;font-size:15px;font-weight:800;background:var(--gold);color:#121214;font-family:inherit;">원문 전체 보기 ›</button>'
-    + '<button onclick="document.getElementById(\'newsDetailOv\').remove()" style="width:100%;padding:12px;margin-top:8px;border-radius:12px;border:none;cursor:pointer;font-size:14px;font-weight:700;background:transparent;color:var(--sub);font-family:inherit;">닫기</button>'
+    + '<button id="newsOpenBtn" style="width:100%;padding:14px;border-radius:12px;border:none;cursor:pointer;font-size:15px;font-weight:800;background:var(--gold);color:#121214;font-family:inherit;">원문 전체 보기 ›</button>'
+    + '<button id="newsCloseBtn" style="width:100%;padding:12px;margin-top:8px;border-radius:12px;border:none;cursor:pointer;font-size:14px;font-weight:700;background:transparent;color:var(--sub);font-family:inherit;">닫기</button>'
     + '</div>';
   ov.addEventListener('click', function(e){ if(e.target === ov) ov.remove(); });
   document.body.appendChild(ov);
+  var _openBtn = document.getElementById('newsOpenBtn');
+  if(_openBtn) _openBtn.addEventListener('click', function(){ openNewsUrl(it.link); });
+  var _closeBtn = document.getElementById('newsCloseBtn');
+  if(_closeBtn) _closeBtn.addEventListener('click', function(){ ov.remove(); });
 };
 
 // 커뮤니티 탭 진입 시 서버에서 새로고침
@@ -17761,6 +17792,39 @@ function _stopBgGeolocation(){
 }
 
 /* 포그라운드 서비스 알림 (경로 안내 중 상태바 표시) */
+// ★ 남은 정거장 수 · 예상 소요시간 계산 (S.route 우선, 없으면 _transitResultData)
+function _journeyRemain(){
+  var r = { stops: null, min: null, dest: '목적지', cur: '이동 중' };
+  try {
+    if(S.route && S.route.path && S.route.path.length){
+      var total = S.route.path.length - 1;
+      r.stops = Math.max(0, total - S.curIdx);
+      r.cur   = S.route.path[Math.min(S.curIdx, total)] || '이동 중';
+      r.dest  = S.route.path[total] || '목적지';
+      // 남은 시간: 전체 소요 × (남은 정거장/전체 정거장)
+      var base = window._homeRouteBaseMin || 0;
+      if(base && total > 0) r.min = Math.max(1, Math.round(base * r.stops / total));
+    } else if(typeof _transitResultData !== 'undefined' && _transitResultData && _transitResultData.routes && _transitResultData.routes[0]){
+      var rt = _transitResultData.routes[0];
+      var secs = rt.sections || [];
+      // 전체 정거장 수 합산: passStopList.stationList 길이(교통 구간만, 도보 제외)
+      var totalStops = 0;
+      secs.forEach(function(s){
+        var tp = s.transportation && s.transportation.type;
+        if(tp === 1 || tp === 2){   // 1=지하철, 2=버스
+          var lst = s.passStopList && (s.passStopList.stationList || s.passStopList.stations);
+          if(lst && lst.length) totalStops += Math.max(1, lst.length - 1);
+          else if(s.stationCount) totalStops += s.stationCount;
+        }
+      });
+      if(totalStops > 0) r.stops = totalStops;
+      r.min = Math.round((rt.summary && rt.summary.duration || 0) / 60) || (window._homeRouteBaseMin || null);
+      if(typeof _transitResultDest !== 'undefined' && _transitResultDest) r.dest = (_transitResultDest.name || _transitResultDest) + '';
+    }
+  } catch(e){}
+  return r;
+}
+
 function _showForegroundNotif(currentStn, destStn, remainStops){
   try {
     var LN = window.Capacitor &&
@@ -17769,8 +17833,8 @@ function _showForegroundNotif(currentStn, destStn, remainStops){
     if(!LN) return;
     LN.schedule({ notifications:[{
       id:          1,   // 고정 ID — 업데이트 시 같은 ID로 덮어씀
-      title:       '🚇 지하철 경로 안내 중',
-      body:        '현재: '+currentStn+' → 목적지: '+destStn+' ('+remainStops+'정거장)',
+      title:       '🚇 ' + destStn + ' 가는 중',
+      body:        _fgBodyText(currentStn, destStn, remainStops),
       ongoing:     true,       // 스와이프 방지 (One UI 일부 무시)
       autoCancel:  false,      // 탭해도 자동 삭제 안 됨
       channelId:   'subway_fg',
@@ -17778,6 +17842,17 @@ function _showForegroundNotif(currentStn, destStn, remainStops){
       extra:       { type: 'fg_service' }
     }]});
   } catch(e){}
+}
+
+// 알림 본문 텍스트: "약 24분 · 12정거장 남음 · → 의왕"
+function _fgBodyText(currentStn, destStn, remainStops){
+  var rm = _journeyRemain();
+  var parts = [];
+  if(rm.min != null)   parts.push('약 ' + rm.min + '분');
+  if(rm.stops != null && rm.stops > 0) parts.push(rm.stops + '정거장 남음');
+  if(!parts.length) parts.push('경로 안내 중');
+  var head = (rm.cur && rm.cur !== '이동 중') ? (rm.cur + ' → ' + rm.dest) : ('→ ' + rm.dest);
+  return parts.join(' · ') + '  ·  ' + head;
 }
 
 /* 포그라운드 서비스 알림 제거 */
