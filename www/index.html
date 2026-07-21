@@ -17548,6 +17548,7 @@ function _beginJourneyTracking(){
     S.boarded = true;
     S.boardingState = 'boarding';
     window._bgAlertFired = {};
+    if(typeof _resetAlertFired === 'function') _resetAlertFired();   // ★ 도착임박 알림 중복방지 플래그 초기화 (이전 여정 잔여 방지)
     if(typeof _startBgGeolocation === 'function') _startBgGeolocation();
     if(typeof _askBgPermOnce === 'function') _askBgPermOnce();
     // 상시 알림 즉시 1회 표시 (경로 정보 있으면 상세, 없으면 기본 문구)
@@ -23705,9 +23706,16 @@ function onStationArrival(skipGpsCheck) {
       if(bannerTxt) bannerTxt.textContent = '🚇 이동 중 · ' + curStnName + (isXferArrival ? ' 환승' : ' 통과');
       console.log('[도착] ' + curStnName + ' (idx=' + S.curIdx + '/' + (S.route.path.length-1) + ')');
 
+      // ★ 도착 임박 알림 (2정거장 전·1정거장 전 진동/알림) — 활성 전진 엔진에서 누락돼 있던 호출
+      if(typeof checkArrivalAlerts === 'function' && S.curIdx < S.route.path.length - 1){
+        checkArrivalAlerts(S.curIdx);
+      }
+
       if(S.curIdx >= S.route.path.length - 1) {
         stopTracking();
         if(typeof toast==='function') toast('🎉 목적지 ' + curStnName + ' 도착!');
+        if(typeof vibrateArrive==='function') vibrateArrive();   // ★ 도착 진동
+        if(typeof showNotification==='function') showNotification('🎉 목적지 도착!', curStnName + '에 도착했습니다. 수고하셨어요!', {vibrate:[300,100,300,100,300], type:'arrive'});
         if(typeof _clearBoardAlerts==='function') _clearBoardAlerts();
       } else {
         if(typeof startTrainAnim==='function') startTrainAnim();
