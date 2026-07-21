@@ -2066,6 +2066,7 @@ function _renderHomeBrief(data, fromName, toName, hour, congPct){
   var _ai = _msgToParas(data.msg);
   var _divider = (_head && _ai) ? '<p style=\"height:1px;margin:8px 0;background:var(--border);\"></p>' : '';
   body.innerHTML = '<div class="home-ai-msg">' + _head + _divider + _ai + '</div>';
+  _injectHomeBriefWeather(fromName, toName);
 }
 
 // <br><br> 또는 \n\n 을 <p>로 변환 (줄간격 촘촘)
@@ -2175,17 +2176,22 @@ function _renderHomeBriefLocal(fromName, toName, hour, congPct){
     var rb = _buildRouteBrief();
     html = rb ? _routeStatusHtml(rb, congPct) : '';
     if(!rb){
-      html = '<p><b>' + fromName + '</b> → <b>' + toName + '</b> 약 <b>' + (tmin||'?') + '분</b> 예상돼요.</p>';
+      var _tf = 0;
+      try { if(S.route && S.route.lp){ var _ls=[]; S.route.lp.forEach(function(l){ if(l && _ls.indexOf(l)<0) _ls.push(l); }); _tf=Math.max(0,_ls.length-1); } } catch(e){}
+      html = '<p><b>' + fromName + '</b> → <b>' + toName + '</b> 약 <b>' + (tmin||'?') + '분</b> 예상돼요'
+           + (_tf>0 ? (' · 환승 <b>' + _tf + '회</b>') : '') + '.</p>';
+      html += '<p style="color:var(--sub);font-size:12px;">🔎 상단 <b>경로 탐색</b>을 누르면 구간별 노선·환승 상세가 표시돼요.</p>';
     }
     // 예상 변화(트렌드)
     var trend;
     if(peak) trend = _whenTxt + '피크 시간대라 다소 붐빌 수 있어요. 여유 있게 움직이세요.';
-    else if(hour===6 || hour===16) trend = '곳 혼잡 시간대로 접어들어요. 지금 출발하면 비교적 수월해요.';
+    else if(hour===6 || hour===16) trend = '곧 혼잡 시간대로 접어들어요. 지금 출발하면 비교적 수월해요.';
     else if(hour===9 || hour===19) trend = '혼잡 피크가 막 지나가는 중이에요. 조금만 기다리면 더 여유로워져요.';
     else trend = '앞으로 30분간 소요시간은 큰 변화 없이 안정적일 전망이에요.';
     html += '<p>' + trend + '</p>';
     html += '<p style="color:var(--sub);font-size:12px;">5분마다 실시간 현황을 업데이트할게요.</p>';
     body.innerHTML = '<div class="home-ai-msg">' + html + '</div>';
+    _injectHomeBriefWeather(fromName, toName);
     return;
   }
 
@@ -2205,6 +2211,80 @@ function _renderHomeBriefLocal(fromName, toName, hour, congPct){
     future
   ];
   body.innerHTML = '<div class="home-ai-msg">' + pB.map(function(p){ return '<p>'+p+'</p>'; }).join('') + '</div>';
+  _injectHomeBriefWeather(fromName, toName);
+}
+
+// ★ 홈 브리핑용 좌표 해석 (출발/도착) — _fmapStart/_fmapDest > S.start/dest > STNDB > GPS
+function _homeBriefCoord(which, name){
+  var src = (which==='to')
+    ? [ (typeof _fmapDest!=='undefined'?_fmapDest:null),  (typeof S!=='undefined'?S.dest:null),  (typeof _transitResultDest!=='undefined'?_transitResultDest:null) ]
+    : [ (typeof _fmapStart!=='undefined'?_fmapStart:null), (typeof S!=='undefined'?S.start:null), (typeof _transitResultStart!=='undefined'?_transitResultStart:null) ];
+  for(var i=0;i<src.length;i++){
+    var o = src[i];
+    if(o && o.lat!=null && o.lng!=null && !isNaN(o.lat) && !isNaN(o.lng)) return { lat:o.lat, lng:o.lng };
+  }
+  try {
+    if(name && typeof STNDB!=='undefined'){
+      var nm = String(name).replace(/역$/,'');
+      var s = STNDB.find(function(x){ return x.lat && (x.name===name || x.name===nm || x.name===nm+'역'); });
+      if(s) return { lat:s.lat, lng:s.lng };
+    }
+  } catch(e){}
+  if(which!=='to'){
+    var gl = window._lastGPSLat || (typeof S!=='undefined' && S.lastGPSFix && S.lastGPSFix.lat);
+    var gn = window._lastGPSLng || (typeof S!=='undefined' && S.lastGPSFix && S.lastGPSFix.lng);
+    if(gl && gn) return { lat:gl, lng:gn };
+  }
+  return null;
+}
+
+// ★ 홈 브리핑에 출발지·목적지 날씨 + 실용 조언 삽입 (비동기)
+var _homeWxSeq = 0;
+function _injectHomeBriefWeather(fromName, toName){
+  try {
+    if(typeof _fetchWeather !== 'function') return;
+    // 미래/수동 예측 모드: 현재 날씨는 오해 소지 → 표시 안 함
+    if((typeof _baseTimeMs!=='undefined' && _baseTimeMs != null)) return;
+    if(typeof _isManualStart==='function' && _isManualStart()) return;
+    var msg = document.querySelector('#homeAiBody .home-ai-msg');
+    if(!msg) return;
+    var fc = _homeBriefCoord('from', fromName);
+    var tc = (toName && toName!==fromName) ? _homeBriefCoord('to', toName) : null;
+    if(!fc && !tc) return;
+    var seq = ++_homeWxSeq;
+    var ph = document.createElement('p');
+    ph.className = 'home-ai-wx';
+    ph.style.cssText = 'color:var(--sub);font-size:12px;margin:0 0 2px;';
+    ph.textContent = '🌤 날씨 확인 중...';
+    msg.insertBefore(ph, msg.firstChild);
+
+    var wF=null, wT=null, need=(fc?1:0)+(tc?1:0), done=0;
+    function render(){
+      if(seq !== _homeWxSeq) return;   // 더 최신 브리핑이 왔으면 무시
+      var cur = document.querySelector('#homeAiBody .home-ai-wx');
+      if(!cur) return;
+      var parts = [];
+      if(wF) parts.push('<b>' + (fromName||'출발') + '</b> ' + wF.emo + ' ' + wF.temp + '°' + (wF.rain>=30?(' ·비'+wF.rain+'%'):''));
+      if(wT) parts.push('<b>' + (toName||'도착') + '</b> ' + wT.emo + ' ' + wT.temp + '°' + (wT.rain>=30?(' ·비'+wT.rain+'%'):''));
+      if(!parts.length){ cur.remove(); return; }
+      var html = '🌤 ' + parts.join(' &nbsp;→&nbsp; ');
+      var tips = [];
+      var maxRain = Math.max((wF&&wF.rain)||0, (wT&&wT.rain)||0);
+      if(maxRain >= 60) tips.push('우산 꼭 챙기세요');
+      else if(maxRain >= 40) tips.push('우산 챙기면 좋아요');
+      if(wF && wT && Math.abs(wF.temp - wT.temp) >= 4) tips.push('도착지 기온차 크니 겉옷 준비');
+      var coldest = Math.min(wF?wF.temp:99, wT?wT.temp:99);
+      if(coldest <= 2) tips.push('많이 추우니 방한 챙기세요');
+      else if(coldest <= 8) tips.push('쌀쌀하니 겉옷 챙기세요');
+      if(tips.length) html += '<br><span style="color:var(--gold);">💡 ' + tips.join(' · ') + '</span>';
+      cur.innerHTML = html;
+      cur.style.color = 'var(--text)';
+      cur.style.fontSize = '13px';
+    }
+    function step(){ if(++done>=need) render(); }
+    if(fc) _fetchWeather(fc.lat, fc.lng, function(w){ wF=w; step(); });
+    if(tc) _fetchWeather(tc.lat, tc.lng, function(w){ wT=w; step(); });
+  } catch(e){}
 }
 
 function _startHomeCountdown(){
@@ -6681,9 +6761,7 @@ window.addEventListener('unhandledrejection', function(e) {
 
       <!-- 도착지 행 -->
       <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;position:relative;">
-        <svg width="10" height="13" viewBox="0 0 24 24" fill="#ff2d55" style="flex-shrink:0;">
-          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
-        </svg>
+        <div style="width:10px;height:10px;border-radius:50%;background:#ff3b30;flex-shrink:0;"></div>
         <input id="fmapDestInp" class="inp"
           style="flex:1;border:none;background:transparent;padding:0;font-size:15px;font-weight:600;color:var(--text);min-width:0;"
           placeholder="도착지 검색" autocomplete="off"
@@ -6867,7 +6945,7 @@ window.addEventListener('unhandledrejection', function(e) {
 
   <!-- ★ 실시간 지하철 톡 (하단, 입력 가능 — 홈/커뮤니티 데이터 공유) -->
   <div class="livetalk-board">
-    <div class="livetalk-hdr"><span class="ldot-live"></span>🚇 실시간 대화</div>
+    <div class="livetalk-hdr" onclick="_goCommunityChat()" style="cursor:pointer;"><span class="ldot-live"></span>실시간 대화 <span style="font-size:12px;color:var(--sub);font-weight:600;margin-left:2px;">›</span></div>
     <div class="livetalk-list" id="liveTalkList"></div>
     <div class="livetalk-input-row">
       <input id="homeTalkInput" type="text" placeholder="실시간 대화 남기기..." maxlength="100"
@@ -7089,7 +7167,7 @@ window.addEventListener('unhandledrejection', function(e) {
 
     <!-- 카테고리 칩 -->
     <div class="filter-row" id="filterRow">
-      <div class="chip" onclick="showChatTab(this)">🔴실시간소통</div>
+      <div class="chip" id="chipLiveTalk" onclick="showChatTab(this)">🔴실시간소통</div>
       <div class="chip on" id="chipBoard" onclick="filterCat(this,'all')">게시판</div>
       <div class="chip" onclick="filterCat(this,'뉴스')">📰뉴스</div>
       <div class="chip" onclick="showSettingsTab(this)">⚙️설정</div>
@@ -17232,10 +17310,12 @@ function _renderPost(post) {
 
   // ★ 잡담·빈 카테고리는 뱃지 숨김 (게시판은 뱃지 없이 제목만)
   var _hideBadge = (!post.cat || post.cat === '잡담' || post.cat === '일상');
+  // ★ 제목 끝의 지역명 괄호 제거 (예: "칼퇴 성공한 날 (여의도)" → "칼퇴 성공한 날")
+  var _ttl = String(post.title == null ? '' : post.title).replace(/\s*[\(（][^\(\)（）]*[\)）]\s*$/, '').trim();
   el.innerHTML =
     '<div class="dc-post-hdr">'
       + (_hideBadge ? '' : '<span class="dc-cat-badge" style="background:' + col + ';">' + post.cat + '</span>')
-      + '<span class="dc-post-title">' + post.title + '</span>'
+      + '<span class="dc-post-title">' + _ttl + '</span>'
     + '</div>'
     + '<div class="dc-post-meta">'
       + '<span class="dc-nick">' + post.nick + '</span>'
@@ -25581,6 +25661,17 @@ function showChatTab(el){
 }
 window.showChatTab = showChatTab;
 
+// ★ 홈 '실시간 대화' 헤더 탭 → 커뮤니티 실시간소통 채팅창으로 이동
+function _goCommunityChat(){
+  try {
+    var commNi = document.getElementById('ni-community');
+    if(typeof switchTab === 'function' && commNi) switchTab('community', commNi);
+    var chip = document.getElementById('chipLiveTalk') || document.querySelector('#filterRow .chip');
+    if(typeof showChatTab === 'function') showChatTab(chip);
+  } catch(e){}
+}
+window._goCommunityChat = _goCommunityChat;
+
 // ══════════════════════════════════════════════════════════════
 // 커뮤니티 아이디 (글쓰기·채팅 참여 조건)
 // ══════════════════════════════════════════════════════════════
@@ -26070,7 +26161,7 @@ function _serverFetchTalks(){
             return;
           }
           _serverTalkIds[t.id] = true;
-          _LIVE_TALK.push({ nick: t.nick, text: t.text, time: t.ts, server: true });
+          _LIVE_TALK.push({ nick: t.nick, text: (typeof _ltTidyText==='function'?_ltTidyText(t.text):t.text), time: t.ts, server: true });
           if(t.ts > _lastTalkTs) _lastTalkTs = t.ts;
           added = true;
           window._serverTalksActive = true;      // ★ 서버 대화 수신 중 → 로컬 생성 중단
@@ -26233,7 +26324,23 @@ function _ltPickPool(){
 }
 function _ltEsc(s){ return String(s||'').replace(/[<>&"]/g,function(c){return {'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c];}); }
 function _ltTime(ms){ var d=new Date(ms); return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2); }
+// ★ 채팅 말줄임(…) 과다 정리: 메시지당 최대 1개, 앞/뒤 말줄임 제거 (내가 쓴 글 제외)
+function _ltTidyText(t){
+  if(t == null) return t;
+  t = String(t).replace(/[.。]{2,}/g, '…');   // "..", "...", "。。" → "…"
+  t = t.replace(/…{2,}/g, '…');                // "……" → "…"
+  var parts = t.split('…');
+  if(parts.length > 2){                         // … 2개 이상 → 첫 번째만 유지
+    t = parts[0] + '…' + parts.slice(1).join(' ');
+  }
+  t = t.replace(/\s*…\s*$/, '');                // 끝 말줄임 제거
+  t = t.replace(/^\s*…\s*/, '');                // 앞 말줄임 제거
+  t = t.replace(/\s{2,}/g, ' ').trim();
+  t = t.replace(/…/g, '...');                   // 남은 말줄임은 사람이 쓰는 "..." 로 (가운데 점 … 안 씀)
+  return t;
+}
 function _ltAdd(msg){
+  if(msg && !msg.mine && msg.text != null) msg.text = _ltTidyText(msg.text);
   _LIVE_TALK.push(msg);
   if(_LIVE_TALK.length > 100) _LIVE_TALK.shift();
   _renderLiveTalk(); _renderChatTab();
