@@ -2236,9 +2236,6 @@ function _renderHomeConductorBrief(fromName, toName, hour, congPct, serverMsg){
     var peak = (hour>=7&&hour<=9)||(hour>=17&&hour<=19);
     var hol  = (typeof _isHolidayOrWeekend==='function' && _isHolidayOrWeekend());
     var congTxt = congPct>=70?'매우 혼잡':congPct>=45?'다소 혼잡':'원활';
-    var greet = (hour>=22||hour<5) ? '늦은 시간까지 고생 많으십니다, 손님.'
-             : (hour<11 ? '좋은 아침입니다, 손님.'
-             : (hour<17 ? '안녕하세요, 손님.' : '퇴근길 수고 많으십니다, 손님.'));
     var ps = [];
 
     if(hasRoute){
@@ -2246,7 +2243,7 @@ function _renderHomeConductorBrief(fromName, toName, hour, congPct, serverMsg){
       var w = [];
       if(wF) w.push('출발지 <b>' + esc(fromName) + '</b>' + _josEun(fromName) + ' 현재 <b>' + wF.temp + '도</b> ' + wF.txt);
       if(wT) w.push('목적지 <b>' + esc(toName) + '</b>' + _josEun(toName) + ' <b>' + wT.temp + '도</b> ' + wT.txt);
-      ps.push(greet + (w.length ? (' ' + w.join(', ') + '입니다.') : ''));
+      if(w.length) ps.push(w.join(', ') + '입니다.');
       // 2) 준비 조언
       var prep = [];
       var maxRain = Math.max((wF&&wF.rain)||0,(wT&&wT.rain)||0);
@@ -2269,7 +2266,7 @@ function _renderHomeConductorBrief(fromName, toName, hour, congPct, serverMsg){
         var _l1 = rb.segments[0].line||'한 노선';
         t += '. 환승 없이 <b>' + esc(_l1) + '</b>' + _josRo(rb.segments[0].line) + ' 한 번에 가실 수 있습니다';
       } else {
-        t += '. 자세한 환승 안내는 상단 <b>경로 탐색</b>을 누르시면 구간별로 알려드리겠습니다';
+        t += '. 환승 정보는 경로가 확정되면 구간별로 안내해 드리겠습니다';
       }
       ps.push(t + '.');
       // 4) 소요시간 + 도착 예정
@@ -2280,7 +2277,7 @@ function _renderHomeConductorBrief(fromName, toName, hour, congPct, serverMsg){
       }
     } else {
       // 목적지 미설정: 현위치 상태 안내
-      ps.push(greet + (wF ? (' 현재 <b>' + esc(fromName) + '</b>' + _josEun(fromName) + ' <b>' + wF.temp + '도</b> ' + wF.txt + '입니다.') : ''));
+      if(wF) ps.push('현재 <b>' + esc(fromName) + '</b>' + _josEun(fromName) + ' <b>' + wF.temp + '도</b> ' + wF.txt + '입니다.');
       var prep2 = [];
       var mr = (wF&&wF.rain)||0;
       if(mr>=60) prep2.push('비 소식이 있으니 우산을 꼭 챙기세요');
@@ -5489,6 +5486,8 @@ function _startTransitWatch(){
     if(ac>150) return;                 // 저정확도(실내 튐) 무시
     window._lastGPSLat=la; window._lastGPSLng=ln;
     if(typeof S!=='undefined') S.lastGPSFix={lat:la,lng:ln,ts:Date.now()};
+    // ★ 위치 확보 시 주변 버스 정류장 미리 로드 (탭 열 때 즉시 표시)
+    try { if(typeof _prefetchNearStops==='function') _prefetchNearStops(la, ln); } catch(e){}
   }
   // 즉시 1회 + 연속 watch
   try { navigator.geolocation.getCurrentPosition(_apply, function(){}, {enableHighAccuracy:true,maximumAge:0,timeout:8000}); } catch(e){}
@@ -6023,22 +6022,205 @@ function refreshBusView() {
 }
 window.refreshBusView = refreshBusView;
 
-// ── 주변 정류장 로드 (GPS) — 카카오 스타일 ────────────────
+// ── 주변 정류장 순서 고정 (사용자 정렬, 기기 저장) ──────────
+function _busNearOrderGet(){ try { return JSON.parse(localStorage.getItem('busNearOrder')||'[]'); } catch(e){ return []; } }
+function _busNearOrderSet(ids){ try { localStorage.setItem('busNearOrder', JSON.stringify(ids)); } catch(e){} }
+function _busStopKey(s){ return String((s&&(s.nodeid||s.nodeId))||(s&&(s.nodenm||s.nodeName||s.name))||''); }
+function _applyBusNearOrder(stops){
+  var order = _busNearOrderGet();
+  if(!order.length) return stops.slice();
+  return stops.slice().sort(function(a,b){
+    var ia=order.indexOf(_busStopKey(a)), ib=order.indexOf(_busStopKey(b));
+    if(ia<0 && ib<0) return (parseInt(a.dist||0))-(parseInt(b.dist||0));  // 둘 다 미지정 → 거리순
+    if(ia<0) return 1;   // 미지정은 뒤로
+    if(ib<0) return -1;
+    return ia-ib;        // 저장된 순서
+  });
+}
+// ── 롱프레스 드래그 정렬 (꾹 누르면 흔들리고 드래그로 순서 변경) ──
+var _busDrag = null;
+function _busReorderEnter(){
+  var listEl = document.getElementById('mapBusStopList');
+  if(!listEl || listEl.classList.contains('bus-reorder-mode')) return;
+  listEl.classList.add('bus-reorder-mode');
+  try { if(navigator.vibrate) navigator.vibrate(18); } catch(e){}
+  if(!document.getElementById('busReorderBar')){
+    var bar = document.createElement('div');
+    bar.id = 'busReorderBar';
+    bar.style.cssText = 'position:sticky;top:0;z-index:60;display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--card);border:1px solid var(--border);border-radius:12px;margin:8px 12px;padding:8px 12px;font-size:13px;color:var(--sub);box-shadow:0 2px 10px rgba(0,0,0,.08);';
+    bar.innerHTML = '<span>끌어서 순서 변경</span><button onclick="_busReorderExit()" style="background:#2f7cf6;color:#fff;border:none;border-radius:8px;padding:6px 16px;font-weight:800;cursor:pointer;">완료</button>';
+    listEl.insertBefore(bar, listEl.firstChild);
+  }
+}
+function _busReorderExit(){
+  var listEl = document.getElementById('mapBusStopList');
+  if(listEl){
+    listEl.classList.remove('bus-reorder-mode','bus-drag-active');
+    Array.prototype.forEach.call(listEl.querySelectorAll('.map-bus-stop-card'), function(c){ c.style.transform=''; c.style.transition=''; c.classList.remove('bus-dragging'); });
+  }
+  var bar = document.getElementById('busReorderBar'); if(bar) bar.remove();
+  _busDrag = null;
+}
+window._busReorderExit = _busReorderExit;
+
+function _busPersistDomOrder(){
+  var listEl = document.getElementById('mapBusStopList');
+  if(!listEl) return;
+  var cards = Array.prototype.slice.call(listEl.querySelectorAll('.map-bus-stop-card'));
+  var keys = cards.map(function(c){ return c.dataset.key || ''; }).filter(Boolean);
+  _busNearOrderSet(keys);
+  if(window._nearOrderedStops){
+    var byKey = {}; window._nearOrderedStops.forEach(function(s){ byKey[_busStopKey(s)] = s; });
+    window._nearOrderedStops = keys.map(function(k){ return byKey[k]; }).filter(Boolean);
+  }
+}
+
+function _bdBeginDrag(card, t){
+  var listEl = document.getElementById('mapBusStopList');
+  var cards = Array.prototype.slice.call(listEl.querySelectorAll('.map-bus-stop-card'));
+  var rects = cards.map(function(c){ var r=c.getBoundingClientRect(); return { el:c, center:r.top + r.height/2, h:r.height }; });
+  var origIndex = cards.indexOf(card);
+  if(origIndex < 0) return;
+  listEl.classList.add('bus-drag-active');
+  card.classList.add('bus-dragging');
+  cards.forEach(function(c){ if(c!==card){ c.style.transform=''; c.style.transition='transform .18s ease'; } });
+  _busDrag = { el:card, listEl:listEl, cards:cards, rects:rects, origIndex:origIndex, targetIndex:origIndex, startY:t.clientY, h:rects[origIndex].h };
+}
+function _bdMove(clientY){
+  var d = _busDrag; if(!d) return;
+  var dy = clientY - d.startY;
+  d.el.style.transform = 'translateY(' + dy + 'px) scale(1.03)';
+  var draggedCenter = d.rects[d.origIndex].center + dy;
+  var ti = 0;
+  for(var i=0;i<d.rects.length;i++){ if(i===d.origIndex) continue; if(d.rects[i].center < draggedCenter) ti++; }
+  d.targetIndex = ti;
+  var gap = d.h + 12;   // 카드 높이 + margin(12)
+  for(var j=0;j<d.rects.length;j++){
+    if(j===d.origIndex) continue;
+    var c = d.rects[j].el, shift = 0;
+    if(d.origIndex < ti){ if(j>d.origIndex && j<=ti) shift = -gap; }
+    else if(d.origIndex > ti){ if(j>=ti && j<d.origIndex) shift = gap; }
+    c.style.transform = shift ? ('translateY(' + shift + 'px)') : '';
+  }
+}
+function _bdEnd(){
+  var d = _busDrag; if(!d) return;
+  var listEl = d.listEl, el = d.el;
+  listEl.classList.remove('bus-drag-active');
+  d.cards.forEach(function(c){ c.style.transition=''; c.style.transform=''; });
+  el.classList.remove('bus-dragging');
+  if(d.targetIndex !== d.origIndex){
+    var others = d.cards.filter(function(c){ return c!==el; });
+    if(d.targetIndex >= others.length) listEl.appendChild(el);
+    else listEl.insertBefore(el, others[d.targetIndex]);
+    _busPersistDomOrder();
+    try { if(navigator.vibrate) navigator.vibrate(10); } catch(e){}
+  }
+  _busDrag = null;
+}
+
+// 카드에 롱프레스+드래그 핸들러 부착 (near 렌더 후 호출)
+function _busDragInit(){
+  var listEl = document.getElementById('mapBusStopList');
+  if(!listEl) return;
+  Array.prototype.forEach.call(listEl.querySelectorAll('.map-bus-stop-card'), function(card){
+    if(card._bdBound) return; card._bdBound = true;
+    var lp=null, sx=0, sy=0, moved=false;
+    card.addEventListener('touchstart', function(e){
+      if(e.touches.length>1) return;
+      var t=e.touches[0]; sx=t.clientX; sy=t.clientY; moved=false;
+      if(listEl.classList.contains('bus-reorder-mode')){
+        _bdBeginDrag(card, t);           // 편집모드: 바로 드래그
+      } else {
+        lp = setTimeout(function(){ if(!moved){ _busReorderEnter(); _bdBeginDrag(card, {clientX:sx, clientY:sy}); } }, 420);  // 꾹 누르기
+      }
+    }, {passive:true});
+    card.addEventListener('touchmove', function(e){
+      var t=e.touches[0];
+      if(_busDrag && _busDrag.el===card){ e.preventDefault(); _bdMove(t.clientY); return; }
+      if(Math.abs(t.clientY-sy)>8 || Math.abs(t.clientX-sx)>8){ moved=true; if(lp){ clearTimeout(lp); lp=null; } }
+    }, {passive:false});
+    function up(){ if(lp){ clearTimeout(lp); lp=null; } if(_busDrag && _busDrag.el===card) _bdEnd(); }
+    card.addEventListener('touchend', up);
+    card.addEventListener('touchcancel', up);
+  });
+}
+window._busDragInit = _busDragInit;
+
+// ── 주변 정류장 프리페치: GPS 확보 시 미리 로드해 캐시(정류장+도착정보) ──
+function _busCoordClose(a,b,c,d){ try { return haversineM(a,b,c,d) < 200; } catch(e){ return false; } }
+function _prefetchNearStops(lat, lng){
+  if(!lat || !lng || typeof _fetchNearStops!=='function') return;
+  var c = window._nearStopsCache;
+  if(c && c.stops && c.stops.length && (Date.now()-c.ts < 60000) && _busCoordClose(c.lat,c.lng,lat,lng)) return;  // 신선하면 skip
+  if(window._nearPrefetching) return;
+  window._nearPrefetching = true;
+  _fetchNearStops(lat, lng, function(err, stops){
+    window._nearPrefetching = false;
+    if(err || !stops || !stops.length) return;
+    var top = stops.slice(0,6);
+    window._nearStopsCache = { ts: Date.now(), lat: lat, lng: lng, stops: top };
+    // 도착정보도 미리 데워두기 (_busCache 30초 TTL → 탭 열 때 즉시 표시)
+    top.forEach(function(s){
+      var cc=s.citycode||s.cityCode||'25', nid=s.nodeid||s.nodeId;
+      if(nid && typeof _fetchBusArrival==='function'){ try { _fetchBusArrival(cc, nid, function(){}); } catch(e){} }
+    });
+    // 버스 near 탭이 지금 열려있고 아직 목록이 없으면 즉시 반영
+    var le=document.getElementById('mapBusStopList');
+    if(le && (typeof _busViewMode==='undefined' || _busViewMode==='near') && !(window._nearOrderedStops && window._nearOrderedStops.length)){
+      _renderNearStops(_applyBusNearOrder(top));
+    }
+  });
+}
+window._prefetchNearStops = _prefetchNearStops;
+
+// 공용 렌더러: 정렬된 정류장 배열을 카드로 (초기 로드/재정렬 공용)
+function _renderNearStops(stops){
+  var listEl = document.getElementById('mapBusStopList');
+  if(!listEl) return;
+  window._nearOrderedStops = stops;
+  var total = stops.length;
+  listEl.innerHTML = '<div style="padding:10px 14px;font-size:12px;color:var(--sub);">📍 주변 정류장 ' + total + '개 · 카드를 <b>꾹 눌러</b> 순서 변경</div>';
+  window._mapBusCards = [];
+  stops.forEach(function(stop, idx){
+    var card = _renderMapBusCard(stop, idx, 'near', total);
+    listEl.appendChild(card);
+    var arrStop = {
+      name: stop.nodenm || stop.nodeName,
+      nodeId: stop.nodeid || stop.nodeId,
+      cityCode: stop.citycode || stop.cityCode || '25',
+      nodeDir: stop.nodeDir || stop.dir
+    };
+    window._mapBusCards.push({ stop: arrStop, cardIdx: 'near_' + idx });
+    _loadMapBusArrival(arrStop, 'near_' + idx);
+  });
+  if(typeof _busDragInit === 'function') _busDragInit();   // ★ 롱프레스 드래그 정렬 활성화
+}
+window._renderNearStops = _renderNearStops;
+
+// ── 주변 정류장 로드 (GPS) — 프리페치 캐시 우선 → 즉시 표시 ──
 function loadMapNearStops(force) {
   var listEl = document.getElementById('mapBusStopList');
   var empty  = document.getElementById('mapBusEmpty');
   if(!listEl) return;
   if(empty) empty.style.display = 'none';
 
-  listEl.innerHTML = '<div class="map-bus-loading"><div class="bus-spinner"></div>주변 정류장 검색 중...</div>';
+  var lat = _busGpsLat || (typeof S!=='undefined' && S.lastGPSFix && S.lastGPSFix.lat) || window._lastGPSLat;
+  var lng = _busGpsLng || (typeof S!=='undefined' && S.lastGPSFix && S.lastGPSFix.lng) || window._lastGPSLng;
 
+  // ★ 프리페치 캐시가 신선하면 로딩 없이 즉시 표시
+  var c = window._nearStopsCache;
+  if(!force && c && c.stops && c.stops.length && (Date.now()-c.ts < 120000)){
+    _renderNearStops(_applyBusNearOrder(c.stops));
+    if(lat && lng) _prefetchNearStops(lat, lng);   // 백그라운드 최신화
+    return;
+  }
+
+  listEl.innerHTML = '<div class="map-bus-loading"><div class="bus-spinner"></div>주변 정류장 검색 중...</div>';
   if(!navigator.geolocation) {
     listEl.innerHTML = '<div class="map-bus-empty">📍<br>위치 정보를 사용할 수 없습니다</div>';
     return;
   }
-
-  var lat = _busGpsLat || (typeof S !== 'undefined' && S.lastGPSFix && S.lastGPSFix.lat);
-  var lng = _busGpsLng || (typeof S !== 'undefined' && S.lastGPSFix && S.lastGPSFix.lng);
 
   function go(la, ln) {
     if(typeof _fetchNearStops !== 'function') {
@@ -6052,20 +6234,8 @@ function loadMapNearStops(force) {
       }
       stops.sort(function(a,b){ return (parseInt(a.dist||0)) - (parseInt(b.dist||0)); });
       var near = stops.slice(0, 6);
-      listEl.innerHTML = '<div style="padding:10px 14px;font-size:12px;color:var(--sub);">📍 주변 정류장 ' + near.length + '개 · 가까운 순</div>';
-      window._mapBusCards = [];
-      near.forEach(function(stop, idx) {
-        var card = _renderMapBusCard(stop, idx, 'near');
-        listEl.appendChild(card);
-        var arrStop = {
-          name: stop.nodenm || stop.nodeName,
-          nodeId: stop.nodeid || stop.nodeId,
-          cityCode: stop.citycode || stop.cityCode || '25',
-          nodeDir: stop.nodeDir || stop.dir
-        };
-        window._mapBusCards.push({ stop: arrStop, cardIdx: 'near_' + idx });
-        _loadMapBusArrival(arrStop, 'near_' + idx);
-      });
+      window._nearStopsCache = { ts: Date.now(), lat: la, lng: ln, stops: near };
+      _renderNearStops(_applyBusNearOrder(near));
     });
   }
 
@@ -6233,12 +6403,13 @@ function _busFindLandmark(stop, arrivals, cb){
   });
 }
 
-function _renderMapBusCard(stop, idx, mode) {
+function _renderMapBusCard(stop, idx, mode, total) {
   var card = document.createElement('div');
   card.className = 'map-bus-stop-card';
   card.id = 'mapBusCard_' + mode + '_' + idx;
   var name = stop.nodenm || stop.nodeName || stop.name || '정류장';
   var nodeId = String(stop.nodeid || stop.nodeId || '');
+  if(mode === 'near') card.dataset.key = _busStopKey(stop);   // ★ 드래그 순서저장용 식별키
   var alias = (typeof _busGetAlias === 'function') ? _busGetAlias(nodeId) : '';
   var dir  = stop.nodeDir || stop.dir || '';
   var dist = stop.dist || stop.distance;
@@ -19294,6 +19465,18 @@ window.onload=function(){
   setTimeout(function(){ if(typeof _updateBaseTimeDisplay==='function') _updateBaseTimeDisplay(); }, 300);
   setTimeout(function(){ if(typeof initCommuteAlarm==='function') initCommuteAlarm(); }, 500);
   setTimeout(function(){ if(typeof _startServerSync==='function') _startServerSync(); }, 1500);  // ★ 서버 동기화 시작
+  // ★ 앱 시작 시 위치 파악되면 주변 버스 정류장 미리 로드 (탭 열 때 즉시 표시)
+  setTimeout(function(){
+    try {
+      if(typeof _prefetchNearStops!=='function') return;
+      var la = window._lastGPSLat || (typeof S!=='undefined' && S.lastGPSFix && S.lastGPSFix.lat);
+      var ln = window._lastGPSLng || (typeof S!=='undefined' && S.lastGPSFix && S.lastGPSFix.lng);
+      if(la && ln){ _prefetchNearStops(la, ln); return; }
+      if(navigator.geolocation) navigator.geolocation.getCurrentPosition(
+        function(p){ _prefetchNearStops(p.coords.latitude, p.coords.longitude); },
+        function(){}, { enableHighAccuracy:false, timeout:8000, maximumAge:60000 });
+    } catch(e){}
+  }, 2000);
   setTimeout(function(){ if(typeof _renderFavRecent==='function') _renderFavRecent(); }, 500);  // ★ 즐겨찾기/최근경로
   setTimeout(function(){ if(typeof renderHorizontalTimeline==='function') renderHorizontalTimeline(); }, 600);  // ★ 경로 노선도 빈 상태 표시
   // 10분마다 실시간 뉴스 갱신
@@ -26187,6 +26370,7 @@ function _serverFetchTalks(){
         });
         if(_LIVE_TALK.length > 100) _LIVE_TALK.splice(0, _LIVE_TALK.length - 100);
         if(added){
+          window._lastServerTalkAt = Date.now();   // ★ 서버 대본 최신 수신 시각 기록 (로컬 되살림 판단용)
           if(typeof _renderLiveTalk==='function') _renderLiveTalk();
           if(typeof _renderChatTab==='function') _renderChatTab();
         }
@@ -26536,7 +26720,13 @@ function _scheduleLiveTalk(){
   if(_ltTimer) clearTimeout(_ltTimer);
   // 실제 채팅 리듬: Gemini 대화 큐가 있으면 8~16초(활발), 폴백이면 15~26초(잔잔)
   var _d = (typeof _ltAiQueue!=='undefined' && _ltAiQueue.length) ? _rndInt(8000,16000) : _rndInt(15000,26000);
-  _ltTimer = setTimeout(function(){ if(!window._serverTalksActive) _ltGenerate(); _scheduleLiveTalk(); }, _d);
+  _ltTimer = setTimeout(function(){
+    // 서버 대본이 최근 90초 내에 온 경우에만 로컬 생성 보류.
+    // 서버가 조용하면(대본 소진 등) 로컬 생성으로 대화를 계속 이어감 → 멈춤 방지
+    var serverFresh = window._serverTalksActive && (Date.now() - (window._lastServerTalkAt||0) < 90000);
+    if(!serverFresh) _ltGenerate();
+    _scheduleLiveTalk();
+  }, _d);
 }
 function initLiveTalk(){
   if(_LIVE_TALK.length) return;  // 중복 방지
@@ -28142,6 +28332,13 @@ document.addEventListener('DOMContentLoaded', function() {
   background:var(--card);font-size:15px;cursor:pointer;}
 .map-bus-stop-card{background:var(--card);border:1px solid var(--border);
   border-radius:18px;margin:12px;overflow:hidden;}
+/* ★ 롱프레스 드래그 정렬: 편집모드 흔들림 + 드래그 카드 강조 */
+@keyframes busJiggle{ 0%,100%{transform:rotate(-0.8deg);} 50%{transform:rotate(0.8deg);} }
+.bus-reorder-mode .map-bus-stop-card{ animation:busJiggle .24s ease-in-out infinite; }
+.bus-reorder-mode.bus-drag-active .map-bus-stop-card{ animation:none; }
+.map-bus-stop-card.bus-dragging{ animation:none!important; z-index:50; position:relative;
+  box-shadow:0 10px 26px rgba(0,0,0,.28); opacity:.97; }
+.bus-drag-active .map-bus-stop-card{ touch-action:none; }
 .map-bus-stop-name{padding:16px 16px 12px;font-size:17px;font-weight:800;color:var(--text);
   display:flex;align-items:center;gap:8px;}
 .map-bus-stop-sub{font-size:12px;color:var(--sub);padding:0 16px 6px;margin-top:-4px;}
