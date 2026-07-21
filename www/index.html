@@ -2051,22 +2051,17 @@ function _renderHomeBrief(data, fromName, toName, hour, congPct){
   var _bMs = (typeof getBaseTimeMs==='function') ? getBaseTimeMs() : Date.now();
   var _preview = (typeof _baseTimeMs!=='undefined' && _baseTimeMs != null);
   var timeStr = new Date(_bMs).toLocaleTimeString('ko-KR', {hour:'2-digit',minute:'2-digit'});
-  var _pre = _preview ? '🔮 예상 · ' : '';
+  var _pre = _preview ? '예상 · ' : '';
   if(typeof _isManualStart==='function' && _isManualStart()){
-    _pre = '📌 수동설정 · ' + _pre;
+    _pre = '수동설정 · ' + _pre;
   }
   var titleEl = document.getElementById('homeAiTitle');
   var hasRoute = toName && toName !== fromName;
   if(titleEl) titleEl.textContent = _pre + (hasRoute
     ? fromName + ' → ' + toName + ' · ' + timeStr
     : fromName + ' · ' + timeStr + ' 기준');
-  // 실시간 경로 현황(로컬 계산) + AI 코멘트(서버) 결합
-  var _rb = _buildRouteBrief();
-  var _head = (hasRoute && _rb) ? _routeStatusHtml(_rb, congPct) : '';
-  var _ai = _msgToParas(data.msg);
-  var _divider = (_head && _ai) ? '<p style=\"height:1px;margin:8px 0;background:var(--border);\"></p>' : '';
-  body.innerHTML = '<div class="home-ai-msg">' + _head + _divider + _ai + '</div>';
-  _injectHomeBriefWeather(fromName, toName);
+  // 승무원 말투 브리핑(날씨+교통+환승+소요시간) + 서버 코멘트 결합
+  _renderHomeConductorBrief(fromName, toName, hour, congPct, data && data.msg);
 }
 
 // <br><br> 또는 \n\n 을 <p>로 변환 (줄간격 촘촘)
@@ -2135,83 +2130,49 @@ function _msgToParas(msg){
   return parts.map(function(p){ return '<p>' + p + '</p>'; }).join('');
 }
 
-// 서버 실패 시 로컬 간이 브리핑 (경로 있으면 소요시간+예상변화 / 없으면 현위치)
+// 서버 실패 시 로컬 브리핑 (실시간=승무원 컴포저 / 미래·수동=예측 요약)
 function _renderHomeBriefLocal(fromName, toName, hour, congPct){
   var body = document.getElementById('homeAiBody');
   if(!body) return;
   var _bMs = (typeof getBaseTimeMs==='function') ? getBaseTimeMs() : Date.now();
   var _preview = (typeof _baseTimeMs!=='undefined' && _baseTimeMs != null);
   var _manualL = (typeof _isManualStart==='function' && _isManualStart());
-  var _mLabel = _manualL ? ('📌 수동설정경로: ' + new Date(_bMs).toLocaleDateString('ko-KR',{month:'numeric',day:'numeric'}) + ' ' + new Date(_bMs).getHours() + '시 · ') : '';
-  var timeStr = _mLabel + (_preview ? '🔮 예상 · ' : '') + new Date(_bMs).toLocaleTimeString('ko-KR', {hour:'2-digit',minute:'2-digit'});
-  var _whenTxt = (_manualL || _preview) ? ('설정하신 ' + new Date(_bMs).getHours() + '시경엔 ') : '지금은 ';
+  var _mLabel = _manualL ? ('수동설정경로: ' + new Date(_bMs).toLocaleDateString('ko-KR',{month:'numeric',day:'numeric'}) + ' ' + new Date(_bMs).getHours() + '시 · ') : '';
+  var timeStr = _mLabel + (_preview ? '예상 · ' : '') + new Date(_bMs).toLocaleTimeString('ko-KR', {hour:'2-digit',minute:'2-digit'});
   var titleEl = document.getElementById('homeAiTitle');
   var hasRoute = toName && toName !== fromName;
-
   var peak = (hour>=7&&hour<=9) || (hour>=17&&hour<=19);
   var congTxt = congPct>=70 ? '매우 혼잡' : congPct>=45 ? '다소 혼잡' : '여유로운 편';
-  var emoji   = congPct>=70 ? '🥵' : congPct>=45 ? '😐' : '😊';
 
-  if(hasRoute){
-    if(titleEl) titleEl.textContent = fromName + ' → ' + toName + ' · ' + timeStr;
+  // ── 미래/수동 설정: 예측 요약(이모지 없음) ──
+  if(_preview || _manualL){
+    if(titleEl) titleEl.textContent = (hasRoute ? fromName + ' → ' + toName : fromName) + ' · ' + timeStr;
+    var _d2 = new Date(_bMs);
+    var _dateTxt = (_d2.getMonth()+1) + '월 ' + _d2.getDate() + '일(' + ['일','월','화','수','목','금','토'][_d2.getDay()] + ') '
+                 + (_d2.getHours()<12?'오전 ':'오후 ') + ((_d2.getHours()%12)||12) + '시' + (_d2.getMinutes()? ' '+_d2.getMinutes()+'분':'');
+    var _hol = (typeof _isHolidayOrWeekend==='function' && _isHolidayOrWeekend());
     var tmin = window._homeRouteBaseMin || 0;
-    var html;
-    if(_preview || _manualL){
-      // ★ 미래/수동 설정: "00월 00일 00시 출발지→도착지 경로는 ~" 미래 요약
-      var _d2 = new Date(_bMs);
-      var _dateTxt = (_d2.getMonth()+1) + '월 ' + _d2.getDate() + '일(' + ['일','월','화','수','목','금','토'][_d2.getDay()] + ') '
-                   + (_d2.getHours()<12?'오전 ':'오후 ') + ((_d2.getHours()%12)||12) + '시' + (_d2.getMinutes()? ' '+_d2.getMinutes()+'분':'');
-      var _hol = (typeof _isHolidayOrWeekend==='function' && _isHolidayOrWeekend());
-      html = '<p><b>' + _dateTxt + '</b> <b>' + fromName + '</b>에서 <b>' + toName + '</b>까지의 경로는 약 <b>' + (tmin||'?') + '분</b>이 걸릴 것으로 보여요.</p>';
-      var _fc;
-      if(peak)            _fc = '그 시간대는 ' + (_hol?'주말이지만 ':'') + '출퇴근 피크라 <b>' + congTxt + '</b>' + emoji + ' 수준의 혼잡이 예상돼요. 여유 있게 출발하시는 걸 추천해요.';
-      else if(hour>=22||hour<6) _fc = '심야 시간대라 한산하겠지만, <b>막차 시간</b>을 꼭 확인하세요.';
-      else if(_hol)       _fc = '주말·공휴일이라 평일보다 여유로울 전망이에요. 혼잡도는 <b>' + congTxt + '</b> ' + emoji + ' 수준으로 예상돼요.';
-      else                _fc = '해당 시간대 혼잡도는 <b>' + congTxt + '</b> ' + emoji + ' 수준으로 예상돼요. 무난하게 이동할 수 있을 거예요.';
-      html += '<p>' + _fc + '</p>';
-      html += '<p style="color:var(--sub);font-size:12px;">🔮 설정하신 시각 기준 예측이에요. 실제 상황과 다를 수 있어요.</p>';
-      body.innerHTML = '<div class="home-ai-msg">' + html + '</div>';
-      return;
+    if((!tmin||tmin<=0) && hasRoute && typeof haversineM==='function'){
+      var _fc2=_homeBriefCoord('from',fromName), _tc2=_homeBriefCoord('to',toName);
+      if(_fc2 && _tc2){ try { tmin = Math.max(5, Math.round(haversineM(_fc2.lat,_fc2.lng,_tc2.lat,_tc2.lng)/1000*2.5)+5); } catch(e){} }
     }
-    var rb = _buildRouteBrief();
-    html = rb ? _routeStatusHtml(rb, congPct) : '';
-    if(!rb){
-      var _tf = 0;
-      try { if(S.route && S.route.lp){ var _ls=[]; S.route.lp.forEach(function(l){ if(l && _ls.indexOf(l)<0) _ls.push(l); }); _tf=Math.max(0,_ls.length-1); } } catch(e){}
-      html = '<p><b>' + fromName + '</b> → <b>' + toName + '</b> 약 <b>' + (tmin||'?') + '분</b> 예상돼요'
-           + (_tf>0 ? (' · 환승 <b>' + _tf + '회</b>') : '') + '.</p>';
-      html += '<p style="color:var(--sub);font-size:12px;">🔎 상단 <b>경로 탐색</b>을 누르면 구간별 노선·환승 상세가 표시돼요.</p>';
-    }
-    // 예상 변화(트렌드)
-    var trend;
-    if(peak) trend = _whenTxt + '피크 시간대라 다소 붐빌 수 있어요. 여유 있게 움직이세요.';
-    else if(hour===6 || hour===16) trend = '곧 혼잡 시간대로 접어들어요. 지금 출발하면 비교적 수월해요.';
-    else if(hour===9 || hour===19) trend = '혼잡 피크가 막 지나가는 중이에요. 조금만 기다리면 더 여유로워져요.';
-    else trend = '앞으로 30분간 소요시간은 큰 변화 없이 안정적일 전망이에요.';
-    html += '<p>' + trend + '</p>';
-    html += '<p style="color:var(--sub);font-size:12px;">5분마다 실시간 현황을 업데이트할게요.</p>';
+    var html = hasRoute
+      ? '<p><b>' + _dateTxt + '</b> 기준, <b>' + fromName + '</b>에서 <b>' + toName + '</b>까지는 약 <b>' + (tmin||'?') + '분</b> 걸릴 것으로 보입니다.</p>'
+      : '<p><b>' + _dateTxt + '</b> 기준으로 <b>' + fromName + '</b> 일대를 안내해 드리겠습니다.</p>';
+    var _fc;
+    if(peak)                  _fc = '그 시간대는 ' + (_hol?'주말이지만 ':'') + '출퇴근 피크라 <b>' + congTxt + '</b> 수준의 혼잡이 예상됩니다. 여유 있게 출발하시길 권합니다.';
+    else if(hour>=22||hour<6) _fc = '심야 시간대라 한산하겠지만, <b>막차 시간</b>을 꼭 확인하세요.';
+    else if(_hol)             _fc = '주말·공휴일이라 평일보다 여유로울 전망입니다. 혼잡도는 <b>' + congTxt + '</b> 수준으로 예상됩니다.';
+    else                      _fc = '해당 시간대 혼잡도는 <b>' + congTxt + '</b> 수준으로 예상됩니다. 무난하게 이동하실 수 있습니다.';
+    html += '<p>' + _fc + '</p>';
+    html += '<p style="color:var(--sub);font-size:12px;">설정하신 시각 기준 예측이에요. 실제 상황과 다를 수 있습니다.</p>';
     body.innerHTML = '<div class="home-ai-msg">' + html + '</div>';
-    _injectHomeBriefWeather(fromName, toName);
     return;
   }
 
-  // 경로 없음: 현위치 기준
-  if(titleEl) titleEl.textContent = fromName + ' · ' + timeStr + ' 기준';
-  var advice = peak
-    ? '지금은 피크 시간대라 열차·버스가 붐빌 수 있어요. 한 대 보내고 다음 편을 노리면 조금 더 여유로워요.'
-    : (hour>=22 || hour<6)
-      ? '심야 시간대예요. 막차 시간을 꼭 확인하세요.'
-      : '지금은 비교적 한산한 시간대예요. 이동하기 좋아요.';
-  var future = peak
-    ? '앞으로 30분간은 계속 붐빌 전망이에요.'
-    : '앞으로 30분간 큰 변화 없이 원활할 것으로 보여요.';
-  var pB = [
-    '현재 <b>' + fromName + '</b> 일대는 <b>' + congTxt + '</b>이에요 (혼잡도 약 ' + congPct + '%).',
-    advice,
-    future
-  ];
-  body.innerHTML = '<div class="home-ai-msg">' + pB.map(function(p){ return '<p>'+p+'</p>'; }).join('') + '</div>';
-  _injectHomeBriefWeather(fromName, toName);
+  // ── 실시간: 승무원 말투 브리핑(날씨+교통+환승+소요시간) ──
+  if(titleEl) titleEl.textContent = hasRoute ? (fromName + ' → ' + toName + ' · ' + timeStr) : (fromName + ' · ' + timeStr + ' 기준');
+  _renderHomeConductorBrief(fromName, toName, hour, congPct, null);
 }
 
 // ★ 홈 브리핑용 좌표 해석 (출발/도착) — _fmapStart/_fmapDest > S.start/dest > STNDB > GPS
@@ -2238,53 +2199,111 @@ function _homeBriefCoord(which, name){
   return null;
 }
 
-// ★ 홈 브리핑에 출발지·목적지 날씨 + 실용 조언 삽입 (비동기)
+// 한글 받침 판별 → 은/는 조사
+function _josEun(w){
+  if(!w) return '은';
+  var c = String(w).charCodeAt(String(w).length-1);
+  if(c<0xAC00 || c>0xD7A3) return '은';
+  return ((c-0xAC00)%28===0) ? '는' : '은';
+}
+// 받침 판별 → 으로/로 조사 (받침 없거나 ㄹ이면 '로')
+function _josRo(w){
+  if(!w) return '으로';
+  var c = String(w).charCodeAt(String(w).length-1);
+  if(c<0xAC00 || c>0xD7A3) return '로';
+  var j = (c-0xAC00)%28;
+  return (j===0 || j===8) ? '로' : '으로';
+}
+// ★ AI 승무원: 손님 응대 말투 브리핑 (날씨+교통+환승+소요시간, 이모지 없음, 비동기)
 var _homeWxSeq = 0;
-function _injectHomeBriefWeather(fromName, toName){
-  try {
-    if(typeof _fetchWeather !== 'function') return;
-    // 미래/수동 예측 모드: 현재 날씨는 오해 소지 → 표시 안 함
-    if((typeof _baseTimeMs!=='undefined' && _baseTimeMs != null)) return;
-    if(typeof _isManualStart==='function' && _isManualStart()) return;
-    var msg = document.querySelector('#homeAiBody .home-ai-msg');
-    if(!msg) return;
-    var fc = _homeBriefCoord('from', fromName);
-    var tc = (toName && toName!==fromName) ? _homeBriefCoord('to', toName) : null;
-    if(!fc && !tc) return;
-    var seq = ++_homeWxSeq;
-    var ph = document.createElement('p');
-    ph.className = 'home-ai-wx';
-    ph.style.cssText = 'color:var(--sub);font-size:12px;margin:0 0 2px;';
-    ph.textContent = '🌤 날씨 확인 중...';
-    msg.insertBefore(ph, msg.firstChild);
+function _renderHomeConductorBrief(fromName, toName, hour, congPct, serverMsg){
+  var body = document.getElementById('homeAiBody');
+  if(!body) return;
+  var hasRoute = toName && toName !== fromName;
+  var rb = (typeof _buildRouteBrief==='function') ? _buildRouteBrief() : null;
+  var fc = _homeBriefCoord('from', fromName);
+  var tc = hasRoute ? _homeBriefCoord('to', toName) : null;
+  // 소요시간: 실제 경로 > 기준값 > 좌표 기반 추정 (?분 방지)
+  var mins = (rb && rb.totalMin) ? rb.totalMin : (window._homeRouteBaseMin || 0);
+  if((!mins || mins<=0) && hasRoute && fc && tc && typeof haversineM==='function'){
+    try { var dkm = haversineM(fc.lat, fc.lng, tc.lat, tc.lng)/1000; mins = Math.max(5, Math.round(dkm*2.5)+5); } catch(e){}
+  }
+  var seq = ++_homeWxSeq;
+  var esc = function(s){ return String(s==null?'':s); };
 
-    var wF=null, wT=null, need=(fc?1:0)+(tc?1:0), done=0;
-    function render(){
-      if(seq !== _homeWxSeq) return;   // 더 최신 브리핑이 왔으면 무시
-      var cur = document.querySelector('#homeAiBody .home-ai-wx');
-      if(!cur) return;
-      var parts = [];
-      if(wF) parts.push('<b>' + (fromName||'출발') + '</b> ' + wF.emo + ' ' + wF.temp + '°' + (wF.rain>=30?(' ·비'+wF.rain+'%'):''));
-      if(wT) parts.push('<b>' + (toName||'도착') + '</b> ' + wT.emo + ' ' + wT.temp + '°' + (wT.rain>=30?(' ·비'+wT.rain+'%'):''));
-      if(!parts.length){ cur.remove(); return; }
-      var html = '🌤 ' + parts.join(' &nbsp;→&nbsp; ');
-      var tips = [];
-      var maxRain = Math.max((wF&&wF.rain)||0, (wT&&wT.rain)||0);
-      if(maxRain >= 60) tips.push('우산 꼭 챙기세요');
-      else if(maxRain >= 40) tips.push('우산 챙기면 좋아요');
-      if(wF && wT && Math.abs(wF.temp - wT.temp) >= 4) tips.push('도착지 기온차 크니 겉옷 준비');
+  function compose(wF, wT){
+    if(seq !== _homeWxSeq) return;   // 더 최신 브리핑이 왔으면 무시
+    var peak = (hour>=7&&hour<=9)||(hour>=17&&hour<=19);
+    var hol  = (typeof _isHolidayOrWeekend==='function' && _isHolidayOrWeekend());
+    var congTxt = congPct>=70?'매우 혼잡':congPct>=45?'다소 혼잡':'원활';
+    var greet = (hour>=22||hour<5) ? '늦은 시간까지 고생 많으십니다, 손님.'
+             : (hour<11 ? '좋은 아침입니다, 손님.'
+             : (hour<17 ? '안녕하세요, 손님.' : '퇴근길 수고 많으십니다, 손님.'));
+    var ps = [];
+
+    if(hasRoute){
+      // 1) 인사 + 출발지/목적지 날씨
+      var w = [];
+      if(wF) w.push('출발지 <b>' + esc(fromName) + '</b>' + _josEun(fromName) + ' 현재 <b>' + wF.temp + '도</b> ' + wF.txt);
+      if(wT) w.push('목적지 <b>' + esc(toName) + '</b>' + _josEun(toName) + ' <b>' + wT.temp + '도</b> ' + wT.txt);
+      ps.push(greet + (w.length ? (' ' + w.join(', ') + '입니다.') : ''));
+      // 2) 준비 조언
+      var prep = [];
+      var maxRain = Math.max((wF&&wF.rain)||0,(wT&&wT.rain)||0);
+      if(maxRain>=60) prep.push('비 소식이 있으니 우산을 꼭 챙기세요');
+      else if(maxRain>=40) prep.push('비가 올 수 있어 우산을 준비하시면 좋습니다');
       var coldest = Math.min(wF?wF.temp:99, wT?wT.temp:99);
-      if(coldest <= 2) tips.push('많이 추우니 방한 챙기세요');
-      else if(coldest <= 8) tips.push('쌀쌀하니 겉옷 챙기세요');
-      if(tips.length) html += '<br><span style="color:var(--gold);">💡 ' + tips.join(' · ') + '</span>';
-      cur.innerHTML = html;
-      cur.style.color = 'var(--text)';
-      cur.style.fontSize = '13px';
+      var hottest = Math.max(wF?wF.temp:-99, wT?wT.temp:-99);
+      if(coldest<=2) prep.push('날이 매우 추우니 따뜻하게 입고 나오세요');
+      else if(coldest<=8) prep.push('쌀쌀하니 겉옷을 챙기시면 좋습니다');
+      else if(hottest>=28) prep.push('덥습니다, 물 한 병 챙기시길 권합니다');
+      if(wF&&wT&&Math.abs(wF.temp-wT.temp)>=4) prep.push('출발지와 목적지 기온차가 크니 참고하세요');
+      if(prep.length) ps.push(prep.join(', ') + '.');
+      // 3) 교통상황 + 환승 안내
+      var t = '교통상황은 ' + (peak ? '출퇴근 피크로 다소 붐빕니다' : (hol ? '주말이라 여유로운 편입니다' : (congTxt==='원활' ? '원활한 편입니다' : (congTxt + '한 편입니다'))));
+      if(rb && rb.segments && rb.segments.length>1){
+        var xl=[];
+        for(var i=1;i<rb.segments.length;i++){ xl.push('<b>'+esc(rb.segments[i].from)+'</b>에서 <b>'+esc(rb.segments[i].line||'다음 노선')+'</b>'); }
+        t += '. 가시는 길에 ' + xl.join(', ') + ' 환승하시면 됩니다';
+      } else if(rb && rb.segments && rb.segments.length===1){
+        var _l1 = rb.segments[0].line||'한 노선';
+        t += '. 환승 없이 <b>' + esc(_l1) + '</b>' + _josRo(rb.segments[0].line) + ' 한 번에 가실 수 있습니다';
+      } else {
+        t += '. 자세한 환승 안내는 상단 <b>경로 탐색</b>을 누르시면 구간별로 알려드리겠습니다';
+      }
+      ps.push(t + '.');
+      // 4) 소요시간 + 도착 예정
+      if(mins>0){
+        var arrTxt='';
+        try { var arr=new Date(Date.now()+mins*60000); var pad=function(n){return(n<10?'0':'')+n;}; arrTxt='도착은 ' + pad(arr.getHours()) + ':' + pad(arr.getMinutes()) + '경으로 예상됩니다.'; } catch(e){}
+        ps.push('예상 소요시간은 약 <b>' + mins + '분</b>입니다.' + (arrTxt ? (' ' + arrTxt) : ''));
+      }
+    } else {
+      // 목적지 미설정: 현위치 상태 안내
+      ps.push(greet + (wF ? (' 현재 <b>' + esc(fromName) + '</b>' + _josEun(fromName) + ' <b>' + wF.temp + '도</b> ' + wF.txt + '입니다.') : ''));
+      var prep2 = [];
+      var mr = (wF&&wF.rain)||0;
+      if(mr>=60) prep2.push('비 소식이 있으니 우산을 꼭 챙기세요');
+      else if(mr>=40) prep2.push('비가 올 수 있어 우산을 준비하시면 좋습니다');
+      if(wF){ if(wF.temp<=2) prep2.push('날이 매우 추우니 따뜻하게 입으세요'); else if(wF.temp<=8) prep2.push('쌀쌀하니 겉옷을 챙기세요'); else if(wF.temp>=28) prep2.push('덥습니다, 물 한 병 챙기시면 좋아요'); }
+      if(prep2.length) ps.push(prep2.join(', ') + '.');
+      ps.push('현재 <b>' + esc(fromName) + '</b> 일대 교통은 ' + (peak?'피크로 다소 붐빕니다':(congTxt==='원활'?'원활합니다':(congTxt+'한 편입니다'))) + '. 목적지를 설정하시면 소요시간과 환승까지 상세히 안내해 드리겠습니다.');
     }
-    function step(){ if(++done>=need) render(); }
-    if(fc) _fetchWeather(fc.lat, fc.lng, function(w){ wF=w; step(); });
-    if(tc) _fetchWeather(tc.lat, tc.lng, function(w){ wT=w; step(); });
-  } catch(e){}
+
+    // 5) 서버(AI) 코멘트 — 이모지 제거 후 결합
+    if(serverMsg){ var sm = (typeof _stripEmoji==='function') ? _stripEmoji(String(serverMsg)) : String(serverMsg); if(sm && sm.trim()) ps.push(sm.trim()); }
+    // 6) 마무리
+    ps.push('<span style="color:var(--sub);font-size:12px;">편안한 여정 되세요. 5분마다 현황을 업데이트해 드리겠습니다.</span>');
+
+    body.innerHTML = '<div class="home-ai-msg">' + ps.map(function(p){ return '<p>' + p + '</p>'; }).join('') + '</div>';
+  }
+
+  var wF=null, wT=null, need=(fc?1:0)+(tc?1:0), done=0;
+  if(!need || typeof _fetchWeather!=='function'){ compose(null, null); return; }
+  body.innerHTML = '<div class="home-ai-msg"><p style="color:var(--sub);">브리핑 준비 중...</p></div>';
+  function step(){ if(++done>=need) compose(wF, wT); }
+  if(fc) _fetchWeather(fc.lat, fc.lng, function(w){ wF=w; step(); });
+  if(tc) _fetchWeather(tc.lat, tc.lng, function(w){ wT=w; step(); });
 }
 
 function _startHomeCountdown(){
