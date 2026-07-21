@@ -3487,7 +3487,12 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
     var ps=null,ns=null;
     for(var a=wi-1;a>=0;a--){ if(segs[a].type!==3){ps=segs[a];break;} }
     for(var b=wi+1;b<segs.length;b++){ if(segs[b].type!==3){ns=segs[b];break;} }
-    if(ps&&ns&&ps.stops.length&&ns.stops.length&&
+    // ★ 도보 거리/시간이 유의미하면(다른 장소로 이동) 같은 이름이어도 둘 다 표시
+    //    (버스정류장 '테크노파크' → 도보 → 지하철역 '테크노파크'는 별개 지점)
+    var walkDur = segs[wi].dur || 0;      // 초
+    var walkDist = segs[wi].dist || 0;    // m
+    var _sameSpot = (walkDur <= 60 && walkDist <= 80);   // 60초·80m 이하만 '같은 자리 환승'으로 간주
+    if(_sameSpot && ps&&ns&&ps.stops.length&&ns.stops.length&&
        _nm(ps.stops[ps.stops.length-1].stationName)===_nm(ns.stops[0].stationName))
       ns.stops=ns.stops.slice(1);
   }
@@ -17225,9 +17230,11 @@ function _renderPost(post) {
       + '</div>';
   }).join('');
 
+  // ★ 잡담·빈 카테고리는 뱃지 숨김 (게시판은 뱃지 없이 제목만)
+  var _hideBadge = (!post.cat || post.cat === '잡담' || post.cat === '일상');
   el.innerHTML =
     '<div class="dc-post-hdr">'
-      + '<span class="dc-cat-badge" style="background:' + col + ';">' + post.cat + '</span>'
+      + (_hideBadge ? '' : '<span class="dc-cat-badge" style="background:' + col + ';">' + post.cat + '</span>')
       + '<span class="dc-post-title">' + post.title + '</span>'
     + '</div>'
     + '<div class="dc-post-meta">'
@@ -20664,6 +20671,16 @@ function _runTrainAnim(){
     var segSec   = _getSegSec();
     var elapsed  = (Date.now() - _segStartMs) / 1000;
     var progress = Math.min(elapsed / segSec, 1.0);
+
+    // ★ 30초마다 GPS 실측으로 진행률 보정 (예상보다 빠르거나 느릴 때)
+    if(!window._lastGpsCorrect || (Date.now() - window._lastGpsCorrect) >= 30000){
+      window._lastGpsCorrect = Date.now();
+      _correctProgressByGps(segSec);
+    }
+
+    // 보정으로 _segStartMs가 바뀌었을 수 있으니 재계산
+    elapsed  = (Date.now() - _segStartMs) / 1000;
+    progress = Math.min(elapsed / segSec, 1.0);
     S.trainProgress = progress;
     if(typeof updateTrainPinInterp === 'function') updateTrainPinInterp(progress);
     // ★ 깜박임 조건: 이동 중(progress 0.05 이상 ~ 0.99 미만)일 때만 깜박임
@@ -20685,6 +20702,38 @@ function _runTrainAnim(){
       _arriveAtStation();
     }
   }, 500);
+
+  // ── ★ GPS 실측으로 현재 구간 진행률 보정 (전진 방향만, 30초 주기) ──
+  function _correctProgressByGps(segSec){
+    if(!navigator.geolocation || !S.route || _atStation) return;
+    var prevStn = _getStnObj(S.curIdx);
+    var nextStn = _getStnObj(S.curIdx + 1);
+    if(!prevStn || !nextStn || !prevStn.lat || !nextStn.lat) return;
+    navigator.geolocation.getCurrentPosition(function(pos){
+      var acc = pos.coords.accuracy || 999;
+      if(acc > 150) return;   // 정확도 낮으면 보정 안 함 (오차 방지)
+      var la = pos.coords.latitude, ln = pos.coords.longitude;
+      var dPrev = haversineM(la, ln, prevStn.lat, prevStn.lng);
+      var dNext = haversineM(la, ln, nextStn.lat, nextStn.lng);
+      var segLen = haversineM(prevStn.lat, prevStn.lng, nextStn.lat, nextStn.lng);
+      if(segLen < 50) return;   // 두 역이 너무 가까우면 스킵
+      // 구간을 벗어난 위치(앞뒤로 크게 이탈)면 보정 안 함 — 도착 감지 로직에 맡김
+      if(dPrev + dNext > segLen * 1.6) return;
+      var gpsProg = Math.max(0, Math.min(1, dPrev / (dPrev + dNext)));   // 실측 진행률
+      var curProg = Math.min((Date.now() - _segStartMs) / 1000 / segSec, 1);
+      // 전진 방향만: 실측이 시간표보다 앞서 있으면 당기고, 뒤처져 있으면 늦춤
+      // (역행 방지 위해 gpsProg가 현재보다 살짝이라도 크거나, 명백히 느릴 때만)
+      var diff = gpsProg - curProg;
+      if(Math.abs(diff) < 0.08) return;   // 8% 미만 차이는 무시 (잦은 흔들림 방지)
+      // _segStartMs 재계산: 지금 시점이 gpsProg가 되도록
+      var newElapsed = gpsProg * segSec;
+      var adjusted = Date.now() - newElapsed * 1000;
+      // 역행 방지: 진행률을 뒤로 크게 되돌리지 않음 (최대 15%까지만 후퇴 허용 = 지연 반영)
+      if(diff < -0.15) { adjusted = Date.now() - (curProg - 0.15) * segSec * 1000; }
+      _segStartMs = adjusted;
+      console.log('[GPS보정] 진행률 ' + Math.round(curProg*100) + '% → ' + Math.round(gpsProg*100) + '% (' + (diff>0?'+':'') + Math.round(diff*100) + '%)');
+    }, function(){}, { enableHighAccuracy: true, timeout: 5000, maximumAge: 10000 });
+  }
 
   // ── 10초 전 사전 GPS 확인 ──
   function _preCheckNextStation() {
@@ -26006,7 +26055,7 @@ function _serverFetchTalks(){
         d.talks.forEach(function(t){
           if(_serverTalkIds[t.id]) return;       // 이미 받은 것 skip
           // ★ 미래 예약 메시지(서버 대본)는 그 시각이 지나면 다음 폴링에서 수신 → 라이브처럼 순차 등장
-          if(t.ts > _nowMs + 5000) return;       // 마킹/커서 전진 없이 보류
+          if(t.ts > _nowMs + 2000) return;       // 마킹/커서 전진 없이 보류
           if(t.nick === '나' || (typeof _getCommId==='function' && t.nick === _getCommId())) {
             _serverTalkIds[t.id] = true;          // 내가 쓴 건 이미 로컬에 있음
             if(t.ts > _lastTalkTs) _lastTalkTs = t.ts;
@@ -26062,7 +26111,7 @@ function _startServerSync(){
   if(!_SERVER_ON) return;
   _serverFetchTalks();
   _serverFetchPosts();
-  setInterval(_serverFetchTalks, 12000);   // 톡: 12초 (라이브 체감)
+  setInterval(_serverFetchTalks, 5000);    // 톡: 5초 (라이브 체감)
   setInterval(_serverFetchPosts, 180000);  // 게시글: 3분
 }
 
