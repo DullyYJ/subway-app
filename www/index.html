@@ -2281,13 +2281,21 @@ function _lineColorKey(line){
   if(/9호선/.test(s)) return {bg:'#f0e6d0',fg:'#8a6a2e'};
   return null;
 }
-function _lineBadge(line){
+function _lineColor(line){
   var nm = String(line||'노선');
   var p = _lineColorKey(nm);
   if(!p){ var h=0; for(var i=0;i<nm.length;i++){ h=(h*31+nm.charCodeAt(i))>>>0; } p=_LINE_PASTELS[h % _LINE_PASTELS.length]; }
-  var txt = (typeof _ltEsc==='function') ? _ltEsc(nm) : nm;
+  return p.fg;
+}
+function _lineBadge(line){
+  var txt = (typeof _ltEsc==='function') ? _ltEsc(String(line||'노선')) : String(line||'노선');
   // 배경(하이라이트) 없이 글자색만으로 노선 구분 → 환승 많아도 깔끔
-  return '<span style="color:'+p.fg+';font-weight:800;white-space:nowrap;">'+txt+'</span>';
+  return '<span style="color:'+_lineColor(line)+';font-weight:800;white-space:nowrap;">'+txt+'</span>';
+}
+// 환승역명을 그 역에서 갈아탈 노선 색상으로 표시
+function _stnBadge(stn, line){
+  var txt = (typeof _ltEsc==='function') ? _ltEsc(String(stn||'')) : String(stn||'');
+  return '<span style="color:'+_lineColor(line)+';font-weight:800;white-space:nowrap;">'+txt+'</span>';
 }
 // ★ AI 승무원: 손님 응대 말투 브리핑 (날씨+교통+환승+소요시간, 이모지 없음, 비동기)
 var _homeWxSeq = 0;
@@ -2335,7 +2343,7 @@ function _renderHomeConductorBrief(fromName, toName, hour, congPct, serverMsg){
       var t = '교통상황은 ' + (peak ? '출퇴근 피크로 다소 붐빕니다' : (hol ? '주말이라 여유로운 편입니다' : (congTxt==='원활' ? '원활한 편입니다' : (congTxt + '한 편입니다'))));
       if(rb && rb.segments && rb.segments.length>1){
         var xl=[];
-        for(var i=1;i<rb.segments.length;i++){ xl.push('<b>'+esc(rb.segments[i].from)+'</b>에서 '+_lineBadge(rb.segments[i].line||'다음 노선')); }
+        for(var i=1;i<rb.segments.length;i++){ xl.push(_stnBadge(rb.segments[i].from, rb.segments[i].line)+'에서 '+_lineBadge(rb.segments[i].line||'다음 노선')); }
         t += '. 가시는 길에 ' + xl.join(', ') + ' 환승하시면 됩니다';
       } else if(rb && rb.segments && rb.segments.length===1){
         var _l1 = rb.segments[0].line||'한 노선';
