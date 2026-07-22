@@ -2086,6 +2086,13 @@ function _congLabel(p){ return p>=70 ? '매우 혼잡' : p>=45 ? '다소 혼잡'
 
 // 현재 경로(S.route)를 노선 구간 단위로 분해 → 실시간 현황용 구조체
 function _buildRouteBrief(){
+  // ★ 화면에 확정된 복합경로(_transitResultData)가 있으면 항상 그걸 우선
+  //    (S.route 잔류로 엉뚱한 환승 안내되는 문제 방지)
+  if(typeof _transitResultData !== 'undefined' && _transitResultData
+     && _transitResultData.routes && _transitResultData.routes.length){
+    var _bf = _briefFromTransitData();
+    if(_bf && _bf.segments && _bf.segments.length) return _bf;
+  }
   if(typeof S === 'undefined' || !S.route || !S.route.path || !S.route.path.length){
     return _briefFromTransitData();   // ★ S.route 없으면 확정된 복합경로에서 추출
   }
