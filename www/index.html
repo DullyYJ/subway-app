@@ -5938,7 +5938,6 @@ function _updateTransitGps() {
             window._gpsWaitIdx = _wIdx;
             window._gpsWaitRatio = 0;
             window._gpsWaitLastMs = _nowMs;   // 대기 시작 시각 기록 (5초 뒤 첫 전진)
-            _placeGpsMarkerSmooth(_wFrom, _wTo, 0);   // 현재 위치 유지
           } else {
             // ★ 5초마다 남은 거리의 1/3씩 전진 (0.9 상한, 다음역 완전 도착은 GPS로만)
             if(_nowMs - (window._gpsWaitLastMs||0) >= 5000){
@@ -5948,8 +5947,28 @@ function _updateTransitGps() {
               window._gpsWaitLastMs = _nowMs;
               window._markerTransMsOverride = 5000;   // 5초에 걸쳐 부드럽게 이동
             }
-            _placeGpsMarkerSmooth(_wFrom, _wTo, window._gpsWaitRatio || 0);
           }
+          // ★ 시각표(arrTime) 기준 '현재 시각' 위치도 계산 → 같은 구간이면 더 앞선 진행률 채택
+          //   (버스·지하철 공통. GPS 없어도 현재 시각에 맞는 위치 유지, 백스텝은 금지)
+          var _useFrom = _wFrom, _useTo = _wTo, _useRatio = window._gpsWaitRatio || 0;
+          try {
+            if(typeof _estimateTimelinePos==='function'){
+              var _tp2 = _estimateTimelinePos();
+              if(_tp2){
+                if(_tp2.fromIdx > _wIdx){
+                  // 시각표상 이미 앞 구간 → 그 구간으로 이동 (전진)
+                  var _f2=_transitNodeData[_tp2.fromIdx], _t2=_transitNodeData[_tp2.toIdx]||_f2;
+                  if(_f2){ _useFrom=_f2; _useTo=_t2; _useRatio=_tp2.ratio||0;
+                    window._gpsWaitIdx=_tp2.fromIdx; window._gpsWaitRatio=Math.min(0.9,_tp2.ratio||0);
+                    window._gpsMaxIdx=Math.max((window._gpsMaxIdx==null?-1:window._gpsMaxIdx), _tp2.fromIdx); }
+                } else if(_tp2.fromIdx === _wIdx && (_tp2.ratio||0) > _useRatio){
+                  _useRatio = Math.min(0.9, _tp2.ratio||0);   // 같은 구간이면 더 앞선 쪽
+                  window._gpsWaitRatio = _useRatio;
+                }
+              }
+            }
+          } catch(e){}
+          _placeGpsMarkerSmooth(_useFrom, _useTo, _useRatio);
         }
       } catch(e){}
       return;   // 조용히 대기 (다음 확인 때 또 1/3 전진)
