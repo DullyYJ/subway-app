@@ -2352,6 +2352,14 @@ function _renderHomeConductorBrief(fromName, toName, hour, congPct, serverMsg){
         t += '. 환승 정보는 경로가 확정되면 구간별로 안내해 드리겠습니다';
       }
       ps.push(t + '.');
+      // ★ 접근 버스: 첫 역까지 도보 대신 버스가 빠르면 안내
+      if(window._accessLeg){
+        var al = window._accessLeg;
+        var _bd = al.board ? ('<b>'+esc(al.board)+'</b>에서 ') : '';
+        var _al = al.alight ? ('<b>'+esc(al.alight)+'</b>에서 내려 ') : '';
+        var _to = al.toStation ? ('<b>'+esc(al.toStation)+'</b>까지 ') : '';
+        ps.push('출발은 ' + _bd + _lineBadge(al.busNo + '번') + ' 버스를 타고 ' + _al + _to + '가시면 걷는 것보다 빨라요 (약 ' + al.min + '분).');
+      }
       // 4) 도착 예정 시각 (남은시간 갱신에 따라 실시간 업데이트 — id 고정)
       if(mins>0){
         try {
@@ -3964,6 +3972,7 @@ function _renderTransitResultCard(data, start, dest, cacheSource) {
   _transitResultStart = start;
   _transitResultDest  = dest;
   _transitResultData  = data;
+  try { if(typeof _computeAccessLeg==='function') _computeAccessLeg(data, start); } catch(e){}   // ★ 접근 버스 대안 탐색
 
   // ★ AI 승무원 출발역 고정: 경로의 첫 교통 역(예: 동춘) — GPS 이동해도 안 바뀜
   try {
@@ -4961,6 +4970,65 @@ function _convertODsayToRoutes(odsayData) {
 window._convertODsayToRoutes = _convertODsayToRoutes;
 
 window.fmapDoRoute = fmapDoRoute;
+
+// ★ 접근 대안: 확정 경로의 첫 교통 지점까지 도보가 길면, 현위치→첫역을 ODsay 버스우선으로
+//   재조회해 '도보보다 빠른 접근 버스'가 있으면 window._accessLeg에 저장 (브리핑에서 안내)
+function _computeAccessLeg(data, start){
+  try {
+    window._accessLeg = null;
+    var route = data && data.routes && data.routes[0];
+    if(!route || !start || start.lat==null || start.lng==null) return;
+    var secs = route.sections || [];
+    var firstTransit = null, walkMin = 0;
+    for(var i=0;i<secs.length;i++){
+      var tt = (secs[i].transportation||{}).type;
+      if(tt===3){ walkMin += Math.round((secs[i].duration||0)/60); continue; }  // 도보 누적
+      if(tt===1 || tt===2){ firstTransit = secs[i]; break; }
+    }
+    if(!firstTransit) return;
+    if((firstTransit.transportation||{}).type === 2) return;   // 첫 교통이 이미 버스면 접근 버스 불필요
+    if(walkMin < 6) return;                                     // 접근 도보가 짧으면(걷는 게 나음) 스킵
+    var sl = ((firstTransit.passStopList||{}).stationList) || [];
+    var board = sl[0];
+    if(!board || board.lat==null) return;
+    var boardLng = board.lon!=null?board.lon:board.lng;
+    if(boardLng==null) return;
+    var url = 'https://api.odsay.com/v1/api/searchPubTransPathT'
+      + '?SX=' + start.lng + '&SY=' + start.lat
+      + '&EX=' + boardLng + '&EY=' + board.lat
+      + '&SearchType=0&SearchPathType=2&apiKey=' + encodeURIComponent('TIZm4dwMq1Uw4UgWJhhstA');
+    var seq = (window._accessLegSeq = (window._accessLegSeq||0) + 1);
+    fetch(url).then(function(r){ return r.json(); }).then(function(d){
+      if(seq !== window._accessLegSeq) return;   // 더 최신 요청이 있으면 무시
+      var paths = (d.result||{}).path || [];
+      if(!paths.length) return;
+      paths.sort(function(a,b){ return ((a.info||{}).totalTime||999) - ((b.info||{}).totalTime||999); });
+      var p = paths[0], info = p.info||{}, subs = p.subPath||[], busLeg = null;
+      for(var k=0;k<subs.length;k++){
+        if(subs[k].trafficType===2){ busLeg = subs[k]; break; }
+        if(subs[k].trafficType===1){ break; }   // 버스 전에 지하철이 나오면 접근 버스 아님
+      }
+      if(!busLeg) return;
+      var accMin = info.totalTime || 999;
+      if(accMin + 1 >= walkMin) return;          // 버스가 도보보다 확실히 빠르지 않으면 스킵
+      var lane = (busLeg.lane||[])[0] || {};
+      var st = (busLeg.passStopList||{}).stations || [];
+      window._accessLeg = {
+        busNo:  lane.busNo || lane.busID || '버스',
+        board:  (st[0]||{}).stationName || busLeg.startName || '',
+        alight: (st[st.length-1]||{}).stationName || busLeg.endName || '',
+        toStation: board.stationName || '',
+        min: accMin, walkMin: walkMin
+      };
+      // 홈 탭 열려있으면 브리핑 즉시 갱신
+      if(typeof requestHomeBrief==='function'){
+        var ht = document.getElementById('tab-home');
+        if(ht && ht.classList.contains('active')) requestHomeBrief(false);
+      }
+    }).catch(function(){});
+  } catch(e){}
+}
+window._computeAccessLeg = _computeAccessLeg;
 
 // ══════════════════════════════════════════════════════════════
 // 🚇 BFS 경로 → transitResultBox 렌더 브릿지
@@ -25479,7 +25547,7 @@ function closeTransitResult(){
   window._lastCongPct = 0;
   window._homeRouteBaseMin = 0;
   window._lastCongNodeIdx = -1;
-  try { _transitResultDest = null; _transitResultStart = null; _transitResultData = null; window._journeyFromFixed = null; } catch(e){}
+  try { _transitResultDest = null; _transitResultStart = null; _transitResultData = null; window._journeyFromFixed = null; window._accessLeg = null; } catch(e){}
   try { if(typeof S !== 'undefined'){ S.dest = null; S.route = null; } } catch(e){}
   var rs = document.getElementById('routeStatus'); if(rs) rs.textContent = '설정 필요';
   // 5) AI 승무원 즉시 갱신 (경로 없음 브리핑)
