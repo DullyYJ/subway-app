@@ -5281,6 +5281,8 @@ function _startTransitGpsTracking(nodes) {
   window._nodePassMs = {};
   window._gpsMaxIdx = -1;   // GPS로 확인된 최대 진행 역 인덱스
   window._timeMaxIdx = -1;  // 시간으로 soft-확인된 최대 진행 역 인덱스
+  window._markerMaxX = null;      // ★ 마커 역행방지 x 최대값 리셋 (새 경로)
+  window._gpsWaitIdx = null; window._gpsWaitRatio = 0; window._hadValidTransitFix = false;
   if(typeof _buildTransitAlertTargets==='function') _buildTransitAlertTargets();   // ★ 환승/하차 2·1정거장 전 알림 타겟
 
   // 경로 시작 시각 기록 (출발 후 경과 시간 계산용)
@@ -5560,6 +5562,9 @@ function _placeGpsMarkerSmooth(fromNd, toNd, ratio){
   var firstDot = (dot.parentNode !== track);
   var snap = firstDot || window._gpsMarkerNeedsSnap;   // 첫 배치 또는 탭 복귀 시 점프 없이 스냅
   if(firstDot) track.appendChild(dot);
+  // ★ 백스텝 절대 금지: 마커 x좌표는 단조 증가만 (새 경로/스냅 복귀 시에만 리셋 허용)
+  if(!snap && window._markerMaxX != null && cx < window._markerMaxX) cx = window._markerMaxX;
+  window._markerMaxX = cx;
   dot.style.transition = snap ? 'none' : ('left ' + _HTL_MARKER_MS + 'ms linear, top .25s ease');
   dot.style.left = cx + 'px'; dot.style.top = yTop + 'px';
   dot.style.transform = 'translateX(-50%)'; dot.style.display = 'block';
@@ -5711,22 +5716,25 @@ function _updateTransitGps() {
     lat = null; lng = null;
   }
 
-  // ── GPS 미확인: 마지막 확인역 → 다음역 '중간(50%)'에 마커를 두고 대기 ──
-  //   (이동 중임을 표현하되 더 나아가진 않음. GPS가 잡히면 아래 로직이 전진 재개. 백스텝 없음)
+  // ── GPS 미확인: 현재 위치 → 다음역 거리를 매 확인마다 1/3씩 전진하며 대기 ──
+  //   (감지되면 실제 위치로 보정. 절대 뒤로 안 감 — ratio는 단조 증가만)
   if(lat == null){
     if(window._hadValidTransitFix){
       try {
         var _wIdx = (window._gpsMaxIdx==null ? -1 : window._gpsMaxIdx);
-        if(_wIdx >= 0 && window._gpsWaitMidIdx !== _wIdx){
-          window._gpsWaitMidIdx = _wIdx;                       // 이 구간 중간 배치는 1회만
-          var _wFrom = _transitNodeData[_wIdx] || null;
-          var _wTo   = _transitNodeData[_wIdx + 1] || null;
-          if(_wFrom && _wTo && typeof _placeGpsMarkerSmooth==='function'){
-            _placeGpsMarkerSmooth(_wFrom, _wTo, 0.5);          // 중간 지점 대기
-          }
+        var _wFrom = (_wIdx>=0) ? _transitNodeData[_wIdx] : null;
+        var _wTo   = (_wIdx>=0) ? _transitNodeData[_wIdx + 1] : null;
+        if(_wFrom && _wTo && typeof _placeGpsMarkerSmooth==='function'){
+          // 구간이 바뀌면 진행률 초기화 (새 구간은 0부터 1/3씩)
+          if(window._gpsWaitIdx !== _wIdx){ window._gpsWaitIdx = _wIdx; window._gpsWaitRatio = 0; }
+          // 남은 거리의 1/3씩 전진: r -> r + (1-r)/3  (0.9 상한, 다음역 완전 도착은 GPS로만)
+          var _r = window._gpsWaitRatio || 0;
+          _r = Math.min(0.9, _r + (1 - _r) / 3);
+          window._gpsWaitRatio = _r;
+          _placeGpsMarkerSmooth(_wFrom, _wTo, _r);
         }
       } catch(e){}
-      return;   // 이후엔 그대로 유지 (조용히 대기)
+      return;   // 조용히 대기 (다음 확인 때 또 1/3 전진)
     }
     // 최초 fix 전: 상태바만 조용히 표시
     if(locBar) { locBar.style.display='flex'; }
@@ -5949,11 +5957,11 @@ function _updateTransitGps() {
       if(seg){ fromNd = _transitNodeData[seg.fromIdx]; toNd = _transitNodeData[seg.toIdx]; ratio = seg.ratio; usedGps = true; }
     }
     if(!usedGps) ratio = Math.min(Math.max(0, ratio), 0.85);
-    // ★ 백스텝 방지: GPS 끊김 대기 중 '구간 중간(0.5)'에 뒀던 경우, 같은 구간에선 0.5 미만으로 회귀 금지
-    var _wi = window._gpsWaitMidIdx;
+    // ★ 백스텝 방지: GPS 끊김 동안 1/3씩 전진해 둔 진행률(_gpsWaitRatio) 아래로는 회귀 금지
+    var _wi = window._gpsWaitIdx;
     if(_wi != null){
-      if(fromIdx === _wi) ratio = Math.max(ratio, 0.5);
-      else if(fromIdx > _wi) window._gpsWaitMidIdx = null;   // 다음 구간 전진 확인 → 대기 해제
+      if(fromIdx === _wi) ratio = Math.max(ratio, (window._gpsWaitRatio || 0));
+      else if(fromIdx > _wi){ window._gpsWaitIdx = null; window._gpsWaitRatio = 0; }   // 다음 구간 확인 → 대기 해제
     }
     if(toNd === fromNd) toNd = null;
     _placeGpsMarkerSmooth(fromNd, toNd, ratio);
