@@ -3070,6 +3070,7 @@ var _fmapStart = null;  // {type, name, lat, lng, line/nodeId/cityCode}
 var _fmapDest  = null;
 
 function _fmapSetLocation(type, loc) {
+  window._metroRouteMode = false;   // 홈에서 직접 설정 → 노선도 하이라이트 해제
   if(type === 'start') {
     _fmapStart = loc;
     var inp = document.getElementById('fmapStartInp');
@@ -17903,21 +17904,13 @@ function svgSetRoute(type) {
     if(inpD) inpD.value = stn.name;
     if(typeof toast==='function') toast('🏁 도착역: ' + name);
     if(S.start && S.dest) {
-      // ★ 전체 경로: 현위치 → (출발역 경유) → 도착역
-      var _myLat = window._lastGPSLat || (typeof S!=='undefined' && S.lastGPSFix && S.lastGPSFix.lat) || null;
-      var _myLng = window._lastGPSLng || (typeof S!=='undefined' && S.lastGPSFix && S.lastGPSFix.lng) || null;
+      // ★ 노선도에서 고른 출발역을 그대로 사용 (내 위치로 덮지 않음)
       var fs = document.getElementById('fmapStartInp');
-      if(_myLat && _myLng){
-        // 출발점을 내 위치로 → ODsay가 현위치→출발역 접근 + 지하철 전체 경로 생성
-        _fmapStart = { type:'gps', name:'내 위치', lat:_myLat, lng:_myLng };
-        if(fs) fs.value = '내 위치';
-        window._preferBoardStn = S.start.name;   // 선택한 출발역(탑승역 힌트)
-      } else {
-        _fmapStart = { type:'subway', name:S.start.name, lat:S.start.lat, lng:S.start.lng, line:S.start.line };
-        if(fs) fs.value = S.start.name;
-        window._preferBoardStn = null;
-      }
+      _fmapStart = { type:'subway', name:S.start.name, lat:S.start.lat, lng:S.start.lng, line:S.start.line };
+      if(fs) fs.value = S.start.name;
+      window._preferBoardStn = S.start.name;
       _fmapDest = { type:'subway', name:S.dest.name, lat:S.dest.lat, lng:S.dest.lng, line:S.dest.line };
+      window._metroRouteMode = true;   // ★ 노선도로 설정한 경로 → 홈에서 하이라이트
       var homeNi = document.getElementById('ni-home');
       if(typeof switchTab === 'function') switchTab('home', homeNi);
       // 홈에서 ODsay 전체 경로 탐색 → 지하철 모드 자동 선택
@@ -25557,7 +25550,7 @@ function closeTransitResult(){
   window._lastCongPct = 0;
   window._homeRouteBaseMin = 0;
   window._lastCongNodeIdx = -1;
-  try { _transitResultDest = null; _transitResultStart = null; _transitResultData = null; window._journeyFromFixed = null; window._accessLeg = null; } catch(e){}
+  try { _transitResultDest = null; _transitResultStart = null; _transitResultData = null; window._journeyFromFixed = null; window._accessLeg = null; window._metroRouteMode = false; } catch(e){}
   try { if(typeof S !== 'undefined'){ S.dest = null; S.route = null; } } catch(e){}
   var rs = document.getElementById('routeStatus'); if(rs) rs.textContent = '설정 필요';
   // 5) AI 승무원 즉시 갱신 (경로 없음 브리핑)
@@ -26462,19 +26455,22 @@ window.getBaseTimeMs = getBaseTimeMs;
 
 // ── 기준시각을 미래로 설정 시: 경로/혼잡도에 '예상' 하이라이트 ──
 function _updatePreviewHighlight(){
-  var custom = (_baseTimeMs != null);
+  var isFuture = (_baseTimeMs != null);
+  var isMetro  = (window._metroRouteMode === true);   // ★ 노선도로 설정한 경로
+  var custom = isFuture;                               // 라벨 텍스트용(예상 시각 여부)
+  var glowOn = isFuture || isMetro;                    // 테두리 하이라이트 여부
   var lblTxt = (document.getElementById('baseTimeDisplay') || {}).textContent || '';
   // 경로 카드
-  function _glow(el){ if(!el) return; if(custom) el.classList.add('preview-glow'); else el.classList.remove('preview-glow'); }
+  function _glow(el){ if(!el) return; if(glowOn) el.classList.add('preview-glow'); else el.classList.remove('preview-glow'); }
   var card = document.getElementById('transitResultCard');
   _glow(card);
   if(card){
     var lbl = document.getElementById('routePreviewLabel');
-    if(custom){
+    if(custom || isMetro){
       if(!lbl){ lbl = document.createElement('div'); lbl.id='routePreviewLabel';
         lbl.style.cssText='font-size:11px;font-weight:800;color:#ff9500;background:rgba(255,149,0,.14);padding:4px 11px;border-radius:9px;margin-bottom:10px;display:inline-block;';
         card.insertBefore(lbl, card.firstChild); }
-      lbl.textContent = '🔮 예상 경로 · ' + lblTxt;
+      lbl.textContent = custom ? ('🔮 예상 경로 · ' + lblTxt) : '🗺️ 노선도에서 설정한 경로';
       lbl.style.display='inline-block';
     } else if(lbl){ lbl.style.display='none'; }
   }
@@ -26483,11 +26479,11 @@ function _updatePreviewHighlight(){
   _glow(cong);
   if(cong){
     var cpl = document.getElementById('congPreviewLabel');
-    if(custom){
+    if(custom || isMetro){
       if(!cpl){ cpl=document.createElement('div'); cpl.id='congPreviewLabel';
         cpl.style.cssText='font-size:11px;font-weight:800;color:#ff9500;background:rgba(255,149,0,.14);padding:4px 11px;border-radius:9px;margin-bottom:10px;display:inline-block;';
         cong.insertBefore(cpl, cong.firstChild); }
-      cpl.textContent='🔮 예상 혼잡도 · ' + lblTxt; cpl.style.display='inline-block';
+      cpl.textContent = custom ? ('🔮 예상 혼잡도 · ' + lblTxt) : '🗺️ 노선도에서 설정한 경로'; cpl.style.display='inline-block';
     } else if(cpl){ cpl.style.display='none'; }
   }
   // AI 승무원 카드
@@ -26495,11 +26491,11 @@ function _updatePreviewHighlight(){
   _glow(aiCard);
   if(aiCard){
     var apl = document.getElementById('aiPreviewLabel');
-    if(custom){
+    if(custom || isMetro){
       if(!apl){ apl=document.createElement('div'); apl.id='aiPreviewLabel';
         apl.style.cssText='font-size:11px;font-weight:800;color:#ff9500;background:rgba(255,149,0,.14);padding:4px 11px;border-radius:9px;margin-bottom:10px;display:inline-block;';
         aiCard.insertBefore(apl, aiCard.firstChild); }
-      apl.textContent='🔮 예상 브리핑 · ' + lblTxt; apl.style.display='inline-block';
+      apl.textContent = custom ? ('🔮 예상 브리핑 · ' + lblTxt) : '🗺️ 노선도에서 설정한 경로'; apl.style.display='inline-block';
     } else if(apl){ apl.style.display='none'; }
   }
   // 차트 기본 툴팁 라벨
