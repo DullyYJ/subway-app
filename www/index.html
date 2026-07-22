@@ -5874,6 +5874,49 @@ function _updateTransitGps() {
     if(window._hadValidTransitFix){
       try {
         var _wIdx = (window._gpsMaxIdx==null ? -1 : window._gpsMaxIdx);
+        // ★ 탑승 전 가드: 첫 교통 역에 아직 탑승 안 했으면(출발시각 전이거나 열차 대기 중)
+        //   마커를 그 역에 고정하고 절대 다음 역으로 전진하지 않음 (놓친 차인데 넘어가는 것 방지)
+        var _boardIdx = -1;
+        for(var _bi=0; _bi<_transitNodeData.length; _bi++){
+          var _bn=_transitNodeData[_bi];
+          if(!_bn.isOrigin && !_bn.isWalk && (_bn.isBus||_bn.isSub)){ _boardIdx=_bi; break; }
+        }
+        var _preBoard = false;
+        if(_boardIdx>=0 && _wIdx <= _boardIdx){
+          // 첫 교통 역 예정 출발시각과 현재 비교
+          var _bnd=_transitNodeData[_boardIdx];
+          var _depM = (_bnd && _bnd.arrTime && typeof _arrTimeToMin==='function') ? _arrTimeToMin(_bnd.arrTime) : null;
+          if(_depM!=null){
+            var _nw=new Date(); var _nwM=_nw.getHours()*60+_nw.getMinutes()+_nw.getSeconds()/60;
+            var _diff=_depM-_nwM; if(_diff<-720)_diff+=1440;
+            if(_diff > -1.0) _preBoard = true;   // 아직 출발시각 전(±1분) → 탑승 전 대기
+          else if(_diff <= -1.5){
+            // ★ GPS 없이도 출발시각이 1.5분 이상 지났으면: 못 탄 것 → 다음 차 시각표로 재동기화
+            var _cool2 = window._rerouteCooldownUntil || 0;
+            if(_baseTimeMs == null && Date.now() > _cool2){
+              window._rerouteCooldownUntil = Date.now() + 120000;
+              window._timeMaxIdx = -1;
+              window._gpsMaxIdx  = Math.min((window._gpsMaxIdx==null?-1:window._gpsMaxIdx), _boardIdx);
+              window._gpsWaitIdx = null; window._gpsWaitRatio = 0;
+              if(window._routeLocked){ window._relockAfterReroute = window._lockedRouteType || 'fast'; }
+              toast('\uD0D1\uC2B9\uC744 \uB193\uCC3C\uC5B4\uC694. \uB2E4\uC74C \uCC28 \uC2DC\uAC04\uD45C\uB85C \uB9DE\uCDB0\uB4DC\uB9B4\uAC8C\uC694');
+              if(typeof fmapDoRoute==='function') setTimeout(fmapDoRoute, 200);
+              return;
+            }
+            _preBoard = true;   // 재탐색 쿨다운 중이면 일단 첫 역에 고정
+          }
+          } else {
+            _preBoard = true;   // 시각 정보 없으면 안전하게 대기
+          }
+        }
+        if(_preBoard){
+          // 첫 교통 역(또는 출발지)에 마커 고정 — 전진 안 함
+          var _fixNd = _transitNodeData[Math.max(0,_boardIdx)] || _transitNodeData[0];
+          if(_fixNd && typeof _placeGpsMarkerSmooth==='function'){
+            _placeGpsMarkerSmooth(_fixNd, _fixNd, 0);
+          }
+          return;
+        }
         var _wFrom = (_wIdx>=0) ? _transitNodeData[_wIdx] : null;
         var _wTo   = (_wIdx>=0) ? _transitNodeData[_wIdx + 1] : null;
         if(_wFrom && _wTo && typeof _placeGpsMarkerSmooth==='function'){
