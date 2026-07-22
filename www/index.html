@@ -18548,25 +18548,46 @@ function _onForegroundResume(){
     window._appInBackground = false;
     // 복귀 후 첫 마커 배치는 애니메이션 없이 실제 위치로 '스냅'(이전역→현재역 왕복 애니메이션 제거)
     window._gpsMarkerNeedsSnap = true;
-    // 경로 추적 중이면 즉시 1회 GPS 갱신 → 백그라운드 동안 이동한 실제 위치 반영
     var card = document.getElementById('transitResultCard');
-    if(card && card.style.display !== 'none'){
-      // 최신 GPS 1회 강제 취득 후 마커 보정
-      if(navigator.geolocation){
-        navigator.geolocation.getCurrentPosition(function(pos){
-          try {
-            window._lastGPSLat = pos.coords.latitude;
-            window._lastGPSLng = pos.coords.longitude;
-            if(typeof S!=='undefined'){ S.lastGPSFix = { lat:pos.coords.latitude, lng:pos.coords.longitude, ts:Date.now() }; }
-          } catch(e){}
-          try { if(typeof _updateTransitGps==='function') _updateTransitGps(); } catch(e){}
-        }, function(){
-          // 실패해도 마지막 좌표로 1회 갱신 (스냅 유지)
-          try { if(typeof _updateTransitGps==='function') _updateTransitGps(); } catch(e){}
-        }, { enableHighAccuracy:true, timeout:4000, maximumAge:0 });
-      } else {
-        try { if(typeof _updateTransitGps==='function') _updateTransitGps(); } catch(e){}
+    if(!card || card.style.display === 'none') return;
+
+    // ① 우선: 백그라운드 진입 전 최신 시각표 기준으로 '현재 시각' 위치에 마커 배치
+    //    (예: 7:01이면 선학~신연수 중간. GPS 없어도 즉시 자연스러운 위치)
+    try {
+      if(typeof _estimateTimelinePos==='function' && typeof _placeGpsMarkerSmooth==='function'){
+        var _tp = _estimateTimelinePos();
+        if(_tp && _transitNodeData){
+          var _fn = _transitNodeData[_tp.fromIdx];
+          var _tn = _transitNodeData[_tp.toIdx] || _fn;
+          if(_fn){
+            window._gpsMarkerNeedsSnap = true;   // 애니메이션 없이 즉시 배치
+            _placeGpsMarkerSmooth(_fn, _tn, _tp.ratio||0);
+            // 진행 인덱스도 시각표 위치까지 끌어올림 (백스텝 방지 기준 갱신)
+            var _passedIdx = (_tp.ratio>=0.999) ? _tp.toIdx : _tp.fromIdx;
+            window._gpsMaxIdx = Math.max((window._gpsMaxIdx==null?-1:window._gpsMaxIdx), _passedIdx);
+            // 시각표 대기 진행률도 현재 구간에 맞춰 세팅 (이후 미감지 전진이 여기서 이어짐)
+            window._gpsWaitIdx = _tp.fromIdx;
+            window._gpsWaitRatio = Math.max(0, Math.min(0.9, _tp.ratio||0));
+            window._gpsWaitLastMs = Date.now();
+          }
+        }
       }
+    } catch(e){}
+
+    // ② 그다음: 최신 GPS 1회 강제 취득 → 실제 위치로 정밀 보정 (백스텝은 금지됨)
+    if(navigator.geolocation){
+      navigator.geolocation.getCurrentPosition(function(pos){
+        try {
+          window._lastGPSLat = pos.coords.latitude;
+          window._lastGPSLng = pos.coords.longitude;
+          if(typeof S!=='undefined'){ S.lastGPSFix = { lat:pos.coords.latitude, lng:pos.coords.longitude, ts:Date.now() }; }
+        } catch(e){}
+        try { if(typeof _updateTransitGps==='function') _updateTransitGps(); } catch(e){}
+      }, function(){
+        try { if(typeof _updateTransitGps==='function') _updateTransitGps(); } catch(e){}
+      }, { enableHighAccuracy:true, timeout:4000, maximumAge:0 });
+    } else {
+      try { if(typeof _updateTransitGps==='function') _updateTransitGps(); } catch(e){}
     }
   } catch(e){}
 }
