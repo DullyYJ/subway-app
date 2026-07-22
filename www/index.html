@@ -2286,7 +2286,8 @@ function _lineBadge(line){
   var p = _lineColorKey(nm);
   if(!p){ var h=0; for(var i=0;i<nm.length;i++){ h=(h*31+nm.charCodeAt(i))>>>0; } p=_LINE_PASTELS[h % _LINE_PASTELS.length]; }
   var txt = (typeof _ltEsc==='function') ? _ltEsc(nm) : nm;
-  return '<span style="background:'+p.bg+';color:'+p.fg+';padding:2px 9px;border-radius:9px;font-weight:800;white-space:nowrap;">'+txt+'</span>';
+  // 배경(하이라이트) 없이 글자색만으로 노선 구분 → 환승 많아도 깔끔
+  return '<span style="color:'+p.fg+';font-weight:800;white-space:nowrap;">'+txt+'</span>';
 }
 // ★ AI 승무원: 손님 응대 말투 브리핑 (날씨+교통+환승+소요시간, 이모지 없음, 비동기)
 var _homeWxSeq = 0;
