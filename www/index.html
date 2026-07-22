@@ -2063,7 +2063,7 @@ function _renderHomeBrief(data, fromName, toName, hour, congPct){
   }
   var titleEl = document.getElementById('homeAiTitle');
   var hasRoute = toName && toName !== fromName;
-  var _remT = (!_preview && hasRoute && window._homeRouteBaseMin > 0) ? ('남은 ' + window._homeRouteBaseMin + '분') : timeStr;
+  var _remT = (!_preview && hasRoute && window._homeRouteBaseMin > 0) ? ('남은시간: ' + window._homeRouteBaseMin + '분') : timeStr;
   if(titleEl) titleEl.textContent = _pre + (hasRoute
     ? fromName + ' → ' + toName + ' · ' + _remT
     : fromName + ' · ' + timeStr + ' 기준');
@@ -2209,7 +2209,7 @@ function _renderHomeBriefLocal(fromName, toName, hour, congPct){
 
   // ── 실시간: 승무원 말투 브리핑(날씨+교통+환승+소요시간) ──
   if(titleEl){
-    var _remT2 = (hasRoute && window._homeRouteBaseMin > 0) ? ('남은 ' + window._homeRouteBaseMin + '분') : timeStr;
+    var _remT2 = (hasRoute && window._homeRouteBaseMin > 0) ? ('남은시간: ' + window._homeRouteBaseMin + '분') : timeStr;
     titleEl.textContent = hasRoute ? (fromName + ' → ' + toName + ' · ' + _remT2) : (fromName + ' · ' + timeStr + ' 기준');
   }
   _renderHomeConductorBrief(fromName, toName, hour, congPct, null);
@@ -5600,10 +5600,10 @@ function _syncHomeBriefRemaining(rem){
     if(titleEl && rem != null && rem >= 0){
       var _fN = window._journeyFromFixed || (typeof _transitResultStart!=='undefined' && _transitResultStart && _transitResultStart.name) || '';
       var _tN = (typeof _transitResultDest!=='undefined' && _transitResultDest && _transitResultDest.name) || '';
-      if(_fN && _tN) titleEl.textContent = _fN + ' → ' + _tN + ' · 남은 ' + rem + '분';
+      if(_fN && _tN) titleEl.textContent = _fN + ' → ' + _tN + ' · 남은시간: ' + rem + '분';
       else {
         var base = titleEl.textContent.split('·')[0].trim();
-        if(base) titleEl.textContent = base + ' · 남은 ' + rem + '분';
+        if(base) titleEl.textContent = base + ' · 남은시간: ' + rem + '분';
       }
     }
     var arrEl = document.getElementById('homeAiArr');
@@ -5651,12 +5651,12 @@ function _startTransitWatch(){
   try {
     window._transitWatchId = navigator.geolocation.watchPosition(_apply, function(){}, {enableHighAccuracy:true, maximumAge:1500, timeout:20000});
   } catch(e){}
-  // ★ 20초 주기 현위치 확인: watch가 조용해도 강제로 위치 재요청 (마커 재개 트리거)
+  // ★ 10초 주기 현위치 확인: watch가 조용해도 강제로 위치 재요청 (마커 재개 트리거)
   if(window._transitGpsPollInt == null){
     window._transitGpsPollInt = setInterval(function(){
       if(document.hidden) return;
-      try { navigator.geolocation.getCurrentPosition(_apply, function(){}, {enableHighAccuracy:true, maximumAge:5000, timeout:15000}); } catch(e){}
-    }, 20000);
+      try { navigator.geolocation.getCurrentPosition(_apply, function(){}, {enableHighAccuracy:true, maximumAge:5000, timeout:9000}); } catch(e){}
+    }, 10000);
   }
 }
 // ★ GPS 미확인 시 마커는 '그 자리 대기' — 시간표만으로는 절대 이동하지 않음.
@@ -5711,11 +5711,22 @@ function _updateTransitGps() {
     lat = null; lng = null;
   }
 
-  // ── GPS 미확인: 마커는 '그 자리 대기' (시간 추정으로 움직이지 않음) ──
-  //   GPS가 다시 잡히면 아래 로직이 자동으로 마커를 재개함. 알림/팝업도 띄우지 않음.
+  // ── GPS 미확인: 마지막 확인역 → 다음역 '중간(50%)'에 마커를 두고 대기 ──
+  //   (이동 중임을 표현하되 더 나아가진 않음. GPS가 잡히면 아래 로직이 전진 재개. 백스텝 없음)
   if(lat == null){
     if(window._hadValidTransitFix){
-      return;   // 이전 위치 그대로 유지 (조용히 대기)
+      try {
+        var _wIdx = (window._gpsMaxIdx==null ? -1 : window._gpsMaxIdx);
+        if(_wIdx >= 0 && window._gpsWaitMidIdx !== _wIdx){
+          window._gpsWaitMidIdx = _wIdx;                       // 이 구간 중간 배치는 1회만
+          var _wFrom = _transitNodeData[_wIdx] || null;
+          var _wTo   = _transitNodeData[_wIdx + 1] || null;
+          if(_wFrom && _wTo && typeof _placeGpsMarkerSmooth==='function'){
+            _placeGpsMarkerSmooth(_wFrom, _wTo, 0.5);          // 중간 지점 대기
+          }
+        }
+      } catch(e){}
+      return;   // 이후엔 그대로 유지 (조용히 대기)
     }
     // 최초 fix 전: 상태바만 조용히 표시
     if(locBar) { locBar.style.display='flex'; }
@@ -5938,6 +5949,12 @@ function _updateTransitGps() {
       if(seg){ fromNd = _transitNodeData[seg.fromIdx]; toNd = _transitNodeData[seg.toIdx]; ratio = seg.ratio; usedGps = true; }
     }
     if(!usedGps) ratio = Math.min(Math.max(0, ratio), 0.85);
+    // ★ 백스텝 방지: GPS 끊김 대기 중 '구간 중간(0.5)'에 뒀던 경우, 같은 구간에선 0.5 미만으로 회귀 금지
+    var _wi = window._gpsWaitMidIdx;
+    if(_wi != null){
+      if(fromIdx === _wi) ratio = Math.max(ratio, 0.5);
+      else if(fromIdx > _wi) window._gpsWaitMidIdx = null;   // 다음 구간 전진 확인 → 대기 해제
+    }
     if(toNd === fromNd) toNd = null;
     _placeGpsMarkerSmooth(fromNd, toNd, ratio);
     // (역 전진 확정은 GPS 확인(_gpsMaxIdx)으로만 — 시간만으로는 전진하지 않음: 마커 왕복 방지)
