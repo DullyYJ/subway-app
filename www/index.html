@@ -2244,6 +2244,40 @@ function _josRo(w){
   var j = (c-0xAC00)%28;
   return (j===0 || j===8) ? '로' : '으로';
 }
+// ── 노선 파스텔 색상 배지 (환승역 노선 강조) ──
+var _LINE_PASTELS = [
+  {bg:'#d9e8ff',fg:'#1b4b8a'},{bg:'#d7f2e3',fg:'#1c7a4d'},{bg:'#ffe1e6',fg:'#b23a4d'},
+  {bg:'#fff0d1',fg:'#9a6b12'},{bg:'#e7ddff',fg:'#5a3aa8'},{bg:'#d5f2f5',fg:'#137580'},
+  {bg:'#ffe6cf',fg:'#a85d1e'},{bg:'#e3f0cf',fg:'#5a7a1e'},{bg:'#ffd9f0',fg:'#a83a86'},
+  {bg:'#f0e6d0',fg:'#8a6a2e'},{bg:'#e0e4ea',fg:'#455066'}
+];
+function _lineColorKey(line){
+  var s = String(line||'');
+  if(/신분당/.test(s)) return {bg:'#ffdcd9',fg:'#b23025'};
+  if(/수인|분당/.test(s)) return {bg:'#ffe9c9',fg:'#a5731a'};
+  if(/경의|중앙/.test(s)) return {bg:'#d5efe6',fg:'#1a7a63'};
+  if(/경춘/.test(s)) return {bg:'#d7efe0',fg:'#1c8a5a'};
+  if(/공항/.test(s)) return {bg:'#d5e8f5',fg:'#1a6a95'};
+  if(/인천\s*1/.test(s)) return {bg:'#d5eaf0',fg:'#137a95'};
+  if(/인천\s*2/.test(s)) return {bg:'#ffe8cf',fg:'#c07a1a'};
+  if(/1호선/.test(s)) return {bg:'#d3e0f5',fg:'#0d3b7a'};
+  if(/2호선/.test(s)) return {bg:'#d6f0d8',fg:'#1a7a2e'};
+  if(/3호선/.test(s)) return {bg:'#ffe2cf',fg:'#b5551a'};
+  if(/4호선/.test(s)) return {bg:'#d5e6ff',fg:'#1560c4'};
+  if(/5호선/.test(s)) return {bg:'#e7dcff',fg:'#5b2e9e'};
+  if(/6호선/.test(s)) return {bg:'#f0ddc9',fg:'#8a4b1e'};
+  if(/7호선/.test(s)) return {bg:'#e2e8cf',fg:'#5a6a12'};
+  if(/8호선/.test(s)) return {bg:'#ffd9ec',fg:'#b03378'};
+  if(/9호선/.test(s)) return {bg:'#f0e6d0',fg:'#8a6a2e'};
+  return null;
+}
+function _lineBadge(line){
+  var nm = String(line||'노선');
+  var p = _lineColorKey(nm);
+  if(!p){ var h=0; for(var i=0;i<nm.length;i++){ h=(h*31+nm.charCodeAt(i))>>>0; } p=_LINE_PASTELS[h % _LINE_PASTELS.length]; }
+  var txt = (typeof _ltEsc==='function') ? _ltEsc(nm) : nm;
+  return '<span style="background:'+p.bg+';color:'+p.fg+';padding:2px 9px;border-radius:9px;font-weight:800;white-space:nowrap;">'+txt+'</span>';
+}
 // ★ AI 승무원: 손님 응대 말투 브리핑 (날씨+교통+환승+소요시간, 이모지 없음, 비동기)
 var _homeWxSeq = 0;
 function _renderHomeConductorBrief(fromName, toName, hour, congPct, serverMsg){
@@ -2290,11 +2324,11 @@ function _renderHomeConductorBrief(fromName, toName, hour, congPct, serverMsg){
       var t = '교통상황은 ' + (peak ? '출퇴근 피크로 다소 붐빕니다' : (hol ? '주말이라 여유로운 편입니다' : (congTxt==='원활' ? '원활한 편입니다' : (congTxt + '한 편입니다'))));
       if(rb && rb.segments && rb.segments.length>1){
         var xl=[];
-        for(var i=1;i<rb.segments.length;i++){ xl.push('<b>'+esc(rb.segments[i].from)+'</b>에서 <b>'+esc(rb.segments[i].line||'다음 노선')+'</b>'); }
+        for(var i=1;i<rb.segments.length;i++){ xl.push('<b>'+esc(rb.segments[i].from)+'</b>에서 '+_lineBadge(rb.segments[i].line||'다음 노선')); }
         t += '. 가시는 길에 ' + xl.join(', ') + ' 환승하시면 됩니다';
       } else if(rb && rb.segments && rb.segments.length===1){
         var _l1 = rb.segments[0].line||'한 노선';
-        t += '. 환승 없이 <b>' + esc(_l1) + '</b>' + _josRo(rb.segments[0].line) + ' 한 번에 가실 수 있습니다';
+        t += '. 환승 없이 ' + _lineBadge(_l1) + _josRo(rb.segments[0].line) + ' 한 번에 가실 수 있습니다';
       } else {
         t += '. 환승 정보는 경로가 확정되면 구간별로 안내해 드리겠습니다';
       }
@@ -5219,6 +5253,7 @@ function _startTransitGpsTracking(nodes) {
   window._nodePassMs = {};
   window._gpsMaxIdx = -1;   // GPS로 확인된 최대 진행 역 인덱스
   window._timeMaxIdx = -1;  // 시간으로 soft-확인된 최대 진행 역 인덱스
+  if(typeof _buildTransitAlertTargets==='function') _buildTransitAlertTargets();   // ★ 환승/하차 2·1정거장 전 알림 타겟
 
   // 경로 시작 시각 기록 (출발 후 경과 시간 계산용)
   _transitStartTime = Date.now();
@@ -5264,6 +5299,64 @@ function _startTransitGpsTracking(nodes) {
   _updateTransitGps();
 }
 window._startTransitGpsTracking = _startTransitGpsTracking;
+
+// ── 환승 · 최종 하차 알림: 2정거장 전 / 1정거장 전 진동+알림 ──
+function _buildTransitAlertTargets(){
+  window._transitAlertTargets = [];
+  window._transitSeqIdx = [];
+  window._transitAlertFired = {};
+  var nd = _transitNodeData || [];
+  var seq = [];                                   // 교통(지하철·버스) 노드 인덱스 순서
+  for(var i=0;i<nd.length;i++){ if(nd[i] && (nd[i].isSub||nd[i].isBus)) seq.push(i); }
+  window._transitSeqIdx = seq;
+  var targets = [];
+  for(var s=1;s<seq.length;s++){
+    var prev = nd[seq[s-1]], cur = nd[seq[s]];
+    if((prev.lineName||'') !== (cur.lineName||'')){    // 노선 변경 → 이전 노선 마지막역 = 환승 하차역
+      targets.push({ seqPos:s-1, nodeIdx:seq[s-1], name:prev.name, kind:'transfer', nextLine:cur.lineName||'' });
+    }
+  }
+  if(seq.length){                                  // 마지막 교통 노드 = 최종 하차
+    targets.push({ seqPos:seq.length-1, nodeIdx:seq[seq.length-1], name:nd[seq[seq.length-1]].name, kind:'dest' });
+  }
+  window._transitAlertTargets = targets;
+}
+function _checkTransitAlerts(curNodeIdx){
+  try {
+    if(typeof _baseTimeMs!=='undefined' && _baseTimeMs != null) return;   // 예상(미래) 모드 제외
+    var targets = window._transitAlertTargets, seq = window._transitSeqIdx;
+    if(!targets || !targets.length || !seq || !seq.length) return;
+    var curPos = -1;                                // 현재 교통 순번(도달한 최대 교통 노드)
+    for(var i=0;i<seq.length;i++){ if(seq[i] <= curNodeIdx) curPos = i; else break; }
+    if(curPos < 0) return;
+    targets.forEach(function(tg){
+      var remain = tg.seqPos - curPos;              // 남은 정거장(교통구간 기준)
+      if(remain===2) _fireTransitAlert(tg, 2);
+      else if(remain===1) _fireTransitAlert(tg, 1);
+      else if(remain===0 && tg.kind==='dest') _fireTransitAlert(tg, 0);
+    });
+  } catch(e){}
+}
+function _fireTransitAlert(tg, remain){
+  var key = tg.nodeIdx + '_' + remain;
+  if(window._transitAlertFired && window._transitAlertFired[key]) return;
+  if(!window._transitAlertFired) window._transitAlertFired = {};
+  window._transitAlertFired[key] = 1;
+  var title, body, vib;
+  if(tg.kind==='transfer'){
+    if(remain===2){ title='환승 2정거장 전'; body=tg.name+'에서 '+(tg.nextLine||'다음 노선')+' 환승이에요. 곧 준비하세요'; vib=[400,150,400]; }
+    else { title='환승 준비'; body='다음 정거장 '+tg.name+'에서 '+(tg.nextLine||'다음 노선')+' 환승 — 내릴 준비하세요'; vib=[300,100,300,100,300]; }
+  } else {
+    if(remain===2){ title='목적지 2정거장 전'; body=tg.name+'까지 2정거장 남았어요'; vib=[400,150,400]; }
+    else if(remain===1){ title='곧 하차'; body='다음 정거장 '+tg.name+' — 내릴 준비하세요'; vib=[300,100,300,100,300]; }
+    else { title='목적지 도착'; body=tg.name+'에 도착했습니다. 수고하셨어요'; vib=[300,100,300,100,300]; }
+  }
+  try { if('vibrate' in navigator) navigator.vibrate(vib); } catch(e){}
+  if(typeof showNotification==='function') showNotification(title, body, { vibrate:vib, type:'arrive' });
+  else if(typeof toast==='function') toast(title + ' · ' + body);
+}
+window._buildTransitAlertTargets = _buildTransitAlertTargets;
+window._checkTransitAlerts = _checkTransitAlerts;
 
 // "HH:MM" → 분(0~1439). 자정 넘김 보정 포함
 function _arrTimeToMin(s){
@@ -5705,6 +5798,9 @@ function _updateTransitGps() {
     }
     window._gpsMaxIdx = Math.max(_pMax, bestIdx);
   }
+
+  // ★ 환승 · 최종 하차 2/1정거장 전 알림 체크 (전진 인덱스 기준)
+  if(typeof _checkTransitAlerts==='function') _checkTransitAlerts(window._gpsMaxIdx);
 
   if(_validGps) { try { _maybeRecordPass(bestIdx, bestDist); } catch(e){} }
 
