@@ -2123,6 +2123,7 @@ function _briefFromTransitData(){
       if(tt !== 1 && tt !== 2) return;   // 도보(3 등) 제외, 지하철(1)·버스(2)만
       var sl = ((sec.passStopList||{}).stationList) || [];
       segs.push({
+        type: tt,
         line: (sec.transportation||{}).name || (tt===2 ? '버스' : '지하철'),
         from: (sl.length ? (sl[0].stationName||'') : ''),
         to:   (sl.length ? (sl[sl.length-1].stationName||'') : ''),
@@ -2342,9 +2343,15 @@ function _renderHomeConductorBrief(fromName, toName, hour, congPct, serverMsg){
       // 3) 교통상황 + 환승 안내
       var t = '교통상황은 ' + (peak ? '출퇴근 피크로 다소 붐빕니다' : (hol ? '주말이라 여유로운 편입니다' : (congTxt==='원활' ? '원활한 편입니다' : (congTxt + '한 편입니다'))));
       if(rb && rb.segments && rb.segments.length>1){
+        var _sg = rb.segments;
+        var lead = '';
+        // ★ 첫 구간이 접근 버스(뒤에 지하철)면: "출발은 ○○에서 △△번 버스로 □□까지 이동하신 뒤,"
+        if(_sg[0] && _sg[0].type===2){
+          lead = '출발은 ' + _stnBadge(_sg[0].from, _sg[0].line) + '에서 ' + _lineBadge(_sg[0].line + '번') + ' 버스를 타고 ' + _stnBadge(_sg[0].to, _sg[0].line) + '까지 이동하신 뒤, ';
+        }
         var xl=[];
-        for(var i=1;i<rb.segments.length;i++){ xl.push(_stnBadge(rb.segments[i].from, rb.segments[i].line)+'에서 '+_lineBadge(rb.segments[i].line||'다음 노선')); }
-        t += '. 가시는 길에 ' + xl.join(', ') + ' 환승하시면 됩니다';
+        for(var i=1;i<_sg.length;i++){ xl.push(_stnBadge(_sg[i].from, _sg[i].line)+'에서 '+_lineBadge(_sg[i].line||'다음 노선')); }
+        t += '. ' + lead + '가시는 길에 ' + xl.join(', ') + ' 환승하시면 됩니다';
       } else if(rb && rb.segments && rb.segments.length===1){
         var _l1 = rb.segments[0].line||'한 노선';
         t += '. 환승 없이 ' + _lineBadge(_l1) + _josRo(rb.segments[0].line) + ' 한 번에 가실 수 있습니다';
@@ -2352,14 +2359,6 @@ function _renderHomeConductorBrief(fromName, toName, hour, congPct, serverMsg){
         t += '. 환승 정보는 경로가 확정되면 구간별로 안내해 드리겠습니다';
       }
       ps.push(t + '.');
-      // ★ 접근 버스: 첫 역까지 도보 대신 버스가 빠르면 안내
-      if(window._accessLeg){
-        var al = window._accessLeg;
-        var _bd = al.board ? ('<b>'+esc(al.board)+'</b>에서 ') : '';
-        var _al = al.alight ? ('<b>'+esc(al.alight)+'</b>에서 내려 ') : '';
-        var _to = al.toStation ? ('<b>'+esc(al.toStation)+'</b>까지 ') : '';
-        ps.push('출발은 ' + _bd + _lineBadge(al.busNo + '번') + ' 버스를 타고 ' + _al + _to + '가시면 걷는 것보다 빨라요 (약 ' + al.min + '분).');
-      }
       // 4) 도착 예정 시각 (남은시간 갱신에 따라 실시간 업데이트 — id 고정)
       if(mins>0){
         try {
@@ -3972,7 +3971,7 @@ function _renderTransitResultCard(data, start, dest, cacheSource) {
   _transitResultStart = start;
   _transitResultDest  = dest;
   _transitResultData  = data;
-  try { if(typeof _computeAccessLeg==='function') _computeAccessLeg(data, start); } catch(e){}   // ★ 접근 버스 대안 탐색
+  try { if(typeof _computeAccessLeg==='function') _computeAccessLeg(data, start, dest, cacheSource); } catch(e){}   // ★ 접근 버스 대안 탐색
 
   // ★ AI 승무원 출발역 고정: 경로의 첫 교통 역(예: 동춘) — GPS 이동해도 안 바뀜
   try {
@@ -4973,7 +4972,7 @@ window.fmapDoRoute = fmapDoRoute;
 
 // ★ 접근 대안: 확정 경로의 첫 교통 지점까지 도보가 길면, 현위치→첫역을 ODsay 버스우선으로
 //   재조회해 '도보보다 빠른 접근 버스'가 있으면 window._accessLeg에 저장 (브리핑에서 안내)
-function _computeAccessLeg(data, start){
+function _computeAccessLeg(data, start, dest, source){
   try {
     window._accessLeg = null;
     var route = data && data.routes && data.routes[0];
@@ -4986,7 +4985,7 @@ function _computeAccessLeg(data, start){
       if(tt===1 || tt===2){ firstTransit = secs[i]; break; }
     }
     if(!firstTransit) return;
-    if((firstTransit.transportation||{}).type === 2) return;   // 첫 교통이 이미 버스면 접근 버스 불필요
+    if((firstTransit.transportation||{}).type === 2) return;   // 첫 교통이 이미 버스면 접근 버스 불필요 (재렌더 루프 방지)
     if(walkMin < 6) return;                                     // 접근 도보가 짧으면(걷는 게 나음) 스킵
     var sl = ((firstTransit.passStopList||{}).stationList) || [];
     var board = sl[0];
@@ -5011,19 +5010,31 @@ function _computeAccessLeg(data, start){
       if(!busLeg) return;
       var accMin = info.totalTime || 999;
       if(accMin + 1 >= walkMin) return;          // 버스가 도보보다 확실히 빠르지 않으면 스킵
-      var lane = (busLeg.lane||[])[0] || {};
-      var st = (busLeg.passStopList||{}).stations || [];
-      window._accessLeg = {
-        busNo:  lane.busNo || lane.busID || '버스',
-        board:  (st[0]||{}).stationName || busLeg.startName || '',
-        alight: (st[st.length-1]||{}).stationName || busLeg.endName || '',
-        toStation: board.stationName || '',
-        min: accMin, walkMin: walkMin
-      };
-      // 홈 탭 열려있으면 브리핑 즉시 갱신
-      if(typeof requestHomeBrief==='function'){
-        var ht = document.getElementById('tab-home');
-        if(ht && ht.classList.contains('active')) requestHomeBrief(false);
+
+      // ★ 접근 경로(현위치→첫역: 도보-버스-도보) 전체를 sections로 변환해 경로에 삽입
+      var accSections = subs.map(function(sp){
+        var ttype = sp.trafficType, lane = (sp.lane||[])[0]||{};
+        var stops = ((sp.passStopList||{}).stations||[]).map(function(s){
+          return { stationName: s.stationName||s.name||'', lat: s.y||s.lat||null, lon: s.x||s.lon||null };
+        });
+        return {
+          transportation: { type: ttype, name: ttype===1?(lane.name||lane.subwayCode||''):ttype===2?(lane.busNo||lane.busID||''):'도보' },
+          duration: (sp.sectionTime||0)*60, distance: sp.distance||0,
+          passStopList: stops.length ? { stationList: stops } : null
+        };
+      });
+      var origSecs = route.sections || [];
+      var idxFirst = origSecs.indexOf(firstTransit);
+      if(idxFirst < 0) return;
+      route.sections = accSections.concat(origSecs.slice(idxFirst));   // 앞 도보 → (도보-버스-도보)로 교체
+      var newDur = 0; route.sections.forEach(function(s){ newDur += (s.duration||0); });
+      route.summary = route.summary || {};
+      route.summary.duration = newDur;
+
+      window._accessLeg = null;   // 텍스트 안내는 세그먼트로 통합 (경로/타임라인/브리핑 일원화)
+      // 접근 버스가 첫 교통이 되어 재렌더해도 위 조기 return으로 재요청 안 함 → 루프 없음
+      if(typeof _renderTransitResultCard==='function'){
+        _renderTransitResultCard(data, start, dest || _transitResultDest, source || 'odsay');
       }
     }).catch(function(){});
   } catch(e){}
