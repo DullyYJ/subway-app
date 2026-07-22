@@ -2062,7 +2062,9 @@ function _renderHomeBrief(data, fromName, toName, hour, congPct){
   }
   var titleEl = document.getElementById('homeAiTitle');
   var hasRoute = toName && toName !== fromName;
-  var _remT = (!_preview && hasRoute && window._homeRouteBaseMin > 0) ? ('남은시간: ' + window._homeRouteBaseMin + '분') : timeStr;
+  var _isMetroR = (window._metroRouteMode === true);
+  var _remWord = _isMetroR ? '소요시간: ' : '남은시간: ';
+  var _remT = ((_isMetroR || !_preview) && hasRoute && window._homeRouteBaseMin > 0) ? (_remWord + window._homeRouteBaseMin + '분') : timeStr;
   if(titleEl) titleEl.textContent = _pre + (hasRoute
     ? fromName + ' → ' + toName + ' · ' + _remT
     : fromName + ' · ' + timeStr + ' 기준');
@@ -2209,7 +2211,7 @@ function _renderHomeBriefLocal(fromName, toName, hour, congPct){
 
   // ── 실시간: 승무원 말투 브리핑(날씨+교통+환승+소요시간) ──
   if(titleEl){
-    var _remT2 = (hasRoute && window._homeRouteBaseMin > 0) ? ('남은시간: ' + window._homeRouteBaseMin + '분') : timeStr;
+    var _remT2 = (hasRoute && window._homeRouteBaseMin > 0) ? ((window._metroRouteMode===true?'소요시간: ':'남은시간: ') + window._homeRouteBaseMin + '분') : timeStr;
     titleEl.textContent = hasRoute ? (fromName + ' → ' + toName + ' · ' + _remT2) : (fromName + ' · ' + timeStr + ' 기준');
   }
   _renderHomeConductorBrief(fromName, toName, hour, congPct, null);
@@ -2297,6 +2299,28 @@ function _stnBadge(stn, line){
   var txt = (typeof _ltEsc==='function') ? _ltEsc(String(stn||'')) : String(stn||'');
   return '<span style="color:'+_lineColor(line)+';font-weight:800;white-space:nowrap;">'+txt+'</span>';
 }
+// ★ 노선도 경로: 현재시각 기준 출발역 다음 열차 조회 → {found, depMin, arrMin} | null
+//   found=false면 오늘 운행 열차 없음(막차 이후)
+function _metroNextTrainInfo(mins){
+  try {
+    var rb = (typeof _buildRouteBrief==='function') ? _buildRouteBrief() : null;
+    var seg0 = rb && rb.segments && rb.segments[0];
+    if(!seg0) return null;
+    var line = seg0.line, stn = seg0.from;
+    if(!line || !stn) return null;
+    var nowMin = (typeof kstMinutesAdj==='function') ? kstMinutesAdj() : (new Date().getHours()*60+new Date().getMinutes());
+    var isWk = (typeof _isHolidayOrWeekend==='function') && _isHolidayOrWeekend();
+    var dep = (typeof _realNextDep==='function') ? _realNextDep(line, stn, '하', nowMin, isWk) : null;
+    if(dep == null) return { found:false, depMin:null, arrMin:null };  // 시각표 없음 → 열차 정보 없음
+    // dep가 익일(+1440)이면 오늘 운행 종료
+    var found = (dep < nowMin + 1440 - 0.5) && (dep < 1440);
+    // _realNextDep는 막차 지나면 times[0]+1440 반환 → 오늘 열차 없음
+    if(dep >= 1440) found = false;
+    return { found: found, depMin: found ? dep : null, arrMin: found ? (dep + (mins||0)) : null };
+  } catch(e){ return null; }
+}
+window._metroNextTrainInfo = _metroNextTrainInfo;
+
 // ★ AI 승무원: 손님 응대 말투 브리핑 (날씨+교통+환승+소요시간, 이모지 없음, 비동기)
 var _homeWxSeq = 0;
 function _renderHomeConductorBrief(fromName, toName, hour, congPct, serverMsg){
@@ -2358,11 +2382,25 @@ function _renderHomeConductorBrief(fromName, toName, hour, congPct, serverMsg){
         t += '. 환승 정보는 경로가 확정되면 구간별로 안내해 드리겠습니다';
       }
       ps.push(t + '.');
-      // 4) 도착 예정 시각 (남은시간 갱신에 따라 실시간 업데이트 — id 고정)
-      if(mins>0){
+      // 4) 도착 예정 시각
+      if(window._metroRouteMode === true){
+        // ★ 노선도 경로: 위치추적 없이 현재시각 기준 열차 유무 + 소요시간만 안내
+        var pad=function(n){return(n<10?'0':'')+n;};
+        var _mm = (typeof mins==='number' && mins>0) ? mins : 0;
+        var info = _metroNextTrainInfo(_mm);
+        if(_mm>0) ps.push('경로 소요시간은 약 <b>' + _mm + '분</b>입니다.');
+        if(info && info.found && info.depMin!=null){
+          var dh=Math.floor((info.depMin%1440)/60), dmn=Math.round(info.depMin%60);
+          var ah=Math.floor((info.arrMin%1440)/60), amn=Math.round(info.arrMin%60);
+          ps.push('현재 기준 다음 열차는 <b>' + pad(dh)+':'+pad(dmn) + '</b>, 도착은 <b>' + pad(ah)+':'+pad(amn) + '</b>경으로 예상됩니다.');
+        } else if(info && !info.found){
+          ps.push('현재 시각 기준으로 <b>운행 중인 열차가 없습니다</b> (막차 이후). 경로와 소요시간만 참고하세요.');
+        }
+      } else if(mins>0){
+        // (실시간 추적 모드) 도착 예정 시각 — 남은시간 갱신에 따라 실시간 업데이트
         try {
-          var arr=new Date(Date.now()+mins*60000); var pad=function(n){return(n<10?'0':'')+n;};
-          ps.push('<span id="homeAiArr">도착은 <b>' + pad(arr.getHours()) + ':' + pad(arr.getMinutes()) + '</b>경으로 예상됩니다.</span>');
+          var arr=new Date(Date.now()+mins*60000); var pad2=function(n){return(n<10?'0':'')+n;};
+          ps.push('<span id="homeAiArr">도착은 <b>' + pad2(arr.getHours()) + ':' + pad2(arr.getMinutes()) + '</b>경으로 예상됩니다.</span>');
         } catch(e){}
       }
     } else {
@@ -2380,7 +2418,11 @@ function _renderHomeConductorBrief(fromName, toName, hour, congPct, serverMsg){
     // 5) 서버(AI) 코멘트 — 이모지 제거 후 결합
     if(serverMsg){ var sm = (typeof _stripEmoji==='function') ? _stripEmoji(String(serverMsg)) : String(serverMsg); if(sm && sm.trim()) ps.push(sm.trim()); }
     // 6) 마무리
-    ps.push('<span style="color:var(--sub);font-size:12px;">편안한 여정 되세요. 5분마다 현황을 업데이트해 드리겠습니다.</span>');
+    if(window._metroRouteMode === true){
+      ps.push('<span style="color:var(--sub);font-size:12px;">노선도에서 설정한 경로 미리보기입니다. 출발하시면 위치 안내를 시작합니다.</span>');
+    } else {
+      ps.push('<span style="color:var(--sub);font-size:12px;">편안한 여정 되세요. 5분마다 현황을 업데이트해 드리겠습니다.</span>');
+    }
 
     body.innerHTML = '<div class="home-ai-msg">' + ps.map(function(p){ return '<p>' + p + '</p>'; }).join('') + '</div>';
   }
@@ -3882,6 +3924,14 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
   var wrap=document.getElementById('transitHtlWrap');
   if(wrap) wrap.style.display='block';
 
+  // ★ 노선도에서 설정한 경로는 미리보기 → GPS 추적/마커 없음 (경로만 표시)
+  if(window._metroRouteMode === true){
+    // 마커/추적 없이 종료 (첫 역에 정적 표시만)
+    var _mMark = document.getElementById('htl-gps-marker-dot');
+    if(_mMark) _mMark.remove();
+    return;
+  }
+
   if(typeof _startTransitGpsTracking==='function') _startTransitGpsTracking(nodes);
 
   // ── GPS 마커 초기화 (단일 dot + ring 구조) ──
@@ -4083,6 +4133,7 @@ window._renderTransitResultCard = _renderTransitResultCard;
 // ── 실제 다음 차(버스 도착/지하철 시각표) 시각으로 타임라인 보정 ──
 function _applyRealBoardTime(){
   try{
+    if(window._metroRouteMode === true) return;   // ★ 노선도 경로: 순수 소요시간만(대기 보정 안 함)
     if(_baseTimeMs != null) return;   // 예상(미래 기준시각)일 땐 실시간 도착 보정 안 함
     if(typeof _isManualStart==='function' && _isManualStart()) return;   // 수동 출발지: 보정 안 함
     if(!_transitNodeData || !_transitNodeData.length) return;
