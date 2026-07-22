@@ -4154,6 +4154,7 @@ function _applyRealBoardTime(){
       if(nextDepMin==null) return;
       var wait = nextDepMin - arriveStopMin; if(wait < -720) wait += 1440;
       if(wait <= 0.5) return;            // 이미 탈 수 있으면 보정 안 함
+      if(wait > 30) return;              // ★ 30분 초과 대기(첫차 대기/운행종료 등)는 소요시간에 반영 안 함 (232분 튐 방지)
       _transitNodeData.forEach(function(n2, i2){
         if(i2 < idx || n2._schedMin==null) return;
         n2._schedMin += wait;
@@ -5084,10 +5085,15 @@ function _computeAccessLeg(data, start, dest, source){
       var origSecs = route.sections || [];
       var idxFirst = origSecs.indexOf(firstTransit);
       if(idxFirst < 0) return;
+      // 원래 총 소요시간(분) 보존
+      var origTotalMin = Math.round(((route.summary && route.summary.duration) || 0)/60);
+      // 접근경로(도보-버스-도보) 소요시간(분)
+      var accTotalMin = accMin;
       route.sections = accSections.concat(origSecs.slice(idxFirst));   // 앞 도보 → (도보-버스-도보)로 교체
-      var newDur = 0; route.sections.forEach(function(s){ newDur += (s.duration||0); });
+      // ★ 총시간 = 원래 총시간 - 원래 접근도보 + 접근경로시간 (sections 합으로 덮지 않음: 지하철 duration 누락 방지)
+      var newTotalMin = Math.max(1, origTotalMin - walkMin + accTotalMin);
       route.summary = route.summary || {};
-      route.summary.duration = newDur;
+      route.summary.duration = newTotalMin * 60;
 
       window._accessLeg = null;   // 텍스트 안내는 세그먼트로 통합 (경로/타임라인/브리핑 일원화)
       // 접근 버스가 첫 교통이 되어 재렌더해도 위 조기 return으로 재요청 안 함 → 루프 없음
