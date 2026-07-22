@@ -5881,6 +5881,8 @@ function _updateTransitGps() {
   // ── GPS 미확인: 현재 위치 → 다음역 거리를 매 확인마다 1/3씩 전진하며 대기 ──
   //   (감지되면 실제 위치로 보정. 절대 뒤로 안 감 — ratio는 단조 증가만)
   if(lat == null){
+    // ★ 백그라운드 상태에선 마커 전진 안 함 (복귀 시 실제 위치로만 스냅 → 튐 방지)
+    if(window._appInBackground === true || document.hidden){ return; }
     if(window._hadValidTransitFix){
       try {
         var _wIdx = (window._gpsMaxIdx==null ? -1 : window._gpsMaxIdx);
@@ -5953,7 +5955,7 @@ function _updateTransitGps() {
       return;   // 조용히 대기 (다음 확인 때 또 1/3 전진)
     }
     // 최초 fix 전: 상태바만 조용히 표시
-    if(locBar) { locBar.style.display='flex'; }
+    if(locBar) { locBar.style.display='none'; }
     if(locCur) locCur.textContent='경로 안내 준비 중...';
     if(locArrow) locArrow.style.display='none';
     if(locNext)  locNext.style.display='none';
@@ -6103,7 +6105,7 @@ function _updateTransitGps() {
 
   // isOrigin(출발지 가상 노드): 출발 대기 중 → 첫 역에 마커 표시
   if(best.isOrigin) {
-    if(locBar) { locBar.style.display = 'flex'; }
+    if(locBar) { locBar.style.display = 'none'; }
     var miEl = document.getElementById('transitLocModeIcon'); if(miEl) miEl.textContent='';
     if(locCur) locCur.textContent = best.name + ' 근처 (출발 대기 중)';
     if(locArrow) locArrow.style.display='none';
@@ -6148,7 +6150,7 @@ function _updateTransitGps() {
 
   // 첫 실제 역 300m 초과 + 5분 미만 → 아직 이동 중
   if(bestIdx <= 1 && bestDist > 300 && elapsedMin < 5) {
-    if(locBar) locBar.style.display = 'flex';
+    if(locBar) locBar.style.display = 'none';
     if(locCur) locCur.textContent = best.name + '까지 이동 중...';
     if(locArrow) locArrow.style.display='none';
     if(locNext)  locNext.style.display='none';
@@ -6238,7 +6240,7 @@ function _updateTransitGps() {
   // ── 상태바 업데이트 ──
   if(!inRange) {
     // 역 범위 밖이면 상태바만 거리 표시, 마커는 없음
-    if(locBar) locBar.style.display = 'flex';
+    if(locBar) locBar.style.display = 'none';
     if(locCur) {
       locCur.textContent = best.name + '까지 이동 중';
     }
@@ -6247,7 +6249,7 @@ function _updateTransitGps() {
     if(locEta)   locEta.style.display='none';
     return;
   }
-  if(locBar) locBar.style.display = 'flex';
+  if(locBar) locBar.style.display = 'none';
   if(locCur) {
     var distStr = bestDist < 50 ? '도착' : '근처';
     var modeStr = best.isBus ? '🚌' : best.isOrigin ? '' : best.isWalk ? '🚶' : '🚃';
@@ -7389,8 +7391,8 @@ window.addEventListener('unhandledrejection', function(e) {
         </button>
       </div>
 
-      <!-- ── GPS 현재위치 상태바 ── -->
-      <div id="transitLocBar" style="display:none;align-items:center;gap:6px;
+      <!-- ── GPS 현재위치 상태바 (제거됨 — 항상 숨김) ── -->
+      <div id="transitLocBar" style="display:none !important;align-items:center;gap:6px;
         background:rgba(29,155,240,.08);border:1px solid rgba(29,155,240,.25);
         border-radius:10px;padding:7px 10px;margin-bottom:8px;font-size:12px;">
         <span id="transitLocModeIcon"></span>
@@ -18508,9 +18510,11 @@ function _initAppStateListener(){
             // 웹 GPS 재시작 (포그라운드에서는 더 빠른 업데이트)
             startWatch();
           }
+          _onForegroundResume();   // ★ 복귀 시 마커 튐 방지 + 실제위치 즉시 보정
         } else {
           // 백그라운드 진입
           console.log('[앱상태] 백그라운드');
+          window._appInBackground = true;
           if(S.route && S.boarded){
             // BackgroundGeolocation 플러그인으로 전환
             _startBgGeolocation();
@@ -18529,12 +18533,44 @@ function _initAppStateListener(){
   // 웹 visibilitychange 폴백 (브라우저/개발 환경)
   document.addEventListener('visibilitychange', function(){
     if(document.hidden){
+      window._appInBackground = true;
       if(S.route && S.boarded) _startBgGeolocation();
     } else {
       if(S.route && S.boarded) startWatch();
+      _onForegroundResume();   // ★ 복귀 시 마커 튐 방지 + 실제위치 즉시 보정
     }
   });
 }
+
+// ★ 포그라운드 복귀 처리: 마커가 이전 역으로 튀는 것 방지 + 실제 위치로 즉시 맞춤
+function _onForegroundResume(){
+  try {
+    window._appInBackground = false;
+    // 복귀 후 첫 마커 배치는 애니메이션 없이 실제 위치로 '스냅'(이전역→현재역 왕복 애니메이션 제거)
+    window._gpsMarkerNeedsSnap = true;
+    // 경로 추적 중이면 즉시 1회 GPS 갱신 → 백그라운드 동안 이동한 실제 위치 반영
+    var card = document.getElementById('transitResultCard');
+    if(card && card.style.display !== 'none'){
+      // 최신 GPS 1회 강제 취득 후 마커 보정
+      if(navigator.geolocation){
+        navigator.geolocation.getCurrentPosition(function(pos){
+          try {
+            window._lastGPSLat = pos.coords.latitude;
+            window._lastGPSLng = pos.coords.longitude;
+            if(typeof S!=='undefined'){ S.lastGPSFix = { lat:pos.coords.latitude, lng:pos.coords.longitude, ts:Date.now() }; }
+          } catch(e){}
+          try { if(typeof _updateTransitGps==='function') _updateTransitGps(); } catch(e){}
+        }, function(){
+          // 실패해도 마지막 좌표로 1회 갱신 (스냅 유지)
+          try { if(typeof _updateTransitGps==='function') _updateTransitGps(); } catch(e){}
+        }, { enableHighAccuracy:true, timeout:4000, maximumAge:0 });
+      } else {
+        try { if(typeof _updateTransitGps==='function') _updateTransitGps(); } catch(e){}
+      }
+    }
+  } catch(e){}
+}
+window._onForegroundResume = _onForegroundResume;
 
 /* 경로 종료 시 백그라운드 정리 */
 function _cleanupBgTracking(){
