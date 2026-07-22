@@ -5631,76 +5631,25 @@ function _startTransitWatch(){
   try {
     window._transitWatchId = navigator.geolocation.watchPosition(_apply, function(){}, {enableHighAccuracy:true, maximumAge:1500, timeout:20000});
   } catch(e){}
-  // ★ 시간 기반 주기 틱: GPS가 끊겨도 시간표대로 다음 역 방향으로 서서히 전진 (진짜 가는 느낌)
-  if(window._transitTimeTickInt == null){
-    window._transitTimeTickInt = setInterval(function(){
+  // ★ 20초 주기 현위치 확인: watch가 조용해도 강제로 위치 재요청 (마커 재개 트리거)
+  if(window._transitGpsPollInt == null){
+    window._transitGpsPollInt = setInterval(function(){
       if(document.hidden) return;
-      try { _tickTimelineMarker(); } catch(e){}
-    }, 3000);
+      try { navigator.geolocation.getCurrentPosition(_apply, function(){}, {enableHighAccuracy:true, maximumAge:5000, timeout:15000}); } catch(e){}
+    }, 20000);
   }
 }
-// GPS 없이(또는 끊겼을 때) 시간표 기준으로 마커를 다음 역 방향으로 이동
+// ★ GPS 미확인 시 마커는 '그 자리 대기' — 시간표만으로는 절대 이동하지 않음.
+//   (마커 이동은 GPS 확인(_updateTransitGps)에서만. GPS가 다시 잡히면 자동 재개)
 function _tickTimelineMarker(){
-  if(typeof _transitNodeData==='undefined' || !_transitNodeData || !_transitNodeData.length) return;
-  if(_baseTimeMs != null) return;
-  if(typeof _isManualStart==='function' && _isManualStart()) return;   // 수동 출발지: 마커 이동 안 함                       // 예상(미래 기준)일 땐 이동 안 함
-  var track = document.getElementById('transitHtlTrack');
-  if(!track || track.offsetParent === null) return;     // 숨겨진 탭이면 스킵
-  var fixTs = (typeof S!=='undefined' && S.lastGPSFix) ? S.lastGPSFix.ts : 0;
-  if(fixTs && (Date.now() - fixTs) < 8000) return;      // 신선한 GPS 있으면 watch가 처리
-  var nodes = _transitNodeData;
-
-  // ── 현재까지 '확인된' 최대 진행 인덱스 = max(GPS확인, 시간확인) ──
-  var pMax = Math.max(
-    (window._gpsMaxIdx==null?-1:window._gpsMaxIdx),
-    (window._timeMaxIdx==null?-1:window._timeMaxIdx)
-  );
-  // 마커는 '마지막 확인역 → 바로 다음역' 한 구간으로만 제한 (절대 다다음역으로 안 넘어감)
-  var fromIdx = (pMax < 0) ? 0 : pMax;
-  var toIdx   = fromIdx + 1;
-  if(toIdx >= nodes.length) toIdx = fromIdx;   // 마지막 노드
-  var fromNd = nodes[fromIdx] || null;
-  var toNd   = nodes[toIdx]   || null;
-  if(!fromNd) return;
-
-  // 이 구간의 '시간 진행도' 계산 (arrTime 기반)
-  var now = new Date();
-  var nowMin = now.getHours()*60 + now.getMinutes() + now.getSeconds()/60;
-  var aMin = _arrTimeToMin(fromNd.arrTime);
-  var bMin = toNd ? _arrTimeToMin(toNd.arrTime) : null;
-  var ratio = 0;
-  if(aMin != null && bMin != null){
-    var span = bMin - aMin; if(span < 0) span += 1440;
-    if(span > 0){ var el = nowMin - aMin; if(el < -720) el += 1440; ratio = el / span; }
-  } else {
-    // arrTime 없으면(도보 등) 전역 추정으로 폴백하되 이 구간을 넘지 않음
-    var tp = (typeof _estimateTimelinePos==='function') ? _estimateTimelinePos() : null;
-    if(tp && tp.fromIdx === fromIdx) ratio = tp.ratio;
-  }
-  // 다음역에 완전히 '도착'하진 않음 — 최대 90%까지만 접근 (GPS/시간확인 전)
-  ratio = Math.min(Math.max(0, ratio), 0.9);
-
-  if(toNd === fromNd) toNd = null;
-  if(typeof _placeGpsMarkerSmooth==='function') _placeGpsMarkerSmooth(fromNd, toNd, ratio);
-
-  // ── soft-confirm: 다음역 '예정 도착시각'이 지났고 구간 끝까지 왔으면 → 한 칸만 전진 ──
-  if(bMin != null){
-    var late = nowMin - bMin; if(late < -720) late += 1440;
-    if(late >= 0 && ratio >= 0.88){
-      // ★ 미탑승 가드: 신선한 GPS(30초 내)가 이 구간 시작점보다 뒤에 있으면 시간 전진 금지
-      var _gFresh = (typeof S!=='undefined' && S.lastGPSFix && (Date.now()-S.lastGPSFix.ts) < 30000);
-      var _gBehind = _gFresh && (window._gpsMaxIdx!=null) && (window._gpsMaxIdx < fromIdx);
-      if(!_gBehind){
-        window._timeMaxIdx = Math.max((window._timeMaxIdx==null?-1:window._timeMaxIdx), toIdx);
-      }
-    }
-  }
+  return;   // 시간 기반 마커 전진 비활성화 (마커 튐/역행 방지)
 }
 window._tickTimelineMarker = _tickTimelineMarker;
 function _stopTransitWatch(){
   try { if(window._transitWatchId!=null && navigator.geolocation){ navigator.geolocation.clearWatch(window._transitWatchId); } } catch(e){}
   window._transitWatchId=null;
   if(window._transitTimeTickInt != null){ clearInterval(window._transitTimeTickInt); window._transitTimeTickInt = null; }
+  if(window._transitGpsPollInt != null){ clearInterval(window._transitGpsPollInt); window._transitGpsPollInt = null; }
 }
 window._startTransitWatch=_startTransitWatch;
 window._stopTransitWatch=_stopTransitWatch;
@@ -5742,24 +5691,13 @@ function _updateTransitGps() {
     lat = null; lng = null;
   }
 
-  // ── GPS 없으면 시간 기반 추정 위치 사용 (지하철 지하구간 등) ──
-  var _usingTimeEst = false;
+  // ── GPS 미확인: 마커는 '그 자리 대기' (시간 추정으로 움직이지 않음) ──
+  //   GPS가 다시 잡히면 아래 로직이 자동으로 마커를 재개함. 알림/팝업도 띄우지 않음.
   if(lat == null){
-    var est = _estimateTimeBasedPos();
-    if(est){
-      lat = est.curLat; lng = est.curLng;
-      _usingTimeEst = true;
-      // 마지막 정상 GPS도 갱신 (다음 폴백용)
-      window._lastEstLat = lat; window._lastEstLng = lng;
-    } else if(window._lastEstLat){
-      // 추정도 안되면 마지막 추정 위치 유지
-      lat = window._lastEstLat; lng = window._lastEstLng;
-      _usingTimeEst = true;
+    if(window._hadValidTransitFix){
+      return;   // 이전 위치 그대로 유지 (조용히 대기)
     }
-  }
-
-  // GPS도 추정도 없으면 상태바만
-  if(lat==null) {
+    // 최초 fix 전: 상태바만 조용히 표시
     if(locBar) { locBar.style.display='flex'; }
     if(locCur) locCur.textContent='경로 안내 준비 중...';
     if(locArrow) locArrow.style.display='none';
@@ -5767,6 +5705,7 @@ function _updateTransitGps() {
     if(locEta)   locEta.style.display='none';
     return;
   }
+  window._hadValidTransitFix = true;
 
   // ── 모든 클래스 초기화 ──
   _transitNodeData.forEach(function(nd){
@@ -5872,15 +5811,9 @@ function _updateTransitGps() {
     }
   } catch(e){}
 
-  // ── 거리 안전장치: best 노드가 50km 이상 멀면 GPS 비정상 ──
-  // (test 환경/깨진 좌표로 엉뚱한 노드가 잡히는 것 방지)
+  // ── 거리 안전장치: best 노드가 50km 이상 멀면 GPS 비정상 → 조용히 대기 (표시 변경 없음) ──
   if(bestDist > 50000){
-    if(locBar) { locBar.style.display='flex'; }
-    if(locCur) locCur.textContent='GPS 신호 확인 중...';
-    if(locArrow) locArrow.style.display='none';
-    if(locNext)  locNext.style.display='none';
-    if(locEta)   locEta.style.display='none';
-    return; // 혼잡도 갱신도 건너뜀 → 경로 첫 구간 표시 유지
+    return; // 이전 마커/표시 유지, 혼잡도 갱신도 건너뜀
   }
 
   // ── 현재 구간 교통수단에 따라 혼잡도 카드 자동 전환 ──
@@ -5987,8 +5920,7 @@ function _updateTransitGps() {
     if(!usedGps) ratio = Math.min(Math.max(0, ratio), 0.85);
     if(toNd === fromNd) toNd = null;
     _placeGpsMarkerSmooth(fromNd, toNd, ratio);
-    // soft-confirm: 다음역 예정시각 지나고 구간 끝까지 왔으면 한 칸만 전진
-    if(!usedGps && bMin != null){ var late=_nowMin-bMin; if(late<-720) late+=1440; if(late>=0 && ratio>=0.85){ window._timeMaxIdx = Math.max((window._timeMaxIdx==null?-1:window._timeMaxIdx), toIdx); } }
+    // (역 전진 확정은 GPS 확인(_gpsMaxIdx)으로만 — 시간만으로는 전진하지 않음: 마커 왕복 방지)
   })();
 
   // SVG GPS 마커 위치 업데이트 (SVG 방식 하위 호환)
