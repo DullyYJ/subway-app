@@ -5434,7 +5434,7 @@ function _startTransitGpsTracking(nodes) {
   window._gpsMaxIdx = -1;   // GPS로 확인된 최대 진행 역 인덱스
   window._timeMaxIdx = -1;  // 시간으로 soft-확인된 최대 진행 역 인덱스
   window._markerMaxX = null;      // ★ 마커 역행방지 x 최대값 리셋 (새 경로)
-  window._gpsWaitIdx = null; window._gpsWaitRatio = 0; window._hadValidTransitFix = false;
+  window._gpsWaitIdx = null; window._gpsWaitRatio = 0; window._gpsWaitLastMs = 0; window._hadValidTransitFix = false;
   if(typeof _buildTransitAlertTargets==='function') _buildTransitAlertTargets();   // ★ 환승/하차 2·1정거장 전 알림 타겟
 
   // 경로 시작 시각 기록 (출발 후 경과 시간 계산용)
@@ -5725,17 +5725,19 @@ function _placeGpsMarkerSmooth(fromNd, toNd, ratio){
   // ★ 백스텝 절대 금지: 마커 x좌표는 단조 증가만 (새 경로/스냅 복귀 시에만 리셋 허용)
   if(!snap && window._markerMaxX != null && cx < window._markerMaxX) cx = window._markerMaxX;
   window._markerMaxX = cx;
-  dot.style.transition = snap ? 'none' : ('left ' + _HTL_MARKER_MS + 'ms linear, top .25s ease');
+  var _transMs = (window._markerTransMsOverride != null) ? window._markerTransMsOverride : _HTL_MARKER_MS;
+  dot.style.transition = snap ? 'none' : ('left ' + _transMs + 'ms linear, top .25s ease');
   dot.style.left = cx + 'px'; dot.style.top = yTop + 'px';
   dot.style.transform = 'translateX(-50%)'; dot.style.display = 'block';
   if(ring){
     var firstRing = (ring.parentNode !== track);
     if(firstRing) track.appendChild(ring);
-    ring.style.transition = snap ? 'none' : ('left ' + _HTL_MARKER_MS + 'ms linear, top .25s ease');
+    ring.style.transition = snap ? 'none' : ('left ' + _transMs + 'ms linear, top .25s ease');
     ring.style.left = cx + 'px'; ring.style.top = yTop + 'px';
     ring.style.transform = 'translateX(-50%)'; ring.style.display = 'block';
   }
   window._gpsMarkerNeedsSnap = false;   // 스냅 완료
+  window._markerTransMsOverride = null;  // 1회성 오버라이드 해제
 }
 window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
 
@@ -5928,13 +5930,24 @@ function _updateTransitGps() {
         var _wFrom = (_wIdx>=0) ? _transitNodeData[_wIdx] : null;
         var _wTo   = (_wIdx>=0) ? _transitNodeData[_wIdx + 1] : null;
         if(_wFrom && _wTo && typeof _placeGpsMarkerSmooth==='function'){
-          // 구간이 바뀌면 진행률 초기화 (새 구간은 0부터 1/3씩)
-          if(window._gpsWaitIdx !== _wIdx){ window._gpsWaitIdx = _wIdx; window._gpsWaitRatio = 0; }
-          // 남은 거리의 1/3씩 전진: r -> r + (1-r)/3  (0.9 상한, 다음역 완전 도착은 GPS로만)
-          var _r = window._gpsWaitRatio || 0;
-          _r = Math.min(0.9, _r + (1 - _r) / 3);
-          window._gpsWaitRatio = _r;
-          _placeGpsMarkerSmooth(_wFrom, _wTo, _r);
+          var _nowMs = Date.now();
+          // 구간이 바뀌면 진행률 초기화 + 이번 틱은 '현재 위치에서 대기'(전진 0), 다음부터 5초 간격
+          if(window._gpsWaitIdx !== _wIdx){
+            window._gpsWaitIdx = _wIdx;
+            window._gpsWaitRatio = 0;
+            window._gpsWaitLastMs = _nowMs;   // 대기 시작 시각 기록 (5초 뒤 첫 전진)
+            _placeGpsMarkerSmooth(_wFrom, _wTo, 0);   // 현재 위치 유지
+          } else {
+            // ★ 5초마다 남은 거리의 1/3씩 전진 (0.9 상한, 다음역 완전 도착은 GPS로만)
+            if(_nowMs - (window._gpsWaitLastMs||0) >= 5000){
+              var _r = window._gpsWaitRatio || 0;
+              _r = Math.min(0.9, _r + (1 - _r) / 3);
+              window._gpsWaitRatio = _r;
+              window._gpsWaitLastMs = _nowMs;
+              window._markerTransMsOverride = 5000;   // 5초에 걸쳐 부드럽게 이동
+            }
+            _placeGpsMarkerSmooth(_wFrom, _wTo, window._gpsWaitRatio || 0);
+          }
         }
       } catch(e){}
       return;   // 조용히 대기 (다음 확인 때 또 1/3 전진)
