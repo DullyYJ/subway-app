@@ -2078,7 +2078,9 @@ function _congLabel(p){ return p>=70 ? '매우 혼잡' : p>=45 ? '다소 혼잡'
 
 // 현재 경로(S.route)를 노선 구간 단위로 분해 → 실시간 현황용 구조체
 function _buildRouteBrief(){
-  if(typeof S === 'undefined' || !S.route || !S.route.path || !S.route.path.length) return null;
+  if(typeof S === 'undefined' || !S.route || !S.route.path || !S.route.path.length){
+    return _briefFromTransitData();   // ★ S.route 없으면 확정된 복합경로에서 추출
+  }
   var path = S.route.path, lp = S.route.lp || [], tp = S.route.tp || [];
   // 환승 중복역 정리
   var cp=[], cl=[], ct=[];
@@ -2100,6 +2102,34 @@ function _buildRouteBrief(){
   var totalMin=0; segs.forEach(function(sg){ totalMin += sg.min; });
   if(!totalMin){ totalMin = Math.round(tp.reduce(function(a,b){ return a+(b>0?b:0); },0)/60) || (window._homeRouteBaseMin||0); }
   return { segments:segs, from:cp[0], to:cp[cp.length-1], totalMin:totalMin, transfers:Math.max(0, segs.length-1) };
+}
+
+// 확정된 복합경로(_transitResultData: ODsay routes/sections)에서 구간·환승 추출
+function _briefFromTransitData(){
+  try {
+    if(typeof _transitResultData === 'undefined' || !_transitResultData || !_transitResultData.routes || !_transitResultData.routes[0]) return null;
+    var route = _transitResultData.routes[0];
+    var sections = route.sections || [];
+    var segs = [];
+    sections.forEach(function(sec){
+      var tt = (sec.transportation||{}).type;
+      if(tt !== 1 && tt !== 2) return;   // 도보(3 등) 제외, 지하철(1)·버스(2)만
+      var sl = ((sec.passStopList||{}).stationList) || [];
+      segs.push({
+        line: (sec.transportation||{}).name || (tt===2 ? '버스' : '지하철'),
+        from: (sl.length ? (sl[0].stationName||'') : ''),
+        to:   (sl.length ? (sl[sl.length-1].stationName||'') : ''),
+        stops: Math.max(0, sl.length-1),
+        min: Math.max(1, Math.round((sec.duration||0)/60))
+      });
+    });
+    if(!segs.length) return null;
+    var totalMin = Math.round(((route.summary && route.summary.duration) || 0)/60) || (window._homeRouteBaseMin||0);
+    if(!totalMin){ totalMin = 0; segs.forEach(function(s){ totalMin += s.min; }); }
+    var from0 = (typeof _transitResultStart!=='undefined' && _transitResultStart && _transitResultStart.name) || segs[0].from;
+    var to0   = (typeof _transitResultDest!=='undefined'  && _transitResultDest  && _transitResultDest.name)  || segs[segs.length-1].to;
+    return { segments:segs, from:from0, to:to0, totalMin:totalMin, transfers:Math.max(0, segs.length-1) };
+  } catch(e){ return null; }
 }
 
 // 실시간 경로 현황 HTML (구간별 노선/역수/소요 + 도착시각 + 혼잡도)
