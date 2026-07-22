@@ -5630,11 +5630,19 @@ function _recalcArrivalsFrom(anchorIdx){
   try { if(typeof _updateRouteRemaining === 'function') _updateRouteRemaining(); } catch(e){}
 }
 // GPS가 특정 정류장/역 70m 이내이면 '통과'로 보고 실제 시각 기록
+//   (첫 교통 역은 150m로 완화 — 지하 진입 전 마지막 fix로 실제 탑승시각 앵커 확보)
 function _maybeRecordPass(idx, dist){
   if(idx == null || idx < 0) return;
   var nd = _transitNodeData[idx];
   if(!nd || nd.isOrigin || nd.isWalk || nd._schedMin == null) return;
-  if(dist != null && dist > 70) return;
+  // 첫 교통 역 판별
+  var _firstIdx = -1;
+  for(var _i=0;_i<_transitNodeData.length;_i++){
+    var _n=_transitNodeData[_i];
+    if(!_n.isOrigin && !_n.isWalk && (_n.isBus||_n.isSub)){ _firstIdx=_i; break; }
+  }
+  var _thresh = (idx === _firstIdx) ? 150 : 70;   // 첫 역은 완화
+  if(dist != null && dist > _thresh) return;
   window._nodePassMs = window._nodePassMs || {};
   if(window._nodePassMs[idx] != null) return;   // 이미 기록됨
   window._nodePassMs[idx] = Date.now();
