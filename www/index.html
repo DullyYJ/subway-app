@@ -497,8 +497,7 @@ header h1 em{color:var(--gold);font-style:normal;}
 @property --pvang{syntax:'<angle>';initial-value:0deg;inherits:false;}
 @keyframes pv-flow{to{--pvang:360deg;}}
 @keyframes pv-flow-fallback{to{transform:rotate(360deg);}}
-.preview-glow{position:relative;}
-.preview-glow::before{content:'';position:absolute;inset:-2px;border-radius:inherit;padding:2.5px;pointer-events:none;z-index:5;background:conic-gradient(from var(--pvang),#ff9500,#ff3b30,#ff2d95,#a24bff,#0a84ff,#30d158,#ffd60a,#ff9500);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude;animation:pv-flow 3s linear infinite;}
+.preview-glow{position:relative;}.preview-glow::before{content:'';position:absolute;inset:-2px;border-radius:inherit;padding:2.5px;pointer-events:none;z-index:5;background:conic-gradient(from var(--pvang),#ff9500,#ff3b30,#ff2d95,#a24bff,#0a84ff,#30d158,#ffd60a,#ff9500);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude;animation:pv-flow 3s linear infinite;}
 .home-ai-head{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
 .home-ai-badge{font-size:20px;}
 .home-ai-title{font-size:13.5px;font-weight:800;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -7196,7 +7195,7 @@ window.addEventListener('unhandledrejection', function(e) {
         <span style="font-size:10px;color:var(--sub);white-space:nowrap;">🕐 기준시각</span>
         <input id="baseTimeInp" type="hidden" value="">
         <div id="baseTimeDisplay" onclick="openDtPicker()"
-          style="color:var(--text);font-size:12px;flex:1;min-width:0;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">현재</div>
+          style="color:var(--text);font-size:12px;flex:1;min-width:0;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">현재 <span style="color:var(--sub);font-size:10px;">(클릭해서 시간을 변경하세요)</span></div>
         <span id="dayTypeBadge" style="font-size:10px;font-weight:700;white-space:nowrap;padding:2px 7px;border-radius:8px;"></span>
         <button onclick="clearBaseTime()"
           style="background:none;border:none;color:var(--sub);font-size:10px;cursor:pointer;white-space:nowrap;padding:0;">현재</button>
@@ -26399,7 +26398,7 @@ window.confirmDtPicker = confirmDtPicker;
 // 기준시각 표시 텍스트 갱신
 function _updateBaseTimeDisplay(){
   var el = document.getElementById('baseTimeDisplay'); if(!el) return;
-  if(_baseTimeMs==null){ el.textContent='현재'; el.style.color='var(--sub)'; return; }
+  if(_baseTimeMs==null){ el.innerHTML='현재 <span style="color:var(--sub);font-size:10px;">(클릭해서 시간을 변경하세요)</span>'; el.style.color='var(--sub)'; return; }
   var d=new Date(_baseTimeMs), today=new Date(); today.setHours(0,0,0,0);
   var dd=new Date(d); dd.setHours(0,0,0,0);
   var dayLabel; var diff=Math.round((dd-today)/86400000);
