@@ -2003,7 +2003,8 @@ function requestHomeBrief(force){
     if(b){ b.disabled = true; b.textContent = '⏳'; }
   }
 
-  var fromName = here ? (typeof here === 'string' ? here : here.name) : '현위치';
+  var fromName = (window._journeyFromFixed) ? window._journeyFromFixed
+               : (here ? (typeof here === 'string' ? here : here.name) : '현위치');
 
   // ★ 예상(미래 기준시각)·수동설정 모드: 서버 대신 미래 요약(로컬)로 즉시 브리핑
   if(_preview || _manual){
@@ -2062,8 +2063,9 @@ function _renderHomeBrief(data, fromName, toName, hour, congPct){
   }
   var titleEl = document.getElementById('homeAiTitle');
   var hasRoute = toName && toName !== fromName;
+  var _remT = (!_preview && hasRoute && window._homeRouteBaseMin > 0) ? ('남은 ' + window._homeRouteBaseMin + '분') : timeStr;
   if(titleEl) titleEl.textContent = _pre + (hasRoute
-    ? fromName + ' → ' + toName + ' · ' + timeStr
+    ? fromName + ' → ' + toName + ' · ' + _remT
     : fromName + ' · ' + timeStr + ' 기준');
   // 승무원 말투 브리핑(날씨+교통+환승+소요시간) + 서버 코멘트 결합
   _renderHomeConductorBrief(fromName, toName, hour, congPct, data && data.msg);
@@ -2206,7 +2208,10 @@ function _renderHomeBriefLocal(fromName, toName, hour, congPct){
   }
 
   // ── 실시간: 승무원 말투 브리핑(날씨+교통+환승+소요시간) ──
-  if(titleEl) titleEl.textContent = hasRoute ? (fromName + ' → ' + toName + ' · ' + timeStr) : (fromName + ' · ' + timeStr + ' 기준');
+  if(titleEl){
+    var _remT2 = (hasRoute && window._homeRouteBaseMin > 0) ? ('남은 ' + window._homeRouteBaseMin + '분') : timeStr;
+    titleEl.textContent = hasRoute ? (fromName + ' → ' + toName + ' · ' + _remT2) : (fromName + ' · ' + timeStr + ' 기준');
+  }
   _renderHomeConductorBrief(fromName, toName, hour, congPct, null);
 }
 
@@ -2338,11 +2343,12 @@ function _renderHomeConductorBrief(fromName, toName, hour, congPct, serverMsg){
         t += '. 환승 정보는 경로가 확정되면 구간별로 안내해 드리겠습니다';
       }
       ps.push(t + '.');
-      // 4) 소요시간 + 도착 예정
+      // 4) 도착 예정 시각 (남은시간 갱신에 따라 실시간 업데이트 — id 고정)
       if(mins>0){
-        var arrTxt='';
-        try { var arr=new Date(Date.now()+mins*60000); var pad=function(n){return(n<10?'0':'')+n;}; arrTxt='도착은 ' + pad(arr.getHours()) + ':' + pad(arr.getMinutes()) + '경으로 예상됩니다.'; } catch(e){}
-        ps.push('예상 소요시간은 약 <b>' + mins + '분</b>입니다.' + (arrTxt ? (' ' + arrTxt) : ''));
+        try {
+          var arr=new Date(Date.now()+mins*60000); var pad=function(n){return(n<10?'0':'')+n;};
+          ps.push('<span id="homeAiArr">도착은 <b>' + pad(arr.getHours()) + ':' + pad(arr.getMinutes()) + '</b>경으로 예상됩니다.</span>');
+        } catch(e){}
       }
     } else {
       // 목적지 미설정: 현위치 상태 안내
@@ -3949,6 +3955,15 @@ function _renderTransitResultCard(data, start, dest, cacheSource) {
   _transitResultStart = start;
   _transitResultDest  = dest;
   _transitResultData  = data;
+
+  // ★ AI 승무원 출발역 고정: 경로의 첫 교통 역(예: 동춘) — GPS 이동해도 안 바뀜
+  try {
+    var _jf = null;
+    var _rb0 = (typeof _briefFromTransitData==='function') ? _briefFromTransitData() : null;
+    if(_rb0 && _rb0.segments && _rb0.segments.length && _rb0.segments[0].from) _jf = _rb0.segments[0].from;
+    if(!_jf && start && start.name && start.name !== '내 위치') _jf = start.name;
+    window._journeyFromFixed = _jf;   // null이면 폴백 사용
+  } catch(e){ window._journeyFromFixed = null; }
 
   if(typeof _resetAIBrief === 'function') _resetAIBrief();
 
@@ -5579,20 +5594,25 @@ function _routeRemainingMin(){
 // 홈 AI 승무원 예상시간을 남은시간으로 로컬 동기화 (서버 호출 없음)
 function _syncHomeBriefRemaining(rem){
   window._homeRouteBaseMin = rem;
-  var body = document.getElementById('homeAiBody');
-  if(!body) return;
-  var toName = (typeof _transitResultDest!=='undefined' && _transitResultDest && _transitResultDest.name) ? _transitResultDest.name
-             : (typeof S!=='undefined' && S.dest && S.dest.name) ? S.dest.name : '';
-  if(!toName) return;
-  var fromName = '현위치';
+  // ★ 전체 재렌더 대신 제자리 갱신: 출발역 표기 고정 + 깜박임 방지
   try {
-    if(typeof _homeNearStationName==='function'){ var h=_homeNearStationName(); if(h && h.name) fromName=h.name; }
-    else if(typeof _transitResultStart!=='undefined' && _transitResultStart && _transitResultStart.name){ fromName=_transitResultStart.name; }
-    else if(typeof S!=='undefined' && S.start && S.start.name){ fromName=S.start.name; }
+    var titleEl = document.getElementById('homeAiTitle');
+    if(titleEl && rem != null && rem >= 0){
+      var _fN = window._journeyFromFixed || (typeof _transitResultStart!=='undefined' && _transitResultStart && _transitResultStart.name) || '';
+      var _tN = (typeof _transitResultDest!=='undefined' && _transitResultDest && _transitResultDest.name) || '';
+      if(_fN && _tN) titleEl.textContent = _fN + ' → ' + _tN + ' · 남은 ' + rem + '분';
+      else {
+        var base = titleEl.textContent.split('·')[0].trim();
+        if(base) titleEl.textContent = base + ' · 남은 ' + rem + '분';
+      }
+    }
+    var arrEl = document.getElementById('homeAiArr');
+    if(arrEl && rem != null && rem >= 0){
+      var arr = new Date(Date.now() + rem*60000);
+      var pad = function(n){ return (n<10?'0':'')+n; };
+      arrEl.innerHTML = '도착은 <b>' + pad(arr.getHours()) + ':' + pad(arr.getMinutes()) + '</b>경으로 예상됩니다.';
+    }
   } catch(e){}
-  if(toName === fromName) return;
-  var congPct = 40; try { if(window._lastCongPct) congPct = window._lastCongPct; } catch(e){}
-  try { if(typeof _renderHomeBriefLocal==='function') _renderHomeBriefLocal(fromName, toName, new Date().getHours(), congPct); } catch(e){}
 }
 
 // 매 틱: 헤더 소요분 + AI 승무원 예상시간 갱신
@@ -25425,7 +25445,7 @@ function closeTransitResult(){
   window._lastCongPct = 0;
   window._homeRouteBaseMin = 0;
   window._lastCongNodeIdx = -1;
-  try { _transitResultDest = null; _transitResultStart = null; _transitResultData = null; } catch(e){}
+  try { _transitResultDest = null; _transitResultStart = null; _transitResultData = null; window._journeyFromFixed = null; } catch(e){}
   try { if(typeof S !== 'undefined'){ S.dest = null; S.route = null; } } catch(e){}
   var rs = document.getElementById('routeStatus'); if(rs) rs.textContent = '설정 필요';
   // 5) AI 승무원 즉시 갱신 (경로 없음 브리핑)
