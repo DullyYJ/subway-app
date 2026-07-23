@@ -27071,13 +27071,60 @@ var _LT_REPLIES = [
   '저는 잘 모르겠던데','오늘 유독 그러네요','어제도 그랬어요','헉 몰랐네','다들 비슷하네요ㅋ',
 ];
 function _ltReplyMsg(){
-  // 직전 글(남의 글)이 있으면 그에 대한 반응
+  // 직전 글이 있으면 그에 대한 반응 (내 글이면 더 높은 확률로 응답)
   var last = _LIVE_TALK.length ? _LIVE_TALK[_LIVE_TALK.length-1] : null;
-  if(last && !last.mine && Math.random() < 0.45) {
-    return _rnd(_LT_REPLIES);
-  }
+  if(!last) return null;
+  if(last.mine && Math.random() < 0.7) return _ltReplyToUser(last.text);
+  if(!last.mine && Math.random() < 0.45) return _rnd(_LT_REPLIES);
   return null;
 }
+
+// ── 내 메시지에 대한 반응 (키워드 기반 문맥 응답) ──
+var _LT_KW_REPLIES = [
+  { re:/(점심|저녁|밥|먹|배고|메뉴|도시락)/, list:['저도 배고파요ㅠ','오늘 뭐 드세요?','편의점 각인가요ㅋㅋ','밥은 챙겨 드세요','저는 김밥으로 때웠어요'] },
+  { re:/(자야|졸리|피곤|잘래|눕|쉬)/,      list:['눈 좀 붙이세요','저도 졸려요...','꿀잠 부럽네요','낮잠이 답이죠ㅋㅋ','푹 쉬세요'] },
+  { re:/(비|우산|장마|소나기)/,             list:['우산 챙기셨어요?','비 진짜 쏟아지네요','저 그냥 맞고 왔어요ㅠ','우산 없는데 큰일'] },
+  { re:/(막히|지연|늦|밀리|헬|지옥)/,        list:['지금 도로 진짜 헬이에요','저도 발 묶였어요ㅠ','오늘따라 심하네요','아 그래서 안 오는구나'] },
+  { re:/(퇴근|칼퇴|끝나)/,                  list:['퇴근하고 싶다 진짜','오늘따라 시간 안 가네요','칼퇴 기원합니다ㅋㅋ','저는 아직 멀었어요ㅠ'] },
+  { re:/(출근|지각|첫차)/,                  list:['출근길 화이팅이요','오늘도 지옥철이네요','저도 방금 탔어요','지각 아니시죠?ㅋㅋ'] },
+  { re:/(덥|더위|에어컨|땀)/,               list:['진짜 덥네요ㅠ','에어컨 그리워요','오늘 습도 미쳤어요'] },
+  { re:/(춥|추위|쌀쌀|패딩)/,               list:['오늘 좀 쌀쌀하죠','따뜻하게 입으세요','저 감기 걸릴 뻔ㅠ'] },
+  { re:/(어디|어느|몇시|언제|어떻게|뭐|왜|\?|？)/, list:['음 그건 잘 모르겠네요','저도 궁금해요','아마 그럴걸요?','어느 쪽이세요?','저도 그거 찾고 있었어요'] },
+  { re:/(힘들|짜증|스트레스|빡|우울)/,      list:['에구 고생 많으세요','저도 오늘 그래요ㅠ','힘내세요 곧 끝나요','토닥토닥'] },
+];
+var _LT_GENERIC_REPLIES = [
+  'ㅋㅋㅋ 인정','아 그러셨구나','헐 진짜요?','저도요ㅠ','ㄹㅇ 공감','오 그래요?',
+  '맞아요 저도 그래요','와 대박','그니까요ㅠ','다들 비슷하네요ㅋ'
+];
+function _ltReplyToUser(userText){
+  var t = String(userText||'');
+  for(var i=0;i<_LT_KW_REPLIES.length;i++){
+    if(_LT_KW_REPLIES[i].re.test(t)) return _rnd(_LT_KW_REPLIES[i].list);
+  }
+  return _rnd(_LT_GENERIC_REPLIES);
+}
+
+// ── 내가 메시지를 보내면 곧바로 1~2명이 반응 ──
+function _ltRespondToUser(userText){
+  try {
+    var n1 = _rnd(_LT_NICKS);
+    setTimeout(function(){
+      // 그 사이 다른 사람이 이미 답했으면 중복 방지
+      _ltAdd({ nick:n1, text:_ltReplyToUser(userText), time:Date.now(), mine:false });
+    }, _rndInt(1500, 4000));
+    // 40% 확률로 한 명 더 반응 (대화가 살아있는 느낌)
+    if(Math.random() < 0.4){
+      var n2 = _rnd(_LT_NICKS);
+      var tries=0; while(n2===n1 && tries++<5) n2 = _rnd(_LT_NICKS);
+      setTimeout(function(){
+        _ltAdd({ nick:n2, text:_rnd(_LT_GENERIC_REPLIES), time:Date.now(), mine:false });
+      }, _rndInt(5000, 9000));
+    }
+    // AI 큐도 내 메시지 문맥으로 갱신 요청
+    if(typeof _ltFetchAi==='function') _ltFetchAi();
+  } catch(e){}
+}
+window._ltRespondToUser = _ltRespondToUser;
 
 // ── Gemini 기반 문맥 대화 생성 (큐에 채워두고 하나씩 사용) ──
 var _ltAiQueue = [], _ltAiFetching = false;
@@ -27194,6 +27241,7 @@ function sendChatMsg(){
   var _txt = inp.value.trim();
   _ltAdd({ nick:myId, text:_txt, time:Date.now(), mine:true });
   if(typeof _serverPostTalk==='function') _serverPostTalk(myId, _txt);  // 서버 공유
+  if(typeof _ltRespondToUser==='function') _ltRespondToUser(_txt);      // ★ 내 말에 반응
   inp.value = '';
 }
 window.sendChatMsg = sendChatMsg;
@@ -27212,6 +27260,7 @@ function _homeTalkSend(){
   var _htxt = inp.value.trim();
   _ltAdd({ nick:myId, text:_htxt, time:Date.now(), mine:true });
   if(typeof _serverPostTalk==='function') _serverPostTalk(myId, _htxt);  // 서버 공유
+  if(typeof _ltRespondToUser==='function') _ltRespondToUser(_htxt);      // ★ 내 말에 반응
   inp.value = '';
 }
 window._homeTalkSend = _homeTalkSend;
