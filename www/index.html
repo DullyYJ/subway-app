@@ -5630,25 +5630,66 @@ function _recalcArrivalsFrom(anchorIdx){
   try { if(typeof _updateRouteRemaining === 'function') _updateRouteRemaining(); } catch(e){}
 }
 // GPS가 특정 정류장/역 70m 이내이면 '통과'로 보고 실제 시각 기록
-//   (첫 교통 역은 150m로 완화 — 지하 진입 전 마지막 fix로 실제 탑승시각 앵커 확보)
+//   단, 아직 출발 전인 '탑승역'은 기록하지 않음 — 역에 서 있다고 출발한 게 아니므로
+//   탑승역 시각은 시각표(다음 열차)가 결정하고, 출발 이후 역부터 GPS로 보정
 function _maybeRecordPass(idx, dist){
   if(idx == null || idx < 0) return;
   var nd = _transitNodeData[idx];
   if(!nd || nd.isOrigin || nd.isWalk || nd._schedMin == null) return;
-  // 첫 교통 역 판별
+  // 첫 교통(탑승) 역 판별
   var _firstIdx = -1;
   for(var _i=0;_i<_transitNodeData.length;_i++){
     var _n=_transitNodeData[_i];
     if(!_n.isOrigin && !_n.isWalk && (_n.isBus||_n.isSub)){ _firstIdx=_i; break; }
   }
-  var _thresh = (idx === _firstIdx) ? 150 : 70;   // 첫 역은 완화
-  if(dist != null && dist > _thresh) return;
+  // 탑승역은 '실제로 그 다음 역까지 진행'이 확인되기 전엔 앵커로 쓰지 않음
+  if(idx === _firstIdx && (window._gpsMaxIdx == null || window._gpsMaxIdx <= _firstIdx)) return;
+  if(dist != null && dist > 70) return;
   window._nodePassMs = window._nodePassMs || {};
   if(window._nodePassMs[idx] != null) return;   // 이미 기록됨
   window._nodePassMs[idx] = Date.now();
   _recalcArrivalsFrom(idx);
 }
 window._maybeRecordPass = _maybeRecordPass;
+
+// ★ 탑승 전 재동기화: 첫 열차를 놓쳤을 때 '현재 시각'이 아니라 '다음 열차 시각'으로 시각표를 맞춤
+function _resyncBoardToNextTrain(){
+  try {
+    if(!_transitNodeData || !_transitNodeData.length) return false;
+    var bIdx=-1, bNd=null;
+    for(var i=0;i<_transitNodeData.length;i++){
+      var n=_transitNodeData[i];
+      if(!n.isOrigin && !n.isWalk && (n.isBus||n.isSub)){ bIdx=i; bNd=n; break; }
+    }
+    if(!bNd || !bNd.isSub) return false;              // 지하철 탑승역만 (버스는 도착정보로 별도 보정)
+    var line = bNd.lineName || '';
+    var nowD = new Date();
+    var nowMin = nowD.getHours()*60 + nowD.getMinutes() + nowD.getSeconds()/60;
+    // 다음 지하철 역으로 상/하행 판별
+    var nextNd=null;
+    for(var j=bIdx+1;j<_transitNodeData.length;j++){ var m=_transitNodeData[j]; if(!m.isWalk && m.isSub){ nextNd=m; break; } }
+    var dir='하행';
+    if(typeof STNDB!=='undefined' && nextNd){
+      var _norm = (typeof _nm==='function') ? _nm : function(x){return x;};
+      var ls = STNDB.filter(function(st){ return st.line===line; });
+      var ci  = ls.findIndex(function(st){ return _norm(st.name)===_norm(bNd.name); });
+      var ni3 = ls.findIndex(function(st){ return _norm(st.name)===_norm(nextNd.name); });
+      if(ci>=0 && ni3>=0) dir = (ci<ni3) ? '하행' : '상행';
+    }
+    var depMin = (typeof getNextDepartureMins==='function') ? getNextDepartureMins(line, bNd.name, dir, nowMin) : null;
+    if(depMin == null) return false;
+    // 분 → 오늘 기준 ms (자정 넘김 보정)
+    var base = new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate(), 0,0,0).getTime();
+    var depMs = base + Math.round(depMin*60000);
+    if(depMs < Date.now() - 60000) depMs += 86400000;
+    // 새 열차 기준으로 전체 시각표 재계산 (이전 앵커 폐기)
+    window._nodePassMs = {};
+    window._nodePassMs[bIdx] = depMs;
+    if(typeof _recalcArrivalsFrom==='function') _recalcArrivalsFrom(bIdx);
+    return true;
+  } catch(e){ return false; }
+}
+window._resyncBoardToNextTrain = _resyncBoardToNextTrain;
 
 var _HTL_MARKER_MS = 3000; // 마커 이동 트랜지션(=틱 주기)
 
@@ -5907,6 +5948,13 @@ function _updateTransitGps() {
             var _cool2 = window._rerouteCooldownUntil || 0;
             if(_baseTimeMs == null && Date.now() > _cool2){
               window._rerouteCooldownUntil = Date.now() + 120000;
+              // ★ 우선 시각표만 '다음 열차'로 재동기화 (경로 재탐색 없이 가볍게)
+              if(typeof _resyncBoardToNextTrain==='function' && _resyncBoardToNextTrain()){
+                window._timeMaxIdx = -1;
+                window._gpsWaitIdx = null; window._gpsWaitRatio = 0;
+                if(typeof toast==='function') toast('\uC5F4\uCC28\uB97C \uB193\uCCE4\uC5B4\uC694. \uB2E4\uC74C \uC5F4\uCC28 \uC2DC\uAC04\uC73C\uB85C \uB9DE\uCF54\uC5B4\uC694');
+                return;
+              }
               window._timeMaxIdx = -1;
               window._gpsMaxIdx  = Math.min((window._gpsMaxIdx==null?-1:window._gpsMaxIdx), _boardIdx);
               window._gpsWaitIdx = null; window._gpsWaitRatio = 0;
@@ -5955,7 +6003,7 @@ function _updateTransitGps() {
             if(typeof _estimateTimelinePos==='function'){
               var _tp2 = _estimateTimelinePos();
               if(_tp2){
-                if(_tp2.fromIdx > _wIdx){
+                if(_tp2.fromIdx > _wIdx && _tp2.fromIdx <= ((window._gpsMaxIdx==null?-1:window._gpsMaxIdx) + 1)){
                   // 시각표상 이미 앞 구간 → 그 구간으로 이동 (전진)
                   var _f2=_transitNodeData[_tp2.fromIdx], _t2=_transitNodeData[_tp2.toIdx]||_f2;
                   if(_f2){ _useFrom=_f2; _useTo=_t2; _useRatio=_tp2.ratio||0;
@@ -6083,6 +6131,51 @@ function _updateTransitGps() {
             return;
           }
         }
+      }
+    }
+  } catch(e){}
+
+  // ★ 지연 재앵커: GPS로 확인된 실제 위치가 시각표 예상 위치보다 뒤처져 있으면
+  //   (예: 이전 열차를 놓치고 다음 열차를 탄 경우) 시각표 전체를 '실제 위치=지금'으로 다시 맞춤
+  try {
+    if(_validGps && _baseTimeMs == null && bestIdx >= 0 && window._metroRouteMode !== true){
+      var _estP = (typeof _estimateTimelinePos==='function') ? _estimateTimelinePos() : null;
+      // 탑승역 인덱스
+      var _bIdx0 = -1;
+      for(var _bi0=0;_bi0<_transitNodeData.length;_bi0++){
+        var _bn0=_transitNodeData[_bi0];
+        if(!_bn0.isOrigin && !_bn0.isWalk && (_bn0.isBus||_bn0.isSub)){ _bIdx0=_bi0; break; }
+      }
+      var _notBoarded = (_bIdx0 >= 0) && (bestIdx <= _bIdx0) && (bestDist < 250);
+      var _lastRe0 = window._reanchorAt || 0;
+
+      if(_notBoarded){
+        // ★ 아직 탑승 전(역에 있음): 현재 시각이 아니라 '다음 열차 시각'으로 시각표를 맞춤
+        //   시각표가 이미 지나갔거나(놓침) 앞서 있으면 재동기화
+        var _bnd0 = _transitNodeData[_bIdx0];
+        var _depM0 = (_bnd0 && _bnd0.arrTime && typeof _arrTimeToMin==='function') ? _arrTimeToMin(_bnd0.arrTime) : null;
+        var _nowD0 = new Date();
+        var _nowM0 = _nowD0.getHours()*60 + _nowD0.getMinutes() + _nowD0.getSeconds()/60;
+        var _passed0 = (_depM0 != null) ? ((_nowM0 - _depM0 + 1440) % 1440) : -1;   // 출발예정 후 경과(분)
+        if(_depM0 != null && _passed0 >= 1.0 && _passed0 < 720 && Date.now() - _lastRe0 > 60000){
+          window._reanchorAt = Date.now();
+          if(_resyncBoardToNextTrain()){
+            window._rerouteCooldownUntil = Date.now() + 120000;   // 기존 전체 재탐색과 중복 방지
+            window._timeMaxIdx = -1;
+            window._gpsWaitIdx = null; window._gpsWaitRatio = 0;
+            if(typeof toast==='function') toast('\uC5F4\uCC28\uB97C \uB193\uCCE4\uC5B4\uC694. \uB2E4\uC74C \uC5F4\uCC28 \uC2DC\uAC04\uC73C\uB85C \uB9DE\uCF54\uC5B4\uC694');
+          }
+        }
+      } else if(_estP && _estP.fromIdx > bestIdx && bestDist < 400 && Date.now() - _lastRe0 > 60000){
+        // ★ 탑승 후: 시각표가 실제(GPS)보다 앞서 있으면 실제 위치=지금 기준으로 재앵커
+        window._reanchorAt = Date.now();
+        window._nodePassMs = window._nodePassMs || {};
+        window._nodePassMs[bestIdx] = Date.now();       // 지금 이 역을 통과 중으로 기록
+        if(typeof _recalcArrivalsFrom==='function') _recalcArrivalsFrom(bestIdx);
+        // 시간 기반으로 앞서간 진행 흔적 정리 (마커 백스텝은 별도 로직이 방지)
+        window._timeMaxIdx = Math.min((window._timeMaxIdx==null?-1:window._timeMaxIdx), bestIdx);
+        window._gpsWaitIdx = null; window._gpsWaitRatio = 0;
+        if(typeof toast==='function') toast('\uC2E4\uC81C \uC704\uCE58\uC5D0 \uB9DE\uCDB0 \uC2DC\uAC04\uD45C\uB97C \uB2E4\uC2DC \uB9DE\uCF54\uC5B4\uC694');
       }
     }
   } catch(e){}
@@ -27074,8 +27167,8 @@ function _ltReplyMsg(){
   // 직전 글이 있으면 그에 대한 반응 (내 글이면 더 높은 확률로 응답)
   var last = _LIVE_TALK.length ? _LIVE_TALK[_LIVE_TALK.length-1] : null;
   if(!last) return null;
-  if(last.mine && Math.random() < 0.7) return _ltReplyToUser(last.text);
-  if(!last.mine && Math.random() < 0.45) return _rnd(_LT_REPLIES);
+  if(last.mine) return null;   // 내 메시지 응답은 _ltRespondToUser(AI)가 담당 → 템플릿 중복 방지
+  if(Math.random() < 0.45) return _rnd(_LT_REPLIES);
   return null;
 }
 
@@ -27104,24 +27197,66 @@ function _ltReplyToUser(userText){
   return _rnd(_LT_GENERIC_REPLIES);
 }
 
-// ── 내가 메시지를 보내면 곧바로 1~2명이 반응 ──
+// ── 내가 메시지를 보내면: 서버 AI가 '내 말을 읽고' 답변 생성 (템플릿은 최후 폴백) ──
+function _ltAiReplyToUser(userText, cb){
+  var now = new Date();
+  // 내 메시지를 명시적으로 표시해서 문맥 전달
+  var recent = _LIVE_TALK.slice(-10).map(function(m){
+    return { nick: m.mine ? '나' : m.nick, text: m.text, me: !!m.mine };
+  });
+  var done = false;
+  var timer = setTimeout(function(){ if(!done){ done = true; cb(null); } }, 7000);  // 7초 내 무응답 → 폴백
+  fetch(_SERVER_URL + '/ai-talk', {
+    method:'POST', headers:{ 'Content-Type':'application/json' },
+    body: JSON.stringify({
+      hour: now.getHours(), minute: now.getMinutes(), day: now.getDay(),
+      weekend: (typeof _isHolidayOrWeekend==='function') ? _isHolidayOrWeekend() : false,
+      nicks: (typeof _LT_NICKS!=='undefined') ? _LT_NICKS.slice(0,12) : [],
+      recent: recent,
+      // ★ 이 메시지에 답하라는 지시 (서버가 지원하면 문맥 응답, 미지원이어도 recent로 문맥 반영)
+      replyTo: { nick:'나', text:String(userText||'') },
+      mode: 'reply',
+      count: 2
+    })
+  })
+  .then(function(r){ return r.ok ? r.json() : null; })
+  .then(function(d){
+    if(done) return; done = true; clearTimeout(timer);
+    var msgs = d && (d.messages || d.msgs || d);
+    if(!Array.isArray(msgs) || !msgs.length){ cb(null); return; }
+    var out = [];
+    msgs.forEach(function(m){
+      var txt = m && (m.text || m.msg || (typeof m==='string'?m:''));
+      if(txt) out.push({ nick:(m.nick||m.name||_rnd(_LT_NICKS)), text:String(txt).replace(/\s+/g,' ').trim().slice(0,60) });
+    });
+    cb(out.length ? out : null);
+  })
+  .catch(function(){ if(!done){ done = true; clearTimeout(timer); cb(null); } });
+}
+
 function _ltRespondToUser(userText){
   try {
-    var n1 = _rnd(_LT_NICKS);
-    setTimeout(function(){
-      // 그 사이 다른 사람이 이미 답했으면 중복 방지
-      _ltAdd({ nick:n1, text:_ltReplyToUser(userText), time:Date.now(), mine:false });
-    }, _rndInt(1500, 4000));
-    // 40% 확률로 한 명 더 반응 (대화가 살아있는 느낌)
-    if(Math.random() < 0.4){
-      var n2 = _rnd(_LT_NICKS);
-      var tries=0; while(n2===n1 && tries++<5) n2 = _rnd(_LT_NICKS);
+    // ★ 미리 만들어둔 대사 큐는 내 말을 모르므로 폐기 (엉뚱한 답 방지)
+    if(typeof _ltAiQueue !== 'undefined') _ltAiQueue.length = 0;
+
+    _ltAiReplyToUser(userText, function(aiMsgs){
+      if(aiMsgs && aiMsgs.length){
+        // AI가 내 말을 읽고 만든 답변 — 사람처럼 시차를 두고 등장
+        aiMsgs.slice(0,2).forEach(function(m, i){
+          setTimeout(function(){
+            _ltAdd({ nick:m.nick, text:m.text, time:Date.now(), mine:false });
+          }, i === 0 ? _rndInt(1200,2800) : _rndInt(4500,8000));
+        });
+        if(typeof _ltFetchAi==='function') setTimeout(_ltFetchAi, 1000);   // 이후 대화도 문맥 이어가게
+        return;
+      }
+      // 폴백: 서버 응답 실패 시에만 키워드 기반 반응
+      var n1 = _rnd(_LT_NICKS);
       setTimeout(function(){
-        _ltAdd({ nick:n2, text:_rnd(_LT_GENERIC_REPLIES), time:Date.now(), mine:false });
-      }, _rndInt(5000, 9000));
-    }
-    // AI 큐도 내 메시지 문맥으로 갱신 요청
-    if(typeof _ltFetchAi==='function') _ltFetchAi();
+        _ltAdd({ nick:n1, text:_ltReplyToUser(userText), time:Date.now(), mine:false });
+      }, _rndInt(1500, 3500));
+      if(typeof _ltFetchAi==='function') _ltFetchAi();
+    });
   } catch(e){}
 }
 window._ltRespondToUser = _ltRespondToUser;
@@ -27132,7 +27267,7 @@ function _ltFetchAi(){
   if(_ltAiFetching) return;
   _ltAiFetching = true;
   var now = new Date();
-  var recent = _LIVE_TALK.slice(-8).map(function(m){ return { nick:m.nick, text:m.text }; });
+  var recent = _LIVE_TALK.slice(-8).map(function(m){ return { nick: m.mine ? '나' : m.nick, text:m.text, me: !!m.mine }; });
   fetch(_SERVER_URL + '/ai-talk', {
     method:'POST', headers:{ 'Content-Type':'application/json' },
     body: JSON.stringify({
@@ -27158,6 +27293,11 @@ function _ltFetchAi(){
 // ── 통합 톡 생성: (Gemini 큐) > 대화 > 뉴스 > 시간대 멘트 ──
 var _ltLastNick = '', _ltRecentTexts = [];
 function _ltGenerate(){
+  // ★ 방금(12초 내) 내가 말했으면 자동 생성 보류 — AI가 내 말에 답할 시간을 줌
+  try {
+    var _lastM = _LIVE_TALK.length ? _LIVE_TALK[_LIVE_TALK.length-1] : null;
+    if(_lastM && _lastM.mine && (Date.now() - (_lastM.time||0)) < 12000) return;
+  } catch(e){}
   // ★ Gemini 대화 큐가 있으면 우선 사용 (문맥 기반 자연스러운 대화)
   if(_ltAiQueue.length){
     var q = _ltAiQueue.shift();
