@@ -6359,14 +6359,19 @@ function loadMapBusStops() {
   } catch(e) {}
 
   var listEl = document.getElementById('mapBusStopList');
-  var empty  = document.getElementById('mapBusEmpty');
   if(!listEl) return;
 
+  listEl.innerHTML = '';   // ★ 항상 비우기 (주변 정류장 목록이 남아있던 문제 수정)
+
   if(!_savedBusStops || _savedBusStops.length === 0) {
-    if(empty) empty.style.display = 'block';
+    window._mapBusCards = [];   // 이전(주변) 카드 참조 제거 → 자동갱신이 옛 목록 갱신하지 않도록
+    listEl.innerHTML =
+      '<div class="map-bus-empty" id="mapBusEmpty">⭐<br>' +
+      '즐겨찾기한 정류장이 없습니다<br>' +
+      '<small>주변 정류장에서 별(☆)을 눌러<br>원하는 정류장을 추가하세요</small><br>' +
+      '<button class="map-bus-set-btn" onclick="switchBusView(\'near\')">주변 정류장 보기</button></div>';
     return;
   }
-  if(empty) empty.style.display = 'none';
 
   listEl.innerHTML = '<div style="padding:10px 12px;font-size:12px;color:var(--sub);">⭐ 즐겨찾기 ' + _savedBusStops.length + '개 · 30초마다 자동 갱신</div>';
 
@@ -6380,6 +6385,48 @@ function loadMapBusStops() {
   });
 }
 window.loadMapBusStops = loadMapBusStops;
+
+// ── 즐겨찾기 등록/해제 (주변 정류장 카드의 ★ 버튼) ──
+function _favBusIndex(stop){
+  var k = _busStopKey(stop);
+  for(var i=0;i<(_savedBusStops||[]).length;i++){
+    if(_busStopKey(_savedBusStops[i]) === k) return i;
+  }
+  return -1;
+}
+function _isFavBusStop(stop){ return _favBusIndex(stop) >= 0; }
+function toggleFavBusStop(stop){
+  try {
+    var i = _favBusIndex(stop);
+    if(i >= 0){
+      _savedBusStops.splice(i, 1);
+      if(typeof toast==='function') toast('즐겨찾기 해제');
+    } else {
+      if((_savedBusStops||[]).length >= 12){ if(typeof toast==='function') toast('즐겨찾기는 최대 12개'); return; }
+      _savedBusStops.push(stop);
+      if(typeof toast==='function') toast('⭐ 즐겨찾기 추가');
+    }
+    try { localStorage.setItem('savedBusStops', JSON.stringify(_savedBusStops)); } catch(e){}
+    if(_busViewMode === 'fav') loadMapBusStops();
+    else if(typeof _refreshFavStars==='function') _refreshFavStars();
+  } catch(e){}
+}
+window.toggleFavBusStop = toggleFavBusStop;
+// 주변 목록의 별 아이콘 상태만 갱신 (재렌더 없이)
+function _refreshFavStars(){
+  try {
+    document.querySelectorAll('#mapBusStopList .bus-fav-toggle').forEach(function(b){
+      var on = (b.dataset.fav === '1');
+      // 실제 상태 재계산
+      var key = b.dataset.key || '';
+      var isFav = (_savedBusStops||[]).some(function(s){ return _busStopKey(s) === key; });
+      if(isFav !== on){ b.dataset.fav = isFav ? '1' : '0'; }
+      b.textContent = isFav ? '★' : '☆';
+      b.style.color = isFav ? 'var(--gold)' : 'var(--sub)';
+    });
+  } catch(e){}
+}
+window._refreshFavStars = _refreshFavStars;
 
 // ── 버스 뷰 토글 (주변/즐겨찾기) ──────────────────────────
 var _busViewMode = 'near';  // 'near' | 'fav'
@@ -6791,9 +6838,14 @@ function _renderMapBusCard(stop, idx, mode, total) {
   var alias = (typeof _busGetAlias === 'function') ? _busGetAlias(nodeId) : '';
   var dir  = stop.nodeDir || stop.dir || '';
   var dist = stop.dist || stop.distance;
+  var isFav = (mode === 'near') ? _isFavBusStop(stop) : false;
+  var favBtn = (mode === 'near')
+    ? '<button class="bus-fav-toggle" data-key="' + _ltEsc(_busStopKey(stop)) + '" data-fav="' + (isFav?'1':'0') + '" title="즐겨찾기" ' +
+      'style="background:none;border:none;cursor:pointer;font-size:16px;padding:0 4px;line-height:1;color:' + (isFav?'var(--gold)':'var(--sub)') + ';">' + (isFav?'★':'☆') + '</button>'
+    : '';
   var rightBtn = (mode === 'fav')
     ? '<button onclick="removeMapBusStop(' + idx + ')" style="margin-left:auto;background:none;border:none;color:var(--sub);font-size:20px;cursor:pointer;line-height:1;">×</button>'
-    : (dist ? '<span class="map-bus-dist">' + _busDist(dist) + '</span>' : '');
+    : (dist ? favBtn + '<span class="map-bus-dist">' + _busDist(dist) + '</span>' : favBtn);
   // ★ 별명이 있으면 별명 크게 + 원래 이름 작게
   var nameHtml = alias
     ? _ltEsc(alias) + ' <span style="font-size:11px;font-weight:600;color:var(--sub);">' + _ltEsc(name) + '</span>'
@@ -6808,6 +6860,12 @@ function _renderMapBusCard(stop, idx, mode, total) {
     '<div class="map-bus-row" style="color:var(--sub);font-size:13px;">도착 정보 불러오는 중...</div>';
   var eb = card.querySelector('.bus-alias-edit');
   if(eb) eb.addEventListener('click', function(ev){ ev.stopPropagation(); _busEditAlias(nodeId, name, mode); });
+  var fb = card.querySelector('.bus-fav-toggle');
+  if(fb){
+    // 길게눌러 순서변경(드래그)과 충돌하지 않도록 터치 시작도 차단
+    fb.addEventListener('touchstart', function(ev){ ev.stopPropagation(); }, {passive:true});
+    fb.addEventListener('click', function(ev){ ev.stopPropagation(); ev.preventDefault(); toggleFavBusStop(stop); });
+  }
   return card;
 }
 window._renderMapBusCard = _renderMapBusCard;
