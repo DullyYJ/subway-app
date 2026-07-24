@@ -5430,15 +5430,39 @@ function _startTransitGpsTracking(nodes) {
       nd._schedMin = mn; _prevSched = mn;
     } else { nd._schedMin = null; }
   });
-  window._nodePassMs = {};
-  window._gpsMaxIdx = -1;   // GPS로 확인된 최대 진행 역 인덱스
-  window._timeMaxIdx = -1;  // 시간으로 soft-확인된 최대 진행 역 인덱스
-  window._markerMaxX = null;      // ★ 마커 역행방지 x 최대값 리셋 (새 경로)
-  window._gpsWaitIdx = null; window._gpsWaitRatio = 0; window._gpsWaitLastMs = 0; window._hadValidTransitFix = false;
+  // ★ 같은 경로의 단순 재렌더(탭 이동/복귀 등)면 진행 상태를 유지 — 새 경로일 때만 초기화
+  //   (뉴스 탭 다녀오면 마커·시각표가 처음으로 돌아가던 문제 수정)
+  var _sig = _transitNodeData.map(function(n){ return (n.name||'') + '|' + (n.lineName||''); }).join('>');
+  var _sameRoute = (window._trackSig === _sig);
+  window._trackSig = _sig;
+
+  if(!_sameRoute){
+    window._nodePassMs = {};
+    window._gpsMaxIdx = -1;   // GPS로 확인된 최대 진행 역 인덱스
+    window._timeMaxIdx = -1;  // 시간으로 soft-확인된 최대 진행 역 인덱스
+    window._markerMaxProg = null;   // 경로좌표 진행도 리셋 (새 경로)
+    window._gpsWaitIdx = null; window._gpsWaitRatio = 0; window._gpsWaitLastMs = 0;
+    window._hadValidTransitFix = false;
+    window._reanchorAt = 0;
+    _transitStartTime = Date.now();
+  } else {
+    // 재렌더 직후: 기록해 둔 실제 통과시각 앵커를 다시 적용해 시각표(지연/다음열차 보정)를 유지
+    try {
+      var _pm = window._nodePassMs || {}, _lastAnchor = -1;
+      Object.keys(_pm).forEach(function(k){ var i = parseInt(k,10); if(!isNaN(i) && i > _lastAnchor) _lastAnchor = i; });
+      if(_lastAnchor >= 0 && typeof _recalcArrivalsFrom === 'function'){
+        setTimeout(function(){ try { _recalcArrivalsFrom(_lastAnchor); } catch(e){} }, 0);
+      }
+    } catch(e){}
+  }
+  // 픽셀 좌표계는 재렌더마다 무효 → 초기화하고 첫 배치는 스냅 (진행도 가드가 위치를 지켜줌)
+  window._markerMaxX = null;
+  window._markerTrackW = null;
+  window._gpsMarkerNeedsSnap = true;
   if(typeof _buildTransitAlertTargets==='function') _buildTransitAlertTargets();   // ★ 환승/하차 2·1정거장 전 알림 타겟
 
   // 경로 시작 시각 기록 (출발 후 경과 시간 계산용)
-  _transitStartTime = Date.now();
+  if(_transitStartTime == null) _transitStartTime = Date.now();
 
   if(_transitGpsTimer) clearInterval(_transitGpsTimer);
   // ★ 수동 출발지(내 위치 아님) 모드: GPS 추적·마커 갱신 금지 — 사용자가 설정한 경로 그대로 표시
@@ -5749,6 +5773,36 @@ function _placeGpsMarkerSmooth(fromNd, toNd, ratio){
   if(!track || !dot || !fromNd || !fromNd.el) return;
   // ★ 트랙이 숨겨져 있으면(다른 탭 등) offset이 0 → 이동하지 말고 복귀 시 스냅하도록 표시
   if(track.offsetParent === null || track.offsetWidth === 0){ window._gpsMarkerNeedsSnap = true; return; }
+
+  // ★ 역주행 원천 차단: 진행도를 '역인덱스 + 구간비율'(경로 좌표)로 관리.
+  //   픽셀(_markerMaxX)과 달리 재렌더·스냅·탭복귀에도 값이 유지되므로 되돌아가지 않음.
+  try {
+    if(_transitNodeData && _transitNodeData.length){
+      var _fi = _transitNodeData.indexOf(fromNd);
+      if(_fi >= 0){
+        var _ti  = toNd ? _transitNodeData.indexOf(toNd) : _fi;
+        var _rr  = Math.max(0, Math.min(1, ratio||0));
+        var _prog = _fi + ((_ti > _fi) ? _rr : 0);
+        var _maxP = window._markerMaxProg;
+        if(_maxP != null && _prog < _maxP - 0.001){
+          // 뒤로 가는 배치 요청 → 지금까지의 최대 진행 위치로 대체 (역주행 방지)
+          var _ci = Math.max(0, Math.min(Math.floor(_maxP), _transitNodeData.length - 1));
+          var _cf = _transitNodeData[_ci];
+          var _ct = _transitNodeData[_ci + 1] || _cf;
+          if(_cf && _cf.el){ fromNd = _cf; toNd = _ct; ratio = _maxP - _ci; }
+        } else {
+          window._markerMaxProg = _prog;
+        }
+      }
+    }
+  } catch(e){}
+
+  // 트랙 크기가 바뀌면(재렌더/회전/스크롤 폭 변화) 픽셀 최대값은 무효 → 초기화
+  if(window._markerTrackW !== track.offsetWidth){
+    window._markerTrackW = track.offsetWidth;
+    window._markerMaxX = null;
+  }
+
   var fEl = fromNd.el, tEl = (toNd && toNd.el) ? toNd.el : fromNd.el;
   // 트랙 기준 콘텐츠 x좌표 (스크롤/변환 무관) — 마커가 노드 정중앙에 오도록
   function _trkX(el){ var x=0, n=el; while(n && n!==track){ x+=n.offsetLeft; n=n.offsetParent; } return x + el.offsetWidth/2; }
@@ -25905,7 +25959,8 @@ function closeTransitResult(){
   window._lastCongPct = 0;
   window._homeRouteBaseMin = 0;
   window._lastCongNodeIdx = -1;
-  try { _transitResultDest = null; _transitResultStart = null; _transitResultData = null; window._journeyFromFixed = null; window._accessLeg = null; window._metroRouteMode = false; } catch(e){}
+  try { _transitResultDest = null; _transitResultStart = null; _transitResultData = null; window._journeyFromFixed = null; window._accessLeg = null; window._metroRouteMode = false;
+    window._trackSig = null; window._markerMaxProg = null; _transitStartTime = null; } catch(e){}
   try { if(typeof S !== 'undefined'){ S.dest = null; S.route = null; } } catch(e){}
   var rs = document.getElementById('routeStatus'); if(rs) rs.textContent = '설정 필요';
   // 5) AI 승무원 즉시 갱신 (경로 없음 브리핑)
