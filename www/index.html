@@ -8178,7 +8178,14 @@ window._hideRouteLoading = _hideRouteLoading;
       });
 
       if(!allPaths.length) {
-        toast('경로를 찾을 수 없습니다.');
+        // ★ 2026-09-09: liveStat 추출이 이 아래에 있어서, 경로가 0건이면
+        //   운행종료 정보를 꺼내보지도 못하고 토스트만 띄웠다. 먼저 꺼낸다.
+        try{
+          var _rx = (results || []).find(function(r){ return r && r.liveStat; });
+          window._liveStat = _rx ? _rx.liveStat : null;
+          window._engSvcFirstBus = (window._liveStat && window._liveStat.svcFirstBus) || null;
+        }catch(e){}
+        if(!_svcShowNoRoute()) toast('경로를 찾을 수 없습니다.');
         return;
       }
 
@@ -9237,19 +9244,47 @@ function _svcModeText(r){
   return '일부 구간이';
 }
 function _svcLines(r){
-  var a = r.endedSub.map(function(x){ return x.line + ' (막차 ' + x.last + ')'; })
-        .concat(r.endedBus.map(function(x){ return x.no + '번'; }));
+  var a = r.endedSub.map(function(x){ return x.last ? (x.line + ' (막차 ' + x.last + ')') : x.line; })
+        .concat(r.endedBus.map(function(x){ return /[0-9]$/.test(x.no) ? (x.no + '번') : x.no; }));
   return a.join(' · ');
 }
 function _svcFirstText(r){
   var p = [];
   if(r.endedSub.length && r.firstSub) p.push('지하철 첫차 ' + r.firstSub);
   if(r.endedBus.length){
-    var bf = _svcBusFirst();
+    var bf = r.firstBus || _svcBusFirst();
     p.push(bf ? ('버스 첫차 ' + bf) : ('버스 첫차 ' + _SVC_BUS_FIRST_FALLBACK + ' 전후(노선마다 다름)'));
   }
   return p.join(' · ');
 }
+
+// ★ 2026-09-09: 경로가 아예 안 나올 때.
+//   엔진이 막차 끊긴 노선을 그래프에서 빼기 시작하면서, 새벽에는 결과가 0건이 된다.
+//   그때 '경로를 찾을 수 없습니다' 토스트만 띄우면 왜 없는지 알 수가 없다.
+//   엔진이 같이 보내준 운행종료 정보로 안내 팝업을 대신 띄운다.
+//   야간이 원인이 아니면 false 를 돌려줘서 예전 토스트로 넘긴다.
+function _svcShowNoRoute(){
+  try{
+    var ls = window._liveStat || {};
+    var busOff = (ls.svcOff || 0) > 0, subOff = (ls.subOff || 0) > 0;
+    if(!busOff && !subOff) return false;
+    var r = {
+      endedSub: subOff ? (ls.subOffList || []).map(function(n){ return { line:n, last:'' }; }) : [],
+      soonSub: [],
+      endedBus: busOff ? (ls.svcOffList || []).map(function(n){ return { no:n }; }) : [],
+      modes: [], ended: true,
+      firstSub: ls.subFirstTrain || null,
+      firstBus: ls.svcFirstBus || null
+    };
+    if(subOff) r.modes.push('지하철');
+    if(busOff) r.modes.push('버스');
+    window._svcLast = r;
+    window._svcModalKey = null;          // 검색할 때마다 다시 알려준다
+    _svcShowModal(r);
+    return true;
+  }catch(e){ return false; }
+}
+window._svcShowNoRoute = _svcShowNoRoute;
 
 // 경로 카드/세부경로에 얹는 띠. 근거를 그대로 적는다.
 function _svcBannerHtml(r){
@@ -16308,6 +16343,11 @@ window._bgDiag = async function(){
               + ((_ls.svcOffList||[]).length ? (' (' + _ls.svcOffList.join(', ') + ')') : ''));
         }
         if(_ls.svcFirstBus) add('가장 이른 버스 첫차: ' + _ls.svcFirstBus);
+        if(_ls.subOff){
+          add('막차 끊긴 호선: ' + _ls.subOff + '개'
+              + ((_ls.subOffList||[]).length ? (' (' + _ls.subOffList.join(', ') + ')') : ''));
+        }
+        if(_ls.subFirstTrain) add('가장 이른 지하철 첫차: ' + _ls.subFirstTrain);
         if(_ls.tabs && _ls.tabs.length){ add('탭별 결과:'); _ls.tabs.forEach(function(t){ add('  · ' + t); }); }
         if(_ls.stillMissing && _ls.stillMissing.length) add('  · 합쳐도 끝내 안 나온 노선: ' + _ls.stillMissing.join(' / '));
         if(_ls.aliasUsed) add('  · 형제 id 병합 ' + _ls.aliasUsed + '회');
