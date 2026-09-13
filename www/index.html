@@ -12377,16 +12377,14 @@ function _routeRemainingMin(){
 function _briefRouteSig(){
   try{
     var rb = (typeof _buildRouteBrief==='function') ? _buildRouteBrief() : null;
-    var legs = '';
-    if(rb && rb.segments && rb.segments.length){
-      legs = rb.segments.map(function(sg){
-        return (sg.line||'') + ':' + (sg.from||'') + '>' + (sg.to||'');
-      }).join('|');
-    }
-    var ep = (typeof _etaPair==='function') ? _etaPair() : null;
-    var arr = (ep && ep.arrMs) ? Math.round(ep.arrMs/60000) : '';
-    if(!legs && arr === '') return '';
-    return legs + '@' + arr;
+    if(!rb || !rb.segments || !rb.segments.length) return '';
+    // ★ 2026-09-13: 도착시각은 지문에서 뺐다.
+    //   시각은 매 틱 로컬로 다시 쓰므로(_syncHomeBriefRemaining) 서버를 부를 이유가 없다.
+    //   넣어 뒀더니 1~2분 흔들릴 때마다 45초마다 브리핑을 새로 만들어 깜박였다.
+    //   본문(어느 노선을 어디서 갈아타라)은 경로가 실제로 바뀔 때만 다시 만든다.
+    return rb.segments.map(function(sg){
+      return (sg.line||'') + ':' + (sg.from||'') + '>' + (sg.to||'');
+    }).join('|');
   }catch(e){ return ''; }
 }
 window._briefRouteSig = _briefRouteSig;
@@ -12472,6 +12470,21 @@ function _aiArrivalSync(){
   }catch(e){}
 }
 window._aiArrivalSync = _aiArrivalSync;
+
+// ★ 2026-09-13: 경로를 확정하기 전에는 _updateTransitGps 틱이 돌지 않아
+//   AI 승무원의 남은시간·도착시각이 멈춰 있었다. 카드가 떠 있는 동안은
+//   15초마다 스스로 따라가게 한다. (확정 뒤에는 GPS 틱이 더 자주 돌지만
+//   같은 함수를 부르는 것뿐이라 겹쳐도 결과가 같다)
+if(!window._aiArrTimer){
+  window._aiArrTimer = setInterval(function(){
+    try{
+      if(document.hidden) return;
+      var card = document.getElementById('transitResultCard');
+      if(!card || card.style.display === 'none') return;
+      _updateRouteRemaining();
+    }catch(e){}
+  }, 15000);
+}
 
 // ── 경로 추적용 연속 GPS watch: 좌표를 실시간으로 갱신 (고정 방지) ──
 // 수동 출발지 모드: 출발지가 '내 위치(gps)'가 아니면 true → GPS 추적/보정 금지
@@ -16438,6 +16451,10 @@ window._bgDiag = async function(){
               + ((_ls.subOffList||[]).length ? (' (' + _ls.subOffList.join(', ') + ')') : ''));
         }
         if(_ls.subFirstTrain) add('가장 이른 지하철 첫차: ' + _ls.subFirstTrain);
+        if(_ls.candListOnly != null){
+          add('승차 후보 제한: ' + (_ls.candListOnly ? ('앱 목록 안 ' + (_ls.candInList||0) + '곳만')
+                                                    : ('전체 (목록 안 ' + (_ls.candInList||0) + '곳뿐이라 해제)')));
+        }
         if(_ls.tabs && _ls.tabs.length){ add('탭별 결과:'); _ls.tabs.forEach(function(t){ add('  · ' + t); }); }
         if(_ls.stillMissing && _ls.stillMissing.length) add('  · 합쳐도 끝내 안 나온 노선: ' + _ls.stillMissing.join(' / '));
         if(_ls.aliasUsed) add('  · 형제 id 병합 ' + _ls.aliasUsed + '회');
