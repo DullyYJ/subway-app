@@ -15601,6 +15601,89 @@ function _busFindPeers(stop, cb){
 }
 
 // 도착정보를 인접 등록분까지 합쳐서 가져오기
+// ══════════════════════════════════════════════════════════════
+// ★ 2026-09-13: 정류장을 지나는 '노선 전체'를 먼저 세운다.
+//   증상: 카카오는 같은 정류장(이음대로.대성베르힐)에 10개 노선을 보여주는데
+//        우리는 3개만 보였다.
+//   원인: 도착정보(getSttnAcctoArvlPrearngeInfoList)는 '지금 오고 있는 차'만 준다.
+//        그걸 그대로 목록으로 썼으니, 배차가 긴 노선은 통째로 사라졌다.
+//   방침: 경유노선 목록(getSttnThrghRouteList)으로 뼈대를 만들고
+//        도착정보를 얹는다. 시간이 없는 노선은 '도착정보 없음'으로 남긴다
+//        (_busArrHtml 이 이미 그렇게 그린다).
+//   경유노선은 거의 안 바뀌므로 7일 캐시해서 호출을 아낀다.
+// ══════════════════════════════════════════════════════════════
+var _THRU_TTL = 7 * 24 * 3600 * 1000;
+var _thruMem = {};
+
+function _thruCacheGet(key){
+  if(_thruMem[key]) return _thruMem[key];
+  try{
+    var raw = localStorage.getItem('thru_' + key);
+    if(!raw) return null;
+    var o = JSON.parse(raw);
+    if(!o || !o.t || (Date.now() - o.t) > _THRU_TTL) return null;
+    _thruMem[key] = o.v || [];
+    return _thruMem[key];
+  }catch(e){ return null; }
+}
+function _thruCacheSet(key, list){
+  _thruMem[key] = list || [];
+  try{ localStorage.setItem('thru_' + key, JSON.stringify({ t: Date.now(), v: list || [] })); }catch(e){}
+}
+
+function _busThruRoutes(cityCode, nodeId){
+  return new Promise(function(resolve){
+    var key = String(cityCode) + '_' + String(nodeId);
+    var hit = _thruCacheGet(key);
+    if(hit) { resolve(hit); return; }
+    if(!cityCode || !nodeId || !/^[0-9]{2,5}$/.test(String(cityCode))) { resolve([]); return; }
+    var url = 'https://apis.data.go.kr/1613000/BusSttnInfoInqireService/getSttnThrghRouteList' +
+      '?serviceKey=' + encodeURIComponent(_BUS_TAGO_KEY) +
+      '&cityCode=' + encodeURIComponent(cityCode) +
+      '&nodeid=' + encodeURIComponent(nodeId) +
+      '&numOfRows=100&pageNo=1&_type=json';
+    var done = false;
+    var to = setTimeout(function(){ if(!done){ done = true; resolve([]); } }, 8000);
+    fetch(_SERVER_URL + '/tago?url=' + encodeURIComponent(url))
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        if(done) return; done = true; clearTimeout(to);
+        var items = [];
+        try{
+          items = data.response.body.items.item || [];
+          if(!Array.isArray(items)) items = [items];
+        }catch(e){ items = []; }
+        var list = items.filter(function(x){ return x && (x.routeno || x.routeNo); })
+                        .map(function(x){
+                          return { routeid: x.routeid || x.routeId || '',
+                                   routeno: String(x.routeno || x.routeNo),
+                                   routetp: x.routetp || x.routeTp || '' };
+                        });
+        if(list.length) _thruCacheSet(key, list);   // 빈 응답은 캐시하지 않는다
+        resolve(list);
+      })
+      .catch(function(){ if(!done){ done = true; clearTimeout(to); resolve([]); } });
+  });
+}
+window._busThruRoutes = _busThruRoutes;
+
+// 도착정보에 없는 경유노선을 '도착정보 없음' 자리로 채워 넣는다
+function _thruFill(rows, thru){
+  rows = rows || [];
+  if(!thru || !thru.length) return rows;
+  var have = {};
+  rows.forEach(function(r){
+    var n = String(r && (r.routeno || r.routeNo) || ''); if(n) have[n] = 1;
+  });
+  var out = rows.slice();
+  thru.forEach(function(t){
+    if(have[t.routeno]) return;
+    out.push({ routeno: t.routeno, routeid: t.routeid, routetp: t.routetp, _noArr: 1 });
+  });
+  return out;
+}
+window._thruFill = _thruFill;
+
 function _busArrFetchMerged(cityCode, stop){
   var nodeId = stop.nodeId || stop.nodeid;
 
@@ -15673,13 +15756,20 @@ function _busArrFetchMerged(cityCode, stop){
       });
     };
 
-    if(stop._peersCached) return _mergePeers(stop._peers);
+    // ★ 경유노선 목록을 얹어 '도착정보 없는 노선'도 보이게 한다
+    var _withThru = function(rows){
+      return _busThruRoutes(cityCode, nodeId)
+        .then(function(thru){ return _thruFill(rows, thru); },
+              function(){ return rows; });
+    };
+
+    if(stop._peersCached) return _mergePeers(stop._peers).then(_withThru);
 
     return new Promise(function(resolve){
       _busFindPeers(stop, function(peers){
         stop._peers = peers || [];       // 목록은 바뀌지 않으므로 한 번만 찾는다
         stop._peersCached = 1;
-        _mergePeers(stop._peers).then(resolve, function(){ resolve(uniq(items)); });
+        _mergePeers(stop._peers).then(_withThru).then(resolve, function(){ resolve(uniq(items)); });
       });
     });
   });
@@ -15851,7 +15941,7 @@ function _loadMapBusArrival(stop, cardIdx, _try) {
         return aa-bb;
       });
       var ridOf = function(g){ return String(g.info.routeid||g.info.routeId||g.info.routeno||g.info.routeNo||''); };
-      routes = routes.slice(0, 12);
+      routes = routes.slice(0, 20);   // ★ 경유노선까지 얹으면 10개를 넘는 정류장이 많다
       var sig = routes.map(ridOf).slice().sort().join(',');
       var sameSet = (card._busSig === sig) && (card.querySelectorAll('.kbus-row').length === routes.length);
 
