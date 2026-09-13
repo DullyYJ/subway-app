@@ -17361,21 +17361,50 @@ window.addEventListener('unhandledrejection', function(e) {
         </style>
         <div style="display:flex;gap:10px;margin-bottom:12px;">
           <div style="flex:1;position:relative;">
-            <div style="font-size:11px;font-weight:700;color:var(--sub);margin-bottom:5px;">🏠 출발지 (집 근처 역)</div>
+            <div style="font-size:11px;font-weight:700;color:var(--sub);margin-bottom:5px;">🏠 출근 출발지 (집 근처)</div>
             <input type="text" id="cmFromStn" placeholder="지하철·버스 (예: 아라)" autocomplete="off"
               oninput="_cmSug(this,'cmFromSug',1)" onfocus="_cmSug(this,'cmFromSug')" onblur="_cmSugBlur('cmFromSug')" onchange="_cmSaveTimes()"
               style="width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:9px;padding:10px;color:var(--text);font-size:14px;outline:none;box-sizing:border-box;font-family:inherit;">
             <div id="cmFromSug" class="cm-sug"></div>
           </div>
           <div style="flex:1;position:relative;">
-            <div style="font-size:11px;font-weight:700;color:var(--sub);margin-bottom:5px;">🏢 도착지 (회사 근처 역)</div>
+            <div style="font-size:11px;font-weight:700;color:var(--sub);margin-bottom:5px;">🏢 출근 도착지 (회사 근처)</div>
             <input type="text" id="cmToStn" placeholder="지하철·버스 (예: 강남)" autocomplete="off"
               oninput="_cmSug(this,'cmToSug',1)" onfocus="_cmSug(this,'cmToSug')" onblur="_cmSugBlur('cmToSug')" onchange="_cmSaveTimes()"
               style="width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:9px;padding:10px;color:var(--text);font-size:14px;outline:none;box-sizing:border-box;font-family:inherit;">
             <div id="cmToSug" class="cm-sug"></div>
           </div>
         </div>
-        <p style="font-size:11px;color:var(--sub);margin:0 0 12px;line-height:1.5;">지하철역과 버스정류장 모두 입력할 수 있어요. 검색 목록의 지하철/버스 표시로 구분돼요.<br>출근은 출발지→도착지, 퇴근은 자동 반대 방향 · 비워두면 현재 위치 기준이에요.</p>
+        <p style="font-size:11px;color:var(--sub);margin:0 0 12px;line-height:1.5;">지하철역과 버스정류장 모두 입력할 수 있어요. 검색 목록의 지하철/버스 표시로 구분돼요. 비워두면 현재 위치 기준이에요.</p>
+
+        <!-- ★ 2026-09-14: 퇴근 전용 출발·도착 (비워 두면 출근의 반대) -->
+        <div style="display:flex;gap:10px;margin-bottom:6px;">
+          <div style="flex:1;position:relative;">
+            <div style="font-size:11px;font-weight:700;color:var(--sub);margin-bottom:5px;">🌆 퇴근 출발지</div>
+            <input type="text" id="cmEveFromStn" placeholder="비우면 회사 근처 역" autocomplete="off"
+              oninput="_cmSug(this,'cmEveFromSug',1)" onfocus="_cmSug(this,'cmEveFromSug')" onblur="_cmSugBlur('cmEveFromSug')" onchange="_cmSaveTimes()"
+              style="width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:9px;padding:10px;color:var(--text);font-size:14px;outline:none;box-sizing:border-box;font-family:inherit;">
+            <div id="cmEveFromSug" class="cm-sug"></div>
+          </div>
+          <div style="flex:1;position:relative;">
+            <div style="font-size:11px;font-weight:700;color:var(--sub);margin-bottom:5px;">🏠 퇴근 도착지</div>
+            <input type="text" id="cmEveToStn" placeholder="비우면 집 근처 역" autocomplete="off"
+              oninput="_cmSug(this,'cmEveToSug',1)" onfocus="_cmSug(this,'cmEveToSug')" onblur="_cmSugBlur('cmEveToSug')" onchange="_cmSaveTimes()"
+              style="width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:9px;padding:10px;color:var(--text);font-size:14px;outline:none;box-sizing:border-box;font-family:inherit;">
+            <div id="cmEveToSug" class="cm-sug"></div>
+          </div>
+        </div>
+        <p id="cmEveHint" style="font-size:11px;color:var(--sub);margin:0 0 12px;line-height:1.5;">비워 두면 출근의 반대 방향으로 보내요.</p>
+
+        <!-- ★ 요일 선택 -->
+        <div style="font-size:11px;font-weight:700;color:var(--sub);margin-bottom:5px;">📅 보낼 요일</div>
+        <div id="cmDays" style="display:flex;gap:5px;margin-bottom:6px;"></div>
+        <div style="display:flex;gap:6px;margin-bottom:6px;">
+          <span onclick="_cmDayPreset('weekday')" style="flex:1;text-align:center;padding:7px 0;border-radius:8px;border:1px solid var(--border2);font-size:11.5px;font-weight:700;color:var(--sub);cursor:pointer;">평일</span>
+          <span onclick="_cmDayPreset('weekend')" style="flex:1;text-align:center;padding:7px 0;border-radius:8px;border:1px solid var(--border2);font-size:11.5px;font-weight:700;color:var(--sub);cursor:pointer;">주말</span>
+          <span onclick="_cmDayPreset('all')" style="flex:1;text-align:center;padding:7px 0;border-radius:8px;border:1px solid var(--border2);font-size:11.5px;font-weight:700;color:var(--sub);cursor:pointer;">매일</span>
+        </div>
+        <p id="cmDaysNote" style="font-size:11px;color:var(--sub);margin:0 0 12px;line-height:1.5;"></p>
         <div style="display:flex;gap:10px;">
           <div style="flex:1;">
             <div style="font-size:11px;font-weight:700;color:var(--sub);margin-bottom:5px;">🌅 출근 브리핑</div>
@@ -26023,9 +26052,27 @@ var _NOTIF_ALLOW = { arrive_reco:0, commute_brief:0, fg_service:0,
 var _VIBE_ALLOW = { transfer:1, transfer2:1,
                     arrive:1, arrival:1, near_arrive:1, near_arrive2:1,
                     arrive_reco:0, commute_brief:0, fg_service:0 };
-function _vibeAllowed(type){ return !!_VIBE_ALLOW[String(type || '')]; }
+function _vibeAllowed(type){
+  var t = String(type || '');
+  // 브리핑은 알림과 함께 짧게 울린다(사용자가 켠 기능이므로)
+  if(t === 'commute_brief'){
+    try{ return !!(typeof _cmAlarm !== 'undefined' && _cmAlarm.on); }catch(e){ return false; }
+  }
+  return !!_VIBE_ALLOW[t];
+}
 window._vibeAllowed = _vibeAllowed;
-function _notifAllowed(type){ return !!_NOTIF_ALLOW[String(type||'')]; }
+// ★ 2026-09-14: 출퇴근 브리핑이 안 오던 이유.
+//   2026-09-03 에 PiP 를 넣으면서 상단 알림을 전부 0 으로 껐는데,
+//   사용자가 설정에서 직접 켜는 '출퇴근 브리핑'까지 같이 꺼졌다.
+//   토글은 켜지는데 showNotification 이 조용히 return 해서 아무 일도 안 일어났다.
+//   → 이 종류만은 정책 상수가 아니라 사용자의 토글을 따른다.
+function _notifAllowed(type){
+  var t = String(type||'');
+  if(t === 'commute_brief'){
+    try{ return !!(typeof _cmAlarm !== 'undefined' && _cmAlarm.on); }catch(e){ return false; }
+  }
+  return !!_NOTIF_ALLOW[t];
+}
 window._notifAllowed = _notifAllowed;
 
 // ★ 2026-08-31: 진동을 알림 정책 안으로 넣는다.
@@ -26770,9 +26817,38 @@ function _showBriefingModal(title, body, route, action){
 window._showBriefingModal = _showBriefingModal;
 
 // ══════════ ⏰ 출퇴근 날씨+AI 브리핑 알림 ══════════
-var _cmAlarm = { on:false, morn:'07:30', eve:'18:30', from:'', to:'', lastKey:'' };
+// ★ 2026-09-14
+//   days  : 브리핑을 보낼 요일 (0=일 … 6=토). 기본 월~금.
+//   eFrom/eTo : 퇴근 전용 출발·도착. 비어 있으면 예전처럼 출근의 반대 방향을 쓴다.
+var _cmAlarm = { on:false, morn:'07:30', eve:'18:30', from:'', to:'',
+                 days:[1,2,3,4,5], eFrom:'', eTo:'', lastKey:'' };
 try { var _cmSaved = JSON.parse(localStorage.getItem('commuteAlarm')||'null'); if(_cmSaved) _cmAlarm = Object.assign(_cmAlarm, _cmSaved); } catch(e){}
 function _cmPersist(){ try{ localStorage.setItem('commuteAlarm', JSON.stringify(_cmAlarm)); }catch(e){} }
+
+// 오늘 보낼 요일인가. 목록이 비어 있으면(옛 설정) 매일 보낸다.
+function _cmDayOn(d){
+  try{
+    var arr = _cmAlarm.days;
+    if(!Array.isArray(arr) || !arr.length) return true;
+    return arr.indexOf(d == null ? new Date().getDay() : d) >= 0;
+  }catch(e){ return true; }
+}
+window._cmDayOn = _cmDayOn;
+
+// 퇴근 전용 위치가 설정돼 있으면 그걸, 없으면 출근의 반대 방향을 쓴다.
+function _cmPair(isMorn){
+  var F = { nm:_cmAlarm.from, lat:_cmAlarm.fromLat, lng:_cmAlarm.fromLng, bus:_cmAlarm.fromBus };
+  var T = { nm:_cmAlarm.to,   lat:_cmAlarm.toLat,   lng:_cmAlarm.toLng,   bus:_cmAlarm.toBus };
+  if(isMorn) return [F, T];
+  var eF = { nm:_cmAlarm.eFrom, lat:_cmAlarm.eFromLat, lng:_cmAlarm.eFromLng, bus:_cmAlarm.eFromBus };
+  var eT = { nm:_cmAlarm.eTo,   lat:_cmAlarm.eToLat,   lng:_cmAlarm.eToLng,   bus:_cmAlarm.eToBus };
+  if((eF.nm||'').trim() || (eT.nm||'').trim()){
+    // 한쪽만 채웠으면 나머지는 출근 반대편으로 메운다
+    return [ (eF.nm||'').trim() ? eF : T, (eT.nm||'').trim() ? eT : F ];
+  }
+  return [T, F];                      // 예전 동작: 출근의 반대
+}
+window._cmPair = _cmPair;
 
 // Open-Meteo 날씨 (키 불필요) — WMO 코드 → 텍스트/이모지
 function _wmoTxt(c){
@@ -26887,10 +26963,9 @@ function _fireCommuteBriefing(type, opts){
   opts = opts || {};
   var isMorn = (type==='morn');
   // ★ 설정된 출발/도착 (지하철역 또는 버스정류장, 퇴근은 자동 반대 방향)
-  var _pF = { nm:_cmAlarm.from, lat:_cmAlarm.fromLat, lng:_cmAlarm.fromLng, bus:_cmAlarm.fromBus };
-  var _pT = { nm:_cmAlarm.to,   lat:_cmAlarm.toLat,   lng:_cmAlarm.toLng,   bus:_cmAlarm.toBus };
-  var fromStn = _cmResolvePlace(isMorn ? _pF : _pT);
-  var toStn   = _cmResolvePlace(isMorn ? _pT : _pF);
+  var _pr = _cmPair(isMorn);
+  var fromStn = _cmResolvePlace(_pr[0]);
+  var toStn   = _cmResolvePlace(_pr[1]);
   // 출발 좌표: 설정역 우선, 없으면 GPS
   var la = fromStn ? fromStn.lat : (window._lastGPSLat || (typeof S!=='undefined' && S.lastGPSFix && S.lastGPSFix.lat) || 37.45);
   var ln = fromStn ? fromStn.lng : (window._lastGPSLng || (typeof S!=='undefined' && S.lastGPSFix && S.lastGPSFix.lng) || 126.70);
@@ -26950,8 +27025,17 @@ function _fireCommuteBriefing(type, opts){
       // ★ 브리핑 기준 출발/도착을 함께 넘겨 '경로탐색' 버튼에서 그대로 사용
       _showBriefingModal(title, body, (fromStn && toStn) ? { from: fromStn, to: toStn } : null);
     } else {
+      var _sent = false;
+      try{ _sent = (typeof _notifAllowed==='function') ? _notifAllowed('commute_brief') : false; }catch(e){}
       if(typeof showNotification==='function') showNotification(title, body, { type:'commute_brief' });
-      if(typeof toast==='function' && !document.hidden) toast(title+' 발송됨');
+      // ★ 예전엔 정책에 막혀 아무것도 안 갔는데도 '발송됨' 토스트가 떴다.
+      if(typeof toast==='function' && !document.hidden){
+        toast(_sent ? (title+' 발송됨') : '알림이 꺼져 있어요 — 위 스위치를 켜주세요');
+      }
+      // 미리보기는 알림이 꺼져 있어도 내용은 보여 준다
+      if(!_sent && opts.preview && typeof _showBriefingModal==='function'){
+        _showBriefingModal(title, body, (fromStn && toStn) ? { from: fromStn, to: toStn } : null);
+      }
     }
   }
 
@@ -26967,10 +27051,9 @@ function _fireCommuteBriefing(type, opts){
 // 알림에 설정된 출발/도착 해석 (출근=from→to, 퇴근=to→from)
 function _cmRouteFor(isMorn){
   try{
-    var _pF = { nm:_cmAlarm.from, lat:_cmAlarm.fromLat, lng:_cmAlarm.fromLng, bus:_cmAlarm.fromBus };
-    var _pT = { nm:_cmAlarm.to,   lat:_cmAlarm.toLat,   lng:_cmAlarm.toLng,   bus:_cmAlarm.toBus };
-    var f = _cmResolvePlace(isMorn ? _pF : _pT);
-    var t = _cmResolvePlace(isMorn ? _pT : _pF);
+    var _pr = _cmPair(isMorn);
+    var f = _cmResolvePlace(_pr[0]);
+    var t = _cmResolvePlace(_pr[1]);
     return (f && t) ? { from:f, to:t } : null;
   }catch(e){ return null; }
 }
@@ -27049,7 +27132,9 @@ function _cmRouteFromBriefing(){
 }
 window._cmRouteFromBriefing = _cmRouteFromBriefing;
 
-window._cmTestFire = function(){ _fireCommuteBriefing(new Date().getHours()<12?'morn':'eve'); };
+window._cmTestFire = function(){
+  _fireCommuteBriefing(new Date().getHours()<12?'morn':'eve', { preview:true });
+};
 
 // 분 단위 체크 스케줄러 (앱 실행 중)
 function _cmTick(){
@@ -27058,6 +27143,7 @@ function _cmTick(){
   var cur = ('0'+n.getHours()).slice(-2)+':'+('0'+n.getMinutes()).slice(-2);
   var key = n.toDateString()+'|'+cur;
   if(_cmAlarm.lastKey === key) return;
+  if(!_cmDayOn(n.getDay())) return;            // ★ 설정한 요일에만
   if(cur === _cmAlarm.morn){ _cmAlarm.lastKey = key; _cmPersist(); _fireCommuteBriefing('morn'); }
   else if(cur === _cmAlarm.eve){ _cmAlarm.lastKey = key; _cmPersist(); _fireCommuteBriefing('eve'); }
 }
@@ -27068,23 +27154,35 @@ function _cmScheduleOS(){
   try{
     var LN = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications;
     if(!LN) return;
-    LN.cancel({ notifications:[{id:9101},{id:9102}] }).catch(function(){});
+    // ★ 2026-09-14: 요일별로 따로 예약한다.
+    //   예전엔 id 두 개로 매일 반복이라, 요일을 골라도 주말에 울렸다.
+    //   요일마다 id 를 나눠(9110+d, 9120+d) 선택한 날에만 예약한다.
+    var _ids = [{id:9101},{id:9102}];
+    for(var _d=0; _d<7; _d++){ _ids.push({id:9110+_d}); _ids.push({id:9120+_d}); }
+    LN.cancel({ notifications:_ids }).catch(function(){});
     // ★ 알림 정책 확인 (commute_brief 허용 시에만 예약)
     if(typeof _notifAllowed==='function' && !_notifAllowed('commute_brief')) return;
     if(!_cmAlarm.on) return;
     var mh = parseInt(_cmAlarm.morn.split(':')[0]), mm = parseInt(_cmAlarm.morn.split(':')[1]);
     var eh = parseInt(_cmAlarm.eve.split(':')[0]),  em = parseInt(_cmAlarm.eve.split(':')[1]);
-    LN.schedule({ notifications:[
-      { id:9101, title:'🌅 출근길 브리핑', body:'날씨와 혼잡도 요약이 준비됐어요 — 탭해서 확인하세요', schedule:{ on:{ hour:mh, minute:mm }, repeats:true }, smallIcon:'ic_stat_icon' },
-      { id:9102, title:'🌆 퇴근길 브리핑', body:'퇴근길 날씨·혼잡도 요약 — 탭해서 확인하세요', schedule:{ on:{ hour:eh, minute:em }, repeats:true }, smallIcon:'ic_stat_icon' }
-    ]}).catch(function(){});
+    var days = (Array.isArray(_cmAlarm.days) && _cmAlarm.days.length) ? _cmAlarm.days : [0,1,2,3,4,5,6];
+    var list = [];
+    days.forEach(function(d){
+      // Capacitor 의 weekday 는 1=일요일 … 7=토요일
+      var wd = ((+d) % 7) + 1;
+      list.push({ id:9110+(+d), title:'🌅 출근길 브리핑', body:'날씨와 혼잡도 요약이 준비됐어요 — 탭해서 확인하세요',
+                  schedule:{ on:{ weekday:wd, hour:mh, minute:mm }, repeats:true }, smallIcon:'ic_stat_icon' });
+      list.push({ id:9120+(+d), title:'🌆 퇴근길 브리핑', body:'퇴근길 날씨·혼잡도 요약 — 탭해서 확인하세요',
+                  schedule:{ on:{ weekday:wd, hour:eh, minute:em }, repeats:true }, smallIcon:'ic_stat_icon' });
+    });
+    if(list.length) LN.schedule({ notifications:list }).catch(function(){});
   }catch(e){}
 }
 
 // 설정 UI 바인딩
 window._cmToggle = function(on){
   _cmAlarm.on = !!on; _cmPersist(); _cmRenderKnob(); _cmScheduleOS();
-  if(on && typeof toast==='function') toast('⏰ 출퇴근 브리핑 알림 켜짐');
+  if(typeof toast==='function') toast(on ? '⏰ 출퇴근 브리핑 알림 켜짐' : '출퇴근 브리핑 알림 꺼짐');
 };
 window._cmSaveTimes = function(){
   var m = document.getElementById('cmMornTime'), e = document.getElementById('cmEveTime');
@@ -27103,8 +27201,71 @@ window._cmSaveTimes = function(){
     _cmAlarm.toLng = (t.dataset.lng != null && t.dataset.lng !== '') ? +t.dataset.lng : null;
     _cmAlarm.toBus = t.dataset.bus === '1';
   }
-  _cmPersist(); _cmScheduleOS();
+  // ★ 2026-09-14: 퇴근 전용 출발·도착 (비워 두면 출근의 반대 방향)
+  var ef = document.getElementById('cmEveFromStn'), et = document.getElementById('cmEveToStn');
+  if(ef){
+    _cmAlarm.eFrom = ef.value.trim();
+    _cmAlarm.eFromLat = (ef.dataset.lat != null && ef.dataset.lat !== '') ? +ef.dataset.lat : null;
+    _cmAlarm.eFromLng = (ef.dataset.lng != null && ef.dataset.lng !== '') ? +ef.dataset.lng : null;
+    _cmAlarm.eFromBus = ef.dataset.bus === '1';
+  }
+  if(et){
+    _cmAlarm.eTo = et.value.trim();
+    _cmAlarm.eToLat = (et.dataset.lat != null && et.dataset.lat !== '') ? +et.dataset.lat : null;
+    _cmAlarm.eToLng = (et.dataset.lng != null && et.dataset.lng !== '') ? +et.dataset.lng : null;
+    _cmAlarm.eToBus = et.dataset.bus === '1';
+  }
+  _cmPersist(); _cmScheduleOS(); _cmRenderEveHint();
 };
+
+// 요일 칩 토글
+window._cmDayToggle = function(d){
+  d = +d;
+  if(!Array.isArray(_cmAlarm.days)) _cmAlarm.days = [1,2,3,4,5];
+  var i = _cmAlarm.days.indexOf(d);
+  if(i >= 0) _cmAlarm.days.splice(i, 1); else _cmAlarm.days.push(d);
+  _cmAlarm.days.sort();
+  _cmPersist(); _cmRenderDays(); _cmScheduleOS();
+};
+window._cmDayPreset = function(kind){
+  _cmAlarm.days = (kind === 'weekday') ? [1,2,3,4,5]
+                : (kind === 'all')     ? [0,1,2,3,4,5,6]
+                : [0,6];
+  _cmPersist(); _cmRenderDays(); _cmScheduleOS();
+};
+var _CM_DAY_NM = ['일','월','화','수','목','금','토'];
+function _cmRenderDays(){
+  var host = document.getElementById('cmDays'); if(!host) return;
+  var on = Array.isArray(_cmAlarm.days) ? _cmAlarm.days : [];
+  host.innerHTML = _CM_DAY_NM.map(function(nm, d){
+    var sel = on.indexOf(d) >= 0;
+    var col = (d===0) ? '#e5484d' : (d===6 ? '#2f6fed' : 'var(--text)');
+    return '<span onclick="_cmDayToggle(' + d + ')" style="flex:1;text-align:center;padding:9px 0;border-radius:9px;'
+      + 'font-size:13px;font-weight:800;cursor:pointer;border:1px solid '
+      + (sel ? 'var(--chip-on-bg)' : 'var(--border2)') + ';'
+      + 'background:' + (sel ? 'var(--chip-on-bg)' : 'transparent') + ';'
+      + 'color:' + (sel ? 'var(--chip-on-txt)' : col) + ';">' + nm + '</span>';
+  }).join('');
+  var note = document.getElementById('cmDaysNote');
+  if(note) note.textContent = on.length ? ('선택한 ' + on.length + '일에만 보내요.')
+                                        : '요일을 하나도 고르지 않아 매일 보내요.';
+}
+window._cmRenderDays = _cmRenderDays;
+
+// 퇴근 위치를 비워 뒀을 때 무엇이 쓰이는지 보여 준다
+function _cmRenderEveHint(){
+  var el = document.getElementById('cmEveHint'); if(!el) return;
+  var ef = (_cmAlarm.eFrom||'').trim(), et = (_cmAlarm.eTo||'').trim();
+  if(!ef && !et){
+    var a = (_cmAlarm.to||'').trim(), b = (_cmAlarm.from||'').trim();
+    el.textContent = (a && b) ? ('비워 두면 출근의 반대 — ' + a + ' → ' + b + ' 로 보내요.')
+                              : '비워 두면 출근의 반대 방향으로 보내요.';
+  } else {
+    el.textContent = '퇴근은 따로 설정한 곳으로 보내요.'
+      + (ef && et ? '' : ' (한쪽만 채우면 나머지는 출근의 반대편을 써요)');
+  }
+}
+window._cmRenderEveHint = _cmRenderEveHint;
 // 역명 → STNDB 매칭 (정확 → 부분)
 function _cmFindStn(nm){
   if(!nm || typeof STNDB==='undefined') return null;
@@ -27142,7 +27303,18 @@ function initCommuteAlarm(){
     t.value = _cmAlarm.to || '';
     if(_cmAlarm.toLat != null){ t.dataset.lat = _cmAlarm.toLat; t.dataset.lng = _cmAlarm.toLng; t.dataset.bus = _cmAlarm.toBus ? '1' : ''; }
   }
+  var ef = document.getElementById('cmEveFromStn'), et = document.getElementById('cmEveToStn');
+  if(ef){
+    ef.value = _cmAlarm.eFrom || '';
+    if(_cmAlarm.eFromLat != null){ ef.dataset.lat = _cmAlarm.eFromLat; ef.dataset.lng = _cmAlarm.eFromLng; ef.dataset.bus = _cmAlarm.eFromBus ? '1' : ''; }
+  }
+  if(et){
+    et.value = _cmAlarm.eTo || '';
+    if(_cmAlarm.eToLat != null){ et.dataset.lat = _cmAlarm.eToLat; et.dataset.lng = _cmAlarm.eToLng; et.dataset.bus = _cmAlarm.eToBus ? '1' : ''; }
+  }
   // 역 자동완성: 커스텀 드롭다운(_cmSug) 사용 — 시스템 datalist 제거됨
+  _cmRenderDays();
+  _cmRenderEveHint();
   _cmRenderKnob();
 }
 window.initCommuteAlarm = initCommuteAlarm;
