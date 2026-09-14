@@ -16566,6 +16566,11 @@ window._bgDiag = async function(){
               + ((_ls.subOffList||[]).length ? (' (' + _ls.subOffList.join(', ') + ')') : ''));
         }
         if(_ls.subFirstTrain) add('가장 이른 지하철 첫차: ' + _ls.subFirstTrain);
+        if(_ls.circRoutes){
+          add('순환 노선: ' + _ls.circRoutes + '개'
+              + ' (두 바퀴 데이터 있음 ' + (_ls.circWithLap||0) + '개)'
+              + (((_ls.circWithLap||0) < _ls.circRoutes) ? ' ← 나머지는 한 바퀴만 있어 다음 바퀴 대기를 계산 못 함' : ''));
+        }
         if(_ls.candListOnly != null){
           add('승차 후보 제한: ' + (_ls.candListOnly ? ('앱 목록 안 ' + (_ls.candInList||0) + '곳만')
                                                     : ('전체 (목록 안 ' + (_ls.candInList||0) + '곳뿐이라 해제)')));
