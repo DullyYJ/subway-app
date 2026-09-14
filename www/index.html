@@ -2055,6 +2055,70 @@ function _foodResolveCoord(destStn){
 }
 
 // 공공데이터(소상공인 상가정보 반경검색)에서 주변 음식업소 조회
+// ══════════════════════════════════════════════════════════════
+// ★ 2026-09-14: 맛집 데이터를 서버(gildongmu-food)에서도 받는다.
+//   내장 STN_FOOD 는 역당 20개(637역)뿐이고 202606 고정본이라 종류가 한정적이다.
+//   서버는 전국 음식점을 D1 에 쌓아 두고 좌표로 돌려준다(외부 API 호출 0회).
+//   ※ 기존 경로(STN_FOOD, 공공데이터 반경조회)는 그대로 둔다.
+//     서버가 죽거나 비어 있어도 지금까지와 똑같이 동작한다.
+var _FOOD_SERVER_DEFAULT = 'https://gildongmu-food.phg0643.workers.dev';
+function _foodServerBase(){
+  try{ var v=localStorage.getItem('foodServer'); if(v) return v.replace(/\/+$/,''); }catch(e){}
+  return _FOOD_SERVER_DEFAULT;
+}
+var _foodSrvCache = {};              // 좌표격자 → {ts, data}
+var _FOOD_SRV_TTL = 10*60*1000;
+var _FOOD_SRV_RADIUS = 1500;
+var _FOOD_SRV_LIMIT  = 400;
+
+// 같은 상호가 같은 자리에 중복 등록된 것 정리하며 합친다
+function _foodMergeList(base, add){
+  var out = (base||[]).slice(), seen = {};
+  out.forEach(function(p){ seen[String(p.place_name||'').replace(/\s/g,'')+'@'+(p.road_address_name||'')]=1; });
+  (add||[]).forEach(function(p){
+    if(!p || !p.place_name) return;
+    var k = String(p.place_name).replace(/\s/g,'')+'@'+(p.road_address_name||'');
+    if(seen[k]) return; seen[k]=1; out.push(p);
+  });
+  out.sort(function(a,b){
+    var da=(a.distance==null?99999:parseInt(a.distance,10)), db=(b.distance==null?99999:parseInt(b.distance,10));
+    return da-db;
+  });
+  return out;
+}
+window._foodMergeList=_foodMergeList;
+
+function _foodFromServer(lat, lng, label){
+  if(lat==null || lng==null) return;
+  var key = lat.toFixed(3)+','+lng.toFixed(3);
+  var c = _foodSrvCache[key];
+  var diag = window._foodSrvDiag = { at: key, n: 0, err: null, cached: !!c };
+  if(c && Date.now()-c.ts < _FOOD_SRV_TTL){
+    diag.n = c.data.length;
+    _foodPublicData = _foodMergeList(_foodPublicData, c.data);
+    _renderFoodList(); return;
+  }
+  var url = _foodServerBase()+'/food?lat='+lat+'&lng='+lng+'&r='+_FOOD_SRV_RADIUS+'&limit='+_FOOD_SRV_LIMIT;
+  var done=false, tid=setTimeout(function(){ if(!done){ done=true; diag.err='timeout'; } }, 6000);
+  fetch(url).then(function(r){ return r.ok ? r.json() : null; }).then(function(d){
+    if(done) return; done=true; clearTimeout(tid);
+    var items = (d && d.items) || [];
+    if(!items.length){ diag.err = d ? 'empty' : 'bad-response'; return; }
+    var mapped = items.map(function(it){
+      return { place_name: it.n, category_name: it.c||'', road_address_name: it.a||'',
+               distance: it.d, x:String(it.lo), y:String(it.la), source:'server' };
+    });
+    _foodSrvCache[key] = { ts: Date.now(), data: mapped };
+    diag.n = mapped.length;
+    _foodPublicData = _foodMergeList(_foodPublicData, mapped);
+    _renderFoodList();
+  }).catch(function(e){
+    if(done) return; done=true; clearTimeout(tid);
+    diag.err = String((e&&e.message)||e).slice(0,60);
+  });
+}
+window._foodFromServer=_foodFromServer;
+
 function _fetchPublicFood(stnNm, lat, lng){
   if(!lat||!lng) return;
   var c=_foodPubCache[stnNm];
@@ -2072,7 +2136,9 @@ function _fetchPublicFood(stnNm, lat, lng){
     return 'https://apis.data.go.kr/B553077/api/open/sdsc2/storeListInRadius'
       +'?serviceKey='+encodeURIComponent(_BUS_TAGO_KEY)
       +'&radius='+_rad+'&cx='+lng+'&cy='+lat
-      +'&indsLclsCd=Q&type=json&numOfRows=200&pageNo='+p;
+      // ★ 2026-09-14: 대분류코드가 Q(공공·행정·국방)로 잘못 박혀 있어 늘 0건이었다.
+      //   API 의 업종코드 목록(largeUpjongList)으로 확인한 음식 대분류는 I2 다.
+      +'&indsLclsCd=I2&type=json&numOfRows=200&pageNo='+p;
   };
   var finish = function(){
     var seen = {};
@@ -2092,7 +2158,8 @@ function _fetchPublicFood(stnNm, lat, lng){
     });
     mapped.sort(function(a,b){ return (a.distance==null?99999:a.distance)-(b.distance==null?99999:b.distance); });
     diag.total = mapped.length;
-    _foodPublicData=mapped;
+    // ★ 2026-09-14: 덮어쓰지 않고 합친다(서버 목록과 공존)
+    _foodPublicData=_foodMergeList(_foodPublicData, mapped);
     _foodPubCache[stnNm]={ ts:Date.now(), data:mapped };
     _renderFoodList();
   };
@@ -2174,6 +2241,13 @@ function _foodFromStn(destStn){
   }
   if(!arr || !arr.length){
     _foodAllData=[];
+    // ★ 2026-09-14: 내장 목록이 없어도 여기서 끝내지 않는다 — 서버에 물어본다.
+    if(_foodStnCoord && typeof _foodFromServer==='function'){
+      if(list) list.innerHTML='<div class="food-loading"><div class="food-spinner"></div>'+_ltEsc(String(destStn))+' \uc8fc\ubcc0 \uc74c\uc2dd\uc810 \ubd88\ub7ec\uc624\ub294 \uc911...</div>';
+      _foodFromServer(_foodStnCoord.lat, _foodStnCoord.lng, String(destStn));
+      if(typeof _fetchPublicFood==='function') _fetchPublicFood(String(destStn), _foodStnCoord.lat, _foodStnCoord.lng);
+      return;
+    }
     if(list) list.innerHTML='<div class="food-empty">\uD83C\uDF7D\uFE0F<br>'+_ltEsc(String(destStn))+' \uc5ed \uc778\uadfc \ub4f1\ub85d \uc74c\uc2dd\uc810 \uc815\ubcf4\uac00 \uc5c6\uc5b4\uc694</div>';
     return;
   }
@@ -2186,6 +2260,9 @@ function _foodFromStn(destStn){
   // ★ 반경 1km 공공데이터(소상공인 상가정보) 추가 조회 → 목록 하단에 더 많은 음식점
   if(_foodStnCoord && typeof _fetchPublicFood==='function')
     _fetchPublicFood(String(destStn), _foodStnCoord.lat, _foodStnCoord.lng);
+  // ★ 2026-09-14: 전국 맛집 서버(D1)도 함께 조회해 목록을 넓힌다
+  if(_foodStnCoord && typeof _foodFromServer==='function')
+    _foodFromServer(_foodStnCoord.lat, _foodStnCoord.lng, String(destStn));
 }
 window._foodFromStn=_foodFromStn;
 
@@ -16528,6 +16605,9 @@ window._bgDiag = async function(){
       _fd.pages.forEach(function(p){ add('  · ' + p.p + '페이지: ' + p.got + '건' + (p.err ? (' / 오류 ' + p.err) : '')); });
       if(_fd.err) add('  · 오류: ' + _fd.err);
     } else add('맛집 공공데이터: 아직 조회 안 함');
+    var _sd = window._foodSrvDiag;
+    if(_sd) add('맛집 서버: ' + _sd.n + '건' + (_sd.cached ? ' (캐시)' : '') + (_sd.err ? (' / ' + _sd.err) : '') + ' · ' + (typeof _foodServerBase==='function' ? _foodServerBase() : ''));
+    else add('맛집 서버: 아직 조회 안 함');
     if(typeof LOCFSM !== 'undefined'){
       add('위치 상태: ' + LOCFSM.state + (LOCFSM.anchor ? (' (' + LOCFSM.anchor.src + ')') : ''));
       add('튐으로 버린 GPS: ' + LOCFSM.rejected + '건');
