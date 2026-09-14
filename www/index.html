@@ -10224,12 +10224,44 @@ function _rtDwellMin(nd){
 var _RT_ARRIVE_GRACE_MIN = 0.5;    // 도착 확정 유예 30초
 var _RT_HOLD_RATIO       = 0.97;   // 확정 전 대기 위치(역 직전)
 
+// ★ 내 위치 근거의 신선도 — GPS 위치와 기지국 통과기록 중 더 최근 것.
+//   지하에서는 GPS 가 오래된 값뿐이라 GPS 나이만 보면 근거가 없는 것처럼 보인다.
+var _EVIDENCE_FRESH_MS = 150000;   // 2분 30초 (지하철 한 구간보다 조금 길게)
+function _evidenceIdxNow(){
+  try{ return (typeof _progEvidenceIdx === 'function') ? _progEvidenceIdx()
+            : (window._gpsConfirmIdx == null ? -1 : window._gpsConfirmIdx); }
+  catch(e){ return -1; }
+}
+function _evidenceAgeMs(){
+  var best = Infinity;
+  try{
+    if(typeof _htlFixAgeMs === 'function'){ var a = _htlFixAgeMs(); if(a != null && a < best) best = a; }
+  }catch(e){}
+  try{
+    var pm = window._nodePassMs || {}, now = Date.now();
+    for(var k in pm){ if(!pm[k]) continue; var d = now - pm[k]; if(d >= 0 && d < best) best = d; }
+  }catch(e){}
+  return best;
+}
+window._evidenceAgeMs = _evidenceAgeMs;
+
 // timed[i] 역의 도착이 확정되었는가
 function _rtArriveConfirmed(t, nowMin){
   if(!t) return true;
-  if(!_rtNoCover(t.nd || (typeof _transitNodeData !== 'undefined' ? _transitNodeData[t.idx] : null))) return true;
   var gi = (window._gpsMaxIdx == null ? -1 : window._gpsMaxIdx);
   if(gi >= t.idx) return true;                       // ① GPS가 이미 그 역 이상 진행
+
+  // ★ 2026-09-14: 근거(GPS 또는 기지국)가 '아직 거기 못 갔다'고 말하고
+  //   그 근거가 신선하면 시각표보다 그쪽을 믿는다.
+  //   증상: 예정보다 10분 늦은 차를 탔는데, 실시간 커버 노선이라는 이유로 점이 시각표대로
+  //        계속 앞서 나가 실제 위치(임학)보다 4정거장 앞(갈산)에 찍혔다.
+  //   내 위치 근거는 열차 시각표보다 '내가 어디 있는지'에 대한 더 직접적인 증거다.
+  //   지하에서는 GPS 가 죽으므로 기지국 통과기록도 같은 자격으로 본다.
+  try{
+    if(_evidenceIdxNow() >= 0 && _evidenceAgeMs() < _EVIDENCE_FRESH_MS) return false;
+  }catch(e){}
+
+  if(!_rtNoCover(t.nd || (typeof _transitNodeData !== 'undefined' ? _transitNodeData[t.idx] : null))) return true;
   return nowMin >= t.min + _RT_ARRIVE_GRACE_MIN;      // ② 예정시각 + 유예 경과
 }
 
@@ -10317,7 +10349,18 @@ function _recalcArrivalsFrom(anchorIdx){
 //   · 아직 안 탔으면: 승차역 시각이 지금보다 뒤여야 한다(이미 지난 차를 가리킬 수 없다)
 //   · 이미 탔으면  : 진행 중인 노드 시각이 지금 근처여야 한다
 //   크게 어긋나면 경로 전체를 통째로 평행 이동시켜 '지금'에 맞춘다.
-var _HTL_SANITY_TOL_MIN = 40;
+var _HTL_SANITY_TOL_MIN = 40;      // 근거가 약할 때(승차 전·추정)
+// ★ 2026-09-14: GPS 로 '여기를 지났다'가 확정된 노드는 훨씬 빡빡하게 본다.
+//   증상: 06:08 차로 안내받았는데 걸어가서 06:18 차를 탔더니, 06:30 에 실제로는
+//        임학인데 앱 타임라인 점은 갈산을 지나 있었다. PiP 만 임학로 맞았다.
+//   원인: 교정 허용치가 40분이라 10분쯤 어긋난 건 그대로 두고,
+//        타임라인 점은 '탐색 시점 시각'만 보고 계속 앞서 나갔다.
+//   → 지난 노드는 실제 통과 시각(_nodePassMs)으로 덮고, 그 뒤는 같은 만큼 민다.
+var _HTL_SANITY_TOL_GPS = 2;
+function _msToMinOfDay(ms){
+  var d = new Date(ms);
+  return d.getHours()*60 + d.getMinutes() + d.getSeconds()/60;
+}
 function _htlSanityCheck(){
   try{
     // ★ 2026-09-04: 확정 전 경로는 엔진 시각 그대로 둔다(여기서 당기면 탭마다 달라진다)
@@ -10339,23 +10382,47 @@ function _htlSanityCheck(){
     }
     if(idx < 0) return;
 
-    var gap = (typeof _markerTimeGap === 'function') ? _markerTimeGap(_transitNodeData[idx]) : null;
+    // ★ GPS 로 통과가 확정되고 실제 통과 시각까지 남아 있으면 그 노드를 기준으로 삼는다.
+    //   '지금'이 아니라 '그때 실제로 지난 시각'과 비교해야 정확하다.
+    var passMs = (window._nodePassMs && window._nodePassMs[idx] != null) ? window._nodePassMs[idx] : null;
+    // ★ 근거는 GPS 든 기지국이든 상관없다. 통과 시각이 남아 있으면 그게 사실이다.
+    var confirmed = (passMs != null &&
+                     ((window._gpsConfirmIdx != null && window._gpsConfirmIdx >= idx) ||
+                      (typeof _progEvidenceIdx === 'function' && _progEvidenceIdx() >= idx)));
+
+    var gap, tol;
+    if(confirmed){
+      var nd0 = _transitNodeData[idx];
+      if(nd0._schedMin == null) return;
+      gap = nd0._schedMin - _msToMinOfDay(passMs);       // 양수 = 예정보다 일찍 지남(=시각표가 늦음)
+      if(gap >  720) gap -= 1440;
+      if(gap < -720) gap += 1440;
+      tol = _HTL_SANITY_TOL_GPS;
+    } else {
+      gap = (typeof _markerTimeGap === 'function') ? _markerTimeGap(_transitNodeData[idx]) : null;
+      tol = _HTL_SANITY_TOL_MIN;
+    }
     if(gap == null) return;
-    if(Math.abs(gap) <= _HTL_SANITY_TOL_MIN) return;             // 정상 범위
+    if(Math.abs(gap) <= tol) return;                             // 정상 범위
 
     // 같은 값을 반복 교정하지 않는다
     var now = Date.now();
-    if(window._htlSanityAt && (now - window._htlSanityAt) < 30000) return;
+    var minGapMs = confirmed ? 8000 : 30000;
+    if(window._htlSanityAt && (now - window._htlSanityAt) < minGapMs) return;
     window._htlSanityAt = now;
 
     console.warn('[경로시각] 기준 노드 ' + (_transitNodeData[idx].name||'?')
-      + '(' + _transitNodeData[idx].arrTime + ')가 현재와 ' + Math.round(gap)
-      + '분 차이 → 경로 전체를 현재 기준으로 맞춤');
-    // gap 이 양수면 미래로 밀려 있으므로 그만큼 당긴다
+      + '(' + _transitNodeData[idx].arrTime + ')가 '
+      + (confirmed ? '실제 통과 시각' : '현재')
+      + '과 ' + Math.round(gap) + '분 차이 → 경로 시각을 맞춤');
+
     var mins = -gap;
-    _transitNodeData.forEach(function(nd){
+    _transitNodeData.forEach(function(nd, i){
       if(nd._schedMin == null) return;
-      nd._schedMin += mins;
+      // 이미 지난 노드는 '실제로 지난 시각'이 있으면 그 값으로 덮는다(추정보다 사실이 낫다)
+      var pm = (window._nodePassMs && window._nodePassMs[i] != null) ? window._nodePassMs[i] : null;
+      if(confirmed && pm != null && i <= idx) nd._schedMin = _msToMinOfDay(pm);
+      else nd._schedMin += mins;
       var t = ((nd._schedMin % 1440) + 1440) % 1440;
       var _h = Math.floor(t/60), _m = Math.round(t%60);
       if(_m >= 60){ _m -= 60; _h = (_h+1)%24; }
@@ -10363,6 +10430,7 @@ function _htlSanityCheck(){
       if(nd.el){ var lbl = nd.el.querySelector('.htl-time-lbl'); if(lbl) lbl.textContent = nd.arrTime; }
     });
     window._markerMaxProg = null;      // 위치 상한도 초기화
+    try{ if(typeof _aiArrivalSync === 'function') _aiArrivalSync(); }catch(e){}
   }catch(e){}
 }
 window._htlSanityCheck = _htlSanityCheck;
@@ -11882,6 +11950,11 @@ function _cellAssist(){
     console.log('[기지국] ' + g.name + ' 추정 (관측 ' + g.hits + '회) → 진행도 ' + cur + '→' + idx);
     window._gpsConfirmIdx = idx;
     window._gpsMaxIdx = Math.max((window._gpsMaxIdx == null ? -1 : window._gpsMaxIdx), idx);
+    // ★ 2026-09-14: 통과 시각을 남긴다.
+    //   _cellHopAdvance 는 남기는데 여기만 빠져 있었다. 이 값이 없으면
+    //   시각 재앵커(_htlSanityCheck)가 근거를 못 찾아 지하에서 그대로 어긋난 채 간다.
+    window._nodePassMs = window._nodePassMs || {};
+    if(window._nodePassMs[idx] == null) window._nodePassMs[idx] = Date.now();
     try{ if(typeof _htlEarlyTrack === 'function'){ window._htlEarlyAt = 0; _htlEarlyTrack(); } }catch(e){}
   });
 }
