@@ -3604,7 +3604,16 @@ function _stnBadge(stn, line){
 //   → 화면에 보이는 타임라인을 기준으로 삼아 두 숫자를 하나로 맞춘다.
 function _htlDepArrTimes(){
   try{
-    var nd = window._lastHtlNodes;
+    // ★ 2026-09-15: _htlShiftFrom(지연·단축 보정)은 _transitNodeData 만 고쳤고
+    //   _lastHtlNodes 는 탐색 당시 값 그대로였다. 그래서 세부경로 시각만 움직이고
+    //   AI 승무원·PiP·남은시간은 옛 시각에 머물러 전부 어긋났다.
+    //   → 보정이 반영되는 쪽(_schedMin 을 들고 있는 배열)을 먼저 본다.
+    var nd = null;
+    try{
+      if(typeof _transitNodeData !== 'undefined' && _transitNodeData && _transitNodeData.length
+         && _transitNodeData.some(function(x){ return x && x._schedMin != null; })) nd = _transitNodeData;
+    }catch(e1){}
+    if(!nd) nd = window._lastHtlNodes;
     if(!nd || !nd.length) return null;
     var re = /^\d{1,2}:\d{2}$/;
     var dep = null, arr = null;
@@ -9652,6 +9661,11 @@ function _etaResearchIfStale(){
     if(!j.stale || j.preview) return false;
     if(!window._lastHtlNodes || !window._lastHtlNodes.length) return false;
     if(typeof S !== 'undefined' && S && S.boardedAt) return false;        // 이미 탄 뒤
+    // ★ 2026-09-15: 이동 중에 재탐색이 돌아 '경로를 찾을 수 없습니다'가 떴다.
+    //   진행 흔적(GPS 통과 · 지연/단축 보정)이 하나라도 있으면 이미 출발한 것이다.
+    if(window._gpsMaxIdx != null && window._gpsMaxIdx > 0) return false;
+    if(window._htlDelaySec) return false;
+    if(typeof _htlNotDeparted === 'function' && !_htlNotDeparted()) return false;
     if(window._rerouteCooldownUntil && Date.now() < window._rerouteCooldownUntil) return false;
     if(Date.now() - (window._etaResearchAt||0) < _ETA_RESEARCH_COOL) return false;
     if(typeof fmapDoRoute !== 'function') return false;
@@ -10823,6 +10837,23 @@ function _htlShiftFrom(fromIdx, sec){
       prev = nd._schedMin;
     });
   })();
+  // ★ 2026-09-15: 홈 타임라인 배열도 같은 폭으로 옮긴다.
+  //   이걸 안 하면 AI 승무원·PiP 가 보정 전 시각을 계속 읽는다.
+  try{
+    var _ln = window._lastHtlNodes;
+    if(_ln && _ln.length && _ln !== _transitNodeData){
+      var _re = /^\d{1,2}:\d{2}$/;
+      for(var _i=fromIdx; _i<_ln.length; _i++){
+        var _n = _ln[_i];
+        if(!_n || !_re.test(String(_n.arrTime||''))) continue;
+        var _q = String(_n.arrTime).split(':');
+        var _t = ((parseInt(_q[0],10)*60 + parseInt(_q[1],10) + mins) % 1440 + 1440) % 1440;
+        var _h3 = Math.floor(_t/60), _m3 = Math.round(_t%60);
+        if(_m3 >= 60){ _m3 -= 60; _h3 = (_h3+1)%24; }
+        _n.arrTime = ('0'+_h3).slice(-2) + ':' + ('0'+_m3).slice(-2);
+      }
+    }
+  }catch(e){}
   window._htlDelaySec = (window._htlDelaySec || 0) + sec;
   // 1분 단위로 넘어갈 때만 1회 안내 (반복 토스트 방지)
   try{
@@ -10834,6 +10865,7 @@ function _htlShiftFrom(fromIdx, sec){
   }catch(e){}
   try { if(typeof _updateRouteRemaining==='function') _updateRouteRemaining(); } catch(e){}
   try { if(typeof _syncHomeBriefRemaining==='function') _syncHomeBriefRemaining(); } catch(e){}
+  try { if(typeof _pipPaint==='function') _pipPaint(); } catch(e){}   // 작은 화면도 같이
 }
 window._htlShiftFrom = _htlShiftFrom;
 
@@ -12668,7 +12700,8 @@ function _syncHomeBriefRemaining(rem){
     var titleEl = document.getElementById('homeAiTitle');
     // ★ 도착시각이 있으면 남은시간도 거기서 역산해 둘을 맞춘다
     try{
-      var _ep0 = (typeof _etaPair==='function') ? _etaPair() : null;
+      var _ep0 = (typeof _journeyEta==='function') ? _journeyEta()
+               : ((typeof _etaPair==='function') ? _etaPair() : null);
       if(_ep0 && _ep0.rem != null) rem = _ep0.rem;
     }catch(e0){}
     if(titleEl && rem != null && rem >= 0){
@@ -12683,7 +12716,8 @@ function _syncHomeBriefRemaining(rem){
     var arrEl = document.getElementById('homeAiArr');
     if(arrEl && rem != null && rem >= 0){
       // ★ 갱신할 때도 타임라인 기준을 우선한다
-      var _ep2 = (typeof _etaPair==='function') ? _etaPair() : null;
+      var _ep2 = (typeof _journeyEta==='function') ? _journeyEta()
+               : ((typeof _etaPair==='function') ? _etaPair() : null);
       var arr = new Date((_ep2 && _ep2.arrMs) || (Date.now() + rem*60000));
       var pad = function(n){ return (n<10?'0':'')+n; };
       arrEl.innerHTML = '도착은 <b>' + pad(arr.getHours()) + ':' + pad(arr.getMinutes()) + '</b>경으로 예상됩니다.';
@@ -32169,7 +32203,8 @@ function _pipData(){
       out.min  = (r.min != null) ? r.min : null;
     }
     // ★ 화면과 같은 함수를 쓴다 — 앱 카드와 작은 화면의 숫자가 어긋나지 않게
-    var _ep = (typeof _etaPair === 'function') ? _etaPair() : null;
+    var _ep = (typeof _journeyEta === 'function') ? _journeyEta()
+            : ((typeof _etaPair === 'function') ? _etaPair() : null);
     var ms = (_ep && _ep.arrMs) || null;
     if(_ep && _ep.rem != null) out.min = _ep.rem;
     if(!ms && out.min != null) ms = Date.now() + out.min*60000;
