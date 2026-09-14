@@ -3337,7 +3337,9 @@ function _renderHomeBrief(data, fromName, toName, hour, congPct){
   var hasRoute = toName && toName !== fromName;
   var _isMetroR = (window._metroRouteMode === true);
   var _remWord = _isMetroR ? '소요시간: ' : '남은시간: ';
-  var _remT = ((_isMetroR || !_preview) && hasRoute && window._homeRouteBaseMin > 0) ? (_remWord + window._homeRouteBaseMin + '분') : timeStr;
+  // ★ 2026-09-14: 총 소요시간을 '남은시간'으로 쓰던 자리. 도착시각에서 역산한 값을 먼저 쓴다.
+  var _remMin = (typeof _etaRemainMin==='function') ? _etaRemainMin(window._homeRouteBaseMin) : window._homeRouteBaseMin;
+  var _remT = ((_isMetroR || !_preview) && hasRoute && _remMin > 0) ? (_remWord + _remMin + '분') : timeStr;
   if(titleEl) titleEl.textContent = _pre + (hasRoute
     ? fromName + ' → ' + toName + ' · ' + _remT
     : fromName + ' · ' + timeStr + ' 기준');
@@ -3500,7 +3502,8 @@ function _renderHomeBriefLocal(fromName, toName, hour, congPct){
 
   // ── 실시간: 승무원 말투 브리핑(날씨+교통+환승+소요시간) ──
   if(titleEl){
-    var _remT2 = (hasRoute && window._homeRouteBaseMin > 0) ? ((window._metroRouteMode===true?'소요시간: ':'남은시간: ') + window._homeRouteBaseMin + '분') : timeStr;
+    var _remMin2 = (typeof _etaRemainMin==='function') ? _etaRemainMin(window._homeRouteBaseMin) : window._homeRouteBaseMin;
+    var _remT2 = (hasRoute && _remMin2 > 0) ? ((window._metroRouteMode===true?'소요시간: ':'남은시간: ') + _remMin2 + '분') : timeStr;
     titleEl.textContent = hasRoute ? (fromName + ' → ' + toName + ' · ' + _remT2) : (fromName + ' · ' + timeStr + ' 기준');
   }
   _renderHomeConductorBrief(fromName, toName, hour, congPct, null);
@@ -3793,7 +3796,8 @@ function _renderHomeConductorBrief(fromName, toName, hour, congPct, serverMsg){
         // (실시간 추적 모드) 도착 예정 시각 — 남은시간 갱신에 따라 실시간 업데이트
         try {
           // ★ 타임라인과 같은 값을 쓴다(없으면 종전처럼 계산)
-          var _ep = (typeof _etaPair==='function') ? _etaPair() : null;
+          var _ep = (typeof _journeyEta==='function') ? _journeyEta()
+                  : ((typeof _etaPair==='function') ? _etaPair() : null);
           var arr=new Date((_ep && _ep.arrMs) || (Date.now()+mins*60000)); var pad2=function(n){return(n<10?'0':'')+n;};
           ps.push('<span id="homeAiArr">도착은 <b>' + pad2(arr.getHours()) + ':' + pad2(arr.getMinutes()) + '</b>경으로 예상됩니다.</span>');
         } catch(e){}
@@ -9584,6 +9588,77 @@ function _etaPair(){
 }
 window._etaPair = _etaPair;
 
+// ★ 2026-09-14: 화면에 도착시각이 나오는 곳이 셋(타임라인 · 남은시간 · AI 승무원)인데
+//   서로 다른 근거를 썼다. 실기기: 타임라인 아라 18:25 / 남은시간 97분 / AI 19:14.
+//   16:48 + 97분 = 18:25 — 같은 경로인데 기준점만 달랐다.
+//     · 타임라인 : 탐색 순간(_htlBaseMs)에 한 번 그리고 그대로 둔다
+//     · 남은시간 : 엔진이 준 총 소요(_homeRouteBaseMin)를 그대로 쓴다 → 시간이 흘러도 안 줄어든다
+//     · AI      : 지금 + 그 총 소요
+//   게다가 시각 보정(_htlSanityCheck 등)이 전부 GPS 틱 안에 있어서,
+//   GPS 가 안 돌면 영영 안 맞춰졌다.
+//   → 도착시각 하나만 기준으로 삼고, 남은시간은 거기서 역산한다.
+//     모든 표시가 이 함수만 본다.
+var _ETA_DEP_PASSED_MS = 2*60*1000;    // 승차 예정시각이 이만큼 지나면 낡은 안내로 본다
+var _ETA_DRAW_OLD_MS   = 10*60*1000;   // 그린 지 이만큼 지나면 낡은 안내로 본다
+var _ETA_RESEARCH_COOL = 3*60*1000;    // 자동 재탐색 최소 간격
+
+function _journeyEta(){
+  var out = { arrMs:null, rem:null, depMs:null, src:'none', ageMs:null, stale:false, preview:false };
+  try{
+    var ep = (typeof _etaPair==='function') ? _etaPair() : null;
+    if(ep){ out.arrMs = ep.arrMs; out.rem = ep.rem; out.src = ep.src; }
+
+    var t = (typeof _htlDepArrTimes==='function') ? _htlDepArrTimes() : null;
+    if(t && t.dep && typeof _etaHmToMs==='function') out.depMs = _etaHmToMs(t.dep);
+
+    var drawn = window._htlDrawnAt || 0;
+    if(drawn) out.ageMs = Date.now() - drawn;
+
+    // 예상(미래 기준시각) 모드·노선도 미리보기는 '지금'과 비교하지 않는다
+    out.preview = !!((typeof _baseTimeMs!=='undefined' && _baseTimeMs != null) || window._metroRouteMode === true);
+    if(!out.preview){
+      if(out.depMs != null && Date.now() - out.depMs > _ETA_DEP_PASSED_MS) out.stale = true;
+      if(out.arrMs != null && Date.now() > out.arrMs) out.stale = true;
+      if(out.ageMs != null && out.ageMs > _ETA_DRAW_OLD_MS) out.stale = true;
+    }
+    // 도착시각이 있으면 남은시간은 항상 거기서 역산 (두 값이 어긋날 수 없게)
+    if(out.arrMs != null) out.rem = Math.max(0, Math.round((out.arrMs - Date.now())/60000));
+  }catch(e){}
+  return out;
+}
+window._journeyEta = _journeyEta;
+
+// 표시용 남은시간(분). 도착시각이 있으면 그걸로, 없으면 종전 값으로 물러난다.
+function _etaRemainMin(fallback){
+  try{
+    var j = _journeyEta();
+    if(j && j.rem != null && !j.preview) return j.rem;
+  }catch(e){}
+  return fallback;
+}
+window._etaRemainMin = _etaRemainMin;
+
+// 낡은 안내면 경로를 다시 잡는다. (GPS 없이도 돈다)
+//   · 예상 모드·미리보기·이미 탑승한 뒤에는 손대지 않는다
+//   · 3분에 한 번만, 확정 경로는 같은 유형으로 다시 확정된다
+function _etaResearchIfStale(){
+  try{
+    if(document.hidden) return false;
+    var j = _journeyEta();
+    if(!j.stale || j.preview) return false;
+    if(!window._lastHtlNodes || !window._lastHtlNodes.length) return false;
+    if(typeof S !== 'undefined' && S && S.boardedAt) return false;        // 이미 탄 뒤
+    if(window._rerouteCooldownUntil && Date.now() < window._rerouteCooldownUntil) return false;
+    if(Date.now() - (window._etaResearchAt||0) < _ETA_RESEARCH_COOL) return false;
+    if(typeof fmapDoRoute !== 'function') return false;
+    window._etaResearchAt = Date.now();
+    if(window._routeLocked) window._relockAfterReroute = window._lockedRouteType || 'fast';
+    setTimeout(fmapDoRoute, 200);
+    return true;
+  }catch(e){ return false; }
+}
+window._etaResearchIfStale = _etaResearchIfStale;
+
 function _highlightRouteTab(type){
   ['fast','less','sub','bus'].forEach(function(t) {
     var btn = document.getElementById('routeTab' + t.charAt(0).toUpperCase() + t.slice(1));
@@ -12671,9 +12746,16 @@ if(!window._aiArrTimer){
   window._aiArrTimer = setInterval(function(){
     try{
       if(document.hidden) return;
+      // ★ 2026-09-14: 예전엔 경로 탭 카드가 보일 때만 돌았다.
+      //   홈 탭에서는 틱이 멈춰 남은시간·도착시각이 탐색 순간에 얼어 있었다.
+      //   타임라인이 살아 있으면 어느 탭이든 계속 맞춘다.
       var card = document.getElementById('transitResultCard');
-      if(!card || card.style.display === 'none') return;
+      var visible = !!(card && card.style.display !== 'none');
+      var hasTl   = !!(window._lastHtlNodes && window._lastHtlNodes.length);
+      if(!visible && !hasTl) return;
       _updateRouteRemaining();
+      // 승차 예정시각이 지났거나 너무 오래된 안내면 경로를 다시 잡는다
+      if(typeof _etaResearchIfStale==='function') _etaResearchIfStale();
     }catch(e){}
   }, 15000);
 }
