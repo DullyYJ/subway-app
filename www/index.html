@@ -8002,6 +8002,9 @@ window._hideRouteLoading = _hideRouteLoading;
 
     // ★ 출발지 주변 실시간 버스 대기를 먼저 모아 엔진에 넘긴다(rtw).
     //   못 모으거나 늦으면 빈 값으로 진행 — 기존 동작 그대로다.
+    _ensureStopsParam(start.lat, start.lng, function(_spNow){
+    window._spForThisSearch = _spNow || '';
+    if(!_spNow) console.warn('[승차후보] 주변 정류장 목록을 못 만들어 전 범위에서 고릅니다');
     _collectRTW(start.lat, start.lng, function(rtw){
     // ★ 2026-08-31: 오래된 응답이라 버릴 때도 로딩 오버레이는 반드시 끈다.
     //   transitLoading 은 position:fixed;inset:0;z-index:9000 인 전체 화면 덮개다.
@@ -8020,8 +8023,8 @@ window._hideRouteLoading = _hideRouteLoading;
     if(rtw) console.log('[route-v2-rtw]', rtw);
 
     // 자체 경로엔진(route-v2): 1회 호출로 3모드(minTime/minTransfer/minWalk) 반환
-    // ★ 승차 후보를 앱이 보여 준 정류장으로 맞춘다
-    var _sp = (typeof _stopsParam === 'function') ? _stopsParam() : '';
+    // ★ 승차 후보를 앱이 보여 준 정류장으로 맞춘다 (없으면 방금 받아 온 목록)
+    var _sp = window._spForThisSearch || '';
     var urls = [ _routeV2Url(_coordQs
                   + (rtw ? ('&rtw=' + encodeURIComponent(rtw)) : '')
                   + (_sp ? ('&stops=' + encodeURIComponent(_sp)) : '')) ];
@@ -8298,6 +8301,7 @@ window._hideRouteLoading = _hideRouteLoading;
       toast('네트워크 오류: ' + (e.message || ''));
     });
     });   // _collectRTW 콜백 끝
+    });   // _ensureStopsParam 콜백 끝
   }
 
   _resolve(qS, _fmapStart, function(r){ _done.start = r; _done.s = true; _run(); });
@@ -8472,6 +8476,44 @@ window._rtwNote = _rtwNote;
 //   → 화면에 보여 준 정류장의 좌표를 그대로 보내 승차 후보를 거기로 맞춘다.
 //     엔진은 이 목록과 하나도 안 맞으면 예전 방식으로 되돌아가므로 경로가 끊기지 않는다.
 var _STOPS_MAX = 12;   // 너무 길면 주소가 길어져 잘릴 수 있다
+
+// ★ 2026-09-14: 승차 정류장은 '지도앱(노선도 버스탭)에 보이는 정류장'만 쓴다 — 절대규칙.
+//   증상: 선광(도보 12분)에서 태웠는데 버스탭 목록에 없는 정류장이었다.
+//   원인: 목록을 _nearStopsCache 에서 가져오는데, 그게 버스탭을 마지막으로 본
+//        위치·시각 기준이었다. 다른 동네에서 탐색하거나 탭을 안 열었으면
+//        빈 값이 나갔고, 엔진은 목록이 없으니 전 범위에서 골랐다.
+//   → 출발지에서 멀거나 오래된 목록은 쓰지 않고, 없으면 탐색 직전에 새로 받는다.
+var _STOPS_NEAR_M   = 400;        // 캐시 중심이 출발지에서 이보다 멀면 다른 동네 목록
+var _STOPS_MAX_AGE  = 10*60*1000; // 10분
+
+function _stopsParamOk(lat, lng){
+  var c = window._nearStopsCache;
+  if(!c || !c.stops || !c.stops.length) return false;
+  if(c.ts && (Date.now() - c.ts) > _STOPS_MAX_AGE) return false;
+  if(lat != null && lng != null && c.lat != null && c.lng != null){
+    try{ if(_hav(lat, lng, c.lat, c.lng) > _STOPS_NEAR_M) return false; }catch(e){}
+  }
+  return true;
+}
+window._stopsParamOk = _stopsParamOk;
+
+// 목록이 없거나 안 맞으면 탐색 직전에 받아 온다(최대 2.5초, 실패해도 그냥 진행)
+function _ensureStopsParam(lat, lng, cb){
+  if(_stopsParamOk(lat, lng)){ cb(_stopsParam()); return; }
+  if(typeof _fetchNearStops !== 'function'){ cb(''); return; }
+  var done = false;
+  var to = setTimeout(function(){ if(!done){ done = true; cb(_stopsParamOk(lat,lng) ? _stopsParam() : ''); } }, 2500);
+  try{
+    _fetchNearStops(lat, lng, function(err, stops){
+      if(done) return; done = true; clearTimeout(to);
+      if(!err && stops && stops.length){
+        window._nearStopsCache = { ts: Date.now(), lat: lat, lng: lng, stops: stops.slice(0,6) };
+      }
+      cb(_stopsParamOk(lat,lng) ? _stopsParam() : '');
+    });
+  }catch(e){ if(!done){ done = true; clearTimeout(to); cb(''); } }
+}
+window._ensureStopsParam = _ensureStopsParam;
 
 function _stopsParam(){
   try{
