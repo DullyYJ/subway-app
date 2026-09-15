@@ -8337,9 +8337,35 @@ window._hideRouteLoading = _hideRouteLoading;
         });
       });
     };
-    Promise.all(urls.map(function(url, ui) {
-      return _fetchJson(url, ui === 0 ? _ROUTE_MAIN_TIMEOUT : _ROUTE_ALT_TIMEOUT);
-    }))
+    // ★ 2026-09-15: 엔진 요청 7건을 한꺼번에 던지던 것을 단계로 나눈다.
+    //   실기기 로그: 7건이 전부 제한시간에 딱 맞춰 타임아웃(4500·9000ms)했다.
+    //   엔진은 요청마다 노선 110개·정류장 25,525개로 그래프를 새로 만든다.
+    //   그걸 같은 워커에 7개 동시에 밀어넣으니 서로 CPU를 뺏어 전부 늦어졌다.
+    //   (11:03 단독 탐색은 같은 엔진에서 정상 응답했다)
+    //   → ① 내 위치 요청 하나만 먼저, 넉넉한 시간을 준다
+    //     ② 경로가 나오면 거기서 끝 — 주변 정류장은 묻지 않는다
+    //     ③ 없을 때만 가까운 두 곳을 물어본다
+    //   결과 배열 모양(길이·순서)은 그대로 둬서 아래 로직은 손대지 않는다.
+    var _routeStaged = function(){
+      return _fetchJson(urls[0], _ROUTE_MAIN_TIMEOUT).then(function(main){
+        var out = new Array(urls.length); out[0] = main || null;
+        var got = 0;
+        try{ got = ((main && main.result && main.result.path) || []).length; }catch(e){}
+        if(got || urls.length < 2){
+          try{ window._routeStagePlan = got ? '내 위치 1건으로 충분' : '대안 없음'; }catch(e){}
+          return out;
+        }
+        var altN = Math.min(_ROUTE_ALT_PARALLEL, urls.length - 1);
+        try{ window._routeStagePlan = '내 위치 실패 → 주변 ' + altN + '곳 추가'; }catch(e){}
+        return Promise.all(urls.slice(1, 1 + altN).map(function(u){
+          return _fetchJson(u, _ROUTE_ALT_TIMEOUT);
+        })).then(function(alts){
+          for(var i = 0; i < alts.length; i++) out[i + 1] = alts[i];
+          return out;
+        });
+      });
+    };
+    _routeStaged()
     .then(function(results) {
       // ★ 더 새로운 결과가 이미 그려졌으면 이 응답은 버린다 (오래된 경로 표시 방지)
       //   버리더라도 로딩 덮개는 먼저 끈다.
@@ -8422,7 +8448,8 @@ window._hideRouteLoading = _hideRouteLoading;
             at: Date.now(),
             from: (typeof start!=='undefined' && start && start.name) || '',
             to:   (typeof dest !=='undefined' && dest  && dest.name)  || '',
-            req:  (results || []).length,
+            req:  (window._routeFetchLog || []).length,
+            plan: window._routeStagePlan || null,
             ok:   _okN, empty: _emptyN, fail: _failN,
             log:  (window._routeFetchLog || []).slice(0, 8),
             ver:  window._engVer || null,
@@ -8932,8 +8959,11 @@ window._orderByDirection = _orderByDirection;
 var _ALT_ORIGIN_MAX      = 8;     // 안전 상한(요청 수 폭주 방지) — 보통 목록이 6개 안팎
 var _ALT_ORIGIN_POOL     = 16;    // 방향 판정 전에 모아두는 후보 수
 var _ALT_ORIGIN_RADIUS_M = 1200;  // 버스 탭 목록이 잡는 범위를 덮는 값
-var _ROUTE_MAIN_TIMEOUT  = 9000;  // 내 위치 기준 경로 — 이건 기다린다
-var _ROUTE_ALT_TIMEOUT   = 4500;  // 주변 정류장 대안 — 늦으면 빼고 진행
+// ★ 2026-09-15: 동시 요청을 줄인 대신 기다리는 시간은 늘린다.
+//   혼자 도는 요청은 엔진이 2초 안팎에 답한다. 9초는 동시 7건일 때나 필요했다.
+var _ROUTE_MAIN_TIMEOUT  = 15000; // 내 위치 기준 경로 — 이것만 먼저, 넉넉히
+var _ROUTE_ALT_TIMEOUT   = 7000;  // 주변 정류장 대안 — 내 위치가 실패했을 때만
+var _ROUTE_ALT_PARALLEL  = 2;     // 대안은 가까운 두 곳까지만
 
 // 경로 서명 — 이용 노선과 승·하차 지점이 같으면 같은 경로로 본다
 function _pathSig(p){
@@ -17000,6 +17030,7 @@ window._bgDiag = async function(){
         if(_nr){
           add('마지막 경로없음: ' + (_nr.from || '?') + '→' + (_nr.to || '?')
               + ' · ' + Math.round((Date.now()-_nr.at)/1000) + '초 전');
+          if(_nr.plan) add('  · 진행: ' + _nr.plan);
           add('  · 요청 ' + (_nr.req||0) + '건 → 경로있음 ' + (_nr.ok||0)
               + ' · 빈응답 ' + (_nr.empty||0) + ' · 실패/타임아웃 ' + (_nr.fail||0));
           (_nr.log || []).forEach(function(L, i){
