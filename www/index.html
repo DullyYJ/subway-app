@@ -12256,6 +12256,16 @@ function _cellHopAdvance(){
       if(a!=null && b!=null){ var d=b-a; if(d<-720) d+=1440; if(d>0) span = d*60; }
     }catch(e){}
     if(Date.now() - enterMs < span * 1000 * _CELL_HOP_MIN_RATIO) return;  // 아직 이르다
+    // ★ 2026-09-15: 시각표(지연 보정 반영분)보다 앞서가지 않는다.
+    //   열차가 늦으면 구간 소요시간 게이트만으로는 계속 앞질러 간다.
+    try{
+      var _due = _arrTimeToMin(to.arrTime);
+      if(_due != null){
+        var _n2 = new Date(), _nm2 = _n2.getHours()*60 + _n2.getMinutes() + _n2.getSeconds()/60;
+        var _gap = _due - _nm2; if(_gap < -720) _gap += 1440;
+        if(_gap > 0.5) return;                 // 아직 그 역 예정시각 전이다
+      }
+    }catch(e){}
 
     // 하차역을 넘지 않는다
     var stop = _transitNodeData.length - 1;
@@ -12264,7 +12274,10 @@ function _cellHopAdvance(){
 
     window._cellHopAt = _cellSeen.lastChange;
     window._gpsMaxIdx = cur + 1;
-    window._gpsConfirmIdx = Math.max((window._gpsConfirmIdx==null?-1:window._gpsConfirmIdx), cur+1);
+    // ★ 2026-09-15: 예전엔 _gpsConfirmIdx 까지 올렸다. 그건 '순수 GPS 확인'
+    //   자리라서, 셀 추정이 한 번 앞서면 GPS 반박도 드리프트 보정도 막혔다.
+    //   셀은 추정이므로 따로 기록하고, 확정 자리는 GPS·실시간열차에만 내준다.
+    window._cellMaxIdx = cur + 1;
     window._nodePassMs = window._nodePassMs || {};
     window._nodePassMs[cur+1] = Date.now();
     window._gpsWaitIdx = null; window._gpsWaitRatio = 0;
@@ -13131,6 +13144,27 @@ function _updateTransitGps() {
   // ★ 마커 역행 방지(지하철은 전진만) + 과도한 전진 억제 — GPS 노이즈로 앞뒤 퍼 차단
   if(_validGps && best && !best.isOrigin && !best.isWalk){
     var _pMax = (window._gpsMaxIdx==null ? -1 : window._gpsMaxIdx);
+    // ★ 2026-09-15: 진행도를 되돌릴 방법이 아예 없었다.
+    //   _gpsMaxIdx·_gpsConfirmIdx 는 어디서나 Math.max 로만 올라간다.
+    //   그래서 기지국 추정(_cellHopAdvance)이 한 번 앞서 나가면 영영 못 돌아왔다.
+    //   실기기: 18:41에 귤현에 있는데 마커는 이미 아라(종점)였다.
+    //   → 최근 GPS가 뒤쪽 역 코앞(250m)에 있고 두 칸 이상 벌어졌으면
+    //     그 역을 실제 위치로 보고 진행도를 내린 뒤 시각표를 다시 맞춘다.
+    if(bestIdx >= 0 && bestIdx <= _pMax - 2 && bestDist <= 250){
+      var _pbNm = (_transitNodeData[bestIdx] && _transitNodeData[bestIdx].name) || '';
+      window._gpsMaxIdx = bestIdx;
+      window._gpsConfirmIdx = bestIdx;
+      window._cellHopAt = null;                 // 셀 전진 기록도 초기화
+      window._markerMaxProg = null;             // 마커 진행도 가드 해제(되돌림 허용)
+      window._nodePassMs = window._nodePassMs || {};
+      Object.keys(window._nodePassMs).forEach(function(k){ if(+k > bestIdx) delete window._nodePassMs[k]; });
+      window._nodePassMs[bestIdx] = Date.now();
+      window._progPullbackAt = Date.now();
+      window._progPullbackTo = _pbNm;
+      if(typeof _recalcArrivalsFrom==='function') _recalcArrivalsFrom(bestIdx);
+      console.log('[진행도 되돌림] 앞서간 ' + _pMax + ' → GPS 실제 ' + bestIdx + ' (' + _pbNm + ', ' + Math.round(bestDist) + 'm)');
+      _pMax = bestIdx;
+    }
     if(bestIdx < _pMax){
       bestIdx = _pMax;
       if(_transitNodeData[_pMax]){ best = _transitNodeData[_pMax];
@@ -16776,8 +16810,11 @@ window._bgDiag = async function(){
       var _bt = (_nd2 === true) ? '아직 승차 전' : (_nd2 === false) ? ('승차 확정' + _bw) : '판단 불가';
       add('승차 판정: ' + _bt + ' · 출발 후 셀변화 ' + (window._boardCellN || 0) + '회');
       add('진행 근거: GPS확정 ' + (window._gpsConfirmIdx==null?-1:window._gpsConfirmIdx)
-          + ' · 최대진행 ' + (window._gpsMaxIdx==null?-1:window._gpsMaxIdx)
-          + ' · 셀전진 ' + (window._cellHopAt ? '있음' : '없음'));
+          + ' · 셀추정 ' + (window._cellMaxIdx==null?-1:window._cellMaxIdx)
+          + ' · 시각표 ' + (window._timeMaxIdx==null?-1:window._timeMaxIdx)
+          + ' · 최종 ' + (window._gpsMaxIdx==null?-1:window._gpsMaxIdx));
+      if(window._progPullbackTo)
+        add('되돌림: ' + window._progPullbackTo + ' (' + Math.round((Date.now()-(window._progPullbackAt||0))/1000) + '초 전)');
     }catch(e){}
     var _sd = window._foodSrvDiag;
     if(_sd) add('맛집 서버: ' + _sd.n + '건' + (_sd.cached ? ' (캐시)' : '') + (_sd.err ? (' / ' + _sd.err) : '') + ' · ' + (typeof _foodServerBase==='function' ? _foodServerBase() : ''));
