@@ -8380,10 +8380,24 @@ window._hideRouteLoading = _hideRouteLoading;
       if(!allPaths.length) {
         // ★ 2026-09-09: liveStat 추출이 이 아래에 있어서, 경로가 0건이면
         //   운행종료 정보를 꺼내보지도 못하고 토스트만 띄웠다. 먼저 꺼낸다.
+        // ★ 2026-09-15: 엔진 버전·실패 이유도 여기서 남긴다.
+        //   예전엔 성공했을 때만 engVer 를 담아서, 실패하면 진단에
+        //   '모름 — 구버전 워커'로 찍혔다. 실제로는 그냥 0건이었던 것이다.
         try{
           var _rx = (results || []).find(function(r){ return r && r.liveStat; });
           window._liveStat = _rx ? _rx.liveStat : null;
           window._engSvcFirstBus = (window._liveStat && window._liveStat.svcFirstBus) || null;
+          var _rv = (results || []).find(function(r){ return r && r.engVer; });
+          if(_rv) window._engVer = _rv.engVer;
+          window._lastNoRoute = {
+            at: Date.now(),
+            from: (typeof start!=='undefined' && start && start.name) || '',
+            to:   (typeof dest !=='undefined' && dest  && dest.name)  || '',
+            got:  (results || []).length,
+            ver:  window._engVer || null,
+            stat: window._liveStat || null
+          };
+          console.warn('[경로없음]', JSON.stringify(window._lastNoRoute).slice(0, 500));
         }catch(e){}
         if(!_svcShowNoRoute()) toast('경로를 찾을 수 없습니다.');
         return;
@@ -11683,8 +11697,12 @@ function _cellPull(force){
 
     var done = false;
     setTimeout(function(){ done = true; }, 6000);
+    window._cellSyncInfo = '조회 중...';
     fetch(_cellServerUrl() + '/cells?min=2', { cache:'no-cache' })
-      .then(function(r){ return r.json(); })
+      .then(function(r){
+        if(!r.ok){ window._cellSyncInfo = 'HTTP ' + r.status + ' — 서버에 /cells 가 없을 수 있어요'; return null; }
+        return r.json();
+      })
       .then(function(j){
         if(done || !j || !j.ok || !j.cells) return;
         done = true;
@@ -11706,10 +11724,13 @@ function _cellPull(force){
         }
         _cellMapSave();
         try{ localStorage.setItem(_CELL_SYNC_KEY, String(Date.now())); }catch(e){}
+        window._cellSyncInfo = '받음 ' + added + '개 · 보강 ' + merged + '개 · 총 ' + Object.keys(m).length + '개';
         console.log('[기지국] 서버에서 ' + added + '개 받음, ' + merged + '개 보강 (총 '
                     + Object.keys(m).length + '개)');
       })
-      .catch(function(){});
+      .catch(function(e){
+        window._cellSyncInfo = '서버 조회 실패 (' + String((e && e.message) || e).slice(0,60) + ')';
+      });
   }catch(e){}
 }
 window._cellPull = _cellPull;
@@ -16864,6 +16885,9 @@ window._bgDiag = async function(){
     var _cm = (typeof _cellMap === 'function') ? _cellMap() : {};
     var _ck = Object.keys(_cm), _cr = _ck.filter(function(k){ return (_cm[k].n||0) >= _CELL_MIN_HITS; });
     add('학습된 기지국: ' + _ck.length + '개 (신뢰 ' + _cr.length + '개)');
+    add('기지국 서버(' + (typeof _cellServerUrl==='function' ? _cellServerUrl().replace(/^https?:\/\//,'') : '?') + '): '
+        + (window._cellSyncInfo || '아직 동기화 안 함'));
+    try{ if(typeof _cellPull === 'function') _cellPull(true); }catch(e){}   // 진단 실행 시 강제로 한 번
     if(_cellLast) add('최근 관측 셀: ' + _cellLast.key);
     else add('최근 관측 셀: 아직 없음 (경로 추적 중에만 조회함)');
     try{
@@ -16935,7 +16959,19 @@ window._bgDiag = async function(){
             + Math.round((Date.now()-_rl.at)/1000) + '초 전)');
         if(_parts.length) add('  · 예: ' + _parts.slice(0,3).join(' / '));
       } else add('실시간 대기 전송: 아직 없음');
-      add('엔진 버전: ' + (window._engVer || '모름 — 구버전 워커가 동작 중'));
+      add('엔진 버전: ' + (window._engVer || '아직 응답 못 받음(탐색 전이거나 전부 실패)'));
+      try{
+        var _nr = window._lastNoRoute;
+        if(_nr){
+          add('마지막 경로없음: ' + (_nr.from || '?') + '→' + (_nr.to || '?')
+              + ' · 응답 ' + _nr.got + '건 · ' + Math.round((Date.now()-_nr.at)/1000) + '초 전');
+          var st = _nr.stat || {};
+          if(st.svcOff != null) add('  · 운행종료 제외 노선: ' + st.svcOff + '개');
+          if(st.svcFirstBus) add('  · 첫차: ' + st.svcFirstBus);
+          if(st.candStat) add('  · 승차후보: ' + JSON.stringify(st.candStat).slice(0,120));
+          if(st.tabs) add('  · 탭별: ' + [].concat(st.tabs).join(' / ').slice(0,200));
+        }
+      }catch(e){}
       add('지하철 시각표: ' + (window._ttVersion || '아직 못 받음')
           + (window._ttKeys ? (' (' + window._ttKeys + '항목)') : '')
           + ' / ' + _ttServer());
@@ -17107,16 +17143,28 @@ window.syncTimeWithServer = function syncTimeWithServer() {
     //        (기기 시계가 그렇게 틀릴 일은 드물고, 틀린 보정값이 훨씬 위험하다)
     var MAX_RTT  = 3000;
     var MAX_SKEW = 5 * 60 * 1000;
-    fetch('https://worldtimeapi.org/api/timezone/Asia/Seoul', {method:'GET'})
-      .then(function(r){ return r.json(); })
+    // ★ 2026-09-15: worldtimeapi.org 로 물어보다 늘 실패했다(진단: '동기화 실패').
+    //   외부 사이트는 앱 네트워크 정책·요청 한도에 걸리기 쉽다.
+    //   우리 워커는 이미 쓰고 있는 주소이고, Cloudflare 가 붙여주는 Date 헤더는
+    //   정확한 서버 시각이다. 본문을 읽을 필요도 없어 가볍다.
+    var _tsUrl = '';
+    try{ _tsUrl = (typeof _SERVER_URL !== 'undefined' && _SERVER_URL) ? _SERVER_URL : ''; }catch(e){}
+    if(!_tsUrl){ try{ _tsUrl = (typeof _cellServerUrl === 'function') ? _cellServerUrl() : ''; }catch(e){} }
+    if(!_tsUrl){
+      window.timeOffset = 0;
+      window._timeSyncInfo = '기기 시계 사용 (서버 주소 없음)';
+      resolve(0); return;
+    }
+    fetch(_tsUrl + '/health?_t=' + t0, { method:'GET', cache:'no-store' })
+      .then(function(r){ return { hdr: r.headers.get('date') }; })
       .then(function(d){
         var t1  = Date.now();
         var rtt = t1 - t0;
-        var serverMs = new Date(d && d.datetime).getTime();
+        var serverMs = new Date(d && d.hdr).getTime();
         var off = serverMs + rtt / 2 - t1;
 
         var why = '';
-        if(!isFinite(serverMs))      why = '시각을 읽지 못함';
+        if(!isFinite(serverMs) || serverMs < 1e12) why = '시각을 읽지 못함';   // 헤더 없음 → Date(null)=0 방어
         else if(rtt > MAX_RTT)       why = '응답이 ' + Math.round(rtt/1000) + '초 걸림';
         else if(!isFinite(off))      why = '보정값이 숫자가 아님';
         else if(Math.abs(off) > MAX_SKEW) why = '기기 시계와 ' + Math.round(off/60000) + '분 차이';
@@ -17134,7 +17182,8 @@ window.syncTimeWithServer = function syncTimeWithServer() {
       })
       .catch(function(e){
         window.timeOffset = 0;
-        window._timeSyncInfo = '기기 시계 사용 (동기화 실패)';
+        window._timeSyncInfo = '기기 시계 사용 (동기화 실패: '
+          + String((e && e.message) || e).slice(0, 60) + ')';
         resolve(0);
       });
   });
