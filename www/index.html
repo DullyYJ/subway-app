@@ -7656,11 +7656,26 @@ function openTransitDetail() {
   var ready = function(){
     return !!(_transitResultData && (_transitResultData.routes||[]).length);
   };
+  // ★ 2026-09-15: 그리다 오류가 나면 시트만 뜨고 안이 비었다(실기기 빈 화면).
+  //   무슨 일이 있어도 안내 문구는 남긴다.
+  var _fallback = function(msg, why){
+    try{
+      if(!sects) return;
+      if(sects.children && sects.children.length) return;   // 이미 그려졌으면 둔다
+      sects.innerHTML = '<div style="padding:34px 20px;text-align:center;color:var(--sub);font-size:13px;line-height:1.7;">'
+        + msg + (why ? ('<br><span style="font-size:11px;opacity:.7;">' + _ltEsc(String(why).slice(0,120)) + '</span>') : '')
+        + '<br><br><button onclick="closeTransitDetail()" style="padding:9px 18px;border:1px solid var(--border);'
+        + 'border-radius:10px;background:var(--card2);color:var(--text);font-size:13px;cursor:pointer;">닫기</button></div>';
+    }catch(e){}
+  };
   if(ready()){
     modal.style.display = 'flex';                 // 시트를 먼저 띄우고
     requestAnimationFrame(function(){             // 그리는 건 다음 프레임에
-      try{ _buildTransitDetailNow(); }catch(e){}
+      var _err = null;
+      try{ _buildTransitDetailNow(); }catch(e){ _err = (e && e.message) || e;
+        try{ if(typeof _errLog==='function') _errLog('세부경로 그리기: ' + _err, '', 0, 0, e); }catch(e2){} }
       try{ _svcInjectDetail(); }catch(e){}
+      _fallback('세부경로를 그리지 못했어요. 경로를 다시 탐색해 주세요.', _err);
     });
     return;
   }
@@ -7669,7 +7684,13 @@ function openTransitDetail() {
   modal.style.display = 'flex';
   var tries = 0;
   (function _wait(){
-    if(ready()){ try{ _buildTransitDetailNow(); }catch(e){} return; }
+    if(ready()){
+      var _e2 = null;
+      try{ _buildTransitDetailNow(); }catch(e){ _e2 = (e && e.message) || e;
+        try{ if(typeof _errLog==='function') _errLog('세부경로 그리기: ' + _e2, '', 0, 0, e); }catch(e3){} }
+      _fallback('세부경로를 그리지 못했어요. 경로를 다시 탐색해 주세요.', _e2);
+      return;
+    }
     if(++tries > 40){                              // 6초
       if(sects) sects.innerHTML =
         '<div style="padding:34px 20px;text-align:center;color:var(--sub);font-size:13px;">경로를 먼저 탐색해 주세요.</div>';
@@ -16138,7 +16159,11 @@ function _thruFill(rows, thru){
 }
 window._thruFill = _thruFill;
 
-function _busArrFetchMerged(cityCode, stop){
+// onPartial: 이웃 정류장 병합 전에 '내 정류장 응답'만 먼저 넘겨준다.
+//   ★ 2026-09-15: 버스 도착정보가 뜨기까지 오래 걸리던 이유.
+//     내 정류장 1회 + 이웃 최대 3곳 + 경유노선 목록까지 다 받은 뒤에야 그렸다.
+//     제일 중요한 내 정류장 값은 이미 손에 있는데 같이 기다린 셈이다.
+function _busArrFetchMerged(cityCode, stop, onPartial){
   var nodeId = stop.nodeId || stop.nodeid;
 
   // ★ 판정 순서 주의 — 반드시 GBIS를 먼저 본다.
@@ -16217,6 +16242,7 @@ function _busArrFetchMerged(cityCode, stop){
               function(){ return rows; });
     };
 
+    try{ if(typeof onPartial === 'function' && items.length) onPartial(uniq(items)); }catch(e){}
     if(stop._peersCached) return _mergePeers(stop._peers).then(_withThru);
 
     return new Promise(function(resolve){
@@ -16234,8 +16260,8 @@ function _busArrFetchMerged(cityCode, stop){
 (function(){
   try{
     var _origBusArrMerged = _busArrFetchMerged;
-    _busArrFetchMerged = function(cityCode, stop){
-      var pr = _origBusArrMerged(cityCode, stop);
+    _busArrFetchMerged = function(cityCode, stop, onPartial){
+      var pr = _origBusArrMerged(cityCode, stop, onPartial);
       try{ return pr.then(function(rows){ try{ _rtwNote(rows, stop); }catch(e){} return rows; }); }
       catch(e){ return pr; }
     };
@@ -16281,10 +16307,11 @@ function _loadMapBusArrival(stop, cardIdx, _try) {
   }
   _try = _try || 0;
 
-  _busArrFetchMerged(cityCode, stop)
-    .then(function(items) {
+  // ★ 2026-09-15: 내 정류장 응답이 오면 바로 그리고, 이웃 병합분은 뒤에 덮는다.
+  var _paintArr = function(items, partial) {
       var card = document.getElementById('mapBusCard_' + cardIdx);
       if(!card) return;
+      if(partial) card._partialAt = Date.now();
 
       // ★ 정류장명 옆 랜드마크 방향 (지하철역>시청>구청>동사무소, 노선별 캐시)
       if(typeof _busFindLandmark === 'function'){
@@ -16472,7 +16499,13 @@ function _loadMapBusArrival(stop, cardIdx, _try) {
              String((a && a.dirName) || '').trim());
         });
       }
+  };
+
+  _busArrFetchMerged(cityCode, stop, function(partial){
+      // 내 정류장 응답만 먼저 — 이웃 병합·경유노선은 뒤에서 덮어쓴다
+      try{ _paintArr(partial, true); }catch(e){}
     })
+    .then(function(items){ _paintArr(items, false); })
     .catch(function() {
       var card = document.getElementById('mapBusCard_' + cardIdx);
       if(!card) return;
@@ -16857,6 +16890,18 @@ window._bgDiag = async function(){
     try{
       if(window._rtPreBoardIdx != null && typeof _htlNotDeparted==='function' && _htlNotDeparted())
         add('실시간 열차: 승차 전이라 마커 미반영 (열차 위치 idx ' + window._rtPreBoardIdx + ')');
+      // ★ 2026-09-15: 화면이 통째로 비는 증상은 대부분 자바스크립트 오류다.
+      //   오류는 이미 저장하고 있었는데 진단에 안 보여줘서 원인을 못 찾았다.
+      try{
+        var _el = JSON.parse(localStorage.getItem(_ERR_KEY) || '[]');
+        if(_el && _el.length){
+          add('── 최근 오류 ' + _el.length + '건 ──');
+          _el.slice(-3).forEach(function(e){
+            add('  · ' + e.t + ' ' + e.m + (e.n > 1 ? (' ×' + e.n) : ''));
+            if(e.f) add('     ' + e.f);
+          });
+        } else add('최근 오류: 없음');
+      }catch(e){}
       var _nd2 = (typeof _htlNotDeparted==='function') ? _htlNotDeparted() : null;
       var _bw = window._boardWhy ? (' (' + window._boardWhy + ')') : '';
       var _bt = (_nd2 === true) ? '아직 승차 전' : (_nd2 === false) ? ('승차 확정' + _bw) : '판단 불가';
