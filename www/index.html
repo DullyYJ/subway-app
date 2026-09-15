@@ -7890,6 +7890,7 @@ window._hideRouteLoading = _hideRouteLoading;
   //   → 탐색을 시작하면 진행도·확정 위치·시각 보정 기준을 전부 -1 로 되돌린다.
   try{
     window._gpsMaxIdx     = -1;   // GPS로 확인된 최대 진행 위치
+  try{ if(typeof _notifOnceReset==='function') _notifOnceReset(); }catch(e){}   // 새 여정 → 알림 관문 초기화
     window._gpsConfirmIdx = -1;   // 순수 GPS로만 확인된 위치
     window._timeMaxIdx    = -1;   // 시각표 추정으로 올라간 위치
     window._htlBoarded    = false;
@@ -26362,16 +26363,22 @@ var _notifId = 1000;
 // ★ 2026-09-03: 상단 알림을 전부 끈다.
 //   작은 요약 화면(PiP)이 현재역·남은시간·도착시각·추천까지 다 보여 주므로
 //   같은 내용을 알림으로 또 보낼 이유가 없다.
-var _NOTIF_ALLOW = { arrive_reco:0, commute_brief:0, fg_service:0,
-                     arrive:0, near_arrive:0, near_arrive2:0,
-                     transfer:0, transfer2:0, arrival:0 };
+// ★ 2026-09-15: 하차·환승 알림이 잠금화면에도, 화면이 켜져 있어도 안 왔다.
+//   원인은 여기다. 2026-09-03 에 PiP 를 넣으며 모든 종류를 0 으로 껐는데,
+//   PiP 는 '작은 창'일 때만 보인다. 화면이 꺼져 있거나 다른 앱을 쓰는 동안에는
+//   아무것도 안 뜨고 진동만 울렸다.
+//   → 몸으로 알아야 하는 알림(하차·환승·추천)은 다시 내보낸다.
+//     같은 내용이 PiP 에 보이는 건 중복이 아니라 이중 안전장치다.
+var _NOTIF_ALLOW = { arrive_reco:1, commute_brief:0, fg_service:1,
+                     arrive:1, near_arrive:1, near_arrive2:1,
+                     transfer:1, transfer2:1, arrival:1 };
 
 // ★ 진동은 알림과 별개로 둔다.
 //   화면을 안 보고 있어도 '환승'과 '하차'는 몸으로 알아야 한다.
 //   알림 정책을 껐다고 진동까지 사라지면 안 되므로 판단 기준을 분리한다.
 var _VIBE_ALLOW = { transfer:1, transfer2:1,
                     arrive:1, arrival:1, near_arrive:1, near_arrive2:1,
-                    arrive_reco:0, commute_brief:0, fg_service:0 };
+                    arrive_reco:1, commute_brief:0, fg_service:0 };
 function _vibeAllowed(type){
   var t = String(type || '');
   // 브리핑은 알림과 함께 짧게 울린다(사용자가 켠 기능이므로)
@@ -26595,9 +26602,63 @@ function _arrDestName(){
 // 도착지 주변 가게 고르기 (kind: 'cafe' | 'night')
 var _ARR_CAFE_RE  = /카페|커피|빵|도넛|디저트|베이커리|케이크|아이스크림|티|차/;
 var _ARR_NIGHT_RE = /치킨|파스타|피자|족발|보쌈|분식|중식|일식|한식|백반|회|초밥|고기|구이|국밥|찜|탕|버거|양식|마라|떡볶이|곱창|포차|호프|술|국수|덮밥|돈가스|카레|볶음|찌개|만두|샌드위치|샐러드|토스트/;
+// ★ 2026-09-15: 하차 추천이 내장 CSV(STN_FOOD)를 보고 있었다.
+//   그 내장본을 없앴으니 이제 맛집 탭과 같은 곳 — 전국 맛집 서버 — 에서 고른다.
+//   알림은 제때 떠야 하므로 미리 받아 두고, 못 받으면 조용히 건너뛴다.
+var _arrFoodCache = { stn:null, at:0, items:[] };
+var _ARR_FOOD_TTL = 30*60*1000;
+
+function _arrFoodList(destStn){
+  // ① 미리 받아 둔 서버 목록  ② 맛집 탭이 이미 들고 있는 목록  ③ 예전 내장본
+  try{
+    if(_arrFoodCache.stn === destStn && _arrFoodCache.items.length
+       && Date.now() - _arrFoodCache.at < _ARR_FOOD_TTL) return _arrFoodCache.items;
+  }catch(e){}
+  try{
+    var pub = window._foodPublicData;
+    if(pub && pub.length){
+      return pub.map(function(x){
+        return { n:x.place_name, c:x.category_name||'', a:x.road_address_name||'',
+                 d:(x.distance!=null? parseInt(x.distance,10) : null) };
+      });
+    }
+  }catch(e){}
+  try{
+    var old = (typeof _stnFoodLookup==='function') ? _stnFoodLookup(destStn) : null;
+    if(old && old.length) return old;
+  }catch(e){}
+  return null;
+}
+
+// 목적지 주변 맛집을 미리 받아 둔다(알림 직전에 부르면 늦는다)
+function _arrEnsureFood(destStn, cb){
+  var done = false;
+  var fin = function(){ if(!done){ done = true; try{ cb(); }catch(e){} } };
+  try{
+    if(_arrFoodCache.stn === destStn && _arrFoodCache.items.length
+       && Date.now() - _arrFoodCache.at < _ARR_FOOD_TTL) return fin();
+    var c = (typeof _homeBriefCoord==='function') ? _homeBriefCoord('dest', destStn) : null;
+    if(!c || c.lat == null || c.lng == null) return fin();
+    var base = (typeof _foodServerBase==='function') ? _foodServerBase() : '';
+    if(!base) return fin();
+    setTimeout(fin, 3500);                       // 늦으면 그냥 진행한다
+    fetch(base + '/food?lat=' + c.lat + '&lng=' + c.lng + '&r=800&limit=200')
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(d){
+        var it = (d && d.items) || [];
+        if(it.length){
+          _arrFoodCache = { stn:destStn, at:Date.now(),
+            items: it.map(function(x){ return { n:x.n, c:x.c||'', a:x.a||'', d:x.d }; }) };
+        }
+        fin();
+      }).catch(fin);
+  }catch(e){ fin(); }
+}
+window._arrEnsureFood = _arrEnsureFood;
+
 function _arrPickPlace(destStn, kind){
   try{
-    var arr = (typeof _stnFoodLookup==='function') ? _stnFoodLookup(destStn) : null;
+    var arr = _arrFoodList(destStn);
     if(!arr || !arr.length) return null;
     var radius = (kind==='cafe') ? _ARR_CAFE_M : _ARR_NIGHT_M;
     var re     = (kind==='cafe') ? _ARR_CAFE_RE : _ARR_NIGHT_RE;
@@ -26876,7 +26937,21 @@ function _arrBuildAlert(destStn, arrHour, arrMs){
 
 // 실제 발사 (알림 + 앱 열려 있으면 팝업)
 function _arrFireAlert(destStn, arrMs){
+  // ★ 2026-09-15: 맛집을 서버에서 받아 온 뒤에 문구를 만든다
+  if(typeof _arrEnsureFood === 'function' && !window._arrFiring){
+    window._arrFiring = true;
+    _arrEnsureFood(destStn, function(){
+      window._arrFiring = false;
+      _arrFireAlertNow(destStn, arrMs);
+    });
+    return;
+  }
+  _arrFireAlertNow(destStn, arrMs);
+}
+
+function _arrFireAlertNow(destStn, arrMs){
   try{
+    if(!_notifOnce('reco')) return;      // ★ 하차 추천도 여정당 1회
     var slot = _arrSlot(arrMs);
     if(slot === 'none') return;        // 00~07시, 10:01~16:59 → 추천 알림 없음
     var a = _arrBuildAlert(destStn, null, arrMs);
@@ -27490,10 +27565,16 @@ function _cmScheduleOS(){
     days.forEach(function(d){
       // Capacitor 의 weekday 는 1=일요일 … 7=토요일
       var wd = ((+d) % 7) + 1;
+      // ★ 2026-09-15: 예약 알림이 안 울리던 이유 세 가지를 한 번에 고친다.
+      //   ① channelId 가 없어 기본 채널(중요도 낮음)로 갔다 → 잠금화면에 안 뜬다
+      //   ② allowWhileIdle 이 없어 절전(Doze) 중에는 통째로 밀렸다
+      //   ③ smallIcon 이름이 실제 리소스(ic_stat_subway)와 달랐다
       list.push({ id:9110+(+d), title:'🌅 출근길 브리핑', body:'날씨와 혼잡도 요약이 준비됐어요 — 탭해서 확인하세요',
-                  schedule:{ on:{ weekday:wd, hour:mh, minute:mm }, repeats:true }, smallIcon:'ic_stat_icon' });
+                  schedule:{ on:{ weekday:wd, hour:mh, minute:mm }, repeats:true, allowWhileIdle:true },
+                  channelId:'subway_alerts', smallIcon:'ic_stat_subway' });
       list.push({ id:9120+(+d), title:'🌆 퇴근길 브리핑', body:'퇴근길 날씨·혼잡도 요약 — 탭해서 확인하세요',
-                  schedule:{ on:{ weekday:wd, hour:eh, minute:em }, repeats:true }, smallIcon:'ic_stat_icon' });
+                  schedule:{ on:{ weekday:wd, hour:eh, minute:em }, repeats:true, allowWhileIdle:true },
+                  channelId:'subway_alerts', smallIcon:'ic_stat_subway' });
     });
     if(list.length) LN.schedule({ notifications:list }).catch(function(){});
   }catch(e){}
@@ -31721,6 +31802,33 @@ function _startBgGeolocation(){
 */
 var _proximityFired = new Set();
 
+// ★ 2026-09-15: 알림을 다시 켜면서 '딱 한 번'을 코드로 보장한다.
+//   예전에 알림을 통째로 껐던 이유가 '계속 울려서'였는데,
+//   같은 도착을 서로 다른 세 곳(_bgArrivalNotify · 근접감지 · 추천)이
+//   각자 판단해서 보냈기 때문이다. 각자 중복방지를 해도 서로는 몰랐다.
+//   → 여정 하나당 한 번만 통과시키는 관문을 두고, 세 곳이 모두 여기를 지난다.
+//     하차 계열(다음역·도착·근접)은 'alight' 한 키로 묶어 통틀어 1회다.
+function _tripSig(){
+  try{
+    if(typeof S !== 'undefined' && S.route && S.route.path && S.route.path.length)
+      return S.route.path.join('>');
+  }catch(e){}
+  return '-';
+}
+window._notifOnceLog = { sig:null, keys:{} };
+function _notifOnce(key){
+  try{
+    var sig = _tripSig();
+    if(window._notifOnceLog.sig !== sig) window._notifOnceLog = { sig:sig, keys:{} };
+    if(window._notifOnceLog.keys[key]) return false;
+    window._notifOnceLog.keys[key] = 1;
+    return true;
+  }catch(e){ return true; }
+}
+window._notifOnce = _notifOnce;
+function _notifOnceReset(){ try{ window._notifOnceLog = { sig:null, keys:{} }; }catch(e){} }
+window._notifOnceReset = _notifOnceReset;
+
 // ★ 백그라운드/포그라운드 공통: 남은 정거장 수 기반 네이티브 알림 (2역·1역·도착)
 window._bgAlertFired = window._bgAlertFired || {};
 function _bgArrivalNotify(idx){
@@ -31737,13 +31845,18 @@ function _bgArrivalNotify(idx){
     // ★ 알림 정책: '하차 10분 전' 외 알림 비활성화
     if(typeof _notifAllowed==='function' && !_notifAllowed('arrival')) return;
     if(fired[key]) return;
+    // ★ 하차 계열은 통틀어 1회, 환승은 역마다 1회
+    var _gate = /^(near1|near2|arrive)$/.test(key) ? 'alight' : ('tf_' + key);
+    if(!_notifOnce(_gate)) return;
     fired[key] = true;
     try {
       if(LN){
         LN.schedule({ notifications:[{
           id: id, title: title, body: body,
           smallIcon: 'ic_stat_subway', channelId: 'subway_alerts',
-          extra:{ type:'arrival', station: destNm }, actionTypeId:'OPEN_APP'
+          // ★ 2026-09-15: actionTypeId:'OPEN_APP' 은 등록된 적이 없는 이름이라
+          //   안드로이드에서 알림이 통째로 버려질 수 있었다. 등록한 것만 쓴다.
+          extra:{ type:'arrival', station: destNm }, actionTypeId:'briefing_actions'
         }]});
       }
     } catch(e){}
@@ -31787,6 +31900,13 @@ function _checkRouteProximityAlert(lat, lng) {
 
     var dist = haversineM(lat, lng, stn.lat, stn.lng);
     if(dist <= 300) {
+      // ★ 하차·환승 알림은 위 관문과 같은 키를 쓴다(같은 도착을 두 번 알리지 않게)
+      var _isDest = (i === path.length - 1);
+      var _isTf   = !!(S.route.transfers && S.route.transfers.indexOf(stnName) >= 0);
+      if((_isDest || _isTf) && !_notifOnce(_isDest ? 'alight' : ('tf_' + stnName))){
+        _proximityFired.add(stnName);
+        continue;
+      }
       // 경로가 길면 Set 도 커지므로 상한을 둔다(경로 역 수 이상은 쌓일 일이 없다)
       if(_proximityFired.size > 300) _proximityFired.clear();
       _proximityFired.add(stnName);
@@ -32369,7 +32489,21 @@ function _pipRecoPaint(){
   if(!box) return;
   var r = window._pipReco;
   if(r && r.at && (Date.now() - r.at) > _PIP_RECO_TTL){ window._pipReco = null; r = null; }
-  if(!r){ box.style.display = 'none'; box.innerHTML = ''; return; }
+  var wrap = document.getElementById('pipView');
+  if(!r){
+    box.style.display = 'none'; box.innerHTML = '';
+    // ★ 2026-09-15: 추천이 사라지면 창을 원래 높이로
+    if(wrap) wrap.style.justifyContent = 'center';
+    if(typeof _pipGrow === 'function') _pipGrow(false);
+    return;
+  }
+  // ★ 추천이 있는 동안은 위에서부터 쌓아 글자가 겹치지 않게 하고 창을 늘린다
+  if(wrap){
+    wrap.style.justifyContent = 'flex-start';
+    wrap.style.paddingTop = 'min(1.2vh,8px)';
+    wrap.style.overflowY = 'auto';
+  }
+  if(typeof _pipGrow === 'function') _pipGrow(true);
 
   var esc = function(t){ return String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
                                                      .replace(/"/g,'&quot;'); };
@@ -32382,7 +32516,10 @@ function _pipRecoPaint(){
   if(r.btns && r.btns.length){
     html += '<div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;">';
     r.btns.forEach(function(b){
-      html += '<button onclick="' + esc(b.call) + '" style="padding:min(1.2vh,8px) min(3.5vw,14px);'
+      // ★ 2026-09-15: 작은 창에서는 터치가 웹으로 안 올 수 있다.
+      //   버튼을 누르면 먼저 앱을 앞으로 불러낸 뒤 원래 동작을 실행한다.
+      html += '<button onclick="_pipRecoAct(&quot;' + esc(b.call).replace(/"/g,'&quot;') + '&quot;)" '
+            + 'style="padding:min(1.6vh,11px) min(4.5vw,18px);touch-action:manipulation;'
             + 'border-radius:999px;border:none;cursor:pointer;font-family:inherit;'
             + 'font-size:min(3.9vw,13px);font-weight:800;background:' + (b.color || '#ffd60a') + ';'
             + 'color:' + (b.fg || '#141416') + ';">' + esc(b.label) + '</button>';
@@ -32391,8 +32528,24 @@ function _pipRecoPaint(){
   }
   box.innerHTML = html;
   box.style.display = 'block';
+  box.style.maxHeight = '60vh';
+  box.style.overflowY = 'auto';
 }
 window._pipRecoPaint = _pipRecoPaint;
+
+// ★ 2026-09-15: 작은 창의 추천 버튼.
+//   안드로이드 PiP 창은 터치를 앱으로 넘기지 않는 경우가 많다.
+//   눌렸다면 먼저 앱을 앞으로 꺼낸 뒤(가능하면) 원래 동작을 실행한다.
+function _pipRecoAct(call){
+  try{
+    var run = function(){ try{ (0, eval)(call); }catch(e){} };
+    var n = (typeof _pipNative==='function') ? _pipNative() : null;
+    var back = n && (n.exit || n.expand || n.leave);
+    if(back){ try{ back.call(n, {}); }catch(e){} setTimeout(run, 400); }
+    else run();
+  }catch(e){}
+}
+window._pipRecoAct = _pipRecoAct;
 
 function _pipShow(){
   try{ window._pipInPip = true;  _pipTick(); }catch(e){}
@@ -32456,10 +32609,31 @@ window._pipNativeAvailable = function(){ return !!_pipNative(); };
 //   resizable/seamless 는 네이티브가 지원하면 '사용자가 늘리지 못하게' 쓰는 값이고,
 //   모르는 키는 플러그인이 그냥 무시하므로 넣어 두어도 안전하다.
 var PIP_W = 239, PIP_H = 100;
+// ★ 2026-09-15: 하차 추천이 뜨면 창을 아래로 늘린다.
+//   기존 239:100 은 글자 두 줄이 겨우 들어가는 높이라 추천이 겹쳐 잘렸다.
+var PIP_W2 = 200, PIP_H2 = 190;
+window._pipTall = false;
+function _pipGrow(on){
+  try{
+    on = !!on;
+    if(window._pipTall === on) return;
+    window._pipTall = on;
+    var n = (typeof _pipNative==='function') ? _pipNative() : null;
+    var o = _pipSizeOpts({});
+    if(!n) return;
+    if(typeof n.setAspectRatio === 'function') n.setAspectRatio(o);
+    else if(typeof n.update === 'function')    n.update(o);
+    else if(typeof n.enter === 'function' && window._pipInPip) n.enter(o);
+  }catch(e){}
+}
+window._pipGrow = _pipGrow;
+
 function _pipSizeOpts(extra){
   var o = extra || {};
-  o.width = PIP_W; o.height = PIP_H;
-  o.aspectWidth = PIP_W; o.aspectHeight = PIP_H;
+  var W = window._pipTall ? PIP_W2 : PIP_W;
+  var H = window._pipTall ? PIP_H2 : PIP_H;
+  o.width = W; o.height = H;
+  o.aspectWidth = W; o.aspectHeight = H;
   o.resizable = false;          // 확대/축소 금지
   o.seamless = false;           // 매끄러운 리사이즈 끄기(안드로이드 12+)
   return o;
