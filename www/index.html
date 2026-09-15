@@ -4219,6 +4219,57 @@ function _dedupStops(stops){
 }
 window._dedupStops = _dedupStops;
 
+// ── 역 출구 정류장을 맨 앞으로 ─────────────────────────────────
+//   ★ 2026-09-15: 역 안에서 주변 정류장을 보면 '아라역5번출구' 같은
+//     역 출구 정류장이 종종 목록에서 빠졌다. 화면은 가까운 순 6곳만 보여주는데,
+//     출구 정류장이 길 건너 일반 정류장들보다 몇십 m 멀면 밀려나기 때문이다.
+//     역에서 나오는 사람에게는 그 정류장이 1순위다 — 앞으로 끌어올린다.
+//   · 이름에 '○○역 ○번출구'가 들어가고 반경 안(_EXIT_NEAR_M)일 때만
+//   · 최대 3곳까지만 고정 — 나머지는 원래대로 가까운 순
+var _EXIT_RE = /역\s*\d*\s*번?\s*출구|역\s*출구/;
+var _EXIT_NEAR_M = 350;
+// ★ 2026-09-15: 예전엔 출구를 3곳까지만 앞으로 끌어올렸다.
+//   환승역은 출구가 8~14개다 — 그중 셋만 보이면 정작 내가 나온 출구가 빠진다.
+//   → 반경 안의 출구는 전부 앞으로 보내고, 목록 길이를 그만큼 늘린다.
+var _NEAR_BASE = 6;        // 기본으로 보여줄 정류장 수
+var _NEAR_MAX  = 16;       // 아무리 많아도 여기까지
+// 이 목록을 몇 개까지 보여줄지 — 출구가 많으면 그만큼 늘린다
+function _nearLimit(stops){
+  try{
+    var ex = 0;
+    (stops||[]).forEach(function(s){
+      if(s && _stopIsExit(s) && (s.dist == null || s.dist <= _EXIT_NEAR_M)) ex++;
+    });
+    if(ex <= 0) return _NEAR_BASE;
+    return Math.min(_NEAR_MAX, Math.max(_NEAR_BASE, ex + 3));   // 출구 전부 + 일반 3곳
+  }catch(e){ return _NEAR_BASE; }
+}
+function _nearTop(stops){ return (stops||[]).slice(0, _nearLimit(stops)); }
+function _stopIsExit(st){
+  try{ return _EXIT_RE.test(String((st && st.nodenm) || '')); }catch(e){ return false; }
+}
+function _stopExitFirst(stops){
+  try{
+    if(!stops || stops.length < 2) return stops || [];
+    var ex = [], rest = [];
+    stops.forEach(function(s){
+      if(!s) return;
+      if(_stopIsExit(s) && (s.dist == null || s.dist <= _EXIT_NEAR_M)) ex.push(s);
+      else rest.push(s);
+    });
+    if(!ex.length) return stops;
+    var byD = function(a,b){ return (a.dist||0) - (b.dist||0); };
+    ex.sort(byD);
+    rest.sort(byD);
+    console.log('[정류장] 역 출구 ' + ex.length + '곳을 앞으로 (' + ex.map(function(s){return s.nodenm;}).join(', ') + ')');
+    return ex.concat(rest);
+  }catch(e){ return stops || []; }
+}
+window._stopExitFirst = _stopExitFirst;
+window._stopIsExit = _stopIsExit;
+window._nearLimit = _nearLimit;
+window._nearTop = _nearTop;
+
 function _fetchNearStops(lat, lng, callback) {
   // ★ 어떤 경로로 끝나든 콜백은 정확히 한 번, 그리고 반드시 시간 안에 돌아온다.
   //   (한 단계라도 응답이 없으면 '검색 중...'에서 멈춰 버리던 문제 차단)
@@ -4229,7 +4280,8 @@ function _fetchNearStops(lat, lng, callback) {
     if(called) return; called = true;
     if(guard) clearTimeout(guard);
     // 어느 출처(TAGO/GBIS/TOPIS/D1)로 끝나든 여기서 한 번 걸러진다
-    _origCb(err || null, _dedupStops(stops || []));
+    // 중복 정리 → 역 출구 정류장 우선
+    _origCb(err || null, _stopExitFirst(_dedupStops(stops || [])));
   };
   guard = setTimeout(function(){
     console.log('[정류장] 전체 타임아웃(18초) — 빈 목록 반환');
@@ -8631,7 +8683,7 @@ function _ensureStopsParam(lat, lng, cb){
     _fetchNearStops(lat, lng, function(err, stops){
       if(done) return; done = true; clearTimeout(to);
       if(!err && stops && stops.length){
-        window._nearStopsCache = { ts: Date.now(), lat: lat, lng: lng, stops: stops.slice(0,6) };
+        window._nearStopsCache = { ts: Date.now(), lat: lat, lng: lng, stops: _nearTop(stops) };
       }
       cb(_stopsParamOk(lat,lng) ? _stopsParam() : '');
     });
@@ -14027,7 +14079,7 @@ function _prefetchNearStops(lat, lng){
   _fetchNearStops(lat, lng, function(err, stops){
     window._nearPrefetching = false;
     if(err || !stops || !stops.length) return;
-    var top = stops.slice(0,6);
+    var top = _nearTop(stops);
     window._nearStopsCache = { ts: Date.now(), lat: lat, lng: lng, stops: top };
     // ★ 도착정보 미리 데우기 — 반드시 렌더러와 '같은' 캐시(_busArrCache)를 채워야 한다.
     //   예전엔 _fetchBusArrival(_busCache)만 데워서 탭 열 때 다시 네트워크를 탔음.
@@ -14301,7 +14353,7 @@ function loadMapNearStops(force) {
     }
     _fetchNearStops(la, ln, function(err, stops){
       // 성공한 결과는 저장해 둔다(다음 실패 때 폴백으로 쓴다)
-      try{ if(!err && stops && stops.length) _nearCacheSet(la, ln, stops.slice(0,6)); }catch(e){}
+      try{ if(!err && stops && stops.length) _nearCacheSet(la, ln, _nearTop(stops)); }catch(e){}
       if(err || !stops || !stops.length){
         // ★ 반경을 넓혀 한 번 더 시도 (도심 외곽·DB 누락 지역 대응)
         if(!silent && !window._nearWideTried){
@@ -14316,7 +14368,7 @@ function loadMapNearStops(force) {
                          dist: haversineM(la, ln, x.lat, x.lng) };
               });
               s2.sort(function(a,b){ return a.dist - b.dist; });
-              if(s2.length){ paint(s2.slice(0,6), la, ln, true); }
+              if(s2.length){ paint(_nearTop(s2), la, ln, true); }
               else if(!shown){
                 // ★ 2026-08-31: 마지막으로 성공했던 목록이 있으면 그거라도 보여준다.
                 //   조회가 실패했다고 화면을 비우면, 방금까지 잘 보이던 정류장이
@@ -14342,7 +14394,7 @@ function loadMapNearStops(force) {
       }
       window._nearWideTried = 0;
       stops.sort(function(a,b){ return (parseInt(a.dist||0)) - (parseInt(b.dist||0)); });
-      paint(stops.slice(0,6), la, ln, true);
+      paint(_nearTop(stops), la, ln, true);
     });
   }
 
