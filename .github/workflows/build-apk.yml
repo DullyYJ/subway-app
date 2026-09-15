@@ -235,6 +235,12 @@ jobs:
             "android.permission.POST_NOTIFICATIONS"
             "android.permission.VIBRATE"
             "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
+            # 2026-09-15: 출퇴근 예약 알림이 안 울리던 원인.
+            #   안드로이드 12+ 는 정확한 시각 알람에 별도 권한이 필요하고,
+            #   재부팅 뒤 예약을 되살리려면 BOOT_COMPLETED 도 있어야 한다.
+            "android.permission.SCHEDULE_EXACT_ALARM"
+            "android.permission.USE_EXACT_ALARM"
+            "android.permission.RECEIVE_BOOT_COMPLETED"
           )
           for PERM in "${PERMS[@]}"; do
             grep -q "$PERM" "$M" || \
