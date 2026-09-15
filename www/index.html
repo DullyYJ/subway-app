@@ -8197,12 +8197,17 @@ window._hideRouteLoading = _hideRouteLoading;
       + '&EX=' + dest.lng  + '&EY=' + dest.lat;
     console.log('[route-v2-req]', _coordQs, '|', start.name+'('+start.type+') → '+dest.name+'('+dest.type+')');
 
-    // ★ 출발지 주변 실시간 버스 대기를 먼저 모아 엔진에 넘긴다(rtw).
-    //   못 모으거나 늦으면 빈 값으로 진행 — 기존 동작 그대로다.
+    // ★ 2026-09-15 · YJ 절대규칙 2번: 실시간 대기 수집(rtw)을 앱에서 뺀다.
+    //   엔진은 2026-09-05 부터 '자기가 고른 승차 정류장'의 도착정보를 직접 조회한다.
+    //   앱이 보는 정류장 집합과 엔진이 고르는 정류장이 달라서, 번호만 맞추는
+    //   폴백도 틀린 값을 붙이길래 엔진에서 일부러 없앴다.
+    //   그 결과 진단이 이렇게 나왔다: rtw 정류장 지정 0회 / 번호만 0회 / 못 찾음 133,014회.
+    //   한 번도 안 맞는 값을 만드느라 탐색 전에 1.5초를 더 썼다는 뜻이다.
+    //   → 수집도, rtw 파라미터도 뺀다. 실시간 반영은 엔진이 한다.
     _ensureStopsParam(start.lat, start.lng, function(_spNow){
     window._spForThisSearch = _spNow || '';
     if(!_spNow) console.warn('[승차후보] 주변 정류장 목록을 못 만들어 전 범위에서 고릅니다');
-    _collectRTW(start.lat, start.lng, function(rtw){
+    (function(rtw){
     // ★ 2026-08-31: 오래된 응답이라 버릴 때도 로딩 오버레이는 반드시 끈다.
     //   transitLoading 은 position:fixed;inset:0;z-index:9000 인 전체 화면 덮개다.
     //   예전엔 여기서 그냥 return 해서 덮개가 남았고, 화면 전체가 안 눌렸다.
@@ -8217,92 +8222,40 @@ window._hideRouteLoading = _hideRouteLoading;
     if(!window._routeBaseMs){
       window._routeBaseMs = (typeof getBaseTimeMs==='function') ? getBaseTimeMs() : Date.now();
     }
-    if(rtw) console.log('[route-v2-rtw]', rtw);
-
     // 자체 경로엔진(route-v2): 1회 호출로 3모드(minTime/minTransfer/minWalk) 반환
     // ★ 승차 후보를 앱이 보여 준 정류장으로 맞춘다 (없으면 방금 받아 온 목록)
     var _sp = window._spForThisSearch || '';
     var urls = [ _routeV2Url(_coordQs
-                  + (rtw ? ('&rtw=' + encodeURIComponent(rtw)) : '')
                   + (_sp ? ('&stops=' + encodeURIComponent(_sp)) : '')) ];
 
-    // ★ 주변 정류장별로 후보를 넓힌다 (2026-08-27)
-    //   route-v2 는 Dijkstra 라 모드당 최적해 **하나씩**만 돌려주고,
-    //   승차 후보 정류장도 최근접 위주로 좀혀놓는다.
-    //   그래서 최단시간·최소환승이 결국 같은 경로로 나왔다.
-    //   카카오처럼 서로 다른 안을 보여주려면 **다른 정류장에서 타는 경로**를
-    //   같이 가져와야 한다 — 주변 정류장 몇 곳을 출발점으로 더 물어본다.
-    var _altOrigins = [];
+    // ★ 2026-09-15 · YJ 절대규칙: 경로 판단은 엔진만 한다. 앱은 그리기만 한다.
+    //   여기서 앱이 하던 일 — 주변 정류장을 골라 출발지로 삼고 요청을 8개까지 늘린 뒤,
+    //   실패하면 '가장 가까운 곳'을 골라 도보 시간을 더해 붙이는 것 — 을 전부 뺀다.
+    //   · 엔진의 accessNodes 가 이미 출발지 주변 정류장을 전부 승차 후보로 잡고
+    //     각 정류장까지 걷는 시간을 비용에 넣어 비교한다. 앱이 하던 일과 같은 일이다.
+    //   · 앱이 도보 시간만 더해 비교하던 방식은 '그 정류장까지 가는 과정'이 경로에
+    //     없어서 16분짜리 엉터리가 이기기도 했다.
+    //   · 게다가 요청이 8개로 늘어 엔진이 서로 CPU를 뺏고 전부 타임아웃 났다.
+    //   앱이 계속 넘기는 것은 '판단'이 아니라 '사용자 뜻'뿐이다.
+    //     · stops  = 사용자가 버스 탭에서 보는 정류장 목록(승차 후보 제한)
+    //     · pref   = 알림에서 직접 지정한 승차 정류장
     try{
-      // ★ 알림에서 지정한 출발지는 최우선 — 반드시 거쳐 가는 후보로 넣는다
-      try{
-        var _pb = window._preferBoardLoc;
-        if(_pb && _pb.lat != null && _pb.lng != null){
-          var _pd = (typeof haversineM==='function')
-                    ? haversineM(start.lat, start.lng, _pb.lat, _pb.lng) : 0;
-          _altOrigins.push({ name: _pb.name || '', id:'', nm: String(_pb.name||'').replace(/\s+/g,''),
-                             la: _pb.lat, lo: _pb.lng, d: _pd, fav: true });
-          console.log('[알림경로] 지정 출발지 ' + _pb.name + ' (' + Math.round(_pd) + 'm) 후보 포함');
-        }
-      }catch(e){}
-
-      // 즐겨찾기 정류장은 무조건 포함(사람마다 늘 쓰는 곳이 있다)
-      var _fs = (typeof _favStopsNear==='function')
-                ? _favStopsNear(start.lat, start.lng, (typeof _FAV_RADIUS_M!=='undefined' ? _FAV_RADIUS_M : 500))
+      var _pb = window._preferBoardLoc;
+      if(_pb && _pb.lat != null && _pb.lng != null){
+        urls[0] += '&pref=' + _pb.lat + ',' + _pb.lng;
+        console.log('[알림경로] 지정 승차 정류장 ' + (_pb.name || '') + ' 을 엔진에 넘김');
+      }
+      // 즐겨찾기 정류장(반경 안 가장 가까운 한 곳)도 사용자 뜻이라 같이 넘긴다.
+      // 강제가 아니라 '우대'다 — 반영 여부와 정도는 엔진이 정한다.
+      var _fv = (typeof _favStopsNear === 'function')
+                ? _favStopsNear(start.lat, start.lng, (typeof _FAV_RADIUS_M !== 'undefined' ? _FAV_RADIUS_M : 500))
                 : [];
-      (_fs || []).slice(0, 1).forEach(function(f){
-        _altOrigins.push({ name: f.nodenm, la: f.la, lo: f.lo, d: f.d, fav: true });
-      });
-      // 그 밖에 반경 안의 정류장을 거리순으로 추가
-      // ★ 버스 탭에 뜨는 정류장 목록을 그대로 쓴다(사용자가 보는 것과 같아야 한다).
-      //   없으면 _collectRTW 가 채워둔 캐시로 폴백.
-      var _nc = window._nearStopsCache;
-      var _cached = (window._nearOrderedStops && window._nearOrderedStops.length)
-                    ? window._nearOrderedStops
-                    : ((_nc && _nc.stops) ? _nc.stops : []);
-      _cached.slice().sort(function(a,b){ return (a.dist||9e9)-(b.dist||9e9); }).forEach(function(st){
-        if(_altOrigins.length >= _ALT_ORIGIN_POOL) return;   // 모으는 단계 상한(재정렬 뒤 MAX 로 자른다)
-        var la = parseFloat(st.gpslati != null ? st.gpslati
-                  : (st.lat != null ? st.lat : st.gpsLati));
-        var lo = parseFloat(st.gpslong != null ? st.gpslong
-                  : (st.lng != null ? st.lng : (st.lon != null ? st.lon : st.gpsLong)));
-        if(!isFinite(la) || !isFinite(lo)) return;
-        var d = (typeof haversineM==='function') ? haversineM(start.lat, start.lng, la, lo) : 9e9;
-        if(d > _ALT_ORIGIN_RADIUS_M) return;
-        // ★ 중복 판정은 '정류장 신원'으로 한다.
-        //   거리로 묶으면(예: 80m) 길 건너 반대방향 정류장이 통째로 빠진다.
-        //   그 둘은 가는 방향이 달라서 경로가 완전히 달라지므로 반드시 각각 봐야 한다.
-        //   같은 ID이거나, 이름이 같으면서 25m 안일 때만 같은 곳으로 본다.
-        var _id = String(st.nodeid || st.nodeId || '');
-        var _nm2 = String(st.nodenm || st.nodeName || st.name || '').replace(/\s+/g,'');
-        for(var k=0;k<_altOrigins.length;k++){
-          var o = _altOrigins[k];
-          if(_id && o.id && _id === o.id) return;
-          if(_nm2 && o.nm === _nm2
-             && (typeof haversineM==='function' ? haversineM(o.la, o.lo, la, lo) : 9e9) < 25) return;
-        }
-        _altOrigins.push({ name: st.nodenm || st.nodeName || st.name || '',
-                           id: _id, nm: _nm2, la: la, lo: lo, d: d, fav: false });
-      });
-      // ★ 같은 이름(상·하행 쌍)은 방향이 맞아 보이는 쪽을 먼저 물어본다
-      _altOrigins = _orderByDirection(_altOrigins, start, dest);
-      if(_altOrigins.length > _ALT_ORIGIN_MAX) _altOrigins = _altOrigins.slice(0, _ALT_ORIGIN_MAX);
-      _altOrigins.forEach(function(o){
-        urls.push(_routeV2Url('SX=' + o.lo + '&SY=' + o.la
-          + '&EX=' + dest.lng + '&EY=' + dest.lat
-          + (rtw ? ('&rtw=' + encodeURIComponent(rtw)) : '')));
-      });
-      if(_altOrigins.length){
-        console.log('[다양화] 주변 정류장 ' + _altOrigins.length + '곳 기준 경로도 함께 탐색: '
-          + _altOrigins.map(function(o){ return o.name + '(' + Math.round(o.d) + 'm' + (o.fav?',★':'') + ')'; }).join(', '));
+      if(_fv && _fv.length && _fv[0].la != null){
+        urls[0] += '&fav=' + _fv[0].la + ',' + _fv[0].lo;
+        console.log('[즐겨찾기] ' + _fv[0].nodenm + ' 우대를 엔진에 넘김');
       }
     }catch(e){}
 
-    // ★ 요청마다 타임아웃을 건다 (2026-08-27)
-    //   예전엔 fetch 에 타임아웃이 없어서, 주변 정류장까지 여러 곳을 물을 때
-    //   **하나만 응답이 안 와도 Promise.all 이 영영 안 끝났다.**
-    //   그러면 카드가 안 그려지고, 6초 워치독이 재탐색을 걸어 요청이 배로 늘었다.
-    //   내 위치 기준(첫 번째)은 넉넉히, 주변 정류장 대안은 짧게 — 늦으면 그냥 뺀다.
     // ★ 2026-09-15: 왜 실패했는지 남긴다.
     //   예전엔 타임아웃·네트워크 오류 모두 조용히 null 이 되어,
     //   진단에는 '응답 7건'(= 요청 수)만 찍혔다. 실제로는 전부 빈손일 수 있었다.
@@ -8346,23 +8299,14 @@ window._hideRouteLoading = _hideRouteLoading;
     //     ② 경로가 나오면 거기서 끝 — 주변 정류장은 묻지 않는다
     //     ③ 없을 때만 가까운 두 곳을 물어본다
     //   결과 배열 모양(길이·순서)은 그대로 둬서 아래 로직은 손대지 않는다.
+    // ★ 2026-09-15: 대안 출발지를 엔진에 맡기면서 요청은 하나가 됐다.
+    //   (엔진이 출발지 주변 정류장을 모두 승차 후보로 본다)
     var _routeStaged = function(){
       return _fetchJson(urls[0], _ROUTE_MAIN_TIMEOUT).then(function(main){
-        var out = new Array(urls.length); out[0] = main || null;
         var got = 0;
         try{ got = ((main && main.result && main.result.path) || []).length; }catch(e){}
-        if(got || urls.length < 2){
-          try{ window._routeStagePlan = got ? '내 위치 1건으로 충분' : '대안 없음'; }catch(e){}
-          return out;
-        }
-        var altN = Math.min(_ROUTE_ALT_PARALLEL, urls.length - 1);
-        try{ window._routeStagePlan = '내 위치 실패 → 주변 ' + altN + '곳 추가'; }catch(e){}
-        return Promise.all(urls.slice(1, 1 + altN).map(function(u){
-          return _fetchJson(u, _ROUTE_ALT_TIMEOUT);
-        })).then(function(alts){
-          for(var i = 0; i < alts.length; i++) out[i + 1] = alts[i];
-          return out;
-        });
+        try{ window._routeStagePlan = '엔진 1건 · 경로 ' + got + '건'; }catch(e){}
+        return [main || null];
       });
     };
     _routeStaged()
@@ -8382,38 +8326,11 @@ window._hideRouteLoading = _hideRouteLoading;
       //   → 기준은 언제나 '내 위치' 결과 하나다. 주변 정류장 결과는 내 위치로는
       //     경로가 아예 안 나올 때만, 그것도 가장 가까운 한 곳만 쓴다.
       //     같은 입력이면 같은 답이 나온다.
-      var allPaths = [];
-      var mainPaths = (results[0] && results[0].result && results[0].result.path) || [];
-
-      if(mainPaths.length){
-        allPaths = mainPaths.slice();
-      } else {
-        // 내 위치로는 경로가 없다 — 가장 가까운 정류장 하나로 대신한다
-        var bestIdx = -1, bestD = Infinity;
-        for(var ri = 1; ri < results.length; ri++){
-          var d0 = results[ri];
-          if(!(d0 && d0.result && d0.result.path && d0.result.path.length)) continue;
-          var o0 = _altOrigins[ri - 1];
-          var dd = (o0 && o0.d != null) ? o0.d : Infinity;
-          if(dd < bestD){ bestD = dd; bestIdx = ri; }
-        }
-        if(bestIdx > 0){
-          var org = _altOrigins[bestIdx - 1];
-          var walkMin = Math.max(1, Math.round((org.d || 0) / 1.2 / 60));   // 1.2m/s
-          console.log('[경로] 내 위치로는 경로가 없어 ' + org.name + '(도보 ' + walkMin + '분) 기준으로 대신합니다');
-          allPaths = results[bestIdx].result.path.map(function(p){
-            try{
-              p = JSON.parse(JSON.stringify(p));
-              p.info = p.info || {};
-              if(p.info.totalTime != null) p.info.totalTime += walkMin;
-              p._altOrigin = org.name;
-              p._altWalkMin = walkMin;
-              if(org.fav) p._favOrigin = org.name;
-            }catch(e){}
-            return p;
-          });
-        }
-      }
+      // ★ 2026-09-15: 결과는 엔진이 준 그대로 쓴다.
+      //   예전엔 여기서 '내 위치로 경로가 없으면 주변 정류장 결과로 대신'했는데,
+      //   그 비교(도보 시간만 더하기)가 앱의 판단이었다. 엔진 답이 곧 답이다.
+      var allPaths = (results[0] && results[0].result && results[0].result.path) || [];
+      allPaths = allPaths.slice();
 
       // ★ 같은 경로가 여러 번 들어오므로 중복을 개다 (노선·승하차 조합이 같으면 한 개)
       allPaths = _dedupPaths(allPaths);
@@ -8487,10 +8404,9 @@ window._hideRouteLoading = _hideRouteLoading;
       //        그 도착정보는 몇 초 사이에도 달라져서 결과가 매번 흔들린다.
       //   → 순위는 엔진이 정한다. 앱은 받은 순서를 그대로 쓴다.
       //     실시간 대기는 이미 rtw 로 엔진에 넘겨 반영되고 있다.
-      var _rankStep = function(paths, cb){
-        if(_rtwDone > 0) console.log('[순위] 엔진이 실시간 대기를 반영함(' + _rtwDone + '개 노선)');
-        cb();
-      };
+      // ★ 2026-09-15: 앱 재순위(_applyRealtimeWaits)는 이미 없앤 상태였고,
+      //   껍데기만 남아 화면을 두 번 그리게 하고 있었다. 한 번만 그린다.
+      if(_rtwDone > 0) console.log('[순위] 엔진이 실시간 대기를 반영함(' + _rtwDone + '개 노선)');
 
       // ★ 노선도가 늦게 뜨던 이유: 재순위(_applyRealtimeWaits, 최대 3.5초)가
       //   끝나야 비로소 그렸다. 앞단 실시간 대기 수집(1.5초)까지 합치면
@@ -8542,12 +8458,8 @@ window._hideRouteLoading = _hideRouteLoading;
                setTimeout(window._scrollToRouteResult, 60); }catch(e){}
         return true;
       };
-      _drawOnce(true);     // 즉시 1차 렌더 — 노선도가 바로 보인다
-
-      _rankStep(allPaths, function(){
+      _drawOnce(true);     // 엔진 결과를 그대로 한 번만 그린다
       if(_routeStale()){ if(loading) loading.style.display = 'none'; return; }
-      // 재순위 결과 반영 — 순서가 바뀌었을 수 있으므로 다시 그린다
-      _drawOnce(false);
 
       // ★ 미탑승 재동기화: 확정 경로였다면 같은 유형으로 다시 확정 (시각표만 다음 차편)
       if(window._relockAfterReroute){
@@ -8563,13 +8475,12 @@ window._hideRouteLoading = _hideRouteLoading;
         var _rs = window._reselectAfterSearch; window._reselectAfterSearch = null;
         _doSelectRouteOption(_rs || 'fast');
       }
-      });   // 순위 단계 콜백 끝
     })
     .catch(function(e){
       if(loading) loading.style.display = 'none';
       toast('네트워크 오류: ' + (e.message || ''));
     });
-    });   // _collectRTW 콜백 끝
+    })(null);   // 실시간 대기는 엔진이 직접 조회한다(rtw 미사용)
     });   // _ensureStopsParam 콜백 끝
   }
 
@@ -9006,15 +8917,13 @@ function _parseRouteOptions(engineData) {
     byType[pt].push(p);
   });
 
-  // ★ Cost = 실제 소요시간 - 즐겨찾기 정류장 승차 감면(5~10분)
-  //   ★ 실시간 대기시간(_rtWaitMin)을 더한다. 아직 조회되지 않은 후보는 0으로 둬서
-  //     불이익 없이 기존 순서를 유지한다(있는 정보로만 비교).
-  var _baseCost = (typeof _favCost==='function')
-    ? _favCost
-    : function(p){ return ((p.info||{}).totalTime||999); };
-  var _cost = function(p){ return _baseCost(p) + (p._rtWaitDelta || 0); };
+  // ★ 2026-09-15 · YJ 절대규칙 3번: 순위도 엔진이 준 값 그대로 쓴다.
+  //   앱이 '즐겨찾기 정류장이면 5~10분 깎기'를 더하고 있었다.
+  //   같은 경로를 엔진은 30분이라 했는데 앱은 20분으로 쳐서 순서를 뒤집었다.
+  //   즐겨찾기는 사용자 뜻이므로 엔진에 fav 로 넘기고, 반영은 엔진이 한다.
+  var _cost = function(p){ return ((p.info||{}).totalTime || 999); };
 
-  // 최단시간: Cost 가장 작은 것(즐겨찾기 승차 경로에 가중치 적용)
+  // 최단시간: 엔진 소요시간이 가장 짧은 것
   var sorted = paths.slice().sort(function(a,b){
     var d=_cost(a)-_cost(b);
     if(d) return d;
@@ -9112,6 +9021,29 @@ function _parseRouteOptions(engineData) {
     _fastPath = lessXfer[0] || paths[0];
   }
 
+  // ★ 2026-09-15 · YJ 절대규칙: 탭 배정도 엔진이 정한다.
+  //   엔진은 minTime·minTransfer·subway·bus 를 각각 따로 계산해 이미 알고 있다.
+  //   앱이 그걸 버리고 정렬·필터로 다시 고르던 것을 여기서 끝낸다.
+  //   (tab 이 없는 구버전 응답에서만 위의 예전 방식으로 물러난다)
+  var _byTab = {};
+  paths.forEach(function(p){
+    var tb = (p.info || {}).tab;
+    if(tb && !_byTab[tb]) _byTab[tb] = p;
+  });
+  if(_byTab.fast || _byTab.less || _byTab.sub || _byTab.bus){
+    return {
+      fast: _byTab.fast || _byTab.less || paths[0],
+      less: _byTab.less || _byTab.direct || _byTab.fast || paths[0],
+      sub:  _byTab.sub  || null,
+      bus:  _byTab.bus  || _byTab.direct || null,
+      all:  paths,
+      count: paths.length,
+      hasSubwayRoute: !!_byTab.sub || subwayPaths.length > 0,
+      favBonusUsed: false,
+      byEngine: true
+    };
+  }
+
   return {
     fast: _fastPath,
     less: lessXfer[0] || paths[0],
@@ -9120,7 +9052,8 @@ function _parseRouteOptions(engineData) {
     all:  paths,
     count: paths.length,
     hasSubwayRoute: subwayPaths.length > 0,
-    favBonusUsed: (typeof _favPathBonus==='function') ? (_favPathBonus(_fastPath)>0) : false
+    favBonusUsed: false,
+    byEngine: false
   };
 }
 
@@ -9248,41 +9181,10 @@ function _favNmKey(x){
   return String(x||'').replace(/\(.*?\)/g,'').replace(/[\s·.,]/g,'')
     .replace(/(정류장|정류소|버스정류장)$/,'').trim();
 }
-// 경로 p가 즐겨찾기 정류장 승차면 감면(분) 반환, 아니면 0. 판정 결과는 p에 캐시.
-function _favPathBonus(p){
-  if(!p) return 0;
-  if(p._favCalc) return p._favBonus||0;
-  p._favCalc=1; p._favBonus=0; p._favStop=null;
-  try{
-    var st=_favRouteStart(); if(!st) return 0;
-    var favs=_favStopsNear(st.lat, st.lng, _FAV_RADIUS_M);
-    if(!favs.length) return 0;
-    var subs=p.subPath||[];
-    for(var i=0;i<subs.length;i++){
-      var sp=subs[i];
-      if(sp.trafficType===3) continue;        // 도보 구간은 건너뜀
-      if(sp.trafficType!==2) break;           // 첫 대중교통이 버스가 아니면 대상 아님
-      var bx=(sp.startX!=null)?parseFloat(sp.startX):NaN;
-      var by=(sp.startY!=null)?parseFloat(sp.startY):NaN;
-      var bn=_favNmKey(sp.startName);
-      for(var k=0;k<favs.length;k++){
-        var f=favs[k], ok=false;
-        if(bn && bn===_favNmKey(f.nodenm)) ok=true;
-        if(!ok && !isNaN(bx) && !isNaN(by) && typeof haversineM==='function'
-           && haversineM(by,bx,f.la,f.lo)<=80) ok=true;
-        if(ok){
-          var ratio=1-Math.min(1,(f.d||0)/_FAV_RADIUS_M);      // 가까울수록 큰 감면
-          p._favBonus=Math.round(_FAV_BONUS_MIN+(_FAV_BONUS_MAX-_FAV_BONUS_MIN)*ratio);
-          p._favStop=f;
-          return p._favBonus;
-        }
-      }
-      break;                                   // 첫 버스 승차 구간만 판정
-    }
-  }catch(e){}
-  return 0;
-}
-// 비교용 Cost(분) = 실제 소요시간 - 즐겨찾기 감면
+// ★ 2026-09-15: 즐겨찾기 감면(_favPathBonus·_favCost)을 들어냈다.
+//   시간 계산은 엔진만 한다. 앱이 깎으면 화면의 '30분'과 순위 근거가 어긋난다.
+//   즐겨찾기 정류장은 탐색 요청에 fav 로 넘겨 엔진이 승차 후보로 우대한다.
+
 // ★ 2026-09-02: 첫 구간(집→타는 곳)과 마지막 구간(내려서→목적지) 도보 시간.
 //   trafficType 3 = 도보.
 function _walkEdgeMin(p){
@@ -9318,15 +9220,7 @@ function _walkPenalty(p){
 window._walkPenalty = _walkPenalty;
 
 // ★ 2026-09-03: 도보 가중치를 앱에서 빼고 엔진(WPEN.minTime=1.6)에만 맡긴다.
-//   양쪽에서 각자 더하면 같은 도보가 두 번 세어져 순위가 엇갈린다.
-//   여기 남는 것은 '즐겨찾기 정류장 감면'뿐이다. 이건 사용자 설정이라 앱의 몫이다.
-function _favCost(p){
-  var t=((p&&p.info)||{}).totalTime;
-  if(t==null) t=999;
-  return t - _favPathBonus(p);
-}
-window._favPathBonus=_favPathBonus;
-window._favCost=_favCost;
+// ★ 2026-09-15: 남아 있던 즐겨찾기 감면도 엔진으로 넘겼다. 앱은 시간을 만들지 않는다.
 // 일반 버스경로 렌더(폴백)
 function _renderNormalBus(){
   if(!_allRouteResults){ toast('경로를 찾을 수 없습니다.'); return; }
@@ -9341,37 +9235,11 @@ function _renderNormalBus(){
   }
   _renderTransitResultCard({routes:[r]}, _transitResultStart, _transitResultDest, 'engine_bus');
 }
-// 버스 탭: 500m 내 즐겨찾기 정류장에서 승차하는 경로 재탐색. 처리하면 true.
-function _selectBusFavRoute(){
-  var st=_transitResultStart, dst=_transitResultDest;
-  if(!st||!st.lat||!st.lng||!dst||!dst.lat||!dst.lng) return false;
-  var favs=_favStopsNear(st.lat, st.lng, 500);
-  if(!favs.length) return false;
-  var fav=favs[0], walkM=Math.round(fav.d);
-  var qs='SX='+fav.lo+'&SY='+fav.la+'&EX='+dst.lng+'&EY='+dst.lat;
-  toast('⭐'+fav.nodenm+'에서 승차 (도보 '+walkM+'m)');
-  fetch(_routeV2Url(qs)).then(function(r){ return r.json(); }).then(function(data){
-    var busPath=null;
-    try{
-      if(data&&data.result&&data.result.path){
-        var opts=_parseRouteOptions({result:{path:data.result.path}});
-        busPath = opts ? (opts.bus || opts.less || opts.fast) : null;
-      }
-    }catch(e){}
-    var routeObj=null;
-    if(busPath){ try{ routeObj=_convertSinglePathToRoute(busPath); }catch(e){} }
-    if(routeObj&&routeObj.sections&&routeObj.sections.length){
-      var favStart={ name:'⭐ '+fav.nodenm, lat:fav.la, lng:fav.lo, type:(st.type||1) };
-      _renderTransitResultCard({routes:[routeObj]}, favStart, dst, 'engine_bus');
-      _transitResultStart = st;   // 전역 출발지는 실제 출발지로 복원(다른 탭 영향 방지)
-      var bx=document.getElementById('transitResultBox')||document.getElementById('transitDetailBox');
-    } else {
-      _renderNormalBus();
-    }
-    _highlightRouteTab('bus');
-  }).catch(function(){ _renderNormalBus(); _highlightRouteTab('bus'); });
-  return true;
-}
+// ★ 2026-09-15: 버스 탭에서 즐겨찾기 정류장으로 '다시 탐색'하던 것을 없앴다.
+//   앱이 출발지를 바꿔 엔진에 또 물어보고, 그 결과를 원래 출발지 카드에 끼워 넣었다.
+//   집에서 그 정류장까지 가는 과정이 경로에 없어 시각이 맞지 않았다.
+//   즐겨찾기는 이제 탐색 한 번에 fav 로 같이 넘어간다.
+function _selectBusFavRoute(){ return false; }
 window._selectBusFavRoute=_selectBusFavRoute;
 
 function _doSelectRouteOption(type) {
@@ -9445,20 +9313,6 @@ function _doSelectRouteOption(type) {
   _renderTransitResultCard(data, _transitResultStart, _transitResultDest, 'engine_' + type);
   try{ _svcApply(routeObj.sections, 'engine_' + type); }catch(e){}
 
-  // ★ 즐겨찾기 정류장 승차 경로가 선택된 경우 1회 안내
-  try{
-    var _selPath=_allRouteResults[type];
-    var _fb=(typeof _favPathBonus==='function')?_favPathBonus(_selPath):0;
-    if(_fb>0 && _selPath && _selPath._favStop){
-      var _fkey=type+'|'+_selPath._favStop.nodenm;
-      if(window._favToastKey!==_fkey){
-        window._favToastKey=_fkey;
-        toast('\u2B50 '+_selPath._favStop.nodenm+' \uC2B9\uCC28 \uACBD\uB85C (\uB3C4\uBCF4 '
-          +Math.round(_selPath._favStop.d)+'m \u00B7 -'+_fb+'\uBD84 \uAC00\uC911\uCE58)');
-      }
-    }
-  }catch(e){}
-
   _highlightRouteTab(type);
 
   // 새 경로 선택 시 메인 확정 버튼 초기화
@@ -9514,38 +9368,52 @@ function _svcLineOf(sg){
   }catch(e){ return ''; }
 }
 
-// 경로 구간들을 훑어 '무엇이 끊겼는지'를 낸다. 판단할 근거가 없으면 null.
+// ★ 2026-09-15 · YJ 절대규칙: 경로에 관한 판단은 엔진만 한다. 앱은 그리기만 한다.
+//   여기서 두 번 데였다.
+//     · 지하철: 앱이 LINE_SCHEDULE(노선당 막차 하나)로 판정 → 23:44 에 '인천1호선 막차 23:30'
+//     · 버스  : 앱이 '심야 + 실시간 정보 없음'으로 추정 → 배차 긴 M6660 을 끊겼다고 안내
+//   둘 다 엔진은 '운행 중'이라고 답했는데 앱이 뒤집은 것이다.
+//   → 이제 앱은 엔진이 준 목록(liveStat.subOffList · svcOffList)에서
+//     '이 경로가 쓰는 노선'만 골라내 문구로 옮긴다. 스스로 판단하지 않는다.
+//   ※ '곧 막차예요' 경고는 엔진이 남은 시간을 주기 전까지 내보내지 않는다.
+//     틀린 경고를 띄우느니 말하지 않는 편이 낫다.
 function _svcCheck(sections){
   try{
-    var now = _svcNowMin();
-    var endedSub = [], soonSub = [], endedBus = [], firstMin = null;
+    var ls = null;
+    try{ ls = window._liveStat || null; }catch(e){}
+    if(!ls) return null;                                  // 엔진 판단이 없으면 아무 말도 안 한다
+
+    var nmKey = function(v){ return String(v == null ? '' : v).replace(/\s/g, ''); };
+    var offSub = (ls.subOffList || []).map(nmKey);
+    var offBus = (ls.svcOffList || []).map(nmKey);
+    if(!offSub.length && !offBus.length) return null;
+
+    var endedSub = [], endedBus = [], seen = {};
     (sections || []).forEach(function(sg){
       if(!sg || !sg.transportation) return;
       var t = sg.transportation.type;
+      var nm = String(sg.transportation.name || '').trim();
+      if(!nm) return;
+      var k = t + '|' + nmKey(nm);
+      if(seen[k]) return;
       if(t === 1){
-        var ln = _svcLineOf(sg);
-        var sc = (typeof LINE_SCHEDULE !== 'undefined') ? LINE_SCHEDULE[ln] : null;
-        if(!sc || !sc.first || !sc.last) return;          // 시각표 없으면 판단 보류
-        var f = timeToMin(sc.first), l = timeToMin(sc.last);
-        if(firstMin === null || _svcUntil(now, f) < _svcUntil(now, firstMin)) firstMin = f;
-        if(!_svcRunning(f, l, now)) endedSub.push({ line: ln, first: sc.first, last: sc.last });
-        else if(_svcUntil(now, l) <= _SVC_SOON_MIN) soonSub.push({ line: ln, last: sc.last, inMin: _svcUntil(now, l) });
+        if(offSub.indexOf(nmKey(nm)) < 0) return;         // 엔진이 살렸다 → 운행 중
+        seen[k] = 1; endedSub.push({ line: nm, first: null, last: '' });
       } else if(t === 2){
-        if(sg.waitReal || sg.waitLive) return;            // 실제로 오고 있다 → 운행 중
-        if(!_svcIsNight(now)) return;                     // 낮이면 그냥 정보 부족일 뿐
-        var no = (sg.transportation.name || '').trim();
-        if(no) endedBus.push({ no: no });
+        if(sg.waitReal || sg.waitLive) return;            // 실제로 오고 있다
+        if(offBus.indexOf(nmKey(nm)) < 0) return;         // 엔진이 살렸다 → 운행 중
+        seen[k] = 1; endedBus.push({ no: nm });
       }
     });
-    if(!endedSub.length && !soonSub.length && !endedBus.length) return null;
+    if(!endedSub.length && !endedBus.length) return null;
+
     var modes = [];
     if(endedSub.length) modes.push('지하철');
     if(endedBus.length) modes.push('버스');
     return {
-      endedSub: endedSub, soonSub: soonSub, endedBus: endedBus,
-      modes: modes,
-      ended: !!(endedSub.length || endedBus.length),
-      firstSub: firstMin != null ? minToTime(firstMin) : null,
+      endedSub: endedSub, soonSub: [], endedBus: endedBus,
+      modes: modes, ended: true,
+      firstSub: ls.subFirstTrain || null,
       firstBus: endedBus.length ? (_svcBusFirst() || _SVC_BUS_FIRST_FALLBACK) : null
     };
   }catch(e){ return null; }
@@ -9558,7 +9426,8 @@ function _svcModeText(r){
   return '일부 구간이';
 }
 function _svcLines(r){
-  var a = r.endedSub.map(function(x){ return x.last ? (x.line + ' (막차 ' + x.last + ')') : x.line; })
+  var a = r.endedSub.map(function(x){
+    return x.last ? (x.line + ' (' + (x.stn ? (x.stn + ' 막차 ') : '막차 ') + x.last + ')') : x.line; })
         .concat(r.endedBus.map(function(x){ return /[0-9]$/.test(x.no) ? (x.no + '번') : x.no; }));
   return a.join(' · ');
 }
