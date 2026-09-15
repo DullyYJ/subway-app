@@ -8303,14 +8303,37 @@ window._hideRouteLoading = _hideRouteLoading;
     //   **하나만 응답이 안 와도 Promise.all 이 영영 안 끝났다.**
     //   그러면 카드가 안 그려지고, 6초 워치독이 재탐색을 걸어 요청이 배로 늘었다.
     //   내 위치 기준(첫 번째)은 넉넉히, 주변 정류장 대안은 짧게 — 늦으면 그냥 뺀다.
+    // ★ 2026-09-15: 왜 실패했는지 남긴다.
+    //   예전엔 타임아웃·네트워크 오류 모두 조용히 null 이 되어,
+    //   진단에는 '응답 7건'(= 요청 수)만 찍혔다. 실제로는 전부 빈손일 수 있었다.
+    window._routeFetchLog = [];
     var _fetchJson = function(url, ms){
       return new Promise(function(res){
         var done = false;
-        var t = setTimeout(function(){ if(!done){ done = true; res(null); } }, ms);
-        fetch(url).then(function(r){ return r.json(); }).then(function(j){
-          if(done) return; done = true; clearTimeout(t); res(j);
-        }).catch(function(){
-          if(done) return; done = true; clearTimeout(t); res(null);
+        var t0 = Date.now();
+        var note = function(how, extra){
+          try{
+            window._routeFetchLog.push({ ms: Date.now() - t0, how: how,
+              n: (extra && extra.n != null) ? extra.n : null,
+              ver: (extra && extra.ver) || null,
+              err: (extra && extra.err) || null });
+          }catch(e){}
+        };
+        var t = setTimeout(function(){
+          if(!done){ done = true; note('타임아웃(' + ms + 'ms)'); res(null); }
+        }, ms);
+        fetch(url).then(function(r){
+          if(!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        }).then(function(j){
+          if(done) return; done = true; clearTimeout(t);
+          var _n = 0; try{ _n = ((j && j.result && j.result.path) || []).length; }catch(e){}
+          note(_n ? '경로 ' + _n + '건' : '경로 0건', { n: _n, ver: (j && j.engVer) || null });
+          res(j);
+        }).catch(function(e){
+          if(done) return; done = true; clearTimeout(t);
+          note('실패', { err: String((e && e.message) || e).slice(0, 60) });
+          res(null);
         });
       });
     };
@@ -8389,11 +8412,19 @@ window._hideRouteLoading = _hideRouteLoading;
           window._engSvcFirstBus = (window._liveStat && window._liveStat.svcFirstBus) || null;
           var _rv = (results || []).find(function(r){ return r && r.engVer; });
           if(_rv) window._engVer = _rv.engVer;
+          var _okN = 0, _emptyN = 0, _failN = 0;
+          (results || []).forEach(function(r){
+            if(!r) _failN++;
+            else if(r.result && r.result.path && r.result.path.length) _okN++;
+            else _emptyN++;
+          });
           window._lastNoRoute = {
             at: Date.now(),
             from: (typeof start!=='undefined' && start && start.name) || '',
             to:   (typeof dest !=='undefined' && dest  && dest.name)  || '',
-            got:  (results || []).length,
+            req:  (results || []).length,
+            ok:   _okN, empty: _emptyN, fail: _failN,
+            log:  (window._routeFetchLog || []).slice(0, 8),
             ver:  window._engVer || null,
             stat: window._liveStat || null
           };
@@ -16968,7 +16999,13 @@ window._bgDiag = async function(){
         var _nr = window._lastNoRoute;
         if(_nr){
           add('마지막 경로없음: ' + (_nr.from || '?') + '→' + (_nr.to || '?')
-              + ' · 응답 ' + _nr.got + '건 · ' + Math.round((Date.now()-_nr.at)/1000) + '초 전');
+              + ' · ' + Math.round((Date.now()-_nr.at)/1000) + '초 전');
+          add('  · 요청 ' + (_nr.req||0) + '건 → 경로있음 ' + (_nr.ok||0)
+              + ' · 빈응답 ' + (_nr.empty||0) + ' · 실패/타임아웃 ' + (_nr.fail||0));
+          (_nr.log || []).forEach(function(L, i){
+            add('  · #' + (i+1) + ' ' + L.how + ' (' + L.ms + 'ms)'
+                + (L.ver ? (' · ' + L.ver) : '') + (L.err ? (' · ' + L.err) : ''));
+          });
           var st = _nr.stat || {};
           if(st.svcOff != null) add('  · 운행종료 제외 노선: ' + st.svcOff + '개');
           if(st.svcFirstBus) add('  · 첫차: ' + st.svcFirstBus);
