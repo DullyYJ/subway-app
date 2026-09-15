@@ -8889,16 +8889,33 @@ function _pathSig(p){
 }
 window._pathSig = _pathSig;
 
-// 같은 서명이면 총 소요시간이 짧은 쪽만 남긴다
+// 같은 서명이면 하나만 남긴다.
+//   ★ 2026-09-15: 엔진이 붙인 탭 표시(info.tab)를 잃지 않게 합쳐서 남긴다.
+//     최단시간과 최소환승이 같은 경로일 때가 흔한데, 예전 방식대로 하나를 버리면
+//     그 탭의 답이 사라져 앱이 다시 고르게 된다(그게 규칙 위반이다).
+//     남은 쪽이 두 탭의 답을 겸하도록 _tabs 에 모아 둔다.
 function _dedupPaths(paths){
   try{
     var best = {}, order = [];
     (paths || []).forEach(function(p){
       var sig = _pathSig(p);
-      var t = ((p.info||{}).totalTime != null) ? p.info.totalTime : 9999;
-      if(!(sig in best)){ best[sig] = p; order.push(sig); return; }
-      var bt = ((best[sig].info||{}).totalTime != null) ? best[sig].info.totalTime : 9999;
-      if(t < bt) best[sig] = p;
+      var tb  = (p.info || {}).tab;
+      if(!(sig in best)){
+        best[sig] = p; order.push(sig);
+        try{ p.info._tabs = tb ? [tb] : []; }catch(e){}
+        return;
+      }
+      var keep = best[sig];
+      try{
+        keep.info._tabs = keep.info._tabs || [];
+        if(tb && keep.info._tabs.indexOf(tb) < 0) keep.info._tabs.push(tb);
+      }catch(e){}
+      var t  = ((p.info||{}).totalTime    != null) ? p.info.totalTime    : 9999;
+      var bt = ((keep.info||{}).totalTime != null) ? keep.info.totalTime : 9999;
+      if(t < bt){                      // 더 짧은 쪽으로 갈아끼우되 탭 표시는 이어받는다
+        try{ p.info._tabs = keep.info._tabs; }catch(e){}
+        best[sig] = p;
+      }
     });
     return order.map(function(sig){ return best[sig]; });
   }catch(e){ return paths || []; }
@@ -9027,8 +9044,9 @@ function _parseRouteOptions(engineData) {
   //   (tab 이 없는 구버전 응답에서만 위의 예전 방식으로 물러난다)
   var _byTab = {};
   paths.forEach(function(p){
-    var tb = (p.info || {}).tab;
-    if(tb && !_byTab[tb]) _byTab[tb] = p;
+    var inf = p.info || {};
+    var tabs = (inf._tabs && inf._tabs.length) ? inf._tabs : (inf.tab ? [inf.tab] : []);
+    tabs.forEach(function(tb){ if(!_byTab[tb]) _byTab[tb] = p; });
   });
   if(_byTab.fast || _byTab.less || _byTab.sub || _byTab.bus){
     return {
