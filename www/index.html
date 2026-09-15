@@ -11683,9 +11683,13 @@ var _CELL_SYNC_KEY   = 'cellSyncAt';
 var _CELL_PULL_TTL   = 12*3600*1000;   // 반나절마다 내려받기
 var _CELL_PUSH_MIN_N = 2;              // 두 번 이상 관측한 것만 올린다
 
+// ★ 2026-09-15: 쇼핑 워커를 보고 있었는데 거기엔 /cells 가 없었다(HTTP 404).
+//   subway-api 에도 없었다 — 앱에 호출 코드만 있고 서버는 만들어진 적이 없었다.
+//   맛집 워커(D1 보유)에 /cells · /cells/report 를 만들어 그쪽을 본다.
 function _cellServerUrl(){
-  try{ if(typeof _shopUrl === 'function') return _shopUrl(); }catch(e){}
-  return 'https://gildongmu-shop.phg0643.workers.dev';
+  try{ var v = localStorage.getItem('cellServer'); if(v) return v.replace(/\/+$/,''); }catch(e){}
+  try{ if(typeof _foodServerBase === 'function') return _foodServerBase(); }catch(e){}
+  return 'https://gildongmu-food.phg0643.workers.dev';
 }
 
 // 서버에서 내려받아 내 맵에 합친다(내 관측이 더 많으면 내 것을 지킨다)
