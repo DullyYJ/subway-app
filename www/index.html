@@ -17010,9 +17010,11 @@ window._bgDiag = async function(){
       if(_bd) add('정류장 수집: 노선 ' + (_bd.nearRoutes==null?'?':_bd.nearRoutes) + '개 / 행 ' + (_bd.rows==null?'?':_bd.rows)
                   + (_bd.capped ? ' — ★상한 도달(노선 일부 누락)' : '')
                   + (_bd.nearErr ? (' / 오류 ' + _bd.nearErr) : ''));
+      // ★ 2026-09-15: rtw 는 앱이 더는 보내지 않는다(엔진이 직접 조회).
+      //   전부 0 인 줄을 계속 띄우면 무언가 고장난 것처럼 읽힌다.
       var _rs = window._rtwStat;
-      if(_rs){
-        add('rtw 적중: 정류장 지정 ' + _rs.stopHit + '회 / 번호만 ' + _rs.anyHit + '회 / 못 찾음 ' + _rs.miss + '회');
+      if(_rs && (_rs.stopHit || _rs.anyHit)){
+        add('rtw 적중: 정류장 지정 ' + _rs.stopHit + '회 / 번호만 ' + _rs.anyHit + '회');
       }
       var _fb2 = window._htlFirstBus;
       if(_fb2){
