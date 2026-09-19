@@ -9397,6 +9397,39 @@ function _svcLineOf(sg){
 //     틀린 경고를 띄우느니 말하지 않는 편이 낫다.
 function _svcCheck(sections){
   try{
+    // ★ 2026-09-16: 엔진이 '이 경로의 승차 시각'으로 다시 판정한 결과가 있으면 그게 1순위다.
+    //   예전엔 '탐색하는 지금' 운행 중인지만 봐서, 23:51 에 탐색한 00:55 지하철 승차를
+    //   멀쩡한 것으로 그렸다(카카오는 첫차 05:04 로 안내). 엔진이 이제 구간별로 알려준다.
+    try{
+      var _sel = null;
+      try{ _sel = (_allRouteResults && _allRouteResults[window._routeSelType || 'fast']) || null; }catch(e0){}
+      if(!_sel) _sel = (sections && sections._path) || null;
+      var _sw = _sel && _sel.info && _sel.info.svcWarn;
+      if(_sw && _sw.length){
+        var _fmt = function(v){
+          if(v == null) return '';
+          var h = Math.floor(((v%1440)+1440)%1440/60), m2 = ((v%60)+60)%60;
+          return ('0'+h).slice(-2)+':'+('0'+m2).slice(-2);
+        };
+        var eSub = [], eBus = [], seen0 = {};
+        _sw.forEach(function(w){
+          if(!w || !w.name || seen0[w.type+w.name]) return;
+          seen0[w.type+w.name] = 1;
+          if(w.type === 'sub') eSub.push({ line:w.name, first:null, last:_fmt(w.last), at:_fmt(w.at) });
+          else                 eBus.push({ no:w.name, last:_fmt(w.last), at:_fmt(w.at) });
+        });
+        if(eSub.length || eBus.length){
+          var md = [];
+          if(eSub.length) md.push('지하철');
+          if(eBus.length) md.push('버스');
+          return { endedSub:eSub, soonSub:[], endedBus:eBus, modes:md, ended:true,
+                   atBoard:true,
+                   firstSub:(window._liveStat && window._liveStat.subFirstTrain) || null,
+                   firstBus:(eBus.length ? (_svcBusFirst() || _SVC_BUS_FIRST_FALLBACK) : null) };
+        }
+      }
+    }catch(e){}
+
     var ls = null;
     try{ ls = window._liveStat || null; }catch(e){}
     if(!ls) return null;                                  // 엔진 판단이 없으면 아무 말도 안 한다
@@ -9445,7 +9478,8 @@ function _svcModeText(r){
 }
 function _svcLines(r){
   var a = r.endedSub.map(function(x){
-    return x.last ? (x.line + ' (' + (x.stn ? (x.stn + ' 막차 ') : '막차 ') + x.last + ')') : x.line; })
+    return x.last ? (x.line + ' (' + (x.at ? (x.at + ' 승차 · 막차 ') : '막차 ') + x.last + ')')
+                  : (x.line + (x.at ? (' (' + x.at + ' 승차)') : '')); })
         .concat(r.endedBus.map(function(x){ return /[0-9]$/.test(x.no) ? (x.no + '번') : x.no; }));
   return a.join(' · ');
 }
@@ -16879,6 +16913,11 @@ window._bgDiag = async function(){
         } else add('최근 오류: 없음');
       }catch(e){}
       var _nd2 = (typeof _htlNotDeparted==='function') ? _htlNotDeparted() : null;
+      try{
+        var _na = window._cmNextAt;
+        if(_na) add('출퇴근 알람 예약: 출근 ' + (_na.morn ? new Date(_na.morn).toLocaleString() : '없음')
+                    + ' / 퇴근 ' + (_na.eve ? new Date(_na.eve).toLocaleString() : '없음'));
+      }catch(e){}
       var _bw = window._boardWhy ? (' (' + window._boardWhy + ')') : '';
       var _bt = (_nd2 === true) ? '아직 승차 전' : (_nd2 === false) ? ('승차 확정' + _bw) : '판단 불가';
       add('승차 판정: ' + _bt + ' · 출발 후 셀변화 ' + (window._boardCellN || 0) + '회');
@@ -16943,7 +16982,16 @@ window._bgDiag = async function(){
           add('운행 끝나 제외한 노선: ' + _ls.svcOff + '개'
               + ((_ls.svcOffList||[]).length ? (' (' + _ls.svcOffList.join(', ') + ')') : ''));
         }
-        if(_ls.svcFirstBus) add('가장 이른 버스 첫차: ' + _ls.svcFirstBus);
+        // ★ 2026-09-16: 어디서 시간을 쓰는지 숫자로 본다
+      if(_ls.ms){
+        var _m = _ls.ms;
+        add('엔진 소요: 총 ' + _m.total + 'ms'
+            + ' (정류장조회 ' + _m.d1 + (_m.cached ? 'ms·캐시' : 'ms')
+            + ' · 그래프 ' + _m.graph + 'ms'
+            + ' · 실측조회 ' + _m.live + 'ms'
+            + ' · 탐색 ' + (_m.search == null ? '?' : _m.search) + 'ms)');
+      }
+      if(_ls.svcFirstBus) add('가장 이른 버스 첫차: ' + _ls.svcFirstBus);
         if(_ls.subOff){
           add('막차 끊긴 호선: ' + _ls.subOff + '개'
               + ((_ls.subOffList||[]).length ? (' (' + _ls.subOffList.join(', ') + ')') : ''));
@@ -26992,9 +27040,13 @@ function _arrSlot(arrMs){
   var d = new Date(arrMs);
   var m = d.getHours()*60 + d.getMinutes();
   // ★ 2026-09-03: 야식은 21:00 까지, 그 뒤부터 쇼핑
+  // ★ 2026-09-16: '올 때도 있고 안 올 때도' 의 절반은 여기였다.
+  //   10:01~16:59 가 통째로 'none' 이라 낮에 내리면 추천이 아예 없었다.
+  //   낮에도 점심·카페는 쓸모가 있으니 시간대를 메운다. 심야(00~07)만 제외.
   if(m >= 17*60   && m <= 21*60)    return 'night';
   if(m >= 21*60+1)                  return 'shop';
   if(m >= 7*60+1  && m <= 10*60)    return 'morning';
+  if(m >= 10*60+1 && m <= 16*60+59) return 'lunch';
   return 'none';
 }
 window._arrSlot = _arrSlot;
@@ -27087,9 +27139,11 @@ function _arrBuildAlert(destStn, arrHour, arrMs){
     };
   }
 
-  // ── 07:01~10:00 · 커피/브런치 · 17:00~19:30 · 야식 ──
-  var isMorn = (slot === 'morning');
-  var place  = _arrPickPlace(destStn, isMorn ? 'cafe' : 'night');
+  // ── 07:01~10:00 커피/브런치 · 10:01~17:00 점심 · 17:00~21:00 야식 ──
+  // ★ 2026-09-16: 낮 시간대(lunch)를 추가했다. 밥집을 고르고 문구만 달리 쓴다.
+  var isLunch = (slot === 'lunch');
+  var isMorn  = (slot === 'morning');
+  var place   = _arrPickPlace(destStn, isLunch ? 'food' : (isMorn ? 'cafe' : 'night'));
   var menu;
   if(isMorn){
     // 커피 한 잔 + 브런치 한 가지를 같이 제안
@@ -27102,10 +27156,18 @@ function _arrBuildAlert(destStn, arrHour, arrMs){
   }
   var brunch = isMorn ? _ARR_BRUNCH[Math.floor(Math.random()*_ARR_BRUNCH.length)] : '';
 
-  var wit2 = _arrPickDaily(isMorn ? _ARR_WIT_MORN : _ARR_WIT_EVE, arr.getHours());
+  var wit2 = _arrPickDaily((isMorn || isLunch) ? _ARR_WIT_MORN : _ARR_WIT_EVE, arr.getHours());
   lines.push(_arrApplyJosa(wit2, menu));
 
-  if(isMorn){
+  if(isLunch){
+    lines.push('🍚 이 근처 한 끼');
+    if(place){
+      var d3 = (place.d != null) ? (place.d + 'm') : '가까운 곳';
+      lines.push('   ' + place.n + ' · ' + d3 + (place.c ? ' · ' + place.c : ''));
+    } else {
+      lines.push('   내리는 길에 한 끼 챙기세요');
+    }
+  } else if(isMorn){
     lines.push('☕ 오늘의 아침 · ' + menu + ' + ' + brunch);
     if(place){
       var dist = (place.d != null) ? (place.d + 'm') : (_ARR_CAFE_M + 'm 이내');
@@ -27122,14 +27184,15 @@ function _arrBuildAlert(destStn, arrHour, arrMs){
     }
   }
   lines.push('');
-  lines.push(isMorn
+  lines.push((isMorn || isLunch)
     ? _ARR_CHEER_MORN[Math.floor(Math.random()*_ARR_CHEER_MORN.length)]
     : _ARR_CLOSE_EVE[Math.floor(Math.random()*_ARR_CLOSE_EVE.length)]);
 
   return {
-    title: '🚉 하차 10분 전' + (destStn ? ' · ' + destStn : '') + (isMorn ? ' ☕' : ' 🍗'),
+    title: '🚉 하차 10분 전' + (destStn ? ' · ' + destStn : '')
+           + (isLunch ? ' 🍚' : (isMorn ? ' ☕' : ' 🍗')),
     body: lines.join('\n'),
-    kind: isMorn ? 'cafe' : 'night',
+    kind: isLunch ? 'lunch' : (isMorn ? 'cafe' : 'night'),
     slot: slot,
     menu: menu, brunch: brunch,
     place: place || null
@@ -27770,13 +27833,42 @@ function _cmScheduleOS(){
       //   ① channelId 가 없어 기본 채널(중요도 낮음)로 갔다 → 잠금화면에 안 뜬다
       //   ② allowWhileIdle 이 없어 절전(Doze) 중에는 통째로 밀렸다
       //   ③ smallIcon 이름이 실제 리소스(ic_stat_subway)와 달랐다
+      // ★ 2026-09-16: extra 에 종류를 담는다. 탭 처리가 이걸 보고 브리핑을 띄운다.
       list.push({ id:9110+(+d), title:'🌅 출근길 브리핑', body:'날씨와 혼잡도 요약이 준비됐어요 — 탭해서 확인하세요',
                   schedule:{ on:{ weekday:wd, hour:mh, minute:mm }, repeats:true, allowWhileIdle:true },
-                  channelId:'subway_alerts', smallIcon:'ic_stat_subway' });
+                  channelId:'subway_alerts', smallIcon:'ic_stat_subway',
+                  actionTypeId:'briefing_actions', extra:{ type:'commute_brief', which:'morn' } });
       list.push({ id:9120+(+d), title:'🌆 퇴근길 브리핑', body:'퇴근길 날씨·혼잡도 요약 — 탭해서 확인하세요',
                   schedule:{ on:{ weekday:wd, hour:eh, minute:em }, repeats:true, allowWhileIdle:true },
-                  channelId:'subway_alerts', smallIcon:'ic_stat_subway' });
+                  channelId:'subway_alerts', smallIcon:'ic_stat_subway',
+                  actionTypeId:'briefing_actions', extra:{ type:'commute_brief', which:'eve' } });
     });
+    // ★ 2026-09-16: '올 때도 있고 안 올 때도' 의 원인.
+    //   요일 반복(on:{weekday,...}, repeats:true)은 안드로이드에서 부정확 알람으로 걸린다.
+    //   절전(Doze)에 들어가면 수십 분 밀리거나 그 회차가 통째로 건너뛰어진다.
+    //   → 가장 가까운 한 번은 '정확한 시각(at)' 알람으로 따로 예약한다.
+    //     앱을 열 때마다 다시 걸리므로, 반복 예약은 백업으로만 남는다.
+    try{
+      var _nextAt = function(hh, mi){
+        var now = new Date();
+        var t = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hh, mi, 0, 0);
+        for(var i=0; i<8; i++){
+          if(t.getTime() > now.getTime() + 30000 && days.indexOf(t.getDay()) >= 0) return t;
+          t = new Date(t.getTime() + 86400000);
+        }
+        return null;
+      };
+      var mAt = _nextAt(mh, mm), eAt = _nextAt(eh, em);
+      if(mAt) list.push({ id:9101, title:'🌅 출근길 브리핑', body:'날씨와 혼잡도 요약이 준비됐어요 — 탭해서 확인하세요',
+                          schedule:{ at:mAt, allowWhileIdle:true },
+                          channelId:'subway_alerts', smallIcon:'ic_stat_subway',
+                          actionTypeId:'briefing_actions', extra:{ type:'commute_brief', which:'morn' } });
+      if(eAt) list.push({ id:9102, title:'🌆 퇴근길 브리핑', body:'퇴근길 날씨·혼잡도 요약 — 탭해서 확인하세요',
+                          schedule:{ at:eAt, allowWhileIdle:true },
+                          channelId:'subway_alerts', smallIcon:'ic_stat_subway',
+                          actionTypeId:'briefing_actions', extra:{ type:'commute_brief', which:'eve' } });
+      window._cmNextAt = { morn: mAt ? mAt.getTime() : null, eve: eAt ? eAt.getTime() : null };
+    }catch(e){}
     if(list.length) LN.schedule({ notifications:list }).catch(function(){});
   }catch(e){}
 }
@@ -28113,9 +28205,16 @@ function _initLocalNotifications(){
                 _rt = _cmRouteFor(/출근/.test(ex.title));
             }catch(e2){}
             setTimeout(function(){ _showBriefingModal(ex.title, ex.body, _rt); }, 350);
-          } else if(nid === 9101 || nid === 9102){
-            // OS 예약 백업 알림(고정 문구) → 탭 시 최신 브리핑 생성해 팝업으로 표시
-            setTimeout(function(){ _fireCommuteBriefing(nid === 9101 ? 'morn' : 'eve', { modal:true }); }, 350);
+          } else if(ex && ex.type === 'commute_brief'){
+            // ★ 2026-09-16: 출퇴근 예약 알림은 고정 문구라 ex.body 가 없다.
+            //   탭하면 그 자리에서 최신 브리핑을 만들어 팝업으로 띄운다.
+            setTimeout(function(){ _fireCommuteBriefing(ex.which === 'eve' ? 'eve' : 'morn', { modal:true }); }, 350);
+          } else if(nid === 9101 || nid === 9102 ||
+                    (nid >= 9110 && nid <= 9116) || (nid >= 9120 && nid <= 9126)){
+            // ★ 2026-09-16: 요일별 id(9110~9126)를 몰라서 탭해도 아무 일이 없었다.
+            //   extra 가 없는 예전 알림도 id 범위로 알아본다.
+            var _isEve = (nid === 9102) || (nid >= 9120 && nid <= 9126);
+            setTimeout(function(){ _fireCommuteBriefing(_isEve ? 'eve' : 'morn', { modal:true }); }, 350);
           }
         } catch(e){}
       });
@@ -32398,7 +32497,23 @@ function _pipTripSet(){
       }
       to = nd[nd.length-1].name || '';
     }
+    // ★ 2026-09-16: '짧은 거리는 PiP 가 안 생긴다' 의 원인 하나.
+    //   노드가 2개 미만(도보+한 구간처럼 짧은 경로)이면 위 두 갈래가 모두 비어
+    //   to 를 못 채우고 그냥 돌아갔다 → 여정이 기록되지 않아 PiP 가 영영 안 뜬다.
+    //   목적지는 화면에 이미 있으니 거기서라도 가져온다.
     if(!to && typeof S !== 'undefined' && S && S.dest && S.dest.name) to = S.dest.name;
+    if(!to){
+      try{
+        var _rd = (typeof _transitResultDest !== 'undefined') ? _transitResultDest : null;
+        if(_rd) to = (_rd.name || _rd) + '';
+      }catch(e0){}
+    }
+    if(!to){
+      try{
+        var _nd3 = (typeof _transitNodeData !== 'undefined') ? _transitNodeData : null;
+        if(_nd3 && _nd3.length) to = _nd3[_nd3.length-1].name || '';
+      }catch(e0b){}
+    }
     if(!to) return;
     // 출발지가 GPS(=내 위치)면 지명으로 바꿔 준다
     if(!from || from === '내 위치'){
@@ -32453,8 +32568,13 @@ function _pipHasRoute(){
 
     // ③ 도착 예정 시각이 5분 넘게 지났다 = 이미 끝난 여정
     try{
+      // ★ 2026-09-16: 짧은 경로는 도착 예정이 코앞이라, 시각이 조금만 어긋나도
+      //   '이미 끝난 여정'으로 정리돼 PiP 가 안 떴다. 여유를 15분으로 늘리고,
+      //   아직 출발조차 안 했으면(승차 전) 지난 시각만으로는 정리하지 않는다.
       var ep = (typeof _etaPair === 'function') ? _etaPair() : null;
-      if(ep && ep.arrMs && (Date.now() - ep.arrMs) > 5*60000){ _pipTripClear(); return false; }
+      var _notYet = false;
+      try{ _notYet = (typeof _htlNotDeparted === 'function') && _htlNotDeparted() === true; }catch(e3){}
+      if(!_notYet && ep && ep.arrMs && (Date.now() - ep.arrMs) > 15*60000){ _pipTripClear(); return false; }
     }catch(e2){}
 
     // ④ 안내를 시작한 지 6시간이 넘었다 = 잊힌 여정
@@ -32680,7 +32800,9 @@ function _pipPaint(){
 // 표시 여부는 감시 루프가 정하므로 여기서는 상태만 바꾸고 즉시 한 번 맞춘다.
 // ★ 2026-09-03: 도착 10분 전 추천을 작은 화면 아래에 붙인다.
 //   알림으로만 보내면 PiP 를 보고 있을 때 놓친다. 화면이 아래로 늘어나며 버튼까지 보여 준다.
-var _PIP_RECO_TTL = 20*60*1000;   // 20분이 지나면 내린다
+// ★ 2026-09-16: 20분은 너무 길었다. 작은 창에서 추천이 계속 떠 있어
+//   현재역·남은시간을 가렸다. 90초만 보여주고 스스로 내려간다.
+var _PIP_RECO_TTL = 90*1000;
 
 function _pipRecoSet(title, body, buttons){
   try{
@@ -32710,6 +32832,7 @@ function _pipRecoPaint(){
     wrap.style.justifyContent = 'flex-start';
     wrap.style.paddingTop = 'min(1.2vh,8px)';
     wrap.style.overflowY = 'auto';
+    wrap.style.rowGap = 'min(0.8vh,6px)';
   }
   if(typeof _pipGrow === 'function') _pipGrow(true);
 
@@ -32734,10 +32857,16 @@ function _pipRecoPaint(){
     });
     html += '</div>';
   }
+  // ★ 2026-09-16: 작은 창은 터치를 웹으로 안 넘겨 버튼이 안 눌린다.
+  //   눌러 없앨 수 없으니 남은 시간을 보여주고 스스로 사라지게 한다.
+  var _left = Math.max(0, Math.round((_PIP_RECO_TTL - (Date.now() - (r.at||Date.now())))/1000));
+  html += '<div style="margin-top:min(1vh,7px);font-size:min(2.6vw,11px);opacity:.55;">'
+       +  '탭하면 앱에서 열려요 · ' + _left + '초 뒤 사라짐</div>';
   box.innerHTML = html;
   box.style.display = 'block';
-  box.style.maxHeight = '60vh';
+  box.style.maxHeight = '52vh';
   box.style.overflowY = 'auto';
+  box.style.boxSizing = 'border-box';
 }
 window._pipRecoPaint = _pipRecoPaint;
 
