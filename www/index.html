@@ -3974,6 +3974,50 @@ var _commHasMore  = true;
 var _serverPosts  = [];   // 서버에서 받은 게시글
 
 // 서버에서 게시글 로드
+// ★ 2026-09-20: 게시판을 처음 열면 2~3초 빈 화면이었다.
+//   글을 서버에서 받아야만 그릴 수 있는 구조라, 그동안 '아직 제보가 없습니다'가
+//   보였다 — 처음 쓰는 사람은 게시판이 비어 있다고 오해한다.
+//   → 지난번에 받은 글을 남겨 두고, 앱을 켤 때 그걸로 먼저 채운다.
+//     서버 응답이 오면 조용히 최신으로 바뀐다(기존 흐름 그대로).
+var _COMM_CACHE_KEY = 'commPostsCache';
+var _COMM_CACHE_MAX = 60;
+var _COMM_CACHE_TTL = 24 * 3600 * 1000;
+function _commSaveCache(list){
+  try{
+    if(!list || !list.length) return;
+    localStorage.setItem(_COMM_CACHE_KEY, JSON.stringify({
+      ts: Date.now(),
+      posts: list.slice(0, _COMM_CACHE_MAX).map(function(p){
+        return { id:p.id, title:p.title, body:p.body, cat:p.cat, time:p.time, nick:p.nick,
+                 views:p.views, like:p.like, lol:p.lol, sad:p.sad, link:p.link, isServer:true };
+      })
+    }));
+  }catch(e){}
+}
+function _commLoadCache(){
+  try{
+    var raw = localStorage.getItem(_COMM_CACHE_KEY);
+    if(!raw) return null;
+    var d = JSON.parse(raw);
+    if(!d || !d.posts || !d.posts.length) return null;
+    if(Date.now() - (d.ts || 0) > _COMM_CACHE_TTL) return null;   // 하루 지난 건 안 쓴다
+    return d.posts.map(function(p){ p.cmts = p.cmts || []; return p; });
+  }catch(e){ return null; }
+}
+function _commHydrate(){
+  try{
+    if(typeof _AI_POSTS === 'undefined' || _AI_POSTS.length) return;
+    var c = _commLoadCache();
+    if(!c) return;
+    _AI_POSTS = c;
+    window._serverPostsActive = true;   // 로컬 자동 생성이 끼어들지 않게
+    if(typeof renderCommList === 'function') renderCommList();
+  }catch(e){}
+}
+window._commHydrate = _commHydrate;
+//   ※ 호출은 _AI_POSTS 가 선언된 뒤(커뮤니티 블록)에서 한다 — 여기서 부르면
+//     나중에 var _AI_POSTS=[] 가 다시 비워버린다.
+
 function _loadServerPosts(cat, reset) {
   if(_commLoading) return;
   if(reset) { _commPage = 0; _commHasMore = true; _serverPosts = []; }
@@ -4038,6 +4082,7 @@ function _loadServerPosts(cat, reset) {
         try { if(typeof _newPostTimer !== 'undefined' && _newPostTimer) clearTimeout(_newPostTimer); } catch(e){}
         try { if(typeof _autoPostTimer !== 'undefined' && _autoPostTimer) clearTimeout(_autoPostTimer); } catch(e){}
         _AI_POSTS = converted;
+        _commSaveCache(converted);     // ★ 다음 실행에서 바로 보여주려고 남긴다
         renderCommList();
       } else if(_AI_POSTS.length === 0) {
         // 서버도 없고 로컬도 없으면 AI 생성
@@ -14313,7 +14358,34 @@ function _renderNearStops(stops){
   if(!listEl) return;
   window._nearOrderedStops = stops;
   var total = stops.length;
+
+  // ★ 2026-09-20: 도착정보가 갱신될 때마다 카드를 통째로 다시 만들어,
+  //   보고 있던 자리가 튀고 화면이 '스프링'처럼 다시 펼쳐졌다.
+  //   정류장 목록이 그대로면 카드는 건드리지 않는다 — 도착 시각만 제자리에서 바뀐다.
+  //   (도착행 갱신은 _loadMapBusArrival 안의 reconcile 이 이미 제자리 처리를 한다)
+  var _sig = '';
+  try{
+    _sig = stops.map(function(st){
+      return (typeof _busStopKey === 'function') ? _busStopKey(st) : (st.nodeid || st.nodenm || '');
+    }).join('|');
+  }catch(e){}
+  var _same = (_sig && listEl.dataset && listEl.dataset.nearSig === _sig
+               && listEl.querySelector('.map-bus-stop-card'));
+  if(_same){
+    _busNearMapRender(stops);            // 지도 핀은 가볍게 갱신
+    (window._mapBusCards || []).forEach(function(c){
+      try{ if(document.getElementById('mapBusCard_' + c.cardIdx)) _loadMapBusArrival(c.stop, c.cardIdx); }catch(e){}
+    });
+    return;                               // 카드는 그대로 둔다 → 스크롤이 튀지 않는다
+  }
+
+  // 목록 자체가 바뀌었을 때만 다시 그린다. 보던 위치는 최대한 지킨다.
+  var _sc = null;
+  try{ _sc = (listEl.scrollTop || (listEl.parentNode && listEl.parentNode.scrollTop) || 0); }catch(e){}
+  var _first = !(listEl.dataset && listEl.dataset.nearSig);   // 이 탭에서 처음 그리는가
+
   listEl.innerHTML = '<div style="padding:10px 14px;font-size:12px;color:var(--sub);">📍 주변 정류장 ' + total + '개 · 번호는 위 지도와 같아요 · 꾹 눌러 순서 변경</div>';
+  try{ listEl.dataset.nearSig = _sig; }catch(e){}
   _busNearMapRender(stops);   // ★ 지도도 같은 순서로 다시 그린다(드래그 정렬 후 번호 유지)
   window._mapBusCards = [];
   stops.forEach(function(stop, idx){
@@ -14333,7 +14405,13 @@ function _renderNearStops(stops){
     if(typeof _applyNodeFix === 'function') _applyNodeFix(arrStop);   // 캐시된 보정 ID 즉시 적용
     window._mapBusCards.push({ stop: arrStop, cardIdx: 'near_' + idx });
     _loadMapBusArrival(arrStop, 'near_' + idx);
+    // 처음 열 때만 아래로 차례차례 펼쳐지는 느낌을 준다(갱신 때는 조용히)
+    if(_first){
+      card.classList.add('bus-card-in');
+      card.style.animationDelay = Math.min(idx * 45, 360) + 'ms';
+    }
   });
+  if(!_first && _sc){ try{ listEl.scrollTop = _sc; }catch(e){} }
   if(typeof _busDragInit === 'function') _busDragInit();   // ★ 롱프레스 드래그 정렬 활성화
 }
 window._renderNearStops = _renderNearStops;
@@ -29277,6 +29355,8 @@ var _STN_MAP={
   '신분당선':['강남','양재','판교','정자','미금'],
 };
 var _AI_POSTS=[];
+// ★ 2026-09-20: 저장해 둔 글로 즉시 채운다(서버 응답 전 빈 화면 방지)
+try{ if(typeof _commHydrate === 'function') _commHydrate(); }catch(e){}
 var _POST_ID=100;
 
 // ── 댓글/대댓글 생성 함수 ──────────────────────────────────
@@ -41534,9 +41614,57 @@ function _shopCtx(){
   };
 }
 
+// ★ 2026-09-20: 계절 추천. 9월이면 후디·자켓을, 한여름이면 반팔을 위로 올린다.
+//   테마 태그(_shopThemeMap)는 상품의 3분의 1 정도만 붙어 있어서 계절을 못 잡는다.
+//   그래서 상품 '이름'으로도 본다 — 이름은 전부 있다.
+//   · 절기는 월 기준, 환절기(2·5·8·11월 후반~)에는 다음 계절을 미리 올린다.
+//     9월에 패딩을 찾는 이유가 그거다. 사람들은 계절을 앞질러 준비한다.
+//   · 날씨는 그날의 사정이라 계절보다 세게 반영한다(비·한파·폭염).
+var _SHOP_SEASON_KW = {
+  winter: /패딩|다운|기모|플리스|양털|무스탕|코트|목도리|머플러|장갑|귀도리|내복|히트텍|전기요|온수매트|핫팩|가습기|난방|방한|털슬리퍼|수면바지|극세사|롱패딩|니트|스웨터|부츠/,
+  spring: /바람막이|윈드브레이커|가디건|트렌치|자켓|재킷|맨투맨|후드|얇은|봄|블라우스|스니커즈|황사|미세먼지|마스크|알레르기|자외선차단/,
+  summer: /반팔|반바지|냉감|쿨링|냉각|린넨|메쉬|썬크림|선크림|자외선|선글라스|모자|캡모자|샌들|슬리퍼|아쿠아|수영|래시가드|선풍기|서큘레이터|제습|모기|아이스|쿨매트|부채/,
+  fall:   /후드|후디|맨투맨|가디건|자켓|재킷|니트|스웨터|점퍼|야상|기모|트렌치|경량패딩|조끼|베스트|긴팔|스카프|부츠|워커/
+};
+function _shopSeasonNow(d){
+  var m = (d || new Date()).getMonth() + 1, day = (d || new Date()).getDate();
+  var cur, next;
+  if(m===12||m===1||m===2)      { cur='winter'; next='spring'; }
+  else if(m>=3 && m<=5)         { cur='spring'; next='summer'; }
+  else if(m>=6 && m<=8)         { cur='summer'; next='fall';   }
+  else                          { cur='fall';   next='winter'; }
+  // 그 계절의 마지막 달 후반이면 다음 계절 준비 비중을 크게 둔다
+  var late = ((m===2||m===5||m===8||m===11) && day>=15) || (m===9) || (m===12&&day>=15);
+  return { cur:cur, next:next, lean: late ? 0.7 : 0.35 };
+}
+function _shopSeasonScore(name, ctx){
+  var nm = String(name||'');
+  if(!nm) return 0;
+  var se = ctx._season || (ctx._season = _shopSeasonNow());
+  var sc = 0;
+  if(_SHOP_SEASON_KW[se.cur]  && _SHOP_SEASON_KW[se.cur].test(nm))  sc += 90;
+  if(_SHOP_SEASON_KW[se.next] && _SHOP_SEASON_KW[se.next].test(nm)) sc += Math.round(90 * se.lean);
+  // 막 지나간 계절 물건은 내린다 — 가을에 반팔, 봄에 패딩을 위로 올릴 이유가 없다
+  var opp = { winter:'summer', summer:'winter', spring:'winter', fall:'summer' }[se.cur];
+  if(_SHOP_SEASON_KW[opp] && _SHOP_SEASON_KW[opp].test(nm)
+     && !(_SHOP_SEASON_KW[se.cur] && _SHOP_SEASON_KW[se.cur].test(nm))) sc -= 70;
+  // 그날 날씨는 계절보다 우선한다
+  if(ctx.rain >= 50 && /우산|레인|방수|장화|우비|제습/.test(nm))     sc += 120;
+  if(ctx.temp != null){
+    if(ctx.temp <= 5  && _SHOP_SEASON_KW.winter.test(nm))            sc += 110;
+    if(ctx.temp >= 28 && _SHOP_SEASON_KW.summer.test(nm))            sc += 110;
+    if(ctx.temp <= 5  && _SHOP_SEASON_KW.summer.test(nm))            sc -= 90;
+    if(ctx.temp >= 28 && _SHOP_SEASON_KW.winter.test(nm))            sc -= 90;
+  }
+  return sc;
+}
+window._shopSeasonScore = _shopSeasonScore;
+window._shopSeasonNow = _shopSeasonNow;
+
 // 상품 1개 점수 — 시간대(현재/인접 슬롯) + 요일 + 날씨(강수·기온)
-function _shopScore(theme, ctx, rng){
+function _shopScore(theme, ctx, rng, name){
   var sc = rng()*12;                       // 같은 조건에서도 약간의 변화
+  sc += _shopSeasonScore(name, ctx);       // ★ 계절·날씨 (이름 기준, 태그 없어도 동작)
   if(!theme) return sc - 12;               // 상황 태그 없는 상품은 후순위
   if(ctx.now[theme])      sc += 100;       // 지금 시간대에 딱 맞는 테마
   else if(ctx.adj[theme]) sc += 45;        // 앞뒤 시간대 테마
@@ -41590,7 +41718,9 @@ function _shopPick(){
   var wx=_shopWeather();
   var rainB=(wx&&wx.rain!=null)?Math.round(wx.rain/20):-1;      // 날씨 바뀌면 재계산
   var tempB=(wx&&wx.temp!=null)?Math.round(wx.temp/5):-99;
-  var seed=_shopSeed()*1000 + (rainB+1)*20 + (tempB+20);
+  var _d=new Date();
+  var seasonB=(_d.getMonth()+1)*3 + Math.min(2, Math.floor((_d.getDate()-1)/10));   // 월·순
+  var seed=_shopSeed()*1000 + (rainB+1)*20 + (tempB+20) + seasonB*7;
   if(_shopCache && _shopCache.seed===seed) return _shopCache;
 
   var rng=_shopRng(seed);
@@ -41605,8 +41735,13 @@ function _shopPick(){
     var list=(c.items||[]).map(function(x){
       return {n:x.n, u:x.u, i:x.i, _cat:c.c, _t:themes[x.u]||''};
     });
-    byCat[c.c]=_shopSpread(list);
-    byCat[c.c].forEach(function(it){ scored.push({it:it, s:_shopScore(it._t, ctx, rng)}); });
+    // ★ 2026-09-20: 카테고리 안에서도 계절에 맞는 것을 위로 올린다.
+    //   (추천 탭뿐 아니라 '패션'·'생활' 같은 개별 탭을 눌렀을 때도 적용된다)
+    var spread=_shopSpread(list);
+    spread.forEach(function(it){ it._s = _shopScore(it._t, ctx, rng, it.n); });
+    spread.sort(function(a,b){ return b._s - a._s; });
+    byCat[c.c]=spread;
+    spread.forEach(function(it){ scored.push({it:it, s:it._s}); });
   });
 
   // ② 추천 100선: 점수순 + 카테고리 편중/동일상품 중복 방지
@@ -45566,6 +45701,10 @@ document.addEventListener('DOMContentLoaded', function() {
   background:var(--card);font-size:15px;cursor:pointer;}
 .map-bus-stop-card{background:var(--card);border:1px solid var(--border);
   border-radius:18px;margin:12px;overflow:hidden;}
+/* ★ 2026-09-20: 처음 열 때만 아래로 펼쳐지는 등장 효과.
+   갱신할 때는 이 클래스를 붙이지 않아 화면이 튀지 않는다. */
+@keyframes busCardIn{ from{opacity:0;transform:translateY(10px);} to{opacity:1;transform:none;} }
+.map-bus-stop-card.bus-card-in{ animation:busCardIn .26s ease-out both; }
 /* ★ 롱프레스 드래그 정렬: 편집모드 흔들림 + 드래그 카드 강조 */
 @keyframes busJiggle{ 0%,100%{transform:rotate(-0.8deg);} 50%{transform:rotate(0.8deg);} }
 /* ★ 카드를 꾹 누르면 OS 텍스트 선택(복사·번역 툴바)이 먼저 잡혀 드래그가 안 되던 문제.
