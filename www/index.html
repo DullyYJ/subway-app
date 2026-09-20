@@ -4871,6 +4871,7 @@ function _loadBusRouteData(cityCode, routeId, src){
   //     · 실패·빈 결과면 짧게(1.2초) 다시 시도한다 (최대 3회)
   //     · 모달이 열려 있는 동안 15초마다 갱신한다
   var _busRetry = 0, _busTimer = null;
+  window._busPosKnown = false;   // 이번 노선의 위치 응답을 아직 못 받았다
   var _startBuses = function(viaGG, _isRefresh){
     if(!_isRefresh && _busSrcGG === viaGG) return;   // 같은 출처로 이미 요청함
     _busSrcGG = viaGG;
@@ -4879,13 +4880,17 @@ function _loadBusRouteData(cityCode, routeId, src){
       if(_busSrcGG !== viaGG) return;      // 그 사이 출처가 바뀌었으면 이 응답은 버린다
       if(_stale()) return;
       var got = (list && list.length) ? list : [];
+      // ★ 2026-09-20: 오류가 아니라 '빈 응답'이면 API 는 제대로 답한 것이다.
+      //   그 경우엔 0대가 사실이므로 확정으로 표시한다.
+      if(!e) window._busPosKnown = true;
       // 실패했거나 아직 한 대도 안 잡혔으면 짧게 재시도
-      if((e || !got.length) && _busRetry < 3){
+      //   ★ 간격을 1.2초 → 0.8초로 좁히고 4회까지. 출퇴근엔 이 정보가 제일 급하다.
+      if((e || !got.length) && _busRetry < 4){
         _busRetry++;
         setTimeout(function(){
           if(_stale() || _busSrcGG !== viaGG) return;
           _startBuses(viaGG, true);
-        }, 1200);
+        }, 800);
         // 첫 응답이 비어도 정류장은 이미 그려져 있으므로 화면은 그대로 둔다
         if(!_busesReady) return;
       }
@@ -4899,7 +4904,9 @@ function _loadBusRouteData(cityCode, routeId, src){
   };
 
   // 모달이 열려 있는 동안 주기적으로 위치만 갱신한다(정류장은 다시 안 받는다)
-  var _BUS_POS_REFRESH = 15000;
+  // ★ 2026-09-20: 15초는 '너무 오래 기다린다'는 체감의 원인이었다.
+  //   모달이 열려 있는 동안만 도는 타이머라 8초로 좁혀도 부담이 적다.
+  var _BUS_POS_REFRESH = 8000;
   if(window._busPosTimer){ clearInterval(window._busPosTimer); window._busPosTimer = null; }
   window._busPosTimer = setInterval(function(){
     try{
@@ -5124,6 +5131,12 @@ function _renderBusRoute(stations, buses){
   var topHtml = '';
   var html = '';
   var runN = buses.length;
+  // ★ 2026-09-20: '운행 0대' 가 계속 떴다(실기기 991, 낮 09:44).
+  //   위치 API 가 그 지역을 아예 제공하지 않거나 응답이 비어도 0대로 단정했다.
+  //   '못 받은 것'과 '정말 없는 것'은 다르다 — 아직 못 받았으면 그렇게 쓴다.
+  var _posKnown = !!window._busPosKnown;
+  var _runTxt = _posKnown ? ('🚌 운행 ' + runN + '대')
+                          : (runN ? ('🚌 운행 ' + runN + '대') : '🚌 위치 확인 중...');
   topHtml += '<div class="brs-top">'
         +   (anchorIsStop && myDirEnd
               ? '<div class="brs-route-dir"><b>' + _ltEsc(anchorNm) + '</b><span class="brs-arrow">→</span><b>'
@@ -5132,7 +5145,7 @@ function _renderBusRoute(stations, buses){
                 + '</div>'
               : '<div class="brs-route-dir"><b>' + _ltEsc(firstNm) + '</b><span class="brs-arrow">→</span><b>' + _ltEsc(lastNm) + '</b></div>')
         +   '<div class="brs-top-meta">'
-        +     '<span class="brs-chip ' + (runN ? 'on' : '') + '">🚌 운행 ' + runN + '대</span>'
+        +     '<span class="brs-chip ' + (runN ? 'on' : '') + '">' + _runTxt + '</span>'
         +     '<span class="brs-chip">정류장 ' + stations.length + '개</span>'
         +     (myEtaTxt ? '<span class="brs-chip me">' + _ltEsc(anchorLabel) + ' · ' + _ltEsc(myEtaTxt) + '</span>' : '')
         +   '</div>'
@@ -9110,6 +9123,7 @@ function confirmSelectedRoute(){
   }
   if(typeof toast === 'function') toast(optName + ' 경로로 확정했어요');
   if(typeof _beginJourneyTracking === 'function') _beginJourneyTracking();   // ★ 백그라운드 추적 시작
+  _pipArmNow();   // ★ 2026-09-20: 확정했으면 작은 화면도 바로 준비
   // 세부경로 닫고 메인 카드에서 추적 진행
   setTimeout(function(){ if(typeof closeTransitDetail==='function') closeTransitDetail(); }, 600);
 }
@@ -9129,8 +9143,28 @@ function confirmCurrentRoute(){
   }
   if(typeof toast === 'function') toast(optName + ' 경로로 확정했어요');
   if(typeof _beginJourneyTracking === 'function') _beginJourneyTracking();   // ★ 백그라운드 추적 시작
+  _pipArmNow();   // ★ 2026-09-20: 확정했으면 작은 화면도 바로 준비
 }
 window.confirmCurrentRoute = confirmCurrentRoute;
+
+// ★ 2026-09-20: 작은 화면이 '어떤 경로는 뜨고 어떤 경로는 안 뜨는' 이유.
+//   여정 기록(_pipTripSet)이 _beginJourneyTracking 안에서만 일어났다.
+//   그 함수는 GPS 권한·백그라운드 추적이 막히면 도중에 빠져나간다.
+//   그러면 경로 카드에는 '확정됨'이라고 떠 있는데 진단에는
+//   '안내 중인 여정: 없음(경로를 확정해야 떠요)' 가 남는다 — 실기기에서 본 그대로다.
+//   → 확정 자체를 신호로 삼아 여기서 한 번 더 적는다. 추적이 되든 안 되든.
+function _pipArmNow(){
+  try{ if(typeof _pipTripSet === 'function') _pipTripSet(); }catch(e){}
+  try{ if(typeof _pipNativeSync === 'function') _pipNativeSync(true); }catch(e){}
+  // 확정 직후엔 경로 데이터가 아직 그려지는 중일 수 있어 한 번 더 확인한다
+  setTimeout(function(){
+    try{
+      if(!window._pipTrip && typeof _pipTripSet === 'function') _pipTripSet();
+      if(typeof _pipNativeSync === 'function') _pipNativeSync(true);
+    }catch(e){}
+  }, 1200);
+}
+window._pipArmNow = _pipArmNow;
 
 // 경로 확인 커스텀 모달 (APK WebView에서 confirm() 차단 대응)
 function _showRouteConfirm(optName, onConfirm){
@@ -16983,8 +17017,8 @@ window._bgDiag = async function(){
               + ((_ls.svcOffList||[]).length ? (' (' + _ls.svcOffList.join(', ') + ')') : ''));
         }
         // ★ 2026-09-16: 어디서 시간을 쓰는지 숫자로 본다
-      if(_ls.ms){
-        var _m = _ls.ms;
+      if(_ls.msBreak){
+        var _m = _ls.msBreak;
         add('엔진 소요: 총 ' + _m.total + 'ms'
             + ' (정류장조회 ' + _m.d1 + (_m.cached ? 'ms·캐시' : 'ms')
             + ' · 그래프 ' + _m.graph + 'ms'
