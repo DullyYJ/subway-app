@@ -3979,6 +3979,59 @@ var _serverPosts  = [];   // 서버에서 받은 게시글
 //   보였다 — 처음 쓰는 사람은 게시판이 비어 있다고 오해한다.
 //   → 지난번에 받은 글을 남겨 두고, 앱을 켤 때 그걸로 먼저 채운다.
 //     서버 응답이 오면 조용히 최신으로 바뀐다(기존 흐름 그대로).
+// ★ 2026-09-20: 앱 업데이트 없이 서버에서 운영하기 위한 수신부.
+//   · /app-config?k=...  운영 설정(쇼핑 추천 규칙 등)
+//   · /content?kind=...  오늘 쓸 글감·대화 소재(서버가 6개월치를 날짜로 갈라 준다)
+//   받은 값은 하루 캐시하고, 못 받으면 앱에 내장된 기존 값을 그대로 쓴다.
+//   서버가 죽어도 지금까지와 똑같이 동작하는 게 원칙이다.
+var _SRV_TTL = 6 * 3600 * 1000;
+function _srvBase(){
+  try{ if(typeof _foodServerBase === 'function') return _foodServerBase(); }catch(e){}
+  return 'https://gildongmu-food.phg0643.workers.dev';
+}
+function _srvCacheGet(key){
+  try{
+    var d = JSON.parse(localStorage.getItem('srv:' + key) || 'null');
+    if(!d || Date.now() - (d.ts||0) > _SRV_TTL) return null;
+    return d.v;
+  }catch(e){ return null; }
+}
+function _srvCacheSet(key, v){
+  try{ localStorage.setItem('srv:' + key, JSON.stringify({ ts: Date.now(), v: v })); }catch(e){}
+}
+function _srvFetch(key, url, cb){
+  var hit = _srvCacheGet(key);
+  if(hit != null){ try{ cb(hit); }catch(e){} return; }
+  var done = false;
+  setTimeout(function(){ if(!done){ done = true; try{ cb(null); }catch(e){} } }, 5000);
+  fetch(_srvBase() + url).then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(d){
+      if(done) return; done = true;
+      var v = null;
+      if(d && d.ok){ v = (d.items != null) ? d.items : d.v; }
+      if(v != null) _srvCacheSet(key, v);
+      try{ cb(v); }catch(e){}
+    }).catch(function(){ if(!done){ done = true; try{ cb(null); }catch(e){} } });
+}
+window._srvFetch = _srvFetch;
+
+// 앱이 켜질 때 한 번 받아 둔다(실패해도 조용히 넘어간다)
+function _srvBootstrap(){
+  try{
+    _srvFetch('cfg:shop', '/app-config?k=shop', function(v){
+      if(v && typeof v === 'object'){ window._srvShopCfg = v; }
+    });
+    _srvFetch('content:post', '/content?kind=post&n=24', function(v){
+      if(v && v.length) window._srvPostSeeds = v;
+    });
+    _srvFetch('content:chat', '/content?kind=chat&n=40', function(v){
+      if(v && v.length) window._srvChatSeeds = v;
+    });
+  }catch(e){}
+}
+window._srvBootstrap = _srvBootstrap;
+try{ setTimeout(_srvBootstrap, 1200); }catch(e){}
+
 var _COMM_CACHE_KEY = 'commPostsCache';
 var _COMM_CACHE_MAX = 60;
 var _COMM_CACHE_TTL = 24 * 3600 * 1000;
@@ -4024,11 +4077,19 @@ function _loadServerPosts(cat, reset) {
   if(!_commHasMore) return;
 
   _commLoading = true;
-  var url = _SERVER_URL + '/posts?limit=50';
-  if(cat && cat !== 'all') url += '&cat=' + encodeURIComponent(cat);
+  // ★ 2026-09-20: 게시판을 콘텐츠 서버에서 받는다.
+  //   subway-api 에는 /posts 가 없어서(프록시 전용) 매번 실패 → 로컬 생성으로 떨어졌고,
+  //   그게 '글이 매일 비슷하다'의 원인이었다.
+  //   콘텐츠 서버가 안 되면 예전 주소로 한 번 더 시도하고, 그것도 안 되면 기존처럼 로컬로 간다.
+  var _q = '/posts?limit=50' + ((cat && cat !== 'all') ? ('&cat=' + encodeURIComponent(cat)) : '');
+  var url = (typeof _srvBase === 'function' ? _srvBase() : _SERVER_URL) + _q;
 
   fetch(url)
-    .then(function(r){ return r.json(); })
+    .then(function(r){
+      if(r.ok) return r.json();
+      throw new Error('HTTP ' + r.status);
+    })
+    .catch(function(){ return fetch(_SERVER_URL + _q).then(function(r){ return r.json(); }); })
     .then(function(data){
       var posts = data.posts || [];
       _commLoading = false;
@@ -29006,6 +29067,22 @@ var _NICK_POOL = [
   '수도권외곽인','신도시통근자','광역버스대기자','첫차족','막차족',
 ];
 
+// ★ 2026-09-20: 서버가 준 오늘의 글감을 앞에 붙인다(_srvPostSeeds).
+//   서버가 6개월치를 날짜로 갈라 주므로 매일 다른 소재가 올라온다.
+//   못 받으면 아래 내장 템플릿만 쓴다 — 지금까지와 같다.
+function _chatTopicPool(){
+  try{
+    var sv = window._srvPostSeeds;
+    if(sv && sv.length){
+      var mapped = sv.filter(function(x){ return x && x.title; })
+                     .map(function(x){ return { title:String(x.title), body:String(x.body||'') }; });
+      if(mapped.length) return mapped.concat(_CHAT_TOPICS);
+    }
+  }catch(e){}
+  return _CHAT_TOPICS;
+}
+window._chatTopicPool = _chatTopicPool;
+
 // 잡담 템플릿
 var _CHAT_TOPICS = [
   { title:'{line} {stn}역 오늘 왜이리 사람 많냐',
@@ -31500,14 +31577,25 @@ function _generatePost() {
 
   // 실시간 뉴스 없거나 일상 차례 → 일상글 (사는 이야기)
   var isNewsFallback = false;  // 더 이상 가짜 뉴스 안 씀
-  var tpl = isNewsFallback ? _rnd(_NEWS_TOPICS) : _rnd(_DAILY_TOPICS);
+  // ★ 2026-09-20: 서버가 준 오늘의 글감을 30% 확률로 먼저 쓴다.
+  //   아래의 '150일 내 재사용 금지' 게이트를 그대로 통과시키므로 중복 방지도 유지된다.
+  var _pool = _DAILY_TOPICS;
+  try{
+    var _sv = (typeof _chatTopicPool === 'function') ? window._srvPostSeeds : null;
+    if(_sv && _sv.length && Math.random() < 0.3){
+      var _m2 = _sv.filter(function(x){ return x && x.title; })
+                   .map(function(x){ return { title:String(x.title), body:String(x.body||'') }; });
+      if(_m2.length) _pool = _m2;
+    }
+  }catch(e){}
+  var tpl = isNewsFallback ? _rnd(_NEWS_TOPICS) : _rnd(_pool);
   // ★ 주말/공휴일: 출퇴근 관련 글 5%만 허용 (95% 재추첨)
   var _isOff = (typeof _isHolidayOrWeekend === 'function') && _isHolidayOrWeekend();
   if(_isOff){
     var _rushKw = /출근|퇴근|지각|칼퇴|야근|회사|출퇴근/;
     var _ot = 0;
     while(_rushKw.test(tpl.title) && Math.random() >= 0.05 && _ot++ < 10){
-      tpl = _rnd(_DAILY_TOPICS);  // 출퇴근 글이면 95% 확률로 다시 뽑기
+      tpl = _rnd(_pool);  // 출퇴근 글이면 95% 확률로 다시 뽑기
     }
   }
   // ★ 5개월(150일) 내 사용한 템플릿은 재사용 금지 (역 이름만 바꾼 중복글 차단)
@@ -31515,7 +31603,7 @@ function _generatePost() {
   if(typeof _postUsed === 'function'){
     var _pt = 0, _tplKey = 'post_tpl_' + _postSlug(tpl.title);
     while(_postUsed(_tplKey) && _pt++ < 30){
-      tpl = _rnd(_DAILY_TOPICS);
+      tpl = _rnd(_pool);
       _tplKey = 'post_tpl_' + _postSlug(tpl.title);
     }
     if(_postUsed(_tplKey)){
@@ -41641,6 +41729,39 @@ function _shopSeasonScore(name, ctx){
   var nm = String(name||'');
   if(!nm) return 0;
   var se = ctx._season || (ctx._season = _shopSeasonNow());
+  // ★ 2026-09-20: 서버에 규칙이 올라와 있으면 그걸 쓴다(앱 업데이트 없이 교체).
+  //   형식: { kw:{winter:"패딩|기모|...", ...}, w:{cur:90, next:0.7, opp:-70, rain:120, temp:110} }
+  var _cfg = window._srvShopCfg;
+  if(_cfg && _cfg.kw){
+    try{
+      if(!ctx._srvKw){
+        ctx._srvKw = {};
+        ['winter','spring','summer','fall'].forEach(function(k){
+          var pat = _cfg.kw[k];
+          if(typeof pat === 'string' && pat) ctx._srvKw[k] = new RegExp(pat);
+        });
+      }
+      // 쓸 만한 규칙이 하나도 없으면 서버 값을 무시하고 내장 규칙으로 간다
+      if(!Object.keys(ctx._srvKw).length) throw new Error('빈 규칙');
+      var W = _cfg.w || {};
+      var kw = ctx._srvKw, sc2 = 0;
+      var wCur = (W.cur != null) ? W.cur : 90, wNext = (W.next != null) ? W.next : se.lean;
+      if(kw[se.cur]  && kw[se.cur].test(nm))  sc2 += wCur;
+      if(kw[se.next] && kw[se.next].test(nm)) sc2 += Math.round(wCur * wNext);
+      var opp2 = { winter:'summer', summer:'winter', spring:'winter', fall:'summer' }[se.cur];
+      if(kw[opp2] && kw[opp2].test(nm) && !(kw[se.cur] && kw[se.cur].test(nm)))
+        sc2 += (W.opp != null) ? W.opp : -70;
+      if(ctx.rain >= 50 && /우산|레인|방수|장화|우비|제습/.test(nm)) sc2 += (W.rain != null) ? W.rain : 120;
+      if(ctx.temp != null){
+        var wt = (W.temp != null) ? W.temp : 110;
+        if(ctx.temp <= 5  && kw.winter && kw.winter.test(nm)) sc2 += wt;
+        if(ctx.temp >= 28 && kw.summer && kw.summer.test(nm)) sc2 += wt;
+        if(ctx.temp <= 5  && kw.summer && kw.summer.test(nm)) sc2 -= wt * 0.8;
+        if(ctx.temp >= 28 && kw.winter && kw.winter.test(nm)) sc2 -= wt * 0.8;
+      }
+      return sc2;
+    }catch(e){}   // 서버 값이 이상하면 아래 내장 규칙으로
+  }
   var sc = 0;
   if(_SHOP_SEASON_KW[se.cur]  && _SHOP_SEASON_KW[se.cur].test(nm))  sc += 90;
   if(_SHOP_SEASON_KW[se.next] && _SHOP_SEASON_KW[se.next].test(nm)) sc += Math.round(90 * se.lean);
@@ -43071,6 +43192,16 @@ function _pickJobPool(h, weekend){
   return arr;
 }
 function _ltPickPool(){
+  // ★ 2026-09-20: 서버가 준 오늘의 대화 소재를 20% 확률로 쓴다.
+  //   시간대별 풀(_LT_POOL)은 그대로 살려 두고 섞기만 한다 — 말투가 갑자기 바뀌지 않게.
+  try{
+    var sv = window._srvChatSeeds;
+    if(sv && sv.length && Math.random() < 0.2){
+      var lines = sv.map(function(x){ return String((x && (x.t || x.text)) || ''); })
+                    .filter(function(t){ return t.length > 1 && t.length <= 60; });
+      if(lines.length) return lines;
+    }
+  }catch(e){}
   var now = new Date();
   var h = now.getHours();
   var offDay = _isHolidayOrWeekend();  // 주말/공휴일
