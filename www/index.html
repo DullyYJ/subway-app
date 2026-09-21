@@ -24730,22 +24730,22 @@ function _arrFireAlert(destStn, arrMs){
 //   아침 = 도착지 카페·브런치 + 근처 가게 + 응원 / 저녁 = 야식 + 근처 가게 + 위로 /
 //   쿠팡 = 왜 이 상품인지 자연스러운 한두 문장(날씨 상품일 때만 날씨를 말한다).
 var _PIP_MORN_TAIL = [
-  '오늘도 든든하게 시작하세요. 제가 응원할게요',
-  '오늘 일정도 차근차근, 잘 해내실 거예요',
-  '무리하지 마시고 천천히요. 오늘도 화이팅이에요',
-  '좋은 일이 하나쯤 생기는 하루가 되길 바라요',
-  '오늘 하루도 제가 옆에서 챙길게요. 화이팅이에요'
+  '오늘도 든든하게 시작하세요. 응원할게요',
+  '오늘 일정도 잘 해내실 거예요',
+  '천천히 하세요. 오늘도 화이팅이에요',
+  '좋은 일이 생기는 하루가 되길 바라요',
+  '오늘 하루도 제가 챙길게요. 화이팅이에요'
 ];
 var _PIP_LUNCH_TAIL = [
   '오후 일정도 제가 챙길게요. 든든히 드세요',
   '오후도 잘 해내실 거예요. 응원할게요',
-  '잠깐이라도 여유 갖고 드세요. 남은 하루도 화이팅이에요'
+  '잠깐이라도 여유 갖고 드세요'
 ];
 var _PIP_NIGHT_TAIL = [
-  '내일 일정은 제가 챙길게요. 오늘은 푹 쉬세요',
-  '남은 건 제가 챙길 테니 편히 쉬세요',
-  '오늘도 수고하셨어요. 내일도 제가 옆에 있을게요',
-  '집에 도착하면 아무 생각 말고 쉬세요. 나머지는 제게 맡기세요'
+  '내일 일정은 제가 챙길게요. 푹 쉬세요',
+  '남은 건 제가 챙길게요. 편히 쉬세요',
+  '오늘도 수고하셨어요. 내일도 함께해요',
+  '나머지는 제게 맡기고 푹 쉬세요'
 ];
 // 쿠팡 아이템: 날씨와 상관있는 상품일 때만 날씨/기온을 말한다(패딩 조끼에 강수량은 필요 없다)
 function _arrShopSay(it, ctx){
@@ -30320,7 +30320,7 @@ function _pipEl(){
   //   3줄  도착 예정시간
   //   4줄  (도착 10분 전이면) 추천 + 버튼 — 이때만 아래로 늘어난다
   //   가장자리는 안쪽으로 20%까지 서서히 투명해지도록 mask 를 씌운다.
-  var NOWRAP = 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;';
+  var NOWRAP = 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;flex:none;';
   // ★ 2026-09-03: 가장자리 페이드를 뺀다.
   //   이 웹뷰에서 mask 합성이 제대로 안 먹어 타원 얼룩처럼 보였다.
   //   어설픈 반투명보다 깔끔한 검정 바탕이 글자도 잘 읽힌다.
@@ -30330,8 +30330,11 @@ function _pipEl(){
     + 'background:#000;color:#fff;padding:min(2vw,12px);text-align:center;'
     + 'font-family:inherit;overflow:hidden;';
   el.innerHTML =
+      // ★ 2026-09-21: 내용을 pipBox 로 감싼다 — 창이 작을 때 통째로 축소해 넣기 위함(_pipFit)
+      '<div id="pipBox" style="width:100%;flex:none;display:flex;flex-direction:column;align-items:center;'
+    +   'gap:min(0.9vh,5px);transform-origin:0 0;">'
       // 앱 상단과 같은 응원 문구가 오른쪽에서 왼쪽으로 흐른다
-      '<div id="pipCheerRow" style="width:100%;overflow:hidden;height:min(3.4vh,20px);position:relative;">'
+    + '<div id="pipCheerRow" style="width:100%;flex:none;overflow:hidden;height:min(3.4vh,20px);position:relative;">'
     +   '<div id="pipCheerTrack" style="display:inline-block;white-space:nowrap;padding-left:100%;'
     +     'animation:pipCheer 15s linear infinite;">'
     +     '<span id="pipCheerText" style="font-size:min(3.8vw,13px);font-weight:800;color:#9aa0ff;"></span>'
@@ -30340,8 +30343,9 @@ function _pipEl(){
     + '<div id="pipStn" style="font-size:min(5vw,17px);line-height:1.25;' + NOWRAP + '"></div>'
     + '<div id="pipMin" style="font-size:min(5.6vw,19px);font-weight:800;line-height:1.25;color:#ffd60a;' + NOWRAP + '"></div>'
     + '<div id="pipArr" style="font-size:min(5.6vw,19px);font-weight:800;line-height:1.25;color:#d8d8dd;' + NOWRAP + '"></div>'
-    + '<div id="pipReco" style="display:none;width:100%;margin-top:min(1.4vh,8px);'
-    +   'padding-top:min(1.4vh,8px);border-top:1px solid rgba(255,255,255,.16);"></div>';
+    + '<div id="pipReco" style="display:none;width:100%;flex:none;margin-top:min(1.4vh,8px);'
+    +   'padding-top:min(1.4vh,8px);border-top:1px solid rgba(255,255,255,.16);"></div>'
+    + '</div>';
   // ★ 2026-09-03: 탭하면 숨기던 동작을 뺐다.
   //   PiP 창을 탭하는 건 '앱으로 돌아가고 싶다'는 뜻이라 안드로이드가 알아서 처리한다.
   //   여기서 숨겨 버리면 작은 창에 앱 화면이 비쳐 고장난 것처럼 보인다.
@@ -30469,7 +30473,7 @@ function _pipRecoPaint(){
     box.style.display = 'none'; box.innerHTML = '';
     // ★ 2026-09-15: 추천이 사라지면 창을 원래 높이로
     if(wrap) wrap.style.justifyContent = 'center';
-    window._pipTallH = null; window._pipRefit = 0;
+    window._pipTallH = null; window._pipRefit = 0; window._pipEnsureN = 0;
     if(typeof _pipGrow === 'function') _pipGrow(false);
     return;
   }
@@ -30478,7 +30482,7 @@ function _pipRecoPaint(){
     wrap.style.justifyContent = 'flex-start';
     wrap.style.paddingTop = 'min(1.2vh,8px)';
     wrap.style.overflowY = 'auto';
-    wrap.style.rowGap = 'min(0.8vh,6px)';
+    var _pb = document.getElementById('pipBox'); if(_pb) _pb.style.rowGap = 'min(0.8vh,6px)';
   }
 
   var esc = function(t){ return String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
@@ -30499,7 +30503,13 @@ function _pipRecoPaint(){
   //   내용이 차지하는 높이 ÷ 창 너비 = 필요한 가로세로 비율. 한 번 정해 창을 늘린다.
   try{
     if(wrap && wrap.clientWidth > 0){
-      var need = box.offsetTop + box.scrollHeight + 14;
+      var _bx = document.getElementById('pipBox');
+      var _rs = ['pipStn','pipMin','pipArr'].map(function(id){ return document.getElementById(id); });
+      _rs.forEach(function(r){ if(r) r.style.display = ''; });
+      if(_bx){ _bx.style.transform = ''; _bx.style.width = '100%'; }
+      var _cs = getComputedStyle(wrap);
+      var need = (_bx ? _bx.offsetHeight : (box.offsetTop + box.scrollHeight))
+               + (parseFloat(_cs.paddingTop)||0) + (parseFloat(_cs.paddingBottom)||0) + 6;
       var hh = Math.max(118, Math.min(236, Math.round(PIP_W2 * need / wrap.clientWidth)));
       if(!window._pipTallH || (Math.abs(hh - window._pipTallH) >= 14 && (window._pipRefit||0) < 2)){
         if(window._pipTallH) window._pipRefit = (window._pipRefit||0) + 1;
@@ -30509,6 +30519,14 @@ function _pipRecoPaint(){
     }
   }catch(e){}
   if(typeof _pipGrow === 'function') _pipGrow(true);
+  try{
+    var _inPip = window._pipInPip || (window.innerHeight <= 340 && window.innerWidth <= 520) || window.innerHeight < window.innerWidth * 1.4;
+    var _want = PIP_W2 / (window._pipTallH || PIP_H2), _cur = window.innerWidth / Math.max(1, window.innerHeight);
+    if(_inPip && Math.abs(_want - _cur) > 0.25 && (Date.now() - (window._pipEnsureAt||0)) > 1500 && (window._pipEnsureN||0) < 6){
+      window._pipEnsureAt = Date.now(); window._pipEnsureN = (window._pipEnsureN||0) + 1;
+      window._pipTall = false; _pipGrow(true);
+    }
+  }catch(e){}
 }
 window._pipRecoPaint = _pipRecoPaint;
 
@@ -30551,6 +30569,46 @@ function _pipWant(){
   }catch(e){ return false; }
 }
 
+// ★ 2026-09-21: 하차 추천이 뜨는 동안 창이 아직 안 늘어났거나 예상보다 작게 늘어나면
+//   줄들이 눌려 글자가 위아래로 잘렸다. 창 높이에 맞게 통째로 줄여서 항상 다 보이게 한다.
+function _pipFit(){
+  try{
+    var v = document.getElementById('pipView'), bx = document.getElementById('pipBox');
+    if(!v || !bx || v.style.display === 'none') return;
+    var rows = ['pipStn','pipMin','pipArr'].map(function(id){ return document.getElementById(id); });
+    var rowsShow = function(d){ rows.forEach(function(r){ if(r) r.style.display = d; }); };
+    var reco = document.getElementById('pipReco');
+    var recoOn = !!(reco && reco.style.display !== 'none' && window._pipReco);
+    rowsShow(''); bx.style.transform = ''; bx.style.width = '100%';
+    var cs = getComputedStyle(v);
+    var avail = v.clientHeight - (parseFloat(cs.paddingTop)||0) - (parseFloat(cs.paddingBottom)||0);
+    var nat = bx.offsetHeight, sc = 1;
+    if(avail > 20 && nat > avail + 1){
+      sc = avail / nat;
+      if(sc < 0.8 && recoOn){            // 너무 작아지면 추천이 주인공이므로 역·시간 줄을 잠깐 비운다
+        rowsShow('none'); nat = bx.offsetHeight; sc = Math.min(1, avail / nat);
+      }
+      for(var i = 0; i < 3 && sc < 1; i++){
+        bx.style.width = (100 / sc) + '%';
+        bx.style.transform = 'scale(' + sc + ')';
+        nat = bx.offsetHeight;
+        if(nat * sc <= avail + 1) break;
+        sc = Math.min(sc, avail / nat);
+      }
+    }
+    if(reco){
+      if(!reco._o) reco._o = { bt: reco.style.borderTop, mt: reco.style.marginTop, pt: reco.style.paddingTop };
+      var _hid = !!(rows[0] && rows[0].style.display === 'none');
+      reco.style.borderTop = _hid ? 'none' : reco._o.bt;
+      reco.style.marginTop = _hid ? '0' : reco._o.mt;
+      reco.style.paddingTop = _hid ? '0' : reco._o.pt;
+    }
+    v.style.overflow = 'hidden';
+    v.style.justifyContent = (sc < 1 || recoOn) ? 'flex-start' : 'center';
+  }catch(e){}
+}
+window._pipFit = _pipFit;
+
 function _pipTick(){
   try{
     var el = document.getElementById('pipView');
@@ -30559,6 +30617,7 @@ function _pipTick(){
     if(want){
       if(!shown){ var e2 = _pipEl(); e2.style.display = 'flex'; }
       _pipPaint();
+      _pipFit();
     } else if(shown){
       if(el) el.style.display = 'none';                 // 취소·도착·복귀 — 어느 쪽이든 내린다
     }
