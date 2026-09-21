@@ -7772,6 +7772,8 @@ function openTransitDetail() {
   var modal = document.getElementById('transitDetailModal');
   var sects = document.getElementById('transitDetailSections');
   if(!modal) return;
+  // ★ 2026-09-21: 시트가 예전 탭 전환 때 display:none 이 걸린 채면 빈 화면이 된다 — 열 때마다 되살린다
+  try{ var _sh0 = document.getElementById('transitDetailSheet'); if(_sh0) _sh0.style.display = 'flex'; }catch(e){}
   var ready = function(){
     return !!(_transitResultData && (_transitResultData.routes||[]).length);
   };
@@ -7939,7 +7941,7 @@ function _buildTransitDetailNow() {
 
   if(sects) sects.innerHTML = html;
   var _sheet=document.getElementById('transitDetailSheet');
-  if(_sheet){ _sheet.style.transform=''; _sheet.style.transition='transform .25s ease'; }
+  if(_sheet){ _sheet.style.transform=''; _sheet.style.transition='transform .25s ease'; _sheet.style.display='flex'; }
   modal.style.display = 'flex';
   if(typeof window._setupDetailSheetDrag==='function') window._setupDetailSheetDrag();
   if(sects) sects.scrollTop=0;
@@ -25923,7 +25925,7 @@ function switchTab(tab,el){
   try{
     // 화면을 덮는 시트·팝업만 닫는다.
     //   승차 확인(boardAskModal 등)은 진행 중인 여정과 관련되므로 건드리지 않는다.
-    ['transitDetailModal','transitDetailSheet','mapRouteSheet','mapStnPopup',
+    ['transitDetailModal','mapRouteSheet','mapStnPopup',
      'favSheet','postSheet','routeModal','routeModePopup','gmPop'].forEach(function(id){
       var m = document.getElementById(id);
       if(m && m.style && m.style.display !== 'none') m.style.display = 'none';
