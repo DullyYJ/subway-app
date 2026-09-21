@@ -24248,13 +24248,35 @@ function _arrJosaRo(word){
   return (jong === 0 || jong === 8) ? '로' : '으로';
 }
 function _arrApplyJosa(txt, menu){
-  return String(txt||'')
-    .replace(/\{menu\}으로/g, menu + _arrJosaRo(menu))
-    .replace(/\{menu\}이\b/g, menu + _arrJosa(menu, '이', '가'))
-    .replace(/\{menu\}을\b/g, menu + _arrJosa(menu, '을', '를'))
-    .replace(/\{menu\}은\b/g, menu + _arrJosa(menu, '은', '는'))
-    .replace(/\{menu\}/g, menu);
+  // ★ 2026-09-21: 음식마다 받침이 달라 조사를 골라 붙인다 (국밥이 / 치킨이 / 피자가, 회로 / 국밥으로 / 피자로 …)
+  //   예전엔 '\b' 를 썼는데 한글 사이에선 경계로 인식되지 않아 '이/을/은' 이 치환되지 않았다.
+  return String(txt||'').replace(/\{menu\}(으로|로|이랑|랑|이(?![랑에라다])|가|을|를|은|는|과|와)?/g, function(_, p){
+    if(!p) return menu;
+    if(p === '으로' || p === '로') return menu + _arrJosaRo(menu);
+    if(p === '이랑' || p === '랑')  return menu + _arrJosa(menu, '이랑', '랑');
+    if(p === '이' || p === '가')    return menu + _arrJosa(menu, '이', '가');
+    if(p === '을' || p === '를')    return menu + _arrJosa(menu, '을', '를');
+    if(p === '은' || p === '는')    return menu + _arrJosa(menu, '은', '는');
+    return menu + _arrJosa(menu, '과', '와');
+  });
 }
+// 이미 완성된 문장(AI 가 쓴 문구 등)에서 특정 단어 뒤 조사가 받침과 안 맞으면 고친다
+function _arrFixJosa(text, word){
+  try{
+    text = String(text || ''); word = String(word || '').trim();
+    if(!text || !word) return text;
+    var esc = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return text.replace(new RegExp(esc + '(으로|로|이랑|랑|이|가|을|를|은|는|과|와)(?![가-힣])', 'g'), function(_, p){
+      if(p === '으로' || p === '로') return word + _arrJosaRo(word);
+      if(p === '이랑' || p === '랑')  return word + _arrJosa(word, '이랑', '랑');
+      if(p === '이' || p === '가')    return word + _arrJosa(word, '이', '가');
+      if(p === '을' || p === '를')    return word + _arrJosa(word, '을', '를');
+      if(p === '은' || p === '는')    return word + _arrJosa(word, '은', '는');
+      return word + _arrJosa(word, '과', '와');
+    });
+  }catch(e){ return text; }
+}
+window._arrFixJosa = _arrFixJosa;
 
 function _arrPickDaily(pool, extraSeed){
   if(!pool || !pool.length) return '';
@@ -24344,6 +24366,47 @@ function _arrEnsureFood(destStn, cb){
   }catch(e){ fin(); }
 }
 window._arrEnsureFood = _arrEnsureFood;
+
+// ★ 2026-09-21: 추천한 음식을 실제로 파는 하차지 주변 가게를 찾는다(가게 이름만 보여준다).
+//   메뉴 → 카테고리/상호에 들어 있을 말. 서버 맛집 목록(_arrFoodList)의 분류(c)와 이름(n)을 본다.
+var _ARR_MENU_KW = {
+  '치킨':['치킨','닭'], '국밥':['국밥','설렁탕','곰탕','순대'], '회':['횟집','회','수산'], '초밥':['초밥','스시','회전'],
+  '돈가스':['돈가스','돈까스','카츠'], '삼겹살':['삼겹','고기','구이','육류'], '곱창':['곱창','막창','대창'],
+  '쌀국수':['쌀국수','베트남'], '마라탕':['마라','훠궈'], '라멘':['라멘','라면','일본식라면'], '족발':['족발','보쌈'],
+  '떡볶이':['떡볶이','분식'], '파스타':['파스타','이탈리','양식'], '피자':['피자'], '부대찌개':['부대찌개','부대','찌개'],
+  '햄버거':['햄버거','버거'], '만두':['만두'], '덮밥':['덮밥','돈부리']
+};
+var _ARR_LUNCH_MENU = ['국밥','돈가스','덮밥','파스타','쌀국수','부대찌개','초밥','라멘','만두','햄버거','떡볶이'];
+function _arrSpotsFor(destStn, menu, kind, n){
+  try{
+    var arr = _arrFoodList(destStn);
+    if(!arr || !arr.length) return [];
+    var radius = (kind === 'cafe') ? _ARR_CAFE_M : _ARR_NIGHT_M;
+    var kws = (kind === 'cafe') ? ['카페','커피','베이커리','브런치','디저트','제과'] : (_ARR_MENU_KW[menu] || [menu]);
+    var list = arr.filter(function(it){
+      if(!it || !it.n) return false;
+      if(it.d != null && it.d > radius) return false;
+      var c = String(it.c || ''), nm = String(it.n || '');
+      return kws.some(function(k){ return c.indexOf(k) >= 0 || (k.length >= 2 && nm.indexOf(k) >= 0); });
+    });
+    if(!list.length) return [];
+    list.sort(function(a,b){ return (a.d==null?1e9:a.d) - (b.d==null?1e9:b.d); });
+    var pool = list.slice(0, Math.max(n || 2, 6));
+    var out = [];
+    while(pool.length && out.length < (n || 2)){
+      var k = Math.floor(Math.random()*pool.length);
+      var nmk = pool.splice(k,1)[0].n;
+      if(out.indexOf(nmk) < 0) out.push(nmk);
+    }
+    return out;
+  }catch(e){ return []; }
+}
+// 하차지 주변에서 실제로 파는 메뉴만 추린다(파는 곳이 없는 메뉴는 추천하지 않는다)
+function _arrMenusWithSpots(destStn, pool){
+  try{
+    return (pool || _ARR_NIGHT_MENU).filter(function(m){ return _arrSpotsFor(destStn, m, 'night', 1).length > 0; });
+  }catch(e){ return []; }
+}
 
 function _arrPickPlace(destStn, kind){
   try{
@@ -24589,11 +24652,18 @@ function _arrBuildAlert(destStn, arrHour, arrMs){
     // 커피 한 잔 + 브런치 한 가지를 같이 제안
     menu = _ARR_DRINKS[Math.floor(Math.random()*_ARR_DRINKS.length)];
   } else {
-    var cat = place ? String(place.c||'') : '';
-    var matched = _ARR_NIGHT_MENU.filter(function(m){ return cat.indexOf(m) >= 0; });
-    menu = matched.length ? matched[0]
-                          : _ARR_NIGHT_MENU[Math.floor(Math.random()*_ARR_NIGHT_MENU.length)];
+    // ★ 2026-09-21: 하차지 주변에서 실제로 파는 메뉴 중에서 고른다(없으면 예전 방식)
+    var _avail = _arrMenusWithSpots(destStn, isLunch ? _ARR_LUNCH_MENU : _ARR_NIGHT_MENU);
+    if(_avail.length){
+      menu = _avail[Math.floor(Math.random()*_avail.length)];
+    } else {
+      var cat = place ? String(place.c||'') : '';
+      var matched = _ARR_NIGHT_MENU.filter(function(m){ return cat.indexOf(m) >= 0; });
+      menu = matched.length ? matched[0]
+                            : _ARR_NIGHT_MENU[Math.floor(Math.random()*_ARR_NIGHT_MENU.length)];
+    }
   }
+  var spots = _arrSpotsFor(destStn, menu, isMorn ? 'cafe' : 'night', isMorn ? 2 : 3);
   var brunch = isMorn ? _ARR_BRUNCH[Math.floor(Math.random()*_ARR_BRUNCH.length)] : '';
 
   var wit2 = _arrPickDaily((isMorn || isLunch) ? _ARR_WIT_MORN : _ARR_WIT_EVE, arr.getHours());
@@ -24618,7 +24688,9 @@ function _arrBuildAlert(destStn, arrHour, arrMs){
   } else {
     lines.push('🍗 오늘의 야식 · ' + menu);
     lines.push('   집 도착에 맞춰 지금 주문하면 딱 맞아요');
-    if(place){
+    if(spots.length){
+      lines.push('   근처에서 드실 거면 · ' + spots.join(', '));
+    } else if(place){
       var d2 = (place.d != null) ? (place.d + 'm') : (_ARR_NIGHT_M + 'm 이내');
       lines.push('   근처에서 드실 거면 · ' + place.n + ' ' + d2);
     }
@@ -24635,6 +24707,7 @@ function _arrBuildAlert(destStn, arrHour, arrMs){
     kind: isLunch ? 'lunch' : (isMorn ? 'cafe' : 'night'),
     slot: slot,
     menu: menu, brunch: brunch,
+    spots: spots,
     place: place || null
   };
 }
@@ -24652,6 +24725,113 @@ function _arrFireAlert(destStn, arrMs){
   }
   _arrFireAlertNow(destStn, arrMs);
 }
+
+// ★ 2026-09-21: 하차 10분 전 작은 화면(PiP)용 문구 — 하루를 챙겨 주는 비서 말투.
+//   아침 = 도착지 카페·브런치 + 근처 가게 + 응원 / 저녁 = 야식 + 근처 가게 + 위로 /
+//   쿠팡 = 왜 이 상품인지 자연스러운 한두 문장(날씨 상품일 때만 날씨를 말한다).
+var _PIP_MORN_TAIL = [
+  '오늘도 든든하게 시작하세요. 제가 응원할게요',
+  '오늘 일정도 차근차근, 잘 해내실 거예요',
+  '무리하지 마시고 천천히요. 오늘도 화이팅이에요',
+  '좋은 일이 하나쯤 생기는 하루가 되길 바라요',
+  '오늘 하루도 제가 옆에서 챙길게요. 화이팅이에요'
+];
+var _PIP_LUNCH_TAIL = [
+  '오후 일정도 제가 챙길게요. 든든히 드세요',
+  '오후도 잘 해내실 거예요. 응원할게요',
+  '잠깐이라도 여유 갖고 드세요. 남은 하루도 화이팅이에요'
+];
+var _PIP_NIGHT_TAIL = [
+  '내일 일정은 제가 챙길게요. 오늘은 푹 쉬세요',
+  '남은 건 제가 챙길 테니 편히 쉬세요',
+  '오늘도 수고하셨어요. 내일도 제가 옆에 있을게요',
+  '집에 도착하면 아무 생각 말고 쉬세요. 나머지는 제게 맡기세요'
+];
+// 쿠팡 아이템: 날씨와 상관있는 상품일 때만 날씨/기온을 말한다(패딩 조끼에 강수량은 필요 없다)
+function _arrShopSay(it, ctx){
+  var nm = String((it && it.n) || ''), t = String((it && it._t) || '');
+  var K = (typeof _SHOP_SEASON_KW !== 'undefined') ? _SHOP_SEASON_KW : {};
+  var rainRe = /우산|장화|레인|우비|방수|제습|빗물/;
+  var isRain = (t === '우천대비') || rainRe.test(nm);
+  var isCold = (K.winter && K.winter.test(nm)) || (K.fall && K.fall.test(nm)) || /조끼|바람막이|가디건|후드|맨투맨|니트/.test(nm);
+  var isHot  = (K.summer && K.summer.test(nm)) || /쿨|냉감|선풍기|서큘레이터|선크림|반팔|반바지|샌들/.test(nm);
+  var temp = (ctx && ctx.temp != null) ? Math.round(ctx.temp) : null;
+  var rain = (ctx && ctx.rain != null) ? Math.round(ctx.rain) : -1;
+  try{
+    if(isRain){
+      if(rain >= 30) return '비 올 확률이 ' + rain + '%예요. 젖지 않게 미리 챙겨 두세요.';
+      return '비 오는 날 요긴해서 미리 챙겨 두면 마음이 놓여요.';
+    }
+    if(isCold && !isHot){
+      if(temp != null){
+        if(temp <= 5)  return '오늘 기온이 ' + temp + '도로 꽤 추워요. 하나 챙겨 두시면 든든해요.';
+        if(temp <= 17) return '오늘 기온이 ' + temp + '도로 쌀쌀해요. 슬슬 챙겨 입을 때예요.';
+        return '아직 ' + temp + '도지만 곧 쌀쌀해질 거예요. 미리 준비해 두세요.';
+      }
+      return '요즘 아침저녁으로 쌀쌀해서 하나쯤 있으면 든든해요.';
+    }
+    if(isHot){
+      if(temp != null){
+        if(temp >= 28) return '오늘 ' + temp + '도로 무더워요. 시원하게 보내시라고 골랐어요.';
+        if(temp >= 22) return '오늘 ' + temp + '도로 따뜻해서 슬슬 필요해질 거예요.';
+      }
+      return '더운 날 요긴해서 미리 챙겨 두면 좋아요.';
+    }
+  }catch(e){}
+  // 날씨와 무관한 상품 — 상품 성격과 지금 시간대로만 말한다
+  var byTheme = {
+    '야식':'출출한 밤에 하나쯤 두면 마음이 놓여요.',
+    '셀프케어':'하루 끝에 나를 챙기는 데 쓰기 좋아요.',
+    '생필품':'떨어지기 전에 채워 두면 편해요.',
+    '커피음료':'내일 아침이 조금 수월해질 거예요.',
+    '사무용품':'책상에 하나 두면 손이 자주 가요.'
+  };
+  if(byTheme[t]) return byTheme[t];
+  if(ctx && ctx.weekend) return '쉬는 날 여유 있을 때 써보기 좋아요.';
+  return '오늘 같은 날 하나쯤 눈여겨볼 만해서 골랐어요.';
+}
+
+function _arrPipText(a, slot, destStn, body){
+  var out = { title: '하차 10분 전' + (destStn ? ' · ' + destStn : ''), lines: [] };
+  try{
+    var strip = function(t){ t = String(t || ''); try{ if(typeof _stripEmoji === 'function') t = _stripEmoji(t); }catch(e){} return t.trim(); };
+    var pick = function(arr){ return arr[Math.floor(Math.random() * arr.length)]; };
+    // 알림 본문의 4번째 줄 = 그날의 위트/위로(저녁엔 AI 문구로 교체됨)
+    var wit = strip(String(body || '').split('\n')[3]);
+    var spots = (a.spots && a.spots.length) ? a.spots : [];
+    var near = spots.length ? ('근처엔 ' + spots.join(', ') + ' 있어요.') : '';
+    if(slot === 'morning'){
+      var m = a.menu || '커피', b = a.brunch || '';
+      out.lines.push('좋은 아침이에요. 내리시면 ' + m + (b ? _arrJosa(m, '과', '와') + ' ' + b : '') + ' 어떠세요?');
+      out.lines.push(near || '내리시면 근처 카페에 잠깐 들러 보세요.');
+      out.lines.push(pick(_PIP_MORN_TAIL));
+    } else if(slot === 'lunch'){
+      var lm = a.menu || '든든한 한 끼';
+      out.lines.push('점심시간이에요. ' + (a.menu ? lm + ' 어떠세요?' : '내리시면 든든하게 챙겨 드세요.'));
+      if(near) out.lines.push(near);
+      out.lines.push(pick(_PIP_LUNCH_TAIL));
+    } else if(slot === 'shop'){
+      var it = a.shop || null, ctx = null;
+      try{ ctx = (typeof _shopCtx === 'function') ? _shopCtx() : null; }catch(e){}
+      if(it){
+        out.lines.push('오늘의 추천 · ' + it.n);
+        out.lines.push(_arrShopSay(it, ctx));
+      } else if(wit){
+        out.lines.push(wit);
+      }
+      out.lines.push(pick(_PIP_NIGHT_TAIL));
+    } else {   // night
+      var mn = a.menu || '야식';
+      out.lines.push('오늘 야식은 ' + mn + _arrJosaRo(mn) + ' 골라봤어요.');
+      out.lines.push(near || '도착 시간에 맞춰 주문해 두면 딱이에요.');
+      if(wit) out.lines.push(wit);
+      out.lines.push(pick(_PIP_NIGHT_TAIL));
+    }
+  }catch(e){}
+  out.lines = out.lines.filter(function(x){ return x && String(x).trim(); });
+  return out;
+}
+window._arrPipText = _arrPipText;
 
 function _arrFireAlertNow(destStn, arrMs){
   try{
@@ -24671,19 +24851,10 @@ function _arrFireAlertNow(destStn, arrMs){
     var icon = (slot === 'shop') ? '🛍' : (slot === 'morning' ? '☕' : '🍗');
 
     var send = function(body){
-      // ★ 작은 화면(PiP)에도 같은 추천을 싣는다
+      // ★ 작은 화면(PiP)에도 같은 추천을 싣는다 — 버튼 없이 문구만, 10초 표시 (2026-09-21)
       try{
-        var _btns = [];
-        if(slot === 'night'){
-          _btns = [{ label:'배달의민족', call:"_dlvOpen('baemin', window._arrOrderMenu)", color:'#2AC1BC', fg:'#fff' },
-                   { label:'요기요',     call:"_dlvOpen('yogiyo', window._arrOrderMenu)", color:'#FA0050', fg:'#fff' }];
-        } else if(slot === 'shop'){
-          _btns = [{ label:'상품 보기', call:'_arrShopOpen()' }];
-        } else {
-          _btns = [{ label:'맛집 보기', call:'_arrGoFoodTab()' }];
-        }
-        var _line = String(body || '').split('\n').filter(function(x){ return x.trim(); })[0] || '';
-        if(typeof _pipRecoSet === 'function') _pipRecoSet(icon + ' ' + a.title, _line, _btns);
+        var _pt = _arrPipText(a, slot, destStn, body);
+        if(typeof _pipRecoSet === 'function') _pipRecoSet(_pt.title, _pt.lines.join('\n'), []);
       }catch(e){}
 
       var vib = [300,120,300];
@@ -24703,7 +24874,7 @@ function _arrFireAlertNow(destStn, arrMs){
         var body = a.body;
         if(ai){
           var ls = body.split('\n');
-          if(ls.length > 3) ls[3] = ai;
+          if(ls.length > 3) ls[3] = _arrFixJosa(ai, subject);
           body = ls.join('\n');
         }
         send(body);
@@ -30160,7 +30331,7 @@ function _pipEl(){
     + 'font-family:inherit;overflow:hidden;';
   el.innerHTML =
       // 앱 상단과 같은 응원 문구가 오른쪽에서 왼쪽으로 흐른다
-      '<div style="width:100%;overflow:hidden;height:min(3.4vh,20px);position:relative;">'
+      '<div id="pipCheerRow" style="width:100%;overflow:hidden;height:min(3.4vh,20px);position:relative;">'
     +   '<div id="pipCheerTrack" style="display:inline-block;white-space:nowrap;padding-left:100%;'
     +     'animation:pipCheer 15s linear infinite;">'
     +     '<span id="pipCheerText" style="font-size:min(3.8vw,13px);font-weight:800;color:#9aa0ff;"></span>'
@@ -30272,7 +30443,8 @@ function _pipPaint(){
 //   알림으로만 보내면 PiP 를 보고 있을 때 놓친다. 화면이 아래로 늘어나며 버튼까지 보여 준다.
 // ★ 2026-09-16: 20분은 너무 길었다. 작은 창에서 추천이 계속 떠 있어
 //   현재역·남은시간을 가렸다. 90초만 보여주고 스스로 내려간다.
-var _PIP_RECO_TTL = 90*1000;
+// ★ 2026-09-21: 작은 창은 버튼이 안 눌리고 글만 읽는 용도라 10초면 충분하다.
+var _PIP_RECO_TTL = 10*1000;
 
 function _pipRecoSet(title, body, buttons){
   try{
@@ -30290,10 +30462,14 @@ function _pipRecoPaint(){
   var r = window._pipReco;
   if(r && r.at && (Date.now() - r.at) > _PIP_RECO_TTL){ window._pipReco = null; r = null; }
   var wrap = document.getElementById('pipView');
+  // ★ 2026-09-21: 창이 늘어난 동안에는 위에 흐르는 응원 문구를 숨긴다(추천 문구를 읽는 데 방해가 된다)
+  var _cRow = document.getElementById('pipCheerRow');
+  if(_cRow) _cRow.style.display = r ? 'none' : '';
   if(!r){
     box.style.display = 'none'; box.innerHTML = '';
     // ★ 2026-09-15: 추천이 사라지면 창을 원래 높이로
     if(wrap) wrap.style.justifyContent = 'center';
+    window._pipTallH = null; window._pipRefit = 0;
     if(typeof _pipGrow === 'function') _pipGrow(false);
     return;
   }
@@ -30304,7 +30480,6 @@ function _pipRecoPaint(){
     wrap.style.overflowY = 'auto';
     wrap.style.rowGap = 'min(0.8vh,6px)';
   }
-  if(typeof _pipGrow === 'function') _pipGrow(true);
 
   var esc = function(t){ return String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
                                                      .replace(/"/g,'&quot;'); };
@@ -30312,31 +30487,28 @@ function _pipRecoPaint(){
            + esc(r.title) + '</div>';
   if(r.body){
     html += '<div style="font-size:min(3.9vw,13px);color:#c6c6cc;line-height:1.4;margin-bottom:min(1.1vh,7px);'
-          + 'white-space:pre-line;">' + esc(r.body) + '</div>';
+          + 'white-space:pre-line;word-break:keep-all;">' + esc(r.body) + '</div>';
   }
-  if(r.btns && r.btns.length){
-    html += '<div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;">';
-    r.btns.forEach(function(b){
-      // ★ 2026-09-15: 작은 창에서는 터치가 웹으로 안 올 수 있다.
-      //   버튼을 누르면 먼저 앱을 앞으로 불러낸 뒤 원래 동작을 실행한다.
-      html += '<button onclick="_pipRecoAct(&quot;' + esc(b.call).replace(/"/g,'&quot;') + '&quot;)" '
-            + 'style="padding:min(1.6vh,11px) min(4.5vw,18px);touch-action:manipulation;'
-            + 'border-radius:999px;border:none;cursor:pointer;font-family:inherit;'
-            + 'font-size:min(3.9vw,13px);font-weight:800;background:' + (b.color || '#ffd60a') + ';'
-            + 'color:' + (b.fg || '#141416') + ';">' + esc(b.label) + '</button>';
-    });
-    html += '</div>';
-  }
-  // ★ 2026-09-16: 작은 창은 터치를 웹으로 안 넘겨 버튼이 안 눌린다.
-  //   눌러 없앨 수 없으니 남은 시간을 보여주고 스스로 사라지게 한다.
-  var _left = Math.max(0, Math.round((_PIP_RECO_TTL - (Date.now() - (r.at||Date.now())))/1000));
-  html += '<div style="margin-top:min(1vh,7px);font-size:min(2.6vw,11px);opacity:.55;">'
-       +  '탭하면 앱에서 열려요 · ' + _left + '초 뒤 사라짐</div>';
+  // ★ 2026-09-21: 작은 창은 터치가 웹으로 오지 않아 버튼이 눌리지 않는다 → 버튼·남은시간 표시를 없애고
+  //   추천 문구만 10초 동안 보여준 뒤 스스로 내려간다.
   box.innerHTML = html;
   box.style.display = 'block';
-  box.style.maxHeight = '52vh';
-  box.style.overflowY = 'auto';
+  box.style.maxHeight = 'none';
   box.style.boxSizing = 'border-box';
+  // ★ 2026-09-21: 창 높이를 내용에 맞춘다 — 예전엔 고정 비율(200:190)이라 아래가 크게 비었다.
+  //   내용이 차지하는 높이 ÷ 창 너비 = 필요한 가로세로 비율. 한 번 정해 창을 늘린다.
+  try{
+    if(wrap && wrap.clientWidth > 0){
+      var need = box.offsetTop + box.scrollHeight + 14;
+      var hh = Math.max(118, Math.min(236, Math.round(PIP_W2 * need / wrap.clientWidth)));
+      if(!window._pipTallH || (Math.abs(hh - window._pipTallH) >= 14 && (window._pipRefit||0) < 2)){
+        if(window._pipTallH) window._pipRefit = (window._pipRefit||0) + 1;
+        window._pipTallH = hh;
+        window._pipTall = false;          // 크기가 정해졌으니 네이티브에 다시 알린다
+      }
+    }
+  }catch(e){}
+  if(typeof _pipGrow === 'function') _pipGrow(true);
 }
 window._pipRecoPaint = _pipRecoPaint;
 
@@ -30438,7 +30610,7 @@ window._pipGrow = _pipGrow;
 function _pipSizeOpts(extra){
   var o = extra || {};
   var W = window._pipTall ? PIP_W2 : PIP_W;
-  var H = window._pipTall ? PIP_H2 : PIP_H;
+  var H = window._pipTall ? (window._pipTallH || PIP_H2) : PIP_H;
   o.width = W; o.height = H;
   o.aspectWidth = W; o.aspectHeight = H;
   o.resizable = false;          // 확대/축소 금지
