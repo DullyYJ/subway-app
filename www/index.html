@@ -6410,11 +6410,30 @@ function _routeBaseStale(){
   return (a != null && a > _ROUTE_BASE_MAX_MS);
 }
 window._routeBaseStale = _routeBaseStale;
+// ★ 2026-09-22: 승차 시각이 막차 뒤라면 엔진이 svcWarn[].shift(첫차까지 분)를 준다.
+//   막차 지난 시각을 그대로 보여주지 않도록, 화면 시각의 기준을 그만큼 첫차 쪽으로 옮긴다.
+//   앱이 계산하는 것은 없다 — 엔진 값을 더할 뿐이다. 예상 시각 모드에서는 옮기지 않는다.
+function _svcShiftMs(){
+  try{
+    if(typeof _baseTimeMs !== 'undefined' && _baseTimeMs != null) return 0;
+    var sel = (typeof _allRouteResults !== 'undefined' && _allRouteResults)
+              ? (_allRouteResults[window._routeSelType || 'fast'] || null) : null;
+    var sw = sel && sel.info && sel.info.svcWarn;
+    if(!sw || !sw.length) return 0;
+    for(var i=0;i<sw.length;i++){
+      var v = sw[i] && sw[i].shift;
+      if(typeof v === 'number' && isFinite(v) && v > 0 && v < 1440) return v*60000;
+    }
+  }catch(e){}
+  return 0;
+}
+window._svcShiftMs = _svcShiftMs;
 function _htlBaseMs(){
+  var _sh = _svcShiftMs();
   if(typeof _baseTimeMs !== 'undefined' && _baseTimeMs != null) return _baseTimeMs;
   var b = window._routeBaseMs;
-  if(b && isFinite(b) && !_routeBaseStale()) return b;
-  return (typeof getBaseTimeMs==='function') ? getBaseTimeMs() : Date.now();
+  if(b && isFinite(b) && !_routeBaseStale()) return b + _sh;
+  return ((typeof getBaseTimeMs==='function') ? getBaseTimeMs() : Date.now()) + _sh;
 }
 window._htlBaseMs = _htlBaseMs;
 
@@ -7844,7 +7863,7 @@ function _buildTransitDetailNow() {
   var _isDark = (document.documentElement.getAttribute('data-theme') !== 'pastel');
 
   // 출발 기준 시각
-  var _baseMs = Date.now();
+  var _baseMs = Date.now() + ((typeof _svcShiftMs==='function') ? _svcShiftMs() : 0);
   try {
     var _bt = document.getElementById('baseTimeInp');
     if(_bt && _bt.value){
@@ -13278,9 +13297,18 @@ function _updateTransitGps() {
               var _tp2 = _estimateTimelinePos();
               if(_tp2){
                 var _cmv2 = (typeof _cellMovingState === 'function') ? _cellMovingState() : null;
+                // ★ 2026-09-22: '정지가 아니면'(=== false 아님) 다 믿던 걸 '이동 확인됨'으로 좁힌다.
+                //   막 탑승한 직후엔 관측이 아직 안 쌓여 _cmv2가 null(판단 불가)인데,
+                //   그때도 시각표만으로 다음 역으로 넘어갔다 — 실제 출발시각이 계획보다
+                //   조금만 늦어도(예: 열차가 살짝 늦게 옴) 마커가 한 역 앞서 보였다
+                //   (YJ 제보: 테크노파크에서 막 탔는데 마커는 캠퍼스타운).
+                //   기지국 신호 자체가 없는 기기(플러그인 미탑재)는 대조할 방법이 없으니
+                //   예전처럼 시각표를 믿는다 — 새 기기에서 마커가 안 움직이는 회귀 방지.
+                var _cellNoSignal = !(typeof _cellPluginReady === 'function' && _cellPluginReady());
                 if(_cmv2 === false){
                   // 📶 기지국이 정지를 가리키면 시각표만으로 다음 구간에 넘어가지 않는다
-                } else if(_tp2.fromIdx > _wIdx && _tp2.fromIdx <= ((window._gpsMaxIdx==null?-1:window._gpsMaxIdx) + 1)){
+                } else if(_tp2.fromIdx > _wIdx && _tp2.fromIdx <= ((window._gpsMaxIdx==null?-1:window._gpsMaxIdx) + 1)
+                          && (_cmv2 === true || _cellNoSignal)){
                   // 시각표상 이미 앞 구간 → 그 구간으로 이동 (전진)
                   var _f2=_transitNodeData[_tp2.fromIdx], _t2=_transitNodeData[_tp2.toIdx]||_f2;
                   if(_f2){ _useFrom=_f2; _useTo=_t2; _useRatio=_tp2.ratio||0;
@@ -23733,16 +23761,21 @@ function detectBoardingState(lat,lng,nearestStn,distToStn,acc){
         if(bannerTxt) bannerTxt.textContent='🚇 탑승 확인('+reason+') · '+nearestStn.name;
         toast('🚇 탑승! ('+reason+')');
 
-        // ★ 출발 전 지연 방어: 탑승 확인 시각을 실제 boardedAt으로 재설정
+        // ★ 출발 전 지연/조기 방어: 탑승 확인 시각을 실제 boardedAt으로 재설정
         // 예: 열차가 3분 늦게 왔으면 → boardedAt을 지금 시각으로 교체
+        // ★ 2026-09-22: 늦게 탄 경우만 고쳤었다. 반대로 계획보다 일찍(또는 살짝만 어긋나게)
+        //   탑승이 확인돼도 boardedAt은 그대로라, 이후 시각표 기반 위치 추정 전체가
+        //   그 오차만큼 계속 밀렸다(한 정거장 앞선 마커로 나타난 원인 중 하나).
+        //   → 방향에 관계없이, 실제로 탄 게 확인된 순간을 '진짜 출발시각'으로 삼는다.
         var nowMs = Date.now();
-        if(S.boardedAt && nowMs > S.boardedAt + 30000) {
-          // 예정 출발보다 30초 이상 늦게 탑승 확인됨 = 열차 지연
-          var lateMs = nowMs - S.boardedAt;
-          S._delayOffsetMs = (S._delayOffsetMs || 0) + lateMs;
+        if(S.boardedAt && Math.abs(nowMs - S.boardedAt) > 30000) {
+          var lateMs = nowMs - S.boardedAt;   // 양수=늦게 탑승, 음수=일찍 탑승
+          if(lateMs > 0){
+            S._delayOffsetMs = (S._delayOffsetMs || 0) + lateMs;
+            if(typeof _showDelayEffect === 'function') _showDelayEffect(Math.round(lateMs/60000));
+          }
           S.boardedAt = nowMs; // ★ 실제 출발 시각으로 재기준
-          console.log('[지연방어] 출발 지연 ' + Math.round(lateMs/1000) + '초 → boardedAt 재설정');
-          if(typeof _showDelayEffect === 'function') _showDelayEffect(Math.round(lateMs/60000));
+          console.log('[지연방어] 출발 ' + (lateMs>0?'지연':'조기') + ' ' + Math.round(Math.abs(lateMs)/1000) + '초 → boardedAt 재설정');
         }
 
         // ★ 탑승 확인 → 가속도계 + 시각표 타이머 시작
