@@ -2964,7 +2964,7 @@ function requestAIBrief(force) {
     body: JSON.stringify({ from: fromName, to: toName, lines: lines,
       hour: new Date().getHours(), congPct: 40, transfers: xfers, totalMin: totalMin })
   })
-  .then(function(r){ return r.json(); })
+  .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
   .then(function(data) {
     if(data.error) throw new Error(data.error);
     _renderAIBrief(data, fromName, toName, lines);
@@ -3310,7 +3310,7 @@ function requestHomeBrief(force){
       segments: (function(){ try { var _r=_buildRouteBrief(); return _r?_r.segments:[]; } catch(e){ return []; } })()
     })
   })
-  .then(function(r){ return r.json(); })
+  .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
   .then(function(data){
     if(data.error) throw new Error(data.error);
     _renderHomeBrief(data, fromName, toName, hour, congPct);
@@ -4089,7 +4089,7 @@ function _loadServerPosts(cat, reset) {
       if(r.ok) return r.json();
       throw new Error('HTTP ' + r.status);
     })
-    .catch(function(){ return fetch(_SERVER_URL + _q).then(function(r){ return r.json(); }); })
+    .catch(function(){ return fetch(_SERVER_URL + _q).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }); })
     .then(function(data){
       var posts = data.posts || [];
       _commLoading = false;
@@ -4116,6 +4116,24 @@ function _loadServerPosts(cat, reset) {
         }
         return true;
       });
+      // ★ 2026-09-22: YJ 제보 — "게시판이 매일 다른 글이었으면 좋겠다".
+      //   위 _seenSlug 는 '이번에 받은 응답 안'에서만 중복을 걸렀다 — 서버가 며칠에 걸쳐
+      //   같은 틀(골격)의 글을 다시 보내면 이 기기엔 매번 '새 글'로 보였다.
+      //   → 로컬 AI 글 생성에 쓰던 6개월 골격 원장(_postIsDup/_postAccept)을 서버 글에도 적용.
+      //   단, 처음 보는 글(id)만 검사한다 — 이미 화면에 떠 있던 글은 다시 검사하지 않아
+      //   (골격이 이미 원장에 적혔으므로) 갑자기 사라지는 일이 없다.
+      //   너무 많이 걸러지면(새로 보여줄 글이 15개 미만) 이번엔 거르지 않는다 —
+      //   빈 게시판보다는 예전 글이 다시 보이는 쪽이 낫다.
+      if(typeof _postIsDup === 'function' && typeof _postAccept === 'function'){
+        window._srvKnownPostIds = window._srvKnownPostIds || {};
+        var _known = window._srvKnownPostIds;
+        var _fresh = [];
+        posts.forEach(function(p){
+          if(_known[p.id] || _postAccept({ title:p.title, body:p.body })) _fresh.push(p);
+        });
+        if(_fresh.length >= 15 || !posts.length) posts = _fresh;
+        posts.forEach(function(p){ _known[p.id] = 1; });   // 이번에 보여준 글은 계속 같은 걸로 유지
+      }
       // 서버 포스트를 _AI_POSTS 형식으로 변환
       var converted = posts.map(function(p){
         return {
@@ -4545,7 +4563,7 @@ function _fetchBusArrival(cityCode, nodeId, callback) {
   var proxyUrl = _SERVER_URL + '/tago?url=' + encodeURIComponent(url);
 
   fetch(proxyUrl)
-    .then(function(r) { return r.json(); })
+    .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
     .then(function(data) {
       var items = [];
       try {
@@ -4557,7 +4575,7 @@ function _fetchBusArrival(cityCode, nodeId, callback) {
     })
     .catch(function(e) {
       fetch(url)
-        .then(function(r) { return r.json(); })
+        .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
         .then(function(data) {
           var items = [];
           try {
@@ -4718,7 +4736,7 @@ function _busProxyGet(apiUrl, cb, _try){
         retryOrFail(new Error('timeout')); fin();
       }, _BUS_REQ_TIMEOUT);
       fetch(proxyUrl)
-        .then(function(r){ return r.json(); })
+        .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
         .then(function(d){
           if(done) return; done = true; clearTimeout(tid);
           // ★ 콜백에서 예외가 나도 큐 슬롯은 반드시 반납한다.
@@ -5580,7 +5598,7 @@ function _busStopSearchByName(q, callback) {
     '&_type=json';
   var proxyUrl = _SERVER_URL + '/tago?url=' + encodeURIComponent(url);
   fetch(proxyUrl)
-    .then(function(r){ return r.json(); })
+    .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
     .then(function(data){
       var items = [];
       try {
@@ -5745,7 +5763,7 @@ function _getD1Cache(slat, slng, elat, elng, callback) {
   var url = _SERVER_URL + '/route-cache?slat=' + slat + '&slng=' + slng +
             '&elat=' + elat + '&elng=' + elng;
   fetch(url)
-    .then(function(r){ return r.json(); })
+    .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
     .then(function(d){
       if(d.cached && d.data) callback(null, d.data);
       else callback(null, null);
@@ -5801,7 +5819,7 @@ function _callKakaoWithCache(start, dest, callback) {
       '&ename=' + encodeURIComponent(dest.name);
 
     fetch(apiUrl)
-      .then(function(r){ return r.json(); })
+      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
       .then(function(data) {
         // 에러 응답은 캐시하지 않음
         if(data && data.error) {
@@ -6942,6 +6960,12 @@ var _transitResultStart = null;
 var _transitResultData  = null;
 
 function _renderTransitResultCard(data, start, dest, cacheSource) {
+  // ★ 2026-09-22: 위치 추적이 두 계통(단일 노선도 S.curIdx / 복합경로 _gpsMaxIdx)으로
+  //   따로 돈다. 이전에 '노선도' 탭에서 경로를 고른 채로 타이머(S.trainAnimInterval)가
+  //   남아 있으면, 지금부터 보여줄 복합경로 카드와 무관하게 뒤에서 계속 역을 전진시켜
+  //   서로 다른 화면에 서로 다른 '현재 위치'가 뜰 수 있다. 새 복합경로 결과를 그릴 땐
+  //   그 남은 타이머부터 멈춘다(데이터는 건드리지 않고 시계만 멈춘다 — 안전한 최소 조치).
+  if(typeof stopTrainAnim === 'function') stopTrainAnim();
   _transitResultStart = start;
   _transitResultDest  = dest;
   _transitResultData  = data;
@@ -8258,7 +8282,7 @@ window._hideRouteLoading = _hideRouteLoading;
     else if(_fmapStart && _fmapStart.lat && _fmapStart.lng){ _by=_fmapStart.lat; _bx=_fmapStart.lng; }
     function _kwSearch(qs, next){
       _kakaoLocal('search/keyword.json', qs)
-      .then(function(r){ return r.json(); })
+      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
       .then(function(d){
         var doc = (d.documents || [])[0];
         if(doc){ cb({type:'address', name:q, lat:parseFloat(doc.y), lng:parseFloat(doc.x)}); }
@@ -10367,7 +10391,10 @@ function _startTransitGpsTracking(nodes) {
   window._lastCongNodeIdx = -1; // 혼잡도 갱신 추적 초기화
 
   // 좌표 조회: STNDB → _REAL_COORDS 순으로 폴백
-  function _getCoords(sName) {
+  // ★ 2026-09-22: 이름이 전역 함수 _getCoords(5965줄)와 같아서 헷갈리기 쉽다.
+  //   이 지역 버전은 '역' 제거 후 재시도하는 폴백이 하나 더 있어 동작이 실제로 다르다
+  //   (전역판은 그 재시도가 없다) — 나중에 실수로 밖으로 옮기다 뒤바뀌지 않도록 이름을 분리한다.
+  function _getCoordsForTransit(sName) {
     // 1) STNDB
     if(typeof STNDB !== 'undefined') {
       var info = STNDB.find(function(s){ return s.name===sName || s.name===(sName+'역'); });
@@ -10415,7 +10442,7 @@ function _startTransitGpsTracking(nodes) {
     if(n.lat && n.lng) {
       lat = parseFloat(n.lat); lng = parseFloat(n.lng);
     } else if(!n.isWalk) {
-      var coords = _getCoords(n.label || '');
+      var coords = _getCoordsForTransit(n.label || '');
       lat = coords.lat; lng = coords.lng;
     }
 
@@ -10580,13 +10607,19 @@ function _fireTransitAlert(tg, remain){
   if(window._transitAlertFired && window._transitAlertFired[key]) return;
   if(!window._transitAlertFired) window._transitAlertFired = {};
   window._transitAlertFired[key] = 1;
+  // ★ 2026-09-22: 정거장 수만 있으면 역간격이 짧을 때 감이 안 온다 — 분 단위도 같이 넣는다.
+  var _minTxt = '';
+  try{
+    var _jr = (typeof _journeyRemain==='function') ? _journeyRemain() : null;
+    if(_jr && _jr.min != null && remain !== 0) _minTxt = ' (약 ' + _jr.min + '분 후)';
+  }catch(e){}
   var title, body, vib;
   if(tg.kind==='transfer'){
-    if(remain===2){ title='환승 2정거장 전'; body=tg.name+'에서 '+(tg.nextLine||'다음 노선')+' 환승이에요. 곧 준비하세요'; vib=[400,150,400]; }
-    else { title='환승 준비'; body='다음 정거장 '+tg.name+'에서 '+(tg.nextLine||'다음 노선')+' 환승 — 내릴 준비하세요'; vib=[300,100,300,100,300]; }
+    if(remain===2){ title='환승 2정거장 전'; body=tg.name+'에서 '+(tg.nextLine||'다음 노선')+' 환승이에요. 곧 준비하세요'+_minTxt; vib=[400,150,400]; }
+    else { title='환승 준비'; body='다음 정거장 '+tg.name+'에서 '+(tg.nextLine||'다음 노선')+' 환승 — 내릴 준비하세요'+_minTxt; vib=[300,100,300,100,300]; }
   } else {
-    if(remain===2){ title='목적지 2정거장 전'; body=tg.name+'까지 2정거장 남았어요'; vib=[400,150,400]; }
-    else if(remain===1){ title='곧 하차'; body='다음 정거장 '+tg.name+' — 내릴 준비하세요'; vib=[300,100,300,100,300]; }
+    if(remain===2){ title='목적지 2정거장 전'; body=tg.name+'까지 2정거장 남았어요'+_minTxt; vib=[400,150,400]; }
+    else if(remain===1){ title='곧 하차'; body='다음 정거장 '+tg.name+' — 내릴 준비하세요'+_minTxt; vib=[300,100,300,100,300]; }
     else { title='목적지 도착'; body=tg.name+'에 도착했습니다. 수고하셨어요'; vib=[300,100,300,100,300]; }
   }
   _vibrateFor('arrive', vib);
@@ -11896,7 +11929,7 @@ function _cellPush(){
     fetch(_cellServerUrl() + '/cells/report', {
       method:'POST', headers:{ 'Content-Type':'application/json' },
       body: JSON.stringify({ cells: out })
-    }).then(function(r){ return r.json(); })
+    }).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
       .then(function(j){ if(j && j.ok) console.log('[기지국] 서버에 ' + j.saved + '개 공유'); })
       .catch(function(){});
   }catch(e){}
@@ -12390,7 +12423,7 @@ function locInitialAnchor(cb){
       try{
         var u = 'https://opencellid.org/cell/get?key=' + encodeURIComponent(OPENCELLID_KEY)
               + '&mcc=' + c.mcc + '&mnc=' + c.mnc + '&lac=' + c.tac + '&cellid=' + c.cid + '&format=json';
-        fetch(u).then(function(r){ return r.json(); }).then(function(j){
+        fetch(u).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }).then(function(j){
           if(j && j.lat && j.lon){
             LOCFSM.anchor = { lat: +j.lat, lng: +j.lon, acc: Math.max(500, +j.range || 1000), src: 'opencellid' };
             cb(LOCFSM.anchor);
@@ -13088,7 +13121,12 @@ if(!window._aiArrTimer){
       var visible = !!(card && card.style.display !== 'none');
       var hasTl   = !!(window._lastHtlNodes && window._lastHtlNodes.length);
       if(!visible && !hasTl) return;
-      _updateRouteRemaining();
+      // ★ 2026-09-22: 본선 추적이 확정되면 _transitGpsTimer(3초 간격)가 이미
+      //   같은 _updateRouteRemaining()을 더 자주 부른다. 여기서 또 부르는 건
+      //   결과는 같지만(위 주석 참고) 불필요한 중복 호출 — 그 구간에서만 건너뛴다.
+      if(!(typeof _transitGpsTimer !== 'undefined' && _transitGpsTimer)) {
+        _updateRouteRemaining();
+      }
       // 승차 예정시각이 지났거나 너무 오래된 안내면 경로를 다시 잡는다
       if(typeof _etaResearchIfStale==='function') _etaResearchIfStale();
     }catch(e){}
@@ -14592,7 +14630,7 @@ function loadMapNearStops(force) {
         if(!silent && !window._nearWideTried){
           window._nearWideTried = 1;
           fetch(_SERVER_URL + '/bus-stops?lat=' + la + '&lng=' + ln + '&radius=2500')
-            .then(function(r){ return r.json(); })
+            .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
             .then(function(d){
               var s2 = (d.stops || []).map(function(x){
                 return { nodenm:x.node_nm, nodeid:x.node_id,
@@ -15220,7 +15258,7 @@ function _busArrFetch(cityCode, nodeId, _bg){
           reject(new Error('timeout')); fin();
         }, _BUS_REQ_TIMEOUT);
         fetch(url)
-          .then(function(r){ return r.json(); })
+          .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
           .then(function(data){
             if(done) return; done = true; clearTimeout(tid);
             var items = [];
@@ -16318,6 +16356,37 @@ function _thruCacheSet(key, list){
   try{ localStorage.setItem('thru_' + key, JSON.stringify({ t: Date.now(), v: list || [] })); }catch(e){}
 }
 
+// ★ 2026-09-22: rtStn_·thru_ 캐시는 읽을 때 TTL 지난 걸 무시만 할 뿐
+//   localStorage에서 지우진 않았다 — 한 번 방문한 정류장/노선은 다시 안 봐도
+//   키가 계속 쌓인다. 하루 한 번, 만료(또는 손상)된 키만 가볍게 쓸어낸다.
+//   (읽기/쓰기 동작 자체는 그대로 — 안 쓰는 키를 지우기만 한다)
+function _sweepStaleCaches(){
+  try{
+    var todayKey = '_cacheSweepDay';
+    var today = new Date().toISOString().slice(0,10);
+    if(localStorage.getItem(todayKey) === today) return; // 하루 한 번이면 충분
+    var now = Date.now();
+    var toRemove = [];
+    for(var i=0; i<localStorage.length; i++){
+      var k = localStorage.key(i);
+      if(!k) continue;
+      var ttl = null;
+      if(k.indexOf('rtStn_') === 0) ttl = _RT_STN_TTL;
+      else if(k.indexOf('thru_') === 0) ttl = _THRU_TTL;
+      else continue;
+      try{
+        var o = JSON.parse(localStorage.getItem(k));
+        if(!o || !o.t || (now - o.t) > ttl) toRemove.push(k);
+      }catch(e){ toRemove.push(k); } // 파싱 자체가 안 되면 못 쓰는 값 — 같이 정리
+    }
+    toRemove.forEach(function(k){ try{ localStorage.removeItem(k); }catch(e){} });
+    try{ localStorage.setItem(todayKey, today); }catch(e){}
+    if(toRemove.length) console.log('[캐시청소] 만료 항목 ' + toRemove.length + '개 정리');
+  }catch(e){}
+}
+window._sweepStaleCaches = _sweepStaleCaches;
+setTimeout(_sweepStaleCaches, 5000); // 시작 부담 없게 살짝 늦게 1회
+
 function _busThruRoutes(cityCode, nodeId){
   return new Promise(function(resolve){
     var key = String(cityCode) + '_' + String(nodeId);
@@ -16332,7 +16401,7 @@ function _busThruRoutes(cityCode, nodeId){
     var done = false;
     var to = setTimeout(function(){ if(!done){ done = true; resolve([]); } }, 8000);
     fetch(_SERVER_URL + '/tago?url=' + encodeURIComponent(url))
-      .then(function(r){ return r.json(); })
+      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
       .then(function(data){
         if(done) return; done = true; clearTimeout(to);
         var items = [];
@@ -17481,19 +17550,25 @@ window.addEventListener('unhandledrejection', function(e) {
         마퀴는 JS 와 무관하게 도니, 이 조합은 **JS 스레드가 멈췄다**는 뜻이다.
         (무한 루프거나 아주 무거운 동기 작업)
    화면이 안 눌리면 진단도 못 열기 때문에, 멈추기 직전 상황을 남겨 둔다.
-     · 1초마다 심박을 찍고 마지막 시각을 localStorage 에 저장
+     · 3초마다 심박을 찍고 마지막 시각을 localStorage 에 저장
      · 다음 실행 때 그 값을 보고 '얼마나 멈춰 있었는지'를 진단에 표시
-   심박이 멈춘 뒤에는 아무것도 실행되지 않으므로, 기록은 '멈추기 직전'까지다. */
+   심박이 멈춘 뒤에는 아무것도 실행되지 않으므로, 기록은 '멈추기 직전'까지다.
+   ★ 2026-09-22: 1초마다 디스크(localStorage)에 쓰던 걸 3초로 늦췄다 — 감시 목적상
+     1초 정밀도가 꼭 필요하진 않고(어차피 '몇 초 멈췄는지' 정도만 본다), 매초 쓰기가
+     배터리/디스크에 불필요하게 잦았다. 정지 판정 기준(5초)도 새 주기의 배 이상 여유를
+     두도록 15초로 같이 늘려 오탐(정상 지연을 멈춤으로 오판)을 막는다. */
 (function(){
   var HB_KEY = 'lastHeartbeat';
   var STALL_KEY = 'lastStall';
+  var HB_INTERVAL_MS = 3000;
+  var STALL_THRESHOLD_MS = 15000;
   try{
     // 지난 실행에서 멈춘 흔적이 있으면 기록해 둔다
     var prev = parseInt(localStorage.getItem(HB_KEY) || '0', 10);
     if(prev > 0){
       var gap = Date.now() - prev;
-      // 5초 넘게 심박이 끊겼다 = 앱이 죽었거나 스레드가 멈췄다
-      if(gap > 5000 && gap < 7*24*3600*1000){
+      // 심박 주기의 5배 넘게 끊겼다 = 앱이 죽었거나 스레드가 멈췄다
+      if(gap > STALL_THRESHOLD_MS && gap < 7*24*3600*1000){
         var rec = { at: prev, gap: gap };
         localStorage.setItem(STALL_KEY, JSON.stringify(rec));
         console.warn('[심박] 지난 실행이 ' + Math.round(gap/1000) + '초 전에 멈춤');
@@ -17502,7 +17577,7 @@ window.addEventListener('unhandledrejection', function(e) {
   }catch(e){}
   setInterval(function(){
     try{ localStorage.setItem(HB_KEY, String(Date.now())); }catch(e){}
-  }, 1000);
+  }, HB_INTERVAL_MS);
 })();
 
 /* ★ 2026-08-31: '검은 화면' 감시
@@ -17619,7 +17694,12 @@ window.addEventListener('unhandledrejection', function(e) {
     </div>
   </div>
 
-  <!-- 숨김 유지 (BFS 타임라인 — 복합경로로 대체, ID 참조 보존) -->
+  <!-- ★ 2026-09-22: 이 주석이 예전엔 "복합경로로 대체된 죽은 화면, ID만 보존"이라고
+       적혀 있었는데 사실이 아니다 — _applyRoute()(단일 지하철/버스 경로 선택, 노선도 탭)가
+       지금도 이 블록을 display:block으로 켜고 renderHorizontalTimeline()으로 채운다.
+       복합경로 결과 카드(#transitHtlWrap, 아래 별도 블록)와는 별개의, 지금도 살아있는
+       화면이다. 이 주석만 보고 죽은 코드로 착각해 지우지 말 것. 시작 시엔 숨김이 맞다
+       (경로 선택 전이라 보여줄 게 없어서) — 그래서 아래 display:none은 유지한다. -->
   <div id="hTimelineWrap" style="display:none;">
     <div id="htlTrackWrap" style="display:none;"><div class="htl-track" id="hTimelineTrack"></div></div>
     <div id="htlMovingTrain" style="display:none;"></div>
@@ -18104,6 +18184,16 @@ window.addEventListener('unhandledrejection', function(e) {
       <p style="font-size:11px;color:var(--sub);text-align:center;margin-top:14px;line-height:1.5;">
         아이디는 이 기기에만 저장되며,<br>작성한 글·채팅에 표시됩니다.
       </p>
+
+      <!-- ★ 2026-09-22: 알림 설정 (종류별 on/off + 권한 거부 안내) -->
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
+        <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:4px;">🔔 알림 설정</div>
+        <p style="font-size:12px;color:var(--sub);margin-bottom:12px;">받고 싶은 알림만 골라서 켜고 끌 수 있어요. 끄면 진동도 함께 꺼져요.</p>
+        <div id="notifPermBanner" style="display:none;background:rgba(255,69,58,.12);border:1px solid rgba(255,69,58,.35);border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#ff453a;line-height:1.5;">
+          ⚠️ 알림 권한이 꺼져 있어요. 기기 설정 &gt; 앱 &gt; 길동무 &gt; 알림에서 허용해주세요.
+        </div>
+        <div id="notifPrefRows"></div>
+      </div>
 
       <!-- ★ 출퇴근 브리핑 알림 -->
       <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
@@ -20346,7 +20436,7 @@ function _ttHydrate(){
 }
 function _ttFetchBundle(){
   try{
-    fetch(_ttServer() + '/tt').then(function(r){ return r.json(); }).then(function(b){
+    fetch(_ttServer() + '/tt').then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }).then(function(b){
       if(!b || !b.data) return;
       if(b.version && b.version === window._ttVersion) return;   // 이미 최신
       if(!_ttApplyBundle(b)) return;
@@ -23716,7 +23806,11 @@ function _doTimetableAdvance() {
     var stdSec    = (S.route.tp || [])[S.curIdx + 1] || 90;
     var delta     = actualSec - stdSec;
     if(delta > 30) {
-      S._delayOffsetMs = (S._delayOffsetMs || 0) + delta * 1000;
+      // ★ 2026-09-22: 연착 누적에 상한이 없었다 — 한 번(예: 화면 꺼진 채 방치)
+      //   비정상적으로 큰 delta가 잡히면 그 값이 그대로 영구 누적돼 이후 모든
+      //   구간 추정이 그만큼 계속 밀렸다. 실제 지연 안내 범위(최대 10분)로 막는다.
+      //   (조기 쪽 0 하한은 그대로 — 시각표보다 빠르게 전진하지 않는 안전장치는 유지)
+      S._delayOffsetMs = Math.min(600000, (S._delayOffsetMs || 0) + delta * 1000);
       if(typeof _showDelayEffect === 'function') _showDelayEffect(Math.round(S._delayOffsetMs/60000));
     } else if(delta < -15) {
       S._delayOffsetMs = Math.max(0, (S._delayOffsetMs || 0) + delta * 1000);
@@ -23733,7 +23827,12 @@ function detectBoardingState(lat,lng,nearestStn,distToStn,acc){
   const banner=document.getElementById('boardBanner');
   const bannerTxt=document.getElementById('boardBannerTxt');
 
-  const inStation = distToStn < 180 || acc < 80;
+  // ★ 2026-09-22: 예전엔 '거리<180 또는 정확도<80'(OR)이라, GPS가 정확하기만 하면
+  //   실제로는 역에서 한참 떨어져 있어도(예: 400m) '역사 안'으로 오판했다.
+  //   정확도는 거리 판정을 대체하는 게 아니라, 판정의 허용오차를 넓히는 용도여야 한다
+  //   (픽스가 부정확할수록 실제 위치가 신고된 좌표에서 그만큼 더 벗어나 있을 수 있으니까).
+  //   → 기준 반경(180m)에 정확도만큼(최대 100m) 여유를 더한 거리로만 판정한다.
+  const inStation = distToStn < (180 + Math.min(acc, 100));
   const recentDist = S.lastMoveDistM || 0;
   const accelSt = _accelState(); // 'train'|'walk'|'still'|'unknown'
 
@@ -24093,7 +24192,13 @@ var _notifId = 1000;
 //     같은 내용이 PiP 에 보이는 건 중복이 아니라 이중 안전장치다.
 var _NOTIF_ALLOW = { arrive_reco:1, commute_brief:0, fg_service:1,
                      arrive:1, near_arrive:1, near_arrive2:1,
-                     transfer:1, transfer2:1, arrival:1 };
+                     transfer:1, transfer2:1, arrival:1,
+                     // ★ 2026-09-22: 'GPS 300m 근접' 알림 코드(_checkRouteProximityAlert)는
+                     //   있었지만 이 정책 맵에 키가 없어서 _notifAllowed('proximity')가
+                     //   항상 false를 반환해 한 번도 발송된 적이 없었다(죽은 기능). 등록한다.
+                     //   (목적지·환승 300m 이내로 한정된 알림이라 near_arrive/transfer와
+                     //   같은 dedup 키를 쓰게 이미 설계돼 있어 중복 발송 위험은 없다)
+                     proximity:1 };
 
 // ★ 진동은 알림과 별개로 둔다.
 //   화면을 안 보고 있어도 '환승'과 '하차'는 몸으로 알아야 한다.
@@ -24102,14 +24207,54 @@ var _VIBE_ALLOW = { transfer:1, transfer2:1,
                     arrive:1, arrival:1, near_arrive:1, near_arrive2:1,
                     // ★ 2026-09-15: 울리는 알람은 환승·하차 두 번뿐.
                     //   하차 추천은 알림만 조용히 띄운다.
-                    arrive_reco:0, commute_brief:0, fg_service:0 };
+                    arrive_reco:0, commute_brief:0, fg_service:0,
+                    proximity:1 };
+
+// ══════════════════════════════════════════════════════════════
+// ★ 2026-09-22: 알림 종류별 on/off — 지금까지는 사용자가 끌 방법이 없었다.
+//   (출퇴근 브리핑만 자체 토글이 있었다) 설정 화면에 노출할 큰 분류 4개만
+//   두고, 기본값은 전부 '켬'(기존 동작 그대로) — 사용자가 직접 끄기 전까진
+//   아무것도 바뀌지 않는다.
+// ══════════════════════════════════════════════════════════════
+var _NOTIF_PREF_KEY = 'notifPref';
+var _NOTIF_PREF_DEFAULT = { arrive:1, transfer:1, proximity:1, arrive_reco:1 };
+var _notifPrefCache = null;
+function _notifPrefLoad(){
+  if(_notifPrefCache) return _notifPrefCache;
+  var p = {};
+  try{
+    var raw = localStorage.getItem(_NOTIF_PREF_KEY);
+    var saved = raw ? JSON.parse(raw) : null;
+    for(var k in _NOTIF_PREF_DEFAULT) p[k] = (saved && saved[k] != null) ? saved[k] : _NOTIF_PREF_DEFAULT[k];
+  }catch(e){ p = Object.assign({}, _NOTIF_PREF_DEFAULT); }
+  _notifPrefCache = p;
+  return p;
+}
+function _notifPrefSet(key, on){
+  var p = _notifPrefLoad();
+  p[key] = on ? 1 : 0;
+  try{ localStorage.setItem(_NOTIF_PREF_KEY, JSON.stringify(p)); }catch(e){}
+}
+window._notifPrefSet = _notifPrefSet;
+// 세부 알림 타입 → 설정 화면의 큰 분류
+function _notifPrefGroup(type){
+  var t = String(type||'');
+  if(t==='near_arrive'||t==='near_arrive2'||t==='arrive'||t==='arrival') return 'arrive';
+  if(t==='transfer'||t==='transfer2') return 'transfer';
+  if(t==='proximity') return 'proximity';
+  if(t==='arrive_reco') return 'arrive_reco';
+  return null;   // commute_brief(자체 토글)·fg_service 등은 그룹 없음 = 기존 로직 그대로
+}
 function _vibeAllowed(type){
   var t = String(type || '');
   // 브리핑은 알림과 함께 짧게 울린다(사용자가 켠 기능이므로)
   if(t === 'commute_brief'){
     try{ return !!(typeof _cmAlarm !== 'undefined' && _cmAlarm.on); }catch(e){ return false; }
   }
-  return !!_VIBE_ALLOW[t];
+  if(!_VIBE_ALLOW[t]) return false;
+  var g = _notifPrefGroup(t);
+  if(g && _notifPrefLoad()[g] === 0) return false;   // 사용자가 설정에서 끔
+  return true;
 }
 window._vibeAllowed = _vibeAllowed;
 // ★ 2026-09-14: 출퇴근 브리핑이 안 오던 이유.
@@ -24122,9 +24267,68 @@ function _notifAllowed(type){
   if(t === 'commute_brief'){
     try{ return !!(typeof _cmAlarm !== 'undefined' && _cmAlarm.on); }catch(e){ return false; }
   }
-  return !!_NOTIF_ALLOW[t];
+  if(!_NOTIF_ALLOW[t]) return false;
+  var g = _notifPrefGroup(t);
+  if(g && _notifPrefLoad()[g] === 0) return false;   // 사용자가 설정에서 끔
+  return true;
 }
 window._notifAllowed = _notifAllowed;
+
+// ── 알림 설정 화면: 토글 4개 + 권한 거부 안내 배너 ──────────────────
+var _NOTIF_PREF_LABELS = {
+  arrive:      { icon:'🚉', title:'도착 임박 알림',   desc:'목적지 1~2정거장 전 · 도착 알림' },
+  transfer:    { icon:'🔄', title:'환승 알림',       desc:'환승역 1~2정거장 전 알림' },
+  proximity:   { icon:'📍', title:'근접 알림(GPS)',  desc:'목적지·환승역 300m 이내 진입 시 알림' },
+  arrive_reco: { icon:'☕', title:'하차 전 추천',    desc:'도착 10분 전 카페·야식 추천' }
+};
+function _notifPrefRender(){
+  var box = document.getElementById('notifPrefRows');
+  if(!box) return;
+  var pref = _notifPrefLoad();
+  var html = '';
+  Object.keys(_NOTIF_PREF_LABELS).forEach(function(key){
+    var L = _NOTIF_PREF_LABELS[key];
+    var on = pref[key] !== 0;
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-top:1px solid var(--border);">'
+          +   '<div><div style="font-size:13.5px;font-weight:700;color:var(--text);">' + L.icon + ' ' + L.title + '</div>'
+          +   '<div style="font-size:11px;color:var(--sub);margin-top:2px;">' + L.desc + '</div></div>'
+          +   '<label style="position:relative;display:inline-block;width:44px;height:25px;flex-shrink:0;">'
+          +     '<input type="checkbox" ' + (on?'checked':'') + ' onchange="_notifPrefToggle(\'' + key + '\',this.checked)" style="opacity:0;width:0;height:0;">'
+          +     '<span style="position:absolute;inset:0;background:' + (on?'#30d158':'var(--border2)') + ';border-radius:25px;transition:.2s;cursor:pointer;"></span>'
+          +     '<span style="position:absolute;left:' + (on?'22px':'3px') + ';top:3px;width:19px;height:19px;background:#fff;border-radius:50%;transition:.2s;pointer-events:none;"></span>'
+          +   '</label>'
+          + '</div>';
+  });
+  box.innerHTML = html;
+}
+window._notifPrefRender = _notifPrefRender;
+function _notifPrefToggle(key, on){
+  _notifPrefSet(key, on);
+  _notifPrefRender();
+  if(typeof toast === 'function') toast((on ? '켰어요: ' : '껐어요: ') + ((_NOTIF_PREF_LABELS[key]||{}).title || key));
+}
+window._notifPrefToggle = _notifPrefToggle;
+
+// ★ 2026-09-22: 알림 권한이 거부(denied)됐을 때 안내가 전혀 없어서, 사용자는
+//   '왜 알림이 안 오지'를 스스로 알 방법이 없었다(GPS 권한 거부는 안내가 있는데
+//   알림만 없었다). 설정 화면을 열 때마다 실제 권한 상태를 물어 배너로 알려준다.
+function _notifPermBannerCheck(){
+  try{
+    var banner = document.getElementById('notifPermBanner');
+    if(!banner) return;
+    var P = window.Capacitor && window.Capacitor.Plugins;
+    if(P && P.LocalNotifications && typeof P.LocalNotifications.checkPermissions === 'function'){
+      P.LocalNotifications.checkPermissions().then(function(np){
+        banner.style.display = (np && np.display === 'denied') ? 'block' : 'none';
+      }).catch(function(){});
+      return;
+    }
+    if('Notification' in window){
+      banner.style.display = (Notification.permission === 'denied') ? 'block' : 'none';
+    }
+  }catch(e){}
+}
+window._notifPermBannerCheck = _notifPermBannerCheck;
 
 // ★ 2026-08-31: 진동을 알림 정책 안으로 넣는다.
 //   증상: 역을 지날 때마다 진동이 울린다.
@@ -24135,7 +24339,17 @@ window._notifAllowed = _notifAllowed;
 function _vibrateFor(type, pattern){
   try{
     if(!_vibeAllowed(type)) return false;   // ★ 알림이 아니라 진동 정책을 본다
-    if('vibrate' in navigator) navigator.vibrate(pattern);
+    var pat = pattern;
+    // ★ 2026-09-22: PiP 작은 화면을 보고 있는 동안(화면도 켜져 있고 PiP 상태)은
+    //   같은 정보가 이미 눈에 보이니 알림+진동이 과하게 느껴질 수 있다.
+    //   완전히 없애진 않는다(몸으로 알아야 하는 알림이라는 원래 취지는 유지) —
+    //   패턴만 짧게 한 번으로 줄인다.
+    try{
+      if(window._pipInPip && !document.hidden && Array.isArray(pat) && pat.length > 1){
+        pat = [pat[0]];
+      }
+    }catch(e2){}
+    if('vibrate' in navigator) navigator.vibrate(pat);
     return true;
   }catch(e){ return false; }
 }
@@ -24165,7 +24379,10 @@ function showNotification(title, body, opts){
         body:    body,
         largeBody: body,                      // ★ 알림 펼치면(∨) 전체 내용 표시 (BigTextStyle)
         summaryText: '길동무',
-        actionTypeId: 'briefing_actions',     // ★ 하단 [닫기] [앱으로 가기] 버튼
+        // ★ 2026-09-22: '하차 전 추천' 알림만 문구가 맞는 전용 버튼([확인하기])을 쓴다.
+        //   PiP 작은 창은 터치가 웹으로 안 와서 버튼을 못 넣지만, 같이 뜨는 이 알림은
+        //   실제로 눌린다 — PiP가 놓친 '누르는 버튼' 역할을 이 알림이 대신한다.
+        actionTypeId: (opts.type === 'arrive_reco') ? 'arrive_reco_actions' : 'briefing_actions',
         sound:   opts.sound || null,
         smallIcon: 'ic_stat_subway',
         channelId: 'subway_alerts',
@@ -25826,12 +26043,21 @@ function _initLocalNotifications(){
       visibility: 1        // VISIBILITY_PUBLIC
     }).catch(function(){});
     // ★ 알림 하단 액션 버튼 등록: [닫기] [앱으로 가기]
+    // ★ 2026-09-22: '하차 전 추천' 알림엔 버튼 문구가 안 맞아서('앱으로 가기') 전용
+    //   타입을 하나 더 둔다. id는 기존과 똑같이 dismiss/open을 써서, 아래
+    //   localNotificationActionPerformed 리스너를 손대지 않고도 그대로 처리된다.
     try {
       LN.registerActionTypes({ types: [{
         id: 'briefing_actions',
         actions: [
           { id: 'dismiss', title: '닫기', foreground: false, destructive: true },
           { id: 'open',    title: '앱으로 가기', foreground: true }
+        ]
+      },{
+        id: 'arrive_reco_actions',
+        actions: [
+          { id: 'dismiss', title: '닫기', foreground: false, destructive: true },
+          { id: 'open',    title: '확인하기', foreground: true }
         ]
       }]}).catch(function(){});
       LN.addListener('localNotificationActionPerformed', function(ev){
@@ -26007,7 +26233,12 @@ function switchTab(tab,el){
     }
     // 🚇 홈 AI 승무원 시작 (현재 위치·시간 기준 5분 브리핑)
     setTimeout(function(){ if(typeof startHomeAI==='function') startHomeAI(); }, 400);
-  } else {
+  } else if(tab==='community'){
+    // ★ 2026-09-22: 알림 설정 카드가 이 탭에 있다 — 열릴 때마다 최신 상태로 그린다
+    if(typeof _notifPrefRender==='function') _notifPrefRender();
+    if(typeof _notifPermBannerCheck==='function') _notifPermBannerCheck();
+  }
+  if(tab!=='home'){
     // 다른 탭 이동 시 폴링 중지
     if(typeof stopNextTrainPolling==='function') stopNextTrainPolling();
     if(typeof stopHomeAI==='function') stopHomeAI();
@@ -27167,7 +27398,7 @@ function _fetchNewsFeed(cb){
   // ★ 저장된 기사를 먼저 올려 화면을 즉시 채운다 (네트워크를 기다리지 않는다)
   try{ if(typeof _newsStoreHydrate === 'function') _newsStoreHydrate(); }catch(e){}
   fetch(_BOARD_WRITER_URL + '/newsfeed')
-    .then(function(r){ return r.json(); })
+    .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
     .then(function(d){
       if(d && d.ok && d.items && d.items.length){
         // ★ 2026-09-02: 여기서 목록을 통째로 갈아엎고 있었다.
@@ -30141,7 +30372,7 @@ function _pipResolveFrom(){
     if(typeof _kakaoLocal !== 'function') return;
     window._pipFromAt = Date.now();
     _kakaoLocal('geo/coord2regioncode.json', 'x=' + ln + '&y=' + la)
-      .then(function(r){ return r.json(); })
+      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
       .then(function(d){
         var docs = (d && d.documents) || [];
         var h = docs.find(function(x){ return x.region_type === 'H'; }) || docs[0];
@@ -30283,7 +30514,7 @@ function _pipMood(m){
 //   현재역만 보면 어디쯤인지 감이 안 온다. 앞뒤를 같이 보여 주면
 //   '다음이 내릴 역인가'를 한눈에 알 수 있다.
 function _pipStations(){
-  var out = { prev:'', cur:'', next:'' };
+  var out = { prev:'', cur:'', next:'', idx:-1, total:0, pct:null };
   try{
     var path = null, idx = -1;
     if(typeof S !== 'undefined' && S && S.route && S.route.path && S.route.path.length){
@@ -30310,6 +30541,10 @@ function _pipStations(){
     out.prev = (idx > 0) ? String(path[idx-1] || '') : '';
     out.cur  = String(path[idx] || '');
     out.next = (idx < path.length - 1) ? String(path[idx+1] || '') : '';
+    // ★ 2026-09-22: 작은 화면에 진행률 막대를 그리기 위한 값(기존 반환값엔 영향 없음)
+    out.idx   = idx;
+    out.total = path.length - 1;
+    out.pct   = (out.total > 0) ? Math.max(0, Math.min(1, idx / out.total)) : null;
   }catch(e){}
   return out;
 }
@@ -30359,11 +30594,14 @@ function _pipEl(){
   // ★ 2026-09-03: 가장자리 페이드를 뺀다.
   //   이 웹뷰에서 mask 합성이 제대로 안 먹어 타원 얼룩처럼 보였다.
   //   어설픈 반투명보다 깔끔한 검정 바탕이 글자도 잘 읽힌다.
+  // ★ 2026-09-22: 평면 검정 대신 은은한 그라데이션 + 위쪽 골드 악센트 바로 좀 더
+  //   '작은 계기판'처럼 보이게 다듬었다. 정보량·아이디는 그대로 두고 배치만 정리한다.
   el.style.cssText =
     'position:fixed;inset:0;z-index:2147483000;display:none;'
     + 'flex-direction:column;align-items:center;justify-content:center;gap:min(0.9vh,5px);'
-    + 'background:#000;color:#fff;padding:min(2vw,12px);text-align:center;'
-    + 'font-family:inherit;overflow:hidden;';
+    + 'background:linear-gradient(180deg,#15151b,#000 65%);color:#fff;'
+    + 'padding:min(2vw,12px);padding-top:min(2.6vw,15px);text-align:center;'
+    + 'font-family:inherit;overflow:hidden;box-shadow:inset 0 2px 0 rgba(255,214,10,.55);';
   el.innerHTML =
       // ★ 2026-09-21: 내용을 pipBox 로 감싼다 — 창이 작을 때 통째로 축소해 넣기 위함(_pipFit)
       '<div id="pipBox" style="width:100%;flex:none;display:flex;flex-direction:column;align-items:center;'
@@ -30376,8 +30614,16 @@ function _pipEl(){
     +   '</div>'
     + '</div>'
     + '<div id="pipStn" style="font-size:min(5vw,17px);line-height:1.25;' + NOWRAP + '"></div>'
-    + '<div id="pipMin" style="font-size:min(5.6vw,19px);font-weight:800;line-height:1.25;color:#ffd60a;' + NOWRAP + '"></div>'
-    + '<div id="pipArr" style="font-size:min(5.6vw,19px);font-weight:800;line-height:1.25;color:#d8d8dd;' + NOWRAP + '"></div>'
+    // ★ 2026-09-22: 여정 진행률 막대 — 목적지까지 얼마나 왔는지 한눈에
+    + '<div id="pipProgWrap" style="width:86%;flex:none;height:4px;border-radius:3px;background:rgba(255,255,255,.14);overflow:hidden;">'
+    +   '<div id="pipProgBar" style="width:0%;height:100%;border-radius:3px;background:linear-gradient(90deg,#ffd60a,#ff9f0a);transition:width .5s ease;"></div>'
+    + '</div>'
+    // ★ 2026-09-22: 소요시간·도착시각을 세로 두 줄 대신 아이콘 붙여 한 줄에 나란히
+    + '<div style="display:flex;align-items:baseline;justify-content:center;gap:min(4vw,16px);width:100%;">'
+    +   '<div id="pipMin" style="font-size:min(5.2vw,18px);font-weight:800;line-height:1.25;color:#ffd60a;' + NOWRAP + '"></div>'
+    +   '<div style="width:1px;height:min(3vh,15px);background:rgba(255,255,255,.18);flex:none;"></div>'
+    +   '<div id="pipArr" style="font-size:min(5.2vw,18px);font-weight:800;line-height:1.25;color:#d8d8dd;' + NOWRAP + '"></div>'
+    + '</div>'
     + '<div id="pipReco" style="display:none;width:100%;flex:none;margin-top:min(1.4vh,8px);'
     +   'padding-top:min(1.4vh,8px);border-top:1px solid rgba(255,255,255,.16);"></div>'
     + '</div>';
@@ -30453,19 +30699,28 @@ function _pipPaint(){
     var m = document.getElementById('pipMin');
     var a = document.getElementById('pipArr');
 
-    // 이전역(흐리게) – 현재역(진하게) – 다음역(흐리게)
+    // 이전역(흐리게) – 현재역(진하게, 앞에 점 표시) – 다음역(흐리게)
     if(R){
       var dim = 'color:#8e8e96;font-weight:600;';
       var on  = 'color:#fff;font-weight:900;';
       var sep = '<span style="color:#5a5a62;margin:0 6px;">–</span>';
+      var dot = '<span style="color:#ffd60a;margin-right:4px;">●</span>';
       var cur = st.cur || d.cur || (d.from || '이동 중');
       R.innerHTML = (st.prev ? '<span style="' + dim + '">' + esc(st.prev) + '</span>' + sep : '')
-                  + '<span style="' + on + '">' + esc(cur) + '</span>'
+                  + '<span style="' + on + '">' + dot + esc(cur) + '</span>'
                   + (st.next ? sep + '<span style="' + dim + '">' + esc(st.next) + '</span>' : '');
     }
+    // ★ 2026-09-22: 여정 진행률 막대 — idx/total이 없으면(경로 정보 부족) 그냥 숨긴다
+    try{
+      var pw = document.getElementById('pipProgWrap'), pb = document.getElementById('pipProgBar');
+      if(pw && pb){
+        if(st.pct != null){ pw.style.display = ''; pb.style.width = Math.round(st.pct*100) + '%'; }
+        else pw.style.display = 'none';
+      }
+    }catch(ePb){}
     window._pipPaintAt = Date.now();
-    if(m) m.textContent = '예상 소요시간: ' + ((d.min != null) ? _pipMinText(d.min) : '-');
-    if(a) a.textContent = '도착 예정시간: ' + (d.arr || '-');
+    if(m) m.textContent = '⏱ ' + ((d.min != null) ? _pipMinText(d.min) : '-');
+    if(a) a.textContent = '🕐 ' + (d.arr || '-');
     _pipCheerPaint();
     _pipRecoPaint();
   }catch(e){}
@@ -30483,7 +30738,11 @@ function _pipPaint(){
 // ★ 2026-09-16: 20분은 너무 길었다. 작은 창에서 추천이 계속 떠 있어
 //   현재역·남은시간을 가렸다. 90초만 보여주고 스스로 내려간다.
 // ★ 2026-09-21: 작은 창은 버튼이 안 눌리고 글만 읽는 용도라 10초면 충분하다.
-var _PIP_RECO_TTL = 10*1000;
+// ★ 2026-09-22: 10초는 너무 짧아서, 그 순간 작은 창을 보고 있지 않으면 통째로
+//   놓쳤다(같은 내용이 알림으로도 가긴 하지만, PiP만 보는 사용자는 확인 기회가
+//   거의 없었다). 20초로 늘리고, 나타나는 순간 살짝 반짝여 눈길을 끌게 한다
+//   (터치가 안 되는 창이라 '재주의'는 시각 효과로만 줄 수 있다).
+var _PIP_RECO_TTL = 20*1000;
 
 function _pipRecoSet(title, body, buttons){
   try{
@@ -30498,6 +30757,7 @@ window._pipRecoClear = _pipRecoClear;
 function _pipRecoPaint(){
   var box = document.getElementById('pipReco');
   if(!box) return;
+  var _wasHidden = box.style.display === 'none' || !box.style.display;
   var r = window._pipReco;
   if(r && r.at && (Date.now() - r.at) > _PIP_RECO_TTL){ window._pipReco = null; r = null; }
   var wrap = document.getElementById('pipView');
@@ -30529,11 +30789,24 @@ function _pipRecoPaint(){
           + 'white-space:pre-line;word-break:keep-all;">' + esc(r.body) + '</div>';
   }
   // ★ 2026-09-21: 작은 창은 터치가 웹으로 오지 않아 버튼이 눌리지 않는다 → 버튼·남은시간 표시를 없애고
-  //   추천 문구만 10초 동안 보여준 뒤 스스로 내려간다.
+  //   추천 문구만 20초 동안 보여준 뒤 스스로 내려간다.
   box.innerHTML = html;
   box.style.display = 'block';
   box.style.maxHeight = 'none';
   box.style.boxSizing = 'border-box';
+  box.style.borderRadius = '10px';
+  // ★ 2026-09-22: 방금 나타난 순간에만 살짝 반짝여서 눈길을 끈다(터치가 안 되니 시각 효과뿐)
+  if(_wasHidden){
+    try{
+      if(!document.getElementById('pipRecoPulseCss')){
+        var stp = document.createElement('style');
+        stp.id = 'pipRecoPulseCss';
+        stp.textContent = '@keyframes pipRecoPulse{0%{box-shadow:0 0 0 0 rgba(255,214,10,.6);}70%{box-shadow:0 0 0 12px rgba(255,214,10,0);}100%{box-shadow:0 0 0 0 rgba(255,214,10,0);}}';
+        document.head.appendChild(stp);
+      }
+      box.style.animation = 'pipRecoPulse 0.7s ease-out 2';
+    }catch(eA){}
+  }
   // ★ 2026-09-21: 창 높이를 내용에 맞춘다 — 예전엔 고정 비율(200:190)이라 아래가 크게 비었다.
   //   내용이 차지하는 높이 ÷ 창 너비 = 필요한 가로세로 비율. 한 번 정해 창을 늘린다.
   try{
@@ -30585,6 +30858,13 @@ function _pipShow(){
 function _pipHide(){
   try{
     window._pipInPip = false;
+    // ★ 2026-09-22: YJ 제보 — 화면이 큰 태블릿에서 PiP를 확장하면 뒤에 앱 화면이
+    //   보인다. 원인: 여기서 무조건 바로 요약 화면을 내렸다. 태블릿은 'PiP 진입/
+    //   복귀' 신호가 앱 활성 신호와 뒤섞여 올 수 있는데, 그 신호만 먼저 와서
+    //   창이 아직 작은(PiP인) 상태에서도 요약 화면이 사라져 실제 앱 화면이
+    //   그대로 드러났다. → 바로 숨기지 말고 _pipTick()에 실제 창 크기로
+    //   다시 판단하게 한다 — 아직 작은 창이면 (아래 _pipWant()가) 계속 띄워 둔다.
+    if(typeof _pipTick === 'function'){ _pipTick(); return; }
     var el = document.getElementById('pipView');
     if(el) el.style.display = 'none';
   }catch(e){}
@@ -30598,7 +30878,17 @@ function _pipHide(){
 //     어떤 사건을 놓쳐도 늦어도 1초 뒤 제자리로 돌아온다.
 function _pipWant(){
   try{
+    // ★ 2026-09-22: 고정 픽셀 기준(340×520)은 폰 기준이다. 화면이 훨씬 큰
+    //   태블릿은 같은 비율로 줄어든 PiP 창이라도 절대 픽셀 크기가 이 기준을
+    //   넘어서, '작은 창'으로 인식되지 못했다. 전체 화면(screen) 대비 지금
+    //   창이 얼마나 작아졌는지(비율)도 같이 본다 — 기기 크기에 상관없이 잡힌다.
     var small = (window.innerHeight <= 340 && window.innerWidth <= 520);
+    try{
+      var sw = window.screen && window.screen.width, sh = window.screen && window.screen.height;
+      if(sw > 0 && sh > 0 && window.innerWidth <= sw * 0.6 && window.innerHeight <= sh * 0.5){
+        small = true;
+      }
+    }catch(e2){}
     if(!(window._pipInPip || small)) return false;      // 작은 창도 아니고 PiP도 아님
     return !!(_pipEnabled() && _pipHasRoute());
   }catch(e){ return false; }
@@ -30659,7 +30949,15 @@ function _pipTick(){
   }catch(e){}
 }
 // 감시 루프는 항상 돈다(가벼운 검사뿐이라 부담이 없다)
-try{ if(!window._pipWatchTimer) window._pipWatchTimer = setInterval(_pipTick, 1000); }catch(e){}
+// ★ 2026-09-22: 다만 안내 중인 경로가 아예 없을 때도 1초마다 똑같이 돌 필요는 없다
+//   (PiP는 경로가 있어야만 뜨므로, 경로가 없는 동안엔 1초 정밀도가 의미가 없다).
+//   경로가 있을 땐 그대로 1초, 없을 땐 5초로 늦춰서 감시는 유지하되 빈도만 줄인다.
+function _pipTickLoop(){
+  try{ _pipTick(); }catch(e){}
+  var delay = (typeof _pipHasRoute === 'function' && _pipHasRoute()) ? 1000 : 5000;
+  window._pipWatchTimer = setTimeout(_pipTickLoop, delay);
+}
+try{ if(!window._pipWatchTimer) _pipTickLoop(); }catch(e){}
 try{
   document.addEventListener('visibilitychange', function(){
     if(!document.hidden && window._pipInPip) _pipTick();
@@ -32002,7 +32300,7 @@ function _updateMyLocLabel() {
     var lat = pos.coords.latitude, lng = pos.coords.longitude;
     // 카카오 좌표→주소 역지오코딩
     _kakaoLocal('geo/coord2regioncode.json', 'x=' + lng + '&y=' + lat)
-    .then(function(r){ return r.json(); })
+    .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
     .then(function(d){
       if(d.documents && d.documents[1]) {
         var addr = d.documents[1];
@@ -33639,6 +33937,24 @@ function advanceToNextStation(source){
 
 /* 도착/환승 알림 체크 */
 var _alertFired = {};   // 중복 알림 방지
+// ★ 2026-09-22: 'N정거장 전' 알림이 정거장 수로만 트리거돼서, 역간격이 짧은 구간(1~2분)에선
+//   울리자마자 사실상 도착이라 준비할 시간이 없었다. 역간격이 긴 구간에선 반대로 너무 일찍 울렸다.
+//   → 남은 시간(tp 누적)을 같이 본다. '2정거장 전' 시점에 이미 임박(150초 이하)했으면
+//   더 정확한 '1정거장 전' 문구를 그 자리에서 대신 울리고, 문구에도 실제 남은 분을 넣는다.
+//   tp가 없거나 계산이 안 되면 예전처럼 정거장 수 기준으로만 판단한다(안전한 폴백).
+var _NEAR_LEAD_SEC = 150; // 약 2분 30초 — 이보다 가까우면 '곧 도착'으로 취급
+function _remainSecTo(fromIdx, toIdx){
+  try{
+    var tp = S.route.tp || [];
+    var sum = 0;
+    for(var k = fromIdx + 1; k <= toIdx; k++){ sum += (tp[k] || 0); }
+    return sum;
+  }catch(e){ return null; }
+}
+function _remainMinTxt(sec){
+  return (sec != null) ? (' (약 ' + Math.max(1, Math.round(sec/60)) + '분 후)') : '';
+}
+
 function checkArrivalAlerts(idx){
   if(!S.route) return;
   var path       = S.route.path;
@@ -33674,13 +33990,15 @@ function checkArrivalAlerts(idx){
   // ══════════════════════════════════════════
   // 목적지 1정거장 전 — 딱 1회만
   // ══════════════════════════════════════════
+  var _remainToDestSec = _remainSecTo(idx, totalStops);
+  var _remainDestTxt   = _remainMinTxt(_remainToDestSec);
   if(idx === totalStops - 1){
     if(!_alertFired['near1']){
       _alertFired['near1'] = true;
       toast('⚠️ 다음 역 목적지! ' + destNm + ' 내릴 준비하세요');
       vibrateArrive();
       showNotification('⚠️ 1정거장 전 도착',
-        '다음 역: ' + destNm + ' — 내릴 준비하세요!',
+        '다음 역: ' + destNm + ' — 내릴 준비하세요!' + _remainDestTxt,
         {vibrate:[300,100,300,100,300], type:'near_arrive'});
     }
     // 환승도 체크 (도착역이 환승역일 수 있음)
@@ -33690,12 +34008,21 @@ function checkArrivalAlerts(idx){
   // 목적지 2정거장 전 — 딱 1회만
   // ══════════════════════════════════════════
   if(idx === totalStops - 2){
-    if(!_alertFired['near2']){
+    if(_remainToDestSec != null && _remainToDestSec <= _NEAR_LEAD_SEC && !_alertFired['near1']){
+      // ★ 역간격이 짧아 '2정거장 전' 시점에 이미 임박 — 더 정확한 '1정거장 전' 문구를 당겨 울린다
+      _alertFired['near1'] = true;
+      _alertFired['near2'] = true;
+      toast('⚠️ 다음 역 목적지! ' + destNm + ' 내릴 준비하세요');
+      vibrateArrive();
+      showNotification('⚠️ 1정거장 전 도착',
+        '다음 역: ' + destNm + ' — 내릴 준비하세요!' + _remainDestTxt,
+        {vibrate:[300,100,300,100,300], type:'near_arrive'});
+    } else if(!_alertFired['near2']){
       _alertFired['near2'] = true;
       toast('🔔 2정거장 후 목적지! ' + destNm);
       vibrateWarning();
       showNotification('🔔 2정거장 전 도착',
-        '목적지: ' + destNm + ' — 2정거장 남았습니다',
+        '목적지: ' + destNm + ' — 2정거장 남았습니다' + _remainDestTxt,
         {vibrate:[400,150,400], type:'near_arrive2'});
     }
   }
@@ -33731,7 +34058,7 @@ function checkArrivalAlerts(idx){
       toast('🔄 다음 역 ' + xferNm + ' 환승 (→' + xferLine + ')');
       vibrateTransfer();
       showNotification('🔄 1정거장 전 환승',
-        '다음 역: ' + xferNm + ' → ' + xferLine + ' 환승하세요',
+        '다음 역: ' + xferNm + ' → ' + xferLine + ' 환승하세요' + _remainMinTxt(_remainSecTo(idx, idx+1)),
         {vibrate:[200,100,200,100,200], type:'transfer'});
     }
   }
@@ -33746,12 +34073,24 @@ function checkArrivalAlerts(idx){
     var xferNm2   = path[idx+2];
     var xferLine2 = lp[idx+2];
     var xfer2Key  = 'xfer_2_' + xferNm2;
-    if(!_alertFired[xfer2Key]){
+    var _xr2      = _remainSecTo(idx, idx+2);
+    if(_xr2 != null && _xr2 <= _NEAR_LEAD_SEC && !_alertFired['xfer_1_' + xferNm2]){
+      // ★ 역간격이 짧아 '2정거장 전' 시점에 이미 임박 — '1정거장 전' 문구를 당겨 울린다.
+      //   이 키('xfer_1_'+이름)는 나중에 next1IsXfer 체크에서도 같이 보는 키라, idx가
+      //   따라잡아도 같은 환승역을 또 알리지 않는다.
+      _alertFired['xfer_1_' + xferNm2] = true;
+      _alertFired[xfer2Key] = true;
+      toast('🔄 다음 역 ' + xferNm2 + ' 환승 (→' + xferLine2 + ')');
+      vibrateTransfer();
+      showNotification('🔄 1정거장 전 환승',
+        '다음 역: ' + xferNm2 + ' → ' + xferLine2 + ' 환승하세요' + _remainMinTxt(_xr2),
+        {vibrate:[200,100,200,100,200], type:'transfer'});
+    } else if(!_alertFired[xfer2Key]){
       _alertFired[xfer2Key] = true;
       toast('🔔 2정거장 후 환승역! ' + xferNm2 + ' (→' + xferLine2 + ')');
       vibrateWarning();
       showNotification('🔔 2정거장 전 환승',
-        xferNm2 + '에서 ' + xferLine2 + ' 환승 — 미리 준비하세요',
+        xferNm2 + '에서 ' + xferLine2 + ' 환승 — 미리 준비하세요' + _remainMinTxt(_xr2),
         {vibrate:[400,150,400], type:'transfer2'});
     }
   }
@@ -34346,7 +34685,7 @@ function fmapSearch(inp, type) {
   // ③ 카카오 주소/장소 검색 (2글자 이상)
   if(q.length >= 2) {
     _kakaoLocal('search/keyword.json', 'query=' + encodeURIComponent(q) + '&size=5')
-    .then(function(r){ return r.json(); })
+    .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
     .then(function(data){
       var docs = data.documents || [];
       // 이미 역/버스 결과에 있는 것 제외
@@ -36891,7 +37230,9 @@ function _applyDelayOffset(actualSegSec) {
     var stdSec = S.route.tp[S.curIdx] || 120;
     var delta = actualSegSec - stdSec;
     if(delta > 30) {
-      S._delayOffsetMs = (S._delayOffsetMs || 0) + delta * 1000;
+      // ★ 2026-09-22: 위 _doTimetableAdvance와 같은 이유로 상한을 둔다 —
+      //   비정상적으로 큰 delta 한 번이 영구 누적되는 것을 막는다(최대 10분).
+      S._delayOffsetMs = Math.min(600000, (S._delayOffsetMs || 0) + delta * 1000);
       if(typeof window !== 'undefined') window.dynamicDelayOffset = S._delayOffsetMs;
       console.log('[Delay] 구간 지연 +' + Math.round(delta) + '초 (누적 ' + Math.round(S._delayOffsetMs/1000) + '초)');
       if(typeof renderRouteSegCards === 'function') renderRouteSegCards(S.route);
@@ -36976,7 +37317,7 @@ function _trackingSyncToHome(){
 window._trackingMatchesHome = _trackingMatchesHome;
 window._trackingSyncToHome  = _trackingSyncToHome;
 
-function onStationArrival(skipGpsCheck) {
+function onStationArrival(skipGpsCheck, isGpsRetry) {
   if(_trackingSyncToHome()) return;          // 홈 경로와 다른 관제는 전진시키지 않는다
   if(!S?.route || S.curIdx >= S.route.path.length - 1) {
     stopTracking();
@@ -37026,16 +37367,21 @@ function onStationArrival(skipGpsCheck) {
       if(bannerTxt) bannerTxt.textContent = '🚇 이동 중 · ' + curStnName + (isXferArrival ? ' 환승' : ' 통과');
       console.log('[도착] ' + curStnName + ' (idx=' + S.curIdx + '/' + (S.route.path.length-1) + ')');
 
-      // ★ 도착 임박 알림 (2정거장 전·1정거장 전 진동/알림) — 활성 전진 엔진에서 누락돼 있던 호출
-      if(typeof checkArrivalAlerts === 'function' && S.curIdx < S.route.path.length - 1){
+      // ★ 도착 임박 알림 (2정거장 전·1정거장 전 진동/알림, 목적지 도착 알림 포함)
+      // ★ 2026-09-22: 예전엔 목적지 도착(S.curIdx가 마지막)일 땐 이 줄을 건너뛰고
+      //   바로 아래에서 toast·vibrateArrive·showNotification을 직접 또 불렀다.
+      //   checkArrivalAlerts의 'arrive' 분기는 _alertFired['arrive']로 중복을 막는데,
+      //   이 직접 호출은 그 가드를 거치지 않아 같은 도착 알림이 두 번(같은 시각에) 갔다
+      //   (YJ 제보: 알림이 같은 시간에 2번 옴). → 항상 checkArrivalAlerts를 거치게 해서
+      //   알림 발송을 한 곳(가드가 있는 곳)으로만 통일한다.
+      if(typeof checkArrivalAlerts === 'function'){
         checkArrivalAlerts(S.curIdx);
       }
 
       if(S.curIdx >= S.route.path.length - 1) {
         stopTracking();
-        if(typeof toast==='function') toast('🎉 목적지 ' + curStnName + ' 도착!');
-        if(typeof vibrateArrive==='function') vibrateArrive();   // ★ 도착 진동
-        if(typeof showNotification==='function') showNotification('🎉 목적지 도착!', curStnName + '에 도착했습니다. 수고하셨어요!', {vibrate:[300,100,300,100,300], type:'arrive'});
+        // ★ toast·진동·알림은 위 checkArrivalAlerts('arrive' 분기)가 가드를 거쳐 이미 보냈다 —
+        //   여기서 다시 보내면 중복이라 뺀다.
         if(typeof _clearBoardAlerts==='function') _clearBoardAlerts();
       } else {
         if(typeof startTrainAnim==='function') startTrainAnim();
@@ -37060,8 +37406,32 @@ function onStationArrival(skipGpsCheck) {
       var d    = haversineM(pos.coords.latitude, pos.coords.longitude, pendingStn.lat, pendingStn.lng);
       var cacc = pos.coords.accuracy || 999;
       console.log('[GPS재확인] ' + pendingName + ' 거리:' + Math.round(d) + 'm acc:' + Math.round(cacc) + 'm');
-      if(d <= 400 || cacc > 150) { _doArrival(); }
-      else { console.log('[GPS재확인] 거리 초과 → 보류'); }
+      // ★ 2026-09-22: 'GPS 정확도가 나쁘면' 무조건 확인된 것으로 쳤다(cacc>150 → 통과).
+      //   정확도가 나쁜 건 '못 믿을 값'이지 '도착했다는 증거'가 아니다 — 오늘 고친
+      //   _tryVerify·_updateTransitGps와 같은 함정. 여기는 이 함수가 유일한 재확인
+      //   시도(재시도 루프가 없음)라 기지국으로 한 번 더 대조하고, 그래도 판단 불가면
+      //   무한정 멈추지 않도록 이 자리에서 짧게 한 번만 재시도한다.
+      var _cmv = (typeof _cellMovingState === 'function') ? _cellMovingState() : null;
+      if(d <= 400) {
+        _doArrival();                                    // 실측으로 확인됨
+      } else if(cacc <= 150) {
+        // ★ 정확도가 좋은데 멀리 있다 = GPS가 '아직 도착 안 했다'고 확실히 말하는 것.
+        //   시각표보다 이 증거를 믿는다 — 강제 전진하지 않고, 다음 데드레커닝 스텝이나
+        //   다른 경로(가속도계·기지국)가 다시 부를 때까지 기다린다(원래 동작 유지).
+        console.log('[GPS재확인] 정확도 양호·거리 초과 → 보류(강제 전진 안 함)');
+      } else if(_cmv === false) {
+        // 정확도는 나쁜데 기지국은 '정지 중'이라고 확인 — 아직 안 믿고 한 번만 재확인
+        if(!isGpsRetry){
+          console.log('[GPS재확인] 정확도 불량 + 기지국 정지신호 → 5초 뒤 한 번 더 확인');
+          setTimeout(function(){ onStationArrival(skipGpsCheck, true); }, 5000);
+        } else {
+          console.log('[GPS재확인] 재확인해도 정지신호 지속 → 보류(강제 전진 안 함)');
+        }
+      } else {
+        // 정확도 나쁘고 기지국도 못 믿을 근거(모름/이동중) → 데드레커닝 취지대로 시각표를 믿는다
+        console.log('[GPS재확인] 정확도 불량(대조 불가) → 시각표 기준으로 진행');
+        _doArrival();
+      }
     },
     function() { _doArrival(); },
     { enableHighAccuracy: true, timeout: 4000, maximumAge: 3000 }
@@ -38149,7 +38519,7 @@ function _splitRegionCode(code){
 function _coordToRegionCode(lat, lng){
   return new Promise(function(resolve){
     _kakaoLocal('geo/coord2regioncode.json', 'x=' + lng + '&y=' + lat)
-    .then(function(r){ return r.json(); }).then(function(d){
+    .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }).then(function(d){
       var docs = d.documents || [];
       // 법정동(B) 우선, 없으면 행정동(H)
       var b = docs.find(function(x){ return x.region_type==='B'; }) || docs[0];
@@ -38189,7 +38559,7 @@ function _fetchBusCongestion(busSection){
           + '&sgg_cd=' + reg.sgg_cd
           + '&numOfRows=1000&pageNo=1';
 
-        fetch(workerUrl).then(function(r){ return r.json(); }).then(function(data){
+        fetch(workerUrl).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }).then(function(data){
           var items = [];
           try {
             // 응답 구조: {"Response":{"header":..,"body":{"items":{"item":[...]}}}}
@@ -38627,7 +38997,7 @@ function _shopFetch(force){
     var done = false;
     var t = setTimeout(function(){ done = true; }, _SHOP_TIMEOUT);
     fetch(_shopUrl() + '/shop', { cache:'no-cache' })
-      .then(function(r){ return r.json(); })
+      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
       .then(function(j){
         if(done) return; done = true; clearTimeout(t);
         if(!j || !j.ok || !j.data) return;
@@ -40666,7 +41036,7 @@ function _serverFetchTalks(){
   if(!_SERVER_ON) return;
   try {
     fetch(_SERVER_URL + '/talks?after=' + _lastTalkTs)
-      .then(function(r){ return r.json(); })
+      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
       .then(function(d){
         // 응답은 왔지만 새 대화가 없음 = 서버 대본 소진 상태
         if(!d || !d.talks || !d.talks.length){
@@ -40713,7 +41083,7 @@ function _serverPostArticle(nick, title, body, cat){
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ nick:nick, title:title, body:body, cat:cat||'잡담' })
-    }).then(function(r){ return r.json(); })
+    }).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
       .then(function(data){
         if(data && data.ok){
           // 등록 직후 서버 목록 새로고침 → 내가 쓴 글 즉시 반영
