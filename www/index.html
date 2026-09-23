@@ -12970,7 +12970,12 @@ function _routeRemainingMin(){
   // ★ 기준시각(미설정 시 현재) 기준으로 남은시간 계산 → 미래 예상 경로도 소요시간 정상
   var now = new Date((typeof getBaseTimeMs==='function') ? getBaseTimeMs() : Date.now());
   var nowMin = now.getHours()*60 + now.getMinutes() + now.getSeconds()/60;
-  if(lastMin < nowMin - 720) lastMin += 1440; // 자정 보정
+  // ★ 2026-09-23: 기존 "12시간 넘게 이르면 다음날" 단발 보정은 일반 시내 경로(짧은 소요)
+  //   전제였다. 장거리(열차·고속버스·시외버스)는 출발 대기만 몇 시간, 총 소요가 12시간을
+  //   넘을 수 있다 — 예: 지금 10:13인데 19:44 출발 4시간 버스를 타서 00:15(다음날) 도착.
+  //   단발 보정(lastMin < nowMin-720)은 이 경우 안 걸려서 rem이 음수로 나와 0으로 깔렸다.
+  //   → '아직 지났다'고 보이는 동안은 계속 하루씩 더해서(반복) 실제 미래 시각을 찾는다.
+  while(lastMin < nowMin) lastMin += 1440;
   var rem = Math.round(lastMin - nowMin);
   return rem > 0 ? rem : 0;
 }
