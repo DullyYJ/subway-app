@@ -8194,7 +8194,7 @@ function fmapDoRoute() {
   // ★ 2026-09-23 (KTX/ITX 선택): 등급 선택 버튼이 부른 재탐색이 아니면 이전 선택을 지운다.
   //   안 지우면 완전히 다른 경로를 탐색해도 예전에 고른 KTX 필터가 계속 걸려 있게 된다.
   if(window._ldPickKeep){ window._ldPickKeep = false; }
-  else { window._ldPick = null; }
+  else { window._ldPick = null; window._ldTrainForceTried = false; }   // ★ 새 탐색이면 '열차 강제 재조회 1회' 권한도 새로 준다
 
   // ★ 새 탐색 시작 — 이전 경로 결과를 즉시 무효화한다.
   //   (예전엔 이전 _allRouteResults가 남아 있어, 응답이 늦으면 노선도에서 새로 고른
@@ -8508,9 +8508,13 @@ window._hideRouteLoading = _hideRouteLoading;
       }
       // ★ 2026-09-23 (KTX/ITX 선택): 세부경로에서 사용자가 등급을 골랐으면 그 값을
       //   엔진(ldMode/ldGrade)에 실어 보낸다 — 엔진이 그 등급 안에서 다시 고른다.
-      if(window._ldPick && window._ldPick.mode && window._ldPick.grade){
-        urls[0] += '&ldMode=' + encodeURIComponent(window._ldPick.mode) + '&ldGrade=' + encodeURIComponent(window._ldPick.grade);
-        console.log('[열차등급] ' + window._ldPick.grade + ' 선택을 엔진에 넘김');
+      //   ★ 2026-09-23 (2차): "기차" 탭을 열었는데 엔진이 고른 장거리 후보가 사실은
+      //   고속/시외버스였던 문제 — 등급(grade)까진 아직 안 골랐어도 모드(mode)만
+      //   'train'으로 넘기는 경우도 있다(_doSelectRouteOption 참고). grade는 있을 때만 붙인다.
+      if(window._ldPick && window._ldPick.mode){
+        urls[0] += '&ldMode=' + encodeURIComponent(window._ldPick.mode);
+        if(window._ldPick.grade) urls[0] += '&ldGrade=' + encodeURIComponent(window._ldPick.grade);
+        console.log('[열차등급] ' + (window._ldPick.grade || '(등급 무관, 모드만)') + ' 선택을 엔진에 넘김');
       }
     }catch(e){}
 
@@ -8702,10 +8706,19 @@ window._hideRouteLoading = _hideRouteLoading;
         window._routeResultReady = _reqToken;
         var tabDiv = document.getElementById('routeOptionTabs');
         if(tabDiv) tabDiv.style.display = 'flex';
-        // ★ 2026-09-23: 장거리(KTX/ITX) 후보가 있을 때만 기차 탭을 보여준다
+        // ★ 2026-09-23: 장거리(KTX/ITX) 후보가 있을 때만 기차 탭을 보여준다.
+        //   글자도 실제 고른 모드(열차/고속버스/시외버스)에 맞게 미리 맞춰 둔다 —
+        //   탭을 실제로 누르면 _doSelectRouteOption이 한 번 더 정확히 맞춘다.
         try{
           var _ldBtn = document.getElementById('routeTabLongdist');
-          if(_ldBtn) _ldBtn.style.display = (_allRouteResults && _allRouteResults.longdist) ? '' : 'none';
+          if(_ldBtn){
+            var _ldInfo = _allRouteResults && _allRouteResults.longdist;
+            _ldBtn.style.display = _ldInfo ? '' : 'none';
+            if(_ldInfo){
+              var _lm0 = (_ldInfo.info || {}).ldMode;
+              _ldBtn.textContent = (_lm0 === 'expbus') ? '🚌 고속버스' : (_lm0 === 'subbus') ? '🚌 시외버스' : '🚄 기차';
+            }
+          }
         }catch(e){}
         // ★ 처음 그릴 때도 현재 보고 있는 탭을 표시
         //   렌더 직후에 한 번 더 걸어 둔다 — 카드를 다시 그리는 과정에서
@@ -9604,6 +9617,33 @@ function _doSelectRouteOption(type) {
     // 즐겨찾기 없음/좌표없음 → 아래 일반 버스경로 로직으로 진행
   }
 
+  // ★ 2026-09-23 (YJ: "조금 더 걸리더라도 ktx나 itx를 타고싶을수도 있어"):
+  //   "🚄 기차" 탭 특별 처리. route_v2.js의 ldFinish는 장거리 후보를 열차/고속버스/
+  //   시외버스 중 '지금 가장 빨리 탈 수 있는' 것 하나로 고른다(모드 안 가리고) — 그래서
+  //   이 탭을 열어도 실제로는 고속버스가 나올 수 있다(부산행 심야우등 사례).
+  //   기차 탭인데 기차가 아니면, 딱 한 번 엔진에 "열차로만"(ldMode=train, 등급은 안 정함)
+  //   다시 물어본다 — 판단(그 구간에 열차가 있는지·어느 편인지)은 여전히 엔진만 한다.
+  //   그래도 없다고 답하면(= 재조회해도 ldMode가 train이 아니면) 있는 그대로 보여주고
+  //   사용자에게 솔직히 알린다(버스로 대신 보여준다고).
+  if(type === 'longdist'){
+    var _ldNow = _allRouteResults.longdist;
+    var _ldNowIsTrain = !!(_ldNow && (_ldNow.info || {}).ldMode === 'train');
+    if(_ldNow && !_ldNowIsTrain && !window._ldTrainForceTried && typeof fmapDoRoute === 'function'){
+      window._ldTrainForceTried = true;
+      window._ldPick = { mode: 'train', grade: null };
+      window._ldPickKeep = true;
+      window._reselectAfterSearch = 'longdist';   // 응답 오면 이 탭으로 다시 연다
+      _highlightRouteTab('longdist');
+      if(typeof toast === 'function') toast('열차편을 찾는 중...');
+      fmapDoRoute();
+      return;
+    }
+    if(_ldNow && !_ldNowIsTrain && window._ldTrainForceTried && typeof toast === 'function'){
+      // 열차로 다시 물어봤는데도 엔진이 여전히 열차가 아닌 걸 줬다 = 이 구간엔 탈 수 있는 열차가 없다는 뜻
+      toast('이 구간은 지금 탈 수 있는 열차편이 없어 고속/시외버스로 보여드려요');
+    }
+  }
+
   // 1) 요청 타입 경로 우선 시도 (sub 외)
   var routeObj = _tryConvert(_allRouteResults[type]);
 
@@ -9632,6 +9672,18 @@ function _doSelectRouteOption(type) {
   try{ _svcApply(routeObj.sections, 'engine_' + type); }catch(e){}
 
   _highlightRouteTab(type);
+
+  // ★ 2026-09-23: "기차" 탭에 실제로는 고속/시외버스가 뜰 수 있으니(위 설명 참고)
+  //   탭 글자도 실제 모드에 맞게 바꿔 준다 — 화면과 실제가 다르면 안 된다.
+  if(type === 'longdist'){
+    try{
+      var _ldBtnLabel = document.getElementById('routeTabLongdist');
+      if(_ldBtnLabel){
+        var _lm = routeObj.ldMode;
+        _ldBtnLabel.textContent = (_lm === 'expbus') ? '🚌 고속버스' : (_lm === 'subbus') ? '🚌 시외버스' : '🚄 기차';
+      }
+    }catch(e){}
+  }
 
   // 새 경로 선택 시 메인 확정 버튼 초기화
   window._pendingRouteType = type;
