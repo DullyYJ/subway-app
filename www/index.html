@@ -17616,25 +17616,41 @@ window.addEventListener('unhandledrejection', function(e) {
    화면이 안 눌리면 진단도 못 열기 때문에, 멈추기 직전 상황을 남겨 둔다.
      · 1초마다 심박을 찍고 마지막 시각을 localStorage 에 저장
      · 다음 실행 때 그 값을 보고 '얼마나 멈춰 있었는지'를 진단에 표시
-   심박이 멈춘 뒤에는 아무것도 실행되지 않으므로, 기록은 '멈추기 직전'까지다. */
+   심박이 멈춘 뒤에는 아무것도 실행되지 않으므로, 기록은 '멈추기 직전'까지다.
+   ★ 2026-09-23 YJ 실측으로 발견한 구멍: 이 비교를 "다음 실행(페이지 새로고침) 때"만
+   했다 — 세부경로처럼 '1분간 멈췄다가 앱을 다시 켜지 않고도 저절로 풀리는' 경우는
+   페이지가 안 새로고침되니 이 비교가 아예 다시 실행되지 않아 영원히 못 잡았다.
+   (실측: 실제로는 1분 멈췄는데 진단엔 "기록 없음") → 이제는 매 틱마다 바로 이전
+   틱과의 간격도 함께 본다. 그러면 재시작 없이, 같은 세션 안에서 바로 잡힌다. */
 (function(){
   var HB_KEY = 'lastHeartbeat';
   var STALL_KEY = 'lastStall';
   try{
-    // 지난 실행에서 멈춘 흔적이 있으면 기록해 둔다
+    // 지난 실행에서 멈춘 흔적이 있으면 기록해 둔다 (앱을 껐다 켠 경우)
     var prev = parseInt(localStorage.getItem(HB_KEY) || '0', 10);
     if(prev > 0){
       var gap = Date.now() - prev;
       // 5초 넘게 심박이 끊겼다 = 앱이 죽었거나 스레드가 멈췄다
       if(gap > 5000 && gap < 7*24*3600*1000){
-        var rec = { at: prev, gap: gap };
+        var rec = { at: prev, gap: gap, sameSession: false };
         localStorage.setItem(STALL_KEY, JSON.stringify(rec));
         console.warn('[심박] 지난 실행이 ' + Math.round(gap/1000) + '초 전에 멈춤');
       }
     }
   }catch(e){}
+  var _hbLast = Date.now();
   setInterval(function(){
-    try{ localStorage.setItem(HB_KEY, String(Date.now())); }catch(e){}
+    var _now = Date.now();
+    var _gap = _now - _hbLast;
+    // ★ 같은 세션 안에서 바로 감지 — 재시작을 기다리지 않는다.
+    if(_gap > 5000 && _gap < 7*24*3600*1000){
+      try{
+        localStorage.setItem(STALL_KEY, JSON.stringify({ at: _hbLast, gap: _gap, sameSession: true }));
+        console.warn('[심박] 이번 세션에서 ' + Math.round(_gap/1000) + '초간 멈춤 감지');
+      }catch(e){}
+    }
+    _hbLast = _now;
+    try{ localStorage.setItem(HB_KEY, String(_now)); }catch(e){}
   }, 1000);
 })();
 
