@@ -7820,15 +7820,10 @@ function openTransitDetail() {
   //   일부 기기에서 position:fixed가 뷰포트가 아니라 그 스크롤 영역 기준으로 잘리는
   //   것으로 보인다(안드로이드 웹뷰에서 종종 나는 문제). body 바로 밑으로 한 번
   //   옮겨두면 어떤 조상의 overflow·레이아웃과도 무관해진다(이미 body 밑이면 그대로 둔다).
-  // ★ 2026-09-23: 옮기기 전에 지난번 목록(수백 개 DOM 일 수 있음)을 먼저 비운다 —
-  //   내용째로 body 밑으로 옮기면 그만큼 다시 그려야 해서 불필요하게 무겁다.
-  //   또, 옮기는 데 오래 걸리는지 여기서도 재서 진단에 남긴다(원인 후보 하나 더 좁히기).
+  // ★ 2026-09-23: 옮기기 전에 지난번 목록(수백 개 DOM 일 수 있음)을 먼저 비운다.
   try{
-    var _tdT_move = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
     if(sects) sects.innerHTML = '';
     if(modal.parentNode !== document.body) document.body.appendChild(modal);
-    var _tdMs_move = ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - _tdT_move;
-    if(_tdMs_move > 200 && typeof _errLog === 'function') _errLog('[진단] 세부경로 모달 이동 ' + Math.round(_tdMs_move) + 'ms', '', 0, 0, null);
   }catch(e){}
   var ready = function(){
     return !!(_transitResultData && (_transitResultData.routes||[]).length);
@@ -7845,9 +7840,23 @@ function openTransitDetail() {
         + 'border-radius:10px;background:var(--card2);color:var(--text);font-size:13px;cursor:pointer;">닫기</button></div>';
     }catch(e){}
   };
+  // ★ 2026-09-23 YJ 실측으로 원인이 좁혀졌다: "누르면 파란 화면만 뜨고, 다른 곳을
+  //   눌러야(터치가 한 번 더 들어와야) 화면이 정상으로 돌아온다." 자바스크립트가 정말
+  //   멈췄다면 터치에도 반응이 없어야 하는데 반응한다 — 즉 JS는 계속 돌고 있고(그래서
+  //   심박·오류 기록도 안 남았다), 안드로이드 웹뷰가 'body로 옮기기'와 '바로 보이기'를
+  //   같은 프레임 안에서 처리하면서 실제 화면 다시 그리기(리페인트)를 건너뛴 것으로 보인다
+  //   — 터치 이벤트가 그 리페인트를 대신 강제해 준 것과 같은 효과다.
+  //   → 터치를 기다리지 않고, 레이아웃을 한 번 강제로 읽고 프레임을 두 번 띄워
+  //   브라우저 스스로 다시 그리게 만든다(비용은 몇 ms뿐).
+  var _showModal = function(cb){
+    try{ void modal.offsetHeight; }catch(e){}   // 강제 레이아웃 — 리페인트를 유도
+    requestAnimationFrame(function(){
+      modal.style.display = 'flex';
+      requestAnimationFrame(cb);
+    });
+  };
   if(ready()){
-    modal.style.display = 'flex';                 // 시트를 먼저 띄우고
-    requestAnimationFrame(function(){             // 그리는 건 다음 프레임에
+    _showModal(function(){                        // 실제로 그리는 건 화면이 보인 다음 프레임에
       var _err = null;
       try{ _buildTransitDetailNow(); }catch(e){ _err = (e && e.message) || e;
         try{ if(typeof _errLog==='function') _errLog('세부경로 그리기: ' + _err, '', 0, 0, e); }catch(e2){} }
@@ -7858,23 +7867,24 @@ function openTransitDetail() {
   }
   if(sects) sects.innerHTML =
     '<div style="padding:34px 20px;text-align:center;color:var(--sub);font-size:13px;">경로를 불러오는 중...</div>';
-  modal.style.display = 'flex';
-  var tries = 0;
-  (function _wait(){
-    if(ready()){
-      var _e2 = null;
-      try{ _buildTransitDetailNow(); }catch(e){ _e2 = (e && e.message) || e;
-        try{ if(typeof _errLog==='function') _errLog('세부경로 그리기: ' + _e2, '', 0, 0, e); }catch(e3){} }
-      _fallback('세부경로를 그리지 못했어요. 경로를 다시 탐색해 주세요.', _e2);
-      return;
-    }
-    if(++tries > 40){                              // 6초
-      if(sects) sects.innerHTML =
-        '<div style="padding:34px 20px;text-align:center;color:var(--sub);font-size:13px;">경로를 먼저 탐색해 주세요.</div>';
-      return;
-    }
-    setTimeout(_wait, 150);
-  })();
+  _showModal(function(){
+    var tries = 0;
+    (function _wait(){
+      if(ready()){
+        var _e2 = null;
+        try{ _buildTransitDetailNow(); }catch(e){ _e2 = (e && e.message) || e;
+          try{ if(typeof _errLog==='function') _errLog('세부경로 그리기: ' + _e2, '', 0, 0, e); }catch(e3){} }
+        _fallback('세부경로를 그리지 못했어요. 경로를 다시 탐색해 주세요.', _e2);
+        return;
+      }
+      if(++tries > 40){                              // 6초
+        if(sects) sects.innerHTML =
+          '<div style="padding:34px 20px;text-align:center;color:var(--sub);font-size:13px;">경로를 먼저 탐색해 주세요.</div>';
+        return;
+      }
+      setTimeout(_wait, 150);
+    })();
+  });
 }
 window.openTransitDetail = openTransitDetail;
 
