@@ -34,6 +34,15 @@ import com.getcapacitor.annotation.CapacitorPlugin;
  *    시스템 PiP 는 사용자의 확대/축소를 막는 API 가 없다(안드로이드 12+ 핀치).
  *    다만 가로비를 시스템 상한인 2.39:1 로 고정하면 시스템이 허용하는
  *    가장 작은 창이 되고, setSeamlessResizeEnabled(false) 로 늘어지는 것도 막는다.
+ *
+ * ④ 2026-09-23 추가: redraw()
+ *    "세부경로 팝업을 열면 화면이 안 그려지고, 아무 데나 터치해야 정상으로
+ *    돌아온다" 는 제보. 진단 로그로 확인해 보니 JS/CSS 쪽은 몇 ms 만에 다
+ *    끝나는데도 화면은 계속 이전 프레임(파란 배경)에 멈춰 있었다 — 즉 Blink가
+ *    새 프레임을 그리는 것까지는 되는데, 안드로이드가 그 결과를 화면에 실제로
+ *    "표시"하는 단계(뷰 invalidate)를 건너뛰는 것으로 보인다. 이건 웹페이지
+ *    쪽 스타일(display/opacity 등)을 아무리 바꿔도 못 고치는 네이티브 단
+ *    문제라, 여기서 직접 웹뷰에 invalidate 를 걸어 준다.
  */
 @CapacitorPlugin(name = "Pip")
 public class PipPlugin extends Plugin {
@@ -72,6 +81,28 @@ public class PipPlugin extends Plugin {
                 .put("available", supported())
                 .put("autoEnter", Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
                 .put("guiding", guiding));
+    }
+
+    /**
+     * ★ 2026-09-23: 웹뷰에 강제로 invalidate 를 걸어 새 프레임을 실제로 화면에
+     * 그리게 만든다. 터치 이벤트 없이도 "화면이 안 그려지는" 문제를 우회하기
+     * 위한 용도 — JS 쪽에서 모달/팝업을 띄운 직후 호출한다.
+     */
+    @PluginMethod
+    public void redraw(PluginCall call) {
+        try {
+            final Activity act = getActivity();
+            final android.webkit.WebView wv = (getBridge() != null) ? getBridge().getWebView() : null;
+            if (act != null && wv != null) {
+                act.runOnUiThread(() -> {
+                    try {
+                        wv.invalidate();
+                        wv.postInvalidateOnAnimation();
+                    } catch (Exception ignored) { }
+                });
+            }
+        } catch (Exception ignored) { }
+        call.resolve(new JSObject().put("ok", true));
     }
 
     private boolean supported() {
