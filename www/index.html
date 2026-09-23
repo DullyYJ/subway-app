@@ -7820,7 +7820,16 @@ function openTransitDetail() {
   //   일부 기기에서 position:fixed가 뷰포트가 아니라 그 스크롤 영역 기준으로 잘리는
   //   것으로 보인다(안드로이드 웹뷰에서 종종 나는 문제). body 바로 밑으로 한 번
   //   옮겨두면 어떤 조상의 overflow·레이아웃과도 무관해진다(이미 body 밑이면 그대로 둔다).
-  try{ if(modal.parentNode !== document.body) document.body.appendChild(modal); }catch(e){}
+  // ★ 2026-09-23: 옮기기 전에 지난번 목록(수백 개 DOM 일 수 있음)을 먼저 비운다 —
+  //   내용째로 body 밑으로 옮기면 그만큼 다시 그려야 해서 불필요하게 무겁다.
+  //   또, 옮기는 데 오래 걸리는지 여기서도 재서 진단에 남긴다(원인 후보 하나 더 좁히기).
+  try{
+    var _tdT_move = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    if(sects) sects.innerHTML = '';
+    if(modal.parentNode !== document.body) document.body.appendChild(modal);
+    var _tdMs_move = ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - _tdT_move;
+    if(_tdMs_move > 200 && typeof _errLog === 'function') _errLog('[진단] 세부경로 모달 이동 ' + Math.round(_tdMs_move) + 'ms', '', 0, 0, null);
+  }catch(e){}
   var ready = function(){
     return !!(_transitResultData && (_transitResultData.routes||[]).length);
   };
@@ -7904,12 +7913,26 @@ function _buildTransitDetailNow() {
   var _fmtT=function(ms){var d=new Date(ms);var h=d.getHours(),m=d.getMinutes();return (h<10?'0':'')+h+':'+(m<10?'0':'')+m;};
 
   // ★ 2026-09-23 YJ 제보: "세부경로 보기 누르면 화면이 파랗게되면서 멈춰"
-  //   전국을 가로지르는 지하철·버스 전용(장거리 엔진 미사용) 경로는 정거장 수가
-  //   수백 개까지 늘어날 수 있는데, 예전엔 펼쳐보기도 전에 구간마다(그것도 정거장마다
-  //   _realSeg 조회까지 곁들여) 목록 HTML을 전부 미리 만들어 뒀다 — 안 열어 볼 목록까지
-  //   한 번에 다 그리느라 메인 스레드가 오래 막혀 '멈춘 것처럼' 보였다.
-  //   → 목록은 이제 실제로 펼칠 때(_toggleDetailSec)만 만든다. 여기선 각 구간의
-  //   원본 데이터만 가벼운 객체로 저장해 둔다.
+  //   — 실측: 진단 로그에 "106초간 정지"가 찍혔다(오류는 없음). 1차로 펼쳐보기 전
+  //   정거장 목록을 전부 미리 만들던 걸 없앴는데도 재현됐다 — 즉, 구간(sections) 자체의
+  //   개수나 뭔가 다른 지점이 원인일 수 있다. 원인을 확실히 좁히기 전까지, 정상 범위를
+  //   훨씬 넘는 값이면 무조건 안전하게(멈추지 않게) 처리하고, 그 값을 진단 로그에
+  //   남겨서 다음에 재현되면 정확한 숫자로 원인을 좁힌다.
+  var _tdT0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+  var _tdTotalStops = 0;
+  try{ sections.forEach(function(s){ try{ _tdTotalStops += ((s.passStopList||{}).stationList||[]).length; }catch(e){} }); }catch(e){}
+  var _TD_SEC_CAP = 150;   // 이보다 많으면 비정상 — 전체를 다 그리지 않는다
+  if(sections.length > _TD_SEC_CAP){
+    try{ if(typeof _errLog==='function') _errLog('[진단] 세부경로 구간 과다: sections=' + sections.length + ' stops=' + _tdTotalStops, '', 0, 0, null); }catch(e){}
+    if(sects) sects.innerHTML =
+      '<div style="padding:30px 20px;text-align:center;color:var(--sub);font-size:13px;line-height:1.7;">'
+      + '이 경로는 구간이 너무 많아(' + sections.length + '개) 전부 펼쳐 보여드리기 어려워요.'
+      + '<br>총 소요시간과 개요만 보여드려요 — 실제 안내는 정상적으로 진행돼요.'
+      + '<br><br><b style="color:var(--text);">' + totalMin + '분 · ' + _ltEsc((start||{}).name||'') + ' → ' + _ltEsc((dest||{}).name||'') + '</b>'
+      + '</div>';
+    modal.style.display = 'flex';
+    return;
+  }
   window._tdSecData = {};
   var html = '';
   var _cumMs = _baseMs;
@@ -7985,8 +8008,25 @@ function _buildTransitDetailNow() {
   if(typeof window._setupDetailSheetDrag==='function') window._setupDetailSheetDrag();
   if(sects) sects.scrollTop=0;
 
+  // ★ 2026-09-23: 위 진단과 짝 — 정상 범위 안에서도 실제로 얼마나 걸렸는지 남긴다.
+  //   다음에 또 멈추면(진단의 '지난 멈춤'), 이 숫자로 sections.forEach 안이 원인인지
+  //   아니면(더 유력) 이 함수 바깥(_updateDetailProgress·CSS 전환 등)이 원인인지 갈린다.
+  try{
+    var _tdMs = ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - _tdT0;
+    if(_tdMs > 200 && typeof _errLog === 'function'){
+      _errLog('[진단] 세부경로 렌더 ' + Math.round(_tdMs) + 'ms · sections=' + sections.length + ' stops=' + _tdTotalStops, '', 0, 0, null);
+    }
+  }catch(e){}
+
   // 현재 진행 위치 갱신 시작 (시간 기반)
+  var _tdT1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
   _updateDetailProgress();
+  try{
+    var _tdMs2 = ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - _tdT1;
+    if(_tdMs2 > 200 && typeof _errLog === 'function'){
+      _errLog('[진단] _updateDetailProgress 첫 실행 ' + Math.round(_tdMs2) + 'ms · sections=' + sections.length, '', 0, 0, null);
+    }
+  }catch(e){}
   if(window._detailProgTimer) clearInterval(window._detailProgTimer);
   window._detailProgTimer = setInterval(_updateDetailProgress, 2000);
 }
