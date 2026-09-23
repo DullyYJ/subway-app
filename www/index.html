@@ -7864,12 +7864,39 @@ function openTransitDetail() {
   //   네이티브(PipPlugin.redraw, Capacitor 플러그인)에 직접 webView.invalidate()를
   //   요청한다 — 안드로이드 뷰 자체를 다시 그리라고 명령하는 거라 웹 쪽 트릭과는
   //   차원이 다르다. 구버전 APK(이 플러그인이 아직 없는)에서도 안전하도록 있으면만 호출.
+  // ★ 2026-09-23 5차: redraw()까지 넣었는데도 증상 동일 → 이 호출이 실제로
+  //   네이티브까지 도달해서 성공했는지 자체를 모른다(그냥 try/catch로 삼켰었음).
+  //   플러그인이 안 잡혔거나, 호출은 갔는데 응답이 없거나, 응답은 왔는데도
+  //   효과가 없거나 — 셋을 구분할 수 있게 결과를 로그로 남긴다.
+  var _nativeRedrawLogged = false;
   var _nativeRedraw = function(){
+    var _log = !_nativeRedrawLogged;
+    _nativeRedrawLogged = true;
     try{
       var P = window.Capacitor && window.Capacitor.Plugins;
       var Pip = P && P.Pip;
-      if(Pip && typeof Pip.redraw === 'function') Pip.redraw();
-    }catch(e){}
+      if(Pip && typeof Pip.redraw === 'function'){
+        if(_log){
+          var _rt0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+          Pip.redraw().then(function(r){
+            try{
+              if(typeof _errLog==='function'){
+                var _rdt = ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - _rt0;
+                _errLog('[진단] 네이티브 redraw 응답 ' + Math.round(_rdt) + 'ms ok=' + (r && r.ok), '', 0, 0, null);
+              }
+            }catch(e){}
+          }).catch(function(err){
+            try{ if(typeof _errLog==='function') _errLog('[진단] 네이티브 redraw 실패: ' + ((err && err.message) || err), '', 0, 0, null); }catch(e){}
+          });
+        } else {
+          Pip.redraw();
+        }
+      } else if(_log){
+        try{ if(typeof _errLog==='function') _errLog('[진단] 네이티브 Pip.redraw 없음(구버전 APK이거나 플러그인 미등록)', '', 0, 0, null); }catch(e){}
+      }
+    }catch(e){
+      if(_log){ try{ if(typeof _errLog==='function') _errLog('[진단] 네이티브 redraw 호출 예외: ' + ((e && e.message) || e), '', 0, 0, null); }catch(e2){} }
+    }
   };
   var _showModal = function(cb){
     var _t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
