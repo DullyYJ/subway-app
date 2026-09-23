@@ -7782,14 +7782,18 @@ function _renderLdGradePicker(route){
   var curGrade = route.ldGrade || '';
   var html = '<div style="font-size:11px;color:var(--sub);margin-bottom:6px;">🚄 탈 열차 고르기</div>'
     + '<div style="display:flex;gap:6px;flex-wrap:wrap;">';
+  // ★ 2026-09-23: <button> 대신 <span> 사용 — #transitResultCard 안 button은
+  //   파스텔 테마 `[data-theme="pastel"] #transitResultCard button{...!important}`
+  //   규칙이 배경·글자색을 강제로 덮어써서 선택된 등급이 안 구분되던 버그(쇼핑탭
+  //   카테고리 칩과 같은 원인). span은 그 규칙 대상이 아니라 인라인 스타일이 그대로 먹는다.
   opts.forEach(function(o){
     var on = (o.grade === curGrade);
     var gradeEsc = _ltEsc(o.grade || '');
-    html += '<button onclick="_ldPickGrade(\'train\',this.getAttribute(\'data-g\'))" data-g="' + gradeEsc + '" '
-      + 'style="padding:7px 12px;border-radius:20px;border:1px solid ' + (on ? '#2f7cf6' : 'var(--border)')
+    html += '<span onclick="_ldPickGrade(\'train\',this.getAttribute(\'data-g\'))" data-g="' + gradeEsc + '" '
+      + 'style="display:inline-flex;align-items:center;padding:7px 12px;border-radius:20px;border:1px solid ' + (on ? '#2f7cf6' : 'var(--border)')
       + ';background:' + (on ? '#2f7cf6' : 'var(--card2)') + ';color:' + (on ? '#fff' : 'var(--text)')
       + ';font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">'
-      + gradeEsc + (o.depLabel ? (' ' + o.depLabel) : '') + '</button>';
+      + gradeEsc + (o.depLabel ? (' ' + o.depLabel) : '') + '</span>';
   });
   html += '</div>';
   wrap.innerHTML = html;
