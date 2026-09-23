@@ -7860,17 +7860,31 @@ function openTransitDetail() {
   //   스타일 변경으로는 근본적으로 못 고칠 수 있다. 마지막으로, 스타일이 아니라
   //   스크롤/리사이즈 이벤트로 안드로이드 쪽 입력 경로를 건드려 강제로 그리게 해본다
   //   (커뮤니티에서 이 종류의 "터치해야 그려지는" 웹뷰 버그에 실제로 쓰이는 방법).
+  // ★ 2026-09-23 4차: 그래도 증상 동일 → 웹페이지 쪽에서 할 수 있는 건 다 해봤다.
+  //   네이티브(PipPlugin.redraw, Capacitor 플러그인)에 직접 webView.invalidate()를
+  //   요청한다 — 안드로이드 뷰 자체를 다시 그리라고 명령하는 거라 웹 쪽 트릭과는
+  //   차원이 다르다. 구버전 APK(이 플러그인이 아직 없는)에서도 안전하도록 있으면만 호출.
+  var _nativeRedraw = function(){
+    try{
+      var P = window.Capacitor && window.Capacitor.Plugins;
+      var Pip = P && P.Pip;
+      if(Pip && typeof Pip.redraw === 'function') Pip.redraw();
+    }catch(e){}
+  };
   var _showModal = function(cb){
     var _t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
     try{ if(typeof _errLog==='function') _errLog('[진단] 세부경로 열기 시작', '', 0, 0, null); }catch(e){}
     modal.style.display = 'flex';
     modal.style.opacity = '0';
     try{ void modal.offsetHeight; }catch(e){}   // 강제 레이아웃
+    _nativeRedraw();
     requestAnimationFrame(function(){
       modal.style.opacity = '1';                // opacity 전환으로 화면 갱신 유도
       try{ window.scrollBy(0,1); window.scrollBy(0,-1); }catch(e){}   // 스크롤 넛지 — 네이티브 invalidate 유도
       try{ window.dispatchEvent(new Event('resize')); }catch(e){}
+      _nativeRedraw();
       requestAnimationFrame(function(){
+        _nativeRedraw();
         try{
           if(typeof _errLog==='function'){
             var _dt = ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - _t0;
