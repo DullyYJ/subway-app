@@ -7853,6 +7853,13 @@ function openTransitDetail() {
   //   이어지지 않는 것으로 보인다. opacity 전환(웹뷰가 보통 별도 레이어로 다루는
   //   애니메이션 경로)으로 갈아타고, translateZ(0)로 이 모달을 처음부터 자체
   //   GPU 레이어로 승격시켜 둔다 — 그래도 안 되면 다음 진단 로그로 정확한 지점을 좁힌다.
+  // ★ 2026-09-23 3차: 진단 로그 실측 결과 "열기 시작"과 "표시 완료"가 같은 초, 7~8ms
+  //   차이로 찍혔다 — 즉 JS·CSS 쪽은 몇 ms 만에 다 끝난다. 그런데도 화면은 계속 파랗다.
+  //   이건 Blink(웹 렌더링) 자체는 정상인데, 안드로이드 OS가 그 결과 화면을 실제로
+  //   "표시"하는 단계(네이티브 invalidate)를 건너뛴다는 뜻 — display/opacity 같은
+  //   스타일 변경으로는 근본적으로 못 고칠 수 있다. 마지막으로, 스타일이 아니라
+  //   스크롤/리사이즈 이벤트로 안드로이드 쪽 입력 경로를 건드려 강제로 그리게 해본다
+  //   (커뮤니티에서 이 종류의 "터치해야 그려지는" 웹뷰 버그에 실제로 쓰이는 방법).
   var _showModal = function(cb){
     var _t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
     try{ if(typeof _errLog==='function') _errLog('[진단] 세부경로 열기 시작', '', 0, 0, null); }catch(e){}
@@ -7861,6 +7868,8 @@ function openTransitDetail() {
     try{ void modal.offsetHeight; }catch(e){}   // 강제 레이아웃
     requestAnimationFrame(function(){
       modal.style.opacity = '1';                // opacity 전환으로 화면 갱신 유도
+      try{ window.scrollBy(0,1); window.scrollBy(0,-1); }catch(e){}   // 스크롤 넛지 — 네이티브 invalidate 유도
+      try{ window.dispatchEvent(new Event('resize')); }catch(e){}
       requestAnimationFrame(function(){
         try{
           if(typeof _errLog==='function'){
