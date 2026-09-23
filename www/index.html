@@ -5897,6 +5897,7 @@ function _renderKakaoTransitResult(data, startName, endName, cacheSource) {
 // ══════════════════════════════════════════════
 function _transitColor(type, name) {
   if(type === 3) return '#8e8e93';
+  if(type === 4) return '#ff9500';  // 장거리(열차/고속버스/시외버스): 주황
   if(type === 2) return '#30d158';  // 버스: 밝은 초록
   // 지하철: LC 색 → 타임라인 가시성 보정
   if(typeof LC !== 'undefined' && name) {
@@ -9043,12 +9044,6 @@ window._dedupPaths = _dedupPaths;
 
 function _parseRouteOptions(engineData) {
   var paths = (engineData.result || {}).path || [];
-  // ★ 2026-09-23: 엔진이 장거리(pathType 4, 열차·고속버스·시외버스)를 보내기 시작했는데,
-  //   화면에 trafficType 4 구간을 그리는 코드가 아직 없다(다음 단계 작업).
-  //   그냥 두면 이게 유일한 결과일 때 '최단시간' 등으로 뽑혀서 깨진 카드가 뜬다 —
-  //   그릴 준비가 될 때까지는 걸러서, 장거리만 있는 경우 예전처럼 "경로 없음"으로 보이게 한다.
-  //   (필터 한 줄만 지우면 바로 노출된다 — 엔진 데이터 자체는 그대로 살아있다.)
-  paths = paths.filter(function(p){ return (p.info||{}).pathType !== 4; });
   if(!paths.length) return null;
 
   // 엔진이 이미 최단시간 순으로 정렬해서 준다
@@ -10006,11 +10001,23 @@ function _convertSinglePathToRoute(path) {
     var ttype = sp.trafficType;
     var lane  = (sp.lane || [])[0] || {};
     var stops = ((sp.passStopList || {}).stations || []).map(_normStop);
+    // ★ 2026-09-23: 장거리(ttype 4)는 경유 정류장 목록이 없다(터미널 대 터미널이라
+    //   passStopList 자체를 안 보낸다) — stops 가 비어 있으면 아래 _renderHtlTrack 이
+    //   구간 전체를 건너뛴다. 출발/도착 터미널 이름 2개로 최소한의 타임라인 노드를 만든다.
+    if(!stops.length && ttype===4 && (sp.startName || sp.endName)) {
+      stops = [
+        { stationName: sp.startName || '', lat: null, lon: null },
+        { stationName: sp.endName   || '', lat: null, lon: null }
+      ];
+    }
     return {
       transportation: {
         type: ttype,
         name: ttype===1?(lane.name||lane.subwayCode||''):
-              ttype===2?(lane.busNo||lane.busID||''):'도보'
+              ttype===2?(lane.busNo||lane.busID||''):
+              // ★ 2026-09-23: ttype 4 = 장거리(열차/고속버스/시외버스). lane.name 에
+              //   워커가 이미 "열차 ITX-새마을" 같은 표시용 라벨을 실어 보낸다.
+              ttype===4?(lane.name||'장거리'):'도보'
       },
       duration: (sp.sectionTime||0)*60,
       distance: sp.distance||0,
@@ -10027,11 +10034,14 @@ function _convertSinglePathToRoute(path) {
       waitReal:  !!sp.waitReal,
       waitLive:  !!sp.waitLive,
       waitEstimated: !!sp.waitEstimated,
-      passStopList: stops.length ? { stationList: stops } : null
+      passStopList: stops.length ? { stationList: stops } : null,
+      // ★ 장거리 전용 부가정보(출발시각·요금·접근거리) — 워커 legsToSubPath 가 실어 보냄
+      depLabel: (sp.depLabel != null ? sp.depLabel : null),
+      fare: (sp.fare != null ? sp.fare : null)
     };
   });
-  // 교통수단(지하철/버스) 구간이 하나도 없으면 무효 경로 → 빈 반환(폴백 유도)
-  var hasTransit = sections.some(function(s){ return s.transportation.type===1 || s.transportation.type===2; });
+  // 교통수단(지하철/버스/장거리) 구간이 하나도 없으면 무효 경로 → 빈 반환(폴백 유도)
+  var hasTransit = sections.some(function(s){ var t=s.transportation.type; return t===1 || t===2 || t===4; });
   if(!hasTransit) return { summary:{}, sections:[] };
   return {
     summary: {
@@ -10046,20 +10056,25 @@ function _convertSinglePathToRoute(path) {
 // 엔진 응답 → _renderTransitResultCard용 routes 형식 변환
 function _convertEngineRoutes(engineData) {
   var paths = (engineData.result || {}).path || [];
-  // ★ 2026-09-23: _parseRouteOptions 와 같은 이유로 장거리(pathType 4)는 아직 걸러낸다 —
-  //   여기서 놔두면 trafficType 4 구간이 ttype 분기에 안 걸려 '도보'로 잘못 표시된다.
-  paths = paths.filter(function(p){ return (p.info||{}).pathType !== 4; });
   var routes = paths.slice(0, 3).map(function(path) {
     var info = path.info || {};
     var sections = (path.subPath || []).map(function(sp) {
-      var ttype = sp.trafficType; // 1=지하철, 2=버스, 3=도보
+      var ttype = sp.trafficType; // 1=지하철, 2=버스, 3=도보, 4=장거리
       var lane  = (sp.lane || [])[0] || {};
       var stops = (sp.passStopList || {}).stations || [];
+      // ★ 2026-09-23: _convertSinglePathToRoute 와 같은 이유로 장거리는 터미널 2개로 합성한다.
+      if(!stops.length && ttype===4 && (sp.startName || sp.endName)) {
+        stops = [
+          { stationName: sp.startName || '' },
+          { stationName: sp.endName   || '' }
+        ];
+      }
       return {
         transportation: {
           type: ttype,
           name: ttype === 1 ? (lane.name || lane.subwayCode || '') :
-                ttype === 2 ? (lane.busNo || lane.busID || '') : '도보'
+                ttype === 2 ? (lane.busNo || lane.busID || '') :
+                ttype === 4 ? (lane.name || '장거리') : '도보'
         },
         duration: (sp.sectionTime || 0) * 60,
         distance: sp.distance || 0,
