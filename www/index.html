@@ -7840,87 +7840,20 @@ function openTransitDetail() {
         + 'border-radius:10px;background:var(--card2);color:var(--text);font-size:13px;cursor:pointer;">닫기</button></div>';
     }catch(e){}
   };
-  // ★ 2026-09-23 YJ 실측으로 원인이 좁혀졌다: "누르면 파란 화면만 뜨고, 다른 곳을
-  //   눌러야(터치가 한 번 더 들어와야) 화면이 정상으로 돌아온다." 자바스크립트가 정말
-  //   멈췄다면 터치에도 반응이 없어야 하는데 반응한다 — 즉 JS는 계속 돌고 있고(그래서
-  //   심박·오류 기록도 안 남았다), 안드로이드 웹뷰가 'body로 옮기기'와 '바로 보이기'를
-  //   같은 프레임 안에서 처리하면서 실제 화면 다시 그리기(리페인트)를 건너뛴 것으로 보인다
-  //   — 터치 이벤트가 그 리페인트를 대신 강제해 준 것과 같은 효과다.
-  //   → 터치를 기다리지 않고, 레이아웃을 한 번 강제로 읽고 프레임을 두 번 띄워
-  //   브라우저 스스로 다시 그리게 만든다(비용은 몇 ms뿐).
-  // ★ 2026-09-23 2차: 강제 레이아웃+더블rAF로도 증상 동일 → display 토글 자체가
-  //   문제가 아니라 "display만 바꾸는 변화"가 이 웹뷰에서 실제 화면 갱신으로
-  //   이어지지 않는 것으로 보인다. opacity 전환(웹뷰가 보통 별도 레이어로 다루는
-  //   애니메이션 경로)으로 갈아타고, translateZ(0)로 이 모달을 처음부터 자체
-  //   GPU 레이어로 승격시켜 둔다 — 그래도 안 되면 다음 진단 로그로 정확한 지점을 좁힌다.
-  // ★ 2026-09-23 3차: 진단 로그 실측 결과 "열기 시작"과 "표시 완료"가 같은 초, 7~8ms
-  //   차이로 찍혔다 — 즉 JS·CSS 쪽은 몇 ms 만에 다 끝난다. 그런데도 화면은 계속 파랗다.
-  //   이건 Blink(웹 렌더링) 자체는 정상인데, 안드로이드 OS가 그 결과 화면을 실제로
-  //   "표시"하는 단계(네이티브 invalidate)를 건너뛴다는 뜻 — display/opacity 같은
-  //   스타일 변경으로는 근본적으로 못 고칠 수 있다. 마지막으로, 스타일이 아니라
-  //   스크롤/리사이즈 이벤트로 안드로이드 쪽 입력 경로를 건드려 강제로 그리게 해본다
-  //   (커뮤니티에서 이 종류의 "터치해야 그려지는" 웹뷰 버그에 실제로 쓰이는 방법).
-  // ★ 2026-09-23 4차: 그래도 증상 동일 → 웹페이지 쪽에서 할 수 있는 건 다 해봤다.
-  //   네이티브(PipPlugin.redraw, Capacitor 플러그인)에 직접 webView.invalidate()를
-  //   요청한다 — 안드로이드 뷰 자체를 다시 그리라고 명령하는 거라 웹 쪽 트릭과는
-  //   차원이 다르다. 구버전 APK(이 플러그인이 아직 없는)에서도 안전하도록 있으면만 호출.
-  // ★ 2026-09-23 5차: redraw()까지 넣었는데도 증상 동일 → 이 호출이 실제로
-  //   네이티브까지 도달해서 성공했는지 자체를 모른다(그냥 try/catch로 삼켰었음).
-  //   플러그인이 안 잡혔거나, 호출은 갔는데 응답이 없거나, 응답은 왔는데도
-  //   효과가 없거나 — 셋을 구분할 수 있게 결과를 로그로 남긴다.
-  var _nativeRedrawLogged = false;
-  var _nativeRedraw = function(){
-    var _log = !_nativeRedrawLogged;
-    _nativeRedrawLogged = true;
-    try{
-      var P = window.Capacitor && window.Capacitor.Plugins;
-      var Pip = P && P.Pip;
-      if(Pip && typeof Pip.redraw === 'function'){
-        if(_log){
-          var _rt0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-          Pip.redraw().then(function(r){
-            try{
-              if(typeof _errLog==='function'){
-                var _rdt = ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - _rt0;
-                _errLog('[진단] 네이티브 redraw 응답 ' + Math.round(_rdt) + 'ms ok=' + (r && r.ok), '', 0, 0, null);
-              }
-            }catch(e){}
-          }).catch(function(err){
-            try{ if(typeof _errLog==='function') _errLog('[진단] 네이티브 redraw 실패: ' + ((err && err.message) || err), '', 0, 0, null); }catch(e){}
-          });
-        } else {
-          Pip.redraw();
-        }
-      } else if(_log){
-        try{ if(typeof _errLog==='function') _errLog('[진단] 네이티브 Pip.redraw 없음(구버전 APK이거나 플러그인 미등록)', '', 0, 0, null); }catch(e){}
-      }
-    }catch(e){
-      if(_log){ try{ if(typeof _errLog==='function') _errLog('[진단] 네이티브 redraw 호출 예외: ' + ((e && e.message) || e), '', 0, 0, null); }catch(e2){} }
-    }
-  };
+  // ★ 2026-09-23 진짜 원인(헤드리스 브라우저로 재현해서 확인):
+  //   switchTab()의 '탭 바꾸면 열린 시트 닫기' 목록에 이 모달의 안쪽 시트
+  //   (#transitDetailSheet)까지 들어 있어서, 탭을 한 번이라도 바꾸면 시트가
+  //   display:none 으로 꺼진 채 남았다. 모달(바깥 배경)만 다시 켜지니
+  //   '파란 반투명 배경만 뜨고 내용이 없는' 화면이 됐고, 아무 데나 누르면
+  //   배경 클릭 → 닫기가 되어 '정상으로 돌아온 것처럼' 보였다.
+  //   → switchTab 목록에서 시트를 뺐고, 여기서도 열 때마다 시트를 확실히 켠다.
   var _showModal = function(cb){
-    var _t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-    try{ if(typeof _errLog==='function') _errLog('[진단] 세부경로 열기 시작', '', 0, 0, null); }catch(e){}
+    try{
+      var _sh = document.getElementById('transitDetailSheet');
+      if(_sh){ _sh.style.display = 'flex'; _sh.style.transform = ''; }
+    }catch(e){}
     modal.style.display = 'flex';
-    modal.style.opacity = '0';
-    try{ void modal.offsetHeight; }catch(e){}   // 강제 레이아웃
-    _nativeRedraw();
-    requestAnimationFrame(function(){
-      modal.style.opacity = '1';                // opacity 전환으로 화면 갱신 유도
-      try{ window.scrollBy(0,1); window.scrollBy(0,-1); }catch(e){}   // 스크롤 넛지 — 네이티브 invalidate 유도
-      try{ window.dispatchEvent(new Event('resize')); }catch(e){}
-      _nativeRedraw();
-      requestAnimationFrame(function(){
-        _nativeRedraw();
-        try{
-          if(typeof _errLog==='function'){
-            var _dt = ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - _t0;
-            _errLog('[진단] 세부경로 표시 완료 ' + Math.round(_dt) + 'ms 후 그리기 시작', '', 0, 0, null);
-          }
-        }catch(e){}
-        cb();
-      });
-    });
+    requestAnimationFrame(function(){ cb(); });   // 시트가 먼저 보이고, 내용은 다음 프레임에
   };
   if(ready()){
     _showModal(function(){                        // 실제로 그리는 건 화면이 보인 다음 프레임에
@@ -8183,7 +8116,7 @@ function closeTransitDetail() {
   var modal = document.getElementById('transitDetailModal');
   var sheet = document.getElementById('transitDetailSheet');
   if(sheet) sheet.style.transform='';
-  if(modal){ modal.style.opacity = '0'; modal.style.display = 'none'; }
+  if(modal) modal.style.display = 'none';
   if(window._detailProgTimer){ clearInterval(window._detailProgTimer); window._detailProgTimer=null; }
 }
 // 세부경로 시트 드래그 닫기
@@ -18154,7 +18087,7 @@ window.addEventListener('unhandledrejection', function(e) {
 
 
   <!-- ══ 세부경로 팝업 ══ -->
-  <div id="transitDetailModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.82);z-index:10001;align-items:flex-end;justify-content:center;opacity:0;transition:opacity .15s ease;transform:translateZ(0);" onclick="if(event.target===this)closeTransitDetail()">
+  <div id="transitDetailModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.82);z-index:10001;align-items:flex-end;justify-content:center;" onclick="if(event.target===this)closeTransitDetail()">
     <div id="transitDetailSheet" style="background:var(--card);border-radius:20px 20px 0 0;width:100%;max-width:520px;height:82vh;height:82dvh;max-height:82vh;max-height:82dvh;display:flex;flex-direction:column;overflow:hidden;transition:transform .25s ease;will-change:transform;margin-bottom:calc(56px + env(safe-area-inset-bottom,0px));">
       <!-- 핸들 + 헤더 (드래그 영역) -->
       <div id="transitDetailHandle" style="padding:8px 18px 0;flex-shrink:0;touch-action:none;cursor:grab;">
@@ -28746,7 +28679,7 @@ function switchTab(tab,el){
   try{
     // 화면을 덮는 시트·팝업만 닫는다.
     //   승차 확인(boardAskModal 등)은 진행 중인 여정과 관련되므로 건드리지 않는다.
-    ['transitDetailModal','transitDetailSheet','mapRouteSheet','mapStnPopup',
+    ['transitDetailModal','mapRouteSheet','mapStnPopup',
      'favSheet','postSheet','routeModal','routeModePopup','gmPop'].forEach(function(id){
       var m = document.getElementById(id);
       if(m && m.style && m.style.display !== 'none') m.style.display = 'none';
