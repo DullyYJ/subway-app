@@ -916,7 +916,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);}
 [data-theme="pastel"] .transitLocBar{color:var(--sub) !important;}
 
 /* 세부경로 팝업 */
-[data-theme="pastel"] #transitDetailModal{background:var(--bg) !important;}
+/* ★ 2026-09-23: 예전엔 var(--bg)를 그대로 써서 배경(--bg)과 오버레이가 완전히 같은 색이라
+   시트가 안 그려지는 경우 화면이 '완전한 빈 화면'처럼 보였다. 옅게라도 어둡게 깔아 둔다. */
+[data-theme="pastel"] #transitDetailModal{background:rgba(26,37,51,.45) !important;}
 [data-theme="pastel"] #transitDetailTimeline{background:var(--card) !important;border-color:var(--border) !important;}
 [data-theme="pastel"] #transitDetailSections{background:var(--bg);}
 
@@ -6991,6 +6993,9 @@ function _renderTransitResultCard(data, start, dest, cacheSource) {
   // 복합경로 가로 타임라인 렌더
   _renderHtlTrack(sections, start, dest, totalMin);
 
+  // 장거리 열차 등급(KTX/ITX 등) 선택 UI — 고를 게 있을 때만 보인다
+  try{ _renderLdGradePicker(route); }catch(e){}
+
   // 탑승 시간대 혼잡 예측
   _renderCongPrediction(sections);
 
@@ -7765,6 +7770,43 @@ function prefetchFoodForDest(){
 }
 window.prefetchFoodForDest = prefetchFoodForDest;
 
+// ★ 2026-09-23 (YJ: "ktx, itx를 타고싶을경우 선택을 하게 했으면 좋겠어"):
+//   장거리(열차) 경로에서 '지금 탈 수 있는' 등급이 둘 이상이면 고를 수 있게 보여준다.
+//   고르면 그 등급을 엔진(ldMode/ldGrade 파라미터)에 실어 다시 물어보고, 엔진이 그
+//   등급 안에서 다시 고른 결과를 그대로 그린다 — 판단은 여전히 엔진만 한다(YJ 절대규칙).
+function _renderLdGradePicker(route){
+  var wrap = document.getElementById('transitLdGradeWrap');
+  if(!wrap) return;
+  var opts = (route && route.ldMode === 'train' && Array.isArray(route.ldOptions)) ? route.ldOptions : [];
+  if(opts.length < 2){ wrap.style.display = 'none'; wrap.innerHTML = ''; return; }
+  var curGrade = route.ldGrade || '';
+  var html = '<div style="font-size:11px;color:var(--sub);margin-bottom:6px;">🚄 탈 열차 고르기</div>'
+    + '<div style="display:flex;gap:6px;flex-wrap:wrap;">';
+  opts.forEach(function(o){
+    var on = (o.grade === curGrade);
+    var gradeEsc = _ltEsc(o.grade || '');
+    html += '<button onclick="_ldPickGrade(\'train\',this.getAttribute(\'data-g\'))" data-g="' + gradeEsc + '" '
+      + 'style="padding:7px 12px;border-radius:20px;border:1px solid ' + (on ? '#2f7cf6' : 'var(--border)')
+      + ';background:' + (on ? '#2f7cf6' : 'var(--card2)') + ';color:' + (on ? '#fff' : 'var(--text)')
+      + ';font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">'
+      + gradeEsc + (o.depLabel ? (' ' + o.depLabel) : '') + '</button>';
+  });
+  html += '</div>';
+  wrap.innerHTML = html;
+  wrap.style.display = 'block';
+}
+window._renderLdGradePicker = _renderLdGradePicker;
+
+// 사용자가 등급 칩을 눌렀을 때 — 그 등급으로 다시 탐색한다.
+function _ldPickGrade(mode, grade){
+  if(!grade) return;
+  window._ldPick = { mode: mode, grade: grade };
+  window._ldPickKeep = true;   // fmapDoRoute 초반의 '새 탐색이면 선택 초기화'를 이번 1회만 건너뛴다
+  if(typeof toast === 'function') toast(grade + ' 로 다시 찾는 중...');
+  if(typeof fmapDoRoute === 'function') fmapDoRoute();
+}
+window._ldPickGrade = _ldPickGrade;
+
 // ★ 세부경로는 '먼저 열고' 채운다 — 2026-08-26
 //   예전엔 데이터가 아직 없으면 return 으로 조용히 아무 일도 안 했다.
 //   탐색 직후 버튼을 누르면 반응이 없다가 뒤늦게 열리는 것처럼 느껴진 원인.
@@ -7773,6 +7815,12 @@ function openTransitDetail() {
   var modal = document.getElementById('transitDetailModal');
   var sects = document.getElementById('transitDetailSections');
   if(!modal) return;
+  // ★ 2026-09-23 YJ 제보: "세부경로 버튼이 안돼"(눌러도 완전히 빈 화면만 뜸).
+  //   이 모달이 스크롤되는 탭 컨테이너(#tabContentWrap, overflow-y:auto) 안에 있어서
+  //   일부 기기에서 position:fixed가 뷰포트가 아니라 그 스크롤 영역 기준으로 잘리는
+  //   것으로 보인다(안드로이드 웹뷰에서 종종 나는 문제). body 바로 밑으로 한 번
+  //   옮겨두면 어떤 조상의 overflow·레이아웃과도 무관해진다(이미 body 밑이면 그대로 둔다).
+  try{ if(modal.parentNode !== document.body) document.body.appendChild(modal); }catch(e){}
   var ready = function(){
     return !!(_transitResultData && (_transitResultData.routes||[]).length);
   };
@@ -8063,6 +8111,11 @@ function fmapDoRoute() {
     toast('출발지와 도착지를 입력해주세요.');
     return;
   }
+
+  // ★ 2026-09-23 (KTX/ITX 선택): 등급 선택 버튼이 부른 재탐색이 아니면 이전 선택을 지운다.
+  //   안 지우면 완전히 다른 경로를 탐색해도 예전에 고른 KTX 필터가 계속 걸려 있게 된다.
+  if(window._ldPickKeep){ window._ldPickKeep = false; }
+  else { window._ldPick = null; }
 
   // ★ 새 탐색 시작 — 이전 경로 결과를 즉시 무효화한다.
   //   (예전엔 이전 _allRouteResults가 남아 있어, 응답이 늦으면 노선도에서 새로 고른
@@ -8373,6 +8426,12 @@ window._hideRouteLoading = _hideRouteLoading;
       if(_fv && _fv.length && _fv[0].la != null){
         urls[0] += '&fav=' + _fv[0].la + ',' + _fv[0].lo;
         console.log('[즐겨찾기] ' + _fv[0].nodenm + ' 우대를 엔진에 넘김');
+      }
+      // ★ 2026-09-23 (KTX/ITX 선택): 세부경로에서 사용자가 등급을 골랐으면 그 값을
+      //   엔진(ldMode/ldGrade)에 실어 보낸다 — 엔진이 그 등급 안에서 다시 고른다.
+      if(window._ldPick && window._ldPick.mode && window._ldPick.grade){
+        urls[0] += '&ldMode=' + encodeURIComponent(window._ldPick.mode) + '&ldGrade=' + encodeURIComponent(window._ldPick.grade);
+        console.log('[열차등급] ' + window._ldPick.grade + ' 선택을 엔진에 넘김');
       }
     }catch(e){}
 
@@ -10049,7 +10108,13 @@ function _convertSinglePathToRoute(path) {
       distance: info.totalDistance||0,
       transfers: info.transferCount||0
     },
-    sections: sections
+    sections: sections,
+    // ★ 2026-09-23 (KTX/ITX 선택): 장거리 경로가 지금 고른 모드·등급과, 같은 모드
+    //   안에서 고를 수 있는 다른 등급 목록을 그대로 실어 나른다(엔진이 채운 값 그대로).
+    pathType: info.pathType || null,
+    ldMode: info.ldMode || null,
+    ldGrade: info.ldGrade || null,
+    ldOptions: info.ldOptions || null
   };
 }
 
@@ -10096,7 +10161,12 @@ function _convertEngineRoutes(engineData) {
         distance: info.totalDistance || 0,
         transfers: info.transferCount || 0
       },
-      sections: sections
+      sections: sections,
+      // ★ 2026-09-23 (KTX/ITX 선택): _convertSinglePathToRoute 와 같은 이유로 그대로 실어 나른다.
+      pathType: info.pathType || null,
+      ldMode: info.ldMode || null,
+      ldGrade: info.ldGrade || null,
+      ldOptions: info.ldOptions || null
     };
   });
   return { routes: routes };
@@ -17693,6 +17763,9 @@ window.addEventListener('unhandledrejection', function(e) {
       <div class="htl-wrap" id="transitHtlWrap" style="position:relative;overflow-x:auto;-webkit-overflow-scrolling:touch;">
         <div id="transitHtlTrack"></div>
       </div>
+
+      <!-- ── 장거리 열차 등급(KTX/ITX 등) 선택 — 2026-09-23 ── -->
+      <div id="transitLdGradeWrap" style="display:none;margin-top:10px;"></div>
 
       <!-- ── 세부경로 / 경로확정 버튼 ── -->
       <div style="margin-top:10px;display:flex;gap:8px;">
