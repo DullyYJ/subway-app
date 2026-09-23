@@ -7903,6 +7903,14 @@ function _buildTransitDetailNow() {
   } catch(e){}
   var _fmtT=function(ms){var d=new Date(ms);var h=d.getHours(),m=d.getMinutes();return (h<10?'0':'')+h+':'+(m<10?'0':'')+m;};
 
+  // ★ 2026-09-23 YJ 제보: "세부경로 보기 누르면 화면이 파랗게되면서 멈춰"
+  //   전국을 가로지르는 지하철·버스 전용(장거리 엔진 미사용) 경로는 정거장 수가
+  //   수백 개까지 늘어날 수 있는데, 예전엔 펼쳐보기도 전에 구간마다(그것도 정거장마다
+  //   _realSeg 조회까지 곁들여) 목록 HTML을 전부 미리 만들어 뒀다 — 안 열어 볼 목록까지
+  //   한 번에 다 그리느라 메인 스레드가 오래 막혀 '멈춘 것처럼' 보였다.
+  //   → 목록은 이제 실제로 펼칠 때(_toggleDetailSec)만 만든다. 여기선 각 구간의
+  //   원본 데이터만 가벼운 객체로 저장해 둔다.
+  window._tdSecData = {};
   var html = '';
   var _cumMs = _baseMs;
   sections.forEach(function(sec, _si) {
@@ -7945,26 +7953,10 @@ function _buildTransitDetailNow() {
     var _secId = 'tdsec_'+_si;
     var _stopsHtml = '';
     if(_expandable){
-      // ★ 실측 역간소요(_REAL_SEG) 우선, 없으면 균등분할
-      var _evenMs = stops.length>1 ? (secSec*1000/(stops.length-1)) : 0;
-      var _cumMs2 = 0;
-      var _offMs = stops.map(function(s2,_k2){
-        if(_k2===0) return 0;
-        var _real = isSub ? _realSeg(trans.name, stops[_k2-1].stationName, stops[_k2].stationName) : null;
-        _cumMs2 += (_real!=null ? _real*1000 : _evenMs);
-        return _cumMs2;
-      });
-      _stopsHtml = '<div id="'+_secId+'_list" style="display:none;padding:4px 0 8px 60px;">';
-      stops.forEach(function(s,_k){
-        var _stMs=_depMs+_offMs[_k];
-        var _isEnd=(_k===0||_k===stops.length-1);
-        _stopsHtml += '<div style="display:flex;align-items:center;gap:10px;padding:5px 16px 5px 0;">'
-          + '<div style="width:9px;height:9px;border-radius:50%;flex-shrink:0;'+(_isEnd?'background:'+col+';':'background:var(--card);border:2px solid '+col+';')+'"></div>'
-          + '<div style="flex:1;font-size:12px;'+(_isEnd?'font-weight:700;color:var(--text);':'color:var(--sub);')+'">'+_ltEsc(s.stationName||'')+'</div>'
-          + '<div style="font-size:11px;color:var(--sub);flex-shrink:0;">'+_fmtT(_stMs)+'</div>'
-          + '</div>';
-      });
-      _stopsHtml += '</div>';
+      // ★ 2026-09-23: 목록 내용은 이제 클릭 시 _toggleDetailSec 가 만든다.
+      //   여기선 빈 컨테이너만 두고, 나중에 쓸 원본 데이터만 저장해 둔다.
+      _stopsHtml = '<div id="'+_secId+'_list" style="display:none;padding:4px 0 8px 60px;"></div>';
+      window._tdSecData[_secId] = { stops: stops, secSec: secSec, depMs: _depMs, col: col, isSub: isSub, lineName: trans.name };
     }
 
     var _clickAttr = _expandable ? ' onclick="_toggleDetailSec(\''+_secId+'\')" style="cursor:pointer;"' : '';
@@ -8036,6 +8028,36 @@ function _toggleDetailSec(secId){
   var chev=document.getElementById(secId+'_chev');
   if(!list) return;
   var open=list.style.display!=='none';
+  // ★ 2026-09-23: 처음 펼칠 때만 목록 내용을 만든다(성능 — 위 _buildTransitDetailNow 주석 참고).
+  //   두 번째부터는 이미 만들어져 있으니 다시 만들지 않는다.
+  if(!open && !list.childNodes.length){
+    try{
+      var d = (window._tdSecData || {})[secId];
+      if(d){
+        var stops = d.stops || [];
+        var _evenMs = stops.length>1 ? (d.secSec*1000/(stops.length-1)) : 0;
+        var _cumMs2 = 0;
+        var _fmtT=function(ms){var dt=new Date(ms);var h=dt.getHours(),m=dt.getMinutes();return (h<10?'0':'')+h+':'+(m<10?'0':'')+m;};
+        var _offMs = stops.map(function(s2,_k2){
+          if(_k2===0) return 0;
+          var _real = d.isSub ? _realSeg(d.lineName, stops[_k2-1].stationName, stops[_k2].stationName) : null;
+          _cumMs2 += (_real!=null ? _real*1000 : _evenMs);
+          return _cumMs2;
+        });
+        var h = '';
+        stops.forEach(function(s,_k){
+          var _stMs=d.depMs+_offMs[_k];
+          var _isEnd=(_k===0||_k===stops.length-1);
+          h += '<div style="display:flex;align-items:center;gap:10px;padding:5px 16px 5px 0;">'
+            + '<div style="width:9px;height:9px;border-radius:50%;flex-shrink:0;'+(_isEnd?'background:'+d.col+';':'background:var(--card);border:2px solid '+d.col+';')+'"></div>'
+            + '<div style="flex:1;font-size:12px;'+(_isEnd?'font-weight:700;color:var(--text);':'color:var(--sub);')+'">'+_ltEsc(s.stationName||'')+'</div>'
+            + '<div style="font-size:11px;color:var(--sub);flex-shrink:0;">'+_fmtT(_stMs)+'</div>'
+            + '</div>';
+        });
+        list.innerHTML = h;
+      }
+    }catch(e){}
+  }
   list.style.display=open?'none':'block';
   if(chev) chev.style.transform=open?'rotate(0deg)':'rotate(180deg)';
 }
