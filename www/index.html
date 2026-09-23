@@ -6673,7 +6673,7 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
       pts.push({type:'stn',nm:_nm(st.stationName||''),col:col,lC:lC,
                 lineNm:sg.name, lineLabel:_lineLabel(sg.type,sg.name),
                 arrT:arrT,isF:isF,isL:isL,ni:ni,
-                segType:sg.type, isSub:sg.type===1,isBus:sg.type===2,
+                segType:sg.type, isSub:sg.type===1,isBus:sg.type===2,isLongdist:sg.type===4,
                 lat:st.lat||null,lng:st.lon||st.lng||null});
       gIdx++;
     });
@@ -6799,8 +6799,8 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
       }
       nodes.push({label:isWalk?'도보':pt.nm, col:(isWalk?'#8e8e93':pt.col), lineName:(pt.lineNm||''),
         arrTime:_narr, isWalk:isWalk, isFirst:isAbsFirst, isLast:isAbsLast,
-        isSub:!!pt.isSub, isBus:!!pt.isBus,
-        icon:isWalk?'🚶':(pt.isSub?'🚇':pt.isBus?'🚌':'📍'),
+        isSub:!!pt.isSub, isBus:!!pt.isBus, isLongdist:!!pt.isLongdist,
+        icon:isWalk?'🚶':(pt.isSub?'🚇':pt.isBus?'🚌':pt.isLongdist?'🚄':'📍'),
         lat:_nlat, lng:_nlng, el:null});
       ni2++;
     }
@@ -7953,14 +7953,17 @@ function _buildTransitDetailNow() {
   sections.forEach(function(sec, _si) {
     var trans  = sec.transportation || {};
     var type   = trans.type;
-    var isWalk = type===3, isSub=type===1, isBus=type===2;
-    var icon   = isWalk?'🚶':isSub?'🚇':'🚌';
+    var isWalk = type===3, isSub=type===1, isBus=type===2, isLongdist=type===4;
+    // ★ 2026-09-23: type 4(장거리 KTX/ITX 등)는 예전엔 버스 아이콘/색으로 표시됐다
+    //   (isBus가 아니라 else 로 떨어져서). 구분되게 기차 아이콘/색을 준다.
+    var icon   = isWalk?'🚶':isSub?'🚇':isLongdist?'🚄':'🚌';
 
     var col;
-    if(isSub)       col = _transitColor(1, trans.name);
-    else if(isBus)  col = _isDark ? '#ffffff' : '#1a1a1a';
-    else            col = 'var(--sub)';
-    var iconBg = isSub ? col+'28' : 'var(--card2)';
+    if(isSub)            col = _transitColor(1, trans.name);
+    else if(isLongdist)  col = '#8b5cf6';
+    else if(isBus)       col = _isDark ? '#ffffff' : '#1a1a1a';
+    else                 col = 'var(--sub)';
+    var iconBg = (isSub || isLongdist) ? col+'28' : 'var(--card2)';
 
     var secSec = sec.duration||0;
     var secMin = Math.round(secSec/60);
@@ -7977,7 +7980,7 @@ function _buildTransitDetailNow() {
 
     var _depMs=_cumMs, _arrMs=_cumMs+secSec*1000; _cumMs=_arrMs;
 
-    var lineBar = isSub
+    var lineBar = (isSub || isLongdist)
       ? '<div style="width:4px;border-radius:2px;background:'+col+';align-self:stretch;flex-shrink:0;margin-right:2px;"></div>'
       : '';
 
@@ -8699,6 +8702,11 @@ window._hideRouteLoading = _hideRouteLoading;
         window._routeResultReady = _reqToken;
         var tabDiv = document.getElementById('routeOptionTabs');
         if(tabDiv) tabDiv.style.display = 'flex';
+        // ★ 2026-09-23: 장거리(KTX/ITX) 후보가 있을 때만 기차 탭을 보여준다
+        try{
+          var _ldBtn = document.getElementById('routeTabLongdist');
+          if(_ldBtn) _ldBtn.style.display = (_allRouteResults && _allRouteResults.longdist) ? '' : 'none';
+        }catch(e){}
         // ★ 처음 그릴 때도 현재 보고 있는 탭을 표시
         //   렌더 직후에 한 번 더 걸어 둔다 — 카드를 다시 그리는 과정에서
         //   버튼 스타일이 초기값으로 돌아가는 경우가 있다.
@@ -9184,9 +9192,10 @@ function _parseRouteOptions(engineData) {
   // 엔진이 이미 최단시간 순으로 정렬해서 준다
   // pathType: 1=지하철우선, 2=버스우선, 3=지하철+버스, 4=장거리(열차/고속버스/시외버스)
   // ★ 2026-09-23: pathType 4(장거리)가 추가되면서 byType[4]가 없어 .push 에서 죽던 버그.
-  //   장거리는 아직 화면을 못 그리므로(다음 단계) 여기선 버킷만 만들어 크래시만 막는다 —
-  //   아래 fast/less/sub/bus 탭 선정 로직은 tab 문자열 기준이라 longdist를 안 골라간다.
-  var byType = { 1: [], 2: [], 3: [] };
+  //   그동안은 버킷만 만들어 크래시만 막고 실제 노출은 안 했었는데(다음 단계로 미룸),
+  //   이번에 아래에서 longdist 키로 실제 노출한다 — "최단시간이 아니어도 KTX/ITX를
+  //   고를 수 있게 해달라"는 요청(가장 빠른 경로에 안 끼워도 별도 탭으로 항상 보여준다).
+  var byType = { 1: [], 2: [], 3: [], 4: [] };
   paths.forEach(function(p) {
     var pt = (p.info || {}).pathType || 3;
     if(!byType[pt]) byType[pt] = [];
@@ -9307,12 +9316,22 @@ function _parseRouteOptions(engineData) {
     var tabs = (inf._tabs && inf._tabs.length) ? inf._tabs : (inf.tab ? [inf.tab] : []);
     tabs.forEach(function(tb){ if(!_byTab[tb]) _byTab[tb] = p; });
   });
+  // ★ 2026-09-23: 장거리(KTX/ITX 등)는 "최단시간"과 경쟁하지 않는 별도 후보다
+  //   (route_v2.js가 애초에 그렇게 설계함 — longDistance는 minTime과 안 섞인다).
+  //   그래서 longdist는 _byTab/byType 어느 쪽에서 왔든 항상 별도 키로 담아 둔다.
+  //   여러 개면(등급별로 나뉘어 올 수도 있음) 시간이 가장 짧은 걸 대표로 쓴다 —
+  //   등급 자체는 _renderLdGradePicker가 route.ldOptions로 따로 고르게 해 준다.
+  var longdistBest = byType[4].length
+    ? byType[4].slice().sort(function(a,b){ return _cost(a)-_cost(b); })[0]
+    : null;
+
   if(_byTab.fast || _byTab.less || _byTab.sub || _byTab.bus){
     return {
       fast: _byTab.fast || _byTab.less || paths[0],
       less: _byTab.less || _byTab.direct || _byTab.fast || paths[0],
       sub:  _byTab.sub  || null,
       bus:  _byTab.bus  || _byTab.direct || null,
+      longdist: _byTab.longdist || longdistBest,
       all:  paths,
       count: paths.length,
       hasSubwayRoute: !!_byTab.sub || subwayPaths.length > 0,
@@ -9326,6 +9345,7 @@ function _parseRouteOptions(engineData) {
     less: lessXfer[0] || paths[0],
     sub:  subFirst,   // 지하철 포함 경로 없으면 null
     bus:  busFirst   || paths[0],
+    longdist: longdistBest,
     all:  paths,
     count: paths.length,
     hasSubwayRoute: subwayPaths.length > 0,
@@ -9357,7 +9377,7 @@ window.selectRouteOption = selectRouteOption;
 // 세부경로에서 현재 보고 있는 경로를 확정 → GPS 추적 시작
 function confirmSelectedRoute(){
   var type = window._pendingRouteType || 'fast';
-  var optName = { fast:'최단시간', less:'최소환승', sub:'지하철', bus:'버스' }[type] || '선택한';
+  var optName = { fast:'최단시간', less:'최소환승', sub:'지하철', bus:'버스', longdist:'기차' }[type] || '선택한';
   window._routeLocked = true;
   window._lockedRouteType = type;
   window._lastCongNodeIdx = -1;
@@ -9378,7 +9398,7 @@ window.confirmSelectedRoute = confirmSelectedRoute;
 // 메인 화면 '경로 확정' 버튼용 (세부경로 안 열고 바로 확정)
 function confirmCurrentRoute(){
   var type = window._pendingRouteType || window._lockedRouteType || 'fast';
-  var optName = { fast:'최단시간', less:'최소환승', sub:'지하철', bus:'버스' }[type] || '선택한';
+  var optName = { fast:'최단시간', less:'최소환승', sub:'지하철', bus:'버스', longdist:'기차' }[type] || '선택한';
   window._routeLocked = true;
   window._lockedRouteType = type;
   window._lastCongNodeIdx = -1;
@@ -10057,7 +10077,7 @@ function _etaResearchIfStale(){
 window._etaResearchIfStale = _etaResearchIfStale;
 
 function _highlightRouteTab(type){
-  ['fast','less','sub','bus'].forEach(function(t) {
+  ['fast','less','sub','bus','longdist'].forEach(function(t) {
     var btn = document.getElementById('routeTab' + t.charAt(0).toUpperCase() + t.slice(1));
     if(!btn) return;
     if(t === type) {
@@ -17836,6 +17856,13 @@ window.addEventListener('unhandledrejection', function(e) {
           style="flex:1;padding:7px 0;border-radius:10px;border:1.5px solid var(--border);
           background:var(--card2);color:var(--sub);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">
           🚌 버스
+        </button>
+        <!-- ★ 2026-09-23: KTX/ITX 등 장거리 — 최단시간이 아니어도 고를 수 있게 별도 탭으로.
+             경로에 장거리 후보가 없으면(단거리 이동 등) JS가 display:none으로 숨긴다. -->
+        <button id="routeTabLongdist" onclick="selectRouteOption('longdist')"
+          style="display:none;flex:1;padding:7px 0;border-radius:10px;border:1.5px solid var(--border);
+          background:var(--card2);color:var(--sub);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">
+          🚄 기차
         </button>
       </div>
 
