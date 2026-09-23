@@ -3423,6 +3423,24 @@ function _briefFromTransitData(){
       //   브리핑에서 빠졌다 — 그래서 AI 승무원이 장거리 구간을 아예 언급을 못 했다.
       if(tt !== 1 && tt !== 2 && tt !== 4) return;
       var sl = ((sec.passStopList||{}).stationList) || [];
+      // ★ 2026-09-24 (YJ: "900분은 말이안돼, 막차고려해서 알려줘야지"):
+      //   장거리(tt===4)의 sec.duration(=엔진 sectionTime)은 다른 버스 구간과 같은
+      //   관례로 '대기(터미널 도착→실제 출발) + 승차'가 합쳐진 값이다(엔진 route_v2.js
+      //   ldToRoute 주석 참고 — 심야엔 다음 날 첫차까지 몇 시간이고 그대로 더해진다).
+      //   그런데 이걸 그대로 "승차 시간만 XX분"이라고 말해서, 실제로는 대부분 '대기'인
+      //   숫자를 '타고 가는 시간'인 것처럼 안내했다 — 서울→부산인데 895분(약 15시간)을
+      //   "승차 시간만"이라 했으니 말이 안 되는 게 당연하다.
+      //   엔진이 arriveSec(터미널 도착)/startSec(실제 출발)/endSec(도착)을 이미 따로
+      //   실어 보내므로, 승차(startSec~endSec)와 대기(arriveSec~startSec)를 분리해서
+      //   보여준다 — 대기가 길면(심야라 다음 열차가 아침 편인 경우 등) 숨기지 않고
+      //   그대로 알려준다("막차 고려" 요청에 대한 응답: 대기를 뭉개지 않고 보여준다).
+      var _ldRideMin = null, _ldWaitMin = null;
+      if(tt===4 && sec.startSec!=null && sec.endSec!=null){
+        _ldRideMin = Math.max(0, Math.round((sec.endSec - sec.startSec)/60));
+      }
+      if(tt===4 && sec.arriveSec!=null && sec.startSec!=null){
+        _ldWaitMin = Math.max(0, Math.round((sec.startSec - sec.arriveSec)/60));
+      }
       segs.push({
         type: tt,
         line: (sec.transportation||{}).name || (tt===2 ? '버스' : tt===4 ? '장거리' : '지하철'),
@@ -3433,7 +3451,9 @@ function _briefFromTransitData(){
         // ★ 장거리 전용 부가정보 — _convertSinglePathToRoute/_convertEngineRoutes가
         //   워커(route-v2)에서 그대로 실어 온 값. 없으면(구버전 응답 등) null.
         fare: (tt===4 && sec.fare != null) ? sec.fare : null,
-        depLabel: (tt===4 && sec.depLabel != null) ? sec.depLabel : null
+        depLabel: (tt===4 && sec.depLabel != null) ? sec.depLabel : null,
+        rideMin: _ldRideMin,   // 실제 '타고 가는' 시간(승차~하차)만
+        waitMin: _ldWaitMin    // 터미널 도착 후 '기다리는' 시간(다음 편까지)만
       });
     });
     if(!segs.length) return null;
@@ -3805,7 +3825,15 @@ function _renderHomeConductorBrief(fromName, toName, hour, congPct, serverMsg){
             + ' 이동합니다';
           if(ls.fare != null) _ldSentence += ' (운임 약 ' + Number(ls.fare).toLocaleString('ko-KR') + '원)';
           else _ldSentence += ' (운임 정보 없음)';
-          if(ls.min>0) _ldSentence += ', 승차 시간만 약 ' + ls.min + '분';
+          // ★ 2026-09-24: rideMin(실제 승차)과 waitMin(터미널 대기)을 분리해서 말한다.
+          //   대기가 뭉개져 "승차 시간만 895분"처럼 보이던 문제 수정 — 자세한 이유는
+          //   _briefFromTransitData의 주석 참고.
+          if(ls.rideMin>0) _ldSentence += ', 승차 시간은 약 ' + ls.rideMin + '분';
+          if(ls.waitMin>15){
+            var _wh = Math.floor(ls.waitMin/60), _wm = ls.waitMin%60;
+            var _waitTxt = _wh>0 ? (_wh+'시간' + (_wm>0 ? (' '+_wm+'분') : '')) : (_wm+'분');
+            _ldSentence += '. 지금은 바로 탈 수 있는 편이 없어서, 터미널 도착 후 다음 편까지 약 ' + _waitTxt + ' 기다려야 해요';
+          }
           ps.push(_ldSentence + '. 장거리 이동이니 출발 시각과 좌석을 미리 한 번 더 확인하시면 좋습니다.');
         });
       }
