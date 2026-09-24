@@ -13215,8 +13215,7 @@ function _tickTimelineMarker(){
   return;   // 시간 기반 마커 전진 비활성화 (마커 튐/역행 방지)
 }
 window._tickTimelineMarker = _tickTimelineMarker;
-function _stopTransitWatch(){try { if(window._transitWatchId!=null && navigator.geolocation){ navigator.geolocation.clearWatch(window._transitWatchId); } } catch(e){}
-    window._transitWatchId=null;
+function _stopTransitWatch()
   if(window._transitTimeTickInt != null){ clearInterval(window._transitTimeTickInt); window._transitTimeTickInt = null; }
   if(window._transitGpsPollInt != null){ clearInterval(window._transitGpsPollInt); window._transitGpsPollInt = null; }
   if(window._rtTrainInt != null){ clearInterval(window._rtTrainInt); window._rtTrainInt = null; }
