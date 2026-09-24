@@ -4101,15 +4101,28 @@ function _loadServerPosts(cat, reset) {
   //   subway-api 에는 /posts 가 없어서(프록시 전용) 매번 실패 → 로컬 생성으로 떨어졌고,
   //   그게 '글이 매일 비슷하다'의 원인이었다.
   //   콘텐츠 서버가 안 되면 예전 주소로 한 번 더 시도하고, 그것도 안 되면 기존처럼 로컬로 간다.
+  // ★ 2026-09-24: 위 09-20 메모가 가리킨 '콘텐츠 서버'(_srvBase, 실제로는 gildongmu-food
+  //   워커 주소)와 폴백(_SERVER_URL=subway-api)는 둘 다 애초에 /posts 라우트가 없는
+  //   워커였다. 정작 게시글을 20분마다 만들어 D1에 쌓아온 곳은 board-writer인데,
+  //   거기엔 그동안 /posts 조회 라우트 자체가 없었다(추가함, board-writer-worker.js
+  //   참고). 즉 서버가 열심히 만든 글이 앱까지 한 번도 도달한 적이 없었고, 그래서
+  //   커뮤니티는 사실상 항상 기기별 로컬 생성만 보여주고 있었다 — '게시글이 매일
+  //   비슷하다'는 제보의 진짜 원인. board-writer를 직접 호출하도록 고친다.
   var _q = '/posts?limit=50' + ((cat && cat !== 'all') ? ('&cat=' + encodeURIComponent(cat)) : '');
-  var url = (typeof _srvBase === 'function' ? _srvBase() : _SERVER_URL) + _q;
+  var _boardWriterBase = (typeof _BOARD_WRITER_URL !== 'undefined' && _BOARD_WRITER_URL) || 'https://board-writer.phg0643.workers.dev';
+  var url = _boardWriterBase + _q;
 
   fetch(url)
     .then(function(r){
       if(r.ok) return r.json();
       throw new Error('HTTP ' + r.status);
     })
-    .catch(function(){ return fetch(_SERVER_URL + _q).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }); })
+    .catch(function(){
+      // 구주소들은 원래 /posts가 없어 실패하지만, 혹시 나중에 프록시가 생기는
+      // 경우를 대비해 안전망으로만 남겨둔다 — 이마저 실패하면 기존처럼 로컬로 간다.
+      var _fallbackBase = (typeof _srvBase === 'function' ? _srvBase() : _SERVER_URL);
+      return fetch(_fallbackBase + _q).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); });
+    })
     .then(function(data){
       var posts = data.posts || [];
       _commLoading = false;
