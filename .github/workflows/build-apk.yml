@@ -8,6 +8,12 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # ★ 2026-09-25 (스토어 출시 준비): Play 스토어는 업로드마다 versionCode가
+      #   반드시 이전보다 커야 한다. android/ 폴더는 매 빌드 cap add android로
+      #   새로 만들어져 커밋 상태로 못 남기니, GitHub Actions가 실행마다 자동으로
+      #   붙여주는 run_number(1,2,3,...)를 그대로 쓴다 — 별도 카운터 파일 불필요.
+      ANDROID_VERSION_CODE: ${{ github.run_number }}
 
     steps:
       - name: Checkout
@@ -57,7 +63,7 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync android
         
-      - name: Install native plugins (기지국 보조측위 + 작은 요약 화면)
+      - name: Install native plugins (기지국 보조측위 + 작은 요약 화면 + 배터리 최적화 제외)
         run: |
           python3 - << 'PYEOF'
           import os, shutil
@@ -67,7 +73,7 @@ jobs:
           os.makedirs(PKGDIR, exist_ok=True)
 
           # 1) 플러그인 소스 복사
-          for src in ["native/CellInfoPlugin.java", "native/PipPlugin.java"]:
+          for src in ["native/CellInfoPlugin.java", "native/PipPlugin.java", "native/PowerPlugin.java"]:
               if not os.path.exists(src):
                   raise SystemExit(src + " 가 없습니다 — 저장소에 올렸는지 확인하세요")
               shutil.copy(src, os.path.join(PKGDIR, os.path.basename(src)))
@@ -88,6 +94,7 @@ jobs:
               "    public void onCreate(Bundle savedInstanceState) {",
               "        registerPlugin(CellInfoPlugin.class);",
               "        registerPlugin(PipPlugin.class);",
+              "        registerPlugin(PowerPlugin.class);",
               "        super.onCreate(savedInstanceState);",
               "    }",
               "",
@@ -190,12 +197,19 @@ jobs:
         run: |
           mkdir -p android/app/src/main/res/xml
           python3 -c "
+          # ★ 2026-09-25 (스토어 출시 준비 — cleartext 정리): 코드 전수 조사 결과
+          #   앱이 기기에서 직접 http:// 로 여는 주소는 실제로 0개다. ws.bus.go.kr·
+          #   apis.data.go.kr 등의 http:// 문자열은 전부 워커 프록시(/tago?url=...)에
+          #   실어 보내는 '값'일 뿐이고, 실제 그 주소로의 요청은 워커(서버) 쪽에서
+          #   일어난다 — 기기는 언제나 https://...workers.dev 하나만 부른다.
+          #   그래서 cleartextTrafficPermitted를 전부 false로 내렸다(안드로이드 기본값과
+          #   동일). 도메인 목록은 앱이 실제로 거치는 워커/프록시 주소 기록용으로 남겨둠.
           xml  = '<?xml version=\"1.0\" encoding=\"utf-8\"?>\n'
           xml += '<network-security-config>\n'
-          xml += '    <base-config cleartextTrafficPermitted=\"true\">\n'
+          xml += '    <base-config cleartextTrafficPermitted=\"false\">\n'
           xml += '        <trust-anchors><certificates src=\"system\"/></trust-anchors>\n'
           xml += '    </base-config>\n'
-          xml += '    <domain-config cleartextTrafficPermitted=\"true\">\n'
+          xml += '    <domain-config cleartextTrafficPermitted=\"false\">\n'
           for d in ['workers.dev','phg0643.workers.dev','swopenapi.seoul.go.kr',
                     'apis.data.go.kr','tago.go.kr','allorigins.win',
                     'corsproxy.io','codetabs.com','thingproxy.freeboard.io','news.google.com']:
@@ -203,7 +217,7 @@ jobs:
           xml += '    </domain-config>\n'
           xml += '</network-security-config>\n'
           open('android/app/src/main/res/xml/network_security_config.xml','w').write(xml)
-          print('network_security_config.xml 생성 완료')
+          print('network_security_config.xml 생성 완료 (cleartext 전부 차단)')
           "
 
       - name: Create notification icon
@@ -278,6 +292,66 @@ jobs:
           echo "=== 최종 AndroidManifest ==="
           cat "$M"
 
+      - name: Patch app/build.gradle (versionCode 자동증가 + 서명설정)
+        run: |
+          python3 << 'PYEOF'
+          path = 'android/app/build.gradle'
+          c = open(path, encoding='utf-8').read()
+
+          # ① versionCode/versionName 하드코딩(1 / "1.0") 제거 → 매 빌드 ANDROID_VERSION_CODE
+          #    env로 대체(위 job env가 github.run_number를 넣어준다). 시크릿 없이도
+          #    항상 정상 동작(없으면 "1"로 폴백 — 기존과 동일).
+          before = '        versionCode 1\n        versionName "1.0"\n'
+          after = ('        versionCode Integer.parseInt(System.getenv("ANDROID_VERSION_CODE") ?: "1")\n'
+                   '        versionName System.getenv("ANDROID_VERSION_NAME") ?: "1.0"\n')
+          if before not in c:
+              raise SystemExit("versionCode/versionName 자리를 못 찾음 — capacitor 템플릿이 바뀌었을 수 있음")
+          c = c.replace(before, after)
+
+          # ② release 서명 설정 — ANDROID_KEYSTORE_PATH가 없으면(시크릿 미설정)
+          #    signingConfig를 아예 안 붙여서 기존과 똑같이 무서명 release로 빌드된다
+          #    (기존 기능 보존). 시크릿을 넣으면 다음 실행부터 자동으로 서명됨.
+          before2 = ("    buildTypes {\n        release {\n            minifyEnabled false\n"
+                     "            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'\n"
+                     "        }\n    }\n")
+          after2 = ("    signingConfigs {\n"
+                    "        release {\n"
+                    '            def ksPath = System.getenv("ANDROID_KEYSTORE_PATH")\n'
+                    "            if (ksPath) {\n"
+                    "                storeFile file(ksPath)\n"
+                    '                storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")\n'
+                    '                keyAlias System.getenv("ANDROID_KEY_ALIAS")\n'
+                    '                keyPassword System.getenv("ANDROID_KEY_PASSWORD")\n'
+                    "            }\n"
+                    "        }\n"
+                    "    }\n"
+                    "    buildTypes {\n"
+                    "        release {\n"
+                    "            minifyEnabled false\n"
+                    "            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'\n"
+                    '            if (System.getenv("ANDROID_KEYSTORE_PATH")) {\n'
+                    "                signingConfig signingConfigs.release\n"
+                    "            }\n"
+                    "        }\n"
+                    "    }\n")
+          if before2 not in c:
+              raise SystemExit("buildTypes.release 자리를 못 찾음 — capacitor 템플릿이 바뀌었을 수 있음")
+          c = c.replace(before2, after2)
+
+          open(path, 'w', encoding='utf-8').write(c)
+          print("app/build.gradle 패치 완료")
+          print(c)
+          PYEOF
+
+      - name: Decode release keystore (시크릿 있을 때만)
+        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/app/release.keystore
+          echo "ANDROID_KEYSTORE_PATH=release.keystore" >> "$GITHUB_ENV"
+          echo "ANDROID_KEYSTORE_PASSWORD=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" >> "$GITHUB_ENV"
+          echo "ANDROID_KEY_ALIAS=${{ secrets.ANDROID_KEY_ALIAS }}" >> "$GITHUB_ENV"
+          echo "ANDROID_KEY_PASSWORD=${{ secrets.ANDROID_KEY_PASSWORD }}" >> "$GITHUB_ENV"
+
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
@@ -294,4 +368,24 @@ jobs:
           name: subway-app-debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
+          if-no-files-found: warn
+
+      # ★ 2026-09-25: 스토어 업로드용 서명 AAB. ANDROID_KEYSTORE_BASE64 시크릿이
+      #   저장소에 없으면 이 단계부터는 전부 건너뛰고(디버그 APK만 나오던 기존 동작
+      #   그대로), 시크릿을 넣는 순간 다음 push부터 자동으로 서명된 AAB가 같이 나온다.
+      - name: Build Release AAB (서명, 시크릿 있을 때만)
+        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        run: cd android && ./gradlew bundleRelease
+
+      - name: List AAB output (릴리스)
+        if: ${{ always() && secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        run: find android/app/build/outputs/bundle -name "*.aab" 2>/dev/null || echo "AAB 없음"
+
+      - name: Upload AAB
+        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: subway-app-release-aab
+          path: android/app/build/outputs/bundle/release/app-release.aab
+          retention-days: 90
           if-no-files-found: warn
