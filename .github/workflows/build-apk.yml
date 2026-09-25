@@ -14,6 +14,12 @@ jobs:
       #   새로 만들어져 커밋 상태로 못 남기니, GitHub Actions가 실행마다 자동으로
       #   붙여주는 run_number(1,2,3,...)를 그대로 쓴다 — 별도 카운터 파일 불필요.
       ANDROID_VERSION_CODE: ${{ github.run_number }}
+      # ★ 2026-09-26 (YJ 제보: "Invalid workflow file" — secrets 를 step 의 if: 에서
+      #   바로 쓰면 "Unrecognized named-value: 'secrets'" 로 워크플로 전체가 막힘.
+      #   시크릿을 아직 하나도 안 만든 저장소에서 특히 이렇게 걸린다. if: 조건에는
+      #   secrets 를 직접 못 쓰므로, job 레벨 env 로 한 번 걸러서(env: 정의는 secrets를
+      #   읽을 수 있다) 그 결과(문자열 "true"/"false")만 if: 에서 쓴다.
+      HAS_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
 
     steps:
       - name: Checkout
@@ -344,7 +350,7 @@ jobs:
           PYEOF
 
       - name: Decode release keystore (시크릿 있을 때만)
-        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        if: ${{ env.HAS_KEYSTORE == 'true' }}
         run: |
           echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/app/release.keystore
           echo "ANDROID_KEYSTORE_PATH=release.keystore" >> "$GITHUB_ENV"
@@ -374,15 +380,15 @@ jobs:
       #   저장소에 없으면 이 단계부터는 전부 건너뛰고(디버그 APK만 나오던 기존 동작
       #   그대로), 시크릿을 넣는 순간 다음 push부터 자동으로 서명된 AAB가 같이 나온다.
       - name: Build Release AAB (서명, 시크릿 있을 때만)
-        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        if: ${{ env.HAS_KEYSTORE == 'true' }}
         run: cd android && ./gradlew bundleRelease
 
       - name: List AAB output (릴리스)
-        if: ${{ always() && secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        if: ${{ always() && env.HAS_KEYSTORE == 'true' }}
         run: find android/app/build/outputs/bundle -name "*.aab" 2>/dev/null || echo "AAB 없음"
 
       - name: Upload AAB
-        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        if: ${{ env.HAS_KEYSTORE == 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: subway-app-release-aab
