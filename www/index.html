@@ -4226,12 +4226,72 @@ function _serverReact(postId, type) {
 }
 window._serverReact = _serverReact;
 
-// 댓글 서버 저장 (추후 확장용)
+// 댓글 서버 저장 (2026-09-25: 실제 서버 연동 — board-writer /comment)
+// ★ 서버(board-writer)에 실제로 쌓인 글(post.isServer===true)에만 댓글을 서버로 보낸다.
+//   로컬 전용(AI 시뮬레이션) 글은 서버에 해당 post_id 행이 없어서 댓글도 그 기기에서만
+//   보이는 게 맞다 — 그런 글은 여태처럼 로컬 저장만 유지.
 function _serverPostComment(postId, nick, body) {
-  // 현재는 로컬 저장, 추후 서버 엔드포인트 추가 시 활성화
-  console.log('[댓글] 로컬 저장:', postId, nick, body);
+  try {
+    var post = null;
+    if(typeof _AI_POSTS !== 'undefined'){
+      for(var i=0;i<_AI_POSTS.length;i++){ if(String(_AI_POSTS[i].id) === String(postId)){ post = _AI_POSTS[i]; break; } }
+    }
+    if(!post || !post.isServer) return;   // 로컬 글 → 서버 전송 안 함(기존 동작 그대로)
+    var base = (typeof _BOARD_WRITER_URL !== 'undefined' && _BOARD_WRITER_URL) || 'https://board-writer.phg0643.workers.dev';
+    fetch(base + '/comment', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ post_id: postId, nick: nick, body: body })
+    }).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+      .then(function(data){
+        if(!(data && data.ok && data.id != null)) return;
+        // ★ 방금 낙관적으로 넣어둔 로컬 댓글의 id를 서버 id로 맞춰준다 — 나중에
+        //   _fetchServerComments가 서버 목록을 다시 받아올 때 같은 댓글이 또 한 번
+        //   붙어 중복 표시되는 것을 막는다(같은 id는 건너뜀).
+        for(var j=post.cmts.length-1;j>=0;j--){
+          var c = post.cmts[j];
+          if(c.mine && c.text === body && c.nick === nick && String(c.id).indexOf('srv') !== 0){
+            c.id = 'srv' + data.id;
+            c.isServer = true;
+            break;
+          }
+        }
+      }).catch(function(){});
+  } catch(e){}
 }
 window._serverPostComment = _serverPostComment;
+
+// 서버(board-writer)에서 이 글에 실제로 달린 다른 사용자 댓글을 받아와 합친다.
+// ★ 로컬 전용 글(post.isServer 없음)은 서버에 행 자체가 없으므로 호출하지 않는다.
+//   과도한 요청을 막기 위해 글을 펼칠 때(한 번)만 호출한다 — 열어둔 채 계속 폴링하지 않음.
+function _fetchServerComments(post){
+  if(!post || !post.isServer || post.id == null) return;
+  try{
+    var base = (typeof _BOARD_WRITER_URL !== 'undefined' && _BOARD_WRITER_URL) || 'https://board-writer.phg0643.workers.dev';
+    fetch(base + '/comments?post_id=' + encodeURIComponent(post.id) + '&limit=50')
+      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+      .then(function(data){
+        var rows = (data && data.comments) || [];
+        if(!rows.length) return;
+        post.cmts = post.cmts || [];
+        var haveIds = {};
+        post.cmts.forEach(function(c){ if(c.id != null) haveIds[String(c.id)] = true; });
+        var added = false;
+        rows.forEach(function(r){
+          var sid = 'srv' + r.id;
+          if(haveIds[sid]) return;
+          haveIds[sid] = true;
+          post.cmts.push({ id: sid, nick: r.nick, text: r.body, time: r.ts, replies: [], isServer: true });
+          added = true;
+        });
+        if(!added) return;
+        post.cmts.sort(function(a,b){ return a.time - b.time; });
+        var wrap = document.getElementById('dccmts-' + post.id);
+        if(wrap && typeof _dcCmtListHtml === 'function') wrap.innerHTML = _dcCmtListHtml(post);
+      }).catch(function(){});
+  }catch(e){}
+}
+window._fetchServerComments = _fetchServerComments;
 
 
 // ══════════════════════════════════════════════════════════════
@@ -27254,6 +27314,51 @@ var _SUBJ_TALK = [
   ['올해 목표 중에 하나는 해내고 싶네요', ['하나라도 하면 성공이죠','응원합니다']]]}
 ];
 
+// ══════════════════════════════════════════════════════════════════════
+// ★ 2026-09-25(YJ 요구): "다른 게시글의 댓글과 똑같으면 안돼" — 댓글 소재 풀이
+//   작아서(주제당 4~14개) 아무 대책 없이 무작위로 뽑으면 서로 다른 글에 같은
+//   댓글 문구가 그대로 반복된다. 게시글 중복방지(_postTopicLog, 6개월)와 같은
+//   원장 방식을 댓글에도 적용 — 단 댓글 풀이 훨씬 작으므로 30일로 짧게 잡는다
+//   (6개월로 하면 트래픽 많은 주제는 금방 다 '이미 씀' 처리돼 버려서, 그 다음부턴
+//   댓글 자체가 안 달리거나 매번 허용 폴백만 타게 된다 — 게시글 쪽 교훈과 동일).
+// ══════════════════════════════════════════════════════════════════════
+var _CMT_LOG_TTL = 30*24*3600*1000;   // 30일
+function _cmtTopicLog(){
+  if(window._cmtLogMem) return window._cmtLogMem;
+  var m={};
+  try { m = JSON.parse(localStorage.getItem('cmtTopicLog')||'{}') || {}; } catch(e){ m={}; }
+  var now=Date.now(), changed=false;
+  for(var k in m){ if(!m[k] || now-m[k] > _CMT_LOG_TTL){ delete m[k]; changed=true; } }
+  window._cmtLogMem=m;
+  if(changed) _cmtTopicSave();
+  return m;
+}
+function _cmtTopicSave(){
+  try { localStorage.setItem('cmtTopicLog', JSON.stringify(window._cmtLogMem||{})); } catch(e){}
+}
+function _cmtKey(text){ return String(text||'').replace(/\s+/g,'').toLowerCase(); }
+function _cmtUsed(text){ var k=_cmtKey(text); return !!(k && _cmtTopicLog()[k]); }
+function _cmtMark(text){
+  var k=_cmtKey(text);
+  if(!k) return;
+  var m=_cmtTopicLog();
+  m[k]=Date.now();
+  var ks=Object.keys(m);
+  if(ks.length>4000){
+    ks.sort(function(a,b){ return m[a]-m[b]; });
+    ks.slice(0,1200).forEach(function(kk){ delete m[kk]; });
+  }
+  _cmtTopicSave();
+}
+// 후보 목록에서 '최근 다른 글에 안 쓴 것'만 우선 거르고, 전부 소진이면(그 주제
+// 풀이 작아 다 써버린 경우) 그제서야 전체 후보를 허용한다 — 게시글 재추첨과 동일 철학
+function _cmtFreshOrAll(list, textOf){
+  var fresh = list.filter(function(x){ return !_cmtUsed(textOf(x)); });
+  return fresh.length ? fresh : list;
+}
+window._cmtUsed = _cmtUsed;
+window._cmtMark = _cmtMark;
+
 // 글 제목+본문으로 소재 찾기 (없으면 null → 댓글 안 붙임)
 function _subjTalkFor(post){
   try{
@@ -27376,11 +27481,16 @@ function _makeCmt(offsetMs, topicPool, usedIdx){
     // 주제 연관 댓글에서 중복 없이 선택
     var avail = topicPool.map(function(_,i){return i;}).filter(function(i){return usedIdx.indexOf(i)<0;});
     if(avail.length){
-      var pick = avail[_rndInt(0, avail.length-1)];
+      // ★ 2026-09-25: 다른 글에 최근에 안 쓴 문구를 우선 — 전부 소진이면 그때만 허용
+      var freshIdx = avail.filter(function(i){ return !_cmtUsed(topicPool[i]); });
+      var pool2 = freshIdx.length ? freshIdx : avail;
+      var pick = pool2[_rndInt(0, pool2.length-1)];
       usedIdx.push(pick);
       text = topicPool[pick];
+      _cmtMark(text);
     } else {
       text = _rnd(topicPool);
+      _cmtMark(text);
     }
   } else {
     return null;   // ★ 주제 풀이 없으면 댓글을 만들지 않는다(일반 템플릿 폴백 폐지)
@@ -27396,7 +27506,10 @@ function _makeCmt(offsetMs, topicPool, usedIdx){
 function _makeReply(parentTime, topicPool){
   var text;
   if(topicPool && topicPool.length){
-    text = _rnd(topicPool);  // 대댓글도 같은 주제 풀에서
+    // ★ 2026-09-25: 대댓글도 다른 글과 겹치지 않게 — 같은 방식으로 신선한 것 우선
+    var fresh = topicPool.filter(function(t){ return !_cmtUsed(t); });
+    text = _rnd(fresh.length ? fresh : topicPool);
+    _cmtMark(text);
   } else {
     return null;   // ★ 주제 풀이 없으면 대댓글도 만들지 않는다
   }
@@ -27413,7 +27526,12 @@ function _initCmts(postTime, post){
   //   대댓글이 '바로 위 댓글'에 답하도록 짝지어져 있어서 대화가 이어진다.
   var subj = (typeof _subjTalkFor==='function') ? _subjTalkFor(post) : null;
   if(subj && subj.c && subj.c.length){
-    var pool = subj.c.slice();
+    // ★ 2026-09-25: 다른 글에서 최근에 안 쓴 댓글 쌍을 우선 — 그 소재 풀이
+    //   작아 전부 소진이면(30일 내 다 써버렸으면) 그때만 전체를 허용한다.
+    var basePool = (typeof _cmtFreshOrAll === 'function')
+      ? _cmtFreshOrAll(subj.c, function(pair){ return pair[0]; })
+      : subj.c;
+    var pool = basePool.slice();
     // 글마다 다른 조합이 나오도록 섞는다
     for(var i=pool.length-1;i>0;i--){ var j=_rndInt(0,i); var t=pool[i]; pool[i]=pool[j]; pool[j]=t; }
     var n = _rndInt(1, Math.min(3, pool.length));
@@ -27423,7 +27541,12 @@ function _initCmts(postTime, post){
       var off  = _rndInt(10000, Math.max(20000, Date.now()-postTime));
       var c = { id:_rndInt(1000,9999), nick:_rnd(_NICK_POOL), text:pair[0],
                 time: Date.now()-off, replies:[] };
-      var reps = pair[1] || [];
+      if(typeof _cmtMark === 'function') _cmtMark(pair[0]);
+      var repsAll = pair[1] || [];
+      // ★ 대댓글도 다른 글과 안 겹치는 것 우선
+      var reps = (typeof _cmtFreshOrAll === 'function')
+        ? _cmtFreshOrAll(repsAll, function(t){ return t; })
+        : repsAll;
       // 대댓글은 그 댓글에 달린 후보 중에서만 (0~2개, 서로 중복 없이)
       if(reps.length){
         var rn = _rndInt(0, Math.min(2, reps.length));
@@ -27437,6 +27560,7 @@ function _initCmts(postTime, post){
           var rnick = _rnd(_NICK_POOL), g=0;
           while(rnick === c.nick && g++ < 5) rnick = _rnd(_NICK_POOL);
           c.replies.push({ nick:rnick, text:reps[pick], time: c.time + _rndInt(60000, 900000)*(r+1) });
+          if(typeof _cmtMark === 'function') _cmtMark(reps[pick]);
         }
       }
       out.push(c);
@@ -29755,8 +29879,14 @@ function _renderPost(post) {
     body.style.display = open ? 'none' : 'block';
     // ★ 열림/닫힘을 기록 — 자동 갱신이 돌아도 본문이 접히지 않게
     window._commOpenPosts = window._commOpenPosts || {};
-    if(open) delete window._commOpenPosts[post.id];
-    else window._commOpenPosts[post.id] = true;
+    if(open) {
+      delete window._commOpenPosts[post.id];
+    } else {
+      window._commOpenPosts[post.id] = true;
+      // ★ 2026-09-25: 글을 펼치는 시점(한 번)에 다른 사용자들이 실제로 남긴
+      //   서버 댓글을 받아와 합친다 — 열어둔 채로 계속 폴링하지는 않는다.
+      if(typeof _fetchServerComments === 'function') _fetchServerComments(post);
+    }
     post.views++;
     var vEl = el.querySelector('.dc-views');
     if(vEl) vEl.textContent = '👁 ' + post.views;
