@@ -18940,6 +18940,20 @@ window.addEventListener('unhandledrejection', function(e) {
         <div id="pipStat" style="margin-top:10px;font-size:11.5px;line-height:1.6;color:var(--sub);"></div>
       </div>
 
+      <!-- ★ 2026-09-26: 배터리 최적화 제외 — PiP·상주알림·예약알림이 삼성·샤오미 등
+           제조사 배터리 관리에 며칠 뒤 백그라운드에서 죽는 걸 막는다. 권한은 예전부터
+           Manifest에 선언돼 있었지만 실제로 시스템 다이얼로그를 띄우는 코드가 없어서
+           한 번도 적용된 적이 없었다(2026-09-25 알림·PiP 점검 때 발견) -->
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
+        <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:4px;">🔋 배터리 최적화 제외</div>
+        <p style="font-size:12px;color:var(--sub);margin-bottom:12px;">꺼두면 기기가 앱을 며칠 안 열었을 때 작은 요약 화면 · 알림이 백그라운드에서 멈출 수 있어요. 제외해두면 계속 살아있어요.</p>
+        <div id="batOptBanner" style="display:none;background:rgba(255,159,10,.12);border:1px solid rgba(255,159,10,.35);border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#ff9f0a;line-height:1.5;">
+          ⚠️ 아직 배터리 최적화 대상이에요. 아래 버튼으로 제외해 주세요.
+        </div>
+        <button onclick="_batRequest()" style="width:100%;padding:11px;border-radius:10px;border:none;cursor:pointer;font-size:13px;font-weight:800;background:var(--gold);color:#121214;font-family:inherit;">배터리 최적화에서 제외하기</button>
+        <div id="batOptStat" style="margin-top:10px;font-size:11.5px;line-height:1.6;color:var(--sub);"></div>
+      </div>
+
       <!-- ★ 백그라운드 위치추적 진단 -->
       <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
         <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:4px;">🛰 백그라운드 추적 진단</div>
@@ -26867,6 +26881,8 @@ function switchTab(tab,el){
     // ★ 2026-09-22: 알림 설정 카드가 이 탭에 있다 — 열릴 때마다 최신 상태로 그린다
     if(typeof _notifPrefRender==='function') _notifPrefRender();
     if(typeof _notifPermBannerCheck==='function') _notifPermBannerCheck();
+    // ★ 2026-09-26: 배터리 최적화 제외 카드도 같은 탭 — 열릴 때마다 최신 상태로 그린다
+    if(typeof _batSyncStat==='function') _batSyncStat();
   }
   if(tab!=='home'){
     // 다른 탭 이동 시 폴링 중지
@@ -31827,6 +31843,73 @@ try{
   else setTimeout(_pipSyncToggle, 300);
 }catch(e){}
 
+// ══════════════════════════════════════════════════════════════
+// ★ 2026-09-26: 배터리 최적화 제외 (네이티브 PowerPlugin, Capacitor.Plugins.Power)
+//   AndroidManifest 의 REQUEST_IGNORE_BATTERY_OPTIMIZATIONS 권한은 선언만으로는
+//   아무 일도 안 한다 — 실제로 시스템 다이얼로그를 띄우는 코드가 필요해서 만든다.
+//   앱을 며칠 안 열면 PiP·상주알림·예약알림이 삼성·샤오미 등 배터리 관리에 죽는
+//   문제를 막는 용도. 부팅마다 강제로 띄우지 않고(플레이스토어 심사·사용자 경험상
+//   자동 팝업은 피함) 설정 화면에서 사용자가 직접 누르는 방식으로만 제공한다.
+function _batNative(){
+  try{
+    var P = window.Capacitor && window.Capacitor.Plugins;
+    return (P && P.Power) || null;
+  }catch(e){ return null; }
+}
+window._batNativeAvailable = function(){ return !!_batNative(); };
+
+function _batSyncStat(){
+  var st = document.getElementById('batOptStat');
+  var banner = document.getElementById('batOptBanner');
+  if(!st) return;
+  var n = _batNative();
+  if(!n || typeof n.isIgnoringOptimizations !== 'function'){
+    st.textContent = '이 빌드에는 배터리 최적화 제외 기능이 없어요.'
+                   + '\n(MainActivity 에 registerPlugin(PowerPlugin.class) 가 있는지 확인하세요)';
+    st.style.whiteSpace = 'pre-line';
+    if(banner) banner.style.display = 'none';
+    return;
+  }
+  n.isIgnoringOptimizations().then(function(r){
+    var on = !!(r && r.ignoring);
+    st.textContent = on ? '✅ 배터리 최적화에서 이미 제외돼 있어요. 백그라운드에서 계속 안전해요.'
+                         : '아직 배터리 최적화 대상이에요 — 기기를 며칠 안 열면 백그라운드 기능이 멈출 수 있어요.';
+    if(banner) banner.style.display = on ? 'none' : 'block';
+  }).catch(function(){
+    st.textContent = '상태를 확인하지 못했어요.';
+    if(banner) banner.style.display = 'none';
+  });
+}
+window._batSyncStat = _batSyncStat;
+
+function _batRequest(){
+  var n = _batNative();
+  if(!n || typeof n.requestIgnoreOptimizations !== 'function'){
+    if(typeof toast === 'function') toast('이 빌드에는 배터리 최적화 제외 기능이 없어요');
+    return;
+  }
+  n.requestIgnoreOptimizations().then(function(r){
+    if(r && r.already){
+      if(typeof toast === 'function') toast('이미 제외돼 있어요 · 걱정 없어요');
+      _batSyncStat();
+      return;
+    }
+    if(r && r.fallback && typeof toast === 'function'){
+      toast('배터리 사용량 화면에서 "제한 없음"으로 바꿔주세요');
+    }
+    // ★ 시스템 다이얼로그/설정 화면에서 돌아오면 _initAppStateListener 의 포그라운드
+    //   전환 처리에서 다시 상태를 확인한다(아래 appStateChange 훅에 추가함).
+  }).catch(function(e){
+    if(typeof toast === 'function') toast('배터리 설정을 열지 못했어요');
+  });
+}
+window._batRequest = _batRequest;
+
+try{
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(_batSyncStat, 300); });
+  else setTimeout(_batSyncStat, 300);
+}catch(e){}
+
 function _pipPreview(){
   _pipShow();
   if(typeof toast === 'function') toast('작은 요약 화면 미리보기 · 탭하면 닫혀요');
@@ -31850,6 +31933,9 @@ function _initAppStateListener(){
           // ★ 2026-09-08: 복귀할 때 네이티브 상태를 다시 알린다.
           //   액티비티가 새로 만들어졌으면 네이티브의 '안내 중' 플래그가 지워져 있다.
           try{ if(typeof _pipNativeSync === 'function') _pipNativeSync(true); }catch(e){}
+          // ★ 2026-09-26: 배터리 최적화 설정 화면에서 돌아왔을 수 있으니 상태를 다시 읽는다
+          //   (설정 화면이 열려 있을 때만 반영되고, 없으면 조용히 아무 일도 안 함).
+          try{ if(typeof _batSyncStat === 'function') _batSyncStat(); }catch(e){}
           if(S.route && S.boarded){
             // 웹 GPS 재시작 (포그라운드에서는 더 빠른 업데이트)
             startWatch();
