@@ -9759,7 +9759,9 @@ function _svcCheck(sections){
           if(!w || !w.name || seen0[w.type+w.name]) return;
           seen0[w.type+w.name] = 1;
           if(w.type === 'sub') eSub.push({ line:w.name, first:null, last:_fmt(w.last), at:_fmt(w.at) });
-          else                 eBus.push({ no:w.name, last:_fmt(w.last), at:_fmt(w.at) });
+          // ★ 2026-09-25: 엔진이 준 state('before'=아직 시작 전/'after'=이미 끝남)를 그대로 옮긴다.
+          //   문구 선택은 앱 몫이지만, '어느 쪽인지' 판단은 여전히 엔진이 svcOffState로 끝낸 값이다.
+          else                 eBus.push({ no:w.name, last:_fmt(w.last), at:_fmt(w.at), state: w.state || null });
         });
         if(eSub.length || eBus.length){
           var md = [];
@@ -9779,7 +9781,16 @@ function _svcCheck(sections){
 
     var nmKey = function(v){ return String(v == null ? '' : v).replace(/\s/g, ''); };
     var offSub = (ls.subOffList || []).map(nmKey);
-    var offBus = (ls.svcOffList || []).map(nmKey);
+    // ★ 2026-09-25: svcOffList 원소가 문자열('노선번호')에서 {no,state} 객체로 바뀌었다
+    //   (엔진의 '아직 시작 전/이미 끝남' 판단을 같이 실어 보냄). 구버전 워커가 아직 문자열을
+    //   주는 경우도 있으니 둘 다 받는다 — 이름→state 조회용 맵도 같이 만든다.
+    var offBusStateMap = {};
+    var offBus = (ls.svcOffList || []).map(function(o){
+      var nm = (o && typeof o === 'object') ? o.no : o;
+      var k2 = nmKey(nm);
+      offBusStateMap[k2] = (o && typeof o === 'object') ? (o.state || null) : null;
+      return k2;
+    });
     if(!offSub.length && !offBus.length) return null;
 
     var endedSub = [], endedBus = [], seen = {};
@@ -9796,7 +9807,7 @@ function _svcCheck(sections){
       } else if(t === 2){
         if(sg.waitReal || sg.waitLive) return;            // 실제로 오고 있다
         if(offBus.indexOf(nmKey(nm)) < 0) return;         // 엔진이 살렸다 → 운행 중
-        seen[k] = 1; endedBus.push({ no: nm });
+        seen[k] = 1; endedBus.push({ no: nm, state: offBusStateMap[nmKey(nm)] || null });
       }
     });
     if(!endedSub.length && !endedBus.length) return null;
@@ -9819,11 +9830,33 @@ function _svcModeText(r){
   if(r.modes.length === 1) return r.modes[0] + '이(가)';
   return '일부 구간이';
 }
+// ★ 2026-09-25 (YJ 제보: 10시대에 15시 출발 하교버스·22시대 출발 심야버스가 "운행이
+//   끝났어요"로 나옴): endedBus 각 항목의 state('before'=아직 시작 전/'after'=이미 끝남,
+//   엔진 svcOffState가 판정)를 모아 버스 쪽 전체 성격을 하나로 요약한다. 지하철은 이
+//   구분을 아직 안 하므로(신고된 범위 밖) 건드리지 않는다.
+function _svcBusPhase(r){
+  var sts = (r.endedBus || []).map(function(x){ return x && x.state; }).filter(Boolean);
+  if(!sts.length) return null;                                    // state 정보 없음(구버전 응답) → 모름
+  if(sts.every(function(s){ return s === 'before'; })) return 'before';
+  if(sts.every(function(s){ return s === 'after';  })) return 'after';
+  return 'mixed';
+}
+// 헤드라인 문구: 지하철이 하나라도 껴 있거나, 버스가 '이미 끝남'/'섞임'/'모름'이면 기존
+// "운행이 끝났어요"를 그대로 쓴다. 버스만 있고 전부 '아직 시작 전'일 때만 문구를 바꾼다.
+function _svcHeadSuffix(r){
+  if(r.endedSub.length) return '운행이 끝났어요';
+  return (_svcBusPhase(r) === 'before') ? '아직 운행 시작 전이에요' : '운행이 끝났어요';
+}
 function _svcLines(r){
   var a = r.endedSub.map(function(x){
     return x.last ? (x.line + ' (' + (x.at ? (x.at + ' 승차 · 막차 ') : '막차 ') + x.last + ')')
                   : (x.line + (x.at ? (' (' + x.at + ' 승차)') : '')); })
-        .concat(r.endedBus.map(function(x){ return /[0-9]$/.test(x.no) ? (x.no + '번') : x.no; }));
+        .concat(r.endedBus.map(function(x){
+          var label = /[0-9]$/.test(x.no) ? (x.no + '번') : x.no;
+          if(x.state === 'before') return label + '(아직 운행 전)';
+          if(x.state === 'after')  return label + '(운행 종료)';
+          return label;
+        }));
   return a.join(' · ');
 }
 function _svcFirstText(r){
@@ -9849,7 +9882,12 @@ function _svcShowNoRoute(){
     var r = {
       endedSub: subOff ? (ls.subOffList || []).map(function(n){ return { line:n, last:'' }; }) : [],
       soonSub: [],
-      endedBus: busOff ? (ls.svcOffList || []).map(function(n){ return { no:n }; }) : [],
+      // ★ 2026-09-25: svcOffList 원소가 {no,state} 객체일 수 있다(구버전 워커면 문자열 그대로).
+      endedBus: busOff ? (ls.svcOffList || []).map(function(o){
+        var nm = (o && typeof o === 'object') ? o.no : o;
+        var st = (o && typeof o === 'object') ? (o.state || null) : null;
+        return { no: nm, state: st };
+      }) : [],
       modes: [], ended: true,
       firstSub: ls.subFirstTrain || null,
       firstBus: ls.svcFirstBus || null
@@ -9872,7 +9910,7 @@ function _svcBannerHtml(r){
                   : 'linear-gradient(135deg,#4b5563 0%,#1f2937 60%,#312e81 100%)';
   var head = warn
     ? '곧 막차예요'
-    : _svcModeText(r) + ' 운행이 끝났어요';
+    : _svcModeText(r) + ' ' + _svcHeadSuffix(r);
   var body = warn
     ? r.soonSub.map(function(x){ return x.line + ' 막차 ' + x.last + ' (약 ' + x.inMin + '분 뒤)'; }).join(' · ')
     : _svcLines(r);
@@ -9905,7 +9943,7 @@ function _svcShowModal(r){
       '<div style="width:100%;max-width:520px;background:' + grad + ';color:#fff;'
       + 'border-radius:20px 20px 0 0;padding:20px 18px 22px;">'
       + '<div style="font-size:17px;font-weight:800;line-height:1.4;">'
-      + (warn ? '곧 막차예요' : _svcModeText(r) + '<br>지금은 운행이 끝났어요') + '</div>'
+      + (warn ? '곧 막차예요' : _svcModeText(r) + '<br>지금은 ' + _svcHeadSuffix(r)) + '</div>'
       + '<div style="margin-top:10px;font-size:13px;opacity:.92;line-height:1.6;">'
       + (warn
           ? r.soonSub.map(function(x){ return x.line + ' 막차 ' + x.last + ' — 약 ' + x.inMin + '분 남았어요.'; }).join('<br>')
@@ -17425,8 +17463,10 @@ window._bgDiag = async function(){
         add('탐색 전 사전조회: 정류장 ' + (_ls.preStops||0) + '곳 중 ' + (_ls.preOk||0) + '곳 응답'
             + (_ls.preErr ? (' / 오류 ' + _ls.preErr) : ''));
         if(_ls.svcOff){
+          // ★ 2026-09-25: svcOffList 원소가 문자열→{no,state} 객체로 바뀌었다. 둘 다 받는다.
+          var _svcOffNames = (_ls.svcOffList||[]).map(function(o){ return (o && typeof o==='object') ? o.no : o; });
           add('운행 끝나 제외한 노선: ' + _ls.svcOff + '개'
-              + ((_ls.svcOffList||[]).length ? (' (' + _ls.svcOffList.join(', ') + ')') : ''));
+              + (_svcOffNames.length ? (' (' + _svcOffNames.join(', ') + ')') : ''));
         }
         // ★ 2026-09-16: 어디서 시간을 쓰는지 숫자로 본다
       if(_ls.msBreak){
