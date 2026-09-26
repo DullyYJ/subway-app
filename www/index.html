@@ -12774,9 +12774,31 @@ function _saveShopApi(){
 }
 window._saveShopApi = _saveShopApi;
 
+// ★ 2026-09-26 (YJ: "실패이유도 안뜸" — 토스트는 한 번 스쳐 지나가서 놓치기 쉽고,
+//   같은 웹뷰 세션에서 두 번째 지도부턴 _glFallback 이 이미 true 라 아예 안 뜬다.
+//   그래서 지도 화면 자체에 계속 남아있는 작은 배지로 바꾼다 — 성공/실패 둘 다
+//   표시해서 "새 지도가 진짜로 떴는지 아닌지"를 스크린샷 한 장으로 바로 알 수 있게.
+//   임시 진단용 — 원인 확인되면 제거하거나 설정화면 진단란으로 옮길 예정.)
+function _mapDiagBadge(map, text){
+  try{
+    var c = map && map.getContainer && map.getContainer();
+    if(!c) return;
+    var el = c.querySelector('[data-map-diag]');
+    if(!el){
+      el = document.createElement('div');
+      el.setAttribute('data-map-diag', '1');
+      el.style.cssText = 'position:absolute;left:6px;bottom:6px;z-index:1000;background:rgba(0,0,0,.7);color:#fff;font-size:10px;line-height:1.4;padding:4px 7px;border-radius:6px;max-width:82%;pointer-events:none;white-space:pre-wrap;';
+      c.appendChild(el);
+    }
+    el.textContent = text;
+  }catch(e){}
+}
+window._mapDiagLast = null;   // 마지막 지도 상태 기록(설정화면 등에서 나중에 참조 가능)
+
 // 지도에 배경 타일을 얹는다. 실패가 잦으면 자동으로 OSM 으로 되돌린다.
 function _addBaseTiles(map){
-  function _osm(){
+  function _osm(reasonForBadge){
+    if(reasonForBadge) _mapDiagBadge(map, '기본 지도(OSM) — ' + reasonForBadge);
     var l = L.tileLayer(_TILE_OSM, {
       maxZoom: 19,
       subdomains: 'abc',
@@ -12806,24 +12828,27 @@ function _addBaseTiles(map){
       attribution: _TILE_ATTR_LIBERTY
     }).addTo(map);
     var glOk = false, errs = 0;
-    // ★ 2026-09-26 (YJ 제보: "지도가 계속 똑같이 나와" — CARTO 코드를 다 지웠는데도
-    //   여전히 예전 지도라는 건, 이 기기에서 Liberty(OpenFreeMap/MapLibre) 자체가
-    //   실패해서 기존 OSM 폴백으로 떨어지고 있다는 뜻 — 원격으로 로그를 볼 방법이
-    //   없어서, 실패 이유를 화면에 바로 보이는 토스트로도 띄운다(임시 진단용 —
-    //   원인 확인되면 이 토스트는 없애고 설정화면 진단란으로 옮길 예정, 자동 폴백
-    //   동작 자체는 그대로).
+    // ★ 2026-09-26 (YJ 제보: "지도가 계속 똑같이 나와" / "실패이유도 안뜸") —
+    //   토스트(한 번 스침) 대신 지도 위에 계속 남는 배지로 실패/성공 이유를 보여준다.
+    //   임시 진단용 — 원인 확인되면 없애거나 설정화면 진단란으로 옮길 예정, 자동
+    //   폴백 동작 자체는 그대로.
     function fail(reason){
       if(glOk || _glFallback) return;
       _glFallback = true;
       console.log('[지도] MapLibre(OpenFreeMap) 실패(' + reason + ') → OSM 래스터로 전환');
+      window._mapDiagLast = { ok:false, reason: reason, at: Date.now() };
       try{ if(typeof toast==='function') toast('무료 지도 불러오기 실패(' + reason + ') → 기본 지도로 전환'); }catch(e){}
       try{ map.removeLayer(gl); }catch(e){}
-      _osm();
+      _osm(reason);
     }
     var inner = null;
     try{ inner = gl.getMaplibreMap(); }catch(e){}
     if(!inner){ fail('no-inner-map'); return; }
-    inner.once('load', function(){ glOk = true; });
+    inner.once('load', function(){
+      glOk = true;
+      window._mapDiagLast = { ok:true, reason:'liberty', at: Date.now() };
+      _mapDiagBadge(map, '✓ 무료 지도(OpenFreeMap Liberty) 로딩 성공');
+    });
     inner.on('error', function(ev){
       if(glOk) return;                          // 스타일이 이미 뜬 뒤의 개별 오류는 무시
       if(++errs < 3 || _glFallback) return;      // 몇 번은 흔하다 — 계속 실패할 때만 전환
@@ -12835,13 +12860,15 @@ function _addBaseTiles(map){
     setTimeout(function(){ fail('timeout'); }, 6000);
   }
   try{
-    if(_glFallback){ _osm(); return; }
+    if(_glFallback){ _osm(window._mapDiagLast ? ('이전 실패: ' + window._mapDiagLast.reason) : '이전에 실패함'); return; }
     _liberty();
   }catch(e){
     // ★ 2026-09-26: _liberty() 가 아예 시작도 못 하고 즉시 던진 경우(예: 라이브러리
     //   스크립트 자체가 안 실행됨) — 위 fail() 토스트와 별개 경로라 여기서도 띄운다.
-    try{ if(typeof toast==='function') toast('무료 지도 초기화 실패(' + ((e&&e.message)||e) + ') → 기본 지도로 전환'); }catch(e3){}
-    try{ _osm(); }catch(e2){}
+    var _em = (e && e.message) || String(e);
+    window._mapDiagLast = { ok:false, reason: _em, at: Date.now() };
+    try{ if(typeof toast==='function') toast('무료 지도 초기화 실패(' + _em + ') → 기본 지도로 전환'); }catch(e3){}
+    try{ _osm(_em); }catch(e2){}
   }
 }
 window._addBaseTiles = _addBaseTiles;
