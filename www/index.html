@@ -12752,21 +12752,16 @@ window._foodEndMarker = _foodEndMarker;
 //   코드 그대로 두고 배경 타일만 바뀐다.
 //   ※ 벡터 스타일 로드가 실패하면(네트워크 차단, WebGL 미지원 등) 지도가
 //     통째로 비지 않도록, 예전에 쓰던 OSM 래스터 타일로 자동 전환한다.
-//   CARTO 키를 설정에 넣어둔 사람은 예전처럼 Voyager 를 그대로 쓴다.
-var _TILE_CARTO_LIGHT = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
-var _TILE_CARTO_DARK  = 'https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}{r}.png';
+// ★ 2026-09-26 (YJ: "carto 지도는 이제 사용을 안하니 관련 파일을 다 삭제해도
+//   될것같아"): CARTO 관련 코드(타일 URL·키 입력·설정 카드)를 전부 제거함.
+//   이제 항상 OpenFreeMap(Liberty)을 먼저 시도하고, 실패시에만 OSM 래스터로
+//   자동 전환한다(그 폴백 로직 자체는 그대로 유지).
 var _TILE_OSM         = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
 var _TILE_LIBERTY     = 'https://tiles.openfreemap.org/styles/liberty';
-var _TILE_ATTR_CARTO  = '© OpenStreetMap · © CARTO';
 var _TILE_ATTR_OSM    = '© OpenStreetMap';
 var _TILE_ATTR_LIBERTY = '© OpenFreeMap © OpenMapTiles © OpenStreetMap contributors';
-var _tileFallback = false;   // 한 번 실패하면 이후 지도는 모두 OSM 으로
 var _glFallback = false;     // MapLibre(OpenFreeMap) 가 한 번 실패하면 이후 지도는 모두 OSM 으로
 
-// CARTO API 키 (비어두면 OSM 사용)
-function _cartoKey(){
-  try{ return (localStorage.getItem('cartoKey')||'').trim(); }catch(e){ return ''; }
-}
 function _saveShopApi(){
   try{
     var el = document.getElementById('shopApiInput');
@@ -12779,24 +12774,6 @@ function _saveShopApi(){
 }
 window._saveShopApi = _saveShopApi;
 
-function _saveCartoKey(){
-  try{
-    var el = document.getElementById('cartoKeyInput');
-    var v  = el ? (el.value||'').trim() : '';
-    localStorage.setItem('cartoKey', v);
-    if(typeof toast==='function') toast(v ? '지도 키를 저장했어요. 지도를 다시 열면 적용돼요' : '무료 지도(OpenFreeMap)로 돌아갔어요');
-    _tileFallback = false;
-  }catch(e){}
-}
-window._cartoKey = _cartoKey;
-window._saveCartoKey = _saveCartoKey;
-
-function _isDarkTheme(){
-  try{
-    var t = document.documentElement.getAttribute('data-theme') || '';
-    return /dark|night|black/i.test(t);
-  }catch(e){ return false; }
-}
 // 지도에 배경 타일을 얹는다. 실패가 잦으면 자동으로 OSM 으로 되돌린다.
 function _addBaseTiles(map){
   function _osm(){
@@ -12821,27 +12798,7 @@ function _addBaseTiles(map){
     });
     return l;
   }
-  // CARTO 키를 넣어둔 사람은 예전 그대로 Voyager(래스터) 우선
-  function _carto(key){
-    var url = (_isDarkTheme() ? _TILE_CARTO_DARK : _TILE_CARTO_LIGHT)
-              + '?key=' + encodeURIComponent(key);
-    var layer = L.tileLayer(url, {
-      maxZoom: 20,
-      subdomains: 'abcd',
-      detectRetina: true,          // 고해상도 화면에서 {r}=@2x 타일 사용
-      attribution: _TILE_ATTR_CARTO
-    });
-    var errs = 0;
-    layer.on('tileerror', function(){
-      if(++errs < 6 || _tileFallback) return;   // 몇 장 실패는 흔하다 — 계속 실패할 때만 전환
-      _tileFallback = true;
-      console.log('[지도] CARTO 타일 실패 → OSM 으로 전환');
-      try{ map.removeLayer(layer); }catch(e){}
-      _osm();
-    });
-    layer.addTo(map);
-  }
-  // OpenFreeMap Liberty(벡터, MapLibre GL) — 새 기본값
+  // OpenFreeMap Liberty(벡터, MapLibre GL) — 기본값
   function _liberty(){
     if(typeof L.maplibreGL !== 'function') throw new Error('L.maplibreGL 없음');
     var gl = L.maplibreGL({
@@ -12869,8 +12826,6 @@ function _addBaseTiles(map){
     setTimeout(function(){ fail('timeout'); }, 6000);
   }
   try{
-    var key = _cartoKey();
-    if(key && !_tileFallback){ _carto(key); return; }
     if(_glFallback){ _osm(); return; }
     _liberty();
   }catch(e){
@@ -16331,11 +16286,6 @@ window._saveBusProxy = _saveBusProxy;
       var sv = localStorage.getItem('busProxyUrl');
       el.value = (sv === null) ? _BUS_PROXY_DEFAULT : sv;
     } catch(e){ el.value = _BUS_PROXY_DEFAULT; }
-    // ★ 지도 타일 키도 같은 타이밍에 채운다
-    try {
-      var ck = document.getElementById('cartoKeyInput');
-      if(ck) ck.value = (typeof _cartoKey === 'function') ? _cartoKey() : '';
-    } catch(e){}
     try {
       var sa = document.getElementById('shopApiInput');
       if(sa) sa.value = localStorage.getItem('shopApiUrl') || '';
@@ -18981,15 +18931,6 @@ window.addEventListener('unhandledrejection', function(e) {
             상품 목록은 서버에서 받아와요. 서버에서 바꾸면 앱 업데이트 없이 바로 반영돼요.
           </div>
 
-          <div style="font-size:11.5px;color:var(--sub);margin-bottom:6px;">지도 타일 키 (CARTO, 비워두면 기본 지도 사용)</div>
-          <div style="display:flex;gap:6px;margin-bottom:6px;">
-            <input id="cartoKeyInput" type="text" placeholder="CARTO API 키 (선택)"
-              style="flex:1;min-width:0;padding:9px 10px;border-radius:9px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;font-family:inherit;">
-            <button onclick="_saveCartoKey()" style="padding:9px 14px;border-radius:9px;border:none;cursor:pointer;font-size:12px;font-weight:800;background:#2f7cf6;color:#fff;font-family:inherit;">저장</button>
-          </div>
-          <div style="font-size:11px;color:var(--sub);line-height:1.5;margin-bottom:12px;">
-            CARTO 가 2026년 8월부터 지도 타일에 키를 요구해요. 키가 없으면 무료 지도(OpenFreeMap)로 보여요.
-          </div>
         </div>
 
         <div style="margin-bottom:10px;">
