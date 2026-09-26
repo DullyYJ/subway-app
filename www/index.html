@@ -12870,7 +12870,13 @@ function _addBaseTiles(map){
       inner.once('load', function(){
         glOk = true;
         window._mapDiagLast = { ok:true, reason:'liberty', at: Date.now() };
-        _mapDiagBadge(map, '✓ 무료 지도(OpenFreeMap Liberty) 로딩 성공');
+        // ★ 2026-09-26 (YJ 요청: "로딩성공 글씨도 지워줘") — 정상 로딩됐을 때는 배지를
+        //   아예 안 띄운다(화면 깔끔하게). 실패 시 사유 배지는 계속 남겨서 진단에 씀.
+        try{
+          var _c = map && map.getContainer && map.getContainer();
+          var _el = _c && _c.querySelector('[data-map-diag]');
+          if(_el && _el.parentNode) _el.parentNode.removeChild(_el);
+        }catch(e){}
       });
       inner.on('error', function(ev){
         if(glOk) return;                          // 스타일이 이미 뜬 뒤의 개별 오류는 무시
@@ -44762,8 +44768,19 @@ document.addEventListener('DOMContentLoaded', function() {
   border:2px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.4);transition:transform .15s,background .15s;}
 .bus-map-pin.on i{background:#e8482e;transform:scale(1.25);}
 .bus-me-dot{background:none!important;border:none!important;}
-.bus-me-dot i{display:block;width:15px;height:15px;border-radius:50%;background:#ff9f0a;
+.bus-me-dot i{position:relative;display:block;width:15px;height:15px;border-radius:50%;background:#ff9f0a;
   border:2px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.4);}
+/* ★ 2026-09-26 (YJ 요청: "내 위치 깜박이게") — 점 자체는 그대로 두고,
+   뒤에서 퍼지며 사라지는 원(ring)만 반복시켜 "현재 위치" 느낌을 줌. */
+.bus-me-dot i::after{
+  content:'';position:absolute;left:50%;top:50%;width:15px;height:15px;
+  margin:-7.5px 0 0 -7.5px;border-radius:50%;background:#ff9f0a;
+  animation:busMePulse 1.6s ease-out infinite;
+}
+@keyframes busMePulse{
+  0%{transform:scale(1);opacity:.55;}
+  100%{transform:scale(2.8);opacity:0;}
+}
 .bus-num-badge{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;
   width:21px;height:21px;border-radius:50%;background:#0066FF;color:#fff;
   font-size:11px;font-weight:800;line-height:1;margin-right:7px;}
