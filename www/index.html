@@ -8311,7 +8311,15 @@ function _buildTransitDetailNow() {
     if(isSub)       col = _transitColor(1, trans.name);
     else if(isBus)  col = _isDark ? '#ffffff' : '#1a1a1a';
     else            col = 'var(--sub)';
-    var iconBg = isSub ? col+'28' : 'var(--card2)';
+    // ★ 2026-09-26 (YJ 요청: "세부경로 화면 좀 이쁘고 직관적으로, 앱 스타일과 어울리게") —
+    //   버스 노선상세(brs-* 클래스, 정류장 화면)에서 이미 쓰던 "색선(레일)+알약 배지" 톤을
+    //   그대로 가져와 두 화면 스타일을 통일한다. col이 hex인 구간(지하철·버스)만 투명도
+    //   접미사(+'28' 등)를 붙일 수 있음 — 도보는 col이 'var(--sub)' 문자열이라 붙이면 깨짐.
+    var isHexCol  = isSub || isBus;
+    var iconBg    = isHexCol ? col+'28' : 'var(--card2)';
+    var railTrack = isHexCol ? col+'30' : 'var(--border)';
+    var badgeBg   = isHexCol ? col+'22' : 'var(--card2)';
+    var badgeFg   = isHexCol ? col : 'var(--sub)';
 
     var secSec = sec.duration||0;
     var secMin = Math.round(secSec/60);
@@ -8328,13 +8336,9 @@ function _buildTransitDetailNow() {
 
     var _depMs=_cumMs, _arrMs=_cumMs+secSec*1000; _cumMs=_arrMs;
 
-    var lineBar = isSub
-      ? '<div style="width:4px;border-radius:2px;background:'+col+';align-self:stretch;flex-shrink:0;margin-right:2px;"></div>'
-      : '';
-
-    var _timeRight = '<div style="display:flex;flex-direction:column;align-items:flex-end;flex-shrink:0;white-space:nowrap;gap:2px;">'
-      + '<div style="font-size:13px;font-weight:700;color:'+(isWalk?'var(--sub)':col)+';">'+(secMin<1?'1분 미만':secMin+'분')+'</div>'
-      + (!isWalk ? '<div style="font-size:10px;color:var(--sub);">'+_fmtT(_depMs)+'~'+_fmtT(_arrMs)+'</div>' : '')
+    var _timeRight = '<div class="td-time-wrap">'
+      + '<div class="td-time" style="color:'+(isWalk?'var(--sub)':col)+';">'+(secMin<1?'1분 미만':secMin+'분')+'</div>'
+      + (!isWalk ? '<div class="td-time-range">'+_fmtT(_depMs)+'~'+_fmtT(_arrMs)+'</div>' : '')
       + '</div>';
 
     var _expandable = !isWalk && stops.length>=2;
@@ -8364,17 +8368,20 @@ function _buildTransitDetailNow() {
     }
 
     var _clickAttr = _expandable ? ' onclick="_toggleDetailSec(\''+_secId+'\')" style="cursor:pointer;"' : '';
-    var _chevron = _expandable ? '<span id="'+_secId+'_chev" style="font-size:10px;color:var(--sub);transition:transform .2s;margin-left:4px;">▼</span>' : '';
+    var _chevron = _expandable ? '<span id="'+_secId+'_chev" class="td-chev">▾</span>' : '';
+    var _railPos = (_si===0?' td-rail-first':'') + (_si===sections.length-1?' td-rail-last':'');
 
-    html += '<div'+_clickAttr+' id="tdseccard_'+_si+'" data-dep="'+_depMs+'" data-arr="'+_arrMs+'" data-walk="'+(isWalk?1:0)+'">'
-      + '<div class="tdsec-row" style="display:flex;align-items:flex-start;padding:13px 16px;border-bottom:1px solid var(--border);gap:12px;position:relative;">'
-      + '<div class="tdsec-prog" id="tdprog_'+_si+'" style="position:absolute;left:0;top:0;bottom:0;width:3px;background:'+col+';transform:scaleY(0);transform-origin:top;transition:transform .5s linear;"></div>'
-      + lineBar
-      + '<div style="width:34px;height:34px;border-radius:50%;background:'+iconBg+';display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;">'+icon+'</div>'
-      + '<div style="flex:1;min-width:0;">'
-        + '<div style="font-size:14px;font-weight:700;color:'+col+';margin-bottom:3px;display:flex;align-items:center;">'+_ltEsc(label)+_chevron+'</div>'
-        + (fromStop ? '<div style="font-size:12px;color:var(--sub);">'+_ltEsc(fromStop)+(toStop?' → '+_ltEsc(toStop):'')+'</div>' : '')
-        + (stopCnt  ? '<div style="font-size:11px;color:var(--sub);margin-top:2px;">'+stopCnt+'</div>' : '')
+    html += '<div'+_clickAttr+' id="tdseccard_'+_si+'" data-dep="'+_depMs+'" data-arr="'+_arrMs+'" data-walk="'+(isWalk?1:0)+'" class="td-row">'
+      + '<div class="tdsec-row">'
+      + '<div class="td-rail'+_railPos+'">'
+        + '<div class="td-rail-track" style="background:'+railTrack+';"></div>'
+        + '<div class="tdsec-prog" id="tdprog_'+_si+'" style="background:'+col+';"></div>'
+        + '<div class="td-icon" style="background:'+iconBg+';">'+icon+'</div>'
+      + '</div>'
+      + '<div class="td-body">'
+        + '<div class="td-label-row"><span class="td-badge" style="background:'+badgeBg+';color:'+badgeFg+';">'+_ltEsc(label)+'</span>'+_chevron+'</div>'
+        + (fromStop ? '<div class="td-stops">'+_ltEsc(fromStop)+(toStop?' → '+_ltEsc(toStop):'')+'</div>' : '')
+        + (stopCnt  ? '<div class="td-stopcnt">'+stopCnt+'</div>' : '')
       + '</div>'
       + _timeRight
       + '</div>'
@@ -44661,7 +44668,7 @@ document.addEventListener('DOMContentLoaded', function() {
   font-size:22px;cursor:pointer;line-height:1;padding:4px 8px;}
 .bus-route-refresh{background:var(--card2);border:1px solid var(--border);border-radius:50%;
   width:36px;height:36px;color:var(--text);font-size:16px;cursor:pointer;transition:transform .5s;}
-.bus-route-fixed{flex:0 0 auto;background:var(--card);}
+.bus-route-fixed{flex:0 0 auto;background:var(--card);box-shadow:0 2px 10px rgba(0,0,0,.15);position:relative;z-index:1;}
 .bus-route-body{flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;min-height:0;background:var(--bg);}
 
 /* ── 노선 상세(정류장 타임라인) ── */
@@ -44731,14 +44738,44 @@ document.addEventListener('DOMContentLoaded', function() {
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .brs-meta{display:flex;align-items:center;gap:8px;margin-top:3px;}
 .brs-id{font-size:11.5px;color:var(--sub);letter-spacing:.3px;}
-.brs-map{margin-left:auto;font-size:11px;font-weight:700;color:#2f7cf6;opacity:.85;}
+.brs-map{margin-left:auto;font-size:11px;font-weight:700;color:#2f7cf6;opacity:.9;
+  background:rgba(47,124,246,.1);padding:3px 9px;border-radius:20px;}
 .brs-note{font-size:12px;font-weight:800;margin-top:5px;}
 .brs-note.bus{color:#2f7cf6;}
 .brs-note.me{color:#ff3b30;}
-.brs-here{background:rgba(47,124,246,.08);}
+.brs-here{background:rgba(47,124,246,.08);border-radius:12px;margin:2px 6px;}
 .brs-here .brs-name{color:#2f7cf6;font-weight:800;}
-.brs-mine{background:rgba(255,59,48,.09);}
+.brs-mine{background:rgba(255,59,48,.09);border-radius:12px;margin:2px 6px;}
 .brs-mine .brs-name{color:#ff3b30;font-weight:800;}
+/* ── 세부경로 시트(transitDetailModal) — 버스 노선상세(brs-*)와 톤 통일 ── */
+/* ★ 2026-09-26 (YJ 요청: "이쁘고 직관적으로") — 구간 아이콘을 이어주는 색선(레일)과
+   알약모양 배지로 바꿔, 위 brs-* 정류장 화면과 같은 시각언어를 쓴다. */
+.td-row .tdsec-row{display:flex;align-items:center;padding:13px 16px;gap:12px;
+  border-bottom:1px solid var(--border);position:relative;transition:background .15s;}
+.td-row:active .tdsec-row{background:var(--card2);}
+.td-rail{align-self:stretch;position:relative;width:34px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;}
+.td-rail-track{position:absolute;left:50%;margin-left:-1.5px;top:0;bottom:0;width:3px;border-radius:2px;}
+.td-rail.td-rail-first .td-rail-track,.td-rail.td-rail-first .tdsec-prog{top:50%;}
+.td-rail.td-rail-last  .td-rail-track,.td-rail.td-rail-last  .tdsec-prog{bottom:50%;}
+.td-rail .tdsec-prog{position:absolute;left:50%;margin-left:-1.5px;top:0;bottom:0;width:3px;
+  border-radius:2px;z-index:1;transform:scaleY(0);transform-origin:top;transition:transform .5s linear;}
+.td-icon{position:relative;z-index:2;width:34px;height:34px;border-radius:50%;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;font-size:16px;
+  border:2px solid var(--card);box-shadow:0 1px 5px rgba(0,0,0,.25);}
+.td-body{flex:1;min-width:0;}
+.td-label-row{display:flex;align-items:center;gap:5px;}
+.td-badge{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap;padding:4px 11px;border-radius:20px;font-size:13px;font-weight:800;}
+.td-stops{font-size:12px;color:var(--sub);margin-top:5px;}
+.td-stopcnt{font-size:11px;color:var(--sub);margin-top:2px;}
+.td-chev{width:19px;height:19px;border-radius:50%;background:var(--card2);border:1px solid var(--border);
+  display:inline-flex;align-items:center;justify-content:center;font-size:9px;color:var(--sub);
+  flex-shrink:0;transition:transform .2s;}
+.td-time-wrap{display:flex;flex-direction:column;align-items:flex-end;flex-shrink:0;white-space:nowrap;gap:2px;}
+.td-time{font-size:14px;font-weight:800;}
+.td-time-range{font-size:10px;color:var(--sub);}
+
 .bus-empty{text-align:center;padding:60px 20px;color:var(--sub);font-size:14px;line-height:1.8;}
 .bus-loading{text-align:center;padding:40px;color:var(--sub);}
 .bus-spinner{width:28px;height:28px;border:3px solid var(--border);
