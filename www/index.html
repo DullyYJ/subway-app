@@ -12806,10 +12806,17 @@ function _addBaseTiles(map){
       attribution: _TILE_ATTR_LIBERTY
     }).addTo(map);
     var glOk = false, errs = 0;
+    // ★ 2026-09-26 (YJ 제보: "지도가 계속 똑같이 나와" — CARTO 코드를 다 지웠는데도
+    //   여전히 예전 지도라는 건, 이 기기에서 Liberty(OpenFreeMap/MapLibre) 자체가
+    //   실패해서 기존 OSM 폴백으로 떨어지고 있다는 뜻 — 원격으로 로그를 볼 방법이
+    //   없어서, 실패 이유를 화면에 바로 보이는 토스트로도 띄운다(임시 진단용 —
+    //   원인 확인되면 이 토스트는 없애고 설정화면 진단란으로 옮길 예정, 자동 폴백
+    //   동작 자체는 그대로).
     function fail(reason){
       if(glOk || _glFallback) return;
       _glFallback = true;
       console.log('[지도] MapLibre(OpenFreeMap) 실패(' + reason + ') → OSM 래스터로 전환');
+      try{ if(typeof toast==='function') toast('무료 지도 불러오기 실패(' + reason + ') → 기본 지도로 전환'); }catch(e){}
       try{ map.removeLayer(gl); }catch(e){}
       _osm();
     }
@@ -12817,10 +12824,12 @@ function _addBaseTiles(map){
     try{ inner = gl.getMaplibreMap(); }catch(e){}
     if(!inner){ fail('no-inner-map'); return; }
     inner.once('load', function(){ glOk = true; });
-    inner.on('error', function(){
+    inner.on('error', function(ev){
       if(glOk) return;                          // 스타일이 이미 뜬 뒤의 개별 오류는 무시
       if(++errs < 3 || _glFallback) return;      // 몇 번은 흔하다 — 계속 실패할 때만 전환
-      fail('error x' + errs);
+      var msg = '';
+      try{ msg = (ev && ev.error && (ev.error.message || String(ev.error))) || ''; }catch(e){}
+      fail('error x' + errs + (msg ? ': ' + msg.slice(0,80) : ''));
     });
     // 오프라인 등으로 load 신호가 영영 안 오는 경우를 대비한 안전장치
     setTimeout(function(){ fail('timeout'); }, 6000);
@@ -12829,6 +12838,9 @@ function _addBaseTiles(map){
     if(_glFallback){ _osm(); return; }
     _liberty();
   }catch(e){
+    // ★ 2026-09-26: _liberty() 가 아예 시작도 못 하고 즉시 던진 경우(예: 라이브러리
+    //   스크립트 자체가 안 실행됨) — 위 fail() 토스트와 별개 경로라 여기서도 띄운다.
+    try{ if(typeof toast==='function') toast('무료 지도 초기화 실패(' + ((e&&e.message)||e) + ') → 기본 지도로 전환'); }catch(e3){}
     try{ _osm(); }catch(e2){}
   }
 }
