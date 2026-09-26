@@ -5699,8 +5699,8 @@ function _renderBusRoute(stations, buses){
         ? '<span class="brs-arw">▼</span>' : '';
 
       var mark = '<span class="brs-dot"></span>';
-      if(here)        mark = '<span class="brs-bus">🚌</span>';
-      else if(isMine) mark = '<span class="brs-me">' + (anchorIsStop ? '🚏' : '📍') + '</span>';
+      if(here)        mark = '<span class="brs-bus"><svg viewBox="0 0 24 24"><path d="M4 16c0 .88.39 1.67 1 2.22V20c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h8v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1.78c.61-.55 1-1.34 1-2.22V6c0-3.5-3.58-4-8-4s-8 .5-8 4v10zm3.5 1c-.83 0-1.5-.67-1.5-1.5S6.67 14 7.5 14s1.5.67 1.5 1.5S8.33 17 7.5 17zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM18 11H6V6h12v5z"/></svg></span>';
+      else if(isMine) mark = '<span class="brs-me"><span class="brs-me-pin"></span></span>';
 
       var note = '';
       if(here){
@@ -8376,6 +8376,7 @@ function _buildTransitDetailNow() {
       + '<div class="td-rail'+_railPos+'">'
         + '<div class="td-rail-track" style="background:'+railTrack+';"></div>'
         + '<div class="tdsec-prog" id="tdprog_'+_si+'" style="background:'+col+';"></div>'
+        + '<div class="td-now-mark" id="tdnow_'+_si+'"></div>'
         + '<div class="td-icon" style="background:'+iconBg+';">'+icon+'</div>'
       + '</div>'
       + '<div class="td-body">'
@@ -8417,6 +8418,7 @@ function _updateDetailProgress(){
     var dep = parseInt(card.getAttribute('data-dep'),10);
     var arr = parseInt(card.getAttribute('data-arr'),10);
     var prog = document.getElementById('tdprog_'+i);
+    var nowMark = document.getElementById('tdnow_'+i);
     if(prog && dep && arr){
       var ratio;
       if(now <= dep) ratio = 0;
@@ -8424,10 +8426,20 @@ function _updateDetailProgress(){
       else ratio = (now - dep) / (arr - dep);
       prog.style.transform = 'scaleY(' + ratio + ')';
       // 현재 진행 중인 구간 카드 하이라이트
-      if(now >= dep && now < arr){
+      var active = (now >= dep && now < arr);
+      if(active){
         card.style.background = 'var(--card2,rgba(255,200,0,0.06))';
       } else {
         card.style.background = '';
+      }
+      // ★ 진행중인 구간에만 "지금 여기" 깜박이는 마킹 표시(진행률 끝점에 위치)
+      if(nowMark){
+        if(active){
+          nowMark.style.display = 'block';
+          nowMark.style.top = (ratio*100) + '%';
+        } else {
+          nowMark.style.display = 'none';
+        }
       }
     }
     i++;
@@ -18662,7 +18674,7 @@ window.addEventListener('unhandledrejection', function(e) {
 
   <!-- ══ 세부경로 팝업 ══ -->
   <div id="transitDetailModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.82);z-index:10001;align-items:flex-end;justify-content:center;" onclick="if(event.target===this)closeTransitDetail()">
-    <div id="transitDetailSheet" style="background:var(--card);border-radius:20px 20px 0 0;width:100%;max-width:520px;height:82vh;height:82dvh;max-height:82vh;max-height:82dvh;display:flex;flex-direction:column;overflow:hidden;transition:transform .25s ease;will-change:transform;margin-bottom:calc(56px + env(safe-area-inset-bottom,0px));">
+    <div id="transitDetailSheet" style="background:var(--card);border-radius:20px 20px 0 0;width:100%;max-width:520px;height:calc(100vh - 56px - env(safe-area-inset-bottom,0px) - env(safe-area-inset-top,0px) - 10px);height:calc(100dvh - 56px - env(safe-area-inset-bottom,0px) - env(safe-area-inset-top,0px) - 10px);max-height:calc(100vh - 56px - env(safe-area-inset-bottom,0px) - env(safe-area-inset-top,0px) - 10px);max-height:calc(100dvh - 56px - env(safe-area-inset-bottom,0px) - env(safe-area-inset-top,0px) - 10px);display:flex;flex-direction:column;overflow:hidden;transition:transform .25s ease;will-change:transform;margin-bottom:calc(56px + env(safe-area-inset-bottom,0px));">
       <!-- 핸들 + 헤더 (드래그 영역) -->
       <div id="transitDetailHandle" style="padding:8px 18px 0;flex-shrink:0;touch-action:none;cursor:grab;">
         <div style="width:40px;height:5px;background:var(--border2,#5a5a5e);border-radius:3px;margin:0 auto 8px;"></div>
@@ -44728,10 +44740,32 @@ document.addEventListener('DOMContentLoaded', function() {
 .brs-rail-up   .brs-arw{color:#fff;}
 .brs-rail-down .brs-arw{color:#fff;}
 .brs-rail-na   .brs-arw{color:#fff;}
-.brs-bus{position:relative;z-index:2;font-size:15px;line-height:1;background:#2f7cf6;
-  border-radius:9px;padding:4px 3px;box-shadow:0 2px 6px rgba(47,124,246,.45);}
-.brs-me{position:relative;z-index:2;font-size:17px;line-height:1;
-  filter:drop-shadow(0 2px 3px rgba(255,59,48,.45));}
+/* ★ 2026-09-27 (YJ 제보: "내위치/버스 아이콘이 세로 라인과 안 맞아") — 이모지 글리프는
+   폰트별 시각 무게중심이 박스 중앙과 어긋나 레일 선과 어긋나 보일 수 있어, 정확히
+   중앙정렬되는 CSS/SVG 아이콘으로 교체. 레일(.brs-rail)의 트랙(::before)과 동일한
+   left:50%+transform 공식으로 절대 위치를 잡아 항상 같은 x좌표에 놓이도록 함. */
+.brs-bus{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  z-index:3;width:21px;height:21px;border-radius:50%;background:#2f7cf6;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 2px 7px rgba(47,124,246,.55);
+  animation:brsBusBeat 1.1s ease-in-out infinite;}
+.brs-bus::after{content:'';position:absolute;left:50%;top:50%;width:21px;height:21px;
+  margin:-10.5px 0 0 -10.5px;border-radius:50%;background:rgba(47,124,246,.45);
+  animation:brsBusPing 1.1s ease-out infinite;z-index:-1;}
+.brs-bus svg{width:13px;height:13px;fill:#fff;position:relative;}
+@keyframes brsBusPing{0%{transform:scale(1);opacity:.75;}100%{transform:scale(2.4);opacity:0;}}
+@keyframes brsBusBeat{0%,100%{transform:translate(-50%,-50%) scale(1);}50%{transform:translate(-50%,-50%) scale(1.15);}}
+
+.brs-me{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  z-index:3;width:17px;height:17px;display:flex;align-items:center;justify-content:center;}
+.brs-me-pin{position:relative;z-index:1;width:15px;height:15px;border-radius:50%;
+  background:#ff3b30;border:2.5px solid #fff;box-shadow:0 2px 5px rgba(255,59,48,.5);
+  display:flex;align-items:center;justify-content:center;}
+.brs-me-pin::after{content:'';width:5px;height:5px;border-radius:50%;background:#fff;}
+.brs-me::before{content:'';position:absolute;left:50%;top:50%;width:17px;height:17px;
+  margin:-8.5px 0 0 -8.5px;border-radius:50%;background:rgba(255,59,48,.5);
+  animation:brsMePulse 1.6s ease-out infinite;z-index:-1;}
+@keyframes brsMePulse{0%{transform:scale(1);opacity:.65;}100%{transform:scale(2.7);opacity:0;}}
 
 .brs-body{flex:1;min-width:0;padding:10px 0;border-bottom:1px solid var(--border);}
 .brs-name{font-size:15px;font-weight:700;color:var(--text);
@@ -44763,6 +44797,16 @@ document.addEventListener('DOMContentLoaded', function() {
 .td-icon{position:relative;z-index:2;width:34px;height:34px;border-radius:50%;flex-shrink:0;
   display:flex;align-items:center;justify-content:center;font-size:16px;
   border:2px solid var(--card);box-shadow:0 1px 5px rgba(0,0,0,.25);}
+/* ★ 2026-09-27 (YJ 요청: "현재 위치기반으로 깜박이는 마킹 추가") — 진행중인 구간의
+   진행률(tdsec-prog)이 채워진 지점에 깜박이는 점을 얹어 "지금 여기"를 명확히 표시 */
+.td-now-mark{position:absolute;left:50%;top:0;width:13px;height:13px;
+  margin:-6.5px 0 0 -6.5px;border-radius:50%;background:#ff3b30;
+  border:2.5px solid #fff;box-shadow:0 0 0 2px rgba(255,59,48,.3),0 2px 6px rgba(255,59,48,.55);
+  z-index:3;display:none;}
+.td-now-mark::after{content:'';position:absolute;left:50%;top:50%;width:13px;height:13px;
+  margin:-6.5px 0 0 -6.5px;border-radius:50%;background:rgba(255,59,48,.55);
+  animation:tdNowPulse 1.4s ease-out infinite;z-index:-1;}
+@keyframes tdNowPulse{0%{transform:scale(1);opacity:.65;}100%{transform:scale(2.5);opacity:0;}}
 .td-body{flex:1;min-width:0;}
 .td-label-row{display:flex;align-items:center;gap:5px;}
 .td-badge{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;
