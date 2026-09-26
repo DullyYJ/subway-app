@@ -12821,6 +12821,17 @@ function _addBaseTiles(map){
     return l;
   }
   // OpenFreeMap Liberty(벡터, MapLibre GL) — 기본값
+  // ★ 2026-09-26 (no-inner-map 원인 조사): MapLibre GL JS 5.x는 WebGL2 필수(4.x는 WebGL1도 지원했음).
+  //   getMaplibreMap()이 null이 되는 순간 기기의 WebGL 지원 여부를 함께 찍어서,
+  //   토스트/배지 한 번으로 "WebGL2 미지원 때문인지" 바로 확인할 수 있게 한다.
+  function _webglCap(){
+    try{
+      var c = document.createElement('canvas');
+      var v2 = !!(c.getContext('webgl2') || c.getContext('experimental-webgl2'));
+      var v1 = !!(c.getContext('webgl') || c.getContext('experimental-webgl'));
+      return 'webgl2=' + (v2 ? 'O' : 'X') + ',webgl1=' + (v1 ? 'O' : 'X');
+    }catch(e){ return 'webgl검사실패:' + ((e && e.message) || e); }
+  }
   function _liberty(){
     if(typeof L.maplibreGL !== 'function') throw new Error('L.maplibreGL 없음');
     var gl = L.maplibreGL({
@@ -12843,7 +12854,7 @@ function _addBaseTiles(map){
     }
     var inner = null;
     try{ inner = gl.getMaplibreMap(); }catch(e){}
-    if(!inner){ fail('no-inner-map'); return; }
+    if(!inner){ fail('no-inner-map,' + _webglCap()); return; }
     inner.once('load', function(){
       glOk = true;
       window._mapDiagLast = { ok:true, reason:'liberty', at: Date.now() };
