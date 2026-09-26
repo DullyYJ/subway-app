@@ -12821,9 +12821,15 @@ function _addBaseTiles(map){
     return l;
   }
   // OpenFreeMap Liberty(벡터, MapLibre GL) — 기본값
-  // ★ 2026-09-26 (no-inner-map 원인 조사): MapLibre GL JS 5.x는 WebGL2 필수(4.x는 WebGL1도 지원했음).
-  //   getMaplibreMap()이 null이 되는 순간 기기의 WebGL 지원 여부를 함께 찍어서,
-  //   토스트/배지 한 번으로 "WebGL2 미지원 때문인지" 바로 확인할 수 있게 한다.
+  // ★ 2026-09-26 (no-inner-map 진단): webgl2=O 인데도 no-inner-map 이 뜨는 걸 YJ 실기기로 확인 →
+  //   WebGL2 미지원 가설은 틀림. 실제 원인은 타이밍: 이 지도들을 만드는 곳(_foodShowMap/_busShowMap
+  //   등)은 L.map(el,{...}) 을 center/zoom 없이 생성한 뒤 _addBaseTiles(map) 를 먼저 부르고,
+  //   setView/fitBounds 는 한참 뒤(마커 찍고 나서)에야 부른다 — 즉 이 시점엔 아직
+  //   map._loaded === false. Leaflet 은 addLayer() 시 map이 아직 로드 전이면 레이어의 onAdd 를
+  //   맵의 'load' 이벤트가 뜰 때까지 미루는데(whenReady 메커니즘), maplibre-gl-leaflet 은
+  //   onAdd 안에서만 실제 MapLibre Map 인스턴스(_glMap)를 만든다 — 그래서 .addTo(map) 직후
+  //   getMaplibreMap()을 바로 부르면 onAdd 자체가 아직 실행 전이라 무조건 null. 기기 성능/
+  //   WebGL과 무관하게 항상 재현되는 버그였음(그래서 100% 재현됐던 것).
   function _webglCap(){
     try{
       var c = document.createElement('canvas');
@@ -12852,23 +12858,30 @@ function _addBaseTiles(map){
       try{ map.removeLayer(gl); }catch(e){}
       _osm(reason);
     }
-    var inner = null;
-    try{ inner = gl.getMaplibreMap(); }catch(e){}
-    if(!inner){ fail('no-inner-map,' + _webglCap()); return; }
-    inner.once('load', function(){
-      glOk = true;
-      window._mapDiagLast = { ok:true, reason:'liberty', at: Date.now() };
-      _mapDiagBadge(map, '✓ 무료 지도(OpenFreeMap Liberty) 로딩 성공');
+    // ★ 2026-09-26: getMaplibreMap() 체크를 map.whenReady() 콜백 안으로 옮김 — map이 이미
+    //   로드된 상태면(다른 화면들처럼 center/zoom을 바로 주는 경우) 지금까지처럼 즉시 실행되고,
+    //   아직 로드 전이면(_foodShowMap/_busShowMap처럼 setView가 나중에 오는 경우) gl 레이어 자신의
+    //   onAdd(맵 addLayer 시 이미 예약됨, 이 whenReady보다 먼저 등록되어 항상 먼저 실행됨)가 끝난
+    //   뒤에 실행되어 _glMap이 실제로 만들어진 다음에 검사하게 된다.
+    map.whenReady(function(){
+      var inner = null;
+      try{ inner = gl.getMaplibreMap(); }catch(e){}
+      if(!inner){ fail('no-inner-map,' + _webglCap()); return; }
+      inner.once('load', function(){
+        glOk = true;
+        window._mapDiagLast = { ok:true, reason:'liberty', at: Date.now() };
+        _mapDiagBadge(map, '✓ 무료 지도(OpenFreeMap Liberty) 로딩 성공');
+      });
+      inner.on('error', function(ev){
+        if(glOk) return;                          // 스타일이 이미 뜬 뒤의 개별 오류는 무시
+        if(++errs < 3 || _glFallback) return;      // 몇 번은 흔하다 — 계속 실패할 때만 전환
+        var msg = '';
+        try{ msg = (ev && ev.error && (ev.error.message || String(ev.error))) || ''; }catch(e){}
+        fail('error x' + errs + (msg ? ': ' + msg.slice(0,80) : ''));
+      });
+      // 오프라인 등으로 load 신호가 영영 안 오는 경우를 대비한 안전장치
+      setTimeout(function(){ fail('timeout'); }, 6000);
     });
-    inner.on('error', function(ev){
-      if(glOk) return;                          // 스타일이 이미 뜬 뒤의 개별 오류는 무시
-      if(++errs < 3 || _glFallback) return;      // 몇 번은 흔하다 — 계속 실패할 때만 전환
-      var msg = '';
-      try{ msg = (ev && ev.error && (ev.error.message || String(ev.error))) || ''; }catch(e){}
-      fail('error x' + errs + (msg ? ': ' + msg.slice(0,80) : ''));
-    });
-    // 오프라인 등으로 load 신호가 영영 안 오는 경우를 대비한 안전장치
-    setTimeout(function(){ fail('timeout'); }, 6000);
   }
   try{
     if(_glFallback){ _osm(window._mapDiagLast ? ('이전 실패: ' + window._mapDiagLast.reason) : '이전에 실패함'); return; }
