@@ -6163,81 +6163,12 @@ function _callKakaoWithCache(start, dest, callback) {
   });
 }
 
-// ── 카카오 경로 결과 렌더링 ──────────────────────────────────
-function _renderKakaoTransitResult(data, startName, endName, cacheSource) {
-  if(!data) { toast('경로를 찾을 수 없습니다.'); return; }
-
-  var routes = data.routes || [];
-  if(!routes.length) { toast('해당 경로가 없습니다.'); return; }
-
-  var route     = routes[0];
-  var summary   = route.summary || {};
-  var sections  = route.sections || [];
-  var totalMin  = Math.round((summary.duration || 0) / 60);
-  var totalDist = Math.round((summary.distance || 0) / 1000 * 10) / 10;
-
-  // 경로 타입 분류
-  var hasSubway = sections.some(function(s){ return (s.transportation||{}).type === 1; });
-  var hasBus    = sections.some(function(s){ return (s.transportation||{}).type === 2; });
-  var typeLabel = hasSubway && hasBus ? '🚇+🚌 복합' : (hasBus ? '🚌 버스' : '🚇 지하철');
-  var apiSource  = (data && data._source) || 'kakao';
-  var apiLabel   = (apiSource === 'route-v2' || apiSource === 'v2_sub') ? '🧭길동무' : (apiSource === 'kakao' ? '🟡카카오' : (apiSource === 'bfs' ? '🚇지하철' : '🌐실시간'));
-  var cacheLabel = cacheSource === 'memory' ? '⚡메모리캐시' : (cacheSource === 'd1' ? '💾서버캐시' : apiLabel);
-
-  var html = '<div style="padding:14px 16px;border-bottom:1px solid var(--border);">' +
-    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">' +
-      '<span style="font-size:13px;font-weight:700;color:var(--gold);">' + typeLabel + '</span>' +
-      '<span style="font-size:11px;color:var(--sub);">' + cacheLabel + '</span>' +
-    '</div>' +
-    '<div style="font-size:16px;font-weight:800;color:var(--text);">' +
-      startName + ' → ' + endName + '</div>' +
-    '<div style="font-size:14px;color:var(--gold);font-weight:700;margin-top:4px;">' +
-      '총 ' + totalMin + '분' + (totalDist ? ' · ' + totalDist + 'km' : '') + '</div>' +
-  '</div>';
-
-  // 구간별 표시
-  html += '<div style="padding:8px 0;">';
-  sections.forEach(function(sec) {
-    var trans  = sec.transportation || {};
-    var type   = trans.type;
-    var isWalk = type === 3;
-    var isSub  = type === 1;
-    var isBus  = type === 2;
-    var icon   = isWalk ? '🚶' : (isSub ? '🚇' : (isBus ? '🚌' : '🔄'));
-    var color  = isWalk ? 'var(--sub)' : (isSub ? '#0a84ff' : '#00b341');
-    var secMin = Math.round((sec.duration || 0) / 60);
-    var name   = isWalk ? ('도보 ' + Math.round((sec.distance||0)) + 'm') :
-                 (trans.name || sec.name || '이동');
-    var stops  = sec.passStopList ? (sec.passStopList.stationList||[]).length : 0;
-
-    html += '<div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border);">' +
-      '<div style="font-size:18px;flex-shrink:0;">' + icon + '</div>' +
-      '<div style="flex:1;">' +
-        '<div style="font-size:13px;font-weight:700;color:' + color + ';">' + _ltEsc(name) + '</div>' +
-        (stops > 0 ? '<div style="font-size:11px;color:var(--sub);">' + stops + '정거장</div>' : '') +
-      '</div>' +
-      '<div style="font-size:13px;font-weight:700;color:var(--text);">' + secMin + '분</div>' +
-    '</div>';
-  });
-  html += '</div>';
-
-  // pathSection에 표시
-  var ps = document.getElementById('pathSection');
-  if(ps) {
-    ps.style.display = 'block';
-    // 기존 내용 찾아서 교체 또는 prepend
-    var existing = ps.querySelector('.kakao-route-result');
-    if(existing) existing.innerHTML = html;
-    else {
-      var div = document.createElement('div');
-      div.className = 'kakao-route-result';
-      div.style.cssText = 'background:var(--card);border:1px solid var(--border);border-radius:16px;margin:12px;overflow:hidden;';
-      div.innerHTML = html;
-      ps.insertBefore(div, ps.firstChild);
-    }
-    ps.scrollIntoView({ behavior: 'smooth' });
-  }
-}
+// ★ 2026-09-27 (YJ 최종점검 낮은우선순위 항목 처리: 죽은코드 추가청소): 여기 있던
+//   _renderKakaoTransitResult(data, startName, endName, cacheSource)는 파일 전체에서
+//   부르는 곳이 단 한 군데도 없는 죽은 함수였다(카카오 경로 API 결과를 화면에 그리는
+//   용도로 만들어졌던 것으로 보이나, 실제로 쓰는 호출부가 없어 절대 실행되지 않음).
+//   삭제함 — 실제 경로 결과 렌더링은 route-v2 엔진 결과를 그리는 다른 함수들이 이미
+//   담당하고 있어 영향 없음.
 
 // ══════════════════════════════════════════════
 // 노선색 헬퍼
@@ -26667,17 +26598,42 @@ function toggleDestSearch(){
   }
 }
 
+// ★ 2026-09-27 (YJ 요청: "같은 장소인데 호선이 달라서 중복으로 나오는 것들을 병합"):
+//   STNDB는 역 하나당 지나는 호선마다 별도 항목이라, 검색결과에 "강남역"이 호선 수만큼
+//   그대로 중복으로 떴다(2호선 줄·신분당선 줄 따로). 이름 기준으로 대표 1건만 남기고,
+//   그 역이 지나는 다른 호선들은 표시용 lineLabel(예: "2호선 · 신분당선")로 합쳐서 보여준다.
+//   ★ 대표 항목의 좌표/호선(s.line)은 그대로 두고 화면에 보여줄 글자만 바꾼다 —
+//   실제로 출발/도착 설정・경로탐색에 넘어가는 값은 기존과 완전히 동일(route-v2 엔진에
+//   영향 없음, 화면 표시만 바뀜).
+function _dedupeStnByName(matches){
+  var seen = new Set();
+  var reps = matches.filter(function(s){
+    if(seen.has(s.name)) return false;
+    seen.add(s.name); return true;
+  });
+  return reps.map(function(s){
+    var lines = [];
+    for(var i=0;i<matches.length;i++){
+      if(matches[i].name===s.name && lines.indexOf(matches[i].line)<0) lines.push(matches[i].line);
+    }
+    var s2 = Object.assign({}, s);
+    s2.lineLabel = lines.join(' · ');
+    return s2;
+  });
+}
+window._dedupeStnByName = _dedupeStnByName;
+
 function inlineDestSearch(q){
   const sug=document.getElementById('inlineDestSug');
   if(!q||q.length<1){sug.style.display='none';return;}
-  const seen=new Set();
-  const ms=STNDB.filter(s=>{const k=s.name+'|'+s.line;if(s.name.includes(q)&&!seen.has(k)){seen.add(k);return true;}return false;});
+  const rawMs=STNDB.filter(s=>s.name.includes(q));
+  const ms=_dedupeStnByName(rawMs);
   if(!ms.length){sug.style.display='none';return;}
   sug.style.display='block';
   sug.innerHTML='';
   ms.slice(0,8).forEach(s=>{
     const d=document.createElement('div');
-    d.innerHTML='<span style="width:9px;height:9px;border-radius:50%;background:'+s.color+';display:inline-block;flex-shrink:0;"></span><span style="flex:1">'+s.name+'</span><span style="font-size:11px;color:var(--sub);">'+s.line+'</span>';
+    d.innerHTML='<span style="width:9px;height:9px;border-radius:50%;background:'+s.color+';display:inline-block;flex-shrink:0;"></span><span style="flex:1">'+s.name+'</span><span style="font-size:11px;color:var(--sub);">'+s.lineLabel+'</span>';
     d.onmousedown=e=>{
       e.preventDefault();
       setDest(s);
@@ -35333,18 +35289,13 @@ function fmapSearch(inp, type) {
   _wireSugScroll(box);
 
   // ① 지하철역 검색
-  var seen = new Set();
-  var stnMatches = STNDB.filter(function(s){
-    var k = s.name+'|'+s.line;
-    if(s.name.indexOf(q)>=0 && !seen.has(k)){ seen.add(k); return true; }
-    return false;
-  }).slice(0, 8);
+  var stnMatches = _dedupeStnByName(STNDB.filter(function(s){ return s.name.indexOf(q)>=0; })).slice(0, 8);
 
   stnMatches.forEach(function(s){
     var d = document.createElement('div');
     d.className = 'sug-item';
     d.innerHTML = '<span style="font-size:11px;background:#0a84ff20;color:#0a84ff;padding:1px 6px;border-radius:8px;margin-right:6px;">🚇지하철</span>' +
-      '<b>' + s.name + '</b> <span style="font-size:11px;color:var(--sub);">' + s.line + '</span>';
+      '<b>' + s.name + '</b> <span style="font-size:11px;color:var(--sub);">' + s.lineLabel + '</span>';
     d.onmousedown = d.ontouchend = function(e){
       if(e.type==='touchend' && box._sugMoved){ return; }
       e.preventDefault();
@@ -35443,12 +35394,7 @@ function fmapSearchMap(inp, type) {
   var box = document.getElementById(boxId);
   if(!box) return;
   if(!q){ box.style.display='none'; return; }
-  var seen = new Set();
-  var matches = STNDB.filter(function(s){
-    var k = s.name+'|'+s.line;
-    if(s.name.indexOf(q)>=0 && !seen.has(k)){ seen.add(k); return true; }
-    return false;
-  });
+  var matches = _dedupeStnByName(STNDB.filter(function(s){ return s.name.indexOf(q)>=0; }));
   if(!matches.length){ box.style.display='none'; return; }
   box.style.display='block'; box.innerHTML='';
   matches.slice(0,10).forEach(function(s){
@@ -35456,7 +35402,7 @@ function fmapSearchMap(inp, type) {
     d.style.cssText='display:flex;align-items:center;gap:8px;padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border2);';
     d.innerHTML='<span style="width:8px;height:8px;border-radius:50%;background:'+s.color+';flex-shrink:0;"></span>'
       +'<span style="flex:1;font-size:13px;font-weight:600;">'+s.name+'</span>'
-      +'<span style="font-size:11px;color:var(--sub);">'+s.line+'</span>';
+      +'<span style="font-size:11px;color:var(--sub);">'+s.lineLabel+'</span>';
     d.onmousedown = function(e){
       e.preventDefault();
       inp.value = s.name;
@@ -35529,11 +35475,11 @@ function debounceSug(inp,boxId){clearTimeout(S.sugT);S.sugT=setTimeout(()=>showS
 function showSug(inp,boxId){
   const q=inp.value.trim(),box=document.getElementById(boxId);
   if(!q){box.style.display='none';return;}
-  const seen=new Set();
-  const ms=STNDB.filter(s=>{const k=s.name+'|'+s.line;if(s.name.includes(q)&&!seen.has(k)){seen.add(k);return true;}return false;});
+  const rawMs=STNDB.filter(s=>s.name.includes(q));
+  const ms=_dedupeStnByName(rawMs);
   if(!ms.length){box.style.display='none';return;}
   box.style.display='block';box.innerHTML='';
-  ms.slice(0,10).forEach(s=>{const d=document.createElement('div');d.innerHTML='<span class="ldot" style="background:'+s.color+'"></span><span style="flex:1">'+s.name+'</span><span style="font-size:11px;color:var(--sub);">'+s.line+'</span>';d.onmousedown=e=>{e.preventDefault();inp.value=s.name;box.style.display='none';};box.appendChild(d);});
+  ms.slice(0,10).forEach(s=>{const d=document.createElement('div');d.innerHTML='<span class="ldot" style="background:'+s.color+'"></span><span style="flex:1">'+s.name+'</span><span style="font-size:11px;color:var(--sub);">'+s.lineLabel+'</span>';d.onmousedown=e=>{e.preventDefault();inp.value=s.name;box.style.display='none';};box.appendChild(d);});
 }
 // ── 통합 오버레이/모달 활성 감지 (전역 리스너 가로채기 방어용) ──
 // 어떤 오버레이든 열려 있으면 true → 전역 클릭 가로채기 통째로 차단
