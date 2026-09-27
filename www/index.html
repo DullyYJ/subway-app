@@ -1836,79 +1836,11 @@ input[type=time]{color-scheme:dark;}
 .cong-gauge-bar{height:8px;background:var(--border2);border-radius:4px;overflow:hidden;}
 .cong-gauge-fill{height:100%;border-radius:4px;transition:width .6s ease,background .4s;}
 
-/* ── 게시글 상세 시트 ── */
-.post-sheet-backdrop{
-  position:fixed;inset:0;
-  background:rgba(0,0,0,.7);backdrop-filter:blur(6px);
-  opacity:0;pointer-events:none;transition:opacity .3s;z-index:800;
-}
-.post-sheet-backdrop.on{opacity:1;pointer-events:auto;}
-.post-sheet{
-  position:fixed;bottom:0;left:0;width:100%;
-  background:var(--card);
-  border-radius:22px 22px 0 0;
-  border-top:1px solid var(--border2);
-  transform:translateY(100%);
-  transition:transform .38s cubic-bezier(.25,1,.5,1);
-  z-index:801;
-  display:flex;flex-direction:column;
-  max-height:90vh;
-}
-.post-sheet.on{transform:translateY(0);}
-.ps-handle{width:38px;height:4px;background:var(--border2);border-radius:2px;align-self:center;margin:14px auto 0;flex-shrink:0;}
-.ps-header{padding:14px 16px 10px;border-bottom:1px solid var(--border);flex-shrink:0;}
-.ps-top{display:flex;align-items:center;gap:7px;margin-bottom:10px;}
-.ps-title{font-size:16px;font-weight:800;color:var(--text);line-height:1.4;margin-bottom:6px;}
-.ps-body{font-size:14px;color:var(--sub);line-height:1.7;}
-.ps-meta{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:11px;color:var(--sub);}
-/* 하트/댓글 액션바 */
-.ps-actions{
-  display:flex;align-items:center;gap:0;
-  padding:12px 16px;border-bottom:1px solid var(--border);
-  flex-shrink:0;
-}
-.ps-action-btn{
-  flex:1;display:flex;align-items:center;justify-content:center;gap:6px;
-  padding:10px;border:none;background:transparent;
-  font-size:14px;font-weight:700;color:var(--sub);cursor:pointer;
-  border-radius:10px;transition:all .15s;font-family:inherit;
-}
-.ps-action-btn:active{background:var(--border);}
-.ps-action-btn.liked{color:var(--hell);}
-.ps-action-btn.liked svg{fill:var(--hell);}
-.ps-divider{width:1px;height:28px;background:var(--border);}
-/* 댓글 목록 */
-.ps-comments{flex:1;overflow-y:auto;padding:0 16px 10px;}
-.ps-comments::-webkit-scrollbar{width:0;}
-.ps-comment-empty{text-align:center;padding:30px 0;font-size:13px;color:var(--sub);}
-.ps-comment{padding:12px 0;border-bottom:1px solid var(--border);}
-.ps-comment:last-child{border-bottom:none;}
-.ps-comment-top{display:flex;align-items:center;gap:6px;margin-bottom:5px;}
-.ps-comment-writer{font-size:12px;font-weight:700;color:var(--text);}
-.ps-comment-time{font-size:10px;color:var(--sub);margin-left:auto;}
-.ps-comment-body{font-size:13px;color:var(--sub);line-height:1.5;}
-.ps-comment-like{display:flex;align-items:center;gap:3px;font-size:11px;color:var(--sub);margin-top:5px;cursor:pointer;}
-.ps-comment-like:active{color:var(--hell);}
-/* 댓글 입력창 */
-.ps-input-row{
-  display:flex;align-items:center;gap:8px;
-  padding:10px 14px;border-top:1px solid var(--border);
-  background:var(--card);flex-shrink:0;
-  padding-bottom:max(10px, env(safe-area-inset-bottom));
-}
-.ps-input{
-  flex:1;padding:9px 13px;background:var(--card2,#2c2c2e);
-  border:1px solid var(--border);color:var(--text);
-  border-radius:20px;outline:none;font-size:13px;font-family:inherit;
-}
-.ps-input::placeholder{color:var(--sub);}
-.ps-send-btn{
-  width:36px;height:36px;border-radius:50%;
-  background:var(--blue);border:none;cursor:pointer;
-  display:flex;align-items:center;justify-content:center;flex-shrink:0;
-  transition:opacity .15s;
-}
-.ps-send-btn:active{opacity:.7;}
+/* ★ 2026-09-27 (YJ 최종점검: 죽은코드 청소): 여기 있던 "게시글 상세 시트"(.post-sheet 등,
+   ps-* 클래스 전부)는 실제로 화면에 여는 코드가 파일 어디에도 없어 사용자가 절대 도달할 수
+   없던 완전한 죽은 UI였다(실제 게시판은 목록에서 바로 펼치는 인라인 방식으로 이미 정상 작동
+   중 — _renderPost/dcAddComment/dcReact, dc-* 클래스). HTML(post-sheet-backdrop/post-sheet)과
+   여기 연결돼 있던 JS(closePostSheet/submitComment/sharePost/togglePostLike)까지 함께 삭제함. */
 /* 게시글 카드 클릭 커서 */
 .post{cursor:pointer;transition:background .15s;}
 .post:active{background:var(--border,#252528);}
@@ -6831,8 +6763,11 @@ window._routeBaseStale = _routeBaseStale;
 function _svcShiftMs(){
   try{
     if(typeof _baseTimeMs !== 'undefined' && _baseTimeMs != null) return 0;
+    // ★ 2026-09-27 (YJ 제보: 야간 탐색 중 버스 탭인데 지하철 운행종료로 안내): window._routeSelType 는
+    //   어디서도 값을 넣어준 적이 없는 변수였다(항상 undefined) — 그래서 항상 'fast'(최단시간) 탭
+    //   경로만 봤다. 실제로 '지금 보고 있는 탭'을 담는 변수는 _pendingRouteType(탭 클릭마다 갱신)이다.
     var sel = (typeof _allRouteResults !== 'undefined' && _allRouteResults)
-              ? (_allRouteResults[window._routeSelType || 'fast'] || null) : null;
+              ? (_allRouteResults[window._pendingRouteType || window._lockedRouteType || 'fast'] || null) : null;
     var sw = sel && sel.info && sel.info.svcWarn;
     if(!sw || !sw.length) return 0;
     for(var i=0;i<sw.length;i++){
@@ -7303,51 +7238,9 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
 }
 window._renderHtlTrack = _renderHtlTrack;
 
-// 탑승 혼잡 예측 렌더
-function _renderCongPrediction(sections) {
-  var congList = document.getElementById('transitCongList');
-  if(!congList) return;
-  var now = Date.now();
-  var html = '';
-  sections.forEach(function(sec) {
-    var trans = sec.transportation || {};
-    var type  = trans.type;
-    if(type === 3) return; // 도보 제외
-    var col    = _transitColor(type, trans.name);
-    var stops  = (sec.passStopList || {}).stationList || [];
-    if(!stops.length) return;
-    var fromStn = stops[0].stationName || '';
-    var toStn   = stops[stops.length-1].stationName || '';
-    var secMin  = Math.round((sec.duration || 0) / 60);
-    var depTime = _fmtHHMM(now);
-    var icon    = type === 1 ? '🚇' : '🚌';
-    var cong    = Math.floor(40 + Math.random() * 20); // 통계 기반 추후 연동
-    var congTxt = cong >= 80 ? '만원' : cong >= 60 ? '혼잡' : cong >= 40 ? '보통' : '여유';
-    var congCol = cong >= 80 ? '#ff3b30' : cong >= 60 ? '#ff9f0a' : cong >= 40 ? '#30d158' : '#34c759';
-
-    html += '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">'
-      + '<div style="width:36px;height:36px;border-radius:50%;background:'+col+'22;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;">'+icon+'</div>'
-      + '<div style="flex:1;min-width:0;">'
-        + '<div style="font-size:13px;font-weight:700;color:'+col+';">'+_ltEsc(trans.name||'이동')+'</div>'
-        + '<div style="font-size:11px;color:var(--sub);">'+_ltEsc(fromStn)+' → '+_ltEsc(toStn)+' · ⏱ '+depTime+' · '+secMin+'분</div>'
-      + '</div>'
-      + '<div style="text-align:right;flex-shrink:0;">'
-        + '<div style="font-size:14px;font-weight:800;color:'+congCol+';">'+cong+'%</div>'
-        + '<div style="font-size:10px;color:'+congCol+';">'+congTxt+'</div>'
-        + '<div style="width:44px;height:3px;background:var(--border2);border-radius:2px;margin-top:3px;">'
-          + '<div style="width:'+cong+'%;height:100%;background:'+congCol+';border-radius:2px;"></div>'
-        + '</div>'
-      + '</div>'
-      + '</div>';
-  });
-
-  if(html) {
-    var congSection = document.getElementById('transitCongSection');
-    if(congSection) congSection.style.display = 'block';
-    congList.innerHTML = html;
-  }
-}
-window._renderCongPrediction = _renderCongPrediction;
+// ★ 2026-09-27 (YJ 최종점검: 죽은코드 청소): 여기 있던 _renderCongPrediction()은
+//   Math.random()으로 혼잡도를 지어내던 미완성 placeholder였고, 실제로 부르는 곳도 없었다
+//   (아래 _renderTransitCongestion() 로 이미 교체됨 — 그 함수의 주석 참고). 삭제함.
 
 // ══════════════════════════════════════════════
 // 복합경로 결과 렌더링
@@ -7434,7 +7327,14 @@ function _renderTransitResultCard(data, start, dest, cacheSource) {
   try{ if(typeof _renderLdGradeChips==='function') _renderLdGradeChips(route.ld || null); }catch(e){}
 
   // 탑승 시간대 혼잡 예측
-  _renderCongPrediction(sections);
+  // ★ 2026-09-27 (YJ 최종점검: 6-에이전트 코드리뷰): 여기서 부르던 _renderCongPrediction()은
+  //   구간마다 Math.random()으로 40~60% 사이 숫자를 지어내 "만원/혼잡/보통/여유"로 실제 데이터처럼
+  //   보여주고 있었다(주석에도 "통계 기반 추후 연동"이라 적혀 있던 미완성 placeholder). 게다가 그 함수는
+  //   보여줄 카드(#transitCongCard)가 아니라 존재하지도 않는 '#transitCongSection'을 열려고 해서
+  //   실제로는 화면에 보이지도 않고 있었다. 이미 시간대·평일/주말·피크시간을 반영하는 진짜 통계기반
+  //   추정 함수 _renderTransitCongestion()(하단 getCongPct/CONG_PROFILE 사용, 메인 혼잡도 카드에서도
+  //   쓰는 것과 동일한 방식)가 있었는데 어디서도 호출되지 않고 있던 것을 여기로 연결한다.
+  _renderTransitCongestion(sections);
 
   // ── 혼잡도 카드: 경로 첫 교통수단에 맞춰 표시 ──
   // 첫 번째 교통수단(도보 제외) 구간이 버스면 버스 혼잡도, 지하철이면 지하철 혼잡도
@@ -10133,9 +10033,19 @@ function _svcCheck(sections){
     //   예전엔 '탐색하는 지금' 운행 중인지만 봐서, 23:51 에 탐색한 00:55 지하철 승차를
     //   멀쩡한 것으로 그렸다(카카오는 첫차 05:04 로 안내). 엔진이 이제 구간별로 알려준다.
     try{
-      var _sel = null;
-      try{ _sel = (_allRouteResults && _allRouteResults[window._routeSelType || 'fast']) || null; }catch(e0){}
-      if(!_sel) _sel = (sections && sections._path) || null;
+      // ★ 2026-09-27 (YJ 제보: 심야에 버스 탭을 보는데 "지하철이(가) 운행이 끝났어요"가 뜸)
+      //   원인: 아래 옛 코드가 항상 window._routeSelType 를 먼저 봤는데, 이 변수는 파일 전체에서
+      //   단 한 번도 값이 채워지지 않는다(항상 undefined) → 매번 '최단시간(fast)' 탭 경로의
+      //   svcWarn 으로 판정했다. 화면엔 버스 탭(N90, 운행 중)이 떠 있는데 안내문은 fast 탭에
+      //   섞여 있던 인천1호선의 막차 정보를 그대로 읽은 것 — 엔진 판단 자체는 맞았는데(인천1호선은
+      //   실제로 끝났다) 앱이 그 판단을 엉뚱한 탭에 붙여 보여준 것이다.
+      //   방침: '지금 화면에 그려진 이 경로(sections)'가 어느 path에서 나왔는지(_path, 아래
+      //   _convertSinglePathToRoute 에서 매달아 둠)를 1순위로 쓴다. 탭/타이밍에 상관없이
+      //   항상 지금 그려진 경로 자신의 svcWarn만 보게 되어, 다른 탭의 경고가 섞이지 않는다.
+      var _sel = (sections && sections._path) || null;
+      if(!_sel){
+        try{ _sel = (_allRouteResults && _allRouteResults[window._pendingRouteType || window._lockedRouteType || 'fast']) || null; }catch(e0){}
+      }
       var _sw = _sel && _sel.info && _sel.info.svcWarn;
       if(_sw && _sw.length){
         var _fmt = function(v){
@@ -10658,6 +10568,9 @@ function _convertSinglePathToRoute(path) {
   //   전부 '무효'로 걸러져 KTX/ITX 결과 자체가 사라졌다(기존 1/2 조건은 그대로 둠).
   var hasTransit = sections.some(function(s){ return s.transportation.type===1 || s.transportation.type===2 || s.transportation.type===4; });
   if(!hasTransit) return { summary:{}, sections:[] };
+  // ★ 2026-09-27: 원본 path를 sections 배열에 매달아 둔다 — _svcCheck 가 '지금 그려진 이 경로'의
+  //   svcWarn을 탭/타이밍에 상관없이 정확히 찾아내는 데 쓴다(아래 _svcCheck 주석 참조).
+  sections._path = path;
   return {
     summary: {
       duration: (info.totalTime||0)*60,
@@ -14395,22 +14308,10 @@ function _updateTransitGps() {
     // (역 전진 확정은 GPS 확인(_gpsMaxIdx)으로만 — 시간만으로는 전진하지 않음: 마커 왕복 방지)
   })();
 
-  // SVG GPS 마커 위치 업데이트 (SVG 방식 하위 호환)
-  if(window._htlGpsMarker && window._htlSvgCenters) {
-    var svgCenters = window._htlSvgCenters;
-    var nonWalkIdx2 = 0, svgTarget = null;
-    for(var sc2=0; sc2<svgCenters.length; sc2++) {
-      if(!svgCenters[sc2].isWalk) {
-        if(nonWalkIdx2 === bestIdx) { svgTarget = svgCenters[sc2]; break; }
-        nonWalkIdx2++;
-      }
-    }
-    if(svgTarget) {
-      window._htlGpsMarker.setAttribute('display','block');
-      window._htlGpsMarker.setAttribute('transform',
-        'translate('+svgTarget.x+','+(svgTarget.y||window._htlSvgY||60)+')');
-    }
-  }
+  // ★ 2026-09-27 (YJ 최종점검: 죽은코드 청소): 여기 있던 "SVG 방식 하위 호환" 블록은
+  //   window._htlGpsMarker/_htlSvgCenters/_htlSvgY 를 조건으로 썼는데, 이 셋 다 파일
+  //   전체에서 대입되는 곳이 단 한 군데도 없어(grep 확인) 조건이 항상 false라 절대 실행되지
+  //   않던 죽은 코드였다. 실제 GPS 마커는 위의 _placeGpsMarkerSmooth()가 전담. 삭제함.
 
   // 진행 위치 = 시간 기반과 GPS 기반 중 더 앞선 것 (지하철 등 GPS 미약해도 자연스럽게 흐름)
   (function(){
@@ -19390,61 +19291,9 @@ window.addEventListener('unhandledrejection', function(e) {
 <!-- 포인트 팝업 -->
 <div class="point-popup" id="pointPopup">+10P 획득!</div>
 
-<!-- 게시글 상세 시트 -->
-<div class="post-sheet-backdrop" id="postSheetBdrop" onclick="closePostSheet()"></div>
-<div class="post-sheet" id="postSheet">
-  <div class="ps-handle"></div>
-
-  <!-- 헤더: 배지 + 제목 + 본문 -->
-  <div class="ps-header">
-    <div class="ps-top">
-      <span class="badge" id="psRankBadge" style="background:#0a84ff;">NEW</span>
-      <span class="ltag" id="psLineBadge" style="background:#555;">-</span>
-      <span id="psCatBadge" style="font-size:10px;color:var(--sub);margin-left:auto;"></span>
-    </div>
-    <div class="ps-title" id="psTitle">-</div>
-    <div class="ps-body" id="psBody">-</div>
-    <div class="ps-meta">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
-      <span id="psWriter">-</span>
-      <span>·</span>
-      <span id="psTime">-</span>
-    </div>
-  </div>
-
-  <!-- 액션바: 하트 + 댓글 수 -->
-  <div class="ps-actions">
-    <button class="ps-action-btn" id="psLikeBtn" onclick="togglePostLike()">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-      <span id="psLikeCount">0</span>
-    </button>
-    <div class="ps-divider"></div>
-    <button class="ps-action-btn" onclick="document.getElementById('psCommentInput').focus()">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/></svg>
-      <span id="psCmtCount">0</span>
-    </button>
-    <div class="ps-divider"></div>
-    <button class="ps-action-btn" onclick="sharePost()">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z"/></svg>
-      공유
-    </button>
-  </div>
-
-  <!-- 댓글 목록 -->
-  <div class="ps-comments" id="psComments">
-    <div class="ps-comment-empty" id="psCommentEmpty">
-      첫 댓글을 남겨보세요 💬
-    </div>
-  </div>
-
-  <!-- 댓글 입력창 -->
-  <div class="ps-input-row">
-    <input class="ps-input" id="psCommentInput" type="text" placeholder="댓글을 입력하세요..." maxlength="100">
-    <button class="ps-send-btn" onclick="submitComment()">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
-    </button>
-  </div>
-</div>
+<!-- ★ 2026-09-27 (YJ 최종점검: 죽은코드 청소) 여기 있던 "게시글 상세 시트"는 여는 코드가
+     없어 실제로 도달할 수 없던 죽은 UI라 삭제함 — CSS 쪽 주석 참고, 실제 게시판은
+     커뮤니티 탭 인라인 펼침(_renderPost 등)으로 이미 정상 동작 중. -->
 
 <!-- 탑승 확인 팝업 모달 -->
 <div class="gm" id="boardConfirmModal">
@@ -26858,7 +26707,7 @@ function switchTab(tab,el){
     // 화면을 덮는 시트·팝업만 닫는다.
     //   승차 확인(boardAskModal 등)은 진행 중인 여정과 관련되므로 건드리지 않는다.
     ['transitDetailModal','mapRouteSheet','mapStnPopup',
-     'favSheet','postSheet','routeModal','routeModePopup','gmPop'].forEach(function(id){
+     'favSheet','routeModal','routeModePopup','gmPop'].forEach(function(id){
       var m = document.getElementById(id);
       if(m && m.style && m.style.display !== 'none') m.style.display = 'none';
     });
@@ -30291,6 +30140,12 @@ function dcReact(id, type, btn) {
   var span = btn.querySelector('span');
   if(span) span.textContent = post[type];
   btn.classList.toggle('dc-react-on');
+  // ★ 2026-09-27 (YJ 최종점검: 6-에이전트 코드리뷰): 여기서 로컬 카운트만 올리고 끝나서,
+  //   실제 서버 글(post.isServer===true)에 대한 반응이 서버로는 전혀 저장되지 않고 있었다
+  //   (새로고침하거나 다른 기기/사용자가 같은 글을 보면 반응 수가 사라짐). 이미 있던
+  //   _serverReact()가 어디서도 호출되지 않고 있던 것을 여기서 연결한다. 댓글 저장
+  //   (_serverPostComment)과 동일하게 post.isServer일 때만 서버로 보낸다.
+  if(post.isServer && typeof _serverReact === 'function') _serverReact(post.id, type);
 }
 window.dcReact = dcReact;
 
@@ -35674,7 +35529,7 @@ function showSug(inp,boxId){
 // 어떤 오버레이든 열려 있으면 true → 전역 클릭 가로채기 통째로 차단
 function _isAnyOverlayOpen() {
   try {
-    var ids = ['bdrop','wbdrop','postSheetBdrop'];
+    var ids = ['bdrop','wbdrop'];
     for (var i=0;i<ids.length;i++){
       var el = document.getElementById(ids[i]);
       if (el && el.classList.contains('on')) return true;
@@ -37099,8 +36954,10 @@ function onMapStnClick(stnName){
 
   // 팝업 표시 (fixed top 위치 — 슬라이드인)
   popup.style.display = 'block';
-
-  if(typeof _updateMspRouteInfo === 'function') _updateMspRouteInfo();
+  // ★ 2026-09-27 (YJ 최종점검: 죽은코드 청소): 여기서 부르던 _updateMspRouteInfo()는
+  //   파일 전체에 정의가 없는 함수였다(typeof 가드 덕에 에러는 안 났지만 항상 조용히
+  //   아무 것도 안 하고 있었음). 호출부만 삭제함 — 이 화면(역 클릭 팝업)의 나머지
+  //   기능(노선 뱃지·팝업 표시 등)은 그대로 유지.
 }
 
 
@@ -44236,13 +44093,8 @@ function report(type) {
 window.report = report;
 
 // ── 커뮤니티 관련 ─────────────────────────────────────────────
-function closePostSheet() {
-  var s = document.getElementById('postSheet');
-  if(s) { s.classList.remove('on'); }
-  var bd = document.getElementById('bdrop');
-  if(bd) bd.classList.remove('on');
-}
-window.closePostSheet = closePostSheet;
+// ★ 2026-09-27 (YJ 최종점검: 죽은코드 청소) 여기 있던 closePostSheet()는 삭제된
+//   "게시글 상세 시트"(#postSheet) 전용 함수였다 — 함께 삭제함.
 
 function submitPost() {
   // ★ 커뮤니티 아이디 필요
@@ -44321,39 +44173,12 @@ function submitPost() {
 }
 window.submitPost = submitPost;
 
-// 하단 시트(postSheet)의 댓글 입력 — 예전 코드가 존재하지 않는 'commentInp'를
-// 찾고 있어서 토스트만 뜨고 실제로는 아무것도 저장되지 않았다. 실제 입력칸에 맞추고,
-// 열려 있는 게시글이 특정되면 목록과 동일한 경로(dcAddComment)로 넘긴다.
-function submitComment() {
-  var inp = document.getElementById('psCommentInput');
-  if(!inp || !inp.value.trim()) return;
-  var pid = (typeof window._psOpenPostId !== 'undefined') ? window._psOpenPostId : null;
-  if(pid != null && typeof dcAddComment === 'function'){
-    var tgt = document.getElementById('dcCmtInp-' + pid);
-    if(tgt){ tgt.value = inp.value; inp.value = ''; dcAddComment(pid); return; }
-  }
-  if(typeof toast === 'function') toast('게시글을 열고 댓글을 남겨주세요.');
-}
-window.submitComment = submitComment;
-
-function sharePost() {
-  if(navigator.share) {
-    navigator.share({ title:'길동무', url: location.href })
-      .catch(function(){});
-  } else {
-    try {
-      navigator.clipboard.writeText(location.href);
-      toast('🔗 링크가 복사되었어요!');
-    } catch(e){ toast('🔗 '+location.href); }
-  }
-}
-window.sharePost = sharePost;
-
-function togglePostLike() {
-  addPoints(2, '좋아요');
-  toast('❤️ +2P');
-}
-window.togglePostLike = togglePostLike;
+// ★ 2026-09-27 (YJ 최종점검: 죽은코드 청소): 여기 있던 submitComment()/sharePost()/
+//   togglePostLike()는 전부 삭제된 "게시글 상세 시트"(#postSheet, psCommentInput 등) 전용
+//   함수였다 — 그 시트를 여는 코드 자체가 없어 사용자가 도달할 수 없었다(submitComment는
+//   그래서 window._psOpenPostId가 항상 비어 있어 매번 "게시글을 열고 댓글을 남겨주세요"
+//   토스트로만 끝났음). 실제 게시판(_renderPost 인라인 펼침, dcAddComment/dcReact)은
+//   이 함수들과 무관하게 이미 정상 동작 중이라 함께 삭제함.
 
 console.log('[앱] 전역 바인딩 완료');
 
