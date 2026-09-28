@@ -8867,9 +8867,22 @@ window._hideRouteLoading = _hideRouteLoading;
         //   렌더 직후에 한 번 더 걸어 둔다 — 카드를 다시 그리는 과정에서
         //   버튼 스타일이 초기값으로 돌아가는 경우가 있다.
         var _ht = window._pendingRouteType || 'fast';
+        // ★ 2026-09-29 (탭 표시-내용 불일치 조사 중 발견): 이전 검색에서 눌렀던 탭
+        //   (예: '버스')이 window._pendingRouteType 에 남아 있는 채로 새 검색을 열면,
+        //   이 새 검색엔 그 탭 후보가 없어도(예: 80km+ 장거리라 로컬 fast/less/sub/bus가
+        //   전부 없음) 아래에서 내용은 항상 _allRouteResults.fast 로 그렸다 — 탭은 '버스'인데
+        //   내용은 fast(또는 그마저 없으면 _convertEngineRoutes 폴백)라 서로 어긋났다.
+        //   로컬 후보가 전부 없고 장거리만 있으면 장거리 탭으로 맞춘다.
+        if(_allRouteResults && !_allRouteResults.fast && !_allRouteResults.less
+           && !_allRouteResults.sub && !_allRouteResults.bus && _allRouteResults.longdist){
+          _ht = 'longdist';
+        }
+        window._pendingRouteType = _ht;
         try{ _highlightRouteTab(_ht); }catch(e){}
         setTimeout(function(){ try{ _highlightRouteTab(_ht); }catch(e){} }, 0);
-        var fr = _allRouteResults ? _allRouteResults.fast : null;
+        // ★ 2026-09-29: 위에서 고른 _ht 탭 그대로 내용을 그린다(예전엔 무조건 .fast만 읽어서
+        //   탭 하이라이트와 내용이 달라질 수 있었다 — 바로 위 주석 참고).
+        var fr = _allRouteResults ? (_allRouteResults[_ht] || _allRouteResults.fast) : null;
         var rd = fr ? { routes: [_convertSinglePathToRoute(fr)] } : _convertEngineRoutes(_cd);
         _renderTransitResultCard(rd, start, dest, 'route-v2');
         // ★ 카드가 생기면 높이가 바뀌므로 다시 한 번 맞춘다
@@ -9368,6 +9381,15 @@ function _parseRouteOptions(engineData) {
     var tabs = (inf._tabs && inf._tabs.length) ? inf._tabs : (inf.tab ? [inf.tab] : []);
     return tabs.indexOf('longdist') >= 0 || inf.longDist === true;
   })[0] || null;
+  // ★ 2026-09-29 (YJ 지시: 카카오·네이버보다 잘해야 되는 것이 목표라 "놨 분" 이상 UI 조사 중 발견):
+  //   이 아래의 fast/less/sub/bus 계산은 장거리(pathType 4) 경로를 섞으면 안 된다 — 80km대
+  //   이상 검색은 로컬(지하철/버스) 후보가 하나도 없고 장거리 후보 하나만 있는 게 정상이라,
+  //   paths 배열에 그 장거리 경로 하나만 남고, 아래 fast/less/sub/bus 폴백(|| paths[0])이 그걸
+  //   그대로 집어서 '버스' 탭(또는 최단시간·최소환승)을 눌렀는데 내용은 심야고속버스
+  //   장거리 경로가 나오는 버그가 있었다. 장거리는 바로 아래 주석처럼 fast/less/sub/bus와
+  //   서로 대체 불가능하니, 이 아래 계산에서는 장거리 경로를 벤 목록만 쓔다(원본 paths는
+  //   all/longdist 필드에서 그대로 쓴다 — 기존 기능 보존).
+  var _localPaths = paths.filter(function(p){ return p !== _longDistPath; });
 
   // ★ 2026-09-15 · YJ 절대규칙 3번: 순위도 엔진이 준 값 그대로 쓴다.
   //   앱이 '즐겨찾기 정류장이면 5~10분 깎기'를 더하고 있었다.
@@ -9376,7 +9398,7 @@ function _parseRouteOptions(engineData) {
   var _cost = function(p){ return ((p.info||{}).totalTime || 999); };
 
   // 최단시간: 엔진 소요시간이 가장 짧은 것
-  var sorted = paths.slice().sort(function(a,b){
+  var sorted = _localPaths.slice().sort(function(a,b){
     var d=_cost(a)-_cost(b);
     if(d) return d;
     return ((a.info||{}).totalTime||999) - ((b.info||{}).totalTime||999);
@@ -9386,7 +9408,7 @@ function _parseRouteOptions(engineData) {
   // ★ 2026-09-08: `transferCount||99` 는 환승 0회를 99회로 바꿔 버렸다.
   //   한 번에 가는 직행버스(1101, 환승 0)가 최소환승 탭에서 항상 꼴째로 밀렸던 원인.
   var _xfOf = function(p){ var v=(p.info||{}).transferCount; return (v==null) ? 99 : v; };
-  var lessXfer = paths.slice().sort(function(a,b){
+  var lessXfer = _localPaths.slice().sort(function(a,b){
     var d=_xfOf(a) - _xfOf(b);
     if(d) return d;
     return _cost(a)-_cost(b);
@@ -9447,7 +9469,7 @@ function _parseRouteOptions(engineData) {
     return 999999;
   }
   // 지하철 포함 경로만 필터
-  var subwayPaths = paths.filter(_hasSubway);
+  var subwayPaths = _localPaths.filter(_hasSubway);
   var subFirst;
   // ★ 워커가 pathType:1로 '최근접 역 승차' 지하철 경로를 이미 계산해 보냄 → 그걸 최우선 사용
   if(byType[1].length > 0){
@@ -9466,11 +9488,11 @@ function _parseRouteOptions(engineData) {
 
   // ── fast(최단시간) 결정 ──
   // 경로가 1개이거나 모든 경로의 totalTime이 같으면 → 최소환승 경로를 최단시간으로 사용
-  var _fastPath = sorted[0] || paths[0];
-  var _times = paths.map(function(p){ return _cost(p); });
+  var _fastPath = sorted[0] || _localPaths[0];
+  var _times = _localPaths.map(function(p){ return _cost(p); });
   var _allSameTime = _times.every(function(t){ return t === _times[0]; });
-  if(paths.length === 1 || _allSameTime){
-    _fastPath = lessXfer[0] || paths[0];
+  if(_localPaths.length === 1 || _allSameTime){
+    _fastPath = lessXfer[0] || _localPaths[0];
   }
 
   // ★ 2026-09-15 · YJ 절대규칙: 탭 배정도 엔진이 정한다.
@@ -9500,9 +9522,9 @@ function _parseRouteOptions(engineData) {
 
   return {
     fast: _fastPath,
-    less: lessXfer[0] || paths[0],
+    less: lessXfer[0] || _localPaths[0],
     sub:  subFirst,   // 지하철 포함 경로 없으면 null
-    bus:  busFirst   || paths[0],
+    bus:  busFirst   || _localPaths[0],
     longdist: _longDistPath || null,   // ★ 2026-09-25
     all:  paths,
     count: paths.length,
@@ -9797,9 +9819,15 @@ function _doSelectRouteOption(type) {
       }
     }
     // 3) 그래도 없으면 all 배열 전체 순회
+    // ★ 2026-09-29: 장거리 경로(info.longDist)는 여기서 제외한다 — 장거리는 위에서
+    //   이미 type==='longdist' 분기로 따로 처리되고(대체 불가 원칙, 바로 위 주석 참고),
+    //   이 지점에 온 type은 fast/less/bus 뿐이다. 장거리 경로가 이 폴백을 타면
+    //   탭 표시(예: '버스')와 실제 내용(심야고속버스 등 장거리)이 어긋난다.
     if(!routeObj && _allRouteResults.all){
       for(var _j=0;_j<_allRouteResults.all.length && !routeObj;_j++){
-        routeObj = _tryConvert(_allRouteResults.all[_j]);
+        var _cand = _allRouteResults.all[_j];
+        if(_cand && _cand.info && _cand.info.longDist === true) continue;
+        routeObj = _tryConvert(_cand);
       }
     }
   }
