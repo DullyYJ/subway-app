@@ -9874,7 +9874,13 @@ function _ldReselect(mode, grade){
 }
 window._ldReselect = _ldReselect;
 
-// 등급·수단 선택 칩 렌더 — route.ld(있을 때만)를 받아 세부경로 카드 상단에 그린다.
+// 등급·수단 선택 UI — route.ld(있을 때만)를 받아 세부경로 카드 상단에 그린다.
+// ★ 2026-09-29 (YJ: "장거리 열차/버스 선택 부분이 너무 이질적이야, 드롭박스로 선택하게
+//   해줘도 좋을 것 같아"): 기존엔 버튼(칩)을 나열했는데, 앱의 다른 선택 UI(예: 글쓰기
+//   카테고리 wCat 드롭박스, .sel-wrap+.inp 조합)와 톤이 안 맞아 보여서 같은 네이티브
+//   <select> 스타일로 통일한다. 후보 목록(cands/opts)이 무엇인지, 선택 시 엔진에
+//   ldMode/ldGrade로 재요청하는 동작(_ldReselect)은 전혀 안 바꾼다 — "버튼 여러 개"를
+//   "드롭박스 하나"로 보여주는 방식만 바뀐다(기존 기능 보존).
 var _LD_MODE_LABEL = { train: '🚆 열차', expbus: '🚌 고속버스', subbus: '🚐 시외버스' };
 function _ldJsStr(s){ return "'" + String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'") + "'"; }
 function _renderLdGradeChips(ld){
@@ -9888,40 +9894,38 @@ function _renderLdGradeChips(ld){
   }
   var cands = Array.isArray(ld.candidates) ? ld.candidates : [];
   var opts  = Array.isArray(ld.options) ? ld.options : [];
-  var chipCss = 'padding:6px 10px;border-radius:10px;font-size:11px;font-weight:700;cursor:pointer;'
-    + 'font-family:inherit;white-space:nowrap;';
 
   var modeHtml = '';
   if(cands.length > 1){
+    var modeOptsHtml = '';
     cands.forEach(function(c){
       if(!c || !c.mode) return;
       var on = c.mode === ld.mode;
       var label = _LD_MODE_LABEL[c.mode] || c.mode;
-      modeHtml += '<button onclick="_ldReselect(' + _ldJsStr(c.mode) + ', null)" style="' + chipCss
-        + 'border:1.5px solid ' + (on ? 'var(--gold)' : 'var(--border)') + ';'
-        + 'background:' + (on ? 'var(--gold)' : 'var(--card2)') + ';'
-        + 'color:' + (on ? '#fff' : 'var(--sub)') + ';">'
-        + _ltEsc(label) + (c.depLabel ? (' ' + _ltEsc(c.depLabel)) : '') + '</button>';
+      modeOptsHtml += '<option value="' + _ltEsc(c.mode) + '"' + (on ? ' selected' : '') + '>'
+        + _ltEsc(label) + (c.depLabel ? (' ' + _ltEsc(c.depLabel)) : '') + '</option>';
     });
+    modeHtml = '<div class="sel-wrap"><select class="inp" onchange="_ldReselect(this.value, null)">'
+      + modeOptsHtml + '</select></div>';
   }
   modeRow.innerHTML = modeHtml;
-  modeRow.style.display = modeHtml ? 'flex' : 'none';
+  modeRow.style.display = modeHtml ? 'block' : 'none';
 
   var gradeHtml = '';
   if(opts.length > 1){
+    var gradeOptsHtml = '';
     opts.forEach(function(o){
       if(!o || !o.grade) return;
       var on = o.grade === ld.grade;
       var priceTxt = (o.fare != null) ? (' · ' + o.fare.toLocaleString() + '원') : '';
-      gradeHtml += '<button onclick="_ldReselect(' + _ldJsStr(ld.mode) + ', ' + _ldJsStr(o.grade) + ')" style="' + chipCss
-        + 'border:1.5px solid ' + (on ? 'var(--gold)' : 'var(--border)') + ';'
-        + 'background:' + (on ? 'var(--gold)' : 'var(--card2)') + ';'
-        + 'color:' + (on ? '#fff' : 'var(--sub)') + ';">'
-        + _ltEsc(o.grade) + (o.depLabel ? (' ' + _ltEsc(o.depLabel)) : '') + priceTxt + '</button>';
+      gradeOptsHtml += '<option value="' + _ltEsc(o.grade) + '"' + (on ? ' selected' : '') + '>'
+        + _ltEsc(o.grade) + (o.depLabel ? (' ' + _ltEsc(o.depLabel)) : '') + priceTxt + '</option>';
     });
+    gradeHtml = '<div class="sel-wrap"><select class="inp" onchange="_ldReselect(' + _ldJsStr(ld.mode) + ', this.value)">'
+      + gradeOptsHtml + '</select></div>';
   }
   gradeRow.innerHTML = gradeHtml;
-  gradeRow.style.display = gradeHtml ? 'flex' : 'none';
+  gradeRow.style.display = gradeHtml ? 'block' : 'none';
 
   wrap.style.display = (modeHtml || gradeHtml) ? 'block' : 'none';
 }
@@ -18272,10 +18276,13 @@ window.addEventListener('unhandledrejection', function(e) {
         </button>
       </div>
 
-      <!-- ── 장거리(열차/고속·시외버스) 등급·수단 선택 칩 ──
+      <!-- ── 장거리(열차/고속·시외버스) 등급·수단 선택 드롭박스 ──
            ★ 2026-09-25: route.ld 가 있을 때만 _renderLdGradeChips 가 채워서 보여준다.
-           1줄=수단(열차/고속버스/시외버스, 후보 2개 이상일 때만), 2줄=등급(KTX/무궁화 등,
-           2개 이상일 때만) — 누르면 _ldReselect 가 ldMode/ldGrade 로 엔진에 재요청한다. -->
+           ★ 2026-09-29: 버튼(칩) 나열 → 앱의 다른 선택 UI(.sel-wrap+.inp, 예: wCat)와
+           통일된 네이티브 드롭박스로 변경(YJ 요청 — 이질적으로 보인다는 피드백).
+           1줄=수단 드롭박스(열차/고속버스/시외버스, 후보 2개 이상일 때만), 2줄=등급
+           드롭박스(KTX/무궁화 등, 2개 이상일 때만) — 고르면 _ldReselect 가 ldMode/ldGrade
+           로 엔진에 재요청한다(판단은 여전히 엔진 몫, 여긴 고른 값만 그대로 전달). -->
       <div id="ldGradeChips" style="display:none;margin-bottom:10px;">
         <div id="ldModeChips" style="display:none;gap:6px;flex-wrap:wrap;margin-bottom:6px;"></div>
         <div id="ldGradeChipsRow" style="display:none;gap:6px;flex-wrap:wrap;"></div>
