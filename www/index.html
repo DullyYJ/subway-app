@@ -1063,7 +1063,6 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);}
 [data-theme="pastel"] .rrow{background:var(--card2);border-color:var(--border2);}
 [data-theme="pastel"] .htl-wrap{background:var(--card);border-color:var(--border);}
 [data-theme="pastel"] #transitResultCard{background:var(--card) !important;border-color:var(--border) !important;}
-[data-theme="pastel"] #transitCongCard{background:var(--card) !important;border-color:var(--border) !important;}
 [data-theme="pastel"] .next-train-panel{background:var(--card) !important;}
 [data-theme="pastel"] .livetalk-board{background:var(--card);border-color:var(--border);}
 [data-theme="pastel"] .post-card{background:var(--card);border-color:var(--border);}
@@ -1243,7 +1242,6 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);}
 [data-theme="pastel"] #gpsModal .gm-card{background:var(--card) !important;}
 [data-theme="pastel"] #gmBody button{background:var(--card2) !important;color:var(--text) !important;}
 [data-theme="pastel"] .gm{background:rgba(0,0,0,.5) !important;}
-[data-theme="pastel"] #transitCongList{background:var(--card) !important;border-color:var(--border) !important;}
 [data-theme="pastel"] #transitResultCard button{background:var(--card2) !important;border-color:var(--border) !important;color:var(--text) !important;}
 /* ★ 2026-09-02: 위 규칙(!important)이 선택된 경로 탭까지 덮어써서, 화이트 테마에서는
    내가 고른 탭(최소환승 등)이 다른 탭과 똑같이 보였다. 선택 탭만 파란색으로 되돌린다. */
@@ -7257,15 +7255,9 @@ function _renderTransitResultCard(data, start, dest, cacheSource) {
   // ★ 2026-09-25 (KTX/ITX 등급선택): 장거리 경로(route.ld)일 때만 등급·수단 칩을 그린다.
   try{ if(typeof _renderLdGradeChips==='function') _renderLdGradeChips(route.ld || null); }catch(e){}
 
-  // 탑승 시간대 혼잡 예측
-  // ★ 2026-09-27 (YJ 최종점검: 6-에이전트 코드리뷰): 여기서 부르던 _renderCongPrediction()은
-  //   구간마다 Math.random()으로 40~60% 사이 숫자를 지어내 "만원/혼잡/보통/여유"로 실제 데이터처럼
-  //   보여주고 있었다(주석에도 "통계 기반 추후 연동"이라 적혀 있던 미완성 placeholder). 게다가 그 함수는
-  //   보여줄 카드(#transitCongCard)가 아니라 존재하지도 않는 '#transitCongSection'을 열려고 해서
-  //   실제로는 화면에 보이지도 않고 있었다. 이미 시간대·평일/주말·피크시간을 반영하는 진짜 통계기반
-  //   추정 함수 _renderTransitCongestion()(하단 getCongPct/CONG_PROFILE 사용, 메인 혼잡도 카드에서도
-  //   쓰는 것과 동일한 방식)가 있었는데 어디서도 호출되지 않고 있던 것을 여기로 연결한다.
-  _renderTransitCongestion(sections);
+  // ★ 2026-09-28 (YJ 지시로 '탑승 시간대 혼잡 예측' 카드 자체를 삭제함 — 아래 '혼잡도 분석'
+  //   카드가 실시간 위치추적 기반으로 대체함): 여기서 부르던 _renderTransitCongestion(sections)
+  //   호출 제거. 함수 정의 자체도 삭제(더는 어디서도 안 부름).
 
   // ── 혼잡도 카드: 경로 첫 교통수단에 맞춰 표시 ──
   // 첫 번째 교통수단(도보 제외) 구간이 버스면 버스 혼잡도, 지하철이면 지하철 혼잡도
@@ -14088,6 +14080,11 @@ function _updateTransitGps() {
   }
 
   // ── 현재 구간 교통수단에 따라 혼잡도 카드 자동 전환 ──
+  // ★ 2026-09-28 (YJ 지시: "혼잡도 분석에 사용자 위치추적으로... 실시간으로 변화되면서 보여주면
+  //   되잖아"): 실제로 GPS가 확인된 상태로 이 지점까지 왔다는 건 사용자가 지금 그 구간을 타고
+  //   이동 중이라는 뜻 — 카드 제목 옆에 실시간 표시(점 깜빡임)를 켠다. 아래 값 자체(혼잡도 %)는
+  //   기존 로직 그대로, 표시만 추가함.
+  try{ var _cld=document.getElementById('congLiveDot'); if(_cld) _cld.style.display='inline-block'; }catch(e){}
   // best 노드가 바뀌었을 때만 갱신 (불필요한 API 호출 방지)
   if(window._lastCongNodeIdx !== bestIdx){
     window._lastCongNodeIdx = bestIdx;
@@ -18290,15 +18287,12 @@ window.addEventListener('unhandledrejection', function(e) {
     <div id="transitResultErr" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;text-align:center;color:var(--sub);font-size:13px;"></div>
   </div>
 
-  <!-- ★ 복합경로 지하철 구간 혼잡 예측 (복합경로 탐색 시 표시) -->
-  <div id="transitCongCard" style="display:none;">
-    <div class="sec" style="font-size:12px;">🚇 탑승 시간대 혼잡 예측</div>
-    <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:8px 12px;gap:0;display:flex;flex-direction:column;" id="transitCongList"></div>
-  </div>
+  <!-- ★ 2026-09-28 (YJ 지시: "탑승시간대 혼잡도 예측은 필요없잖아"): 아래 '혼잡도 분석' 카드 하나로
+       충분하다고 판단해 이 카드를 삭제함. 관련 렌더 함수(_renderTransitCongestion)와 호출부도 함께 제거. -->
 
   <!-- 3순위: 집단지성 혼잡 분석 -->
   <div>
-    <div class="sec">혼잡도 분석<span id="congBadge" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;color:#fff;background:var(--arex);">-</span></div>
+    <div class="sec">혼잡도 분석<span id="congLiveDot" class="ldot-live" style="display:none;"></span><span id="congBadge" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;color:#fff;background:var(--arex);">-</span></div>
     <div class="cong-card" id="congCard" style="border-left-color:var(--arex);">
       <div class="cong-top">
         <div>
@@ -38854,95 +38848,8 @@ function getCongPct(stnName, lineName) {
 }
 window.getCongPct = getCongPct;
 
-// ★ 복합경로 지하철 구간 탑승 시간대 혼잡도 예측
-function _renderTransitCongestion(sections) {
-  var card = document.getElementById('transitCongCard');
-  var list = document.getElementById('transitCongList');
-  if(!card || !list) return;
-
-  // 지하철 구간만 추출
-  var subwaySecs = (sections || []).filter(function(sec) {
-    return (sec.transportation || {}).type === 1;
-  });
-  if(!subwaySecs.length) { card.style.display='none'; return; }
-
-  // 현재 시각 기준 누적 탑승 시간 계산
-  var nowMs = Date.now();
-  // 복합경로 전체 시작 = 도보(type3) 첫 구간 소요시간 더해서 지하철 탑승 시각 추정
-  var elapsed = 0;
-  var html = '';
-
-  sections.forEach(function(sec) {
-    var trans  = sec.transportation || {};
-    var type   = trans.type;
-    var secSec = Math.round((sec.duration || 0)); // 초 단위
-
-    if(type !== 1) {
-      elapsed += secSec;
-      return;
-    }
-
-    // 지하철 탑승 예상 시각
-    var boardMs  = nowMs + elapsed * 1000;
-    var boardH   = new Date(boardMs).getHours();
-    var boardMin = new Date(boardMs).getMinutes();
-    var boardHHMM = (boardH<10?'0':'')+boardH+':'+(boardMin<10?'0':'')+boardMin;
-
-    var lineName = trans.name || '';
-    var stops    = [];
-    try { stops = sec.passStopList ? (sec.passStopList.stationList||[]) : []; } catch(e){}
-    var fromStn  = stops.length ? (stops[0].stationName||'') : lineName;
-    var toStn    = stops.length>1 ? (stops[stops.length-1].stationName||'') : '';
-
-    // 탑승 역 이름 정리 (끝 '역' 제거)
-    var stnKey = fromStn;
-    if(stnKey.length>1 && stnKey.slice(-1)==='역') stnKey=stnKey.slice(0,-1);
-
-    // 혼잡도 — 탑승 시간대(boardH) 기준
-    var pct = 0;
-    if(typeof _REAL_CONG !== 'undefined' && _REAL_CONG[stnKey] && _REAL_CONG[stnKey][boardH]>0) {
-      pct = Math.round(_REAL_CONG[stnKey][boardH]);
-    } else {
-      // 통계 기반
-      var base = (typeof CONG_PROFILE !== 'undefined') ? (CONG_PROFILE[boardH]||50) : 50;
-      var w    = (typeof LINE_CONG_W !== 'undefined') ? (LINE_CONG_W[lineName]||0.80) : 0.80;
-      var isPk = (boardH>=7&&boardH<=9)||(boardH>=18&&boardH<=20);
-      pct = Math.max(5, Math.min(100, Math.round(base*w*(isPk?1.0:0.95))));
-    }
-
-    var col  = pct>=75?'#ff453a':pct>=50?'#ff9f0a':'#30d158';
-    var txt  = pct>=75?'혼잡':pct>=50?'보통':'여유';
-    var secMin = Math.round(secSec/60);
-
-    html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border2);">'
-      + '<div style="width:28px;height:28px;border-radius:50%;background:'+col+'22;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;">🚇</div>'
-      + '<div style="flex:1;min-width:0;">'
-        + '<div style="font-size:12px;font-weight:700;color:'+col+';">'+_ltEsc(lineName)+'</div>'
-        + '<div style="font-size:10px;color:var(--sub);">'
-          + _ltEsc(fromStn)+(toStn?' → '+_ltEsc(toStn):'')
-          + ' · 🕐 '+boardHHMM+' · '+secMin+'분'
-        + '</div>'
-      + '</div>'
-      + '<div style="text-align:right;flex-shrink:0;">'
-        + '<div style="font-size:13px;font-weight:800;color:'+col+';">'+pct+'%</div>'
-        + '<div style="font-size:9px;color:'+col+';font-weight:700;">'+txt+'</div>'
-        + '<div style="width:40px;height:3px;background:var(--border2,#2c2c2e);border-radius:2px;margin-top:3px;">'
-          + '<div style="width:'+pct+'%;height:100%;background:'+col+';border-radius:2px;"></div>'
-        + '</div>'
-      + '</div>'
-    + '</div>';
-
-    elapsed += secSec;
-  });
-
-  // 마지막 border-bottom 제거
-  // 마지막 항목 border 제거
-  var lastIdx = html.lastIndexOf('border-bottom:1px solid var(--border2);');
-  if(lastIdx >= 0) html = html.slice(0,lastIdx) + 'border-bottom:none;' + html.slice(lastIdx+39);
-  list.innerHTML = html;
-  card.style.display = 'block';
-}
-window._renderTransitCongestion = _renderTransitCongestion;
+// ★ 2026-09-28 (YJ 지시: "탑승시간대 혼잡도 예측은 필요없잖아"): _renderTransitCongestion()와
+//   그 표시 카드(#transitCongCard)를 통째로 삭제함 — 호출부(_renderTransitResultCard 안)도 제거함.
 
 // 24시간 혼잡도 배열 반환
 function getCong24(stnName, lineName) {
@@ -39393,6 +39300,7 @@ window.updateBusCong = updateBusCong;
 // ── 혼잡도 카드를 '출발역 설정 전' 대기 상태로 리셋 ──
 function _resetCongToWaiting(){
   window._congMode = null;
+  var _cld0 = document.getElementById('congLiveDot'); if(_cld0) _cld0.style.display = 'none';
   var labelEl = document.querySelector('.cong-stn');
   if(labelEl) labelEl.innerHTML = '지하철 <b id="congStn">-</b>';
   var badge = document.getElementById('congBadge');
@@ -39491,7 +39399,6 @@ function closeTransitResult(){
   var box = document.getElementById('transitResultBox'); if(box) box.style.display = 'none';
   var card = document.getElementById('transitResultCard'); if(card) card.style.display = 'none';
   var lb = document.getElementById('transitLocBar'); if(lb) lb.style.display = 'none';
-  var tcc = document.getElementById('transitCongCard'); if(tcc) tcc.style.display = 'none';
   // 3) 혼잡도 카드 대기 상태로
   _resetCongToWaiting();
   // 4) 경로 관련 전역 초기화 → AI 승무원도 경로 없음 상태로
