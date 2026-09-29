@@ -10009,10 +10009,15 @@ function _renderLdGradeChips(ld){
       // 없으면(예전 응답 등) 예전처럼 모드만 맞으면 선택됨으로 본다(기존 기능 보존).
       var on = (c.mode === ld.mode) && (curDepTs == null || c.depTs === curDepTs);
       var label = (_LD_MODE_LABEL[c.mode] || c.mode) + (c.depLabel ? (' ' + c.depLabel) : '');
+      // ★ 2026-09-29 (YJ 3차 확인: "13:33(구포경유) 편을 골랐더니 360분이 나와서 이상하다" —
+      //   실제로는 버그가 아니라 그 편이 진짜 그만큼 오래 걸리는 게 맞았지만, 고르기 전엔
+      //   총 소요시간을 전혀 알 수 없었다): 닫힌 버튼 라벨(curLabel)은 기존처럼 간결하게
+      //   유지하되, 드롭박스 목록 항목(optLabel)에는 총 소요시간을 덧붙여 미리 보여준다.
+      var optLabel = label + (c.totalMin != null ? (' · ' + c.totalMin + '분') : '');
       if(on) curLabel = label;
       modeOptsHtml += '<div class="ld-dd-opt' + (on ? ' on' : '') + '" onclick="_ldDdPick('
         + _ldJsStr(c.mode) + ', null, ' + (c.depTs != null ? c.depTs : 'null') + ', event)">'
-        + _ltEsc(label) + '</div>';
+        + _ltEsc(optLabel) + '</div>';
     });
     if(!curLabel){
       var _c0 = cands.filter(function(c){ return c && c.mode === ld.mode; })[0];
