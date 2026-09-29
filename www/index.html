@@ -5702,14 +5702,21 @@ function _renderBusRoute(stations, buses){
           +   '<span class="brs-sec-tag">' + dirLabel + '</span>'
           + '</div>';
 
+    // ★ 2026-09-29 (YJ 재제보: "여전히 끊어져있어, 제대로 고쳐") — 예전엔 줄(.brs-row)마다
+    //   각자 선(::before)을 그려 이어 붙이는 방식이라 어떤 이유로든 줄 높이가 어긋나면
+    //   (강조 표시 margin, 도착정보 note 유무 등) 그 지점의 선만 끊겨 보였다. 이번엔 이
+    //   방향 구간(g.items) 전체를 감싸는 컨테이너 안에 '처음부터 끝까지 하나로 이어진 선'
+    //   딱 하나만 절대좌표로 깔아, 개별 줄 사정과 무관하게 구조적으로 끊길 수 없게 만든다.
+    html += '<div class="brs-group"><div class="brs-railine brs-railine-' + g.cls + '"></div>';
+
     g.items.forEach(function(o, k){
       var s = o.s;
       var ord = parseInt(s.nodeord)||0;
       var here = busAtOrd[ord];
       var isMine = (myOrd != null && ord === myOrd);
-      var railCls = 'brs-rail brs-rail-' + g.cls
-        + (k===0 ? ' brs-rail-first' : '')
-        + (k===g.items.length-1 ? ' brs-rail-last' : '');
+      // ★ 선(라인)은 위 .brs-railine 하나가 전담 — 여기 레일은 점/버스/내위치 마커 자리만
+      //   맡는다(방향별 색상 선택자(.brs-rail-up 등)는 그대로 써야 해서 클래스는 유지).
+      var railCls = 'brs-rail brs-rail-' + g.cls;
       // ★ 진행 방향 화살표 (구간 중간마다 표시)
       var arrow = (k < g.items.length-1 && (k % 2 === 0))
         ? '<span class="brs-arw">▼</span>' : '';
@@ -5738,6 +5745,7 @@ function _renderBusRoute(stations, buses){
            +    '</div>'
            + '</div>';
     });
+    html += '</div>'; // /brs-group
   });
   html += '</div>';
 
@@ -8252,7 +8260,17 @@ function _buildTransitDetailNow() {
   var _isDark = (document.documentElement.getAttribute('data-theme') !== 'pastel');
 
   // 출발 기준 시각
-  var _baseMs = Date.now() + ((typeof _svcShiftMs==='function') ? _svcShiftMs() : 0);
+  // ★ 2026-09-29 (YJ 제보: "세부경로에서 현재위치 마커가 계속 출발지에 고정되어있어") —
+  //   예전엔 세부경로를 열 때마다 '지금 막 출발'이라고 가정하고(Date.now() 기준) 전 구간
+  //   시각을 처음부터 다시 계산했다. 그래서 실제로는 이미 몇 정거장 지났어도, 열 때마다
+  //   1번째 구간이 방금 시작한 것처럼 다시 그려져 마커가 계속 출발지에 멈춰 있는 것처럼
+  //   보였다. → 실제로 확정한 경로를 추적 중이면, 이번 여정이 '진짜로 시작된 시각'
+  //   (_transitStartTime — GPS 추적을 시작할 때 한 번만 기록되고 같은 경로인 동안
+  //   유지된다)을 기준으로 삼는다. 그래야 언제 다시 열어도 실제 경과한 만큼 진행되어
+  //   보인다. 예상 시각 모드·경로 미확정(탭 구경) 중에는 기존 동작을 그대로 둔다.
+  var _liveTrackingBase = (typeof _htlMayAdjustTime==='function' && _htlMayAdjustTime()
+    && typeof _transitStartTime !== 'undefined' && _transitStartTime) ? _transitStartTime : null;
+  var _baseMs = _liveTrackingBase || (Date.now() + ((typeof _svcShiftMs==='function') ? _svcShiftMs() : 0));
   try {
     var _bt = document.getElementById('baseTimeInp');
     if(_bt && _bt.value){
@@ -14249,7 +14267,12 @@ function _updateTransitGps() {
     //   실기기: 18:41에 귤현에 있는데 마커는 이미 아라(종점)였다.
     //   → 최근 GPS가 뒤쪽 역 코앞(250m)에 있고 두 칸 이상 벌어졌으면
     //     그 역을 실제 위치로 보고 진행도를 내린 뒤 시각표를 다시 맞춘다.
-    if(bestIdx >= 0 && bestIdx <= _pMax - 2 && bestDist <= 250){
+    // ★ 2026-09-29 (YJ 제보: "마커가 실제 위치보다 한 정거장 먼저 앞서서 가고있어") —
+    //   위 되돌림은 "두 칸 이상"(-2) 벌어져야만 작동해서, 노이즈 있는 GPS·기지국 추정이
+    //   한 칸만 앞서 나간 흔한 경우(정확히 1개 역 오차)는 절대 스스로 못 돌아왔다.
+    //   실측 GPS가 이미 어떤 역 250m 이내에 확실히 있는데 마커가 그보다 하나라도 앞서
+    //   있으면 항상 되돌리도록 -2 → -1 로 완화(거리 조건은 그대로라 오탐 위험은 낮음).
+    if(bestIdx >= 0 && bestIdx <= _pMax - 1 && bestDist <= 250){
       var _pbNm = (_transitNodeData[bestIdx] && _transitNodeData[bestIdx].name) || '';
       window._gpsMaxIdx = bestIdx;
       window._gpsConfirmIdx = bestIdx;
@@ -31538,10 +31561,14 @@ function _pipEl(){
   //   어설픈 반투명보다 깔끔한 검정 바탕이 글자도 잘 읽힌다.
   // ★ 2026-09-22: 평면 검정 대신 은은한 그라데이션 + 위쪽 골드 악센트 바로 좀 더
   //   '작은 계기판'처럼 보이게 다듬었다. 정보량·아이디는 그대로 두고 배치만 정리한다.
+  // ★ 2026-09-29 (YJ 제보: "pip 배경에 글자가 흐르는게 보여") — 그라데이션(#15151b→#000)의
+  //   덜 어두운 윗부분이 일부 기기의 PiP 창에서 뒤(홈 화면 등)가 비치는 것처럼 보였다.
+  //   09-03에 겪었던 것과 같은 종류의 문제라 다시 안전한 쪽으로: 그라데이션을 걷어내고
+  //   무조건 불투명한 순수 검정(#000) 한 가지로 고정한다.
   el.style.cssText =
     'position:fixed;inset:0;z-index:2147483000;display:none;'
     + 'flex-direction:column;align-items:center;justify-content:center;gap:min(0.9vh,5px);'
-    + 'background:linear-gradient(180deg,#15151b,#000 65%);color:#fff;'
+    + 'background:#000;color:#fff;'
     + 'padding:min(2vw,12px);padding-top:min(2.6vw,15px);text-align:center;'
     + 'font-family:inherit;overflow:hidden;box-shadow:inset 0 2px 0 rgba(255,214,10,.55);';
   el.innerHTML =
@@ -31560,16 +31587,13 @@ function _pipEl(){
     + '<div id="pipProgWrap" style="width:86%;flex:none;height:4px;border-radius:3px;background:rgba(255,255,255,.14);overflow:hidden;">'
     +   '<div id="pipProgBar" style="width:0%;height:100%;border-radius:3px;background:linear-gradient(90deg,#ffd60a,#ff9f0a);transition:width .5s ease;"></div>'
     + '</div>'
-    // ★ 2026-09-29: "PiP가 심심하다" 피드백 → 아이콘만 나열하던 것 대신 비서가 요약해
-    //   주듯 목적지 이름 + 하이라이트(색칠 알약)된 소요시간·도착시각을 한 줄로 보여준다.
-    //   기존과 같은 한 줄·같은 컨테이너라 창 높이는 그대로 — 자리가 부족하면
-    //   목적지 이름만 줄임표(...)로 줄고, 시간 두 값은 flex:none 이라 항상 끝까지 보인다.
-    + '<div style="display:flex;align-items:baseline;justify-content:center;gap:min(2.4vw,8px);width:100%;">'
-    +   '<div id="pipDest" style="flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'
-    +     'font-size:min(3.8vw,13px);font-weight:800;color:#ffd60a;text-align:left;"></div>'
-    +   '<div id="pipMin" style="font-size:min(4.2vw,14px);font-weight:800;line-height:1.3;' + NOWRAP + '"></div>'
-    +   '<div id="pipArr" style="font-size:min(4.2vw,14px);font-weight:800;line-height:1.3;' + NOWRAP + '"></div>'
-    + '</div>'
+    // ★ 2026-09-29: "PiP가 심심하다" → 목적지+소요시간+도착시각을 하이라이트(색글자)
+    //   한 줄로 보여줬는데, YJ가 다시 "OOO까지 총 O시간O분 소요되고 OO시OO분에
+    //   도착예정입니다"처럼 완전한 문장으로, 시인성 좋게 보여달라고 요청 → 알약(칩)
+    //   대신 줄바꿈이 되는 한 문장으로 바꾸고, 읽기 쉽도록 아래 PIP_H를 늘려 자리를
+    //   더 확보했다(핵심 낱말 3개만 색으로 강조 — 나머지 글은 흰 글자로 또렷하게).
+    + '<div id="pipSentence" style="width:100%;flex:none;font-size:min(4.4vw,15px);'
+    +   'font-weight:700;line-height:1.42;color:#fff;word-break:keep-all;"></div>'
     + '<div id="pipReco" style="display:none;width:100%;flex:none;margin-top:min(1.4vh,8px);'
     +   'padding-top:min(1.4vh,8px);border-top:1px solid rgba(255,255,255,.16);"></div>'
     + '</div>';
@@ -31642,8 +31666,7 @@ function _pipPaint(){
     var esc = function(t){ return String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
     var st = _pipStations();
     var R = document.getElementById('pipStn');
-    var m = document.getElementById('pipMin');
-    var a = document.getElementById('pipArr');
+    var sEl = document.getElementById('pipSentence');
 
     // 이전역(흐리게) – 현재역(진하게, 앞에 점 표시) – 다음역(흐리게)
     if(R){
@@ -31665,22 +31688,23 @@ function _pipPaint(){
       }
     }catch(ePb){}
     window._pipPaintAt = Date.now();
-    // ★ 2026-09-29: 목적지 이름을 항상 함께 보여준다(중간역 추적 중엔 위 줄이 이전-현재-다음
-    //   역만 보여줘서 최종 목적지가 어딘지 가려질 때가 있었음 — YJ 피드백 대응)
+    // ★ 2026-09-29: "OOO까지 총 O시간O분 소요되고 OO시OO분에 도착예정입니다" 완전한
+    //   문장 하나로 — 목적지·소요시간·도착시각 세 낱말만 색으로 강조해 시인성을 높인다.
+    //   (중간역 추적 중엔 위 pipStn 줄이 이전-현재-다음 역만 보여줘서 최종 목적지가
+    //   가려질 때가 있었는데, 이 문장엔 항상 목적지가 들어가 있어 그 문제도 해결됨)
     try{
-      var pd = document.getElementById('pipDest');
-      if(pd){
+      if(sEl){
         var destNm = d.dest || (window._pipTrip && window._pipTrip.to) || '';
-        pd.textContent = destNm ? (destNm + '까지') : '';
+        var durHtml = (d.min != null)
+          ? '<b style="color:#ff9f0a;">' + esc(_pipMinText(d.min)) + '</b>'
+          : '<b style="color:#ff9f0a;">-</b>';
+        var arrHtml = d.arr
+          ? '<b style="color:#7dd3fc;">' + esc(d.arr) + '</b>'
+          : '<b style="color:#7dd3fc;">-</b>';
+        sEl.innerHTML = (destNm ? '<b style="color:#ffd60a;">' + esc(destNm) + '</b>까지 ' : '')
+          + '총 ' + durHtml + ' 소요되고 ' + arrHtml + '에 도착예정입니다';
       }
-    }catch(ePd){}
-    // ★ 소요시간·도착시각을 색칠된 알약(하이라이트)으로 — 기존엔 흰 글자 + 아이콘뿐이었음
-    if(m) m.innerHTML = (d.min != null)
-      ? ('<span style="background:rgba(255,159,10,.2);color:#ff9f0a;padding:1px 7px;border-radius:7px;white-space:nowrap;">⏱ ' + esc(_pipMinText(d.min)) + '</span>')
-      : '-';
-    if(a) a.innerHTML = d.arr
-      ? ('<span style="background:rgba(90,200,250,.22);color:#7dd3fc;padding:1px 7px;border-radius:7px;white-space:nowrap;">🕐 ' + esc(d.arr) + '</span>')
-      : '-';
+    }catch(eS){}
     _pipCheerPaint();
     _pipRecoPaint();
   }catch(e){}
@@ -31772,7 +31796,7 @@ function _pipRecoPaint(){
   try{
     if(wrap && wrap.clientWidth > 0){
       var _bx = document.getElementById('pipBox');
-      var _rs = ['pipStn','pipDest','pipMin','pipArr'].map(function(id){ return document.getElementById(id); });
+      var _rs = ['pipStn','pipSentence'].map(function(id){ return document.getElementById(id); });
       _rs.forEach(function(r){ if(r) r.style.display = ''; });
       if(_bx){ _bx.style.transform = ''; _bx.style.width = '100%'; }
       var _cs = getComputedStyle(wrap);
@@ -31860,7 +31884,7 @@ function _pipFit(){
   try{
     var v = document.getElementById('pipView'), bx = document.getElementById('pipBox');
     if(!v || !bx || v.style.display === 'none') return;
-    var rows = ['pipStn','pipDest','pipMin','pipArr'].map(function(id){ return document.getElementById(id); });
+    var rows = ['pipStn','pipSentence'].map(function(id){ return document.getElementById(id); });
     var rowsShow = function(d){ rows.forEach(function(r){ if(r) r.style.display = d; }); };
     var reco = document.getElementById('pipReco');
     var recoOn = !!(reco && reco.style.display !== 'none' && window._pipReco);
@@ -31936,10 +31960,13 @@ function _pipNative(){
 window._pipNativeAvailable = function(){ return !!_pipNative(); };
 
 // ★ 작은 창 크기를 한 곳에서 정한다.
-//   안드로이드 PiP 가 허용하는 최대 가로비는 2.39:1 이라 그보다 납작하게는 못 만든다.
+//   안드로이드 PiP 가 허용하는 최대 가로비는 2.39:1 이라 그보다 납작하게는 못 만든다
+//   (더 낮은 비율, 즉 세로로 더 넉넉한 창은 문제없다).
 //   resizable/seamless 는 네이티브가 지원하면 '사용자가 늘리지 못하게' 쓰는 값이고,
 //   모르는 키는 플러그인이 그냥 무시하므로 넣어 두어도 안전하다.
-var PIP_W = 239, PIP_H = 100;
+// ★ 2026-09-29: 하단 요약을 알약 한 줄에서 완전한 문장(최대 2줄)으로 바꾸면서
+//   기존 100 높이로는 문장이 눌리거나 잘릴 수 있어 136으로 늘려 여유를 준다.
+var PIP_W = 239, PIP_H = 136;
 // ★ 2026-09-15: 하차 추천이 뜨면 창을 아래로 늘린다.
 //   기존 239:100 은 글자 두 줄이 겨우 들어가는 높이라 추천이 겹쳐 잘렸다.
 var PIP_W2 = 200, PIP_H2 = 190;
@@ -44815,13 +44842,18 @@ document.addEventListener('DOMContentLoaded', function() {
   transition:background .15s;}
 .brs-row:active{background:var(--card2);}
 .brs-rail{position:relative;width:20px;flex-shrink:0;display:flex;justify-content:center;align-items:center;}
-.brs-rail::before{content:'';position:absolute;left:50%;transform:translateX(-50%);
-  top:0;bottom:0;width:5px;border-radius:3px;background:var(--border);}
-.brs-rail-up::before{background:#00b341;}
-.brs-rail-down::before{background:#ff9f0a;}
-.brs-rail-na::before{background:#2f7cf6;}
-.brs-rail-first::before{top:50%;border-radius:3px 3px 0 0;}
-.brs-rail-last::before{bottom:50%;border-radius:0 0 3px 3px;}
+/* ★ 2026-09-29 (YJ 재제보: "여전히 끊어져있어, 제대로 고쳐") — 예전엔 줄(.brs-row)마다 각자
+   선(::before)을 그려 이어 붙이는 방식이라, 강조 표시 margin뿐 아니라 줄 높이가 조금만
+   달라져도(도착정보 note 유무 등) 인접한 선끼리 어긋나 끊겨 보일 여지가 구조적으로 있었다.
+   → 방향 구간 전체를 감싸는 컨테이너(.brs-group, JS에서 추가) 안에 '처음부터 끝까지 하나로
+   이어진 선' 딱 하나만 절대좌표로 깔고, 정류장 점·버스·내위치 마커는 그 위에 얹는 방식으로
+   바꿔 개별 줄 사정과 무관하게 어떤 경우에도 끊길 수 없게 만든다. */
+.brs-group{position:relative;}
+.brs-railine{position:absolute;left:26px;top:0;bottom:0;width:5px;transform:translateX(-50%);
+  border-radius:3px;background:var(--border);z-index:0;}
+.brs-railine-up{background:#00b341;}
+.brs-railine-down{background:#ff9f0a;}
+.brs-railine-na{background:#2f7cf6;}
 .brs-dot{position:relative;z-index:1;width:9px;height:9px;border-radius:50%;
   background:var(--bg);border:2.5px solid rgba(255,255,255,.9);
   box-shadow:0 0 0 2px rgba(0,0,0,.06);}
@@ -44870,14 +44902,16 @@ document.addEventListener('DOMContentLoaded', function() {
 .brs-note{font-size:12px;font-weight:800;margin-top:5px;}
 .brs-note.bus{color:#2f7cf6;}
 .brs-note.me{color:#ff3b30;}
-/* ★ 2026-09-29 (YJ 제보: "라인이 끊어져있어, 일직선으로 이어줘") — 위아래 margin(2px)이
-   .brs-row(레일을 감싼 flex 부모) 자체를 위아래로 밀어내면서, 그 폭만큼 레일(::before,
-   top:0~bottom:0)이 앞뒤 정류장 줄과 만나지 못해 정확히 이 강조된 줄(현재 버스 위치·
-   승차 정류장)에서만 세로선이 끊겨 보였다. 좌우 여백(카드 느낌)은 그대로 두고 위아래
-   margin만 없애 레일이 끊김 없이 이어지도록 수정. */
-.brs-here{background:rgba(47,124,246,.08);border-radius:12px;margin:0 6px;}
+/* ★ 2026-09-29 (YJ 재제보: "아직도 노선이 일자가 아니야") — 좌우 margin(6px)이 이
+   강조된 줄(.brs-row)만 오른쪽으로 6px 밀어내는데, 세로선(.brs-railine)은 정류장
+   컨테이너(.brs-group) 기준 고정 좌표라 안 밀린다. 그래서 버스 위치·승차 정류장
+   마커(.brs-bus/.brs-me)만 선에서 6px 벗어나 "선이 삐뚤다"로 보였다(직전엔 위아래
+   margin 때문에 끊겨 보였던 걸 고쳤는데, 좌우 margin이 남아 있어 이번엔 좌우로
+   어긋나 보인 것). 좌우 margin·border-radius를 아예 없애 모든 줄이 완전히 같은
+   가로 위치를 쓰도록 하여 다시는 이 종류로 어긋나지 않게 한다. */
+.brs-here{background:rgba(47,124,246,.08);}
 .brs-here .brs-name{color:#2f7cf6;font-weight:800;}
-.brs-mine{background:rgba(255,59,48,.09);border-radius:12px;margin:0 6px;}
+.brs-mine{background:rgba(255,59,48,.09);}
 .brs-mine .brs-name{color:#ff3b30;font-weight:800;}
 /* ── 세부경로 시트(transitDetailModal) — 버스 노선상세(brs-*)와 톤 통일 ── */
 /* ★ 2026-09-26 (YJ 요청: "이쁘고 직관적으로") — 구간 아이콘을 이어주는 색선(레일)과
