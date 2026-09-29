@@ -19142,10 +19142,14 @@ window.addEventListener('unhandledrejection', function(e) {
         <div id="pipStat" style="margin-top:10px;font-size:11.5px;line-height:1.6;color:var(--sub);"></div>
       </div>
 
-      <!-- ★ 2026-09-26: 배터리 최적화 제외 — PiP·상주알림·예약알림이 삼성·샤오미 등
+      <!-- ★ 2026-09-29: 개발자용 진단 도구 3종(배터리 최적화 제외 / 백그라운드 추적 진단 /
+           버스 도착정보 진단)은 일반 사용자에게 불필요해 주석 처리함(YJ 요청).
+           코드는 그대로 남겨둠 — 개발자가 필요할 때 이 주석 블록만 해제하면 복원됨.
+
+      ★ 2026-09-26: 배터리 최적화 제외 — PiP·상주알림·예약알림이 삼성·샤오미 등
            제조사 배터리 관리에 며칠 뒤 백그라운드에서 죽는 걸 막는다. 권한은 예전부터
            Manifest에 선언돼 있었지만 실제로 시스템 다이얼로그를 띄우는 코드가 없어서
-           한 번도 적용된 적이 없었다(2026-09-25 알림·PiP 점검 때 발견) -->
+           한 번도 적용된 적이 없었다(2026-09-25 알림·PiP 점검 때 발견)
       <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
         <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:4px;">🔋 배터리 최적화 제외</div>
         <p style="font-size:12px;color:var(--sub);margin-bottom:12px;">꺼두면 기기가 앱을 며칠 안 열었을 때 작은 요약 화면 · 알림이 백그라운드에서 멈출 수 있어요. 제외해두면 계속 살아있어요.</p>
@@ -19156,7 +19160,7 @@ window.addEventListener('unhandledrejection', function(e) {
         <div id="batOptStat" style="margin-top:10px;font-size:11.5px;line-height:1.6;color:var(--sub);"></div>
       </div>
 
-      <!-- ★ 백그라운드 위치추적 진단 -->
+      ★ 백그라운드 위치추적 진단
       <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
         <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:4px;">🛰 백그라운드 추적 진단</div>
         <p style="font-size:12px;color:var(--sub);margin-bottom:12px;">플러그인·권한 상태와 실시간 로그를 확인해요.</p>
@@ -19167,7 +19171,7 @@ window.addEventListener('unhandledrejection', function(e) {
         <div id="bgDiagLog" style="background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:10px;font-size:11px;line-height:1.6;color:var(--text);font-family:monospace;max-height:280px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;">로그가 여기 표시됩니다. '진단 실행'을 눌러 상태를 확인하세요.</div>
       </div>
 
-      <!-- ★ 버스 도착정보 진단 -->
+      ★ 버스 도착정보 진단
       <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
         <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:4px;">🚌 버스 도착정보 진단</div>
         <p style="font-size:12px;color:var(--sub);margin-bottom:12px;">도착정보가 안 뜨는 정류장의 원인을 확인해요. (노선도 &gt; 버스 탭을 먼저 연 뒤 실행)</p>
@@ -19196,7 +19200,7 @@ window.addEventListener('unhandledrejection', function(e) {
         <div id="busDiagLog" style="background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:10px;font-size:11px;line-height:1.6;color:var(--text);font-family:monospace;min-height:44px;max-height:260px;overflow-y:auto;white-space:pre-wrap;">진단을 실행하면 결과가 여기에 표시돼요.</div>
       </div>
 
-      <!-- ★ 실시간 열차위치 진단 -->
+      ★ 실시간 열차위치 진단 — 2026-09-29 YJ 요청으로 추가 주석 처리(개발자용, 사용자 비노출)
       <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
         <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:4px;">🚆 실시간 열차위치 진단</div>
         <p style="font-size:12px;color:var(--sub);margin-bottom:12px;"><b>열차위치</b>: 1~9호선 · 경의중앙 · 수인분당 · 공항철도 · 경춘 · 신분당 · <b>GTX-A</b><br><b>도착정보</b>: 위 노선 + 경강 · 서해 · 신림 · 우이신설<br><b>미제공</b>: 인천1·2호선, 김포골드라인, 의정부경전철, 에버라인 → 시각표+GPS+연착추정<br>1차=열차위치 · 2차=역 도착정보 (각 10~15초)</p>
@@ -19207,6 +19211,7 @@ window.addEventListener('unhandledrejection', function(e) {
         <button onclick="_rtProbeArrivalUI()" style="width:100%;margin-bottom:10px;padding:11px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);font-family:inherit;">2차 진단 · 역 도착정보</button>
         <div id="rtProbeLog" style="background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:10px;font-size:11px;line-height:1.6;color:var(--text);font-family:monospace;min-height:44px;max-height:220px;overflow-y:auto;white-space:pre-wrap;">진단을 실행하면 결과가 여기에 표시돼요.</div>
       </div>
+      -->
 
       <!-- ★ 테마 설정 -->
       <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
