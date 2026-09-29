@@ -31560,11 +31560,15 @@ function _pipEl(){
     + '<div id="pipProgWrap" style="width:86%;flex:none;height:4px;border-radius:3px;background:rgba(255,255,255,.14);overflow:hidden;">'
     +   '<div id="pipProgBar" style="width:0%;height:100%;border-radius:3px;background:linear-gradient(90deg,#ffd60a,#ff9f0a);transition:width .5s ease;"></div>'
     + '</div>'
-    // ★ 2026-09-22: 소요시간·도착시각을 세로 두 줄 대신 아이콘 붙여 한 줄에 나란히
-    + '<div style="display:flex;align-items:baseline;justify-content:center;gap:min(4vw,16px);width:100%;">'
-    +   '<div id="pipMin" style="font-size:min(5.2vw,18px);font-weight:800;line-height:1.25;color:#ffd60a;' + NOWRAP + '"></div>'
-    +   '<div style="width:1px;height:min(3vh,15px);background:rgba(255,255,255,.18);flex:none;"></div>'
-    +   '<div id="pipArr" style="font-size:min(5.2vw,18px);font-weight:800;line-height:1.25;color:#d8d8dd;' + NOWRAP + '"></div>'
+    // ★ 2026-09-29: "PiP가 심심하다" 피드백 → 아이콘만 나열하던 것 대신 비서가 요약해
+    //   주듯 목적지 이름 + 하이라이트(색칠 알약)된 소요시간·도착시각을 한 줄로 보여준다.
+    //   기존과 같은 한 줄·같은 컨테이너라 창 높이는 그대로 — 자리가 부족하면
+    //   목적지 이름만 줄임표(...)로 줄고, 시간 두 값은 flex:none 이라 항상 끝까지 보인다.
+    + '<div style="display:flex;align-items:baseline;justify-content:center;gap:min(2.4vw,8px);width:100%;">'
+    +   '<div id="pipDest" style="flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'
+    +     'font-size:min(3.8vw,13px);font-weight:800;color:#ffd60a;text-align:left;"></div>'
+    +   '<div id="pipMin" style="font-size:min(4.2vw,14px);font-weight:800;line-height:1.3;' + NOWRAP + '"></div>'
+    +   '<div id="pipArr" style="font-size:min(4.2vw,14px);font-weight:800;line-height:1.3;' + NOWRAP + '"></div>'
     + '</div>'
     + '<div id="pipReco" style="display:none;width:100%;flex:none;margin-top:min(1.4vh,8px);'
     +   'padding-top:min(1.4vh,8px);border-top:1px solid rgba(255,255,255,.16);"></div>'
@@ -31644,7 +31648,7 @@ function _pipPaint(){
     // 이전역(흐리게) – 현재역(진하게, 앞에 점 표시) – 다음역(흐리게)
     if(R){
       var dim = 'color:#8e8e96;font-weight:600;';
-      var on  = 'color:#fff;font-weight:900;';
+      var on  = 'color:#fff;font-weight:900;background:rgba(255,255,255,.12);padding:1px 8px;border-radius:8px;';
       var sep = '<span style="color:#5a5a62;margin:0 6px;">–</span>';
       var dot = '<span style="color:#ffd60a;margin-right:4px;">●</span>';
       var cur = st.cur || d.cur || (d.from || '이동 중');
@@ -31661,8 +31665,22 @@ function _pipPaint(){
       }
     }catch(ePb){}
     window._pipPaintAt = Date.now();
-    if(m) m.textContent = '⏱ ' + ((d.min != null) ? _pipMinText(d.min) : '-');
-    if(a) a.textContent = '🕐 ' + (d.arr || '-');
+    // ★ 2026-09-29: 목적지 이름을 항상 함께 보여준다(중간역 추적 중엔 위 줄이 이전-현재-다음
+    //   역만 보여줘서 최종 목적지가 어딘지 가려질 때가 있었음 — YJ 피드백 대응)
+    try{
+      var pd = document.getElementById('pipDest');
+      if(pd){
+        var destNm = d.dest || (window._pipTrip && window._pipTrip.to) || '';
+        pd.textContent = destNm ? (destNm + '까지') : '';
+      }
+    }catch(ePd){}
+    // ★ 소요시간·도착시각을 색칠된 알약(하이라이트)으로 — 기존엔 흰 글자 + 아이콘뿐이었음
+    if(m) m.innerHTML = (d.min != null)
+      ? ('<span style="background:rgba(255,159,10,.2);color:#ff9f0a;padding:1px 7px;border-radius:7px;white-space:nowrap;">⏱ ' + esc(_pipMinText(d.min)) + '</span>')
+      : '-';
+    if(a) a.innerHTML = d.arr
+      ? ('<span style="background:rgba(90,200,250,.22);color:#7dd3fc;padding:1px 7px;border-radius:7px;white-space:nowrap;">🕐 ' + esc(d.arr) + '</span>')
+      : '-';
     _pipCheerPaint();
     _pipRecoPaint();
   }catch(e){}
@@ -31754,7 +31772,7 @@ function _pipRecoPaint(){
   try{
     if(wrap && wrap.clientWidth > 0){
       var _bx = document.getElementById('pipBox');
-      var _rs = ['pipStn','pipMin','pipArr'].map(function(id){ return document.getElementById(id); });
+      var _rs = ['pipStn','pipDest','pipMin','pipArr'].map(function(id){ return document.getElementById(id); });
       _rs.forEach(function(r){ if(r) r.style.display = ''; });
       if(_bx){ _bx.style.transform = ''; _bx.style.width = '100%'; }
       var _cs = getComputedStyle(wrap);
@@ -31842,7 +31860,7 @@ function _pipFit(){
   try{
     var v = document.getElementById('pipView'), bx = document.getElementById('pipBox');
     if(!v || !bx || v.style.display === 'none') return;
-    var rows = ['pipStn','pipMin','pipArr'].map(function(id){ return document.getElementById(id); });
+    var rows = ['pipStn','pipDest','pipMin','pipArr'].map(function(id){ return document.getElementById(id); });
     var rowsShow = function(d){ rows.forEach(function(r){ if(r) r.style.display = d; }); };
     var reco = document.getElementById('pipReco');
     var recoOn = !!(reco && reco.style.display !== 'none' && window._pipReco);
