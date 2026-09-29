@@ -23802,6 +23802,36 @@ function _setStartToMyLocation(lat, lng){
 }
 window._setStartToMyLocation = _setStartToMyLocation;
 
+// ★ 2026-09-29 (YJ: "경로 해제시 내위치도 같이 해제되고있어. 내위치는 항상 앱이
+//   켜져있으면 실시간으로 받아와야해. 내위치가 끊이지 않게해"): 지금까지 "내 위치"는
+//   '위치 감지' 버튼(또는 앱 시작 시 자동 1회)을 눌렀을 때의 GPS 스냅샷 한 장이었다
+//   — 그 뒤로 시간이 지나거나 경로를 닫았다 다시 열어도 그 오래된 좌표 그대로였고,
+//   경로 닫기(closeTransitResult → _resetRouteInputs)는 출발지 자체를 아예 비워서
+//   매번 '위치 감지'를 다시 눌러야 했다. 앱이 열려 있는 동안 계속 GPS를 구독해
+//   두고, 출발지가 "내 위치"(type:'gps')인 동안은 좌표만 조용히 계속 최신으로
+//   맞춘다(표시 이름·입력창은 그대로 "내 위치" — 다시 그리거나 포커스를 뺏지 않음).
+//   이 구독은 단 한 번만 시작되고(중복 구독 방지) 앱이 켜져 있는 한 어디서도
+//   멈추지 않는다 — _resetRouteInputs가 출발지를 비우는 것과는 별개로 동작한다.
+function _startMyLocationLiveWatch(){
+  if(window._myLocWatchId != null) return;   // 이미 구독 중이면 중복 시작하지 않음
+  if(!navigator.geolocation) return;
+  try{
+    window._myLocWatchId = navigator.geolocation.watchPosition(function(pos){
+      var lat = pos.coords.latitude, lng = pos.coords.longitude;
+      if(isNaN(lat) || isNaN(lng)) return;
+      window._lastGPSLat = lat; window._lastGPSLng = lng; window._lastGPSAt = Date.now();
+      try{ if(typeof S !== 'undefined') S.lastGPSFix = { lat: lat, lng: lng, ts: Date.now() }; }catch(e){}
+      // 출발지가 여전히 "내 위치"(GPS)면 좌표만 조용히 갱신 — 이름/표시는 그대로 둔다
+      if(typeof _fmapStart !== 'undefined' && _fmapStart && _fmapStart.type === 'gps'){
+        _fmapStart.lat = lat; _fmapStart.lng = lng;
+      }
+    }, function(err){
+      console.warn('[내위치 실시간] GPS 오류:', err && err.code);
+    }, { enableHighAccuracy:true, maximumAge:5000, timeout:20000 });
+  }catch(e){}
+}
+window._startMyLocationLiveWatch = _startMyLocationLiveWatch;
+
 // ── 앱 진입 시: GPS로 출발지 자동 지정 → 목적지 입력으로 유도 ──
 function autoSetStartFromGPS() {
   // 이미 출발지가 있으면 건드리지 않음 (사용자 수정 존중)
@@ -27197,24 +27227,14 @@ function _skipGpsPermission() {
   toast('ℹ️ 시간 기반 모드로 동작합니다');
 }
 
+// ★ 2026-09-29 (YJ: "모든 하단 토글을 제거해"): 화면 하단에 잠깐 떴다 사라지던
+//   토스트 팝업을 앱 전체에서 없앴다. 앱 안의 모든 토스트 호출이 결국 이 함수
+//   하나를 거치므로, 개별 호출부를 일일이 찾아 지우는 대신 여기서 화면 표시만
+//   끈다 — 현재 호출부는 물론 앞으로 추가될 호출부까지 한 번에 적용되고, 호출하는
+//   쪽 코드는 하나도 안 건드려서 각 기능의 나머지 동작(에러 처리 흐름 등)은 기존과
+//   동일하게 유지된다. 콘솔에만 남겨 디버깅은 여전히 가능하다.
 function toast(msg){
-  // 기술적/내부 메시지 필터 — 사용자에게 표시하지 않음
-  var _hiddenPhrases = [
-    'getShtrmPath','API 미응답','로컬 경로로 진행','정상)',
-    'DeadReckoning','추측 항법','GPS 신호 복구됨','GPS 음영',
-    'GPS 권한 허용됨','출발역 보정됨','API 체크 완료',
-    'TAGO','시각표 로드','캐시 사용','서버 동기화',
-    '[hidden]','console.log'
-  ];
-  if(_hiddenPhrases.some(function(p){ return String(msg).indexOf(p) !== -1; })){
-    console.log('[toast-hidden]', msg);
-    return;
-  }
-  const t=document.getElementById('toast');
-  if(S.toastT) clearTimeout(S.toastT);
-  t.textContent=msg;
-  t.classList.add('on');
-  S.toastT=setTimeout(function(){ t.classList.remove('on'); }, 2400);
+  console.log('[toast]', msg);
 }
 
 // ── 디버그 토스트 (APK 환경에서 콘솔 대신 화면에 표시) ──────────
@@ -33616,7 +33636,15 @@ window.onload=function(){
   setTimeout(function(){
     var p = (window._notifPermDone && window._notifPermDone.then) ? window._notifPermDone : Promise.resolve();
     p.then(function(){
-      setTimeout(function(){ try { if(typeof autoSetStartFromGPS === 'function') autoSetStartFromGPS(); } catch(e){} }, 300);
+      setTimeout(function(){
+        try { if(typeof autoSetStartFromGPS === 'function') autoSetStartFromGPS(); } catch(e){}
+        // ★ 2026-09-29 (YJ: "내위치는 항상 실시간으로 받아와야 해, 끊기지 않게 해줘"):
+        //   최초 GPS 스냅샷(autoSetStartFromGPS) 이후에도 앱이 켜져 있는 동안 계속
+        //   GPS를 구독해 "내 위치" 좌표를 조용히 최신으로 유지한다 — 경로를 닫거나
+        //   다시 열어도(closeTransitResult/_resetRouteInputs) 이 구독은 절대 멈추지
+        //   않는다(어디서도 clearWatch 안 부름 — 앱이 켜져 있는 한 계속 감).
+        try { if(typeof _startMyLocationLiveWatch === 'function') _startMyLocationLiveWatch(); } catch(e){}
+      }, 300);
     });
   }, 400);
 
@@ -39667,24 +39695,40 @@ window._resetCongToWaiting = _resetCongToWaiting;
 //   다음 탐색 때 이전 경로가 섞여 보였다.
 function _resetRouteInputs(){
   try{
-    // 입력창 비우기 (홈 / 노선도 양쪽)
-    ['fmapStartInp','fmapDestInp','inpStart','inpDest'].forEach(function(id){
+    // ★ 2026-09-29 (YJ: "경로 해제시 내위치도 같이 해제되고있어, 내위치는 항상
+    //   실시간으로 받아와야 해 — 끊기지 않게 해줘"): 출발지가 GPS "내 위치"일
+    //   때는 경로를 닫아도(X) 출발지를 비우지 않는다 — 그대로 "내 위치"로 남는다
+    //   (좌표는 _startMyLocationLiveWatch가 계속 최신으로 갱신 중). 목적지·나머지
+    //   상태는 기존과 똑같이 전부 초기화한다(기존 기능 보존).
+    var _wasGpsStart = !!(typeof _fmapStart !== 'undefined' && _fmapStart && _fmapStart.type === 'gps');
+
+    // 입력창 비우기 (홈 / 노선도 양쪽) — 출발지가 GPS 내 위치면 그대로 둔다
+    ['fmapDestInp','inpDest'].forEach(function(id){
       var el = document.getElementById(id);
       if(el) el.value = '';
     });
+    if(!_wasGpsStart){
+      ['fmapStartInp','inpStart'].forEach(function(id){
+        var el = document.getElementById(id);
+        if(el) el.value = '';
+      });
+    }
     // 출발/도착 표시 되돌리기
     var vs = document.getElementById('valStart'), ss = document.getElementById('subStart');
     var vd = document.getElementById('valDest'),  sd = document.getElementById('subDest');
-    if(vs){ vs.textContent = '-'; vs.style.opacity = '0.6'; }
-    if(ss)  ss.textContent = '위에서 역 검색';
+    if(!_wasGpsStart){
+      if(vs){ vs.textContent = '-'; vs.style.opacity = '0.6'; }
+      if(ss)  ss.textContent = '위에서 역 검색';
+    }
     if(vd){ vd.textContent = '-'; vd.style.opacity = '0.6'; }
     if(sd)  sd.textContent = '위에서 역 검색';
     var sc = document.getElementById('routeSummaryCard');
     if(sc) sc.style.display = 'none';
     var sn = document.getElementById('setupNotice');
     if(sn) sn.style.display = '';
-    // 상태 초기화
-    _fmapStart = null; _fmapDest = null;
+    // 상태 초기화 — 출발지가 GPS 내 위치였다면 그대로 유지
+    if(!_wasGpsStart) _fmapStart = null;
+    _fmapDest = null;
     if(typeof S !== 'undefined' && S){ S.start = null; S.dest = null; S.route = null; }
     window._preferBoardStn = null;
     window._preferBoardLoc = null;
