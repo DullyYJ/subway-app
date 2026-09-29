@@ -1760,6 +1760,18 @@ input[type=time]{color-scheme:dark;}
 .sug-item:last-child{border-bottom:none;}
 .sug-item:active{background:rgba(120,120,128,.16);}
 .dt-select{background:var(--card2,#2c2c2e);color:var(--text);border:1px solid var(--border2);border-radius:12px;padding:12px 16px;font-size:16px;font-weight:700;font-family:inherit;outline:none;min-width:110px;text-align:center;-webkit-appearance:none;appearance:none;cursor:pointer;}
+/* ★ 2026-09-29 (YJ: 장거리 열차/버스 선택 드롭박스가 "이질적"): 네이티브 <select>는
+   펼치면 OS 자체(안드로이드 시스템 다크) 팝업이라 앱 테마가 안 먹혔다 — 순수
+   div/button 커스텀 드롭박스로 교체. var(--card)/var(--text)/var(--border) 등 테마
+   변수를 그대로 써서 다크/pastel 테마에 자동으로 맞는다(하드코딩 색 없음). */
+.ld-dd{position:relative;}
+.ld-dd-btn{width:100%;box-sizing:border-box;padding:11px 12px;background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:11px;outline:none;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left;}
+.ld-dd-btn::after{content:'▾';color:var(--sub);font-size:12px;flex:none;}
+.ld-dd-list{position:absolute;left:0;right:0;top:calc(100% + 4px);background:var(--card);border:1px solid var(--border2,var(--border));border-radius:11px;box-shadow:0 8px 24px rgba(0,0,0,.28);z-index:60;overflow-y:auto;max-height:260px;}
+.ld-dd-opt{padding:11px 12px;font-size:13px;font-weight:600;color:var(--text);cursor:pointer;border-bottom:1px solid var(--border);}
+.ld-dd-opt:last-child{border-bottom:none;}
+.ld-dd-opt.on{background:var(--gold);color:#fff;font-weight:700;}
+.ld-dd-opt:not(.on):active{background:var(--card2);}
 /* 노선도 지하철 하단 검색바 제거 */
 #baseTimeRow,#stnInputRow{display:none !important;}
 .sug div{padding:10px 13px;font-size:13px;color:var(--text);cursor:pointer;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;}
@@ -9850,14 +9862,59 @@ function _doSelectRouteOption(type) {
 }
 window._doSelectRouteOption = _doSelectRouteOption;
 
-// ★ 2026-09-25 (KTX/ITX 등급선택): 세부경로에서 사용자가 다른 등급·수단 칩을 누르면
-//   엔진에 ldMode/ldGrade 를 실어 다시 묻는다 — 무엇을 고를지는 여기서 정하지 않는다,
-//   그저 사용자가 누른 값을 그대로 전달하고 엔진이 돌려준 답(longdist)만 갈아끼운다
-//   (YJ 절대규칙: 판단은 엔진만 한다).
-function _ldReselect(mode, grade){
+// ★ 2026-09-29 (YJ: "장거리 경로 처음 탐색시 시간 오류 발생 후, 재탐색시 정상 표출"):
+//   원인 조사: _ldReselect 가 방금 새로 받아온 답(ldp)을 _doSelectRouteOption('longdist')
+//   에 넘겼는데, 그 함수 맨 앞엔 "탐색한 지 오래된 결과면 엔진에 다시 물어보고 그 응답이
+//   오면 이 탭을 연다"는 지연 재검색 로직(9746행 부근, 일반 탭-클릭 상황을 위한 것 —
+//   손 안 댐)이 있다. _ldReselect 는 이미 방금 이 선택(모드/등급/시각)을 위해 새로 받아온
+//   데이터를 들고 있는데, 그 경로를 타면 그 지연 재검색 로직이 또 한 번 끼어들어(별도의
+//   비동기 재조회를 새로 시작) 화면이 일시적으로 어긋나 보일 수 있었다(드롭박스는 새
+//   값으로 바로 바뀌는데 그 아래 타임라인은 아직 이전 편 그대로 — 재탐색하면 그제서야
+//   맞는 이유). 아래 _tryConvert/_renderLongDistSelection 을 모듈 스코프로 분리해
+//   _ldReselect 가 그 지연 재검색 로직을 거치지 않고 곧장 화면을 그리게 한다 — 기존
+//   탭-클릭 경로인 _doSelectRouteOption('longdist')(9790행 부근)는 전혀 안 건드렸다
+//   (기존 기능 보존, 그 경로는 여전히 지연 재검색 로직을 그대로 거친다).
+function _tryConvert(p){
+  if(!p) return null;
+  try {
+    var r = _convertSinglePathToRoute(p);
+    if(r && r.sections && r.sections.length) return r;
+  } catch(e){}
+  return null;
+}
+window._tryConvert = _tryConvert;
+
+function _renderLongDistSelection(){
+  if(!_allRouteResults) return false;
+  var _ldRouteObj = _tryConvert(_allRouteResults.longdist);
+  if(!_ldRouteObj){ toast('장거리(열차·시외버스) 경로를 찾을 수 없습니다.'); return false; }
+  var _ldData = { routes: [_ldRouteObj] };
+  _renderTransitResultCard(_ldData, _transitResultStart, _transitResultDest, 'engine_longdist');
+  try{ _svcApply(_ldRouteObj.sections, 'engine_longdist'); }catch(e){}
+  _highlightRouteTab('longdist');
+  window._pendingRouteType = 'longdist';
+  var _mcBtnLd = document.getElementById('mainConfirmRouteBtn');
+  if(_mcBtnLd){
+    var _lockedLd = (window._routeLocked && window._lockedRouteType === 'longdist');
+    _mcBtnLd.textContent = _lockedLd ? '✅ 확정됨' : '✅ 경로 확정';
+    _mcBtnLd.style.background = _lockedLd ? '#30a14e' : '#2f7cf6';
+  }
+  return true;
+}
+window._renderLongDistSelection = _renderLongDistSelection;
+
+// ★ 2026-09-25 (KTX/ITX 등급선택): 세부경로에서 사용자가 다른 등급·수단·시각을 고르면
+//   엔진에 ldMode/ldGrade/ldDepTs 를 실어 다시 묻는다 — 무엇을 고를지는 여기서 정하지
+//   않는다, 그저 사용자가 고른 값을 그대로 전달하고 엔진이 돌려준 답(longdist)만
+//   갈아끼운다(YJ 절대규칙: 판단은 엔진만 한다).
+// ★ 2026-09-29: depTs(정확히 어느 편인지, 모드당 여러 시각이 있을 때 구분용) 인자 추가.
+//   없으면(기존 호출부·기존 동작) 예전처럼 그 모드·등급 안에서 "지금 탈 수 있는 가장
+//   빠른 편"을 엔진이 그대로 고른다(기존 기능 보존) — 있을 때만 그 정확한 편을 짚는다.
+function _ldReselect(mode, grade, depTs){
   if(!window._lastCoordQs){ toast('경로 정보를 다시 불러와 주세요.'); return; }
   var qs = window._lastCoordQs + '&ldMode=' + encodeURIComponent(mode)
-    + (grade ? ('&ldGrade=' + encodeURIComponent(grade)) : '');
+    + (grade ? ('&ldGrade=' + encodeURIComponent(grade)) : '')
+    + (depTs ? ('&ldDepTs=' + encodeURIComponent(depTs)) : '');
   if(typeof toast==='function') toast('다른 편 확인 중...');
   fetch(_routeV2Url(qs)).then(function(r){
     if(!r.ok) throw new Error('HTTP ' + r.status);
@@ -9867,22 +9924,68 @@ function _ldReselect(mode, grade){
     var ldp = paths.filter(function(p){ return (p.info || {}).longDist === true; })[0] || null;
     if(!ldp){ if(typeof toast==='function') toast('선택한 편을 찾을 수 없어요'); return; }
     if(_allRouteResults) _allRouteResults.longdist = ldp;
-    _doSelectRouteOption('longdist');
+    _renderLongDistSelection();
   }).catch(function(e){
     if(typeof toast==='function') toast('네트워크 오류: ' + (e.message || ''));
   });
 }
 window._ldReselect = _ldReselect;
 
-// 등급·수단 선택 UI — route.ld(있을 때만)를 받아 세부경로 카드 상단에 그린다.
+// 등급·수단·시각 선택 UI — route.ld(있을 때만)를 받아 세부경로 카드 상단에 그린다.
 // ★ 2026-09-29 (YJ: "장거리 열차/버스 선택 부분이 너무 이질적이야, 드롭박스로 선택하게
-//   해줘도 좋을 것 같아"): 기존엔 버튼(칩)을 나열했는데, 앱의 다른 선택 UI(예: 글쓰기
-//   카테고리 wCat 드롭박스, .sel-wrap+.inp 조합)와 톤이 안 맞아 보여서 같은 네이티브
-//   <select> 스타일로 통일한다. 후보 목록(cands/opts)이 무엇인지, 선택 시 엔진에
-//   ldMode/ldGrade로 재요청하는 동작(_ldReselect)은 전혀 안 바꾼다 — "버튼 여러 개"를
-//   "드롭박스 하나"로 보여주는 방식만 바뀐다(기존 기능 보존).
+//   해줘도 좋을 것 같아"): 기존엔 버튼(칩)을 나열했는데, 앱의 다른 선택 UI와 톤이 안
+//   맞아 보여서 드롭박스로 바꿨었다.
+// ★ 2026-09-29 (YJ 2차 피드백, 실기기 스크린샷): "① 드롭박스 앱 테마에 맞게 변경
+//   (버스/열차 시간 2개씩 더 추가)". 두 가지를 함께 고친다.
+//   (1) 네이티브 <select>는 목록을 펼치면 OS 자체 팝업(안드로이드 시스템 다크 테마 —
+//       라디오버튼·검정배경)으로 뜬다. 앱 CSS(.inp/.sel-wrap 등, 밝은/pastel 테마 포함)가
+//       전혀 안 먹혀서 "이질적"으로 보였다. → <select> 대신 순수 div/button으로 만든
+//       커스텀 드롭박스(.ld-dd*, 아래 CSS)로 바꾼다 — 펼친 목록도 앱 색상(var(--card),
+//       var(--text) 등, 테마 변수라 다크/pastel 자동 대응)을 그대로 쓴다.
+//   (2) 어제 candidates dedup 수정(route-v2-worker.js ldFinish)이 "같은 모드는 무조건
+//       1개만" 남기는 바람에, 실제로는 서로 다른 시각의 진짜 다른 편(예: 열차 09:51 과
+//       열차 10:27)까지 전부 하나로 뭉개져 버렸다 — 그래서 이번엔 후보가 모드당 1개씩만
+//       보였다. 워커 쪽도 같이 고쳐서(모드+정확히 같은 시각만 중복 제거, 모드당 최대
+//       3개=기존 1개+2개까지 남김) 되살렸다 — 이 함수는 그 후보 배열을 받는 쪽이라
+//       그대로 그리면 된다(엔진이 이미 몇 개를 줄지 정함 — 여기선 그리기만).
+//   후보 목록이 무엇인지, 선택 시 엔진에 ldMode/ldGrade/ldDepTs로 재요청하는 판단
+//   (_ldReselect)은 전혀 안 바꾼다 — 그리는 방식(버튼 여러 개 → 드롭박스)만 바뀐다.
 var _LD_MODE_LABEL = { train: '🚆 열차', expbus: '🚌 고속버스', subbus: '🚐 시외버스' };
 function _ldJsStr(s){ return "'" + String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'") + "'"; }
+
+// 커스텀 드롭박스 공통 동작(열기/닫기/바깥클릭 닫기) — 모드/등급 두 드롭박스가 공유한다.
+function _ldDdCloseAll(){
+  var all = document.querySelectorAll('.ld-dd-list');
+  for(var i=0;i<all.length;i++) all[i].style.display = 'none';
+}
+window._ldDdCloseAll = _ldDdCloseAll;
+function _ldDdToggle(id, ev){
+  if(ev && ev.stopPropagation) ev.stopPropagation();
+  var list = document.getElementById(id);
+  if(!list) return;
+  var opening = (list.style.display !== 'block');
+  _ldDdCloseAll();
+  list.style.display = opening ? 'block' : 'none';
+}
+window._ldDdToggle = _ldDdToggle;
+// mode/grade 둘 다 이 함수 하나로 받는다 — 모드 드롭박스는 grade를 null로, 등급
+// 드롭박스는 mode를 ld.mode(고정)로 넘겨 호출한다. depTs는 "정확히 이 편"을 짚는 값
+// (2026-09-29 신규, 없으면 예전처럼 그 모드/등급 안에서 가장 빠른 편을 엔진이 고른다).
+function _ldDdPick(mode, grade, depTs, ev){
+  if(ev && ev.stopPropagation) ev.stopPropagation();
+  _ldDdCloseAll();
+  _ldReselect(mode, grade || null, depTs || null);
+}
+window._ldDdPick = _ldDdPick;
+if(!window._ldDdOutsideInited){
+  window._ldDdOutsideInited = true;
+  document.addEventListener('click', function(e){
+    var t = e.target;
+    if(t && t.closest && t.closest('.ld-dd')) return;   // 드롭박스 자기 자신 클릭은 각자 처리(위 stopPropagation)
+    _ldDdCloseAll();
+  });
+}
+
 function _renderLdGradeChips(ld){
   var wrap = document.getElementById('ldGradeChips');
   var modeRow = document.getElementById('ldModeChips');
@@ -9894,35 +9997,57 @@ function _renderLdGradeChips(ld){
   }
   var cands = Array.isArray(ld.candidates) ? ld.candidates : [];
   var opts  = Array.isArray(ld.options) ? ld.options : [];
+  var curDepTs = (ld.depTs != null) ? ld.depTs : null;   // 지금 고른 정확한 편(있으면)
 
   var modeHtml = '';
   if(cands.length > 1){
+    var curLabel = '';
     var modeOptsHtml = '';
     cands.forEach(function(c){
       if(!c || !c.mode) return;
-      var on = c.mode === ld.mode;
-      var label = _LD_MODE_LABEL[c.mode] || c.mode;
-      modeOptsHtml += '<option value="' + _ltEsc(c.mode) + '"' + (on ? ' selected' : '') + '>'
-        + _ltEsc(label) + (c.depLabel ? (' ' + _ltEsc(c.depLabel)) : '') + '</option>';
+      // depTs 정보가 있으면(엔진이 채워준 경우) 모드+정확한 시각까지 맞아야 "선택됨" —
+      // 없으면(예전 응답 등) 예전처럼 모드만 맞으면 선택됨으로 본다(기존 기능 보존).
+      var on = (c.mode === ld.mode) && (curDepTs == null || c.depTs === curDepTs);
+      var label = (_LD_MODE_LABEL[c.mode] || c.mode) + (c.depLabel ? (' ' + c.depLabel) : '');
+      if(on) curLabel = label;
+      modeOptsHtml += '<div class="ld-dd-opt' + (on ? ' on' : '') + '" onclick="_ldDdPick('
+        + _ldJsStr(c.mode) + ', null, ' + (c.depTs != null ? c.depTs : 'null') + ', event)">'
+        + _ltEsc(label) + '</div>';
     });
-    modeHtml = '<div class="sel-wrap"><select class="inp" onchange="_ldReselect(this.value, null)">'
-      + modeOptsHtml + '</select></div>';
+    if(!curLabel){
+      var _c0 = cands.filter(function(c){ return c && c.mode === ld.mode; })[0];
+      curLabel = (_LD_MODE_LABEL[ld.mode] || ld.mode) + (_c0 && _c0.depLabel ? (' ' + _c0.depLabel) : '');
+    }
+    modeHtml = '<div class="ld-dd">'
+      + '<button type="button" class="ld-dd-btn" onclick="_ldDdToggle(\'ldModeDDList\', event)">' + _ltEsc(curLabel) + '</button>'
+      + '<div class="ld-dd-list" id="ldModeDDList" style="display:none;">' + modeOptsHtml + '</div>'
+      + '</div>';
   }
   modeRow.innerHTML = modeHtml;
   modeRow.style.display = modeHtml ? 'block' : 'none';
 
   var gradeHtml = '';
   if(opts.length > 1){
+    var curGLabel = '';
     var gradeOptsHtml = '';
     opts.forEach(function(o){
       if(!o || !o.grade) return;
-      var on = o.grade === ld.grade;
+      var on = (o.grade === ld.grade) && (curDepTs == null || o.depTs == null || o.depTs === curDepTs);
       var priceTxt = (o.fare != null) ? (' · ' + o.fare.toLocaleString() + '원') : '';
-      gradeOptsHtml += '<option value="' + _ltEsc(o.grade) + '"' + (on ? ' selected' : '') + '>'
-        + _ltEsc(o.grade) + (o.depLabel ? (' ' + _ltEsc(o.depLabel)) : '') + priceTxt + '</option>';
+      var label = o.grade + (o.depLabel ? (' ' + o.depLabel) : '') + priceTxt;
+      if(on) curGLabel = label;
+      gradeOptsHtml += '<div class="ld-dd-opt' + (on ? ' on' : '') + '" onclick="_ldDdPick('
+        + _ldJsStr(ld.mode) + ', ' + _ldJsStr(o.grade) + ', ' + (o.depTs != null ? o.depTs : 'null') + ', event)">'
+        + _ltEsc(label) + '</div>';
     });
-    gradeHtml = '<div class="sel-wrap"><select class="inp" onchange="_ldReselect(' + _ldJsStr(ld.mode) + ', this.value)">'
-      + gradeOptsHtml + '</select></div>';
+    if(!curGLabel){
+      var _o0 = opts.filter(function(o){ return o && o.grade === ld.grade; })[0];
+      curGLabel = _o0 ? (_o0.grade + (_o0.depLabel ? (' ' + _o0.depLabel) : '')) : (ld.grade || '');
+    }
+    gradeHtml = '<div class="ld-dd">'
+      + '<button type="button" class="ld-dd-btn" onclick="_ldDdToggle(\'ldGradeDDList\', event)">' + _ltEsc(curGLabel) + '</button>'
+      + '<div class="ld-dd-list" id="ldGradeDDList" style="display:none;">' + gradeOptsHtml + '</div>'
+      + '</div>';
   }
   gradeRow.innerHTML = gradeHtml;
   gradeRow.style.display = gradeHtml ? 'block' : 'none';
@@ -10539,6 +10664,11 @@ function _convertSinglePathToRoute(path) {
     ld: info.longDist ? {
       mode: info.ldMode || null,
       grade: info.ldGrade || null,
+      // ★ 2026-09-29: 지금 고른 정확한 편(출발시각). 모드당 후보가 여러 개일 때
+      //   드롭박스에서 "선택됨" 표시를 모드만이 아니라 정확히 이 편까지 맞춰 고르는 데 쓴다
+      //   (info.ldDepTs 가 없는 예전 엔진 응답이면 null — _renderLdGradeChips 가 그 경우
+      //   모드만 맞으면 선택됨으로 보는 예전 방식으로 자동 대체함, 기존 기능 보존).
+      depTs: info.ldDepTs != null ? info.ldDepTs : null,
       options: info.ldOptions || [],
       candidates: info.candidates || [],
       distKm: info.distKm != null ? info.distKm : null
@@ -18276,13 +18406,17 @@ window.addEventListener('unhandledrejection', function(e) {
         </button>
       </div>
 
-      <!-- ── 장거리(열차/고속·시외버스) 등급·수단 선택 드롭박스 ──
+      <!-- ── 장거리(열차/고속·시외버스) 등급·수단·시각 선택 드롭박스 ──
            ★ 2026-09-25: route.ld 가 있을 때만 _renderLdGradeChips 가 채워서 보여준다.
-           ★ 2026-09-29: 버튼(칩) 나열 → 앱의 다른 선택 UI(.sel-wrap+.inp, 예: wCat)와
-           통일된 네이티브 드롭박스로 변경(YJ 요청 — 이질적으로 보인다는 피드백).
-           1줄=수단 드롭박스(열차/고속버스/시외버스, 후보 2개 이상일 때만), 2줄=등급
-           드롭박스(KTX/무궁화 등, 2개 이상일 때만) — 고르면 _ldReselect 가 ldMode/ldGrade
-           로 엔진에 재요청한다(판단은 여전히 엔진 몫, 여긴 고른 값만 그대로 전달). -->
+           ★ 2026-09-29: 버튼(칩) 나열 → 드롭박스로 1차 변경.
+           ★ 2026-09-29(2차, YJ 실기기 피드백): 네이티브 <select>는 펼치면 OS 자체 팝업이라
+           앱 테마가 안 먹혀 "이질적"이었다 — .ld-dd* 커스텀 드롭박스(순수 div/button,
+           앱 테마 변수 사용)로 교체. 같이, 모드당 후보를 1개로 뭉개던 걸 고쳐(워커
+           route-v2-worker.js ldFinish) 실제로 다른 시각의 편이 여러 개 다시 보이게 함.
+           1줄=수단·시각 드롭박스(열차/고속버스/시외버스, 후보 2개 이상일 때만 — 같은
+           모드라도 시각이 다르면 별도 항목), 2줄=등급 드롭박스(KTX/무궁화 등, 2개 이상일
+           때만) — 고르면 _ldReselect 가 ldMode/ldGrade/ldDepTs 로 엔진에 재요청한다
+           (판단은 여전히 엔진 몫, 여긴 고른 값만 그대로 전달). -->
       <div id="ldGradeChips" style="display:none;margin-bottom:10px;">
         <div id="ldModeChips" style="display:none;gap:6px;flex-wrap:wrap;margin-bottom:6px;"></div>
         <div id="ldGradeChipsRow" style="display:none;gap:6px;flex-wrap:wrap;"></div>
