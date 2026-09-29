@@ -3677,24 +3677,42 @@ function _buildRouteBrief(){
 }
 
 // 확정된 복합경로(_transitResultData: 경로엔진 routes/sections)에서 구간·환승 추출
+// ★ 2026-09-29 (YJ: "장거리 운행시 AI승무원의 설명이 부족해, 도착·환승 시간정보를
+//   더 자세히"): 기존엔 지하철(1)·버스(2) 구간만 뽑아서, 장거리(열차·고속버스,
+//   trafficType 4) 구간 자체가 통째로 빠졌다 — 그래서 여정의 핵심(장거리 이동)이
+//   브리핑에서 아예 언급되지 않고 그 앞뒤 접근/환승 구간만 안내됐다. 장거리도
+//   포함시키고, 대기가 섞인 sectionTime 대신 엔진의 정확한 startSec/endSec으로
+//   실제 출발·도착 "시각"(예: 14:57 출발 → 17:59 도착)까지 구해 둔다(있을 때만 —
+//   없으면 기존처럼 소요분만 쓰는 문구로 자연히 대체된다, 기존 기능 보존).
 function _briefFromTransitData(){
   try {
     if(typeof _transitResultData === 'undefined' || !_transitResultData || !_transitResultData.routes || !_transitResultData.routes[0]) return null;
     var route = _transitResultData.routes[0];
     var sections = route.sections || [];
     var segs = [];
+    var _baseMs = (typeof _htlBaseMs==='function') ? _htlBaseMs() : null;
     sections.forEach(function(sec){
       var tt = (sec.transportation||{}).type;
-      if(tt !== 1 && tt !== 2) return;   // 도보(3 등) 제외, 지하철(1)·버스(2)만
+      if(tt !== 1 && tt !== 2 && tt !== 4) return;   // 도보(3 등) 제외, 지하철(1)·버스(2)·장거리(4)
       var sl = ((sec.passStopList||{}).stationList) || [];
-      segs.push({
+      var segObj = {
         type: tt,
-        line: (sec.transportation||{}).name || (tt===2 ? '버스' : '지하철'),
+        line: (sec.transportation||{}).name || (tt===2 ? '버스' : tt===4 ? '장거리' : '지하철'),
         from: (sl.length ? (sl[0].stationName||'') : ''),
         to:   (sl.length ? (sl[sl.length-1].stationName||'') : ''),
         stops: Math.max(0, sl.length-1),
         min: Math.max(1, Math.round((sec.duration||0)/60))
-      });
+      };
+      if(tt === 4 && _baseMs != null && sec.startSec != null && sec.endSec != null
+         && isFinite(sec.startSec) && isFinite(sec.endSec)){
+        var _pad = function(n){ return (n<10?'0':'')+n; };
+        var _dep = new Date(_baseMs + sec.startSec*1000);
+        var _arr = new Date(_baseMs + sec.endSec*1000);
+        segObj.depClock = _pad(_dep.getHours()) + ':' + _pad(_dep.getMinutes());
+        segObj.arrClock = _pad(_arr.getHours()) + ':' + _pad(_arr.getMinutes());
+        segObj.rideMin  = Math.round(Math.max(0, sec.endSec - sec.startSec) / 60);
+      }
+      segs.push(segObj);
     });
     if(!segs.length) return null;
     var totalMin = Math.round(((route.summary && route.summary.duration) || 0)/60) || (window._homeRouteBaseMin||0);
@@ -4026,7 +4044,39 @@ function _renderHomeConductorBrief(fromName, toName, hour, congPct, serverMsg){
         congPct >= 70 ? (_peakBusy ? '출퇴근 피크로 매우 붐빕니다' : '매우 혼잡한 편입니다') :
         congPct >= 45 ? (_peakBusy ? '출퇴근 피크로 다소 붐빕니다' : '다소 혼잡한 편입니다') :
         (hol ? '주말이라 여유로운 편입니다' : '원활한 편입니다'));
-      if(rb && rb.segments && rb.segments.length>1){
+      // ★ 2026-09-29 (YJ: "장거리 운행시 AI승무원의 설명이 부족해, 도착·환승
+      //   시간정보를 더 자세히"): rb.segments에 장거리(type 4) 구간이 있으면
+      //   그 구간을 중심으로 "몇시에 출발해 몇시에 도착"까지 짚어 주는 전용
+      //   문장을 만든다 — 일반 환승 나열(아래 else 분기)은 손 안 댐(기존 기능 보존).
+      var _ldSegIdx = -1;
+      if(rb && rb.segments){
+        for(var _li=0; _li<rb.segments.length; _li++){ if(rb.segments[_li].type===4){ _ldSegIdx=_li; break; } }
+      }
+      if(_ldSegIdx >= 0){
+        var _sg = rb.segments;
+        var _ld = _sg[_ldSegIdx];
+        var _accessSegs = _sg.slice(0, _ldSegIdx);
+        var _egressSegs = _sg.slice(_ldSegIdx+1);
+        var _parts = [];
+        if(_accessSegs.length){
+          var _accFirst = _accessSegs[0];
+          var _accLast = _accessSegs[_accessSegs.length-1];
+          _parts.push(_stnBadge(_accFirst.from, _accFirst.line) + '에서 ' + _stnBadge(_accLast.to, _accLast.line) + '까지 이동하신 뒤');
+        }
+        var _ldTimeTxt = (_ld.depClock && _ld.arrClock)
+          ? ('<b>' + _ld.depClock + '</b>에 출발해 <b>' + _ld.arrClock + '</b>경 도착')
+          : ('약 <b>' + _ld.min + '분</b> 소요');
+        _parts.push(_stnBadge(_ld.from, _ld.line) + '에서 ' + _lineBadge(_ld.line) + '를 타고 ' + _stnBadge(_ld.to, _ld.line) + '까지 ' + _ldTimeTxt
+          + (_ld.rideMin ? ' (실제 이동 약 ' + _ld.rideMin + '분)' : ''));
+        if(_egressSegs.length){
+          var _exl=[];
+          for(var _ei=0;_ei<_egressSegs.length;_ei++){ _exl.push(_stnBadge(_egressSegs[_ei].from, _egressSegs[_ei].line)+'에서 '+_lineBadge(_egressSegs[_ei].line||'다음 노선')); }
+          _parts.push('도착 후에는 ' + _exl.join(', ') + ' 환승하시면 최종 목적지까지 이동하실 수 있습니다');
+        } else {
+          _parts.push('도착하시는 곳이 목적지와 가까워 별도 환승 없이 이동하실 수 있습니다');
+        }
+        t += '. ' + _parts.join(', ');
+      } else if(rb && rb.segments && rb.segments.length>1){
         var _sg = rb.segments;
         var lead = '';
         // ★ 첫 구간이 접근 버스(뒤에 지하철)면: "출발은 ○○에서 △△번 버스로 □□까지 이동하신 뒤,"
@@ -9813,14 +9863,17 @@ window._walkPenalty = _walkPenalty;
 // ★ 2026-09-15: 남아 있던 즐겨찾기 감면도 엔진으로 넘겼다. 앱은 시간을 만들지 않는다.
 // 일반 버스경로 렌더(폴백)
 function _renderNormalBus(){
-  if(!_allRouteResults){ toast('경로를 찾을 수 없습니다.'); return; }
+  // ★ 2026-09-29 (YJ: "하단 토글메세지는 필요없어보여, 다 지워줘"): 탭 전환류
+  //   함수들의 "경로 없음" 안내를 화면 하단에 토스트로 띄우던 것을 없앴다.
+  //   (다른 탭/카드 UI가 그대로 남아 있어 사용자가 판단하는 데 지장 없음 — 콘솔에만 남김)
+  if(!_allRouteResults){ console.warn('[버스탭] 경로 결과 없음'); return; }
   var r=null;
   try{ r=_convertSinglePathToRoute(_allRouteResults.bus); }catch(e){}
   // ★ 2026-09-05: 다른 탭 경로로 메꾸지 않는다.
   //   예전엔 버스 전용 경로가 없으면 less/fast/sub 를 대신 그렸고,
   //   그래서 버스 탭에 공항철도가 섞인 경로가 나왔다.
   if(!(r&&r.sections&&r.sections.length)){
-    toast('버스만으로 가는 경로가 없어요');
+    console.warn('[버스탭] 버스만으로 가는 경로가 없음');
     return;
   }
   _renderTransitResultCard({routes:[r]}, _transitResultStart, _transitResultDest, 'engine_bus');
@@ -9881,7 +9934,8 @@ function _doSelectRouteOption(type) {
   //   그래서 아래 공용 폴백 체인(2·3번)을 타지 않고 여기서 끝낸다 — 없으면 없다고만 알린다.
   if(type === 'longdist'){
     var _ldRouteObj = _tryConvert(_allRouteResults.longdist);
-    if(!_ldRouteObj){ toast('장거리(열차·시외버스) 경로를 찾을 수 없습니다.'); return; }
+    // ★ 2026-09-29 (YJ: "하단 토글메세지는 필요없어보여, 다 지워줘") — 하단 토스트 제거.
+    if(!_ldRouteObj){ console.warn('[장거리탭] 경로 없음'); return; }
     var _ldData = { routes: [_ldRouteObj] };
     _renderTransitResultCard(_ldData, _transitResultStart, _transitResultDest, 'engine_longdist');
     try{ _svcApply(_ldRouteObj.sections, 'engine_longdist'); }catch(e){}
@@ -9924,7 +9978,8 @@ function _doSelectRouteOption(type) {
     }
   }
 
-  if(!routeObj){ toast('경로를 찾을 수 없습니다.'); return; }
+  // ★ 2026-09-29 (YJ: "하단 토글메세지는 필요없어보여, 다 지워줘") — 하단 토스트 제거.
+  if(!routeObj){ console.warn('[탭 전환] 경로 없음: ' + type); return; }
   var data = { routes: [routeObj] };
   _renderTransitResultCard(data, _transitResultStart, _transitResultDest, 'engine_' + type);
   try{ _svcApply(routeObj.sections, 'engine_' + type); }catch(e){}
@@ -9967,7 +10022,8 @@ window._tryConvert = _tryConvert;
 function _renderLongDistSelection(){
   if(!_allRouteResults) return false;
   var _ldRouteObj = _tryConvert(_allRouteResults.longdist);
-  if(!_ldRouteObj){ toast('장거리(열차·시외버스) 경로를 찾을 수 없습니다.'); return false; }
+  // ★ 2026-09-29 (YJ: "하단 토글메세지는 필요없어보여, 다 지워줘") — 하단 토스트 제거.
+  if(!_ldRouteObj){ console.warn('[장거리 재선택] 변환 실패'); return false; }
   var _ldData = { routes: [_ldRouteObj] };
   _renderTransitResultCard(_ldData, _transitResultStart, _transitResultDest, 'engine_longdist');
   try{ _svcApply(_ldRouteObj.sections, 'engine_longdist'); }catch(e){}
@@ -9997,25 +10053,27 @@ window._renderLongDistSelection = _renderLongDistSelection;
 //   여기서도 띄우고(있는 요소 재사용, 새로 안 만듦), 응답이 오든 실패하든 반드시
 //   끈다(성공/실패/빈 결과 세 경로 모두 _hideRouteLoading 호출) — 화면이 안 먹통
 //   되도록 새 탐색 쪽과 동일한 창구(_hideRouteLoading)를 그대로 재사용한다.
+// ★ 2026-09-29 (YJ: "하단 토글메세지는 필요없어보여, 다 지워줘"): 로딩 덮개가
+//   이미 진행 상황을 보여 주므로, 그 아래 겹쳐 뜨던 "다른 편 확인 중..." 등
+//   바닥 토스트들은 전부 없앴다(콘솔 로그로만 남김 — 화면엔 안 뜸).
 function _ldReselect(mode, grade, depTs){
-  if(!window._lastCoordQs){ toast('경로 정보를 다시 불러와 주세요.'); return; }
+  if(!window._lastCoordQs){ console.warn('[다른 편] _lastCoordQs 없음'); return; }
   var qs = window._lastCoordQs + '&ldMode=' + encodeURIComponent(mode)
     + (grade ? ('&ldGrade=' + encodeURIComponent(grade)) : '')
     + (depTs ? ('&ldDepTs=' + encodeURIComponent(depTs)) : '');
   var _ldLoadEl = document.getElementById('transitLoading');
   if(_ldLoadEl) _ldLoadEl.style.display = 'flex';
-  if(typeof toast==='function') toast('다른 편 확인 중...');
   fetch(_routeV2Url(qs)).then(function(r){
     if(!r.ok) throw new Error('HTTP ' + r.status);
     return r.json();
   }).then(function(j){
     var paths = ((j || {}).result || {}).path || [];
     var ldp = paths.filter(function(p){ return (p.info || {}).longDist === true; })[0] || null;
-    if(!ldp){ if(typeof toast==='function') toast('선택한 편을 찾을 수 없어요'); return; }
+    if(!ldp){ console.warn('[다른 편] 선택한 편을 찾을 수 없음'); return; }
     if(_allRouteResults) _allRouteResults.longdist = ldp;
     _renderLongDistSelection();
   }).catch(function(e){
-    if(typeof toast==='function') toast('네트워크 오류: ' + (e.message || ''));
+    console.warn('[다른 편] 네트워크 오류:', e && e.message);
   }).then(function(){
     // fetch 체인 맨 끝에 한 번 더 then — 성공/실패 어느 쪽이든(위 catch가 에러를
     // 삼켰으므로) 항상 이 지점을 지나 로딩을 끈다.
