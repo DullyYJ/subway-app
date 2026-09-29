@@ -44870,9 +44870,14 @@ document.addEventListener('DOMContentLoaded', function() {
 .brs-note{font-size:12px;font-weight:800;margin-top:5px;}
 .brs-note.bus{color:#2f7cf6;}
 .brs-note.me{color:#ff3b30;}
-.brs-here{background:rgba(47,124,246,.08);border-radius:12px;margin:2px 6px;}
+/* ★ 2026-09-29 (YJ 제보: "라인이 끊어져있어, 일직선으로 이어줘") — 위아래 margin(2px)이
+   .brs-row(레일을 감싼 flex 부모) 자체를 위아래로 밀어내면서, 그 폭만큼 레일(::before,
+   top:0~bottom:0)이 앞뒤 정류장 줄과 만나지 못해 정확히 이 강조된 줄(현재 버스 위치·
+   승차 정류장)에서만 세로선이 끊겨 보였다. 좌우 여백(카드 느낌)은 그대로 두고 위아래
+   margin만 없애 레일이 끊김 없이 이어지도록 수정. */
+.brs-here{background:rgba(47,124,246,.08);border-radius:12px;margin:0 6px;}
 .brs-here .brs-name{color:#2f7cf6;font-weight:800;}
-.brs-mine{background:rgba(255,59,48,.09);border-radius:12px;margin:2px 6px;}
+.brs-mine{background:rgba(255,59,48,.09);border-radius:12px;margin:0 6px;}
 .brs-mine .brs-name{color:#ff3b30;font-weight:800;}
 /* ── 세부경로 시트(transitDetailModal) — 버스 노선상세(brs-*)와 톤 통일 ── */
 /* ★ 2026-09-26 (YJ 요청: "이쁘고 직관적으로") — 구간 아이콘을 이어주는 색선(레일)과
