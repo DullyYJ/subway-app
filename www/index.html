@@ -9769,6 +9769,14 @@ window.confirmCurrentRoute = confirmCurrentRoute;
 //   → 확정 자체를 신호로 삼아 여기서 한 번 더 적는다. 추적이 되든 안 되든.
 function _pipArmNow(){
   try{ if(typeof _pipTripSet === 'function') _pipTripSet(); }catch(e){}
+  // ★ 2026-10-01: 오버레이 권한이 아직 없으면 한 번만 알려 준다(다른 앱을 보면서도 내 위치를 보려면 필요)
+  try{
+    if(typeof _ovlNative === 'function' && _ovlNative() && _ovlSupported !== false && _ovlGranted !== true && _ovlEnabled()
+       && localStorage.getItem('ovlHint') !== '1'){
+      localStorage.setItem('ovlHint', '1');
+      if(typeof toast === 'function') toast("다른 앱을 보면서도 내 위치를 보려면 설정 > '다른 앱 위에 표시'를 켜세요");
+    }
+  }catch(e){}
   try{ if(typeof _pipNativeSync === 'function') _pipNativeSync(true); }catch(e){}
   // 확정 직후엔 경로 데이터가 아직 그려지는 중일 수 있어 한 번 더 확인한다
   setTimeout(function(){
@@ -19174,6 +19182,19 @@ window.addEventListener('unhandledrejection', function(e) {
           </label>
         </div>
         <p style="font-size:12px;color:var(--sub);margin:6px 0 12px;">앱을 내려도 현재역 · 남은시간 · 도착 예정 시각만 작게 띄웁니다. 화면을 탭하면 닫혀요.</p>
+        <!-- ★ 2026-10-01: 다른 앱 위에 표시(오버레이) — 다른 앱을 쓰는 동안 현재역·남은시간을 화면 맨 위에 작은 막대로 -->
+        <div style="margin:0 0 12px;padding:12px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+            <div style="font-size:14px;font-weight:800;color:var(--text);">🪟 다른 앱 위에 표시</div>
+            <label style="position:relative;display:inline-block;width:50px;height:28px;flex-shrink:0;">
+              <input type="checkbox" id="ovlToggle" onchange="_ovlSetEnabled(this.checked)" style="opacity:0;width:0;height:0;">
+              <span id="ovlToggleTrack" style="position:absolute;inset:0;background:var(--border2);border-radius:28px;transition:.2s;cursor:pointer;"></span>
+              <span id="ovlToggleKnob" style="position:absolute;left:3px;top:3px;width:22px;height:22px;background:#fff;border-radius:50%;transition:.2s;pointer-events:none;"></span>
+            </label>
+          </div>
+          <p style="font-size:12px;color:var(--sub);margin:6px 0 0;">다른 앱을 쓰는 동안 현재역 · 남은시간을 화면 위쪽에 작은 막대로 띄워요. 막대를 누르면 앱으로 돌아오고, 끌어서 위치를 옮길 수 있어요. 안내 정보만 보여주고 광고는 넣지 않아요. 처음 켜면 설정에서 '다른 앱 위에 표시' 권한을 허용해 주세요.</p>
+          <div id="ovlStat" style="margin-top:6px;font-size:11.5px;line-height:1.6;color:var(--sub);white-space:pre-line;"></div>
+        </div>
         <button onclick="_pipPreview()" style="width:100%;padding:11px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);font-family:inherit;">미리보기</button>
         <div id="pipStat" style="margin-top:10px;font-size:11.5px;line-height:1.6;color:var(--sub);"></div>
       </div>
@@ -31791,18 +31812,12 @@ function _pipEl(){
     + 'flex-direction:column;align-items:center;justify-content:center;gap:1.4vw;'
     + 'background:#000;color:#fff;'
     + 'padding:2.4vw;padding-top:2.8vw;text-align:center;'
-    + 'font-family:inherit;overflow:hidden;box-shadow:inset 0 2px 0 rgba(255,214,10,.55);';
+    + 'font-family:inherit;overflow:hidden;';   // ★ 2026-10-01 (YJ: "노란색 띠 상단에서 없애줘"): 위쪽 골드 띠(inset box-shadow) 제거 — 배경은 순수 검정 한 가지
   el.innerHTML =
       // ★ 2026-09-21: 내용을 pipBox 로 감싼다 — 창이 작을 때 통째로 축소해 넣기 위함(_pipFit)
       '<div id="pipBox" style="width:100%;flex:none;display:flex;flex-direction:column;align-items:center;'
     +   'gap:2.2vw;transform-origin:50% 0;">'
-      // 앱 상단과 같은 응원 문구가 오른쪽에서 왼쪽으로 흐른다
-    + '<div id="pipCheerRow" style="width:100%;flex:none;overflow:hidden;height:5.6vw;position:relative;">'
-    +   '<div id="pipCheerTrack" style="display:inline-block;white-space:nowrap;padding-left:100%;'
-    +     'animation:pipCheer 15s linear infinite;">'
-    +     '<span id="pipCheerText" style="font-size:4.4vw;font-weight:800;color:#9aa0ff;"></span>'
-    +   '</div>'
-    + '</div>'
+      // ★ 2026-10-01 (YJ: "pip는 맨위에 글자 흘러가는 거 없이 배경이 다 검정이어야 해"): 위에 흐르던 응원 문구 줄을 뺐다.
     + '<div id="pipStn" style="width:100%;font-size:6.2vw;line-height:1.25;display:flex;justify-content:center;align-items:baseline;gap:1.6vw;' + NOWRAP + '"></div>'
     // ★ 2026-09-22: 여정 진행률 막대 — 목적지까지 얼마나 왔는지 한눈에
     + '<div id="pipProgWrap" style="width:92%;flex:none;height:1.8vw;min-height:3px;border-radius:3px;background:rgba(255,255,255,.14);overflow:hidden;">'
@@ -31821,62 +31836,12 @@ function _pipEl(){
   // ★ 2026-09-03: 탭하면 숨기던 동작을 뺐다.
   //   PiP 창을 탭하는 건 '앱으로 돌아가고 싶다'는 뜻이라 안드로이드가 알아서 처리한다.
   //   여기서 숨겨 버리면 작은 창에 앱 화면이 비쳐 고장난 것처럼 보인다.
-  // 흐르는 애니메이션 정의(한 번만)
-  try{
-    if(!document.getElementById('pipCheerCss')){
-      var st0 = document.createElement('style');
-      st0.id = 'pipCheerCss';
-      st0.textContent = '@keyframes pipCheer{0%{transform:translateX(0);}100%{transform:translateX(-100%);}}';
-      document.head.appendChild(st0);
-    }
-  }catch(e){}
   document.body.appendChild(el);
   return el;
 }
 
-// ★ 2026-09-03: 앱 상단과 같은 응원 문구를 작은 화면에도 흘린다.
-//   앞선 시도는 animationiteration 이벤트로 문구를 바꿨는데, 배경에서 애니메이션이
-//   멈추면 이벤트도 안 와서 줄이 통째로 비어 보였다.
-//   → 이벤트에 기대지 않는다. 15초 단위로 시계에서 번호를 뽑아 문구를 고르므로
-//     언제 그리든 항상 뭔가가 들어 있다.
-var _PIP_CHEER_MS = 15000;
-var _PIP_CHEER_FALLBACK = [
-  '오늘도 안전하게 다녀오세요',
-  '조금만 더 가면 도착이에요',
-  '창밖 한 번 보고 가세요',
-  '수고 많으셨어요',
-  '가는 길이 편안하길 바라요',
-  '잠시 어깨 펴고 숨 한 번',
-  '무사히 도착하실 거예요'
-];
-
-function _pipCheerList(){
-  // ① 앱 헤더가 쓰는 목록  ② 헤더에 떠 있는 문구  ③ 내장 문구
-  try{
-    if(typeof _refreshMarqueeList === 'function') _refreshMarqueeList();
-    if(typeof _marqueeList !== 'undefined' && _marqueeList && _marqueeList.length)
-      return _marqueeList;
-  }catch(e){}
-  try{
-    var src = document.getElementById('hdrMarqueeText');
-    var t = src && src.textContent;
-    if(t && t.trim()) return [t.trim()];
-  }catch(e){}
-  return _PIP_CHEER_FALLBACK;
-}
-
-function _pipCheerPaint(){
-  try{
-    var el = document.getElementById('pipCheerText');
-    if(!el) return;
-    var list = _pipCheerList();
-    if(!list.length) return;
-    var idx = Math.floor(Date.now() / _PIP_CHEER_MS) % list.length;
-    var msg = String(list[idx] || '');
-    if(typeof _stripEmoji === 'function'){ try{ msg = _stripEmoji(msg); }catch(e){} }
-    if(el.textContent !== msg) el.textContent = msg;
-  }catch(e){}
-}
+// ★ 2026-10-01: 작은 화면의 흐르는 응원 문구는 없앴다(YJ 요청). 외부 호출이 남아 있어도 안전하도록 빈 함수만 둔다.
+function _pipCheerPaint(){}
 window._pipCheerPaint = _pipCheerPaint;
 
 function _pipPaint(){
@@ -31979,8 +31944,6 @@ function _pipRecoPaint(){
   }
   var wrap = document.getElementById('pipView');
   // ★ 2026-09-21: 창이 늘어난 동안에는 위에 흐르는 응원 문구를 숨긴다(추천 문구를 읽는 데 방해가 된다)
-  var _cRow = document.getElementById('pipCheerRow');
-  if(_cRow) _cRow.style.display = r ? 'none' : '';
   if(!r){
     box.style.display = 'none'; box.innerHTML = '';
     // ★ 2026-09-15: 추천이 사라지면 창을 원래 높이로
@@ -32132,21 +32095,25 @@ function _pipFit(){
     if(avail > 20 && nat > 0 && (nat > avail + 1 || (MAXUP > 1 && nat < avail * 0.92))){
       sc = Math.max(0.3, Math.min(MAXUP, avail / nat));
       if(sc < 0.8 && recoOn){            // 너무 작아지면 추천이 주인공이므로 역·시간 줄을 잠깐 비운다
-        rowsShow('none'); nat = bx.offsetHeight; sc = Math.min(1, avail / nat);
+        rowsShow('none'); nat = bx.offsetHeight;
       }
-      for(var i = 0; i < 5 && Math.abs(sc - 1) > 0.01; i++){
-        bx.style.width = (100 / sc) + '%';
-        bx.style.transform = 'scale(' + sc + ')';
-        nat = bx.offsetHeight;
-        var want = Math.max(0.3, Math.min(MAXUP, avail / nat));
-        if(nat * sc <= avail + 1 && nat * sc >= avail * 0.9) break;   // 이미 알맞게 찼다
-        if(want > sc && nat * sc <= avail + 1 && i >= 3) break;        // 키우다 진동하면 현재값 유지
-        sc = (i < 3) ? want : Math.min(sc, want);
+      // ★ 2026-10-01: 납작한 창(239:100)에서 예전 반복 보정이 줄바꿈 때문에 왔다 갔다 하다가 넘친 채 끝났다
+      //   (배율을 줄이면 상자가 넓어져 문장이 2줄로 줄고, 그러면 다시 키우고… 가 반복).
+      //   → '넘치지 않는 가장 큰 배율'을 이분 탐색으로 찾는다. 마지막에 반드시 확인된 값만 적용한다.
+      var _fits = function(k){
+        bx.style.width = (100 / k) + '%'; bx.style.transform = (Math.abs(k - 1) < 0.005) ? '' : 'scale(' + k + ')';
+        return bx.offsetHeight * k <= avail + 1;
+      };
+      var lo = 0.3, hi = MAXUP, best = 0.3;
+      if(_fits(hi)) best = hi;
+      else {
+        for(var i = 0; i < 9; i++){
+          var mid = (lo + hi) / 2;
+          if(_fits(mid)){ best = mid; lo = mid; } else hi = mid;
+        }
       }
-      if(nat * sc > avail + 1){            // 마지막 안전장치 — 절대 넘치지 않게
-        sc = Math.max(0.3, Math.min(sc, avail / nat));
-        bx.style.width = (100 / sc) + '%'; bx.style.transform = 'scale(' + sc + ')';
-      }
+      sc = best;
+      _fits(sc);
       if(Math.abs(sc - 1) <= 0.01){ sc = 1; bx.style.width = '100%'; bx.style.transform = ''; }
     }
     if(reco){
@@ -32175,6 +32142,7 @@ function _pipTick(){
       if(el) el.style.display = 'none';                 // 취소·도착·복귀 — 어느 쪽이든 내린다
     }
   }catch(e){}
+  try{ _ovlSync(); }catch(e2){}                          // ★ 2026-10-01: 다른 앱 위 오버레이도 같은 여정 값으로 갱신
 }
 // 감시 루프는 항상 돈다(가벼운 검사뿐이라 부담이 없다)
 // ★ 2026-09-22: 다만 안내 중인 경로가 아예 없을 때도 1초마다 똑같이 돌 필요는 없다
@@ -32210,7 +32178,10 @@ window._pipNativeAvailable = function(){ return !!_pipNative(); };
 //   모르는 키는 플러그인이 그냥 무시하므로 넣어 두어도 안전하다.
 // ★ 2026-09-29: 하단 요약을 알약 한 줄에서 완전한 문장(최대 2줄)으로 바꾸면서
 //   기존 100 높이로는 문장이 눌리거나 잘릴 수 있어 136으로 늘려 여유를 준다.
-var PIP_W = 239, PIP_H = 136;
+// ★ 2026-10-01 (YJ: "pip의 세로 크기를 지금의 1/2로 줄일 수 있어?"): 안드로이드 PiP 는 가로:세로 비율이
+//   2.39:1 보다 납작할 수 없다(넘으면 setAspectRatio 가 예외 → 조용히 무시됨). 그래서 절반(≈3.5:1)은 불가능하고
+//   허용되는 가장 낮은 높이인 239:100 으로 줄인다(136→100, 약 26% 감소). 안에 담기는 글은 _pipFit 이 창에 맞춘다.
+var PIP_W = 239, PIP_H = 100;
 // ★ 2026-09-15: 하차 추천이 뜨면 창을 아래로 늘린다.
 //   기존 239:100 은 글자 두 줄이 겨우 들어가는 높이라 추천이 겹쳐 잘렸다.
 var PIP_W2 = 200, PIP_H2 = 190;
@@ -32229,7 +32200,7 @@ function _pipGrow(on){
     //   거절되고 창은 안 커졌다(10초 주기 동기화가 우연히 맞춰 줄 때까지). 줄일 때도 마찬가지.
     //   → 네이티브에 실제로 있고 setPictureInPictureParams 를 바로 거는 setActive 를 먼저 쓴다.
     //   실패하면 동기화 타이머가 다시 보내도록 표시해 둔다(_pipLastActive/_pipLastSz 초기화).
-    o.active = !!(_pipEnabled() && _pipHasRoute());
+    o.active = !!(_pipEnabled() && _pipHasRoute() && !_ovlUsable());
     var _bad = function(){ _pipLastActive = null; _pipLastSz = ''; };
     var _call = function(fn){
       try{ var r = fn.call(n, o); if(r && typeof r.then === 'function') r.then(function(){ _pipLastSz = o.width + 'x' + o.height; }, _bad); else _pipLastSz = o.width + 'x' + o.height; }
@@ -32286,7 +32257,7 @@ function _pipNativeSync(force){
   try{
     var n = _pipNative();
     if(!n || typeof n.setActive !== 'function'){ _pipLastActive = null; return; }
-    var v = !!(_pipEnabled() && _pipHasRoute());
+    var v = !!(_pipEnabled() && _pipHasRoute() && !_ovlUsable());   // ★ 2026-10-01: 오버레이를 쓰는 동안엔 PiP 자동 전환을 끈다(둘이 겹치지 않게)
     var now = Date.now();
     var _o = _pipSizeOpts({ active: v });
     var _sz = _o.width + 'x' + _o.height;
@@ -32343,6 +32314,130 @@ window._pipSyncToggle = _pipSyncToggle;
 try{
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(_pipSyncToggle, 300); });
   else setTimeout(_pipSyncToggle, 300);
+}catch(e){}
+
+// ══════════════════════════════════════════════════════════════
+// ★ 2026-10-01 (YJ: "다른 앱을 보면서 내 위치가 어딘지 알게 하고 싶어 — 오버레이, 앱이 백그라운드로 돌면 알아서 위에 떠야 해"):
+//   다른 앱 위에 표시(오버레이). 앱은 '그리기'만 한다 — 보여줄 글(현재▸다음, 목적지·남은 시간·도착, 추천 제목)은
+//   PiP 와 같은 값(_pipStations·_pipData·_pipReco)에서 뽑아 네이티브(Capacitor.Plugins.Overlay)에 문자열로 넘길 뿐이다.
+//   앱이 화면에서 사라지면(onStop) 네이티브가 알아서 띄우고, 돌아오면 알아서 내린다. 권한은 사용자가 설정에서 켠다.
+//   오버레이가 쓰이는 동안엔 PiP 자동 전환을 끈다(_pipNativeSync). 광고·홍보 문구는 넣지 않는다(플레이 정책).
+var _OVL_KEY = 'ovlOn';
+var _ovlGranted = null, _ovlSupported = null;
+var _ovlLastKey = null, _ovlLastAt = 0, _OVL_HEARTBEAT_MS = 20000;
+function _ovlNative(){
+  try{ var P = window.Capacitor && window.Capacitor.Plugins; return (P && P.Overlay) || null; }catch(e){ return null; }
+}
+function _ovlEnabled(){ try{ return localStorage.getItem(_OVL_KEY) !== '0'; }catch(e){ return true; } }
+// 지금 오버레이를 실제로 쓸 수 있나(플러그인 있음 + OS 지원 + 권한 허용 + 사용자가 켬)
+function _ovlUsable(){
+  try{ return !!(_ovlNative() && _ovlSupported !== false && _ovlGranted === true && _ovlEnabled()); }catch(e){ return false; }
+}
+window._ovlUsable = _ovlUsable;
+function _ovlRefresh(cb){
+  try{
+    var n = _ovlNative();
+    if(!n || typeof n.isAvailable !== 'function'){ _ovlGranted = null; _ovlSupported = null; if(cb) cb(); return; }
+    var r = n.isAvailable();
+    if(r && typeof r.then === 'function'){
+      r.then(function(v){
+        _ovlGranted = !!(v && v.granted); _ovlSupported = !(v && v.supported === false);
+        try{ _ovlSyncToggle(); _pipNativeSync(true); _ovlSync(true); }catch(e){}
+        if(cb) cb();
+      }).catch(function(){ if(cb) cb(); });
+    } else if(cb) cb();
+  }catch(e){ if(cb) cb(); }
+}
+window._ovlRefresh = _ovlRefresh;
+// 오버레이에 찍을 세 줄 — 판단 없이 이미 있는 값을 문자열로 옮긴다
+function _ovlLines(){
+  var out = { l1:'', l2:'', l3:'' };
+  try{
+    var st = _pipStations(), d = _pipData();
+    var cur = st.cur || d.cur || d.from || '이동 중';
+    out.l1 = st.next ? (cur + ' ▸ ' + st.next) : ('● ' + cur);
+    var dest = d.dest || (window._pipTrip && window._pipTrip.to) || '';
+    var t = (d.min != null) ? _pipMinText(d.min) : '-';
+    out.l2 = (dest ? dest + '까지 ' : '') + t + (d.arr ? ' · ' + d.arr + ' 도착' : '');
+    var r = window._pipReco;
+    if(r && r.title){
+      if(!r.ovlAt) r.ovlAt = Date.now();
+      if(Date.now() - r.ovlAt <= _PIP_RECO_TTL) out.l3 = _pipClampText(r.title, 28);
+    }
+  }catch(e){}
+  return out;
+}
+function _ovlSync(force){
+  try{
+    var n = _ovlNative();
+    if(!n || typeof n.update !== 'function') return;
+    var active = !!(_ovlUsable() && _pipEnabled() && _pipHasRoute());
+    var L = active ? _ovlLines() : { l1:'', l2:'', l3:'' };
+    var key = (active ? '1' : '0') + '|' + L.l1 + '|' + L.l2 + '|' + L.l3;
+    var now = Date.now();
+    // 바뀐 게 없으면 보내지 않는다. 다만 켜져 있는 동안엔 20초마다 한 번은 다시 보내 '살아 있음'을 알린다
+    // (네이티브는 3분 넘게 소식이 없으면 낡은 값이 남지 않도록 스스로 숨긴다).
+    if(!force && key === _ovlLastKey && (!active || (now - _ovlLastAt) < _OVL_HEARTBEAT_MS)) return;
+    if(!active && _ovlLastKey === null && !force) { _ovlLastKey = key; return; }   // 처음부터 꺼져 있으면 굳이 알리지 않는다
+    _ovlLastKey = key; _ovlLastAt = now;
+    var r = n.update({ active: active, line1: L.l1, line2: L.l2, line3: L.l3 });
+    if(r && typeof r.catch === 'function') r.catch(function(){ _ovlLastKey = null; });   // 실패하면 다음 틱에 다시
+  }catch(e){ _ovlLastKey = null; }
+}
+window._ovlSync = _ovlSync;
+function _ovlSetEnabled(v){
+  try{ localStorage.setItem(_OVL_KEY, v ? '1' : '0'); }catch(e){}
+  var n = _ovlNative();
+  if(v && !n){
+    if(typeof toast === 'function') toast('이 앱 버전에서는 다른 앱 위 표시를 지원하지 않아요');
+    try{ localStorage.setItem(_OVL_KEY, '0'); }catch(e){}
+    _ovlSyncToggle(); return;
+  }
+  if(v && _ovlGranted !== true){
+    // 권한 안내(설정 화면으로 보내 직접 켜게 한다) — 무엇을 왜 쓰는지 먼저 알린다
+    var ok = true;
+    try{
+      ok = window.confirm('다른 앱을 쓰는 동안 현재역·남은시간을 화면 위쪽에 작게 띄우려면 \'다른 앱 위에 표시\' 권한이 필요해요.\n\n안내 정보만 보여주고 광고는 넣지 않아요. 설정 화면을 열까요?');
+    }catch(e){}
+    if(ok){
+      try{ n.requestPermission(); }catch(e){}
+      if(typeof toast === 'function') toast("설정에서 '길동무'의 '다른 앱 위에 표시'를 켜 주세요");
+    } else {
+      try{ localStorage.setItem(_OVL_KEY, '0'); }catch(e){}
+    }
+  } else if(typeof toast === 'function'){
+    toast(v ? '다른 앱 위에 표시를 켰어요' : '다른 앱 위에 표시를 껐어요');
+  }
+  _ovlSyncToggle();
+  try{ _pipNativeSync(true); }catch(e){}
+  _ovlSync(true);
+}
+window._ovlSetEnabled = _ovlSetEnabled;
+function _ovlSyncToggle(){
+  try{
+    var on = _ovlEnabled();
+    var chk = document.getElementById('ovlToggle'), tr = document.getElementById('ovlToggleTrack'), kn = document.getElementById('ovlToggleKnob');
+    if(chk) chk.checked = on;
+    if(tr)  tr.style.background = on ? 'var(--green,#34c759)' : 'var(--border2)';
+    if(kn)  kn.style.left = on ? '25px' : '3px';
+    var st = document.getElementById('ovlStat');
+    if(st){
+      if(!_ovlNative()) st.textContent = '이 앱 버전에서는 지원하지 않아요.';
+      else if(_ovlSupported === false) st.textContent = '이 기기(안드로이드 8 미만)에서는 지원하지 않아요.';
+      else if(_ovlGranted === true) st.textContent = on ? '사용 중 · 다른 앱을 쓰는 동안 위쪽에 표시돼요.' : '권한은 허용됨 · 지금은 꺼져 있어요.';
+      else st.textContent = on ? "권한이 필요해요 · 설정에서 '다른 앱 위에 표시'를 허용해 주세요." : '꺼져 있어요.';
+    }
+  }catch(e){}
+}
+window._ovlSyncToggle = _ovlSyncToggle;
+try{
+  setTimeout(function(){ _ovlRefresh(); }, 1500);
+  setInterval(function(){ _ovlSync(); }, 5000);
+  // 설정 화면에서 권한을 켜고 돌아오면 바로 반영한다
+  document.addEventListener('visibilitychange', function(){ if(!document.hidden) _ovlRefresh(); });
+  window.addEventListener('focus', function(){ _ovlRefresh(); });
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(_ovlSyncToggle, 400); });
+  else setTimeout(_ovlSyncToggle, 400);
 }catch(e){}
 
 // ══════════════════════════════════════════════════════════════
