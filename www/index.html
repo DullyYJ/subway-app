@@ -31742,7 +31742,8 @@ function _pipStations(){
       for(var i=0;i<_transitNodeData.length;i++){
         var nd = _transitNodeData[i];
         var nm = String((nd && nd.name) || '');
-        if(!nm || (nd && nd.isWalk) || /^(도보|환승|이동)$/.test(nm)) continue;
+        // ★ 2026-10-01: 출발지 가상 노드('내 위치' 등)는 역이 아니다 — 줄 맨 앞에 '내 위치'가 끼어 보이던 원인
+        if(!nm || (nd && (nd.isWalk || nd.isOrigin)) || /^(도보|환승|이동|내 위치|현위치)$/.test(nm)) continue;
         // ★ 2026-10-01: 같은 자리 환승(서울→서울, 부산→부산)은 한 번만 보여준다
         if(keep.length && keep[keep.length-1] === nm){ if(i <= raw) hit = keep.length - 1; continue; }
         if(i <= raw) hit = keep.length;      // 지나온 곳까지의 위치를 기억
