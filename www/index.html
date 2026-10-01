@@ -14094,7 +14094,17 @@ function _updateTransitGps() {
   //   (감지되면 실제 위치로 보정. 절대 뒤로 안 감 — ratio는 단조 증가만)
   if(lat == null){
     // ★ 백그라운드 상태에선 마커 전진 안 함 (복귀 시 실제 위치로만 스냅 → 튐 방지)
-    if(window._appInBackground === true || document.hidden){ return; }
+    // ★ 2026-10-01 (YJ: "지하는 셀ID·GPS·시간표를 같이 본다 — 그런데 오버레이는 앱 밖에서 안 바뀐다"):
+    //   '마커 전진 안 함'은 지키되(아래 return), 진행도(_gpsMaxIdx)를 올리는 셀 근거 판정은 여기서 먼저 돌린다.
+    //   예전엔 이 return 이 셀 판정(_cellAssist·_cellHopAdvance)보다 앞이라, 앱이 가려진 동안은 지하에서
+    //   셀이 바뀌어도 아무도 세지 않았다(셀 관측 자체도 _cellAssist 가 불러 줘야 갱신된다).
+    //   진행도만 올리고 마커는 건드리지 않으므로 복귀 시 튐 방지 의도는 그대로다.
+    if(window._appInBackground === true || document.hidden){
+      try{ _cellAssist(); }catch(e){}
+      try{ _cellHopAdvance(); }catch(e){}
+      try{ _htlDriftCheck(); }catch(e){}
+      return;
+    }
     if(window._hadValidTransitFix){
       try {
         var _wIdx = (window._gpsMaxIdx==null ? -1 : window._gpsMaxIdx);
@@ -31071,6 +31081,19 @@ function _startBgGeolocation(){
 
       // ★ 2026-09-03: 배경에서는 JS 타이머가 멈춰 작은 화면(PiP)의 숫자가 굳는다.
       //   위치 콜백은 운영체제가 깨워 주므로, 올 때마다 화면을 다시 그린다.
+      // ★ 2026-10-01 (YJ: "오버레이가 역을 이동해도 안 바뀌고 앱에 갔다 와야 바뀐다"):
+      //   홈 경로의 진행 위치(_gpsMaxIdx)는 웹 GPS(S.lastGPSFix)로만 갱신되는데, 앱이 가려지면 웹 GPS 는 오지 않고
+      //   이 백그라운드 위치만 온다 → 진행 위치가 그대로 굳어 오버레이도 그대로였다.
+      //   받은 위치를 웹 GPS 와 같은 자리에 적고, 진행 판정(_updateTransitGps)을 바로 한 번 돌린 뒤 화면을 갱신한다.
+      try{
+        var _bla = location.latitude, _bln = location.longitude, _bac = location.accuracy || 99;
+        if(_bla != null && _bln != null && !isNaN(_bla) && !isNaN(_bln) && _bac <= 150){
+          window._lastGPSLat = _bla; window._lastGPSLng = _bln; window._lastGPSAt = Date.now();
+          if(typeof S !== 'undefined') S.lastGPSFix = { lat:_bla, lng:_bln, ts:Date.now() };
+          if(typeof _transitNodeData !== 'undefined' && _transitNodeData && _transitNodeData.length
+             && typeof _updateTransitGps === 'function') _updateTransitGps();
+        }
+      }catch(e){}
       try{ if(typeof _pipTick === 'function') _pipTick(); }catch(e){}
 
       // startWatch()의 GPS 처리와 동일한 로직 재사용
@@ -32409,6 +32432,24 @@ function _ovlSync(force){
   }catch(e){ _ovlLastKey = null; }
 }
 window._ovlSync = _ovlSync;
+// ★ 2026-10-01: 앱이 가려지면 웹뷰 타이머가 늦춰지거나 멈춘다 → 오버레이가 떠 있는 동안 네이티브가 5초마다 이 함수를 직접 부른다.
+//   새로운 판단은 없다. 이미 있는 갱신 함수(위치 진행 판정 · 실시간 열차위치 조회 · 화면 갱신)를 한 번씩 돌릴 뿐이다.
+var _ovlTickRtAt = 0;
+window._ovlNativeTick = function(){
+  try{
+    var now = Date.now();
+    if(typeof _updateTransitGps === 'function' && typeof _transitNodeData !== 'undefined' && _transitNodeData && _transitNodeData.length){
+      try{ _updateTransitGps(); }catch(e1){}
+    }
+    // 지하에서는 GPS 가 없다 — 공공데이터 열차위치/도착정보가 진행 위치의 근거(원래 15초 타이머가 하던 일)
+    if(now - _ovlTickRtAt >= 14000){
+      _ovlTickRtAt = now;
+      try{ if(typeof _rtPoll === 'function') _rtPoll(); }catch(e2){}
+      try{ if(typeof _rtArrPoll === 'function') _rtArrPoll(); }catch(e3){}
+    }
+    if(typeof _pipTick === 'function') _pipTick(); else _ovlSync();
+  }catch(e){}
+};
 function _ovlSetEnabled(v){
   try{ localStorage.setItem(_OVL_KEY, v ? '1' : '0'); }catch(e){}
   var n = _ovlNative();
