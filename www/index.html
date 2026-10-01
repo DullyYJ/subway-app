@@ -13371,6 +13371,13 @@ function _cellHopAdvance(){
     if(cur < 0) return;
     var from = _transitNodeData[cur], to = _transitNodeData[cur+1];
     if(!from || !to || !to.isSub) return;                 // 지하철 구간에서만
+    // ★ 2026-10-01: 최근 GPS 가 '아직 그 역에 못 왔다(500m 넘게 이전 역 쪽)'고 말하면 셀·시각표 추정으로 앞서가지 않는다.
+    //   (지상으로 올라오는 역처럼 GPS 가 잡히는 곳에서는 GPS 가 이긴다. 지하처럼 GPS 가 없으면 이 검사는 건너뛴다.)
+    try{
+      var _vf = (typeof S !== 'undefined') ? S.lastGPSFix : null;
+      if(_vf && _vf.ts && (Date.now() - _vf.ts) <= 20000 && to.lat != null && typeof haversineM === 'function'
+         && haversineM(_vf.lat, _vf.lng, to.lat, to.lng) > 500 && _gpsBeforeNode(_vf.lat, _vf.lng, cur + 1)) return;
+    }catch(eV){}
 
     // 이 구간에 들어선 시각 — 통과 기록이 있으면 그걸, 없으면 셀 변화 직전
     var enterMs = (window._nodePassMs && window._nodePassMs[cur]) || null;
@@ -14043,6 +14050,26 @@ function _stopTransitWatch(){
 window._startTransitWatch=_startTransitWatch;
 window._stopTransitWatch=_stopTransitWatch;
 
+// ★ 2026-10-01 (YJ: "귤현을 가는 중인데 벌써 지나간 것처럼 나온다 — 귤현은 지상으로 올라오는 역이라 GPS 가 더 정확할 텐데"):
+//   GPS 가 N번째 역보다 '이전 역 쪽'에 있는지(= 아직 N 에 못 왔는지). 두 역을 잇는 선 위에서 내적으로 판정한다.
+//   '가장 가까운 역'만 보면 두 역의 한가운데를 넘는 순간 다음 역으로 바뀌어, 아직 한참 남았는데 도착한 것처럼 나왔다.
+function _gpsBeforeNode(lat, lng, idx){
+  try{
+    var N = _transitNodeData[idx]; if(!N || N.lat == null || !N.isSub) return false;
+    var P = null;
+    for(var j = idx - 1; j >= 0; j--){
+      var q = _transitNodeData[j];
+      if(q && q.lat != null && !q.isOrigin && !q.isWalk){ P = q; break; }
+    }
+    if(!P) return false;
+    var k = Math.cos(N.lat * Math.PI / 180);
+    var gx = (lng - N.lng) * 111000 * k, gy = (lat - N.lat) * 111000;
+    var px = (P.lng - N.lng) * 111000 * k, py = (P.lat - N.lat) * 111000;
+    return (gx * px + gy * py) > 0;
+  }catch(e){ return false; }
+}
+window._gpsBeforeNode = _gpsBeforeNode;
+
 function _updateTransitGps() {
   try{ if(typeof locTick === 'function') locTick(); }catch(e){}
   try{ if(typeof _progGuard === 'function') _progGuard(); }catch(e){}   // ★ 진행도 상한 확인
@@ -14100,6 +14127,9 @@ function _updateTransitGps() {
     //   셀이 바뀌어도 아무도 세지 않았다(셀 관측 자체도 _cellAssist 가 불러 줘야 갱신된다).
     //   진행도만 올리고 마커는 건드리지 않으므로 복귀 시 튐 방지 의도는 그대로다.
     if(window._appInBackground === true || document.hidden){
+      // 승차 확정(_htlBoardWatch)도 여기서 돌린다 — 15초 타이머는 '화면이 보일 때만' 돌아서, 승차 직후 다른 앱으로 넘어가면
+      // 승차가 확정되지 않고, 그러면 셀 전진(_cellHopAdvance)이 '아직 승차 전'으로 막혀 역이 안 넘어갔다.
+      try{ if(typeof _htlBoardWatch === 'function') _htlBoardWatch(); }catch(e){}
       try{ _cellAssist(); }catch(e){}
       try{ _cellHopAdvance(); }catch(e){}
       try{ _htlDriftCheck(); }catch(e){}
@@ -14292,6 +14322,23 @@ function _updateTransitGps() {
   // ★ 마커 역행 방지(지하철은 전진만) + 과도한 전진 억제 — GPS 노이즈로 앞뒤 퍼 차단
   if(_validGps && best && !best.isOrigin && !best.isWalk){
     var _pMax = (window._gpsMaxIdx==null ? -1 : window._gpsMaxIdx);
+    // ★ 2026-10-01: 셀·시각표 '추정'으로 올라간 진행도가 GPS 보다 앞서 있으면 GPS 가 이긴다.
+    //   추정이 N번째 역 도착으로 판정했는데 GPS 는 N 에서 500m 넘게 이전 역 쪽이면 → 아직 N 에 못 온 것이다(한 칸 되돌린다).
+    //   GPS 로 확정된 진행도(_gpsConfirmIdx)는 건드리지 않는다.
+    try{
+      var _gcI = (window._gpsConfirmIdx == null ? -1 : window._gpsConfirmIdx);
+      var _nA = (_pMax > 0) ? _transitNodeData[_pMax] : null;
+      if(_nA && window._cellMaxIdx === _pMax && _gcI < _pMax && _nA.isSub && _nA.lat != null && typeof haversineM === 'function'
+         && haversineM(lat, lng, _nA.lat, _nA.lng) > 500 && _gpsBeforeNode(lat, lng, _pMax)){
+        console.log('[진행도 되돌림] 추정이 앞서감 ' + _pMax + ' → ' + (_pMax - 1) + ' (GPS: ' + (_nA.name||'') + ' 아직 못 옴)');
+        window._gpsMaxIdx = _pMax - 1;
+        window._cellMaxIdx = null;
+        window._markerMaxProg = null;
+        if(window._nodePassMs) delete window._nodePassMs[_pMax];
+        window._gpsWaitIdx = null; window._gpsWaitRatio = 0;
+        _pMax = _pMax - 1;
+      }
+    }catch(eR){}
     // ★ 2026-09-15: 진행도를 되돌릴 방법이 아예 없었다.
     //   _gpsMaxIdx·_gpsConfirmIdx 는 어디서나 Math.max 로만 올라간다.
     //   그래서 기지국 추정(_cellHopAdvance)이 한 번 앞서 나가면 영영 못 돌아왔다.
@@ -14327,6 +14374,15 @@ function _updateTransitGps() {
       if(_transitNodeData[bestIdx]){ best = _transitNodeData[bestIdx];
         bestDist = (best.lat!=null && typeof haversineM==='function') ? haversineM(lat,lng,best.lat,best.lng) : bestDist; }
     }
+    // ★ 2026-10-01: 지하철은 '가장 가까운 역'이 다음 역으로 바뀌는 순간(두 역의 한가운데)이 아니라, 역에 400m 안으로
+    //   들어왔을 때 도착으로 본다. 아직 이전 역 쪽(접근 중)이면 한 칸 전 역까지만 지나온 것으로 둔다.
+    try{
+      if(best && best.isSub && bestDist > 400 && bestIdx > _pMax && _gpsBeforeNode(lat, lng, bestIdx)){
+        bestIdx = Math.max(_pMax, bestIdx - 1);
+        best = _transitNodeData[bestIdx] || best;
+        if(best && best.lat != null && typeof haversineM === 'function') bestDist = haversineM(lat, lng, best.lat, best.lng);
+      }
+    }catch(eA){}
     window._gpsMaxIdx = Math.max(_pMax, bestIdx);
     // ★ 시각표 추정이 섞이지 않은 '순수 GPS 확인' 진행도 — 시각 보정의 기준으로만 쓴다.
     //   (_gpsMaxIdx는 포그라운드 복귀·시간 soft 전진 때도 올라가므로 그대로 쓰면
@@ -26083,12 +26139,25 @@ function _arrPipText(a, slot, destStn, body){
 }
 window._arrPipText = _arrPipText;
 
+// ★ 2026-10-01 (YJ: "하차 전 추천 알림이 안 온다 — 확인해줘"): 발사 경과를 남겨 설정>진단에서 볼 수 있게 한다.
+window._arrDiag = window._arrDiag || {};
+function _arrDiagSet(k, v){ try{ window._arrDiag[k] = v; window._arrDiag.at = Date.now(); }catch(e){} }
 function _arrFireAlertNow(destStn, arrMs){
   try{
-    if(!_notifOnce('reco')) return;      // ★ 하차 추천도 여정당 1회
+    _arrDiagSet('stage', '발사 시도');
+    if(!_notifOnce('reco')){ _arrDiagSet('stage', '이번 여정에서 이미 발송함(여정당 1회)'); return; }      // ★ 하차 추천도 여정당 1회
     var slot = _arrSlot(arrMs);
-    if(slot === 'none') return;        // 00~07시, 10:01~16:59 → 추천 알림 없음
-    var a = _arrBuildAlert(destStn, null, arrMs);
+    if(slot === 'none'){ _arrDiagSet('stage', '추천 없는 시간대'); return; }        // 00~07시 → 추천 알림 없음
+    var a;
+    try{ a = _arrBuildAlert(destStn, null, arrMs); }
+    catch(eB){
+      // 문구를 만들다 오류가 나도 알림은 나가야 한다 — 간단한 문구로 대신 보낸다
+      _arrDiagSet('err', String(eB && eB.message || eB));
+      var _hh = new Date(arrMs); var _hm = ('0'+_hh.getHours()).slice(-2)+':'+('0'+_hh.getMinutes()).slice(-2);
+      a = { title:'🚉 하차 ' + _arrRemainMin(arrMs) + '분 전' + (destStn ? ' · ' + destStn : ''),
+            body:'하차 ' + _arrRemainMin(arrMs) + '분 전이에요.\n' + (destStn ? destStn + ' ' : '') + '도착 예정 ' + _hm + '\n\n내리시면 근처에서 잠깐 쉬어 가세요.',
+            menu:'', shop:null, place:null, remMin:_arrRemainMin(arrMs), dinner:false, spots:[] };
+    }
     window._arrOrderMenu = a.menu || '야식';
     window._arrShopItem  = a.shop || null;
     window._arrPlace     = a.place || null;
@@ -26110,6 +26179,7 @@ function _arrFireAlertNow(destStn, arrMs){
 
       var vib = [300,120,300];
       try { if('vibrate' in navigator) navigator.vibrate(vib); } catch(e){}
+      _arrDiagSet('stage', '알림 발송: ' + a.title + (_notifAllowed('arrive_reco') ? '' : ' (설정에서 꺼져 있어 차단됨)'));
       if(typeof showNotification==='function')
         showNotification(a.title, body, { vibrate:vib, type:'arrive_reco' });
       if(!document.hidden && typeof _showBriefingModal==='function')
@@ -26230,6 +26300,7 @@ function _arrWatchTick(){
       rem   = Math.round((arrMs - Date.now()) / 1000);
     }
     window._arrLastRemSec = rem;                 // 설정>진단에서 확인용
+    window._arrLastTickAt = Date.now();
     try{ if(typeof _pipTick === 'function') _pipTick(); }catch(e){}   // 작은 화면 갱신 기회
     if(rem <= 0) return;
     _arrCheckPreAlert(arrMs, rem);
@@ -26290,6 +26361,10 @@ function _arrStatusShow(){
       ? new Date(window._arrAlertAt).toLocaleTimeString() + '  (30분간 재발송 안 함)'
       : '없음'));
     L.push('알림 정책: ' + ((typeof _notifAllowed === 'function' && _notifAllowed('arrive_reco')) ? '허용됨' : '차단됨'));
+    L.push('마지막 감시: ' + (window._arrLastTickAt ? new Date(window._arrLastTickAt).toLocaleTimeString() : '없음'));
+    var _dg = window._arrDiag || {};
+    L.push('발사 경과: ' + (_dg.stage || '없음') + (_dg.at ? '  (' + new Date(_dg.at).toLocaleTimeString() + ')' : ''));
+    if(_dg.err) L.push('문구 생성 오류: ' + _dg.err);
   }catch(e){ L.push('상태 확인 오류: ' + (e && e.message)); }
   box.textContent = L.join('\n');
 }
@@ -31094,6 +31169,7 @@ function _startBgGeolocation(){
              && typeof _updateTransitGps === 'function') _updateTransitGps();
         }
       }catch(e){}
+      try{ if(typeof _arrWatchTick === 'function') _arrWatchTick(); }catch(e){}   // ★ 하차 10분 전 추천 감시도 위치가 올 때마다 한 번
       try{ if(typeof _pipTick === 'function') _pipTick(); }catch(e){}
 
       // startWatch()의 GPS 처리와 동일한 로직 재사용
@@ -32177,6 +32253,7 @@ function _pipTick(){
     }
   }catch(e){}
   try{ _ovlSync(); }catch(e2){}                          // ★ 2026-10-01: 다른 앱 위 오버레이도 같은 여정 값으로 갱신
+  try{ _ovlKeepAliveSync(); }catch(e3){}                 // ★ 2026-10-01: 여정 중이면 가려져도 네이티브가 깨워 주게 한다
 }
 // 감시 루프는 항상 돈다(가벼운 검사뿐이라 부담이 없다)
 // ★ 2026-09-22: 다만 안내 중인 경로가 아예 없을 때도 1초마다 똑같이 돌 필요는 없다
@@ -32400,7 +32477,7 @@ function _ovlLines(){
     var c0 = (P === st.path) ? Math.max(0, Math.min(st.idx < 0 ? 0 : st.idx, P.length - 1)) : 0;
     for(var k = -2; k <= 2; k++){
       var nm = P[c0 + k];
-      out.track.push(nm == null ? '' : clamp(nm, k === 0 ? 9 : 5));
+      out.track.push(nm == null ? '' : clamp(nm, k === 0 ? 12 : 5));
     }
     out.cur = 2;
     var dest = d.dest || (window._pipTrip && window._pipTrip.to) || '';
@@ -32434,10 +32511,29 @@ function _ovlSync(force){
 window._ovlSync = _ovlSync;
 // ★ 2026-10-01: 앱이 가려지면 웹뷰 타이머가 늦춰지거나 멈춘다 → 오버레이가 떠 있는 동안 네이티브가 5초마다 이 함수를 직접 부른다.
 //   새로운 판단은 없다. 이미 있는 갱신 함수(위치 진행 판정 · 실시간 열차위치 조회 · 화면 갱신)를 한 번씩 돌릴 뿐이다.
+// ★ 2026-10-01 (YJ: "하차 전 추천 알림이 안 온다"): 앱이 가려지면 웹뷰 타이머(하차 10분 전 감시 포함)가 멈춘다.
+//   확정한 여정이 진행되는 동안은 오버레이를 쓰든 안 쓰든 네이티브가 5초마다 웹을 깨우도록 켠다(60초마다 갱신, 끝나면 끈다).
+var _ovlKaOn = null, _ovlKaAt = 0;
+function _ovlKeepAliveSync(){
+  try{
+    var n = _ovlNative();
+    if(!n || typeof n.keepAlive !== 'function') return;
+    var want = !!(window._routeLocked === true && typeof _pipHasRoute === 'function' && _pipHasRoute());
+    var now = Date.now();
+    if(want === _ovlKaOn && (!want || now - _ovlKaAt < 60000)) return;
+    _ovlKaOn = want; _ovlKaAt = now;
+    var r = n.keepAlive({ on: want });
+    if(r && typeof r.catch === 'function') r.catch(function(){ _ovlKaOn = null; });
+  }catch(e){ _ovlKaOn = null; }
+}
+window._ovlKeepAliveSync = _ovlKeepAliveSync;
 var _ovlTickRtAt = 0;
 window._ovlNativeTick = function(){
   try{
     var now = Date.now();
+    try{ _ovlKeepAliveSync(); }catch(e0){}
+    // 하차 10분 전 추천 감시(원래 20초 타이머) — 가려진 동안 타이머가 멈춰도 여기서 돌린다
+    try{ if(typeof _arrWatchTick === 'function') _arrWatchTick(); }catch(e4){}
     if(typeof _updateTransitGps === 'function' && typeof _transitNodeData !== 'undefined' && _transitNodeData && _transitNodeData.length){
       try{ _updateTransitGps(); }catch(e1){}
     }
