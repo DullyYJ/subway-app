@@ -25322,29 +25322,10 @@ function _arrAiCopy(menu, destStn, cb, opt){
   var timer = setTimeout(function(){ if(!done){ done = true; cb(null); } }, 5000);
   try{
     if(typeof _SERVER_URL === 'undefined'){ clearTimeout(timer); cb(null); return; }
-    var now = new Date();
-    var wx = (typeof _ltWx === 'function') ? _ltWx() : null;
+    // 문구는 서버가 '저녁/야식 × 메뉴'별로 미리 만들어 저장해 두고 하나씩 골라 준다(프롬프트도 서버가 갖고 있다).
     fetch(_SERVER_URL + '/ai-talk', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        mode: 'nightsnack',
-        count: 1,
-        hour: now.getHours(), minute: now.getMinutes(), day: now.getDay(),
-        weekend: (typeof _isHolidayOrWeekend === 'function') ? _isHolidayOrWeekend() : false,
-        weather: wx ? { temp: wx.temp, sky: wx.txt, rain: wx.rain } : null,
-        menu: menu, station: destStn || '',
-        noPolitics: true,
-        // 워커가 mode를 모르더라도 recent 문맥만으로 비슷한 톤이 나오도록 지시문을 함께 전달
-        rules: [
-          '퇴근길에 하차 ' + _min + '분 전인 사람에게 보내는 한 문장',
-          '오늘 하루 고생했다는 위로를 담되 과하지 않게, 담백하고 따뜻하게',
-          (_dinner ? menu + '(으)로 든든하게 저녁을 챙기자는 흐름으로 자연스럽게 이어질 것(야식이라는 말은 쓰지 말 것)'
-                   : menu + '(으)로 하루의 피로를 풀고 마무리하자는 흐름으로 자연스럽게 이어질 것'),
-          '광고처럼 들리지 않게, 강요하지 말 것',
-          '35자 이내 한 문장, 이모지 없이, 존댓말'
-        ],
-        recent: [{ nick: '시스템', text: '퇴근길 ' + (destStn || '') + ' 하차 ' + _min + '분 전 · 오늘 ' + (_dinner ? '저녁은 ' : '야식은 ') + menu }]
-      })
+      body: JSON.stringify({ mode: 'nightsnack', menu: menu, dinner: _dinner, min: _min, station: destStn || '' })
     })
     .then(function(r){ return r.ok ? r.json() : null; })
     .then(function(d){
@@ -26081,83 +26062,23 @@ function _cmPair(isMorn){
 }
 window._cmPair = _cmPair;
 
-// Open-Meteo 날씨 (키 불필요) — WMO 코드 → 텍스트/이모지
-function _wmoTxt(c){
-  if(c===0) return ['맑음','☀️']; if(c<=2) return ['대체로 맑음','🌤'];
-  if(c===3) return ['흐림','☁️']; if(c<=48) return ['안개','🌫'];
-  if(c<=57) return ['이슬비','🌦']; if(c<=67) return ['비','🌧'];
-  if(c<=77) return ['눈','🌨']; if(c<=82) return ['소나기','🌦'];
-  if(c<=86) return ['소낙눈','🌨']; return ['뇌우','⛈'];
-}
-// 날씨 캐시: ① 메모리(10분) → ② Worker D1 격자 캐시(/weather, 30분 공유) → ③ Open-Meteo 직접 (폴백)
-var _wxMem = {};   // { gridKey: { ts, data } }
+// 날씨는 서버(워커 /weather)가 격자별로 10분 저장해 두고 글자·이모지까지 만들어 준다 — 앱은 받아서 그리기만 한다.
+var _wxMem = {};   // { gridKey: { ts, data } }  (같은 격자를 10분 안에 다시 묻지 않는다)
 function _wxGrid(lat, lng){ return (Math.round(lat*10)/10).toFixed(1) + ',' + (Math.round(lng*10)/10).toFixed(1); }
-function _wxParse(d){
-  if(!d || !d.current) return null;
-  var h = new Date().getHours();
-  var pp = (d.hourly && d.hourly.precipitation_probability) ? (d.hourly.precipitation_probability[h]||0) : 0;
-  var wt = _wmoTxt(d.current.weather_code||0);
-  return { temp: Math.round(d.current.temperature_2m), txt: wt[0], emo: wt[1], rain: pp };
-}
 function _fetchWeather(lat, lng, cb){
   var key = _wxGrid(lat, lng);
-  // ① 메모리 캐시 10분
   var m = _wxMem[key];
   if(m && (Date.now() - m.ts) < 10*60*1000){ cb(m.data); return; }
-  function _done(parsed){
-    if(parsed) _wxMem[key] = { ts: Date.now(), data: parsed };
-    cb(parsed);
-  }
-  // ② Worker D1 격자 캐시 (지역 공유, API 호출 절감)
   fetch(_SERVER_URL + '/weather?lat=' + lat + '&lng=' + lng)
     .then(function(r){ return r.ok ? r.json() : null; })
     .then(function(d){
-      var parsed = _wxParse(d && (d.data || d));
-      if(parsed){ _done(parsed); return; }
-      throw new Error('no worker cache');
+      if(d && d.ok){ delete d.ok; _wxMem[key] = { ts: Date.now(), data: d }; cb(d); }
+      else cb(null);
     })
-    .catch(function(){
-      // ③ Open-Meteo 직접 폴백
-      var u = 'https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lng
-            + '&current=temperature_2m,weather_code&hourly=precipitation_probability&forecast_days=1&timezone=Asia%2FSeoul';
-      fetch(u).then(function(r){ return r.ok ? r.json() : null; })
-        .then(function(d){ _done(_wxParse(d)); })
-        .catch(function(){ _done(null); });
-    });
+    .catch(function(){ cb(null); });
 }
-
-// ── ★ 리치 날씨: 습도·체감·최저최고·자외선·바람 (브리핑용, 하루 2~3회라 직접 호출 OK) ──
-function _wxParseRich(d){
-  if(!d || !d.current) return null;
-  var c = d.current;
-  var h = new Date().getHours();
-  var pp = (d.hourly && d.hourly.precipitation_probability) ? (d.hourly.precipitation_probability[h]||0) : 0;
-  var wt = _wmoTxt(c.weather_code||0);
-  var o = { temp: Math.round(c.temperature_2m), txt: wt[0], emo: wt[1], rain: pp };
-  if(c.relative_humidity_2m != null) o.hum = Math.round(c.relative_humidity_2m);
-  if(c.apparent_temperature != null) o.feel = Math.round(c.apparent_temperature);
-  if(c.wind_speed_10m != null) o.wind = Math.round(c.wind_speed_10m);
-  if(d.daily && d.daily.temperature_2m_max && d.daily.temperature_2m_max[0] != null) o.tmax = Math.round(d.daily.temperature_2m_max[0]);
-  if(d.daily && d.daily.temperature_2m_min && d.daily.temperature_2m_min[0] != null) o.tmin = Math.round(d.daily.temperature_2m_min[0]);
-  if(d.daily && d.daily.uv_index_max && d.daily.uv_index_max[0] != null) o.uv = Math.round(d.daily.uv_index_max[0]);
-  return o;
-}
-function _fetchWeatherRich(lat, lng, cb){
-  var key = 'R' + _wxGrid(lat, lng);
-  var m = _wxMem[key];
-  if(m && (Date.now() - m.ts) < 10*60*1000){ cb(m.data); return; }
-  var u = 'https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lng
-        + '&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m'
-        + '&hourly=precipitation_probability&daily=temperature_2m_max,temperature_2m_min,uv_index_max'
-        + '&forecast_days=1&timezone=Asia%2FSeoul';
-  fetch(u).then(function(r){ return r.ok ? r.json() : null; })
-    .then(function(d){
-      var p = _wxParseRich(d);
-      if(p){ _wxMem[key] = { ts: Date.now(), data: p }; cb(p); return; }
-      throw new Error('rich parse fail');
-    })
-    .catch(function(){ _fetchWeather(lat, lng, cb); });   // 기존 캐시 경로 폴백
-}
+// 리치 날씨(습도·체감·최저최고·자외선·바람)도 같은 응답에 들어 있다
+var _fetchWeatherRich = _fetchWeather;
 
 // ── ★ 요일별 마무리 멘트 (주차에 따라 매주 로테이션) ──
 var _CM_CLOSING = {
@@ -28203,28 +28124,20 @@ function _fetchNewsFeed(cb){
         _newsApplyCats(_NEWSFEED.items);   // 제목 기반 카테고리 재분류
         _NEWSFEED.ts = Date.now();
       }
-      // ★ 증시 뉴스 보강 후 다시 렌더
-      _fetchStockNews(function(){
-        _newsApplyCats(_NEWSFEED.items);
-        if(cb) cb();
-        // 모든 카테고리를 뒤에서 한 번에 채운다 (화면은 이미 저장본으로 차 있다)
-        try{
-          if(!window._newsAllFetched){
-            window._newsAllFetched = 1;
-            setTimeout(function(){
-              // 서버가 있으면 한 번에 받고, 없으면 예전처럼 앱이 직접 긁는다
-              _fetchNewsFromServer(function(ok){
-                if(ok){
-                  try{ if(_commFilter === '뉴스'){ var l=document.getElementById('commList'); if(l) _renderNewsTab(l); } }catch(e2){}
-                  return;
-                }
-                console.log('[뉴스] 서버 실패 → 앱에서 직접 수집');
-                if(typeof _fetchAllCatNews==='function') _fetchAllCatNews();
-              });
-            }, 300);
-          }
-        }catch(e){}
-      });
+      _newsApplyCats(_NEWSFEED.items);
+      if(cb) cb();
+      // 모든 카테고리는 서버(워커 D1)에서 한 번에 받는다. 화면은 이미 저장본으로 차 있다.
+      try{
+        if(!window._newsAllFetched){
+          window._newsAllFetched = 1;
+          setTimeout(function(){
+            _fetchNewsFromServer(function(ok){
+              if(!ok) return;
+              try{ if(_commFilter === '뉴스'){ var l=document.getElementById('commList'); if(l) _renderNewsTab(l); } }catch(e2){}
+            });
+          }, 300);
+        }
+      }catch(e){}
     }).catch(function(){ if(cb) cb(); });
 }
 
@@ -28300,102 +28213,8 @@ function _newsApplyCats(items){
 }
 window._newsApplyCats = _newsApplyCats;
 
-// ── 증시 뉴스 보강: 구글뉴스 RSS(증시/코스피/코스닥)에서 직접 수집 ──
-// ── 카테고리별 뉴스 수집 ──────────────────────────────────────
-//   서버(/newsfeed)는 종합 피드 하나라 카테고리별로 기사가 크게 모자랐고,
-//   증시 보강만 따로 하다 보니 '전체'가 증시 기사로 뒤덮이는 일이 있었다.
-//   → 카테고리마다 전용 검색 피드를 두어 각각 충분히 채운다.
-var _NEWS_CAT_FEEDS = {
-  '증시': [
-    'https://news.google.com/rss/search?q=%EC%BD%94%EC%8A%A4%ED%94%BC%20%EC%BD%94%EC%8A%A4%EB%8B%A5%20%EC%A6%9D%EC%8B%9C+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EC%A3%BC%EC%8B%9D%EC%8B%9C%EC%9E%A5%20%EC%99%B8%EA%B5%AD%EC%9D%B8%20%EC%88%9C%EB%A7%A4%EC%88%98%20%EA%B3%B5%EB%AA%A8%EC%A3%BC+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EB%89%B4%EC%9A%95%EC%A6%9D%EC%8B%9C%20%EB%82%98%EC%8A%A4%EB%8B%A5%20%EB%8B%A4%EC%9A%B0%EC%A7%80%EC%88%98+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EB%AF%B8%EA%B5%AD%EC%A6%9D%EC%8B%9C%20%EC%9B%94%EA%B0%80%20S%26P500+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EC%A6%9D%EA%B6%8C%EC%82%AC%20%EB%AA%A9%ED%91%9C%EC%A3%BC%EA%B0%80%20%EC%8B%A4%EC%A0%81%EB%B0%9C%ED%91%9C+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EB%B0%B0%EB%8B%B9%20%EC%9E%90%EC%82%AC%EC%A3%BC%20%EC%86%8C%EA%B0%81+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EC%83%81%EC%9E%A5%EA%B8%B0%EC%97%85%20%EC%9D%B8%EC%88%98%ED%95%A9%EB%B3%91+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EC%A6%9D%EC%8B%9C%20%EC%A0%84%EB%A7%9D%20%EB%A6%AC%ED%8F%AC%ED%8A%B8+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EA%B0%9C%EC%9D%B8%20%EA%B8%B0%EA%B4%80%20%EB%A7%A4%EB%A7%A4%EB%8F%99%ED%96%A5+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EB%B9%84%ED%8A%B8%EC%BD%94%EC%9D%B8%20%EA%B0%80%EC%83%81%EC%9E%90%EC%82%B0%20%EC%8B%9C%EC%84%B8+when:14d&hl=ko&gl=KR&ceid=KR:ko'
-  ],
-  '경제': [
-    'https://news.google.com/rss/search?q=%ED%99%98%EC%9C%A8%20%EC%9B%90%EB%8B%AC%EB%9F%AC%20%EA%B8%B0%EC%A4%80%EA%B8%88%EB%A6%AC+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EB%AC%BC%EA%B0%80%20%EC%86%8C%EB%B9%84%EC%9E%90%EB%AC%BC%EA%B0%80%20%EC%9D%B8%ED%94%8C%EB%A0%88%EC%9D%B4%EC%85%98+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EB%B6%80%EB%8F%99%EC%82%B0%20%EC%95%84%ED%8C%8C%ED%8A%B8%20%EC%A0%84%EC%84%B8%20%EB%B6%84%EC%96%91+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EC%88%98%EC%B6%9C%20%EB%AC%B4%EC%97%AD%EC%88%98%EC%A7%80%20%EA%B2%BD%EC%83%81%EC%88%98%EC%A7%80+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EA%B3%A0%EC%9A%A9%20%EC%B7%A8%EC%97%85%EC%9E%90%20%EC%8B%A4%EC%97%85%EB%A5%A0%20%EC%9E%84%EA%B8%88+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EC%86%8C%EB%B9%84%20%EB%82%B4%EC%88%98%20%EA%B2%BD%EA%B8%B0+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EA%B8%88%EC%9C%B5%EA%B6%8C%20%EB%8C%80%EC%B6%9C%20%EA%B8%88%EB%A6%AC+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EC%84%B8%EA%B8%88%20%EC%97%B0%EB%A7%90%EC%A0%95%EC%82%B0%20%EC%A0%95%EC%B1%85+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EC%9B%90%EC%9E%90%EC%9E%AC%20%EC%9C%A0%EA%B0%80%20%EA%B5%AD%EC%A0%9C%EC%9C%A0%EA%B0%80+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EA%B8%B0%EC%97%85%20%EC%8B%A4%EC%A0%81%20%EB%A7%A4%EC%B6%9C%20%EC%98%81%EC%97%85%EC%9D%B4%EC%9D%B5+when:14d&hl=ko&gl=KR&ceid=KR:ko'
-  ],
-  '사회': [
-    'https://news.google.com/rss/search?q=%EC%82%AC%EA%B1%B4%EC%82%AC%EA%B3%A0%20%EA%B2%BD%EC%B0%B0%20%ED%99%94%EC%9E%AC+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EA%B5%90%ED%86%B5%EC%82%AC%EA%B3%A0%20%EC%A7%80%ED%95%98%EC%B2%A0%20%EB%B2%84%EC%8A%A4%20%EC%82%AC%EA%B3%A0+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EB%B2%95%EC%9B%90%20%ED%8C%90%EA%B2%B0%20%EA%B2%80%EC%B0%B0%20%EC%88%98%EC%82%AC+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EB%82%A0%EC%94%A8%20%EA%B8%B0%EC%83%81%EC%B2%AD%20%ED%83%9C%ED%92%8D%20%ED%8F%AD%EC%97%BC+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EA%B5%90%EC%9C%A1%20%ED%95%99%EA%B5%90%20%EB%8C%80%ED%95%99%20%EC%9E%85%EC%8B%9C+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EC%A7%80%ED%95%98%EC%B2%A0%20%EB%B2%84%EC%8A%A4%20%EA%B5%90%ED%86%B5%20%EC%A0%95%EC%B1%85+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EB%B3%91%EC%9B%90%20%EC%9D%98%EB%A3%8C%20%EA%B1%B4%EA%B0%95%EB%B3%B4%ED%97%98+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EC%95%84%ED%8C%8C%ED%8A%B8%20%EC%9E%AC%EA%B0%9C%EB%B0%9C%20%EC%A3%BC%EB%AF%BC+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%ED%99%98%EA%B2%BD%20%EB%AF%B8%EC%84%B8%EB%A8%BC%EC%A7%80%20%EC%9E%AC%ED%99%9C%EC%9A%A9+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EB%B3%B5%EC%A7%80%20%EC%97%B0%EA%B8%88%20%EC%A7%80%EC%9B%90%EA%B8%88+when:14d&hl=ko&gl=KR&ceid=KR:ko'
-  ],
-  '정치': [
-    'https://news.google.com/rss/search?q=%EA%B5%AD%ED%9A%8C%20%EB%B3%B8%ED%9A%8C%EC%9D%98%20%EB%B2%95%EC%95%88%20%EC%B2%98%EB%A6%AC+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EB%8C%80%ED%86%B5%EB%A0%B9%EC%8B%A4%20%EC%A0%95%EB%B6%80%20%EC%A0%95%EC%B1%85%20%EB%B0%9C%ED%91%9C+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EC%97%AC%EC%95%BC%20%EB%8C%80%ED%91%9C%20%EC%A0%95%EC%B9%98%EA%B6%8C%20%EA%B3%B5%EB%B0%A9+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EC%84%A0%EA%B1%B0%20%EC%97%AC%EB%A1%A0%EC%A1%B0%EC%82%AC%20%EC%A7%80%EC%A7%80%EC%9C%A8+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EC%99%B8%EA%B5%90%20%EC%A0%95%EC%83%81%ED%9A%8C%EB%8B%B4%20%ED%95%9C%EB%AF%B8%20%ED%95%9C%EC%9D%BC+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EA%B5%AD%EC%A0%95%EA%B0%90%EC%82%AC%20%EC%83%81%EC%9E%84%EC%9C%84+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EC%A7%80%EB%B0%A9%EC%9E%90%EC%B9%98%EB%8B%A8%EC%B2%B4%20%EC%8B%9C%EB%8F%84%EC%A7%80%EC%82%AC+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EC%A0%95%EB%8B%B9%20%EB%8B%B9%EB%8C%80%ED%91%9C%20%ED%9A%8C%EC%9D%98+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EA%B5%AD%EB%B0%A9%20%EC%95%88%EB%B3%B4%20%EA%B5%B0+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EB%B2%95%20%EA%B0%9C%EC%A0%95%EC%95%88%20%EC%8B%9C%ED%96%89+when:14d&hl=ko&gl=KR&ceid=KR:ko'
-  ],
-  '연예': [
-    'https://news.google.com/rss/search?q=%EC%95%84%EC%9D%B4%EB%8F%8C%20%EC%BB%B4%EB%B0%B1%20%EC%8B%A0%EA%B3%A1%20%EC%9D%8C%EC%9B%90+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EB%93%9C%EB%9D%BC%EB%A7%88%20%EC%8B%9C%EC%B2%AD%EB%A5%A0%20%EB%B0%A9%EC%86%A1+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EC%98%81%ED%99%94%20%EA%B0%9C%EB%B4%89%20%EB%B0%95%EC%8A%A4%EC%98%A4%ED%94%BC%EC%8A%A4+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EC%98%88%EB%8A%A5%20%EC%B6%9C%EC%97%B0%20%EB%B0%A9%EC%86%A1%EC%9D%B8+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=K%ED%8C%9D%20%ED%95%B4%EC%99%B8%20%EC%BD%98%EC%84%9C%ED%8A%B8%20%ED%88%AC%EC%96%B4+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EB%B0%B0%EC%9A%B0%20%EC%BA%90%EC%8A%A4%ED%8C%85%20%EC%9E%91%ED%92%88+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EA%B0%80%EC%88%98%20%EC%95%A8%EB%B2%94%20%EB%B0%9C%EB%A7%A4+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EC%9C%A0%ED%8A%9C%EB%B8%8C%20%ED%81%AC%EB%A6%AC%EC%97%90%EC%9D%B4%ED%84%B0+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EC%8B%9C%EC%83%81%EC%8B%9D%20%EC%88%98%EC%83%81+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EC%97%B0%EC%98%88%EA%B3%84%20%EA%B7%BC%ED%99%A9%20%EC%9D%B8%ED%84%B0%EB%B7%B0+when:14d&hl=ko&gl=KR&ceid=KR:ko'
-  ],
-  '스포츠': [
-    'https://news.google.com/rss/search?q=%ED%94%84%EB%A1%9C%EC%95%BC%EA%B5%AC%20KBO%20%EA%B2%BD%EA%B8%B0%20%EA%B2%B0%EA%B3%BC+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EC%B6%95%EA%B5%AC%20K%EB%A6%AC%EA%B7%B8%20%EA%B5%AD%EA%B0%80%EB%8C%80%ED%91%9C+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EC%86%90%ED%9D%A5%EB%AF%BC%20%EC%9D%B4%EA%B0%95%EC%9D%B8%20%ED%95%B4%EC%99%B8%EC%B6%95%EA%B5%AC+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%ED%94%84%EB%A1%9C%EB%86%8D%EA%B5%AC%20%EB%B0%B0%EA%B5%AC%20KBL+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EC%98%AC%EB%A6%BC%ED%94%BD%20%EC%95%84%EC%8B%9C%EC%95%88%EA%B2%8C%EC%9E%84%20%EB%A9%94%EB%8B%AC+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EC%95%BC%EA%B5%AC%20%EC%88%9C%EC%9C%84%20%EA%B2%BD%EA%B8%B0%20%EC%9D%BC%EC%A0%95+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EC%B6%95%EA%B5%AC%20%EB%8C%80%ED%91%9C%ED%8C%80%20%ED%8F%89%EA%B0%80%EC%A0%84+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EA%B3%A8%ED%94%84%20%EB%8C%80%ED%9A%8C%20%EC%9A%B0%EC%8A%B9+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=e%EC%8A%A4%ED%8F%AC%EC%B8%A0%20%EB%A6%AC%EA%B7%B8+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EA%B2%A9%ED%88%AC%EA%B8%B0%20UFC%20%EA%B2%BD%EA%B8%B0+when:14d&hl=ko&gl=KR&ceid=KR:ko'
-  ],
-  'IT': [
-    'https://news.google.com/rss/search?q=%EC%9D%B8%EA%B3%B5%EC%A7%80%EB%8A%A5%20AI%20%EC%B1%97GPT+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EB%B0%98%EB%8F%84%EC%B2%B4%20%EC%82%BC%EC%84%B1%EC%A0%84%EC%9E%90%20SK%ED%95%98%EC%9D%B4%EB%8B%89%EC%8A%A4+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EC%8A%A4%EB%A7%88%ED%8A%B8%ED%8F%B0%20%EA%B0%A4%EB%9F%AD%EC%8B%9C%20%EC%95%84%EC%9D%B4%ED%8F%B0%20%EC%B6%9C%EC%8B%9C+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EB%84%A4%EC%9D%B4%EB%B2%84%20%EC%B9%B4%EC%B9%B4%EC%98%A4%20%ED%94%8C%EB%9E%AB%ED%8F%BC+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EC%8A%A4%ED%83%80%ED%8A%B8%EC%97%85%20%ED%88%AC%EC%9E%90%20%EC%9C%A0%EC%B9%98%20IT%EC%97%85%EA%B3%84+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%ED%81%B4%EB%9D%BC%EC%9A%B0%EB%93%9C%20%EB%8D%B0%EC%9D%B4%ED%84%B0%EC%84%BC%ED%84%B0+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EB%B3%B4%EC%95%88%20%ED%95%B4%ED%82%B9%20%EA%B0%9C%EC%9D%B8%EC%A0%95%EB%B3%B4+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EC%A0%84%EA%B8%B0%EC%B0%A8%20%EB%B0%B0%ED%84%B0%EB%A6%AC+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EC%9A%B0%EC%A3%BC%20%EC%9C%84%EC%84%B1%20%EB%B0%9C%EC%82%AC+when:14d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/search?q=%EB%A1%9C%EB%B4%87%20%EC%9E%90%EB%8F%99%ED%99%94%20%EA%B8%B0%EC%88%A0+when:14d&hl=ko&gl=KR&ceid=KR:ko'
-  ]
-};
+// ── 카테고리별 뉴스는 서버(워커 D1)가 모아 둔다. 앱은 읽기만 한다 ──
 var _NEWS_CAT_TARGET = 100;          // 카테고리당 목표 건수
-var _NEWS_CAT_TTL    = 3*60*1000;    // 같은 카테고리 재수집 간격(목표 미달 시 곧 다시 시도)
-var _newsCatAt = {};                 // 카테고리별 마지막 수집 시각
-// ★ 2026-09-02: 목표(100건)를 영영 못 채우는 카테고리에서 재수집이 끝없이 돌던 것을 막는다.
-var _NEWS_CAT_MAX_TRIES = 3;         // 카테고리당 자동 보충 시도 상한 (앱 실행 1회 기준)
 var _NEWS_ROW_CHUNK = 100;           // 뉴스 목록을 한 번에 그리는 줄 수 (나머지는 이어서 붙임)
 
 // 한 카테고리를 채운다. 이미 목표를 넘겼고 최근에 받았으면 건너뛴다.
@@ -28467,7 +28286,7 @@ window._newsStoreHydrate = _newsStoreHydrate;
 // ── 서버에서 뉴스 한 번에 받아오기 ────────────────────────────
 //   ★ 원래는 앱이 기기마다 70개 피드를 CORS 프록시로 긁었다. 느리고 자주 실패했다.
 //     이제 서버(워커)가 정기적으로 모아 D1에 넣어두므로 **호출 한 번**이면 끝난다.
-//     서버가 없거나 실패하면 예전 방식(_fetchAllCatNews)으로 물러난다.
+//     서버가 실패하면 저장본(localStorage)만 보여 준다.
 var _NEWS_SERVER_URL = 'https://gentle-lab-7e47subway-api.phg0643.workers.dev/news/all';
 function _fetchNewsFromServer(cb){
   var done = false;
@@ -28497,63 +28316,6 @@ function _fetchNewsFromServer(cb){
 }
 window._fetchNewsFromServer = _fetchNewsFromServer;
 
-// 모든 카테고리를 한 번에 병렬로 채운다 (앱 시작 직후 뒤에서 실행)
-//   화면은 저장본으로 이미 차 있으므로 사용자는 기다리지 않는다.
-function _fetchAllCatNews(cb){
-  try{
-    var cats = Object.keys(_NEWS_CAT_FEEDS || {});
-    if(!cats.length){ if(cb) cb(); return; }
-    var pending = cats.length;
-    var done = function(){
-      if(--pending > 0) return;
-      _newsStoreSave();
-      try{ if(_commFilter === '뉴스'){ var l=document.getElementById('commList'); if(l) _renderNewsTab(l); } }catch(e){}
-      if(cb) cb();
-    };
-    cats.forEach(function(c){ _fetchCatNews(c, done, true); });
-  }catch(e){ if(cb) cb(); }
-}
-window._fetchAllCatNews = _fetchAllCatNews;
-
-function _fetchCatNews(cat, cb, force){
-  try{
-    var feeds = _NEWS_CAT_FEEDS[cat];
-    // ★ 2026-09-02: 즉시 반환할 때 콜백을 그 자리에서 부르면 호출한 쪽과 동기 재귀가 된다.
-    //   콜백은 항상 다음 틱에 부른다(호출부는 비동기 완료만 가정하면 되므로 동작은 그대로).
-    var _cbAsync = function(){ if(cb) setTimeout(cb, 0); };
-    if(!feeds || typeof _PROXY_LIST === 'undefined' || typeof _parseNewsRSS !== 'function'){ _cbAsync(); return; }
-    var have = (_NEWSFEED.items || []).filter(function(x){ return x && x.cat === cat; }).length;
-    if(!force && have >= _NEWS_CAT_TARGET) { _cbAsync(); return; }
-    // 목표(100건)를 못 채운 상태면 TTL 을 짧게 잡아 계속 채워 나간다.
-    var ttl = (have >= _NEWS_CAT_TARGET) ? (10*60*1000) : _NEWS_CAT_TTL;
-    if(!force && _newsCatAt[cat] && Date.now() - _newsCatAt[cat] < ttl){ _cbAsync(); return; }
-    _newsCatAt[cat] = Date.now();
-
-    var pending = feeds.length;
-    var done = function(){
-      if(--pending > 0) return;
-      _newsStoreSave();          // 받은 만큼 바로 저장 → 다음 실행은 기다림 없음
-      if(cb) cb();
-    };
-    feeds.forEach(function(rss){
-      // _PROXY_LIST 는 URL을 받아 프록시 주소를 만들어 주는 '함수 배열'이다.
-      // 하나가 실패하면 다음 프록시로 넘어간다 (기존 뉴스 수집과 같은 방식).
-      (function tryP(i){
-        if(i >= _PROXY_LIST.length){ done(); return; }
-        fetch(_PROXY_LIST[i](rss))
-          .then(function(r){ if(!r.ok) throw new Error('http'); return r.text(); })
-          .then(function(xml){
-            var arr = _parseNewsRSS(xml) || [];
-            if(!arr.length){ tryP(i+1); return; }
-            _newsMerge(arr, cat);
-            done();
-          })
-          .catch(function(){ tryP(i+1); });
-      })(0);
-    });
-  }catch(e){ if(cb) setTimeout(cb, 0); }
-}
-window._fetchCatNews = _fetchCatNews;
 
 // 새 기사를 중복 없이 합친다. 제목과 링크 둘 다로 걸러낸다.
 // ★ 2026-09-02: 기사 목록에 섞이는 잡음 제거.
@@ -28610,73 +28372,6 @@ function _newsMerge(news, hintCat){
 }
 window._newsMerge = _newsMerge;
 
-var _newsStockAt = 0;
-// force=true면 캐시(10분)를 무시하고 다시 모은다 (증시 탭을 열었는데 기사가 없을 때)
-function _fetchStockNews(cb, force){
-  if(!force && _newsStockAt && Date.now() - _newsStockAt < 10*60*1000){ if(cb) cb(); return; }
-  if(typeof _PROXY_LIST === 'undefined' || typeof _parseNewsRSS !== 'function'){ if(cb) cb(); return; }
-  _newsStockAt = Date.now();
-  // ★ 국내 2 + 미국 2 + 경제 토픽 1.
-  //   미국 증시는 한글 기사가 따로 검색돼야 잡힌다(영문 매체는 제외됨).
-  var feeds = [
-    // 국내 — 지수
-    'https://news.google.com/rss/search?q=%EC%BD%94%EC%8A%A4%ED%94%BC%20%EC%BD%94%EC%8A%A4%EB%8B%A5%20%EC%A6%9D%EC%8B%9C+when:2d&hl=ko&gl=KR&ceid=KR:ko',
-    // 국내 — 수급·공모주
-    'https://news.google.com/rss/search?q=%EC%A3%BC%EC%8B%9D%EC%8B%9C%EC%9E%A5%20%EC%99%B8%EA%B5%AD%EC%9D%B8%20%EC%88%9C%EB%A7%A4%EC%88%98%20%EA%B3%B5%EB%AA%A8%EC%A3%BC%20%EC%83%81%EC%9E%A5+when:2d&hl=ko&gl=KR&ceid=KR:ko',
-    // 미국 — 지수
-    'https://news.google.com/rss/search?q=%EB%89%B4%EC%9A%95%EC%A6%9D%EC%8B%9C%20%EB%82%98%EC%8A%A4%EB%8B%A5%20%EB%8B%A4%EC%9A%B0%EC%A7%80%EC%88%98+when:2d&hl=ko&gl=KR&ceid=KR:ko',
-    // 미국 — 시장 전반
-    'https://news.google.com/rss/search?q=%EB%AF%B8%EA%B5%AD%EC%A6%9D%EC%8B%9C%20%EC%9B%94%EA%B0%80%20S%26P500+when:2d&hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=ko&gl=KR&ceid=KR:ko'
-  ];
-  var pending = feeds.length;
-  var done = function(){ if(--pending <= 0 && cb) cb(); };
-  feeds.forEach(function(rss){
-    (function tryP(i){
-      if(i >= _PROXY_LIST.length){ done(); return; }
-      fetch(_PROXY_LIST[i](rss))
-        .then(function(r){ if(!r.ok) throw new Error('http'); return r.text(); })
-        .then(function(xml){
-          var arr = _parseNewsRSS(xml) || [];
-          if(!arr.length){ tryP(i+1); return; }
-          var have = {};
-          (_NEWSFEED.items || []).forEach(function(x){
-            if(!x) return;
-            if(x.title) have[x.title.replace(/\s/g,'')] = 1;
-            if(x.link)  have['L:' + x.link] = 1;      // 제목이 조금 달라도 같은 기사면 걸러낸다
-          });
-          var add = [];
-          arr.forEach(function(n){
-            if(!n.title) return;
-            var k = n.title.replace(/\s/g,'');
-            if(have[k] || (n.link && have['L:' + n.link])) return;
-            have[k] = 1;
-            if(n.link) have['L:' + n.link] = 1;
-            var ts = 0;
-            try{ ts = n.pubDate ? new Date(n.pubDate).getTime() : 0; }catch(e){}
-            if(!ts) ts = Date.now();
-            var item = { title:n.title, link:n.link, ts:ts, desc:'', source:n.source, cat:'증시' };
-            item.cat = _newsClassify(item);
-            // 검색 피드 결과는 증시 우선 배정 (경제로 빠지는 것 방지)
-            // 검색 피드는 증시 목적이므로, 경제/IT로 분류된 것도 증시 신호가 있으면 증시로 돌린다
-            if((item.cat === '경제' || item.cat === 'IT')
-               && /(코스피|코스닥|증시|주가|주식|상장|공모주|나스닥|다우|S&P|월가|뉴욕|지수|종목|매수|매도|배당|상한가|하한가|시총)/.test(n.title)){
-              item.cat = '증시';
-            }
-            item._catFixed = 1;
-            add.push(item);
-          });
-          if(add.length){
-            _NEWSFEED.items = add.concat(_NEWSFEED.items || []);
-            _NEWSFEED.ts = Date.now();
-          }
-          done();
-        })
-        .catch(function(){ tryP(i+1); });
-    })(0);
-  });
-}
-window._fetchStockNews = _fetchStockNews;
 
 function _newsAgo(ts){
   var m = Math.floor((Date.now() - ts) / 60000);
@@ -28728,32 +28423,6 @@ function _renderNewsTab(list){
                .sort(function(a,b){ return (b.ts||0) - (a.ts||0); });
   }
 
-  // ★ 카테고리별 목표(100건)를 못 채웠으면 그 카테고리 전용 피드를 더 받아온다.
-  // ★ 2026-09-02: 여기가 '앱이 멈추는' 원인이었다.
-  //   _fetchCatNews 는 재수집 간격(TTL) 안이면 콜백을 **그 자리에서 동기로** 부른다.
-  //   그 콜백이 다시 _renderNewsTab 을 부르고, 목표(100건)를 여전히 못 채웠으면
-  //   또 _fetchCatNews → 콜백 → 렌더 … 가 끝없이 반복됐다(동기 재귀).
-  //   구글 차단으로 기사가 거의 없는 연예 탭처럼 목표를 못 채우는 카테고리에서는
-  //   JS 스레드가 통째로 붙잡혀 화면이 아무것도 안 눌렸다.
-  //   → ①카테고리당 시도 상한 ②기사가 실제로 늘었을 때만 재렌더 ③재렌더는 스택을 끊고 비동기로
-  if(_newsCatSel !== '전체' && typeof _fetchCatNews === 'function' && !window._newsCatFetching){
-    var haveN = items.length;
-    var _rcCat = _newsCatSel;
-    window._newsCatTries = window._newsCatTries || {};
-    var _rcTry = window._newsCatTries[_rcCat] || 0;
-    if(haveN < _NEWS_CAT_TARGET && _rcTry < _NEWS_CAT_MAX_TRIES){
-      // 저장본으로 이미 차 있으면 조용히 보충만 한다 (화면은 그대로 유지)
-      window._newsCatTries[_rcCat] = _rcTry + 1;
-      window._newsCatFetching = 1;
-      _fetchCatNews(_rcCat, function(){
-        window._newsCatFetching = 0;
-        if(_newsCatSel !== _rcCat) return;             // 그 사이 다른 탭으로 옮겼으면 건드리지 않는다
-        var _now = (_NEWSFEED.items || []).filter(function(x){ return x && x.cat === _rcCat; }).length;
-        if(_now <= haveN) return;                      // 한 건도 안 늘었으면 다시 그릴 이유가 없다
-        setTimeout(function(){ _renderNewsTab(list); }, 0);
-      });
-    }
-  }
   var esc = function(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); };
   window._NEWS_SHOWN = items;   // 상세 팝업 참조용
   var _newsRowHtml = function(it, i){
@@ -34241,14 +33910,6 @@ function safeSetItem(key, val){
 // 네트워크 엔진 (AbortSignal 없음 — WebView 완전 호환)
 // ══════════════════════════════════════════════════════════════
 
-// 다중 프록시 로테이션
-var _PROXY_LIST = [
-  function(u){ return 'https://api.allorigins.win/raw?url='+encodeURIComponent(u); },
-  function(u){ return 'https://corsproxy.io/?'+encodeURIComponent(u); },
-  function(u){ return 'https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(u); },
-  function(u){ return 'https://thingproxy.freeboard.io/fetch/'+u; },
-];
-var _proxyIdx = 0;
 
 // ══════════════════════════════════════════════════════════════
 // 실시간 뉴스 기반 커뮤니티 글 생성 (현재 날짜/시간 기준 외부 데이터)
@@ -34258,74 +33919,21 @@ var _REALTIME_NEWS = [];   // 실시간 수신 뉴스 캐시
 var _newsFetchedAt = 0;
 
 function _fetchRealtimeNews() {
-  // 구글 뉴스 RSS (한국어, 지하철 키워드) — 현재 시점 최신 기사
-  var rssUrl = 'https://news.google.com/rss/search?q=' +
-               encodeURIComponent('지하철 OR 전철 OR 수도권전철') +
-               '&hl=ko&gl=KR&ceid=KR:ko';
-
-  function tryProxy(idx) {
-    if(idx >= _PROXY_LIST.length) {
-      console.log('[뉴스] 실시간 수신 불가 → 템플릿 모드로 동작 (정상)');
-      return;
-    }
-    var url = _PROXY_LIST[idx](rssUrl);
-    var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
-    var to = ctrl ? setTimeout(function(){ ctrl.abort(); }, 6000) : null;
-
-    fetch(url, ctrl ? {signal: ctrl.signal} : {})
-      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.text(); })
-      .then(function(xml){
-        if(to) clearTimeout(to);
-        var items = _parseNewsRSS(xml);
-        if(items && items.length) {
-          _REALTIME_NEWS = items;
-          _newsFetchedAt = Date.now();
-          console.log('[뉴스] 실시간 기사 ' + items.length + '건 수신 (' + new Date().toLocaleString('ko-KR') + ')');
-        } else {
-          tryProxy(idx+1);
-        }
-      })
-      .catch(function(e){
-        if(to) clearTimeout(to);
-        tryProxy(idx+1);
+  // 지하철 기사는 서버(워커)가 구글뉴스에서 모아 둔다 — 앱은 읽기만 한다.
+  fetch(_NEWS_SERVER_URL.replace(/\/news\/all$/, '/news/extra'))
+    .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+    .then(function(d){
+      var items = (d && d.subway) || [];
+      if(!items.length) return;
+      _REALTIME_NEWS = items.map(function(n){
+        return { title:n.title, source:n.source, pubDate:n.pubDate, link:n.link };
       });
-  }
-  tryProxy(0);
+      _newsFetchedAt = Date.now();
+      console.log('[뉴스] 서버에서 지하철 기사 ' + items.length + '건 수신');
+    })
+    .catch(function(){ /* 실패하면 템플릿 모드로 동작(정상) */ });
 }
 window._fetchRealtimeNews = _fetchRealtimeNews;
-
-// RSS XML 파싱 → {title, source, pubDate, link} 배열
-function _parseNewsRSS(xml) {
-  try {
-    var out = [];
-    var parser = new DOMParser();
-    var doc = parser.parseFromString(xml, 'text/xml');
-    var items = doc.querySelectorAll('item');
-    items.forEach(function(it){
-      var title = (it.querySelector('title') || {}).textContent || '';
-      var link  = (it.querySelector('link') || {}).textContent || '';
-      var pub   = (it.querySelector('pubDate') || {}).textContent || '';
-      var src   = (it.querySelector('source') || {}).textContent || '뉴스';
-      // 구글 뉴스 제목 형식: "기사제목 - 언론사"
-      var srcSplit = title.split(' - ');
-      var cleanTitle = srcSplit.length > 1 ? srcSplit.slice(0, -1).join(' - ') : title;
-      var cleanSrc = srcSplit.length > 1 ? srcSplit[srcSplit.length-1] : src;
-      if(cleanTitle) {
-        var _dec = (typeof _htmlDecode === 'function') ? _htmlDecode : function(x){ return x; };
-        out.push({
-          title: _dec(cleanTitle).replace(/\s+/g,' ').trim(),
-          source: _dec(cleanSrc).trim(),
-          pubDate: pub, link: link
-        });
-      }
-    });
-    //   피드당 상한. 카테고리별로 100건 이상 모으려면 15건으로는 턱없이 모자라다.
-    return out.slice(0, 60);
-  } catch(e) {
-    console.warn('[뉴스 파싱 오류]', e.message);
-    return [];
-  }
-}
 
 // 실시간 뉴스 1건 → 커뮤니티 게시글 객체로 변환
 function _makeNewsPostFromRealtime() {
@@ -34423,12 +34031,6 @@ function _fetchWithTimeout(urlStr, opts, timeoutMs) {
   return _xhrRequest(_url, _ms);
 }
 
-function _fetchViaProxy(urlStr, ms) {
-  var _url=String(urlStr), _ms=Number(ms)||8000;
-  var fn=_PROXY_LIST[_proxyIdx%_PROXY_LIST.length];
-  _proxyIdx=(_proxyIdx+1)%_PROXY_LIST.length;
-  return _fetchWithTimeout(fn(_url),{},_ms);
-}
 
 // ══════════════════════════════════════════════════════════════
 // 서울시 열린데이터광장 API 키 바인딩 (요청 지시사항 4번)
@@ -42390,30 +41992,15 @@ window._ltTopicMark = _ltTopicMark;
 var _LT_HOT_NEWS = [], _ltHotAt = 0;
 function _ltFetchHotNews(){
   if(_ltHotAt && Date.now()-_ltHotAt < 30*60*1000) return;
-  if(typeof _PROXY_LIST==='undefined' || typeof _parseNewsRSS!=='function') return;
   _ltHotAt = Date.now();
-  var feeds = [
-    'https://news.google.com/rss?hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/headlines/section/topic/ENTERTAINMENT?hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/headlines/section/topic/SPORTS?hl=ko&gl=KR&ceid=KR:ko',
-    'https://news.google.com/rss/headlines/section/topic/TECHNOLOGY?hl=ko&gl=KR&ceid=KR:ko'
-  ];
-  var got = [];
-  feeds.forEach(function(rss){
-    (function tryP(i){
-      if(i >= _PROXY_LIST.length) return;
-      fetch(_PROXY_LIST[i](rss))
-        .then(function(r){ if(!r.ok) throw new Error('http'); return r.text(); })
-        .then(function(xml){
-          var items = _parseNewsRSS(xml) || [];
-          items = items.filter(function(n){ return n && n.title && !_ltIsBanned(n.title); });
-          if(!items.length){ tryP(i+1); return; }
-          got = got.concat(items.slice(0,8));
-          _LT_HOT_NEWS = got.slice(0, 40);
-        })
-        .catch(function(){ tryP(i+1); });
-    })(0);
-  });
+  // 핫이슈는 서버(워커)가 모아 둔다 — 앱은 읽기만 한다.
+  fetch(_NEWS_SERVER_URL.replace(/\/news\/all$/, '/news/extra'))
+    .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+    .then(function(d){
+      var items = ((d && d.hot) || []).filter(function(n){ return n && n.title && !_ltIsBanned(n.title); });
+      if(items.length) _LT_HOT_NEWS = items.slice(0, 40);
+    })
+    .catch(function(){ _ltHotAt = 0; });
 }
 window._ltFetchHotNews = _ltFetchHotNews;
 
