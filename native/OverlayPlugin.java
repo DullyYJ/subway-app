@@ -70,6 +70,10 @@ public class OverlayPlugin extends Plugin {
     private WindowManager.LayoutParams lp;
     private LinearLayout root;
     private TextView t1, t2, t3;
+    private LinearLayout row;                    // 다섯 칸(출발·경로…) — 현위치가 늘 가운데 칸에 오도록 칸 폭을 좌우 대칭으로 고정
+    private final TextView[] cells = new TextView[5];
+    private final TextView[] seps = new TextView[4];
+    private static final float[] CELL_W = { 1f, 1f, 2f, 1f, 1f };
     private boolean attached = false;
 
     // ── JS 에서 부르는 메서드 ─────────────────────────────────────
@@ -231,6 +235,25 @@ public class OverlayPlugin extends Plugin {
         t1.setMaxWidth(maxW - dp(28));
         t2.setMaxWidth(maxW - dp(28));
         t3.setMaxWidth(maxW - dp(28));
+        // ★ 2026-10-01 (YJ: "현위치는 가운데 고정, 시작과 끝은 빈칸"): 윗줄을 다섯 칸으로 나눈다.
+        //   칸 폭이 좌우 대칭(1,1,2,1,1)이라 가운데 칸(현위치)은 화면에서 정확히 가운데에 놓이고, 비어 있는 칸은 그냥 비어 보인다.
+        row = new LinearLayout(ctx);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        for (int i = 0; i < 5; i++) {
+            TextView c = makeText(11, Color.parseColor("#6E6E76"), false);
+            c.setSingleLine(true);
+            c.setEllipsize(TextUtils.TruncateAt.END);
+            cells[i] = c;
+            row.addView(c, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, CELL_W[i]));
+            if (i < 4) {
+                TextView sp = makeText(11, Color.parseColor("#44444B"), false);
+                sp.setText("\u203A");                       // ›
+                seps[i] = sp;
+                row.addView(sp, new LinearLayout.LayoutParams(dp(8), LinearLayout.LayoutParams.WRAP_CONTENT));
+            }
+        }
+        root.addView(row, new LinearLayout.LayoutParams(maxW - dp(28), LinearLayout.LayoutParams.WRAP_CONTENT));
         root.addView(t1);
         root.addView(t2);
         root.addView(t3);
@@ -329,6 +352,28 @@ public class OverlayPlugin extends Plugin {
 
     private void attachOrUpdate() {
         if (root == null) build();
+        boolean five = track.length == 5;
+        row.setVisibility(five ? View.VISIBLE : View.GONE);
+        if (five) {
+            for (int i = 0; i < 5; i++) {
+                String nm = track[i] == null ? "" : track[i];
+                boolean cur = (i == trackCur);
+                TextView c = cells[i];
+                c.setText(nm);
+                c.setTextColor(cur ? Color.WHITE : Color.parseColor("#6E6E76"));
+                c.setTextSize(cur ? 17 : 11);
+                c.setTypeface(cur ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
+                c.setSingleLine(!cur);                       // 현위치는 길면 두 줄까지
+                c.setMaxLines(cur ? 2 : 1);
+            }
+            for (int i = 0; i < 4; i++) {                    // 양옆이 모두 차 있는 사이에만 › 를 보인다
+                boolean both = track[i] != null && track[i].length() > 0 && track[i + 1] != null && track[i + 1].length() > 0;
+                seps[i].setVisibility(both ? View.VISIBLE : View.INVISIBLE);
+            }
+            t1.setVisibility(View.GONE);
+        } else {
+            t1.setVisibility(View.VISIBLE);
+        }
         t1.setText(buildTrack());
         t2.setText(line2);
         t2.setVisibility(line2.length() > 0 ? View.VISIBLE : View.GONE);
