@@ -19170,6 +19170,7 @@ window.addEventListener('unhandledrejection', function(e) {
 
       <!-- ★ 작은 요약 화면(PiP) -->
       <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
+        <!-- ★ 2026-10-01: PiP(작은 요약 화면) 스위치는 우선 숨김(YJ 요청). 복원하려면 이 주석을 풀고 _PIP_FEATURE=true
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
           <div style="font-size:15px;font-weight:800;color:var(--text);">📺 작은 요약 화면</div>
           <label style="position:relative;display:inline-block;width:50px;height:28px;flex-shrink:0;">
@@ -19182,10 +19183,11 @@ window.addEventListener('unhandledrejection', function(e) {
           </label>
         </div>
         <p style="font-size:12px;color:var(--sub);margin:6px 0 12px;">앱을 내려도 현재역 · 남은시간 · 도착 예정 시각만 작게 띄웁니다. 화면을 탭하면 닫혀요.</p>
+        -->
         <!-- ★ 2026-10-01: 다른 앱 위에 표시(오버레이) — 다른 앱을 쓰는 동안 현재역·남은시간을 화면 맨 위에 작은 막대로 -->
-        <div style="margin:0 0 12px;padding:12px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);">
+        <div style="margin:0;padding:0;">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
-            <div style="font-size:14px;font-weight:800;color:var(--text);">🪟 다른 앱 위에 표시</div>
+            <div style="font-size:15px;font-weight:800;color:var(--text);">🪟 다른 앱 위에 표시</div>
             <label style="position:relative;display:inline-block;width:50px;height:28px;flex-shrink:0;">
               <input type="checkbox" id="ovlToggle" onchange="_ovlSetEnabled(this.checked)" style="opacity:0;width:0;height:0;">
               <span id="ovlToggleTrack" style="position:absolute;inset:0;background:var(--border2);border-radius:28px;transition:.2s;cursor:pointer;"></span>
@@ -19195,8 +19197,10 @@ window.addEventListener('unhandledrejection', function(e) {
           <p style="font-size:12px;color:var(--sub);margin:6px 0 0;">다른 앱을 쓰는 동안 현재역 · 남은시간을 화면 위쪽에 작은 막대로 띄워요. 막대를 누르면 앱으로 돌아오고, 끌어서 위치를 옮길 수 있어요. 안내 정보만 보여주고 광고는 넣지 않아요. 처음 켜면 설정에서 '다른 앱 위에 표시' 권한을 허용해 주세요.</p>
           <div id="ovlStat" style="margin-top:6px;font-size:11.5px;line-height:1.6;color:var(--sub);white-space:pre-line;"></div>
         </div>
+        <!-- ★ 2026-10-01: PiP 미리보기·상태 표시도 숨김(복원 시 주석 해제)
         <button onclick="_pipPreview()" style="width:100%;padding:11px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);font-family:inherit;">미리보기</button>
         <div id="pipStat" style="margin-top:10px;font-size:11.5px;line-height:1.6;color:var(--sub);"></div>
+        -->
       </div>
 
       <!-- ★ 2026-09-29: 개발자용 진단 도구 3종(배터리 최적화 제외 / 백그라운드 추적 진단 /
@@ -31483,7 +31487,12 @@ function _clearForegroundNotif(){
 var _PIP_KEY = 'pipOn';
 var _pipTimer = null;
 
-function _pipEnabled(){ try{ return localStorage.getItem(_PIP_KEY) !== '0'; }catch(e){ return true; } }
+// ★ 2026-10-01 (YJ: "PIP는 우선 주석처리해서 기능에서 제거해줘"): PiP(작은 창) 기능을 통째로 끈다.
+//   코드는 그대로 두고 이 스위치 하나로 막는다 — 아래 true 로 바꾸면 복원된다.
+//   꺼지면: 네이티브에 '안내 중 아님'만 알려 자동 전환이 안 일어나고(_pipNativeSync/_pipGrow), 작은 화면 HTML 도 안 뜨고(_pipWant),
+//   설정의 PiP 스위치·미리보기는 숨긴다. 다른 앱 위 표시(오버레이)는 이 스위치와 무관하게 따로 동작한다.
+var _PIP_FEATURE = false;
+function _pipEnabled(){ if(!_PIP_FEATURE) return false; try{ return localStorage.getItem(_PIP_KEY) !== '0'; }catch(e){ return true; } }
 function _pipSetEnabled(v){
   try{ localStorage.setItem(_PIP_KEY, v ? '1' : '0'); }catch(e){}
   if(!v) _pipHide();
@@ -31750,6 +31759,7 @@ function _pipStations(){
     out.next = (idx < path.length - 1) ? String(path[idx+1] || '') : '';
     // ★ 2026-09-22: 작은 화면에 진행률 막대를 그리기 위한 값(기존 반환값엔 영향 없음)
     out.idx   = idx;
+    out.path  = path.map(function(x){ return String(x || ''); });   // ★ 2026-10-01: 오버레이의 '밀어내기' 줄이 쓰는 전체 역 목록
     out.total = path.length - 1;
     out.pct   = (out.total > 0) ? Math.max(0, Math.min(1, idx / out.total)) : null;
   }catch(e){}
@@ -32351,11 +32361,30 @@ function _ovlRefresh(cb){
 window._ovlRefresh = _ovlRefresh;
 // 오버레이에 찍을 세 줄 — 판단 없이 이미 있는 값을 문자열로 옮긴다
 function _ovlLines(){
-  var out = { l1:'', l2:'', l3:'' };
+  var out = { l1:'', l2:'', l3:'', track:[], cur:-1 };
   try{
     var st = _pipStations(), d = _pipData();
     var cur = st.cur || d.cur || d.from || '이동 중';
     out.l1 = st.next ? (cur + ' ▸ ' + st.next) : ('● ' + cur);
+    // ★ 2026-10-01 (YJ: "출발하면 출발(현위치)-경로1-경로2-경로3-경로4 / 이동하면 출발지-경로1(현위치)-경로2-경로3-경로4 …
+    //   내 위치는 경로가 이동되면 가운데서 고정되는 거야"): 다섯 칸짜리 창이 현위치를 가운데(셋째 칸)에 두고 역 목록 위를 밀려 간다.
+    //   출발 직후엔 현위치가 첫째 칸, 한 칸 가면 둘째 칸, 두 칸 가면 가운데에 닿아 고정되고 지나온 역은 왼쪽으로 밀려 사라진다.
+    //   끝이 가까워지면 창이 더 못 밀려 현위치 표시가 오른쪽으로 움직인다. 이미 있는 역 목록·진행 위치를 늘어놓기만 한다.
+    //   현위치만 흰색(네이티브가 칠함), 나머지는 회색.
+    var clamp = function(t, n){ t = String(t||'').replace(/\s+/g,' ').trim(); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
+    var P = (st.path && st.path.length) ? st.path : null, slots = [], curSlot = 0;
+    if(P){
+      var N = P.length, c = Math.max(0, Math.min(st.idx < 0 ? 0 : st.idx, N - 1));
+      var w0 = (N <= 5) ? 0 : Math.max(0, Math.min(c - 2, N - 5));   // 창의 시작: 현위치가 가운데(c-2)에 오도록, 양 끝에서는 멈춘다
+      slots = P.slice(w0, w0 + 5);
+      curSlot = c - w0;
+    } else {                                         // 역 목록이 없으면 현재 ▸ 다음만
+      slots = [cur]; curSlot = 0; if(st.next) slots.push(st.next);
+    }
+    slots.forEach(function(nm, i){
+      out.track.push(clamp(nm, i === curSlot ? 9 : 5));
+    });
+    out.cur = curSlot;
     var dest = d.dest || (window._pipTrip && window._pipTrip.to) || '';
     var t = (d.min != null) ? _pipMinText(d.min) : '-';
     out.l2 = (dest ? dest + '까지 ' : '') + t + (d.arr ? ' · ' + d.arr + ' 도착' : '');
@@ -32371,16 +32400,16 @@ function _ovlSync(force){
   try{
     var n = _ovlNative();
     if(!n || typeof n.update !== 'function') return;
-    var active = !!(_ovlUsable() && _pipEnabled() && _pipHasRoute());
-    var L = active ? _ovlLines() : { l1:'', l2:'', l3:'' };
-    var key = (active ? '1' : '0') + '|' + L.l1 + '|' + L.l2 + '|' + L.l3;
+    var active = !!(_ovlUsable() && _pipHasRoute());   // ★ 2026-10-01: PiP 스위치와 무관(PiP 는 꺼 둠)
+    var L = active ? _ovlLines() : { l1:'', l2:'', l3:'', track:[], cur:-1 };
+    var key = (active ? '1' : '0') + '|' + L.l1 + '|' + L.l2 + '|' + L.l3 + '|' + L.track.join('>') + '|' + L.cur;
     var now = Date.now();
     // 바뀐 게 없으면 보내지 않는다. 다만 켜져 있는 동안엔 20초마다 한 번은 다시 보내 '살아 있음'을 알린다
     // (네이티브는 3분 넘게 소식이 없으면 낡은 값이 남지 않도록 스스로 숨긴다).
     if(!force && key === _ovlLastKey && (!active || (now - _ovlLastAt) < _OVL_HEARTBEAT_MS)) return;
     if(!active && _ovlLastKey === null && !force) { _ovlLastKey = key; return; }   // 처음부터 꺼져 있으면 굳이 알리지 않는다
     _ovlLastKey = key; _ovlLastAt = now;
-    var r = n.update({ active: active, line1: L.l1, line2: L.l2, line3: L.l3 });
+    var r = n.update({ active: active, line1: L.l1, track: L.track, cur: L.cur, line2: L.l2, line3: L.l3 });
     if(r && typeof r.catch === 'function') r.catch(function(){ _ovlLastKey = null; });   // 실패하면 다음 틱에 다시
   }catch(e){ _ovlLastKey = null; }
 }
