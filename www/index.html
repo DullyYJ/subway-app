@@ -8770,7 +8770,11 @@ window._hideRouteLoading = _hideRouteLoading;
     var _reqBaseMs = (typeof getBaseTimeMs === 'function') ? getBaseTimeMs() : Date.now();
     var _coordQs = 'SX=' + start.lng + '&SY=' + start.lat
       + '&EX=' + dest.lng  + '&EY=' + dest.lat
-      + '&baseMs=' + Math.round(_reqBaseMs);
+      + '&baseMs=' + Math.round(_reqBaseMs)
+      // ★ 2026-10-01 (YJ 절대규칙: 엔진이 판단, 앱은 그리기만): 사용자가 고른 출발·도착 이름을 같이 보낸다.
+      //   여정의 출발/도착 이름(진짜 이름인지, 도보·환승 표시는 아닌지)은 엔진이 정해 info.trip 으로 돌려준다.
+      + '&SN=' + encodeURIComponent(String(start.name || '').slice(0, 60))
+      + '&EN=' + encodeURIComponent(String(dest.name || '').slice(0, 60));
     console.log('[route-v2-req]', _coordQs, '|', start.name+'('+start.type+') → '+dest.name+'('+dest.type+')');
     // ★ 2026-09-25 (장거리 등급/수단 재선택용): 세부경로에서 사용자가 다른 등급·수단을
     //   고르면 이 좌표만 그대로 써서 &ldMode=&ldGrade= 만 붙여 다시 물어본다(_ldReselect).
@@ -10766,23 +10770,13 @@ window._selectSubwayNearestRoute = _selectSubwayNearestRoute;
 //   앱까지 도달하지 못했다. 아래 키 중 하나라도 있으면 초 단위로 담아둔다.
 //     sec / secFromStart / travelSec  : 구간 시작으로부터 누적 초
 //     arrTime / time / arrivalTime    : "HH:MM" 또는 누적 분
-// ★ 2026-10-01 (YJ: "버스노선에 (가상)은 뭐야? 미정차면 미정차, 정차면 정차인지 정확하게 표기해줘"):
-//   '합정역(가상)' 의 (가상)은 환승점 표시가 아니라 정류장 원자료에 들어 있는 '가상 정류장' —
-//   노선 선형을 이어 주는 명목상의 지점이라 버스가 서지 않는다(엔진은 이런 지점에서 타고 내리지
-//   않도록 같은 날 고쳤다 · route-v2 isPassStop). 사용자에게는 '가상'이 무슨 뜻인지 알 수 없으니
-//   서지 않는 지점은 모두 '(미정차)'로 통일해 표기하고, 정차하는 정류장은 이름만 그대로 둔다.
-//   엔진이 pass:true 를 실어 보내면(새 워커) 그것을 우선하고, 구버전 워커는 이름 패턴으로 판단한다.
-function _stopDisplayName(nm, pass){
-  var t = String(nm == null ? '' : nm);
-  var virt = /[\(\[\uFF08]\s*가상\s*(정류장)?\s*[\)\]\uFF09]/;
-  if(virt.test(t)) return t.replace(virt, '(미정차)').replace(/\s+\(미정차\)/, '(미정차)');
-  if(pass && !/미정차|무정차|통과|정차\s*안함/.test(t)) return t + '(미정차)';
-  return t;
-}
-window._stopDisplayName = _stopDisplayName;
+// ★ 2026-10-01 (YJ: "버스노선에 (가상)은 뭐야? 미정차면 미정차, 정차면 정차인지 정확하게 표기해줘",
+//   그리고 "HTML은 그리기만, 엔진이 모든 기능"): 정류장 표시 이름은 엔진(route-v2 stopDispName)이 완성해서
+//   내려준다 — '(가상)' → '(미정차)', 서지 않는 지점(pass:true)엔 '(미정차)'. 앱은 받은 이름을 그대로 그린다.
+//   (엔진 2026-10-01b 이상 필요 — 엔진을 먼저 배포할 것)
 function _normStop(sv){
   if(!sv) return { stationName:'', lat:null, lon:null };
-  var o = { stationName: _stopDisplayName(sv.stationName||sv.name||'', !!sv.pass),
+  var o = { stationName: (sv.stationName||sv.name||''),
             lat: (sv.y!=null?sv.y:(sv.lat!=null?sv.lat:null)),
             lon: (sv.x!=null?sv.x:(sv.lon!=null?sv.lon:(sv.lng!=null?sv.lng:null))) };
   // 누적 초
@@ -31350,7 +31344,9 @@ function _journeyRemain(){
       for(var i=_prog+1;i<=_last;i++){ if(!_nd[i].isWalk) _left++; }
       r.stops = _left;
       r.cur   = _nd[_prog].name || '이동 중';
-      r.dest  = _pipResultDestName() || _lastRealNodeName(_nd) || _nd[_last].name || '목적지';
+      // ★ 2026-10-01: 확정한 여정이면 엔진이 정한 도착 이름(_pipTrip.to ← info.trip.to)을 그대로 쓴다.
+      r.dest  = ((window._routeLocked === true && window._pipTrip && window._pipTrip.to) || '')
+                || _pipResultDestName() || _lastRealNodeName(_nd) || _nd[_last].name || '목적지';
       // 남은 시간: 마지막 노드 도착 시각 - 현재
       try{
         var at = _nd[_last].arrTime;
@@ -31547,13 +31543,30 @@ function _pipResultDestName(){
 }
 window._pipResultDestName = _pipResultDestName;
 
+// ★ 2026-10-01 (YJ 절대규칙): 여정의 출발·도착 이름은 엔진이 정해 info.trip{from,to,arrSec} 로 준다.
+//   지금 그려진 경로(window._lastHtlSections)가 어느 엔진 path 에서 나왔는지는 sections._path 로 안다.
+//   없으면(노선도 전용 경로·구엔진) null → 아래 _pipTripSet 이 종전 폴백을 쓴다.
+function _engineTrip(){
+  try{
+    var sc = window._lastHtlSections;
+    var t = sc && sc._path && sc._path.info && sc._path.info.trip;
+    return (t && t.to) ? t : null;
+  }catch(e){ return null; }
+}
+window._engineTrip = _engineTrip;
 function _pipTripSet(){
   try{
     var from = '내 위치', to = '';
+    var _et = _engineTrip();
+    if(_et){
+      // 엔진이 준 이름을 그대로 쓴다(판단 없음). 출발이 비면 아래 GPS 지명 보강만 한다.
+      to = String(_et.to);
+      if(_et.from) from = String(_et.from);
+    }
     var nd = (typeof _transitNodeData !== 'undefined') ? _transitNodeData : null;
     // ① 화면에 그려진 복합경로(홈 탐색 · 장거리 포함)가 있으면 그 경로가 기준이다
     //    (노선도 BFS 전용 S.route 는 이전 검색의 잔류값일 수 있다)
-    var _homeOn = !!(nd && nd.length >= 2 && typeof _transitResultData !== 'undefined' && _transitResultData);
+    var _homeOn = !to && !!(nd && nd.length >= 2 && typeof _transitResultData !== 'undefined' && _transitResultData);   // 엔진 이름이 있으면 건너뜀
     if(_homeOn){
       to = _pipResultDestName() || _lastRealNodeName(nd);
       for(var i0=0;i0<nd.length;i0++){
