@@ -25300,6 +25300,15 @@ var _ARR_WIT_MORN = [
   '오늘 하루도 당신 편이에요, 한 잔 꼭 챙기세요',
   '작은 한 잔이 오늘을 버티게 해줄 거예요'
 ];
+// ★ 2026-10-01: 점심 도착인데 '커피 한 잔' 위트(_ARR_WIT_MORN)가 알림 본문에 나가던 것을 점심용으로 분리
+var _ARR_WIT_LUNCH = [
+  '점심은 {menu}로 든든하게 채워요',
+  '오후를 버틸 힘은 {menu} 한 끼에서 나와요',
+  '잠깐 쉬어가요, 오늘 점심은 {menu} 어때요',
+  '{menu} 한 그릇이면 오후도 거뜬해요',
+  '배고픈 시간이죠, {menu}로 기운 차려요',
+  '바쁜 하루일수록 한 끼는 제대로 챙겨요'
+];
 // {menu} = 추천 메뉴로 치환
 var _ARR_WIT_EVE = [
   '오늘 하루도 고생했어요, {menu}으로 스트레스 날려요',
@@ -25612,7 +25621,9 @@ window._arrOrder = _arrOrder;
 
 // ── Gemini(워커 /ai-talk)로 감성 문구 생성 ──
 //   실패하면 기존 로컬 문구를 그대로 쓰므로 항상 안전.
-function _arrAiCopy(menu, destStn, cb){
+function _arrAiCopy(menu, destStn, cb, opt){
+  opt = opt || {};
+  var _min = opt.min || _ARR_PRE_MIN, _dinner = !!opt.dinner;   // ★ 2026-10-01: 실제 남은 분 / 17~19시 저녁 구분
   var done = false;
   var timer = setTimeout(function(){ if(!done){ done = true; cb(null); } }, 5000);
   try{
@@ -25631,13 +25642,14 @@ function _arrAiCopy(menu, destStn, cb){
         noPolitics: true,
         // 워커가 mode를 모르더라도 recent 문맥만으로 비슷한 톤이 나오도록 지시문을 함께 전달
         rules: [
-          '퇴근길에 하차 10분 전인 사람에게 보내는 한 문장',
+          '퇴근길에 하차 ' + _min + '분 전인 사람에게 보내는 한 문장',
           '오늘 하루 고생했다는 위로를 담되 과하지 않게, 담백하고 따뜻하게',
-          menu + '(으)로 하루의 피로를 풀고 마무리하자는 흐름으로 자연스럽게 이어질 것',
+          (_dinner ? menu + '(으)로 든든하게 저녁을 챙기자는 흐름으로 자연스럽게 이어질 것(야식이라는 말은 쓰지 말 것)'
+                   : menu + '(으)로 하루의 피로를 풀고 마무리하자는 흐름으로 자연스럽게 이어질 것'),
           '광고처럼 들리지 않게, 강요하지 말 것',
           '35자 이내 한 문장, 이모지 없이, 존댓말'
         ],
-        recent: [{ nick: '시스템', text: '퇴근길 ' + (destStn || '') + ' 하차 10분 전 · 오늘 야식은 ' + menu }]
+        recent: [{ nick: '시스템', text: '퇴근길 ' + (destStn || '') + ' 하차 ' + _min + '분 전 · 오늘 ' + (_dinner ? '저녁은 ' : '야식은 ') + menu }]
       })
     })
     .then(function(r){ return r.ok ? r.json() : null; })
@@ -25737,14 +25749,46 @@ function _arrShopReason(it, ctx){
   }catch(e){ return '오늘 같은 날 한 번쯤 눈여겨볼 만해요'; }
 }
 
-// 도착 10분 전 알림 본문 구성
+// ★ 2026-10-01 (YJ 제안 1번): '하차 10분 전'이 고정 문구라, 6분 거리 경로에서도 10분 전이라고 나왔다.
+//   발사 순간의 실제 남은 분(1~10)을 쓴다. 도착시각을 모르거나 테스트처럼 지금과 동떨어진
+//   값(과거·12분 초과)이면 예전처럼 10분으로 둔다.
+function _arrRemainMin(arrMs){
+  try{
+    var m = Math.round((Number(arrMs) - Date.now()) / 60000);
+    if(!isFinite(m) || m < 1 || m > _ARR_PRE_MIN + 2) return _ARR_PRE_MIN;
+    return Math.min(_ARR_PRE_MIN, m);
+  }catch(e){ return _ARR_PRE_MIN; }
+}
+window._arrRemainMin = _arrRemainMin;
+
+// ★ 2026-10-01 (YJ 제안 2번): 17~19시 도착은 '야식'이 아니라 '저녁 식사'다(19시부터 야식).
+//   슬롯 이름('night')과 배달 연결·감시 로직은 그대로 두고, 문구·메뉴·동작만 갈라 쓴다.
+function _arrIsDinner(arrMs){
+  try{
+    var d = new Date(arrMs), m = d.getHours()*60 + d.getMinutes();
+    return m >= 17*60 && m < 19*60;
+  }catch(e){ return false; }
+}
+var _ARR_DINNER_MENU = ['국밥','삼겹살','돈가스','덮밥','파스타','쌀국수','부대찌개','초밥','라멘','만두','햄버거'];
+var _ARR_WIT_DINNER = [
+  '오늘도 수고했어요, 저녁은 {menu}로 든든하게',
+  '퇴근길 끝에 {menu} 한 끼가 기다리면 좋겠어요',
+  '고생한 만큼 {menu} 한 끼는 챙겨 먹어요',
+  '배고플 시간이죠, 오늘 저녁은 {menu} 어때요',
+  '오늘 저녁은 {menu}로 기운 차려요',
+  '든든한 {menu} 한 끼면 남은 하루도 거뜬해요'
+];
+
+// 도착 N분 전 알림 본문 구성
 function _arrBuildAlert(destStn, arrHour, arrMs){
   var slot = _arrSlot(arrMs);
+  var remMin = _arrRemainMin(arrMs);
+  var isDinner = (slot === 'night') && _arrIsDinner(arrMs);
   var arr  = new Date(arrMs);
   var hhmm = ('0'+arr.getHours()).slice(-2)+':'+('0'+arr.getMinutes()).slice(-2);
 
   var lines = [];
-  lines.push('하차 10분 전이에요.');
+  lines.push('하차 ' + remMin + '분 전이에요.');
   lines.push((destStn ? destStn + ' ' : '') + '도착 예정 ' + hhmm);
   lines.push('');
 
@@ -25763,8 +25807,8 @@ function _arrBuildAlert(destStn, arrHour, arrMs){
     lines.push('');
     lines.push(_ARR_CLOSE_EVE[Math.floor(Math.random()*_ARR_CLOSE_EVE.length)]);
     return {
-      title: '🚉 하차 10분 전' + (destStn ? ' · ' + destStn : '') + ' 🛍',
-      body: lines.join('\n'), kind: 'shop', slot: slot,
+      title: '🚉 하차 ' + remMin + '분 전' + (destStn ? ' · ' + destStn : '') + ' 🛍',
+      body: lines.join('\n'), kind: 'shop', slot: slot, remMin: remMin,
       shop: sp ? sp.item : null
     };
   }
@@ -25773,28 +25817,30 @@ function _arrBuildAlert(destStn, arrHour, arrMs){
   // ★ 2026-09-16: 낮 시간대(lunch)를 추가했다. 밥집을 고르고 문구만 달리 쓴다.
   var isLunch = (slot === 'lunch');
   var isMorn  = (slot === 'morning');
-  var place   = _arrPickPlace(destStn, isLunch ? 'food' : (isMorn ? 'cafe' : 'night'));
+  var place   = _arrPickPlace(destStn, (isLunch || isDinner) ? 'food' : (isMorn ? 'cafe' : 'night'));
   var menu;
   if(isMorn){
     // 커피 한 잔 + 브런치 한 가지를 같이 제안
     menu = _ARR_DRINKS[Math.floor(Math.random()*_ARR_DRINKS.length)];
   } else {
     // ★ 2026-09-21: 하차지 주변에서 실제로 파는 메뉴 중에서 고른다(없으면 예전 방식)
-    var _avail = _arrMenusWithSpots(destStn, isLunch ? _ARR_LUNCH_MENU : _ARR_NIGHT_MENU);
+    var _menuPool = isLunch ? _ARR_LUNCH_MENU : (isDinner ? _ARR_DINNER_MENU : _ARR_NIGHT_MENU);
+    var _avail = _arrMenusWithSpots(destStn, _menuPool);
     if(_avail.length){
       menu = _avail[Math.floor(Math.random()*_avail.length)];
     } else {
       var cat = place ? String(place.c||'') : '';
-      var matched = _ARR_NIGHT_MENU.filter(function(m){ return cat.indexOf(m) >= 0; });
+      var matched = _menuPool.filter(function(m){ return cat.indexOf(m) >= 0; });
       menu = matched.length ? matched[0]
-                            : _ARR_NIGHT_MENU[Math.floor(Math.random()*_ARR_NIGHT_MENU.length)];
+                            : _menuPool[Math.floor(Math.random()*_menuPool.length)];
     }
   }
   var spots = _arrSpotsFor(destStn, menu, isMorn ? 'cafe' : 'night', isMorn ? 2 : 3);
   var brunch = isMorn ? _ARR_BRUNCH[Math.floor(Math.random()*_ARR_BRUNCH.length)] : '';
 
-  var wit2 = _arrPickDaily((isMorn || isLunch) ? _ARR_WIT_MORN : _ARR_WIT_EVE, arr.getHours());
-  lines.push(_arrApplyJosa(wit2, menu));
+  var wit2 = _arrPickDaily(isMorn ? _ARR_WIT_MORN : (isLunch ? _ARR_WIT_LUNCH : (isDinner ? _ARR_WIT_DINNER : _ARR_WIT_EVE)), arr.getHours());
+  // ★ 2026-10-01: 예전 문구에 '집까지 10분'이 박혀 있어 실제 남은 분으로 바꾼다
+  lines.push(_arrApplyJosa(wit2, menu).replace('집까지 10분', '집까지 ' + remMin + '분'));
 
   if(isLunch){
     lines.push('🍚 이 근처 한 끼');
@@ -25812,6 +25858,15 @@ function _arrBuildAlert(destStn, arrHour, arrMs){
     } else {
       lines.push('   내리자마자 근처 카페에 들러보세요');
     }
+  } else if(isDinner){
+    lines.push('🍽 오늘의 저녁 · ' + menu);
+    lines.push('   내리는 길에 들러 든든히 드세요');
+    if(spots.length){
+      lines.push('   근처에서 드실 거면 · ' + spots.join(', '));
+    } else if(place){
+      var d4 = (place.d != null) ? (place.d + 'm') : (_ARR_NIGHT_M + 'm 이내');
+      lines.push('   근처에서 드실 거면 · ' + place.n + ' ' + d4);
+    }
   } else {
     lines.push('🍗 오늘의 야식 · ' + menu);
     lines.push('   집 도착에 맞춰 지금 주문하면 딱 맞아요');
@@ -25828,11 +25883,11 @@ function _arrBuildAlert(destStn, arrHour, arrMs){
     : _ARR_CLOSE_EVE[Math.floor(Math.random()*_ARR_CLOSE_EVE.length)]);
 
   return {
-    title: '🚉 하차 10분 전' + (destStn ? ' · ' + destStn : '')
-           + (isLunch ? ' 🍚' : (isMorn ? ' ☕' : ' 🍗')),
+    title: '🚉 하차 ' + remMin + '분 전' + (destStn ? ' · ' + destStn : '')
+           + (isLunch ? ' 🍚' : (isMorn ? ' ☕' : (isDinner ? ' 🍽' : ' 🍗'))),
     body: lines.join('\n'),
-    kind: isLunch ? 'lunch' : (isMorn ? 'cafe' : 'night'),
-    slot: slot,
+    kind: isLunch ? 'lunch' : (isMorn ? 'cafe' : (isDinner ? 'dinner' : 'night')),
+    slot: slot, remMin: remMin, dinner: isDinner,
     menu: menu, brunch: brunch,
     spots: spots,
     place: place || null
@@ -25918,8 +25973,38 @@ function _arrShopSay(it, ctx){
   return '오늘 같은 날 하나쯤 눈여겨볼 만해서 골랐어요.';
 }
 
+var _PIP_DINNER_TAIL = [
+  '남은 하루도 제가 챙길게요. 맛있게 드세요',
+  '오늘도 수고했어요. 든든히 드세요',
+  '저녁 맛있게 드시고 편히 쉬세요'
+];
+
+// ★ 2026-10-01 (YJ 제안 3번): 작은 창은 한 줄에 17자 안팎이라 AI 문구·가게 이름이 길면
+//   창이 한없이 커지거나 글자가 눌렸다. 줄마다 길이를 자르고, 전체가 7줄을 넘으면 덜 중요한
+//   뒷줄(응원 한마디 → 위트 순)부터 뺀다. 첫 줄(추천 핵심)과 둘째 줄(근처 가게)은 지킨다.
+var _PIP_LINE_MAX  = 46;   // 한 문장 최대 글자 수(작은 창에서 3줄 안쪽)
+var _PIP_LINE_CPL  = 18;   // 작은 창 한 줄에 들어가는 글자 수(여유 있게)
+var _PIP_TOTAL_VIS = 7;    // 본문 최대 표시 줄 수
+function _pipClampText(t, max){
+  t = String(t == null ? '' : t).replace(/\s+/g, ' ').trim();
+  if(t.length <= max) return t;
+  var cut = t.slice(0, max);
+  // 문장·쉼표·띄어쓰기 경계에서 자르되, 너무 앞에서 자르지는 않는다
+  var i = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf(', '), cut.lastIndexOf(' '));
+  if(i >= max * 0.6) cut = cut.slice(0, i);
+  return cut.replace(/[\s,.·]+$/, '') + '…';
+}
+function _pipClampLines(lines){
+  var out = (lines || []).map(function(x){ return _pipClampText(x, _PIP_LINE_MAX); })
+                         .filter(function(x){ return x; });
+  var vis = function(){ return out.reduce(function(n, x){ return n + Math.max(1, Math.ceil(x.length / _PIP_LINE_CPL)); }, 0); };
+  while(out.length > 2 && vis() > _PIP_TOTAL_VIS) out.pop();
+  return out;
+}
+window._pipClampLines = _pipClampLines;
+
 function _arrPipText(a, slot, destStn, body){
-  var out = { title: '하차 10분 전' + (destStn ? ' · ' + destStn : ''), lines: [] };
+  var out = { title: '하차 ' + ((a && a.remMin) || _ARR_PRE_MIN) + '분 전' + (destStn ? ' · ' + destStn : ''), lines: [] };
   try{
     var strip = function(t){ t = String(t || ''); try{ if(typeof _stripEmoji === 'function') t = _stripEmoji(t); }catch(e){} return t.trim(); };
     var pick = function(arr){ return arr[Math.floor(Math.random() * arr.length)]; };
@@ -25929,7 +26014,10 @@ function _arrPipText(a, slot, destStn, body){
     var near = spots.length ? ('근처엔 ' + spots.join(', ') + ' 있어요.') : '';
     if(slot === 'morning'){
       var m = a.menu || '커피', b = a.brunch || '';
-      out.lines.push('좋은 아침이에요. 내리시면 ' + m + (b ? _arrJosa(m, '과', '와') + ' ' + b : '') + ' 어떠세요?');
+      // ★ 2026-10-01: 문장이 길면 '…'로 잘려 '어떠세요?'가 사라지므로, 길 땐 브런치 메뉴를 빼고 문장을 온전히 둔다
+      var _mq = '좋은 아침이에요. 내리시면 ' + m + (b ? _arrJosa(m, '과', '와') + ' ' + b : '') + ' 어떠세요?';
+      if(_mq.length > _PIP_LINE_MAX) _mq = '좋은 아침이에요. 내리시면 ' + m + ' 어떠세요?';
+      out.lines.push(_mq);
       out.lines.push(near || '내리시면 근처 카페에 잠깐 들러 보세요.');
       out.lines.push(pick(_PIP_MORN_TAIL));
     } else if(slot === 'lunch'){
@@ -25947,6 +26035,12 @@ function _arrPipText(a, slot, destStn, body){
         out.lines.push(wit);
       }
       out.lines.push(pick(_PIP_NIGHT_TAIL));
+    } else if(a.dinner){   // 17~19시 — 야식이 아니라 저녁 식사
+      var dn = a.menu || '든든한 한 끼';
+      out.lines.push('오늘 저녁은 ' + dn + _arrJosaRo(dn) + ' 골라봤어요.');
+      out.lines.push(near || '내리시면 근처에서 든든히 드세요.');
+      if(wit) out.lines.push(wit);
+      out.lines.push(pick(_PIP_DINNER_TAIL));
     } else {   // night
       var mn = a.menu || '야식';
       out.lines.push('오늘 야식은 ' + mn + _arrJosaRo(mn) + ' 골라봤어요.');
@@ -25955,7 +26049,7 @@ function _arrPipText(a, slot, destStn, body){
       out.lines.push(pick(_PIP_NIGHT_TAIL));
     }
   }catch(e){}
-  out.lines = out.lines.filter(function(x){ return x && String(x).trim(); });
+  out.lines = _pipClampLines(out.lines.filter(function(x){ return x && String(x).trim(); }));
   return out;
 }
 window._arrPipText = _arrPipText;
@@ -25971,7 +26065,8 @@ function _arrFireAlertNow(destStn, arrMs){
     window._arrPlace     = a.place || null;
 
     var action;
-    if(slot === 'night')        action = { kind:'delivery', menu:(a.menu||'야식') };
+    if(slot === 'night' && a.dinner) action = { label:'맛집 위치 보기', call:'_arrGoFoodTab()' };   // ★ 17~19시는 배달보다 내리는 길 한 끼
+    else if(slot === 'night')   action = { kind:'delivery', menu:(a.menu||'야식') };
     else if(slot === 'shop')    action = { kind:'shop', item:a.shop };
     else                        action = { label:'맛집 위치 보기', call:'_arrGoFoodTab()' };
 
@@ -26005,7 +26100,7 @@ function _arrFireAlertNow(destStn, arrMs){
           body = ls.join('\n');
         }
         send(body);
-      });
+      }, { min: a.remMin, dinner: !!a.dinner });
     } else {
       send(a.body);
     }
@@ -31680,24 +31775,24 @@ function _pipEl(){
   //   무조건 불투명한 순수 검정(#000) 한 가지로 고정한다.
   el.style.cssText =
     'position:fixed;inset:0;z-index:2147483000;display:none;'
-    + 'flex-direction:column;align-items:center;justify-content:center;gap:min(0.9vh,5px);'
+    + 'flex-direction:column;align-items:center;justify-content:center;gap:1.4vw;'
     + 'background:#000;color:#fff;'
-    + 'padding:min(2vw,12px);padding-top:min(2.6vw,15px);text-align:center;'
+    + 'padding:2.4vw;padding-top:2.8vw;text-align:center;'
     + 'font-family:inherit;overflow:hidden;box-shadow:inset 0 2px 0 rgba(255,214,10,.55);';
   el.innerHTML =
       // ★ 2026-09-21: 내용을 pipBox 로 감싼다 — 창이 작을 때 통째로 축소해 넣기 위함(_pipFit)
       '<div id="pipBox" style="width:100%;flex:none;display:flex;flex-direction:column;align-items:center;'
-    +   'gap:min(0.9vh,5px);transform-origin:0 0;">'
+    +   'gap:2.2vw;transform-origin:50% 0;">'
       // 앱 상단과 같은 응원 문구가 오른쪽에서 왼쪽으로 흐른다
-    + '<div id="pipCheerRow" style="width:100%;flex:none;overflow:hidden;height:min(3.4vh,20px);position:relative;">'
+    + '<div id="pipCheerRow" style="width:100%;flex:none;overflow:hidden;height:5.6vw;position:relative;">'
     +   '<div id="pipCheerTrack" style="display:inline-block;white-space:nowrap;padding-left:100%;'
     +     'animation:pipCheer 15s linear infinite;">'
-    +     '<span id="pipCheerText" style="font-size:min(3.8vw,13px);font-weight:800;color:#9aa0ff;"></span>'
+    +     '<span id="pipCheerText" style="font-size:4.4vw;font-weight:800;color:#9aa0ff;"></span>'
     +   '</div>'
     + '</div>'
-    + '<div id="pipStn" style="font-size:min(5vw,17px);line-height:1.25;' + NOWRAP + '"></div>'
+    + '<div id="pipStn" style="width:100%;font-size:6.2vw;line-height:1.25;display:flex;justify-content:center;align-items:baseline;gap:1.6vw;' + NOWRAP + '"></div>'
     // ★ 2026-09-22: 여정 진행률 막대 — 목적지까지 얼마나 왔는지 한눈에
-    + '<div id="pipProgWrap" style="width:86%;flex:none;height:4px;border-radius:3px;background:rgba(255,255,255,.14);overflow:hidden;">'
+    + '<div id="pipProgWrap" style="width:92%;flex:none;height:1.8vw;min-height:3px;border-radius:3px;background:rgba(255,255,255,.14);overflow:hidden;">'
     +   '<div id="pipProgBar" style="width:0%;height:100%;border-radius:3px;background:linear-gradient(90deg,#ffd60a,#ff9f0a);transition:width .5s ease;"></div>'
     + '</div>'
     // ★ 2026-09-29: "PiP가 심심하다" → 목적지+소요시간+도착시각을 하이라이트(색글자)
@@ -31705,8 +31800,8 @@ function _pipEl(){
     //   도착예정입니다"처럼 완전한 문장으로, 시인성 좋게 보여달라고 요청 → 알약(칩)
     //   대신 줄바꿈이 되는 한 문장으로 바꾸고, 읽기 쉽도록 아래 PIP_H를 늘려 자리를
     //   더 확보했다(핵심 낱말 3개만 색으로 강조 — 나머지 글은 흰 글자로 또렷하게).
-    + '<div id="pipSentence" style="width:100%;flex:none;font-size:min(4.4vw,15px);'
-    +   'font-weight:700;line-height:1.42;color:#fff;word-break:keep-all;"></div>'
+    + '<div id="pipSentence" style="width:100%;flex:none;font-size:6.9vw;'
+    +   'font-weight:700;line-height:1.38;color:#fff;word-break:keep-all;"></div>'
     + '<div id="pipReco" style="display:none;width:100%;flex:none;margin-top:min(1.4vh,8px);'
     +   'padding-top:min(1.4vh,8px);border-top:1px solid rgba(255,255,255,.16);"></div>'
     + '</div>';
@@ -31781,16 +31876,21 @@ function _pipPaint(){
     var R = document.getElementById('pipStn');
     var sEl = document.getElementById('pipSentence');
 
-    // 이전역(흐리게) – 현재역(진하게, 앞에 점 표시) – 다음역(흐리게)
+    // ★ 2026-10-01 (YJ: "pip화면 대비 글자가 차지하는 부분이 작거나 비율이 이상해서 보기 이상해"):
+    //   길찾기 중 사용자가 가장 필요한 건 '다음에 어디냐'다. 이전역은 이미 지나온 정보라 빼고,
+    //   '현재(작고 흐리게) ▸ 다음(크고 진하게)' 두 개만 큼직하게 보여 준다.
+    //   다음이 없으면(마지막) 현재 자리를 큼직하게 보여 준다.
     if(R){
-      var dim = 'color:#8e8e96;font-weight:600;';
-      var on  = 'color:#fff;font-weight:900;background:rgba(255,255,255,.12);padding:1px 8px;border-radius:8px;';
-      var sep = '<span style="color:#5a5a62;margin:0 6px;">–</span>';
-      var dot = '<span style="color:#ffd60a;margin-right:4px;">●</span>';
       var cur = st.cur || d.cur || (d.from || '이동 중');
-      R.innerHTML = (st.prev ? '<span style="' + dim + '">' + esc(st.prev) + '</span>' + sep : '')
-                  + '<span style="' + on + '">' + dot + esc(cur) + '</span>'
-                  + (st.next ? sep + '<span style="' + dim + '">' + esc(st.next) + '</span>' : '');
+      var nm1 = 'min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+      if(st.next){
+        R.innerHTML = '<span style="color:#9a9aa3;font-weight:700;font-size:.74em;flex:0 1 auto;' + nm1 + '">' + esc(cur) + '</span>'
+                    + '<span style="color:#ffd60a;font-weight:900;flex:none;">▸</span>'
+                    + '<span style="color:#fff;font-weight:900;font-size:1.12em;flex:0 1 auto;' + nm1 + '">' + esc(st.next) + '</span>';
+      } else {
+        R.innerHTML = '<span style="color:#ffd60a;font-weight:900;flex:none;">●</span>'
+                    + '<span style="color:#fff;font-weight:900;font-size:1.12em;flex:0 1 auto;' + nm1 + '">' + esc(cur) + '</span>';
+      }
     }
     // ★ 2026-09-22: 여정 진행률 막대 — idx/total이 없으면(경로 정보 부족) 그냥 숨긴다
     try{
@@ -31809,10 +31909,10 @@ function _pipPaint(){
       if(sEl){
         var destNm = d.dest || (window._pipTrip && window._pipTrip.to) || '';
         var durHtml = (d.min != null)
-          ? '<b style="color:#ff9f0a;">' + esc(_pipMinText(d.min)) + '</b>'
+          ? '<b style="color:#ff9f0a;font-size:1.14em;">' + esc(_pipMinText(d.min)) + '</b>'
           : '<b style="color:#ff9f0a;">-</b>';
         var arrHtml = d.arr
-          ? '<b style="color:#7dd3fc;">' + esc(d.arr) + '</b>'
+          ? '<b style="color:#7dd3fc;font-size:1.14em;">' + esc(d.arr) + '</b>'
           : '<b style="color:#7dd3fc;">-</b>';
         sEl.innerHTML = (destNm ? '<b style="color:#ffd60a;">' + esc(destNm) + '</b>까지 ' : '')
           + '총 ' + durHtml + ' 소요되고 ' + arrHtml + '에 도착예정입니다';
@@ -31886,10 +31986,10 @@ function _pipRecoPaint(){
 
   var esc = function(t){ return String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
                                                      .replace(/"/g,'&quot;'); };
-  var html = '<div style="font-size:min(4.6vw,15px);font-weight:800;line-height:1.3;margin-bottom:min(0.8vh,5px);">'
+  var html = '<div style="font-size:6.6vw;font-weight:800;line-height:1.3;margin-bottom:1.6vw;">'
            + esc(r.title) + '</div>';
   if(r.body){
-    html += '<div style="font-size:min(3.9vw,13px);color:#c6c6cc;line-height:1.4;margin-bottom:min(1.1vh,7px);'
+    html += '<div style="font-size:5.4vw;color:#d4d4da;line-height:1.4;margin-bottom:1.6vw;'
           + 'white-space:pre-line;word-break:keep-all;">' + esc(r.body) + '</div>';
   }
   // ★ 2026-09-21: 작은 창은 터치가 웹으로 오지 않아 버튼이 눌리지 않는다 → 버튼·남은시간 표시를 없애고
@@ -32012,18 +32112,29 @@ function _pipFit(){
     var cs = getComputedStyle(v);
     var avail = v.clientHeight - (parseFloat(cs.paddingTop)||0) - (parseFloat(cs.paddingBottom)||0);
     var nat = bx.offsetHeight, sc = 1;
-    if(avail > 20 && nat > avail + 1){
-      sc = avail / nat;
+    // ★ 2026-10-01 (YJ: "글자가 차지하는 부분이 작거나 비율이 이상해"): 줄이기만 하던 맞춤에
+    //   '키우기'를 더한다. 내용이 창보다 작으면(위아래가 비면) 창을 채우도록 최대 1.5배까지 키운다.
+    //   추천이 떠 있을 땐 창 높이를 내용에 맞춰 늘리는 방식이라 키우지 않는다(줄이기만).
+    var MAXUP = recoOn ? 1 : 1.5;
+    if(avail > 20 && nat > 0 && (nat > avail + 1 || (MAXUP > 1 && nat < avail * 0.92))){
+      sc = Math.max(0.3, Math.min(MAXUP, avail / nat));
       if(sc < 0.8 && recoOn){            // 너무 작아지면 추천이 주인공이므로 역·시간 줄을 잠깐 비운다
         rowsShow('none'); nat = bx.offsetHeight; sc = Math.min(1, avail / nat);
       }
-      for(var i = 0; i < 3 && sc < 1; i++){
+      for(var i = 0; i < 5 && Math.abs(sc - 1) > 0.01; i++){
         bx.style.width = (100 / sc) + '%';
         bx.style.transform = 'scale(' + sc + ')';
         nat = bx.offsetHeight;
-        if(nat * sc <= avail + 1) break;
-        sc = Math.min(sc, avail / nat);
+        var want = Math.max(0.3, Math.min(MAXUP, avail / nat));
+        if(nat * sc <= avail + 1 && nat * sc >= avail * 0.9) break;   // 이미 알맞게 찼다
+        if(want > sc && nat * sc <= avail + 1 && i >= 3) break;        // 키우다 진동하면 현재값 유지
+        sc = (i < 3) ? want : Math.min(sc, want);
       }
+      if(nat * sc > avail + 1){            // 마지막 안전장치 — 절대 넘치지 않게
+        sc = Math.max(0.3, Math.min(sc, avail / nat));
+        bx.style.width = (100 / sc) + '%'; bx.style.transform = 'scale(' + sc + ')';
+      }
+      if(Math.abs(sc - 1) <= 0.01){ sc = 1; bx.style.width = '100%'; bx.style.transform = ''; }
     }
     if(reco){
       if(!reco._o) reco._o = { bt: reco.style.borderTop, mt: reco.style.marginTop, pt: reco.style.paddingTop };
@@ -32033,7 +32144,7 @@ function _pipFit(){
       reco.style.paddingTop = _hid ? '0' : reco._o.pt;
     }
     v.style.overflow = 'hidden';
-    v.style.justifyContent = (sc < 1 || recoOn) ? 'flex-start' : 'center';
+    v.style.justifyContent = (sc !== 1 || recoOn) ? 'flex-start' : 'center';
   }catch(e){}
 }
 window._pipFit = _pipFit;
@@ -32099,9 +32210,22 @@ function _pipGrow(on){
     var n = (typeof _pipNative==='function') ? _pipNative() : null;
     var o = _pipSizeOpts({});
     if(!n) return;
-    if(typeof n.setAspectRatio === 'function') n.setAspectRatio(o);
-    else if(typeof n.update === 'function')    n.update(o);
-    else if(typeof n.enter === 'function' && window._pipInPip) n.enter(o);
+    // ★ 2026-10-01 (도착 전 추천 PiP 확장 점검): 네이티브 PipPlugin 에는 setAspectRatio/update 가
+    //   없고(setActive·enter·isAvailable·redraw 뿐), Capacitor 는 모르는 메서드도 함수처럼 보이게
+    //   하는 경우가 있어 `typeof === 'function'` 검사가 항상 통과 → 호출은 'not implemented' 로 조용히
+    //   거절되고 창은 안 커졌다(10초 주기 동기화가 우연히 맞춰 줄 때까지). 줄일 때도 마찬가지.
+    //   → 네이티브에 실제로 있고 setPictureInPictureParams 를 바로 거는 setActive 를 먼저 쓴다.
+    //   실패하면 동기화 타이머가 다시 보내도록 표시해 둔다(_pipLastActive/_pipLastSz 초기화).
+    o.active = !!(_pipEnabled() && _pipHasRoute());
+    var _bad = function(){ _pipLastActive = null; _pipLastSz = ''; };
+    var _call = function(fn){
+      try{ var r = fn.call(n, o); if(r && typeof r.then === 'function') r.then(function(){ _pipLastSz = o.width + 'x' + o.height; }, _bad); else _pipLastSz = o.width + 'x' + o.height; }
+      catch(e){ _bad(); }
+    };
+    if(typeof n.setActive === 'function')         _call(n.setActive);
+    else if(typeof n.setAspectRatio === 'function') _call(n.setAspectRatio);
+    else if(typeof n.update === 'function')       _call(n.update);
+    else if(typeof n.enter === 'function' && window._pipInPip) _call(n.enter);
   }catch(e){}
 }
 window._pipGrow = _pipGrow;
@@ -32137,6 +32261,7 @@ window._pipEnter = _pipEnter;
 //   안드로이드는 홈 버튼을 누르는 순간(onUserLeaveHint)에만 PiP로 바꿀 수 있어서,
 //   그때 물어볼 시간이 없다. 미리 상태를 넘겨 두고 네이티브가 스스로 판단하게 한다.
 var _pipLastActive = null;
+var _pipLastSz = '';           // ★ 2026-10-01: 마지막으로 네이티브에 알린 창 크기 — 크기가 바뀌었으면 값이 같아도 다시 보낸다
 var _pipLastSyncAt = 0;
 var _PIP_RESEND_MS = 30000;
 // ★ 2026-09-08: 예전엔 '값이 바뀔 때 한 번'만 보냈다.
@@ -32150,13 +32275,15 @@ function _pipNativeSync(force){
     if(!n || typeof n.setActive !== 'function'){ _pipLastActive = null; return; }
     var v = !!(_pipEnabled() && _pipHasRoute());
     var now = Date.now();
-    if(!force && v === _pipLastActive && (now - _pipLastSyncAt) < _PIP_RESEND_MS) return;
+    var _o = _pipSizeOpts({ active: v });
+    var _sz = _o.width + 'x' + _o.height;
+    if(!force && v === _pipLastActive && _sz === _pipLastSz && (now - _pipLastSyncAt) < _PIP_RESEND_MS) return;
     _pipLastSyncAt = now;
-    var r = n.setActive(_pipSizeOpts({ active: v }));
+    var r = n.setActive(_o);
     if(r && typeof r.then === 'function'){
-      r.then(function(){ _pipLastActive = v; window._pipArmed = v; })
-       .catch(function(){ _pipLastActive = null; window._pipArmed = null; });   // 실패하면 다음 틱에 재시도
-    } else { _pipLastActive = v; window._pipArmed = v; }
+      r.then(function(){ _pipLastActive = v; _pipLastSz = _sz; window._pipArmed = v; })
+       .catch(function(){ _pipLastActive = null; _pipLastSz = ''; window._pipArmed = null; });   // 실패하면 다음 틱에 재시도
+    } else { _pipLastActive = v; _pipLastSz = _sz; window._pipArmed = v; }
   }catch(e){ _pipLastActive = null; window._pipArmed = null; }
 }
 window._pipNativeSync = _pipNativeSync;
@@ -42135,7 +42262,7 @@ function _serverPostTalk(nick, text){
     }).catch(function(){});  // 실패해도 앱은 계속 작동 (로컬 표시는 됨)
 
     // ★ 사용자 개입 → AI 참여자들이 이 메시지에 직접 반응 (6~45초 뒤 등장)
-    fetch(_BOARD_WRITER_URL + '/react?token=328574', {
+    fetch(_BOARD_WRITER_URL + '/react?token=328574', {   // (키 정리 단계에서 토큰 제거 예정 — workers-hardened/README.md 참고)
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ nick: nick, text: text })
