@@ -2789,13 +2789,6 @@ function _foodMakeCard(p, i, isPublic){
 
 
 // 카테고리 필터 클릭
-// 서버 질의용 카테고리: '전체'는 빈값(전반 검색)으로 변환
-function _foodQueryCat() {
-  if(!_foodCurFilter || _foodCurFilter === '전체' || _foodCurFilter === '밥집') return '';
-  if(_foodCurFilter === '육식') return '고기';
-  if(_foodCurFilter === '회집') return '회';
-  return _foodCurFilter;
-}
 function foodFilterCat(el, cat) {
   document.querySelectorAll('.food-chip').forEach(function(c){ c.classList.remove('on'); });
   el.classList.add('on');
@@ -2873,162 +2866,6 @@ function loadFoodTab(force) {
 }
 window.loadFoodTab = loadFoodTab;
 
-
-// 맛집 조회: 네이버(우선) + 카카오 좌표/역명 병렬 통합 (최대한 많이, 중복 제거)
-var _WORKER_FOOD = 'https://gentle-lab-7e47subway-api.phg0643.workers.dev';
-function _foodMapItem(p){
-  var nm = p.place_name || p.name || p.title || p.bizesNm || '';
-  nm = String(nm).replace(/<[^>]*>/g,'').trim();   // 혹시 모를 태그 제거
-  return {
-    id: p.place_id || p.id || nm || '',
-    place_name: nm,
-    category_name: p.category_name || p.category || p.indsMclsNm || '',
-    address_name: p.address_name || '',
-    road_address_name: p.road_address_name || p.roadAddress || p.address || '',
-    distance: String(p.distance || 0),
-    place_url: p.place_url || p.link || '',
-    x: String(p.lng || p.x || p.mapx || 0),
-    y: String(p.lat || p.y || p.mapy || 0)
-  };
-}
-function _fetchKakaoFood(stnNm, lat, lng) {
-  var list = document.getElementById('foodList');
-  if(list && (!_foodAllData || !_foodAllData.length)) list.innerHTML =
-    '<div class="food-loading"><div class="food-spinner"></div>' + stnNm + ' 맛집 불러오는 중...</div>';
-
-  // ★ 필터와 무관하게 다섯 분류를 각각 조회해 합침 → 모든 탭이 골고루 나옴
-  var collected = [];
-  var seen = {};
-  function _k(p){ return String(p.place_name||'').replace(/\s/g,''); }
-  function _merge(arr){
-    (arr||[]).forEach(function(p){ var k=_k(p); if(p.place_name && !seen[k]){ seen[k]=1; collected.push(p); } });
-    _foodAllData = collected.slice();
-    if(_foodAllData.length) _foodCache[stnNm] = { ts: Date.now(), data: _foodAllData };
-    _renderFoodList();
-  }
-  function _pull(d){ if(!d) return; var pl=d.restaurants||d.documents||[]; if(pl.length) _merge(pl.map(_foodMapItem)); }
-  function _getJSON(u){ return _fetchT(u, {}, 8000).then(function(r){ return r.ok ? r.json() : null; }); }
-
-  // 카테고리별 검색어 (빈값=전반, 밥집, 카페, 육식, 회집, 주점)
-  var _catList = ['', '맛집', '카페', '고기', '회', '술집'];
-
-  // 1) 네이버 (리뷰 기반, 우선) — 카테고리별
-  _catList.forEach(function(c){
-    _getJSON(_WORKER_FOOD + '/naver-food?region=' + encodeURIComponent(stnNm) + '&cat=' + encodeURIComponent(c))
-      .then(_pull).catch(function(){});
-  });
-  // 2) 카카오 좌표 5km — 카테고리별 (골고루 보강)
-  if(lat && lng){
-    _catList.forEach(function(c){
-      _getJSON(_WORKER_FOOD + '/kakao-food-geo?lat=' + lat + '&lng=' + lng + '&radius=5000&cat=' + encodeURIComponent(c))
-        .then(_pull).catch(function(){});
-    });
-  }
-  // 3) 역명 기반 (D1 캐시/폴백)
-  _getJSON(_WORKER_FOOD + '/kakao-food?station=' + encodeURIComponent(stnNm) + '&cat=')
-    .then(_pull).catch(function(){});
-  // 아무 소스도 결과 없을 때만 빈 상태 표시
-  setTimeout(function(){
-    if((!_foodAllData||!_foodAllData.length) && (!_foodPublicData||!_foodPublicData.length)){
-      var l=document.getElementById('foodList');
-      if(l) l.innerHTML = '<div class="food-empty">\uD83D\uDE22<br>' + stnNm + ' 주변<br>\uAC80\uC0C9\uB41C \uB9DB\uC9D1\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.</div>';
-    }
-  }, 6000);
-}
-window._fetchKakaoFood = _fetchKakaoFood;
-
-// 카카오 좌표 기반 5km 조회 (폴백)
-function _fetchKakaoFoodGeo(stnNm, lat, lng) {
-  var list = document.getElementById('foodList');
-
-  // 좌표 기반 5km 반경 조회 (어떤 목적지든 작동)
-  var workerUrl = 'https://gentle-lab-7e47subway-api.phg0643.workers.dev/kakao-food-geo' +
-    '?lat=' + lat + '&lng=' + lng +
-    '&radius=5000' +
-    '&cat=' + encodeURIComponent(_foodQueryCat());
-
-  fetch(workerUrl)
-    .then(function(r) {
-      if(!r.ok) throw new Error('HTTP ' + r.status);
-      return r.json();
-    })
-    .then(function(data) {
-      var places = data.restaurants || data.documents || [];
-      if(!places.length) {
-        // 좌표 조회 실패 시 역명 기반으로 폴백
-        _fetchKakaoFoodByName(stnNm);
-        return;
-      }
-      _foodAllData = places.map(function(p) {
-        return {
-          id:                p.place_id   || p.id             || '',
-          place_name:        p.place_name                     || '',
-          category_name:     p.category_name                  || '',
-          address_name:      p.address_name                   || '',
-          road_address_name: p.road_address_name              || '',
-          distance:          String(p.distance                || 0),
-          place_url:         p.place_url                      || '',
-          x:                 String(p.lng || p.x              || 0),
-          y:                 String(p.lat || p.y              || 0),
-        };
-      });
-      _foodCache[stnNm] = { ts: Date.now(), data: _foodAllData };
-      _renderFoodList();
-    })
-    .catch(function(e) {
-      console.warn('[맛집] 좌표 조회 오류, 역명 폴백:', e);
-      _fetchKakaoFoodByName(stnNm);
-    });
-}
-window._fetchKakaoFoodGeo = _fetchKakaoFoodGeo;
-
-// 역명 기반 조회 (최종 폴백)
-function _fetchKakaoFoodByName(stnNm) {
-  var list = document.getElementById('foodList');
-  if(list) list.innerHTML =
-    '<div class="food-loading"><div class="food-spinner"></div>' + stnNm + ' 맛집 불러오는 중...</div>';
-
-  var workerUrl = 'https://gentle-lab-7e47subway-api.phg0643.workers.dev/kakao-food' +
-    '?station=' + encodeURIComponent(stnNm) +
-    '&cat=' + encodeURIComponent(_foodQueryCat());
-
-  fetch(workerUrl)
-    .then(function(r) {
-      if(!r.ok) throw new Error('HTTP ' + r.status);
-      return r.json();
-    })
-    .then(function(data) {
-      // D1 결과 (cached) 또는 실시간 결과 모두 처리
-      var places = data.restaurants || data.documents || [];
-      if(!places.length) {
-        if(list) list.innerHTML =
-          '<div class="food-empty">😢<br>' + stnNm + ' 주변<br>검색된 맛집이 없습니다.<br>' +
-          '<small style="color:var(--sub)">새벽 3시 이후 자동 업데이트됩니다</small></div>';
-        return;
-      }
-      // D1 컬럼명 → 카카오 API 형식으로 정규화
-      _foodAllData = places.map(function(p) {
-        return {
-          id:                p.place_id   || p.id             || '',
-          place_name:        p.place_name                     || '',
-          category_name:     p.category_name                  || '',
-          address_name:      p.address_name                   || '',
-          road_address_name: p.road_address_name              || '',
-          distance:          String(p.distance                || 0),
-          place_url:         p.place_url                      || '',
-          x:                 String(p.lng || p.x              || 0),
-          y:                 String(p.lat || p.y              || 0),
-        };
-      });
-      _foodCache[stnNm] = { ts: Date.now(), data: _foodAllData };
-      _renderFoodList();
-    })
-    .catch(function(e) {
-      console.warn('[맛집] Worker 오류:', e);
-      if(list) list.innerHTML =
-        '<div class="food-error">⚠️ 맛집 정보를 불러오지 못했습니다.<br>잠시 후 다시 시도해주세요.</div>';
-    });
-}
 
 // 별점 텍스트 생성 (카카오는 별점 없음 → 인기도 기반 표시)
 function _foodStars(idx) {
@@ -4535,19 +4372,6 @@ function _loadServerPosts(cat, reset) {
 }
 window._loadServerPosts = _loadServerPosts;
 
-// 서버에 게시글 저장
-// [정리] 중복 정의 제거: _serverPostArticle (아래쪽 정의 사용, 등록도 그쪽에서)
-
-// 서버에서 반응(좋아요 등) 저장
-function _serverReact(postId, type) {
-  if(!postId || isNaN(postId)) return;  // 로컬 AI 게시글은 서버 반응 불필요
-  fetch(_SERVER_URL + '/react', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id: postId, type: type })
-  }).catch(function(){});
-}
-window._serverReact = _serverReact;
 
 // 댓글 서버 저장 (2026-09-25: 실제 서버 연동 — board-writer /comment)
 // ★ 서버(board-writer)에 실제로 쌓인 글(post.isServer===true)에만 댓글을 서버로 보낸다.
@@ -6036,95 +5860,11 @@ function _busStopSearchByName(q, callback) {
 window._busStopSearchByName = _busStopSearchByName;
 
 
-// ══════════════════════════════════════════════════════════════
-// 🗺️ 카카오 대중교통 경로 API (버스 포함 경로)
-// ══════════════════════════════════════════════════════════════
-// 모빌리티 키도 서버(Worker)로 이전
-
-function _fetchKakaoTransitRoute(startLat, startLng, endLat, endLng, callback) {
-  // 카카오 모빌리티 대중교통 경로 API (Worker 프록시 경유 — 키 노출 없음)
-  var _naviQs = 'origin=' + startLng + ',' + startLat +
-    '&destination=' + endLng + ',' + endLat +
-    '&departure_time=' + encodeURIComponent(new Date().toISOString().replace('T',' ').slice(0,16));
-
-  _kakaoNavi('v1/future/directions/transit', _naviQs)
-  .then(function(r){
-    if(!r.ok) throw new Error('HTTP ' + r.status);
-    return r.json();
-  })
-  .then(function(data){ callback(null, data); })
-  .catch(function(e){
-    console.warn('[카카오경로]', e);
-    // 카카오 대중교통 API 실패시 Worker 프록시로 재시도
-    var proxyUrl = _SERVER_URL + '/kakao-transit' +
-      '?slat=' + startLat + '&slng=' + startLng +
-      '&elat=' + endLat   + '&elng=' + endLng;
-    fetch(proxyUrl)
-      .then(function(r2){ return r2.json(); })
-      .then(function(d2){ callback(null, d2); })
-      .catch(function(e2){ callback(e2, null); });
-  });
-}
-
-// 카카오 경로 결과를 앱 표시 형식으로 변환
-function _renderKakaoRoute(data, startName, endName) {
-  if(!data || !data.routes || !data.routes.length) {
-    toast('경로를 찾을 수 없습니다.');
-    return;
-  }
-  var route = data.routes[0];
-  var sections = route.sections || [];
-
-  // 경로 요약 표시
-  var totalTime = Math.round(route.summary.duration / 60);
-  var totalDist = Math.round(route.summary.distance / 1000 * 10) / 10;
-
-  var html = '<div style="padding:14px;background:var(--card);border-radius:16px;margin-bottom:10px;">' +
-    '<div style="font-size:16px;font-weight:800;color:var(--text);margin-bottom:8px;">' +
-    startName + ' → ' + endName + '</div>' +
-    '<div style="font-size:14px;color:var(--gold);font-weight:700;">' +
-    '총 ' + totalTime + '분 · ' + totalDist + 'km</div>' +
-    '</div>';
-
-  // 구간별 표시
-  sections.forEach(function(sec) {
-    var type = sec.transportation || {};
-    var isSubway = type.type === 1;
-    var isBus    = type.type === 2;
-    var isWalk   = type.type === 3;
-
-    var icon  = isWalk ? '🚶' : (isSubway ? '🚇' : '🚌');
-    var color = isWalk ? 'var(--sub)' : (isSubway ? '#0a84ff' : '#00b341');
-    var timeMin = Math.round((sec.duration || 0) / 60);
-
-    html += '<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">' +
-      '<div style="font-size:20px;flex-shrink:0;">' + icon + '</div>' +
-      '<div style="flex:1;">' +
-        '<div style="font-size:13px;font-weight:700;color:' + color + ';">' +
-          (isWalk ? '도보' : (type.name || sec.name || '이동')) + '</div>' +
-        '<div style="font-size:12px;color:var(--sub);">' + timeMin + '분</div>' +
-      '</div>' +
-    '</div>';
-  });
-
-  var pathSection = document.getElementById('pathSection');
-  if(pathSection) {
-    pathSection.style.display = 'block';
-    var content = pathSection.querySelector('#pathContent') ||
-                  pathSection.querySelector('.path-content');
-    if(content) content.innerHTML = html;
-    else pathSection.innerHTML = html;
-  }
-}
-
 // ── 경로 탐색 통합 함수 ─────────────────────────────────────
 
 // ══════════════════════════════════════════════════════════════
-// 🗺️ 하이브리드 경로 탐색 시스템 (BFS + 카카오 + 3단계 캐시)
+// 🗺️ 경로 탐색 보조 (도시 판별)
 // ══════════════════════════════════════════════════════════════
-
-// 앱 메모리 캐시 (30분)
-var _memRouteCache = {};
 
 // 노선 → 도시 매핑
 var _LINE_CITY = {
@@ -6153,117 +5893,6 @@ function _needKakao(start, dest) {
   }
   return false;
 }
-
-// 캐시 키 생성 (좌표 소수점 3자리)
-function _makeRouteCacheKey(slat, slng, elat, elng) {
-  var s = Math.round(slat*1000)/1000 + ',' + Math.round(slng*1000)/1000;
-  var e = Math.round(elat*1000)/1000 + ',' + Math.round(elng*1000)/1000;
-  return s + '→' + e;
-}
-
-// ── 1단계: 메모리 캐시 (즉시, 30분) ────────────────────────
-function _getMemCache(key) {
-  var c = _memRouteCache[key];
-  if(!c) return null;
-  if(Date.now() - c.ts > 30*60*1000) { delete _memRouteCache[key]; return null; }
-  return c.data;
-}
-function _clearMemCache(key) {
-  try { delete _memRouteCache[key]; } catch(e) {}
-}
-
-function _setMemCache(key, data) {
-  _memRouteCache[key] = { ts: Date.now(), data: data };
-  // 메모리 캐시 최대 20개 (오래된 것 삭제)
-  var keys = Object.keys(_memRouteCache);
-  if(keys.length > 20) {
-    keys.sort(function(a,b){ return _memRouteCache[a].ts - _memRouteCache[b].ts; });
-    delete _memRouteCache[keys[0]];
-  }
-}
-
-// ── 2단계: D1 서버 캐시 (하루) ─────────────────────────────
-function _getD1Cache(slat, slng, elat, elng, callback) {
-  var url = _SERVER_URL + '/route-cache?slat=' + slat + '&slng=' + slng +
-            '&elat=' + elat + '&elng=' + elng;
-  fetch(url)
-    .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
-    .then(function(d){
-      if(d.cached && d.data) callback(null, d.data);
-      else callback(null, null);
-    })
-    .catch(function(){ callback(null, null); });
-}
-
-// ── D1 캐시 저장 ─────────────────────────────────────────
-function _saveD1Cache(slat, slng, elat, elng, sname, ename, data) {
-  fetch(_SERVER_URL + '/route-cache', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      slat: slat, slng: slng, elat: elat, elng: elng,
-      sname: sname, ename: ename, data: data
-    })
-  }).catch(function(){});
-}
-
-// ── 3단계: 카카오 API 호출 (캐시 미스 시) ──────────────────
-function _callKakaoWithCache(start, dest, callback) {
-  var slat = start.lat, slng = start.lng;
-  var elat = dest.lat,  elng = dest.lng;
-  var cKey = _makeRouteCacheKey(slat, slng, elat, elng);
-
-  // 1단계: 메모리 캐시
-  var mem = _getMemCache(cKey);
-  if(mem) {
-    // 캐시된 에러 응답은 무시
-    if(mem.error) {
-      _clearMemCache(cKey);
-    } else {
-      callback(null, mem, 'memory');
-      return;
-    }
-  }
-
-  // 2단계: D1 서버 캐시
-  _getD1Cache(slat, slng, elat, elng, function(err, d1data) {
-    if(d1data) {
-      console.log('[경로캐시] D1HIT:', start.name, '→', dest.name);
-      _setMemCache(cKey, d1data); // 메모리에도 올림
-      callback(null, d1data, 'd1');
-      return;
-    }
-
-    // 3단계: 카카오 API (실제 호출)
-    console.log('[경로캐시] MISS → 카카오API 호출:', start.name, '→', dest.name);
-    var apiUrl = _SERVER_URL + '/kakao-transit' +
-      '?slat=' + slat + '&slng=' + slng +
-      '&elat=' + elat + '&elng=' + elng +
-      '&sname=' + encodeURIComponent(start.name) +
-      '&ename=' + encodeURIComponent(dest.name);
-
-    fetch(apiUrl)
-      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
-      .then(function(data) {
-        // 에러 응답은 캐시하지 않음
-        if(data && data.error) {
-          callback(null, data, 'error');
-          return;
-        }
-        // 메모리 캐시 저장
-        _setMemCache(cKey, data);
-        callback(null, data, 'api');
-      })
-      .catch(function(e){ callback(e, null, 'error'); });
-  });
-}
-
-// ★ 2026-09-27 (YJ 최종점검 낮은우선순위 항목 처리: 죽은코드 추가청소): 여기 있던
-//   _renderKakaoTransitResult(data, startName, endName, cacheSource)는 파일 전체에서
-//   부르는 곳이 단 한 군데도 없는 죽은 함수였다(카카오 경로 API 결과를 화면에 그리는
-//   용도로 만들어졌던 것으로 보이나, 실제로 쓰는 호출부가 없어 절대 실행되지 않음).
-//   삭제함 — 실제 경로 결과 렌더링은 route-v2 엔진 결과를 그리는 다른 함수들이 이미
-//   담당하고 있어 영향 없음.
 
 // ══════════════════════════════════════════════
 // 노선색 헬퍼
@@ -18398,7 +18027,7 @@ window.calcETA = function calcETA() {
     if(el) el.textContent = arrTime;
     var remEl = document.getElementById('etaRemain');
     if(remEl) remEl.textContent = remMin + '분 ' + remSec + '초';
-    // ★ 도착 10분 전 추천 알림 (오전 10시 이전=커피 / 오후 5시 이후=야식)
+    // ★ 도착 10분 전 추천 알림 (07~10시 커피 / 10~17시 점심 / 17~19시 저녁 / 19~21시 야식 / 21시 이후 쇼핑)
     if(typeof _arrCheckPreAlert === 'function') _arrCheckPreAlert(arrMs, remSecs);
   } catch(e) {}
 };
@@ -25740,9 +25369,10 @@ window._arrAiCopy = _arrAiCopy;
 // ── 시간대 판정 ──────────────────────────────────────────────
 //   00:00~07:00  none    : 추천 없음 (기존 도착 알림만)
 //   07:01~10:00  morning : 커피·브런치 추천 + 맛집 위치 보기
-//   10:01~16:59  none    : 추천 없음
-//   17:00~19:30  night   : 야식 추천 + 배달앱
-//   19:31~23:59  shop    : 쿠팡 아이템 추천 + 쿠팡 구경
+//   10:01~16:59  lunch   : 점심·카페 추천
+//   17:00~18:59  night   : 저녁 식사 추천(_arrIsDinner) + 배달앱
+//   19:00~21:00  night   : 야식 추천 + 배달앱
+//   21:01~23:59  shop    : 쿠팡 아이템 추천 + 쿠팡 구경
 function _arrSlot(arrMs){
   var d = new Date(arrMs);
   var m = d.getHours()*60 + d.getMinutes();
@@ -25878,7 +25508,7 @@ function _arrBuildAlert(destStn, arrHour, arrMs){
     };
   }
 
-  // ── 07:01~10:00 커피/브런치 · 10:01~17:00 점심 · 17:00~21:00 야식 ──
+  // ── 07:01~10:00 커피/브런치 · 10:01~17:00 점심 · 17:00~19:00 저녁 · 19:00~21:00 야식 ──
   // ★ 2026-09-16: 낮 시간대(lunch)를 추가했다. 밥집을 고르고 문구만 달리 쓴다.
   var isLunch = (slot === 'lunch');
   var isMorn  = (slot === 'morning');
@@ -26333,9 +25963,10 @@ function _arrStatusShow(){
     }
     var slot = (typeof _arrSlot === 'function') ? _arrSlot(Date.now()) : '?';
     var slotTxt = slot === 'morning' ? '커피 (07:01~10:00)'
-                : slot === 'night'   ? '야식 (17:00~19:30)'
-                : slot === 'shop'    ? '쇼핑 (19:31~)'
-                : '추천 없는 시간대 (00:00~07:00, 10:01~16:59)';
+                : slot === 'lunch'   ? '점심 (10:01~16:59)'
+                : slot === 'night'   ? ((typeof _arrIsDinner === 'function' && _arrIsDinner(Date.now())) ? '저녁 식사 (17:00~18:59)' : '야식 (19:00~21:00)')
+                : slot === 'shop'    ? '쇼핑 (21:01~)'
+                : '추천 없는 시간대 (00:00~07:00)';
     L.push('지금 시간대: ' + slotTxt);
     L.push('마지막 발송: ' + (window._arrAlertAt
       ? new Date(window._arrAlertAt).toLocaleTimeString() + '  (30분간 재발송 안 함)'
@@ -30711,12 +30342,7 @@ function dcReact(id, type, btn) {
   var span = btn.querySelector('span');
   if(span) span.textContent = post[type];
   btn.classList.toggle('dc-react-on');
-  // ★ 2026-09-27 (YJ 최종점검: 6-에이전트 코드리뷰): 여기서 로컬 카운트만 올리고 끝나서,
-  //   실제 서버 글(post.isServer===true)에 대한 반응이 서버로는 전혀 저장되지 않고 있었다
-  //   (새로고침하거나 다른 기기/사용자가 같은 글을 보면 반응 수가 사라짐). 이미 있던
-  //   _serverReact()가 어디서도 호출되지 않고 있던 것을 여기서 연결한다. 댓글 저장
-  //   (_serverPostComment)과 동일하게 post.isServer일 때만 서버로 보낸다.
-  if(post.isServer && typeof _serverReact === 'function') _serverReact(post.id, type);
+  // 반응은 이 기기에만 반영된다 — 서버(board-writer)에 글 반응을 저장하는 라우트가 아직 없다.
 }
 window.dcReact = dcReact;
 
@@ -42414,96 +42040,21 @@ window._LIVE_TALK = _LIVE_TALK;
 // ══════════════════════════════════════════════════════════════
 var _SERVER_URL = 'https://gentle-lab-7e47subway-api.phg0643.workers.dev';
 var _SERVER_ON = true;                  // 서버 연동 on/off
-var _lastTalkTs = 0;                    // 마지막으로 받은 톡 시각 (증분 조회용)
-var _serverTalkIds = {};                // 서버 톡 중복 방지
-var _serverPostIds = {};                // 서버 게시글 중복 방지
 
 // 서버에 톡 등록 (작성 시 호출)
 var _BOARD_WRITER_URL = 'https://board-writer.phg0643.workers.dev';
 function _serverPostTalk(nick, text){
   if(!_SERVER_ON) return;
   try {
-    fetch(_SERVER_URL + '/talks', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ nick: nick, text: text })
-    }).catch(function(){});  // 실패해도 앱은 계속 작동 (로컬 표시는 됨)
-
     // ★ 사용자 개입 → AI 참여자들이 이 메시지에 직접 반응 (6~45초 뒤 등장)
     fetch(_BOARD_WRITER_URL + '/react', {   // 토큰 없음 — 서버가 IP·시간당 호출 수로 제한
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ nick: nick, text: text })
     }).catch(function(){});
-    // 반응이 빨리 보이도록 후속 폴링 예약
-    [8000, 20000, 45000].forEach(function(d){
-      setTimeout(function(){ try { _serverFetchTalks(); } catch(e){} }, d);
-    });
   } catch(e){}
 }
 
-// 서버에서 새 톡 가져오기 (폴링)
-function _serverFetchTalks(){
-  if(!_SERVER_ON) return;
-  try {
-    fetch(_SERVER_URL + '/talks?after=' + _lastTalkTs)
-      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
-      .then(function(d){
-        // 응답은 왔지만 새 대화가 없음 = 서버 대본 소진 상태
-        if(!d || !d.talks || !d.talks.length){
-          window._serverEmptyAt = Date.now();
-          return;
-        }
-        var added = false;
-        var _nowMs = Date.now();
-        d.talks.forEach(function(t){
-          if(_serverTalkIds[t.id]) return;       // 이미 받은 것 skip
-          // ★ 미래 예약 메시지(서버 대본)는 그 시각이 지나면 다음 폴링에서 수신 → 라이브처럼 순차 등장
-          if(t.ts > _nowMs + 2000) return;       // 마킹/커서 전진 없이 보류
-          if(t.nick === '나' || (typeof _getCommId==='function' && t.nick === _getCommId())) {
-            _serverTalkIds[t.id] = true;          // 내가 쓴 건 이미 로컬에 있음
-            if(t.ts > _lastTalkTs) _lastTalkTs = t.ts;
-            return;
-          }
-          _serverTalkIds[t.id] = true;
-          _LIVE_TALK.push({ nick: t.nick, text: (typeof _ltTidyText==='function'?_ltTidyText(t.text):t.text), time: t.ts, server: true });
-          if(t.ts > _lastTalkTs) _lastTalkTs = t.ts;
-          added = true;
-          window._serverTalksActive = true;      // ★ 서버 대화 수신 중 → 로컬 생성 중단
-        });
-        if(_LIVE_TALK.length > 100) _LIVE_TALK.splice(0, _LIVE_TALK.length - 100);
-        if(added){
-          window._lastServerTalkAt = Date.now();   // ★ 서버 대본 최신 수신 시각 기록 (로컬 되살림 판단용)
-          // ★ 2026-08-27: 서버에서 받은 대화도 저장한다.
-          //   이 경로는 _ltAdd 를 거치지 않고 _LIVE_TALK 에 직접 push 하기 때문에
-          //   저장 훅이 안 불렸다. 실제 대화의 대부분이 서버에서 오므로,
-          //   이게 빠지면 '꺼다 켜면 텍 빈' 증상이 그대로 남는다.
-          try{ if(typeof window._saveTalk==='function') window._saveTalk(_LIVE_TALK); }catch(e){}
-          if(typeof _renderLiveTalk==='function') _renderLiveTalk();
-          if(typeof _renderChatTab==='function') _renderChatTab();
-        }
-      }).catch(function(){});
-  } catch(e){}
-}
-
-// 서버에 게시글 등록
-function _serverPostArticle(nick, title, body, cat){
-  if(typeof _SERVER_ON !== 'undefined' && !_SERVER_ON) return;
-  try {
-    fetch(_SERVER_URL + '/posts', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ nick:nick, title:title, body:body, cat:cat||'잡담' })
-    }).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
-      .then(function(data){
-        if(data && data.ok){
-          // 등록 직후 서버 목록 새로고침 → 내가 쓴 글 즉시 반영
-          setTimeout(function(){ if(typeof _loadServerPosts==='function') _loadServerPosts(_commFilter, true); }, 2000);
-        }
-      }).catch(function(){});
-  } catch(e){}
-}
-window._serverPostArticle = _serverPostArticle;
 
 // 서버에서 게시글 가져오기
 // ★ 옛 형식(cmts/id/views 누락) 직접 주입이 렌더 크래시 원인이었음
@@ -42519,9 +42070,7 @@ function _serverFetchPosts(){
 // 서버 폴링 시작 (20초마다)
 function _startServerSync(){
   if(!_SERVER_ON) return;
-  _serverFetchTalks();
   _serverFetchPosts();
-  setInterval(_serverFetchTalks, 5000);    // 톡: 5초 (라이브 체감)
   setInterval(_serverFetchPosts, 180000);  // 게시글: 3분
 }
 
@@ -43696,7 +43245,6 @@ function initLiveTalk(){
   // ★ 처음이라 아무것도 없으면 지난 대화부터 만들어 채운다
   try{ _ltBackfill(_LT_FILL_TARGET); }catch(e){}
   _renderLiveTalk(); _renderChatTab(); _scheduleLiveTalk();
-  try { if(typeof _serverFetchTalks === 'function') _serverFetchTalks(); } catch(e){}
   try { _ltFetchAi(); } catch(e){}   // Gemini 대화 초기 로드 (서버 폴백용)
 }
 window.initLiveTalk = initLiveTalk;
@@ -44847,11 +44395,6 @@ function submitPost() {
   if(typeof _AI_POSTS !== 'undefined') {
     _AI_POSTS.unshift(userPost);
   }
-  // ★ 서버에도 게시글 등록 (다른 사용자와 공유)
-  if(typeof _serverPostArticle === 'function') {
-    _serverPostArticle(userPost.nick, titleVal, bodyVal, catVal);
-  }
-
   // 목록 즉시 갱신
   if(typeof renderCommList === 'function') renderCommList();
 
