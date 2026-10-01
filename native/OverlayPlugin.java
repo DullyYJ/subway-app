@@ -20,6 +20,7 @@ import android.text.style.ForegroundColorSpan;
 import android.text.style.RelativeSizeSpan;
 import android.text.style.StyleSpan;
 import android.util.DisplayMetrics;
+import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
@@ -73,7 +74,7 @@ public class OverlayPlugin extends Plugin {
     private LinearLayout row;                    // 다섯 칸(출발·경로…) — 현위치가 늘 가운데 칸에 오도록 칸 폭을 좌우 대칭으로 고정
     private final TextView[] cells = new TextView[5];
     private final TextView[] seps = new TextView[4];
-    private static final float[] CELL_W = { 1f, 1f, 2f, 1f, 1f };
+    private static final float[] CELL_W = { 1f, 1f, 1.8f, 1f, 1f };   // 좌우 대칭 — 가운데(현위치) 칸이 화면 정중앙
     private boolean attached = false;
 
     // ── JS 에서 부르는 메서드 ─────────────────────────────────────
@@ -137,6 +138,19 @@ public class OverlayPlugin extends Plugin {
         call.resolve(new JSObject().put("ok", true).put("shown", attached));
     }
 
+    /**
+     * ★ 2026-10-01 (YJ: "하차 전 추천 알림이 안 온다"): 앱이 가려지면 웹뷰 타이머가 멈춰 '하차 10분 전' 감시도 같이 멈춘다.
+     * 확정한 여정이 진행되는 동안(오버레이를 쓰든 안 쓰든) 네이티브가 5초마다 웹을 깨우도록 웹이 켜고 끈다.
+     * 웹이 60초마다 다시 켜 주지 않으면(10분) 스스로 멈춘다.
+     */
+    @PluginMethod
+    public void keepAlive(PluginCall call) {
+        journeyOn = call.getBoolean("on", false);
+        if (journeyOn) journeyAt = System.currentTimeMillis();
+        main.post(new Runnable() { @Override public void run() { if (journeyOn) startTicker(); } });
+        call.resolve(new JSObject().put("ok", true));
+    }
+
     // ── 앱이 화면에서 사라지면 뜨고, 돌아오면 사라진다 ─────────────
 
     @Override
@@ -154,6 +168,9 @@ public class OverlayPlugin extends Plugin {
     @Override
     protected void handleOnDestroy() {
         wanted = false;
+        journeyOn = false;
+        main.removeCallbacks(ticker);
+        ticking = false;
         appVisible = true;
         main.post(new Runnable() { @Override public void run() { detach(); } });
     }
@@ -202,13 +219,18 @@ public class OverlayPlugin extends Plugin {
     //   → 오버레이가 떠 있는 동안은 네이티브가 5초마다 웹에 '한 번 돌아라' 하고 직접 깨운다.
     //   (스크립트 직접 실행은 타이머 제한을 받지 않는다. 무엇을 계산할지는 웹이 정하고, 여기서는 깨우기만 한다.)
     private static final long TICK_MS = 5 * 1000L;
+    private static final long JOURNEY_STALE_MS = 10 * 60 * 1000L;   // 웹이 10분 넘게 '안내 중'이라고 말해 주지 않으면 스스로 멈춘다
     private boolean ticking = false;
+    private volatile boolean journeyOn = false;    // 웹: 확정한 여정이 진행 중 (오버레이 사용 여부와 무관)
+    private volatile long journeyAt = 0L;
 
     private final Runnable ticker = new Runnable() {
         @Override public void run() {
-            if (!attached) { ticking = false; return; }
+            boolean journey = journeyOn && (System.currentTimeMillis() - journeyAt) < JOURNEY_STALE_MS;
+            if (!attached && !journey) { ticking = false; return; }
             try {
-                if (getBridge() != null && getBridge().getWebView() != null) {
+                // 앱이 보이는 동안은 웹이 스스로 돌고 있으니 깨울 필요가 없다. 가려진 동안만 깨운다.
+                if (!appVisible && getBridge() != null && getBridge().getWebView() != null) {
                     getBridge().getWebView().evaluateJavascript(
                             "try{window._ovlNativeTick&&window._ovlNativeTick();}catch(e){}", null);
                 }
@@ -244,48 +266,74 @@ public class OverlayPlugin extends Plugin {
         Context ctx = getContext();
         wm = (WindowManager) ctx.getSystemService(Context.WINDOW_SERVICE);
         DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
-        int maxW = Math.round(dm.widthPixels * 0.92f);
+        // ★ 2026-10-01 (YJ: "역간 거리가 너무 멀어서 역이 하나만 보여 — 좌우 2개씩 보이게"): 실기기에서 다섯 칸이 화면보다 넓게
+        //   퍼져 바깥 두 칸이 잘렸다(가중치(weight) 폭 + WRAP_CONTENT 창 조합). → 창 폭과 모든 칸 폭을 '정확한 픽셀'로 직접 정한다.
+        //   이렇게 하면 어떤 기기에서도 창 = 화면의 94%, 다섯 칸 합 = 창 안쪽 폭으로 고정된다.
+        int maxW = Math.round(dm.widthPixels * 0.96f);
+        final int padH = dp(8);
+        final int rowW = maxW - 2 * padH;
+        final int sepW = dp(4);
+        // ★ 2026-10-01 (YJ: "양옆 역은 세로 가운데로, 글자는 조금 키워"): 세 기둥 — 왼쪽(두 칸) · 가운데(현위치 + 노란 줄) · 오른쪽(두 칸).
+        //   양옆 칸은 창 전체 높이의 한가운데에 놓인다(가운데 기둥이 두 줄이라 위쪽에 치우쳐 보이던 것을 바로잡음).
+        //   가운데 기둥 폭은 노란 줄(남은 시간 문구)이 한 줄에 들어갈 만큼 확보하고, 나머지를 좌우 대칭으로 나눈다.
+        final int centerW = Math.round(rowW * 0.43f);
+        final int sideW = Math.round((rowW - centerW - 4 * sepW) / 4f);
 
         root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setGravity(Gravity.CENTER_HORIZONTAL);
-        root.setPadding(dp(14), dp(8), dp(14), dp(8));
+        root.setPadding(padH, dp(8), padH, dp(8));
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(Color.BLACK);                 // 순수 검정(PiP 와 같은 규칙)
         bg.setCornerRadius(dp(14));
         root.setBackground(bg);
 
-        t1 = makeText(15, Color.WHITE, false);
+        t1 = makeText(15, Color.WHITE, false);     // (예비 — 다섯 칸을 못 받았을 때만 가운데 칸에 쓴다)
         t2 = makeText(18, Color.parseColor("#FFD60A"), true);      // ★ 2026-10-01: 14→18 (아래 글자를 키워 달라는 요청)
         t3 = makeText(14, Color.parseColor("#D4D4DA"), false);
-        t1.setMaxWidth(maxW - dp(28));
-        t2.setMaxWidth(maxW - dp(28));
-        t3.setMaxWidth(maxW - dp(28));
-        // ★ 2026-10-01 (YJ: "현위치는 가운데 고정, 시작과 끝은 빈칸"): 윗줄을 다섯 칸으로 나눈다.
-        //   칸 폭이 좌우 대칭(1,1,2,1,1)이라 가운데 칸(현위치)은 화면에서 정확히 가운데에 놓이고, 비어 있는 칸은 그냥 비어 보인다.
-        row = new LinearLayout(ctx);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
+        t2.setMaxWidth(centerW);
+        t3.setMaxWidth(rowW);
+
         for (int i = 0; i < 5; i++) {
-            TextView c = makeText(11, Color.parseColor("#6E6E76"), false);
-            c.setSingleLine(true);
-            c.setEllipsize(TextUtils.TruncateAt.END);
+            TextView c = makeText(12, Color.parseColor("#6E6E76"), false);
             cells[i] = c;
-            row.addView(c, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, CELL_W[i]));
-            if (i < 4) {
-                TextView sp = makeText(11, Color.parseColor("#44444B"), false);
-                sp.setText("\u203A");                       // ›
-                seps[i] = sp;
-                row.addView(sp, new LinearLayout.LayoutParams(dp(8), LinearLayout.LayoutParams.WRAP_CONTENT));
+        }
+        for (int i = 0; i < 4; i++) {
+            TextView sp = makeText(12, Color.parseColor("#44444B"), false);
+            sp.setText("\u203A");                       // ›
+            seps[i] = sp;
+        }
+        // 옆 칸은 한 줄로 두고, 칸 폭에 맞춰 글자가 12sp 이하에서 스스로 줄어든다(이름이 길어도 잘리거나 줄바꿈되지 않게)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            for (int i = 0; i < 5; i++) {
+                if (i == 2) continue;
+                cells[i].setMaxLines(1);
+                cells[i].setAutoSizeTextTypeUniformWithConfiguration(8, 12, 1, TypedValue.COMPLEX_UNIT_SP);
             }
         }
-        root.addView(row, new LinearLayout.LayoutParams(maxW - dp(28), LinearLayout.LayoutParams.WRAP_CONTENT));
-        root.addView(t1);
-        root.addView(t2);
+
+        row = new LinearLayout(ctx);                 // 세 기둥을 가로로 놓는 줄 — 모든 기둥이 세로 가운데 정렬
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.addView(cells[0], new LinearLayout.LayoutParams(sideW, LinearLayout.LayoutParams.WRAP_CONTENT));
+        row.addView(seps[0], new LinearLayout.LayoutParams(sepW, LinearLayout.LayoutParams.WRAP_CONTENT));
+        row.addView(cells[1], new LinearLayout.LayoutParams(sideW, LinearLayout.LayoutParams.WRAP_CONTENT));
+        row.addView(seps[1], new LinearLayout.LayoutParams(sepW, LinearLayout.LayoutParams.WRAP_CONTENT));
+        LinearLayout mid = new LinearLayout(ctx);    // 가운데 기둥: 현위치(흰색) 위, 노란 줄 아래
+        mid.setOrientation(LinearLayout.VERTICAL);
+        mid.setGravity(Gravity.CENTER_HORIZONTAL);
+        mid.addView(cells[2], new LinearLayout.LayoutParams(centerW, LinearLayout.LayoutParams.WRAP_CONTENT));
+        mid.addView(t2, new LinearLayout.LayoutParams(centerW, LinearLayout.LayoutParams.WRAP_CONTENT));
+        row.addView(mid, new LinearLayout.LayoutParams(centerW, LinearLayout.LayoutParams.WRAP_CONTENT));
+        row.addView(seps[2], new LinearLayout.LayoutParams(sepW, LinearLayout.LayoutParams.WRAP_CONTENT));
+        row.addView(cells[3], new LinearLayout.LayoutParams(sideW, LinearLayout.LayoutParams.WRAP_CONTENT));
+        row.addView(seps[3], new LinearLayout.LayoutParams(sepW, LinearLayout.LayoutParams.WRAP_CONTENT));
+        row.addView(cells[4], new LinearLayout.LayoutParams(sideW, LinearLayout.LayoutParams.WRAP_CONTENT));
+        root.addView(row, new LinearLayout.LayoutParams(rowW, LinearLayout.LayoutParams.WRAP_CONTENT));
         root.addView(t3);
 
         lp = new WindowManager.LayoutParams(
-                WindowManager.LayoutParams.WRAP_CONTENT,
+                maxW,
                 WindowManager.LayoutParams.WRAP_CONTENT,
                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
                         ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -379,28 +427,25 @@ public class OverlayPlugin extends Plugin {
     private void attachOrUpdate() {
         if (root == null) build();
         boolean five = track.length == 5;
-        row.setVisibility(five ? View.VISIBLE : View.GONE);
-        if (five) {
-            for (int i = 0; i < 5; i++) {
-                String nm = track[i] == null ? "" : track[i];
-                boolean cur = (i == trackCur);
-                TextView c = cells[i];
-                c.setText(nm);
-                c.setTextColor(cur ? Color.WHITE : Color.parseColor("#6E6E76"));
-                c.setTextSize(cur ? 17 : 11);
-                c.setTypeface(cur ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
-                c.setSingleLine(!cur);                       // 현위치는 길면 두 줄까지
-                c.setMaxLines(cur ? 2 : 1);
+        for (int i = 0; i < 5; i++) {
+            String nm = five ? (track[i] == null ? "" : track[i]) : "";
+            if (!five && i == 2) nm = line1;               // 예비: 다섯 칸을 못 받으면 한 줄 문구를 가운데 칸에
+            boolean cur = five ? (i == trackCur) : (i == 2);
+            TextView c = cells[i];
+            c.setText(nm);
+            if (i == 2) {                                   // 현위치 칸: 흰색·굵게·17sp, 길면 두 줄까지
+                c.setTextColor(Color.WHITE);
+                c.setTextSize(17);
+                c.setTypeface(Typeface.DEFAULT_BOLD);
+                c.setMaxLines(2);
+            } else {                                        // 옆 칸: 회색, 칸에 맞춰 자동 축소(최대 12sp)
+                c.setTextColor(Color.parseColor("#6E6E76"));
             }
-            for (int i = 0; i < 4; i++) {                    // 양옆이 모두 차 있는 사이에만 › 를 보인다
-                boolean both = track[i] != null && track[i].length() > 0 && track[i + 1] != null && track[i + 1].length() > 0;
-                seps[i].setVisibility(both ? View.VISIBLE : View.INVISIBLE);
-            }
-            t1.setVisibility(View.GONE);
-        } else {
-            t1.setVisibility(View.VISIBLE);
         }
-        t1.setText(buildTrack());
+        for (int i = 0; i < 4; i++) {                       // 양옆이 모두 차 있는 사이에만 › 를 보인다
+            boolean both = five && track[i] != null && track[i].length() > 0 && track[i + 1] != null && track[i + 1].length() > 0;
+            seps[i].setVisibility(both ? View.VISIBLE : View.INVISIBLE);
+        }
         t2.setText(line2);
         t2.setVisibility(line2.length() > 0 ? View.VISIBLE : View.GONE);
         t3.setText(line3);
@@ -417,8 +462,7 @@ public class OverlayPlugin extends Plugin {
 
     private void detach() {
         main.removeCallbacks(checker);
-        main.removeCallbacks(ticker);
-        ticking = false;
+        if (!journeyOn) { main.removeCallbacks(ticker); ticking = false; }   // 여정이 진행 중이면 오버레이를 내려도 깨우기는 계속한다
         if (attached && wm != null && root != null) {
             try { wm.removeView(root); } catch (Exception ignored) { }
         }
