@@ -13,7 +13,12 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
+import android.text.SpannableStringBuilder;
+import android.text.Spanned;
 import android.text.TextUtils;
+import android.text.style.ForegroundColorSpan;
+import android.text.style.RelativeSizeSpan;
+import android.text.style.StyleSpan;
 import android.util.DisplayMetrics;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -23,6 +28,7 @@ import android.view.WindowManager;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -57,6 +63,8 @@ public class OverlayPlugin extends Plugin {
     private volatile boolean appVisible = true;    // 액티비티가 화면에 보이는가
     private volatile long lastUpdateAt = 0L;
     private String line1 = "", line2 = "", line3 = "";
+    private String[] track = new String[0];     // 출발 – 경로 – 현위치 – 경로 – 도착 (웹이 정해 준 이름들)
+    private int trackCur = -1;                  // 현위치 칸 번호(이 칸만 하얗고, 나머지는 흐린 회색)
 
     private WindowManager wm;
     private WindowManager.LayoutParams lp;
@@ -102,12 +110,22 @@ public class OverlayPlugin extends Plugin {
 
     /**
      * 웹이 주기적으로 부른다. active=false 면 숨긴다.
-     * line1: 윗줄(현재 ▸ 다음), line2: 가운데 줄(목적지·남은 시간·도착), line3: 선택(추천 알림 제목 등)
+     * track/cur: 윗줄 — 출발·경로·현위치·경로·도착 이름 목록과 현위치 칸 번호(현위치만 하얗게, 나머지는 회색).
+     *            track 이 비어 있으면 line1 을 그대로 쓴다.
+     * line2: 가운데 줄(목적지·남은 시간·도착), line3: 선택(추천 알림 제목 등)
      */
     @PluginMethod
     public void update(PluginCall call) {
         wanted = call.getBoolean("active", false);
         line1 = nz(call.getString("line1"));
+        try {
+            JSArray arr = call.getArray("track");
+            int n = arr == null ? 0 : arr.length();
+            String[] tr = new String[n];
+            for (int i = 0; i < n; i++) tr[i] = arr.optString(i, "");
+            track = tr;
+        } catch (Exception e) { track = new String[0]; }
+        trackCur = call.getInt("cur", -1);
         line2 = nz(call.getString("line2"));
         line3 = nz(call.getString("line3"));
         lastUpdateAt = System.currentTimeMillis();
@@ -155,7 +173,8 @@ public class OverlayPlugin extends Plugin {
                 try {
                     boolean stale = (System.currentTimeMillis() - lastUpdateAt) > STALE_MS;
                     boolean show = wanted && !appVisible && !stale && canDraw()
-                            && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && line1.length() > 0;
+                            && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                            && (track.length > 0 || line1.length() > 0);
                     if (show) { attachOrUpdate(); scheduleCheck(); }
                     else detach();
                 } catch (Exception ignored) { }
@@ -183,8 +202,8 @@ public class OverlayPlugin extends Plugin {
         TextView t = new TextView(getContext());
         t.setTextColor(color);
         t.setTextSize(sp);
-        t.setSingleLine(true);
-        t.setEllipsize(TextUtils.TruncateAt.END);
+        // ★ 2026-10-01: 한 줄 + '…' 로 자르면 아래 줄이 잘려 보였다(YJ 제보) → 잘라 내지 않고 필요하면 두 줄로 줄바꿈
+        t.setMaxLines(2);
         t.setGravity(Gravity.CENTER);
         if (bold) t.setTypeface(Typeface.DEFAULT_BOLD);
         t.setIncludeFontPadding(false);
@@ -206,9 +225,9 @@ public class OverlayPlugin extends Plugin {
         bg.setCornerRadius(dp(14));
         root.setBackground(bg);
 
-        t1 = makeText(16, Color.WHITE, true);
-        t2 = makeText(14, Color.parseColor("#FFD60A"), true);
-        t3 = makeText(12, Color.parseColor("#D4D4DA"), false);
+        t1 = makeText(15, Color.WHITE, false);
+        t2 = makeText(18, Color.parseColor("#FFD60A"), true);      // ★ 2026-10-01: 14→18 (아래 글자를 키워 달라는 요청)
+        t3 = makeText(14, Color.parseColor("#D4D4DA"), false);
         t1.setMaxWidth(maxW - dp(28));
         t2.setMaxWidth(maxW - dp(28));
         t3.setMaxWidth(maxW - dp(28));
@@ -280,9 +299,37 @@ public class OverlayPlugin extends Plugin {
         } catch (Exception ignored) { }
     }
 
+    /** 윗줄: 현위치 칸만 하얗고 크게, 나머지(출발·경로·도착)는 작고 흐린 회색. 글자만 그린다. */
+    private CharSequence buildTrack() {
+        if (track.length == 0) return line1;
+        final int dim = Color.parseColor("#6E6E76");      // 잘 안 보이는 회색
+        final int sepc = Color.parseColor("#44444B");
+        SpannableStringBuilder sb = new SpannableStringBuilder();
+        for (int i = 0; i < track.length; i++) {
+            if (i > 0) {
+                int a = sb.length();
+                sb.append(" \u203A ");                    // ›
+                sb.setSpan(new ForegroundColorSpan(sepc), a, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                sb.setSpan(new RelativeSizeSpan(0.8f), a, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            }
+            int s0 = sb.length();
+            sb.append(track[i]);
+            int e0 = sb.length();
+            if (i == trackCur) {
+                sb.setSpan(new ForegroundColorSpan(Color.WHITE), s0, e0, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                sb.setSpan(new StyleSpan(Typeface.BOLD), s0, e0, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                sb.setSpan(new RelativeSizeSpan(1.25f), s0, e0, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            } else {
+                sb.setSpan(new ForegroundColorSpan(dim), s0, e0, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                sb.setSpan(new RelativeSizeSpan(0.82f), s0, e0, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            }
+        }
+        return sb;
+    }
+
     private void attachOrUpdate() {
         if (root == null) build();
-        t1.setText(line1);
+        t1.setText(buildTrack());
         t2.setText(line2);
         t2.setVisibility(line2.length() > 0 ? View.VISIBLE : View.GONE);
         t3.setText(line3);
