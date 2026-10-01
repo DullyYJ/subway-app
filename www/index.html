@@ -19869,7 +19869,7 @@ window.addEventListener('unhandledrejection', function(e) {
 // ── API 키 설정 (서울 열린데이터광장 swopenapi 기반) ──────────────
 // [1] 지하철 실시간 도착정보 (realtimeStationArrival) — statnNm 파라미터
 if(typeof RT_API_KEY === 'undefined')
-var RT_API_KEY = (function(h){var s='';for(var i=0;i<h.length;i+=2)s+=String.fromCharCode(parseInt(h.substr(i,2),16));return s;})('746156434b796a773330776d4253');
+var RT_API_KEY = '';   // ★ 2026-10-01: 소스에 키를 두지 않는다(예전엔 16진수로 가려 둔 서울시 키가 있었다) — 키는 서버(Worker)가 관리
 // 서울시 swopenapi 기반 — URL은 SEOUL_API_BASE 공용 사용 (RT_API_BASE 미사용)
 var RT_API_BASE = 'https://swopenapi.seoul.go.kr/api/subway';
 
