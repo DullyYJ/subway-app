@@ -2188,14 +2188,13 @@ function _exitCancel(){
 var _KAKAO_PROXY_BASE = 'https://gentle-lab-7e47subway-api.phg0643.workers.dev';
 // ★ 키를 클라이언트에 두지 않기 위한 공용 프록시 베이스 (Worker가 서버에서 키를 붙임)
 var _API_PROXY_BASE = _KAKAO_PROXY_BASE;
-// ★ 2026-09-02: 경로 탐색은 ODsay 같은 외부 API가 아니라 **자체 엔진**이다.
+// ★ 경로 탐색은 외부 경로 API가 아니라 **자체 엔진**이다.
 //   route-v2 워커가 전국 지하철·버스 데이터를 얹고 Dijkstra 로 직접 계산한다.
-//   응답만 예전 형식(subPath/trafficType/sectionTime)에 맞춰 내보내서
-//   앱의 기존 파서를 그대로 쓴다.
-//   ↓ 경로 문자열의 'odsay' 는 **워커에 등록된 라우트 이름**이라 앱에서 바꾸면
-//     404 가 나서 경로 탐색이 통째로 죽는다. 워커를 같이 고치기 전에는 손대지 말 것.
+//   응답은 앱 파서(subPath/trafficType/sectionTime)에 맞춘 형식이다.
+//   ↓ 경로 문자열은 **워커에 등록된 라우트 이름**이라 한쪽만 바꾸면 404 가 나서
+//     경로 탐색이 통째로 죽는다. 워커와 같이 바꿀 것.
 var _ROUTE_V2_BASE = 'https://route-v2.phg0643.workers.dev';
-var _ROUTE_V2_PATH = '/route-v2-odsay';   // 워커 라우트명(변경 금지)
+var _ROUTE_V2_PATH = '/route-v2-app';   // 워커 라우트명(워커와 함께만 변경)
 function _routeV2Url(qs){
   return _ROUTE_V2_BASE + _ROUTE_V2_PATH + '?' + qs;
 }
@@ -19866,16 +19865,7 @@ window.addEventListener('unhandledrejection', function(e) {
    - 인코딩 키(URL-encoded)와 디코딩 키(Decoded) 중 디코딩 키 사용 권장
    ══════════════════════════════════════════════════════════ */
 // !! 이 줄을 수정하세요 !!
-// ── API 키 설정 (서울 열린데이터광장 swopenapi 기반) ──────────────
-// [1] 지하철 실시간 도착정보 (realtimeStationArrival) — statnNm 파라미터
-if(typeof RT_API_KEY === 'undefined')
-var RT_API_KEY = '';   // ★ 2026-10-01: 소스에 키를 두지 않는다(예전엔 16진수로 가려 둔 서울시 키가 있었다) — 키는 서버(Worker)가 관리
-// 서울시 swopenapi 기반 — URL은 SEOUL_API_BASE 공용 사용 (RT_API_BASE 미사용)
-var RT_API_BASE = 'https://swopenapi.seoul.go.kr/api/subway';
-
-// [2] 지하철역 최단 이동경로 (getShtrmPath) — dptreSttnNm/arvlStnNm 파라미터
-var ROUTE_API_KEY  = '';   // ★ 서버(Worker)가 주입 — 클라이언트 미보관
-var ROUTE_API_BASE = 'https://swopenapi.seoul.go.kr/api/subway';
+// ── API 키: 앱에는 키를 두지 않는다 — 모든 외부 API 는 서버(Worker)가 키를 붙여 호출한다 ──
 
 /* ══ 노선 색상 ══ */
 const LC={
@@ -24876,8 +24866,7 @@ function detectBoardingState(lat,lng,nearestStn,distToStn,acc){
 // ══════════════════════════════════════════════════════════════
 
 // ── 인증키 (인증키.xlsx hex 디코딩) ─────────────────────────
-// RT_API_KEY: 상단에서 선언됨 (data.go.kr 키 사용)
-// RT_API_KEY_SNGL: _SEOUL_KEYS[1]으로 통합
+// (인증키는 앱에 없음 — 서버가 관리)
 // API 베이스 URL
 
 // ── SUBWAY_MASTER_DB (서울시 역사마스터 정보.csv 기반) ───────
@@ -24938,12 +24927,11 @@ function getSubwayIdByLine(lineName) {
 }
 
 // ── 실시간 도착정보 API 호출 ───────────────────────────────────
-// 서울시 열린데이터광장 swopenapi 사용
-// API: realtimeStationArrival (KEY=RT_API_KEY, 필수: statnNm)
-//      realtimeStationArrival/ALL (KEY=_SEOUL_KEYS_NET[0], 전체 일괄)
+// 서울시 열린데이터 실시간 도착정보 — 서버 /seoul 경유
+// API: realtimeStationArrival (필수: statnNm)
 // 반환: { btrainNo, arvlCd, barvlDt, arvlMsg2, updnLine, statnNm, subwayId }
 // ── 실시간 도착정보 API (지시사항 4번 URL 규격 완전 준수) ────────
-// URL: https://swopenapi.seoul.go.kr/api/subway/{KEY}/json/{SERVICE}/{START}/{END}/{STATION_NAME}
+// 요청: 서버 /seoul?path={SERVICE}/{START}/{END}/{STATION_NAME}
 // SERVICE=realtimeStationArrival, START=1, END=5, STATION_NAME=역명(역 자 제거)
 async function fetchRealtimeArrival(stnName, lineName) {
   if(!stnName) return null;
@@ -24975,15 +24963,7 @@ async function fetchRealtimeArrival(stnName, lineName) {
     });
   }
 
-  // 지시사항 4번 URL 생성 함수: https 강제, encodeURIComponent 처리
-  function _buildUrl(key) {
-    return 'https://swopenapi.seoul.go.kr/api/subway/'
-      + encodeURIComponent(key)
-      + '/json/realtimeStationArrival/1/5/'
-      + encodeURIComponent(cleanName);
-  }
-
-  // 1순위: seoulFetch(apiKey) 직접 호출 (Capacitor CORS 오픈 환경)
+  // 1순위: seoulFetch — 서버(Worker) /seoul 경유
   try {
     var raw0 = await seoulFetch('realtimeStationArrival/1/5/'+encodeURIComponent(cleanName), 5000);
     var items0 = _parseSeoulResponse(raw0);
@@ -32882,75 +32862,7 @@ window.manualGPSDetect = manualGPSDetect;
 // arrTimeSeconds 변수 선언 (ReferenceError 방어)
 var arrTimeSeconds = 0;
 
-// ── API 통신 테스트 (콘솔: window._testAPI('역명') / window._testRouteAPI('출발','도착')) ──
-window._testAPI = async function(stnName) {
-  stnName = stnName || '의왕';
-  console.log('=== 실시간 도착정보 API 테스트 시작:', stnName, '===');
-
-  // [1] realtimeStationArrival — RT_API_KEY, 필수: statnNm
-  if (typeof RT_API_KEY !== 'undefined') {
-    var url1 = RT_API_BASE + '/' + encodeURIComponent(RT_API_KEY)
-      + '/json/realtimeStationArrival/1/10/' + encodeURIComponent(stnName);
-    console.log('[1] realtimeStationArrival URL:', url1.slice(0,120));
-    try {
-      var r1 = await fetch(url1, {mode:'cors'});
-      var t1 = await r1.text();
-      console.log('[1] 응답 status:', r1.status, '/ 내용(200자):', t1.slice(0,200));
-    } catch(e) { console.error('[1] 실패:', e.message); }
-  }
-
-  // [2] realtimeStationArrival/ALL — SEOUL_KEYS_NET[0], 필수: statnNm
-  if (typeof _SEOUL_KEYS_NET !== 'undefined' && _SEOUL_KEYS_NET[0]) {
-    var url2 = 'https://swopenapi.seoul.go.kr/api/subway/' + encodeURIComponent(_SEOUL_KEYS_NET[0])
-      + '/json/realtimeStationArrival/0/5/' + encodeURIComponent(stnName);
-    console.log('[2] realtimeStationArrival/ALL URL:', url2.slice(0,120));
-    try {
-      var r2 = await fetch(url2, {mode:'cors'});
-      var t2 = await r2.text();
-      console.log('[2] 응답 status:', r2.status, '/ 내용(200자):', t2.slice(0,200));
-    } catch(e) { console.error('[2] 실패:', e.message); }
-  }
-
-  // [3] realtimePosition — SEOUL_KEYS_NET[1], 필수: subwayNm(호선명)
-  if (typeof _SEOUL_KEYS_NET !== 'undefined' && _SEOUL_KEYS_NET[1]) {
-    var url3 = 'https://swopenapi.seoul.go.kr/api/subway/' + encodeURIComponent(_SEOUL_KEYS_NET[1])
-      + '/json/realtimePosition/0/100/4호선';
-    console.log('[3] realtimePosition URL:', url3.slice(0,120));
-    try {
-      var r3 = await fetch(url3, {mode:'cors'});
-      var t3 = await r3.text();
-      console.log('[3] 응답 status:', r3.status, '/ 내용(200자):', t3.slice(0,200));
-    } catch(e) { console.error('[3] 실패:', e.message); }
-  }
-
-  // [4] GitHub Pages timetable
-  try {
-    var r4 = await fetch('https://dullyyj.github.io/Subway-app/timetable.json', {cache:'no-store'});
-    console.log('[4] GitHub timetable:', r4.status, r4.ok ? '✅' : '❌');
-  } catch(e) { console.error('[4] GitHub 실패:', e.message); }
-
-  console.log('=== 테스트 완료 ===');
-};
-
-// 최단경로 API 단독 테스트: window._testRouteAPI('의왕','금정')
-window._testRouteAPI = async function(from, to) {
-  from = from || '의왕'; to = to || '금정';
-  console.log('=== getShtrmPath 테스트:', from, '→', to, '===');
-  var d = new Date();
-  var pad = function(n){ return String(n).padStart(2,'0'); };
-  var dt = d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())
-         +' '+pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
-  var url = ROUTE_API_BASE + '/' + encodeURIComponent(ROUTE_API_KEY)
-    + '/json/getShtrmPath/1/1/'
-    + encodeURIComponent(from) + '/' + encodeURIComponent(to) + '/' + encodeURIComponent(dt);
-  console.log('getShtrmPath URL:', url.slice(0,160));
-  try {
-    var r = await fetch(url, {mode:'cors'});
-    var t = await r.text();
-    console.log('응답 status:', r.status, '/ 내용(300자):', t.slice(0,300));
-  } catch(e) { console.error('getShtrmPath 실패:', e.message); }
-  console.log('=== 테스트 완료 ===');
-};
+// (콘솔용 API 직접 호출 테스트 함수 제거 — 모든 외부 API 는 서버(Worker) 경유)
 // WebView 환경 감지 시 간단한 상태 표시
 if (typeof _IS_WEBVIEW_BLOCKED !== 'undefined' && _IS_WEBVIEW_BLOCKED) {
   console.log('[앱] 오프라인/WebView 모드: 정적 시각표 기반으로 동작');
@@ -34895,20 +34807,7 @@ function _fetchViaProxy(urlStr, ms) {
 // ══════════════════════════════════════════════════════════════
 // 서울시 열린데이터광장 API 키 바인딩 (요청 지시사항 4번)
 // ══════════════════════════════════════════════════════════════
-// [지하철 실시간 도착정보] KEY — realtimeStationArrival, 필수: statnNm
-// hex 디코딩 헬퍼 (_H) — apiKey 선언보다 먼저 정의
-var _H=function(h){var s='';for(var i=0;i<h.length;i+=2)s+=String.fromCharCode(parseInt(h.substr(i,2),16));return s;};
-
-// _SEOUL_KEYS_NET[0] (최신 키)를 기본으로 사용, 실패 시 로테이션
-var apiKey = '';   // ★ 서버(Worker)가 주입 — 클라이언트 미보관 // (2026/06/20)
-// 상수화 (fetchRealtimeArrival 에서 RT_API_KEY 동의어로 사용)
-var RT_API_KEY  = apiKey;
-var RT_API_BASE = 'https://swopenapi.seoul.go.kr/api/subway';
-
-// [일괄 도착정보] + [열차 위치정보] 멀티 키 로테이션 (11개 전체)
-var _SEOUL_KEYS_NET = [];   // ★ 키는 서버(Worker)에서 관리 — 클라이언트 미보관
-var _skIdx=0;
-var SEOUL_API_BASE='https://swopenapi.seoul.go.kr/api/subway';
+// (서울 API 키·직접 호출 주소는 앱에서 제거 — 서버 /seoul 이 키 로테이션 담당)
 
 // ── seoulFetch: URL 규격 = {BASE}/{KEY}/json/{SERVICE}/{START}/{END}/{STATION_NAME}
 // 호출 예) seoulFetch('realtimeStationArrival/1/5/강남')
@@ -42531,7 +42430,7 @@ function _serverPostTalk(nick, text){
     }).catch(function(){});  // 실패해도 앱은 계속 작동 (로컬 표시는 됨)
 
     // ★ 사용자 개입 → AI 참여자들이 이 메시지에 직접 반응 (6~45초 뒤 등장)
-    fetch(_BOARD_WRITER_URL + '/react?token=328574', {   // (키 정리 단계에서 토큰 제거 예정 — workers-hardened/README.md 참고)
+    fetch(_BOARD_WRITER_URL + '/react', {   // 토큰 없음 — 서버가 IP·시간당 호출 수로 제한
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ nick: nick, text: text })
@@ -45019,16 +44918,6 @@ async function _fetchPublicRouteTime(startStn, endStn) {
     var pad = function(n){ return String(n).padStart(2,'0'); };
     return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())
       +' '+pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
-  }
-
-  // URL 빌더: https://swopenapi.seoul.go.kr/api/subway/{KEY}/json/getShtrmPath/{S}/{E}/{출발}/{도착}/{searchDt}
-  function _buildRouteUrl(key) {
-    return 'https://swopenapi.seoul.go.kr/api/subway/'
-      + encodeURIComponent(key)
-      + '/json/getShtrmPath/1/1/'
-      + encodeURIComponent(startNm) + '/'
-      + encodeURIComponent(endNm) + '/'
-      + encodeURIComponent(_searchDt());
   }
 
   // 응답 파싱: { DBInfo:[{travelTime,...}], StationList:[...] }
