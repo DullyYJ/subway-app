@@ -69,7 +69,7 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync android
         
-      - name: Install native plugins (기지국 보조측위 + 작은 요약 화면 + 배터리 최적화 제외)
+      - name: Install native plugins (기지국 보조측위 + 작은 요약 화면 + 배터리 최적화 제외 + 다른 앱 위 표시)
         run: |
           python3 - << 'PYEOF'
           import os, shutil
@@ -79,7 +79,7 @@ jobs:
           os.makedirs(PKGDIR, exist_ok=True)
 
           # 1) 플러그인 소스 복사
-          for src in ["native/CellInfoPlugin.java", "native/PipPlugin.java", "native/PowerPlugin.java"]:
+          for src in ["native/CellInfoPlugin.java", "native/PipPlugin.java", "native/PowerPlugin.java", "native/OverlayPlugin.java"]:
               if not os.path.exists(src):
                   raise SystemExit(src + " 가 없습니다 — 저장소에 올렸는지 확인하세요")
               shutil.copy(src, os.path.join(PKGDIR, os.path.basename(src)))
@@ -101,6 +101,7 @@ jobs:
               "        registerPlugin(CellInfoPlugin.class);",
               "        registerPlugin(PipPlugin.class);",
               "        registerPlugin(PowerPlugin.class);",
+              "        registerPlugin(OverlayPlugin.class);",
               "        super.onCreate(savedInstanceState);",
               "    }",
               "",
@@ -261,6 +262,8 @@ jobs:
             "android.permission.SCHEDULE_EXACT_ALARM"
             "android.permission.USE_EXACT_ALARM"
             "android.permission.RECEIVE_BOOT_COMPLETED"
+            # 2026-10-01: 다른 앱 위에 길안내 요약을 띄우는 오버레이(사용자가 설정에서 직접 허용해야 동작)
+            "android.permission.SYSTEM_ALERT_WINDOW"
           )
           for PERM in "${PERMS[@]}"; do
             grep -q "$PERM" "$M" || \
