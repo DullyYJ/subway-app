@@ -3811,6 +3811,10 @@ function _renderHomeBriefLocal(fromName, toName, hour, congPct){
 
 // ★ 홈 브리핑용 좌표 해석 (출발/도착) — _fmapStart/_fmapDest > S.start/dest > STNDB > GPS
 function _homeBriefCoord(which, name){
+  // ★ 2026-10-01: 하차 추천(_arrEnsureFood)이 'dest' 로 불렀는데 이 함수는 'to' 만 도착지로 알아서
+  //   'dest' 는 출발지 좌표로 처리됐다 — 그 결과 도착지 주변 맛집이 아니라 '출발지 주변' 맛집을
+  //   받아 와 추천에 썼다(장거리면 서울 맛집을 부산 근처라고 추천). 'dest' 도 도착지로 본다.
+  if(which === 'dest') which = 'to';
   var src = (which==='to')
     ? [ (typeof _fmapDest!=='undefined'?_fmapDest:null),  (typeof S!=='undefined'?S.dest:null),  (typeof _transitResultDest!=='undefined'?_transitResultDest:null) ]
     : [ (typeof _fmapStart!=='undefined'?_fmapStart:null), (typeof S!=='undefined'?S.start:null), (typeof _transitResultStart!=='undefined'?_transitResultStart:null) ];
@@ -9717,7 +9721,7 @@ window.selectRouteOption = selectRouteOption;
 // 세부경로에서 현재 보고 있는 경로를 확정 → GPS 추적 시작
 function confirmSelectedRoute(){
   var type = window._pendingRouteType || 'fast';
-  var optName = { fast:'최단시간', less:'최소환승', sub:'지하철', bus:'버스' }[type] || '선택한';
+  var optName = { fast:'최단시간', less:'최소환승', sub:'지하철', bus:'버스', longdist:'장거리' }[type] || '선택한';
   window._routeLocked = true;
   window._lockedRouteType = type;
   window._lastCongNodeIdx = -1;
@@ -9738,7 +9742,7 @@ window.confirmSelectedRoute = confirmSelectedRoute;
 // 메인 화면 '경로 확정' 버튼용 (세부경로 안 열고 바로 확정)
 function confirmCurrentRoute(){
   var type = window._pendingRouteType || window._lockedRouteType || 'fast';
-  var optName = { fast:'최단시간', less:'최소환승', sub:'지하철', bus:'버스' }[type] || '선택한';
+  var optName = { fast:'최단시간', less:'최소환승', sub:'지하철', bus:'버스', longdist:'장거리' }[type] || '선택한';
   window._routeLocked = true;
   window._lockedRouteType = type;
   window._lastCongNodeIdx = -1;
@@ -10762,9 +10766,23 @@ window._selectSubwayNearestRoute = _selectSubwayNearestRoute;
 //   앱까지 도달하지 못했다. 아래 키 중 하나라도 있으면 초 단위로 담아둔다.
 //     sec / secFromStart / travelSec  : 구간 시작으로부터 누적 초
 //     arrTime / time / arrivalTime    : "HH:MM" 또는 누적 분
+// ★ 2026-10-01 (YJ: "버스노선에 (가상)은 뭐야? 미정차면 미정차, 정차면 정차인지 정확하게 표기해줘"):
+//   '합정역(가상)' 의 (가상)은 환승점 표시가 아니라 정류장 원자료에 들어 있는 '가상 정류장' —
+//   노선 선형을 이어 주는 명목상의 지점이라 버스가 서지 않는다(엔진은 이런 지점에서 타고 내리지
+//   않도록 같은 날 고쳤다 · route-v2 isPassStop). 사용자에게는 '가상'이 무슨 뜻인지 알 수 없으니
+//   서지 않는 지점은 모두 '(미정차)'로 통일해 표기하고, 정차하는 정류장은 이름만 그대로 둔다.
+//   엔진이 pass:true 를 실어 보내면(새 워커) 그것을 우선하고, 구버전 워커는 이름 패턴으로 판단한다.
+function _stopDisplayName(nm, pass){
+  var t = String(nm == null ? '' : nm);
+  var virt = /[\(\[\uFF08]\s*가상\s*(정류장)?\s*[\)\]\uFF09]/;
+  if(virt.test(t)) return t.replace(virt, '(미정차)').replace(/\s+\(미정차\)/, '(미정차)');
+  if(pass && !/미정차|무정차|통과|정차\s*안함/.test(t)) return t + '(미정차)';
+  return t;
+}
+window._stopDisplayName = _stopDisplayName;
 function _normStop(sv){
   if(!sv) return { stationName:'', lat:null, lon:null };
-  var o = { stationName: sv.stationName||sv.name||'',
+  var o = { stationName: _stopDisplayName(sv.stationName||sv.name||'', !!sv.pass),
             lat: (sv.y!=null?sv.y:(sv.lat!=null?sv.lat:null)),
             lon: (sv.x!=null?sv.x:(sv.lon!=null?sv.lon:(sv.lng!=null?sv.lng:null))) };
   // 누적 초
@@ -10773,6 +10791,7 @@ function _normStop(sv){
   else if(sv.travelSec!=null)    sec = parseFloat(sv.travelSec);
   else if(sv.sec!=null)          sec = parseFloat(sv.sec);
   if(sec!=null && isFinite(sec) && sec>=0) o.secFromStart = sec;
+  if(sv.pass) o.pass = true;    // ★ 2026-10-01: 서지 않고 지나가는 지점
   // 시각 문자열/분
   var tv = (sv.arrTime!=null?sv.arrTime:(sv.arrivalTime!=null?sv.arrivalTime:sv.time));
   if(tv!=null && tv!==''){
@@ -25396,6 +25415,9 @@ function _arrRecoMark(name){
 // 도착역 이름
 function _arrDestName(){
   try{
+    // ★ 2026-10-01: 홈에서 확정한 여정이면 그 목적지가 1순위(S.route 는 이전 검색 잔류값일 수 있다)
+    if(window._routeLocked === true && window._pipTrip && window._pipTrip.to
+       && typeof _pipHasRoute === 'function' && _pipHasRoute()) return window._pipTrip.to;
     if(typeof S!=='undefined' && S.route && S.route.path && S.route.path.length)
       return S.route.path[S.route.path.length-1];
     if(typeof _transitResultDest!=='undefined' && _transitResultDest && _transitResultDest.name)
@@ -25421,7 +25443,17 @@ function _arrFoodList(destStn){
        && Date.now() - _arrFoodCache.at < _ARR_FOOD_TTL) return _arrFoodCache.items;
   }catch(e){}
   try{
-    var pub = window._foodPublicData;
+    // ★ 2026-10-01: 맛집 탭이 들고 있는 목록은 '지금 내가 있는 곳' 기준이다. 도착지가 5km 넘게
+    //   떨어져 있으면(장거리) 그걸 도착지 근처 가게로 쓰면 안 된다.
+    var _farFromHere = false;
+    try{
+      var _dc = _homeBriefCoord('to', destStn), _gl = window._lastGPSLat, _gn = window._lastGPSLng;
+      if(_dc && _gl != null && _gn != null){
+        var _dy = (_dc.lat - _gl) * 111000, _dx = (_dc.lng - _gn) * 111000 * Math.cos(_gl * Math.PI / 180);
+        _farFromHere = Math.sqrt(_dy*_dy + _dx*_dx) > 5000;
+      }
+    }catch(eF){}
+    var pub = _farFromHere ? null : window._foodPublicData;
     if(pub && pub.length){
       return pub.map(function(x){
         return { n:x.place_name, c:x.category_name||'', a:x.road_address_name||'',
@@ -26041,15 +26073,38 @@ window._arrCheckPreAlert = _arrCheckPreAlert;
 //   → 20초마다 남은 시간을 직접 재는 감시 타이머를 둔다. 계산식은 calcETA 와 동일하고,
 //     발사 판정·시간대 제한은 기존 _arrCheckPreAlert 를 그대로 쓴다(동작 변경 없음).
 var _ARR_WATCH_MS = 20000;
+// ★ 2026-10-01 (YJ: "하차시 쇼핑, 음식 등 추천이 pip에 발생이 안돼" — 장거리 경로로 확인):
+//   원인 ①: 이 감시는 S.route(노선도 BFS 전용 경로)와 S.boardedAt 이 있어야만 돌았다. 홈에서
+//   탐색해 확정한 경로(엔진 · 장거리 포함)는 _transitNodeData/타임라인에만 있고 S.route 가
+//   비어 있어서, 이 함수가 첫 줄에서 그냥 돌아가 하차 10분 전 추천이 알림이든 PiP든 한 번도
+//   발사되지 않았다(노선도로 고른 짧은 지하철 경로에서만 떴다).
+//   → 홈에서 확정한 여정이면 PiP 가 쓰는 것과 같은 도착시각(_journeyEta: 화면 타임라인 기준)
+//     으로 남은 시간을 잰다. 숫자가 PiP·알림·타임라인에서 어긋나지 않는다.
+function _arrHomeEta(){
+  try{
+    if(window._routeLocked !== true) return null;                      // 확정한 여정만
+    if(typeof _pipHasRoute !== 'function' || !_pipHasRoute()) return null;   // 예상시각·미리보기·종료된 여정 제외
+    var je = (typeof _journeyEta === 'function') ? _journeyEta() : null;
+    if(!je || je.preview || !je.arrMs) return null;
+    return { arrMs: je.arrMs, rem: Math.round((je.arrMs - Date.now()) / 1000) };
+  }catch(e){ return null; }
+}
+window._arrHomeEta = _arrHomeEta;
 function _arrWatchTick(){
   try{
-    if(typeof S === 'undefined' || !S || !S.route || !S.boardedAt) return;
+    if(typeof S === 'undefined' || !S) return;
     if(typeof _baseTimeMs !== 'undefined' && _baseTimeMs != null) return;
     if(window._metroRouteMode === true) return;   // ★ 노선도 미리보기 → 추천 알림 없음
-    var total = (S.route.tp || []).reduce(function(a, b){ return a + (b || 0); }, 0);
-    if(!total) return;
-    var arrMs = S.boardedAt + total * 1000;
-    var rem   = Math.round((arrMs - Date.now()) / 1000);
+    var arrMs = null, rem = null;
+    var he = _arrHomeEta();                        // ★ 홈에서 확정한 경로(장거리 포함)가 1순위
+    if(he){ arrMs = he.arrMs; rem = he.rem; }
+    else {
+      if(!S.route || !S.boardedAt) return;
+      var total = (S.route.tp || []).reduce(function(a, b){ return a + (b || 0); }, 0);
+      if(!total) return;
+      arrMs = S.boardedAt + total * 1000;
+      rem   = Math.round((arrMs - Date.now()) / 1000);
+    }
     window._arrLastRemSec = rem;                 // 설정>진단에서 확인용
     try{ if(typeof _pipTick === 'function') _pipTick(); }catch(e){}   // 작은 화면 갱신 기회
     if(rem <= 0) return;
@@ -26091,7 +26146,8 @@ function _arrStatusShow(){
   var L = [];
   try{
     L.push('감시 타이머: ' + (window._arrWatchTimer ? '동작 중 (20초마다)' : '없음'));
-    var hasRoute = (typeof S !== 'undefined' && S && S.route && S.boardedAt);
+    var hasRoute = (typeof S !== 'undefined' && S && S.route && S.boardedAt)
+                || !!(typeof _arrHomeEta === 'function' && _arrHomeEta());   // ★ 2026-10-01: 홈에서 확정한 경로도
     L.push('현재 경로: ' + (hasRoute ? (_arrDestName() || '-') + ' 도착 예정' : '없음 (탑승 상태 아님)'));
     if(window._arrLastRemSec != null){
       var r = window._arrLastRemSec;
@@ -30985,6 +31041,13 @@ function _tripSig(){
     if(typeof S !== 'undefined' && S.route && S.route.path && S.route.path.length)
       return S.route.path.join('>');
   }catch(e){}
+  // ★ 2026-10-01: 홈 경로는 S.route 가 없어 서명이 늘 '-' 였다 → 여정이 바뀌어도 '여정당 1회' 관문이
+  //   안 풀려서, 한 번 알림을 보낸 뒤로는 다른 장거리 여정의 하차 추천이 영영 막혔다.
+  //   목적지 + 이번 탐색(_routeBaseMs)으로 구분한다(여정 중에 안 바뀌는 값만 쓴다).
+  try{
+    var t = window._pipTrip;
+    if(t && t.to) return 'H:' + t.to + '|' + (window._routeBaseMs || 0);
+  }catch(e){}
   return '-';
 }
 window._notifOnceLog = { sig:null, keys:{} };
@@ -31178,7 +31241,9 @@ function _journeyRemain(){
     try{
       if(_nd && _nd.length && S && S.dest && S.dest.name){
         var _k = function(v){ return String(v||'').replace(/\s/g,'').replace(/\(.*$/,'').replace(/역$/,''); };
-        if(_k(_nd[_nd.length-1].name) !== _k(S.dest.name)) _nd = null;
+        // ★ 2026-10-01: 경로가 도보로 끝나면 마지막 노드 이름은 '도보'다 — 마지막 '실제' 정차지로 비교한다
+        if(_k(_lastRealNodeName(_nd) || _nd[_nd.length-1].name) !== _k(S.dest.name)
+           && _k(_pipResultDestName()) !== _k(S.dest.name)) _nd = null;
       }
     }catch(e){}
     if(_nd && _nd.length){
@@ -31190,7 +31255,7 @@ function _journeyRemain(){
       for(var i=_prog+1;i<=_last;i++){ if(!_nd[i].isWalk) _left++; }
       r.stops = _left;
       r.cur   = _nd[_prog].name || '이동 중';
-      r.dest  = _nd[_last].name || '목적지';
+      r.dest  = _pipResultDestName() || _lastRealNodeName(_nd) || _nd[_last].name || '목적지';
       // 남은 시간: 마지막 노드 도착 시각 - 현재
       try{
         var at = _nd[_last].arrTime;
@@ -31354,20 +31419,62 @@ function _pipResolveFrom(){
 }
 window._pipResolveFrom = _pipResolveFrom;
 
+// ★ 2026-10-01 (YJ: "단거리 제외 일정거리부터는 pip가 생성안돼" — 장거리 경로로 재현함):
+//   원인: 경로 끝이 '도착역 → 도보 → 목적지' 처럼 도보로 끝나면 마지막 노드 이름이 '도보'다.
+//   예전 코드는 그 이름을 그대로 목적지(to)로 적었고, _pipHasRoute 가 '화면의 목적지(S.dest)와
+//   다르다 = 지난 여정'으로 판단해 여정을 지워 PiP 가 영영 안 떴다. 도착지에서 걷는 구간은
+//   먼 거리 경로(열차·고속버스 뒤 시내 이동)일수록 거의 항상 있고, 짧은 경로는 역 앞에서
+//   끝나 우연히 멀쩡했다.
+//   → 도보·환승·도착지 같은 '이동 표시'는 이름으로 쓰지 않는다. 목적지는
+//     ①지금 화면에 그려진 복합경로의 도착지 이름 ②마지막 실제 정차지 ③노선도 경로 순으로 정한다.
+function _pipIsRealName(v){
+  var t = String(v == null ? '' : v).trim();
+  return !!t && !/^(도보|환승|이동|도착지|출발지|내 ?위치)$/.test(t);
+}
+window._pipIsRealName = _pipIsRealName;
+function _lastRealNodeName(nd){
+  try{
+    for(var i = (nd ? nd.length : 0) - 1; i >= 0; i--){
+      var n = nd[i];
+      if(!n || n.isWalk) continue;
+      if(_pipIsRealName(n.name)) return String(n.name);
+    }
+  }catch(e){}
+  return '';
+}
+window._lastRealNodeName = _lastRealNodeName;
+function _pipResultDestName(){
+  try{
+    var rd = (typeof _transitResultDest !== 'undefined') ? _transitResultDest : null;
+    var nm = rd ? (rd.name || (typeof rd === 'string' ? rd : '')) : '';
+    return _pipIsRealName(nm) ? String(nm) : '';
+  }catch(e){ return ''; }
+}
+window._pipResultDestName = _pipResultDestName;
+
 function _pipTripSet(){
   try{
     var from = '내 위치', to = '';
-    if(typeof S !== 'undefined' && S && S.route && S.route.path && S.route.path.length >= 2){
+    var nd = (typeof _transitNodeData !== 'undefined') ? _transitNodeData : null;
+    // ① 화면에 그려진 복합경로(홈 탐색 · 장거리 포함)가 있으면 그 경로가 기준이다
+    //    (노선도 BFS 전용 S.route 는 이전 검색의 잔류값일 수 있다)
+    var _homeOn = !!(nd && nd.length >= 2 && typeof _transitResultData !== 'undefined' && _transitResultData);
+    if(_homeOn){
+      to = _pipResultDestName() || _lastRealNodeName(nd);
+      for(var i0=0;i0<nd.length;i0++){
+        if(nd[i0] && !nd[i0].isWalk && nd[i0].name && (nd[i0].isOrigin || _pipIsRealName(nd[i0].name))){ from = nd[i0].name; break; }
+      }
+    }
+    if(!to && typeof S !== 'undefined' && S && S.route && S.route.path && S.route.path.length >= 2){
       from = S.route.path[0] || from;
       to   = S.route.path[S.route.path.length - 1] || '';
     }
-    var nd = (typeof _transitNodeData !== 'undefined') ? _transitNodeData : null;
     if(!to && nd && nd.length >= 2){
       // ★ 2026-09-02: 첫 노드가 '도보'인 경우가 많아, 실제로 타는 곳을 출발지로 삼는다
       for(var i1=0;i1<nd.length;i1++){
         if(nd[i1] && !nd[i1].isWalk && nd[i1].name){ from = nd[i1].name; break; }
       }
-      to = nd[nd.length-1].name || '';
+      to = _lastRealNodeName(nd) || '';
     }
     // ★ 2026-09-16: '짧은 거리는 PiP 가 안 생긴다' 의 원인 하나.
     //   노드가 2개 미만(도보+한 구간처럼 짧은 경로)이면 위 두 갈래가 모두 비어
@@ -31383,7 +31490,7 @@ function _pipTripSet(){
     if(!to){
       try{
         var _nd3 = (typeof _transitNodeData !== 'undefined') ? _transitNodeData : null;
-        if(_nd3 && _nd3.length) to = _nd3[_nd3.length-1].name || '';
+        if(_nd3 && _nd3.length) to = _lastRealNodeName(_nd3);
       }catch(e0b){}
     }
     if(!to) return;
@@ -31434,8 +31541,12 @@ function _pipHasRoute(){
     if(!hasPath){ _pipTripClear(); return false; }
 
     // ② 목적지가 바뀌었다 = 지난 여정
+    //   ★ 2026-10-01: 화면의 도착지는 S.dest 뿐 아니라 지금 그려진 복합경로의 도착지(_transitResultDest)
+    //   로도 알 수 있다 — 둘 중 하나라도 여정의 목적지와 같으면 같은 여정이다.
     if(typeof S !== 'undefined' && S && S.dest && S.dest.name && !_stnSame(S.dest.name, trip.to)){
-      _pipTripClear(); return false;
+      var _okDest = false;
+      try{ var _rn2 = _pipResultDestName(); if(_rn2 && _stnSame(_rn2, trip.to)) _okDest = true; }catch(eD){}
+      if(!_okDest){ _pipTripClear(); return false; }
     }
 
     // ③ 도착 예정 시각이 5분 넘게 지났다 = 이미 끝난 여정
@@ -31494,6 +31605,8 @@ function _pipStations(){
         var nd = _transitNodeData[i];
         var nm = String((nd && nd.name) || '');
         if(!nm || (nd && nd.isWalk) || /^(도보|환승|이동)$/.test(nm)) continue;
+        // ★ 2026-10-01: 같은 자리 환승(서울→서울, 부산→부산)은 한 번만 보여준다
+        if(keep.length && keep[keep.length-1] === nm){ if(i <= raw) hit = keep.length - 1; continue; }
         if(i <= raw) hit = keep.length;      // 지나온 곳까지의 위치를 기억
         keep.push(nm);
       }
@@ -31743,7 +31856,14 @@ function _pipRecoPaint(){
   if(!box) return;
   var _wasHidden = box.style.display === 'none' || !box.style.display;
   var r = window._pipReco;
-  if(r && r.at && (Date.now() - r.at) > _PIP_RECO_TTL){ window._pipReco = null; r = null; }
+  // ★ 2026-10-01: 20초를 '추천이 만들어진 순간'부터 세면, 그때 작은 창이 안 떠 있던 사용자는
+  //   (앱을 보고 있다가 나중에 홈으로 나간 경우) 추천을 통째로 못 본다. 이 함수는 작은 창이
+  //   실제로 그려질 때만 불리므로, 처음 그려지는 순간부터 20초를 센다. 단 오래 묵은 추천이
+  //   엉뚱한 때 나오지 않게 만들어진 지 12분이 지나면 버린다(하차 10분 전 알림이므로 충분하다).
+  if(r && r.at){
+    if(!r.shownAt) r.shownAt = Date.now();
+    if((Date.now() - r.shownAt) > _PIP_RECO_TTL || (Date.now() - r.at) > 12*60*1000){ window._pipReco = null; r = null; }
+  }
   var wrap = document.getElementById('pipView');
   // ★ 2026-09-21: 창이 늘어난 동안에는 위에 흐르는 응원 문구를 숨긴다(추천 문구를 읽는 데 방해가 된다)
   var _cRow = document.getElementById('pipCheerRow');
