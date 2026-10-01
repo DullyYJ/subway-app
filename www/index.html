@@ -32366,25 +32366,19 @@ function _ovlLines(){
     var st = _pipStations(), d = _pipData();
     var cur = st.cur || d.cur || d.from || '이동 중';
     out.l1 = st.next ? (cur + ' ▸ ' + st.next) : ('● ' + cur);
-    // ★ 2026-10-01 (YJ: "출발하면 출발(현위치)-경로1-경로2-경로3-경로4 / 이동하면 출발지-경로1(현위치)-경로2-경로3-경로4 …
-    //   내 위치는 경로가 이동되면 가운데서 고정되는 거야"): 다섯 칸짜리 창이 현위치를 가운데(셋째 칸)에 두고 역 목록 위를 밀려 간다.
-    //   출발 직후엔 현위치가 첫째 칸, 한 칸 가면 둘째 칸, 두 칸 가면 가운데에 닿아 고정되고 지나온 역은 왼쪽으로 밀려 사라진다.
-    //   끝이 가까워지면 창이 더 못 밀려 현위치 표시가 오른쪽으로 움직인다. 이미 있는 역 목록·진행 위치를 늘어놓기만 한다.
-    //   현위치만 흰색(네이티브가 칠함), 나머지는 회색.
+    // ★ 2026-10-01 (YJ: "출발하면 출발(현위치)-경로1-경로2-경로3-경로4 … 내 위치는 경로가 이동되면 가운데서 고정", 이어서
+    //   "시작과 끝은 빈칸으로 두자, 가운데 시작으로 가자. 끝도 가운데서 끝나고"): 항상 다섯 칸, 현위치는 늘 가운데(셋째 칸).
+    //   앞뒤로 갈 역이 없는 칸은 빈칸으로 둔다 — 출발 때는 [빈, 빈, 출발(현위치), 경로1, 경로2], 도착 때는 [경로, 경로, 도착(현위치), 빈, 빈].
+    //   이미 있는 역 목록·진행 위치를 늘어놓기만 한다. 현위치만 흰색(네이티브가 칠함), 나머지는 회색.
     var clamp = function(t, n){ t = String(t||'').replace(/\s+/g,' ').trim(); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
-    var P = (st.path && st.path.length) ? st.path : null, slots = [], curSlot = 0;
-    if(P){
-      var N = P.length, c = Math.max(0, Math.min(st.idx < 0 ? 0 : st.idx, N - 1));
-      var w0 = (N <= 5) ? 0 : Math.max(0, Math.min(c - 2, N - 5));   // 창의 시작: 현위치가 가운데(c-2)에 오도록, 양 끝에서는 멈춘다
-      slots = P.slice(w0, w0 + 5);
-      curSlot = c - w0;
-    } else {                                         // 역 목록이 없으면 현재 ▸ 다음만
-      slots = [cur]; curSlot = 0; if(st.next) slots.push(st.next);
+    var P = (st.path && st.path.length) ? st.path : null;
+    if(!P){ P = [cur]; if(st.next) P.push(st.next); }
+    var c0 = (P === st.path) ? Math.max(0, Math.min(st.idx < 0 ? 0 : st.idx, P.length - 1)) : 0;
+    for(var k = -2; k <= 2; k++){
+      var nm = P[c0 + k];
+      out.track.push(nm == null ? '' : clamp(nm, k === 0 ? 9 : 5));
     }
-    slots.forEach(function(nm, i){
-      out.track.push(clamp(nm, i === curSlot ? 9 : 5));
-    });
-    out.cur = curSlot;
+    out.cur = 2;
     var dest = d.dest || (window._pipTrip && window._pipTrip.to) || '';
     var t = (d.min != null) ? _pipMinText(d.min) : '-';
     out.l2 = (dest ? dest + '까지 ' : '') + t + (d.arr ? ' · ' + d.arr + ' 도착' : '');
