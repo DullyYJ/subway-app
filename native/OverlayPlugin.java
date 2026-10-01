@@ -179,7 +179,7 @@ public class OverlayPlugin extends Plugin {
                     boolean show = wanted && !appVisible && !stale && canDraw()
                             && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
                             && (track.length > 0 || line1.length() > 0);
-                    if (show) { attachOrUpdate(); scheduleCheck(); }
+                    if (show) { attachOrUpdate(); scheduleCheck(); startTicker(); }
                     else detach();
                 } catch (Exception ignored) { }
             }
@@ -195,6 +195,32 @@ public class OverlayPlugin extends Plugin {
     private void scheduleCheck() {
         main.removeCallbacks(checker);
         main.postDelayed(checker, CHECK_MS);
+    }
+
+    // ★ 2026-10-01 (YJ: "역을 이동해도 오버레이가 실시간으로 안 바뀌고 앱에 갔다 와야 바뀐다"):
+    //   앱이 가려지면 웹뷰가 '숨겨진 페이지'가 되어 JS 타이머가 1초~1분 간격으로 늦춰지거나 멈춘다.
+    //   → 오버레이가 떠 있는 동안은 네이티브가 5초마다 웹에 '한 번 돌아라' 하고 직접 깨운다.
+    //   (스크립트 직접 실행은 타이머 제한을 받지 않는다. 무엇을 계산할지는 웹이 정하고, 여기서는 깨우기만 한다.)
+    private static final long TICK_MS = 5 * 1000L;
+    private boolean ticking = false;
+
+    private final Runnable ticker = new Runnable() {
+        @Override public void run() {
+            if (!attached) { ticking = false; return; }
+            try {
+                if (getBridge() != null && getBridge().getWebView() != null) {
+                    getBridge().getWebView().evaluateJavascript(
+                            "try{window._ovlNativeTick&&window._ovlNativeTick();}catch(e){}", null);
+                }
+            } catch (Exception ignored) { }
+            main.postDelayed(this, TICK_MS);
+        }
+    };
+
+    private void startTicker() {
+        if (ticking) return;
+        ticking = true;
+        main.postDelayed(ticker, TICK_MS);
     }
 
     private int dp(float v) {
@@ -391,6 +417,8 @@ public class OverlayPlugin extends Plugin {
 
     private void detach() {
         main.removeCallbacks(checker);
+        main.removeCallbacks(ticker);
+        ticking = false;
         if (attached && wm != null && root != null) {
             try { wm.removeView(root); } catch (Exception ignored) { }
         }
