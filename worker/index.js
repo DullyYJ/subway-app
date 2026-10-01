@@ -640,6 +640,51 @@ async function seoulUpstream(path, keys, ttl, cacheKey) {
            status: lastStatus, key: 'exhausted' };
 }
 
+// ══════════════════════════════════════════════════════════════
+// /bus-stops?lat=..&lng=..&radius=800  →  { ok, count, stops:[{node_id,node_nm,city_code,lat,lng,dist}] }
+//   D1(subway-db) bus_stops 테이블의 좌표 범위 조회. 열 이름이 달라도 동작하도록 SELECT * 후
+//   node_id/node_nm/city_code 의 흔한 별칭을 모두 받아 준다(앱이 기대하는 이름으로 내보낸다).
+// ══════════════════════════════════════════════════════════════
+function _hav(y1, x1, y2, x2) {
+  const R = 6371e3, t = Math.PI / 180;
+  const dy = (y2 - y1) * t, dx = (x2 - x1) * t;
+  const a = Math.sin(dy / 2) ** 2 + Math.cos(y1 * t) * Math.cos(y2 * t) * Math.sin(dx / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+async function handleBusStops(url, env) {
+  const lat = parseFloat(url.searchParams.get('lat'));
+  const lng = parseFloat(url.searchParams.get('lng'));
+  if (!isFinite(lat) || !isFinite(lng) || lat < 32 || lat > 39.6 || lng < 124 || lng > 132.5) {
+    return jsonRes({ ok: false, error: 'lat,lng 필요(국내 좌표)' }, 400);
+  }
+  const radius = Math.min(3000, Math.max(100, parseInt(url.searchParams.get('radius') || '800', 10) || 800));
+  const dLat = radius / 111000;
+  const dLng = radius / (111000 * Math.max(0.2, Math.cos(lat * Math.PI / 180)));
+  try {
+    const q = await env.DB.prepare(
+      'SELECT * FROM bus_stops WHERE lat BETWEEN ?1 AND ?2 AND lng BETWEEN ?3 AND ?4 LIMIT 800'
+    ).bind(lat - dLat, lat + dLat, lng - dLng, lng + dLng).all();
+    const pick = (r, ...ks) => { for (const k of ks) if (r[k] != null && r[k] !== '') return r[k]; return ''; };
+    const stops = [];
+    for (const r of (q && q.results) || []) {
+      const la = parseFloat(r.lat), ln = parseFloat(r.lng);
+      if (!isFinite(la) || !isFinite(ln)) continue;
+      const d = _hav(lat, lng, la, ln);
+      if (d > radius) continue;
+      stops.push({
+        node_id:   String(pick(r, 'node_id', 'nodeid', 'nodeId', 'id', 'stop_id')),
+        node_nm:   String(pick(r, 'node_nm', 'nodenm', 'nodeNm', 'name', 'stop_nm')),
+        city_code: String(pick(r, 'city_code', 'citycode', 'cityCode')),
+        lat: la, lng: ln, dist: Math.round(d)
+      });
+    }
+    stops.sort((a, b) => a.dist - b.dist);
+    return jsonRes({ ok: true, count: Math.min(stops.length, 60), stops: stops.slice(0, 60) });
+  } catch (e) {
+    return jsonRes({ ok: false, error: String((e && e.message) || e).slice(0, 160) }, 500);
+  }
+}
+
 export default {
   async fetch(request, env) {
     const reqUrl = new URL(request.url);
@@ -656,8 +701,8 @@ export default {
           ok: true,
           service: 'gildongmu-bus-proxy',
           // 배포된 코드가 어느 버전인지 확인용 — 새 기능이 안 보이면 여기부터 본다
-          version: 'seoul-cache-2026-09-02',
-          routes: ['/tago', '/seoul', '/kakao-local', '/news/all', '/news',
+          version: 'gentle-2026-10-01a',
+          routes: ['/tago', '/seoul', '/kakao-local', '/bus-stops', '/news/all', '/news',
                    '/admin/news-collect', '/admin/news-debug', '/admin/news-purge', '/admin/kakao-purge'],
           keySet: !!env.DATA_GO_KR_KEY,
           kakaoKeySet: !!env.KAKAO_REST_KEY,
@@ -671,6 +716,24 @@ export default {
         }),
         { headers: { 'Content-Type': 'application/json; charset=utf-8', ...CORS } }
       );
+    }
+
+    /* ── 🔒 관리 경로 보호 (2026-10-01) ──────────────────────────
+     *   /admin/* 은 예전엔 인증이 없어 누구나 호출할 수 있었다.
+     *   시크릿 ADMIN_TOKEN 이 없으면 닫힌다(fail closed). 호출: ?token=... 또는 X-Admin-Token 헤더.
+     */
+    if (reqUrl.pathname.indexOf('/admin/') === 0) {
+      const want = String(env.ADMIN_TOKEN || '');
+      const got  = request.headers.get('X-Admin-Token') || reqUrl.searchParams.get('token') || '';
+      if (!want || got !== want) return jsonRes({ ok: false, error: 'unauthorized' }, 401);
+    }
+
+    /* ── 🚌 주변 정류장 (D1 보조 조회) ───────────────────────────
+     *   앱은 TAGO 가 0건이거나 실패할 때 이 경로로 D1 의 정류장 목록을 받아 쓴다.
+     *   (그동안 이 워커에 없어 항상 404 → 외곽·TAGO 장애 지역에서 '정류장 없음'이 됐다)
+     */
+    if (reqUrl.pathname === '/bus-stops') {
+      return handleBusStops(reqUrl, env);
     }
 
     /* ── 📰 뉴스 ─────────────────────────────────────────────── */
