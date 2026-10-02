@@ -3860,39 +3860,50 @@ function _renderHomeConductorBrief(fromName, toName, hour, congPct, serverMsg){
     var congTxt = congPct>=70?'매우 혼잡':congPct>=45?'다소 혼잡':'원활';
     var ps = [];
 
-    if(hasRoute){
-      // 1) 인사 + 출발지/목적지 날씨
+    // ★ 2026-10-03 (YJ 지시: "자연스럽게 비서가 어시스트 하는 폼으로"): 말투를 해요체 비서 톤으로,
+    //   순서를 '핵심(소요·환승) → 출발/도착 시각 → 혼잡 한마디 → 날씨·준비물'로 바꿨다.
+    //   (예전엔 날씨부터 나열하고, 서버 문장이 따로 붙어 '주말이라 여유로운 편'과 '출퇴근 시간대지만…'이
+    //    한 카드에 같이 나오는 모순이 있었다.) 숫자·경로 계산은 그대로, 문장만 바뀐다.
+    var late = (hour>=22 || hour<5);
+    // 날씨·준비물 문단(공통)
+    function _wxParas(){
+      var out = [];
       var w = [];
-      if(wF) w.push('출발지 <b>' + esc(fromName) + '</b>' + _josEun(fromName) + ' 현재 <b>' + wF.temp + '도</b> ' + wF.txt);
-      if(wT) w.push('목적지 <b>' + esc(toName) + '</b>' + _josEun(toName) + ' <b>' + wT.temp + '도</b> ' + wT.txt);
-      if(w.length) ps.push(w.join(', ') + '입니다.');
-      // 2) 준비 조언
+      if(wF) w.push('<b>' + esc(fromName) + '</b> <b>' + wF.temp + '도</b> ' + wF.txt);
+      if(wT) w.push('<b>' + esc(toName) + '</b> <b>' + wT.temp + '도</b> ' + wT.txt);
       var prep = [];
       var maxRain = Math.max((wF&&wF.rain)||0,(wT&&wT.rain)||0);
-      if(maxRain>=60) prep.push('비 소식이 있으니 우산을 꼭 챙기세요');
-      else if(maxRain>=40) prep.push('비가 올 수 있어 우산을 준비하시면 좋습니다');
+      if(maxRain>=60) prep.push('비 소식이 있어요. 우산 꼭 챙기세요.');
+      else if(maxRain>=40) prep.push('비가 올 수도 있어요. 우산 하나 챙기시면 좋아요.');
       var coldest = Math.min(wF?wF.temp:99, wT?wT.temp:99);
       var hottest = Math.max(wF?wF.temp:-99, wT?wT.temp:-99);
-      if(coldest<=2) prep.push('날이 매우 추우니 따뜻하게 입고 나오세요');
-      else if(coldest<=8) prep.push('쌀쌀하니 겉옷을 챙기시면 좋습니다');
-      else if(hottest>=28) prep.push('덥습니다, 물 한 병 챙기시길 권합니다');
-      if(wF&&wT&&Math.abs(wF.temp-wT.temp)>=4) prep.push('출발지와 목적지 기온차가 크니 참고하세요');
-      if(prep.length) ps.push(prep.join(', ') + '.');
-      // 3) 교통상황 + 환승 안내
-      var _peakBusy = peak && congPct >= 45;   // 피크 '시간대'라도 실제 혼잡할 때만 붐빔으로 안내
-      var t = '교통상황은 ' + (
-        congPct >= 70 ? (_peakBusy ? '출퇴근 피크로 매우 붐빕니다' : '매우 혼잡한 편입니다') :
-        congPct >= 45 ? (_peakBusy ? '출퇴근 피크로 다소 붐빕니다' : '다소 혼잡한 편입니다') :
-        (hol ? '주말이라 여유로운 편입니다' : '원활한 편입니다'));
-      // ★ 2026-09-29 (YJ: "장거리 운행시 AI승무원의 설명이 부족해, 도착·환승
-      //   시간정보를 더 자세히"): rb.segments에 장거리(type 4) 구간이 있으면
-      //   그 구간을 중심으로 "몇시에 출발해 몇시에 도착"까지 짚어 주는 전용
-      //   문장을 만든다 — 일반 환승 나열(아래 else 분기)은 손 안 댐(기존 기능 보존).
+      if(coldest<=2) prep.push('많이 추워요. 따뜻하게 입고 나오세요.');
+      else if(coldest<=8) prep.push('쌀쌀하니 겉옷 챙기세요.');
+      else if(hottest>=28) prep.push('더우니 물 한 병 챙기시면 좋아요.');
+      if(wF&&wT&&Math.abs(wF.temp-wT.temp)>=4) prep.push('두 곳 기온 차가 ' + Math.abs(wF.temp-wT.temp) + '도라 옷차림 참고하세요.');
+      if(w.length) out.push('날씨는 ' + w.join(', ') + '이에요.' + (prep.length ? ' ' + prep.join(' ') : ''));
+      else if(prep.length) out.push(prep.join(' '));
+      return out;
+    }
+    // 혼잡 한마디(모순 없이 한 문장)
+    function _cgLine(){
+      if(late) return '늦은 시간이라 막차 시간은 꼭 확인해 두세요.';
+      if(congPct >= 70) return peak ? '지금은 출퇴근 피크라 많이 붐벼요. 한 칸 안쪽으로 들어가시면 한결 나아요.' : '지금 꽤 혼잡해요. 여유를 두고 움직이세요.';
+      if(congPct >= 45) return peak ? '지금은 출퇴근 피크라 다소 붐벼요.' : '지금은 다소 붐비는 편이에요.';
+      if(hol) return '주말이라 한산한 편이에요.';
+      return peak ? '출퇴근 시간대지만 크게 붐비진 않아요.' : '지금은 여유로운 편이에요.';
+    }
+
+    if(hasRoute){
+      // 1) 핵심: 소요시간 + 환승 안내
+      var _head = '<b>' + esc(fromName) + '</b>에서 <b>' + esc(toName) + '</b>까지는 ' + (mins>0 ? '약 <b>' + mins + '분</b> 걸려요.' : '이렇게 가시면 돼요.');
       var _ldSegIdx = -1;
       if(rb && rb.segments){
         for(var _li=0; _li<rb.segments.length; _li++){ if(rb.segments[_li].type===4){ _ldSegIdx=_li; break; } }
       }
+      var t = '';
       if(_ldSegIdx >= 0){
+        // 장거리(열차·고속버스·시외버스): 몇 시에 출발해 몇 시에 도착하는지까지 짚어 준다.
         var _sg = rb.segments;
         var _ld = _sg[_ldSegIdx];
         var _accessSegs = _sg.slice(0, _ldSegIdx);
@@ -3901,45 +3912,45 @@ function _renderHomeConductorBrief(fromName, toName, hour, congPct, serverMsg){
         if(_accessSegs.length){
           var _accFirst = _accessSegs[0];
           var _accLast = _accessSegs[_accessSegs.length-1];
-          _parts.push(_stnBadge(_accFirst.from, _accFirst.line) + '에서 ' + _stnBadge(_accLast.to, _accLast.line) + '까지 이동하신 뒤');
+          _parts.push(_stnBadge(_accFirst.from, _accFirst.line) + '에서 ' + _stnBadge(_accLast.to, _accLast.line) + '까지 먼저 이동하시고');
         }
         var _ldTimeTxt = (_ld.depClock && _ld.arrClock)
-          ? ('<b>' + _ld.depClock + '</b>에 출발해 <b>' + _ld.arrClock + '</b>경 도착')
-          : ('약 <b>' + _ld.min + '분</b> 소요');
-        _parts.push(_stnBadge(_ld.from, _ld.line) + '에서 ' + _lineBadge(_ld.line) + '를 타고 ' + _stnBadge(_ld.to, _ld.line) + '까지 ' + _ldTimeTxt
-          + (_ld.rideMin ? ' (실제 이동 약 ' + _ld.rideMin + '분)' : ''));
+          ? ('<b>' + _ld.depClock + '</b> 출발, <b>' + _ld.arrClock + '</b>경 도착이에요')
+          : ('약 <b>' + _ld.min + '분</b> 걸려요');
+        _parts.push(_stnBadge(_ld.from, _ld.line) + '에서 ' + _lineBadge(_ld.line) + '를 타고 ' + _stnBadge(_ld.to, _ld.line) + '까지 가시면 돼요. ' + _ldTimeTxt
+          + (_ld.rideMin ? ' (타고 가는 시간은 약 ' + _ld.rideMin + '분)' : '') + '.');
+        t = _parts.join(', ');
         if(_egressSegs.length){
           var _exl=[];
-          for(var _ei=0;_ei<_egressSegs.length;_ei++){ _exl.push(_stnBadge(_egressSegs[_ei].from, _egressSegs[_ei].line)+'에서 '+_lineBadge(_egressSegs[_ei].line||'다음 노선')); }
-          _parts.push('도착 후에는 ' + _exl.join(', ') + ' 환승하시면 최종 목적지까지 이동하실 수 있습니다');
+          for(var _ei=0;_ei<_egressSegs.length;_ei++){ var _el=_egressSegs[_ei].line||'다음 노선'; _exl.push(_stnBadge(_egressSegs[_ei].from, _egressSegs[_ei].line)+'에서 '+_lineBadge(_el)+_josRo(_el)); }
+          t += ' 도착하시면 ' + _exl.join(', ') + ' 갈아타고 목적지까지 가시면 돼요.';
         } else {
-          _parts.push('도착하시는 곳이 목적지와 가까워 별도 환승 없이 이동하실 수 있습니다');
+          t += ' 내리신 곳이 목적지와 가까워서 따로 환승은 없어요.';
         }
-        t += '. ' + _parts.join(', ');
+        t += ' 승차권과 출발 시각은 한 번 더 확인해 주세요.';
       } else if(rb && rb.segments && rb.segments.length>1){
-        var _sg = rb.segments;
+        var _sg2 = rb.segments;
         var lead = '';
-        // ★ 첫 구간이 접근 버스(뒤에 지하철)면: "출발은 ○○에서 △△번 버스로 □□까지 이동하신 뒤,"
-        if(_sg[0] && _sg[0].type===2){
-          lead = '출발은 ' + _stnBadge(_sg[0].from, _sg[0].line) + '에서 ' + _lineBadge(_sg[0].line + '번') + ' 버스를 타고 ' + _stnBadge(_sg[0].to, _sg[0].line) + '까지 이동하신 뒤, ';
+        if(_sg2[0] && _sg2[0].type===2){
+          lead = _stnBadge(_sg2[0].from, _sg2[0].line) + '에서 ' + _lineBadge(_sg2[0].line + '번') + ' 버스를 타고 ' + _stnBadge(_sg2[0].to, _sg2[0].line) + '까지 가신 다음, ';
         }
         var xl=[];
-        for(var i=1;i<_sg.length;i++){ xl.push(_stnBadge(_sg[i].from, _sg[i].line)+'에서 '+_lineBadge(_sg[i].line||'다음 노선')); }
-        t += '. ' + lead + '가시는 길에 ' + xl.join(', ') + ' 환승하시면 됩니다';
+        for(var i=1;i<_sg2.length;i++){ var _nl=_sg2[i].line||'다음 노선'; xl.push(_stnBadge(_sg2[i].from, _sg2[i].line)+'에서 '+_lineBadge(_nl)+_josRo(_nl)); }
+        var _nx = _sg2.length-1;
+        t = lead + '가는 길에 ' + xl.join(', ') + ' 갈아타시면 돼요.' + (_nx>=2 ? ' 환승이 ' + _nx + '번이라 안내 방송 놓치지 마세요.' : '');
       } else if(rb && rb.segments && rb.segments.length===1){
         var _l1 = rb.segments[0].line||'한 노선';
-        t += '. 환승 없이 ' + _lineBadge(_l1) + _josRo(rb.segments[0].line) + ' 한 번에 가실 수 있습니다';
+        t = '환승 없이 ' + _lineBadge(_l1) + _josRo(rb.segments[0].line) + ' 한 번에 가실 수 있어요.';
       } else {
-        t += '. 환승 정보는 경로가 확정되면 구간별로 안내해 드리겠습니다';
+        t = '환승 정보는 경로가 확정되면 구간별로 알려드릴게요.';
       }
-      ps.push(t + '.');
-      // 4) 도착 예정 시각
+      ps.push(_head + ' ' + t);
+      // 2) 출발·도착 시각
       if(window._metroRouteMode === true){
-        // ★ 노선도 경로: 위치추적 없이 현재시각 기준 열차 유무 + 소요시간만 안내
+        // ★ 노선도 경로: 위치추적 없이 현재시각 기준 열차 유무만 안내(소요시간은 위 첫 문장에 있다)
         var pad=function(n){return(n<10?'0':'')+n;};
         var _mm = (typeof mins==='number' && mins>0) ? mins : 0;
         var info = _metroNextTrainInfo(_mm);
-        if(_mm>0) ps.push('경로 소요시간은 약 <b>' + _mm + '분</b>입니다.');
         if(info && info.found && info.depMin!=null){
           var dh=Math.floor((info.depMin%1440)/60), dmn=Math.round(info.depMin%60);
           var ah=Math.floor((info.arrMin%1440)/60), amn=Math.round(info.arrMin%60);
@@ -3947,79 +3958,76 @@ function _renderHomeConductorBrief(fromName, toName, hour, congPct, serverMsg){
           // ★ 위 경로 카드 타임라인에 실제 시각이 있으면 그쪽을 따른다(숫자 불일치 방지).
           var _tlT = (typeof _htlDepArrTimes === 'function') ? _htlDepArrTimes() : null;
           if(_tlT){ _depStr = _tlT.dep; _arrStr = _tlT.arr; }
-          ps.push('현재 기준 다음 열차는 <b>' + _depStr + '</b>, 도착은 <b>' + _arrStr + '</b>경으로 예상됩니다.');
+          ps.push('지금 출발하시면 다음 열차는 <b>' + _depStr + '</b>, 도착은 <b>' + _arrStr + '</b>경이에요.');
         } else if(info && info.found === false){
-          var _fMsg = '현재 시각 기준으로 <b>운행 중인 열차가 없습니다</b> (막차 이후).';
+          var _fMsg = '지금은 <b>운행 중인 열차가 없어요</b> (막차 이후).';
           if(info.firstMin != null){
             var fh = Math.floor(info.firstMin/60), fm = Math.round(info.firstMin%60);
             if(fm >= 60){ fm -= 60; fh = (fh+1)%24; }
             var _fStr = pad(fh) + ':' + pad(fm);
-            // 첫차까지 남은 시간도 함께
             var _nowM = (typeof kstMinutesAdj==='function') ? kstMinutesAdj()
                       : (new Date().getHours()*60 + new Date().getMinutes());
             var _wait = info.firstMin - _nowM; if(_wait < 0) _wait += 1440;
             var _wTxt = (_wait >= 60)
               ? (Math.floor(_wait/60) + '시간 ' + (_wait%60) + '분 후')
               : (Math.round(_wait) + '분 후');
-            _fMsg += ' 첫차는 <b>' + _fStr + '</b>(' + _wTxt + ')에 있습니다.';
+            _fMsg += ' 첫차는 <b>' + _fStr + '</b>(' + _wTxt + ')에 있어요.';
             if(_mm>0){
               var _arrF = info.firstMin + _mm;
               var ah2 = Math.floor((_arrF%1440)/60), am2 = Math.round(_arrF%60);
               if(am2 >= 60){ am2 -= 60; ah2 = (ah2+1)%24; }
-              _fMsg += ' 첫차로 가시면 <b>' + pad(ah2)+':'+pad(am2) + '</b>경 도착 예정입니다.';
+              _fMsg += ' 첫차를 타시면 <b>' + pad(ah2)+':'+pad(am2) + '</b>경 도착해요.';
             }
           } else {
-            _fMsg += ' 경로와 소요시간만 참고하세요.';
+            _fMsg += ' 경로와 소요시간만 참고해 주세요.';
           }
           ps.push(_fMsg);
         }
       } else if(mins>0){
-        // (실시간 추적 모드) 도착 예정 시각 — 남은시간 갱신에 따라 실시간 업데이트
+        // (실시간 추적 모드) 도착 예정 시각 — 남은시간 갱신에 따라 실시간 업데이트(#homeAiArr 는 별도 갱신기가 같은 문장 틀로 덮어쓴다)
         try {
-          // ★ 타임라인과 같은 값을 쓴다(없으면 종전처럼 계산)
           var _ep = (typeof _journeyEta==='function') ? _journeyEta()
                   : ((typeof _etaPair==='function') ? _etaPair() : null);
           var arr=new Date((_ep && _ep.arrMs) || (Date.now()+mins*60000)); var pad2=function(n){return(n<10?'0':'')+n;};
-          ps.push('<span id="homeAiArr">도착은 <b>' + pad2(arr.getHours()) + ':' + pad2(arr.getMinutes()) + '</b>경으로 예상됩니다.</span>');
+          ps.push('<span id="homeAiArr">도착은 <b>' + pad2(arr.getHours()) + ':' + pad2(arr.getMinutes()) + '</b>경 예정이에요.</span>');
         } catch(e){}
       }
+      // 3) 혼잡 한마디 → 4) 날씨·준비물
+      ps.push(_cgLine());
+      _wxParas().forEach(function(x){ ps.push(x); });
     } else {
-      // 목적지 미설정: 현위치 상태 안내
-      if(wF) ps.push('현재 <b>' + esc(fromName) + '</b>' + _josEun(fromName) + ' <b>' + wF.temp + '도</b> ' + wF.txt + '입니다.');
+      // 목적지 미설정: 현위치 상태 안내(비서 톤)
+      if(wF) ps.push('지금 <b>' + esc(fromName) + '</b> 일대는 <b>' + wF.temp + '도</b>, ' + wF.txt + '이에요.');
       var prep2 = [];
       var mr = (wF&&wF.rain)||0;
-      if(mr>=60) prep2.push('비 소식이 있으니 우산을 꼭 챙기세요');
-      else if(mr>=40) prep2.push('비가 올 수 있어 우산을 준비하시면 좋습니다');
-      if(wF){ if(wF.temp<=2) prep2.push('날이 매우 추우니 따뜻하게 입으세요'); else if(wF.temp<=8) prep2.push('쌀쌀하니 겉옷을 챙기세요'); else if(wF.temp>=28) prep2.push('덥습니다, 물 한 병 챙기시면 좋아요'); }
-      if(prep2.length) ps.push(prep2.join(', ') + '.');
-      // ★ 2026-09-24: 목적지 미설정 상태에서 문장이 두 줄뿐이라 내용이 빈약했다.
-      //   시간대(심야/주말·공휴일/출퇴근 피크)에 대한 전문적인 안내 한 줄을 더해
-      //   근거 있는 조언처럼 느껴지도록 보강한다(AI 승무원 톤 개선 요청 반영).
-      var _lateNight = (hour>=23 || hour<5);
-      var _timeNote = _lateNight
-        ? '심야 시간대에는 배차 간격이 평소보다 길어질 수 있으니 여유를 두고 움직이시길 권해 드립니다.'
+      if(mr>=60) prep2.push('비 소식이 있어요. 우산 꼭 챙기세요.');
+      else if(mr>=40) prep2.push('비가 올 수도 있어요. 우산 하나 챙기시면 좋아요.');
+      if(wF){ if(wF.temp<=2) prep2.push('많이 추워요. 따뜻하게 입으세요.'); else if(wF.temp<=8) prep2.push('쌀쌀하니 겉옷 챙기세요.'); else if(wF.temp>=28) prep2.push('더우니 물 한 병 챙기시면 좋아요.'); }
+      if(prep2.length) ps.push(prep2.join(' '));
+      var _timeNote = late
+        ? '늦은 시간이라 배차 간격이 길어질 수 있어요. 여유 있게 움직이세요.'
         : hol
-          ? '오늘은 주말·공휴일 운행 시간표가 적용되고 있습니다.'
+          ? '오늘은 주말·공휴일 시간표로 운행해요.'
           : peak
-            ? '현재는 출퇴근 혼잡 시간대이니 열차 이용 시 참고하시기 바랍니다.'
+            ? '지금은 출퇴근 혼잡 시간대예요. 이용에 참고하세요.'
             : '';
       if(_timeNote) ps.push(_timeNote);
-      ps.push('현재 <b>' + esc(fromName) + '</b> 일대 교통은 ' + (congPct>=70?(peak&&congPct>=45?'피크로 매우 붐빕니다':'매우 혼잡합니다'):congPct>=45?(peak?'피크로 다소 붐빕니다':'다소 혼잡합니다'):'원활합니다') + '. 목적지를 설정하시면 예상 소요시간과 환승 경로까지 상세히 안내해 드리겠습니다.');
+      ps.push('<b>' + esc(fromName) + '</b> 일대 교통은 ' + (congPct>=70?(peak&&congPct>=45?'피크라 매우 붐벼요':'꽤 혼잡해요'):congPct>=45?(peak?'피크라 다소 붐벼요':'다소 붐비는 편이에요'):'원활해요') + '. 목적지를 정해 주시면 소요시간과 환승 경로까지 챙겨 드릴게요.');
     }
 
     // 5) 서버(AI) 코멘트 — 이모지 제거 후 결합
-    if(serverMsg){ var sm = (typeof _stripEmoji==='function') ? _stripEmoji(String(serverMsg)) : String(serverMsg); if(sm && sm.trim()) ps.push(sm.trim()); }
+    if(serverMsg && !hasRoute){ var sm = (typeof _stripEmoji==='function') ? _stripEmoji(String(serverMsg)) : String(serverMsg); if(sm && sm.trim()) ps.push(sm.trim()); }
     // 6) 마무리 — ★ 2026-09-24: 매번 똑같은 한 문장만 나와 기계적으로 느껴졌다.
     //   같은 정보를 전달하는 여러 표현 중 하나를 골라, 볼 때마다 조금씩 다르게
     //   들리는 전문 승무원 말투를 유지한다.
     if(window._metroRouteMode === true){
-      ps.push('<span style="color:var(--sub);font-size:12px;">노선도에서 설정한 경로 미리보기입니다. 출발하시면 위치 안내를 시작합니다.</span>');
+      ps.push('<span style="color:var(--sub);font-size:12px;">노선도에서 고르신 경로 미리보기예요. 출발하시면 위치에 맞춰 안내를 이어갈게요.</span>');
     } else {
       var _closings = [
-        '편안한 여정 되세요. 5분마다 현황을 업데이트해 드리겠습니다.',
-        '안전하고 편안한 이동 되시길 바랍니다. 현황은 5분 간격으로 다시 안내해 드리겠습니다.',
-        '쾌적한 이동 되시길 바랍니다. 최신 현황으로 5분마다 갱신해 드리겠습니다.',
-        '오늘도 안전한 여정 되시길 바랍니다. 5분마다 최신 정보로 업데이트해 드리겠습니다.'
+        '이동 중에도 5분마다 현황을 새로 알려드릴게요.',
+        '가시는 동안 바뀌는 상황은 제가 5분마다 챙겨서 알려드릴게요.',
+        '편안히 다녀오세요. 5분마다 최신 정보로 다시 안내해 드릴게요.',
+        '안전하게 다녀오세요. 달라지는 점이 있으면 5분 간격으로 알려드릴게요.'
       ];
       ps.push('<span style="color:var(--sub);font-size:12px;">' + _closings[Math.floor(Math.random()*_closings.length)] + '</span>');
     }
@@ -13714,7 +13722,7 @@ function _syncHomeBriefRemaining(rem){
                : ((typeof _etaPair==='function') ? _etaPair() : null);
       var arr = new Date((_ep2 && _ep2.arrMs) || (Date.now() + rem*60000));
       var pad = function(n){ return (n<10?'0':'')+n; };
-      arrEl.innerHTML = '도착은 <b>' + pad(arr.getHours()) + ':' + pad(arr.getMinutes()) + '</b>경으로 예상됩니다.';
+      arrEl.innerHTML = '도착은 <b>' + pad(arr.getHours()) + ':' + pad(arr.getMinutes()) + '</b>경 예정이에요.';
     }
   } catch(e){}
 }
@@ -18592,10 +18600,10 @@ window.addEventListener('unhandledrejection', function(e) {
 
   <!-- 4순위: 🚇 AI 역무원 (현재 위치·시간 기준 10분마다 브리핑) -->
   <div>
-    <div class="sec">AI 승무원</div>
+    <div class="sec">AI 비서</div>
     <div class="home-ai-card" id="homeAiCard">
       <div class="home-ai-head">
-        <span class="home-ai-title" id="homeAiTitle">AI 승무원 브리핑</span>
+        <span class="home-ai-title" id="homeAiTitle">AI 비서 브리핑</span>
         <span class="home-ai-next" id="homeAiNext"></span>
         <button class="home-ai-refresh" id="homeAiRefreshBtn" onclick="requestHomeBrief(true)">🔄</button>
       </div>
