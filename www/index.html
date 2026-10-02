@@ -24240,7 +24240,9 @@ function startWatch(){
 
       if(!isRealMove) {
         // 정지 상태 — 역 전진 일체 차단, 시각적 업데이트만 허용
-        updateCong(n);
+        // ★ 2026-10-03: 노선도 미리보기(_metroRouteMode) 중엔 내 GPS 근처역(예: 아라)이 혼잡도 카드를 덮지 않게 한다
+        //   (서울역→수원 경로인데 혼잡도 카드만 '지하철 아라'로 바뀌던 증상, YJ 화면 제보).
+        if(window._metroRouteMode !== true) updateCong(n);
         return;
       }
 
@@ -24306,7 +24308,7 @@ function startWatch(){
         }
       }
     }
-    updateCong(n);
+    if(window._metroRouteMode !== true) updateCong(n);   // ★ 2026-10-03: 미리보기 중엔 GPS 근처역으로 혼잡도 카드를 바꾸지 않는다
   },function(gpsErr){ if(gpsErr.code===1){console.warn("[GPS]권한차단");} else {console.log("[GPS]오류",gpsErr.code);} },{
     // ★ 지하철 이동 감지: enableHighAccuracy true로 변경
     //   - true: GPS 칩 우선 → coords.speed 신뢰도 대폭 향상
