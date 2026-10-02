@@ -4,8 +4,17 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.animation.ValueAnimator;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.ColorFilter;
+import android.graphics.Matrix;
+import android.graphics.Paint;
 import android.graphics.PixelFormat;
+import android.graphics.RectF;
+import android.graphics.SweepGradient;
+import android.graphics.drawable.Drawable;
+import android.view.animation.LinearInterpolator;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
@@ -67,6 +76,10 @@ public class OverlayPlugin extends Plugin {
     private String line1 = "", line2 = "", line3 = "";
     private String[] track = new String[0];     // 출발 – 경로 – 현위치 – 경로 – 도착 (웹이 정해 준 이름들)
     private int trackCur = -1;                  // 현위치 칸 번호(이 칸만 하얗고, 나머지는 흐린 회색)
+    private int alertLevel = 0;                 // 하차 임박: 0 없음 · 2 두 정거장 전(무지개 테두리가 천천히) · 1 한 정거장 전(빠르게)
+    private RainbowBorder border;
+    private ValueAnimator borderAnim;
+    private int borderMode = 0;
 
     private WindowManager wm;
     private WindowManager.LayoutParams lp;
@@ -131,6 +144,8 @@ public class OverlayPlugin extends Plugin {
             track = tr;
         } catch (Exception e) { track = new String[0]; }
         trackCur = call.getInt("cur", -1);
+        Integer al = call.getInt("alert", 0);
+        alertLevel = al == null ? 0 : Math.max(0, Math.min(2, al));
         line2 = nz(call.getString("line2"));
         line3 = nz(call.getString("line3"));
         lastUpdateAt = System.currentTimeMillis();
@@ -196,7 +211,7 @@ public class OverlayPlugin extends Plugin {
                     boolean show = wanted && !appVisible && !stale && canDraw()
                             && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
                             && (track.length > 0 || line1.length() > 0);
-                    if (show) { attachOrUpdate(); scheduleCheck(); startTicker(); }
+                    if (show) { rebuildIfResized(); attachOrUpdate(); scheduleCheck(); startTicker(); }
                     else detach();
                 } catch (Exception ignored) { }
             }
@@ -228,6 +243,7 @@ public class OverlayPlugin extends Plugin {
         @Override public void run() {
             boolean journey = journeyOn && (System.currentTimeMillis() - journeyAt) < JOURNEY_STALE_MS;
             if (!attached && !journey) { ticking = false; return; }
+            try { if (attached) rebuildIfResized(); } catch (Exception ignored0) { }
             try {
                 // 앱이 보이는 동안은 웹이 스스로 돌고 있으니 깨울 필요가 없다. 가려진 동안만 깨운다.
                 if (!appVisible && getBridge() != null && getBridge().getWebView() != null) {
@@ -248,9 +264,40 @@ public class OverlayPlugin extends Plugin {
         main.postDelayed(ticker, TICK_MS);
     }
 
+    // ★ 2026-10-02 (YJ: 갤럭시 폴드 — "폰을 펴고 접을 때 화면에 안 맞춰져"): 오버레이는 만들 때의 화면 폭으로 굳어 있었다.
+    //   접었다 펴면 화면 폭·밀도가 바뀌는데 창은 옛 폭 그대로라 좁은 화면에선 잘리고 넓은 화면에선 작게 남았다.
+    //   → 폭·밀도는 '지금 실제 화면'(앱 컨텍스트의 기본 디스플레이)에서 읽고, 바뀌면 다시 만든다(rebuildIfResized).
+    private DisplayMetrics realMetrics() {
+        DisplayMetrics dm = new DisplayMetrics();
+        try {
+            WindowManager w = (WindowManager) getContext().getApplicationContext().getSystemService(Context.WINDOW_SERVICE);
+            w.getDefaultDisplay().getRealMetrics(dm);
+            if (dm.widthPixels > 0 && dm.density > 0) return dm;
+        } catch (Exception ignored) { }
+        return getContext().getResources().getDisplayMetrics();
+    }
+
+    private String builtKey = "";
+
+    private String sizeKey() {
+        DisplayMetrics dm = realMetrics();
+        return dm.widthPixels + "x" + dm.heightPixels + "@" + dm.density;
+    }
+
+    /** 화면 폭·밀도가 바뀌었으면(폴드 펴기/접기) 오버레이를 새 크기로 다시 만든다. 메인 스레드에서만 부른다. */
+    private void rebuildIfResized() {
+        if (root == null || sizeKey().equals(builtKey)) return;
+        boolean was = attached;
+        if (attached && wm != null) {
+            try { wm.removeView(root); } catch (Exception ignored) { }
+            attached = false;
+        }
+        root = null; border = null; borderAnim = null; borderMode = 0;
+        if (was) attachOrUpdate();
+    }
+
     private int dp(float v) {
-        DisplayMetrics dm = getContext().getResources().getDisplayMetrics();
-        return Math.round(v * dm.density);
+        return Math.round(v * realMetrics().density);
     }
 
     private TextView makeText(float sp, int color, boolean bold) {
@@ -268,18 +315,20 @@ public class OverlayPlugin extends Plugin {
     private void build() {
         Context ctx = getContext();
         wm = (WindowManager) ctx.getSystemService(Context.WINDOW_SERVICE);
-        DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
+        DisplayMetrics dm = realMetrics();
+        builtKey = sizeKey();
         // ★ 2026-10-01 (YJ: "역간 거리가 너무 멀어서 역이 하나만 보여 — 좌우 2개씩 보이게"): 실기기에서 다섯 칸이 화면보다 넓게
         //   퍼져 바깥 두 칸이 잘렸다(가중치(weight) 폭 + WRAP_CONTENT 창 조합). → 창 폭과 모든 칸 폭을 '정확한 픽셀'로 직접 정한다.
         //   이렇게 하면 어떤 기기에서도 창 = 화면의 94%, 다섯 칸 합 = 창 안쪽 폭으로 고정된다.
-        int maxW = Math.round(dm.widthPixels * 0.96f);
+        // ★ 2026-10-02: 펼친 폴드(가로 700dp 안팎)에선 96% 폭이 지나치게 넓다 → 최대 560dp 로 제한한다.
+        int maxW = Math.min(Math.round(dm.widthPixels * 0.96f), dp(560));
         final int padH = dp(8);
         final int rowW = maxW - 2 * padH;
-        final int sepW = dp(4);
+        final int sepW = dp(6);
         // ★ 2026-10-01 (YJ: "양옆 역은 세로 가운데로, 글자는 조금 키워"): 세 기둥 — 왼쪽(두 칸) · 가운데(현위치 + 노란 줄) · 오른쪽(두 칸).
         //   양옆 칸은 창 전체 높이의 한가운데에 놓인다(가운데 기둥이 두 줄이라 위쪽에 치우쳐 보이던 것을 바로잡음).
         //   가운데 기둥 폭은 노란 줄(남은 시간 문구)이 한 줄에 들어갈 만큼 확보하고, 나머지를 좌우 대칭으로 나눈다.
-        final int centerW = Math.round(rowW * 0.43f);
+        final int centerW = Math.round(rowW * 0.30f);   // ★ 2026-10-02: 옆 글자를 2배로 키우느라 가운데 기둥은 좁힌다(노란 줄은 전체 폭이라 영향 없음)
         final int sideW = Math.round((rowW - centerW - 4 * sepW) / 4f);
 
         root = new LinearLayout(ctx);
@@ -297,20 +346,21 @@ public class OverlayPlugin extends Plugin {
         t3.setMaxWidth(rowW);
 
         for (int i = 0; i < 5; i++) {
-            TextView c = makeText(12, Color.parseColor("#6E6E76"), false);
+            TextView c = makeText(24, Color.parseColor("#6E6E76"), false);   // ★ 2026-10-02 (YJ: "좌우 지나온·다가올 역 글자 2배"): 12→24sp
             cells[i] = c;
         }
         for (int i = 0; i < 4; i++) {
-            TextView sp = makeText(12, Color.parseColor("#44444B"), false);
+            TextView sp = makeText(20, Color.parseColor("#44444B"), false);
             sp.setText("\u203A");                       // ›
             seps[i] = sp;
         }
-        // 옆 칸은 한 줄로 두고, 칸 폭에 맞춰 글자가 12sp 이하에서 스스로 줄어든다(이름이 길어도 잘리거나 줄바꿈되지 않게)
+        // 옆 칸: 24sp 기본, 이름이 길면 칸 폭에 맞춰 스스로 줄어든다
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             for (int i = 0; i < 5; i++) {
                 if (i == 2) continue;
-                cells[i].setMaxLines(1);
-                cells[i].setAutoSizeTextTypeUniformWithConfiguration(8, 12, 1, TypedValue.COMPLEX_UNIT_SP);
+                // 24sp 가 기본(2배). 칸 폭에 안 들어가는 긴 이름만 두 줄까지 쓰며 줄어든다(최소 11sp).
+                cells[i].setMaxLines(2);
+                cells[i].setAutoSizeTextTypeUniformWithConfiguration(11, 24, 1, TypedValue.COMPLEX_UNIT_SP);
             }
         }
 
@@ -362,8 +412,10 @@ public class OverlayPlugin extends Plugin {
                 PixelFormat.TRANSLUCENT);
         lp.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
         SharedPreferences sp = ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE);
-        lp.x = sp.getInt("x", 0);
-        lp.y = sp.getInt("y", dp(36));            // 상태바 바로 아래
+        // ★ 2026-10-02: 저장된 위치가 지금 화면 밖이면(폴드를 접어 폭이 줄었을 때) 안쪽으로 당겨 놓는다
+        int xLimit = Math.max(0, (dm.widthPixels - maxW) / 2);
+        lp.x = Math.max(-xLimit, Math.min(xLimit, sp.getInt("x", 0)));
+        lp.y = Math.max(0, Math.min(sp.getInt("y", dp(36)), Math.max(0, dm.heightPixels - dp(120))));   // 상태바 바로 아래
 
         final int slop = ViewConfiguration.get(ctx).getScaledTouchSlop();
         root.setOnTouchListener(new View.OnTouchListener() {
@@ -392,6 +444,73 @@ public class OverlayPlugin extends Plugin {
                 }
             }
         });
+    }
+
+    /**
+     * ★ 2026-10-02 (YJ: "2정거장 전엔 오버레이 모서리가 얇은 무지개빛으로 천천히 돌고, 1정거장 전엔 빨리 돌면서 곧 내려야 한다는 표시"):
+     * 오버레이 테두리에 무지개색 SweepGradient 를 돌려 그린다. 판단(몇 정거장 남았나)은 웹이 하고, 여기선 alert 값(0/2/1)대로 그리기만 한다.
+     */
+    private static class RainbowBorder extends Drawable {
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final RectF rect = new RectF();
+        private final Matrix matrix = new Matrix();
+        private SweepGradient shader;
+        private float angle = 0f, radius, stroke;
+        private boolean visible = false;
+        private final int[] colors = {
+                0xFFFF3B30, 0xFFFF9500, 0xFFFFD60A, 0xFF34C759, 0xFF00C7BE, 0xFF0A84FF, 0xFFAF52DE, 0xFFFF2D92, 0xFFFF3B30 };
+
+        RainbowBorder(float radiusPx, float strokePx) {
+            radius = radiusPx; stroke = strokePx;
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(strokePx);
+        }
+        void setAngle(float a) { angle = a; invalidateSelf(); }
+        void setShown(boolean v) { visible = v; invalidateSelf(); }
+        @Override protected void onBoundsChange(android.graphics.Rect b) {
+            rect.set(b);
+            rect.inset(stroke / 2f, stroke / 2f);
+            shader = new SweepGradient(b.exactCenterX(), b.exactCenterY(), colors, null);
+            paint.setShader(shader);
+        }
+        @Override public void draw(Canvas c) {
+            if (!visible || shader == null) return;
+            matrix.setRotate(angle, getBounds().exactCenterX(), getBounds().exactCenterY());
+            shader.setLocalMatrix(matrix);
+            c.drawRoundRect(rect, radius, radius, paint);
+        }
+        @Override public void setAlpha(int a) { paint.setAlpha(a); }
+        @Override public void setColorFilter(ColorFilter f) { paint.setColorFilter(f); }
+        @Override public int getOpacity() { return PixelFormat.TRANSLUCENT; }
+    }
+
+    /** alert 값에 맞춰 테두리를 켜고(2=6초에 한 바퀴, 1=1.1초에 한 바퀴) 끈다. 메인 스레드에서 부른다. */
+    private void applyAlert() {
+        if (root == null) return;
+        if (border == null) {
+            border = new RainbowBorder(dp(14), dp(2.5f));            // 얇은 테두리
+            root.setForeground(border);
+        }
+        int mode = alertLevel;
+        if (mode == borderMode && (mode == 0 || (borderAnim != null && borderAnim.isRunning()))) return;
+        borderMode = mode;
+        if (borderAnim != null) { borderAnim.cancel(); borderAnim = null; }
+        if (mode == 0) { border.setShown(false); return; }
+        border.setShown(true);
+        borderAnim = ValueAnimator.ofFloat(0f, 360f);
+        borderAnim.setInterpolator(new LinearInterpolator());
+        borderAnim.setDuration(mode == 1 ? 1100L : 6000L);
+        borderAnim.setRepeatCount(ValueAnimator.INFINITE);
+        borderAnim.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+            @Override public void onAnimationUpdate(ValueAnimator a) { border.setAngle((Float) a.getAnimatedValue()); }
+        });
+        borderAnim.start();
+    }
+
+    private void stopAlert() {
+        try { if (borderAnim != null) borderAnim.cancel(); } catch (Exception ignored) { }
+        borderAnim = null; borderMode = 0;
+        if (border != null) border.setShown(false);
     }
 
     private void savePos() {
@@ -451,9 +570,9 @@ public class OverlayPlugin extends Plugin {
             boolean cur = five ? (i == trackCur) : (i == 2);
             TextView c = cells[i];
             c.setText(nm);
-            if (i == 2) {                                   // 현위치 칸: 흰색·굵게·17sp, 길면 두 줄까지
+            if (i == 2) {                                   // 현위치 칸: 흰색·굵게·24sp, 길면 두 줄까지
                 c.setTextColor(Color.WHITE);
-                c.setTextSize(17);
+                c.setTextSize(24);                          // ★ 2026-10-02: 옆 칸이 24sp 가 돼서 현위치도 같은 24sp(흰색·굵게로 구분)
                 c.setTypeface(Typeface.DEFAULT_BOLD);
                 c.setMaxLines(2);
             } else {                                        // 옆 칸: 회색, 칸에 맞춰 자동 축소(최대 12sp)
@@ -468,6 +587,7 @@ public class OverlayPlugin extends Plugin {
         t2.setVisibility(line2.length() > 0 ? View.VISIBLE : View.GONE);
         t3.setText(line3);
         t3.setVisibility(line3.length() > 0 ? View.VISIBLE : View.GONE);
+        try { applyAlert(); } catch (Exception ignored) { }
         if (!attached) {
             try {
                 wm.addView(root, lp);
@@ -479,6 +599,7 @@ public class OverlayPlugin extends Plugin {
     }
 
     private void detach() {
+        stopAlert();                                   // 보이지 않는 동안 애니메이션을 돌리지 않는다(배터리)
         main.removeCallbacks(checker);
         if (!journeyOn) { main.removeCallbacks(ticker); ticking = false; }   // 여정이 진행 중이면 오버레이를 내려도 깨우기는 계속한다
         if (attached && wm != null && root != null) {
