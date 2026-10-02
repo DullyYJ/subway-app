@@ -136,6 +136,65 @@ public class CellInfoPlugin extends Plugin {
         call.resolve(ret);
     }
 
+    /**
+     * ★ 2026-10-02 (YJ: "실제 역은 귤현인데 앱·오버레이가 다 안 맞아 — GPS·셀ID 점검해봐"):
+     *   requestUpdate 는 갱신만 시켜 놓고 결과를 버렸고, JS 는 350ms 뒤 getCurrent(캐시)를 읽었다. 갱신이 그 안에 끝나지 않으면
+     *   (특히 앱이 가려진 동안) 낡은 셀을 보게 되어 '셀이 바뀌었다'는 신호가 늦거나 빠진다.
+     *   → 갱신 요청의 '콜백으로 받은 새 값'을 그대로 돌려준다(2초 안에 안 오면 캐시값으로 대신한다). Android 10 미만은 바로 캐시값.
+     *   반환 형식은 getCurrent 와 같다 + fresh(true=콜백 값 / false=캐시 대체).
+     */
+    @PluginMethod
+    public void getFresh(final PluginCall call) {
+        final android.os.Handler h = new android.os.Handler(android.os.Looper.getMainLooper());
+        final boolean[] done = { false };
+        final Runnable fallback = new Runnable() {
+            @Override public void run() {
+                if (done[0]) return;
+                done[0] = true;
+                getCurrent(call);          // 캐시값(기존 동작)
+            }
+        };
+        try {
+            Context ctx = getContext();
+            boolean fine = ctx != null && ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_FINE_LOCATION)
+                    == PackageManager.PERMISSION_GRANTED;
+            if (!fine || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) { fallback.run(); return; }
+            TelephonyManager tm = (TelephonyManager) ctx.getSystemService(Context.TELEPHONY_SERVICE);
+            if (tm == null) { fallback.run(); return; }
+            h.postDelayed(fallback, 2000);
+            tm.requestCellInfoUpdate(ctx.getMainExecutor(), new TelephonyManager.CellInfoCallback() {
+                @Override public void onCellInfo(List<CellInfo> cellInfo) {
+                    if (done[0]) return;
+                    done[0] = true;
+                    h.removeCallbacks(fallback);
+                    try {
+                        JSObject ret = new JSObject();
+                        JSArray cells = new JSArray();
+                        if (cellInfo != null) {
+                            for (CellInfo ci : cellInfo) {
+                                JSObject o = toJs(ci);
+                                if (o != null) cells.put(o);
+                            }
+                        }
+                        ret.put("cells", cells);
+                        ret.put("fresh", true);
+                        call.resolve(ret);
+                    } catch (Throwable t) {
+                        try { call.resolve(new JSObject()); } catch (Throwable ignored) { }
+                    }
+                }
+                @Override public void onError(int errorCode, Throwable detail) {
+                    if (done[0]) return;
+                    h.removeCallbacks(fallback);
+                    fallback.run();
+                }
+            });
+        } catch (Throwable t) {
+            h.removeCallbacks(fallback);
+            fallback.run();
+        }
+    }
+
     // ── CellInfo → JS 객체 ───────────────────────────────────────────
     private JSObject toJs(CellInfo ci) {
         if (ci == null) return null;
