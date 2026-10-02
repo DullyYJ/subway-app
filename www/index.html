@@ -3040,6 +3040,28 @@ function _startBriefCountdown() {
   }, 1000);
 }
 
+// ★ 2026-10-03 (YJ: "서버 문장도 같은 톤으로"): 개인 AI 승무원 탭 문장을 앱이 직접 비서 말투(해요체)로 만든다.
+//   서버(/ai-brief)는 혼잡도를 40 으로 고정해 보내 '비교적 여유로워요'가 늘 붙고, 주말·피크 판단도 없었다.
+//   경로·소요·환승 숫자는 그대로 쓰고 문장만 새로 만든다. 값이 없으면 서버 문장을 그대로 쓴다(기존 동작 보존).
+function _secBriefText(fromName, toName, lines, ctx, serverMsg){
+  try{
+    if(!fromName || !toName || !ctx) return serverMsg;
+    var hour = ctx.hour, tot = ctx.totalMin, xf = ctx.xfers || 0;
+    var hol = (typeof _isHolidayOrWeekend==='function' && _isHolidayOrWeekend());
+    var late = (hour >= 22 || hour < 5), peak = (hour >= 7 && hour <= 9) || (hour >= 17 && hour <= 19);
+    var ps = [];
+    ps.push(fromName + '에서 ' + toName + '까지는 ' + (tot > 0 ? '약 ' + tot + '분 ' : '') + '걸려요.'
+      + ((lines && lines.length) ? ' ' + lines.join(' → ') + ' 순서로 가시면 돼요.' : ''));
+    ps.push(xf <= 0 ? '환승 없이 한 번에 가실 수 있어요.'
+      : xf === 1 ? '환승이 한 번 있어요. 환승 구간 이동 거리를 미리 봐 두면 편해요.'
+      : '환승이 ' + xf + '번이라 안내 방송을 놓치지 마세요.');
+    ps.push(late ? '늦은 시간이라 막차 시간은 꼭 확인해 두세요.'
+      : peak ? (hol ? '주말이어도 출퇴근 시간대라 붐빌 수 있어요.' : '출퇴근 시간대라 붐빌 수 있어요. 여유 있게 출발하세요.')
+      : (hol ? '주말이라 비교적 한산해요.' : '지금은 비교적 여유로워요.'));
+    return ps.join(' ');
+  }catch(e){ return serverMsg; }
+}
+
 // ── 브리핑 요청 ──
 function requestAIBrief(force) {
   var scroll = document.getElementById('aiBriefScroll');
@@ -3057,6 +3079,7 @@ function requestAIBrief(force) {
   }
   var totalMin = S.route ? Math.round((S.route.tp||[]).reduce(function(a,b){ return a+(b>0?b:0); },0)/60) : 60;
   var xfers    = Math.max(0, lines.length - 1);
+  window._aiBriefCtx = { totalMin: totalMin, xfers: xfers, hour: new Date().getHours() };
 
   if(force) {
     scroll.innerHTML = '<div class="ai-empty" style="padding:30px;">🤖 브리핑 생성 중...</div>';
@@ -3107,7 +3130,7 @@ function _renderAIBrief(data, fromName, toName, lines) {
     + '<span class="ai-msg-line">' + timeStr + '</span>'
     + '</div>'
     + (lineChips ? '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;">' + lineChips + '</div>' : '')
-    + '<div class="ai-msg-body" style="font-size:14px;line-height:1.75;">' + _ltEsc(data.msg) + '</div>';
+    + '<div class="ai-msg-body" style="font-size:14px;line-height:1.75;">' + _ltEsc(_secBriefText(fromName, toName, lines, window._aiBriefCtx, data.msg)) + '</div>';
   scroll.innerHTML = '';
   scroll.appendChild(card);
 }
@@ -4016,7 +4039,7 @@ function _renderHomeConductorBrief(fromName, toName, hour, congPct, serverMsg){
     }
 
     // 5) 서버(AI) 코멘트 — 이모지 제거 후 결합
-    if(serverMsg && !hasRoute){ var sm = (typeof _stripEmoji==='function') ? _stripEmoji(String(serverMsg)) : String(serverMsg); if(sm && sm.trim()) ps.push(sm.trim()); }
+    if(false && serverMsg){ var sm = (typeof _stripEmoji==='function') ? _stripEmoji(String(serverMsg)) : String(serverMsg); if(sm && sm.trim()) ps.push(sm.trim()); }
     // 6) 마무리 — ★ 2026-09-24: 매번 똑같은 한 문장만 나와 기계적으로 느껴졌다.
     //   같은 정보를 전달하는 여러 표현 중 하나를 골라, 볼 때마다 조금씩 다르게
     //   들리는 전문 승무원 말투를 유지한다.
@@ -18600,10 +18623,10 @@ window.addEventListener('unhandledrejection', function(e) {
 
   <!-- 4순위: 🚇 AI 역무원 (현재 위치·시간 기준 10분마다 브리핑) -->
   <div>
-    <div class="sec">AI 비서</div>
+    <div class="sec">AI 승무원</div>
     <div class="home-ai-card" id="homeAiCard">
       <div class="home-ai-head">
-        <span class="home-ai-title" id="homeAiTitle">AI 비서 브리핑</span>
+        <span class="home-ai-title" id="homeAiTitle">AI 승무원 브리핑</span>
         <span class="home-ai-next" id="homeAiNext"></span>
         <button class="home-ai-refresh" id="homeAiRefreshBtn" onclick="requestHomeBrief(true)">🔄</button>
       </div>
@@ -32051,14 +32074,18 @@ function _ovlLines(){
     var P = (st.path && st.path.length) ? st.path : null;
     if(!P){ P = [cur]; if(st.next) P.push(st.next); }
     var c0 = (P === st.path) ? Math.max(0, Math.min(st.idx < 0 ? 0 : st.idx, P.length - 1)) : 0;
-    for(var k = -2; k <= 2; k++){
-      var nm = P[c0 + k];
-      out.track.push(nm == null ? '' : clamp(nm, k === 0 ? 12 : 5));
+    // ★ 2026-10-03 (YJ: "지나간 곳 · 현위치 · 다음정거장 세 칸, 아래는 남은시간: 00시간 00분 · 00:00도착"): 다섯 칸 → 세 칸.
+    //   [바로 앞 역, 현위치, 바로 다음 역]만 네이티브에 넘긴다(없는 칸은 빈 문자열 — 네이티브가 '지나간 곳'/'다음정거장'을 흐리게 보여준다).
+    var _tri = [P[c0 - 1], P[c0], P[c0 + 1]];
+    for(var k = 0; k < 3; k++){
+      var nm = _tri[k];
+      out.track.push(nm == null ? '' : clamp(nm, k === 1 ? 12 : 10));
     }
-    out.cur = 2;
-    var dest = d.dest || (window._pipTrip && window._pipTrip.to) || '';
-    var t = (d.min != null) ? _pipMinText(d.min) : '-';
-    out.l2 = (dest ? dest + '까지 ' : '') + t + (d.arr ? ' · ' + d.arr + ' 도착' : '');
+    out.cur = 1;
+    var _pad2 = function(n){ return (n < 10 ? '0' : '') + n; };
+    var _mm = (d.min != null && isFinite(d.min)) ? Math.max(0, Math.round(d.min)) : null;
+    var _remTxt = (_mm == null) ? '00시간 00분' : (_pad2(Math.floor(_mm / 60)) + '시간 ' + _pad2(_mm % 60) + '분');
+    out.l2 = '남은시간: ' + _remTxt + ' · ' + (d.arr ? d.arr : '00:00') + '도착';
     var r = window._pipReco;
     if(r && r.title){
       if(!r.ovlAt) r.ovlAt = Date.now();

@@ -85,9 +85,8 @@ public class OverlayPlugin extends Plugin {
     private WindowManager.LayoutParams lp;
     private LinearLayout root;
     private TextView t1, t2, t3;
-    private final TextView[] cells = new TextView[5];
-    private final TextView[] seps = new TextView[4];
-    private static final float[] CELL_W = { 1f, 1f, 1.8f, 1f, 1f };   // 좌우 대칭 — 가운데(현위치) 칸이 화면 정중앙
+    // ★ 2026-10-03 (YJ: "지나간 곳 · 현위치 · 다음정거장 — 세 칸, 아래는 남은시간·도착"): 다섯 칸 → 세 칸. 가운데(현위치) 칸이 화면 정중앙.
+    private final TextView[] cells = new TextView[3];
     private boolean attached = false;
 
     // ── JS 에서 부르는 메서드 ─────────────────────────────────────
@@ -324,12 +323,8 @@ public class OverlayPlugin extends Plugin {
         int maxW = Math.min(Math.round(dm.widthPixels * 0.96f), dp(560));
         final int padH = dp(8);
         final int rowW = maxW - 2 * padH;
-        final int sepW = dp(6);
-        // ★ 2026-10-01 (YJ: "양옆 역은 세로 가운데로, 글자는 조금 키워"): 세 기둥 — 왼쪽(두 칸) · 가운데(현위치 + 노란 줄) · 오른쪽(두 칸).
-        //   양옆 칸은 창 전체 높이의 한가운데에 놓인다(가운데 기둥이 두 줄이라 위쪽에 치우쳐 보이던 것을 바로잡음).
-        //   가운데 기둥 폭은 노란 줄(남은 시간 문구)이 한 줄에 들어갈 만큼 확보하고, 나머지를 좌우 대칭으로 나눈다.
-        final int centerW = Math.round(rowW * 0.30f);   // ★ 2026-10-02: 옆 글자를 2배로 키우느라 가운데 기둥은 좁힌다(노란 줄은 전체 폭이라 영향 없음)
-        final int sideW = Math.round((rowW - centerW - 4 * sepW) / 4f);
+        final int centerW = Math.round(rowW * 0.36f);   // 현위치(가운데) 칸
+        final int sideW = Math.round((rowW - centerW) / 2f);   // 지나간 곳 · 다음정거장 — 좌우 대칭
 
         root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -345,60 +340,34 @@ public class OverlayPlugin extends Plugin {
         t3 = makeText(14, Color.parseColor("#D4D4DA"), false);
         t3.setMaxWidth(rowW);
 
-        for (int i = 0; i < 5; i++) {
-            TextView c = makeText(24, Color.parseColor("#6E6E76"), false);   // ★ 2026-10-02 (YJ: "좌우 지나온·다가올 역 글자 2배"): 12→24sp
+        for (int i = 0; i < 3; i++) {
+            TextView c = makeText(i == 1 ? 26 : 22, i == 1 ? Color.WHITE : Color.parseColor("#6E6E76"), i == 1);
+            c.setMaxLines(2);
             cells[i] = c;
         }
-        for (int i = 0; i < 4; i++) {
-            TextView sp = makeText(20, Color.parseColor("#44444B"), false);
-            sp.setText("\u203A");                       // ›
-            seps[i] = sp;
-        }
-        // 옆 칸: 24sp 기본, 이름이 길면 칸 폭에 맞춰 스스로 줄어든다
+        // 옆 칸(지나간 곳·다음정거장): 기본 22sp, 이름이 길면 칸 폭에 맞춰 두 줄까지 쓰며 스스로 줄어든다(최소 11sp)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            for (int i = 0; i < 5; i++) {
-                if (i == 2) continue;
-                // 24sp 가 기본(2배). 칸 폭에 안 들어가는 긴 이름만 두 줄까지 쓰며 줄어든다(최소 11sp).
-                cells[i].setMaxLines(2);
-                cells[i].setAutoSizeTextTypeUniformWithConfiguration(11, 24, 1, TypedValue.COMPLEX_UNIT_SP);
-            }
+            cells[0].setAutoSizeTextTypeUniformWithConfiguration(11, 22, 1, TypedValue.COMPLEX_UNIT_SP);
+            cells[2].setAutoSizeTextTypeUniformWithConfiguration(11, 22, 1, TypedValue.COMPLEX_UNIT_SP);
         }
-
-        // ★ 2026-10-02 (YJ: "노란 글씨는 하단에 한 줄로 · 양옆 경로는 내 위치(흰색)와 노란 글씨의 한가운데 높이"):
-        //   예전엔 노란 줄이 가운데 기둥(창 폭의 43%) 안에 있어 길면 두 줄로 꺾였다.
-        //   이제 노란 줄은 맨 아래, 창 전체 폭에 '한 줄'로 놓고(길면 글자가 스스로 줄어든다),
-        //   양옆 칸(과거·대기 경로)은 [흰색 현위치 줄 ~ 노란 줄] 전체 높이의 한가운데에 겹쳐 놓는다
-        //   (흰 줄과 노란 줄 사이에 gap 을 둬서 양옆 글자가 어느 쪽과도 겹치지 않게 한다).
+        // 노란 줄(남은시간 · 도착)은 맨 아래 전체 폭에 한 줄(길면 글자가 스스로 줄어든다)
         t2.setMaxWidth(rowW);
         t2.setMaxLines(1);
         t2.setHorizontallyScrolling(false);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             t2.setAutoSizeTextTypeUniformWithConfiguration(10, 18, 1, TypedValue.COMPLEX_UNIT_SP);
         }
-        LinearLayout col = new LinearLayout(ctx);    // 위: 현위치(흰색, 가운데) · 아래: 노란 줄(전체 폭, 한 줄)
-        col.setOrientation(LinearLayout.VERTICAL);
-        col.setGravity(Gravity.CENTER_HORIZONTAL);
-        col.addView(cells[2], new LinearLayout.LayoutParams(centerW, LinearLayout.LayoutParams.WRAP_CONTENT));
+        LinearLayout row = new LinearLayout(ctx);    // 윗줄: 지나간 곳 | 현위치 | 다음정거장 (세로 가운데 정렬)
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.addView(cells[0], new LinearLayout.LayoutParams(sideW, LinearLayout.LayoutParams.WRAP_CONTENT));
+        row.addView(cells[1], new LinearLayout.LayoutParams(centerW, LinearLayout.LayoutParams.WRAP_CONTENT));
+        row.addView(cells[2], new LinearLayout.LayoutParams(sideW, LinearLayout.LayoutParams.WRAP_CONTENT));
         View gap = new View(ctx);
-        col.addView(gap, new LinearLayout.LayoutParams(1, dp(12)));
-        col.addView(t2, new LinearLayout.LayoutParams(rowW, LinearLayout.LayoutParams.WRAP_CONTENT));
-        LinearLayout sides = new LinearLayout(ctx);  // 양옆 칸: 전체 높이의 세로 가운데(= 흰 줄과 노란 줄의 중간)
-        sides.setOrientation(LinearLayout.HORIZONTAL);
-        sides.setGravity(Gravity.CENTER_VERTICAL);
-        sides.addView(cells[0], new LinearLayout.LayoutParams(sideW, LinearLayout.LayoutParams.WRAP_CONTENT));
-        sides.addView(seps[0], new LinearLayout.LayoutParams(sepW, LinearLayout.LayoutParams.WRAP_CONTENT));
-        sides.addView(cells[1], new LinearLayout.LayoutParams(sideW, LinearLayout.LayoutParams.WRAP_CONTENT));
-        sides.addView(seps[1], new LinearLayout.LayoutParams(sepW, LinearLayout.LayoutParams.WRAP_CONTENT));
-        sides.addView(new View(ctx), new LinearLayout.LayoutParams(centerW, 1));   // 가운데 기둥 자리(현위치 칸은 col 이 그린다)
-        sides.addView(seps[2], new LinearLayout.LayoutParams(sepW, LinearLayout.LayoutParams.WRAP_CONTENT));
-        sides.addView(cells[3], new LinearLayout.LayoutParams(sideW, LinearLayout.LayoutParams.WRAP_CONTENT));
-        sides.addView(seps[3], new LinearLayout.LayoutParams(sepW, LinearLayout.LayoutParams.WRAP_CONTENT));
-        sides.addView(cells[4], new LinearLayout.LayoutParams(sideW, LinearLayout.LayoutParams.WRAP_CONTENT));
-        FrameLayout stack = new FrameLayout(ctx);
-        stack.addView(col, new FrameLayout.LayoutParams(rowW, FrameLayout.LayoutParams.WRAP_CONTENT));
-        stack.addView(sides, new FrameLayout.LayoutParams(rowW, FrameLayout.LayoutParams.MATCH_PARENT));
         root.addView(t3);                            // 추천 알림 제목은 위(노란 줄이 늘 맨 아래)
-        root.addView(stack, new LinearLayout.LayoutParams(rowW, LinearLayout.LayoutParams.WRAP_CONTENT));
+        root.addView(row, new LinearLayout.LayoutParams(rowW, LinearLayout.LayoutParams.WRAP_CONTENT));
+        root.addView(gap, new LinearLayout.LayoutParams(1, dp(6)));
+        root.addView(t2, new LinearLayout.LayoutParams(rowW, LinearLayout.LayoutParams.WRAP_CONTENT));
 
         lp = new WindowManager.LayoutParams(
                 maxW,
@@ -563,25 +532,26 @@ public class OverlayPlugin extends Plugin {
 
     private void attachOrUpdate() {
         if (root == null) build();
-        boolean five = track.length == 5;
-        for (int i = 0; i < 5; i++) {
-            String nm = five ? (track[i] == null ? "" : track[i]) : "";
-            if (!five && i == 2) nm = line1;               // 예비: 다섯 칸을 못 받으면 한 줄 문구를 가운데 칸에
-            boolean cur = five ? (i == trackCur) : (i == 2);
+        // 웹이 세 칸(지나간 곳·현위치·다음정거장)을 준다. 예전 웹(다섯 칸)이면 가운데 셋만 쓴다.
+        String[] three = new String[3];
+        if (track.length == 3) {
+            for (int i = 0; i < 3; i++) three[i] = track[i] == null ? "" : track[i];
+        } else if (track.length == 5) {
+            for (int i = 0; i < 3; i++) three[i] = track[i + 1] == null ? "" : track[i + 1];
+        } else {
+            three[0] = ""; three[1] = line1; three[2] = "";   // 예비: 칸을 못 받으면 한 줄 문구를 가운데 칸에
+        }
+        final String[] hint = { "지나간 곳", "현위치", "다음정거장" };   // 비어 있으면 자리 이름을 흐리게 보여준다
+        for (int i = 0; i < 3; i++) {
             TextView c = cells[i];
-            c.setText(nm);
-            if (i == 2) {                                   // 현위치 칸: 흰색·굵게·24sp, 길면 두 줄까지
-                c.setTextColor(Color.WHITE);
-                c.setTextSize(24);                          // ★ 2026-10-02: 옆 칸이 24sp 가 돼서 현위치도 같은 24sp(흰색·굵게로 구분)
+            boolean empty = three[i] == null || three[i].length() == 0;
+            c.setText(empty ? hint[i] : three[i]);
+            if (i == 1) {                                   // 현위치 칸: 흰색·굵게, 비어 있으면 회색
+                c.setTextColor(empty ? Color.parseColor("#6E6E76") : Color.WHITE);
                 c.setTypeface(Typeface.DEFAULT_BOLD);
-                c.setMaxLines(2);
-            } else {                                        // 옆 칸: 회색, 칸에 맞춰 자동 축소(최대 12sp)
+            } else {                                        // 옆 칸: 회색
                 c.setTextColor(Color.parseColor("#6E6E76"));
             }
-        }
-        for (int i = 0; i < 4; i++) {                       // 양옆이 모두 차 있는 사이에만 › 를 보인다
-            boolean both = five && track[i] != null && track[i].length() > 0 && track[i + 1] != null && track[i + 1].length() > 0;
-            seps[i].setVisibility(both ? View.VISIBLE : View.INVISIBLE);
         }
         t2.setText(line2);
         t2.setVisibility(line2.length() > 0 ? View.VISIBLE : View.GONE);
