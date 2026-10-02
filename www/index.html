@@ -12958,6 +12958,7 @@ function _cellAssist(){
   window._cellAssistAt = now;
   _cellGuessStation(function(g){
     if(!g || !g.name) return;
+    if((g.hits || 0) < 3) return;                         // ★ 2026-10-02: 이 값은 '확정 진행도'를 올리므로 2회 관측(우연 가능)이 아니라 3회 이상만 믿는다
     var idx = _cellRouteIdx(g.name);
     if(idx < 0) return;                                  // 이 경로의 역이 아니면 무시
     var cur = (window._gpsConfirmIdx == null ? -1 : window._gpsConfirmIdx);
@@ -13046,7 +13047,14 @@ function _cellHopAdvance(){
     if(typeof _recalcArrivalsFrom==='function') _recalcArrivalsFrom(cur+1);
     // ★ 지하역은 GPS로 확정되는 일이 없어 학습이 영영 0개였다.
     //   셀 홈으로 판정한 역도 학습시켜 다음부터 _cellAssist 가 쓸 수 있게 한다.
-    try{ if(typeof _cellLearn==='function') _cellLearn(to.name, to.lineName||''); }catch(e){}
+    // ★ 2026-10-02: 이 판정은 '추정'이다. 열차가 늦으면(예정시각보다 1분 넘게 지난 뒤의 셀 변화) 엉뚱한 역에 셀을 묶어 학습하고,
+    //   그 학습이 다음 번 _cellAssist 의 '확정'으로 되돌아온다(추정이 추정을 키우는 순환). 예정시각 근처(−1분 ~ +0.5분)일 때만 학습한다.
+    try{
+      var _dueL = _arrTimeToMin(to.arrTime), _nL = new Date(), _nmL = _nL.getHours()*60 + _nL.getMinutes() + _nL.getSeconds()/60;
+      var _gapL = (_dueL == null) ? null : (_dueL - _nmL);
+      if(_gapL != null && _gapL < -720) _gapL += 1440;
+      if(_gapL != null && _gapL >= -1.0 && typeof _cellLearn==='function') _cellLearn(to.name, to.lineName||'');
+    }catch(e){}
     console.log('[기지국] 셀 변화 → ' + (to.name||'') + ' 통과로 판정 (진행도 ' + cur + '→' + (cur+1) + ')');
   }catch(e){}
 }
@@ -13068,8 +13076,8 @@ function _htlDriftCheck(){
     if(Date.now() - (window._driftFixAt||0) < _DRIFT_COOL_MS) return;
     var conf = (window._gpsConfirmIdx==null ? -1 : window._gpsConfirmIdx);
     if(conf < 0) return;                                  // 실제 근거가 아직 없음
-    if(typeof _estimateTimelinePos!=='function') return;
-    var tp = _estimateTimelinePos();
+    if(typeof _estimateTimelinePosHold!=='function') return;
+    var tp = _estimateTimelinePosHold();   // 상한 없는 값 — '시각표가 실제보다 앞섰나'를 재야 한다
     if(!tp || tp.fromIdx == null) return;
     if(tp.fromIdx - conf < _DRIFT_GAP) return;            // 아직 벌어지지 않음
 
@@ -13359,7 +13367,8 @@ function _xferHoldIdx(){
 }
 window._xferHoldIdx = _xferHoldIdx;
 
-function _estimateTimelinePos(){
+// 시각표 위치 + 환승 승차 대기 고정(위). 근거 상한은 아직 걸지 않은 값 — '시각표가 실제보다 앞서 있나'를 재는 쪽(드리프트·재앵커)이 쓴다.
+function _estimateTimelinePosHold(){
   var tp = _estimateTimelinePosRaw();
   try{
     if(tp && tp.fromIdx != null){
@@ -13367,6 +13376,27 @@ function _estimateTimelinePos(){
       if(h >= 0 && tp.fromIdx >= h){
         window._xferHoldingAt = Date.now();
         return { fromIdx: h, toIdx: h, ratio: 0 };
+      }
+    }
+  }catch(e){}
+  return tp;
+}
+window._estimateTimelinePosHold = _estimateTimelinePosHold;
+
+// ★ 2026-10-02 (YJ: "실제 역은 귤현인데 앱과 오버레이가 다 안 맞아"): 같은 시각 화면 — 열차가 3분 늦어 실제는 귤현(18:27 예정)인데
+//   앱 마커는 시각표대로 계양(18:29)이었다. 원인: 앱을 열 때(포그라운드 복귀 스냅)·상태 표시 등은 시각표 위치를 그대로 믿고 마커를 놓았다.
+//   (실시간 분기에는 '확정 진행도 + 1역까지만'이라는 상한이 있었는데 이 길만 상한이 없었다 — 규칙이 두 벌이었다.)
+//   → 시각표 위치는 어디서 읽든 '실제 근거로 확정된 진행도(_gpsMaxIdx) + 1역'을 넘지 못한다. 근거 없이 두 역 이상 앞서가지 않는다.
+function _estimateTimelinePos(){
+  var tp = _estimateTimelinePosHold();
+  try{
+    if(tp && tp.fromIdx != null && window._routeLocked === true && window._metroRouteMode !== true
+       && !(typeof _baseTimeMs !== 'undefined' && _baseTimeMs != null)){
+      var gm = (window._gpsMaxIdx == null ? -1 : window._gpsMaxIdx);
+      var cap = (gm < 0 ? 0 : gm) + 1;
+      if(gm >= 0 && tp.fromIdx > cap){
+        window._tlCapAt = Date.now();
+        return { fromIdx: cap, toIdx: Math.min(cap + 1, (typeof _transitNodeData !== 'undefined' && _transitNodeData ? _transitNodeData.length - 1 : cap)), ratio: 0 };
       }
     }
   }catch(e){}
@@ -14171,7 +14201,7 @@ function _updateTransitGps() {
   //   (예: 이전 열차를 놓치고 다음 열차를 탄 경우) 시각표 전체를 '실제 위치=지금'으로 다시 맞춤
   try {
     if(_validGps && _baseTimeMs == null && bestIdx >= 0 && window._metroRouteMode !== true){
-      var _estP = (typeof _estimateTimelinePos==='function') ? _estimateTimelinePos() : null;
+      var _estP = (typeof _estimateTimelinePosHold==='function') ? _estimateTimelinePosHold() : null;   // 상한 없는 값(재앵커 판단용)
       // 탑승역 인덱스
       var _bIdx0 = -1;
       for(var _bi0=0;_bi0<_transitNodeData.length;_bi0++){
