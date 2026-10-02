@@ -31756,6 +31756,51 @@ function _pipOnResize(){
 }
 try{ window.addEventListener('resize', _pipOnResize); }catch(e){}
 
+// ★ 2026-10-02 (YJ: 갤럭시 폴드 — "폰을 펴고 접을 때 화면에 안 맞춰지는 게 있어"):
+//   접었다 펴면 창 크기·비율이 통째로 바뀐다(좁고 긴 화면 ↔ 거의 정사각형). 안드로이드 웹뷰가 예전 크기로 굳은 채
+//   남거나, 한 번만 재서 쓰던 값(타임라인 마커 위치·트랙 폭)이 옛 크기 기준으로 남는다.
+//   → 창 크기가 바뀌면(디바운스 250ms, 두 번: 즉시 + 700ms 뒤 안정된 크기에서) 웹뷰 높이를 한 번 흔들어 다시 배치시키고,
+//     마커를 새 크기 기준으로 다시 놓고, 오버레이/지도도 같이 갱신한다.
+var _foldKey = '', _foldT1 = null, _foldT2 = null;
+function _foldRelayout(){
+  try{
+    var k = String(window.innerWidth);
+    var changed = (k !== _foldKey);
+    _foldKey = k;
+    var de = document.documentElement;
+    de.style.height = window.innerHeight + 'px';          // 웹뷰가 옛 높이로 굳은 경우 강제로 다시 계산
+    requestAnimationFrame(function(){ de.style.height = ''; });
+    try{ document.body.style.setProperty('--app-h', window.innerHeight + 'px'); }catch(e0){}
+    window._markerTrackW = null; window._markerMaxX = null;   // 트랙 폭 기준 값 무효화(마커 픽셀 위치 재계산)
+    window._gpsMarkerNeedsSnap = true;
+    try{
+      var card = document.getElementById('transitResultCard');
+      if(card && card.style.display !== 'none' && typeof _estimateTimelinePos === 'function'
+         && typeof _placeGpsMarkerSmooth === 'function' && typeof _transitNodeData !== 'undefined' && _transitNodeData && _transitNodeData.length){
+        var idx = (window._gpsMaxIdx == null ? 0 : Math.max(0, window._gpsMaxIdx));
+        var f = _transitNodeData[idx], t = _transitNodeData[idx + 1] || f;
+        if(f) _placeGpsMarkerSmooth(f, t, window._gpsWaitRatio || 0);
+      }
+    }catch(e1){}
+    try{ if(typeof _pzFit === 'function'){ var sv = document.getElementById('gmSvgView'); if(sv && sv.offsetParent !== null) _pzFit(); } }catch(e2){}
+    try{ window.dispatchEvent(new Event('resize')); }catch(e3){}   // 지도(leaflet·maplibre)가 스스로 크기를 다시 재게 한다
+    try{ if(typeof _ovlSync === 'function') _ovlSync(true); }catch(e4){}
+    if(changed) console.log('[폴드] 창 크기 변경 → 다시 배치 ' + k);
+  }catch(e){}
+}
+try{
+  _foldKey = String(window.innerWidth);
+  var _foldOnResize = function(){
+    var k = String(window.innerWidth);
+    if(k === _foldKey) return;                              // 폭이 같으면(키보드로 높이만 바뀐 경우 등) 건드리지 않는다
+    clearTimeout(_foldT1); clearTimeout(_foldT2);
+    _foldT1 = setTimeout(_foldRelayout, 250);
+    _foldT2 = setTimeout(_foldRelayout, 900);
+  };
+  window.addEventListener('resize', _foldOnResize);
+  window.addEventListener('orientationchange', _foldOnResize);
+}catch(e){}
+
 // 설정에서 눌러 보는 미리보기 (5초 뒤 자동으로 닫힌다)
 // 설정 화면의 토글 모양을 지금 상태에 맞춘다
 function _pipSyncToggle(){
@@ -31824,11 +31869,40 @@ function _ovlRefresh(cb){
   }catch(e){ if(cb) cb(); }
 }
 window._ovlRefresh = _ovlRefresh;
+// ★ 2026-10-02 (YJ: "2정거장 전엔 오버레이 모서리가 얇은 무지개빛으로 천천히 돌고, 1정거장 전엔 빨리 돌면서 곧 내려야 한다는 표시"):
+//   지금 타고 있는 구간에서 내릴 역까지 남은 정거장 수 → 2 = 두 정거장 전(천천히), 1 = 한 정거장 전·하차역 도착(빠르게), 0 = 표시 없음.
+//   홈에서 확정한 여정은 '지금 타고 있는 구간의 하차역'(다음 도보/환승 직전 노드, 없으면 종점)을, 지하철 탭 여정은 종점을 기준으로 센다.
+//   아직 타기 전(승차역 대기·환승 승차 대기)이거나 걷는 중이면 0 — 타고 있을 때만 알린다. 진행 위치는 화면·알림과 같은 값(_gpsMaxIdx / S.curIdx)을 쓴다.
+function _ovlAlertLevel(st){
+  try{
+    var useT = (window._routeLocked === true && window._metroRouteMode !== true
+                && typeof _transitNodeData !== 'undefined' && _transitNodeData && _transitNodeData.length > 0);
+    if(!useT){
+      if(!(typeof S !== 'undefined' && S && S.route && S.boarded) || !st || !st.path || !(st.total > 0)) return 0;
+      var rem0 = st.total - st.idx;
+      return rem0 === 2 ? 2 : (rem0 >= 0 && rem0 <= 1 && st.idx > 0 ? 1 : 0);
+    }
+    var c = (window._gpsMaxIdx == null ? -1 : window._gpsMaxIdx);
+    var N = _transitNodeData, n = N.length;
+    if(c < 0 || c >= n) return 0;
+    var cn = N[c];
+    if(!cn || cn.isOrigin || cn.isWalk || !(cn.isBus || cn.isSub)) return 0;           // 걷는 중
+    if(typeof _htlNotDeparted === 'function' && _htlNotDeparted()) return 0;           // 첫 승차 전
+    var h = (typeof _xferHoldIdx === 'function') ? _xferHoldIdx() : -1;
+    if(h >= 0 && c === h) return 0;                                                    // 환승 승차 대기 중
+    var a = c;
+    while(a < n - 1 && !(N[a + 1] && N[a + 1].isWalk)) a++;                            // 이 구간의 하차역
+    var rem = a - c;
+    return rem === 2 ? 2 : (rem <= 1 ? 1 : 0);
+  }catch(e){ return 0; }
+}
+window._ovlAlertLevel = _ovlAlertLevel;
 // 오버레이에 찍을 세 줄 — 판단 없이 이미 있는 값을 문자열로 옮긴다
 function _ovlLines(){
-  var out = { l1:'', l2:'', l3:'', track:[], cur:-1 };
+  var out = { l1:'', l2:'', l3:'', track:[], cur:-1, alert:0 };
   try{
     var st = _pipStations(), d = _pipData();
+    out.alert = _ovlAlertLevel(st);
     var cur = st.cur || d.cur || d.from || '이동 중';
     out.l1 = st.next ? (cur + ' ▸ ' + st.next) : ('● ' + cur);
     // ★ 2026-10-01 (YJ: "출발하면 출발(현위치)-경로1-경로2-경로3-경로4 … 내 위치는 경로가 이동되면 가운데서 고정", 이어서
@@ -31860,15 +31934,15 @@ function _ovlSync(force){
     var n = _ovlNative();
     if(!n || typeof n.update !== 'function') return;
     var active = !!(_ovlUsable() && _pipHasRoute());   // ★ 2026-10-01: PiP 스위치와 무관(PiP 는 꺼 둠)
-    var L = active ? _ovlLines() : { l1:'', l2:'', l3:'', track:[], cur:-1 };
-    var key = (active ? '1' : '0') + '|' + L.l1 + '|' + L.l2 + '|' + L.l3 + '|' + L.track.join('>') + '|' + L.cur;
+    var L = active ? _ovlLines() : { l1:'', l2:'', l3:'', track:[], cur:-1, alert:0 };
+    var key = (active ? '1' : '0') + '|' + L.l1 + '|' + L.l2 + '|' + L.l3 + '|' + L.track.join('>') + '|' + L.cur + '|' + L.alert;
     var now = Date.now();
     // 바뀐 게 없으면 보내지 않는다. 다만 켜져 있는 동안엔 20초마다 한 번은 다시 보내 '살아 있음'을 알린다
     // (네이티브는 3분 넘게 소식이 없으면 낡은 값이 남지 않도록 스스로 숨긴다).
     if(!force && key === _ovlLastKey && (!active || (now - _ovlLastAt) < _OVL_HEARTBEAT_MS)) return;
     if(!active && _ovlLastKey === null && !force) { _ovlLastKey = key; return; }   // 처음부터 꺼져 있으면 굳이 알리지 않는다
     _ovlLastKey = key; _ovlLastAt = now;
-    var r = n.update({ active: active, line1: L.l1, track: L.track, cur: L.cur, line2: L.l2, line3: L.l3 });
+    var r = n.update({ active: active, line1: L.l1, track: L.track, cur: L.cur, line2: L.l2, line3: L.l3, alert: L.alert || 0 });
     if(r && typeof r.catch === 'function') r.catch(function(){ _ovlLastKey = null; });   // 실패하면 다음 틱에 다시
   }catch(e){ _ovlLastKey = null; }
 }
