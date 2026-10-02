@@ -79,7 +79,7 @@ jobs:
           os.makedirs(PKGDIR, exist_ok=True)
 
           # 1) 플러그인 소스 복사
-          for src in ["native/CellInfoPlugin.java", "native/PipPlugin.java", "native/PowerPlugin.java", "native/OverlayPlugin.java"]:
+          for src in ["native/CellInfoPlugin.java", "native/PipPlugin.java", "native/PowerPlugin.java", "native/OverlayPlugin.java", "native/MotionPlugin.java"]:
               if not os.path.exists(src):
                   raise SystemExit(src + " 가 없습니다 — 저장소에 올렸는지 확인하세요")
               shutil.copy(src, os.path.join(PKGDIR, os.path.basename(src)))
@@ -102,6 +102,7 @@ jobs:
               "        registerPlugin(PipPlugin.class);",
               "        registerPlugin(PowerPlugin.class);",
               "        registerPlugin(OverlayPlugin.class);",
+              "        registerPlugin(MotionPlugin.class);",
               "        super.onCreate(savedInstanceState);",
               "    }",
               "",
