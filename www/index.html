@@ -9899,7 +9899,20 @@ function _renderLdGradeChips(ld){
   gradeRow.innerHTML = gradeHtml;
   gradeRow.style.display = gradeHtml ? 'block' : 'none';
 
-  wrap.style.display = (modeHtml || gradeHtml) ? 'block' : 'none';
+  // ★ 2026-10-02: 카카오·네이버는 '다음 열차를 기다리는 시간'을 빼고 가장 빠른 열차 기준으로 보여준다.
+  //   우리 총 소요는 대기까지 포함(가장 일찍 도착하는 편)이라 숫자가 달라 보인다 — 같은 기준의 숫자를 엔진이 주면 그대로 한 줄 보여준다.
+  var noteEl = document.getElementById('ldNoteRow');
+  if(!noteEl){ noteEl = document.createElement('div'); noteEl.id = 'ldNoteRow'; noteEl.style.cssText = 'font-size:12px;line-height:1.5;color:var(--sub);margin-top:8px;'; wrap.appendChild(noteEl); }
+  var noteTxt = '';
+  if(ld.noWaitMin != null) noteTxt += '대기 시간을 빼면 약 ' + ld.noWaitMin + '분 (다른 지도앱은 대기를 빼고 표시해요)';
+  if(ld.fastRide && ld.fastRide.rideMin != null){
+    noteTxt += (noteTxt ? '\n' : '') + '이동만 가장 빠른 편: ' + (ld.fastRide.depLabel || '') + ' 출발, 열차 ' + ld.fastRide.rideMin + '분'
+      + (ld.fastRide.noWaitMin != null ? ' (대기 제외 총 ' + ld.fastRide.noWaitMin + '분)' : '');
+  }
+  noteEl.style.whiteSpace = 'pre-line';
+  noteEl.textContent = noteTxt;
+  noteEl.style.display = noteTxt ? 'block' : 'none';
+  wrap.style.display = (modeHtml || gradeHtml || noteTxt) ? 'block' : 'none';
 }
 window._renderLdGradeChips = _renderLdGradeChips;
 
@@ -10522,6 +10535,9 @@ function _convertSinglePathToRoute(path) {
       //   모드만 맞으면 선택됨으로 보는 예전 방식으로 자동 대체함, 기존 기능 보존).
       depTs: info.ldDepTs != null ? info.ldDepTs : null,
       options: info.ldOptions || [],
+      // ★ 2026-10-02: 엔진(02ar)이 주는 '대기 제외 총 소요'와 '이동시간 최단 편' — 계산은 엔진, 앱은 한 줄로 보여주기만 한다.
+      noWaitMin: info.ldNoWaitMin != null ? info.ldNoWaitMin : null,
+      fastRide: info.ldFastRide || null,
       candidates: info.candidates || [],
       distKm: info.distKm != null ? info.distKm : null
     } : null
