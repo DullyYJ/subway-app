@@ -12212,7 +12212,9 @@ function _cellPick(cells){
     if(!list.length) return null;
     var reg = list.filter(function(c){ return c.registered; });
     var pool = reg.length ? reg : list;
-    pool.sort(function(a,b){ return (b.dbm == null ? -999 : b.dbm) - (a.dbm == null ? -999 : a.dbm); });
+    // ★ 같은 종류(LTE>NR>3G>2G) 안에서 신호 순으로 — LTE↔NR 이 번갈아 뽑혀 '가짜 셀 변화'가 생기는 걸 막는다
+    var _rk = function(c){ var t = String(c.type || '').toLowerCase(); return t.indexOf('lte')>=0 ? 4 : t.indexOf('nr')>=0 ? 3 : (t.indexOf('wcdma')>=0||t.indexOf('umts')>=0) ? 2 : 1; };
+    pool.sort(function(a,b){ return (_rk(b) - _rk(a)) || ((b.dbm == null ? -999 : b.dbm) - (a.dbm == null ? -999 : a.dbm)); });
     return pool[0];
   }catch(e){ return null; }
 }
@@ -12233,6 +12235,18 @@ function _cellNow(cb){
   var _fired = false;
   function _go(){ if(_fired) return; _fired = true; _cellFetch(cb); }
   try{
+    if(typeof _P.getFresh === 'function'){
+      // ★ 새 값을 직접 받아온다 (예전엔 갱신 요청 결과를 버리고 낡은 캐시를 읽었다)
+      var _gf = false;
+      var _gt = setTimeout(function(){ if(!_gf){ _gf = true; _go(); } }, 3500);
+      _P.getFresh().then(function(r){
+        if(_gf) return; _gf = true; clearTimeout(_gt); _fired = true;
+        var c = _cellPick(r && r.cells);
+        if(c){ var k = _cellKey(c); _cellLast = { key: k, ts: Date.now() }; _cellNoteObservation(k); }
+        cb(c);
+      }).catch(function(){ if(!_gf){ _gf = true; clearTimeout(_gt); _go(); } });
+      return;
+    }
     if(typeof _P.requestUpdate === 'function'){
       _P.requestUpdate().then(function(){ setTimeout(_go, _CELL_UPDATE_WAIT_MS); })
                        .catch(function(){ _go(); });
@@ -12928,10 +12942,18 @@ var _cellSeen = null;                // { key, since, lastChange }
 function _cellNoteObservation(key){
   var now = Date.now();
   if(!key) return;
-  if(!_cellSeen){ _cellSeen = { key: key, since: now, lastChange: now }; return; }
+  // 최근 2분간 본 셀 기록 — A→B→A 경계 왔다갔다(핑퐁)를 '이동'으로 세지 않는다
+  if(!window._cellRecent) window._cellRecent = {};
+  var _rc = window._cellRecent;
+  for(var _k in _rc){ if(now - _rc[_k] > 120000) delete _rc[_k]; }
+  if(!_cellSeen){ _cellSeen = { key: key, since: now, lastChange: now, hopAt: now }; _rc[key] = now; return; }
   if(_cellSeen.key !== key){
-    _cellSeen = { key: key, since: now, lastChange: now };
+    var _back = (_rc[key] != null);   // 방금 전에 있던 셀로 되돌아옴
+    _cellSeen = { key: key, since: now, lastChange: now, hopAt: _back ? (_cellSeen.hopAt || now) : now };
+    _rc[key] = now;
+    try{ _ovlDiag('셀', String(key).slice(-9) + (_back ? ' 되돌아옴' : ' 새 셀')); }catch(eD){}
   }else{
+    _rc[key] = now;
     _cellSeen.since = now;              // 같은 셀을 계속 보고 있음
   }
 }
@@ -12992,10 +13014,10 @@ function _cellHopAdvance(){
   try{
     if(!_cellPluginReady()) return;
     if(typeof _htlNotDeparted==='function' && _htlNotDeparted()) return;  // 아직 승차 전
-    if(!_cellSeen || !_cellSeen.lastChange) return;
+    if(!_cellSeen || !_cellSeen.hopAt) return;
     try{ var _xh = _xferHoldIdx(); if(_xh >= 0 && (window._gpsMaxIdx==null?-1:window._gpsMaxIdx) >= _xh) return; }catch(eX){}   // 환승 승차 전엔 셀 변화로 앞서가지 않는다
     // 마지막으로 세어 넣은 셀 변화 이후에 또 바뀌었을 때만
-    if(window._cellHopAt === _cellSeen.lastChange) return;
+    if(window._cellHopAt === _cellSeen.hopAt) return;
 
     var cur = (window._gpsMaxIdx==null ? -1 : window._gpsMaxIdx);
     if(cur < 0) return;
@@ -13035,7 +13057,7 @@ function _cellHopAdvance(){
     try{ var lg=_rtCurrentSubLeg(); if(lg && lg.alightIdx!=null) stop=lg.alightIdx; }catch(e){}
     if(cur + 1 > stop) return;
 
-    window._cellHopAt = _cellSeen.lastChange;
+    window._cellHopAt = _cellSeen.hopAt;
     window._gpsMaxIdx = cur + 1;
     // ★ 2026-09-15: 예전엔 _gpsConfirmIdx 까지 올렸다. 그건 '순수 GPS 확인'
     //   자리라서, 셀 추정이 한 번 앞서면 GPS 반박도 드리프트 보정도 막혔다.
