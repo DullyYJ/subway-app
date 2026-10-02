@@ -8512,16 +8512,26 @@ window._hideRouteLoading = _hideRouteLoading;
     //   결과 배열 모양(길이·순서)은 그대로 둬서 아래 로직은 손대지 않는다.
     // ★ 2026-09-15: 대안 출발지를 엔진에 맡기면서 요청은 하나가 됐다.
     //   (엔진이 출발지 주변 정류장을 모두 승차 후보로 본다)
+    // ★ 2026-10-02 (속도 — 실시간 도착조회를 응답 경로에서 분리):
+    //   엔진은 '지금' 기준 요청이면 실시간(GPS) 도착정보를 받느라 4~5초를 더 쓴다(없으면 1초 안팎).
+    //   그래서 ① live=0(실시간 조회 생략, 배차 가정치) 응답을 먼저 받아 바로 그리고
+    //   ② 엔진이 liveStat.livePending 으로 '실시간 반영본이 따로 있다'고 알려 주면
+    //   ③ 같은 요청을 live 없이 한 번 더 보내 도착하면 그 결과로 다시 그린다(내용이 같으면 다시 그리지 않는다).
+    //   무엇이 더 정확한지·바뀌었는지는 엔진 응답 그대로이고, 앱은 도착한 순서대로 그리기만 한다.
+    //   ①이 실패하면(구버전 엔진·네트워크) 예전처럼 한 번에 받는다.
     var _routeStaged = function(){
-      return _fetchJson(urls[0], _ROUTE_MAIN_TIMEOUT).then(function(main){
+      return _fetchJson(urls[0] + '&live=0', _ROUTE_MAIN_TIMEOUT).then(function(main0){
+        // 엔진이 'ldWait'(80km+ 인데 빠른 응답엔 장거리 후보가 아직 없음)라고 하면 빠른 응답은 그리지 않고 전체 응답을 기다린다
+        if(main0 && !(main0.liveStat && main0.liveStat.ldWait)) return main0;
+        return _fetchJson(urls[0], _ROUTE_MAIN_TIMEOUT).then(function(full){ return full || main0; });
+      }).then(function(main){
         var got = 0;
         try{ got = ((main && main.result && main.result.path) || []).length; }catch(e){}
         try{ window._routeStagePlan = '엔진 1건 · 경로 ' + got + '건'; }catch(e){}
         return [main || null];
       });
     };
-    _routeStaged()
-    .then(function(results) {
+    var _handleRouteResults = function(results) {
       // ★ 더 새로운 결과가 이미 그려졌으면 이 응답은 버린다 (오래된 경로 표시 방지)
       //   버리더라도 로딩 덮개는 먼저 끈다.
       if(loading) loading.style.display = 'none';
@@ -8703,6 +8713,24 @@ window._hideRouteLoading = _hideRouteLoading;
         var _rs = window._reselectAfterSearch; window._reselectAfterSearch = null;
         _doSelectRouteOption(_rs || 'fast');
       }
+    };
+    _routeStaged()
+    .then(function(results){
+      _handleRouteResults(results);
+      // 실시간 반영본이 있다고 엔진이 알려 준 경우만 뒤따라 받는다(커스텀 기준시각이면 애초에 안 옴)
+      var _m0 = results && results[0];
+      if(!(_m0 && _m0.liveStat && _m0.liveStat.livePending)) return;
+      if(_routeStale()) return;
+      _fetchJson(urls[0], _ROUTE_MAIN_TIMEOUT).then(function(full){
+        if(!full || _routeStale() || window._routeLocked) return;
+        var _fp = (full.result && full.result.path) || [];
+        if(!_fp.length) return;
+        var _p0 = (_m0.result && _m0.result.path) || [];
+        window._liveStat = full.liveStat || window._liveStat;       // 진단은 최신 응답 기준
+        if(JSON.stringify(_fp) === JSON.stringify(_p0)) return;     // 같으면 다시 그릴 이유 없음(깜빡임 방지)
+        window._reselectAfterSearch = window._pendingRouteType || 'fast';   // 보던 탭 유지
+        _handleRouteResults([full]);
+      });
     })
     .catch(function(e){
       if(loading) loading.style.display = 'none';
