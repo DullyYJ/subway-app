@@ -12992,6 +12992,7 @@ function _cellHopAdvance(){
     if(!_cellPluginReady()) return;
     if(typeof _htlNotDeparted==='function' && _htlNotDeparted()) return;  // 아직 승차 전
     if(!_cellSeen || !_cellSeen.lastChange) return;
+    try{ var _xh = _xferHoldIdx(); if(_xh >= 0 && (window._gpsMaxIdx==null?-1:window._gpsMaxIdx) >= _xh) return; }catch(eX){}   // 환승 승차 전엔 셀 변화로 앞서가지 않는다
     // 마지막으로 세어 넣은 셀 변화 이후에 또 바뀌었을 때만
     if(window._cellHopAt === _cellSeen.lastChange) return;
 
@@ -13293,7 +13294,87 @@ window._resyncBoardToNextTrain = _resyncBoardToNextTrain;
 var _HTL_MARKER_MS = 3000; // 마커 이동 트랜지션(=틱 주기)
 
 // 타임라인 arrTime 기반 현재 진행 위치 (fromIdx/toIdx/ratio) — 좌표 불필요
+// ══════════════════════════════════════════════════════════════════
+// ★ 2026-10-02 (YJ 제보: "테크노파크에서 놓쳐서 대기 중인데 마커도 전진되고 있어")
+//   '승차 전 고정'은 첫 교통 노드(_htlBoardIdx)에만 걸려 있었다. 버스 → 도보 → 지하철처럼
+//   환승해서 두 번째 승차역에서 기다리는 동안엔 시각표가 마커를 다음 역으로 밀어 버렸다.
+//   → 도보 노드 바로 뒤에 오는 교통 노드(=환승 승차역)마다 같은 규칙을 건다:
+//     실제로 출발했다는 근거가 나오기 전엔 시각표 위치가 그 역을 넘지 못한다.
+//   근거: (a) 진행도·통과기록이 이미 그 역을 지남 (b) 예정 출발 +45초가 지났고 GPS 로 400m 이상 멀어짐
+//         (c) GPS 가 끊긴(지하) 상태에서 출발 후 기지국이 2번 이상 바뀜 (d) 기지국 플러그인이 없고 GPS 도 끊김
+// ══════════════════════════════════════════════════════════════════
+function _xferBoardIdxs(){
+  var out = [];
+  try{
+    var first = (typeof _htlBoardIdx === 'function') ? _htlBoardIdx() : -1;
+    for(var i = 0; i < _transitNodeData.length; i++){
+      if(i <= first) continue;
+      var n = _transitNodeData[i], p = _transitNodeData[i - 1];
+      if(!n || !p || n.isOrigin || n.isWalk || !(n.isBus || n.isSub)) continue;
+      if(p.isWalk) out.push(i);
+    }
+  }catch(e){}
+  return out;
+}
+function _xferDeparted(b){
+  try{
+    var nd = _transitNodeData[b];
+    var dep = (nd && nd.arrTime) ? _arrTimeToMin(nd.arrTime) : null;
+    if(dep == null) return false;
+    var n = new Date(), nowMin = n.getHours()*60 + n.getMinutes() + n.getSeconds()/60;
+    var past = nowMin - dep; if(past < -720) past += 1440; if(past > 720) past -= 1440;
+    var xc = (window._xferCell[b] = window._xferCell[b] || { at: 0, n: 0 });
+    var pluginOk = (typeof _cellPluginReady === 'function') && _cellPluginReady();
+    if(past >= 0 && pluginOk && typeof _cellSeen !== 'undefined' && _cellSeen && _cellSeen.lastChange && xc.at !== _cellSeen.lastChange){
+      xc.at = _cellSeen.lastChange; xc.n++;
+    }
+    if(past < _HTL_BOARD_GRACE_MIN) return false;
+    var age = _htlFixAgeMs();
+    var fx = (typeof S !== 'undefined') ? S.lastGPSFix : null;
+    if(fx && fx.lat && age <= _HTL_FIX_STALE_MS && nd.lat != null && typeof haversineM === 'function'){
+      return haversineM(fx.lat, fx.lng, nd.lat, nd.lng) > _HTL_DEPART_M;   // 최신 위치가 역 앞이면 아직 대기 중
+    }
+    if(!pluginOk) return past >= 4;                  // 대조할 신호가 없으면 한참(4분) 지난 뒤에야 시각표를 믿는다(놓치고 기다리는 경우 보호)
+    return (_cellMovingState() === true && xc.n >= 2);
+  }catch(e){ return false; }
+}
+// 아직 출발이 확인되지 않은 '첫 번째 환승 승차역' 인덱스 (없으면 -1)
+function _xferHoldIdx(){
+  try{
+    if(!_transitNodeData || !_transitNodeData.length) return -1;
+    if(window._metroRouteMode === true || (typeof _baseTimeMs !== 'undefined' && _baseTimeMs != null)) return -1;
+    if(window._xferRouteRef !== _transitNodeData){ window._xferRouteRef = _transitNodeData; window._xferOK = {}; window._xferCell = {}; }
+    var xs = _xferBoardIdxs();
+    if(!xs.length) return -1;
+    var ev = (typeof _progEvidenceIdx === 'function') ? _progEvidenceIdx() : -1;
+    var gmax = (window._gpsMaxIdx == null ? -1 : window._gpsMaxIdx);
+    for(var k = 0; k < xs.length; k++){
+      var b = xs[k];
+      if(window._xferOK[b]) continue;
+      if(ev > b || gmax > b || _xferDeparted(b)){ window._xferOK[b] = true; continue; }
+      return b;
+    }
+  }catch(e){}
+  return -1;
+}
+window._xferHoldIdx = _xferHoldIdx;
+
 function _estimateTimelinePos(){
+  var tp = _estimateTimelinePosRaw();
+  try{
+    if(tp && tp.fromIdx != null){
+      var h = _xferHoldIdx();
+      if(h >= 0 && tp.fromIdx >= h){
+        window._xferHoldingAt = Date.now();
+        return { fromIdx: h, toIdx: h, ratio: 0 };
+      }
+    }
+  }catch(e){}
+  return tp;
+}
+window._estimateTimelinePos = _estimateTimelinePos;
+
+function _estimateTimelinePosRaw(){
   if(!_transitNodeData || !_transitNodeData.length) return null;
   var timed = [];
   _transitNodeData.forEach(function(nd, idx){
@@ -18890,6 +18971,7 @@ window.addEventListener('unhandledrejection', function(e) {
           </div>
           <p style="font-size:12px;color:var(--sub);margin:6px 0 0;">다른 앱을 쓰는 동안 현재역 · 남은시간을 화면 위쪽에 작은 막대로 띄워요. 막대를 누르면 앱으로 돌아오고, 끌어서 위치를 옮길 수 있어요. 안내 정보만 보여주고 광고는 넣지 않아요. 처음 켜면 설정에서 '다른 앱 위에 표시' 권한을 허용해 주세요.</p>
           <div id="ovlStat" style="margin-top:6px;font-size:11.5px;line-height:1.6;color:var(--sub);white-space:pre-line;"></div>
+          <button onclick="_ovlDiagShow()" style="margin-top:8px;width:100%;padding:9px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:12px;font-weight:700;background:transparent;color:var(--sub);font-family:inherit;">오버레이 진단 기록 보기</button>
         </div>
         <!-- ★ 2026-10-01: PiP 미리보기·상태 표시도 숨김(복원 시 주석 해제)
         <button onclick="_pipPreview()" style="width:100%;padding:11px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);font-family:inherit;">미리보기</button>
@@ -30428,6 +30510,7 @@ function _startBgGeolocation(){
         return;
       }
       if(!location) return;
+      try{ if(typeof _ovlDiag === 'function') _ovlDiag('BG위치', 'acc=' + Math.round(location.accuracy||0)); }catch(eD){}
 
       // ★ 2026-09-03: 배경에서는 JS 타이머가 멈춰 작은 화면(PiP)의 숫자가 굳는다.
       //   위치 콜백은 운영체제가 깨워 주므로, 올 때마다 화면을 다시 그린다.
@@ -31105,7 +31188,13 @@ function _pipStations(){
   var out = { prev:'', cur:'', next:'', idx:-1, total:0, pct:null };
   try{
     var path = null, idx = -1;
-    if(typeof S !== 'undefined' && S && S.route && S.route.path && S.route.path.length){
+    // ★ 2026-10-02 (YJ: "지상에서도 오버레이가 안 바뀌었어"): 홈에서 확정한 여정은 진행 위치가 _gpsMaxIdx 로 갱신된다.
+    //   그런데 예전에 본 지하철 경로(S.route)가 남아 있으면 그쪽(S.curIdx, 갱신 안 됨)을 먼저 읽어 오버레이가 굳었다.
+    //   → 홈 여정이 확정돼 있으면(노선도 미리보기 아님) 항상 _transitNodeData 를 쓴다.
+    var _homeJourney = false;
+    try{ _homeJourney = (window._routeLocked === true && window._metroRouteMode !== true
+                         && typeof _transitNodeData !== 'undefined' && _transitNodeData && _transitNodeData.length > 0); }catch(eH){}
+    if(!_homeJourney && typeof S !== 'undefined' && S && S.route && S.route.path && S.route.path.length){
       path = S.route.path;
       idx  = (S.curIdx != null) ? S.curIdx : 0;
     } else if(typeof _transitNodeData !== 'undefined' && _transitNodeData && _transitNodeData.length){
@@ -31802,11 +31891,71 @@ function _ovlKeepAliveSync(){
   }catch(e){ _ovlKaOn = null; }
 }
 window._ovlKeepAliveSync = _ovlKeepAliveSync;
+// ★ 2026-10-02: 오버레이가 왜 안 바뀌는지 기기에서 바로 볼 수 있게 남기는 기록(최근 80줄, 새로 열어도 유지).
+//   tick 은 20초에 한 줄만, 그 외(BG위치·상태전환·재시작)는 그때마다 한 줄.
+var _ovlDiagBuf = null, _ovlDiagTickAt = 0;
+function _ovlDiagLoad(){
+  if(_ovlDiagBuf) return _ovlDiagBuf;
+  try{ _ovlDiagBuf = JSON.parse(localStorage.getItem('ovlDiag') || '[]'); }catch(e){ _ovlDiagBuf = []; }
+  if(!Array.isArray(_ovlDiagBuf)) _ovlDiagBuf = [];
+  return _ovlDiagBuf;
+}
+function _ovlDiag(tag, extra){
+  try{
+    var now = Date.now();
+    if(tag === 'tick'){ if(now - _ovlDiagTickAt < 20000) return; _ovlDiagTickAt = now; }
+    var b = _ovlDiagLoad();
+    var fx = (typeof S !== 'undefined') ? S.lastGPSFix : null;
+    var nm = '';
+    try{ var st = _pipStations(); nm = st.cur + (st.next ? '>' + st.next : ''); }catch(e1){}
+    var d = new Date();
+    var hh = ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2)+':'+('0'+d.getSeconds()).slice(-2);
+    b.push([hh, tag, document.hidden ? 'H' : 'V', (typeof _bgGeoActive !== 'undefined' && _bgGeoActive) ? 'bg1' : 'bg0',
+            window._routeLocked === true ? 'L' : 'u',
+            fx && fx.ts ? Math.round((now - fx.ts)/1000) + 's' : '-',
+            window._gpsMaxIdx == null ? '-' : window._gpsMaxIdx,
+            (typeof S !== 'undefined' && S && S.route) ? 'S.route' : '-',
+            nm, extra || ''].join(' '));
+    while(b.length > 80) b.shift();
+    try{ localStorage.setItem('ovlDiag', JSON.stringify(b)); }catch(e2){}
+  }catch(e){}
+}
+window._ovlDiag = _ovlDiag;
+function _ovlDiagShow(){
+  try{
+    var old = document.getElementById('ovlDiagOv'); if(old) old.remove();
+    var b = _ovlDiagLoad().slice().reverse();
+    var ov = document.createElement('div');
+    ov.id = 'ovlDiagOv';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:2147483600;display:flex;align-items:center;justify-content:center;padding:14px;';
+    var esc = function(t){ return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;'); };
+    ov.innerHTML = '<div style="background:var(--card);border-radius:14px;width:100%;max-height:85vh;display:flex;flex-direction:column;padding:14px;">'
+      + '<div style="font-size:14px;font-weight:800;color:var(--text);margin-bottom:6px;">오버레이 진단 기록 (최신이 위)</div>'
+      + '<div style="font-size:10.5px;color:var(--sub);margin-bottom:8px;line-height:1.5;">시각 · 종류 · H(숨김)/V(보임) · bg1(백그라운드 위치 켜짐) · L(경로 확정) · 마지막 위치 경과 · 진행 번호 · 현재>다음</div>'
+      + '<pre style="flex:1;overflow:auto;margin:0;font-size:10.5px;line-height:1.5;color:var(--text);white-space:pre-wrap;word-break:break-all;">' + (b.length ? esc(b.join('\n')) : '기록 없음') + '</pre>'
+      + '<div style="display:flex;gap:8px;margin-top:10px;">'
+      + '<button id="ovlDiagClr" style="flex:1;padding:10px;border-radius:10px;border:1px solid var(--border2);background:transparent;color:var(--sub);font-family:inherit;font-size:13px;cursor:pointer;">지우기</button>'
+      + '<button id="ovlDiagCls" style="flex:1;padding:10px;border-radius:10px;border:none;background:var(--gold);color:#121214;font-weight:800;font-family:inherit;font-size:13px;cursor:pointer;">닫기</button></div></div>';
+    document.body.appendChild(ov);
+    ov.querySelector('#ovlDiagCls').onclick = function(){ ov.remove(); };
+    ov.querySelector('#ovlDiagClr').onclick = function(){ _ovlDiagBuf = []; try{ localStorage.removeItem('ovlDiag'); }catch(e){} ov.remove(); };
+  }catch(e){}
+}
+window._ovlDiagShow = _ovlDiagShow;
 var _ovlTickRtAt = 0;
 window._ovlNativeTick = function(){
   try{
     var now = Date.now();
     try{ _ovlKeepAliveSync(); }catch(e0){}
+    // ★ 2026-10-02: 확정한 여정인데 백그라운드 위치 감시가 없으면(시작 조건 불발·끊김) 여기서 다시 켠다(30초 간격)
+    try{
+      if(window._routeLocked === true && !_bgGeoActive && now - (window._ovlBgRetryAt||0) > 30000){
+        window._ovlBgRetryAt = now;
+        _ovlDiag('BG재시작');
+        _startBgGeolocation();
+      }
+    }catch(e00){}
+    try{ _ovlDiag('tick'); }catch(e01){}
     // 하차 10분 전 추천 감시(원래 20초 타이머) — 가려진 동안 타이머가 멈춰도 여기서 돌린다
     try{ if(typeof _arrWatchTick === 'function') _arrWatchTick(); }catch(e4){}
     if(typeof _updateTransitGps === 'function' && typeof _transitNodeData !== 'undefined' && _transitNodeData && _transitNodeData.length){
@@ -31962,6 +32111,7 @@ function _initAppStateListener(){
         if(state.isActive){
           // 포그라운드 진입
           console.log('[앱상태] 포그라운드');
+          try{ _ovlDiag('앱→앞'); }catch(eD){}
           try{ if(typeof _pipHide === 'function') _pipHide(); }catch(e){}
           // ★ 2026-09-08: 복귀할 때 네이티브 상태를 다시 알린다.
           //   액티비티가 새로 만들어졌으면 네이티브의 '안내 중' 플래그가 지워져 있다.
@@ -31978,6 +32128,11 @@ function _initAppStateListener(){
           // 백그라운드 진입
           console.log('[앱상태] 백그라운드');
           window._appInBackground = true;
+          try{ _ovlDiag('앱→뒤'); }catch(eD){}
+          // ★ 2026-10-02: 홈에서 확정한 여정은 S.route 가 없어 아래 블록이 통째로 건너뛰어졌다 → 백그라운드 위치만이라도 켠다
+          if(window._routeLocked === true && !(S.route && S.boarded)){
+            try{ _startBgGeolocation(); }catch(eB){}
+          }
           if(S.route && S.boarded){
             // BackgroundGeolocation 플러그인으로 전환
             _startBgGeolocation();
@@ -31999,7 +32154,7 @@ function _initAppStateListener(){
   document.addEventListener('visibilitychange', function(){
     if(document.hidden){
       window._appInBackground = true;
-      if(S.route && S.boarded) _startBgGeolocation();
+      if((S.route && S.boarded) || window._routeLocked === true) _startBgGeolocation();
     } else {
       if(S.route && S.boarded) startWatch();
       _onForegroundResume();   // ★ 복귀 시 마커 튐 방지 + 실제위치 즉시 보정
