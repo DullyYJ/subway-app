@@ -31184,6 +31184,35 @@ function _pipMood(m){
 // ★ 2026-09-03: 작은 화면에 이전·현재·다음 역을 함께 보여 준다.
 //   현재역만 보면 어디쯤인지 감이 안 온다. 앞뒤를 같이 보여 주면
 //   '다음이 내릴 역인가'를 한눈에 알 수 있다.
+// ★ 2026-10-02 (YJ: "오버레이가 잘 되다가 멈춰. 앱은 제대로 작동하고 있어" — 같은 시각 스크린샷: 앱은 갈산 18:18, 오버레이는 부평시장):
+//   멈춘 게 아니었다 — 남은 시간·도착 시각은 계속 갱신됐고 '현재역'만 굳어 있었다.
+//   앱이 가려진 동안은 마커 전진을 일부러 막고(_updateTransitGps 의 숨김 분기) 진행도(_gpsMaxIdx)는 GPS·기지국 같은 '실제 근거'로만 올리는데,
+//   지하에서는 근거가 드물어 _gpsMaxIdx 가 한참 그대로다. 앱 화면은 그 위에 시각표 추정(_estimateTimelinePos)을 얹어 보여 주고(복귀 시 즉시 스냅),
+//   오버레이는 _gpsMaxIdx 만 읽어서 서로 달랐다.
+//   → 오버레이도 앱 화면의 '현재 위치' 규칙(진행 위치 = 실제 근거와 시각표 추정 중 더 앞선 것, 기지국이 '정지'라 하면 시각표로 안 넘어감,
+//     승차 전엔 승차역에 고정)을 그대로 따른다. 환승 승차 대기 고정은 _estimateTimelinePos 안에서 이미 걸려 있다.
+function _pipHereIdx(){
+  var raw = (window._gpsMaxIdx != null) ? window._gpsMaxIdx : 0;
+  try{
+    if(window._routeLocked !== true || window._metroRouteMode === true) return raw;
+    if(typeof _baseTimeMs !== 'undefined' && _baseTimeMs != null) return raw;
+    if(typeof _transitNodeData === 'undefined' || !_transitNodeData || !_transitNodeData.length) return raw;
+    var tp = (typeof _estimateTimelinePos === 'function') ? _estimateTimelinePos() : null;
+    if(tp && tp.fromIdx != null){
+      var th = (tp.ratio >= 0.9) ? tp.toIdx : tp.fromIdx;
+      var cmv = (typeof _cellMovingState === 'function') ? _cellMovingState() : null;
+      if(th > raw && cmv !== false) raw = th;
+    }
+    if(typeof _htlNotDeparted === 'function' && _htlNotDeparted()){
+      var bi = (typeof _htlBoardIdx === 'function') ? _htlBoardIdx() : -1;
+      if(bi >= 0 && raw > bi) raw = bi;
+    }
+    if(raw > _transitNodeData.length - 1) raw = _transitNodeData.length - 1;
+  }catch(e){}
+  return raw;
+}
+window._pipHereIdx = _pipHereIdx;
+
 function _pipStations(){
   var out = { prev:'', cur:'', next:'', idx:-1, total:0, pct:null };
   try{
@@ -31201,7 +31230,7 @@ function _pipStations(){
       // ★ 2026-09-03: '도보' 같은 이동 구간은 역이 아니다.
       //   그대로 쓰면 '내 위치 – 도보' 처럼 역 자리에 엉뚱한 말이 들어간다.
       var keep = [], hit = -1;
-      var raw = (window._gpsMaxIdx != null) ? window._gpsMaxIdx : 0;
+      var raw = _pipHereIdx();   // ★ 2026-10-02: 앱 타임라인과 같은 '현재 위치'(실제 근거 + 시각표 추정 중 앞선 것)
       for(var i=0;i<_transitNodeData.length;i++){
         var nd = _transitNodeData[i];
         var nm = String((nd && nd.name) || '');
@@ -31882,7 +31911,7 @@ function _ovlAlertLevel(st){
       var rem0 = st.total - st.idx;
       return rem0 === 2 ? 2 : (rem0 >= 0 && rem0 <= 1 && st.idx > 0 ? 1 : 0);
     }
-    var c = (window._gpsMaxIdx == null ? -1 : window._gpsMaxIdx);
+    var c = _pipHereIdx();
     var N = _transitNodeData, n = N.length;
     if(c < 0 || c >= n) return 0;
     var cn = N[c];
@@ -31987,7 +32016,7 @@ function _ovlDiag(tag, extra){
     b.push([hh, tag, document.hidden ? 'H' : 'V', (typeof _bgGeoActive !== 'undefined' && _bgGeoActive) ? 'bg1' : 'bg0',
             window._routeLocked === true ? 'L' : 'u',
             fx && fx.ts ? Math.round((now - fx.ts)/1000) + 's' : '-',
-            window._gpsMaxIdx == null ? '-' : window._gpsMaxIdx,
+            window._gpsMaxIdx == null ? '-' : window._gpsMaxIdx + '/' + (typeof _pipHereIdx === 'function' ? _pipHereIdx() : '?'),
             (typeof S !== 'undefined' && S && S.route) ? 'S.route' : '-',
             nm, extra || ''].join(' '));
     while(b.length > 80) b.shift();
@@ -32005,7 +32034,7 @@ function _ovlDiagShow(){
     var esc = function(t){ return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;'); };
     ov.innerHTML = '<div style="background:var(--card);border-radius:14px;width:100%;max-height:85vh;display:flex;flex-direction:column;padding:14px;">'
       + '<div style="font-size:14px;font-weight:800;color:var(--text);margin-bottom:6px;">오버레이 진단 기록 (최신이 위)</div>'
-      + '<div style="font-size:10.5px;color:var(--sub);margin-bottom:8px;line-height:1.5;">시각 · 종류 · H(숨김)/V(보임) · bg1(백그라운드 위치 켜짐) · L(경로 확정) · 마지막 위치 경과 · 진행 번호 · 현재>다음</div>'
+      + '<div style="font-size:10.5px;color:var(--sub);margin-bottom:8px;line-height:1.5;">시각 · 종류 · H(숨김)/V(보임) · bg1(백그라운드 위치 켜짐) · L(경로 확정) · 마지막 위치 경과 · 진행 번호(근거/표시) · 현재>다음</div>'
       + '<pre style="flex:1;overflow:auto;margin:0;font-size:10.5px;line-height:1.5;color:var(--text);white-space:pre-wrap;word-break:break-all;">' + (b.length ? esc(b.join('\n')) : '기록 없음') + '</pre>'
       + '<div style="display:flex;gap:8px;margin-top:10px;">'
       + '<button id="ovlDiagClr" style="flex:1;padding:10px;border-radius:10px;border:1px solid var(--border2);background:transparent;color:var(--sub);font-family:inherit;font-size:13px;cursor:pointer;">지우기</button>'
