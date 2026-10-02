@@ -26,6 +26,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.WindowManager;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -71,7 +72,6 @@ public class OverlayPlugin extends Plugin {
     private WindowManager.LayoutParams lp;
     private LinearLayout root;
     private TextView t1, t2, t3;
-    private LinearLayout row;                    // 다섯 칸(출발·경로…) — 현위치가 늘 가운데 칸에 오도록 칸 폭을 좌우 대칭으로 고정
     private final TextView[] cells = new TextView[5];
     private final TextView[] seps = new TextView[4];
     private static final float[] CELL_W = { 1f, 1f, 1.8f, 1f, 1f };   // 좌우 대칭 — 가운데(현위치) 칸이 화면 정중앙
@@ -231,6 +231,9 @@ public class OverlayPlugin extends Plugin {
             try {
                 // 앱이 보이는 동안은 웹이 스스로 돌고 있으니 깨울 필요가 없다. 가려진 동안만 깨운다.
                 if (!appVisible && getBridge() != null && getBridge().getWebView() != null) {
+                    // ★ 2026-10-02 (YJ: "앱을 켤 때마다 위치가 바뀌어 있고 오버레이는 실시간으로 안 바뀐다"): 앱이 가려지면 웹뷰의 타이머·렌더가
+                    //   멈춘 상태일 수 있다 → 깨우기 직전에 웹뷰 타이머를 다시 살린다(시스템 전체 설정이 아니라 이 웹뷰의 JS 타이머 일시정지 해제).
+                    try { getBridge().getWebView().resumeTimers(); } catch (Exception ignored2) { }
                     getBridge().getWebView().evaluateJavascript(
                             "try{window._ovlNativeTick&&window._ovlNativeTick();}catch(e){}", null);
                 }
@@ -291,7 +294,6 @@ public class OverlayPlugin extends Plugin {
         t1 = makeText(15, Color.WHITE, false);     // (예비 — 다섯 칸을 못 받았을 때만 가운데 칸에 쓴다)
         t2 = makeText(18, Color.parseColor("#FFD60A"), true);      // ★ 2026-10-01: 14→18 (아래 글자를 키워 달라는 요청)
         t3 = makeText(14, Color.parseColor("#D4D4DA"), false);
-        t2.setMaxWidth(centerW);
         t3.setMaxWidth(rowW);
 
         for (int i = 0; i < 5; i++) {
@@ -312,25 +314,41 @@ public class OverlayPlugin extends Plugin {
             }
         }
 
-        row = new LinearLayout(ctx);                 // 세 기둥을 가로로 놓는 줄 — 모든 기둥이 세로 가운데 정렬
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.addView(cells[0], new LinearLayout.LayoutParams(sideW, LinearLayout.LayoutParams.WRAP_CONTENT));
-        row.addView(seps[0], new LinearLayout.LayoutParams(sepW, LinearLayout.LayoutParams.WRAP_CONTENT));
-        row.addView(cells[1], new LinearLayout.LayoutParams(sideW, LinearLayout.LayoutParams.WRAP_CONTENT));
-        row.addView(seps[1], new LinearLayout.LayoutParams(sepW, LinearLayout.LayoutParams.WRAP_CONTENT));
-        LinearLayout mid = new LinearLayout(ctx);    // 가운데 기둥: 현위치(흰색) 위, 노란 줄 아래
-        mid.setOrientation(LinearLayout.VERTICAL);
-        mid.setGravity(Gravity.CENTER_HORIZONTAL);
-        mid.addView(cells[2], new LinearLayout.LayoutParams(centerW, LinearLayout.LayoutParams.WRAP_CONTENT));
-        mid.addView(t2, new LinearLayout.LayoutParams(centerW, LinearLayout.LayoutParams.WRAP_CONTENT));
-        row.addView(mid, new LinearLayout.LayoutParams(centerW, LinearLayout.LayoutParams.WRAP_CONTENT));
-        row.addView(seps[2], new LinearLayout.LayoutParams(sepW, LinearLayout.LayoutParams.WRAP_CONTENT));
-        row.addView(cells[3], new LinearLayout.LayoutParams(sideW, LinearLayout.LayoutParams.WRAP_CONTENT));
-        row.addView(seps[3], new LinearLayout.LayoutParams(sepW, LinearLayout.LayoutParams.WRAP_CONTENT));
-        row.addView(cells[4], new LinearLayout.LayoutParams(sideW, LinearLayout.LayoutParams.WRAP_CONTENT));
-        root.addView(row, new LinearLayout.LayoutParams(rowW, LinearLayout.LayoutParams.WRAP_CONTENT));
-        root.addView(t3);
+        // ★ 2026-10-02 (YJ: "노란 글씨는 하단에 한 줄로 · 양옆 경로는 내 위치(흰색)와 노란 글씨의 한가운데 높이"):
+        //   예전엔 노란 줄이 가운데 기둥(창 폭의 43%) 안에 있어 길면 두 줄로 꺾였다.
+        //   이제 노란 줄은 맨 아래, 창 전체 폭에 '한 줄'로 놓고(길면 글자가 스스로 줄어든다),
+        //   양옆 칸(과거·대기 경로)은 [흰색 현위치 줄 ~ 노란 줄] 전체 높이의 한가운데에 겹쳐 놓는다
+        //   (흰 줄과 노란 줄 사이에 gap 을 둬서 양옆 글자가 어느 쪽과도 겹치지 않게 한다).
+        t2.setMaxWidth(rowW);
+        t2.setMaxLines(1);
+        t2.setHorizontallyScrolling(false);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            t2.setAutoSizeTextTypeUniformWithConfiguration(10, 18, 1, TypedValue.COMPLEX_UNIT_SP);
+        }
+        LinearLayout col = new LinearLayout(ctx);    // 위: 현위치(흰색, 가운데) · 아래: 노란 줄(전체 폭, 한 줄)
+        col.setOrientation(LinearLayout.VERTICAL);
+        col.setGravity(Gravity.CENTER_HORIZONTAL);
+        col.addView(cells[2], new LinearLayout.LayoutParams(centerW, LinearLayout.LayoutParams.WRAP_CONTENT));
+        View gap = new View(ctx);
+        col.addView(gap, new LinearLayout.LayoutParams(1, dp(12)));
+        col.addView(t2, new LinearLayout.LayoutParams(rowW, LinearLayout.LayoutParams.WRAP_CONTENT));
+        LinearLayout sides = new LinearLayout(ctx);  // 양옆 칸: 전체 높이의 세로 가운데(= 흰 줄과 노란 줄의 중간)
+        sides.setOrientation(LinearLayout.HORIZONTAL);
+        sides.setGravity(Gravity.CENTER_VERTICAL);
+        sides.addView(cells[0], new LinearLayout.LayoutParams(sideW, LinearLayout.LayoutParams.WRAP_CONTENT));
+        sides.addView(seps[0], new LinearLayout.LayoutParams(sepW, LinearLayout.LayoutParams.WRAP_CONTENT));
+        sides.addView(cells[1], new LinearLayout.LayoutParams(sideW, LinearLayout.LayoutParams.WRAP_CONTENT));
+        sides.addView(seps[1], new LinearLayout.LayoutParams(sepW, LinearLayout.LayoutParams.WRAP_CONTENT));
+        sides.addView(new View(ctx), new LinearLayout.LayoutParams(centerW, 1));   // 가운데 기둥 자리(현위치 칸은 col 이 그린다)
+        sides.addView(seps[2], new LinearLayout.LayoutParams(sepW, LinearLayout.LayoutParams.WRAP_CONTENT));
+        sides.addView(cells[3], new LinearLayout.LayoutParams(sideW, LinearLayout.LayoutParams.WRAP_CONTENT));
+        sides.addView(seps[3], new LinearLayout.LayoutParams(sepW, LinearLayout.LayoutParams.WRAP_CONTENT));
+        sides.addView(cells[4], new LinearLayout.LayoutParams(sideW, LinearLayout.LayoutParams.WRAP_CONTENT));
+        FrameLayout stack = new FrameLayout(ctx);
+        stack.addView(col, new FrameLayout.LayoutParams(rowW, FrameLayout.LayoutParams.WRAP_CONTENT));
+        stack.addView(sides, new FrameLayout.LayoutParams(rowW, FrameLayout.LayoutParams.MATCH_PARENT));
+        root.addView(t3);                            // 추천 알림 제목은 위(노란 줄이 늘 맨 아래)
+        root.addView(stack, new LinearLayout.LayoutParams(rowW, LinearLayout.LayoutParams.WRAP_CONTENT));
 
         lp = new WindowManager.LayoutParams(
                 maxW,
