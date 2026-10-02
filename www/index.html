@@ -13833,6 +13833,7 @@ window._gpsBeforeNode = _gpsBeforeNode;
 
 function _updateTransitGps() {
   try{ if(typeof locTick === 'function') locTick(); }catch(e){}
+  try{ if(typeof _pfTick === 'function') _pfTick(); }catch(e){}   // ★ 확률 위치 판단기(그림자/보정)
   try{ if(typeof _progGuard === 'function') _progGuard(); }catch(e){}   // ★ 진행도 상한 확인
   var card = document.getElementById('transitResultCard');
   if(!card || card.style.display==='none') { clearInterval(_transitGpsTimer); return; }
@@ -19024,6 +19025,8 @@ window.addEventListener('unhandledrejection', function(e) {
           <p style="font-size:12px;color:var(--sub);margin:6px 0 0;">다른 앱을 쓰는 동안 현재역 · 남은시간을 화면 위쪽에 작은 막대로 띄워요. 막대를 누르면 앱으로 돌아오고, 끌어서 위치를 옮길 수 있어요. 안내 정보만 보여주고 광고는 넣지 않아요. 처음 켜면 설정에서 '다른 앱 위에 표시' 권한을 허용해 주세요.</p>
           <div id="ovlStat" style="margin-top:6px;font-size:11.5px;line-height:1.6;color:var(--sub);white-space:pre-line;"></div>
           <button onclick="_ovlDiagShow()" style="margin-top:8px;width:100%;padding:9px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:12px;font-weight:700;background:transparent;color:var(--sub);font-family:inherit;">오버레이 진단 기록 보기</button>
+          <button id="pfLiveBtn" onclick="_pfSetLive(!_pfLive())" style="margin-top:6px;width:100%;padding:9px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:12px;font-weight:700;background:transparent;color:var(--sub);font-family:inherit;">새 위치 판단기 보정: 꺼짐 (누르면 켬 · 실험)</button>
+          <button id="pfRecBtn" onclick="_pfRecSet(!_pfRecOn())" style="margin-top:6px;width:100%;padding:9px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:12px;font-weight:700;background:transparent;color:var(--sub);font-family:inherit;">정답 기록 버튼: 꺼짐 (테스트 탑승용)</button>
         </div>
         <!-- ★ 2026-10-01: PiP 미리보기·상태 표시도 숨김(복원 시 주석 해제)
         <button onclick="_pipPreview()" style="width:100%;padding:11px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);font-family:inherit;">미리보기</button>
@@ -32046,7 +32049,7 @@ function _ovlKeepAliveSync(){
   }catch(e){ _ovlKaOn = null; }
 }
 window._ovlKeepAliveSync = _ovlKeepAliveSync;
-// ★ 2026-10-02: 오버레이가 왜 안 바뀌는지 기기에서 바로 볼 수 있게 남기는 기록(최근 80줄, 새로 열어도 유지).
+// ★ 2026-10-02: 오버레이가 왜 안 바뀌는지 기기에서 바로 볼 수 있게 남기는 기록(최근 600줄, 새로 열어도 유지).
 //   tick 은 20초에 한 줄만, 그 외(BG위치·상태전환·재시작)는 그때마다 한 줄.
 var _ovlDiagBuf = null, _ovlDiagTickAt = 0;
 function _ovlDiagLoad(){
@@ -32071,7 +32074,7 @@ function _ovlDiag(tag, extra){
             window._gpsMaxIdx == null ? '-' : window._gpsMaxIdx + '/' + (typeof _pipHereIdx === 'function' ? _pipHereIdx() : '?'),
             (typeof S !== 'undefined' && S && S.route) ? 'S.route' : '-',
             nm, extra || ''].join(' '));
-    while(b.length > 80) b.shift();
+    while(b.length > 600) b.shift();
     try{ localStorage.setItem('ovlDiag', JSON.stringify(b)); }catch(e2){}
   }catch(e){}
 }
@@ -32086,13 +32089,23 @@ function _ovlDiagShow(){
     var esc = function(t){ return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;'); };
     ov.innerHTML = '<div style="background:var(--card);border-radius:14px;width:100%;max-height:85vh;display:flex;flex-direction:column;padding:14px;">'
       + '<div style="font-size:14px;font-weight:800;color:var(--text);margin-bottom:6px;">오버레이 진단 기록 (최신이 위)</div>'
-      + '<div style="font-size:10.5px;color:var(--sub);margin-bottom:8px;line-height:1.5;">시각 · 종류 · H(숨김)/V(보임) · bg1(백그라운드 위치 켜짐) · L(경로 확정) · 마지막 위치 경과 · 진행 번호(근거/표시) · 현재>다음</div>'
+      + '<div style="font-size:10.5px;color:var(--sub);margin-bottom:8px;line-height:1.5;">시각 · 종류 · H(숨김)/V(보임) · bg1(백그라운드 위치 켜짐) · L(경로 확정) · 마지막 위치 경과 · 진행 번호(근거/표시) · 현재>다음<br>PF = 새 판단기(역 번호·정차/주행·확신도·추정 지연 | 앱 진행도 | 센서 현재값/기준값 | 입력 횟수: g=GPS m=움직임 c=셀)</div>'
       + '<pre style="flex:1;overflow:auto;margin:0;font-size:10.5px;line-height:1.5;color:var(--text);white-space:pre-wrap;word-break:break-all;">' + (b.length ? esc(b.join('\n')) : '기록 없음') + '</pre>'
       + '<div style="display:flex;gap:8px;margin-top:10px;">'
+      + '<button id="ovlDiagCpy" style="flex:1;padding:10px;border-radius:10px;border:1px solid var(--border2);background:transparent;color:var(--text);font-family:inherit;font-size:13px;cursor:pointer;">전체 복사</button>'
       + '<button id="ovlDiagClr" style="flex:1;padding:10px;border-radius:10px;border:1px solid var(--border2);background:transparent;color:var(--sub);font-family:inherit;font-size:13px;cursor:pointer;">지우기</button>'
       + '<button id="ovlDiagCls" style="flex:1;padding:10px;border-radius:10px;border:none;background:var(--gold);color:#121214;font-weight:800;font-family:inherit;font-size:13px;cursor:pointer;">닫기</button></div></div>';
     document.body.appendChild(ov);
     ov.querySelector('#ovlDiagCls').onclick = function(){ ov.remove(); };
+    ov.querySelector('#ovlDiagCpy').onclick = function(){
+      // 시간 순서(오래된 것부터)로 복사 — 채팅에 붙여 넣어 분석하기 좋게
+      var txt = _ovlDiagLoad().join('\n'), btn = ov.querySelector('#ovlDiagCpy');
+      var done = function(ok){ btn.textContent = ok ? '복사됨 ✓' : '복사 실패'; setTimeout(function(){ btn.textContent = '전체 복사'; }, 1500); };
+      try{
+        if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(function(){ done(true); }).catch(function(){ done(false); }); return; }
+      }catch(e0){}
+      try{ var ta = document.createElement('textarea'); ta.value = txt; ta.style.cssText = 'position:fixed;left:-9999px;'; document.body.appendChild(ta); ta.select(); var ok = document.execCommand('copy'); ta.remove(); done(ok); }catch(e1){ done(false); }
+    };
     ov.querySelector('#ovlDiagClr').onclick = function(){ _ovlDiagBuf = []; try{ localStorage.removeItem('ovlDiag'); }catch(e){} ov.remove(); };
   }catch(e){}
 }
@@ -45073,6 +45086,602 @@ window.addEventListener('load', function(){
     }, 2500);
   }, 300);
 });
+</script>
+<script id="posfusion-core">
+// ═══════════════════════════════════════════════════════════════
+// PosFusion — 노선 위 위치를 '확률'로 추정하는 판단기 (은닉 마르코프 모델)
+//
+//  상태  : 역에 서 있음(dwell i) / 역 i → i+1 사이를 달리는 중(seg i)
+//  전이  : 앞으로만 진행(뒤로는 아주 조금만 새게 둠). 이탈 확률은 시각표(+학습한 지연)에서 나옴
+//  증거  : GPS(오차 반경 반영, 노선 선분과의 거리), 가속도 센서의 정차/주행, 기지국 지문, 시각표
+//  출력  : '마지막으로 도착한 역'(= 앱의 _gpsMaxIdx 와 같은 뜻) + 그 확신도
+//
+//  순수 JS(DOM 없음) — node 로 시뮬레이션 테스트 가능.
+// ═══════════════════════════════════════════════════════════════
+(function(root){
+'use strict';
+
+var C = {
+  DWELL_S: 30,          // 일반 정차 평균(초)
+  DWELL_XFER_S: 150,    // 환승 구간 평균(초)
+  DEP_AFTER_ARR_S: 20,  // 도착 후 출발까지(초)
+  SEG_DEFAULT_S: 120,   // 시각표가 없을 때 구간 평균(초)
+  OVERDUE_FLOOR_S: 75,  // 예정 도착이 지난 뒤에도 '곧 도착'으로 보는 최소 남은 시간(초)
+  EARLY_BRAKE: 0.12,    // 예정 출발 45초 전보다 이르면 출발 확률을 이만큼으로 줄인다
+  BACK_LEAK: 5e-4,      // 한 걸음 되돌아갈 수 있는 아주 작은 누수
+  FLOOR: 1e-4,          // 어디든 갈 수 있는 바닥 확률(증거가 틀려도 복구되게)
+  GPS_MAX_ACC: 150,     // 이보다 부정확한 fix 는 쓰지 않는다(m)
+  GPS_MAX_AGE_S: 10,    // 이보다 오래된 fix 는 쓰지 않는다
+  GPS_EPS: 0.02,        // GPS 이상값 허용
+  MOTION_CONF: 0.82,    // 정차/주행 판정이 맞을 확률
+  CELL_EPS: 0.15,       // 셀 증거가 틀렸을 때의 최소 가능도
+  CELL_SIGMA: 0.9,      // 셀 증거가 가리키는 역 주변 폭(역 단위)
+  SIG_DWELL_S: 18,      // 출발 시각 흔들림(초) — 시각표가 분 단위라 오차 포함
+  SIG_SEG_S: 25,        // 도착 시각 흔들림(초)
+  STEP_S: 5             // 시간 진행 한 걸음(초)
+};
+
+function rad(d){ return d * Math.PI / 180; }
+function hav(la1, ln1, la2, ln2){
+  var R = 6371000, dLa = rad(la2-la1), dLn = rad(ln2-ln1);
+  var a = Math.sin(dLa/2)*Math.sin(dLa/2) + Math.cos(rad(la1))*Math.cos(rad(la2))*Math.sin(dLn/2)*Math.sin(dLn/2);
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+// 가우스 지속시간의 '위험률'(hazard): 예정 시각 T 근처에서 집중적으로 떠난다.
+//  z = (지금 - T)/sigma.  예정 한참 전이면 ≈0, 예정 시각이면 1/sigma 정도, 지나가면 커진다.
+function erfc(x){
+  // Abramowitz-Stegun 7.1.26
+  var z = Math.abs(x), t = 1/(1 + 0.5*z);
+  var r = t*Math.exp(-z*z - 1.26551223 + t*(1.00002368 + t*(0.37409196 + t*(0.09678418 + t*(-0.18628806 + t*(0.27886807 + t*(-1.13520398 + t*(1.48851587 + t*(-0.82215223 + t*0.17087277)))))))));
+  return x >= 0 ? r : 2 - r;
+}
+function gaussHaz(z, sigma, h){
+  var phi = Math.exp(-0.5*z*z) / 2.5066282746;
+  var tail = 0.5*erfc(z/1.4142135624);
+  var lam = phi / (sigma * Math.max(tail, 1e-6));
+  var v = lam * h;
+  return v > 0.6 ? 0.6 : v;
+}
+// 점 → 선분 거리(m), 등장방형 근사(역간 수 km 이내라 충분)
+function distSeg(lat, lng, a, b){
+  var kx = 111320 * Math.cos(rad(lat)), ky = 110540;
+  var px = (lng - a.lng) * kx, py = (lat - a.lat) * ky;
+  var bx = (b.lng - a.lng) * kx, by = (b.lat - a.lat) * ky;
+  var L2 = bx*bx + by*by;
+  var t = L2 > 0 ? Math.max(0, Math.min(1, (px*bx + py*by) / L2)) : 0;
+  var dx = px - t*bx, dy = py - t*by;
+  return { d: Math.sqrt(dx*dx + dy*dy), f: t };
+}
+
+// stations: [{ lat, lng, schedMs|null, xferFromPrev:boolean, name }]
+//
+// ★ 지연을 '모르는 값'으로 둔다. 열차가 몇 분 늦는지 모르는 채로 시각표를 믿으면
+//   시각표만큼 앞서가 버린다. 그래서 지연 가정(-2분 ~ +10분)을 K개 두고 각각 독립된
+//   HMM 을 돌린 뒤, 증거를 잘 설명한 가정에 가중치를 몰아준다(다중 모델 필터).
+//   정차/주행 패턴이 시각표의 어느 지연과 맞는지가 곧 '지금 몇 분 늦었나'의 답이다.
+function create(stations, opts){
+  var cfg = {}; for(var k in C) cfg[k] = C[k];
+  if(opts) for(var k2 in opts) cfg[k2] = opts[k2];
+  var N = stations.length, M = Math.max(1, 2*N - 1);
+  var DELAYS = [];
+  for(var dd = -120; dd <= 600; dd += 30) DELAYS.push(dd);
+  var K = DELAYS.length, i;
+  var subs = DELAYS.map(function(d){
+    return { delay: d, w: Math.exp(-Math.abs(d) / (d < 0 ? 60 : 200)), P: new Array(M) };
+  });
+  var self = { N: N, M: M, cfg: cfg, lastMs: null };
+  var lastGpsTs = 0, lastCellAt = 0;
+
+  function normW(){
+    var s = 0, j; for(j=0;j<K;j++) s += subs[j].w;
+    if(!(s > 0)){ for(j=0;j<K;j++) subs[j].w = 1/K; return; }
+    for(j=0;j<K;j++){ subs[j].w = Math.max(subs[j].w / s, 2e-3); }
+    s = 0; for(j=0;j<K;j++) s += subs[j].w;
+    for(j=0;j<K;j++) subs[j].w /= s;
+  }
+  function normP(P){
+    var s = 0, j; for(j=0;j<M;j++) s += P[j];
+    if(!(s > 0)){ for(j=0;j<M;j++) P[j] = 1/M; return; }
+    for(j=0;j<M;j++) P[j] /= s;
+  }
+  function seed(idx, conf, nowMs){
+    idx = Math.max(0, Math.min(N-1, idx|0));
+    conf = conf == null ? 0.9 : conf;
+    for(var k3=0;k3<K;k3++){
+      var P = subs[k3].P;
+      for(i=0;i<M;i++) P[i] = (1-conf)/Math.max(1, M-1);
+      P[2*idx] = conf; normP(P);
+    }
+    if(nowMs != null) self.lastMs = nowMs;
+  }
+  function isXferDwell(j){ return j > 0 && !!stations[j].xferFromPrev; }
+
+  function stepOne(sub, nowMs, h){
+    var P = sub.P, nx = new Array(M), a, delayMs = sub.delay*1000;
+    for(a=0;a<M;a++) nx[a] = 0;
+    for(var j=0;j<N;j++){
+      var p = P[2*j];
+      if(p > 0){
+        if(j >= N-1){ nx[2*j] += p; }
+        else{
+          var hd, sj = stations[j].schedMs;
+          if(sj != null){
+            var Td = sj + delayMs + (j === 0 ? 0 : cfg.DEP_AFTER_ARR_S*1000);
+            hd = gaussHaz((nowMs - Td)/1000 / cfg.SIG_DWELL_S, cfg.SIG_DWELL_S, h);
+            if(isXferDwell(j)) hd = gaussHaz((nowMs - (sj + delayMs))/1000 / (cfg.SIG_DWELL_S*2), cfg.SIG_DWELL_S*2, h);
+          }else hd = h / cfg.DWELL_S;
+          if(hd > 0.6) hd = 0.6;
+          nx[2*j] += p*(1-hd); nx[2*j+1] += p*hd;
+        }
+      }
+      if(j < N-1){
+        var q = P[2*j+1];
+        if(q > 0){
+          var sn = stations[j+1].schedMs, hs;
+          if(sn != null){
+            var sg = cfg.SIG_SEG_S;
+            if(stations[j+1].xferFromPrev) sg *= 2;
+            hs = gaussHaz((nowMs - (sn + delayMs))/1000 / sg, sg, h);
+          }else hs = h / cfg.SEG_DEFAULT_S;
+          if(hs > 0.6) hs = 0.6;
+          nx[2*j+1] += q*(1-hs); nx[2*(j+1)] += q*hs;
+        }
+      }
+    }
+    var out = new Array(M);
+    for(var b=0;b<M;b++) out[b] = nx[b]*(1 - cfg.BACK_LEAK) + (b+1<M ? nx[b+1]*cfg.BACK_LEAK : 0) + cfg.FLOOR/M;
+    sub.P = out; normP(sub.P);
+  }
+  function stepAll(nowMs, h){
+    for(var k4=0;k4<K;k4++) stepOne(subs[k4], nowMs, h);
+    // 지연 가정끼리 아주 조금 섞는다(열차가 더 늦어지는 일 · 가정 고착 방지)
+    var mix = 0.012 * h / cfg.STEP_S, nw = new Array(K), k5;
+    for(k5=0;k5<K;k5++){
+      var l = k5 > 0 ? subs[k5-1].w : subs[k5].w, r = k5 < K-1 ? subs[k5+1].w : subs[k5].w;
+      nw[k5] = subs[k5].w*(1-2*mix) + (l + r)*mix;
+    }
+    for(k5=0;k5<K;k5++) subs[k5].w = nw[k5];
+    normW();
+  }
+
+  self.seed = seed;
+  self.predict = function(nowMs){
+    if(self.lastMs == null){ self.lastMs = nowMs; return; }
+    var dt = (nowMs - self.lastMs)/1000;
+    if(dt <= 0) return;
+    if(dt > 600) dt = 600;
+    var t = self.lastMs;
+    while(dt > 1e-6){
+      var h = Math.min(cfg.STEP_S, dt);
+      t += h*1000; stepAll(t, h); dt -= h;
+    }
+    self.lastMs = nowMs;
+  };
+
+  // L(j): 상태 j 의 가능도. 모든 가정에 적용하고, 증거를 설명한 정도만큼 가정 가중치를 갱신한다.
+  function applyEvidence(Lfn, w){
+    for(var k6=0;k6<K;k6++){
+      var P = subs[k6].P, Z = 0;
+      for(var j=0;j<M;j++){
+        var v = Lfn(j); if(!(v > 1e-9)) v = 1e-9;
+        if(w != null && w !== 1) v = Math.pow(v, w);
+        P[j] *= v; Z += P[j];
+      }
+      subs[k6].w *= Math.max(Z, 1e-12);
+      normP(P);
+    }
+    normW();
+  }
+
+  self.motion = function(state, nowMs, conf){
+    if(state !== 'moving' && state !== 'stopped') return;
+    var c = conf == null ? cfg.MOTION_CONF : conf, moving = state === 'moving';
+    applyEvidence(function(j){
+      var isDwell = (j % 2 === 0), idx = j >> 1;
+      var neutral = isDwell ? isXferDwell(idx) : !!stations[idx+1].xferFromPrev;
+      if(neutral) return 0.5;
+      if(isDwell) return moving ? (1 - c) : c;
+      return moving ? c : (1 - c) * 0.8 + 0.02;
+    }, 0.6);
+  };
+
+  self.gps = function(fix, nowMs){
+    if(!fix || fix.lat == null) return false;
+    if(fix.ts && fix.ts === lastGpsTs) return false;
+    var age = fix.ts ? (nowMs - fix.ts)/1000 : 0;
+    if(age > cfg.GPS_MAX_AGE_S) return false;
+    var acc = fix.acc == null ? 60 : fix.acc;
+    if(acc > cfg.GPS_MAX_ACC) return false;
+    lastGpsTs = fix.ts || nowMs;
+    var Lc = new Array(M);
+    for(var j=0;j<M;j++){
+      var idx = j >> 1, d, sg;
+      if(j % 2 === 0){
+        var s = stations[idx];
+        if(s.lat == null){ Lc[j] = 1; continue; }
+        d = hav(fix.lat, fix.lng, s.lat, s.lng); sg = Math.max(acc, 70) + 60;
+      }else{
+        var a = stations[idx], b = stations[idx+1];
+        if(a.lat == null || b.lat == null){ Lc[j] = 1; continue; }
+        d = distSeg(fix.lat, fix.lng, a, b).d; sg = Math.max(acc, 70) + 120;
+      }
+      Lc[j] = cfg.GPS_EPS + Math.exp(-(d*d)/(2*sg*sg));
+    }
+    applyEvidence(function(j){ return Lc[j]; }, acc <= 50 ? 1 : 0.7);
+    return true;
+  };
+
+  self.cell = function(stnIdx, conf, nowMs){
+    if(stnIdx == null || stnIdx < 0 || stnIdx >= N) return;
+    if(nowMs - lastCellAt < 15000) return;
+    lastCellAt = nowMs;
+    applyEvidence(function(j){
+      var pos = (j % 2 === 0) ? (j >> 1) : ((j >> 1) + 0.5), d = pos - stnIdx;
+      return cfg.CELL_EPS + (1 - cfg.CELL_EPS) * Math.exp(-(d*d)/(2*cfg.CELL_SIGMA*cfg.CELL_SIGMA));
+    }, Math.max(0.3, Math.min(1, conf == null ? 0.7 : conf)));
+  };
+
+  self.arrived = function(stnIdx, nowMs, strength){
+    if(stnIdx == null || stnIdx < 0 || stnIdx >= N) return;
+    var s = strength == null ? 0.9 : strength;
+    applyEvidence(function(j){ return ((j >> 1) === stnIdx) ? 1 : (1 - s) + 0.02; }, 1);
+  };
+
+  function combined(){
+    var Pm = new Array(M), j, k7;
+    for(j=0;j<M;j++) Pm[j] = 0;
+    for(k7=0;k7<K;k7++){ var P = subs[k7].P, w = subs[k7].w; for(j=0;j<M;j++) Pm[j] += w*P[j]; }
+    return Pm;
+  }
+  self.best = function(){
+    var Pm = combined(), A = new Array(N), j, bi = 0, bv = -1;
+    for(j=0;j<N;j++){ A[j] = Pm[2*j] + (j < N-1 ? Pm[2*j+1] : 0); if(A[j] > bv){ bv = A[j]; bi = j; } }
+    var pd = Pm[2*bi], ps = bi < N-1 ? Pm[2*bi+1] : 0;
+    var mapK = 0; for(j=1;j<K;j++) if(subs[j].w > subs[mapK].w) mapK = j;
+    return {
+      idx: bi, conf: bv,
+      kind: (pd >= ps || bi >= N-1) ? 'dwell' : 'seg',
+      nextConf: bi < N-1 ? A[bi+1] : 0,
+      delayS: subs[mapK].delay, delayW: subs[mapK].w
+    };
+  };
+  self.dist = combined;
+  self.cfgGet = function(){ return cfg; };
+
+  seed(0, 0.9, null);
+  normW();
+  return self;
+}
+
+var api = { create: create, hav: hav, distSeg: distSeg, defaults: C };
+if(typeof module !== 'undefined' && module.exports) module.exports = api;
+else root.PosFusion = api;
+})(typeof window !== 'undefined' ? window : this);
+
+</script>
+<script id="posfusion-glue">
+// ═══════════════════════════════════════════════════════════════
+// 📍 PosFusion 연결부 (2026-10-02)
+//   · 평소엔 '그림자 모드' — 기존 위치 판단은 그대로 두고, 새 판단기의 결과를 진단 기록에만 남긴다.
+//   · 진단 화면의 '새 위치 판단기로 보정' 을 켜면(pfLive=1) 한 번에 한 역씩 '앞으로만' 진행도를 올려 준다.
+// ═══════════════════════════════════════════════════════════════
+var _pf = { f: null, sig: '', st: [], tdToK: {}, lastLogAt: 0, lastBestK: -1, lastCellKey: '', lastLiveAt: 0, feeds: { gps: 0, motion: 0, cell: 0 } };
+
+function _pfLive(){ try{ return localStorage.getItem('pfLive') === '1'; }catch(e){ return false; } }
+function _pfSetLive(v){
+  try{ localStorage.setItem('pfLive', v ? '1' : '0'); }catch(e){}
+  try{ _ovlDiag('PF', v ? '보정 켬' : '보정 끔'); }catch(e){}
+  _pfSyncBtn();
+}
+function _pfSyncBtn(){
+  try{
+    var b = document.getElementById('pfLiveBtn'); if(!b) return;
+    var on = _pfLive();
+    b.textContent = on ? '새 위치 판단기 보정: 켜짐 (누르면 끔)' : '새 위치 판단기 보정: 꺼짐 (누르면 켬 · 실험)';
+    b.style.color = on ? 'var(--gold)' : 'var(--sub)';
+  }catch(e){}
+}
+window._pfSetLive = _pfSetLive; window._pfSyncBtn = _pfSyncBtn;
+
+// ── 가속도 센서 → 정차/주행 판정 ──
+var _pfM = { buf: [], state: null, since: 0, fast: 0, base: 0, started: false, listener: null, n20: 0, lastSampleAt: 0 };
+
+function _pfMotionPlugin(){
+  try{ var P = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Motion; return P || null; }catch(e){ return null; }
+}
+function _pfMotionStart(){
+  try{
+    if(_pfM.started) return;
+    var P = _pfMotionPlugin(); if(!P || typeof P.start !== 'function') return;
+    _pfM.started = true;
+    try{
+      var h = P.addListener('motion', function(ev){ try{ _pfMotionFeed(ev); }catch(e){} });
+      _pfM.listener = h;
+    }catch(e0){}
+    P.start().then(function(r){ try{ _ovlDiag('PF', '센서 ' + (r && r.ok ? '시작' : ('실패 ' + (r && r.reason)))); }catch(e){} })
+             .catch(function(){ _pfM.started = false; });
+  }catch(e){ _pfM.started = false; }
+}
+function _pfMotionStop(){
+  try{
+    if(!_pfM.started) return;
+    var P = _pfMotionPlugin();
+    if(P && typeof P.stop === 'function') P.stop();
+    try{ if(_pfM.listener && _pfM.listener.then) _pfM.listener.then(function(h){ try{ h.remove(); }catch(e){} }); else if(_pfM.listener && _pfM.listener.remove) _pfM.listener.remove(); }catch(e1){}
+    _pfM.listener = null; _pfM.started = false; _pfM.state = null; _pfM.buf = [];
+  }catch(e){}
+}
+function _pfMedian(a){ var s = a.slice().sort(function(x, y){ return x - y; }); return s.length ? s[s.length >> 1] : 0; }
+// ── 1초마다 들어오는 센서 요약 → 'stopped' | 'moving' | null ──
+//  두 갈래로 본다.
+//   (1) 펄스: 출발·제동 때의 '같은 방향으로 이어지는 수평 가속'(세계 좌표 1초 평균 hm). 손에 들고 있어도 남는다.
+//        출발 펄스가 오면 주행, 제동 펄스가 끝나면 정차 — 확신이 높다(0.92).
+//   (2) 수준: 진동 세기(rms) 중앙값이 '달릴 때의 세기'에 비해 높은가 낮은가 — 손떨림에 약하다(0.6~0.72).
+var _pfP = { run: null, last: null, u: null, uBad: 0, lastKind: '', lastAt: 0, count: 0 };
+var _PF_HM_ON = 0.28, _PF_HM_MEAN = 0.30, _PF_COH = 0.7, _PF_SHAKE = 1.8;
+
+function _pfDot(a, b){ return a[0]*b[0] + a[1]*b[1]; }
+function _pfPulseKind(dir, startMs, endMs){
+  var P = _pfP, kind = null;
+  if(P.u){
+    var d = _pfDot(dir, P.u);
+    if(d > 0.6) kind = 'accel'; else if(d < -0.6) kind = 'brake';
+    else { P.uBad++; if(P.uBad >= 2){ P.u = null; P.uBad = 0; } }
+  }
+  if(!kind && P.last && _pfDot(dir, P.last.dir) < -0.5){
+    var gap = (startMs - P.last.end) / 1000;
+    if(gap > 0 && gap <= 55){ P.u = dir; kind = 'accel'; P.last.kind = 'brake'; P.uBad = 0; }          // 짧은 간격 = 정차 시간 → 앞이 제동, 지금이 출발
+    else if(gap >= 70 && gap < 400){ P.u = P.last.dir; kind = 'brake'; P.last.kind = 'accel'; P.uBad = 0; }  // 긴 간격 = 주행 시간 → 앞이 출발, 지금이 제동
+  }
+  return kind;
+}
+function _pfSetMotion(st, now, why){
+  if(_pfM.state !== st){ _pfM.state = st; _pfM.since = now; try{ _ovlDiag('움직임', (st === 'moving' ? '주행' : '정차') + ' ' + why); }catch(e){} }
+  _pfM.pulseAt = now; _pfM.pulseUntil = now + (st === 'moving' ? 150000 : 60000);   // 다음 펄스가 오기 전까지 유지(주행 2.5분 · 정차 1분)
+}
+function _pfPulseFeed(ev, now){
+  var hm = (ev && typeof ev.hm === 'number') ? ev.hm : -1;
+  if(hm < 0) return;
+  var P = _pfP;
+  if(hm >= _PF_HM_ON){
+    if(!P.run) P.run = { start: now, n: 0, sx: 0, sy: 0, sabs: 0, srms: 0, miss: 0, early: false };
+    var r = P.run; r.srms += (typeof ev.rms === 'number' ? ev.rms : hm); r.n++; r.sx += ev.wx || 0; r.sy += ev.wy || 0; r.sabs += hm; r.miss = 0; r.end = now;
+    // 3초째에 방향이 정해져 있으면(u 가 있으면) 출발 펄스를 바로 반영 — 제동은 끝까지 기다린다
+    if(r.n === 3 && P.u){
+      var m = Math.hypot(r.sx, r.sy);
+      if(m / r.n >= _PF_HM_MEAN && m / r.sabs >= _PF_COH && r.srms / r.sabs <= _PF_SHAKE && _pfDot([r.sx/m, r.sy/m], P.u) > 0.6){ r.early = true; _pfSetMotion('moving', now, '출발 펄스'); }
+    }
+  }else if(P.run){
+    P.run.miss++;
+    if(P.run.miss >= 2){ var rr = P.run; P.run = null; _pfPulseEnd(rr, now); }
+  }
+}
+function _pfPulseEnd(r, now){
+  if(r.n < 3) return;
+  var m = Math.hypot(r.sx, r.sy);
+  if(m / r.n < _PF_HM_MEAN || m / r.sabs < _PF_COH) return;
+  // 흔들기 걸러내기: 열차 가속은 부드러워서 전체 진동(rms)이 수평 평균(hm)과 비슷하다. 흔들면 rms 만 훨씬 크다.
+  if(r.srms / r.sabs > _PF_SHAKE){ try{ _ovlDiag('펄스', '흔들림으로 보고 무시 rms/hm=' + (r.srms / r.sabs).toFixed(1)); }catch(e){} return; }
+  var dir = [r.sx / m, r.sy / m], P = _pfP;
+  var kind = _pfPulseKind(dir, r.start, r.end);
+  P.last = { dir: dir, start: r.start, end: r.end, kind: kind };
+  P.count++; P.lastKind = kind || '?'; P.lastAt = now;
+  try{ _ovlDiag('펄스', (kind || '미분류') + ' ' + r.n + '초 평균 ' + (m / r.n).toFixed(2) + ' 일관 ' + (m / r.sabs).toFixed(2)); }catch(e){}
+  if(kind === 'accel' && !r.early) _pfSetMotion('moving', now, '출발 펄스');
+  else if(kind === 'brake') _pfSetMotion('stopped', now, '제동 펄스');
+}
+
+// 센서 1초 요약 한 건 처리
+function _pfMotionFeed(ev){
+  var rms = (ev && typeof ev === 'object') ? ev.rms : ev;
+  if(typeof rms !== 'number' || !isFinite(rms)) return;
+  var now = Date.now(), b = _pfM.buf;
+  b.push([now, rms]); _pfM.lastSampleAt = now;
+  while(b.length && now - b[0][0] > 180000) b.shift();
+  if(ev && typeof ev === 'object'){ try{ _pfPulseFeed(ev, now); }catch(e0){} _pfM.hm = ev.hm; _pfM.vz = ev.vz; }
+  // 최근 8초 중앙값 — 폰을 만지작거리는 순간적 튐에 둔감하게
+  var recent = [];
+  for(var i = b.length - 1; i >= 0 && now - b[i][0] <= 8000; i--) recent.push(b[i][1]);
+  if(recent.length < 4) return;
+  var fast = _pfMedian(recent);
+  var all = b.map(function(x){ return x[1]; }).sort(function(x, y){ return x - y; });
+  var base = all.length >= 30 ? all[Math.floor(all.length * 0.8)] : 0.06;
+  _pfM.fast = fast; _pfM.base = base;
+  if(_pfM.pulseUntil && now < _pfM.pulseUntil) return;        // 펄스가 정한 상태는 유효기간 동안 수준 판정이 뒤집지 않는다
+  var hi = Math.max(base, 0.06);
+  var stopT = Math.max(0.03, 0.40 * hi), moveT = Math.max(0.045, 0.60 * hi);
+  var prev = _pfM.state, st = prev;
+  if(fast < stopT) st = 'stopped'; else if(fast > moveT) st = 'moving';
+  if(st !== prev){ _pfM.state = st; _pfM.since = now; _pfM.lvlAt = now; try{ _ovlDiag('움직임', (st === 'moving' ? '주행' : '정차') + ' 수준 f=' + fast.toFixed(3) + ' b=' + base.toFixed(3)); }catch(e){} }
+}
+// PF 에 줄 확신도: 최근 펄스가 정한 상태면 높게, 수준만이면 낮게(화면을 보고 있으면 손에 들고 있을 가능성이 커서 더 낮게)
+window._pfMotionConf = function(){
+  var now = Date.now();
+  if(_pfM.pulseUntil && now < _pfM.pulseUntil) return (now - (_pfM.pulseAt || 0) < 30000) ? 0.92 : 0.8;
+  return document.hidden ? 0.72 : 0.6;
+};
+window._pfMotionState = function(){ return (_pfM.state && Date.now() - _pfM.lastSampleAt < 6000) ? _pfM.state : null; };
+
+// ── 경로 → 판단기 만들기 ──
+function _pfBuild(){
+  var nd = (typeof _transitNodeData !== 'undefined') ? _transitNodeData : null;
+  if(!nd || !nd.length){ _pf.f = null; _pf.sig = ''; return false; }
+  var sig = (window._trackSig || '') + '#' + (window._trackBase || 0);
+  if(_pf.f && _pf.sig === sig) return true;
+  var st = [], tdToK = {}, prev = null;
+  var midnight = new Date(); midnight.setHours(0, 0, 0, 0);
+  var nowMs = Date.now();
+  for(var i = 0; i < nd.length; i++){
+    var n = nd[i];
+    if(!n || n.isOrigin || n.isWalk || !n.isSub || n.lat == null || n.lng == null) continue;
+    var sMs = null;
+    if(n._schedMin != null){
+      sMs = midnight.getTime() + n._schedMin * 60000;
+      if(sMs - nowMs > 12*3600000) sMs -= 24*3600000; else if(nowMs - sMs > 12*3600000) sMs += 24*3600000;
+    }
+    var xfer = !!(prev && ((prev.lineName || '') !== (n.lineName || '') || (i - prev._td) > 1 && _pfWalkBetween(prev._td, i)));
+    tdToK[i] = st.length;
+    st.push({ lat: n.lat, lng: n.lng, schedMs: sMs, xferFromPrev: xfer, name: n.name, _td: i, lineName: n.lineName || '' });
+    prev = st[st.length - 1];
+  }
+  if(st.length < 2){ _pf.f = null; _pf.sig = sig; _pf.st = st; return false; }
+  _pf.st = st; _pf.tdToK = tdToK; _pf.sig = sig;
+  _pf.f = PosFusion.create(st);
+  // 이미 진행도가 있으면(재시작·재렌더) 거기서 시작
+  var seed = 0, gm = (window._gpsMaxIdx == null ? -1 : window._gpsMaxIdx);
+  if(gm > 0){ for(var k = 0; k < st.length; k++){ if(st[k]._td <= gm) seed = k; } }
+  _pf.f.seed(seed, seed > 0 ? 0.8 : 0.9, Date.now());
+  _pf.lastBestK = seed; _pf.lastCellKey = '';
+  try{ _ovlDiag('PF', '경로 ' + st.length + '역 시작 ' + seed); }catch(e){}
+  return true;
+}
+function _pfWalkBetween(a, b){
+  try{ for(var j = a + 1; j < b; j++){ if(_transitNodeData[j] && _transitNodeData[j].isWalk) return true; } }catch(e){}
+  return false;
+}
+
+// ── 3~5초마다 호출 (_updateTransitGps 맨 앞) ──
+function _pfTick(){
+  try{
+    if(window._routeLocked !== true || window._metroRouteMode === true){
+      if(_pf.f && !window._routeLocked) { _pf.f = null; _pf.sig = ''; }
+      if(!window._routeLocked && _pfM.started && (Date.now() - (_pf.idleSince || (_pf.idleSince = Date.now())) > 120000)) _pfMotionStop();
+      return;
+    }
+    _pf.idleSince = 0;
+    if(!_pfBuild()) return;
+    _pfMotionStart();
+    var f = _pf.f, now = Date.now();
+    f.predict(now);
+
+    // GPS
+    var fx = (typeof S !== 'undefined') ? S.lastGPSFix : null;
+    if(fx && fx.lat != null && f.gps({ lat: fx.lat, lng: fx.lng, ts: fx.ts, acc: fx.acc }, now)) _pf.feeds.gps++;
+
+    // 정차/주행 — 첫 역 예정 출발 2분 전까지는 쓰지 않는다(역으로 걸어가는 중의 '이동'을 열차 주행으로 오인 방지)
+    var ms = window._pfMotionState();
+    if(ms){
+      var s0 = _pf.st[0] && _pf.st[0].schedMs;
+      var started = (_pf.lastBestK > 0) || s0 == null || now >= s0 - 120000;
+      if(started && now - (_pf.lastMotionFeedAt || 0) >= 4000){
+        _pf.lastMotionFeedAt = now; f.motion(ms, now, window._pfMotionConf()); _pf.feeds.motion++;
+      }
+    }
+
+    // 기지국 지문 — 셀이 바뀐 순간, 충분히 학습된 셀만
+    try{
+      var cl = (typeof _cellLast !== 'undefined') ? _cellLast : null;
+      if(cl && cl.key && cl.key !== _pf.lastCellKey && now - cl.ts < 20000){
+        _pf.lastCellKey = cl.key;
+        var e = _cellMap()[cl.key];
+        if(e && (e.n || 0) >= 3){
+          var td = _cellRouteIdx(e.s), k = (td >= 0) ? _pf.tdToK[td] : null;
+          if(k != null){ f.cell(k, Math.min(1, 0.4 + e.n / 20), now); _pf.feeds.cell++; }
+        }
+      }
+    }catch(eC){}
+
+    var b = f.best();
+    // 로그: 역이 바뀌었거나 20초마다
+    var chg = (b.idx !== _pf.lastBestK);
+    if(chg || now - _pf.lastLogAt > 20000){
+      _pf.lastLogAt = now;
+      var td2 = _pf.st[b.idx] ? _pf.st[b.idx]._td : -1;
+      try{
+        _ovlDiag(chg ? 'PF▶' : 'PF',
+          b.idx + '(' + (_pf.st[b.idx] ? _pf.st[b.idx].name : '?') + ') ' + (b.kind === 'dwell' ? '정차' : '주행') + ' ' + Math.round(b.conf * 100) + '% 지연' + b.delayS + 's'
+          + ' | 앱 ' + (window._gpsMaxIdx == null ? '-' : window._gpsMaxIdx) + '→td' + td2
+          + ' | 센서 ' + (_pfM.state || '-') + ' ' + (_pfM.fast || 0).toFixed(3) + '/' + (_pfM.base || 0).toFixed(3)
+          + ' hm' + (_pfM.hm == null ? '-' : _pfM.hm) + ' 펄스' + _pfP.count + ' | g' + _pf.feeds.gps + ' m' + _pf.feeds.motion + ' c' + _pf.feeds.cell);
+      }catch(eL){}
+    }
+    _pf.lastBestK = b.idx;
+    window._pfBest = { idx: b.idx, td: _pf.st[b.idx] ? _pf.st[b.idx]._td : -1, conf: b.conf, kind: b.kind, delayS: b.delayS, at: now };
+    if(_pfLive()) _pfApplyLive(b, now);
+  }catch(e){}
+}
+window._pfTick = _pfTick;
+
+// ── 보정(옵션) — 앞으로만, 한 번에 한 역, 확신 70% 이상 ──
+function _pfApplyLive(b, now){
+  try{
+    if(b.conf < 0.7) return;
+    if(now - _pf.lastLiveAt < 15000) return;                       // 한 역 올린 뒤 15초 쉰다
+    if(typeof _htlNotDeparted === 'function' && _htlNotDeparted()) return;   // 승차 확정 전
+    var gm = (window._gpsMaxIdx == null ? -1 : window._gpsMaxIdx);
+    if(gm < 0) return;
+    var target = _pf.st[b.idx] ? _pf.st[b.idx]._td : -1;
+    if(target <= gm) return;                                        // 되돌리지 않는다(앞으로만)
+    // 한 번에 한 역: gm 다음 지하철 역
+    var nextTd = -1;
+    for(var k = 0; k < _pf.st.length; k++){ if(_pf.st[k]._td > gm){ nextTd = _pf.st[k]._td; break; } }
+    if(nextTd < 0 || nextTd > target) return;
+    try{ var xh = _xferHoldIdx(); if(xh >= 0 && gm >= xh) return; }catch(e1){}
+    var stop = _transitNodeData.length - 1;
+    try{ var lg = _rtCurrentSubLeg(); if(lg && lg.alightIdx != null) stop = lg.alightIdx; }catch(e2){}
+    if(nextTd > stop) return;
+    // 최근 GPS 가 '아직 그 역에 못 왔다'고 하면 따르지 않는다
+    try{
+      var v = (typeof S !== 'undefined') ? S.lastGPSFix : null, tn = _transitNodeData[nextTd];
+      if(v && v.ts && now - v.ts <= 20000 && tn && tn.lat != null && haversineM(v.lat, v.lng, tn.lat, tn.lng) > 500 && _gpsBeforeNode(v.lat, v.lng, nextTd)) return;
+    }catch(e3){}
+    _pf.lastLiveAt = now;
+    window._gpsMaxIdx = nextTd;
+    window._nodePassMs = window._nodePassMs || {};
+    window._nodePassMs[nextTd] = now;
+    window._gpsWaitIdx = null; window._gpsWaitRatio = 0;
+    try{ if(typeof _recalcArrivalsFrom === 'function') _recalcArrivalsFrom(nextTd); }catch(e4){}
+    try{ _ovlDiag('PF보정', gm + '→' + nextTd + ' ' + Math.round(b.conf * 100) + '%'); }catch(e5){}
+  }catch(e){}
+}
+
+// ═══ 정답 기록 — 테스트 탑승용 ═══
+//  켜면 화면 아래에 '멈췄어요 / 출발했어요' 버튼이 뜬다. 열차가 실제로 서거나 출발하는 순간 눌러 주면
+//  진단 기록에 '정답' 줄로 남아, 센서·새 판단기·앱의 판단과 같은 시간축에서 비교할 수 있다.
+//  (앱이 화면에 떠 있을 때만 누를 수 있다)
+function _pfRecOn(){ try{ return localStorage.getItem('pfRec') === '1'; }catch(e){ return false; } }
+function _pfRecSet(v){
+  try{ localStorage.setItem('pfRec', v ? '1' : '0'); }catch(e){}
+  try{ _ovlDiag('정답', v ? '기록 모드 켬' : '기록 모드 끔'); }catch(e){}
+  _pfRecSync();
+}
+function _pfRecTap(kind, el){
+  try{
+    var b = window._pfBest;
+    var info = 'PF ' + (b ? (b.idx + (b.kind === 'dwell' ? ' 정차' : ' 주행') + ' ' + Math.round(b.conf * 100) + '%') : '-')
+             + ' | 센서 ' + (_pfM.state || '-') + ' f=' + (_pfM.fast || 0).toFixed(3) + ' hm=' + (_pfM.hm == null ? '-' : _pfM.hm);
+    _ovlDiag('정답', kind + ' ◀ 사용자가 누름 | ' + info);
+    try{ if(navigator.vibrate) navigator.vibrate(40); }catch(e1){}
+    if(el){ var t = el.getAttribute('data-t') || el.textContent; el.setAttribute('data-t', t); el.textContent = '기록됨 ✓'; setTimeout(function(){ el.textContent = t; }, 900); }
+  }catch(e){}
+}
+function _pfRecSync(){
+  try{
+    var on = _pfRecOn();
+    var btn = document.getElementById('pfRecBtn');
+    if(btn){ btn.textContent = on ? '정답 기록 버튼: 켜짐 (누르면 끔)' : '정답 기록 버튼: 꺼짐 (테스트 탑승용)'; btn.style.color = on ? 'var(--gold)' : 'var(--sub)'; }
+    var bar = document.getElementById('pfRecBar');
+    if(!on){ if(bar) bar.remove(); return; }
+    if(bar) return;
+    bar = document.createElement('div');
+    bar.id = 'pfRecBar';
+    bar.style.cssText = 'position:fixed;left:0;right:0;bottom:calc(68px + env(safe-area-inset-bottom));z-index:2147483000;display:flex;gap:10px;padding:0 14px;pointer-events:none;';
+    var mk = function(label, kind, bg){
+      var b = document.createElement('button');
+      b.textContent = label; b.setAttribute('data-t', label);
+      b.style.cssText = 'flex:1;pointer-events:auto;padding:16px 8px;border-radius:14px;border:none;font-size:16px;font-weight:800;font-family:inherit;color:#121214;box-shadow:0 4px 14px rgba(0,0,0,.35);background:' + bg + ';';
+      b.onclick = function(){ _pfRecTap(kind, b); };
+      return b;
+    };
+    bar.appendChild(mk('🛑 멈췄어요', '멈춤(도착)', '#ffd45a'));
+    bar.appendChild(mk('▶ 출발했어요', '출발', '#7fd8a0'));
+    document.body.appendChild(bar);
+  }catch(e){}
+}
+window._pfRecOn = _pfRecOn; window._pfRecSet = _pfRecSet; window._pfRecSync = _pfRecSync;
+setTimeout(_pfRecSync, 1800);
+setTimeout(_pfSyncBtn, 1500);
+
 </script>
 </body>
 </html>
