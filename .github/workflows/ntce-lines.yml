@@ -1,0 +1,65 @@
+name: Notice line distribution (ntce)
+
+# 공지 API(B553766/ntce/getNtceList) 과거 공지의 lineNmLst 노선 분포를 집계만 한다.
+# 키·공지 본문은 출력하지 않는다. 앱의 '연동 전' 문구가 1~8호선 외 노선을 다뤄야 하는지 확인용.
+on:
+  workflow_dispatch:
+  push:
+    branches: [ claude/jolly-darwin-dtzab9 ]
+    paths: [ .github/workflows/ntce-lines.yml ]
+
+jobs:
+  count:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      KEY: ${{ secrets.TAGO_KEY }}
+    steps:
+      - name: Fetch and count
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.parse, urllib.request, collections
+          key = os.environ.get("KEY", "")
+          if not key:
+              raise SystemExit("::error::TAGO_KEY 없음")
+          def get(params):
+              q = urllib.parse.urlencode(dict(params, dataType="JSON", serviceKey=key))
+              with urllib.request.urlopen("https://apis.data.go.kr/B553766/ntce/getNtceList?" + q, timeout=30) as r:
+                  return json.loads(r.read().decode("utf-8"))
+          items, total = [], None
+          for page in (1, 2, 3):
+              j = get({"pageNo": page, "numOfRows": 100})
+              h = j["response"]["header"]
+              if str(h.get("resultCode")) != "00":
+                  raise SystemExit("::error::resultCode " + str(h.get("resultCode")) + " " + str(h.get("resultMsg")))
+              b = j["response"]["body"]
+              total = b.get("totalCount")
+              it = (b.get("items") or {}).get("item") or []
+              it = it if isinstance(it, list) else [it]
+              items += it
+              if len(it) < 100:
+                  break
+          print("totalCount", total, "fetched", len(items))
+          ts = sorted(str(x.get("noftOcrnDt") or "") for x in items if x.get("noftOcrnDt"))
+          if ts:
+              print("range", ts[0], "~", ts[-1])
+          per_line, combos, empty = collections.Counter(), collections.Counter(), 0
+          for x in items:
+              raw = str(x.get("lineNmLst") or "")
+              lines = [v.strip() for v in raw.split(",") if v.strip()]
+              if not lines:
+                  empty += 1
+              combos[raw] += 1
+              for ln in set(lines):
+                  per_line[ln] += 1
+          print("empty lineNmLst", empty)
+          print("--- per line (공지 수) ---")
+          for ln, n in per_line.most_common():
+              print(f"{n:4d}  {ln!r}")
+          print("--- raw lineNmLst values ---")
+          for raw, n in combos.most_common(40):
+              print(f"{n:4d}  {raw!r}")
+          print("--- other fields seen ---")
+          print(sorted({k for x in items for k in x.keys()}))
+          print("noftSeCd", collections.Counter(str(x.get("noftSeCd")) for x in items).most_common())
+          PY
