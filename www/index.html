@@ -3055,7 +3055,7 @@ function _secBriefText(fromName, toName, lines, ctx, serverMsg){
     try{   // ★ 2026-10-03: 기다리는 시간·타는 시간 구분 + 이 경로를 고른 이유
       var _r0 = (typeof _transitResultData!=='undefined' && _transitResultData && _transitResultData.routes) ? _transitResultData.routes[0] : null;
       if(_r0 && _r0.why!==undefined){
-        var _s0 = _routeTimeSplit(_r0.sections||[]);
+        var _s0 = _routeTimeSplit(_r0.sections||[], Math.round(((_r0.summary||{}).duration||0)/60));
         if(_s0 && _s0.wait>0 && _s0.ride>0) ps.push('타고 가는 시간은 ' + _s0.ride + '분, 기다리는 시간은 ' + _s0.wait + '분이에요.');
         if(_r0.why) ps.push(_r0.why);
         if(typeof _doorTipLines==='function'){ var _dt0=_doorTipLines(_r0.sections||[]); if(_dt0.length) ps.push(_dt0.join(' ')); }
@@ -3981,7 +3981,7 @@ function _renderHomeConductorBrief(fromName, toName, hour, congPct, serverMsg){
       try{
         var _rt0 = (typeof _transitResultData!=='undefined' && _transitResultData && _transitResultData.routes) ? _transitResultData.routes[0] : null;
         if(_rt0 && _rt0.why!==undefined){
-          var _sp0 = _routeTimeSplit(_rt0.sections||[]);
+          var _sp0 = _routeTimeSplit(_rt0.sections||[], Math.round(((_rt0.summary||{}).duration||0)/60));
           var _extra = [];
           if(_sp0 && _sp0.wait>0 && _sp0.ride>0) _extra.push('이 중 타고 가는 시간은 <b>' + _sp0.ride + '분</b>, 기다리는 시간은 <b>' + _sp0.wait + '분</b>이에요.');
           if(_rt0.why) _extra.push(esc(_rt0.why));
@@ -10531,7 +10531,7 @@ window._selectSubwayNearestRoute = _selectSubwayNearestRoute;
 //   · 대기 = 구간 전체시간(sectionTime) − 실제 이동(endSec−startSec) (버스·장거리는 승차 전 기다림이 여기 들어 있다)
 //   · 급행은 엔진이 따로 준 xpWaitSec 만큼을 이동에서 빼서 대기로 옮긴다
 //   · 도보·환승 = 교통수단이 아닌 구간(도보, 환승 이동)
-function _routeTimeSplit(sections){
+function _routeTimeSplit(sections, totalMin){
   try{
     var ride=0, wait=0, walk=0, n=0;
     (sections||[]).forEach(function(s){
@@ -10550,7 +10550,17 @@ function _routeTimeSplit(sections){
       ride+=r-xw; wait+=w+xw; n++;
     });
     if(!n) return null;
-    return { ride:Math.round(ride), wait:Math.round(wait), walk:Math.round(walk) };
+    // ★ 2026-10-03: 항목별로 따로 반올림하면 합이 카드의 총 소요(36분)와 어긋난다(26+4+8=38).
+    //   totalMin 이 주어지고 차이가 3분 이내면 비율로 맞춘 뒤, 합이 정확히 그 값이 되도록 반올림한다(최대잔여법).
+    var parts=[ride,wait,walk], sum=ride+wait+walk, target=Math.round(sum);
+    if(totalMin>0 && sum>0 && Math.abs(totalMin-sum)<=3){
+      var k=totalMin/sum; parts=parts.map(function(v){ return v*k; }); target=totalMin;
+    }
+    var fl=parts.map(function(v){ return Math.floor(v); });
+    var left=target-fl.reduce(function(a,b){ return a+b; },0);
+    parts.map(function(v,i){ return [v-Math.floor(v),i]; }).sort(function(a,b){ return b[0]-a[0]; })
+      .slice(0,Math.max(0,left)).forEach(function(o){ fl[o[1]]++; });
+    return { ride:fl[0], wait:fl[1], walk:fl[2] };
   }catch(e){ return null; }
 }
 window._routeTimeSplit = _routeTimeSplit;
@@ -10674,7 +10684,7 @@ window._xferTipFor=_xferTipFor; window._exitTipFor=_exitTipFor; window._register
 function _renderSplitRow(route){
   var el=document.getElementById('transitSplitRow');
   if(!el) return;
-  var sp=(route && route.why!==undefined) ? _routeTimeSplit((route&&route.sections)||[]) : null;   // 엔진 경로만(노선도·BFS 미리보기는 대기 정보가 없음)
+  var sp=(route && route.why!==undefined) ? _routeTimeSplit((route&&route.sections)||[], Math.round(((route&&route.summary&&route.summary.duration)||0)/60)) : null;   // 엔진 경로만(노선도·BFS 미리보기는 대기 정보가 없음)
   window._routeSplitNow=sp;
   var why=(route&&route.why)||'';
   var h='';
