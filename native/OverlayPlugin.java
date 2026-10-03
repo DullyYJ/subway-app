@@ -320,7 +320,8 @@ public class OverlayPlugin extends Plugin {
         //   퍼져 바깥 두 칸이 잘렸다(가중치(weight) 폭 + WRAP_CONTENT 창 조합). → 창 폭과 모든 칸 폭을 '정확한 픽셀'로 직접 정한다.
         //   이렇게 하면 어떤 기기에서도 창 = 화면의 94%, 다섯 칸 합 = 창 안쪽 폭으로 고정된다.
         // ★ 2026-10-02: 펼친 폴드(가로 700dp 안팎)에선 96% 폭이 지나치게 넓다 → 최대 560dp 로 제한한다.
-        int maxW = Math.min(Math.round(dm.widthPixels * 0.96f), dp(560));
+        // ★ 2026-10-03 (YJ: "오버레이 좌우폭을 화면 좌우에 맞춰줘"): 화면 폭 그대로(가장자리까지).
+        int maxW = dm.widthPixels;
         final int padH = dp(8);
         final int rowW = maxW - 2 * padH;
         final int centerW = Math.round(rowW * 0.36f);   // 현위치(가운데) 칸

@@ -32009,7 +32009,9 @@ var _ovlLastKey = null, _ovlLastAt = 0, _OVL_HEARTBEAT_MS = 20000;
 function _ovlNative(){
   try{ var P = window.Capacitor && window.Capacitor.Plugins; return (P && P.Overlay) || null; }catch(e){ return null; }
 }
-function _ovlEnabled(){ try{ return localStorage.getItem(_OVL_KEY) !== '0'; }catch(e){ return true; } }
+// ★ 2026-10-03 (YJ: "처음부터 오버레이가 켜져 있어 — 처음엔 꺼 두기"): 켜기로 직접 고른 적이 있을 때만(저장값 '1') 켜진 것으로 본다.
+//   예전엔 저장값이 없으면 켜진 것으로 봐서(!== '0') 설치 직후부터 켜져 있고 권한 안내가 먼저 떴다.
+function _ovlEnabled(){ try{ return localStorage.getItem(_OVL_KEY) === '1'; }catch(e){ return false; } }
 // 지금 오버레이를 실제로 쓸 수 있나(플러그인 있음 + OS 지원 + 권한 허용 + 사용자가 켬)
 function _ovlUsable(){
   try{ return !!(_ovlNative() && _ovlSupported !== false && _ovlGranted === true && _ovlEnabled()); }catch(e){ return false; }
@@ -32223,6 +32225,28 @@ window._ovlNativeTick = function(){
     if(typeof _pipTick === 'function') _pipTick(); else _ovlSync();
   }catch(e){}
 };
+// 오버레이 권한 안내 모달 — 앱 테마(--card·--text·--sub·--border)를 따른다
+function _showOvlPermDialog(onOk, onCancel){
+  var old = document.getElementById('ovlPermOverlay');
+  if(old && old.parentNode) old.parentNode.removeChild(old);
+  var ov = document.createElement('div');
+  ov.id = 'ovlPermOverlay';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:28px;';
+  ov.innerHTML =
+    '<div style="background:var(--card,var(--bg,#fff));border:1px solid var(--border);border-radius:18px;max-width:340px;width:100%;padding:24px 22px;box-shadow:0 12px 40px rgba(0,0,0,0.3);">'
+    + '<div style="font-size:17px;font-weight:800;color:var(--text);margin-bottom:10px;line-height:1.4;">다른 앱 위에 표시</div>'
+    + '<div style="font-size:14px;color:var(--text);line-height:1.65;margin-bottom:6px;">다른 앱을 쓰는 동안 현재역·남은시간을 화면 위쪽에 작게 띄우려면 \'다른 앱 위에 표시\' 권한이 필요해요.</div>'
+    + '<div style="font-size:13px;color:var(--sub);line-height:1.6;margin-bottom:20px;">안내 정보만 보여주고 광고는 넣지 않아요. 설정 화면을 열까요?</div>'
+    + '<div style="display:flex;gap:10px;">'
+    + '<button id="ovlPermNo" style="flex:1;padding:13px;border-radius:11px;border:1px solid var(--border);background:var(--card2,#f2f2f2);color:var(--sub);font-size:15px;font-weight:700;cursor:pointer;">취소</button>'
+    + '<button id="ovlPermOk" style="flex:1;padding:13px;border-radius:11px;border:none;background:#2f7cf6;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">설정 열기</button>'
+    + '</div></div>';
+  document.body.appendChild(ov);
+  var close = function(){ try{ if(ov.parentNode) ov.parentNode.removeChild(ov); }catch(e){} };
+  document.getElementById('ovlPermOk').onclick = function(){ close(); try{ onOk && onOk(); }catch(e){} };
+  document.getElementById('ovlPermNo').onclick = function(){ close(); try{ onCancel && onCancel(); }catch(e){} };
+  ov.addEventListener('click', function(ev){ if(ev.target === ov){ close(); try{ onCancel && onCancel(); }catch(e){} } });
+}
 function _ovlSetEnabled(v){
   try{ localStorage.setItem(_OVL_KEY, v ? '1' : '0'); }catch(e){}
   var n = _ovlNative();
@@ -32232,17 +32256,19 @@ function _ovlSetEnabled(v){
     _ovlSyncToggle(); return;
   }
   if(v && _ovlGranted !== true){
-    // 권한 안내(설정 화면으로 보내 직접 켜게 한다) — 무엇을 왜 쓰는지 먼저 알린다
-    var ok = true;
-    try{
-      ok = window.confirm('다른 앱을 쓰는 동안 현재역·남은시간을 화면 위쪽에 작게 띄우려면 \'다른 앱 위에 표시\' 권한이 필요해요.\n\n안내 정보만 보여주고 광고는 넣지 않아요. 설정 화면을 열까요?');
-    }catch(e){}
-    if(ok){
+    // 권한 안내(설정 화면으로 보내 직접 켜게 한다) — 무엇을 왜 쓰는지 먼저 알린다.
+    // ★ 2026-10-03 (YJ: "알림도 테마에 맞춰줘"): 시스템 confirm() 대신 앱 테마 모달을 쓴다. 응답은 비동기라 여기서 마무리한다.
+    var _after = function(){ _ovlSyncToggle(); try{ _pipNativeSync(true); }catch(e){} _ovlSync(true); };
+    _showOvlPermDialog(function(){
       try{ n.requestPermission(); }catch(e){}
       if(typeof toast === 'function') toast("설정에서 '길동무'의 '다른 앱 위에 표시'를 켜 주세요");
-    } else {
+      _after();
+    }, function(){
       try{ localStorage.setItem(_OVL_KEY, '0'); }catch(e){}
-    }
+      _after();
+    });
+    _ovlSyncToggle();
+    return;
   } else if(typeof toast === 'function'){
     toast(v ? '다른 앱 위에 표시를 켰어요' : '다른 앱 위에 표시를 껐어요');
   }
