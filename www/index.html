@@ -4359,6 +4359,9 @@ function _loadServerPosts(cat, reset) {
         posts.forEach(function(p){ _known[p.id] = 1; });   // 이번에 보여준 글은 계속 같은 걸로 유지
       }
       // 서버 포스트를 _AI_POSTS 형식으로 변환
+      // ★ 2026-10-03: 3분마다 목록을 다시 만들 때 이미 받아 둔 서버 댓글이 사라지지 않게 id 로 이어받는다
+      var _prevCm = {};
+      try{ (_AI_POSTS || []).forEach(function(q){ if(q && q.isServer && q.cmts && q.cmts.length) _prevCm[q.id] = q.cmts; }); }catch(e){}
       var converted = posts.map(function(p){
         return {
           id:    p.id,
@@ -4371,7 +4374,8 @@ function _loadServerPosts(cat, reset) {
           like:  p.likes || 0,
           lol:   p.lols  || 0,
           sad:   p.sads  || 0,
-          cmts:  [],
+          cmts:  _prevCm[p.id] || [],
+          srvCmts: p.cmts || 0,     // ★ 서버가 알려준 '올 때가 된' 댓글 수(목록의 💬 숫자용)
           link:  p.link  || '',
           isServer: true,
         };
@@ -4466,10 +4470,24 @@ function _fetchServerComments(post){
         post.cmts.sort(function(a,b){ return a.time - b.time; });
         var wrap = document.getElementById('dccmts-' + post.id);
         if(wrap && typeof _dcCmtListHtml === 'function') wrap.innerHTML = _dcCmtListHtml(post);
+        try{ var _ce = document.getElementById('dccnt-' + post.id); if(_ce) _ce.textContent = '💬 ' + post.cmts.length; }catch(e){}
       }).catch(function(){});
   }catch(e){}
 }
 window._fetchServerComments = _fetchServerComments;
+// ★ 2026-10-03: 서버가 댓글을 시각을 두고 하나씩 내보낸다 — 글을 펼쳐 둔 동안엔 15초마다 새 댓글을 받아 붙인다
+try{
+  setInterval(function(){
+    if(document.hidden) return;
+    var op = window._commOpenPosts || {};
+    for(var k in op){
+      if(!op[k]) continue;
+      for(var i = 0; i < (_AI_POSTS || []).length; i++){
+        if(String(_AI_POSTS[i].id) === String(k)){ _fetchServerComments(_AI_POSTS[i]); break; }
+      }
+    }
+  }, 15000);
+}catch(e){}
 
 
 // ══════════════════════════════════════════════════════════════
@@ -30207,6 +30225,8 @@ function _renderPost(post) {
       + '<span class="dc-time">' + _timeAgo(post.time) + '</span>'
       + '<span class="dc-dot">·</span>'
       + '<span class="dc-views">👁 ' + (post.views || 0) + '</span>'
+      + (Math.max(post.srvCmts || 0, (post.cmts || []).length) > 0
+          ? ('<span class="dc-dot">·</span><span class="dc-cmtcnt" id="dccnt-' + post.id + '">💬 ' + Math.max(post.srvCmts || 0, (post.cmts || []).length) + '</span>') : '')
     + '</div>'
     + '<div class="dc-post-body" style="display:none;">'
       + '<div class="dc-body-txt">' + _dcEsc((post.body || '').replace(/\n{2,}/g,'\n')).replace(/\n/g,'<br>') + '</div>'
