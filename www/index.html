@@ -41598,6 +41598,8 @@ function _commCurTab(){
     var stv = document.getElementById('settingsTabView');
     if(cv  && cv.style.display  !== 'none' && cv.style.display  !== '') return 'chat';
     if(stv && stv.style.display !== 'none') return 'settings';
+    var lv  = document.getElementById('lineRoomView');           // ★ 2026-10-03: '내 노선' 칩이 생기면서 스와이프 순서에 빠져 있었다
+    if(lv && lv.style.display !== 'none' && lv.style.display !== '') return 'line';
     return (_commFilter === '뉴스') ? 'news' : 'board';
   }catch(e){ return 'board'; }
 }
@@ -41607,11 +41609,15 @@ function _commGoTab(name){
   try{
     var row = document.getElementById('filterRow');
     if(!row) return;
-    var chips = row.querySelectorAll('.chip');
-    if(name === 'chat')     { if(typeof showChatTab==='function')     showChatTab(chips[0]); return; }
-    if(name === 'board')    { if(typeof filterCat==='function')       filterCat(chips[1], 'all'); return; }
-    if(name === 'news')     { if(typeof filterCat==='function')       filterCat(chips[2], '뉴스'); return; }
-    if(name === 'settings') { if(typeof showSettingsTab==='function') showSettingsTab(chips[3]); return; }
+    // ★ 2026-10-03: 칩을 순서(번호)로 집으면 '내 노선' 칩이 끼면서 한 칸씩 밀린다 → id·onclick 으로 집는다
+    var byId = function(id){ return document.getElementById(id); };
+    var chatC  = byId('chipLiveTalk'), boardC = byId('chipBoard'), lineC = byId('chipLineRoom');
+    var newsC  = row.querySelector('.chip[onclick*="뉴스"]'), setC = row.querySelector('.chip[onclick*="showSettingsTab"]');
+    if(name === 'chat')     { if(typeof showChatTab==='function')     showChatTab(chatC); return; }
+    if(name === 'board')    { if(typeof filterCat==='function')       filterCat(boardC, 'all'); return; }
+    if(name === 'line')     { if(typeof showLineRoomTab==='function') showLineRoomTab(lineC); return; }
+    if(name === 'news')     { if(typeof filterCat==='function')       filterCat(newsC, '뉴스'); return; }
+    if(name === 'settings') { if(typeof showSettingsTab==='function') showSettingsTab(setC); return; }
   }catch(e){}
 }
 
@@ -41650,11 +41656,11 @@ function _commSwipeStep(dir){
     if(_newsCatStep(-dir)) return;
     // ★ 끝에 닿았을 때의 처리는 방향별로 다르다
     //   · IT(마지막)에서 왼쪽 → 설정으로 넘어가지 않고 멈춘다
-    //   · 전체(처음)에서 오른쪽 → 게시판으로 돌아간다
-    if(dir === 1) _commGoTab('board');
+    //   · 전체(처음)에서 오른쪽 → 내 노선으로 돌아간다(게시판 → 내 노선 → 뉴스 순서)
+    if(dir === 1) _commGoTab('line');
     return;
   }
-  var order = ['chat', 'board', 'news', 'settings'];
+  var order = ['chat', 'board', 'line', 'news', 'settings'];
   var i = order.indexOf(cur);
   if(i < 0) return;
   var nx = i - dir;                       // 왼쪽으로 밀면 다음 탭
@@ -41974,8 +41980,20 @@ function _lrRenderOfficial(line){
   var el=document.getElementById('lrOfficial'); if(!el) return;
   _offGet(function(j){
     var n=j && j.lines && j.lines[line];
-    if(!n || line!==_lr.line){ el.style.display='none'; el.innerHTML=''; return; }
-    el.innerHTML=_offText(line,n); el.style.display='block';
+    if(line!==_lr.line || !j){ el.style.display='none'; el.innerHTML=''; return; }
+    var _ALERT='rgba(10,132,255,.12)', _ALERT_B='rgba(10,132,255,.35)', _QUIET='rgba(142,142,147,.10)', _QUIET_B='rgba(142,142,147,.28)';
+    if(n){ el.style.background=_ALERT; el.style.borderColor=_ALERT_B; el.innerHTML=_offText(line,n); el.style.display='block'; return; }
+    // ★ 2026-10-03: 공지가 없을 때도 '확인했다'는 표시를 남겨서, 연동이 안 된 건지 정말 없는 건지 구분되게 한다.
+    //   공식 공지(서울교통공사 지하철 알림정보)는 1~8호선만 있다. 다른 철도 노선은 연동 전이라고 알린다. 버스 방은 표시하지 않는다.
+    if(/^[1-8]호선$/.test(line)){
+      el.style.background=_QUIET; el.style.borderColor=_QUIET_B;
+      el.innerHTML='✅ <b>서울교통공사 공지 확인</b> · 지금 '+_ltEsc(line)+' 지연·사고 공지는 없어요 <span style="color:var(--sub);">('+_offAgo(_offCache.at||Date.now())+' 확인)</span>';
+      el.style.display='block';
+    } else if(/선$/.test(line) || /^(공항철도|경의중앙|수인분당|신분당|경춘|경강|서해|GTX)/.test(line)){
+      el.style.background=_QUIET; el.style.borderColor=_QUIET_B;
+      el.innerHTML='ℹ️ '+_ltEsc(line)+'은(는) 공식 공지 연동 전이에요 · 아래 이용자 제보로 알려 드려요';
+      el.style.display='block';
+    } else { el.style.display='none'; el.innerHTML=''; }
   });
 }
 function _routeOfficialRow(route){
