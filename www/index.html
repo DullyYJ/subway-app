@@ -10536,7 +10536,11 @@ function _routeTimeSplit(sections){
     var ride=0, wait=0, walk=0, n=0;
     (sections||[]).forEach(function(s){
       var t=(s.transportation||{}).type, dur=(s.duration||0)/60;
-      if(t!==1 && t!==2 && t!==4){ walk+=dur; return; }
+      if(t!==1 && t!==2 && t!==4){
+        // ★ 환승 구간 안의 배차 대기(엔진 03bm xferWaitSec)는 '도보·환승'이 아니라 '대기'로 센다(합계는 그대로)
+        var xw2=(s.xferWaitSec>0) ? Math.min(dur, s.xferWaitSec/60) : 0;
+        walk+=dur-xw2; wait+=xw2; return;
+      }
       var r=null;
       if(s.startSec!=null && s.endSec!=null && isFinite(s.startSec) && isFinite(s.endSec) && s.endSec>=s.startSec) r=(s.endSec-s.startSec)/60;
       if(r==null) r=Math.max(0, dur-((s.waitSec||0)/60));
@@ -10801,6 +10805,7 @@ function _convertSinglePathToRoute(path) {
       waitLive:  !!sp.waitLive,
       xpWaitSec: (sp.xpWaitSec!=null ? sp.xpWaitSec : null),   // ★ 2026-10-03: 급행 기다리는 초(엔진 03bi) — 승차/대기 분리용
       xfer: (sp.xfer || null), exitFast: (sp.exitFast || null), stnName: (sp.endName || sp.startName || ''),   // ★ 2026-10-03: 환승 호차-문·빠른하차(엔진 03bk)
+      xferWaitSec: (sp.xferWaitSec!=null ? sp.xferWaitSec : null),
       waitEstimated: !!sp.waitEstimated,
       passStopList: stops.length ? { stationList: stops } : null
     };
@@ -10870,6 +10875,7 @@ function _convertEngineRoutes(engineData) {
         waitLive:  !!sp.waitLive,
       xpWaitSec: (sp.xpWaitSec!=null ? sp.xpWaitSec : null),
         xfer: (sp.xfer || null), exitFast: (sp.exitFast || null), stnName: (sp.endName || sp.startName || ''),
+        xferWaitSec: (sp.xferWaitSec!=null ? sp.xferWaitSec : null),
         waitEstimated: !!sp.waitEstimated,
         passStopList: stops.length ? { stationList: stops.map(_normStop) } : null
       };
