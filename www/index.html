@@ -3058,6 +3058,7 @@ function _secBriefText(fromName, toName, lines, ctx, serverMsg){
         var _s0 = _routeTimeSplit(_r0.sections||[]);
         if(_s0 && _s0.wait>0 && _s0.ride>0) ps.push('타고 가는 시간은 ' + _s0.ride + '분, 기다리는 시간은 ' + _s0.wait + '분이에요.');
         if(_r0.why) ps.push(_r0.why);
+        if(typeof _doorTipLines==='function'){ var _dt0=_doorTipLines(_r0.sections||[]); if(_dt0.length) ps.push(_dt0.join(' ')); }
       }
     }catch(e){}
     ps.push(xf <= 0 ? '환승 없이 한 번에 가실 수 있어요.'
@@ -3985,6 +3986,7 @@ function _renderHomeConductorBrief(fromName, toName, hour, congPct, serverMsg){
           if(_sp0 && _sp0.wait>0 && _sp0.ride>0) _extra.push('이 중 타고 가는 시간은 <b>' + _sp0.ride + '분</b>, 기다리는 시간은 <b>' + _sp0.wait + '분</b>이에요.');
           if(_rt0.why) _extra.push(esc(_rt0.why));
           if(_extra.length) ps.push(_extra.join(' '));
+          if(typeof _doorTipLines==='function'){ var _dt=_doorTipLines(_rt0.sections||[]); if(_dt.length) ps.push(esc(_dt.join(' '))); }   // 환승·하차 문 위치(서울교통공사 구간)
         }
       }catch(e){}
       // 2) 출발·도착 시각
@@ -10629,6 +10631,42 @@ function _doorTipLines(sections){
 }
 window._doorTipLines=_doorTipLines;
 
+// 알림·AI 승무원이 쓰도록 지금 보여 주는 경로의 환승/하차 문 정보를 역 이름으로 찾게 모아 둔다.
+function _dtKey(n){
+  n=String(n==null?'':n).replace(/\(.*?\)/g,'').replace(/\s+/g,'');
+  if(n.length>1 && /역$/.test(n)) n=n.slice(0,-1);
+  return n;
+}
+window._doorTips={xfer:{},exit:null};
+function _registerDoorTips(sections){
+  var t={xfer:{},exit:null};
+  try{
+    (sections||[]).forEach(function(sc){
+      var x=sc&&sc.xfer;
+      if(x && x.dropCar && x.dropDoor && x.boardCar && x.boardDoor && sc.stnName){
+        t.xfer[_dtKey(sc.stnName)]={ drop:x.dropCar+'호차 '+x.dropDoor+'번 문', board:x.boardCar+'호차 '+x.boardDoor+'번 문', to:(/^\d+$/.test(String(x.to||''))?x.to+'호선':''), secs:x.secs||0 };
+      }
+    });
+    for(var i=(sections||[]).length-1;i>=0;i--){
+      var e=sections[i]&&sections[i].exitFast;
+      if(e && e.length && sections[i].stnName){
+        var parts=e.map(function(f){ var l=_doorLabel(f.door); if(!l) return ''; var fc=f.fac||'출구'; var jo=(typeof _arrJosa==='function')?_arrJosa(fc,'은','는'):'은'; return fc+jo+' '+l; }).filter(Boolean);
+        if(parts.length) t.exit={ stn:_dtKey(sections[i].stnName), text:parts.join(', ') };
+        break;
+      }
+    }
+  }catch(err){}
+  window._doorTips=t;
+}
+// 알림 문구 뒤에 붙일 말(없으면 빈 문자열)
+function _xferTipFor(stnName){
+  try{ var x=(window._doorTips||{}).xfer[_dtKey(stnName)]; return x ? (' · 미리 '+x.drop+' 쪽으로 가면 환승이 빨라요') : ''; }catch(e){ return ''; }
+}
+function _exitTipFor(stnName){
+  try{ var e=(window._doorTips||{}).exit; return (e && e.stn===_dtKey(stnName)) ? (' · '+e.text+'이 가까워요') : ''; }catch(e2){ return ''; }
+}
+window._xferTipFor=_xferTipFor; window._exitTipFor=_exitTipFor; window._registerDoorTips=_registerDoorTips;
+
 function _renderSplitRow(route){
   var el=document.getElementById('transitSplitRow');
   if(!el) return;
@@ -10639,6 +10677,7 @@ function _renderSplitRow(route){
   if(sp) h+='<div><b style="color:var(--text);">'+_ltEsc(_routeSplitText(sp))+'</b></div>';
   if(why) h+='<div>'+_ltEsc(why)+'</div>';
   _doorTipLines((route&&route.sections)||[]).forEach(function(t){ h+='<div>'+_ltEsc(t)+'</div>'; });
+  _registerDoorTips((route&&route.sections)||[]);
   el.innerHTML=h;
   el.style.display=h?'block':'none';
 }
@@ -35503,7 +35542,7 @@ function checkArrivalAlerts(idx){
       toast('⚠️ 다음 역 목적지! ' + destNm + ' 내릴 준비하세요');
       vibrateArrive();
       showNotification('⚠️ 1정거장 전 도착',
-        '다음 역: ' + destNm + ' — 내릴 준비하세요!' + _remainDestTxt,
+        '다음 역: ' + destNm + ' — 내릴 준비하세요!' + _remainDestTxt + _exitTipFor(destNm),
         {vibrate:[300,100,300,100,300], type:'near_arrive'});
     }
     // 환승도 체크 (도착역이 환승역일 수 있음)
@@ -35520,14 +35559,14 @@ function checkArrivalAlerts(idx){
       toast('⚠️ 다음 역 목적지! ' + destNm + ' 내릴 준비하세요');
       vibrateArrive();
       showNotification('⚠️ 1정거장 전 도착',
-        '다음 역: ' + destNm + ' — 내릴 준비하세요!' + _remainDestTxt,
+        '다음 역: ' + destNm + ' — 내릴 준비하세요!' + _remainDestTxt + _exitTipFor(destNm),
         {vibrate:[300,100,300,100,300], type:'near_arrive'});
     } else if(!_alertFired['near2']){
       _alertFired['near2'] = true;
       toast('🔔 2정거장 후 목적지! ' + destNm);
       vibrateWarning();
       showNotification('🔔 2정거장 전 도착',
-        '목적지: ' + destNm + ' — 2정거장 남았습니다' + _remainDestTxt,
+        '목적지: ' + destNm + ' — 2정거장 남았습니다' + _remainDestTxt + _exitTipFor(destNm),
         {vibrate:[400,150,400], type:'near_arrive2'});
     }
   }
@@ -35563,7 +35602,7 @@ function checkArrivalAlerts(idx){
       toast('🔄 다음 역 ' + xferNm + ' 환승 (→' + xferLine + ')');
       vibrateTransfer();
       showNotification('🔄 1정거장 전 환승',
-        '다음 역: ' + xferNm + ' → ' + xferLine + ' 환승하세요' + _remainMinTxt(_remainSecTo(idx, idx+1)),
+        '다음 역: ' + xferNm + ' → ' + xferLine + ' 환승하세요' + _remainMinTxt(_remainSecTo(idx, idx+1)) + _xferTipFor(xferNm),
         {vibrate:[200,100,200,100,200], type:'transfer'});
     }
   }
@@ -35588,14 +35627,14 @@ function checkArrivalAlerts(idx){
       toast('🔄 다음 역 ' + xferNm2 + ' 환승 (→' + xferLine2 + ')');
       vibrateTransfer();
       showNotification('🔄 1정거장 전 환승',
-        '다음 역: ' + xferNm2 + ' → ' + xferLine2 + ' 환승하세요' + _remainMinTxt(_xr2),
+        '다음 역: ' + xferNm2 + ' → ' + xferLine2 + ' 환승하세요' + _remainMinTxt(_xr2) + _xferTipFor(xferNm2),
         {vibrate:[200,100,200,100,200], type:'transfer'});
     } else if(!_alertFired[xfer2Key]){
       _alertFired[xfer2Key] = true;
       toast('🔔 2정거장 후 환승역! ' + xferNm2 + ' (→' + xferLine2 + ')');
       vibrateWarning();
       showNotification('🔔 2정거장 전 환승',
-        xferNm2 + '에서 ' + xferLine2 + ' 환승 — 미리 준비하세요' + _remainMinTxt(_xr2),
+        xferNm2 + '에서 ' + xferLine2 + ' 환승 — 미리 준비하세요' + _remainMinTxt(_xr2) + _xferTipFor(xferNm2),
         {vibrate:[400,150,400], type:'transfer2'});
     }
   }
