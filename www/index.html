@@ -3052,15 +3052,7 @@ function _secBriefText(fromName, toName, lines, ctx, serverMsg){
     var ps = [];
     ps.push(fromName + '에서 ' + toName + '까지는 ' + (tot > 0 ? '약 ' + tot + '분 ' : '') + '걸려요.'
       + ((lines && lines.length) ? ' ' + lines.join(' → ') + ' 순서로 가시면 돼요.' : ''));
-    try{   // ★ 2026-10-03: 기다리는 시간·타는 시간 구분 + 이 경로를 고른 이유
-      var _r0 = (typeof _transitResultData!=='undefined' && _transitResultData && _transitResultData.routes) ? _transitResultData.routes[0] : null;
-      if(_r0 && _r0.why!==undefined){
-        var _s0 = _routeTimeSplit(_r0.sections||[], Math.round(((_r0.summary||{}).duration||0)/60));
-        if(_s0 && _s0.wait>0 && _s0.ride>0) ps.push('타고 가는 시간은 ' + _s0.ride + '분, 기다리는 시간은 ' + _s0.wait + '분이에요.');
-        if(_r0.why) ps.push(_r0.why);
-        if(typeof _doorTipLines==='function'){ var _dt0=_doorTipLines(_r0.sections||[]); if(_dt0.length) ps.push(_dt0.join(' ')); }
-      }
-    }catch(e){}
+    // ★ 2026-10-03: 승차·대기 구분, 경로를 고른 이유, 문 위치는 위 경로 카드(#transitSplitRow)가 이미 보여 주므로 여기서는 반복하지 않는다.
     ps.push(xf <= 0 ? '환승 없이 한 번에 가실 수 있어요.'
       : xf === 1 ? '환승이 한 번 있어요. 환승 구간 이동 거리를 미리 봐 두면 편해요.'
       : '환승이 ' + xf + '번이라 안내 방송을 놓치지 마세요.');
@@ -3977,18 +3969,7 @@ function _renderHomeConductorBrief(fromName, toName, hour, congPct, serverMsg){
         t = '환승 정보는 경로가 확정되면 구간별로 알려드릴게요.';
       }
       ps.push(_head + ' ' + t);
-      // ★ 2026-10-03: 대기·승차 구분 + 이 경로를 고른 이유(엔진 근거) 한두 문장
-      try{
-        var _rt0 = (typeof _transitResultData!=='undefined' && _transitResultData && _transitResultData.routes) ? _transitResultData.routes[0] : null;
-        if(_rt0 && _rt0.why!==undefined){
-          var _sp0 = _routeTimeSplit(_rt0.sections||[], Math.round(((_rt0.summary||{}).duration||0)/60));
-          var _extra = [];
-          if(_sp0 && _sp0.wait>0 && _sp0.ride>0) _extra.push('이 중 타고 가는 시간은 <b>' + _sp0.ride + '분</b>, 기다리는 시간은 <b>' + _sp0.wait + '분</b>이에요.');
-          if(_rt0.why) _extra.push(esc(_rt0.why));
-          if(_extra.length) ps.push(_extra.join(' '));
-          if(typeof _doorTipLines==='function'){ var _dt=_doorTipLines(_rt0.sections||[]); if(_dt.length) ps.push(esc(_dt.join(' '))); }   // 환승·하차 문 위치(서울교통공사 구간)
-        }
-      }catch(e){}
+      // (승차·대기 구분, 경로를 고른 이유, 문 위치는 위 경로 카드가 이미 보여 주므로 여기서는 반복하지 않는다 — 2026-10-03)
       // 2) 출발·도착 시각
       if(window._metroRouteMode === true){
         // ★ 노선도 경로: 위치추적 없이 현재시각 기준 열차 유무만 안내(소요시간은 위 첫 문장에 있다)
