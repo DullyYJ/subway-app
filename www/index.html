@@ -7110,6 +7110,7 @@ function _renderTransitResultCard(data, start, dest, cacheSource) {
   // ★ 2026-10-03: 승차·대기·도보 분리 + 선택 이유 한 줄
   try{ _renderSplitRow(route); }catch(e){}
   try{ _depCompareStart(route); }catch(e){}
+  try{ if(typeof _lrRouteAlertStart==='function') _lrRouteAlertStart(route); }catch(e){}
 
   // 복합경로 가로 타임라인 렌더
   _renderHtlTrack(sections, start, dest, totalMin);
@@ -18685,6 +18686,7 @@ window.addEventListener('unhandledrejection', function(e) {
       <!-- ★ 2026-10-03: 승차·대기·도보 분리 + 왜 이 경로인지 -->
       <div id="transitSplitRow" style="display:none;font-size:12px;line-height:1.5;color:var(--sub);margin:-2px 0 8px;"></div>
       <div id="transitDepRow" style="display:none;font-size:12px;line-height:1.5;color:var(--sub);margin:0 0 8px;"></div>
+      <div id="transitAlertRow" style="display:none;font-size:12px;line-height:1.5;color:var(--text);margin:0 0 8px;padding:7px 10px;border-radius:10px;background:rgba(255,69,58,.12);border:1px solid rgba(255,69,58,.35);"></div>
 
       <!-- ── 경로 옵션 탭 (최단시간/최소환승) ── -->
       <div id="routeOptionTabs" style="display:none;gap:6px;margin-bottom:10px;flex-wrap:nowrap;">
@@ -19056,6 +19058,7 @@ window.addEventListener('unhandledrejection', function(e) {
     <div class="filter-row" id="filterRow">
       <div class="chip" id="chipLiveTalk" onclick="showChatTab(this)">🔴실시간소통</div>
       <div class="chip on" id="chipBoard" onclick="filterCat(this,'all')">게시판</div>
+      <div class="chip" id="chipLineRoom" onclick="showLineRoomTab(this)">🚇내 노선</div>
       <div class="chip" onclick="filterCat(this,'뉴스')">📰뉴스</div>
       <div class="chip" onclick="showSettingsTab(this)">⚙️설정</div>
     </div>
@@ -19088,6 +19091,21 @@ window.addEventListener('unhandledrejection', function(e) {
       <input id="chatInput" type="text" placeholder="메시지를 입력하세요..." maxlength="200"
         onkeydown="if(event.key==='Enter')sendChatMsg()">
       <button class="chat-send-btn" onclick="sendChatMsg()">➤</button>
+    </div>
+  </div>
+
+  <!-- ★ 2026-10-03 내 노선 방 — 노선별 대화 + 지연·혼잡 제보 (실제 이용자 글만) -->
+  <div id="lineRoomView" style="display:none;flex:1;min-height:0;overflow:hidden;flex-direction:column;">
+    <div id="lrLines" style="flex-shrink:0;display:flex;gap:6px;overflow-x:auto;padding:8px 12px 4px;-webkit-overflow-scrolling:touch;"></div>
+    <div id="lrAlert" style="display:none;flex-shrink:0;margin:4px 12px 0;padding:8px 11px;border-radius:10px;font-size:12px;line-height:1.5;"></div>
+    <div class="chat-scroll" id="lrScroll"></div>
+    <div style="flex-shrink:0;display:flex;gap:8px;padding:6px 12px 0;">
+      <button onclick="_lrReport('delay')" style="flex:1;padding:8px 4px;border-radius:10px;border:1px solid var(--border2);background:var(--card);color:var(--text);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">🚨 지연돼요</button>
+      <button onclick="_lrReport('crowd')" style="flex:1;padding:8px 4px;border-radius:10px;border:1px solid var(--border2);background:var(--card);color:var(--text);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">😵 붐벼요</button>
+    </div>
+    <div class="chat-inputbar">
+      <input id="lrInput" type="text" placeholder="이 노선 이용자에게 한마디…" maxlength="120" onkeydown="if(event.key==='Enter')_lrSend()">
+      <button class="chat-send-btn" onclick="_lrSend()">➤</button>
     </div>
   </div>
 
@@ -41690,6 +41708,183 @@ function showChatTab(el){
   if(box) box.scrollTop = box.scrollHeight;
 }
 window.showChatTab = showChatTab;
+
+// ══════════════════════════════════════════════════════════════
+// ★ 2026-10-03 (개선안 4·5): 내 노선 방 + 지연 제보 / 경로 카드의 지연 경고
+//   서버: board-writer /lroom(대화·제보), /lalerts(최근 30분 지연 제보 집계). 가짜 대화는 만들지 않는다 —
+//   실제 이용자가 남긴 글만 보인다. 글쓰기·제보는 커뮤니티 아이디가 있어야 하고(구경은 자유), 욕설은 서버가 막는다.
+// ══════════════════════════════════════════════════════════════
+var _LR_COMMON = ['1호선','2호선','3호선','4호선','5호선','6호선','7호선','8호선','9호선','신분당선','수인분당선','경의중앙선','공항철도','경춘선','GTX-A'];
+var _lr = { line:'', since:0, seen:{}, timer:null, busy:false };
+function _lrBase(){ return (typeof _BOARD_WRITER_URL!=='undefined' && _BOARD_WRITER_URL) || 'https://board-writer.phg0643.workers.dev'; }
+function _lrRouteLines(){
+  try{
+    var out=[];
+    var rt=(typeof _transitResultData!=='undefined' && _transitResultData && _transitResultData.routes) ? _transitResultData.routes[0] : null;
+    ((rt&&rt.sections)||[]).forEach(function(sc){
+      var t=(sc.transportation||{}).type, nm=(sc.transportation||{}).name;
+      if(t===1 && nm && out.indexOf(nm)<0) out.push(nm);
+    });
+    return out;
+  }catch(e){ return []; }
+}
+function _lrPickDefault(){
+  var saved=''; try{ saved=_safeLS.get('lr_line',''); }catch(e){}
+  var rl=_lrRouteLines();
+  if(rl.length) return rl[0];
+  return saved || '2호선';
+}
+function _lrRenderLines(){
+  var box=document.getElementById('lrLines'); if(!box) return;
+  var rl=_lrRouteLines(), all=rl.slice();
+  _LR_COMMON.forEach(function(l){ if(all.indexOf(l)<0) all.push(l); });
+  box.innerHTML=all.map(function(l){
+    var on=(l===_lr.line), mine=rl.indexOf(l)>=0;
+    var col=(typeof _transitColor==='function') ? _transitColor(1,l) : 'var(--gold)';
+    return '<span onclick="_lrSelect(\''+_ltEsc(l).replace(/'/g,'')+'\')" style="flex-shrink:0;cursor:pointer;font-size:12px;font-weight:700;padding:5px 11px;border-radius:14px;white-space:nowrap;'
+      +(on?('background:'+col+';color:#fff;border:1px solid '+col+';'):('background:transparent;color:var(--text);border:1px solid var(--border2);'))+'">'+(mine?'📍':'')+_ltEsc(l)+'</span>';
+  }).join('');
+}
+function _lrSelect(line){
+  _lr.line=line; _lr.since=0; _lr.seen={};
+  try{ _safeLS.set('lr_line',line); }catch(e){}
+  var sc=document.getElementById('lrScroll'); if(sc) sc.innerHTML='';
+  _lrRenderLines(); _lrPoll(true);
+}
+window._lrSelect=_lrSelect;
+function showLineRoomTab(el){
+  try{ var _nb=document.getElementById('newsCatBar'); if(_nb) _nb.style.display='none'; }catch(e){}
+  document.querySelectorAll('#filterRow .chip').forEach(function(c){c.classList.remove('on');});
+  if(el) el.classList.add('on');
+  ['commScrollView','chatTabView','settingsTabView','aiTabView'].forEach(function(id){ var e=document.getElementById(id); if(e) e.style.display='none'; });
+  var fab=document.getElementById('commFab'); if(fab) fab.style.display='none';
+  var v=document.getElementById('lineRoomView');
+  if(v){ v.style.display='flex'; v.style.flexDirection='column'; v.style.flex='1'; v.style.minHeight='0'; }
+  if(!_lr.line) _lr.line=_lrPickDefault();
+  _lrRenderLines(); _lrPoll(true);
+  if(!_lr.timer) _lr.timer=setInterval(function(){
+    var vv=document.getElementById('lineRoomView');
+    var tc=document.getElementById('tab-community');
+    if(!vv || vv.style.display==='none' || document.visibilityState==='hidden' || (tc && !tc.classList.contains('active'))){ return; }
+    _lrPoll(false);
+  }, 6000);
+}
+window.showLineRoomTab=showLineRoomTab;
+// 다른 칩으로 가면 이 방은 닫는다
+// (뒤에서 `window.showSettingsTab = ...` 처럼 다시 대입하는 줄이 있어, 문서가 다 불러와진 뒤에 감싼다)
+window.addEventListener('load', function(){
+  ['filterCat','showChatTab','showSettingsTab','showAITab'].forEach(function(fn){
+    try{
+      var o=window[fn]; if(typeof o!=='function' || o._lrWrapped) return;
+      var w=function(){ var v=document.getElementById('lineRoomView'); if(v) v.style.display='none'; return o.apply(this, arguments); };
+      w._lrWrapped=true; window[fn]=w;
+    }catch(e){}
+  });
+});
+function _lrTime(ts){ var d=new Date(ts), p=function(n){return (n<10?'0':'')+n;}; return p(d.getHours())+':'+p(d.getMinutes()); }
+function _lrRenderAlert(al){
+  var el=document.getElementById('lrAlert'); if(!el) return;
+  var n=(al&&al.reporters)||0;
+  if(!n){ el.style.display='none'; el.innerHTML=''; return; }
+  var st=((al.stations)||[]).map(function(x){ return _ltEsc(x.stn)+' '+x.n+'명'; }).join(', ');
+  var strong=n>=3;
+  el.style.display='block';
+  el.style.background=strong?'rgba(255,69,58,.14)':'rgba(255,159,10,.14)';
+  el.style.border='1px solid '+(strong?'rgba(255,69,58,.4)':'rgba(255,159,10,.4)');
+  el.style.color='var(--text)';
+  el.innerHTML=(strong?'🚨 <b>지연 제보가 모이고 있어요</b>':'⚠️ 지연 제보가 있어요')+' · 최근 30분 '+n+'명'+(st?' ('+st+')':'')+(strong?'':' — 아직 확인 중이에요');
+}
+function _lrAppend(msgs){
+  var sc=document.getElementById('lrScroll'); if(!sc) return;
+  var me=''; try{ me=(_getCommId()||''); }catch(e){}
+  var nearBottom=(sc.scrollHeight-sc.scrollTop-sc.clientHeight)<80;
+  var added=false;
+  msgs.forEach(function(m){
+    if(_lr.seen[m.id]) return; _lr.seen[m.id]=1; added=true;
+    if(m.ts>_lr.since) _lr.since=m.ts;
+    var mine=(me && m.nick===me);
+    var badge = m.kind==='delay' ? '<span style="font-size:10px;font-weight:800;color:#ff453a;margin-right:5px;">🚨 지연</span>'
+              : m.kind==='crowd' ? '<span style="font-size:10px;font-weight:800;color:#ff9f0a;margin-right:5px;">😵 혼잡</span>' : '';
+    var d=document.createElement('div');
+    d.className='chat-bubble'+(mine?' mine':'');
+    d.innerHTML='<div class="chat-bub-body">'+(mine?'':'<div class="chat-bub-nick">'+_ltEsc(m.nick||'익명')+'</div>')
+      +'<div class="chat-bub-txt">'+badge+_ltEsc(m.text||'')+'</div><div class="chat-bub-time">'+_lrTime(m.ts)+'</div></div>';
+    sc.appendChild(d);
+  });
+  if(!sc.children.length){
+    sc.innerHTML='<div style="margin:auto;text-align:center;color:var(--sub);font-size:13px;line-height:1.7;padding:30px 20px;">아직 이 노선 방에 글이 없어요.<br>지금 타고 계신다면 첫 한마디를 남겨 보세요.<br><span style="font-size:11px;">지연·혼잡 제보는 같은 노선 이용자에게 바로 도움이 돼요.</span></div>';
+  } else if(added){
+    var emp=sc.querySelector('div[style*="margin:auto"]'); if(emp) emp.remove();
+    if(nearBottom || sc.dataset.first!=='1'){ sc.scrollTop=sc.scrollHeight; sc.dataset.first='1'; }
+  }
+}
+function _lrPoll(first){
+  if(_lr.busy || !_lr.line) return; _lr.busy=true;
+  var line=_lr.line;
+  fetch(_lrBase()+'/lroom?line='+encodeURIComponent(line)+'&since='+(_lr.since||0))
+    .then(function(r){ return r.ok?r.json():null; })
+    .then(function(j){
+      _lr.busy=false;
+      if(!j || !j.ok || line!==_lr.line) return;
+      _lrAppend(j.msgs||[]); _lrRenderAlert(j.alert);
+    }).catch(function(){ _lr.busy=false; });
+}
+function _lrPost(kind, text, stn){
+  var id=''; try{ id=(_getCommId()||''); }catch(e){}
+  if(!id){ if(typeof toast==='function') toast('설정에서 커뮤니티 아이디를 등록하면 글과 제보를 남길 수 있어요'); return Promise.resolve(false); }
+  return fetch(_lrBase()+'/lroom',{ method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ line:_lr.line, nick:id, text:text||'', kind:kind, stn:stn||'' }) })
+    .then(function(r){ return r.json().catch(function(){ return null; }).then(function(j){ return { ok:r.ok, j:j }; }); })
+    .then(function(x){
+      if(x.ok && x.j && x.j.ok){ _lrPoll(false); return true; }
+      var e=(x.j&&x.j.error)||'';
+      if(typeof toast==='function') toast(e==='filtered' ? '부적절한 표현이 있어 올리지 못했어요' : e==='rate limited' ? '잠시 후 다시 시도해 주세요(시간당 한도)' : '올리지 못했어요. 잠시 후 다시 시도해 주세요');
+      return false;
+    }).catch(function(){ if(typeof toast==='function') toast('네트워크가 불안정해요'); return false; });
+}
+function _lrSend(){
+  var inp=document.getElementById('lrInput'); if(!inp) return;
+  var t=(inp.value||'').trim(); if(!t) return;
+  _lrPost('chat', t, '').then(function(ok){ if(ok) inp.value=''; });
+}
+window._lrSend=_lrSend;
+function _lrReport(kind){
+  var stn=''; try{ stn=(window.prompt && window.prompt((kind==='delay'?'지연':'혼잡')+' 제보 — 어느 역 근처인가요? (모르면 비워 두세요)', '')) || ''; }catch(e){}
+  _lrPost(kind, '', String(stn).trim().slice(0,20)).then(function(ok){ if(ok && typeof toast==='function') toast('제보해 주셔서 고마워요'); });
+}
+window._lrReport=_lrReport;
+
+// 경로 카드: 내 경로의 지하철 노선 중 최근 30분 지연 제보가 3명 이상이면 경고 한 줄(개선안 5). 1~2명은 '확인 중'으로 약하게.
+var _lrAlertAsk = { key:'', at:0 };
+function _lrRouteAlertStart(route){
+  var el=document.getElementById('transitAlertRow'); if(!el) return;
+  try{
+    if(!route || route.why===undefined){ el.style.display='none'; return; }
+    var lines=[]; (route.sections||[]).forEach(function(sc){ var nm=(sc.transportation||{}).name; if((sc.transportation||{}).type===1 && nm && lines.indexOf(nm)<0) lines.push(nm); });
+    if(!lines.length){ el.style.display='none'; return; }
+    var key=lines.join(',');
+    if(_lrAlertAsk.key===key && Date.now()-_lrAlertAsk.at<60000) return;
+    _lrAlertAsk={ key:key, at:Date.now() };
+    fetch(_lrBase()+'/lalerts?lines='+encodeURIComponent(key)).then(function(r){ return r.ok?r.json():null; }).then(function(j){
+      if(!j||!j.ok){ return; }
+      var parts=[];
+      lines.forEach(function(l){ var a=(j.lines||{})[l]; if(a && a.reporters>=3){ var st=(a.stations||[])[0]; parts.push('<b>'+_ltEsc(l)+'</b> 최근 30분 지연 제보 '+a.reporters+'명'+(st?' ('+_ltEsc(st.stn)+' 부근)':'')); } });
+      if(!parts.length){ el.style.display='none'; el.innerHTML=''; return; }
+      el.innerHTML='🚨 '+parts.join(' · ')+' — 시간 여유를 두고 이동하세요. <span onclick="_lrOpenRoom(\''+_ltEsc(lines[0]).replace(/'/g,'')+'\')" style="color:var(--gold);font-weight:700;cursor:pointer;">내 노선 방 보기 ›</span>';
+      el.style.display='block';
+    }).catch(function(){});
+  }catch(e){}
+}
+window._lrRouteAlertStart=_lrRouteAlertStart;
+function _lrOpenRoom(line){
+  try{
+    var ni=document.getElementById('ni-community'); if(typeof switchTab==='function' && ni) switchTab('community', ni);
+    _lr.line=line||_lr.line||''; _lr.since=0; _lr.seen={};
+    var sc=document.getElementById('lrScroll'); if(sc) sc.innerHTML='';
+    showLineRoomTab(document.getElementById('chipLineRoom'));
+  }catch(e){}
+}
+window._lrOpenRoom=_lrOpenRoom;
 
 // ★ 홈 '실시간 대화' 헤더 탭 → 커뮤니티 실시간소통 채팅창으로 이동
 function _goCommunityChat(){
