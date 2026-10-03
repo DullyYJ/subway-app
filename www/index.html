@@ -7109,6 +7109,7 @@ function _renderTransitResultCard(data, start, dest, cacheSource) {
 
   // ★ 2026-10-03: 승차·대기·도보 분리 + 선택 이유 한 줄
   try{ _renderSplitRow(route); }catch(e){}
+  try{ _depCompareStart(route); }catch(e){}
 
   // 복합경로 가로 타임라인 렌더
   _renderHtlTrack(sections, start, dest, totalMin);
@@ -10604,6 +10605,58 @@ function _renderSplitRow(route){
   el.style.display=h?'block':'none';
 }
 window._renderSplitRow=_renderSplitRow;
+
+// ★ 2026-10-03 (개선안 1 — 출발 시각 비교): 지금 출발 / 10분 뒤 / 20분 뒤 중 언제 가야 가장 일찍 도착하는지.
+//   급행·배차가 드문 구간에선 조금 늦게 출발하는 편이 먼저 도착하기도 한다. 계산은 전부 엔진(baseMs 로 시각을 바꿔 물음)이고,
+//   앱은 도착 시각을 나란히 보여 주기만 한다. 경로가 그려진 뒤 1.2초 후 조용히 2~3번 물어보며 실패하면 아무것도 안 보인다.
+//   기준시각을 직접 고른 경우·노선도 미리보기·엔진 경로가 아닌 경우엔 하지 않는다.
+var _depCmp = { key:'' };
+function _depCompareStart(route){
+  var el=document.getElementById('transitDepRow');
+  if(!el) return;
+  try{
+    var qs=window._lastCoordQs;
+    if(!qs || !route || route.why===undefined || window._metroRouteMode===true || (typeof _baseTimeMs!=='undefined' && _baseTimeMs!=null)){ el.style.display='none'; el.innerHTML=''; return; }
+    if(_depCmp.key===qs){ return; }   // 같은 검색(요청 문자열 동일)이면 다시 묻지 않는다 — 탭 전환 등
+    _depCmp.key=qs;
+    el.style.display='none'; el.innerHTML='';
+    var myKey=_depCmp.key;
+    var t0=(typeof getBaseTimeMs==='function') ? getBaseTimeMs() : Date.now();
+    var offs=[0,10,20], res=[];
+    var ask=function(i){
+      if(i>=offs.length) return finish();
+      if(_depCmp.key!==myKey) return;
+      var q=qs.replace(/baseMs=\d+/,'baseMs='+Math.round(t0+offs[i]*60000))+'&live=0';
+      fetch(_routeV2Url(q.replace(/^\?/,'')), { priority:'low' }).then(function(r){ return r.ok?r.json():null; }).then(function(j){
+        var paths=(j&&j.result&&j.result.path)||[];
+        var f=null; for(var k=0;k<paths.length;k++){ if((paths[k].info||{}).tab==='fast'){ f=paths[k]; break; } }
+        if(!f) f=paths[0];
+        var tt=f&&f.info&&f.info.totalTime;
+        res.push(tt!=null ? { off:offs[i], arrMs:t0+offs[i]*60000+tt*60000, tot:tt } : null);
+        ask(i+1);
+      }).catch(function(){ res.push(null); ask(i+1); });
+    };
+    var finish=function(){
+      if(_depCmp.key!==myKey) return;
+      if(!res[0]) return;
+      var pad=function(n){ return (n<10?'0':'')+n; };
+      var hm=function(ms){ var d=new Date(ms); return pad(d.getHours())+':'+pad(d.getMinutes()); };
+      var best=res[0];
+      res.forEach(function(r){ if(r && r.arrMs < best.arrMs - 60000) best=r; });   // 1분 넘게 빨라야 '더 낫다'
+      var parts=res.map(function(r,i){ return r ? ((offs[i]===0?'지금':offs[i]+'분 뒤')+' 출발 → <b style="color:var(--text);">'+hm(r.arrMs)+'</b> 도착') : null; }).filter(Boolean);
+      var msg;
+      if(best.off===0){
+        var _lateOk=0; res.forEach(function(r){ if(r && r.off>0 && r.arrMs <= res[0].arrMs + 60000) _lateOk=Math.max(_lateOk, r.off); });
+        msg=_lateOk>0 ? ('지금 출발하든 '+_lateOk+'분 뒤에 출발하든 도착 시각은 같아요. 여유 있게 나가셔도 돼요.') : '지금 출발하는 게 가장 일찍 도착해요.';
+      }
+      else msg=best.off+'분 뒤에 출발하면 '+Math.round((res[0].arrMs-best.arrMs)/60000)+'분 일찍 도착해요 (기다리는 것이 더 빠른 구간이에요).';
+      el.innerHTML='<div>'+parts.join(' · ')+'</div><div>'+msg+'</div>';
+      el.style.display='block';
+    };
+    setTimeout(function(){ ask(0); }, 1200);
+  }catch(e){}
+}
+window._depCompareStart=_depCompareStart;
 
 // 단일 엔진 path → route 형식
 // ★ 정류장 객체 정규화 — 시간 정보가 오면 반드시 보존한다(2026-08-26)
@@ -18631,6 +18684,7 @@ window.addEventListener('unhandledrejection', function(e) {
       </div>
       <!-- ★ 2026-10-03: 승차·대기·도보 분리 + 왜 이 경로인지 -->
       <div id="transitSplitRow" style="display:none;font-size:12px;line-height:1.5;color:var(--sub);margin:-2px 0 8px;"></div>
+      <div id="transitDepRow" style="display:none;font-size:12px;line-height:1.5;color:var(--sub);margin:0 0 8px;"></div>
 
       <!-- ── 경로 옵션 탭 (최단시간/최소환승) ── -->
       <div id="routeOptionTabs" style="display:none;gap:6px;margin-bottom:10px;flex-wrap:nowrap;">
@@ -26415,6 +26469,52 @@ function _cmPair(isMorn){
   return [T, F];                      // 예전 동작: 출근의 반대
 }
 window._cmPair = _cmPair;
+
+// ★ 2026-10-03 (속도 개선안 9 — 출퇴근 경로 미리 계산): 출근·퇴근 시각이 가까워지면 저장해 둔 집↔회사 경로를
+//   화면 없이 조용히 한 번 물어 둔다. 엔진 쪽 지역 데이터(버스 행 캐시·KV 엣지 캐시)가 그 구간으로 데워져,
+//   사용자가 앱을 열어 검색하면 '처음 가는 지역'의 첫 읽기 지연(0.3~0.7초)이 없다.
+//   · 결과를 화면에 쓰지 않는다(표시·순위·알림에 영향 없음). 실패해도 조용히 무시한다.
+//   · 출근/퇴근 시각 -45분 ~ +20분 안에서만, 같은 구간은 20분에 한 번만, 설정한 요일에만.
+//   · 좌표(fromLat/toLat 등)가 저장돼 있을 때만 한다. 데이터 절약 모드·오프라인이면 하지 않는다.
+var _cmPf = { at:{}, busy:false };
+function _cmHm(str){ var m=/^(\d{1,2}):(\d{2})$/.exec(String(str||'')); return m ? (+m[1])*60+(+m[2]) : null; }
+function _commutePrefetch(why){
+  try{
+    if(_cmPf.busy) return;
+    if(typeof navigator!=='undefined'){
+      if(navigator.onLine===false) return;
+      if(navigator.connection && navigator.connection.saveData) return;
+    }
+    if(typeof document!=='undefined' && document.visibilityState==='hidden') return;
+    if(typeof _cmDayOn==='function' && !_cmDayOn()) return;
+    var d=new Date(), nowM=d.getHours()*60+d.getMinutes();
+    var cand=[['morn',_cmHm(_cmAlarm.morn),true],['eve',_cmHm(_cmAlarm.eve),false]];
+    for(var i=0;i<cand.length;i++){
+      var tm=cand[i][1]; if(tm==null) continue;
+      var diff=nowM-tm; if(diff>720) diff-=1440; if(diff<-720) diff+=1440;
+      if(diff<-45 || diff>20) continue;
+      var pr=_cmPair(cand[i][2]), F=pr[0], T=pr[1];
+      if(!F || !T || F.lat==null || F.lng==null || T.lat==null || T.lng==null) continue;
+      var key=cand[i][0]+':'+Number(F.lat).toFixed(3)+','+Number(F.lng).toFixed(3)+'>'+Number(T.lat).toFixed(3)+','+Number(T.lng).toFixed(3);
+      if(_cmPf.at[key] && Date.now()-_cmPf.at[key] < 20*60*1000) continue;
+      _cmPf.at[key]=Date.now(); _cmPf.busy=true;
+      var qs='SX='+F.lng+'&SY='+F.lat+'&EX='+T.lng+'&EY='+T.lat+'&baseMs='+Date.now()+'&live=0'
+        +'&SN='+encodeURIComponent(String(F.nm||'').slice(0,60))+'&EN='+encodeURIComponent(String(T.nm||'').slice(0,60));
+      var t0=Date.now();
+      fetch(_routeV2Url(qs), { priority:'low' }).then(function(r){ return r.ok ? r.json() : null; }).then(function(j){
+        _cmPf.busy=false;
+        try{ _cmPf.last={ at:Date.now(), ms:Date.now()-t0, n:((j&&j.result&&j.result.path)||[]).length, why:why||'' }; }catch(e){}
+      }).catch(function(){ _cmPf.busy=false; });
+      return;   // 한 번에 한 구간만
+    }
+  }catch(e){ try{ _cmPf.busy=false; }catch(e2){} }
+}
+window._commutePrefetch = _commutePrefetch;
+try{
+  setTimeout(function(){ _commutePrefetch('start'); }, 8000);
+  document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') setTimeout(function(){ _commutePrefetch('resume'); }, 1500); });
+  setInterval(function(){ _commutePrefetch('tick'); }, 10*60*1000);
+}catch(e){}
 
 // 날씨는 서버(워커 /weather)가 격자별로 10분 저장해 두고 글자·이모지까지 만들어 준다 — 앱은 받아서 그리기만 한다.
 var _wxMem = {};   // { gridKey: { ts, data } }  (같은 격자를 10분 안에 다시 묻지 않는다)
