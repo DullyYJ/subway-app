@@ -4245,7 +4245,7 @@ try{ setTimeout(_srvBootstrap, 1200); }catch(e){}
 
 var _COMM_CACHE_KEY = 'commPostsCache';
 var _COMM_CACHE_MAX = 60;
-var _COMM_CACHE_TTL = 24 * 3600 * 1000;
+var _COMM_CACHE_TTL = 7 * 24 * 3600 * 1000;   // ★ 2026-10-03: 24h→7일 (며칠만에 켜도 첫 화면이 비지 않게)
 function _commSaveCache(list){
   try{
     if(!list || !list.length) return;
@@ -27114,6 +27114,10 @@ function switchTab(tab,el){
     // 🚇 홈 AI 승무원 시작 (현재 위치·시간 기준 5분 브리핑)
     setTimeout(function(){ if(typeof startHomeAI==='function') startHomeAI(); }, 400);
   } else if(tab==='community'){
+    // ★ 2026-10-03 (YJ: "게시판을 누르면 3초 뒤에 나온다"): 글은 앱 시작 때 이미 받아 두는데,
+    //   탭이 가려져 있으면 renderCommList 가 '예약만' 걸고 4초 주기 타이머가 그려 줬다 —
+    //   그래서 들어온 순간부터 0~4초를 기다렸다. 들어오는 즉시 그린다.
+    try{ if(typeof _commEnterRender==='function') _commEnterRender(); }catch(e){}
     // ★ 2026-09-22: 알림 설정 카드가 이 탭에 있다 — 열릴 때마다 최신 상태로 그린다
     if(typeof _notifPrefRender==='function') _notifPrefRender();
     if(typeof _notifPermBannerCheck==='function') _notifPermBannerCheck();
@@ -28242,6 +28246,21 @@ function _commFlushPending(){
 }
 window._commFlushPending = _commFlushPending;
 try{ setInterval(_commFlushPending, 4000); }catch(e){}
+// ★ 2026-10-03: 게시판 탭에 들어오는 순간 호출 — 예약된 갱신이 있거나 목록이 비어 있으면
+//   타이머를 기다리지 않고 바로 그린다(읽는 중인 글이 있으면 건드리지 않음).
+function _commEnterRender(){
+  try{
+    var list = document.getElementById('commList');
+    if(!list) return;
+    var empty = !list.firstElementChild || (list.children.length === 1 && /불러오는 중/.test(list.textContent||''));
+    if(window._commPendingRender || (empty && _AI_POSTS.length)){
+      if(!empty && _commBusyReading()) return;
+      window._commPendingRender = false;
+      renderCommList();
+    }
+  }catch(e){}
+}
+window._commEnterRender = _commEnterRender;
 
 function renderCommList(){
   var list=document.getElementById('commList');
@@ -28267,6 +28286,7 @@ function renderCommList(){
       if(_AI_POSTS.length === 0){
         // 캐시가 없을 때만 로딩 화면
         list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--sub);">게시글 불러오는 중...</div>';
+        // (첫 설치·캐시 없음에서도 3초 넘게 비지 않도록 서버 응답 도착 즉시 그린다)
         return;
       }
       // 캐시가 있으면 아래로 진행해 기존 글 즉시 표시 (서버 응답 오면 renderCommList 재호출됨)
@@ -33914,7 +33934,7 @@ window.onload=function(){
     if(typeof _loadServerPosts === 'function') {
       _loadServerPosts('all', true);
     }
-  }, 1500);
+  }, 300);   // ★ 2026-10-03: 1500→300ms (게시판 첫 진입 전에 글을 받아 둔다)
   // (게시글 주기 갱신은 _startServerSync 내 _serverFetchPosts 3분 폴링으로 일원화)
 
   // ── 백그라운드 추적 + 알림 초기화 ──────────────────
