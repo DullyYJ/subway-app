@@ -41895,7 +41895,11 @@ function _offGet(cb){
 }
 function _offAgo(ts){ var m=Math.max(0,Math.round((Date.now()-ts)/60000)); return m<1?'방금':(m<60?m+'분 전':Math.round(m/60)+'시간 전'); }
 function _offText(l, n){
-  return '🚇 <b>서울교통공사 공지</b> · '+_ltEsc(l)+' — '+_ltEsc(n.text||n.title||'')+' <span style="color:var(--sub);">('+_offAgo(n.ts)+')</span>';
+  // 본문이 이미 노선명으로 시작하면 앞에 또 붙이지 않고('2호선 — 2호선 …'), 너무 길면 줄인다.
+  var t=String(n.text||n.title||'').replace(/\s+/g,' ').trim();
+  if(t.length>110) t=t.slice(0,108).replace(/\s+\S*$/,'')+'…';
+  var pre=(t.indexOf(l)===0) ? '' : _ltEsc(l)+' — ';
+  return '🚇 <b>서울교통공사 공지</b> · '+pre+_ltEsc(t)+' <span style="color:var(--sub);">('+_offAgo(n.ts)+')</span>';
 }
 function _lrRenderOfficial(line){
   var el=document.getElementById('lrOfficial'); if(!el) return;
