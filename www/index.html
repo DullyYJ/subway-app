@@ -18770,6 +18770,7 @@ window.addEventListener('unhandledrejection', function(e) {
       <!-- ★ 2026-10-03: 승차·대기·도보 분리 + 왜 이 경로인지 -->
       <div id="transitSplitRow" style="display:none;font-size:12px;line-height:1.5;color:var(--sub);margin:-2px 0 8px;"></div>
       <div id="transitDepRow" style="display:none;font-size:12px;line-height:1.5;color:var(--sub);margin:0 0 8px;"></div>
+      <div id="transitOfficialRow" style="display:none;font-size:12px;line-height:1.5;color:var(--text);margin:0 0 8px;padding:7px 10px;border-radius:10px;background:rgba(10,132,255,.12);border:1px solid rgba(10,132,255,.35);"></div>
       <div id="transitAlertRow" style="display:none;font-size:12px;line-height:1.5;color:var(--text);margin:0 0 8px;padding:7px 10px;border-radius:10px;background:rgba(255,69,58,.12);border:1px solid rgba(255,69,58,.35);"></div>
 
       <!-- ── 경로 옵션 탭 (최단시간/최소환승) ── -->
@@ -19181,6 +19182,7 @@ window.addEventListener('unhandledrejection', function(e) {
   <!-- ★ 2026-10-03 내 노선 방 — 노선별 대화 + 지연·혼잡 제보 (실제 이용자 글만) -->
   <div id="lineRoomView" style="display:none;flex:1;min-height:0;overflow:hidden;flex-direction:column;">
     <div id="lrLines" style="flex-shrink:0;display:flex;gap:6px;overflow-x:auto;padding:8px 12px 4px;-webkit-overflow-scrolling:touch;"></div>
+    <div id="lrOfficial" style="display:none;flex-shrink:0;margin:4px 12px 0;padding:8px 11px;border-radius:10px;font-size:12px;line-height:1.5;background:rgba(10,132,255,.12);border:1px solid rgba(10,132,255,.35);color:var(--text);"></div>
     <div id="lrAlert" style="display:none;flex-shrink:0;margin:4px 12px 0;padding:8px 11px;border-radius:10px;font-size:12px;line-height:1.5;"></div>
     <div class="chat-scroll" id="lrScroll"></div>
     <div style="flex-shrink:0;display:flex;gap:8px;padding:6px 12px 0;">
@@ -41866,6 +41868,47 @@ window.addEventListener('load', function(){
   });
 });
 function _lrTime(ts){ var d=new Date(ts), p=function(n){return (n<10?'0':'')+n;}; return p(d.getHours())+':'+p(d.getMinutes()); }
+// ★ 2026-10-03: 서울교통공사 공식 운행 공지(엔진 /line-notices — 지연·무정차·사고 등 진행 중인 것만). 1~8호선 한정, 없으면 아무것도 안 보인다.
+//   노선 방이 비어 있어도 이 줄은 실제 데이터라서 사용자를 속이지 않는다. 1분 안엔 다시 묻지 않는다.
+var _offCache={ at:0, data:null, busy:false };
+function _offGet(cb){
+  try{
+    if(_offCache.data && Date.now()-_offCache.at<60000){ cb(_offCache.data); return; }
+    if(_offCache.busy){ cb(_offCache.data); return; }
+    _offCache.busy=true;
+    fetch(_ROUTE_V2_BASE+'/line-notices').then(function(r){ return r.ok?r.json():null; }).then(function(j){
+      _offCache.busy=false;
+      if(j && j.ok){ _offCache.data=j; _offCache.at=Date.now(); }
+      cb(_offCache.data);
+    }).catch(function(){ _offCache.busy=false; cb(_offCache.data); });
+  }catch(e){ cb(null); }
+}
+function _offAgo(ts){ var m=Math.max(0,Math.round((Date.now()-ts)/60000)); return m<1?'방금':(m<60?m+'분 전':Math.round(m/60)+'시간 전'); }
+function _offText(l, n){
+  return '🚇 <b>서울교통공사 공지</b> · '+_ltEsc(l)+' — '+_ltEsc(n.text||n.title||'')+' <span style="color:var(--sub);">('+_offAgo(n.ts)+')</span>';
+}
+function _lrRenderOfficial(line){
+  var el=document.getElementById('lrOfficial'); if(!el) return;
+  _offGet(function(j){
+    var n=j && j.lines && j.lines[line];
+    if(!n || line!==_lr.line){ el.style.display='none'; el.innerHTML=''; return; }
+    el.innerHTML=_offText(line,n); el.style.display='block';
+  });
+}
+function _routeOfficialRow(route){
+  var el=document.getElementById('transitOfficialRow'); if(!el) return;
+  try{
+    if(!route || route.why===undefined){ el.style.display='none'; return; }
+    var lines=[]; (route.sections||[]).forEach(function(sc){ var nm=(sc.transportation||{}).name; if((sc.transportation||{}).type===1 && nm && lines.indexOf(nm)<0) lines.push(nm); });
+    if(!lines.length){ el.style.display='none'; return; }
+    _offGet(function(j){
+      var parts=[]; lines.forEach(function(l){ var n=j && j.lines && j.lines[l]; if(n) parts.push(_offText(l,n)); });
+      if(!parts.length){ el.style.display='none'; el.innerHTML=''; return; }
+      el.innerHTML=parts.join('<br>'); el.style.display='block';
+    });
+  }catch(e){ el.style.display='none'; }
+}
+window._routeOfficialRow=_routeOfficialRow;
 function _lrRenderAlert(al){
   var el=document.getElementById('lrAlert'); if(!el) return;
   var n=(al&&al.reporters)||0;
@@ -41927,7 +41970,7 @@ function _lrPoll(first){
     .then(function(j){
       _lr.busy=false;
       if(!j || !j.ok || line!==_lr.line) return;
-      _lrAppend(j.msgs||[]); _lrRenderAlert(j.alert);
+      _lrAppend(j.msgs||[]); _lrRenderAlert(j.alert); _lrRenderOfficial(line);
     }).catch(function(){ _lr.busy=false; });
 }
 function _lrPost(kind, text, stn){
@@ -41958,6 +42001,7 @@ window._lrReport=_lrReport;
 // 경로 카드: 내 경로의 지하철 노선 중 최근 30분 지연 제보가 3명 이상이면 경고 한 줄(개선안 5). 1~2명은 '확인 중'으로 약하게.
 var _lrAlertAsk = { key:'', at:0 };
 function _lrRouteAlertStart(route){
+  try{ _routeOfficialRow(route); }catch(e0){}
   var el=document.getElementById('transitAlertRow'); if(!el) return;
   try{
     if(!route || route.why===undefined){ el.style.display='none'; return; }
@@ -42080,7 +42124,7 @@ var _POLICY_DOCS = {
       + '· <b>국토교통부</b> — 「국가대중교통정보센터(TAGO) 버스정류소정보·버스도착정보」<br>'
       + '· <b>서울특별시</b> — 「서울특별시 버스도착정보조회 서비스」, 「서울특별시 정류소정보조회 서비스」<br>'
       + '· <b>서울특별시</b> — 「지하철 실시간 도착정보·열차위치정보」(서울 열린데이터광장)<br>'
-      + '· <b>서울교통공사</b> — 「서울 도시철도 환승정보」, 「빠른하차정보」(환승·하차 호차/문 위치)<br>'
+      + '· <b>서울교통공사</b> — 「서울 도시철도 환승정보」, 「빠른하차정보」(환승·하차 호차/문 위치), 「지하철 알림정보」(운행 공지)<br>'
       + '· <b>소상공인시장진흥공단</b> — 「상가(상권)정보」<br>'
       + '· <b>기상청</b> 단기예보 · Open-Meteo (날씨)<br>'
       + '· 카카오 (장소 검색·길찾기) · 네이버 (지역 검색)'
