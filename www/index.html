@@ -19282,6 +19282,12 @@ window.addEventListener('unhandledrejection', function(e) {
         <div id="notifPrefRows"></div>
       </div>
 
+      <!-- ★ 2026-10-03: 도착 오차 익명 기록 (끌 수 있음) -->
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
+        <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:8px;">📊 안내 정확도 향상</div>
+        <div id="rideLogRow"></div>
+      </div>
+
       <!-- ★ 출퇴근 브리핑 알림 -->
       <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
@@ -25359,6 +25365,67 @@ var _NOTIF_PREF_LABELS = {
   proximity:   { icon:'📍', title:'근접 알림(GPS)',  desc:'목적지·환승역 300m 이내 진입 시 알림' },
   arrive_reco: { icon:'☕', title:'하차 전 추천',    desc:'도착 10분 전 카페·야식 추천' }
 };
+// ★ 2026-10-03 (익명 정확도 기록): 목적지에 도착하면 '예상한 탑승~하차 분'과 '실제로 걸린 분'을 서버에 한 번 보낸다.
+//   보내는 것: 예상분·실제분·환승 횟수·노선명·시간대(시)·평일 여부·수단 구분. 역 이름·좌표·기기 식별값은 보내지 않는다.
+//   엔진 경로를 따라 처음부터 끝까지 이동한 경우만(장거리·미리보기·예상 시각 모드 제외). 설정에서 끌 수 있다(기본 켜짐).
+function _rideLogOn(){ try{ return _safeLS.get('rideLogOff', 0) !== 1; }catch(e){ return true; } }
+function _rideLogToggle(on){
+  try{ _safeLS.set('rideLogOff', on ? 0 : 1); }catch(e){}
+  _rideLogRender();
+  if(typeof toast === 'function') toast(on ? '켰어요: 도착 오차 익명 기록' : '껐어요: 도착 오차 익명 기록');
+}
+window._rideLogToggle = _rideLogToggle;
+function _rideLogRender(){
+  var box = document.getElementById('rideLogRow');
+  if(!box) return;
+  var on = _rideLogOn();
+  box.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">'
+    + '<div><div style="font-size:13.5px;font-weight:700;color:var(--text);">도착 오차 익명 기록</div>'
+    + '<div style="font-size:11px;color:var(--sub);margin-top:2px;line-height:1.5;">목적지에 도착하면 예상 시간과 실제 시간의 차이만 익명으로 보내요. 역 이름·위치·기기 정보는 보내지 않아요.</div></div>'
+    + '<label style="position:relative;display:inline-block;width:44px;height:25px;flex-shrink:0;">'
+    +   '<input type="checkbox" ' + (on?'checked':'') + ' onchange="_rideLogToggle(this.checked)" style="opacity:0;width:0;height:0;">'
+    +   '<span style="position:absolute;inset:0;background:' + (on?'#30d158':'var(--border2)') + ';border-radius:25px;transition:.2s;cursor:pointer;"></span>'
+    +   '<span style="position:absolute;left:' + (on?'22px':'3px') + ';top:3px;width:19px;height:19px;background:#fff;border-radius:50%;transition:.2s;pointer-events:none;"></span>'
+    + '</label></div>';
+}
+window._rideLogRender = _rideLogRender;
+function _rideLogPayload(){
+  if(typeof S === 'undefined' || !S || !S.boardedAt) return null;
+  if((typeof _baseTimeMs !== 'undefined' && _baseTimeMs != null) || window._metroRouteMode === true) return null;
+  var rt = (typeof _transitResultData !== 'undefined' && _transitResultData && _transitResultData.routes) ? _transitResultData.routes[0] : null;
+  if(!rt || rt.why === undefined) return null;                       // 엔진 경로만
+  var t0 = null, t1 = null, names = [], nTr = 0, bus = false, ld = false, subN = 0;
+  (rt.sections || []).forEach(function(sc){
+    var ty = (sc.transportation || {}).type;
+    if(ty === 4) ld = true;
+    if(ty === 1 || ty === 2){
+      nTr++; if(ty === 2) bus = true; else subN++;
+      names.push(String((sc.transportation || {}).name || '').replace(/[^0-9A-Za-z가-힣]/g, ''));
+      if(sc.startSec != null && isFinite(sc.startSec) && (t0 == null || sc.startSec < t0)) t0 = sc.startSec;
+      if(sc.endSec != null && isFinite(sc.endSec) && (t1 == null || sc.endSec > t1)) t1 = sc.endSec;
+    }
+  });
+  if(ld || !nTr || t0 == null || t1 == null || t1 <= t0) return null;
+  var pred = (t1 - t0) / 60, act = (Date.now() - S.boardedAt) / 60000;
+  if(!(pred >= 3 && act >= 3 && act <= 300) || act / pred < 0.5 || act / pred > 2) return null;   // 중간에 탄 경우·추적 오류 제외
+  var d = new Date(S.boardedAt), dow = d.getDay();
+  return { pred: Math.round(pred * 10) / 10, act: Math.round(act * 10) / 10,
+           xf: Math.max(0, Math.min(6, nTr - 1)), lines: names.filter(Boolean).join(','),
+           hr: d.getHours(), wk: (dow >= 1 && dow <= 5) ? 1 : 0, mode: bus ? (subN ? 'mix' : 'bus') : 'sub' };
+}
+window._rideLogPayload = _rideLogPayload;
+function _rideLogSend(){
+  if(!_rideLogOn()) return;
+  if(window._rideLogDone && S && window._rideLogDone === S.boardedAt) return;   // 한 여정에 한 번
+  var pl = _rideLogPayload();
+  if(S && S.boardedAt) window._rideLogDone = S.boardedAt;
+  if(!pl) return;
+  try{
+    fetch(_lrBase() + '/ridelog', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(pl), keepalive:true }).catch(function(){});
+  }catch(e){}
+}
+window._rideLogSend = _rideLogSend;
+
 function _notifPrefRender(){
   var box = document.getElementById('notifPrefRows');
   if(!box) return;
@@ -25378,6 +25445,7 @@ function _notifPrefRender(){
           + '</div>';
   });
   box.innerHTML = html;
+  try{ _rideLogRender(); }catch(e){}
 }
 window._notifPrefRender = _notifPrefRender;
 function _notifPrefToggle(key, on){
@@ -35530,6 +35598,7 @@ function checkArrivalAlerts(idx){
   if(idx === totalStops){
     if(!_alertFired['arrive']){
       _alertFired['arrive'] = true;
+      try{ _rideLogSend(); }catch(e){}   // ★ 2026-10-03: 익명 정확도 기록(역·좌표·식별값 없음, 설정에서 끌 수 있음)
       toast('🎉 목적지 ' + destNm + ' 도착!');
       vibrateArrive();
       showNotification('🎉 목적지 도착!',
@@ -42080,15 +42149,17 @@ var _POLICY_DOCS = {
       + '· 위치정보(GPS 좌표): 실시간 경로 안내·주변 정류장 검색<br>'
       + '· 이용자가 입력한 닉네임·게시글·댓글·채팅 내용<br>'
       + '· 내 노선 방 이용 시: 노선명, 대화·지연·혼잡 제보 내용, 선택 입력한 역 이름, 그리고 도배·중복 제보를 막기 위한 <b>기기 식별 코드</b>(IP 주소를 복원할 수 없게 일방향 암호화한 값의 앞 12자리. IP 주소 원본은 저장하지 않습니다)<br>'
+      + '· 도착 오차 익명 기록(설정에서 끌 수 있음): 목적지 도착 시 예상 소요 분, 실제 소요 분, 환승 횟수, 노선명, 시간대(시), 평일 여부. <b>역 이름·좌표·기기 식별 코드는 포함하지 않으며</b> 개인을 식별할 수 없습니다<br>'
       + '· 출발지/도착지 등 이용자가 직접 설정한 값<br>'
       + '별도의 회원가입 절차가 없으며, 이름·연락처·주민등록번호 등은 수집하지 않습니다.</p>'
       + '<p><b>2. 이용 목적</b><br>'
-      + '대중교통 경로 안내, 실시간 도착정보 제공, 커뮤니티 서비스 운영에만 사용합니다.</p>'
+      + '대중교통 경로 안내, 실시간 도착정보 제공, 커뮤니티 서비스 운영, 경로 소요시간 예측 정확도 개선(익명 통계)에만 사용합니다.</p>'
       + '<p><b>3. 보관 및 파기</b><br>'
       + '· 위치정보: 경로 안내 목적으로만 일시 사용하며 <b>서버에 저장하지 않습니다.</b><br>'
       + '· 닉네임·설정값: 이용자 기기(단말)에 저장되며 앱 삭제 시 함께 삭제됩니다.<br>'
       + '· 게시글·댓글·채팅: 작성일로부터 보관하며, 최신 글 기준 일정 수량 초과 시 오래된 순으로 자동 삭제됩니다.<br>'
       + '· 내 노선 방 대화·제보와 기기 식별 코드(글 신고 시 신고한 기기의 코드 포함): 작성·신고 후 <b>14일이 지나면 자동 삭제</b>됩니다. 화면에는 최근 12시간 글만 보입니다. 그 전에 삭제를 원하시면 문의처로 요청해 주세요.<br>'
+      + '· 도착 오차 익명 기록: <b>1년이 지나면 자동 삭제</b>됩니다. 이용자를 식별할 수 있는 값이 없어 개별 삭제 요청은 처리할 수 없으며, 설정 &gt; 안내 정확도 향상에서 언제든 전송을 끌 수 있습니다.<br>'
       + '· 출퇴근 경로 미리 조회: 설정해 둔 출발·도착 좌표로 경로를 미리 불러올 뿐이며, 그 좌표를 따로 저장하거나 계정과 연결하지 않습니다.</p>'
       + '<p><b>4. 제3자 제공 및 처리위탁</b><br>'
       + '이용자의 개인정보를 제3자에게 판매·제공하지 않습니다. 다만 서비스 제공을 위해 아래 외부 API를 호출하며, '
