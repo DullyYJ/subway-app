@@ -42387,6 +42387,7 @@ function _ltAdd(msg){
   // ★ 정치·사회 분쟁 소재는 표시하지 않음 (내가 쓴 글은 그대로)
   if(msg && !msg.mine && typeof _ltIsBanned==='function' && _ltIsBanned(msg.text)) return;
   if(msg && !msg.mine && msg.text != null) msg.text = _ltTidyText(msg.text);
+  if(msg && msg.mine){ (window._ltMineKeys = window._ltMineKeys || {})[msg.nick + '\n' + msg.text] = Date.now(); }
   _LIVE_TALK.push(msg);
   // 상한은 리터럴로 둔다(다른 블록 상수에 의존하지 않게)
   if(_LIVE_TALK.length > 100) _LIVE_TALK.shift();
@@ -43165,7 +43166,7 @@ function sendChatMsg(){
   var _txt = inp.value.trim();
   _ltAdd({ nick:myId, text:_txt, time:Date.now(), mine:true });
   if(typeof _serverPostTalk==='function') _serverPostTalk(myId, _txt);  // 서버 공유
-  if(typeof _ltRespondToUser==='function') _ltRespondToUser(_txt);      // ★ 내 말에 반응
+  if(!window._serverTalksActive && typeof _ltRespondToUser==='function') _ltRespondToUser(_txt);   // ★ 내 말에 반응(서버 대화 중엔 서버가 반응을 만든다)
   inp.value = '';
 }
 window.sendChatMsg = sendChatMsg;
@@ -43184,7 +43185,7 @@ function _homeTalkSend(){
   var _htxt = inp.value.trim();
   _ltAdd({ nick:myId, text:_htxt, time:Date.now(), mine:true });
   if(typeof _serverPostTalk==='function') _serverPostTalk(myId, _htxt);  // 서버 공유
-  if(typeof _ltRespondToUser==='function') _ltRespondToUser(_htxt);      // ★ 내 말에 반응
+  if(!window._serverTalksActive && typeof _ltRespondToUser==='function') _ltRespondToUser(_htxt);   // ★ 내 말에 반응(서버 대화 중엔 서버가 반응을 만든다)
   inp.value = '';
 }
 window._homeTalkSend = _homeTalkSend;
@@ -43198,6 +43199,8 @@ if(!window._ltWatchdog){
   window._ltWatchdog = setInterval(function(){
     try{
       if(document.hidden) return;
+      // ★ 2026-10-03: 서버 대화(모두가 같은 대화)를 받고 있는 동안엔 조용해도 로컬 대화를 섞지 않는다
+      if(window._serverTalksActive && Date.now() - (window._lastServerTalkAt||0) < 90000) return;
       var last = 0;
       try{
         if(_LIVE_TALK && _LIVE_TALK.length){
@@ -43319,6 +43322,81 @@ function _ltBackfill(target){
   }catch(e){ return 0; }
 }
 window._ltBackfill = _ltBackfill;
+
+// ══════════════════════════════════════════════════════════════════
+// ★ 2026-10-03 (YJ: "사용자들이 같은 대화를 보게 해"): 실시간소통을 서버 대화로 통일
+//   그동안 서버(board-writer)는 대화를 만들어 DB에 쌓기만 했고 앱은 읽지 않아, 각자 기기에서
+//   따로 만든 대화를 보고 있었다. 이제 앱이 6초마다 GET /talks?since=<마지막 시각> 으로
+//   '지금까지 올 때가 된' 줄만 받아 붙인다 → 모든 사용자가 같은 시각에 같은 줄을 본다.
+//   · 서버가 대화 시각을 미리 흩뿌려 저장하므로, 폴링 간격과 무관하게 줄 간격은 서버 리듬 그대로다.
+//   · 서버가 90초 넘게 응답이 없으면 기존 로컬 생성이 자동으로 이어받는다(_scheduleLiveTalk).
+//   · 내가 친 말은 서버(/react)에 저장돼 다른 사람에게도 보이고, 되돌아온 내 줄은 중복으로 거른다.
+var _LT_SRV = { since: 0, seen: {}, seenN: 0, skew: 0, init: false, busy: false, errs: 0 };
+function _ltServerPoll(){
+  try{
+    if(document.hidden || _LT_SRV.busy) return;
+    if(typeof _SERVER_ON !== 'undefined' && !_SERVER_ON) return;
+    var base = (typeof _BOARD_WRITER_URL !== 'undefined' && _BOARD_WRITER_URL) || 'https://board-writer.phg0643.workers.dev';
+    _LT_SRV.busy = true;
+    var ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var to = setTimeout(function(){ try{ if(ctl) ctl.abort(); }catch(e){} }, 7000);
+    var q = _LT_SRV.init ? ('?since=' + _LT_SRV.since + '&limit=40') : '?limit=30';
+    fetch(base + '/talks' + q, { cache: 'no-store', signal: ctl ? ctl.signal : undefined })
+      .then(function(r){ if(!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function(j){
+        clearTimeout(to); _LT_SRV.busy = false;
+        if(!j || !j.ok || !j.talks) throw new Error('bad');
+        _LT_SRV.errs = 0;
+        _LT_SRV.skew = (j.now || Date.now()) - Date.now();      // 서버 시계 - 내 시계
+        window._lastServerTalkAt = Date.now();
+        var rows = j.talks;
+        var myId = (typeof _getCommId==='function' && _getCommId()) || '나';
+        var mine = window._ltMineKeys || {};
+        var fresh = [];
+        rows.forEach(function(r){
+          if(r == null || r.id == null || _LT_SRV.seen[r.id]) return;
+          _LT_SRV.seen[r.id] = 1; _LT_SRV.seenN++;
+          if(r.ts > _LT_SRV.since) _LT_SRV.since = r.ts;
+          // 내가 방금 보낸 말이 서버를 거쳐 돌아온 것이면 건너뜀(이미 화면에 있다)
+          if(mine[r.nick + '\n' + r.text] && Date.now() - mine[r.nick + '\n' + r.text] < 600000) return;
+          var t = Math.min(Date.now(), (r.ts || Date.now()) - _LT_SRV.skew);
+          fresh.push({ nick: String(r.nick || ''), text: String(r.text || ''), time: t, mine: false, srv: true });
+        });
+        if(_LT_SRV.seenN > 600){ _LT_SRV.seen = {}; _LT_SRV.seenN = 0; rows.forEach(function(r){ _LT_SRV.seen[r.id] = 1; _LT_SRV.seenN++; }); }
+        if(!_LT_SRV.init){
+          if(!rows.length) return;                                   // 서버에 대화가 아직 없으면 로컬 유지
+          _LT_SRV.init = true;
+          window._serverTalksActive = true;
+          // 첫 연결: 기기마다 달랐던 로컬 대화를 걷어내고 서버 대화로 바꾼다(내가 최근 10분 안에 보낸 말은 유지)
+          var keep = _LIVE_TALK.filter(function(m){ return m && m.mine && Date.now() - m.time < 600000; });
+          var next = fresh.filter(function(m){ return !(typeof _ltIsBanned==='function' && _ltIsBanned(m.text)); })
+                          .map(function(m){ m.text = _ltTidyText(m.text); return m; })
+                          .filter(function(m){ return m.text && m.text.trim(); })
+                          .concat(keep).sort(function(a,b){ return a.time - b.time; });
+          _LIVE_TALK.splice.apply(_LIVE_TALK, [0, _LIVE_TALK.length].concat(next));
+          window._LIVE_TALK = _LIVE_TALK;
+          try{ var box = document.getElementById('chatScroll'); if(box){ box.innerHTML = ''; box._lastRid = 0; } }catch(e){}
+          try{ if(typeof window._saveTalk === 'function') window._saveTalk(_LIVE_TALK); }catch(e){}
+          try{ _renderLiveTalk(); }catch(e){}
+          try{ _renderChatTab(); }catch(e){}
+          console.log('[실시간소통] 서버 대화로 전환 — ' + next.length + '줄');
+          return;
+        }
+        window._serverTalksActive = true;
+        fresh.forEach(function(m){ _ltAdd(m); });                  // _ltAdd 가 금지어·정리·저장·렌더를 처리
+      })
+      .catch(function(){
+        clearTimeout(to); _LT_SRV.busy = false;
+        _LT_SRV.errs++;                                            // 90초 조용하면 로컬 생성이 이어받는다
+      });
+  }catch(e){ _LT_SRV.busy = false; }
+}
+window._ltServerPoll = _ltServerPoll;
+try{
+  setTimeout(_ltServerPoll, 1800);
+  setInterval(_ltServerPoll, 6000);
+  document.addEventListener('visibilitychange', function(){ if(!document.hidden) setTimeout(_ltServerPoll, 300); });
+}catch(e){}
 
 function initLiveTalk(){
   // ★ 복원된 대화가 있으면 그대로 둔다(중복 방지). 부족하면 앞을 채운다.
