@@ -41941,7 +41941,7 @@ window.addEventListener('load', function(){
   });
 });
 function _lrTime(ts){ var d=new Date(ts), p=function(n){return (n<10?'0':'')+n;}; return p(d.getHours())+':'+p(d.getMinutes()); }
-// ★ 2026-10-03: 서울교통공사 공식 운행 공지(엔진 /line-notices — 지연·무정차·사고 등 진행 중인 것만). 1~8호선 한정, 없으면 아무것도 안 보인다.
+// ★ 2026-10-03: 서울교통공사 공식 운행 공지(엔진 /line-notices — 지연·무정차·사고 등 진행 중인 것만). 1~8호선 중심(경의중앙선·공항철도는 환승역 관련만 가끔), 없으면 아무것도 안 보인다.
 //   노선 방이 비어 있어도 이 줄은 실제 데이터라서 사용자를 속이지 않는다. 1분 안엔 다시 묻지 않는다.
 var _offCache={ at:0, data:null, busy:false };
 function _offGet(cb){
@@ -41973,7 +41973,13 @@ function _lrRenderOfficial(line){
     if(n){ el.style.background=_ALERT; el.style.borderColor=_ALERT_B; el.innerHTML=_offText(line,n); el.style.display='block'; return; }
     // ★ 2026-10-03: 공지가 없을 때도 '확인했다'는 표시를 남겨서, 연동이 안 된 건지 정말 없는 건지 구분되게 한다.
     //   공식 공지(서울교통공사 지하철 알림정보)는 1~8호선만 있다. 다른 철도 노선은 연동 전이라고 알린다. 버스 방은 표시하지 않는다.
-    if(/^[1-8]호선$/.test(line)){
+    //   ★ 2026-10-04: 과거 공지 300건(2024-05~2026-09) 실측 — 1~8호선 외엔 경의중앙선 4건·공항철도 3건만 나왔다(공사 관할 환승역 관련).
+    //   이 두 노선은 '연동 전'이 아니라 '공사 공지에 가끔만 올라오는' 노선이라 문구를 따로 둔다(공지가 있으면 위에서 그대로 보인다).
+    if(line==='경의중앙선' || line==='공항철도'){
+      el.style.background=_QUIET; el.style.borderColor=_QUIET_B;
+      el.innerHTML='ℹ️ '+_ltEsc(line)+'은(는) 서울교통공사 환승역 관련 공지만 가끔 올라와요 · 지금은 없어요 · 아래 이용자 제보로 알려 드려요';
+      el.style.display='block';
+    } else if(/^[1-8]호선$/.test(line)){
       el.style.background=_QUIET; el.style.borderColor=_QUIET_B;
       el.innerHTML='✅ <b>서울교통공사 공지 확인</b> · 지금 '+_ltEsc(line)+' 지연·사고 공지는 없어요 <span style="color:var(--sub);">('+_offAgo(_offCache.at||Date.now())+' 확인)</span>';
       el.style.display='block';
