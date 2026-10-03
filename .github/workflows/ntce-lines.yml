@@ -63,3 +63,17 @@ jobs:
           print(sorted({k for x in items for k in x.keys()}))
           print("noftSeCd", collections.Counter(str(x.get("noftSeCd")) for x in items).most_common())
           PY
+
+  # ride_log(익명 도착 오차) 누적량만 읽는다. 환승 보정 근거(환승 1회 이상 n≥30) 확인용, 읽기 전용.
+  ridelog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+    steps:
+      - name: Count ride_log
+        run: |
+          npx -y wrangler@3 d1 execute subway-db --remote --json --command \
+            "SELECT xf, mode, COUNT(*) n, ROUND(AVG(act-pred),2) avg_diff, MIN(day) d0, MAX(day) d1 FROM ride_log GROUP BY xf, mode ORDER BY xf, mode" \
+            || echo "ride_log 조회 실패(테이블 없음일 수 있음)"
