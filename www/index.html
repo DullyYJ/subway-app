@@ -17913,7 +17913,8 @@ function handleBackPress(){
   // ⑤ 커뮤니티 서브탭 (실시간소통/설정 → 전체로)
   var chatView = document.getElementById('chatTabView');
   var settView = document.getElementById('settingsTabView');
-  if((chatView && chatView.style.display === 'flex') ||
+  var lineView = document.getElementById('lineRoomView');
+  if((chatView && chatView.style.display === 'flex') || (lineView && lineView.style.display === 'flex') ||
      (settView && settView.style.display !== 'none')){
     // 전체 탭으로 복귀
     var allChip = document.getElementById('chipBoard') || document.querySelector('#filterRow .chip');
@@ -19141,7 +19142,6 @@ window.addEventListener('unhandledrejection', function(e) {
     <div class="filter-row" id="filterRow">
       <div class="chip" id="chipLiveTalk" onclick="showChatTab(this)">🔴실시간소통</div>
       <div class="chip on" id="chipBoard" onclick="filterCat(this,'all')">게시판</div>
-      <div class="chip" id="chipLineRoom" onclick="showLineRoomTab(this)">🚇내 노선</div>
       <div class="chip" onclick="filterCat(this,'뉴스')">📰뉴스</div>
       <div class="chip" onclick="showSettingsTab(this)">⚙️설정</div>
     </div>
@@ -19177,9 +19177,8 @@ window.addEventListener('unhandledrejection', function(e) {
     </div>
   </div>
 
-  <!-- ★ 2026-10-03 내 노선 방 — 노선별 대화 + 지연·혼잡 제보 (실제 이용자 글만) -->
+  <!-- ★ 실시간소통의 노선 방(2026-10-04: '내 노선' 탭을 없애고 실시간소통 하단 탭으로 합침) — 노선별 대화 + 지연·혼잡 제보 + 공식 공지 -->
   <div id="lineRoomView" style="display:none;flex:1;min-height:0;overflow:hidden;flex-direction:column;">
-    <div id="lrLines" style="flex-shrink:0;display:flex;gap:6px;overflow-x:auto;padding:8px 12px 4px;-webkit-overflow-scrolling:touch;"></div>
     <div id="lrOfficial" style="display:none;flex-shrink:0;margin:4px 12px 0;padding:8px 11px;border-radius:10px;font-size:12px;line-height:1.5;background:rgba(10,132,255,.12);border:1px solid rgba(10,132,255,.35);color:var(--text);"></div>
     <div id="lrAlert" style="display:none;flex-shrink:0;margin:4px 12px 0;padding:8px 11px;border-radius:10px;font-size:12px;line-height:1.5;"></div>
     <div class="chat-scroll" id="lrScroll"></div>
@@ -19192,6 +19191,9 @@ window.addEventListener('unhandledrejection', function(e) {
       <button class="chat-send-btn" onclick="_lrSend()">➤</button>
     </div>
   </div>
+
+  <!-- ★ 2026-10-04 실시간소통 하단 탭: 전체 + 내가 실제로 타는 노선(경로 안내를 시작할 때 쌓임) -->
+  <div id="chatLineBar" style="display:none;flex-shrink:0;gap:6px;align-items:center;overflow-x:auto;padding:6px 12px 8px;border-top:1px solid var(--border2);-webkit-overflow-scrolling:touch;"></div>
 
   <!-- ★ AI 승무원 탭 — 개인 경로 브리핑 -->
   <div class="ai-tab-wrap" id="aiTabView" style="display:none;">
@@ -29528,7 +29530,7 @@ function _saveTalk(list){
     var arr = (src || [])
       .filter(function(m){ return m && m.time && (now - m.time) < _TALK_TTL; })
       .slice(-_TALK_MAX)
-      .map(function(m){ return { nick:m.nick, text:m.text, time:m.time, mine:!!m.mine }; });
+      .map(function(m){ return { nick:m.nick, text:m.text, time:m.time, mine:!!m.mine, line:m.line||'' }; });
     localStorage.setItem(_TALK_KEY, JSON.stringify(arr));
   }catch(e){}
 }
@@ -39436,6 +39438,7 @@ function startTracking() {
   _trackingEngine.segStartMs = Date.now();
   S.speedSamples  = [];
   S.lastMoveDistM = 0;
+  try{ if(typeof _myLinesRecord === 'function') _myLinesRecord(); }catch(e){}   // ★ 2026-10-04: 실시간소통 하단 탭 = 내가 실제로 타는 노선
 
   // ★ boardingState/boarded는 사용자가 탑승 버튼 누를 때만 설정
   // startTracking 자동 호출 시에는 idle 유지
@@ -41586,8 +41589,8 @@ function _commCurTab(){
     var stv = document.getElementById('settingsTabView');
     if(cv  && cv.style.display  !== 'none' && cv.style.display  !== '') return 'chat';
     if(stv && stv.style.display !== 'none') return 'settings';
-    var lv  = document.getElementById('lineRoomView');           // ★ 2026-10-03: '내 노선' 칩이 생기면서 스와이프 순서에 빠져 있었다
-    if(lv && lv.style.display !== 'none' && lv.style.display !== '') return 'line';
+    var lv  = document.getElementById('lineRoomView');           // ★ 2026-10-04: 노선 방은 실시간소통 안의 하단 탭이다 → 탭 순서에서는 실시간소통
+    if(lv && lv.style.display !== 'none' && lv.style.display !== '') return 'chat';
     return (_commFilter === '뉴스') ? 'news' : 'board';
   }catch(e){ return 'board'; }
 }
@@ -41599,11 +41602,10 @@ function _commGoTab(name){
     if(!row) return;
     // ★ 2026-10-03: 칩을 순서(번호)로 집으면 '내 노선' 칩이 끼면서 한 칸씩 밀린다 → id·onclick 으로 집는다
     var byId = function(id){ return document.getElementById(id); };
-    var chatC  = byId('chipLiveTalk'), boardC = byId('chipBoard'), lineC = byId('chipLineRoom');
+    var chatC  = byId('chipLiveTalk'), boardC = byId('chipBoard');
     var newsC  = row.querySelector('.chip[onclick*="뉴스"]'), setC = row.querySelector('.chip[onclick*="showSettingsTab"]');
     if(name === 'chat')     { if(typeof showChatTab==='function')     showChatTab(chatC); return; }
     if(name === 'board')    { if(typeof filterCat==='function')       filterCat(boardC, 'all'); return; }
-    if(name === 'line')     { if(typeof showLineRoomTab==='function') showLineRoomTab(lineC); return; }
     if(name === 'news')     { if(typeof filterCat==='function')       filterCat(newsC, '뉴스'); return; }
     if(name === 'settings') { if(typeof showSettingsTab==='function') showSettingsTab(setC); return; }
   }catch(e){}
@@ -41644,11 +41646,11 @@ function _commSwipeStep(dir){
     if(_newsCatStep(-dir)) return;
     // ★ 끝에 닿았을 때의 처리는 방향별로 다르다
     //   · IT(마지막)에서 왼쪽 → 설정으로 넘어가지 않고 멈춘다
-    //   · 전체(처음)에서 오른쪽 → 내 노선으로 돌아간다(게시판 → 내 노선 → 뉴스 순서)
-    if(dir === 1) _commGoTab('line');
+    //   · 전체(처음)에서 오른쪽 → 게시판으로 돌아간다(실시간소통 → 게시판 → 뉴스 → 설정 순서)
+    if(dir === 1) _commGoTab('board');
     return;
   }
-  var order = ['chat', 'board', 'line', 'news', 'settings'];
+  var order = ['chat', 'board', 'news', 'settings'];
   var i = order.indexOf(cur);
   if(i < 0) return;
   var nx = i - dir;                       // 왼쪽으로 밀면 다음 탭
@@ -41859,19 +41861,15 @@ function showChatTab(el){
   var stv=document.getElementById('settingsTabView'); if(stv) stv.style.display='none';
   var avHide=document.getElementById('aiTabView'); if(avHide) avHide.style.display='none';
   if(sv) sv.style.display='none';
-  if(cv){ cv.style.display='flex'; cv.style.flexDirection='column'; cv.style.flex='1'; cv.style.minHeight='0'; }
   if(fab) fab.style.display='none';  // 채팅 입력창이 있으므로 글쓰기 FAB 숨김
-  _renderChatTab();
-  // 진입 시 하단으로 스크롤
-  var box=document.getElementById('chatScroll');
-  if(box) box.scrollTop = box.scrollHeight;
+  _chatShowPane();
 }
 window.showChatTab = showChatTab;
 
 // ══════════════════════════════════════════════════════════════
 // ★ 2026-10-03 (개선안 4·5): 내 노선 방 + 지연 제보 / 경로 카드의 지연 경고
-//   서버: board-writer /lroom(대화·제보), /lalerts(최근 30분 지연 제보 집계). 가짜 대화는 만들지 않는다 —
-//   실제 이용자가 남긴 글만 보인다. 글쓰기·제보는 커뮤니티 아이디가 있어야 하고(구경은 자유), 욕설은 서버가 막는다.
+//   서버: board-writer /lroom(대화·제보), /lalerts(최근 30분 지연 제보 집계).
+//   ★ 2026-10-04: 방의 일상 대화는 AI 이용자도 채운다(서버 generateLineTalks). 지연·혼잡 제보와 경보 집계는 실제 이용자 것만 센다. 글쓰기·제보는 커뮤니티 아이디가 있어야 하고(구경은 자유), 욕설은 서버가 막는다.
 // ══════════════════════════════════════════════════════════════
 var _LR_COMMON = ['1호선','2호선','3호선','4호선','5호선','6호선','7호선','8호선','9호선','신분당선','수인분당선','경의중앙선','공항철도','경춘선','GTX-A'];
 var _lr = { line:'', since:0, seen:{}, timer:null, busy:false };
@@ -41887,61 +41885,103 @@ function _lrRouteLines(){
     return out;
   }catch(e){ return []; }
 }
-function _lrPickDefault(){
-  var saved=''; try{ saved=_safeLS.get('lr_line',''); }catch(e){}
-  var rl=_lrRouteLines();
-  if(rl.length) return rl[0];
-  return saved || '2호선';
+// ★ 2026-10-04 (YJ): '내 노선' 탭을 없애고 실시간소통 하단 탭으로 합쳤다.
+//   · 하단 탭 = [전체] + 내가 '경로 안내를 시작'할 때 실제로 타는 지하철 노선(탄 횟수 많은 순, 최대 6개).
+//   · [전체]는 각 노선 방의 대화를 모아서 보여주고(서버 /talks), 닉네임 앞에 (몇호선)이 붙는다.
+//   · 노선 탭은 그 노선 방(서버 /lroom): 대화 + 공식 공지 + 지연·혼잡 제보 버튼. 기존 기능은 그대로 둔다.
+var _LR_KNOWN = _LR_COMMON.concat(['인천1호선','인천2호선','김포골드라인']);
+window._chatSel = 'all';
+function _myLinesList(){
+  try{
+    var a=_safeLS.get('my_lines',[]); if(!Array.isArray(a)) return [];
+    return a.filter(function(x){ return x && _LR_KNOWN.indexOf(x.l)>=0; })
+      .sort(function(x,y){ return ((y.n||0)-(x.n||0)) || ((y.t||0)-(x.t||0)); })
+      .map(function(x){ return x.l; }).slice(0,6);
+  }catch(e){ return []; }
 }
-function _lrRenderLines(){
-  var box=document.getElementById('lrLines'); if(!box) return;
-  var rl=_lrRouteLines(), all=rl.slice();
-  _LR_COMMON.forEach(function(l){ if(all.indexOf(l)<0) all.push(l); });
-  box.innerHTML=all.map(function(l){
-    var on=(l===_lr.line), mine=rl.indexOf(l)>=0;
-    var col=(typeof _transitColor==='function') ? _transitColor(1,l) : 'var(--gold)';
-    return '<span onclick="_lrSelect(\''+_ltEsc(l).replace(/'/g,'')+'\')" style="flex-shrink:0;cursor:pointer;font-size:12px;font-weight:700;padding:5px 11px;border-radius:14px;white-space:nowrap;'
-      +(on?('background:'+col+';color:#fff;border:1px solid '+col+';'):('background:transparent;color:var(--text);border:1px solid var(--border2);'))+'">'+(mine?'📍':'')+_ltEsc(l)+'</span>';
-  }).join('');
+// 경로 안내(추적)를 시작할 때 호출 — 지금 안내 중인 경로의 지하철 노선만 기록한다(검색만 하고 안 탄 경로는 기록 안 함)
+function _myLinesRecord(){
+  try{
+    var cand=[];
+    var add=function(l){ l=String(l||'').replace(/\s/g,''); if(l && _LR_KNOWN.indexOf(l)>=0 && cand.indexOf(l)<0) cand.push(l); };
+    ((typeof S!=='undefined' && S && S.route && S.route.lp) || []).forEach(add);
+    if(!cand.length) _lrRouteLines().forEach(add);
+    if(!cand.length) return;
+    var a=_safeLS.get('my_lines',[]); if(!Array.isArray(a)) a=[];
+    var now=Date.now();
+    cand.forEach(function(l){
+      var f=null; a.forEach(function(x){ if(x && x.l===l) f=x; });
+      if(f){ f.n=(f.n||0)+1; f.t=now; } else a.push({ l:l, n:1, t:now });
+    });
+    a.sort(function(x,y){ return (y.t||0)-(x.t||0); });
+    _safeLS.set('my_lines', a.slice(0,12));
+    _chatBarRender();
+  }catch(e){}
 }
-function _lrSelect(line){
-  _lr.line=line; _lr.since=0; _lr.seen={};
-  try{ _safeLS.set('lr_line',line); }catch(e){}
-  var sc=document.getElementById('lrScroll'); if(sc) sc.innerHTML='';
-  _lrRenderLines(); _lrPoll(true);
+window._myLinesRecord=_myLinesRecord;
+window._myLinesList=_myLinesList;
+// 전체 탭에서 글을 쓸 때 붙는 노선 = 내가 가장 많이 타는 노선(없으면 노선 없이 전체에만)
+function _chatPostLine(){ var m=_myLinesList(); return m.length ? m[0] : ''; }
+window._chatPostLine=_chatPostLine;
+function _chatBarRender(){
+  var bar=document.getElementById('chatLineBar'); if(!bar) return;
+  var mine=_myLinesList(), sel=window._chatSel||'all';
+  var items=['all'].concat(mine);
+  if(sel!=='all' && items.indexOf(sel)<0) items.push(sel);   // 알림 등으로 임시로 연 노선
+  bar.innerHTML=items.map(function(l){
+    var on=(l===sel), label=(l==='all')?'전체':l;
+    var col=(l==='all') ? 'var(--gold)' : ((typeof _transitColor==='function') ? _transitColor(1,l) : 'var(--gold)');
+    return '<span onclick="_chatSelect(\''+_ltEsc(l).replace(/'/g,'')+'\')" style="flex-shrink:0;cursor:pointer;font-size:12.5px;font-weight:700;padding:6px 14px;border-radius:15px;white-space:nowrap;'
+      +(on?('background:'+col+';color:#fff;border:1px solid '+col+';'):('background:transparent;color:var(--text);border:1px solid var(--border2);'))+'">'+_ltEsc(label)+'</span>';
+  }).join('')+(mine.length?'':'<span style="flex-shrink:0;font-size:11px;color:var(--sub);padding-left:4px;white-space:nowrap;">경로 안내를 시작하면 내가 타는 노선 방이 여기 생겨요</span>');
 }
-window._lrSelect=_lrSelect;
-function showLineRoomTab(el){
-  try{ var _nb=document.getElementById('newsCatBar'); if(_nb) _nb.style.display='none'; }catch(e){}
-  document.querySelectorAll('#filterRow .chip').forEach(function(c){c.classList.remove('on');});
-  if(el) el.classList.add('on');
-  ['commScrollView','chatTabView','settingsTabView','aiTabView'].forEach(function(id){ var e=document.getElementById(id); if(e) e.style.display='none'; });
-  var fab=document.getElementById('commFab'); if(fab) fab.style.display='none';
-  var v=document.getElementById('lineRoomView');
-  if(v){ v.style.display='flex'; v.style.flexDirection='column'; v.style.flex='1'; v.style.minHeight='0'; }
-  if(!_lr.line) _lr.line=_lrPickDefault();
-  _lrRenderLines(); _lrPoll(true);
-  if(!_lr.timer) _lr.timer=setInterval(function(){
-    var vv=document.getElementById('lineRoomView');
-    var tc=document.getElementById('tab-community');
-    if(!vv || vv.style.display==='none' || document.visibilityState==='hidden' || (tc && !tc.classList.contains('active'))){ return; }
-    _lrPoll(false);
-  }, 6000);
+// 선택된 방(전체/노선)에 맞춰 화면을 보여준다
+function _chatShowPane(){
+  var sel=window._chatSel||'all';
+  var cv=document.getElementById('chatTabView'), lv=document.getElementById('lineRoomView'), bar=document.getElementById('chatLineBar');
+  if(sel==='all'){
+    if(lv) lv.style.display='none';
+    if(cv){ cv.style.display='flex'; cv.style.flexDirection='column'; cv.style.flex='1'; cv.style.minHeight='0'; }
+    _renderChatTab();
+    var box=document.getElementById('chatScroll'); if(box) box.scrollTop=box.scrollHeight;   // 진입 시 하단으로
+  } else {
+    if(cv) cv.style.display='none';
+    if(lv){ lv.style.display='flex'; lv.style.flexDirection='column'; lv.style.flex='1'; lv.style.minHeight='0'; }
+    if(_lr.line!==sel){
+      _lr.line=sel; _lr.since=0; _lr.seen={}; _lr.busy=false;
+      var sc=document.getElementById('lrScroll'); if(sc){ sc.innerHTML=''; delete sc.dataset.first; }
+      ['lrOfficial','lrAlert'].forEach(function(id){ var e=document.getElementById(id); if(e){ e.style.display='none'; e.innerHTML=''; } });
+    }
+    _lrPoll(true);
+    if(!_lr.timer) _lr.timer=setInterval(function(){
+      var vv=document.getElementById('lineRoomView');
+      var tc=document.getElementById('tab-community');
+      if(!vv || vv.style.display==='none' || document.visibilityState==='hidden' || (tc && !tc.classList.contains('active'))){ return; }
+      _lrPoll(false);
+    }, 6000);
+  }
+  if(bar) bar.style.display='flex';
+  _chatBarRender();
 }
-window.showLineRoomTab=showLineRoomTab;
-// 다른 칩으로 가면 이 방은 닫는다
+function _chatSelect(sel){ window._chatSel=sel||'all'; _chatShowPane(); }
+window._chatSelect=_chatSelect;
+// 다른 칩(게시판·뉴스·설정·AI)으로 가면 노선 방과 하단 탭은 닫는다
 // (뒤에서 `window.showSettingsTab = ...` 처럼 다시 대입하는 줄이 있어, 문서가 다 불러와진 뒤에 감싼다)
 window.addEventListener('load', function(){
-  ['filterCat','showChatTab','showSettingsTab','showAITab'].forEach(function(fn){
+  ['filterCat','showSettingsTab','showAITab'].forEach(function(fn){
     try{
       var o=window[fn]; if(typeof o!=='function' || o._lrWrapped) return;
-      var w=function(){ var v=document.getElementById('lineRoomView'); if(v) v.style.display='none'; return o.apply(this, arguments); };
+      var w=function(){
+        var v=document.getElementById('lineRoomView'); if(v) v.style.display='none';
+        var b=document.getElementById('chatLineBar'); if(b) b.style.display='none';
+        return o.apply(this, arguments);
+      };
       w._lrWrapped=true; window[fn]=w;
     }catch(e){}
   });
 });
 function _lrTime(ts){ var d=new Date(ts), p=function(n){return (n<10?'0':'')+n;}; return p(d.getHours())+':'+p(d.getMinutes()); }
-// ★ 2026-10-03: 서울교통공사 공식 운행 공지(엔진 /line-notices — 지연·무정차·사고 등 진행 중인 것만). 1~8호선 한정, 없으면 아무것도 안 보인다.
+// ★ 2026-10-03: 서울교통공사 공식 운행 공지(엔진 /line-notices — 지연·무정차·사고 등 진행 중인 것만). 1~8호선 중심(경의중앙선·공항철도는 환승역 관련만 가끔), 없으면 아무것도 안 보인다.
 //   노선 방이 비어 있어도 이 줄은 실제 데이터라서 사용자를 속이지 않는다. 1분 안엔 다시 묻지 않는다.
 var _offCache={ at:0, data:null, busy:false };
 function _offGet(cb){
@@ -41973,7 +42013,13 @@ function _lrRenderOfficial(line){
     if(n){ el.style.background=_ALERT; el.style.borderColor=_ALERT_B; el.innerHTML=_offText(line,n); el.style.display='block'; return; }
     // ★ 2026-10-03: 공지가 없을 때도 '확인했다'는 표시를 남겨서, 연동이 안 된 건지 정말 없는 건지 구분되게 한다.
     //   공식 공지(서울교통공사 지하철 알림정보)는 1~8호선만 있다. 다른 철도 노선은 연동 전이라고 알린다. 버스 방은 표시하지 않는다.
-    if(/^[1-8]호선$/.test(line)){
+    //   ★ 2026-10-04: 과거 공지 300건(2024-05~2026-09) 실측 — 1~8호선 외엔 경의중앙선 4건·공항철도 3건만 나왔다(공사 관할 환승역 관련).
+    //   이 두 노선은 '연동 전'이 아니라 '공사 공지에 가끔만 올라오는' 노선이라 문구를 따로 둔다(공지가 있으면 위에서 그대로 보인다).
+    if(line==='경의중앙선' || line==='공항철도'){
+      el.style.background=_QUIET; el.style.borderColor=_QUIET_B;
+      el.innerHTML='ℹ️ '+_ltEsc(line)+'은(는) 서울교통공사 환승역 관련 공지만 가끔 올라와요 · 지금은 없어요 · 아래 이용자 제보로 알려 드려요';
+      el.style.display='block';
+    } else if(/^[1-8]호선$/.test(line)){
       el.style.background=_QUIET; el.style.borderColor=_QUIET_B;
       el.innerHTML='✅ <b>서울교통공사 공지 확인</b> · 지금 '+_ltEsc(line)+' 지연·사고 공지는 없어요 <span style="color:var(--sub);">('+_offAgo(_offCache.at||Date.now())+' 확인)</span>';
       el.style.display='block';
@@ -42077,8 +42123,19 @@ function _lrPost(kind, text, stn){
 }
 function _lrSend(){
   var inp=document.getElementById('lrInput'); if(!inp) return;
-  var t=(inp.value||'').trim(); if(!t) return;
-  _lrPost('chat', t, '').then(function(ok){ if(ok) inp.value=''; });
+  var t=(inp.value||'').trim(); if(!t || !_lr.line) return;
+  var id=''; try{ id=(_getCommId()||''); }catch(e){}
+  if(!id){ if(typeof toast==='function') toast('설정에서 커뮤니티 아이디를 등록하면 글과 제보를 남길 수 있어요'); return; }
+  if(typeof _containsBadWord==='function' && _containsBadWord(t)){ if(typeof toast==='function') toast('⚠️ 욕설·비방은 등록할 수 없어요. 바른 언어를 사용해주세요'); return; }
+  var line=_lr.line;
+  // ★ 2026-10-04: /lroom 대신 /react(line) — 서버가 이 방에 저장하고, 이 방의 다른 이용자(AI)가 몇 초 뒤 반응한다
+  fetch(_lrBase()+'/react',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ nick:id, text:t, line:line }) })
+    .then(function(r){ return r.json().catch(function(){ return null; }).then(function(j){ return { ok:r.ok, j:j }; }); })
+    .then(function(x){
+      if(x.j && x.j.stored){ inp.value=''; _lrPoll(false); setTimeout(function(){ _lrPoll(false); }, 1500); return; }
+      var e=(x.j&&x.j.error)||'';
+      if(typeof toast==='function') toast(e==='filtered' ? '부적절한 표현이 있어 올리지 못했어요' : (e==='rate limited'||!x.ok) ? '잠시 후 다시 시도해 주세요(시간당 한도)' : '올리지 못했어요. 잠시 후 다시 시도해 주세요');
+    }).catch(function(){ if(typeof toast==='function') toast('네트워크가 불안정해요'); });
 }
 window._lrSend=_lrSend;
 function _lrReport(kind){
@@ -42104,7 +42161,7 @@ function _lrRouteAlertStart(route){
       var parts=[];
       lines.forEach(function(l){ var a=(j.lines||{})[l]; if(a && a.reporters>=3){ var st=(a.stations||[])[0]; parts.push('<b>'+_ltEsc(l)+'</b> 최근 30분 지연 제보 '+a.reporters+'명'+(st?' ('+_ltEsc(st.stn)+' 부근)':'')); } });
       if(!parts.length){ el.style.display='none'; el.innerHTML=''; return; }
-      el.innerHTML='🚨 '+parts.join(' · ')+' — 시간 여유를 두고 이동하세요. <span onclick="_lrOpenRoom(\''+_ltEsc(lines[0]).replace(/'/g,'')+'\')" style="color:var(--gold);font-weight:700;cursor:pointer;">내 노선 방 보기 ›</span>';
+      el.innerHTML='🚨 '+parts.join(' · ')+' — 시간 여유를 두고 이동하세요. <span onclick="_lrOpenRoom(\''+_ltEsc(lines[0]).replace(/'/g,'')+'\')" style="color:var(--gold);font-weight:700;cursor:pointer;">노선 방 보기 ›</span>';
       el.style.display='block';
     }).catch(function(){});
   }catch(e){}
@@ -42113,9 +42170,8 @@ window._lrRouteAlertStart=_lrRouteAlertStart;
 function _lrOpenRoom(line){
   try{
     var ni=document.getElementById('ni-community'); if(typeof switchTab==='function' && ni) switchTab('community', ni);
-    _lr.line=line||_lr.line||''; _lr.since=0; _lr.seen={};
-    var sc=document.getElementById('lrScroll'); if(sc) sc.innerHTML='';
-    showLineRoomTab(document.getElementById('chipLineRoom'));
+    window._chatSel=line||'all';
+    showChatTab(document.getElementById('chipLiveTalk'));
   }catch(e){}
 }
 window._lrOpenRoom=_lrOpenRoom;
@@ -42154,7 +42210,7 @@ var _POLICY_DOCS = {
       '<p><b>1. 수집하는 항목</b><br>'
       + '· 위치정보(GPS 좌표): 실시간 경로 안내·주변 정류장 검색<br>'
       + '· 이용자가 입력한 닉네임·게시글·댓글·채팅 내용<br>'
-      + '· 내 노선 방 이용 시: 노선명, 대화·지연·혼잡 제보 내용, 선택 입력한 역 이름, 그리고 도배·중복 제보를 막기 위한 <b>기기 식별 코드</b>(IP 주소를 복원할 수 없게 일방향 암호화한 값의 앞 12자리. IP 주소 원본은 저장하지 않습니다)<br>'
+      + '· 노선별 실시간소통(노선 방) 이용 시: 노선명, 대화·지연·혼잡 제보 내용, 선택 입력한 역 이름, 그리고 도배·중복 제보를 막기 위한 <b>기기 식별 코드</b>(IP 주소를 복원할 수 없게 일방향 암호화한 값의 앞 12자리. IP 주소 원본은 저장하지 않습니다)<br>'
       + '· 도착 오차 익명 기록(설정에서 끌 수 있음): 목적지 도착 시 예상 소요 분, 실제 소요 분, 환승 횟수, 노선명, 시간대(시), 평일 여부. <b>역 이름·좌표·기기 식별 코드는 포함하지 않으며</b> 개인을 식별할 수 없습니다<br>'
       + '· 출발지/도착지 등 이용자가 직접 설정한 값<br>'
       + '별도의 회원가입 절차가 없으며, 이름·연락처·주민등록번호 등은 수집하지 않습니다.</p>'
@@ -42164,7 +42220,7 @@ var _POLICY_DOCS = {
       + '· 위치정보: 경로 안내 목적으로만 일시 사용하며 <b>서버에 저장하지 않습니다.</b><br>'
       + '· 닉네임·설정값: 이용자 기기(단말)에 저장되며 앱 삭제 시 함께 삭제됩니다.<br>'
       + '· 게시글·댓글·채팅: 작성일로부터 보관하며, 최신 글 기준 일정 수량 초과 시 오래된 순으로 자동 삭제됩니다.<br>'
-      + '· 내 노선 방 대화·제보와 기기 식별 코드(글 신고 시 신고한 기기의 코드 포함): 작성·신고 후 <b>14일이 지나면 자동 삭제</b>됩니다. 화면에는 최근 12시간 글만 보입니다. 그 전에 삭제를 원하시면 문의처로 요청해 주세요.<br>'
+      + '· 노선 방 대화·제보와 기기 식별 코드(글 신고 시 신고한 기기의 코드 포함): 작성·신고 후 <b>14일이 지나면 자동 삭제</b>됩니다. 화면에는 최근 12시간 글만 보입니다. 그 전에 삭제를 원하시면 문의처로 요청해 주세요.<br>'
       + '· 도착 오차 익명 기록: <b>1년이 지나면 자동 삭제</b>됩니다. 이용자를 식별할 수 있는 값이 없어 개별 삭제 요청은 처리할 수 없으며, 설정 &gt; 안내 정확도 향상에서 언제든 전송을 끌 수 있습니다.<br>'
       + '· 출퇴근 경로 미리 조회: 설정해 둔 출발·도착 좌표로 경로를 미리 불러올 뿐이며, 그 좌표를 따로 저장하거나 계정과 연결하지 않습니다.</p>'
       + '<p><b>4. 제3자 제공 및 처리위탁</b><br>'
@@ -42810,14 +42866,14 @@ var _SERVER_ON = true;                  // 서버 연동 on/off
 
 // 서버에 톡 등록 (작성 시 호출)
 var _BOARD_WRITER_URL = 'https://board-writer.phg0643.workers.dev';
-function _serverPostTalk(nick, text){
+function _serverPostTalk(nick, text, line){
   if(!_SERVER_ON) return;
   try {
     // ★ 사용자 개입 → AI 참여자들이 이 메시지에 직접 반응 (6~45초 뒤 등장)
     fetch(_BOARD_WRITER_URL + '/react', {   // 토큰 없음 — 서버가 IP·시간당 호출 수로 제한
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ nick: nick, text: text })
+      body: JSON.stringify(line ? { nick: nick, text: text, line: line } : { nick: nick, text: text })
     }).catch(function(){});
   } catch(e){}
 }
@@ -43795,7 +43851,7 @@ function _renderLiveTalk(){
 function _chatBubbleHtml(m, animDir){
   var cls = 'chat-bubble' + (m.mine?' mine':'') + (animDir ? (m.mine?' anim-r':' anim-l') : '');
   return '<div class="'+cls+'"><div class="chat-bub-body">'
-    + (m.mine?'':'<div class="chat-bub-nick">'+_ltEsc(m.nick)+'</div>')
+    + (m.mine?'':'<div class="chat-bub-nick">'+(m.line?'<span style="color:var(--sub);font-weight:600;">('+_ltEsc(m.line)+')</span> ':'')+_ltEsc(m.nick)+'</div>')
     + '<div class="chat-bub-txt">'+_ltEsc(m.text)+'</div>'
     + '<div class="chat-bub-time">'+_ltTime(m.time)+'</div></div></div>';
 }
@@ -43830,8 +43886,9 @@ function sendChatMsg(){
   }
   var myId = (typeof _getCommId==='function' && _getCommId()) || '나';
   var _txt = inp.value.trim();
-  _ltAdd({ nick:myId, text:_txt, time:Date.now(), mine:true });
-  if(typeof _serverPostTalk==='function') _serverPostTalk(myId, _txt);  // 서버 공유
+  var _myLn = (typeof _chatPostLine==='function') ? _chatPostLine() : '';   // ★ 2026-10-04: 전체 탭 글은 내가 가장 많이 타는 노선의 방에 올라간다(없으면 노선 없이)
+  _ltAdd({ nick:myId, text:_txt, time:Date.now(), mine:true, line:_myLn });
+  if(typeof _serverPostTalk==='function') _serverPostTalk(myId, _txt, _myLn);  // 서버 공유
   if(!window._serverTalksActive && typeof _ltRespondToUser==='function') _ltRespondToUser(_txt);   // ★ 내 말에 반응(서버 대화 중엔 서버가 반응을 만든다)
   inp.value = '';
 }
@@ -44026,7 +44083,7 @@ function _ltServerPoll(){
           // 내가 방금 보낸 말이 서버를 거쳐 돌아온 것이면 건너뜀(이미 화면에 있다)
           if(mine[r.nick + '\n' + r.text] && Date.now() - mine[r.nick + '\n' + r.text] < 600000) return;
           var t = Math.min(Date.now(), (r.ts || Date.now()) - _LT_SRV.skew);
-          fresh.push({ nick: String(r.nick || ''), text: String(r.text || ''), time: t, mine: false, srv: true });
+          fresh.push({ nick: String(r.nick || ''), text: String(r.text || ''), time: t, mine: false, srv: true, line: r.line ? String(r.line) : '' });
         });
         if(_LT_SRV.seenN > 600){ _LT_SRV.seen = {}; _LT_SRV.seenN = 0; rows.forEach(function(r){ _LT_SRV.seen[r.id] = 1; _LT_SRV.seenN++; }); }
         if(!_LT_SRV.init){
