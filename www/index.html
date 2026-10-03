@@ -32079,13 +32079,17 @@ function _ovlLines(){
     var _tri = [P[c0 - 1], P[c0], P[c0 + 1]];
     for(var k = 0; k < 3; k++){
       var nm = _tri[k];
-      out.track.push(nm == null ? '' : clamp(nm, k === 1 ? 12 : 10));
+      out.track.push(nm == null ? '' : clamp(nm, 40));   // 길이 자르기는 네이티브(한 줄·…)가 한다
     }
     out.cur = 1;
     var _pad2 = function(n){ return (n < 10 ? '0' : '') + n; };
     var _mm = (d.min != null && isFinite(d.min)) ? Math.max(0, Math.round(d.min)) : null;
-    var _remTxt = (_mm == null) ? '00시간 00분' : (_pad2(Math.floor(_mm / 60)) + '시간 ' + _pad2(_mm % 60) + '분');
-    out.l2 = '남은시간: ' + _remTxt + ' · ' + (d.arr ? d.arr : '00:00') + '도착';
+    // 값이 없으면 줄을 비운다(네이티브가 숨김) — '00시간 00분' 같은 자리 표시는 쓰지 않는다
+    if(_mm != null && d.arr){
+      out.l2 = '남은시간: ' + _pad2(Math.floor(_mm / 60)) + '시간 ' + _pad2(_mm % 60) + '분 · ' + d.arr + '도착';
+    } else if(_mm != null){
+      out.l2 = '남은시간: ' + _pad2(Math.floor(_mm / 60)) + '시간 ' + _pad2(_mm % 60) + '분';
+    }
     var r = window._pipReco;
     if(r && r.title){
       if(!r.ovlAt) r.ovlAt = Date.now();

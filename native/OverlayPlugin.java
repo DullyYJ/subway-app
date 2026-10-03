@@ -342,13 +342,11 @@ public class OverlayPlugin extends Plugin {
 
         for (int i = 0; i < 3; i++) {
             TextView c = makeText(i == 1 ? 26 : 22, i == 1 ? Color.WHITE : Color.parseColor("#6E6E76"), i == 1);
-            c.setMaxLines(2);
+            // ★ 2026-10-03 (YJ: "경로는 한 줄만, 정류장이 길면 …으로 잘라"): 세 칸 모두 한 줄, 넘치면 끝을 '…' 로 자른다(글자 크기는 고정).
+            c.setSingleLine(true);
+            c.setMaxLines(1);
+            c.setEllipsize(android.text.TextUtils.TruncateAt.END);
             cells[i] = c;
-        }
-        // 옆 칸(지나간 곳·다음정거장): 기본 22sp, 이름이 길면 칸 폭에 맞춰 두 줄까지 쓰며 스스로 줄어든다(최소 11sp)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            cells[0].setAutoSizeTextTypeUniformWithConfiguration(11, 22, 1, TypedValue.COMPLEX_UNIT_SP);
-            cells[2].setAutoSizeTextTypeUniformWithConfiguration(11, 22, 1, TypedValue.COMPLEX_UNIT_SP);
         }
         // 노란 줄(남은시간 · 도착)은 맨 아래 전체 폭에 한 줄(길면 글자가 스스로 줄어든다)
         t2.setMaxWidth(rowW);
@@ -541,13 +539,13 @@ public class OverlayPlugin extends Plugin {
         } else {
             three[0] = ""; three[1] = line1; three[2] = "";   // 예비: 칸을 못 받으면 한 줄 문구를 가운데 칸에
         }
-        final String[] hint = { "지나간 곳", "현위치", "다음정거장" };   // 비어 있으면 자리 이름을 흐리게 보여준다
+        // ★ 2026-10-03 (YJ: "지나간 곳이라는 글자는 예시였어, 직접 쓰지 마"): 비어 있는 칸은 글자를 넣지 않고 그대로 비워 둔다.
         for (int i = 0; i < 3; i++) {
             TextView c = cells[i];
-            boolean empty = three[i] == null || three[i].length() == 0;
-            c.setText(empty ? hint[i] : three[i]);
-            if (i == 1) {                                   // 현위치 칸: 흰색·굵게, 비어 있으면 회색
-                c.setTextColor(empty ? Color.parseColor("#6E6E76") : Color.WHITE);
+            String nm = three[i] == null ? "" : three[i];
+            c.setText(nm);
+            if (i == 1) {                                   // 현위치 칸: 흰색·굵게
+                c.setTextColor(Color.WHITE);
                 c.setTypeface(Typeface.DEFAULT_BOLD);
             } else {                                        // 옆 칸: 회색
                 c.setTextColor(Color.parseColor("#6E6E76"));
