@@ -4014,7 +4014,8 @@ function _renderHomeConductorBrief(fromName, toName, hour, congPct, serverMsg){
           var _ep = (typeof _journeyEta==='function') ? _journeyEta()
                   : ((typeof _etaPair==='function') ? _etaPair() : null);
           var arr=new Date((_ep && _ep.arrMs) || (Date.now()+mins*60000)); var pad2=function(n){return(n<10?'0':'')+n;};
-          ps.push('<span id="homeAiArr">도착은 <b>' + pad2(arr.getHours()) + ':' + pad2(arr.getMinutes()) + '</b>경 예정이에요.</span>');
+          var _dm = (window._depCmpMsg && window._depCmpMsg.key===window._lastCoordQs && !(typeof S!=='undefined' && S.boardedAt)) ? window._depCmpMsg.msg : '';
+          ps.push('<span id="homeAiArr">도착은 <b>' + pad2(arr.getHours()) + ':' + pad2(arr.getMinutes()) + '</b>경 예정이에요.</span>' + (_dm ? ' <span id="homeAiDep">' + _dm + '</span>' : ''));
         } catch(e){}
       }
       // 3) 혼잡 한마디 → 4) 날씨·준비물
@@ -10715,15 +10716,20 @@ function _depCompareStart(route){
       var hm=function(ms){ var d=new Date(ms); return pad(d.getHours())+':'+pad(d.getMinutes()); };
       var best=res[0];
       res.forEach(function(r){ if(r && r.arrMs < best.arrMs - 60000) best=r; });   // 1분 넘게 빨라야 '더 낫다'
-      var parts=res.map(function(r,i){ return r ? ((offs[i]===0?'지금':offs[i]+'분 뒤')+' 출발 → <b style="color:var(--text);">'+hm(r.arrMs)+'</b> 도착') : null; }).filter(Boolean);
       var msg;
       if(best.off===0){
         var _lateOk=0; res.forEach(function(r){ if(r && r.off>0 && r.arrMs <= res[0].arrMs + 60000) _lateOk=Math.max(_lateOk, r.off); });
-        msg=_lateOk>0 ? ('지금 출발하든 '+_lateOk+'분 뒤에 출발하든 도착 시각은 같아요. 여유 있게 나가셔도 돼요.') : '지금 출발하는 게 가장 일찍 도착해요.';
+        msg=_lateOk>0 ? ('지금 나가셔도, '+_lateOk+'분 뒤에 나가셔도 도착 시각은 같아요.') : '지금 출발하는 게 가장 일찍 도착해요.';
       }
-      else msg=best.off+'분 뒤에 출발하면 '+Math.round((res[0].arrMs-best.arrMs)/60000)+'분 일찍 도착해요 (기다리는 것이 더 빠른 구간이에요).';
-      el.innerHTML='<div>'+parts.join(' · ')+'</div><div>'+msg+'</div>';
-      el.style.display='block';
+      else msg=best.off+'분 뒤에 출발하면 '+Math.round((res[0].arrMs-best.arrMs)/60000)+'분 일찍 도착해요.';
+      // ★ 2026-10-04 (YJ: "지금출발 부분은 AI승무원이랑 합쳐서 간략히"): 카드에 따로 그리던 '지금/10분 뒤/20분 뒤 → 도착' 줄을 없애고
+      //   결론 한 문장만 AI 승무원 도착 안내 뒤에 붙인다.
+      window._depCmpMsg = { key: myKey, msg: msg };
+      el.style.display='none'; el.innerHTML='';
+      try{
+        var _ae=document.getElementById('homeAiArr');
+        if(_ae && !document.getElementById('homeAiDep')){ _ae.insertAdjacentHTML('afterend', ' <span id="homeAiDep">'+msg+'</span>'); }
+      }catch(e){}
     };
     setTimeout(function(){ ask(0); }, 1200);
   }catch(e){}
@@ -14013,6 +14019,7 @@ function _syncHomeBriefRemaining(rem){
       var arr = new Date((_ep2 && _ep2.arrMs) || (Date.now() + rem*60000));
       var pad = function(n){ return (n<10?'0':'')+n; };
       arrEl.innerHTML = '도착은 <b>' + pad(arr.getHours()) + ':' + pad(arr.getMinutes()) + '</b>경 예정이에요.';
+      try{ if(typeof S!=='undefined' && S.boardedAt){ var _de=document.getElementById('homeAiDep'); if(_de) _de.remove(); } }catch(e){}   // 탑승 후엔 '언제 출발할지' 안내 불필요
     }
   } catch(e){}
 }
