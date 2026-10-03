@@ -3052,6 +3052,14 @@ function _secBriefText(fromName, toName, lines, ctx, serverMsg){
     var ps = [];
     ps.push(fromName + '에서 ' + toName + '까지는 ' + (tot > 0 ? '약 ' + tot + '분 ' : '') + '걸려요.'
       + ((lines && lines.length) ? ' ' + lines.join(' → ') + ' 순서로 가시면 돼요.' : ''));
+    try{   // ★ 2026-10-03: 기다리는 시간·타는 시간 구분 + 이 경로를 고른 이유
+      var _r0 = (typeof _transitResultData!=='undefined' && _transitResultData && _transitResultData.routes) ? _transitResultData.routes[0] : null;
+      if(_r0 && _r0.why!==undefined){
+        var _s0 = _routeTimeSplit(_r0.sections||[]);
+        if(_s0 && _s0.wait>0 && _s0.ride>0) ps.push('타고 가는 시간은 ' + _s0.ride + '분, 기다리는 시간은 ' + _s0.wait + '분이에요.');
+        if(_r0.why) ps.push(_r0.why);
+      }
+    }catch(e){}
     ps.push(xf <= 0 ? '환승 없이 한 번에 가실 수 있어요.'
       : xf === 1 ? '환승이 한 번 있어요. 환승 구간 이동 거리를 미리 봐 두면 편해요.'
       : '환승이 ' + xf + '번이라 안내 방송을 놓치지 마세요.');
@@ -3968,6 +3976,17 @@ function _renderHomeConductorBrief(fromName, toName, hour, congPct, serverMsg){
         t = '환승 정보는 경로가 확정되면 구간별로 알려드릴게요.';
       }
       ps.push(_head + ' ' + t);
+      // ★ 2026-10-03: 대기·승차 구분 + 이 경로를 고른 이유(엔진 근거) 한두 문장
+      try{
+        var _rt0 = (typeof _transitResultData!=='undefined' && _transitResultData && _transitResultData.routes) ? _transitResultData.routes[0] : null;
+        if(_rt0 && _rt0.why!==undefined){
+          var _sp0 = _routeTimeSplit(_rt0.sections||[]);
+          var _extra = [];
+          if(_sp0 && _sp0.wait>0 && _sp0.ride>0) _extra.push('이 중 타고 가는 시간은 <b>' + _sp0.ride + '분</b>, 기다리는 시간은 <b>' + _sp0.wait + '분</b>이에요.');
+          if(_rt0.why) _extra.push(esc(_rt0.why));
+          if(_extra.length) ps.push(_extra.join(' '));
+        }
+      }catch(e){}
       // 2) 출발·도착 시각
       if(window._metroRouteMode === true){
         // ★ 노선도 경로: 위치추적 없이 현재시각 기준 열차 유무만 안내(소요시간은 위 첫 문장에 있다)
@@ -7087,6 +7106,9 @@ function _renderTransitResultCard(data, start, dest, cacheSource) {
   // 즐겨찾기 버튼 표시
   var favBtn = document.getElementById('favToggleBtn');
   if(favBtn) favBtn.style.display = 'inline-flex';
+
+  // ★ 2026-10-03: 승차·대기·도보 분리 + 선택 이유 한 줄
+  try{ _renderSplitRow(route); }catch(e){}
 
   // 복합경로 가로 타임라인 렌더
   _renderHtlTrack(sections, start, dest, totalMin);
@@ -10500,6 +10522,89 @@ function _selectSubwayNearestRoute(){
 }
 window._selectSubwayNearestRoute = _selectSubwayNearestRoute;
 
+// ★ 2026-10-03 (YJ: "대기와 실제 승차를 구분해서 보여줘 / 왜 이 경로를 골랐는지 AI 승무원에 간단히"):
+//   총 소요를 '승차 / 대기 / 도보·환승'으로 나눈다. 계산은 엔진이 준 숫자만 쓴다(앱이 새로 추정하지 않음):
+//   · 대기 = 구간 전체시간(sectionTime) − 실제 이동(endSec−startSec) (버스·장거리는 승차 전 기다림이 여기 들어 있다)
+//   · 급행은 엔진이 따로 준 xpWaitSec 만큼을 이동에서 빼서 대기로 옮긴다
+//   · 도보·환승 = 교통수단이 아닌 구간(도보, 환승 이동)
+function _routeTimeSplit(sections){
+  try{
+    var ride=0, wait=0, walk=0, n=0;
+    (sections||[]).forEach(function(s){
+      var t=(s.transportation||{}).type, dur=(s.duration||0)/60;
+      if(t!==1 && t!==2 && t!==4){ walk+=dur; return; }
+      var r=null;
+      if(s.startSec!=null && s.endSec!=null && isFinite(s.startSec) && isFinite(s.endSec) && s.endSec>=s.startSec) r=(s.endSec-s.startSec)/60;
+      if(r==null) r=Math.max(0, dur-((s.waitSec||0)/60));
+      if(r>dur) r=dur;
+      var w=Math.max(0, dur-r);
+      var xw=(s.xpWaitSec>0) ? Math.min(r, s.xpWaitSec/60) : 0;   // 급행 대기는 이동 시간 안에 들어 있다
+      ride+=r-xw; wait+=w+xw; n++;
+    });
+    if(!n) return null;
+    return { ride:Math.round(ride), wait:Math.round(wait), walk:Math.round(walk) };
+  }catch(e){ return null; }
+}
+window._routeTimeSplit = _routeTimeSplit;
+function _routeSplitText(sp){
+  if(!sp) return '';
+  var a=['승차 '+sp.ride+'분'];
+  if(sp.wait>0) a.push('대기 '+sp.wait+'분');
+  if(sp.walk>0) a.push('도보·환승 '+sp.walk+'분');
+  return a.join(' · ');
+}
+window._routeSplitText = _routeSplitText;
+
+// 왜 이 경로인지 한두 문장(엔진이 붙인 탭·소요·환승만 근거로 쓴다)
+function _routeWhyText(path){
+  try{
+    var info=(path&&path.info)||{}, R=_allRouteResults||{};
+    var tabs=(info._tabs&&info._tabs.length)?info._tabs.slice():(info.tab?[info.tab]:[]);
+    var has=function(t){ return tabs.indexOf(t)>=0; };
+    var tot=info.totalTime, xf=info.transferCount||0;
+    var ti=function(p){ return (p&&p.info&&p.info.totalTime!=null)?p.info.totalTime:null; };
+    var xi=function(p){ return (p&&p.info&&p.info.transferCount!=null)?p.info.transferCount:null; };
+    var out=[];
+    if(info.longDist){
+      out.push('기다리는 시간까지 합쳐 가장 일찍 도착하는 '+(info.ldGrade||'장거리')+' 편이에요.');
+      var fr=info.ldFastRide;
+      if(fr && fr.rideMin!=null && fr.depTs!=null && info.ldDepTs!=null && fr.depTs>info.ldDepTs)
+        out.push('이동 시간만 가장 짧은 편은 '+(fr.depLabel||'')+' 출발('+fr.rideMin+'분)이지만 기다리는 시간이 길어 도착은 더 늦어요.');
+    } else if(has('fast') && has('less')){
+      out.push('가장 빨리 도착하면서 환승도 가장 적은 경로예요.');
+    } else if(has('fast')){
+      out.push('가장 빨리 도착하는 경로예요.');
+      var L=R.less;
+      if(L && xi(L)!=null && xi(L)<xf && ti(L)!=null && tot!=null && ti(L)>tot) out.push('환승 '+xi(L)+'회로 가는 경로는 '+(ti(L)-tot)+'분 더 걸려요.');
+    } else if(has('less')){
+      out.push('환승이 가장 적은 경로예요'+(xf===0?'(환승 없음).':'(환승 '+xf+'회).'));
+      var F=R.fast;
+      if(F && ti(F)!=null && tot!=null && tot>ti(F)) out.push('가장 빠른 경로보다 '+(tot-ti(F))+'분 더 걸려요.');
+    } else if(has('walk')){
+      out.push('걷는 시간이 가장 짧은 경로예요.');
+    } else if(has('sub')){
+      out.push('지하철 위주로 이동하는 경로예요.');
+    } else if(has('bus')){
+      out.push('버스 위주로 이동하는 경로예요.');
+    }
+    return out.join(' ');
+  }catch(e){ return ''; }
+}
+window._routeWhyText = _routeWhyText;
+function _renderSplitRow(route){
+  var el=document.getElementById('transitSplitRow');
+  if(!el) return;
+  var sp=(route && route.why!==undefined) ? _routeTimeSplit((route&&route.sections)||[]) : null;   // 엔진 경로만(노선도·BFS 미리보기는 대기 정보가 없음)
+  window._routeSplitNow=sp;
+  var why=(route&&route.why)||'';
+  var h='';
+  if(sp) h+='<div><b style="color:var(--text);">'+_ltEsc(_routeSplitText(sp))+'</b></div>';
+  if(why) h+='<div>'+_ltEsc(why)+'</div>';
+  el.innerHTML=h;
+  el.style.display=h?'block':'none';
+}
+window._renderSplitRow=_renderSplitRow;
+
 // 단일 엔진 path → route 형식
 // ★ 정류장 객체 정규화 — 시간 정보가 오면 반드시 보존한다(2026-08-26)
 //   예전 변환기는 stationName/lat/lon 세 필드만 남기고 나머지를 통째로 버렸다.
@@ -10564,6 +10669,7 @@ function _convertSinglePathToRoute(path) {
       boardStopId: (sp.boardStopId || null),
       waitReal:  !!sp.waitReal,
       waitLive:  !!sp.waitLive,
+      xpWaitSec: (sp.xpWaitSec!=null ? sp.xpWaitSec : null),   // ★ 2026-10-03: 급행 기다리는 초(엔진 03bi) — 승차/대기 분리용
       waitEstimated: !!sp.waitEstimated,
       passStopList: stops.length ? { stationList: stops } : null
     };
@@ -10583,6 +10689,7 @@ function _convertSinglePathToRoute(path) {
       transfers: info.transferCount||0
     },
     sections: sections,
+    why: _routeWhyText(path),   // ★ 2026-10-03: 왜 이 경로인지(엔진 탭·소요·환승 근거)
     // ★ 2026-09-25 (KTX/ITX 등급선택): 장거리 경로일 때만 채워짐 — 세부경로 화면이
     //   이 값으로 등급·수단 선택 칩을 그린다(_renderLdGradeChips). 판단은 여전히 엔진 몫,
     //   여기선 응답을 그대로 옮겨 담을 뿐이다.
@@ -10630,7 +10737,8 @@ function _convertEngineRoutes(engineData) {
         boardStopId: (sp.boardStopId || null),
         waitReal:  !!sp.waitReal,
         waitLive:  !!sp.waitLive,
-      waitEstimated: !!sp.waitEstimated,
+      xpWaitSec: (sp.xpWaitSec!=null ? sp.xpWaitSec : null),
+        waitEstimated: !!sp.waitEstimated,
         passStopList: stops.length ? { stationList: stops.map(_normStop) } : null
       };
     });
@@ -10640,7 +10748,8 @@ function _convertEngineRoutes(engineData) {
         distance: info.totalDistance || 0,
         transfers: info.transferCount || 0
       },
-      sections: sections
+      sections: sections,
+      why: _routeWhyText(path)
     };
   });
   return { routes: routes };
@@ -18520,6 +18629,8 @@ window.addEventListener('unhandledrejection', function(e) {
         <button onclick="closeTransitResult()"
           style="flex-shrink:0;background:none;border:none;color:var(--sub);font-size:20px;cursor:pointer;padding:0;line-height:1;">×</button>
       </div>
+      <!-- ★ 2026-10-03: 승차·대기·도보 분리 + 왜 이 경로인지 -->
+      <div id="transitSplitRow" style="display:none;font-size:12px;line-height:1.5;color:var(--sub);margin:-2px 0 8px;"></div>
 
       <!-- ── 경로 옵션 탭 (최단시간/최소환승) ── -->
       <div id="routeOptionTabs" style="display:none;gap:6px;margin-bottom:10px;flex-wrap:nowrap;">
