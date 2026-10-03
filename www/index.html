@@ -5928,6 +5928,11 @@ function _needKakao(start, dest) {
 // ══════════════════════════════════════════════
 // 노선색 헬퍼
 // ══════════════════════════════════════════════
+// ★ 2026-10-03 (YJ: "환승이 일어나면 같은 버스라도 라인색을 다르게"): 한 경로에 버스 구간이 둘 이상이면
+//   구간마다 다른 색을 쓴다(첫 구간은 기존 초록 그대로). 버스 구간이 하나뿐이면 예전 그대로다.
+var _BUS_LEG_COLS = ['#30d158', '#bf5af2', '#ff6482', '#40c8e0', '#ffd60a'];
+function _busLegCol(n){ return _BUS_LEG_COLS[((n % _BUS_LEG_COLS.length) + _BUS_LEG_COLS.length) % _BUS_LEG_COLS.length]; }
+window._busLegCol = _busLegCol;
 function _transitColor(type, name) {
   if(type === 3) return '#8e8e93';
   if(type === 2) return '#30d158';  // 버스: 밝은 초록
@@ -6710,15 +6715,18 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
   var _firstDep=segMs[0];
 
   var _lastStnArr='';
+  // 버스 구간이 둘 이상이면 구간마다 색을 달리한다(같은 초록이 이어져 환승이 안 보이던 문제)
+  var _busN=0; segs.forEach(function(s0){ if(s0.type===2) s0._busNo=_busN++; });
+  var _segCol=function(s0){ return (s0.type===2 && _busN>=2) ? _busLegCol(s0._busNo) : _transitColor(s0.type,s0.name); };
   segs.forEach(function(sg,si){
-    var col=_transitColor(sg.type,sg.name);
+    var col=_segCol(sg);
     var secMin=Math.round(sg.dur/60);
 
     if(sg.type===3){
       var pC='#8e8e93',nC='#8e8e93';
       var nextType=0,nextName='';
-      for(var a=si-1;a>=0;a--){ if(segs[a].type!==3){pC=_transitColor(segs[a].type,segs[a].name);break;} }
-      for(var b=si+1;b<segs.length;b++){ if(segs[b].type!==3){nC=_transitColor(segs[b].type,segs[b].name);nextType=segs[b].type;nextName=segs[b].name;break;} }
+      for(var a=si-1;a>=0;a--){ if(segs[a].type!==3){pC=_segCol(segs[a]);break;} }
+      for(var b=si+1;b<segs.length;b++){ if(segs[b].type!==3){nC=_segCol(segs[b]);nextType=segs[b].type;nextName=segs[b].name;break;} }
       pts.push({type:'walk',pC:pC,nC:nC, durSec:sg.dur,
                 nextType:nextType, nextLabel:_lineLabel(nextType,nextName), nextCol:nC,
                 lbl:secMin>0?secMin+'분':(Math.round(sg.dist)+'m')});
@@ -6756,7 +6764,7 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
       else            arrT=_fmtHHMM(segMs[si]+_offSec[ni]*1000);
       var lC=col;
       if(ni===0&&si>0){
-        for(var a=si-1;a>=0;a--){ if(segs[a].type!==3){lC=_transitColor(segs[a].type,segs[a].name);break;} }
+        for(var a=si-1;a>=0;a--){ if(segs[a].type!==3){lC=_segCol(segs[a]);break;} }
       }
       pts.push({type:'stn',nm:_nm(st.stationName||''),col:col,lC:lC,
                 lineNm:sg.name, lineLabel:_lineLabel(sg.type,sg.name),
@@ -7947,6 +7955,9 @@ function _buildTransitDetailNow() {
 
   var html = '';
   var _cumMs = _baseMs;
+  // 버스 구간이 둘 이상이면 구간마다 색을 달리한다(타임라인과 같은 팔레트)
+  var _dBusIdx = {}, _dBusN = 0;
+  sections.forEach(function(s0, i0){ if(s0 && s0.transportation && s0.transportation.type===2) _dBusIdx[i0] = _dBusN++; });
   sections.forEach(function(sec, _si) {
     var trans  = sec.transportation || {};
     var type   = trans.type;
@@ -7955,7 +7966,7 @@ function _buildTransitDetailNow() {
 
     var col;
     if(isSub)       col = _transitColor(1, trans.name);
-    else if(isBus)  col = _isDark ? '#ffffff' : '#1a1a1a';
+    else if(isBus)  col = (_dBusN>=2) ? _busLegCol(_dBusIdx[_si]) : (_isDark ? '#ffffff' : '#1a1a1a');
     else            col = 'var(--sub)';
     // ★ 2026-09-26 (YJ 요청: "세부경로 화면 좀 이쁘고 직관적으로, 앱 스타일과 어울리게") —
     //   버스 노선상세(brs-* 클래스, 정류장 화면)에서 이미 쓰던 "색선(레일)+알약 배지" 톤을

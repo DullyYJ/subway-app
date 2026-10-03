@@ -342,7 +342,7 @@ public class OverlayPlugin extends Plugin {
         t3.setMaxWidth(rowW);
 
         for (int i = 0; i < 3; i++) {
-            TextView c = makeText(i == 1 ? 26 : 22, i == 1 ? Color.WHITE : Color.parseColor("#6E6E76"), i == 1);
+            TextView c = makeText(i == 1 ? 23.4f : 19.8f, i == 1 ? Color.WHITE : Color.parseColor("#6E6E76"), i == 1);
             // ★ 2026-10-03 (YJ: "경로는 한 줄만, 정류장이 길면 …으로 잘라"): 세 칸 모두 한 줄, 넘치면 끝을 '…' 로 자른다(글자 크기는 고정).
             c.setSingleLine(true);
             c.setMaxLines(1);
