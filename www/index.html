@@ -10593,6 +10593,42 @@ function _routeWhyText(path){
   }catch(e){ return ''; }
 }
 window._routeWhyText = _routeWhyText;
+// ★ 2026-10-03 (개선안 2): 환승 호차-문·도착역 빠른하차. 자료는 서울교통공사 공공데이터(엔진 03bk가 sections 에 xfer/exitFast 로 실어 줌).
+//   서울교통공사 구간 밖(코레일·9호선 등)이나 방향이 불확실한 곳은 엔진이 아예 안 보내므로, 있을 때만 한 줄로 보여 준다.
+function _doorLabel(d){
+  var m=String(d||'').match(/^(\d+)\s*-\s*(\d+)$/);
+  return m ? (m[1]+'호차 '+m[2]+'번 문') : '';
+}
+function _doorTipLines(sections){
+  var out=[];
+  try{
+    (sections||[]).forEach(function(sc){
+      var x=sc && sc.xfer;
+      if(x && x.dropCar && x.dropDoor && x.boardCar && x.boardDoor){
+        var tl=/^\d+$/.test(String(x.to||'')) ? (x.to+'호선 ') : '';
+        var t=(sc.stnName ? sc.stnName+' 환승: ' : '환승: ')+x.dropCar+'호차 '+x.dropDoor+'번 문에서 내리면 '+tl+x.boardCar+'호차 '+x.boardDoor+'번 문이 가까워요';
+        if(x.secs>0) t+=' (환승 약 '+Math.max(1,Math.round(x.secs/60))+'분)';
+        out.push(t);
+      }
+    });
+    for(var i=(sections||[]).length-1;i>=0;i--){
+      var e=sections[i] && sections[i].exitFast;
+      if(e && e.length){
+        var parts=e.map(function(f){
+          var l=_doorLabel(f.door); if(!l) return '';
+          var fc=f.fac||'출구';
+          var jo=(typeof _arrJosa==='function') ? _arrJosa(fc,'은','는') : '은';
+          return fc+jo+' '+l;
+        }).filter(Boolean);
+        if(parts.length) out.push((sections[i].stnName ? sections[i].stnName+' 하차: ' : '하차: ')+parts.join(', ')+'이 가까워요');
+        break;
+      }
+    }
+  }catch(e){}
+  return out;
+}
+window._doorTipLines=_doorTipLines;
+
 function _renderSplitRow(route){
   var el=document.getElementById('transitSplitRow');
   if(!el) return;
@@ -10602,6 +10638,7 @@ function _renderSplitRow(route){
   var h='';
   if(sp) h+='<div><b style="color:var(--text);">'+_ltEsc(_routeSplitText(sp))+'</b></div>';
   if(why) h+='<div>'+_ltEsc(why)+'</div>';
+  _doorTipLines((route&&route.sections)||[]).forEach(function(t){ h+='<div>'+_ltEsc(t)+'</div>'; });
   el.innerHTML=h;
   el.style.display=h?'block':'none';
 }
@@ -10724,6 +10761,7 @@ function _convertSinglePathToRoute(path) {
       waitReal:  !!sp.waitReal,
       waitLive:  !!sp.waitLive,
       xpWaitSec: (sp.xpWaitSec!=null ? sp.xpWaitSec : null),   // ★ 2026-10-03: 급행 기다리는 초(엔진 03bi) — 승차/대기 분리용
+      xfer: (sp.xfer || null), exitFast: (sp.exitFast || null), stnName: (sp.endName || sp.startName || ''),   // ★ 2026-10-03: 환승 호차-문·빠른하차(엔진 03bk)
       waitEstimated: !!sp.waitEstimated,
       passStopList: stops.length ? { stationList: stops } : null
     };
@@ -10792,6 +10830,7 @@ function _convertEngineRoutes(engineData) {
         waitReal:  !!sp.waitReal,
         waitLive:  !!sp.waitLive,
       xpWaitSec: (sp.xpWaitSec!=null ? sp.xpWaitSec : null),
+        xfer: (sp.xfer || null), exitFast: (sp.exitFast || null), stnName: (sp.endName || sp.startName || ''),
         waitEstimated: !!sp.waitEstimated,
         passStopList: stops.length ? { stationList: stops.map(_normStop) } : null
       };
@@ -41979,6 +42018,7 @@ var _POLICY_DOCS = {
       + '· <b>국토교통부</b> — 「국가대중교통정보센터(TAGO) 버스정류소정보·버스도착정보」<br>'
       + '· <b>서울특별시</b> — 「서울특별시 버스도착정보조회 서비스」, 「서울특별시 정류소정보조회 서비스」<br>'
       + '· <b>서울특별시</b> — 「지하철 실시간 도착정보·열차위치정보」(서울 열린데이터광장)<br>'
+      + '· <b>서울교통공사</b> — 「서울 도시철도 환승정보」, 「빠른하차정보」(환승·하차 호차/문 위치)<br>'
       + '· <b>소상공인시장진흥공단</b> — 「상가(상권)정보」<br>'
       + '· <b>기상청</b> 단기예보 · Open-Meteo (날씨)<br>'
       + '· 카카오 (장소 검색·길찾기) · 네이버 (지역 검색)'
