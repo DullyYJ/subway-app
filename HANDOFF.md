@@ -11,7 +11,7 @@
 - 엔진 `ENGINE_VERSION` = `route-v2-2026-10-03bs` (이번 묶음에서 엔진 코드는 안 건드려 그대로)
 - 앱 서버 주소: 엔진 `route-v2.phg0643.workers.dev`, 게시판/대화 `board-writer.phg0643.workers.dev`, 버스·기타 `gentle-lab-7e47subway-api.phg0643.workers.dev`
 - 열려 있는 PR(둘 다 draft): [subway-app#1](https://github.com/DullyYJ/subway-app/pull/1), [route-v2#1](https://github.com/DullyYJ/route-v2/pull/1)
-- main 직접 push 여부는 YJ가 정한다(정해 주기 전까지 작업 브랜치에서만 진행)
+- main push·board-writer 배포·Cloudflare 접속은 YJ가 허용했다("전부 허용"). 단 Cloudflare 접속은 환경 설정(Network access)을 YJ가 바꿔야 열린다 — 작성 시점에는 아직 막혀 있음
 
 ## 2. 이번에 바꾼 것
 **subway-app**
@@ -58,6 +58,6 @@
 - 이 환경 제약: 아웃바운드가 프록시를 거치며 `workers.dev`, `apis.data.go.kr`, `api.cloudflare.com`은 막혀 있다. 외부 API를 불러야 하면 Actions 러너에서 시크릿(`TAGO_KEY`, `CF_API_TOKEN`, `CF_ACCOUNT_ID`)으로 한다(키·본문은 로그에 출력하지 말 것)
 
 ## 6. 임시 파일 · 되돌릴 것
-- **`.github/workflows/ntce-lines.yml` — 병합 전에 삭제.** 임시 집계용이고, `ridelog` 작업이 Cloudflare 시크릿으로 D1을 읽는다(읽기 전용 SELECT). 이 파일을 건드리는 push마다 자동 실행된다
+- `ntce-lines.yml`(임시 집계 워크플로)은 병합 전에 삭제했다. 같은 집계가 필요하면 git 히스토리의 `5772a90`/`7bb6764`에서 꺼내 쓴다
 - 이 브랜치의 `Build APK` 수동 실행 결과물은 확인용(30일 뒤 만료)
 - 로컬 임시 파일(모의 서버 테스트, 스크린샷)은 스크래치패드에만 있고 저장소에는 없다
