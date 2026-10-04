@@ -1,6 +1,6 @@
 # HANDOFF (길동무 앱 + 엔진) — 작업 묶음이 끝날 때마다 이 파일 하나를 갱신한다
 
-최종 갱신: 2026-10-04 · 이번 묶음(공지 문구·지연 의심 추정)은 YJ 허용에 따라 **두 저장소 main에 직접 push**했다. 작업 브랜치 `claude/jolly-darwin-dtzab9`에는 **미검증 WIP 커밋 `ac3e4ff`**(설정에서 이용 노선 직접 고르기)가 있다 — main에 넣지 말 것(4번 참고). 이 브랜치의 HANDOFF.md는 오래된 사본이니 main의 것을 본다
+최종 갱신: 2026-10-04 밤 · **지연 추정(도착 간격 기반)은 YJ 결정으로 중단 상태(엔진 `EST_ENABLED` 기본 꺼짐)** — 서울 지하철 서버가 Cloudflare 출구 주소를 거부해서. 아래 '지연 추정 중단' 참고. 이전 묶음은 YJ 허용에 따라 두 저장소 main에 직접 push했다. 작업 브랜치 `claude/jolly-darwin-dtzab9`에는 **미검증 WIP 커밋 `ac3e4ff`**(설정에서 이용 노선 직접 고르기)가 있다 — main에 넣지 말 것(4번 참고). 이 브랜치의 HANDOFF.md는 오래된 사본이니 main의 것을 본다
 
 ## 1. 저장소·배포 방법·현재 버전
 | 저장소 | 역할 | 배포 |
@@ -8,19 +8,27 @@
 | `DullyYJ/subway-app` | 앱. 화면은 `www/index.html`, 개인정보처리방침 `www/privacy.html` | Actions `Build APK`(build-apk.yml): **main push 때만 자동**. 다른 브랜치는 수동 실행(workflow_dispatch). 결과는 아티팩트 `subway-app-debug` |
 | `DullyYJ/route-v2` | 경로 엔진 `route-v2-worker.js` + 실시간소통/게시판 서버 `board-writer/index.js` (별도 워커) | 엔진: main push 시 Cloudflare Workers Builds가 자동 배포(YJ 확인). GitHub Actions 없음. `board-writer`는 엔진과 **따로 배포**해야 한다(main/PR 병합만으로 배포되지 않음) |
 
-- 엔진 `ENGINE_VERSION` = `route-v2-2026-10-04bv` (루트 URL 응답의 `version`으로 배포 여부 확인) · 읽기 전용 상태 확인 `GET /est-status`
+- 엔진 `ENGINE_VERSION` = `route-v2-2026-10-04bw` (루트 URL 응답의 `version`으로 배포 여부 확인) · 읽기 전용 상태 확인 `GET /est-status`
 - 앱 서버 주소: 엔진 `route-v2.phg0643.workers.dev`, 게시판/대화 `board-writer.phg0643.workers.dev`, 버스·기타 `gentle-lab-7e47subway-api.phg0643.workers.dev`
 - PR: [subway-app#1](https://github.com/DullyYJ/subway-app/pull/1) 병합 완료(`18ef908`). [route-v2#1](https://github.com/DullyYJ/route-v2/pull/1)(board-writer 코드, 브랜치 `claude/jolly-darwin-dtzab9`)은 draft로 열려 있고 main에는 **아직 안 들어갔다** — 병합해도 board-writer는 배포되지 않는다
 - main push·board-writer 배포·Cloudflare 접속은 YJ가 허용했다("전부 허용"). 하지만 아래 두 가지는 허용만으로 안 열리고 YJ가 설정을 바꿔야 한다(3·4번 참고)
 
 ## 2. 이번에 바꾼 것
+**지연 추정 중단 (YJ 결정, 2026-10-04 밤, main 직접 push)**
+- route-v2 `26b58cc`(엔진 04bw) — 환경변수 **`EST_ENABLED`**(`"1"`/`"true"`일 때만 켜짐, **기본 꺼짐**). 꺼져 있으면: 서울 `realtimePosition`·KV 호출 **0건**, `/line-notices`에 추정 공지가 **없다**(KV에 저장돼 있던 의심/해제 상태도 내보내지 않음), `/est-status`는 `enabled:false`와 5개 노선(9호선·신분당·공항철도·경의중앙·수인분당) 모두 **`hold:"disabled"`**. 앱은 추정 항목을 못 받으니 아무것도 표시하지 않는다(앱 코드는 그대로 두었고, 항목이 오면 다시 그린다)
+- **1~8호선 공식 공지 동작은 그대로**: 꺼진 상태에서도 `/line-notices`는 공식 공지만 내려주고, 앱의 공지 줄·'N호선 정상 운행 중입니다'(1~8호선, 공지 없음)·경의중앙선/공항철도/그 밖의 노선 문구도 불변. 시험으로 확인(75건, 이 중 '꺼짐' 6건 + 통합)
+- **코드는 지우지 않았다**: 판정(2배/+6분·연속 2회), 9호선 시간표 기준, 시간표 없는 4개 노선의 기준선(최근 관측 중앙값), 호출 상한(`EST_DAILY_CAP`), 거절 시 10분 쉼, `/est-status` 진단이 모두 그대로다. 스위치만 켜면 저장된 상태로 곧바로 이어서 동작한다(시험됨). 진입점 `estimateNotices`/`estimateCached`/`estRefreshLine`/`/est-status`에 스위치 검사가 있고, 엔진에서 `realtimePosition`을 부르는 곳은 `estFetchPositions` 하나뿐(그 위가 모두 막힘)
+- **막힌 원인**: 서울 지하철 서버(`swopenapi.seoul.go.kr`)가 **Cloudflare 출구 주소의 요청을 거부**한다. 증상: Worker→swopenapi가 522 또는 본문 없는 400(0~1ms, 헤더 없음), 공개 `sample` 키·http·헤더 변경에도 동일, **Worker 배치를 서울로 옮겨도 동일**(YJ 확인). 키·헤더·스킴 문제가 아님은 코드와 진단으로 배제했다. 이 환경에서는 서울 서버를 호출할 수 없어 직접 재현은 못 했고 YJ의 확인에 따른다
+- **다시 켤 조건 = 한국 IP에서 나가는 중계 확보** (예: AWS 서울 리전의 Lambda/소형 서버처럼 swopenapi가 받아 주는 주소). 켜는 순서: ① 그 중계에서 swopenapi 호출이 200으로 오는지 먼저 확인 ② gentle-lab `/seoul`의 업스트림을 그 중계로 돌리는 수정(키는 중계/Worker 시크릿에만 둔다 — 앱에 넣지 않음) ③ gentle-lab Deploy 후 `SEOUL_DEBUG=1`로 `/seoul?…&debug=1`의 `hint`·`probes`로 확인(진단 코드 `2c26859`가 이미 있음) ④ 엔진에 변수 `EST_ENABLED=1` 추가 ⑤ `/est-status`에서 `enabled:true`, 9호선 `hold`가 비고 시간표 없는 노선의 `baseline.samples`가 늘어나는지 확인 ⑥ 며칠 오탐(`lastMaxGapSec` vs `thresholdSec`)과 호출량(`budget.usedToday`)을 본다. 다른 대안(서울시에 출구 허용 문의, 앱에서 직접 호출)은 아래 '진단 결과' 참고 — 앱 직접 호출은 키가 앱에 들어가서 권하지 않는다
+- **범위 밖(그대로)**: 앱에는 지연 추정과 별개로 `realtimePosition`을 쓰는 기존 기능이 있다(`www/index.html`의 RT 진단 `seoulFetch('realtimePosition/0/100/…')`, 구간 열차 위치 `_rtPosParam`). 같은 중계(`/seoul`)를 지나므로 중계가 막힌 동안 실패할 것이다 — 이번 요청(지연 추정 끄기) 범위가 아니라 건드리지 않았다
+
 **진단 결과와 후속 (2026-10-04 밤, main 직접 push)**
 - **YJ가 `SEOUL_DEBUG=1`로 얻은 결과**: 키 32자(영문 5+숫자 27, 16진수 모양), `variantInUse: std`, probe 4개(std-https·plain-https·plain-http·sample-key-https) **모두 status 400, 0~1ms, content-type/server 없음, 본문 0바이트**. 공개 `sample` 키·http도 같음
 - **코드로 배제된 것**: 키 값/인코딩(sample 키도 실패), 요청 헤더·`cf` 옵션(plain 3개는 `fetch(url)`에 옵션 자체가 없음), https/http(둘 다 실패), 전역 fetch 바꿔치기(없음), Worker의 외부 호출 일반 문제(같은 Worker의 `/tago`→apis.data.go.kr은 동작). 이 저장소에 swopenapi 차단 기록은 없지만 `wrangler.toml` 주석에 '구글 뉴스가 워커 IP를 503으로 막는다(2026-08-25)'가 있어 이 Worker의 나가는 IP가 막힌 전례는 있다
-- **남은 가장 유력한 원인 = 서울(swopenapi) 쪽이 Cloudflare 출구(IP/지역)의 요청을 거절**. 근거: 0~1ms에 헤더 없는 400은 방화벽/WAF가 돌려주는 거절 모양과 같다. **그러나 이 환경에서 호출할 수 없어 단정은 못 한다** — 요청 모양(한글 경로 등)·서울 도메인 전체 차단 같은 후보가 남아 있다. 이 원인이 맞다면 **Worker 코드로는 고칠 수 없다**
+- **원인(이후 YJ가 확인해 확정 취급) = 서울(swopenapi) 쪽이 Cloudflare 출구(IP/지역)의 요청을 거절**. 근거: 0~1ms에 헤더 없는 400은 방화벽/WAF가 돌려주는 거절 모양과 같다. **그러나 이 환경에서 호출할 수 없어 단정은 못 한다** — 요청 모양(한글 경로 등)·서울 도메인 전체 차단 같은 후보가 남아 있다. 이 원인이 맞다면 **Worker 코드로는 고칠 수 없다**
 - subway-app `2c26859` — 진단 확장(`/seoul?…&debug=1`, `SEOUL_DEBUG=1`일 때만): probe 12개 = 사용 방식(std/plain/http/raw-key) + 공개 sample 키 × {한글 경로, http, ASCII 경로, **브라우저 헤더**} + `swopenapi` 루트 + `openapi.seoul.go.kr:8088` + `data.seoul.go.kr` + 대조군(`apis.data.go.kr`, `example.com`). 각 probe에 헤더 이름·statusText·redirected·최종 URL(키 마스킹)을 싣고, 맨 위 `hint` 한 줄로 요약(어느 방식이 통함 / '모두 본문 없는 400인데 대조군은 정상 → swopenapi 쪽이 거절' / '모든 외부 요청 실패'). 시험 13건. **Deploy 필요**
 - route-v2 `4d922cb`(엔진 04bv) — 중계가 서울 거절을 JSON(`upstream`)으로 알리거나 본문 없는 4xx를 주면 `hold: upstream-4xx / http-4xx`로 기록하고 **10분 쉰다**(막힌 동안 5개 노선이 2분마다 두드려 호출 상한만 쓰는 것 방지). 정상 표시는 하지 않는다. 시험 69건
-- **다음 단계(YJ)**: ① 이 main의 `worker/index.js`를 Deploy하고 `debug=1`을 다시 호출 → 응답의 `hint`와 `probes`(특히 `sample-ascii-path`, `sample-browser-headers`, `seoul-8088-http`, `seoul-data-portal`, `control-*`)를 알려 주면 확정한다. ② `hint`가 '일부 방식이 통함'이면 그 방식을 기본으로 바꾸는 한 줄 수정으로 끝난다. ③ `hint`가 'swopenapi 쪽이 거절'이면 선택지: (a) **한국 IP에서 나가는 중계**(예: AWS 서울 Lambda/클라우드 소형 서버)를 두고 gentle-lab이 그쪽으로 넘기기 — 인프라·키 위치 결정 필요 (b) 서울시 데이터 담당에 Cloudflare 출구 허용 문의 (c) 앱(사용자 폰=한국 IP)에서 직접 호출 — 키가 앱에 들어가야 해서 '앱에 새 키 금지'·'엔진이 호출' 원칙과 충돌, 권하지 않음. 원인이 이것이면 앱의 평소 도착정보도 같은 이유로 계속 실패하는 중이었을 가능성이 크다
+- (무효: YJ가 지연 추정을 중단하기로 결정 — 위 '지연 추정 중단'의 '다시 켤 조건'을 본다. 아래는 중계를 다시 쓸 때 참고) **다음 단계(YJ)**: ① 이 main의 `worker/index.js`를 Deploy하고 `debug=1`을 다시 호출 → 응답의 `hint`와 `probes`를 보면 확정한다. ② `hint`가 '일부 방식이 통함'이면 그 방식을 기본으로 바꾸는 한 줄 수정. ③ 'swopenapi 쪽이 거절'이면: (a) 한국 IP 중계 (b) 서울시에 출구 허용 문의 (c) 앱 직접 호출(키가 앱에 들어가 권하지 않음)
 
 **최신 묶음 (2026-10-04 후반, main 직접 push)**
 - subway-app `2a594a9` — **gentle-lab `/seoul` 중계의 '본문 없는 HTTP 400' 대응** (`worker/index.js`, 시험 `worker/test/seoul_relay.test.js` 11건). **배포는 대시보드 Deploy가 필요하다(자동 배포 꺼져 있음) — 아직 배포 안 됨**
@@ -69,12 +77,12 @@
 - `POST /react`: body에 `line`이 있으면 그 방에 저장하고 그 방에서 AI가 반응. 없으면 기존 동작
 
 ## 3. 확인 안 된 것
-- **엔진 04bu 자동 배포 결과·`/est-status`**: main push 후 Workers Builds 결과와 `/est-status` 응답을 이 환경에서 못 본다(Cloudflare·workers.dev 접속 차단 재확인). 루트 URL `version`이 `route-v2-2026-10-04bu`인지, `/est-status`에서 9호선 `source:timetable`, 나머지 `source:baseline`·`baseline.samples`가 늘어나는지 확인 필요. (이 PR 브랜치에서는 Workers Builds가 매번 0초 만에 실패했다 — main에서는 다를 수 있다)
-- **gentle-lab `/seoul` 400의 실제 원인은 미확정**: 진단 결과(전 probe 400, 0~1ms, 헤더 없음)로 키·헤더·스킴은 배제됐고 swopenapi 쪽 거절(출구 IP/지역)이 가장 유력하나 이 환경에서 확인 못 함. 확장 진단 Deploy 후 `hint` 확인 필요(위). 해결 전에는 엔진 `/est-status`의 9호선 등이 `hold:upstream-400`(중계 새 버전) 또는 `http-400`(옛 중계)로 남고, 앱의 평소 도착정보도 같은 문제일 수 있다
-- **서울 realtimePosition 실호출 미검증**: 네트워크가 막혀 실제 응답을 못 받았다. 필드명(`statnNm, trainNo, updnLine, recptnDt, lstcarAt`)은 공개 명세 기준이고 모의 데이터로만 시험했다. 배포 후 `/est-status`에서 9호선이 계속 `hold`(예: `unmapped`, `no-data`, `stale`, `fetch`)면 필드·역 이름 불일치부터 본다. BUSAPI 내부 호출 경로(`https://busapi.internal/seoul?path=…`)는 기존 `/tago` 패턴과 같지만 실호출은 못 해 봤다
-- **서울 인증키 일일 한도**: gentle-lab 주석 기준 키 1개 하루 1,000건. 지연 추정은 하루 상한(기본 400)에서 고르게 쓴다(위). 실제 키 한도가 다르면 `EST_DAILY_CAP`으로 조정
-- **배차간격 해석**: `tt`가 일반열차만의 간격인지 급행 포함인지 모른다. 9호선은 방향별 모든 열차를 함께 세므로(간격이 더 촘촘하게 나옴) 오탐 쪽이 아니라 누락 쪽으로 기운다 **기준선 방식의 한계**: 자연스럽게 들쭉날쭉한 노선(공항철도 직통·일반 혼합, 경의중앙·수인분당의 분기)은 최대 간격이 중앙값의 2배를 넘는 날이 있어 오탐이 날 수 있고, 노선 전체가 멈추면 간격이 고르므로 못 잡는다. 배포 후 `/est-status`의 `lastMaxGapSec`·`thresholdSec`와 실제 표시를 며칠 보고 조정할 것
-- 판정 구간·임계값(첫차+30분~min(막차−60분, 23:00), 3대 이상, 2회 연속, 10분 끊김)은 YJ 규칙과 제 해석을 합친 값이다 기준선 최소 표본(20개/30분)·보관(3시간)·고정 시간(06:30~22:30)도 같은 성격의 값이다
+- **엔진 04bw 자동 배포 결과**: main push 후 Workers Builds 결과와 `/est-status` 응답을 이 환경에서 못 본다(Cloudflare·workers.dev 접속 차단 재확인). 루트 URL `version`이 `route-v2-2026-10-04bw`인지, `/est-status`가 `enabled:false`와 모든 노선 `hold:"disabled"`를 보여 주는지 확인 필요(코드·시험으로는 확인됨). Workers Builds가 이 PR 브랜치에서는 매번 0초 만에 실패했다 — main에서는 다를 수 있다
+- **gentle-lab `/seoul` 400**: 원인은 서울 서버의 Cloudflare 출구 거부로 확정 취급(위). `worker/index.js`의 방어·진단 변경(`2a594a9`, `2c26859`)은 **아직 Deploy 안 됨**(중계 재사용 때 필요). 해결 전에는 앱의 평소 도착정보도 같은 이유로 실패할 수 있다
+[재개 시 확인] - **서울 realtimePosition 실호출 미검증**: 네트워크가 막혀 실제 응답을 못 받았다. 필드명(`statnNm, trainNo, updnLine, recptnDt, lstcarAt`)은 공개 명세 기준이고 모의 데이터로만 시험했다. 배포 후 `/est-status`에서 9호선이 계속 `hold`(예: `unmapped`, `no-data`, `stale`, `fetch`)면 필드·역 이름 불일치부터 본다. BUSAPI 내부 호출 경로(`https://busapi.internal/seoul?path=…`)는 기존 `/tago` 패턴과 같지만 실호출은 못 해 봤다
+[재개 시 확인] - **서울 인증키 일일 한도**: gentle-lab 주석 기준 키 1개 하루 1,000건. 지연 추정은 하루 상한(기본 400)에서 고르게 쓴다(위). 실제 키 한도가 다르면 `EST_DAILY_CAP`으로 조정
+[재개 시 확인] - **배차간격 해석**: `tt`가 일반열차만의 간격인지 급행 포함인지 모른다. 9호선은 방향별 모든 열차를 함께 세므로(간격이 더 촘촘하게 나옴) 오탐 쪽이 아니라 누락 쪽으로 기운다 **기준선 방식의 한계**: 자연스럽게 들쭉날쭉한 노선(공항철도 직통·일반 혼합, 경의중앙·수인분당의 분기)은 최대 간격이 중앙값의 2배를 넘는 날이 있어 오탐이 날 수 있고, 노선 전체가 멈추면 간격이 고르므로 못 잡는다. 배포 후 `/est-status`의 `lastMaxGapSec`·`thresholdSec`와 실제 표시를 며칠 보고 조정할 것
+[재개 시 확인] - 판정 구간·임계값(첫차+30분~min(막차−60분, 23:00), 3대 이상, 2회 연속, 10분 끊김)은 YJ 규칙과 제 해석을 합친 값이다 기준선 최소 표본(20개/30분)·보관(3시간)·고정 시간(06:30~22:30)도 같은 성격의 값이다
 - **board-writer 배포가 막힌 이유 2가지** (YJ 설정 필요)
   1. `route-v2` 저장소에는 `CF_API_TOKEN`·`CF_ACCOUNT_ID` 시크릿이 없다(확인용 워크플로가 "시크릿 없음"으로 실패). `subway-app`에는 있다. 시크릿은 Claude가 만들 수 없다
   2. 작업 환경의 Network access가 `workers.dev`, `api.cloudflare.com`, `apis.data.go.kr`을 막는다(2026-10-04 재확인, 403)
@@ -89,7 +97,7 @@
 ## 4. 남은 일 · YJ가 정할 것
 - **YJ가 할 일**: (a) `route-v2` 저장소 Settings → Secrets에 `CF_API_TOKEN`·`CF_ACCOUNT_ID` 추가하거나, board-writer를 대시보드에서 직접 배포 (b) 필요하면 환경 Network access에 `workers.dev`, `api.cloudflare.com`, `apis.data.go.kr` 허용 (c) route-v2 `Workers Builds` 체크 실패 원인 확인(Cloudflare 대시보드, 이 PR과 무관해 보임)
 - **YJ 결정**: 배포 시점(배포하면 호선별 AI 글 시작) / 노선 비중(`LR_AI_ROOMS`의 w)이 맞는지
-- **YJ 할 일(지연 추정)**: ① gentle-lab(`worker/index.js` 최신 main)을 대시보드에서 Deploy → 변수 `SEOUL_DEBUG=1`을 잠깐 켜고 `/seoul?path=…&debug=1` 결과 확인(결과의 `probes`를 알려 주면 원인을 이어서 본다) → 끝나면 변수 삭제 ② 엔진 04bu 배포·`/est-status` 확인 ③ 오탐이 보이면 4개 노선만 보류로 되돌리거나 기준선 조건을 조정(결정 필요). 시간표 값을 가지고 있으면 번들 `tt`에 넣는 쪽이 더 정확하다
+- **지연 추정**: 중단(스위치 꺼짐). 재개 조건·순서는 위 '지연 추정 중단' 참고 — 한국 IP 중계를 어떻게 확보할지(직접 운영/서울시 문의)가 YJ 결정 사항
 - **미완 WIP**: 브랜치 `claude/jolly-darwin-dtzab9`의 `ac3e4ff` — 하단 탭을 '설정에서 직접 고른 노선'으로 바꾸는 작업(설정 카드·고르기 창, 자동 기록 제거). 문법 검사만 했고 화면 시험·PR은 안 했다. main에는 아직 '경로 안내 시작 때 자동으로 쌓이는 노선'(`24eab5e`) 방식이 들어 있다. 이어서 할 때: 헤드리스 시험 → PR. 그 브랜치의 HANDOFF.md는 오래된 사본
 - (B) 환승 보정: ride_log가 0건이라 보류. 근거는 **환승 1회 이상 n≥30, 일관된 2분 내외**일 때만, 역별 편차로. `xfer_pos.secs` 평균(255초)을 통째로 쓰지 말 것. 단, ride_log에는 역 이름이 없어 역별 편차를 내려면 별도 방법이 필요(노선·시간대 수준까지만 가능)
 - (C) 키·토큰 정리: YJ가 **이번에는 패스**라고 했다. 기능 작업 후 다시 요청이 오기 전까지 하지 않고, 앱에 새 키를 넣지 않는다
@@ -98,7 +106,7 @@
 ## 5. 테스트·빌드 확인 방법
 - 앱 문법: `www/index.html`의 인라인 `<script>`를 `new Function`으로 검사(`type="text/x-metro-svg"` 블록은 JS가 아니라 제외)
 - 앱 화면: Playwright(`/opt/pw-browsers/chromium-1194/chrome-linux/chrome`)로 `file:///.../www/index.html`을 열고 외부 요청을 모두 막은 뒤 board-writer(`/talks`, `/lroom`, `/react`)만 모킹. `switchTab('community', #ni-community)` → `showChatTab(#chipLiveTalk)`; `_myLinesRecord()`로 노선 쌓기; `_chatSelect('2호선')`; 스와이프 순서는 `_commSwipeStep(±1)`과 `_commCurTab()`
-- 지연 의심(엔진): `node test/est_delay.test.js`(단위 65건: 시간표·기준선·상태 머신·호출 상한·`estimateNotices`) · `node test/est_line_notices.test.js`(`/line-notices` 통합) — 저장소 `route-v2`. 모의 위치·KV·BUSAPI라 네트워크가 필요 없다 · 중계: `node worker/test/seoul_relay.test.js`(subway-app, 11건)
+- 지연 의심(엔진): `node test/est_delay.test.js`(단위 75건: 시간표·기준선·상태 머신·호출 상한·`EST_ENABLED` 스위치·`estimateNotices`; 시험 환경은 `EST_ENABLED:'1'`로 켜 둔다) · `node test/est_line_notices.test.js`(`/line-notices` 통합) — 저장소 `route-v2`. 모의 위치·KV·BUSAPI라 네트워크가 필요 없다 · 중계: `node worker/test/seoul_relay.test.js`(subway-app, 11건)
 - 서버: `node --check board-writer/index.js`. 로컬 실행은 `node:sqlite`로 D1을 흉내 낸 모의 env(`prepare/bind/run/all/first/batch`)를 만들어 `scheduled()`, `/talks`, `/lroom`, `/react`를 호출(Node 22)
 - 빌드: Actions → `Build APK` → Run workflow(브랜치 선택) 또는 MCP `actions_run_trigger`. 성공하면 `subway-app-debug` 아티팩트가 생긴다. 서명 릴리스(AAB)는 시크릿이 있을 때만
 - 이 환경 제약: 아웃바운드가 프록시를 거치며 `workers.dev`, `apis.data.go.kr`, `api.cloudflare.com`은 막혀 있다. 외부 API를 불러야 하면 Actions 러너에서 시크릿(`TAGO_KEY`, `CF_API_TOKEN`, `CF_ACCOUNT_ID`)으로 한다(키·본문은 로그에 출력하지 말 것)
