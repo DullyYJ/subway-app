@@ -10,7 +10,7 @@
 
 - 엔진 `ENGINE_VERSION` = `route-v2-2026-10-04bw` (루트 URL 응답의 `version`으로 배포 여부 확인) · 읽기 전용 상태 확인 `GET /est-status`
 - 앱 서버 주소: 엔진 `route-v2.phg0643.workers.dev`, 게시판/대화 `board-writer.phg0643.workers.dev`, 버스·기타 `gentle-lab-7e47subway-api.phg0643.workers.dev`
-- PR: [subway-app#1](https://github.com/DullyYJ/subway-app/pull/1) 병합 완료(`18ef908`). [route-v2#1](https://github.com/DullyYJ/route-v2/pull/1)(board-writer 코드, 브랜치 `claude/jolly-darwin-dtzab9`)은 draft로 열려 있고 main에는 **아직 안 들어갔다** — 병합해도 board-writer는 배포되지 않는다
+- PR: [subway-app#1](https://github.com/DullyYJ/subway-app/pull/1) 병합 완료(`18ef908`). [route-v2#1](https://github.com/DullyYJ/route-v2/pull/1)(board-writer 코드)도 **YJ가 병합함**(`a504d1a`, 2026-10-04) — 이제 route-v2 **main의 `board-writer/index.js`가 신버전**(호선 방 `line` 저장·`/talks` 모으기·호선별 AI 글, PR 브랜치 `93c9927`과 내용 동일, 엔진 04bw·`EST_ENABLED` 스위치도 그대로 유지됨 확인). 다만 **병합만으로 board-writer가 배포되지는 않는다** — 대시보드에 `board-writer/index.js` 전체를 붙여넣어야 한다. 배포 후 확인: `/talks` 줄에 `line` 필드(id `"L123"` 형태)가 보이는지, `/lroom?line=경춘선`이 `ok:true`로 열리는지
 - main push·board-writer 배포·Cloudflare 접속은 YJ가 허용했다("전부 허용"). 하지만 아래 두 가지는 허용만으로 안 열리고 YJ가 설정을 바꿔야 한다(3·4번 참고)
 
 ## 2. 이번에 바꾼 것
