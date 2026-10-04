@@ -18419,6 +18419,18 @@ window._bgDiag = async function(){
   } else {
     add('→ 플러그인이 없어 시작 불가. APK에 background-geolocation이 안 들어간 상태.');
   }
+  // ★ 2026-10-05: 가속도계(보조 지표) 상태 — 승차를 단독으로 확정하지 않는다
+  try{
+    var _ac = (typeof _accelStats === 'function') ? _accelStats() : null;
+    if(_ac){
+      add('가속도계(보조 지표 · 단독 확정 안 함): ' + (_ac.supported ? (_ac.active ? '켜짐' : '꺼짐(역 진입 때 시작)') : '센서 미지원'));
+      add('  상태 ' + _ac.state + ' · stddev ' + (_ac.stddev == null ? '-' : _ac.stddev.toFixed(2)) + ' · 평균 ' + (_ac.avg == null ? '-' : _ac.avg.toFixed(2))
+        + ' · 샘플 ' + _ac.n + (_ac.rateHz ? ' (≈' + Math.round(_ac.rateHz) + '/초)' : '') + (_ac.lastAgeMs != null ? ' · 마지막 ' + Math.round(_ac.lastAgeMs/1000) + '초 전' : ''));
+      add('  임계값 열차 ≥' + _ac.thresholds.train + ' · 도보 ≥' + _ac.thresholds.walk + ' (추정값, 실측 아님)');
+    }
+    var _ld = window._lastBoardDecision;
+    if(_ld) add('마지막 승차 판정: ' + _ld.reason + ' · GPS ' + _ld.gps + ' 기지국 ' + _ld.cell + ' 시각표 ' + _ld.time + ' 가속도계 ' + _ld.accel + (_ld.stddev != null ? ' (stddev ' + _ld.stddev.toFixed(2) + ')' : '') + ' · ' + Math.round((Date.now()-_ld.at)/1000) + '초 전');
+  }catch(eAc){ add('가속도계 점검 실패: ' + (eAc && eAc.message)); }
   var el = document.getElementById('bgDiagLog');
   if(el){
     window._bgLogBuf.push(out.join('\n'));
@@ -19411,6 +19423,19 @@ window.addEventListener('unhandledrejection', function(e) {
         <button onclick="_pipPreview()" style="width:100%;padding:11px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);font-family:inherit;">미리보기</button>
         <div id="pipStat" style="margin-top:10px;font-size:11.5px;line-height:1.6;color:var(--sub);"></div>
         -->
+      </div>
+
+      <!-- ★ 2026-10-05: 가속도계(보조 지표) 직접 측정 — 열차 안에서 눌러 진동 값을 본다.
+           ※ 아래 개발자용 진단 도구 주석 블록 '밖'에 둔다(HTML 주석은 중첩되지 않아 그 안에 주석을 넣으면 숨긴 카드가 드러난다). -->
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
+        <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:4px;">📳 가속도계 측정 (보조 지표)</div>
+        <p style="font-size:12px;color:var(--sub);margin-bottom:12px;line-height:1.5;">승차 확정은 GPS·기지국·시각표가 하고, 가속도계는 그것들과 함께일 때만 '진동 보조'로 쓰여요. 열차 안에서 눌러 상태(열차/도보/정지)와 진동 값(stddev)을 확인해요. 측정은 90초 동안 0.5초마다 표시해요.</p>
+        <div style="display:flex;gap:8px;margin-bottom:10px;">
+          <button onclick="_accelLiveTestStart()" style="flex:1;padding:11px;border-radius:10px;border:none;cursor:pointer;font-size:13px;font-weight:800;background:var(--gold);color:#121214;font-family:inherit;">측정 시작</button>
+          <button onclick="_accelSnapshotShow()" style="padding:11px 12px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);font-family:inherit;">지금 상태</button>
+          <button onclick="_accelLiveTestStop()" style="padding:11px 12px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--sub);font-family:inherit;">중지</button>
+        </div>
+        <div id="accelTestOut" style="background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:10px;font-size:11px;line-height:1.6;color:var(--text);font-family:monospace;max-height:280px;overflow-y:auto;white-space:pre-wrap;min-height:40px;">아직 측정 전이에요</div>
       </div>
 
       <!-- ★ 2026-09-29: 개발자용 진단 도구 3종(배터리 최적화 제외 / 백그라운드 추적 진단 /
@@ -24707,6 +24732,86 @@ function _accelState() {
   return 'still';
 }
 
+/* ★ 2026-10-05 (YJ): 가속도계는 '보조 지표'다 — 승차를 단독으로 확정하지 않는다(detectBoardingState 참고).
+   아래는 설정 > 진단에서 상태를 눈으로 보기 위한 읽기 전용 요약과 직접 측정 도구다. 수집(_onDeviceMotion)·판정(_accelState)은 건드리지 않는다.
+   ※ 임계값(TRAIN 1.8 / 도보 0.8)은 실측값이 아니라 주석 추정이다. STILL_THRESH(0.4)는 _accelState 에서 쓰이지 않고 0.8 미만은 모두 'still' 이다.
+   ※ 판정 창은 최근 10샘플(기기에 따라 약 0.2초)로 짧고, 출발·정차 때의 앞뒤 가속은 보지 않는다. */
+function _accelStats() {
+  var n = _accel.samples.length;
+  var recent = _accel.samples.slice(-10), avg = null, sd = null;
+  if(recent.length >= 2) {
+    avg = recent.reduce(function(s,v){ return s+v.mag; }, 0) / recent.length;
+    sd = Math.sqrt(recent.reduce(function(s,v){ return s+Math.pow(v.mag-avg,2); }, 0) / recent.length);
+  }
+  var rate = null;
+  if(n >= 2) { var span = (_accel.samples[n-1].ts - _accel.samples[0].ts) / 1000; if(span > 0) rate = (n-1) / span; }
+  return {
+    supported: !!window.DeviceMotionEvent, active: !!_accel.active, n: n,
+    state: _accelState(), stddev: sd, avg: avg, rateHz: rate,
+    lastAgeMs: n ? (Date.now() - _accel.samples[n-1].ts) : null,
+    thresholds: { train: _accel.TRAIN_THRESH, walk: 0.8, still: _accel.STILL_THRESH }
+  };
+}
+window._accelStats = _accelStats;
+
+var _accelTest = { timer: null, startedByTest: false, t0: 0, rows: [], sd: [], counts: {} };
+function _accelTestOut(txt) { var el = document.getElementById('accelTestOut'); if(el) { el.textContent = txt; el.scrollTop = el.scrollHeight; } }
+function _accelTestTick() {
+  var s = _accelStats(), T = _accelTest;
+  T.counts[s.state] = (T.counts[s.state] || 0) + 1;
+  if(s.stddev != null) T.sd.push(s.stddev);
+  var sec = Math.round((Date.now() - T.t0) / 1000);
+  T.rows.push(sec + '초 | ' + s.state + ' | stddev ' + (s.stddev == null ? '-' : s.stddev.toFixed(2))
+    + ' | 평균 ' + (s.avg == null ? '-' : s.avg.toFixed(2)) + ' | 샘플 ' + s.n + (s.rateHz ? ' (≈' + Math.round(s.rateHz) + '/초)' : ''));
+  if(T.rows.length > 300) T.rows.shift();
+  _accelTestOut('임계값: 열차 ≥ ' + s.thresholds.train + ' · 도보 ≥ ' + s.thresholds.walk + ' · 그 아래 정지 (m/s², 최근 10샘플 stddev)\n' + T.rows.slice(-14).join('\n'));
+  if(sec >= 90) _accelLiveTestStop();
+}
+function _accelLiveTestStart() {
+  if(_accelTest.timer) return;
+  if(!window.DeviceMotionEvent) { _accelTestOut('이 기기는 가속도 센서(DeviceMotionEvent)를 지원하지 않아요'); return; }
+  var begin = function() {
+    _accelTest.startedByTest = !_accel.active;     // 이미 켜져 있으면(승차 감지 중) 그대로 쓰고 끄지 않는다
+    _startAccel();
+    _accelTest.t0 = Date.now(); _accelTest.rows = []; _accelTest.sd = []; _accelTest.counts = {};
+    _accelTest.timer = setInterval(_accelTestTick, 500);
+    _accelTestOut('측정 중… (90초, 0.5초마다 표시)');
+  };
+  var DME = window.DeviceMotionEvent;
+  if(typeof DME.requestPermission === 'function') {
+    DME.requestPermission().then(function(r){ if(r === 'granted') begin(); else _accelTestOut('센서 권한이 거부됐어요'); })
+      .catch(function(){ _accelTestOut('센서 권한을 요청하지 못했어요'); });
+  } else begin();
+}
+function _accelLiveTestStop() {
+  var T = _accelTest;
+  if(!T.timer) return;
+  clearInterval(T.timer); T.timer = null;
+  if(T.startedByTest && (typeof S === 'undefined' || !S || !S.boardingState || S.boardingState === 'idle')) _stopAccel();
+  var total = 0, k; for(k in T.counts) total += T.counts[k];
+  var sd = T.sd.slice().sort(function(a,b){ return a-b; });
+  var pick = function(q){ return sd.length ? sd[Math.min(sd.length-1, Math.floor(sd.length*q))] : null; };
+  var f = function(v){ return v == null ? '-' : v.toFixed(2); };
+  var pct = function(st){ return total ? Math.round(100*(T.counts[st]||0)/total) + '%' : '-'; };
+  _accelTestOut(T.rows.slice(-14).join('\n') + '\n── 요약 (' + total + '회) ──\n'
+    + '상태 비율: 열차 ' + pct('train') + ' · 도보 ' + pct('walk') + ' · 정지 ' + pct('still') + ' · 모름 ' + pct('unknown') + '\n'
+    + 'stddev: 최소 ' + f(sd[0]) + ' · 중앙 ' + f(pick(0.5)) + ' · 90% ' + f(pick(0.9)) + ' · 최대 ' + f(sd[sd.length-1]) + '\n'
+    + '※ 열차 안/걷기/서 있기를 각각 따로 측정해 이 값을 알려 주세요 — 임계값 조정에 씁니다.');
+}
+function _accelSnapshotShow() {
+  var s = _accelStats(), L = [];
+  L.push('가속도계: ' + (s.supported ? (s.active ? '켜짐' : '꺼짐 (역 진입 때 시작됨 — 측정 시작을 누르면 잠깐 켜요)') : '이 기기는 센서 미지원'));
+  L.push('상태 ' + s.state + ' · stddev ' + (s.stddev == null ? '-' : s.stddev.toFixed(2)) + ' · 평균 ' + (s.avg == null ? '-' : s.avg.toFixed(2))
+    + ' · 샘플 ' + s.n + (s.rateHz ? ' (≈' + Math.round(s.rateHz) + '/초)' : '') + (s.lastAgeMs != null ? ' · 마지막 ' + Math.round(s.lastAgeMs/1000) + '초 전' : ''));
+  L.push('임계값(추정, 실측 아님): 열차 ≥' + s.thresholds.train + ' · 도보 ≥' + s.thresholds.walk + ' · 그 아래 정지');
+  var d = window._lastBoardDecision;
+  L.push(d ? ('마지막 승차 판정: ' + d.reason + ' · GPS ' + d.gps + ' 기지국 ' + d.cell + ' 시각표 ' + d.time + ' 가속도계 ' + d.accel + (d.stddev != null ? ' (stddev ' + d.stddev.toFixed(2) + ')' : '') + ' · ' + Math.round((Date.now()-d.at)/1000) + '초 전')
+             : '마지막 승차 판정: 아직 없음');
+  _accelTestOut(L.join('\n'));
+}
+window._accelSnapshotShow = _accelSnapshotShow;
+window._accelLiveTestStart = _accelLiveTestStart; window._accelLiveTestStop = _accelLiveTestStop;
+
 /* ── 시각표 타이머 기반 자동 역 전진 ── */
 var _timetableTimer = null;
 var _ttSegStartMs   = null;  // 현재 구간 실제 시작 ms (지연 측정용)
@@ -24932,15 +25037,27 @@ function detectBoardingState(lat,lng,nearestStn,distToStn,acc){
       if(typeof _tryWalkAutoStart === 'function') _tryWalkAutoStart();
     }
     else if(S.boardingState==='station_enter'){
-      // ── 탑승 판정 (3중 조건 중 하나라도 만족) ──
-      const bySpeed  = avgSpeed >= 2.5;                         // GPS 속도
-      const byAccel  = accelSt === 'train';                     // 가속도계 열차진동
-      const byMove   = !inStation && recentDist >= 8;           // GPS 역사 이탈 + 이동
+      // ── 탑승 판정 ──
+      // ★ 2026-10-05 (YJ): 가속도계는 보조 지표 — 단독으로 승차를 확정하지 않는다.
+      //   주 근거 = GPS(속도 · 역사 이탈 · 이동거리). 기지국(셀 이동 중)·시각표(예정 출발시각 경과)는 가속도계(열차 진동)와 '함께' 있을 때만
+      //   승차 확정에 쓴다(이 둘이 단독으로 확정하는 길은 대기 모드 _htlBoardWatch 에 따로 있고, 여기선 바꾸지 않았다).
+      //   가속도계는 위 근거 중 하나라도 같이 있을 때만 '진동 보조'로 인정되어 문구에 붙는다.
+      const bySpeed   = avgSpeed >= 2.5;                        // GPS 속도
+      const byMove    = !inStation && recentDist >= 8;          // GPS 역사 이탈 + 이동
       const byGpsDist = recentDist >= 20;                       // GPS 1회 20m 이상 이동
-      if(bySpeed || byAccel || byMove || byGpsDist){
+      const byGps     = bySpeed || byMove || byGpsDist;
+      const byCell    = (typeof _cellMovingState === 'function') && _cellMovingState() === true;     // 기지국(셀) 변화 중
+      var _pdBoard    = (typeof _htlMinPastDeparture === 'function') ? _htlMinPastDeparture() : null;
+      const byTime    = (_pdBoard != null) && _pdBoard >= ((typeof _HTL_BOARD_GRACE_MIN !== 'undefined') ? _HTL_BOARD_GRACE_MIN : 0);   // 시각표: 출발시각 경과
+      const accelTrain  = accelSt === 'train';                  // 가속도계 열차진동(보조)
+      const accelAssist = accelTrain && (byGps || byCell || byTime);   // 다른 근거와 함께일 때만 보조로 인정
+      if(byGps || (accelTrain && (byCell || byTime))){
         S.boardingState='boarding';
         if(pin) pin.className='train-pin boarding';
-        var reason = byAccel?'진동감지':bySpeed?'속도감지':byMove?'이탈감지':'GPS감지';
+        var mainWhy = bySpeed?'속도감지':byMove?'이탈감지':byGpsDist?'GPS감지':byCell?'기지국':'시각표';
+        var reason = mainWhy + (accelAssist ? ' · 진동 보조' : '');
+        try{ var _as0 = _accelStats(); window._lastBoardDecision = { at: Date.now(), reason: reason, gps: byGps, cell: byCell, time: byTime, accel: accelSt, stddev: _as0.stddev }; }catch(eD){}
+        console.log('[승차판정] ' + reason + ' (GPS:' + byGps + ' 기지국:' + byCell + ' 시각표:' + byTime + ' 가속도계:' + accelSt + ')');
         if(bannerTxt) bannerTxt.textContent='🚇 탑승 확인('+reason+') · '+nearestStn.name;
         toast('🚇 탑승! ('+reason+')');
 
@@ -24969,7 +25086,7 @@ function detectBoardingState(lat,lng,nearestStn,distToStn,acc){
   else if(S.boardingState==='boarding'){
     // 배너 상태 표시
     if(accelSt === 'train'){
-      if(bannerTxt) bannerTxt.textContent='🚇 이동 중 (진동감지)';
+      if(bannerTxt) bannerTxt.textContent='🚇 이동 중 (진동 보조)';   // ★ 가속도계는 보조 — 단독 근거처럼 보이지 않게
     } else if(avgSpeed >= 2){
       if(bannerTxt) bannerTxt.textContent='🚇 이동 중 · 약 '+Math.round(avgSpeed*3.6)+'km/h';
     }
