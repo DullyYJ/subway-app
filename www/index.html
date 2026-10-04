@@ -19339,6 +19339,10 @@ window.addEventListener('unhandledrejection', function(e) {
          비쳐 보이는 문제가 있었다(쇼핑탭과 같은 증상). 아예 스크롤 밖으로 뺀다. -->
     <div id="newsCatBar" style="display:none;gap:6px;overflow-x:auto;padding:4px 0 2px;-webkit-overflow-scrolling:touch;"></div>
 
+    <!-- ★ 2026-10-04 (YJ): 실시간소통 노선 칩(전체 + 모든 호선 방, 가로 스크롤). 하단에 있던 것을 뉴스 카테고리처럼 위쪽 고정 헤더로 옮겼다.
+         내가 탄 노선(my_lines, 경로 안내를 시작할 때 쌓임)은 앞쪽에 📍 강조 -->
+    <div id="chatLineBar" style="display:none;flex-direction:column;padding:4px 0 2px;"></div>
+
     <!-- 선택된 노선 태그 (선택 시 표시) -->
     <div id="activeLineTag" style="display:none;">
       <div class="active-line-tag">
@@ -19380,8 +19384,6 @@ window.addEventListener('unhandledrejection', function(e) {
     </div>
   </div>
 
-  <!-- ★ 2026-10-04 실시간소통 하단 탭: 전체 + 모든 호선 방(가로 스크롤). 내가 탄 노선(my_lines, 경로 안내를 시작할 때 쌓임)은 앞쪽에 📍 강조 -->
-  <div id="chatLineBar" style="display:none;flex-shrink:0;flex-direction:column;padding:6px 0 8px;border-top:1px solid var(--border2);"></div>
 
   <!-- ★ AI 승무원 탭 — 개인 경로 브리핑 -->
   <div class="ai-tab-wrap" id="aiTabView" style="display:none;">
@@ -41820,7 +41822,7 @@ function _swipeBlocked(el){
       var tag = (n.tagName || '').toLowerCase();
       if(tag === 'input' || tag === 'textarea' || tag === 'select' || tag === 'button') return true;
       var id = n.id || '';
-      if(id === 'newsCatBar' || id === 'filterRow') return true;   // 칩 바는 가로 스크롤
+      if(id === 'newsCatBar' || id === 'filterRow' || id === 'chatLineBar') return true;   // 칩 바는 가로 스크롤
       // 가로로 스크롤되는 영역(지도·가로 목록 등)
       try{
         var ov = window.getComputedStyle(n).overflowX;
@@ -42086,8 +42088,8 @@ function _chatBarRender(){
               : (base+'font-weight:700;background:transparent;color:var(--text);border:1px solid var(--border2);');
     return '<span class="chat-line-chip" data-l="'+_ltEsc(l)+'" onclick="_chatSelect(\''+_ltEsc(l).replace(/'/g,'')+'\')" style="'+st+'">'+(isMine?'📍 ':'')+_ltEsc(label)+'</span>';
   }).join('');
-  bar.innerHTML=(mine.length?'':'<div style="padding:0 14px 5px;font-size:11px;color:var(--sub);">📍 내가 탄 노선은 앞에 표시돼요</div>')
-    +'<div id="chatLineChips" style="display:flex;gap:6px;align-items:center;overflow-x:auto;padding:0 12px;-webkit-overflow-scrolling:touch;">'+chips+'</div>';
+  bar.innerHTML='<div id="chatLineChips" style="display:flex;gap:6px;align-items:center;overflow-x:auto;padding:0 0 2px;-webkit-overflow-scrolling:touch;">'+chips+'</div>'
+    +(mine.length?'':'<div style="padding:3px 2px 0;font-size:11px;color:var(--sub);">📍 내가 탄 노선은 앞에 표시돼요</div>');
   // 스크롤 위치를 지키되, 선택된 칩이 화면 밖이면 가운데로
   var row=document.getElementById('chatLineChips'); if(!row) return;
   row.scrollLeft=prev;
