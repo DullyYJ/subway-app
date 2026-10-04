@@ -543,6 +543,123 @@ function seoulKeys(env) {
     .filter(Boolean);
 }
 
+// ══════════════════════════════════════════════════════════════
+// 한국 IP 중계 연동 (2026-10-04)
+//   서울 swopenapi 가 Cloudflare 출구 IP 를 거부해서 /seoul 의 직접 호출은 실패한다.
+//   한국 집 인터넷에 있는 노트북(tools/seoul-relay)이 '앱이 찾는 경로'만 대신 불러 와 D1 에 올려 두고,
+//   /seoul 은 그 값을 돌려준다. 노트북은 사용자 요청을 직접 받지 않는다(밖으로 보내기만 한다).
+//     앱 → /seoul?path=…  → ① 메모리 ② 엣지 캐시 ③ [중계 값(D1)] ④ (중계가 죽었을 때만) 옛 직접 호출
+//     노트북 → GET /relay/wanted (찾는 경로 목록) → 서울 호출 → POST /relay/push (결과 올리기)
+//   인증: 시크릿 RELAY_TOKEN(16자 이상) 과 같은 값을 노트북이 x-relay-token 헤더로 보낸다.
+//   중계가 3분 넘게 소식이 없으면(꺼짐) 옛 동작으로 돌아가고, 앱은 그동안 정적 시각표로 동작한다.
+// ══════════════════════════════════════════════════════════════
+const RELAY_MAX_AGE = { arrival: 75, position: 90, other: 1800 };   // 중계가 올린 값을 이 초 안일 때만 쓴다
+const RELAY_ALIVE_MS = 180000;
+let _relayReady = false;
+let _relayAliveMem = { at: 0, v: false };
+let _relayHbAt = 0;
+let _relayPruneAt = 0;
+const _relayWantAt = new Map();   // path -> 마지막으로 기록한 시각(isolate 안에서 20초에 한 번만 쓴다)
+
+async function relayInit(env) {
+  if (_relayReady || !env || !env.DB) return;
+  await env.DB.prepare('CREATE TABLE IF NOT EXISTS relay_cache (path TEXT PRIMARY KEY, status INTEGER, body TEXT, at INTEGER)').run();
+  await env.DB.prepare('CREATE TABLE IF NOT EXISTS relay_want (path TEXT PRIMARY KEY, at INTEGER, n INTEGER)').run();
+  await env.DB.prepare('CREATE TABLE IF NOT EXISTS relay_state (k TEXT PRIMARY KEY, v TEXT, at INTEGER)').run();
+  _relayReady = true;
+}
+function relayAuth(request, env) {
+  const t = String((env && env.RELAY_TOKEN) || ''), h = String(request.headers.get('x-relay-token') || '');
+  if (t.length < 16 || h.length !== t.length) return false;
+  let d = 0;
+  for (let i = 0; i < t.length; i++) d |= t.charCodeAt(i) ^ h.charCodeAt(i);
+  return d === 0;
+}
+function relayMaxAgeSec(path) {
+  if (/^realtimeStationArrival\//.test(path)) return RELAY_MAX_AGE.arrival;
+  if (/^realtimePosition\//.test(path))       return RELAY_MAX_AGE.position;
+  return RELAY_MAX_AGE.other;
+}
+async function relayAlive(env) {
+  if (!env || !env.DB) return false;
+  const now = Date.now();
+  if (now - _relayAliveMem.at < 20000) return _relayAliveMem.v;
+  let v = false;
+  try {
+    await relayInit(env);
+    const row = await env.DB.prepare("SELECT at FROM relay_state WHERE k='hb'").first();
+    v = !!(row && now - row.at < RELAY_ALIVE_MS);
+  } catch (e) { v = false; }
+  _relayAliveMem = { at: now, v };
+  return v;
+}
+async function relayLookup(path, env) {
+  try {
+    const row = await env.DB.prepare('SELECT status, body, at FROM relay_cache WHERE path=?').bind(path).first();
+    if (row && Date.now() - row.at <= relayMaxAgeSec(path) * 1000) return row;
+  } catch (e) { /* 없는 것으로 */ }
+  return null;
+}
+async function relayWant(path, env) {
+  const now = Date.now(), last = _relayWantAt.get(path) || 0;
+  if (now - last < 20000) return;
+  _relayWantAt.set(path, now);
+  if (_relayWantAt.size > 500) { for (const [k, v] of _relayWantAt) { if (now - v > 60000) _relayWantAt.delete(k); } }
+  try {
+    await env.DB.prepare('INSERT INTO relay_want (path, at, n) VALUES (?, ?, 1) ON CONFLICT(path) DO UPDATE SET at=excluded.at, n=n+1').bind(path, now).run();
+  } catch (e) { /* 기록 실패는 무시 */ }
+}
+async function relayHeartbeat(env, info) {
+  const now = Date.now();
+  if (now - _relayHbAt < 25000) return;
+  _relayHbAt = now;
+  try {
+    await env.DB.prepare("INSERT INTO relay_state (k, v, at) VALUES ('hb', ?, ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v, at=excluded.at").bind(String(info || ''), now).run();
+    _relayAliveMem = { at: now, v: true };
+  } catch (e) { /* 무시 */ }
+}
+async function relayWanted(request, env) {
+  if (!relayAuth(request, env)) return jsonRes({ ok: false, error: 'unauthorized' }, 401);
+  if (!env.DB) return jsonRes({ ok: false, error: 'DB not bound' }, 500);
+  await relayInit(env);
+  const now = Date.now();
+  const u = new URL(request.url);
+  await relayHeartbeat(env, u.searchParams.get('info') || '');
+  if (now - _relayPruneAt > 3600000) {
+    _relayPruneAt = now;
+    try {
+      await env.DB.prepare('DELETE FROM relay_want WHERE at < ?').bind(now - 86400000).run();
+      await env.DB.prepare('DELETE FROM relay_cache WHERE at < ?').bind(now - 86400000).run();
+    } catch (e) { /* 무시 */ }
+  }
+  const rows = await env.DB.prepare(
+    'SELECT w.path AS path, w.n AS n, w.at AS at, COALESCE(c.at, 0) AS have FROM relay_want w LEFT JOIN relay_cache c ON c.path = w.path WHERE w.at > ? ORDER BY w.n DESC LIMIT 80'
+  ).bind(now - 150000).all();
+  return jsonRes({ ok: true, now, wanted: (rows && rows.results) || [] });
+}
+async function relayPush(request, env) {
+  if (request.method !== 'POST') return jsonRes({ ok: false, error: 'POST only' }, 405);
+  if (!relayAuth(request, env)) return jsonRes({ ok: false, error: 'unauthorized' }, 401);
+  if (!env.DB) return jsonRes({ ok: false, error: 'DB not bound' }, 500);
+  await relayInit(env);
+  let j = null;
+  try { j = await request.json(); } catch (e) { return jsonRes({ ok: false, error: 'bad json' }, 400); }
+  const items = (j && Array.isArray(j.items)) ? j.items.slice(0, 60) : [];
+  const now = Date.now(), stmts = []; let skipped = 0;
+  for (const it of items) {
+    const path = it && it.path, body = it && it.body;
+    if (typeof path !== 'string' || typeof body !== 'string' || !SEOUL_SERVICES.test(path) || body.length > 400000) { skipped++; continue; }
+    let code = '';   // 정상은 errorMessage.code, 오류는 최상위 code
+    try { const b = JSON.parse(body); code = (b && b.errorMessage && b.errorMessage.code) || (b && b.status && b.status.code) || (b && typeof b.code === 'string' && b.code) || ''; } catch (e) { skipped++; continue; }
+    if (/^ERROR-/.test(code) || code === 'INFO-100') { skipped++; continue; }   // 한도·키 오류는 올리지 않는다
+    stmts.push(env.DB.prepare('INSERT INTO relay_cache (path, status, body, at) VALUES (?, 200, ?, ?) ON CONFLICT(path) DO UPDATE SET status=200, body=excluded.body, at=excluded.at').bind(path, body, now));
+  }
+  if (stmts.length) await env.DB.batch(stmts);
+  _relayHbAt = 0;
+  await relayHeartbeat(env, j && j.info);
+  return jsonRes({ ok: true, stored: stmts.length, skipped });
+}
+
 async function handleSeoul(request, env) {
   const url  = new URL(request.url);
   const path = url.searchParams.get('path') || '';
@@ -552,13 +669,11 @@ async function handleSeoul(request, env) {
   }
 
   const keys = seoulKeys(env);
-  if (!keys.length) {
-    return jsonRes({ ok: false, error: 'SEOUL_API_KEY not set' }, 500);
-  }
 
   // ★ 2026-10-04: 진단용(대시보드에서 변수 SEOUL_DEBUG=1 을 켠 동안만). 업스트림 상태코드·본문 앞부분·키 모양(길이·문자 종류 개수)만 내고 키 값은 절대 내지 않는다.
   if (url.searchParams.get('debug') === '1') {
     if (env.SEOUL_DEBUG !== '1') return jsonRes({ ok: false, error: 'debug off' }, 403);
+    if (!keys.length) return jsonRes({ ok: false, error: 'SEOUL_API_KEY not set' }, 500);
     return seoulDebug(path, keys);
   }
 
@@ -577,6 +692,27 @@ async function handleSeoul(request, env) {
     const body = await edge.text();
     seoulMemPut(path, edge.status, body, ttl);
     return seoulRes(body, edge.status, 'EDGE', ttl);
+  }
+
+  // ②-b 한국 IP 중계가 살아 있으면 그 값을 쓴다(없으면 찾는 경로로 기록하고 '준비 중'을 돌려준다 → 앱은 시각표로 동작)
+  if (await relayAlive(env)) {
+    const row = await relayLookup(path, env);
+    if (row) {
+      await relayWant(path, env);
+      seoulMemPut(path, 200, row.body, ttl);
+      try {
+        await caches.default.put(cacheKey, new Response(row.body, { headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'public, max-age=' + ttl } }));
+      } catch (e) { /* 엣지 캐시 실패는 무시 */ }
+      seoulStats.relay = (seoulStats.relay || 0) + 1;
+      return seoulRes(row.body, 200, 'RELAY', ttl);
+    }
+    await relayWant(path, env);
+    return new Response(JSON.stringify({ ok: false, error: 'relay pending', relay: true }), {
+      status: 503, headers: { 'Content-Type': 'application/json; charset=utf-8', ...CORS, 'Retry-After': '5', 'Cache-Control': 'no-store', 'x-seoul-cache': 'RELAY-PENDING' } });
+  }
+
+  if (!keys.length) {
+    return jsonRes({ ok: false, error: 'SEOUL_API_KEY not set' }, 500);
   }
 
   // ③ 같은 경로를 동시에 여러 명이 요청하면 upstream 은 한 번만
@@ -988,6 +1124,8 @@ export default {
     if (reqUrl.pathname === '/seoul') {
       return handleSeoul(request, env);
     }
+    if (reqUrl.pathname === '/relay/wanted') return relayWanted(request, env);
+    if (reqUrl.pathname === '/relay/push')   return relayPush(request, env);
 
     if (reqUrl.pathname !== '/tago') {
       return new Response('Not found', { status: 404, headers: CORS });
