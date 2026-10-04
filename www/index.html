@@ -18419,7 +18419,7 @@ window._bgDiag = async function(){
   } else {
     add('→ 플러그인이 없어 시작 불가. APK에 background-geolocation이 안 들어간 상태.');
   }
-  // ★ 2026-10-05: 가속도계(보조 지표) 상태 — 승차를 단독으로 확정하지 않는다
+  // ★ 2026-10-04: 가속도계(보조 지표) 상태 — 승차를 단독으로 확정하지 않는다
   try{
     var _ac = (typeof _accelStats === 'function') ? _accelStats() : null;
     if(_ac){
@@ -19204,7 +19204,7 @@ window.addEventListener('unhandledrejection', function(e) {
     </div>
   </div>
 
-  <!-- ★ 2026-10-05 실시간소통 하단 탭: 전체 + 모든 호선 방(가로 스크롤). 내가 탄 노선(my_lines, 경로 안내를 시작할 때 쌓임)은 앞쪽에 📍 강조 -->
+  <!-- ★ 2026-10-04 실시간소통 하단 탭: 전체 + 모든 호선 방(가로 스크롤). 내가 탄 노선(my_lines, 경로 안내를 시작할 때 쌓임)은 앞쪽에 📍 강조 -->
   <div id="chatLineBar" style="display:none;flex-shrink:0;flex-direction:column;padding:6px 0 8px;border-top:1px solid var(--border2);"></div>
 
   <!-- ★ AI 승무원 탭 — 개인 경로 브리핑 -->
@@ -19425,7 +19425,7 @@ window.addEventListener('unhandledrejection', function(e) {
         -->
       </div>
 
-      <!-- ★ 2026-10-05: 가속도계(보조 지표) 직접 측정 — 열차 안에서 눌러 진동 값을 본다.
+      <!-- ★ 2026-10-04: 가속도계(보조 지표) 직접 측정 — 열차 안에서 눌러 진동 값을 본다.
            ※ 아래 개발자용 진단 도구 주석 블록 '밖'에 둔다(HTML 주석은 중첩되지 않아 그 안에 주석을 넣으면 숨긴 카드가 드러난다). -->
       <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
         <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:4px;">📳 가속도계 측정 (보조 지표)</div>
@@ -24732,7 +24732,7 @@ function _accelState() {
   return 'still';
 }
 
-/* ★ 2026-10-05 (YJ): 가속도계는 '보조 지표'다 — 승차를 단독으로 확정하지 않는다(detectBoardingState 참고).
+/* ★ 2026-10-04 (YJ): 가속도계는 '보조 지표'다 — 승차를 단독으로 확정하지 않는다(detectBoardingState 참고).
    아래는 설정 > 진단에서 상태를 눈으로 보기 위한 읽기 전용 요약과 직접 측정 도구다. 수집(_onDeviceMotion)·판정(_accelState)은 건드리지 않는다.
    ※ 임계값(TRAIN 1.8 / 도보 0.8)은 실측값이 아니라 주석 추정이다. STILL_THRESH(0.4)는 _accelState 에서 쓰이지 않고 0.8 미만은 모두 'still' 이다.
    ※ 판정 창은 최근 10샘플(기기에 따라 약 0.2초)로 짧고, 출발·정차 때의 앞뒤 가속은 보지 않는다. */
@@ -25038,7 +25038,7 @@ function detectBoardingState(lat,lng,nearestStn,distToStn,acc){
     }
     else if(S.boardingState==='station_enter'){
       // ── 탑승 판정 ──
-      // ★ 2026-10-05 (YJ): 가속도계는 보조 지표 — 단독으로 승차를 확정하지 않는다.
+      // ★ 2026-10-04 (YJ): 가속도계는 보조 지표 — 단독으로 승차를 확정하지 않는다.
       //   주 근거 = GPS(속도 · 역사 이탈 · 이동거리). 기지국(셀 이동 중)·시각표(예정 출발시각 경과)는 가속도계(열차 진동)와 '함께' 있을 때만
       //   승차 확정에 쓴다(이 둘이 단독으로 확정하는 길은 대기 모드 _htlBoardWatch 에 따로 있고, 여기선 바꾸지 않았다).
       //   가속도계는 위 근거 중 하나라도 같이 있을 때만 '진동 보조'로 인정되어 문구에 붙는다.
@@ -42043,7 +42043,7 @@ window._chatPostLine=_chatPostLine;
 function _chatBarRender(){
   var bar=document.getElementById('chatLineBar'); if(!bar) return;
   var mine=_myLinesList(), sel=window._chatSel||'all';
-  // ★ 2026-10-05 (YJ): 하단 탭 = [전체] + 모든 호선 방. 내가 탄 노선(my_lines)은 앞쪽에 📍로 강조, 나머지는 정의된 순서.
+  // ★ 2026-10-04 (YJ): 하단 탭 = [전체] + 모든 호선 방. 내가 탄 노선(my_lines)은 앞쪽에 📍로 강조, 나머지는 정의된 순서.
   var rest=_LR_KNOWN.filter(function(l){ return mine.indexOf(l)<0; });
   var items=['all'].concat(mine, rest);
   if(sel!=='all' && items.indexOf(sel)<0) items.push(sel);   // 목록 밖 노선(알림 등으로 연 방)

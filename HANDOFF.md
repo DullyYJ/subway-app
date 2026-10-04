@@ -1,128 +1,113 @@
 # HANDOFF (길동무 앱 + 엔진) — 작업 묶음이 끝날 때마다 이 파일 하나를 갱신한다
 
-최종 갱신: 2026-10-05 · 실시간소통 하단 줄은 호선별 채팅방 탭으로 개편(아래 2번 맨 위) · **지연 추정(도착 간격 기반)은 YJ 결정으로 중단 상태(엔진 `EST_ENABLED` 기본 꺼짐)** — 서울 지하철 서버가 Cloudflare 출구 주소를 거부해서. 아래 '지연 추정 중단' 참고. 이전 묶음은 YJ 허용에 따라 두 저장소 main에 직접 push했다. 작업 브랜치 `claude/jolly-darwin-dtzab9`의 WIP 커밋 `ac3e4ff`(설정에서 이용 노선 직접 고르기)는 하단 줄 개편으로 대체돼 폐기 대상이다(4번 참고). 이 브랜치의 HANDOFF.md는 오래된 사본이니 main의 것을 본다
+**마지막 갱신: 2026-10-04 (KST 낮)** · 다음 Claude는 이 파일부터 읽고, 아래 "주의·원칙"을 지킨다.
 
-## 1. 저장소·배포 방법·현재 버전
+## 0. 현재 상태 한눈에
+| 대상 | 버전·커밋 | 상태 |
+|---|---|---|
+| 앱 `DullyYJ/subway-app` main | 마지막 앱 동작 변경 `2c883e0`(가속도계 보조화). 그 뒤는 주석 날짜 정정+이 문서뿐 | Build APK #747(`2c883e0`) 성공 — 아래 5번 표 참고 |
+| 엔진 `DullyYJ/route-v2` main | `ENGINE_VERSION = route-v2-2026-10-04bw`, 병합 커밋 `a504d1a` | main push 시 Cloudflare Workers Builds 자동 배포. 지연 추정은 `EST_ENABLED` 꺼짐 |
+| board-writer (`route-v2/board-writer/index.js`, main) | 신버전(호선 방 `line` 저장·`/talks` 모으기·호선별 AI 글) | **대시보드에 배포됨** — Cowork 클로드 확인: `/talks` 항목에 `line` 필드·`L숫자` id, `/lroom?line=…` 정상, 경춘선·GTX-A는 빈 방으로 열림 |
+| 중계 gentle-lab (`subway-app/worker/index.js`) | 강화 코드(재시도·키 정리·진단) | **대시보드에 붙여 넣어 배포됨**(YJ가 Deploy). `SEOUL_DEBUG` 변수는 진단 후 YJ가 삭제. 배치(Placement)는 AWS ap-northeast-2로 바꿨으나 swopenapi 차단에는 효과 없음 |
+
+## 1. 저장소·배포 방법
 | 저장소 | 역할 | 배포 |
 |---|---|---|
-| `DullyYJ/subway-app` | 앱. 화면은 `www/index.html`, 개인정보처리방침 `www/privacy.html` | Actions `Build APK`(build-apk.yml): **main push 때만 자동**. 다른 브랜치는 수동 실행(workflow_dispatch). 결과는 아티팩트 `subway-app-debug` |
-| `DullyYJ/route-v2` | 경로 엔진 `route-v2-worker.js` + 실시간소통/게시판 서버 `board-writer/index.js` (별도 워커) | 엔진: main push 시 Cloudflare Workers Builds가 자동 배포(YJ 확인). GitHub Actions 없음. `board-writer`는 엔진과 **따로 배포**해야 한다(main/PR 병합만으로 배포되지 않음) |
+| `DullyYJ/subway-app` | 앱. 화면 `www/index.html`, 방침 `www/privacy.html`, 중계 `worker/index.js`, 시험 `test/`·`worker/test/` | Actions `Build APK`(build-apk.yml): **main push 때만 자동**, 다른 브랜치는 수동 실행. 결과 아티팩트 `subway-app-debug`. 중계(gentle-lab)는 자동 배포 꺼짐 → **대시보드 Deploy**(코드 붙여넣기) |
+| `DullyYJ/route-v2` | 경로 엔진 `route-v2-worker.js` + 게시판/실시간소통 서버 `board-writer/index.js`(별도 워커) + 시험 `test/` | 엔진은 main push → Workers Builds 자동 배포. board-writer는 병합만으로 배포 안 됨 → **대시보드에 파일 전체 붙여넣기** |
 
-- 엔진 `ENGINE_VERSION` = `route-v2-2026-10-04bw` (루트 URL 응답의 `version`으로 배포 여부 확인) · 읽기 전용 상태 확인 `GET /est-status`
-- 앱 서버 주소: 엔진 `route-v2.phg0643.workers.dev`, 게시판/대화 `board-writer.phg0643.workers.dev`, 버스·기타 `gentle-lab-7e47subway-api.phg0643.workers.dev`
-- PR: [subway-app#1](https://github.com/DullyYJ/subway-app/pull/1) 병합 완료(`18ef908`). [route-v2#1](https://github.com/DullyYJ/route-v2/pull/1)(board-writer 코드)도 **YJ가 병합함**(`a504d1a`, 2026-10-04) — 이제 route-v2 **main의 `board-writer/index.js`가 신버전**(호선 방 `line` 저장·`/talks` 모으기·호선별 AI 글, PR 브랜치 `93c9927`과 내용 동일, 엔진 04bw·`EST_ENABLED` 스위치도 그대로 유지됨 확인). 다만 **병합만으로 board-writer가 배포되지는 않는다** — 대시보드에 `board-writer/index.js` 전체를 붙여넣어야 한다. 배포 후 확인: `/talks` 줄에 `line` 필드(id `"L123"` 형태)가 보이는지, `/lroom?line=경춘선`이 `ok:true`로 열리는지
-- main push·board-writer 배포·Cloudflare 접속은 YJ가 허용했다("전부 허용"). 하지만 아래 두 가지는 허용만으로 안 열리고 YJ가 설정을 바꿔야 한다(3·4번 참고)
+- 서버 주소: 엔진 `route-v2.phg0643.workers.dev`, 게시판 `board-writer.phg0643.workers.dev`, 중계 `gentle-lab-7e47subway-api.phg0643.workers.dev`
+- 작업 방식: YJ가 두 저장소 main 직접 push와 대시보드 배포를 허용했다. 단 **병합·Deploy·프로덕션 설정 클릭은 YJ가 직접 누른다**(자동 승인 분류기가 Cowork의 그런 클릭을 막은 적이 있다).
+- 브랜치: route-v2의 옛 `claude/jolly-darwin-dtzab9`는 삭제됨. **subway-app의 같은 이름 브랜치는 미완성 커밋 `ac3e4ff`('설정에서 이용 노선 직접 고르기') 등이 있다 — YJ 지시가 있을 때까지 삭제하지 말 것.** 그 커밋은 하단 호선 탭 개편으로 대체돼 폐기 대상이고, 그 브랜치의 HANDOFF.md는 옛 사본이다.
 
-## 2. 이번에 바꾼 것
-**실시간소통 하단 줄 = 호선별 채팅방 탭 (2026-10-05, main 직접 push)**
-- subway-app `6b5d2fe` (`www/index.html`, 시험 `test/chat_line_tabs.ui.test.js` 21건) — 맨 아래 줄을 `전체` + **모든 호선 칩**(`_LR_KNOWN` 18개: 1~9호선, 신분당·수인분당·경의중앙·공항철도·경춘선·GTX-A·인천1·2호선·김포골드라인)으로 바꿈. 가로 스크롤, 어느 칩이든 눌러 그 방에서 읽고 쓰기. 선택한 칩은 화면 안으로 스크롤되고 채워진 색으로 강조
-  - **내가 탄 노선**(`my_lines`, 경로 안내 시작 때 `startTracking()`이 `_myLinesRecord()`로 기록, 많이 탄 순)은 전체 바로 뒤 앞쪽에 `📍` + 굵은 테두리. 안내문구는 `📍 내가 탄 노선은 앞에 표시돼요`(내가 탄 노선이 없을 때만). 옛 문구 '경로 안내를 시작하면 내가 타는 노선 방이 여기 생겨요'는 삭제
-  - **빈 방**: `아직 {호선} 방에 글이 없어요. 첫 글을 남겨보세요!`(+지연·혼잡 제보 안내). 방 전환 직후엔 `불러오는 중…`, 서버 응답이 실패하면 `연결이 불안정해요…`(6초마다 자동 재시도)
-  - 그대로 둔 것: 전체 방의 각 호선 대화 모아보기와 `(N호선)` 표시(호선 방에서는 표시 안 함), 공식 공지 줄(`_lrRenderOfficial`), 지연·혼잡 제보 버튼·신고, 글쓰기 `/react`(line)와 AI 반응, 전체에서 쓴 글은 가장 많이 탄 노선 방으로 전송, 스와이프 순서(실시간소통→게시판→뉴스→설정), 게시판/뉴스/설정으로 가면 호선 줄과 방이 숨고 돌아오면 보던 방 복원
-  - 칩 줄은 가로 스크롤 영역이라 그 위에서 시작한 스와이프는 탭 전환으로 넘어가지 않는다(`_swipeBlocked`)
-- **board-writer는 변경 없음 → 대시보드에 새로 붙여넣을 코드 없음.** 모의 DB로 확인: 18개 호선 모두 글 저장(`/react` line)·조회(`/lroom`)가 되고, AI 글이 없는 호선은 `ok:true`+빈 목록으로 열리며, 이상한 이름(`<script>`)만 400, 목록 밖 노선(서해선)도 열린다. 전체(`/talks`)에는 18개 호선 글이 `line`과 함께 모인다. (참고: AI 반응은 기존 제한 'IP당 시간당 12회'에 걸리면 `429 rate limited`이지만 글은 `stored:true`로 저장되고 앱은 저장을 성공으로 처리한다)
-- APK 빌드: 하단 탭 변경 `6b5d2fe`의 main 자동 빌드 **#743 성공**. 이어서 HANDOFF.md만 바꾼 커밋 `bf3b620`의 #744는 이 줄을 쓸 때 진행 중(앱 내용은 #743과 같음)
-- 이 서버 기능(`line` 저장·`/talks` 모으기·호선별 AI 글)은 board-writer가 **배포돼 있어야** 의미가 있다. 배포 전이면 호선 방 글은 호선 방이 아니라 예전 전체 대화에 저장된다(아래 3번 참고)
+## 2. 구조 요약 (이어받는 사람용)
+**승차 판정 (`detectBoardingState`, `www/index.html`)** — 상태 `idle → station_enter → boarding → arrived`
+- 주 근거는 **GPS(속도 ≥2.5m/s · 역사 이탈+8m 이동 · 1회 20m 이동), 기지국(셀 변화, `_cellMovingState`), 시각표(예정 출발시각 경과, `_htlMinPastDeparture`)**.
+- **가속도계(`_accel`/`_accelState`)는 보조 지표다.** `station_enter` 분기에서 확정 규칙: `GPS 근거` 단독 **또는** `가속도계 train` + (`기지국` 또는 `시각표`). 가속도계 단독은 확정하지 않는다. 가속도계가 위 근거와 함께일 때만 문구에 `· 진동 보조`가 붙는다(예: `속도감지 · 진동 보조`, `기지국 · 진동 보조`, `시각표 · 진동 보조`). `진동감지` 단독 문구는 없다. boarding 중 배너는 `이동 중 (진동 보조)`.
+- 기지국+시각표로 승차를 확정하는 길은 **대기 모드 `_htlBoardWatch`**(승차역 이탈 / 출발시각 경과+위치 없음 / 출발 후 셀 2회 이상 변화)에 따로 있고 이번에 바꾸지 않았다. 수동 탑승 버튼 경로(`boardingState='boarding'`을 직접 세팅하는 곳들)도 그대로.
+- 승차 확정 뒤 `_startTimetableAdvance` → 시각표 타이머 전진, `_doTimetableAdvance`는 지연 측정만 담당(건드리지 말 것). 도착 판정의 `accelSt !== 'train'`도 그대로.
+- **별개의 두 번째 가속도 시스템**이 있다: `_pf*`(Capacitor Motion 플러그인, 위치 융합의 정차/주행 판정, `www/index.html` 46399줄 근처). `_accel`과 무관하며 이번에 안 건드렸다. 그리고 Watchdog 쪽 주석에 "가속도계 제거 — 핸드폰 위치 따라 오판 빈발"이 있다(38781줄 근처) — 가속도계는 위치에 민감하다는 선행 경험이다.
+- 로그: 판정 때 `[승차판정] <근거> (GPS/기지국/시각표/가속도계)`를 콘솔에 남기고 `window._lastBoardDecision`에 보관한다.
 
-**지연 추정 중단 (YJ 결정, 2026-10-04 밤, main 직접 push)**
-- route-v2 `26b58cc`(엔진 04bw) — 환경변수 **`EST_ENABLED`**(`"1"`/`"true"`일 때만 켜짐, **기본 꺼짐**). 꺼져 있으면: 서울 `realtimePosition`·KV 호출 **0건**, `/line-notices`에 추정 공지가 **없다**(KV에 저장돼 있던 의심/해제 상태도 내보내지 않음), `/est-status`는 `enabled:false`와 5개 노선(9호선·신분당·공항철도·경의중앙·수인분당) 모두 **`hold:"disabled"`**. 앱은 추정 항목을 못 받으니 아무것도 표시하지 않는다(앱 코드는 그대로 두었고, 항목이 오면 다시 그린다)
-- **1~8호선 공식 공지 동작은 그대로**: 꺼진 상태에서도 `/line-notices`는 공식 공지만 내려주고, 앱의 공지 줄·'N호선 정상 운행 중입니다'(1~8호선, 공지 없음)·경의중앙선/공항철도/그 밖의 노선 문구도 불변. 시험으로 확인(75건, 이 중 '꺼짐' 6건 + 통합)
-- **코드는 지우지 않았다**: 판정(2배/+6분·연속 2회), 9호선 시간표 기준, 시간표 없는 4개 노선의 기준선(최근 관측 중앙값), 호출 상한(`EST_DAILY_CAP`), 거절 시 10분 쉼, `/est-status` 진단이 모두 그대로다. 스위치만 켜면 저장된 상태로 곧바로 이어서 동작한다(시험됨). 진입점 `estimateNotices`/`estimateCached`/`estRefreshLine`/`/est-status`에 스위치 검사가 있고, 엔진에서 `realtimePosition`을 부르는 곳은 `estFetchPositions` 하나뿐(그 위가 모두 막힘)
-- **막힌 원인**: 서울 지하철 서버(`swopenapi.seoul.go.kr`)가 **Cloudflare 출구 주소의 요청을 거부**한다. 증상: Worker→swopenapi가 522 또는 본문 없는 400(0~1ms, 헤더 없음), 공개 `sample` 키·http·헤더 변경에도 동일, **Worker 배치를 서울로 옮겨도 동일**(YJ 확인). 키·헤더·스킴 문제가 아님은 코드와 진단으로 배제했다. 이 환경에서는 서울 서버를 호출할 수 없어 직접 재현은 못 했고 YJ의 확인에 따른다
-- **다시 켤 조건 = 한국 IP에서 나가는 중계 확보** (예: AWS 서울 리전의 Lambda/소형 서버처럼 swopenapi가 받아 주는 주소). 켜는 순서: ① 그 중계에서 swopenapi 호출이 200으로 오는지 먼저 확인 ② gentle-lab `/seoul`의 업스트림을 그 중계로 돌리는 수정(키는 중계/Worker 시크릿에만 둔다 — 앱에 넣지 않음) ③ gentle-lab Deploy 후 `SEOUL_DEBUG=1`로 `/seoul?…&debug=1`의 `hint`·`probes`로 확인(진단 코드 `2c26859`가 이미 있음) ④ 엔진에 변수 `EST_ENABLED=1` 추가 ⑤ `/est-status`에서 `enabled:true`, 9호선 `hold`가 비고 시간표 없는 노선의 `baseline.samples`가 늘어나는지 확인 ⑥ 며칠 오탐(`lastMaxGapSec` vs `thresholdSec`)과 호출량(`budget.usedToday`)을 본다. 다른 대안(서울시에 출구 허용 문의, 앱에서 직접 호출)은 아래 '진단 결과' 참고 — 앱 직접 호출은 키가 앱에 들어가서 권하지 않는다
-- **범위 밖(그대로)**: 앱에는 지연 추정과 별개로 `realtimePosition`을 쓰는 기존 기능이 있다(`www/index.html`의 RT 진단 `seoulFetch('realtimePosition/0/100/…')`, 구간 열차 위치 `_rtPosParam`). 같은 중계(`/seoul`)를 지나므로 중계가 막힌 동안 실패할 것이다 — 이번 요청(지연 추정 끄기) 범위가 아니라 건드리지 않았다
+**커뮤니티 > 실시간소통**
+- 상단 칩 4개(실시간소통·게시판·뉴스·설정), 스와이프 순서 그대로. 맨 아래 줄 = `전체` + **모든 호선 칩**(`_LR_KNOWN` 18개: 1~9호선, 신분당·수인분당·경의중앙·공항철도·경춘선·GTX-A·인천1·2호선·김포골드라인) 가로 스크롤. **내가 탄 노선(`my_lines`, 경로 안내 시작 때 `startTracking()`→`_myLinesRecord()`가 기록, 많이 탄 순)은 앞쪽에 `📍`+굵은 테두리.** 안내문구 `📍 내가 탄 노선은 앞에 표시돼요`(탄 노선 없을 때만).
+- 호선 방: 읽기 `GET /lroom?line=<호선>&since=<ts>`(6초마다), 쓰기 `POST /react {nick,text,line}`(AI 반응이 그 방에 달림), 제보 `POST /lroom`, 신고 `POST /lreport`, 경보 `GET /lalerts`. **`/talks`는 `line` 파라미터를 읽지 않는 "전체 모아보기"**(앱은 `?since=&limit=`만 쓴다). 전체 방에서만 닉네임 앞 `(N호선)`. 전체에서 쓴 글은 가장 많이 탄 노선 방으로 전송.
+- 빈 방: `아직 {호선} 방에 글이 없어요. 첫 글을 남겨보세요!`, 로딩 `불러오는 중…`, 실패 `연결이 불안정해요…`. 공식 공지 줄(`_lrRenderOfficial`)·지연/혼잡 제보·신고는 호선 방 안에 그대로.
+- 서버: board-writer가 20분마다 호선별 AI 대화를 만든다(`generateLineTalks`, 노선 비중 `LR_AI_ROOMS` 2호선 10 … 인천2호선 1, 지연·혼잡 제보는 만들지 않음, AI 글 2일 뒤 삭제). `/react`의 AI 반응은 IP당 시간당 12회 제한(넘으면 429이지만 글은 `stored:true`로 저장).
 
-**진단 결과와 후속 (2026-10-04 밤, main 직접 push)**
-- **YJ가 `SEOUL_DEBUG=1`로 얻은 결과**: 키 32자(영문 5+숫자 27, 16진수 모양), `variantInUse: std`, probe 4개(std-https·plain-https·plain-http·sample-key-https) **모두 status 400, 0~1ms, content-type/server 없음, 본문 0바이트**. 공개 `sample` 키·http도 같음
-- **코드로 배제된 것**: 키 값/인코딩(sample 키도 실패), 요청 헤더·`cf` 옵션(plain 3개는 `fetch(url)`에 옵션 자체가 없음), https/http(둘 다 실패), 전역 fetch 바꿔치기(없음), Worker의 외부 호출 일반 문제(같은 Worker의 `/tago`→apis.data.go.kr은 동작). 이 저장소에 swopenapi 차단 기록은 없지만 `wrangler.toml` 주석에 '구글 뉴스가 워커 IP를 503으로 막는다(2026-08-25)'가 있어 이 Worker의 나가는 IP가 막힌 전례는 있다
-- **원인(이후 YJ가 확인해 확정 취급) = 서울(swopenapi) 쪽이 Cloudflare 출구(IP/지역)의 요청을 거절**. 근거: 0~1ms에 헤더 없는 400은 방화벽/WAF가 돌려주는 거절 모양과 같다. **그러나 이 환경에서 호출할 수 없어 단정은 못 한다** — 요청 모양(한글 경로 등)·서울 도메인 전체 차단 같은 후보가 남아 있다. 이 원인이 맞다면 **Worker 코드로는 고칠 수 없다**
-- subway-app `2c26859` — 진단 확장(`/seoul?…&debug=1`, `SEOUL_DEBUG=1`일 때만): probe 12개 = 사용 방식(std/plain/http/raw-key) + 공개 sample 키 × {한글 경로, http, ASCII 경로, **브라우저 헤더**} + `swopenapi` 루트 + `openapi.seoul.go.kr:8088` + `data.seoul.go.kr` + 대조군(`apis.data.go.kr`, `example.com`). 각 probe에 헤더 이름·statusText·redirected·최종 URL(키 마스킹)을 싣고, 맨 위 `hint` 한 줄로 요약(어느 방식이 통함 / '모두 본문 없는 400인데 대조군은 정상 → swopenapi 쪽이 거절' / '모든 외부 요청 실패'). 시험 13건. **Deploy 필요**
-- route-v2 `4d922cb`(엔진 04bv) — 중계가 서울 거절을 JSON(`upstream`)으로 알리거나 본문 없는 4xx를 주면 `hold: upstream-4xx / http-4xx`로 기록하고 **10분 쉰다**(막힌 동안 5개 노선이 2분마다 두드려 호출 상한만 쓰는 것 방지). 정상 표시는 하지 않는다. 시험 69건
-- (무효: YJ가 지연 추정을 중단하기로 결정 — 위 '지연 추정 중단'의 '다시 켤 조건'을 본다. 아래는 중계를 다시 쓸 때 참고) **다음 단계(YJ)**: ① 이 main의 `worker/index.js`를 Deploy하고 `debug=1`을 다시 호출 → 응답의 `hint`와 `probes`를 보면 확정한다. ② `hint`가 '일부 방식이 통함'이면 그 방식을 기본으로 바꾸는 한 줄 수정. ③ 'swopenapi 쪽이 거절'이면: (a) 한국 IP 중계 (b) 서울시에 출구 허용 문의 (c) 앱 직접 호출(키가 앱에 들어가 권하지 않음)
+**공식 공지** — 엔진 `/line-notices`(서울교통공사 공지 API 1~8호선). 앱 `_lrRenderOfficial`: 공지 있음=`🚇 서울교통공사 공지 …`, 1~8호선 공지 없음=`✅ N호선 정상 운행 중입니다 (방금 확인)`, 경의중앙선·공항철도=`환승역 관련 공지만 가끔 올라와요`, 그 밖의 노선=`공식 공지 연동 전이에요`. 공지가 해제되면(엔진 `NTCE_RESOLVED_RE`) 자동으로 '정상 운행' 문구로 바뀐다. 공지 API 과거 300건 실측: 1~8호선이 거의 전부, 그 외 경의중앙선 4건·공항철도 3건뿐.
 
-**최신 묶음 (2026-10-04 후반, main 직접 push)**
-- subway-app `2a594a9` — **gentle-lab `/seoul` 중계의 '본문 없는 HTTP 400' 대응** (`worker/index.js`, 시험 `worker/test/seoul_relay.test.js` 11건). **배포는 대시보드 Deploy가 필요하다(자동 배포 꺼져 있음) — 아직 배포 안 됨**
-  - 원인 추정(코드 근거): 업스트림(서울)이 본문 없는 4xx를 주면 예전 `seoulUpstream`이 빈 본문 그대로 `status 400`으로 넘겨서 앱·엔진이 '본문 없는 400'을 봤다(`path not allowed` 등 자체 거절은 JSON 본문이 있어 아님). **왜 서울이 400을 주는지는 이 환경에서 호출할 수 없어 단정하지 못했다** — 후보: 시크릿 값에 따옴표·줄바꿈이 섞임, 요청 헤더(Accept/UA), https 스킴. 그래서 아래 ①~③을 넣었다  → **위 '진단 결과와 후속'이 최신 판단**
-  - ① 본문 없는 4xx면 방식을 바꿔 재시도: `std`(https+Accept/UA) → `plain`(https, 헤더 없음) → `http`. 통한 방식은 isolate 메모리에 기억. ② 끝내 안 되면 본문 있는 JSON `{ok:false,error:'upstream 400 (empty body)',upstream:400}`을 돌려주고 같은 경로는 30초 쉰다. ③ `SEOUL_API_KEY` 앞뒤의 따옴표·공백·제어문자 제거
-  - **진단**: 대시보드에서 일반 변수 `SEOUL_DEBUG=1`을 켠 동안만 `GET /seoul?path=realtimeStationArrival/0/1/%EC%84%9C%EC%9A%B8&debug=1`이 열린다(20초에 1회, 끄면 403). 응답: 방식별 업스트림 상태코드·content-type·server·본문 앞 300자·키 모양(길이·영문/숫자/기타 개수)·공개 `sample` 키 호출 결과. **키 값은 어디에도 나오지 않고(본문에 섞여도 `***`로 가림) 시험이 이를 확인한다**. `sample-key-https`만 200이면 등록된 키 문제, 모두 400이면 서울/네트워크 쪽 문제. 확인이 끝나면 `SEOUL_DEBUG`를 지울 것
-- route-v2 `a4beb05`(엔진 04bu) — **시간표가 없는 4개 노선(신분당·공항철도·경의중앙·수인분당)도 판정**: 시간표 대신 **최근 관측 간격의 중앙값을 기준선**으로 쓴다
-  - 관측마다 방향별 인접 열차 간격의 중앙값을 표본 1개로 저장(최근 3시간·최대 60개, KV `est:v1:<ID>`의 `hist`), 기준선 = 표본 중앙값. **표본 20개 이상·30분 이상에 걸쳐야** 판정하고 그 전엔 `baseline-warmup` 보류(표시 없음). 판정 규칙(≥ min(2×, +6분) 연속 2회 의심 / 정상 연속 2회 해제)·공식 우선·1~8호선 동작·9호선(시간표) 로직은 그대로
-  - 지연 의심 관측과 의심 상태에서는 표본을 넣지 않는다(기준선이 지연에 끌려가지 않게). 같은 위치 자료(`recptnDt`)는 표본으로 한 번만. 응답 문구는 `…최근 관측 평균(약 N분)보다…`(`baseline:true`)
-  - 첫·막차 자료(`ft/lt`)가 없는 노선은 고정 시간 06:30~22:30에만 판정(공항철도는 기존 `ft/lt` 규칙). 4개 노선 모두 번들에서 '한 줄(트리)'로 잡힘을 확인
-  - **서울 API 하루 호출 상한 신설**: 지연 추정 전 노선 합계 기본 400건/일(환경변수 `EST_DAILY_CAP`), 06~23시에 고르게 쓰고 넘으면 `budget` 보류. 이유: 5개 노선을 2분마다 부르면 하루 2,000건 넘게 필요한데 gentle-lab 주석상 키 1개는 하루 1,000건이고 **앱의 도착정보가 같은 키를 쓴다**. 그래서 실제 관측 간격은 평균 노선당 약 10분 이상이 될 수 있고(기준선 쌓이는 시간도 그만큼 늘어남), 상한을 올리면 빨라지지만 앱의 도착정보 여유가 줄어든다
-  - `/est-status`에 `source`(timetable/baseline), 기준선 표본 수·중앙값·창, `windowMode`, 오늘 사용량(`budget.usedToday/cap`) 추가. 시험 65건
+**지연 추정(도착 간격 기반) — 현재 중단 (YJ 결정)** — 상세는 4번.
 
-**이번 묶음 (2026-10-04, main 직접 push)**
-- subway-app `60eb8d7` — 노선 방 위 공지 줄: 1~8호선에 진행 중 공지가 없으면 `N호선 정상 운행 중입니다 (방금 확인)`. 공지가 있을 때 표시, 경의중앙선·공항철도·그 밖의 노선 문구, 공지 해제 시 자동 전환(엔진 `NTCE_RESOLVED_RE`)은 그대로. Build APK #735 성공
-- route-v2 `b66fe7d` · `f062161`(ENGINE_VERSION 04bt) · `cd0b195`(test) — **공식 데이터가 없는 노선의 '지연 의심(추정)'** (`route-v2-worker.js`, `estimateNotices` 계열)
-  - 대상 `9호선·신분당선·공항철도·경의중앙선·수인분당선`. 1~8호선 공식 공지 동작은 그대로, 같은 노선에 공식 공지가 있으면 공식이 우선(추정은 만들지도 않음)
-  - 데이터: 서울 `realtimePosition`을 **엔진이 `env.BUSAPI`(gentle-lab `/seoul`, 시크릿 `SEOUL_API_KEY`는 gentle-lab에 이미 있음)로 호출**. 엔진에 새 시크릿 없음, 앱은 직접 호출하지 않음
-  - 판정: 같은 방향 인접 열차 간격(역간 소요시간 `seg`로 환산) ≥ `min(2×배차간격, 배차간격+6분)`이 **연속 2회** → 지연 의심, **정상 연속 2회** → 해제. 같은 위치 자료(`recptnDt`)는 한 번만 센다. 연속 횟수·상태는 `ROWS_KV`(`est:v1:<노선ID>`)
-  - 배차간격 = 번들 시간표 `SUBWAY_BUNDLE.lines[*].tt`(요일·시간대별). `tt`가 있는 건 1~9호선뿐이라 **9호선만 시간표 기준**이다. 나머지 4개 노선은 (최신 묶음에서) 최근 관측 중앙값 기준선으로 판정한다 — 위 '최신 묶음' 참고
-  - 보류(정상이라고 표시하지 않음): 첫차+30분 전, 막차−60분 이후, **23시 이후(심야)**, 막차 열차(`lstcarAt`)가 보임, 위치 자료 5분 넘게 오래됨/없음/오류, 방향당 열차 3대 미만, 역 이름 매칭 30% 초과 실패, 호선이 한 줄(트리)이 아닌 경우. 보류가 10분 넘게 이어지면 의심 상태도 내린다(정상 표시 없이)
-  - 호출량: 노선별 **2분에 1회 이하**(KV `lastTry`로 isolate 사이 공유). `/line-notices` 요청은 막지 않고 저장된 상태로 바로 답하며, 갱신할 때가 된 노선만 `waitUntil`로 백그라운드 갱신. 일일 한도(`ERROR-337` 등)면 30분 쉰다
-  - 응답: `/line-notices`의 `lines[노선]`에 `estimated:true`로 합침. 지연 의심 `{estimated, suspect:true, title:"지연 의심 (도착 간격 기준 추정)", text, ts, normalMin, gapMin}`, 해제 직후 30분만 `{estimated, suspect:false, cleared:true, title:"정상 운행 중으로 보여요 (도착 간격 기준)"}`. 처음부터 정상이면 아무것도 안 낸다
-- subway-app `04c2da3` — 노선 방 위 공지 줄: 추정은 공식과 다르게 표시(`⚠️ 지연 의심 (도착 간격 기준 추정) · … (N분 전 · 공식 공지 아님)` 주황, 해제는 `🟢 정상 운행 중으로 보여요 (도착 간격 기준)` 회색). 경로 카드 줄에는 지연 의심만 띄움. `_offText`/`_lrRenderOfficial`/`_routeOfficialRow`
+## 3. 이번 세션(2026-10-04)에 한 일
+**Code 클로드 (이 저장소 커밋)**
+- subway-app `2c883e0` — **가속도계를 승차 확정 지표에서 보조 지표로**(위 2번 구조). `www/index.html`: `detectBoardingState` 확정 규칙 변경·문구 변경, `_accelStats()`(읽기 전용 요약)·직접 측정 도구 추가, 설정에 `📳 가속도계 측정 (보조 지표)` 카드(측정 시작 90초 / 지금 상태 / 중지: 상태 train·walk·still·unknown, stddev, 평균, 샘플 수·Hz, 임계값, 마지막 승차 판정 근거, 끝나면 상태 비율·stddev 최소/중앙/90%/최대 요약). `_bgDiag`에도 같은 줄 추가. 시험 `test/accel_auxiliary.ui.test.js` 20건. **수집(`_onDeviceMotion`)·상태 판정(`_accelState`)·임계값·로그·시각표 타이머·`_doTimetableAdvance`·`_htlBoardWatch`·기지국 전진은 한 줄도 바꾸지 않았다**(diff로 확인).
+  - 시험 중 발견한 사고: 설정 화면의 **개발자용 진단 카드 3종(배터리 최적화 제외·백그라운드 추적 진단·버스 도착정보 진단)은 HTML 주석 안에 숨겨져 있다**(YJ 요청, 2026-09-29, `www/index.html` 19441~19510줄 근처). 그 안에 `<!-- -->`를 넣으면 HTML 주석은 중첩되지 않아 바깥 주석이 끊기고 숨긴 카드가 드러나며 `-->`가 글자로 보인다. 처음에 그렇게 넣었다가 시험이 잡아 **주석 밖으로 옮겼다**. 시험 `숨겨 둔 개발자용 진단 카드…는 계속 숨겨져 있다`가 이를 지킨다(고의로 사고를 재현해 실패함을 확인).
+- subway-app `6b5d2fe`(Build #743 성공) — 하단 줄을 호선별 채팅방 탭으로 개편(2번 구조). 시험 `test/chat_line_tabs.ui.test.js` 21건. board-writer 변경 없음.
+- route-v2 `26b58cc`(엔진 04bw) — 지연 추정 스위치 `EST_ENABLED`(기본 꺼짐), 시험 75건. 같은 날 앞서: `b66fe7d`(04bt)·`a4beb05`(04bu 기준선)·`4d922cb`(04bv 거절 시 10분 쉼)·`cd0b195`(시험).
+- subway-app `2a594a9`·`2c26859` — 중계 `/seoul` 강화(본문 없는 4xx 재시도 std→plain→http, 빈 400 대신 JSON 오류+30초 쿨다운, `SEOUL_API_KEY` 따옴표·공백 제거)와 진단(`SEOUL_DEBUG=1`일 때만 `/seoul?…&debug=1`, 키 값은 어디에도 안 나옴). 시험 `worker/test/seoul_relay.test.js` 13건. **YJ가 대시보드에 붙여 넣어 배포함.**
+- 공지 문구: `16abcfe`(경의중앙선·공항철도 '환승역 관련 공지만 가끔'), `60eb8d7`(1~8호선 `N호선 정상 운행 중입니다`, #735 성공), `04c2da3`(추정 표시 — 지금은 추정이 오지 않아 안 보임).
+- route-v2#1(board-writer 노선별 실시간소통) 병합 `a504d1a`(YJ가 ready로 바꿔 병합). 병합 뒤 main 빌드 성공, 엔진 04bw 유지.
 
-**이전 묶음**
-**subway-app**
-- `5772a90` · `7bb6764` — `.github/workflows/ntce-lines.yml`(임시 집계 워크플로, 6번 참고). 공지 API 과거 300건(2024-05-14~2026-09-22, 전체 1,314건)의 `lineNmLst` 집계 + ride_log 건수 조회(읽기 전용)
-  - 결과: 1~8호선이 거의 전부(1호선 95·4호선 86·5호선 75·2호선 68·3호선 62·6호선 45·7호선 43·8호선 35). 그 외는 **경의중앙선 4건·공항철도 3건**뿐(환승역 관련). 9호선·신분당선 등 0건. `lineNmLst`가 빈 공지 33건
-  - ride_log: 테이블은 있으나 **0건**
-- `16abcfe` — 공식 공지가 없을 때 경의중앙선·공항철도 문구를 "연동 전"에서 "환승역 관련 공지만 가끔 올라와요 · 지금은 없어요"로 변경(그 외 노선 문구·공지 표시는 그대로)
-- `24eab5e` — 커뮤니티 개편
-  - 상단 `내 노선` 칩 삭제. 노선 방(대화·공식 공지·지연/붐빔 제보·신고)은 **실시간소통 하단 탭**으로 이동
-  - 하단 탭 = `전체` + 내가 경로 안내를 시작할 때 실제로 타는 지하철 노선(탄 횟수 순, 최대 6개, `_safeLS` 키 `my_lines`). 기록 시점은 `startTracking()` 안의 `_myLinesRecord()`
-  - 전체 탭: 각 노선 방 대화를 모아서 표시, 닉네임 앞에 `(2호선)` 표시. 전체에서 쓴 글은 가장 많이 타는 노선 방으로 간다(없으면 노선 없이)
-  - 스와이프 순서: 실시간소통 → 게시판 → 뉴스 → 설정. 게시판에서 밀어도 더는 내 노선으로 가지 않음(뉴스 카테고리가 따라 나오던 문제 해결). 뉴스 첫 카테고리에서 오른쪽 → 게시판
-  - 노선 방 글쓰기는 `/lroom` 대신 `/react`(line 포함)로 보내 AI 이용자가 반응하게 함. 지연·붐빔 제보는 기존 `/lroom` 그대로
-  - 개인정보처리방침: 노선 방도 AI 생성 콘텐츠 안내에 포함
-- 수정하지 않은 것(규칙): AI 승무원 문구는 건드리지 않았다. 승차·대기 분할, 경로 선택 이유, 문 위치 팁은 경로 카드에만 있다 — AI 승무원에 다시 넣지 말 것
+**Cowork 클로드가 한 일 (브라우저·대시보드 쪽)**
+- gentle-lab 중계에 강화 코드를 대시보드로 붙여 넣어 배포(YJ가 Deploy 클릭). `SEOUL_DEBUG`는 진단 후 YJ가 삭제. 배치를 AWS ap-northeast-2로 바꿨으나 효과 없음.
+- **서울 swopenapi가 Cloudflare 출구 IP를 거부**함을 진단: 한글 경로는 즉시 빈 400, ASCII 경로는 522(지연). 해결에는 **한국 IP 중계**가 필요. Oracle Cloud 무료 서버는 가입 화면의 홈 리전 목록에 한국이 없어 중단(일본·싱가포르는 리전 변경이 안 되고 서울 API의 해외 IP 허용 여부도 불명이라 선택 안 함). Cowork 작업 폴더에 중계 Node 초안(`relay.js`: `x-relay-token` 인증, `SEOUL_API_KEY` 환경변수, 허용 경로 정규식, 10초·15초 캐시, 키 마스킹)이 있으나 **저장소에는 올리지 않았다.**
+- 호선별 채팅방(#743)의 서버 쪽 확인: 배포된 board-writer는 이미 신버전, `/lroom` 호선별 조회, 경춘선·GTX-A 빈 방 정상. (위 0번 표)
+- route-v2 옛 브랜치 삭제(subway-app 쪽은 YJ 지시 대기).
 
-**route-v2** (`93c9927`, `board-writer/index.js`만 변경)
-- `generateLineTalks`: 20분 cron마다 총 줄 수(`talkCount`)를 노선 비중(`LR_AI_ROOMS`: 2호선 10 … 인천2호선 1)대로 나눠 `line_msgs`(kind=chat, ipk='ai')에 저장. cron은 `generateTalks` 대신 이것을 호출(`generateTalks`와 `/gentalk`는 남겨 둠)
-  - AI는 지연·붐빔 제보(delay/crowd)를 만들지 않아 `lrAlerts` 집계에 섞이지 않음. 대화에서 노선의 지금 운행 상황을 지어내지 않도록 프롬프트(`lineRule`)에서 막음
-  - AI 글은 2일 뒤 삭제(실제 이용자 글은 14일). 6개월 중복 원장(`talkLedgerFilter`)은 방 구분 없이 공용
-- `GET /talks`: 노선 방 대화를 시간순으로 모아 각 줄에 `line`을 붙여 내려줌(+ 최근 6시간의 옛 `talks`는 line=null)
-- `POST /react`: body에 `line`이 있으면 그 방에 저장하고 그 방에서 AI가 반응. 없으면 기존 동작
+## 4. 지연 추정 중단 (YJ 결정) — 막힌 원인과 다시 켤 조건
+- **결정:** 9호선 포함 지연 추정 전체 비활성. 엔진 환경변수 **`EST_ENABLED`가 `"1"`/`"true"`일 때만 켜지고 기본 꺼짐**. 꺼짐 상태: 서울 `realtimePosition`·KV 호출 0건, `/line-notices`에 추정 없음(저장돼 있던 상태도 안 내보냄), `/est-status`는 `enabled:false`와 5개 노선(9호선·신분당·공항철도·경의중앙·수인분당) 모두 `hold:"disabled"`, 앱은 아무것도 표시하지 않음. **1~8호선 공식 공지는 그대로 정상.**
+- **막힌 원인:** 서울 지하철 서버(`swopenapi.seoul.go.kr`)가 **Cloudflare 출구 주소를 거부**한다. 코드·진단으로 키/헤더/스킴/Worker 일반 외부 호출 문제는 배제됐다(공개 `sample` 키·http·헤더 변경에도 동일, 같은 Worker의 `/tago`→apis.data.go.kr는 정상, 배치 변경 무효). 이 Code 환경은 서울 서버를 호출할 수 없어 직접 재현은 못 했고 YJ·Cowork의 진단에 따른다.
+- **코드는 지우지 않았다.** 판정(같은 방향 인접 열차 간격 ≥ `min(2×배차간격, 배차간격+6분)` 연속 2회 → 의심, 정상 연속 2회 → 해제), 9호선 시간표 기준(`SUBWAY_BUNDLE.lines[*].tt`), 시간표 없는 4개 노선의 기준선(최근 관측 간격 중앙값: 표본 20개·30분 이상 쌓이기 전 보류, 지연 중 표본 제외), 보류 조건(첫차+30분 전·막차−60분 이후·23시 이후·막차 열차·자료 오래됨/부족), 하루 호출 상한 `EST_DAILY_CAP`(기본 400), 거절 시 10분 쉼, `/est-status` 진단이 모두 남아 있다. 진입점 `estimateNotices`·`estimateCached`·`estRefreshLine`·`/est-status`에 스위치 검사. 데이터는 엔진이 `env.BUSAPI`(gentle-lab `/seoul`, 키 `SEOUL_API_KEY`는 gentle-lab 시크릿)로 호출 — 엔진에 새 시크릿 없음, 앱은 직접 호출 금지.
+- **다시 켤 조건 = 한국 IP 중계 확보.** 순서: ① 그 중계에서 swopenapi가 200으로 오는지 먼저 확인(Cowork의 `relay.js` 초안 참고) ② gentle-lab `/seoul`의 업스트림을 그 중계로 돌리는 수정(키는 중계/Worker 시크릿에만, 앱에 넣지 않음) ③ Deploy 후 `SEOUL_DEBUG=1`로 `debug=1`의 `hint`·`probes` 확인(끝나면 변수 삭제) ④ 엔진에 `EST_ENABLED=1` ⑤ `/est-status`에서 `enabled:true`, 9호선 `hold` 비고 시간표 없는 노선의 `baseline.samples`가 느는지 확인 ⑥ 며칠간 오탐(`lastMaxGapSec` vs `thresholdSec`)·호출량(`budget.usedToday`) 관찰. 다른 대안: 서울시에 Cloudflare 출구 허용 문의. 앱에서 직접 호출은 키가 앱에 들어가므로 권하지 않는다.
+- **같은 중계를 쓰는 기존 기능도 영향:** 앱의 평소 도착정보(`realtimeStationArrival`)와 앱의 `realtimePosition` 기존 기능(RT 진단·구간 열차 위치 `_rtPosParam`)은 `/seoul` 중계를 지나므로 중계가 막힌 동안 실패하고 **시간표 폴백으로 동작**하는 것으로 보인다(확인 필요 — 6번).
+- 운영 원칙: **앱은 표시 전용, 처리는 서버에서.** 기존 기능은 반드시 보존. 키·토큰 정리는 마지막.
 
-## 3. 확인 안 된 것
-- **엔진 04bw 자동 배포 결과**: main push 후 Workers Builds 결과와 `/est-status` 응답을 이 환경에서 못 본다(Cloudflare·workers.dev 접속 차단 재확인). 루트 URL `version`이 `route-v2-2026-10-04bw`인지, `/est-status`가 `enabled:false`와 모든 노선 `hold:"disabled"`를 보여 주는지 확인 필요(코드·시험으로는 확인됨). Workers Builds가 이 PR 브랜치에서는 매번 0초 만에 실패했다 — main에서는 다를 수 있다
-- **gentle-lab `/seoul` 400**: 원인은 서울 서버의 Cloudflare 출구 거부로 확정 취급(위). `worker/index.js`의 방어·진단 변경(`2a594a9`, `2c26859`)은 **아직 Deploy 안 됨**(중계 재사용 때 필요). 해결 전에는 앱의 평소 도착정보도 같은 이유로 실패할 수 있다
-[재개 시 확인] - **서울 realtimePosition 실호출 미검증**: 네트워크가 막혀 실제 응답을 못 받았다. 필드명(`statnNm, trainNo, updnLine, recptnDt, lstcarAt`)은 공개 명세 기준이고 모의 데이터로만 시험했다. 배포 후 `/est-status`에서 9호선이 계속 `hold`(예: `unmapped`, `no-data`, `stale`, `fetch`)면 필드·역 이름 불일치부터 본다. BUSAPI 내부 호출 경로(`https://busapi.internal/seoul?path=…`)는 기존 `/tago` 패턴과 같지만 실호출은 못 해 봤다
-[재개 시 확인] - **서울 인증키 일일 한도**: gentle-lab 주석 기준 키 1개 하루 1,000건. 지연 추정은 하루 상한(기본 400)에서 고르게 쓴다(위). 실제 키 한도가 다르면 `EST_DAILY_CAP`으로 조정
-[재개 시 확인] - **배차간격 해석**: `tt`가 일반열차만의 간격인지 급행 포함인지 모른다. 9호선은 방향별 모든 열차를 함께 세므로(간격이 더 촘촘하게 나옴) 오탐 쪽이 아니라 누락 쪽으로 기운다 **기준선 방식의 한계**: 자연스럽게 들쭉날쭉한 노선(공항철도 직통·일반 혼합, 경의중앙·수인분당의 분기)은 최대 간격이 중앙값의 2배를 넘는 날이 있어 오탐이 날 수 있고, 노선 전체가 멈추면 간격이 고르므로 못 잡는다. 배포 후 `/est-status`의 `lastMaxGapSec`·`thresholdSec`와 실제 표시를 며칠 보고 조정할 것
-[재개 시 확인] - 판정 구간·임계값(첫차+30분~min(막차−60분, 23:00), 3대 이상, 2회 연속, 10분 끊김)은 YJ 규칙과 제 해석을 합친 값이다 기준선 최소 표본(20개/30분)·보관(3시간)·고정 시간(06:30~22:30)도 같은 성격의 값이다
-- **board-writer 배포가 막힌 이유 2가지** (YJ 설정 필요)
-  1. `route-v2` 저장소에는 `CF_API_TOKEN`·`CF_ACCOUNT_ID` 시크릿이 없다(확인용 워크플로가 "시크릿 없음"으로 실패). `subway-app`에는 있다. 시크릿은 Claude가 만들 수 없다
-  2. 작업 환경의 Network access가 `workers.dev`, `api.cloudflare.com`, `apis.data.go.kr`을 막는다(2026-10-04 재확인, 403)
-  - 또 `board-writer`용 `wrangler.toml`이 저장소에 없어서, 그냥 `wrangler deploy`하면 대시보드에서 설정한 바인딩(D1 등)이 덮어써질 수 있다. 배포 전에 현재 설정(바인딩 이름·크론)을 먼저 읽어 보고, 코드만 올리는 방식(Cloudflare API 업로드 + 기존 바인딩 유지)이나 대시보드 수동 배포를 쓸 것
-- **board-writer 서버 배포 안 됨**: 이 작업 환경은 Cloudflare·workers.dev·apis.data.go.kr 접속이 막혀 있다. 배포 전에는 호선별 AI 글과 `(N호선)` 표시가 나오지 않는다. 배포 전에 노선 방에서 쓴 글은 호선 방이 아니라 예전 전체 대화(`talks`)에 저장된다
-- 실제 Gemini 호출 경로는 못 돌려 봤다(로컬 모의 실행은 폴백 문구 경로). 폴백은 6개월 중복 금지 때문에 글이 적게 나온다. 배포 후 `/status`·`/talks`로 방별 글 수가 비중대로 나오는지 확인 필요
-- `S.route.lp`의 노선 이름 형식이 `2호선`처럼 나오는지는 코드로만 확인(실기기 경로 안내로 `my_lines` 쌓이는지 확인 필요). lp에서 못 찾으면 `_lrRouteLines()`(검색 결과 1번 경로)로 대체하는데, 사용자가 다른 경로를 골랐다면 어긋날 수 있다
-- APK 빌드: 수동 #732·#733 성공, 병합 자동 #734(`18ef908`) 성공, 문구 변경 #735(`60eb8d7`) 성공. 지연 의심 표시 #736(`04c2da3`) **성공**
-- route-v2 PR의 `Workers Builds: route-v2` 체크 실패: 빌드가 0초에 끝나고 로그 없음, 이 PR은 `route-v2-worker.js`를 안 건드림 → Cloudflare 빌드 설정 문제로 보이나 대시보드를 못 봐서 원인 미확인(PR에 코멘트 남김)
-- 노선 칸이 빈 공지 33건은 지금 엔진에서 어느 노선에도 표시되지 않는다(고치지 않음)
+## 5. 확인 안 된 것 · 가속도계 타당성 검토
+**빌드**
+| 커밋 | Build APK | 결과 |
+|---|---|---|
+| `18ef908`(subway-app#1 병합) | #734 | 성공 |
+| `60eb8d7` | #735 | 성공 |
+| `6b5d2fe`(하단 호선 탭) | #743 | 성공 |
+| `c26e5ea` | #746 | 성공 |
+| `2c883e0`(가속도계 보조) | **#747** | 성공 (2026-10-04 확인) |
+| 이 문서+주석 날짜 정정 커밋 | #748 이후 | 문서·주석만 바뀜(동작 동일). 결과는 Actions에서 확인 |
 
-## 4. 남은 일 · YJ가 정할 것
-- **YJ가 할 일**: (a) `route-v2` 저장소 Settings → Secrets에 `CF_API_TOKEN`·`CF_ACCOUNT_ID` 추가하거나, board-writer를 대시보드에서 직접 배포 (b) 필요하면 환경 Network access에 `workers.dev`, `api.cloudflare.com`, `apis.data.go.kr` 허용 (c) route-v2 `Workers Builds` 체크 실패 원인 확인(Cloudflare 대시보드, 이 PR과 무관해 보임)
-- **YJ 결정**: 배포 시점(배포하면 호선별 AI 글 시작) / 노선 비중(`LR_AI_ROOMS`의 w)이 맞는지
-- **지연 추정**: 중단(스위치 꺼짐). 재개 조건·순서는 위 '지연 추정 중단' 참고 — 한국 IP 중계를 어떻게 확보할지(직접 운영/서울시 문의)가 YJ 결정 사항
-- **옛 WIP 폐기 대상**: 브랜치 `claude/jolly-darwin-dtzab9`의 `ac3e4ff`('설정에서 이용 노선 직접 고르기')는 이번 변경(모든 호선 칩 + 내가 탄 노선 앞쪽 강조, `my_lines` 자동 기록 유지)으로 **대체됐다**. 병합하지 말고 브랜치째 정리해도 된다(YJ 확인 후). 그 브랜치의 HANDOFF.md도 옛 사본
-- (B) 환승 보정: ride_log가 0건이라 보류. 근거는 **환승 1회 이상 n≥30, 일관된 2분 내외**일 때만, 역별 편차로. `xfer_pos.secs` 평균(255초)을 통째로 쓰지 말 것. 단, ride_log에는 역 이름이 없어 역별 편차를 내려면 별도 방법이 필요(노선·시간대 수준까지만 가능)
-- (C) 키·토큰 정리: YJ가 **이번에는 패스**라고 했다. 기능 작업 후 다시 요청이 오기 전까지 하지 않고, 앱에 새 키를 넣지 않는다
-- 선택: 실제 사용자가 거의 없는 노선(GTX-A 등)은 AI 글이 너무 적거나 어색한지 배포 후 확인
+**가속도계(`_accel`) 타당성 검토 결과 — 보조 지표로 낮춘 이유와 한계**
+- 임계값(`TRAIN_THRESH` **1.8**, 도보 **0.8**)은 **실측값이 아니라 코드 주석의 추정**이다("도보 0.5~1.0, 열차 1.5~4.0"). 그래서 **걷기 오탐 가능성**이 있다(도보 stddev가 1.8을 넘는 사람·걸음이 있다). `STILL_THRESH`(**0.4**)는 정의돼 있지만 **`_accelState`가 쓰지 않는다** — 0.8 미만은 모두 `still`.
+- 판정 창이 **최근 10샘플(기기에 따라 약 0.2초)**로 매우 짧아 순간 흔들림에 민감하다. 최소 8샘플 미만이면 `unknown`.
+- **열차 출발·정차 때의 앞뒤(수평) 가속은 보지 않는다**(전체 가속도 크기의 stddev만 본다). 지하철 승차의 가장 뚜렷한 신호(출발 가속·제동)를 쓰지 않는다.
+- **부드러운 구간의 열차 진동은 작아서 미탐**(train으로 안 잡힘)할 수 있다. 기기를 어떻게 들고 있는지(손/주머니)에 따라 크게 달라진다(Watchdog 주석의 "가속도계 제거 — 핸드폰 위치 따라 오판 빈발"과 같은 맥락).
+- 그래서 **단독 확정을 없애고** GPS·기지국·시각표가 있을 때만 보조로 인정한다.
+- **YJ가 열차에서 실측해 임계값을 정할 예정.** 방법: 설정 > `📳 가속도계 측정 (보조 지표)` 카드로 (열차 안 / 걷기 / 서 있기)를 각각 90초 측정해 요약(stddev 최소·중앙·90%·최대, 상태 비율)을 받는다. **실측 결과를 받으면 `TRAIN_THRESH`·도보 0.8·창 크기를 조정하고, 필요하면 출발·정차의 수평 가속을 쓰는 방향도 검토**한다. 조정 전에는 임계값을 바꾸지 말 것.
 
-## 5. 테스트·빌드 확인 방법
-- 앱 문법: `www/index.html`의 인라인 `<script>`를 `new Function`으로 검사(`type="text/x-metro-svg"` 블록은 JS가 아니라 제외)
-- 앱 화면: Playwright(`/opt/pw-browsers/chromium-1194/chrome-linux/chrome`)로 `file:///.../www/index.html`을 열고 외부 요청을 모두 막은 뒤 board-writer(`/talks`, `/lroom`, `/react`)만 모킹. `switchTab('community', #ni-community)` → `showChatTab(#chipLiveTalk)`; `_myLinesRecord()`로 노선 쌓기; `_chatSelect('2호선')`; 스와이프 순서는 `_commSwipeStep(±1)`과 `_commCurTab()`
-- 실시간소통 하단 호선 탭 화면 시험: `node test/chat_line_tabs.ui.test.js [스크린샷 폴더]`(subway-app, 21건; 서버만 모의, 첫 실행 위치 안내 팝업은 확인한 상태로 시작)
-- 지연 의심(엔진): `node test/est_delay.test.js`(단위 75건: 시간표·기준선·상태 머신·호출 상한·`EST_ENABLED` 스위치·`estimateNotices`; 시험 환경은 `EST_ENABLED:'1'`로 켜 둔다) · `node test/est_line_notices.test.js`(`/line-notices` 통합) — 저장소 `route-v2`. 모의 위치·KV·BUSAPI라 네트워크가 필요 없다 · 중계: `node worker/test/seoul_relay.test.js`(subway-app, 11건)
-- 서버: `node --check board-writer/index.js`. 로컬 실행은 `node:sqlite`로 D1을 흉내 낸 모의 env(`prepare/bind/run/all/first/batch`)를 만들어 `scheduled()`, `/talks`, `/lroom`, `/react`를 호출(Node 22)
-- 빌드: Actions → `Build APK` → Run workflow(브랜치 선택) 또는 MCP `actions_run_trigger`. 성공하면 `subway-app-debug` 아티팩트가 생긴다. 서명 릴리스(AAB)는 시크릿이 있을 때만
-- 이 환경 제약: 아웃바운드가 프록시를 거치며 `workers.dev`, `apis.data.go.kr`, `api.cloudflare.com`은 막혀 있다. 외부 API를 불러야 하면 Actions 러너에서 시크릿(`TAGO_KEY`, `CF_API_TOKEN`, `CF_ACCOUNT_ID`)으로 한다(키·본문은 로그에 출력하지 말 것)
+**그 밖의 미확인**
+- 엔진 04bw 자동 배포 결과: Code 환경은 Cloudflare·workers.dev에 접속할 수 없어 못 본다. 루트 `version`이 `route-v2-2026-10-04bw`인지, `/est-status`가 `enabled:false`·`hold:"disabled"`인지 확인 필요(코드·시험으로는 확인됨). 과거 PR 브랜치에서 Workers Builds가 0초 만에 실패한 적이 있다 — main 결과 확인.
+- 실제 Gemini 경로(호선별 AI 글)는 못 돌려 봤다(시험은 폴백 경로). 폴백은 6개월 중복 금지 때문에 글이 적게 나온다. 배포된 서버에서 방별 글 수가 비중대로 나오는지 확인.
+- `S.route.lp`의 노선 이름 형식(`2호선` 등)은 코드로만 확인. 실기기 경로 안내로 `my_lines`가 쌓이는지 확인. lp에서 못 찾으면 `_lrRouteLines()`(검색 결과 1번 경로)로 대체하므로, 다른 경로를 골랐다면 어긋날 수 있다.
+- 노선 칸이 빈 공지 33건은 엔진에서 어느 노선에도 표시되지 않는다(고치지 않음). ride_log는 **0건**(역 이름이 없어 역별 편차는 못 냄).
+- 지연 추정을 다시 켤 때 확인할 것(지금은 꺼짐): 서울 `realtimePosition` 실호출·필드명(`statnNm, trainNo, updnLine, recptnDt, lstcarAt`)·BUSAPI 내부 경로, 서울 키 일일 한도(주석상 키 1개 1,000건, 앱 도착정보와 공유), `tt`가 일반열차만의 간격인지, 기준선 방식의 오탐(공항철도 직통·일반 혼합, 경의중앙·수인분당 분기), 판정 구간·임계값(YJ 규칙+해석의 합).
 
-## 6. 임시 파일 · 되돌릴 것
-- `ntce-lines.yml`(임시 집계 워크플로)은 병합 전에 삭제했다. 같은 집계가 필요하면 git 히스토리의 `5772a90`/`7bb6764`에서 꺼내 쓴다
-- 이 브랜치의 `Build APK` 수동 실행 결과물은 확인용(30일 뒤 만료)
-- 로컬 임시 파일(모의 서버 테스트, 스크린샷)은 스크래치패드에만 있고 저장소에는 없다
+## 6. 남은 과제 (우선순위 없이)
+1. **한국 IP 중계로 서울 실시간 복구** → 그 뒤 `EST_ENABLED=1`(4번 순서). 중계 방식은 YJ 결정.
+2. **앱 도착정보가 실시간인지 시간표 폴백인지 확인** — 서울 `/seoul`이 막혀 있으면 시간표로 동작할 것으로 보인다. 실기기에서 확인.
+3. **경로 검색 지연 프로파일링**(0.6~2.4초).
+4. **환승 보정**: ride_log n≥30, 환승 1회 이상, 일관된 2분 내외일 때만 역별 편차로. `xfer_pos.secs` 평균(255초)을 통째로 쓰지 말 것. ride_log가 0건이라 보류.
+5. **가속도계 실측 반영**(5번): YJ 실측 결과를 받으면 임계값 조정.
+6. **키·토큰 정리** — 기능 작업이 끝난 뒤. 앱에 새 키를 넣지 않는다. (YJ가 "이번에는 패스"라고 했다.)
+7. subway-app의 옛 브랜치 `claude/jolly-darwin-dtzab9`(`ac3e4ff` 등) 삭제 — **YJ 지시를 기다릴 것.**
+8. 선택: 사용자가 적은 노선(GTX-A 등)의 AI 글이 너무 적거나 어색한지 배포 서버에서 확인.
+
+## 7. 테스트·빌드 확인 방법
+- 앱 문법: `www/index.html`의 인라인 `<script>`를 `new Function`으로 검사(`type="text/x-metro-svg"` 블록은 JS가 아니라 제외).
+- 앱 화면(헤드리스, 서버만 모의, 외부 요청 전부 차단, Playwright `/opt/node-tools/node_modules/playwright` + Chromium `/opt/pw-browsers/chromium-1194`): `node test/chat_line_tabs.ui.test.js [스크린샷 폴더]`(21건) · `node test/accel_auxiliary.ui.test.js`(20건: 가속도계 단독 비확정·조합별 확정·문구·수집/상태 보존·설정 카드·숨긴 개발자 카드 보존). 첫 실행 위치 안내 팝업(`locDiscOv`)은 시험에서 '확인'을 누른 상태로 시작한다.
+- 중계: `node worker/test/seoul_relay.test.js`(13건, subway-app). 엔진: `node test/est_delay.test.js`(75건) · `node test/est_line_notices.test.js`(통합) — route-v2. 모의 위치·KV·BUSAPI라 네트워크가 필요 없다. board-writer: `node --check board-writer/index.js`, `node:sqlite`로 D1을 흉내 낸 모의 env로 `scheduled()`·`/talks`·`/lroom`·`/react`를 호출(Node 22).
+- 빌드: main push → `Build APK` 자동. 다른 브랜치는 Actions → Run workflow. 성공하면 `subway-app-debug` 아티팩트. 서명 릴리스(AAB)는 시크릿이 있을 때만.
+- Code 환경 제약: 아웃바운드가 프록시를 거치며 `workers.dev`·`apis.data.go.kr`·`api.cloudflare.com`은 막혀 있다(403). 외부 API가 필요하면 Actions 러너에서 시크릿(`TAGO_KEY`, `CF_API_TOKEN`, `CF_ACCOUNT_ID` — subway-app에만 있음)으로. 키·본문은 로그에 출력하지 말 것.
+
+## 8. 주의·되돌릴 것
+- **AI 승무원 문구는 건드리지 말 것.** 승차·대기 분할, 경로 선택 이유, 문 위치 팁은 경로 카드에만 있다 — AI 승무원에 다시 넣지 않는다(중복 금지).
+- **개발자용 진단 카드 주석 블록 안에 `<!-- -->`를 넣지 말 것**(3번 사고 참고).
+- 임시 파일: `ntce-lines.yml`(공지 분포 집계)은 삭제함 — 필요하면 git 히스토리 `5772a90`/`7bb6764`. Cowork 작업 폴더의 `relay.js` 초안은 저장소에 없다. 로컬 시험 스크린샷은 저장소에 없다.
+- 코드 주석에 `2026-10-05`로 적었던 날짜는 오기였고 `2026-10-04`로 정정했다.
