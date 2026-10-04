@@ -538,7 +538,8 @@ const SEOUL_SERVICES = /^(realtimeStationArrival|realtimePosition|getShtrmPath|S
 function seoulKeys(env) {
   return String(env.SEOUL_API_KEY || '')
     .split(',')
-    .map((s) => s.trim())
+    // ★ 2026-10-04: 대시보드에 값을 붙여 넣을 때 따옴표·줄바꿈·공백이 같이 들어가면 URL 경로가 깨져 업스트림이 본문 없는 400 을 줄 수 있다 → 앞뒤의 따옴표/공백/제어문자를 걷어낸다
+    .map((s) => s.replace(/[\u0000-\u001f\u007f]/g, '').replace(/^[\s"'`]+|[\s"'`]+$/g, ''))
     .filter(Boolean);
 }
 
@@ -553,6 +554,12 @@ async function handleSeoul(request, env) {
   const keys = seoulKeys(env);
   if (!keys.length) {
     return jsonRes({ ok: false, error: 'SEOUL_API_KEY not set' }, 500);
+  }
+
+  // ★ 2026-10-04: 진단용(대시보드에서 변수 SEOUL_DEBUG=1 을 켠 동안만). 업스트림 상태코드·본문 앞부분·키 모양(길이·문자 종류 개수)만 내고 키 값은 절대 내지 않는다.
+  if (url.searchParams.get('debug') === '1') {
+    if (env.SEOUL_DEBUG !== '1') return jsonRes({ ok: false, error: 'debug off' }, 403);
+    return seoulDebug(path, keys);
   }
 
   const ttl = seoulTtl(path);
@@ -590,25 +597,61 @@ async function handleSeoul(request, env) {
   }
 }
 
+// ★ 2026-10-04 (본문 없는 HTTP 400): 서울 업스트림이 본문 없는 4xx 를 주면 예전엔 그대로 '본문 없는 400' 이 앱·엔진까지 갔다.
+//   원인을 코드만으로 단정할 수 없어(가능성: 키 값 모양, 요청 헤더, 스킴) 두 가지를 한다.
+//   ① 본문 없는 4xx 면 방식을 바꿔 다시 시도한다: std(https+Accept/UA) → plain(https, 헤더 없음) → http. 통한 방식은 기억해 다음부터 그것부터 쓴다.
+//   ② 끝내 안 되면 본문 없는 응답 대신 JSON({ok:false, error, upstream}) 을 돌려주고, 같은 경로는 30초 쉰다(재시도 폭주·쿼터 낭비 방지).
+//   진단은 /seoul?path=…&debug=1 (SEOUL_DEBUG=1 일 때만). 키 값은 어디에도 내지 않는다.
+const SEOUL_VARIANTS = [
+  { id: 'std',   scheme: 'https', headers: true  },
+  { id: 'plain', scheme: 'https', headers: false },
+  { id: 'http',  scheme: 'http',  headers: false }
+];
+let _seoulVariant = 0;
+const _seoulBad = new Map();   // path -> { until, status }
+function seoulEmptyClientErr(status, body) { return status >= 400 && status < 500 && !String(body || '').trim(); }
+function seoulTarget(v, key, path) {
+  const base = v.scheme === 'http' ? SEOUL_BASE.replace(/^https:/, 'http:') : SEOUL_BASE;
+  return base + '/' + encodeURIComponent(key) + '/json/' + path;
+}
+async function seoulFetchVariant(v, key, path, ttl) {
+  const init = v.headers
+    ? { headers: { Accept: 'application/json', 'User-Agent': 'gildongmu/1.0' }, cf: { cacheTtl: ttl, cacheEverything: false } }
+    : { cf: { cacheTtl: ttl, cacheEverything: false } };
+  const r = await fetch(seoulTarget(v, key, path), init);
+  return { status: r.status, body: await r.text() };
+}
+
 // 실제 호출 (키 로테이션 포함) — 성공하면 두 캐시에 모두 넣는다
 async function seoulUpstream(path, keys, ttl, cacheKey) {
   let lastBody = '', lastStatus = 502;
 
+  const bad = _seoulBad.get(path);
+  if (bad && Date.now() < bad.until) {
+    return { body: JSON.stringify({ ok: false, error: 'upstream rejected (cooling down)', upstream: bad.status }), status: bad.status, key: 'cooldown' };
+  }
+
   for (let i = 0; i < keys.length; i++) {
-    const target = SEOUL_BASE + '/' + encodeURIComponent(keys[i]) + '/json/' + path;
-    let body = '', status = 502;
-    try {
-      const r = await fetch(target, {
-        headers: { Accept: 'application/json', 'User-Agent': 'gildongmu/1.0' },
-        cf: { cacheTtl: ttl, cacheEverything: false }
-      });
-      seoulStats.upstream++;
-      status = r.status;
-      body   = await r.text();
-    } catch (e) {
-      lastBody = JSON.stringify({ ok: false, error: String((e && e.message) || e) });
+    let body = '', status = 502, got = null, emptyErr = null;
+    for (let k = 0; k < SEOUL_VARIANTS.length; k++) {
+      const vi = (_seoulVariant + k) % SEOUL_VARIANTS.length;
+      try {
+        const r = await seoulFetchVariant(SEOUL_VARIANTS[vi], keys[i], path, ttl);
+        seoulStats.upstream++;
+        if (seoulEmptyClientErr(r.status, r.body)) { emptyErr = r; continue; }   // 본문 없는 4xx → 다른 방식으로
+        got = r; _seoulVariant = vi; break;
+      } catch (e) {
+        lastBody = JSON.stringify({ ok: false, error: String((e && e.message) || e) });
+      }
+    }
+    if (!got && emptyErr) {
+      // 모든 방식이 본문 없는 4xx — 본문 없는 응답 대신 이유가 보이는 JSON 으로
+      lastStatus = emptyErr.status;
+      lastBody = JSON.stringify({ ok: false, error: 'upstream ' + emptyErr.status + ' (empty body)', upstream: emptyErr.status });
       continue;                       // 다음 키로
     }
+    if (!got) continue;               // 네트워크 오류 — 다음 키로
+    status = got.status; body = got.body;
 
     lastBody = body; lastStatus = status;
 
@@ -635,9 +678,70 @@ async function seoulUpstream(path, keys, ttl, cacheKey) {
     return { body, status, key: i + 1 };
   }
 
+  if (seoulEmptyClientErr(lastStatus, '') || /"upstream":/.test(lastBody)) {
+    _seoulBad.set(path, { until: Date.now() + 30000, status: lastStatus });
+    if (_seoulBad.size > 200) { for (const [k, v] of _seoulBad) { if (Date.now() > v.until) _seoulBad.delete(k); } }
+  }
   // 모든 키가 막힘 — 앱은 이 경우 정적 시각표로 폴백한다
   return { body: lastBody || JSON.stringify({ ok: false, error: 'all keys exhausted' }),
            status: lastStatus, key: 'exhausted' };
+}
+
+// ── 진단 (SEOUL_DEBUG=1 일 때만). 키 값·키가 들어간 URL 은 응답에 절대 싣지 않는다. 20초에 한 번만. ──
+let _seoulDebugAt = 0;
+function seoulRedact(str, keys) {
+  let t = String(str == null ? '' : str);
+  keys.forEach((k) => {
+    if (!k) return;
+    [k, encodeURIComponent(k)].forEach((x) => { if (x) t = t.split(x).join('***'); });
+  });
+  return t;
+}
+function seoulKeyShape(k) {
+  const s = String(k || '');
+  return {
+    len: s.length,
+    letters: (s.match(/[A-Za-z]/g) || []).length,
+    digits: (s.match(/[0-9]/g) || []).length,
+    other: (s.match(/[^A-Za-z0-9]/g) || []).length,
+    nonAscii: /[^\x00-\x7f]/.test(s),
+    hasPercent: s.indexOf('%') >= 0,
+    hasSlashPlusEq: /[\/+=]/.test(s),
+    needsEncoding: encodeURIComponent(s) !== s
+  };
+}
+async function seoulProbe(label, url, init, keys) {
+  const t0 = Date.now();
+  try {
+    const r = await fetch(url, init);
+    const txt = await r.text();
+    return {
+      label, status: r.status, ms: Date.now() - t0,
+      contentType: r.headers.get('content-type') || '', server: r.headers.get('server') || '',
+      bodyLen: txt.length, head: seoulRedact(txt.slice(0, 300), keys)
+    };
+  } catch (e) {
+    return { label, error: seoulRedact(String((e && e.message) || e).slice(0, 160), keys) };
+  }
+}
+async function seoulDebug(path, keys) {
+  if (Date.now() - _seoulDebugAt < 20000) return jsonRes({ ok: false, error: 'wait 20s between debug calls' }, 429);
+  _seoulDebugAt = Date.now();
+  const k = keys[0];
+  const std = { headers: { Accept: 'application/json', 'User-Agent': 'gildongmu/1.0' } };
+  const probes = [];
+  probes.push(await seoulProbe('std-https', SEOUL_BASE + '/' + encodeURIComponent(k) + '/json/' + path, std, keys));
+  probes.push(await seoulProbe('plain-https', SEOUL_BASE + '/' + encodeURIComponent(k) + '/json/' + path, undefined, keys));
+  probes.push(await seoulProbe('plain-http', SEOUL_BASE.replace(/^https:/, 'http:') + '/' + encodeURIComponent(k) + '/json/' + path, undefined, keys));
+  if (encodeURIComponent(k) !== k) probes.push(await seoulProbe('raw-key-https', SEOUL_BASE + '/' + k + '/json/' + path, undefined, keys));
+  // 공개 sample 키로 같은 서비스를 불러 '업스트림 자체'가 이 서버에서 닿는지 가른다(sample 키는 공개 문서 값)
+  probes.push(await seoulProbe('sample-key-https', SEOUL_BASE + '/sample/json/realtimeStationArrival/0/5/' + '서울', undefined, keys));
+  return jsonRes({
+    ok: true, debug: true, path,
+    keyCount: keys.length, firstKeyShape: seoulKeyShape(k),
+    variantInUse: SEOUL_VARIANTS[_seoulVariant].id, stats: seoulStats,
+    probes
+  });
 }
 
 // ══════════════════════════════════════════════════════════════
