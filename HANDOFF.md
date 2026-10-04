@@ -8,7 +8,7 @@
 | 앱 `DullyYJ/subway-app` main | 마지막 앱 동작 변경 `fc0a74a`(자동 확정 오탐 방지·승강장 늦은 열차 4분 유예). 그 앞 `fd48d76`이 경로 미확정 시 탑승 감지 자동 확정·카카오 장소 ID 직링크·네이버 좌표 검색, 그 앞 `df32cdb`가 분 표시 통일·승차/대기 합 보정·'분 남음'·주황 배지·역 사이 지연 반영, 그 앞 `43e816b`가 재탐색 차단·PF 단일 위치원·복합 승차판정·가속도계 삭제. 그 뒤는 시험 파일과 이 문서뿐 | Build APK #759(`df32cdb`) 성공, `fd48d76` #762, `fc0a74a` #765 성공. **실기기 검증은 아직 안 함(다음 승차에서)** |
 | 엔진 `DullyYJ/route-v2` main | `ENGINE_VERSION = route-v2-2026-10-04bw`, 병합 커밋 `a504d1a` | main push 시 Cloudflare Workers Builds 자동 배포. 지연 추정은 `EST_ENABLED` 꺼짐 |
 | board-writer (`route-v2/board-writer/index.js`, main) | 신버전(호선 방 `line` 저장·`/talks` 모으기·호선별 AI 글) | **대시보드에 배포됨** — Cowork 클로드 확인: `/talks` 항목에 `line` 필드·`L숫자` id, `/lroom?line=…` 정상, 경춘선·GTX-A는 빈 방으로 열림 |
-| 중계 gentle-lab (`subway-app/worker/index.js`) | 강화 코드(재시도·키 정리·진단) | **대시보드에 붙여 넣어 배포됨**(YJ가 Deploy). `SEOUL_DEBUG` 변수는 진단 후 YJ가 삭제. 배치(Placement)는 AWS ap-northeast-2로 바꿨으나 swopenapi 차단에는 효과 없음 |
+| 중계 gentle-lab (`subway-app/worker/index.js`) | 강화 코드(재시도·키 정리·진단) + **한국 IP 중계 수신부(`/relay/wanted`·`/relay/push`, 4-1번)** | 강화 코드까지는 **대시보드에 붙여 넣어 배포됨**(YJ가 Deploy). **수신부는 저장소에만 있고 미배포**(`RELAY_TOKEN` 시크릿 + Deploy 필요). `SEOUL_DEBUG` 변수는 진단 후 YJ가 삭제. 배치(Placement)는 AWS ap-northeast-2로 바꿨으나 swopenapi 차단에는 효과 없음 |
 
 ## 1. 저장소·배포 방법
 | 저장소 | 역할 | 배포 |
@@ -79,6 +79,15 @@
 - **같은 중계를 쓰는 기존 기능도 영향:** 앱의 평소 도착정보(`realtimeStationArrival`)와 앱의 `realtimePosition` 기존 기능(RT 진단·구간 열차 위치 `_rtPosParam`)은 `/seoul` 중계를 지나므로 중계가 막힌 동안 실패하고 **시간표 폴백으로 동작**하는 것으로 보인다(확인 필요 — 6번).
 - 운영 원칙: **앱은 표시 전용, 처리는 서버에서.** 기존 기능은 반드시 보존. 키·토큰 정리는 마지막.
 
+## 4-1. 한국 IP 중계 (노트북 푸시 방식) — 코드 완료, 배포 전
+- 구조: 노트북은 **밖으로만** 호출한다(사용자 요청을 직접 받지 않음). 앱 → `/seoul` → ① 메모리 ② 엣지 캐시 ③ **중계 값(D1 `relay_cache`)** ④ (중계가 죽었을 때만) 옛 직접 호출. 노트북 `tools/seoul-relay/relay.js`는 8초마다 `GET /relay/wanted`(앱이 최근 150초 안에 찾은 경로)를 받아 **없거나 오래된 경로만** 서울 API에서 받아 `POST /relay/push`로 올린다. 값이 신선하면 앱 수만 명이 같은 경로를 찾아도 서울 호출은 1번이다.
+- 신선도: 도착정보 75초·위치 90초·기타 30분 이내만 사용. 노트북은 도착 25초·위치 30초 지난 것만 다시 받는다. 중계 소식(heartbeat)이 180초 넘게 없으면 '꺼짐'으로 보고 옛 동작(앱은 정적 시각표)으로 돌아간다. 중계가 살아 있는데 값이 아직 없으면 `503 relay pending`(Retry-After 5)을 주고 그 경로를 '찾는 목록'에 올리므로 **첫 요청은 실패하고 수 초 뒤부터 채워진다**.
+- 워커: `RELAY_TOKEN`(16자 이상, 노트북 `.env`와 같은 값) 시크릿이 필요하다. 새 바인딩은 없다(기존 D1 `DB`). 표 3개(`relay_cache`·`relay_want`·`relay_state`)는 첫 호출 때 자동 생성, 24시간 지나면 정리. 한도·키 오류(`ERROR-*`·`INFO-100`)는 올리지 않는다(`INFO-200` 없음 응답은 허용).
+- 노트북: 키별 하루 예산(기본 950)을 남은 운행시간에 고르게 쓰고(토큰 버킷), `ERROR-337`/`INFO-100`/`ERROR-336` 때 다음 키로 넘어간다. 상태 `state.json`, 로그 `relay.log`. `node relay.js --check`로 설정·서울 응답(한국 IP에서)·워커 인증을 한 번에 점검한다. 설치 순서는 `tools/seoul-relay/README.md`(Node LTS → `.env` → `--check` → `install-autostart.ps1` → `schtasks /Run /TN GildongmuRelay`). `run-forever.bat`은 라벨 없는 `for /l` 반복문(GitHub가 LF로 저장해도 동작).
+- 서울 한도: 실시간 지하철 API는 **키당 하루 1,000건**. 열린데이터광장 '활용사례 갤러리'에 앱을 등록하고 그 키를 쓰면 한도가 풀린다(YJ가 직접). 워커 무료 플랜 요청 상한(하루 10만 건)은 별개의 규모 문제 — 수만 명 규모면 엣지 캐시 히트가 대부분이어야 한다.
+- 시험(클라우드, 모의): `worker/test/relay_push.test.js` 8건, `tools/seoul-relay/relay.test.js` 9건(종단 간). **실제 서울 API·노트북 환경은 미검증.**
+- 남은 순서: ① 워커 시크릿 `RELAY_TOKEN` 등록 ② 대시보드에 `worker/index.js` 붙여 넣고 Deploy(YJ) ③ 노트북에 Node 설치·`.env`(키·토큰)·`--check`·자동 시작 등록 ④ 앱에서 `x-seoul-cache: RELAY` 확인 ⑤ 4번 순서대로 `EST_ENABLED=1`.
+
 ## 5. 확인 안 된 것 · 빌드 · 가속도계 삭제 근거
 **빌드**
 | 커밋 | Build APK | 결과 |
@@ -110,12 +119,12 @@
 - 지연 추정을 다시 켤 때 확인할 것(지금은 꺼짐): 서울 `realtimePosition` 실호출·필드명(`statnNm, trainNo, updnLine, recptnDt, lstcarAt`)·BUSAPI 내부 경로, 서울 키 일일 한도(주석상 키 1개 1,000건, 앱 도착정보와 공유), `tt`가 일반열차만의 간격인지, 기준선 방식의 오탐(공항철도 직통·일반 혼합, 경의중앙·수인분당 분기), 판정 구간·임계값(YJ 규칙+해석의 합).
 
 ## 6. 남은 과제 (우선순위 없이)
-1. **한국 IP 중계로 서울 실시간 복구** → 그 뒤 `EST_ENABLED=1`(4번 순서). 중계 방식은 YJ 결정.
+1. **한국 IP 중계로 서울 실시간 복구** → 그 뒤 `EST_ENABLED=1`(4번 순서). 방식은 YJ가 **Windows 구형 노트북**으로 결정. 코드는 저장소에 올라가 있고(`worker/index.js` 수신부 + `tools/seoul-relay/`), **남은 것은 배포·설치뿐**이다(4-1번 참고).
 2. **앱 도착정보가 실시간인지 시간표 폴백인지 확인** — 서울 `/seoul`이 막혀 있으면 시간표로 동작할 것으로 보인다. 실기기에서 확인.
 3. **경로 검색 지연 프로파일링**(0.6~2.4초).
 4. **환승 보정**: ride_log n≥30, 환승 1회 이상, 일관된 2분 내외일 때만 역별 편차로. `xfer_pos.secs` 평균(255초)을 통째로 쓰지 말 것. ride_log가 0건이라 보류.
 5. **다음 승차 실기기 검증(가장 중요)**: 기록 모드를 켜고 ① 탑승 중 재탐색이 없는지(`경로 N역 시작`이 안 나오는지) ② 마커·오버레이·혼잡도 카드가 PF 위치와 같은지(`PF채택` 로그) ③ 승강장에 이미 서 있다가 일찍 탄 열차를 `승차확정`으로 잡는지 ④ 백그라운드 갔다 와도 재탐색 안 되는지 ⑤ 역방향(잠실→강변) ⑥ 계양→잠실 69분 도착 예상이 실제 14:01 과 맞는지 ⑦ 환승 1~2정거장 전 무지개 하이라이트를 확인한다.
-5-1. **남은 개선(미수정)**: ⓐ 네이버 맛집 버튼은 장소 ID 를 못 얻어 좌표 편향 검색(카카오는 ID 직링크로 해결) ⓑ 자동 확정은 방향 확인과 5분 검증 취소가 붙었지만 휴리스틱이라 실기기 확인 필요(버스 노선이 지하철과 나란할 때 등) ⓒ 승강장 유예 4분은 경험값 — 실제로 놓친 경우 '다음 열차 맞춤'이 4분+1.5분 늦게 뜬다 ⓓ 서울 실시간 도착(한국 IP 중계)은 미복구 — 구형 노트북이 30초마다 서울 API 를 불러 Cloudflare 에 올리고 앱은 Cloudflare 캐시만 읽는 구조를 제안함(YJ 결정 대기) ⓔ 총 소요가 '엔진 총합'과 '화면 타임라인'이 어긋나는 실제 원인은 코드·합성 시험으로만 확인했다 — 실기기에서 카드 숫자·`전체 N분` 줄·도착 시각이 서로 맞는지 확인(어긋나면 기록 모드 로그와 `window._htlTlTotalMin` 값 대조). (이전에 여기 있던 분 불일치·'8분 vs 16분' 라벨·주황 배지·역 사이 지연 재계산 4건은 `df32cdb`에서 고쳤다.)
+5-1. **남은 개선(미수정)**: ⓐ 네이버 맛집 버튼은 장소 ID 를 못 얻어 좌표 편향 검색(카카오는 ID 직링크로 해결) ⓑ 자동 확정은 방향 확인과 5분 검증 취소가 붙었지만 휴리스틱이라 실기기 확인 필요(버스 노선이 지하철과 나란할 때 등) ⓒ 승강장 유예 4분은 경험값 — 실제로 놓친 경우 '다음 열차 맞춤'이 4분+1.5분 늦게 뜬다 ⓓ 서울 실시간 도착(한국 IP 중계)은 코드만 완성·미배포(4-1번) ⓔ 총 소요가 '엔진 총합'과 '화면 타임라인'이 어긋나는 실제 원인은 코드·합성 시험으로만 확인했다 — 실기기에서 카드 숫자·`전체 N분` 줄·도착 시각이 서로 맞는지 확인(어긋나면 기록 모드 로그와 `window._htlTlTotalMin` 값 대조). (이전에 여기 있던 분 불일치·'8분 vs 16분' 라벨·주황 배지·역 사이 지연 재계산 4건은 `df32cdb`에서 고쳤다.)
 6. **키·토큰 정리** — 기능 작업이 끝난 뒤. 앱에 새 키를 넣지 않는다. (YJ가 "이번에는 패스"라고 했다.)
 7. subway-app의 옛 브랜치 `claude/jolly-darwin-dtzab9`(`ac3e4ff` 등) 삭제 — **YJ 지시를 기다릴 것.**
 8. 선택: 사용자가 적은 노선(GTX-A 등)의 AI 글이 너무 적거나 어색한지 배포 서버에서 확인.
@@ -123,14 +132,14 @@
 ## 7. 테스트·빌드 확인 방법
 - 앱 문법: `www/index.html`의 인라인 `<script>`를 `new Function`으로 검사(`type="text/x-metro-svg"` 블록은 JS가 아니라 제외).
 - 앱 화면(헤드리스, 서버만 모의, 외부 요청 전부 차단, Playwright `/opt/node-tools/node_modules/playwright` + Chromium `/opt/pw-browsers/chromium-1194`): `node test/chat_line_tabs.ui.test.js [스크린샷 폴더]`(21건) · `node test/ride_evidence.ui.test.js [html 경로]`(35건, 약 6분 — 백그라운드로 실행: 재탐색 차단·승차 증거·69분 시나리오·역방향·버튼·가속도 삭제 확인). 첫 실행 위치 안내 팝업(`locDiscOv`)은 시험에서 '확인'을 누른 상태로 시작한다.
-- 중계: `node worker/test/seoul_relay.test.js`(13건, subway-app). 엔진: `node test/est_delay.test.js`(75건) · `node test/est_line_notices.test.js`(통합) — route-v2. 모의 위치·KV·BUSAPI라 네트워크가 필요 없다. board-writer: `node --check board-writer/index.js`, `node:sqlite`로 D1을 흉내 낸 모의 env로 `scheduled()`·`/talks`·`/lroom`·`/react`를 호출(Node 22).
+- 중계: `node worker/test/seoul_relay.test.js`(13건)·`node worker/test/relay_push.test.js`(8건)·`node tools/seoul-relay/relay.test.js`(9건) (subway-app). 엔진: `node test/est_delay.test.js`(75건) · `node test/est_line_notices.test.js`(통합) — route-v2. 모의 위치·KV·BUSAPI라 네트워크가 필요 없다. board-writer: `node --check board-writer/index.js`, `node:sqlite`로 D1을 흉내 낸 모의 env로 `scheduled()`·`/talks`·`/lroom`·`/react`를 호출(Node 22).
 - 빌드: main push → `Build APK` 자동. 다른 브랜치는 Actions → Run workflow. 성공하면 `subway-app-debug` 아티팩트. 서명 릴리스(AAB)는 시크릿이 있을 때만.
 - Code 환경 제약: 아웃바운드가 프록시를 거치며 `workers.dev`·`apis.data.go.kr`·`api.cloudflare.com`은 막혀 있다(403). 외부 API가 필요하면 Actions 러너에서 시크릿(`TAGO_KEY`, `CF_API_TOKEN`, `CF_ACCOUNT_ID` — subway-app에만 있음)으로. 키·본문은 로그에 출력하지 말 것.
 
 ## 8. 주의·되돌릴 것
 - **AI 승무원 문구는 건드리지 말 것.** 승차·대기 분할, 경로 선택 이유, 문 위치 팁은 경로 카드에만 있다 — AI 승무원에 다시 넣지 않는다(중복 금지).
 - **개발자용 진단 카드 주석 블록 안에 `<!-- -->`를 넣지 말 것**(3번 사고 참고).
-- 임시 파일: `ntce-lines.yml`(공지 분포 집계)은 삭제함 — 필요하면 git 히스토리 `5772a90`/`7bb6764`. Cowork 작업 폴더의 `relay.js` 초안은 저장소에 없다. 로컬 시험 스크린샷은 저장소에 없다.
+- 임시 파일: `ntce-lines.yml`(공지 분포 집계)은 삭제함 — 필요하면 git 히스토리 `5772a90`/`7bb6764`. 예전 Cowork 초안 `relay.js`는 폐기하고 `tools/seoul-relay/`로 대체했다. 로컬 시험 스크린샷은 저장소에 없다.
 - 코드 주석에 `2026-10-05`로 적었던 날짜는 오기였고 `2026-10-04`로 정정했다.
 
 - 줄바꿈: `www/index.html`·`HANDOFF.md`는 LF(파일 끝 CRLF 한 줄만 예외). 커밋 도구가 CRLF 로 바꾸지 않았는지 올린 뒤 sha256/`CR` 개수로 확인.
