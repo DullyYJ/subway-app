@@ -63,10 +63,27 @@ const SECRET = 'AbCd1234SecretKeyZ';          // 시험용 가짜 키
   await t('debug: 켜면 상태코드·본문 앞부분·키 모양을 내고 키 값은 어디에도 없다', async () => {
     calls = []; handler = (u) => u.includes('/sample/') ? new Response(ok200, { status: 200 }) : new Response('Bad Request ' + SECRET + ' ' + encodeURIComponent(SECRET), { status: 400 });
     const r = await call('path=' + encodeURIComponent(P()) + '&debug=1', { SEOUL_API_KEY: SECRET, SEOUL_DEBUG: '1' });
-    const j = JSON.parse(r.text); assert.strictEqual(r.status, 200); assert.ok(j.probes.length >= 4);
-    assert.ok(j.probes.some((p) => p.label === 'sample-key-https' && p.status === 200)); assert.ok(j.probes.some((p) => p.label === 'std-https' && p.status === 400));
+    const j = JSON.parse(r.text); assert.strictEqual(r.status, 200); assert.ok(j.probes.length >= 10, 'probes=' + j.probes.length);
+    assert.ok(j.probes.some((p) => p.label === 'sample-https' && p.status === 200)); assert.ok(j.probes.some((p) => p.label === 'std-https' && p.status === 400));
+    assert.ok(j.probes.some((p) => p.group === 'control') && j.probes.some((p) => p.group === 'seoul-other'));
+    assert.ok(typeof j.hint === 'string' && j.hint.length > 0);
     assert.strictEqual(j.firstKeyShape.len, SECRET.length);
     assert.strictEqual(r.text.includes(SECRET), false, '키 값이 응답에 있음'); assert.ok(r.text.includes('***'));
+  });
+
+  const freshMod = async () => { const f = path.join(os.tmpdir(), 'gentle-lab-seoul-test-' + process.pid + '-' + Math.random().toString(36).slice(2) + '.mjs'); fs.writeFileSync(f, fs.readFileSync(path.join(__dirname, '..', 'index.js'), 'utf8')); const m = await import(f); fs.unlinkSync(f); return m.default; };
+  const dbg = async (Wf, env) => { const r = await Wf.fetch(new Request('https://x.test/seoul?path=' + encodeURIComponent('realtimeStationArrival/0/1/서울') + '&debug=1'), env); return JSON.parse(await r.text()); };
+  await t('debug 요약: swopenapi 로 가는 모든 방식이 본문 없는 400 이고 대조군은 정상이면 "swopenapi 쪽이 거절" 로 요약한다', async () => {
+    const Wf = await freshMod();
+    handler = (u) => /swopenapi\.seoul\.go\.kr\/api\/subway/.test(u) ? new Response('', { status: 400 }) : new Response('<html>ok</html>', { status: 200 });
+    const j = await dbg(Wf, { SEOUL_API_KEY: SECRET, SEOUL_DEBUG: '1' });
+    assert.ok(/swopenapi 쪽이/.test(j.hint), j.hint); assert.strictEqual(JSON.stringify(j).includes(SECRET), false);
+  });
+  await t('debug 요약: 어느 한 방식(예: 브라우저 헤더)이 통하면 그 방식을 알려준다', async () => {
+    const Wf = await freshMod();
+    handler = (u, init) => (/swopenapi\.seoul\.go\.kr\/api\/subway/.test(u) && !(init && init.headers && init.headers.Referer)) ? new Response('', { status: 400 }) : new Response(ok200, { status: 200 });
+    const j = await dbg(Wf, { SEOUL_API_KEY: SECRET, SEOUL_DEBUG: '1' });
+    assert.ok(/sample-browser-headers/.test(j.hint) && /통함/.test(j.hint), j.hint);
   });
   await t('debug: 20초 안에 다시 부르면 429', async () => {
     const r = await call('path=' + encodeURIComponent(P()) + '&debug=1', { SEOUL_API_KEY: SECRET, SEOUL_DEBUG: '1' });

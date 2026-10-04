@@ -710,34 +710,64 @@ function seoulKeyShape(k) {
     needsEncoding: encodeURIComponent(s) !== s
   };
 }
-async function seoulProbe(label, url, init, keys) {
+async function seoulProbe(label, url, init, keys, group) {
   const t0 = Date.now();
   try {
     const r = await fetch(url, init);
     const txt = await r.text();
+    const names = []; r.headers.forEach((_v, k) => names.push(k));          // 헤더 이름만(값은 내지 않는다)
     return {
-      label, status: r.status, ms: Date.now() - t0,
+      label, group: group || 'seoul', status: r.status, statusText: r.statusText || '', ms: Date.now() - t0,
+      redirected: !!r.redirected, finalUrl: seoulRedact(r.url || '', keys).slice(0, 120),
       contentType: r.headers.get('content-type') || '', server: r.headers.get('server') || '',
-      bodyLen: txt.length, head: seoulRedact(txt.slice(0, 300), keys)
+      headerNames: names.slice(0, 20), bodyLen: txt.length, head: seoulRedact(txt.slice(0, 300), keys)
     };
   } catch (e) {
-    return { label, error: seoulRedact(String((e && e.message) || e).slice(0, 160), keys) };
+    return { label, group: group || 'seoul', error: seoulRedact(String((e && e.message) || e).slice(0, 160), keys) };
   }
+}
+// 진단 결과를 사람이 바로 읽을 수 있게 한 줄로 요약한다(어디까지 확인됐는지 단정하지 않는다)
+function seoulHint(probes) {
+  const sw = probes.filter((p) => p.group === 'swopenapi');
+  const ctl = probes.filter((p) => p.group === 'control');
+  const okOf = (p) => p && !p.error && p.status >= 200 && p.status < 400;
+  const swOk = sw.filter(okOf);
+  const ctlOk = ctl.filter(okOf);
+  const allEmpty400 = sw.length > 0 && sw.every((p) => !p.error && p.status === 400 && p.bodyLen === 0);
+  if (swOk.length) return 'swopenapi 일부 방식이 통함: ' + swOk.map((p) => p.label).join(', ') + ' → 그 방식을 기본으로 쓰도록 바꾸면 됨';
+  if (allEmpty400 && ctlOk.length) return 'swopenapi 로 가는 모든 방식(헤더·http·ASCII 경로·sample 키 포함)이 본문 없는 400, 다른 사이트는 정상 → swopenapi 쪽이 이 Worker 의 요청(출구 IP/지역)을 거절하는 것으로 보임. 코드로는 못 고침';
+  if (allEmpty400 && !ctlOk.length) return '모든 외부 요청이 실패 → 이 Worker 의 외부 접속 자체 문제';
+  return '결과가 섞여 있음 — probes 를 직접 확인';
 }
 async function seoulDebug(path, keys) {
   if (Date.now() - _seoulDebugAt < 20000) return jsonRes({ ok: false, error: 'wait 20s between debug calls' }, 429);
   _seoulDebugAt = Date.now();
   const k = keys[0];
   const std = { headers: { Accept: 'application/json', 'User-Agent': 'gildongmu/1.0' } };
+  const browserLike = { headers: {
+    'User-Agent': 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36',
+    Accept: 'application/json, text/plain, */*', 'Accept-Language': 'ko-KR,ko;q=0.9', Referer: 'https://data.seoul.go.kr/' } };
+  const SW = 'swopenapi';
   const probes = [];
-  probes.push(await seoulProbe('std-https', SEOUL_BASE + '/' + encodeURIComponent(k) + '/json/' + path, std, keys));
-  probes.push(await seoulProbe('plain-https', SEOUL_BASE + '/' + encodeURIComponent(k) + '/json/' + path, undefined, keys));
-  probes.push(await seoulProbe('plain-http', SEOUL_BASE.replace(/^https:/, 'http:') + '/' + encodeURIComponent(k) + '/json/' + path, undefined, keys));
-  if (encodeURIComponent(k) !== k) probes.push(await seoulProbe('raw-key-https', SEOUL_BASE + '/' + k + '/json/' + path, undefined, keys));
-  // 공개 sample 키로 같은 서비스를 불러 '업스트림 자체'가 이 서버에서 닿는지 가른다(sample 키는 공개 문서 값)
-  probes.push(await seoulProbe('sample-key-https', SEOUL_BASE + '/sample/json/realtimeStationArrival/0/5/' + '서울', undefined, keys));
+  // ── 이 Worker 가 쓰는 방식 그대로 ──
+  probes.push(await seoulProbe('std-https', SEOUL_BASE + '/' + encodeURIComponent(k) + '/json/' + path, std, keys, SW));
+  probes.push(await seoulProbe('plain-https', SEOUL_BASE + '/' + encodeURIComponent(k) + '/json/' + path, undefined, keys, SW));
+  probes.push(await seoulProbe('plain-http', SEOUL_BASE.replace(/^https:/, 'http:') + '/' + encodeURIComponent(k) + '/json/' + path, undefined, keys, SW));
+  if (encodeURIComponent(k) !== k) probes.push(await seoulProbe('raw-key-https', SEOUL_BASE + '/' + k + '/json/' + path, undefined, keys, SW));
+  // ── 공개 sample 키(키 문제를 배제) × 요청 모양 ──
+  probes.push(await seoulProbe('sample-https', SEOUL_BASE + '/sample/json/realtimeStationArrival/0/5/' + '서울', undefined, keys, SW));
+  probes.push(await seoulProbe('sample-http', SEOUL_BASE.replace(/^https:/, 'http:') + '/sample/json/realtimeStationArrival/0/5/' + '서울', undefined, keys, SW));
+  probes.push(await seoulProbe('sample-ascii-path', SEOUL_BASE + '/sample/json/realtimeStationArrival/0/5/%EC%84%9C%EC%9A%B8', undefined, keys, SW));
+  probes.push(await seoulProbe('sample-browser-headers', SEOUL_BASE + '/sample/json/realtimeStationArrival/0/5/%EC%84%9C%EC%9A%B8', browserLike, keys, SW));
+  // ── 다른 서울시 호스트(서울 도메인 전체가 막힌 건지) ──
+  probes.push(await seoulProbe('swopenapi-root', SEOUL_BASE.replace(/\/api\/subway$/, '/'), undefined, keys, 'seoul-other'));
+  probes.push(await seoulProbe('seoul-8088-http', 'http://openapi.seoul.go.kr:8088/sample/json/CardSubwayStatsNew/1/5/20220301/', undefined, keys, 'seoul-other'));
+  probes.push(await seoulProbe('seoul-data-portal', 'https://data.seoul.go.kr/', undefined, keys, 'seoul-other'));
+  // ── 대조군(이 Worker 가 외부로 나가긴 하는지) ──
+  probes.push(await seoulProbe('control-apis-data-go-kr', 'https://apis.data.go.kr/', undefined, keys, 'control'));
+  probes.push(await seoulProbe('control-example', 'https://example.com/', undefined, keys, 'control'));
   return jsonRes({
-    ok: true, debug: true, path,
+    ok: true, debug: true, path, hint: seoulHint(probes),
     keyCount: keys.length, firstKeyShape: seoulKeyShape(k),
     variantInUse: SEOUL_VARIANTS[_seoulVariant].id, stats: seoulStats,
     probes
