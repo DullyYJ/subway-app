@@ -1385,10 +1385,11 @@ header h1 em{color:var(--gold);font-style:normal;}
   50%    { transform:translateX(-50%) scale(1.25); opacity:.75; }
 }
 .htl-wait-badge{
-  position:absolute; top:-24px; transform:translateX(-50%);
-  background:#ff9f0a; color:#fff; font-size:10px; font-weight:800;
-  padding:3px 8px; border-radius:20px; white-space:nowrap; pointer-events:none;
-  box-shadow:0 2px 6px rgba(255,159,10,.35); z-index:11;
+  /* 2026-10-04: 역 이름 줄(30px)과 겹쳐 카드 위쪽이 잘려 보였다 → 노선 줄(18px) 높이 안에 들어가게 작게 */
+  position:absolute; top:-18px; transform:translateX(-50%);
+  background:#ff9f0a; color:#fff; font-size:9px; font-weight:800; line-height:12px; height:12px;
+  padding:0 7px; border-radius:20px; white-space:nowrap; pointer-events:none; box-sizing:content-box;
+  box-shadow:0 1px 4px rgba(255,159,10,.35); z-index:12;
 }
 @keyframes htl-gps-ring{ 0%{transform:translateX(-50%) scale(.5);opacity:.85;} 100%{transform:translateX(-50%) scale(2.4);opacity:0;} }
 .htl-gps-ring{animation:htl-gps-ring 1.4s ease-out infinite;}
@@ -6752,6 +6753,9 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
     return t;
   });
   window._htlWaitMin=_ttWaitTotal;
+  // 2026-10-04: 화면에 보이는 타임라인(탐색 시각 → 도착 시각)의 총 소요. 카드 숫자·승차/대기/도보 합이 모두 이 값을 따른다.
+  //   엔진의 totalTime 은 앱이 얹는 지하철 시각표 대기(_ttShiftMs)·구간 사이 틈을 몰라 타임라인보다 짧게 나왔다(69분 vs 72분).
+  try{ window._htlTlTotalMin = (cumMs - _base0) / 60000; }catch(eTl){ window._htlTlTotalMin = null; }
   window._htlBoardArriveMin=_boardArriveMin;
   if(typeof _htlTagoWarm==='function') setTimeout(function(){ _htlTagoWarm(segs); }, 300);
   var gIdx=0;
@@ -7099,6 +7103,7 @@ function _renderTransitResultCard(data, start, dest, cacheSource) {
   var summary  = route.summary || {};
   var sections = route.sections || [];
   var totalMin = Math.round((summary.duration || 0) / 60);
+  window._htlTlTotalMin = null;
   window._homeRouteBaseMin = totalMin;  // AI 승무원 예상시간 기준값 (S.route 없는 복합경로 대비)
 
   // 카드 표시
@@ -7113,7 +7118,7 @@ function _renderTransitResultCard(data, start, dest, cacheSource) {
     var dName = _ltEsc(((dest||{}).name||'').replace(/역$/,''));
     header.innerHTML =
       '<span id="transitResultMinNum" style="font-size:28px;font-weight:900;color:var(--text);line-height:1;">' + totalMin + '</span>'
-      + '<span style="font-size:14px;color:var(--sub);margin-right:8px;">분</span>'
+      + '<span id="transitResultMinUnit" style="font-size:14px;color:var(--sub);margin-right:8px;">분</span>'
       + '<span style="font-size:12px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;">'
       + sName + ' → ' + dName
       + '</span>';
@@ -7130,6 +7135,17 @@ function _renderTransitResultCard(data, start, dest, cacheSource) {
 
   // 복합경로 가로 타임라인 렌더
   _renderHtlTrack(sections, start, dest, totalMin);
+  // 2026-10-04: 엔진 총 소요와 화면 타임라인(앱이 얹은 시각표 대기 포함)이 어긋나면 사용자가 보는 타임라인을 기준으로 맞춘다.
+  try{
+    var _tl = window._htlTlTotalMin;
+    if(route.why!==undefined && _tl!=null && isFinite(_tl) && _tl>0 && Math.abs(_tl-totalMin)<=15 && Math.round(_tl)!==totalMin){
+      totalMin = Math.round(_tl);
+      window._homeRouteBaseMin = totalMin;
+      var _ne = document.getElementById('transitResultMinNum'); if(_ne) _ne.textContent = totalMin;
+    }
+    window._routeTotalMin = totalMin;
+    _renderSplitRow(route);
+  }catch(eTot){}
 
   // ★ 2026-09-25 (KTX/ITX 등급선택): 장거리 경로(route.ld)일 때만 등급·수단 칩을 그린다.
   try{ if(typeof _renderLdGradeChips==='function') _renderLdGradeChips(route.ld || null); }catch(e){}
@@ -10593,7 +10609,11 @@ function _routeTimeSplit(sections, totalMin){
     // ★ 2026-10-03: 항목별로 따로 반올림하면 합이 카드의 총 소요(36분)와 어긋난다(26+4+8=38).
     //   totalMin 이 주어지고 차이가 3분 이내면 비율로 맞춘 뒤, 합이 정확히 그 값이 되도록 반올림한다(최대잔여법).
     var parts=[ride,wait,walk], sum=ride+wait+walk, target=Math.round(sum);
-    if(totalMin>0 && sum>0 && Math.abs(totalMin-sum)<=3){
+    // 2026-10-04: 구간 합(65분)이 카드 총 소요(69분)보다 작으면 모자란 만큼은 구간 사이에서 기다린 시간이다 → '대기'에 더한다.
+    //   (예전엔 3분 이내일 때만 비율로 맞추고, 그 이상이면 합이 총 소요와 어긋난 채 표시됐다)
+    if(totalMin>0 && sum>0 && totalMin-sum>0.5 && totalMin-sum<=15){
+      wait+=totalMin-sum; parts=[ride,wait,walk]; sum=totalMin; target=totalMin;
+    } else if(totalMin>0 && sum>0 && Math.abs(totalMin-sum)<=3){
       var k=totalMin/sum; parts=parts.map(function(v){ return v*k; }); target=totalMin;
     }
     var fl=parts.map(function(v){ return Math.floor(v); });
@@ -10724,11 +10744,14 @@ window._xferTipFor=_xferTipFor; window._exitTipFor=_exitTipFor; window._register
 function _renderSplitRow(route){
   var el=document.getElementById('transitSplitRow');
   if(!el) return;
-  var sp=(route && route.why!==undefined) ? _routeTimeSplit((route&&route.sections)||[], Math.round(((route&&route.summary&&route.summary.duration)||0)/60)) : null;   // 엔진 경로만(노선도·BFS 미리보기는 대기 정보가 없음)
+  var _tot=Math.round(((route&&route.summary&&route.summary.duration)||0)/60);
+  try{ var _tl=window._htlTlTotalMin; if(_tl!=null && isFinite(_tl) && _tl>0 && Math.abs(_tl-_tot)<=15) _tot=Math.round(_tl); }catch(eT){}
+  var sp=(route && route.why!==undefined) ? _routeTimeSplit((route&&route.sections)||[], _tot) : null;   // 엔진 경로만(노선도·BFS 미리보기는 대기 정보가 없음)
   window._routeSplitNow=sp;
   var why=(route&&route.why)||'';
   var h='';
-  if(sp) h+='<div><b style="color:var(--text);">'+_ltEsc(_routeSplitText(sp))+'</b></div>';
+  // 2026-10-04: '전체 N분'을 앞에 붙여, 이동 중 헤더의 '남은 시간'과 이 줄(처음 계획 전체의 분리)이 다른 숫자임을 분명히 한다.
+  if(sp) h+='<div><b style="color:var(--text);">'+_ltEsc('전체 '+(sp.ride+sp.wait+sp.walk)+'분 · '+_routeSplitText(sp))+'</b></div>';
   if(why) h+='<div>'+_ltEsc(why)+'</div>';
   _doorTipLines((route&&route.sections)||[]).forEach(function(t){ h+='<div>'+_ltEsc(t)+'</div>'; });
   _registerDoorTips((route&&route.sections)||[]);
@@ -14104,6 +14127,14 @@ function _updateRouteRemaining(){
   if(rem == null) return;
   var numEl = document.getElementById('transitResultMinNum');
   if(numEl) numEl.textContent = rem;
+  // 2026-10-04: 이동 중 헤더 숫자는 '남은 시간'이다. 승차/대기 줄(전체 계획)과 헷갈리지 않게 단위를 바꾼다.
+  try{
+    var _ue = document.getElementById('transitResultMinUnit');
+    if(_ue){
+      var _under = !!((window._rideEv && window._rideEv().riding) || (typeof S!=='undefined' && S && S.boardedAt) || (window._gpsMaxIdx != null && window._gpsMaxIdx > 0));
+      _ue.textContent = _under ? '분 남음' : '분';
+    }
+  }catch(eU){}
   // ★ 2026-08-31: 남은 '분'이 같아도 도착 '시각'은 바뀔 수 있다.
   //   예전엔 rem 이 달라졌을 때만 갱신해서, 경로 시각이 이동해도
   //   AI 승무원 카드에는 이전 도착시각이 그대로 남아 있었다.
@@ -46691,6 +46722,7 @@ function _pfTick(){
     _pf.lastBestK = b.idx;
     window._pfBest = { idx: b.idx, td: _pf.st[b.idx] ? _pf.st[b.idx]._td : -1, conf: b.conf, kind: b.kind, delayS: b.delayS, at: now };
     if(_pfLive()) _pfApplyLive(b, now);
+    try{ _pfOverdueShift(now); }catch(eO){}
   }catch(e){}
 }
 window._pfTick = _pfTick;
@@ -46889,6 +46921,41 @@ function _pfApplyLive(b, now){
     }
   }catch(e){}
 }
+
+// ── 역 사이 지연 반영 (2026-10-04) ──
+//   PF 가 역을 채택하는 순간에만 시각을 맞추면, 열차가 늦을 때 다음 역 예정 시각이 지나도 '남은 시간'이 0분으로 굳는다.
+//   '다음 역에 닿았다는 증거가 없는데 예정 시각 + 60초가 지났다'는 것은 그만큼 늦는다는 증거다.
+//   → 다음 역을 '지금 + 30초'로 미루고 그 뒤 모든 시각을 같은 만큼 민다(앞당기지는 않는다. 당김은 PF 채택·_htlSanityCheck 몫).
+function _pfOverdueShift(now){
+  if(window._routeLocked !== true || window._metroRouteMode === true) return;
+  if(typeof _baseTimeMs !== 'undefined' && _baseTimeMs != null) return;
+  if(!(window._rideEv && window._rideEv().riding)) return;
+  var A = _pf.A; if(!A || A.sig !== _pf.sig || A.td == null || A.td < 0) return;
+  var nd = _transitNodeData; if(!nd || !nd.length) return;
+  var ni = -1;
+  for(var j = A.td + 1; j < nd.length; j++){ if(nd[j] && nd[j]._schedMin != null && !nd[j].isWalk){ ni = j; break; } }
+  if(ni < 0) return;
+  var b = window._pfBest;   // PF 가 이미 그 역 이후라고 보면 채택(_pfApplyLive)이 맡는다
+  if(b && now - b.at < 20000 && b.td >= ni && b.conf >= 0.5) return;
+  if(now - (window._pfOverdueAt || 0) < 20000) return;
+  var over = _msToMinOfDay(now) - nd[ni]._schedMin;
+  if(over < -720) over += 1440; if(over > 720) over -= 1440;
+  if(over * 60 < 60) return;
+  var add = Math.min(15, over + 0.5);
+  window._pfOverdueAt = now;
+  for(var i = ni; i < nd.length; i++){
+    var n = nd[i]; if(!n || n._schedMin == null) continue;
+    n._schedMin += add;
+    var t = ((n._schedMin % 1440) + 1440) % 1440, h = Math.floor(t / 60), m = Math.round(t % 60);
+    if(m >= 60){ m -= 60; h = (h + 1) % 24; }
+    n.arrTime = ('0' + h).slice(-2) + ':' + ('0' + m).slice(-2);
+    if(n.el){ var lb = n.el.querySelector('.htl-time-lbl'); if(lb) lb.textContent = n.arrTime; }
+  }
+  window._markerMaxProg = null;
+  try{ _ovlDiag('지연반영', nd[ni].name + ' 예정 ' + Math.round(over * 60) + '초 지났는데 도착 증거 없음 → 이후 시각 +' + Math.round(add * 60) + '초'); }catch(e1){}
+  try{ if(typeof _aiArrivalSync === 'function') _aiArrivalSync(); }catch(e2){}
+}
+window._pfOverdueShift = _pfOverdueShift;
 
 // ═══ 정답 기록 — 테스트 탑승용 ═══
 //  켜면 화면 아래에 '멈췄어요 / 출발했어요' 버튼이 뜬다. 열차가 실제로 서거나 출발하는 순간 눌러 주면
