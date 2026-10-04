@@ -41998,6 +41998,12 @@ function _offGet(cb){
 }
 function _offAgo(ts){ var m=Math.max(0,Math.round((Date.now()-ts)/60000)); return m<1?'방금':(m<60?m+'분 전':Math.round(m/60)+'시간 전'); }
 function _offText(l, n){
+  // ★ 2026-10-04: 엔진이 estimated:true 로 보낸 건 공식 공지가 아니라 도착 간격으로 짐작한 것 — 공식 공지와 다르게 표시한다
+  if(n && n.estimated){
+    return n.suspect
+      ? '⚠️ <b>'+_ltEsc(l)+' 지연 의심 (도착 간격 기준 추정)</b> · '+_ltEsc(String(n.text||'').replace(/\s+/g,' ').trim())+' <span style="color:var(--sub);">('+_offAgo(n.ts)+' · 공식 공지 아님)</span>'
+      : '🟢 <b>'+_ltEsc(l)+' 정상 운행 중으로 보여요 (도착 간격 기준)</b> <span style="color:var(--sub);">('+_offAgo(n.ts)+')</span>';
+  }
   // 본문이 이미 노선명으로 시작하면 앞에 또 붙이지 않고('2호선 — 2호선 …'), 너무 길면 줄인다.
   var t=String(n.text||n.title||'').replace(/\s+/g,' ').trim();
   if(t.length>110) t=t.slice(0,108).replace(/\s+\S*$/,'')+'…';
@@ -42010,6 +42016,12 @@ function _lrRenderOfficial(line){
     var n=j && j.lines && j.lines[line];
     if(line!==_lr.line || !j){ el.style.display='none'; el.innerHTML=''; return; }
     var _ALERT='rgba(10,132,255,.12)', _ALERT_B='rgba(10,132,255,.35)', _QUIET='rgba(142,142,147,.10)', _QUIET_B='rgba(142,142,147,.28)';
+    if(n && n.estimated){
+      // 추정(공식 아님): 지연 의심은 주황, 해제('정상 운행 중으로 보여요')는 회색
+      if(n.suspect){ el.style.background='rgba(255,159,10,.14)'; el.style.borderColor='rgba(255,159,10,.4)'; }
+      else { el.style.background=_QUIET; el.style.borderColor=_QUIET_B; }
+      el.innerHTML=_offText(line,n); el.style.display='block'; return;
+    }
     if(n){ el.style.background=_ALERT; el.style.borderColor=_ALERT_B; el.innerHTML=_offText(line,n); el.style.display='block'; return; }
     // ★ 2026-10-03: 공지가 없을 때도 '확인했다'는 표시를 남겨서, 연동이 안 된 건지 정말 없는 건지 구분되게 한다.
     //   공식 공지(서울교통공사 지하철 알림정보)는 1~8호선만 있다. 다른 철도 노선은 연동 전이라고 알린다. 버스 방은 표시하지 않는다.
@@ -42037,7 +42049,7 @@ function _routeOfficialRow(route){
     var lines=[]; (route.sections||[]).forEach(function(sc){ var nm=(sc.transportation||{}).name; if((sc.transportation||{}).type===1 && nm && lines.indexOf(nm)<0) lines.push(nm); });
     if(!lines.length){ el.style.display='none'; return; }
     _offGet(function(j){
-      var parts=[]; lines.forEach(function(l){ var n=j && j.lines && j.lines[l]; if(n) parts.push(_offText(l,n)); });
+      var parts=[]; lines.forEach(function(l){ var n=j && j.lines && j.lines[l]; if(n && !(n.estimated && !n.suspect)) parts.push(_offText(l,n)); });
       if(!parts.length){ el.style.display='none'; el.innerHTML=''; return; }
       el.innerHTML=parts.join('<br>'); el.style.display='block';
     });
