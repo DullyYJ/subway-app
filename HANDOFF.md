@@ -8,15 +8,23 @@
 | `DullyYJ/subway-app` | 앱. 화면은 `www/index.html`, 개인정보처리방침 `www/privacy.html` | Actions `Build APK`(build-apk.yml): **main push 때만 자동**. 다른 브랜치는 수동 실행(workflow_dispatch). 결과는 아티팩트 `subway-app-debug` |
 | `DullyYJ/route-v2` | 경로 엔진 `route-v2-worker.js` + 실시간소통/게시판 서버 `board-writer/index.js` (별도 워커) | 엔진: main push 시 Cloudflare Workers Builds가 자동 배포(YJ 확인). GitHub Actions 없음. `board-writer`는 엔진과 **따로 배포**해야 한다(main/PR 병합만으로 배포되지 않음) |
 
-- 엔진 `ENGINE_VERSION` = `route-v2-2026-10-04bu` (루트 URL 응답의 `version`으로 배포 여부 확인) · 읽기 전용 상태 확인 `GET /est-status`
+- 엔진 `ENGINE_VERSION` = `route-v2-2026-10-04bv` (루트 URL 응답의 `version`으로 배포 여부 확인) · 읽기 전용 상태 확인 `GET /est-status`
 - 앱 서버 주소: 엔진 `route-v2.phg0643.workers.dev`, 게시판/대화 `board-writer.phg0643.workers.dev`, 버스·기타 `gentle-lab-7e47subway-api.phg0643.workers.dev`
 - PR: [subway-app#1](https://github.com/DullyYJ/subway-app/pull/1) 병합 완료(`18ef908`). [route-v2#1](https://github.com/DullyYJ/route-v2/pull/1)(board-writer 코드, 브랜치 `claude/jolly-darwin-dtzab9`)은 draft로 열려 있고 main에는 **아직 안 들어갔다** — 병합해도 board-writer는 배포되지 않는다
 - main push·board-writer 배포·Cloudflare 접속은 YJ가 허용했다("전부 허용"). 하지만 아래 두 가지는 허용만으로 안 열리고 YJ가 설정을 바꿔야 한다(3·4번 참고)
 
 ## 2. 이번에 바꾼 것
+**진단 결과와 후속 (2026-10-04 밤, main 직접 push)**
+- **YJ가 `SEOUL_DEBUG=1`로 얻은 결과**: 키 32자(영문 5+숫자 27, 16진수 모양), `variantInUse: std`, probe 4개(std-https·plain-https·plain-http·sample-key-https) **모두 status 400, 0~1ms, content-type/server 없음, 본문 0바이트**. 공개 `sample` 키·http도 같음
+- **코드로 배제된 것**: 키 값/인코딩(sample 키도 실패), 요청 헤더·`cf` 옵션(plain 3개는 `fetch(url)`에 옵션 자체가 없음), https/http(둘 다 실패), 전역 fetch 바꿔치기(없음), Worker의 외부 호출 일반 문제(같은 Worker의 `/tago`→apis.data.go.kr은 동작). 이 저장소에 swopenapi 차단 기록은 없지만 `wrangler.toml` 주석에 '구글 뉴스가 워커 IP를 503으로 막는다(2026-08-25)'가 있어 이 Worker의 나가는 IP가 막힌 전례는 있다
+- **남은 가장 유력한 원인 = 서울(swopenapi) 쪽이 Cloudflare 출구(IP/지역)의 요청을 거절**. 근거: 0~1ms에 헤더 없는 400은 방화벽/WAF가 돌려주는 거절 모양과 같다. **그러나 이 환경에서 호출할 수 없어 단정은 못 한다** — 요청 모양(한글 경로 등)·서울 도메인 전체 차단 같은 후보가 남아 있다. 이 원인이 맞다면 **Worker 코드로는 고칠 수 없다**
+- subway-app `2c26859` — 진단 확장(`/seoul?…&debug=1`, `SEOUL_DEBUG=1`일 때만): probe 12개 = 사용 방식(std/plain/http/raw-key) + 공개 sample 키 × {한글 경로, http, ASCII 경로, **브라우저 헤더**} + `swopenapi` 루트 + `openapi.seoul.go.kr:8088` + `data.seoul.go.kr` + 대조군(`apis.data.go.kr`, `example.com`). 각 probe에 헤더 이름·statusText·redirected·최종 URL(키 마스킹)을 싣고, 맨 위 `hint` 한 줄로 요약(어느 방식이 통함 / '모두 본문 없는 400인데 대조군은 정상 → swopenapi 쪽이 거절' / '모든 외부 요청 실패'). 시험 13건. **Deploy 필요**
+- route-v2 `4d922cb`(엔진 04bv) — 중계가 서울 거절을 JSON(`upstream`)으로 알리거나 본문 없는 4xx를 주면 `hold: upstream-4xx / http-4xx`로 기록하고 **10분 쉰다**(막힌 동안 5개 노선이 2분마다 두드려 호출 상한만 쓰는 것 방지). 정상 표시는 하지 않는다. 시험 69건
+- **다음 단계(YJ)**: ① 이 main의 `worker/index.js`를 Deploy하고 `debug=1`을 다시 호출 → 응답의 `hint`와 `probes`(특히 `sample-ascii-path`, `sample-browser-headers`, `seoul-8088-http`, `seoul-data-portal`, `control-*`)를 알려 주면 확정한다. ② `hint`가 '일부 방식이 통함'이면 그 방식을 기본으로 바꾸는 한 줄 수정으로 끝난다. ③ `hint`가 'swopenapi 쪽이 거절'이면 선택지: (a) **한국 IP에서 나가는 중계**(예: AWS 서울 Lambda/클라우드 소형 서버)를 두고 gentle-lab이 그쪽으로 넘기기 — 인프라·키 위치 결정 필요 (b) 서울시 데이터 담당에 Cloudflare 출구 허용 문의 (c) 앱(사용자 폰=한국 IP)에서 직접 호출 — 키가 앱에 들어가야 해서 '앱에 새 키 금지'·'엔진이 호출' 원칙과 충돌, 권하지 않음. 원인이 이것이면 앱의 평소 도착정보도 같은 이유로 계속 실패하는 중이었을 가능성이 크다
+
 **최신 묶음 (2026-10-04 후반, main 직접 push)**
 - subway-app `2a594a9` — **gentle-lab `/seoul` 중계의 '본문 없는 HTTP 400' 대응** (`worker/index.js`, 시험 `worker/test/seoul_relay.test.js` 11건). **배포는 대시보드 Deploy가 필요하다(자동 배포 꺼져 있음) — 아직 배포 안 됨**
-  - 원인 추정(코드 근거): 업스트림(서울)이 본문 없는 4xx를 주면 예전 `seoulUpstream`이 빈 본문 그대로 `status 400`으로 넘겨서 앱·엔진이 '본문 없는 400'을 봤다(`path not allowed` 등 자체 거절은 JSON 본문이 있어 아님). **왜 서울이 400을 주는지는 이 환경에서 호출할 수 없어 단정하지 못했다** — 후보: 시크릿 값에 따옴표·줄바꿈이 섞임, 요청 헤더(Accept/UA), https 스킴. 그래서 아래 ①~③을 넣었다
+  - 원인 추정(코드 근거): 업스트림(서울)이 본문 없는 4xx를 주면 예전 `seoulUpstream`이 빈 본문 그대로 `status 400`으로 넘겨서 앱·엔진이 '본문 없는 400'을 봤다(`path not allowed` 등 자체 거절은 JSON 본문이 있어 아님). **왜 서울이 400을 주는지는 이 환경에서 호출할 수 없어 단정하지 못했다** — 후보: 시크릿 값에 따옴표·줄바꿈이 섞임, 요청 헤더(Accept/UA), https 스킴. 그래서 아래 ①~③을 넣었다  → **위 '진단 결과와 후속'이 최신 판단**
   - ① 본문 없는 4xx면 방식을 바꿔 재시도: `std`(https+Accept/UA) → `plain`(https, 헤더 없음) → `http`. 통한 방식은 isolate 메모리에 기억. ② 끝내 안 되면 본문 있는 JSON `{ok:false,error:'upstream 400 (empty body)',upstream:400}`을 돌려주고 같은 경로는 30초 쉰다. ③ `SEOUL_API_KEY` 앞뒤의 따옴표·공백·제어문자 제거
   - **진단**: 대시보드에서 일반 변수 `SEOUL_DEBUG=1`을 켠 동안만 `GET /seoul?path=realtimeStationArrival/0/1/%EC%84%9C%EC%9A%B8&debug=1`이 열린다(20초에 1회, 끄면 403). 응답: 방식별 업스트림 상태코드·content-type·server·본문 앞 300자·키 모양(길이·영문/숫자/기타 개수)·공개 `sample` 키 호출 결과. **키 값은 어디에도 나오지 않고(본문에 섞여도 `***`로 가림) 시험이 이를 확인한다**. `sample-key-https`만 200이면 등록된 키 문제, 모두 400이면 서울/네트워크 쪽 문제. 확인이 끝나면 `SEOUL_DEBUG`를 지울 것
 - route-v2 `a4beb05`(엔진 04bu) — **시간표가 없는 4개 노선(신분당·공항철도·경의중앙·수인분당)도 판정**: 시간표 대신 **최근 관측 간격의 중앙값을 기준선**으로 쓴다
@@ -62,7 +70,7 @@
 
 ## 3. 확인 안 된 것
 - **엔진 04bu 자동 배포 결과·`/est-status`**: main push 후 Workers Builds 결과와 `/est-status` 응답을 이 환경에서 못 본다(Cloudflare·workers.dev 접속 차단 재확인). 루트 URL `version`이 `route-v2-2026-10-04bu`인지, `/est-status`에서 9호선 `source:timetable`, 나머지 `source:baseline`·`baseline.samples`가 늘어나는지 확인 필요. (이 PR 브랜치에서는 Workers Builds가 매번 0초 만에 실패했다 — main에서는 다를 수 있다)
-- **gentle-lab `/seoul` 400의 실제 원인은 미확인**: 위 ①~③은 원인을 모른 채 넣은 방어 + 진단이다. 대시보드 Deploy 후 `SEOUL_DEBUG=1`로 `debug=1` 호출 결과를 보면 원인이 나온다. 해결되기 전에는 엔진 `/est-status`의 9호선이 `hold:http-400`(또는 `fetch`)로 남고, **앱의 평소 도착정보도 같은 문제를 겪는 중**이다
+- **gentle-lab `/seoul` 400의 실제 원인은 미확정**: 진단 결과(전 probe 400, 0~1ms, 헤더 없음)로 키·헤더·스킴은 배제됐고 swopenapi 쪽 거절(출구 IP/지역)이 가장 유력하나 이 환경에서 확인 못 함. 확장 진단 Deploy 후 `hint` 확인 필요(위). 해결 전에는 엔진 `/est-status`의 9호선 등이 `hold:upstream-400`(중계 새 버전) 또는 `http-400`(옛 중계)로 남고, 앱의 평소 도착정보도 같은 문제일 수 있다
 - **서울 realtimePosition 실호출 미검증**: 네트워크가 막혀 실제 응답을 못 받았다. 필드명(`statnNm, trainNo, updnLine, recptnDt, lstcarAt`)은 공개 명세 기준이고 모의 데이터로만 시험했다. 배포 후 `/est-status`에서 9호선이 계속 `hold`(예: `unmapped`, `no-data`, `stale`, `fetch`)면 필드·역 이름 불일치부터 본다. BUSAPI 내부 호출 경로(`https://busapi.internal/seoul?path=…`)는 기존 `/tago` 패턴과 같지만 실호출은 못 해 봤다
 - **서울 인증키 일일 한도**: gentle-lab 주석 기준 키 1개 하루 1,000건. 지연 추정은 하루 상한(기본 400)에서 고르게 쓴다(위). 실제 키 한도가 다르면 `EST_DAILY_CAP`으로 조정
 - **배차간격 해석**: `tt`가 일반열차만의 간격인지 급행 포함인지 모른다. 9호선은 방향별 모든 열차를 함께 세므로(간격이 더 촘촘하게 나옴) 오탐 쪽이 아니라 누락 쪽으로 기운다 **기준선 방식의 한계**: 자연스럽게 들쭉날쭉한 노선(공항철도 직통·일반 혼합, 경의중앙·수인분당의 분기)은 최대 간격이 중앙값의 2배를 넘는 날이 있어 오탐이 날 수 있고, 노선 전체가 멈추면 간격이 고르므로 못 잡는다. 배포 후 `/est-status`의 `lastMaxGapSec`·`thresholdSec`와 실제 표시를 며칠 보고 조정할 것
