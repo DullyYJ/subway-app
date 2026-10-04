@@ -2615,6 +2615,36 @@ function _navBtnsHtml(lat, lng, name){
 }
 window._navBtnsHtml=_navBtnsHtml;
 
+// ★ 2026-10-04 (YJ: "맛집탭에서 카카오·네이버 누르면 길찾기 말고 해당 가게의 리뷰 및 설명이 보이게"):
+//   가게 이름(+역 이름)으로 각 지도 앱의 '검색 → 장소 상세(리뷰·설명)'를 연다. 길찾기는 아래 별도 버튼으로 그대로 둔다.
+function _placeInfo(kind, nameEnc, lat, lng, stnEnc){
+  var name='', stn='';
+  try{ name=decodeURIComponent(String(nameEnc||'')); }catch(e){ name=String(nameEnc||''); }
+  try{ stn=decodeURIComponent(String(stnEnc||'')); }catch(e2){ stn=String(stnEnc||''); }
+  if(!name){ if(typeof toast==='function') toast('가게 이름이 없어요'); return; }
+  var q=(stn ? (stn.replace(/역$/,'')+'역 ') : '')+name, qe=encodeURIComponent(q);
+  if(typeof toast==='function') toast((kind==='naver'?'네이버':'카카오')+' 지도에서 가게 정보를 여는 중...');
+  var appUrl, webUrl;
+  if(kind==='naver'){
+    appUrl='nmap://search?query='+qe+'&appname=com.dullyyj.subway';
+    webUrl='https://map.naver.com/p/search/'+qe;
+  } else {
+    appUrl='kakaomap://search?q='+qe+((lat!=null&&lng!=null&&!isNaN(parseFloat(lat))) ? ('&p='+lat+','+lng) : '');
+    webUrl='https://map.kakao.com/link/search/'+qe;
+  }
+  _navOpen(appUrl, webUrl);
+}
+window._placeInfo=_placeInfo;
+function _placeBtnsHtml(lat, lng, name, stn){
+  var enc=encodeURIComponent(String(name||'')).replace(/'/g,'%27');
+  var sEnc=encodeURIComponent(String(stn||'')).replace(/'/g,'%27');
+  return '<div class="food-map-navs">'
+    + '<button class="fmap-nav fmap-nav-n" onclick="_placeInfo(\'naver\','+'\''+enc+'\''+','+lat+','+lng+','+'\''+sEnc+'\''+')">네이버 리뷰·정보</button>'
+    + '<button class="fmap-nav fmap-nav-k" onclick="_placeInfo(\'kakao\','+'\''+enc+'\''+','+lat+','+lng+','+'\''+sEnc+'\''+')">카카오 리뷰·정보</button>'
+    + '</div>';
+}
+window._placeBtnsHtml=_placeBtnsHtml;
+
 // ── 인앱 지도(OSM/Leaflet) 길찾기: 식당 선택 시 카드 아래 지도 펼침(외부앱 실행 없음) ──
 function _foodMapCssInject(){
   if(document.getElementById('foodMapCss')) return;
@@ -2702,6 +2732,7 @@ function _foodShowMap(card, p){
     +'<span class="food-map-x" onclick="_foodCloseMap()">✕</span></div>'
     +'<div id="'+cid+'" class="food-map-canvas"></div>'
     +'<div class="food-map-foot">🚶 '+(stnNm?(_ltEsc(stnNm)+'역 → '):'')+_ltEsc(p.place_name)+' 도보 경로'
+    + _placeBtnsHtml(dLat, dLng, p.place_name, stnNm)
     + _navBtnsHtml(dLat, dLng, p.place_name)
     +'</div>';
   if(card.parentNode) card.parentNode.insertBefore(panel, card.nextSibling);
@@ -3977,8 +4008,9 @@ function _renderHomeConductorBrief(fromName, toName, hour, congPct, serverMsg){
         var _mm = (typeof mins==='number' && mins>0) ? mins : 0;
         var info = _metroNextTrainInfo(_mm);
         if(info && info.found && info.depMin!=null){
-          var dh=Math.floor((info.depMin%1440)/60), dmn=Math.round(info.depMin%60);
-          var ah=Math.floor((info.arrMin%1440)/60), amn=Math.round(info.arrMin%60);
+          var _dR=Math.round(info.depMin)%1440, _aR=Math.round(info.arrMin)%1440;   // 2026-10-04: 분 반올림으로 '13:60' 방지
+          var dh=Math.floor(_dR/60), dmn=_dR%60;
+          var ah=Math.floor(_aR/60), amn=_aR%60;
           var _depStr = pad(dh)+':'+pad(dmn), _arrStr = pad(ah)+':'+pad(amn);
           // ★ 위 경로 카드 타임라인에 실제 시각이 있으면 그쪽을 따른다(숫자 불일치 방지).
           var _tlT = (typeof _htlDepArrTimes === 'function') ? _htlDepArrTimes() : null;
@@ -7367,8 +7399,8 @@ function _applyRealBoardTime(opts){
       _transitNodeData.forEach(function(n2, i2){
         if(i2 < idx || n2._schedMin==null) return;
         n2._schedMin += wait;
-        var t=((n2._schedMin%1440)+1440)%1440;
-        var hh=('0'+Math.floor(t/60)).slice(-2), mm=('0'+Math.round(t%60)).slice(-2);
+        var t=Math.round(((n2._schedMin%1440)+1440)%1440)%1440;   // 2026-10-04: 분을 먼저 반올림해야 '13:60' 이 안 나온다
+        var hh=('0'+Math.floor(t/60)).slice(-2), mm=('0'+(t%60)).slice(-2);
         n2.arrTime = hh+':'+mm;
         // 라벨 갱신 실패가 나머지 노드 보정을 막지 않도록 방어
         try{ if(n2.el && n2.el.querySelector){ var lbl=n2.el.querySelector('.htl-time-lbl'); if(lbl) lbl.textContent=n2.arrTime; } }catch(e){}
@@ -7546,6 +7578,7 @@ function _htlResyncBoard(force){
     if(window._metroRouteMode === true) return;
     if(typeof _isManualStart==='function' && _isManualStart()) return;
     if(!_htlNotDeparted()) return;                                           // 이미 출발함
+    try{ if(window._rideEv && window._rideEv().riding) return; }catch(eRs){}   // 2026-10-04: 탑승 증거가 있으면 다음 열차로 밀지 않는다
     // ★ 승차역에 도착해 있었다면, 예정 출발시각 전후 _HTL_BOARD_HOLD_MIN 동안은
     //   다음 열차로 밀지 않는다. 지금 그 열차를 타고 있는 중일 수 있기 때문.
     //   (탑승 판정은 _htlBoardWatch가 곧 내린다 — 그 사이 시각표가 흔들리면 안 된다)
@@ -7667,6 +7700,7 @@ window._htlWaitStop = _htlWaitStop;
 // 대기 마커 배지 표시/숨김
 function _htlWaitBadge(show, txt){
   try{
+    try{ if(show && window._rideEv && window._rideEv().riding) show = false; }catch(eRw){}   // 2026-10-04: 탑승 중에는 '승차 대기' 주황 표시를 켜지 않는다
     var dot = window._htlGpsDot || document.getElementById('htl-gps-marker-dot');
     if(!dot) return;
     var b = document.getElementById('htlWaitBadge');
@@ -7830,20 +7864,38 @@ function _htlBoardWatch(){
     var _boardedByCell = (_pastDep != null && _pastDep >= _HTL_BOARD_GRACE_MIN
                           && _cellMv === true && (window._boardCellN || 0) >= 2);
 
-    if(_htlWait.arrived && (_movedAway || _boardedByTime || _boardedByCell)){
+    // ★ 2026-10-04: 복합 증거 갈래 — GPS 이동 + 기지국 변화 + PF 를 함께 본다.
+    //   (승차역에 '도착했던 기록'(_htlWait.arrived)이 없어도 인정: 이미 역에 있다가 탄 사람은 그 기록이 없다.
+    //    12:51 계양 승차를 못 잡아 시각표가 다음 열차로 밀리던 원인)
+    var _evRide = false, _evInfo = null;
+    try{
+      _evInfo = window._rideEv ? window._rideEv() : null; _evRide = !!(_evInfo && _evInfo.now);
+      // 승차역에 있었던 사람만 증거로 확정한다(버스·택시로 역에 가는 중의 이동을 열차로 오인 방지). 궤적이 아예 없으면(지하) 판단 불가로 통과.
+      if(_evRide && !_htlWait.arrived){
+        var _bn9 = _transitNodeData[_htlBoardIdx()];
+        var _nb9 = (_bn9 && window._evNearNode) ? window._evNearNode(_bn9, 600) : null;
+        if(_nb9 === false) _evRide = false;
+      }
+    }catch(eEv){}
+    if(_evRide || (_htlWait.arrived && (_movedAway || _boardedByTime || _boardedByCell))){
       var bi2 = _htlBoardIdx();
       if(bi2 >= 0){
         window._gpsMaxIdx = Math.max(window._gpsMaxIdx == null ? -1 : window._gpsMaxIdx, bi2);
         window._gpsConfirmIdx = Math.max(window._gpsConfirmIdx == null ? -1 : window._gpsConfirmIdx, bi2);
         window._nodePassMs = window._nodePassMs || {};
-        if(window._nodePassMs[bi2] == null) window._nodePassMs[bi2] = Date.now();
+        // 증거로 확정한 경우: 승차(출발) 시각을 '움직임이 시작된 때'로 잡아 시각표를 실제 탄 열차에 맞춘다(8분 어긋남 방지)
+        var _depMs = (_evRide && window._rideEvStartMs) ? window._rideEvStartMs : null;
+        if(_depMs && (window._nodePassMs[bi2] == null || _evRide)) window._nodePassMs[bi2] = _depMs;
+        else if(window._nodePassMs[bi2] == null) window._nodePassMs[bi2] = Date.now();
         console.log('[대기모드] 승차 확정 — '
           + (_movedAway ? ('승차역에서 ' + Math.round(d0) + 'm 이동')
              : _boardedByTime ? ('출발시각 ' + Math.round((_pastDep||0)*60) + '초 경과, 최신 위치 없음(지하 추정)')
              : ('기지국 ' + (window._boardCellN||0) + '회 변화 + 출발시각 경과(지하 추정)')));
-        window._boardWhy = _movedAway ? 'GPS' : (_boardedByTime ? '시각+위치없음' : '기지국');
+        window._boardWhy = _evRide ? ('복합증거 GPS' + _evInfo.gps + ' 기지국' + _evInfo.cell + ' PF' + _evInfo.pf) : (_movedAway ? 'GPS' : (_boardedByTime ? '시각+위치없음' : '기지국'));
+        try{ _ovlDiag('승차확정', window._boardWhy + ' | 계획출발 ' + (_pastDep == null ? '-' : Math.round(_pastDep * 60) + '초 경과') + ' 승차역거리 ' + (d0 == null ? '-' : Math.round(d0) + 'm')); }catch(eBw){}
       }
       window._htlBoarded = true;      // 이후 마커·시각 보정은 정상 진행 모드로
+      try{ if(_evRide && typeof _recalcArrivalsFrom === 'function' && bi2 >= 0) _recalcArrivalsFrom(bi2); }catch(eRc){}
       _htlWaitStop('승차 확정');
       return;
     }
@@ -8008,7 +8060,7 @@ function _buildTransitDetailNow() {
     var secMin = Math.round(secSec/60);
     var secDist= Math.round(sec.distance||0);
     var label  = isWalk
-      ? '도보 ' + (secDist>=1000?(secDist/1000).toFixed(1)+'km':secDist+'m')
+      ? ((typeof sec.distance === 'number' && secDist <= 0) ? '환승 이동' : ('도보 ' + (secDist>=1000?(secDist/1000).toFixed(1)+'km':secDist+'m')))   // 2026-10-04: 거리 0m 이동은 '도보 0m'가 아니라 환승 이동
       : (trans.name || '이동');
 
     var stops = [];
@@ -8190,6 +8242,10 @@ window.closeTransitDetail     = closeTransitDetail;
 
 // ── fmapDoRoute: 지하철역 / 버스정류장 / 일반장소 모두 지원 ──
 function fmapDoRoute() {
+  try{
+    if(window._rideEvKeep){ window._rideEvKeep = false; }      // 이탈 재탐색: 타고 있는 채로 다시 찾는 것 — 증거 유지
+    else if(window._rideEvReset) window._rideEvReset('경로 탐색 시작', true);   // 2026-10-04: 새 탐색 = 새 여정 — 이전 궤적·기지국 기록은 증거에서 제외
+  }catch(eRv){}
   var inpS = document.getElementById('fmapStartInp');
   var inpD = document.getElementById('fmapDestInp');
 
@@ -10448,6 +10504,8 @@ function _etaResearchIfStale(){
     if(!j.stale || j.preview) return false;
     if(!window._lastHtlNodes || !window._lastHtlNodes.length) return false;
     if(typeof S !== 'undefined' && S && S.boardedAt) return false;        // 이미 탄 뒤
+    if(window._htlBoarded === true) return false;                          // 2026-10-04: 승차 확정 뒤
+    try{ if(window._rideEv && window._rideEv().riding) return false; }catch(eR){}   // 2026-10-04: 탑승 증거(GPS·기지국·PF)가 있으면 재탐색 금지
     // ★ 2026-09-15: 이동 중에 재탐색이 돌아 '경로를 찾을 수 없습니다'가 떴다.
     //   진행 흔적(GPS 통과 · 지연/단축 보정)이 하나라도 있으면 이미 출발한 것이다.
     if(window._gpsMaxIdx != null && window._gpsMaxIdx > 0) return false;
@@ -11381,8 +11439,18 @@ function _fireTransitAlert(tg, remain){
   // ★ 2026-09-22: 정거장 수만 있으면 역간격이 짧을 때 감이 안 온다 — 분 단위도 같이 넣는다.
   var _minTxt = '';
   try{
-    var _jr = (typeof _journeyRemain==='function') ? _journeyRemain() : null;
-    if(_jr && _jr.min != null && remain !== 0) _minTxt = ' (약 ' + _jr.min + '분 후)';
+    // 2026-10-04: '약 N분 후'는 그 알림 역(환승역·하차역)의 도착 시각까지 — 예전엔 환승 알림에도 '여정 전체 남은 시간'이 찍혔다.
+    //   도착 시각(arrTime)은 PF 가 채택한 통과 시각으로 맞춰지므로 실제 위치와 같은 값을 쓴다.
+    var _tnd = (typeof _transitNodeData !== 'undefined' && _transitNodeData) ? _transitNodeData[tg.nodeIdx] : null;
+    var _tam = (_tnd && _tnd.arrTime) ? _arrTimeToMin(_tnd.arrTime) : null;
+    if(_tam != null && remain !== 0){
+      var _tn = new Date(), _tnow = _tn.getHours()*60 + _tn.getMinutes() + _tn.getSeconds()/60, _td = _tam - _tnow;
+      if(_td < -720) _td += 1440; if(_td > 720) _td -= 1440;
+      if(_td >= 0 && _td < 240) _minTxt = ' (약 ' + Math.max(1, Math.round(_td)) + '분 후)';
+    } else {
+      var _jr = (typeof _journeyRemain==='function') ? _journeyRemain() : null;
+      if(_jr && _jr.min != null && remain !== 0) _minTxt = ' (약 ' + _jr.min + '분 후)';
+    }
   }catch(e){}
   var title, body, vib;
   if(tg.kind==='transfer'){
@@ -12130,6 +12198,7 @@ function _handleOffRoute(){
     window._nodePassMs = {}; window._markerMaxProg = null;
     window._htlBoarded = false; window._htlDelaySec = 0; window._htlEarlyAt = 0;
     window._boardCellAt = null; window._boardCellN = 0; window._boardWhy = null;
+    window._rideEvKeep = true;   // 2026-10-04: 이탈 재탐색은 타고 있는 채로 다시 찾는 것 — 탑승 증거를 지우지 않는다
     if(window._routeLocked){ window._relockAfterReroute = window._lockedRouteType || 'fast'; }
     if(typeof fmapDoRoute==='function') setTimeout(fmapDoRoute, 200);
   }catch(e){}
@@ -13328,6 +13397,7 @@ function _cellAssist(){
   window._cellAssistAt = now;
   _cellGuessStation(function(g){
     if(!g || !g.name) return;
+    if(window._pfTrusted && window._pfTrusted()) return;   // 2026-10-04: 위치는 PF 하나가 정한다(셀 단독 전진 금지). 셀 관측 조회(_cellNow)는 계속 돈다.
     if((g.hits || 0) < 3) return;                         // ★ 2026-10-02: 이 값은 '확정 진행도'를 올리므로 2회 관측(우연 가능)이 아니라 3회 이상만 믿는다
     var idx = _cellRouteIdx(g.name);
     if(idx < 0) return;                                  // 이 경로의 역이 아니면 무시
@@ -13361,6 +13431,7 @@ var _CELL_HOP_MIN_RATIO = 0.55;   // 구간 소요시간의 이만큼은 지나�
 function _cellHopAdvance(){
   try{
     if(!_cellPluginReady()) return;
+    if(window._pfTrusted && window._pfTrusted()) return;   // 2026-10-04: 위치는 PF 하나가 정한다
     if(typeof _htlNotDeparted==='function' && _htlNotDeparted()) return;  // 아직 승차 전
     if(!_cellSeen || !_cellSeen.hopAt) return;
     try{ var _xh = _xferHoldIdx(); if(_xh >= 0 && (window._gpsMaxIdx==null?-1:window._gpsMaxIdx) >= _xh) return; }catch(eX){}   // 환승 승차 전엔 셀 변화로 앞서가지 않는다
@@ -13442,6 +13513,7 @@ var _DRIFT_COOL_MS = 90000;    // 재동기화 쿨다운
 
 function _htlDriftCheck(){
   try{
+    if(window._pfTrusted && window._pfTrusted()) return;   // 2026-10-04: PF 채택 때마다 통과 시각으로 시각표를 맞춘다
     if(typeof _htlNotDeparted==='function' && _htlNotDeparted()) return;
     if(Date.now() - (window._driftFixAt||0) < _DRIFT_COOL_MS) return;
     var conf = (window._gpsConfirmIdx==null ? -1 : window._gpsConfirmIdx);
@@ -13758,6 +13830,8 @@ window._estimateTimelinePosHold = _estimateTimelinePosHold;
 //   (실시간 분기에는 '확정 진행도 + 1역까지만'이라는 상한이 있었는데 이 길만 상한이 없었다 — 규칙이 두 벌이었다.)
 //   → 시각표 위치는 어디서 읽든 '실제 근거로 확정된 진행도(_gpsMaxIdx) + 1역'을 넘지 못한다. 근거 없이 두 역 이상 앞서가지 않는다.
 function _estimateTimelinePos(){
+  // 2026-10-04: PF(새 위치 판단기)가 채택한 위치가 있으면 그것이 유일한 위치다 — 마커·오버레이·복귀 스냅이 모두 여기를 읽는다.
+  try{ if(window._pfPosOverride){ var _pfo = window._pfPosOverride(); if(_pfo) return _pfo; } }catch(ePf){}
   var tp = _estimateTimelinePosHold();
   try{
     if(tp && tp.fromIdx != null && window._routeLocked === true && window._metroRouteMode !== true
@@ -14257,7 +14331,8 @@ function _updateTransitGps() {
           if(!_bn.isOrigin && !_bn.isWalk && (_bn.isBus||_bn.isSub)){ _boardIdx=_bi; break; }
         }
         var _preBoard = false;
-        if(_boardIdx>=0 && _wIdx <= _boardIdx){
+        var _rdNow = false; try{ _rdNow = (window._htlBoarded === true) || !!(window._rideEv && window._rideEv().riding); }catch(eRd){}
+        if(_boardIdx>=0 && _wIdx <= _boardIdx && !_rdNow){   // 2026-10-04: 승차 확정·탑승 증거가 있으면 승차역에 고정하지 않는다
           // 첫 교통 역 예정 출발시각과 현재 비교
           var _bnd=_transitNodeData[_boardIdx];
           var _depM = (_bnd && _bnd.arrTime && typeof _arrTimeToMin==='function') ? _arrTimeToMin(_bnd.arrTime) : null;
@@ -14268,7 +14343,8 @@ function _updateTransitGps() {
           else if(_diff <= -1.5){
             // ★ GPS 없이도 출발시각이 1.5분 이상 지났으면: 못 탄 것 → 다음 차 시각표로 재동기화
             var _cool2 = window._rerouteCooldownUntil || 0;
-            if(_baseTimeMs == null && Date.now() > _cool2){
+            // 2026-10-04: 시각만으로 '놓쳤다'고 하지 않는다 — 정지 증명(GPS 궤적·기지국·PF)이 있을 때만. 증거 없으면 승차역에 고정.
+            if(_baseTimeMs == null && Date.now() > _cool2 && typeof window._missProof==='function' && window._missProof()){
               window._rerouteCooldownUntil = Date.now() + 120000;
               // ★ 우선 시각표만 '다음 열차'로 재동기화 (경로 재탐색 없이 가볍게)
               if(typeof _resyncBoardToNextTrain==='function' && _resyncBoardToNextTrain()){
@@ -14374,6 +14450,15 @@ function _updateTransitGps() {
               }
             }
           } catch(e){}
+          // 2026-10-04: PF 가 채택한 위치가 있으면 그것으로 덮는다(시각표·기지국 보간이 앞서 가지 못하게)
+          try{
+            var _po = (window._pfPosOverride) ? window._pfPosOverride() : null;
+            if(_po && _transitNodeData[_po.fromIdx]){
+              _useFrom = _transitNodeData[_po.fromIdx]; _useTo = _transitNodeData[_po.toIdx] || _useFrom; _useRatio = _po.ratio || 0;
+              window._gpsWaitIdx = _po.fromIdx; window._gpsWaitRatio = _useRatio;
+              window._markerTransMsOverride = null;
+            }
+          }catch(ePo){}
           _placeGpsMarkerSmooth(_useFrom, _useTo, _useRatio);
         }
       } catch(e){}
@@ -14546,7 +14631,8 @@ function _updateTransitGps() {
           var _late=_nmin-_dep; if(_late < -720) _late+=1440;
           var _stillStart = (bestIdx <= _frIdx) && (bestDist < 150);
           var _cool = window._rerouteCooldownUntil || 0;
-          if(_late >= 1.5 && _stillStart && Date.now() > _cool){
+          // 2026-10-04: 탑승 중 재탐색 차단 — 정지 증명(GPS 궤적·기지국·PF)이 있고 2분 넘게 지났을 때만 '못 탔다'로 본다.
+          if(_late >= 2 && _stillStart && Date.now() > _cool && typeof window._missProof==='function' && window._missProof()){
             window._rerouteCooldownUntil = Date.now() + 120000; // 2분 쿨다운
             // 진행 상태 리셋 (시간표가 앞서간 흔적 제거)
             window._timeMaxIdx = -1;
@@ -14591,7 +14677,8 @@ function _updateTransitGps() {
         var _nowD0 = new Date();
         var _nowM0 = _nowD0.getHours()*60 + _nowD0.getMinutes() + _nowD0.getSeconds()/60;
         var _passed0 = (_depM0 != null) ? ((_nowM0 - _depM0 + 1440) % 1440) : -1;   // 출발예정 후 경과(분)
-        if(_depM0 != null && _passed0 >= 1.0 && _passed0 < 720 && Date.now() - _lastRe0 > 60000){
+        if(_depM0 != null && _passed0 >= 1.0 && _passed0 < 720 && Date.now() - _lastRe0 > 60000
+           && typeof window._missProof==='function' && window._missProof()){
           window._reanchorAt = Date.now();
           if(_resyncBoardToNextTrain()){
             window._rerouteCooldownUntil = Date.now() + 120000;   // 기존 전체 재탐색과 중복 방지
@@ -14625,27 +14712,32 @@ function _updateTransitGps() {
   //   이동 중이라는 뜻 — 카드 제목 옆에 실시간 표시(점 깜빡임)를 켠다. 아래 값 자체(혼잡도 %)는
   //   기존 로직 그대로, 표시만 추가함.
   try{ var _cld=document.getElementById('congLiveDot'); if(_cld) _cld.style.display='inline-block'; }catch(e){}
-  // best 노드가 바뀌었을 때만 갱신 (불필요한 API 호출 방지)
-  if(window._lastCongNodeIdx !== bestIdx){
-    window._lastCongNodeIdx = bestIdx;
-    if(best.isBus && best.lineName){
+  // 2026-10-04: 혼잡도 카드도 마커와 같은 위치(PF 채택 역)를 읽는다. PF 가 없을 때만 GPS 최근접 노드.
+  var _cgIdx = bestIdx, _cgBest = best;
+  try{
+    if(window._pfTrusted && window._pfTrusted() && _pf && _pf.A && _transitNodeData[_pf.A.td]){ _cgIdx = _pf.A.td; _cgBest = _transitNodeData[_cgIdx]; }
+  }catch(eCg){}
+  // 노드가 바뀌었을 때만 갱신 (불필요한 API 호출 방지)
+  if(window._lastCongNodeIdx !== _cgIdx){
+    window._lastCongNodeIdx = _cgIdx;
+    if(_cgBest.isBus && _cgBest.lineName){
       // 버스 구간 → 버스 노선 혼잡도
       // 현재 버스 구간의 정류장 목록 구성 (best 노드 주변 같은 노선 stops)
       var busStops = [];
       var curStopIdx = 0;
       _transitNodeData.forEach(function(nd, i){
-        if(nd.isBus && nd.lineName===best.lineName && nd.lat){
-          if(i===bestIdx) curStopIdx = busStops.length;
+        if(nd.isBus && nd.lineName===_cgBest.lineName && nd.lat){
+          if(i===_cgIdx) curStopIdx = busStops.length;
           busStops.push({ stationName: nd.name, lat: nd.lat, lon: nd.lng });
         }
       });
       if(typeof updateBusCong==='function'){
-        updateBusCong({ name: best.lineName, stops: busStops, curStopIdx: curStopIdx });
+        updateBusCong({ name: _cgBest.lineName, stops: busStops, curStopIdx: curStopIdx });
       }
-    } else if(best.isSub && best.name){
+    } else if(_cgBest.isSub && _cgBest.name){
       // 지하철 구간 → 기존 지하철역 혼잡도
       if(typeof updateCong==='function'){
-        updateCong({ name: best.name, line: best.lineName || '' });
+        updateCong({ name: _cgBest.name, line: _cgBest.lineName || '' });
       }
     }
   }
@@ -14765,9 +14857,23 @@ function _updateTransitGps() {
         }
       }
     }catch(e){}
+    // ★ 2026-10-04: PF 가 채택한 위치가 있으면 그것을 따른다. GPS 가 같은 구간(±1역)을 가리키면 GPS 투영(더 정밀)을 그대로 쓴다.
+    var _pfUsed = false;
+    try{
+      var _po3 = (window._pfPosOverride) ? window._pfPosOverride() : null;
+      if(_po3 && _transitNodeData[_po3.fromIdx]){
+        var _gpsOk3 = usedGps && fromNd && (_transitNodeData.indexOf(fromNd) >= _po3.fromIdx - 1);   // GPS 가 PF 보다 앞서 있으면 GPS 투영을 그대로 쓴다(이미 그 역 150m 안 확인)
+        if(!_gpsOk3){
+          fromNd = _transitNodeData[_po3.fromIdx]; toNd = _transitNodeData[_po3.toIdx] || null; ratio = _po3.ratio || 0; usedGps = false;
+          window._gpsWaitIdx = _po3.fromIdx; window._gpsWaitRatio = ratio;
+          window._markerMaxProg = null;
+        }
+        _pfUsed = true;
+      }
+    }catch(ePo3){}
     // ★ 백스텝 방지: GPS 끊김 동안 1/3씩 전진해 둔 진행률(_gpsWaitRatio) 아래로는 회귀 금지
     var _wi = window._gpsWaitIdx;
-    if(_wi != null){
+    if(_wi != null && !_pfUsed){
       if(fromIdx === _wi) ratio = Math.max(ratio, (window._gpsWaitRatio || 0));
       else if(fromIdx > _wi){ window._gpsWaitIdx = null; window._gpsWaitRatio = 0; }   // 다음 구간 확인 → 대기 해제
     }
@@ -14793,6 +14899,7 @@ function _updateTransitGps() {
       // GPS 없음 → 시간 기반. 역에 거의 도착(90%)해야 다음 역으로 넘어감 (미리 도착 방지)
       var timeHere = tp ? ((tp.ratio >= 0.9) ? tp.toIdx : tp.fromIdx) : -1;
       hereIdx = Math.max(timeHere, (window._gpsMaxIdx==null?-1:window._gpsMaxIdx));
+      try{ if(window._pfTrusted && window._pfTrusted() && _pf && _pf.A) hereIdx = _pf.A.td; }catch(ePh){}   // 2026-10-04: PF 가 채택한 역
     }
     // ★ 출발 시각 전이면 현재 위치 표시도 승차역에 고정 (앞서 나가지 않도록)
     try{
@@ -18419,18 +18526,13 @@ window._bgDiag = async function(){
   } else {
     add('→ 플러그인이 없어 시작 불가. APK에 background-geolocation이 안 들어간 상태.');
   }
-  // ★ 2026-10-04: 가속도계(보조 지표) 상태 — 승차를 단독으로 확정하지 않는다
+  // 마지막 승차 판정(근거 기록)
   try{
-    var _ac = (typeof _accelStats === 'function') ? _accelStats() : null;
-    if(_ac){
-      add('가속도계(보조 지표 · 단독 확정 안 함): ' + (_ac.supported ? (_ac.active ? '켜짐' : '꺼짐(역 진입 때 시작)') : '센서 미지원'));
-      add('  상태 ' + _ac.state + ' · stddev ' + (_ac.stddev == null ? '-' : _ac.stddev.toFixed(2)) + ' · 평균 ' + (_ac.avg == null ? '-' : _ac.avg.toFixed(2))
-        + ' · 샘플 ' + _ac.n + (_ac.rateHz ? ' (≈' + Math.round(_ac.rateHz) + '/초)' : '') + (_ac.lastAgeMs != null ? ' · 마지막 ' + Math.round(_ac.lastAgeMs/1000) + '초 전' : ''));
-      add('  임계값 열차 ≥' + _ac.thresholds.train + ' · 도보 ≥' + _ac.thresholds.walk + ' (추정값, 실측 아님)');
-    }
     var _ld = window._lastBoardDecision;
-    if(_ld) add('마지막 승차 판정: ' + _ld.reason + ' · GPS ' + _ld.gps + ' 기지국 ' + _ld.cell + ' 시각표 ' + _ld.time + ' 가속도계 ' + _ld.accel + (_ld.stddev != null ? ' (stddev ' + _ld.stddev.toFixed(2) + ')' : '') + ' · ' + Math.round((Date.now()-_ld.at)/1000) + '초 전');
-  }catch(eAc){ add('가속도계 점검 실패: ' + (eAc && eAc.message)); }
+    if(_ld) add('마지막 승차 판정: ' + _ld.reason + ' · GPS ' + _ld.gps + ' 기지국 ' + _ld.cell + ' 시각표 ' + _ld.time + ' · ' + Math.round((Date.now()-_ld.at)/1000) + '초 전');
+    var _re = window._rideEv ? window._rideEv() : null;
+    if(_re) add('승차 증거: ' + (_re.riding ? '있음' : '없음') + ' (GPS ' + _re.gps + ' 기지국 ' + _re.cell + ' PF ' + _re.pf + (_re.sticky ? ' · 유지 중' : '') + ')');
+  }catch(eAc){ add('승차 판정 점검 실패: ' + (eAc && eAc.message)); }
   var el = document.getElementById('bgDiagLog');
   if(el){
     window._bgLogBuf.push(out.join('\n'));
@@ -19423,19 +19525,6 @@ window.addEventListener('unhandledrejection', function(e) {
         <button onclick="_pipPreview()" style="width:100%;padding:11px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);font-family:inherit;">미리보기</button>
         <div id="pipStat" style="margin-top:10px;font-size:11.5px;line-height:1.6;color:var(--sub);"></div>
         -->
-      </div>
-
-      <!-- ★ 2026-10-04: 가속도계(보조 지표) 직접 측정 — 열차 안에서 눌러 진동 값을 본다.
-           ※ 아래 개발자용 진단 도구 주석 블록 '밖'에 둔다(HTML 주석은 중첩되지 않아 그 안에 주석을 넣으면 숨긴 카드가 드러난다). -->
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
-        <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:4px;">📳 가속도계 측정 (보조 지표)</div>
-        <p style="font-size:12px;color:var(--sub);margin-bottom:12px;line-height:1.5;">승차 확정은 GPS·기지국·시각표가 하고, 가속도계는 그것들과 함께일 때만 '진동 보조'로 쓰여요. 열차 안에서 눌러 상태(열차/도보/정지)와 진동 값(stddev)을 확인해요. 측정은 90초 동안 0.5초마다 표시해요.</p>
-        <div style="display:flex;gap:8px;margin-bottom:10px;">
-          <button onclick="_accelLiveTestStart()" style="flex:1;padding:11px;border-radius:10px;border:none;cursor:pointer;font-size:13px;font-weight:800;background:var(--gold);color:#121214;font-family:inherit;">측정 시작</button>
-          <button onclick="_accelSnapshotShow()" style="padding:11px 12px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);font-family:inherit;">지금 상태</button>
-          <button onclick="_accelLiveTestStop()" style="padding:11px 12px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--sub);font-family:inherit;">중지</button>
-        </div>
-        <div id="accelTestOut" style="background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:10px;font-size:11px;line-height:1.6;color:var(--text);font-family:monospace;max-height:280px;overflow-y:auto;white-space:pre-wrap;min-height:40px;">아직 측정 전이에요</div>
       </div>
 
       <!-- ★ 2026-09-29: 개발자용 진단 도구 3종(배터리 최적화 제외 / 백그라운드 추적 진단 /
@@ -24681,136 +24770,11 @@ function startWatch(){
 
 /* ════════════════════════════════════════════
    탑승 상태 감지 — 3중 감지 시스템
-   ① 가속도계: 열차 진동 패턴 (핸드폰 주머니/손 무관)
+   ① GPS + 기지국(셀) 복합 판정 (가속도계는 2026-10-04 삭제 — 열차 안 실측에서 정지와 구분 불가)
    ② 시각표 타이머: 출발시각 이후 구간 소요시간 자동 전진
    ③ GPS 보조: 지상 구간에서만 위치 보정
    상태머신: idle → station_enter → boarding → arrived
 ════════════════════════════════════════════ */
-
-/* ── 가속도계 기반 이동 감지 ── */
-var _accel = {
-  active: false,
-  samples: [],       // {mag, ts} 최근 30개
-  trainVibMs: 0,     // 마지막 열차진동 감지 시각
-  TRAIN_THRESH: 1.8, // m/s² — 열차 주행 진동 임계값 (도보 0.5~1.0, 열차 1.5~4.0)
-  STILL_THRESH: 0.4, // m/s² — 정지 판정 (가속도 변화량)
-};
-
-function _startAccel() {
-  if(_accel.active || !window.DeviceMotionEvent) return;
-  _accel.active = true;
-  _accel.samples = [];
-  window.addEventListener('devicemotion', _onDeviceMotion, { passive: true });
-  console.log('[가속도계] 시작');
-}
-function _stopAccel() {
-  if(!_accel.active) return;
-  _accel.active = false;
-  window.removeEventListener('devicemotion', _onDeviceMotion);
-  console.log('[가속도계] 종료');
-}
-function _onDeviceMotion(e) {
-  var a = e.accelerationIncludingGravity || e.acceleration;
-  if(!a) return;
-  var mag = Math.sqrt((a.x||0)*(a.x||0) + (a.y||0)*(a.y||0) + (a.z||0)*(a.z||0));
-  var now = Date.now();
-  _accel.samples.push({ mag: mag, ts: now });
-  if(_accel.samples.length > 30) _accel.samples.shift();
-}
-
-/* 가속도계 상태 판정: 'train'|'walk'|'still'|'unknown' */
-function _accelState() {
-  if(!_accel.active || _accel.samples.length < 8) return 'unknown';
-  var recent = _accel.samples.slice(-10);
-  var avg = recent.reduce(function(s,v){ return s+v.mag; }, 0) / recent.length;
-  var variance = recent.reduce(function(s,v){ return s+Math.pow(v.mag-avg,2); },0)/recent.length;
-  var stddev = Math.sqrt(variance);
-  // 열차: 중력(9.8) 제외한 진동 stddev가 크고 평균 가속도가 일정
-  // 도보: 규칙적 큰 진폭 (1~2Hz), 열차: 불규칙 작은 고주파 진동
-  if(stddev >= _accel.TRAIN_THRESH) return 'train';
-  if(stddev >= 0.8) return 'walk';
-  return 'still';
-}
-
-/* ★ 2026-10-04 (YJ): 가속도계는 '보조 지표'다 — 승차를 단독으로 확정하지 않는다(detectBoardingState 참고).
-   아래는 설정 > 진단에서 상태를 눈으로 보기 위한 읽기 전용 요약과 직접 측정 도구다. 수집(_onDeviceMotion)·판정(_accelState)은 건드리지 않는다.
-   ※ 임계값(TRAIN 1.8 / 도보 0.8)은 실측값이 아니라 주석 추정이다. STILL_THRESH(0.4)는 _accelState 에서 쓰이지 않고 0.8 미만은 모두 'still' 이다.
-   ※ 판정 창은 최근 10샘플(기기에 따라 약 0.2초)로 짧고, 출발·정차 때의 앞뒤 가속은 보지 않는다. */
-function _accelStats() {
-  var n = _accel.samples.length;
-  var recent = _accel.samples.slice(-10), avg = null, sd = null;
-  if(recent.length >= 2) {
-    avg = recent.reduce(function(s,v){ return s+v.mag; }, 0) / recent.length;
-    sd = Math.sqrt(recent.reduce(function(s,v){ return s+Math.pow(v.mag-avg,2); }, 0) / recent.length);
-  }
-  var rate = null;
-  if(n >= 2) { var span = (_accel.samples[n-1].ts - _accel.samples[0].ts) / 1000; if(span > 0) rate = (n-1) / span; }
-  return {
-    supported: !!window.DeviceMotionEvent, active: !!_accel.active, n: n,
-    state: _accelState(), stddev: sd, avg: avg, rateHz: rate,
-    lastAgeMs: n ? (Date.now() - _accel.samples[n-1].ts) : null,
-    thresholds: { train: _accel.TRAIN_THRESH, walk: 0.8, still: _accel.STILL_THRESH }
-  };
-}
-window._accelStats = _accelStats;
-
-var _accelTest = { timer: null, startedByTest: false, t0: 0, rows: [], sd: [], counts: {} };
-function _accelTestOut(txt) { var el = document.getElementById('accelTestOut'); if(el) { el.textContent = txt; el.scrollTop = el.scrollHeight; } }
-function _accelTestTick() {
-  var s = _accelStats(), T = _accelTest;
-  T.counts[s.state] = (T.counts[s.state] || 0) + 1;
-  if(s.stddev != null) T.sd.push(s.stddev);
-  var sec = Math.round((Date.now() - T.t0) / 1000);
-  T.rows.push(sec + '초 | ' + s.state + ' | stddev ' + (s.stddev == null ? '-' : s.stddev.toFixed(2))
-    + ' | 평균 ' + (s.avg == null ? '-' : s.avg.toFixed(2)) + ' | 샘플 ' + s.n + (s.rateHz ? ' (≈' + Math.round(s.rateHz) + '/초)' : ''));
-  if(T.rows.length > 300) T.rows.shift();
-  _accelTestOut('임계값: 열차 ≥ ' + s.thresholds.train + ' · 도보 ≥ ' + s.thresholds.walk + ' · 그 아래 정지 (m/s², 최근 10샘플 stddev)\n' + T.rows.slice(-14).join('\n'));
-  if(sec >= 90) _accelLiveTestStop();
-}
-function _accelLiveTestStart() {
-  if(_accelTest.timer) return;
-  if(!window.DeviceMotionEvent) { _accelTestOut('이 기기는 가속도 센서(DeviceMotionEvent)를 지원하지 않아요'); return; }
-  var begin = function() {
-    _accelTest.startedByTest = !_accel.active;     // 이미 켜져 있으면(승차 감지 중) 그대로 쓰고 끄지 않는다
-    _startAccel();
-    _accelTest.t0 = Date.now(); _accelTest.rows = []; _accelTest.sd = []; _accelTest.counts = {};
-    _accelTest.timer = setInterval(_accelTestTick, 500);
-    _accelTestOut('측정 중… (90초, 0.5초마다 표시)');
-  };
-  var DME = window.DeviceMotionEvent;
-  if(typeof DME.requestPermission === 'function') {
-    DME.requestPermission().then(function(r){ if(r === 'granted') begin(); else _accelTestOut('센서 권한이 거부됐어요'); })
-      .catch(function(){ _accelTestOut('센서 권한을 요청하지 못했어요'); });
-  } else begin();
-}
-function _accelLiveTestStop() {
-  var T = _accelTest;
-  if(!T.timer) return;
-  clearInterval(T.timer); T.timer = null;
-  if(T.startedByTest && (typeof S === 'undefined' || !S || !S.boardingState || S.boardingState === 'idle')) _stopAccel();
-  var total = 0, k; for(k in T.counts) total += T.counts[k];
-  var sd = T.sd.slice().sort(function(a,b){ return a-b; });
-  var pick = function(q){ return sd.length ? sd[Math.min(sd.length-1, Math.floor(sd.length*q))] : null; };
-  var f = function(v){ return v == null ? '-' : v.toFixed(2); };
-  var pct = function(st){ return total ? Math.round(100*(T.counts[st]||0)/total) + '%' : '-'; };
-  _accelTestOut(T.rows.slice(-14).join('\n') + '\n── 요약 (' + total + '회) ──\n'
-    + '상태 비율: 열차 ' + pct('train') + ' · 도보 ' + pct('walk') + ' · 정지 ' + pct('still') + ' · 모름 ' + pct('unknown') + '\n'
-    + 'stddev: 최소 ' + f(sd[0]) + ' · 중앙 ' + f(pick(0.5)) + ' · 90% ' + f(pick(0.9)) + ' · 최대 ' + f(sd[sd.length-1]) + '\n'
-    + '※ 열차 안/걷기/서 있기를 각각 따로 측정해 이 값을 알려 주세요 — 임계값 조정에 씁니다.');
-}
-function _accelSnapshotShow() {
-  var s = _accelStats(), L = [];
-  L.push('가속도계: ' + (s.supported ? (s.active ? '켜짐' : '꺼짐 (역 진입 때 시작됨 — 측정 시작을 누르면 잠깐 켜요)') : '이 기기는 센서 미지원'));
-  L.push('상태 ' + s.state + ' · stddev ' + (s.stddev == null ? '-' : s.stddev.toFixed(2)) + ' · 평균 ' + (s.avg == null ? '-' : s.avg.toFixed(2))
-    + ' · 샘플 ' + s.n + (s.rateHz ? ' (≈' + Math.round(s.rateHz) + '/초)' : '') + (s.lastAgeMs != null ? ' · 마지막 ' + Math.round(s.lastAgeMs/1000) + '초 전' : ''));
-  L.push('임계값(추정, 실측 아님): 열차 ≥' + s.thresholds.train + ' · 도보 ≥' + s.thresholds.walk + ' · 그 아래 정지');
-  var d = window._lastBoardDecision;
-  L.push(d ? ('마지막 승차 판정: ' + d.reason + ' · GPS ' + d.gps + ' 기지국 ' + d.cell + ' 시각표 ' + d.time + ' 가속도계 ' + d.accel + (d.stddev != null ? ' (stddev ' + d.stddev.toFixed(2) + ')' : '') + ' · ' + Math.round((Date.now()-d.at)/1000) + '초 전')
-             : '마지막 승차 판정: 아직 없음');
-  _accelTestOut(L.join('\n'));
-}
-window._accelSnapshotShow = _accelSnapshotShow;
-window._accelLiveTestStart = _accelLiveTestStart; window._accelLiveTestStop = _accelLiveTestStop;
 
 /* ── 시각표 타이머 기반 자동 역 전진 ── */
 var _timetableTimer = null;
@@ -24985,8 +24949,7 @@ function _doTimetableAdvance() {
   if(!S.route || S.boardingState !== 'boarding') return;
   if(S.curIdx >= S.route.path.length - 1) return;
 
-  var accelSt = _accelState();
-  console.log('[시각표] 구간 타이머 완료 → _runTrainAnim이 역 전진 담당 (가속도계:' + accelSt + ')');
+  console.log('[시각표] 구간 타이머 완료 → _runTrainAnim이 역 전진 담당');
 
   // ★ 역 전진은 _runTrainAnim 내부에서 처리
   // _doTimetableAdvance는 구간 소요시간 지연 측정만 담당
@@ -25023,7 +24986,6 @@ function detectBoardingState(lat,lng,nearestStn,distToStn,acc){
   //   → 기준 반경(180m)에 정확도만큼(최대 100m) 여유를 더한 거리로만 판정한다.
   const inStation = distToStn < (180 + Math.min(acc, 100));
   const recentDist = S.lastMoveDistM || 0;
-  const accelSt = _accelState(); // 'train'|'walk'|'still'|'unknown'
 
   if(S.boardingState==='idle' || S.boardingState==='station_enter'){
     if(inStation && S.boardingState==='idle'){
@@ -25031,7 +24993,6 @@ function detectBoardingState(lat,lng,nearestStn,distToStn,acc){
       if(pin) pin.className='train-pin station-enter';
       if(bannerTxt) bannerTxt.textContent='역사 진입 · 탑승 대기 중...';
       if(banner) banner.classList.add('on');
-      _startAccel(); // ★ 역 진입 시 가속도계 시작
       toast('🚉 '+nearestStn.name+' 역사 진입');
       // ★ 자동 도보안내: 출발역 근처 도달
       if(typeof _tryWalkAutoStart === 'function') _tryWalkAutoStart();
@@ -25049,15 +25010,14 @@ function detectBoardingState(lat,lng,nearestStn,distToStn,acc){
       const byCell    = (typeof _cellMovingState === 'function') && _cellMovingState() === true;     // 기지국(셀) 변화 중
       var _pdBoard    = (typeof _htlMinPastDeparture === 'function') ? _htlMinPastDeparture() : null;
       const byTime    = (_pdBoard != null) && _pdBoard >= ((typeof _HTL_BOARD_GRACE_MIN !== 'undefined') ? _HTL_BOARD_GRACE_MIN : 0);   // 시각표: 출발시각 경과
-      const accelTrain  = accelSt === 'train';                  // 가속도계 열차진동(보조)
-      const accelAssist = accelTrain && (byGps || byCell || byTime);   // 다른 근거와 함께일 때만 보조로 인정
-      if(byGps || (accelTrain && (byCell || byTime))){
+      // ★ 2026-10-04: 가속도계 삭제 — GPS 이동이 주 근거, 기지국(이동 중)+시각표(출발 경과)는 '함께'일 때만 확정.
+      if(byGps || (byCell && byTime)){
         S.boardingState='boarding';
         if(pin) pin.className='train-pin boarding';
         var mainWhy = bySpeed?'속도감지':byMove?'이탈감지':byGpsDist?'GPS감지':byCell?'기지국':'시각표';
-        var reason = mainWhy + (accelAssist ? ' · 진동 보조' : '');
-        try{ var _as0 = _accelStats(); window._lastBoardDecision = { at: Date.now(), reason: reason, gps: byGps, cell: byCell, time: byTime, accel: accelSt, stddev: _as0.stddev }; }catch(eD){}
-        console.log('[승차판정] ' + reason + ' (GPS:' + byGps + ' 기지국:' + byCell + ' 시각표:' + byTime + ' 가속도계:' + accelSt + ')');
+        var reason = mainWhy;
+        try{ window._lastBoardDecision = { at: Date.now(), reason: reason, gps: byGps, cell: byCell, time: byTime }; }catch(eD){}
+        console.log('[승차판정] ' + reason + ' (GPS:' + byGps + ' 기지국:' + byCell + ' 시각표:' + byTime + ')');
         if(bannerTxt) bannerTxt.textContent='🚇 탑승 확인('+reason+') · '+nearestStn.name;
         toast('🚇 탑승! ('+reason+')');
 
@@ -25078,20 +25038,18 @@ function detectBoardingState(lat,lng,nearestStn,distToStn,acc){
           console.log('[지연방어] 출발 ' + (lateMs>0?'지연':'조기') + ' ' + Math.round(Math.abs(lateMs)/1000) + '초 → boardedAt 재설정');
         }
 
-        // ★ 탑승 확인 → 가속도계 + 시각표 타이머 시작
+        // ★ 탑승 확인 → 시각표 타이머 시작
         _startTimetableAdvance();
       }
     }
   }
   else if(S.boardingState==='boarding'){
     // 배너 상태 표시
-    if(accelSt === 'train'){
-      if(bannerTxt) bannerTxt.textContent='🚇 이동 중 (진동 보조)';   // ★ 가속도계는 보조 — 단독 근거처럼 보이지 않게
-    } else if(avgSpeed >= 2){
+    if(avgSpeed >= 2){
       if(bannerTxt) bannerTxt.textContent='🚇 이동 중 · 약 '+Math.round(avgSpeed*3.6)+'km/h';
     }
     // GPS가 다음 역 근처 + 감속 감지 → 도착
-    if(inStation && avgSpeed < 2 && accelSt !== 'train'){
+    if(inStation && avgSpeed < 2){
       if(S.route){
         const idx=S.route.path.indexOf(nearestStn.name);
         if(idx > S.curIdx){
@@ -25101,7 +25059,6 @@ function detectBoardingState(lat,lng,nearestStn,distToStn,acc){
           if(pin) pin.className='train-pin';
           if(banner) banner.classList.remove('on');
           _stopTimetableAdvance();
-          _stopAccel();
         }
       }
     }
@@ -33036,11 +32993,12 @@ function _onForegroundResume(){
          && typeof fmapDoRoute==='function'){
         var _card = document.getElementById('transitResultCard');
         if(_card && _card.style.display !== 'none'){
+          // 2026-10-04: 앱으로 돌아왔다고 경로를 다시 찾지 않는다(YJ 제보 — 경로탐색 후 백그라운드 갔다 오면 재탐색됨).
+          //   결과는 그대로 두고, 시각이 지났을 수 있다는 안내만 한 번 한다. 다시 찾기는 사용자가 검색 버튼으로.
           var _rn = Date.now();
-          if(!window._routeAutoAt || (_rn - window._routeAutoAt) > 20000){
-            window._routeAutoAt = _rn;
-            window._reselectAfterSearch = window._pendingRouteType || 'fast';
-            fmapDoRoute();
+          if(!window._routeStaleToastAt || (_rn - window._routeStaleToastAt) > 600000){
+            window._routeStaleToastAt = _rn;
+            try{ if(typeof toast==='function') toast('탐색한 지 오래됐어요. 시각이 지났다면 검색 버튼으로 다시 찾아 주세요'); }catch(eT){}
           }
         }
       }
@@ -33192,7 +33150,6 @@ function quickBoardToggle() {
     if(btn){ btn.textContent='🚇 탑승하기'; btn.style.background='linear-gradient(135deg,#1a7a3a,#30d158)'; btn.style.boxShadow='0 4px 16px rgba(48,209,88,.3)'; }
     _clearBoardAlerts();
     _stopTimetableAdvance();
-    _stopAccel();
     toast('🚉 하차 처리되었습니다.');
     return;
   }
@@ -33270,7 +33227,6 @@ function _confirmBoard() {
     // 진동 알림 재스케줄
     _scheduleBoardAlerts();
     // 탑승 시작
-    if(typeof _startAccel==='function') _startAccel();
     if(typeof _startTimetableAdvance==='function') _startTimetableAdvance();
     var depStr = new Date(baseMs).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
     toast('🚇 탑승 확인! ' + depStr + ' 출발 기준으로 경로 시각이 설정됐습니다.');
@@ -33536,7 +33492,6 @@ function _scheduleAutoBoard(depMs, depTime) {
       _verifyDepartureStationGps(function() {
         if(typeof _rebaseAllFromNow === 'function') _rebaseAllFromNow(depMs);
         if(typeof _scheduleBoardAlerts === 'function') _scheduleBoardAlerts();
-        if(typeof _startAccel === 'function') _startAccel();
         if(typeof _startTimetableAdvance === 'function') _startTimetableAdvance();
         toast('🚇 ' + (depTime||'') + ' 열차 자동 탑승! 이동을 시작합니다.');
       });
@@ -34148,8 +34103,7 @@ function manualBoard(){
     document.getElementById('boardBannerTxt').textContent = '🚇 열차 정보 확인 중...';
     addPoints(10,'탑승 확인');
     _resetAlertFired && _resetAlertFired();  // 알림 중복 방지 초기화
-    // ★ 수동 탑승 시도 가속도계 + 시각표 타이머 시작
-    if(typeof _startAccel === 'function') _startAccel();
+    // ★ 수동 탑승 시도 시각표 타이머 시작
     if(typeof _startTimetableAdvance === 'function') _startTimetableAdvance();
     if(S.route && !S.trainAnimInterval) startTrainAnim();
     if(!S.lastGPSFix) startApiPoll();
@@ -39726,7 +39680,6 @@ function stopTracking() {
   // ── [방어1+2] watchdog·가상주행 정지 + 지연 오프셋 Cleanup ──
   if(typeof _stopSilenceWatchdog === 'function') _stopSilenceWatchdog();
   if(typeof _clearTrainAlerts === 'function') _clearTrainAlerts();
-  if(typeof _stopAccel === 'function') _stopAccel();
   if(typeof _stopTimetableAdvance === 'function') _stopTimetableAdvance();
   if(typeof _stationGpsTimer !== 'undefined' && _stationGpsTimer) {
     clearTimeout(_stationGpsTimer); _stationGpsTimer = null;
@@ -40105,6 +40058,8 @@ function updateCong(stn, force) {
   if(badge) { badge.textContent = lvlS; badge.style.background = col; }
   if(card)  card.style.borderLeftColor = col;
 
+  // 2026-10-04: 버스 구간을 지난 뒤 지하철로 돌아와도 '버스' 라벨이 남던 것 — 지하철 갱신 때 라벨을 되돌린다
+  try{ var _lbC = document.querySelector('.cong-stn'); if(_lbC && _lbC.textContent.indexOf('지하철') !== 0) _lbC.innerHTML = '지하철 <b id="congStn">-</b>'; }catch(eLb){}
   // 역명 + 상태텍스트
   var stnEl = document.getElementById('congStn');
   var stEl  = document.getElementById('congStatusTxt');
@@ -46497,7 +46452,13 @@ else root.PosFusion = api;
 // ═══════════════════════════════════════════════════════════════
 var _pf = { f: null, sig: '', st: [], tdToK: {}, lastLogAt: 0, lastBestK: -1, lastCellKey: '', lastLiveAt: 0, feeds: { gps: 0, motion: 0, cell: 0 } };
 
-function _pfLive(){ try{ return localStorage.getItem('pfLive') === '1'; }catch(e){ return false; } }
+function _pfLive(){
+  try{
+    // 2026-10-04: 새 위치 판단기(PF)가 위치의 단일 기준이다 — 기본 켬. 이전에 껐던 기기도 한 번 켠다(pfLive2 이전 값 무시).
+    if(localStorage.getItem('pfLive2') !== '1'){ localStorage.setItem('pfLive2', '1'); localStorage.setItem('pfLive', '1'); }
+    return localStorage.getItem('pfLive') !== '0';
+  }catch(e){ return true; }
+}
 function _pfSetLive(v){
   try{ localStorage.setItem('pfLive', v ? '1' : '0'); }catch(e){}
   try{ _ovlDiag('PF', v ? '보정 켬' : '보정 끔'); }catch(e){}
@@ -46673,8 +46634,10 @@ function _pfWalkBetween(a, b){
 // ── 3~5초마다 호출 (_updateTransitGps 맨 앞) ──
 function _pfTick(){
   try{
+    try{ _evSample(Date.now()); }catch(eS){}   // 2026-10-04: 경로 확정 전에도 GPS 궤적·기지국 변화를 쌓는다(승차 증거)
     if(window._routeLocked !== true || window._metroRouteMode === true){
-      if(_pf.f && !window._routeLocked) { _pf.f = null; _pf.sig = ''; }
+      if(_pf.f && !window._routeLocked) { _pf.f = null; _pf.sig = ''; _pf.A = null; }
+
       if(!window._routeLocked && _pfM.started && (Date.now() - (_pf.idleSince || (_pf.idleSince = Date.now())) > 120000)) _pfMotionStop();
       return;
     }
@@ -46732,36 +46695,198 @@ function _pfTick(){
 }
 window._pfTick = _pfTick;
 
-// ── 보정(옵션) — 앞으로만, 한 번에 한 역, 확신 70% 이상 ──
-function _pfApplyLive(b, now){
+// ═══════════════════════════════════════════════════════════════
+// 📍 위치 증거와 단일 위치원 (2026-10-04)
+//   · 화면마다 따로 위치를 계산해 서로 어긋나던 것을 PF(새 위치 판단기) 하나로 모은다.
+//     마커·오버레이·혼잡도 카드·알림·도착 예상은 모두 _gpsMaxIdx(=PF 가 채택한 마지막 도착역)를 읽는다.
+//   · 승차 여부는 GPS 이동 + 기지국 변화 + PF 를 '함께' 본다(한 가지만으로 확정하지 않는다).
+//   · 탑승 중(증거 있음)에는 시각만 보고 다음 열차로 재탐색하지 않는다.
+// ═══════════════════════════════════════════════════════════════
+var _ev = { trail: [], cell: [], lastCellKey: '', sticky: 0, startMs: 0, cache: null, cacheAt: 0, lastLog: '', floorMs: 0 };
+function _evSample(now){
   try{
-    if(b.conf < 0.7) return;
-    if(now - _pf.lastLiveAt < 15000) return;                       // 한 역 올린 뒤 15초 쉰다
-    if(typeof _htlNotDeparted === 'function' && _htlNotDeparted()) return;   // 승차 확정 전
-    var gm = (window._gpsMaxIdx == null ? -1 : window._gpsMaxIdx);
-    if(gm < 0) return;
-    var target = _pf.st[b.idx] ? _pf.st[b.idx]._td : -1;
-    if(target <= gm) return;                                        // 되돌리지 않는다(앞으로만)
-    // 한 번에 한 역: gm 다음 지하철 역
-    var nextTd = -1;
-    for(var k = 0; k < _pf.st.length; k++){ if(_pf.st[k]._td > gm){ nextTd = _pf.st[k]._td; break; } }
-    if(nextTd < 0 || nextTd > target) return;
-    try{ var xh = _xferHoldIdx(); if(xh >= 0 && gm >= xh) return; }catch(e1){}
+    var fx = (typeof S !== 'undefined') ? S.lastGPSFix : null;
+    if(fx && fx.lat != null && fx.lng != null && fx.ts && (fx.acc == null || fx.acc <= 120) && now - fx.ts <= 15000){
+      var lt = _ev.trail[_ev.trail.length - 1];
+      if(!lt || lt.ts !== fx.ts) _ev.trail.push({ lat: fx.lat, lng: fx.lng, ts: fx.ts });
+    }
+    while(_ev.trail.length && now - _ev.trail[0].ts > 600000) _ev.trail.shift();
+    var cl = (typeof _cellLast !== 'undefined') ? _cellLast : null;
+    if(cl && cl.key && cl.key !== _ev.lastCellKey){ _ev.lastCellKey = cl.key; _ev.cell.push(now); }
+    while(_ev.cell.length && now - _ev.cell[0] > 600000) _ev.cell.shift();
+  }catch(e){}
+}
+// 최근 win ms 동안 GPS 가 움직인 정도 (점 3개 이상, 45초 이상 걸쳐야 판단)
+function _evSpan(win, now){
+  var pts = [], i;
+  for(i = 0; i < _ev.trail.length; i++){ if(now - _ev.trail[i].ts <= win && _ev.trail[i].ts >= _ev.floorMs) pts.push(_ev.trail[i]); }
+  if(pts.length < 3) return null;
+  var dt = (pts[pts.length - 1].ts - pts[0].ts) / 1000;
+  if(dt < 45) return null;
+  var mx = 0, ds = [];
+  for(i = 1; i < pts.length; i++){ var d = haversineM(pts[0].lat, pts[0].lng, pts[i].lat, pts[i].lng); ds.push(d); if(d > mx) mx = d; }
+  ds.sort(function(a, b){ return a - b; });
+  var d80 = ds[Math.min(ds.length - 1, Math.floor(ds.length * 0.8))];
+  return { n: pts.length, dt: dt, dist: mx, d80: d80, v: mx / dt };
+}
+function _evCellN(win, now){ var n = 0; for(var i = 0; i < _ev.cell.length; i++){ if(now - _ev.cell[i] <= win && _ev.cell[i] >= _ev.floorMs) n++; } return n; }
+// 최근 10분 궤적 중 node 에서 radius(m) 안에 있었던 적이 있나 — 있음 true / 궤적은 있는데 없음 false / 궤적 자체가 없음 null(판단 불가)
+window._evNearNode = function(node, radius){
+  try{
+    if(!node || node.lat == null) return null;
+    var any = false, now = Date.now();
+    for(var i = 0; i < _ev.trail.length; i++){
+      var p = _ev.trail[i]; if(now - p.ts > 600000 || p.ts < _ev.floorMs) continue;
+      any = true; if(haversineM(p.lat, p.lng, node.lat, node.lng) <= radius) return true;
+    }
+    return any ? false : null;
+  }catch(e){ return null; }
+};
+function _evLog(tag, msg){ if(_ev.lastLog === tag + msg) return; _ev.lastLog = tag + msg; try{ _ovlDiag(tag, msg); }catch(e){} }
+// 지금 열차(탈것)를 타고 이동 중인가 — GPS 이동 · 기지국 변화 · PF 를 함께 본다. 한 번 확인되면 20분간 유지(지하에서 신호가 약해도 풀리지 않게).
+window._rideEv = function(){
+  var now = Date.now();
+  if(_ev.cache && Math.abs(now - _ev.cacheAt) < 3000) return _ev.cache;
+  var r = { riding: false, now: false, gps: 0, cell: 0, pf: 0, sticky: false };
+  try{
+    var sp = _evSpan(150000, now);
+    if(sp){ if(sp.dist >= 350 && sp.v >= 4.5) r.gps = 2; else if(sp.dist >= 200 && sp.v >= 3.5) r.gps = 1; }
+    var nc = _evCellN(180000, now);
+    r.cell = nc >= 3 ? 1.5 : (nc >= 2 ? 1 : 0);
+    var b = window._pfBest, adv = false;
+    if(b && now - b.at < 20000 && b.conf >= 0.7){ if(b.kind === 'seg') r.pf = 1; adv = (b.idx >= 1); }
+    r.now = (r.gps >= 2) || (r.gps >= 1 && (r.cell >= 1 || r.pf >= 1)) || (r.cell >= 1 && r.pf >= 1 && adv);
+    if(r.now){
+      if(!(_ev.sticky > now)){
+        _ev.startMs = now - (r.gps ? 60000 : 0);
+        if(!r.gps && _ev.cell.length){ for(var i = 0; i < _ev.cell.length; i++){ if(now - _ev.cell[i] <= 180000){ _ev.startMs = _ev.cell[i]; break; } } }
+        _evLog('승차판단', '탑승 증거 확인 GPS' + r.gps + ' 기지국' + r.cell + ' PF' + r.pf + (sp ? (' (이동 ' + Math.round(sp.dist) + 'm/' + Math.round(sp.dt) + '초)') : ''));
+      }
+      _ev.sticky = now + 20 * 60000;
+    }
+    r.sticky = _ev.sticky > now;
+    r.riding = r.now || r.sticky;
+    window._rideEvStartMs = _ev.startMs;
+  }catch(e){}
+  _ev.cache = r; _ev.cacheAt = now;
+  return r;
+};
+window._rideEvReset = function(why, floor){ _ev.sticky = 0; _ev.cache = null; _ev.startMs = 0; if(floor) _ev.floorMs = Date.now(); try{ if(why) _evLog('승차판단', '초기화 ' + why); }catch(e){} };
+// '정말 못 탔다'는 증명: 최근 2분간 GPS 가 역 근처에서 거의 안 움직였고 기지국도 안 바뀌었고 PF 도 주행이 아님.
+//   궤적이 모자라면(지하·GPS 없음) 판단 불가 → 못 탔다고 보지 않는다(시각만으로 다음 열차로 밀지 않는다).
+window._missProof = function(){
+  try{
+    var r = window._rideEv();
+    if(r.riding || window._htlBoarded === true) return false;
+    var now = Date.now(), sp = _evSpan(120000, now);
+    if(!sp || sp.d80 > 80) return false;
+    if(_evCellN(180000, now) >= 2) return false;
+    var b = window._pfBest;
+    if(b && now - b.at < 20000 && b.conf >= 0.7 && b.kind === 'seg') return false;
+    _evLog('승차판단', '미탑승 증명 정지 ' + Math.round(sp.d80) + 'm/' + Math.round(sp.dt) + '초');
+    return true;
+  }catch(e){ return false; }
+};
+
+// PF 결과를 '채택'해서 앱 전체가 읽는 위치(_gpsMaxIdx)로 쓸 수 있는 상태인가
+window._pfTrusted = function(){
+  try{
+    if(!_pf.f || window._routeLocked !== true || window._metroRouteMode === true) return false;
+    if(typeof _baseTimeMs !== 'undefined' && _baseTimeMs != null) return false;
+    var A = _pf.A; if(!A || A.sig !== _pf.sig || A.k < 0) return false;
+    var b = window._pfBest; if(!b || Date.now() - b.at > 30000) return false;
+    if(typeof _htlNotDeparted === 'function' && _htlNotDeparted()) return false;
+    return true;
+  }catch(e){ return false; }
+};
+// 마커·오버레이가 쓰는 위치: 채택한 역(정차면 그 역 위, 주행이면 다음 역을 향해 최대 85%)
+window._pfPosOverride = function(){
+  try{
+    if(!window._pfTrusted()) return null;
+    var A = _pf.A, td = A.td, nd = _transitNodeData, b = window._pfBest;
+    if(!nd || !nd[td]) return null;
+    try{ var xh = _xferHoldIdx(); if(xh >= 0 && td >= xh) return null; }catch(e1){}   // 환승 승차 대기 중에는 환승 고정 규칙이 맡는다
+    var to = -1;
+    for(var j = td + 1; j < nd.length; j++){ if(nd[j] && _arrTimeToMin(nd[j].arrTime) != null){ to = j; break; } }
+    if(to < 0) return { fromIdx: td, toIdx: td, ratio: 0 };
+    if(b && b.idx === A.k && b.kind === 'dwell') return { fromIdx: td, toIdx: to, ratio: 0 };
+    var r = 0.3, aMin = _arrTimeToMin(nd[td].arrTime), bMin = _arrTimeToMin(nd[to].arrTime);
+    if(aMin != null && bMin != null){
+      var span = bMin - aMin; if(span < 0) span += 1440;
+      if(span > 0){
+        var n = new Date(), nowMin = n.getHours() * 60 + n.getMinutes() + n.getSeconds() / 60, el = nowMin - aMin;
+        if(el < -720) el += 1440; r = el / span;
+      }
+    }
+    r = Math.max(0.05, Math.min(0.85, r));
+    return { fromIdx: td, toIdx: to, ratio: r };
+  }catch(e){ return null; }
+};
+
+// ── PF 채택: 앞으로는 확신 60%↑가 2회 이상(또는 80%↑) · 뒤로는 확신 80%↑가 25초 이상 유지될 때만 ──
+function _pfAdopt(k, b, now, why){
+  try{
+    var A = _pf.A, st = _pf.st[k]; if(!st) return;
+    var kk = k, td = st._td, q, j;
+    try{
+      var xh = _xferHoldIdx();    // 환승 승차 확인(GPS·기지국) 전에는 그 역 너머로 채택하지 않는다
+      if(xh >= 0 && td > xh){ j = -1; for(q = 0; q < _pf.st.length; q++){ if(_pf.st[q]._td <= xh) j = q; } if(j < 0 || j === A.k) return; kk = j; td = _pf.st[j]._td; }
+    }catch(e1){}
     var stop = _transitNodeData.length - 1;
     try{ var lg = _rtCurrentSubLeg(); if(lg && lg.alightIdx != null) stop = lg.alightIdx; }catch(e2){}
-    if(nextTd > stop) return;
-    // 최근 GPS 가 '아직 그 역에 못 왔다'고 하면 따르지 않는다
-    try{
-      var v = (typeof S !== 'undefined') ? S.lastGPSFix : null, tn = _transitNodeData[nextTd];
-      if(v && v.ts && now - v.ts <= 20000 && tn && tn.lat != null && haversineM(v.lat, v.lng, tn.lat, tn.lng) > 500 && _gpsBeforeNode(v.lat, v.lng, nextTd)) return;
-    }catch(e3){}
-    _pf.lastLiveAt = now;
-    window._gpsMaxIdx = nextTd;
+    if(td > stop){ j = -1; for(q = 0; q < _pf.st.length; q++){ if(_pf.st[q]._td <= stop) j = q; } if(j < 0) return; kk = j; td = _pf.st[j]._td; }
+    var gm = (window._gpsMaxIdx == null ? -1 : window._gpsMaxIdx);
+    if(td < gm){
+      try{   // 지금 GPS 가 그 역(gm) 바로 근처라고 하면 PF 가 틀린 것 — 되돌리지 않는다
+        var v = (typeof S !== 'undefined') ? S.lastGPSFix : null, gn = _transitNodeData[gm];
+        if(v && v.ts && now - v.ts <= 15000 && gn && gn.lat != null && haversineM(v.lat, v.lng, gn.lat, gn.lng) < 300) return;
+      }catch(e3){}
+    }
+    if(kk === A.k && why !== '초기') return;
+    var prevTd = A.td;
+    A.k = kk; A.td = td; A.at = now; A.cand = -1; A.candN = 0; A.backAt = 0;
     window._nodePassMs = window._nodePassMs || {};
-    window._nodePassMs[nextTd] = now;
+    var gc = (window._gpsConfirmIdx == null ? -1 : window._gpsConfirmIdx);
+    if(td > gm){
+      window._gpsMaxIdx = td; window._gpsConfirmIdx = Math.max(gc, td);
+      window._nodePassMs[td] = now;
+    }else if(td < gm && why !== '초기'){   // 첫 채택은 이미 확인된 진행도를 낮추지 않는다
+      window._gpsMaxIdx = td; window._gpsConfirmIdx = td; window._timeMaxIdx = -1;
+      for(var key in window._nodePassMs){ if(+key > td) delete window._nodePassMs[key]; }
+      window._nodePassMs[td] = now;
+    }else if(window._nodePassMs[td] == null){ window._nodePassMs[td] = now; }
     window._gpsWaitIdx = null; window._gpsWaitRatio = 0;
-    try{ if(typeof _recalcArrivalsFrom === 'function') _recalcArrivalsFrom(nextTd); }catch(e4){}
-    try{ _ovlDiag('PF보정', gm + '→' + nextTd + ' ' + Math.round(b.conf * 100) + '%'); }catch(e5){}
+    try{ if(typeof _recalcArrivalsFrom === 'function') _recalcArrivalsFrom(td); }catch(e4){}
+    try{ _ovlDiag('PF채택', why + ' ' + (prevTd == null ? '-' : prevTd) + '→' + td + '(' + st.name + ') 앱 ' + gm + ' ' + Math.round(b.conf * 100) + '% ' + (b.kind === 'dwell' ? '정차' : '주행') + ' 지연' + b.delayS + 's'); }catch(e5){}
+  }catch(e){}
+}
+function _pfApplyLive(b, now){
+  try{
+    if(window._metroRouteMode === true || window._routeLocked !== true) return;
+    if(typeof _baseTimeMs !== 'undefined' && _baseTimeMs != null) return;
+    if(typeof _htlNotDeparted === 'function' && _htlNotDeparted()) return;     // 승차 확정 전
+    var A = _pf.A;
+    if(!A || A.sig !== _pf.sig){ A = _pf.A = { sig: _pf.sig, k: -1, td: -1, cand: -1, candN: 0, candAt: 0, backAt: 0, at: 0 }; }
+    if(!_pf.st[b.idx]) return;
+    if(A.k < 0){
+      if(b.conf < 0.6) return;
+      var gm0 = (window._gpsMaxIdx == null ? -1 : window._gpsMaxIdx), k0 = b.idx;
+      if(gm0 > 0){ for(var q = 0; q < _pf.st.length; q++){ if(_pf.st[q]._td <= gm0 && q > k0) k0 = q; } }   // 이미 확인된 진행도보다 뒤에서 시작하지 않는다
+      _pfAdopt(k0, b, now, '초기');
+      return;
+    }
+    if(b.idx === A.k){ A.cand = -1; A.candN = 0; A.backAt = 0; return; }
+    if(b.idx > A.k){
+      A.backAt = 0;
+      if(b.conf < 0.6) return;
+      if(A.cand !== b.idx){ A.cand = b.idx; A.candN = 1; A.candAt = now; } else A.candN++;
+      if(b.conf >= 0.8 || (A.candN >= 2 && now - A.candAt >= 4000)) _pfAdopt(b.idx, b, now, '앞');
+    }else{
+      A.cand = -1; A.candN = 0;
+      if(b.conf < 0.8){ A.backAt = 0; return; }
+      if(!A.backAt) A.backAt = now;
+      if(now - A.backAt >= 25000) _pfAdopt(b.idx, b, now, '뒤');
+    }
   }catch(e){}
 }
 
