@@ -9563,6 +9563,7 @@ function confirmSelectedRoute(){
   var type = window._pendingRouteType || 'fast';
   var optName = { fast:'최단시간', less:'최소환승', sub:'지하철', bus:'버스', longdist:'장거리' }[type] || '선택한';
   window._routeLocked = true;
+  window._autoLockInfo = null;   // 사용자가 직접 확정 → 자동 확정 검증·취소 대상이 아니다
   window._lockedRouteType = type;
   window._lastCongNodeIdx = -1;
   // 확정 버튼 시각 피드백
@@ -9584,6 +9585,7 @@ function confirmCurrentRoute(){
   var type = window._pendingRouteType || window._lockedRouteType || 'fast';
   var optName = { fast:'최단시간', less:'최소환승', sub:'지하철', bus:'버스', longdist:'장거리' }[type] || '선택한';
   window._routeLocked = true;
+  window._autoLockInfo = null;   // 사용자가 직접 확정 → 자동 확정 검증·취소 대상이 아니다
   window._lockedRouteType = type;
   window._lastCongNodeIdx = -1;
   var btn = document.getElementById('mainConfirmRouteBtn');
@@ -10562,6 +10564,7 @@ function _etaResearchIfStale(){
     if(typeof S !== 'undefined' && S && S.boardedAt) return false;        // 이미 탄 뒤
     if(window._htlBoarded === true) return false;                          // 2026-10-04: 승차 확정 뒤
     try{ if(window._rideEv && window._rideEv().riding) return false; }catch(eR){}   // 2026-10-04: 탑승 증거(GPS·기지국·PF)가 있으면 재탐색 금지
+    try{ if(j.depMs != null && window._platGrace && window._platGrace((Date.now() - j.depMs) / 60000)) return false; }catch(eP){}   // 2026-10-04: 승강장에서 늦은 열차를 기다리는 중
     // ★ 2026-09-15: 이동 중에 재탐색이 돌아 '경로를 찾을 수 없습니다'가 떴다.
     //   진행 흔적(GPS 통과 · 지연/단축 보정)이 하나라도 있으면 이미 출발한 것이다.
     if(window._gpsMaxIdx != null && window._gpsMaxIdx > 0) return false;
@@ -14415,7 +14418,7 @@ function _updateTransitGps() {
             // ★ GPS 없이도 출발시각이 1.5분 이상 지났으면: 못 탄 것 → 다음 차 시각표로 재동기화
             var _cool2 = window._rerouteCooldownUntil || 0;
             // 2026-10-04: 시각만으로 '놓쳤다'고 하지 않는다 — 정지 증명(GPS 궤적·기지국·PF)이 있을 때만. 증거 없으면 승차역에 고정.
-            if(_baseTimeMs == null && Date.now() > _cool2 && typeof window._missProof==='function' && window._missProof()){
+            if(_baseTimeMs == null && Date.now() > _cool2 && !(window._platGrace && window._platGrace(-_diff)) && typeof window._missProof==='function' && window._missProof()){
               window._rerouteCooldownUntil = Date.now() + 120000;
               // ★ 우선 시각표만 '다음 열차'로 재동기화 (경로 재탐색 없이 가볍게)
               if(typeof _resyncBoardToNextTrain==='function' && _resyncBoardToNextTrain()){
@@ -14703,7 +14706,7 @@ function _updateTransitGps() {
           var _stillStart = (bestIdx <= _frIdx) && (bestDist < 150);
           var _cool = window._rerouteCooldownUntil || 0;
           // 2026-10-04: 탑승 중 재탐색 차단 — 정지 증명(GPS 궤적·기지국·PF)이 있고 2분 넘게 지났을 때만 '못 탔다'로 본다.
-          if(_late >= 2 && _stillStart && Date.now() > _cool && typeof window._missProof==='function' && window._missProof()){
+          if(_late >= 2 && _stillStart && Date.now() > _cool && !(window._platGrace && window._platGrace(_late)) && typeof window._missProof==='function' && window._missProof()){
             window._rerouteCooldownUntil = Date.now() + 120000; // 2분 쿨다운
             // 진행 상태 리셋 (시간표가 앞서간 흔적 제거)
             window._timeMaxIdx = -1;
@@ -14749,7 +14752,7 @@ function _updateTransitGps() {
         var _nowM0 = _nowD0.getHours()*60 + _nowD0.getMinutes() + _nowD0.getSeconds()/60;
         var _passed0 = (_depM0 != null) ? ((_nowM0 - _depM0 + 1440) % 1440) : -1;   // 출발예정 후 경과(분)
         if(_depM0 != null && _passed0 >= 1.0 && _passed0 < 720 && Date.now() - _lastRe0 > 60000
-           && typeof window._missProof==='function' && window._missProof()){
+           && !(window._platGrace && window._platGrace(_passed0)) && typeof window._missProof==='function' && window._missProof()){
           window._reanchorAt = Date.now();
           if(_resyncBoardToNextTrain()){
             window._rerouteCooldownUntil = Date.now() + 120000;   // 기존 전체 재탐색과 중복 방지
@@ -46709,11 +46712,13 @@ function _pfTick(){
     if(window._routeLocked !== true || window._metroRouteMode === true){
       if(_pf.f && !window._routeLocked) { _pf.f = null; _pf.sig = ''; _pf.A = null; }
       try{ _autoLockOnRide(); }catch(eAL){}
+      try{ _platformLateShift(Date.now()); }catch(ePL){}
 
       if(!window._routeLocked && _pfM.started && (Date.now() - (_pf.idleSince || (_pf.idleSince = Date.now())) > 120000)) _pfMotionStop();
       return;
     }
     _pf.idleSince = 0;
+    try{ _autoLockVerify(Date.now()); }catch(eAV){}
     if(!_pfBuild()) return;
     _pfMotionStart();
     var f = _pf.f, now = Date.now();
@@ -46764,6 +46769,7 @@ function _pfTick(){
     window._pfBest = { idx: b.idx, td: _pf.st[b.idx] ? _pf.st[b.idx]._td : -1, conf: b.conf, kind: b.kind, delayS: b.delayS, at: now };
     if(_pfLive()) _pfApplyLive(b, now);
     try{ _pfOverdueShift(now); }catch(eO){}
+    try{ _platformLateShift(now); }catch(ePL2){}
   }catch(e){}
 }
 window._pfTick = _pfTick;
@@ -46977,12 +46983,18 @@ function _autoLockOnRide(){
   if(!r || !r.now) return false;                                   // 지금 실제로 움직이는 중일 때만
   var bi = _htlBoardIdx(); if(bi < 0) return false;
   if(window._evNearNode(_transitNodeData[bi], 400) !== true) return false;
+  if(_evTowardNext(bi) === false) return false;                    // 다음 역 쪽으로 가고 있지 않으면(반대 방향·다른 길) 확정하지 않는다
   try{
     var t = _htlDepArrTimes(), depMs = (t && t.dep) ? _etaHmToMs(t.dep) : null;
     if(depMs != null && (now < depMs - 15 * 60000 || now > depMs + 25 * 60000)) return false;
   }catch(e1){}
   window._autoLockAt = now;
   var type = window._pendingRouteType || 'fast';
+  var info = { at: now, bi: bi, btn: null, mbtn: null, boarded: null, state: null };
+  try{ var _b0 = document.getElementById('confirmRouteBtn'); if(_b0) info.btn = [_b0.textContent, _b0.style.background]; }catch(e8){}
+  try{ var _m0 = document.getElementById('mainConfirmRouteBtn'); if(_m0) info.mbtn = [_m0.textContent, _m0.style.background]; }catch(e9){}
+  try{ info.boarded = S.boarded; info.state = S.boardingState; }catch(e10){}
+  window._autoLockInfo = info;
   window._routeLocked = true; window._lockedRouteType = type; window._lastCongNodeIdx = -1;
   try{ var _b = document.getElementById('confirmRouteBtn'); if(_b){ _b.textContent = '✅ 탑승 감지로 확정됨'; _b.style.background = '#30a14e'; } }catch(e2){}
   try{ var _mb = document.getElementById('mainConfirmRouteBtn'); if(_mb){ _mb.textContent = '✅ 탑승 감지로 확정됨'; _mb.style.background = '#30a14e'; } }catch(e3){}
@@ -46993,6 +47005,104 @@ function _autoLockOnRide(){
   return true;
 }
 window._autoLockOnRide = _autoLockOnRide;
+
+// 승차역 근처에서 지금까지 다음 역 쪽으로 150m 이상 가까워졌는가. 판단 불가(다음 역·궤적 없음)면 null.
+function _evTowardNext(bi){
+  try{
+    var nd = _transitNodeData, b = nd && nd[bi], nx = null, j;
+    if(!b || b.lat == null) return null;
+    for(j = bi + 1; j < nd.length; j++){ if(nd[j] && nd[j].lat != null && !nd[j].isWalk){ nx = nd[j]; break; } }
+    if(!nx) return null;
+    var now = Date.now(), tr = _ev.trail, near = null, nearD = 1e12, last = null;
+    for(var i = 0; i < tr.length; i++){
+      var p = tr[i]; if(now - p.ts > 600000 || p.ts < _ev.floorMs) continue;
+      var d = haversineM(p.lat, p.lng, b.lat, b.lng);
+      if(d < nearD){ nearD = d; near = p; }
+      last = p;
+    }
+    if(!near || !last) return null;
+    return haversineM(last.lat, last.lng, nx.lat, nx.lng) <= haversineM(near.lat, near.lng, nx.lat, nx.lng) - 150;
+  }catch(e){ return null; }
+}
+window._evTowardNext = _evTowardNext;
+// 자동 확정 뒤 검증: 5분(이동 중이면 10분) 안에 승차 확정·다음 역 진행이 안 보이면 오탐으로 보고 확정을 거둔다(수동 확정은 건드리지 않는다).
+function _autoLockVerify(now){
+  var I = window._autoLockInfo; if(!I) return;
+  if(window._routeLocked !== true){ window._autoLockInfo = null; return; }
+  if(window._htlBoarded === true || (window._gpsMaxIdx != null && window._gpsMaxIdx > I.bi)){
+    window._autoLockInfo = null;
+    try{ _ovlDiag('자동확정', '검증 통과 — 승차/다음 역 진행 확인'); }catch(e0){}
+    return;
+  }
+  var age = now - I.at; if(age < 5 * 60000) return;
+  var r = null; try{ r = window._rideEv ? window._rideEv() : null; }catch(e1){}
+  if(r && r.now && age < 10 * 60000) return;
+  window._routeLocked = false; window._lockedRouteType = null; window._autoLockInfo = null;
+  window._autoLockAt = now + 5 * 60000;                 // 곧바로 다시 확정하지 않는다(5분 + 기본 60초)
+  try{ var b = document.getElementById('confirmRouteBtn'); if(b && I.btn){ b.textContent = I.btn[0]; b.style.background = I.btn[1]; } }catch(e2){}
+  try{ var mb = document.getElementById('mainConfirmRouteBtn'); if(mb && I.mbtn){ mb.textContent = I.mbtn[0]; mb.style.background = I.mbtn[1]; } }catch(e3){}
+  try{ if(I.boarded != null) S.boarded = I.boarded; if(I.state != null) S.boardingState = I.state; }catch(e4){}
+  try{ if(typeof toast === 'function') toast('탑승이 확인되지 않아 자동 확정을 취소했어요'); }catch(e5){}
+  try{ _ovlDiag('자동확정', '취소 — ' + Math.round(age / 1000) + '초 동안 승차 확정·다음 역 진행 없음'); }catch(e6){}
+}
+window._autoLockVerify = _autoLockVerify;
+
+// ── 승강장에서 늦은 열차를 기다리는 중 (2026-10-04) ──
+//   승차역 300m 안에 있고 아직 안 탔을 때 예정 출발 시각이 지나도 열차가 4분까지 늦는 일은 흔하다.
+//   그동안은 '놓쳤다'(다음 열차로 재동기화·재탐색)로 보지 않고, 늦는 것으로 보고 시각만 뒤로 민다.
+//   4분이 넘어도 안 타면 기존대로 정지 증명이 있을 때 놓친 것으로 본다.
+var _PLAT_GRACE_MIN = 4;
+function _platformWaiting(){
+  try{
+    if(window._htlBoarded === true) return false;
+    if(window._rideEv && window._rideEv().riding) return false;
+    var bi = _htlBoardIdx(); if(bi < 0) return false;
+    var n = _transitNodeData && _transitNodeData[bi]; if(!n || n.lat == null) return false;
+    var tr = _ev.trail, p = tr[tr.length - 1], now = Date.now();
+    if(!p || now - p.ts > 90000) return false;
+    return haversineM(p.lat, p.lng, n.lat, n.lng) <= 300;
+  }catch(e){ return false; }
+}
+// passedMin: 호출한 쪽이 계산한 '예정 출발 후 경과(분)'. 승강장 대기 중이고 아직 유예 안이면 true.
+function _platGrace(passedMin){
+  try{
+    if(!_platformWaiting()) return false;
+    var bi = _htlBoardIdx(), n = _transitNodeData[bi], D = window._platDep0, p = passedMin;
+    if(D && D.node === n){ var o = _msToMinOfDay(Date.now()) - D.min; if(o < -720) o += 1440; if(o > 720) o -= 1440; p = o; }
+    return p < _PLAT_GRACE_MIN;
+  }catch(e){ return false; }
+}
+window._platformWaiting = _platformWaiting; window._platGrace = _platGrace;
+function _platformLateShift(now){
+  try{
+    if(window._metroRouteMode === true) return;
+    if(typeof _baseTimeMs !== 'undefined' && _baseTimeMs != null) return;
+    if(now - (window._platShiftAt || 0) < 20000) return;
+    if(!_platformWaiting()) return;
+    var bi = _htlBoardIdx(), nd = _transitNodeData, bn = nd[bi];
+    if(!bn || bn._schedMin == null) return;
+    var D = window._platDep0, base = (D && D.node === bn) ? D.min : bn._schedMin;
+    var origOver = _msToMinOfDay(now) - base; if(origOver < -720) origOver += 1440; if(origOver > 720) origOver -= 1440;
+    if(origOver >= _PLAT_GRACE_MIN) return;                       // 유예가 끝났다 — 기존 '놓침' 판단이 맡는다
+    var over = _msToMinOfDay(now) - bn._schedMin; if(over < -720) over += 1440; if(over > 720) over -= 1440;
+    if(over * 60 < 60) return;
+    if(!D || D.node !== bn) window._platDep0 = { node: bn, min: bn._schedMin };
+    var add = over + 0.5;
+    window._platShiftAt = now;
+    for(var i = bi; i < nd.length; i++){
+      var n = nd[i]; if(!n || n._schedMin == null) continue;
+      n._schedMin += add;
+      var t = ((n._schedMin % 1440) + 1440) % 1440, h = Math.floor(t / 60), m = Math.round(t % 60);
+      if(m >= 60){ m -= 60; h = (h + 1) % 24; }
+      n.arrTime = ('0' + h).slice(-2) + ':' + ('0' + m).slice(-2);
+      if(n.el){ var lb = n.el.querySelector('.htl-time-lbl'); if(lb) lb.textContent = n.arrTime; }
+    }
+    window._markerMaxProg = null;
+    try{ _ovlDiag('지연반영', '승강장 대기 중 · ' + (bn.name || '?') + ' 예정 ' + Math.round(over * 60) + '초 지남 → 열차 지연으로 보고 이후 시각 +' + Math.round(add * 60) + '초'); }catch(e1){}
+    try{ if(typeof _aiArrivalSync === 'function') _aiArrivalSync(); }catch(e2){}
+  }catch(e){}
+}
+window._platformLateShift = _platformLateShift;
 
 // ── 역 사이 지연 반영 (2026-10-04) ──
 //   PF 가 역을 채택하는 순간에만 시각을 맞추면, 열차가 늦을 때 다음 역 예정 시각이 지나도 '남은 시간'이 0분으로 굳는다.
