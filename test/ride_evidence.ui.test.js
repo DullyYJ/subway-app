@@ -167,6 +167,82 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     assert.ok(r.rem == null || r.rem <= 3, '남은 시간 ' + r.rem);
   });
 
+  console.log('[분 표시·배지·지연 반영 (2026-10-04 추가)]');
+  await t('구간 합(65분)이 총 소요(69분)보다 작으면 모자란 4분은 대기로 가고 합이 69분이 된다', async () => {
+    const r = await page.evaluate(() => {
+      const secs = [{ transportation: { type: 3 }, duration: 300 }, { transportation: { type: 1 }, duration: 2400, startSec: 300, endSec: 2700 }, { transportation: { type: 3 }, duration: 1200 }];
+      return { a: _routeTimeSplit(secs, 69), b: _routeTimeSplit(secs, 65), c: _routeTimeSplit(secs, 66) };
+    });
+    assert.strictEqual(r.a.ride + r.a.wait + r.a.walk, 69, JSON.stringify(r.a));
+    assert.strictEqual(r.a.wait, 4, JSON.stringify(r.a));
+    assert.strictEqual(r.a.ride, 40); assert.strictEqual(r.a.walk, 25);
+    assert.strictEqual(r.b.ride + r.b.wait + r.b.walk, 65, '같으면 그대로 ' + JSON.stringify(r.b));
+    assert.strictEqual(r.c.ride + r.c.wait + r.c.walk, 66);
+  });
+  await t('분리 줄 앞에 "전체 N분"이 붙고, 타임라인 총 소요(72분)를 따른다', async () => {
+    const txt = await page.evaluate(() => {
+      let el = document.getElementById('transitSplitRow');
+      if (!el) { el = document.createElement('div'); el.id = 'transitSplitRow'; document.body.appendChild(el); }
+      window._htlTlTotalMin = 72;
+      const secs = [{ transportation: { type: 3 }, duration: 300 }, { transportation: { type: 1 }, duration: 2400, startSec: 300, endSec: 2700 }, { transportation: { type: 3 }, duration: 1200 }];
+      _renderSplitRow({ why: '', sections: secs, summary: { duration: 69 * 60 } });
+      return el.textContent;
+    });
+    assert.ok(/^전체 72분 · 승차 40분 · 대기 7분 · 도보·환승 25분/.test(txt), txt);
+  });
+  await t('이동 중 헤더 숫자 옆 단위가 "분 남음"으로 바뀐다', async () => {
+    const u = await page.evaluate(() => {
+      let n = document.getElementById('transitResultMinNum'), un = document.getElementById('transitResultMinUnit');
+      if (!n) { n = document.createElement('span'); n.id = 'transitResultMinNum'; document.body.appendChild(n); }
+      if (!un) { un = document.createElement('span'); un.id = 'transitResultMinUnit'; un.textContent = '분'; document.body.appendChild(un); }
+      un.textContent = '분';
+      window._gpsMaxIdx = 3; window._rideEvReset && window._rideEvReset('시험');
+      try { _updateRouteRemaining(); } catch (e) {}
+      return un.textContent;
+    });
+    assert.strictEqual(u, '분 남음');
+  });
+  await t('주황 대기 배지가 역 이름 줄과 겹치지 않고 카드 안에 들어온다', async () => {
+    const r = await page.evaluate(() => {
+      document.body.insertAdjacentHTML('beforeend',
+        '<div class="htl-wrap" id="tWrap" style="width:340px;position:fixed;left:10px;top:10px;"><div id="transitHtlTrack">'
+        + '<div class="htl-stn"><div class="htl-name" id="tName">계양</div><div class="htl-line">공항철도</div><div class="htl-axis" id="tAxis"><div class="htl-dot" id="htl-gps-marker-dot" style="left:50%"></div></div></div></div></div>');
+      window._htlGpsDot = document.getElementById('htl-gps-marker-dot');
+      window._rideEvReset && window._rideEvReset('시험');
+      const ev = window._rideEv; window._rideEv = function () { return { riding: false }; };
+      _htlWaitBadge(true, '대기 중 · 250m');
+      window._rideEv = ev;
+      const b = document.getElementById('htlWaitBadge').getBoundingClientRect(), n = document.getElementById('tName').getBoundingClientRect(), w = document.getElementById('tWrap').getBoundingClientRect();
+      return { overlapName: !(b.bottom <= n.bottom - 0.5 ? b.top >= n.bottom || b.bottom <= n.top : false) && (b.top < n.bottom && b.bottom > n.top), top: b.top, wrapTop: w.top, nameBottom: n.bottom, bottom: b.bottom, h: b.height };
+    });
+    assert.ok(r.top >= r.wrapTop, '카드 위로 잘리지 않음 ' + JSON.stringify(r));
+    assert.ok(r.top >= r.nameBottom - 0.5, '역 이름 줄과 겹침 ' + JSON.stringify(r));
+    assert.ok(r.h <= 14, '배지 높이 ' + r.h);
+  });
+  await t('다음 역 예정이 60초 넘게 지났는데 도착 증거가 없으면 그 역과 이후 시각이 같은 만큼 밀린다(앞당기지 않음, 20초 간격)', async () => {
+    const r = await page.evaluate(() => {
+      const nd = _transitNodeData; const n = new Date(); const nowMin = n.getHours() * 60 + n.getMinutes() + n.getSeconds() / 60;
+      if (!window._pf || !_pf.A) { _pf.A = { sig: _pf.sig, k: 0, td: 0, cand: -1, candN: 0, candAt: 0, backAt: 0, at: 0 }; }
+      _pf.A.sig = _pf.sig; _pf.A.td = 2; window._routeLocked = true; window._metroRouteMode = false;
+      for (let i = 0; i < nd.length; i++) { if (nd[i]) nd[i]._schedMin = nowMin - 2 + (i - 3) * 2.5; }
+      const before = nd.map(x => x && x._schedMin);
+      window._pfBest = { idx: 0, td: 0, conf: 0.2, kind: 'seg', at: Date.now() };
+      window._pfOverdueAt = 0; window._ev.sticky = Date.now() + 1e6; window._ev.cache = null;
+      window._pfOverdueShift(Date.now());
+      const after = nd.map(x => x && x._schedMin);
+      const d3 = after[3] - before[3], d4 = after[4] - before[4], d2 = after[2] - before[2];
+      window._pfOverdueShift(Date.now());       // 20초 안 → 한 번 더 밀리지 않는다
+      const again = nd[3]._schedMin - after[3];
+      // 앞당김 없음: 예정이 아직 안 지났으면 그대로
+      for (let i = 0; i < nd.length; i++) { if (nd[i]) nd[i]._schedMin = nowMin + 3 + (i - 3) * 2.5; }
+      window._pfOverdueAt = 0; const b2 = nd[3]._schedMin; window._pfOverdueShift(Date.now()); const none = nd[3]._schedMin - b2;
+      return { d3, d4, d2, again, none, nowMinErr: Math.abs(after[3] - (nowMin + 0.5)) };
+    });
+    assert.ok(Math.abs(r.d3 - 2.5) < 0.2 && Math.abs(r.d4 - r.d3) < 1e-6, JSON.stringify(r));
+    assert.strictEqual(r.d2, 0, '이미 지난 역은 건드리지 않음');
+    assert.strictEqual(r.again, 0); assert.strictEqual(r.none, 0);
+  });
+
   console.log('[표시 수정]');
   await t('지하철 구간 갱신 시 혼잡도 카드 라벨이 "버스"에서 "지하철"로 돌아온다', async () => {
     const txt = await page.evaluate(() => {
