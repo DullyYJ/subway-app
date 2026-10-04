@@ -42021,7 +42021,7 @@ function _lrRenderOfficial(line){
       el.style.display='block';
     } else if(/^[1-8]호선$/.test(line)){
       el.style.background=_QUIET; el.style.borderColor=_QUIET_B;
-      el.innerHTML='✅ <b>서울교통공사 공지 확인</b> · 지금 '+_ltEsc(line)+' 지연·사고 공지는 없어요 <span style="color:var(--sub);">('+_offAgo(_offCache.at||Date.now())+' 확인)</span>';
+      el.innerHTML='✅ <b>'+_ltEsc(line)+' 정상 운행 중입니다</b> <span style="color:var(--sub);">('+_offAgo(_offCache.at||Date.now())+' 확인)</span>';
       el.style.display='block';
     } else if(/선$/.test(line) || /^(공항철도|경의중앙|수인분당|신분당|경춘|경강|서해|GTX)/.test(line)){
       el.style.background=_QUIET; el.style.borderColor=_QUIET_B;
