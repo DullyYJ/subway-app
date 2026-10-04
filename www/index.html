@@ -2625,17 +2625,57 @@ function _placeInfo(kind, nameEnc, lat, lng, stnEnc){
   if(!name){ if(typeof toast==='function') toast('가게 이름이 없어요'); return; }
   var q=(stn ? (stn.replace(/역$/,'')+'역 ') : '')+name, qe=encodeURIComponent(q);
   if(typeof toast==='function') toast((kind==='naver'?'네이버':'카카오')+' 지도에서 가게 정보를 여는 중...');
+  var hasPos=(lat!=null&&lng!=null&&!isNaN(parseFloat(lat))&&!isNaN(parseFloat(lng)));
   var appUrl, webUrl;
   if(kind==='naver'){
-    appUrl='nmap://search?query='+qe+'&appname=com.dullyyj.subway';
-    webUrl='https://map.naver.com/p/search/'+qe;
-  } else {
-    appUrl='kakaomap://search?q='+qe+((lat!=null&&lng!=null&&!isNaN(parseFloat(lat))) ? ('&p='+lat+','+lng) : '');
-    webUrl='https://map.kakao.com/link/search/'+qe;
+    // 네이버는 장소 ID 를 알 방법이 없어 검색으로 연다. 좌표를 같이 넘겨 같은 이름의 다른 지점이 앞에 오지 않게 한다.
+    appUrl='nmap://search?query='+qe+(hasPos?('&lat='+lat+'&lng='+lng+'&zoom=17'):'')+'&appname=com.dullyyj.subway';
+    webUrl='https://map.naver.com/p/search/'+qe+(hasPos?('?c=17.00,'+lng+','+lat+',0,0,0,dh'):'');
+    _navOpen(appUrl, webUrl);
+    return;
   }
-  _navOpen(appUrl, webUrl);
+  appUrl='kakaomap://search?q='+qe+(hasPos ? ('&p='+lat+','+lng) : '');
+  webUrl='https://map.kakao.com/link/search/'+qe;
+  // 2026-10-04: 카카오는 가게 근처에서 이름으로 찾아 장소 ID 를 얻으면 그 가게 페이지(리뷰·사진·메뉴)를 바로 연다. 못 찾으면 위 검색으로 연다.
+  _placeKakaoId(name, lat, lng).then(function(id){
+    if(id) _navOpen('kakaomap://place?id='+id, 'https://place.map.kakao.com/'+id);
+    else _navOpen(appUrl, webUrl);
+  }, function(){ _navOpen(appUrl, webUrl); });
 }
 window._placeInfo=_placeInfo;
+var _placeIdCache={};
+function _placeNorm(x){ return String(x||'').replace(/<[^>]*>/g,'').replace(/[\s·.,()\-_/]/g,'').toLowerCase(); }
+// 가게 이름 + 좌표 → 카카오 장소 ID (같은 이름이 가까이 있으면 가장 가까운 것). 없거나 실패하면 null.
+function _placeKakaoId(name, lat, lng){
+  return new Promise(function(resolve){
+    try{
+      var la=parseFloat(lat), ln=parseFloat(lng);
+      if(!name || isNaN(la) || isNaN(ln) || typeof _kakaoLocal!=='function' || window._kakaoDead){ resolve(null); return; }
+      var key=_placeNorm(name)+'@'+la.toFixed(4)+','+ln.toFixed(4);
+      if(_placeIdCache[key]!==undefined){ resolve(_placeIdCache[key]); return; }
+      var done=false, tid=setTimeout(function(){ if(!done){ done=true; resolve(null); } }, 4000);
+      _kakaoLocal('search/keyword.json', 'query='+encodeURIComponent(name)+'&x='+ln+'&y='+la+'&radius=500&sort=distance&size=10')
+        .then(function(r){ if(!r || !r.ok) throw new Error('HTTP'); return r.json(); })
+        .then(function(d){
+          if(done) return; done=true; clearTimeout(tid);
+          var want=_placeNorm(name), best=null;
+          ((d&&d.documents)||[]).forEach(function(doc){
+            var got=_placeNorm(doc.place_name);
+            if(!got || !doc.id) return;
+            if(got!==want && got.indexOf(want)<0 && want.indexOf(got)<0) return;      // 이름이 다르면 다른 가게
+            var dist=parseFloat(doc.distance); if(isNaN(dist)) dist=0;
+            var exact=(got===want) ? 0 : 1;
+            if(!best || exact<best.exact || (exact===best.exact && dist<best.dist)) best={ id:String(doc.id), dist:dist, exact:exact };
+          });
+          var id=best ? best.id : null;
+          if(id) _placeIdCache[key]=id;
+          resolve(id);
+        })
+        .catch(function(){ if(done) return; done=true; clearTimeout(tid); resolve(null); });
+    }catch(e){ resolve(null); }
+  });
+}
+window._placeKakaoId=_placeKakaoId;
 function _placeBtnsHtml(lat, lng, name, stn){
   var enc=encodeURIComponent(String(name||'')).replace(/'/g,'%27');
   var sEnc=encodeURIComponent(String(stn||'')).replace(/'/g,'%27');
@@ -46668,6 +46708,7 @@ function _pfTick(){
     try{ _evSample(Date.now()); }catch(eS){}   // 2026-10-04: 경로 확정 전에도 GPS 궤적·기지국 변화를 쌓는다(승차 증거)
     if(window._routeLocked !== true || window._metroRouteMode === true){
       if(_pf.f && !window._routeLocked) { _pf.f = null; _pf.sig = ''; _pf.A = null; }
+      try{ _autoLockOnRide(); }catch(eAL){}
 
       if(!window._routeLocked && _pfM.started && (Date.now() - (_pf.idleSince || (_pf.idleSince = Date.now())) > 120000)) _pfMotionStop();
       return;
@@ -46921,6 +46962,37 @@ function _pfApplyLive(b, now){
     }
   }catch(e){}
 }
+
+// ── 경로를 확정하지 않고 그냥 탄 경우 (2026-10-04) ──
+//   '경로 확정'을 안 누르면 추적·위치 판단(PF)·시각 보정이 전부 꺼져 있어, 탑승 중에도 아무것도 따라가지 않았다.
+//   열차를 타고 이동한다는 증거(GPS 이동 + 기지국/PF)가 지금 있고, 그 궤적이 보던 경로의 승차역 400m 안을 지났고,
+//   승차 예정 시각이 지금과 크게 어긋나지 않으면(−15분~+25분) 보던 경로로 확정한 것으로 본다. 한 번 알려 준다.
+function _autoLockOnRide(){
+  if(window._routeLocked === true || window._metroRouteMode === true) return false;
+  if(typeof _baseTimeMs !== 'undefined' && _baseTimeMs != null) return false;
+  if(!window._lastHtlNodes || !window._lastHtlNodes.length || !_transitNodeData || !_transitNodeData.length) return false;
+  var now = Date.now();
+  if(now - (window._autoLockAt || 0) < 60000) return false;
+  var r = window._rideEv ? window._rideEv() : null;
+  if(!r || !r.now) return false;                                   // 지금 실제로 움직이는 중일 때만
+  var bi = _htlBoardIdx(); if(bi < 0) return false;
+  if(window._evNearNode(_transitNodeData[bi], 400) !== true) return false;
+  try{
+    var t = _htlDepArrTimes(), depMs = (t && t.dep) ? _etaHmToMs(t.dep) : null;
+    if(depMs != null && (now < depMs - 15 * 60000 || now > depMs + 25 * 60000)) return false;
+  }catch(e1){}
+  window._autoLockAt = now;
+  var type = window._pendingRouteType || 'fast';
+  window._routeLocked = true; window._lockedRouteType = type; window._lastCongNodeIdx = -1;
+  try{ var _b = document.getElementById('confirmRouteBtn'); if(_b){ _b.textContent = '✅ 탑승 감지로 확정됨'; _b.style.background = '#30a14e'; } }catch(e2){}
+  try{ var _mb = document.getElementById('mainConfirmRouteBtn'); if(_mb){ _mb.textContent = '✅ 탑승 감지로 확정됨'; _mb.style.background = '#30a14e'; } }catch(e3){}
+  try{ if(typeof toast === 'function') toast('탑승이 감지돼 지금 보는 경로로 안내를 시작해요'); }catch(e4){}
+  try{ if(typeof _beginJourneyTracking === 'function') _beginJourneyTracking(); }catch(e5){}
+  try{ _pipArmNow(); }catch(e6){}
+  try{ _ovlDiag('자동확정', '탑승 증거 GPS' + r.gps + ' 기지국' + r.cell + ' PF' + r.pf + ' · 승차역 ' + (_transitNodeData[bi].name || '?') + ' 근처 통과 → 경로 확정(' + type + ')'); }catch(e7){}
+  return true;
+}
+window._autoLockOnRide = _autoLockOnRide;
 
 // ── 역 사이 지연 반영 (2026-10-04) ──
 //   PF 가 역을 채택하는 순간에만 시각을 맞추면, 열차가 늦을 때 다음 역 예정 시각이 지나도 '남은 시간'이 0분으로 굳는다.
