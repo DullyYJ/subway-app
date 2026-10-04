@@ -5,7 +5,7 @@
 ## 0. 현재 상태 한눈에
 | 대상 | 버전·커밋 | 상태 |
 |---|---|---|
-| 앱 `DullyYJ/subway-app` main | 마지막 앱 동작 변경 `df32cdb`(분 표시 통일·승차/대기 합 보정·'분 남음'·주황 배지·역 사이 지연 반영). 그 앞 `43e816b`가 재탐색 차단·PF 단일 위치원·복합 승차판정·가속도계 삭제. 그 뒤는 시험 파일과 이 문서뿐 | Build APK #759(`df32cdb`) 성공 — 5번 표 참고. **실기기 검증은 아직 안 함(다음 승차에서)** |
+| 앱 `DullyYJ/subway-app` main | 마지막 앱 동작 변경 `fd48d76`(경로 미확정 시 탑승 감지 자동 확정·카카오 장소 ID 직링크·네이버 좌표 검색). 그 앞 `df32cdb`가 분 표시 통일·승차/대기 합 보정·'분 남음'·주황 배지·역 사이 지연 반영, 그 앞 `43e816b`가 재탐색 차단·PF 단일 위치원·복합 승차판정·가속도계 삭제. 그 뒤는 시험 파일과 이 문서뿐 | Build APK #759(`df32cdb`) 성공, `fd48d76`은 #762 성공. **실기기 검증은 아직 안 함(다음 승차에서)** |
 | 엔진 `DullyYJ/route-v2` main | `ENGINE_VERSION = route-v2-2026-10-04bw`, 병합 커밋 `a504d1a` | main push 시 Cloudflare Workers Builds 자동 배포. 지연 추정은 `EST_ENABLED` 꺼짐 |
 | board-writer (`route-v2/board-writer/index.js`, main) | 신버전(호선 방 `line` 저장·`/talks` 모으기·호선별 AI 글) | **대시보드에 배포됨** — Cowork 클로드 확인: `/talks` 항목에 `line` 필드·`L숫자` id, `/lroom?line=…` 정상, 경춘선·GTX-A는 빈 방으로 열림 |
 | 중계 gentle-lab (`subway-app/worker/index.js`) | 강화 코드(재시도·키 정리·진단) | **대시보드에 붙여 넣어 배포됨**(YJ가 Deploy). `SEOUL_DEBUG` 변수는 진단 후 YJ가 삭제. 배치(Placement)는 AWS ap-northeast-2로 바꿨으나 swopenapi 차단에는 효과 없음 |
@@ -33,7 +33,8 @@
 - 주황 대기 배지(`.htl-wait-badge`): 역 이름 줄(30px)과 겹치던 것을 노선 줄(18px) 높이 안(`top:-18px; height:12px`)에 들어가게 줄였다. 시험이 이름 줄과 안 겹치고 카드 안에 있음을 확인한다. 실기기 확인 필요.
 - 표시 수정: 시각 `13:60` 오류(분 올림) 수정, 혼잡도 카드 라벨이 지하철에서 `버스`로 남던 것(`updateCong`에서 라벨 리셋), 환승 이동 `도보 0m` → `환승 이동`, 알림 ETA는 알림 노드의 `arrTime`에서 계산, 탑승 중 주황 대기 배지 숨김.
 - 로그 태그(`_ovlDiag`/`_evLog`): `승차판단`(탑승 증거 확인·초기화·미탑승 증명 정지), `승차확정`(대기 모드에서 확정, 근거와 출발 경과), `PF채택`(역 전진 때 PF 위치·신뢰도·지연). 기록 모드 로그에서 이 세 줄로 이번 개편의 동작을 대조한다.
-- 맛집 탭: 카카오/네이버 버튼은 길찾기가 아니라 **가게 상세·리뷰**를 연다(`_placeInfo`: 앱 `nmap://search`·`kakaomap://search` → 웹 `map.naver.com/p/search/…`·`map.kakao.com/link/search/…` 폴백). 길찾기는 `_navBtnsHtml`로 별도 버튼(`네이버 길찾기`·`카카오 길찾기`)으로 남겼다. 가게 이름 검색이라 장소 ID 직링크는 아니다.
+- 맛집 탭: 카카오/네이버 버튼은 길찾기가 아니라 **가게 상세·리뷰**를 연다(`_placeInfo`: 앱 `nmap://search`·`kakaomap://search` → 웹 `map.naver.com/p/search/…`·`map.kakao.com/link/search/…` 폴백). 길찾기는 `_navBtnsHtml`로 별도 버튼(`네이버 길찾기`·`카카오 길찾기`)으로 남겼다. **카카오**는 `_placeKakaoId(name,lat,lng)`가 `_kakaoLocal('search/keyword.json')`(반경 500m·거리순)으로 같은 이름(정규화 후 일치·포함) 가게를 찾아 ID 를 얻으면 `kakaomap://place?id=ID`/`https://place.map.kakao.com/ID`로 가게 페이지를 바로 연다(4초 제한, 캐시, 실패·`_kakaoDead`면 검색으로 폴백). **네이버**는 장소 ID 를 얻을 방법이 없어 검색으로 열되 좌표 편향(`nmap://search…&lat&lng&zoom=17`, 웹 `?c=17.00,lng,lat,…`)을 줘 같은 이름의 다른 지점이 앞에 오지 않게 했다 — 네이버 직링크는 불가(한계).
+- **경로 미확정 자동 확정(`_autoLockOnRide`, 46924줄 근처)**: '경로 확정'을 안 누르면 `_routeLocked`가 false 라 추적·PF·시각 보정이 모두 꺼졌다. `_pfTick`의 미확정 분기가 이 함수를 부른다. 조건: 미확정·지하철 경로(노선도 미리보기·예상 모드 아님)·`_lastHtlNodes` 있음, 지금 실제 이동 증거(`_rideEv().now`), 승차역 400m 안을 지났음(`_evNearNode`), 승차 예정 −15분~+25분 안, 마지막 시도 60초 뒤. 만족하면 `_routeLocked=true`, `_lockedRouteType=_pendingRouteType||'fast'`, 버튼 문구 '탑승 감지로 확정됨', 토스트, `_beginJourneyTracking()`, `_pipArmNow()`, 로그 `자동확정`. 서 있거나 승차역에서 멀면 확정하지 않는다.
 - 승차 판정 일부(`detectBoardingState`의 GPS·기지국·시각표 근거, 수동 탑승 버튼 경로)와 `_startTimetableAdvance`·`_doTimetableAdvance`(지연 측정)는 그대로다.
 
 **커뮤니티 > 실시간소통**
@@ -49,7 +50,7 @@
 ## 3. 이번 세션(2026-10-04)에 한 일
 **저녁: 열차 시험(계양 12:52 → 잠실 14:01, 69분) 문제 일괄 수정 — Cowork 클로드가 직접 수정·push**
 - 앱 `7a63fc1`(줄바꿈이 CRLF 로 들어가 폐기) → **`43e816b`**(LF 로 재커밋, 실제 반영본). 위 2번 구조 전부가 이 커밋. 가속도계(`_accel`·`_startAccel`·`_accelState`·`'진동 보조'` 문구·설정의 측정 카드·`_bgDiag` 줄)를 **전부 삭제**했다. 실측(열차 운행 98회 샘플, stddev 최소 0.06/중앙 0.16/90% 0.17/최대 0.38)이 임계 `TRAIN_THRESH 1.8` 보다 한참 낮았고 걷기보다 작아 구분 불가였다. 가속도 쪽 신호는 PF 의 `_pfM*`(정차/주행 확률)만 남는다.
-- 시험: `test/ride_evidence.ui.test.js`(처음 19건, 이후 24건)를 추가하고 `test/accel_auxiliary.ui.test.js`는 삭제(이력에 있음). 시나리오: 승차역에서 3분 서 있어도 승차증거 없음·정지 증명, 역방향(경도 감소) 17:10 마커가 역을 지나치지 않음, **23역·188초 간격 69분 시나리오에서 재탐색 0회·남은 시간 0~2분**, 그려 둔 지 1시간이 지난 경로도 `_etaResearchIfStale` 가 탑승 중엔 재탐색 안 함, 앱 복귀 재탐색 없음, 맛집/네이버 버튼, `13:60` 잔존 여부, 가속도 코드 삭제 확인.
+- 시험: `test/ride_evidence.ui.test.js`(처음 19건, 이후 24건, 현재 30건)를 추가하고 `test/accel_auxiliary.ui.test.js`는 삭제(이력에 있음). 시나리오: 승차역에서 3분 서 있어도 승차증거 없음·정지 증명, 역방향(경도 감소) 17:10 마커가 역을 지나치지 않음, **23역·188초 간격 69분 시나리오에서 재탐색 0회·남은 시간 0~2분**, 그려 둔 지 1시간이 지난 경로도 `_etaResearchIfStale` 가 탑승 중엔 재탐색 안 함, 앱 복귀 재탐색 없음, 맛집/네이버 버튼, `13:60` 잔존 여부, 가속도 코드 삭제 확인.
 - 코드 검토에서 나온 논리 오류는 모두 고쳤다(증거 캐시의 시각 역행 등). 검토가 지적했으나 **안 고친 것**은 6번 목록.
 - **커밋 방법(이 환경 제약)**: 6.7MB 파일은 GitHub 편집기가 안 열린다. 내장 브라우저(GitHub 로그인된 DullyYJ)에서 `POST /DullyYJ/subway-app/tree-save/main/<경로>`(필드: message, placeholder_message, description, commit-choice=direct, target_branch=main, quick_pull, guidance_task, commit=현재 head oid, same_repo=1, pr, content_changed, filename, new_filename, value, authenticity_token; 헤더 accept json·github-verified-fetch true·x-fetch-nonce·x-requested-with)로 저장한다. 토큰·oid 는 편집 페이지 `script[data-target="react-app.embeddedData"]`. 새 파일은 `/create/main/<폴더>`(파일명에 폴더를 넣으면 최상위로 올라간다 — 폴더 경로로 POST 하고 이름만 넣을 것, 잘못 올리면 `new_filename`으로 이동 가능), 삭제는 `DELETE` 로 `blob/main/<경로>`. **함정: Chrome FormData 멀티파트가 값의 LF 를 CRLF 로 바꾼다 → LF 파일은 `Blob`으로 멀티파트 본문을 직접 만들고(파트 사이만 `\r\n`) content-type 헤더에 boundary 를 지정.** 올린 뒤 `raw/main/…` 를 sha256 으로 대조한다.
 - 장기 시험 실행: `nohup node test/ride_evidence.ui.test.js <html 경로> &`(약 4분, 포그라운드로는 시간 초과).
@@ -92,7 +93,9 @@
 | `4d205d9`(새 시험 파일, 최상위에 잘못 올라감) | #755 | 성공 |
 | `956aa85`(시험을 test/로 이동) · `16ffdca`(가속도계 시험 삭제) · HANDOFF 커밋 | #756·#757·#758 | 성공 |
 | **`df32cdb`(남은 문제 4건 수정)** | **#759** | **성공** (2026-10-04 확인) |
-| `da309ca`(시험 5건 추가) | #760 | 확인 시점에 진행 중 — Actions 에서 결과 확인 |
+| `da309ca`(시험 5건 추가) | #760 | **성공** |
+| **`fd48d76`(자동 확정·카카오 ID)** | **#762** | **성공** (2026-10-04 확인) |
+| `0a62dad`(시험 30건) | #763 | **성공** (APK 는 `fd48d76` 과 같은 앱) |
 
 **가속도계(`_accel`) — 삭제됨(2026-10-04 저녁).** 실측으로 열차 구간 stddev 가 임계(1.8)의 1/10 수준이라 판정 근거가 될 수 없음이 확인됐다(2번·3번). 앞의 '보조 지표'(`2c883e0`, #747·#748) 도입분과 설정의 측정 카드도 함께 지웠다. **되살리지 말 것** — 위치 증거는 GPS·기지국·PF 이다. 옛 시험은 `test/accel_auxiliary.ui.test.js`(이력 `2c883e0`)에 있다.
 
@@ -109,14 +112,14 @@
 3. **경로 검색 지연 프로파일링**(0.6~2.4초).
 4. **환승 보정**: ride_log n≥30, 환승 1회 이상, 일관된 2분 내외일 때만 역별 편차로. `xfer_pos.secs` 평균(255초)을 통째로 쓰지 말 것. ride_log가 0건이라 보류.
 5. **다음 승차 실기기 검증(가장 중요)**: 기록 모드를 켜고 ① 탑승 중 재탐색이 없는지(`경로 N역 시작`이 안 나오는지) ② 마커·오버레이·혼잡도 카드가 PF 위치와 같은지(`PF채택` 로그) ③ 승강장에 이미 서 있다가 일찍 탄 열차를 `승차확정`으로 잡는지 ④ 백그라운드 갔다 와도 재탐색 안 되는지 ⑤ 역방향(잠실→강변) ⑥ 계양→잠실 69분 도착 예상이 실제 14:01 과 맞는지 ⑦ 환승 1~2정거장 전 무지개 하이라이트를 확인한다.
-5-1. **남은 개선(미수정)**: ⓐ 잠금(`_routeLocked`)이 아닌 경로는 PF 가 꺼져 옛 로직으로 동작(재탐색 방어는 `_ev` 표본으로 유지됨) ⓑ 맛집 버튼은 장소 ID 가 아니라 이름 검색 ⓒ 총 소요가 '엔진 총합'과 '화면 타임라인'이 어긋나는 실제 원인은 코드·합성 시험으로만 확인했다 — 실기기에서 카드 숫자·`전체 N분` 줄·도착 시각이 서로 맞는지 확인(어긋나면 기록 모드 로그와 `window._htlTlTotalMin` 값 대조). (이전에 여기 있던 분 불일치·'8분 vs 16분' 라벨·주황 배지·역 사이 지연 재계산 4건은 `df32cdb`에서 고쳤다.)
+5-1. **남은 개선(미수정)**: ⓐ 네이버 맛집 버튼은 장소 ID 를 못 얻어 좌표 편향 검색(카카오는 ID 직링크로 해결) ⓑ 자동 확정은 '승차역 400m 통과 + 이동 증거'라는 휴리스틱이라 실기기 확인 필요(오탐: 승차역 근처를 다른 교통수단으로 지나는 경우) ⓒ 승강장에서 늦은 열차를 2분 넘게 정지해 기다리면 기존 설계대로 '놓침' 재탐색이 가능 ⓓ 총 소요가 '엔진 총합'과 '화면 타임라인'이 어긋나는 실제 원인은 코드·합성 시험으로만 확인했다 — 실기기에서 카드 숫자·`전체 N분` 줄·도착 시각이 서로 맞는지 확인(어긋나면 기록 모드 로그와 `window._htlTlTotalMin` 값 대조). (이전에 여기 있던 분 불일치·'8분 vs 16분' 라벨·주황 배지·역 사이 지연 재계산 4건은 `df32cdb`에서 고쳤다.)
 6. **키·토큰 정리** — 기능 작업이 끝난 뒤. 앱에 새 키를 넣지 않는다. (YJ가 "이번에는 패스"라고 했다.)
 7. subway-app의 옛 브랜치 `claude/jolly-darwin-dtzab9`(`ac3e4ff` 등) 삭제 — **YJ 지시를 기다릴 것.**
 8. 선택: 사용자가 적은 노선(GTX-A 등)의 AI 글이 너무 적거나 어색한지 배포 서버에서 확인.
 
 ## 7. 테스트·빌드 확인 방법
 - 앱 문법: `www/index.html`의 인라인 `<script>`를 `new Function`으로 검사(`type="text/x-metro-svg"` 블록은 JS가 아니라 제외).
-- 앱 화면(헤드리스, 서버만 모의, 외부 요청 전부 차단, Playwright `/opt/node-tools/node_modules/playwright` + Chromium `/opt/pw-browsers/chromium-1194`): `node test/chat_line_tabs.ui.test.js [스크린샷 폴더]`(21건) · `node test/ride_evidence.ui.test.js [html 경로]`(24건, 약 4분 — 백그라운드로 실행: 재탐색 차단·승차 증거·69분 시나리오·역방향·버튼·가속도 삭제 확인). 첫 실행 위치 안내 팝업(`locDiscOv`)은 시험에서 '확인'을 누른 상태로 시작한다.
+- 앱 화면(헤드리스, 서버만 모의, 외부 요청 전부 차단, Playwright `/opt/node-tools/node_modules/playwright` + Chromium `/opt/pw-browsers/chromium-1194`): `node test/chat_line_tabs.ui.test.js [스크린샷 폴더]`(21건) · `node test/ride_evidence.ui.test.js [html 경로]`(30건, 약 5분 — 백그라운드로 실행: 재탐색 차단·승차 증거·69분 시나리오·역방향·버튼·가속도 삭제 확인). 첫 실행 위치 안내 팝업(`locDiscOv`)은 시험에서 '확인'을 누른 상태로 시작한다.
 - 중계: `node worker/test/seoul_relay.test.js`(13건, subway-app). 엔진: `node test/est_delay.test.js`(75건) · `node test/est_line_notices.test.js`(통합) — route-v2. 모의 위치·KV·BUSAPI라 네트워크가 필요 없다. board-writer: `node --check board-writer/index.js`, `node:sqlite`로 D1을 흉내 낸 모의 env로 `scheduled()`·`/talks`·`/lroom`·`/react`를 호출(Node 22).
 - 빌드: main push → `Build APK` 자동. 다른 브랜치는 Actions → Run workflow. 성공하면 `subway-app-debug` 아티팩트. 서명 릴리스(AAB)는 시크릿이 있을 때만.
 - Code 환경 제약: 아웃바운드가 프록시를 거치며 `workers.dev`·`apis.data.go.kr`·`api.cloudflare.com`은 막혀 있다(403). 외부 API가 필요하면 Actions 러너에서 시크릿(`TAGO_KEY`, `CF_API_TOKEN`, `CF_ACCOUNT_ID` — subway-app에만 있음)으로. 키·본문은 로그에 출력하지 말 것.
