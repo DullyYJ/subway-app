@@ -107,9 +107,9 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   });
 
   // ── 시나리오: 열차 지연·역방향·장거리(69분) ──
-  const sim = async ({ n, seg, dir, delay, dwell, startAt }) => {
+  const sim = async ({ n, seg, dir, delay, dwell, startAt, locked, latOff }) => {
     // n 역, 역간 seg초(정차 dwell초 포함), dir=+1/-1(경도 방향), delay=실제 열차가 시각표보다 늦은 초
-    await page.evaluate(([n, seg, dir, startAt]) => {
+    await page.evaluate(([n, seg, dir, startAt, locked]) => {
       window.__calls = { route: 0 };
       window.fmapDoRoute = function () { window.__calls.route++; };
       const base = new Date(startAt), midnight = new Date(startAt.slice(0, 10) + 'T00:00:00+09:00');
@@ -120,29 +120,34 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
         nodes.push({ name: 'S' + i, lat: 37.5, lng: 126.9 + dir * 0.0137 * i, isSub: true, isBus: false, isWalk: false, isOrigin: false, lineName: '2호선', _schedMin: m, el: null,
           arrTime: ('0' + Math.floor(m / 60)).slice(-2) + ':' + ('0' + Math.floor(m % 60)).slice(-2) });
       }
-      _transitNodeData = nodes; window._routeLocked = true; window._metroRouteMode = false; _baseTimeMs = null;
+      _transitNodeData = nodes; window._lastHtlNodes = nodes; window._routeLocked = (locked !== false); window._metroRouteMode = false; _baseTimeMs = null;
+      window.__began = 0; window._beginJourneyTracking = function () { window.__began++; }; window._autoLockAt = 0; window._pendingRouteType = 'fast';
       window._trackSig = 'T' + Math.random(); window._trackBase = 1; window._gpsMaxIdx = -1; window._gpsConfirmIdx = -1; window._nodePassMs = {}; window._htlBoarded = false;
       window._pf && (_pf.A = null); S.lastGPSFix = null; _fmapStart = { type: 'gps' };
       const card = document.getElementById('transitResultCard'); if (card) card.style.display = 'block';
       window._rideEvReset && window._rideEvReset('시험'); _ev.trail = []; _ev.cell = []; _ev.cache = null; _ev.cacheAt = 0;
-    }, [n, seg, dir, startAt]);
+    }, [n, seg, dir, startAt, locked]);
     await page.clock.setSystemTime(new Date(startAt));
-    const out = { maxPipAhead: -9, maxGmAhead: -9, route: 0, boardedAt: null, gm: -1, rem: null, ovl: [] };
+    await page.evaluate(() => { window._htlDrawnAt = Date.now(); window._etaResearchAt = 0; });
+    const out = { maxPipAhead: -9, maxGmAhead: -9, route: 0, boardedAt: null, gm: -1, rem: null, ovl: [], lockedAt: null, began: 0 };
     const total = (n - 1) * seg + 60;
     for (let sec = 0; sec < total; sec += 5) {
       const el = Math.max(0, sec - delay), k = Math.min(n - 1, Math.floor(el / seg)), w = el % seg;
       const frac = (k >= n - 1) ? 0 : (w < dwell ? 0 : Math.min(1, (w - dwell) / (seg - dwell)));
       const trueArrived = 1 + k;   // 노드 인덱스(1=S0)
-      await page.evaluate(([k, frac, dir]) => { S.lastGPSFix = { lat: 37.5, lng: 126.9 + dir * 0.0137 * (k + frac), ts: Date.now(), acc: 15 }; }, [k, frac, dir]);
+      await page.evaluate(([k, frac, dir, latOff]) => { S.lastGPSFix = { lat: 37.5 + latOff, lng: 126.9 + dir * 0.0137 * (k + frac), ts: Date.now(), acc: 15 }; }, [k, frac, dir, latOff || 0]);
       await tick();
-      const st = await page.evaluate(() => { try { _htlBoardWatch(); } catch (e) {} try { _etaResearchIfStale(); } catch (e) {} return { gm: window._gpsMaxIdx, boarded: window._htlBoarded, route: window.__calls.route, pip: _pipHereIdx(), tp: (_estimateTimelinePos() || {}).fromIdx }; });
-      if (st.boarded && out.boardedAt == null) out.boardedAt = sec;
+      const st = await page.evaluate(() => { try { _htlBoardWatch(); } catch (e) {} try { _etaResearchIfStale(); } catch (e) {} return { locked: window._routeLocked === true, began: window.__began, gm: window._gpsMaxIdx, boarded: window._htlBoarded, route: window.__calls.route, pip: _pipHereIdx(), tp: (_estimateTimelinePos() || {}).fromIdx }; });
+      if (st.boarded && out.boardedAt == null) { out.boardedAt = sec; out.routeAtBoard = st.route; }
+      if (st.locked && out.lockedAt == null) out.lockedAt = sec;
+      out.began = st.began;
       if (st.gm >= 0) out.maxGmAhead = Math.max(out.maxGmAhead, st.gm - trueArrived);
       if (out.boardedAt != null) out.maxPipAhead = Math.max(out.maxPipAhead, st.pip - trueArrived);
       out.route = st.route; out.gm = st.gm;
       await page.clock.runFor(5000);
     }
     console.log('      [sim n=' + n + ' dir=' + dir + ' delay=' + delay + '] 탑승확정 ' + out.boardedAt + '초 · gm앞섬 ' + out.maxGmAhead + ' · overlay앞섬 ' + out.maxPipAhead + ' · 재탐색 ' + out.route + ' · 최종gm ' + out.gm);
+    out.routeAfterBoard = out.boardedAt == null ? 0 : out.route - (out.routeAtBoard || 0);
     out.rem = await page.evaluate(() => { try { return _journeyEta().rem; } catch (e) { return null; } });
     return out;
   };
@@ -150,7 +155,8 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   let r1;
   await t('열차가 시각표보다 3분 늦어도 오버레이·진행도가 실제 역보다 앞서지 않는다(≤1역, 도착 판정은 증거 뒤)', async () => {
     r1 = await sim({ n: 8, seg: 120, dir: 1, delay: 180, dwell: 30, startAt: '2026-10-04T13:00:00+09:00' });
-    assert.strictEqual(r1.route, 0, '재탐색 ' + r1.route);
+    // 승강장에서 늦은 열차를 기다리는 동안(승차 전, 예정 +2분 넘고 정지 증명)은 '놓쳤다'고 보고 다시 찾을 수 있다(기존 설계). 탑 뒤에는 절대 안 된다.
+    assert.strictEqual(r1.routeAfterBoard, 0, '탑승 뒤 재탐색 ' + r1.routeAfterBoard);
     assert.ok(r1.maxGmAhead <= 0, 'gm 앞섬 ' + r1.maxGmAhead);
     assert.ok(r1.maxPipAhead <= 0, 'overlay 앞섬 ' + r1.maxPipAhead);
   });
@@ -165,6 +171,29 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     assert.ok(r.gm >= 21, 'gm=' + r.gm);
     assert.ok(r.maxGmAhead <= 0 && r.maxPipAhead <= 0, 'gm ' + r.maxGmAhead + ' pip ' + r.maxPipAhead);
     assert.ok(r.rem == null || r.rem <= 3, '남은 시간 ' + r.rem);
+  });
+
+  console.log('[경로 미확정 자동 확정]');
+  await t('경로 확정을 안 눌러도 승차역을 지나 열차로 이동하면 자동 확정되고 추적이 끝까지 따라간다', async () => {
+    const r = await sim({ n: 8, seg: 120, dir: 1, delay: 0, dwell: 30, startAt: '2026-10-04T13:00:00+09:00', locked: false });
+    assert.ok(r.lockedAt != null, '자동 확정 안 됨');
+    assert.ok(r.lockedAt <= 400, '자동 확정이 늦음 ' + r.lockedAt + '초');
+    assert.strictEqual(r.route, 0, '재탐색 ' + r.route);
+    assert.ok(r.began >= 1, '추적 시작 안 됨');
+    assert.ok(r.gm >= 6, '끝까지 못 따라감 gm=' + r.gm);
+    assert.ok(r.maxGmAhead <= 0, 'gm 앞섬 ' + r.maxGmAhead);
+  });
+  await t('승차역에서 멀리 떨어진 곳(약 5km)을 이동하면 확정하지 않는다', async () => {
+    const r = await sim({ n: 8, seg: 120, dir: 1, delay: 0, dwell: 30, startAt: '2026-10-04T13:00:00+09:00', locked: false, latOff: 0.05 });
+    assert.strictEqual(r.lockedAt, null, '엉뚱한 곳에서 확정됨 ' + r.lockedAt);
+  });
+  await t('제자리에 서 있으면 확정하지 않는다', async () => {
+    const r = await sim({ n: 8, seg: 120, dir: 1, delay: 99999, dwell: 30, startAt: '2026-10-04T13:00:00+09:00', locked: false });
+    assert.strictEqual(r.lockedAt, null, '정지 중 확정됨 ' + r.lockedAt);
+  });
+  await t('이미 확정된 경로는 자동 확정이 건드리지 않는다(알림·추적 재시작 없음)', async () => {
+    const r = await sim({ n: 6, seg: 120, dir: 1, delay: 0, dwell: 30, startAt: '2026-10-04T13:00:00+09:00', locked: true });
+    assert.strictEqual(r.began, 0, '추적 재시작 ' + r.began);
   });
 
   console.log('[분 표시·배지·지연 반영 (2026-10-04 추가)]');
@@ -256,19 +285,48 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     const r = await page.evaluate(() => ({ a: typeof _accelState, b: typeof _startAccel, c: !!document.getElementById('accelTestOut') }));
     assert.strictEqual(r.a, 'undefined'); assert.strictEqual(r.b, 'undefined'); assert.strictEqual(r.c, false);
   });
-  await t('맛집 카카오/네이버 버튼은 가게 검색(상세)을 열고 길찾기는 별도 버튼으로 남는다', async () => {
+  const flush = () => new Promise(r => { let n = 0; (function f() { if (++n > 40) r(); else Promise.resolve().then(f); })(); });
+  await t('맛집 버튼 표시와 네이버는 가게 검색(좌표 포함)으로 열리고 길찾기는 별도 버튼으로 남는다', async () => {
     const r = await page.evaluate(() => {
       const urls = []; window._navOpen = function (a, w) { urls.push([a, w]); };
       const h = _placeBtnsHtml(37.5, 126.9, "홍'길동 횟집", '합정');
       _placeInfo('naver', encodeURIComponent('횟집'), 37.5, 126.9, encodeURIComponent('합정'));
-      _placeInfo('kakao', encodeURIComponent('횟집'), 37.5, 126.9, encodeURIComponent('합정'));
       const nav = _navBtnsHtml(37.5, 126.9, '횟집');
       return { h, urls, nav };
     });
     assert.ok(/네이버 리뷰·정보/.test(r.h) && /카카오 리뷰·정보/.test(r.h));
-    assert.ok(/map\.naver\.com\/p\/search\//.test(r.urls[0][1]) && /nmap:\/\/search/.test(r.urls[0][0]));
-    assert.ok(/map\.kakao\.com\/link\/search\//.test(r.urls[1][1]) && /kakaomap:\/\/search/.test(r.urls[1][0]));
+    assert.ok(/map\.naver\.com\/p\/search\//.test(r.urls[0][1]) && /\?c=17\.00,126\.9,37\.5/.test(r.urls[0][1]), r.urls[0][1]);
+    assert.ok(/nmap:\/\/search/.test(r.urls[0][0]) && /lat=37\.5&lng=126\.9/.test(r.urls[0][0]), r.urls[0][0]);
     assert.ok(/네이버 길찾기/.test(r.nav) && /카카오 길찾기/.test(r.nav));
+  });
+  const kakaoRun = async (docs, dead, lat) => {
+    await page.evaluate(([docs, dead, lat]) => {
+      window.__urls = []; window._navOpen = function (a, w) { window.__urls.push([a, w]); };
+      window._kakaoDead = !!dead;
+      window.__kq = null;
+      window._kakaoLocal = function (path, qs) { window.__kq = path + '?' + qs; return Promise.resolve({ ok: true, json: function () { return Promise.resolve({ documents: docs }); } }); };
+      _placeInfo('kakao', encodeURIComponent('홍길동 횟집'), lat, 126.9, encodeURIComponent('합정'));
+    }, [docs, dead, lat]);
+    await flush();
+    return page.evaluate(() => ({ urls: window.__urls, q: window.__kq }));
+  };
+  await t('카카오: 근처에서 같은 이름의 가게를 찾으면 그 가게 페이지(장소 ID)를 바로 연다(다른 이름·먼 지점은 제외)', async () => {
+    const r = await kakaoRun([
+      { id: '111', place_name: '길동무 횟집', distance: '10' },
+      { id: '222', place_name: '홍길동 횟집 본점', distance: '300' },
+      { id: '333', place_name: '홍길동횟집', distance: '120' },
+    ], false, 37.501);
+    assert.strictEqual(r.urls.length, 1, JSON.stringify(r));
+    assert.strictEqual(r.urls[0][0], 'kakaomap://place?id=333', '이름이 같은 것이 우선 ' + JSON.stringify(r.urls));
+    assert.strictEqual(r.urls[0][1], 'https://place.map.kakao.com/333');
+    assert.ok(/search\/keyword\.json\?query=/.test(r.q) && /x=126\.9&y=37\.501&radius=500&sort=distance/.test(r.q), r.q);
+  });
+  await t('카카오: 맞는 가게가 없거나 카카오가 막혀 있으면 검색으로 연다', async () => {
+    const a = await kakaoRun([{ id: '1', place_name: '전혀 다른 집', distance: '5' }], false, 37.502);
+    assert.ok(/^kakaomap:\/\/search\?q=/.test(a.urls[0][0]) && /map\.kakao\.com\/link\/search\//.test(a.urls[0][1]), JSON.stringify(a.urls));
+    const b = await kakaoRun([{ id: '9', place_name: '홍길동 횟집', distance: '5' }], true, 37.503);
+    assert.ok(/^kakaomap:\/\/search\?q=/.test(b.urls[0][0]), '카카오 막힘 ' + JSON.stringify(b.urls));
+    await page.evaluate(() => { window._kakaoDead = false; });
   });
   await t('시각 표시에 "13:60" 이 나올 수 없다(분을 먼저 반올림)', async () => {
     const src = fs.readFileSync(html, 'utf8');
