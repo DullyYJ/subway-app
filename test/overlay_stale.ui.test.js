@@ -83,6 +83,36 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     await page.clock.runFor(5000);
   }
   await t('GPS 가 계속 오는 동안은 끊김 상태가 한 번도 켜지지 않는다', async () => { assert.strictEqual(bad, 0); });
+  console.log('[기지국: 모르는 셀 / 학습된 셀]');
+  const cellSetup = async () => {
+    await page.goto('file://' + html); await page.clock.runFor(2500);   // 앞 장면의 PF·셀 상태가 남지 않게 새로 연다
+    await setup(true);
+    await page.evaluate(() => {
+      window.__cmv = true; window.__cellKey = 'U0'; window._cellAssistAt = 0;
+      window._cellMaxIdx = -1; window._timeMaxIdx = -1; window._cellHopAt = null; window._cellRecent = {}; _cellSeen = null; window._htlSanityAt = 0; window._driftFixAt = 0;
+      window._cellPluginReady = function () { return true; };
+      window._cellKey = function () { return window.__cellKey; };
+      window._cellNow = function (cb) { window._cellLast = { key: window.__cellKey, ts: Date.now() }; try { _cellNoteObservation(window.__cellKey); } catch (e) {} cb({}); };
+      window._cellMapMem = { KS1: { s: 'S1', l: '인천1호선', n: 10, t: Date.now() } };   // 학습된 셀: S1(인덱스 2)
+    });
+  };
+  const cellAdvance = async (sec, keyAt) => {
+    for (let s = 0; s < sec; s += 5) {
+      await page.evaluate((k) => { if (k) window.__cellKey = k; try { _ovlNativeTick(); } catch (e) {} try { _cellAssist(); } catch (e) {} }, keyAt && keyAt(s));
+      await page.clock.runFor(5000);
+    }
+  };
+  await cellSetup();
+  await cellAdvance(300, () => 'U0');   // 학습 안 된 셀 하나에 붙어 있음(움직이지만 어느 역인지는 모름)
+  const u = await here();
+  await t('학습 안 된 셀만 보이고 위치 근거가 없으면 시각표를 따라간다(≥ 인덱스 3)', async () => { assert.ok(u.pip >= 3, 'pip=' + u.pip); });
+  await cellSetup();
+  await cellAdvance(240, () => 'U0');   // 06:23 — 예정은 S2~S3 사이
+  await cellAdvance(30, () => 'KS1');                         // 실제로는 열차가 늦어 S1(인덱스 2)의 셀에 붙어 있다
+  const k = await here();
+  await t('학습된 셀이 S1 을 가리키면 진행도가 그 역으로 확정된다(시각표가 더 앞서 있어도)', async () => { assert.strictEqual(k.gm, 2); });
+  await t('그 뒤 오버레이 위치가 확정 진행도 +1역을 넘지 않는다', async () => { assert.ok(k.pip <= 3, 'pip=' + k.pip); });
+
   await t('JS 오류가 없다', async () => { assert.strictEqual(errs.length, 0, errs[0]); });
 
   console.log(`\n${pass} 통과 / ${fail} 실패`);
