@@ -114,16 +114,39 @@ let pass = 0; const t = async (name, fn) => { try { await fn(); pass++; console.
     await page.fill('#chatInput', '전체에서 인사'); await page.evaluate(() => sendChatMsg()); await page.waitForTimeout(400);
     const r = reacts[reacts.length - 1]; assert.strictEqual(r.line, '5호선'); assert.strictEqual(r.text, '전체에서 인사');
   });
+  await t('호선 칩 스와이프: 왼쪽으로 밀면 다음 칩, 오른쪽이면 이전 칩(칩 순서 그대로, 방 화면도 바뀜)', async () => {
+    await page.evaluate(() => _chatSelect('all')); await page.waitForTimeout(200);
+    const order = await page.evaluate(() => _chatItems());
+    const step = async d => { await page.evaluate(x => _commSwipeStep(x), d); await page.waitForTimeout(150); return page.evaluate(() => window._chatSel); };
+    assert.strictEqual(await step(-1), order[1]); assert.strictEqual(await step(-1), order[2]);
+    assert.strictEqual(await step(1), order[1]); assert.strictEqual(await step(1), 'all');
+    assert.strictEqual(await step(1), 'all', '처음(전체)에서 오른쪽은 그대로');
+    assert.strictEqual(await page.evaluate(() => _commCurTab()), 'chat');
+    const d = await page.evaluate(() => ({ chat: getComputedStyle(document.getElementById('chatTabView')).display, line: getComputedStyle(document.getElementById('lineRoomView')).display })); assert.deepStrictEqual(d, { chat: 'flex', line: 'none' });
+  });
+  await t('실제 터치 스와이프(방 화면 위에서 왼쪽으로 밀기)로도 다음 호선 방으로 넘어간다', async () => {
+    await page.evaluate(() => _chatSelect(_chatItems()[1])); await page.waitForTimeout(300);
+    const before = await page.evaluate(() => window._chatSel), order = await page.evaluate(() => _chatItems());
+    await page.evaluate(() => { const el = document.getElementById('lrScroll'); const mk = (type, x, y) => { const t = new Touch({ identifier: 1, target: el, clientX: x, clientY: y }); el.dispatchEvent(new TouchEvent(type, { bubbles: true, cancelable: true, touches: type === 'touchend' ? [] : [t], changedTouches: [t] })); }; mk('touchstart', 300, 400); mk('touchmove', 200, 404); mk('touchend', 120, 408); });
+    await page.waitForTimeout(300);
+    assert.strictEqual(await page.evaluate(() => window._chatSel), order[order.indexOf(before) + 1]);
+  });
+  await t('칩 끝(마지막 호선)에서 왼쪽으로 밀면 종전처럼 게시판으로 넘어가고, 호선 칩은 안 벗어난다', async () => {
+    await page.evaluate(() => _chatSelect(_chatItems().slice(-1)[0])); await page.waitForTimeout(200);
+    await page.evaluate(() => _commSwipeStep(-1)); assert.strictEqual(await page.evaluate(() => _commCurTab()), 'board');
+    await openChat(); await page.waitForTimeout(200);
+  });
   await t('스와이프 순서: 실시간소통 → 게시판 → 뉴스 → 설정 (호선 방에서도 동일)', async () => {
     await page.click('#chatLineChips .chat-line-chip[data-l="9호선"]'); await page.waitForTimeout(300);
     const seq = []; for (let i = 0; i < 4; i++) { seq.push(await page.evaluate(() => _commCurTab())); await page.evaluate(() => { if (_commCurTab() === 'news') { /* 뉴스는 카테고리 단위 */ } _commGoTab(({ chat: 'board', board: 'news', news: 'settings', settings: 'settings' })[_commCurTab()]); }); }
     assert.deepStrictEqual(seq, ['chat', 'board', 'news', 'settings']);
-    const s2 = []; await openChat(); await page.evaluate(() => _chatSelect('9호선'));
+    const s2 = []; await openChat(); await page.evaluate(() => _chatSelect(_chatItems().slice(-1)[0]));
     await page.evaluate(() => _commSwipeStep(-1)); s2.push(await page.evaluate(() => _commCurTab())); await page.evaluate(() => _commSwipeStep(-1)); s2.push(await page.evaluate(() => _commCurTab()));
     await page.evaluate(() => _commSwipeStep(1)); s2.push(await page.evaluate(() => _commCurTab())); await page.evaluate(() => _commSwipeStep(1)); s2.push(await page.evaluate(() => _commCurTab()));
     assert.deepStrictEqual(s2, ['board', 'news', 'board', 'chat']);
   });
   await t('게시판으로 가면 하단 호선 탭과 호선 방은 숨고, 돌아오면 보던 방이 그대로 열린다', async () => {
+    await page.evaluate(() => _chatSelect('9호선')); await page.waitForTimeout(200);
     await page.evaluate(() => { filterCat(document.getElementById('chipBoard'), 'all'); });
     const d1 = await page.evaluate(() => ({ bar: getComputedStyle(document.getElementById('chatLineBar')).display, line: getComputedStyle(document.getElementById('lineRoomView')).display, news: getComputedStyle(document.getElementById('newsCatBar')).display })); assert.deepStrictEqual(d1, { bar: 'none', line: 'none', news: 'none' });
     await page.evaluate(() => showChatTab(document.getElementById('chipLiveTalk'))); await page.waitForTimeout(300);
