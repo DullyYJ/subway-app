@@ -13673,6 +13673,7 @@ var _DRIFT_COOL_MS = 90000;    // 재동기화 쿨다운
 function _htlDriftCheck(){
   try{
     if(window._pfTrusted && window._pfTrusted()) return;   // 2026-10-04: PF 채택 때마다 통과 시각으로 시각표를 맞춘다
+    if(window._evStaleFollow && window._evStaleFollow()) return;   // 2026-10-06: 근거가 끊긴 동안은 시각표를 따라가는 중이다 — 재동기화로 되돌리지 않는다
     if(typeof _htlNotDeparted==='function' && _htlNotDeparted()) return;
     if(Date.now() - (window._driftFixAt||0) < _DRIFT_COOL_MS) return;
     var conf = (window._gpsConfirmIdx==null ? -1 : window._gpsConfirmIdx);
@@ -13994,7 +13995,7 @@ window._evStaleMs = function(){
     if(typeof _htlNotDeparted === 'function' && _htlNotDeparted()) return -1;
     var now = Date.now(), last = 0, v = (typeof S !== 'undefined') ? S.lastGPSFix : null;
     if(v && v.ts) last = Math.max(last, v.ts);
-    try{ if(_cellSeen && _cellSeen.lastChange) last = Math.max(last, _cellSeen.lastChange); }catch(e1){}
+    // (기지국이 '바뀐 것'은 움직인다는 뜻일 뿐 어느 역인지는 말해 주지 않는다 — 위치 근거가 아니다. 학습된 셀이 역을 가리키면 PF·_cellAssist 가 진행도를 올리고 그 통과 시각(아래)이 근거가 된다. 정차 판정은 아래 cmv 로 막는다)
     // (PF 채택 시각은 근거가 아니다 — PF 는 관측이 없어도 예측만으로 '신선'하게 갱신된다)
     try{ var gm = window._gpsMaxIdx; if(gm != null && gm >= 0 && window._nodePassMs && window._nodePassMs[gm]) last = Math.max(last, window._nodePassMs[gm]); }catch(e3){}
     if(!last || now - last < 90000) return -1;
@@ -47085,6 +47086,7 @@ window._missProof = function(){
 window._pfTrusted = function(){
   try{
     if(!_pf.f || window._routeLocked !== true || window._metroRouteMode === true) return false;
+    if(window._evStaleFollow && window._evStaleFollow()) return false;   // 2026-10-06: 근거가 끊긴 동안 PF 는 마지막 역에 굳은 채 '신선'해 보일 뿐이다 — 기지국 판정(_cellAssist·_cellHopAdvance)이 막히지 않게 푼다
     if(typeof _baseTimeMs !== 'undefined' && _baseTimeMs != null) return false;
     var A = _pf.A; if(!A || A.sig !== _pf.sig || A.k < 0) return false;
     var b = window._pfBest; if(!b || Date.now() - b.at > 30000) return false;
