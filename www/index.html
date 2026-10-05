@@ -17865,6 +17865,8 @@ function _loadMapBusArrival(stop, cardIdx, _try) {
     return;
   }
   _try = _try || 0;
+  // ★ 2026-10-05: 카드별 마지막 조회 시각(자동 갱신 간격 조절용). 재시도(_try>0)는 기록하지 않는다.
+  if(!_try){ try{ (window._busLastFetchAt = window._busLastFetchAt || {})[cardIdx] = Date.now(); }catch(e){} }
 
   // ★ 2026-09-15: 내 정류장 응답이 오면 바로 그리고, 이웃 병합분은 뒤에 덮는다.
   var _paintArr = function(items, partial) {
@@ -18092,13 +18094,42 @@ function _loadMapBusArrival(stop, cardIdx, _try) {
 }
 
 // 목록/카드는 유지하고 도착정보만 제자리 갱신 (전체 재로딩 깜빡임 제거)
+// ★ 2026-10-05: 서울시 버스도착 API(하루 1만 건) 보호 — 화면 변화 없이 호출만 줄인다.
+//   · 화면에 보이는 카드: 가장 빠른 도착이 10분 이내면 30초마다(기존과 동일), 10분보다 멀면 60초마다
+//   · 화면 밖(스크롤 아래·다른 탭)에 있는 카드: 90초마다 (남은 시간은 1초 카운트다운이 계속 흘려 준다)
+var _BUS_FAR_SEC = 600, _BUS_FAR_GAP = 60000, _BUS_OFF_GAP = 90000, _BUS_TICK_SLACK = 2000;
+function _busPollGap(inView, minRemSec){
+  if(!inView) return _BUS_OFF_GAP;
+  if(!isFinite(minRemSec) || minRemSec > _BUS_FAR_SEC) return _BUS_FAR_GAP;   // 도착 정보 없음·먼 도착뿐
+  return 0;                                                                   // 임박 → 매 틱
+}
+function _busCardMinRemSec(cardIdx){
+  var pre = 'busarr_' + cardIdx + '_', now = Date.now(), min = Infinity;
+  for(var id in _BUSARR){
+    if(id.indexOf(pre) !== 0) continue;
+    var st = _BUSARR[id]; if(!st) continue;
+    var rem = st.sec - (now - st.at) / 1000;
+    if(rem < min) min = rem;
+  }
+  return min;
+}
+function _busCardInView(cardIdx){
+  try{
+    var el = document.getElementById('mapBusCard_' + cardIdx);
+    if(!el || el.offsetParent === null) return false;       // 없음·숨은 탭
+    var r = el.getBoundingClientRect(), h = window.innerHeight || document.documentElement.clientHeight || 0;
+    return r.bottom > 0 && r.top < h;
+  }catch(e){ return true; }
+}
 function _refreshMapBusArrivals(){
   var cards = window._mapBusCards;
   if(!cards || !cards.length) return;
+  var last = (window._busLastFetchAt = window._busLastFetchAt || {}), now = Date.now();
   cards.forEach(function(c){
-    if(document.getElementById('mapBusCard_' + c.cardIdx)){
-      _loadMapBusArrival(c.stop, c.cardIdx);
-    }
+    if(!document.getElementById('mapBusCard_' + c.cardIdx)) return;
+    var gap = _busPollGap(_busCardInView(c.cardIdx), _busCardMinRemSec(c.cardIdx));
+    if(gap && (now - (last[c.cardIdx] || 0)) < gap - _BUS_TICK_SLACK) return;   // 아직 갱신할 때가 아님
+    _loadMapBusArrival(c.stop, c.cardIdx);
   });
 }
 window._refreshMapBusArrivals = _refreshMapBusArrivals;
