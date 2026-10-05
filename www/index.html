@@ -7820,7 +7820,13 @@ function _htlWaitTick(force){
       var d = _htlDistToBoard();
       _htlWait.dist = d;
       _htlWait.nextGap = _htlWaitInterval(d);
-      if(d != null && d <= _HTL_ARRIVE_M){
+      // ★ 2026-10-06 (YJ 제보: 버스로 이동 중 '확정'을 눌렀더니 6:18 열차가 이미 떠난 5:58 열차로 바뀜):
+      //   승차역 근처를 버스·차로 '지나가는' 것은 도착이 아니다. 이동 증거(GPS 이동·기지국·PF)가 지금 있으면
+      //   도착으로 치지 않는다 — 도착 뒤 400m 멀어지면 '열차를 탔다'로 확정하던 길이라, 지나가기만 해도
+      //   탑승 확정 → 시각표의 이미 떠난 열차로 되돌려 맞추던 것이 원인이었다. 걸어서 닿으면 이동 증거가 없어 그대로 도착 처리된다.
+      var _passBy = false;
+      try{ _passBy = !!(d != null && d <= _HTL_ARRIVE_M && window._rideEv && window._rideEv().now); }catch(ePb){}
+      if(d != null && d <= _HTL_ARRIVE_M && !_passBy){
         // ★ 승차역 도착 확인 → 지금 기준 다음 열차로 타임라인 재계산
         _htlWaitArrived(d);
       } else {
@@ -7856,6 +7862,9 @@ window._htlWaitTick = _htlWaitTick;
 function _htlWaitArrived(d){
   try{
     _htlWait.arrived = true;          // ★ 이 여정에서는 다시 '대기'로 돌아가지 않는다
+    // ★ 2026-10-06: 역에 걸어서 닿았다 — 그 전의 이동(버스·차)은 열차 탑승 증거가 아니다. 증거를 여기서부터 새로 쌓는다.
+    //   (안 지우면 버스 출발 시각이 '탑승 시작'으로 남아 승차 시각이 과거 열차로 당겨진다)
+    try{ if(window._rideEvReset) window._rideEvReset('승차역 도착', true); }catch(eRr){}
     _htlWaitStop('승차역 도착');
     var bi = _htlBoardIdx();
     var before = _htlBoardDepMin();
@@ -7930,6 +7939,13 @@ function _htlBoardWatch(){
         var _bn9 = _transitNodeData[_htlBoardIdx()];
         var _nb9 = (_bn9 && window._evNearNode) ? window._evNearNode(_bn9, 600) : null;
         if(_nb9 === false) _evRide = false;
+        // ★ 2026-10-06: 역 근처를 '지나간' 것만으로는 부족하다 — 버스·차는 역 옆을 달려 지나간다.
+        //   역 300m 안에서 걷거나 서 있던(시속 9km 이하) 기록이 있어야 한다. 궤적이 없으면(지하) 판단 불가로 통과.
+        else if(_bn9 && window._evWalkedNear){
+          var _ww9 = window._evWalkedNear(_bn9, 300);
+          // 달리기가 시작된 때가 '역 앞에서 마지막으로 걷거나 서 있던' 때보다 1분 넘게 앞서면, 그 달리기는 역에 닿기 전의 버스·차다
+          if(_ww9 === false || (_ww9 === true && window._rideEvStartMs && window._evLastSlowAt && window._rideEvStartMs < window._evLastSlowAt - 60000)) _evRide = false;
+        }
       }
     }catch(eEv){}
     if(_evRide || (_htlWait.arrived && (_movedAway || _boardedByTime || _boardedByCell))){
@@ -46969,6 +46985,26 @@ window._evNearNode = function(node, radius){
     return any ? false : null;
   }catch(e){ return null; }
 };
+// 최근 10분 궤적 중 node 에서 radius(m) 안에서 걷거나 서 있던(시속 9km 이하) 시간이 15초 이상인가
+//   — 있음 true / 궤적은 있는데 없음 false / 궤적 자체가 없음 null(판단 불가)
+window._evWalkedNear = function(node, radius){
+  try{
+    if(!node || node.lat == null) return null;
+    var any = false, now = Date.now(), prev = null, slow = 0, lastSlow = 0;
+    for(var i = 0; i < _ev.trail.length; i++){
+      var p = _ev.trail[i]; if(now - p.ts > 600000 || p.ts < _ev.floorMs) continue;
+      any = true;
+      var inn = haversineM(p.lat, p.lng, node.lat, node.lng) <= radius;
+      if(prev && inn && prev.inn){
+        var dt = (p.ts - prev.p.ts) / 1000;
+        if(dt > 0 && dt <= 60 && haversineM(prev.p.lat, prev.p.lng, p.lat, p.lng) / dt <= 2.5){ slow += dt; lastSlow = p.ts; }
+      }
+      prev = { p: p, inn: inn };
+    }
+    window._evLastSlowAt = lastSlow;   // 마지막으로 역 앞에서 걷거나 서 있던 시각 — 달리기 시작은 그 뒤여야 열차 출발이다
+    return any ? (slow >= 15) : null;
+  }catch(e){ return null; }
+};
 function _evLog(tag, msg){ if(_ev.lastLog === tag + msg) return; _ev.lastLog = tag + msg; try{ _ovlDiag(tag, msg); }catch(e){} }
 // 지금 열차(탈것)를 타고 이동 중인가 — GPS 이동 · 기지국 변화 · PF 를 함께 본다. 한 번 확인되면 20분간 유지(지하에서 신호가 약해도 풀리지 않게).
 window._rideEv = function(){
@@ -47131,6 +47167,7 @@ function _autoLockOnRide(){
   if(!r || !r.now) return false;                                   // 지금 실제로 움직이는 중일 때만
   var bi = _htlBoardIdx(); if(bi < 0) return false;
   if(window._evNearNode(_transitNodeData[bi], 400) !== true) return false;
+  if(window._evWalkedNear && window._evWalkedNear(_transitNodeData[bi], 300) === false) return false;   // 2026-10-06: 역 옆을 달려 지나간 버스·차는 제외
   if(_evTowardNext(bi) === false) return false;                    // 다음 역 쪽으로 가고 있지 않으면(반대 방향·다른 길) 확정하지 않는다
   try{
     var t = _htlDepArrTimes(), depMs = (t && t.dep) ? _etaHmToMs(t.dep) : null;
