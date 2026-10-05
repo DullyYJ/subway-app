@@ -40787,14 +40787,44 @@ function _shopFetch(force){
           });
         }
         console.log('[쇼핑] 서버 상품 ' + cnt + '개 적용 (v' + j.version + ')');
-        if(changed && typeof _renderShopGrid === 'function'){
-          try{ _renderShopGrid(); }catch(e){}
+        // ★ 2026-10-05: 예전엔 _renderShopGrid() 를 인자 없이 불러 예외가 나고(조용히 삼켜짐)
+        //   새 상품이 다음 렌더 때까지 화면에 안 떴다. renderShop() 이 추천을 다시 계산해 그린다.
+        if(changed && typeof renderShop === 'function'){
+          try{ renderShop(); }catch(e){}
         }
       })
       .catch(function(){ if(!done){ done = true; clearTimeout(t); } });
   }catch(e){}
 }
 window._shopFetch = _shopFetch;
+
+// ★ 2026-10-05: 상품이 서버에서 바뀌면 바로 보이게 한다.
+//   예전엔 저장본이 6시간 지나야 다시 받았다. 이제는 쇼핑 화면을 열거나 앱을 켤 때
+//   가벼운 /version(수십 바이트)만 불러 저장본과 비교하고, 다르면 그때만 전체를 받는다.
+//   · 2분에 한 번만 확인(화면을 자주 다시 그려도 요청이 몰리지 않게)
+//   · 네트워크가 안 되거나 느리면 조용히 넘어가고 저장본·내장 기본값을 그대로 쓴다.
+var _SHOP_CHECK_GAP = 2*60*1000, _shopLastCheck = 0;
+function _shopCheck(){
+  try{
+    var now = Date.now();
+    if(now - _shopLastCheck < _SHOP_CHECK_GAP) return;
+    _shopLastCheck = now;
+    var raw = null;
+    try{ raw = JSON.parse(localStorage.getItem(_SHOP_CACHE_KEY)||'null'); }catch(e){}
+    var done = false;
+    var t = setTimeout(function(){ done = true; }, 4000);
+    fetch(_shopUrl() + '/version', { cache:'no-cache' })
+      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+      .then(function(j){
+        clearTimeout(t);
+        if(done) return; done = true;
+        if(!j || !j.ok || !j.version) return;
+        if(!raw || raw.version !== j.version) _shopFetch(true);
+      })
+      .catch(function(){ clearTimeout(t); done = true; });
+  }catch(e){}
+}
+window._shopCheck = _shopCheck;
 
 // 기본값(첫 실행·오프라인용) — 서버 데이터가 오면 덮인다
 var SHOP_DATA={
@@ -41765,6 +41795,7 @@ window.getShopCat=getShopCat;
 
 function renderShop(cat){
   var grid=document.getElementById('shopGrid'); if(!grid) return;
+  try{ if(typeof _shopCheck==='function') _shopCheck(); }catch(e){}   // 서버 상품이 바뀌었으면 바로 받는다
   var pick=_shopPick();          // 시간·요일·날씨 기반 추천 100선 + 카테고리 전체(캐시)
   _renderShopCats(pick);         // 상단 카테고리 탭(추천=100 / 나머지=보유 전체 수)
   _renderShopGrid(pick);         // 활성 탭 그리드
@@ -46310,6 +46341,7 @@ window.addEventListener('load', function(){
     // ★ 쇼핑 상품: 저장본을 먼저 얹고(즉시), 뒤에서 최신 확인
     try { if(typeof _shopHydrate==='function') _shopHydrate(); } catch(e){}
     try { if(typeof _shopFetch==='function') _shopFetch(); } catch(e){}
+    try { if(typeof _shopCheck==='function') _shopCheck(); } catch(e){}
     // ★ 기지국 매핑: 서버에 모인 학습을 받아온다(앱 재설치 후에도 바로 동작)
     try { if(typeof _cellPull==='function') setTimeout(_cellPull, 2500); } catch(e){}
     // ★ 시작 시 GPS 확보 시작 → 잡히는 즉시 주변 정류장 프리페치 (권한 이미 있으면 프롬프트 없음)
