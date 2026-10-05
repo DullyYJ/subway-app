@@ -91,8 +91,11 @@ let pass = 0; const t = async (name, fn) => { try { await fn(); pass++; console.
   await t('반응 기능: 서버가 단 다른 이용자의 반응 글이 그 방에 나타난다', async () => {
     const txt = await page.$$eval('#lrScroll .chat-bub-txt', els => els.map(e => e.textContent.trim())); assert.ok(txt.includes('ㅇㅈ 맞아요'), JSON.stringify(txt));
   });
-  await t('지연·혼잡 제보 버튼과 안내 영역이 그대로 있다', async () => {
-    const btn = await page.$$eval('#lineRoomView button', els => els.map(e => e.textContent.trim())); assert.ok(btn.includes('🚨 지연돼요') && btn.includes('😵 붐벼요'), JSON.stringify(btn));
+  await t('지연·붐벼요 제보 버튼은 없고(삭제), 공식 공지·경보 안내 영역은 그대로 있다', async () => {
+    const btn = await page.$$eval('#lineRoomView button', els => els.map(e => e.textContent.trim()));
+    assert.ok(!btn.some(x => /지연돼요|붐벼요/.test(x)), JSON.stringify(btn));
+    assert.strictEqual(await page.evaluate(() => typeof window._lrReport), 'undefined');
+    assert.strictEqual(await page.$$eval('#lrOfficial, #lrAlert', els => els.length), 2);
   });
   if (shots) await page.screenshot({ path: path.join(shots, 'chat_line_gyeongchun.png') });
 
