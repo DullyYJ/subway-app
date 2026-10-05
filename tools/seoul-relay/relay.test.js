@@ -29,7 +29,7 @@ function mkDB() {
     return new Response(arrivalBody(p.split('/').pop()), { status: 200 });
   };
   const cfg = R.makeConfig({ WORKER_URL: WURL, RELAY_TOKEN: TOKEN, SEOUL_API_KEYS: 'KEYONE1,KEYTWO2', STATE_FILE: path.join(os.tmpdir(), 'relay-state-' + process.pid + '.json') });
-  const mk = (over) => { const r = new R.Relay(Object.assign({}, cfg, over || {}), { fetch: fakeFetch, log: () => {} }); r.budget.tokens = 12; return r; };
+  const mk = (over) => { const r = new R.Relay(Object.assign({}, cfg, { serviceStartHour: 0, serviceEndHour: 24, burstMax: 12 }, over || {}), { fetch: fakeFetch, log: () => {} }); r.budget.tokens = 12; return r; };
   const app = (p) => W.fetch(new Request(WURL + '/seoul?path=' + encodeURIComponent(p)), env);
   const clearEdge = () => store.clear();
   const P = (s) => 'realtimeStationArrival/0/10/' + encodeURIComponent(s);
@@ -80,8 +80,23 @@ function mkDB() {
     assert.strictEqual(b.remaining(Date.parse('2026-10-05T00:10:00+09:00')), 950, '자정 지나면 초기화');
     assert.ok(R.serviceSecondsLeft(Date.parse('2026-10-04T12:00:00+09:00')) > 11 * 3600 && R.serviceSecondsLeft(Date.parse('2026-10-04T12:00:00+09:00')) < 13 * 3600);
     assert.ok(R.serviceSecondsLeft(Date.parse('2026-10-04T03:00:00+09:00')) >= 19 * 3600, '새벽에는 운행 시작 기준');
-    const b2 = new R.Budget(['a'], 1000, null); b2.last = Date.parse('2026-10-04T12:00:00+09:00') - 100000; b2.tokens = 0;
+    const b2 = new R.Budget(['a'], 1000, null, { burst: 12 }); b2.last = Date.parse('2026-10-04T12:00:00+09:00') - 100000; b2.tokens = 0;
     b2.refill(Date.parse('2026-10-04T12:00:00+09:00')); assert.ok(b2.tokens > 1 && b2.tokens < 4, '100초 동안 쌓인 토큰 ' + b2.tokens);
+  });
+  await t('하루 1,000건을 05~24시(19시간)에 고르게: 약 68초에 1건, 00~05시에는 호출하지 않는다', async () => {
+    const b = new R.Budget(['a'], 1000, null); const T = (h) => Date.parse('2026-10-04T' + h + '+09:00');
+    b.roll(T('05:00:00')); b.last = T('05:00:00');
+    let calls = 0;
+    // 05:00~24:00 을 30초 간격으로 돌리며 토큰이 허락하는 만큼 호출
+    for (let ms = T('05:00:30'); ms < T('23:59:59'); ms += 30000) { b.refill(ms); while (b.tokens >= 1) { b.spend(b.pickKey(ms)); calls++; } }
+    assert.ok(calls >= 990 && calls <= 1000, '하루 호출 ' + calls);
+    // 한 시간 동안의 호출이 시간대 전체에서 고르다(대략 52건/시간)
+    const b2 = new R.Budget(['a'], 1000, null); b2.roll(T('05:00:00')); b2.last = T('05:00:00'); let perH = {};
+    for (let ms = T('05:00:30'); ms < T('23:59:59'); ms += 30000) { b2.refill(ms); while (b2.tokens >= 1) { b2.spend(0); const h = new Date(ms + 9 * 3600000).getUTCHours(); perH[h] = (perH[h] || 0) + 1; } }
+    const vals = Object.values(perH); assert.ok(Math.min(...vals) >= 48 && Math.max(...vals) <= 58, '시간별 ' + JSON.stringify(perH));
+    // 시간대 밖(00:30)에는 토큰이 쌓이지 않는다
+    const b3 = new R.Budget(['a'], 1000, null); b3.last = T('00:20:00'); b3.tokens = 3; b3.refill(T('00:30:00')); assert.strictEqual(b3.tokens, 0);
+    assert.strictEqual(R.inService(T('04:59:00')), false); assert.strictEqual(R.inService(T('05:00:00')), true); assert.strictEqual(R.inService(T('23:59:00')), true); assert.strictEqual(R.inService(T('00:00:00') + 86400000), false);
   });
   await t('찾는 경로 고르기: 값이 없는 것 먼저, 많이 찾는 것 먼저, 신선한 것 제외, 토큰만큼만', async () => {
     const now = 1e12, c = cfg;
