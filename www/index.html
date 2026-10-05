@@ -8894,22 +8894,100 @@ window._hideRouteLoading = _hideRouteLoading;
         _doSelectRouteOption(_rs || 'fast');
       }
     };
+    // ★ 2026-10-05 (YJ: 버스가 '예상'으로 나왔으면 10~20초 뒤 다시 조회해 실제값으로 바꾼다):
+    //   엔진이 liveStat.liveMissing 으로 '조회를 시도했는데 못 받은(막힘·시간초과·4분 전 보관값) 버스 구간 수'를 알려 준다.
+    //   0보다 크면 화면이 열려 있는 동안 12·16·20초 뒤 최대 3번 같은 요청을 다시 보내고,
+    //   실제값이 더 많아진 응답이 오면 그 결과로 다시 그린다(앱은 그리기만 한다 — 판단은 엔진).
+    //   · 조회가 닿았는데 노선이 없는 구간은 엔진이 세지 않는다(다시 물어도 같은 답) — 헛호출 없음
+    //   · 기준시각을 직접 고른 탐색(실시간을 못 씀)·새 탐색이 시작된 경우·이미 탄 경우·세부경로를 보는 중엔 건드리지 않는다
+    //   · 요청마다 baseMs 를 지금으로 바꿔 보내고 화면 시간축(_routeBaseMs)도 같이 옮긴다(엔진 시각은 요청 시점 기준)
+    //   · 다시 그릴 때 결과 카드로 스크롤하지 않는다(보던 자리 유지)
+    var _EST_RETRY_MS = [12000, 16000, 20000];
+    var _estMissOf = function(r){
+      var ls = r && r.liveStat;
+      if(!ls) return 0;
+      if(typeof ls.liveMissing === 'number') return ls.liveMissing;
+      return ls.livePending ? 1 : 0;      // 실시간 반영본을 못 받은 빠른 응답 — 전부 예상이다
+    };
+    var _estBusy = function(){
+      try{
+        if(document.hidden) return true;
+        var dm = document.getElementById('transitDetailModal');
+        if(dm && window.getComputedStyle(dm).display !== 'none') return true;
+      }catch(e){}
+      return false;
+    };
+    var _estOkToRedraw = function(){
+      if(window._routeReqToken !== _reqToken || _routeStale()) return false;
+      if(!window._routeLocked) return true;
+      // 확정한 경로는 아직 타기 전일 때만(낡은 안내 재탐색과 같은 조건)
+      try{
+        if(typeof S !== 'undefined' && S && S.boardedAt) return false;
+        if(window._htlBoarded === true) return false;
+        if(window._rideEv && window._rideEv().riding) return false;
+        if(window._gpsMaxIdx != null && window._gpsMaxIdx > 0) return false;
+        if(window._htlDelaySec) return false;
+        if(typeof _htlNotDeparted === 'function' && !_htlNotDeparted()) return false;
+      }catch(e){ return false; }
+      return true;
+    };
+    var _estRetry = function(shown){
+      try{
+        if(typeof _baseTimeMs !== 'undefined' && _baseTimeMs != null) return;   // 기준시각을 직접 고른 탐색은 실시간 도착을 못 쓴다
+        var best = _estMissOf(shown);
+        if(!best) return;
+        var bestApplied = (shown && shown.liveStat && shown.liveStat.liveApplied) || 0;
+        var endAt = Date.now() + 100000;
+        var step = function(n){
+          if(n >= _EST_RETRY_MS.length) return;
+          setTimeout(function wait(){
+            try{
+              if(window._routeReqToken !== _reqToken || _routeStale()) return;     // 새 탐색이 시작됐거나 더 새 결과가 그려졌다
+              if(_estBusy()){ if(Date.now() < endAt) setTimeout(wait, 4000); return; }   // 화면이 가려졌거나 세부경로를 보는 중 — 잠시 뒤 다시 본다
+              if(!_estOkToRedraw()) return;
+              var nb = (typeof getBaseTimeMs === 'function') ? getBaseTimeMs() : Date.now();
+              var u = urls[0].replace(/([?&])baseMs=\d+/, function(m, pre){ return pre + 'baseMs=' + Math.round(nb); });
+              _fetchJson(u, _ROUTE_MAIN_TIMEOUT).then(function(full){
+                try{
+                  var fp = (full && full.result && full.result.path) || [];
+                  if(!fp.length || !_estOkToRedraw() || _estBusy()){ step(n + 1); return; }
+                  var m = _estMissOf(full), ap = (full.liveStat && full.liveStat.liveApplied) || 0;
+                  window._liveStat = full.liveStat || window._liveStat;
+                  if(!(m < best || (m === best && ap > bestApplied))){ step(n + 1); return; }   // 나아진 게 없으면 그대로 둔다(깜빡임 방지)
+                  best = m; bestApplied = ap;
+                  window._routeBaseMs = Math.round(nb);
+                  if(window._routeLocked) window._relockAfterReroute = window._lockedRouteType || 'fast';
+                  else window._reselectAfterSearch = window._pendingRouteType || 'fast';   // 보던 탭 유지
+                  var sv = window._scrollToRouteResult, nop = function(){};
+                  window._scrollToRouteResult = nop;
+                  try{ _handleRouteResults([full]); }
+                  finally{ setTimeout(function(){ if(window._scrollToRouteResult === nop) window._scrollToRouteResult = sv; }, 1500); }
+                  if(m > 0) step(n + 1);
+                }catch(e2){}
+              });
+            }catch(e1){}
+          }, _EST_RETRY_MS[n]);
+        };
+        step(0);
+      }catch(e){}
+    };
     _routeStaged()
     .then(function(results){
       _handleRouteResults(results);
       // 실시간 반영본이 있다고 엔진이 알려 준 경우만 뒤따라 받는다(커스텀 기준시각이면 애초에 안 옴)
       var _m0 = results && results[0];
-      if(!(_m0 && _m0.liveStat && _m0.liveStat.livePending)) return;
+      if(!(_m0 && _m0.liveStat && _m0.liveStat.livePending)){ _estRetry(_m0); return; }   // 한 번에 받은 응답이면 바로 '예상' 재조회 여부를 본다
       if(_routeStale()) return;
       _fetchJson(urls[0], _ROUTE_MAIN_TIMEOUT).then(function(full){
-        if(!full || _routeStale() || window._routeLocked) return;
+        if(!full || _routeStale() || window._routeLocked){ _estRetry(_m0); return; }   // 못 받았으면 빠른 응답(전부 예상) 기준으로 재조회
         var _fp = (full.result && full.result.path) || [];
-        if(!_fp.length) return;
+        if(!_fp.length){ _estRetry(_m0); return; }
         var _p0 = (_m0.result && _m0.result.path) || [];
         window._liveStat = full.liveStat || window._liveStat;       // 진단은 최신 응답 기준
-        if(JSON.stringify(_fp) === JSON.stringify(_p0)) return;     // 같으면 다시 그릴 이유 없음(깜빡임 방지)
+        if(JSON.stringify(_fp) === JSON.stringify(_p0)){ _estRetry(full); return; }     // 같으면 다시 그릴 이유 없음(깜빡임 방지)
         window._reselectAfterSearch = window._pendingRouteType || 'fast';   // 보던 탭 유지
         _handleRouteResults([full]);
+        _estRetry(full);
       });
     })
     .catch(function(e){
