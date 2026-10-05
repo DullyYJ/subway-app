@@ -41865,6 +41865,13 @@ function _newsCatStep(dir){
 // dir: -1 = 왼쪽으로 밈(다음), +1 = 오른쪽으로 밈(이전)
 function _commSwipeStep(dir){
   var cur = _commCurTab();
+  // ★ 2026-10-05 (YJ): 실시간소통은 호선 칩(전체 + 호선들)이 스와이프 단위 — 칩 사이를 먼저 넘기고,
+  //   끝(왼쪽으로 마지막 호선)에 닿으면 종전처럼 다음 탭(게시판)으로 넘어간다. 처음(전체)에서 오른쪽은 그대로 멈춤.
+  if(cur === 'chat' && typeof _chatItems === 'function' && typeof _chatSelect === 'function'){
+    var _ci = _chatItems(), _cs = _ci.indexOf(window._chatSel || 'all');
+    var _cn = _cs - dir;                   // 왼쪽으로 밀면 다음 칩
+    if(_cs >= 0 && _cn >= 0 && _cn < _ci.length){ _chatSelect(_ci[_cn]); return; }
+  }
   // 뉴스 탭이면 카테고리가 우선 — 끝에 닿으면 그대로 멈춘다(탭을 넘기지 않는다)
   if(cur === 'news'){
     // 뉴스 안에서는 카테고리가 스와이프 단위
@@ -42148,13 +42155,20 @@ window._myLinesList=_myLinesList;
 // 전체 탭에서 글을 쓸 때 붙는 노선 = 내가 가장 많이 타는 노선(없으면 노선 없이 전체에만)
 function _chatPostLine(){ var m=_myLinesList(); return m.length ? m[0] : ''; }
 window._chatPostLine=_chatPostLine;
+// 칩 순서(전체 → 내가 탄 노선 → 나머지 호선). 칩 그리기와 좌우 스와이프가 같이 쓴다
+function _chatItems(){
+  var mine=_myLinesList(), sel=window._chatSel||'all';
+  var rest=_LR_KNOWN.filter(function(l){ return mine.indexOf(l)<0; });
+  var items=['all'].concat(mine, rest);
+  if(sel!=='all' && items.indexOf(sel)<0) items.push(sel);   // 목록 밖 노선(알림 등으로 연 방)
+  return items;
+}
+window._chatItems=_chatItems;
 function _chatBarRender(){
   var bar=document.getElementById('chatLineBar'); if(!bar) return;
   var mine=_myLinesList(), sel=window._chatSel||'all';
   // ★ 2026-10-04 (YJ): 하단 탭 = [전체] + 모든 호선 방. 내가 탄 노선(my_lines)은 앞쪽에 📍로 강조, 나머지는 정의된 순서.
-  var rest=_LR_KNOWN.filter(function(l){ return mine.indexOf(l)<0; });
-  var items=['all'].concat(mine, rest);
-  if(sel!=='all' && items.indexOf(sel)<0) items.push(sel);   // 목록 밖 노선(알림 등으로 연 방)
+  var items=_chatItems();
   var old=document.getElementById('chatLineChips'), prev=old ? old.scrollLeft : 0;
   var chips=items.map(function(l){
     var on=(l===sel), isMine=(mine.indexOf(l)>=0), label=(l==='all')?'전체':l;
