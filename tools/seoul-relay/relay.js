@@ -23,7 +23,10 @@ function makeConfig(env) {
     token: String(g('RELAY_TOKEN', '')),
     keys: String(g('SEOUL_API_KEYS', g('SEOUL_API_KEY', ''))).split(',').map((s) => s.trim()).filter(Boolean),
     seoulBase: String(g('SEOUL_BASE', 'https://swopenapi.seoul.go.kr/api/subway')).replace(/\/+$/, ''),
-    perKeyDaily: parseInt(g('DAILY_BUDGET_PER_KEY', '950'), 10),   // 키당 하루 한도(서울 기본 1,000건)보다 조금 낮게
+    perKeyDaily: parseInt(g('DAILY_BUDGET_PER_KEY', '1000'), 10),  // 키당 하루 한도(서울 기본 1,000건). 앱 출시 후 호출이 늘면 .env 에서 바꾼다
+    serviceStartHour: parseInt(g('SERVICE_START_HOUR', '5'), 10),  // 호출을 고르게 나눠 쓰는 시간대(한국 시각): 05시 ~ 24시(=00시)
+    serviceEndHour: parseInt(g('SERVICE_END_HOUR', '24'), 10),
+    burstMax: Math.max(1, parseInt(g('BURST_MAX', '4'), 10)),      // 한꺼번에 몰아 쓸 수 있는 최대 호출 수(작을수록 고르게)
     pollSec: Math.max(3, parseInt(g('POLL_SEC', '8'), 10)),
     arrivalRefetchSec: parseInt(g('ARRIVAL_REFETCH_SEC', '25'), 10),
     positionRefetchSec: parseInt(g('POSITION_REFETCH_SEC', '30'), 10),
@@ -34,20 +37,24 @@ function makeConfig(env) {
 // ── 날짜(한국 시각) ──
 function kst(nowMs) { return new Date(nowMs + 9 * 3600000); }
 function kstDay(nowMs) { return kst(nowMs).toISOString().slice(0, 10); }
-// 오늘 남은 '운행 시간'(초). 01:00~05:00 은 운행이 없으므로 세지 않는다.
-function serviceSecondsLeft(nowMs) {
+// 호출을 나눠 쓰는 시간대(기본 05:00~24:00, 19시간) 중 오늘 남은 초. 시간대 밖(00~05시)이면 0 이 아니라 '내일 시간대 전체'가 아닌 최소값을 돌려주고,
+// 실제 호출은 inService() 로 막는다.
+function serviceSecondsLeft(nowMs, startH, endH) {
+  const START = (startH == null ? 5 : startH) * 3600, END = (endH == null ? 24 : endH) * 3600;
   const d = kst(nowMs), sec = d.getUTCHours() * 3600 + d.getUTCMinutes() * 60 + d.getUTCSeconds();
-  const START = 5 * 3600, END = 24 * 3600, DEAD_FROM = 1 * 3600;
-  let left = 0;
-  if (sec < DEAD_FROM) left += DEAD_FROM - sec;              // 00:00~01:00 남은 부분
-  left += END - Math.max(sec, START);                          // 05:00~24:00 남은 부분
-  return Math.max(60, left);
+  if (sec < START) return Math.max(60, END - START);           // 시간대 시작 전: 오늘 시간대 전체를 기준으로
+  return Math.max(60, END - sec);                                // 시간대 안: 남은 시간
+}
+function inService(nowMs, startH, endH) {
+  const d = kst(nowMs), h = d.getUTCHours() + d.getUTCMinutes() / 60;
+  return h >= (startH == null ? 5 : startH) && h < (endH == null ? 24 : endH);
 }
 
 // ── 하루 호출 예산(키별) ──
 class Budget {
-  constructor(keys, perKeyDaily, state) {
+  constructor(keys, perKeyDaily, state, opts) {
     this.keys = keys; this.cap = perKeyDaily;
+    this.startH = opts && opts.startH != null ? opts.startH : 5; this.endH = opts && opts.endH != null ? opts.endH : 24; this.burst = (opts && opts.burst) || 4;
     this.day = (state && state.day) || ''; this.used = (state && state.used) || {}; this.dead = (state && state.dead) || {};
     this.tokens = 3; this.last = 0;
   }
@@ -61,12 +68,13 @@ class Budget {
     this.keys.forEach((k, i) => { if (!this.dead[i]) r += Math.max(0, this.cap - (this.used[i] || 0)); });
     return r;
   }
-  // 남은 호출을 남은 운행 시간에 고르게 나눠 쓴다(토큰 버킷, 한 번에 최대 12건)
+  // 남은 호출을 시간대(05~24시)의 남은 시간에 고르게 나눠 쓴다(토큰 버킷, 한 번에 최대 burst 건). 시간대 밖에는 호출하지 않는다.
   refill(nowMs) {
     if (!this.last) { this.last = nowMs; return; }
     const dt = (nowMs - this.last) / 1000; this.last = nowMs;
-    const rate = this.remaining(nowMs) / serviceSecondsLeft(nowMs);
-    this.tokens = Math.min(12, this.tokens + dt * rate);
+    if (!inService(nowMs, this.startH, this.endH)) { this.tokens = 0; return; }
+    const rate = this.remaining(nowMs) / serviceSecondsLeft(nowMs, this.startH, this.endH);
+    this.tokens = Math.min(this.burst, this.tokens + dt * rate);
   }
   pickKey(nowMs) {
     this.roll(nowMs);
@@ -119,7 +127,7 @@ class Relay {
     this.cfg = cfg; this.f = (deps && deps.fetch) || fetch; this.now = (deps && deps.now) || Date.now;
     this.log = (deps && deps.log) || ((...a) => console.log(new Date(this.now()).toISOString().slice(11, 19), ...a));
     let st = null; try { st = JSON.parse(fs.readFileSync(cfg.stateFile, 'utf8')); } catch (e) { /* 처음 */ }
-    this.budget = new Budget(cfg.keys, cfg.perKeyDaily, st);
+    this.budget = new Budget(cfg.keys, cfg.perKeyDaily, st, { startH: cfg.serviceStartHour, endH: cfg.serviceEndHour, burst: cfg.burstMax });
     this.stats = { fetched: 0, pushed: 0, errors: 0, polls: 0 };
   }
   save() { try { fs.writeFileSync(this.cfg.stateFile, JSON.stringify(this.budget.snapshot())); } catch (e) { /* 무시 */ } }
@@ -185,7 +193,7 @@ async function check(cfg) {
   catch (e) { say(false, '워커에 연결 못 함: ' + e.message); }
 }
 
-module.exports = { loadEnv, makeConfig, kstDay, serviceSecondsLeft, Budget, pickWork, errCode, Relay, refetchMs };
+module.exports = { loadEnv, makeConfig, kstDay, serviceSecondsLeft, inService, Budget, pickWork, errCode, Relay, refetchMs };
 
 if (require.main === module) {
   const cfg = makeConfig(Object.assign({}, loadEnv(path.join(__dirname, '.env')), process.env));
