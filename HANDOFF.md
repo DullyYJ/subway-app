@@ -58,7 +58,7 @@
 
 **2026-10-05 추가 (Cowork 클로드)**
 - 맛집 카드(`_foodShowMap`) 하단의 네이버·카카오 길찾기 버튼 제거(리뷰·정보 버튼만 유지, YJ 요청 — 리뷰 화면에서 길찾기 가능). 정류장 지도(`_busShowMap`)의 길찾기 버튼과 `_navBtnsHtml` 함수는 그대로. 앱 `a5d6e61`(Build #788 성공).
-- 서울 버스 실시간 도착: route-v2 엔진 05j(`15d80ed`) — `fetchSeoulArrivals`(서울시 버스도착정보 `ws.bus.go.kr/api/rest/arrive/getLowArrInfoByStId`, 같은 공공데이터포털 키, traTime 초). SEL+9자리 정류장만 조회(서울 stId 는 형제 id 규칙 적용 금지). 한도 응답이면 키2, 둘 다면 20분 휴식, 끄기: 환경변수 `SEOUL_BUS_LIVE=0`. 시험 `route-v2/test/seoul_live.test.js` 9건. 임시 진단 `/seoul-bus-test` 는 삭제함. 실측: 시청→강남 경로에서 `liveStat.via=seoul`, 472번 `waitLive`, `liveMissing 0`. 남은 것: 경기 버스(GGB, 경기버스정보 API 15080346 승인·시험 필요), 서울 하루 1만건 한도(사용자 늘면 키2·휴식 로직이 흡수, 초과 시 '예상' 유지).
+- 서울 버스 실시간 도착: route-v2 엔진 05k(`7879aa6`, 05j `15d80ed`에서 한도 휴식 20분→5분) — `fetchSeoulArrivals`(서울시 버스도착정보 `ws.bus.go.kr/api/rest/arrive/getLowArrInfoByStId`, 같은 공공데이터포털 키, traTime 초). SEL+9자리 정류장만 조회(서울 stId 는 형제 id 규칙 적용 금지). 한도 응답이면 키2, 둘 다면 5분 휴식, 끄기: 환경변수 `SEOUL_BUS_LIVE=0`. 시험 `route-v2/test/seoul_live.test.js` 9건. 임시 진단 `/seoul-bus-test` 는 삭제함. 실측: 시청→강남 경로에서 `liveStat.via=seoul`, 472번 `waitLive`, `liveMissing 0`. 남은 것: 경기 버스(GGB, 경기버스정보 API 15080346 승인·시험 필요), 서울 하루 1만건 한도(사용자 늘면 키2·휴식 로직이 흡수, 초과 시 '예상' 유지).
 
 **Code 클로드 (이 저장소 커밋)**
 - subway-app `2c883e0` — (저녁에 삭제됨, 기록용) **가속도계를 승차 확정 지표에서 보조 지표로**. `www/index.html`: `detectBoardingState` 확정 규칙 변경·문구 변경, `_accelStats()`(읽기 전용 요약)·직접 측정 도구 추가, 설정에 `📳 가속도계 측정 (보조 지표)` 카드(측정 시작 90초 / 지금 상태 / 중지: 상태 train·walk·still·unknown, stddev, 평균, 샘플 수·Hz, 임계값, 마지막 승차 판정 근거, 끝나면 상태 비율·stddev 최소/중앙/90%/최대 요약). `_bgDiag`에도 같은 줄 추가. 시험 `test/accel_auxiliary.ui.test.js` 20건. **수집(`_onDeviceMotion`)·상태 판정(`_accelState`)·임계값·로그·시각표 타이머·`_doTimetableAdvance`·`_htlBoardWatch`·기지국 전진은 한 줄도 바꾸지 않았다**(diff로 확인).
