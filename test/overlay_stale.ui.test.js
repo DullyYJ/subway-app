@@ -47,7 +47,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   await t('근거가 끊긴 지 90초 안에는 시각표로 앞서가지 않는다(마지막 확인 역 +1까지)', async () => { assert.ok(a60.pip <= 2, 'pip=' + a60.pip); assert.strictEqual(a60.stale, -1); });
   await advance(240);   // 06:24 — 예정상 3번째 역(S3, 인덱스 4)을 막 지남
   const a300 = await here();
-  await t('근거 없이 5분이 흘러도 오버레이 위치가 시각표를 따라 나아간다(≥ 인덱스 3)', async () => { assert.ok(a300.pip >= 3, 'pip=' + a300.pip); });
+  await t('근거 없이 5분이 흘러도 오버레이 위치가 시각표를 따라 나아간다(≥ 인덱스 2: 근거가 전혀 없을 땐 PF 가 지연을 넉넉히 가정한다)', async () => { assert.ok(a300.pip >= 2, 'pip=' + a300.pip); });
   await t('시각표를 따라가도 예정보다 앞서지는 않는다(예정 도착 인덱스 이하)', async () => { assert.ok(a300.pip <= 4, 'pip=' + a300.pip); });
   await advance(600);   // 06:34 — 노선 끝
   const a900 = await here();
@@ -83,6 +83,29 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     await page.clock.runFor(5000);
   }
   await t('GPS 가 계속 오는 동안은 끊김 상태가 한 번도 켜지지 않는다', async () => { assert.strictEqual(bad, 0); });
+  console.log('[GPS 로 타다가 지하에서 끊김 — 열차 위치와 비교]');
+  const blindRun = async (delay) => {
+    await page.goto('file://' + html); await page.clock.runFor(2500);
+    await setup(true);
+    await page.evaluate(() => { Object.defineProperty(document, 'hidden', { get: () => true, configurable: true }); window._appInBackground = true; });
+    const L = [];
+    for (let sec = 0; sec < 600; sec += 5) {
+      const se = Math.max(0, sec - delay), kk = Math.min(7, Math.floor(se / 120)), w = se % 120;
+      const frac = kk >= 7 ? 0 : (w < 30 ? 0 : Math.min(1, (w - 30) / 90));
+      const lng = 126.9 + 0.0137 * (kk + frac);
+      await page.evaluate(([lng, on]) => { if (on) S.lastGPSFix = { lat: 37.5, lng, ts: Date.now(), acc: 15 }; try { _ovlNativeTick(); } catch (e) {} }, [lng, sec < 100]);
+      if (sec >= 100) { const h = await here(); L.push(h.pip - (1 + kk)); }
+      await page.clock.runFor(5000);
+    }
+    const mae = L.reduce((a, b) => a + Math.abs(b), 0) / L.length;
+    return { mae, min: Math.min(...L), max: Math.max(...L), ahead: L.filter(x => x > 0).length / L.length };
+  };
+  const b0 = await blindRun(0);
+  await t('열차가 시각표대로 가면 지하에서 8분 동안 오차 평균 0.3역 이하, 1역 넘게 어긋나지 않는다', async () => { assert.ok(b0.mae <= 0.3, 'mae=' + b0.mae); assert.ok(b0.min >= -1 && b0.max <= 1, b0.min + '/' + b0.max); });
+  const b1 = await blindRun(150);
+  await t('열차가 2분 30초 늦어도(GPS 로 지연을 배운 뒤 끊김) 오차 평균 0.3역 이하', async () => { assert.ok(b1.mae <= 0.3, 'mae=' + b1.mae); });
+  await t('그때 실제보다 앞서 표시되는 시간이 25% 이하이고 1역 넘게 앞서지 않는다', async () => { assert.ok(b1.ahead <= 0.25, 'ahead=' + b1.ahead); assert.ok(b1.max <= 1, 'max=' + b1.max); });
+
   console.log('[기지국: 모르는 셀 / 학습된 셀]');
   const cellSetup = async () => {
     await page.goto('file://' + html); await page.clock.runFor(2500);   // 앞 장면의 PF·셀 상태가 남지 않게 새로 연다
@@ -105,7 +128,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   await cellSetup();
   await cellAdvance(300, () => 'U0');   // 학습 안 된 셀 하나에 붙어 있음(움직이지만 어느 역인지는 모름)
   const u = await here();
-  await t('학습 안 된 셀만 보이고 위치 근거가 없으면 시각표를 따라간다(≥ 인덱스 3)', async () => { assert.ok(u.pip >= 3, 'pip=' + u.pip); });
+  await t('학습 안 된 셀만 보이고 위치 근거가 없으면 시각표를 따라간다(≥ 인덱스 2)', async () => { assert.ok(u.pip >= 2, 'pip=' + u.pip); });
   await cellSetup();
   await cellAdvance(240, () => 'U0');   // 06:23 — 예정은 S2~S3 사이
   await cellAdvance(30, () => 'KS1');                         // 실제로는 열차가 늦어 S1(인덱스 2)의 셀에 붙어 있다
