@@ -12891,7 +12891,10 @@ function _cellPull(force){
     var done = false;
     setTimeout(function(){ done = true; }, 6000);
     window._cellSyncInfo = '조회 중...';
-    fetch(_cellServerUrl() + '/cells?min=2', { cache:'no-cache' })
+    var _plmn = null;
+    try{ _plmn = window._cellPlmn || localStorage.getItem('cellPlmn') || null; }catch(ePq){}
+    if(_plmn && !/^\d{3}-\d{1,3}$/.test(_plmn)) _plmn = null;
+    fetch(_cellServerUrl() + '/cells?min=2' + (_plmn ? '&plmn=' + encodeURIComponent(_plmn) : ''), { cache:'no-cache' })
       .then(function(r){
         if(!r.ok){ window._cellSyncInfo = 'HTTP ' + r.status + ' — 서버에 /cells 가 없을 수 있어요'; return null; }
         return r.json();
@@ -12903,6 +12906,7 @@ function _cellPull(force){
         for(var k in j.cells){
           var sv = j.cells[k];
           if(!sv || !sv.s) continue;
+          if(_plmn && k.indexOf(_plmn + '-') !== 0) continue;   // 서버가 아직 통신사 필터를 모르는 옛 버전이어도 내 통신사 것만 담는다
           var mine = m[k];
           if(!mine){
             m[k] = { s: sv.s, l: sv.l || '', n: Math.min(sv.n || 1, 5),
@@ -12954,7 +12958,7 @@ function _cellMapSave(){
     var m = _cellMapMem || {};
     var keys = Object.keys(m);
     if(keys.length > _CELL_MAX_ENTRIES){
-      keys.sort(function(a,b){ return (m[a].t || 0) - (m[b].t || 0); });   // 오래된 것부터
+      keys.sort(function(a,b){ return ((m[a].n || 0) - (m[b].n || 0)) || ((m[a].t || 0) - (m[b].t || 0)); });   // 관측이 적은 것부터, 같으면 오래된 것부터(많이 확인된 셀을 지킨다)
       keys.slice(0, keys.length - _CELL_MAX_ENTRIES).forEach(function(k){ delete m[k]; });
     }
     localStorage.setItem('cellStnMap', JSON.stringify(m));
@@ -13518,6 +13522,18 @@ var _cellSeen = null;                // { key, since, lastChange }
 function _cellNoteObservation(key){
   var now = Date.now();
   if(!key) return;
+  // ★ 2026-10-06: 내 통신사(MCC-MNC)를 기억한다. 서버 표에는 KT·SKT·LG U+ 셀이 모두 들어오는데 내 폰엔 내 통신사 셀만 쓸모 있다
+  //   (셀 키는 mcc-mnc-tac-cid 라 통신사끼리 섞이거나 충돌하지 않는다). 받아올 때 이 값으로 걸러 내려받는다.
+  try{
+    var _pl = String(key).split('-').slice(0, 2).join('-');
+    if(/^\d{3}-\d{1,3}$/.test(_pl) && window._cellPlmn !== _pl){
+      var _oldPl = window._cellPlmn;
+      try{ if(_oldPl == null) _oldPl = localStorage.getItem('cellPlmn'); }catch(eL0){}
+      window._cellPlmn = _pl;
+      try{ localStorage.setItem('cellPlmn', _pl); }catch(eL1){}
+      if(_oldPl !== _pl){ try{ if(typeof _cellPull === 'function') setTimeout(function(){ _cellPull(true); }, 1500); }catch(eL2){} }   // 통신사가 새로 정해지거나 바뀌면 그 통신사 표를 바로 받는다
+    }
+  }catch(ePl){}
   // 최근 2분간 본 셀 기록 — A→B→A 경계 왔다갔다(핑퐁)를 '이동'으로 세지 않는다
   if(!window._cellRecent) window._cellRecent = {};
   var _rc = window._cellRecent;
