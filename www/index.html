@@ -13969,8 +13969,8 @@ function _xferHoldIdx(){
 window._xferHoldIdx = _xferHoldIdx;
 
 // 시각표 위치 + 환승 승차 대기 고정(위). 근거 상한은 아직 걸지 않은 값 — '시각표가 실제보다 앞서 있나'를 재는 쪽(드리프트·재앵커)이 쓴다.
-function _estimateTimelinePosHold(){
-  var tp = _estimateTimelinePosRaw();
+function _estimateTimelinePosHold(offMs){
+  var tp = _estimateTimelinePosRaw(offMs);
   try{
     if(tp && tp.fromIdx != null){
       var h = _xferHoldIdx();
@@ -13984,6 +13984,29 @@ function _estimateTimelinePosHold(){
 }
 window._estimateTimelinePosHold = _estimateTimelinePosHold;
 
+// 위치 근거(GPS·기지국 변화·PF 채택)가 끊겼는가 — 끊긴 지 90초 넘고, 승차 확정이고, 기지국이 '정차 중'이라 하지 않을 때만 참.
+//   (확정 전/승차 전엔 거짓: 승강장에서 시각표만으로 앞서가지 않는다)
+window._evStaleMs = function(){
+  try{
+    if(window._routeLocked !== true || window._metroRouteMode === true) return -1;
+    if(typeof _baseTimeMs !== 'undefined' && _baseTimeMs != null) return -1;
+    if(window._htlBoarded !== true) return -1;
+    if(typeof _htlNotDeparted === 'function' && _htlNotDeparted()) return -1;
+    var now = Date.now(), last = 0, v = (typeof S !== 'undefined') ? S.lastGPSFix : null;
+    if(v && v.ts) last = Math.max(last, v.ts);
+    try{ if(_cellSeen && _cellSeen.lastChange) last = Math.max(last, _cellSeen.lastChange); }catch(e1){}
+    // (PF 채택 시각은 근거가 아니다 — PF 는 관측이 없어도 예측만으로 '신선'하게 갱신된다)
+    try{ var gm = window._gpsMaxIdx; if(gm != null && gm >= 0 && window._nodePassMs && window._nodePassMs[gm]) last = Math.max(last, window._nodePassMs[gm]); }catch(e3){}
+    if(!last || now - last < 90000) return -1;
+    var cmv = (typeof _cellMovingState === 'function') ? _cellMovingState() : null;
+    if(cmv === false) return -1;
+    return now - last;
+  }catch(e){ return -1; }
+};
+window._evStaleFollow = function(){ return window._evStaleMs() >= 0; };
+// 근거가 끊긴 동안 시각표를 늦춰 읽는 유예: 끊긴 지 90초부터 1분에 걸쳐 0→60초로 늘린다(위치가 갑자기 뒤로 뛰지 않고 1분간 머문 뒤 다시 간다)
+window._evStaleOffMs = function(){ var m = window._evStaleMs(); return m < 0 ? 0 : Math.min(60000, m - 90000); };
+
 // ★ 2026-10-02 (YJ: "실제 역은 귤현인데 앱과 오버레이가 다 안 맞아"): 같은 시각 화면 — 열차가 3분 늦어 실제는 귤현(18:27 예정)인데
 //   앱 마커는 시각표대로 계양(18:29)이었다. 원인: 앱을 열 때(포그라운드 복귀 스냅)·상태 표시 등은 시각표 위치를 그대로 믿고 마커를 놓았다.
 //   (실시간 분기에는 '확정 진행도 + 1역까지만'이라는 상한이 있었는데 이 길만 상한이 없었다 — 규칙이 두 벌이었다.)
@@ -13991,9 +14014,16 @@ window._estimateTimelinePosHold = _estimateTimelinePosHold;
 function _estimateTimelinePos(){
   // 2026-10-04: PF(새 위치 판단기)가 채택한 위치가 있으면 그것이 유일한 위치다 — 마커·오버레이·복귀 스냅이 모두 여기를 읽는다.
   try{ if(window._pfPosOverride){ var _pfo = window._pfPosOverride(); if(_pfo) return _pfo; } }catch(ePf){}
-  var tp = _estimateTimelinePosHold();
+  // ★ 2026-10-06 (YJ: "오버레이는 시간이 줄어드는데 역은 안 바뀌어", "동수인데 부평으로 나와"):
+  //   지하·백그라운드에서는 GPS·기지국 근거가 몇 분씩 끊긴다. 아래 상한(확정 진행도+1역)은 '근거가 있는데 시각표만 앞선' 경우를
+  //   막으려는 것인데, 근거 자체가 없을 때도 마지막 확인 역에 굳어 남은 시간만 줄었다.
+  //   → 근거가 90초 넘게 끊겼고 승차가 확정돼 있고 기지국이 '정차 중'이라 하지 않으면, 상한을 풀고 시각표 위치를 최대 1분 늦춰 읽는다
+  //     (시각표는 이미 마지막 실제 통과 시각으로 맞춰져 있다). 근거가 돌아오면 이 분기가 꺼지고 마커는 그 위치로 되돌아간다.
+  var _off = 0, _stale = false;
+  try{ var _sm = window._evStaleMs ? window._evStaleMs() : -1; if(_sm >= 0){ _stale = true; _off = Math.min(60000, _sm - 90000); window._tlStaleAt = Date.now(); } }catch(eSm){}
+  var tp = _estimateTimelinePosHold(_off);
   try{
-    if(tp && tp.fromIdx != null && window._routeLocked === true && window._metroRouteMode !== true
+    if(!_stale && tp && tp.fromIdx != null && window._routeLocked === true && window._metroRouteMode !== true
        && !(typeof _baseTimeMs !== 'undefined' && _baseTimeMs != null)){
       var gm = (window._gpsMaxIdx == null ? -1 : window._gpsMaxIdx);
       var cap = (gm < 0 ? 0 : gm) + 1;
@@ -14007,7 +14037,7 @@ function _estimateTimelinePos(){
 }
 window._estimateTimelinePos = _estimateTimelinePos;
 
-function _estimateTimelinePosRaw(){
+function _estimateTimelinePosRaw(offMs){
   if(!_transitNodeData || !_transitNodeData.length) return null;
   var timed = [];
   _transitNodeData.forEach(function(nd, idx){
@@ -14016,7 +14046,7 @@ function _estimateTimelinePosRaw(){
   });
   if(timed.length < 2) return null;
   for(var i=1;i<timed.length;i++){ if(timed[i].min < timed[i-1].min) timed[i].min += 1440; }
-  var now = new Date();
+  var now = new Date(Date.now() - (offMs || 0));   // 2026-10-06: offMs = 근거가 끊겼을 때 시각표를 그만큼 늦춰 읽는 유예
   var nowMin = now.getHours()*60 + now.getMinutes() + now.getSeconds()/60;
   if(nowMin < timed[0].min - 60) nowMin += 1440;
   if(nowMin <= timed[0].min) return { fromIdx: timed[0].idx, toIdx: timed[0].idx, ratio: 0 };
@@ -47066,6 +47096,7 @@ window._pfTrusted = function(){
 window._pfPosOverride = function(){
   try{
     if(!window._pfTrusted()) return null;
+    if(window._evStaleFollow && window._evStaleFollow()) return null;   // 2026-10-06: 근거가 90초 넘게 끊기면 PF 는 마지막 역에 굳으므로 시각표 추정(유예 1분)으로 넘긴다
     var A = _pf.A, td = A.td, nd = _transitNodeData, b = window._pfBest;
     if(!nd || !nd[td]) return null;
     try{ var xh = _xferHoldIdx(); if(xh >= 0 && td >= xh) return null; }catch(e1){}   // 환승 승차 대기 중에는 환승 고정 규칙이 맡는다
