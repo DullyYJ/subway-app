@@ -2774,7 +2774,6 @@ function _foodShowMap(card, p){
     +'<div id="'+cid+'" class="food-map-canvas"></div>'
     +'<div class="food-map-foot">🚶 '+(stnNm?(_ltEsc(stnNm)+'역 → '):'')+_ltEsc(p.place_name)+' 도보 경로'
     + _placeBtnsHtml(dLat, dLng, p.place_name, stnNm)
-    + _navBtnsHtml(dLat, dLng, p.place_name)
     +'</div>';
   if(card.parentNode) card.parentNode.insertBefore(panel, card.nextSibling);
   else card.appendChild(panel);
