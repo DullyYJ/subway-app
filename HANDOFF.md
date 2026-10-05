@@ -169,3 +169,10 @@
 - **쇼핑 상품 즉시 반영(2026-10-05)**: 앱이 쇼핑 화면을 열 때·켤 때 gildongmu-shop `/version` 만 가볍게 확인(2분 간격)하고 저장본과 다르면 `/shop` 을 받아 바로 그린다(`_shopCheck`). 같은 시기에 `_shopFetch` 가 받은 뒤 `_renderShopGrid()` 를 인자 없이 불러 새 상품이 다음 렌더까지 안 뜨던 숨은 버그도 `renderShop()` 으로 고쳤다. 시험: `test/shop_version.ui.test.js`. 상품 교체 = 서버 PAYLOAD 교체 + version 올리기 + 대시보드 Deploy(코드 편집 화면은 iframe 이라 전체 코드를 클립보드에 넣고 붙여넣는다). 현재 913개(v20261005-2130). 엑셀 `카테고리별_분류결과_7종.xlsx` 양식: 번호·추천 아이템·연결링크·이미지URL, 시트=카테고리.
 
 - 서울 버스 도착 API(하루 1만 건) 보호 (2026-10-05): ①서버 gildongmu-bus 워커에 정류장별 공유 캐시 추가 — ws.bus.go.kr getStationByUid 20초, getStationByPos 60초, TAGO/경기 도착정보 15초, 같은 요청 동시 진입 시 1회만 상위 호출(INFLIGHT 합치기), 정상 응답(headerCd 0/4, resultCode 00/0/4)만 캐시하고 오류·인증실패는 캐시 안 함, 그 외 경로(노선 경유정류장 등)는 기존 그대로 통과. 응답 헤더 x-gm-cache(HIT/MISS/JOIN)와 /health 의 cache.entries 로 확인. 워커는 Cache API 가 workers.dev 에서 안 돼서 isolate 메모리 Map + 상위 fetch 의 cacheTtlByStatus 를 같이 쓴다. 배포: 대시보드 편집 화면(iframe)에 클립보드 붙여넣기 후 배포. 코드에 역슬래시가 있으면 javascript_tool 전달 중 사라지니 자리표시자로 보낸 뒤 페이지에서 되돌리고 sha256 으로 확인할 것. ②앱 _refreshMapBusArrivals 간격 조절(_busPollGap): 화면에 보이고 가장 빠른 도착이 10분 이내면 30초(기존 그대로), 10분보다 멀거나 도착 정보가 없으면 60초, 화면 밖·숨은 탭 카드는 90초. 남은 시간은 1초 카운트다운이 계속 흘리므로 화면은 같다. 시험: node test/bus_poll_gap.test.js (10개). 앱 반영은 새 APK 필요, 서버 캐시는 즉시 적용.
+
+
+## 2026-10-05 API 호출량 집계 페이지 (/usage)
+공개 링크: https://gildongmu-bus.phg0643.workers.dev/usage (JSON: /usage.json). 2026-09-01부터 날짜별 전체 표시, 호출명(공공데이터포털 서비스/오퍼레이션)별 x 키별(키1=TAGO_KEY, 키2=TAGO_KEY2, 중계서버=gentle-lab, 앱 버스서버=gildongmu-bus), CSV 내려받기 지원.
+데이터는 D1 subway-db 의 live_usage(day,k,n) 에 저장. gildongmu-bus(바인딩 DB=subway-db)는 bus.* 키, route-v2 는 tago.* gbis.* seoul.k1/k2 ld.TrainInfo|ExpBusInfo|SuburbsBusInfo.* xfer.* ntce.* kric.* est.* share.hit 키를 기록(약 1분 단위 flush, 근사치).
+집계 시작일은 2026-10-05. 그 이전(9월) 호출량은 이 서버에 기록이 없으므로 공공데이터포털 활용현황에서 확인해야 함.
+route-v2 집계 코드는 배포본(번들)에 직접 반영했고 GitHub route-v2 저장소 소스에는 아직 반영 안 됨(배포본과 저장소 소스가 다름에 주의). gentle-lab 은 아직 미계측(binding 경유 /tago 는 route-v2 쪽 'binding' 카운트로만 확인 가능).
