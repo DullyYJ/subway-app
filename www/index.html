@@ -14022,6 +14022,16 @@ function _estimateTimelinePos(){
   //     (시각표는 이미 마지막 실제 통과 시각으로 맞춰져 있다). 근거가 돌아오면 이 분기가 꺼지고 마커는 그 위치로 되돌아간다.
   var _off = 0, _stale = false;
   try{ var _sm = window._evStaleMs ? window._evStaleMs() : -1; if(_sm >= 0){ _stale = true; _off = Math.min(60000, _sm - 90000); window._tlStaleAt = Date.now(); } }catch(eSm){}
+  if(_stale){
+    // 근거가 끊긴 동안은 PF 도착 분포의 중앙값을 쓴다(시각표 + 증거로 배운 지연). 환승 승차 대기 고정은 그대로 존중한다.
+    try{
+      var _pm = window._pfMedianPos ? window._pfMedianPos() : null;
+      if(_pm){
+        var _h = _xferHoldIdx();
+        if(!(_h >= 0 && _pm.fromIdx >= _h)) return _pm;
+      }
+    }catch(ePm){}
+  }
   var tp = _estimateTimelinePosHold(_off);
   try{
     if(!_stale && tp && tp.fromIdx != null && window._routeLocked === true && window._metroRouteMode !== true
@@ -46699,6 +46709,18 @@ function create(stations, opts){
       delayS: subs[mapK].delay, delayW: subs[mapK].w
     };
   };
+  // '마지막으로 도착한 역'의 중앙값: 도착 분포 P(마지막 도착 = j) 의 누적이 처음 1/2 를 넘는 역.
+  //   최빈값(best)은 분포가 퍼지면 확률이 낮은 한 역으로 튀지만, 중앙값은 '이 역은 이미 지났을 확률이 절반 이상'인 가장 앞 역이라
+  //   기대 오차(역 단위 절대값)를 가장 작게 한다. 근거가 끊겨 분포가 시각표·지연 가정만으로 퍼질 때의 대표값으로 쓴다.
+  self.median = function(){
+    var Pm = combined(), c = 0, j, bi = N - 1;
+    for(j=0;j<N;j++){
+      c += Pm[2*j] + (j < N-1 ? Pm[2*j+1] : 0);
+      if(c >= 0.5){ bi = j; break; }
+    }
+    var mapK = 0; for(j=1;j<K;j++) if(subs[j].w > subs[mapK].w) mapK = j;
+    return { idx: bi, delayS: subs[mapK].delay, delayW: subs[mapK].w };
+  };
   self.dist = combined;
   self.cfgGet = function(){ return cfg; };
 
@@ -47093,6 +47115,25 @@ window._pfTrusted = function(){
     if(typeof _htlNotDeparted === 'function' && _htlNotDeparted()) return false;
     return true;
   }catch(e){ return false; }
+};
+// 근거가 끊겼을 때의 위치: PF 가 시각표와 '학습한 지연'으로 계산한 도착 분포의 중앙값(마지막 도착 역) + 그 구간 안의 진행 비율.
+//   (채택값 _pf.A 는 확신 60% 넘는 증거가 있어야 움직여서, 증거 없이 분포가 퍼지면 마지막 역에 굳는다 — 분포 자체는 계속 움직인다)
+window._pfMedianPos = function(){
+  try{
+    var f = _pf.f; if(!f || !_pf.st || !_pf.st.length || window._routeLocked !== true) return null;
+    if(!f.median) return null;
+    var m = f.median(), k = m.idx, st = _pf.st, nd = _transitNodeData;
+    if(!st[k] || !nd || !nd[st[k]._td]) return null;
+    var td = st[k]._td;
+    if(k >= st.length - 1) return { fromIdx: td, toIdx: td, ratio: 1 };
+    var to = st[k + 1]._td, r = 0;
+    var a = st[k].schedMs, b = st[k + 1].schedMs;
+    if(a != null && b != null && b > a){
+      var el = Date.now() - (a + m.delayS * 1000 + 20000);      // 도착 후 출발까지(DEP_AFTER_ARR_S)를 뺀 달리는 시간
+      r = el / (b - a - 20000); if(!(r > 0.05)) r = 0.05; if(r > 0.85) r = 0.85;
+    }
+    return { fromIdx: td, toIdx: to, ratio: r };
+  }catch(e){ return null; }
 };
 // 마커·오버레이가 쓰는 위치: 채택한 역(정차면 그 역 위, 주행이면 다음 역을 향해 최대 85%)
 window._pfPosOverride = function(){
