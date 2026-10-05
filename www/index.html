@@ -19451,10 +19451,7 @@ window.addEventListener('unhandledrejection', function(e) {
     <div id="lrOfficial" style="display:none;flex-shrink:0;margin:4px 12px 0;padding:8px 11px;border-radius:10px;font-size:12px;line-height:1.5;background:rgba(10,132,255,.12);border:1px solid rgba(10,132,255,.35);color:var(--text);"></div>
     <div id="lrAlert" style="display:none;flex-shrink:0;margin:4px 12px 0;padding:8px 11px;border-radius:10px;font-size:12px;line-height:1.5;"></div>
     <div class="chat-scroll" id="lrScroll"></div>
-    <div style="flex-shrink:0;display:flex;gap:8px;padding:6px 12px 0;">
-      <button onclick="_lrReport('delay')" style="flex:1;padding:8px 4px;border-radius:10px;border:1px solid var(--border2);background:var(--card);color:var(--text);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">🚨 지연돼요</button>
-      <button onclick="_lrReport('crowd')" style="flex:1;padding:8px 4px;border-radius:10px;border:1px solid var(--border2);background:var(--card);color:var(--text);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">😵 붐벼요</button>
-    </div>
+    <!-- ★ 2026-10-05 (YJ): 지연돼요·붐벼요 제보 버튼 삭제(악용 우려). 서버도 일반 대화만 받는다 -->
     <div class="chat-inputbar">
       <input id="lrInput" type="text" placeholder="이 노선 이용자에게 한마디…" maxlength="120" onkeydown="if(event.key==='Enter')_lrSend()">
       <button class="chat-send-btn" onclick="_lrSend()">➤</button>
@@ -42413,11 +42410,6 @@ function _lrSend(){
     }).catch(function(){ if(typeof toast==='function') toast('네트워크가 불안정해요'); });
 }
 window._lrSend=_lrSend;
-function _lrReport(kind){
-  var stn=''; try{ stn=(window.prompt && window.prompt((kind==='delay'?'지연':'혼잡')+' 제보 — 어느 역 근처인가요? (모르면 비워 두세요)', '')) || ''; }catch(e){}
-  _lrPost(kind, '', String(stn).trim().slice(0,20)).then(function(ok){ if(ok && typeof toast==='function') toast('제보해 주셔서 고마워요'); });
-}
-window._lrReport=_lrReport;
 
 // 경로 카드: 내 경로의 지하철 노선 중 최근 30분 지연 제보가 3명 이상이면 경고 한 줄(개선안 5). 1~2명은 '확인 중'으로 약하게.
 var _lrAlertAsk = { key:'', at:0 };
