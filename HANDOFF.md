@@ -1,12 +1,12 @@
 # HANDOFF (길동무 앱 + 엔진) — 작업 묶음이 끝날 때마다 이 파일 하나를 갱신한다
 
-**마지막 갱신: 2026-10-06 (KST)** · 다음 Claude는 이 파일부터 읽고, 아래 "주의·원칙"을 지킨다. **2026-10-06 세션의 최신 변경(엔진 인천2호선 수정·배포 06b, 앱 셀 수정, 시험·시뮬 하네스, 작업 방법·남은 일)은 [`HANDOFF-2026-10-06.md`](HANDOFF-2026-10-06.md)에 있다 — 함께 읽을 것. 원칙: 모든 결정은 엔진이, 앱은 그리기만.**
+**마지막 갱신: 2026-10-06 (KST)** · 다음 Claude는 이 파일부터 읽고, 아래 "주의·원칙"을 지킨다. **작업 3·4(서구청→서해구청 표기, 번들 누락역 추가)는 [`HANDOFF-작업3-4-서해구청-누락역.md`](HANDOFF-작업3-4-서해구청-누락역.md)로 넘겼다.** **2026-10-06 세션의 최신 변경(엔진 인천2호선 수정 06a~d, 총시간/타임라인 정합 06e·06f, 라이브 스윕 시험, 앱 셀 수정, 시험·시뮬 하네스, 작업 방법·남은 일)은 [`HANDOFF-2026-10-06.md`](HANDOFF-2026-10-06.md)에 있다 — 함께 읽을 것. 원칙: 모든 결정은 엔진이, 앱은 그리기만.**
 
 ## 0. 현재 상태 한눈에
 | 대상 | 버전·커밋 | 상태 |
 |---|---|---|
 | 앱 `DullyYJ/subway-app` main | 마지막 앱 동작 변경 `fc0a74a`(자동 확정 오탐 방지·승강장 늦은 열차 4분 유예). 그 앞 `fd48d76`이 경로 미확정 시 탑승 감지 자동 확정·카카오 장소 ID 직링크·네이버 좌표 검색, 그 앞 `df32cdb`가 분 표시 통일·승차/대기 합 보정·'분 남음'·주황 배지·역 사이 지연 반영, 그 앞 `43e816b`가 재탐색 차단·PF 단일 위치원·복합 승차판정·가속도계 삭제. 그 뒤는 시험 파일과 이 문서뿐 | Build APK #759(`df32cdb`) 성공, `fd48d76` #762, `fc0a74a` #765 성공. **실기기 검증은 아직 안 함(다음 승차에서)** |
-| 엔진 `DullyYJ/route-v2` main | `ENGINE_VERSION = route-v2-2026-10-06d` (인천2호선 중간역 누락 수정 — `HANDOFF-2026-10-06.md` 2-1; 그 앞은 05g 버스 실측 `예상` 줄이기 — 3-1번) | main push 시 Cloudflare Workers Builds 자동 배포. 지연 추정은 `EST_ENABLED` 꺼짐 |
+| 엔진 `DullyYJ/route-v2` main | `ENGINE_VERSION = route-v2-2026-10-06f` (06e·06f 총시간/타임라인 정합 + 라이브 스윕 시험 `test/live_sweep.js` — `HANDOFF-2026-10-06.md` 2-1·3-1b; 인천2호선 중간역 누락 수정 06a~d; 그 앞은 05g 버스 실측 `예상` 줄이기 — 3-1번) | main push 시 Cloudflare Workers Builds 자동 배포. 지연 추정은 `EST_ENABLED` 꺼짐 |
 | board-writer (`route-v2/board-writer/index.js`, main) | 신버전(호선 방 `line` 저장·`/talks` 모으기·호선별 AI 글) | **대시보드에 배포됨** — Cowork 클로드 확인: `/talks` 항목에 `line` 필드·`L숫자` id, `/lroom?line=…` 정상, 경춘선·GTX-A는 빈 방으로 열림 |
 | 중계 gentle-lab (`subway-app/worker/index.js`) | 강화 코드(재시도·키 정리·진단) + **한국 IP 중계 수신부(`/relay/wanted`·`/relay/push`, 4-1번)** | 강화 코드까지는 **대시보드에 붙여 넣어 배포됨**(YJ가 Deploy). **수신부도 배포됨**(`RELAY_TOKEN` 등록·Deploy 완료, 응답 헤더 `x-seoul-cache: RELAY` 확인 — 3-1번). `SEOUL_DEBUG` 변수는 진단 후 YJ가 삭제. 배치(Placement)는 AWS ap-northeast-2로 바꿨으나 swopenapi 차단에는 효과 없음 |
 
