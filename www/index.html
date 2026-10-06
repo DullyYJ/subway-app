@@ -11827,10 +11827,19 @@ function _recalcArrivalsFrom(anchorIdx){
   //   열차는 시각표 구간 소요의 60%보다 빨리 달릴 수 없다 → 앵커는 '승차 확정 + 그 최소 소요' 보다 앞설 수 없다.
   //   (기지국 선행 최대치(3분)보다 더 미래가 되는 경우·승차 기록이 앵커보다 늦은 경우는 근거가 모순이라 적용하지 않는다)
   try{
-    if(!_notDeparted && _boardIdx >= 0 && anchor.idx > _boardIdx && pm[_boardIdx] != null){
-      var _bn0 = _transitNodeData[_boardIdx];
+    // 환승 뒤 구간도 같다: 앵커보다 앞에 있는 '가장 가까운 승차 구간 시작(승차 기록이 있는 역·정류장)'을 기준으로 삼는다.
+    var _flIdx = -1;
+    if(!_notDeparted && _boardIdx >= 0){
+      for(var _fj = anchor.idx - 1; _fj >= _boardIdx; _fj--){
+        var _fn = _transitNodeData[_fj], _fp = _transitNodeData[_fj - 1];
+        if(!_fn || !(_fn.isSub || _fn.isBus) || pm[_fj] == null) continue;
+        if(!_fp || _fp.isWalk || _fp.isOrigin || (_fp.lineName || '') !== (_fn.lineName || '') || !!_fp.isBus !== !!_fn.isBus){ _flIdx = _fj; break; }
+      }
+    }
+    if(_flIdx >= 0){
+      var _bn0 = _transitNodeData[_flIdx];
       if(_bn0 && _bn0._schedMin != null && anchor.sched > _bn0._schedMin){
-        var _earliest = pm[_boardIdx] + 0.6 * (anchor.sched - _bn0._schedMin) * 60000;
+        var _earliest = pm[_flIdx] + 0.6 * (anchor.sched - _bn0._schedMin) * 60000;
         if(anchorMs < _earliest && _earliest <= Date.now() + 180000){
           console.log('[승차시각] 앵커 하한 적용 ' + (_transitNodeData[anchor.idx] && _transitNodeData[anchor.idx].name) + ' 통과 기록이 승차보다 너무 빠름 → 늦춤 ' + Math.round((_earliest - anchorMs)/1000) + '초');
           try{ _ovlDiag('승차시각', '앵커 하한 ' + ((_transitNodeData[anchor.idx]||{}).name||'') + ' +' + Math.round((_earliest - anchorMs)/1000) + '초'); }catch(eD){}

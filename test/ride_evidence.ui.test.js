@@ -501,6 +501,22 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     const a = await times(); assert.strictEqual(a[3], '18:15', JSON.stringify(a)); assert.strictEqual(a[5], '18:20');
   });
 
+  console.log('[복합경로: 환승 뒤 두 번째 열차도 기지국 선행으로 시각표가 앞당겨지지 않는다]');
+  await page.clock.setSystemTime(new Date('2026-10-06T18:11:50+09:00'));
+  await page.evaluate(() => {
+    const mk = (name, h, m, o) => Object.assign({ name: name, lat: 37.5, lng: 0, isSub: false, isBus: false, isWalk: false, isOrigin: false, lineName: '', _schedMin: h * 60 + m, el: null, arrTime: ('0' + h).slice(-2) + ':' + ('0' + m).slice(-2) }, o);
+    const nodes = [mk('출발', 17, 55, { isOrigin: true }), mk('가', 18, 0, { isSub: true, lineName: '7호선' }), mk('나', 18, 3, { isSub: true, lineName: '7호선' }), mk('환승', 18, 8, { isWalk: true }),
+      mk('다', 18, 11, { isSub: true, lineName: '9호선' }), mk('라', 18, 14, { isSub: true, lineName: '9호선' }), mk('마', 18, 17, { isSub: true, lineName: '9호선' })];
+    nodes.forEach((n, i) => { n.lng = 126.9 + 0.0137 * i; });
+    _transitNodeData = nodes; window._routeLocked = true; window._metroRouteMode = false; _baseTimeMs = null; window._htlBoarded = true;
+    window._gpsMaxIdx = 4; window._gpsConfirmIdx = 4; window._nodePassMs = { 1: Date.now() - 700000, 4: Date.now() };
+  });
+  await page.clock.setSystemTime(new Date('2026-10-06T18:12:40+09:00'));
+  await page.evaluate(() => { window._gpsMaxIdx = 5; window._nodePassMs[5] = Date.now(); _recalcArrivalsFrom(5); });
+  await t('환승 열차를 탄 지 50초 만에 다음 역 선행 통과가 찍혀도 그 역 시각이 시각표보다 1분 넘게 앞서지 않는다', async () => {
+    const a = await times(); assert.ok(a[4] >= '18:13', JSON.stringify(a)); assert.ok(a[3] >= '18:10', JSON.stringify(a));
+  });
+
   console.log('[오버레이 화살표 — 이동 중 여부(moving)]');
   await jumpSetup();
   await page.clock.setSystemTime(new Date('2026-10-06T17:42:20+09:00'));
