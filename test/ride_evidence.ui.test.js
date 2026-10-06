@@ -487,6 +487,20 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     });
     assert.strictEqual(x, 1);
   });
+  console.log('[복합경로: 버스 → 지하철 — 아직 타지 않은 지하철 구간은 시간표로 당기지 않는다]');
+  await page.clock.setSystemTime(new Date('2026-10-06T18:00:30+09:00'));
+  await page.evaluate(() => {
+    const mk = (name, h, m, o) => Object.assign({ name: name, lat: 37.5, lng: 0, isSub: false, isBus: false, isWalk: false, isOrigin: false, lineName: '', _schedMin: h * 60 + m, el: null, arrTime: ('0' + h).slice(-2) + ':' + ('0' + m).slice(-2) }, o);
+    const nodes = [mk('출발', 17, 50, { isOrigin: true }), mk('정류장A', 18, 0, { isBus: true, lineName: '버스 10' }), mk('정류장B', 18, 4, { isBus: true, lineName: '버스 10' }), mk('환승', 18, 11, { isWalk: true }),
+      mk('캠퍼스타운', 18, 15, { isSub: true, lineName: '인천1호선' }), mk('동막', 18, 18, { isSub: true, lineName: '인천1호선' }), mk('동춘', 18, 20, { isSub: true, lineName: '인천1호선' })];
+    nodes.forEach((n, i) => { n.lng = 126.9 + 0.0137 * i; });
+    _transitNodeData = nodes; window._routeLocked = true; window._metroRouteMode = false; _baseTimeMs = null;
+    window._gpsMaxIdx = 1; window._gpsConfirmIdx = 1; window._nodePassMs = { 1: Date.now() }; window._htlBoarded = true; _recalcArrivalsFrom(1);
+  });
+  await t('버스를 타고 가는 동안 지하철 승차 시각이 시간표의 더 이른 열차(18:13)로 당겨지지 않는다', async () => {
+    const a = await times(); assert.strictEqual(a[3], '18:15', JSON.stringify(a)); assert.strictEqual(a[5], '18:20');
+  });
+
   console.log('[오버레이 화살표 — 이동 중 여부(moving)]');
   await jumpSetup();
   await page.clock.setSystemTime(new Date('2026-10-06T17:42:20+09:00'));
