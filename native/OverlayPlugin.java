@@ -76,6 +76,7 @@ public class OverlayPlugin extends Plugin {
     private String line1 = "", line2 = "", line3 = "";
     private String[] track = new String[0];     // 출발 – 경로 – 현위치 – 경로 – 도착 (웹이 정해 준 이름들)
     private int trackCur = -1;                  // 현위치 칸 번호(이 칸만 하얗고, 나머지는 흐린 회색)
+    private boolean moving = false;             // ★ 2026-10-06: 열차가 현재 역을 떠나 다음 역으로 가는 중(웹이 판단해 넘겨 준다) — 화살표가 깜박인다
     private int alertLevel = 0;                 // 하차 임박: 0 없음 · 2 두 정거장 전(무지개 테두리가 천천히) · 1 한 정거장 전(빠르게)
     private RainbowBorder border;
     private ValueAnimator borderAnim;
@@ -88,6 +89,46 @@ public class OverlayPlugin extends Plugin {
     // ★ 2026-10-03 (YJ: "지나간 곳 · 현위치 · 다음정거장 — 세 칸, 아래는 남은시간·도착"): 다섯 칸 → 세 칸. 가운데(현위치) 칸이 화면 정중앙.
     private final TextView[] cells = new TextView[3];
     private boolean attached = false;
+
+    // ★ 2026-10-06 (YJ: "현재역과 다음역 사이에 화살표 -->. 정차 중엔 회색, 이동 중이면 회색↔흰색으로 자동차 깜박이처럼"):
+    //   역 글자는 움직이지 않는다. 가운데 칸 글자 끝 ~ 다음 칸 글자 시작 사이 '빈 자리'에 맞춰 선 길이를 정하고 오른쪽 끝에 화살촉을 그린다.
+    //   무엇을 보여줄지(이동 중인가)는 웹이 정해서 moving 으로 넘겨 주고, 여기서는 그리기·깜박임만 한다.
+    private ArrowView arrow;
+    private int rowWpx = 0, centerWpx = 0, sideWpx = 0;
+    private static final long BLINK_MS = 550L;
+    private boolean blinkOn = false, blinking = false;
+    private final Runnable blinker = new Runnable() {
+        @Override public void run() {
+            if (!attached || !moving || arrow == null) { blinking = false; return; }
+            blinkOn = !blinkOn;
+            arrow.setLit(blinkOn);
+            main.postDelayed(this, BLINK_MS);
+        }
+    };
+
+    /** 역 사이 화살표(-->) 를 그리는 뷰. 위치는 setGap 으로 받은 가로 구간(행 기준 픽셀) 안에 선을 긋고 오른쪽 끝에 화살촉을 둔다. */
+    private class ArrowView extends View {
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private float x0 = 0f, x1 = 0f;
+        private boolean lit = false;
+        ArrowView(Context c) {
+            super(c);
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeCap(Paint.Cap.ROUND);
+            paint.setStrokeWidth(dp(2.4f));
+        }
+        void setGap(float a, float b) { x0 = a; x1 = b; invalidate(); }
+        void setLit(boolean on) { lit = on; invalidate(); }
+        @Override protected void onDraw(Canvas cv) {
+            if (x1 - x0 < dp(14)) return;                       // 빈 자리가 너무 좁으면 그리지 않는다
+            paint.setColor(lit ? Color.WHITE : Color.parseColor("#6E6E76"));
+            float y = getHeight() / 2f;
+            float head = dp(6.5f);
+            cv.drawLine(x0, y, x1, y, paint);                   // ──
+            cv.drawLine(x1, y, x1 - head, y - head * 0.75f, paint);   // 화살촉 위
+            cv.drawLine(x1, y, x1 - head, y + head * 0.75f, paint);   // 화살촉 아래
+        }
+    }
 
     // ── JS 에서 부르는 메서드 ─────────────────────────────────────
 
@@ -143,6 +184,7 @@ public class OverlayPlugin extends Plugin {
             track = tr;
         } catch (Exception e) { track = new String[0]; }
         trackCur = call.getInt("cur", -1);
+        moving = call.getBoolean("moving", false);
         Integer al = call.getInt("alert", 0);
         alertLevel = al == null ? 0 : Math.max(0, Math.min(2, al));
         line2 = nz(call.getString("line2"));
@@ -291,7 +333,8 @@ public class OverlayPlugin extends Plugin {
             try { wm.removeView(root); } catch (Exception ignored) { }
             attached = false;
         }
-        root = null; border = null; borderAnim = null; borderMode = 0;
+        stopBlink();
+        root = null; border = null; borderAnim = null; borderMode = 0; arrow = null;
         if (was) attachOrUpdate();
     }
 
@@ -363,8 +406,13 @@ public class OverlayPlugin extends Plugin {
         row.addView(cells[1], new LinearLayout.LayoutParams(centerW, LinearLayout.LayoutParams.WRAP_CONTENT));
         row.addView(cells[2], new LinearLayout.LayoutParams(sideW, LinearLayout.LayoutParams.WRAP_CONTENT));
         View gap = new View(ctx);
+        rowWpx = rowW; centerWpx = centerW; sideWpx = sideW;
+        arrow = new ArrowView(ctx);
+        FrameLayout rowFrame = new FrameLayout(ctx);     // 윗줄 위에 화살표를 겹쳐 올린다(역 글자 위치는 그대로)
+        rowFrame.addView(row, new FrameLayout.LayoutParams(rowW, FrameLayout.LayoutParams.WRAP_CONTENT));
+        rowFrame.addView(arrow, new FrameLayout.LayoutParams(rowW, FrameLayout.LayoutParams.MATCH_PARENT));
         root.addView(t3);                            // 추천 알림 제목은 위(노란 줄이 늘 맨 아래)
-        root.addView(row, new LinearLayout.LayoutParams(rowW, LinearLayout.LayoutParams.WRAP_CONTENT));
+        root.addView(rowFrame, new LinearLayout.LayoutParams(rowW, LinearLayout.LayoutParams.WRAP_CONTENT));
         root.addView(gap, new LinearLayout.LayoutParams(1, dp(6)));
         root.addView(t2, new LinearLayout.LayoutParams(rowW, LinearLayout.LayoutParams.WRAP_CONTENT));
 
@@ -552,6 +600,7 @@ public class OverlayPlugin extends Plugin {
                 c.setTextColor(Color.parseColor("#6E6E76"));
             }
         }
+        try { updateArrow(three); } catch (Exception ignored) { }
         t2.setText(line2);
         t2.setVisibility(line2.length() > 0 ? View.VISIBLE : View.GONE);
         t3.setText(line3);
@@ -567,7 +616,37 @@ public class OverlayPlugin extends Plugin {
         }
     }
 
+    /** 가운데 칸 글자 끝과 다음 칸 글자 시작 사이 빈 자리를 재서 화살표 길이를 정하고, 이동 중이면 깜박이기 시작한다. */
+    private void updateArrow(String[] three) {
+        if (arrow == null) return;
+        String cur = three[1] == null ? "" : three[1], nxt = three[2] == null ? "" : three[2];
+        if (cur.length() == 0 || nxt.length() == 0) {      // 다음 역이 없으면(종점·출발 전) 화살표도 없다
+            arrow.setGap(0f, 0f); arrow.setLit(false); stopBlink(); return;
+        }
+        float wCur = Math.min(cells[1].getPaint().measureText(cur), centerWpx);
+        float wNxt = Math.min(cells[2].getPaint().measureText(nxt), sideWpx);
+        float pad = dp(7);
+        float a = sideWpx + centerWpx / 2f + wCur / 2f + pad;            // 가운데 글자 오른쪽 끝 + 여백
+        float b = sideWpx + centerWpx + sideWpx / 2f - wNxt / 2f - pad;  // 다음 글자 왼쪽 끝 − 여백
+        arrow.setGap(a, b);
+        if (moving) startBlink();
+        else { stopBlink(); arrow.setLit(false); }                       // 정차 중: 회색 고정
+    }
+
+    private void startBlink() {
+        if (blinking) return;
+        blinking = true; blinkOn = true;
+        if (arrow != null) arrow.setLit(true);
+        main.postDelayed(blinker, BLINK_MS);
+    }
+
+    private void stopBlink() {
+        main.removeCallbacks(blinker);
+        blinking = false; blinkOn = false;
+    }
+
     private void detach() {
+        stopBlink();
         stopAlert();                                   // 보이지 않는 동안 애니메이션을 돌리지 않는다(배터리)
         main.removeCallbacks(checker);
         if (!journeyOn) { main.removeCallbacks(ticker); ticking = false; }   // 여정이 진행 중이면 오버레이를 내려도 깨우기는 계속한다

@@ -408,6 +408,102 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     const src = fs.readFileSync(html, 'utf8');
     assert.ok(!/Math\.round\(t%60\)\)\.slice\(-2\)/.test(src), '반올림 전 분 계산이 남아 있음');
   });
+  console.log('[승차 직후 시각표 점프 — 2026-10-06 실승차]');
+  // 17:35 캠퍼스타운 승차 → 52초 뒤 기지국 선행으로 동막 '통과'가 찍히면 출발이 17:29 로 6분 앞당겨지던 문제
+  const jumpSetup = async () => {
+    await page.clock.setSystemTime(new Date('2026-10-06T17:35:00+09:00'));
+    await page.evaluate(() => {
+      const midnight = new Date('2026-10-06T00:00:00+09:00'); const bm = (new Date('2026-10-06T17:35:00+09:00') - midnight) / 60000;
+      const names = ['캠퍼스타운', '동막', '동춘', '원인재', '신연수', '선학', '문학경기장'], offs = [0, 3, 5, 7, 8, 10, 12];
+      const nodes = [{ name: '출발', lat: 37.5, lng: 126.896, isOrigin: true, isWalk: false, isSub: false, isBus: false, _schedMin: bm - 5, el: null }];
+      names.forEach((nm, i) => { const m = bm + offs[i]; nodes.push({ name: nm, lat: 37.5, lng: 126.9 + 0.0137 * i, isSub: true, isBus: false, isWalk: false, isOrigin: false, lineName: '인천1호선', _schedMin: m, el: null, arrTime: ('0' + Math.floor(m / 60)).slice(-2) + ':' + ('0' + Math.floor(m % 60)).slice(-2) }); });
+      _transitNodeData = nodes; window._routeLocked = true; window._metroRouteMode = false; _baseTimeMs = null;
+      window._gpsMaxIdx = -1; window._gpsConfirmIdx = -1; window._nodePassMs = {}; window._htlBoarded = false;
+    });
+  };
+  const times = () => page.evaluate(() => _transitNodeData.slice(1).map(n => n.arrTime));
+  await jumpSetup();
+  await page.clock.setSystemTime(new Date('2026-10-06T17:35:48+09:00'));
+  await page.evaluate(() => { window._htlBoarded = true; window._gpsMaxIdx = 1; window._nodePassMs[1] = Date.now(); _recalcArrivalsFrom(1); });
+  await page.clock.setSystemTime(new Date('2026-10-06T17:36:40+09:00'));
+  await page.evaluate(() => { window._gpsMaxIdx = 2; window._nodePassMs[2] = Date.now(); _recalcArrivalsFrom(2); });
+  await t('승차 52초 뒤 동막 선행 통과가 찍혀도 출발 시각이 탄 시각(17:35)보다 2분 넘게 앞서지 않는다', async () => {
+    const a = await times(); const m = a[0].split(':'); const dep = (+m[0]) * 60 + (+m[1]);
+    assert.ok(dep >= 17 * 60 + 33, '출발 ' + a[0] + ' (예전: 17:29)');
+  });
+  await t('이미 탄 시각보다 앞선 열차(17:29)로 스냅하지 않는다', async () => {
+    const a = await times(); assert.notStrictEqual(a[0], '17:29'); assert.notStrictEqual(a[1], '17:32');
+  });
+  await page.clock.setSystemTime(new Date('2026-10-06T17:38:05+09:00'));
+  await page.evaluate(() => { window._nodePassMs[2] = Date.now(); _recalcArrivalsFrom(2); });
+  await t('동막에 실제로 도착하면 원래 시각(17:35 · 동막 17:38)으로 맞는다', async () => {
+    const a = await times(); assert.strictEqual(a[0], '17:35'); assert.strictEqual(a[1], '17:38');
+  });
+  // 정상 흐름은 그대로: 승차 후 정상 속도 통과는 앵커 하한에 걸리지 않는다
+  await jumpSetup();
+  await page.clock.setSystemTime(new Date('2026-10-06T17:35:10+09:00'));
+  await page.evaluate(() => { window._htlBoarded = true; window._gpsMaxIdx = 1; window._nodePassMs[1] = Date.now(); _recalcArrivalsFrom(1); });
+  await page.clock.setSystemTime(new Date('2026-10-06T17:38:30+09:00'));
+  await page.evaluate(() => { window._gpsMaxIdx = 2; window._nodePassMs[2] = Date.now(); _recalcArrivalsFrom(2); });
+  await t('정상 속도(3분 구간을 3분20초)로 통과하면 시각이 그대로 따라간다(하한 영향 없음)', async () => {
+    const a = await times(); assert.strictEqual(a[1], '17:38', JSON.stringify(a));
+  });
+  console.log('[오버레이·혼잡도 카드가 마커(GPS 투영) 위치를 따른다 — 부평인데 동수]');
+  await jumpSetup();
+  await page.clock.setSystemTime(new Date('2026-10-06T17:42:20+09:00'));
+  await page.evaluate(() => { window._htlBoarded = true; window._nodePassMs = { 1: Date.now() - 400000, 4: Date.now() - 20000 }; window._gpsMaxIdx = 4; window._gpsConfirmIdx = 4; });
+  const here = (mp) => page.evaluate((mp) => { window._markerPos = mp ? Object.assign({ ts: Date.now() }, mp) : null; return _pipHereIdx(); }, mp);
+  await t('마커가 GPS 로 다음 역 85% 이상에 그려졌으면 오버레이도 다음 역을 현재 역으로 본다', async () => { assert.strictEqual(await here({ from: 4, to: 5, ratio: 0.9, gps: true }), 5); });
+  await t('마커가 아직 역 사이 중간이면 오버레이는 그대로(현재 역 유지)', async () => { assert.strictEqual(await here({ from: 4, to: 5, ratio: 0.5, gps: true }), 4); });
+  await t('GPS 가 아니라 추정으로 그린 마커는 오버레이를 앞서게 하지 않는다(기존 규칙 유지)', async () => { assert.strictEqual(await here({ from: 4, to: 5, ratio: 0.9, gps: false }), 4); });
+  await t('낡은(20초 넘은) 마커 값은 쓰지 않는다', async () => { const r = await page.evaluate(() => { window._markerPos = { from: 4, to: 5, ratio: 0.95, gps: true, ts: Date.now() - 25000 }; return _pipHereIdx(); }); assert.strictEqual(r, 4); });
+  await t('마커가 진행도보다 두 역 넘게 앞서도 한 역까지만 따른다(튀는 값 방지)', async () => { assert.ok((await here({ from: 6, to: 7, ratio: 0.9, gps: true })) <= 5); });
+  await page.evaluate(() => { window._markerPos = null; });
+
+  console.log('[하차 전 팝업 버튼]');
+  await t('팝업이 맨 위(2147483647)에 뜨고, 터치만 와도(클릭 변환이 막혀도) 버튼이 동작한다', async () => {
+    const r = await page.evaluate(() => {
+      window.__x = 0; _showBriefingModal('하차 8분 전', '아라 도착 예정', null, { label: '맛집 위치 보기', call: 'window.__x=(window.__x||0)+1' });
+      const ov = document.getElementById('briefModalOv'); const btns = ov.querySelectorAll('button');
+      const z = ov.style.zIndex;
+      btns[1].dispatchEvent(new Event('touchend', { bubbles: true, cancelable: true }));
+      return { z: z, x: window.__x, n: btns.length };
+    });
+    assert.strictEqual(r.z, '2147483647'); assert.strictEqual(r.n, 2); assert.strictEqual(r.x, 1, '터치로 한 번만 실행');
+    await page.evaluate(() => { const o = document.getElementById('briefModalOv'); if (o) o.remove(); });
+  });
+  await t('팝업 확인 버튼이 터치로도 팝업을 닫는다', async () => {
+    const r = await page.evaluate(() => {
+      _showBriefingModal('t', 'b', null, null);
+      document.querySelector('#briefModalOv button').dispatchEvent(new Event('touchend', { bubbles: true, cancelable: true }));
+      return !!document.getElementById('briefModalOv');
+    });
+    assert.strictEqual(r, false);
+  });
+  await t('실제 클릭은 한 번만 실행된다(터치 처리와 겹치지 않음)', async () => {
+    const x = await page.evaluate(() => {
+      window.__x = 0; _showBriefingModal('t', 'b', null, { label: '위치', call: 'window.__x=(window.__x||0)+1' });
+      const b = document.querySelectorAll('#briefModalOv button')[1]; b.click(); const o = document.getElementById('briefModalOv'); if (o) o.remove(); return window.__x;
+    });
+    assert.strictEqual(x, 1);
+  });
+  console.log('[오버레이 화살표 — 이동 중 여부(moving)]');
+  await jumpSetup();
+  await page.clock.setSystemTime(new Date('2026-10-06T17:42:20+09:00'));
+  await page.evaluate(() => { window._htlBoarded = true; window._nodePassMs = { 1: Date.now() - 400000, 4: Date.now() - 20000 }; window._gpsMaxIdx = 4; window._gpsConfirmIdx = 4; });
+  const mv = (b) => page.evaluate((b) => { window._pfBest = b ? Object.assign({ at: Date.now(), conf: 0.8 }, b) : null; return { m: _ovlMoving(), l: _ovlLines() }; }, b);
+  await t('PF 가 주행(seg)이라 하면 moving=true, 정차(dwell)라 하면 false', async () => {
+    const a = await mv({ kind: 'seg', idx: 3 }); assert.strictEqual(a.m, true); assert.strictEqual(a.l.moving, true, '다음 역이 있으니 깜박임');
+    const b2 = await mv({ kind: 'dwell', idx: 3 }); assert.strictEqual(b2.m, false); assert.strictEqual(b2.l.moving, false);
+  });
+  await t('PF 확신이 50% 미만이거나 낡았으면 PF 판정을 쓰지 않는다(기지국 판정이 true 일 때만 이동)', async () => {
+    const r = await page.evaluate(() => { window._pfBest = { at: Date.now() - 60000, conf: 0.9, kind: 'seg', idx: 3 }; const o = _ovlMoving(); return { o: o, cm: _cellMovingState() }; });
+    assert.strictEqual(r.o, r.cm === true);
+  });
+  await t('승차 전에는 moving=false', async () => {
+    const r = await page.evaluate(() => { window._htlBoarded = false; window._gpsMaxIdx = -1; window._nodePassMs = {}; window._pfBest = { at: Date.now(), conf: 0.9, kind: 'seg', idx: 3 }; return _ovlMoving(); });
+    assert.strictEqual(r, false);
+  });
   await t('JS 오류가 없다', async () => { assert.deepStrictEqual(errs.filter(e => !/Failed to fetch|NetworkError|Load failed/.test(e)), []); });
   await b.close();
   console.log(`\n${pass} 통과, ${fail} 실패`); process.exit(fail ? 1 : 0);

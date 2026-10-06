@@ -11821,6 +11821,25 @@ function _recalcArrivalsFrom(anchorIdx){
   }
   var _notDeparted = (typeof _htlNotDeparted==='function') ? _htlNotDeparted() : false;
 
+  // ★ 2026-10-06 (YJ 실승차: 17:35 탑승인데 타임라인이 17:29 로 6분 앞당겨짐)
+  //   기지국 선행(마커가 최대 ~3분 앞서감)이 '다음 역 통과'를 승차 52초 뒤에 찍으면,
+  //   그 시각을 앵커로 역산한 출발이 승차 시각보다 3분 앞서 버린다(그 뒤 스냅이 더 이른 열차로 끌어당김).
+  //   열차는 시각표 구간 소요의 60%보다 빨리 달릴 수 없다 → 앵커는 '승차 확정 + 그 최소 소요' 보다 앞설 수 없다.
+  //   (기지국 선행 최대치(3분)보다 더 미래가 되는 경우·승차 기록이 앵커보다 늦은 경우는 근거가 모순이라 적용하지 않는다)
+  try{
+    if(!_notDeparted && _boardIdx >= 0 && anchor.idx > _boardIdx && pm[_boardIdx] != null){
+      var _bn0 = _transitNodeData[_boardIdx];
+      if(_bn0 && _bn0._schedMin != null && anchor.sched > _bn0._schedMin){
+        var _earliest = pm[_boardIdx] + 0.6 * (anchor.sched - _bn0._schedMin) * 60000;
+        if(anchorMs < _earliest && _earliest <= Date.now() + 180000){
+          console.log('[승차시각] 앵커 하한 적용 ' + (_transitNodeData[anchor.idx] && _transitNodeData[anchor.idx].name) + ' 통과 기록이 승차보다 너무 빠름 → 늦춤 ' + Math.round((_earliest - anchorMs)/1000) + '초');
+          try{ _ovlDiag('승차시각', '앵커 하한 ' + ((_transitNodeData[anchor.idx]||{}).name||'') + ' +' + Math.round((_earliest - anchorMs)/1000) + '초'); }catch(eD){}
+          anchorMs = _earliest;
+        }
+      }
+    }
+  }catch(eFl){}
+
   // 앵커(최근 실측 통과) 기준으로 노드 시각을 재계산 → 순서 꼬임 방지
   _transitNodeData.forEach(function(nd, idx){
     if(nd._schedMin == null) return;
@@ -11987,11 +12006,19 @@ function _htlSnapBoardArr(){
 
     var p = nd.arrTime.split(':');
     var cur = parseInt(p[0],10)*60 + parseInt(p[1],10);
+    // ★ 2026-10-06: 이미 탄 시각보다 앞선 열차로는 스냅하지 않는다(17:35 탑승 → 17:29 열차로 끌려가던 문제).
+    //   승차 확정 시각(_nodePassMs) 2분 전까지만 후보. 후보가 없으면 스냅하지 않고 그대로 둔다.
+    var _floorMin = null;
+    try{
+      var _pmB = (window._nodePassMs || {})[bi];
+      if(_pmB != null){ var _fd = new Date(_pmB - 2*60000); _floorMin = _fd.getHours()*60 + _fd.getMinutes(); }
+    }catch(eF){}
     // 표시 시각 이하 중 가장 늦은 출발 (자정 넘김 고려)
     var best = null;
     for(var k=0;k<times.length;k++){
       var t = times[k];
       var diff = cur - t; if(diff < -720) diff += 1440;
+      if(_floorMin != null){ var _dt = t - _floorMin; if(_dt < -720) _dt += 1440; if(_dt > 720) _dt -= 1440; if(_dt < 0) continue; }
       if(diff >= 0 && diff <= 30 && (best === null || t > best)) best = t;
     }
     if(best === null) return;
@@ -14953,6 +14980,13 @@ function _updateTransitGps() {
   try{
     if(window._pfTrusted && window._pfTrusted() && _pf && _pf.A && _transitNodeData[_pf.A.td]){ _cgIdx = _pf.A.td; _cgBest = _transitNodeData[_cgIdx]; }
   }catch(eCg){}
+  // ★ 2026-10-06: 오버레이와 같은 '현재 역'(마커가 GPS 로 그려진 위치 포함)보다 뒤처지지 않는다 — 부평인데 카드는 동수였다
+  try{
+    if(window._routeLocked === true && window._metroRouteMode !== true){
+      var _cgH = _pipHereIdx();
+      if(_cgH > _cgIdx && _cgH <= _cgIdx + 1 && _transitNodeData[_cgH] && (_transitNodeData[_cgH].isSub || _transitNodeData[_cgH].isBus)){ _cgIdx = _cgH; _cgBest = _transitNodeData[_cgH]; }
+    }
+  }catch(eCg2){}
   // 노드가 바뀌었을 때만 갱신 (불필요한 API 호출 방지)
   if(window._lastCongNodeIdx !== _cgIdx){
     window._lastCongNodeIdx = _cgIdx;
@@ -15114,6 +15148,13 @@ function _updateTransitGps() {
       else if(fromIdx > _wi){ window._gpsWaitIdx = null; window._gpsWaitRatio = 0; }   // 다음 구간 확인 → 대기 해제
     }
     if(toNd === fromNd) toNd = null;
+    // ★ 2026-10-06 (YJ: "부평인데 오버레이·혼잡도 카드는 동수"): 마커는 GPS 투영으로 부평에 정확히 있는데 진행 인덱스(_gpsMaxIdx)는
+    //   GPS 가 역 150m 안일 때만, PF 는 정차를 잡았을 때만 올라가서 지하에서는 한 역씩 늦었다(부평은 PF 가 정차를 놓치고 3분 뒤 12→14 로 건너뜀).
+    //   → 마커가 GPS 로 그려진 위치(역 사이 85% 이상이면 다음 역)를 오버레이·혼잡도 카드가 함께 읽도록 남겨 둔다. 새 판단은 없다.
+    try{
+      var _mpF = _transitNodeData.indexOf(fromNd), _mpT = toNd ? _transitNodeData.indexOf(toNd) : _mpF;
+      window._markerPos = (_mpF >= 0) ? { from:_mpF, to:(_mpT >= 0 ? _mpT : _mpF), ratio:ratio, gps:!!usedGps, ts:Date.now() } : null;
+    }catch(eMp){}
     _placeGpsMarkerSmooth(fromNd, toNd, ratio);
     // (역 전진 확정은 GPS 확인(_gpsMaxIdx)으로만 — 시간만으로는 전진하지 않음: 마커 왕복 방지)
   })();
@@ -26940,6 +26981,42 @@ function _showBriefingModal(title, body, route, action){
             : '')
         + '</div>';
       ov.addEventListener('click', function(e){ if(e.target === ov) ov.remove(); });
+      // ★ 2026-10-06 (YJ 실승차 18:12: '하차 8분 전' 팝업의 확인·맛집 위치 보기가 둘 다 안 눌렸다):
+      //   원인을 아직 특정하지 못했다(위를 덮은 투명 층 / 터치→클릭 변환 차단 / 웹뷰 멈춤 후보). 버튼이 어떤 이유로든 눌리게 방어하고,
+      //   다음에 또 그러면 원인이 로그에 남게 한다.
+      //   ① 가장 위 층(2147483647)·터치 허용 ② 버튼은 touchend 로도 바로 누른다(클릭 변환이 막혀도 동작, 중복 실행 방지)
+      //   ③ 열린 뒤 0.3초에 버튼 한가운데를 실제로 누르는 요소가 팝업 안인지 확인 → 아니면 팝업을 맨 위로 다시 올리고 덮은 요소를 진단 기록에 남긴다
+      try{
+        ov.style.zIndex = '2147483647'; ov.style.pointerEvents = 'auto'; ov.style.touchAction = 'manipulation';
+        var _btns = ov.querySelectorAll('button');
+        for(var _bi = 0; _bi < _btns.length; _bi++){
+          (function(btn){
+            var lastAt = 0;
+            btn.addEventListener('click', function(){ lastAt = Date.now(); try{ _ovlDiag('팝업', '버튼 눌림(클릭) ' + (btn.textContent || '')); }catch(e0){} });
+            btn.addEventListener('touchend', function(ev){
+              if(Date.now() - lastAt < 700) return;          // 이미 클릭으로 처리됨
+              try{ ev.preventDefault(); }catch(e1){}
+              lastAt = Date.now();
+              try{ _ovlDiag('팝업', '버튼 눌림(터치) ' + (btn.textContent || '')); }catch(e2){}
+              try{ btn.click(); }catch(e3){}
+            }, { passive: false });
+          })(_btns[_bi]);
+        }
+        setTimeout(function(){
+          try{
+            if(!ov.parentNode) return;
+            var b0 = ov.querySelector('button'); if(!b0) return;
+            var rc = b0.getBoundingClientRect(), top = document.elementFromPoint(rc.left + rc.width / 2, rc.top + rc.height / 2);
+            if(top && !ov.contains(top)){
+              var zi = ''; try{ zi = getComputedStyle(top).zIndex; }catch(e4){}
+              try{ _ovlDiag('팝업', '버튼이 덮여 있음 → ' + top.tagName + '#' + (top.id || '') + '.' + String(top.className || '').slice(0, 40) + ' z=' + zi); }catch(e5){}
+              ov.style.zIndex = '2147483647'; document.body.appendChild(ov);
+              var top2 = document.elementFromPoint(rc.left + rc.width / 2, rc.top + rc.height / 2);
+              if(top2 && !ov.contains(top2)){ try{ _ovlDiag('팝업', '다시 올려도 덮여 있음 → ' + top2.tagName + '#' + (top2.id || '') + ' z=' + getComputedStyle(top2).zIndex); }catch(e6){} }
+            } else { try{ _ovlDiag('팝업', '표시됨 · 버튼 위 가림 없음'); }catch(e7){} }
+          }catch(e8){}
+        }, 300);
+      }catch(eGuard){}
       document.body.appendChild(ov);
     } catch(e){}
   }
@@ -32109,6 +32186,14 @@ function _pipHereIdx(){
       var cmv = (typeof _cellMovingState === 'function') ? _cellMovingState() : null;
       if(th > raw && cmv !== false) raw = th;
     }
+    // ★ 2026-10-06: 마커가 GPS 로 그려진 위치를 따른다(한 역까지만 앞서갈 수 있다). 위 주석 참고(_markerPos).
+    try{
+      var _mp = window._markerPos;
+      if(_mp && _mp.gps && Date.now() - _mp.ts <= 20000){
+        var _mh = (_mp.ratio >= 0.85 && _mp.to > _mp.from) ? _mp.to : _mp.from;
+        if(_mh > raw && _mh <= raw + 1) raw = _mh;
+      }
+    }catch(eMp2){}
     if(typeof _htlNotDeparted === 'function' && _htlNotDeparted()){
       var bi = (typeof _htlBoardIdx === 'function') ? _htlBoardIdx() : -1;
       if(bi >= 0 && raw > bi) raw = bi;
@@ -32869,8 +32954,21 @@ function _ovlAlertLevel(st){
 }
 window._ovlAlertLevel = _ovlAlertLevel;
 // 오버레이에 찍을 세 줄 — 판단 없이 이미 있는 값을 문자열로 옮긴다
+// ★ 2026-10-06 (YJ: 오버레이 '현재역 → 다음역' 사이 화살표 -->): 열차가 역을 떠나 달리는 중인가. 새 판단은 만들지 않고 PF(위치 판단기)의 주행/정차 판정을 그대로 넘긴다.
+//   PF 가 신선하면(30초·확신 50%↑) 그 판정(seg=주행, dwell=정차), 없으면 기지국 움직임 판정(true 일 때만). 승차 전·미리보기·종점에서는 false.
+function _ovlMoving(){
+  try{
+    if(window._routeLocked !== true || window._metroRouteMode === true) return false;
+    if(typeof _htlNotDeparted === 'function' && _htlNotDeparted()) return false;
+    var b = window._pfBest, now = Date.now();
+    if(b && b.at && now - b.at <= 30000 && b.conf >= 0.5 && b.kind) return b.kind === 'seg';
+    var cm = (typeof _cellMovingState === 'function') ? _cellMovingState() : null;
+    return cm === true;
+  }catch(e){ return false; }
+}
+window._ovlMoving = _ovlMoving;
 function _ovlLines(){
-  var out = { l1:'', l2:'', l3:'', track:[], cur:-1, alert:0 };
+  var out = { l1:'', l2:'', l3:'', track:[], cur:-1, alert:0, moving:false };
   try{
     var st = _pipStations(), d = _pipData();
     out.alert = _ovlAlertLevel(st);
@@ -32892,6 +32990,7 @@ function _ovlLines(){
       out.track.push(nm == null ? '' : clamp(nm, 40));   // 길이 자르기는 네이티브(한 줄·…)가 한다
     }
     out.cur = 1;
+    out.moving = !!(_tri[2] && _ovlMoving());   // 다음 역이 있을 때만 화살표가 깜박인다
     var _pad2 = function(n){ return (n < 10 ? '0' : '') + n; };
     var _mm = (d.min != null && isFinite(d.min)) ? Math.max(0, Math.round(d.min)) : null;
     // 값이 없으면 줄을 비운다(네이티브가 숨김) — '00시간 00분' 같은 자리 표시는 쓰지 않는다
@@ -32913,15 +33012,15 @@ function _ovlSync(force){
     var n = _ovlNative();
     if(!n || typeof n.update !== 'function') return;
     var active = !!(_ovlUsable() && _pipHasRoute());   // ★ 2026-10-01: PiP 스위치와 무관(PiP 는 꺼 둠)
-    var L = active ? _ovlLines() : { l1:'', l2:'', l3:'', track:[], cur:-1, alert:0 };
-    var key = (active ? '1' : '0') + '|' + L.l1 + '|' + L.l2 + '|' + L.l3 + '|' + L.track.join('>') + '|' + L.cur + '|' + L.alert;
+    var L = active ? _ovlLines() : { l1:'', l2:'', l3:'', track:[], cur:-1, alert:0, moving:false };
+    var key = (active ? '1' : '0') + '|' + L.l1 + '|' + L.l2 + '|' + L.l3 + '|' + L.track.join('>') + '|' + L.cur + '|' + L.alert + '|' + (L.moving ? 'M' : 'S');
     var now = Date.now();
     // 바뀐 게 없으면 보내지 않는다. 다만 켜져 있는 동안엔 20초마다 한 번은 다시 보내 '살아 있음'을 알린다
     // (네이티브는 3분 넘게 소식이 없으면 낡은 값이 남지 않도록 스스로 숨긴다).
     if(!force && key === _ovlLastKey && (!active || (now - _ovlLastAt) < _OVL_HEARTBEAT_MS)) return;
     if(!active && _ovlLastKey === null && !force) { _ovlLastKey = key; return; }   // 처음부터 꺼져 있으면 굳이 알리지 않는다
     _ovlLastKey = key; _ovlLastAt = now;
-    var r = n.update({ active: active, line1: L.l1, track: L.track, cur: L.cur, line2: L.l2, line3: L.l3, alert: L.alert || 0 });
+    var r = n.update({ active: active, line1: L.l1, track: L.track, cur: L.cur, line2: L.l2, line3: L.l3, alert: L.alert || 0, moving: !!L.moving });
     if(r && typeof r.catch === 'function') r.catch(function(){ _ovlLastKey = null; });   // 실패하면 다음 틱에 다시
   }catch(e){ _ovlLastKey = null; }
 }

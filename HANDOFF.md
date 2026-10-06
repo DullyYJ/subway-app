@@ -176,3 +176,12 @@
 데이터는 D1 subway-db 의 live_usage(day,k,n) 에 저장. gildongmu-bus(바인딩 DB=subway-db)는 bus.* 키, route-v2 는 tago.* gbis.* seoul.k1/k2 ld.TrainInfo|ExpBusInfo|SuburbsBusInfo.* xfer.* ntce.* kric.* est.* share.hit 키를 기록(약 1분 단위 flush, 근사치).
 집계 시작일은 2026-10-05. 그 이전(9월) 호출량은 이 서버에 기록이 없으므로 공공데이터포털 활용현황에서 확인해야 함.
 (2026-10-06 정정: 예전에 배포본에만 있던 집계·KRIC 상한 패치는 06a 에서 route-v2 소스로 되살려 이제 배포본과 저장소 소스가 같다.) gentle-lab 은 아직 미계측(binding 경유 /tago 는 route-v2 쪽 'binding' 카운트로만 확인 가능).
+
+## 2026-10-06 밤 — YJ 실승차(캠퍼스타운→아라) 개선 4건
+상세 원인·로그 근거는 저장소 밖 기록 `IMPROVEMENTS_2026-10-06.md` 요약. 코드 위치:
+1. **승차 직후 시각표 6분 점프(17:35→17:29)** — `_recalcArrivalsFrom`(앵커 하한: 승차 확정 + 시각표 구간 소요 60%)·`_htlSnapBoardArr`(승차 2분 전보다 앞선 열차로 스냅 금지). 원인: 기지국 선행이 승차 52초 뒤 '다음 역 통과'를 찍어 앵커가 3분 앞섬 → 정적 시간표의 더 이른 열차로 스냅. 시험: `test/ride_evidence.ui.test.js` '승차 직후 시각표 점프'.
+2. **오버레이·혼잡도 카드가 마커보다 한 역 늦음(부평/동수)** — `window._markerPos`(마커가 GPS 로 그려진 위치)를 `_pipHereIdx`·혼잡도 카드가 따름(85%↑이면 다음 역, 한 역까지만 앞섬). PF·기지국 규칙은 그대로.
+3. **하차 전 팝업 버튼 먹통** — 원인 미특정. 팝업 최상단 z-index·touchend 대체·가림 요소 점검/진단(`_ovlDiag('팝업', …)`). 재발 시 설정 → 오버레이 진단 기록에서 `팝업` 줄을 볼 것.
+4. **오버레이 화살표(-->)** — `native/OverlayPlugin.java`(ArrowView, 깜박임 0.55초) + `_ovlMoving()`(PF seg/dwell → `moving`). **APK 재빌드 필요.**
+- 손대지 않은 것: PF 채택 문턱(60%)·셀 혼선(문학경기장 17:46~47 에서 PF 5↔6 왕복으로 ≈1분 지연) — 다음 로그에서 `PF▶`→`PF채택` 간격을 더 모은 뒤 조정.
+
