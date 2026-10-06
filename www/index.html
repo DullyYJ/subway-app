@@ -11821,6 +11821,31 @@ function _recalcArrivalsFrom(anchorIdx){
   }
   var _notDeparted = (typeof _htlNotDeparted==='function') ? _htlNotDeparted() : false;
 
+  // ★ 2026-10-06 (경로 무작위 시뮬레이션): 기준을 '마지막 통과 하나'로만 잡으면, 기지국 선행이 찍은 이른 통과(1~3분 일찍)가 그대로 도착 예정에 반영돼
+  //   다음 역까지 시각이 일찍 나온다. 열차 지연은 구간 동안 거의 일정하므로, 같은 열차에서 승차 이후 찍힌 통과가 2개 이상이면
+  //   최근 3개 '지연값(통과 시각 − 시각표)' 중 가장 큰 값을 기준으로 삼는다(선행은 항상 음의 오차, 위치 채택 지연은 작은 양의 오차).
+  //   승차 확정 자체의 통과(늦게 확정될 수 있음)는 제외한다.
+  try{
+    var _am = window._ANCHOR_MODE || 'max3';
+    if(_am !== 'last' && !_notDeparted){
+      var _lsIdx = -1;
+      for(var _lj = anchor.idx; _lj >= 0 && _lj >= _boardIdx; _lj--){
+        var _ln = _transitNodeData[_lj], _lp = _transitNodeData[_lj - 1];
+        if(!_ln || !(_ln.isSub || _ln.isBus)) continue;
+        if(!_lp || _lp.isWalk || _lp.isOrigin || (_lp.lineName || '') !== (_ln.lineName || '') || !!_lp.isBus !== !!_ln.isBus){ _lsIdx = _lj; break; }
+      }
+      if(_lsIdx >= 0){
+        var _offs = [];
+        for(var _pi = 0; _pi < passes.length; _pi++){ if(passes[_pi].idx > _lsIdx) _offs.push(passes[_pi].ms - passes[_pi].sched * 60000); }
+        if(_offs.length >= 2){
+          _offs = _offs.slice(-3);
+          var _r = (_am === 'med3') ? _offs.slice().sort(function(x, y){ return x - y; })[Math.floor(_offs.length / 2)] : Math.max.apply(null, _offs);
+          anchorMs = anchor.sched * 60000 + _r;
+        }
+      }
+    }
+  }catch(eRb){}
+
   // ★ 2026-10-06 (YJ 실승차: 17:35 탑승인데 타임라인이 17:29 로 6분 앞당겨짐)
   //   기지국 선행(마커가 최대 ~3분 앞서감)이 '다음 역 통과'를 승차 52초 뒤에 찍으면,
   //   그 시각을 앵커로 역산한 출발이 승차 시각보다 3분 앞서 버린다(그 뒤 스냅이 더 이른 열차로 끌어당김).

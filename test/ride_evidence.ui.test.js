@@ -517,6 +517,31 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     const a = await times(); assert.ok(a[4] >= '18:13', JSON.stringify(a)); assert.ok(a[3] >= '18:10', JSON.stringify(a));
   });
 
+  console.log('[기준 시각 — 선행 통과 하나에 도착 예정이 끌려가지 않는다(최근 3개 지연값 중 최대)]');
+  await jumpSetup();
+  await page.clock.setSystemTime(new Date('2026-10-06T17:35:48+09:00'));
+  await page.evaluate(() => { window._htlBoarded = true; window._gpsMaxIdx = 1; window._nodePassMs[1] = Date.now(); _recalcArrivalsFrom(1); });
+  await page.clock.setSystemTime(new Date('2026-10-06T17:38:05+09:00'));
+  await page.evaluate(() => { window._gpsMaxIdx = 2; window._nodePassMs[2] = Date.now(); _recalcArrivalsFrom(2); });
+  await page.clock.setSystemTime(new Date('2026-10-06T17:40:00+09:00'));
+  await page.evaluate(() => { window._gpsMaxIdx = 3; window._nodePassMs[3] = Date.now(); _recalcArrivalsFrom(3); });
+  await page.clock.setSystemTime(new Date('2026-10-06T17:40:30+09:00'));
+  await page.evaluate(() => { window._gpsMaxIdx = 4; window._nodePassMs[4] = Date.now(); _recalcArrivalsFrom(4); });   // 원인재 선행(계획 17:42 보다 90초 일찍)
+  await t('정시 운행 중 한 역이 1분 반 일찍 찍혀도 다음 역 시각(신연수 17:43)이 17:41 로 끌려가지 않는다', async () => {
+    const a = await times(); assert.ok(a[4] >= '17:43', JSON.stringify(a));
+  });
+  await jumpSetup();
+  await page.evaluate(() => { _transitNodeData.forEach(n => { n.lineName = '7호선'; }); });   // 시간표 스냅(정적 시간표)이 끼어들지 않는 노선으로 — 지연 추종만 본다
+  await page.clock.setSystemTime(new Date('2026-10-06T17:35:48+09:00'));
+  await page.evaluate(() => { window._htlBoarded = true; window._gpsMaxIdx = 1; window._nodePassMs[1] = Date.now(); _recalcArrivalsFrom(1); });
+  await page.clock.setSystemTime(new Date('2026-10-06T17:39:00+09:00'));
+  await page.evaluate(() => { window._gpsMaxIdx = 2; window._nodePassMs[2] = Date.now(); _recalcArrivalsFrom(2); });   // 동막 1분 지연
+  await page.clock.setSystemTime(new Date('2026-10-06T17:41:05+09:00'));
+  await page.evaluate(() => { window._gpsMaxIdx = 3; window._nodePassMs[3] = Date.now(); _recalcArrivalsFrom(3); });   // 동춘 1분 지연
+  await t('열차가 실제로 1분 늦으면 그 지연을 따라간다(원인재 17:42 → 17:43)', async () => {
+    const a = await times(); assert.strictEqual(a[3], '17:43', JSON.stringify(a));
+  });
+
   console.log('[오버레이 화살표 — 이동 중 여부(moving)]');
   await jumpSetup();
   await page.clock.setSystemTime(new Date('2026-10-06T17:42:20+09:00'));
