@@ -594,6 +594,19 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     const a = await times(); assert.ok(a[4] >= '17:46', JSON.stringify(a));
   });
 
+  await connSetup();
+  await page.clock.setSystemTime(new Date('2026-10-06T17:35:20+09:00'));
+  await page.evaluate(() => { window._htlBoarded = true; window._gpsMaxIdx = 1; window._gpsConfirmIdx = 1; window._nodePassMs[1] = Date.now(); _recalcArrivalsFrom(1); });
+  await page.clock.setSystemTime(new Date('2026-10-06T17:40:10+09:00'));
+  await page.evaluate(() => { window._gpsMaxIdx = 3; window._gpsConfirmIdx = 3; window._nodePassMs[3] = Date.now(); _recalcArrivalsFrom(3); });
+  const before = await times();
+  await page.clock.setSystemTime(new Date('2026-10-06T17:52:00+09:00'));   // 환승해서 탄 두 번째 열차가 9분 늦게 출발
+  await page.evaluate(() => { window._gpsMaxIdx = 5; window._gpsConfirmIdx = 5; window._nodePassMs[5] = Date.now(); _recalcArrivalsFrom(5); });
+  await t('환승 뒤 두 번째 열차가 늦어도 이미 지나간 앞 구간 역 시각(캠퍼스타운~원인재)은 바뀌지 않는다', async () => {
+    const a = await times(); assert.deepStrictEqual(a.slice(0, 3), before.slice(0, 3), JSON.stringify({ before, a }));
+    assert.ok(a[4] >= '17:52', '뒤 구간은 지연을 따라간다 ' + JSON.stringify(a));
+  });
+
   console.log('[오버레이 화살표 — 이동 중 여부(moving)]');
   await jumpSetup();
   await page.clock.setSystemTime(new Date('2026-10-06T17:42:20+09:00'));

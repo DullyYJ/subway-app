@@ -11796,6 +11796,18 @@ function _rtDwellRatio(elapsedMin, spanMin, dwellMin){
 // ★ 2026-10-07 (전국 시뮬: 예상보다 일찍 탄 경우 환승 뒤 열차·버스까지 같이 앞당겨져 도착예정이 10분 넘게 일찍 나옴):
 //   이미 탄 열차가 일찍 가면 그 뒤 '환승해서 탈' 열차·버스는 시각표대로 출발한다 — 환승 대기가 길어질 뿐 앞당겨지지 않는다.
 //   늦으면(환승 시각표보다 뒤에 닿으면) 지금처럼 그대로 뒤로 민다. 그래서 앞으로 탈 승차 구간의 시작 시각은 '처음 안내받은 시각(_plan0)'보다 이르게 나오지 않게 한다.
+// 표시 마지막 안전망: 고정해 둔 앞 구간 값과 새로 계산한 값, 보정 경로(_htlSanityCheck) 사이에서도 순서가 거꾸로 가지 않게(앞 시각보다 이른 값은 앞 시각에 맞춘다)
+function _monoDisplayFix(){
+  try{
+    var _pvMin = null;
+    _transitNodeData.forEach(function(nd){
+      var m0 = (typeof _arrTimeToMin === 'function') ? _arrTimeToMin(nd.arrTime) : null;
+      if(m0 == null) return;
+      if(_pvMin != null){ var dd0 = m0 - _pvMin; if(dd0 < -720) dd0 += 1440; if(dd0 < 0 && dd0 > -720){ m0 = _pvMin; nd.arrTime = ('0' + Math.floor(m0 / 60)).slice(-2) + ':' + ('0' + (m0 % 60)).slice(-2); if(nd.el){ var t0 = nd.el.querySelector('.htl-time-lbl'); if(t0) t0.textContent = nd.arrTime; } } }
+      _pvMin = m0;
+    });
+  }catch(eMono2){}
+}
 function _plan0Stamp(){
   try{ (_transitNodeData || []).forEach(function(nd){ if(nd && nd._plan0 == null && nd._schedMin != null) nd._plan0 = nd._schedMin; }); }catch(e){}
 }
@@ -11912,8 +11924,14 @@ function _recalcArrivalsFrom(anchorIdx){
 
   // 앵커(최근 실측 통과) 기준으로 노드 시각을 재계산 → 순서 꼬임 방지
   var _newMsArr = {};
+  // ★ 2026-10-07 (전국 시뮬: 이미 지나간 앞 구간 역의 시각이 뒤 구간 지연에 따라 최대 17분씩 바뀜): 환승해서 탄 뒤에는 앞 열차·버스 구간은 이미 끝난 일이다.
+  //   뒤 구간 앵커로 앞 구간까지 다시 역산하면 앞 구간 역 시각이 뒤 구간의 지연·일찍 도착에 끌려 움직인다. 지금 타고 있는 구간(앵커가 속한 승차 구간)의 시작 앞쪽 노드는 이미 계산된 값을 그대로 둔다.
+  var _legStartA = -1;
+  if(!_notDeparted){ for(var _ls0 = anchor.idx; _ls0 >= 0; _ls0--){ if(_isLegStartIdx(_ls0)){ _legStartA = _ls0; break; } } }
+  var _freezeBelow = (_legStartA > _boardIdx && _boardIdx >= 0) ? _legStartA : -1;
   _transitNodeData.forEach(function(nd, idx){
     if(nd._schedMin == null) return;
+    if(idx < _freezeBelow) return;
     // 승차 전이면 승차역 이후는 고정 (차가 오는 시각은 내 걸음과 무관하다)
     if(_notDeparted && _boardIdx >= 0 && idx >= _boardIdx) return;
     // 자정을 넘는 경로에서는 _schedMin 이 어떤 역은 25:28(이어서 센 값), 어떤 역은 01:28(통과 시각으로 덮여 하루 안으로 접힌 값)이다. 앵커와의 차이를 ±12시간 안으로 접어 같은 기준에서 비교한다.
@@ -11976,6 +11994,7 @@ function _recalcArrivalsFrom(anchorIdx){
 
   // ★ 자가 점검: 경로 전체가 '지금'과 동떨어졌으면 되돌린다 (2026-08-31)
   try{ _htlSanityCheck(); }catch(e){}
+  _monoDisplayFix();
 
   // 헤더 남은시간/브리핑 갱신
   try { if(typeof _updateRouteRemaining === 'function') _updateRouteRemaining(); } catch(e){}
@@ -12055,8 +12074,16 @@ function _htlSanityCheck(){
 
     var mins = -gap;
     var _oldSched = _transitNodeData.map(function(nd){ return nd._schedMin; });
+    // 지금 타고 있는 승차 구간 앞쪽(이미 끝난 앞 구간·도보)은 건드리지 않는다 — 뒤 구간 지연이 앞 구간 역 시각을 끌고 가지 않게(_recalcArrivalsFrom 과 같은 규칙).
+    var _frzB = -1;
+    try{
+      var _fb = -1; for(var _fx = 0; _fx < _transitNodeData.length; _fx++){ var _fn = _transitNodeData[_fx]; if(!_fn.isOrigin && !_fn.isWalk && (_fn.isBus || _fn.isSub)){ _fb = _fx; break; } }
+      var _ls2 = -1; for(var _lj2 = idx; _lj2 >= 0; _lj2--){ if(_isLegStartIdx(_lj2)){ _ls2 = _lj2; break; } }
+      if(_fb >= 0 && _ls2 > _fb && !(typeof _htlNotDeparted === 'function' && _htlNotDeparted())) _frzB = _ls2;
+    }catch(eFz){}
     _transitNodeData.forEach(function(nd, i){
       if(nd._schedMin == null) return;
+      if(i < _frzB) return;
       // 이미 지난 노드는 '실제로 지난 시각'이 있으면 그 값으로 덮는다(추정보다 사실이 낫다)
       var pm = (window._nodePassMs && window._nodePassMs[i] != null) ? window._nodePassMs[i] : null;
       if(confirmed && pm != null && i <= idx) nd._schedMin = _msToMinOfDay(pm);
