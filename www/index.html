@@ -13651,6 +13651,18 @@ function _cellHopAdvance(){
     try{ var lg=_rtCurrentSubLeg(); if(lg && lg.alightIdx!=null) stop=lg.alightIdx; }catch(e){}
     if(cur + 1 > stop) return;
 
+    // ★ 2026-10-06: 셀 변화는 '움직였다'는 약한 근거일 뿐 '다음 역에 닿았다'는 근거가 아니다.
+    //   구간 하나에서 셀이 2번 바뀌면(실제로 흔하다) 한 칸씩 연달아 올라가고, 올라갈 때마다 시각표를 현재로 당겨 앞서는 폭이 쌓인다
+    //   (시험: 열차가 3분 늦을 때 마커가 최대 3역 앞서 20분 가까이 유지). 근거가 끊긴 동안의 가장 좋은 추정은 PF 중앙값(시각표+학습한 지연의 사후분포)이므로,
+    //   중앙값이 그 역에 이미 닿았다고 볼 때만 인정한다(셀 변화가 중앙값을 앞지르지 못한다). 못 구하면(PF 없음) 종전 규칙 그대로.
+    try{
+      var _mp = window._pfMedianPos ? window._pfMedianPos() : null;
+      if(_mp && _mp.fromIdx != null){
+        var _mpos = _mp.fromIdx + (_mp.ratio || 0);
+        if(_mpos < cur + 1) return;
+      }
+    }catch(eMp){}
+
     window._cellHopAt = _cellSeen.hopAt;
     window._gpsMaxIdx = cur + 1;
     // ★ 2026-09-15: 예전엔 _gpsConfirmIdx 까지 올렸다. 그건 '순수 GPS 확인'
