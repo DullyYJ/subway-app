@@ -11805,6 +11805,29 @@ function _recalcArrivalsFrom(anchorIdx){
   if(!passes.length) return;
   passes.sort(function(a,b){ return a.idx - b.idx; });
   var anchor = passes[passes.length - 1];
+  // ★ 2026-10-06 (YJ: '카카오·네이버를 이겨야 한다' — 실제로 얼마나 틀리는지 재야 한다): 역을 지날 때마다 '그 전에 화면이 말하던 이 역의 시각'과 실제 통과 시각의 차이를
+  //   진단 기록(설정 → 오버레이 진단 기록 → 전체 복사)에 남긴다. 승차 때 말한 도착 예정과 마지막 역의 실제 통과도 함께. 새 판단은 없다(읽기만).
+  try{
+    if(window._accFor !== window._nodePassMs){ window._accFor = window._nodePassMs; window._accSeen = {}; window._accFirst = null; }
+    if(!window._accSeen[anchor.idx]){
+      window._accSeen[anchor.idx] = anchor.ms;
+      var _an = _transitNodeData[anchor.idx], _dn = _transitNodeData[_transitNodeData.length - 1];
+      var _pm = (_an && _an.arrTime && typeof _arrTimeToMin === 'function') ? _arrTimeToMin(_an.arrTime) : null;
+      if(_an && _pm != null){
+        var _ad = new Date(anchor.ms), _am2 = _ad.getHours() * 60 + _ad.getMinutes() + _ad.getSeconds() / 60;
+        var _er = _am2 - _pm; if(_er > 720) _er -= 1440; if(_er < -720) _er += 1440;
+        var _p2 = function(n){ return (n < 10 ? '0' : '') + n; };
+        var _dm = (_dn && _dn.arrTime && typeof _arrTimeToMin === 'function') ? _arrTimeToMin(_dn.arrTime) : null;
+        if(window._accFirst == null && _dm != null){ window._accFirst = { eta: _dn.arrTime, at: anchor.ms }; }
+        _ovlDiag('정확도', (_an.name || '') + '(' + anchor.idx + ') 화면 ' + _an.arrTime + ' · 실제 ' + _p2(_ad.getHours()) + ':' + _p2(_ad.getMinutes()) + ':' + _p2(_ad.getSeconds())
+          + ' · 오차 ' + (_er >= 0 ? '+' : '') + _er.toFixed(1) + '분 | 도착예정 ' + (_dn ? _dn.arrTime : '-') + (window._accFirst ? (' (처음 ' + window._accFirst.eta + ')') : ''));
+        if(anchor.idx === _transitNodeData.length - 1 && window._accFirst){
+          var _fm = _arrTimeToMin(window._accFirst.eta), _gap = _am2 - _fm; if(_gap > 720) _gap -= 1440; if(_gap < -720) _gap += 1440;
+          _ovlDiag('정확도', '도착 — 처음 말한 도착예정 ' + window._accFirst.eta + ' 실제 ' + _p2(_ad.getHours()) + ':' + _p2(_ad.getMinutes()) + ' 오차 ' + (_gap >= 0 ? '+' : '') + _gap.toFixed(1) + '분');
+        }
+      }
+    }
+  }catch(eAcc){}
   // ★ 역간 소요는 실측(_REAL_SEG 기반 _schedMin)을 고정 유지 — pace 배율 없이 '시각만 이동'
   //   (관측 속도로 역간 시간을 늘리거나 줄이지 않음 → 계양-아라 4분 등 하드코딩 값 보존)
   var anchorMs = anchor.ms;
