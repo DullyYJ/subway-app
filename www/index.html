@@ -11453,7 +11453,7 @@ function _startTransitGpsTracking(nodes) {
     var mn = _arrTimeToMin(nd.arrTime);
     if(mn != null){
       if(_prevSched != null && mn < _prevSched) mn += 1440;  // 자정 넘김 보정
-      nd._schedMin = mn; _prevSched = mn;
+      nd._schedMin = mn; _prevSched = mn; nd._plan0 = mn;   // 처음 안내받은 시각(환승 뒤 승차 시각이 이보다 이르게 나오지 않게 하는 기준)
     } else { nd._schedMin = null; }
   });
   // ★ 같은 경로의 단순 재렌더(탭 이동/복귀 등)면 진행 상태를 유지 — 새 경로일 때만 초기화
@@ -11793,6 +11793,18 @@ function _rtDwellRatio(elapsedMin, spanMin, dwellMin){
 // ── 실측 도착시간 보정 ──────────────────────────────
 // GPS로 정류장/역 통과가 확인되면 실제 시각을 기록하고,
 // 관측된 이동 속도(pace)로 이후 노드의 도착시간을 다시 계산한다.
+// ★ 2026-10-07 (전국 시뮬: 예상보다 일찍 탄 경우 환승 뒤 열차·버스까지 같이 앞당겨져 도착예정이 10분 넘게 일찍 나옴):
+//   이미 탄 열차가 일찍 가면 그 뒤 '환승해서 탈' 열차·버스는 시각표대로 출발한다 — 환승 대기가 길어질 뿐 앞당겨지지 않는다.
+//   늦으면(환승 시각표보다 뒤에 닿으면) 지금처럼 그대로 뒤로 민다. 그래서 앞으로 탈 승차 구간의 시작 시각은 '처음 안내받은 시각(_plan0)'보다 이르게 나오지 않게 한다.
+function _plan0Stamp(){
+  try{ (_transitNodeData || []).forEach(function(nd){ if(nd && nd._plan0 == null && nd._schedMin != null) nd._plan0 = nd._schedMin; }); }catch(e){}
+}
+function _isLegStartIdx(i){
+  var n = _transitNodeData[i], pv = _transitNodeData[i - 1];
+  if(!n || !(n.isSub || n.isBus)) return false;
+  return !pv || pv.isWalk || pv.isOrigin || (pv.lineName || '') !== (n.lineName || '') || !!pv.isBus !== !!n.isBus;
+}
+function _minOfDayF(ms){ var d = new Date(ms); return d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60; }
 function _recalcArrivalsFrom(anchorIdx){
   // ★ 2026-09-04: 실측 통과 기준 재계산은 '확정한 경로를 타고 갈 때'만.
   if(typeof _htlMayAdjustTime==='function' && !_htlMayAdjustTime()) return;
@@ -11802,6 +11814,7 @@ function _recalcArrivalsFrom(anchorIdx){
     var ii = +key; var nd = _transitNodeData[ii];
     if(nd && nd._schedMin != null) passes.push({ idx:ii, ms:pm[key], sched:nd._schedMin });
   }
+  _plan0Stamp();
   if(!passes.length) return;
   passes.sort(function(a,b){ return a.idx - b.idx; });
   var anchor = passes[passes.length - 1];
@@ -11898,12 +11911,56 @@ function _recalcArrivalsFrom(anchorIdx){
   }catch(eFl){}
 
   // 앵커(최근 실측 통과) 기준으로 노드 시각을 재계산 → 순서 꼬임 방지
+  var _newMsArr = {};
   _transitNodeData.forEach(function(nd, idx){
     if(nd._schedMin == null) return;
     // 승차 전이면 승차역 이후는 고정 (차가 오는 시각은 내 걸음과 무관하다)
     if(_notDeparted && _boardIdx >= 0 && idx >= _boardIdx) return;
-    var newMs = anchorMs + (nd._schedMin - anchor.sched) * 60000;
-    var d = new Date(newMs);
+    // 자정을 넘는 경로에서는 _schedMin 이 어떤 역은 25:28(이어서 센 값), 어떤 역은 01:28(통과 시각으로 덮여 하루 안으로 접힌 값)이다. 앵커와의 차이를 ±12시간 안으로 접어 같은 기준에서 비교한다.
+    var _dd = nd._schedMin - anchor.sched; _dd -= Math.round(_dd / 1440) * 1440;
+    _newMsArr[idx] = anchorMs + _dd * 60000;
+  });
+  try{
+    var _carry = 0;
+    for(var _hi2 = anchor.idx + 1; _hi2 < _transitNodeData.length; _hi2++){
+      if(_newMsArr[_hi2] == null) continue;
+      var _hn = _transitNodeData[_hi2];
+      if(_hn._plan0 != null && _isLegStartIdx(_hi2) && _hi2 > _boardIdx){
+        var _need = _hn._plan0 - _minOfDayF(_newMsArr[_hi2] + _carry); _need -= Math.round(_need / 1440) * 1440;
+        if(_need > 0.05) _carry += _need * 60000;
+      }
+      _newMsArr[_hi2] += _carry;
+    }
+  }catch(eHold){}
+  // ★ 2026-10-07 (전국 시뮬: 타임라인 시각 역전 — 앞 역보다 뒤 역이 더 이른 시각): 통과가 기록된 역은 _schedMin 이 실제 통과 시각으로 덮이는데(_htlSanityCheck),
+  //   위치 판단이 건너뛴 역(통과 기록 없음)은 옛 _schedMin 을 그대로 가져 이웃 역보다 이르거나 늦게 나왔다.
+  //   → 통과 기록이 있는 두 역 사이의 기록 없는 역은 두 역의 표시 시각 사이를 예정 시각 비율로 나눠 놓고, 마지막으로 순서가 거꾸로 가지 않게 한다.
+  try{
+    var _stI = [];
+    for(var _q = 0; _q <= anchor.idx; _q++){ if(pm[_q] != null && _newMsArr[_q] != null) _stI.push(_q); }
+    for(var _w = 0; _w < _stI.length - 1; _w++){
+      var _p1 = _stI[_w], _n1 = _stI[_w + 1];
+      if(_n1 - _p1 < 2) continue;
+      var _sp = _transitNodeData[_p1]._schedMin, _sn = _transitNodeData[_n1]._schedMin;
+      var _lo = _newMsArr[_p1], _hi = Math.max(_lo, _newMsArr[_n1]);
+      for(var _x = _p1 + 1; _x < _n1; _x++){
+        var _nx = _transitNodeData[_x];
+        if(!_nx || _newMsArr[_x] == null || _nx._schedMin == null) continue;
+        var _dn1 = _sn - _sp; _dn1 -= Math.round(_dn1 / 1440) * 1440; var _dx1 = _nx._schedMin - _sp; _dx1 -= Math.round(_dx1 / 1440) * 1440;
+        var _f = (_dn1 > 0) ? _dx1 / _dn1 : 0.5; _f = Math.max(0, Math.min(1, _f));
+        _newMsArr[_x] = _lo + (_hi - _lo) * _f;
+      }
+    }
+    var _prevMs = null;
+    for(var _y = 0; _y < _transitNodeData.length; _y++){
+      if(_newMsArr[_y] == null) continue;
+      if(_prevMs != null && _newMsArr[_y] < _prevMs) _newMsArr[_y] = _prevMs;
+      _prevMs = _newMsArr[_y];
+    }
+  }catch(eMono){}
+  _transitNodeData.forEach(function(nd, idx){
+    if(_newMsArr[idx] == null) return;
+    var d = new Date(_newMsArr[idx]);
     var hh = ('0'+d.getHours()).slice(-2), mm = ('0'+d.getMinutes()).slice(-2);
     nd.arrTime = hh + ':' + mm;
     if(nd.el){ var t = nd.el.querySelector('.htl-time-lbl'); if(t) t.textContent = nd.arrTime; }
@@ -11942,6 +11999,7 @@ function _msToMinOfDay(ms){
 }
 function _htlSanityCheck(){
   try{
+    _plan0Stamp();
     // ★ 2026-09-04: 확정 전 경로는 엔진 시각 그대로 둔다(여기서 당기면 탭마다 달라진다)
     if(typeof _htlMayAdjustTime==='function' && !_htlMayAdjustTime()) return;
     if(window._metroRouteMode === true) return;                 // 노선도 미리보기 제외
@@ -11996,6 +12054,7 @@ function _htlSanityCheck(){
       + '과 ' + Math.round(gap) + '분 차이 → 경로 시각을 맞춤');
 
     var mins = -gap;
+    var _oldSched = _transitNodeData.map(function(nd){ return nd._schedMin; });
     _transitNodeData.forEach(function(nd, i){
       if(nd._schedMin == null) return;
       // 이미 지난 노드는 '실제로 지난 시각'이 있으면 그 값으로 덮는다(추정보다 사실이 낫다)
@@ -12008,6 +12067,45 @@ function _htlSanityCheck(){
       nd.arrTime = ('0'+_h).slice(-2) + ':' + ('0'+_m).slice(-2);
       if(nd.el){ var lbl = nd.el.querySelector('.htl-time-lbl'); if(lbl) lbl.textContent = nd.arrTime; }
     });
+    try{   // 앞으로 탈 승차 구간은 처음 안내받은 시각보다 이르게 하지 않는다(위 평행 이동이 환승 뒤 열차까지 앞당긴 것을 되돌림)
+      var _c2 = 0, _bi3 = -1;
+      for(var _b3 = 0; _b3 < _transitNodeData.length; _b3++){ var _bn3 = _transitNodeData[_b3]; if(!_bn3.isOrigin && !_bn3.isWalk && (_bn3.isBus || _bn3.isSub)){ _bi3 = _b3; break; } }
+      for(var _h3 = idx + 1; _h3 < _transitNodeData.length; _h3++){
+        var _n3 = _transitNodeData[_h3]; if(!_n3 || _n3._schedMin == null) continue;
+        if(_n3._plan0 != null && _isLegStartIdx(_h3) && _h3 > _bi3){
+          var _nd3 = _n3._plan0 - (_n3._schedMin + _c2); _nd3 -= Math.round(_nd3 / 1440) * 1440;
+          if(_nd3 > 0.05) _c2 += _nd3;
+        }
+        if(_c2 > 0){
+          _n3._schedMin += _c2;
+          var _t3 = ((_n3._schedMin % 1440) + 1440) % 1440, _hh3 = Math.floor(_t3 / 60), _mi3 = Math.round(_t3 % 60);
+          if(_mi3 >= 60){ _mi3 -= 60; _hh3 = (_hh3 + 1) % 24; }
+          _n3.arrTime = ('0' + _hh3).slice(-2) + ':' + ('0' + _mi3).slice(-2);
+          if(_n3.el){ var _l3 = _n3.el.querySelector('.htl-time-lbl'); if(_l3) _l3.textContent = _n3.arrTime; }
+        }
+      }
+    }catch(eHold2){}
+    // ★ 2026-10-07 (전국 시뮬: 타임라인 시각 역전): 통과 기록이 있는 역은 위에서 실제 통과 시각으로 덮였는데, 위치 판단이 건너뛴 역(기록 없음)은 평행 이동만 돼서
+    //   이웃 역보다 이르거나 늦은 시각으로 남았다. 기록 있는 두 역 사이의 기록 없는 역은 옛 예정 시각의 비율로 두 역 사이에 놓는다(하루 접힘 보정 포함).
+    try{
+      var _pmS = window._nodePassMs || {}, _stS = [];
+      for(var _q = 0; _q <= idx; _q++){ if(_pmS[_q] != null && _transitNodeData[_q] && _transitNodeData[_q]._schedMin != null) _stS.push(_q); }
+      var _fold = function(v){ return v - Math.round(v / 1440) * 1440; };
+      for(var _w = 0; _w < _stS.length - 1; _w++){
+        var _p1 = _stS[_w], _n1 = _stS[_w + 1]; if(_n1 - _p1 < 2) continue;
+        var _op = _oldSched[_p1], _on = _oldSched[_n1], _span = _fold(_on - _op);
+        var _np = _transitNodeData[_p1]._schedMin, _nn = _np + Math.max(0, _fold(_transitNodeData[_n1]._schedMin - _np));
+        for(var _x = _p1 + 1; _x < _n1; _x++){
+          var _ndx = _transitNodeData[_x]; if(!_ndx || _ndx._schedMin == null || _oldSched[_x] == null) continue;
+          var _fr = (_span > 0) ? _fold(_oldSched[_x] - _op) / _span : 0.5; _fr = Math.max(0, Math.min(1, _fr));
+          _ndx._schedMin = _np + (_nn - _np) * _fr;
+          var _tt = ((_ndx._schedMin % 1440) + 1440) % 1440, _hh = Math.floor(_tt / 60), _mi = Math.round(_tt % 60);
+          if(_mi >= 60){ _mi -= 60; _hh = (_hh + 1) % 24; }
+          _ndx.arrTime = ('0' + _hh).slice(-2) + ':' + ('0' + _mi).slice(-2);
+          if(_ndx.el){ var _lb = _ndx.el.querySelector('.htl-time-lbl'); if(_lb) _lb.textContent = _ndx.arrTime; }
+        }
+      }
+    }catch(eInt){}
     window._markerMaxProg = null;      // 위치 상한도 초기화
     try{ if(typeof _aiArrivalSync === 'function') _aiArrivalSync(); }catch(e){}
   }catch(e){}

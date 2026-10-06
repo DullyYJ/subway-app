@@ -542,6 +542,58 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     const a = await times(); assert.strictEqual(a[3], '17:43', JSON.stringify(a));
   });
 
+  console.log('[기록 없는 역 — 앞뒤 역 사이에 놓이고 순서가 거꾸로 가지 않는다]');
+  await jumpSetup();
+  await page.evaluate(() => { _transitNodeData.forEach(n => { n.lineName = '7호선'; }); });
+  await page.clock.setSystemTime(new Date('2026-10-06T17:35:48+09:00'));
+  await page.evaluate(() => { window._htlBoarded = true; window._gpsMaxIdx = 1; window._nodePassMs[1] = Date.now(); _recalcArrivalsFrom(1); });
+  await page.clock.setSystemTime(new Date('2026-10-06T17:39:30+09:00'));
+  await page.evaluate(() => { window._gpsMaxIdx = 2; window._nodePassMs[2] = Date.now(); _recalcArrivalsFrom(2); });
+  await page.clock.setSystemTime(new Date('2026-10-06T17:47:10+09:00'));   // 동춘(3)·원인재(4)는 위치 판단이 건너뜀 → 신연수(5) 통과만 기록, 열차는 4분 넘게 늦음
+  await page.evaluate(() => { window._gpsMaxIdx = 5; window._nodePassMs[5] = Date.now(); _recalcArrivalsFrom(5); });
+  await t('통과 기록이 없는 역(3·4)이 앞 역(2)보다 이르거나 뒤 역(5)보다 늦게 나오지 않는다', async () => {
+    const a = await times(); const nz = a.slice(1, 7);
+    for (let i = 1; i < nz.length; i++) assert.ok(nz[i] >= nz[i - 1], JSON.stringify(a));
+    assert.ok(a[3] >= a[2] && a[4] >= a[3] && a[5] >= a[4], JSON.stringify(a));
+  });
+  await t('자정을 넘는 경로(23:50 승차)에서도 순서가 거꾸로 가지 않고 도착 예정이 하루 전으로 튀지 않는다', async () => {
+    const r = await page.evaluate(() => {
+      const nd = _transitNodeData; const base = 23 * 60 + 50;
+      nd.forEach((n, i) => { n._schedMin = base + i * 3; n.lineName = '7호선'; const t = (base + i * 3) % 1440; n.arrTime = ('0' + Math.floor(t / 60)).slice(-2) + ':' + ('0' + (t % 60)).slice(-2); });
+      window._nodePassMs = {}; window._htlBoarded = true; window._gpsMaxIdx = 1; return base;
+    });
+    await page.clock.setSystemTime(new Date('2026-10-06T23:55:00+09:00'));
+    await page.evaluate(() => { window._nodePassMs[1] = Date.now(); _recalcArrivalsFrom(1); });
+    await page.clock.setSystemTime(new Date('2026-10-07T00:05:00+09:00'));
+    await page.evaluate(() => { window._gpsMaxIdx = 4; window._nodePassMs[4] = Date.now(); _recalcArrivalsFrom(4); });
+    const a = await times(); const toMin = (x) => { const p = x.split(':'); return +p[0] * 60 + +p[1]; };
+    const last = toMin(a[a.length - 1]); const nowM = 5;
+    assert.ok(((last - nowM + 1440) % 1440) < 120, JSON.stringify(a));     // 도착 예정이 지금으로부터 2시간 안(하루 전/뒤로 튀지 않음)
+    for (let i = 2; i < a.length; i++) { let d = toMin(a[i]) - toMin(a[i - 1]); if (d < -720) d += 1440; assert.ok(d >= 0, JSON.stringify(a)); }
+  });
+
+  console.log('[환승 뒤 승차 시각 — 일찍 탔어도 시각표보다 앞당겨지지 않는다]');
+  const connSetup = async () => {
+    await jumpSetup();
+    await page.evaluate(() => { const nd = _transitNodeData; [1, 2, 3].forEach(i => { nd[i].lineName = '7호선'; }); nd[4].isSub = false; nd[4].isWalk = true; nd[4].name = '환승'; nd[4].lineName = ''; [5, 6, 7].forEach(i => { nd[i].lineName = '2호선'; }); });
+  };
+  await connSetup();
+  await page.clock.setSystemTime(new Date('2026-10-06T17:30:00+09:00'));   // 예정(17:35)보다 5분 일찍 탐
+  await page.evaluate(() => { window._htlBoarded = true; window._gpsMaxIdx = 1; window._gpsConfirmIdx = 1; window._nodePassMs[1] = Date.now(); _recalcArrivalsFrom(1); });
+  await page.clock.setSystemTime(new Date('2026-10-06T17:35:00+09:00'));   // 동춘(예정 17:40)도 5분 일찍
+  await page.evaluate(() => { window._gpsMaxIdx = 3; window._gpsConfirmIdx = 3; window._nodePassMs[3] = Date.now(); _recalcArrivalsFrom(3); });
+  await t('첫 열차를 5분 일찍 타도 환승 뒤 열차(신연수 17:43)는 앞당겨지지 않는다', async () => {
+    const a = await times(); assert.ok(a[4] >= '17:43', JSON.stringify(a)); assert.ok(a[2] <= '17:36', '앞 구간은 일찍 간 만큼 앞당겨짐 ' + JSON.stringify(a));
+  });
+  await connSetup();
+  await page.clock.setSystemTime(new Date('2026-10-06T17:38:00+09:00'));   // 예정보다 3분 늦게 탐
+  await page.evaluate(() => { window._htlBoarded = true; window._gpsMaxIdx = 1; window._gpsConfirmIdx = 1; window._nodePassMs[1] = Date.now(); _recalcArrivalsFrom(1); });
+  await page.clock.setSystemTime(new Date('2026-10-06T17:43:00+09:00'));
+  await page.evaluate(() => { window._gpsMaxIdx = 3; window._gpsConfirmIdx = 3; window._nodePassMs[3] = Date.now(); _recalcArrivalsFrom(3); });
+  await t('늦게 타면 환승 뒤 열차도 같은 만큼 뒤로 밀린다(지연은 그대로 전파)', async () => {
+    const a = await times(); assert.ok(a[4] >= '17:46', JSON.stringify(a));
+  });
+
   console.log('[오버레이 화살표 — 이동 중 여부(moving)]');
   await jumpSetup();
   await page.clock.setSystemTime(new Date('2026-10-06T17:42:20+09:00'));

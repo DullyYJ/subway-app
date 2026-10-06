@@ -4,7 +4,7 @@ const html = process.argv[2], N = +(process.argv[3] || 60), SEED = +(process.arg
 const ANOM = process.env.ANOM || '';   // 쉼표: pullback,stale,skip3,late6,reverse
 function rng(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 const ORDER = ['검단호수공원','신검단중앙','아라','계양','귤현','박촌','임학','계산','경인교대입구','작전','갈산','부평구청','부평시장','부평','동수','부평삼거리','간석오거리','인천시청','예술회관','인천터미널','문학경기장','선학','신연수','원인재','동춘','동막','캠퍼스타운','테크노파크','지식정보단지','인천대입구','센트럴파크','국제업무지구','송도달빛축제공원'];
-const LINES = [['1호선',2,3.5],['2호선',1.5,2.5],['3호선',2,3],['4호선',2,3],['5호선',1.5,3],['6호선',1.5,3],['7호선',2,3.5],['8호선',1.5,3],['9호선',1.5,3],['9호선(급행)',3,9],['신분당선',2,5],['수인분당선',2,4],['경의중앙선',2,5],['공항철도',2,4],['공항철도(직통)',6,15],['김포골드라인',1.5,2.5],['인천2호선',2,3],['경춘선',2.5,5],['GTX-A',5,12],['에버라인',2,3.5],['의정부경전철',1.5,3]];
+const LINES = [['부산1호선',1.5,2.5],['부산2호선',1.5,2.5],['부산3호선',1.5,3],['부산4호선',2,3],['동해선',2.5,5],['부산김해경전철',1.5,3],['대구1호선',1.5,3],['대구2호선',1.5,3],['대구3호선',1.5,2.5],['대전1호선',1.5,3],['광주1호선',1.5,3],['신림선',1.5,3],['우이신설선',1.5,2.5],['용인에버라인',2,3.5],['KTX',15,40],['ITX',6,15],['1호선',2,3.5],['2호선',1.5,2.5],['3호선',2,3],['4호선',2,3],['5호선',1.5,3],['6호선',1.5,3],['7호선',2,3.5],['8호선',1.5,3],['9호선',1.5,3],['9호선(급행)',3,9],['신분당선',2,5],['수인분당선',2,4],['경의중앙선',2,5],['공항철도',2,4],['공항철도(직통)',6,15],['김포골드라인',1.5,2.5],['인천2호선',2,3],['경춘선',2.5,5],['GTX-A',5,12],['에버라인',2,3.5],['의정부경전철',1.5,3]];
 const KINDS = [['gsub'], ['walk','gsub'], ['walk','gsub','xfer','gsub'], ['bus','xfer','gsub'], ['walk','gsub','xfer','gsub','xfer','gsub'], ['walk','gsub','walk','bus'], ['walk','bus','xfer','gsub','xfer','bus'], ['isub'], ['walk', 'isub'], ['bus', 'xfer', 'isub'], ['walk', 'isub', 'xfer', 'sub'], ['walk', 'isub', 'walk', 'bus'], ['walk', 'isub'], ['walk', 'isub', 'xfer', 'isub'], ['walk', 'bus', 'xfer', 'isub', 'xfer', 'bus']];
 (async () => {
   const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--no-sandbox'] });
@@ -66,6 +66,8 @@ const KINDS = [['gsub'], ['walk','gsub'], ['walk','gsub','xfer','gsub'], ['bus',
         truth[i] = (base + Math.max(0, cum)) * 60 + (nodes[i].real ? ri(0, 59) * 0 : 0);
       }
     });
+    { const AA = ANOM.split(','); legs.forEach((lg, li) => { if (AA.includes('early') && R() < 0.5) { const d = -ri(2, 6) * 60; for (let i = lg.start; i <= lg.end; i++) truth[i] += d; } else if (AA.includes('late1') && R() < 0.5) { const d = ri(2, 8) * 60; for (let i = lg.start; i <= lg.end; i++) truth[i] += d; } }); }
+    if (ANOM.split(',').includes('miss')) legs.forEach((lg, li) => { if (li > 0 && R() < 0.45) { const d = ri(4, 9) * 60; for (let i = lg.start; i <= lg.end; i++) truth[i] += d; } });
     legs.forEach((lg, li) => { if (li > 0) { const prevEnd = truth[legs[li - 1].end]; if (truth[lg.start] < prevEnd + 120) { const d = prevEnd + 120 - truth[lg.start]; for (let i = lg.start; i <= lg.end; i++) truth[i] += d; } } });
     const destIdx = nodes.length - 1; const destTruth = truth[destIdx];
     const events = []; const trIdx = []; for (let i = 0; i < nodes.length; i++) if (truth[i] != null) trIdx.push(i);
@@ -75,6 +77,8 @@ const KINDS = [['gsub'], ['walk','gsub'], ['walk','gsub','xfer','gsub'], ['bus',
       events.push({ at: truth[lg.start] + lateConfirm, type: 'board', idx: lg.start });
       let lastAt = truth[lg.start] + lateConfirm;
       for (let i = lg.start + 1; i <= lg.end; i++) {
+        if (A.includes('ug') && lg.ug == null) { lg.ug = R() < 0.7 ? [lg.start + ri(1, 3), 0] : [-1, -1]; lg.ug[1] = lg.ug[0] + ri(2, 5); }
+        if (A.includes('ug') && lg.ug[0] >= 0 && i >= lg.ug[0] && i < lg.ug[1]) continue;   // 지하 구간: GPS·기지국 근거가 끊겨 위치 판단이 이 역들을 건너뜀
         const skipP = A.includes('skip3') ? 0.25 : 0.08;
         if (R() < skipP && i < lg.end) continue;
         if (R() < 0.5) { const le = truth[i] - ri(60, 170); if (le > lastAt + 5) { events.push({ at: le, type: 'adopt', idx: i, lead: true }); lastAt = le; } }
@@ -102,13 +106,14 @@ const KINDS = [['gsub'], ['walk','gsub'], ['walk','gsub','xfer','gsub'], ['bus',
           else if (ev.type === 'pull') { try { _recalcArrivalsFrom(window._gpsMaxIdx); } catch (e) { throw e; } }
           const Nn = _transitNodeData; const p = Nn[destIdx].arrTime.split(':'); const eta = (+p[0]) * 60 + (+p[1]);
           let here = -1; try { here = _pipHereIdx(); } catch (e) {}
-          return { eta: eta, here: here, tl: Nn.map(n => n.arrTime), sm: Nn.map(n => n._schedMin == null ? null : +n._schedMin.toFixed(1)), ps: Nn.map((n, i) => { const v = (window._nodePassMs || {})[i]; return v == null ? null : +(((v - new Date('2026-10-06T00:00:00+09:00').getTime()) / 60000).toFixed(1)); }) };
+          let mono = 0; for (let q = 1; q < Nn.length; q++) { const a = Nn[q - 1].arrTime.split(':'), c = Nn[q].arrTime.split(':'); let d = ((+c[0]) * 60 + (+c[1])) - ((+a[0]) * 60 + (+a[1])); if (d < -720) d += 1440; if (d < -0.01) mono++; } const nowm = new Date(); const nm = nowm.getHours() * 60 + nowm.getMinutes() + nowm.getSeconds() / 60; let etaNow = eta - nm; if (etaNow < -720) etaNow += 1440; if (etaNow > 720) etaNow -= 1440;
+          return { eta: eta, mono: mono, etaNow: etaNow, here: here, tl: Nn.map(n => n.arrTime), sm: Nn.map(n => n._schedMin == null ? null : +n._schedMin.toFixed(1)), ps: Nn.map((n, i) => { const v = (window._nodePassMs || {})[i]; return v == null ? null : +(((v - new Date('2026-10-06T00:00:00+09:00').getTime()) / 60000).toFixed(1)); }) };
         } catch (e) { return { err: String(e.message) }; }
       }, [ev, destIdx]);
       if (r.err) { rec.push({ err: r.err }); continue; }
       let ti = -1; for (const i of trIdx) if (truth[i] <= ev.at) ti = i;
       if(process.env.ONLY) logs.push('--- ev '+ev.type+' idx '+ev.idx+' at '+Math.floor(ev.at/3600)+':'+Math.floor(ev.at%3600/60)+':'+Math.floor(ev.at%60));
-      rec.push({ at: ev.at, type: ev.type, lead: !!ev.lead, idx: ev.idx, etaErr: (() => { let d = (r.eta - destTruth / 60) % 1440; if (d > 720) d -= 1440; if (d < -720) d += 1440; return d; })(), sm: r.sm, ps: r.ps, here: r.here, trueIdx: ti, tl: r.tl });
+      rec.push({ mono: r.mono, etaNow: r.etaNow, at: ev.at, type: ev.type, lead: !!ev.lead, idx: ev.idx, etaErr: (() => { let d = (r.eta - destTruth / 60) % 1440; if (d > 720) d -= 1440; if (d < -720) d += 1440; return d; })(), sm: r.sm, ps: r.ps, here: r.here, trueIdx: ti, tl: r.tl });
     }
     out.push({ sc, kind: kind.join('>'), dir: dk, truthBoard: truth[legs[0].start] / 60, firstTransit: legs[0].start, startMin, destPlan: nodes[destIdx].plan, destTruth: destTruth / 60, nodes: nodes.length, names: nodes.map(n => n.name), truthAll: nodes.map((n, i) => truth[i] != null ? truth[i] / 60 : null), rec });
   }
