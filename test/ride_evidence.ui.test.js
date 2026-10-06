@@ -559,6 +559,24 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     const r = await page.evaluate(() => { window._htlBoarded = false; window._gpsMaxIdx = -1; window._nodePassMs = {}; window._pfBest = { at: Date.now(), conf: 0.9, kind: 'seg', idx: 3 }; return _ovlMoving(); });
     assert.strictEqual(r, false);
   });
+  console.log('[셀 선행 통과시각 교체]');
+  const cellLead = async (stampAgoS, markCell) => page.evaluate(([ago, mark]) => {
+    const nd = _transitNodeData, td = 3, now = Date.now();
+    window._routeLocked = true; window._metroRouteMode = false; window._htlBoarded = true;
+    window._gpsMaxIdx = td; window._gpsConfirmIdx = td - 1; window._nodePassMs = { [td]: now - ago * 1000 }; window._cellStampMs = mark ? { [td]: now - ago * 1000 } : {};
+    _pf.sig = 'T1'; _pf.st = [{ _td: 1, name: 'a' }, { _td: 2, name: 'b' }, { _td: td, name: nd[td] ? nd[td].name : 'c' }]; _pf.A = { sig: 'T1', k: 1, td: 2, cand: -1, candN: 0, candAt: 0, backAt: 0, at: 0 };
+    _pfAdopt(2, { conf: 0.9, kind: 'seg', delayS: 0, idx: 2 }, now, '앞');
+    return { ms: now - window._nodePassMs[td], left: !!(window._cellStampMs && window._cellStampMs[td]) };
+  }, [stampAgoS, markCell]);
+  await t('셀 추정으로 찍힌 통과 시각은 PF 채택 때 채택 시각−35초로 교체된다(stamp 가 100초 앞섰던 경우)', async () => {
+    const r = await cellLead(100, true); assert.ok(Math.abs(r.ms - 35000) < 300, JSON.stringify(r)); assert.strictEqual(r.left, false);
+  });
+  await t('셀 stamp 가 아닌 통과 시각(GPS·직접 확인)은 PF 채택이 덮어쓰지 않는다', async () => {
+    const r = await cellLead(100, false); assert.ok(Math.abs(r.ms - 100000) < 300, JSON.stringify(r));
+  });
+  await t('셀 stamp 와 PF 채택이 10초 안쪽으로 가까우면 그대로 둔다', async () => {
+    const r = await cellLead(40, true); assert.ok(Math.abs(r.ms - 40000) < 300, JSON.stringify(r));
+  });
   await t('JS 오류가 없다', async () => { assert.deepStrictEqual(errs.filter(e => !/Failed to fetch|NetworkError|Load failed/.test(e)), []); });
   await b.close();
   console.log(`\n${pass} 통과, ${fail} 실패`); process.exit(fail ? 1 : 0);

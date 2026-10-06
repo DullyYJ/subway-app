@@ -13758,6 +13758,9 @@ function _cellHopAdvance(){
     window._cellMaxIdx = cur + 1;
     window._nodePassMs = window._nodePassMs || {};
     window._nodePassMs[cur+1] = Date.now();
+    // ★ 2026-10-07: 셀 변화로 찍은 통과 시각은 실제 통과보다 1~3분 이르다(선행). 어떤 stamp 가 셀 추정인지 값으로 기억해 두었다가,
+    //   곧이어 PF 가 같은 역을 채택하면 그 시각(채택 지연 보정)으로 교체한다 — 선행 stamp 가 연달아 쌓여 도착예정이 끝까지 앞서 고정되던 문제.
+    window._cellStampMs = window._cellStampMs || {}; window._cellStampMs[cur+1] = window._nodePassMs[cur+1];
     window._gpsWaitIdx = null; window._gpsWaitRatio = 0;
     if(typeof _recalcArrivalsFrom==='function') _recalcArrivalsFrom(cur+1);
     // ★ 지하역은 GPS로 확정되는 일이 없어 학습이 영영 0개였다.
@@ -47379,6 +47382,12 @@ function _pfAdopt(k, b, now, why){
       for(var key in window._nodePassMs){ if(+key > td) delete window._nodePassMs[key]; }
       window._nodePassMs[td] = now;
     }else if(window._nodePassMs[td] == null){ window._nodePassMs[td] = now; }
+    else if(td === gm && window._cellStampMs && window._cellStampMs[td] != null && window._nodePassMs[td] === window._cellStampMs[td]){
+      // 셀 추정 stamp(선행) → PF 채택 시각에서 채택 지연(≈35초)을 뺀 값으로 교체. 10초 넘게 늦을 때만(아니면 그대로).
+      var _ns = now - 35000;
+      if(_ns - window._nodePassMs[td] > 10000){ window._nodePassMs[td] = _ns; try{ _ovlDiag('통과시각', st.name + ' 셀 추정 ' + Math.round((_ns - window._cellStampMs[td])/1000) + '초 앞 → PF 시각으로 교체'); }catch(eD){} }
+      delete window._cellStampMs[td];
+    }
     window._gpsWaitIdx = null; window._gpsWaitRatio = 0;
     try{ if(typeof _recalcArrivalsFrom === 'function') _recalcArrivalsFrom(td); }catch(e4){}
     try{ _ovlDiag('PF채택', why + ' ' + (prevTd == null ? '-' : prevTd) + '→' + td + '(' + st.name + ') 앱 ' + gm + ' ' + Math.round(b.conf * 100) + '% ' + (b.kind === 'dwell' ? '정차' : '주행') + ' 지연' + b.delayS + 's'); }catch(e5){}
