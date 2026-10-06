@@ -12053,6 +12053,9 @@ function _htlSnapBoardArr(){
     // ★ 2026-10-06 (복합경로 시험: 버스 → 지하철): 앞 구간이 버스면 '승차 확정'은 버스 얘기다. 아직 타지 않은 지하철 구간(진행도가 그 역에 못 미침)을
     //   '이미 탄 열차'로 보고 정적 시간표의 더 이른 열차(18:15 → 18:13)로 당기면 도착이 2분 일찍 나온다. 그 역에 닿은 뒤에만 맞춘다.
     if(window._gpsMaxIdx == null || window._gpsMaxIdx < bi) return;
+    // ★ 2026-10-07 (전 노선 시뮬: 첫 승차 시각이 2~3분씩 앞뒤로 흔들림): 승차 뒤 실제 통과 기록이 하나라도 있으면 시각은 그 기록(_recalcArrivalsFrom 앵커)이 정한다.
+    //   그때도 정적 시간표로 승차역을 다시 맞추면 앵커가 만든 시각을 '더 이른 열차'로 끌어당겼다 놓았다 한다. 스냅은 승차 직후(통과 기록이 승차역뿐일 때)만 한다.
+    try{ var _pmS = window._nodePassMs || {}; for(var _ks in _pmS){ if(+_ks > bi) return; } }catch(eS){}
 
     var nx = _transitNodeData[bi+1];
     var dirKey = (typeof _boardDirKey==='function') ? _boardDirKey(nd, nx) : null;

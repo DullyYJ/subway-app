@@ -89,8 +89,9 @@ const KINDS = [['gsub'], ['walk','gsub'], ['walk','gsub','xfer','gsub'], ['bus',
     await page.evaluate(([nodes, LF, MODE]) => {
       const N = nodes.map((n, i) => ({ name: n.name, lat: 37.5, lng: 126.9 + 0.0137 * i, isSub: !!n.isSub, isBus: !!n.isBus, isWalk: !!n.isWalk, isOrigin: !!n.isOrigin, lineName: n.line || '', _schedMin: n.plan, el: null,
         arrTime: ('0' + Math.floor(Math.round(n.plan) / 60)).slice(-2) + ':' + ('0' + (Math.round(n.plan) % 60)).slice(-2) }));
-      _transitNodeData = N; window._routeLocked = true; window._metroRouteMode = false; _baseTimeMs = null; window._gpsMaxIdx = -1; window._gpsConfirmIdx = -1; window._nodePassMs = {}; window._htlBoarded = false; window._markerPos = null; window._pfBest = null; window.__leadIdx = {}; window.__LEADFIX = LF; if (MODE) window._ANCHOR_MODE = MODE; window._rideEvReset && window._rideEvReset('fuzz2');
+      _transitNodeData = N; window._routeLocked = true; window._metroRouteMode = false; _baseTimeMs = null; window._gpsMaxIdx = -1; window._gpsConfirmIdx = -1; window._nodePassMs = {}; window._htlBoarded = false; window._markerPos = null; window._pfBest = null; window.__leadIdx = {}; window.__LEADFIX = LF; if (window.__NOSNAP) window._htlSnapBoardArr = function () {}; if (MODE) window._ANCHOR_MODE = MODE; window._rideEvReset && window._rideEvReset('fuzz2');
     }, [nodes, +(process.env.LEADFIX||0), process.env.MODE || '']);
+    if (process.env.NOSNAP) await page.evaluate(() => { window._htlSnapBoardArr = function () {}; });
     const mid = new Date('2026-10-06T00:00:00+09:00').getTime(); const rec = [];
     for (const ev of events) {
       await page.clock.setSystemTime(new Date(mid + ev.at * 1000));
