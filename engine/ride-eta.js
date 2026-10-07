@@ -8,7 +8,7 @@
 // 입력  { nowMs, nodes:[{name,isSub,isBus,isWalk,isOrigin,lineName,planMin}], passes:[{idx,ms,src}], boarded,
 //         timetable?:{boardIdx,times[]}, notDeparted?, platformWaiting?, live?:[{idx,ms}], boardNext?:{ms,src,allowEarlier,maxWaitMin}, boardArriveMs?, tzOffsetMin?, opts? }
 //   planMin : 처음 안내한 도착 예정(하루 안의 분, 자정을 넘으면 1440 이상). 앱이 덮어쓴 값이 아니라 '원래 값'을 항상 보낸다.
-//   passes  : 통과 증거. src = 'board'(승차 확정) | 'gps' | 'pf'(위치 채택) | 'cell'(기지국 선행) | 'drift'
+//   passes  : 통과 증거. src = 'board'(승차 확정) | 'move'(움직임 시작 시각 — 되짚어 찍은 값) | 'gps' | 'pf'(위치 채택) | 'cell'(기지국 선행) | 'drift'
 //             같은 역에 증거가 여러 개여도 된다(예: 기지국 선행 + 뒤이은 PF 채택) — 어느 것을 믿을지는 여기서 정한다.
 //   timetable: 첫 승차역의 정적 시각표 출발 분(승차 직후 한 번만 쓰인다)
 // 출력  { arr:["HH:MM"…], etaMs:[ms…], schedMin:[분…], delayMin, anchorIdx, notes:[…], boardShiftMin?(승차 전만) }
@@ -29,6 +29,9 @@ var RIDE_ETA_DEFAULTS = {
   cellLeadMinSec: 60, cellLeadMaxSec: 180,
   // GPS 통과: 가장 가까웠던 순간 ±15초
   gpsTolSec: 15,
+  // 움직임 시작(src 'move'): 앱이 위치 궤적에서 '달리기가 시작된 때'를 되짚어 찍은 값(앱: 탑승 증거가 선 시각 − 60초). 증거가 서는 때는 출발 뒤 25~120초라
+  //   찍힌 값은 실제 출발보다 −35~+60초(이르거나 늦다)에 놓이고, 문턱 근처 오차 ±10초. (실측 전의 가정 — 실차 기록으로 보정할 값)
+  moveLagMinSec: -35, moveLagMaxSec: 60, moveTolSec: 10,
   // ★ 2026-10-07 (원인: 승차 확정이 3~6분 늦으면 직후 PF 채택이 5초 간격으로 한꺼번에 몰려 찍힘): 앞 기록과 이 간격(초) 안에 찍힌 통과 = '몰림'.
   //   실제 통과보다 훨씬 늦은 시각이라 지연의 상한일 뿐이다 → 지연 수준을 정하는 데 쓰지 않는다.
   backlogGapSec: 12, burstExactSec: 6.5, burstAmbigW: 0.5,
@@ -78,7 +81,7 @@ function _reHHMM(ms, tzMin, rounding) {
 function _reMin(ms, tzMin) { var m = ((ms + tzMin * 60000) / 60000) % 1440; return (m + 1440) % 1440; }
 function _reIsTransit(n) { return !!n && !n.isWalk && !n.isOrigin && (!!n.isSub || !!n.isBus); }
 function _reMerge(a, b) { var o = {}, k; for (k in a) o[k] = a[k]; if (b) for (k in b) o[k] = b[k]; return o; }
-function _reSrcPri(src) { return src === 'gps' ? 5 : src === 'pf' ? 4 : src === 'drift' ? 3 : src === 'board' ? 2 : 1; }
+function _reSrcPri(src) { return src === 'gps' ? 6 : src === 'move' ? 5 : src === 'pf' ? 4 : src === 'drift' ? 3 : src === 'board' ? 2 : 1; }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 본체
@@ -397,6 +400,8 @@ function _reLegModel(S, planMs, O, priorMean, snap, notes) {
         v += Math.log(f);
       } else if (st.src === 'gps') {
         v += win(d, xi + sh - O.gpsTolSec / 60 - wid, xi + sh + O.gpsTolSec / 60 + wid, sg);
+      } else if (st.src === 'move') {
+        v += win(d, xi + sh - (O.moveLagMaxSec + O.moveTolSec) / 60 - wid, xi + sh - (O.moveLagMinSec - O.moveTolSec) / 60 + wid, sg);      // 지연 ∈ [x−(탐지 지연 최대+오차), x−(최소−오차)]
       } else if (loose[i] || backlog[i]) {
         if (O.burstRamp) {
           var cB = (U[i] - planMs[st.idx]) / MIN + sh + wid, accB = 0, nsB = 14, zq;
@@ -438,7 +443,7 @@ function _reLegModel(S, planMs, O, priorMean, snap, notes) {
   for (i = 0; i < B.length; i++) {
     var b2 = B[i];
     if (b2.src === 'board' || loose[i] || backlog[i]) est[b2.idx] = Math.min(b2.ms - 5000, planMs[b2.idx] + level * MIN);   // 늦게 알게 된 기록은 실제 통과가 아니다
-    else est[b2.idx] = b2.src === 'gps' ? b2.ms : b2.ms - O.pfLagSec * 1000;
+    else est[b2.idx] = b2.src === 'gps' ? b2.ms : b2.src === 'move' ? b2.ms - (O.moveLagMinSec + O.moveLagMaxSec) / 2 * 1000 : b2.ms - O.pfLagSec * 1000;
   }
   for (i = 0; i < C.length; i++) est[C[i].idx] = Math.max(C[i].ms, planMs[C[i].idx] + level * MIN);
   return { level: level, est: est };

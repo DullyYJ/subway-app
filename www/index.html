@@ -7928,7 +7928,7 @@ function _htlBoardWatch(){
         window._nodePassMs = window._nodePassMs || {};
         // 증거로 확정한 경우: 승차(출발) 시각을 '움직임이 시작된 때'로 잡아 시각표를 실제 탄 열차에 맞춘다(8분 어긋남 방지)
         var _depMs = (_evRide && window._rideEvStartMs) ? window._rideEvStartMs : null;
-        if(_depMs && (window._nodePassMs[bi2] == null || _evRide)){ window._nodePassMs[bi2] = _depMs; _etaSrc(bi2, 'gps'); }   // 움직임이 시작된 때(되짚어 찍은 값) — 확정이 늦어도 이 시각은 실제 출발에 가깝다
+        if(_depMs && (window._nodePassMs[bi2] == null || _evRide)){ window._nodePassMs[bi2] = _depMs; _etaSrc(bi2, 'move'); }   // 움직임이 시작된 때(되짚어 찍은 값) — 확정이 늦어도 이 시각은 실제 출발에 가깝다(속도 문턱을 넘은 순간이라 0~45초 늦다: 엔진이 감안)
         else if(window._nodePassMs[bi2] == null){ window._nodePassMs[bi2] = Date.now(); _etaSrc(bi2, 'board'); }                 // 확정한 시각 — 실제 승차보다 늦다(엔진이 늦은 정도를 따진다)
         console.log('[대기모드] 승차 확정 — '
           + (_movedAway ? ('승차역에서 ' + Math.round(d0) + 'm 이동')

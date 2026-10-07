@@ -4,6 +4,7 @@
 //   ENGINE=경로   : 다른 엔진 파일로 비교(기본 ../../engine/ride-eta.js)
 //   ROUND=floor   : 표시 반올림을 내림으로(기본 round — 엔진 기본값 그대로)
 //   OPTS='{"pfLagSec":0}' : 엔진 옵션(input.opts)을 덮어쓴다(민감도 점검용)
+//   MOVE=0.5      : 승차 확정 때 '움직임 시작' 증거(src move)를 보낼 수 있는 비율(기본 0 = 기존 모델)
 //   NOTT=1        : 정적 시간표(timetable) 입력을 보내지 않는다
 //
 // 이 파일의 '진실 모델'과 '사건 모델'은 브라우저 시뮬(fuzz3.js, Playwright + www/index.html)과 같은 시드·같은 난수 호출 순서를 쓴다 →
@@ -20,6 +21,7 @@
 var fs = require('fs'), path = require('path');
 var N = +(process.argv[2] || 80), SEED = +(process.argv[3] || 63);
 var ANOM = process.env.ANOM || '';
+var MOVE = +(process.env.MOVE || 0);
 var ENGINE = process.env.ENGINE || path.join(__dirname, '..', '..', 'engine', 'ride-eta.js');
 var E = require(ENGINE);
 var EXTRA_OPTS = process.env.OPTS ? JSON.parse(process.env.OPTS) : null;
@@ -123,7 +125,13 @@ for (var sc = 0; sc < N; sc++) {
   samples.forEach(function (smp) {
     var ev = smp.ev;
     var nowMs = MID + ev.at * 1000;
-    if (ev.type === 'board') { boarded = true; passes.push({ idx: ev.idx, ms: nowMs, src: 'board' }); }
+    if (ev.type === 'board') {
+      boarded = true;
+      // MOVE=p : 승차 확정 때 위치 궤적에서 '움직임 시작'을 되짚어 찍을 수 있는 비율(지하 승강장 등은 궤적이 없다). 별도 난수라 다른 시나리오는 그대로다.
+      var mvR = rng(SEED * 100003 + sc * 131 + ev.idx * 17 + 7), hasMv = MOVE > 0 && mvR() < MOVE;
+      if (hasMv) { var lagS = -35 + mvR() * 95 + (mvR() * 16 - 8); passes.push({ idx: ev.idx, ms: MID + (truth[ev.idx] + lagS) * 1000, src: 'move' }); }   // 실제 출발 + (−35~+60초 ± 오차) — 앱의 startMs = 탑승 증거가 선 시각 − 60초
+      else passes.push({ idx: ev.idx, ms: nowMs, src: 'board' });
+    }
     else if (ev.type === 'adopt') passes.push({ idx: ev.idx, ms: nowMs, src: ev.lead ? 'cell' : 'pf' });
     var input = { nowMs: nowMs, nodes: inNodes, passes: passes.slice(), boarded: boarded, notDeparted: false };
     if (ttIn) input.timetable = ttIn;

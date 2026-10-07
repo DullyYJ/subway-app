@@ -35,6 +35,7 @@ function xferScene() {
 }
 const run = (nodes, passes, nowMs, extra) => rideEta(Object.assign({ nowMs: nowMs != null ? nowMs : passes[passes.length - 1].ms, nodes: nodes, passes: passes, boarded: true }, extra || {}));
 const P = (idx, h, m, s, src) => ({ idx: idx, ms: at(h, m, s), src: src || 'pf' });
+const hmStr = (m) => ('0' + Math.floor(m / 60)).slice(-2) + ':' + ('0' + Math.round(m % 60)).slice(-2);
 const near = (arrStr, planStr, tol) => Math.abs(hm(arrStr) - hm(planStr)) <= (tol == null ? 1 : tol);
 const sceneArr = (r) => r.arr.slice(1);          // 출발 노드 제외
 
@@ -345,6 +346,19 @@ t('승강장 대기 + 이미 역에 있음(boardArriveMs=지금): 승차역 시�
   const w = rideEta({ nowMs: now, nodes: nodes, passes: [], boarded: false, notDeparted: true, platformWaiting: true, boardArriveMs: now });
   assert.ok(hm(w.arr[1]) >= hm('17:37'), w.arr[1]);                    // 예정 17:35 + 2분 지연 → 17:37~38 (지금 + 0.5분)
   assert.ok(hm(w.arr[7]) - hm('17:35') >= 2, w.arr[7]);
+});
+t("움직임 시작 증거(move): 승차 확정이 4분 늦어도 출발 시각을 알면 지연으로 오해하지 않는다", () => {
+  const nodes = scene();
+  const mv = run(nodes, [P(1, 17, 35, 20, 'move')], at(17, 39, 0));         // 17:35:20 에 움직임 시작(탐지 지연 ≈20초 → 실제 출발 ≈17:35:00)
+  assert.ok(near(mv.arr[1], '17:35', 0) && near(mv.arr[7], nodes[7].planMin ? hmStr(nodes[7].planMin) : '17:49', 1), mv.arr.join(' '));
+  assert.ok(Math.abs(mv.delayMin) <= 0.5, 'delay ' + mv.delayMin);
+  const bd = run(nodes, [P(1, 17, 39, 0, 'board')], at(17, 39, 0));         // 같은 시각의 '확정'만 있으면 3~6분 늦은 확정일 수도 있어 지연 추정이 갈린다
+  assert.notStrictEqual(bd.delayMin, mv.delayMin);
+});
+t("움직임 시작 증거(move): 탐지 지연만큼 이른 시각으로 보고 뒤 통과(PF)와 함께 쓴다", () => {
+  const nodes = scene(), r = run(nodes, [P(1, 17, 36, 0, 'move'), P(2, 17, 38, 50)], at(17, 39, 0));   // 출발 17:35:15 ± , 다음 역 17:38:15 안팎 = 약 +0.3분
+  assert.ok(Math.abs(r.delayMin - 0.3) <= 0.5, 'delay ' + r.delayMin);
+  assert.ok(r.notes.some(x => /믿을 만한 통과 2개/.test(x)), r.notes.join(' | '));
 });
 t('승강장 대기 유예(4분)가 끝나면 밀지 않는다(놓침 판단은 앱의 몫)', () => {
   const nodes = scene(), r = rideEta({ nowMs: at(17, 40, 30), nodes: nodes, passes: [], boarded: false, notDeparted: true, platformWaiting: true });
