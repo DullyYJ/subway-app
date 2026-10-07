@@ -253,3 +253,4 @@
 - 패치 `tools/route-speed/patch_ldcache.js`: ①`ld:`·`ldn:`·`ld2:` 3개를 한 번에 병렬 읽기(+`cacheTtl:60`, `ld2:` 중복 읽기 제거) ②`live=0` 에서 KV 미스가 확인된 키는 격리 안에서 60초간 KV 재조회 생략(별도 `LD_MISS` 메모, `LD_TAGO_NEG` 와 분리 → 이후 live 호출이 막히지 않음). 반환값(items/via)은 기존과 동일 — `ld_cache_test.mjs` 모의 KV 로 5개 시나리오 확인(미스 경로 2단→1단, 두 번째 호출 읽기 0).
 - 엔진 버전 `route-v2-2026-10-07s2`. kric(KV 캐싱)는 D1 쿼리 자체가 ~25ms 라 이득이 불확실해 보류.
 - 빌드: `IN=.../route-v2-worker.mjs tools/route-speed/make.sh out.js` (dijkstra→access→addbus→ldcache→version).
+- **s2 배포 후 실측(2026-10-07 21:50, 70건×2회, live=0, 내장 브라우저·왕복 기준선 ≈300ms)**: 처음 호출 p50 1082 / p90 1608 / p99 2356ms, 재호출 p50 717 / p90 1358 / p99 1931ms (이전 s0: 1570/2290/3320 · 1110/1670/2640). 구간별 재호출 p50: 시내 A 364·H 445, 광역 B 782, C 973, 장거리 D 894·E 891·G 768. 1초 초과 12건(재호출), 대부분 C/D/E. 70건 중 69건이 `cacheTier:"kv"` — 요청마다 다른 격리로 가서 매번 콜드 경로(rows 풀기·addBus·kric)를 탄다. 다음 병목은 격리 재사용 실패(콜드 비용).
