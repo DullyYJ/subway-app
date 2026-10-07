@@ -6,12 +6,12 @@
 //   앱은 매번 '지금까지의 증거 전부'를 보내고, 이 함수가 노드별 도착시각을 돌려준다(상태 없음 = stateless).
 //
 // 입력  { nowMs, nodes:[{name,isSub,isBus,isWalk,isOrigin,lineName,planMin}], passes:[{idx,ms,src}], boarded,
-//         timetable?:{boardIdx,times[]}, notDeparted?, tzOffsetMin?, opts? }
+//         timetable?:{boardIdx,times[]}, notDeparted?, platformWaiting?, live?:[{idx,ms}], boardNext?:{ms,src,allowEarlier,maxWaitMin}, boardArriveMs?, tzOffsetMin?, opts? }
 //   planMin : 처음 안내한 도착 예정(하루 안의 분, 자정을 넘으면 1440 이상). 앱이 덮어쓴 값이 아니라 '원래 값'을 항상 보낸다.
 //   passes  : 통과 증거. src = 'board'(승차 확정) | 'gps' | 'pf'(위치 채택) | 'cell'(기지국 선행) | 'drift'
 //             같은 역에 증거가 여러 개여도 된다(예: 기지국 선행 + 뒤이은 PF 채택) — 어느 것을 믿을지는 여기서 정한다.
 //   timetable: 첫 승차역의 정적 시각표 출발 분(승차 직후 한 번만 쓰인다)
-// 출력  { arr:["HH:MM"…], etaMs:[ms…], delayMin, anchorIdx, notes:[…] }
+// 출력  { arr:["HH:MM"…], etaMs:[ms…], schedMin:[분…], delayMin, anchorIdx, notes:[…], boardShiftMin?(승차 전만) }
 //
 // 이 파일은 의존성이 없다. 맨 아래 module.exports 는 시험(Node)용이고 Worker 에서는 함수 선언만 쓰인다.
 'use strict';
@@ -137,20 +137,7 @@ function rideEta(input) {
       var okN = bnx.allowEarlier ? (Math.abs(wN) >= 1 && wN <= maxW && wN >= -180) : (wN > 0.5 && wN <= maxW);
       if (okN) { shiftFrom(boardIdx, wN * 60000); notes.push('다음 차 시각 ' + Math.round(wN * 10) / 10 + '분 반영(' + (bnx.src || '?') + ')'); }
     }
-    // (2) 승차역 시각은 내가 그 역에 닿는 시각보다 이를 수 없다(예전 앱 _htlBoardFixWait 불변식)
-    if (bOk && isFinite(+input.boardArriveMs)) {
-      var dA = (+input.boardArriveMs - out[boardIdx]) / 60000;
-      if (dA > 0.02) { shiftFrom(boardIdx, dA * 60000); notes.push('승차역 시각을 내가 닿는 시각(' + Math.round(dA * 10) / 10 + '분 뒤)에 맞춤'); }
-    }
-    // (3) 예정 승차 시각이 '지금'보다 한참 지났으면(이미 떠난 차를 가리킴) 경로 전체를 지금에 맞춘다(예전 앱 _htlSanityCheck 의 40분)
-    if (bOk) {
-      var staleMin = (nowMs - out[boardIdx]) / 60000;
-      if (staleMin > O.staleShiftMin) {
-        shiftFrom(0, staleMin * 60000);
-        notes.push('승차 전 예정이 ' + Math.round(staleMin) + '분 지나 경로 전체를 지금에 맞춤');
-      }
-    }
-    // (4) 승강장 대기(예전 앱 _platformLateShift): 열차가 늦는 것으로 보고 승차역부터 시각을 민다. 처음 예정 기준 유예(platGraceMin)가 끝나면 '놓침' 판단은 앱의 몫이라 계산하지 않는다.
+    // (2) 승강장 대기(예전 앱 _platformLateShift): 열차가 늦는 것으로 보고 승차역부터 시각을 민다. 처음 예정 기준 유예(platGraceMin)가 끝나면 '놓침' 판단은 앱의 몫이라 계산하지 않는다.
     if (input.platformWaiting === true && bOk) {
       var overP = (nowMs - out[boardIdx]) / 60000, origP = (nowMs - planMs[boardIdx]) / 60000;
       if (overP >= O.platMinOverMin && origP < O.platGraceMin) {
@@ -159,7 +146,22 @@ function rideEta(input) {
         notes.push('승강장 대기: 예정 출발 ' + Math.round(overP * 60) + '초 지남 → 열차 지연으로 보고 승차역 이후 +' + Math.round(addP / 1000) + '초');
       }
     }
-    return _reFinish(out, tz, O, -1, 0, notes, n, nowMs);
+    // (3) 승차역 시각은 내가 그 역에 닿는 시각보다 이를 수 없다(예전 앱 _htlBoardFixWait 불변식)
+    if (bOk && isFinite(+input.boardArriveMs)) {
+      var dA = (+input.boardArriveMs - out[boardIdx]) / 60000;
+      if (dA > 0.02) { shiftFrom(boardIdx, dA * 60000); notes.push('승차역 시각을 내가 닿는 시각(' + Math.round(dA * 10) / 10 + '분 뒤)에 맞춤'); }
+    }
+    // (4) 예정 승차 시각이 '지금'보다 한참 지났으면(이미 떠난 차를 가리킴) 경로 전체를 지금에 맞춘다(예전 앱 _htlSanityCheck 의 40분)
+    if (bOk) {
+      var staleMin = (nowMs - out[boardIdx]) / 60000;
+      if (staleMin > O.staleShiftMin) {
+        shiftFrom(0, staleMin * 60000);
+        notes.push('승차 전 예정이 ' + Math.round(staleMin) + '분 지나 경로 전체를 지금에 맞춤');
+      }
+    }
+    var rPre = _reFinish(out, tz, O, -1, 0, notes, n, nowMs);
+    rPre.boardShiftMin = bOk ? Math.round(((rPre.etaMs[boardIdx] != null ? rPre.etaMs[boardIdx] : planMs[boardIdx]) - planMs[boardIdx]) / 600) / 100 : 0;      // 승차역 시각이 처음 예정보다 얼마나 밀렸나(분)
+    return rPre;
   }
 
   // ── 4. 통과 증거 정리: 역마다 하나만(gps > pf > drift > board > cell), 같은 종류면 먼저 안 쪽, 시각 순서가 거꾸로면 버림
@@ -326,7 +328,10 @@ function _reFinish(out, tz, O, anchorIdx, level, notes, n, nowMs) {
   }
   if (mono) notes.push('표시 순서 보정 ' + mono + '곳');
   for (q = 0; q < n; q++) arr[q] = out[q] == null ? null : _reHHMM(out[q], tz, O.rounding);
-  return { arr: arr, etaMs: out, delayMin: Math.round(level * 100) / 100, anchorIdx: anchorIdx, notes: notes };
+  // schedMin: '지금(하루 안의 분) + 그 노드까지 남은 분' — 앱이 옛 필드(_schedMin)를 같은 값으로 맞출 때 쓴다(자정을 넘으면 1440 이상이 된다)
+  var nowM = _reMin(nowMs, tz), sched = new Array(n);
+  for (q = 0; q < n; q++) sched[q] = out[q] == null ? null : Math.round((nowM + (out[q] - nowMs) / 60000) * 1000) / 1000;
+  return { arr: arr, etaMs: out, schedMin: sched, delayMin: Math.round(level * 100) / 100, anchorIdx: anchorIdx, notes: notes };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

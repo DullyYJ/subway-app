@@ -7390,16 +7390,8 @@ function _boardNextDep(nd, nextNd, fromMin, cb){
 function _htlBoardFixWait(){
   try{
     if(typeof _htlNotDeparted==='function' && !_htlNotDeparted()) return;   // 출발 후엔 실측이 우선
-    var eta = _boardEtaMin();
-    if(eta == null) return;
-    var bi = (typeof _htlBoardIdx==='function') ? _htlBoardIdx() : -1;
-    if(bi < 0) return;
-    var nd = _transitNodeData[bi];
-    if(!nd || nd._schedMin == null) return;
-    var d = nd._schedMin - eta;
-    if(d < -720) d += 1440;
-    if(d >= -0.02) return;                                                  // 정상
-    if(typeof _htlShiftFrom==='function') _htlShiftFrom(bi, -d*60);
+    try{ var em = _boardEtaMin(); if(em != null && isFinite(em)) window._etaBoardArrive = _etaMinToMs(em); }catch(eA){}   // 내가 승차역에 닿는 시각(증거)
+    _etaRequest('boardfix');          // 승차역 시각 ≥ 내가 닿는 시각 불변식은 엔진(boardArriveMs)이 지킨다
   }catch(e){}
 }
 window._boardEtaMin       = _boardEtaMin;
@@ -7440,29 +7432,9 @@ function _applyRealBoardTime(opts){
     //   (사용자가 예상보다 일찍 승차역에 도착해 앞 열차를 타는 경우)
     var applyDelay = function(nextDepMin, allowEarlier){
       if(nextDepMin==null) return;
-      var wait = nextDepMin - arriveStopMin;
-      if(wait < -720) wait += 1440;
-      if(wait > 720)  wait -= 1440;
-      if(allowEarlier){
-        if(Math.abs(wait) < 1) return;         // 1분 미만 차이는 무시
-        if(wait > _maxWait) return;
-        if(wait < -180) return;                // 비정상 값 방어
-      } else {
-        if(wait <= 0.5) return;                // 이미 탈 수 있으면 보정 안 함
-        if(wait > _maxWait) return;            // 상한 초과(첫차 대기·운행종료 등)는 미반영
-      }
-      _transitNodeData.forEach(function(n2, i2){
-        if(i2 < idx || n2._schedMin==null) return;
-        n2._schedMin += wait;
-        var t=Math.round(((n2._schedMin%1440)+1440)%1440)%1440;   // 2026-10-04: 분을 먼저 반올림해야 '13:60' 이 안 나온다
-        var hh=('0'+Math.floor(t/60)).slice(-2), mm=('0'+(t%60)).slice(-2);
-        n2.arrTime = hh+':'+mm;
-        // 라벨 갱신 실패가 나머지 노드 보정을 막지 않도록 방어
-        try{ if(n2.el && n2.el.querySelector){ var lbl=n2.el.querySelector('.htl-time-lbl'); if(lbl) lbl.textContent=n2.arrTime; } }catch(e){}
-      });
-      if(typeof window._homeRouteBaseMin==='number') window._homeRouteBaseMin += wait;
-      try{ if(typeof _updateRouteRemaining==='function') _updateRouteRemaining(); }catch(e){}
-      try{ if(typeof _syncHomeBriefRemaining==='function') _syncHomeBriefRemaining(); }catch(e){}
+      // 다음 차 출발 시각만 증거로 보낸다. 대기 시간 계산·허용 범위 판단·뒤 시각 이동은 엔진(boardNext)이 한다.
+      window._etaBoardNext = { ms: _etaMinToMs(nextDepMin), src: 'realboard', allowEarlier: !!allowEarlier, maxWaitMin: _maxWait };
+      _etaRequest('boardnext');
     };
 
     if(nd.isBus){
@@ -7956,8 +7928,8 @@ function _htlBoardWatch(){
         window._nodePassMs = window._nodePassMs || {};
         // 증거로 확정한 경우: 승차(출발) 시각을 '움직임이 시작된 때'로 잡아 시각표를 실제 탄 열차에 맞춘다(8분 어긋남 방지)
         var _depMs = (_evRide && window._rideEvStartMs) ? window._rideEvStartMs : null;
-        if(_depMs && (window._nodePassMs[bi2] == null || _evRide)) window._nodePassMs[bi2] = _depMs;
-        else if(window._nodePassMs[bi2] == null) window._nodePassMs[bi2] = Date.now();
+        if(_depMs && (window._nodePassMs[bi2] == null || _evRide)){ window._nodePassMs[bi2] = _depMs; _etaSrc(bi2, 'gps'); }   // 움직임이 시작된 때(되짚어 찍은 값) — 확정이 늦어도 이 시각은 실제 출발에 가깝다
+        else if(window._nodePassMs[bi2] == null){ window._nodePassMs[bi2] = Date.now(); _etaSrc(bi2, 'board'); }                 // 확정한 시각 — 실제 승차보다 늦다(엔진이 늦은 정도를 따진다)
         console.log('[대기모드] 승차 확정 — '
           + (_movedAway ? ('승차역에서 ' + Math.round(d0) + 'm 이동')
              : _boardedByTime ? ('출발시각 ' + Math.round((_pastDep||0)*60) + '초 경과, 최신 위치 없음(지하 추정)')
@@ -11473,7 +11445,7 @@ function _startTransitGpsTracking(nodes) {
   window._trackBase = _baseKey;
 
   if(!_sameRoute){
-    window._nodePassMs = {};
+    window._nodePassMs = {}; _etaResetEvidence();
     window._gpsMaxIdx = -1;   // GPS로 확인된 최대 진행 역 인덱스
     window._gpsConfirmIdx = -1;   // 그중 '순수 GPS'로만 확인된 인덱스 (시각 보정 기준)
     window._timeMaxIdx = -1;  // 시간으로 soft-확인된 최대 진행 역 인덱스
@@ -11797,39 +11769,125 @@ function _rtDwellRatio(elapsedMin, spanMin, dwellMin){
 //   이미 탄 열차가 일찍 가면 그 뒤 '환승해서 탈' 열차·버스는 시각표대로 출발한다 — 환승 대기가 길어질 뿐 앞당겨지지 않는다.
 //   늦으면(환승 시각표보다 뒤에 닿으면) 지금처럼 그대로 뒤로 민다. 그래서 앞으로 탈 승차 구간의 시작 시각은 '처음 안내받은 시각(_plan0)'보다 이르게 나오지 않게 한다.
 // 표시 마지막 안전망: 고정해 둔 앞 구간 값과 새로 계산한 값, 보정 경로(_htlSanityCheck) 사이에서도 순서가 거꾸로 가지 않게(앞 시각보다 이른 값은 앞 시각에 맞춘다)
-function _monoDisplayFix(){
-  try{
-    var _pvMin = null;
-    _transitNodeData.forEach(function(nd){
-      var m0 = (typeof _arrTimeToMin === 'function') ? _arrTimeToMin(nd.arrTime) : null;
-      if(m0 == null) return;
-      if(_pvMin != null){ var dd0 = m0 - _pvMin; if(dd0 < -720) dd0 += 1440; if(dd0 < 0 && dd0 > -720){ m0 = _pvMin; nd.arrTime = ('0' + Math.floor(m0 / 60)).slice(-2) + ':' + ('0' + (m0 % 60)).slice(-2); if(nd.el){ var t0 = nd.el.querySelector('.htl-time-lbl'); if(t0) t0.textContent = nd.arrTime; } } }
-      _pvMin = m0;
-    });
-  }catch(eMono2){}
-}
+// ══════════════════════════════════════════════════════════════════
+// ★ 도착시각 = 엔진 몫, 앱은 그리기만 (2026-10-07 — YJ 절대 규칙: "모든 논리계산은 엔진이 하고 앱은 그림만 그린다")
+//   앱은 '증거'(통과 기록·출처·승차 여부·승강장 대기·실시간 도착정보·다음 차 시각·내가 역에 닿는 시각·시각표)를 모아 엔진(POST /ride-eta)에 보내고,
+//   돌려받은 시각(arr)을 타임라인에 그대로 쓴다. 지연 판단·앵커·스냅·연착·역전 방지 같은 계산은 이 파일에 없다(engine/ride-eta.js).
+//   엔진은 상태가 없어 매번 '지금까지의 증거 전부'를 받는다 → 응답이 늦거나 못 받아도 다음 요청이 모든 것을 따라잡는다.
+//   못 받는 동안(오프라인·응답 실패)은 마지막으로 받은 시각이 화면에 그대로 남는다 — 앱이 대신 계산하지 않는다.
+// ══════════════════════════════════════════════════════════════════
+var _ETA_URL = ((typeof _ROUTE_V2_BASE === 'string' && _ROUTE_V2_BASE) ? _ROUTE_V2_BASE : 'https://route-v2.phg0643.workers.dev') + '/ride-eta';
+var _ETA_TIMEOUT_MS = 8000, _ETA_TICK_MS = 15000, _ETA_LIVE_MAX_AGE_MS = 60000;
+var _etaSt = { busy: false, pending: null, seq: 0, lastAt: 0, fails: 0, retryT: null, okAt: 0, applied: 0 };
+window._etaSt = _etaSt;
 function _plan0Stamp(){
   try{ (_transitNodeData || []).forEach(function(nd){ if(nd && nd._plan0 == null && nd._schedMin != null) nd._plan0 = nd._schedMin; }); }catch(e){}
 }
-function _isLegStartIdx(i){
-  var n = _transitNodeData[i], pv = _transitNodeData[i - 1];
-  if(!n || !(n.isSub || n.isBus)) return false;
-  return !pv || pv.isWalk || pv.isOrigin || (pv.lineName || '') !== (n.lineName || '') || !!pv.isBus !== !!n.isBus;
+// 통과 기록의 출처 표시: 'gps' | 'pf' | 'cell' | 'drift' | 'board' — 값(시각)은 그대로 두고 출처만 따로 적는다(엔진이 출처별로 믿는 정도를 정한다)
+function _etaSrc(idx, src){ try{ (window._nodePassSrc = window._nodePassSrc || {})[idx] = src; }catch(e){} }
+function _etaResetEvidence(){
+  window._nodePassSrc = {}; window._nodePassPf = {}; window._etaLive = []; window._etaBoardNext = null; window._etaBoardArrive = null; window._etaBoardShift0 = 0;
 }
-function _minOfDayF(ms){ var d = new Date(ms); return d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60; }
+function _etaMinToMs(minOfDay){            // 하루 안의 분(kstMinutesAdj 기준) → 지금 기준 가장 가까운 ms
+  var nowMin = (typeof kstMinutesAdj === 'function') ? kstMinutesAdj() : (new Date().getHours() * 60 + new Date().getMinutes());
+  var d = minOfDay - nowMin; if(d < -720) d += 1440; if(d > 720) d -= 1440;
+  return Date.now() + d * 60000;
+}
+function _etaPayload(){
+  var nd = _transitNodeData || [];
+  var nodes = nd.map(function(n){
+    return { name: n.name || '', isSub: !!n.isSub, isBus: !!n.isBus, isWalk: !!n.isWalk, isOrigin: !!n.isOrigin, lineName: n.lineName || '', planMin: (n._plan0 != null && isFinite(n._plan0)) ? n._plan0 : null };
+  });
+  var pm = window._nodePassMs || {}, src = window._nodePassSrc || {}, pf = window._nodePassPf || {}, passes = [], k, i;
+  for(k in pm){ i = +k; if(isFinite(i) && pm[k]) passes.push({ idx: i, ms: pm[k], src: src[k] || 'pf' }); }
+  for(k in pf){ i = +k; if(isFinite(i) && pf[k] && pm[k] != null && pm[k] !== pf[k]) passes.push({ idx: i, ms: pf[k], src: 'pf' }); }   // 기지국 선행 뒤에 PF 가 채택한 같은 역(원래 값 그대로)
+  var notDep = (typeof _htlNotDeparted === 'function') ? _htlNotDeparted() : false;
+  var P = { nowMs: Date.now(), nodes: nodes, passes: passes, boarded: !notDep, notDeparted: !!notDep, tzOffsetMin: -new Date().getTimezoneOffset() };
+  try{ if(notDep && typeof _platformWaiting === 'function' && _platformWaiting()) P.platformWaiting = true; }catch(e1){}
+  try{
+    var lv = (window._etaLive || []).filter(function(x){ return x && Date.now() - x.at <= _ETA_LIVE_MAX_AGE_MS; });
+    if(lv.length) P.live = lv.map(function(x){ return { idx: x.idx, ms: x.ms }; });
+  }catch(e2){}
+  try{ if(notDep && window._etaBoardNext) P.boardNext = window._etaBoardNext; }catch(e3){}
+  try{ if(notDep && window._etaBoardArrive != null && isFinite(window._etaBoardArrive)) P.boardArriveMs = window._etaBoardArrive; }catch(e4){}   // '내가 승차역에 닿는 시각' 증거(승차 시각 보정 때 한 번 적어 둔다 — 예전 앱도 그때만 맞췄다)
+  try{    // 첫 승차 지하철역의 정적 시각표(승차 확정 직후 어느 열차를 탔는지 가리는 데 쓴다) — 자료만 찾아 보내고 판단은 엔진이 한다
+    var bi = -1; for(i = 0; i < nd.length; i++){ var n0 = nd[i]; if(!n0.isOrigin && !n0.isWalk && n0.isSub){ bi = i; break; } }
+    if(bi >= 0 && !notDep && typeof _ttOfficialTimes === 'function' && typeof _boardDirKey === 'function'){
+      var dk = _boardDirKey(nd[bi], nd[bi + 1]);
+      if(dk){ var isHol = (typeof _isHolidayOrWeekend === 'function') ? _isHolidayOrWeekend() : false, tms = _ttOfficialTimes(nd[bi].lineName || '', nd[bi].name, dk, isHol); if(tms && tms.length) P.timetable = { boardIdx: bi, times: tms }; }
+    }
+  }catch(e5){}
+  return P;
+}
+function _etaPaintLabel(n){ try{ if(n.el){ var t = n.el.querySelector('.htl-time-lbl'); if(t) t.textContent = n.arrTime; } }catch(e){} }
+// 엔진이 준 시각을 화면에 쓴다(계산 없음). 시각 문자열 → 라벨, 옛 필드(_schedMin)는 엔진이 준 값으로 맞춘다.
+function _etaApply(res, P){
+  if(!res || !res.arr || !res.arr.length) return;
+  var nd = _transitNodeData || [], ln = window._lastHtlNodes, changed = 0, i;
+  for(i = 0; i < nd.length && i < res.arr.length; i++){
+    var a = res.arr[i], n = nd[i]; if(!n || !a) continue;
+    if(n.arrTime !== a){ n.arrTime = a; changed++; _etaPaintLabel(n); }
+    if(res.schedMin && res.schedMin[i] != null) n._schedMin = res.schedMin[i];
+    if(ln && ln !== nd && ln[i] && ln[i].arrTime !== a) ln[i].arrTime = a;       // 홈 타임라인 배열(AI 승무원·PiP 가 읽는다)
+  }
+  if(P && P.boarded){   // '열차 N분 지연' 안내는 엔진이 준 지연 수준을 그대로 읽는다
+    try{
+      var dsec = Math.round((res.delayMin || 0) * 60); window._htlDelaySec = dsec;
+      var dm = Math.floor(Math.abs(dsec) / 60);
+      if(dm >= 1 && window._htlDelayToastMin !== dm && typeof toast === 'function'){ window._htlDelayToastMin = dm; toast((dsec > 0 ? '🕐 열차 ' + dm + '분 지연 반영됨' : '⚡ ' + dm + '분 단축 반영됨')); }
+    }catch(eT){}
+  }
+  if(P && P.notDeparted && typeof res.boardShiftMin === 'number'){   // 승차 전: 홈 브리핑의 기준 분이 '승차역 시각이 밀린 만큼'만 따라가게 한다
+    try{ var dsh = res.boardShiftMin - (window._etaBoardShift0 || 0); if(Math.abs(dsh) > 0.001){ if(typeof window._homeRouteBaseMin === 'number') window._homeRouteBaseMin += dsh; window._etaBoardShift0 = res.boardShiftMin; } }catch(eB){}
+  }
+  _etaSt.okAt = Date.now(); _etaSt.applied++; window._etaLast = { at: _etaSt.okAt, why: P && P._why, notes: res.notes, delayMin: res.delayMin, anchorIdx: res.anchorIdx };
+  try{ _fgNotifySync(); }catch(e1){}      // 역이 바뀌면 상주 알림도 즉시
+  try{ _aiArrivalSync(); }catch(e2){}     // AI 승무원 카드의 도착시각도 함께
+  try{ if(typeof _updateRouteRemaining === 'function') _updateRouteRemaining(); }catch(e3){}   // 헤더 남은시간/브리핑
+  try{ if(typeof _syncHomeBriefRemaining === 'function') _syncHomeBriefRemaining(); }catch(e4){}
+}
+function _etaNext(){ if(_etaSt.pending){ var w = _etaSt.pending; _etaSt.pending = null; _etaRequest(w === 'tick' ? 'pass' : w); } }
+// why: 'pass'(통과 기록 변화 — 바로) | 'tick'(시간이 흘러야 달라지는 계산: 연착·승강장 대기 — 15초에 한 번) | 그 밖(보정 사유)
+function _etaRequest(why){
+  try{
+    if(typeof _htlMayAdjustTime === 'function' && !_htlMayAdjustTime()) return;
+    if(!_transitNodeData || !_transitNodeData.length) return;
+    if(typeof fetch !== 'function') return;
+    var now = Date.now();
+    if(why === 'tick' && now - _etaSt.lastAt < _ETA_TICK_MS) return;
+    if(_etaSt.busy){ _etaSt.pending = why || 'pass'; return; }
+    _plan0Stamp();
+    var P = _etaPayload(); P._why = why;
+    var routeSig = window._trackSig, ctl = (typeof AbortController === 'function') ? new AbortController() : null, to = null;
+    _etaSt.busy = true; _etaSt.lastAt = now; _etaSt.seq++;
+    to = setTimeout(function(){ try{ if(ctl) ctl.abort(); }catch(e){} }, _ETA_TIMEOUT_MS);
+    var body = JSON.stringify(P);
+    fetch(_ETA_URL, { method: 'POST', headers: { 'content-type': 'application/json' }, body: body, signal: ctl ? ctl.signal : undefined })
+      .then(function(r){ if(!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function(res){
+        clearTimeout(to); _etaSt.busy = false; _etaSt.fails = 0;
+        if(window._trackSig === routeSig) _etaApply(res, P);      // 그 사이 경로가 바뀌었으면 버린다
+        _etaNext();
+      })
+      .catch(function(err){
+        clearTimeout(to); _etaSt.busy = false; _etaSt.fails++;
+        try{ _ovlDiag('도착시각', '엔진 응답 실패 ' + _etaSt.fails + '번째 · ' + String(err && err.message || err).slice(0, 60) + ' — 마지막 시각 유지'); }catch(e){}
+        try{ if(_etaSt.retryT) clearTimeout(_etaSt.retryT); _etaSt.retryT = setTimeout(function(){ _etaSt.retryT = null; _etaRequest('retry'); }, Math.min(30000, 4000 * _etaSt.fails)); }catch(e2){}
+        _etaNext();
+      });
+  }catch(e){ _etaSt.busy = false; }
+}
+window._etaRequest = _etaRequest; window._etaApply = _etaApply; window._etaPayload = _etaPayload;
+// 통과 기록이 바뀔 때 부르는 이름은 예전 그대로다(호출하는 곳 12군데) — 이제는 증거를 엔진에 보내고 결과를 받아 그린다.
 function _recalcArrivalsFrom(anchorIdx){
-  // ★ 2026-09-04: 실측 통과 기준 재계산은 '확정한 경로를 타고 갈 때'만.
   if(typeof _htlMayAdjustTime==='function' && !_htlMayAdjustTime()) return;
-  var passes = [];
-  var pm = window._nodePassMs || {};
+  _plan0Stamp();
+  var pm = window._nodePassMs || {}, anchor = null;
   for(var key in pm){
     var ii = +key; var nd = _transitNodeData[ii];
-    if(nd && nd._schedMin != null) passes.push({ idx:ii, ms:pm[key], sched:nd._schedMin });
+    if(nd && nd._schedMin != null && (anchor == null || ii > anchor.idx)) anchor = { idx: ii, ms: pm[key] };
   }
-  _plan0Stamp();
-  if(!passes.length) return;
-  passes.sort(function(a,b){ return a.idx - b.idx; });
-  var anchor = passes[passes.length - 1];
+  if(anchor){
   // ★ 2026-10-06 (YJ: '카카오·네이버를 이겨야 한다' — 실제로 얼마나 틀리는지 재야 한다): 역을 지날 때마다 '그 전에 화면이 말하던 이 역의 시각'과 실제 통과 시각의 차이를
   //   진단 기록(설정 → 오버레이 진단 기록 → 전체 복사)에 남긴다. 승차 때 말한 도착 예정과 마지막 역의 실제 통과도 함께. 새 판단은 없다(읽기만).
   try{
@@ -11853,152 +11911,14 @@ function _recalcArrivalsFrom(anchorIdx){
       }
     }
   }catch(eAcc){}
-  // ★ 역간 소요는 실측(_REAL_SEG 기반 _schedMin)을 고정 유지 — pace 배율 없이 '시각만 이동'
-  //   (관측 속도로 역간 시간을 늘리거나 줄이지 않음 → 계양-아라 4분 등 하드코딩 값 보존)
-  var anchorMs = anchor.ms;
-  // ★ 2026-08-31: 아직 타지 않았으면 승차역부터 뒤는 건드리지 않는다.
-  //   열차·버스 출발 시각은 시각표(또는 실시간 도착정보)로 정해져 있다.
-  //   내가 역까지 빨리 걷든 늦게 걷든 그 차가 일찍 오지는 않는다.
-  //   예전엔 도보 노드를 통과할 때마다 앵커 기준으로 전 노드를 평행 이동시켜서,
-  //   걷는 속도에 따라 '17:38 → 17:39 → 17:34' 처럼 승차 시각이 계속 흔들렸다.
-  //   → 승차 전에는 '승차역 앞(도보 구간)'만 갱신한다.
-  var _boardIdx = -1;
-  for(var _bi2=0; _bi2<_transitNodeData.length; _bi2++){
-    var _n2 = _transitNodeData[_bi2];
-    if(!_n2.isOrigin && !_n2.isWalk && (_n2.isBus || _n2.isSub)){ _boardIdx = _bi2; break; }
   }
-  var _notDeparted = (typeof _htlNotDeparted==='function') ? _htlNotDeparted() : false;
-
-  // ★ 2026-10-06 (경로 무작위 시뮬레이션): 기준을 '마지막 통과 하나'로만 잡으면, 기지국 선행이 찍은 이른 통과(1~3분 일찍)가 그대로 도착 예정에 반영돼
-  //   다음 역까지 시각이 일찍 나온다. 열차 지연은 구간 동안 거의 일정하므로, 같은 열차에서 승차 이후 찍힌 통과가 2개 이상이면
-  //   최근 3개 '지연값(통과 시각 − 시각표)' 중 가장 큰 값을 기준으로 삼는다(선행은 항상 음의 오차, 위치 채택 지연은 작은 양의 오차).
-  //   승차 확정 자체의 통과(늦게 확정될 수 있음)는 제외한다.
-  try{
-    var _am = window._ANCHOR_MODE || 'max3';
-    if(_am !== 'last' && !_notDeparted){
-      var _lsIdx = -1;
-      for(var _lj = anchor.idx; _lj >= 0 && _lj >= _boardIdx; _lj--){
-        var _ln = _transitNodeData[_lj], _lp = _transitNodeData[_lj - 1];
-        if(!_ln || !(_ln.isSub || _ln.isBus)) continue;
-        if(!_lp || _lp.isWalk || _lp.isOrigin || (_lp.lineName || '') !== (_ln.lineName || '') || !!_lp.isBus !== !!_ln.isBus){ _lsIdx = _lj; break; }
-      }
-      if(_lsIdx >= 0){
-        var _offs = [];
-        for(var _pi = 0; _pi < passes.length; _pi++){ if(passes[_pi].idx > _lsIdx) _offs.push(passes[_pi].ms - passes[_pi].sched * 60000); }
-        if(_offs.length >= 2){
-          _offs = _offs.slice(-3);
-          var _r = (_am === 'med3') ? _offs.slice().sort(function(x, y){ return x - y; })[Math.floor(_offs.length / 2)] : Math.max.apply(null, _offs);
-          anchorMs = anchor.sched * 60000 + _r;
-        }
-      }
-    }
-  }catch(eRb){}
-
-  // ★ 2026-10-06 (YJ 실승차: 17:35 탑승인데 타임라인이 17:29 로 6분 앞당겨짐)
-  //   기지국 선행(마커가 최대 ~3분 앞서감)이 '다음 역 통과'를 승차 52초 뒤에 찍으면,
-  //   그 시각을 앵커로 역산한 출발이 승차 시각보다 3분 앞서 버린다(그 뒤 스냅이 더 이른 열차로 끌어당김).
-  //   열차는 시각표 구간 소요의 60%보다 빨리 달릴 수 없다 → 앵커는 '승차 확정 + 그 최소 소요' 보다 앞설 수 없다.
-  //   (기지국 선행 최대치(3분)보다 더 미래가 되는 경우·승차 기록이 앵커보다 늦은 경우는 근거가 모순이라 적용하지 않는다)
-  try{
-    // 환승 뒤 구간도 같다: 앵커보다 앞에 있는 '가장 가까운 승차 구간 시작(승차 기록이 있는 역·정류장)'을 기준으로 삼는다.
-    var _flIdx = -1;
-    if(!_notDeparted && _boardIdx >= 0){
-      for(var _fj = anchor.idx - 1; _fj >= _boardIdx; _fj--){
-        var _fn = _transitNodeData[_fj], _fp = _transitNodeData[_fj - 1];
-        if(!_fn || !(_fn.isSub || _fn.isBus) || pm[_fj] == null) continue;
-        if(!_fp || _fp.isWalk || _fp.isOrigin || (_fp.lineName || '') !== (_fn.lineName || '') || !!_fp.isBus !== !!_fn.isBus){ _flIdx = _fj; break; }
-      }
-    }
-    if(_flIdx >= 0){
-      var _bn0 = _transitNodeData[_flIdx];
-      if(_bn0 && _bn0._schedMin != null && anchor.sched > _bn0._schedMin){
-        var _earliest = pm[_flIdx] + 0.6 * (anchor.sched - _bn0._schedMin) * 60000;
-        if(anchorMs < _earliest && _earliest <= Date.now() + 180000){
-          console.log('[승차시각] 앵커 하한 적용 ' + (_transitNodeData[anchor.idx] && _transitNodeData[anchor.idx].name) + ' 통과 기록이 승차보다 너무 빠름 → 늦춤 ' + Math.round((_earliest - anchorMs)/1000) + '초');
-          try{ _ovlDiag('승차시각', '앵커 하한 ' + ((_transitNodeData[anchor.idx]||{}).name||'') + ' +' + Math.round((_earliest - anchorMs)/1000) + '초'); }catch(eD){}
-          anchorMs = _earliest;
-        }
-      }
-    }
-  }catch(eFl){}
-
-  // 앵커(최근 실측 통과) 기준으로 노드 시각을 재계산 → 순서 꼬임 방지
-  var _newMsArr = {};
-  // ★ 2026-10-07 (전국 시뮬: 이미 지나간 앞 구간 역의 시각이 뒤 구간 지연에 따라 최대 17분씩 바뀜): 환승해서 탄 뒤에는 앞 열차·버스 구간은 이미 끝난 일이다.
-  //   뒤 구간 앵커로 앞 구간까지 다시 역산하면 앞 구간 역 시각이 뒤 구간의 지연·일찍 도착에 끌려 움직인다. 지금 타고 있는 구간(앵커가 속한 승차 구간)의 시작 앞쪽 노드는 이미 계산된 값을 그대로 둔다.
-  var _legStartA = -1;
-  if(!_notDeparted){ for(var _ls0 = anchor.idx; _ls0 >= 0; _ls0--){ if(_isLegStartIdx(_ls0)){ _legStartA = _ls0; break; } } }
-  var _freezeBelow = (_legStartA > _boardIdx && _boardIdx >= 0) ? _legStartA : -1;
-  _transitNodeData.forEach(function(nd, idx){
-    if(nd._schedMin == null) return;
-    if(idx < _freezeBelow) return;
-    // 승차 전이면 승차역 이후는 고정 (차가 오는 시각은 내 걸음과 무관하다)
-    if(_notDeparted && _boardIdx >= 0 && idx >= _boardIdx) return;
-    // 자정을 넘는 경로에서는 _schedMin 이 어떤 역은 25:28(이어서 센 값), 어떤 역은 01:28(통과 시각으로 덮여 하루 안으로 접힌 값)이다. 앵커와의 차이를 ±12시간 안으로 접어 같은 기준에서 비교한다.
-    var _dd = nd._schedMin - anchor.sched; _dd -= Math.round(_dd / 1440) * 1440;
-    _newMsArr[idx] = anchorMs + _dd * 60000;
-  });
-  try{
-    var _carry = 0;
-    for(var _hi2 = anchor.idx + 1; _hi2 < _transitNodeData.length; _hi2++){
-      if(_newMsArr[_hi2] == null) continue;
-      var _hn = _transitNodeData[_hi2];
-      if(_hn._plan0 != null && _isLegStartIdx(_hi2) && _hi2 > _boardIdx){
-        var _need = _hn._plan0 - _minOfDayF(_newMsArr[_hi2] + _carry); _need -= Math.round(_need / 1440) * 1440;
-        if(_need > 0.05) _carry += _need * 60000;
-      }
-      _newMsArr[_hi2] += _carry;
-    }
-  }catch(eHold){}
-  // ★ 2026-10-07 (전국 시뮬: 타임라인 시각 역전 — 앞 역보다 뒤 역이 더 이른 시각): 통과가 기록된 역은 _schedMin 이 실제 통과 시각으로 덮이는데(_htlSanityCheck),
-  //   위치 판단이 건너뛴 역(통과 기록 없음)은 옛 _schedMin 을 그대로 가져 이웃 역보다 이르거나 늦게 나왔다.
-  //   → 통과 기록이 있는 두 역 사이의 기록 없는 역은 두 역의 표시 시각 사이를 예정 시각 비율로 나눠 놓고, 마지막으로 순서가 거꾸로 가지 않게 한다.
-  try{
-    var _stI = [];
-    for(var _q = 0; _q <= anchor.idx; _q++){ if(pm[_q] != null && _newMsArr[_q] != null) _stI.push(_q); }
-    for(var _w = 0; _w < _stI.length - 1; _w++){
-      var _p1 = _stI[_w], _n1 = _stI[_w + 1];
-      if(_n1 - _p1 < 2) continue;
-      var _sp = _transitNodeData[_p1]._schedMin, _sn = _transitNodeData[_n1]._schedMin;
-      var _lo = _newMsArr[_p1], _hi = Math.max(_lo, _newMsArr[_n1]);
-      for(var _x = _p1 + 1; _x < _n1; _x++){
-        var _nx = _transitNodeData[_x];
-        if(!_nx || _newMsArr[_x] == null || _nx._schedMin == null) continue;
-        var _dn1 = _sn - _sp; _dn1 -= Math.round(_dn1 / 1440) * 1440; var _dx1 = _nx._schedMin - _sp; _dx1 -= Math.round(_dx1 / 1440) * 1440;
-        var _f = (_dn1 > 0) ? _dx1 / _dn1 : 0.5; _f = Math.max(0, Math.min(1, _f));
-        _newMsArr[_x] = _lo + (_hi - _lo) * _f;
-      }
-    }
-    var _prevMs = null;
-    for(var _y = 0; _y < _transitNodeData.length; _y++){
-      if(_newMsArr[_y] == null) continue;
-      if(_prevMs != null && _newMsArr[_y] < _prevMs) _newMsArr[_y] = _prevMs;
-      _prevMs = _newMsArr[_y];
-    }
-  }catch(eMono){}
-  _transitNodeData.forEach(function(nd, idx){
-    if(_newMsArr[idx] == null) return;
-    var d = new Date(_newMsArr[idx]);
-    var hh = ('0'+d.getHours()).slice(-2), mm = ('0'+d.getMinutes()).slice(-2);
-    nd.arrTime = hh + ':' + mm;
-    if(nd.el){ var t = nd.el.querySelector('.htl-time-lbl'); if(t) t.textContent = nd.arrTime; }
-  });
-  // ★ 2026-08-30: 승차역 시각을 시각표에 맞춘다.
-  //   재동기화는 '앵커 통과 실측시각'을 기준으로 전 노드를 평행 이동시킨다.
-  //   그래서 마커가 위치를 놓쳤다가 되잡는 순간 승차역이 06:12 처럼
-  //   **시각표에 없는 시각**으로 찍혔다(아라 평일 하행은 06:08·06:18·06:28).
-  //   이미 탄 열차이므로, 그 시각 이하의 가장 늦은 시각표 출발로 스냅한다.
-  try{ _htlSnapBoardArr(); }catch(e){}
-  try{ _fgNotifySync(); }catch(e){}      // ★ 역이 바뀌면 상주 알림도 즉시
-  try{ _aiArrivalSync(); }catch(e){}    // ★ AI 승무원 카드의 도착시각도 함께
-
-  // ★ 자가 점검: 경로 전체가 '지금'과 동떨어졌으면 되돌린다 (2026-08-31)
-  try{ _htlSanityCheck(); }catch(e){}
-  _monoDisplayFix();
-
-  // 헤더 남은시간/브리핑 갱신
-  try { if(typeof _updateRouteRemaining === 'function') _updateRouteRemaining(); } catch(e){}
+  _etaRequest('pass');
 }
+// 예전에 앱이 직접 시각을 계산·이동하던 함수들 — 이름은 남기고 엔진 요청으로만 바꿨다(호출하는 쪽을 한꺼번에 바꾸지 않기 위해).
+function _htlSanityCheck(){ _etaRequest('tick'); }
+window._htlSanityCheck = _htlSanityCheck;
+function _htlSnapBoardArr(){ /* 정적 시각표 스냅은 엔진(timetable 입력)이 한다 */ }
+window._htlSnapBoardArr = _htlSnapBoardArr;
 
 // 경로 시각이 현재 시각과 상식적으로 맞는지 확인한다.
 //   · 아직 안 탔으면: 승차역 시각이 지금보다 뒤여야 한다(이미 지난 차를 가리킬 수 없다)
@@ -12016,128 +11936,6 @@ function _msToMinOfDay(ms){
   var d = new Date(ms);
   return d.getHours()*60 + d.getMinutes() + d.getSeconds()/60;
 }
-function _htlSanityCheck(){
-  try{
-    _plan0Stamp();
-    // ★ 2026-09-04: 확정 전 경로는 엔진 시각 그대로 둔다(여기서 당기면 탭마다 달라진다)
-    if(typeof _htlMayAdjustTime==='function' && !_htlMayAdjustTime()) return;
-    if(window._metroRouteMode === true) return;                 // 노선도 미리보기 제외
-    if(typeof _baseTimeMs !== 'undefined' && _baseTimeMs != null) return;   // 예상시각 모드 제외
-    if(!_transitNodeData || !_transitNodeData.length) return;
-
-    // 기준 노드: 진행 중이면 그 노드, 아니면 승차역
-    var idx = -1;
-    var prog = (window._gpsMaxIdx == null) ? -1 : window._gpsMaxIdx;
-    if(prog >= 0 && _transitNodeData[prog] && _transitNodeData[prog]._schedMin != null){
-      idx = prog;
-    } else {
-      for(var i=0;i<_transitNodeData.length;i++){
-        var n = _transitNodeData[i];
-        if(!n.isOrigin && !n.isWalk && (n.isBus || n.isSub) && n._schedMin != null){ idx = i; break; }
-      }
-    }
-    if(idx < 0) return;
-
-    // ★ GPS 로 통과가 확정되고 실제 통과 시각까지 남아 있으면 그 노드를 기준으로 삼는다.
-    //   '지금'이 아니라 '그때 실제로 지난 시각'과 비교해야 정확하다.
-    var passMs = (window._nodePassMs && window._nodePassMs[idx] != null) ? window._nodePassMs[idx] : null;
-    // ★ 근거는 GPS 든 기지국이든 상관없다. 통과 시각이 남아 있으면 그게 사실이다.
-    var confirmed = (passMs != null &&
-                     ((window._gpsConfirmIdx != null && window._gpsConfirmIdx >= idx) ||
-                      (typeof _progEvidenceIdx === 'function' && _progEvidenceIdx() >= idx)));
-
-    var gap, tol;
-    if(confirmed){
-      var nd0 = _transitNodeData[idx];
-      if(nd0._schedMin == null) return;
-      gap = nd0._schedMin - _msToMinOfDay(passMs);       // 양수 = 예정보다 일찍 지남(=시각표가 늦음)
-      if(gap >  720) gap -= 1440;
-      if(gap < -720) gap += 1440;
-      tol = _HTL_SANITY_TOL_GPS;
-    } else {
-      gap = (typeof _markerTimeGap === 'function') ? _markerTimeGap(_transitNodeData[idx]) : null;
-      tol = _HTL_SANITY_TOL_MIN;
-    }
-    if(gap == null) return;
-    if(Math.abs(gap) <= tol) return;                             // 정상 범위
-
-    // 같은 값을 반복 교정하지 않는다
-    var now = Date.now();
-    var minGapMs = confirmed ? 8000 : 30000;
-    if(window._htlSanityAt && (now - window._htlSanityAt) < minGapMs) return;
-    window._htlSanityAt = now;
-
-    console.warn('[경로시각] 기준 노드 ' + (_transitNodeData[idx].name||'?')
-      + '(' + _transitNodeData[idx].arrTime + ')가 '
-      + (confirmed ? '실제 통과 시각' : '현재')
-      + '과 ' + Math.round(gap) + '분 차이 → 경로 시각을 맞춤');
-
-    var mins = -gap;
-    var _oldSched = _transitNodeData.map(function(nd){ return nd._schedMin; });
-    // 지금 타고 있는 승차 구간 앞쪽(이미 끝난 앞 구간·도보)은 건드리지 않는다 — 뒤 구간 지연이 앞 구간 역 시각을 끌고 가지 않게(_recalcArrivalsFrom 과 같은 규칙).
-    var _frzB = -1;
-    try{
-      var _fb = -1; for(var _fx = 0; _fx < _transitNodeData.length; _fx++){ var _fn = _transitNodeData[_fx]; if(!_fn.isOrigin && !_fn.isWalk && (_fn.isBus || _fn.isSub)){ _fb = _fx; break; } }
-      var _ls2 = -1; for(var _lj2 = idx; _lj2 >= 0; _lj2--){ if(_isLegStartIdx(_lj2)){ _ls2 = _lj2; break; } }
-      if(_fb >= 0 && _ls2 > _fb && !(typeof _htlNotDeparted === 'function' && _htlNotDeparted())) _frzB = _ls2;
-    }catch(eFz){}
-    _transitNodeData.forEach(function(nd, i){
-      if(nd._schedMin == null) return;
-      if(i < _frzB) return;
-      // 이미 지난 노드는 '실제로 지난 시각'이 있으면 그 값으로 덮는다(추정보다 사실이 낫다)
-      var pm = (window._nodePassMs && window._nodePassMs[i] != null) ? window._nodePassMs[i] : null;
-      if(confirmed && pm != null && i <= idx) nd._schedMin = _msToMinOfDay(pm);
-      else nd._schedMin += mins;
-      var t = ((nd._schedMin % 1440) + 1440) % 1440;
-      var _h = Math.floor(t/60), _m = Math.round(t%60);
-      if(_m >= 60){ _m -= 60; _h = (_h+1)%24; }
-      nd.arrTime = ('0'+_h).slice(-2) + ':' + ('0'+_m).slice(-2);
-      if(nd.el){ var lbl = nd.el.querySelector('.htl-time-lbl'); if(lbl) lbl.textContent = nd.arrTime; }
-    });
-    try{   // 앞으로 탈 승차 구간은 처음 안내받은 시각보다 이르게 하지 않는다(위 평행 이동이 환승 뒤 열차까지 앞당긴 것을 되돌림)
-      var _c2 = 0, _bi3 = -1;
-      for(var _b3 = 0; _b3 < _transitNodeData.length; _b3++){ var _bn3 = _transitNodeData[_b3]; if(!_bn3.isOrigin && !_bn3.isWalk && (_bn3.isBus || _bn3.isSub)){ _bi3 = _b3; break; } }
-      for(var _h3 = idx + 1; _h3 < _transitNodeData.length; _h3++){
-        var _n3 = _transitNodeData[_h3]; if(!_n3 || _n3._schedMin == null) continue;
-        if(_n3._plan0 != null && _isLegStartIdx(_h3) && _h3 > _bi3){
-          var _nd3 = _n3._plan0 - (_n3._schedMin + _c2); _nd3 -= Math.round(_nd3 / 1440) * 1440;
-          if(_nd3 > 0.05) _c2 += _nd3;
-        }
-        if(_c2 > 0){
-          _n3._schedMin += _c2;
-          var _t3 = ((_n3._schedMin % 1440) + 1440) % 1440, _hh3 = Math.floor(_t3 / 60), _mi3 = Math.round(_t3 % 60);
-          if(_mi3 >= 60){ _mi3 -= 60; _hh3 = (_hh3 + 1) % 24; }
-          _n3.arrTime = ('0' + _hh3).slice(-2) + ':' + ('0' + _mi3).slice(-2);
-          if(_n3.el){ var _l3 = _n3.el.querySelector('.htl-time-lbl'); if(_l3) _l3.textContent = _n3.arrTime; }
-        }
-      }
-    }catch(eHold2){}
-    // ★ 2026-10-07 (전국 시뮬: 타임라인 시각 역전): 통과 기록이 있는 역은 위에서 실제 통과 시각으로 덮였는데, 위치 판단이 건너뛴 역(기록 없음)은 평행 이동만 돼서
-    //   이웃 역보다 이르거나 늦은 시각으로 남았다. 기록 있는 두 역 사이의 기록 없는 역은 옛 예정 시각의 비율로 두 역 사이에 놓는다(하루 접힘 보정 포함).
-    try{
-      var _pmS = window._nodePassMs || {}, _stS = [];
-      for(var _q = 0; _q <= idx; _q++){ if(_pmS[_q] != null && _transitNodeData[_q] && _transitNodeData[_q]._schedMin != null) _stS.push(_q); }
-      var _fold = function(v){ return v - Math.round(v / 1440) * 1440; };
-      for(var _w = 0; _w < _stS.length - 1; _w++){
-        var _p1 = _stS[_w], _n1 = _stS[_w + 1]; if(_n1 - _p1 < 2) continue;
-        var _op = _oldSched[_p1], _on = _oldSched[_n1], _span = _fold(_on - _op);
-        var _np = _transitNodeData[_p1]._schedMin, _nn = _np + Math.max(0, _fold(_transitNodeData[_n1]._schedMin - _np));
-        for(var _x = _p1 + 1; _x < _n1; _x++){
-          var _ndx = _transitNodeData[_x]; if(!_ndx || _ndx._schedMin == null || _oldSched[_x] == null) continue;
-          var _fr = (_span > 0) ? _fold(_oldSched[_x] - _op) / _span : 0.5; _fr = Math.max(0, Math.min(1, _fr));
-          _ndx._schedMin = _np + (_nn - _np) * _fr;
-          var _tt = ((_ndx._schedMin % 1440) + 1440) % 1440, _hh = Math.floor(_tt / 60), _mi = Math.round(_tt % 60);
-          if(_mi >= 60){ _mi -= 60; _hh = (_hh + 1) % 24; }
-          _ndx.arrTime = ('0' + _hh).slice(-2) + ':' + ('0' + _mi).slice(-2);
-          if(_ndx.el){ var _lb = _ndx.el.querySelector('.htl-time-lbl'); if(_lb) _lb.textContent = _ndx.arrTime; }
-        }
-      }
-    }catch(eInt){}
-    window._markerMaxProg = null;      // 위치 상한도 초기화
-    try{ if(typeof _aiArrivalSync === 'function') _aiArrivalSync(); }catch(e){}
-  }catch(e){}
-}
-window._htlSanityCheck = _htlSanityCheck;
 
 // ★ 역을 지날 때마다 상주 알림을 즉시 갱신한다 (2026-08-30)
 //   예전엔 30초 주기로만 갱신돼서, 역을 지나도 한동안 이전 역이 떠 있었다.
@@ -12160,76 +11958,6 @@ window._fgNotifySync = _fgNotifySync;
 // 승차역(첫 지하철 노드) 표시 시각을 그 역 시각표 값으로 되돌린다.
 //   승차 후에는 '이미 떠난 열차'이므로 표시 시각 이하 중 가장 늦은 값,
 //   승차 전에는 기존 로직(_ttNextDepForSeg)이 담당하므로 건드리지 않는다.
-function _htlSnapBoardArr(){
-  try{
-    if(typeof _htlMayAdjustTime==='function' && !_htlMayAdjustTime()) return;   // 확정 경로만
-    if(!_transitNodeData || !_transitNodeData.length) return;
-    // 승차 전이면 손대지 않는다
-    var boarded = (typeof _htlNotDeparted==='function') ? !_htlNotDeparted() : false;
-    if(!boarded) return;
-
-    var bi = -1, nd = null;
-    for(var i=0;i<_transitNodeData.length;i++){
-      var n = _transitNodeData[i];
-      if(!n.isOrigin && !n.isWalk && n.isSub){ bi = i; nd = n; break; }
-    }
-    if(!nd || !nd.arrTime || !/^\d{1,2}:\d{2}$/.test(nd.arrTime)) return;
-    if(typeof _ttOfficialTimes !== 'function') return;
-    // ★ 2026-10-06 (복합경로 시험: 버스 → 지하철): 앞 구간이 버스면 '승차 확정'은 버스 얘기다. 아직 타지 않은 지하철 구간(진행도가 그 역에 못 미침)을
-    //   '이미 탄 열차'로 보고 정적 시간표의 더 이른 열차(18:15 → 18:13)로 당기면 도착이 2분 일찍 나온다. 그 역에 닿은 뒤에만 맞춘다.
-    if(window._gpsMaxIdx == null || window._gpsMaxIdx < bi) return;
-    // ★ 2026-10-07 (전 노선 시뮬: 첫 승차 시각이 2~3분씩 앞뒤로 흔들림): 승차 뒤 실제 통과 기록이 하나라도 있으면 시각은 그 기록(_recalcArrivalsFrom 앵커)이 정한다.
-    //   그때도 정적 시간표로 승차역을 다시 맞추면 앵커가 만든 시각을 '더 이른 열차'로 끌어당겼다 놓았다 한다. 스냅은 승차 직후(통과 기록이 승차역뿐일 때)만 한다.
-    try{ var _pmS = window._nodePassMs || {}; for(var _ks in _pmS){ if(+_ks > bi) return; } }catch(eS){}
-
-    var nx = _transitNodeData[bi+1];
-    var dirKey = (typeof _boardDirKey==='function') ? _boardDirKey(nd, nx) : null;
-    if(!dirKey) return;
-    // ★ 인자 순서 주의: (노선명, 역명, 방향키, 휴일여부)
-    //   예전엔 역명과 노선명을 뒤집어 넘겨서 항상 null 이 돌아왔고,
-    //   그 결과 스냅이 통째로 건너뛰어져 시각표에 없는 시각이 그대로 남았다.
-    var _isHol = (typeof _isHolidayOrWeekend==='function') ? _isHolidayOrWeekend() : false;
-    var times = _ttOfficialTimes(nd.lineName || '', nd.name, dirKey, _isHol);
-    if(!times || !times.length) return;
-
-    var p = nd.arrTime.split(':');
-    var cur = parseInt(p[0],10)*60 + parseInt(p[1],10);
-    // ★ 2026-10-06: 이미 탄 시각보다 앞선 열차로는 스냅하지 않는다(17:35 탑승 → 17:29 열차로 끌려가던 문제).
-    //   승차 확정 시각(_nodePassMs) 2분 전까지만 후보. 후보가 없으면 스냅하지 않고 그대로 둔다.
-    var _floorMin = null;
-    try{
-      var _pmB = (window._nodePassMs || {})[bi];
-      if(_pmB != null){ var _fd = new Date(_pmB - 2*60000); _floorMin = _fd.getHours()*60 + _fd.getMinutes(); }
-    }catch(eF){}
-    // 표시 시각 이하 중 가장 늦은 출발 (자정 넘김 고려)
-    var best = null;
-    for(var k=0;k<times.length;k++){
-      var t = times[k];
-      var diff = cur - t; if(diff < -720) diff += 1440;
-      if(_floorMin != null){ var _dt = t - _floorMin; if(_dt < -720) _dt += 1440; if(_dt > 720) _dt -= 1440; if(_dt < 0) continue; }
-      if(diff >= 0 && diff <= 30 && (best === null || t > best)) best = t;
-    }
-    if(best === null) return;
-    if(best === cur) return;                       // 이미 시각표 값
-
-    var shiftMin = cur - best; if(shiftMin < -720) shiftMin += 1440;
-    if(shiftMin === 0) return;
-    console.log('[승차시각] ' + nd.name + ' ' + nd.arrTime + ' → 시각표 '
-                + ('0'+Math.floor(best/60)).slice(-2) + ':' + ('0'+(best%60)).slice(-2)
-                + ' 로 보정 (' + shiftMin + '분)');
-    // 승차역부터 뒤쪽 전부 같은 폭으로 당긴다(구간 소요는 유지)
-    for(var j=bi;j<_transitNodeData.length;j++){
-      var m = _transitNodeData[j];
-      if(!m.arrTime || !/^\d{1,2}:\d{2}$/.test(m.arrTime)) continue;
-      var q = m.arrTime.split(':');
-      var v = parseInt(q[0],10)*60 + parseInt(q[1],10) - shiftMin;
-      v = ((v % 1440) + 1440) % 1440;
-      m.arrTime = ('0'+Math.floor(v/60)).slice(-2) + ':' + ('0'+(v%60)).slice(-2);
-      if(m.el){ var el = m.el.querySelector('.htl-time-lbl'); if(el) el.textContent = m.arrTime; }
-    }
-  }catch(e){}
-}
-window._htlSnapBoardArr = _htlSnapBoardArr;
 // GPS가 특정 정류장/역 70m 이내이면 '통과'로 보고 실제 시각 기록
 //   단, 아직 출발 전인 '탑승역'은 기록하지 않음 — 역에 서 있다고 출발한 게 아니므로
 //   탑승역 시각은 시각표(다음 열차)가 결정하고, 출발 이후 역부터 GPS로 보정
@@ -12269,7 +11997,7 @@ function _maybeRecordPass(idx, dist){
       return;                                       // 아직 확정하지 않음(최근접 탐색 중)
     }
     if(cur && dist > cur.best + 25){               // 멀어지기 시작 → 최근접 순간으로 확정
-      window._nodePassMs[idx] = cur.ms;
+      window._nodePassMs[idx] = cur.ms; _etaSrc(idx, 'gps');
       delete pr[idx];
       _recalcArrivalsFrom(idx);
     }
@@ -12278,7 +12006,7 @@ function _maybeRecordPass(idx, dist){
 
   // 반경 밖으로 나감 → 직전에 잡아둔 최근접 순간으로 확정
   if(pr[idx] != null){
-    window._nodePassMs[idx] = pr[idx].ms;
+    window._nodePassMs[idx] = pr[idx].ms; _etaSrc(idx, 'gps');
     delete pr[idx];
     _recalcArrivalsFrom(idx);
   }
@@ -12310,109 +12038,11 @@ function _htlNodeMs(nd){
 // 이걸 넘는 값은 계산 오류이므로 통째로 무시한다(예전엔 상한이 없어
 // 잘못된 값 하나가 경로 전체를 몇 시간씩 밀어버릴 수 있었다).
 var _HTL_SHIFT_MAX_MIN = 90;
-function _htlShiftFrom(fromIdx, sec){
-  if(typeof _htlMayAdjustTime==='function' && !_htlMayAdjustTime()) return;   // 확정 경로만
-  if(!sec || !isFinite(sec)) return;
-  var mins = sec / 60;
-  if(Math.abs(mins) > _HTL_SHIFT_MAX_MIN){
-    console.warn('[시각이동] ' + Math.round(mins) + '분은 비정상 → 무시');
-    return;
-  }
-  _transitNodeData.forEach(function(nd, i){
-    if(i < fromIdx || nd._schedMin == null) return;
-    nd._schedMin += mins;
-    var t = ((nd._schedMin % 1440) + 1440) % 1440;
-    var _h = Math.floor(t/60), _m = Math.round(t%60);
-    if(_m >= 60){ _m -= 60; _h = (_h+1)%24; }   // 반올림으로 60분이 되는 경우 방어
-    nd.arrTime = ('0'+_h).slice(-2) + ':' + ('0'+_m).slice(-2);
-    if(nd.el){ var lbl = nd.el.querySelector('.htl-time-lbl'); if(lbl) lbl.textContent = nd.arrTime; }
-  });
-  // ★ 안전장치: 어떤 경로로 들어오든 표시 시각이 역행하지 않도록 단조 증가를 보장한다.
-  (function(){
-    var prev = null;
-    _transitNodeData.forEach(function(nd){
-      if(nd._schedMin == null) return;
-      if(prev != null && nd._schedMin < prev){
-        nd._schedMin = prev;                       // 앞 역보다 이른 값은 앞 역에 맞춘다
-        var t2 = ((nd._schedMin % 1440) + 1440) % 1440;
-        var h2 = Math.floor(t2/60), m2 = Math.round(t2%60);
-        if(m2 >= 60){ m2 -= 60; h2 = (h2+1)%24; }
-        nd.arrTime = ('0'+h2).slice(-2) + ':' + ('0'+m2).slice(-2);
-        if(nd.el){ var l2 = nd.el.querySelector('.htl-time-lbl'); if(l2) l2.textContent = nd.arrTime; }
-      }
-      prev = nd._schedMin;
-    });
-  })();
-  // ★ 2026-09-15: 홈 타임라인 배열도 같은 폭으로 옮긴다.
-  //   이걸 안 하면 AI 승무원·PiP 가 보정 전 시각을 계속 읽는다.
-  try{
-    var _ln = window._lastHtlNodes;
-    if(_ln && _ln.length && _ln !== _transitNodeData){
-      var _re = /^\d{1,2}:\d{2}$/;
-      for(var _i=fromIdx; _i<_ln.length; _i++){
-        var _n = _ln[_i];
-        if(!_n || !_re.test(String(_n.arrTime||''))) continue;
-        var _q = String(_n.arrTime).split(':');
-        var _t = ((parseInt(_q[0],10)*60 + parseInt(_q[1],10) + mins) % 1440 + 1440) % 1440;
-        var _h3 = Math.floor(_t/60), _m3 = Math.round(_t%60);
-        if(_m3 >= 60){ _m3 -= 60; _h3 = (_h3+1)%24; }
-        _n.arrTime = ('0'+_h3).slice(-2) + ':' + ('0'+_m3).slice(-2);
-      }
-    }
-  }catch(e){}
-  window._htlDelaySec = (window._htlDelaySec || 0) + sec;
-  // 1분 단위로 넘어갈 때만 1회 안내 (반복 토스트 방지)
-  try{
-    var _dm = Math.floor(Math.abs(window._htlDelaySec) / 60);
-    if(_dm >= 1 && window._htlDelayToastMin !== _dm && typeof toast==='function'){
-      window._htlDelayToastMin = _dm;
-      toast((window._htlDelaySec > 0 ? '🕐 열차 ' + _dm + '분 지연 반영됨' : '⚡ ' + _dm + '분 단축 반영됨'));
-    }
-  }catch(e){}
-  try { if(typeof _updateRouteRemaining==='function') _updateRouteRemaining(); } catch(e){}
-  try { if(typeof _syncHomeBriefRemaining==='function') _syncHomeBriefRemaining(); } catch(e){}
-  try { if(typeof _pipPaint==='function') _pipPaint(); } catch(e){}   // 작은 화면도 같이
-}
+function _htlShiftFrom(fromIdx, sec){ _etaRequest('shift'); }   // 시각 이동 계산은 엔진이 한다(증거를 보내 다시 받는다) — 예전엔 여기서 _schedMin 을 직접 옮겼다
 window._htlShiftFrom = _htlShiftFrom;
 
 // GPS 틱마다 호출 — 현재 확인된 역과 다음 역의 예정 시각을 실제와 맞춘다
-function _htlDelayTrack(curIdx, curDist, validGps){
-  try{
-    if(typeof _baseTimeMs!=='undefined' && _baseTimeMs != null) return;     // 예상 시각 모드 제외
-    if(window._metroRouteMode === true) return;
-    if(typeof _isManualStart==='function' && _isManualStart()) return;
-    if(typeof _htlNotDeparted==='function' && _htlNotDeparted()) return;    // 출발 전은 _htlResyncBoard 담당
-    if(!validGps || curIdx == null || curIdx < 0) return;
-    if(curDist == null || curDist > 250) return;                            // 현재 역 근처일 때만 신뢰
-    var cur = _transitNodeData[curIdx];
-    if(!cur || cur.isOrigin || cur.isWalk || cur._schedMin == null) return;
-
-    var now = Date.now();
-    // 다음 실제 정차 노드
-    var nx = null, nxIdx = -1;
-    for(var i=curIdx+1; i<_transitNodeData.length; i++){
-      var n = _transitNodeData[i];
-      if(!n.isOrigin && !n.isWalk && n._schedMin != null){ nx = n; nxIdx = i; break; }
-    }
-    if(!nx) return;
-
-    var nxMs = _htlNodeMs(nx);
-    if(nxMs == null) return;
-    var lateSec = (now - nxMs) / 1000;      // 양수 = 다음 역 예정 시각을 이미 넘김
-
-    // 다음 역 예정 시각이 지났는데 아직 현재 역 근처 → 그만큼 연착
-    if(lateSec >= _HTL_DELAY_MIN_SEC){
-      if(lateSec > _HTL_DELAY_MAX_SEC) lateSec = _HTL_DELAY_MAX_SEC;
-      // 같은 지연을 반복 반영하지 않도록 15초 간격 제한
-      if(window._htlDelayAt && now - window._htlDelayAt < 15000) return;
-      window._htlDelayAt = now;
-      _htlShiftFrom(nxIdx, lateSec);
-      return;
-    }
-
-    // 반대로 예정보다 빨리 온 경우는 _htlEarlyTrack이 처리
-  }catch(e){}
-}
+function _htlDelayTrack(curIdx, curDist, validGps){ _etaRequest('tick'); }   // 연착 판단은 엔진(연착 보정) — 예전엔 다음 역 예정 시각이 지났는지 여기서 계산했다
 window._htlDelayTrack = _htlDelayTrack;
 
 // ★ 예정보다 이르게 진행 중일 때의 시각 보정
@@ -12423,45 +12053,7 @@ window._htlDelayTrack = _htlDelayTrack;
 //   아직 미래면, 그 차이만큼 이후 시각 전체를 앞당긴다.
 var _HTL_EARLY_MIN_SEC = 60;        // 1분 이상 어긋나야 반영
 var _HTL_EARLY_MAX_SEC = 60*60;     // 한 번에 반영할 최대치
-function _htlEarlyTrack(){
-  try{
-    if(typeof _baseTimeMs!=='undefined' && _baseTimeMs != null) return;   // 예상 시각 모드 제외
-    if(window._metroRouteMode === true) return;
-    if(typeof _isManualStart==='function' && _isManualStart()) return;
-    if(typeof _htlNotDeparted==='function' && _htlNotDeparted()) return;  // 출발 전은 대상 아님
-
-    var gi = (window._gpsConfirmIdx == null ? -1 : window._gpsConfirmIdx);
-    if(gi < 0) return;
-
-    // 탑승역은 앵커로 쓰지 않는다 — 역에 서 있다고 출발한 것이 아니므로
-    var firstIdx = -1;
-    for(var i=0;i<_transitNodeData.length;i++){
-      var n0 = _transitNodeData[i];
-      if(!n0.isOrigin && !n0.isWalk && (n0.isBus || n0.isSub)){ firstIdx = i; break; }
-    }
-    if(firstIdx < 0 || gi <= firstIdx) return;
-
-    var nd = _transitNodeData[gi];
-    if(!nd || nd.isOrigin || nd.isWalk || nd._schedMin == null) return;
-
-    var ms = _htlNodeMs(nd);
-    if(ms == null) return;
-    var earlySec = (ms - Date.now()) / 1000;    // 양수 = 예정보다 이르게 도달
-    if(earlySec < _HTL_EARLY_MIN_SEC) return;
-    if(earlySec > _HTL_EARLY_MAX_SEC) earlySec = _HTL_EARLY_MAX_SEC;
-
-    var now2 = Date.now();
-    if(window._htlEarlyAt && now2 - window._htlEarlyAt < 15000) return;   // 반복 반영 방지
-    window._htlEarlyAt = now2;
-
-    // ★ 앵커 이후만 당기면 안 된다 — 앞 역이 옛 시각(늦은 값)으로 남아 순서가 뒤집힌다.
-    //   (실제로 '굴현 22:44 → 계양 22:35'처럼 뒤로 가는 화면이 나왔다)
-    //   지연(뒤로 밀기)은 뒤쪽만 밀어도 순서가 안 깨지지만, 단축(앞으로 당기기)은
-    //   경로 전체를 같은 폭으로 당겨야 일관된다. _recalcArrivalsFrom이 앵커 기준으로
-    //   앞·뒤를 모두 재계산하는 것과 같은 이유다.
-    _htlShiftFrom(0, -earlySec);   // 앵커 역이 '지금'이 되도록 경로 전체를 앞당김
-  }catch(e){}
-}
+function _htlEarlyTrack(){ _etaRequest('tick'); }   // 일찍 도착한 만큼의 시각 당김은 통과 기록을 받은 엔진이 한다
 window._htlEarlyTrack = _htlEarlyTrack;
 
 // ── 경로 이탈 감지 ────────────────────────────────────────────────
@@ -12569,7 +12161,7 @@ function _handleOffRoute(){
     // 진행 상태를 모두 리셋해야 새 경로에서 마커가 엉뚱한 곳부터 시작하지 않는다
     window._gpsMaxIdx = -1; window._gpsConfirmIdx = -1; window._timeMaxIdx = -1;
     window._gpsWaitIdx = null; window._gpsWaitRatio = 0;
-    window._nodePassMs = {}; window._markerMaxProg = null;
+    window._nodePassMs = {}; _etaResetEvidence(); window._markerMaxProg = null;
     window._htlBoarded = false; window._htlDelaySec = 0; window._htlEarlyAt = 0;
     window._boardCellAt = null; window._boardCellN = 0; window._boardWhy = null;
     window._rideEvKeep = true;   // 2026-10-04: 이탈 재탐색은 타고 있는 채로 다시 찾는 것 — 탑승 증거를 지우지 않는다
@@ -13800,7 +13392,7 @@ function _cellAssist(){
     //   _cellHopAdvance 는 남기는데 여기만 빠져 있었다. 이 값이 없으면
     //   시각 재앵커(_htlSanityCheck)가 근거를 못 찾아 지하에서 그대로 어긋난 채 간다.
     window._nodePassMs = window._nodePassMs || {};
-    if(window._nodePassMs[idx] == null) window._nodePassMs[idx] = Date.now();
+    if(window._nodePassMs[idx] == null){ window._nodePassMs[idx] = Date.now(); _etaSrc(idx, 'cell'); }
     try{ if(typeof _htlEarlyTrack === 'function'){ window._htlEarlyAt = 0; _htlEarlyTrack(); } }catch(e){}
   });
 }
@@ -13885,7 +13477,7 @@ function _cellHopAdvance(){
     //   셀은 추정이므로 따로 기록하고, 확정 자리는 GPS·실시간열차에만 내준다.
     window._cellMaxIdx = cur + 1;
     window._nodePassMs = window._nodePassMs || {};
-    window._nodePassMs[cur+1] = Date.now();
+    window._nodePassMs[cur+1] = Date.now(); _etaSrc(cur+1, 'cell');
     // ★ 2026-10-07: 셀 변화로 찍은 통과 시각은 실제 통과보다 1~3분 이르다(선행). 어떤 stamp 가 셀 추정인지 값으로 기억해 두었다가,
     //   곧이어 PF 가 같은 역을 채택하면 그 시각(채택 지연 보정)으로 교체한다 — 선행 stamp 가 연달아 쌓여 도착예정이 끝까지 앞서 고정되던 문제.
     window._cellStampMs = window._cellStampMs || {}; window._cellStampMs[cur+1] = window._nodePassMs[cur+1];
@@ -13931,7 +13523,7 @@ function _htlDriftCheck(){
 
     window._driftFixAt = Date.now();
     window._nodePassMs = window._nodePassMs || {};
-    window._nodePassMs[conf] = Date.now();                // 지금 이 역을 통과 중
+    window._nodePassMs[conf] = Date.now(); _etaSrc(conf, 'drift');                // 지금 이 역을 통과 중
     if(typeof _recalcArrivalsFrom==='function') _recalcArrivalsFrom(conf);
     window._timeMaxIdx = Math.min((window._timeMaxIdx==null?-1:window._timeMaxIdx), conf);
     window._gpsWaitIdx = null; window._gpsWaitRatio = 0;
@@ -13957,7 +13549,7 @@ function _rtApplyAnchor(nodeIdx, sttus){
     }
   }catch(e){}
   window._nodePassMs=window._nodePassMs||{};
-  window._nodePassMs[nodeIdx]=Date.now();
+  window._nodePassMs[nodeIdx]=Date.now(); _etaSrc(nodeIdx, 'gps');
   // 📶 이 순간 붙어 있던 기지국을 이 역으로 학습 (지하 보조측위용)
   try{ if(typeof _cellLearn==='function' && nd) _cellLearn(nd.name, nd.lineName||''); }catch(e){}
   window._gpsMaxIdx=Math.max((window._gpsMaxIdx==null?-1:window._gpsMaxIdx), nodeIdx);
@@ -14095,19 +13687,12 @@ async function _rtArrPoll(){
     });
     if(!best) return;
 
-    // 예정 도착 시각 vs 실제 남은 시간
-    var schedMs = (typeof _htlNodeMs==='function') ? _htlNodeMs(nNd) : null;
-    if(schedMs == null) return;
+    // 실제 남은 시간 → '그 역에 그 시각에 도착' 증거로 엔진에 보낸다(예정과의 어긋남 판단·뒤 시각 보정은 엔진 — 예전엔 여기서 차이를 재고 _htlShiftFrom 으로 밀었다)
     var realMs = Date.now() + best.sec * 1000;
-    var diffSec = (realMs - schedMs) / 1000;                 // 양수 = 연착
-
-    if(Math.abs(diffSec) < _RT_ARR_MIN_SEC) return;
-    if(Math.abs(diffSec) > _RT_ARR_MAX_SEC) return;
-
-    if(typeof _htlShiftFrom === 'function') _htlShiftFrom(nIdx, diffSec);
+    window._etaLive = [{ idx: nIdx, ms: realMs, at: Date.now() }];
     window._rtFreshUntil = Date.now() + 45000;               // 실시간 우선 구간
-    console.log('[RT도착] ' + leg.lineName + ' ' + nNd.name + ' 실제 ' + best.sec + '초 후 → '
-              + (diffSec > 0 ? '+' : '') + Math.round(diffSec) + '초 보정');
+    console.log('[RT도착] ' + leg.lineName + ' ' + nNd.name + ' 실제 ' + best.sec + '초 후 → 엔진에 전달');
+    _etaRequest('live');
   }catch(e){ /* 조용히 폴백 */ }
 }
 window._rtArrPoll = _rtArrPoll;
@@ -14139,9 +13724,10 @@ function _resyncBoardToNextTrain(){
     var depMs = base + Math.round(depMin*60000);
     if(depMs < Date.now() - 60000) depMs += 86400000;
     // 새 열차 기준으로 전체 시각표 재계산 (이전 앵커 폐기)
-    window._nodePassMs = {};
-    window._nodePassMs[bIdx] = depMs;
-    if(typeof _recalcArrivalsFrom==='function') _recalcArrivalsFrom(bIdx);
+    window._nodePassMs = {}; _etaResetEvidence();
+    window._nodePassMs[bIdx] = depMs; _etaSrc(bIdx, 'gps');
+    window._etaBoardNext = { ms: depMs, src: 'resync', allowEarlier: true, maxWaitMin: 240 };   // 새 열차 출발 시각만 증거로 — 시각 재계산은 엔진
+    _etaRequest('resync');
     return true;
   } catch(e){ return false; }
 }
@@ -15008,7 +14594,7 @@ function _updateTransitGps() {
       window._markerMaxProg = null;             // 마커 진행도 가드 해제(되돌림 허용)
       window._nodePassMs = window._nodePassMs || {};
       Object.keys(window._nodePassMs).forEach(function(k){ if(+k > bestIdx) delete window._nodePassMs[k]; });
-      window._nodePassMs[bestIdx] = Date.now();
+      window._nodePassMs[bestIdx] = Date.now(); _etaSrc(bestIdx, 'gps');
       window._progPullbackAt = Date.now();
       window._progPullbackTo = _pbNm;
       if(typeof _recalcArrivalsFrom==='function') _recalcArrivalsFrom(bestIdx);
@@ -15145,7 +14731,7 @@ function _updateTransitGps() {
         // ★ 탑승 후: 시각표가 실제(GPS)보다 앞서 있으면 실제 위치=지금 기준으로 재앵커
         window._reanchorAt = Date.now();
         window._nodePassMs = window._nodePassMs || {};
-        window._nodePassMs[bestIdx] = Date.now();       // 지금 이 역을 통과 중으로 기록
+        window._nodePassMs[bestIdx] = Date.now(); _etaSrc(bestIdx, 'gps');       // 지금 이 역을 통과 중으로 기록
         if(typeof _recalcArrivalsFrom==='function') _recalcArrivalsFrom(bestIdx);
         // 시간 기반으로 앞서간 진행 흔적 정리 (마커 백스텝은 별도 로직이 방지)
         window._timeMaxIdx = Math.min((window._timeMaxIdx==null?-1:window._timeMaxIdx), bestIdx);
@@ -47502,18 +47088,19 @@ function _pfAdopt(k, b, now, why){
     A.k = kk; A.td = td; A.at = now; A.cand = -1; A.candN = 0; A.backAt = 0;
     window._nodePassMs = window._nodePassMs || {};
     var gc = (window._gpsConfirmIdx == null ? -1 : window._gpsConfirmIdx);
+    window._nodePassPf = window._nodePassPf || {};
     if(td > gm){
       window._gpsMaxIdx = td; window._gpsConfirmIdx = Math.max(gc, td);
-      window._nodePassMs[td] = now;
+      window._nodePassMs[td] = now; _etaSrc(td, 'pf'); delete window._nodePassPf[td];
     }else if(td < gm && why !== '초기'){   // 첫 채택은 이미 확인된 진행도를 낮추지 않는다
       window._gpsMaxIdx = td; window._gpsConfirmIdx = td; window._timeMaxIdx = -1;
       for(var key in window._nodePassMs){ if(+key > td) delete window._nodePassMs[key]; }
-      window._nodePassMs[td] = now;
-    }else if(window._nodePassMs[td] == null){ window._nodePassMs[td] = now; }
+      window._nodePassMs[td] = now; _etaSrc(td, 'pf'); delete window._nodePassPf[td];
+    }else if(window._nodePassMs[td] == null){ window._nodePassMs[td] = now; _etaSrc(td, 'pf'); }
     else if(td === gm && window._cellStampMs && window._cellStampMs[td] != null && window._nodePassMs[td] === window._cellStampMs[td]){
-      // 셀 추정 stamp(선행) → PF 채택 시각에서 채택 지연(≈35초)을 뺀 값으로 교체. 10초 넘게 늦을 때만(아니면 그대로).
-      var _ns = now - 35000;
-      if(_ns - window._nodePassMs[td] > 10000){ window._nodePassMs[td] = _ns; try{ _ovlDiag('통과시각', st.name + ' 셀 추정 ' + Math.round((_ns - window._cellStampMs[td])/1000) + '초 앞 → PF 시각으로 교체'); }catch(eD){} }
+      // 셀 추정 stamp(선행)가 있는 역을 PF 가 채택했다: 두 기록을 모두 엔진에 보낸다(기록 값은 손대지 않는다). 어느 쪽을 믿고 채택 지연을 얼마로 볼지는 엔진이 정한다.
+      window._nodePassPf[td] = now;
+      try{ _ovlDiag('통과시각', st.name + ' 셀 추정 stamp 에 PF 채택 시각을 증거로 추가 → 엔진에 전달'); }catch(eD){}
       delete window._cellStampMs[td];
     }
     window._gpsWaitIdx = null; window._gpsWaitRatio = 0;
@@ -47657,32 +47244,13 @@ function _platGrace(passedMin){
 }
 window._platformWaiting = _platformWaiting; window._platGrace = _platGrace;
 function _platformLateShift(now){
-  try{
+  try{   // 승강장 대기 지연 계산은 엔진(platformWaiting). 앱은 '처음 예정 출발'만 적어 둔다(유예 판단 _platGrace 가 이 시각부터 센다)
     if(window._metroRouteMode === true) return;
     if(typeof _baseTimeMs !== 'undefined' && _baseTimeMs != null) return;
-    if(now - (window._platShiftAt || 0) < 20000) return;
     if(!_platformWaiting()) return;
-    var bi = _htlBoardIdx(), nd = _transitNodeData, bn = nd[bi];
-    if(!bn || bn._schedMin == null) return;
-    var D = window._platDep0, base = (D && D.node === bn) ? D.min : bn._schedMin;
-    var origOver = _msToMinOfDay(now) - base; if(origOver < -720) origOver += 1440; if(origOver > 720) origOver -= 1440;
-    if(origOver >= _PLAT_GRACE_MIN) return;                       // 유예가 끝났다 — 기존 '놓침' 판단이 맡는다
-    var over = _msToMinOfDay(now) - bn._schedMin; if(over < -720) over += 1440; if(over > 720) over -= 1440;
-    if(over * 60 < 60) return;
-    if(!D || D.node !== bn) window._platDep0 = { node: bn, min: bn._schedMin };
-    var add = over + 0.5;
-    window._platShiftAt = now;
-    for(var i = bi; i < nd.length; i++){
-      var n = nd[i]; if(!n || n._schedMin == null) continue;
-      n._schedMin += add;
-      var t = ((n._schedMin % 1440) + 1440) % 1440, h = Math.floor(t / 60), m = Math.round(t % 60);
-      if(m >= 60){ m -= 60; h = (h + 1) % 24; }
-      n.arrTime = ('0' + h).slice(-2) + ':' + ('0' + m).slice(-2);
-      if(n.el){ var lb = n.el.querySelector('.htl-time-lbl'); if(lb) lb.textContent = n.arrTime; }
-    }
-    window._markerMaxProg = null;
-    try{ _ovlDiag('지연반영', '승강장 대기 중 · ' + (bn.name || '?') + ' 예정 ' + Math.round(over * 60) + '초 지남 → 열차 지연으로 보고 이후 시각 +' + Math.round(add * 60) + '초'); }catch(e1){}
-    try{ if(typeof _aiArrivalSync === 'function') _aiArrivalSync(); }catch(e2){}
+    var bi = _htlBoardIdx(), bn = _transitNodeData[bi], D = window._platDep0;
+    if(bn && bn._plan0 != null && (!D || D.node !== bn)) window._platDep0 = { node: bn, min: bn._plan0 };
+    _etaRequest('tick');
   }catch(e){}
 }
 window._platformLateShift = _platformLateShift;
@@ -47693,32 +47261,7 @@ window._platformLateShift = _platformLateShift;
 //   → 다음 역을 '지금 + 30초'로 미루고 그 뒤 모든 시각을 같은 만큼 민다(앞당기지는 않는다. 당김은 PF 채택·_htlSanityCheck 몫).
 function _pfOverdueShift(now){
   if(window._routeLocked !== true || window._metroRouteMode === true) return;
-  if(typeof _baseTimeMs !== 'undefined' && _baseTimeMs != null) return;
-  if(!(window._rideEv && window._rideEv().riding)) return;
-  var A = _pf.A; if(!A || A.sig !== _pf.sig || A.td == null || A.td < 0) return;
-  var nd = _transitNodeData; if(!nd || !nd.length) return;
-  var ni = -1;
-  for(var j = A.td + 1; j < nd.length; j++){ if(nd[j] && nd[j]._schedMin != null && !nd[j].isWalk){ ni = j; break; } }
-  if(ni < 0) return;
-  var b = window._pfBest;   // PF 가 이미 그 역 이후라고 보면 채택(_pfApplyLive)이 맡는다
-  if(b && now - b.at < 20000 && b.td >= ni && b.conf >= 0.5) return;
-  if(now - (window._pfOverdueAt || 0) < 20000) return;
-  var over = _msToMinOfDay(now) - nd[ni]._schedMin;
-  if(over < -720) over += 1440; if(over > 720) over -= 1440;
-  if(over * 60 < 60) return;
-  var add = Math.min(15, over + 0.5);
-  window._pfOverdueAt = now;
-  for(var i = ni; i < nd.length; i++){
-    var n = nd[i]; if(!n || n._schedMin == null) continue;
-    n._schedMin += add;
-    var t = ((n._schedMin % 1440) + 1440) % 1440, h = Math.floor(t / 60), m = Math.round(t % 60);
-    if(m >= 60){ m -= 60; h = (h + 1) % 24; }
-    n.arrTime = ('0' + h).slice(-2) + ':' + ('0' + m).slice(-2);
-    if(n.el){ var lb = n.el.querySelector('.htl-time-lbl'); if(lb) lb.textContent = n.arrTime; }
-  }
-  window._markerMaxProg = null;
-  try{ _ovlDiag('지연반영', nd[ni].name + ' 예정 ' + Math.round(over * 60) + '초 지났는데 도착 증거 없음 → 이후 시각 +' + Math.round(add * 60) + '초'); }catch(e1){}
-  try{ if(typeof _aiArrivalSync === 'function') _aiArrivalSync(); }catch(e2){}
+  _etaRequest('tick');      // 연착 보정(다음 역 예정 시각이 지났는데 도착 증거가 없을 때)은 엔진이 한다
 }
 window._pfOverdueShift = _pfOverdueShift;
 

@@ -340,6 +340,12 @@ t('승강장 대기: 예정 출발이 1분 넘게 지났으면 승차역부터 �
   assert.ok(hm(w.arr[7]) - hm(n.arr[7]) >= 2, w.arr[7] + ' vs ' + n.arr[7]);
   assert.strictEqual(w.arr[0], n.arr[0]);                              // 승차역 앞(도보)은 그대로
 });
+t('승강장 대기 + 이미 역에 있음(boardArriveMs=지금): 승차역 시각이 지금으로 끌려와 늦음 증거가 사라지지 않는다', () => {
+  const nodes = scene(), now = at(17, 37, 0);
+  const w = rideEta({ nowMs: now, nodes: nodes, passes: [], boarded: false, notDeparted: true, platformWaiting: true, boardArriveMs: now });
+  assert.ok(hm(w.arr[1]) >= hm('17:37'), w.arr[1]);                    // 예정 17:35 + 2분 지연 → 17:37~38 (지금 + 0.5분)
+  assert.ok(hm(w.arr[7]) - hm('17:35') >= 2, w.arr[7]);
+});
 t('승강장 대기 유예(4분)가 끝나면 밀지 않는다(놓침 판단은 앱의 몫)', () => {
   const nodes = scene(), r = rideEta({ nowMs: at(17, 40, 30), nodes: nodes, passes: [], boarded: false, notDeparted: true, platformWaiting: true });
   assert.strictEqual(r.arr[1], '17:35');

@@ -12,6 +12,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   const page = await ctx.newPage();
   const errs = []; page.on('pageerror', e => errs.push(e.message));
   await page.route('**/*', r => { const u = new URL(r.request().url()); return u.protocol === 'file:' ? r.continue() : r.abort(); });
+  const __em = require('./helpers/eta_mock'); await __em.installEtaMock(page); __em.autoWait(page); global.etaWait = () => __em.etaWait(page);
   await page.clock.install({ time: new Date('2026-10-06T06:00:00+09:00') });
   await page.goto('file://' + html);
   await page.clock.runFor(2500);

@@ -4,13 +4,15 @@ const assert = require('assert'), path = require('path'), fs = require('fs');
 const { chromium } = require('/opt/node-tools/node_modules/playwright');
 const html = process.argv[2] || path.join(__dirname, '..', 'www', 'index.html');
 let pass = 0, fail = 0;
-const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', name); } catch (e) { fail++; console.log('  FAIL', name, '\n      ', String(e.message).split('\n')[0]); } };
+const ONLY = process.env.ONLY ? new RegExp(process.env.ONLY) : null;
+const t = async (name, fn) => { if (ONLY && !ONLY.test(name)) return; try { await fn(); pass++; console.log('  ok  ', name); } catch (e) { fail++; console.log('  FAIL', name, '\n      ', String(e.message).split('\n')[0]); } };
 (async () => {
   const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--no-sandbox'] });
   const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, timezoneId: 'Asia/Seoul', geolocation: { latitude: 37.5, longitude: 126.9 }, permissions: ['geolocation'] });
   const page = await ctx.newPage();
   const errs = []; page.on('pageerror', e => errs.push(e.message));
   await page.route('**/*', r => { const u = new URL(r.request().url()); return u.protocol === 'file:' ? r.continue() : r.abort(); });
+  const __em = require('./helpers/eta_mock'); await __em.installEtaMock(page); __em.autoWait(page); global.etaWait = () => __em.etaWait(page);
   await page.clock.install({ time: new Date('2026-10-04T12:40:00+09:00') });
   await page.goto('file://' + html);
   await page.clock.runFor(2500);
@@ -125,7 +127,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
       window._trackSig = 'T' + Math.random(); window._trackBase = 1; window._gpsMaxIdx = -1; window._gpsConfirmIdx = -1; window._nodePassMs = {}; window._htlBoarded = false;
       window._pf && (_pf.A = null); S.lastGPSFix = null; _fmapStart = { type: 'gps' };
       const card = document.getElementById('transitResultCard'); if (card) card.style.display = 'block';
-      window._rideEvReset && window._rideEvReset('시험'); _ev.trail = []; _ev.cell = []; _ev.cache = null; _ev.cacheAt = 0;
+      window._rideEvReset && window._rideEvReset('시험'); _ev.trail = []; _ev.cell = []; _ev.cache = null; _ev.cacheAt = 0; window._etaResetEvidence();
     }, [n, seg, dir, startAt, locked]);
     await page.clock.setSystemTime(new Date(startAt));
     await page.evaluate(() => { window._htlDrawnAt = Date.now(); window._etaResearchAt = 0; });
@@ -136,13 +138,15 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
       const frac = (k >= n - 1) ? 0 : (w < dwell ? 0 : Math.min(1, (w - dwell) / (seg - dwell)));
       const trueArrived = 1 + k;   // 노드 인덱스(1=S0)
       await page.evaluate(([k, frac, dir, latOff]) => { S.lastGPSFix = { lat: 37.5 + latOff, lng: 126.9 + dir * 0.0137 * (k + frac), ts: Date.now(), acc: 15 }; }, [k, frac, gpsDir == null ? dir : gpsDir, latOff || 0]);
-      await tick();
+      await tick(); await etaWait();
       const st = await page.evaluate(() => { try { _htlBoardWatch(); } catch (e) {} try { _etaResearchIfStale(); } catch (e) {} return { locked: window._routeLocked === true, began: window.__began, gm: window._gpsMaxIdx, boarded: window._htlBoarded, route: window.__calls.route, pip: _pipHereIdx(), tp: (_estimateTimelinePos() || {}).fromIdx }; });
+      await etaWait(); st.pip = await page.evaluate(() => _pipHereIdx());   // 엔진 응답이 화면에 적용된 뒤의 오버레이(응답 지연은 실제로는 수백 ms)
       if (st.boarded && out.boardedAt == null) { out.boardedAt = sec; out.routeAtBoard = st.route; }
       if (st.locked && out.lockedAt == null) out.lockedAt = sec;
       out.began = st.began;
       if (st.gm >= 0) out.maxGmAhead = Math.max(out.maxGmAhead, st.gm - trueArrived);
       if (out.boardedAt != null) out.maxPipAhead = Math.max(out.maxPipAhead, st.pip - trueArrived);
+      if (process.env.DBGSIM && out.boardedAt != null && st.pip - trueArrived >= 1) console.log('   [dbg] sec', sec, 'pip', st.pip, 'true', trueArrived, JSON.stringify(await page.evaluate(() => ({ t: _transitNodeData.slice(1, 6).map(n => n.arrTime), pm: window._nodePassMs, src: window._nodePassSrc, last: window._etaLast, now: new Date().toTimeString().slice(0, 8) }))));
       out.route = st.route; out.gm = st.gm;
       await page.clock.runFor(5000);
     }
@@ -225,9 +229,9 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   const platSetup = (passedMin, near) => page.evaluate(([passedMin, near]) => {
     const nd = _transitNodeData, bn = nd[1];
     const n = new Date(), nowMin = n.getHours() * 60 + n.getMinutes() + n.getSeconds() / 60;
-    window._platDep0 = null; window._platShiftAt = 0; window._rideEvReset('시험'); window._htlBoarded = false; window._gpsMaxIdx = -1; window._nodePassMs = {};
+    window._platDep0 = null; window._platShiftAt = 0; window._htlBoardNear = !!near; window._etaResetEvidence(); window._rideEvReset('시험'); window._htlBoarded = false; window._gpsMaxIdx = -1; window._nodePassMs = {};
     window._routeLocked = true; window._metroRouteMode = false; _baseTimeMs = null;
-    for (let i = 1; i < nd.length; i++) { const m = nowMin - passedMin + (i - 1) * 2; nd[i]._schedMin = m; const mm = Math.round(((m % 1440) + 1440) % 1440); nd[i].arrTime = ('0' + Math.floor(mm / 60)).slice(-2) + ':' + ('0' + (mm % 60)).slice(-2); }
+    for (let i = 1; i < nd.length; i++) { const m = nowMin - passedMin + (i - 1) * 2; nd[i]._schedMin = m; nd[i]._plan0 = m; const mm = Math.round(((m % 1440) + 1440) % 1440); nd[i].arrTime = ('0' + Math.floor(mm / 60)).slice(-2) + ':' + ('0' + (mm % 60)).slice(-2); }
     _ev.trail = [{ lat: bn.lat + (near ? 0.0005 : 0.05), lng: bn.lng, ts: Date.now() }]; _ev.cache = null; _ev.cacheAt = 0;
     return nowMin;
   }, [passedMin, near]);
@@ -249,27 +253,31 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     const r1 = await page.evaluate(() => window.__calls.route);
     assert.strictEqual(r1, 0, '유예 안인데 재탐색 ' + r1 + ' ' + c);
     await platSetup(7, true);
-    await page.evaluate(() => { window._etaResearchAt = 0; window._htlDrawnAt = Date.now(); _etaResearchIfStale(); });
+    await page.evaluate(() => { window._etaResearchAt = 0; window._htlDrawnAt = Date.now(); window._rerouteCooldownUntil = 0; window._htlDelaySec = 0; S.boardedAt = null; _etaResearchIfStale(); });
     await page.clock.runFor(500);
     const r2 = await page.evaluate(() => window.__calls.route);
     assert.strictEqual(r2, 1, '유예가 끝났는데 재탐색 안 함 ' + r2);
   });
-  await t('승강장에서 예정이 2분 지났으면 이후 시각이 같은 만큼 밀리고(20초 간격), 유예(4분)가 지나면 밀지 않는다', async () => {
+  await t('승강장에서 예정이 2분 지났으면 엔진이 이후 시각을 같은 만큼 밀고(앱은 받아 그리기만), 유예(4분)가 지나면 밀지 않는다', async () => {
     await platSetup(2, true);
-    const r = await page.evaluate(() => {
-      const nd = _transitNodeData, b0 = nd.map(x => x && x._schedMin), now = Date.now();
-      _platformLateShift(now);
-      const a1 = nd.map(x => x && x._schedMin);
-      _platformLateShift(now + 1000);                   // 20초 안 → 한 번 더 밀리지 않는다
-      const a2 = nd[1]._schedMin;
-      return { d1: a1[1] - b0[1], d2: a1[2] - b0[2], d5: a1[5] - b0[5], d0: a1[0] - b0[0], again: a2 - a1[1], keep: !!window._platDep0 };
+    const r = await page.evaluate(async () => {
+      const nd = _transitNodeData, b0 = nd.map(x => x && x._plan0); b0.s0 = nd[0] && nd[0]._schedMin; window.__s0 = b0.s0;
+      window._etaSt.lastAt = 0; _platformLateShift(Date.now());
+      return { b0 };
     });
-    assert.ok(Math.abs(r.d1 - 2.5) < 0.2, JSON.stringify(r));
-    assert.ok(Math.abs(r.d2 - r.d1) < 1e-6 && Math.abs(r.d5 - r.d1) < 1e-6, '이후 모든 시각이 같은 만큼 ' + JSON.stringify(r));
-    assert.strictEqual(r.d0, 0); assert.strictEqual(r.again, 0); assert.ok(r.keep);
+    await etaWait();
+    const r2 = await page.evaluate((b0) => {
+      const nd = _transitNodeData, a1 = nd.map(x => x && x._schedMin);
+      return { d1: a1[1] - b0[1], d2: a1[2] - b0[2], d5: a1[5] - b0[5], d0: (nd[0] && nd[0]._schedMin || 0) - (window.__s0 || 0), keep: !!window._platDep0 };
+    }, r.b0);
+    assert.ok(Math.abs(r2.d1 - 2.5) < 0.2, JSON.stringify(r2));
+    assert.ok(Math.abs(r2.d2 - r2.d1) < 1e-6 && Math.abs(r2.d5 - r2.d1) < 1e-6, '이후 모든 시각이 같은 만큼 ' + JSON.stringify(r2));
+    assert.strictEqual(r2.d0, 0, JSON.stringify(r2)); assert.ok(r2.keep, JSON.stringify(r2));
     await platSetup(5, true);
-    const z = await page.evaluate(() => { const b = _transitNodeData[1]._schedMin; _platformLateShift(Date.now()); return _transitNodeData[1]._schedMin - b; });
-    assert.strictEqual(z, 0, '유예 뒤에는 밀지 않는다');
+    await page.evaluate(() => { window._etaSt.lastAt = 0; _platformLateShift(Date.now()); });
+    await etaWait();
+    const z = await page.evaluate(() => (window._etaLast && window._etaLast.notes || []).filter(x => /승강장 대기/.test(x)).length);
+    assert.strictEqual(z, 0, '유예 뒤에는 엔진이 승강장 지연으로 밀지 않는다');
   });
 
   console.log('[분 표시·배지·지연 반영 (2026-10-04 추가)]');
@@ -324,28 +332,26 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     assert.ok(r.top >= r.nameBottom - 0.5, '역 이름 줄과 겹침 ' + JSON.stringify(r));
     assert.ok(r.h <= 14, '배지 높이 ' + r.h);
   });
-  await t('다음 역 예정이 60초 넘게 지났는데 도착 증거가 없으면 그 역과 이후 시각이 같은 만큼 밀린다(앞당기지 않음, 20초 간격)', async () => {
-    const r = await page.evaluate(() => {
+  await t('다음 역 예정이 60초 넘게 지났는데 도착 증거가 없으면 엔진이 그 역과 이후 시각을 같은 만큼 밀고(앞당기지 않음), 앱은 받아 그린다', async () => {
+    const setup2 = (off) => page.evaluate((off) => {
       const nd = _transitNodeData; const n = new Date(); const nowMin = n.getHours() * 60 + n.getMinutes() + n.getSeconds() / 60;
-      if (!window._pf || !_pf.A) { _pf.A = { sig: _pf.sig, k: 0, td: 0, cand: -1, candN: 0, candAt: 0, backAt: 0, at: 0 }; }
-      _pf.A.sig = _pf.sig; _pf.A.td = 2; window._routeLocked = true; window._metroRouteMode = false;
-      for (let i = 0; i < nd.length; i++) { if (nd[i]) nd[i]._schedMin = nowMin - 2 + (i - 3) * 2.5; }
-      const before = nd.map(x => x && x._schedMin);
-      window._pfBest = { idx: 0, td: 0, conf: 0.2, kind: 'seg', at: Date.now() };
-      window._pfOverdueAt = 0; window._ev.sticky = Date.now() + 1e6; window._ev.cache = null;
-      window._pfOverdueShift(Date.now());
-      const after = nd.map(x => x && x._schedMin);
-      const d3 = after[3] - before[3], d4 = after[4] - before[4], d2 = after[2] - before[2];
-      window._pfOverdueShift(Date.now());       // 20초 안 → 한 번 더 밀리지 않는다
-      const again = nd[3]._schedMin - after[3];
-      // 앞당김 없음: 예정이 아직 안 지났으면 그대로
-      for (let i = 0; i < nd.length; i++) { if (nd[i]) nd[i]._schedMin = nowMin + 3 + (i - 3) * 2.5; }
-      window._pfOverdueAt = 0; const b2 = nd[3]._schedMin; window._pfOverdueShift(Date.now()); const none = nd[3]._schedMin - b2;
-      return { d3, d4, d2, again, none, nowMinErr: Math.abs(after[3] - (nowMin + 0.5)) };
-    });
-    assert.ok(Math.abs(r.d3 - 2.5) < 0.2 && Math.abs(r.d4 - r.d3) < 1e-6, JSON.stringify(r));
-    assert.strictEqual(r.d2, 0, '이미 지난 역은 건드리지 않음');
-    assert.strictEqual(r.again, 0); assert.strictEqual(r.none, 0);
+      window._etaResetEvidence(); window._nodePassMs = {}; window._routeLocked = true; window._metroRouteMode = false; window._htlBoarded = true; window._gpsMaxIdx = 2;
+      for (let i = 0; i < nd.length; i++) { if (nd[i]) { const m = nowMin + off + (i - 3) * 2.5; nd[i]._schedMin = m; nd[i]._plan0 = m; } }
+      // 1·2번 역은 이미 지났다(통과 기록)
+      [1, 2].forEach(i => { if (nd[i]._plan0 < nowMin - 0.2) { window._nodePassMs[i] = Date.now() + (nd[i]._plan0 - nowMin) * 60000; window._etaSrc(i, 'gps'); } });   // 예정대로 지난 역만 통과 기록
+      return nd.map(x => x && x._plan0);
+    }, off);
+    const before = await setup2(-2);
+    await page.evaluate(() => { window._etaSt.lastAt = 0; window._pfOverdueShift(Date.now()); });
+    await etaWait();
+    const r = await page.evaluate((before) => { const nd = _transitNodeData; return { d3: nd[3]._schedMin - before[3], d4: nd[4]._schedMin - before[4], d2: nd[2]._schedMin - before[2] }; }, before);
+    assert.ok(r.d3 > 1.5 && r.d3 < 3.2 && r.d4 > 0.5 && r.d4 <= r.d3 + 0.01 && r.d2 < 0.6, JSON.stringify(r));   // 엔진 'clamp' 방식: 다음 역은 지금+30초로, 그 뒤는 보정 폭이 줄며 따라온다
+    // 앞당김 없음: 예정이 아직 안 지났으면 그대로
+    const before2 = await setup2(3);
+    await page.evaluate(() => { window._etaSt.lastAt = 0; window._pfOverdueShift(Date.now()); });
+    await etaWait();
+    const none = await page.evaluate((b) => _transitNodeData[3]._schedMin - b[3], before2);
+    assert.ok(Math.abs(none) < 0.05, '앞당기지 않음 ' + none);
   });
 
   console.log('[표시 수정]');
@@ -424,9 +430,11 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   const times = () => page.evaluate(() => _transitNodeData.slice(1).map(n => n.arrTime));
   await jumpSetup();
   await page.clock.setSystemTime(new Date('2026-10-06T17:35:48+09:00'));
-  await page.evaluate(() => { window._htlBoarded = true; window._gpsMaxIdx = 1; window._nodePassMs[1] = Date.now(); _recalcArrivalsFrom(1); });
+  await page.evaluate(() => { window._htlBoarded = true; window._gpsMaxIdx = 1; window._nodePassMs[1] = Date.now(); _etaSrc(1, 'board'); _recalcArrivalsFrom(1); });
+  await etaWait();
   await page.clock.setSystemTime(new Date('2026-10-06T17:36:40+09:00'));
-  await page.evaluate(() => { window._gpsMaxIdx = 2; window._nodePassMs[2] = Date.now(); _recalcArrivalsFrom(2); });
+  await page.evaluate(() => { window._gpsMaxIdx = 2; window._nodePassMs[2] = Date.now(); _etaSrc(2, 'cell'); _recalcArrivalsFrom(2); });
+  await etaWait();
   await t('승차 52초 뒤 동막 선행 통과가 찍혀도 출발 시각이 탄 시각(17:35)보다 2분 넘게 앞서지 않는다', async () => {
     const a = await times(); const m = a[0].split(':'); const dep = (+m[0]) * 60 + (+m[1]);
     assert.ok(dep >= 17 * 60 + 33, '출발 ' + a[0] + ' (예전: 17:29)');
@@ -435,18 +443,21 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     const a = await times(); assert.notStrictEqual(a[0], '17:29'); assert.notStrictEqual(a[1], '17:32');
   });
   await page.clock.setSystemTime(new Date('2026-10-06T17:38:05+09:00'));
-  await page.evaluate(() => { window._nodePassMs[2] = Date.now(); _recalcArrivalsFrom(2); });
+  await page.evaluate(() => { window._nodePassMs[2] = Date.now(); _etaSrc(2, 'gps'); _recalcArrivalsFrom(2); });
+  await etaWait();
   await t('동막에 실제로 도착하면 원래 시각(17:35 · 동막 17:38)으로 맞는다', async () => {
     const a = await times(); assert.strictEqual(a[0], '17:35'); assert.strictEqual(a[1], '17:38');
   });
   // 정상 흐름은 그대로: 승차 후 정상 속도 통과는 앵커 하한에 걸리지 않는다
   await jumpSetup();
   await page.clock.setSystemTime(new Date('2026-10-06T17:35:10+09:00'));
-  await page.evaluate(() => { window._htlBoarded = true; window._gpsMaxIdx = 1; window._nodePassMs[1] = Date.now(); _recalcArrivalsFrom(1); });
+  await page.evaluate(() => { window._htlBoarded = true; window._gpsMaxIdx = 1; window._nodePassMs[1] = Date.now(); _etaSrc(1, 'board'); _recalcArrivalsFrom(1); });
+  await etaWait();
   await page.clock.setSystemTime(new Date('2026-10-06T17:38:30+09:00'));
-  await page.evaluate(() => { window._gpsMaxIdx = 2; window._nodePassMs[2] = Date.now(); _recalcArrivalsFrom(2); });
+  await page.evaluate(() => { window._gpsMaxIdx = 2; window._nodePassMs[2] = Date.now(); _etaSrc(2, 'gps'); _recalcArrivalsFrom(2); });
+  await etaWait();
   await t('정상 속도(3분 구간을 3분20초)로 통과하면 시각이 그대로 따라간다(하한 영향 없음)', async () => {
-    const a = await times(); assert.strictEqual(a[1], '17:38', JSON.stringify(a));
+    const a = await times(); assert.ok(a[1] === '17:38' || a[1] === '17:39', '동막은 실제 통과(17:38:30) 시각으로 ' + JSON.stringify(a)); assert.ok(a[0] <= '17:35', '출발 ' + a[0]);
   });
   console.log('[오버레이·혼잡도 카드가 마커(GPS 투영) 위치를 따른다 — 부평인데 동수]');
   await jumpSetup();
@@ -495,7 +506,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
       mk('캠퍼스타운', 18, 15, { isSub: true, lineName: '인천1호선' }), mk('동막', 18, 18, { isSub: true, lineName: '인천1호선' }), mk('동춘', 18, 20, { isSub: true, lineName: '인천1호선' })];
     nodes.forEach((n, i) => { n.lng = 126.9 + 0.0137 * i; });
     _transitNodeData = nodes; window._routeLocked = true; window._metroRouteMode = false; _baseTimeMs = null;
-    window._gpsMaxIdx = 1; window._gpsConfirmIdx = 1; window._nodePassMs = { 1: Date.now() }; window._htlBoarded = true; _recalcArrivalsFrom(1);
+    window._gpsMaxIdx = 1; window._gpsConfirmIdx = 1; window._nodePassMs = { 1: Date.now() }; _etaSrc(1, 'gps'); window._htlBoarded = true; _recalcArrivalsFrom(1);
   });
   await t('버스를 타고 가는 동안 지하철 승차 시각이 시간표의 더 이른 열차(18:13)로 당겨지지 않는다', async () => {
     const a = await times(); assert.strictEqual(a[3], '18:15', JSON.stringify(a)); assert.strictEqual(a[5], '18:20');
@@ -512,7 +523,8 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     window._gpsMaxIdx = 4; window._gpsConfirmIdx = 4; window._nodePassMs = { 1: Date.now() - 700000, 4: Date.now() };
   });
   await page.clock.setSystemTime(new Date('2026-10-06T18:12:40+09:00'));
-  await page.evaluate(() => { window._gpsMaxIdx = 5; window._nodePassMs[5] = Date.now(); _recalcArrivalsFrom(5); });
+  await page.evaluate(() => { window._gpsMaxIdx = 5; window._nodePassMs[5] = Date.now(); _etaSrc(5, 'gps'); _recalcArrivalsFrom(5); });
+  await etaWait();
   await t('환승 열차를 탄 지 50초 만에 다음 역 선행 통과가 찍혀도 그 역 시각이 시각표보다 1분 넘게 앞서지 않는다', async () => {
     const a = await times(); assert.ok(a[4] >= '18:13', JSON.stringify(a)); assert.ok(a[3] >= '18:10', JSON.stringify(a));
   });
@@ -520,24 +532,31 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   console.log('[기준 시각 — 선행 통과 하나에 도착 예정이 끌려가지 않는다(최근 3개 지연값 중 최대)]');
   await jumpSetup();
   await page.clock.setSystemTime(new Date('2026-10-06T17:35:48+09:00'));
-  await page.evaluate(() => { window._htlBoarded = true; window._gpsMaxIdx = 1; window._nodePassMs[1] = Date.now(); _recalcArrivalsFrom(1); });
+  await page.evaluate(() => { window._htlBoarded = true; window._gpsMaxIdx = 1; window._nodePassMs[1] = Date.now(); _etaSrc(1, 'board'); _recalcArrivalsFrom(1); });
+  await etaWait();
   await page.clock.setSystemTime(new Date('2026-10-06T17:38:05+09:00'));
-  await page.evaluate(() => { window._gpsMaxIdx = 2; window._nodePassMs[2] = Date.now(); _recalcArrivalsFrom(2); });
+  await page.evaluate(() => { window._gpsMaxIdx = 2; window._nodePassMs[2] = Date.now(); _etaSrc(2, 'gps'); _recalcArrivalsFrom(2); });
+  await etaWait();
   await page.clock.setSystemTime(new Date('2026-10-06T17:40:00+09:00'));
-  await page.evaluate(() => { window._gpsMaxIdx = 3; window._nodePassMs[3] = Date.now(); _recalcArrivalsFrom(3); });
+  await page.evaluate(() => { window._gpsMaxIdx = 3; window._nodePassMs[3] = Date.now(); _etaSrc(3, 'gps'); _recalcArrivalsFrom(3); });
+  await etaWait();
   await page.clock.setSystemTime(new Date('2026-10-06T17:40:30+09:00'));
-  await page.evaluate(() => { window._gpsMaxIdx = 4; window._nodePassMs[4] = Date.now(); _recalcArrivalsFrom(4); });   // 원인재 선행(계획 17:42 보다 90초 일찍)
+  await page.evaluate(() => { window._gpsMaxIdx = 4; window._nodePassMs[4] = Date.now(); _etaSrc(4, 'cell'); _recalcArrivalsFrom(4); });   // 원인재 선행(기지국)(계획 17:42 보다 90초 일찍)
+  await etaWait();
   await t('정시 운행 중 한 역이 1분 반 일찍 찍혀도 다음 역 시각(신연수 17:43)이 17:41 로 끌려가지 않는다', async () => {
     const a = await times(); assert.ok(a[4] >= '17:43', JSON.stringify(a));
   });
   await jumpSetup();
   await page.evaluate(() => { _transitNodeData.forEach(n => { n.lineName = '7호선'; }); });   // 시간표 스냅(정적 시간표)이 끼어들지 않는 노선으로 — 지연 추종만 본다
   await page.clock.setSystemTime(new Date('2026-10-06T17:35:48+09:00'));
-  await page.evaluate(() => { window._htlBoarded = true; window._gpsMaxIdx = 1; window._nodePassMs[1] = Date.now(); _recalcArrivalsFrom(1); });
+  await page.evaluate(() => { window._htlBoarded = true; window._gpsMaxIdx = 1; window._nodePassMs[1] = Date.now(); _etaSrc(1, 'board'); _recalcArrivalsFrom(1); });
+  await etaWait();
   await page.clock.setSystemTime(new Date('2026-10-06T17:39:00+09:00'));
-  await page.evaluate(() => { window._gpsMaxIdx = 2; window._nodePassMs[2] = Date.now(); _recalcArrivalsFrom(2); });   // 동막 1분 지연
+  await page.evaluate(() => { window._gpsMaxIdx = 2; window._nodePassMs[2] = Date.now(); _etaSrc(2, 'gps'); _recalcArrivalsFrom(2); });   // 동막 1분 지연
+  await etaWait();
   await page.clock.setSystemTime(new Date('2026-10-06T17:41:05+09:00'));
-  await page.evaluate(() => { window._gpsMaxIdx = 3; window._nodePassMs[3] = Date.now(); _recalcArrivalsFrom(3); });   // 동춘 1분 지연
+  await page.evaluate(() => { window._gpsMaxIdx = 3; window._nodePassMs[3] = Date.now(); _etaSrc(3, 'gps'); _recalcArrivalsFrom(3); });   // 동춘 1분 지연
+  await etaWait();
   await t('열차가 실제로 1분 늦으면 그 지연을 따라간다(원인재 17:42 → 17:43)', async () => {
     const a = await times(); assert.strictEqual(a[3], '17:43', JSON.stringify(a));
   });
@@ -546,11 +565,14 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   await jumpSetup();
   await page.evaluate(() => { _transitNodeData.forEach(n => { n.lineName = '7호선'; }); });
   await page.clock.setSystemTime(new Date('2026-10-06T17:35:48+09:00'));
-  await page.evaluate(() => { window._htlBoarded = true; window._gpsMaxIdx = 1; window._nodePassMs[1] = Date.now(); _recalcArrivalsFrom(1); });
+  await page.evaluate(() => { window._htlBoarded = true; window._gpsMaxIdx = 1; window._nodePassMs[1] = Date.now(); _etaSrc(1, 'board'); _recalcArrivalsFrom(1); });
+  await etaWait();
   await page.clock.setSystemTime(new Date('2026-10-06T17:39:30+09:00'));
-  await page.evaluate(() => { window._gpsMaxIdx = 2; window._nodePassMs[2] = Date.now(); _recalcArrivalsFrom(2); });
+  await page.evaluate(() => { window._gpsMaxIdx = 2; window._nodePassMs[2] = Date.now(); _etaSrc(2, 'gps'); _recalcArrivalsFrom(2); });
+  await etaWait();
   await page.clock.setSystemTime(new Date('2026-10-06T17:47:10+09:00'));   // 동춘(3)·원인재(4)는 위치 판단이 건너뜀 → 신연수(5) 통과만 기록, 열차는 4분 넘게 늦음
-  await page.evaluate(() => { window._gpsMaxIdx = 5; window._nodePassMs[5] = Date.now(); _recalcArrivalsFrom(5); });
+  await page.evaluate(() => { window._gpsMaxIdx = 5; window._nodePassMs[5] = Date.now(); _etaSrc(5, 'gps'); _recalcArrivalsFrom(5); });
+  await etaWait();
   await t('통과 기록이 없는 역(3·4)이 앞 역(2)보다 이르거나 뒤 역(5)보다 늦게 나오지 않는다', async () => {
     const a = await times(); const nz = a.slice(1, 7);
     for (let i = 1; i < nz.length; i++) assert.ok(nz[i] >= nz[i - 1], JSON.stringify(a));
@@ -563,9 +585,11 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
       window._nodePassMs = {}; window._htlBoarded = true; window._gpsMaxIdx = 1; return base;
     });
     await page.clock.setSystemTime(new Date('2026-10-06T23:55:00+09:00'));
-    await page.evaluate(() => { window._nodePassMs[1] = Date.now(); _recalcArrivalsFrom(1); });
+    await page.evaluate(() => { window._nodePassMs[1] = Date.now(); _etaSrc(1, 'gps'); _recalcArrivalsFrom(1); });
+    await etaWait();
     await page.clock.setSystemTime(new Date('2026-10-07T00:05:00+09:00'));
-    await page.evaluate(() => { window._gpsMaxIdx = 4; window._nodePassMs[4] = Date.now(); _recalcArrivalsFrom(4); });
+    await page.evaluate(() => { window._gpsMaxIdx = 4; window._nodePassMs[4] = Date.now(); _etaSrc(4, 'gps'); _recalcArrivalsFrom(4); });
+    await etaWait();
     const a = await times(); const toMin = (x) => { const p = x.split(':'); return +p[0] * 60 + +p[1]; };
     const last = toMin(a[a.length - 1]); const nowM = 5;
     assert.ok(((last - nowM + 1440) % 1440) < 120, JSON.stringify(a));     // 도착 예정이 지금으로부터 2시간 안(하루 전/뒤로 튀지 않음)
@@ -579,29 +603,36 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   };
   await connSetup();
   await page.clock.setSystemTime(new Date('2026-10-06T17:30:00+09:00'));   // 예정(17:35)보다 5분 일찍 탐
-  await page.evaluate(() => { window._htlBoarded = true; window._gpsMaxIdx = 1; window._gpsConfirmIdx = 1; window._nodePassMs[1] = Date.now(); _recalcArrivalsFrom(1); });
+  await page.evaluate(() => { window._htlBoarded = true; window._gpsMaxIdx = 1; window._gpsConfirmIdx = 1; window._nodePassMs[1] = Date.now(); _etaSrc(1, 'gps'); _recalcArrivalsFrom(1); });
+  await etaWait();
   await page.clock.setSystemTime(new Date('2026-10-06T17:35:00+09:00'));   // 동춘(예정 17:40)도 5분 일찍
-  await page.evaluate(() => { window._gpsMaxIdx = 3; window._gpsConfirmIdx = 3; window._nodePassMs[3] = Date.now(); _recalcArrivalsFrom(3); });
+  await page.evaluate(() => { window._gpsMaxIdx = 3; window._gpsConfirmIdx = 3; window._nodePassMs[3] = Date.now(); _etaSrc(3, 'gps'); _recalcArrivalsFrom(3); });
+  await etaWait();
   await t('첫 열차를 5분 일찍 타도 환승 뒤 열차(신연수 17:43)는 앞당겨지지 않는다', async () => {
     const a = await times(); assert.ok(a[4] >= '17:43', JSON.stringify(a)); assert.ok(a[2] <= '17:36', '앞 구간은 일찍 간 만큼 앞당겨짐 ' + JSON.stringify(a));
   });
   await connSetup();
   await page.clock.setSystemTime(new Date('2026-10-06T17:38:00+09:00'));   // 예정보다 3분 늦게 탐
-  await page.evaluate(() => { window._htlBoarded = true; window._gpsMaxIdx = 1; window._gpsConfirmIdx = 1; window._nodePassMs[1] = Date.now(); _recalcArrivalsFrom(1); });
+  await page.evaluate(() => { window._htlBoarded = true; window._gpsMaxIdx = 1; window._gpsConfirmIdx = 1; window._nodePassMs[1] = Date.now(); _etaSrc(1, 'gps'); _recalcArrivalsFrom(1); });
+  await etaWait();
   await page.clock.setSystemTime(new Date('2026-10-06T17:43:00+09:00'));
-  await page.evaluate(() => { window._gpsMaxIdx = 3; window._gpsConfirmIdx = 3; window._nodePassMs[3] = Date.now(); _recalcArrivalsFrom(3); });
+  await page.evaluate(() => { window._gpsMaxIdx = 3; window._gpsConfirmIdx = 3; window._nodePassMs[3] = Date.now(); _etaSrc(3, 'gps'); _recalcArrivalsFrom(3); });
+  await etaWait();
   await t('늦게 타면 환승 뒤 열차도 같은 만큼 뒤로 밀린다(지연은 그대로 전파)', async () => {
     const a = await times(); assert.ok(a[4] >= '17:46', JSON.stringify(a));
   });
 
   await connSetup();
   await page.clock.setSystemTime(new Date('2026-10-06T17:35:20+09:00'));
-  await page.evaluate(() => { window._htlBoarded = true; window._gpsMaxIdx = 1; window._gpsConfirmIdx = 1; window._nodePassMs[1] = Date.now(); _recalcArrivalsFrom(1); });
+  await page.evaluate(() => { window._htlBoarded = true; window._gpsMaxIdx = 1; window._gpsConfirmIdx = 1; window._nodePassMs[1] = Date.now(); _etaSrc(1, 'gps'); _recalcArrivalsFrom(1); });
+  await etaWait();
   await page.clock.setSystemTime(new Date('2026-10-06T17:40:10+09:00'));
-  await page.evaluate(() => { window._gpsMaxIdx = 3; window._gpsConfirmIdx = 3; window._nodePassMs[3] = Date.now(); _recalcArrivalsFrom(3); });
+  await page.evaluate(() => { window._gpsMaxIdx = 3; window._gpsConfirmIdx = 3; window._nodePassMs[3] = Date.now(); _etaSrc(3, 'gps'); _recalcArrivalsFrom(3); });
+  await etaWait();
   const before = await times();
   await page.clock.setSystemTime(new Date('2026-10-06T17:52:00+09:00'));   // 환승해서 탄 두 번째 열차가 9분 늦게 출발
-  await page.evaluate(() => { window._gpsMaxIdx = 5; window._gpsConfirmIdx = 5; window._nodePassMs[5] = Date.now(); _recalcArrivalsFrom(5); });
+  await page.evaluate(() => { window._gpsMaxIdx = 5; window._gpsConfirmIdx = 5; window._nodePassMs[5] = Date.now(); _etaSrc(5, 'gps'); _recalcArrivalsFrom(5); });
+  await etaWait();
   await t('환승 뒤 두 번째 열차가 늦어도 이미 지나간 앞 구간 역 시각(캠퍼스타운~원인재)은 바뀌지 않는다', async () => {
     const a = await times(); assert.deepStrictEqual(a.slice(0, 3), before.slice(0, 3), JSON.stringify({ before, a }));
     assert.ok(a[4] >= '17:52', '뒤 구간은 지연을 따라간다 ' + JSON.stringify(a));
@@ -628,18 +659,19 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   const cellLead = async (stampAgoS, markCell) => page.evaluate(([ago, mark]) => {
     const nd = _transitNodeData, td = 3, now = Date.now();
     window._routeLocked = true; window._metroRouteMode = false; window._htlBoarded = true;
-    window._gpsMaxIdx = td; window._gpsConfirmIdx = td - 1; window._nodePassMs = { [td]: now - ago * 1000 }; window._cellStampMs = mark ? { [td]: now - ago * 1000 } : {};
+    window._gpsMaxIdx = td; window._gpsConfirmIdx = td - 1; window._nodePassMs = { [td]: now - ago * 1000 }; window._nodePassPf = {}; window._nodePassSrc = { [td]: mark ? 'cell' : 'gps' }; window._cellStampMs = mark ? { [td]: now - ago * 1000 } : {};
     _pf.sig = 'T1'; _pf.st = [{ _td: 1, name: 'a' }, { _td: 2, name: 'b' }, { _td: td, name: nd[td] ? nd[td].name : 'c' }]; _pf.A = { sig: 'T1', k: 1, td: 2, cand: -1, candN: 0, candAt: 0, backAt: 0, at: 0 };
     _pfAdopt(2, { conf: 0.9, kind: 'seg', delayS: 0, idx: 2 }, now, '앞');
-    return { ms: now - window._nodePassMs[td], left: !!(window._cellStampMs && window._cellStampMs[td]) };
+    return { ms: now - window._nodePassMs[td], left: !!(window._cellStampMs && window._cellStampMs[td]), pf: (window._nodePassPf && window._nodePassPf[td] != null) ? now - window._nodePassPf[td] : null, src: (window._nodePassSrc || {})[td], sent: _etaPayload().passes.filter(x => x.idx === td).map(x => x.src).sort() };
   }, [stampAgoS, markCell]);
-  await t('셀 추정으로 찍힌 통과 시각은 PF 채택 때 채택 시각−35초로 교체된다(stamp 가 100초 앞섰던 경우)', async () => {
-    const r = await cellLead(100, true); assert.ok(Math.abs(r.ms - 35000) < 300, JSON.stringify(r)); assert.strictEqual(r.left, false);
+  await t('셀 추정 stamp 가 있던 역을 PF 가 채택하면 두 기록(셀 원래 값 + PF 채택 시각)을 모두 엔진에 보내고 앱은 값을 고치지 않는다', async () => {
+    const r = await cellLead(100, true); assert.ok(Math.abs(r.ms - 100000) < 300, JSON.stringify(r)); assert.ok(r.pf != null && Math.abs(r.pf) < 300, JSON.stringify(r));
+    assert.deepStrictEqual(r.sent, ['cell', 'pf'], JSON.stringify(r));
   });
-  await t('셀 stamp 가 아닌 통과 시각(GPS·직접 확인)은 PF 채택이 덮어쓰지 않는다', async () => {
-    const r = await cellLead(100, false); assert.ok(Math.abs(r.ms - 100000) < 300, JSON.stringify(r));
+  await t('셀 stamp 가 아닌 통과 시각(GPS·직접 확인)은 PF 채택이 덮어쓰지 않고 PF 값도 따로 보내지 않는다', async () => {
+    const r = await cellLead(100, false); assert.ok(Math.abs(r.ms - 100000) < 300, JSON.stringify(r)); assert.strictEqual(r.pf, null, JSON.stringify(r));
   });
-  await t('셀 stamp 와 PF 채택이 10초 안쪽으로 가까우면 그대로 둔다', async () => {
+  await t('셀 stamp 와 PF 채택이 가까워도 값은 그대로 두고 판단은 엔진이 한다', async () => {
     const r = await cellLead(40, true); assert.ok(Math.abs(r.ms - 40000) < 300, JSON.stringify(r));
   });
   await t('JS 오류가 없다', async () => { assert.deepStrictEqual(errs.filter(e => !/Failed to fetch|NetworkError|Load failed/.test(e)), []); });

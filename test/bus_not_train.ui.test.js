@@ -12,6 +12,7 @@ const MLNG = 1 / 88300;   // 위도 37.5 에서 1m 의 경도(도)
   const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, timezoneId: 'Asia/Seoul', geolocation: { latitude: 37.5, longitude: 126.9 }, permissions: ['geolocation'] });
   const page = await ctx.newPage();
   await page.route('**/*', r => { const u = new URL(r.request().url()); return u.protocol === 'file:' ? r.continue() : r.abort(); });
+  const __em = require('./helpers/eta_mock'); await __em.installEtaMock(page); __em.autoWait(page); global.etaWait = () => __em.etaWait(page);
   await page.clock.install({ time: new Date('2026-10-06T06:00:00+09:00') });
   await page.goto('file://' + html);
   await page.clock.runFor(2500);
@@ -48,7 +49,7 @@ const MLNG = 1 / 88300;   // 위도 37.5 에서 1m 의 경도(도)
   await t('역 옆을 달려 지나가도 승차 확정이 되지 않는다', async () => { assert.strictEqual(s1.boarded, false); });
   await t('승차역 도착으로도 기록되지 않는다', async () => { assert.strictEqual(s1.arrived, false); });
   await t('통과 기록·진행도가 생기지 않는다', async () => { assert.strictEqual(s1.pass, 0); assert.ok(s1.gm <= -1, 'gm=' + s1.gm); });
-  await t('승차역 시각이 이미 떠난 열차(05:58)로 당겨지지 않는다', async () => { assert.strictEqual(s1.arr, '06:18'); });
+  await t('승차역 시각이 이미 떠난 열차(05:58)로 당겨지지 않는다', async () => { assert.strictEqual(s1.arr, '06:18', JSON.stringify(await page.evaluate(() => ({ last: window._etaLast, P: window._etaPayload() })))); });
 
   console.log('[걸어서 승차역에 닿아 열차를 탐]');
   await setup('2026-10-06T06:18:00+09:00');

@@ -16,6 +16,7 @@ const startAt = '2026-10-06T06:19:00+09:00', DWELL = 30;
     const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, timezoneId: 'Asia/Seoul', geolocation: { latitude: 37.5, longitude: 126.9 }, permissions: ['geolocation'] });
     const page = await ctx.newPage(); const errs = []; page.on('pageerror', e => errs.push(e.message));
     await page.route('**/*', r => { const u = new URL(r.request().url()); return u.protocol === 'file:' ? r.continue() : r.abort(); });
+    const __em = require('./helpers/eta_mock'); await __em.installEtaMock(page); __em.autoWait(page); global.etaWait = () => __em.etaWait(page);
     await page.clock.install({ time: new Date('2026-10-06T06:00:00+09:00') });
     await page.goto('file://' + html); await page.clock.runFor(2500);
     const rel = SS.map(x => x - SS[0]), n = ST.length;
