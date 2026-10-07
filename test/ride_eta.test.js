@@ -354,6 +354,22 @@ t('실시간 도착정보: 다음 역을 그 시각으로 맞추고 뒤를 같�
   assert.deepStrictEqual(small.arr, base.arr);
 });
 
+t('승차 전 다음 차 시각(boardNext): 예정보다 늦은 차는 승차역부터 그만큼 민다, 앞당김은 allowEarlier 일 때만', () => {
+  const nodes = scene(), now = at(17, 30, 0), mk = (b) => rideEta({ nowMs: now, nodes: nodes, passes: [], boarded: false, notDeparted: true, boardNext: b });
+  const late = mk({ ms: at(17, 38, 0), src: 'table' });
+  assert.strictEqual(late.arr[1], '17:38'); assert.strictEqual(late.arr[7], '17:50'); assert.strictEqual(late.arr[0], '17:30');
+  assert.strictEqual(mk({ ms: at(17, 32, 0) }).arr[1], '17:35');                                 // 이른 차는 allowEarlier 없으면 무시
+  assert.strictEqual(mk({ ms: at(17, 32, 0), allowEarlier: true }).arr[1], '17:32');
+  assert.strictEqual(mk({ ms: at(18, 30, 0) }).arr[1], '17:35');                                 // 30분 넘는 대기는 반영 안 함
+  assert.strictEqual(mk({ ms: at(18, 30, 0), maxWaitMin: 90 }).arr[1], '18:30');
+});
+t('승차역 시각은 내가 그 역에 닿는 시각(boardArriveMs)보다 이를 수 없다', () => {
+  const nodes = scene(), r = rideEta({ nowMs: at(17, 30, 0), nodes: nodes, passes: [], boarded: false, notDeparted: true, boardArriveMs: at(17, 37, 0) });
+  assert.strictEqual(r.arr[1], '17:37'); assert.strictEqual(r.arr[7], '17:49');
+  const ok = rideEta({ nowMs: at(17, 30, 0), nodes: nodes, passes: [], boarded: false, notDeparted: true, boardArriveMs: at(17, 33, 0) });
+  assert.strictEqual(ok.arr[1], '17:35');
+});
+
 console.log('[Worker 진입점 handleRideEta]');
 (async () => {
   const mkReq = (method, body) => new Request('https://example.test/ride-eta', { method: method, body: body == null ? undefined : (typeof body === 'string' ? body : JSON.stringify(body)), headers: { 'content-type': 'application/json' } });

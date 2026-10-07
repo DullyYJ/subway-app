@@ -61,6 +61,8 @@ var RIDE_ETA_DEFAULTS = {
   platMinOverMin: 1, platGraceMin: 4, platExtraMin: 0.5,
   // 실시간 도착정보(live: 앱이 서울 열린데이터 등에서 받아 보내는 '이 역에 이 시각에 도착')가 현재 계산과 이만큼(초) 이상 어긋나면 그 노드를 그 시각으로 맞추고 뒤를 같은 폭만큼 민다(예전 앱의 _rtArrPoll → _htlShiftFrom).
   liveMinSec: 20, liveMaxSec: 900,
+  // 다음 차 시각(boardNext)을 반영하는 최대 대기(분) — 첫차 대기·운행 종료 같은 값은 반영하지 않는다(예전 앱 _maxWait)
+  boardMaxWaitMin: 30,
   // 표시 반올림: 'round'(가장 가까운 분) | 'floor'(내림 — 예전 앱)
   rounding: 'round'
 };
@@ -127,20 +129,33 @@ function rideEta(input) {
   if (input.notDeparted === true || input.boarded === false) {
     planOnly();
     notes.push('승차 전: 승차역 이후 시각은 예정 그대로');
-    // 기존 _htlSanityCheck: 예정 승차 시각이 '지금'보다 한참 지났으면(이미 떠난 차를 가리킴) 경로 전체를 지금에 맞춘다.
-    if (boardIdx >= 0 && valid[boardIdx]) {
-      var staleMin = (nowMs - planMs[boardIdx]) / 60000;
+    var bOk = boardIdx >= 0 && valid[boardIdx], shiftFrom = function (from, ms) { for (var q = from; q < n; q++) if (out[q] != null) out[q] += ms; };
+    // (1) 실제 다음 차 시각(예전 앱 _applyRealBoardTime/applyDelay): 앱이 버스 도착정보·실시간 지하철·시각표에서 가져온 '내가 탈 수 있는 다음 차의 출발 시각'.
+    //     열차는 이 시각에 오므로 승차역부터 그 시각으로 맞춘다(허용 범위 안일 때만 — allowEarlier 면 앞당김도, 아니면 늦춤만).
+    if (bOk && input.boardNext && isFinite(+input.boardNext.ms)) {
+      var bnx = input.boardNext, wN = (+bnx.ms - planMs[boardIdx]) / 60000, maxW = (bnx.maxWaitMin != null && isFinite(+bnx.maxWaitMin)) ? +bnx.maxWaitMin : O.boardMaxWaitMin;
+      var okN = bnx.allowEarlier ? (Math.abs(wN) >= 1 && wN <= maxW && wN >= -180) : (wN > 0.5 && wN <= maxW);
+      if (okN) { shiftFrom(boardIdx, wN * 60000); notes.push('다음 차 시각 ' + Math.round(wN * 10) / 10 + '분 반영(' + (bnx.src || '?') + ')'); }
+    }
+    // (2) 승차역 시각은 내가 그 역에 닿는 시각보다 이를 수 없다(예전 앱 _htlBoardFixWait 불변식)
+    if (bOk && isFinite(+input.boardArriveMs)) {
+      var dA = (+input.boardArriveMs - out[boardIdx]) / 60000;
+      if (dA > 0.02) { shiftFrom(boardIdx, dA * 60000); notes.push('승차역 시각을 내가 닿는 시각(' + Math.round(dA * 10) / 10 + '분 뒤)에 맞춤'); }
+    }
+    // (3) 예정 승차 시각이 '지금'보다 한참 지났으면(이미 떠난 차를 가리킴) 경로 전체를 지금에 맞춘다(예전 앱 _htlSanityCheck 의 40분)
+    if (bOk) {
+      var staleMin = (nowMs - out[boardIdx]) / 60000;
       if (staleMin > O.staleShiftMin) {
-        for (k = 0; k < n; k++) if (out[k] != null) out[k] += staleMin * 60000;
+        shiftFrom(0, staleMin * 60000);
         notes.push('승차 전 예정이 ' + Math.round(staleMin) + '분 지나 경로 전체를 지금에 맞춤');
       }
     }
-    // 승강장 대기(예전 앱 _platformLateShift): 열차가 늦는 것으로 보고 승차역부터 시각을 민다. 유예(platGraceMin)가 끝나면 '놓침' 판단은 앱의 몫이라 계산하지 않는다.
-    if (input.platformWaiting === true && boardIdx >= 0 && valid[boardIdx]) {
-      var overP = (nowMs - planMs[boardIdx]) / 60000;
-      if (overP >= O.platMinOverMin && overP < O.platGraceMin) {
+    // (4) 승강장 대기(예전 앱 _platformLateShift): 열차가 늦는 것으로 보고 승차역부터 시각을 민다. 처음 예정 기준 유예(platGraceMin)가 끝나면 '놓침' 판단은 앱의 몫이라 계산하지 않는다.
+    if (input.platformWaiting === true && bOk) {
+      var overP = (nowMs - out[boardIdx]) / 60000, origP = (nowMs - planMs[boardIdx]) / 60000;
+      if (overP >= O.platMinOverMin && origP < O.platGraceMin) {
         var addP = (overP + O.platExtraMin) * 60000;
-        for (k = boardIdx; k < n; k++) if (out[k] != null) out[k] += addP;
+        shiftFrom(boardIdx, addP);
         notes.push('승강장 대기: 예정 출발 ' + Math.round(overP * 60) + '초 지남 → 열차 지연으로 보고 승차역 이후 +' + Math.round(addP / 1000) + '초');
       }
     }
