@@ -7,6 +7,7 @@ T=$(mktemp -d)
 node patch_dijkstra.js $IN $T/a.js
 node patch_access.js $T/a.js $T/b.js
 node patch_addbus_memo.js $T/b.js $T/c.js
-node patch_version.js $T/c.js $1
+node patch_ldcache.js $T/c.js $T/d.js
+node patch_version.js $T/d.js $1
 cp $1 $1.chk.mjs && node --check $1.chk.mjs && rm -f $1.chk.mjs
 echo built $1 $(wc -c < $1)

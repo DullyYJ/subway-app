@@ -247,3 +247,9 @@
 - 로컬(따뜻한 상태) 요청당: 서울역→수원 461→217ms, 강남→수원 296→164, 단거리 56→15. 탐색만 노드당 9.9→4.0µs.
 - 배포본 `route-v2-worker-with-ride-eta.js`(엔진 버전 `route-v2-2026-10-07s1`). 배포 후 같은 70건으로 실측 비교 필요(이전: 브라우저 측정 중앙 767ms·p90 1570ms, 왕복 ≈0.3~0.4초 포함).
 - 아직 안 한 것: 콜드 스타트(격리 첫 요청, JIT·KV 읽기), 장거리(KTX 등) 구간의 ld 처리 시간(로컬 재현 데이터 없음 — 배포 후 실측으로 판단), 앱의 '빠른 경로 먼저' 분할(전체가 1초 안이면 불필요).
+
+### 2026-10-07 밤(3) — 장거리(ld) 캐시 콜드 I/O 단축 (s2, 재배포 필요, 결과 동일)
+- 원인: live=0 일 때 `ldTagoCached` 가 KV 캐시 미스마다 `ld:`/`ldn:` 병렬 읽기 → 다시 `ld2:` 직렬 읽기를 하며(후보 열차·구간마다) 콜드 격리에서 ldTrainMs ≈ 830~890ms.
+- 패치 `tools/route-speed/patch_ldcache.js`: ①`ld:`·`ldn:`·`ld2:` 3개를 한 번에 병렬 읽기(+`cacheTtl:60`, `ld2:` 중복 읽기 제거) ②`live=0` 에서 KV 미스가 확인된 키는 격리 안에서 60초간 KV 재조회 생략(별도 `LD_MISS` 메모, `LD_TAGO_NEG` 와 분리 → 이후 live 호출이 막히지 않음). 반환값(items/via)은 기존과 동일 — `ld_cache_test.mjs` 모의 KV 로 5개 시나리오 확인(미스 경로 2단→1단, 두 번째 호출 읽기 0).
+- 엔진 버전 `route-v2-2026-10-07s2`. kric(KV 캐싱)는 D1 쿼리 자체가 ~25ms 라 이득이 불확실해 보류.
+- 빌드: `IN=.../route-v2-worker.mjs tools/route-speed/make.sh out.js` (dijkstra→access→addbus→ldcache→version).
