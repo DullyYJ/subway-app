@@ -314,6 +314,46 @@ console.log('[시뮬 회귀 — test/fuzz/ride_eta_sim.js 를 짧게 돌려 오�
   });
 })();
 
+console.log('[앱에서 옮겨 온 계산: 연착·승강장 대기·실시간 도착정보]');
+t('연착: 다음 역 예정 시각이 지났는데 증거가 없으면 그 역은 지금보다 이르게 나오지 않는다(남은 시간이 0분으로 굳지 않음)', () => {
+  const nodes = scene();
+  const base = run(nodes, [P(1, 17, 35, 40, 'board'), P(2, 17, 38, 20)], at(17, 38, 30));
+  const late = run(nodes, [P(1, 17, 35, 40, 'board'), P(2, 17, 38, 20)], at(17, 41, 10));       // 동춘(예정 17:40)을 지났는데 3번째 역 증거가 없다
+  assert.ok(hm(late.arr[3]) >= hm('17:41'), late.arr[3]);
+  assert.ok(late.notes.some(x => /연착/.test(x)), late.notes.join(' | '));
+  assert.ok(hm(base.arr[3]) <= hm('17:40'), '증거 전엔 밀리지 않는다 ' + base.arr[3]);
+});
+t('연착은 상태가 없다: 같은 입력을 두 번 불러도 같은 결과(누적해서 밀리지 않음)', () => {
+  const nodes = scene(), ps = [P(1, 17, 35, 40, 'board'), P(2, 17, 38, 20)];
+  assert.deepStrictEqual(run(nodes, ps, at(17, 42, 0)).arr, run(nodes, ps, at(17, 42, 0)).arr);
+});
+t('연착 보정은 뒤 역 전체를 밀지 않는다(지하에서 역을 건너뛴 경우 오인 방지): 뒤 역은 앞 역보다 이르지 않게만', () => {
+  const nodes = scene(), ps = [P(1, 17, 35, 40, 'board'), P(2, 17, 38, 20)];
+  const quiet = run(nodes, ps, at(17, 38, 40)), late = run(nodes, ps, at(17, 41, 30));
+  assert.ok(hm(late.arr[7]) - hm(quiet.arr[7]) <= 2, quiet.arr[7] + ' → ' + late.arr[7]);
+});
+t('승강장 대기: 예정 출발이 1분 넘게 지났으면 승차역부터 지연으로 밀고, 대기 중이 아니면 밀지 않는다', () => {
+  const nodes = scene(), now = at(17, 37, 0);                        // 예정 승차 17:35 → 2분 지남
+  const w = rideEta({ nowMs: now, nodes: nodes, passes: [], boarded: false, notDeparted: true, platformWaiting: true });
+  const n = rideEta({ nowMs: now, nodes: nodes, passes: [], boarded: false, notDeparted: true });
+  assert.ok(hm(w.arr[1]) >= hm('17:37'), w.arr[1]); assert.strictEqual(n.arr[1], '17:35');
+  assert.ok(hm(w.arr[7]) - hm(n.arr[7]) >= 2, w.arr[7] + ' vs ' + n.arr[7]);
+  assert.strictEqual(w.arr[0], n.arr[0]);                              // 승차역 앞(도보)은 그대로
+});
+t('승강장 대기 유예(4분)가 끝나면 밀지 않는다(놓침 판단은 앱의 몫)', () => {
+  const nodes = scene(), r = rideEta({ nowMs: at(17, 40, 30), nodes: nodes, passes: [], boarded: false, notDeparted: true, platformWaiting: true });
+  assert.strictEqual(r.arr[1], '17:35');
+});
+t('실시간 도착정보: 다음 역을 그 시각으로 맞추고 뒤를 같은 폭만큼 민다(앞 역은 그대로)', () => {
+  const nodes = scene(), ps = [P(1, 17, 35, 40, 'board'), P(2, 17, 38, 20)], now = at(17, 38, 30);
+  const base = run(nodes, ps, now);
+  const lv = run(nodes, ps, now, { live: [{ idx: 3, ms: at(17, 43, 0) }] });                  // 동춘을 17:43 에 도착한다고 알려줌(계산은 ≈17:40)
+  assert.ok(near(lv.arr[3], '17:43', 0), lv.arr[3]); assert.strictEqual(lv.arr[2], base.arr[2]);
+  assert.ok(hm(lv.arr[7]) - hm(base.arr[7]) >= 2, base.arr[7] + ' → ' + lv.arr[7]);
+  const small = run(nodes, ps, now, { live: [{ idx: 3, ms: at(17, 40, 5) }] });               // 차이가 20초 미만이면 무시
+  assert.deepStrictEqual(small.arr, base.arr);
+});
+
 console.log('[Worker 진입점 handleRideEta]');
 (async () => {
   const mkReq = (method, body) => new Request('https://example.test/ride-eta', { method: method, body: body == null ? undefined : (typeof body === 'string' ? body : JSON.stringify(body)), headers: { 'content-type': 'application/json' } });

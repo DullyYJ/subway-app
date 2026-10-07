@@ -53,6 +53,14 @@ var RIDE_ETA_DEFAULTS = {
   snapBackMin: 2, snapLateMaxMin: 1.5, snapCandMaxMin: 6, snapEps: 0.5, snapOldW: 0.4,
   // 승차 전인데 예정 승차 시각이 '지금'보다 이만큼(분) 넘게 지났으면 경로 전체를 지금에 맞춘다(기존 _htlSanityCheck 의 40분)
   staleShiftMin: 40,
+  // ★ 2026-10-07 (앱의 시각 계산을 엔진으로 옮김 — 'overdue' = 예전 앱의 _pfOverdueShift / _htlDelayTrack):
+  //   앵커(마지막 통과) 뒤 첫 정차 노드의 예정 시각이 이만큼(초) 지났는데 도착 증거가 없으면 그만큼 늦는 것이다 → 그 노드를 '지금 + overdueExtraMin 분'으로 미루고 뒤를 같은 폭만큼 민다(최대 overdueMaxMin 분).
+  //   엔진은 상태가 없어 매번 같은 식으로 다시 계산하므로 누적되지 않는다.
+  overdueSec: 60, overdueMaxMin: 15, overdueExtraMin: 0.5, overdueGain: 1, overdueMode: 'clamp',
+  // 승강장에서 열차를 기다리는 중(platformWaiting): 예정 출발이 platMinOverMin 분 넘게 지났고 platGraceMin 분 안이면 늦는 것으로 보고 승차역부터 '지금 + platExtraMin 분'으로 민다(예전 앱의 _platformLateShift).
+  platMinOverMin: 1, platGraceMin: 4, platExtraMin: 0.5,
+  // 실시간 도착정보(live: 앱이 서울 열린데이터 등에서 받아 보내는 '이 역에 이 시각에 도착')가 현재 계산과 이만큼(초) 이상 어긋나면 그 노드를 그 시각으로 맞추고 뒤를 같은 폭만큼 민다(예전 앱의 _rtArrPoll → _htlShiftFrom).
+  liveMinSec: 20, liveMaxSec: 900,
   // 표시 반올림: 'round'(가장 가까운 분) | 'floor'(내림 — 예전 앱)
   rounding: 'round'
 };
@@ -125,6 +133,15 @@ function rideEta(input) {
       if (staleMin > O.staleShiftMin) {
         for (k = 0; k < n; k++) if (out[k] != null) out[k] += staleMin * 60000;
         notes.push('승차 전 예정이 ' + Math.round(staleMin) + '분 지나 경로 전체를 지금에 맞춤');
+      }
+    }
+    // 승강장 대기(예전 앱 _platformLateShift): 열차가 늦는 것으로 보고 승차역부터 시각을 민다. 유예(platGraceMin)가 끝나면 '놓침' 판단은 앱의 몫이라 계산하지 않는다.
+    if (input.platformWaiting === true && boardIdx >= 0 && valid[boardIdx]) {
+      var overP = (nowMs - planMs[boardIdx]) / 60000;
+      if (overP >= O.platMinOverMin && overP < O.platGraceMin) {
+        var addP = (overP + O.platExtraMin) * 60000;
+        for (k = boardIdx; k < n; k++) if (out[k] != null) out[k] += addP;
+        notes.push('승강장 대기: 예정 출발 ' + Math.round(overP * 60) + '초 지남 → 열차 지연으로 보고 승차역 이후 +' + Math.round(addP / 1000) + '초');
       }
     }
     return _reFinish(out, tz, O, -1, 0, notes, n, nowMs);
@@ -233,6 +250,45 @@ function rideEta(input) {
     var span = planMs[hi] - planMs[lo], f = span > 0 ? (planMs[k] - planMs[lo]) / span : 0.5;
     out[k] = tLo + (tHi - tLo) * Math.max(0, Math.min(1, f));
     interp++;
+  }
+  // (마) 실시간 도착정보: 앵커 뒤 가장 가까운 노드 하나를 그 시각으로 맞추고 뒤를 같은 폭만큼 민다(앞 구간·앞 역은 건드리지 않는다)
+  var liveIn = input.live || [], liveBest = null;
+  for (ii = 0; ii < liveIn.length; ii++) {
+    var LV = liveIn[ii];
+    if (!LV || !isFinite(+LV.idx) || !isFinite(+LV.ms) || +LV.idx <= anchor.idx || +LV.idx >= n || out[+LV.idx] == null) continue;
+    if (!liveBest || +LV.idx < +liveBest.idx) liveBest = LV;
+  }
+  if (liveBest) {
+    var dLv = (+liveBest.ms - out[+liveBest.idx]) / 1000;
+    if (Math.abs(dLv) >= O.liveMinSec && Math.abs(dLv) <= O.liveMaxSec) {
+      for (k = +liveBest.idx; k < n; k++) if (out[k] != null) out[k] += dLv * 1000;
+      notes.push('실시간 도착정보 ' + (nodes[+liveBest.idx].name || liveBest.idx) + ': ' + (dLv > 0 ? '+' : '') + Math.round(dLv) + '초 반영');
+    }
+  }
+  // (바) 연착: 앵커 뒤 첫 정차 노드의 예정 시각이 지났는데 도착 증거가 없다
+  var nxO = -1;
+  for (k = anchor.idx + 1; k < n; k++) if (valid[k] && _reIsTransit(nodes[k]) && out[k] != null) { nxO = k; break; }
+  if (nxO >= 0) {
+    var overO = (nowMs - out[nxO]) / 1000;
+    if (overO >= O.overdueSec) {
+      if (O.overdueMode === 'shift') {
+        // 뒤 시각을 통째로 민다(예전 앱 방식). 위치 판단이 지하에서 역을 건너뛴 경우(증거 없음 ≠ 연착)에도 밀어 버려 시뮬에서 정확도가 나빠진다 → 기본값 아님
+        var addO = Math.min(O.overdueMaxMin, (overO / 60 + O.overdueExtraMin) * O.overdueGain) * 60000;
+        for (k = nxO; k < n; k++) if (out[k] != null) out[k] += addO;
+        notes.push('연착: ' + (nodes[nxO].name || nxO) + ' 예정 ' + Math.round(overO) + '초 지났는데 도착 증거 없음 → 이후 +' + Math.round(addO / 1000) + '초');
+      } else {
+        // 증거 없이 예정 시각이 지났다고 이미 도착한 것은 아니다(남은 시간이 0분으로 굳지 않게): 그 노드만 '지금 + overdueExtraMin 분'으로 올리고,
+        // 뒤 노드는 '앞 노드 + 예정 간격의 minRunRatio' 보다 이르지 않게만 한다(밀 필요가 있을 때만 민다). 증거 없는 통과를 연착으로 오인해 뒤 전체를 미는 일이 없다.
+        var floorO = nowMs + O.overdueExtraMin * 60000, prevO = null, movedO = 0;
+        for (k = nxO; k < n; k++) {
+          if (out[k] == null) continue;
+          var lo = (k === nxO) ? floorO : (prevO == null ? -Infinity : prevO.t + O.minRunRatio * (planMs[k] - prevO.p));
+          if (out[k] < lo) { out[k] = lo; movedO++; }
+          prevO = { t: out[k], p: planMs[k] };
+        }
+        notes.push('연착 보정: ' + (nodes[nxO].name || nxO) + ' 예정 ' + Math.round(overO) + '초 지났는데 도착 증거 없음 → 지금 + ' + O.overdueExtraMin + '분으로 올림(' + movedO + '곳)');
+      }
+    }
   }
   if (frozenTail) notes.push('앞 구간 마지막 통과 뒤 역 ' + frozenTail + '곳: 그 구간 자신의 지연 수준으로 고정');
   if (interp) notes.push('통과 기록 없는 역 ' + interp + '곳: 앞뒤 기록 사이를 예정 비율로 나눔');

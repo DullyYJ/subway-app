@@ -116,7 +116,12 @@ for (var sc = 0; sc < N; sc++) {
   var firstLeg = legs[0];
   var ttIn = (!process.env.NOTT && firstLeg.ttTimes) ? { boardIdx: firstLeg.start, times: firstLeg.ttTimes } : null;
   var passes = [], boarded = false, rec = [];
-  events.forEach(function (ev) {
+  // TICKS=1 : 사건 사이(사건 뒤 40초·100초)에도 엔진에 물어 본다 — 통과 증거가 새로 없는 '조용한 구간'의 정확도(연착·실시간 도착정보 등)를 재기 위해
+  var samples = events.map(function (ev) { return { at: ev.at, ev: ev }; });
+  if (process.env.TICKS) events.forEach(function (ev, k) { var nx = events[k + 1] ? events[k + 1].at : destTruth; [40, 100].forEach(function (dt) { if (ev.at + dt < nx - 5 && ev.at + dt < destTruth) samples.push({ at: ev.at + dt, ev: { at: ev.at + dt, type: 'tick', idx: ev.idx, lead: false } }); }); });
+  samples.sort(function (x, y) { return x.at - y.at; });
+  samples.forEach(function (smp) {
+    var ev = smp.ev;
     var nowMs = MID + ev.at * 1000;
     if (ev.type === 'board') { boarded = true; passes.push({ idx: ev.idx, ms: nowMs, src: 'board' }); }
     else if (ev.type === 'adopt') passes.push({ idx: ev.idx, ms: nowMs, src: ev.lead ? 'cell' : 'pf' });
