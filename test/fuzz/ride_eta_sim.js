@@ -6,6 +6,8 @@
 //   OPTS='{"pfLagSec":0}' : 엔진 옵션(input.opts)을 덮어쓴다(민감도 점검용)
 //   MOVE=0.5      : 승차 확정 때 '움직임 시작' 증거(src move)를 보낼 수 있는 비율(기본 0 = 기존 모델)
 //   추가 변수(ANOM): halt(구간 중 정차·큰 지연) slowseg(서행) express(중간부터 일찍) traffic(버스 흔들림) falsepf(엉뚱한 역 채택) dupe(중복 채택) restart(앱 재시작=증거 소실) offline(통신 끊김=마지막 값 유지) badmove(MOVE 증거 오인, MOVE 와 함께)
+//   LIVE=p        : 시나리오의 p 비율에서 실시간 도착정보(live) 입력을 보낸다(LIVEBAD=1: 엉뚱한 열차 35%)
+//   LIVEC=min|all : (LIVE 와 함께) 도착정보를 여러 열차 후보로 만든다 — min: 가장 빨리 오는 한 대만(지금 앱), all: 후보 전부(엔진이 내 열차를 고른다)
 //   NOTT=1        : 정적 시간표(timetable) 입력을 보내지 않는다
 //
 // 이 파일의 '진실 모델'과 '사건 모델'은 브라우저 시뮬(fuzz3.js, Playwright + www/index.html)과 같은 시드·같은 난수 호출 순서를 쓴다 →
@@ -23,6 +25,7 @@ var fs = require('fs'), path = require('path');
 var N = +(process.argv[2] || 80), SEED = +(process.argv[3] || 63);
 var ANOM = process.env.ANOM || '';
 var MOVE = +(process.env.MOVE || 0);
+var LIVE = +(process.env.LIVE || 0);
 var ENGINE = process.env.ENGINE || path.join(__dirname, '..', '..', 'engine', 'ride-eta.js');
 var E = require(ENGINE);
 var EXTRA_OPTS = process.env.OPTS ? JSON.parse(process.env.OPTS) : null;
@@ -170,6 +173,38 @@ for (var sc = 0; sc < N; sc++) {
     var input = { nowMs: nowMs, nodes: inNodes, passes: passes.slice(), boarded: boarded, notDeparted: false };
     if (ttIn) input.timetable = ttIn;
     if (EXTRA_OPTS || process.env.ROUND) input.opts = Object.assign({}, EXTRA_OPTS || {}, process.env.ROUND ? { rounding: process.env.ROUND } : {});
+    // LIVE=p : 시나리오의 p 비율에서 앱이 '실시간 도착정보'(지금 위치 앞 1~2개 역의 도착 시각)를 보낸다. 별도 난수라 다른 시나리오는 그대로다.
+    //   값 = 진짜 도착 + 오차(sd 25초) + 자료 나이(−40~+10초); 12%는 엉뚱한 열차(뒤차: +2~8분 / 앞차: −2~5분)를 집은 값; 한 번 부를 때 85% 만 받는다. LIVEBAD=1 이면 엉뚱한 열차 비율 35%.
+    if (LIVE > 0) {
+      var lr = rng(SEED * 7919 + sc * 97 + 5);
+      if (lr() < LIVE) {
+        var lrr = rng(SEED * 6007 + sc * 41 + Math.round(ev.at) * 5 + 9), liveArr = [], tiL = -1;
+        for (var zL = 0; zL < trIdx.length; zL++) if (truth[trIdx[zL]] <= ev.at) tiL = trIdx[zL];
+        if (boarded && lrr() < 0.85) {
+          var cntL = 0;
+          for (var jL = tiL + 1; jL < nodes.length && cntL < 2; jL++) {
+            if (truth[jL] == null || !nodes[jL].isSub) continue;
+            var lgJ = legs.findIndex(function (lg) { return jL >= lg.start && jL <= lg.end; }); var lgT = legs.findIndex(function (lg) { return tiL >= lg.start && tiL <= lg.end; });
+            if (lgJ !== lgT) break;
+            var gs = 0; for (var qq = 0; qq < 6; qq++) gs += lrr(); gs = (gs - 3) * 0.82 * 25;     // ≈N(0, 25초)
+            var vL = truth[jL] + gs + (-40 + lrr() * 50);
+            if (lrr() < (process.env.LIVEBAD ? 0.35 : 0.12)) vL = truth[jL] + (lrr() < 0.7 ? (120 + lrr() * 360) : -(120 + lrr() * 180));
+            if (process.env.LIVEC) {      // LIVEC=min|all : 도착정보가 여러 열차(앞차·내 열차·뒤차)로 온다. min = 앱이 가장 빨리 오는 한 대만 보냄(지금 앱), all = 전부 보냄
+              var candL = [];
+              var vU = truth[jL] + gs + (-40 + lrr() * 50);
+              if (lrr() < 0.88) candL.push(vU);
+              if (lrr() < 0.9) candL.push(vU + 120 + lrr() * 360);                  // 뒤차(배차간격 2~8분)
+              if (lrr() < 0.25) candL.push(vU - (90 + lrr() * 210));                // 아직 이 역에 못 닿은 앞차
+              candL.sort(function (x1, x2) { return x1 - x2; });
+              if (candL.length) { if (process.env.LIVEC === 'min') liveArr.push({ idx: jL, ms: MID + candL[0] * 1000 }); else candL.forEach(function (cv) { liveArr.push({ idx: jL, ms: MID + cv * 1000 }); }); }
+              cntL++; continue;
+            }
+            liveArr.push({ idx: jL, ms: MID + vL * 1000 }); cntL++;
+          }
+        }
+        if (liveArr.length && !(offlineNow)) input.live = liveArr;
+      }
+    }
     var r;
     if (process.env.DUMP && process.env.DUMP === sc + ':' + rec.length) fs.writeFileSync(process.env.DUMP_FILE || '/dev/stderr', JSON.stringify(input));   // 디버그: 그 사건의 엔진 입력을 그대로 저장
     try { r = (offlineNow && lastR) ? lastR : E.rideEta(input); if (!offlineNow) lastR = r; } catch (e) { errs.push(String(e && e.stack || e).split('\n').slice(0, 3).join(' | ')); rec.push({ err: String(e && e.message) }); return; }

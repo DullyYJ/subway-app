@@ -13676,22 +13676,23 @@ async function _rtArrPoll(){
     var items = (raw && raw.realtimeArrivalList) ? raw.realtimeArrivalList : null;
     if(!items || !items.length) return;
 
-    var best = null;
+    var secs = [];
     items.forEach(function(t){
       if(!t || String(t.subwayId || '') !== sid) return;
       var sec = parseInt(t.barvlDt, 10);
       if(!isFinite(sec) || sec <= 0) return;                 // 유효한 남은 시간만
       var fwd = _rtArrForward(leg.lineName, nNd.name, alightNd ? alightNd.name : '', t.bstatnNm);
       if(fwd === false) return;                              // 반대 방향 열차 제외
-      if(!best || sec < best.sec) best = { sec: sec, t: t };
+      secs.push(sec);
     });
-    if(!best) return;
+    if(!secs.length) return;
+    secs.sort(function(a, b){ return a - b; });
 
-    // 실제 남은 시간 → '그 역에 그 시각에 도착' 증거로 엔진에 보낸다(예정과의 어긋남 판단·뒤 시각 보정은 엔진 — 예전엔 여기서 차이를 재고 _htlShiftFrom 으로 밀었다)
-    var realMs = Date.now() + best.sec * 1000;
-    window._etaLive = [{ idx: nIdx, ms: realMs, at: Date.now() }];
+    // 이 역에 오는 열차들의 남은 시간 → '그 역에 그 시각에 도착' 후보로 전부 엔진에 보낸다(앞차·내 열차·뒤차 중 어느 것이 내 열차인지, 예정과의 어긋남 판단·뒤 시각 보정은 엔진 — 앱은 고르지 않는다)
+    var nowL = Date.now();
+    window._etaLive = secs.slice(0, 4).map(function(sc){ return { idx: nIdx, ms: nowL + sc * 1000, at: nowL }; });
     window._rtFreshUntil = Date.now() + 45000;               // 실시간 우선 구간
-    console.log('[RT도착] ' + leg.lineName + ' ' + nNd.name + ' 실제 ' + best.sec + '초 후 → 엔진에 전달');
+    console.log('[RT도착] ' + leg.lineName + ' ' + nNd.name + ' 후보 ' + secs.slice(0, 4).join('/') + '초 후 → 엔진에 전달');
     _etaRequest('live');
   }catch(e){ /* 조용히 폴백 */ }
 }

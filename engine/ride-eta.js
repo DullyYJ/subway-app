@@ -70,6 +70,8 @@ var RIDE_ETA_DEFAULTS = {
   platMinOverMin: 1, platGraceMin: 4, platExtraMin: 0.5,
   // 실시간 도착정보(live: 앱이 서울 열린데이터 등에서 받아 보내는 '이 역에 이 시각에 도착')가 현재 계산과 이만큼(초) 이상 어긋나면 그 노드를 그 시각으로 맞추고 뒤를 같은 폭만큼 민다(예전 앱의 _rtArrPoll → _htlShiftFrom).
   liveMinSec: 20, liveMaxSec: 900,
+  // 실시간 도착정보를 구간 지연 필터의 측정값으로 쓴다(liveHmm=1): 표준편차 liveSdSec 의 가우시안 + 엉뚱한 열차를 집었을 확률 epsLive 의 이상치 혼합.
+  liveHmm: 1, liveSdSec: 30, epsLive: 0.35,
   // 다음 차 시각(boardNext)을 반영하는 최대 대기(분) — 첫차 대기·운행 종료 같은 값은 반영하지 않는다(예전 앱 _maxWait)
   boardMaxWaitMin: 30,
   // 표시 반올림: 'round'(가장 가까운 분) | 'floor'(내림 — 예전 앱)
@@ -228,12 +230,28 @@ function rideEta(input) {
   //     → 이미 끝난 앞 구간 역 시각은 뒤 구간의 지연·일찍 도착에 끌려가지 않는다(앞 구간 고정).
   var legsMap = {}, legKeys = [];
   for (ii = 0; ii < ps.length; ii++) { var lg = legOf[ps[ii].idx]; if (!legsMap[lg]) { legsMap[lg] = []; legKeys.push(lg); } legsMap[lg].push(ps[ii]); }
-  var est = {}, legLevel = {};
+  var est = {}, legLevel = {}, liveUsed = {};
   for (ii = 0; ii < legKeys.length; ii++) {
     var L = legKeys[ii];
     var prior = O.priorDelayMin;
     if (ii > 0) prior = Math.max(O.priorDelayMin, legLevel[legKeys[ii - 1]]);     // 앞 구간이 늦으면 환승 열차도 늦다(지연 전파)
-    var m = _reLegModel(legsMap[L], planMs, O, prior, snapIdx >= 0 && legOf[snapIdx] === L ? snap : null, notes);
+    var liveL = null;
+    if (O.liveHmm && ii === legKeys.length - 1) {          // 마지막(현재) 구간에서 아직 안 지난 역의 실시간 도착정보만 지연 필터에 넣는다
+      liveL = [];
+      var lastPs = legsMap[L][legsMap[L].length - 1].idx, liveSeen = {};
+      for (var lj = 0; lj < (input.live || []).length; lj++) {
+        var LV0 = input.live[lj];
+        if (!LV0 || !isFinite(+LV0.idx) || !isFinite(+LV0.ms)) continue;
+        var li0 = +LV0.idx;
+        if (li0 <= lastPs || li0 >= n || !valid[li0] || !_reIsTransit(nodes[li0]) || legOf[li0] !== L) continue;
+        // 같은 역에 도착 예정 열차가 여러 대면(앞차·내 열차·뒤차) 모두 후보로 넘긴다 — 어느 것이 내 열차인지는 지연 필터가 통과 기록과 맞춰 가른다
+        if (!liveSeen[li0]) { liveSeen[li0] = { idx: li0, ms: [] }; liveL.push(liveSeen[li0]); }
+        if (liveSeen[li0].ms.length < 4) liveSeen[li0].ms.push(+LV0.ms);
+      }
+      liveL.sort(function (a, b) { return a.idx - b.idx; });
+      for (lj = 0; lj < liveL.length; lj++) liveUsed[liveL[lj].idx] = 1;
+    }
+    var m = _reLegModel(legsMap[L], planMs, O, prior, snapIdx >= 0 && legOf[snapIdx] === L ? snap : null, notes, liveL);
     legLevel[L] = m.level;
     for (var e in m.est) est[e] = m.est[e];
   }
@@ -281,7 +299,7 @@ function rideEta(input) {
   var liveIn = input.live || [], liveBest = null;
   for (ii = 0; ii < liveIn.length; ii++) {
     var LV = liveIn[ii];
-    if (!LV || !isFinite(+LV.idx) || !isFinite(+LV.ms) || +LV.idx <= anchor.idx || +LV.idx >= n || out[+LV.idx] == null) continue;
+    if (!LV || !isFinite(+LV.idx) || !isFinite(+LV.ms) || +LV.idx <= anchor.idx || +LV.idx >= n || out[+LV.idx] == null || liveUsed[+LV.idx]) continue;
     if (!liveBest || +LV.idx < +liveBest.idx) liveBest = LV;
   }
   if (liveBest) {
@@ -357,7 +375,7 @@ function _reFinish(out, tz, O, anchorIdx, level, notes, n, nowMs) {
 //     · 정적 시간표(승차 직후) : 열차는 시각표보다 일찍 떠나지 않는다 → 확정 직전 6분 안의 시각표 열차마다 '지연 ∈ [시각표−예정, +1.5분]' 봉우리를 만들고 모두 더한 혼합 가능도(어느 열차였는지는 확정 지연 분포가 가른다)
 //     · 사전 분포            : 믿을 만한 통과가 하나도 없을 때만(승차 직후 몰림뿐일 때) 영향
 // ─────────────────────────────────────────────────────────────────────────────
-function _reLegModel(S, planMs, O, priorMean, snap, notes) {
+function _reLegModel(S, planMs, O, priorMean, snap, notes, liveL) {
   var est = {}, i, g, MIN = 60000;
   var B = [], C = [];                 // B: 위치 증거(승차·PF·GPS·드리프트), C: 기지국 선행
   for (i = 0; i < S.length; i++) (S[i].src === 'cell' ? C : B).push(S[i]);
@@ -435,27 +453,44 @@ function _reLegModel(S, planMs, O, priorMean, snap, notes) {
     var normA = function (arr) { var sum = 0, q; for (q = 0; q < NG; q++) sum += arr[q]; if (!(sum > 0)) { for (q = 0; q < NG; q++) arr[q] = 1 / NG; return; } for (q = 0; q < NG; q++) arr[q] /= sum; };
     normA(al);
     var prevI = -1;
+    function hmmStep(dk) {
+      var shC = O.driftBiasPerStop * dk / step, sdC = Math.max(0.3, O.driftPerStop * Math.sqrt(dk) / step), pj = 1 - Math.pow(1 - O.epsJump, dk);
+      // 기울기: 분수 칸만큼 이동(선형 보간)
+      var s0 = Math.floor(shC), fr = shC - s0;
+      for (gg = 0; gg < NG; gg++) { var a0 = gg - s0, a1 = gg - s0 - 1; t1[gg] = (a0 >= 0 ? al[a0] * (1 - fr) : 0) + (a1 >= 0 ? al[a1] * fr : 0); }
+      // 가우시안 번짐
+      var R = Math.max(1, Math.ceil(3 * sdC)), ker = new Float64Array(2 * R + 1), ks = 0;
+      for (kk = -R; kk <= R; kk++) { ker[kk + R] = Math.exp(-0.5 * kk * kk / (sdC * sdC)); ks += ker[kk + R]; }
+      for (gg = 0; gg < NG; gg++) { sm = 0; for (kk = -R; kk <= R; kk++) { var gi = gg + kk; if (gi >= 0 && gi < NG) sm += t1[gi] * ker[kk + R]; } t2[gg] = sm / ks; }
+      // 갑작스런 변화: 라플라스 컨볼루션(재귀 필터)
+      if (pj > 1e-9) {
+        // 갑작스런 변화는 비대칭: 늦어지는 쪽(정차·서행 — 크게 가능)과 일찍 달리는 쪽(회복 — 작게만 가능)의 지수 꼬리를 따로 둔다(재귀 필터로 O(NG)).
+        var ru = Math.exp(-step / O.jumpUpScaleMin), rd = Math.exp(-step / O.jumpDnScaleMin), wU = O.jumpUpW * (1 - ru), wD = (1 - O.jumpUpW) * (1 - rd), Uc = 0, Dc = 0, Dv = new Float64Array(NG);
+        for (gg = NG - 1; gg >= 0; gg--) { Dv[gg] = Dc; Dc = t2[gg] + rd * Dc; }                  // Dv[g] = Σ_{m≥1} rd^{m−1} α[g+m]
+        for (gg = 0; gg < NG; gg++) { al[gg] = (1 - pj) * t2[gg] + pj * (wU * Uc + wD * Dv[gg]); Uc = t2[gg] + ru * Uc; }   // Uc = Σ_{m≥1} ru^{m−1} α[g−m]
+      } else for (gg = 0; gg < NG; gg++) al[gg] = t2[gg];
+    }
     for (i = Math.max(0, B.length - 60); i < B.length; i++) {      // 계산량 상한: 최근 60개 통과만(보통 한 구간은 그보다 훨씬 적다)
-      if (prevI >= 0) {
-        var dk = Math.max(1, B[i].idx - prevI), shC = O.driftBiasPerStop * dk / step, sdC = Math.max(0.3, O.driftPerStop * Math.sqrt(dk) / step), pj = 1 - Math.pow(1 - O.epsJump, dk);
-        // 기울기: 분수 칸만큼 이동(선형 보간)
-        var s0 = Math.floor(shC), fr = shC - s0;
-        for (gg = 0; gg < NG; gg++) { var a0 = gg - s0, a1 = gg - s0 - 1; t1[gg] = (a0 >= 0 ? al[a0] * (1 - fr) : 0) + (a1 >= 0 ? al[a1] * fr : 0); }
-        // 가우시안 번짐
-        var R = Math.max(1, Math.ceil(3 * sdC)), ker = new Float64Array(2 * R + 1), ks = 0;
-        for (kk = -R; kk <= R; kk++) { ker[kk + R] = Math.exp(-0.5 * kk * kk / (sdC * sdC)); ks += ker[kk + R]; }
-        for (gg = 0; gg < NG; gg++) { sm = 0; for (kk = -R; kk <= R; kk++) { var gi = gg + kk; if (gi >= 0 && gi < NG) sm += t1[gi] * ker[kk + R]; } t2[gg] = sm / ks; }
-        // 갑작스런 변화: 라플라스 컨볼루션(재귀 필터)
-        if (pj > 1e-9) {
-          // 갑작스런 변화는 비대칭: 늦어지는 쪽(정차·서행 — 크게 가능)과 일찍 달리는 쪽(회복 — 작게만 가능)의 지수 꼬리를 따로 둔다(재귀 필터로 O(NG)).
-          var ru = Math.exp(-step / O.jumpUpScaleMin), rd = Math.exp(-step / O.jumpDnScaleMin), wU = O.jumpUpW * (1 - ru), wD = (1 - O.jumpUpW) * (1 - rd), Uc = 0, Dc = 0, Dv = new Float64Array(NG);
-          for (gg = NG - 1; gg >= 0; gg--) { Dv[gg] = Dc; Dc = t2[gg] + rd * Dc; }                  // Dv[g] = Σ_{m≥1} rd^{m−1} α[g+m]
-          for (gg = 0; gg < NG; gg++) { al[gg] = (1 - pj) * t2[gg] + pj * (wU * Uc + wD * Dv[gg]); Uc = t2[gg] + ru * Uc; }   // Uc = Σ_{m≥1} ru^{m−1} α[g−m]
-        } else for (gg = 0; gg < NG; gg++) al[gg] = t2[gg];
-      }
+      if (prevI >= 0) hmmStep(Math.max(1, B[i].idx - prevI));
       var bs = B[i].src, mixOut = (bs !== 'board' && !(loose[i] || backlog[i]));
       for (gg = 0; gg < NG; gg++) { var ev = Math.exp(emitLog(i, gLo + gg * step, 0, 0, 0)); al[gg] *= mixOut ? ((1 - O.epsOut) * ev + O.epsOut * O.robustFloor) : ev; }
       normA(al); prevI = B[i].idx;
+    }
+    // 실시간 도착정보(앞으로 설 역의 도착 시각) — 그 역의 지연을 직접 재는 값. 이 역까지 지연이 변할 수 있으니 역 수만큼 전이한 뒤 가우시안(+이상치)으로 곱한다.
+    if (liveL && liveL.length && prevI >= 0) {
+      var sdL = Math.max(0.05, O.liveSdSec / 60), nUsed = 0;
+      for (var lq = 0; lq < liveL.length; lq++) {
+        var LQ = liveL[lq], xls = [], mq;
+        for (mq = 0; mq < LQ.ms.length; mq++) xls.push((LQ.ms[mq] - planMs[LQ.idx]) / MIN);
+        hmmStep(Math.max(1, LQ.idx - prevI));
+        for (gg = 0; gg < NG; gg++) {
+          var dg = gLo + gg * step, mixL = 0;
+          for (mq = 0; mq < xls.length; mq++) { var zl = (dg - xls[mq]) / sdL; mixL += Math.exp(-0.5 * zl * zl); }
+          al[gg] *= (1 - O.epsLive) * mixL / xls.length + O.epsLive * O.robustFloor;
+        }
+        normA(al); prevI = LQ.idx; nUsed++;
+      }
+      if (nUsed) notes.push('실시간 도착정보 ' + nUsed + '건을 지연 필터에 반영');
     }
     hmmAl = al;
   }

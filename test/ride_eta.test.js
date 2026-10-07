@@ -373,16 +373,34 @@ t('승강장 대기 유예(4분)가 끝나면 밀지 않는다(놓침 판단은 
   const nodes = scene(), r = rideEta({ nowMs: at(17, 40, 30), nodes: nodes, passes: [], boarded: false, notDeparted: true, platformWaiting: true });
   assert.strictEqual(r.arr[1], '17:35');
 });
-t('실시간 도착정보: 다음 역을 그 시각으로 맞추고 뒤를 같은 폭만큼 민다(앞 역은 그대로)', () => {
+t('실시간 도착정보: 두 역이 같은 방향으로 늦다고 하면 그 지연을 따르고, 앞 역·이미 지난 역은 그대로', () => {
   const nodes = scene(), ps = [P(1, 17, 35, 40, 'board'), P(2, 17, 38, 20)], now = at(17, 38, 30);
   const base = run(nodes, ps, now);
-  const lv = run(nodes, ps, now, { live: [{ idx: 3, ms: at(17, 43, 0) }] });                  // 동춘을 17:43 에 도착한다고 알려줌(계산은 ≈17:40)
-  assert.ok(near(lv.arr[3], '17:43', 0), lv.arr[3]); assert.strictEqual(lv.arr[2], base.arr[2]);
+  const lv = run(nodes, ps, now, { live: [{ idx: 3, ms: at(17, 43, 0) }, { idx: 4, ms: at(17, 45, 0) }] });      // 동춘 17:43·원인재 17:45 (계산은 ≈17:40·17:42)
+  assert.ok(hm(lv.arr[3]) >= hm('17:42') && hm(lv.arr[4]) >= hm('17:44'), lv.arr.join(' ')); assert.strictEqual(lv.arr[2], base.arr[2]);
   assert.ok(hm(lv.arr[7]) - hm(base.arr[7]) >= 2, base.arr[7] + ' → ' + lv.arr[7]);
-  const small = run(nodes, ps, now, { live: [{ idx: 3, ms: at(17, 40, 5) }] });               // 차이가 20초 미만이면 무시
-  assert.deepStrictEqual(small.arr, base.arr);
+  assert.ok(lv.notes.some(x => /실시간 도착정보 2건/.test(x)), lv.notes.join(' | '));
+});
+t('실시간 도착정보: 하나만 통과 기록과 크게 어긋나면(엉뚱한 열차일 수 있음) 절반만 따르지 않고 기록 쪽을 지킨다 — 이상치 혼합', () => {
+  const nodes = scene(), ps = [P(1, 17, 35, 40, 'board'), P(2, 17, 38, 20), P(3, 17, 40, 20)], now = at(17, 40, 30);
+  const base = run(nodes, ps, now);
+  const odd = run(nodes, ps, now, { live: [{ idx: 4, ms: at(17, 47, 0) }] });                  // 통과가 정시인데 다음 역만 +5분 — 뒤차를 집었을 가능성
+  assert.ok(Math.abs(hm(odd.arr[4]) - hm(base.arr[4])) <= 1.01, base.arr[4] + ' → ' + odd.arr[4]);
+  const small = run(nodes, ps, now, { live: [{ idx: 4, ms: at(17, 42, 10) }] });                // 거의 같은 값은 정상 반영(±1분 이내)
+  assert.ok(Math.abs(hm(small.arr[4]) - hm(base.arr[4])) <= 1);
+  const old = run(nodes, ps, now, { live: [{ idx: 4, ms: at(17, 47, 0) }], opts: { liveHmm: 0 } });   // 옛 방식(뒤를 통째로 밈)은 옵션으로 남아 있다
+  assert.ok(hm(old.arr[4]) - hm(base.arr[4]) >= 4, old.arr[4]);
 });
 
+t('실시간 도착정보 후보가 여럿이면(앞차·내 열차·뒤차) 통과 기록과 맞는 열차를 내 열차로 고른다', () => {
+  const nodes = scene(), ps = [P(1, 17, 35, 40, 'board'), P(2, 17, 38, 20), P(3, 17, 43, 20)], now = at(17, 43, 30);   // 동춘부터 3분 늦어 달린다
+  const base = run(nodes, ps, now);
+  const withC = run(nodes, ps, now, { live: [{ idx: 4, ms: at(17, 42, 10) }, { idx: 4, ms: at(17, 45, 10) }, { idx: 4, ms: at(17, 49, 40) }] });   // 앞차 / 내 열차(예정 17:42 + 3분) / 뒤차
+  assert.ok(Math.abs(hm(withC.arr[4]) - hm('17:45')) <= 1, base.arr[4] + ' → ' + withC.arr[4]);
+  assert.ok(Math.abs(hm(withC.arr[7]) - hm(base.arr[7])) <= 1.01, base.arr[7] + ' → ' + withC.arr[7]);       // 이미 지연을 아는 상태라 크게 바뀌지 않는다
+  const only = run(nodes, [P(1, 17, 35, 40, 'board'), P(2, 17, 38, 20)], at(17, 38, 30), { live: [{ idx: 3, ms: at(17, 40, 5) }, { idx: 3, ms: at(17, 44, 10) }] });   // 정시 통과 + 후보 둘(정시 / 뒤차 +4분)
+  assert.ok(Math.abs(hm(only.arr[3]) - hm('17:40')) <= 1, only.arr.join(' '));
+});
 t('승차 전 다음 차 시각(boardNext): 예정보다 늦은 차는 승차역부터 그만큼 민다, 앞당김은 allowEarlier 일 때만', () => {
   const nodes = scene(), now = at(17, 30, 0), mk = (b) => rideEta({ nowMs: now, nodes: nodes, passes: [], boarded: false, notDeparted: true, boardNext: b });
   const late = mk({ ms: at(17, 38, 0), src: 'table' });
