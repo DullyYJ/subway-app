@@ -13,3 +13,6 @@
 - `patch_s3.js`: ①버스 대기 간선 캐시를 accessSec/rtw 상태로 확장(waitLog·rtwStat 부작용을 그대로 재생, ld 순위 계산의 `__bwMemo` 안에서는 비활성) ②isPassStop 이름별 캐시 ③xpBits/xpHops 테이블 디코드(잘못된 문자는 원본 경로).
 - 검증: `eq4.mjs`(accessSec·rtw·중도 변경·라이브 전환에서 waitLog·rtwStat 포함 동일), `eq5.mjs`(디코드·isPassStop 7만 건 퍼즈), `full_rc.mjs`(70건 전체 응답; `KEEPLS=1` 이면 liveStat 의 시간 필드 외 전부 비교) — 모두 차이 0. 먼저 `eq5`/`full_rc` 에서 rtwStat.miss 차이를 잡아 `__bwMemo` 예외를 넣었다.
 - 효과: 로컬 따뜻한 상태 장거리 ≈12% 단축, 콜드 첫 요청은 거의 변화 없음(콜드는 JIT 가 지배: 부산 콜드 ≈800ms vs 따뜻 ≈230ms).
+
+## s4
+- `patch_warm.js`: `GET /warm` — 격리당 최초 1회 서울역→수원 검색(live=0)을 내부 실행해 JIT·kric·rows 를 예열(60초 내 재호출은 즉시 반환, 속도제한 적용). 진단용 `busDiag.iso/isoN`(격리 식별자·요청 순번) 추가. 기존 경로·응답 본문 불변: 70건 전체 응답 비교 차이 0. 로컬 효과: 부산 콜드 ≈800ms → 워밍 후 ≈530ms.
