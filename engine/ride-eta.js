@@ -23,14 +23,15 @@ var RIDE_ETA_DEFAULTS = {
   // ★ 2026-10-07 (PF 채택 지연): 위치 채택(PF)은 실제 통과보다 5~70초(평균 ≈ 37초) 늦게 찍힌다 → 실제 통과 ≈ 채택 시각 − 35초.
   pfLagSec: 35, pfLagMinSec: 5, pfLagMaxSec: 70,
   // 승차 확정이 실제 승차보다 늦은 정도: 보통 20~120초, 가끔(약 20%) 2~6.5분.
-  boardLagMinSec: 20, boardLagNormSec: 120, boardLateMinSec: 170, boardLagMaxSec: 370, boardNormW: 0.8, boardSoftMin: 0.25, boardFloor: 0.004,
+  //   ★ 2026-10-07: boardFloor(범위 밖 바닥 확률) 0.004 → 0.0008. 바닥이 높으면 '확정 지연 > 370초' 쪽으로 퍼진 평탄 꼬리가 분포의 10~90% 구간을 부풀려, 한쪽 봉우리가 분명한데도 값이 가운데로 끌려갔다.
+  boardLagMinSec: 20, boardLagNormSec: 120, boardLateMinSec: 170, boardLagMaxSec: 370, boardNormW: 0.8, boardSoftMin: 0.25, boardFloor: 0.0008,
   // 기지국 선행 통과는 실제 통과보다 1~3분 이르다.
   cellLeadMinSec: 60, cellLeadMaxSec: 180,
   // GPS 통과: 가장 가까웠던 순간 ±15초
   gpsTolSec: 15,
   // ★ 2026-10-07 (원인: 승차 확정이 3~6분 늦으면 직후 PF 채택이 5초 간격으로 한꺼번에 몰려 찍힘): 앞 기록과 이 간격(초) 안에 찍힌 통과 = '몰림'.
   //   실제 통과보다 훨씬 늦은 시각이라 지연의 상한일 뿐이다 → 지연 수준을 정하는 데 쓰지 않는다.
-  backlogGapSec: 12,
+  backlogGapSec: 12, burstExactSec: 6.5, burstAmbigW: 0.5,
   // 열차는 시각표 구간 소요의 60% 보다 빨리 달릴 수 없다(기존 앱 규칙 '앵커 하한'의 일반화). 뒤 통과가 이보다 빠르게 찍혔으면 앞 통과는 늦게 알게 된 기록이다.
   minRunRatio: 0.6, burstTolSec: 45,
   // 지연 수준을 정할 때 보는 '가장 최근 믿을 만한 통과' 개수(기존 앱: 최근 3개). 오래된 통과는 지연 변화를 못 따라가므로 버린다.
@@ -43,8 +44,13 @@ var RIDE_ETA_DEFAULTS = {
   softMin: 0.2,
   // 최종 지연 수준 = 확률 분포의 10~90% 구간 한가운데(둘로 갈리는 상황에서 어느 쪽이 맞아도 오차가 반으로 줄도록)
   quantile: 0.1,
+  // ★ 2026-10-07 (몰림 증거를 확률로): 몰림 기록은 '실제 통과 + 채택 지연(5~70초) ≤ 기록'이라 가능도가 d 가 낮을수록 서서히 커지는 경사다.
+  //   false 면 예전처럼 상한 계단(d ≤ 기록 − 5초)으로만 쓴다(되돌리기용).
+  burstRamp: true,
   // 정적 시간표 스냅: 승차 확정 시각 N분 전까지의 열차만 후보(17:35 탑승인데 17:29 열차로 끌려가지 않게). 열차가 시각표보다 일찍 떠나지 않는다는 하한으로 쓴다.
-  snapBackMin: 2, snapLateMaxMin: 1.5,
+  //   ★ 2026-10-07: 후보를 '확정 직전 snapCandMaxMin 분 안의 시각표 열차 전부'로 넓힘(확정이 늦은 경우 진짜 탄 열차는 더 앞 열차). 2분 안 열차 가중 1, 그보다 앞 열차 snapOldW,
+  //   어느 후보에도 안 맞는 지연도 snapEps 만큼은 남겨 둔다(시각표를 벗어난 운행이 있어도 못박지 않게).
+  snapBackMin: 2, snapLateMaxMin: 1.5, snapCandMaxMin: 6, snapEps: 0.5, snapOldW: 0.4,
   // 승차 전인데 예정 승차 시각이 '지금'보다 이만큼(분) 넘게 지났으면 경로 전체를 지금에 맞춘다(기존 _htlSanityCheck 의 40분)
   staleShiftMin: 40,
   // 표시 반올림: 'round'(가장 가까운 분) | 'floor'(내림 — 예전 앱)
@@ -152,26 +158,26 @@ function rideEta(input) {
     return _reFinish(out, tz, O, -1, 0, notes, n, nowMs);
   }
 
-  // ── 5. 정적 시간표 스냅 후보: 승차 직후(승차역 뒤 통과 기록이 아직 하나도 없을 때)만.
-  var snapIdx = -1, snapDelay = null;
+  // ── 5. 정적 시간표 후보: 첫 승차역에서 확정 시각 직전 snapCandMaxMin 분 안에 떠난 시각표 열차 전부.
+  //     (예전에는 '확정 2분 전 이후 가장 최근 열차' 하나만 골라 지연 ≥ 그 열차로 못박았다 → 확정이 3~6분 늦은 경우(진짜 탄 열차는 더 앞 열차)엔 엉뚱한 열차에 끌려가 최대 5분 오차.
+  //      이제 후보 전부를 '여러 봉우리' 가능도로 넘기고, 어느 열차였는지는 확정 지연 분포가 가른다.) 승차 뒤 믿을 만한 통과가 하나라도 생기면 구간 모델이 쓰지 않는다.
+  var snapIdx = -1, snap = null;
   var TT = input.timetable;
   if (TT && isFinite(+TT.boardIdx) && TT.times && TT.times.length && byIdx[+TT.boardIdx]) {
     var anyAfter = false;
     for (k in byIdx) if (+k > +TT.boardIdx) { anyAfter = true; break; }
-    if (!anyAfter) {
-      var bp = byIdx[+TT.boardIdx], bIdx = +TT.boardIdx;
-      var bMin = _reMin(bp.ms, tz), floorMin = Math.floor(_reMin(bp.ms - O.snapBackMin * 60000, tz)), best = null;
-      for (j = 0; j < TT.times.length; j++) {
-        var t = +TT.times[j];
-        var dBack = _reFold(Math.floor(bMin) - t);                    // 승차 확정 분 − 시각표 분 (≥0 = 이미 떠난 열차)
-        var dFloor = _reFold(t - floorMin);                           // 확정 2분 전 이후
-        if (dBack >= 0 && dBack <= 30 && dFloor >= 0 && (best === null || dBack < best)) best = dBack;
-      }
-      if (best !== null) {
-        var tMs = bp.ms - (bMin - Math.floor(bMin)) * 60000 - best * 60000;          // 그날 그 분의 정각(ms)
-        snapIdx = bIdx; snapDelay = (tMs - planMs[bIdx]) / 60000;
-        notes.push('정적 시간표 스냅: ' + (nodes[bIdx].name || bIdx) + ' 승차 확정 ' + _reHHMM(bp.ms, tz, 'floor') + ' → 시각표 ' + _reHHMM(tMs, tz, 'floor') + ' 이후 출발로 본다');
-      }
+    var bp = byIdx[+TT.boardIdx], bIdx = +TT.boardIdx;
+    var bMin = _reMin(bp.ms, tz), floorMin = Math.floor(_reMin(bp.ms - O.snapBackMin * 60000, tz)), best = null, cands = [], sub0 = (bMin - Math.floor(bMin)) * 60000;
+    for (j = 0; j < TT.times.length; j++) {
+      var t = +TT.times[j];
+      var dBack = _reFold(Math.floor(bMin) - t);                      // 승차 확정 분 − 시각표 분 (≥0 = 이미 떠난 열차)
+      if (dBack < 0 || dBack > 30) continue;
+      if (_reFold(t - floorMin) >= 0 && (best === null || dBack < best)) best = dBack;       // 확정 2분 전 이후 가장 최근 열차(알림용)
+      if (dBack <= O.snapCandMaxMin) cands.push({ d: (bp.ms - sub0 - dBack * 60000 - planMs[bIdx]) / 60000, w: (_reFold(t - floorMin) >= 0) ? 1 : O.snapOldW });
+    }
+    if (cands.length && !anyAfter) {
+      snapIdx = bIdx;
+      snap = { delays: cands, note: best === null ? null : '정적 시간표 스냅: ' + (nodes[bIdx].name || bIdx) + ' 승차 확정 ' + _reHHMM(bp.ms, tz, 'floor') + ' → 시각표 ' + _reHHMM(bp.ms - sub0 - best * 60000, tz, 'floor') + ' 이후 출발로 본다' };
     }
   }
 
@@ -184,7 +190,7 @@ function rideEta(input) {
     var L = legKeys[ii];
     var prior = O.priorDelayMin;
     if (ii > 0) prior = Math.max(O.priorDelayMin, legLevel[legKeys[ii - 1]]);     // 앞 구간이 늦으면 환승 열차도 늦다(지연 전파)
-    var m = _reLegModel(legsMap[L], planMs, O, prior, snapIdx >= 0 && legOf[snapIdx] === L ? { idx: snapIdx, delay: snapDelay } : null, notes);
+    var m = _reLegModel(legsMap[L], planMs, O, prior, snapIdx >= 0 && legOf[snapIdx] === L ? snap : null, notes);
     legLevel[L] = m.level;
     for (var e in m.est) est[e] = m.est[e];
   }
@@ -258,10 +264,12 @@ function _reFinish(out, tz, O, anchorIdx, level, notes, n, nowMs) {
 //   증거마다 '그 증거가 허용하는 지연의 범위'를 만들고, 범위들을 곱한 확률 분포(격자)의 10~90% 구간 한가운데를 지연 수준으로 삼는다.
 //     · 위치 채택(PF)        : 실제 통과는 채택보다 5~70초 앞 → 지연 ∈ [x−70초, x−5초]   (x = 채택 시각 − 예정)
 //     · 승차 확정(board)     : 실제 승차보다 보통 20~120초, 가끔 2~6.5분 늦게 확정됨
-//     · 몰림(backlog)        : 앞 기록과 12초 안에 찍힌 통과, 또는 뒤 통과가 '최소 주행시간'보다 가깝게 찍혀 늦게 알게 된 것으로 드러난 통과 → 상한(지연 ≤ x−5초)으로만
+//     · 몰림(backlog)        : 앞 기록과 12초 안에 찍힌 통과, 또는 뒤 통과가 '최소 주행시간'보다 가깝게 찍혀 늦게 알게 된 것으로 드러난 통과 → 상한으로만.
+//                              채택 지연이 5~70초 균일이면 '실제 통과 + 지연 ≤ 기록'의 확률은 d 가 낮을수록 서서히 커지는 경사(burstRamp). 그래서 승차 확정이 3~6분 늦었다는 쪽(확정 지연 큰 쪽)에
+//                              확률이 실리고, 확정 지연이 보통(20~120초)이어서 몰림이 생기려면 구간 간격이 1분 안팎이어야 한다는 사실이 자연스레 반영된다.
 //     · 기지국 선행(cell)    : 실제 통과는 stamp 보다 1~3분 뒤 → 지연 ∈ [x+60초, x+180초]
 //     · GPS                  : 지연 ∈ [x±15초]
-//     · 정적 시간표(승차 직후) : 열차는 시각표보다 일찍 떠나지 않는다 → 지연 ≥ 시각표 − 예정
+//     · 정적 시간표(승차 직후) : 열차는 시각표보다 일찍 떠나지 않는다 → 확정 직전 6분 안의 시각표 열차마다 '지연 ∈ [시각표−예정, +1.5분]' 봉우리를 만들고 모두 더한 혼합 가능도(어느 열차였는지는 확정 지연 분포가 가른다)
 //     · 사전 분포            : 믿을 만한 통과가 하나도 없을 때만(승차 직후 몰림뿐일 때) 영향
 // ─────────────────────────────────────────────────────────────────────────────
 function _reLegModel(S, planMs, O, priorMean, snap, notes) {
@@ -271,12 +279,13 @@ function _reLegModel(S, planMs, O, priorMean, snap, notes) {
   var tolMs = O.burstTolSec * 1000;
 
   // 몰림 판별: 뒤 통과에서 거꾸로 '최소 주행시간만큼 앞선 시각'(U)보다 늦게 찍힌 기록 = 이제야 알게 된 기록(상한일 뿐)
-  var U = new Array(B.length), loose = new Array(B.length), backlog = new Array(B.length), nBacklog = 0;
+  var U = new Array(B.length), loose = new Array(B.length), backlog = new Array(B.length), ambig = new Array(B.length), nBacklog = 0;
   for (i = B.length - 1; i >= 0; i--) {
     U[i] = B[i].ms;
     if (i < B.length - 1) { var cand = U[i + 1] - O.minRunRatio * (planMs[B[i + 1].idx] - planMs[B[i].idx]); if (cand < U[i]) U[i] = cand; }
     loose[i] = (B[i].ms - U[i]) > tolMs;
     backlog[i] = i > 0 && (B[i].ms - B[i - 1].ms) <= O.backlogGapSec * 1000;
+    ambig[i] = backlog[i] && !loose[i] && (B[i].ms - B[i - 1].ms) > O.burstExactSec * 1000;
     if ((loose[i] || backlog[i]) && B[i].src !== 'board') nBacklog++;
   }
   var infList = [];
@@ -292,6 +301,8 @@ function _reLegModel(S, planMs, O, priorMean, snap, notes) {
   var gLo = Math.min.apply(null, xs) - 8, gHi = Math.max.apply(null, xs) + 3, step = 0.05;
   if (gHi - gLo > 250) gHi = gLo + 250;
   var NG = Math.max(2, Math.round((gHi - gLo) / step) + 1), lp = new Array(NG);
+  var snapOn = !!snap && nInfo === 0;
+  if (snapOn && snap.note) notes.push(snap.note);
   function win(d, a, b, sg) { if (d < a) { var z = (a - d) / sg; return -0.5 * z * z; } if (d > b) { var z2 = (d - b) / sg; return -0.5 * z2 * z2; } return 0; }
   var pfLo = O.pfLagMinSec / 60, pfHi = O.pfLagMaxSec / 60, sg = O.softMin;
   var bnMin = O.boardLagMinSec / 60, bnNorm = O.boardLagNormSec / 60, bnLateMin = O.boardLateMinSec / 60, bnMax = O.boardLagMaxSec / 60, bsg = O.boardSoftMin;
@@ -311,7 +322,14 @@ function _reLegModel(S, planMs, O, priorMean, snap, notes) {
       } else if (st.src === 'gps') {
         v += win(d, xi + sh - O.gpsTolSec / 60 - wid, xi + sh + O.gpsTolSec / 60 + wid, sg);
       } else if (loose[i] || backlog[i]) {
-        v += win(d, -1e9, (U[i] - planMs[st.idx]) / MIN - pfLo, sg);                // 몰림: 상한만
+        if (O.burstRamp) {
+          var cB = (U[i] - planMs[st.idx]) / MIN + sh + wid, accB = 0, nsB = 14, zq;
+          for (var lq = 0; lq < nsB; lq++) { var lagM = pfLo + (pfHi - pfLo) * (lq + 0.5) / nsB; zq = Math.max(0, d + lagM - cB) / sg; accB += Math.exp(-0.5 * zq * zq); }
+          accB /= nsB;
+          // 앞 기록과 간격이 5초 간격 몰림(≈5초)보다 조금 넓으면(6.5~12초) 몰림일 수도, 우연히 바로 뒤에 찍힌 정상 채택일 수도 있다 → 두 가설의 혼합
+          if (ambig[i]) accB = O.burstAmbigW * accB + (1 - O.burstAmbigW) * soft(d, xi + sh - pfHi - wid, xi + sh - pfLo + wid, sg);
+          v += Math.log(accB + 1e-12);
+        } else v += win(d, -1e9, (U[i] - planMs[st.idx]) / MIN - pfLo, sg);                // 몰림: 상한만
       } else if (st.src === 'drift') {
         v += win(d, xi + sh - 2 * pfHi - wid, xi + sh + 0.2 + wid, sg);              // 드리프트 보정 위치: 지연이 더 클 수 있어 범위를 넓게
       } else {
@@ -322,7 +340,7 @@ function _reLegModel(S, planMs, O, priorMean, snap, notes) {
       var xc = (C[i].ms - planMs[C[i].idx]) / MIN, wc = O.driftPerStop * Math.sqrt(Math.max(0, lastIdx - C[i].idx));
       v += win(d, xc + O.cellLeadMinSec / 60 - wc, xc + O.cellLeadMaxSec / 60 + wc, sg);
     }
-    if (snap) v += win(d, snap.delay - 0.15, snap.delay + O.snapLateMaxMin, sg);
+    if (snapOn) { var mixS = O.snapEps; for (var sj = 0; sj < snap.delays.length; sj++) mixS += snap.delays[sj].w * soft(d, snap.delays[sj].d - 0.15, snap.delays[sj].d + O.snapLateMaxMin, sg); v += Math.log(mixS); }
     lp[g] = v;
   }
   var mx = -Infinity, tot = 0, w = new Array(NG);
@@ -336,7 +354,7 @@ function _reLegModel(S, planMs, O, priorMean, snap, notes) {
     if (!gotHi && acc >= tot * (1 - O.quantile)) { qHi = gLo + g * step; gotHi = true; }
   }
   if (O.quantile > 0 && O.quantile < 0.5) level = (qLo + qHi) / 2;
-  if (nBacklog) notes.push('몰림 ' + nBacklog + '건: 지연 수준에서 제외(상한으로만 사용)');
+  if (nBacklog) notes.push('몰림 ' + nBacklog + '건: 지연 수준에서 제외(채택 지연을 감안한 상한 가능도로만 사용)');
   if (C.length) notes.push('기지국 선행 ' + C.length + '건: 실제보다 1~3분 이른 값이라 하한으로만 사용');
   notes.push('구간 지연 수준 ' + (Math.round(level * 100) / 100) + '분 (믿을 만한 통과 ' + nInfo + '개' + (nInfo ? '' : ', 사전값·승차 확정으로 추정') + ')');
 
