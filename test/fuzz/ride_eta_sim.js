@@ -5,6 +5,7 @@
 //   ROUND=floor   : 표시 반올림을 내림으로(기본 round — 엔진 기본값 그대로)
 //   OPTS='{"pfLagSec":0}' : 엔진 옵션(input.opts)을 덮어쓴다(민감도 점검용)
 //   MOVE=0.5      : 승차 확정 때 '움직임 시작' 증거(src move)를 보낼 수 있는 비율(기본 0 = 기존 모델)
+//   추가 변수(ANOM): halt(구간 중 정차·큰 지연) slowseg(서행) express(중간부터 일찍) traffic(버스 흔들림) falsepf(엉뚱한 역 채택) dupe(중복 채택) restart(앱 재시작=증거 소실) offline(통신 끊김=마지막 값 유지) badmove(MOVE 증거 오인, MOVE 와 함께)
 //   NOTT=1        : 정적 시간표(timetable) 입력을 보내지 않는다
 //
 // 이 파일의 '진실 모델'과 '사건 모델'은 브라우저 시뮬(fuzz3.js, Playwright + www/index.html)과 같은 시드·같은 난수 호출 순서를 쓴다 →
@@ -93,6 +94,29 @@ for (var sc = 0; sc < N; sc++) {
   });
   { var AA = ANOM.split(','); legs.forEach(function (lg) { if (AA.includes('early') && R() < 0.5) { var d = -ri(2, 6) * 60; lg.shift = (lg.shift || 0) + d / 60; for (var i = lg.start; i <= lg.end; i++) truth[i] += d; } else if (AA.includes('late1') && R() < 0.5) { var d = ri(2, 8) * 60; lg.shift = (lg.shift || 0) + d / 60; for (var i = lg.start; i <= lg.end; i++) truth[i] += d; } }); }
   if (ANOM.split(',').includes('miss')) legs.forEach(function (lg, li) { if (li > 0 && R() < 0.45) { var d = ri(4, 9) * 60; lg.shift = (lg.shift || 0) + d / 60; for (var i = lg.start; i <= lg.end; i++) truth[i] += d; } });
+  // ── 추가 변수(별도 난수 R2라 ANOM 에 안 쓰면 기존 시나리오는 한 칸도 안 변한다) ──
+  var R2 = rng(SEED * 977 + sc * 13 + 5), A2 = ANOM.split(','), ri2 = function (a, b3) { return a + Math.floor(R2() * (b3 - a + 1)); };
+  legs.forEach(function (lg) {
+    var len = lg.end - lg.start;
+    if (len < 3) return;
+    if (A2.includes('halt') && R2() < 0.35) {            // 구간 중간에 열차가 멈췄다(신호·사고·문 끼임): 작은 정차 +1~3분(50%) 또는 큰 지연 +4~15분
+      var h = lg.start + ri2(1, len - 1), d = (R2() < 0.5 ? ri2(1, 3) : ri2(4, 15)) * 60; lg.halt = [h, d / 60];
+      for (var i = h; i <= lg.end; i++) truth[i] += d;
+    }
+    if (A2.includes('slowseg') && R2() < 0.3) {          // 서행 구간: 2~4개 역에 걸쳐 총 +2~4분이 서서히 쌓이고 그 뒤 유지
+      var h2 = lg.start + ri2(1, len - 1), k = ri2(2, 4), tot = ri2(2, 4) * 60; lg.slow = [h2, tot / 60];
+      for (var i = h2; i <= lg.end; i++) truth[i] += tot * Math.min(1, (i - h2 + 1) / k);
+    }
+    if (A2.includes('express') && lg.type === 'sub' && R2() < 0.25) {   // 구간 중간부터 일찍 달림(급행·정차 생략): 서서히 최대 2~5분 앞서간다
+      var h3 = lg.start + ri2(1, len - 1), k3 = ri2(2, 4), tot3 = ri2(2, 5) * 60; lg.exp = [h3, -tot3 / 60];
+      for (var i = h3; i <= lg.end; i++) truth[i] -= Math.min(tot3, tot3 * (i - h3 + 1) / k3);
+    }
+    if (A2.includes('traffic') && lg.type === 'bus') {     // 버스는 교통에 따라 역(정류장)마다 ±1분씩 흔들린다
+      var w = 0; for (var i = lg.start + 1; i <= lg.end; i++) { w += (R2() - 0.45) * 120; truth[i] += w; }
+      lg.traffic = true;
+    }
+  });
+  legs.forEach(function (lg) { for (var i = lg.start + 1; i <= lg.end; i++) if (truth[i] < truth[i - 1] + 30) truth[i] = truth[i - 1] + 30; });
   legs.forEach(function (lg, li) { if (li > 0) { var prevEnd = truth[legs[li - 1].end]; if (truth[lg.start] < prevEnd + 120) { var d = prevEnd + 120 - truth[lg.start]; for (var i = lg.start; i <= lg.end; i++) truth[i] += d; } } });
   var destIdx = nodes.length - 1; var destTruth = truth[destIdx];
   var events = []; var trIdx = []; for (var i = 0; i < nodes.length; i++) if (truth[i] != null) trIdx.push(i);
@@ -117,7 +141,7 @@ for (var sc = 0; sc < N; sc++) {
   var inNodes = nodes.map(function (n) { return { name: n.name, isSub: !!n.isSub, isBus: !!n.isBus, isWalk: !!n.isWalk, isOrigin: !!n.isOrigin, lineName: n.line || '', planMin: n.plan }; });
   var firstLeg = legs[0];
   var ttIn = (!process.env.NOTT && firstLeg.ttTimes) ? { boardIdx: firstLeg.start, times: firstLeg.ttTimes } : null;
-  var passes = [], boarded = false, rec = [];
+  var passes = [], boarded = false, rec = [], offlineLeft = 0, lastR = null;
   // TICKS=1 : 사건 사이(사건 뒤 40초·100초)에도 엔진에 물어 본다 — 통과 증거가 새로 없는 '조용한 구간'의 정확도(연착·실시간 도착정보 등)를 재기 위해
   var samples = events.map(function (ev) { return { at: ev.at, ev: ev }; });
   if (process.env.TICKS) events.forEach(function (ev, k) { var nx = events[k + 1] ? events[k + 1].at : destTruth; [40, 100].forEach(function (dt) { if (ev.at + dt < nx - 5 && ev.at + dt < destTruth) samples.push({ at: ev.at + dt, ev: { at: ev.at + dt, type: 'tick', idx: ev.idx, lead: false } }); }); });
@@ -129,16 +153,26 @@ for (var sc = 0; sc < N; sc++) {
       boarded = true;
       // MOVE=p : 승차 확정 때 위치 궤적에서 '움직임 시작'을 되짚어 찍을 수 있는 비율(지하 승강장 등은 궤적이 없다). 별도 난수라 다른 시나리오는 그대로다.
       var mvR = rng(SEED * 100003 + sc * 131 + ev.idx * 17 + 7), hasMv = MOVE > 0 && mvR() < MOVE;
-      if (hasMv) { var lagS = -35 + mvR() * 95 + (mvR() * 16 - 8); passes.push({ idx: ev.idx, ms: MID + (truth[ev.idx] + lagS) * 1000, src: 'move' }); }   // 실제 출발 + (−35~+60초 ± 오차) — 앱의 startMs = 탑승 증거가 선 시각 − 60초
+      if (hasMv) { var lagS = -35 + mvR() * 95 + (mvR() * 16 - 8); if (ANOM.split(',').includes('badmove') && mvR() < 0.15) lagS = -(120 + mvR() * 240);   // 엉뚱한 움직임(앞서 달리던 버스·차)을 출발로 오인: 2~6분 이르게 찍힘
+       passes.push({ idx: ev.idx, ms: MID + (truth[ev.idx] + lagS) * 1000, src: 'move' }); }   // 실제 출발 + (−35~+60초 ± 오차) — 앱의 startMs = 탑승 증거가 선 시각 − 60초
       else passes.push({ idx: ev.idx, ms: nowMs, src: 'board' });
     }
-    else if (ev.type === 'adopt') passes.push({ idx: ev.idx, ms: nowMs, src: ev.lead ? 'cell' : 'pf' });
+    else if (ev.type === 'adopt') {
+      var pidx = ev.idx, xr = rng(SEED * 31337 + sc * 71 + Math.round(ev.at) * 3 + 11);
+      if (ANOM.split(',').includes('falsepf') && !ev.lead && xr() < 0.08) { var dlt = [-1, 1, 2][Math.floor(xr() * 3)]; pidx = Math.max(firstLeg.start + 1, Math.min(nodes.length - 1, ev.idx + dlt)); }   // 위치 채택이 엉뚱한 역으로 찍힘
+      passes.push({ idx: pidx, ms: nowMs, src: ev.lead ? 'cell' : 'pf' });
+      if (ANOM.split(',').includes('dupe') && xr() < 0.12) passes.push({ idx: pidx, ms: nowMs + 20000, src: 'pf' });                                                    // 같은 역이 20초 뒤 한 번 더 채택됨
+    }
+    var ox = rng(SEED * 4099 + sc * 53 + Math.round(ev.at) + 3);
+    if (ANOM.split(',').includes('restart') && boarded && ox() < 0.02) { passes = []; }                                       // 앱이 꺼졌다 켜져 모아 둔 증거를 잃음(탔다는 사실은 남음)
+    var offlineNow = false;
+    if (ANOM.split(',').includes('offline')) { if (offlineLeft > 0) { offlineLeft--; offlineNow = true; } else if (rec.length && ox() < 0.06) { offlineLeft = 2 + Math.floor(ox() * 4); offlineNow = true; } }   // 통신 끊김: 엔진 응답을 못 받아 마지막 화면 값이 남는다
     var input = { nowMs: nowMs, nodes: inNodes, passes: passes.slice(), boarded: boarded, notDeparted: false };
     if (ttIn) input.timetable = ttIn;
     if (EXTRA_OPTS || process.env.ROUND) input.opts = Object.assign({}, EXTRA_OPTS || {}, process.env.ROUND ? { rounding: process.env.ROUND } : {});
     var r;
     if (process.env.DUMP && process.env.DUMP === sc + ':' + rec.length) fs.writeFileSync(process.env.DUMP_FILE || '/dev/stderr', JSON.stringify(input));   // 디버그: 그 사건의 엔진 입력을 그대로 저장
-    try { r = E.rideEta(input); } catch (e) { errs.push(String(e && e.stack || e).split('\n').slice(0, 3).join(' | ')); rec.push({ err: String(e && e.message) }); return; }
+    try { r = (offlineNow && lastR) ? lastR : E.rideEta(input); if (!offlineNow) lastR = r; } catch (e) { errs.push(String(e && e.stack || e).split('\n').slice(0, 3).join(' | ')); rec.push({ err: String(e && e.message) }); return; }
     var tl = r.arr;
     var p = tl[destIdx].split(':'); var eta = (+p[0]) * 60 + (+p[1]);
     var mono = 0; for (var q = 1; q < tl.length; q++) { var a1 = tl[q - 1].split(':'), c1 = tl[q].split(':'); var dd = ((+c1[0]) * 60 + (+c1[1])) - ((+a1[0]) * 60 + (+a1[1])); if (dd < -720) dd += 1440; if (dd < -0.01) mono++; }

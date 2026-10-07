@@ -39,6 +39,12 @@ var RIDE_ETA_DEFAULTS = {
   minRunRatio: 0.6, burstTolSec: 45,
   // 지연 수준을 정할 때 보는 '가장 최근 믿을 만한 통과' 개수(기존 앱: 최근 3개). 오래된 통과는 지연 변화를 못 따라가므로 버린다.
   levelWindow: 3,
+  // 강건 가능도(robust): 통과 하나하나를 '맞다(지금 지연 수준을 알려 줌)'와 '이후 지연이 갑자기 바뀌었거나(구간 중 정차·서행) 이상치다'의 혼합으로 본다.
+  //   그 통과 뒤 지나온 역 수 k 만큼 '바뀌었을' 확률 q = 1−(1−epsJump)^k + epsOut. 하드 창(levelWindow) 대신 오래된 통과는 서서히 영향이 줄고, 한 번의 엉뚱한 통과는 여러 통과가 한 목소리를 내면 무시된다.
+  robust: 0, epsJump: 0.04, epsOut: 0.03, robustFloor: 0.03,
+  //   hmm: 1 이면 위 아이디어를 변화점 필터로 정확히 푼다(통과를 순서대로 보며 사후분포를 이음). jumpScaleMin: 갑작스런 변화 폭(라플라스 척도, 분).
+  earlyJumpMaxMin: 0,
+  hmm: 1, bimodalSpanMin: 0, looseOnlyAtStart: 1, jumpUpScaleMin: 4, jumpDnScaleMin: 1.5, jumpUpW: 0.75, priorNegWideSd: 3.5,
   // 구간 안에서 지연은 서서히 변한다: 한 역당 변화폭(분, √역수로 늘어남)과, 늦어지는 쪽으로의 평균 기울기(분/역)
   driftPerStop: 0.12, driftBiasPerStop: 0.07,
   // 지연 사전 분포(분): 열차는 대개 예정 근처(좁은 봉우리) + 가끔 크게 어긋남(넓은 꼬리). 증거가 없을 때만 영향을 준다.
@@ -367,6 +373,8 @@ function _reLegModel(S, planMs, O, priorMean, snap, notes) {
     ambig[i] = backlog[i] && !loose[i] && (B[i].ms - B[i - 1].ms) > O.burstExactSec * 1000;
     if ((loose[i] || backlog[i]) && B[i].src !== 'board') nBacklog++;
   }
+  // 늦게 알게 된 통과(몰림)는 승차 확정이 늦을 때 확정 직후에만 생긴다. 구간 중간에서 앞 통과가 '뒤 통과보다 늦다'고 나오면 앞 통과가 늦은 게 아니라 뒤 통과가 엉뚱한 값일 수 있다 → 중간에서는 몰림으로 보지 않는다.
+  if (O.hmm && O.looseOnlyAtStart) { var okc = true; for (i = 0; i < B.length; i++) { var isEv = !(B[i].src === 'board' || loose[i] || backlog[i]); if (loose[i] && !okc) loose[i] = false; if (isEv) okc = false; } nBacklog = 0; for (i = 0; i < B.length; i++) if ((loose[i] || backlog[i]) && B[i].src !== 'board') nBacklog++; }
   var infList = [];
   for (i = 0; i < B.length; i++) if (B[i].src !== 'board' && !loose[i] && !backlog[i]) infList.push(i);
   var nInfo = infList.length;
@@ -382,40 +390,83 @@ function _reLegModel(S, planMs, O, priorMean, snap, notes) {
   var NG = Math.max(2, Math.round((gHi - gLo) / step) + 1), lp = new Array(NG);
   var snapOn = !!snap && nInfo === 0;
   if (snapOn && snap.note) notes.push(snap.note);
+  var rbQ = function (lvl, k2) { if (!O.robust) return lvl; var q = 1 - Math.pow(1 - O.epsJump, k2) + O.epsOut; if (q > 0.9) q = 0.9; return Math.log((1 - q) * Math.exp(lvl) + q * O.robustFloor); };
   function win(d, a, b, sg) { if (d < a) { var z = (a - d) / sg; return -0.5 * z * z; } if (d > b) { var z2 = (d - b) / sg; return -0.5 * z2 * z2; } return 0; }
   var pfLo = O.pfLagMinSec / 60, pfHi = O.pfLagMaxSec / 60, sg = O.softMin;
   var bnMin = O.boardLagMinSec / 60, bnNorm = O.boardLagNormSec / 60, bnLateMin = O.boardLateMinSec / 60, bnMax = O.boardLagMaxSec / 60, bsg = O.boardSoftMin;
   var dNorm = O.boardNormW / (bnNorm - bnMin), dLate = (1 - O.boardNormW) / (bnMax - bnLateMin);
   function soft(x, a, b, sg2) { if (x < a) { var z = (a - x) / sg2; return Math.exp(-0.5 * z * z); } if (x > b) { var z3 = (x - b) / sg2; return Math.exp(-0.5 * z3 * z3); } return 1; }
+  // 통과 i 가 지연 d(분)를 얼마나 지지하는지(로그 가능도). wid/sh/k2: 이 통과가 마지막 통과보다 몇 역 앞이라 생기는 창 넓힘·기울기(하드 창 방식), HMM 방식은 0.
+  function emitLog(i, d, wid, sh, k2) {
+    var st = B[i], xi = (st.ms - planMs[st.idx]) / MIN;
+    if (st.src === 'board') {
+      var lc = xi - d;                                                             // lc: 승차 확정이 실제 승차보다 늦은 정도(분)
+      var f = O.boardFloor + dNorm * soft(lc, bnMin, bnNorm, bsg) + dLate * soft(lc, bnLateMin, bnMax, bsg);
+      return Math.log(f);
+    } else if (st.src === 'gps') {
+      return rbQ(win(d, xi + sh - O.gpsTolSec / 60 - wid, xi + sh + O.gpsTolSec / 60 + wid, sg), k2);
+    } else if (st.src === 'move') {
+      return rbQ(win(d, xi + sh - (O.moveLagMaxSec + O.moveTolSec) / 60 - wid, xi + sh - (O.moveLagMinSec - O.moveTolSec) / 60 + wid, sg), k2);      // 지연 ∈ [x−(탐지 지연 최대+오차), x−(최소−오차)]
+    } else if (loose[i] || backlog[i]) {
+      if (O.burstRamp) {
+        var cB = (U[i] - planMs[st.idx]) / MIN + sh + wid, accB = 0, nsB = 14, zq;
+        for (var lq = 0; lq < nsB; lq++) { var lagM = pfLo + (pfHi - pfLo) * (lq + 0.5) / nsB; zq = Math.max(0, d + lagM - cB) / sg; accB += Math.exp(-0.5 * zq * zq); }
+        accB /= nsB;
+        // 앞 기록과 간격이 5초 간격 몰림(≈5초)보다 조금 넓으면(6.5~12초) 몰림일 수도, 우연히 바로 뒤에 찍힌 정상 채택일 수도 있다 → 두 가설의 혼합
+        if (ambig[i]) accB = O.burstAmbigW * accB + (1 - O.burstAmbigW) * soft(d, xi + sh - pfHi - wid, xi + sh - pfLo + wid, sg);
+        return Math.log(accB + 1e-12);
+      } else return win(d, -1e9, (U[i] - planMs[st.idx]) / MIN - pfLo, sg);                // 몰림: 상한만
+    } else if (st.src === 'drift') {
+      return rbQ(win(d, xi + sh - 2 * pfHi - wid, xi + sh + 0.2 + wid, sg), k2);              // 드리프트 보정 위치: 지연이 더 클 수 있어 범위를 넓게
+    } else {
+      return rbQ(win(d, xi + sh - pfHi - wid, xi + sh - pfLo + wid, sg), k2);
+    }
+  }
+  // ── 변화점(HMM) 필터: 통과를 시간 순으로 보며 지연 수준의 사후분포를 이어 간다. 역 사이에 지연은 서서히 변하고(가우시안·기울기), 작은 확률로 갑자기 바뀐다(구간 중 정차·서행: 라플라스).
+  //     통과 하나가 이상치일 확률(epsOut)도 둔다 → 한 번의 엉뚱한 통과는 무시되고, 그 뒤 통과들이 새 수준을 가리키면 따라간다.
+  var hmmAl = null;
+  if (O.hmm) {
+    var al = new Float64Array(NG), t1 = new Float64Array(NG), t2 = new Float64Array(NG), gg, kk, sm;
+    var prW = nInfo ? 0.02 : O.priorNarrowW;
+    for (gg = 0; gg < NG; gg++) {
+      var d0 = gLo + gg * step, wSd = (d0 < priorMean && O.priorNegWideSd > 0) ? O.priorNegWideSd : O.priorWideSd;       // 일찍 달리는 쪽은 한계가 있다(시각표보다 20분 이른 열차는 없다): 아래쪽 꼬리를 좁힘
+      al[gg] = prW * Math.exp(-0.5 * Math.pow((d0 - priorMean) / O.priorNarrowSd, 2)) / O.priorNarrowSd + (1 - prW) * Math.exp(-0.5 * Math.pow((d0 - priorMean) / wSd, 2)) / wSd;
+    }
+    var normA = function (arr) { var sum = 0, q; for (q = 0; q < NG; q++) sum += arr[q]; if (!(sum > 0)) { for (q = 0; q < NG; q++) arr[q] = 1 / NG; return; } for (q = 0; q < NG; q++) arr[q] /= sum; };
+    normA(al);
+    var prevI = -1;
+    for (i = Math.max(0, B.length - 60); i < B.length; i++) {      // 계산량 상한: 최근 60개 통과만(보통 한 구간은 그보다 훨씬 적다)
+      if (prevI >= 0) {
+        var dk = Math.max(1, B[i].idx - prevI), shC = O.driftBiasPerStop * dk / step, sdC = Math.max(0.3, O.driftPerStop * Math.sqrt(dk) / step), pj = 1 - Math.pow(1 - O.epsJump, dk);
+        // 기울기: 분수 칸만큼 이동(선형 보간)
+        var s0 = Math.floor(shC), fr = shC - s0;
+        for (gg = 0; gg < NG; gg++) { var a0 = gg - s0, a1 = gg - s0 - 1; t1[gg] = (a0 >= 0 ? al[a0] * (1 - fr) : 0) + (a1 >= 0 ? al[a1] * fr : 0); }
+        // 가우시안 번짐
+        var R = Math.max(1, Math.ceil(3 * sdC)), ker = new Float64Array(2 * R + 1), ks = 0;
+        for (kk = -R; kk <= R; kk++) { ker[kk + R] = Math.exp(-0.5 * kk * kk / (sdC * sdC)); ks += ker[kk + R]; }
+        for (gg = 0; gg < NG; gg++) { sm = 0; for (kk = -R; kk <= R; kk++) { var gi = gg + kk; if (gi >= 0 && gi < NG) sm += t1[gi] * ker[kk + R]; } t2[gg] = sm / ks; }
+        // 갑작스런 변화: 라플라스 컨볼루션(재귀 필터)
+        if (pj > 1e-9) {
+          // 갑작스런 변화는 비대칭: 늦어지는 쪽(정차·서행 — 크게 가능)과 일찍 달리는 쪽(회복 — 작게만 가능)의 지수 꼬리를 따로 둔다(재귀 필터로 O(NG)).
+          var ru = Math.exp(-step / O.jumpUpScaleMin), rd = Math.exp(-step / O.jumpDnScaleMin), wU = O.jumpUpW * (1 - ru), wD = (1 - O.jumpUpW) * (1 - rd), Uc = 0, Dc = 0, Dv = new Float64Array(NG);
+          for (gg = NG - 1; gg >= 0; gg--) { Dv[gg] = Dc; Dc = t2[gg] + rd * Dc; }                  // Dv[g] = Σ_{m≥1} rd^{m−1} α[g+m]
+          for (gg = 0; gg < NG; gg++) { al[gg] = (1 - pj) * t2[gg] + pj * (wU * Uc + wD * Dv[gg]); Uc = t2[gg] + ru * Uc; }   // Uc = Σ_{m≥1} ru^{m−1} α[g−m]
+        } else for (gg = 0; gg < NG; gg++) al[gg] = t2[gg];
+      }
+      var bs = B[i].src, mixOut = (bs !== 'board' && !(loose[i] || backlog[i]));
+      for (gg = 0; gg < NG; gg++) { var ev = Math.exp(emitLog(i, gLo + gg * step, 0, 0, 0)); al[gg] *= mixOut ? ((1 - O.epsOut) * ev + O.epsOut * O.robustFloor) : ev; }
+      normA(al); prevI = B[i].idx;
+    }
+    hmmAl = al;
+  }
   for (g = 0; g < NG; g++) {
     var d = gLo + g * step;
     var v = Math.log((nInfo ? 0.02 : O.priorNarrowW) * Math.exp(-0.5 * Math.pow((d - priorMean) / O.priorNarrowSd, 2)) / O.priorNarrowSd
       + (1 - O.priorNarrowW) * Math.exp(-0.5 * Math.pow((d - priorMean) / O.priorWideSd, 2)) / O.priorWideSd);
-    for (i = useFrom; i < B.length; i++) {
-      var st = B[i], xi = (st.ms - planMs[st.idx]) / MIN, k2 = Math.max(0, lastIdx - st.idx);
-      var wid = O.driftPerStop * Math.sqrt(k2), sh = O.driftBiasPerStop * k2;      // 오래된 통과일수록 그 사이 지연이 달라졌을 수 있다(대개 늦어지는 쪽)
-      if (st.src === 'board') {
-        var lc = xi - d;                                                             // lc: 승차 확정이 실제 승차보다 늦은 정도(분)
-        var f = O.boardFloor + dNorm * soft(lc, bnMin, bnNorm, bsg) + dLate * soft(lc, bnLateMin, bnMax, bsg);
-        v += Math.log(f);
-      } else if (st.src === 'gps') {
-        v += win(d, xi + sh - O.gpsTolSec / 60 - wid, xi + sh + O.gpsTolSec / 60 + wid, sg);
-      } else if (st.src === 'move') {
-        v += win(d, xi + sh - (O.moveLagMaxSec + O.moveTolSec) / 60 - wid, xi + sh - (O.moveLagMinSec - O.moveTolSec) / 60 + wid, sg);      // 지연 ∈ [x−(탐지 지연 최대+오차), x−(최소−오차)]
-      } else if (loose[i] || backlog[i]) {
-        if (O.burstRamp) {
-          var cB = (U[i] - planMs[st.idx]) / MIN + sh + wid, accB = 0, nsB = 14, zq;
-          for (var lq = 0; lq < nsB; lq++) { var lagM = pfLo + (pfHi - pfLo) * (lq + 0.5) / nsB; zq = Math.max(0, d + lagM - cB) / sg; accB += Math.exp(-0.5 * zq * zq); }
-          accB /= nsB;
-          // 앞 기록과 간격이 5초 간격 몰림(≈5초)보다 조금 넓으면(6.5~12초) 몰림일 수도, 우연히 바로 뒤에 찍힌 정상 채택일 수도 있다 → 두 가설의 혼합
-          if (ambig[i]) accB = O.burstAmbigW * accB + (1 - O.burstAmbigW) * soft(d, xi + sh - pfHi - wid, xi + sh - pfLo + wid, sg);
-          v += Math.log(accB + 1e-12);
-        } else v += win(d, -1e9, (U[i] - planMs[st.idx]) / MIN - pfLo, sg);                // 몰림: 상한만
-      } else if (st.src === 'drift') {
-        v += win(d, xi + sh - 2 * pfHi - wid, xi + sh + 0.2 + wid, sg);              // 드리프트 보정 위치: 지연이 더 클 수 있어 범위를 넓게
-      } else {
-        v += win(d, xi + sh - pfHi - wid, xi + sh - pfLo + wid, sg);
-      }
+    if (hmmAl) v = Math.log(hmmAl[g] + 1e-300);
+    else for (i = useFrom; i < B.length; i++) {
+      var k2 = Math.max(0, lastIdx - B[i].idx);
+      v += emitLog(i, d, O.driftPerStop * Math.sqrt(k2), O.driftBiasPerStop * k2, k2);      // 오래된 통과일수록 그 사이 지연이 달라졌을 수 있다(대개 늦어지는 쪽)
     }
     for (i = 0; i < C.length; i++) {
       var xc = (C[i].ms - planMs[C[i].idx]) / MIN, wc = O.driftPerStop * Math.sqrt(Math.max(0, lastIdx - C[i].idx));
@@ -434,7 +485,7 @@ function _reLegModel(S, planMs, O, priorMean, snap, notes) {
     if (!gotMed && acc >= tot / 2) { level = gLo + g * step; gotMed = true; }
     if (!gotHi && acc >= tot * (1 - O.quantile)) { qHi = gLo + g * step; gotHi = true; }
   }
-  if (O.quantile > 0 && O.quantile < 0.5) level = (qLo + qHi) / 2;
+  if (O.quantile > 0 && O.quantile < 0.5) level = (O.bimodalSpanMin > 0 && qHi - qLo > O.bimodalSpanMin) ? level : (qLo + qHi) / 2;      // 사후분포가 두 봉우리(예: 엉뚱한 통과 vs 정말 바뀜)로 갈라지면 가운데(둘 다 아닌 값)가 아니라 중앙값
   if (nBacklog) notes.push('몰림 ' + nBacklog + '건: 지연 수준에서 제외(채택 지연을 감안한 상한 가능도로만 사용)');
   if (C.length) notes.push('기지국 선행 ' + C.length + '건: 실제보다 1~3분 이른 값이라 하한으로만 사용');
   notes.push('구간 지연 수준 ' + (Math.round(level * 100) / 100) + '분 (믿을 만한 통과 ' + nInfo + '개' + (nInfo ? '' : ', 사전값·승차 확정으로 추정') + ')');

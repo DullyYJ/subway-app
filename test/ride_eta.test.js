@@ -360,6 +360,15 @@ t("움직임 시작 증거(move): 탐지 지연만큼 이른 시각으로 보고
   assert.ok(Math.abs(r.delayMin - 0.3) <= 0.5, 'delay ' + r.delayMin);
   assert.ok(r.notes.some(x => /믿을 만한 통과 2개/.test(x)), r.notes.join(' | '));
 });
+t('중간에 정차·서행으로 지연이 갑자기 4분 생겨도(계단식 변화) 두 번 통과 뒤에는 새 지연을 따른다(변화점 필터)', () => {
+  const nodes = scene();
+  const a = run(nodes, [P(1, 17, 35, 20), P(2, 17, 38, 15), P(3, 17, 44, 5), P(4, 17, 46, 10)]);   // 3번째 역부터 +4분
+  assert.ok(hm(a.arr[7]) >= hm('17:50') && hm(a.arr[7]) <= hm('17:52'), a.arr.join(' '));
+  const b = run(nodes, [P(1, 17, 35, 20), P(2, 17, 38, 15), P(3, 17, 40, 15), P(4, 17, 46, 0), P(5, 17, 47, 0)]);   // 4번째 역 앞 구간에서 +4분
+  assert.ok(hm(b.arr[7]) >= hm('17:49') && hm(b.arr[7]) <= hm('17:51'), b.arr.join(' '));
+  const c = run(nodes, [P(1, 17, 35, 20), P(2, 17, 38, 15), P(3, 17, 40, 15), P(4, 17, 42, 15), P(5, 17, 43, 15)]);   // 정시 운행이면 지연 0 근처 유지
+  assert.ok(Math.abs(c.delayMin) <= 0.6 && c.arr[7] === '17:47', c.arr.join(' ') + ' d=' + c.delayMin);
+});
 t('승강장 대기 유예(4분)가 끝나면 밀지 않는다(놓침 판단은 앱의 몫)', () => {
   const nodes = scene(), r = rideEta({ nowMs: at(17, 40, 30), nodes: nodes, passes: [], boarded: false, notDeparted: true, platformWaiting: true });
   assert.strictEqual(r.arr[1], '17:35');
