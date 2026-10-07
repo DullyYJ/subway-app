@@ -33,7 +33,8 @@ for(const [ci,sx,sy,ex,ey] of Q){
   txt=await r.text();tt.push(performance.now()-t);}
   if(!txt)continue; tt.sort((a,b)=>a-b);ts.push([ci,Math.round(tt[Math.floor(tt.length/2)])]);
   // 엔진 내부 진단(시간 등)은 비교에서 제외
-  try{const j=JSON.parse(txt);delete j.liveStat;delete j.busDiag;delete j.engVer;delete j.engineVersion;out[ci]=JSON.stringify(j)}catch(e){out[ci]=txt.slice(0,200)}
+  try{const j=JSON.parse(txt);if(!process.env.KEEPLS){delete j.liveStat;delete j.busDiag;}delete j.engVer;delete j.engineVersion;out[ci]=JSON.stringify(j)}catch(e){out[ci]=txt.slice(0,200)}
 }
-fs.writeFileSync('/tmp/prof/out_'+tag+'.json',JSON.stringify(out));
+fs.writeFileSync('/tmp/prof/s3t/out_'+tag+'.json',JSON.stringify(out));
 console.log(tag,'times',ts.map(x=>x.join(':')).join(' '));
+if(globalThis.__BW)console.log('BW',JSON.stringify(globalThis.__BW));

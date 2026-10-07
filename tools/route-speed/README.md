@@ -8,3 +8,8 @@
 - `patch_addbus_memo.js`: addBus 결과를 (rows 배열·분·요일) 키로 최근 2개 재사용.
 - 검증: `eq.mjs`(탐색 무작위 질의 원본 대비 JSON 동일), `eq2.mjs`(xpWait·accessNodes), `eq3.mjs`(라이브/rtw/accessSec 상태에서 부작용 통계까지), `full_rc.mjs`(handleRouteV2 전체 응답 비교). 데이터(정류장 행·kric)는 D1 에서 받아 `/tmp/prof/` 에 둔다(커밋하지 않음) — 경로는 스크립트 상단 참고.
 - 2026-10-07 결과: 무작위 수천 건 + 전체 응답 13건 **차이 0**. 로컬(따뜻한 상태) 요청당 시간 약 2~3배 단축(서울역→수원 461→217ms, 강남→수원 296→164ms).
+
+## s3 (2026-10-07 밤 추가)
+- `patch_s3.js`: ①버스 대기 간선 캐시를 accessSec/rtw 상태로 확장(waitLog·rtwStat 부작용을 그대로 재생, ld 순위 계산의 `__bwMemo` 안에서는 비활성) ②isPassStop 이름별 캐시 ③xpBits/xpHops 테이블 디코드(잘못된 문자는 원본 경로).
+- 검증: `eq4.mjs`(accessSec·rtw·중도 변경·라이브 전환에서 waitLog·rtwStat 포함 동일), `eq5.mjs`(디코드·isPassStop 7만 건 퍼즈), `full_rc.mjs`(70건 전체 응답; `KEEPLS=1` 이면 liveStat 의 시간 필드 외 전부 비교) — 모두 차이 0. 먼저 `eq5`/`full_rc` 에서 rtwStat.miss 차이를 잡아 `__bwMemo` 예외를 넣었다.
+- 효과: 로컬 따뜻한 상태 장거리 ≈12% 단축, 콜드 첫 요청은 거의 변화 없음(콜드는 JIT 가 지배: 부산 콜드 ≈800ms vs 따뜻 ≈230ms).
