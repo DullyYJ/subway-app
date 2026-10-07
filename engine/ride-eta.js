@@ -1,0 +1,367 @@
+// 길동무 — 탑승 중 도착시각 계산 모듈 (route-v2 Worker 에 붙여 넣는 순수 함수)
+//
+// ★ 원칙(YJ): "계산은 전부 엔진이 한다. 앱은 그리기만 한다."
+//   예전에는 앱(www/index.html)이 역·정류장 통과 시각(_nodePassMs)을 보고 직접 도착시각을 다시 계산했다
+//   (_recalcArrivalsFrom · _htlSanityCheck · _htlSnapBoardArr · _monoDisplayFix). 그 계산을 이 파일로 옮겨 다듬었다.
+//   앱은 매번 '지금까지의 증거 전부'를 보내고, 이 함수가 노드별 도착시각을 돌려준다(상태 없음 = stateless).
+//
+// 입력  { nowMs, nodes:[{name,isSub,isBus,isWalk,isOrigin,lineName,planMin}], passes:[{idx,ms,src}], boarded,
+//         timetable?:{boardIdx,times[]}, notDeparted?, tzOffsetMin?, opts? }
+//   planMin : 처음 안내한 도착 예정(하루 안의 분, 자정을 넘으면 1440 이상). 앱이 덮어쓴 값이 아니라 '원래 값'을 항상 보낸다.
+//   passes  : 통과 증거. src = 'board'(승차 확정) | 'gps' | 'pf'(위치 채택) | 'cell'(기지국 선행) | 'drift'
+//             같은 역에 증거가 여러 개여도 된다(예: 기지국 선행 + 뒤이은 PF 채택) — 어느 것을 믿을지는 여기서 정한다.
+//   timetable: 첫 승차역의 정적 시각표 출발 분(승차 직후 한 번만 쓰인다)
+// 출력  { arr:["HH:MM"…], etaMs:[ms…], delayMin, anchorIdx, notes:[…] }
+//
+// 이 파일은 의존성이 없다. 맨 아래 module.exports 는 시험(Node)용이고 Worker 에서는 함수 선언만 쓰인다.
+'use strict';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 조정값. 전부 '측정으로 고칠 수 있는' 값이다(근거는 각 줄 주석). 요청의 opts 로 덮어쓸 수 있다(민감도 점검용).
+// ─────────────────────────────────────────────────────────────────────────────
+var RIDE_ETA_DEFAULTS = {
+  // ★ 2026-10-07 (PF 채택 지연): 위치 채택(PF)은 실제 통과보다 5~70초(평균 ≈ 37초) 늦게 찍힌다 → 실제 통과 ≈ 채택 시각 − 35초.
+  pfLagSec: 35, pfLagMinSec: 5, pfLagMaxSec: 70,
+  // 승차 확정이 실제 승차보다 늦은 정도: 보통 20~120초, 가끔(약 20%) 2~6.5분.
+  boardLagMinSec: 20, boardLagNormSec: 120, boardLateMinSec: 170, boardLagMaxSec: 370, boardNormW: 0.8, boardSoftMin: 0.25, boardFloor: 0.004,
+  // 기지국 선행 통과는 실제 통과보다 1~3분 이르다.
+  cellLeadMinSec: 60, cellLeadMaxSec: 180,
+  // GPS 통과: 가장 가까웠던 순간 ±15초
+  gpsTolSec: 15,
+  // ★ 2026-10-07 (원인: 승차 확정이 3~6분 늦으면 직후 PF 채택이 5초 간격으로 한꺼번에 몰려 찍힘): 앞 기록과 이 간격(초) 안에 찍힌 통과 = '몰림'.
+  //   실제 통과보다 훨씬 늦은 시각이라 지연의 상한일 뿐이다 → 지연 수준을 정하는 데 쓰지 않는다.
+  backlogGapSec: 12,
+  // 열차는 시각표 구간 소요의 60% 보다 빨리 달릴 수 없다(기존 앱 규칙 '앵커 하한'의 일반화). 뒤 통과가 이보다 빠르게 찍혔으면 앞 통과는 늦게 알게 된 기록이다.
+  minRunRatio: 0.6, burstTolSec: 45,
+  // 지연 수준을 정할 때 보는 '가장 최근 믿을 만한 통과' 개수(기존 앱: 최근 3개). 오래된 통과는 지연 변화를 못 따라가므로 버린다.
+  levelWindow: 3,
+  // 구간 안에서 지연은 서서히 변한다: 한 역당 변화폭(분, √역수로 늘어남)과, 늦어지는 쪽으로의 평균 기울기(분/역)
+  driftPerStop: 0.12, driftBiasPerStop: 0.07,
+  // 지연 사전 분포(분): 열차는 대개 예정 근처(좁은 봉우리) + 가끔 크게 어긋남(넓은 꼬리). 증거가 없을 때만 영향을 준다.
+  priorDelayMin: 0.5, priorNarrowW: 0.5, priorNarrowSd: 3, priorWideSd: 8,
+  // 범위 가장자리의 부드러움(분)
+  softMin: 0.2,
+  // 최종 지연 수준 = 확률 분포의 10~90% 구간 한가운데(둘로 갈리는 상황에서 어느 쪽이 맞아도 오차가 반으로 줄도록)
+  quantile: 0.1,
+  // 정적 시간표 스냅: 승차 확정 시각 N분 전까지의 열차만 후보(17:35 탑승인데 17:29 열차로 끌려가지 않게). 열차가 시각표보다 일찍 떠나지 않는다는 하한으로 쓴다.
+  snapBackMin: 2, snapLateMaxMin: 1.5,
+  // 승차 전인데 예정 승차 시각이 '지금'보다 이만큼(분) 넘게 지났으면 경로 전체를 지금에 맞춘다(기존 _htlSanityCheck 의 40분)
+  staleShiftMin: 40,
+  // 표시 반올림: 'round'(가장 가까운 분) | 'floor'(내림 — 예전 앱)
+  rounding: 'round'
+};
+
+function _reFold(d) { return d - Math.round(d / 1440) * 1440; }          // 자정 접힘: 차이를 ±12시간 안으로
+function _reHHMM(ms, tzMin, rounding) {
+  var m = (ms + tzMin * 60000) / 60000;
+  m = (rounding === 'floor') ? Math.floor(m + 1e-9) : Math.round(m);
+  m = ((m % 1440) + 1440) % 1440;
+  var h = Math.floor(m / 60), mi = m % 60;
+  return (h < 10 ? '0' : '') + h + ':' + (mi < 10 ? '0' : '') + mi;
+}
+function _reMin(ms, tzMin) { var m = ((ms + tzMin * 60000) / 60000) % 1440; return (m + 1440) % 1440; }
+function _reIsTransit(n) { return !!n && !n.isWalk && !n.isOrigin && (!!n.isSub || !!n.isBus); }
+function _reMerge(a, b) { var o = {}, k; for (k in a) o[k] = a[k]; if (b) for (k in b) o[k] = b[k]; return o; }
+function _reSrcPri(src) { return src === 'gps' ? 5 : src === 'pf' ? 4 : src === 'drift' ? 3 : src === 'board' ? 2 : 1; }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 본체
+// ─────────────────────────────────────────────────────────────────────────────
+function rideEta(input) {
+  input = input || {};
+  var O = _reMerge(RIDE_ETA_DEFAULTS, input.opts);
+  var tz = (typeof input.tzOffsetMin === 'number') ? input.tzOffsetMin : 540;     // 한국 표준시
+  var nodes = input.nodes || [];
+  var n = nodes.length;
+  var notes = [];
+  var passesIn = input.passes || [];
+  var i, j, k, ii;
+
+  var nowMs = +input.nowMs;
+  if (!isFinite(nowMs)) {
+    nowMs = 0;
+    for (ii = 0; ii < passesIn.length; ii++) if (+passesIn[ii].ms > nowMs) nowMs = +passesIn[ii].ms;
+    if (!nowMs) nowMs = Date.now();
+  }
+
+  // ── 1. 예정 시각(planMin)을 '지금' 기준 절대 시각(ms)으로. 자정을 넘는 경로도 이어서 센다(차이는 항상 ±12시간으로 접어서).
+  var planMs = new Array(n), valid = new Array(n), firstValid = -1, prevValid = -1, chain = 0, nowMin = _reMin(nowMs, tz), ms0 = 0;
+  for (i = 0; i < n; i++) {
+    var pmI = nodes[i] && nodes[i].planMin;
+    valid[i] = (pmI != null && isFinite(+pmI));
+    if (!valid[i]) { planMs[i] = null; continue; }
+    if (firstValid < 0) { firstValid = i; chain = +pmI; ms0 = nowMs + _reFold(+pmI - nowMin) * 60000; }
+    else chain += _reFold(+pmI - (+nodes[prevValid].planMin));
+    planMs[i] = ms0 + (chain - (+nodes[firstValid].planMin)) * 60000;
+    prevValid = i;
+  }
+  if (firstValid < 0) return { arr: [], etaMs: [], delayMin: 0, anchorIdx: -1, notes: ['planMin 이 있는 노드가 없다'] };
+
+  // ── 2. 승차 구간(leg) 구조 — 기존 _isLegStartIdx 와 같은 판정(앞이 도보·출발점이거나 노선·수단이 바뀌면 새 구간)
+  var isLegStart = new Array(n), legOf = new Array(n), boardIdx = -1, curLeg = -1;
+  for (i = 0; i < n; i++) {
+    var nd = nodes[i], pv = nodes[i - 1];
+    isLegStart[i] = !!(_reIsTransit(nd) && (!pv || pv.isWalk || pv.isOrigin || (pv.lineName || '') !== (nd.lineName || '') || !!pv.isBus !== !!nd.isBus));
+    if (isLegStart[i]) curLeg = i;
+    legOf[i] = _reIsTransit(nd) ? curLeg : -1;
+    if (boardIdx < 0 && _reIsTransit(nd)) boardIdx = i;
+  }
+
+  // ── 3. 아직 안 탔으면 승차역부터 뒤는 건드리지 않는다(차는 시각표대로 온다 — 내가 걷는 속도와 무관하다).
+  var out = new Array(n);
+  function planOnly() { for (var q = 0; q < n; q++) out[q] = valid[q] ? planMs[q] : null; }
+  if (input.notDeparted === true || input.boarded === false) {
+    planOnly();
+    notes.push('승차 전: 승차역 이후 시각은 예정 그대로');
+    // 기존 _htlSanityCheck: 예정 승차 시각이 '지금'보다 한참 지났으면(이미 떠난 차를 가리킴) 경로 전체를 지금에 맞춘다.
+    if (boardIdx >= 0 && valid[boardIdx]) {
+      var staleMin = (nowMs - planMs[boardIdx]) / 60000;
+      if (staleMin > O.staleShiftMin) {
+        for (k = 0; k < n; k++) if (out[k] != null) out[k] += staleMin * 60000;
+        notes.push('승차 전 예정이 ' + Math.round(staleMin) + '분 지나 경로 전체를 지금에 맞춤');
+      }
+    }
+    return _reFinish(out, tz, O, -1, 0, notes, n, nowMs);
+  }
+
+  // ── 4. 통과 증거 정리: 역마다 하나만(gps > pf > drift > board > cell), 같은 종류면 먼저 안 쪽, 시각 순서가 거꾸로면 버림
+  var byIdx = {}, P;
+  for (ii = 0; ii < passesIn.length; ii++) {
+    P = passesIn[ii];
+    if (!P || !isFinite(+P.idx) || !isFinite(+P.ms)) continue;
+    var ix = +P.idx;
+    if (ix < 0 || ix >= n || !valid[ix] || !_reIsTransit(nodes[ix])) continue;
+    var src = P.src || 'pf', cur = byIdx[ix];
+    if (!cur || _reSrcPri(src) > _reSrcPri(cur.src) || (_reSrcPri(src) === _reSrcPri(cur.src) && +P.ms < cur.ms)) {
+      if (cur && cur.src === 'cell' && src !== 'cell') notes.push('역 ' + ix + ': 기지국 선행 대신 위치 채택을 씀');
+      byIdx[ix] = { idx: ix, ms: +P.ms, src: src };
+    }
+  }
+  var ps = [];
+  for (k in byIdx) ps.push(byIdx[k]);
+  ps.sort(function (a, b) { return a.idx - b.idx; });
+  var kept = [], lastMs = -Infinity;
+  for (ii = 0; ii < ps.length; ii++) {
+    if (ps[ii].ms < lastMs - 20000) { notes.push('역 ' + ps[ii].idx + ' 통과 시각이 앞 역보다 이르다 → 버림'); continue; }
+    kept.push(ps[ii]); if (ps[ii].ms > lastMs) lastMs = ps[ii].ms;
+  }
+  ps = kept;
+  if (!ps.length) {
+    planOnly();
+    notes.push('통과 증거 없음: 예정 그대로');
+    return _reFinish(out, tz, O, -1, 0, notes, n, nowMs);
+  }
+
+  // ── 5. 정적 시간표 스냅 후보: 승차 직후(승차역 뒤 통과 기록이 아직 하나도 없을 때)만.
+  var snapIdx = -1, snapDelay = null;
+  var TT = input.timetable;
+  if (TT && isFinite(+TT.boardIdx) && TT.times && TT.times.length && byIdx[+TT.boardIdx]) {
+    var anyAfter = false;
+    for (k in byIdx) if (+k > +TT.boardIdx) { anyAfter = true; break; }
+    if (!anyAfter) {
+      var bp = byIdx[+TT.boardIdx], bIdx = +TT.boardIdx;
+      var bMin = _reMin(bp.ms, tz), floorMin = Math.floor(_reMin(bp.ms - O.snapBackMin * 60000, tz)), best = null;
+      for (j = 0; j < TT.times.length; j++) {
+        var t = +TT.times[j];
+        var dBack = _reFold(Math.floor(bMin) - t);                    // 승차 확정 분 − 시각표 분 (≥0 = 이미 떠난 열차)
+        var dFloor = _reFold(t - floorMin);                           // 확정 2분 전 이후
+        if (dBack >= 0 && dBack <= 30 && dFloor >= 0 && (best === null || dBack < best)) best = dBack;
+      }
+      if (best !== null) {
+        var tMs = bp.ms - (bMin - Math.floor(bMin)) * 60000 - best * 60000;          // 그날 그 분의 정각(ms)
+        snapIdx = bIdx; snapDelay = (tMs - planMs[bIdx]) / 60000;
+        notes.push('정적 시간표 스냅: ' + (nodes[bIdx].name || bIdx) + ' 승차 확정 ' + _reHHMM(bp.ms, tz, 'floor') + ' → 시각표 ' + _reHHMM(tMs, tz, 'floor') + ' 이후 출발로 본다');
+      }
+    }
+  }
+
+  // ── 6. 구간(leg)별 모델: 구간마다 '그 구간의 통과'만으로 지연 수준과 각 역의 실제 통과 시각을 추정한다.
+  //     → 이미 끝난 앞 구간 역 시각은 뒤 구간의 지연·일찍 도착에 끌려가지 않는다(앞 구간 고정).
+  var legsMap = {}, legKeys = [];
+  for (ii = 0; ii < ps.length; ii++) { var lg = legOf[ps[ii].idx]; if (!legsMap[lg]) { legsMap[lg] = []; legKeys.push(lg); } legsMap[lg].push(ps[ii]); }
+  var est = {}, legLevel = {};
+  for (ii = 0; ii < legKeys.length; ii++) {
+    var L = legKeys[ii];
+    var prior = O.priorDelayMin;
+    if (ii > 0) prior = Math.max(O.priorDelayMin, legLevel[legKeys[ii - 1]]);     // 앞 구간이 늦으면 환승 열차도 늦다(지연 전파)
+    var m = _reLegModel(legsMap[L], planMs, O, prior, snapIdx >= 0 && legOf[snapIdx] === L ? { idx: snapIdx, delay: snapDelay } : null, notes);
+    legLevel[L] = m.level;
+    for (var e in m.est) est[e] = m.est[e];
+  }
+  var anchor = ps[ps.length - 1];
+  var level = legLevel[legOf[anchor.idx]];
+  if (legKeys.length > 1) notes.push('앞 구간 ' + (legKeys.length - 1) + '개는 자기 구간 통과만으로 고정(뒤 구간 지연에 안 끌려감)');
+
+  // ── 7. 노드별 시각 만들기
+  //  (가) 통과가 있는 역: 그 추정 시각       (나) 앵커 뒤: 예정 + 지연 수준(환승 열차는 처음 안내보다 이르지 않게)
+  //  (다) 통과 기록 있는 두 역 사이의 기록 없는 역: 두 역 시각 사이를 예정 비율로 나눈다       (라) 첫 통과 앞: 예정 그대로(도보 구간)
+  for (k = 0; k < n; k++) out[k] = null;
+  for (k in est) out[+k] = est[k];
+  var carry = 0, held = false;
+  for (k = anchor.idx + 1; k < n; k++) {
+    if (!valid[k]) continue;
+    var base = planMs[k] + level * 60000 + carry;
+    if (isLegStart[k] && k > boardIdx) {
+      var need = planMs[k] - base;
+      if (need > 3000) { carry += need; base += need; held = true; }
+    }
+    out[k] = base;
+  }
+  if (held) notes.push('환승 유지: 앞으로 탈 열차·버스는 처음 안내한 시각보다 이르게 나오지 않음');
+  var stamped = [];
+  for (k = 0; k <= anchor.idx; k++) if (est[k] != null) stamped.push(k);
+  var interp = 0, frozenTail = 0;
+  for (k = 0; k < n; k++) {
+    if (out[k] != null || !valid[k]) continue;
+    if (k < stamped[0]) { out[k] = planMs[k]; continue; }
+    var lo = -1, hi = -1;
+    for (j = 0; j < stamped.length; j++) { if (stamped[j] < k) lo = stamped[j]; else { hi = stamped[j]; break; } }
+    if (lo < 0 || hi < 0) { out[k] = planMs[k] + level * 60000; continue; }
+    var tLo = est[lo], tHi = Math.max(tLo, est[hi]);
+    // 이미 끝난 앞 구간의 마지막 통과 뒤 역(통과 기록 없음)은 그 구간 자신의 지연 수준으로 — 뒤 구간 증거에 끌려가지 않게(다음 통과 시각은 넘지 않게)
+    if (legOf[k] >= 0 && legOf[k] !== legOf[anchor.idx] && legLevel[legOf[k]] != null && legOf[lo] === legOf[k] && legOf[hi] !== legOf[k]) {
+      out[k] = Math.max(tLo, Math.min(tHi, planMs[k] + legLevel[legOf[k]] * 60000));
+      frozenTail++;
+      continue;
+    }
+    var span = planMs[hi] - planMs[lo], f = span > 0 ? (planMs[k] - planMs[lo]) / span : 0.5;
+    out[k] = tLo + (tHi - tLo) * Math.max(0, Math.min(1, f));
+    interp++;
+  }
+  if (frozenTail) notes.push('앞 구간 마지막 통과 뒤 역 ' + frozenTail + '곳: 그 구간 자신의 지연 수준으로 고정');
+  if (interp) notes.push('통과 기록 없는 역 ' + interp + '곳: 앞뒤 기록 사이를 예정 비율로 나눔');
+
+  return _reFinish(out, tz, O, anchor.idx, level, notes, n, nowMs);
+}
+
+// 표시 마지막 안전망: 시각이 거꾸로 가지 않게(앞 시각보다 이른 값은 앞 시각에 맞춘다) + 도착 예정이 이미 지난 시각이 되지 않게 + 서식
+function _reFinish(out, tz, O, anchorIdx, level, notes, n, nowMs) {
+  var prev = null, mono = 0, arr = new Array(n), q, last = -1;
+  // 첫 통과 앞 도보 노드가 뒤 노드보다 늦을 수 있으므로 앞쪽은 뒤에서부터 상한을 먼저 적용
+  var nextMin = null;
+  for (q = n - 1; q >= 0; q--) { if (out[q] == null) continue; if (nextMin != null && out[q] > nextMin && q < anchorIdx) out[q] = nextMin; if (nextMin == null || out[q] < nextMin) nextMin = out[q]; }
+  for (q = n - 1; q >= 0; q--) if (out[q] != null) { last = q; break; }
+  if (anchorIdx >= 0 && last > anchorIdx && out[last] < nowMs) { out[last] = nowMs; notes.push('도착 예정이 이미 지난 시각이라 지금으로 맞춤'); }
+  for (q = 0; q < n; q++) {
+    if (out[q] == null) continue;
+    if (prev != null && out[q] < prev) { out[q] = prev; mono++; }
+    prev = out[q];
+  }
+  if (mono) notes.push('표시 순서 보정 ' + mono + '곳');
+  for (q = 0; q < n; q++) arr[q] = out[q] == null ? null : _reHHMM(out[q], tz, O.rounding);
+  return { arr: arr, etaMs: out, delayMin: Math.round(level * 100) / 100, anchorIdx: anchorIdx, notes: notes };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 한 승차 구간의 통과 증거 → { level(분), est{idx:ms} }
+//   '지연 수준(level)' = 이 구간 열차가 예정보다 얼마나 늦(+)거나 이른(−)지(분). 구간 안에서는 거의 일정하다.
+//   증거마다 '그 증거가 허용하는 지연의 범위'를 만들고, 범위들을 곱한 확률 분포(격자)의 10~90% 구간 한가운데를 지연 수준으로 삼는다.
+//     · 위치 채택(PF)        : 실제 통과는 채택보다 5~70초 앞 → 지연 ∈ [x−70초, x−5초]   (x = 채택 시각 − 예정)
+//     · 승차 확정(board)     : 실제 승차보다 보통 20~120초, 가끔 2~6.5분 늦게 확정됨
+//     · 몰림(backlog)        : 앞 기록과 12초 안에 찍힌 통과, 또는 뒤 통과가 '최소 주행시간'보다 가깝게 찍혀 늦게 알게 된 것으로 드러난 통과 → 상한(지연 ≤ x−5초)으로만
+//     · 기지국 선행(cell)    : 실제 통과는 stamp 보다 1~3분 뒤 → 지연 ∈ [x+60초, x+180초]
+//     · GPS                  : 지연 ∈ [x±15초]
+//     · 정적 시간표(승차 직후) : 열차는 시각표보다 일찍 떠나지 않는다 → 지연 ≥ 시각표 − 예정
+//     · 사전 분포            : 믿을 만한 통과가 하나도 없을 때만(승차 직후 몰림뿐일 때) 영향
+// ─────────────────────────────────────────────────────────────────────────────
+function _reLegModel(S, planMs, O, priorMean, snap, notes) {
+  var est = {}, i, g, MIN = 60000;
+  var B = [], C = [];                 // B: 위치 증거(승차·PF·GPS·드리프트), C: 기지국 선행
+  for (i = 0; i < S.length; i++) (S[i].src === 'cell' ? C : B).push(S[i]);
+  var tolMs = O.burstTolSec * 1000;
+
+  // 몰림 판별: 뒤 통과에서 거꾸로 '최소 주행시간만큼 앞선 시각'(U)보다 늦게 찍힌 기록 = 이제야 알게 된 기록(상한일 뿐)
+  var U = new Array(B.length), loose = new Array(B.length), backlog = new Array(B.length), nBacklog = 0;
+  for (i = B.length - 1; i >= 0; i--) {
+    U[i] = B[i].ms;
+    if (i < B.length - 1) { var cand = U[i + 1] - O.minRunRatio * (planMs[B[i + 1].idx] - planMs[B[i].idx]); if (cand < U[i]) U[i] = cand; }
+    loose[i] = (B[i].ms - U[i]) > tolMs;
+    backlog[i] = i > 0 && (B[i].ms - B[i - 1].ms) <= O.backlogGapSec * 1000;
+    if ((loose[i] || backlog[i]) && B[i].src !== 'board') nBacklog++;
+  }
+  var infList = [];
+  for (i = 0; i < B.length; i++) if (B[i].src !== 'board' && !loose[i] && !backlog[i]) infList.push(i);
+  var nInfo = infList.length;
+  // 지연은 구간 안에서 서서히 변하므로 '가장 최근 믿을 만한 통과 몇 개'부터 뒤만 쓴다
+  var useFrom = nInfo ? infList[Math.max(0, nInfo - O.levelWindow)] : 0;
+  var lastIdx = S[S.length - 1].idx;
+
+  // 격자 범위
+  var xs = [];
+  for (i = 0; i < S.length; i++) xs.push((S[i].ms - planMs[S[i].idx]) / MIN);
+  var gLo = Math.min.apply(null, xs) - 8, gHi = Math.max.apply(null, xs) + 3, step = 0.05;
+  if (gHi - gLo > 250) gHi = gLo + 250;
+  var NG = Math.max(2, Math.round((gHi - gLo) / step) + 1), lp = new Array(NG);
+  function win(d, a, b, sg) { if (d < a) { var z = (a - d) / sg; return -0.5 * z * z; } if (d > b) { var z2 = (d - b) / sg; return -0.5 * z2 * z2; } return 0; }
+  var pfLo = O.pfLagMinSec / 60, pfHi = O.pfLagMaxSec / 60, sg = O.softMin;
+  var bnMin = O.boardLagMinSec / 60, bnNorm = O.boardLagNormSec / 60, bnLateMin = O.boardLateMinSec / 60, bnMax = O.boardLagMaxSec / 60, bsg = O.boardSoftMin;
+  var dNorm = O.boardNormW / (bnNorm - bnMin), dLate = (1 - O.boardNormW) / (bnMax - bnLateMin);
+  function soft(x, a, b, sg2) { if (x < a) { var z = (a - x) / sg2; return Math.exp(-0.5 * z * z); } if (x > b) { var z3 = (x - b) / sg2; return Math.exp(-0.5 * z3 * z3); } return 1; }
+  for (g = 0; g < NG; g++) {
+    var d = gLo + g * step;
+    var v = Math.log((nInfo ? 0.02 : O.priorNarrowW) * Math.exp(-0.5 * Math.pow((d - priorMean) / O.priorNarrowSd, 2)) / O.priorNarrowSd
+      + (1 - O.priorNarrowW) * Math.exp(-0.5 * Math.pow((d - priorMean) / O.priorWideSd, 2)) / O.priorWideSd);
+    for (i = useFrom; i < B.length; i++) {
+      var st = B[i], xi = (st.ms - planMs[st.idx]) / MIN, k2 = Math.max(0, lastIdx - st.idx);
+      var wid = O.driftPerStop * Math.sqrt(k2), sh = O.driftBiasPerStop * k2;      // 오래된 통과일수록 그 사이 지연이 달라졌을 수 있다(대개 늦어지는 쪽)
+      if (st.src === 'board') {
+        var lc = xi - d;                                                             // lc: 승차 확정이 실제 승차보다 늦은 정도(분)
+        var f = O.boardFloor + dNorm * soft(lc, bnMin, bnNorm, bsg) + dLate * soft(lc, bnLateMin, bnMax, bsg);
+        v += Math.log(f);
+      } else if (st.src === 'gps') {
+        v += win(d, xi + sh - O.gpsTolSec / 60 - wid, xi + sh + O.gpsTolSec / 60 + wid, sg);
+      } else if (loose[i] || backlog[i]) {
+        v += win(d, -1e9, (U[i] - planMs[st.idx]) / MIN - pfLo, sg);                // 몰림: 상한만
+      } else if (st.src === 'drift') {
+        v += win(d, xi + sh - 2 * pfHi - wid, xi + sh + 0.2 + wid, sg);              // 드리프트 보정 위치: 지연이 더 클 수 있어 범위를 넓게
+      } else {
+        v += win(d, xi + sh - pfHi - wid, xi + sh - pfLo + wid, sg);
+      }
+    }
+    for (i = 0; i < C.length; i++) {
+      var xc = (C[i].ms - planMs[C[i].idx]) / MIN, wc = O.driftPerStop * Math.sqrt(Math.max(0, lastIdx - C[i].idx));
+      v += win(d, xc + O.cellLeadMinSec / 60 - wc, xc + O.cellLeadMaxSec / 60 + wc, sg);
+    }
+    if (snap) v += win(d, snap.delay - 0.15, snap.delay + O.snapLateMaxMin, sg);
+    lp[g] = v;
+  }
+  var mx = -Infinity, tot = 0, w = new Array(NG);
+  for (g = 0; g < NG; g++) if (lp[g] > mx) mx = lp[g];
+  for (g = 0; g < NG; g++) { w[g] = Math.exp(lp[g] - mx); tot += w[g]; }
+  var level = gLo, qLo = gLo, qHi = gLo, acc = 0, gotLo = false, gotHi = false, gotMed = false;
+  for (g = 0; g < NG; g++) {
+    acc += w[g];
+    if (!gotLo && acc >= tot * O.quantile) { qLo = gLo + g * step; gotLo = true; }
+    if (!gotMed && acc >= tot / 2) { level = gLo + g * step; gotMed = true; }
+    if (!gotHi && acc >= tot * (1 - O.quantile)) { qHi = gLo + g * step; gotHi = true; }
+  }
+  if (O.quantile > 0 && O.quantile < 0.5) level = (qLo + qHi) / 2;
+  if (nBacklog) notes.push('몰림 ' + nBacklog + '건: 지연 수준에서 제외(상한으로만 사용)');
+  if (C.length) notes.push('기지국 선행 ' + C.length + '건: 실제보다 1~3분 이른 값이라 하한으로만 사용');
+  notes.push('구간 지연 수준 ' + (Math.round(level * 100) / 100) + '분 (믿을 만한 통과 ' + nInfo + '개' + (nInfo ? '' : ', 사전값·승차 확정으로 추정') + ')');
+
+  // 각 역 추정 시각
+  for (i = 0; i < B.length; i++) {
+    var b2 = B[i];
+    if (b2.src === 'board' || loose[i] || backlog[i]) est[b2.idx] = Math.min(b2.ms - 5000, planMs[b2.idx] + level * MIN);   // 늦게 알게 된 기록은 실제 통과가 아니다
+    else est[b2.idx] = b2.src === 'gps' ? b2.ms : b2.ms - O.pfLagSec * 1000;
+  }
+  for (i = 0; i < C.length; i++) est[C[i].idx] = Math.max(C[i].ms, planMs[C[i].idx] + level * MIN);
+  return { level: level, est: est };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cloudflare Worker 진입점 — route-v2 의 fetch 에서  if (url.pathname === "/ride-eta") return handleRideEta(request);
+// ─────────────────────────────────────────────────────────────────────────────
+function handleRideEta(request) {
+  var H = { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'access-control-allow-methods': 'POST, OPTIONS', 'access-control-allow-headers': 'content-type' };
+  if (request.method === 'OPTIONS') return Promise.resolve(new Response(null, { status: 204, headers: H }));
+  if (request.method !== 'POST') return Promise.resolve(new Response(JSON.stringify({ error: 'POST only' }), { status: 405, headers: H }));
+  return request.json().then(function (body) {
+    var out;
+    try { out = rideEta(body); } catch (e) { return new Response(JSON.stringify({ error: String(e && e.message || e) }), { status: 500, headers: H }); }
+    return new Response(JSON.stringify(out), { headers: H });
+  }, function () { return new Response(JSON.stringify({ error: 'JSON 아님' }), { status: 400, headers: H }); });
+}
+
+if (typeof module !== 'undefined') module.exports = { rideEta: rideEta, handleRideEta: handleRideEta, RIDE_ETA_DEFAULTS: RIDE_ETA_DEFAULTS };
