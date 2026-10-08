@@ -54,7 +54,7 @@ async function newApp(b, opts) {
     const j = (o) => r.fulfill({ status: 200, headers: H, body: JSON.stringify(o) });
     calls.push(req.method() + ' ' + u.host.split('.')[0] + u.pathname); if (req.method() === 'POST' && /board-writer/.test(u.host)) page.__bodies.push(u.pathname + ' ' + (req.postData() || ''));
     if (req.method() === 'OPTIONS') return r.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*' } });
-    if (/route-v2/.test(u.host)) return j(resp());
+    if (/route-v2/.test(u.host)) { if (page.__engMode === 'abort') return r.abort('failed'); if (page.__engMode === 'fail') return r.fulfill({ status: 500, headers: H, body: '{}' }); return j(resp()); }
     if (/board-writer/.test(u.host)) {
       if (u.pathname === '/posts') return j({ ok: true, posts: page.__srvPosts.concat(POSTS) });
       if (u.pathname === '/post' && req.method() === 'POST') {
@@ -383,6 +383,18 @@ const vis = (page, id) => page.evaluate(i => { const e = document.getElementById
     const q = await page.evaluate(() => ({ fs: _fmapStart && _fmapStart.name, fd: _fmapDest && _fmapDest.name, inp: document.getElementById('fmapStartInp').value + '>' + document.getElementById('fmapDestInp').value }));
     assert.ok(/강남/.test(q.fs) && /수원/.test(q.fd), JSON.stringify(q)); assert.ok(calls.some(c => /route-v2/.test(c)), '엔진 호출 없음: ' + calls.join(','));
     await page.evaluate(() => _applyFavRoute('서울역', '수원')); await page.clock.runFor(5000);
+  });
+  await t('엔진이 응답하지 않으면 앱이 대신 계산하지 않고, 화면에 이유와 [다시 시도]를 보여주며, 다시 누르면 엔진 결과가 나온다', async () => {
+    await go(page, 'home', 500);
+    page.__engMode = 'abort';
+    await page.evaluate(() => _applyFavRoute('서울역', '수원')); await page.clock.runFor(14000);
+    const r = await page.evaluate(() => { const e = document.getElementById('transitResultErr'); const c = document.getElementById('transitResultCard'); return { err: e && getComputedStyle(e).display, txt: e ? e.innerText : '', card: c && getComputedStyle(c).display, load: getComputedStyle(document.getElementById('transitLoading')).display, retry: !!document.getElementById('routeRetryBtn'), pop: !!document.querySelector('#routeModePopup.open') }; });
+    assert.strictEqual(r.err, 'block', JSON.stringify(r)); assert.ok(/경로를 불러오지 못했어요/.test(r.txt) && /연결/.test(r.txt), JSON.stringify(r)); assert.ok(r.retry, '다시 시도 버튼 없음');
+    assert.notStrictEqual(r.card, 'flex', '앱이 임의로 경로 카드를 그림'); assert.strictEqual(r.load, 'none', '로딩 덮개가 남음'); assert.strictEqual(r.pop, false);
+    page.__engMode = null; calls.length = 0;
+    await page.evaluate(() => document.getElementById('routeRetryBtn').click()); await page.clock.runFor(5000);
+    const q = await page.evaluate(() => ({ err: getComputedStyle(document.getElementById('transitResultErr')).display, card: getComputedStyle(document.getElementById('transitResultCard')).display }));
+    assert.deepStrictEqual(q, { err: 'none', card: 'flex' }); assert.ok(calls.some(c => /route-v2/.test(c)), '엔진 재호출 없음');
   });
   await t('노선도 탭에서 JS 오류가 없다', async () => assert.deepStrictEqual(errs, []));
 

@@ -377,5 +377,7 @@
   - **홈 ⇅ 바꾸기 버튼**(`swapFmapRoute`): 엔진 상태(_fmapStart/_fmapDest)는 안 바꾸고 옛 BFS+'경로 유형 선택' 팝업을 띄웠고, 내 위치·장소·정류장이면 아무 일도 안 했음 → 엔진 상태를 서로 바꾸고 `fmapDoRoute()` 로 다시 탐색.
   - `calcFmapRoute`/`calcFmapRouteMap`(노선도 검색줄)·`doRoute` → 전부 엔진 호출로 바꿈(`doRoute` 는 호환용 얇은 껍데기: S.start/S.dest 를 엔진 입력으로 옮기고 `fmapDoRoute()`).
 - **삭제**: `_showRouteModePopup/_closeRouteModePopup/_selectRouteMode/_applyRoute`, 경로 유형 선택 팝업(`#routeModePopup` HTML·CSS), 옛 역 팝업(`#mapStnPopup`·`onMapStnClick`·`mspSetRoute`), `_goHome`, `calcOptimal`, `findPath`, `_fetchPublicRouteTime`, `_applyApiRouteData`, `_applyExpressTime/EXPRESS_SEGMENTS`, 옛 doRoute 본문(약 700줄).
-- **일부러 남김**: `bfsMinTime/bfsMinXfer/bfs` + `_renderBfsToTransitBox`(엔진 호출이 실패했을 때만 쓰는 폴백, 11449행 근처), `S.route` 를 쓰는 옛 '지하철 탭 관제'(renderPath/updateRouteDetailUI/startTracking 등 — 지금은 엔진 경로에서 S.route=null 이라 휴면). 다음에 정리한다면 이 두 덩어리(폴백 유지 여부 결정 필요).
-- 시험: `tabs_smoke.ui.test.js` 51개(바꾸기 2개·옛 코드 제거 확인 1개·공유글 8개 포함) + 나머지 12개 파일 전부 통과(병렬로 돌리면 타이밍 시험 몇 개가 느려 실패할 수 있으니 단독 재실행).
+- **폴백도 삭제(YJ 지시: 정확하지 않은 임의 경로는 보여주지 않는다)**: 앱 자체 BFS(`bfsMinTime/bfsMinXfer/bfs`, 고정 구간시간 표 기반이라 시간표·실시간이 없어 부정확), `_renderBfsToTransitBox`, 노선 그래프 `G`+`edge()` 데이터 1,150여 줄, 급행 메타(`EXPRESS_*`), 우선순위 큐 헬퍼, `lineOrder` 까지 제거. 지방역을 `STNDB` 에 추가하는 코드는 유지(엣지 연결만 뺌).
+  - 엔진이 응답하지 못하면: `_routeFailShow()` 가 홈 결과 영역에 **이유 + [다시 시도]** 를 보여준다(연결 실패 / 경로 없음 / 응답 지연 3종). 토스트는 앱 전체가 꺼져 있어 예전엔 아무 안내도 안 떴다. 첫 실패는 기존처럼 8.5초 뒤 1회 자동 재시도(실패 안내는 '결과'로 치지 않음).
+  - 남은 것: `S.route` 를 쓰는 옛 '지하철 탭 관제'(renderPath/updateRouteDetailUI/startTracking 등)는 엔진 경로에서 S.route=null 이라 휴면 상태 — 다음 정리 후보.
+- 시험: `tabs_smoke.ui.test.js` 52개(바꾸기 2개·옛 코드 제거 확인 1개·엔진 실패 안내 1개·공유글 8개 포함) + 나머지 12개 파일 전부 통과(병렬로 돌리면 타이밍 시험 몇 개가 느려 실패할 수 있으니 단독 재실행. `journey_alerts.ui.test.js` 의 '하차 10분 전 추천 알림' 은 정리 전 코드에서도 4번 중 1번꼴로 흔들리는 기존 타이밍 flake).
