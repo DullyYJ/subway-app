@@ -13,6 +13,7 @@ node patch_warm.js $T/d.js $T/e.js
 node patch_btverify.js $T/e.js $T/f0.js
 node patch_nearcount.js $T/f0.js $T/f1.js
 node patch_restlimit.js $T/f1.js $T/f.js
-node patch_version.js $T/f.js $1
+node patch_ldwarn.js $T/f.js $T/g.js
+node patch_version.js $T/g.js $1
 cp $1 $1.chk.mjs && node --check $1.chk.mjs && rm -f $1.chk.mjs
 echo built $1 $(wc -c < $1)
