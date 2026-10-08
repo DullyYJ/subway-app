@@ -2970,13 +2970,6 @@ function _foodCatSimple(cat) {
   return c[c.length - 1] || c[0] || '음식점';
 }
 
-// 네이버 지도 링크
-function _naverMapUrl(place) {
-  var q = encodeURIComponent(place.place_name);
-  return 'naver://search?query=' + q +
-         '&appScheme=navermap&appStoreURL=' +
-         encodeURIComponent('https://map.naver.com/v5/search/' + q);
-}
 
 // 네이버 지도 웹 링크 (앱 없을 시 폴백)
 function _naverMapWebUrl(place) {
@@ -3034,20 +3027,6 @@ function _renderFoodList() {
 }
 window._renderFoodList = _renderFoodList;
 
-// 맛집 링크 열기 (네이버 지도 앱 → 웹 폴백)
-function _openFoodLink(webUrl, appUrl) {
-  // 네이버 지도 앱 열기 시도
-  var iframe = document.createElement('iframe');
-  iframe.style.display = 'none';
-  iframe.src = appUrl;
-  document.body.appendChild(iframe);
-  setTimeout(function() {
-    document.body.removeChild(iframe);
-    // 앱이 없으면 웹으로
-    window.open(webUrl, '_blank');
-  }, 1500);
-}
-window._openFoodLink = _openFoodLink;
 
 
 // ══════════════════════════════════════════════════════════════
@@ -3340,18 +3319,6 @@ function _pickMarqueeCat(h){
   return 'night'; // 20~07
 }
 
-// 날짜+시간대 기반 시드로 "오늘의 메시지" 선택 (하루 동안 같은 시간대면 동일)
-function _pickDailyMsg(){
-  var now = new Date();
-  var h = now.getHours();
-  var cat = _pickMarqueeCat(h);
-  var arr = HDR_MSGS[cat] || HDR_MSGS.morning;
-  // 날짜 시드 (YYYYMMDD) + 시간대 → 매일 바뀜
-  var seed = now.getFullYear()*10000 + (now.getMonth()+1)*100 + now.getDate();
-  seed = seed * 7 + cat.length + h;
-  var idx = Math.abs(seed) % arr.length;
-  return arr[idx];
-}
 
 // 응원문구 회전: 한 번 지나갈 때마다 다음 문구로 교체 (이모지 제외)
 var _marqueeList = [];
@@ -3582,7 +3549,6 @@ function _stripEmoji(t){
     .replace(/(^|>)\s+/g, '$1')
     .trim();
 }
-function _congLabel(p){ return p>=70 ? '매우 혼잡' : p>=45 ? '다소 혼잡' : '여유로운 편'; }
 
 // 현재 경로(S.route)를 노선 구간 단위로 분해 → 실시간 현황용 구조체
 function _buildRouteBrief(){
@@ -3666,33 +3632,7 @@ function _briefFromTransitData(){
   } catch(e){ return null; }
 }
 
-// 실시간 경로 현황 HTML (구간별 노선/역수/소요 + 도착시각 + 혼잡도)
-function _routeStatusHtml(rb, congPct){
-  if(!rb) return '';
-  var now = new Date();
-  var mins = (window._homeRouteBaseMin && window._homeRouteBaseMin>0) ? window._homeRouteBaseMin : (rb.totalMin||0);
-  var arr = new Date(now.getTime() + mins*60000);
-  var pad = function(n){ return (n<10?'0':'')+n; };
-  var arrStr = pad(arr.getHours()) + ':' + pad(arr.getMinutes());
-  var hour = now.getHours();
-  var peak = (hour>=7&&hour<=9) || (hour>=17&&hour<=19);
-  var congTxt = _congLabel(congPct);
-  var ps = [];
-  ps.push('지금 <b>' + rb.from + '</b> 출발 → <b>' + arrStr + '</b>쯤 <b>' + rb.to + '</b> 도착 · 약 <b>' + mins + '분</b> (환승 ' + rb.transfers + '회)');
-  rb.segments.forEach(function(sg, idx){
-    var stopTxt = sg.stops>0 ? (' · ' + sg.stops + '개역') : '';
-    ps.push((idx+1) + '. <b>' + (sg.line||'이동') + '</b> ' + sg.from + ' → ' + sg.to + ' (' + sg.min + '분' + stopTxt + ')');
-  });
-  var firstLine = (rb.segments[0] && rb.segments[0].line) || '';
-  ps.push('현재 ' + (firstLine ? ('<b>' + firstLine + '</b> ') : '') + '구간 혼잡도 <b>' + congTxt + '</b> · 약 ' + congPct + '%' + (peak ? ' (지금은 피크 시간대예요)' : ''));
-  return ps.map(function(p){ return '<p>' + p + '</p>'; }).join('');
-}
 
-function _msgToParas(msg){
-  if(!msg) return '';
-  var parts = String(msg).split(/<br>\s*<br>|\n\n|\n/).map(function(s){ return _stripEmoji(s.trim()); }).filter(Boolean);
-  return parts.map(function(p){ return '<p>' + p + '</p>'; }).join('');
-}
 
 // 서버 실패 시 로컬 브리핑 (실시간=승무원 컴포저 / 미래·수동=예측 요약)
 function _renderHomeBriefLocal(fromName, toName, hour, congPct){
@@ -3780,13 +3720,6 @@ function _homeBriefCoord(which, name){
   return null;
 }
 
-// 한글 받침 판별 → 은/는 조사
-function _josEun(w){
-  if(!w) return '은';
-  var c = String(w).charCodeAt(String(w).length-1);
-  if(c<0xAC00 || c>0xD7A3) return '은';
-  return ((c-0xAC00)%28===0) ? '는' : '은';
-}
 // 받침 판별 → 으로/로 조사 (받침 없거나 ㄹ이면 '로')
 function _josRo(w){
   if(!w) return '으로';
@@ -4195,13 +4128,6 @@ function _startHomeCountdown(){
   }, 1000);
 }
 
-// 경로 유무 판단
-function _homeHasRoute(){
-  var toName = (typeof S !== 'undefined' && S.dest && S.dest.name) ? S.dest.name
-             : (typeof _transitResultDest !== 'undefined' && _transitResultDest && _transitResultDest.name)
-               ? _transitResultDest.name : '';
-  return !!toName;
-}
 
 // 홈 탭 진입 시 시작 / 다른 탭 가면 정지
 // 경로 있으면 5분 주기, 없으면 10분 주기
@@ -4247,21 +4173,6 @@ window.filterCat = function(el, cat) {
   if(_origFilterCat) _origFilterCat(el, cat);
 };
 
-// ── 하위 호환 stubs ──
-function _getRouteLines() {
-  if(!S.route || !S.route.lp) return null;
-  var lines = [];
-  S.route.lp.forEach(function(l){ if(l && lines.indexOf(l)===-1) lines.push(l); });
-  return lines.length > 0 ? lines : null;
-}
-function loadAIMessages()  { _updateAITabState(); }
-function renderAIMessages(){ }
-function _aiTimeAgo(ts)    { return '방금'; }
-function aiFilterLine()    { }
-function triggerAIRun()    { requestAIBrief(true); }
-window.loadAIMessages = loadAIMessages;
-window.triggerAIRun   = triggerAIRun;
-window.aiFilterLine   = aiFilterLine;
 
 // ══════════════════════════════════════════════════════════════
 // 📋 커뮤니티 서버 기반 관리
@@ -5987,85 +5898,6 @@ function _updateRouteBtn() {
 // ── GPS로 주변 역/정류장 검색 ─────────────────────────────────
 // [정리] 중복 정의 제거: fmapGpsLocate (아래쪽 정의 사용, 등록도 그쪽에서)
 
-// 주변 역+정류장 목록 표시
-function _showNearbyLocations(lat, lng, box, type) {
-  if(!box) return;
-  box.style.display = 'block';
-  box.innerHTML = '';
-
-  // ① 주변 지하철역 (STNDB에서 거리 계산)
-  var nearStns = STNDB
-    .filter(function(s){ return s.lat && s.lng; })
-    .map(function(s){
-      var dlat = s.lat - lat, dlng = s.lng - lng;
-      var dist = Math.round(Math.sqrt(dlat*dlat + dlng*dlng) * 111000);
-      return { s: s, dist: dist };
-    })
-    .filter(function(x){ return x.dist < 1000; })
-    .sort(function(a,b){ return a.dist - b.dist; });
-
-  // 중복 역명 제거
-  var seenNames = new Set();
-  nearStns = nearStns.filter(function(x){
-    if(seenNames.has(x.s.name)) return false;
-    seenNames.add(x.s.name); return true;
-  }).slice(0, 5);
-
-  nearStns.forEach(function(x){
-    var d = document.createElement('div');
-    d.className = 'sug-item';
-    d.innerHTML =
-      '<span style="font-size:11px;background:#0a84ff20;color:#0a84ff;padding:1px 6px;border-radius:8px;margin-right:6px;">🚇지하철</span>' +
-      '<b>' + x.s.name + '</b>' +
-      '<span style="font-size:11px;color:var(--sub);margin-left:6px;">' + x.s.line + '</span>' +
-      '<span style="font-size:11px;color:var(--gold);margin-left:auto;">' + x.dist + 'm</span>';
-    d.onmousedown = d.ontouchend = function(e){
-      e.preventDefault();
-      var inp = document.getElementById(type==='start'?'fmapStartInp':'fmapDestInp');
-      if(inp) inp.value = x.s.name;
-      box.style.display = 'none';
-      _fmapSetLocation(type, {
-        type:'subway', name:x.s.name, line:x.s.line, lat:x.s.lat, lng:x.s.lng
-      });
-    };
-    box.appendChild(d);
-  });
-
-  // ② 주변 버스정류장 (TAGO API)
-  _fetchNearStops(lat, lng, function(err, stops){
-    if(err || !stops || !stops.length) return;
-    stops.slice(0, 4).forEach(function(stop){
-      var d = document.createElement('div');
-      d.className = 'sug-item';
-      d.innerHTML =
-        '<span style="font-size:11px;background:#00b34120;color:#00b341;padding:1px 6px;border-radius:8px;margin-right:6px;">🚌버스</span>' +
-        '<b>' + _ltEsc(stop.nodenm||stop.nodeName||'') + '</b>' +
-        '<span style="font-size:11px;color:var(--gold);margin-left:auto;">' + _busDist(stop.dist||0) + '</span>';
-      d.onmousedown = d.ontouchend = function(e){
-        e.preventDefault();
-        var inp = document.getElementById(type==='start'?'fmapStartInp':'fmapDestInp');
-        if(inp) inp.value = stop.nodenm || stop.nodeName || '';
-        box.style.display = 'none';
-        _fmapSetLocation(type, {
-          type:'bus',
-          name: stop.nodenm || stop.nodeName || '',
-          nodeId: stop.nodeid || stop.nodeId,
-          cityCode: (typeof _tagoCityCode==='function' ? _tagoCityCode(stop) : '') || stop.citycode || stop.cityCode || '',
-          lat: parseFloat(stop.gpslati || stop.gpsLati || lat),
-          lng: parseFloat(stop.gpslong || stop.gpsLong || lng)
-        });
-      };
-      box.appendChild(d);
-    });
-    if(!nearStns.length && !stops.length) {
-      box.innerHTML = '<div style="padding:10px;color:var(--sub);font-size:13px;">주변 역/정류장 없음</div>';
-    }
-  });
-
-  if(!nearStns.length) {
-    box.innerHTML = '<div style="padding:10px;color:var(--sub);font-size:13px;">주변 지하철역 검색 중...</div>';
-  }
-}
 
 // 버스정류장 이름으로 검색 (TAGO)
 function _busStopSearchByName(q, callback) {
@@ -6104,24 +5936,7 @@ var _LINE_CITY = {
   '인천1호선':'인천','인천2호선':'인천',
   '김포골드라인':'경기',
 };
-function _getCity(lineName) {
-  return _LINE_CITY[lineName] || '서울'; // 기본값 서울/수도권
-}
 
-// 카카오 API 필요 여부 판단
-function _needKakao(start, dest) {
-  // 1. 장소/주소/GPS 출발지 또는 도착지 → 항상 복합경로
-  if(start.type === 'gps' || start.type === 'address') return true;
-  if(dest.type  === 'gps' || dest.type  === 'address') return true;
-  // 2. 버스정류장 포함
-  if(start.type === 'bus' || dest.type === 'bus') return true;
-  // 3. 다른 도시 간 이동
-  if(start.line && dest.line) {
-    var sc = _getCity(start.line), dc = _getCity(dest.line);
-    if(sc !== dc) return true;
-  }
-  return false;
-}
 
 // ══════════════════════════════════════════════
 // 노선색 헬퍼
@@ -6181,19 +5996,6 @@ function _brightenForTimeline(hex) {
 window._brightenForTimeline = _brightenForTimeline;
 window._transitColor = _transitColor;
 
-function _normalizeLine(name) {
-  if(!name) return '';
-  var bare = name.replace(/^(수도권|광역|서울|인천|경기)\s+/, '');
-  var map = {
-    '경인선':'1호선','경부선':'1호선','경원선':'1호선','일산선':'1호선',
-    '과천선':'4호선','안산선':'4호선','장항선':'1호선',
-    '분당선':'수인분당선','수인선':'수인분당선',
-    '공항철도1호선':'공항철도','별내선':'8호선',
-    '신분당선(연장)':'신분당선','신분당선(연장2)':'신분당선',
-  };
-  return map[bare] || map[name] || bare || name;
-}
-window._normalizeLine = _normalizeLine;
 
 function _fmtHHMM(ms) {
   if(!ms) return '';
@@ -6203,19 +6005,6 @@ function _fmtHHMM(ms) {
 }
 window._fmtHHMM = _fmtHHMM;
 
-function _getCoords(sName) {
-  if(!sName) return { lat: null, lng: null };
-  var nm = sName.replace(/역$/, '');
-  if(typeof STNDB !== 'undefined') {
-    var s = STNDB.find(function(x){ return x.name === nm || x.name === nm + '역'; });
-    if(s && s.lat) return { lat: s.lat, lng: s.lng };
-  }
-  if(typeof _REAL_COORDS !== 'undefined' && _REAL_COORDS[nm]) {
-    return { lat: _REAL_COORDS[nm][0], lng: _REAL_COORDS[nm][1] };
-  }
-  return { lat: null, lng: null };
-}
-window._getCoords = _getCoords;
 
 // HTL 트랙 렌더링 v3 - 완전 단순화
 function _htlOriginCoord(){
@@ -6469,59 +6258,6 @@ var _WALK_MPS_ALIGHT   = 1.1;    // 도보 속도(m/s) ≈ 66m/분
 var _ALIGHT_MAX_WALK_M = 800;    // 이보다 멀면 하차 후보로 보지 않는다
 var _ALIGHT_MIN_GAIN_S = 60;     // 1분 이상 이득일 때만 바꾼다(잦은 흔들림 방지)
 
-// ⚠ 2026-09-03부터 사용하지 않음 — 하차 정류장 선정은 엔진(optimizeAlight)이 한다.
-//   되살리지 말 것. 앱에서 또 계산하면 화면 시각과 엔진 계산이 어긋난다.
-function _busAlightOptimize(segs){
-  if(!segs || !segs.length) return;
-  for(var i=0;i<segs.length;i++){
-    var bs = segs[i];
-    if(!bs || bs.type !== 2 || !bs.stops || bs.stops.length < 3) continue;
-
-    // 이 버스 다음에 오는 '도보 구간'과 '다음 교통수단' 찾기
-    var wIdx = -1, ns = null;
-    for(var j=i+1;j<segs.length;j++){
-      if(segs[j].type === 3){ if(wIdx < 0) wIdx = j; continue; }
-      ns = segs[j]; break;
-    }
-    if(wIdx < 0 || !ns || !ns.stops || !ns.stops.length) continue;   // 도보로 갈아타는 경우만
-
-    var tgt = ns.stops[0];
-    var tLat = tgt.lat, tLng = (tgt.lon != null ? tgt.lon : tgt.lng);
-    if(tLat == null || tLng == null) continue;
-    if(typeof haversineM !== 'function') continue;
-
-    var off = _segStopOffsets(bs);          // 승차 기준 정류장별 누적 초
-    var last = bs.stops.length - 1;
-
-    var best = -1, bestCost = Infinity, bestWalk = 0, bestDist = 0, curCost = Infinity;
-    for(var k=1;k<=last;k++){
-      var st = bs.stops[k];
-      var la = st.lat, ln = (st.lon != null ? st.lon : st.lng);
-      if(la == null || ln == null) continue;
-      var d = haversineM(la, ln, tLat, tLng);
-      var w = d / _WALK_MPS_ALIGHT;
-      var ride = (off[k] != null) ? off[k] : (bs.dur || 0);
-      var cost = ride + w;
-      if(k === last) curCost = cost;                       // 지금 방식(끝까지 타기)의 비용
-      if(d > _ALIGHT_MAX_WALK_M) continue;                 // 너무 멀리 걷게 되는 곳은 제외
-      if(cost < bestCost){ bestCost = cost; best = k; bestWalk = w; bestDist = d; }
-    }
-
-    if(best < 0 || best === last) continue;
-    if(!(curCost - bestCost >= _ALIGHT_MIN_GAIN_S)) continue;   // 이득이 뚜렷할 때만
-
-    console.log('[버스하차] ' + (bs.name||'') + ' — '
-      + _stopNm(bs.stops[last]) + '(' + Math.round(curCost/60) + '분) → '
-      + _stopNm(bs.stops[best]) + '(' + Math.round(bestCost/60) + '분)에 하차');
-
-    bs.stops = bs.stops.slice(0, best + 1);
-    bs.dur   = Math.max(60, Math.round(off[best]));
-    segs[wIdx].dur  = Math.max(0, Math.round(bestWalk));
-    segs[wIdx].dist = Math.round(bestDist);
-  }
-}
-function _stopNm(st){ return String((st && st.stationName) || ''); }
-window._busAlightOptimize = _busAlightOptimize;
 
 function _segStopOffsets(sg){
   var stops = (sg && sg.stops) || [];
@@ -9118,82 +8854,7 @@ var _RT_WAIT_TIMEOUT   = 3500;   // 이 안에 안 오면 기존 순위로 진�
 //   ※ 워커가 leg별 waitSec을 내보내주면 이 상수 없이 정확히 상쇄할 수 있다(개선 예정).
 var _RT_ASSUMED_WAIT_MIN = 4.5;
 
-// 후보의 첫 버스 구간 (없으면 null)
-function _firstBusSub(p){
-  var subs = (p && p.subPath) || [];
-  for(var i=0;i<subs.length;i++){
-    if(subs[i].trafficType === 2) return subs[i];
-  }
-  return null;
-}
-// 그 정류장에서 그 노선이 몇 초 뒤에 오는가 (모르면 null)
-function _rtWaitSecForSub(sp, cb){
-  try{
-    var lat = sp.startY, lng = sp.startX;
-    var lane = (sp.lane || [])[0] || {};
-    var busNo = String(lane.busNo || lane.busID || '').trim();
-    if(lat == null || lng == null || !busNo || typeof _fetchNearStops !== 'function'){ cb(null); return; }
 
-    _fetchNearStops(lat, lng, function(err, stops){
-      if(err || !stops || !stops.length){ cb(null); return; }
-      // 이름이 같은 정류장을 우선, 없으면 가장 가까운 것
-      var want = String(sp.startName || '').replace(/\s/g,'');
-      var target = null;
-      for(var i=0;i<stops.length;i++){
-        if(want && String(stops[i].nodenm||'').replace(/\s/g,'') === want){ target = stops[i]; break; }
-      }
-      if(!target) target = stops[0];
-
-      var cc = (typeof _tagoCityCode==='function') ? _tagoCityCode(target) : '';
-      if(typeof _busArrFetchMerged !== 'function'){ cb(null); return; }
-      _busArrFetchMerged(cc, target).then(function(rows){
-        var best = null;
-        (rows||[]).forEach(function(r){
-          if(String(r.routeno||'').trim() !== busNo) return;
-          var t = parseInt(r.arrtime, 10);
-          if(isFinite(t) && t > 0 && (best === null || t < best)) best = t;
-        });
-        cb(best);
-      }, function(){ cb(null); });
-    });
-  }catch(e){ cb(null); }
-}
-
-// 후보들에 _rtWaitMin을 채운 뒤 cb() — 타임아웃이면 채워진 만큼만 반영
-function _applyRealtimeWaits(paths, cb){
-  try{
-    if(!paths || !paths.length){ cb(); return; }
-    var targets = paths.slice(0, _RT_WAIT_MAX_PATHS).filter(function(p){ return !!_firstBusSub(p); });
-    if(!targets.length){ cb(); return; }
-
-    var done = false, pending = targets.length;
-    var finish = function(){ if(!done){ done = true; cb(); } };
-    var timer = setTimeout(finish, _RT_WAIT_TIMEOUT);
-
-    targets.forEach(function(p){
-      var sub = _firstBusSub(p);
-      // ★ 엔진이 이 노선에 실시간 대기를 이미 반영했으면(waitReal) 보정할 게 없다.
-      if(sub && sub.waitReal){
-        p._rtWaitMin   = Math.round((sub.waitSec || 0) / 60);
-        p._rtWaitDelta = 0;
-        if(--pending <= 0){ clearTimeout(timer); finish(); }
-        return;
-      }
-      _rtWaitSecForSub(sub, function(sec){
-        if(sec != null){
-          p._rtWaitMin  = Math.round(sec / 60);                       // 표시용: 실제 대기(분)
-          // 순위 보정치 = 실제 대기 − 엔진이 이미 반영한 가정 대기
-          //   엔진이 leg별 waitSec을 내려주면 그 값으로 정확히 상쇄하고,
-          //   없으면(구버전 워커) 예전처럼 평균 가정치를 쓴다.
-          var assumed = (sub && sub.waitSec != null) ? (sub.waitSec / 60) : _RT_ASSUMED_WAIT_MIN;
-          p._rtWaitDelta = (sec / 60) - assumed;
-        }
-        if(--pending <= 0){ clearTimeout(timer); finish(); }
-      });
-    });
-  }catch(e){ cb(); }
-}
-window._applyRealtimeWaits = _applyRealtimeWaits;
 
 // ── 출발지 주변 실시간 버스 대기 → 경로엔진(rtw)으로 전달 ──────────────
 //   엔진은 원래 '배차 평균(busHW/2)'으로 대기를 가정해서, 지금 어떤 차가 먼저 오는지와
@@ -9323,156 +8984,8 @@ function _stopsParam(){
 }
 window._stopsParam = _stopsParam;
 
-function _collectRTW(lat, lng, cb){
-  // ★ 2026-09-08: 앱은 더 이상 경로탐색을 위해 도착정보를 모으지 않는다.
-  //   2026-09-05부터 실측 조회는 엔진이 직접 한다(자기가 고른 승차 정류장을 아니까).
-  //   그런데 앱쪽 rtw 수집이 남아 있어서
-  //     - 탐색 전 3초를 더 기다렸고
-  //     - TAGO 동시세션(30개 상한)을 엔진과 서로 뺏었다
-  //   진단 실측: rtw 적중 정류장 지정 0회 / 번호만 0회 / 못 찾음 18840회,
-  //             그 사이 엔진은 ICB168001439 timeout + 예산 초과로 직행탐색을 건너뜀다.
-  //   → 보내지 않는다. 세션과 시간을 엔진에게 넘긴다.
-  try{ window._rtwLast = { str: '', n: 0, at: Date.now(), off: true }; }catch(e){}
-  cb('');
-  return;
-  /* eslint-disable no-unreachable */
-  var done = false;
-  var finish = function(str){
-    if(done) return; done = true;
-    try{ window._rtwLast = { str: str || '', n: (str ? str.split(',').length : 0), at: Date.now() }; }catch(e){}
-    cb(str || '');
-  };
-  var timer = setTimeout(function(){ finish(_rtwBuild(bag)); }, _RTW_TIMEOUT);
-  var bag = {};   // 노선번호 → 가장 빠른 도착(초)
 
-  // ★ 2026-09-04: 먼저 캐시로 채운다. 조회가 늦어도 번 값을 보내지 않기 위해서.
-  try{
-    var _now = Date.now();
-    for(var _k in window._rtwCache){
-      var _left = _rtwAged(window._rtwCache[_k], _now);
-      if(_left != null && _left >= 0 && _left <= 3600 && window._rtwCache[_k].at > _now - _RTW_CACHE_MS) bag[_k] = _left;
-    }
-  }catch(e){}
 
-  try{
-    if(lat == null || lng == null || typeof _fetchNearStops !== 'function'){ clearTimeout(timer); finish(''); return; }
-    _fetchNearStops(lat, lng, function(err, stops){
-      if(err || !stops || !stops.length){ clearTimeout(timer); finish(''); return; }
-      var list = stops.slice(0, _RTW_STOPS);
-      var pending = list.length;
-      if(!pending){ clearTimeout(timer); finish(''); return; }
-      list.forEach(function(st){
-        var cc = (typeof _tagoCityCode === 'function') ? _tagoCityCode(st) : '';
-        var after = function(){ if(--pending <= 0){ clearTimeout(timer); finish(_rtwBuild(bag)); } };
-        if(typeof _busArrFetchMerged !== 'function'){ after(); return; }
-        _busArrFetchMerged(cc, st).then(function(rows){
-          _rtwNote(rows, st);
-          var _sid = _rtwStopId(st);
-          (rows || []).forEach(function(r){
-            var no = String(r.routeno || '').trim();
-            var t  = parseInt(r.arrtime, 10);
-            if(!no || !isFinite(t) || t < 0 || t > 3600) return;
-            if(/[,:@]/.test(no)) return;
-            if(bag[no] == null || t < bag[no]) bag[no] = t;
-            if(_sid){ var k2 = no + '@' + _sid; if(bag[k2] == null || t < bag[k2]) bag[k2] = t; }
-          });
-          after();
-        }, after);
-      });
-    });
-  }catch(e){ clearTimeout(timer); finish(''); }
-}
-function _rtwBuild(bag){
-  try{
-    var keys = Object.keys(bag || {});
-    if(!keys.length) return '';
-    // ★ 자를 때의 순서: ① 정류장까지 지정된 항목이 먼저(제일 정확하다)
-    //   ② 그 안에서는 느린 노선부터 — 빠른 노선을 빼면 엔진이 조금 손해볼
-    //   뿐이지만, 느린 노선을 빼면 그걸 '3분 뒤 도착'으로 보고 공치로 골라버린다.
-    keys.sort(function(a,b){
-      var sa = (a.indexOf('@') > 0) ? 0 : 1, sb = (b.indexOf('@') > 0) ? 0 : 1;
-      if(sa !== sb) return sa - sb;
-      return bag[b] - bag[a];
-    });
-    return keys.slice(0, _RTW_MAX).map(function(k){ return k + ':' + Math.round(bag[k]); }).join(',');
-  }catch(e){ return ''; }
-}
-window._collectRTW = _collectRTW;
-window._rtwBuild   = _rtwBuild;
-
-// ★ 같은 이름 정류장의 방향 가리기 (2026-08-27)
-//   같은 이름이 둘 있으면 대개 상·하행 쌍이다. 목적지 반대편으로 가는 쪽까지
-//   경로를 물어보는 건 낭비다. 그렇다고 무조건 하나를 버리면,
-//   **같은 이름인데 실제로는 같은 방향인 경우**(연속 정류장·회차 구간)를 놓친다.
-//   → 버리지 않고 '순서'를 정한다. 방향이 맞아 보이는 쪽을 먼저 물어보고,
-//     남은 형제는 요청 여력이 있을 때만 뒤에 붙인다.
-//
-//   판정 근거(있는 것부터):
-//     ① updowncd (상행0/하행1) — 노선 경유정류소에서 올 때만 있다
-//     ② 도착정보의 방면 이름(dirName)이 목적지 이름과 겹치는가
-//     ③ 기하: 형제 정류장 대비 목적지 쪽으로 치우친 쪽
-//        (왕복 노선은 도로 양옆에 서므로, 목적지 방향으로 밀린 쪽이 대체로 맞다)
-function _stopDirScore(st, sibling, start, dest){
-  var sc = 0;
-  try{
-    // ② 방면 라벨에 목적지 이름이 들어 있으면 강한 신호
-    var dn = String(st.dirName || st._dirName || '').replace(/\s+/g,'');
-    var dnm = String((dest && (dest.name || dest.nodenm)) || '').replace(/\s+/g,'').replace(/역$/,'');
-    //   라벨은 실제 운행 방향이라 기하 추정보다 훨씬 믿을 만하다 → 결정적 가중치
-    if(dn && dnm && dn.indexOf(dnm) >= 0) sc += 1000;
-
-    if(!sibling || !start || !dest) return sc;
-
-    // ③ 기하: start→dest 방향 벡터에, (형제→나) 벡터를 투영
-    //   결과 단위는 대략 '목적지 쪽으로 밀린 미터'다. 상·하행 쌍은 보통 수십 m라
-    //   ±300 으로 잘라 둔다 — 안 자르면 멀리 떨어진 동명 정류장의 기하 점수가
-    //   ②의 방면 라벨을 덮어써서, 라벨이 있는데도 엉뚱한 쪽이 먼저 뽑힌다.
-    var kx = Math.cos(start.lat * Math.PI / 180);
-    var vx = (dest.lng - start.lng) * kx, vy = (dest.lat - start.lat);
-    var vlen = Math.sqrt(vx*vx + vy*vy) || 1;
-    var wx = (st.lo - sibling.lo) * kx, wy = (st.la - sibling.la);
-    var geo = ((vx*wx + vy*wy) / vlen) * 1e5 / 0.9;   // ≈ 미터
-    sc += Math.max(-300, Math.min(300, geo));
-  }catch(e){}
-  return sc;
-}
-window._stopDirScore = _stopDirScore;
-
-// 후보 목록을 '이름 그룹당 대표 먼저, 형제는 뒤로' 순서로 재배열한다.
-function _orderByDirection(list, start, dest){
-  try{
-    var groups = {}, order = [];
-    list.forEach(function(o){
-      var key = o.nm || o.name || ('#' + order.length);
-      if(!groups[key]){ groups[key] = []; order.push(key); }
-      groups[key].push(o);
-    });
-    var firsts = [], rest = [];
-    order.forEach(function(key){
-      var g = groups[key];
-      if(g.length === 1){ firsts.push(g[0]); return; }
-      // 같은 이름이 여럿 — 방향 점수가 높은 순으로
-      g.forEach(function(o){
-        var sib = g.find(function(x){ return x !== o; }) || null;
-        o._dirScore = _stopDirScore(o, sib, start, dest);
-      });
-      g.sort(function(a,b){
-        var d = (b._dirScore||0) - (a._dirScore||0);
-        if(d) return d;
-        return (a.d||0) - (b.d||0);
-      });
-      // 즐겨찾기는 방향과 무관하게 대표로 (사용자가 늘 쓰는 곳)
-      var favIdx = g.findIndex(function(x){ return x.fav; });
-      if(favIdx > 0){ var f = g.splice(favIdx,1)[0]; g.unshift(f); }
-      firsts.push(g[0]);
-      for(var i=1;i<g.length;i++) rest.push(g[i]);
-    });
-    firsts.sort(function(a,b){ return (a.d||0) - (b.d||0); });
-    rest.sort(function(a,b){ return (a.d||0) - (b.d||0); });
-    return firsts.concat(rest);
-  }catch(e){ return list; }
-}
-window._orderByDirection = _orderByDirection;
 
 // ★ 후보 다양화 설정 (2026-08-27)
 //   기준은 **버스 탭에 실제로 뜨는 주변 정류장 전부**다(window._nearOrderedStops).
@@ -9800,36 +9313,6 @@ function _pipArmNow(){
 }
 window._pipArmNow = _pipArmNow;
 
-// 경로 확인 커스텀 모달 (APK WebView에서 confirm() 차단 대응)
-function _showRouteConfirm(optName, onConfirm){
-  var ov = document.getElementById('routeConfirmOverlay');
-  if(!ov){
-    ov = document.createElement('div');
-    ov.id = 'routeConfirmOverlay';
-    ov.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.5);'
-      + 'display:flex;align-items:center;justify-content:center;padding:32px;';
-    ov.innerHTML =
-      '<div style="background:var(--bg,#fff);border-radius:18px;max-width:340px;width:100%;'
-      + 'padding:24px 22px;box-shadow:0 12px 40px rgba(0,0,0,0.3);text-align:center;">'
-      + '<div id="rcfTitle" style="font-size:17px;font-weight:800;color:var(--text);margin-bottom:8px;line-height:1.4;"></div>'
-      + '<div style="font-size:13px;color:var(--sub);margin-bottom:20px;">이 경로로 안내를 시작할까요?</div>'
-      + '<div style="display:flex;gap:10px;">'
-      + '<button id="rcfCancel" style="flex:1;padding:13px;border-radius:11px;border:1px solid var(--border);'
-      + 'background:var(--card2,#f2f2f2);color:var(--sub);font-size:15px;font-weight:700;cursor:pointer;">취소</button>'
-      + '<button id="rcfOk" style="flex:1;padding:13px;border-radius:11px;border:none;'
-      + 'background:#2f7cf6;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">확인</button>'
-      + '</div></div>';
-    document.body.appendChild(ov);
-  }
-  document.getElementById('rcfTitle').textContent = optName + ' 방법으로 진행하겠습니다';
-  ov.style.display = 'flex';
-  var okBtn = document.getElementById('rcfOk');
-  var cancelBtn = document.getElementById('rcfCancel');
-  okBtn.onclick = function(){ ov.style.display='none'; if(onConfirm) onConfirm(); };
-  cancelBtn.onclick = function(){ ov.style.display='none'; };
-  ov.onclick = function(e){ if(e.target===ov) ov.style.display='none'; };
-}
-window._showRouteConfirm = _showRouteConfirm;
 
 // 실제 경로 선택/렌더 (팝업 확인 후 호출)
 // ── 즐겨찾기 버스정류장 승차 (버스 경로 전용) ──
@@ -9855,36 +9338,10 @@ var _FAV_RADIUS_M   = 500;   // 즐겨찾기 인정 반경(m)
 var _FAV_BONUS_MAX  = 10;    // 최대 감면(분) — 바로 앞 정류장
 var _FAV_BONUS_MIN  = 5;     // 최소 감면(분) — 반경 경계
 
-function _favRouteStart(){
-  var st=null;
-  if(window._favSearchStart && window._favSearchStart.lat) st=window._favSearchStart;
-  if(!st && typeof _transitResultStart!=='undefined' && _transitResultStart && _transitResultStart.lat) st=_transitResultStart;
-  if(!st && typeof _fmapStart!=='undefined' && _fmapStart && _fmapStart.lat) st=_fmapStart;
-  if(!st && typeof S!=='undefined' && S && S.start && S.start.lat) st=S.start;
-  return st;
-}
-function _favNmKey(x){
-  return String(x||'').replace(/\(.*?\)/g,'').replace(/[\s·.,]/g,'')
-    .replace(/(정류장|정류소|버스정류장)$/,'').trim();
-}
 // ★ 2026-09-15: 즐겨찾기 감면(_favPathBonus·_favCost)을 들어냈다.
 //   시간 계산은 엔진만 한다. 앱이 깎으면 화면의 '30분'과 순위 근거가 어긋난다.
 //   즐겨찾기 정류장은 탐색 요청에 fav 로 넘겨 엔진이 승차 후보로 우대한다.
 
-// ★ 2026-09-02: 첫 구간(집→타는 곳)과 마지막 구간(내려서→목적지) 도보 시간.
-//   trafficType 3 = 도보.
-function _walkEdgeMin(p){
-  var out = { head:0, tail:0 };
-  try{
-    var subs = (p && p.subPath) || [];
-    if(!subs.length) return out;
-    if(subs[0] && subs[0].trafficType === 3) out.head = subs[0].sectionTime || 0;
-    var last = subs[subs.length-1];
-    if(subs.length > 1 && last && last.trafficType === 3) out.tail = last.sectionTime || 0;
-  }catch(e){}
-  return out;
-}
-window._walkEdgeMin = _walkEdgeMin;
 
 // ★ 2026-09-02: 오래 걷는 경로에 벌점.
 //   증상: 정류장이 코앞인데 53분을 걸어 지하철역까지 가는 경로가 '최단시간'으로 뽑혔다.
@@ -9894,36 +9351,7 @@ window._walkEdgeMin = _walkEdgeMin;
 //     정당하게 비교되도록 한다. 10분 이하 도보는 벌점 0이라 기존 순서 그대로다.
 var _WALK_FREE_MIN = 10;   // 이만큼은 그냥 걷는 것으로 본다
 var _WALK_WEIGHT   = 1.5;  // 넘는 시간에 붙는 가중치
-// ⚠ 2026-09-03부터 사용하지 않음 — 도보 가중치는 엔진(WPEN.minTime)이 담당한다.
-//   양쪽에서 더하면 같은 도보를 두 번 세게 된다.
-function _walkPenalty(p){
-  try{
-    var w = _walkEdgeMin(p);
-    var over = Math.max(0, w.head - _WALK_FREE_MIN) + Math.max(0, w.tail - _WALK_FREE_MIN);
-    return Math.round(over * _WALK_WEIGHT);
-  }catch(e){ return 0; }
-}
-window._walkPenalty = _walkPenalty;
 
-// ★ 2026-09-03: 도보 가중치를 앱에서 빼고 엔진(WPEN.minTime=1.6)에만 맡긴다.
-// ★ 2026-09-15: 남아 있던 즐겨찾기 감면도 엔진으로 넘겼다. 앱은 시간을 만들지 않는다.
-// 일반 버스경로 렌더(폴백)
-function _renderNormalBus(){
-  // ★ 2026-09-29 (YJ: "하단 토글메세지는 필요없어보여, 다 지워줘"): 탭 전환류
-  //   함수들의 "경로 없음" 안내를 화면 하단에 토스트로 띄우던 것을 없앴다.
-  //   (다른 탭/카드 UI가 그대로 남아 있어 사용자가 판단하는 데 지장 없음 — 콘솔에만 남김)
-  if(!_allRouteResults){ console.warn('[버스탭] 경로 결과 없음'); return; }
-  var r=null;
-  try{ r=_convertSinglePathToRoute(_allRouteResults.bus); }catch(e){}
-  // ★ 2026-09-05: 다른 탭 경로로 메꾸지 않는다.
-  //   예전엔 버스 전용 경로가 없으면 less/fast/sub 를 대신 그렸고,
-  //   그래서 버스 탭에 공항철도가 섞인 경로가 나왔다.
-  if(!(r&&r.sections&&r.sections.length)){
-    console.warn('[버스탭] 버스만으로 가는 경로가 없음');
-    return;
-  }
-  _renderTransitResultCard({routes:[r]}, _transitResultStart, _transitResultDest, 'engine_bus');
-}
 // ★ 2026-09-15: 버스 탭에서 즐겨찾기 정류장으로 '다시 탐색'하던 것을 없앴다.
 //   앱이 출발지를 바꿔 엔진에 또 물어보고, 그 결과를 원래 출발지 카드에 끼워 넣었다.
 //   집에서 그 정류장까지 가는 과정이 경로에 없어 시각이 맞지 않았다.
@@ -10299,20 +9727,7 @@ function _svcBusFirst(){
   return null;
 }
 
-function _svcNowMin(){ var d = new Date(); return d.getHours()*60 + d.getMinutes(); }
-// 자정을 넘기는 운행시간(예: 05:30~00:40)도 맞게 판정한다
-function _svcRunning(f, l, now){ return (l < f) ? (now >= f || now <= l) : (now >= f && now <= l); }
-function _svcUntil(now, t){ var d = t - now; if(d < 0) d += 1440; return d; }
-function _svcIsNight(now){ return now >= _SVC_NIGHT_FROM || now < _SVC_NIGHT_TO; }
 
-function _svcLineOf(sg){
-  try{
-    var n = ((sg.transportation||{}).name || '').trim();
-    if(!n) return '';
-    if(typeof _TT_SCHED_ALIAS !== 'undefined' && _TT_SCHED_ALIAS[n]) return _TT_SCHED_ALIAS[n];
-    return n;
-  }catch(e){ return ''; }
-}
 
 // ★ 2026-09-15 · YJ 절대규칙: 경로에 관한 판단은 엔진만 한다. 앱은 그리기만 한다.
 //   여기서 두 번 데였다.
@@ -11195,147 +10610,6 @@ window.fmapDoRoute = fmapDoRoute;
 function _computeAccessLeg(){ window._accessLeg = null; }
 window._computeAccessLeg = _computeAccessLeg;
 
-// ══════════════════════════════════════════════════════════════
-// 🗺️ 노선도 탭 경로 결과 시트 표시
-// ══════════════════════════════════════════════════════════════
-function _showMapRouteSheet(startStn, destStn) {
-  var sheet    = document.getElementById('mapRouteSheet');
-  var title    = document.getElementById('mapRouteSheetTitle');
-  var track    = document.getElementById('mapRouteSheetTrack');
-  var sections = document.getElementById('mapRouteSheetSections');
-  if(!sheet || !track || !sections) return;
-
-  if(!S || !S.route || !S.route.path || !S.route.path.length) {
-    toast('경로를 찾을 수 없습니다.');
-    return;
-  }
-
-  var path = S.route.path;
-  var lp   = S.route.lp || [];
-  var tp   = S.route.tp || [];
-  var totalSec = tp.reduce(function(a,b){ return a+(b>0?b:0); }, 0);
-  var totalMin = Math.round(totalSec / 60);
-
-  // 제목
-  if(title) title.textContent = totalMin + '분 · ' + startStn.name + ' → ' + destStn.name;
-
-  // 노선 구간 분리
-  var segs = [];
-  var segStart = 0;
-  for(var i=1; i<=path.length; i++) {
-    var changed = i===path.length || (lp[i] && lp[i-1] && lp[i] !== lp[i-1]);
-    if(changed) {
-      var segPath = path.slice(segStart, i);
-      var segLp   = lp[segStart] || lp[segStart+1] || '';
-      var segSec  = tp.slice(segStart, i).reduce(function(a,b){ return a+(b>0?b:0); }, 0);
-      segs.push({ path: segPath, line: segLp, sec: segSec });
-      segStart = i;
-    }
-  }
-
-  // HH:MM 헬퍼
-  var _nowMs2 = Date.now(), _el2 = 0;
-  function _fmt2(ms){ var d=new Date(ms),h=d.getHours(),m=d.getMinutes(); return (h<10?'0':'')+h+':'+(m<10?'0':'')+m; }
-
-  // 타임라인 렌더
-  var tHtml = '';
-  segs.forEach(function(seg, si) {
-    var col = (typeof _transitColor==='function') ? _transitColor(1, seg.line) : '#0a84ff';
-    var perSec = seg.path.length > 1 ? Math.round(seg.sec / (seg.path.length-1)) : seg.sec;
-
-    seg.path.forEach(function(nm, ni) {
-      var arrT  = _fmt2(_nowMs2 + _el2 * 1000);
-      var isF   = (si===0 && ni===0);
-      var isL   = (si===segs.length-1 && ni===seg.path.length-1);
-      var prevLast = (si>0 && segs[si-1].path.length>0) ? segs[si-1].path[segs[si-1].path.length-1] : null;
-      var _curLN  = typeof _normalizeLine==='function' ? _normalizeLine(seg.line) : seg.line;
-      var _prevLN = (si>0 && typeof _normalizeLine==='function') ? _normalizeLine(segs[si-1].line) : (si>0?segs[si-1].line:'');
-      var isXfer = (ni===0 && si>0 && nm !== prevLast && _curLN !== _prevLN);
-      var prevSegCol = (si>0) ? (typeof _transitColor==='function' ? _transitColor(1, segs[si-1].line) : '#0a84ff') : col;
-
-      // ── 환승 구분자: 수직 점선 구분선 형태 ──
-      if(isXfer) {
-        tHtml += '<div class="htl-xfer-sep" style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;width:28px;position:relative;">'
-          + '<div style="position:absolute;top:0;bottom:0;left:50%;width:0;border-left:2px dashed #3a3a3c;transform:translateX(-50%);z-index:0;"></div>'
-          + '<div style="position:relative;z-index:1;height:28px;display:flex;align-items:flex-end;justify-content:center;padding-bottom:2px;">'
-            + '<span style="font-size:13px;line-height:1;">🔄</span>'
-          + '</div>'
-          + '<div style="position:relative;z-index:1;height:18px;display:flex;align-items:center;justify-content:center;">'
-            + '<div style="width:6px;height:6px;border-radius:50%;background:'+col+';box-shadow:0 0 0 2px '+col+'44;"></div>'
-          + '</div>'
-          + '<div style="position:relative;height:26px;width:100%;display:flex;align-items:center;justify-content:center;">'
-            + '<div style="position:absolute;left:0;width:50%;top:12px;height:3px;right:auto;background:'+prevSegCol+';z-index:1;"></div>'
-            + '<div style="position:absolute;left:50%;width:50%;top:12px;height:3px;right:auto;background:'+col+';z-index:1;"></div>'
-          + '</div>'
-          + '<div style="position:relative;z-index:1;font-size:9px;color:var(--sub);height:16px;line-height:16px;text-align:center;">'+arrT+'</div>'
-        + '</div>';
-      }
-
-      // 환승역 이후 첫 역은 왼쪽 선을 현재색으로
-      var leftCol  = col;
-      var rightCol = col;
-
-      var dot = isF ? '<span class="htl-dot" style="border-color:var(--start-dot);background:var(--start-dot);width:14px;height:14px;top:6px;z-index:4;"></span>'
-              : isL ? '<span class="htl-dot" style="border-color:#ff2d55;background:#ff2d55;width:14px;height:14px;top:6px;"></span>'
-              : '<span class="htl-dot" style="border-color:'+col+';background:'+col+';"></span>';
-
-      // 첫 역만 노선 배지 (환승역은 구분자에서 이미 표시)
-      var badge = (!isXfer && ni===0) ? '<div class="htl-line" style="color:'+col+';font-size:7.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+seg.line+'</div>' : '<div class="htl-line"></div>';
-
-      var shortNm = nm.length > 6 ? nm.slice(0,5)+'…' : nm;
-      tHtml += '<div class="htl-stn" style="--line-color:'+col+';width:52px;flex-shrink:0;">'
-        + '<div class="htl-name" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;height:28px;line-height:28px;font-size:9px;display:block;text-align:center;padding:0 2px;">'+shortNm.replace(/</g,'&lt;')+'</div>'
-        + badge
-        + '<div class="htl-axis">'
-          + (!isF ? '<div class="htl-line-seg" style="left:0;width:0;right:auto;top:12px;background:'+leftCol+';"></div>' : '')
-          + dot
-          + (!isL ? '<div class="htl-line-seg" style="left:50%;width:calc(50% + 64px);right:auto;top:12px;background:'+rightCol+';"></div>' : '')
-        + '</div>'
-        + '<div class="htl-time" style="font-size:9px;color:var(--sub);text-align:center;height:16px;margin-top:3px;white-space:nowrap;">'+arrT+'</div>'
-        + '</div>';
-
-      if(ni < seg.path.length - 1) _el2 += perSec;
-    });
-    _el2 += 0; // 환승 대기 (추후 반영 가능)
-  });
-  track.innerHTML = tHtml;
-
-  // 구간 상세
-  var secHtml = '';
-  segs.forEach(function(seg) {
-    var col = (typeof _transitColor==='function') ? _transitColor(1, seg.line) : '#0a84ff';
-    var min = Math.round(seg.sec / 60);
-    var from = seg.path[0], to = seg.path[seg.path.length-1];
-    var cnt  = seg.path.length > 2 ? (seg.path.length-2)+'정거장 경유' : '';
-    secHtml += '<div style="display:flex;align-items:flex-start;padding:13px 16px;border-bottom:1px solid #2c2c2e;gap:12px;">'
-      + '<div style="width:34px;height:34px;border-radius:50%;background:'+col+'22;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;">🚇</div>'
-      + '<div style="flex:1;min-width:0;">'
-        + '<div style="font-size:13px;font-weight:700;color:'+col+';margin-bottom:2px;">'+seg.line+'</div>'
-        + '<div style="font-size:12px;color:var(--sub);">'+from+' → '+to+'</div>'
-        + (cnt ? '<div style="font-size:11px;color:var(--sub);margin-top:1px;">'+cnt+'</div>' : '')
-      + '</div>'
-      + '<div style="font-size:14px;font-weight:700;color:var(--text);flex-shrink:0;">'+(min<1?'1분 미만':min+'분')+'</div>'
-    + '</div>';
-  });
-  sections.innerHTML = secHtml;
-
-  // _transitResultStart/Dest 세팅 (세부경로 팝업용)
-  _transitResultStart = { name: startStn.name, lat: startStn.lat, lng: startStn.lng };
-  _transitResultDest  = { name: destStn.name,  lat: destStn.lat,  lng: destStn.lng };
-  // _transitResultData는 openTransitDetail이 S.route로 구성
-  _transitResultData = {
-    routes:[{ summary:{ duration: totalSec }, sections: segs.map(function(sg){
-      return { transportation:{type:1,name:sg.line}, duration:sg.sec, distance:Math.round(sg.sec/60*700),
-        passStopList:{ stationList: sg.path.map(function(n){return{stationName:n};}) } };
-    })}]
-  };
-
-  sheet.style.display = 'flex';
-  // 첫 노드로 스크롤
-  var tw = sheet.querySelector('.htl-wrap');
-  if(tw) tw.scrollLeft = 0;
-}
-window._showMapRouteSheet = _showMapRouteSheet;
 
 function closeMapRouteSheet() {
   var sheet = document.getElementById('mapRouteSheet');
@@ -11628,69 +10902,6 @@ function _arrTimeToMin(s){
   return parseInt(m[1],10)*60 + parseInt(m[2],10);
 }
 
-// 현재 시각 기준, 경로 시간표상 어느 구간에 있는지 추정
-// 반환: { fromIdx, toIdx, ratio(0~1), curLat, curLng } 또는 null
-function _estimateTimeBasedPos(){
-  if(!_transitNodeData || !_transitNodeData.length) return null;
-
-  // arrTime 있는 노드만 인덱스+분으로 수집
-  var timed = [];
-  _transitNodeData.forEach(function(nd, idx){
-    var mn = _arrTimeToMin(nd.arrTime);
-    if(mn != null && nd.lat != null){
-      timed.push({ idx: idx, min: mn, lat: nd.lat, lng: nd.lng, nd: nd });
-    }
-  });
-  if(timed.length < 2) return null;
-
-  // 자정 넘김 보정: 이전보다 작아지면 +1440
-  for(var i=1;i<timed.length;i++){
-    if(timed[i].min < timed[i-1].min) timed[i].min += 1440;
-  }
-
-  var now = new Date();
-  var nowMin = now.getHours()*60 + now.getMinutes() + now.getSeconds()/60;
-  // 시간표 기준에 맞춰 자정 보정
-  if(nowMin < timed[0].min - 60) nowMin += 1440;
-
-  // 출발 전
-  if(nowMin <= timed[0].min){
-    return { fromIdx: timed[0].idx, toIdx: timed[0].idx, ratio: 0,
-             curLat: timed[0].lat, curLng: timed[0].lng };
-  }
-  // ★ 확정 범위 안에서만 위치를 반환한다 (미커버 노선 도착 확정 게이트)
-  var _emit = function(j, r){
-    if(j >= timed.length - 1){
-      var L = timed[timed.length-1];
-      return { fromIdx: L.idx, toIdx: L.idx, ratio: 1, curLat: L.lat, curLng: L.lng };
-    }
-    var a = timed[j], b = timed[j+1];
-    return {
-      fromIdx: a.idx, toIdx: b.idx, ratio: r,
-      curLat: a.lat + (b.lat - a.lat) * r,
-      curLng: a.lng + (b.lng - a.lng) * r
-    };
-  };
-
-  // 도착 후
-  var last = timed[timed.length-1];
-  if(nowMin >= last.min){
-    var g0 = _rtGateProgress(timed, nowMin, timed.length-1, 1);
-    return _emit(g0.j, g0.ratio);
-  }
-  // 두 노드 사이 보간
-  for(var j=0;j<timed.length-1;j++){
-    var a = timed[j], b = timed[j+1];
-    if(nowMin >= a.min && nowMin <= b.min){
-      var span = (b.min - a.min) || 1;
-      var r = _rtDwellRatio(nowMin - a.min, span, _rtDwellMin(a.nd || _transitNodeData[a.idx]));  // 미커버 노선 30초 정차 반영
-      var g = _rtGateProgress(timed, nowMin, j, r);
-      return _emit(g.j, g.ratio);
-    }
-  }
-  return null;
-}
-window._estimateTimeBasedPos = _estimateTimeBasedPos;
 
 // ── 실시간 위치 미커버 노선 정차(dwell) 모델 ─────────────────────
 //   실시간 열차위치 API가 없는 지하철 노선(인천1·2호선, 지방선 등)은 시각표+GPS로만
@@ -12043,17 +11254,6 @@ window._maybeRecordPass = _maybeRecordPass;
 var _HTL_DELAY_MIN_SEC = 20;      // 이 이상 어긋나야 반영 (초)
 var _HTL_DELAY_MAX_SEC = 20*60;   // 한 번에 반영할 최대치 (초)
 
-// 노드의 현재 계산상 도착 시각(ms) — 오늘 날짜 기준
-function _htlNodeMs(nd){
-  if(!nd || nd._schedMin == null) return null;
-  var now = new Date();
-  var d = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-  var ms = d.getTime() + Math.round(nd._schedMin * 60000);
-  // 자정 넘김 보정
-  while(ms - now.getTime() > 12*3600000) ms -= 86400000;
-  while(now.getTime() - ms > 12*3600000) ms += 86400000;
-  return ms;
-}
 // fromIdx 이후 모든 노드를 sec 초만큼 이동 (양수=지연, 음수=단축)
 // 한 번에 이동할 수 있는 최대 폭. 실제 지연·단축은 아무리 커도 이 범위다.
 // 이걸 넘는 값은 계산 오류이므로 통째로 무시한다(예전엔 상한이 없어
@@ -12274,15 +11474,6 @@ async function _rtProbe(){
 }
 window._rtProbe = _rtProbe;
 
-// 인천1·2호선만 빠르게 확인
-async function _rtProbeIncheon(){
-  var saved = _RT_PROBE_CANDS;
-  _RT_PROBE_CANDS = saved.filter(function(c){ return /인천|김포/.test(c[0]); });
-  var r = await _rtProbe();
-  _RT_PROBE_CANDS = saved;
-  return r;
-}
-window._rtProbeIncheon = _rtProbeIncheon;
 
 // 진단 결과를 실제 매핑에 반영(+localStorage 저장) — 앱 재시작 후에도 유지
 function _rtSaveProbe(rows){
@@ -13289,53 +12480,8 @@ var OPENCELLID_KEY = '';               // 값을 넣으면 ③이 켜진다
 function locSaveLast(lat, lng, acc){
   try{ localStorage.setItem('locLastFix', JSON.stringify({ lat:lat, lng:lng, acc:acc||100, ts:Date.now() })); }catch(e){}
 }
-function locLoadLast(){
-  try{
-    var e = JSON.parse(localStorage.getItem('locLastFix') || 'null');
-    if(!e || !e.ts || Date.now() - e.ts > LOC_LAST_TTL) return null;
-    // 오래될수록 신뢰도를 낮춘다 (시간당 +200m)
-    var aged = (e.acc || 100) + Math.round((Date.now() - e.ts) / 3600000) * 200;
-    return { lat: e.lat, lng: e.lng, acc: Math.min(aged, 3000), src: 'last' };
-  }catch(e){ return null; }
-}
 window.locSaveLast = locSaveLast;
-window.locLoadLast = locLoadLast;
 
-function locInitialAnchor(cb){
-  try{
-    if(LOCFSM.anchor){ cb(LOCFSM.anchor); return; }
-
-    // ① 마지막 알던 위치 — 즉시
-    var last = locLoadLast();
-    if(last){ LOCFSM.anchor = last; cb(last); }      // 먼저 돌려주고, 더 나은 게 있으면 아래에서 갱신
-
-    if(typeof _cellNow !== 'function'){ if(!last) cb(null); return; }
-    _cellNow(function(c){
-      var key = (typeof _cellKey === 'function') ? _cellKey(c) : '';
-      var e = key ? _cellMap()[key] : null;
-
-      // ② 학습된 셀 좌표 — 실제 그 역에서 잡은 GPS라 정확도가 높다
-      if(e && e.lat != null && e.lng != null){
-        LOCFSM.anchor = { lat: e.lat, lng: e.lng, acc: 300, src: 'cell' };
-        cb(LOCFSM.anchor); return;
-      }
-
-      // ③ OpenCelliD — 키가 있을 때만. 오차가 커서 최후 수단이다.
-      if(!OPENCELLID_KEY || !c){ if(!last) cb(null); return; }
-      try{
-        var u = 'https://opencellid.org/cell/get?key=' + encodeURIComponent(OPENCELLID_KEY)
-              + '&mcc=' + c.mcc + '&mnc=' + c.mnc + '&lac=' + c.tac + '&cellid=' + c.cid + '&format=json';
-        fetch(u).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }).then(function(j){
-          if(j && j.lat && j.lon){
-            LOCFSM.anchor = { lat: +j.lat, lng: +j.lon, acc: Math.max(500, +j.range || 1000), src: 'opencellid' };
-            cb(LOCFSM.anchor);
-          }else if(!last) cb(null);
-        }).catch(function(){ if(!last) cb(null); });
-      }catch(e2){ if(!last) cb(null); }
-    });
-  }catch(e){ cb(null); }
-}
-window.locInitialAnchor = locInitialAnchor;
 
 // ── 기지국 변화 = '움직이는 중' 증거 (학습 불필요) ──────────────
 //   셀이 '어느 역'인지는 학습이 있어야 알지만, 셀이 바뀐다는 사실 자체는
@@ -14281,12 +13427,6 @@ function _startTransitWatch(){
     }, 1200);
   }
 }
-// ★ GPS 미확인 시 마커는 '그 자리 대기' — 시간표만으로는 절대 이동하지 않음.
-//   (마커 이동은 GPS 확인(_updateTransitGps)에서만. GPS가 다시 잡히면 자동 재개)
-function _tickTimelineMarker(){
-  return;   // 시간 기반 마커 전진 비활성화 (마커 튐/역행 방지)
-}
-window._tickTimelineMarker = _tickTimelineMarker;
 function _stopTransitWatch(){
   if(window._transitTimeTickInt != null){ clearInterval(window._transitTimeTickInt); window._transitTimeTickInt = null; }
   if(window._transitGpsPollInt != null){ clearInterval(window._transitGpsPollInt); window._transitGpsPollInt = null; }
@@ -16202,25 +15342,6 @@ window.removeMapBusStop = removeMapBusStop;
 // 실시간 버스 도착 정보 로드
 // 노선 종점(방면) 조회 + 캐시 (경유정류장 마지막 = 종점)
 window._busDirCache = window._busDirCache || {};
-function _fetchBusDir(cityCode, routeId, cb){
-  var key = cityCode + '_' + routeId;
-  if(window._busDirCache[key] !== undefined){ cb(window._busDirCache[key]); return; }
-  if(typeof _fetchRouteStations !== 'function'){ cb(''); return; }
-  _fetchRouteStations(cityCode, routeId, function(err, stations){
-    var dest = '';
-    if(!err && stations && stations.length){
-      var last  = stations[stations.length - 1];
-      var first = stations[0];
-      var ln = (last  && (last.nodenm  || last.nodeNm))  || '';
-      var fn = (first && (first.nodenm || first.nodeNm)) || '';
-      if(ln && fn && ln === fn) dest = '순환';   // 기점=종점 → 순환
-      else dest = ln;
-    }
-    window._busDirCache[key] = dest;
-    cb(dest);
-  });
-}
-window._fetchBusDir = _fetchBusDir;
 
 // 현재 정류장 기준 '다음 정류장' 조회 (○○방향 표시용)
 window._busNextCache = window._busNextCache || {};
@@ -17070,16 +16191,6 @@ function _topisFailed(kind){
 function _topisFailSave(kind){
   try{ localStorage.setItem('topisFail_' + kind, String(Date.now())); }catch(e){}
 }
-// 사용자가 진단에서 강제로 재시도할 수 있도록 노출
-function _topisResetPaths(){
-  try{
-    ['pos','uid'].forEach(function(k){
-      localStorage.removeItem('topisPath_' + k);
-      localStorage.removeItem('topisFail_' + k);
-    });
-  }catch(e){}
-}
-window._topisResetPaths = _topisResetPaths;
 // 404(HTML) 응답인지
 function _topisNotFound(text){
   return /요청하신 페이지를 찾을 수 없|404|<html/i.test(String(text || ''));
@@ -17288,12 +16399,6 @@ function _isGGPreferred(lat, lng){
 }
 window._isGGPreferred = _isGGPreferred;
 
-// 확실히 경기(= 서울도 인천도 아님) — 진단 표기용
-function _isGyeonggiPos(lat, lng){
-  if(typeof _isSeoulPos === 'function' && _isSeoulPos(lat, lng)) return false;
-  return _isGGPreferred(lat, lng);
-}
-window._isGyeonggiPos = _isGyeonggiPos;
 
 // 텍스트 응답 → JSON. 게이트웨이 인증 실패 시 XML/HTML이 오므로 그때는 null.
 function _ggParse(text){
@@ -17458,20 +16563,6 @@ function _ggArrivals(stop, cb){
 }
 window._ggArrivals = _ggArrivals;
 
-// 지역별 도착정보 보강 — 서울만 TOPIS, 나머지는 TAGO가 담당
-function _arrRegionFallback(cityCode, stop, cb){
-  try{
-    // GBIS 먼저 — 서울 좌표의 GBIS 정류장이 cityCode '11'로 추정돼 TOPIS로 새는 것 방지
-    var isGG = stop._src === 'gbis' || String(stop.nodeid || '').indexOf('GG:') === 0;
-    if(isGG && typeof _ggArrivals === 'function'){ _ggArrivals(stop, cb); return; }
-    var isSeoul = (String(cityCode) === '11')
-                || stop._src === 'topis'
-                || String(stop.nodeid || '').indexOf('SEOUL:') === 0;
-    if(isSeoul){ _seoulArrivals(stop, cb); return; }
-    cb([]);
-  }catch(e){ cb([]); }
-}
-window._arrRegionFallback = _arrRegionFallback;
 
 // ══════════════════════════════════════════════════════════════════
 // ★ 인접 시·도 정류장 병합 조회
@@ -21082,21 +20173,10 @@ const STNDB=RAW.map(r=>({name:r[0],line:r[1],lat:r[2],lng:r[3],sec:r[4],color:LC
 /* BFS 그래프 */
 
 
-// ── KST 시간 유틸 ────────────────────────────────────────────
-function kstMinutes() {
-  var d = new Date();
-  return (d.getUTCHours() + 9) * 60 + d.getUTCMinutes();
-}
 function kstMinutesAdj() {
   var off = (typeof window.timeOffset === 'number') ? window.timeOffset : 0;
   var d   = new Date(Date.now() + off);
   return (d.getUTCHours() + 9) * 60 + d.getUTCMinutes();
-}
-function kstNow() {
-  var d = new Date(Date.now() + ((typeof window.timeOffset==='number')?window.timeOffset:0));
-  var h = (d.getUTCHours() + 9) % 24;
-  var m = d.getUTCMinutes();
-  return h.toString().padStart(2,'0') + ':' + m.toString().padStart(2,'0');
 }
 function getDayCode() {
   // 기준시각(미설정 시 현재)의 KST 날짜 기준
@@ -21130,14 +20210,7 @@ function fmtKST(ms) {
   return h.toString().padStart(2,'0') + ':' + m.toString().padStart(2,'0');
 }
 
-// fmtKST + 분 추가 유틸 — 자정 롤오버 자동 처리
-// 예: fmtKSTaddMin(23*60+58*60000, 5) → '00:03'
-function fmtKSTfromMs(baseMs, addSec) {
-  var totalMs = baseMs + (addSec || 0) * 1000;
-  return fmtKST(totalMs);
-}
 window.fmtKST = fmtKST;
-window.fmtKSTfromMs = fmtKSTfromMs;
 
 // ── 노선 배차 간격 (시각표 없을 때 fallback) ─────────────────
 var LINE_SCHEDULE = {};
@@ -21406,9 +20479,6 @@ function startRealtimeTrainPosPolling() {
   updateRealtimeTrainPosition().catch(function(){});
 }
 
-function stopRealtimeTrainPosPolling() {
-  if(_trainPosTimer) { clearInterval(_trainPosTimer); _trainPosTimer = null; }
-}
 
 async function seoulFetchArrival(stnName, lineName) {
   var cacheKey = stnName + '|' + lineName;
@@ -22804,12 +21874,6 @@ function _gpsSetBusy(busy) {
 }
 
 /* ── GPS 모달 열기 헬퍼 ── */
-function _openGpsModal() {
-  var m = document.getElementById('gpsModal');
-  if (!m) return;
-  m.style.display = 'flex';   // none 해제 + flex 직접 지정
-  m.classList.add('on');
-}
 
 // ── GPS 좌표를 그대로 출발지("내 위치")로 설정 ──
 function _setStartToMyLocation(lat, lng){
@@ -22988,288 +22052,18 @@ function triggerGPS(){
 }
 
 /* ── 단일 역 모달 표시 (기존 gmBody 구조 재사용) ── */
-function _showGpsSingleModal(n, lat, lng, acc){
-  var d = hav(lat, lng, n.lat, n.lng);
-  var gmIcon  = document.getElementById('gmIcon');
-  var gmTitle = document.getElementById('gmTitle');
-  var gmBody  = document.getElementById('gmBody');
-  var gmBtns  = document.querySelector('#gpsModal .gm-btns');
-  /* 선택목록 있으면 제거 후 기본 버튼 복구 */
-  _restoreGpsModalBtns(gmBtns);
-  if(d <= 300){
-    if(gmIcon)  gmIcon.textContent  = '📍';
-    if(gmTitle) gmTitle.textContent = '역 감지됨';
-    if(gmBody)  gmBody.innerHTML    = '현재 위치가 <b>'+n.name+' ('+n.line+')</b>으로 판단됩니다.<br>출발역으로 설정하시겠습니까?';
-  } else {
-    var dWalk = Math.round(walkingDist(d));
-    if(gmIcon)  gmIcon.textContent  = '🗺️';
-    if(gmTitle) gmTitle.textContent = '가장 가까운 역';
-    if(gmBody)  gmBody.innerHTML    = '도보 약 <b>'+dWalk+'m</b> 거리의<br><b>'+n.name+' ('+n.line+')</b>이 가장 가깝습니다.<br>출발역으로 설정하시겠습니까?';
-  }
-  var gpsModal = document.getElementById('gpsModal');
-  if(gpsModal){ _openGpsModal(); }
-}
 
 /* ── 복수 역 선택 모달 ── */
-function _showGpsMultiModal(candidates, lat, lng){
-  var gmIcon  = document.getElementById('gmIcon');
-  var gmTitle = document.getElementById('gmTitle');
-  var gmBody  = document.getElementById('gmBody');
-  var gmBtns  = document.querySelector('#gpsModal .gm-btns');
-
-  if(gmIcon)  gmIcon.textContent  = '📡';
-  if(gmTitle) gmTitle.textContent = '주변 역 선택';
-
-  /* 목록 최대 6개 */
-  var list = candidates.slice(0, 6);
-  var html = '<div style="font-size:11px;color:var(--sub);margin-bottom:8px;">출발역으로 설정할 역을 선택하세요</div>';
-  html += '<div id="gpsMultiList" style="display:flex;flex-direction:column;gap:7px;">';
-  list.forEach(function(s, i){
-    var d = Math.round(s.dist);
-    var walk = Math.round(walkingDist(s.dist));
-    var clr = s.color || '#888';
-    var distLabel = d <= 500
-      ? '<span style="color:var(--green);font-weight:700;">'+d+'m</span>'
-      : '<span style="color:var(--orange);">'+d+'m (도보 '+walk+'m)</span>';
-    html += '<button onclick="gpsSelectStation('+i+')" style="'
-      +'display:flex;align-items:center;gap:10px;'
-      +'background:var(--card2);border:1.5px solid '+clr+';border-radius:11px;'
-      +'padding:10px 12px;cursor:pointer;text-align:left;font-family:inherit;'
-      +'transition:background .15s;" '
-      +'onmousedown="this.style.background=\'#3a3a3c\'" '
-      +'onmouseup="this.style.background=\'#2c2c2e\'">'
-      +'<span style="font-size:18px;">🚇</span>'
-      +'<span style="flex:1;">'
-      +'<span style="display:block;font-size:13px;font-weight:700;color:var(--text);">'+s.name+'</span>'
-      +'<span style="display:block;font-size:11px;color:'+clr+';font-weight:600;margin-top:2px;">'+s.line+' · '+distLabel+'</span>'
-      +'</span>'
-      +'<span style="font-size:12px;color:var(--sub);">▶</span>'
-      +'</button>';
-  });
-  html += '</div>';
-  if(gmBody) gmBody.innerHTML = html;
-
-  /* 버튼 영역 → 취소만 */
-  if(gmBtns){
-    gmBtns.innerHTML = '<button class="gm-no" style="flex:1;" onclick="gpsNo()">취소</button>';
-  }
-
-  var gpsModal = document.getElementById('gpsModal');
-  if(gpsModal){ _openGpsModal(); }
-}
 
 /* 복수 목록에서 역 선택 */
 /* ── 단일 역/정류장 모달 (버스 포함 버전) ── */
-function _showGpsSingleModal2(n, lat, lng, acc) {
-  var isBus   = n.type === 'bus';
-  var icon    = isBus ? '🚌' : '📍';
-  var typeTag = isBus ? '버스정류장' : '역';
-  var label   = isBus ? n.name : n.name + ' (' + (n.line||'') + ')';
-  var d       = Math.round(n.dist || 0);
-
-  var gmIcon  = document.getElementById('gmIcon');
-  var gmTitle = document.getElementById('gmTitle');
-  var gmBody  = document.getElementById('gmBody');
-  var gmBtns  = document.querySelector('#gpsModal .gm-btns');
-  _restoreGpsModalBtns(gmBtns);
-
-  if(gmIcon)  gmIcon.textContent = icon;
-  if(gmTitle) gmTitle.textContent = (d <= 300 ? typeTag + ' 감지됨' : '가장 가까운 ' + typeTag);
-  if(gmBody)  gmBody.innerHTML =
-    '현재 위치가 <b>' + _ltEsc(label) + '</b>으로 판단됩니다.<br>' +
-    (d > 0 ? '(' + d + 'm) ' : '') + '출발지로 설정하시겠습니까?';
-
-  var gpsModal = document.getElementById('gpsModal');
-  if(gpsModal) _openGpsModal();
-}
 
 /* ── 복수 역/정류장 선택 모달 (버스 도착정보 + 상행/하행 구분) ── */
-function _showGpsMultiModal2(combined, lat, lng) {
-  var gmIcon  = document.getElementById('gmIcon');
-  var gmTitle = document.getElementById('gmTitle');
-  var gmBody  = document.getElementById('gmBody');
-  var gmBtns  = document.querySelector('#gpsModal .gm-btns');
-
-  if(gmIcon)  gmIcon.textContent  = '📡';
-  if(gmTitle) gmTitle.textContent = '주변 역/정류장 선택';
-
-  var list = combined.slice(0, 8);
-
-  // 지하철역 / 버스정류장 분리 (상행/하행 구분 위해 중복명 유지)
-  var subItems = list.filter(function(s){ return s.type !== 'bus'; });
-  var busItems = list.filter(function(s){ return s.type === 'bus'; });
-  // 거리 500m 이내 버스정류장 우선, 그 외 추가
-  busItems.sort(function(a,b){ return a.dist-b.dist; });
-
-  function makeItem(s, i) {
-    var isBus = s.type === 'bus';
-    var icon  = isBus ? '🚌' : '🚇';
-    var clr   = isBus ? '#00b341' : (s.color || '#0a84ff');
-    var tag   = isBus ? '버스' : (s.line || '지하철');
-    var d     = Math.round(s.dist || 0);
-    var distTxt = d <= 500 ? '<b style="color:#30d158;">'+d+'m</b>'
-                           : '<span style="color:var(--orange);">'+d+'m</span>';
-    var arrId = 'busArr_' + i;
-    return '<button onclick="gpsSelectStation(' + i + ')" id="gpsBtn_'+i+'" style="'
-      + 'display:flex;align-items:center;gap:10px;width:100%;'
-      + 'background:var(--card2);border:1.5px solid ' + clr + ';border-radius:11px;'
-      + 'padding:10px 12px;cursor:pointer;text-align:left;font-family:inherit;margin-bottom:6px;">'
-      + '<span style="font-size:20px;">' + icon + '</span>'
-      + '<span style="flex:1;min-width:0;">'
-      + '<span style="display:block;font-size:13px;font-weight:700;color:var(--text);'
-        + 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _ltEsc(s.name) + '</span>'
-      + '<span style="display:block;font-size:11px;color:'+clr+';font-weight:600;margin-top:1px;">'
-        + _ltEsc(tag) + ' · ' + distTxt
-        + (isBus ? ' <span id="'+arrId+'" style="color:var(--sub);">도착정보 조회중...</span>' : '')
-      + '</span>'
-      + '</span>'
-      + '<span style="font-size:11px;color:var(--sub);">▶</span>'
-      + '</button>';
-  }
-
-  var html = '<div style="font-size:11px;color:var(--sub);margin-bottom:10px;">출발지로 설정할 곳을 선택하세요</div>';
-
-  // 상행/하행 표시: 같은 정류장명이 2개 이상이면 상행/하행으로 구분
-  var busGroups = {};
-  busItems.forEach(function(s) {
-    var realIdx = list.indexOf(s);
-    var nm = (s.name || '').replace(/\s*(상행|하행|[0-9]+번)$/,'').trim() || s.name;
-    if(!busGroups[nm]) busGroups[nm] = [];
-    busGroups[nm].push({ s: s, idx: realIdx });
-  });
-
-  // 버스 섹션
-  if(busItems.length > 0) {
-    html += '<div style="font-size:10px;font-weight:700;color:var(--sub);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">🚌 버스정류장</div>';
-    Object.keys(busGroups).forEach(function(nm) {
-      var group = busGroups[nm];
-      if(group.length >= 2) {
-        // 상행/하행 가로 배열
-        html += '<div style="display:flex;gap:6px;margin-bottom:6px;">';
-        group.forEach(function(item, gi) {
-          var s = item.s; var i = item.idx;
-          var clr = '#00b341';
-          var d = Math.round(s.dist||0);
-          var arrId = 'busArr_' + i;
-          // 정류장명에 방향 힌트가 있으면 사용, 없으면 인덱스 기반
-          var origNm = item.s.name || '';
-          var dirLabel = origNm.includes('상행') ? '상행'
-            : origNm.includes('하행') ? '하행'
-            : gi === 0 ? '방향 ①' : '방향 ②';
-          html += '<button onclick="gpsSelectStation('+i+')" style="'
-            + 'flex:1;display:flex;flex-direction:column;align-items:flex-start;gap:3px;'
-            + 'background:var(--card2);border:1.5px solid '+clr+';border-radius:11px;'
-            + 'padding:9px 10px;cursor:pointer;font-family:inherit;">'
-            + '<div style="display:flex;align-items:center;gap:5px;width:100%;">'
-              + '<span style="font-size:11px;font-weight:800;color:#fff;background:'+clr+';border-radius:5px;padding:1px 6px;">'+dirLabel+'</span>'
-              + '<span style="font-size:12px;font-weight:700;color:var(--text);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _ltEsc(nm) + '</span>'
-            + '</div>'
-            + '<div style="font-size:10px;color:var(--sub);">🚶 '+d+'m</div>'
-            + '<div id="'+arrId+'" style="font-size:10px;color:var(--gold);">도착정보 로딩중...</div>'
-            + '</button>';
-        });
-        html += '</div>';
-      } else {
-        // 단일 정류장
-        group.forEach(function(item) { html += makeItem(item.s, item.idx); });
-      }
-    });
-  }
-
-  // 지하철 섹션
-  if(subItems.length > 0) {
-    html += '<div style="font-size:10px;font-weight:700;color:var(--sub);margin:8px 0 6px;letter-spacing:.5px;">🚇 지하철역</div>';
-    subItems.forEach(function(s) {
-      var realIdx = list.indexOf(s);
-      html += makeItem(s, realIdx);
-    });
-  }
-
-  if(gmBody) gmBody.innerHTML = html;
-  if(gmBtns) gmBtns.innerHTML = '<button class="gm-no" style="flex:1;" onclick="gpsNo()">취소</button>';
-
-  var gpsModal = document.getElementById('gpsModal');
-  if(gpsModal) _openGpsModal();
-
-  // 버스 도착정보 비동기 조회
-  setTimeout(function() {
-    busItems.forEach(function(s) {
-      var realIdx = list.indexOf(s);
-      var arrId = 'busArr_' + realIdx;
-      var el = document.getElementById(arrId);
-      if(!el || !s.nodeId) {
-        if(el) el.textContent = '';
-        return;
-      }
-      _fetchBusArrival((typeof _tagoCityCode==='function' ? _tagoCityCode(s) : '') || s.cityCode || '', s.nodeId, function(err, arrivals) {
-        if(!el) return;
-        if(err || !arrivals || !arrivals.length) {
-          el.textContent = '도착정보 없음';
-          return;
-        }
-        var arr = arrivals[0];
-        var min = Math.round((arr.arrtime || arr.ARRTIME || 0) / 60);
-        var veh = arr.vehicletp || arr.routeno || '';
-        var txt = min <= 0 ? '곧 도착' : min + '분 후';
-        if(veh) txt = _ltEsc(veh) + ' · ' + txt;
-        el.textContent = '🔴 ' + txt;
-        // 2번째 버스
-        if(arrivals[1]) {
-          var min2 = Math.round((arrivals[1].arrtime || arrivals[1].ARRTIME || 0) / 60);
-          el.textContent += '  |  ' + min2 + '분';
-        }
-      });
-    });
-  }, 300);
-}
 
 /* 복수 목록에서 역/정류장 선택 */
-function gpsSelectStation(idx){
-  var s = _gpsNearCandidates[idx];
-  if(!s) return;
-  var m = document.getElementById('gpsModal');
-  if(m){ m.classList.remove('on'); m.style.display='none'; }
-
-  if(s.type === 'bus') {
-    // 버스정류장 선택
-    var inp = document.getElementById('fmapStartInp');
-    if(inp) inp.value = s.name;
-    _fmapSetLocation('start', {
-      type:'bus', name:s.name,
-      nodeId: s.nodeId, cityCode: (typeof _tagoCityCode==='function' ? _tagoCityCode(s) : '') || s.cityCode || '',
-      lat: s.lat, lng: s.lng
-    });
-    toast('✅ ' + s.name + ' 출발지 설정 완료!');
-    // 도착지 입력창으로 포커스
-    setTimeout(function(){
-      var destInp = document.getElementById('fmapDestInp');
-      if(destInp) destInp.focus();
-    }, 300);
-  } else {
-    // 지하철역 선택
-    S.gpsStation = s;
-    setStart(s);
-    toast('✅ ' + s.name + ' (' + (s.line||'') + ') 출발역 설정 완료!');
-    setTimeout(function(){
-      var destInp = document.getElementById('fmapDestInp');
-      if(destInp) destInp.focus();
-    }, 300);
-  }
-  if(_fmapDest) fmapDoRoute();
-  else if(S.dest) doRoute();
-}
-window.gpsSelectStation = gpsSelectStation;
 
 /* 단일→복수 전환 후 gm-btns 원복 헬퍼 */
-function _restoreGpsModalBtns(gmBtns){
-  if(!gmBtns) return;
-  if(!gmBtns.querySelector('.gm-yes')){
-    gmBtns.innerHTML = '<button class="gm-no" onclick="gpsNo()">아니요</button>'
-                     + '<button class="gm-yes" onclick="gpsYes()">네</button>';
-  }
-}
 
-function resetGPS(){ _gpsSetBusy(false); }
 function startWatch(){
   if(S.gpsWatch)navigator.geolocation.clearWatch(S.gpsWatch);
   S.gpsWatch=navigator.geolocation.watchPosition(function(pos){
@@ -23741,43 +22535,6 @@ function detectBoardingState(lat,lng,nearestStn,distToStn,acc){
 // 동명이역은 배열로 처리
 const SUBWAY_MASTER_DB = {"동탄":{"id":"9010","lat":37.20034,"lng":127.09569,"line":"수도권 광역급행철도","subwayId":"","stCode":"0011"},"구성":[{"id":"9009","lat":37.29913,"lng":127.10389,"line":"수도권 광역급행철도","subwayId":""},{"id":"1863","lat":37.298969,"lng":127.105664,"line":"분당선","subwayId":"1075"}],"성남":[{"id":"9008","lat":37.39467,"lng":127.12058,"line":"수도권 광역급행철도","subwayId":""},{"id":"1512","lat":37.39468,"lng":127.11945,"line":"경강선","subwayId":"1095"}],"수서":[{"id":"9007","lat":37.48637,"lng":127.10161,"line":"수도권 광역급행철도","subwayId":""},{"id":"1030","lat":37.487472,"lng":127.101422,"line":"분당선","subwayId":"1075"},{"id":"0339","lat":37.487378,"lng":127.101907,"line":"3호선","subwayId":"1003"}],"삼성":{"id":"9006","lat":37.50887,"lng":127.06324,"line":"수도권 광역급행철도","subwayId":"","stCode":"0219"},"서울":{"id":"9005","lat":37.55569,"lng":126.97296,"line":"수도권 광역급행철도","subwayId":"","stCode":"9005"},"연신내":[{"id":"9004","lat":37.61878,"lng":126.9213,"line":"수도권 광역급행철도","subwayId":""},{"id":"2615","lat":37.618636,"lng":126.920625,"line":"6호선","subwayId":"1006"},{"id":"0311","lat":37.619229,"lng":126.921038,"line":"3호선","subwayId":"1003"}],"대곡":[{"id":"9002","lat":37.63191,"lng":126.81113,"line":"수도권 광역급행철도","subwayId":""},{"id":"1953","lat":37.631626,"lng":126.811024,"line":"일산선","subwayId":"1001"}],"킨텍스":{"id":"9001","lat":37.66532,"lng":126.74843,"line":"수도권 광역급행철도","subwayId":"","stCode":"9001"},"운정":[{"id":"9000","lat":37.71614,"lng":126.72841,"line":"수도권 광역급행철도","subwayId":""},{"id":"1278","lat":37.725826,"lng":126.767257,"line":"경의중앙선","subwayId":"1067"}],"김포공항":[{"id":"4929","lat":37.56236,"lng":126.801868,"line":"김포골드라인","subwayId":"1094"},{"id":"4207","lat":37.561842,"lng":126.801904,"line":"공항철도1호선","subwayId":"1065"},{"id":"4102","lat":37.561916,"lng":126.802152,"line":"9호선","subwayId":"1009"},{"id":"2513","lat":37.562384,"lng":126.801292,"line":"5호선","subwayId":"1005"},{"id":"1980","lat":37.5617,"lng":126.8041,"line":"서해선","subwayId":"1093"}],"고촌":{"id":"4928","lat":37.601243,"lng":126.770345,"line":"김포골드라인","subwayId":"1094","stCode":"4928"},"풍무":{"id":"4927","lat":37.612488,"lng":126.732387,"line":"김포골드라인","subwayId":"1094","stCode":"4927"},"사우(김포시청)":{"id":"4926","lat":37.620249,"lng":126.719731,"line":"김포골드라인","subwayId":"1094"},"걸포북변":{"id":"4925","lat":37.63165,"lng":126.705975,"line":"김포골드라인","subwayId":"1094","stCode":"4925"},"운양":{"id":"4924","lat":37.653867,"lng":126.68393,"line":"김포골드라인","subwayId":"1094","stCode":"4924"},"장기":{"id":"4923","lat":37.643986,"lng":126.669017,"line":"김포골드라인","subwayId":"1094","stCode":"4923"},"마산":{"id":"4922","lat":37.640732,"lng":126.644344,"line":"김포골드라인","subwayId":"1094","stCode":"4922"},"구래":{"id":"4921","lat":37.645384,"lng":126.628633,"line":"김포골드라인","subwayId":"1094","stCode":"4921"},"양촌":{"id":"4920","lat":37.642379,"lng":126.614309,"line":"김포골드라인","subwayId":"1094","stCode":"4920"},"원시":{"id":"4815","lat":37.302371,"lng":126.786691,"line":"서해선","subwayId":"1093","stCode":"4815"},"원곡":{"id":"4814","lat":37.31321,"lng":126.796261,"line":"서해선","subwayId":"1093"},"초지":[{"id":"4813","lat":37.319619,"lng":126.808147,"line":"서해선","subwayId":"1093"},{"id":"1758","lat":37.320646,"lng":126.805913,"line":"안산선","subwayId":"1001"}],"선부":{"id":"4812","lat":37.334353,"lng":126.809904,"line":"서해선","subwayId":"1093","stCode":"4812"},"달미":{"id":"4811","lat":37.348847,"lng":126.809409,"line":"서해선","subwayId":"1093","stCode":"4811"},"시흥능곡":{"id":"4810","lat":37.369864,"lng":126.808573,"line":"서해선","subwayId":"1093","stCode":"4810"},"시흥시청":{"id":"4809","lat":37.382223,"lng":126.805625,"line":"서해선","subwayId":"1093","stCode":"4809"},"신현":{"id":"4808","lat":37.409008,"lng":126.788017,"line":"서해선","subwayId":"1093","stCode":"4808"},"신천":{"id":"4807","lat":37.439066,"lng":126.786788,"line":"서해선","subwayId":"1093","stCode":"4807"},"시흥대야":{"id":"4806","lat":37.450145,"lng":126.793041,"line":"서해선","subwayId":"1093","stCode":"4806"},"소새울":{"id":"4805","lat":37.468467,"lng":126.797252,"line":"서해선","subwayId":"1093","stCode":"4805"},"소사":[{"id":"4804","lat":37.483279,"lng":126.795023,"line":"서해선","subwayId":"1093"},{"id":"1814","lat":37.482753,"lng":126.79544,"line":"경인선","subwayId":"1001"}],"신설동":[{"id":"4713","lat":37.576095,"lng":127.023242,"line":"우이신설선","subwayId":"1092"},{"id":"0246","lat":37.574747,"lng":127.024932,"line":"2호선","subwayId":"1002"},{"id":"0156","lat":37.576048,"lng":127.024634,"line":"1호선","subwayId":"1001"}],"보문":[{"id":"4712","lat":37.585286,"lng":127.019381,"line":"우이신설선","subwayId":"1092"},{"id":"2639","lat":37.585274,"lng":127.019351,"line":"6호선","subwayId":"1006"}],"성신여대입구(돈암)":[{"id":"4711","lat":37.592467,"lng":127.016516,"line":"우이신설선","subwayId":"1092"},{"id":"0418","lat":37.592612,"lng":127.016441,"line":"4호선","subwayId":"1004"}],"정릉":{"id":"4710","lat":37.603133,"lng":127.013396,"line":"우이신설선","subwayId":"1092","stCode":"4710"},"북한산보국문":{"id":"4709","lat":37.612072,"lng":127.008251,"line":"우이신설선","subwayId":"1092","stCode":"4709"},"솔샘":{"id":"4708","lat":37.620238,"lng":127.013626,"line":"우이신설선","subwayId":"1092","stCode":"4708"},"삼양사거리":{"id":"4707","lat":37.621337,"lng":127.020473,"line":"우이신설선","subwayId":"1092","stCode":"4707"},"삼양":{"id":"4706","lat":37.626914,"lng":127.018106,"line":"우이신설선","subwayId":"1092","stCode":"4706"},"화계":{"id":"4705","lat":37.634133,"lng":127.017511,"line":"우이신설선","subwayId":"1092","stCode":"4705"},"가오리":{"id":"4704","lat":37.641537,"lng":127.016789,"line":"우이신설선","subwayId":"1092","stCode":"4704"},"4.19민주묘지":{"id":"4703","lat":37.649502,"lng":127.013684,"line":"우이신설선","subwayId":"1092"},"솔밭공원":{"id":"4702","lat":37.65603,"lng":127.013273,"line":"우이신설선","subwayId":"1092","stCode":"4702"},"북한산우이":{"id":"4701","lat":37.662909,"lng":127.012706,"line":"우이신설선","subwayId":"1092","stCode":"4701"},"탑석":{"id":"4615","lat":37.733579,"lng":127.088704,"line":"의정부선","subwayId":"1104","stCode":"4615"},"송산":{"id":"4614","lat":37.737279,"lng":127.087159,"line":"의정부선","subwayId":"1104","stCode":"4614"},"어룡":{"id":"4613","lat":37.742802,"lng":127.085035,"line":"의정부선","subwayId":"1104","stCode":"4613"},"곤제":{"id":"4612","lat":37.750471,"lng":127.083715,"line":"의정부선","subwayId":"1104","stCode":"4612"},"효자":{"id":"4611","lat":37.754025,"lng":127.076902,"line":"의정부선","subwayId":"1104","stCode":"4611"},"경기도청북부청사":{"id":"4610","lat":37.75059,"lng":127.071495,"line":"의정부선","subwayId":"1104","stCode":"4610"},"새말":{"id":"4609","lat":37.748885,"lng":127.06362,"line":"의정부선","subwayId":"1104","stCode":"4609"},"동오":{"id":"4608","lat":37.745271,"lng":127.056947,"line":"의정부선","subwayId":"1104","stCode":"4608"},"의정부중앙":{"id":"4607","lat":37.743676,"lng":127.049565,"line":"의정부선","subwayId":"1104","stCode":"4607"},"흥선":{"id":"4606","lat":37.743302,"lng":127.037023,"line":"의정부선","subwayId":"1104","stCode":"4606"},"의정부시청":{"id":"4605","lat":37.739256,"lng":127.034781,"line":"의정부선","subwayId":"1104","stCode":"4605"},"경전철의정부":{"id":"4604","lat":37.737202,"lng":127.043257,"line":"의정부선","subwayId":"1104","stCode":"4604"},"범골":{"id":"4603","lat":37.728755,"lng":127.04353,"line":"의정부선","subwayId":"1104","stCode":"4603"},"회룡":[{"id":"4602","lat":37.725006,"lng":127.047073,"line":"의정부선","subwayId":"1104"},{"id":"1905","lat":37.724416,"lng":127.04736,"line":"경원선","subwayId":"1001"}],"발곡":{"id":"4601","lat":37.727048,"lng":127.052803,"line":"의정부선","subwayId":"1104","stCode":"4601"},"전대.에버랜드":{"id":"4517","lat":37.285342,"lng":127.219561,"line":"에버라인선","subwayId":"1103","stCode":"4517"},"둔전":{"id":"4515","lat":37.267051,"lng":127.21364,"line":"에버라인선","subwayId":"1103","stCode":"4515"},"보평":{"id":"4514","lat":37.258965,"lng":127.218457,"line":"에버라인선","subwayId":"1103","stCode":"4514"},"고진":{"id":"4513","lat":37.24484,"lng":127.214251,"line":"에버라인선","subwayId":"1103","stCode":"4513"},"운동장.송담대":{"id":"4512","lat":37.237845,"lng":127.209198,"line":"에버라인선","subwayId":"1103"},"김량장":{"id":"4511","lat":37.237247,"lng":127.198781,"line":"에버라인선","subwayId":"1103","stCode":"4511"},"명지대":{"id":"4510","lat":37.237964,"lng":127.190294,"line":"에버라인선","subwayId":"1103","stCode":"4510"},"시청.용인대":{"id":"4509","lat":37.239151,"lng":127.178406,"line":"에버라인선","subwayId":"1103","stCode":"4509"},"삼가":{"id":"4508","lat":37.242115,"lng":127.168075,"line":"에버라인선","subwayId":"1103","stCode":"4508"},"초당":{"id":"4506","lat":37.260752,"lng":127.159443,"line":"에버라인선","subwayId":"1103","stCode":"4506"},"동백":{"id":"4505","lat":37.269043,"lng":127.152716,"line":"에버라인선","subwayId":"1103","stCode":"4505"},"어정":{"id":"4504","lat":37.274917,"lng":127.143714,"line":"에버라인선","subwayId":"1103","stCode":"4504"},"지석":{"id":"4503","lat":37.269606,"lng":127.136515,"line":"에버라인선","subwayId":"1103","stCode":"4503"},"강남대":{"id":"4502","lat":37.270161,"lng":127.126033,"line":"에버라인선","subwayId":"1103","stCode":"4502"},"기흥":[{"id":"4501","lat":37.275449,"lng":127.116665,"line":"에버라인선","subwayId":"1103"},{"id":"1865","lat":37.275061,"lng":127.11591,"line":"분당선","subwayId":"1075"}],"관악산(서울대)":{"id":"4411","lat":37.4691018,"lng":126.9450639,"line":"신림선","subwayId":""},"서울대벤처타운":{"id":"4410","lat":37.4720019,"lng":126.9339351,"line":"신림선","subwayId":"","stCode":"4410"},"서원":{"id":"4409","lat":37.4782341,"lng":126.9330365,"line":"신림선","subwayId":"","stCode":"4409"},"신림":[{"id":"4408","lat":37.4849266,"lng":126.9296159,"line":"신림선","subwayId":""},{"id":"0230","lat":37.484201,"lng":126.929715,"line":"2호선","subwayId":"1002"}],"당곡":{"id":"4407","lat":37.4902998,"lng":126.9275133,"line":"신림선","subwayId":"","stCode":"4407"},"보라매병원":{"id":"4406","lat":37.4929598,"lng":126.9234964,"line":"신림선","subwayId":"","stCode":"4406"},"보라매공원":{"id":"4405","lat":37.4955691,"lng":126.9180827,"line":"신림선","subwayId":"","stCode":"4405"},"보라매":[{"id":"4404","lat":37.5002739,"lng":126.9204355,"line":"신림선","subwayId":""},{"id":"2744","lat":37.499872,"lng":126.920428,"line":"7호선","subwayId":"1007"}],"서울지방병무청":{"id":"4403","lat":37.5060464,"lng":126.9227083,"line":"신림선","subwayId":"","stCode":"4403"},"대방":[{"id":"4402","lat":37.5133059,"lng":126.9257265,"line":"신림선","subwayId":""},{"id":"1005","lat":37.513342,"lng":126.926382,"line":"경부선","subwayId":"1001"}],"샛강":[{"id":"4401","lat":37.5170969,"lng":126.929399,"line":"신림선","subwayId":""},{"id":"4116","lat":37.517274,"lng":126.928422,"line":"9호선","subwayId":"1009"}],"광교(경기대)":{"id":"4319","lat":37.30211,"lng":127.044483,"line":"신분당선(연장)","subwayId":"1077"},"광교중앙(아주대)":{"id":"4318","lat":37.288617,"lng":127.051478,"line":"신분당선(연장)","subwayId":"1077"},"상현":{"id":"4317","lat":37.297664,"lng":127.069342,"line":"신분당선(연장)","subwayId":"1077","stCode":"4317"},"성복":{"id":"4316","lat":37.313335,"lng":127.0801,"line":"신분당선(연장)","subwayId":"1077","stCode":"4316"},"수지구청":{"id":"4315","lat":37.322702,"lng":127.095026,"line":"신분당선(연장)","subwayId":"1077","stCode":"4315"},"동천":{"id":"4314","lat":37.337928,"lng":127.102976,"line":"신분당선(연장)","subwayId":"1077","stCode":"4314"},"미금":[{"id":"4313","lat":37.349982,"lng":127.108918,"line":"신분당선(연장)","subwayId":"1077"},{"id":"1858","lat":37.350077,"lng":127.10891,"line":"분당선","subwayId":"1075"}],"정자":[{"id":"4312","lat":37.367098,"lng":127.108403,"line":"신분당선","subwayId":"1077"},{"id":"1857","lat":37.365994,"lng":127.10807,"line":"분당선","subwayId":"1075"}],"판교":[{"id":"4311","lat":37.394761,"lng":127.112217,"line":"신분당선","subwayId":"1077"},{"id":"1501","lat":37.394761,"lng":127.111217,"line":"경강선","subwayId":"1095"}],"청계산입구":{"id":"4310","lat":37.447211,"lng":127.055664,"line":"신분당선","subwayId":"1077","stCode":"4310"},"양재시민의숲(매헌)":{"id":"4309","lat":37.470023,"lng":127.03842,"line":"신분당선","subwayId":"1077"},"양재(서초구청)":[{"id":"4308","lat":37.483809,"lng":127.034653,"line":"신분당선","subwayId":"1077"},{"id":"0332","lat":37.484477,"lng":127.033902,"line":"3호선","subwayId":"1003"}],"강남":[{"id":"4307","lat":37.496837,"lng":127.028104,"line":"신분당선","subwayId":"1077"},{"id":"0222","lat":37.49799,"lng":127.027912,"line":"2호선","subwayId":"1002"}],"신논현":[{"id":"4306","lat":37.504598,"lng":127.02506,"line":"신분당선(연장2)","subwayId":"1077"},{"id":"4125","lat":37.504598,"lng":127.02506,"line":"9호선","subwayId":"1009"}],"논현":[{"id":"4305","lat":37.511093,"lng":127.021415,"line":"신분당선(연장2)","subwayId":"1077"},{"id":"2734","lat":37.511093,"lng":127.021415,"line":"7호선","subwayId":"1007"}],"신사":[{"id":"4304","lat":37.516334,"lng":127.020114,"line":"신분당선(연장2)","subwayId":"1077"},{"id":"0327","lat":37.516334,"lng":127.020114,"line":"3호선","subwayId":"1003"}],"영종":{"id":"4217","lat":37.51202,"lng":126.524254,"line":"공항철도1호선","subwayId":"1065","stCode":"4217"},"인천공항2터미널":{"id":"4215","lat":37.460699,"lng":126.441442,"line":"공항철도1호선","subwayId":"1065","stCode":"4215"},"인천공항1터미널":{"id":"4213","lat":37.447464,"lng":126.452508,"line":"공항철도1호선","subwayId":"1065","stCode":"4213"},"공항화물청사":{"id":"4212","lat":37.459041,"lng":126.477516,"line":"공항철도1호선","subwayId":"1065","stCode":"4212"},"운서":{"id":"4211","lat":37.492904,"lng":126.49379,"line":"공항철도1호선","subwayId":"1065","stCode":"4211"},"청라국제도시":{"id":"4210","lat":37.556409,"lng":126.624648,"line":"공항철도1호선","subwayId":"1065","stCode":"4210"},"검암":[{"id":"4209","lat":37.569098,"lng":126.674007,"line":"공항철도1호선","subwayId":"1065"},{"id":"3207","lat":37.56866,"lng":126.675687,"line":"인천2호선","subwayId":"1082"}],"계양":[{"id":"4208","lat":37.571662,"lng":126.7363,"line":"공항철도1호선","subwayId":"1065"},{"id":"3110","lat":37.571449,"lng":126.73578,"line":"인천1호선","subwayId":"1081"}],"마곡나루":[{"id":"4206","lat":37.565543,"lng":126.827378,"line":"공항철도1호선","subwayId":"1065"},{"id":"4105","lat":37.566778,"lng":126.82731,"line":"9호선","subwayId":"1009"}],"디지털미디어시티":[{"id":"4204","lat":37.576958,"lng":126.898609,"line":"공항철도1호선","subwayId":"1065"},{"id":"2619","lat":37.576108,"lng":126.901391,"line":"6호선","subwayId":"1006"},{"id":"1266","lat":37.577475,"lng":126.900453,"line":"경의중앙선","subwayId":"1067"}],"홍대입구":[{"id":"4203","lat":37.557438,"lng":126.926715,"line":"공항철도1호선","subwayId":"1065"},{"id":"1264","lat":37.557641,"lng":126.926683,"line":"경의중앙선","subwayId":"1067"},{"id":"0239","lat":37.55679,"lng":126.923708,"line":"2호선","subwayId":"1002"}],"공덕":[{"id":"4202","lat":37.54253,"lng":126.952024,"line":"공항철도1호선","subwayId":"1065"},{"id":"2627","lat":37.543555,"lng":126.951678,"line":"6호선","subwayId":"1006"},{"id":"2530","lat":37.544431,"lng":126.951372,"line":"5호선","subwayId":"1005"},{"id":"1262","lat":37.542596,"lng":126.952099,"line":"경의중앙선","subwayId":"1067"}],"서울역":[{"id":"4201","lat":37.553247,"lng":126.969769,"line":"공항철도1호선","subwayId":"1065"},{"id":"1251","lat":37.557231,"lng":126.97103,"line":"경의중앙선","subwayId":"1067"},{"id":"1001","lat":37.554337,"lng":126.971134,"line":"경부선","subwayId":"1001"},{"id":"0426","lat":37.55281,"lng":126.972556,"line":"4호선","subwayId":"1004"},{"id":"0150","lat":37.556228,"lng":126.972135,"line":"1호선","subwayId":"1001"}],"중앙보훈병원":{"id":"4138","lat":37.529191,"lng":127.148739,"line":"9호선(연장)","subwayId":"1009","stCode":"4138"},"둔촌오륜":{"id":"4137","lat":37.519683,"lng":127.137989,"line":"9호선(연장)","subwayId":"1009","stCode":"4137"},"올림픽공원(한국체대)":[{"id":"4136","lat":37.516269,"lng":127.130288,"line":"9호선(연장)","subwayId":"1009"},{"id":"2556","lat":37.516201,"lng":127.130923,"line":"5호선","subwayId":"1005"}],"한성백제":{"id":"4135","lat":37.516404,"lng":127.116503,"line":"9호선(연장)","subwayId":"1009","stCode":"4135"},"송파나루":{"id":"4134","lat":37.510372,"lng":127.112216,"line":"9호선(연장)","subwayId":"1009","stCode":"4134"},"석촌":[{"id":"4133","lat":37.505208,"lng":127.10704,"line":"9호선(연장)","subwayId":"1009"},{"id":"2816","lat":37.505557,"lng":127.106832,"line":"8호선","subwayId":"1008"}],"석촌고분":{"id":"4132","lat":37.502558,"lng":127.097033,"line":"9호선(연장)","subwayId":"1009","stCode":"4132"},"삼전":{"id":"4131","lat":37.504738,"lng":127.088025,"line":"9호선(연장)","subwayId":"1009","stCode":"4131"},"종합운동장":[{"id":"4130","lat":37.511426,"lng":127.076275,"line":"9호선(연장)","subwayId":"1009"},{"id":"0218","lat":37.511022,"lng":127.073704,"line":"2호선","subwayId":"1002"}],"봉은사":{"id":"4129","lat":37.514219,"lng":127.060245,"line":"9호선(연장)","subwayId":"1009","stCode":"4129"},"삼성중앙":{"id":"4128","lat":37.513011,"lng":127.053282,"line":"9호선(연장)","subwayId":"1009","stCode":"4128"},"선정릉":[{"id":"4127","lat":37.510297,"lng":127.043999,"line":"9호선(연장)","subwayId":"1009"},{"id":"1850","lat":37.510735,"lng":127.043677,"line":"분당선","subwayId":"1075"}],"언주":{"id":"4126","lat":37.507287,"lng":127.033868,"line":"9호선(연장)","subwayId":"1009","stCode":"4126"},"사평":{"id":"4124","lat":37.504206,"lng":127.015259,"line":"9호선","subwayId":"1009","stCode":"4124"},"고속터미널":[{"id":"4123","lat":37.50598,"lng":127.004403,"line":"9호선","subwayId":"1009"},{"id":"2736","lat":37.503367,"lng":127.005068,"line":"7호선","subwayId":"1007"},{"id":"0329","lat":37.504891,"lng":127.004916,"line":"3호선","subwayId":"1003"}],"신반포":{"id":"4122","lat":37.503415,"lng":126.995925,"line":"9호선","subwayId":"1009","stCode":"4122"},"구반포":{"id":"4121","lat":37.501364,"lng":126.987332,"line":"9호선","subwayId":"1009","stCode":"4121"},"동작(현충원)":[{"id":"4120","lat":37.502878,"lng":126.978153,"line":"9호선","subwayId":"1009"},{"id":"0431","lat":37.502852,"lng":126.980347,"line":"4호선","subwayId":"1004"}],"흑석(중앙대입구)":{"id":"4119","lat":37.50877,"lng":126.963708,"line":"9호선","subwayId":"1009"},"노들":{"id":"4118","lat":37.512887,"lng":126.953222,"line":"9호선","subwayId":"1009","stCode":"4118"},"노량진":[{"id":"4117","lat":37.513534,"lng":126.941005,"line":"9호선","subwayId":"1009"},{"id":"1004","lat":37.514149,"lng":126.94271,"line":"경부선","subwayId":"1001"}],"여의도":[{"id":"4115","lat":37.52176,"lng":126.92403,"line":"9호선","subwayId":"1009"},{"id":"2527","lat":37.521747,"lng":126.924357,"line":"5호선","subwayId":"1005"}],"국회의사당":{"id":"4114","lat":37.528105,"lng":126.917874,"line":"9호선","subwayId":"1009","stCode":"4114"},"당산":[{"id":"4113","lat":37.533406,"lng":126.902809,"line":"9호선","subwayId":"1009"},{"id":"0237","lat":37.534946,"lng":126.902767,"line":"2호선","subwayId":"1002"}],"선유도":{"id":"4112","lat":37.53802,"lng":126.893525,"line":"9호선","subwayId":"1009","stCode":"4112"},"신목동":{"id":"4111","lat":37.544277,"lng":126.88308,"line":"9호선","subwayId":"1009","stCode":"4111"},"염창":{"id":"4110","lat":37.546936,"lng":126.874916,"line":"9호선","subwayId":"1009","stCode":"4110"},"등촌":{"id":"4109","lat":37.550632,"lng":126.865689,"line":"9호선","subwayId":"1009","stCode":"4109"},"증미":{"id":"4108","lat":37.557402,"lng":126.861939,"line":"9호선","subwayId":"1009","stCode":"4108"},"가양":{"id":"4107","lat":37.561391,"lng":126.854456,"line":"9호선","subwayId":"1009","stCode":"4107"},"양천향교":{"id":"4106","lat":37.568381,"lng":126.841333,"line":"9호선","subwayId":"1009","stCode":"4106"},"신방화":{"id":"4104","lat":37.567532,"lng":126.816601,"line":"9호선","subwayId":"1009","stCode":"4104"},"공항시장":{"id":"4103","lat":37.563726,"lng":126.810678,"line":"9호선","subwayId":"1009","stCode":"4103"},"개화":{"id":"4101","lat":37.578608,"lng":126.798153,"line":"9호선","subwayId":"1009","stCode":"4101"},"석남(거북시장)":[{"id":"3763","lat":37.5062285,"lng":126.6762813,"line":"7호선","subwayId":"1007"},{"id":"3213","lat":37.506193,"lng":126.676203,"line":"인천2호선","subwayId":"1082"}],"산곡":{"id":"3762","lat":37.5086,"lng":126.7035277,"line":"7호선","subwayId":"1007","stCode":"3762"},"부평구청":[{"id":"3761","lat":37.50848,"lng":126.72077,"line":"7호선(인천)","subwayId":"1007"},{"id":"3118","lat":37.508407,"lng":126.720555,"line":"인천1호선","subwayId":"1081"},{"id":"2761","lat":37.507394,"lng":126.721599,"line":"7호선","subwayId":"1007"}],"굴포천":[{"id":"3760","lat":37.50681,"lng":126.73234,"line":"7호선(인천)","subwayId":"1007"},{"id":"2760","lat":37.506997,"lng":126.73128,"line":"7호선","subwayId":"1007"}],"삼산체육관":[{"id":"3759","lat":37.50724,"lng":126.74179,"line":"7호선(인천)","subwayId":"1007"},{"id":"2759","lat":37.506411,"lng":126.742153,"line":"7호선","subwayId":"1007"}],"상동":[{"id":"3758","lat":37.505814,"lng":126.753163,"line":"7호선(인천)","subwayId":"1007"},{"id":"2758","lat":37.505781,"lng":126.753083,"line":"7호선","subwayId":"1007"}],"부천시청":[{"id":"3757","lat":37.50444,"lng":126.76364,"line":"7호선(인천)","subwayId":"1007"},{"id":"2757","lat":37.504631,"lng":126.763538,"line":"7호선","subwayId":"1007"}],"신중동":[{"id":"3756","lat":37.50282,"lng":126.77566,"line":"7호선(인천)","subwayId":"1007"},{"id":"2756","lat":37.503048,"lng":126.77596,"line":"7호선","subwayId":"1007"}],"춘의":[{"id":"3755","lat":37.50365,"lng":126.78828,"line":"7호선(인천)","subwayId":"1007"},{"id":"2755","lat":37.503663,"lng":126.787036,"line":"7호선","subwayId":"1007"}],"부천종합운동장":[{"id":"3754","lat":37.50502,"lng":126.79661,"line":"7호선(인천)","subwayId":"1007"},{"id":"2754","lat":37.50538,"lng":126.797337,"line":"7호선","subwayId":"1007"},{"id":"1982","lat":37.505457,"lng":126.797289,"line":"서해선","subwayId":"1093"}],"까치울":[{"id":"3753","lat":37.50613,"lng":126.81093,"line":"7호선(인천)","subwayId":"1007"},{"id":"2753","lat":37.506207,"lng":126.810939,"line":"7호선","subwayId":"1007"}],"운연(서창)":{"id":"3227","lat":37.440127,"lng":126.75997,"line":"인천2호선","subwayId":"1082"},"인천대공원":{"id":"3226","lat":37.448769,"lng":126.752618,"line":"인천2호선","subwayId":"1082","stCode":"3226"},"남동구청":{"id":"3225","lat":37.448161,"lng":126.736939,"line":"인천2호선","subwayId":"1082","stCode":"3225"},"만수":{"id":"3224","lat":37.454911,"lng":126.732094,"line":"인천2호선","subwayId":"1082","stCode":"3224"},"모래내시장":{"id":"3223","lat":37.45583,"lng":126.719298,"line":"인천2호선","subwayId":"1082","stCode":"3223"},"석천사거리":{"id":"3222","lat":37.456805,"lng":126.709986,"line":"인천2호선","subwayId":"1082","stCode":"3222"},"인천시청":[{"id":"3221","lat":37.456833,"lng":126.701306,"line":"인천2호선","subwayId":"1082"},{"id":"3124","lat":37.457263,"lng":126.702143,"line":"인천1호선","subwayId":"1081"}],"석바위시장":{"id":"3220","lat":37.457611,"lng":126.692575,"line":"인천2호선","subwayId":"1082","stCode":"3220"},"시민공원(문화창작지대)":{"id":"3219","lat":37.458335,"lng":126.681192,"line":"인천2호선","subwayId":"1082"},"주안":[{"id":"3218","lat":37.464992,"lng":126.679098,"line":"인천2호선","subwayId":"1082"},{"id":"1809","lat":37.465047,"lng":126.679742,"line":"경인선","subwayId":"1001"}],"주안국가산단":{"id":"3217","lat":37.473703,"lng":126.68113,"line":"인천2호선","subwayId":"1082","stCode":"3217"},"가재울":{"id":"3216","lat":37.484192,"lng":126.683673,"line":"인천2호선","subwayId":"1082","stCode":"3216"},"인천가좌":{"id":"3215","lat":37.4897,"lng":126.675208,"line":"인천2호선","subwayId":"1082","stCode":"3215"},"서부여성회관":{"id":"3214","lat":37.500168,"lng":126.675795,"line":"인천2호선","subwayId":"1082","stCode":"3214"},"가정중앙시장":{"id":"3212","lat":37.517054,"lng":126.676672,"line":"인천2호선","subwayId":"1082","stCode":"3212"},"가정(루원시티)":{"id":"3211","lat":37.524649,"lng":126.675539,"line":"인천2호선","subwayId":"1082"},"서구청":{"id":"3210","lat":37.543742,"lng":126.676787,"line":"인천2호선","subwayId":"1082","stCode":"3210"},"아시아드경기장(공촌사거리)":{"id":"3209","lat":37.5517,"lng":126.677122,"line":"인천2호선","subwayId":"1082"},"검바위":{"id":"3208","lat":37.561405,"lng":126.677566,"line":"인천2호선","subwayId":"1082","stCode":"3208"},"독정":{"id":"3206","lat":37.585212,"lng":126.675844,"line":"인천2호선","subwayId":"1082","stCode":"3206"},"완정":{"id":"3205","lat":37.592928,"lng":126.673203,"line":"인천2호선","subwayId":"1082","stCode":"3205"},"마전":{"id":"3204","lat":37.597566,"lng":126.666998,"line":"인천2호선","subwayId":"1082","stCode":"3204"},"검단사거리":{"id":"3203","lat":37.60185,"lng":126.657108,"line":"인천2호선","subwayId":"1082","stCode":"3203"},"왕길":{"id":"3202","lat":37.59518,"lng":126.642696,"line":"인천2호선","subwayId":"1082","stCode":"3202"},"검단오류(검단산업단지)":{"id":"3201","lat":37.594877,"lng":126.627178,"line":"인천2호선","subwayId":"1082"},"송도달빛축제공원":{"id":"3139","lat":37.407143,"lng":126.62597,"line":"인천1호선","subwayId":"1081","stCode":"3139"},"국제업무지구":{"id":"3138","lat":37.399907,"lng":126.630347,"line":"인천1호선","subwayId":"1081","stCode":"3138"},"센트럴파크":{"id":"3137","lat":37.393054,"lng":126.634729,"line":"인천1호선","subwayId":"1081","stCode":"3137"},"인천대입구":{"id":"3136","lat":37.386007,"lng":126.639484,"line":"인천1호선","subwayId":"1081","stCode":"3136"},"지식정보단지":{"id":"3135","lat":37.378384,"lng":126.645168,"line":"인천1호선","subwayId":"1081","stCode":"3135"},"테크노파크":{"id":"3134","lat":37.382268,"lng":126.656365,"line":"인천1호선","subwayId":"1081","stCode":"3134"},"캠퍼스타운":{"id":"3133","lat":37.387855,"lng":126.661673,"line":"인천1호선","subwayId":"1081","stCode":"3133"},"동막":{"id":"3132","lat":37.397878,"lng":126.674005,"line":"인천1호선","subwayId":"1081","stCode":"3132"},"동춘":{"id":"3131","lat":37.404737,"lng":126.681015,"line":"인천1호선","subwayId":"1081","stCode":"3131"},"원인재":[{"id":"3130","lat":37.412333,"lng":126.687869,"line":"인천1호선","subwayId":"1081"},{"id":"1884","lat":37.413049,"lng":126.686648,"line":"수인선","subwayId":"1075"}],"신연수":{"id":"3129","lat":37.41804,"lng":126.693863,"line":"인천1호선","subwayId":"1081","stCode":"3129"},"선학":{"id":"3128","lat":37.426684,"lng":126.698863,"line":"인천1호선","subwayId":"1081","stCode":"3128"},"문학경기장":{"id":"3127","lat":37.434935,"lng":126.698579,"line":"인천1호선","subwayId":"1081","stCode":"3127"},"인천터미널":{"id":"3126","lat":37.442383,"lng":126.699706,"line":"인천1호선","subwayId":"1081","stCode":"3126"},"예술회관":{"id":"3125","lat":37.449396,"lng":126.701012,"line":"인천1호선","subwayId":"1081","stCode":"3125"},"간석오거리":{"id":"3123","lat":37.467048,"lng":126.707938,"line":"인천1호선","subwayId":"1081","stCode":"3123"},"부평삼거리":{"id":"3122","lat":37.477679,"lng":126.710208,"line":"인천1호선","subwayId":"1081","stCode":"3122"},"동수":{"id":"3121","lat":37.485312,"lng":126.718247,"line":"인천1호선","subwayId":"1081","stCode":"3121"},"부평":[{"id":"3120","lat":37.490535,"lng":126.723453,"line":"인천1호선","subwayId":"1081"},{"id":"1806","lat":37.489445,"lng":126.724506,"line":"경인선","subwayId":"1001"}],"부평시장":{"id":"3119","lat":37.498383,"lng":126.722244,"line":"인천1호선","subwayId":"1081","stCode":"3119"},"갈산":{"id":"3117","lat":37.517268,"lng":126.721514,"line":"인천1호선","subwayId":"1081","stCode":"3117"},"작전":{"id":"3116","lat":37.530415,"lng":126.722527,"line":"인천1호선","subwayId":"1081","stCode":"3116"},"경인교대입구":{"id":"3115","lat":37.538157,"lng":126.722597,"line":"인천1호선","subwayId":"1081","stCode":"3115"},"계산":{"id":"3114","lat":37.543238,"lng":126.728128,"line":"인천1호선","subwayId":"1081","stCode":"3114"},"임학":{"id":"3113","lat":37.545059,"lng":126.738665,"line":"인천1호선","subwayId":"1081","stCode":"3113"},"박촌":{"id":"3112","lat":37.553703,"lng":126.745077,"line":"인천1호선","subwayId":"1081","stCode":"3112"},"귤현":{"id":"3111","lat":37.566379,"lng":126.742654,"line":"인천1호선","subwayId":"1081","stCode":"3111"},"아라(북부법원?검찰청)":{"id":"3109","lat":37.592259,"lng":126.713301,"line":"인천1호선","subwayId":"1081"},"신검단중앙":{"id":"3108","lat":37.602676,"lng":126.698527,"line":"인천1호선","subwayId":"1081","stCode":"3108"},"검단호수공원":{"id":"3107","lat":37.60244,"lng":126.688566,"line":"인천1호선","subwayId":"1081","stCode":"3107"},"남위례":{"id":"2828","lat":37.4624,"lng":127.13977,"line":"8호선","subwayId":"1008","stCode":"2828"},"모란":[{"id":"2827","lat":37.433824,"lng":127.129837,"line":"8호선","subwayId":"1008"},{"id":"1853","lat":37.432052,"lng":127.129104,"line":"분당선","subwayId":"1075"}],"수진":{"id":"2826","lat":37.437428,"lng":127.140722,"line":"8호선","subwayId":"1008","stCode":"2826"},"신흥":{"id":"2825","lat":37.440918,"lng":127.147564,"line":"8호선","subwayId":"1008","stCode":"2825"},"단대오거리":{"id":"2824","lat":37.44521,"lng":127.156866,"line":"8호선","subwayId":"1008","stCode":"2824"},"남한산성입구(성남법원.검찰청)":{"id":"2823","lat":37.451535,"lng":127.159816,"line":"8호선","subwayId":"1008"},"산성":{"id":"2822","lat":37.457122,"lng":127.149908,"line":"8호선","subwayId":"1008","stCode":"2822"},"복정":[{"id":"2821","lat":37.471052,"lng":127.126732,"line":"8호선","subwayId":"1008"},{"id":"1031","lat":37.470047,"lng":127.12666,"line":"분당선","subwayId":"1075"}],"장지":{"id":"2820","lat":37.478703,"lng":127.126191,"line":"8호선","subwayId":"1008","stCode":"2820"},"문정":{"id":"2819","lat":37.485855,"lng":127.1225,"line":"8호선","subwayId":"1008","stCode":"2819"},"가락시장":[{"id":"2818","lat":37.492888,"lng":127.118398,"line":"8호선","subwayId":"1008"},{"id":"0340","lat":37.492245,"lng":127.117757,"line":"3호선","subwayId":"1003"}],"송파":{"id":"2817","lat":37.499703,"lng":127.112183,"line":"8호선","subwayId":"1008","stCode":"2817"},"잠실(송파구청)":[{"id":"2815","lat":37.514692,"lng":127.104338,"line":"8호선","subwayId":"1008"},{"id":"0216","lat":37.513262,"lng":127.100159,"line":"2호선","subwayId":"1002"}],"몽촌토성(평화의문)":{"id":"2814","lat":37.517409,"lng":127.112359,"line":"8호선","subwayId":"1008"},"강동구청":{"id":"2813","lat":37.530341,"lng":127.120508,"line":"8호선","subwayId":"1008","stCode":"2813"},"천호(풍납토성)":[{"id":"2812","lat":37.538113,"lng":127.123254,"line":"8호선","subwayId":"1008"},{"id":"2548","lat":37.53864,"lng":127.123308,"line":"5호선","subwayId":"1005"}],"암사":{"id":"2811","lat":37.55021,"lng":127.127562,"line":"8호선","subwayId":"1008","stCode":"2811"},"암사역사공원":{"id":"2810","lat":37.55695,"lng":127.13702,"line":"8호선","subwayId":"1008","stCode":"2810"},"장자호수공원":{"id":"2809","lat":37.58738,"lng":127.13794,"line":"별내선","subwayId":"1008","stCode":"2809"},"구리":[{"id":"2808","lat":37.60262,"lng":127.1407,"line":"별내선","subwayId":"1008"},{"id":"1205","lat":37.603392,"lng":127.143869,"line":"중앙선","subwayId":"1001"}],"동구릉":{"id":"2807","lat":37.61105,"lng":127.13793,"line":"별내선","subwayId":"1008","stCode":"2807"},"다산":{"id":"2806","lat":37.62429,"lng":127.14973,"line":"별내선","subwayId":"1008","stCode":"2806"},"별내":[{"id":"2805","lat":37.64232,"lng":127.1276,"line":"별내선","subwayId":"1008"},{"id":"1313","lat":37.64202,"lng":127.12684,"line":"경춘선","subwayId":"1069"}],"온수(성공회대입구)":[{"id":"2752","lat":37.492092,"lng":126.823023,"line":"7호선","subwayId":"1007"},{"id":"1821","lat":37.492433,"lng":126.824086,"line":"경인선","subwayId":"1001"}],"천왕":{"id":"2751","lat":37.486637,"lng":126.838713,"line":"7호선","subwayId":"1007","stCode":"2751"},"광명사거리":{"id":"2750","lat":37.479252,"lng":126.854876,"line":"7호선","subwayId":"1007","stCode":"2750"},"철산":{"id":"2749","lat":37.47605,"lng":126.867911,"line":"7호선","subwayId":"1007","stCode":"2749"},"가산디지털단지":[{"id":"2748","lat":37.480338,"lng":126.882656,"line":"7호선","subwayId":"1007"},{"id":"1702","lat":37.481581,"lng":126.882581,"line":"경부선","subwayId":"1001"}],"남구로":{"id":"2747","lat":37.486056,"lng":126.887249,"line":"7호선","subwayId":"1007","stCode":"2747"},"대림(구로구청)":[{"id":"2746","lat":37.493013,"lng":126.897075,"line":"7호선","subwayId":"1007"},{"id":"0233","lat":37.493243,"lng":126.894932,"line":"2호선","subwayId":"1002"}],"신풍":{"id":"2745","lat":37.50008,"lng":126.90993,"line":"7호선","subwayId":"1007","stCode":"2745"},"신대방삼거리":{"id":"2743","lat":37.499701,"lng":126.928276,"line":"7호선","subwayId":"1007","stCode":"2743"},"장승배기":{"id":"2742","lat":37.504898,"lng":126.93915,"line":"7호선","subwayId":"1007","stCode":"2742"},"상도":{"id":"2741","lat":37.502834,"lng":126.94791,"line":"7호선","subwayId":"1007","stCode":"2741"},"숭실대입구(살피재)":{"id":"2740","lat":37.496029,"lng":126.953822,"line":"7호선","subwayId":"1007"},"남성":{"id":"2739","lat":37.484596,"lng":126.971251,"line":"7호선","subwayId":"1007","stCode":"2739"},"이수":{"id":"2738","lat":37.485196,"lng":126.981605,"line":"7호선","subwayId":"1007","stCode":"2738"},"내방":{"id":"2737","lat":37.487618,"lng":126.993513,"line":"7호선","subwayId":"1007","stCode":"2737"},"반포":{"id":"2735","lat":37.508178,"lng":127.011727,"line":"7호선","subwayId":"1007","stCode":"2735"},"학동":{"id":"2733","lat":37.514229,"lng":127.031656,"line":"7호선","subwayId":"1007","stCode":"2733"},"강남구청":[{"id":"2732","lat":37.517179,"lng":127.041255,"line":"7호선","subwayId":"1007"},{"id":"1849","lat":37.517469,"lng":127.041151,"line":"분당선","subwayId":"1075"}],"청담":{"id":"2731","lat":37.519365,"lng":127.05335,"line":"7호선","subwayId":"1007","stCode":"2731"},"뚝섬유원지":{"id":"2730","lat":37.53154,"lng":127.066704,"line":"7호선","subwayId":"1007"},"건대입구":[{"id":"2729","lat":37.540786,"lng":127.071011,"line":"7호선","subwayId":"1007"},{"id":"0212","lat":37.540373,"lng":127.069191,"line":"2호선","subwayId":"1002"}],"어린이대공원(세종대)":{"id":"2728","lat":37.548014,"lng":127.074658,"line":"7호선","subwayId":"1007"},"군자(능동)":[{"id":"2727","lat":37.556897,"lng":127.079338,"line":"7호선","subwayId":"1007"},{"id":"2545","lat":37.557088,"lng":127.079577,"line":"5호선","subwayId":"1005"}],"중곡":{"id":"2726","lat":37.565923,"lng":127.08432,"line":"7호선","subwayId":"1007","stCode":"2726"},"용마산":{"id":"2725","lat":37.573647,"lng":127.086727,"line":"7호선","subwayId":"1007","stCode":"2725"},"사가정":{"id":"2724","lat":37.580894,"lng":127.088478,"line":"7호선","subwayId":"1007","stCode":"2724"},"면목":{"id":"2723","lat":37.588579,"lng":127.087503,"line":"7호선","subwayId":"1007","stCode":"2723"},"상봉(시외버스터미널)":[{"id":"2722","lat":37.595577,"lng":127.085716,"line":"7호선","subwayId":"1007"},{"id":"1202","lat":37.596678,"lng":127.08504,"line":"중앙선","subwayId":"1001"}],"중화":{"id":"2721","lat":37.602545,"lng":127.079264,"line":"7호선","subwayId":"1007","stCode":"2721"},"먹골":{"id":"2720","lat":37.610637,"lng":127.077725,"line":"7호선","subwayId":"1007","stCode":"2720"},"태릉입구":[{"id":"2719","lat":37.618294,"lng":127.075397,"line":"7호선","subwayId":"1007"},{"id":"2646","lat":37.617338,"lng":127.074735,"line":"6호선","subwayId":"1006"}],"공릉(서울과학기술대)":{"id":"2718","lat":37.625742,"lng":127.072896,"line":"7호선","subwayId":"1007"},"하계":{"id":"2717","lat":37.636352,"lng":127.06799,"line":"7호선","subwayId":"1007","stCode":"2717"},"중계":{"id":"2716","lat":37.644583,"lng":127.064303,"line":"7호선","subwayId":"1007","stCode":"2716"},"노원":[{"id":"2715","lat":37.654836,"lng":127.060462,"line":"7호선","subwayId":"1007"},{"id":"0411","lat":37.65627,"lng":127.063276,"line":"4호선","subwayId":"1004"}],"마들":{"id":"2714","lat":37.66494,"lng":127.057675,"line":"7호선","subwayId":"1007","stCode":"2714"},"수락산":{"id":"2713","lat":37.67785,"lng":127.055315,"line":"7호선","subwayId":"1007","stCode":"2713"},"도봉산":[{"id":"2712","lat":37.689241,"lng":127.046509,"line":"7호선","subwayId":"1007"},{"id":"1903","lat":37.689534,"lng":127.046049,"line":"경원선","subwayId":"1001"}],"장암":{"id":"2711","lat":37.700109,"lng":127.053196,"line":"7호선","subwayId":"1007","stCode":"2711"},"신내":[{"id":"2649","lat":37.613174,"lng":127.102231,"line":"6호선","subwayId":"1006"},{"id":"1311","lat":37.612887,"lng":127.103218,"line":"경춘선","subwayId":"1069"}],"봉화산(서울의료원)":{"id":"2648","lat":37.617283,"lng":127.091401,"line":"6호선","subwayId":"1006"},"화랑대(서울여대입구)":{"id":"2647","lat":37.620064,"lng":127.084689,"line":"6호선","subwayId":"1006"},"석계":[{"id":"2645","lat":37.614872,"lng":127.065595,"line":"6호선","subwayId":"1006"},{"id":"1018","lat":37.614532,"lng":127.065934,"line":"경원선","subwayId":"1001"}],"돌곶이":{"id":"2644","lat":37.610537,"lng":127.056431,"line":"6호선","subwayId":"1006","stCode":"2644"},"상월곡(한국과학기술연구원)":{"id":"2643","lat":37.606377,"lng":127.048491,"line":"6호선","subwayId":"1006"},"월곡(동덕여대)":{"id":"2642","lat":37.601948,"lng":127.041518,"line":"6호선","subwayId":"1006"},"고려대(종암)":{"id":"2641","lat":37.590508,"lng":127.036296,"line":"6호선","subwayId":"1006"},"안암(고대병원앞)":{"id":"2640","lat":37.586272,"lng":127.029005,"line":"6호선","subwayId":"1006"},"창신":{"id":"2638","lat":37.579661,"lng":127.015241,"line":"6호선","subwayId":"1006","stCode":"2638"},"동묘앞":[{"id":"2637","lat":37.572279,"lng":127.015653,"line":"6호선","subwayId":"1006"},{"id":"0159","lat":37.573197,"lng":127.01648,"line":"1호선","subwayId":"1001"}],"신당":[{"id":"2636","lat":37.566154,"lng":127.016146,"line":"6호선","subwayId":"1006"},{"id":"0206","lat":37.56564,"lng":127.019614,"line":"2호선","subwayId":"1002"}],"청구":[{"id":"2635","lat":37.560608,"lng":127.013986,"line":"6호선","subwayId":"1006"},{"id":"2538","lat":37.560276,"lng":127.013639,"line":"5호선","subwayId":"1005"}],"약수":[{"id":"2634","lat":37.554263,"lng":127.010358,"line":"6호선","subwayId":"1006"},{"id":"0323","lat":37.554867,"lng":127.010541,"line":"3호선","subwayId":"1003"}],"버티고개":{"id":"2633","lat":37.548013,"lng":127.007055,"line":"6호선","subwayId":"1006","stCode":"2633"},"한강진":{"id":"2632","lat":37.539631,"lng":127.001725,"line":"6호선","subwayId":"1006","stCode":"2632"},"이태원":{"id":"2631","lat":37.534488,"lng":126.994302,"line":"6호선","subwayId":"1006","stCode":"2631"},"녹사평(용산구청)":{"id":"2630","lat":37.534675,"lng":126.986695,"line":"6호선","subwayId":"1006"},"삼각지":[{"id":"2629","lat":37.535534,"lng":126.974032,"line":"6호선","subwayId":"1006"},{"id":"0428","lat":37.534075,"lng":126.9726,"line":"4호선","subwayId":"1004"}],"효창공원앞":[{"id":"2628","lat":37.539233,"lng":126.961384,"line":"6호선","subwayId":"1006"},{"id":"1261","lat":37.538579,"lng":126.96221,"line":"경의중앙선","subwayId":"1067"}],"대흥(서강대앞)":{"id":"2626","lat":37.547771,"lng":126.942069,"line":"6호선","subwayId":"1006"},"광흥창(서강)":{"id":"2625","lat":37.547456,"lng":126.931993,"line":"6호선","subwayId":"1006"},"상수":{"id":"2624","lat":37.547716,"lng":126.922852,"line":"6호선","subwayId":"1006","stCode":"2624"},"합정":[{"id":"2623","lat":37.549209,"lng":126.913366,"line":"6호선","subwayId":"1006"},{"id":"0238","lat":37.549457,"lng":126.913808,"line":"2호선","subwayId":"1002"}],"망원":{"id":"2622","lat":37.556094,"lng":126.910052,"line":"6호선","subwayId":"1006","stCode":"2622"},"마포구청":{"id":"2621","lat":37.563515,"lng":126.903343,"line":"6호선","subwayId":"1006","stCode":"2621"},"월드컵경기장(성산)":{"id":"2620","lat":37.569532,"lng":126.899298,"line":"6호선","subwayId":"1006"},"증산(명지대앞)":{"id":"2618","lat":37.583876,"lng":126.909645,"line":"6호선","subwayId":"1006"},"새절(신사)":{"id":"2617","lat":37.591148,"lng":126.913629,"line":"6호선","subwayId":"1006"},"구산":{"id":"2616","lat":37.611377,"lng":126.91727,"line":"6호선","subwayId":"1006","stCode":"2616"},"독바위":{"id":"2614","lat":37.618456,"lng":126.933031,"line":"6호선","subwayId":"1006","stCode":"2614"},"불광":[{"id":"2613","lat":37.610873,"lng":126.92939,"line":"6호선","subwayId":"1006"},{"id":"0312","lat":37.610553,"lng":126.92982,"line":"3호선","subwayId":"1003"}],"역촌":{"id":"2612","lat":37.606021,"lng":126.922744,"line":"6호선","subwayId":"1006","stCode":"2612"},"응암":{"id":"2611","lat":37.598605,"lng":126.915577,"line":"6호선","subwayId":"1006","stCode":"2611"},"하남검단산":{"id":"2566","lat":37.53972,"lng":127.22345,"line":"5호선","subwayId":"1005","stCode":"2566"},"하남시청(덕풍-신장)":{"id":"2565","lat":37.54205,"lng":127.20612,"line":"5호선","subwayId":"1005"},"하남풍산":{"id":"2564","lat":37.552034,"lng":127.203864,"line":"5호선","subwayId":"1005","stCode":"2564"},"미사":{"id":"2563","lat":37.560927,"lng":127.193877,"line":"5호선","subwayId":"1005","stCode":"2563"},"강일":{"id":"2562","lat":37.55749,"lng":127.17593,"line":"5호선","subwayId":"1005","stCode":"2562"},"마천":{"id":"2561","lat":37.49499,"lng":127.152781,"line":"5호선","subwayId":"1005","stCode":"2561"},"거여":{"id":"2560","lat":37.493105,"lng":127.14415,"line":"5호선","subwayId":"1005","stCode":"2560"},"개롱":{"id":"2559","lat":37.498079,"lng":127.13482,"line":"5호선","subwayId":"1005","stCode":"2559"},"오금":[{"id":"2558","lat":37.502057,"lng":127.127938,"line":"5호선","subwayId":"1005"},{"id":"0342","lat":37.502129,"lng":127.128319,"line":"3호선","subwayId":"1003"}],"방이":{"id":"2557","lat":37.508857,"lng":127.126133,"line":"5호선","subwayId":"1005","stCode":"2557"},"둔촌동":{"id":"2555","lat":37.527788,"lng":127.136248,"line":"5호선","subwayId":"1005","stCode":"2555"},"상일동":{"id":"2554","lat":37.556712,"lng":127.166417,"line":"5호선","subwayId":"1005","stCode":"2554"},"고덕":{"id":"2553","lat":37.555004,"lng":127.154151,"line":"5호선","subwayId":"1005","stCode":"2553"},"명일":{"id":"2552","lat":37.55137,"lng":127.143999,"line":"5호선","subwayId":"1005","stCode":"2552"},"굽은다리(강동구민회관앞)":{"id":"2551","lat":37.545477,"lng":127.142853,"line":"5호선","subwayId":"1005"},"길동":{"id":"2550","lat":37.537801,"lng":127.140004,"line":"5호선","subwayId":"1005","stCode":"2550"},"강동":{"id":"2549","lat":37.535804,"lng":127.132481,"line":"5호선","subwayId":"1005","stCode":"2549"},"광나루(장신대)":{"id":"2547","lat":37.545303,"lng":127.10357,"line":"5호선","subwayId":"1005"},"아차산(어린이대공원후문)":{"id":"2546","lat":37.551691,"lng":127.089761,"line":"5호선","subwayId":"1005"},"장한평":{"id":"2544","lat":37.56144,"lng":127.064623,"line":"5호선","subwayId":"1005","stCode":"2544"},"답십리":{"id":"2543","lat":37.566747,"lng":127.052704,"line":"5호선","subwayId":"1005","stCode":"2543"},"마장":{"id":"2542","lat":37.5661,"lng":127.042973,"line":"5호선","subwayId":"1005","stCode":"2542"},"왕십리(성동구청)":[{"id":"2541","lat":37.56184,"lng":127.037059,"line":"5호선","subwayId":"1005"},{"id":"1013","lat":37.561827,"lng":127.038352,"line":"경원선","subwayId":"1001"},{"id":"0208","lat":37.561238,"lng":127.036954,"line":"2호선","subwayId":"1002"}],"행당":{"id":"2540","lat":37.557322,"lng":127.029476,"line":"5호선","subwayId":"1005","stCode":"2540"},"신금호":{"id":"2539","lat":37.554548,"lng":127.020331,"line":"5호선","subwayId":"1005","stCode":"2539"},"동대문역사문화공원":[{"id":"2537","lat":37.564665,"lng":127.005353,"line":"5호선","subwayId":"1005"},{"id":"0422","lat":37.565133,"lng":127.007885,"line":"4호선","subwayId":"1004"},{"id":"0205","lat":37.565613,"lng":127.009054,"line":"2호선","subwayId":"1002"}],"을지로4가":[{"id":"2536","lat":37.567352,"lng":126.998032,"line":"5호선","subwayId":"1005"},{"id":"0204","lat":37.566595,"lng":126.997817,"line":"2호선","subwayId":"1002"}],"종로3가":[{"id":"2535","lat":37.57254,"lng":126.990305,"line":"5호선","subwayId":"1005"},{"id":"0319","lat":37.571605,"lng":126.991791,"line":"3호선","subwayId":"1003"},{"id":"0153","lat":37.570406,"lng":126.991847,"line":"1호선","subwayId":"1001"}],"광화문(세종문화회관)":{"id":"2534","lat":37.571525,"lng":126.97717,"line":"5호선","subwayId":"1005"},"서대문":{"id":"2533","lat":37.565773,"lng":126.966641,"line":"5호선","subwayId":"1005","stCode":"2533"},"충정로(경기대입구)":[{"id":"2532","lat":37.560236,"lng":126.9629,"line":"5호선","subwayId":"1005"},{"id":"0243","lat":37.559704,"lng":126.964378,"line":"2호선","subwayId":"1002"}],"애오개":{"id":"2531","lat":37.553736,"lng":126.95682,"line":"5호선","subwayId":"1005","stCode":"2531"},"마포":{"id":"2529","lat":37.539574,"lng":126.945932,"line":"5호선","subwayId":"1005","stCode":"2529"},"여의나루":{"id":"2528","lat":37.527098,"lng":126.932901,"line":"5호선","subwayId":"1005","stCode":"2528"},"신길":[{"id":"2526","lat":37.517623,"lng":126.914839,"line":"5호선","subwayId":"1005"},{"id":"1032","lat":37.516862,"lng":126.917865,"line":"경부선","subwayId":"1001"}],"영등포시장":{"id":"2525","lat":37.522669,"lng":126.905139,"line":"5호선","subwayId":"1005","stCode":"2525"},"영등포구청":[{"id":"2524","lat":37.5242,"lng":126.89503,"line":"5호선","subwayId":"1005"},{"id":"0236","lat":37.525706,"lng":126.89661,"line":"2호선","subwayId":"1002"}],"양평":[{"id":"2523","lat":37.525569,"lng":126.886129,"line":"5호선","subwayId":"1005"},{"id":"1217","lat":37.492773,"lng":127.491837,"line":"중앙선","subwayId":"1001"}],"오목교(목동운동장앞)":{"id":"2522","lat":37.524496,"lng":126.875181,"line":"5호선","subwayId":"1005"},"목동":{"id":"2521","lat":37.526065,"lng":126.864931,"line":"5호선","subwayId":"1005","stCode":"2521"},"신정(은행정)":{"id":"2520","lat":37.524997,"lng":126.856191,"line":"5호선","subwayId":"1005"},"까치산":{"id":"2519","lat":37.531768,"lng":126.846683,"line":"5호선","subwayId":"1005","stCode":"0200"},"화곡":{"id":"2518","lat":37.541513,"lng":126.840461,"line":"5호선","subwayId":"1005","stCode":"2518"},"우장산":{"id":"2517","lat":37.548768,"lng":126.836318,"line":"5호선","subwayId":"1005","stCode":"2517"},"발산":{"id":"2516","lat":37.558598,"lng":126.837668,"line":"5호선","subwayId":"1005","stCode":"2516"},"마곡":{"id":"2515","lat":37.560183,"lng":126.825448,"line":"5호선","subwayId":"1005","stCode":"2515"},"송정":{"id":"2514","lat":37.561184,"lng":126.811973,"line":"5호선","subwayId":"1005","stCode":"2514"},"개화산":{"id":"2512","lat":37.572399,"lng":126.806171,"line":"5호선","subwayId":"1005","stCode":"2512"},"방화":{"id":"2511","lat":37.577446,"lng":126.812741,"line":"5호선","subwayId":"1005","stCode":"2511"},"원종":{"id":"1981","lat":37.5239,"lng":126.8049,"line":"서해선","subwayId":"1093","stCode":"1981"},"대화":{"id":"1958","lat":37.676087,"lng":126.747569,"line":"일산선","subwayId":"1001","stCode":"1958"},"주엽":{"id":"1957","lat":37.670072,"lng":126.761334,"line":"일산선","subwayId":"1001","stCode":"1957"},"정발산":{"id":"1956","lat":37.659477,"lng":126.773359,"line":"일산선","subwayId":"1001","stCode":"1956"},"마두":{"id":"1955","lat":37.652206,"lng":126.77762,"line":"일산선","subwayId":"1001","stCode":"1955"},"백석":{"id":"1954","lat":37.643114,"lng":126.78787,"line":"일산선","subwayId":"1001","stCode":"1954"},"화정":{"id":"1952","lat":37.634592,"lng":126.83265,"line":"일산선","subwayId":"1001","stCode":"1952"},"원당":{"id":"1951","lat":37.653324,"lng":126.843041,"line":"일산선","subwayId":"1001","stCode":"1951"},"삼송":{"id":"1950","lat":37.653083,"lng":126.895558,"line":"일산선","subwayId":"1001","stCode":"1950"},"지축":[{"id":"1949","lat":37.648017,"lng":126.91397,"line":"일산선","subwayId":"1001"},{"id":"0309","lat":37.648033,"lng":126.913917,"line":"3호선","subwayId":"1003"}],"원흥":{"id":"1948","lat":37.650658,"lng":126.872642,"line":"일산선","subwayId":"1001","stCode":"1948"},"연천":{"id":"1919","lat":38.10073,"lng":127.07372,"line":"경원선","subwayId":"1001","stCode":"1919"},"전곡":{"id":"1918","lat":38.02458,"lng":127.0718,"line":"경원선","subwayId":"1001","stCode":"1918"},"청산":{"id":"1917","lat":37.98172,"lng":127.06912,"line":"경원선","subwayId":"1001","stCode":"1917"},"소요산":{"id":"1916","lat":37.9481,"lng":127.061034,"line":"경원선","subwayId":"1001","stCode":"1916"},"동두천":{"id":"1915","lat":37.927878,"lng":127.05479,"line":"경원선","subwayId":"1001","stCode":"1915"},"보산":{"id":"1914","lat":37.913702,"lng":127.057277,"line":"경원선","subwayId":"1001","stCode":"1914"},"동두천중앙":{"id":"1913","lat":37.901885,"lng":127.056482,"line":"경원선","subwayId":"1001","stCode":"1913"},"지행":{"id":"1912","lat":37.892334,"lng":127.055716,"line":"경원선","subwayId":"1001","stCode":"1912"},"덕정":{"id":"1911","lat":37.843188,"lng":127.061277,"line":"경원선","subwayId":"1001","stCode":"1911"},"덕계":{"id":"1910","lat":37.818486,"lng":127.056486,"line":"경원선","subwayId":"1001","stCode":"1910"},"양주":{"id":"1909","lat":37.774381,"lng":127.044708,"line":"경원선","subwayId":"1001","stCode":"1909"},"녹양":{"id":"1908","lat":37.75938,"lng":127.042292,"line":"경원선","subwayId":"1001","stCode":"1908"},"가능":{"id":"1907","lat":37.748577,"lng":127.044213,"line":"경원선","subwayId":"1001","stCode":"1907"},"의정부":{"id":"1906","lat":37.738415,"lng":127.045958,"line":"경원선","subwayId":"1001","stCode":"1906"},"망월사":{"id":"1904","lat":37.709914,"lng":127.047455,"line":"경원선","subwayId":"1001","stCode":"1904"},"도봉":{"id":"1902","lat":37.679563,"lng":127.045595,"line":"경원선","subwayId":"1001","stCode":"1902"},"방학":{"id":"1901","lat":37.667503,"lng":127.044273,"line":"경원선","subwayId":"1001","stCode":"1901"},"인천":[{"id":"1891","lat":37.476403,"lng":126.617326,"line":"수인선","subwayId":"1075"},{"id":"1812","lat":37.476079,"lng":126.616801,"line":"경인선","subwayId":"1001"}],"신포":{"id":"1890","lat":37.46874,"lng":126.623853,"line":"수인선","subwayId":"1075","stCode":"1890"},"숭의":{"id":"1889","lat":37.460789,"lng":126.638297,"line":"수인선","subwayId":"1075","stCode":"1889"},"인하대":{"id":"1888","lat":37.448493,"lng":126.649619,"line":"수인선","subwayId":"1075","stCode":"1888"},"송도":{"id":"1886","lat":37.428514,"lng":126.657772,"line":"수인선","subwayId":"1075","stCode":"1886"},"연수":{"id":"1885","lat":37.417804,"lng":126.67894,"line":"수인선","subwayId":"1075","stCode":"1885"},"남동인더스파크":{"id":"1883","lat":37.407722,"lng":126.695216,"line":"수인선","subwayId":"1075","stCode":"1883"},"호구포":{"id":"1882","lat":37.401637,"lng":126.708627,"line":"수인선","subwayId":"1075","stCode":"1882"},"인천논현":{"id":"1881","lat":37.400614,"lng":126.722478,"line":"수인선","subwayId":"1075","stCode":"1881"},"소래포구":{"id":"1880","lat":37.40095,"lng":126.733522,"line":"수인선","subwayId":"1075","stCode":"1880"},"월곶":{"id":"1879","lat":37.391769,"lng":126.742699,"line":"수인선","subwayId":"1075","stCode":"1879"},"달월":{"id":"1878","lat":37.379681,"lng":126.745177,"line":"수인선","subwayId":"1075","stCode":"1878"},"사리":{"id":"1877","lat":37.28998,"lng":126.85685,"line":"수인선","subwayId":"1075","stCode":"1877"},"야목":{"id":"1876","lat":37.264179,"lng":126.879483,"line":"수인선","subwayId":"1075","stCode":"1876"},"어천":{"id":"1875","lat":37.250102,"lng":126.90879,"line":"수인선","subwayId":"1075","stCode":"1875"},"오목천":{"id":"1874","lat":37.24304,"lng":126.963676,"line":"수인선","subwayId":"1075","stCode":"1874"},"고색":{"id":"1873","lat":37.24963,"lng":126.980248,"line":"수인선","subwayId":"1075","stCode":"1873"},"매교":{"id":"1872","lat":37.265481,"lng":127.015678,"line":"분당선","subwayId":"1075","stCode":"1872"},"수원시청":{"id":"1871","lat":37.261911,"lng":127.030736,"line":"분당선","subwayId":"1075","stCode":"1871"},"매탄권선":{"id":"1870","lat":37.252759,"lng":127.040566,"line":"분당선","subwayId":"1075","stCode":"1870"},"망포":{"id":"1869","lat":37.245795,"lng":127.057353,"line":"분당선","subwayId":"1075","stCode":"1869"},"영통":{"id":"1868","lat":37.251568,"lng":127.071394,"line":"분당선","subwayId":"1075","stCode":"1868"},"청명":{"id":"1867","lat":37.259489,"lng":127.078934,"line":"분당선","subwayId":"1075","stCode":"1867"},"상갈":{"id":"1866","lat":37.26181,"lng":127.108847,"line":"분당선","subwayId":"1075","stCode":"1866"},"신갈":{"id":"1864","lat":37.286102,"lng":127.111313,"line":"분당선","subwayId":"1075","stCode":"1864"},"죽전":{"id":"1862","lat":37.324753,"lng":127.107395,"line":"분당선","subwayId":"1075","stCode":"1862"},"보정":{"id":"1861","lat":37.312752,"lng":127.108196,"line":"분당선","subwayId":"1075","stCode":"1861"},"이매":[{"id":"1860","lat":37.395371,"lng":127.128248,"line":"분당선","subwayId":"1075"},{"id":"1502","lat":37.394655,"lng":127.127819,"line":"경강선","subwayId":"1095"}],"오리":{"id":"1859","lat":37.339824,"lng":127.108942,"line":"분당선","subwayId":"1075","stCode":"1859"},"수내":{"id":"1856","lat":37.378455,"lng":127.114322,"line":"분당선","subwayId":"1075","stCode":"1856"},"서현":{"id":"1855","lat":37.385126,"lng":127.123592,"line":"분당선","subwayId":"1075","stCode":"1855"},"야탑":{"id":"1854","lat":37.411185,"lng":127.128715,"line":"분당선","subwayId":"1075","stCode":"1854"},"태평":{"id":"1852","lat":37.440019,"lng":127.127709,"line":"분당선","subwayId":"1075","stCode":"1852"},"가천대":{"id":"1851","lat":37.448605,"lng":127.126697,"line":"분당선","subwayId":"1075","stCode":"1851"},"압구정로데오":{"id":"1848","lat":37.527381,"lng":127.040534,"line":"분당선","subwayId":"1075","stCode":"1848"},"서울숲":{"id":"1847","lat":37.543617,"lng":127.044707,"line":"분당선","subwayId":"1075","stCode":"1847"},"수원":[{"id":"1846","lat":37.265917,"lng":126.999422,"line":"분당선","subwayId":"1075"},{"id":"1713","lat":37.266348,"lng":126.999561,"line":"경부선","subwayId":"1001"}],"도화":{"id":"1823","lat":37.46607,"lng":126.668672,"line":"경인선","subwayId":"1001","stCode":"1823"},"중동":{"id":"1822","lat":37.486562,"lng":126.764843,"line":"경인선","subwayId":"1001","stCode":"1822"},"도원":{"id":"1817","lat":37.468446,"lng":126.642706,"line":"경인선","subwayId":"1001","stCode":"1817"},"간석":{"id":"1816","lat":37.464737,"lng":126.694181,"line":"경인선","subwayId":"1001","stCode":"1816"},"부개":{"id":"1815","lat":37.488418,"lng":126.74109,"line":"경인선","subwayId":"1001","stCode":"1815"},"구일":{"id":"1813","lat":37.496756,"lng":126.870793,"line":"경인선","subwayId":"1001","stCode":"1813"},"동인천":{"id":"1811","lat":37.475276,"lng":126.632802,"line":"경인선","subwayId":"1001","stCode":"1811"},"제물포":{"id":"1810","lat":37.466769,"lng":126.656666,"line":"경인선","subwayId":"1001","stCode":"1810"},"동암":{"id":"1808","lat":37.471408,"lng":126.702896,"line":"경인선","subwayId":"1001","stCode":"1808"},"백운":{"id":"1807","lat":37.483664,"lng":126.707704,"line":"경인선","subwayId":"1001","stCode":"1807"},"송내":{"id":"1805","lat":37.4876,"lng":126.753664,"line":"경인선","subwayId":"1001","stCode":"1805"},"부천":{"id":"1804","lat":37.48405,"lng":126.782686,"line":"경인선","subwayId":"1001","stCode":"1804"},"역곡":{"id":"1803","lat":37.485178,"lng":126.811502,"line":"경인선","subwayId":"1001","stCode":"1803"},"오류동":{"id":"1802","lat":37.494526,"lng":126.845365,"line":"경인선","subwayId":"1001","stCode":"1802"},"개봉":{"id":"1801","lat":37.494594,"lng":126.85968,"line":"경인선","subwayId":"1001","stCode":"1801"},"수리산":{"id":"1763","lat":37.349801,"lng":126.925365,"line":"안산선","subwayId":"1001","stCode":"1763"},"오이도":{"id":"1762","lat":37.362357,"lng":126.738714,"line":"안산선","subwayId":"1001","stCode":"1762"},"정왕":{"id":"1761","lat":37.351735,"lng":126.742989,"line":"안산선","subwayId":"1001","stCode":"1761"},"신길온천":{"id":"1760","lat":37.338212,"lng":126.765844,"line":"안산선","subwayId":"1001","stCode":"1835"},"안산":{"id":"1759","lat":37.327082,"lng":126.788532,"line":"안산선","subwayId":"1001","stCode":"1834"},"고잔":{"id":"1757","lat":37.316784,"lng":126.823144,"line":"안산선","subwayId":"1001","stCode":"1832"},"중앙":{"id":"1756","lat":37.315941,"lng":126.838573,"line":"안산선","subwayId":"1001","stCode":"1756"},"한대앞":{"id":"1755","lat":37.309689,"lng":126.85344,"line":"안산선","subwayId":"1001","stCode":"1755"},"상록수":{"id":"1754","lat":37.302795,"lng":126.866489,"line":"안산선","subwayId":"1001","stCode":"1754"},"반월":{"id":"1753","lat":37.312212,"lng":126.903524,"line":"안산선","subwayId":"1001","stCode":"1753"},"대야미":{"id":"1752","lat":37.328467,"lng":126.917332,"line":"안산선","subwayId":"1001","stCode":"1752"},"산본":{"id":"1751","lat":37.358101,"lng":126.933274,"line":"안산선","subwayId":"1001","stCode":"1751"},"광명":{"id":"1750","lat":37.416182,"lng":126.884466,"line":"경부선","subwayId":"1001","stCode":"1750"},"서동탄":{"id":"1749","lat":37.195504,"lng":127.051672,"line":"경부선","subwayId":"1001","stCode":"1749"},"당정":{"id":"1729","lat":37.344285,"lng":126.948345,"line":"경부선","subwayId":"1001","stCode":"1729"},"천안":{"id":"1728","lat":36.810005,"lng":127.146826,"line":"경부선","subwayId":"1001","stCode":"1728"},"두정":{"id":"1727","lat":36.833705,"lng":127.14896,"line":"경부선","subwayId":"1001","stCode":"1727"},"직산":{"id":"1726","lat":36.870593,"lng":127.143904,"line":"경부선","subwayId":"1001","stCode":"1726"},"성환":{"id":"1725","lat":36.916076,"lng":127.126964,"line":"경부선","subwayId":"1001","stCode":"1725"},"평택":{"id":"1724","lat":36.990726,"lng":127.085159,"line":"경부선","subwayId":"1001","stCode":"1724"},"지제":{"id":"1723","lat":37.0188,"lng":127.070444,"line":"경부선","subwayId":"1001"},"서정리":{"id":"1722","lat":37.056496,"lng":127.052819,"line":"경부선","subwayId":"1001","stCode":"1722"},"송탄":{"id":"1721","lat":37.075696,"lng":127.054301,"line":"경부선","subwayId":"1001","stCode":"1721"},"진위":{"id":"1720","lat":37.109447,"lng":127.062278,"line":"경부선","subwayId":"1001","stCode":"1720"},"오산":{"id":"1719","lat":37.145885,"lng":127.06672,"line":"경부선","subwayId":"1001","stCode":"1719"},"오산대":{"id":"1718","lat":37.168953,"lng":127.063197,"line":"경부선","subwayId":"1001","stCode":"1718"},"세마":{"id":"1717","lat":37.187533,"lng":127.04318,"line":"경부선","subwayId":"1001","stCode":"1717"},"병점":{"id":"1716","lat":37.207503,"lng":127.032731,"line":"경부선","subwayId":"1001","stCode":"1716"},"세류":{"id":"1715","lat":37.245025,"lng":127.013222,"line":"경부선","subwayId":"1001","stCode":"1715"},"독산":{"id":"1714","lat":37.466613,"lng":126.889249,"line":"경부선","subwayId":"1001","stCode":"1714"},"화서":{"id":"1712","lat":37.283862,"lng":126.989627,"line":"경부선","subwayId":"1001","stCode":"1712"},"성균관대":{"id":"1711","lat":37.300349,"lng":126.97075,"line":"경부선","subwayId":"1001","stCode":"1711"},"의왕":{"id":"1710","lat":37.320852,"lng":126.948217,"line":"경부선","subwayId":"1001","stCode":"1710"},"군포":{"id":"1709","lat":37.35356,"lng":126.948462,"line":"경부선","subwayId":"1001","stCode":"1709"},"금정":[{"id":"1708","lat":37.372221,"lng":126.943429,"line":"경부선","subwayId":"1001"},{"id":"1458","lat":37.372209,"lng":126.943417,"line":"과천선","subwayId":"1001"}],"명학":{"id":"1707","lat":37.384653,"lng":126.935433,"line":"경부선","subwayId":"1001","stCode":"1707"},"안양":{"id":"1706","lat":37.401592,"lng":126.922874,"line":"경부선","subwayId":"1001","stCode":"1706"},"관악":{"id":"1705","lat":37.419232,"lng":126.908706,"line":"경부선","subwayId":"1001","stCode":"1705"},"석수":{"id":"1704","lat":37.435047,"lng":126.902295,"line":"경부선","subwayId":"1001","stCode":"1704"},"금천구청":{"id":"1703","lat":37.455626,"lng":126.89398,"line":"경부선","subwayId":"1001","stCode":"1703"},"구로":{"id":"1701","lat":37.503039,"lng":126.881966,"line":"경부선","subwayId":"1001","stCode":"1701"},"여주":{"id":"1511","lat":37.282308,"lng":127.628816,"line":"경강선","subwayId":"1095","stCode":"1511"},"세종대왕릉":{"id":"1510","lat":37.295309,"lng":127.570938,"line":"경강선","subwayId":"1095","stCode":"1510"},"부발":{"id":"1509","lat":37.260192,"lng":127.490277,"line":"경강선","subwayId":"1095","stCode":"1509"},"이천":{"id":"1508","lat":37.265579,"lng":127.44226,"line":"경강선","subwayId":"1095","stCode":"1508"},"신둔도예촌":{"id":"1507","lat":37.317185,"lng":127.40476,"line":"경강선","subwayId":"1095","stCode":"1507"},"곤지암":{"id":"1506","lat":37.351315,"lng":127.34674,"line":"경강선","subwayId":"1095","stCode":"1506"},"초월":{"id":"1505","lat":37.374419,"lng":127.299,"line":"경강선","subwayId":"1095","stCode":"1505"},"경기광주":{"id":"1504","lat":37.399907,"lng":127.25263,"line":"경강선","subwayId":"1095","stCode":"1504"},"삼동":{"id":"1503","lat":37.409522,"lng":127.20336,"line":"경강선","subwayId":"1095","stCode":"1503"},"범계":{"id":"1457","lat":37.389793,"lng":126.950806,"line":"과천선","subwayId":"1001","stCode":"1457"},"평촌":{"id":"1456","lat":37.394287,"lng":126.963883,"line":"과천선","subwayId":"1001","stCode":"1456"},"인덕원":{"id":"1455","lat":37.401553,"lng":126.976715,"line":"과천선","subwayId":"1001","stCode":"1455"},"정부과천청사":{"id":"1454","lat":37.426513,"lng":126.98978,"line":"과천선","subwayId":"1001","stCode":"1454"},"과천":{"id":"1453","lat":37.433021,"lng":126.996568,"line":"과천선","subwayId":"1001","stCode":"1453"},"대공원":{"id":"1452","lat":37.435675,"lng":127.006523,"line":"과천선","subwayId":"1001","stCode":"1452"},"경마공원":{"id":"1451","lat":37.443885,"lng":127.007888,"line":"과천선","subwayId":"1001","stCode":"1451"},"선바위":{"id":"1450","lat":37.451673,"lng":127.002303,"line":"과천선","subwayId":"1001","stCode":"1450"},"신창(순천향대)":{"id":"1408","lat":36.769502,"lng":126.951108,"line":"장항선","subwayId":"1001"},"온양온천":{"id":"1407","lat":36.780483,"lng":127.003249,"line":"장항선","subwayId":"1001","stCode":"1407"},"배방":{"id":"1405","lat":36.777629,"lng":127.052991,"line":"장항선","subwayId":"1001","stCode":"1405"},"탕정":{"id":"1404","lat":36.78866,"lng":127.08485,"line":"장항선","subwayId":"1001","stCode":"1404"},"아산":{"id":"1403","lat":36.792053,"lng":127.104361,"line":"장항선","subwayId":"1001","stCode":"1403"},"쌍용(나사렛대)":{"id":"1402","lat":36.793759,"lng":127.1214,"line":"장항선","subwayId":"1001"},"봉명":{"id":"1401","lat":36.801215,"lng":127.135763,"line":"장항선","subwayId":"1001","stCode":"1401"},"춘천":{"id":"1329","lat":37.885054,"lng":127.717023,"line":"경춘선","subwayId":"1069","stCode":"1329"},"남춘천":{"id":"1328","lat":37.864007,"lng":127.723792,"line":"경춘선","subwayId":"1069","stCode":"1328"},"김유정":{"id":"1327","lat":37.818466,"lng":127.71434,"line":"경춘선","subwayId":"1069","stCode":"1327"},"강촌":{"id":"1326","lat":37.805723,"lng":127.634146,"line":"경춘선","subwayId":"1069","stCode":"1326"},"백양리":{"id":"1325","lat":37.830779,"lng":127.58933,"line":"경춘선","subwayId":"1069","stCode":"1325"},"굴봉산":{"id":"1324","lat":37.832067,"lng":127.557695,"line":"경춘선","subwayId":"1069","stCode":"1324"},"가평":{"id":"1323","lat":37.814536,"lng":127.510739,"line":"경춘선","subwayId":"1069","stCode":"1323"},"상천":{"id":"1322","lat":37.770246,"lng":127.454821,"line":"경춘선","subwayId":"1069","stCode":"1322"},"청평":{"id":"1321","lat":37.735488,"lng":127.42661,"line":"경춘선","subwayId":"1069","stCode":"1321"},"대성리":{"id":"1320","lat":37.684071,"lng":127.379319,"line":"경춘선","subwayId":"1069","stCode":"1320"},"마석":{"id":"1319","lat":37.652782,"lng":127.311767,"line":"경춘선","subwayId":"1069","stCode":"1319"},"천마산":{"id":"1318","lat":37.658978,"lng":127.285379,"line":"경춘선","subwayId":"1069","stCode":"1318"},"평내호평":{"id":"1317","lat":37.653225,"lng":127.244493,"line":"경춘선","subwayId":"1069","stCode":"1317"},"금곡":{"id":"1316","lat":37.637382,"lng":127.207853,"line":"경춘선","subwayId":"1069","stCode":"1316"},"사릉":{"id":"1315","lat":37.65108,"lng":127.176933,"line":"경춘선","subwayId":"1069","stCode":"1315"},"퇴계원":{"id":"1314","lat":37.648311,"lng":127.143952,"line":"경춘선","subwayId":"1069","stCode":"1314"},"갈매":{"id":"1312","lat":37.634118,"lng":127.114757,"line":"경춘선","subwayId":"1069","stCode":"1312"},"운천":{"id":"1286","lat":37.879942,"lng":126.769999,"line":"경의중앙선","subwayId":"1067","stCode":"1286"},"임진강":{"id":"1285","lat":37.888421,"lng":126.746765,"line":"경의중앙선","subwayId":"1067","stCode":"1285"},"문산":{"id":"1284","lat":37.854619,"lng":126.788047,"line":"경의중앙선","subwayId":"1067","stCode":"1284"},"파주":{"id":"1283","lat":37.815298,"lng":126.792783,"line":"경의중앙선","subwayId":"1067","stCode":"1283"},"월롱":{"id":"1282","lat":37.796188,"lng":126.792587,"line":"경의중앙선","subwayId":"1067","stCode":"1282"},"금촌":{"id":"1280","lat":37.766217,"lng":126.774644,"line":"경의중앙선","subwayId":"1067","stCode":"1280"},"금릉":{"id":"1279","lat":37.751322,"lng":126.765347,"line":"경의중앙선","subwayId":"1067","stCode":"1279"},"야당":{"id":"1277","lat":37.712327,"lng":126.761356,"line":"경의중앙선","subwayId":"1067","stCode":"1277"},"탄현":{"id":"1276","lat":37.694023,"lng":126.761086,"line":"경의중앙선","subwayId":"1067","stCode":"1276"},"일산":{"id":"1275","lat":37.682077,"lng":126.769846,"line":"경의중앙선","subwayId":"1067","stCode":"1275"},"풍산":{"id":"1274","lat":37.672346,"lng":126.786243,"line":"경의중앙선","subwayId":"1067","stCode":"1274"},"백마":{"id":"1273","lat":37.658239,"lng":126.794461,"line":"경의중앙선","subwayId":"1067","stCode":"106C"},"곡산":{"id":"1272","lat":37.645676,"lng":126.801762,"line":"경의중앙선","subwayId":"1067","stCode":"1272"},"능곡":{"id":"1271","lat":37.618808,"lng":126.820783,"line":"경의중앙선","subwayId":"1067","stCode":"104C"},"행신":{"id":"1270","lat":37.612102,"lng":126.834146,"line":"경의중앙선","subwayId":"1067","stCode":"1270"},"강매":{"id":"1269","lat":37.612314,"lng":126.843223,"line":"경의중앙선","subwayId":"1067","stCode":"1269"},"화전":{"id":"1268","lat":37.602888,"lng":126.868387,"line":"경의중앙선","subwayId":"1067"},"수색":{"id":"1267","lat":37.580842,"lng":126.895611,"line":"경의중앙선","subwayId":"1067","stCode":"1267"},"가좌":{"id":"1265","lat":37.568491,"lng":126.915487,"line":"경의중앙선","subwayId":"1067","stCode":"1265"},"서강대":{"id":"1263","lat":37.551881,"lng":126.935711,"line":"경의중앙선","subwayId":"1067","stCode":"1263"},"신촌":[{"id":"1252","lat":37.559733,"lng":126.942597,"line":"경의중앙선","subwayId":"1067"},{"id":"0240","lat":37.555131,"lng":126.936926,"line":"2호선","subwayId":"1002"}],"지평":{"id":"1220","lat":37.476393,"lng":127.629874,"line":"중앙선","subwayId":"1001","stCode":"1220"},"용문":{"id":"1219","lat":37.48223,"lng":127.594647,"line":"중앙선","subwayId":"1001","stCode":"1219"},"원덕":{"id":"1218","lat":37.468672,"lng":127.547076,"line":"중앙선","subwayId":"1001","stCode":"1218"},"오빈":{"id":"1216","lat":37.506062,"lng":127.473868,"line":"중앙선","subwayId":"1001","stCode":"1216"},"아신":{"id":"1215","lat":37.51382,"lng":127.443173,"line":"중앙선","subwayId":"1001","stCode":"1215"},"국수":{"id":"1214","lat":37.516169,"lng":127.399367,"line":"중앙선","subwayId":"1001","stCode":"1214"},"신원":{"id":"1213","lat":37.525545,"lng":127.372921,"line":"중앙선","subwayId":"1001","stCode":"1213"},"양수":{"id":"1212","lat":37.545981,"lng":127.329098,"line":"중앙선","subwayId":"1001","stCode":"1212"},"운길산":{"id":"1211","lat":37.554669,"lng":127.310115,"line":"중앙선","subwayId":"1001","stCode":"1211"},"팔당":{"id":"1210","lat":37.547371,"lng":127.243939,"line":"중앙선","subwayId":"1001","stCode":"1210"},"도심":{"id":"1209","lat":37.579622,"lng":127.222672,"line":"중앙선","subwayId":"1001","stCode":"1209"},"덕소":{"id":"1208","lat":37.586781,"lng":127.208832,"line":"중앙선","subwayId":"1001","stCode":"1208"},"양정":{"id":"1207","lat":37.60533,"lng":127.19364,"line":"중앙선","subwayId":"1001","stCode":"1207"},"도농":{"id":"1206","lat":37.608806,"lng":127.161153,"line":"중앙선","subwayId":"1001","stCode":"1206"},"양원":{"id":"1204","lat":37.606596,"lng":127.107906,"line":"중앙선","subwayId":"1001","stCode":"1204"},"망우":{"id":"1203","lat":37.59955,"lng":127.091909,"line":"중앙선","subwayId":"1001","stCode":"1203"},"중랑":{"id":"1201","lat":37.594917,"lng":127.076116,"line":"중앙선","subwayId":"1001","stCode":"1201"},"대모산입구":{"id":"1028","lat":37.491373,"lng":127.07272,"line":"분당선","subwayId":"1075","stCode":"1028"},"개포동":{"id":"1027","lat":37.489116,"lng":127.06614,"line":"분당선","subwayId":"1075","stCode":"1027"},"구룡":{"id":"1026","lat":37.486839,"lng":127.058856,"line":"분당선","subwayId":"1075","stCode":"1026"},"도곡":[{"id":"1025","lat":37.491224,"lng":127.055186,"line":"분당선","subwayId":"1075"},{"id":"0334","lat":37.490922,"lng":127.055452,"line":"3호선","subwayId":"1003"}],"한티":{"id":"1024","lat":37.496237,"lng":127.052873,"line":"분당선","subwayId":"1075","stCode":"1024"},"선릉":[{"id":"1023","lat":37.504856,"lng":127.048807,"line":"분당선","subwayId":"1075"},{"id":"0220","lat":37.504286,"lng":127.048203,"line":"2호선","subwayId":"1002"}],"녹천":{"id":"1021","lat":37.644799,"lng":127.051269,"line":"경원선","subwayId":"1001","stCode":"1021"},"월계":{"id":"1020","lat":37.633212,"lng":127.058831,"line":"경원선","subwayId":"1001","stCode":"1020"},"광운대":{"id":"1019","lat":37.623632,"lng":127.061835,"line":"경원선","subwayId":"1001","stCode":"1305"},"신이문":{"id":"1017","lat":37.601854,"lng":127.067325,"line":"경원선","subwayId":"1001","stCode":"1017"},"외대앞":{"id":"1016","lat":37.596073,"lng":127.063549,"line":"경원선","subwayId":"1001","stCode":"1016"},"회기":{"id":"1015","lat":37.58946,"lng":127.057583,"line":"중앙선","subwayId":"1001","stCode":"1307"},"청량리(서울시립대입구)":[{"id":"1014","lat":37.580759,"lng":127.0483,"line":"경원선","subwayId":"1001"},{"id":"0158","lat":37.579956,"lng":127.044585,"line":"1호선","subwayId":"1001"}],"응봉":{"id":"1012","lat":37.549946,"lng":127.034538,"line":"경원선","subwayId":"1001","stCode":"1012"},"옥수":[{"id":"1011","lat":37.540446,"lng":127.018672,"line":"경원선","subwayId":"1001"},{"id":"0325","lat":37.541684,"lng":127.017269,"line":"3호선","subwayId":"1003"}],"한남":{"id":"1010","lat":37.52943,"lng":127.009169,"line":"경원선","subwayId":"1001","stCode":"1010"},"서빙고":{"id":"1009","lat":37.519594,"lng":126.988537,"line":"경원선","subwayId":"1001","stCode":"1009"},"이촌(국립중앙박물관)":[{"id":"1008","lat":37.522427,"lng":126.973406,"line":"경원선","subwayId":"1001"},{"id":"0430","lat":37.522295,"lng":126.974733,"line":"4호선","subwayId":"1004"}],"신도림":[{"id":"1007","lat":37.508787,"lng":126.891144,"line":"경부선","subwayId":"1001"},{"id":"0234","lat":37.508961,"lng":126.891084,"line":"2호선","subwayId":"1002"}],"영등포":{"id":"1006","lat":37.515504,"lng":126.907628,"line":"경부선","subwayId":"1001","stCode":"1006"},"용산":{"id":"1003","lat":37.529849,"lng":126.964561,"line":"경부선","subwayId":"1001","stCode":"100C"},"남영":{"id":"1002","lat":37.541021,"lng":126.9713,"line":"경부선","subwayId":"1001","stCode":"1002"},"남태령":{"id":"0434","lat":37.463873,"lng":126.989134,"line":"4호선","subwayId":"1004","stCode":"0434"},"사당":[{"id":"0433","lat":37.476955,"lng":126.981651,"line":"4호선","subwayId":"1004"},{"id":"0226","lat":37.476538,"lng":126.981544,"line":"2호선","subwayId":"1002"}],"총신대입구(이수)":{"id":"0432","lat":37.486263,"lng":126.981989,"line":"4호선","subwayId":"1004"},"신용산":{"id":"0429","lat":37.52917,"lng":126.967894,"line":"4호선","subwayId":"1004","stCode":"0429"},"숙대입구(갈월)":{"id":"0427","lat":37.54456,"lng":126.972106,"line":"4호선","subwayId":"1004"},"회현(남대문시장)":{"id":"0425","lat":37.558514,"lng":126.978246,"line":"4호선","subwayId":"1004"},"명동":{"id":"0424","lat":37.560989,"lng":126.986325,"line":"4호선","subwayId":"1004","stCode":"0424"},"충무로":[{"id":"0423","lat":37.561207,"lng":126.99408,"line":"4호선","subwayId":"1004"},{"id":"0321","lat":37.56143,"lng":126.994072,"line":"3호선","subwayId":"1003"}],"동대문":[{"id":"0421","lat":37.57093,"lng":127.009287,"line":"4호선","subwayId":"1004"},{"id":"0155","lat":37.571687,"lng":127.01093,"line":"1호선","subwayId":"1001"}],"혜화":{"id":"0420","lat":37.582336,"lng":127.001844,"line":"4호선","subwayId":"1004","stCode":"0420"},"한성대입구(삼선교)":{"id":"0419","lat":37.588458,"lng":127.006221,"line":"4호선","subwayId":"1004"},"길음":{"id":"0417","lat":37.603407,"lng":127.025053,"line":"4호선","subwayId":"1004","stCode":"0417"},"미아사거리":{"id":"0416","lat":37.613292,"lng":127.030053,"line":"4호선","subwayId":"1004","stCode":"0416"},"미아(서울사이버대학)":{"id":"0415","lat":37.62667,"lng":127.025983,"line":"4호선","subwayId":"1004"},"수유(강북구청)":{"id":"0414","lat":37.638052,"lng":127.025732,"line":"4호선","subwayId":"1004"},"쌍문":{"id":"0413","lat":37.648627,"lng":127.034709,"line":"4호선","subwayId":"1004","stCode":"0413"},"창동":{"id":"0412","lat":37.653088,"lng":127.047274,"line":"4호선","subwayId":"1004","stCode":"1022"},"상계":{"id":"0410","lat":37.660878,"lng":127.073572,"line":"4호선","subwayId":"1004","stCode":"0410"},"불암산":{"id":"0409","lat":37.670272,"lng":127.079066,"line":"4호선","subwayId":"1004","stCode":"0409"},"별내별가람":{"id":"0408","lat":37.66778,"lng":127.11581,"line":"진접선","subwayId":"","stCode":"0408"},"오남":{"id":"0406","lat":37.705,"lng":127.19281,"line":"진접선","subwayId":"","stCode":"0406"},"진접":{"id":"0405","lat":37.7205,"lng":127.2034,"line":"진접선","subwayId":"","stCode":"0405"},"경찰병원":{"id":"0341","lat":37.495918,"lng":127.12454,"line":"3호선","subwayId":"1003","stCode":"0341"},"일원":{"id":"0338","lat":37.483681,"lng":127.08439,"line":"3호선","subwayId":"1003","stCode":"0338"},"대청":{"id":"0337","lat":37.493514,"lng":127.079532,"line":"3호선","subwayId":"1003","stCode":"0337"},"학여울":{"id":"0336","lat":37.496663,"lng":127.070594,"line":"3호선","subwayId":"1003","stCode":"0336"},"대치":{"id":"0335","lat":37.494612,"lng":127.063642,"line":"3호선","subwayId":"1003","stCode":"0335"},"매봉":{"id":"0333","lat":37.486947,"lng":127.046769,"line":"3호선","subwayId":"1003","stCode":"0333"},"남부터미널(예술의전당)":{"id":"0331","lat":37.485013,"lng":127.016189,"line":"3호선","subwayId":"1003"},"교대(법원.검찰청)":[{"id":"0330","lat":37.493025,"lng":127.013786,"line":"3호선","subwayId":"1003"},{"id":"0223","lat":37.493961,"lng":127.014667,"line":"2호선","subwayId":"1002"}],"잠원":{"id":"0328","lat":37.512759,"lng":127.01122,"line":"3호선","subwayId":"1003","stCode":"0328"},"압구정":{"id":"0326","lat":37.527072,"lng":127.028461,"line":"3호선","subwayId":"1003","stCode":"0326"},"금호":{"id":"0324","lat":37.548034,"lng":127.015872,"line":"3호선","subwayId":"1003","stCode":"0324"},"동대입구":{"id":"0322","lat":37.559052,"lng":127.005602,"line":"3호선","subwayId":"1003","stCode":"0322"},"을지로3가":[{"id":"0320","lat":37.566672,"lng":126.992548,"line":"3호선","subwayId":"1003"},{"id":"0203","lat":37.566306,"lng":126.991696,"line":"2호선","subwayId":"1002"}],"안국":{"id":"0318","lat":37.576477,"lng":126.985443,"line":"3호선","subwayId":"1003","stCode":"0318"},"경복궁(정부서울청사)":{"id":"0317","lat":37.575762,"lng":126.97353,"line":"3호선","subwayId":"1003"},"독립문":{"id":"0316","lat":37.574571,"lng":126.957748,"line":"3호선","subwayId":"1003","stCode":"0316"},"무악재":{"id":"0315","lat":37.582299,"lng":126.950291,"line":"3호선","subwayId":"1003","stCode":"0315"},"홍제":{"id":"0314","lat":37.589066,"lng":126.943736,"line":"3호선","subwayId":"1003","stCode":"0314"},"녹번":{"id":"0313","lat":37.600927,"lng":126.935756,"line":"3호선","subwayId":"1003","stCode":"0313"},"구파발":{"id":"0310","lat":37.636763,"lng":126.918821,"line":"3호선","subwayId":"1003","stCode":"0310"},"용두(동대문구청)":{"id":"0250","lat":37.574028,"lng":127.038091,"line":"2호선","subwayId":"1002"},"신정네거리":{"id":"0249","lat":37.520074,"lng":126.852912,"line":"2호선","subwayId":"1002","stCode":"0249"},"양천구청":{"id":"0248","lat":37.512398,"lng":126.865819,"line":"2호선","subwayId":"1002","stCode":"0248"},"도림천":{"id":"0247","lat":37.514287,"lng":126.882768,"line":"2호선","subwayId":"1002","stCode":"0247"},"신답":{"id":"0245","lat":37.57004,"lng":127.046481,"line":"2호선","subwayId":"1002","stCode":"0245"},"용답":{"id":"0244","lat":37.561904,"lng":127.050899,"line":"2호선","subwayId":"1002","stCode":"0244"},"아현":{"id":"0242","lat":37.557345,"lng":126.956141,"line":"2호선","subwayId":"1002","stCode":"0242"},"이대":{"id":"0241","lat":37.556733,"lng":126.946013,"line":"2호선","subwayId":"1002","stCode":"0241"},"문래":{"id":"0235","lat":37.517933,"lng":126.89476,"line":"2호선","subwayId":"1002","stCode":"0235"},"구로디지털단지":{"id":"0232","lat":37.485266,"lng":126.901401,"line":"2호선","subwayId":"1002","stCode":"0232"},"신대방":{"id":"0231","lat":37.487462,"lng":126.913149,"line":"2호선","subwayId":"1002","stCode":"0231"},"봉천":{"id":"0229","lat":37.482362,"lng":126.941892,"line":"2호선","subwayId":"1002","stCode":"0229"},"서울대입구(관악구청)":{"id":"0228","lat":37.481247,"lng":126.952739,"line":"2호선","subwayId":"1002"},"낙성대":{"id":"0227","lat":37.47693,"lng":126.963693,"line":"2호선","subwayId":"1002","stCode":"0227"},"방배":{"id":"0225","lat":37.481426,"lng":126.997596,"line":"2호선","subwayId":"1002","stCode":"0225"},"서초":{"id":"0224","lat":37.491897,"lng":127.007917,"line":"2호선","subwayId":"1002","stCode":"0224"},"역삼":{"id":"0221","lat":37.500622,"lng":127.036456,"line":"2호선","subwayId":"1002","stCode":"0221"},"삼성(무역센터)":{"id":"0219","lat":37.508844,"lng":127.06316,"line":"2호선","subwayId":"1002"},"잠실새내":{"id":"0217","lat":37.511687,"lng":127.086162,"line":"2호선","subwayId":"1002","stCode":"0217"},"잠실나루":{"id":"0215","lat":37.520733,"lng":127.10379,"line":"2호선","subwayId":"1002","stCode":"0215"},"강변(동서울터미널)":{"id":"0214","lat":37.535095,"lng":127.094681,"line":"2호선","subwayId":"1002"},"구의(광진구청)":{"id":"0213","lat":37.537077,"lng":127.085916,"line":"2호선","subwayId":"1002"},"성수":{"id":"0211","lat":37.544581,"lng":127.055961,"line":"2호선","subwayId":"1002","stCode":"0211"},"뚝섬":{"id":"0210","lat":37.547184,"lng":127.047367,"line":"2호선","subwayId":"1002","stCode":"0210"},"한양대":{"id":"0209","lat":37.555273,"lng":127.043655,"line":"2호선","subwayId":"1002","stCode":"0209"},"상왕십리":{"id":"0207","lat":37.564354,"lng":127.029354,"line":"2호선","subwayId":"1002","stCode":"0207"},"을지로입구":{"id":"0202","lat":37.566014,"lng":126.982618,"line":"2호선","subwayId":"1002","stCode":"0202"},"시청":[{"id":"0201","lat":37.563588,"lng":126.975411,"line":"2호선","subwayId":"1002"},{"id":"0151","lat":37.565715,"lng":126.977088,"line":"1호선","subwayId":"1001"}],"제기동":{"id":"0157","lat":37.578103,"lng":127.034893,"line":"1호선","subwayId":"1001","stCode":"0157"},"종로5가":{"id":"0154","lat":37.570926,"lng":127.001849,"line":"1호선","subwayId":"1001","stCode":"0154"},"종각":{"id":"0152","lat":37.570161,"lng":126.982923,"line":"1호선","subwayId":"1001","stCode":"0152"}};
 
-// ── 역명 → 역사 정보 조회 (유연한 매칭) ──────────────────────
-function getMasterInfo(stnName, lineName) {
-  if(!stnName) return null;
-  const clean = stnName.replace(/역$/, '').trim();
-  
-  // 1순위: 정확한 역명
-  let entry = SUBWAY_MASTER_DB[clean] || SUBWAY_MASTER_DB[stnName];
-  
-  // 2순위: '역' 붙여서 찾기
-  if(!entry) entry = SUBWAY_MASTER_DB[clean + '역'];
-  
-  // 3순위: 부분 매칭
-  if(!entry) {
-    const key = Object.keys(SUBWAY_MASTER_DB).find(k =>
-      k.replace(/역$/, '') === clean || clean.includes(k.replace(/역$/, ''))
-    );
-    if(key) entry = SUBWAY_MASTER_DB[key];
-  }
-  
-  if(!entry) return null;
-  
-  // 동명이역 → 노선명으로 필터
-  if(Array.isArray(entry)) {
-    if(lineName) {
-      // 호선 → API 노선명 정규화
-      const normLine = lineName.replace('호선', '') + '호선';
-      const match = entry.find(e =>
-        e.line === lineName ||
-        e.line.replace('호선', '') === lineName.replace('호선', '') ||
-        e.subwayId === getSubwayIdByLine(lineName)
-      );
-      return match || entry[0];
-    }
-    return entry[0];
-  }
-  return entry;
-}
 
 // ── 호선명 → subwayId 변환 ────────────────────────────────────
 function getSubwayIdByLine(lineName) {
@@ -23947,11 +22704,6 @@ function _vib(type, pat){
 function vibrateArrive(){
   // 목적지 도착: 강하게 3번 (도착 패턴)
   _vib('arrive', [300,100,300,100,300]);
-}
-function vibratePass(){
-  // ★ 중간 역 통과 진동은 쓰지 않는다 (2026-08-31)
-  //   역마다 울려서 성가시다는 피드백. 하차·환승 임박에만 진동한다.
-  //   함수는 호출부 호환을 위해 남겨 두고 동작만 없앤다.
 }
 function vibrateTransfer(){
   // 환승 알림: 2번
@@ -26143,19 +24895,6 @@ function _initLocalNotifications(){
 })();
 
 /* ══ 인라인 목적지 검색 ══ */
-function toggleDestSearch(){
-  const panel=document.getElementById('destSearchPanel');
-  const inp=document.getElementById('inlineDestInput');
-  if(panel.style.display==='none'){
-    panel.style.display='block';
-    setTimeout(()=>inp.focus(),100);
-    // 현재 도착역이 있으면 미리 채우기
-    if(S.dest) inp.value=S.dest.name;
-  } else {
-    panel.style.display='none';
-    document.getElementById('inlineDestSug').style.display='none';
-  }
-}
 
 // ★ 2026-09-27 (YJ 요청: "같은 장소인데 호선이 달라서 중복으로 나오는 것들을 병합"):
 //   STNDB는 역 하나당 지나는 호선마다 별도 항목이라, 검색결과에 "강남역"이 호선 수만큼
@@ -26182,30 +24921,6 @@ function _dedupeStnByName(matches){
 }
 window._dedupeStnByName = _dedupeStnByName;
 
-function inlineDestSearch(q){
-  const sug=document.getElementById('inlineDestSug');
-  if(!q||q.length<1){sug.style.display='none';return;}
-  const rawMs=STNDB.filter(s=>s.name.includes(q));
-  const ms=_dedupeStnByName(rawMs);
-  if(!ms.length){sug.style.display='none';return;}
-  sug.style.display='block';
-  sug.innerHTML='';
-  ms.slice(0,8).forEach(s=>{
-    const d=document.createElement('div');
-    d.innerHTML='<span style="width:9px;height:9px;border-radius:50%;background:'+s.color+';display:inline-block;flex-shrink:0;"></span><span style="flex:1">'+s.name+'</span><span style="font-size:11px;color:var(--sub);">'+s.lineLabel+'</span>';
-    d.onmousedown=e=>{
-      e.preventDefault();
-      setDest(s);
-      document.getElementById('destSearchPanel').style.display='none';
-      sug.style.display='none';
-      document.getElementById('inlineDestInput').value='';
-      document.getElementById('inpDest').value=s.name;
-      if(S.start) doRoute();
-      else { toast('출발역도 설정해주세요'); openSheet(); }
-    };
-    sug.appendChild(d);
-  });
-}
 
 /* ══ 탭 전환 ══ */
 function switchTab(tab,el){
@@ -26370,63 +25085,9 @@ function switchTab(tab,el){
 
 /* ══ 토스트 ══ */
 
-// ── GPS 권한 요청 (앱 시작 시 시스템 설정창 표시) ───────────
-function _checkFirstLaunchGps() {
-  // Capacitor Geolocation 플러그인으로 즉시 시스템 권한 요청
-  setTimeout(function() {
-    _requestGpsPermission();
-  }, 800);
-}
 
-function _requestGpsPermission() {
-  var m = document.getElementById('gpsPermModal');
-  if(m) m.style.display = 'none';
 
-  if(!navigator.geolocation) {
-    toast('⚠️ 이 기기는 GPS를 지원하지 않습니다.');
-    return;
-  }
 
-  // 표준 Web API로 권한 요청 → Android 시스템 권한창 표시
-  navigator.geolocation.getCurrentPosition(
-    function(pos) {
-      console.log('[GPS] ✅ 권한 허용, 위치:', pos.coords.latitude, pos.coords.longitude);
-      console.log('[toast-hidden] '+'✅ GPS 권한 허용됨!');
-    },
-    function(err) {
-      console.log('[GPS] 권한 결과 코드:', err.code);
-      if(err.code === 1) {
-        // 거부된 경우 안내 모달
-        var m2 = document.getElementById('gpsPermModal');
-        if(m2) m2.style.display = 'flex';
-        toast('⚠️ GPS 권한이 거부됐습니다.');
-      }
-    },
-    { enableHighAccuracy: false, timeout: 30000, maximumAge: 0 }
-  );
-}
-
-function _openGpsSystemSettings() {
-  // 설정 앱 열기 (거부된 경우)
-  try {
-    var CapApp = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
-    if(CapApp && CapApp.openUrl) {
-      CapApp.openUrl({ url: 'app-settings:' });
-    } else {
-      toast('설정 → 앱 → 길동무 → 권한 → 위치');
-    }
-  } catch(e) {
-    toast('설정 → 앱 → 길동무 → 권한 → 위치');
-  }
-  var m = document.getElementById('gpsPermModal');
-  if(m) m.style.display = 'none';
-}
-
-function _skipGpsPermission() {
-  var m = document.getElementById('gpsPermModal');
-  if(m) m.style.display = 'none';
-  toast('ℹ️ 시간 기반 모드로 동작합니다');
-}
 
 // ★ 2026-09-29 (YJ: "모든 하단 토글을 제거해"): 화면 하단에 잠깐 떴다 사라지던
 //   토스트 팝업을 앱 전체에서 없앴다. 앱 안의 모든 토스트 호출이 결국 이 함수
@@ -26638,26 +25299,7 @@ async function calcOptimalDeparture() {
 }
 window.calcOptimalDeparture = calcOptimalDeparture;
 
-// ── showTransferCarPopup: 환승 칸 추천 팝업 ─────────────────
-function showTransferCarPopup(route, destName) {
-  if(!route || !route.path) return;
-  var xfers = route.path.filter(function(stn, i){
-    return i > 0 && route.lp[i] && route.lp[i-1] && route.lp[i] !== route.lp[i-1];
-  });
-  if(!xfers.length) return;
-  var msg = xfers.map(function(stn){
-    var car = typeof getTransferCar === 'function' ? getTransferCar(stn) : '';
-    return car ? stn + ': ' + car : stn;
-  }).join(' / ');
-  if(msg) toast('🚃 환승 추천: ' + msg);
-}
-window.showTransferCarPopup = showTransferCarPopup;
 
-// ── getTransferCarPopup: 환승 정보 반환 (showTransferCarPopup 별칭) ──
-function getTransferCarPopup(route, destName) {
-  return showTransferCarPopup(route, destName);
-}
-window.getTransferCarPopup = getTransferCarPopup;
 
 // ── openExternalApp: 외부 링크 열기 ─────────────────────────
 // 뉴스 원문 열기 (언론사 도메인 허용)
@@ -29700,35 +28342,11 @@ function svgSetRoute(type) {
 }
 window.svgSetRoute = svgSetRoute;
 
-// 현위치 → 출발역 접근(거리·도보시간) 표시
-function _showStartAccess(startStn){
-  try{
-    if(!startStn || startStn.lat==null || startStn.lng==null) return;
-    var la = window._lastGPSLat || (typeof S!=='undefined' && S.lastGPSFix && S.lastGPSFix.lat) || null;
-    var ln = window._lastGPSLng || (typeof S!=='undefined' && S.lastGPSFix && S.lastGPSFix.lng) || null;
-    if(!la || !ln || typeof haversineM!=='function') return;
-    var d = Math.round(haversineM(la, ln, startStn.lat, startStn.lng));
-    var walkMin = Math.max(1, Math.round(d/67));   // 도보 약 67m/분
-    var distTxt = d>=1000 ? (d/1000).toFixed(1)+'km' : d+'m';
-    var txt = '📍 내 위치 → ' + startStn.name + ' 약 ' + distTxt + ' · 도보 ' + walkMin + '분';
-    var el = document.getElementById('transitLocCur');
-    if(el){ el.textContent = txt; }
-    else if(typeof toast==='function') toast(txt);
-  }catch(e){}
-}
-window._showStartAccess = _showStartAccess;
 
 
 
 
 
-// ── stopWatch: GPS 감시 중단 ─────────────────────────────────
-function stopWatch() {
-  if(S._gpsWatch) {
-    navigator.geolocation.clearWatch(S._gpsWatch);
-    S._gpsWatch = null;
-  }
-}
 
 // ══════════════════════════════════════════════════════════════
 // 백그라운드 GPS + 포그라운드 서비스 (Capacitor)
@@ -30493,15 +29111,6 @@ function _pipMinText(m){
   return h ? (h + '시간 ' + mm + '분') : (mm + '분');
 }
 
-// 남은 시간에 맞춘 한마디
-function _pipMood(m){
-  if(m == null) return '안전하게 이동하세요';
-  if(m < 3)  return '내릴 준비하세요';
-  if(m < 10) return '거의 다 왔어요';
-  if(m < 30) return '조금만 더 가면 돼요';
-  if(m < 60) return '절반쯤 왔어요';
-  return '여유 있게 가고 있어요';
-}
 
 // ★ 2026-09-03: 작은 화면에 이전·현재·다음 역을 함께 보여 준다.
 //   현재역만 보면 어디쯤인지 감이 안 온다. 앞뒤를 같이 보여 주면
@@ -30851,19 +29460,6 @@ function _pipRecoPaint(){
 }
 window._pipRecoPaint = _pipRecoPaint;
 
-// ★ 2026-09-15: 작은 창의 추천 버튼.
-//   안드로이드 PiP 창은 터치를 앱으로 넘기지 않는 경우가 많다.
-//   눌렸다면 먼저 앱을 앞으로 꺼낸 뒤(가능하면) 원래 동작을 실행한다.
-function _pipRecoAct(call){
-  try{
-    var run = function(){ try{ (0, eval)(call); }catch(e){} };
-    var n = (typeof _pipNative==='function') ? _pipNative() : null;
-    var back = n && (n.exit || n.expand || n.leave);
-    if(back){ try{ back.call(n, {}); }catch(e){} setTimeout(run, 400); }
-    else run();
-  }catch(e){}
-}
-window._pipRecoAct = _pipRecoAct;
 
 function _pipShow(){
   try{ window._pipInPip = true;  _pipTick(); }catch(e){}
@@ -31819,7 +30415,6 @@ function _cleanupBgTracking(){
   if(window._fgKeepAliveTimer){ clearInterval(window._fgKeepAliveTimer); window._fgKeepAliveTimer = null; }
 }
 
-window.stopWatch = stopWatch;
 
 // ── showStationDetail: 역 상세 정보 토스트 ──────────────────
 function showStationDetail(stnName) {
@@ -31829,11 +30424,6 @@ function showStationDetail(stnName) {
 }
 window.showStationDetail = showStationDetail;
 
-// ── manualGPSDetect: 수동 GPS 감지 ───────────────────────────
-function manualGPSDetect() {
-  if(typeof triggerGPS === 'function') triggerGPS();
-}
-window.manualGPSDetect = manualGPSDetect;
 
 // arrTimeSeconds 변수 선언 (ReferenceError 방어)
 var arrTimeSeconds = 0;
@@ -32503,43 +31093,7 @@ function _boardNextTrain() {
   }
 }
 
-// ── ★ 출발 시각 도달 시 탑승확인 팝업 스케줄 ────────────
-function _scheduleBoardAskPopup(depMs) {
-  // ★ 출발시각 탑승확인 팝업 비활성화
-  // 경로 설정 직후 안내 팝업(_showRouteReadyPopup)만 사용
-  if(_boardAskTimer) clearTimeout(_boardAskTimer);
-  _boardAskTimer = null;
-}
 
-function _openBoardAskModal(depMs) {
-  if(typeof _isManualStart==='function' && _isManualStart()) return;
-  var m = document.getElementById('boardAskModal');
-  if(!m) return;
-  m._depMs = depMs;
-
-  var depStr = '';
-  if(depMs) {
-    var d = new Date(depMs);
-    var h = (d.getUTCHours()+9)%24, mn = d.getUTCMinutes();
-    depStr = h.toString().padStart(2,'0')+':'+mn.toString().padStart(2,'0');
-  }
-
-  var icon  = document.getElementById('boardAskIcon');
-  var title = document.getElementById('boardAskTitle');
-  var body  = document.getElementById('boardAskBody');
-  var btns  = document.getElementById('boardAskBtns');
-  if(icon)  icon.textContent  = '🚉';
-  if(title) title.textContent = '열차에 탑승하셨나요?';
-  if(body)  body.innerHTML    = (depStr ? '<b style="color:var(--gold);">'+depStr+'</b> 출발 시각이 됐습니다.<br>' : '')
-    + '지금 열차에 탑승하셨나요?';
-  if(btns) btns.innerHTML =
-    '<button onclick="_boardAskYes()" style="width:100%;padding:12px;background:linear-gradient(135deg,#1a7a3a,#30d158);color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:800;cursor:pointer;margin-bottom:8px;">✅ 네, 탑승했습니다</button>'
-    +'<button onclick="_boardAskNo()" style="width:100%;padding:11px;background:#2c2c2e;color:var(--sub);border:1px solid var(--border2);border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:8px;">❌ 아니요, 못 탔어요</button>'
-    +'<button onclick="_boardAskNext()" style="width:100%;padding:11px;background:#1c3a5e;color:#0a84ff;border:1px solid rgba(10,132,255,.3);border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;">🕐 다음 열차 대기</button>';
-
-  _vibratePattern([200,100,200]);
-  m.style.display='flex'; m.classList.add('on');
-}
 
 function _closeBoardAskModal() {
   var m = document.getElementById('boardAskModal');
@@ -32590,13 +31144,6 @@ function _boardAskNext() {
   }
 }
 
-// ── 경로 설정 시 탑승 버튼 표시 ─────────────────────────
-function _showQuickBoardBtn(show) {
-  var wrap = document.getElementById('quickBoardWrap');
-  var btn  = document.getElementById('quickBoardBtn');
-  if(wrap) wrap.style.display = show ? 'block' : 'none';
-  if(btn && !show) { btn.textContent='🚇 탑승하기'; btn.style.background='linear-gradient(135deg,#1a7a3a,#30d158)'; }
-}
 
 // ══════════════════════════════════════════════════════
 // 도보 안내 모달 시스템
@@ -33191,15 +31738,6 @@ try {
   }
 } catch(e){}
 
-// localStorage 접근 오류 안전 처리
-function safeGetItem(key, def){
-  try{ return localStorage.getItem(key) || def; }
-  catch(e){ return def; }
-}
-function safeSetItem(key, val){
-  try{ localStorage.setItem(key, val); return true; }
-  catch(e){ return false; }
-}
 
 // ── Median 앱 GPS 초기화 ──────────────────────────
   // Median WebView에서 위치 권한 팝업이 한 번만 뜨도록 처리
@@ -33558,59 +32096,6 @@ function _fetchRealtimeNews() {
 }
 window._fetchRealtimeNews = _fetchRealtimeNews;
 
-// 실시간 뉴스 1건 → 커뮤니티 게시글 객체로 변환
-function _makeNewsPostFromRealtime() {
-  // ★ 지하철 뉴스 + 그날의 핫이슈 뉴스 통합, 정치·분쟁 기사 제외
-  var pool = [];
-  try{
-    if(typeof _REALTIME_NEWS !== 'undefined') pool = pool.concat(_REALTIME_NEWS||[]);
-    if(typeof _LT_HOT_NEWS !== 'undefined')   pool = pool.concat(_LT_HOT_NEWS||[]);
-  }catch(e){}
-  pool = pool.filter(function(n){
-    if(!n || !n.title) return false;
-    if(typeof _postBanned==='function' && _postBanned(n.title)) return false;
-    // 5개월 내 같은 기사 주제로 이미 글을 썼으면 제외
-    if(typeof _postUsed==='function' && _postUsed('post_news_' + _postSlug(n.title))) return false;
-    if(typeof _postDupInList==='function' && _postDupInList(n.title)) return false;
-    return true;
-  });
-  if(!pool.length) return null;
-  var news = _rnd(pool);
-  if(typeof _postMark==='function') _postMark('post_news_' + _postSlug(news.title));
-  var now = Date.now();
-  // 기사 발행시각 파싱 (실패 시 현재시각 근처)
-  var pubMs = now - _rndInt(300000, 7200000);
-  if(news.pubDate) {
-    var pt = Date.parse(news.pubDate);
-    if(!isNaN(pt)) pubMs = pt;
-  }
-  var bodyText = '[' + (news.source || '뉴스') + '] 보도\n\n' +
-                 '자세한 내용은 아래 링크에서 확인하세요.' +
-                 (news.link ? '\n\n🔗 ' + news.link : '');
-  var post = {
-    id:    _POST_ID++,
-    cat:   '뉴스',
-    tag:   '뉴스',
-    title: (typeof _htmlDecode === 'function') ? _htmlDecode(news.title) : news.title,
-    body:  bodyText,
-    link:  news.link || '',
-    nick:  _rnd(_NICK_POOL),
-    line:  '',
-    time:  pubMs,
-    likes: _rndInt(0, 50),
-    like:  _rndInt(0, 50),
-    lol:   _rndInt(0, 15),
-    sad:   _rndInt(0, 10),
-    views: _rndInt(50, 500),
-    cmts:  [],
-    _realtimeNews: true,
-
-  };
-  // ★ 실제 기사 제목 주제 분석 기반 연관 댓글
-  post.cmts = _initCmts(pubMs, post);
-  return post;
-}
-window._makeNewsPostFromRealtime = _makeNewsPostFromRealtime;
 
 
 
@@ -33962,44 +32447,6 @@ window.addEventListener('resize', function() {
 
 
 
-// ── GPS + SUBWAY_MASTER_DB 연동 150m 도착 검증 ────────────────
-function checkGpsArrivalWithMaster(lat, lng) {
-  if(!S.route || S.boardingState !== 'boarding') return;  // ★ 조건 오류 수정
-  const path = S.route.path;
-  if(S.curIdx >= path.length - 1) return;
-  
-  const nextStnName = path[S.curIdx + 1];
-  // SUBWAY_MASTER_DB에서 정확한 GPS 좌표 가져오기
-  const masterInfo = getMasterInfo(nextStnName, S.route.lp[S.curIdx + 1]);
-  
-  let checkLat, checkLng;
-  if(masterInfo && masterInfo.lat && masterInfo.lng) {
-    checkLat = masterInfo.lat;   // 역사마스터 실측 좌표
-    checkLng = masterInfo.lng;
-  } else {
-    // 폴백: STNDB 좌표
-    const stn = STNDB.find(s => s.name === nextStnName);
-    if(!stn) return;
-    checkLat = stn.lat;
-    checkLng = stn.lng;
-  }
-  
-  const dist = hav(lat, lng, checkLat, checkLng);
-  if(dist <= 150) {
-    console.log('[GPS 도착]', nextStnName, '150m 이내:', Math.round(dist)+'m',
-                '(역사마스터 좌표 사용)');
-    // 타임스탬프 동기화 + 역 전진
-    if(S.boardedAt) {
-      const arrTimes = _buildStationArrivalTimes();
-      if(arrTimes && arrTimes[S.curIdx]) {
-        const diff = Date.now() - arrTimes[S.curIdx];
-        S.boardedAt -= diff;
-      }
-    }
-    S.curIdx = Math.max(S.curIdx, Math.max(0, path.indexOf(nextStnName) - 1));   // ★ 역행 차단
-    advanceToNextStation('GPS_MASTER');
-  }
-}
 
 function startApiPoll(){
   stopApiPoll();
@@ -34829,12 +33276,6 @@ function addGpsBuf(lat,lng,acc,ts){
   GPS_BUF.push({lat,lng,acc,ts});
   if(GPS_BUF.length>6) GPS_BUF.shift();
 }
-function gpsWeightedMean(){
-  if(!GPS_BUF.length) return null;
-  let wLat=0,wLng=0,wSum=0;
-  GPS_BUF.forEach(p=>{const w=1/Math.max(1,p.acc);wLat+=p.lat*w;wLng+=p.lng*w;wSum+=w;});
-  return{lat:wLat/wSum,lng:wLng/wSum};
-}
 
 // [수정] 하버사인(Haversine) 공식 기반 정밀 GPS 매칭
 function haversineM(lat1, lon1, lat2, lon2){
@@ -35322,33 +33763,7 @@ window._safeLS = _safeLS;
 
 var _FAV_KEY = 'mk_favorites', _RECENT_KEY = 'mk_recent';
 
-// 최근 경로 저장 (경로 탐색 성공 시 호출)
-function _saveRecent(startName, destName){
-  if(!startName || !destName) return;
-  var list = _safeLS.get(_RECENT_KEY, []);
-  // 중복 제거 후 맨 앞에 추가
-  list = list.filter(function(r){ return !(r.s===startName && r.d===destName); });
-  list.unshift({ s: startName, d: destName, t: Date.now() });
-  if(list.length > 6) list = list.slice(0, 6);  // 최근 6개만
-  _safeLS.set(_RECENT_KEY, list);
-  _renderFavRecent();
-}
 
-// 즐겨찾기 토글
-function _toggleFav(startName, destName){
-  if(!startName || !destName) return;
-  var list = _safeLS.get(_FAV_KEY, []);
-  var idx = list.findIndex(function(f){ return f.s===startName && f.d===destName; });
-  if(idx >= 0){ list.splice(idx, 1); }       // 이미 있으면 제거
-  else {
-    if(list.length >= 8){ if(typeof toast==='function') toast('즐겨찾기는 최대 8개'); return; }
-    list.push({ s: startName, d: destName });  // 추가
-    if(typeof toast==='function') toast('⭐ 즐겨찾기 추가');
-  }
-  _safeLS.set(_FAV_KEY, list);
-  _renderFavRecent();
-}
-window._toggleFav = _toggleFav;
 
 // 즐겨찾기 삭제 (× 버튼 전용)
 function _removeFav(startName, destName){
@@ -35848,14 +34263,6 @@ window.renderRouteSegCards = renderRouteSegCards;
 
 // ── 전체 경로 타임라인 토글 ────────────────────────────────
 var _timelineExpanded = false;
-function toggleFullTimeline() {
-  _timelineExpanded = !_timelineExpanded;
-  var tl  = document.getElementById('kakaoTimeline');
-  var btn = document.getElementById('timelineToggleBtn');
-  if(tl)  tl.style.display  = _timelineExpanded ? 'block' : 'none';
-  if(btn) btn.textContent   = _timelineExpanded ? '전체 경로 접기 ▲' : '전체 경로 보기 ▼';
-}
-window.toggleFullTimeline = toggleFullTimeline;
 
 function renderPath(r){
   // ★ pathSection(세로 상세)은 화면에 표시하지 않음 — 데이터 계산용으로만 사용
@@ -36257,12 +34664,6 @@ function switchRouteTab(el, type){
 window.switchRouteTab = switchRouteTab;
 
 /* ── 전국 노선도: 탭으로 전환 ── */
-function openFullMap(){
-  // 노선도 탭으로 전환
-  const mapTab=document.getElementById('ni-map');
-  if(mapTab) switchTab('map', mapTab);
-}
-function closeFullMap(){ }
 /* switchMapRegion → 아래 정의 */
 
 /* ════════════════════════════════════════════════════
@@ -36277,50 +34678,14 @@ function closeFullMap(){ }
 let _sm={scale:1,x:0,y:0,lastDist:0,px1:0,py1:0,dragging:false,mx:0,my:0};
 const SM_MIN=0.3, SM_MAX=6;
 
-function _smApply(animate){
-  const c=document.getElementById('seoulMapCanvas');
-  if(!c) return;
-  if(animate){
-    c.style.transition='transform 0.25s cubic-bezier(0.25,0.46,0.45,0.94)';
-    setTimeout(()=>{ c.style.transition=''; }, 260);
-  }
-  c.style.transform=`translate(${_sm.x}px,${_sm.y}px) scale(${_sm.scale})`;
-}
 
-function seoulMapZoom(factor,fromBtn){}  // 네이티브 스크롤 사용
-
-function seoulMapReset(){
-  const sv=document.getElementById('seoulMapView');
-  if(sv){sv.scrollTop=0;sv.scrollLeft=0;}
-}
+  // 네이티브 스크롤 사용
 
 
 
 
 
-function _extractStnNameFromEl(el) {
-  // S* 클래스(텍스트) 또는 P* 클래스(역원)에서 역명 추출
-  var text = '';
-  // 텍스트 노드에서 직접
-  if(el.tagName === 'text' || el.tagName === 'TEXT') {
-    text = el.textContent || el.innerText || '';
-  }
-  // use 태그 (역 심벌)
-  if(el.tagName === 'use' || el.tagName === 'USE') {
-    // 인근 텍스트 요소 찾기
-    var g = el.closest('g');
-    if(g) {
-      var t = g.querySelector('text');
-      if(t) text = t.textContent || '';
-    }
-  }
-  // g 그룹 → 자식 text
-  if(el.tagName === 'g' || el.tagName === 'G') {
-    var t = el.querySelector('text');
-    if(t) text = t.textContent || '';
-  }
-  return text.trim().replace(/\s+/g, '');
-}
+
 
 
 // ── SVG text 직접 클릭 방식 (참조 index-9.html) ─────────────
@@ -36689,22 +35054,7 @@ function renderSeoulMap() {
 }
 window.renderSeoulMap = renderSeoulMap;
 
-// ── gmView: SVG 뷰 초기화 ─────────────────────────────────────
-function gmView() {
-  var gv = document.getElementById('gmSvgView');
-  if(gv) gv.style.display = 'block';
-  requestAnimationFrame(function(){
-    if(typeof _pzFit === 'function') _pzFit();
-  });
-}
-window.gmView = gmView;
 
-// ── renderCommunity: 커뮤니티 탭 렌더링 ──────────────────────
-function renderCommunity() {
-  if(typeof renderCommList==='function') renderCommList();
-  else if(typeof renderFeed==='function') renderFeed();
-}
-window.renderCommunity = renderCommunity;
 
 
 
@@ -37052,12 +35402,6 @@ function _exitDeadReckoning() {
 }
 window._enterDeadReckoning = _enterDeadReckoning;
 window._exitDeadReckoning  = _exitDeadReckoning;
-// 요구사항3: EnterTunnelMode = 기존 Dead Reckoning(추측항법)의 명시적 별칭
-// GPS 노이즈/터널 시 표준 주행시간 타이머로 강제 전환 (중복 구현 방지)
-function EnterTunnelMode(){ return _enterDeadReckoning(); }
-function ExitTunnelMode(){  return _exitDeadReckoning(); }
-window.EnterTunnelMode = EnterTunnelMode;
-window.ExitTunnelMode  = ExitTunnelMode;
 
 // ══════════════════════════════════════════════════════════════
 // 요구사항2: 30초 GPS 침묵 watchdog — 미탑승/지연 시 다음 열차 기점 재연산
@@ -37068,32 +35412,7 @@ function _clearTrainAlerts() {
   _trainAlertTimers.forEach(function(t){ clearTimeout(t); });
   _trainAlertTimers = [];
 }
-function _scheduleTrainAlerts(depMs, waitMin, depTimeStr) {
-  // ★ 비활성화 — _showRouteReadyPopup 단일 팝업으로 통합
-  _clearTrainAlerts();
-}
 
-function _showTrainUrgentModal(type, depTimeStr, nextInfo) {
-  // 기존 gpsModal 구조 재활용
-  var m = document.getElementById('gpsModal');
-  if(!m) { toast(type === 'run' ? '🏃 지금 뛰면 탈 수 있어요!' : '⏳ 다음 열차를 기다리세요'); return; }
-  var icon  = document.getElementById('gmIcon');
-  var title = document.getElementById('gmTitle');
-  var body  = document.getElementById('gmBody');
-  var btns  = document.querySelector('#gpsModal .gm-btns');
-  if(type === 'run') {
-    if(icon)  icon.textContent  = '🏃';
-    if(title) title.textContent = '지금 뛰면 탈 수 있어요!';
-    if(body)  body.innerHTML    = '<b>' + (depTimeStr||'') + '</b> 출발 열차까지 약 3분 남았습니다.<br>서두르면 탑승 가능합니다!';
-    if(btns)  btns.innerHTML    = '<button class="gm-yes" onclick="document.getElementById(\'gpsModal\').classList.remove(\'on\');document.getElementById(\'gpsModal\').style.display=\'none\';">확인</button>';
-  } else {
-    if(icon)  icon.textContent  = '⏳';
-    if(title) title.textContent = '다음 열차를 기다리세요';
-    if(body)  body.innerHTML    = '<b>' + (depTimeStr||'') + '</b> 출발 열차까지 1분 남았습니다.<br>다음 열차: <b>' + (nextInfo||'잠시 후') + '</b> 도착 예정';
-    if(btns)  btns.innerHTML    = '<button class="gm-yes" onclick="document.getElementById(\'gpsModal\').classList.remove(\'on\');document.getElementById(\'gpsModal\').style.display=\'none\';">확인</button>';
-  }
-  _openGpsModal();
-}
 
 function _startSilenceWatchdog() {
   _stopSilenceWatchdog();
@@ -38816,13 +37135,6 @@ function updateFabVisibility(tab){
 }
 window.updateFabVisibility = updateFabVisibility;
 
-// ── openRouteModal ───────────────────────────────────────────
-function openRouteModal(){
-  var bd=document.getElementById('bdrop'), sh=document.getElementById('sheet');
-  if(bd) bd.classList.add('on');
-  if(sh) sh.classList.add('on');
-}
-window.openRouteModal = openRouteModal;
 
 function closeRouteModal(){
   var bd=document.getElementById('bdrop'), sh=document.getElementById('sheet');
@@ -39581,11 +37893,6 @@ function _shopRng(seed){
     return ((t^t>>>14)>>>0)/4294967296;
   };
 }
-function _shopShuffle(arr, rng){
-  var a=arr.slice();
-  for(var i=a.length-1;i>0;i--){ var j=Math.floor(rng()*(i+1)); var t=a[i]; a[i]=a[j]; a[j]=t; }
-  return a;
-}
 
 // ── 상품 URL → 상황 테마(SHOP_DATA의 t) 매핑 ──
 var _shopThemeCache=null;
@@ -39903,14 +38210,6 @@ var _shopSlotIdx=_curShopSlot();
 var _shopTimerFn=null;
 var _shopWxTried=false;
 
-// 캐시된 날씨에서 강수확률(%) 추출. 없으면 -1
-function _shopRain(){
-  try{
-    var best=null,ts=0;
-    for(var k in _wxMem){ var m=_wxMem[k]; if(m&&m.data&&m.ts>ts){ts=m.ts;best=m.data;} }
-    return best?(best.rain||0):-1;
-  }catch(e){ return -1; }
-}
 // 날씨 캐시가 없으면 위치로 1회 채워오고 다시 렌더 (best-effort)
 function _shopWarmWeather(){
   if(_shopWxTried) return; _shopWxTried=true;
@@ -39922,13 +38221,6 @@ function _shopWarmWeather(){
   }catch(e){}
 }
 
-function getShopCat(){
-  var slots=_shopSlots(), s=slots[_shopSlotIdx%slots.length];
-  var rain=_shopRain();
-  var wx = rain>=60 ? ' \u00b7 \u2614\ube44' : rain>=30 ? ' \u00b7 \ud83c\udf27\ube44 \uac00\ub2a5' : '';
-  return '\uD83D\uDD50 ' + s.time + ' \u00B7 ' + s.label + (_shopIsWeekend()?' (\uC8FC\uB9D0)':'') + wx;
-}
-window.getShopCat=getShopCat;
 
 function renderShop(cat){
   var grid=document.getElementById('shopGrid'); if(!grid) return;
@@ -39949,8 +38241,6 @@ function refreshShop(){
 }
 window.refreshShop=refreshShop;
 
-function startShopTimer(){ /* 10분 자동 새로고침 제거 — 날짜·시간 시드로 고정 */ }
-window.startShopTimer=startShopTimer;
 
 // ── 커뮤니티 ────────────────────────────────────────────────
 var _commFilter='all';
@@ -40547,19 +38837,6 @@ function _lrPoll(first){
       if(!j || !j.ok){ _lrLoadFail(); return; }
       _lrAppend(j.msgs||[]); _lrRenderAlert(j.alert); _lrRenderOfficial(line);
     }).catch(function(){ _lr.busy=false; if(line===_lr.line) _lrLoadFail(); });
-}
-function _lrPost(kind, text, stn){
-  var id=''; try{ id=(_getCommId()||''); }catch(e){}
-  if(!id){ if(typeof toast==='function') toast('설정에서 커뮤니티 아이디를 등록하면 글과 제보를 남길 수 있어요'); return Promise.resolve(false); }
-  return fetch(_lrBase()+'/lroom',{ method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ line:_lr.line, nick:id, text:text||'', kind:kind, stn:stn||'' }) })
-    .then(function(r){ return r.json().catch(function(){ return null; }).then(function(j){ return { ok:r.ok, j:j }; }); })
-    .then(function(x){
-      if(x.ok && x.j && x.j.ok){ _lrPoll(false); return true; }
-      var e=(x.j&&x.j.error)||'';
-      if(typeof toast==='function') toast(e==='filtered' ? '부적절한 표현이 있어 올리지 못했어요' : e==='rate limited' ? '잠시 후 다시 시도해 주세요(시간당 한도)' : '올리지 못했어요. 잠시 후 다시 시도해 주세요');
-      return false;
-    }).catch(function(){ if(typeof toast==='function') toast('네트워크가 불안정해요'); return false; });
 }
 function _lrSend(){
   var inp=document.getElementById('lrInput'); if(!inp) return;
@@ -41554,17 +39831,6 @@ function _ltAdd(msg){
   _renderLiveTalk(); _renderChatTab();
 }
 
-// ── 뉴스 키워드 추출 (제목에서 핵심 명사구) ──
-function _ltNewsKeyword(title){
-  if(!title) return '';
-  // 언론사/괄호/특수문자 제거 후 핵심 어구만
-  var t = String(title);
-  if(typeof _htmlDecode === 'function') t = _htmlDecode(t);   // &apos; 등 엔티티 디코드
-  t = t.replace(/\[[^\]]*\]/g,'').replace(/\([^)]*\)/g,'').trim();
-  // 너무 길면 앞부분만
-  if(t.length > 24) t = t.slice(0, 24) + '…';
-  return t;
-}
 
 // ── 실시간 뉴스 반응 멘트 생성 (실제 기사 제목 기반) ──
 var _LT_NEWS_REACT = [
@@ -41576,26 +39842,6 @@ var _LT_NEWS_REACT = [
   '"{kw}" 보고 좀 놀랐네요',
   '"{kw}" 관련해서 다들 어떻게 봄?',
 ];
-function _ltNewsMsg(){
-  var pool = [];
-  try{
-    if(typeof _LT_HOT_NEWS !== 'undefined') pool = pool.concat(_LT_HOT_NEWS||[]);
-    if(typeof _REALTIME_NEWS !== 'undefined') pool = pool.concat(_REALTIME_NEWS||[]);
-  }catch(e){}
-  // ★ 정치·분쟁 기사 제외
-  pool = pool.filter(function(n){
-    return n && n.title && !(typeof _ltIsBanned==='function' && _ltIsBanned(n.title));
-  });
-  if(!pool.length) return null;
-  var news = _rnd(pool);
-  var kw = _ltNewsKeyword(news.title);
-  if(!kw || (typeof _ltIsBanned==='function' && _ltIsBanned(kw))) return null;
-  // ★ 6개월 내 다룬 주제면 사용하지 않음
-  if(typeof _ltTopicUsed==='function' && _ltTopicUsed('hot_'+_ltKeySlug(kw))) return null;
-  if(typeof _ltTopicMark==='function') _ltTopicMark('hot_'+_ltKeySlug(kw));
-  var tpl = _rnd(_LT_NEWS_REACT);
-  return tpl.replace('{kw}', kw);
-}
 
 
 // ══════════════════════════════════════════════════════════════════════
@@ -42965,238 +41211,6 @@ async function refreshETA(currentIndex) {
 }
 window.refreshETA = refreshETA;
 
-async function triggerRealtimeChain(route) {
-  if(!route || !route.path || route.path.length < 2) return;
-  if(!S || !S.start) return;
-  if(typeof _IS_WEBVIEW_BLOCKED !== 'undefined' && _IS_WEBVIEW_BLOCKED) return;
-
-  var baseMs    = (typeof getBaseTimeMs==='function') ? getBaseTimeMs() : Date.now();
-  // ★ 운행 종료 시간대: 기준 시각을 첫차 시각으로 당겨 ETA를 첫차 기준으로 계산
-  if(typeof checkRouteOperating === 'function'){
-    var _bd = new Date(baseMs);
-    var _curMin = _bd.getHours()*60 + _bd.getMinutes();
-    var _op = checkRouteOperating(route, _curMin);
-    if(_op && !_op.ok && _op.firstTrainMin != null){
-      // 첫차 시각으로 baseMs 설정 (오늘 첫차가 이미 지난 새벽이면 오늘 첫차, 아니면 그대로)
-      var _first = _op.firstTrainMin;
-      var _firstMs = new Date(_bd);
-      _firstMs.setHours(Math.floor(_first/60), _first%60, 0, 0);
-      // 현재가 첫차 이전(새벽 0~5시)이면 오늘 첫차, 막차 후 심야면 다음날 첫차
-      if(_first < _curMin){ _firstMs.setDate(_firstMs.getDate()+1); }
-      baseMs = _firstMs.getTime();
-      console.log('[연쇄예측] 운행종료 → 첫차 기준:', new Date(baseMs).toLocaleTimeString());
-    }
-  }
-  var startName = S.start.name;
-  var startLine = S.start.line;
-  var cleanNm   = startName.replace(/역$/, '').trim();
-
-  console.log('[연쇄예측] ▶ 출발역:', startName, '기준시각:', new Date(baseMs).toLocaleTimeString());
-
-  // ── STEP 1: seoulFetch로 realtimeArrivalList 전체 취득 ──────
-  var arrList = null;
-  try {
-    var raw = await seoulFetch('realtimeStationArrival/1/5/' + encodeURIComponent(cleanNm), 5000);
-    if(raw && raw.realtimeArrivalList && raw.realtimeArrivalList.length) {
-      arrList = raw.realtimeArrivalList;
-      console.log('[연쇄예측] API 수신:', arrList.length + '건');
-    }
-  } catch(e) { arrList = null; }
-
-  // ── STEP 2: 기준시각 이후 첫 열차 자동 매칭 ────────────────
-  // barvlDt: 도착까지 남은 초 / arvlCd: 0=진입 1=도착 2=출발예정 3=전역출발 4=전전역출발 99=정보없음
-  var targetDepMs = baseMs;
-  var matchedTrain = null;
-
-  if(arrList && arrList.length) {
-    // 같은 호선 + 방향 우선 필터
-    var direction = S._nextTrainDir || '하행';
-    var subwayId  = (typeof getSubwayIdByLine==='function') ? getSubwayIdByLine(startLine) : '';
-
-    var filtered = arrList.filter(function(t) {
-      var lineMatch = !subwayId || !t.subwayId || t.subwayId === subwayId;
-      var dirMatch  = !t.updnLine || t.updnLine.indexOf(direction) >= 0 || t.updnLine === direction;
-      return lineMatch && dirMatch;
-    });
-    if(!filtered.length) filtered = arrList; // 필터 결과 없으면 전체 사용
-
-    // barvlDt(남은 초) 기준 정렬 → 기준시각 이후 첫 열차 선택
-    filtered.sort(function(a, b){ return parseInt(a.barvlDt||9999) - parseInt(b.barvlDt||9999); });
-
-    for(var fi = 0; fi < filtered.length; fi++) {
-      var t = filtered[fi];
-      var remainSec  = parseInt(t.barvlDt || 0);
-      var tArriveMs  = Date.now() + remainSec * 1000;
-      // 기준시각 이후에 도착하는 열차 = 탑승 가능한 첫 열차
-      if(tArriveMs >= baseMs) {
-        matchedTrain  = t;
-        targetDepMs   = tArriveMs;
-        console.log('[연쇄예측] ✅ 타겟 열차 매칭:', t.btrainNo||'?', '/' , remainSec+'초 후 /', t.arvlMsg2||'', '/ arvlCd:', t.arvlCd);
-        break;
-      }
-    }
-    // 모든 열차가 기준시각 이전 → 가장 마지막 열차 사용
-    if(!matchedTrain && filtered.length) {
-      matchedTrain = filtered[filtered.length - 1];
-      var rs2 = parseInt(matchedTrain.barvlDt || 0);
-      targetDepMs = Date.now() + rs2 * 1000;
-      console.log('[연쇄예측] ⚠ 기준시각 이전 열차만 있음 → 마지막 열차 사용:', rs2+'초 후');
-    }
-  }
-
-  // API 실패 시 fallback: 시각표 기반 다음 열차 (기준시각 격자에 정확히 맞춤)
-  if(!matchedTrain) {
-    var direction2 = S._nextTrainDir || '하행';
-    // ★ 방향 자동 판별 (출발역→다음역 STNDB 순서)
-    if(typeof STNDB !== 'undefined' && route.path && route.path.length > 1){
-      var _ls = STNDB.filter(function(s){ return s.line === startLine; });
-      var _ci = _ls.findIndex(function(s){ return s.name === route.path[0]; });
-      var _ni = _ls.findIndex(function(s){ return s.name === route.path[1]; });
-      if(_ci>=0 && _ni>=0) direction2 = (_ci<_ni) ? '하행' : '상행';
-    }
-    var bNow2 = new Date(baseMs);
-    var baseTotalMin = bNow2.getHours()*60 + bNow2.getMinutes();
-    if(typeof getNextDepartureMins === 'function') {
-      // ★ 기준시각(baseTotalMin)을 넘겨 그 시점 이후 실제 다음 열차 시각 조회
-      var nextMins = getNextDepartureMins(startLine, startName, direction2, baseTotalMin);
-      if(nextMins != null) {
-        var wait = ((nextMins % 1440) + 1440) % 1440 - baseTotalMin;
-        if(wait < 0) wait += 1440;
-        if(wait >= 0 && wait <= 120) {
-          targetDepMs = baseMs + wait * 60000;
-          console.log('[연쇄예측] 시각표 출발:', new Date(targetDepMs).toLocaleTimeString(), '(대기', wait+'분)');
-        }
-      }
-    }
-  }
-
-  // ── STEP 3: tp[] 기반 도미노 도착 예측 (환승역/경유역/목적지 전부) ──
-  // ★ 환승역 도착 시 갈아탈 노선의 실제 다음 열차 시각표를 재조회하여
-  //   대기시간을 cursor에 반영 (카카오맵 수준 정합성)
-  var stationETAs = [];
-  var cursor = targetDepMs;
-  for(var i = 0; i < route.path.length; i++) {
-    // ── 환승 판별: 직전 역과 노선이 다르면 환승역 ──
-    var isXfer = (i > 0 && route.lp && route.lp[i] && route.lp[i-1] && route.lp[i] !== route.lp[i-1]);
-    if(isXfer) {
-      var newLine = route.lp[i];
-      var xferStn = route.path[i];
-      // ── [방향 판별] 환승역과 다음 경유역의 STNDB 인덱스 비교 ──
-      var xferDir = '하행';
-      if(typeof STNDB !== 'undefined' && i + 1 < route.path.length) {
-        var lnStns2 = STNDB.filter(function(s){ return s.line === newLine; });
-        var curIdx2 = lnStns2.findIndex(function(s){ return s.name === xferStn; });
-        var nxtIdx2 = lnStns2.findIndex(function(s){ return s.name === route.path[i+1]; });
-        if(curIdx2 >= 0 && nxtIdx2 >= 0) xferDir = (curIdx2 < nxtIdx2) ? '하행' : '상행';
-      }
-      // ── 갈아탈 열차 실제 다음 출발시각 조회 ──
-      var waitSec = 240;  // 폴백 기본 대기 4분(240초)
-      if(typeof getNextDepartureMins === 'function') {
-        var cDate = new Date(cursor);
-        var cMin  = cDate.getHours() * 60 + cDate.getMinutes();
-        var nextDepMin = getNextDepartureMins(newLine, xferStn, xferDir, cMin);
-        // getNextDepartureMins는 현재시각 기준이므로, cursor 시각 기준 대기는
-        // 배차 간격으로 재산출 (cursor 시점에 맞춰 보정)
-        if(nextDepMin != null) {
-          var sched2 = (typeof LINE_SCHEDULE !== 'undefined') ? LINE_SCHEDULE[newLine] : null;
-          if(sched2 && sched2.interval) {
-            // cursor 분 기준 다음 열차까지 남은 시간 = interval 내 나머지
-            var firstM2 = (typeof timeToMin==='function') ? timeToMin(sched2.first) : 300;
-            var waited2 = ((cMin - firstM2) % sched2.interval + sched2.interval) % sched2.interval;
-            var w = sched2.interval - waited2;
-            waitSec = (w <= 0 ? sched2.interval : w) * 60;
-          } else {
-            // 배차정보 없으면 시각표 절대시각과의 차이로 대기 산출
-            var wMin = nextDepMin >= cMin ? (nextDepMin - cMin) : (1440 - cMin + nextDepMin);
-            if(wMin >= 0 && wMin <= 30) waitSec = wMin * 60;
-          }
-        }
-      }
-      cursor += waitSec * 1000;  // 환승 대기시간 점프
-      console.log('[연쇄예측] 환승 ' + xferStn + ' → ' + newLine + '(' + xferDir + ') 대기 ' + Math.round(waitSec/60) + '분');
-    }
-
-    stationETAs.push({
-      name:   route.path[i],
-      line:   route.lp  ? (route.lp[i]  || '') : '',
-      etaMs:  cursor
-    });
-    var segSec = (route.tp && route.tp[i] > 0) ? route.tp[i] : 120;
-    cursor += segSec * 1000;
-  }
-
-  // ── STEP 4: 전역 상태 저장 ──────────────────────────────────
-  S._stationETAs  = stationETAs;
-  S._targetDepMs  = targetDepMs;
-  if(matchedTrain) {
-    S._matchedTrain = matchedTrain;
-    S._nextTrainMs  = targetDepMs;
-    S._nextTrainDepStr = (typeof fmtKST==='function') ? fmtKST(targetDepMs) : '';
-  }
-
-  // ── [반응형] ETA 갱신 구독 등록 (1회만) ──────────────────────
-  // refreshETA가 S._stationETAs를 갱신하면 타임라인 시각을 즉시 반영
-  if(!S._etaBusBound && typeof _etaBus !== 'undefined') {
-    S._etaBusBound = true;
-    _etaBus.on('eta-updated', function(data){
-      try {
-        if(!S._stationETAs || !S.route) return;
-        // 타임라인 각 역 시각 텍스트만 가볍게 갱신 (전체 재렌더 X)
-        S._stationETAs.forEach(function(e, idx){
-          var el = document.getElementById('ktl-' + idx);
-          if(el){
-            var tEl = el.querySelector('.ktl-time');
-            if(tEl && typeof fmtKST === 'function') tEl.textContent = fmtKST(e.etaMs);
-          }
-        });
-        // 최종 도착시각 배지 갱신
-        var lastEta = S._stationETAs[S._stationETAs.length-1];
-        if(lastEta && typeof fmtKST === 'function'){
-          var arrEl2 = document.getElementById('routeArriveTime');
-          var ab2    = document.getElementById('arriveBtnTime');
-          if(arrEl2) arrEl2.textContent = '도착 ' + fmtKST(lastEta.etaMs);
-          if(ab2)    ab2.textContent    = fmtKST(lastEta.etaMs);
-        }
-        // ★ 가로 타임라인도 동기화
-        if(typeof renderHorizontalTimeline === 'function') renderHorizontalTimeline();
-      } catch(e){ /* 무시 */ }
-    });
-  }
-
-  var finalArrMs = stationETAs.length ? stationETAs[stationETAs.length-1].etaMs : cursor;
-
-  // ── STEP 5: 타임라인 + UI 갱신 ──────────────────────────────
-  // renderKakaoTimeline에 targetDepMs 전달 → 도미노 계산 반영
-  if(typeof renderKakaoTimeline === 'function') {
-    renderKakaoTimeline(route, targetDepMs);
-  }
-  if(typeof fmtKST === 'function') {
-    var depEl = document.getElementById('routeDepartTime');
-    var arrEl = document.getElementById('routeArriveTime');
-    var ab    = document.getElementById('arriveBtnTime');
-    var depStr = fmtKST(targetDepMs);
-    var arrStr = fmtKST(finalArrMs);
-    if(matchedTrain) {
-      var waitMinShow = Math.max(0, Math.round((targetDepMs - Date.now()) / 60000));
-      if(depEl) depEl.textContent = '출발 ' + depStr + ' (다음열차 ' + waitMinShow + '분 후)';
-    } else {
-      if(depEl) depEl.textContent = '출발 ' + depStr;
-    }
-    if(arrEl) arrEl.textContent = '도착 ' + arrStr;
-    if(ab)    ab.textContent    = arrStr;
-  }
-  // train-pin 활성
-  var pin = document.getElementById('trainPin');
-  if(pin && matchedTrain) {
-    pin.classList.remove('waiting');
-    pin.classList.add('waiting');
-  }
-
-  console.log('[연쇄예측] ✅ 완료 → 출발', new Date(targetDepMs).toLocaleTimeString(),
-              '/ 도착', new Date(finalArrMs).toLocaleTimeString(),
-              '/ 경유', stationETAs.length + '역');
-}
-window.triggerRealtimeChain = triggerRealtimeChain;
 
 function renderFeed(){
   var feed=document.getElementById('feed');
@@ -43208,12 +41222,6 @@ function renderFeed(){
 }
 window.renderFeed = renderFeed;
 
-function openLineFilter(){
-  var lines=['전체','1호선','2호선','3호선','4호선','5호선','6호선','7호선','8호선'];
-  var sel=prompt('노선 선택: '+lines.join(', '));
-  if(sel){ renderFeed(); }
-}
-window.openLineFilter = openLineFilter;
 
 
 
