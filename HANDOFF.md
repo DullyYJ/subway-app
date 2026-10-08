@@ -335,3 +335,19 @@
   - 나머지 290건은 해시까지 완전 동일. 다른 탭(less/walk/sub/bus) 변경 0, 탭 구성 변경 0.
   - 응답 시간 중앙/p90: s8 666/1311ms → s10 549/1120ms(차이는 캐시 상태 영향, 악화 없음).
 - 파일: tools/route-speed/patch_fasttab.js, make.sh(체인에 corridor·fasttab 추가), patch_version.js(s10). 운영 엔진 버전 `route-v2-2026-10-08s10`. 롤백은 s8 재배포.
+
+## 2026-10-08 (밤) 전 탭 기능 점검 — 알림·오버레이·탭 연결 (앱 수정 5건, 엔진 변경 없음)
+요청: "각 탭의 모든 기능이 정상 작동하나, 알림·오버레이 포함 유기적으로 연결되는지 점검". 헤드리스 Chromium(가짜 시계·가짜 Capacitor 플러그인·모의 서버)으로 시나리오 시험을 새로 만들어 돌렸다.
+**새 시험(모두 `node test/<파일>`로 실행, 현재 전부 통과)**
+- `test/journey_alerts.ui.test.js`(26) — 환승·하차 알림 순서/중복, 설정 스위치별 차단, 구형 경로 알림, 오버레이 갱신·경고 단계·keepAlive, 하차 전 추천, 출퇴근 브리핑.
+- `test/journey_e2e.ui.test.js`(24) — 홈 검색→결과 4탭→세부경로→경로 확정→GPS 이동→알림·오버레이·상주알림→× 종료·도중 취소.
+- `test/tabs_smoke.ui.test.js`(37) — 5개 탭 전환, 커뮤니티(게시판·댓글·공감·뉴스·실시간소통·설정 스위치·테마·아이디), 노선도(버스 주변/즐겨찾기·지하철 SVG·역 팝업→홈·엔진 호출), 쇼핑, 맛집(경로 없음/있음), 알림 탭 처리(환승 알림 팝업·닫기·출퇴근 브리핑).
+- `test/helpers/engine_fixture.js` — 모의 엔진 응답.
+**고친 것(전부 `www/index.html`)**
+1. 알림 설정 스위치가 엉뚱한 알림을 막음: `_fireTransitAlert`/`_bgArrivalNotify`가 알림 종류(transfer/near_arrive/arrive 등)를 `showNotification`·`_notifAllowed`·`_vibrateFor`에 넘기지 않아 '환승 알림 끔'이 도착 알림까지, 반대로 도착 끔이 환승까지 영향. 종류별로 넘기도록 수정(기본값 동일).
+2. 홈 결과 카드의 × (`closeTransitResult`)가 오버레이·백그라운드 GPS·상주 알림·남은 알림을 안 껐음 → `_cleanupBgTracking()` 호출 추가.
+3. 맛집 탭을 다시 열면(공공데이터 캐시 10분) `_fetchPublicFood`가 `_foodPublicData=c.data`로 덮어써 서버 맛집이 사라짐 → `_foodMergeList`로 병합.
+4. 하늘 파스텔 테마에서 설정의 '다크 블랙' 카드 제목이 흰 글씨(배경만 밝아짐)라 안 보임 → 파스텔일 때 글자색도 테마색으로(CSS).
+5. 홈 출발지가 '내 위치 찾는 중...'에서 멈출 수 있음(첫 `getCurrentPosition` 무응답) → 실시간 위치 구독(`_startMyLocationLiveWatch`)이 위치를 받으면 그때 '내 위치'로 채움(수동·기존 출발지는 건드리지 않음).
+**확인했지만 문제 아님**: 노선도 지하철 탭의 역 선택→홈은 `svgSetRoute`→`fmapDoRoute`(엔진)로 간다. `onMapStnClick`/`mspSetRoute`/`_goHome`(앱 자체 BFS+경로 유형 선택창)은 호출처가 없는 옛 코드(죽은 코드, 지우지 않음). 버스 지도·목록은 320~412px 폭에서 겹치지 않음.
+**이 환경에서 못 본 것(실기기 필요)**: 실제 서버 응답(gentle-lab `/bus-stops`·`/tago`·`/weather`, board-writer, 맛집 서버 — 샌드박스에서 workers.dev 접속 불가), 실제 지도 타일, 안드로이드 알림·오버레이·백그라운드 위치 권한 동작. **새 APK 빌드 필요**(main push → Actions `Build APK`).
