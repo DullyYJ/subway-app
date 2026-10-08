@@ -351,3 +351,10 @@
 5. 홈 출발지가 '내 위치 찾는 중...'에서 멈출 수 있음(첫 `getCurrentPosition` 무응답) → 실시간 위치 구독(`_startMyLocationLiveWatch`)이 위치를 받으면 그때 '내 위치'로 채움(수동·기존 출발지는 건드리지 않음).
 **확인했지만 문제 아님**: 노선도 지하철 탭의 역 선택→홈은 `svgSetRoute`→`fmapDoRoute`(엔진)로 간다. `onMapStnClick`/`mspSetRoute`/`_goHome`(앱 자체 BFS+경로 유형 선택창)은 호출처가 없는 옛 코드(죽은 코드, 지우지 않음). 버스 지도·목록은 320~412px 폭에서 겹치지 않음.
 **이 환경에서 못 본 것(실기기 필요)**: 실제 서버 응답(gentle-lab `/bus-stops`·`/tago`·`/weather`, board-writer, 맛집 서버 — 샌드박스에서 workers.dev 접속 불가), 실제 지도 타일, 안드로이드 알림·오버레이·백그라운드 위치 권한 동작. **새 APK 빌드 필요**(main push → Actions `Build APK`).
+
+## 2026-10-08 (밤, 이어서) 추가 수정 4건 — 글 사라짐·맛집 서버 실패 안내·5분 뒤 옛 경로 팝업
+1. **게시판에 쓴 글이 약 3분 뒤 사라짐**: 글은 기기 안(`_AI_POSTS`)에만 있고 서버에 받는 라우트가 없어(board-writer에 글 등록 POST 없음), 서버 목록으로 갈아끼울 때 지워졌다. → `localStorage 'myPosts'`(최대 50개·30일)에 따로 보관해 서버 목록 위에 매번 얹는다(`_myPostsMerge`). id 는 `Date.now()`(서버 글 id 100번대와 겹침 방지). 캐시(`commPostsCache`)에는 넣지 않는다. **다른 사람에게는 여전히 보이지 않는다 — 공유하려면 board-writer에 글 등록 라우트(+검열)가 필요(YJ 결정 사항).**
+2. **맛집 서버 실패 안내**: 내장 목록(`STN_FOOD`)이 비어 있어 전부 서버 의존인데, 실패하면 스피너가 안 꺼지거나 "음식점이 없습니다"로 잘못 안내. → `_foodSrvFail` 표시 후 "맛집 정보를 불러오지 못했어요 · 새로고침" 안내. 서버가 성공했지만 비어 있으면 기존 문구.
+3. **노선도에서 경로를 정하면 5분 뒤 옛 '경로 유형 선택' 팝업이 뜸**: `startAutoRefresh`(5분 주기)와 `clearBaseTime`이 `S.start&&S.dest` 만 보고 옛 `doRoute`(앱 자체 BFS)를 불렀다. 엔진 경로(`_fmapDest` 있음)면 부르지 않도록 가드. (옛 BFS 코드 자체는 지우지 않음 — `toggleDestSearch`·`calcFmapRoute` 등 일부 호출처가 남아 있어 별도 정리 과제.)
+4. 쓸모없는 `X-Frame-Options` meta 제거(콘솔 오류 제거).
+시험: `test/tabs_smoke.ui.test.js` 41개(내 글 유지·맛집 실패/빈/복구·11분 경과 팝업 없음 추가) 전체 통과, 기존 시험 전부 통과.

@@ -10,7 +10,6 @@
 <!-- XSS/MIME 스니핑 방지 -->
 <meta http-equiv="X-Content-Type-Options" content="nosniff">
 <!-- 클릭재킹 방지: 동일 출처 프레임만 허용 -->
-<meta http-equiv="X-Frame-Options" content="SAMEORIGIN">
 <!-- XSS 필터 활성화 -->
 <meta http-equiv="X-XSS-Protection" content="1; mode=block">
 <!-- Referrer: 외부 링크 시 최소 정보만 전달 -->
@@ -2349,6 +2348,7 @@ function _foodServerBase(){
   try{ var v=localStorage.getItem('foodServer'); if(v) return v.replace(/\/+$/,''); }catch(e){}
   return _FOOD_SERVER_DEFAULT;
 }
+var _foodSrvFail = false;            // 마지막 맛집 서버 요청이 실패했는가(빈 목록을 '없음'과 구분)
 var _foodSrvCache = {};              // 좌표격자 → {ts, data}
 var _FOOD_SRV_TTL = 10*60*1000;
 var _FOOD_SRV_RADIUS = 1500;
@@ -2377,16 +2377,22 @@ function _foodFromServer(lat, lng, label){
   var c = _foodSrvCache[key];
   var diag = window._foodSrvDiag = { at: key, n: 0, err: null, cached: !!c };
   if(c && Date.now()-c.ts < _FOOD_SRV_TTL){
+    _foodSrvFail = false;
     diag.n = c.data.length;
     _foodPublicData = _foodMergeList(_foodPublicData, c.data);
     _renderFoodList(); return;
   }
+  _foodSrvFail = false;
   var url = _foodServerBase()+'/food?lat='+lat+'&lng='+lng+'&r='+_FOOD_SRV_RADIUS+'&limit='+_FOOD_SRV_LIMIT;
-  var done=false, tid=setTimeout(function(){ if(!done){ done=true; diag.err='timeout'; } }, 6000);
+  // ★ 2026-10-08: 서버가 실패·지연이면 목록이 '불러오는 중' 스피너로 멈추거나 '음식점이 없다'고 잘못 알렸다.
+  //   실패했다는 표시(_foodSrvFail)를 남기고 다시 그려서 '불러오지 못했어요' 안내를 보여 준다.
+  var _failNow = function(why){ diag.err = why; _foodSrvFail = true; try{ _renderFoodList(); }catch(e){} };
+  var done=false, tid=setTimeout(function(){ if(!done){ done=true; _failNow('timeout'); } }, 6000);
   fetch(url).then(function(r){ return r.ok ? r.json() : null; }).then(function(d){
     if(done) return; done=true; clearTimeout(tid);
     var items = (d && d.items) || [];
-    if(!items.length){ diag.err = d ? 'empty' : 'bad-response'; return; }
+    if(!items.length){ if(d){ diag.err = 'empty'; _foodSrvFail = false; try{ _renderFoodList(); }catch(e){} } else _failNow('bad-response'); return; }
+    _foodSrvFail = false;
     var mapped = items.map(function(it){
       return { place_name: it.n, category_name: it.c||'', road_address_name: it.a||'',
                distance: it.d, x:String(it.lo), y:String(it.la), source:'server' };
@@ -2397,7 +2403,7 @@ function _foodFromServer(lat, lng, label){
     _renderFoodList();
   }).catch(function(e){
     if(done) return; done=true; clearTimeout(tid);
-    diag.err = String((e&&e.message)||e).slice(0,60);
+    _failNow(String((e&&e.message)||e).slice(0,60));
   });
 }
 window._foodFromServer=_foodFromServer;
@@ -2992,7 +2998,9 @@ function _renderFoodList() {
   pub = pub.filter(function(p){ return !seen[String(p.place_name||'').replace(/\s/g,'')]; });
 
   if(!curated.length && !pub.length) {
-    list.innerHTML = '<div class="food-empty">😢<br>해당 카테고리 음식점이 없습니다.</div>';
+    list.innerHTML = _foodSrvFail
+      ? '<div class="food-empty">📡<br>맛집 정보를 불러오지 못했어요.<br>잠시 뒤 <b>🔄 새로고침</b>을 눌러주세요.</div>'
+      : '<div class="food-empty">😢<br>해당 카테고리 음식점이 없습니다.</div>';
     return;
   }
 
@@ -4330,7 +4338,7 @@ function _commSaveCache(list){
     if(!list || !list.length) return;
     localStorage.setItem(_COMM_CACHE_KEY, JSON.stringify({
       ts: Date.now(),
-      posts: list.slice(0, _COMM_CACHE_MAX).map(function(p){
+      posts: list.filter(function(p){ return !p.mine; }).slice(0, _COMM_CACHE_MAX).map(function(p){
         return { id:p.id, title:p.title, body:p.body, cat:p.cat, time:p.time, nick:p.nick,
                  views:p.views, like:p.like, lol:p.lol, sad:p.sad, link:p.link, isServer:true };
       })
@@ -4352,7 +4360,7 @@ function _commHydrate(){
     if(typeof _AI_POSTS === 'undefined' || _AI_POSTS.length) return;
     var c = _commLoadCache();
     if(!c) return;
-    _AI_POSTS = c;
+    _AI_POSTS = (typeof _myPostsMerge === 'function') ? _myPostsMerge(c) : c;   // 내가 쓴 글도 함께
     window._serverPostsActive = true;   // 로컬 자동 생성이 끼어들지 않게
     if(typeof renderCommList === 'function') renderCommList();
   }catch(e){}
@@ -4360,6 +4368,31 @@ function _commHydrate(){
 window._commHydrate = _commHydrate;
 //   ※ 호출은 _AI_POSTS 가 선언된 뒤(커뮤니티 블록)에서 한다 — 여기서 부르면
 //     나중에 var _AI_POSTS=[] 가 다시 비워버린다.
+
+// ★ 2026-10-08: 내가 쓴 글 보관. 글은 이 기기에만 저장되는데(서버에 글 받는 라우트가 아직 없다),
+//   서버 목록으로 갈아끼울 때마다 사라져서 등록 몇 분 뒤 글이 없어졌다.
+//   → localStorage 에 따로 보관하고, 서버 글 위에 항상 다시 얹는다. (다른 사람에게는 보이지 않는다)
+var _MY_POSTS_KEY = 'myPosts';
+var _MY_POSTS_TTL = 30*24*3600*1000;
+function _myPostsLoad(){
+  try{
+    var a = JSON.parse(localStorage.getItem(_MY_POSTS_KEY) || '[]');
+    if(!Array.isArray(a)) return [];
+    var cut = Date.now() - _MY_POSTS_TTL;
+    return a.filter(function(p){ return p && p.title && p.mine && (p.time||0) > cut; }).slice(0, 50);
+  }catch(e){ return []; }
+}
+function _myPostsSave(){
+  try{ localStorage.setItem(_MY_POSTS_KEY, JSON.stringify((window._myPosts||[]).slice(0,50))); }catch(e){}
+}
+window._myPosts = _myPostsLoad();
+window._myPostsSave = _myPostsSave;
+function _myPostsMerge(list){
+  var mine = window._myPosts || [];
+  if(!mine.length) return list;
+  var ids = {}; mine.forEach(function(p){ ids[p.id] = 1; });
+  return mine.concat((list||[]).filter(function(p){ return !ids[p.id]; }));
+}
 
 function _loadServerPosts(cat, reset) {
   if(_commLoading) return;
@@ -4467,6 +4500,7 @@ function _loadServerPosts(cat, reset) {
         window._serverPostsActive = true;
         try { if(typeof _newPostTimer !== 'undefined' && _newPostTimer) clearTimeout(_newPostTimer); } catch(e){}
         try { if(typeof _autoPostTimer !== 'undefined' && _autoPostTimer) clearTimeout(_autoPostTimer); } catch(e){}
+        converted = _myPostsMerge(converted);   // ★ 내가 쓴 글은 서버 목록 위에 계속 얹는다
         _AI_POSTS = converted;
         _commSaveCache(converted);     // ★ 다음 실행에서 바로 보여주려고 남긴다
         renderCommList();
@@ -28071,6 +28105,10 @@ var _autoRefreshTimer = null;
 function startAutoRefresh() {
   clearInterval(_autoRefreshTimer);
   _autoRefreshTimer = setInterval(function(){
+    // ★ 2026-10-08: 노선도에서 출발·도착을 정하면 S.start/S.dest 도 같이 채워지는데, 그 상태에서 5분마다
+    //   옛 계산(doRoute = 앱 자체 BFS)이 돌아 엔진 결과 위로 '경로 유형 선택' 팝업을 띄웠다.
+    //   엔진으로 탐색한 경로(_fmapDest 있음)는 다시 계산하지 않는다 — 계산은 엔진만 한다.
+    if(typeof _fmapDest !== 'undefined' && _fmapDest) return;
     if(S && S.start && S.dest && typeof doRoute === 'function') {
       doRoute();
     }
@@ -30792,6 +30830,7 @@ function dcAddComment(pid){
   if(wrap) wrap.innerHTML = _dcCmtListHtml(post);
 
   if(typeof _serverPostComment === 'function') _serverPostComment(pid, nick, txt);
+  if(post.mine) _myPostsSave();
   if(typeof toast === 'function') toast('💬 댓글이 등록되었어요!');
 }
 window.dcAddComment = dcAddComment;
@@ -30875,6 +30914,7 @@ function dcReact(id, type, btn) {
   var post = _AI_POSTS.find(function(p){ return p.id === id; });
   if(!post) return;
   post[type] = (post[type]||0) + 1;
+  if(post.mine) try{ _myPostsSave(); }catch(e){}
   var span = btn.querySelector('span');
   if(span) span.textContent = post[type];
   btn.classList.toggle('dc-react-on');
@@ -43058,7 +43098,8 @@ function clearBaseTime() {
     setTimeout(function(){ fmapDoRoute(); }, 120);
   }
   toast('🕐 기준시각: 현재 시각 사용');
-  if(typeof S !== 'undefined' && S.start && S.dest) {
+  // ★ 2026-10-08: 엔진 경로(_fmapDest)가 있으면 위에서 이미 엔진으로 다시 탐색했다 — 옛 BFS 를 또 돌리지 않는다
+  if(typeof S !== 'undefined' && S.start && S.dest && !(typeof _fmapDest !== 'undefined' && _fmapDest)) {
     setTimeout(function(){ if(typeof doRoute==='function') doRoute(); }, 100);
   }
 }
@@ -45593,7 +45634,8 @@ function submitPost() {
 
   // 사용자 게시글 _AI_POSTS에 추가
   var userPost = {
-    id:    _POST_ID++,
+    id:    Date.now(),   // ★ 서버 글 id(100번대~)와 겹치지 않게
+    mine:  true,
     cat:   catVal,
     title: titleVal,
     body:  bodyVal,
@@ -45607,6 +45649,7 @@ function submitPost() {
   if(typeof _AI_POSTS !== 'undefined') {
     _AI_POSTS.unshift(userPost);
   }
+  try{ (window._myPosts = window._myPosts || []).unshift(userPost); _myPostsSave(); }catch(e){}
   // 목록 즉시 갱신
   if(typeof renderCommList === 'function') renderCommList();
 

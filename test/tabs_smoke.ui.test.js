@@ -61,7 +61,7 @@ async function newApp(b, opts) {
       return j({ ok: true });
     }
     if (u.pathname === '/bus-stops') return j({ ok: true, stops: STOPS });
-    if (u.pathname === '/food') return j({ ok: true, items: FOODS });
+    if (u.pathname === '/food') { if (page.__foodMode === 'fail') return r.fulfill({ status: 500, headers: H, body: '{}' }); if (page.__foodMode === 'empty') return j({ ok: true, items: [] }); return j({ ok: true, items: FOODS }); }
     return j({});
   });
   await page.clock.install({ time: NOW });
@@ -115,6 +115,18 @@ const vis = (page, id) => page.evaluate(i => { const e = document.getElementById
     await page.click('#commList .dc-post[data-id="102"] .dc-react-btn'); await page.clock.runFor(500);
     const after = await page.evaluate(() => +document.querySelector('#commList .dc-post[data-id="102"] .dc-react-btn span').textContent);
     assert.strictEqual(after, before + 1);
+  });
+
+  await t('내가 쓴 글은 서버 목록이 갱신돼도, 앱을 다시 켜도 남아 있고 서버 글과 id 가 겹치지 않는다', async () => {
+    await page.evaluate(() => openWriteSheet()); await page.clock.runFor(400);
+    await page.fill('#wTitle', '내가 쓴 글 제목'); await page.fill('#wBody', '내가 쓴 본문');
+    await page.evaluate(() => submitPost()); await page.clock.runFor(1200);
+    const has = () => page.evaluate(() => document.getElementById('commList').innerText.includes('내가 쓴 글 제목'));
+    assert.ok(await has(), '등록 직후');
+    await page.clock.runFor(240000); assert.ok(await has(), '서버 갱신(4분) 뒤');
+    await page.evaluate(() => { _commNeedRefresh = true; _loadServerPosts('all', true); }); await page.clock.runFor(2000); assert.ok(await has(), '강제 새로고침 뒤');
+    const ids = await page.evaluate(() => _AI_POSTS.map(p => p.id)); assert.strictEqual(new Set(ids).size, ids.length, '중복 id');
+    await page.reload(); await page.waitForTimeout(400); await page.clock.runFor(3500); await go(page, 'community', 1500); await page.waitForTimeout(400); await page.clock.runFor(2500); assert.ok(await has(), '앱 재시작 뒤');
   });
 
   console.log('[커뮤니티 — 뉴스 / 실시간소통 / 설정]');
@@ -203,6 +215,19 @@ const vis = (page, id) => page.evaluate(i => { const e = document.getElementById
     assert.deepStrictEqual(errs, []);
   });
 
+  await t('맛집 서버가 실패하면 \'없음\'이 아니라 \'불러오지 못했어요\' 안내가 뜨고, 서버가 비어 있으면 \'없음\' 이 뜬다', async () => {
+    await go(page, 'home', 300);
+    await page.evaluate(() => { _foodSrvCache = {}; _foodPubCache = {}; _foodAllData = []; _foodPublicData = []; });
+    page.__foodMode = 'fail'; await go(page, 'food', 300); await page.evaluate(() => loadFoodTab(true)); await page.waitForTimeout(300); await page.clock.runFor(7000);
+    let txt = await page.evaluate(() => document.getElementById('foodList').innerText); assert.ok(/불러오지 못했어요/.test(txt), '실패: ' + txt);
+    await page.evaluate(() => { _foodSrvCache = {}; _foodPubCache = {}; _foodAllData = []; _foodPublicData = []; });
+    page.__foodMode = 'empty'; await page.evaluate(() => loadFoodTab(true)); await page.waitForTimeout(300); await page.clock.runFor(7000);
+    txt = await page.evaluate(() => document.getElementById('foodList').innerText); assert.ok(/음식점이 없습니다/.test(txt), '빈 서버: ' + txt);
+    await page.evaluate(() => { _foodSrvCache = {}; _foodPubCache = {}; _foodAllData = []; _foodPublicData = []; });
+    page.__foodMode = 'ok'; await page.evaluate(() => loadFoodTab(true)); await page.waitForTimeout(300); await page.clock.runFor(7000);
+    txt = await page.evaluate(() => document.getElementById('foodList').innerText); assert.ok(/국밥집/.test(txt), '복구: ' + txt);
+  });
+
   console.log('[노선도 — 버스 / 지하철]');
   await go(page, 'map', 2000);
   await t('노선도 탭 첫 화면은 버스이고 주변 정류장 카드가 그려진다', async () => {
@@ -250,6 +275,17 @@ const vis = (page, id) => page.evaluate(i => { const e = document.getElementById
     assert.strictEqual(r.tab, 'tab-home'); assert.ok(/서울역/.test(r.s) && /수원/.test(r.d), JSON.stringify(r)); assert.strictEqual(r.card, 'flex');
     assert.ok(calls.some(c => /route-v2/.test(c)), '엔진 호출 없음: ' + calls.join(','));
     assert.ok(!(await page.evaluate(() => getComputedStyle(document.getElementById('routeModePopup')).display === 'flex')), '앱 자체 계산(BFS) 선택창이 뜨면 안 된다');
+  });
+  await t('경로를 정한 뒤 11분이 지나도 옛 계산(경로 유형 선택 팝업)이 끼어들지 않고 엔진 결과가 그대로다', async () => {
+    const hdr0 = await page.evaluate(() => (document.getElementById('transitResultHeader') || {}).textContent);
+    await page.clock.runFor(11 * 60000);
+    const r = await page.evaluate(() => ({ pop: document.getElementById('routeModePopup').classList.contains('open'), card: getComputedStyle(document.getElementById('transitResultCard')).display, hdr: (document.getElementById('transitResultHeader') || {}).textContent }));
+    assert.strictEqual(r.pop, false, 'popup'); assert.strictEqual(r.card, 'flex', 'card ' + r.card); assert.ok(r.hdr && r.hdr.length > 0, 'hdr ' + hdr0 + ' -> ' + r.hdr);
+  });
+  await t('즐겨찾기/최근 경로를 적용한 뒤에도 마찬가지다', async () => {
+    await page.evaluate(() => _applyFavRoute('서울역', '수원')); await page.clock.runFor(5000);
+    await page.clock.runFor(11 * 60000);
+    assert.strictEqual(await page.evaluate(() => document.getElementById('routeModePopup').classList.contains('open')), false);
   });
   await t('노선도 탭에서 JS 오류가 없다', async () => assert.deepStrictEqual(errs, []));
 
