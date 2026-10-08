@@ -36,6 +36,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   await page.goto('file://' + html);
   await page.clock.runFor(3000);
 
+  const until = async (fn, ms) => { const end = Date.now() + (ms || 4000); for (;;) { if (await page.evaluate(fn)) return true; if (Date.now() > end) return false; await new Promise(r => setTimeout(r, 60)); await page.clock.runFor(100); } };
   const titles = () => page.evaluate(() => window.__ln.map(n => n.title));
   const resetLN = () => page.evaluate(() => { window.__ln.length = 0; });
   // 장면: 1호선 A0~A5(6역, 2분 간격) → A5 에서 2호선 B1~B4 로 환승 → 도착 B4.  인덱스: 0 출발(도보), 1~6 = A0~A5, 7~10 = B1~B4
@@ -124,6 +125,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   console.log('[하차 전 추천 · 출퇴근 브리핑]');
   await setup(null);
   await page.evaluate(() => { window.__ln.length = 0; _notifOnceReset(); Object.defineProperty(document, 'hidden', { configurable: true, get: () => true }); _arrFireAlertNow('B4', Date.now() + 10 * 60000); });
+  await until(() => window.__ln.some(n => n.extra && n.extra.type === 'arrive_reco'));
   await page.clock.runFor(1500);
   await t('하차 10분 전 추천 알림이 나가고 [확인하기] 버튼 유형이 붙는다(화면 밖일 때)', async () => {
     const ln = await page.evaluate(() => window.__ln); const r = ln.find(n => n.extra && n.extra.type === 'arrive_reco');
@@ -135,6 +137,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   });
   await t('화면 밖에서는 팝업 없이 상단 알림 하나만 나간다', async () => assert.ok(!(await page.evaluate(() => !!document.getElementById('briefModalOv')))));
   await page.evaluate(() => { delete document.hidden; const ov = document.getElementById('briefModalOv'); if (ov) ov.remove(); window.__ln.length = 0; _notifOnceReset(); _arrFireAlertNow('B4', Date.now() + 10 * 60000); });
+  await until(() => !!document.getElementById('briefModalOv') || window.__ln.some(n => n.extra && n.extra.type === 'arrive_reco'));   // 문구를 서버에서 받아 오는 비동기라 실제 시간으로 기다린다
   await page.clock.runFor(1500);
   await t('앱을 보고 있을 때는 팝업만 뜨고 상단 알림은 따로 나가지 않는다(같은 순간 두 번 금지)', async () => {
     const r = await page.evaluate(() => ({ ov: !!document.getElementById('briefModalOv'), ln: window.__ln.filter(n => n.extra && n.extra.type === 'arrive_reco').length }));
@@ -142,17 +145,17 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   });
   await page.evaluate(() => { const ov = document.getElementById('briefModalOv'); if (ov) ov.remove(); });
   await page.evaluate(() => { _notifPrefSet('arrive_reco', 0); _notifOnceReset(); window.__ln.length = 0; _arrFireAlertNow('B4', Date.now() + 10 * 60000); });
-  await page.clock.runFor(1500);
+  await new Promise(r => setTimeout(r, 600)); await page.clock.runFor(1500);   // 막혔는지 확인하려면 비동기 문구 응답이 지나간 뒤여야 한다
   await t('설정에서 하차 전 추천을 끄면 알림이 나가지 않는다', async () => assert.ok(!(await page.evaluate(() => window.__ln)).some(n => n.extra && n.extra.type === 'arrive_reco')));
   await page.evaluate(() => { _notifPrefSet('arrive_reco', 1); window.__ln.length = 0; _cmAlarm.on = false; _fireCommuteBriefing('morn'); });
   await t('출퇴근 브리핑 스위치가 꺼져 있으면 알림이 나가지 않는다', async () => assert.strictEqual((await page.evaluate(() => window.__ln)).length, 0));
   await page.evaluate(() => { _cmAlarm.on = true; window.__ln.length = 0; _fireCommuteBriefing('morn'); });
-  await page.clock.runFor(500);
+  await until(() => window.__ln.some(n => /브리핑/.test(n.title))); await page.clock.runFor(500);
   await t('스위치를 켜면 출근길 브리핑 알림이 나간다', async () => { const ln = await page.evaluate(() => window.__ln); assert.ok(ln.some(n => /브리핑/.test(n.title)), JSON.stringify(ln.map(n => n.title))); });
   await t('예약 시각(07:30)·요일이 맞을 때만 자동 발사된다(_cmTick)', async () => {
     await page.evaluate(() => { _cmAlarm.on = true; _cmAlarm.days = [4]; _cmAlarm.morn = '07:30'; _cmAlarm.lastKey = ''; window.__ln.length = 0; });
     await page.clock.setSystemTime(new Date('2026-10-08T07:30:10+09:00'));
-    await page.evaluate(() => _cmTick()); await page.clock.runFor(1500);
+    await page.evaluate(() => _cmTick()); await until(() => window.__ln.some(n => /출근길 브리핑/.test(n.title))); await page.clock.runFor(1500);
     const n1 = await page.evaluate(() => window.__ln.filter(n => /출근길 브리핑/.test(n.title)).length);
     await page.evaluate(() => { _cmAlarm.days = [1, 2, 3, 5]; _cmAlarm.lastKey = ''; window.__ln.length = 0; _cmTick(); }); await page.clock.runFor(1500);
     const n2 = await page.evaluate(() => window.__ln.filter(n => /브리핑/.test(n.title)).length);
@@ -178,15 +181,17 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   await t('OS 예약이 걸려 있으면 앱이 켜져 있어도 같은 시각에 따로 알림을 보내지 않는다', async () => {
     await page.evaluate(() => { window._cmOsOk = true; _cmAlarm.lastKey = ''; window.__ln.length = 0; });
     await page.clock.setSystemTime(new Date('2026-10-09T07:30:10+09:00'));
-    await page.evaluate(() => _cmTick()); await page.clock.runFor(1500);
+    await page.evaluate(() => _cmTick()); await new Promise(r => setTimeout(r, 600)); await page.clock.runFor(1500);
     assert.strictEqual(await page.evaluate(() => window.__ln.filter(n => /브리핑/.test(n.title)).length), 0);
   });
   await t('OS 예약이 없을 때(웹·예약 실패)만 앱이 직접 한 번 보낸다', async () => {
-    await page.evaluate(() => { window._cmOsOk = false; _cmAlarm.lastKey = ''; window.__ln.length = 0; _cmTick(); _cmTick(); }); await page.clock.runFor(1500);
+    await page.evaluate(() => { window._cmOsOk = false; _cmAlarm.lastKey = ''; window.__ln.length = 0; _cmTick(); _cmTick(); });
+    await until(() => window.__ln.some(n => /출근길 브리핑/.test(n.title))); await new Promise(r => setTimeout(r, 300)); await page.clock.runFor(1500);   // 날씨를 받아 오는 비동기
     assert.strictEqual(await page.evaluate(() => window.__ln.filter(n => /출근길 브리핑/.test(n.title)).length), 1);
   });
   await t('브리핑 본문에서 \'피크\' 안내가 한 줄에만 나온다', async () => {
-    await page.evaluate(() => { _cmAlarm.on = true; window.__ln.length = 0; window.__brief = null; _fireCommuteBriefing('morn'); }); await page.clock.runFor(1500);
+    await page.evaluate(() => { _cmAlarm.on = true; window.__ln.length = 0; window.__brief = null; _fireCommuteBriefing('morn'); });
+    await until(() => window.__ln.some(n => /출근길 브리핑/.test(n.title))); await page.clock.runFor(500);
     const b = await page.evaluate(() => (window.__ln.find(n => /출근길 브리핑/.test(n.title)) || {}).body || '');
     assert.ok((b.match(/피크/g) || []).length <= 1, b);
   });

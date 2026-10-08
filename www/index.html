@@ -23087,10 +23087,11 @@ function _arrFireAlertNow(destStn, arrMs){
 
       var vib = [300,120,300];
       // ★ 2026-10-09 (YJ: "같은 시간에 두 번 올 필요 없다"): 앱을 보고 있으면 팝업과 상단 알림이 동시에 떴다.
-      //   · 화면에 앱이 보이는 중(PiP 작은 창 아님) → 팝업 하나만
-      //   · 그 밖(화면 꺼짐·다른 앱·PiP) → 상단 알림 하나만 (PiP 는 터치가 웹으로 안 오니 알림이 버튼 역할)
+      //   · 앱 화면을 보는 중 → 팝업 하나만
+      //   · 그 밖(화면 꺼짐·다른 앱 위) → 상단 알림 하나만. 다른 앱 위의 오버레이는 현재역·남은시간만 보여 주므로 추천은 알림이 맡는다.
       //   진동은 따로 울리지 않는다 — 정책(_VIBE_ALLOW)상 하차 추천은 '조용히'.
-      var _viewing = !document.hidden && !window._pipInPip && typeof _showBriefingModal==='function';
+      //   (PiP 는 꺼져 있다 — _PIP_FEATURE=false. 여기서 PiP 를 따로 따지지 않는다)
+      var _viewing = !document.hidden && typeof _showBriefingModal==='function';
       _arrDiagSet('stage', (_viewing ? '팝업 표시: ' : '알림 발송: ') + a.title + (_notifAllowed('arrive_reco') ? '' : ' (설정에서 꺼져 있어 차단됨)'));
       if(_viewing){
         if(_notifAllowed('arrive_reco')) _showBriefingModal(a.title, body, null, action);
