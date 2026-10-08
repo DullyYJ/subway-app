@@ -16,10 +16,10 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     window.__ln = []; window.__ovl = []; window.__ka = [];
     window.Capacitor = { isNativePlatform: () => true, getPlatform: () => 'android', Plugins: {
       LocalNotifications: {
-        schedule: (o) => { window.__ln.push(o.notifications[0]); return Promise.resolve({ notifications: o.notifications }); },
+        schedule: (o) => { o.notifications.forEach(n => window.__ln.push(n)); return Promise.resolve({ notifications: o.notifications }); },
         checkPermissions: () => Promise.resolve({ display: 'granted' }), requestPermissions: () => Promise.resolve({ display: 'granted' }),
         createChannel: () => Promise.resolve(), registerActionTypes: () => Promise.resolve(), addListener: () => Promise.resolve({ remove() {} }),
-        cancel: () => Promise.resolve(), getPending: () => Promise.resolve({ notifications: [] }), removeAllDeliveredNotifications: () => Promise.resolve(),
+        cancel: (o) => { (window.__cancel = window.__cancel || []).push(o); return Promise.resolve(); }, getPending: () => Promise.resolve({ notifications: [] }), removeAllDeliveredNotifications: () => Promise.resolve(),
       },
       Overlay: {
         isAvailable: () => Promise.resolve({ granted: true, supported: true }),
@@ -123,9 +123,9 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
 
   console.log('[하차 전 추천 · 출퇴근 브리핑]');
   await setup(null);
-  await page.evaluate(() => { window.__ln.length = 0; _notifOnceReset(); _arrFireAlertNow('B4', Date.now() + 10 * 60000); });
+  await page.evaluate(() => { window.__ln.length = 0; _notifOnceReset(); Object.defineProperty(document, 'hidden', { configurable: true, get: () => true }); _arrFireAlertNow('B4', Date.now() + 10 * 60000); });
   await page.clock.runFor(1500);
-  await t('하차 10분 전 추천 알림이 나가고 [확인하기] 버튼 유형이 붙는다', async () => {
+  await t('하차 10분 전 추천 알림이 나가고 [확인하기] 버튼 유형이 붙는다(화면 밖일 때)', async () => {
     const ln = await page.evaluate(() => window.__ln); const r = ln.find(n => n.extra && n.extra.type === 'arrive_reco');
     assert.ok(r, JSON.stringify(ln.map(n => n.title))); assert.strictEqual(r.actionTypeId, 'arrive_reco_actions');
   });
@@ -133,6 +133,14 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     await page.evaluate(() => _arrFireAlertNow('B4', Date.now() + 9 * 60000)); await page.clock.runFor(1500);
     const ln = await page.evaluate(() => window.__ln); assert.strictEqual(ln.filter(n => n.extra && n.extra.type === 'arrive_reco').length, 1);
   });
+  await t('화면 밖에서는 팝업 없이 상단 알림 하나만 나간다', async () => assert.ok(!(await page.evaluate(() => !!document.getElementById('briefModalOv')))));
+  await page.evaluate(() => { delete document.hidden; const ov = document.getElementById('briefModalOv'); if (ov) ov.remove(); window.__ln.length = 0; _notifOnceReset(); _arrFireAlertNow('B4', Date.now() + 10 * 60000); });
+  await page.clock.runFor(1500);
+  await t('앱을 보고 있을 때는 팝업만 뜨고 상단 알림은 따로 나가지 않는다(같은 순간 두 번 금지)', async () => {
+    const r = await page.evaluate(() => ({ ov: !!document.getElementById('briefModalOv'), ln: window.__ln.filter(n => n.extra && n.extra.type === 'arrive_reco').length }));
+    assert.strictEqual(r.ov, true, '팝업이 없음'); assert.strictEqual(r.ln, 0, '상단 알림이 같이 나감');
+  });
+  await page.evaluate(() => { const ov = document.getElementById('briefModalOv'); if (ov) ov.remove(); });
   await page.evaluate(() => { _notifPrefSet('arrive_reco', 0); _notifOnceReset(); window.__ln.length = 0; _arrFireAlertNow('B4', Date.now() + 10 * 60000); });
   await page.clock.runFor(1500);
   await t('설정에서 하차 전 추천을 끄면 알림이 나가지 않는다', async () => assert.ok(!(await page.evaluate(() => window.__ln)).some(n => n.extra && n.extra.type === 'arrive_reco')));
@@ -151,6 +159,50 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     assert.strictEqual(n1, 1, '목요일 07:30 에 나가야 함'); assert.strictEqual(n2, 0, '선택하지 않은 요일엔 안 나가야 함');
   });
 
+  console.log('[같은 시각에 두 번 울리지 않는다]');
+  await page.evaluate(() => { _cmAlarm.on = true; _cmAlarm.days = [1, 2, 3, 4, 5]; _cmAlarm.morn = '07:30'; _cmAlarm.eve = '18:30'; window.__ln.length = 0; window.__cancel = []; window._cmOsOk = false; _cmScheduleOS(); });
+  await page.clock.runFor(200);
+  await t('출퇴근 브리핑 OS 예약은 반복 없이 \'정확한 시각\'만, 같은 시각에 하나씩이다', async () => {
+    const L = await page.evaluate(() => window.__ln.filter(n => n.extra && n.extra.type === 'commute_brief').map(n => ({ id: n.id, which: n.extra.which, at: new Date(n.schedule.at).getTime(), rep: !!(n.schedule.repeats || n.schedule.on), dow: new Date(n.schedule.at).getDay(), hm: new Date(n.schedule.at).toLocaleTimeString('en-GB', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit' }) })));
+    assert.ok(L.length >= 40 && L.length <= 56, '예약 수 ' + L.length);
+    assert.ok(!L.some(x => x.rep), '반복 예약이 남아 있음');
+    assert.strictEqual(new Set(L.map(x => x.id)).size, L.length, 'id 중복');
+    assert.strictEqual(new Set(L.map(x => x.which + x.at)).size, L.length, '같은 시각 중복 예약');
+    assert.ok(L.every(x => x.dow >= 1 && x.dow <= 5), '선택하지 않은 요일에 예약됨');
+    assert.ok(L.filter(x => x.which === 'morn').every(x => x.hm === '07:30') && L.filter(x => x.which === 'eve').every(x => x.hm === '18:30'));
+  });
+  await t('예전 반복 예약(9110~·9120~)과 정확한 시각 예약(9101·9102)은 취소 목록에 들어 있다', async () => {
+    const ids = await page.evaluate(() => [].concat(...window.__cancel.map(o => o.notifications.map(n => n.id))));
+    for (const id of [9101, 9102, 9110, 9116, 9120, 9126]) assert.ok(ids.includes(id), '취소 안 됨: ' + id);
+  });
+  await t('OS 예약이 걸려 있으면 앱이 켜져 있어도 같은 시각에 따로 알림을 보내지 않는다', async () => {
+    await page.evaluate(() => { window._cmOsOk = true; _cmAlarm.lastKey = ''; window.__ln.length = 0; });
+    await page.clock.setSystemTime(new Date('2026-10-09T07:30:10+09:00'));
+    await page.evaluate(() => _cmTick()); await page.clock.runFor(1500);
+    assert.strictEqual(await page.evaluate(() => window.__ln.filter(n => /브리핑/.test(n.title)).length), 0);
+  });
+  await t('OS 예약이 없을 때(웹·예약 실패)만 앱이 직접 한 번 보낸다', async () => {
+    await page.evaluate(() => { window._cmOsOk = false; _cmAlarm.lastKey = ''; window.__ln.length = 0; _cmTick(); _cmTick(); }); await page.clock.runFor(1500);
+    assert.strictEqual(await page.evaluate(() => window.__ln.filter(n => /출근길 브리핑/.test(n.title)).length), 1);
+  });
+  await t('브리핑 본문에서 \'피크\' 안내가 한 줄에만 나온다', async () => {
+    await page.evaluate(() => { _cmAlarm.on = true; window.__ln.length = 0; window.__brief = null; _fireCommuteBriefing('morn'); }); await page.clock.runFor(1500);
+    const b = await page.evaluate(() => (window.__ln.find(n => /출근길 브리핑/.test(n.title)) || {}).body || '');
+    assert.ok((b.match(/피크/g) || []).length <= 1, b);
+  });
+  await page.evaluate(() => { _notifPrefSet('transfer', 1); _notifPrefSet('arrive', 1); window.__ln.length = 0; _notifOnceReset(); });
+  await t('환승 알림과 목적지 알림이 같은 순간 겹치면 가장 급한 하나만 나가고, 다음 정거장에서 이어서 온다', async () => {
+    const titles2 = await page.evaluate(() => {
+      window.__ln.length = 0; _baseTimeMs = null;
+      window._transitAlertFired = {};
+      window._transitSeqIdx = [0, 1, 2, 3, 4, 5, 6];
+      window._transitAlertTargets = [{ seqPos: 5, nodeIdx: 5, name: 'X5', kind: 'transfer', nextLine: '2호선' }, { seqPos: 6, nodeIdx: 6, name: 'X6', kind: 'dest' }];
+      const out = [];
+      [3, 4, 5, 6].forEach(i => { const n0 = window.__ln.length; _checkTransitAlerts(i); out.push(window.__ln.slice(n0).map(n => n.title)); });
+      return out;
+    });
+    assert.deepStrictEqual(titles2, [['환승 2정거장 전'], ['환승 준비'], ['곧 하차'], ['목적지 도착']], JSON.stringify(titles2));   // 4번째 판정에서 '목적지 2정거장 전'은 환승 준비와 겹쳐 빠진다
+  });
   await t('JS 오류가 없다', async () => assert.deepStrictEqual([...new Set(errs)], []));
   console.log('\n' + pass + ' 통과 / ' + fail + ' 실패');
   await b.close();

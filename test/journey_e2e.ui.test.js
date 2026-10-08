@@ -94,7 +94,7 @@ const pass_through = async (page, n) => {
   for (const n of nodes) {
     if (n.w || n.lat == null || n.name === '내 위치') continue;
     await pass_through(page, n);
-    const s = await page.evaluate(() => ({ gm: window._gpsMaxIdx, o: window.__ovl[window.__ovl.length - 1], ln: window.__ln.filter(x => x.title).map(x => x.title) }));
+    const s = await page.evaluate(() => ({ gm: window._gpsMaxIdx, o: window.__ovl[window.__ovl.length - 1], ln: window.__ln.filter(x => x.title).map(x => x.title), pop: Array.from(document.querySelectorAll('#briefModalOv')).map(e => e.textContent) }));
     if (s.gm < prevGm) mono = false; prevGm = s.gm;
     if (!(s.o.track || []).includes(n.name)) trackOk = false;
     s.step = n.i + ':' + n.name + ' gm=' + s.gm + ' alert=' + s.o.alert; seen.push(s);
@@ -108,7 +108,7 @@ const pass_through = async (page, n) => {
     assert.ok(idx.every(i => i >= 0), JSON.stringify(ts)); assert.ok(idx.every((v, k) => k === 0 || v > idx[k - 1]), JSON.stringify(ts));
     assert.strictEqual(new Set(ts).size, ts.length, '중복: ' + JSON.stringify(ts));
   });
-  await t('하차 전 추천 알림이 한 번 나간다', async () => assert.strictEqual(last.ln.filter(x => /하차 \d+분 전/.test(x)).length, 1, JSON.stringify(last.ln)));
+  await t('하차 전 추천이 한 번만 나간다(앱을 보는 중이면 팝업 하나, 아니면 상단 알림 하나 — 같이 나가지 않는다)', async () => { const n = last.ln.filter(x => /하차 \d+분 전/.test(x)).length, p = last.pop.filter(x => /하차 \d+분 전/.test(x)).length; assert.strictEqual(n + p, 1, JSON.stringify({ ln: last.ln, pop: last.pop.length })); });
   await t('이동 중 상주 알림(현재역 · 남은시간)이 갱신된다', async () => assert.ok(last.ln.filter(x => / · \d+분$/.test(x)).length >= 2, JSON.stringify(last.ln)));
   await t('오버레이 경고 단계가 0 에서 시작해 1 에 도달한다', async () => { const a = await page.evaluate(() => window.__ovl.map(o => o.alert)); assert.ok(a.includes(0) && a.includes(1) && a.indexOf(1) > a.indexOf(0), JSON.stringify(a) + ' / ' + seen.map(x => x.step).join(' | ')); });
 

@@ -10809,20 +10809,35 @@ function _checkTransitAlerts(curNodeIdx){
     var curPos = -1;                                // 현재 교통 순번(도달한 최대 교통 노드)
     for(var i=0;i<seq.length;i++){ if(seq[i] <= curNodeIdx) curPos = i; else break; }
     if(curPos < 0) return;
+    // ★ 2026-10-09 (YJ: "같은 시간에 두 번이나 올 필요는 없어"): 환승역과 목적지가 가까우면
+    //   '환승 준비'와 '목적지 2정거장 전'이 같은 순간에 같이 울렸다. 한 번의 판정에서는 가장 급한
+    //   알림(남은 정거장이 적은 것) 하나만 보내고, 같이 걸린 나머지는 보낸 것으로 처리한다.
+    //   (다음 정거장에서 목적지 알림이 따로 오므로 빠지는 정보는 없다)
+    var due = [];
     targets.forEach(function(tg){
       var remain = tg.seqPos - curPos;              // 남은 정거장(교통구간 기준)
-      if(remain===2) _fireTransitAlert(tg, 2);
-      else if(remain===1) _fireTransitAlert(tg, 1);
-      else if(remain===0 && tg.kind==='dest') _fireTransitAlert(tg, 0);
+      if(remain===2 || remain===1 || (remain===0 && tg.kind==='dest')){
+        var nt = _transitAlertType(tg, remain);
+        var fired = window._transitAlertFired && window._transitAlertFired[tg.nodeIdx + '_' + remain];
+        if(!fired && (typeof _notifAllowed!=='function' || _notifAllowed(nt))) due.push({ tg:tg, remain:remain });
+      }
     });
+    if(!due.length) return;
+    due.sort(function(a, b){ return a.remain - b.remain; });
+    if(!window._transitAlertFired) window._transitAlertFired = {};
+    for(var k=1; k<due.length; k++) window._transitAlertFired[due[k].tg.nodeIdx + '_' + due[k].remain] = 1;
+    _fireTransitAlert(due[0].tg, due[0].remain);
   } catch(e){}
+}
+function _transitAlertType(tg, remain){
+  return (tg.kind==='transfer') ? (remain===2 ? 'transfer2' : 'transfer')
+                                : (remain===2 ? 'near_arrive2' : (remain===1 ? 'near_arrive' : 'arrive'));
 }
 function _fireTransitAlert(tg, remain){
   // ★ 2026-10-08: 환승 알림도 'arrive'(도착 임박) 종류로 판정해서, 설정의 '환승 알림' 스위치를 꺼도 계속 오고
   //   '도착 임박' 을 끄면 환승 알림까지 같이 사라졌다. 환승은 환승 종류로, 하차는 도착 종류로 각자 스위치를 따른다.
   //   (스위치를 건드리지 않은 기본 상태에서는 예전과 완전히 같다 — 두 종류 모두 기본 켬)
-  var _ntype = (tg.kind==='transfer') ? (remain===2 ? 'transfer2' : 'transfer')
-                                      : (remain===2 ? 'near_arrive2' : (remain===1 ? 'near_arrive' : 'arrive'));
+  var _ntype = _transitAlertType(tg, remain);
   if(typeof _notifAllowed==='function' && !_notifAllowed(_ntype)) return;
   var key = tg.nodeIdx + '_' + remain;
   if(window._transitAlertFired && window._transitAlertFired[key]) return;
@@ -10853,9 +10868,8 @@ function _fireTransitAlert(tg, remain){
     else if(remain===1){ title='곧 하차'; body='다음 정거장 '+tg.name+' — 내릴 준비하세요'+_minTxt; vib=[300,100,300,100,300]; }
     else { title='목적지 도착'; body=tg.name+'에 도착했습니다. 수고하셨어요'; vib=[300,100,300,100,300]; }
   }
-  _vibrateFor(_ntype, vib);
-  if(typeof showNotification==='function') showNotification(title, body, { vibrate:vib, type:_ntype });
-  else if(typeof toast==='function') toast(title + ' · ' + body);
+  if(typeof showNotification==='function') showNotification(title, body, { vibrate:vib, type:_ntype });   // 진동은 showNotification 이 정책대로 한 번 울린다
+  else { _vibrateFor(_ntype, vib); if(typeof toast==='function') toast(title + ' · ' + body); }
 }
 window._buildTransitAlertTargets = _buildTransitAlertTargets;
 window._checkTransitAlerts = _checkTransitAlerts;
@@ -22249,8 +22263,8 @@ function showNotification(title, body, opts){
         channelId: 'subway_alerts',
         extra:   { type: opts.type || 'general', title: title, body: body }   // ★ 탭 시 상세 팝업 복원용
       }]});
-      // 진동은 별도 (LocalNotifications가 채널 진동 설정 따름)
-      if('vibrate' in navigator) navigator.vibrate(vibPat);
+      // 진동: 맨 위 _vibrateFor 가 정책(_VIBE_ALLOW)에 따라 이미 울렸다. 여기서 또 울리면
+      //   정책이 '진동 없음'인 알림(하차 추천·브리핑)도 울리고, 같은 알림에 진동이 두 번 간다.
       return;
     }
   } catch(e){}
@@ -22263,7 +22277,6 @@ function showNotification(title, body, opts){
       vibrate: vibPat
     });
   }
-  if('vibrate' in navigator) navigator.vibrate(vibPat);
 }
 
 // ── ★ 알림 탭 → 앱 내 브리핑 상세 팝업 ──
@@ -23073,12 +23086,17 @@ function _arrFireAlertNow(destStn, arrMs){
       }catch(e){}
 
       var vib = [300,120,300];
-      try { if('vibrate' in navigator) navigator.vibrate(vib); } catch(e){}
-      _arrDiagSet('stage', '알림 발송: ' + a.title + (_notifAllowed('arrive_reco') ? '' : ' (설정에서 꺼져 있어 차단됨)'));
-      if(typeof showNotification==='function')
+      // ★ 2026-10-09 (YJ: "같은 시간에 두 번 올 필요 없다"): 앱을 보고 있으면 팝업과 상단 알림이 동시에 떴다.
+      //   · 화면에 앱이 보이는 중(PiP 작은 창 아님) → 팝업 하나만
+      //   · 그 밖(화면 꺼짐·다른 앱·PiP) → 상단 알림 하나만 (PiP 는 터치가 웹으로 안 오니 알림이 버튼 역할)
+      //   진동은 따로 울리지 않는다 — 정책(_VIBE_ALLOW)상 하차 추천은 '조용히'.
+      var _viewing = !document.hidden && !window._pipInPip && typeof _showBriefingModal==='function';
+      _arrDiagSet('stage', (_viewing ? '팝업 표시: ' : '알림 발송: ') + a.title + (_notifAllowed('arrive_reco') ? '' : ' (설정에서 꺼져 있어 차단됨)'));
+      if(_viewing){
+        if(_notifAllowed('arrive_reco')) _showBriefingModal(a.title, body, null, action);
+      } else if(typeof showNotification==='function'){
         showNotification(a.title, body, { vibrate:vib, type:'arrive_reco' });
-      if(!document.hidden && typeof _showBriefingModal==='function')
-        _showBriefingModal(a.title, body, null, action);
+      }
     };
 
     // ★ 저녁(야식·쇼핑)엔 Gemini로 하루를 위로하는 문구를 받아 감성 줄 교체
@@ -23535,7 +23553,7 @@ function _fireCommuteBriefing(type, opts){
     if(wT && wF && toStn && (Math.abs(wT.temp - wF.temp) >= 2 || Math.abs((wT.rain||0)-(wF.rain||0)) >= 20 || wT.txt !== wF.txt)){
       lines.push(toStn.name + ' ' + wT.emo+' '+wT.temp+'° '+wT.txt + (wT.rain>=40 ? ' · 강수 '+wT.rain+'%' : ''));
     }
-    if(!(fromStn && fromStn.bus)) lines.push(stnNm+' 혼잡도 '+pct+'% ('+congTxt+')' + (peak?' · 피크 시간대예요':''));
+    if(!(fromStn && fromStn.bus)) lines.push(stnNm+' 혼잡도 '+pct+'% ('+congTxt+')');   // ★ 2026-10-09: 피크 안내는 아래 추천 줄에 한 번만 나온다(예전엔 같은 말이 두 줄)
     // ★ 출퇴근길 추천사항 (최대 3개, 깔끔한 텍스트)
     var recs = [];
     if(wF){
@@ -23677,6 +23695,9 @@ window._cmTestFire = function(){
 // 분 단위 체크 스케줄러 (앱 실행 중)
 function _cmTick(){
   if(!_cmAlarm.on) return;
+  // ★ 2026-10-09: OS 예약 알림이 걸려 있으면 같은 시각에 앱이 또 보내지 않는다(두 번 울림 방지).
+  //   OS 예약이 없는 경우(웹·예약 실패)에만 앱이 직접 보낸다.
+  try{ if(window._cmOsOk === true) return; }catch(e){}
   var n = new Date();
   var cur = ('0'+n.getHours()).slice(-2)+':'+('0'+n.getMinutes()).slice(-2);
   var key = n.toDateString()+'|'+cur;
@@ -23686,69 +23707,71 @@ function _cmTick(){
   else if(cur === _cmAlarm.eve){ _cmAlarm.lastKey = key; _cmPersist(); _fireCommuteBriefing('eve'); }
 }
 setInterval(_cmTick, 30000);
+// ★ 2026-10-09: 예약은 앞으로 _CM_OS_DAYS 일치만 걸어 두므로, 앱을 열 때마다(시작 · 다시 앞으로 올 때) 다시 채운다.
+//   같은 id 로 덮어쓰는 것이라 여러 번 불려도 알림이 늘지 않는다.
+setTimeout(function(){ try{ _cmScheduleOS(); }catch(e){} }, 4000);
+document.addEventListener('visibilitychange', function(){
+  try{ if(!document.hidden && Date.now() - (window._cmSchedAt || 0) > 30*60000) _cmScheduleOS(); }catch(e){}
+});
 
-// OS 반복 알림 (앱 종료 시 백업 — 고정 문구, 탭하면 앱 열림)
+// OS 예약 알림 (앱 종료 중에도 울린다 — 고정 문구, 탭하면 앱 열림)
+// ★ 2026-10-09 (YJ: "출퇴근 알람이 두 번씩 온다"): 같은 시각에 알림이 최대 3개 나갔다.
+//   ① 요일 반복 예약(9110+d·9120+d)  ② '정확한 시각' 예약(9101·9102)  ③ 앱이 켜져 있을 때 _cmTick
+//   → 반복 예약을 없애고, '정확한 시각' 예약만 앞으로 _CM_OS_DAYS 일치(선택한 요일만) 미리 걸어 둔다.
+//     앱을 열 때마다 다시 걸리므로 며칠 안 열어도 이어진다. 앱이 켜져 있어도 울리는 건 OS 알림 하나뿐이다.
+var _CM_OS_DAYS = 28;                 // 앞으로 며칠치를 미리 예약할지
+var _CM_ID_MORN = 9200, _CM_ID_EVE = 9300;   // 날짜별 id: 9200+i(출근) · 9300+i(퇴근)
+function _cmAllIds(){
+  var ids = [{id:9101},{id:9102}];                                   // 예전 '정확한 시각' 예약
+  for(var d=0; d<7; d++){ ids.push({id:9110+d}); ids.push({id:9120+d}); }   // 예전 요일 반복 예약
+  for(var i=0; i<_CM_OS_DAYS; i++){ ids.push({id:_CM_ID_MORN+i}); ids.push({id:_CM_ID_EVE+i}); }
+  return ids;
+}
+function _cmOccurrences(hh, mi, days, now){
+  var out = [];
+  for(var i=0; i<=_CM_OS_DAYS+7 && out.length<_CM_OS_DAYS; i++){
+    var t = new Date(now.getFullYear(), now.getMonth(), now.getDate()+i, hh, mi, 0, 0);
+    if(t.getTime() > now.getTime() + 2000 && days.indexOf(t.getDay()) >= 0) out.push(t);
+  }
+  return out;
+}
 function _cmScheduleOS(){
   try{
     var LN = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications;
     if(!LN) return;
-    // ★ 2026-09-14: 요일별로 따로 예약한다.
-    //   예전엔 id 두 개로 매일 반복이라, 요일을 골라도 주말에 울렸다.
-    //   요일마다 id 를 나눠(9110+d, 9120+d) 선택한 날에만 예약한다.
-    var _ids = [{id:9101},{id:9102}];
-    for(var _d=0; _d<7; _d++){ _ids.push({id:9110+_d}); _ids.push({id:9120+_d}); }
-    LN.cancel({ notifications:_ids }).catch(function(){});
+    window._cmOsOk = false; window._cmSchedAt = Date.now();
+    LN.cancel({ notifications:_cmAllIds() }).catch(function(){});
     // ★ 알림 정책 확인 (commute_brief 허용 시에만 예약)
     if(typeof _notifAllowed==='function' && !_notifAllowed('commute_brief')) return;
     if(!_cmAlarm.on) return;
     var mh = parseInt(_cmAlarm.morn.split(':')[0]), mm = parseInt(_cmAlarm.morn.split(':')[1]);
     var eh = parseInt(_cmAlarm.eve.split(':')[0]),  em = parseInt(_cmAlarm.eve.split(':')[1]);
     var days = (Array.isArray(_cmAlarm.days) && _cmAlarm.days.length) ? _cmAlarm.days : [0,1,2,3,4,5,6];
+    var now = new Date();
     var list = [];
-    days.forEach(function(d){
-      // Capacitor 의 weekday 는 1=일요일 … 7=토요일
-      var wd = ((+d) % 7) + 1;
-      // ★ 2026-09-15: 예약 알림이 안 울리던 이유 세 가지를 한 번에 고친다.
-      //   ① channelId 가 없어 기본 채널(중요도 낮음)로 갔다 → 잠금화면에 안 뜬다
-      //   ② allowWhileIdle 이 없어 절전(Doze) 중에는 통째로 밀렸다
-      //   ③ smallIcon 이름이 실제 리소스(ic_stat_subway)와 달랐다
-      // ★ 2026-09-16: extra 에 종류를 담는다. 탭 처리가 이걸 보고 브리핑을 띄운다.
-      list.push({ id:9110+(+d), title:'🌅 출근길 브리핑', body:'날씨와 혼잡도 요약이 준비됐어요 — 탭해서 확인하세요',
-                  schedule:{ on:{ weekday:wd, hour:mh, minute:mm }, repeats:true, allowWhileIdle:true },
+    // ★ 2026-09-15: 예약 알림이 안 울리던 이유 세 가지 — channelId(중요도) · allowWhileIdle(절전) · smallIcon 이름
+    // ★ 2026-09-16: extra 에 종류를 담는다. 탭 처리가 이걸 보고 최신 브리핑을 팝업으로 띄운다.
+    // ★ 2026-09-16: 요일 반복(on:{weekday}, repeats:true)은 안드로이드에서 부정확 알람이라 절전 중 밀리거나 건너뛰었다
+    //   → '정확한 시각(at)' 알람만 쓴다.
+    var morn = _cmOccurrences(mh, mm, days, now), eve = _cmOccurrences(eh, em, days, now);
+    morn.forEach(function(t, i){
+      list.push({ id:_CM_ID_MORN+i, title:'🌅 출근길 브리핑', body:'날씨와 혼잡도 요약이 준비됐어요 — 탭해서 확인하세요',
+                  schedule:{ at:t, allowWhileIdle:true },
                   channelId:'subway_alerts', smallIcon:'ic_stat_subway',
                   actionTypeId:'briefing_actions', extra:{ type:'commute_brief', which:'morn' } });
-      list.push({ id:9120+(+d), title:'🌆 퇴근길 브리핑', body:'퇴근길 날씨·혼잡도 요약 — 탭해서 확인하세요',
-                  schedule:{ on:{ weekday:wd, hour:eh, minute:em }, repeats:true, allowWhileIdle:true },
+    });
+    eve.forEach(function(t, i){
+      list.push({ id:_CM_ID_EVE+i, title:'🌆 퇴근길 브리핑', body:'퇴근길 날씨·혼잡도 요약 — 탭해서 확인하세요',
+                  schedule:{ at:t, allowWhileIdle:true },
                   channelId:'subway_alerts', smallIcon:'ic_stat_subway',
                   actionTypeId:'briefing_actions', extra:{ type:'commute_brief', which:'eve' } });
     });
-    // ★ 2026-09-16: '올 때도 있고 안 올 때도' 의 원인.
-    //   요일 반복(on:{weekday,...}, repeats:true)은 안드로이드에서 부정확 알람으로 걸린다.
-    //   절전(Doze)에 들어가면 수십 분 밀리거나 그 회차가 통째로 건너뛰어진다.
-    //   → 가장 가까운 한 번은 '정확한 시각(at)' 알람으로 따로 예약한다.
-    //     앱을 열 때마다 다시 걸리므로, 반복 예약은 백업으로만 남는다.
-    try{
-      var _nextAt = function(hh, mi){
-        var now = new Date();
-        var t = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hh, mi, 0, 0);
-        for(var i=0; i<8; i++){
-          if(t.getTime() > now.getTime() + 30000 && days.indexOf(t.getDay()) >= 0) return t;
-          t = new Date(t.getTime() + 86400000);
-        }
-        return null;
-      };
-      var mAt = _nextAt(mh, mm), eAt = _nextAt(eh, em);
-      if(mAt) list.push({ id:9101, title:'🌅 출근길 브리핑', body:'날씨와 혼잡도 요약이 준비됐어요 — 탭해서 확인하세요',
-                          schedule:{ at:mAt, allowWhileIdle:true },
-                          channelId:'subway_alerts', smallIcon:'ic_stat_subway',
-                          actionTypeId:'briefing_actions', extra:{ type:'commute_brief', which:'morn' } });
-      if(eAt) list.push({ id:9102, title:'🌆 퇴근길 브리핑', body:'퇴근길 날씨·혼잡도 요약 — 탭해서 확인하세요',
-                          schedule:{ at:eAt, allowWhileIdle:true },
-                          channelId:'subway_alerts', smallIcon:'ic_stat_subway',
-                          actionTypeId:'briefing_actions', extra:{ type:'commute_brief', which:'eve' } });
-      window._cmNextAt = { morn: mAt ? mAt.getTime() : null, eve: eAt ? eAt.getTime() : null };
-    }catch(e){}
-    if(list.length) LN.schedule({ notifications:list }).catch(function(){});
+    window._cmNextAt = { morn: morn[0] ? morn[0].getTime() : null, eve: eve[0] ? eve[0].getTime() : null };
+    if(list.length){
+      var pr = LN.schedule({ notifications:list });
+      if(pr && typeof pr.then === 'function') pr.then(function(){ window._cmOsOk = true; }).catch(function(){ window._cmOsOk = false; });
+      else window._cmOsOk = true;
+    }
   }catch(e){}
 }
 
@@ -24048,6 +24071,9 @@ function _initLocalNotifications(){
              window.Capacitor.Plugins &&
              window.Capacitor.Plugins.LocalNotifications;
     if(!LN) return;
+    // ★ 2026-10-09: 두 번 불리면 알림 탭 리스너가 두 개 붙어 팝업이 두 번 뜬다 → 한 번만 초기화
+    if(window._lnInitDone) return;
+    window._lnInitDone = true;
     // 채널 생성 (Android 8+ 필수)
     LN.createChannel({
       id: 'subway_alerts',
@@ -24098,10 +24124,11 @@ function _initLocalNotifications(){
             //   탭하면 그 자리에서 최신 브리핑을 만들어 팝업으로 띄운다.
             setTimeout(function(){ _fireCommuteBriefing(ex.which === 'eve' ? 'eve' : 'morn', { modal:true }); }, 350);
           } else if(nid === 9101 || nid === 9102 ||
-                    (nid >= 9110 && nid <= 9116) || (nid >= 9120 && nid <= 9126)){
+                    (nid >= 9110 && nid <= 9116) || (nid >= 9120 && nid <= 9126) ||
+                    (nid >= _CM_ID_MORN && nid < _CM_ID_MORN + _CM_OS_DAYS) || (nid >= _CM_ID_EVE && nid < _CM_ID_EVE + _CM_OS_DAYS)){
             // ★ 2026-09-16: 요일별 id(9110~9126)를 몰라서 탭해도 아무 일이 없었다.
             //   extra 가 없는 예전 알림도 id 범위로 알아본다.
-            var _isEve = (nid === 9102) || (nid >= 9120 && nid <= 9126);
+            var _isEve = (nid === 9102) || (nid >= 9120 && nid <= 9126) || (nid >= _CM_ID_EVE && nid < _CM_ID_EVE + _CM_OS_DAYS);
             setTimeout(function(){ _fireCommuteBriefing(_isEve ? 'eve' : 'morn', { modal:true }); }, 350);
           }
         } catch(e){}

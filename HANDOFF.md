@@ -388,3 +388,10 @@
 - **(1차 기록) 남겨둔 것**: `S.route` 가 null 인 운영 환경에서 사실상 휴면인 "지하철 탭 관제" 서브시스템(`startTracking/_doArrival/startApiPoll/detectBoardingState` 등). `_updateTrackingHUD`, `advanceToNextStation`, `_rebaseAllFromNow` 등 13개 가드 함수를 지우면 12곳의 호출이 남아 끊어지므로(여러 살아있는 함수와 얽힘) 되돌렸다. 지우려면 진입점부터 호출 체인 전체를 한 번에 걷어내야 한다.
 - 테스트는 단독 실행 권장(병렬 시 타이밍 flake).
 - **3차(2026-10-09)**: 숨김(display:none !important) 영역 `#boardSection`의 버튼(toggleTracking/manualBoard/stopTracking)과 한 번도 열리지 않는 모달 `#boardConfirmModal`·`#boardAskModal`이 관제 체인(`startTracking`→`_onGPSUpdate`→`_doArrival`→`onStationArrival` 등)의 유일한 진입점이었음을 확인 → 해당 onclick/모달 제거 후 도달 불가가 된 함수 52개(`startTracking`, `_onGPSUpdate`, `_doArrival`, `renderMap`, `checkRouteOperating`, `calcOptimalDeparture` 등) 제거. 이제 `S.route` 는 조건식 읽기 몇 곳에만 남음. 검증: 12개 스위트 전부 통과 + 무작위 클릭 1,600회 이전 버전과 오류 집합 동일(0건).
+
+### 알림 중복 정리 (2026-10-09, YJ: "출퇴근 알람이 두 번씩 온다 / 같은 시간에 두 번 올 필요 없다")
+- **출퇴근 브리핑**: 같은 시각에 ①요일 반복 OS 예약(9110+d·9120+d) ②'정확한 시각' OS 예약(9101·9102) ③앱이 켜져 있을 때 `_cmTick` 이 모두 울렸다. → 반복 예약 폐지, '정확한 시각(at)' 예약만 앞으로 28일치(선택한 요일만) 걸어 둔다(id 9200+i 출근 · 9300+i 퇴근). 앱 시작 4초 뒤와 앞으로 돌아올 때(30분 간격 제한) 다시 채운다. 예전 id 는 취소 목록에 남겨 기존 설치본의 반복 예약도 지운다. `window._cmOsOk===true` 면 `_cmTick` 은 보내지 않는다(웹·예약 실패 때만 직접 발송).
+- **하차 10분 전 추천**: 앱을 보는 중에는 팝업+상단 알림이 같이 떴다 → 보는 중(PiP 아님)이면 팝업만, 아니면 상단 알림만. 정책상 '조용히'인 알림이 `navigator.vibrate` 로 울리던 것도 제거(`showNotification` 맨 위 `_vibrateFor` 한 곳에서만 정책대로 울림).
+- **환승·하차 알림**: 한 번의 판정에서 둘이 겹치면(환승역과 목적지가 가까울 때) 가장 급한 하나만 보내고 나머지는 보낸 것으로 처리.
+- 브리핑 본문의 '피크 시간대' 중복 문구 제거. `_initLocalNotifications` 한 번만 초기화(탭 리스너 중복 방지).
+- 28일 넘게 앱을 한 번도 안 열면 예약이 끊긴다(앱을 열면 다시 채워짐).
