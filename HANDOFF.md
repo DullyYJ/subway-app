@@ -358,3 +358,24 @@
 3. **노선도에서 경로를 정하면 5분 뒤 옛 '경로 유형 선택' 팝업이 뜸**: `startAutoRefresh`(5분 주기)와 `clearBaseTime`이 `S.start&&S.dest` 만 보고 옛 `doRoute`(앱 자체 BFS)를 불렀다. 엔진 경로(`_fmapDest` 있음)면 부르지 않도록 가드. (옛 BFS 코드 자체는 지우지 않음 — `toggleDestSearch`·`calcFmapRoute` 등 일부 호출처가 남아 있어 별도 정리 과제.)
 4. 쓸모없는 `X-Frame-Options` meta 제거(콘솔 오류 제거).
 시험: `test/tabs_smoke.ui.test.js` 41개(내 글 유지·맛집 실패/빈/복구·11분 경과 팝업 없음 추가) 전체 통과, 기존 시험 전부 통과.
+
+## 2026-10-09 — 내가 쓴 글을 모든 사용자가 보게 + 옛 계산코드 정리
+
+### 1) 공유 게시글 (board-writer 서버 + 앱)
+- **서버(배포 완료, 2026-10-09 00:24 KST)**: `DullyYJ/route-v2` `board-writer/index.js` (커밋 192eadd). 시험 `test/board_writer_userposts.test.mjs`(16개, `cd test && node board_writer_userposts.test.mjs`).
+  - 새 경로: `POST /post`(닉·제목·본문·cat·owner_key), `POST /post/mine-delete`(owner_key 일치만), `POST /report`(3건 누적 시 자동 숨김),
+    관리자 `GET /reports?token=` · `GET /post/delete?id=&token=` (ADMIN_TOKEN).
+  - posts 테이블에 `user`, `hidden`, `owner` 컬럼을 **첫 글 등록 때 자동 ALTER**(ensureUserPostCols). owner 는 SHA-256 해시만 저장, IP 도 해시로만(신고 기록 14일 뒤 삭제).
+  - 한도: IP당 시간 5·하루 15건, 광고/링크/전화번호/욕설 차단, MAX_POSTS=500 초과분은 id 오래된 순으로 정리(AI 글 포함).
+  - 배포 방법: Cloudflare 대시보드 편집기에 코드 통째로 붙여넣기(자동화 브라우저 클립보드가 막혀 사람이 Ctrl+A/V → Deploy). 배포 직후 라이브 POST→목록→본인삭제 확인함.
+- **앱**: `submitPost` 가 서버에 올리고(실패·오프라인이면 '⏳ 전송 대기'로 두었다가 재시도, 중복 없음), `_loadServerPosts` 가 남의 글도 `user:1` 로 받아 표시. 내 글 🗑 삭제, 남의 글 🚩 신고(두 번 눌러 확인, 내 기기에서는 즉시 숨김). 글쓰기 오류는 `#wErr` 에 인라인(토스트는 앱 전체에서 꺼져 있음).
+- 개인정보: 앱 안 처리방침(`_POLICY_DOCS.privacy`)·`www/privacy.html` 에 "글은 모든 사용자에게 공개·신고·삭제" 문구 추가.
+- 한계: 댓글에는 신고 버튼이 없음, 닉네임만 있고 로그인은 없음(owner_key 로 본인 글만 삭제).
+
+### 2) 옛 계산코드 정리 (YJ 절대규칙: 계산은 엔진, 앱은 그리기만)
+- 시험(48개 UI 흐름)에 호출 계측을 걸어 보니 정상 흐름에서 옛 코드는 한 번도 안 불렸고, 아래만 실제 사용자 경로로 남아 있었다:
+  - **홈 ⇅ 바꾸기 버튼**(`swapFmapRoute`): 엔진 상태(_fmapStart/_fmapDest)는 안 바꾸고 옛 BFS+'경로 유형 선택' 팝업을 띄웠고, 내 위치·장소·정류장이면 아무 일도 안 했음 → 엔진 상태를 서로 바꾸고 `fmapDoRoute()` 로 다시 탐색.
+  - `calcFmapRoute`/`calcFmapRouteMap`(노선도 검색줄)·`doRoute` → 전부 엔진 호출로 바꿈(`doRoute` 는 호환용 얇은 껍데기: S.start/S.dest 를 엔진 입력으로 옮기고 `fmapDoRoute()`).
+- **삭제**: `_showRouteModePopup/_closeRouteModePopup/_selectRouteMode/_applyRoute`, 경로 유형 선택 팝업(`#routeModePopup` HTML·CSS), 옛 역 팝업(`#mapStnPopup`·`onMapStnClick`·`mspSetRoute`), `_goHome`, `calcOptimal`, `findPath`, `_fetchPublicRouteTime`, `_applyApiRouteData`, `_applyExpressTime/EXPRESS_SEGMENTS`, 옛 doRoute 본문(약 700줄).
+- **일부러 남김**: `bfsMinTime/bfsMinXfer/bfs` + `_renderBfsToTransitBox`(엔진 호출이 실패했을 때만 쓰는 폴백, 11449행 근처), `S.route` 를 쓰는 옛 '지하철 탭 관제'(renderPath/updateRouteDetailUI/startTracking 등 — 지금은 엔진 경로에서 S.route=null 이라 휴면). 다음에 정리한다면 이 두 덩어리(폴백 유지 여부 결정 필요).
+- 시험: `tabs_smoke.ui.test.js` 51개(바꾸기 2개·옛 코드 제거 확인 1개·공유글 8개 포함) + 나머지 12개 파일 전부 통과(병렬로 돌리면 타이밍 시험 몇 개가 느려 실패할 수 있으니 단독 재실행).

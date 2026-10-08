@@ -22359,64 +22359,6 @@ function _updateNextTrainUIFromStatic(stn) {
   if(el) el.textContent = waitMin===0 ? '🚇 곧 출발' : '🚇 '+waitMin+'분 후 ('+depTime+')';
 }
 
-// ── calcOptimal: 최적 출발 시각 계산 (doRoute 보조) ─────────
-// ── calcOptimal: BFS 최적 경로 계산 + 기준시각 기반 출발 ms 반환 ──
-// 반환: { route, depMs, arrMs, waitMin } 또는 null
-function calcOptimal(startStn, destStn) {
-  startStn = startStn || (S && S.start);
-  destStn  = destStn  || (S && S.dest);
-  if(!startStn || !destStn) return null;
-
-  // BFS 두 경로 계산
-  var rFast = (typeof bfsMinTime  === 'function') ? bfsMinTime(startStn.name,  destStn.name)  : null;
-  var rMin  = (typeof bfsMinXfer  === 'function') ? bfsMinXfer(startStn.name, destStn.name) : null;
-  var route = rFast || rMin;
-  if(!route) return null;
-
-  // 기준시각 기반 출발 ms
-  var baseMs = (typeof getBaseTimeMs === 'function') ? getBaseTimeMs() : Date.now();
-
-  // 시각표에서 다음 열차 대기 시간 반영
-  var waitMin = 0;
-  if(typeof getNextDepartureMins === 'function') {
-    var _sl = Array.isArray(startStn.lines) ? (startStn.lines[0]||startStn.line||'') : (startStn.line||'');
-    // 경로의 출발 노선 (lp[1] = 첫 이동 구간 노선)
-    if(route.lp && route.lp.length > 1 && route.lp[1]) _sl = route.lp[1];
-    // ★ 방향 자동 판별: 출발역과 다음역의 STNDB 순서 비교 (수동 설정 불필요)
-    var _dir = S._nextTrainDir || '하행';
-    if(route.path && route.path.length > 1 && typeof STNDB !== 'undefined') {
-      var lnStns = STNDB.filter(function(s){ return s.line === _sl; });
-      var ci = lnStns.findIndex(function(s){ return s.name === route.path[0]; });
-      var ni = lnStns.findIndex(function(s){ return s.name === route.path[1]; });
-      if(ci >= 0 && ni >= 0) _dir = (ci < ni) ? '하행' : '상행';
-    }
-    var bNow = new Date(baseMs);
-    var baseTotalMin = bNow.getHours()*60 + bNow.getMinutes();
-    // ★ 기준 시각을 넘겨 그 시점 이후 가장 가까운 실제 열차 시각 조회
-    var nm = getNextDepartureMins(_sl, startStn.name, _dir, baseTotalMin);
-    if(nm != null) {
-      // [수정3] 자정 경계(23:50~01:10) 막차 시각 오버플로우 방어
-      //   막차가 24:30·25:10 등으로 오거나 다음날 00:40으로 초기화돼 시차 역전 → 절대보정
-      var _nmNorm = ((nm % 1440) + 1440) % 1440;  // 25:10·음수 모두 0~1439로 정규화
-      var diff = _nmNorm - baseTotalMin;          // 기본 차이
-      // 자정 넘김(diff<0): 다음날 방향으로 +1440 보정해 양수 잔여분 도출
-      if(diff < 0) diff += 1440;
-      // 정상 대기 범위(0~120분)만 인정. 그 이상이면 막차 끊김 → 운행종료(0)
-      waitMin = (diff >= 0 && diff <= 120) ? diff : 0;
-    }
-  }
-
-  var depMs = baseMs + waitMin * 60000;
-  var routeSec = route.tp ? route.tp.reduce(function(a,b){return a+b;}, 0) : 0;
-  var arrMs = depMs + routeSec * 1000;
-
-  console.log('[calcOptimal] 출발:', new Date(depMs).toLocaleTimeString(),
-              '도착:', new Date(arrMs).toLocaleTimeString(),
-              '경유역:', route.path ? route.path.length : 0, '개');
-  return { route: route, routeFast: rFast, routeMin: rMin||rFast,
-           depMs: depMs, arrMs: arrMs, waitMin: waitMin };
-}
-window.calcOptimal = calcOptimal;
 
 
 // ── ★ 실제 역간 소요시간 (서울교통공사 1~8호선, 271개 구간) ──
@@ -27786,8 +27728,8 @@ function switchTab(tab,el){
   try{
     // 화면을 덮는 시트·팝업만 닫는다.
     //   승차 확인(boardAskModal 등)은 진행 중인 여정과 관련되므로 건드리지 않는다.
-    ['transitDetailModal','mapRouteSheet','mapStnPopup',
-     'favSheet','routeModal','routeModePopup','gmPop'].forEach(function(id){
+    ['transitDetailModal','mapRouteSheet',
+     'favSheet','routeModal','gmPop'].forEach(function(id){
       var m = document.getElementById(id);
       if(m && m.style && m.style.display !== 'none') m.style.display = 'none';
     });
@@ -28332,10 +28274,8 @@ function gmHub(name) {
       // ★ 다른 오버레이/모달 활성 중에는 전역 가로채기 통째로 차단
       var bdrop = document.getElementById('bdrop');
       var wbdrop = document.getElementById('wbdrop');
-      var routeModePopup = document.getElementById('routeModePopup');
       if((bdrop && bdrop.classList.contains('on')) ||
-         (wbdrop && wbdrop.classList.contains('on')) ||
-         (routeModePopup && routeModePopup.classList.contains('open'))) return;
+         (wbdrop && wbdrop.classList.contains('on'))) return;
 
       if(!e.target.closest || (!e.target.closest('#gmPop') && !e.target.closest('[onclick*="gmHub"]'))){
         gmClosePop();
@@ -31287,54 +31227,6 @@ window._showStartAccess = _showStartAccess;
 
 
 
-// ── _goHome: 홈탭 전환 + doRoute + seoulFetch 도미노 체인 ─────
-// [지침 1-③] 홈탭 전환 즉시 calcOptimal(doRoute) + seoulFetch 연쇄 자동 실행
-function _goHome() {
-  // ① 입력 필드 즉시 주입
-  var fsi = document.getElementById('fmapStartInp');
-  var fdi = document.getElementById('fmapDestInp');
-  var inpS = document.getElementById('inpStart');
-  var inpD = document.getElementById('inpDest');
-  if(S.start) {
-    if(fsi) fsi.value = S.start.name;
-    if(inpS) inpS.value = S.start.name;
-  }
-  if(S.dest) {
-    if(fdi) fdi.value = S.dest.name;
-    if(inpD) inpD.value = S.dest.name;
-  }
-
-  // ② 홈탭 전환
-  var btn = document.getElementById('ni-home');
-  if(typeof switchTab==='function') switchTab('home', btn);
-
-  // ③ doRoute (calcOptimal - BFS 최단/최소환승 경로 계산)
-  setTimeout(function(){
-    if(typeof doRoute==='function') doRoute();
-  }, 200);
-
-  // ④ seoulFetch 실시간 API 연쇄 (출발역 기준)
-  if(S.start) {
-    var cleanNm = S.start.name.replace(/역$/, '').trim();
-    setTimeout(function(){
-      if(typeof seoulFetch==='function') {
-        seoulFetch('realtimeStationArrival/1/5/' + encodeURIComponent(cleanNm), 5000)
-          .then(function(raw) {
-            if(!raw || !raw.realtimeArrivalList || !raw.realtimeArrivalList.length) return;
-            console.log('[_goHome] seoulFetch 성공:', raw.realtimeArrivalList.length+'건');
-            var pin = document.getElementById('trainPin');
-            if(pin) { pin.classList.remove('waiting'); pin.classList.add('boarding'); }
-            // ⑤ triggerRealtimeChain 도미노 예측
-            if(S.route && typeof triggerRealtimeChain==='function') {
-              triggerRealtimeChain(S.route);
-            }
-          }).catch(function(){});
-      }
-      if(typeof startNextTrainPolling==='function') startNextTrainPolling(S.start);
-    }, 400);
-  }
-}
-window._goHome = _goHome;
 
 
 // ── stopWatch: GPS 감시 중단 ─────────────────────────────────
@@ -34897,37 +34789,6 @@ function safeSetItem(key, val){
   background-size: 40px 40px;
 }
 /* ── 경로 수동설정 모달 ── */
-/* ── 경로 모드 선택 팝업 ── */
-#routeModePopup {
-  display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);
-  z-index:10000;align-items:flex-end;justify-content:center;
-}
-#routeModePopup.open { display:flex; }
-#routeModeCard {
-  background:#1c1c1e;border-radius:24px 24px 0 0;
-  padding:24px 20px calc(90px + env(safe-area-inset-bottom));width:100%;max-width:480px;
-  transform:translateY(100%);transition:transform .28s cubic-bezier(.4,0,.2,1);
-  max-height:85vh;overflow-y:auto;
-}
-#routeModePopup.open #routeModeCard { transform:translateY(0); }
-.rmc-handle{width:36px;height:4px;border-radius:2px;background:#444;margin:0 auto 20px;}
-.rmc-title{font-size:17px;font-weight:800;color:#fff;text-align:center;margin-bottom:6px;}
-.rmc-sub{font-size:12px;color:var(--sub);text-align:center;margin-bottom:20px;}
-.rmc-row{display:flex;gap:12px;}
-.rmc-btn{
-  flex:1;border:none;border-radius:16px;padding:18px 12px;cursor:pointer;
-  display:flex;flex-direction:column;align-items:center;gap:6px;
-  transition:all .15s;
-}
-.rmc-btn-fast{background:linear-gradient(135deg,#0a84ff22,#0a84ff11);border:2px solid #0a84ff88;}
-.rmc-btn-min {background:linear-gradient(135deg,#30d15822,#30d15811);border:2px solid #30d15888;}
-.rmc-btn:active{transform:scale(.97);}
-.rmc-icon{font-size:28px;}
-.rmc-bname{font-size:14px;font-weight:800;color:#fff;}
-.rmc-bdesc{font-size:11px;color:var(--sub);text-align:center;line-height:1.5;}
-.rmc-badge{font-size:10px;font-weight:800;padding:2px 8px;border-radius:10px;margin-top:2px;}
-.rmc-badge-fast{background:#0a84ff;color:#fff;}
-.rmc-badge-min {background:#30d158;color:#fff;}
 
 #routeModal {
   display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);
@@ -35014,29 +34875,6 @@ function safeSetItem(key, val){
 </style>
 
 <!-- ── 경로 수동설정 모달 ── -->
-<!-- ── 경로 모드 선택 팝업 ── -->
-<div id="routeModePopup" onclick="if(event.target===this)_closeRouteModePopup()">
-  <div id="routeModeCard">
-    <div class="rmc-handle"></div>
-    <div class="rmc-title">경로 유형 선택</div>
-    <div class="rmc-sub" id="rmcRouteSummary">출발역 → 도착역</div>
-    <div class="rmc-row">
-      <button class="rmc-btn rmc-btn-fast" onclick="_selectRouteMode('fast')">
-        <span class="rmc-icon">⚡</span>
-        <span class="rmc-bname">최단시간</span>
-        <span class="rmc-bdesc" id="rmcFastDesc">가장 빠른 경로</span>
-        <span class="rmc-badge rmc-badge-fast" id="rmcFastBadge">-분</span>
-      </button>
-      <button class="rmc-btn rmc-btn-min" onclick="_selectRouteMode('min')">
-        <span class="rmc-icon">🔄</span>
-        <span class="rmc-bname">최소환승</span>
-        <span class="rmc-bdesc" id="rmcMinDesc">환승 적은 경로</span>
-        <span class="rmc-badge rmc-badge-min" id="rmcMinBadge">-분</span>
-      </button>
-    </div>
-  </div>
-</div>
-
 <!-- 🚌 버스 노선 추적 모달 (전체 정류장 + 현재 버스 위치) -->
 <div id="busRouteModal" class="bus-route-modal" onclick="if(event.target===this)closeBusRoute()">
   <div class="bus-route-sheet">
@@ -36835,8 +36673,6 @@ function _isAnyOverlayOpen() {
       }
     }
     // open 클래스 기반
-    var rmp = document.getElementById('routeModePopup');
-    if (rmp && rmp.classList.contains('open')) return true;
     var rm = document.getElementById('routeModal');
     if (rm && rm.classList.contains('open')) return true;
     var svgPop = document.getElementById('svgStationPop');
@@ -36974,28 +36810,6 @@ function setDest(stn){
 
 /* ══ 경로 ══ */
 
-// findPath: BFS 래퍼 + 검증 로그
-function findPath(startName, endName) {
-  const r = bfs(startName, endName);
-  if (!r) {
-    console.warn('[PATH FINDING] 경로 없음:', startName, '→', endName);
-    return null;
-  }
-  // 환승 지점 추출
-  const xfers = [];
-  for (let i = 1; i < r.lp.length; i++) {
-    if (r.lp[i] && r.lp[i-1] && r.lp[i] !== r.lp[i-1]) {
-      xfers.push(`${r.path[i]}(${r.lp[i-1]}→${r.lp[i]})`);
-    }
-  }
-  const pathStr = r.path.join(' → ');
-  console.log(
-    `[PATH FINDING] 출발: ${startName} | 도착: ${endName}\n` +
-    `  경로(${r.path.length}역): ${pathStr}\n` +
-    `  환승: ${xfers.length ? xfers.join(', ') : '없음'} | 소요: ${Math.round(sum(r.tp)/60)}분`
-  );
-  return r;
-}
 
 // ══════════════════════════════════════════════════════════════
 // 즐겨찾기 / 최근 경로 — localStorage 기반 (안전 래퍼)
@@ -37228,180 +37042,20 @@ function _renderFavPopup(){
 window._renderFavPopup = _renderFavPopup;
 
 function doRoute(){
-  if(!S.start||!S.dest)return;
-
-  // ★ 경로 재탐색: 이전 경로 캐시 완전 초기화
-  S._stationETAs   = null;
-  S._delayOffsetMs = 0;
-  S.boardedAt      = null;
-  S.boarded        = false;
-  S.boardingState  = 'idle';
-  window._apiFailed = 0; window._nextTrainFailed = 0;
-  S.curIdx         = 0;
-  S.trainProgress  = 0;
-  S.boarded_anim_started = false;
-  if(typeof _cancelAutoBoard === 'function') _cancelAutoBoard();
-  if(typeof window !== 'undefined') window.dynamicDelayOffset = 0;
-
-  // 타임라인 DOM 초기화 (이전 경로 표시 제거)
-  var track = document.getElementById('hTimelineTrack');
-  if(track) track.innerHTML = '';
-  var htlTrain = document.getElementById('htlMovingTrain');
-  if(htlTrain) htlTrain.style.display = 'none';
-
-  // 이전 검색의 API 정거장 캐시 초기화
-  S._apiStations = null;
-  S._apiRouteSec = 0;
-
-  // ★ 출발역 노선의 TAGO 시간표를 백그라운드에서 미리 로드
-  // (getNextDepartureMins가 동기 함수라 호출 전에 캐시를 채워둬야 함)
-  if(S.start && S.start.name) {
-    var _firstLineGuess = (S.start.line) || '';
-    if(_firstLineGuess && typeof tagoGetNextDep === 'function') {
-      tagoGetNextDep(_firstLineGuess, S.start.name, kstMinutesAdj()).catch(function(){});
+  // ★ 2026-10-09: 옛 앱 자체 계산(BFS 최단/최소환승 + 경로 유형 선택 팝업)을 없앴다.
+  //   YJ 절대규칙: 모든 논리계산은 엔진, 앱은 그리기만. 남아 있는 호출자는 전부 엔진으로 보낸다.
+  try{
+    if(typeof S !== 'undefined' && S.start && S.dest && !(_fmapStart && _fmapDest)){
+      _fmapStart = { type:'subway', name:S.start.name, lat:S.start.lat, lng:S.start.lng, line:S.start.line };
+      _fmapDest  = { type:'subway', name:S.dest.name,  lat:S.dest.lat,  lng:S.dest.lng,  line:S.dest.line };
+      var fi = document.getElementById('fmapStartInp'); if(fi) fi.value = S.start.name;
+      var fd = document.getElementById('fmapDestInp');  if(fd) fd.value = S.dest.name;
     }
-  }
-
-  const rFast = bfsMinTime(S.start.name,  S.dest.name);  // 최단시간
-  const rMin  = bfsMinXfer(S.start.name, S.dest.name);  // 최소환승
-
-  // 공공데이터포털 최단 이동경로 API로 소요시간 보정 + 전체 연동 반영
-  _fetchPublicRouteTime(S.start, S.dest).then(function(apiSec){
-    if(apiSec > 0) {
-      _applyApiRouteData(apiSec);  // API 성공 → 실시간 데이터 바인딩
-    } else {
-      // API 무효 응답 → 로컬 BFS 결과 그대로 UI 반영 (폴백)
-      if(typeof updateRouteDetailUI === 'function') updateRouteDetailUI();
-    }
-  }).catch(function(e){
-    // ★ 통신 지연/에러 → 화면 멈춤 없이 로컬 findShortestPath 결과로 즉시 폴백
-    console.warn('[경로API] 폴백 → 로컬 알고리즘 사용', e && e.message);
-    if(typeof updateRouteDetailUI === 'function') updateRouteDetailUI();
-  });
-
-  if(!rFast){ toast('경로를 찾을 수 없습니다.'); return; }
-
-  // ★ 최근 경로 이력은 저장하지 않음 (사용자가 설정한 즐겨찾기만 기억)
-
-  // ── 경로 후처리: lp[0] 보정 ─────────────────────────────
-  // BFS 시작 시 ln='' 이므로 lp[0]이 항상 빈 문자열
-  // lp[1]의 노선을 lp[0]으로 채워 출발역 노선 표시 정상화
-  function fixRoute(r) {
-    if(!r) return r;
-    var lp = r.lp.slice(); // 복사
-    var tp = r.tp.slice();
-    var path = r.path.slice();
-
-    // lp[0] 보정: 출발역 노선 = 첫 번째 엣지의 노선
-    if(lp.length > 1 && lp[0] === '') {
-      lp[0] = lp[1];
-    }
-
-    // ── ★ 상하행 방향 선판단 + 종착역 컷오프 방어 ──────────────
-    // 목적지 도착 이후 배열 후순위에 연장선 역이 꼬여 붙는 현상 차단
-    // (예: 인천1호선 동막→송도달빛축제공원 도착 후 검단 연장선 역이 append)
-    try {
-      var destName = (S?.dest?.name) || path[path.length - 1];
-      var destIdx  = -1;
-      // path에서 목적지의 마지막 정상 인덱스 탐색
-      for(var di = 0; di < path.length; di++) {
-        if(path[di] === destName) { destIdx = di; break; }
-      }
-      // 목적지 이후에 잔여 역이 더 있으면 컷오프 (종착 단절)
-      if(destIdx >= 0 && destIdx < path.length - 1) {
-        path = path.slice(0, destIdx + 1);
-        lp   = lp.slice(0, destIdx + 1);
-        tp   = tp.slice(0, destIdx + 1);
-        console.log('[경로 컷오프] 목적지(' + destName + ') 이후 ' + '잔여역 단절');
-      }
-    } catch(e) { console.warn('[컷오프 방어]', e.message); }
-
-    // 동일 역 연속 중복 제거 (환승 시 같은 역이 두 번 나올 수 있음)
-    var cleanPath = [path[0]];
-    var cleanLp   = [lp[0]];
-    var cleanTp   = [];
-    var cumSec = 0;
-    for(var i = 1; i < path.length; i++) {
-      if(path[i] === path[i-1] && lp[i] === lp[i-1]) {
-        // 완전 중복: 스킵
-        continue;
-      }
-      // 같은 역이지만 노선 변경 = 환승 (유지)
-      cleanPath.push(path[i]);
-      cleanLp.push(lp[i]);
-      cleanTp.push(tp[i] || 120);
-    }
-    // tp는 구간 사이 소요시간 — cleanPath.length-1 개여야 함
-    // cleanTp에 출발역→첫역 구간 추가
-    cleanTp.unshift(tp[0] || 0);
-
-    return {
-      path:  cleanPath,
-      lp:    cleanLp,
-      tp:    cleanTp,
-      xfers: cleanLp.filter(function(l,i){ return i>0 && l && cleanLp[i-1] && l !== cleanLp[i-1]; }).length
-    };
-  }
-
-  S.routeFast = fixRoute(rFast);
-  S.routeMin  = fixRoute(rMin || rFast);
-
-  // ── ★ 급행(Express) 구간 표준 소요시간 보정 (최단시간 경로 한정) ──
-  // 급행이 상시 운행되는 구간을 경로가 통과하면, 완행 누적시간 대신
-  // 표준 급행 주파시간을 통째로 대입 (카카오맵 수준 정합성)
-  S.routeFast = _applyExpressTime(S.routeFast);
-
-  // ★ 경로 계산 완료 → 경로 유형 선택 팝업 표시
-  _showRouteModePopup();
+  }catch(e){}
+  if(typeof fmapDoRoute === 'function') fmapDoRoute();
 }
 
-// ── 급행 표준 주파시간 적용 ────────────────────────────────────
-// EXPRESS_SEGMENTS: {노선: [{from, to, sec}]} 급행 구간 표준시간(초)
-const EXPRESS_SEGMENTS = {
-  '1호선': [
-    {from:'구로', to:'부평', sec:18*60},   // 용산급행 구로-부평 18분
-    {from:'부평', to:'구로', sec:18*60},
-  ],
-  '9호선': [
-    {from:'개화', to:'중앙보훈병원', sec:48*60},  // 급행 전구간 약 48분
-  ],
-  '공항철도': [
-    {from:'서울역', to:'인천공항1터미널', sec:43*60},  // 직통 43분
-  ],
-};
-function _applyExpressTime(r){
-  if(!r || !r.path || r.path.length < 2) return r;
-  try {
-    // 단일 노선 구간에서만 급행 적용 (환승 없는 직진 구간)
-    var firstLine = r.lp[1] || r.lp[0];
-    var allSame = r.lp.every(function(l){ return !l || l === firstLine; });
-    if(!allSame) return r;  // 환승 경로는 급행 보정 제외 (복잡도 회피)
-
-    var segs = EXPRESS_SEGMENTS[firstLine];
-    if(!segs) return r;
-
-    var startStn = r.path[0], endStn = r.path[r.path.length-1];
-    for(var i=0;i<segs.length;i++){
-      var s = segs[i];
-      // 경로가 급행 구간을 완전히 포함하는지 확인
-      var fi = r.path.indexOf(s.from), ti = r.path.indexOf(s.to);
-      if(fi >= 0 && ti >= 0 && fi < ti){
-        // 급행 구간의 완행 누적시간을 표준 급행시간으로 통째 교체
-        var perStn = Math.round(s.sec / (ti - fi));
-        for(var j=fi+1;j<=ti;j++){ r.tp[j] = perStn; }
-        console.log('[급행 보정] ' + firstLine + ' ' + s.from + '→' + s.to + ' = ' + Math.round(s.sec/60) + '분 적용');
-      }
-    }
-  } catch(e){ console.warn('[급행 보정 오류]', e.message); }
-  return r;
-}
-window._applyExpressTime = _applyExpressTime;
 // ── renderRouteSegCards: 경로 역 목록 UI ───────────────────
-// ════════════════════════════════════════════════════════════════
-// _applyApiRouteData — 공공데이터 API 소요시간을 전역 경로/UI/애니메이션에 강제 반영
-// API 응답(초) 수신 직후: ① S.route 시간 보정 ② 하단 타임라인 ③ 헤더 분
-//                        ④ 열차 핀 애니메이션 주기 재계산
-// ════════════════════════════════════════════════════════════════
 // ════════════════════════════════════════════════════════════════
 // updateRouteDetailUI — 경로 상세 UI 통합 강제 리프레시
 // API 수신/폴백 양쪽에서 호출 → 타임라인·헤더·지도·핀 일괄 동기화
@@ -37477,82 +37131,6 @@ function updateRouteDetailUI() {
 }
 window.updateRouteDetailUI = updateRouteDetailUI;
 
-function _applyApiRouteData(apiSec) {
-  // 방어: 유효하지 않은 응답이면 로컬 BFS 결과 유지 (fallback)
-  if(!apiSec || apiSec <= 0 || !S?.route?.path) return;
-
-  try {
-    S._apiRouteSec = apiSec;
-    console.log('[경로API] 실시간 소요시간:', apiSec + '초 (' + Math.round(apiSec/60) + '분)');
-
-    // ── ① API 정거장 리스트로 경로 자체 오버라이드 (있을 때만) ──
-    // 로컬 BFS 결과를 API 실제 노선 기준 역 배열로 100% 교체
-    if(S._apiStations && S._apiStations.length >= 2) {
-      var apiPath = [], apiLp = [];
-      for(var s=0;s<S._apiStations.length;s++){
-        apiPath.push(S._apiStations[s].name);
-        apiLp.push(S._apiStations[s].line || (s>0 ? S._apiStations[s-1].line : ''));
-      }
-      // lp[0] 보정
-      if(!apiLp[0] && apiLp.length>1) apiLp[0] = apiLp[1];
-
-      // ★ 목적지 종착 컷오프: 도착역 이후 연장선 역 단절
-      try {
-        var destNm = (S?.dest?.name) || apiPath[apiPath.length-1];
-        var dIdx = apiPath.indexOf(destNm);
-        if(dIdx >= 0 && dIdx < apiPath.length - 1) {
-          apiPath = apiPath.slice(0, dIdx + 1);
-          apiLp   = apiLp.slice(0, dIdx + 1);
-        }
-      } catch(e) {}
-
-      S.route.path = apiPath;     // ★ 전역 경로 변수 강제 오버라이드
-      S.route.lp   = apiLp;
-      console.log('[경로API] 경로 오버라이드:', apiPath.length + '역');
-    }
-
-    var path = S.route.path;
-
-    // ── ② 구간별 시간 균등 배분으로 tp 재계산 ──────────────────
-    var moveSegs = 0;
-    for(var i=1;i<path.length;i++){ if(path[i] !== path[i-1]) moveSegs++; }
-    var perSeg = moveSegs > 0 ? Math.round(apiSec / moveSegs) : 120;
-    // ★ 실측 역간소요(_REAL_SEG) 우선, 없으면 API 균등분할
-    var _lp = S.route.lp || [];
-    var newTp = [0];
-    for(var j=1;j<path.length;j++){
-      if(path[j] === path[j-1]){ newTp.push(0); continue; }
-      var _ln = _lp[j] || _lp[j-1] || '';
-      var _rv = _realSeg(_ln, path[j-1], path[j]);
-      newTp.push(_rv != null ? _rv : perSeg);
-    }
-    S.route.tp = newTp;          // 전역 경로 객체 오버라이딩
-    S.route._apiBound = true;    // API 바인딩 완료 플래그
-
-    // ── ③ 열차 핀 애니메이션·카운트다운 완전 초기화 후 재구동 ──
-    if(typeof stopTrainAnim === 'function') stopTrainAnim();
-    if(typeof _trackingEngine !== 'undefined' && _trackingEngine?.stationTimer) {
-      clearTimeout(_trackingEngine.stationTimer);
-      _trackingEngine.stationTimer = null;
-    }
-    if(typeof _boardCountdownTimer !== 'undefined' && _boardCountdownTimer) {
-      clearInterval(_boardCountdownTimer);
-      _boardCountdownTimer = null;
-    }
-
-    // ── ④ 통합 UI 리프레시 (타임라인+헤더분+지도+하이라이트) ──
-    updateRouteDetailUI();
-
-    // ── ⑤ 관제 중이면 새 경로 기준 애니메이션 재구동 ──────────
-    if(S.boardingState === 'boarding') {
-      if(typeof _runTrainAnim === 'function') _runTrainAnim();
-    }
-
-  } catch(e) {
-    console.warn('[경로API 연동 오류]', e.message);
-  }
-}
-window._applyApiRouteData = _applyApiRouteData;
 
 function renderRouteSegCards(r) {
   var container = document.getElementById('routeSegCards');
@@ -38231,34 +37809,6 @@ function seoulMapReset(){
 
 
 
-function onMapStnClick(stnName){
-  // 역 클릭: 화면 중앙에 팝업 표시
-  var popup = document.getElementById('mapStnPopup');
-  if(!popup) return;
-
-  // 역 정보
-  document.getElementById('mspName').textContent = stnName;
-  var linesDiv = document.getElementById('mspLines');
-  if(linesDiv) {
-    linesDiv.innerHTML = '';
-    var stns = STNDB.filter(function(s){ return s.name === stnName; });
-    stns.forEach(function(s){
-      var sp = document.createElement('span');
-      sp.style.cssText = 'font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;color:#fff;background:' + (s.color || '#555');
-      sp.textContent = s.line;
-      linesDiv.appendChild(sp);
-    });
-  }
-  _mspStnName = stnName;
-  _selName     = stnName;  // svgSetRoute용
-
-  // 팝업 표시 (fixed top 위치 — 슬라이드인)
-  popup.style.display = 'block';
-  // ★ 2026-09-27 (YJ 최종점검: 죽은코드 청소): 여기서 부르던 _updateMspRouteInfo()는
-  //   파일 전체에 정의가 없는 함수였다(typeof 가드 덕에 에러는 안 났지만 항상 조용히
-  //   아무 것도 안 하고 있었음). 호출부만 삭제함 — 이 화면(역 클릭 팝업)의 나머지
-  //   기능(노선 뱃지·팝업 표시 등)은 그대로 유지.
-}
 
 
 function _extractStnNameFromEl(el) {
@@ -38670,75 +38220,6 @@ function renderCommunity() {
 window.renderCommunity = renderCommunity;
 
 
-// ── mspSetRoute: 0525-12 패턴 완전 이식 ─────────────────────────
-// [지침 1-②] 출발역 선택 → 팝업 닫지 않고 노선도 탭 유지
-//             출발+도착 모두 채워진 순간 → _goHome() 자동 호출
-function mspSetRoute(type) {
-  var name = _mspStnName;
-  if(!name) return;
-
-  var stn = (typeof STNDB !== 'undefined') ? STNDB.find(function(s){ return s.name === name; }) : null;
-  if(!stn) { if(typeof toast==='function') toast('역 데이터 없음: ' + name); return; }
-
-  // lines 배열 안전 변환 (split TypeError 원천 차단)
-  var lineArr = Array.isArray(stn.lines)
-    ? stn.lines
-    : (stn.lines ? stn.lines.toString().split(',') : (stn.line ? [stn.line] : []));
-
-  if(type === 'start') {
-    // ── 출발역 재설정: 기존 도착역 완전 초기화 ──────────────
-    S.start = stn;
-    S.dest  = null;  // 도착역 무조건 초기화
-
-    // 도착역 UI 초기화
-    var vd2=document.getElementById('valDest'), sd2=document.getElementById('subDest');
-    var fd2=document.getElementById('fmapDestInp'), id2=document.getElementById('inpDest');
-    var sc2=document.getElementById('routeSummaryCard');
-    if(vd2){ vd2.textContent='-'; vd2.style.opacity='0.6'; }
-    if(sd2)  sd2.textContent='위에서 역 검색';
-    if(fd2)  fd2.value='';
-    if(id2)  id2.value='';
-    if(sc2)  sc2.style.display='none';
-
-    // 출발역 UI 설정
-    var vs=document.getElementById('valStart'), ss=document.getElementById('subStart');
-    var ct=document.getElementById('curStnTxt'), sn=document.getElementById('setupNotice');
-    var fi=document.getElementById('fmapStartInp'), inp=document.getElementById('inpStart');
-    if(vs) vs.textContent=stn.name;
-    if(ss) ss.textContent=lineArr[0]||stn.line||'-';
-    if(ct) ct.textContent=stn.name;
-    if(sn) sn.style.display='none';
-    if(fi) fi.value=stn.name;
-    if(inp) inp.value=stn.name;
-
-    // 팝업은 닫지 않음 — 노선도에서 도착역 연속 선택 가능
-    toast('🚉 출발역: '+name+'  ·  이제 도착역을 선택하세요');
-    // S.dest=null이므로 _goHome 호출 안 함
-
-  } else {
-    // 도착역 기록
-    S.dest = stn;
-    var vd=document.getElementById('valDest'), sd=document.getElementById('subDest');
-    var sc=document.getElementById('routeSummaryCard'), fd=document.getElementById('fmapDestInp');
-    var inpD=document.getElementById('inpDest');
-    if(vd){ vd.textContent=stn.name; vd.style.opacity='1'; }
-    if(sd) sd.textContent=stn.line+' · 변경하려면 위에서 검색';
-    if(sc) sc.style.display='block';
-    if(fd) fd.value=stn.name;
-    if(inpD) inpD.value=stn.name;
-    // 팝업 닫기
-    var popup2=document.getElementById('mapStnPopup');
-    if(popup2) popup2.style.display='none';
-    toast('🏁 도착역: '+name);
-    // 출발+도착 모두 채워진 순간 → 홈탭 자동 전환 + 도미노 체인
-    if(S.start && S.dest) {
-      _goHome();
-    } else {
-      toast('⚠️ 출발역을 먼저 선택해주세요');
-    }
-  }
-}
-window.mspSetRoute = mspSetRoute;
 
 
 
@@ -45255,211 +44736,6 @@ window.openLineFilter = openLineFilter;
 
 // ── window 바인딩 (WebView 탭 전환 스코프 격리 방지) ──────────
 window.switchTab              = switchTab;
-// ══════════════════════════════════════════════════════════════
-// 경로 모드 선택 팝업 — 사용자가 최단시간 or 최소환승 선택
-// ══════════════════════════════════════════════════════════════
-
-function _showRouteModePopup() {
-  var rf = S.routeFast;
-  var rm = S.routeMin;
-  if(!rf) return;
-
-  // 요약 텍스트 계산
-  var startNm = S.start ? S.start.name : '-';
-  var destNm  = S.dest  ? S.dest.name  : '-';
-
-  // 최단시간 정보
-  var fastSec   = rf.tp.reduce(function(a,b){return a+b;},0);
-  var fastMin   = Math.round(fastSec/60);
-  var fastXfers = rf.lp.filter(function(l,i){ return i>0&&l&&rf.lp[i-1]&&l!==rf.lp[i-1]; }).length;
-
-  // 최소환승 정보
-  var minSec   = rm.tp.reduce(function(a,b){return a+b;},0);
-  var minMin   = Math.round(minSec/60);
-  var minXfers = rm.lp.filter(function(l,i){ return i>0&&l&&rm.lp[i-1]&&l!==rm.lp[i-1]; }).length;
-
-  // 두 경로가 완전히 같으면 바로 최단시간으로 진행
-  if(rf.path.join(',') === rm.path.join(',')) {
-    _selectRouteMode('fast');
-    return;
-  }
-
-  // 팝업 내용 채우기
-  var summary = document.getElementById('rmcRouteSummary');
-  var fdesc   = document.getElementById('rmcFastDesc');
-  var fbadge  = document.getElementById('rmcFastBadge');
-  var mdesc   = document.getElementById('rmcMinDesc');
-  var mbadge  = document.getElementById('rmcMinBadge');
-
-  if(summary) summary.textContent = startNm + ' → ' + destNm;
-
-  if(fdesc)  fdesc.textContent  = '환승 ' + fastXfers + '회 · ' + rf.path.length + '개 역';
-  if(fbadge) fbadge.textContent = fastMin + '분';
-
-  if(mdesc)  mdesc.textContent  = '환승 ' + minXfers + '회 · ' + rm.path.length + '개 역';
-  if(mbadge) mbadge.textContent = minMin + '분';
-
-  // 더 빠른 방법에 "추천" 배지 추가
-  var fBtn = document.querySelector('.rmc-btn-fast');
-  var mBtn = document.querySelector('.rmc-btn-min');
-  document.querySelectorAll('.rmc-rec').forEach(function(el){ el.remove(); });
-  if(fastMin <= minMin) {
-    if(fBtn) { var rec=document.createElement('span'); rec.className='rmc-badge rmc-badge-fast rmc-rec'; rec.style.cssText='font-size:9px;margin-top:4px;'; rec.textContent='⚡ 추천'; fBtn.appendChild(rec); }
-  } else {
-    if(mBtn) { var rec=document.createElement('span'); rec.className='rmc-badge rmc-badge-min rmc-rec'; rec.style.cssText='font-size:9px;margin-top:4px;'; rec.textContent='✅ 추천'; mBtn.appendChild(rec); }
-  }
-
-  // 팝업 열기
-  var popup = document.getElementById('routeModePopup');
-  if(popup) { popup.style.display='flex'; setTimeout(function(){ popup.classList.add('open'); }, 10); }
-}
-window._showRouteModePopup = _showRouteModePopup;
-
-function _closeRouteModePopup() {
-  var popup = document.getElementById('routeModePopup');
-  if(popup) {
-    popup.classList.remove('open');
-    // ★ 수정6: 닫힐 때 pointer-events:none으로 터치 먹통 완전 차단
-    popup.style.pointerEvents = 'none';
-    setTimeout(function(){
-      popup.style.display = 'none';
-      popup.style.pointerEvents = '';
-    }, 300);
-  }
-}
-window._closeRouteModePopup = _closeRouteModePopup;
-
-function _selectRouteMode(mode) {
-  _closeRouteModePopup();
-
-  S.routeMode = mode;
-  var r = (mode === 'min') ? (S.routeMin || S.routeFast) : (S.routeFast || S.routeMin);
-  if(!r) return;
-
-  // kakao-tab 동기화
-  document.querySelectorAll('.kakao-tab').forEach(function(t){ t.classList.remove('on'); });
-  var targetTab = document.querySelector('.kakao-tab[onclick*="' + (mode==='min'?'min':'fast') + '"]');
-  if(targetTab) targetTab.classList.add('on');
-
-  // 경로 적용
-  _applyRoute(r);
-}
-window._selectRouteMode = _selectRouteMode;
-
-// ── _applyRoute: 선택한 경로를 실제로 화면에 렌더 ──────────
-function _applyRoute(r) {
-  // ★ 이전 경로 상태 완전 초기화
-  S.route         = r;
-  S.curIdx        = 0;
-  S.trainProgress = 0;
-  S.mapPositions  = null;
-  S.lastGPSFix    = null;
-  // 출발/도착 잔류 방지 (앱 재시작 시 초기화)
-  S.start = null;
-  S.dest  = null;
-  _fmapStart = null;
-  _fmapDest  = null;
-  S.boardingState = 'idle';
-  S.speedSamples  = [];
-  S.lastPos       = null;
-  S._stationETAs  = null;  // ★ 이전 경로 ETA 캐시 초기화
-  S._delayOffsetMs = 0;
-  S.boarded       = false;
-  S.boardAsked    = false;
-
-  // HTL 이동 열차 레이어 숨김
-  var htlTrain = document.getElementById('htlMovingTrain');
-  if(htlTrain) htlTrain.style.display = 'none';
-  S.lastPos       = null;
-
-  // ── ★ 요구사항1: 시간표(계획 출발시각) 기준점 우선 적용 ──────
-  // 사용자가 기준시각을 지정했거나 다음 열차 출발시각이 있으면 그것을,
-  // 없으면 현재 시각을 Base Time으로 사용
-  try {
-    var planMs = null;
-    if(typeof _baseTimeMs !== 'undefined' && _baseTimeMs !== null) {
-      planMs = _baseTimeMs;  // 사용자 지정 시간표
-    } else if(S.start && typeof _resolveTrainDepartMs === 'function') {
-      var dep = _resolveTrainDepartMs(Date.now());
-      if(dep && dep.ms) planMs = dep.ms;  // 실제 다음 열차 출발시각
-    }
-    S.boardedAt = planMs || ((typeof getBaseTimeMs==='function') ? getBaseTimeMs() : Date.now());
-    S._delayOffsetMs = 0;  // 지연 오프셋 초기화 (요구사항3)
-    console.log('[Base Time] 경로 기준시각:', new Date(S.boardedAt).toLocaleTimeString());
-  } catch(e){
-    S.boardedAt = Date.now();
-    S._delayOffsetMs = 0;
-  }
-
-  var xf = r.lp.filter(function(l,i){ return i>0&&l&&r.lp[i-1]&&l!==r.lp[i-1]; }).length;
-  console.log('[ROUTE] 선택된 경로: ' + (S.routeMode==='min'?'최소환승':'최단시간')
-    + ' | ' + Math.round(r.tp.reduce(function(a,b){return a+b;},0)/60) + '분 환승' + xf + '회 (' + r.path.length + '역)');
-
-  var pin = document.getElementById('trainPin');
-  if(pin) pin.className = 'train-pin waiting';
-  var banner = document.getElementById('boardBanner');
-  if(banner) banner.classList.remove('on');
-  stopTrainAnim();
-
-  if(S.start && S.dest && S.route){
-    startNextTrainPolling(S.start);
-    setTimeout(function(){ showTransferCarPopup(S.route, S.dest.name); }, 800);
-  }
-  stopApiPoll();
-
-  // ★ 경로 노선도: 빈약한 가로 SVG(metroSection)·세로 상세(pathSection) 숨김
-  //   → 정보 풍부한 가로 3층 타임라인(hTimelineWrap)으로 일원화
-  var metroSec = document.getElementById('metroSection');
-  if(metroSec) metroSec.style.display = 'none';
-
-  var _ps2 = document.getElementById('pathSection');
-  if(_ps2) _ps2.style.display = 'none';
-
-  // 가로 3층 타임라인 표시 + 렌더
-  var _htl = document.getElementById('hTimelineWrap');
-  if(_htl) _htl.style.display = 'block';
-  if(typeof renderHorizontalTimeline === 'function') renderHorizontalTimeline();
-
-  var _sc = document.getElementById('routeSummaryCard');
-  if(_sc) _sc.style.display = 'block';
-  var _sn = document.getElementById('setupNotice');
-  if(_sn) _sn.style.display = 'none';
-  var _fsi = document.getElementById('fmapStartInp');
-  var _fdi = document.getElementById('fmapDestInp');
-  if(_fsi && S.start) _fsi.value = S.start.name;
-  if(_fdi && S.dest)  _fdi.value = S.dest.name;
-
-  renderPath(r);
-  renderMap();
-  calcETA();
-  updateCong(S.start);
-  setTimeout(function(){ highlightRouteSVG(r); }, 200);
-  // boardSection 숨김 유지 (GPS 자동 관제)
-  document.getElementById('boardSection').style.display = 'none';
-  if(typeof _clearBoardAlerts === 'function') _clearBoardAlerts();
-
-  // ★ 탑승 버튼 항상 '탑승하기' 초기화
-  var qb = document.getElementById('quickBoardBtn');
-  if(qb){ qb.textContent='🚇 탑승하기'; qb.style.background='linear-gradient(135deg,#1a7a3a,#30d158)'; qb.style.boxShadow='0 4px 16px rgba(48,209,88,.3)'; }
-
-  // ★ ETA 즉시 재빌드 (새 경로 기준)
-  if(typeof _rebaseAllFromNow === 'function') _rebaseAllFromNow(S.boardedAt || Date.now());
-
-  // ★ 타임라인 강제 재렌더 (이전 경로 캐시 완전 제거)
-  var track = document.getElementById('hTimelineTrack');
-  if(track) track.innerHTML = '';
-  if(typeof renderHorizontalTimeline === 'function') renderHorizontalTimeline();
-
-  setTimeout(function(){ if(typeof updateRouteUI==='function') updateRouteUI(); }, 100);
-  setTimeout(function(){
-    if(typeof startTracking === 'function') {
-      if(_trackingEngine && _trackingEngine.active) stopTracking();
-      startTracking();
-    }
-  }, 500);
-  setTimeout(function(){ if(typeof triggerRealtimeChain==='function') triggerRealtimeChain(r); }, 400);
-}
-window._applyRoute = _applyRoute;
 
 window.doRoute                = doRoute;
 window.setStart               = setStart;
@@ -45468,7 +44744,6 @@ window.manualBoard            = manualBoard;
 window.loadTimetable          = loadTimetable;
 window.loadCongestion         = loadCongestion;
 window.seoulFetch             = seoulFetch;
-window.calcOptimal            = calcOptimal;
 window.renderSeoulMap         = renderSeoulMap;
 window.renderShop             = renderShop;
 window.startAutoRefresh       = startAutoRefresh;
@@ -45769,84 +45044,6 @@ window.submitPost = submitPost;
 
 console.log('[앱] 전역 바인딩 완료');
 
-// ══════════════════════════════════════════════════════════════
-// 공공데이터포털 지하철역 최단 이동경로 API
-// ══════════════════════════════════════════════════════════════
-
-// 출발역/도착역 ID → 공공데이터포털 API로 실제 소요시간(초) 조회
-// ── 서울시 교통공사 지하철역 최단경로이동정보 (getShtrmPath) ────
-// 필수 요청인자: KEY, TYPE(json), SERVICE(getShtrmPath),
-//               START_INDEX(1), END_INDEX(1),
-//               dptreSttnNm(출발역명), arvlStnNm(도착역명),
-//               searchDt(기준시각 yyyy-MM-dd HH:mm:ss)
-// 선택 요청인자: searchType(duration=최소시간|distance=최단거리|transfer=최소환승)
-async function _fetchPublicRouteTime(startStn, endStn) {
-  if(!startStn || !endStn) return 0;
-  if(typeof _IS_WEBVIEW_BLOCKED !== 'undefined' && _IS_WEBVIEW_BLOCKED) return 0;
-
-  var startNm = (startStn.name || '').replace(/역$/, '').trim();
-  var endNm   = (endStn.name   || '').replace(/역$/, '').trim();
-  if(!startNm || !endNm) return 0;
-
-  // 검색일시: 기준시각 우선, 없으면 현재 시각 (yyyy-MM-dd HH:mm:ss)
-  function _searchDt() {
-    var base = (typeof getBaseTimeMs==='function') ? getBaseTimeMs() : Date.now();
-    var d = new Date(base);
-    var pad = function(n){ return String(n).padStart(2,'0'); };
-    return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())
-      +' '+pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
-  }
-
-  // 응답 파싱: { DBInfo:[{travelTime,...}], StationList:[...] }
-  function _parseRouteApiResponse(raw) {
-    if(!raw) return 0;
-    if(raw.errorMessage){
-      var code=raw.errorMessage.code||'';
-      if(code!=='INFO-000'){ console.warn('[getShtrmPath]',code,raw.errorMessage.message||''); return 0; }
-    }
-    // ── 정거장 리스트 추출 (실제 노선 기준 역명 배열) → 전역 저장 ──
-    try {
-      var rawList = raw.StationList || raw.stationList ||
-                    (raw.DBInfo && raw.DBInfo.length ? raw.DBInfo[0].StationList : null);
-      if(rawList && rawList.length) {
-        var names = rawList.map(function(s){
-          var nm = (s.STATION_NM || s.stationNm || s.name || s.STATIN_NM || '').replace(/역$/,'').trim();
-          var ln = (s.LINE_NUM || s.lineNm || s.line || '').trim();
-          return { name: nm, line: ln };
-        }).filter(function(x){ return x.name; });
-        if(names.length >= 2) {
-          S._apiStations = names;  // ★ API 실제 정거장 리스트 전역 저장
-          console.log('[getShtrmPath] 정거장 ' + names.length + '개 수신:', names.map(function(x){return x.name;}).slice(0,5).join('→')+'...');
-        }
-      }
-    } catch(e) { console.warn('[StationList 파싱]', e.message); }
-
-    // travelTime (분 단위)
-    var t = parseInt(raw.travelTime||raw.travTime||0);
-    if(t>0) return t*60;
-    if(raw.DBInfo&&raw.DBInfo.length){
-      var t2=parseInt(raw.DBInfo[0].travelTime||raw.DBInfo[0].travTime||0);
-      if(t2>0) return t2*60;
-    }
-    return 0;
-  }
-
-  try {
-    // ★ Worker 경유 (서버가 키 주입) — 클라이언트 키/공개프록시 사용 안 함
-    var _rpath = 'getShtrmPath/1/1/' + encodeURIComponent(startNm) + '/'
-               + encodeURIComponent(endNm) + '/' + encodeURIComponent(_searchDt());
-    var url = _seoulUrl(_rpath);
-
-    var res = await _fetchWithTimeout(url, {}, 6000);
-    var raw = await _safeParseResponse(res, 'ROUTE_PROXY');
-    var sec = _parseRouteApiResponse(raw);
-    if(sec > 0) return sec;
-
-    // (공개 프록시 경유 제거 — 키 노출 방지)
-  }catch(e){ if(!window._shtrmWarned){ window._shtrmWarned=true; console.warn('[getShtrmPath] API 미응답 — 로컬 경로로 진행(정상)'); } }
-  return 0;
-}
-window._fetchPublicRouteTime = _fetchPublicRouteTime;
 
 // ════════════════════════════════════════════════════════════════
 // updateRouteUI — pathSection/boardSection 조건부 표시
@@ -45893,53 +45090,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
 </script>
 
-
-<!-- ── 역 선택 팝업 (홈탭 상단 슬라이드인) ── -->
-<div id="mapStnPopup" style="
-  display:none;
-  position:fixed;
-  top:0; left:0; right:0;
-  z-index:999;
-  padding: env(safe-area-inset-top, 0px) 0 0;
-">
-  <!-- 배경 딤 (탭 하면 닫힘) -->
-  <div onclick="document.getElementById('mapStnPopup').style.display='none';"
-       style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:-1;"></div>
-  <!-- 카드 -->
-  <div style="
-    background:var(--card,#1c1c1e);
-    border-radius:0 0 20px 20px;
-    padding:14px 16px 16px;
-    box-shadow:0 6px 28px rgba(0,0,0,.6);
-    animation:slideDown .22s ease;
-  ">
-    <!-- 헤더: 역명 + 닫기 -->
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-      <div style="display:flex;align-items:center;gap:8px;">
-        <span style="font-size:18px;font-weight:900;color:var(--text,#fff);" id="mspName">-</span>
-        <div id="mspLines" style="display:flex;gap:4px;flex-wrap:wrap;"></div>
-      </div>
-      <button onclick="document.getElementById('mapStnPopup').style.display='none';"
-              style="background:none;border:none;color:var(--sub,#888);font-size:20px;
-                     line-height:1;cursor:pointer;padding:2px 6px;">✕</button>
-    </div>
-    <!-- 출발역 / 도착역 버튼 -->
-    <div style="display:flex;gap:10px;">
-      <button ontouchend="event.preventDefault();mspSetRoute('start')" onclick="mspSetRoute('start')"
-              style="flex:1;padding:13px 0;background:var(--blue,#0a84ff);color:#fff;
-                     border:none;border-radius:12px;font-size:14px;font-weight:700;
-                     cursor:pointer;font-family:inherit;letter-spacing:.3px;">
-        🚉 출발역
-      </button>
-      <button ontouchend="event.preventDefault();mspSetRoute('dest')" onclick="mspSetRoute('dest')"
-              style="flex:1;padding:13px 0;background:var(--red,#ff2d55);color:#fff;
-                     border:none;border-radius:12px;font-size:14px;font-weight:700;
-                     cursor:pointer;font-family:inherit;letter-spacing:.3px;">
-        🏁 도착역
-      </button>
-    </div>
-  </div>
-</div>
 
 <style>
 @keyframes slideDown {

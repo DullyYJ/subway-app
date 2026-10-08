@@ -328,8 +328,8 @@ const vis = (page, id) => page.evaluate(i => { const e = document.getElementById
   });
   await t('역 검색(서울역)을 하면 해당 역 팝업(출발역/도착역 버튼)이 열린다', async () => {
     await page.fill('#mapStnSearch', '서울역'); await page.keyboard.press('Enter'); await page.clock.runFor(1500);
-    const r = await page.evaluate(() => ({ svg: !!document.getElementById('svgStationPop'), grid: getComputedStyle(document.getElementById('mapStnPopup')).display, txt: (document.getElementById('svgStationPop') || {}).innerText || '' }));
-    assert.ok(r.svg || r.grid !== 'none', JSON.stringify(r));
+    const r = await page.evaluate(() => ({ svg: !!document.getElementById('svgStationPop'), txt: (document.getElementById('svgStationPop') || {}).innerText || '' }));
+    assert.ok(r.svg && /출발역/.test(r.txt) && /도착역/.test(r.txt), JSON.stringify(r));
   });
   await t('노선도에서 역을 눌러 출발역·도착역을 정하면 홈으로 이동해 엔진으로 경로를 찾는다', async () => {
     calls.length = 0;
@@ -342,25 +342,25 @@ const vis = (page, id) => page.evaluate(i => { const e = document.getElementById
     const r = await page.evaluate(() => ({ tab: document.querySelector('.tab-body.active').id, s: document.getElementById('fmapStartInp').value, d: document.getElementById('fmapDestInp').value, card: getComputedStyle(document.getElementById('transitResultCard')).display, hdr: (document.getElementById('transitResultHeader') || {}).textContent }));
     assert.strictEqual(r.tab, 'tab-home'); assert.ok(/서울역/.test(r.s) && /수원/.test(r.d), JSON.stringify(r)); assert.strictEqual(r.card, 'flex');
     assert.ok(calls.some(c => /route-v2/.test(c)), '엔진 호출 없음: ' + calls.join(','));
-    assert.ok(!(await page.evaluate(() => getComputedStyle(document.getElementById('routeModePopup')).display === 'flex')), '앱 자체 계산(BFS) 선택창이 뜨면 안 된다');
+    assert.ok(!(await page.evaluate(() => !!document.querySelector('#routeModePopup.open'))), '앱 자체 계산(BFS) 선택창이 뜨면 안 된다');
   });
   await t('경로를 정한 뒤 11분이 지나도 옛 계산(경로 유형 선택 팝업)이 끼어들지 않고 엔진 결과가 그대로다', async () => {
     const hdr0 = await page.evaluate(() => (document.getElementById('transitResultHeader') || {}).textContent);
     await page.clock.runFor(11 * 60000);
-    const r = await page.evaluate(() => ({ pop: document.getElementById('routeModePopup').classList.contains('open'), card: getComputedStyle(document.getElementById('transitResultCard')).display, hdr: (document.getElementById('transitResultHeader') || {}).textContent }));
+    const r = await page.evaluate(() => ({ pop: !!document.querySelector('#routeModePopup.open'), card: getComputedStyle(document.getElementById('transitResultCard')).display, hdr: (document.getElementById('transitResultHeader') || {}).textContent }));
     assert.strictEqual(r.pop, false, 'popup'); assert.strictEqual(r.card, 'flex', 'card ' + r.card); assert.ok(r.hdr && r.hdr.length > 0, 'hdr ' + hdr0 + ' -> ' + r.hdr);
   });
   await t('즐겨찾기/최근 경로를 적용한 뒤에도 마찬가지다', async () => {
     await page.evaluate(() => _applyFavRoute('서울역', '수원')); await page.clock.runFor(5000);
     await page.clock.runFor(11 * 60000);
-    assert.strictEqual(await page.evaluate(() => document.getElementById('routeModePopup').classList.contains('open')), false);
+    assert.strictEqual(await page.evaluate(() => !!document.querySelector('#routeModePopup.open')), false);
   });
   await t('홈의 출발↔도착 바꾸기(⇅) 버튼은 엔진으로 다시 탐색하고, 옛 계산(경로 유형 선택 팝업)을 띄우지 않는다', async () => {
     await go(page, 'home', 800);
     await page.evaluate(() => _applyFavRoute('서울역', '수원')); await page.clock.runFor(5000);
     calls.length = 0;
     await page.evaluate(() => document.querySelector('button[onclick="swapFmapRoute()"]').click()); await page.clock.runFor(5000);
-    const r = await page.evaluate(() => ({ s: document.getElementById('fmapStartInp').value, d: document.getElementById('fmapDestInp').value, fs: _fmapStart && _fmapStart.name, fd: _fmapDest && _fmapDest.name, pop: document.getElementById('routeModePopup').classList.contains('open') }));
+    const r = await page.evaluate(() => ({ s: document.getElementById('fmapStartInp').value, d: document.getElementById('fmapDestInp').value, fs: _fmapStart && _fmapStart.name, fd: _fmapDest && _fmapDest.name, pop: !!document.querySelector('#routeModePopup.open') }));
     assert.ok(/수원/.test(r.s) && /서울역/.test(r.d), JSON.stringify(r)); assert.ok(/수원/.test(r.fs) && /서울역/.test(r.fd), '엔진 상태가 안 바뀜 ' + JSON.stringify(r));
     assert.ok(calls.some(c => /route-v2/.test(c)), '엔진 호출 없음: ' + calls.join(','));
     assert.strictEqual(r.pop, false, '옛 계산 팝업이 뜸');
@@ -373,6 +373,16 @@ const vis = (page, id) => page.evaluate(i => { const e = document.getElementById
     assert.ok(r.s === '수원' && r.d === '테스트빌딩' && r.fs === '수원' && r.fd === '테스트빌딩', JSON.stringify(r));
     assert.ok(calls.some(c => /route-v2/.test(c)), '엔진 호출 없음: ' + calls.join(','));
     await page.evaluate(() => _applyFavRoute('서울역', '수원')); await page.clock.runFor(5000);   // 뒤 시험을 위해 원래 경로로 되돌린다
+  });
+  await t('옛 계산 코드(앱 자체 BFS 경로 계산·경로 유형 선택 팝업·옛 역 팝업)가 앱에서 없어졌고, 남은 doRoute 는 엔진으로만 보낸다', async () => {
+    const r = await page.evaluate(() => ({ gone: ['_showRouteModePopup', '_selectRouteMode', '_applyRoute', '_goHome', 'mspSetRoute', 'onMapStnClick', 'calcOptimal', 'findPath', '_fetchPublicRouteTime', '_applyApiRouteData', '_applyExpressTime'].filter(n => typeof window[n] !== 'undefined'), el: ['routeModePopup', 'mapStnPopup'].filter(i => document.getElementById(i)), doRoute: typeof doRoute }));
+    assert.deepStrictEqual(r.gone, [], '남아 있음: ' + r.gone); assert.deepStrictEqual(r.el, []); assert.strictEqual(r.doRoute, 'function');
+    await go(page, 'home', 500);
+    await page.evaluate(() => { _fmapStart = null; _fmapDest = null; document.getElementById('fmapStartInp').value = ''; document.getElementById('fmapDestInp').value = ''; setStart(STNDB.find(s => s.name === '강남')); setDest(STNDB.find(s => s.name === '수원')); });
+    calls.length = 0; await page.evaluate(() => doRoute()); await page.clock.runFor(5000);
+    const q = await page.evaluate(() => ({ fs: _fmapStart && _fmapStart.name, fd: _fmapDest && _fmapDest.name, inp: document.getElementById('fmapStartInp').value + '>' + document.getElementById('fmapDestInp').value }));
+    assert.ok(/강남/.test(q.fs) && /수원/.test(q.fd), JSON.stringify(q)); assert.ok(calls.some(c => /route-v2/.test(c)), '엔진 호출 없음: ' + calls.join(','));
+    await page.evaluate(() => _applyFavRoute('서울역', '수원')); await page.clock.runFor(5000);
   });
   await t('노선도 탭에서 JS 오류가 없다', async () => assert.deepStrictEqual(errs, []));
 
