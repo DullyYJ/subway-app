@@ -384,5 +384,6 @@
 
 ### 안 쓰는 코드 정리 (2026-10-09)
 - 어디서도 참조되지 않는 함수 111개 + 미사용 변수/헬퍼 6개(`_batNativeAvailable` 등), `switchRouteTab` 및 `.kakao-tab` 제거. acorn 도달성 분석 + 블록별 `node --check` + 미선언 식별자 diff(기준선 112개와 동일)로 검증.
-- **남겨둔 것**: `S.route` 가 null 인 운영 환경에서 사실상 휴면인 "지하철 탭 관제" 서브시스템(`startTracking/_doArrival/startApiPoll/detectBoardingState` 등). `_updateTrackingHUD`, `advanceToNextStation`, `_rebaseAllFromNow` 등 13개 가드 함수를 지우면 12곳의 호출이 남아 끊어지므로(여러 살아있는 함수와 얽힘) 되돌렸다. 지우려면 진입점부터 호출 체인 전체를 한 번에 걷어내야 한다.
+- **2차(같은 날)**: `S.route` 는 운영에서 항상 null(대입은 전부 null)이라는 전제로 AST 상수 접기를 적용 → 죽은 `if(S.route…)` 분기 73곳 제거, 연쇄로 호출이 끊긴 함수 35개와 껍데기가 된 함수 7개(`_updateTrackingHUD`·`_rebaseAllFromNow`·`checkArrivalAlerts` 등)와 호출부 제거(약 570KB 감소). 옛 지하철 탭 알림 테스트(`_bgArrivalNotify`) 삭제. 아래 '남겨둔 것'은 1차 시점 기록이며, 남은 `S.route` 참조는 약 90곳(대부분 `startTracking`·`_doArrival`·`startApiPoll` 체인 안쪽).
+- **(1차 기록) 남겨둔 것**: `S.route` 가 null 인 운영 환경에서 사실상 휴면인 "지하철 탭 관제" 서브시스템(`startTracking/_doArrival/startApiPoll/detectBoardingState` 등). `_updateTrackingHUD`, `advanceToNextStation`, `_rebaseAllFromNow` 등 13개 가드 함수를 지우면 12곳의 호출이 남아 끊어지므로(여러 살아있는 함수와 얽힘) 되돌렸다. 지우려면 진입점부터 호출 체인 전체를 한 번에 걷어내야 한다.
 - 테스트는 단독 실행 권장(병렬 시 타이밍 flake).

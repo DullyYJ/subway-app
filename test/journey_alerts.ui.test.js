@@ -103,22 +103,6 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   for (const i of [4, 5, 8, 9, 10]) await at(i);
   await t('둘 다 끄면 아무 알림도 나가지 않는다', async () => assert.deepStrictEqual(await titles(), []));
 
-  console.log('[구형(지하철 탭) 경로의 환승·하차 알림도 같은 스위치를 따른다]');
-  const legacy = async (prefs) => {
-    await page.evaluate((prefs) => {
-      try { localStorage.removeItem('notifPref'); } catch (e) {}
-      _notifPrefCache = null; if (prefs) Object.keys(prefs).forEach(k => _notifPrefSet(k, prefs[k]));
-      S.route = { path: ['P0', 'P1', 'P2', 'P3', 'P4', 'P5'], lp: ['1호선', '1호선', '1호선', '2호선', '2호선', '2호선'], transfers: ['P2'], tp: [0, 120, 120, 120, 120, 120] };
-      S.boarded = true; S.curIdx = 0; _bgAlertFired = {}; window._bgAlertFired = {}; window._bgAlertSig = null; _notifOnceReset(); window.__ln.length = 0;
-    }, prefs || null);
-  };
-  await legacy(null);
-  await page.evaluate(() => { for (let i = 0; i <= 4; i++) _bgArrivalNotify(i); });
-  await t('환승 한 정거장 전·목적지 한 정거장 전 알림이 나간다', async () => { const ts = await titles(); assert.ok(ts.some(x => /환승/.test(x)), JSON.stringify(ts)); assert.ok(ts.some(x => /하차/.test(x)), JSON.stringify(ts)); });
-  await legacy({ transfer: 0 });
-  await page.evaluate(() => { for (let i = 0; i <= 4; i++) _bgArrivalNotify(i); });
-  await t('환승 알림을 끄면 구형 경로에서도 환승 알림이 나가지 않는다(하차는 나감)', async () => { const ts = await titles(); assert.ok(!ts.some(x => /환승/.test(x)), JSON.stringify(ts)); assert.ok(ts.some(x => /하차/.test(x)), JSON.stringify(ts)); });
-
   console.log('[오버레이 — 알림과 같은 위치·남은 시간을 받는다]');
   await setup(null);
   await page.evaluate(() => { window._htlBoarded = true; window._nodePassMs = { 1: Date.now() }; window._gpsMaxIdx = 1; window._gpsConfirmIdx = 1; });
