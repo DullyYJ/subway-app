@@ -4340,7 +4340,7 @@ function _commSaveCache(list){
       ts: Date.now(),
       posts: list.filter(function(p){ return !p.mine; }).slice(0, _COMM_CACHE_MAX).map(function(p){
         return { id:p.id, title:p.title, body:p.body, cat:p.cat, time:p.time, nick:p.nick,
-                 views:p.views, like:p.like, lol:p.lol, sad:p.sad, link:p.link, isServer:true };
+                 views:p.views, like:p.like, lol:p.lol, sad:p.sad, link:p.link, user:p.user, isServer:true };
       })
     }));
   }catch(e){}
@@ -4383,16 +4383,81 @@ function _myPostsLoad(){
   }catch(e){ return []; }
 }
 function _myPostsSave(){
-  try{ localStorage.setItem(_MY_POSTS_KEY, JSON.stringify((window._myPosts||[]).slice(0,50))); }catch(e){}
+  try{ localStorage.setItem(_MY_POSTS_KEY, JSON.stringify((window._myPosts||[]).slice(0,50), function(k,v){ return (k==='_sending'||k==='_tries') ? undefined : v; })); }catch(e){}
 }
 window._myPosts = _myPostsLoad();
 window._myPostsSave = _myPostsSave;
 function _myPostsMerge(list){
   var mine = window._myPosts || [];
+  var rep = _reportedIds();
+  list = (list||[]).filter(function(p){ return !rep[p.id]; });   // 내가 신고한 글은 계속 숨긴다
   if(!mine.length) return list;
-  var ids = {}; mine.forEach(function(p){ ids[p.id] = 1; });
-  return mine.concat((list||[]).filter(function(p){ return !ids[p.id]; }));
+  var ids = {}, sig = {};
+  mine.forEach(function(p){ ids[p.id] = 1; sig[p.nick+'|'+p.title+'|'+p.body] = 1; });
+  // 서버에 올라간 내 글은 서버 목록에도 같은 글이 있다 → id 또는 내용이 같으면 서버 쪽을 버리고 내 것(댓글·반응 보존)을 쓴다
+  return mine.concat(list.filter(function(p){ return !ids[p.id] && !sig[p.nick+'|'+p.title+'|'+p.body]; }));
 }
+// ── 신고한 글 목록(이 기기에서 계속 숨김) ──
+function _reportedIds(){
+  try{ var a = JSON.parse(localStorage.getItem('reportedPosts') || '[]'); var o = {}; (Array.isArray(a)?a:[]).forEach(function(i){ o[i] = 1; }); return o; }catch(e){ return {}; }
+}
+function _reportedAdd(id){
+  try{ var a = JSON.parse(localStorage.getItem('reportedPosts') || '[]'); if(!Array.isArray(a)) a = []; if(a.indexOf(id) < 0) a.push(id); localStorage.setItem('reportedPosts', JSON.stringify(a.slice(-300))); }catch(e){}
+}
+// ── 서버 통신: 글 등록 / 신고 / 본인 삭제 (board-writer) ──
+function _bwBase(){ return (typeof _BOARD_WRITER_URL !== 'undefined' && _BOARD_WRITER_URL) || 'https://board-writer.phg0643.workers.dev'; }
+function _myOwnerKey(){
+  try{
+    var k = localStorage.getItem('postOwnerKey');
+    if(!k || k.length < 16){
+      var a = new Uint8Array(16);
+      if(window.crypto && crypto.getRandomValues) crypto.getRandomValues(a); else for(var i=0;i<16;i++) a[i] = Math.floor(Math.random()*256);
+      k = Array.prototype.map.call(a, function(x){ return ('0'+x.toString(16)).slice(-2); }).join('');
+      localStorage.setItem('postOwnerKey', k);
+    }
+    return k;
+  }catch(e){ return ''; }
+}
+// 결과: {ok:true,id} | {rejected:true,error,status} (서버가 거절 — 다시 시도해도 같다) | {offline:true} (연결 실패·시간 초과)
+function _bwPost(path, payload, cb){
+  var done = false;
+  var fin = function(r){ if(done) return; done = true; try{ cb(r); }catch(e){} };
+  var tid = setTimeout(function(){ fin({ offline:true }); }, 9000);
+  try{
+    fetch(_bwBase() + path, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+      .then(function(r){ return r.json().then(function(j){ return { st:r.status, j:j }; }, function(){ return { st:r.status, j:null }; }); })
+      .then(function(x){
+        clearTimeout(tid);
+        if(x.j && x.j.ok) fin({ ok:true, id:x.j.id, j:x.j });
+        else if(x.st >= 400 && x.st < 500) fin({ rejected:true, status:x.st, error:(x.j && x.j.error) || '등록할 수 없어요' });
+        else fin({ offline:true });
+      })
+      .catch(function(){ clearTimeout(tid); fin({ offline:true }); });
+  }catch(e){ clearTimeout(tid); fin({ offline:true }); }
+}
+window._bwPost = _bwPost;
+// 연결이 안 돼 보류된 내 글을 다시 올린다(앱 시작·목록 갱신 때)
+function _myPostsFlush(){
+  try{
+    var mine = window._myPosts || [];
+    mine.filter(function(p){ return p.pending && !p._sending; }).forEach(function(p){
+      p._sending = true;
+      _bwPost('/post', { nick:p.nick, title:p.title, body:p.body, cat:p.cat, owner_key:_myOwnerKey() }, function(r){
+        p._sending = false;
+        if(r.ok){ p.id = r.id; p.isServer = true; p.pending = false; _myPostsSave(); try{ renderCommList(); }catch(e){} }
+        else if(r.rejected && r.status !== 429){
+          if(/이미 올렸/.test(r.error||'')){ p.pending = false; _myPostsSave(); return; }   // 앞서 보낸 요청이 실제로는 성공했던 경우
+          window._myPosts = (window._myPosts||[]).filter(function(q){ return q !== p; });
+          if(typeof _AI_POSTS !== 'undefined') _AI_POSTS = _AI_POSTS.filter(function(q){ return q !== p; });
+          _myPostsSave(); try{ renderCommList(); }catch(e){}
+          if(typeof toast === 'function') toast('⚠️ 보류돼 있던 글을 올리지 못했어요: ' + (r.error||''));
+        } else { p._tries = (p._tries||0) + 1; if(p._tries >= 5){ p.pending = false; _myPostsSave(); } }
+      });
+    });
+  }catch(e){}
+}
+window._myPostsFlush = _myPostsFlush;
+setTimeout(function(){ try{ _myPostsFlush(); }catch(e){} }, 6000);
 
 function _loadServerPosts(cat, reset) {
   if(_commLoading) return;
@@ -4489,6 +4554,7 @@ function _loadServerPosts(cat, reset) {
           cmts:  _prevCm[p.id] || [],
           srvCmts: p.cmts || 0,     // ★ 서버가 알려준 '올 때가 된' 댓글 수(목록의 💬 숫자용)
           link:  p.link  || '',
+          user:  p.user ? 1 : 0,   // ★ 2026-10-08: 이용자가 올린 글(신고 대상)
           isServer: true,
         };
       });
@@ -4501,6 +4567,7 @@ function _loadServerPosts(cat, reset) {
         try { if(typeof _newPostTimer !== 'undefined' && _newPostTimer) clearTimeout(_newPostTimer); } catch(e){}
         try { if(typeof _autoPostTimer !== 'undefined' && _autoPostTimer) clearTimeout(_autoPostTimer); } catch(e){}
         converted = _myPostsMerge(converted);   // ★ 내가 쓴 글은 서버 목록 위에 계속 얹는다
+        try{ setTimeout(_myPostsFlush, 500); }catch(e){}
         _AI_POSTS = converted;
         _commSaveCache(converted);     // ★ 다음 실행에서 바로 보여주려고 남긴다
         renderCommList();
@@ -19979,6 +20046,7 @@ window.addEventListener('unhandledrejection', function(e) {
     <div class="sel-wrap"><select class="inp" id="wCat"><option value="잡담">잡담</option></select></div>
   </div>
   <div id="reportLimitHint" style="font-size:11px;color:var(--gold);padding:0 2px 6px;"></div>
+  <div id="wErr" style="display:none;font-size:12px;font-weight:700;color:#ff453a;padding:0 2px 8px;"></div>
   <div class="srow"><label>제목</label><input class="inp" id="wTitle" type="text" placeholder="제목을 입력하세요"></div>
   <div class="srow"><label>내용</label><textarea class="inp" id="wBody" rows="3" style="resize:none;line-height:1.6;" placeholder="현장 상황을 알려주세요"></textarea></div>
   <button class="save-btn" onclick="submitPost()">제보 등록</button>
@@ -30862,6 +30930,7 @@ function _renderPost(post) {
     + '</div>'
     + '<div class="dc-post-meta">'
       + '<span class="dc-nick">' + _dcEsc(post.nick) + '</span>'
+      + (post.pending ? '<span class="dc-dot">·</span><span style="color:var(--sub);">⏳ 전송 대기</span>' : '')
       + '<span class="dc-dot">·</span>'
       + '<span class="dc-time">' + _timeAgo(post.time) + '</span>'
       + '<span class="dc-dot">·</span>'
@@ -30875,6 +30944,8 @@ function _renderPost(post) {
         + '<button class="dc-react-btn" onclick="dcReact(' + post.id + ',\'like\',this)">👍 <span>' + (post.like || 0) + '</span></button>'
         + '<button class="dc-react-btn" onclick="dcReact(' + post.id + ',\'lol\',this)">ㅋㅋ <span>' + (post.lol || 0) + '</span></button>'
         + '<button class="dc-react-btn" onclick="dcReact(' + post.id + ',\'sad\',this)">ㅠㅠ <span>' + (post.sad || 0) + '</span></button>'
+        + (post.mine ? '<button class="dc-react-btn" style="margin-left:auto;" onclick="dcDeleteMine(' + post.id + ',this)">🗑 삭제</button>'
+           : (post.user ? '<button class="dc-react-btn" style="margin-left:auto;" onclick="dcReport(' + post.id + ',this)">🚩 신고</button>' : ''))
       + '</div>'
       + '<div class="dc-cmts" id="dccmts-' + post.id + '">' + cmtHtml + '</div>'
       + _dcCmtInputHtml(post.id)
@@ -30921,6 +30992,47 @@ function dcReact(id, type, btn) {
   // 반응은 이 기기에만 반영된다 — 서버(board-writer)에 글 반응을 저장하는 라우트가 아직 없다.
 }
 window.dcReact = dcReact;
+
+// ★ 2026-10-08: 이용자 글 신고(두 번 눌러 확정) — 서로 다른 3곳이 신고하면 서버가 숨긴다. 신고한 글은 이 기기에서 바로 숨긴다.
+function dcReport(id, btn){
+  if(!btn.dataset.armed){
+    btn.dataset.armed = '1'; btn.dataset.t = btn.textContent; btn.textContent = '정말 신고할까요? 한 번 더';
+    setTimeout(function(){ if(btn && btn.dataset.armed){ delete btn.dataset.armed; btn.textContent = btn.dataset.t || '🚩 신고'; } }, 3500);
+    return;
+  }
+  delete btn.dataset.armed;
+  _reportedAdd(id);
+  _AI_POSTS = _AI_POSTS.filter(function(p){ return p.id !== id; });
+  if(typeof renderCommList === 'function') renderCommList();
+  toast('🚩 신고가 접수됐어요. 이 글은 더 이상 보이지 않아요');
+  _bwPost('/report', { post_id:id }, function(){});
+}
+window.dcReport = dcReport;
+
+// 내 글 삭제(서버에서도 지운다 — 올릴 때 보낸 기기 비밀키로 본인 확인)
+function dcDeleteMine(id, btn){
+  if(!btn.dataset.armed){
+    btn.dataset.armed = '1'; btn.dataset.t = btn.textContent; btn.textContent = '정말 삭제할까요? 한 번 더';
+    setTimeout(function(){ if(btn && btn.dataset.armed){ delete btn.dataset.armed; btn.textContent = btn.dataset.t || '🗑 삭제'; } }, 3500);
+    return;
+  }
+  delete btn.dataset.armed;
+  var post = null;
+  for(var i=0;i<_AI_POSTS.length;i++){ if(_AI_POSTS[i].id === id){ post = _AI_POSTS[i]; break; } }
+  var remove = function(){
+    window._myPosts = (window._myPosts||[]).filter(function(p){ return p.id !== id; });
+    _myPostsSave();
+    _AI_POSTS = _AI_POSTS.filter(function(p){ return p.id !== id; });
+    if(typeof renderCommList === 'function') renderCommList();
+    toast('🗑 글을 삭제했어요');
+  };
+  if(post && post.isServer){
+    _bwPost('/post/mine-delete', { post_id:id, owner_key:_myOwnerKey() }, function(r){
+      if(r.ok) remove(); else { btn.textContent = '⚠️ 삭제 실패 · 다시 눌러 재시도'; setTimeout(function(){ btn.textContent = '🗑 삭제'; }, 3500); }
+    });
+  } else remove();
+}
+window.dcDeleteMine = dcDeleteMine;
 
 // ★ 뉴스 성격의 글인지 — 카테고리뿐 아니라 뉴스 링크·출처 표기까지 본다
 //   (서버에서 내려온 글은 cat이 비어 있어도 본문에 기사 링크가 들어있는 경우가 있다)
@@ -36679,29 +36791,18 @@ function calcFmapRouteMap() {
   if(!ss){ toast('출발지를 확인해주세요.'); return; }
   if(!ds){ toast('도착지를 확인해주세요.'); return; }
 
-  // 홈탭 입력창 동기화 (홈에 적용 시 필요)
+  // 홈탭 입력창 동기화 → 엔진으로 탐색 (★ 2026-10-09: 앱 자체 BFS 제거 — 계산은 엔진만)
   var hsi = document.getElementById('fmapStartInp');
   var hdi = document.getElementById('fmapDestInp');
   if(hsi) hsi.value = startName;
   if(hdi) hdi.value = destName;
-
-  // _fmapStart/_fmapDest 설정
   _fmapStart = { type:'subway', name:ss.name, lat:ss.lat, lng:ss.lng, line:ss.line };
   _fmapDest  = { type:'subway', name:ds.name, lat:ds.lat, lng:ds.lng, line:ds.line };
-
-  // S.start/S.dest 설정 + BFS 실행
   S.start = ss; S.dest = ds;
-  if(typeof doRoute === 'function') doRoute();
 
-  // BFS 완료 후 홈탭 transitResultBox에 즉시 렌더
-  setTimeout(function() {
-    if(typeof _renderBfsToTransitBox === 'function') {
-      _renderBfsToTransitBox(_fmapStart, _fmapDest);
-    }
-  }, 450);
-  // 홈탭 전환
   var homeNi2 = document.getElementById('ni-home');
   if(typeof switchTab === 'function') switchTab('home', homeNi2);
+  setTimeout(function(){ if(typeof fmapDoRoute === 'function') fmapDoRoute(); }, 100);
 }
 window.calcFmapRouteMap = calcFmapRouteMap;
 
@@ -36780,6 +36881,7 @@ function closeWrite(){
   if(wsh) wsh.classList.remove('on');
 }
 function openWriteSheet(){
+  try{ var _we = document.getElementById('wErr'); if(_we){ _we.textContent = ''; _we.style.display = 'none'; } }catch(e){}
   // ★ 커뮤니티 아이디 필요 (없으면 글쓰기 차단, 구경은 가능)
   if(typeof _requireCommId==='function' && !_requireCommId()) return;
   var wbd=document.getElementById('wbdrop');
@@ -42585,6 +42687,7 @@ var _POLICY_DOCS = {
       + '· 위치정보: 경로 안내 목적으로만 일시 사용하며 <b>서버에 저장하지 않습니다.</b><br>'
       + '· 닉네임·설정값: 이용자 기기(단말)에 저장되며 앱 삭제 시 함께 삭제됩니다.<br>'
       + '· 게시글·댓글·채팅: 작성일로부터 보관하며, 최신 글 기준 일정 수량 초과 시 오래된 순으로 자동 삭제됩니다.<br>'
+      + '· 게시글은 등록 즉시 다른 모든 이용자에게 닉네임과 함께 공개됩니다. 부적절한 글은 신고할 수 있고(3명 이상 신고 시 자동 숨김), 내 글은 앱에서 직접 삭제할 수 있습니다. 본인 확인용 비밀키는 해시값으로, 도배 방지용 IP 는 원문 없이 해시값으로만 일시 기록합니다.<br>'
       + '· 노선 방 대화·제보와 기기 식별 코드(글 신고 시 신고한 기기의 코드 포함): 작성·신고 후 <b>14일이 지나면 자동 삭제</b>됩니다. 화면에는 최근 12시간 글만 보입니다. 그 전에 삭제를 원하시면 문의처로 요청해 주세요.<br>'
       + '· 도착 오차 익명 기록: <b>1년이 지나면 자동 삭제</b>됩니다. 이용자를 식별할 수 있는 값이 없어 개별 삭제 요청은 처리할 수 없으며, 설정 &gt; 안내 정확도 향상에서 언제든 전송을 끌 수 있습니다.<br>'
       + '· 출퇴근 경로 미리 조회: 설정해 둔 출발·도착 좌표로 경로를 미리 불러올 뿐이며, 그 좌표를 따로 저장하거나 계정과 연결하지 않습니다.</p>'
@@ -45418,50 +45521,18 @@ window.gmRouteSet = gmRouteSet;
 
 // ── 노선도/홈 검색바 관련 ─────────────────────────────────────
 function calcFmapRoute() {
+  // ★ 2026-10-09: 계산은 엔진만 한다. 입력창 내용을 그대로 엔진에 넘긴다(옛 BFS·경로 유형 선택 팝업 제거).
   var sn = document.getElementById('fmapStartInp');
   var dn = document.getElementById('fmapDestInp');
   if(!sn || !dn) return;
-  var startName = sn.value.trim();
-  var destName  = dn.value.trim();
-  if(!startName){ toast('출발역을 입력해주세요.'); sn.focus(); return; }
-  if(!destName) { toast('도착역을 입력해주세요.');  dn.focus(); return; }
-  var ss = STNDB.find(function(s){ return s.name===startName; });
-  var ds = STNDB.find(function(s){ return s.name===destName; });
-  if(!ss){ toast('출발지를 확인해주세요.'); return; }
-  if(!ds){ toast('도착지를 확인해주세요.'); return; }
-
-  S.start = ss; S.dest = ds;
-
-  // UI 동기화
-  var vs=document.getElementById('valStart'), vd=document.getElementById('valDest');
-  var fsi=document.getElementById('fmapStartInp'), fdi=document.getElementById('fmapDestInp');
-  var sc=document.getElementById('routeSummaryCard'), sn=document.getElementById('setupNotice');
-  if(vs) vs.textContent=ss.name;
-  if(vd){ vd.textContent=ds.name; vd.style.opacity='1'; }
-  if(fsi) fsi.value=ss.name;
-  if(fdi) fdi.value=ds.name;
-  if(sc) sc.style.display='block';
-  if(sn) sn.style.display='none';
-
-  // 홈탭이 아니면 전환
+  if(!sn.value.trim()){ toast('출발역을 입력해주세요.'); sn.focus(); return; }
+  if(!dn.value.trim()){ toast('도착역을 입력해주세요.'); dn.focus(); return; }
   var activeTab = document.querySelector('.ni.on');
-  var isHome = activeTab && activeTab.id === 'ni-home';
-  if(!isHome) {
+  if(!(activeTab && activeTab.id === 'ni-home')) {
     var homeNi = document.getElementById('ni-home');
     if(typeof switchTab==='function') switchTab('home', homeNi);
   }
-
-  // 경로 탐색 실행 후 pathSection으로 스크롤
-  setTimeout(function(){
-    if(typeof doRoute==='function') doRoute();
-    // 경로 완료 후 pathSection으로 부드럽게 스크롤
-    setTimeout(function(){
-      var ps = document.getElementById('pathSection');
-      if(ps && ps.style.display !== 'none') {
-        ps.scrollIntoView({behavior:'smooth', block:'start'});
-      }
-    }, 600);
-  }, isHome ? 100 : 250);
+  setTimeout(function(){ if(typeof fmapDoRoute==='function') fmapDoRoute(); }, 100);
 }
 window.calcFmapRoute = calcFmapRoute;
 
@@ -45470,16 +45541,14 @@ function swapFmapRoute() {
   var si = document.getElementById('fmapStartInp');
   var di = document.getElementById('fmapDestInp');
   if(!si || !di) return;
-  var tmp = si.value;
-  si.value = di.value;
-  di.value = tmp;
-  // S 객체도 교체
-  if(typeof S !== 'undefined') {
-    var ts = S.start; S.start = S.dest; S.dest = ts;
-  }
-  // 양쪽 다 있으면 즉시 재탐색
-  if(si.value && di.value) {
-    setTimeout(function(){ calcFmapRoute(); }, 100);
+  // ★ 2026-10-09: 출발↔도착 바꾸기는 엔진 상태(_fmapStart/_fmapDest)를 바꾸고 엔진으로 다시 탐색한다.
+  //   (예전엔 입력창 글자와 S.start/S.dest 만 바꾸고 옛 계산(calcFmapRoute→doRoute=앱 BFS)을 돌려
+  //    '경로 유형 선택' 팝업이 뜨고, 지하철역이 아닌 출발/도착(내 위치·장소·정류장)이면 아무 일도 안 일어났다.)
+  var tmp = si.value; si.value = di.value; di.value = tmp;
+  var tf = _fmapStart; _fmapStart = _fmapDest; _fmapDest = tf;
+  if(typeof S !== 'undefined') { var ts = S.start; S.start = S.dest; S.dest = ts; }
+  if(si.value.trim() && di.value.trim() && typeof fmapDoRoute === 'function') {
+    setTimeout(function(){ fmapDoRoute(); }, 100);
   }
 }
 window.swapFmapRoute = swapFmapRoute;
@@ -45607,6 +45676,7 @@ window.report = report;
 // ★ 2026-09-27 (YJ 최종점검: 죽은코드 청소) 여기 있던 closePostSheet()는 삭제된
 //   "게시글 상세 시트"(#postSheet) 전용 함수였다 — 함께 삭제함.
 
+function _wErrShow(msg){ var e = document.getElementById('wErr'); if(!e) return; e.textContent = msg || ''; e.style.display = msg ? 'block' : 'none'; }
 function submitPost() {
   // ★ 커뮤니티 아이디 필요
   if(typeof _requireCommId==='function' && !_requireCommId()) return;
@@ -45617,11 +45687,12 @@ function submitPost() {
   var titleVal = titleEl.value.trim();
   var bodyVal  = bodyEl.value.trim();
   var catVal   = catEl ? catEl.value : '잡담';
-  if(!titleVal) { toast('제목을 입력해주세요.'); return; }
-  if(!bodyVal)  { toast('내용을 입력해주세요.'); return; }
+  if(!titleVal) { toast('제목을 입력해주세요.'); _wErrShow('⚠️ 제목을 입력해주세요'); return; }
+  if(!bodyVal)  { toast('내용을 입력해주세요.'); _wErrShow('⚠️ 내용을 입력해주세요'); return; }
   // ★ 욕설·비방 차단 (제목+본문)
   if(_containsBadWord(titleVal) || _containsBadWord(bodyVal)){
     toast('⚠️ 욕설·비방이 포함되어 등록할 수 없어요. 바른 언어를 사용해주세요');
+    _wErrShow('⚠️ 욕설·비방이 포함되어 등록할 수 없어요. 바른 언어를 사용해주세요');
     return;
   }
 
@@ -45632,52 +45703,60 @@ function submitPost() {
     return;
   }
 
-  // 사용자 게시글 _AI_POSTS에 추가
-  var userPost = {
-    id:    Date.now(),   // ★ 서버 글 id(100번대~)와 겹치지 않게
-    mine:  true,
-    cat:   catVal,
-    title: titleVal,
-    body:  bodyVal,
-    nick:  (typeof _getCommId==='function' && _getCommId()) || '나',
-    time:  Date.now(),
-    views: 1,
-    like:  0, lol: 0, sad: 0,
-    cmts:  [],
-    isAI:  false,  // 사용자 작성 글 표시
-  };
-  if(typeof _AI_POSTS !== 'undefined') {
-    _AI_POSTS.unshift(userPost);
-  }
-  try{ (window._myPosts = window._myPosts || []).unshift(userPost); _myPostsSave(); }catch(e){}
-  // 목록 즉시 갱신
-  if(typeof renderCommList === 'function') renderCommList();
+  // ★ 2026-10-08: 글은 서버(board-writer)에 올려 앱 사용자 모두에게 보이게 한다.
+  //   서버가 거절하면(욕설·링크·도배 등) 사유를 알리고 글쓰기 창을 그대로 둔다.
+  //   연결이 안 되면 내 기기에 먼저 등록해 두고(보류) 나중에 다시 올린다.
+  if(window._postSending) return;
+  window._postSending = true;
+  _wErrShow('');
+  var _nick0 = (typeof _getCommId==='function' && _getCommId()) || '나';
+  var _btn = document.querySelector('[onclick="submitPost()"]');
+  if(_btn){ _btn.disabled = true; _btn.dataset.t = _btn.textContent; _btn.textContent = '등록 중...'; }
+  var _unlock = function(){ window._postSending = false; if(_btn){ _btn.disabled = false; if(_btn.dataset.t) _btn.textContent = _btn.dataset.t; } };
+  _bwPost('/post', { nick:_nick0, title:titleVal, body:bodyVal, cat:catVal, owner_key:_myOwnerKey() }, function(r){
+    _unlock();
+    if(r.rejected){ _wErrShow('⚠️ ' + r.error); return; }   // 토스트는 앱 전체에서 꺼져 있어 화면에 직접 표시한다
+    _wErrShow('');
+    var userPost = {
+      id:    r.ok ? r.id : Date.now(),   // 서버 글 id 와 겹치지 않게(보류 글은 시각 id)
+      mine:  true,
+      user:  1,
+      isServer: !!r.ok,
+      pending:  !r.ok,
+      cat:   catVal,
+      title: titleVal,
+      body:  bodyVal,
+      nick:  _nick0,
+      time:  Date.now(),
+      views: 1,
+      like:  0, lol: 0, sad: 0,
+      cmts:  [],
+      isAI:  false,  // 사용자 작성 글 표시
+    };
+    if(typeof _AI_POSTS !== 'undefined') _AI_POSTS.unshift(userPost);
+    try{ (window._myPosts = window._myPosts || []).unshift(userPost); _myPostsSave(); }catch(e){}
+    if(typeof renderCommList === 'function') renderCommList();
+    if(typeof _autoCommentOnUserPost === 'function') _autoCommentOnUserPost(userPost.id);
 
-  // 사용자 글에 자동 댓글 스케줄 (무조건 달아줌)
-  if(typeof _autoCommentOnUserPost === 'function') {
-    _autoCommentOnUserPost(userPost.id);
-  }
+    // ── 포인트 적립 ──────────────────────────────────────────
+    if(isReport) {
+      // 현장제보: 차등 포인트 (3~8P, 높을수록 확률 감소) + 일일 카운트 증가
+      var pts = (typeof _drawReportPoints === 'function') ? _drawReportPoints() : 5;
+      if(typeof _incReportCount === 'function') _incReportCount();
+      toast('🚨 현장제보 등록! +' + pts + 'P (오늘 ' + _getReportCount() + '/3)' + (r.ok ? '' : ' · 연결되면 올라가요'));
+      if(typeof addPoints === 'function') addPoints(pts, '현장제보');
+    } else {
+      toast(r.ok ? '✅ 글이 등록되었어요! +10P' : '✅ 글을 저장했어요! +10P (연결되면 모두에게 보여요)');
+      if(typeof addPoints === 'function') addPoints(10, '커뮤니티 글쓰기');
+    }
+    if(typeof closeWrite === 'function') closeWrite();
+    titleEl.value = '';
+    bodyEl.value  = '';
 
-  // ── 포인트 적립 ──────────────────────────────────────────
-  if(isReport) {
-    // 현장제보: 차등 포인트 (3~8P, 높을수록 확률 감소) + 일일 카운트 증가
-    var pts = (typeof _drawReportPoints === 'function') ? _drawReportPoints() : 5;
-    if(typeof _incReportCount === 'function') _incReportCount();
-    var remain = 3 - (typeof _getReportCount === 'function' ? _getReportCount() : 0);
-    toast('🚨 현장제보 등록! +' + pts + 'P (오늘 ' + _getReportCount() + '/3)');
-    if(typeof addPoints === 'function') addPoints(pts, '현장제보');
-  } else {
-    // 잡담: 고정 10P
-    toast('✅ 글이 등록되었어요! +10P');
-    if(typeof addPoints === 'function') addPoints(10, '커뮤니티 글쓰기');
-  }
-  if(typeof closeWrite === 'function') closeWrite();
-  titleEl.value = '';
-  bodyEl.value  = '';
-
-  // 커뮤니티 탭으로 전환
-  var commNi = document.getElementById('ni-community');
-  if(typeof switchTab === 'function' && commNi) switchTab('community', commNi);
+    // 커뮤니티 탭으로 전환
+    var commNi = document.getElementById('ni-community');
+    if(typeof switchTab === 'function' && commNi) switchTab('community', commNi);
+  });
 }
 window.submitPost = submitPost;
 

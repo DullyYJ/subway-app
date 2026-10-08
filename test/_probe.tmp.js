@@ -36,6 +36,9 @@ async function newApp(b, opts) {
   const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, timezoneId: 'Asia/Seoul', geolocation: { latitude: 37.5547, longitude: 126.9726 }, permissions: ['geolocation'] });
   await ctx.addInitScript((o) => {
     try { localStorage.setItem('gdm_loc_disclosed', '1'); localStorage.setItem('bgPermGuided', '1'); localStorage.setItem('ovlOn', '1'); if (o.commId) localStorage.setItem('mk_comm_id', JSON.stringify(o.commId)); } catch (e) {}
+        window.__legacy = {}; window.__legacyStack = {};
+    (function wrapAll(){ var names=['doRoute','bfsMinTime','bfsMinXfer','_showRouteModePopup','_applyRoute','startTracking','_goHome','mspSetRoute','onMapStnClick','calcFmapRouteMap','calcFmapRoute','calcOptimal','_selectRouteMode','switchRouteTab','fmapDoRoute'];
+      setInterval(function(){ names.forEach(function(n){ var f=window[n]; if(typeof f!=='function'||f.__w) return; var w=function(){ window.__legacy[n]=(window.__legacy[n]||0)+1; if(n!=='fmapDoRoute') window.__legacyStack[n]=(new Error().stack||'').split('\n').slice(2,5).join(' | '); return f.apply(this,arguments); }; w.__w=1; window[n]=w; }); },50); })();
     window.__ln = []; window.__ovl = []; window.__ka = []; window.__bg = []; window.__posts = []; window.__tab = [];
     window.Capacitor = { isNativePlatform: () => true, getPlatform: () => 'android', Plugins: {
       LocalNotifications: { schedule: (x) => { window.__ln.push(x.notifications[0]); return Promise.resolve(); }, checkPermissions: () => Promise.resolve({ display: 'granted' }), requestPermissions: () => Promise.resolve({ display: 'granted' }),
@@ -44,7 +47,7 @@ async function newApp(b, opts) {
       BackgroundGeolocation: { addWatcher: (x, cb) => { window.__bgcb = cb; window.__bg.push('add'); return Promise.resolve('w1'); }, removeWatcher: () => { window.__bg.push('remove'); return Promise.resolve(); }, openSettings: () => Promise.resolve() },
     } };
   }, opts);
-  const page = await ctx.newPage();
+  const page = await ctx.newPage(); (global.__pages=global.__pages||[]).push(page);
   const errs = []; page.on('pageerror', e => errs.push(e.message));
   const calls = []; page.__calls = calls; page.__srvPosts = []; page.__bodies = [];
   await page.route('**/*', async r => {
@@ -355,25 +358,6 @@ const vis = (page, id) => page.evaluate(i => { const e = document.getElementById
     await page.clock.runFor(11 * 60000);
     assert.strictEqual(await page.evaluate(() => document.getElementById('routeModePopup').classList.contains('open')), false);
   });
-  await t('홈의 출발↔도착 바꾸기(⇅) 버튼은 엔진으로 다시 탐색하고, 옛 계산(경로 유형 선택 팝업)을 띄우지 않는다', async () => {
-    await go(page, 'home', 800);
-    await page.evaluate(() => _applyFavRoute('서울역', '수원')); await page.clock.runFor(5000);
-    calls.length = 0;
-    await page.evaluate(() => document.querySelector('button[onclick="swapFmapRoute()"]').click()); await page.clock.runFor(5000);
-    const r = await page.evaluate(() => ({ s: document.getElementById('fmapStartInp').value, d: document.getElementById('fmapDestInp').value, fs: _fmapStart && _fmapStart.name, fd: _fmapDest && _fmapDest.name, pop: document.getElementById('routeModePopup').classList.contains('open') }));
-    assert.ok(/수원/.test(r.s) && /서울역/.test(r.d), JSON.stringify(r)); assert.ok(/수원/.test(r.fs) && /서울역/.test(r.fd), '엔진 상태가 안 바뀜 ' + JSON.stringify(r));
-    assert.ok(calls.some(c => /route-v2/.test(c)), '엔진 호출 없음: ' + calls.join(','));
-    assert.strictEqual(r.pop, false, '옛 계산 팝업이 뜸');
-  });
-  await t('출발지가 지하철역이 아닌 곳(내 위치·장소)이어도 바꾸기가 동작한다', async () => {
-    await page.evaluate(() => { _fmapStart = { type: 'place', name: '테스트빌딩', lat: 37.5547, lng: 126.9726 }; document.getElementById('fmapStartInp').value = '테스트빌딩'; _fmapDest = { type: 'subway', name: '수원', lat: 37.2656, lng: 127.0001, line: '1호선' }; document.getElementById('fmapDestInp').value = '수원'; });
-    calls.length = 0;
-    await page.evaluate(() => document.querySelector('button[onclick="swapFmapRoute()"]').click()); await page.clock.runFor(5000);
-    const r = await page.evaluate(() => ({ s: document.getElementById('fmapStartInp').value, d: document.getElementById('fmapDestInp').value, fs: _fmapStart && _fmapStart.name, fd: _fmapDest && _fmapDest.name }));
-    assert.ok(r.s === '수원' && r.d === '테스트빌딩' && r.fs === '수원' && r.fd === '테스트빌딩', JSON.stringify(r));
-    assert.ok(calls.some(c => /route-v2/.test(c)), '엔진 호출 없음: ' + calls.join(','));
-    await page.evaluate(() => _applyFavRoute('서울역', '수원')); await page.clock.runFor(5000);   // 뒤 시험을 위해 원래 경로로 되돌린다
-  });
   await t('노선도 탭에서 JS 오류가 없다', async () => assert.deepStrictEqual(errs, []));
 
   console.log('[쇼핑 / 맛집]');
@@ -419,6 +403,7 @@ const vis = (page, id) => page.evaluate(i => { const e = document.getElementById
   });
   await t('JS 오류가 없다(전체)', async () => assert.deepStrictEqual(errs, []));
 
+  for (const pg of global.__pages) { try { console.log('LEGACY', JSON.stringify(await pg.evaluate(() => ({c: window.__legacy, s: window.__legacyStack})))); } catch (e) {} }
   await ctx.close(); await b.close();
   console.log('\n' + pass + ' 통과 / ' + fail + ' 실패'); process.exit(fail ? 1 : 0);
 })();
