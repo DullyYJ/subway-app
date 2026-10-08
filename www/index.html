@@ -8535,7 +8535,12 @@ window._hideRouteLoading = _hideRouteLoading;
     // ── 경로 방식 판단 ──
     // 지하철역↔지하철역 같은 도시 → BFS
     // 그 외(버스/장소/다른도시) → 경로엔진
-    var useBFS = (start.type === 'subway' && dest.type === 'subway' && _needKakao(start, dest) === false);
+    // ★ 2026-10-08 (YJ: 수동 입력 시 4개 탭 경로가 전부 똑같이 나옴): 역↔역도 엔진으로 보낸다.
+    //   원인: 직접 친 역 이름이 type 'subway' 로 풀려서 앱 자체 BFS(doRoute)가 한 경로만 그렸다.
+    //        엔진은 최단시간·최소환승·지하철·버스·장거리 후보를 따로 계산해 주는데 그걸 안 썼다.
+    //   YJ 절대규칙: 모든 논리계산은 엔진, 앱은 그리기만. → BFS 분기를 쓰지 않는다.
+    //   (STNDB 역은 항상 lat/lng 가 있어 아래 엔진 분기가 그대로 동작한다.)
+    var useBFS = false;   // 예전: start.type==='subway' && dest.type==='subway' && _needKakao(start,dest)===false
 
     if(useBFS) {
       if(loading) loading.style.display = 'none';
@@ -11330,12 +11335,15 @@ window.closeMapRouteSheet = closeMapRouteSheet;
 function applyMapRouteToHome() {
   // 홈탭으로 전환하고 이미 계산된 경로 표시
   closeMapRouteSheet();
-  // transitResultBox에도 렌더
-  if(typeof _renderBfsToTransitBox === 'function' && _fmapStart && _fmapDest) {
-    _renderBfsToTransitBox(_fmapStart, _fmapDest);
-  }
+  // ★ 2026-10-08: 홈 결과도 엔진이 계산한다(예전엔 앱 BFS 한 경로를 4개 탭에 똑같이 그렸다).
+  //   calcFmapRouteMap 이 홈 입력창(fmapStartInp/DestInp)을 이미 맞춰 두었으므로 그대로 탐색한다.
   var homeNi = document.getElementById('ni-home');
   if(typeof switchTab === 'function') switchTab('home', homeNi);
+  if(typeof fmapDoRoute === 'function' && _fmapStart && _fmapDest) {
+    fmapDoRoute();
+  } else if(typeof _renderBfsToTransitBox === 'function' && _fmapStart && _fmapDest) {
+    _renderBfsToTransitBox(_fmapStart, _fmapDest);   // 폴백(정상 경로에선 쓰이지 않음)
+  }
 }
 window.applyMapRouteToHome = applyMapRouteToHome;
 
@@ -36762,7 +36770,13 @@ function saveRoute(){
   toast('🔍 최단 경로 탐색 중...');
   var homeNi = document.getElementById('ni-home');
   if(typeof switchTab==='function') switchTab('home', homeNi);
-  setTimeout(function(){ if(typeof doRoute==='function') doRoute(); toast('✅ 경로 탐색 완료!'); }, 300);
+  // ★ 2026-10-08: 엔진으로 탐색(앱 BFS는 4개 탭을 똑같이 그렸다). 홈 입력창도 같은 이름으로 맞춘다.
+  var _fsi = document.getElementById('fmapStartInp'); if(_fsi) _fsi.value = sn;
+  var _fdi = document.getElementById('fmapDestInp');  if(_fdi) _fdi.value = dn;
+  setTimeout(function(){
+    if(typeof fmapDoRoute==='function') fmapDoRoute();
+    else if(typeof doRoute==='function') doRoute();
+  }, 300);
   try{
     localStorage.setItem('mk_r', JSON.stringify({s:sn, d:dn, t:tVal, r:rVal}));
   }catch(e){}
@@ -36890,7 +36904,9 @@ function _applyFavRoute(startName, destName){
   if(typeof setDest==='function') setDest(ds);
   var si = document.getElementById('fmapStartInp'); if(si) si.value = startName;
   var di = document.getElementById('fmapDestInp');  if(di) di.value = destName;
-  if(typeof doRoute==='function') doRoute();
+  // ★ 2026-10-08: 즐겨찾기/최근 경로도 엔진으로 탐색(앱 BFS는 4개 탭을 똑같이 그렸다)
+  if(typeof fmapDoRoute==='function') fmapDoRoute();
+  else if(typeof doRoute==='function') doRoute();
 }
 window._applyFavRoute = _applyFavRoute;
 
