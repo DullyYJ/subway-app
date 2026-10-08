@@ -391,7 +391,13 @@
 
 ### 알림 중복 정리 (2026-10-09, YJ: "출퇴근 알람이 두 번씩 온다 / 같은 시간에 두 번 올 필요 없다")
 - **출퇴근 브리핑**: 같은 시각에 ①요일 반복 OS 예약(9110+d·9120+d) ②'정확한 시각' OS 예약(9101·9102) ③앱이 켜져 있을 때 `_cmTick` 이 모두 울렸다. → 반복 예약 폐지, '정확한 시각(at)' 예약만 앞으로 28일치(선택한 요일만) 걸어 둔다(id 9200+i 출근 · 9300+i 퇴근). 앱 시작 4초 뒤와 앞으로 돌아올 때(30분 간격 제한) 다시 채운다. 예전 id 는 취소 목록에 남겨 기존 설치본의 반복 예약도 지운다. `window._cmOsOk===true` 면 `_cmTick` 은 보내지 않는다(웹·예약 실패 때만 직접 발송).
-- **하차 10분 전 추천**: 앱을 보는 중에는 팝업+상단 알림이 같이 떴다 → 앱 화면을 보는 중이면 팝업만, 아니면(화면 꺼짐·다른 앱 위) 상단 알림만. PiP 는 꺼져 있어(`_PIP_FEATURE=false`) 따지지 않는다. 정책상 '조용히'인 알림이 `navigator.vibrate` 로 울리던 것도 제거(`showNotification` 맨 위 `_vibrateFor` 한 곳에서만 정책대로 울림).
+- **하차 10분 전 추천**: 앱을 보는 중에는 팝업+상단 알림이 같이 떴다 → 앱 화면을 보는 중이면 팝업만, 아니면(화면 꺼짐·다른 앱 위) 상단 알림만. PiP 는 코드째 제거했다(아래 PiP 제거 항목). 정책상 '조용히'인 알림이 `navigator.vibrate` 로 울리던 것도 제거(`showNotification` 맨 위 `_vibrateFor` 한 곳에서만 정책대로 울림).
 - **환승·하차 알림**: 한 번의 판정에서 둘이 겹치면(환승역과 목적지가 가까울 때) 가장 급한 하나만 보내고 나머지는 보낸 것으로 처리.
 - 브리핑 본문의 '피크 시간대' 중복 문구 제거. `_initLocalNotifications` 한 번만 초기화(탭 리스너 중복 방지).
 - 28일 넘게 앱을 한 번도 안 열면 예약이 끊긴다(앱을 열면 다시 채워짐).
+
+### PiP(작은 요약 화면) 제거 (2026-10-09, YJ: "pip 죽이고 오버레이 했잖아")
+- `_PIP_FEATURE=false` 로 꺼 둔 PiP 의 화면·네이티브 신호·설정 UI 를 코드째 삭제: `_pipEnabled/_pipSetEnabled/_pipEl/_pipPaint/_pipRecoPaint/_pipFit/_pipWant/_pipGrow/_pipSizeOpts/_pipNative/_pipNativeSync/_pipOnResize/_pipSyncToggle/_pipPreview/_pipShow/_pipHide/_pipCheerPaint/_pipMinText`, 관련 상수·리스너·타이머, 설정의 숨김 HTML(주석 처리돼 있던 스위치·미리보기).
+- **남긴 것(오버레이가 같이 쓴다)**: `_pipTrip*`·`_pipHasRoute`·`_pipHereIdx`·`_pipStations`·`_pipData`·`_pipClampText/_pipClampLines`·`_pipReco*`(오버레이 3째 줄 추천)·`_arrPipText`·`_pipArmNow`·`_pipIsRealName`·`_pipResultDestName`. 이름만 pip 일 뿐 오버레이·알림·남은시간 계산이 쓴다.
+- 1초 감시 루프는 이름을 `_pipTick/_pipTickLoop/_pipWatchTimer` → `_ovlTick/_ovlTickLoop/_ovlWatchTimer` 로 바꾸고, 하는 일을 `_ovlSync()`+`_ovlKeepAliveSync()` 둘로 줄였다(오버레이 갱신·백그라운드 깨우기는 이 루프가 맡는다).
+- 네이티브(`native/PipPlugin.java`, 빌드 워크플로의 `registerPlugin(PipPlugin.class)`·`onPictureInPictureModeChanged`)는 손대지 않았다. 웹이 `setActive` 를 더 이상 보내지 않아 `guiding=false`(기본값) 그대로라 PiP 로 전환되지 않는다. 네이티브까지 걷어내려면 워크플로 패치와 APK 빌드 확인이 따로 필요하다.

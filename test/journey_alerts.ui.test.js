@@ -119,6 +119,13 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   await t('목적지 2정거장 전이면 오버레이 경고 단계가 2(천천히 도는 테두리)', async () => { const o = await page.evaluate(() => window.__ovl[window.__ovl.length - 1]); assert.strictEqual(o.alert, 2, JSON.stringify(o)); });
   await page.evaluate(() => { window._gpsMaxIdx = 9; window._gpsConfirmIdx = 9; window._nodePassMs[9] = Date.now(); window.__ovl.length = 0; _ovlSync(true); });
   await t('목적지 1정거장 전이면 경고 단계가 1(빠르게)', async () => { const o = await page.evaluate(() => window.__ovl[window.__ovl.length - 1]); assert.strictEqual(o.alert, 1, JSON.stringify(o)); });
+  await t('오버레이는 아무도 부르지 않아도 감시 루프(_ovlTickLoop)가 알아서 갱신한다(PiP 제거 뒤에도)', async () => {
+    const r = await page.evaluate(() => { _ovlLastKey = null; window.__ovl.length = 0; return typeof window._ovlWatchTimer; });
+    assert.notStrictEqual(r, 'undefined', '감시 루프가 시작되지 않음');
+    await page.clock.runFor(6000);
+    assert.ok((await page.evaluate(() => window.__ovl.length)) > 0, '오버레이 갱신이 없음');
+    assert.ok(await page.evaluate(() => typeof _pipShow === 'undefined' && typeof _pipPaint === 'undefined'), 'PiP 화면 코드가 남아 있음');
+  });
   await page.evaluate(() => { window._routeLocked = false; _transitNodeData = null; window._lastHtlNodes = null; S.route = null; window.__ovl.length = 0; _ovlSync(true); });
   await t('여정이 끝나면 오버레이가 꺼진다(active=false)', async () => { const o = await page.evaluate(() => window.__ovl[window.__ovl.length - 1]); assert.ok(o && o.active === false, JSON.stringify(o)); });
 

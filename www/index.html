@@ -3551,11 +3551,7 @@ function _buildRouteBrief(){
   
   
   // 노선 변경 지점으로 구간 분리
-  
-  
-   
-  
-  
+
 }
 
 // 확정된 복합경로(_transitResultData: 경로엔진 routes/sections)에서 구간·환승 추출
@@ -8957,9 +8953,6 @@ function _stopsParam(){
 }
 window._stopsParam = _stopsParam;
 
-
-
-
 // ★ 후보 다양화 설정 (2026-08-27)
 //   기준은 **버스 탭에 실제로 뜨는 주변 정류장 전부**다(window._nearOrderedStops).
 //   그게 사용자가 눈으로 보는 목록이고, 거기서 타는 경로가 다 나와야 한다.
@@ -9275,12 +9268,12 @@ function _pipArmNow(){
       if(typeof toast === 'function') toast("다른 앱을 보면서도 내 위치를 보려면 설정 > '다른 앱 위에 표시'를 켜세요");
     }
   }catch(e){}
-  try{ if(typeof _pipNativeSync === 'function') _pipNativeSync(true); }catch(e){}
+  try{  }catch(e){}
   // 확정 직후엔 경로 데이터가 아직 그려지는 중일 수 있어 한 번 더 확인한다
   setTimeout(function(){
     try{
       if(!window._pipTrip && typeof _pipTripSet === 'function') _pipTripSet();
-      if(typeof _pipNativeSync === 'function') _pipNativeSync(true);
+      
     }catch(e){}
   }, 1200);
 }
@@ -18640,22 +18633,8 @@ window.addEventListener('unhandledrejection', function(e) {
         <div id="arrTestStat" style="margin-top:10px;background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:10px;font-size:11.5px;line-height:1.7;color:var(--text);font-family:monospace;white-space:pre-wrap;">'상태 확인'을 누르면 감시 상태와 남은 시간이 표시됩니다.</div>
       </div>
 
-      <!-- ★ 작은 요약 화면(PiP) -->
+      <!-- ★ 다른 앱 위에 표시(오버레이) -->
       <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
-        <!-- ★ 2026-10-01: PiP(작은 요약 화면) 스위치는 우선 숨김(YJ 요청). 복원하려면 이 주석을 풀고 _PIP_FEATURE=true
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
-          <div style="font-size:15px;font-weight:800;color:var(--text);">📺 작은 요약 화면</div>
-          <label style="position:relative;display:inline-block;width:50px;height:28px;flex-shrink:0;">
-            <input type="checkbox" id="pipToggle" onchange="_pipSetEnabled(this.checked)"
-              style="opacity:0;width:0;height:0;">
-            <span id="pipToggleTrack" style="position:absolute;inset:0;background:var(--border2);
-              border-radius:28px;transition:.2s;cursor:pointer;"></span>
-            <span id="pipToggleKnob" style="position:absolute;left:3px;top:3px;width:22px;height:22px;
-              background:#fff;border-radius:50%;transition:.2s;pointer-events:none;"></span>
-          </label>
-        </div>
-        <p style="font-size:12px;color:var(--sub);margin:6px 0 12px;">앱을 내려도 현재역 · 남은시간 · 도착 예정 시각만 작게 띄웁니다. 화면을 탭하면 닫혀요.</p>
-        -->
         <!-- ★ 2026-10-01: 다른 앱 위에 표시(오버레이) — 다른 앱을 쓰는 동안 현재역·남은시간을 화면 맨 위에 작은 막대로 -->
         <div style="margin:0;padding:0;">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
@@ -18672,10 +18651,6 @@ window.addEventListener('unhandledrejection', function(e) {
           <button id="pfLiveBtn" onclick="_pfSetLive(!_pfLive())" style="margin-top:6px;width:100%;padding:9px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:12px;font-weight:700;background:transparent;color:var(--sub);font-family:inherit;">새 위치 판단기 보정: 꺼짐 (누르면 켬 · 실험)</button>
           <button id="pfRecBtn" onclick="_pfRecSet(!_pfRecOn())" style="margin-top:6px;width:100%;padding:9px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:12px;font-weight:700;background:transparent;color:var(--sub);font-family:inherit;">정답 기록 버튼: 꺼짐 (테스트 탑승용)</button>
         </div>
-        <!-- ★ 2026-10-01: PiP 미리보기·상태 표시도 숨김(복원 시 주석 해제)
-        <button onclick="_pipPreview()" style="width:100%;padding:11px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);font-family:inherit;">미리보기</button>
-        <div id="pipStat" style="margin-top:10px;font-size:11.5px;line-height:1.6;color:var(--sub);"></div>
-        -->
       </div>
 
       <!-- ★ 2026-09-29: 개발자용 진단 도구 3종(배터리 최적화 제외 / 백그라운드 추적 진단 /
@@ -20266,11 +20241,6 @@ var _trainPosTimer = null;
 
 // 경로 상의 현재 탑승 열차 위치 찾기
 
-
-
-
-
-
 // 평일/휴일, 상행/하행 구분
 // ── 인천1·2호선 공식 시각표 (인천교통공사 2025.04/06 기준) ──
 // =====================================================================
@@ -21802,12 +21772,6 @@ function _startTimetableAdvance() {
   _stopTimetableAdvance();
   return;
 
-  
-  
-  
-
-  
-
   // ★ 출발 시각까지 대기 후 열차 이동 시작
   
 }
@@ -21823,9 +21787,6 @@ function _stopPeriodicVerification() {
 function _stopTimetableAdvance() {
   if(_timetableTimer) { clearTimeout(_timetableTimer); _timetableTimer = null; }
 }
-
-
-
 
 /* 역 → 역 사이 보간 위치로 열차 핀 이동 */
 
@@ -22010,10 +21971,6 @@ async function resolveRealtimeDepartMs() {
   
   return { ms: depMs, depTime, waitMin: Math.round(waitMs/60000), source: 'API', arrival };
 }
-
-
-
-
 
 /* ══ 진동 알림 ══ */
 
@@ -22215,15 +22172,6 @@ function _vibrateFor(type, pattern){
   try{
     if(!_vibeAllowed(type)) return false;   // ★ 알림이 아니라 진동 정책을 본다
     var pat = pattern;
-    // ★ 2026-09-22: PiP 작은 화면을 보고 있는 동안(화면도 켜져 있고 PiP 상태)은
-    //   같은 정보가 이미 눈에 보이니 알림+진동이 과하게 느껴질 수 있다.
-    //   완전히 없애진 않는다(몸으로 알아야 하는 알림이라는 원래 취지는 유지) —
-    //   패턴만 짧게 한 번으로 줄인다.
-    try{
-      if(window._pipInPip && !document.hidden && Array.isArray(pat) && pat.length > 1){
-        pat = [pat[0]];
-      }
-    }catch(e2){}
     if('vibrate' in navigator) navigator.vibrate(pat);
     return true;
   }catch(e){ return false; }
@@ -23088,9 +23036,9 @@ function _arrFireAlertNow(destStn, arrMs){
       var vib = [300,120,300];
       // ★ 2026-10-09 (YJ: "같은 시간에 두 번 올 필요 없다"): 앱을 보고 있으면 팝업과 상단 알림이 동시에 떴다.
       //   · 앱 화면을 보는 중 → 팝업 하나만
-      //   · 그 밖(화면 꺼짐·다른 앱 위) → 상단 알림 하나만. 다른 앱 위의 오버레이는 현재역·남은시간만 보여 주므로 추천은 알림이 맡는다.
+      //   · 그 밖(화면 꺼짐·다른 앱 위) → 상단 알림 하나만. (오버레이의 3째 줄에도 추천 제목이 20초간 뜨지만 그건 알람이 아니라 상태 표시다)
       //   진동은 따로 울리지 않는다 — 정책(_VIBE_ALLOW)상 하차 추천은 '조용히'.
-      //   (PiP 는 꺼져 있다 — _PIP_FEATURE=false. 여기서 PiP 를 따로 따지지 않는다)
+      //   (PiP 는 2026-10-09 에 코드째 제거했다)
       var _viewing = !document.hidden && typeof _showBriefingModal==='function';
       _arrDiagSet('stage', (_viewing ? '팝업 표시: ' : '알림 발송: ') + a.title + (_notifAllowed('arrive_reco') ? '' : ' (설정에서 꺼져 있어 차단됨)'));
       if(_viewing){
@@ -23208,14 +23156,11 @@ function _arrWatchTick(){
     if(he){ arrMs = he.arrMs; rem = he.rem; }
     else {
       return;
-      
-      
-      
-      
+
     }
     window._arrLastRemSec = rem;                 // 설정>진단에서 확인용
     window._arrLastTickAt = Date.now();
-    try{ if(typeof _pipTick === 'function') _pipTick(); }catch(e){}   // 작은 화면 갱신 기회
+    try{ if(typeof _ovlTick === 'function') _ovlTick(); }catch(e){}   // 작은 화면 갱신 기회
     if(rem <= 0) return;
     _arrCheckPreAlert(arrMs, rem);
   }catch(e){}
@@ -24365,10 +24310,6 @@ function switchTab(tab,el){
 
 /* ══ 토스트 ══ */
 
-
-
-
-
 // ★ 2026-09-29 (YJ: "모든 하단 토글을 제거해"): 화면 하단에 잠깐 떴다 사라지던
 //   토스트 팝업을 앱 전체에서 없앴다. 앱 안의 모든 토스트 호출이 결국 이 함수
 //   하나를 거치므로, 개별 호출부를 일일이 찾아 지우는 대신 여기서 화면 표시만
@@ -24559,9 +24500,6 @@ function startAutoRefresh() {
   }, 5 * 60 * 1000);  // 5분
 }
 window.startAutoRefresh = startAutoRefresh;
-
-
-
 
 // ── openExternalApp: 외부 링크 열기 ─────────────────────────
 // 뉴스 원문 열기 (언론사 도메인 허용)
@@ -27539,12 +27477,6 @@ function svgSetRoute(type) {
 }
 window.svgSetRoute = svgSetRoute;
 
-
-
-
-
-
-
 // ══════════════════════════════════════════════════════════════
 // 백그라운드 GPS + 포그라운드 서비스 (Capacitor)
 // ══════════════════════════════════════════════════════════════
@@ -27594,7 +27526,7 @@ function _beginJourneyTracking(){
     if(typeof _showForegroundNotif === 'function') _showForegroundNotif(cur, dest, rem);
     // ★ 2026-09-02: 작은 요약 화면이 볼 여정을 여기서 한 번만 적는다(이전 목적지 잔상 방지)
     try{ if(typeof _pipTripSet === 'function') _pipTripSet(); }catch(e){}
-    try{ if(typeof _pipNativeSync === 'function') _pipNativeSync(); }catch(e){}
+    try{  }catch(e){}
     console.log('[탑승] 경로 확정 → 백그라운드 추적 시작 (route=' + (!!S.route) + ')');
   } catch(e){ console.warn('[탑승] 시작 예외:', (e&&e.message)||e); }
 }
@@ -27660,7 +27592,7 @@ function _startBgGeolocation(){
         }
       }catch(e){}
       try{ if(typeof _arrWatchTick === 'function') _arrWatchTick(); }catch(e){}   // ★ 하차 10분 전 추천 감시도 위치가 올 때마다 한 번
-      try{ if(typeof _pipTick === 'function') _pipTick(); }catch(e){}
+      try{ if(typeof _ovlTick === 'function') _ovlTick(); }catch(e){}
 
       // startWatch()의 GPS 처리와 동일한 로직 재사용
       var rawLat = location.latitude;
@@ -27754,10 +27686,6 @@ window._notifOnceReset = _notifOnceReset;
 
 // ★ 백그라운드/포그라운드 공통: 남은 정거장 수 기반 네이티브 알림 (2역·1역·도착)
 window._bgAlertFired = window._bgAlertFired || {};
-
-
-
-
 
 /* 경로 재설정 시 근접 알림 기록 초기화 */
 function _resetProximityFired() {
@@ -27911,30 +27839,6 @@ function _clearForegroundNotif(){
 }
 
 // ══════════════════════════════════════════════════════════════
-// ★ 2026-09-02: 작은 요약 화면 (PiP)
-//   티맵·카카오내비처럼 앱을 내려도 현재역·남은시간·도착시각만 크게 보여준다.
-//   구성이 두 겹이다.
-//   (1) 화면(이 파일) — 창이 작아지면 요약만 남기고 나머지를 가린다.
-//   (2) 네이티브 — 안드로이드에게 "이 화면을 작게 띄워라"라고 시키는 부분.
-//       Capacitor 플러그인(Pip.enter)이 있으면 그걸 부르고, 없으면 화면만 준비해 둔다.
-//       (네이티브 없이 웹만으로는 다른 앱 위에 창을 띄울 수 없다 — 그때는 상주 알림이 대신한다)
-var _PIP_KEY = 'pipOn';
-var _pipTimer = null;
-
-// ★ 2026-10-01 (YJ: "PIP는 우선 주석처리해서 기능에서 제거해줘"): PiP(작은 창) 기능을 통째로 끈다.
-//   코드는 그대로 두고 이 스위치 하나로 막는다 — 아래 true 로 바꾸면 복원된다.
-//   꺼지면: 네이티브에 '안내 중 아님'만 알려 자동 전환이 안 일어나고(_pipNativeSync/_pipGrow), 작은 화면 HTML 도 안 뜨고(_pipWant),
-//   설정의 PiP 스위치·미리보기는 숨긴다. 다른 앱 위 표시(오버레이)는 이 스위치와 무관하게 따로 동작한다.
-var _PIP_FEATURE = false;
-function _pipEnabled(){ if(!_PIP_FEATURE) return false; try{ return localStorage.getItem(_PIP_KEY) !== '0'; }catch(e){ return true; } }
-function _pipSetEnabled(v){
-  try{ localStorage.setItem(_PIP_KEY, v ? '1' : '0'); }catch(e){}
-  if(!v) _pipHide();
-  if(typeof toast === 'function') toast(v ? '작은 요약 화면을 켰어요' : '작은 요약 화면을 껐어요');
-  try{ if(typeof _pipSyncToggle === 'function') _pipSyncToggle(); }catch(e){}
-  try{ if(typeof _pipNativeSync === 'function') _pipNativeSync(); }catch(e){}
-}
-window._pipSetEnabled = _pipSetEnabled;
 
 // ★ 2026-09-02: 지금 안내 중인 여정을 한 곳(_pipTrip)에만 적어 둔다.
 //   증상: 새 목적지를 정하고 앱을 내려도 이전 목적지로 작은 화면이 떴다.
@@ -28138,12 +28042,7 @@ function _pipHasRoute(){
 }
 
 // 표시할 값 — 상주 알림과 같은 계산을 쓴다(숫자가 어긋나지 않게)
-function _pipMinText(m){
-  if(m == null) return '-';
-  if(m < 1) return '곧 도착';
-  var h = Math.floor(m/60), mm = m%60;
-  return h ? (h + '시간 ' + mm + '분') : (mm + '분');
-}
+
 
 
 // ★ 2026-09-03: 작은 화면에 이전·현재·다음 역을 함께 보여 준다.
@@ -28257,122 +28156,9 @@ function _pipData(){
 }
 window._pipData = _pipData;
 
-function _pipEl(){
-  var el = document.getElementById('pipView');
-  if(el) return el;
-  el = document.createElement('div');
-  el.id = 'pipView';
-  // ★ 2026-09-02: 창이 작아지면 글자가 잘리고 겹쳤다.
-  //   고정 px 대신 창 크기(vw/vh)에 맞춰 줄어드는 값을 쓰고, 모든 줄을 한 줄로 고정한다.
-  // ★ 2026-09-03: 구성 변경
-  //   1줄  이전역(흐리게) – 현재역(진하게) – 다음역(흐리게)
-  //   2줄  예상 소요시간
-  //   3줄  도착 예정시간
-  //   4줄  (도착 10분 전이면) 추천 + 버튼 — 이때만 아래로 늘어난다
-  //   가장자리는 안쪽으로 20%까지 서서히 투명해지도록 mask 를 씌운다.
-  var NOWRAP = 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;flex:none;';
-  // ★ 2026-09-03: 가장자리 페이드를 뺀다.
-  //   이 웹뷰에서 mask 합성이 제대로 안 먹어 타원 얼룩처럼 보였다.
-  //   어설픈 반투명보다 깔끔한 검정 바탕이 글자도 잘 읽힌다.
-  // ★ 2026-09-22: 평면 검정 대신 은은한 그라데이션 + 위쪽 골드 악센트 바로 좀 더
-  //   '작은 계기판'처럼 보이게 다듬었다. 정보량·아이디는 그대로 두고 배치만 정리한다.
-  // ★ 2026-09-29 (YJ 제보: "pip 배경에 글자가 흐르는게 보여") — 그라데이션(#15151b→#000)의
-  //   덜 어두운 윗부분이 일부 기기의 PiP 창에서 뒤(홈 화면 등)가 비치는 것처럼 보였다.
-  //   09-03에 겪었던 것과 같은 종류의 문제라 다시 안전한 쪽으로: 그라데이션을 걷어내고
-  //   무조건 불투명한 순수 검정(#000) 한 가지로 고정한다.
-  el.style.cssText =
-    'position:fixed;inset:0;z-index:2147483000;display:none;'
-    + 'flex-direction:column;align-items:center;justify-content:center;gap:1.4vw;'
-    + 'background:#000;color:#fff;'
-    + 'padding:2.4vw;padding-top:2.8vw;text-align:center;'
-    + 'font-family:inherit;overflow:hidden;';   // ★ 2026-10-01 (YJ: "노란색 띠 상단에서 없애줘"): 위쪽 골드 띠(inset box-shadow) 제거 — 배경은 순수 검정 한 가지
-  el.innerHTML =
-      // ★ 2026-09-21: 내용을 pipBox 로 감싼다 — 창이 작을 때 통째로 축소해 넣기 위함(_pipFit)
-      '<div id="pipBox" style="width:100%;flex:none;display:flex;flex-direction:column;align-items:center;'
-    +   'gap:2.2vw;transform-origin:50% 0;">'
-      // ★ 2026-10-01 (YJ: "pip는 맨위에 글자 흘러가는 거 없이 배경이 다 검정이어야 해"): 위에 흐르던 응원 문구 줄을 뺐다.
-    + '<div id="pipStn" style="width:100%;font-size:6.2vw;line-height:1.25;display:flex;justify-content:center;align-items:baseline;gap:1.6vw;' + NOWRAP + '"></div>'
-    // ★ 2026-09-22: 여정 진행률 막대 — 목적지까지 얼마나 왔는지 한눈에
-    + '<div id="pipProgWrap" style="width:92%;flex:none;height:1.8vw;min-height:3px;border-radius:3px;background:rgba(255,255,255,.14);overflow:hidden;">'
-    +   '<div id="pipProgBar" style="width:0%;height:100%;border-radius:3px;background:linear-gradient(90deg,#ffd60a,#ff9f0a);transition:width .5s ease;"></div>'
-    + '</div>'
-    // ★ 2026-09-29: "PiP가 심심하다" → 목적지+소요시간+도착시각을 하이라이트(색글자)
-    //   한 줄로 보여줬는데, YJ가 다시 "OOO까지 총 O시간O분 소요되고 OO시OO분에
-    //   도착예정입니다"처럼 완전한 문장으로, 시인성 좋게 보여달라고 요청 → 알약(칩)
-    //   대신 줄바꿈이 되는 한 문장으로 바꾸고, 읽기 쉽도록 아래 PIP_H를 늘려 자리를
-    //   더 확보했다(핵심 낱말 3개만 색으로 강조 — 나머지 글은 흰 글자로 또렷하게).
-    + '<div id="pipSentence" style="width:100%;flex:none;font-size:6.9vw;'
-    +   'font-weight:700;line-height:1.38;color:#fff;word-break:keep-all;"></div>'
-    + '<div id="pipReco" style="display:none;width:100%;flex:none;margin-top:min(1.4vh,8px);'
-    +   'padding-top:min(1.4vh,8px);border-top:1px solid rgba(255,255,255,.16);"></div>'
-    + '</div>';
-  // ★ 2026-09-03: 탭하면 숨기던 동작을 뺐다.
-  //   PiP 창을 탭하는 건 '앱으로 돌아가고 싶다'는 뜻이라 안드로이드가 알아서 처리한다.
-  //   여기서 숨겨 버리면 작은 창에 앱 화면이 비쳐 고장난 것처럼 보인다.
-  document.body.appendChild(el);
-  return el;
-}
+
 
 // ★ 2026-10-01: 작은 화면의 흐르는 응원 문구는 없앴다(YJ 요청). 외부 호출이 남아 있어도 안전하도록 빈 함수만 둔다.
-function _pipCheerPaint(){}
-window._pipCheerPaint = _pipCheerPaint;
-
-function _pipPaint(){
-  try{
-    var el = document.getElementById('pipView');
-    if(!el || el.style.display === 'none') return;
-    var d = _pipData();
-    var esc = function(t){ return String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
-    var st = _pipStations();
-    var R = document.getElementById('pipStn');
-    var sEl = document.getElementById('pipSentence');
-
-    // ★ 2026-10-01 (YJ: "pip화면 대비 글자가 차지하는 부분이 작거나 비율이 이상해서 보기 이상해"):
-    //   길찾기 중 사용자가 가장 필요한 건 '다음에 어디냐'다. 이전역은 이미 지나온 정보라 빼고,
-    //   '현재(작고 흐리게) ▸ 다음(크고 진하게)' 두 개만 큼직하게 보여 준다.
-    //   다음이 없으면(마지막) 현재 자리를 큼직하게 보여 준다.
-    if(R){
-      var cur = st.cur || d.cur || (d.from || '이동 중');
-      var nm1 = 'min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
-      if(st.next){
-        R.innerHTML = '<span style="color:#9a9aa3;font-weight:700;font-size:.74em;flex:0 1 auto;' + nm1 + '">' + esc(cur) + '</span>'
-                    + '<span style="color:#ffd60a;font-weight:900;flex:none;">▸</span>'
-                    + '<span style="color:#fff;font-weight:900;font-size:1.12em;flex:0 1 auto;' + nm1 + '">' + esc(st.next) + '</span>';
-      } else {
-        R.innerHTML = '<span style="color:#ffd60a;font-weight:900;flex:none;">●</span>'
-                    + '<span style="color:#fff;font-weight:900;font-size:1.12em;flex:0 1 auto;' + nm1 + '">' + esc(cur) + '</span>';
-      }
-    }
-    // ★ 2026-09-22: 여정 진행률 막대 — idx/total이 없으면(경로 정보 부족) 그냥 숨긴다
-    try{
-      var pw = document.getElementById('pipProgWrap'), pb = document.getElementById('pipProgBar');
-      if(pw && pb){
-        if(st.pct != null){ pw.style.display = ''; pb.style.width = Math.round(st.pct*100) + '%'; }
-        else pw.style.display = 'none';
-      }
-    }catch(ePb){}
-    window._pipPaintAt = Date.now();
-    // ★ 2026-09-29: "OOO까지 총 O시간O분 소요되고 OO시OO분에 도착예정입니다" 완전한
-    //   문장 하나로 — 목적지·소요시간·도착시각 세 낱말만 색으로 강조해 시인성을 높인다.
-    //   (중간역 추적 중엔 위 pipStn 줄이 이전-현재-다음 역만 보여줘서 최종 목적지가
-    //   가려질 때가 있었는데, 이 문장엔 항상 목적지가 들어가 있어 그 문제도 해결됨)
-    try{
-      if(sEl){
-        var destNm = d.dest || (window._pipTrip && window._pipTrip.to) || '';
-        var durHtml = (d.min != null)
-          ? '<b style="color:#ff9f0a;font-size:1.14em;">' + esc(_pipMinText(d.min)) + '</b>'
-          : '<b style="color:#ff9f0a;">-</b>';
-        var arrHtml = d.arr
-          ? '<b style="color:#7dd3fc;font-size:1.14em;">' + esc(d.arr) + '</b>'
-          : '<b style="color:#7dd3fc;">-</b>';
-        sEl.innerHTML = (destNm ? '<b style="color:#ffd60a;">' + esc(destNm) + '</b>까지 ' : '')
-          + '총 ' + durHtml + ' 소요되고 ' + arrHtml + '에 도착예정입니다';
-      }
-    }catch(eS){}
-    _pipCheerPaint();
-    _pipRecoPaint();
-  }catch(e){}
-}
 
 // ★ 2026-09-02: 화면을 껐다 켜면 작은 창에 앱 화면이 그대로 보이던 문제.
 //   원인: 화면이 다시 켜질 때 잠깐 큰 크기로 resize 가 오면서 요약을 숨겼고,
@@ -28395,120 +28181,12 @@ var _PIP_RECO_TTL = 20*1000;
 function _pipRecoSet(title, body, buttons){
   try{
     window._pipReco = { title: title || '', body: body || '', btns: buttons || [], at: Date.now() };
-    if(typeof _pipTick === 'function') _pipTick();
+    if(typeof _ovlTick === 'function') _ovlTick();
   }catch(e){}
 }
 window._pipRecoSet = _pipRecoSet;
 function _pipRecoClear(){ try{ window._pipReco = null; }catch(e){} }
 window._pipRecoClear = _pipRecoClear;
-
-function _pipRecoPaint(){
-  var box = document.getElementById('pipReco');
-  if(!box) return;
-  var _wasHidden = box.style.display === 'none' || !box.style.display;
-  var r = window._pipReco;
-  // ★ 2026-10-01: 20초를 '추천이 만들어진 순간'부터 세면, 그때 작은 창이 안 떠 있던 사용자는
-  //   (앱을 보고 있다가 나중에 홈으로 나간 경우) 추천을 통째로 못 본다. 이 함수는 작은 창이
-  //   실제로 그려질 때만 불리므로, 처음 그려지는 순간부터 20초를 센다. 단 오래 묵은 추천이
-  //   엉뚱한 때 나오지 않게 만들어진 지 12분이 지나면 버린다(하차 10분 전 알림이므로 충분하다).
-  if(r && r.at){
-    if(!r.shownAt) r.shownAt = Date.now();
-    if((Date.now() - r.shownAt) > _PIP_RECO_TTL || (Date.now() - r.at) > 12*60*1000){ window._pipReco = null; r = null; }
-  }
-  var wrap = document.getElementById('pipView');
-  // ★ 2026-09-21: 창이 늘어난 동안에는 위에 흐르는 응원 문구를 숨긴다(추천 문구를 읽는 데 방해가 된다)
-  if(!r){
-    box.style.display = 'none'; box.innerHTML = '';
-    // ★ 2026-09-15: 추천이 사라지면 창을 원래 높이로
-    if(wrap) wrap.style.justifyContent = 'center';
-    window._pipTallH = null; window._pipRefit = 0; window._pipEnsureN = 0;
-    if(typeof _pipGrow === 'function') _pipGrow(false);
-    return;
-  }
-  // ★ 추천이 있는 동안은 위에서부터 쌓아 글자가 겹치지 않게 하고 창을 늘린다
-  if(wrap){
-    wrap.style.justifyContent = 'flex-start';
-    wrap.style.paddingTop = 'min(1.2vh,8px)';
-    wrap.style.overflowY = 'auto';
-    var _pb = document.getElementById('pipBox'); if(_pb) _pb.style.rowGap = 'min(0.8vh,6px)';
-  }
-
-  var esc = function(t){ return String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-                                                     .replace(/"/g,'&quot;'); };
-  var html = '<div style="font-size:6.6vw;font-weight:800;line-height:1.3;margin-bottom:1.6vw;">'
-           + esc(r.title) + '</div>';
-  if(r.body){
-    html += '<div style="font-size:5.4vw;color:#d4d4da;line-height:1.4;margin-bottom:1.6vw;'
-          + 'white-space:pre-line;word-break:keep-all;">' + esc(r.body) + '</div>';
-  }
-  // ★ 2026-09-21: 작은 창은 터치가 웹으로 오지 않아 버튼이 눌리지 않는다 → 버튼·남은시간 표시를 없애고
-  //   추천 문구만 20초 동안 보여준 뒤 스스로 내려간다.
-  box.innerHTML = html;
-  box.style.display = 'block';
-  box.style.maxHeight = 'none';
-  box.style.boxSizing = 'border-box';
-  box.style.borderRadius = '10px';
-  // ★ 2026-09-22: 방금 나타난 순간에만 살짝 반짝여서 눈길을 끈다(터치가 안 되니 시각 효과뿐)
-  if(_wasHidden){
-    try{
-      if(!document.getElementById('pipRecoPulseCss')){
-        var stp = document.createElement('style');
-        stp.id = 'pipRecoPulseCss';
-        stp.textContent = '@keyframes pipRecoPulse{0%{box-shadow:0 0 0 0 rgba(255,214,10,.6);}70%{box-shadow:0 0 0 12px rgba(255,214,10,0);}100%{box-shadow:0 0 0 0 rgba(255,214,10,0);}}';
-        document.head.appendChild(stp);
-      }
-      box.style.animation = 'pipRecoPulse 0.7s ease-out 2';
-    }catch(eA){}
-  }
-  // ★ 2026-09-21: 창 높이를 내용에 맞춘다 — 예전엔 고정 비율(200:190)이라 아래가 크게 비었다.
-  //   내용이 차지하는 높이 ÷ 창 너비 = 필요한 가로세로 비율. 한 번 정해 창을 늘린다.
-  try{
-    if(wrap && wrap.clientWidth > 0){
-      var _bx = document.getElementById('pipBox');
-      var _rs = ['pipStn','pipSentence'].map(function(id){ return document.getElementById(id); });
-      _rs.forEach(function(r){ if(r) r.style.display = ''; });
-      if(_bx){ _bx.style.transform = ''; _bx.style.width = '100%'; }
-      var _cs = getComputedStyle(wrap);
-      var need = (_bx ? _bx.offsetHeight : (box.offsetTop + box.scrollHeight))
-               + (parseFloat(_cs.paddingTop)||0) + (parseFloat(_cs.paddingBottom)||0) + 6;
-      var hh = Math.max(118, Math.min(236, Math.round(PIP_W2 * need / wrap.clientWidth)));
-      if(!window._pipTallH || (Math.abs(hh - window._pipTallH) >= 14 && (window._pipRefit||0) < 2)){
-        if(window._pipTallH) window._pipRefit = (window._pipRefit||0) + 1;
-        window._pipTallH = hh;
-        window._pipTall = false;          // 크기가 정해졌으니 네이티브에 다시 알린다
-      }
-    }
-  }catch(e){}
-  if(typeof _pipGrow === 'function') _pipGrow(true);
-  try{
-    var _inPip = window._pipInPip || (window.innerHeight <= 340 && window.innerWidth <= 520) || window.innerHeight < window.innerWidth * 1.4;
-    var _want = PIP_W2 / (window._pipTallH || PIP_H2), _cur = window.innerWidth / Math.max(1, window.innerHeight);
-    if(_inPip && Math.abs(_want - _cur) > 0.25 && (Date.now() - (window._pipEnsureAt||0)) > 1500 && (window._pipEnsureN||0) < 6){
-      window._pipEnsureAt = Date.now(); window._pipEnsureN = (window._pipEnsureN||0) + 1;
-      window._pipTall = false; _pipGrow(true);
-    }
-  }catch(e){}
-}
-window._pipRecoPaint = _pipRecoPaint;
-
-
-function _pipShow(){
-  try{ window._pipInPip = true;  _pipTick(); }catch(e){}
-}
-function _pipHide(){
-  try{
-    window._pipInPip = false;
-    // ★ 2026-09-22: YJ 제보 — 화면이 큰 태블릿에서 PiP를 확장하면 뒤에 앱 화면이
-    //   보인다. 원인: 여기서 무조건 바로 요약 화면을 내렸다. 태블릿은 'PiP 진입/
-    //   복귀' 신호가 앱 활성 신호와 뒤섞여 올 수 있는데, 그 신호만 먼저 와서
-    //   창이 아직 작은(PiP인) 상태에서도 요약 화면이 사라져 실제 앱 화면이
-    //   그대로 드러났다. → 바로 숨기지 말고 _pipTick()에 실제 창 크기로
-    //   다시 판단하게 한다 — 아직 작은 창이면 (아래 _pipWant()가) 계속 띄워 둔다.
-    if(typeof _pipTick === 'function'){ _pipTick(); return; }
-    var el = document.getElementById('pipView');
-    if(el) el.style.display = 'none';
-  }catch(e){}
-}
 
 // ★ 2026-09-03: 이벤트를 놓쳐도 스스로 제자리를 찾는 감시 루프.
 //   증상: 화면을 껐다 켜면 작은 창에 앱 화면이 그대로 보였다.
@@ -28516,216 +28194,37 @@ function _pipHide(){
 //        복귀 통지를 놓치면, 다시 켜 줄 계기가 없어 그 상태로 굳는다.
 //   → 1초마다 '지금 어때야 하는가'를 계산해서 화면을 거기에 맞춘다.
 //     어떤 사건을 놓쳐도 늦어도 1초 뒤 제자리로 돌아온다.
-function _pipWant(){
-  try{
-    // ★ 2026-09-22: 고정 픽셀 기준(340×520)은 폰 기준이다. 화면이 훨씬 큰
-    //   태블릿은 같은 비율로 줄어든 PiP 창이라도 절대 픽셀 크기가 이 기준을
-    //   넘어서, '작은 창'으로 인식되지 못했다. 전체 화면(screen) 대비 지금
-    //   창이 얼마나 작아졌는지(비율)도 같이 본다 — 기기 크기에 상관없이 잡힌다.
-    var small = (window.innerHeight <= 340 && window.innerWidth <= 520);
-    try{
-      var sw = window.screen && window.screen.width, sh = window.screen && window.screen.height;
-      if(sw > 0 && sh > 0 && window.innerWidth <= sw * 0.6 && window.innerHeight <= sh * 0.5){
-        small = true;
-      }
-    }catch(e2){}
-    if(!(window._pipInPip || small)) return false;      // 작은 창도 아니고 PiP도 아님
-    return !!(_pipEnabled() && _pipHasRoute());
-  }catch(e){ return false; }
-}
+
 
 // ★ 2026-09-21: 하차 추천이 뜨는 동안 창이 아직 안 늘어났거나 예상보다 작게 늘어나면
 //   줄들이 눌려 글자가 위아래로 잘렸다. 창 높이에 맞게 통째로 줄여서 항상 다 보이게 한다.
-function _pipFit(){
-  try{
-    var v = document.getElementById('pipView'), bx = document.getElementById('pipBox');
-    if(!v || !bx || v.style.display === 'none') return;
-    var rows = ['pipStn','pipSentence'].map(function(id){ return document.getElementById(id); });
-    var rowsShow = function(d){ rows.forEach(function(r){ if(r) r.style.display = d; }); };
-    var reco = document.getElementById('pipReco');
-    var recoOn = !!(reco && reco.style.display !== 'none' && window._pipReco);
-    rowsShow(''); bx.style.transform = ''; bx.style.width = '100%';
-    var cs = getComputedStyle(v);
-    var avail = v.clientHeight - (parseFloat(cs.paddingTop)||0) - (parseFloat(cs.paddingBottom)||0);
-    var nat = bx.offsetHeight, sc = 1;
-    // ★ 2026-10-01 (YJ: "글자가 차지하는 부분이 작거나 비율이 이상해"): 줄이기만 하던 맞춤에
-    //   '키우기'를 더한다. 내용이 창보다 작으면(위아래가 비면) 창을 채우도록 최대 1.5배까지 키운다.
-    //   추천이 떠 있을 땐 창 높이를 내용에 맞춰 늘리는 방식이라 키우지 않는다(줄이기만).
-    var MAXUP = recoOn ? 1 : 1.5;
-    if(avail > 20 && nat > 0 && (nat > avail + 1 || (MAXUP > 1 && nat < avail * 0.92))){
-      sc = Math.max(0.3, Math.min(MAXUP, avail / nat));
-      if(sc < 0.8 && recoOn){            // 너무 작아지면 추천이 주인공이므로 역·시간 줄을 잠깐 비운다
-        rowsShow('none'); nat = bx.offsetHeight;
-      }
-      // ★ 2026-10-01: 납작한 창(239:100)에서 예전 반복 보정이 줄바꿈 때문에 왔다 갔다 하다가 넘친 채 끝났다
-      //   (배율을 줄이면 상자가 넓어져 문장이 2줄로 줄고, 그러면 다시 키우고… 가 반복).
-      //   → '넘치지 않는 가장 큰 배율'을 이분 탐색으로 찾는다. 마지막에 반드시 확인된 값만 적용한다.
-      var _fits = function(k){
-        bx.style.width = (100 / k) + '%'; bx.style.transform = (Math.abs(k - 1) < 0.005) ? '' : 'scale(' + k + ')';
-        return bx.offsetHeight * k <= avail + 1;
-      };
-      var lo = 0.3, hi = MAXUP, best = 0.3;
-      if(_fits(hi)) best = hi;
-      else {
-        for(var i = 0; i < 9; i++){
-          var mid = (lo + hi) / 2;
-          if(_fits(mid)){ best = mid; lo = mid; } else hi = mid;
-        }
-      }
-      sc = best;
-      _fits(sc);
-      if(Math.abs(sc - 1) <= 0.01){ sc = 1; bx.style.width = '100%'; bx.style.transform = ''; }
-    }
-    if(reco){
-      if(!reco._o) reco._o = { bt: reco.style.borderTop, mt: reco.style.marginTop, pt: reco.style.paddingTop };
-      var _hid = !!(rows[0] && rows[0].style.display === 'none');
-      reco.style.borderTop = _hid ? 'none' : reco._o.bt;
-      reco.style.marginTop = _hid ? '0' : reco._o.mt;
-      reco.style.paddingTop = _hid ? '0' : reco._o.pt;
-    }
-    v.style.overflow = 'hidden';
-    v.style.justifyContent = (sc !== 1 || recoOn) ? 'flex-start' : 'center';
-  }catch(e){}
-}
-window._pipFit = _pipFit;
 
-function _pipTick(){
-  try{
-    var el = document.getElementById('pipView');
-    var shown = !!(el && el.style.display !== 'none');
-    var want  = _pipWant();
-    if(want){
-      if(!shown){ var e2 = _pipEl(); e2.style.display = 'flex'; }
-      _pipPaint();
-      _pipFit();
-    } else if(shown){
-      if(el) el.style.display = 'none';                 // 취소·도착·복귀 — 어느 쪽이든 내린다
-    }
-  }catch(e){}
+
+
+function _ovlTick(){
+  // ★ 2026-10-09: PiP(작은 요약 화면)는 완전히 걷어냈다(_PIP_FEATURE=false 로 꺼 둔 지 오래였다).
+  //   이 틱은 이제 다른 앱 위 오버레이·백그라운드 깨우기만 갱신한다(이름은 호출처가 많아 _ovlTick 으로 바꿨다).
   try{ _ovlSync(); }catch(e2){}                          // ★ 2026-10-01: 다른 앱 위 오버레이도 같은 여정 값으로 갱신
   try{ _ovlKeepAliveSync(); }catch(e3){}                 // ★ 2026-10-01: 여정 중이면 가려져도 네이티브가 깨워 주게 한다
 }
-// 감시 루프는 항상 돈다(가벼운 검사뿐이라 부담이 없다)
-// ★ 2026-09-22: 다만 안내 중인 경로가 아예 없을 때도 1초마다 똑같이 돌 필요는 없다
-//   (PiP는 경로가 있어야만 뜨므로, 경로가 없는 동안엔 1초 정밀도가 의미가 없다).
-//   경로가 있을 땐 그대로 1초, 없을 땐 5초로 늦춰서 감시는 유지하되 빈도만 줄인다.
-function _pipTickLoop(){
-  try{ _pipTick(); }catch(e){}
+
+function _ovlTickLoop(){
+  try{ _ovlTick(); }catch(e){}
   var delay = (typeof _pipHasRoute === 'function' && _pipHasRoute()) ? 1000 : 5000;
-  window._pipWatchTimer = setTimeout(_pipTickLoop, delay);
+  window._ovlWatchTimer = setTimeout(_ovlTickLoop, delay);
 }
-try{ if(!window._pipWatchTimer) _pipTickLoop(); }catch(e){}
-try{
-  document.addEventListener('visibilitychange', function(){
-    if(!document.hidden && window._pipInPip) _pipTick();
-  });
-}catch(e){}
-window._pipShow = _pipShow;
-window._pipHide = _pipHide;
+try{ if(!window._ovlWatchTimer) _ovlTickLoop(); }catch(e){}
+
+
 
 // 네이티브 PiP 플러그인 (있으면 사용)
-function _pipNative(){
-  try{
-    var P = window.Capacitor && window.Capacitor.Plugins;
-    return (P && (P.Pip || P.PictureInPicture)) || null;
-  }catch(e){ return null; }
-}
+
 
 // ★ 작은 창 크기를 한 곳에서 정한다.
 //   안드로이드 PiP 가 허용하는 최대 가로비는 2.39:1 이라 그보다 납작하게는 못 만든다
 //   (더 낮은 비율, 즉 세로로 더 넉넉한 창은 문제없다).
 //   resizable/seamless 는 네이티브가 지원하면 '사용자가 늘리지 못하게' 쓰는 값이고,
 //   모르는 키는 플러그인이 그냥 무시하므로 넣어 두어도 안전하다.
-// ★ 2026-09-29: 하단 요약을 알약 한 줄에서 완전한 문장(최대 2줄)으로 바꾸면서
-//   기존 100 높이로는 문장이 눌리거나 잘릴 수 있어 136으로 늘려 여유를 준다.
-// ★ 2026-10-01 (YJ: "pip의 세로 크기를 지금의 1/2로 줄일 수 있어?"): 안드로이드 PiP 는 가로:세로 비율이
-//   2.39:1 보다 납작할 수 없다(넘으면 setAspectRatio 가 예외 → 조용히 무시됨). 그래서 절반(≈3.5:1)은 불가능하고
-//   허용되는 가장 낮은 높이인 239:100 으로 줄인다(136→100, 약 26% 감소). 안에 담기는 글은 _pipFit 이 창에 맞춘다.
-var PIP_W = 239, PIP_H = 100;
-// ★ 2026-09-15: 하차 추천이 뜨면 창을 아래로 늘린다.
-//   기존 239:100 은 글자 두 줄이 겨우 들어가는 높이라 추천이 겹쳐 잘렸다.
-var PIP_W2 = 200, PIP_H2 = 190;
-window._pipTall = false;
-function _pipGrow(on){
-  try{
-    on = !!on;
-    if(window._pipTall === on) return;
-    window._pipTall = on;
-    var n = (typeof _pipNative==='function') ? _pipNative() : null;
-    var o = _pipSizeOpts({});
-    if(!n) return;
-    // ★ 2026-10-01 (도착 전 추천 PiP 확장 점검): 네이티브 PipPlugin 에는 setAspectRatio/update 가
-    //   없고(setActive·enter·isAvailable·redraw 뿐), Capacitor 는 모르는 메서드도 함수처럼 보이게
-    //   하는 경우가 있어 `typeof === 'function'` 검사가 항상 통과 → 호출은 'not implemented' 로 조용히
-    //   거절되고 창은 안 커졌다(10초 주기 동기화가 우연히 맞춰 줄 때까지). 줄일 때도 마찬가지.
-    //   → 네이티브에 실제로 있고 setPictureInPictureParams 를 바로 거는 setActive 를 먼저 쓴다.
-    //   실패하면 동기화 타이머가 다시 보내도록 표시해 둔다(_pipLastActive/_pipLastSz 초기화).
-    o.active = !!(_pipEnabled() && _pipHasRoute() && !_ovlUsable());
-    var _bad = function(){ _pipLastActive = null; _pipLastSz = ''; };
-    var _call = function(fn){
-      try{ var r = fn.call(n, o); if(r && typeof r.then === 'function') r.then(function(){ _pipLastSz = o.width + 'x' + o.height; }, _bad); else _pipLastSz = o.width + 'x' + o.height; }
-      catch(e){ _bad(); }
-    };
-    if(typeof n.setActive === 'function')         _call(n.setActive);
-    else if(typeof n.setAspectRatio === 'function') _call(n.setAspectRatio);
-    else if(typeof n.update === 'function')       _call(n.update);
-    else if(typeof n.enter === 'function' && window._pipInPip) _call(n.enter);
-  }catch(e){}
-}
-window._pipGrow = _pipGrow;
-
-function _pipSizeOpts(extra){
-  var o = extra || {};
-  var W = window._pipTall ? PIP_W2 : PIP_W;
-  var H = window._pipTall ? (window._pipTallH || PIP_H2) : PIP_H;
-  o.width = W; o.height = H;
-  o.aspectWidth = W; o.aspectHeight = H;
-  o.resizable = false;          // 확대/축소 금지
-  o.seamless = false;           // 매끄러운 리사이즈 끄기(안드로이드 12+)
-  return o;
-}
-window._pipSizeOpts = _pipSizeOpts;
-
-
-// ★ 네이티브에 "지금 안내 중인가"를 알려 둔다.
-//   안드로이드는 홈 버튼을 누르는 순간(onUserLeaveHint)에만 PiP로 바꿀 수 있어서,
-//   그때 물어볼 시간이 없다. 미리 상태를 넘겨 두고 네이티브가 스스로 판단하게 한다.
-var _pipLastActive = null;
-var _pipLastSz = '';           // ★ 2026-10-01: 마지막으로 네이티브에 알린 창 크기 — 크기가 바뀌었으면 값이 같아도 다시 보낸다
-var _pipLastSyncAt = 0;
-var _PIP_RESEND_MS = 30000;
-// ★ 2026-09-08: 예전엔 '값이 바뀔 때 한 번'만 보냈다.
-//   플러그인이 아직 준비되기 전(첫 2초)이나 호출이 실패하면 네이티브는
-//   끝내 '안내 중'이라는 걸 모르고, 홈 버튼을 눌러도 PiP 로 안 바뀐다.
-//   액티비티가 다시 만들어지면 네이티브 쪽 상태도 초기화되는데 웹은 그걸 모른다.
-//   → 성공했을 때만 기억하고, 값이 같아도 30초마다 한 번은 다시 알린다.
-function _pipNativeSync(force){
-  try{
-    var n = _pipNative();
-    if(!n || typeof n.setActive !== 'function'){ _pipLastActive = null; return; }
-    var v = !!(_pipEnabled() && _pipHasRoute() && !_ovlUsable());   // ★ 2026-10-01: 오버레이를 쓰는 동안엔 PiP 자동 전환을 끈다(둘이 겹치지 않게)
-    var now = Date.now();
-    var _o = _pipSizeOpts({ active: v });
-    var _sz = _o.width + 'x' + _o.height;
-    if(!force && v === _pipLastActive && _sz === _pipLastSz && (now - _pipLastSyncAt) < _PIP_RESEND_MS) return;
-    _pipLastSyncAt = now;
-    var r = n.setActive(_o);
-    if(r && typeof r.then === 'function'){
-      r.then(function(){ _pipLastActive = v; _pipLastSz = _sz; window._pipArmed = v; })
-       .catch(function(){ _pipLastActive = null; _pipLastSz = ''; window._pipArmed = null; });   // 실패하면 다음 틱에 재시도
-    } else { _pipLastActive = v; _pipLastSz = _sz; window._pipArmed = v; }
-  }catch(e){ _pipLastActive = null; window._pipArmed = null; }
-}
-window._pipNativeSync = _pipNativeSync;
-try{ setInterval(_pipNativeSync, 10000); setTimeout(function(){ _pipNativeSync(true); }, 1200); setTimeout(function(){ _pipNativeSync(true); }, 4000); }catch(e){}
-
-// ★ 창 크기로 PiP 여부를 판단한다.
-//   안드로이드가 PiP로 만들면 웹뷰가 작아진다. 그때만 요약 화면을 남긴다.
-function _pipOnResize(){
-  // 크기가 바뀌면 즉시 한 번 맞춘다(나머지는 감시 루프가 이어서 본다)
-  try{ _pipTick(); }catch(e){}
-}
-try{ window.addEventListener('resize', _pipOnResize); }catch(e){}
 
 // ★ 2026-10-02 (YJ: 갤럭시 폴드 — "폰을 펴고 접을 때 화면에 안 맞춰지는 게 있어"):
 //   접었다 펴면 창 크기·비율이 통째로 바뀐다(좁고 긴 화면 ↔ 거의 정사각형). 안드로이드 웹뷰가 예전 크기로 굳은 채
@@ -28774,38 +28273,8 @@ try{
 
 // 설정에서 눌러 보는 미리보기 (5초 뒤 자동으로 닫힌다)
 // 설정 화면의 토글 모양을 지금 상태에 맞춘다
-function _pipSyncToggle(){
-  try{
-    var on = _pipEnabled();
-    var chk = document.getElementById('pipToggle');
-    var tr  = document.getElementById('pipToggleTrack');
-    var kn  = document.getElementById('pipToggleKnob');
-    if(chk) chk.checked = on;
-    if(tr)  tr.style.background = on ? 'var(--green,#34c759)' : 'var(--border2)';
-    if(kn)  kn.style.left = on ? '25px' : '3px';
-    var st = document.getElementById('pipStat');
-    if(st){
-      if(!_pipNative()){
-        st.textContent = '이 빌드에는 화면 축소 기능이 없어, 앱을 내리면 상단 알림으로 안내해요.'
-                       + '\n(MainActivity 에 registerPlugin(PipPlugin.class) 가 있는지 확인하세요)';
-        st.style.whiteSpace = 'pre-line';
-      } else {
-        var _hasR = false;
-        try{ _hasR = !!(typeof _pipHasRoute==='function' && _pipHasRoute()); }catch(e2){}
-        st.textContent = '화면 위 축소 표시를 쓸 수 있어요.'
-          + '\n· 안내 중인 여정: ' + (_hasR ? '있음' : '없음(경로를 확정해야 떠요)')
-          + '\n· 네이티브에 알림: ' + (window._pipArmed === true ? '켜짐'
-              : (window._pipArmed === false ? '꺼짐' : '아직 전달 못 함'));
-        st.style.whiteSpace = 'pre-line';
-      }
-    }
-  }catch(e){}
-}
-window._pipSyncToggle = _pipSyncToggle;
-try{
-  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(_pipSyncToggle, 300); });
-  else setTimeout(_pipSyncToggle, 300);
-}catch(e){}
+
+
 
 // ══════════════════════════════════════════════════════════════
 // ★ 2026-10-01 (YJ: "다른 앱을 보면서 내 위치가 어딘지 알게 하고 싶어 — 오버레이, 앱이 백그라운드로 돌면 알아서 위에 떠야 해"):
@@ -28835,7 +28304,7 @@ function _ovlRefresh(cb){
     if(r && typeof r.then === 'function'){
       r.then(function(v){
         _ovlGranted = !!(v && v.granted); _ovlSupported = !(v && v.supported === false);
-        try{ _ovlSyncToggle(); _pipNativeSync(true); _ovlSync(true); }catch(e){}
+        try{ _ovlSyncToggle();  _ovlSync(true); }catch(e){}
         if(cb) cb();
       }).catch(function(){ if(cb) cb(); });
     } else if(cb) cb();
@@ -29080,7 +28549,7 @@ window._ovlNativeTick = function(){
       try{ if(typeof _rtPoll === 'function') _rtPoll(); }catch(e2){}
       try{ if(typeof _rtArrPoll === 'function') _rtArrPoll(); }catch(e3){}
     }
-    if(typeof _pipTick === 'function') _pipTick(); else _ovlSync();
+    if(typeof _ovlTick === 'function') _ovlTick(); else _ovlSync();
   }catch(e){}
 };
 // 오버레이 권한 안내 모달 — 앱 테마(--card·--text·--sub·--border)를 따른다
@@ -29116,7 +28585,7 @@ function _ovlSetEnabled(v){
   if(v && _ovlGranted !== true){
     // 권한 안내(설정 화면으로 보내 직접 켜게 한다) — 무엇을 왜 쓰는지 먼저 알린다.
     // ★ 2026-10-03 (YJ: "알림도 테마에 맞춰줘"): 시스템 confirm() 대신 앱 테마 모달을 쓴다. 응답은 비동기라 여기서 마무리한다.
-    var _after = function(){ _ovlSyncToggle(); try{ _pipNativeSync(true); }catch(e){} _ovlSync(true); };
+    var _after = function(){ _ovlSyncToggle(); try{  }catch(e){} _ovlSync(true); };
     _showOvlPermDialog(function(){
       try{ n.requestPermission(); }catch(e){}
       if(typeof toast === 'function') toast("설정에서 '길동무'의 '다른 앱 위에 표시'를 켜 주세요");
@@ -29131,7 +28600,7 @@ function _ovlSetEnabled(v){
     toast(v ? '다른 앱 위에 표시를 켰어요' : '다른 앱 위에 표시를 껐어요');
   }
   _ovlSyncToggle();
-  try{ _pipNativeSync(true); }catch(e){}
+  try{  }catch(e){}
   _ovlSync(true);
 }
 window._ovlSetEnabled = _ovlSetEnabled;
@@ -29228,13 +28697,6 @@ try{
   else setTimeout(_batSyncStat, 300);
 }catch(e){}
 
-function _pipPreview(){
-  _pipShow();
-  if(typeof toast === 'function') toast('작은 요약 화면 미리보기 · 탭하면 닫혀요');
-  setTimeout(function(){ if(window.innerHeight > 340) _pipHide(); }, 5000);
-}
-window._pipPreview = _pipPreview;
-
 /* 앱 포그라운드/백그라운드 전환 감지 */
 function _initAppStateListener(){
   // Capacitor App 플러그인
@@ -29248,10 +28710,10 @@ function _initAppStateListener(){
           // 포그라운드 진입
           console.log('[앱상태] 포그라운드');
           try{ _ovlDiag('앱→앞'); }catch(eD){}
-          try{ if(typeof _pipHide === 'function') _pipHide(); }catch(e){}
+          try{  }catch(e){}
           // ★ 2026-09-08: 복귀할 때 네이티브 상태를 다시 알린다.
           //   액티비티가 새로 만들어졌으면 네이티브의 '안내 중' 플래그가 지워져 있다.
-          try{ if(typeof _pipNativeSync === 'function') _pipNativeSync(true); }catch(e){}
+          try{  }catch(e){}
           // ★ 2026-09-26: 배터리 최적화 설정 화면에서 돌아왔을 수 있으니 상태를 다시 읽는다
           //   (설정 화면이 열려 있을 때만 반영되고, 없으면 조용히 아무 일도 안 함).
           try{ if(typeof _batSyncStat === 'function') _batSyncStat(); }catch(e){}
@@ -29407,8 +28869,8 @@ window._onForegroundResume = _onForegroundResume;
 function _cleanupBgTracking(){
   // ★ 2026-09-02: 여정이 끝나거나 취소되면 작은 요약 화면도 같이 내린다
   try{ if(typeof _pipTripClear === 'function') _pipTripClear(); }catch(e){}
-  try{ if(typeof _pipHide === 'function') _pipHide(); }catch(e){}
-  try{ if(typeof _pipNativeSync === 'function') _pipNativeSync(); }catch(e){}
+  try{  }catch(e){}
+  try{  }catch(e){}
 
   _stopBgGeolocation();
   _clearForegroundNotif();
@@ -29416,9 +28878,6 @@ function _cleanupBgTracking(){
   window._bgAlertFired = {};
   if(window._fgKeepAliveTimer){ clearInterval(window._fgKeepAliveTimer); window._fgKeepAliveTimer = null; }
 }
-
-
-
 
 // arrTimeSeconds 변수 선언 (ReferenceError 방어)
 var arrTimeSeconds = 0;
@@ -29444,10 +28903,7 @@ function quickBoardToggle() {
   }
   { toast('먼저 경로를 검색하세요.'); return; }
   // 팝업 표시
-  
-  
-  
-  
+
 }
 
 // ★ 탑승 시각(nowMs) 기준으로 경로 전체 시각 재계산 + UI 업데이트
@@ -29748,12 +29204,6 @@ function _clearBoardAlerts() {
 
 // ── 출발 시 탑승확인 팝업 ─────────────────────────────────
 var _boardAskTimer = null;
-
-
-
-
-
-
 
 // ══════════════════════════════════════════════════════
 // 도보 안내 모달 시스템
@@ -30677,9 +30127,6 @@ function _fetchRealtimeNews() {
 }
 window._fetchRealtimeNews = _fetchRealtimeNews;
 
-
-
-
 function _makeResponseLike(status, text) {
   var _t = String(text||'');
   return {
@@ -31023,11 +30470,6 @@ window.addEventListener('resize', function() {
   var sv = document.getElementById('gmSvgView');
   if (sv && sv.offsetParent !== null) _pzFit();
 });
-
-
-
-
-
 
 function startApiPoll(){
   stopApiPoll();
@@ -31802,18 +31244,11 @@ function doRoute(){
   if(typeof fmapDoRoute === 'function') fmapDoRoute();
 }
 
-
-
-
-
 ;
 
 
 // ── 전체 경로 타임라인 토글 ────────────────────────────────
 var _timelineExpanded = false;
-
-
-
 
 /* ── 전국 노선도: 탭으로 전환 ── */
 /* switchMapRegion → 아래 정의 */
@@ -31832,13 +31267,6 @@ const SM_MIN=0.3, SM_MAX=6;
 
 
   // 네이티브 스크롤 사용
-
-
-
-
-
-
-
 
 // ── SVG text 직접 클릭 방식 (참조 index-9.html) ─────────────
 
@@ -32206,12 +31634,6 @@ function renderSeoulMap() {
 }
 window.renderSeoulMap = renderSeoulMap;
 
-
-
-
-
-
-
 // ══════════════════════════════════════════════════════════════
 // 누락 함수 복구 블록 (renderShop, LINE_SVG_CLASS, gmFilterLine 등)
 // ══════════════════════════════════════════════════════════════
@@ -32540,25 +31962,12 @@ function _stopSilenceWatchdog() {
   }
 }
 
-
-
-
-
-
 // ══════════════════════════════════════════════════════════════
 // ★ 문 열릴 때 GPS 위치 보정
 //   역 도착 후 20초 대기(문 열림) → GPS 1회 확인 → 실제 역 특정
 //   타이머 오차 누적을 매 역마다 자동 교정
 // ══════════════════════════════════════════════════════════════
 var _stationGpsTimer = null;
-
-
-
-
-
-
-
-
 
 // ── stopTracking: 관제 모드 정지 ───────────────────────────
 function stopTracking() {
@@ -37039,14 +36448,7 @@ function renderHorizontalTimeline(){
   // ★ etas가 path보다 짧으면(비동기 미완성) tp 기반으로 전체 보강 — 일부 역 "-" 방지
   
   // ── 중복 환승역 제거 (환승역은 path에 2번 연속 등장) ──
-  
-  
-  
-  
 
-  
-  
-  
   // ★ 탑승 버튼: 경로 있으면 항상 표시
   
   
@@ -37136,9 +36538,6 @@ function renderFeed(){
   });
 }
 window.renderFeed = renderFeed;
-
-
-
 
 // ══════════════════════════════════════════════════════════════
 // window 전역 바인딩 + 누락 함수 복구
