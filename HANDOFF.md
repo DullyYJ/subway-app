@@ -381,3 +381,8 @@
   - 엔진이 응답하지 못하면: `_routeFailShow()` 가 홈 결과 영역에 **이유 + [다시 시도]** 를 보여준다(연결 실패 / 경로 없음 / 응답 지연 3종). 토스트는 앱 전체가 꺼져 있어 예전엔 아무 안내도 안 떴다. 첫 실패는 기존처럼 8.5초 뒤 1회 자동 재시도(실패 안내는 '결과'로 치지 않음).
   - 남은 것: `S.route` 를 쓰는 옛 '지하철 탭 관제'(renderPath/updateRouteDetailUI/startTracking 등)는 엔진 경로에서 S.route=null 이라 휴면 상태 — 다음 정리 후보.
 - 시험: `tabs_smoke.ui.test.js` 52개(바꾸기 2개·옛 코드 제거 확인 1개·엔진 실패 안내 1개·공유글 8개 포함) + 나머지 12개 파일 전부 통과(병렬로 돌리면 타이밍 시험 몇 개가 느려 실패할 수 있으니 단독 재실행. `journey_alerts.ui.test.js` 의 '하차 10분 전 추천 알림' 은 정리 전 코드에서도 4번 중 1번꼴로 흔들리는 기존 타이밍 flake).
+
+### 안 쓰는 코드 정리 (2026-10-09)
+- 어디서도 참조되지 않는 함수 111개 + 미사용 변수/헬퍼 6개(`_batNativeAvailable` 등), `switchRouteTab` 및 `.kakao-tab` 제거. acorn 도달성 분석 + 블록별 `node --check` + 미선언 식별자 diff(기준선 112개와 동일)로 검증.
+- **남겨둔 것**: `S.route` 가 null 인 운영 환경에서 사실상 휴면인 "지하철 탭 관제" 서브시스템(`startTracking/_doArrival/startApiPoll/detectBoardingState` 등). `_updateTrackingHUD`, `advanceToNextStation`, `_rebaseAllFromNow` 등 13개 가드 함수를 지우면 12곳의 호출이 남아 끊어지므로(여러 살아있는 함수와 얽힘) 되돌렸다. 지우려면 진입점부터 호출 체인 전체를 한 번에 걷어내야 한다.
+- 테스트는 단독 실행 권장(병렬 시 타이밍 flake).

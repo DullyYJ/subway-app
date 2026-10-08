@@ -2201,15 +2201,11 @@ var _ROUTE_V2_PATH = '/route-v2-app';   // 워커 라우트명(워커와 함께�
 function _routeV2Url(qs){
   return _ROUTE_V2_BASE + _ROUTE_V2_PATH + '?' + qs;
 }
-// 공공데이터포털(TAGO) 프록시: path=엔드포인트경로, qs=serviceKey 제외한 쿼리
-function _tagoUrl(path, qs){
-  return _API_PROXY_BASE + '/tago?path=' + encodeURIComponent(path) + '&qs=' + encodeURIComponent(qs || '');
-}
 // 서울 열린데이터 실시간 프록시: path 예) 'realtimeStationArrival/0/5/서울역'
 function _seoulUrl(path){
   return _API_PROXY_BASE + '/seoul?path=' + encodeURIComponent(path);
 }
-window._tagoUrl = _tagoUrl; window._seoulUrl = _seoulUrl;
+ window._seoulUrl = _seoulUrl;
 // dapi.kakao.com/v2/local/* 프록시
 // ★ 2026-09-02: 이 워커에 /kakao-local 라우트가 없으면 계속 404가 돌아온다(확인됨).
 //   호출부들은 실패를 조용히 무시하도록 되어 있어 앱은 정상 동작하지만,
@@ -2289,12 +2285,7 @@ function _kakaoLocal(path, qs){
       }).catch(function(){ return r; });
     });
 }
-// apis-navi.kakaomobility.com/* 프록시
-function _kakaoNavi(path, qs){
-  return _fetchT(_KAKAO_PROXY_BASE + '/kakao-navi?path=' + encodeURIComponent(path) + '&qs=' + encodeURIComponent(qs || ''), {}, 8000);
-}
-window._kakaoLocal = _kakaoLocal; window._kakaoNavi = _kakaoNavi;
-var _NAVER_CLIENT_ID  = 'hA4NRbssAZ_MvYBElOTQ';  // 네이버 Static Map
+window._kakaoLocal = _kakaoLocal; var _NAVER_CLIENT_ID  = 'hA4NRbssAZ_MvYBElOTQ';  // 네이버 Static Map
 // ── 역별 인근 음식점 내장본 — 2026-09-14 제거 ──
 //   소상공인 상가정보 CSV(202606) 고정본이라 폐업한 집이 계속 떴고,
 //   역당 최근접 20곳(637역)뿐이라 종류도 한정적이었다(1.39MB).
@@ -13005,8 +12996,6 @@ window._evStaleMs = function(){
   }catch(e){ return -1; }
 };
 window._evStaleFollow = function(){ return window._evStaleMs() >= 0; };
-// 근거가 끊긴 동안 시각표를 늦춰 읽는 유예: 끊긴 지 90초부터 1분에 걸쳐 0→60초로 늘린다(위치가 갑자기 뒤로 뛰지 않고 1분간 머문 뒤 다시 간다)
-window._evStaleOffMs = function(){ var m = window._evStaleMs(); return m < 0 ? 0 : Math.min(60000, m - 90000); };
 
 // ★ 2026-10-02 (YJ: "실제 역은 귤현인데 앱과 오버레이가 다 안 맞아"): 같은 시각 화면 — 열차가 3분 늦어 실제는 귤현(18:27 예정)인데
 //   앱 마커는 시각표대로 계양(18:29)이었다. 원인: 앱을 열 때(포그라운드 복귀 스냅)·상태 표시 등은 시각표 위치를 그대로 믿고 마커를 놓았다.
@@ -18411,10 +18400,6 @@ window.addEventListener('unhandledrejection', function(e) {
     <div class="kakao-route-card">
       <!-- 헤더: 탭 + 요약 -->
       <div class="kakao-route-header">
-        <div class="kakao-route-tabs">
-          <div class="kakao-tab on" onclick="switchRouteTab(this,'fast')">최단시간</div>
-          <div class="kakao-tab" onclick="switchRouteTab(this,'min')">최소환승</div>
-        </div>
         <div class="kakao-summary">
           <div class="kakao-time"><span id="routeMinutes">-</span><span>분</span></div>
           <span id="routeXferBadge" class="kakao-badge" style="background:rgba(10,132,255,.15);color:#0a84ff;font-size:11px;">환승없음</span>
@@ -25381,48 +25366,6 @@ window.highlightRouteSVG = highlightRouteSVG;
 var _selName = '';   // SVG text 클릭 시 역명
 var _gmSel   = '';   // gmPop 팝업 클릭 시 역명
 
-// ── gmHub: gmPop 하단 팝업 열기 ──────────────────────────────
-// SVG 역 클릭 or 오버레이 클릭 → gmPop에 역명/노선 표시
-function gmHub(name) {
-  _gmSel   = name;
-  _selName = name;
-  var pn = document.getElementById('gmPN');
-  var pl = document.getElementById('gmPL');
-  var pop = document.getElementById('gmPop');
-  if(!pop) return;
-  if(pn) pn.textContent = name;
-  if(pl) {
-    // ★ 2026-09-02: 같은 역이 노선별로 여러 줄 들어 있어 같은 노선이 두 번 나오곤 했다.
-    //   노선명을 정리(중복 제거)한 뒤 공통 배지로 그린다.
-    var stns = (typeof STNDB !== 'undefined') ? STNDB.filter(function(s){ return s.name === name; }) : [];
-    var _pls = (typeof _lineListClean === 'function')
-      ? _lineListClean(stns.map(function(s){ return s.line; }))
-      : stns.map(function(s){ return s.line; });
-    pl.innerHTML = _pls.length && typeof _linePillHtml === 'function'
-      ? _pls.map(_linePillHtml).join('')
-      : '';
-  }
-  pop.style.bottom = '0';
-  // 외부 클릭 시 닫기
-  setTimeout(function(){
-    function _cls(e){
-      // ★ 다른 오버레이/모달 활성 중에는 전역 가로채기 통째로 차단
-      var bdrop = document.getElementById('bdrop');
-      var wbdrop = document.getElementById('wbdrop');
-      if((bdrop && bdrop.classList.contains('on')) ||
-         (wbdrop && wbdrop.classList.contains('on'))) return;
-
-      if(!e.target.closest || (!e.target.closest('#gmPop') && !e.target.closest('[onclick*="gmHub"]'))){
-        gmClosePop();
-        document.removeEventListener('touchstart', _cls, true);
-        document.removeEventListener('click',      _cls, true);
-      }
-    }
-    document.addEventListener('touchstart', _cls, { passive: true });
-    document.addEventListener('click',      _cls);
-  }, 350);
-}
-window.gmHub = gmHub;
 
 // ── gmClosePop: gmPop 닫기 ────────────────────────────────────
 function gmClosePop() {
@@ -29599,7 +29542,6 @@ function _pipNative(){
     return (P && (P.Pip || P.PictureInPicture)) || null;
   }catch(e){ return null; }
 }
-window._pipNativeAvailable = function(){ return !!_pipNative(); };
 
 // ★ 작은 창 크기를 한 곳에서 정한다.
 //   안드로이드 PiP 가 허용하는 최대 가로비는 2.39:1 이라 그보다 납작하게는 못 만든다
@@ -30159,7 +30101,6 @@ function _batNative(){
     return (P && P.Power) || null;
   }catch(e){ return null; }
 }
-window._batNativeAvailable = function(){ return !!_batNative(); };
 
 function _batSyncStat(){
   var st = document.getElementById('batOptStat');
@@ -34632,36 +34573,6 @@ function renderKakaoTimeline(r, startMs){
   if(typeof renderHorizontalTimeline === 'function') renderHorizontalTimeline();
 }
 
-function switchRouteTab(el, type){
-  document.querySelectorAll('.kakao-tab').forEach(t=>t.classList.remove('on'));
-  el.classList.add('on');
-  S.routeMode = type;
-
-  if (!S.routeFast && !S.routeMin) {
-    toast('먼저 경로를 검색하세요');
-    return;
-  }
-
-  var r = (type === 'min') ? (S.routeMin || S.routeFast) : (S.routeFast || S.routeMin);
-  if (!r) return;
-
-  // 경로 화면 갱신 (startTracking은 재시작 안 함)
-  S.route = r;
-  renderPath(r);
-  renderMap();
-  // ★ 즉시 운행 안내 + 타임라인 갱신 (API 응답 기다리지 않고 바로 표시)
-  if(typeof updateRouteDetailUI === 'function') updateRouteDetailUI();
-  if(typeof renderHorizontalTimeline === 'function') renderHorizontalTimeline();
-  setTimeout(function(){ highlightRouteSVG(r); }, 100);
-
-  var xfers = r.lp.filter(function(l,i){return i>0&&l&&r.lp[i-1]&&l!==r.lp[i-1];}).length;
-  var mins  = Math.round(r.tp.reduce(function(a,b){return a+b;},0)/60);
-  toast(type==='fast'
-    ? '⚡ 최단시간: '+mins+'분 / 환승 '+xfers+'회'
-    : '🔄 최소환승: '+xfers+'회 / '+mins+'분'
-  );
-}
-window.switchRouteTab = switchRouteTab;
 
 /* ── 전국 노선도: 탭으로 전환 ── */
 /* switchMapRegion → 아래 정의 */
