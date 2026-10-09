@@ -1,0 +1,24 @@
+# 역 좌표 공공데이터(파일데이터) 받아 보기 — 수동 실행. 결과: data/station-coords 브랜치(메인·APK 빌드와 무관).
+name: Probe station coordinates
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: 받기
+        env:
+          TAGO_KEY: ${{ secrets.TAGO_KEY }}
+        run: node tools/station-coords/probe.js out-coords
+      - name: 결과를 data/station-coords 브랜치에 올림
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@users.noreply.github.com"
+          cd out-coords && git init -q && git checkout -q -b data/station-coords && git add -A && git commit -q -m "station coords probe $(date -u +%FT%TZ)" && git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" data/station-coords
