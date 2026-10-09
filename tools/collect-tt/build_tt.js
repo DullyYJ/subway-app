@@ -16,7 +16,9 @@ const nz = n => String(n || '').replace(/\(.*?\)/g, '').replace(/역$/, '').repl
 const RT = bundle.data._REAL_TT; bundle.data._TT_ORIENT = bundle.data._TT_ORIENT || {};
 const NONLINEAR = new Set(['경의중앙선']);
 const ENDBASED = new Set(['GTX-A', '서해선']);   // TAGO 의 상/하가 구간마다 뒤집히는 노선 — 종착역 위치로 방향 키를 다시 정한다(순서는 번들 _TT_ORDER_HARD)               // 갈라지거나 구간이 나뉜 노선 — 방향 힌트를 만들지 않는다(시각표 상관 사용)
-const ORDER_FIX = { '공항철도': ['서울', '공덕', '홍대입구', '디지털미디어시티', '마곡나루', '김포공항', '계양', '검암', '청라국제도시', '영종', '운서', '공항화물청사', '인천공항1터미널', '인천공항2터미널'] };
+// 대구1·2·광주1·대전1호선은 역 ID/코드 순서가 선로 순서와 다르다(대구1호선 중앙로가 맨 끝으로 밀림) — 선로 순서로 적어 둔 NT_STNORDER 를 그대로 쓴다.
+// ★ 이 노선들의 NT_STNORDER 는 KRIC 역 코드가 커지는 방향(= 하)으로 적는다(광주1호선은 녹동→평동). 방향 힌트의 fwd 가 '하' 로 고정이기 때문.
+const ORDER_FIX = { ...Object.fromEntries(['대구1호선', '대구2호선', '광주1호선', '대전1호선'].map(l => [l, NT_STNORDER[l].map(nz)])), '공항철도': ['서울', '공덕', '홍대입구', '디지털미디어시티', '마곡나루', '김포공항', '계양', '검암', '청라국제도시', '영종', '운서', '공항화물청사', '인천공항1터미널', '인천공항2터미널'] };
 function toMin(s) { if (!s || s === '0' || !/^\d{6}$/.test(s)) return null; let m = (+s.slice(0, 2)) * 60 + (+s.slice(2, 4)); if (m < 180) m += 1440; return m; }
 function enc(minsArr) { const s = Array.from(new Set(minsArr.filter(x => x != null))).sort((a, b) => a - b); if (!s.length) return null; const o = [s[0]]; for (let i = 1; i < s.length; i++) o.push(s[i] - s[i - 1]); return o; }
 // 실측 인접 관계(_REAL_SEG)로 만든 '이웃 그래프'(TAGO 에 있는 역만; 자료에 없는 역 하나를 사이에 둔 두 역도 이웃).
@@ -109,7 +111,14 @@ for (const l in tagoStn) {
 }
 // ── KRIC ──
 const kr = {};
-for (const f of kricFiles) for (const row of JSON.parse(fs.readFileSync(f, 'utf8'))) {
+// 역 코드의 크기 비교 = 선로 방향. 코드가 선로 순서와 어긋난 역(대구1호선 중앙로=3140)은 ORDER_FIX 의 선로 순서로 비교한다.
+const kricRows = []; for (const f of kricFiles) for (const row of JSON.parse(fs.readFileSync(f, 'utf8'))) kricRows.push(row);
+const codeName = {};   // 노선 -> 역코드 -> 이름
+for (const row of kricRows) { const l = KMAP[row.opr + '|' + row.ln]; if (l) (codeName[l] = codeName[l] || {})[row.st] = nz(row.nm); }
+const kricAfter = (line, a, b) => {   // a 가 b 보다 선로상 뒤(= '하' 쪽)인가
+  const ord = ORDER_FIX[line]; if (ord) { const ia = ord.indexOf((codeName[line] || {})[a]), ib = ord.indexOf((codeName[line] || {})[b]); if (ia >= 0 && ib >= 0) return ia > ib; }
+  return a > b; };
+for (const row of kricRows) {
   const line = KMAP[row.opr + '|' + row.ln]; if (!line || !NT_STNORDER[line]) continue;
   (kr[line] = kr[line] || {})[row.st] = kr[line][row.st] || { nm: nz(row.nm), days: {} };
   const o = kr[line][row.st]; const rows = String(row.data || '').split('\n').filter(Boolean).map(x => x.split(','));
@@ -117,14 +126,15 @@ for (const f of kricFiles) for (const row of JSON.parse(fs.readFileSync(f, 'utf8
   const up = [], dn = [];
   for (const r of rows) { const [trn, arr, dep, org, dst] = r; if (dst === row.st) continue;       // 종착
     const t = toMin(dep) != null ? toMin(dep) : toMin(arr); if (t == null) continue;
-    (dst > row.st ? dn : up).push(t); }       // 역 번호(문자열 순서 = 선로 순서)가 커지는 쪽으로 가는 열차 = 하
+    (kricAfter(line, dst, row.st) ? dn : up).push(t); }       // 역 번호(문자열 순서 = 선로 순서)가 커지는 쪽으로 가는 열차 = 하
   o.days[dayKey] = { 상: up, 하: dn };
 }
 for (const line in kr) {
   const sts = Object.keys(kr[line]).sort((a, b) => +a - +b);
   for (const st of sts) { const o = kr[line][st]; const key = line + '|' + o.nm; if (RT[key] && !RT[key].__new) continue;
     for (const dn of ['D', 'W', 'S']) if (o.days[dn]) for (const dk of ['상', '하']) put(line, o.nm, dn, dk, o.days[dn][dk]); }
-  const order = sts.map(s => kr[line][s].nm).filter(n => !(ORIENT_EXCLUDE[line] || []).includes(n));
+  let order = sts.map(s => kr[line][s].nm).filter(n => !(ORIENT_EXCLUDE[line] || []).includes(n));
+  if (ORDER_FIX[line]) { const have = new Set(order); const fixed = ORDER_FIX[line].filter(n => have.has(n)); order.forEach(n => { if (!fixed.includes(n)) fixed.push(n); }); order = fixed; }   // 대구1호선 중앙로 역번호(3140)가 선로 순서와 다르다
   // 서울 노선은 역 코드 순서가 선로 순서와 어긋날 수 있어(갈라짐·고리), 번들의 실측 인접 관계(_REAL_SEG)와 대조해 거의 다 이웃일 때만 힌트를 만든다(어긋난 곳 ≤2개이고 5% 이하 — 갈라지는 곳의 건너뜀 정도만 허용).
   let hint = true, auditNote = '';
   if (/^\d호선$/.test(line)) { const a = require('./orient_audit.js').audit(bundle, line, order); hint = a.checked && a.bad.length <= 2 && a.bad.length <= 0.05 * a.pairs; auditNote = a.checked ? ' 인접점검 어긋남 ' + a.bad.length + '/' + a.pairs + (a.bad.length ? '(' + a.bad.join(',') + ')' : '') : ' 인접자료 없음'; }
