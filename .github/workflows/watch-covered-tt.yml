@@ -10,7 +10,7 @@ permissions:
   contents: write
   issues: write
 concurrency:
-  group: watch-covered-tt
+  group: tago-collect   # TAGO 를 오래 두드리는 워크플로끼리는 한 번에 하나만(동시에 돌리면 호출이 막혀 자료가 빈다)
   cancel-in-progress: false
 jobs:
   watch:
@@ -37,7 +37,7 @@ jobs:
           node tools/collect-tt/collect.js
       - name: 대조
         run: |
-          node tools/collect-tt/drift.js $OUT/base.json $OUT/raw.json tools/collect-tt/drift-baseline.json $OUT/drift
+          node tools/collect-tt/drift.js $OUT/base.json $OUT/raw.json tools/collect-tt/drift-baseline.json $OUT/drift $OUT/report.json
           cat $OUT/drift/drift.md >> "$GITHUB_STEP_SUMMARY"
       - name: 기준선 갱신 커밋
         run: |

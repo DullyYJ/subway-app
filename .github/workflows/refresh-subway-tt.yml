@@ -24,7 +24,7 @@ permissions:
   contents: write
   issues: write
 concurrency:
-  group: refresh-subway-tt
+  group: tago-collect   # TAGO 를 오래 두드리는 워크플로끼리는 한 번에 하나만(동시에 돌리면 호출이 막혀 자료가 빈다)
   cancel-in-progress: false
 jobs:
   refresh:

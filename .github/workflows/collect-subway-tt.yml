@@ -13,6 +13,9 @@ on:
         default: ''
 permissions:
   contents: write
+concurrency:
+  group: tago-collect
+  cancel-in-progress: false
 jobs:
   collect:
     runs-on: ubuntu-latest
