@@ -1,0 +1,14 @@
+[
+ {
+  "delete": 200,
+  "body": {
+   "result": "ok",
+   "success": true,
+   "errors": [],
+   "messages": []
+  }
+ },
+ {
+  "after": 0
+ }
+]
