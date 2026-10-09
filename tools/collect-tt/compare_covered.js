@@ -1,6 +1,6 @@
 // TAGO 로 수집한 서울 1~9·인천·김포 시각표(raw)를 지금 번들과 역·요일·방향별로 대조한다. (drift.js 가 불러 쓰고, 단독 실행도 된다)
 // 단독: node tools/collect-tt/compare_covered.js <base.json> <raw.json> [report.json]
-//   · 두 자료는 같은 원본이라 같은 열차를 초 단위 버림 차이로 ±1분 다르게 적는다 → ±1분은 같은 열차로 본다(순서대로 짝짓기).
+//   · 두 자료는 같은 원본이라 같은 열차를 초 단위 버림·도착/출발 시각 차이로 ±2분 다르게 적는다 → ±2분은 같은 열차로 본다(순서대로 짝짓기).
 //   · 일치도 = 짝지은 수 / 합집합 수. 3·5·6·8호선, 인천1호선, 김포골드라인은 0.94~0.99 로 맞는다(2026-10-09 실측).
 const fs = require('fs'), crypto = require('crypto');
 const { NT_STNORDER, NT_INCHEON_TT } = require('../../engine/next-train-data.js');
@@ -33,15 +33,15 @@ function tagoRecords(raw) {
   return { rec, prefixes };
 }
 const lineHash = (rec, l) => { const h = crypto.createHash('sha1'); for (const nm of NT_STNORDER[l].map(nz)) { const t = rec[l + '|' + nm]; h.update(nm + ':' + JSON.stringify(t ? t.tt : null) + ';'); } return h.digest('hex').slice(0, 16); };
-const jac = (a, b) => { let i = 0, j = 0, m = 0; while (i < a.length && j < b.length) { const d = a[i] - b[j]; if (Math.abs(d) <= 1) { m++; i++; j++; } else if (d < 0) i++; else j++; } const u = a.length + b.length - m; return u ? m / u : 1; };
+const jac = (a, b) => { let i = 0, j = 0, m = 0; while (i < a.length && j < b.length) { const d = a[i] - b[j]; if (Math.abs(d) <= 2) { m++; i++; j++; } else if (d < 0) i++; else j++; } const u = a.length + b.length - m; return u ? m / u : 1; };
 // 인천·김포는 _REAL_TT 가 아니라 따로 둔 표(엔진 내장 NT_INCHEON_TT, 번들 _GIMPO_TT)를 쓴다 — 같은 모양으로 맞춘다.
 function altOf(base, l, nm) {
   if (l === '김포골드라인') { const g = base.data._GIMPO_TT && base.data._GIMPO_TT[nm]; if (!g) return null; const f = a => norm((a || []).map(x => x[0] * 60 + x[1])); return { D: { 상: f(g.up.wd), 하: f(g.down.wd) }, W: { 상: f(g.up.hd), 하: f(g.down.hd) } }; }
   const t = NT_INCHEON_TT[l] && NT_INCHEON_TT[l][nm]; if (!t) return null;
   return { D: { 상: norm(t['평일상']), 하: norm(t['평일하']) }, W: { 상: norm(t['휴일상']), 하: norm(t['휴일하']) } };
 }
-function compare(base, raw) {
-  const RT = base.data._REAL_TT; const { rec, prefixes } = tagoRecords(raw);
+function compare(base, raw, recOverride) {
+  const RT = base.data._REAL_TT; const { rec, prefixes } = recOverride ? { rec: recOverride, prefixes: {} } : tagoRecords(raw);
   const rep = { prefixes, lines: {}, worst: [] };
   for (const l of COV) {
     const sts = NT_STNORDER[l].map(nz);
@@ -73,7 +73,27 @@ function compare(base, raw) {
   rep.worst.sort((a, b) => a.j - b.j); rep.worstN = rep.worst.length; rep.worst = rep.worst.slice(0, 40);
   return rep;
 }
-module.exports = { compare, tagoRecords, COV, lineHash };
+// KRIC(D1 kric_tt 내보내기) → 같은 모양의 기록. 방향: 도착역 코드가 이 역보다 큰 쪽 = D(하), 작은 쪽 = U(상). 종착(도착역=이 역)은 뺌. 요일: 8=평일 D, 9=휴일 W, 7=토 S.
+const KRIC_LINE = { 'S1|1': '1호선', 'S1|2': '2호선', 'S1|3': '3호선', 'S1|4': '4호선', 'S1|5': '5호선', 'S1|6': '6호선', 'S1|7': '7호선', 'S1|8': '8호선', 'S9|9': '9호선', 'KR|1': '1호선', 'KR|3': '3호선', 'KR|4': '4호선', 'NU|4': '4호선', 'NU|8': '8호선', 'GU|8': '8호선', 'IC|7': '7호선', 'IC|I1': '인천1호선', 'IC|I2': '인천2호선', 'GM|G1': '김포골드라인' };
+function kricRecords(rows) {
+  const rec = {};
+  for (const r of rows) {
+    const line = KRIC_LINE[r.opr + '|' + r.ln]; const dn = { '8': 'D', '9': 'W', '7': 'S' }[r.day]; if (!line || !dn || !NT_STNORDER[line]) continue;
+    const nm = nz(r.nm); if (!NT_STNORDER[line].some(s => nz(s) === nm)) continue;
+    const o = rec[line + '|' + nm] = rec[line + '|' + nm] || { id: r.opr + r.ln + r.st, st: r.st, tt: {} };
+    const up = [], dn2 = [];
+    for (const row of String(r.data || '').split('\n').filter(Boolean)) {
+      const [trn, arr, dep, org, dst] = row.split(','); if (dst === r.st) continue;
+      const t = toMin(dep) != null ? toMin(dep) : toMin(arr); if (t == null) continue;
+      (dst > r.st ? dn2 : up).push(t);
+    }
+    const f = a => Array.from(new Set(a)).sort((x, y) => x - y);
+    const prevD = (o.tt[dn] && o.tt[dn].D) || [], prevU = (o.tt[dn] && o.tt[dn].U) || [];
+    o.tt[dn] = { U: f(prevU.concat(up)), D: f(prevD.concat(dn2)) };
+  }
+  return rec;
+}
+module.exports = { compare, tagoRecords, kricRecords, COV, lineHash };
 if (require.main === module) {
   const [baseP, rawP, outP] = process.argv.slice(2);
   const rep = compare(JSON.parse(fs.readFileSync(baseP, 'utf8')), JSON.parse(fs.readFileSync(rawP, 'utf8')));

@@ -53,7 +53,9 @@ function put(line, nm, day, dir, mins) {
   const key = line + '|' + nm; const rec = (RT[key] && RT[key].__new) ? RT[key] : (RT[key] = { __new: 1 });
   (rec[day] = rec[day] || {})[dir] = arr;
 }
-const KMAP = { 'DG|1': '대구1호선', 'DG|2': '대구2호선', 'DG|3': '대구3호선', 'DJ|1': '대전1호선', 'GJ|1': '광주1호선', 'SL|L1': '신림선', 'AR|A1': '공항철도', 'BG|B1': '부산김해경전철' };
+const KMAP = { 'DG|1': '대구1호선', 'DG|2': '대구2호선', 'DG|3': '대구3호선', 'DJ|1': '대전1호선', 'GJ|1': '광주1호선', 'SL|L1': '신림선', 'AR|A1': '공항철도', 'BG|B1': '부산김해경전철', 'S1|4': '4호선', 'KR|4': '4호선', 'NU|4': '4호선', 'S1|5': '5호선', 'S1|6': '6호선', 'S9|9': '9호선' };   // 서울 5·9호선: 서울교통공사·서울9호선 역 코드가 선로 순서(코드가 커지는 쪽 = 하)
+// 방향 힌트 순서에서 뺄 역: 6호선 응암 순환(응암→역촌→불광→독바위→연신내→구산→응암)은 한 번 돌아 제자리로 오는 고리라 '번호가 커지는 쪽'이 하나로 안 정해진다 → 이 역들은 힌트 없이 시각표 상관으로 정한다(엔진은 힌트 순서에 없는 역이 끼면 상관으로 넘어간다).
+const ORIENT_EXCLUDE = { '6호선': ['응암', '역촌', '불광', '독바위', '연신내', '구산'] };
 const KRIC_LINES = new Set();
 for (const f of kricFiles) for (const row of JSON.parse(fs.readFileSync(f, 'utf8'))) { const l = KMAP[row.opr + '|' + row.ln]; if (l && NT_STNORDER[l]) KRIC_LINES.add(l); }
 // ── TAGO ──
@@ -122,9 +124,12 @@ for (const line in kr) {
   const sts = Object.keys(kr[line]).sort((a, b) => +a - +b);
   for (const st of sts) { const o = kr[line][st]; const key = line + '|' + o.nm; if (RT[key] && !RT[key].__new) continue;
     for (const dn of ['D', 'W', 'S']) if (o.days[dn]) for (const dk of ['상', '하']) put(line, o.nm, dn, dk, o.days[dn][dk]); }
-  const order = sts.map(s => kr[line][s].nm);
-  bundle.data._TT_ORIENT[line] = { order, fwd: '하' };
-  stat[line] = Object.assign(stat[line] || {}, { KRIC역: sts.length, 방향힌트: 'O(역번호 순)' });
+  const order = sts.map(s => kr[line][s].nm).filter(n => !(ORIENT_EXCLUDE[line] || []).includes(n));
+  // 서울 노선은 역 코드 순서가 선로 순서와 어긋날 수 있어(갈라짐·고리), 번들의 실측 인접 관계(_REAL_SEG)와 대조해 거의 다 이웃일 때만 힌트를 만든다(어긋난 곳 ≤2개이고 5% 이하 — 갈라지는 곳의 건너뜀 정도만 허용).
+  let hint = true, auditNote = '';
+  if (/^\d호선$/.test(line)) { const a = require('./orient_audit.js').audit(bundle, line, order); hint = a.checked && a.bad.length <= 2 && a.bad.length <= 0.05 * a.pairs; auditNote = a.checked ? ' 인접점검 어긋남 ' + a.bad.length + '/' + a.pairs + (a.bad.length ? '(' + a.bad.join(',') + ')' : '') : ' 인접자료 없음'; }
+  if (hint) bundle.data._TT_ORIENT[line] = { order, fwd: '하' };
+  stat[line] = Object.assign(stat[line] || {}, { KRIC역: sts.length, 방향힌트: (hint ? 'O(역번호 순)' : 'X') + auditNote });
   lineStations[line] = order;
 }
 // ── 부산교통공사(웹 수집; tools/collect-tt/busan.js) ──

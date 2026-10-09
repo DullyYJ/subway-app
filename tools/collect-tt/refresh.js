@@ -11,8 +11,10 @@ for (let i = 0; i < argv.length; i++) { if (['--base', '--out', '--report'].incl
 if (!opt.base || !opt.out) { console.error('--base, --out 필요'); process.exit(2); }
 const MANAGED = ['신분당선', '수인분당선', '에버라인선', '경의중앙선', 'GTX-A', '서해선', '경춘선', '경강선', '의정부선', '우이신설선',
   '대구1호선', '대구2호선', '대구3호선', '대전1호선', '광주1호선', '신림선', '공항철도', '부산1호선', '부산2호선', '부산3호선', '부산4호선',
-  '3호선'];   // 서울 3호선: TAGO 와 0.95 로 일치(2026-10-09 실측)하고, 실측 인접 관계로 선로 순서가 확인돼(build_tt 의 contractedGraph/physicalPath) 방향 힌트까지 줄 수 있어 자동 갱신에 넣었다.
-//   서울 1·2·4·5·6·7·8·9호선과 인천·김포는 넣지 않았다 — 이유는 HANDOFF 의 '서울·인천·김포 시각표 점검' 참조(주간 감시 watch-covered-tt.yml 이 달라짐만 이슈로 알린다).
+  '3호선', '4호선', '5호선', '6호선', '9호선'];
+// 서울 3호선은 TAGO, 4·5·6·9호선은 KRIC(우리 D1 에 엔진이 매일 갱신해 두는 값)에서 가져온다. 이 노선들은 TAGO 와 KRIC 모두 옛 번들과 같은 원본(±2분)인데,
+// 옛 번들은 방향 라벨이 노선마다 뒤집혀 있거나 일관되지 않아 엔진의 방향 판정이 인접 역쌍의 25~30% 에서 모호했다. 새 자료는 역 코드 순서(= 선로 순서, _REAL_SEG 로 검증)로 방향 힌트까지 줘서 0% 다.
+// 1·2·7·8호선과 인천·김포는 넣지 않았다 — 이유는 HANDOFF 의 '서울·인천·김포 시각표 점검' 참조(주간 감시 watch-covered-tt.yml 이 달라짐만 이슈로 알린다).
 // 환경변수 MANAGED_EXTRA(쉼표 구분): 이번 실행에서만 관리 대상에 더할 노선(시험·임시 확장용)
 for (const l of String(process.env.MANAGED_EXTRA || '').split(',').map(x => x.trim()).filter(Boolean)) if (!MANAGED.includes(l)) MANAGED.push(l);
 const M = new Set(MANAGED);

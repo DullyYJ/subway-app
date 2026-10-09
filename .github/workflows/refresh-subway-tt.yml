@@ -62,7 +62,7 @@ jobs:
         env:
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
-          PAIRS: 'DG:1,DG:2,DG:3,DJ:1,GJ:1,SL:L1,AR:A1,KR:K1,KR:K2,KR:K4'
+          PAIRS: 'DG:1,DG:2,DG:3,DJ:1,GJ:1,SL:L1,AR:A1,KR:K1,KR:K2,KR:K4,S1:4,S1:5,S1:6,S9:9,KR:4,NU:4'
         run: node tools/collect-tt/export_kric.js
       - name: 부산교통공사 수집
         run: node tools/collect-tt/busan.js

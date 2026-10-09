@@ -8,7 +8,7 @@ const fs = require('fs'), path = require('path');
 const { compare, COV } = require('./compare_covered.js');
 const [baseP, rawP, blP, outDir, repP] = process.argv.slice(2);
 if (!baseP || !rawP || !blP || !outDir) { console.error('사용법: drift.js <base.json> <raw.json> <baseline.json> <out_dir>'); process.exit(2); }
-const MANAGED_SEOUL = new Set(['3호선']);     // refresh.js 가 직접 갱신하는 노선은 감시에서 뺀다
+const MANAGED_SEOUL = new Set(['3호선', '4호선', '5호선', '6호선', '9호선']);     // refresh.js 가 직접 갱신하는 노선은 감시에서 뺀다
 const rep = compare(JSON.parse(fs.readFileSync(baseP, 'utf8')), JSON.parse(fs.readFileSync(rawP, 'utf8')));
 const crep = repP && fs.existsSync(repP) ? JSON.parse(fs.readFileSync(repP, 'utf8')) : null;
 const flaky = !!(crep && crep.calls && crep.fails / crep.calls > 0.02);
