@@ -400,4 +400,11 @@
 - `_PIP_FEATURE=false` 로 꺼 둔 PiP 의 화면·네이티브 신호·설정 UI 를 코드째 삭제: `_pipEnabled/_pipSetEnabled/_pipEl/_pipPaint/_pipRecoPaint/_pipFit/_pipWant/_pipGrow/_pipSizeOpts/_pipNative/_pipNativeSync/_pipOnResize/_pipSyncToggle/_pipPreview/_pipShow/_pipHide/_pipCheerPaint/_pipMinText`, 관련 상수·리스너·타이머, 설정의 숨김 HTML(주석 처리돼 있던 스위치·미리보기).
 - **남긴 것(오버레이가 같이 쓴다)**: `_pipTrip*`·`_pipHasRoute`·`_pipHereIdx`·`_pipStations`·`_pipData`·`_pipClampText/_pipClampLines`·`_pipReco*`(오버레이 3째 줄 추천)·`_arrPipText`·`_pipArmNow`·`_pipIsRealName`·`_pipResultDestName`. 이름만 pip 일 뿐 오버레이·알림·남은시간 계산이 쓴다.
 - 1초 감시 루프는 이름을 `_pipTick/_pipTickLoop/_pipWatchTimer` → `_ovlTick/_ovlTickLoop/_ovlWatchTimer` 로 바꾸고, 하는 일을 `_ovlSync()`+`_ovlKeepAliveSync()` 둘로 줄였다(오버레이 갱신·백그라운드 깨우기는 이 루프가 맡는다).
-- 네이티브(`native/PipPlugin.java`, 빌드 워크플로의 `registerPlugin(PipPlugin.class)`·`onPictureInPictureModeChanged`)는 손대지 않았다. 웹이 `setActive` 를 더 이상 보내지 않아 `guiding=false`(기본값) 그대로라 PiP 로 전환되지 않는다. 네이티브까지 걷어내려면 워크플로 패치와 APK 빌드 확인이 따로 필요하다.
+- 네이티브 PiP 는 다음 항목("깨끗하게 정리")에서 걷어냈다.
+
+### 깨끗하게 정리 (2026-10-09, YJ: "확인하고 깨끗하게 정리해줘")
+- **앱(www/index.html)**: 어디서도 읽히지 않는 최상위 변수 70개와 함수 3개, 어떤 요소·클래스·토큰에서도 쓰이지 않는 CSS 규칙 209개(@keyframes 포함) 삭제. 6,343,457 → 6,307,758 자. 방법: acorn 으로 사용처 분석 + 동적 클래스(접두어 조합) 검사 + 화면 캡처 비교(홈·노선도·경로 결과 동일).
+- **네이티브**: `native/PipPlugin.java` 삭제, 워크플로에서 `registerPlugin(PipPlugin.class)`·`onUserLeaveHint`·`onPictureInPictureModeChanged`·미사용 import 제거. 매니페스트 패치는 `resizeableActivity="true"` 와 configChanges(폴드 화면 변화)만 남김(`supportsPictureInPicture` 는 더 넣지 않음). **APK 설치 후 오버레이·알림·폴드 화면 전환을 실기기에서 한 번 확인할 것**(네이티브는 이 환경에서 테스트 불가).
+- **저장소**: PiP 설치 안내였던 루트 `README.md` 삭제(내용이 현재 구조와 맞지 않음).
+- **일부러 남긴 것**: `window.median_back_pressed`(외부 Median 브리지가 호출), 이미 정의돼 있지 않던 `rmSuggest` 핸들러(기존부터 있던 것이라 건드리지 않음).
+- 검증: 누락 식별자 신규 0건(기준 대비), 스크립트 블록 12개 문법 통과, 테스트 13개 스위트 전부 통과(ride_evidence 62, ride_eta 68 포함), 무작위 클릭 3시드 오류 0.
