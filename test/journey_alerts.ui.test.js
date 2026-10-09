@@ -3,7 +3,7 @@
 // 정확히 그 종류만 막는지 ③ 오버레이가 같은 위치·남은시간을 받는지 ④ 하차 전 추천·출퇴근 브리핑이 나가는지 확인한다.
 // 실행: node test/journey_alerts.ui.test.js [html 경로]
 const assert = require('assert'), path = require('path');
-const { chromium } = require('/opt/node-tools/node_modules/playwright');
+const { chromium } = require('./helpers/pw');
 const html = process.argv[2] || path.join(__dirname, '..', 'www', 'index.html');
 let pass = 0, fail = 0;
 const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', name); } catch (e) { fail++; console.log('  FAIL', name, '\n      ', String(e.message).split('\n')[0]); } };

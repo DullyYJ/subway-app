@@ -2,7 +2,7 @@
 // (2026-10-06 시뮬레이션에서 열차가 3분 늦을 때 `_cellHopAdvance` 가 마커를 최대 3역, 20분 가까이 앞세웠다 → PF 중앙값이 그 역에 닿았을 때만 인정하도록 제한)
 // 실행: node test/cell_hop_lead.ui.test.js [html 경로]   (약 3분, Playwright: /opt/node-tools/node_modules/playwright)
 const assert = require('assert'), path = require('path');
-const { chromium } = require('/opt/node-tools/node_modules/playwright');
+const { chromium } = require('./helpers/pw');
 const html = process.argv[2] || path.join(__dirname, '..', 'www', 'index.html');
 let pass = 0, fail = 0;
 const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', name); } catch (e) { fail++; console.log('  FAIL', name, '\n      ', String(e.message).split('\n')[0]); } };

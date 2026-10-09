@@ -2,7 +2,7 @@
 // (YJ 제보 2026-10-06: "오버레이에서 시간은 줄고 있는데 역은 안 바뀌어", "동수인데 부평으로 나와")
 // 실행: node test/overlay_stale.ui.test.js [html 경로]   (Playwright: /opt/node-tools/node_modules/playwright)
 const assert = require('assert'), path = require('path');
-const { chromium } = require('/opt/node-tools/node_modules/playwright');
+const { chromium } = require('./helpers/pw');
 const html = process.argv[2] || path.join(__dirname, '..', 'www', 'index.html');
 let pass = 0, fail = 0;
 const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', name); } catch (e) { fail++; console.log('  FAIL', name, '\n      ', String(e.message).split('\n')[0]); } };

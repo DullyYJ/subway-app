@@ -2,7 +2,7 @@
 // 앱은 '가장 빨리 오는 한 대'를 고르지 않고, 이 역에 오는 열차 후보(앞차·내 열차·뒤차)를 전부 엔진에 넘긴다(어느 열차가 내 열차인지는 엔진이 정한다).
 // 실행: node test/rt_arrival_cands.ui.test.js [html 경로]
 const assert = require('assert'), path = require('path');
-const { chromium } = require('/opt/node-tools/node_modules/playwright');
+const { chromium } = require('./helpers/pw');
 const html = process.argv[2] || path.join(__dirname, '..', 'www', 'index.html');
 let pass = 0, fail = 0;
 const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', name); } catch (e) { fail++; console.log('  FAIL', name, '\n      ', String(e.message).split('\n')[0]); } };

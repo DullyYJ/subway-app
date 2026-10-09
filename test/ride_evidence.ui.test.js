@@ -1,7 +1,7 @@
 // 탑승 증거·재탐색 차단·PF 단일 위치 시험 — 헤드리스 Chromium + 가짜 시계. 외부 요청은 전부 차단.
 // 실행: node test/ride_evidence.ui.test.js [html 경로]   (Playwright: /opt/node-tools/node_modules/playwright)
 const assert = require('assert'), path = require('path'), fs = require('fs');
-const { chromium } = require('/opt/node-tools/node_modules/playwright');
+const { chromium } = require('./helpers/pw');
 const html = process.argv[2] || path.join(__dirname, '..', 'www', 'index.html');
 let pass = 0, fail = 0;
 const ONLY = process.env.ONLY ? new RegExp(process.env.ONLY) : null;

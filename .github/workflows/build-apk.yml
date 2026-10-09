@@ -6,7 +6,49 @@ on:
   workflow_dispatch:
 
 jobs:
+  # ★ 2026-10-09: 테스트가 하나라도 깨지면 APK 를 만들지 않는다.
+  #   (예전엔 테스트를 작업 환경에서만 돌려서, 깨져도 그대로 APK 가 나왔다.)
+  #   파일마다 별도 머신에서 돌린다 — 같은 머신에서 병렬로 돌리면 타이밍이 흔들려 flake 가 난다.
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        file:
+          - bus_not_train.ui.test.js
+          - bus_poll_gap.test.js
+          - cell_hop_lead.ui.test.js
+          - cell_sync.ui.test.js
+          - chat_line_tabs.ui.test.js
+          - journey_alerts.ui.test.js
+          - journey_e2e.ui.test.js
+          - overlay_stale.ui.test.js
+          - ride_eta.test.js
+          - ride_evidence.ui.test.js
+          - rt_arrival_cands.ui.test.js
+          - shop_version.ui.test.js
+          - tabs_smoke.ui.test.js
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Playwright + Chromium + Korean fonts
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+          sudo apt-get install -y fonts-noto-cjk
+
+      - name: Run ${{ matrix.file }}
+        run: node test/${{ matrix.file }}
+
   build:
+    needs: test
     runs-on: ubuntu-latest
     env:
       # ★ 2026-09-25 (스토어 출시 준비): Play 스토어는 업로드마다 versionCode가

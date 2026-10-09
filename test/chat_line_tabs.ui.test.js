@@ -1,7 +1,7 @@
 // 실시간소통 하단 호선 탭 화면 시험 — 헤드리스 Chromium, 서버(board-writer·engine)만 모의, 외부 요청은 전부 차단.
 // 실행: node test/chat_line_tabs.ui.test.js [스크린샷 폴더]   (Playwright: /opt/node-tools/node_modules/playwright, Chromium: /opt/pw-browsers/chromium-1194)
 const assert = require('assert'), path = require('path');
-const { chromium } = require('/opt/node-tools/node_modules/playwright');
+const { chromium } = require('./helpers/pw');
 const shots = process.argv[2];
 let pass = 0; const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', name); } catch (e) { console.log('  FAIL', name, '\n      ', e.message.split('\n')[0]); process.exitCode = 1; } };
 (async () => {

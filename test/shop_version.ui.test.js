@@ -1,7 +1,7 @@
 // 쇼핑 상품 서버 버전 확인 시험 — 쇼핑 화면을 열면 /version 만 불러 비교하고, 달라졌을 때만 /shop 을 받아 바로 그린다.
 // 실행: node test/shop_version.ui.test.js [html 경로]   (Playwright: /opt/node-tools/node_modules/playwright)
 const assert = require('assert'), path = require('path');
-const { chromium } = require('/opt/node-tools/node_modules/playwright');
+const { chromium } = require('./helpers/pw');
 const html = process.argv[2] || path.join(__dirname, '..', 'www', 'index.html');
 let pass = 0, fail = 0;
 const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', name); } catch (e) { fail++; console.log('  FAIL', name, '\n      ', String(e.message).slice(0, 300)); } };

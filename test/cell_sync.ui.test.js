@@ -2,7 +2,7 @@
 // (사용자가 늘어 SKT·LG U+ 셀이 서버에 쌓여도 내 통신사 것만 받아 쓰고, 저장 상한에서 많이 확인된 셀을 지키는지)
 // 실행: node test/cell_sync.ui.test.js [html 경로]   (Playwright: /opt/node-tools/node_modules/playwright)
 const assert = require('assert'), path = require('path');
-const { chromium } = require('/opt/node-tools/node_modules/playwright');
+const { chromium } = require('./helpers/pw');
 const html = process.argv[2] || path.join(__dirname, '..', 'www', 'index.html');
 let pass = 0, fail = 0;
 const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', name); } catch (e) { fail++; console.log('  FAIL', name, '\n      ', String(e.message).split('\n')[0]); } };

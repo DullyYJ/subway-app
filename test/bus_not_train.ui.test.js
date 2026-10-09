@@ -2,7 +2,7 @@
 // (YJ 제보 2026-10-06: 6:18 열차 추천 → 버스 이동 중 확정 → 이미 떠난 5:58 열차로 시각이 당겨졌다)
 // 실행: node test/bus_not_train.ui.test.js [html 경로]   (Playwright: /opt/node-tools/node_modules/playwright)
 const assert = require('assert'), path = require('path');
-const { chromium } = require('/opt/node-tools/node_modules/playwright');
+const { chromium } = require('./helpers/pw');
 const html = process.argv[2] || path.join(__dirname, '..', 'www', 'index.html');
 let pass = 0, fail = 0;
 const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', name); } catch (e) { fail++; console.log('  FAIL', name, '\n      ', String(e.message).split('\n')[0]); } };

@@ -2,7 +2,7 @@
 // 헤드리스 Chromium + 가짜 시계 + 가짜 Capacitor 플러그인 + 모의 서버(게시판/뉴스/버스/엔진).
 // 실행: node test/tabs_smoke.ui.test.js [html 경로]
 const assert = require('assert'), path = require('path');
-const { chromium } = require('/opt/node-tools/node_modules/playwright');
+const { chromium } = require('./helpers/pw');
 const { resp } = require('./helpers/engine_fixture');
 const html = process.argv[2] || path.join(__dirname, '..', 'www', 'index.html');
 let pass = 0, fail = 0;
