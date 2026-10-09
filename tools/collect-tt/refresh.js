@@ -80,20 +80,39 @@ if (changedLines.length) {
   }
 }
 
-// 5b) 방향 힌트 — 시각표 자료는 그대로 두고 _TT_ORIENT 만 붙이는 노선(7호선). 안전장치는 hints.js 안(KRIC 정답과 대조해 나빠지면 안 붙임)
+// 5b) 1호선 구간 시각표 바로잡기 + 방향 힌트 — 1호선(코레일)의 옛 기록은 KRIC(공식·매일 갱신)·웹 시간표와 어긋났다(소요산~광운대가 특히, 경인·경부는 편수 ~7% 부족).
+//     선형 구간(연천~광운대, 광운대~구로, 구로~인천, 구로~신창)의 역 기록만 KRIC 출발 시각으로 다시 만들고(tools/collect-tt/seg_fix.js), 방향 라벨이 일관되면 방향 힌트(_TT_ORIENT)를 붙인다.
+//     안전장치: 바꾼 뒤 KRIC 정답과 어긋나는 인접쌍이 옛것보다 늘거나 새로 틀리는 쌍이 생기면 1호선은 통째로 옛 기록으로 되돌린다.
+//     7호선은 시각표는 그대로 두고 방향 힌트만 붙인다(hints.js). 안전장치는 hints.js 안.
 const hinted = [], hintNotes = [];
-const HINT_SPEC = { '1호선': 'KR|1,S1|1', '7호선': 'S1|7,IC|7' }, HINT_APPLY = new Set(['7호선']);   // 1호선은 시험 결과 개선이 없어(끝 역 2쌍) 붙이지 않고 측정만 한다
+const HINT_SPEC = { '1호선': 'KR|1,S1|1', '7호선': 'S1|7,IC|7' }, HINT_APPLY = new Set(['7호선']);
+const LINE1_SEGS = [['연천', '광운대', '연천'], ['광운대', '구로', '광운대'], ['구로', '인천', '구로'], ['구로', '신창', '구로']];   // [시작, 끝, 북쪽 끝(상행 쪽)]
 if (opt['hint-kric'] && fs.existsSync(opt['hint-kric'])) {
   try {
-    const { addHints } = require('./hints.js'); const rows = JSON.parse(fs.readFileSync(opt['hint-kric'], 'utf8'));
-    const res = addHints(fin, rows, HINT_SPEC);
+    const hints = require('./hints.js'), { fixSegment } = require('./seg_fix.js'); const rows = JSON.parse(fs.readFileSync(opt['hint-kric'], 'utf8'));
+    // ① 1호선 구간 바로잡기(+힌트) — 통째로 시험해 보고 나빠지면 되돌린다
+    {
+      const keys = k => Object.keys(fin.data._REAL_TT).filter(x => lineOf(x) === '1호선'), snap = {}; keys().forEach(k => snap[k] = fin.data._REAL_TT[k]);
+      const snapOrient = fin.data._TT_ORIENT['1호선']; let nCh = 0;
+      for (const [from, to, north] of LINE1_SEGS) { const r = fixSegment(fin, rows, { line: '1호선', srcs: ['KR|1', 'S1|1'], from, to, north, northKey: '상' }); nCh += r.changes.length; if (!r.ok && r.why && r.why !== '바꿀 역 없음') hintNotes.push('- 1호선 ' + from + '~' + to + ' 구간 바로잡기 건너뜀: ' + r.why); }
+      const revert = () => { for (const k of keys()) delete fin.data._REAL_TT[k]; for (const k in snap) fin.data._REAL_TT[k] = snap[k]; if (snapOrient) fin.data._TT_ORIENT['1호선'] = snapOrient; else delete fin.data._TT_ORIENT['1호선']; };
+      if (nCh) {
+        const pairs = hints.pairsOf(hints.trainsOf(rows, new Set(['KR|1', 'S1|1']))), wb = hints.wrongPairs(old, '1호선', pairs);
+        const hr = hints.addHints(fin, rows, { '1호선': HINT_SPEC['1호선'] }); const wa = hints.wrongPairs(fin, '1호선', pairs);
+        const ok = wa.length <= wb.length && wa.every(x => wb.includes(x));
+        if (ok) { hinted.push('1호선'); HINT_APPLY.add('1호선'); hintNotes.push('- **1호선** 구간 시각표 ' + nCh + '곳을 KRIC 출발 시각으로 바로잡음 — 방향 어긋난 쌍 ' + wb.length + '→' + wa.length + (hr['1호선'] && hr['1호선'].ok ? ', 방향 힌트 적용' : '')); }
+        else { revert(); hintNotes.push('- 1호선 구간 바로잡기 취소(방향 검증이 나빠짐: ' + wb.length + '→' + wa.length + ', 새로 틀림 ' + wa.filter(x => !wb.includes(x)).join(',') + ')'); }
+      }
+    }
+    // ② 7호선(및 1호선 힌트가 아직 없는 경우) 방향 힌트
+    const res = hints.addHints(fin, rows, HINT_SPEC);
     for (const l in res) {
       const r = res[l];
-      if (r.ok && !r.same && HINT_APPLY.has(l)) { hinted.push(l); hintNotes.push('- **' + l + '** 방향 힌트 적용 — KRIC 정답과 어긋난 인접쌍 ' + r.before + '→' + r.after + ' (고친 쌍: ' + r.fixed.join(', ') + ')'); }
+      if (r.ok && !r.same && HINT_APPLY.has(l)) { if (!hinted.includes(l)) hinted.push(l); hintNotes.push('- **' + l + '** 방향 힌트 적용 — KRIC 정답과 어긋난 인접쌍 ' + r.before + '→' + r.after + ' (고친 쌍: ' + r.fixed.join(', ') + ')'); }
       else if (r.ok && !r.same) { delete fin.data._TT_ORIENT[l]; hintNotes.push('- ' + l + ' 방향 힌트는 효과가 있으나 아직 적용 대상이 아님'); }
-      else if (!r.ok) { if (old.data._TT_ORIENT[l]) fin.data._TT_ORIENT[l] = old.data._TT_ORIENT[l]; hintNotes.push('- ' + l + ' 방향 힌트 미적용: ' + r.why); }
+      else if (!r.ok) { if (old.data._TT_ORIENT[l]) fin.data._TT_ORIENT[l] = old.data._TT_ORIENT[l]; else delete fin.data._TT_ORIENT[l]; if (l !== '1호선' || !HINT_APPLY.has('1호선')) hintNotes.push('- ' + l + ' 방향 힌트 미적용: ' + r.why); }
     }
-  } catch (e) { hintNotes.push('- 방향 힌트 단계 오류(건너뜀): ' + e.message); }
+  } catch (e) { hintNotes.push('- 방향 힌트·1호선 구간 단계 오류(건너뜀): ' + e.message); }
 }
 
 // 5c) 종점 역 출발 시각 바로잡기 — 서울 열린데이터광장 시간표(--seoul)의 '출발' 시각으로, 종점 역에 도착 시각이 들어 있는 기록만 바꾼다(조건은 tools/seoul-tt/terminals.js).
@@ -114,8 +133,9 @@ if (opt.seoul && fs.existsSync(opt.seoul)) {
 
 // 6) 결과 기록
 const touched = MANAGED.filter(l => diffs[l] && (diffs[l].changed.length || diffs[l].added.length));
+const line1Changed = Object.keys(fin.data._REAL_TT).filter(k => lineOf(k) === '1호선' && !same(fin.data._REAL_TT[k], OT[k])).length;
 const orientChanged = [...new Set(MANAGED.concat(Object.keys(HINT_SPEC)))].filter(l => !same(fin.data._TT_ORIENT[l], old.data._TT_ORIENT[l]));   // 방향 힌트만 달라져도 '변경' — 버전을 올려야 엔진 캐시가 새 번들로 바뀐다
-const changed = touched.length > 0 || hinted.length > 0 || orientChanged.length > 0 || termChanged > 0;
+const changed = touched.length > 0 || hinted.length > 0 || orientChanged.length > 0 || termChanged > 0 || line1Changed > 0;
 if (changed) {
   fin.version = built.version;
   // 같은 날 두 번 바뀌어도 버전이 달라지고 사전순으로 커지도록 뒤에 .2, .3 … 을 붙인다(엔진은 '내장본보다 사전순으로 작은 KV 번들'을 무시한다)
