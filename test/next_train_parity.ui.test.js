@@ -57,13 +57,23 @@ const NOWS = [0, 30, 200, 270, 300, 330, 360, 420, 480, 600, 780, 900, 1020, 114
         const stops = names.map(n => ({ stationName: n }));
         const sg = { type: 1, name: line, stops };
         const dir = _ttSegDir(line, stops, hol);
-        const row = { dir, dep: [], info: [] };
+        const row = { dir, dep: [], info: [], tbl: [], tms: null, fr: [] };
         for (const now of NOWS) {
           window._TT_GRID_CACHE = null;
           row.dep.push(_ttNextDepForSeg(sg, now));
           window.kstMinutesAdj = () => now;
           window._buildRouteBrief = () => ({ segments: [{ line, from: names[0], to: names[1] }] });
           row.info.push(_metroNextTrainInfo(7));
+          if (names.length === 2) {
+            const nd = { lineName: line, name: names[0] }, nx = { name: names[1] };
+            row.tbl.push([_boardDirKey(nd, nx), _boardNextDepTable(nd, nx, now + 0.37)]);
+          }
+          row.fr.push(_ttNextDepForSeg(sg, now + 0.61));
+        }
+        if (names.length === 2) {
+          const dk0 = _boardDirKey({ lineName: line, name: names[0] }, { name: names[1] });
+          const tms = _ttOfficialTimes(line, names[0], dk0, hol);
+          row.tms = [dk0, (tms && tms.length) ? tms : null];
         }
         out.push(row);
       }
@@ -77,10 +87,20 @@ const NOWS = [0, 30, 200, 270, 300, 330, 360, 420, 480, 600, 780, 900, 1020, 114
         const A = appRes[ci];
         const dir = eng.segDir(line, stops, dayMs + 12 * 3600e3);
         if (dir !== A.dir) { bad++; badLines[line] = (badLines[line] || 0) + 1; if (samples.length < 6) samples.push('dir ' + line + ' ' + names.join('>') + ' 앱=' + A.dir + ' 엔진=' + dir); }
+        if (names.length === 2) {
+          const bm = eng.boardTimes({ line, from: names[0], to: names[1], baseMs: dayMs + 12 * 3600e3 });
+          if (JSON.stringify([bm.dk, bm.times]) !== JSON.stringify(A.tms)) { bad++; badLines[line] = (badLines[line] || 0) + 1; if (samples.length < 6) samples.push('tms ' + line + ' ' + names.join('>')); }
+        }
         NOWS.forEach((now, ni) => {
           const baseMs = dayMs + now * 60e3;
           const dep = eng.segNextDep(sg, baseMs);
           if (dep !== A.dep[ni]) { bad++; badLines[line] = (badLines[line] || 0) + 1; if (samples.length < 6) samples.push('dep ' + line + ' ' + names.join('>') + ' @' + now + ' 앱=' + A.dep[ni] + ' 엔진=' + dep); }
+          if (names.length === 2) {
+            const bt = eng.boardTable({ line, from: names[0], to: names[1], atMin: now + 0.37, baseMs });
+            if (JSON.stringify([bt.dk, bt.depMin]) !== JSON.stringify(A.tbl[ni])) { bad++; badLines[line] = (badLines[line] || 0) + 1; if (samples.length < 6) samples.push('tbl ' + line + ' ' + names.join('>') + ' @' + now + ' 앱=' + JSON.stringify(A.tbl[ni]) + ' 엔진=' + JSON.stringify([bt.dk, bt.depMin])); }
+          }
+          const fr = eng.segNextDepAt(sg, baseMs, now + 0.61);
+          if (fr !== A.fr[ni]) { bad++; badLines[line] = (badLines[line] || 0) + 1; if (samples.length < 6) samples.push('fr ' + line + ' ' + names.join('>') + ' @' + now + ' 앱=' + A.fr[ni] + ' 엔진=' + fr); }
           const info = eng.metroInfo({ line, from: names[0], to: names[1], baseMs, mins: 7 });
           if (JSON.stringify(info) !== JSON.stringify(A.info[ni])) { bad++; badLines[line] = (badLines[line] || 0) + 1; if (samples.length < 6) samples.push('info ' + line + ' ' + names.slice(0, 2).join('>') + ' @' + now + ' 앱=' + JSON.stringify(A.info[ni]) + ' 엔진=' + JSON.stringify(info)); }
         });

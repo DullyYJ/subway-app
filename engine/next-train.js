@@ -602,6 +602,155 @@ function ntCreate(DATA) {
     } catch(e){ return null; }
   }
 
+  // 인천 호선 시각표 조회
+  // direction: '상행'|'하행'|'상'|'하'
+  // isHoliday: boolean
+  function _incheonNextDep(lineName, stnName, direction, baseMin, isHoliday) {
+    var tt = _INCHEON_TT[lineName];
+    if(!tt) return null;
+    var stnData = tt[stnName];
+    if(!stnData) return null;
+    var dayType = isHoliday ? '휴일' : '평일';
+    var dirType = (direction === '상행' || direction === '상') ? '상' : '하';
+    var key = dayType + dirType;
+    var times = stnData[key];
+    if(!times || !times.length) {
+      // 방향 fallback
+      times = stnData[dayType + (dirType==='상'?'하':'상')];
+    }
+    if(!times || !times.length) return null;
+    var next = times.find(function(t){ return t >= baseMin; });
+    if(next != null) return next;
+    return times[0] + 1440; // 익일 첫차
+  }
+
+  // 김포골드라인 다음 출발시각 조회
+  function _gimpoNextDep(stNm, dir, curMin, isHoliday) {
+    var tt = _GIMPO_TT[stNm];
+    if (!tt) return null;
+    var arr = isHoliday ? (dir==='up'?tt.up.hd:tt.down.hd) : (dir==='up'?tt.up.wd:tt.down.wd);
+    if (!arr || arr.length===0) return null;
+    // curMin: KST 기준 분(0~1439)
+    var cur = curMin;
+    for (var i=0;i<arr.length;i++) {
+      var dh=arr[i][0], dm=arr[i][1];
+      // 24시 이상 = 익일 새벽 (1440분 오프셋 적용)
+      var depAbs = (dh >= 24 ? (dh-24)*60+dm+1440 : dh*60+dm);
+      if (depAbs > cur) {
+        var retH = dh >= 24 ? dh-24 : dh;
+        return {h:retH, m:dm, minsLeft:depAbs-cur};
+      }
+    }
+    return null;
+  }
+
+  // ── 정적 시각표 기반 다음 열차 시각 ──────────────────────────
+  function getNextDepartureMins(lineName, stnName, direction, baseMin) {
+    // baseMin: 기준 시각(분). 미지정 시 현재 시각 사용 (기준시각 조정 일관성)
+    var curMin = baseMin;
+
+    // ★ 1순위: 인천1·2호선 공식 시각표 (평일/휴일, 상행/하행 완전 적용)
+    if(lineName === '김포골드라인' && typeof _gimpoNextDep === 'function') {
+      var _isHol = _ctxHol;
+      var _gDir = (direction === '상' || direction === '상행' || direction === 'up') ? 'up' : 'down';
+      var _gResult = _gimpoNextDep(stnName, _gDir, curMin, _isHol);
+      if(_gResult != null) {
+        // 절대분(0~1439) 반환 — getNextDepartureMins 규격에 맞춤
+        var _gAbsMin = _gResult.h * 60 + _gResult.m;
+        return _gAbsMin;
+      }
+    }
+    if((lineName === '인천1호선' || lineName === '인천2호선') && typeof _incheonNextDep === 'function') {
+      var _isHol = _ctxHol;
+      var _iResult = _incheonNextDep(lineName, stnName, direction, curMin, _isHol);
+      if(_iResult != null) {
+        return _iResult;
+      }
+    }
+
+    // ★ 실제 시각표(_REAL_TT) — 서울교통공사 실제 열차 시각 (최우선, API 다음)
+    if(typeof _realNextDep === 'function'){
+      var _wkEnd = _ctxHol;
+      var _rn = _realNextDep(lineName, stnName, direction, curMin, _wkEnd);
+      if(_rn != null) return _rn;
+    }
+    // ★ 내장 시각표(_BUILTIN_TT) 사용
+    if(typeof _BUILTIN_TT !== 'undefined' && _BUILTIN_TT[lineName]){
+      var grid = _BUILTIN_TT[lineName];
+      // ★ 현재 시각 기준 가장 빠른 열차
+      var gMin = curMin;
+      for(var gi=0; gi<grid.length; gi++){
+        if(grid[gi] >= gMin) return grid[gi];
+      }
+      if(grid.length) return grid[0] + 1440;
+    }
+    // fallback: 배차 간격 기반
+    var sched = LINE_SCHEDULE[lineName];
+    if(!sched) return null;
+    var firstMin = timeToMin(sched.first);
+    var lastMin  = timeToMin(sched.last);
+    if(lastMin < firstMin) lastMin += 1440;
+    if(curMin < firstMin || curMin > lastMin) return null;
+    var baseIv = sched.interval;
+    var iv = baseIv;
+    var hour = Math.floor((curMin % 1440) / 60);
+    var isPeak = (hour >= 7 && hour < 9) || (hour >= 18 && hour < 20);
+    var isNight = (hour >= 22 || hour < 6);
+    var isWeekend = (_ctxDay === '토' || _ctxDay === '일')   /* 앱 원본 그대로: 요일코드가 'SAT'/'SUN' 이라 이 비교는 늘 거짓이다 */;
+    if(isPeak)        iv = Math.max(2, Math.round(baseIv * 0.6));
+    else if(isNight)  iv = Math.round(baseIv * 2.2);
+    else if(isWeekend) iv = Math.round(baseIv * 1.4);
+    if(iv < 1) iv = 1;
+    // ★ 현재 시각 기준 바로 다음 배차
+    var waited = (curMin - firstMin) % iv;
+    var nextT = curMin + (iv - waited);
+    return nextT;
+  }
+
+  // ① 방향키 '상'/'하' — _ttSegDir 하나로 통일 (STNDB는 폴백)
+  function _boardDirKey(nd, nextNd){
+    var line = (nd && nd.lineName) || '';
+    var isHol = _ctxHol;
+    try{
+      if(nextNd && typeof _ttSegDir==='function'){
+        var d = _ttSegDir(line, [{stationName:nd.name},{stationName:nextNd.name}], isHol);
+        if(d) return (d==='상행') ? '상' : '하';
+      }
+    }catch(e){}
+    try{
+      if(nextNd && typeof STNDB!=='undefined'){
+        var _norm = function(x){ return x; };
+        var ls = STNDB.filter(function(st){ return st.line===line; });
+        var ci = ls.findIndex(function(st){ return _norm(st.name)===_norm(nd.name); });
+        var ni = ls.findIndex(function(st){ return _norm(st.name)===_norm(nextNd.name); });
+        if(ci>=0 && ni>=0) return (ci<ni) ? '하' : '상';
+      }
+    }catch(e){}
+    return '하';
+  }
+
+  // ② 시각표 기준 다음 열차(동기) — 공식 시각표 → 캐시/원격 → 생성 시각표
+  function _boardNextDepTable(nd, nextNd, fromMin){
+    if(!nd || fromMin==null) return null;
+    var line = nd.lineName || '';
+    var dk = _boardDirKey(nd, nextNd);
+    var isHol = _ctxHol;
+    var mins = null;
+    try{
+      if(typeof _ttOfficialTimes==='function'){
+        var tms = _ttOfficialTimes(line, nd.name, dk, isHol);
+        if(tms && tms.length){
+          for(var i=0;i<tms.length;i++){ if(tms[i] >= fromMin){ mins = tms[i]; break; } }
+          if(mins==null) mins = tms[0] + 1440;
+        }
+      }
+    }catch(e){}
+    if(mins==null && typeof getNextDepartureMins==='function'){
+      try{ mins = getNextDepartureMins(line, nd.name, (dk==='상')?'상행':'하행', fromMin); }catch(e){}
+    }
+    return mins;
+  }
+
   function setCtx(info) { _ctxHol = !!info.isHol; _ctxDay = info.dayCode || 'DAY'; }
 
   return {
@@ -614,6 +763,25 @@ function ntCreate(DATA) {
     segNextDep: function (sg, baseMs) {
       var di = ntDayInfo(baseMs); setCtx(di);
       return _ttNextDepForSeg(sg, di.nowMin);
+    },
+    // 같은 구간을 '지금이 아닌 분(baseMin, 소수 가능)'에 타는 경우: 요일 구분은 dayMs(탐색 기준 시각)로 정한다 — 앱의 옛 계산과 같다
+    segNextDepAt: function (sg, dayMs, baseMin) {
+      setCtx(ntDayInfo(dayMs));
+      return _ttNextDepForSeg(sg, baseMin);
+    },
+    // 승차역에서 atMin(분) 이후 첫 열차: { line, from(승차역), to(다음역, 없어도 됨), atMin, baseMs } → { dk:'상'|'하', depMin(분, 자정 넘으면 1440 이상) | null }
+    boardTable: function (q) {
+      setCtx(ntDayInfo(q.baseMs));
+      var nd = { lineName: q.line, name: q.from }, nx = q.to ? { name: q.to } : null;
+      return { dk: _boardDirKey(nd, nx), depMin: _boardNextDepTable(nd, nx, q.atMin) };
+    },
+    // 승차역의 공식 시각표(그날 방향별 출발 분 배열) — ride-eta 가 승차 직후 어느 열차를 탔는지 가릴 때 쓴다
+    boardTimes: function (q) {
+      setCtx(ntDayInfo(q.baseMs));
+      var nd = { lineName: q.line, name: q.from }, nx = q.to ? { name: q.to } : null;
+      var dk = _boardDirKey(nd, nx);
+      var tms = _ttOfficialTimes(q.line, q.from, dk, _ctxHol);
+      return { dk: dk, times: (tms && tms.length) ? tms : null };
     },
     segDir: function (line, stops, baseMs) {
       var di = ntDayInfo(baseMs); setCtx(di);

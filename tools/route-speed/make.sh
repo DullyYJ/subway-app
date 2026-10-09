@@ -15,7 +15,8 @@ node patch_nearcount.js $T/f0.js $T/f1.js
 node patch_restlimit.js $T/f1.js $T/f.js
 node patch_ldwarn.js $T/f.js $T/g0.js
 node patch_corridor.js $T/g0.js $T/g1.js
-node patch_fasttab.js $T/g1.js $T/g.js
+node patch_fasttab.js $T/g1.js $T/g2.js
+node patch_nexttrain.js $T/g2.js $T/g.js
 node patch_version.js $T/g.js $1
 cp $1 $1.chk.mjs && node --check $1.chk.mjs && rm -f $1.chk.mjs
 echo built $1 $(wc -c < $1)

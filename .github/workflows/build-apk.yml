@@ -24,6 +24,8 @@ jobs:
           - journey_alerts.ui.test.js
           - journey_e2e.ui.test.js
           - latent_refs.ui.test.js
+          - next_train_attach.ui.test.js
+          - next_train_parity.ui.test.js
           - overlay_stale.ui.test.js
           - ride_eta.test.js
           - ride_evidence.ui.test.js
