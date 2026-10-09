@@ -22,8 +22,11 @@ async function get(url, opt) { const r = await fetch(url, Object.assign({ header
           L('  DOWNLOAD', du, d.status, buf.length, d.headers.get('content-type'), d.headers.get('content-disposition'));
           if (d.status === 200 && buf.length > 500) fs.writeFileSync(path.join(out, id + '_' + f + '_' + n + '.bin'), buf);
         }
-      } catch (e) { L('ERR', url, e.message); }
+      } catch (e) { L('ERR', url, e.message, e.cause && (e.cause.code || e.cause.message)); }
     }
+  }
+  for (const u of ['https://www.data.go.kr/', 'https://api.data.go.kr/', 'https://apis.data.go.kr/1613000/SubwayInfo/GetSubwayStationList', 'https://overpass-api.de/api/status', 'https://data.kric.go.kr/']) {
+    try { const r = await get(u); L('REACH', u, r.status); } catch (e) { L('REACH ERR', u, e.message, e.cause && (e.cause.code || e.cause.message)); }
   }
   // KRIC stationInfo (TAGO 키가 통하는지)
   const key = process.env.TAGO_KEY;
