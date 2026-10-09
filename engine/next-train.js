@@ -70,6 +70,12 @@ function ntCreate(DATA) {
     return out;
   }
 
+  // 요일별 기록 고르기: 평일 D / 휴일 W / (있으면) 토요일 S. S 는 TAGO 로 채운 노선에만 있다(서울 1~9호선 기록에는 없어 기존 동작 그대로).
+  function _rttDay(rec, isHol){
+    if(!isHol) return rec.D || rec.W;
+    if(_ctxDay === 'SAT' && rec.S) return rec.S;
+    return rec.W || rec.D;
+  }
   function _ttNm(n){ return String(n||'').replace(/\(.*?\)/g,'').replace(/역$/,'').replace(/\s+/g,'').trim(); }
 
   var _TT_SCHED_ALIAS = { '의정부선':'의정부경전철', '에버라인선':'용인경전철', '인천공항철도':'공항철도' };
@@ -81,7 +87,7 @@ function ntCreate(DATA) {
     if(typeof _REAL_TT !== 'undefined' && _REAL_TT){
       var rec = _REAL_TT[lineName + '|' + nm];
       if(rec){
-        var day = isHol ? (rec.W || rec.D) : (rec.D || rec.W);
+        var day = _rttDay(rec, isHol);
         if(day){
           var arr = day[dk] || null;
           if(arr && arr.length && typeof _rttDecode === 'function') return _rttDecode(arr);
@@ -119,7 +125,7 @@ function ntCreate(DATA) {
     var key = lineName + '|' + nm;
     var rec = _REAL_TT[key];
     if(!rec) return null;
-    var day = isWeekend ? (rec.W||rec.D) : (rec.D||rec.W);
+    var day = _rttDay(rec, isWeekend);
     if(!day) return null;
     var dk = (dir==='상행'||dir==='상'||dir==='내선') ? '상' : '하';
     var arr = day[dk] || day['상'] || day['하'];
@@ -142,7 +148,7 @@ function ntCreate(DATA) {
     if(typeof _REAL_TT !== 'undefined'){
       var rec = _REAL_TT[lineName + '|' + nm];
       if(rec){
-        var day = isWeekend ? (rec.W||rec.D) : (rec.D||rec.W);
+        var day = _rttDay(rec, isWeekend);
         if(day){
           var firsts = [];
           if(dir){

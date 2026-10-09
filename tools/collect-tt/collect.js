@@ -22,21 +22,23 @@ const ALIAS = {
   '광주1호선': { any: ['광주'], num: '1' }, '대전1호선': { any: ['대전'], num: '1' },
 };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-let calls = 0, fails = 0;
+let calls = 0, fails = 0; const T0 = Date.now(); const BUDGET = (+process.env.BUDGET_MIN || 40) * 60000; const left = () => Date.now() - T0 < BUDGET;
+let lastErr = ''; setInterval(() => console.log('진행 calls', calls, 'fails', fails, '경과(분)', Math.round((Date.now() - T0) / 60000), lastErr), 60000).unref();
 async function api(op, params) {
+  if (!left()) return { items: [], total: 0, err: '시간 초과' };
   const qs = Object.entries(params).map(([k, v]) => k + '=' + encodeURIComponent(v)).join('&');
   const url = BASE + '/' + op + '?serviceKey=' + encodeURIComponent(KEY) + '&_type=json&' + qs;
-  for (let a = 0; a < 5; a++) {
+  for (let a = 0; a < 3; a++) {
     calls++;
     try {
-      const r = await fetch(url, { signal: AbortSignal.timeout(20000) });
+      const r = await fetch(url, { signal: AbortSignal.timeout(12000) });
       const t = await r.text();
       if (t.trim()[0] !== '{') throw new Error('비JSON ' + r.status + ' ' + t.slice(0, 60).replace(/serviceKey=[^&\s]*/g, 'serviceKey=***'));
       const j = JSON.parse(t); const h = j.response && j.response.header;
       if (!h || h.resultCode !== '00') { const c = h && h.resultCode; if (c === '03' || c === '00') return { items: [], total: 0 }; throw new Error('resultCode ' + c + ' ' + (h && h.resultMsg)); }
       const b = j.response.body || {}; let it = b.items && b.items.item; if (!it) it = []; if (!Array.isArray(it)) it = [it];
       return { items: it, total: +b.totalCount || it.length };
-    } catch (e) { fails++; if (a === 4) { console.log('실패', op, JSON.stringify(params).slice(0, 100), String(e.message).slice(0, 120)); return { items: [], total: 0, err: String(e.message).slice(0, 120) }; } await sleep(500 * (a + 1)); }
+    } catch (e) { fails++; lastErr = String(e.message).slice(0, 80); if (a === 2) { console.log('실패', op, JSON.stringify(params).slice(0, 100), String(e.message).slice(0, 120)); return { items: [], total: 0, err: String(e.message).slice(0, 120) }; } await sleep(500 * (a + 1)); }
   }
 }
 async function pool(items, n, fn) { let i = 0; const out = new Array(items.length); await Promise.all(Array.from({ length: n }, async () => { while (i < items.length) { const k = i++; out[k] = await fn(items[k], k); } })); return out; }
