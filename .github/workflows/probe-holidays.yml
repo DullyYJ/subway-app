@@ -1,0 +1,29 @@
+name: Probe holiday API
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: node tools/holidays/probe_api.js
+        env:
+          TAGO_KEY: ${{ secrets.TAGO_KEY }}
+      - name: 올리기
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@users.noreply.github.com"
+          git checkout --orphan data-hol-probe
+          git rm -rf --cached . >/dev/null 2>&1 || true
+          mkdir -p /tmp/keep && cp tools/holidays/out/probe-api.json /tmp/keep/
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp /tmp/keep/* .
+          git add -A
+          git commit -m "holiday api probe"
+          git push -f origin HEAD:refs/heads/data/hol-probe
