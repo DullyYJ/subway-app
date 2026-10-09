@@ -1,0 +1,21 @@
+name: KV permission probe
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: KV 쓰기/읽기/삭제 권한 확인(임시 키 nt:probe)
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          NS: dc7124fce2d946768165f47fc58d6b7e
+        run: |
+          B="https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/storage/kv/namespaces/$NS"
+          echo "-- put"; curl -s -X PUT "$B/values/nt:probe" -H "Authorization: Bearer $CF_API_TOKEN" --data 'probe' | head -c 300; echo
+          echo "-- get"; curl -s "$B/values/nt:probe" -H "Authorization: Bearer $CF_API_TOKEN" | head -c 100; echo
+          echo "-- has nt:bundle:v1?"; curl -s "$B/keys?prefix=nt:" -H "Authorization: Bearer $CF_API_TOKEN" | head -c 300; echo
+          echo "-- delete"; curl -s -X DELETE "$B/values/nt:probe" -H "Authorization: Bearer $CF_API_TOKEN" | head -c 200; echo

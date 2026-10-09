@@ -8,8 +8,8 @@
 //   · _TT_ORIENT[노선] = { order:[역…], fwd:'상'|'하' } — 선형 노선에서 'order 번호가 커지는 쪽으로 가는 열차'의 키. 엔진은 이 노선의 방향을 시각표 상관 대신 이것으로 정한다.
 const fs = require('fs');
 const argv = process.argv.slice(2); const inP = argv[0], outP = argv[1];
-const tagoFiles = [], kricFiles = [], busanFiles = []; let mode = null;
-for (const a of argv.slice(2)) { if (a === '--tago') mode = tagoFiles; else if (a === '--kric') mode = kricFiles; else if (a === '--busan') mode = busanFiles; else if (mode) mode.push(a); }
+const tagoFiles = [], kricFiles = [], busanFiles = [], fillFiles = []; let mode = null;
+for (const a of argv.slice(2)) { if (a === '--tago') mode = tagoFiles; else if (a === '--kric') mode = kricFiles; else if (a === '--busan') mode = busanFiles; else if (a === '--kric-fill') mode = fillFiles; else if (mode) mode.push(a); }
 const bundle = JSON.parse(fs.readFileSync(inP, 'utf8'));
 const { NT_STNORDER } = require('../../engine/next-train-data.js');
 const nz = n => String(n || '').replace(/\(.*?\)/g, '').replace(/역$/, '').replace(/\s+/g, '').trim();
@@ -119,6 +119,43 @@ for (const f of busanFiles) {
     stat[line] = Object.assign(stat[line] || {}, { 부산역: seq.length + '/' + NT_STNORDER[line].length, 순서일치: sorted, 이름불일치: miss.join(',') || '-', 방향힌트: 'O(역코드 순)' });
     lineStations[line] = bundle.data._TT_ORIENT[line].order;
   }
+}
+// ── 빈 역 보충(코레일 KRIC; --kric-fill kric_KR.json) ──
+//   TAGO 에 시각표가 없는 역(수인분당 청량리·신길온천, 경의중앙 지평·문산·운천·임진강, 경춘 광운대 …)만, 코레일 역별 시각표로 채운다. 이미 기록이 있는 역은 건드리지 않는다.
+//   방향 키는 TAGO 와 같은 기준(U→상, D→하)으로 맞춘다: 열차의 종착역 이름이 TAGO 에서 주로 U 로 가면 상, D 로 가면 하.
+//   종착역 이름만으로 방향이 갈리지 않는 몇 개(HAND)는 노선 지리로 직접 정했다.
+const FILL_MAP = { K1: '수인분당선', K2: '경춘선', K4: '경의중앙선' };
+const HAND = {   // 노선: { '이 역|행선': '상'|'하' }
+  '수인분당선': { '신길온천|오이도': '하' },
+  '경의중앙선': { '지평|용산': '상', '문산|용산': '하', '운천|문산': '하', '임진강|문산': '하' }
+};
+if (fillFiles.length) {
+  const endLab = {};   // 노선 -> 종착역 -> {U,D}
+  for (const f of tagoFiles) { const raw = JSON.parse(fs.readFileSync(f, 'utf8'));
+    for (const id in raw) { const r = raw[id]; if (!Object.values(FILL_MAP).includes(r.line)) continue; const m = endLab[r.line] = endLab[r.line] || {};
+      for (const u of ['U', 'D']) for (const x of (r.tt['01' + u] || [])) { const e = nz(x[2]); if (!e || e === r.nm) continue; (m[e] = m[e] || { U: 0, D: 0 })[u]++; } } }
+  const names = {}, rowsBy = {};
+  for (const f of fillFiles) for (const row of JSON.parse(fs.readFileSync(f, 'utf8'))) { if (row.opr !== 'KR' || !FILL_MAP[row.ln]) continue; names[row.ln + '|' + row.st] = nz(row.nm); (rowsBy[row.ln] = rowsBy[row.ln] || []).push(row); }
+  for (const ln in rowsBy) { const line = FILL_MAP[ln];
+    for (const row of rowsBy[ln]) { const nm = nz(row.nm); const key = line + '|' + nm;
+      if (!NT_STNORDER[line] || !NT_STNORDER[line].some(x => nz(x) === nm)) continue;
+      const cnt = r0 => r0 && r0.D ? ['상', '하'].reduce((a, k) => a + (r0.D[k] ? r0.D[k].length : 0), 0) : 0;
+      let kn = 0; { const dd = String(row.data || '').split('\n').filter(Boolean).filter(x => { const c = x.split(','); const d = names[ln + '|' + c[4]]; return d && d !== nm && (c[2] || c[1]); }).length; kn = dd; }
+      // 이미 기록이 있으면 건드리지 않는다. 다만 하루 30편 이하의 드문 역에서 코레일 쪽이 평일 편수가 더 많으면(TAGO 가 일부 열차를 빠뜨린 경우) 코레일로 바꾼다.
+      if (RT[key] && !(row.day === '8' && cnt(RT[key]) <= 30 && kn > cnt(RT[key]))) { if (row.day === '8') stat[line] = Object.assign(stat[line] || {}, { ['유지_' + nm]: 'TAGO ' + cnt(RT[key]) + '편 / 코레일 ' + kn + '편' }); continue; }
+      if (RT[key] && row.day === '8') { RT[key] = { __new: 1 }; stat[line] = Object.assign(stat[line] || {}, { ['교체_' + nm]: 'TAGO ' + cnt(RT[key]) + '→코레일 ' + kn }); }
+      const dayKey = { '8': 'D', '9': 'W', '7': 'S' }[row.day]; if (!dayKey) continue;
+      const up = [], dn = []; let unk = 0;
+      for (const r of String(row.data || '').split('\n').filter(Boolean).map(x => x.split(','))) { const [, arr, dep, , dst] = r;
+        const dest = names[ln + '|' + dst] || ''; if (!dest || dest === nm) continue;                   // 이 역이 종착인 열차는 뺀다
+        const t = toMin(dep) != null ? toMin(dep) : toMin(arr); if (t == null) continue;
+        let lab = (HAND[line] || {})[nm + '|' + dest];
+        if (!lab) { const c = (endLab[line] || {})[dest]; if (c && c.U !== c.D) lab = c.U > c.D ? '상' : '하'; }
+        if (!lab) { unk++; continue; }
+        (lab === '상' ? up : dn).push(t); }
+      put(line, nm, dayKey, '상', up); put(line, nm, dayKey, '하', dn);
+      stat[line] = Object.assign(stat[line] || {}, { ['보충_' + nm]: '코레일(' + (up.length + dn.length) + '건' + (unk ? ', 방향불명 ' + unk : '') + ')' });
+    } }
 }
 let added = 0;
 for (const k in RT) if (RT[k].__new) { delete RT[k].__new; added++; const l = k.split('|')[0]; stat[l] = stat[l] || {}; stat[l].기록 = (stat[l].기록 || 0) + 1; if (RT[k].S) stat[l].토요일 = (stat[l].토요일 || 0) + 1; }
