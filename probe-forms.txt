@@ -1,0 +1,236 @@
+<form name="newwinpop" method="post" >
+</form>
+=====
+<form name="frm_search" method="post" >
+
+<input type="hidden" value="0" name="updown">
+
+<div class="station-search-full">
+	<div class="station-info-1-1">
+		
+			<span class="station-info-ring-2">1</span>호선
+		
+		
+		
+		
+	<h3>
+	
+		
+	
+		
+	
+		
+	
+		
+	
+		
+	
+		
+	
+		신평
+			
+		
+	
+		
+	
+		
+	
+		
+	
+		
+	
+		
+	
+		
+	
+		
+	
+		
+	
+		
+	
+		
+	
+		
+	
+		
+	
+		
+	
+		
+	
+		
+	
+		
+	
+		
+	
+		
+	
+		
+	
+		
+	
+		
+	
+		
+	
+		
+	
+		
+	
+		
+	
+		
+	
+		
+	
+		
+	
+		
+	
+		
+	
+		
+	
+		
+	
+		
+	
+	</h3>
+	</div>
+	<div class="select-wrap">
+		<label for="choice-line" class="blind">호선 선택</label>
+		<select name="S_HO" id="choice-line" onchange="onSelect(this.value, 1001); return false;" >
+			
+				<option value="1" selected >1호선</option>
+				<option value="2"  >2호선</option>
+				<option value="3"  >3호선</option>
+				<option value="4"  >4호선</option>
+			
+			
+			
+			
+			
+		</select>
+		<label for="choice-sta" class="blind">역선택</label>
+		<span class="station_r" >
+		<select name="S_STATION" id="choice-sta">
+			
+				<option value="95"    >다대포해수욕장</option>
+			
+				<option value="96"    >다대포항</option>
+			
+				<option value="97"    >낫개</option>
+			
+				<option value="98"    >신장림</option>
+			
+				<option value="99"    >장림</option>
+			
+				<option value="100"    >동매</option>
+			
+				<option value="101"  selected  >신평</option>
+			
+				<option value="102"    >하단</option>
+			
+				<option value="103"    >당리</option>
+			
+				<option value="104"    >사하</option>
+			
+				<option value="105"    >괴정</option>
+			
+				<option value="106"    >대티</option>
+			
+				<option value="107"    >서대신</option>
+			
+				<option value="108"    >동대신</option>
+			
+				<option value="109"    >토성</option>
+			
+				<option value="110"    >자갈치</option>
+			
+				<option value="111"    >남포</option>
+			
+				<option value="112"    >중앙</option>
+			
+				<option value="113"    >부산</option>
+			
+				<option value="114"    >초량</option>
+			
+				<option value="115"    >부산진</option>
+			
+				<option value="116"    >좌천</option>
+			
+				<option value="117"    >범일</option>
+			
+				<option value="118"    >범내골</option>
+			
+				<option value="119"    >서면(1)</option>
+			
+				<option value="120"    >부전</option>
+			
+				<option value="121"    >양정</option>
+			
+				<option value="122"    >시청</option>
+			
+				<option value="123"    >연산(1)</option>
+			
+				<option value="124"    >교대(1)</option>
+			
+				<option value="125"    >동래(1)</option>
+			
+				<option value="126"    >명륜</option>
+			
+				<option value="127"    >온천장</option>
+			
+				<option value="128"    >부산대</option>
+			
+				<option value="129"    >장전</option>
+			
+				<option value="130"    >구서</option>
+			
+				<option value="131"    >두실</option>
+			
+				<option value="132"    >남산</option>
+			
+				<option value="133"    >범어사</option>
+			
+				<option value="134"    >노포</option>
+			
+		</select>
+		</span>
+		<input type="button" class="bd-btn-search" onclick="onView('다대포해수욕장', '노포'); return false;" value="이동" />
+		
+	</div>
+</div>
+</form>
+=====
+<form name="satisfactionForm" >
+<input type="hidden" name="iPage_url" value="/homepage/default/stationtime/page/view.do" />
+<input type="hidden" name="iPage_domain" value="data.humetro.busan.kr" />
+<input type="hidden" name="menu_no" value="10010103" />
+
+
+	<dl>
+		<dt>현재 열람하신 페이지의 내용이나 사용 편의성에 만족하십니까?</dt>
+		<dd>
+			<input type="radio" name="pageratess" value="5" checked id="prate-5" /><label  for="prate-5">&nbsp;&nbsp;매우만족(5점)</label>
+		</dd>
+		<dd>
+			<input type="radio" name="pageratess" value="4" id="prate-4" /><label  for="prate-4">&nbsp;&nbsp;만족(4점)</label>
+		</dd>
+		<dd>
+			<input type="radio" name="pageratess" value="3" id="prate-3" /><label  for="prate-3">&nbsp;&nbsp;보통(3점)</label>
+		</dd>
+		<dd>
+			<input type="radio" name="pageratess" value="2" id="prate-2" /><label  for="prate-2">&nbsp;&nbsp;불만족(2점)</label>
+		</dd>
+		<dd>
+			<input type="radio" name="pageratess" value="1" id="prate-1" /><label  for="prate-1">&nbsp;&nbsp;매우불만족(1점)</label>
+		</dd>
+	</dl>
+	<button type="submit" class="page-rate-btn" onclick="sat_input(); return false;" ><span class="blind">평가하기</span></button>
+
+
+
+</form>

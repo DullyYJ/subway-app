@@ -1,0 +1,63 @@
+
+function onSelect(v,n){
+		
+		$.ajax({
+			  type : "post",
+			  url : "/homepage/stationinfo/stationCodeAjaxAll.do",
+			  data:{
+			  s_line:v,
+			  homepageno:n
+			  },
+			  
+			  complete : function( XMLHttpRequest, statusText,response,data ) {
+			  },
+			  success:function(data,textStatus,xhr) {
+				$(".station_r").html(data);
+			  },
+
+			  error : function( XMLHttpRequest, textStatus, errorThrown ) {
+	
+			  }
+		  })	
+	
+}
+
+
+function onView(s, e){
+	
+	
+	var form = document.frm_search;
+	
+	var sname = $("#choice-sta option:selected").text();
+	var li_s = s;
+	var li_e = e;
+	
+	form.updown.value = '0';
+	
+	if(li_s == sname) {
+		form.updown.value = '1';
+	} else if(li_e == sname) {
+		form.updown.value = '0';
+	} else if (sname == '') {
+		form.updown.value = '1';
+	}
+
+	form.action = '/homepage/default/stationtime/page/view.do?menu_no=10010103';
+	form.method = "post";
+	form.submit();			
+	
+}
+
+
+function onUpdown(n){
+	
+	var form = document.frm_search;
+	
+	form.updown.value = n;
+	form.action = '/homepage/default/stationtime/page/view.do?menu_no=10010103';
+	form.method = "post";
+	form.submit();		
+	
+}
+
+

@@ -1,0 +1,10 @@
+base dests=다대포해수욕장행,신평행 len=257375
+{"s_cho":"1"} dests=다대포해수욕장행,신평행 len=257375
+{"s_cho":"0"} dests=다대포해수욕장행,신평행 len=257375
+{"s_updown":"1"} dests=다대포해수욕장행,신평행 len=257375
+{"s_updown_cd":"1"} dests=다대포해수욕장행,신평행 len=257375
+{"updown":"1"} dests=노포행 len=250486
+{"s_cho":"2"} dests=다대포해수욕장행,신평행 len=257375
+{"s_course":"1"} dests=다대포해수욕장행,신평행 len=257375
+{"s_ud":"1"} dests=다대포해수욕장행,신평행 len=257375
+{"s_dir":"1"} dests=다대포해수욕장행,신평행 len=257375
