@@ -783,6 +783,22 @@ function ntCreate(DATA) {
       var tms = _ttOfficialTimes(q.line, q.from, dk, _ctxHol);
       return { dk: dk, times: (tms && tms.length) ? tms : null };
     },
+    // 실시간 도착정보의 열차가 내 진행 방향인가 — 앱의 옛 _rtArrForward 그대로.
+    //   (line, nextName=내 다음 역, alightName=내릴 역, bstatnNm=열차 종착역) → true | false | null(판단 불가)
+    forward: function (line, nextName, alightName, bstatnNm) {
+      try {
+        var ord = _ttOrderOf(line);
+        if (!ord || !ord.length) return null;
+        var nz = function (x) { return String(x || '').replace(/역$/, '').trim(); };
+        var iN = ord.indexOf(nz(nextName));
+        var iA = ord.indexOf(nz(alightName));
+        var iB = ord.indexOf(nz(String(bstatnNm || '').replace(/행$/, '')));
+        if (iN < 0 || iB < 0) return null;
+        if (iA < 0) return null;
+        var fwd = (iA > iN);
+        return fwd ? (iB > iN) : (iB < iN);
+      } catch (e) { return null; }
+    },
     segDir: function (line, stops, baseMs) {
       var di = ntDayInfo(baseMs); setCtx(di);
       return _ttSegDir(line, stops, di.isHol);

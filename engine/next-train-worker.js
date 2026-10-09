@@ -105,11 +105,13 @@ async function ntAttachAll(env, od, baseMs, bf) {
 //   GET  ?op=board&line=1호선&from=서울역&to=남영&atMin=480.5&baseMs=…   → { dk:'상'|'하', depMin }
 //        ?op=times (같은 인자)                                            → { dk, times:[…]|null }
 //        ?op=info  (같은 인자, atMin 없음; 기준 시각 = baseMs)             → { info:{found,depMin,firstMin,dir} }
+//        ?op=fwd&line=…&from=내다음역&to=내릴역&term=열차종착역            → { fwd:true|false|null }  (실시간 도착정보 열차가 내 진행 방향인지)
 //   POST { items:[{ id, op, … }] } → { items:[{ id, … }] }  (한 번에 여러 개)
 function ntAnswer(nt, q) {
   var baseMs = q.baseMs != null && isFinite(+q.baseMs) && +q.baseMs > 0 ? +q.baseMs : Date.now();
   var line = String(q.line || ''), from = String(q.from || ''), to = q.to ? String(q.to) : '';
   if (!line || !from) return { error: 'line, from 필요' };
+  if (q.op === 'fwd') return { fwd: nt.forward(line, from, to, q.term) };      // from=내 다음 역, to=내릴 역, term=열차 종착역
   var op = q.op || 'board';
   if (op === 'times') { var t = nt.boardTimes({ line: line, from: from, to: to, baseMs: baseMs }); return { dk: t.dk, times: t.times }; }
   if (op === 'info') { return { info: nt.metroInfo({ line: line, from: from, to: to, baseMs: baseMs, mins: 0 }) }; }
@@ -132,7 +134,7 @@ async function handleNextTrain(request, env) {
       return new Response(JSON.stringify({ ver: nt.version || null, items: outs }), { headers: H });
     }
     var u = new URL(request.url), g = function (k) { return u.searchParams.get(k); };
-    var a = ntAnswer(nt, { op: g('op'), line: g('line'), from: g('from'), to: g('to'), atMin: g('atMin'), baseMs: g('baseMs') });
+    var a = ntAnswer(nt, { op: g('op'), line: g('line'), from: g('from'), to: g('to'), term: g('term'), atMin: g('atMin'), baseMs: g('baseMs') });
     if (a.error) return new Response(JSON.stringify(a), { status: 400, headers: H });
     a.ver = nt.version || null;
     return new Response(JSON.stringify(a), { headers: H });

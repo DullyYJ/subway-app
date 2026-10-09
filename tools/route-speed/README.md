@@ -16,3 +16,10 @@
 
 ## s4
 - `patch_warm.js`: `GET /warm` — 격리당 최초 1회 서울역→수원 검색(live=0)을 내부 실행해 JIT·kric·rows 를 예열(60초 내 재호출은 즉시 반환, 속도제한 적용). 진단용 `busDiag.iso/isoN`(격리 식별자·요청 순번) 추가. 기존 경로·응답 본문 불변: 70건 전체 응답 비교 차이 0. 로컬 효과: 부산 콜드 ≈800ms → 워밍 후 ≈530ms.
+
+## s11 (2026-10-09) — 지하철 '다음 열차' 계산을 엔진으로
+- `patch_nexttrain.js`: `engine/next-train.js`·`next-train-data.js`·`next-train-worker.js` 를 `handleFetch` 앞에 넣고, `/route-v2-app` 응답에 구간별 `ttWaitMs`·`nextTrain`·`ntVer` 를 붙이고(`xferAnnotateAll` 다음), `/next-train` 라우트 추가, `/ride-eta` 를 `handleRideEtaNT`(boardInfo → timetable 채움)로 교체. 앵커가 하나라도 안 맞으면 실패. `ENGINE_DIR` 환경변수로 engine 폴더 위치 지정(기본: 저장소의 engine/).
+- `gen_nt_data.js`: 인천 시각표(`test/fixtures/incheon_tt.json`) → `engine/next-train-data.js` 의 차분 압축본 재생성.
+- 빌드: `ENGINE_DIR=<저장소>/engine ./make.sh <출력.js>` (make.sh 는 /home/claude/work/deploy/speed 에서 돌린다 — 이 폴더의 patch_*.js 를 거기에 복사해서).
+- 검증: s10 vs s11 전체 응답 70건 — 새 필드(ttWaitMs·nextTrain·ntVer·ttApplied)를 빼면 차이 0(55건에 새 필드 붙음, 구간 307개 중 대기 262개). 단위·비교 시험은 `test/next_train_*.test.js`.
+

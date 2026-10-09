@@ -1,7 +1,7 @@
 // 지하철 '다음 열차' 계산을 앱(옛 코드)에서 엔진(engine/next-train.js)으로 옮긴 것이 결과까지 같은지 비교한다.
 // 같은 시각표 데이터(test/fixtures/tt_bundle.json = gildongmu-tt 번들 + 앱에 들어 있던 _INCHEON_TT)를 양쪽에 넣고,
 // 모든 노선의 인접 역쌍 × 시각 × 평일/토/일 에 대해 방향 판정·다음 열차·첫차/막차 안내(_metroNextTrainInfo)를 비교한다.
-// 실행: node test/next_train_parity.ui.test.js [html 경로]   (옛 코드는 www/index.html 에 남아 있는 동안만 비교할 수 있다)
+// 실행: node test/next_train_parity.ui.test.js [html 경로]   (옛 계산 코드는 test/fixtures/legacy_timetable.js — 앱에서는 지웠다)
 const assert = require('assert'), path = require('path'), fs = require('fs');
 const { chromium } = require('./helpers/pw');
 const { ntCreate } = require('../engine/next-train.js');
@@ -20,6 +20,7 @@ const NOWS = [0, 30, 200, 270, 300, 330, 360, 420, 480, 600, 780, 900, 1020, 114
   p.on('pageerror', e => errs.push(e.message));
   await p.route('**/*', r => { const u = r.request().url(); if (u.startsWith('file:') || u.startsWith('data:')) return r.continue(); return r.fulfill({ status: 200, contentType: 'application/json', body: '{}' }); });
   await p.goto('file://' + html); await p.waitForTimeout(2500);
+  await require('./helpers/legacy')(p);   // 옛 시각표 계산 코드를 덧붙인다(앱에서는 지웠다)
   await p.evaluate(bd => { _ttApplyBundle(bd); }, bundle);
   // 엔진 데이터 파일이 앱에 들어 있던 값과 같은지도 확인
   const incheon = await p.evaluate(() => JSON.parse(JSON.stringify(_INCHEON_TT)));
@@ -108,6 +109,23 @@ const NOWS = [0, 30, 200, 270, 300, 330, 360, 420, 480, 600, 780, 900, 1020, 114
       assert.strictEqual(bad, 0, bad + "건 불일치 " + JSON.stringify(badLines) + "\n" + samples.join("\n"));
     });
   }
+  // 실시간 도착정보 열차가 내 진행 방향인지(_rtArrForward) — 노선별 모든 (내 다음 역, 내릴 역, 종착역) 조합 일부 + 이름 변형
+  const fwdCases = [];
+  for (const [line, ord] of Object.entries(lineStations)) {
+    for (let n = 0; n < 120 && ord.length > 3; n++) {
+      const pick = () => ord[Math.floor(Math.random() * ord.length)];
+      const nx = pick(), al = pick(), tm = pick();
+      fwdCases.push([line, nx, al, tm]);
+      fwdCases.push([line, nx + '역', al + '역', tm + '행']);
+      fwdCases.push([line, nx, '', tm]); fwdCases.push([line, nx, al, '없는역']);
+    }
+  }
+  const fwdApp = await p.evaluate(cs => cs.map(c => _rtArrForward(c[0], c[1], c[2], c[3])), fwdCases);
+  await t('열차 진행 방향 판정(_rtArrForward)이 옛 앱 계산과 같다(' + fwdCases.length + '건)', async () => {
+    let bad = 0; const sm = [];
+    fwdCases.forEach((c, i) => { const e = eng.forward(c[0], c[1], c[2], c[3]); if (e !== fwdApp[i]) { bad++; if (sm.length < 5) sm.push(c.join('|') + ' 앱=' + fwdApp[i] + ' 엔진=' + e); } });
+    assert.strictEqual(bad, 0, bad + '건 불일치\n' + sm.join('\n'));
+  });
   await t('JS 오류가 없다', async () => { assert.deepStrictEqual(errs, []); });
   await b.close();
   console.log('\n' + pass + ' 통과 / ' + fail + ' 실패'); process.exit(fail ? 1 : 0);

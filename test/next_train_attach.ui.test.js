@@ -20,6 +20,7 @@ const ri = (a, b) => a + Math.floor(rnd() * (b - a + 1));
   const p = await (await b.newContext({ timezoneId: 'Asia/Seoul' })).newPage();
   await p.route('**/*', r => { const u = r.request().url(); if (u.startsWith('file:') || u.startsWith('data:')) return r.continue(); return r.fulfill({ status: 200, contentType: 'application/json', body: '{}' }); });
   await p.goto('file://' + html); await p.waitForTimeout(2500);
+  await require('./helpers/legacy')(p);   // 옛 시각표 계산 코드를 덧붙인다(앱에서는 지웠다)
   await p.evaluate(bd => { _ttApplyBundle(bd); }, bundle);
   const lineStations = await p.evaluate(() => { const out = {}; const lines = new Set(); for (const k in _REAL_TT) lines.add(k.split('|')[0]); for (const k in _INCHEON_TT) lines.add(k); lines.add('김포골드라인'); for (const l of lines) out[l] = _ttOrderOf(l).slice(); return out; });
   const lines = Object.keys(lineStations).filter(l => lineStations[l].length >= 4);
@@ -167,6 +168,12 @@ const ri = (a, b) => a + Math.floor(rnd() * (b - a + 1));
     const a = await get('op=times&' + q), e = nt.boardTimes({ line: '2호선', from: '강남', to: '역삼', baseMs: baseDay + 8 * 3600e3 });
     assert.deepStrictEqual(a.j.times, e.times); assert.ok(a.j.times && a.j.times.length > 100);
     const i = await get('op=info&' + q); assert.ok(i.j.info && i.j.info.dir);
+  });
+  await t('/next-train?op=fwd', async () => {
+    const r = await get('op=fwd&line=' + encodeURIComponent('2호선') + '&from=' + encodeURIComponent('강남') + '&to=' + encodeURIComponent('잠실') + '&term=' + encodeURIComponent('성수행'));
+    assert.strictEqual(r.s, 200); assert.strictEqual(r.j.fwd, nt.forward('2호선', '강남', '잠실', '성수행'));
+    const r2 = await get('op=fwd&line=' + encodeURIComponent('2호선') + '&from=' + encodeURIComponent('강남') + '&term=' + encodeURIComponent('성수'));
+    assert.strictEqual(r2.j.fwd, null);
   });
   await t('/next-train: 인자 부족은 400, OPTIONS 는 204', async () => {
     assert.strictEqual((await get('op=board&line=2호선')).s, 400);

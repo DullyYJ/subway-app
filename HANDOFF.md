@@ -414,6 +414,20 @@
 - **정의된 적 없는 이름을 부르던 곳**(정의되지 않은 식별자 110 → 점검): 대부분은 브라우저·Capacitor 전역이거나 `window.x=` 로 만든 전역(오탐). 진짜 문제는 아래 셋.
   - `_metroNextTrainInfo`(노선도 경로 AI 브리핑의 '다음 열차'): 방향 판정이 한 번도 정의된 적 없는 함수를 불러 항상 '하'였다 → 경로 카드와 같은 `_ttSegDir` 로 교체(수정함).
   - `_stopsParamOk`: 거리 검사가 `_hav`(없음)라 try/catch 에 삼켜져 400m 검사가 항상 건너뛰어졌다 → `_distM` 으로 교체(수정함).
-  - **미수정**: `tagoGetNextDep` 이 `_tagoFindNext`(없음)를 불러, TAGO 시각표를 받은 뒤 예외 → 5회 누적 시 TAGO 조회 자동 비활성화. 고치면 실서버 TAGO 호출이 늘어나고 이 환경에서 검증할 수 없어 보류. 쓸지 말지 결정 필요(쓰려면 '정렬된 분 목록에서 baseMin 이상 첫 값' 함수 하나 추가).
+  - **(→ 아래 '다음 열차 엔진 이전'에서 TAGO 지하철 코드째 삭제)** `tagoGetNextDep` 이 `_tagoFindNext`(없음)를 불러, TAGO 시각표를 받은 뒤 예외 → 5회 누적 시 TAGO 조회 자동 비활성화. 고치면 실서버 TAGO 호출이 늘어나고 이 환경에서 검증할 수 없어 보류. 쓸지 말지 결정 필요(쓰려면 '정렬된 분 목록에서 baseMin 이상 첫 값' 함수 하나 추가).
   - 남겨둔 무해한 죽은 가드: `typeof closeWriteSheet/clearRoute/clearRouteHighlight==='function'`(정의 없음 → 그냥 건너뜀), `_ttNorm` 대체 람다.
 
+### 지하철 '다음 열차' 계산을 엔진으로 이전 (2026-10-09, YJ: "엔진으로 다 옮겨서 계산은 엔진이 그림은 앱이 그리기로 했잖아")
+- **원칙 그대로**: 시각표 데이터·방향 판정·다음 열차 계산은 앱에서 전부 지웠다. 앱은 엔진이 준 값을 그리기만 한다. (앱 −215KB)
+- **엔진(route-v2 s11, `route-v2-2026-10-09s11`)** — 소스는 `engine/next-train.js`(계산), `engine/next-train-data.js`(인천 1·2호선 시각표 [차분 압축]·지방 노선 역순서), `engine/next-train-worker.js`(Worker 연결부). `tools/route-speed/patch_nexttrain.js` 가 route-v2 에 앵커 기반으로 끼운다(make.sh 에 포함).
+  - `/route-v2-app` 응답의 지하철 구간마다 `ttWaitMs`(다음 열차까지 기다리는 시간, ms; 0~30분일 때만)·`nextTrain`({found,depMin,firstMin,dir}) + 응답에 `ntVer`(시각표 번들 버전). 대기는 앞 구간 대기가 뒤 구간 시각에 이어지게(앱이 합산) 계산한다 — 옛 앱 타임라인과 같은 식.
+  - `&bf=1` 쿼리: 앱이 '예상 시각' 모드(기준시각을 직접 고름)일 때 막차 뒤 보정(svcWarn.shift)을 대기 계산에 쓰지 않게 알린다(옛 앱 규칙).
+  - `GET/POST /next-train` — `op=board`(승차역에서 atMin 이후 첫 열차 + 방향키) · `op=times`(그날 방향별 출발 분 배열) · `op=info`(첫차/막차 안내) · `op=fwd`(실시간 도착정보 열차가 내 진행 방향인지). POST `{items:[…]}` 는 한 번에 최대 20건.
+  - `/ride-eta` 가 `boardInfo:{boardIdx,line,from,to}` 를 받으면 시각표를 엔진이 채운다(옛 `timetable` 이 같이 오면 그걸 우선).
+  - 시각표 번들은 gildongmu-tt(`/tt`)에서 받아 KV(`nt:bundle:v1`, 6시간)에 둔다 — **gildongmu-tt 워커는 계속 필요**하다(시각표를 고치면 그 워커만 재배포, 엔진은 최대 6시간 안에 반영). 못 받으면 경로는 그대로 나가고 값(`ttWaitMs`·`nextTrain`)만 빠진다 — 앱은 대기 0 으로 그린다.
+  - **배포 순서**: 엔진(s11)을 먼저 배포 → 그 뒤 새 APK. 새 앱 + 옛 엔진이면 지하철 승차 대기가 0 으로 그려진다(오류는 없음). 옛 앱 + 새 엔진은 문제 없다(새 필드를 무시).
+- **앱 변경**: ① 경로 변환이 구간의 `ttWaitMs`·`nextTrain` 을 싣는다 ② 타임라인은 `ttWaitMs` 를 더해 그린다 ③ 브리핑 '다음 열차'(`_metroNextTrainInfo`)는 첫 구간의 `nextTrain` 을 옮긴다(탐색 90초 후엔 엔진에 지금 기준으로 다시 묻고 다음 브리핑부터 반영) ④ 승차 시각 재조회(`_boardNextDepTable`/`_boardNextDep`/`_resyncBoardToNextTrain`/`_resolveTrainDepartMs`)는 `/next-train` 비동기 ⑤ 실시간 열차 방향 판정은 `_ntForward`(엔진 `op=fwd`, 결과 기억) ⑥ `/ride-eta` 로는 `boardInfo` 만 보낸다 ⑦ 예상 시각 모드면 요청에 `&bf=1`.
+- **앱에서 지운 것**: `_REAL_TT/_GIMPO_TT/_INCHEON_TT/_BUILTIN_TT/LINE_SCHEDULE/_REAL_SEG/_TT_ORDER_HARD` 데이터와 `_ttSegDir/_ttNextDepForSeg/_ttOfficialTimes/getNextDepartureMins/_realNextDep/_incheonNextDep/_gimpoNextDep/_genNextDep/_ttDerivedTimes/_ttOrderOf/_rtArrForward/_boardDirKey` 등 계산 함수, 시각표 번들 내려받기(`_ttApplyBundle/_ttHydrate/_ttFetchBundle`, localStorage `ttBundle`), `loadTimetable`(timetable.json), TAGO 지하철 시각표(`tagoGetNextDep`·`_htlTagoWarm`; 버스용 TAGO 는 그대로).
+- **달라진 점(의도)**: ① 환승 후 구간의 승차역을 '그 구간의 진짜 첫 역'으로 본다(옛 앱은 중복 역 제거 때문에 2번째 역을 쓰는 경우가 있었다) ② 날짜 구분(평일/휴일)은 '탐색 요청 시각' 기준(옛 앱은 그릴 때의 기기 시각) ③ 상세 화면의 역별 시각(`_toggleDetailSec` 목록)은 앱의 실측 역간시간 대신 엔진의 `stopSec` ④ 탐색 후 5분이 지나 타임라인 기준이 기기 시계로 바뀐 경우, 대기(ttWaitMs)는 탐색 시각 기준 값 그대로(옛 앱은 그릴 때마다 다시 계산) — 이때는 어차피 재탐색을 안내한다.
+- **검증**: ① `test/next_train_parity.ui.test.js` — 엔진 vs 옛 앱 계산(`test/fixtures/legacy_timetable.js`, 앱에서 지운 원본 그대로) 15만 건+진행 방향 1.5만 건 차이 0 ② `test/next_train_attach.ui.test.js` — 경로 4,000개(합성)+실제 엔진 응답 경로 990개의 구간별 대기가 옛 타임라인 계산과 같음, KV/fetch/`/next-train`/`/ride-eta` 모의 ③ `test/next_train_app.ui.test.js` — 앱이 엔진 값을 그리고(실제 엔진 코드가 `/next-train` 에 답함) 앱에 시각표 계산이 남지 않음 ④ 옛 앱 vs 새 앱 실제 응답 990회 렌더 비교(대기 737건 포함): 대기·총 소요·모든 시각 라벨 동일 ⑤ 엔진 s10 vs s11 전체 응답 70건 비교: 기존 필드 차이 0(새 필드만 추가).
+- **못 한 것**: 실제 단말·운영 서버에서의 확인(샌드박스에서 workers.dev 접근 불가). 배포 후 확인: `/route-v2-app?...` 응답에 `ntVer`·구간 `ttWaitMs`/`nextTrain`, `/next-train?op=info&line=2호선&from=강남&to=역삼`.
