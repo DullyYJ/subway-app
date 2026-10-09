@@ -3,7 +3,7 @@ const fs = require('fs'), path = require('path');
 const out = process.argv[2] || 'out'; fs.mkdirSync(out, { recursive: true });
 const log = []; const L = (...a) => { const s = a.join(' '); console.log(s); log.push(s); };
 async function get(url, opt) {
-  let last; for (let i = 0; i < 5; i++) { try { return await fetch(url, Object.assign({ headers: { 'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124 Safari/537.36', 'accept-language': 'ko' }, redirect: 'follow' }, opt || {})); } catch (e) { last = e; await new Promise(r => setTimeout(r, 4000)); } }
+  let last; for (let i = 0; i < 3; i++) { try { return await fetch(url, Object.assign({ headers: { 'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124 Safari/537.36', 'accept-language': 'ko' }, redirect: 'follow', signal: AbortSignal.timeout(25000) }, opt || {})); } catch (e) { last = e; await new Promise(r => setTimeout(r, 2000)); } }
   throw last; }
 (async () => {
   const sets = { '15093755': '국가철도공단_도시광역철도_역사정보', '15013205': '전국도시철도역사정보표준데이터' };
