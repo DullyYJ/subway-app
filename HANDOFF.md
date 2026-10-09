@@ -459,3 +459,13 @@
 - 번들 형식 기능(_TT_ORIENT·S)은 엔진 s14 이상이 필요하다 — 엔진 배포 전에 KV 에 새 형식 번들을 올리지 말 것(force 도 엔진 s15 배포 확인 뒤에만).
 - 필요한 시크릿: TAGO_KEY, CF_API_TOKEN(D1 읽기 + Workers KV 쓰기), CF_ACCOUNT_ID. KV 권한은 `kv-probe.yml` 로 확인 가능.
 - 코레일(KRIC) 보충: TAGO 에 없는 역(신길온천·광운대 등)은 `--kric-fill`(FILL_MAP K1→수인분당선, K2→경춘선, K4→경의중앙선)로 채우고, 방향은 TAGO 종착역 U/D 다수결 + 몇 곳(HAND)만 지리로 직접 지정.
+
+### 공휴일 단일 출처 + 매일 자동 갱신 (s16, 2026-10-09) — `.github/workflows/refresh-holidays.yml`
+- **왜**: 엔진·앱에 공휴일 목록이 따로따로 하드코딩돼 있었고 틀렸다(2026 노동절 5/1·제헌절 7/17 누락 — 2026년부터 둘 다 공휴일, 5/25·8/17 대체, 6/3 지방선거 등).
+- **구조**: `engine/holidays.js`(단일 출처) → 다음열차(`ntDayInfo`), KTX(LD) 요일 구분, 버스 배차·지하철 주말 판정(`holDowKST`), 앱(`GET /holidays`)이 모두 이걸 쓴다. 데이터 우선순위: KV `nt:holidays:v1` → 내장(`engine/holidays-data.js`). KV가 내장보다 옛것(asOf)이면 무시. 내장본이 없는 해는 고정 양력 공휴일만 인식.
+- **자동 갱신(매일 03:40 KST)**: A=정부 특일 API(가중 3, `TAGO_KEY` 그대로 사용 — data.go.kr '특일 정보' 신청 완료), B=Nager.Date(1), C=규칙 계산(2, `tools/holidays/rules.js`: 양력 고정+음력 `Intl` chinese+대체공휴일 법규). 공휴일 = 찬성 ≥2 이고 찬성 > 반대. A가 '완전'하면 `verified`, 아니면 `provisional`. 고정 공휴일 누락·14개 미만·독립 출처 2개 미만이면 이전 자료를 유지하고 이슈("공휴일 자동 갱신: 확인 필요")로 알림. 바뀌면 KV 쓰기(+읽기검증) → 내장본(`holidays.json`, `holidays-data.js`, `www/index.html` HOL_BUILTIN 블록)을 main에 커밋.
+- **앱**: `_holName(y,m,d)` — 내장값 + `/holidays`(6시간마다, 로드 2.5초 후, 화면 복귀 시) 캐시 `gdm_hol_v1`.
+- **수동 도구**: `node tools/holidays/make_initial.js; gen_embed.js; gen_app.js` (초기값 재생성), 워크플로 `dry` 입력으로 시험 실행.
+- **테스트**: `test/holidays.test.js`, `test/holidays_decide.test.js`, `test/next_train_attach.ui.test.js`(앱 내장 공휴일 = 엔진 공휴일, 2026~2028 전 날짜).
+- **빌드**: `tools/route-speed/patch_*.js` 를 `deploy/speed/` 로 복사한 뒤 `make.sh`. s16 = 이 모든 것 + 신길온천·광운대 시각표 + '옛 KV 번들 무시' 규칙.
+- **미해결/주의**: board-writer(대시보드 배포 서버)에 별도 공휴일 목록이 있으면 `/holidays` 를 부르도록 바꿔야 함(대시보드 배포 필요). 2028년은 정부 API 미공표라 `provisional`.
