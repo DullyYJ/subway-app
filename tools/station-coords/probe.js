@@ -34,6 +34,16 @@ async function get(url, opt) {
   for (const u of ['https://www.data.go.kr/', 'https://api.data.go.kr/', 'https://apis.data.go.kr/1613000/SubwayInfo/GetSubwayStationList', 'https://overpass-api.de/api/status', 'https://data.kric.go.kr/']) {
     try { const r = await get(u); L('REACH', u, r.status); } catch (e) { L('REACH ERR', u, e.message, e.cause && (e.cause.code || e.cause.message)); }
   }
+  // 파일데이터 내려받기(포털이 쓰는 주소) — 15093755
+  for (const u of ['https://www.data.go.kr/tcs/dss/selectFileDataDownload.do?publicDataPk=15093755&publicDataDetailPk=uddi:df94c599-74fa-48e2-99c9-e743e49b5d78',
+                   'https://www.data.go.kr/tcs/dss/selectFileDataDownload.do?recommendDataYn=Y&publicDataPk=15093755&publicDataDetailPk=uddi:df94c599-74fa-48e2-99c9-e743e49b5d78']) {
+    try { const r = await get(u, { headers: { 'user-agent': 'Mozilla/5.0', referer: 'https://www.data.go.kr/data/15093755/fileData.do' } }); const b = Buffer.from(await r.arrayBuffer());
+      L('FILEDL', r.status, b.length, r.headers.get('content-type'), r.headers.get('content-disposition'), b.slice(0, 200).toString('utf8').replace(/\s+/g, ' '));
+      if (b.length > 300) fs.writeFileSync(path.join(out, 'stations_15093755_' + (u.includes('recommend') ? 'b' : 'a') + '.bin'), b);
+    } catch (e) { L('FILEDL ERR', e.message); }
+  }
+  // 표준데이터 15013205 OpenAPI 페이지
+  try { const r = await get('https://www.data.go.kr/data/15013205/openapi.do'); const t = await r.text(); L('OPENAPI PAGE', r.status, t.length); fs.writeFileSync(path.join(out, '15013205_openapi.html'), t); } catch (e) { L('OPENAPI PAGE ERR', e.message); }
   // OpenStreetMap(Overpass) — 지하철역 이름·좌표 교차 확인용
   const bb = { 대구: '35.70,128.30,36.00,128.95', 광주: '35.05,126.70,35.25,127.00', 대전: '36.25,127.25,36.45,127.55' };
   for (const c in bb) {
