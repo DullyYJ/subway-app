@@ -7,7 +7,7 @@
 //   · 출력 옆에 changed.txt('yes'|'no'), rejected.txt(거부된 노선 목록) 를 쓴다.
 const fs = require('fs'), path = require('path'), cp = require('child_process');
 const argv = process.argv.slice(2); const opt = {}; const rest = [];
-for (let i = 0; i < argv.length; i++) { if (['--base', '--out', '--report', '--hint-kric'].includes(argv[i])) { opt[argv[i].slice(2)] = argv[++i]; } else rest.push(argv[i]); }
+for (let i = 0; i < argv.length; i++) { if (['--base', '--out', '--report', '--hint-kric', '--seoul'].includes(argv[i])) { opt[argv[i].slice(2)] = argv[++i]; } else rest.push(argv[i]); }
 if (!opt.base || !opt.out) { console.error('--base, --out 필요'); process.exit(2); }
 const MANAGED = ['신분당선', '수인분당선', '에버라인선', '경의중앙선', 'GTX-A', '서해선', '경춘선', '경강선', '의정부선', '우이신설선',
   '대구1호선', '대구2호선', '대구3호선', '대전1호선', '광주1호선', '신림선', '공항철도', '부산1호선', '부산2호선', '부산3호선', '부산4호선',
@@ -96,10 +96,26 @@ if (opt['hint-kric'] && fs.existsSync(opt['hint-kric'])) {
   } catch (e) { hintNotes.push('- 방향 힌트 단계 오류(건너뜀): ' + e.message); }
 }
 
+// 5c) 종점 역 출발 시각 바로잡기 — 서울 열린데이터광장 시간표(--seoul)의 '출발' 시각으로, 종점 역에 도착 시각이 들어 있는 기록만 바꾼다(조건은 tools/seoul-tt/terminals.js).
+//     MANAGED 노선(3~6호선)은 위에서 KRIC/TAGO 로 다시 만든 값이 도착 시각이라 이 단계가 매번 다시 바로잡는다 — 그래서 '옛 기록과 실제로 달라졌는지'로 변경 여부를 따진다.
+const termNotes = []; let termChanged = 0;
+if (opt.seoul && fs.existsSync(opt.seoul)) {
+  try {
+    const { applyTerminals } = require('../seoul-tt/terminals.js'), seoul = JSON.parse(require('zlib').gunzipSync(fs.readFileSync(opt.seoul)));
+    if (seoul.stations && Object.keys(seoul.stations).length > 200) {
+      const ch = applyTerminals(fin, seoul, new Set([2, 3, 4, 5, 6, 7, 8]));
+      const net = ch.filter(c => !same((OT[c.key] || {})[c.day], (R[c.key] || {})[c.day]));
+      termChanged = net.length;
+      if (net.length) termNotes.push('- **종점 역 출발 시각 ' + net.length + '곳 바로잡음**(도착 시각이 들어 있던 기록 → 서울 시간표의 출발 시각): ' + net.slice(0, 6).map(c => c.key.replace('|', ' ') + (c.day === 'D' ? '(평일)' : '(휴일)')).join(', ') + (net.length > 6 ? ' 외' : ''));
+      for (const l in diffs) diffs[l].changed = diffs[l].changed.filter(st => !same(OT[l + '|' + st], R[l + '|' + st]));    // 실제로 달라지지 않은 역은 변경에서 뺀다
+    } else termNotes.push('- 종점 역 바로잡기 건너뜀: 서울 시간표 역 수 부족(' + Object.keys(seoul.stations || {}).length + ')');
+  } catch (e) { termNotes.push('- 종점 역 바로잡기 단계 오류(건너뜀): ' + e.message); }
+}
+
 // 6) 결과 기록
 const touched = MANAGED.filter(l => diffs[l] && (diffs[l].changed.length || diffs[l].added.length));
 const orientChanged = [...new Set(MANAGED.concat(Object.keys(HINT_SPEC)))].filter(l => !same(fin.data._TT_ORIENT[l], old.data._TT_ORIENT[l]));   // 방향 힌트만 달라져도 '변경' — 버전을 올려야 엔진 캐시가 새 번들로 바뀐다
-const changed = touched.length > 0 || hinted.length > 0 || orientChanged.length > 0;
+const changed = touched.length > 0 || hinted.length > 0 || orientChanged.length > 0 || termChanged > 0;
 if (changed) {
   fin.version = built.version;
   // 같은 날 두 번 바뀌어도 버전이 달라지고 사전순으로 커지도록 뒤에 .2, .3 … 을 붙인다(엔진은 '내장본보다 사전순으로 작은 KV 번들'을 무시한다)
@@ -112,6 +128,7 @@ const rejected = MANAGED.filter(l => !verdict[l].ok);
 fs.writeFileSync(path.join(dir, 'rejected.txt'), rejected.map(l => l + ': ' + verdict[l].why).join('\n'));
 const md = ['# 시각표 분기 갱신 보고', '', '- 버전: `' + old.version + '` → `' + fin.version + '`', '- 변경된 노선: ' + (touched.length ? touched.length + '개' : '없음') + (orientChanged.length ? ' (+ 방향 힌트만 달라진 노선: ' + orientChanged.join(', ') + ')' : ''), ''];
 if (hintNotes.length) md.push(...hintNotes, '');
+if (termNotes.length) md.push(...termNotes, '');
 for (const l of touched) { const d = diffs[l]; md.push('- **' + l + '** — 바뀐 역 ' + d.changed.length + ', 새로 생긴 역 ' + d.added.length + (d.kept.length ? ', 새 자료에 없어 옛 기록 유지 ' + d.kept.length : '') + (d.changed.length ? ' (예: ' + d.changed.slice(0, 5).join(', ') + ')' : '')); }
 if (rejected.length) { md.push('', '## 확인 필요(자동 반영하지 않고 옛 기록 유지)'); for (const l of rejected) md.push('- **' + l + '** — ' + verdict[l].why); }
 fs.writeFileSync(opt.report || path.join(dir, 'report.md'), md.join('\n') + '\n');
