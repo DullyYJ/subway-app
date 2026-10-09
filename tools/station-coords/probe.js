@@ -48,6 +48,14 @@ async function get(url, opt) {
   for (const u of ['https://data.kric.go.kr/rips/M_01_01/detail.do?id=32', 'https://openapi.kric.go.kr/rips/M_01_01/detail.do?id=32']) {
     try { const r = await get(u); const t = await r.text(); L('KRICPAGE', u, r.status, t.length); fs.writeFileSync(path.join(out, 'kricpage_' + (u.includes('openapi') ? 'b' : 'a') + '.html'), t); } catch (e) { L('KRICPAGE ERR', u, e.message); }
   }
+  // KRIC 파일데이터 내려받기(역사정보 xlsx)
+  for (const host of ['https://data.kric.go.kr', 'https://openapi.kric.go.kr']) {
+    const u = host + '/rips/dataset/download.file?type=filedata&id=32&operation=1';
+    try { const r = await get(u, { headers: { 'user-agent': 'Mozilla/5.0', referer: host + '/rips/M_01_01/detail.do?id=32' } }); const b = Buffer.from(await r.arrayBuffer());
+      L('KRICDL', u, r.status, b.length, r.headers.get('content-type'), r.headers.get('content-disposition'), b.slice(0, 80).toString('latin1').replace(/[^\x20-\x7e]/g, '.'));
+      if (r.status === 200 && b.length > 2000) fs.writeFileSync(path.join(out, 'kric_stations_' + (host.includes('openapi') ? 'b' : 'a') + '.xlsx'), b);
+    } catch (e) { L('KRICDL ERR', u, e.message); }
+  }
   // OpenStreetMap(Overpass) — 지하철역 이름·좌표 교차 확인용
   const bb = { 대구: '35.70,128.30,36.00,128.95', 광주: '35.05,126.70,35.25,127.00', 대전: '36.25,127.25,36.45,127.55' };
   for (const c in bb) {
