@@ -9739,7 +9739,8 @@ window._svcCheck = _svcCheck;
 
 function _svcModeText(r){
   if(r.modes.length === 2) return '지하철과 버스 모두';
-  if(r.modes.length === 1) return r.modes[0] + '이(가)';
+  // ★ 2026-10-09: 조사 — '버스이(가)' → '버스가' / '지하철이'
+  if(r.modes.length === 1) return r.modes[0] + (r.modes[0] === '버스' ? '가' : '이');
   return '일부 구간이';
 }
 // ★ 2026-09-25 (YJ 제보: 10시대에 15시 출발 하교버스·22시대 출발 심야버스가 "운행이
@@ -9770,6 +9771,21 @@ function _svcLines(r){
           return label;
         }));
   return a.join(' · ');
+}
+// ★ 2026-10-09 (YJ 제보: 심야 버스 경로에 "버스 첫차 05:30 기준"이라고 떴는데 시각표는 00:20~): 엔진은 지하철만
+//   첫차로 옮겨 계산하고 버스 시각은 옮기지 않는다. 그래서 '첫차 기준'이라는 말은 지하철에만 쓰고,
+//   버스는 엔진이 알려준 state(before/after)대로 있는 그대로 말한다. 앱이 계산하지 않고 옮겨 적기만 한다.
+function _svcFootText(r){
+  var p = [];
+  if(r.endedSub.length && r.firstSub) p.push('아래 시각은 지하철 첫차 ' + r.firstSub + ' 기준으로 안내해요.');
+  if(r.endedBus.length){
+    var ph = _svcBusPhase(r);
+    var bf = r.firstBus || _svcBusFirst();
+    if(ph === 'before')     p.push('버스는 첫차' + (bf ? ' ' + bf + ' 전후' : '') + '부터 탈 수 있어요. 버스 시각은 첫차 기준으로 옮기지 않았으니 참고만 해 주세요.');
+    else if(ph === 'after') p.push('버스 막차가 지난 시각이에요. 버스 시각은 참고용이에요.');
+    else                    p.push('버스 시각은 참고용이에요.');
+  }
+  return p.join(' ');
 }
 function _svcFirstText(r){
   var p = [];
@@ -9826,7 +9842,7 @@ function _svcBannerHtml(r){
   var body = warn
     ? r.soonSub.map(function(x){ return x.line + ' 막차 ' + x.last + ' (약 ' + x.inMin + '분 뒤)'; }).join(' · ')
     : _svcLines(r);
-  var foot = warn ? '' : ('<div style="margin-top:6px;font-size:11px;opacity:.85;">아래 시각은 ' + (_svcFirstText(r) || '첫차') + ' 기준으로 안내해요.</div>');
+  var foot = warn ? '' : ('<div style="margin-top:6px;font-size:11px;opacity:.85;">' + (_svcFootText(r) || '아래 시각은 참고용이에요.') + '</div>');
   return '<div id="svcBanner" style="background:' + grad + ';color:#fff;border-radius:12px;'
        + 'padding:10px 12px;margin-bottom:8px;font-size:12px;line-height:1.5;">'
        + '<div style="font-weight:800;font-size:13px;">' + head + '</div>'
@@ -9859,12 +9875,12 @@ function _svcShowModal(r){
       + '<div style="margin-top:10px;font-size:13px;opacity:.92;line-height:1.6;">'
       + (warn
           ? r.soonSub.map(function(x){ return x.line + ' 막차 ' + x.last + ' — 약 ' + x.inMin + '분 남았어요.'; }).join('<br>')
-          : _svcLines(r) + '<br><br>아래 경로의 시각은 <b>' + (_svcFirstText(r) || '첫차') + '</b> 기준이에요.')
+          : _svcLines(r) + '<br><br>' + (_svcFootText(r) || '아래 경로의 시각은 참고용이에요.'))
       + '</div>'
       + (r.endedBus.length
           ? '<div style="margin-top:10px;font-size:11px;opacity:.75;line-height:1.5;">'
             + (_svcBusFirst()
-                ? '주변 노선 중 가장 이른 첫차 기준이에요. 노선마다 첫차가 다르니 노선도 &gt; 버스 탭에서 확인해 주세요.'
+                ? '주변 노선 중 가장 이른 첫차예요. 노선마다 첫차가 다르니 노선도 &gt; 버스 탭에서 확인해 주세요.'
                 : '버스는 노선마다 첫차가 달라 정확한 시각을 알려드리지 못해요. 노선도 &gt; 버스 탭에서 정류장별 도착정보를 확인해 주세요.')
             + '</div>'
           : '')
