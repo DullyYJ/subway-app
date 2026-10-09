@@ -44,11 +44,15 @@ async function get(url, opt) {
   }
   // 표준데이터 15013205 OpenAPI 페이지
   try { const r = await get('https://www.data.go.kr/data/15013205/openapi.do'); const t = await r.text(); L('OPENAPI PAGE', r.status, t.length); fs.writeFileSync(path.join(out, '15013205_openapi.html'), t); } catch (e) { L('OPENAPI PAGE ERR', e.message); }
+  // 철도 데이터 포털(KRIC) — 같은 자료의 원본 페이지
+  for (const u of ['https://data.kric.go.kr/rips/M_01_01/detail.do?id=32', 'https://openapi.kric.go.kr/rips/M_01_01/detail.do?id=32']) {
+    try { const r = await get(u); const t = await r.text(); L('KRICPAGE', u, r.status, t.length); fs.writeFileSync(path.join(out, 'kricpage_' + (u.includes('openapi') ? 'b' : 'a') + '.html'), t); } catch (e) { L('KRICPAGE ERR', u, e.message); }
+  }
   // OpenStreetMap(Overpass) — 지하철역 이름·좌표 교차 확인용
   const bb = { 대구: '35.70,128.30,36.00,128.95', 광주: '35.05,126.70,35.25,127.00', 대전: '36.25,127.25,36.45,127.55' };
   for (const c in bb) {
     const q = '[out:json][timeout:60];(node["railway"="station"](' + bb[c] + ');node["railway"="stop"]["station"="subway"](' + bb[c] + '););out tags center;';
-    try { const r = await get('https://overpass-api.de/api/interpreter', { method: 'POST', body: 'data=' + encodeURIComponent(q), headers: { 'content-type': 'application/x-www-form-urlencoded', 'user-agent': 'gildongmu-probe' } }); const t = await r.text(); L('OSM', c, r.status, t.length); fs.writeFileSync(path.join(out, 'osm_' + c + '.json'), t); } catch (e) { L('OSM ERR', c, e.message); }
+    try { const r = await get('https://overpass-api.de/api/interpreter', { method: 'POST', body: 'data=' + encodeURIComponent(q), headers: { 'content-type': 'application/x-www-form-urlencoded', 'user-agent': 'gildongmu-probe' } }); const t = await r.text(); L('OSM', c, r.status, t.length); if (r.status === 200) fs.writeFileSync(path.join(out, 'osm_' + c + '.json'), t); } catch (e) { L('OSM ERR', c, e.message); }
   }
   // KRIC stationInfo (TAGO 키가 통하는지)
   const key = process.env.TAGO_KEY;
