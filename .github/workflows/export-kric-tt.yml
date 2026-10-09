@@ -7,6 +7,10 @@ on:
         description: '운영기관 코드(쉼표)'
         required: false
         default: 'DG,DJ,GJ'
+      pairs:
+        description: '운영기관:노선 쌍(쉼표; 지정하면 oprs 대신)'
+        required: false
+        default: ''
 permissions:
   contents: write
 jobs:
@@ -23,6 +27,7 @@ jobs:
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
           OPRS: ${{ inputs.oprs }}
+          PAIRS: ${{ inputs.pairs }}
         run: node tools/collect-tt/export_kric.js
       - name: 결과 올리기
         run: |

@@ -5,6 +5,7 @@ const TOKEN = process.env.CF_API_TOKEN, ACCT = process.env.CF_ACCOUNT_ID, DB = p
 if (!TOKEN || !ACCT) { console.error('CF_API_TOKEN/CF_ACCOUNT_ID 없음'); process.exit(1); }
 const OUT = path.join(__dirname, 'out'); fs.mkdirSync(OUT, { recursive: true });
 const oprs = (process.env.OPRS || 'DG,DJ,GJ').split(',');
+const pairs = (process.env.PAIRS || '').split(',').filter(Boolean).map(x => x.split(':'));   // 'KR:K1,KR:K4' 처럼 노선까지 지정하면 OPRS 대신 이것을 쓴다
 async function q(sql, params) {
   for (let a = 0; a < 3; a++) {
     try {
@@ -16,8 +17,9 @@ async function q(sql, params) {
 }
 (async () => {
   const out = [];
-  for (const opr of oprs) {
-    const keys = await q('SELECT ln, st, day FROM kric_tt WHERE opr = ? ORDER BY ln, st, day', [opr]);
+  const jobs = pairs.length ? pairs : oprs.map(o => [o, null]);
+  for (const [opr, ln0] of jobs) {
+    const keys = await q('SELECT ln, st, day FROM kric_tt WHERE opr = ?' + (ln0 ? ' AND ln = ?' : '') + ' ORDER BY ln, st, day', ln0 ? [opr, ln0] : [opr]);
     console.log(opr, '행', keys.length);
     for (let i = 0; i < keys.length; i += 8) {
       const part = keys.slice(i, i + 8);
