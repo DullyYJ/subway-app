@@ -1,0 +1,29 @@
+# 부산교통공사 역별 열차시각표 원본 수집(수동 실행) → data/busan-tt 브랜치
+name: Collect Busan timetables
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: 수집
+        run: node tools/collect-tt/busan.js
+      - name: 올리기
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@users.noreply.github.com"
+          git checkout --orphan data-busan-tt
+          git rm -rf --cached . >/dev/null 2>&1 || true
+          mkdir -p /tmp/keep && cp tools/collect-tt/out/* /tmp/keep/
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp /tmp/keep/* .
+          git add -A
+          git commit -m "busan timetables raw ($(date -u +%FT%TZ))"
+          git push -f origin HEAD:refs/heads/data/busan-tt
