@@ -1,0 +1,39 @@
+# 지하철 역별 시각표 수집 (TAGO, 수동 실행). 결과는 data/subway-tt 브랜치의 tools/collect-tt/out/ 에 올라간다(메인 브랜치·APK 빌드와 무관).
+name: Collect subway timetables
+on:
+  workflow_dispatch:
+    inputs:
+      lines:
+        description: '쉼표로 구분한 노선(비우면 시각표 없는 노선 전체)'
+        required: false
+        default: ''
+permissions:
+  contents: write
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: TAGO 시각표 수집
+        env:
+          TAGO_KEY: ${{ secrets.TAGO_KEY }}
+          LINES: ${{ inputs.lines }}
+        run: |
+          [ -n "$TAGO_KEY" ] || { echo "::error::TAGO_KEY 시크릿이 비어 있습니다"; exit 1; }
+          node tools/collect-tt/collect.js
+      - name: 결과를 data/subway-tt 브랜치에 올림
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@users.noreply.github.com"
+          git checkout --orphan data-subway-tt
+          git rm -rf --cached . >/dev/null 2>&1 || true
+          mkdir -p /tmp/keep && cp tools/collect-tt/out/*.json /tmp/keep/
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp /tmp/keep/*.json .
+          git add -A
+          git commit -m "subway timetable raw data ($(date -u +%FT%TZ))"
+          git push -f origin HEAD:refs/heads/data/subway-tt
