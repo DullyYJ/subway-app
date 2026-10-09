@@ -3,6 +3,10 @@ name: Collect subway timetables
 on:
   workflow_dispatch:
     inputs:
+      budget:
+        description: '시간 예산(분)'
+        required: false
+        default: '40'
       lines:
         description: '쉼표로 구분한 노선(비우면 시각표 없는 노선 전체)'
         required: false
@@ -24,7 +28,7 @@ jobs:
           LINES: ${{ inputs.lines }}
         run: |
           [ -n "$TAGO_KEY" ] || { echo "::error::TAGO_KEY 시크릿이 비어 있습니다"; exit 1; }
-          node tools/collect-tt/collect.js
+          BUDGET_MIN=${{ inputs.budget }} node tools/collect-tt/collect.js
       - name: 결과를 data/subway-tt 브랜치에 올림
         run: |
           git config user.name "github-actions"

@@ -23,7 +23,7 @@ const ALIAS = {
 };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 let calls = 0, fails = 0; const T0 = Date.now(); const BUDGET = (+process.env.BUDGET_MIN || 40) * 60000; const left = () => Date.now() - T0 < BUDGET;
-let lastErr = ''; setInterval(() => console.log('진행 calls', calls, 'fails', fails, '경과(분)', Math.round((Date.now() - T0) / 60000), lastErr), 60000).unref();
+let lastErr = ''; const errs = {}; setInterval(() => console.log('진행 calls', calls, 'fails', fails, '경과(분)', Math.round((Date.now() - T0) / 60000), lastErr), 60000).unref();
 async function api(op, params) {
   if (!left()) return { items: [], total: 0, err: '시간 초과' };
   const qs = Object.entries(params).map(([k, v]) => k + '=' + encodeURIComponent(v)).join('&');
@@ -38,7 +38,7 @@ async function api(op, params) {
       if (!h || h.resultCode !== '00') { const c = h && h.resultCode; if (c === '03' || c === '00') return { items: [], total: 0 }; throw new Error('resultCode ' + c + ' ' + (h && h.resultMsg)); }
       const b = j.response.body || {}; let it = b.items && b.items.item; if (!it) it = []; if (!Array.isArray(it)) it = [it];
       return { items: it, total: +b.totalCount || it.length };
-    } catch (e) { fails++; lastErr = String(e.message).slice(0, 80); if (a === 2) { console.log('실패', op, JSON.stringify(params).slice(0, 100), String(e.message).slice(0, 120)); return { items: [], total: 0, err: String(e.message).slice(0, 120) }; } await sleep(500 * (a + 1)); }
+    } catch (e) { fails++; lastErr = String(e.message).slice(0, 80); errs[lastErr] = (errs[lastErr] || 0) + 1; if (a === 2) { console.log('실패', op, JSON.stringify(params).slice(0, 100), String(e.message).slice(0, 120)); return { items: [], total: 0, err: String(e.message).slice(0, 120) }; } await sleep(500 * (a + 1)); }
   }
 }
 async function pool(items, n, fn) { let i = 0; const out = new Array(items.length); await Promise.all(Array.from({ length: n }, async () => { while (i < items.length) { const k = i++; out[k] = await fn(items[k], k); } })); return out; }
@@ -82,7 +82,7 @@ function routeMatches(line, routeName) {
   });
   fs.writeFileSync(path.join(OUT, 'raw.json'), JSON.stringify(raw));
   // 요약
-  const rep = { calls, fails, lines: {}, routeNames: {}, unmatched: [] };
+  const rep = { calls, fails, errs, lines: {}, routeNames: {}, unmatched: [] };
   for (const nm of nameList) for (const c of stations[nm]) rep.routeNames[c.route] = (rep.routeNames[c.route] || 0) + 1;
   for (const l of lines) {
     const have = Object.values(raw).filter(r => r.line === l); const cnt = have.filter(r => Object.values(r.tt).some(a => a.length)).length;
