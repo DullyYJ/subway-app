@@ -25,6 +25,10 @@ async function get(url, opt) { const r = await fetch(url, Object.assign({ header
       } catch (e) { L('ERR', url, e.message, e.cause && (e.cause.code || e.cause.message)); }
     }
   }
+  for (const id of ['15093755', '15013205']) for (const kind of ['fileData', 'standard', 'openapi']) {
+    const u = 'https://www.data.go.kr/catalog/' + id + '/' + kind + '.json';
+    try { const r = await get(u); const t = await r.text(); L('CATALOG', u, r.status, t.length); fs.writeFileSync(path.join(out, 'catalog_' + id + '_' + kind + '.json'), t); } catch (e) { L('CATALOG ERR', u, e.message); }
+  }
   for (const u of ['https://www.data.go.kr/', 'https://api.data.go.kr/', 'https://apis.data.go.kr/1613000/SubwayInfo/GetSubwayStationList', 'https://overpass-api.de/api/status', 'https://data.kric.go.kr/']) {
     try { const r = await get(u); L('REACH', u, r.status); } catch (e) { L('REACH ERR', u, e.message, e.cause && (e.cause.code || e.cause.message)); }
   }
