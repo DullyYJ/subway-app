@@ -1,0 +1,35 @@
+PAGE https://www.data.go.kr/data/15013205/fileData.do 404 2474
+  atchFileId 
+  fileDetailSn 
+PAGE https://www.data.go.kr/data/15013205/standard.do 200 163844
+  atchFileId 
+  fileDetailSn 
+PAGE https://www.data.go.kr/data/15093755/fileData.do 200 156504
+  atchFileId 
+  fileDetailSn 
+PAGE https://www.data.go.kr/data/15093755/standard.do 404 2474
+  atchFileId 
+  fileDetailSn 
+CATALOG https://www.data.go.kr/catalog/15093755/fileData.json 200 922
+CATALOG https://www.data.go.kr/catalog/15093755/standard.json 200 617
+CATALOG https://www.data.go.kr/catalog/15093755/openapi.json 200 86
+CATALOG https://www.data.go.kr/catalog/15013205/fileData.json 200 86
+CATALOG https://www.data.go.kr/catalog/15013205/standard.json 200 427
+CATALOG https://www.data.go.kr/catalog/15013205/openapi.json 200 568
+REACH https://www.data.go.kr/ 200
+REACH https://api.data.go.kr/ 400
+REACH https://apis.data.go.kr/1613000/SubwayInfo/GetSubwayStationList 400
+REACH https://overpass-api.de/api/status 200
+REACH https://data.kric.go.kr/ 200
+FILEDL 200 10254 text/html;charset=UTF-8  {"dataSetFileDetailInfo":{"rn":"","searchCondition1":"","searchCondition2":"","searchCondition3":"","searchCondition1Array":null,"searchCondition2Array":null,"searchCondition3Array":null,"searchKeywor
+FILEDL 200 10254 text/html;charset=UTF-8  {"dataSetFileDetailInfo":{"rn":"","searchCondition1":"","searchCondition2":"","searchCondition3":"","searchCondition1Array":null,"searchCondition2Array":null,"searchCondition3Array":null,"searchKeywor
+OPENAPI PAGE 200 163844
+KRICPAGE https://data.kric.go.kr/rips/M_01_01/detail.do?id=32 200 13616
+KRICPAGE https://openapi.kric.go.kr/rips/M_01_01/detail.do?id=32 200 13616
+KRICDL https://data.kric.go.kr/rips/dataset/download.file?type=filedata&id=32&operation=1 200 313132 application/octet-stream;charset=UTF-8 attachment; filename="ì ì²´_ëìì² ëì­ì¬ì ë³´_20260630.xlsx" PK..........!.A7..r...........[Content_Types].xml ...(..........................
+KRICDL https://openapi.kric.go.kr/rips/dataset/download.file?type=filedata&id=32&operation=1 200 313132 application/octet-stream;charset=UTF-8 attachment; filename="ì ì²´_ëìì² ëì­ì¬ì ë³´_20260630.xlsx" PK..........!.A7..r...........[Content_Types].xml ...(..........................
+OSM 대구 504 695
+OSM 광주 504 695
+OSM 대전 504 695
+KRIC DG 1 0115 200 {"header":{"resultCode":"30","resultMsg":"등록되지 않은 서비스키입니다."}}
+KRIC KR 1 135 200 {"header":{"resultCode":"30","resultMsg":"등록되지 않은 서비스키입니다."}}
