@@ -142,8 +142,8 @@ if (fillFiles.length) {
       const cnt = r0 => r0 && r0.D ? ['상', '하'].reduce((a, k) => a + (r0.D[k] ? r0.D[k].length : 0), 0) : 0;
       let kn = 0; { const dd = String(row.data || '').split('\n').filter(Boolean).filter(x => { const c = x.split(','); const d = names[ln + '|' + c[4]]; return d && d !== nm && (c[2] || c[1]); }).length; kn = dd; }
       // 이미 기록이 있으면 건드리지 않는다. 다만 하루 30편 이하의 드문 역에서 코레일 쪽이 평일 편수가 더 많으면(TAGO 가 일부 열차를 빠뜨린 경우) 코레일로 바꾼다.
-      if (RT[key] && !(row.day === '8' && cnt(RT[key]) <= 30 && kn > cnt(RT[key]))) { if (row.day === '8') stat[line] = Object.assign(stat[line] || {}, { ['유지_' + nm]: 'TAGO ' + cnt(RT[key]) + '편 / 코레일 ' + kn + '편' }); continue; }
-      if (RT[key] && row.day === '8') { RT[key] = { __new: 1 }; stat[line] = Object.assign(stat[line] || {}, { ['교체_' + nm]: 'TAGO ' + cnt(RT[key]) + '→코레일 ' + kn }); }
+      if (RT[key] && !(row.day === '8' && cnt(RT[key]) <= 30 && kn > cnt(RT[key]))) { if (row.day === '8' && cnt(RT[key]) !== kn && Math.abs(cnt(RT[key]) - kn) > 0.05 * Math.max(kn, 1)) stat[line] = Object.assign(stat[line] || {}, { ['편수차이_' + nm]: 'TAGO ' + cnt(RT[key]) + '편 / 코레일 ' + kn + '편(유지)' }); continue; }
+      if (RT[key] && row.day === '8') { stat[line] = Object.assign(stat[line] || {}, { ['교체_' + nm]: 'TAGO ' + cnt(RT[key]) + '→코레일 ' + kn }); RT[key] = { __new: 1 }; }
       const dayKey = { '8': 'D', '9': 'W', '7': 'S' }[row.day]; if (!dayKey) continue;
       const up = [], dn = []; let unk = 0;
       for (const r of String(row.data || '').split('\n').filter(Boolean).map(x => x.split(','))) { const [, arr, dep, , dst] = r;

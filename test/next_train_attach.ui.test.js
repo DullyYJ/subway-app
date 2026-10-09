@@ -144,6 +144,7 @@ const ri = (a, b) => a + Math.floor(rnd() * (b - a + 1));
     assert.deepStrictEqual(nt2.officialTimes('U선', '가', '하', sat), [700, 710]);
   });
   // ── ntEnsure: KV · 서비스 바인딩 · 내장본 ──
+  bundle.version = 'tt-9999-12-31';   // KV·서비스 시험용 번들은 내장본보다 새것으로 둔다(내장본보다 오래된 번들은 쓰지 않는 규칙)
   const bundleTxt = JSON.stringify(bundle);
   const mkKV = (init) => { const m = new Map(init || []); return { m, gets: 0, get: async function (k) { this.gets++; return m.has(k) ? m.get(k) : null; }, put: async (k, v, o) => { m.set(k, v); m.opts = o; } }; };
   const embedBundle = JSON.parse(W.NT_TT_EMBED);
@@ -165,6 +166,13 @@ const ri = (a, b) => a + Math.floor(rnd() * (b - a + 1));
     const svc = { fetch: async (u) => { called++; assert.ok(String(u).endsWith('/tt')); return { ok: true, text: async () => bundleTxt }; } };
     const a = await W.ntEnsure({ ROWS_KV: kv, TT_SVC: svc }); assert.ok(a && a.src === 'svc' && a.version === bundle.version);
     assert.strictEqual(called, 1); assert.ok(kv.m.has('nt:bundle:v1')); assert.strictEqual(kv.m.opts.expirationTtl, 21600); assert.strictEqual(fetchN, 0);
+  });
+  await t('ntEnsure: 내장본보다 오래된 KV·서비스 번들은 쓰지 않는다(내장본 사용), 같거나 새것이면 KV 사용', async () => {
+    const old = JSON.stringify(Object.assign({}, bundle, { version: 'tt-2026-09-06' }));
+    W._ntReset(); const a = await W.ntEnsure({ ROWS_KV: mkKV([['nt:bundle:v1', old]]) }); assert.ok(a && a.src === 'embed', a && a.src);
+    W._ntReset(); const b2 = await W.ntEnsure({ ROWS_KV: mkKV(), TT_SVC: { fetch: async () => ({ ok: true, text: async () => old }) } }); assert.ok(b2 && b2.src === 'embed');
+    const same = JSON.stringify(Object.assign({}, bundle, { version: embedBundle.version }));
+    W._ntReset(); const c = await W.ntEnsure({ ROWS_KV: mkKV([['nt:bundle:v1', same]]) }); assert.ok(c && c.src === 'kv');
   });
   await t('ntEnsure: 서비스 바인딩이 실패하면 내장본으로 넘어간다', async () => {
     W._ntReset(); const a = await W.ntEnsure({ TT_SVC: { fetch: async () => { throw new Error('boom'); } } }); assert.ok(a && a.src === 'embed');

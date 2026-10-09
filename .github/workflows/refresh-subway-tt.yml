@@ -1,0 +1,97 @@
+# 지하철 역별 시각표 분기 자동 갱신 — 사람이 신경 쓸 필요가 없도록.
+#   · 분기에 한 번(1·4·7·10월 3일 새벽 03:17 KST) 자동 실행. 수동 실행도 가능(dry 로 시험 가능).
+#   · 흐름: 현재 내장 번들 꺼내기 → TAGO(수도권 광역)·KRIC(D1)·부산교통공사 새로 수집 → refresh.js 가 '달라진 역만' 안전장치와 함께 반영
+#           → 달라진 게 있으면 ① engine/next-train-tt.js 를 다시 만들어 main 에 커밋 ② Cloudflare KV(nt:bundle:v1)에 올림 → 엔진은 재배포 없이 곧바로(최대 1시간) 새 시각표를 쓴다.
+#   · 안전장치에 걸린 노선은 옛 기록을 그대로 두고 GitHub 이슈로 알린다. 수집 단계가 실패하면 이 워크플로가 실패로 끝난다(GitHub 알림).
+#   · 관리 대상 노선은 tools/collect-tt/refresh.js 의 MANAGED(서울 1~9호선 등은 건드리지 않음).
+name: Refresh subway timetables
+on:
+  schedule:
+    - cron: '17 18 2 1,4,7,10 *'
+  workflow_dispatch:
+    inputs:
+      dry:
+        description: '시험 실행(커밋·KV 쓰기 없이 보고서만)'
+        type: boolean
+        required: false
+        default: false
+permissions:
+  contents: write
+  issues: write
+concurrency:
+  group: refresh-subway-tt
+  cancel-in-progress: false
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 170
+    env:
+      OUT: tools/collect-tt/out
+      KV_NS: dc7124fce2d946768165f47fc58d6b7e
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: 현재 내장 번들 꺼내기
+        run: |
+          mkdir -p $OUT
+          node tools/collect-tt/extract_embed.js $OUT/base.json
+      - name: TAGO 수집(수도권 광역 10개 노선)
+        env:
+          TAGO_KEY: ${{ secrets.TAGO_KEY }}
+          LINES: 신분당선,수인분당선,에버라인선,경의중앙선,GTX-A,서해선,경춘선,경강선,의정부선,우이신설선
+          BUDGET_MIN: '70'
+        run: |
+          [ -n "$TAGO_KEY" ] || { echo "::error::TAGO_KEY 시크릿이 비어 있습니다"; exit 1; }
+          node tools/collect-tt/collect.js
+      - name: KRIC(D1) 내보내기
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          PAIRS: 'DG:1,DG:2,DG:3,DJ:1,GJ:1,SL:L1,AR:A1,KR:K1,KR:K2,KR:K4'
+        run: node tools/collect-tt/export_kric.js
+      - name: 부산교통공사 수집
+        run: node tools/collect-tt/busan.js
+      - name: 달라진 역만 반영(안전장치 포함)
+        run: |
+          node tools/collect-tt/refresh.js --base $OUT/base.json --out $OUT/final.json --report $OUT/report.md \
+            --tago $OUT/raw.json --kric $OUT/kric.json --kric-fill $OUT/kric.json --busan $OUT/busan.json
+          cat $OUT/report.md >> "$GITHUB_STEP_SUMMARY"
+          echo "CHANGED=$(cat $OUT/changed.txt)" >> "$GITHUB_ENV"
+      - name: 내장 파일 다시 만들고 시험
+        if: env.CHANGED == 'yes'
+        run: |
+          node tools/route-speed/gen_nt_tt.js $OUT/final.json
+          node test/next_train_attach.ui.test.js
+          node test/ride_eta.test.js
+      - name: main 에 커밋
+        if: env.CHANGED == 'yes' && inputs.dry != true
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@users.noreply.github.com"
+          git add engine/next-train-tt.js
+          git commit -m "data: 지하철 시각표 분기 자동 갱신" -m "$(cat $OUT/report.md)"
+          for i in 1 2 3; do git pull -q --rebase origin main && git push -q origin HEAD:main && break || sleep 5; done
+      - name: Cloudflare KV 에 올리기
+        if: env.CHANGED == 'yes' && inputs.dry != true
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+        run: |
+          set -e
+          B="https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/storage/kv/namespaces/$KV_NS/values/nt:bundle:v1"
+          curl -sf -X PUT "$B" -H "Authorization: Bearer $CF_API_TOKEN" --data-binary @$OUT/final.json >/dev/null || { echo "::error::KV 쓰기 실패"; exit 1; }
+          GOT=$(curl -sf "$B" -H "Authorization: Bearer $CF_API_TOKEN" | wc -c)
+          WANT=$(wc -c < $OUT/final.json)
+          [ "$GOT" = "$WANT" ] || { echo "::error::KV 읽기 크기 불일치 $GOT != $WANT"; exit 1; }
+          echo "KV 반영 완료 (${WANT} bytes)"
+      - name: 확인 필요 노선이 있으면 이슈로 알림
+        if: inputs.dry != true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -s $OUT/rejected.txt ]; then
+            BODY="분기 시각표 자동 갱신에서 아래 노선은 안전장치에 걸려 반영하지 않고 옛 기록을 그대로 두었습니다.\n\n$(sed 's/^/- /' $OUT/rejected.txt)\n\n(실행: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)"
+            gh api repos/$GITHUB_REPOSITORY/issues -f title="시각표 자동 갱신: 확인 필요 노선 $(wc -l < $OUT/rejected.txt)개" -f body="$(printf "$BODY")" >/dev/null
+          fi

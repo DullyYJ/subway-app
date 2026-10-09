@@ -10,13 +10,17 @@ var NT_TTL_MS = 6 * 3600 * 1000;
 var NT_MAX_WAIT_MIN = 30;         // 앱의 옛 _TT_MAX_WAIT — 대기가 이보다 길면 반영하지 않는다(막차 뒤·시각표 이상)
 var _NT = null, _NT_AT = 0, _NT_P = null, _NT_FAIL_AT = 0, _NT_WHY = '', _NT_SRC = '';   // _NT_WHY: 마지막 실패 사유 · _NT_SRC: 지금 쓰는 시각표의 출처(kv|svc|embed) — 진단용
 
+function ntEmbedVer() {
+  try { var m = /"version"\s*:\s*"([^"]*)"/.exec(String(NT_TT_EMBED).slice(0, 400)); return m ? m[1] : ''; } catch (e) { return ''; }
+}
+
 async function ntEnsure(env) {
   if (_NT && Date.now() - _NT_AT < NT_TTL_MS) return _NT;
   if (_NT_P) return _NT_P;
   if (!_NT && _NT_FAIL_AT && Date.now() - _NT_FAIL_AT < 30000) return null;   // 직전에 실패했으면 30초는 다시 시도하지 않는다
   _NT_P = (async function () {
     var bundle = null, txt = null, why = [], src = '';
-    // 1) KV 캐시(서비스 바인딩으로 받아 둔 더 새로운 것)  2) 서비스 바인딩 env.TT_SVC (대시보드에서 gildongmu-tt 를 TT_SVC 로 연결했을 때)  3) 엔진에 내장된 번들
+    // 1) KV 캐시(분기 자동 갱신이 올린 것, 또는 서비스 바인딩으로 받아 둔 것)  2) 서비스 바인딩 env.TT_SVC (대시보드에서 gildongmu-tt 를 TT_SVC 로 연결했을 때)  3) 엔진에 내장된 번들
     //    ※ gildongmu-tt 의 workers.dev 주소를 fetch 로 직접 부르면 같은 계정 워커끼리라 404 가 와서 쓰지 않는다.
     try { if (env && env.ROWS_KV) txt = await env.ROWS_KV.get(NT_KV_KEY, { cacheTtl: 3600 }); } catch (e) { why.push('kvget:' + String(e && e.message || e).slice(0, 80)); }
     if (txt) { try { bundle = JSON.parse(txt); src = 'kv'; } catch (e) { bundle = null; why.push('kvparse'); } }
@@ -30,6 +34,8 @@ async function ntEnsure(env) {
         } else { why.push('svc:' + r.status); }
       } catch (e) { bundle = null; why.push('svcx:' + String(e && e.message || e).slice(0, 120)); }
     }
+    // 내장본보다 오래된 번들(옛 KV·옛 서비스 응답)은 쓰지 않는다 — 버전 문자열(tt-날짜+tago-날짜)을 사전순으로 비교
+    if (bundle && bundle.data) { var ev = ntEmbedVer(); if (ev && String(bundle.version || '') < ev) { why.push('older:' + src + ':' + String(bundle.version || '').slice(0, 40)); bundle = null; src = ''; } }
     if (!bundle || !bundle.data) {
       bundle = null; src = '';
       try { bundle = JSON.parse(NT_TT_EMBED); src = 'embed'; } catch (e) { bundle = null; why.push('embed:' + String(e && e.message || e).slice(0, 80)); }
