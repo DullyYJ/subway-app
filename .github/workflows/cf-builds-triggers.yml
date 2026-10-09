@@ -1,0 +1,47 @@
+# Cloudflare Workers Builds(저장소 푸시 → 자동 배포) 연결을 보거나 끈다 — 수동 실행. 결과: data/cf-builds 브랜치(메인·APK 빌드와 무관).
+#   action=list   : 연결 목록만 본다(아무것도 바꾸지 않음)
+#   action=delete : trigger_id 를 정확히 적은 연결 하나만 끊는다
+name: Cloudflare builds triggers
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'list 또는 delete'
+        required: true
+        default: 'list'
+      worker_tag:
+        description: '워커 태그(route-v2 = 3e22acd7c5ff4273a507c2ba54c41a22)'
+        required: true
+        default: '3e22acd7c5ff4273a507c2ba54c41a22'
+      trigger_id:
+        description: 'delete 일 때 끊을 트리거 ID'
+        required: false
+        default: ''
+permissions:
+  contents: write
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: 실행
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+        run: node tools/cf/builds_triggers.js "${{ inputs.action }}" "${{ inputs.worker_tag }}" "${{ inputs.trigger_id }}"
+      - name: 결과를 data/cf-builds 브랜치에 올림
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@users.noreply.github.com"
+          git checkout --orphan data-cf-builds
+          git rm -rf --cached . >/dev/null 2>&1 || true
+          mkdir -p /tmp/keep && cp out-cf/* /tmp/keep/
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp /tmp/keep/* .
+          git add -A
+          git commit -m "cf builds ($(date -u +%FT%TZ))"
+          git push -f origin HEAD:refs/heads/data/cf-builds
