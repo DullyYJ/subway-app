@@ -15,14 +15,13 @@
 // 앱과 다른 점: 날짜 구분(평일/휴일)과 기준 시각은 요청의 baseMs 에서 엔진이 정한다(앱은 기준시각 설정을 반영해 같은 값을 보냈다).
 'use strict';
 
-var NT_HOLIDAYS = ['1-1','2-16','2-17','2-18','3-1','3-2','5-5','5-24','6-6','8-15','9-24','9-25','9-26','10-3','10-5','10-9','12-25'];
+// 공휴일은 engine/holidays.js(holIs) 가 단일 출처다 — KV 로 자동 갱신되고, 자료가 없는 해는 양력 고정 공휴일만 인정한다.
 
 // 기준 시각(ms) → KST 기준 { nowMin(0~1439), isHol(주말·공휴일), dayCode('DAY'|'SAT'|'SUN') }
 function ntDayInfo(baseMs) {
   var d = new Date(baseMs + 9 * 3600000);
   var dow = d.getUTCDay();
-  var key = (d.getUTCMonth() + 1) + '-' + d.getUTCDate();
-  var hol = NT_HOLIDAYS.indexOf(key) >= 0;
+  var hol = (typeof holIs === 'function') ? holIs(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate()) : false;
   return {
     nowMin: d.getUTCHours() * 60 + d.getUTCMinutes(),
     isHol: dow === 0 || dow === 6 || hol,
@@ -828,4 +827,4 @@ function ntCreate(DATA) {
   };
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { ntCreate: ntCreate, ntDayInfo: ntDayInfo, NT_HOLIDAYS: NT_HOLIDAYS };
+if (typeof module !== 'undefined' && module.exports) module.exports = { ntCreate: ntCreate, ntDayInfo: ntDayInfo };

@@ -70,7 +70,12 @@ const ri = (a, b) => a + Math.floor(rnd() * (b - a + 1));
   }, cs);
   const appRes = await appWaits(cases);
   await t('기기 시간대가 KST (비교 전제)', async () => { assert.strictEqual(await p.evaluate(() => new Date(0).getTimezoneOffset()), -540); });
-  await t('앱의 공휴일 목록 = 엔진 공휴일 목록', async () => { assert.deepStrictEqual(W.NT_HOLIDAYS.slice().sort(), (await p.evaluate(() => _HOLIDAYS_2026.slice())).sort()); });
+  await t('앱의 공휴일(내장값) = 엔진 공휴일 — 2026~2028 모든 날짜', async () => {
+    const days = []; for (let t0 = Date.UTC(2026, 0, 1); t0 < Date.UTC(2029, 0, 1); t0 += 86400000) { const d = new Date(t0); days.push([d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate()]); }
+    const appH = await p.evaluate(ds => ds.map(x => _holName(x[0], x[1], x[2])), days);
+    const bad = days.filter((x, i) => (W.holName(x[0], x[1], x[2]) || null) !== (appH[i] || null));
+    assert.strictEqual(bad.length, 0, bad.slice(0, 5).map(x => x.join('-')).join(','));
+  });
 
   await t('ttWaitMs 가 앱의 옛 타임라인 계산과 같다(' + cases.length + '개 경로)', async () => {
     let bad = 0, nWait = 0, nSub = 0; const samples = [];

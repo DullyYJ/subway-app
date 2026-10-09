@@ -15,6 +15,7 @@ function ntEmbedVer() {
 }
 
 async function ntEnsure(env) {
+  try { if (typeof holEnsure === 'function') await holEnsure(env); } catch (e) { }   // 공휴일(KV)도 같이 최신으로 — 실패해도 지금 가진 것을 쓴다
   if (_NT && Date.now() - _NT_AT < NT_TTL_MS) return _NT;
   if (_NT_P) return _NT_P;
   if (!_NT && _NT_FAIL_AT && Date.now() - _NT_FAIL_AT < 30000) return null;   // 직전에 실패했으면 30초는 다시 시도하지 않는다
