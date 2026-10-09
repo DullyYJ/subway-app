@@ -21,6 +21,10 @@ const ALIAS = {
   '대구1호선': { any: ['대구'], num: '1' }, '대구2호선': { any: ['대구'], num: '2' }, '대구3호선': { any: ['대구'], num: '3' },
   '광주1호선': { any: ['광주'], num: '1' }, '대전1호선': { any: ['대전'], num: '1' },
 };
+// COVERED_MODE=1: 이미 시각표가 있는 노선(서울 1~9·인천·김포)을 TAGO 로 받아 기존 번들과 대조하기 위한 시험 수집.
+//   노선 이름이 '1호선'처럼 도시 구분이 없어, 다른 도시 접두(MTRBS 부산·MTRDJ 대전·MTRDG 대구·MTRGJ 광주)만 빼고 모두 받는다. 어느 노선인지는 대조 단계에서 역 ID 접두로 가린다.
+const COVERED_MODE = !!process.env.COVERED_MODE;
+const OTHER_CITY = /^MTR(BS|DJ|DG|GJ)/;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 let calls = 0, fails = 0; const T0 = Date.now(); const BUDGET = (+process.env.BUDGET_MIN || 40) * 60000; const left = () => Date.now() - T0 < BUDGET;
 let lastErr = ''; const errs = {}; setInterval(() => console.log('진행 calls', calls, 'fails', fails, '경과(분)', Math.round((Date.now() - T0) / 60000), lastErr), 60000).unref();
@@ -42,7 +46,13 @@ async function api(op, params) {
   }
 }
 async function pool(items, n, fn) { let i = 0; const out = new Array(items.length); await Promise.all(Array.from({ length: n }, async () => { while (i < items.length) { const k = i++; out[k] = await fn(items[k], k); } })); return out; }
-function routeMatches(line, routeName) {
+function routeMatches(line, routeName, id) {
+  if (COVERED_MODE) {
+    if (OTHER_CITY.test(id || '')) return false;
+    const r = String(routeName || '').replace(/\s+/g, ''); const m = line.match(/(\d)호선$/);
+    if (line === '김포골드라인') return r.includes('김포');
+    return !!m && r === m[1] + '호선';
+  }
   const a = ALIAS[line]; if (!a) return false; const r = String(routeName || '').replace(/\s+/g, '');
   if (a.not && a.not.some(x => r.includes(x))) return false;
   if (!a.any.some(x => r.includes(x))) return false;
@@ -50,7 +60,7 @@ function routeMatches(line, routeName) {
   return true;
 }
 (async () => {
-  const lines = Object.keys(NT_STNORDER).filter(l => !COVERED.has(l) && (!only.length || only.includes(l)));
+  const lines = Object.keys(NT_STNORDER).filter(l => (COVERED_MODE ? COVERED.has(l) : !COVERED.has(l)) && (!only.length || only.includes(l)));
   const names = {}; lines.forEach(l => NT_STNORDER[l].forEach(s => { (names[nz(s)] = names[nz(s)] || new Set()).add(l); }));
   const nameList = Object.keys(names);
   console.log('대상 노선', lines.length, '역 이름', nameList.length);
@@ -64,7 +74,7 @@ function routeMatches(line, routeName) {
   fs.writeFileSync(path.join(OUT, 'stations.json'), JSON.stringify(stations));
   // 2) 우리 노선과 맞는 후보 → 시각표
   const jobs = [];
-  for (const nm of nameList) for (const c of stations[nm]) for (const l of names[nm]) if (routeMatches(l, c.route)) jobs.push({ line: l, nm, id: c.id, route: c.route });
+  for (const nm of nameList) for (const c of stations[nm]) for (const l of names[nm]) if (routeMatches(l, c.route, c.id)) jobs.push({ line: l, nm, id: c.id, route: c.route });
   const seen = new Set(), uniq = jobs.filter(j => { const k = j.id; if (seen.has(k)) return false; seen.add(k); return true; });
   console.log('시각표 조회 대상 후보', uniq.length);
   const raw = {};
