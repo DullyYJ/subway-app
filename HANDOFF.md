@@ -536,3 +536,10 @@
 - **앱(`www/index.html`)**: 호선 방을 열면 6시간 안에 받아 둔 사본(`lrc:<호선>`, 최근 60줄)을 먼저 그리고 새 글만 이어 붙임 · `/lroom` 요청 12초 제한(응답 없을 때 busy 가 안 풀리던 문제).
 - **배포**: board-writer 는 대시보드에서 붙여 넣고 Deploy(YJ). 앱은 main push → APK.
 - **미확인**: 실제 단축 폭은 이 환경에서 workers.dev 에 못 붙어 측정하지 못했다. 배포 뒤 앱에서 체감 확인.
+
+### 게시글·댓글·실시간소통이 밤새 멈추고 문장이 깨지던 문제 (2026-10-10)
+- **원인(D1 실측)**: ①무료 Gemini 키는 `gemini-2.5-flash-lite` 하루 약 20회뿐(이 키에서 2.5-flash·2.0-flash 는 404). 소통방 18개가 4시간치씩 미리 만드느라 오후 16시 한도 초기화 직후 16회를 써 버리고, 21:30경부터 다음 날 오후까지 429 → 글·댓글·소통방 모두 정지(템플릿 폴백은 6개월 중복 원장에 걸려 0개). ②temperature 1.15 가 flash-lite 에서 "치맥… 🍗… 🤤" 같은 말줄임표 조각을 만들었다.
+- **서버(`board-writer/index.js`)**: 한도가 따로 잡히는 Gemma(`gemma-3-27b-it`, `-12b-it`)를 예비 모델에 추가, 소통방 대량 생성은 Gemma 먼저(`GEM_BULK_ORDER`) · gemini-* 는 24시간 `GEMINI_TALK_BUDGET`=8회까지만 소통방에 씀(나머지는 게시글·댓글 몫, 사용량은 bw_diag `gemuse`) · 400·403 도 다음 모델로 넘어감 · ListModels 로 이 키에서 쓸 수 있는 모델 탐색(bw_diag `gemmodels`, 3시간에 한 번) · temperature 0.9~0.95 · `parseJsonArr`(설명 문구가 붙어도 JSON 추출) · `aiJunk`(말줄임표 2개 이상·이모지 2개 이상·글자 없음 거름, 소통방·글·댓글 모두) · 소통방 미리 만드는 길이 4→6시간, 시간당 최소 9→6개, 한 번에 최대 60개 · 읽을 때도 AI 글 중 말줄임표 2개 이상은 숨김(`LR_HIDDEN_SQL`, 행은 지우지 않음, 이용자 글은 대상 아님).
+- **시험**: `test/board_writer_gemma.test.mjs`(flash-lite 429 → Gemma 로 459개 생성, 깨진 문장 저장 안 됨, 기존 깨진 AI 글 /lroom·/talks 에서 숨김, 이용자 글 유지) + 기존 16개·speed 통과.
+- **배포 뒤 확인**: `SELECT k,v FROM bw_diag WHERE k IN ('gemmodels','gemuse','linetalks') ORDER BY ts DESC LIMIT 10` — gemmodels 에 gemma 가 있고 linetalks.gem.model 이 gemma 인지. 이 키에서 Gemma 도 404/429 면 같은 정지가 반복되므로 Gemini 유료 전환(결제 설정) 또는 다른 키가 필요.
+- **미확인**: 이 환경에서 Gemini API 에 직접 못 붙어 Gemma 가 이 키에서 실제로 응답하는지는 확인하지 못했다(모의 응답으로만 시험).
