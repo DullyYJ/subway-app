@@ -437,3 +437,15 @@
 - s13 부터 번들(`gildongmu-tt` 의 TT_BUNDLE, tt-2026-09-06)을 엔진에 **내장**(`engine/next-train-tt.js`, 생성: `node tools/route-speed/gen_nt_tt.js <번들.json>`). 우선순위: KV(`nt:bundle:v1`) → 서비스 바인딩 `env.TT_SVC` → 내장본.
 - gildongmu-tt 시각표를 새로 배포하면: 새 번들 JSON 을 위 스크립트로 다시 내장하고 엔진을 다시 배포한다(또는 route-v2 에 서비스 바인딩 `TT_SVC` → gildongmu-tt 를 연결하면 엔진 재배포 없이 6시간 안에 반영된다).
 - 확인: `GET /next-train?op=info&line=2호선&from=강남&to=역삼` 응답의 `ver`(번들 버전)·`src`(embed|kv|svc).
+
+### 시각표 확장 (s14, 2026-10-09) — 수도권 광역·지방 도시철도 역별 시각표
+- 번들(`engine/next-train-tt.js` 에 내장)에 **520역** 추가: 신분당선·수인분당선·에버라인·경의중앙선·GTX-A·서해선·경춘선·경강선·의정부선·우이신설선(TAGO), 대구1~3·대전1·광주1·신림선·공항철도(KRIC, D1 `kric_tt`), 부산1~4호선(부산교통공사 웹). 서울 1~9호선 등 기존 기록은 그대로(`RT[key]` 가 이미 있으면 건드리지 않음).
+- 출처·수집 도구(모두 GitHub Actions 수동 실행, 결과는 orphan 브랜치):
+  - TAGO: `collect-subway-tt.yml` (tools/collect-tt/collect.js, 비밀 TAGO_KEY) → `data/subway-tt`
+  - KRIC(D1 내보내기): `export-kric-tt.yml` → `data/kric-tt`
+  - 부산: `collect-busan.yml` (tools/collect-tt/busan.js; POST view.do 에 `updown=0|1` 로 양방향, 행을 파싱해 저장) → `data/busan-tt`
+  - 가져오기: `git fetch -q origin +data/<이름>:refs/remotes/origin/<이름>` (force-push 라 `+` 필요) → `git show origin/<이름>:<파일>`
+- 변환: `node tools/collect-tt/build_tt.js <기존번들.json> <출력.json> --tago a.json b.json --kric k1.json k2.json --busan busan.json` → `validate_tt.js`(방향 일관성·낮 시간 대기시간) → `node tools/route-speed/gen_nt_tt.js <출력.json>` 로 내장 → 엔진 빌드(make.sh; deploy/speed 의 patch_*.js 는 repo tools/route-speed 것으로 먼저 복사).
+- 번들 형식 확장: `_REAL_TT[노선|역] = {D:평일, W:일·공휴일, S:토요일(자료 있을 때만)}`; 엔진은 토요일에 S 가 있으면 S, 없으면 W. `_TT_ORIENT[노선]={order:[역…], fwd:'상'|'하'}` — 'order 번호가 커지는 쪽으로 가는 열차'의 방향 키. 있으면 `_ttSegDir` 가 시각표 상관(xcorr) 대신 이것으로 방향을 정한다(밀집 노선에서 xcorr 가 불안정).
+- 알려진 빈칸(엔진은 파생/격자 시각으로 대체): 수인분당 청량리·신길온천, 경의중앙 지평·문산(토)·운천·임진강, 경춘 광운대, 대전 토요일 자료 없음(일요일 대용), 경의중앙은 갈라지는 노선이라 방향을 xcorr 로 정함.
+- 시각표는 스냅샷(2026-10-09). 개정되면 위 절차로 다시 수집·내장·배포하거나 TT_SVC 바인딩 사용.

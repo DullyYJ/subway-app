@@ -120,6 +120,29 @@ const ri = (a, b) => a + Math.floor(rnd() * (b - a + 1));
     assert.ok(leg.nextTrain && leg.nextTrain.dir); assert.strictEqual(leg.ttWaitMs, undefined);
   });
 
+  // ── TAGO·KRIC 로 채운 노선: 방향 힌트(_TT_ORIENT)와 토요일(S) 시각표 ──
+  await t('방향 힌트(_TT_ORIENT)가 있는 노선은 시각표 상관보다 힌트로 방향을 정한다', async () => {
+    const mk = (orient) => ntCreate({ _REAL_TT: { 'T선|가': { D: { '상': [600, 10], '하': [601, 10] } }, 'T선|나': { D: { '상': [602, 10], '하': [603, 10] } }, 'T선|다': { D: { '상': [604, 10], '하': [605, 10] } } }, _TT_ORIENT: orient, STNORDER: { 'T선': ['가', '나', '다'] } });
+    const ms = Date.UTC(2026, 9, 14, 3, 0);
+    const a = mk({ 'T선': { order: ['가', '나', '다'], fwd: '하' } });
+    assert.strictEqual(a.segDir('T선', [{ stationName: '가' }, { stationName: '다' }], ms), '하행');
+    assert.strictEqual(a.segDir('T선', [{ stationName: '다' }, { stationName: '가' }], ms), '상행');
+    assert.strictEqual(a.segDir('T선', [{ stationName: '나' }, { stationName: '다' }, { stationName: '나' }].slice(0, 2), ms), '하행');
+    const b = mk({ 'T선': { order: ['가', '나', '다'], fwd: '상' } });
+    assert.strictEqual(b.segDir('T선', [{ stationName: '가' }, { stationName: '나' }], ms), '상행');
+    // 힌트에 없는 역이면 기존 방식(상관 등)으로 넘어간다 — 오류 없이 값이 나오거나 null
+    const c = mk({ 'T선': { order: ['가', '나'], fwd: '하' } });
+    c.segDir('T선', [{ stationName: '가' }, { stationName: '다' }], ms);
+  });
+  await t('토요일(S) 시각표: 토요일에는 S, 일요일·공휴일은 W, 평일은 D (S 가 없으면 W)', async () => {
+    const rec = { D: { '하': [600, 10] }, W: { '하': [700, 10] }, S: { '하': [800, 10] } }, rec2 = { D: { '하': [600, 10] }, W: { '하': [700, 10] } };
+    const nt2 = ntCreate({ _REAL_TT: { 'T선|가': rec, 'U선|가': rec2 } });
+    const wd = Date.UTC(2026, 9, 14, 3, 0), sat = Date.UTC(2026, 9, 17, 3, 0), sun = Date.UTC(2026, 9, 18, 3, 0);
+    assert.deepStrictEqual(nt2.officialTimes('T선', '가', '하', wd), [600, 610]);
+    assert.deepStrictEqual(nt2.officialTimes('T선', '가', '하', sat), [800, 810]);
+    assert.deepStrictEqual(nt2.officialTimes('T선', '가', '하', sun), [700, 710]);
+    assert.deepStrictEqual(nt2.officialTimes('U선', '가', '하', sat), [700, 710]);
+  });
   // ── ntEnsure: KV · 서비스 바인딩 · 내장본 ──
   const bundleTxt = JSON.stringify(bundle);
   const mkKV = (init) => { const m = new Map(init || []); return { m, gets: 0, get: async function (k) { this.gets++; return m.has(k) ? m.get(k) : null; }, put: async (k, v, o) => { m.set(k, v); m.opts = o; } }; };

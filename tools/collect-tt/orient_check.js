@@ -5,7 +5,7 @@ const W = require(path.join(__dirname, '..', '..', 'test', 'helpers', 'nt_load')
 const bundle = JSON.parse(fs.readFileSync(process.argv[2], 'utf8')); const d = bundle.data;
 const order = JSON.parse(fs.readFileSync(process.argv[2].replace(/\.json$/, '') + '.order.json', 'utf8'));
 const nz = n => String(n || '').replace(/\(.*?\)/g, '').replace(/역$/, '').replace(/\s+/g, '').trim();
-const nt = W.ntCreate({ _REAL_TT: d._REAL_TT, _GIMPO_TT: d._GIMPO_TT, _BUILTIN_TT: d._BUILTIN_TT, LINE_SCHEDULE: d.LINE_SCHEDULE, _REAL_SEG: d._REAL_SEG, _TT_ORDER_HARD: d._TT_ORDER_HARD, _INCHEON_TT: W.NT_INCHEON_TT, STNORDER: W.NT_STNORDER });
+const nt = W.ntCreate({ _REAL_TT: d._REAL_TT, _GIMPO_TT: d._GIMPO_TT, _BUILTIN_TT: d._BUILTIN_TT, LINE_SCHEDULE: d.LINE_SCHEDULE, _REAL_SEG: d._REAL_SEG, _TT_ORDER_HARD: d._TT_ORDER_HARD, _TT_ORIENT: d._TT_ORIENT, _INCHEON_TT: W.NT_INCHEON_TT, STNORDER: W.NT_STNORDER });
 const rec = {};   // line -> nm -> {U:{end:count}, D:{…}}
 for (const f of process.argv.slice(3)) { const raw = JSON.parse(fs.readFileSync(f)); for (const id in raw) { const r = raw[id]; const o = ((rec[r.line] = rec[r.line] || {})[r.nm] = {}); for (const ud of ['U', 'D']) { o[ud] = {}; (r.tt['01' + ud] || []).forEach(x => { const e = nz(x[2]); o[ud][e] = (o[ud][e] || 0) + 1; }); } } }
 const MSS = [Date.UTC(2026, 9, 14, 4, 0), Date.UTC(2026, 9, 17, 4, 0), Date.UTC(2026, 9, 18, 4, 0)];   // 평일·토·일

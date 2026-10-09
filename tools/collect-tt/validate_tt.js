@@ -5,7 +5,7 @@ const W = require(path.join(__dirname, '..', '..', 'test', 'helpers', 'nt_load')
 const bundle = JSON.parse(fs.readFileSync(process.argv[2], 'utf8')); const d = bundle.data;
 const idOrder = fs.existsSync(process.argv[2].replace(/\.json$/, '') + '.order.json') ? JSON.parse(fs.readFileSync(process.argv[2].replace(/\.json$/, '') + '.order.json', 'utf8')) : {};
 const only = (process.argv[3] || '').split(',').filter(Boolean);
-const nt = W.ntCreate({ _REAL_TT: d._REAL_TT, _GIMPO_TT: d._GIMPO_TT, _BUILTIN_TT: d._BUILTIN_TT, LINE_SCHEDULE: d.LINE_SCHEDULE, _REAL_SEG: d._REAL_SEG, _TT_ORDER_HARD: d._TT_ORDER_HARD, _INCHEON_TT: W.NT_INCHEON_TT, STNORDER: W.NT_STNORDER });
+const nt = W.ntCreate({ _REAL_TT: d._REAL_TT, _GIMPO_TT: d._GIMPO_TT, _BUILTIN_TT: d._BUILTIN_TT, LINE_SCHEDULE: d.LINE_SCHEDULE, _REAL_SEG: d._REAL_SEG, _TT_ORDER_HARD: d._TT_ORDER_HARD, _TT_ORIENT: d._TT_ORIENT, _INCHEON_TT: W.NT_INCHEON_TT, STNORDER: W.NT_STNORDER });
 const nz = n => String(n || '').replace(/\(.*?\)/g, '').replace(/역$/, '').replace(/\s+/g, '').trim();
 const lines = Object.keys(W.NT_STNORDER).filter(l => Object.keys(d._REAL_TT).some(k => k.startsWith(l + '|')) && (!only.length || only.includes(l)) && !/^[1-9]호선$|^인천/.test(l));
 const KST = (y, mo, dd, h, mi) => Date.UTC(y, mo - 1, dd, h - 9, mi);

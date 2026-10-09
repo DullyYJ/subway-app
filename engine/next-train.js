@@ -34,6 +34,7 @@ function ntCreate(DATA) {
   var window = {};   // 앱 코드가 캐시를 window 에 두던 것을 그대로 쓰기 위한 지역 객체
   var _REAL_TT = DATA._REAL_TT || {}, _GIMPO_TT = DATA._GIMPO_TT || {}, _INCHEON_TT = DATA._INCHEON_TT || {};
   var _BUILTIN_TT = DATA._BUILTIN_TT || {}, LINE_SCHEDULE = DATA.LINE_SCHEDULE || {};
+  var _TT_ORIENT = DATA._TT_ORIENT || {};     // 선형 노선의 방향 힌트 { 노선: { order:[역…], fwd:'상'|'하' } } — fwd = order 번호가 커지는 쪽으로 가는 열차의 시각표 키(TAGO·KRIC 자료로 정해 둔 것)
   var _REAL_SEG = DATA._REAL_SEG || {}, _TT_ORDER_HARD = DATA._TT_ORDER_HARD || {};
   var STNDB;   // 번들에 없는 지방 노선의 역 순서(앱의 STNDB 와 같은 순서): DATA.STNORDER = { 노선: [역…] }
   if (DATA.STNORDER) {
@@ -359,6 +360,16 @@ function ntCreate(DATA) {
       if(n) names.push(n);
     }
     if(names.length < 2) return null;
+    // ⓪ 방향 힌트(수집 자료에서 정한 노선 순서 + 번호가 커지는 쪽의 시각표 키) — 있는 노선은 상관 계산보다 우선한다(분 단위 시각이 겹쳐 흔들리는 일을 막는다)
+    var _or = _TT_ORIENT[lineName];
+    if(_or && _or.order && _or.fwd){
+      if(!_or.idx){ _or.idx = {}; for(var oi=0; oi<_or.order.length; oi++) _or.idx[_ttNm(_or.order[oi])] = oi; }
+      var _ia = _or.idx[names[0]], _ib = _or.idx[names[names.length-1]];
+      if(_ia != null && _ib != null && _ia !== _ib){
+        var _ok = (_ib > _ia) ? _or.fwd : (_or.fwd === '상' ? '하' : '상');
+        return (_ok === '상') ? '상행' : '하행';
+      }
+    }
     // ① 상호상관(가장 신뢰도 높음)
     var _xk = _ttXcorrKey(lineName, names[0], names[names.length-1], isHol);
     if(!_xk && names.length > 2) _xk = _ttXcorrKey(lineName, names[0], names[1], isHol);

@@ -8,13 +8,14 @@
 //   · _TT_ORIENT[노선] = { order:[역…], fwd:'상'|'하' } — 선형 노선에서 'order 번호가 커지는 쪽으로 가는 열차'의 키. 엔진은 이 노선의 방향을 시각표 상관 대신 이것으로 정한다.
 const fs = require('fs');
 const argv = process.argv.slice(2); const inP = argv[0], outP = argv[1];
-const tagoFiles = [], kricFiles = []; let mode = null;
-for (const a of argv.slice(2)) { if (a === '--tago') mode = tagoFiles; else if (a === '--kric') mode = kricFiles; else if (mode) mode.push(a); }
+const tagoFiles = [], kricFiles = [], busanFiles = []; let mode = null;
+for (const a of argv.slice(2)) { if (a === '--tago') mode = tagoFiles; else if (a === '--kric') mode = kricFiles; else if (a === '--busan') mode = busanFiles; else if (mode) mode.push(a); }
 const bundle = JSON.parse(fs.readFileSync(inP, 'utf8'));
 const { NT_STNORDER } = require('../../engine/next-train-data.js');
 const nz = n => String(n || '').replace(/\(.*?\)/g, '').replace(/역$/, '').replace(/\s+/g, '').trim();
 const RT = bundle.data._REAL_TT; bundle.data._TT_ORIENT = bundle.data._TT_ORIENT || {};
-const NONLINEAR = new Set(['경의중앙선', 'GTX-A', '서해선']);               // 갈라지거나 구간이 나뉜 노선 — 방향 힌트를 만들지 않는다(시각표 상관 사용)
+const NONLINEAR = new Set(['경의중앙선']);
+const ENDBASED = new Set(['GTX-A', '서해선']);   // TAGO 의 상/하가 구간마다 뒤집히는 노선 — 종착역 위치로 방향 키를 다시 정한다(순서는 번들 _TT_ORDER_HARD)               // 갈라지거나 구간이 나뉜 노선 — 방향 힌트를 만들지 않는다(시각표 상관 사용)
 const ORDER_FIX = { '공항철도': ['서울', '공덕', '홍대입구', '디지털미디어시티', '마곡나루', '김포공항', '계양', '검암', '청라국제도시', '영종', '운서', '공항화물청사', '인천공항1터미널', '인천공항2터미널'] };
 function toMin(s) { if (!s || s === '0' || !/^\d{6}$/.test(s)) return null; let m = (+s.slice(0, 2)) * 60 + (+s.slice(2, 4)); if (m < 180) m += 1440; return m; }
 function enc(minsArr) { const s = Array.from(new Set(minsArr.filter(x => x != null))).sort((a, b) => a - b); if (!s.length) return null; const o = [s[0]]; for (let i = 1; i < s.length; i++) o.push(s[i] - s[i - 1]); return o; }
@@ -24,15 +25,31 @@ function put(line, nm, day, dir, mins) {
   const key = line + '|' + nm; const rec = (RT[key] && RT[key].__new) ? RT[key] : (RT[key] = { __new: 1 });
   (rec[day] = rec[day] || {})[dir] = arr;
 }
+const KMAP = { 'DG|1': '대구1호선', 'DG|2': '대구2호선', 'DG|3': '대구3호선', 'DJ|1': '대전1호선', 'GJ|1': '광주1호선', 'SL|L1': '신림선', 'AR|A1': '공항철도', 'BG|B1': '부산김해경전철' };
+const KRIC_LINES = new Set();
+for (const f of kricFiles) for (const row of JSON.parse(fs.readFileSync(f, 'utf8'))) { const l = KMAP[row.opr + '|' + row.ln]; if (l && NT_STNORDER[l]) KRIC_LINES.add(l); }
 // ── TAGO ──
 const tagoStn = {};   // line -> [{nm,id,side:{U:lo/hi}}]
 const idSort = (a, b) => { const f = x => { const m = x.id.match(/^(\D*)(\d*)(\D*)(\d+)$/); return m ? [m[1] + m[2] + m[3], +m[4]] : [x.id, 0]; }; const A = f(a), B = f(b); return A[0] < B[0] ? -1 : A[0] > B[0] ? 1 : A[1] - B[1]; };
 for (const f of tagoFiles) {
   const raw = JSON.parse(fs.readFileSync(f, 'utf8'));
   for (const id in raw) {
-    const r = raw[id]; if (!NT_STNORDER[r.line] || !NT_STNORDER[r.line].some(s => nz(s) === r.nm)) continue;
+    const r = raw[id]; if (KRIC_LINES.has(r.line)) continue;       // KRIC 자료가 있는 노선은 KRIC(방향 정보가 더 정확)을 쓴다
+    if (!NT_STNORDER[r.line] || !NT_STNORDER[r.line].some(s => nz(s) === r.nm)) continue;
     const key = r.line + '|' + r.nm; if (RT[key] && !RT[key].__new) continue;     // 기존(서울 1~9호선 등) 기록은 건드리지 않는다
     const days = { D: '01', S: '02', W: '03' };
+    if (ENDBASED.has(r.line) && bundle.data._TT_ORDER_HARD[r.line]) {
+      const ord = bundle.data._TT_ORDER_HARD[r.line].map(nz), ix = {}; ord.forEach((n, i) => ix[n] = i);
+      for (const [dn, dc] of Object.entries(days)) {
+        const up = [], dn2 = [];
+        for (const ud of ['U', 'D']) for (const x of (r.tt[dc + ud] || [])) { const e = nz(x[2]); if (e === r.nm || ix[r.nm] == null) continue; const t = toMin((x[1] && x[1] !== '0') ? x[1] : x[0]);
+          if (!e) { if (ix[r.nm] === 0) dn2.push(t); else if (ix[r.nm] === ord.length - 1) up.push(t); continue; }   // 종착역 이름이 비어 있는 행 = 기점역에서 출발하는 열차(갈 수 있는 방향이 하나뿐)
+          if (ix[e] == null) continue; (ix[e] > ix[r.nm] ? dn2 : up).push(t); }
+        put(r.line, r.nm, dn, '상', up); put(r.line, r.nm, dn, '하', dn2);
+      }
+      (tagoStn[r.line] = tagoStn[r.line] || []).push({ nm: r.nm, id, ends: { U: [], D: [] }, endBased: true });
+      continue;
+    }
     for (const [dn, dc] of Object.entries(days)) for (const [ud, dk] of [['U', '상'], ['D', '하']]) {
       const rows = (r.tt[dc + ud] || []).filter(x => nz(x[2]) !== r.nm);          // 이 역이 종착인 열차는 뺀다
       put(r.line, r.nm, dn, dk, rows.map(x => toMin((x[1] && x[1] !== '0') ? x[1] : x[0])));
@@ -41,6 +58,7 @@ for (const f of tagoFiles) {
   }
 }
 for (const l in tagoStn) {
+  if (ENDBASED.has(l) && bundle.data._TT_ORDER_HARD[l]) { const order = bundle.data._TT_ORDER_HARD[l].map(nz); bundle.data._TT_ORIENT[l] = { order, fwd: '하' }; stat[l] = Object.assign(stat[l] || {}, { TAGO역: tagoStn[l].length, 방향힌트: 'O(종착역 기준, 번들 순서)' }); lineStations[l] = order; continue; }
   let st = tagoStn[l].sort(idSort); let order = st.map(s => s.nm);
   if (ORDER_FIX[l]) { const have = new Set(order); const fixed = ORDER_FIX[l].filter(n => have.has(n)); order.forEach(n => { if (!fixed.includes(n)) fixed.push(n); }); order = fixed; }
   const idx = {}; order.forEach((n, i) => idx[n] = i);
@@ -53,17 +71,16 @@ for (const l in tagoStn) {
   lineStations[l] = order;
 }
 // ── KRIC ──
-const KMAP = { 'DG|1': '대구1호선', 'DG|2': '대구2호선', 'DG|3': '대구3호선', 'DJ|1': '대전1호선', 'GJ|1': '광주1호선' };
 const kr = {};
 for (const f of kricFiles) for (const row of JSON.parse(fs.readFileSync(f, 'utf8'))) {
-  const line = KMAP[row.opr + '|' + row.ln]; if (!line) continue;
+  const line = KMAP[row.opr + '|' + row.ln]; if (!line || !NT_STNORDER[line]) continue;
   (kr[line] = kr[line] || {})[row.st] = kr[line][row.st] || { nm: nz(row.nm), days: {} };
   const o = kr[line][row.st]; const rows = String(row.data || '').split('\n').filter(Boolean).map(x => x.split(','));
   const dayKey = { '8': 'D', '9': 'W', '7': 'S' }[row.day]; if (!dayKey) continue;
   const up = [], dn = [];
   for (const r of rows) { const [trn, arr, dep, org, dst] = r; if (dst === row.st) continue;       // 종착
     const t = toMin(dep) != null ? toMin(dep) : toMin(arr); if (t == null) continue;
-    (+dst > +row.st ? dn : up).push(t); }
+    (dst > row.st ? dn : up).push(t); }       // 역 번호(문자열 순서 = 선로 순서)가 커지는 쪽으로 가는 열차 = 하
   o.days[dayKey] = { 상: up, 하: dn };
 }
 for (const line in kr) {
@@ -74,6 +91,34 @@ for (const line in kr) {
   bundle.data._TT_ORIENT[line] = { order, fwd: '하' };
   stat[line] = Object.assign(stat[line] || {}, { KRIC역: sts.length, 방향힌트: 'O(역번호 순)' });
   lineStations[line] = order;
+}
+// ── 부산교통공사(웹 수집; tools/collect-tt/busan.js) ──
+//   · busan.json = {호선:{역코드:{nm, ud:{0:{rows}, 1:{rows}}}}}. rows=[[시, 평일[[행선,분]…], 토요일[…], 일·공휴일[…]]…]. 역코드가 커지는 쪽이 하(노포·양산·대저·안평 쪽).
+//   · 방향: 행선역이 이 역보다 번호가 큰 쪽이면 하, 작은 쪽이면 상. 행선=이 역(종착)인 열차는 뺀다.
+for (const f of busanFiles) {
+  const raw = JSON.parse(fs.readFileSync(f, 'utf8'));
+  for (const ho in raw) {
+    const line = '부산' + ho + '호선'; if (!NT_STNORDER[line]) continue;
+    const nzOrder = NT_STNORDER[line].map(nz), ix = {}; nzOrder.forEach((n, i) => ix[n] = i);
+    const codes = Object.keys(raw[ho]).sort((a, b) => +a - +b), seq = [];
+    let miss = [];
+    for (const c of codes) { const o = raw[ho][c]; const nm = nz(o.nm);
+      if (ix[nm] == null) { miss.push(o.nm); continue; }
+      seq.push(nm);
+      const acc = { D: { 상: [], 하: [] }, S: { 상: [], 하: [] }, W: { 상: [], 하: [] } };   // 행선이 적힌 행
+      const blk = { D: { 상: [], 하: [] }, S: { 상: [], 하: [] }, W: { 상: [], 하: [] } };   // 행선이 빈 행(페이지 방향 라벨로 판정)
+      for (const ud of ['0', '1']) { const p = o.ud && o.ud[ud]; if (!p || !p.rows) continue; const onDest = nz(String(p.on || '').replace(/행$/, ''));
+        for (const [hh, ...cols] of p.rows) { const h = +hh; const base = h < 3 ? h + 24 : h;
+          cols.forEach((arr, ci) => { const dn = ['D', 'S', 'W'][ci]; for (const [dest, mm] of arr) { const e = nz(dest) || onDest; if (e === nm || ix[e] == null) continue; (nz(dest) ? acc : blk)[dn][ix[e] > ix[nm] ? '하' : '상'].push(base * 60 + (+mm)); } }); } }
+      const term = ix[nm] === 0 || ix[nm] === nzOrder.length - 1;   // 종착 역의 빈 행은 (안평·대저처럼) 같은 출발을 되풀이하는 경우와 (수영·미남처럼) 나머지 출발인 경우가 있다 — 행선이 적힌 출발 수가 빈 행 이상이면 되풀이로 보고 뺀다
+      for (const dn of ['D', 'S', 'W']) for (const dk of ['상', '하']) if (!(term && acc[dn][dk].length >= blk[dn][dk].length)) acc[dn][dk] = acc[dn][dk].concat(blk[dn][dk]);
+      for (const dn of ['D', 'S', 'W']) for (const dk of ['상', '하']) put(line, nm, dn, dk, acc[dn][dk]);
+    }
+    const sorted = seq.every((n, i) => i === 0 || ix[n] > ix[seq[i - 1]]);
+    bundle.data._TT_ORIENT[line] = { order: NT_STNORDER[line].map(nz).filter(n => seq.includes(n)), fwd: '하' };
+    stat[line] = Object.assign(stat[line] || {}, { 부산역: seq.length + '/' + NT_STNORDER[line].length, 순서일치: sorted, 이름불일치: miss.join(',') || '-', 방향힌트: 'O(역코드 순)' });
+    lineStations[line] = bundle.data._TT_ORIENT[line].order;
+  }
 }
 let added = 0;
 for (const k in RT) if (RT[k].__new) { delete RT[k].__new; added++; const l = k.split('|')[0]; stat[l] = stat[l] || {}; stat[l].기록 = (stat[l].기록 || 0) + 1; if (RT[k].S) stat[l].토요일 = (stat[l].토요일 || 0) + 1; }

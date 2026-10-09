@@ -38,7 +38,7 @@ async function ntEnsure(env) {
     var d = bundle.data;
     _NT = ntCreate({
       _REAL_TT: d._REAL_TT, _GIMPO_TT: d._GIMPO_TT, _BUILTIN_TT: d._BUILTIN_TT, LINE_SCHEDULE: d.LINE_SCHEDULE,
-      _REAL_SEG: d._REAL_SEG, _TT_ORDER_HARD: d._TT_ORDER_HARD, _INCHEON_TT: NT_INCHEON_TT, STNORDER: NT_STNORDER
+      _REAL_SEG: d._REAL_SEG, _TT_ORDER_HARD: d._TT_ORDER_HARD, _TT_ORIENT: d._TT_ORIENT, _INCHEON_TT: NT_INCHEON_TT, STNORDER: NT_STNORDER
     });
     _NT.version = bundle.version || null; _NT.src = src;
     _NT_AT = Date.now(); _NT_FAIL_AT = 0;
