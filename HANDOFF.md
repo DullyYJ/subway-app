@@ -529,3 +529,10 @@
 - **검증**: 합성 시험 `tools/route-speed/test/svc_board.test.mjs <엔진.js>`(낮 경고 없음 / 23:20 출발 X노선 → Y노선 재탐색 / 대안 없음 → after 경고). s17 대비 무작위 질의 비교 — 16시: 420건 차이 0, 23:10·00:40: 버스 경고가 없던 결과는 전부 동일(차이 0), 경고가 있던 결과의 약 60~65%가 경고 없는 경로로 바뀜(나머지는 대안 없음). 밤에는 재탐색 때문에 탐색 시간이 늘 수 있다(질의당 약 2배, 경고 있는 질의만).
 - **앱(`www/index.html`)**: `_svcModeText` 조사(버스가/지하철이), `_svcFootText` 신설 — "첫차 기준" 문구는 지하철에만, 버스는 엔진 state 그대로(before: 첫차 이후부터 탈 수 있어요·옮기지 않았어요 / after: 막차가 지난 시각이에요). 앱은 계산하지 않고 옮겨 적기만 한다.
 - **배포**: 엔진 s18 파일을 Cloudflare 에서 Deploy(YJ).
+
+### 게시판·실시간소통 로딩 단축 (2026-10-10)
+- **원인(코드 추적, 실측 아님)**: ①board-writer `fetch` 가 모든 요청 앞에서 `holRefresh`(D1 왕복 3번)를 기다림 — 격리가 새로 뜨는 첫 요청이 그만큼 늦음. ②`ensureLineRoom` 이 격리마다 표 만들기 3번을 차례로 기다림. ③workers.dev 에서는 엣지 캐시(`caches.default`)가 동작하지 않는다(Cloudflare 문서: 사용자 지정 도메인에서만) → `/posts`·`/talks`·`/lroom` 의 '5~30초 캐시'가 사실상 없었고 6초 폴링이 매번 D1 로 감. ④`/lroom` 은 대화·지연 제보 집계(질의 3개)를 차례로, `/posts` 는 열 목록 조회 2개를 차례로 읽음. ⑤앱 호선 방은 첫 응답까지 '불러오는 중…'만 보임(게시판·전체 대화는 이미 사본이 있었음).
+- **서버(`route-v2/board-writer/index.js`)**: 공휴일 읽기는 `ctx.waitUntil`(응답과 별개) · `ensureLineRoom` 은 batch 1번을 응답과 별개로 보내고 표가 없다는 오류가 나면 기다렸다 한 번 재시도 · `/posts`(15초)·`/talks`·`/lroom`(5초) 격리 메모리 스냅샷(글·제보·댓글 POST 때 비움) · `/lroom` 대화+집계 동시 조회, `lrAlerts` 두 질의 동시, `/posts` 열 조회 동시 · 댓글 표 색인 `idx_comments_post`(post_id, ts) 1회 생성. 시험: `test/board_writer_userposts.test.mjs`(16), 신규 `test/board_writer_speed.test.mjs`(쓰기 직후 읽기·메모리 캐시·표 없음 재시도).
+- **앱(`www/index.html`)**: 호선 방을 열면 6시간 안에 받아 둔 사본(`lrc:<호선>`, 최근 60줄)을 먼저 그리고 새 글만 이어 붙임 · `/lroom` 요청 12초 제한(응답 없을 때 busy 가 안 풀리던 문제).
+- **배포**: board-writer 는 대시보드에서 붙여 넣고 Deploy(YJ). 앱은 main push → APK.
+- **미확인**: 실제 단축 폭은 이 환경에서 workers.dev 에 못 붙어 측정하지 못했다. 배포 뒤 앱에서 체감 확인.

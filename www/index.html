@@ -33043,6 +33043,12 @@ function _chatShowPane(){
       _lr.line=sel; _lr.since=0; _lr.seen={}; _lr.busy=false;
       var sc=document.getElementById('lrScroll'); if(sc){ sc.innerHTML='<div class="lr-loading" style="margin:auto;text-align:center;color:var(--sub);font-size:13px;padding:30px 20px;">불러오는 중…</div>'; delete sc.dataset.first; }
       ['lrOfficial','lrAlert'].forEach(function(id){ var e=document.getElementById(id); if(e){ e.style.display='none'; e.innerHTML=''; } });
+      // ★ 2026-10-10 (YJ: 실시간소통 로딩이 길다): 지난번에 본 이 방의 글을 먼저 바로 보여 주고, 서버 응답이 오면 새 글만 이어 붙인다
+      //   (6시간 안에 받은 것만 — 오래된 대화를 지금 것처럼 보이지 않게). 표시만 하며 계산은 하지 않는다.
+      try{
+        var _lc=_safeLS.get('lrc:'+sel,null);
+        if(_lc && _lc.msgs && _lc.msgs.length && Date.now()-(_lc.at||0)<6*3600e3) _lrAppend(_lc.msgs);
+      }catch(e){}
     }
     _lrPoll(true);
     if(!_lr.timer) _lr.timer=setInterval(function(){
@@ -33210,14 +33216,29 @@ function _lrLoadFail(){
 function _lrPoll(first){
   if(_lr.busy || !_lr.line) return; _lr.busy=true;
   var line=_lr.line;
-  fetch(_lrBase()+'/lroom?line='+encodeURIComponent(line)+'&since='+(_lr.since||0))
+  // ★ 2026-10-10: 응답이 없으면 12초 뒤 끊고 다음 6초 주기에 다시 시도한다(예전엔 busy 가 영영 안 풀릴 수 있었다)
+  var _ctl=(typeof AbortController!=='undefined')?new AbortController():null;
+  var _to=setTimeout(function(){ try{ if(_ctl) _ctl.abort(); }catch(e){} }, 12000);
+  fetch(_lrBase()+'/lroom?line='+encodeURIComponent(line)+'&since='+(_lr.since||0), _ctl?{ signal:_ctl.signal }:undefined)
     .then(function(r){ return r.ok?r.json():null; })
     .then(function(j){
+      clearTimeout(_to);
       _lr.busy=false;
       if(line!==_lr.line) return;
       if(!j || !j.ok){ _lrLoadFail(); return; }
       _lrAppend(j.msgs||[]); _lrRenderAlert(j.alert); _lrRenderOfficial(line);
-    }).catch(function(){ _lr.busy=false; if(line===_lr.line) _lrLoadFail(); });
+      // 다음에 이 방을 열 때 바로 보여 줄 사본(최근 60줄)
+      try{
+        var ms=j.msgs||[];
+        if(ms.length){
+          var cc=_safeLS.get('lrc:'+line,null), arr=(cc && cc.msgs) ? cc.msgs.slice() : [], have={};
+          arr.forEach(function(m){ have[m.id]=1; });
+          ms.forEach(function(m){ if(!have[m.id]){ arr.push(m); have[m.id]=1; } });
+          arr.sort(function(a,b){ return (a.ts||0)-(b.ts||0); });
+          _safeLS.set('lrc:'+line, { at:Date.now(), msgs:arr.slice(-60) });
+        }
+      }catch(e){}
+    }).catch(function(){ clearTimeout(_to); _lr.busy=false; if(line===_lr.line) _lrLoadFail(); });
 }
 function _lrSend(){
   var inp=document.getElementById('lrInput'); if(!inp) return;
