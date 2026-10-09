@@ -68,6 +68,19 @@ jobs:
           curl -sf -X PUT "$B" -H "Authorization: Bearer $CF_API_TOKEN" --data-binary @$OUT/holidays.json >/dev/null || { echo "::error::KV 쓰기 실패"; exit 1; }
           GOT=$(curl -sf "$B" -H "Authorization: Bearer $CF_API_TOKEN" | wc -c); WANT=$(wc -c < $OUT/holidays.json)
           [ "$GOT" = "$WANT" ] || { echo "::error::KV 읽기 크기 불일치 $GOT != $WANT"; exit 1; }
+      - name: D1 사본(게시판 글쓰기 워커가 읽음 — 워커끼리 workers.dev 로 부를 수 없어서)
+        if: inputs.dry != true
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+        run: |
+          F=$OUT/holidays.json; [ -s "$F" ] || F=$OUT/prior-kv.json; [ -s "$F" ] || F=tools/holidays/holidays.json
+          node -e "
+            const fs=require('fs');const v=fs.readFileSync('$F','utf8');JSON.parse(v);
+            const q=(sql,params)=>fetch('https://api.cloudflare.com/client/v4/accounts/'+process.env.CF_ACCOUNT_ID+'/d1/database/c06de2e6-d6bc-401c-be32-25fde0b5f747/query',{method:'POST',headers:{authorization:'Bearer '+process.env.CF_API_TOKEN,'content-type':'application/json'},body:JSON.stringify({sql,params:params||[]})}).then(r=>r.json());
+            (async()=>{let j=await q('CREATE TABLE IF NOT EXISTS holidays_live (k TEXT PRIMARY KEY, v TEXT NOT NULL, ts INTEGER)');if(!j.success)throw new Error(JSON.stringify(j.errors));
+              j=await q(\"INSERT OR REPLACE INTO holidays_live (k,v,ts) VALUES ('nt:holidays:v1', ?1, ?2)\",[v,Date.now()]);if(!j.success)throw new Error(JSON.stringify(j.errors));console.log('D1 사본 완료',v.length,'bytes');})().catch(e=>{console.error('::warning::D1 사본 실패',String(e.message).slice(0,200));});
+          "
       - name: main 에 커밋(내장본 갱신)
         if: env.CHANGED == 'yes' && inputs.dry != true
         run: |
