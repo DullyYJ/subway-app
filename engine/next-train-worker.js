@@ -9,16 +9,16 @@ var NT_TT_URL = "https://gildongmu-tt.phg0643.workers.dev/tt";
 var NT_KV_KEY = "nt:bundle:v1";
 var NT_TTL_MS = 6 * 3600 * 1000;
 var NT_MAX_WAIT_MIN = 30;         // 앱의 옛 _TT_MAX_WAIT — 대기가 이보다 길면 반영하지 않는다(막차 뒤·시각표 이상)
-var _NT = null, _NT_AT = 0, _NT_P = null, _NT_FAIL_AT = 0;
+var _NT = null, _NT_AT = 0, _NT_P = null, _NT_FAIL_AT = 0, _NT_WHY = '';   // _NT_WHY: 마지막 실패 사유(진단용)
 
 async function ntEnsure(env) {
   if (_NT && Date.now() - _NT_AT < NT_TTL_MS) return _NT;
   if (_NT_P) return _NT_P;
   if (!_NT && _NT_FAIL_AT && Date.now() - _NT_FAIL_AT < 30000) return null;   // 직전에 실패했으면 30초는 다시 시도하지 않는다
   _NT_P = (async function () {
-    var bundle = null, txt = null;
-    try { if (env && env.ROWS_KV) txt = await env.ROWS_KV.get(NT_KV_KEY, { cacheTtl: 3600 }); } catch (e) {}
-    if (txt) { try { bundle = JSON.parse(txt); } catch (e) { bundle = null; } }
+    var bundle = null, txt = null, why = [];
+    try { if (env && env.ROWS_KV) txt = await env.ROWS_KV.get(NT_KV_KEY, { cacheTtl: 3600 }); else why.push('kv:none'); } catch (e) { why.push('kvget:' + String(e && e.message || e).slice(0, 80)); }
+    if (txt) { try { bundle = JSON.parse(txt); } catch (e) { bundle = null; why.push('kvparse'); } }
     if (!bundle || !bundle.data) {
       bundle = null;
       try {
@@ -26,11 +26,12 @@ async function ntEnsure(env) {
         if (r.ok) {
           txt = await r.text();
           bundle = JSON.parse(txt);
-          if (bundle && bundle.data && env && env.ROWS_KV) { try { await env.ROWS_KV.put(NT_KV_KEY, txt, { expirationTtl: NT_TTL_MS / 1000 }); } catch (e) {} }
-        }
-      } catch (e) { bundle = null; }
+          if (!bundle || !bundle.data) why.push('nodata');
+          else if (env && env.ROWS_KV) { try { await env.ROWS_KV.put(NT_KV_KEY, txt, { expirationTtl: NT_TTL_MS / 1000 }); } catch (e) { why.push('kvput:' + String(e && e.message || e).slice(0, 80)); } }
+        } else { why.push('fetch:' + r.status); }
+      } catch (e) { bundle = null; why.push('fetchx:' + String(e && e.message || e).slice(0, 120)); }
     }
-    if (!bundle || !bundle.data) { _NT_FAIL_AT = Date.now(); return _NT || null; }   // 실패하면 있던 것을 계속 쓴다
+    if (!bundle || !bundle.data) { _NT_FAIL_AT = Date.now(); _NT_WHY = why.join(' | ') || 'unknown'; return _NT || null; }   // 실패하면 있던 것을 계속 쓴다
     var d = bundle.data;
     _NT = ntCreate({
       _REAL_TT: d._REAL_TT, _GIMPO_TT: d._GIMPO_TT, _BUILTIN_TT: d._BUILTIN_TT, LINE_SCHEDULE: d.LINE_SCHEDULE,
@@ -125,7 +126,7 @@ async function handleNextTrain(request, env) {
   var H = { 'content-type': 'application/json; charset=utf-8', 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, POST, OPTIONS', 'access-control-allow-headers': 'content-type' };
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: H });
   var nt = await ntEnsure(env);
-  if (!nt) return new Response(JSON.stringify({ error: '시각표를 불러오지 못했습니다' }), { status: 503, headers: H });
+  if (!nt) return new Response(JSON.stringify({ error: '시각표를 불러오지 못했습니다', why: _NT_WHY }), { status: 503, headers: H });
   try {
     if (request.method === 'POST') {
       var body = await request.json();
@@ -164,4 +165,4 @@ async function handleRideEtaNT(request, env) {
   return handleRideEta(request);
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { ntEnsure: ntEnsure, ntAttachPath: ntAttachPath, ntAttachAll: ntAttachAll, ntAnswer: ntAnswer, handleNextTrain: handleNextTrain, handleRideEtaNT: handleRideEtaNT, _ntReset: function () { _NT = null; _NT_AT = 0; _NT_P = null; _NT_FAIL_AT = 0; } };
+if (typeof module !== 'undefined' && module.exports) module.exports = { ntEnsure: ntEnsure, ntAttachPath: ntAttachPath, ntAttachAll: ntAttachAll, ntAnswer: ntAnswer, handleNextTrain: handleNextTrain, handleRideEtaNT: handleRideEtaNT, _ntReset: function () { _NT = null; _NT_AT = 0; _NT_P = null; _NT_FAIL_AT = 0; _NT_WHY = ''; } };
