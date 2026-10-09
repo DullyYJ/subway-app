@@ -1,0 +1,34 @@
+# 서울 열린데이터광장 「역코드로 지하철 열차 시간표 검색」 전체 수집 — 수동 실행. 시크릿 SEOUL_TT_KEY 필요.
+#   결과(키는 가려짐): data/seoul-tt-all 브랜치(메인·APK 빌드와 무관).
+name: Collect Seoul timetable (all lines)
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: 시험 호출
+        env:
+          SEOUL_TT_KEY: ${{ secrets.SEOUL_TT_KEY }}
+        run: node tools/seoul-tt/collect.js out-seoul-tt
+      - name: 결과를 data/seoul-tt-all 브랜치에 올림
+        if: always()
+        run: |
+          [ -s out-seoul-tt/seoul_tt.json.gz ] || exit 0
+          git config user.name "github-actions"
+          git config user.email "actions@users.noreply.github.com"
+          git checkout --orphan data-seoul-all
+          git rm -rf --cached . >/dev/null 2>&1 || true
+          mkdir -p /tmp/keep && cp out-seoul-tt/* /tmp/keep/
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp /tmp/keep/* .
+          git add -A
+          git commit -m "seoul tt all ($(date -u +%FT%TZ))"
+          git push -f origin HEAD:refs/heads/data/seoul-tt-all
