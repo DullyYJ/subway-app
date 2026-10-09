@@ -3767,17 +3767,13 @@ function _metroNextTrainInfo(mins){
     var isWk = (typeof _isHolidayOrWeekend==='function') && _isHolidayOrWeekend();
 
     // ── 진행 방향 판정: 승차역·다음역의 첫차 시각차 (Bug2 _ttSegDir와 동일 원리) ──
+    // (2026-10-09: 예전 코드는 한 번도 정의된 적 없는 함수를 불러 항상 '하'가 됐다 →
+    //  Bug2 에서 만든 통합 방향 판정 _ttSegDir 를 쓴다)
     var dirKey = '하';
     try{
-      if(typeof _ttFirstOfficial==='function' && nextStn){
-        var cand = [];
-        ['상','하'].forEach(function(dk){
-          var fa = _ttFirstOfficial(line, stn, dk, isWk);
-          var fb = _ttFirstOfficial(line, nextStn, dk, isWk);
-          if(fa == null || fb == null) return;
-          if(fb - fa > 0) cand.push({ dk: dk, diff: fb - fa });
-        });
-        if(cand.length){ cand.sort(function(a,b){ return a.diff - b.diff; }); dirKey = cand[0].dk; }
+      if(typeof _ttSegDir==='function' && nextStn){
+        var _sd = _ttSegDir(line, [{ stationName: stn }, { stationName: nextStn }], isWk);
+        if(_sd === '상행') dirKey = '상'; else if(_sd === '하행') dirKey = '하';
       }
     }catch(e){}
 
@@ -8886,7 +8882,7 @@ function _stopsParamOk(lat, lng){
   if(!c || !c.stops || !c.stops.length) return false;
   if(c.ts && (Date.now() - c.ts) > _STOPS_MAX_AGE) return false;
   if(lat != null && lng != null && c.lat != null && c.lng != null){
-    try{ if(_hav(lat, lng, c.lat, c.lng) > _STOPS_NEAR_M) return false; }catch(e){}
+    try{ if(_distM(lat, lng, c.lat, c.lng) > _STOPS_NEAR_M) return false; }catch(e){}
   }
   return true;
 }

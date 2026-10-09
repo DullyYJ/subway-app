@@ -23,6 +23,7 @@ jobs:
           - chat_line_tabs.ui.test.js
           - journey_alerts.ui.test.js
           - journey_e2e.ui.test.js
+          - latent_refs.ui.test.js
           - overlay_stale.ui.test.js
           - ride_eta.test.js
           - ride_evidence.ui.test.js

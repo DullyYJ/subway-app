@@ -408,3 +408,12 @@
 - **저장소**: PiP 설치 안내였던 루트 `README.md` 삭제(내용이 현재 구조와 맞지 않음).
 - **일부러 남긴 것**: `window.median_back_pressed`(외부 Median 브리지가 호출), 이미 정의돼 있지 않던 `rmSuggest` 핸들러(기존부터 있던 것이라 건드리지 않음).
 - 검증: 누락 식별자 신규 0건(기준 대비), 스크립트 블록 12개 문법 통과, 테스트 13개 스위트 전부 통과(ride_evidence 62, ride_eta 68 포함), 무작위 클릭 3시드 오류 0.
+
+### 빌드 전 테스트 + 조용히 실패하던 호출 정리 (2026-10-09)
+- **CI**: `.github/workflows/build-apk.yml` 에 `test` 작업 추가 — 테스트 14개를 파일별 머신에서 돌리고, 하나라도 실패하면 `build`(APK)가 실행되지 않는다. 테스트 파일은 `test/helpers/pw.js` 로 Playwright 를 불러 로컬(/opt)·CI 양쪽에서 돈다. 새 테스트 파일을 만들면 워크플로의 `matrix.file` 목록에도 넣을 것.
+- **정의된 적 없는 이름을 부르던 곳**(정의되지 않은 식별자 110 → 점검): 대부분은 브라우저·Capacitor 전역이거나 `window.x=` 로 만든 전역(오탐). 진짜 문제는 아래 셋.
+  - `_metroNextTrainInfo`(노선도 경로 AI 브리핑의 '다음 열차'): 방향 판정이 한 번도 정의된 적 없는 함수를 불러 항상 '하'였다 → 경로 카드와 같은 `_ttSegDir` 로 교체(수정함).
+  - `_stopsParamOk`: 거리 검사가 `_hav`(없음)라 try/catch 에 삼켜져 400m 검사가 항상 건너뛰어졌다 → `_distM` 으로 교체(수정함).
+  - **미수정**: `tagoGetNextDep` 이 `_tagoFindNext`(없음)를 불러, TAGO 시각표를 받은 뒤 예외 → 5회 누적 시 TAGO 조회 자동 비활성화. 고치면 실서버 TAGO 호출이 늘어나고 이 환경에서 검증할 수 없어 보류. 쓸지 말지 결정 필요(쓰려면 '정렬된 분 목록에서 baseMin 이상 첫 값' 함수 하나 추가).
+  - 남겨둔 무해한 죽은 가드: `typeof closeWriteSheet/clearRoute/clearRouteHighlight==='function'`(정의 없음 → 그냥 건너뜀), `_ttNorm` 대체 람다.
+
