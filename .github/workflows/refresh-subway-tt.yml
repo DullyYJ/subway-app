@@ -73,11 +73,18 @@ jobs:
           cat $OUT/report.md >> "$GITHUB_STEP_SUMMARY"
           C=$(cat $OUT/changed.txt); [ "${{ inputs.force }}" = "true" ] && C=yes
           echo "CHANGED=$C" >> "$GITHUB_ENV"
+      - name: 시험 준비(Playwright·크롬·한글 글꼴)
+        if: env.CHANGED == 'yes'
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+          sudo apt-get install -y fonts-noto-cjk
       - name: 내장 파일 다시 만들고 시험
         if: env.CHANGED == 'yes'
         run: |
           node tools/route-speed/gen_nt_tt.js $OUT/final.json
           node test/next_train_attach.ui.test.js
+          node test/next_train_parity.ui.test.js
           node test/ride_eta.test.js
       - name: main 에 커밋
         if: env.CHANGED == 'yes' && inputs.dry != true
