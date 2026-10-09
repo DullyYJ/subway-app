@@ -51,6 +51,7 @@ function routeMatches(line, routeName, id) {
     if (OTHER_CITY.test(id || '')) return false;
     const r = String(routeName || '').replace(/\s+/g, ''); const m = line.match(/(\d)호선$/);
     if (line === '김포골드라인') return r.includes('김포');
+    if (/^인천/.test(line)) return r === line;
     return !!m && r === m[1] + '호선';
   }
   const a = ALIAS[line]; if (!a) return false; const r = String(routeName || '').replace(/\s+/g, '');
