@@ -7,7 +7,7 @@ const fs = require('fs'), path = require('path');
 const KEY = process.env.TAGO_KEY || '';
 if (!KEY) { console.error('TAGO_KEY 없음'); process.exit(1); }
 const BASE = 'https://apis.data.go.kr/1613000/SubwayInfo';
-const OUT = path.join(__dirname, 'out'); fs.mkdirSync(OUT, { recursive: true });
+const OUT = process.env.OUT_DIR ? path.resolve(process.env.OUT_DIR) : path.join(__dirname, 'out'); fs.mkdirSync(OUT, { recursive: true });
 const { NT_STNORDER } = require('../../engine/next-train-data.js');
 const only = (process.env.LINES || '').split(',').map(s => s.trim()).filter(Boolean);
 const COVERED = new Set(['1호선', '2호선', '3호선', '4호선', '5호선', '6호선', '7호선', '8호선', '9호선', '인천1호선', '인천2호선', '김포골드라인']);

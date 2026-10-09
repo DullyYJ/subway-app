@@ -10,7 +10,11 @@ const argv = process.argv.slice(2); const opt = {}; const rest = [];
 for (let i = 0; i < argv.length; i++) { if (['--base', '--out', '--report'].includes(argv[i])) { opt[argv[i].slice(2)] = argv[++i]; } else rest.push(argv[i]); }
 if (!opt.base || !opt.out) { console.error('--base, --out 필요'); process.exit(2); }
 const MANAGED = ['신분당선', '수인분당선', '에버라인선', '경의중앙선', 'GTX-A', '서해선', '경춘선', '경강선', '의정부선', '우이신설선',
-  '대구1호선', '대구2호선', '대구3호선', '대전1호선', '광주1호선', '신림선', '공항철도', '부산1호선', '부산2호선', '부산3호선', '부산4호선'];
+  '대구1호선', '대구2호선', '대구3호선', '대전1호선', '광주1호선', '신림선', '공항철도', '부산1호선', '부산2호선', '부산3호선', '부산4호선',
+  '3호선'];   // 서울 3호선: TAGO 와 0.95 로 일치(2026-10-09 실측)하고, 실측 인접 관계로 선로 순서가 확인돼(build_tt 의 contractedGraph/physicalPath) 방향 힌트까지 줄 수 있어 자동 갱신에 넣었다.
+//   서울 1·2·4·5·6·7·8·9호선과 인천·김포는 넣지 않았다 — 이유는 HANDOFF 의 '서울·인천·김포 시각표 점검' 참조(주간 감시 watch-covered-tt.yml 이 달라짐만 이슈로 알린다).
+// 환경변수 MANAGED_EXTRA(쉼표 구분): 이번 실행에서만 관리 대상에 더할 노선(시험·임시 확장용)
+for (const l of String(process.env.MANAGED_EXTRA || '').split(',').map(x => x.trim()).filter(Boolean)) if (!MANAGED.includes(l)) MANAGED.push(l);
 const M = new Set(MANAGED);
 const lineOf = k => k.split('|')[0];
 const old = JSON.parse(fs.readFileSync(opt.base, 'utf8'));
@@ -77,7 +81,11 @@ if (changedLines.length) {
 // 6) 결과 기록
 const touched = MANAGED.filter(l => diffs[l] && (diffs[l].changed.length || diffs[l].added.length));
 const changed = touched.length > 0;
-if (changed) fin.version = built.version; else fin.version = old.version;
+if (changed) {
+  fin.version = built.version;
+  // 같은 날 두 번 바뀌어도 버전이 달라지고 사전순으로 커지도록 뒤에 .2, .3 … 을 붙인다(엔진은 '내장본보다 사전순으로 작은 KV 번들'을 무시한다)
+  if (fin.version <= old.version) { const m = old.version.match(/^(.*?)(?:\.(\d+))?$/); fin.version = m[1] + '.' + ((+m[2] || 1) + 1); if (fin.version <= old.version) fin.version = old.version + '.2'; }
+} else fin.version = old.version;
 fs.writeFileSync(opt.out, JSON.stringify(fin));
 fs.writeFileSync(opt.out.replace(/\.json$/, '') + '.order.json', JSON.stringify(order));
 fs.writeFileSync(path.join(dir, 'changed.txt'), changed ? 'yes' : 'no');

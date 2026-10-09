@@ -19,6 +19,34 @@ const ENDBASED = new Set(['GTX-A', '서해선']);   // TAGO 의 상/하가 구�
 const ORDER_FIX = { '공항철도': ['서울', '공덕', '홍대입구', '디지털미디어시티', '마곡나루', '김포공항', '계양', '검암', '청라국제도시', '영종', '운서', '공항화물청사', '인천공항1터미널', '인천공항2터미널'] };
 function toMin(s) { if (!s || s === '0' || !/^\d{6}$/.test(s)) return null; let m = (+s.slice(0, 2)) * 60 + (+s.slice(2, 4)); if (m < 180) m += 1440; return m; }
 function enc(minsArr) { const s = Array.from(new Set(minsArr.filter(x => x != null))).sort((a, b) => a - b); if (!s.length) return null; const o = [s[0]]; for (let i = 1; i < s.length; i++) o.push(s[i] - s[i - 1]); return o; }
+// 실측 인접 관계(_REAL_SEG)로 만든 '이웃 그래프'(TAGO 에 있는 역만; 자료에 없는 역 하나를 사이에 둔 두 역도 이웃).
+function contractedGraph(bundle, line, names) {
+  const present = new Set(names), adj = {}; names.forEach(n => adj[n] = new Set());
+  const raw = {}; for (const k in (bundle.data._REAL_SEG || {})) { const p = k.split('|'); if (p[0] !== line) continue; const a = nz(p[1]), b = nz(p[2]); (raw[a] = raw[a] || new Set()).add(b); (raw[b] = raw[b] || new Set()).add(a); }
+  if (!Object.keys(raw).length) return null;
+  for (const a of names) for (const b of (raw[a] || [])) { if (present.has(b)) { if (a !== b) { adj[a].add(b); adj[b].add(a); } } else for (const c of (raw[b] || [])) if (present.has(c) && c !== a) { adj[a].add(c); adj[c].add(a); } }
+  return adj;
+}
+// 순서가 '첫 역에서 바깥으로 뻗는 나무' 모양인지: 이웃 그래프가 사이클 없는 한 덩어리 나무이고, 모든 이웃쌍에서 첫 역에서 먼 쪽이 순서 번호도 크다.
+//   → 순서 번호가 커지는 쪽 = 바깥쪽. 한 줄이거나 Y자(5호선 마천·하남)여도 어느 이웃쌍이든 방향이 한 가지로 정해진다. 고리(6호선 응암, 2호선)나 급행 건너뜀 간선이 있으면 실패.
+function outwardTreeOK(adj, order) {
+  if (!adj) return false; const idx = {}; order.forEach((n, i) => idx[n] = i);
+  let edges = 0; order.forEach(n => edges += adj[n].size); edges /= 2;
+  if (edges !== order.length - 1) return false;
+  const dist = { [order[0]]: 0 }, q = [order[0]];
+  while (q.length) { const c = q.shift(); for (const x of adj[c]) if (dist[x] == null) { dist[x] = dist[c] + 1; q.push(x); } }
+  if (order.some(n => dist[n] == null)) return false;
+  for (const a of order) for (const b of adj[a]) { if (Math.abs(dist[a] - dist[b]) !== 1) return false; if ((dist[a] < dist[b]) !== (idx[a] < idx[b])) return false; }
+  return true;
+}
+// 한 줄 경로(양 끝 두 역, 모두 차수 ≤2)면 그 순서
+function physicalPath(adj, names) {
+  if (!adj) return null; const ends = names.filter(n => adj[n].size === 1);
+  if (ends.length !== 2 || names.some(n => adj[n].size === 0 || adj[n].size > 2)) return null;
+  const path = [ends[0]], seen = new Set(path); let cur = ends[0];
+  while (true) { const nx = [...adj[cur]].find(x => !seen.has(x)); if (!nx) break; path.push(nx); seen.add(nx); cur = nx; }
+  return path.length === names.length ? path : null;
+}
 const stat = {}; const lineStations = {};   // line -> [{nm, rec}]
 function put(line, nm, day, dir, mins) {
   const arr = enc(mins); if (!arr) return;
@@ -61,11 +89,18 @@ for (const l in tagoStn) {
   if (ENDBASED.has(l) && bundle.data._TT_ORDER_HARD[l]) { const order = bundle.data._TT_ORDER_HARD[l].map(nz); bundle.data._TT_ORIENT[l] = { order, fwd: '하' }; stat[l] = Object.assign(stat[l] || {}, { TAGO역: tagoStn[l].length, 방향힌트: 'O(종착역 기준, 번들 순서)' }); lineStations[l] = order; continue; }
   let st = tagoStn[l].sort(idSort); let order = st.map(s => s.nm);
   if (ORDER_FIX[l]) { const have = new Set(order); const fixed = ORDER_FIX[l].filter(n => have.has(n)); order.forEach(n => { if (!fixed.includes(n)) fixed.push(n); }); order = fixed; }
+  // 서울 1~9호선: 역 ID 순서가 선로 순서와 다른 노선이 있다(7호선은 석남→장암으로 끊기고 8호선 별내선·9호선 노량진은 뒤섞인다). 번들의 실측 인접 관계(_REAL_SEG)에서 '한 줄'로 이어지는 순서를 만들 수 있을 때만 그 순서를 쓰고, 못 만들면 방향 힌트를 만들지 않는다(엔진이 시각표 상관으로 정한다).
+  let seoulPhysical = null;
+  if (/^\d호선$/.test(l)) {
+    const g = contractedGraph(bundle, l, order);
+    if (g && outwardTreeOK(g, order)) seoulPhysical = order;                    // 역 ID 순서가 그대로 선로 순서(바깥으로 뻗는 나무)
+    else { const pp = physicalPath(g, order); if (pp) { seoulPhysical = pp; order = pp; } }
+  }
   const idx = {}; order.forEach((n, i) => idx[n] = i);
   let loN = 0, hiN = 0;                                                        // U 열차가 번호 작은 쪽/큰 쪽으로 가는 역 수
   for (const s of st) { let lo = 0, hi = 0; s.ends.U.forEach(e => { if (idx[e] == null) return; if (idx[e] < idx[s.nm]) lo++; else if (idx[e] > idx[s.nm]) hi++; }); if (lo > hi) loN++; else if (hi > lo) hiN++; }
   const dec = loN + hiN, major = Math.max(loN, hiN);
-  const ok = !NONLINEAR.has(l) && dec >= 4 && major / dec >= 0.9;
+  const ok = !NONLINEAR.has(l) && dec >= 4 && major / dec >= 0.9 && (!/^\d호선$/.test(l) || !!seoulPhysical);
   stat[l] = Object.assign(stat[l] || {}, { TAGO역: st.length, 방향힌트: ok ? 'O' : 'X(U방향 일관 ' + major + '/' + dec + (NONLINEAR.has(l) ? ', 비선형' : '') + ')' });
   if (ok) bundle.data._TT_ORIENT[l] = { order, fwd: loN > hiN ? '하' : '상' };   // U 가 번호 작은 쪽이면 번호 커지는 쪽은 D(하)
   lineStations[l] = order;

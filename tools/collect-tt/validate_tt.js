@@ -9,7 +9,7 @@ function validate(bundle, idOrder, only) {
   const W = require(path.join(__dirname, '..', '..', 'test', 'helpers', 'nt_load'))();
   const d = bundle.data; idOrder = idOrder || {}; only = only || [];
   const nt = W.ntCreate({ _REAL_TT: d._REAL_TT, _GIMPO_TT: d._GIMPO_TT, _BUILTIN_TT: d._BUILTIN_TT, LINE_SCHEDULE: d.LINE_SCHEDULE, _REAL_SEG: d._REAL_SEG, _TT_ORDER_HARD: d._TT_ORDER_HARD, _TT_ORIENT: d._TT_ORIENT, _INCHEON_TT: W.NT_INCHEON_TT, STNORDER: W.NT_STNORDER });
-  const lines = Object.keys(W.NT_STNORDER).filter(l => Object.keys(d._REAL_TT).some(k => k.startsWith(l + '|')) && (!only.length || only.includes(l)) && !/^[1-9]호선$|^인천/.test(l));
+  const lines = Object.keys(W.NT_STNORDER).filter(l => Object.keys(d._REAL_TT).some(k => k.startsWith(l + '|')) && (!only.length || only.includes(l)) && (only.includes(l) || !/^[1-9]호선$|^인천/.test(l)));   // 서울 1~9·인천은 평소엔 점검 대상이 아니고, 이름을 콕 집어 부를 때만 점검한다
   const out = [];
   for (const l of lines) {
     const ord = (idOrder[l] || W.NT_STNORDER[l].map(nz)).filter(n => d._REAL_TT[l + '|' + n]);   // 순서: TAGO 역 ID 순(있으면)
