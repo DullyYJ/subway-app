@@ -64,12 +64,20 @@ jobs:
           CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
           PAIRS: 'DG:1,DG:2,DG:3,DJ:1,GJ:1,SL:L1,AR:A1,KR:K1,KR:K2,KR:K4,S1:4,S1:5,S1:6,S9:9,KR:4,NU:4'
         run: node tools/collect-tt/export_kric.js
+      - name: KRIC(D1) 내보내기 — 방향 힌트용(1·7호선)
+        continue-on-error: true
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          PAIRS: 'KR:1,S1:1,S1:7,IC:7'
+          OUT_FILE: kric-hint.json
+        run: node tools/collect-tt/export_kric.js
       - name: 부산교통공사 수집
         run: node tools/collect-tt/busan.js
       - name: 달라진 역만 반영(안전장치 포함)
         run: |
           node tools/collect-tt/refresh.js --base $OUT/base.json --out $OUT/final.json --report $OUT/report.md \
-            --tago $OUT/raw.json tools/collect-tt/out-cov/raw.json --kric $OUT/kric.json --kric-fill $OUT/kric.json --busan $OUT/busan.json
+            --tago $OUT/raw.json tools/collect-tt/out-cov/raw.json --kric $OUT/kric.json --kric-fill $OUT/kric.json --busan $OUT/busan.json --hint-kric $OUT/kric-hint.json
           cat $OUT/report.md >> "$GITHUB_STEP_SUMMARY"
           C=$(cat $OUT/changed.txt); [ "${{ inputs.force }}" = "true" ] && C=yes
           echo "CHANGED=$C" >> "$GITHUB_ENV"

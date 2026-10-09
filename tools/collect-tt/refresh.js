@@ -7,7 +7,7 @@
 //   · 출력 옆에 changed.txt('yes'|'no'), rejected.txt(거부된 노선 목록) 를 쓴다.
 const fs = require('fs'), path = require('path'), cp = require('child_process');
 const argv = process.argv.slice(2); const opt = {}; const rest = [];
-for (let i = 0; i < argv.length; i++) { if (['--base', '--out', '--report'].includes(argv[i])) { opt[argv[i].slice(2)] = argv[++i]; } else rest.push(argv[i]); }
+for (let i = 0; i < argv.length; i++) { if (['--base', '--out', '--report', '--hint-kric'].includes(argv[i])) { opt[argv[i].slice(2)] = argv[++i]; } else rest.push(argv[i]); }
 if (!opt.base || !opt.out) { console.error('--base, --out 필요'); process.exit(2); }
 const MANAGED = ['신분당선', '수인분당선', '에버라인선', '경의중앙선', 'GTX-A', '서해선', '경춘선', '경강선', '의정부선', '우이신설선',
   '대구1호선', '대구2호선', '대구3호선', '대전1호선', '광주1호선', '신림선', '공항철도', '부산1호선', '부산2호선', '부산3호선', '부산4호선',
@@ -80,9 +80,25 @@ if (changedLines.length) {
   }
 }
 
+// 5b) 방향 힌트 — 시각표 자료는 그대로 두고 _TT_ORIENT 만 붙이는 노선(7호선). 안전장치는 hints.js 안(KRIC 정답과 대조해 나빠지면 안 붙임)
+const hinted = [], hintNotes = [];
+const HINT_SPEC = { '1호선': 'KR|1,S1|1', '7호선': 'S1|7,IC|7' }, HINT_APPLY = new Set(['7호선']);   // 1호선은 시험 결과 개선이 없어(끝 역 2쌍) 붙이지 않고 측정만 한다
+if (opt['hint-kric'] && fs.existsSync(opt['hint-kric'])) {
+  try {
+    const { addHints } = require('./hints.js'); const rows = JSON.parse(fs.readFileSync(opt['hint-kric'], 'utf8'));
+    const res = addHints(fin, rows, HINT_SPEC);
+    for (const l in res) {
+      const r = res[l];
+      if (r.ok && !r.same && HINT_APPLY.has(l)) { hinted.push(l); hintNotes.push('- **' + l + '** 방향 힌트 적용 — KRIC 정답과 어긋난 인접쌍 ' + r.before + '→' + r.after + ' (고친 쌍: ' + r.fixed.join(', ') + ')'); }
+      else if (r.ok && !r.same) { delete fin.data._TT_ORIENT[l]; hintNotes.push('- ' + l + ' 방향 힌트는 효과가 있으나 아직 적용 대상이 아님'); }
+      else if (!r.ok) { if (old.data._TT_ORIENT[l]) fin.data._TT_ORIENT[l] = old.data._TT_ORIENT[l]; hintNotes.push('- ' + l + ' 방향 힌트 미적용: ' + r.why); }
+    }
+  } catch (e) { hintNotes.push('- 방향 힌트 단계 오류(건너뜀): ' + e.message); }
+}
+
 // 6) 결과 기록
 const touched = MANAGED.filter(l => diffs[l] && (diffs[l].changed.length || diffs[l].added.length));
-const changed = touched.length > 0;
+const changed = touched.length > 0 || hinted.length > 0;
 if (changed) {
   fin.version = built.version;
   // 같은 날 두 번 바뀌어도 버전이 달라지고 사전순으로 커지도록 뒤에 .2, .3 … 을 붙인다(엔진은 '내장본보다 사전순으로 작은 KV 번들'을 무시한다)
@@ -93,7 +109,8 @@ fs.writeFileSync(opt.out.replace(/\.json$/, '') + '.order.json', JSON.stringify(
 fs.writeFileSync(path.join(dir, 'changed.txt'), changed ? 'yes' : 'no');
 const rejected = MANAGED.filter(l => !verdict[l].ok);
 fs.writeFileSync(path.join(dir, 'rejected.txt'), rejected.map(l => l + ': ' + verdict[l].why).join('\n'));
-const md = ['# 시각표 분기 갱신 보고', '', '- 버전: `' + old.version + '` → `' + fin.version + '`', '- 변경된 노선: ' + (touched.length ? touched.length + '개' : '없음'), ''];
+const md = ['# 시각표 분기 갱신 보고', '', '- 버전: `' + old.version + '` → `' + fin.version + '`', '- 변경된 노선: ' + (touched.length ? touched.length + '개' : '없음') + (hinted.length ? ' (+ 방향 힌트만 붙인 노선: ' + hinted.join(', ') + ')' : ''), ''];
+if (hintNotes.length) md.push(...hintNotes, '');
 for (const l of touched) { const d = diffs[l]; md.push('- **' + l + '** — 바뀐 역 ' + d.changed.length + ', 새로 생긴 역 ' + d.added.length + (d.kept.length ? ', 새 자료에 없어 옛 기록 유지 ' + d.kept.length : '') + (d.changed.length ? ' (예: ' + d.changed.slice(0, 5).join(', ') + ')' : '')); }
 if (rejected.length) { md.push('', '## 확인 필요(자동 반영하지 않고 옛 기록 유지)'); for (const l of rejected) md.push('- **' + l + '** — ' + verdict[l].why); }
 fs.writeFileSync(opt.report || path.join(dir, 'report.md'), md.join('\n') + '\n');

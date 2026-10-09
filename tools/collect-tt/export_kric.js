@@ -28,6 +28,6 @@ async function q(sql, params) {
       rows.forEach(r => out.push(r));
     }
   }
-  fs.writeFileSync(path.join(OUT, 'kric.json'), JSON.stringify(out));
+  fs.writeFileSync(path.join(OUT, process.env.OUT_FILE || 'kric.json'), JSON.stringify(out));
   console.log('저장', out.length, '행');
 })().catch(e => { console.error('실패', String(e.message).slice(0, 300)); process.exit(1); });
