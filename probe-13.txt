@@ -1,0 +1,1749 @@
+URL https://astro.kasi.re.kr/life/pageView/5?solYear=2027&solMonth=02
+STATUS 200
+TYPE text/html;charset=UTF-8
+LEN 43531
+
+
+
+
+
+
+
+
+
+<head>
+	<script src="/resources/js/life/modify-date.js"></script>
+	<script src="/resources/js/validateCommon.js"></script>
+    <script src="/resources/js/life/common.js"></script>
+    <!-- <script src="/resources/js/bootstrap-datepicker_custom.js"></script>
+    <script src="/resources/js/bootstrap-datepicker.kr_custom.js"></script>
+	<link rel="stylesheet" href="/resources/css/bootstrap-datepicker.min.css"> -->
+	<script>
+        $(function () {
+            hideModifyDate();
+            
+            if($("#search_year").val() != null && $("#search_year").val() != ''){
+            	$('#year01').val($("#search_year").val());
+        	} 
+            
+            if($("#search_month").val() != null && $("#search_month").val() != ''){
+            	$('#month01').val($("#search_month").val());
+            }
+            
+            var popoverTriggerList = document.querySelectorAll('[data-bs-toggle="popover"]');
+
+            popoverTriggerList.forEach(function (el) {
+              new bootstrap.Popover(el);
+            });
+           
+            var dp = $('#dp');
+            var dp2 = $('#dp2');
+            var non_dp = $('#non-dp');
+            var dp_val = $("#search_dp").val() == null || $("#search_dp").val() == "" ? "1" : $("#search_dp").val();
+	        handleDatepicker(dp_val);
+            var dateString = '';
+
+            if(dateString == '') {
+                var searchDate = new Date();
+				
+                year = searchDate.getFullYear();
+                month = searchDate.getMonth();
+               // date = searchDate.getDate();
+               
+                if($("#search_year").val() != null && $("#search_year").val() != ''){
+             		year = $("#search_year").val();
+             	}
+             	
+             	 if($("#search_month").val() != null && $("#search_month").val() != ''){
+             		month = $("#search_month").val();
+                 }
+
+                dateString = year + "-" + format02d(Number(month))
+            }else{
+            	
+                var ymd = dateString.split('-');
+
+                year = parseInt(ymd[0]);
+                month = parseInt(ymd[1]) - 1;
+             //   date = parseInt(ymd[2]);
+             
+             	if($("#search_year").val() != null && $("#search_year").val() != ''){
+             		year = $("#search_year").val();
+             	}
+             	
+             	 if($("#search_month").val() != null && $("#search_month").val() != ''){
+             		month = $("#search_month").val();
+                 }
+             		
+                dateString = year + "-" + month
+            }
+
+         	//$('#date').text(formatDate(year, month, date));
+            //dp.data('date', dateString);
+            dp.find('input[name="date"]').val(dateString);
+            /* dp.datepicker({
+            	//dateFormat: 'yy-mm',
+            	format: 'yyyy-mm',
+            	language : "kr",
+            	startDate : new Date(-59, 1),
+            	endDate : new Date(2050, 11),
+            	autoclose : true
+            }); */
+            
+            
+            dp.click(function(){
+            	/* 
+            	var popup = $('.add-on').offset();
+            	$('.datepicker').css({
+                    'top' : popup.top + 40,
+                    'left' : popup.left
+                   });*/
+            }) 
+            
+            
+            //datepicker 위치조정
+           	$('.add-on').click(function(e){
+           		e.preventDefault();
+                var popup = $(this).offset();
+                $('.datepicker').css({
+                  'top' : popup.top + 40,
+                  'left' : popup.left
+                 });
+            });
+           
+            //위치변경시 위치조정
+           	$(window).resize(function(){
+           		$('.datepicker').hide()
+	           	if(this.resizeTO) {
+	                clearTimeout(this.resizeTO);
+	            }
+	
+	            this.resizeTO = setTimeout(function() {
+	                $(this).trigger('resizeEnd');
+	            }, 0);
+	        });
+
+	        $(window).on('resizeEnd', function() {
+	        	$('.datepicker').show();
+	        	var resizeTop = $('.add-on').offset().top;
+	        	var resizeLeft = $('.add-on').offset().left;
+	        	$('.datepicker').css({
+                  'top' :resizeTop + 40,
+                  'left' : resizeLeft
+                 });
+	        });
+	        
+
+            $('input[name="select"]').change(function () {
+                handleDatepicker($(this).val());
+            });
+            
+ 			
+
+            function handleDatepicker(val){
+            	
+    	        if(Number(val) == 1) {
+    	            dp.hide();
+    	            dp2.hide();
+    	            non_dp.show();
+                	
+               		if($("#search_check").val() == "J"){
+                       	$("#non_dp_11").prop("checked", true);
+                       	$("#non_dp_12").prop("checked", false);
+               		} else if($("#search_check").val() == "G"){
+                       	$("#non_dp_12").prop("checked", true);
+                       	$("#non_dp_11").prop("checked", false);
+                	}
+               		
+    	        } else {
+    	            dp.show();
+    	            dp2.show();
+    	            non_dp.hide();
+    	            
+    	            if($("#search_check").val() == "J"){
+                       	$("#dp_11").prop("checked", true);
+                       	$("#dp_12").prop("checked", false);
+                    } else if($("#search_check").val() == "G"){
+                       	$("#dp_12").prop("checked", true);
+                       	$("#dp_11").prop("checked", false);
+                	}
+    	        }
+    	    }
+            
+            $('#prevMonthBtn').click(function(){
+
+                var currentYear = parseInt($('#search_year').val());
+                var currentMonth = parseInt($('#search_month').val());
+
+                if(currentMonth == 1){
+                    currentMonth = 12;
+                    currentYear = currentYear - 1;
+                }else{
+                    currentMonth = currentMonth - 1;
+                }
+
+                var monthStr = currentMonth < 10 ? '0' + currentMonth : '' + currentMonth;
+
+                $('#year01').val(currentYear);
+                $('#month01').val(monthStr);
+                $('#search_year').val(currentYear);
+                $('#search_month').val(monthStr);
+                $('#mp-input').val(currentYear + '-' + monthStr);
+
+                fn_convert();
+            });
+
+            $('#nextMonthBtn').click(function(){
+
+                var currentYear = parseInt($('#search_year').val());
+                var currentMonth = parseInt($('#search_month').val());
+
+                if(currentMonth == 12){
+                    currentMonth = 1;
+                    currentYear = currentYear + 1;
+                }else{
+                    currentMonth = currentMonth + 1;
+                }
+
+                var monthStr = currentMonth < 10 ? '0' + currentMonth : '' + currentMonth;
+
+                $('#year01').val(currentYear);
+                $('#month01').val(monthStr);
+                $('#search_year').val(currentYear);
+                $('#search_month').val(monthStr);
+                $('#mp-input').val(currentYear + '-' + monthStr);
+
+                fn_convert();
+            });
+            
+        })
+        
+		function fn_convert() {
+			if($('#mp').is(':visible')){	//달력
+			
+			
+				if($('#mp-input').val().split('-').length >= 3){
+					$("#search_year").val("-" + $('#mp-input').val().split('-')[1])
+					$("#search_month").val($('#mp-input').val().split('-')[2])
+				} else{
+					$("#search_year").val($('#mp-input').val().split('-')[0])
+					$("#search_month").val($('#mp-input').val().split('-')[1])
+				}
+				
+				if(!$("input:checkbox[id='dp_11']").is(":checked") && !$("input:checkbox[id='dp_12']").is(":checked")){
+					alert("검색하실 역법을 선택해주세요.")
+					return;
+				}
+				
+				if($("input:checkbox[id='dp_11']").is(":checked") && $("input:checkbox[id='dp_12']").is(":checked")){
+					alert("하나의 역법을 선택해주세요.")
+					return;
+				}
+				
+				if($("input:checkbox[id='dp_11']").is(":checked")){
+					$("#search_check").val("J");
+				} else{
+					$("#search_check").val("G");
+				}
+				
+				$("#search_dp").val("0");
+				$('#convertForm').submit();
+				
+			}else {	//입력폼	
+				if ( !isNumber($('#year01').val()) || !isNumber($('#month01').val()) ) {
+					alert('입력된 연 또는 월이 숫자형태가 아닙니다.');
+					return;
+				}
+				if ( $('#year01').val() < -59 ) {
+					alert('양력 -59년 이후의 날짜에 대해서만 음양력변환이 가능합니다.');
+					return;
+				}
+				if ( $('#year01').val() == -59 && $('#month01').val() == 1 ) {
+					alert('양력 -59년 2월 이후의 날짜에 대해서만 음양력변환이 가능합니다.');
+					return;
+				}
+				if ( $('#year01').val() > 2050 ) {
+					alert('양력 2050년 12월까지만 음양력변환이 가능합니다.');
+					return;
+				}
+				if ( $('#month01').val() > 12 ) {
+					alert('월은 12보다 작아야 합니다.');
+					return;
+				}
+				$("#search_year").val($('#year01').val())
+				
+				if($("#search_month").val().length == 2){
+					$("#search_month").val($('#month01').val());
+				} else{
+					$("#search_month").val(format02d($('#month01').val()));
+				}
+				
+				if(!$("input:checkbox[id='non_dp_11']").is(":checked") && !$("input:checkbox[id='non_dp_12']").is(":checked")){
+					alert("검색하실 역법을 선택해주세요.")
+					return;
+				}
+				
+				if($("input:checkbox[id='non_dp_11']").is(":checked") && $("input:checkbox[id='non_dp_12']").is(":checked")){
+					alert("하나의 역법을 선택해주세요.")
+					return;
+				}
+				
+				if($("input:checkbox[id='non_dp_11']").is(":checked")){
+					$("#search_check").val("J");
+				} else{
+					$("#search_check").val("G");
+				}
+				
+				$("#search_dp").val("1");
+				$('#convertForm').submit();
+			}
+		}
+        
+	</script>
+</head>
+<body>
+	<!-- 월별 음양력 (convertMonthly) -->
+	<div class="contents_wr contents_wr02">
+		<div class="contents_left border-gray border-radius-20">
+			<div class="con-text">
+<!-- 				<p class="con-h3">■ 변환 설정</p> -->
+				<p class="con-sub">양력 연도와 월을 입력하여 한 달간의 양력 날짜 확인할 수 있습니다.</p>
+			</div>
+			
+			<!-- search_write -->
+			<form name="convertForm" id="convertForm" class="form-horizontal" method="post">
+				<input type="hidden" name="search_year" id="search_year" value="2026" />
+				<input type="hidden" name="search_month" id="search_month" value="10" />
+				<input type="hidden" name="search_dp" id="search_dp" value="1" />
+				<input type="hidden" name="search_check" id="search_check" value="G" />
+				<fieldset>
+				<legend>월별 음양력 검색</legend>
+				<div class="con-text">
+					<p class="con-h4">날짜 입력 방식</p>
+					<div class="form-check-inline-wr">
+						
+		               		
+		               			<div class="form-check form-check-inline">
+			               			<input class="form-check-input" type="radio" name="select" id="select1" value="1" checked>
+			               			<label class="form-check-label" for="select1" id="select1Label">직접 입력</label>
+		               			</div>
+		               			<div class="form-check form-check-inline">
+		               				<input class="form-check-input"  type="radio" name="select" id="select2" value="0">
+			               			<label class="form-check-label" for="select2" class="sr-only" id="select2Label">달력선택</label>
+		               			</div>
+		               		
+		               		
+		               	
+					</div>
+				</div>
+				<div class="con-text">
+					<p class="con-h4">양력 날짜 입력</p>
+					<div id="non-dp">
+						<div class="form-group">
+							<label for="year01" class="sr-only">년도</label>
+		                   	<input id="year01" name="yyyy" class="form-control" type="text" maxlength="4" placeholder="년도"/>
+		                   	<label for="month01" class="sr-only">월</label>
+		                   	<input id="month01" name="mm" class="form-control" type="text" maxlength="2" placeholder="월"/>
+						</div>
+						<div class="form-check-inline-wr mt-2">
+							<div class="form-check form-check-inline">
+								<input class="form-check-input" id="non_dp_11" type="checkbox">
+								<label class="form-check-label" for="non_dp_11">율리우스력</label>
+							</div>
+							<div class="form-check form-check-inline">
+								<input class="form-check-input" id="non_dp_12" type="checkbox"> 
+								<label class="form-check-label" for="non_dp_12">그레고리력</label>
+						    </div>
+						</div>
+					</div>
+					<div id="dp" class="date" data-date-format="yyyy-mm-dd">
+						<div class="form-group from-group-btn">
+							<label for="dp-input" class="sr-only">달력입력</label>
+							
+							
+
+
+
+<!--     KRDS 공통 날짜 선택 달력 컴포넌트 -->
+
+<!--     사용법: -->
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<style>
+/* =============================================
+   KRDS 월 선택 컴포넌트 스타일
+   기존 krdsCalendar.jsp 스타일 구조와 동일하게 맞춤
+   ============================================= */
+.krds-mp-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    width: 100%;
+    gap: 4px;
+}
+.krds-mp-wrap .form-control {
+    flex: 1;
+    cursor: pointer;
+}
+/* 팝업 */
+.krds-mp-popup {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    z-index: 9999;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    width: 260px;
+    padding: 14px;
+    box-sizing: border-box;
+}
+.krds-mp-popup.open { display: block; }
+
+/* 헤더 (연도 네비) */
+.krds-mp-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+.krds-mp-nav {
+    background: none;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    cursor: pointer;
+    width: 28px;
+    height: 28px;
+    font-size: 16px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.krds-mp-nav:hover { background: #f0f0f0; }
+
+.krds-mp-year-label {
+    font-size: 15px;
+    font-weight: 600;
+    color: #1a1a1a;
+}
+
+/* 월 그리드 */
+.krds-mp-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+}
+.krds-mp-grid button {
+    padding: 9px 4px;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 400;
+    color: #1a1a1a;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    background: #fff;
+    cursor: pointer;
+    transition: background 0.1s, border-color 0.1s, color 0.1s;
+    line-height: 1.2;
+}
+.krds-mp-grid button:hover {
+    background: #ebf4ff;
+    border-color: #aac4e8;
+}
+/* 이번 달 */
+.krds-mp-grid button.krds-mp-current {
+    border-color: var(--color-blue, #0054A6);
+    color: var(--color-blue, #0054A6);
+    font-weight: 600;
+}
+/* 선택된 월 */
+.krds-mp-grid button.krds-mp-selected {
+    background: var(--color-blue, #0054A6);
+    color: #fff;
+    border-color: var(--color-blue, #0054A6);
+    font-weight: 600;
+}
+.krds-mp-grid button.krds-mp-selected:hover {
+    background: #2c5282;
+    border-color: #2c5282;
+}
+
+/* 푸터 - 기존 krdsCalendar.jsp와 동일 구조 */
+.krds-mp-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid #eee;
+}
+.krds-mp-footer button {
+    padding: 4px 14px;
+    border-radius: 4px;
+    font-size: 13px;
+    cursor: pointer;
+    border: 1px solid var(--color-gray-light, #ddd);
+    background: rgba(var(--color-gray-light-rgb), .5);
+}
+
+/* .krds-mp-footer .krds-dp-btn-cancel{background:rgba(var(--color-gray-light-rgb), .5);} */
+
+.krds-mp-footer button:hover { background: #f5f5f5; }
+.krds-mp-footer .krds-mp-btn-this { background: #fff; }
+.krds-mp-footer .krds-mp-btn-confirm {
+    background: var(--color-blue, #0054A6);
+    color: #fff;
+    border-color: var(--color-blue, #0054A6);
+}
+.krds-mp-footer .krds-mp-btn-confirm:hover { background: #2c5282; }
+</style>
+
+<!-- 달력 래퍼 -->
+<div class="form-group from-group-btn input-append krds-mp-wrap" id="mp">
+
+    <!-- 날짜 input -->
+    <input
+        type="text"
+        id="mp-input"
+        name="date"
+        class="form-control"
+        placeholder="월을 선택하세요"
+        value=""
+        readonly
+    />
+
+    <!-- 달력 열기 버튼 (기존 사이트 스타일 유지) -->
+    <a href="#" class="add-on btn btn-gray krds-mp-open-btn" onclick="return false;">
+        <i class="bi bi-calendar-check"></i>
+    </a>
+
+    <!-- 달력 팝업 -->
+    <div class="krds-mp-popup">
+
+        <!-- 연도 네비 -->
+        <div class="krds-mp-head">
+            <button type="button" class="krds-mp-nav krds-mp-prev"><i class="bi bi-chevron-left"></i></button>
+            <!-- <span class="krds-mp-year-label"></span> -->
+            <select class="krds-mp-year-select form-control form-select krds-mp-year-label" aria-label="연도 선택"></select>
+            <button type="button" class="krds-mp-nav krds-mp-next"><i class="bi bi-chevron-right"></i></button>
+        </div>
+
+        <!-- 월 그리드 -->
+        <div class="krds-mp-grid"></div>
+
+        <!-- 푸터 -->
+        <div class="krds-mp-footer">
+            <button type="button" class="krds-mp-btn-this">이번 달</button>
+            <button type="button" class="krds-mp-btn-cancel">취소</button>
+            <button type="button" class="krds-mp-btn-confirm">확인</button>
+        </div>
+    </div>
+</div>
+
+<script type="text/javascript">
+(function () {
+    /* ---- 대상 요소 (wrapperId 기준 스코프 → 여러 개 공존 가능) ---- */
+    var wrap    = document.getElementById('mp');
+    if (!wrap) return;
+
+    var inp     = wrap.querySelector('#mp-input');
+    var popup   = wrap.querySelector('.krds-mp-popup');
+    var openBtn = wrap.querySelector('.krds-mp-open-btn');
+
+    var MONTHS = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+
+    var currentYear;
+    var selectedYear  = null;
+    var selectedMonth = null; // 0-indexed
+    var tempYear      = null;
+    var tempMonth     = null; // 0-indexed
+    
+    var minMonthStr = '-59-02';
+    var maxMonthStr = '2050-12';
+
+    function parseYearMonth(value) {
+        if (!value) {
+            return null;
+        }
+
+        var match = value.match(/^(-?\d{1,4})-(\d{2})$/);
+
+        if (!match) {
+            return null;
+        }
+
+        return {
+            year: parseInt(match[1], 10),
+            month: parseInt(match[2], 10) // 1~12
+        };
+    }
+
+    var minMonthValue = parseYearMonth(minMonthStr);
+    var maxMonthValue = parseYearMonth(maxMonthStr);
+    
+    /* ---- 연도 select 생성 (선택된 연도 기준 ±5년) ---- */
+    function buildYearSelect() {
+	    var select = popup.querySelector('.krds-mp-year-select');
+	    select.innerHTML = '';
+	
+	    var startYear = minMonthValue
+	        ? minMonthValue.year
+	        : currentYear - 5;
+	
+	    var endYear = maxMonthValue
+	        ? maxMonthValue.year
+	        : currentYear + 5;
+	
+	    for (var year = startYear; year <= endYear; year++) {
+	        var option = document.createElement('option');
+	
+	        option.value = year;
+	        option.textContent = year + '년';
+	        option.selected = year === currentYear;
+	
+	        select.appendChild(option);
+	    }
+	}
+    
+    /* ---- 월 범위 지정 ---- */
+    function isMonthInRange(year, monthIndex) {
+        var month = monthIndex + 1;
+
+        if (minMonthValue) {
+            if (year < minMonthValue.year) {
+                return false;
+            }
+
+            if (
+                year === minMonthValue.year &&
+                month < minMonthValue.month
+            ) {
+                return false;
+            }
+        }
+
+        if (maxMonthValue) {
+            if (year > maxMonthValue.year) {
+                return false;
+            }
+
+            if (
+                year === maxMonthValue.year &&
+                month > maxMonthValue.month
+            ) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /* ---- 월 그리드 렌더 ---- */
+    function renderGrid() {
+        var now    = new Date();
+        var todayY = now.getFullYear();
+        var todayM = now.getMonth(); // 0-indexed
+        
+    	buildYearSelect();
+
+        //popup.querySelector('.krds-mp-year-label').textContent = currentYear + '년';
+
+        var grid = popup.querySelector('.krds-mp-grid');
+        grid.innerHTML = '';
+        
+        for (var i = 0; i < 12; i++) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.textContent = MONTHS[i];
+
+            var selectable = isMonthInRange(currentYear, i);
+
+            if (!selectable) {
+                btn.disabled = true;
+                btn.classList.add('krds-mp-disabled');
+            }
+
+            if (currentYear === todayY && i === todayM) {
+                btn.classList.add('krds-mp-current');
+            }
+
+            if (currentYear === tempYear && i === tempMonth) {
+                btn.classList.add('krds-mp-selected');
+            }
+
+            if (selectable) {
+                btn.addEventListener('click', (function (yr, mo, b) {
+                    return function () {
+                        tempYear = yr;
+                        tempMonth = mo;
+
+                        popup.querySelectorAll('.krds-mp-grid button')
+                            .forEach(function (x) {
+                                x.classList.remove('krds-mp-selected');
+                            });
+
+                        b.classList.add('krds-mp-selected');
+                    };
+                })(currentYear, i, btn));
+            }
+
+            grid.appendChild(btn);
+        }
+
+/*         for (var i = 0; i < 12; i++) {
+            var btn = document.createElement('button');
+            btn.type        = 'button';
+            btn.textContent = MONTHS[i];
+
+            if (currentYear === todayY && i === todayM) {
+                btn.classList.add('krds-mp-current');
+            }
+            if (currentYear === tempYear && i === tempMonth) {
+                btn.classList.add('krds-mp-selected');
+            }
+
+            // 월 클릭: 임시 선택만 표시 (확인 버튼으로 최종 반영) 
+            btn.addEventListener('click', (function (yr, mo, b) {
+                return function () {
+                    tempYear  = yr;
+                    tempMonth = mo;
+                    popup.querySelectorAll('.krds-mp-grid button').forEach(function (x) {
+                        x.classList.remove('krds-mp-selected');
+                    });
+                    b.classList.add('krds-mp-selected');
+                };
+            })(currentYear, i, btn));
+
+            grid.appendChild(btn);
+        } */
+    }
+    
+    /* 연도변경 */
+    popup.querySelector('.krds-mp-year-select')
+    .addEventListener('change', function () {
+
+        currentYear = parseInt(this.value, 10);
+        renderGrid();
+    });
+
+    /* ---- 팝업 열기 ---- */
+/*     function openPopup() {
+        var val = inp.value;
+        if (val && /^\d{4}-\d{2}$/.test(val)) {
+            var p     = val.split('-');
+            currentYear   = parseInt(p[0], 10);
+            selectedYear  = currentYear;
+            selectedMonth = parseInt(p[1], 10) - 1; // 0-indexed
+        } else {
+            var t     = new Date();
+            currentYear   = t.getFullYear();
+            selectedYear  = null;
+            selectedMonth = null;
+        }
+        tempYear  = selectedYear;
+        tempMonth = selectedMonth;
+        renderGrid();
+        popup.classList.add('open');
+    } */
+    function openPopup() {
+        var parsed = parseYearMonth(inp.value);
+
+        if (
+            parsed &&
+            isMonthInRange(parsed.year, parsed.month - 1)
+        ) {
+            currentYear = parsed.year;
+            selectedYear = parsed.year;
+            selectedMonth = parsed.month - 1;
+        } else {
+            var t = new Date();
+
+            currentYear = t.getFullYear();
+            selectedYear = null;
+            selectedMonth = null;
+        }
+
+        tempYear = selectedYear;
+        tempMonth = selectedMonth;
+
+        renderGrid();
+        popup.classList.add('open');
+    }
+
+    /* ---- 팝업 닫기 ---- */
+    function closePopup() {
+        popup.classList.remove('open');
+    }
+
+    /* ---- 최종 반영 ---- */
+    function applySelection() {
+        if (tempYear === null || tempMonth === null) return;
+        selectedYear  = tempYear;
+        selectedMonth = tempMonth;
+        var formatted = selectedYear + '-' + String(selectedMonth + 1).padStart(2, '0');
+        inp.value = formatted;
+
+        /* hidden input 동기화 (기존 krdsCalendar.jsp와 동일 패턴) */
+        var form = inp.closest('form');
+        if (form) {
+            var hidden = form.querySelector('input[name="date"][type="hidden"]');
+            if (hidden) hidden.value = formatted;
+        }
+
+        /* 커스텀 이벤트 발행 → 외부에서 listen 가능 */
+        var ev = new CustomEvent('krdsMonthChange', {
+            bubbles: true,
+            detail: { year: selectedYear, month: selectedMonth + 1, formatted: formatted }
+        });
+        inp.dispatchEvent(ev);
+
+        closePopup();
+    }
+
+    /* ---- 이벤트 바인딩 ---- */
+
+    /* 열기 버튼 */
+    openBtn.addEventListener('click', function (e) {
+    	e.stopPropagation();
+        popup.classList.contains('open') ? closePopup() : openPopup();
+    });
+
+    /* input 클릭으로도 열기 */
+    inp.addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (!popup.classList.contains('open')) openPopup();
+    });
+
+    /* 외부 클릭 시 닫기 */
+    document.addEventListener('click', function (e) {
+        if (!wrap.contains(e.target)) closePopup();
+    });
+
+    /* 이전 연도 */
+/*     popup.querySelector('.krds-mp-prev').addEventListener('click', function () {
+        currentYear--;
+        renderGrid();
+    }); */
+
+    /* 다음 연도 */
+/*     popup.querySelector('.krds-mp-next').addEventListener('click', function () {
+        currentYear++;
+        renderGrid();
+    }); */
+    
+    popup.querySelector('.krds-mp-prev').addEventListener('click', function () {
+        var previousYear = currentYear - 1;
+
+        if (
+            !minMonthValue ||
+            previousYear >= minMonthValue.year
+        ) {
+            currentYear = previousYear;
+            renderGrid();
+        }
+    });
+
+    popup.querySelector('.krds-mp-next').addEventListener('click', function () {
+        var nextYear = currentYear + 1;
+
+        if (
+            !maxMonthValue ||
+            nextYear <= maxMonthValue.year
+        ) {
+            currentYear = nextYear;
+            renderGrid();
+        }
+    });
+    
+
+    /* 이번 달 버튼 */
+    popup.querySelector('.krds-mp-btn-this').addEventListener('click', function () {
+        var t   = new Date();
+        currentYear = t.getFullYear();
+        tempYear    = currentYear;
+        tempMonth   = t.getMonth(); // 0-indexed
+        renderGrid();
+    });
+
+    /* 취소 버튼 */
+    popup.querySelector('.krds-mp-btn-cancel').addEventListener('click', function () {
+        closePopup();
+    });
+
+    /* 확인 버튼 */
+    popup.querySelector('.krds-mp-btn-confirm').addEventListener('click', function () {
+        applySelection();
+    });
+
+})();
+</script>
+
+		                    <!-- <input id="dp-input" name="date" class="form-control" size="16" type="text" readonly="readonly">
+		                    <a href="#" class="add-on btn btn-gray"><i class="bi bi-calendar-check"></i></a> -->
+						</div>
+						
+	                </div>  
+	                <div id="dp2">
+	                	<div class="form-check-inline-wr mt-2">
+							<div class="form-check form-check-inline">
+		                 		<input class="form-check-input" id="dp_11" type="checkbox">
+							    <label class="form-check-label" for="dp_11">율리우스력</label>
+						    </div>						    
+							<div class="form-check form-check-inline">
+								<input class="form-check-input" id="dp_12" type="checkbox">
+							     <label class="form-check-label" for="dp_12">그레고리력</label>
+							</div>
+		                </div>
+	                </div>
+	                <p class="con-sub con-sub-sm py-2">※ 우리나라의 현행 공식 역법은 그레고리력 (천문법 제5조 [법률 제14906호, 2017. 10. 24.])</p>
+	                <div class="search_btn">
+				     	<a href="javascript:fn_convert();" class="btn btn-blue">변환하기</a>
+						<a href="/kor/life/pageView/5" class="btn btn-gray-light">다시작성</a>
+				    </div>
+	            </div>
+				</fieldset>
+			</form>
+			<div class="con-text mb-0">
+				<p class="con-h4">안내 정보</p>
+				<div class="con-box-wr">
+					<div class="con-box">
+						<p>※ 1582년 로마 교황 그레고리우스 13세는 율리우스력을 그레고리력으로 개정함에 따라 (율리우스력) 1582년 10월 4일 다음 날은 (그레고리력) 1582년 10월 15일이 됨. 연구원은 두 역법 정보를 모두 제공함</p>
+						<p>※ 입력범위 : -59년 02월 ~ 2050년 12월</p>
+					</div>
+					<a href="#" class="con-box-more"><i class="bi bi-chevron-down"></i></a>
+				</div>
+				<script>
+				document.querySelectorAll('.con-box-more').forEach(btn => {
+				  btn.addEventListener('click', function(e) {
+				    e.preventDefault();
+				
+				    const wrapper = this.closest('.con-box-wr');
+				    const box = wrapper.querySelector('.con-box');
+				
+				    if (box.classList.contains('open')) {
+				      box.style.height = '105px';
+				      box.classList.remove('open');
+				    } else {
+				      box.style.height = box.scrollHeight + 'px';
+				      box.classList.add('open');
+				    }
+
+				    wrapper.classList.toggle('open');
+				  });
+				});
+				</script>
+			</div>
+		</div>
+		<div class="contents_right_wr">
+		<div class="contents_right">
+			
+			<div class="month_move_wr">
+				<a class="btn btn-gray-light-line" id="prevMonthBtn"><span class="sr-only"> 보기</span><i class="bi bi-chevron-left"></i></a>
+				
+					
+					
+						<p class="con-h3 p-0">양력 2026년 10월 달력정보</p>
+					
+				
+                <a class="btn btn-gray-light-line" id="nextMonthBtn"><span class="sr-only">다음달 보기</span><i class="bi bi-chevron-right"></i></a>
+			</div>
+			<div class="table-responsive mt-3">
+				<table class="table tbl_cnt tbl_border tbl_center monthly_bg">
+					<caption>입력범위에 따른 음력양력 대조표에 대한 양력, 음력, 음력간지의 내용을 확인하실 수 있습니다.</caption>
+					<colgroup>
+						<col style="width:17%;">
+						<col style="width:17%;">
+						<col style="width:auto;">
+						<col style="width:12%;">
+						<col style="width:17%;">
+					<thead>
+						<tr>
+							
+								
+								
+									<th scope="col">그레고리력</th>
+									<th scope="col">음력</th>
+									<th scope="col">음력간지</th>
+									<th scope="col">요일</th>
+									<th scope="col">율리우스력</th>
+								
+							
+							
+							
+						</tr>
+					</thead>
+					<tbody>
+						
+							<tr>
+								
+									
+									
+									
+										<td class="bg_color td_style02">2026년 10월 01일</td>
+										
+											
+											
+												<td>2026년 08월 21일</td>
+											
+										
+										
+											
+											
+												<td>병오(丙午)년 정유(丁酉)월 무신(戊申)일</td>
+											
+										
+										<td>목요일</td>
+										<td class="td_style02">2026년 09월 18일</td>
+									
+								
+							</tr>
+						
+							<tr>
+								
+									
+									
+									
+										<td class="bg_color td_style02">2026년 10월 02일</td>
+										
+											
+											
+												<td>2026년 08월 22일</td>
+											
+										
+										
+											
+											
+												<td>병오(丙午)년 정유(丁酉)월 기유(己酉)일</td>
+											
+										
+										<td>금요일</td>
+										<td class="td_style02">2026년 09월 19일</td>
+									
+								
+							</tr>
+						
+							<tr>
+								
+									
+									
+									
+										<td class="bg_color td_style02">2026년 10월 03일</td>
+										
+											
+											
+												<td>2026년 08월 23일</td>
+											
+										
+										
+											
+											
+												<td>병오(丙午)년 정유(丁酉)월 경술(庚戌)일</td>
+											
+										
+										<td>토요일</td>
+										<td class="td_style02">2026년 09월 20일</td>
+									
+								
+							</tr>
+						
+							<tr>
+								
+									
+									
+									
+										<td class="bg_color td_style02">2026년 10월 04일</td>
+										
+											
+											
+												<td>2026년 08월 24일</td>
+											
+										
+										
+											
+											
+												<td>병오(丙午)년 정유(丁酉)월 신해(辛亥)일</td>
+											
+										
+										<td>일요일</td>
+										<td class="td_style02">2026년 09월 21일</td>
+									
+								
+							</tr>
+						
+							<tr>
+								
+									
+									
+									
+										<td class="bg_color td_style02">2026년 10월 05일</td>
+										
+											
+											
+												<td>2026년 08월 25일</td>
+											
+										
+										
+											
+											
+												<td>병오(丙午)년 정유(丁酉)월 임자(壬子)일</td>
+											
+										
+										<td>월요일</td>
+										<td class="td_style02">2026년 09월 22일</td>
+									
+								
+							</tr>
+						
+							<tr>
+								
+									
+									
+									
+										<td class="bg_color td_style02">2026년 10월 06일</td>
+										
+											
+											
+												<td>2026년 08월 26일</td>
+											
+										
+										
+											
+											
+												<td>병오(丙午)년 정유(丁酉)월 계축(癸丑)일</td>
+											
+										
+										<td>화요일</td>
+										<td class="td_style02">2026년 09월 23일</td>
+									
+								
+							</tr>
+						
+							<tr>
+								
+									
+									
+									
+										<td class="bg_color td_style02">2026년 10월 07일</td>
+										
+											
+											
+												<td>2026년 08월 27일</td>
+											
+										
+										
+											
+											
+												<td>병오(丙午)년 정유(丁酉)월 갑인(甲寅)일</td>
+											
+										
+										<td>수요일</td>
+										<td class="td_style02">2026년 09월 24일</td>
+									
+								
+							</tr>
+						
+							<tr>
+								
+									
+									
+									
+										<td class="bg_color td_style02">2026년 10월 08일</td>
+										
+											
+											
+												<td>2026년 08월 28일</td>
+											
+										
+										
+											
+											
+												<td>병오(丙午)년 정유(丁酉)월 을묘(乙卯)일</td>
+											
+										
+										<td>목요일</td>
+										<td class="td_style02">2026년 09월 25일</td>
+									
+								
+							</tr>
+						
+							<tr>
+								
+									
+									
+									
+										<td class="bg_color td_style02">2026년 10월 09일</td>
+										
+											
+											
+												<td>2026년 08월 29일</td>
+											
+										
+										
+											
+											
+												<td>병오(丙午)년 정유(丁酉)월 병진(丙辰)일</td>
+											
+										
+										<td>금요일</td>
+										<td class="td_style02">2026년 09월 26일</td>
+									
+								
+							</tr>
+						
+							<tr>
+								
+									
+									
+									
+										<td class="bg_color td_style02">2026년 10월 10일</td>
+										
+											
+											
+												<td>2026년 08월 30일</td>
+											
+										
+										
+											
+											
+												<td>병오(丙午)년 정유(丁酉)월 정사(丁巳)일</td>
+											
+										
+										<td>토요일</td>
+										<td class="td_style02">2026년 09월 27일</td>
+									
+								
+							</tr>
+						
+							<tr>
+								
+									
+									
+									
+										<td class="bg_color td_style02">2026년 10월 11일</td>
+										
+											
+											
+												<td>2026년 09월 01일</td>
+											
+										
+										
+											
+											
+												<td>병오(丙午)년 무술(戊戌)월 무오(戊午)일</td>
+											
+										
+										<td>일요일</td>
+										<td class="td_style02">2026년 09월 28일</td>
+									
+								
+							</tr>
+						
+							<tr>
+								
+									
+									
+									
+										<td class="bg_color td_style02">2026년 10월 12일</td>
+										
+											
+											
+												<td>2026년 09월 02일</td>
+											
+										
+										
+											
+											
+												<td>병오(丙午)년 무술(戊戌)월 기미(己未)일</td>
+											
+										
+										<td>월요일</td>
+										<td class="td_style02">2026년 09월 29일</td>
+									
+								
+							</tr>
+						
+							<tr>
+								
+									
+									
+									
+										<td class="bg_color td_style02">2026년 10월 13일</td>
+										
+											
+											
+												<td>2026년 09월 03일</td>
+											
+										
+										
+											
+											
+												<td>병오(丙午)년 무술(戊戌)월 경신(庚申)일</td>
+											
+										
+										<td>화요일</td>
+										<td class="td_style02">2026년 09월 30일</td>
+									
+								
+							</tr>
+						
+							<tr>
+								
+									
+									
+									
+										<td class="bg_color td_style02">2026년 10월 14일</td>
+										
+											
+											
+												<td>2026년 09월 04일</td>
+											
+										
+										
+											
+											
+												<td>병오(丙午)년 무술(戊戌)월 신유(辛酉)일</td>
+											
+										
+										<td>수요일</td>
+										<td class="td_style02">2026년 10월 01일</td>
+									
+								
+							</tr>
+						
+							<tr>
+								
+									
+									
+									
+										<td class="bg_color td_style02">2026년 10월 15일</td>
+										
+											
+											
+												<td>2026년 09월 05일</td>
+											
+										
+										
+											
+											
+												<td>병오(丙午)년 무술(戊戌)월 임술(壬戌)일</td>
+											
+										
+										<td>목요일</td>
+										<td class="td_style02">2026년 10월 02일</td>
+									
+								
+							</tr>
+						
+							<tr>
+								
+									
+									
+									
+										<td class="bg_color td_style02">2026년 10월 16일</td>
+										
+											
+											
+												<td>2026년 09월 06일</td>
+											
+										
+										
+											
+											
+												<td>병오(丙午)년 무술(戊戌)월 계해(癸亥)일</td>
+											
+										
+										<td>금요일</td>
+										<td class="td_style02">2026년 10월 03일</td>
+									
+								
+							</tr>
+						
+							<tr>
+								
+									
+									
+									
+										<td class="bg_color td_style02">2026년 10월 17일</td>
+										
+											
+											
+												<td>2026년 09월 07일</td>
+											
+										
+										
+											
+											
+												<td>병오(丙午)년 무술(戊戌)월 갑자(甲子)일</td>
+											
+										
+										<td>토요일</td>
+										<td class="td_style02">2026년 10월 04일</td>
+									
+								
+							</tr>
+						
+							<tr>
+								
+									
+									
+									
+										<td class="bg_color td_style02">2026년 10월 18일</td>
+										
+											
+											
+												<td>2026년 09월 08일</td>
+											
+										
+										
+											
+											
+												<td>병오(丙午)년 무술(戊戌)월 을축(乙丑)일</td>
+											
+										
+										<td>일요일</td>
+										<td class="td_style02">2026년 10월 05일</td>
+									
+								
+							</tr>
+						
+							<tr>
+								
+									
+									
+									
+										<td class="bg_color td_style02">2026년 10월 19일</td>
+										
+											
+											
+												<td>2026년 09월 09일</td>
+											
+										
+										
+											
+											
+												<td>병오(丙午)년 무술(戊戌)월 병인(丙寅)일</td>
+											
+										
+										<td>월요일</td>
+										<td class="td_style02">2026년 10월 06일</td>
+									
+								
+							</tr>
+						
+							<tr>
+								
+									
+									
+									
+										<td class="bg_color td_style02">2026년 10월 20일</td>
+										
+											
+											
+												<td>2026년 09월 10일</td>
+											
+										
+										
+											
+											
+												<td>병오(丙午)년 무술(戊戌)월 정묘(丁卯)일</td>
+											
+										
+										<td>화요일</td>
+										<td class="td_style02">2026년 10월 07일</td>
+									
+								
+							</tr>
+						
+							<tr>
+								
+									
+									
+									
+										<td class="bg_color td_style02">2026년 10월 21일</td>
+										
+											
+											
+												<td>2026년 09월 11일</td>
+											
+										
+										
+											
+											
+												<td>병오(丙午)년 무술(戊戌)월 무진(戊辰)일</td>
+											
+										
+										<td>수요일</td>
+										<td class="td_style02">2026년 10월 08일</td>
+									
+								
+							</tr>
+						
+							<tr>
+								
+									
+									
+									
+										<td class="bg_color td_style02">2026년 10월 22일</td>
+										
+											
+											
+												<td>2026년 09월 12일</td>
+											
+										
+										
+											
+											
+												<td>병오(丙午)년 무술(戊戌)월 기사(己巳)일</td>
+											
+										
+										<td>목요일</td>
+										<td class="td_style02">2026년 10월 09일</td>
+									
+								
+							</tr>
+						
+							<tr>
+								
+									
+									
+									
+										<td class="bg_color td_style02">2026년 10월 23일</td>
+										
+											
+											
+												<td>2026년 09월 13일</td>
+											
+										
+										
+											
+											
+												<td>병오(丙午)년 무술(戊戌)월 경오(庚午)일</td>
+											
+										
+										<td>금요일</td>
+										<td class="td_style02">2026년 10월 10일</td>
+									
+								
+							</tr>
+						
+							<tr>
+								
+									
+									
+									
+										<td class="bg_color td_style02">2026년 10월 24일</td>
+										
+											
+											
+												<td>2026년 09월 14일</td>
+											
+										
+										
+											
+											
+												<td>병오(丙午)년 무술(戊戌)월 신미(辛未)일</td>
+											
+										
+										<td>토요일</td>
+										<td class="td_style02">2026년 10월 11일</td>
+									
+								
+							</tr>
+						
+							<tr>
+								
+									
+									
+									
+										<td class="bg_color td_style02">2026년 10월 25일</td>
+										
+											
+											
+												<td>2026년 09월 15일</td>
+											
+										
+										
+											
+											
+												<td>병오(丙午)년 무술(戊戌)월 임신(壬申)일</td>
+											
+										
+										<td>일요일</td>
+										<td class="td_style02">2026년 10월 12일</td>
+									
+								
+							</tr>
+						
+							<tr>
+								
+									
+									
+									
+										<td class="bg_color td_style02">2026년 10월 26일</td>
+										
+											
+											
+												<td>2026년 09월 16일</td>
+											
+										
+										
+											
+											
+												<td>병오(丙午)년 무술(戊戌)월 계유(癸酉)일</td>
+											
+										
+										<td>월요일</td>
+										<td class="td_style02">2026년 10월 13일</td>
+									
+								
+							</tr>
+						
+							<tr>
+								
+									
+									
+									
+										<td class="bg_color td_style02">2026년 10월 27일</td>
+										
+											
+											
+												<td>2026년 09월 17일</td>
+											
+										
+										
+											
+											
+												<td>병오(丙午)년 무술(戊戌)월 갑술(甲戌)일</td>
+											
+										
+										<td>화요일</td>
+										<td class="td_style02">2026년 10월 14일</td>
+									
+								
+							</tr>
+						
+							<tr>
+								
+									
+									
+									
+										<td class="bg_color td_style02">2026년 10월 28일</td>
+										
+											
+											
+												<td>2026년 09월 18일</td>
+											
+										
+										
+											
+											
+												<td>병오(丙午)년 무술(戊戌)월 을해(乙亥)일</td>
+											
+										
+										<td>수요일</td>
+										<td class="td_style02">2026년 10월 15일</td>
+									
+								
+							</tr>
+						
+							<tr>
+								
+									
+									
+									
+										<td class="bg_color td_style02">2026년 10월 29일</td>
+										
+											
+											
+												<td>2026년 09월 19일</td>
+											
+										
+										
+											
+											
+												<td>병오(丙午)년 무술(戊戌)월 병자(丙子)일</td>
+											
+										
+										<td>목요일</td>
+										<td class="td_style02">2026년 10월 16일</td>
+									
+								
+							</tr>
+						
+							<tr>
+								
+									
+									
+									
+										<td class="bg_color td_style02">2026년 10월 30일</td>
+										
+											
+											
+												<td>2026년 09월 20일</td>
+											
+										
+										
+											
+											
+												<td>병오(丙午)년 무술(戊戌)월 정축(丁丑)일</td>
+											
+										
+										<td>금요일</td>
+										<td class="td_style02">2026년 10월 17일</td>
+									
+								
+							</tr>
+						
+							<tr>
+								
+									
+									
+									
+										<td class="bg_color td_style02">2026년 10월 31일</td>
+										
+											
+											
+												<td>2026년 09월 21일</td>
+											
+										
+										
+											
+											
+												<td>병오(丙午)년 무술(戊戌)월 무인(戊寅)일</td>
+											
+										
+										<td>토요일</td>
+										<td class="td_style02">2026년 10월 18일</td>
+									
+								
+							</tr>
+						
+					</tbody>
+				</table>
+			</div>
+		</div>
+		</div>
+	</div>
+
+</body> 
+<script>
+
+</script>

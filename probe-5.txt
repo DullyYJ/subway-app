@@ -1,0 +1,919 @@
+URL https://astro.kasi.re.kr/life/pageView/6
+STATUS 200
+TYPE text/html;charset=UTF-8
+LEN 35971
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<head>
+    <script src="/resources/js/life/common.js"></script>
+    <script src="/resources/js/life/modify-date.js"></script>
+
+    <script src="/resources/js/life/print.js"></script>
+    <script src="/resources/js/life/window.js?ver=1"></script>
+
+    <script type="text/javascript">
+        var isRunning = false;
+        var iOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+		
+        //2022 - 광주(경기), 보현산, 소백산, 대덕, 고성(강원), 제주(레이다기지)
+        //2023 - 경기광주, 보현산천문대, 소백산천문대, 대덕전파천문대, 강원고성, 제주레이더
+        var areas = [];
+        // 강원도
+        var area1 = ["강릉", "강원(고성)", "대관령", "동해", "삼척", "양양", "영월", "원주", "주문진", "춘천", "태백"];
+        // 서울
+        var area2 = ["서울"];
+        // 인천
+        var area3 = ["강화도", "인천"];
+        // 경기도
+        var area4 = ["고양", "광주(경기)", "부천", "속초", "수원", "시흥", "안산", "안양", "양평", "여주", "용인", "파주", "평택", "화성"];
+        // 울릉도
+        var area5 = ["울릉도"];
+        // 독도
+        var area6 = ["독도"];
+        // 경상북도
+        var area7 = ["경주", "구미", "김천", "보현산", "상주", "안동", "영덕", "영주", "영천", "울진", "의성", "포항"]
+        // 충청남도
+        var area8 = ["논산", "당진", "보령", "서산", "서천", "아산", "천안", "태안"];
+        // 충청북도
+        var area8_2 = ["소백산", "제천", "청주", "청주공항", "추풍령", "충주"];
+        // 대전
+        var area9 = ["대전"];
+        // 세종
+        var area9_2 = ["세종"];
+        // 대구
+        var area10 = ["대구"];
+        // 전라북도
+        var area11 = ["군산", "남원", "변산", "부안", "익산", "임실", "장수", "전주", "정읍"];
+        // 광주
+        var area12 = ["광주"];
+        // 울산
+        var area13 = ["울산"];
+        // 부산
+        var area14 = ["부산"];
+        // 경상남도
+        var area15 = ["거제", "거창", "김해", "남해", "마산", "밀양", "사천", "진주", "진해", "창원", "통영"];
+        // 전라광주
+        var area16 = ["고흥", "광양", "목포", "무안", "보성", "순천", "승주", "여수", "여수공항", "영광", "완도", "장흥", "진도", "춘양", "해남", "흑산도","광주"]
+        // 제주도
+        var area17 = ["서귀포", "성산일출봉", "제주", "제주(레이다기지)"];
+
+        $(function () {
+        var areaList = $('ul.areaList');
+        var date = new Date();
+        var today = String(date.getFullYear()) + format02d(date.getMonth() + 1);
+        var modal = $('.sunMoonMaploc_popup');
+
+        var yearInput = $('#yearInput');
+        var monthInput = $('#monthInput');
+        var titleMonthSpan = $('#title-month-span');
+        var sunmoonTableBody = $('#sunmoon-table-body');
+        var titleLocationSpan = $('#title-location-span');
+
+        var mainMap = $('div.main_map');
+        var localMap = $('div.local_map');
+
+        var isMain;
+        var sunRiseSetModal = $('.sunMoonMaptwt_popup');
+        var sunRiseSetTableBody = $('#sun-rise-set-table-body');
+        var modalTitle = sunRiseSetModal.find('h4');
+
+        var location;
+
+        hideModifyDate();
+
+        if ($.fn.popover) {
+            $('[data-toggle="popover"]').popover();
+        }
+
+        areas = areas.concat(
+            area1, area2, area3, area4, area5, area6, area7, area8, area8_2, area9, area9_2, area10, area11, area12, area13, area14, area15, area16, area17
+        ).sort(function (a, b) {
+            return (a).localeCompare(b);
+        });
+
+        $('#list_count').text(areas.length);
+
+        areas.forEach(function (data) {
+            var li = '<li><a href="javascript:" class="areaList_btn">' + data + '<i class="bi bi-window-stack"></i></a></li>';
+            areaList.append(li);
+        });
+
+        yearInput.val(date.getFullYear());
+        monthInput.val(date.getMonth() + 1);
+        titleMonthSpan.text(date.getFullYear() + '년 ' + (date.getMonth() + 1) + '월');
+
+        mainMap.show();
+        localMap.hide();
+
+        function ajaxRequest(location, date) {
+
+            if(date.substring(0,4) < 2023 && location == '강원(고성)'){
+                location = '고성(강원)'
+            }
+            if(date.substring(0,4) >= 2023 && location == '강원(고성)'){
+                location = '강원고성'
+            }
+            if(date.substring(0,4) >= 2023 && location == '광주(경기)'){
+                location = '경기광주'
+            }
+            if(date.substring(0,4) >= 2023 && location == '보현산'){
+                location = '보현산천문대';
+            }
+            if(date.substring(0,4) >= 2023 && location == '소백산'){
+                location = '소백산천문대';
+            }
+            if(date.substring(0,4) >= 2023 && location == '대덕'){
+                location = '대덕전파천문대';
+            }
+            if(date.substring(0,4) >= 2023 && location == '제주(레이다기지)'){
+                location = '제주레이더';
+            }
+
+            if(!isRunning){
+                isRunning = true;
+
+                $.ajax({
+                    url : "/life/sunmoon",
+                    data : {
+                        location : location,
+                        date : date
+                    },
+                    beforeSend : function(){
+                        var yyyy = date.substr(0, 4);
+                        var mm = date.substr(4, 2);
+
+                        yearInput.val(yyyy);
+                        monthInput.val(parseInt(mm));
+
+                        titleMonthSpan.text(yyyy + '년 ' + parseInt(mm) + '월');
+                        sunmoonTableBody.empty();
+
+                        $('#excelLink').attr('href', '/life/sunmoon/excel?location=' + encodeURI(location) + '&date=' + date);
+                    },
+                    success : function(datas){
+                        var sunmoon = datas.sunmoon;
+                        var luncList = datas.luncList;
+
+                        if(sunmoon.length > 0) {
+                            sunmoon.forEach(function (data, i) {
+                                var tr = '';
+
+                                tr += '<tr>';
+                                tr += '<td>' + data.RGON_DATE.substr(6) + '</td>';
+                                tr += '<td>' + (luncList.length === 0 || luncList[i].LUNC === undefined ? '자료없음' : luncList[i].LUNC) + '</td>';
+                                tr += '<td>' + formatTime(data.SUNRISE_TM) + '</td>';
+                                tr += '<td>' + formatTime(data.SUN_TRANSIT_TM) + '</td>';
+                                tr += '<td>' + formatTime(data.SUNSET_TM) + '</td>';
+                                tr += '<td>' + formatTime(data.MOONRISE_TM) + '</td>';
+                                tr += '<td>' + formatTime(data.MOON_TRANSIT_TM) + '</td>';
+                                tr += '<td>' + formatTime(data.MOONSET_TM) + '</td>';
+                                tr += '<td>' + formatTime(data.CIVIL_TWIL_TM_MORN) + '</td>';
+                                tr += '<td>' + formatTime(data.CIVIL_TWIL_TM_EVEN) + '</td>';
+                                tr += '<td>' + formatTime(data.NAUT_TWIL_TM_MORN) + '</td>';
+                                tr += '<td>' + formatTime(data.NAUT_TWIL_TM_EVEN) + '</td>';
+                                tr += '<td>' + formatTime(data.ASTRO_TWIL_TM_MORN) + '</td>';
+                                tr += '<td>' + formatTime(data.ASTRO_TWIL_TM_EVEN) + '</td>';
+                                tr += '</tr>';
+
+                                sunmoonTableBody.append(tr);
+                            });
+                        } else {
+                            sunmoonTableBody.append('<tr><td colspan="14">자료없음</td></tr>');
+                        }
+                    },
+                    complete : function () {
+                        isRunning = false;
+                    }
+                });
+            }
+        }
+
+        function checkUndefined(val){
+            if(val === undefined) {
+                return '-';
+            }
+            return val;
+        }
+
+        yearInput.keydown(function (e) {
+            if (e.keyCode === 13) {
+                $('#searchButton').trigger('click');
+                return false;
+            }
+        });
+
+        $('.main_map .Map a').on('click', function () {
+            var area = $(this).attr('class');
+
+            if(area){
+                var currentMap = $('ul.' + area).closest('div.sunMoonMap');
+
+                mainMap.hide();
+                localMap.hide();
+                currentMap.show();
+            }
+        });
+
+        $('ul.Map li a:not([class]), ul.areaList li a').click(function () {
+            sunmoonTableBody.empty();
+
+            location = $(this).text();
+            titleLocationSpan.text(location);
+
+            if (!iOS) {
+                ajaxRequest(location, today);
+                modal.modal('show');
+            } else {
+                modal.find('.buttons').hide();
+                openSunmmonWindow(modal.html(), location)
+            }
+        });
+
+        $('#monthInput, #yearInput, #searchButton').on('mousedown click', function (e) {
+            e.stopPropagation();
+        });
+        
+        $('.sunMoonMaploc_popup .close').on('click', function(e){
+            e.preventDefault();
+            $('.sunMoonMaploc_popup').modal('hide');
+        });
+        
+        $('.sunMoonMaptwt_popup .close').on('click', function(e){
+            e.preventDefault();
+            $('.sunMoonMaptwt_popup').modal('hide');
+        });
+        
+        $('.btn_return').on('click', function () {
+            $('.local_map').hide();
+            $('.main_map').show();
+        });
+
+        $('#searchButton').on('click', function (e) {
+            e.preventDefault();
+
+            var year = parseInt(yearInput.val(), 10);
+            var month = monthInput.val();
+
+            if (!location) {
+                alert('지역을 먼저 선택해주세요.');
+                return;
+            }
+
+            if (!isNaN(year) && year >= 1896 && year <= 2051) {
+                ajaxRequest(location, year + format02d(month));
+            } else {
+                alert('범위가 올바르지 않습니다.');
+            }
+        });
+        
+        $('#prevMonthBtn').click(function(){
+            var currentMm = parseInt($('#monthInput').val());
+            var currentYyyy = parseInt($('#yearInput').val());
+
+            if(currentMm == 1){
+                currentMm = 12;
+                currentYyyy = currentYyyy - 1;
+            }else{
+                currentMm = currentMm - 1;
+            }
+            
+            $('#yearInput').val(currentYyyy);
+            $('#monthInput').val(currentMm);
+            $('#searchButton').click();
+        });
+
+        $('#nextMonthBtn').click(function(){
+            var currentMm = parseInt($('#monthInput').val());
+            var currentYyyy = parseInt($('#yearInput').val());
+
+            if(currentMm == 12){
+                currentMm = 1;
+                currentYyyy = currentYyyy + 1;
+            }else{
+                currentMm = currentMm + 1;
+            }
+
+            $('#yearInput').val(currentYyyy);
+            $('#monthInput').val(currentMm);
+            $('#searchButton').click();
+        });
+        
+        $('.sunRiseSet').click(function () {
+            modalTitle.text($(this).text());
+            isMain = $(this).data('main');
+            sunRiseSetTableBody.empty();
+
+            if (!iOS) {
+                sunRiseSetModal.modal('show');
+            } else {
+                openSunrisesetWindow(sunRiseSetModal.html(), isMain)
+            }
+        });
+
+        sunRiseSetModal.on('shown.bs.modal', function() {
+            $.ajax({
+                url : "/life/sunRiseSet",
+                data : {
+                    "isMain" : isMain
+                },
+                success : function(datas){
+                    datas.forEach(function (data, i) {
+                        var tr = '';
+
+                        tr += '<tr>';
+                        tr += '<td>' + data.LOCATION_NM + '</td>';
+                        tr += '<td>' + checkUndefined(format02d(data.SUN_SET_HH)) + '</td>';
+                        tr += '<td>' + checkUndefined(format02d(data.SUN_SET_MM)) + '</td>';
+                        tr += '<td>' + checkUndefined(format02d(data.SUN_RISE_HH)) + '</td>';
+                        tr += '<td>' + checkUndefined(format02d(data.SUN_RISE_MM)) + '</td>';
+                        tr += '</tr>';
+
+                        sunRiseSetTableBody.append(tr);
+                    });
+                }
+            });
+        });
+
+        var type = "null";
+        if (type == 'main') {
+            $('.sunRiseSet').trigger('click');
+        }
+    });
+</script>
+</head>
+<body>
+<!-- 월별 해/달 출몰시각 (sunMoonMap)  -->
+<div class="contents_wr contents_wr02">
+	<!-- box_img -->
+	<div class="contents_left border-gray border-radius-20">
+		<div class="con-text">
+<!-- 			<p class="con-h3">■ 지역별 검색</p> -->
+			<p class="con-sub">지도에서 원하는 <strong>지역을 클릭</strong>하시면 해당 지역의 <em>월별 해/달 출몰시각</em>을 보실 수 있습니다.</p>
+		</div>
+		
+		<div class="con-text">
+			<div class="search_btn">
+				<a class="btn btn-md btn-blue-deep sunRiseSet" href="javascript:" data-main="1" title="모달창 열림">주요 명소의 연말 일몰 시각 및 <br>새해 일출 시각 <i class="bi bi-window-stack"></i></a>
+			</div>
+			<div class="search_btn mt-1">
+				<a class="btn btn-md btn-blue sunRiseSet" href="javascript:" data-main="0" title="모달창 열림">기타 주요도시 연말 및 <br>새해 일출몰 시각 <i class="bi bi-window-stack"></i></a>
+			</div>
+		</div>
+		
+		<div class="con-text mb-0">
+			<p class="con-h4">안내 정보</p>
+			<div class="con-box-wr">
+				<div class="con-box">
+					<p>※ '월별 해/달 출몰시각' 페이지에서 제공하는 자료는 국토지리정보원에서 제공하는 해당 도시의 좌표값을 이용하여 계산한 값이며 '일출일몰시각계산' 페이지에서 제공하는 자료는 사용자가 입력한 값에 기반하여 도출된 값이므로, 결과값이 소폭 다를 수 있습니다.</p>
+				</div>
+				<a href="#" class="con-box-more"><i class="bi bi-chevron-down"></i></a>
+			</div>
+			<script>
+			document.querySelectorAll('.con-box-more').forEach(btn => {
+			  btn.addEventListener('click', function(e) {
+			    e.preventDefault();
+			
+			    const wrapper = this.closest('.con-box-wr');
+			    const box = wrapper.querySelector('.con-box');
+			
+			    if (box.classList.contains('open')) {
+			      box.style.height = '65px';
+			      box.classList.remove('open');
+			    } else {
+			      box.style.height = box.scrollHeight + 'px';
+			      box.classList.add('open');
+			    }
+
+			    wrapper.classList.toggle('open');
+			  });
+			});
+			</script>
+		</div>
+	</div>
+	<!-- box_img -->
+	
+	<div class="contents_right_wr">
+	<div class="contents_right sunMoonMap_wr">
+		<p class="con-h3 mb-3">월별 해/달 출몰시각 지도</p>
+		<!-- sunMoonMap -->
+		<div class="sunMoonMap main_map border-radius-20 overflow-hidden">
+		    <div class="Map_wrap">
+		        <ul class="Map Korea">
+		            <li class="area1"><a href="javascript:" class="Gangwon">강원도</a></li>
+		            <li class="area5"><a href="javascript:">울릉도</a></li>
+		            <li class="area6"><a href="javascript:">독도</a></li>
+		            <li class="area3"><a href="javascript:" class="Incheon">인천</a></li>
+		            <li class="area2"><a href="javascript:">서울</a></li>
+		            <li class="area4"><a href="javascript:" class="Gyeonggi">경기도</a></li>
+		            <li class="area7"><a href="javascript:" class="Gyeongbuk">경상북도</a></li>
+		            <li class="area8_2"><a href="javascript:" class="Chungbuk">충청북도</a></li>
+		            <li class="area8"><a href="javascript:" class="Chungnam">충청남도</a></li>
+		            <li class="area9_2"><a href="javascript:">세종</a></li>
+		            <li class="area9"><a href="javascript:">대전</a></li>
+		            <li class="area10"><a href="javascript:">대구</a></li>
+		            <li class="area11"><a href="javascript:" class="Jeonbuk">전라북도</a></li>
+		            <!-- <li class="area12"><a href="javascript:">광주</a></li> -->
+		            <li class="area13"><a href="javascript:">울산</a></li>
+		            <li class="area14"><a href="javascript:">부산</a></li>
+		            <li class="area15"><a href="javascript:" class="Gyeongnam">경상남도</a></li>
+		            <li class="area16"><a href="javascript:" class="Jeonnam">전남광주</a></li>
+		            <li class="area17"><a href="javascript:" class="Jeju">제주도</a></li>
+		        </ul>
+		    </div>
+		</div>
+		<!--// sunMoonMap -->
+	
+		<!-- sunMoonMap -->
+		<div class="sunMoonMap local_map border-radius-20 overflow-hidden">
+		    <div class="Map_wrap Map_View">
+		    	<div class="Map_nav">
+		    		<ul class="location">
+		    			<li>대한민국</li>
+		    			<li class="active"><strong>경기도</strong></li>
+		    		</ul>
+		    		<a href="javascript:" class="btn_return">대한민국 지도로 돌아가기</a>
+		    	</div><!-- //Map_nav -->
+		        <ul class="Map Gyeonggi">
+		            <li class="area1"><a href="javascript:">파주</a></li>
+		            <li class="area2"><a href="javascript:">고양</a></li>
+		            <li class="area3"><a href="javascript:">부천</a></li>
+		            <li class="area4"><a href="javascript:">양평</a></li>
+		            <li class="area5"><a href="javascript:">시흥</a></li>
+		            <li class="area6"><a href="javascript:">안양</a></li>
+		            <li class="area7"><a href="javascript:">광주(경기)</a></li>
+		            <li class="area8"><a href="javascript:">안산</a></li>
+		            <li class="area9"><a href="javascript:">수원</a></li>
+		            <li class="area10"><a href="javascript:">용인</a></li>
+		            <li class="area11"><a href="javascript:">여주</a></li>
+		            <li class="area12"><a href="javascript:">화성</a></li>
+		            <li class="area13"><a href="javascript:">평택</a></li>
+		        </ul>
+		    </div>
+		</div>
+		<!--// sunMoonMap -->
+	
+		<!-- sunMoonMap -->
+		<div class="sunMoonMap local_map border-radius-20 overflow-hidden">
+		    <div class="Map_wrap Map_View">
+		    	<div class="Map_nav">
+		    		<ul class="location">
+		    			<li>대한민국</li>
+		    			<li class="active"><strong>인천</strong></li>
+		    		</ul>
+		    		<a href="javascript:" class="btn_return">대한민국 지도로 돌아가기</a>
+		    	</div><!-- //Map_nav -->
+		        <ul class="Map Incheon">
+		            <li class="area1"><a href="javascript:">강화도</a></li>
+		            <li class="area2"><a href="javascript:">인천</a></li>
+		        </ul>
+		    </div>
+		</div>
+		<!--// sunMoonMap -->
+	
+		<!-- sunMoonMap -->
+		<div class="sunMoonMap local_map border-radius-20 overflow-hidden">
+		    <div class="Map_wrap Map_View">
+		    	<div class="Map_nav">
+		    		<ul class="location">
+		    			<li>대한민국</li>
+		    			<li class="active"><strong>강원도</strong></li>
+		    		</ul>
+		    		<a href="javascript:" class="btn_return">대한민국 지도로 돌아가기</a>
+		    	</div><!-- //Map_nav -->
+		        <ul class="Map Gangwon">
+		            <li class="area1"><a href="javascript:">강원(고성)</a></li>
+		            <li class="area2"><a href="javascript:">속초</a></li>
+		            <li class="area3"><a href="javascript:">양양</a></li>
+		            <li class="area4"><a href="javascript:">춘천</a></li>
+		            <li class="area5"><a href="javascript:">주문진</a></li>
+		            <li class="area6"><a href="javascript:">강릉</a></li>
+		            <li class="area7"><a href="javascript:">대관령</a></li>
+		            <li class="area8"><a href="javascript:">동해</a></li>
+		            <li class="area9"><a href="javascript:">삼척</a></li>
+		            <li class="area10"><a href="javascript:">원주</a></li>
+		            <li class="area11"><a href="javascript:">영월</a></li>
+		            <li class="area12"><a href="javascript:">태백</a></li>
+		        </ul>
+		    </div>
+		</div>
+		<!--// sunMoonMap -->
+		
+		<!-- sunMoonMap -->
+		<div class="sunMoonMap local_map border-radius-20 overflow-hidden">
+		    <div class="Map_wrap Map_View">
+		    	<div class="Map_nav">
+		    		<ul class="location">
+		    			<li>대한민국</li>
+		    			<li class="active"><strong>충청남도</strong></li>
+		    		</ul>
+		    		<a href="javascript:" class="btn_return">대한민국 지도로 돌아가기</a>
+		    	</div><!-- //Map_nav -->
+		        <ul class="Map Chungnam">
+		            <li class="area1"><a href="javascript:">당진</a></li>
+		            <li class="area2"><a href="javascript:">서산</a></li>
+		            <li class="area3"><a href="javascript:">태안</a></li>
+		            <li class="area4"><a href="javascript:">천안</a></li>
+		            <li class="area5"><a href="javascript:">아산</a></li>
+		            <li class="area6"><a href="javascript:">보령</a></li>
+		            <li class="area7"><a href="javascript:">서천</a></li>
+		            <li class="area8"><a href="javascript:">논산</a></li>
+		        </ul>
+		    </div>
+		</div>
+		<!--// sunMoonMap -->
+		
+		<!-- sunMoonMap -->
+		<div class="sunMoonMap local_map border-radius-20 overflow-hidden">
+		    <div class="Map_wrap Map_View">
+		    	<div class="Map_nav">
+		    		<ul class="location">
+		    			<li>대한민국</li>
+		    			<li class="active"><strong>충청북도</strong></li>
+		    		</ul>
+		    		<a href="javascript:" class="btn_return">대한민국 지도로 돌아가기</a>
+		    	</div><!-- //Map_nav -->
+		        <ul class="Map Chungbuk">
+		            <li class="area1"><a href="javascript:">제천</a></li>
+		            <li class="area2"><a href="javascript:">충주</a></li>
+		            <li class="area3"><a href="javascript:">소백산</a></li>
+		            <li class="area4"><a href="javascript:">청주공항</a></li>
+		            <li class="area5"><a href="javascript:">청주</a></li>
+		            <li class="area6"><a href="javascript:">추풍령</a></li>
+		        </ul>
+		    </div>
+		</div>
+		<!--// sunMoonMap -->
+		
+		<!-- sunMoonMap -->
+		<div class="sunMoonMap local_map border-radius-20 overflow-hidden">
+		    <div class="Map_wrap Map_View">
+		    	<div class="Map_nav">
+		    		<ul class="location">
+		    			<li>대한민국</li>
+		    			<li class="active"><strong>경상남도</strong></li>
+		    		</ul>
+		    		<a href="javascript:" class="btn_return">대한민국 지도로 돌아가기</a>
+		    	</div><!-- //Map_nav -->
+		        <ul class="Map Gyeongnam">
+		            <li class="area1"><a href="javascript:">거창</a></li>
+		            <li class="area2"><a href="javascript:">밀양</a></li>
+		            <li class="area3"><a href="javascript:">진주</a></li>
+		            <li class="area4"><a href="javascript:">마산</a></li>
+		            <li class="area5"><a href="javascript:">창원</a></li>
+		            <li class="area6"><a href="javascript:">진해</a></li>
+		            <li class="area7"><a href="javascript:">김해</a></li>
+		            <li class="area8"><a href="javascript:">사천</a></li>
+		            <li class="area9"><a href="javascript:">남해</a></li>
+		            <li class="area10"><a href="javascript:">통영</a></li>
+		            <li class="area11"><a href="javascript:">거제</a></li>
+		        </ul>
+		    </div>
+		</div>
+		<!--// sunMoonMap -->
+		
+		<!-- sunMoonMap -->
+		<div class="sunMoonMap local_map border-radius-20 overflow-hidden">
+		    <div class="Map_wrap Map_View">
+		    	<div class="Map_nav">
+		    		<ul class="location">
+		    			<li>대한민국</li>
+		    			<li class="active"><strong>경상북도</strong></li>
+		    		</ul>
+		    		<a href="javascript:" class="btn_return">대한민국 지도로 돌아가기</a>
+		    	</div><!-- //Map_nav -->
+		        <ul class="Map Gyeongbuk">
+		            <li class="area1"><a href="javascript:">울진</a></li>
+		            <li class="area2"><a href="javascript:">영주</a></li>
+		            <li class="area3"><a href="javascript:">안동</a></li>
+		            <li class="area4"><a href="javascript:">상주</a></li>
+		            <li class="area5"><a href="javascript:">의성</a></li>
+		            <li class="area6"><a href="javascript:">영덕</a></li>
+		            <li class="area7"><a href="javascript:">김천</a></li>
+		            <li class="area8"><a href="javascript:">구미</a></li>
+		            <li class="area9"><a href="javascript:">보현산</a></li>
+		            <li class="area10"><a href="javascript:">영천</a></li>
+		            <li class="area11"><a href="javascript:">포항</a></li>
+		            <li class="area12"><a href="javascript:">경주</a></li>
+		        </ul>
+		    </div>
+		</div>
+		<!--// sunMoonMap -->
+		
+		<!-- sunMoonMap -->
+		<div class="sunMoonMap local_map border-radius-20 overflow-hidden">
+		    <div class="Map_wrap Map_View">
+		    	<div class="Map_nav">
+		    		<ul class="location">
+		    			<li>대한민국</li>
+		    			<li class="active"><strong>전남광주</strong></li>
+		    		</ul>
+		    		<a href="javascript:" class="btn_return">대한민국 지도로 돌아가기</a>
+		    	</div><!-- //Map_nav -->
+		        <ul class="Map Jeonnam">
+		            <li class="area1"><a href="javascript:">영광</a></li>
+		            <li class="area2"><a href="javascript:">무안</a></li>
+		            <li class="area3"><a href="javascript:">목포</a></li>
+		            <li class="area4"><a href="javascript:">춘양</a></li>
+		            <li class="area5"><a href="javascript:">승주</a></li>
+		            <li class="area6"><a href="javascript:">순천</a></li>
+		            <li class="area7"><a href="javascript:">광양</a></li>
+		            <li class="area8"><a href="javascript:">여수공항</a></li>
+		            <li class="area9"><a href="javascript:">여수</a></li>
+		            <li class="area10"><a href="javascript:">고흥</a></li>
+		            <li class="area11"><a href="javascript:">보성</a></li>
+		            <li class="area12"><a href="javascript:">장흥</a></li>
+		            <li class="area13"><a href="javascript:">해남</a></li>
+		            <li class="area14"><a href="javascript:">완도</a></li>
+		            <li class="area15"><a href="javascript:">진도</a></li>
+		            <li class="area16"><a href="javascript:">흑산도</a></li>
+		            <li class="area17"><a href="javascript:">광주</a></li>
+		        </ul>
+		    </div>
+		</div>
+		<!--// sunMoonMap -->
+		
+		<!-- sunMoonMap -->
+		<div class="sunMoonMap local_map border-radius-20 overflow-hidden">
+		    <div class="Map_wrap Map_View">
+		    	<div class="Map_nav">
+		    		<ul class="location">
+		    			<li>대한민국</li>
+		    			<li class="active"><strong>전라북도</strong></li>
+		    		</ul>
+		    		<a href="javascript:" class="btn_return">대한민국 지도로 돌아가기</a>
+		    	</div><!-- //Map_nav -->
+		        <ul class="Map Jeonbuk">
+		            <li class="area1"><a href="javascript:">군산</a></li>
+		            <li class="area2"><a href="javascript:">익산</a></li>
+		            <li class="area3"><a href="javascript:">전주</a></li>
+		            <li class="area4"><a href="javascript:">부안</a></li>
+		            <li class="area5"><a href="javascript:">변산</a></li>
+		            <li class="area6"><a href="javascript:">정읍</a></li>
+		            <li class="area7"><a href="javascript:">임실</a></li>
+		            <li class="area8"><a href="javascript:">장수</a></li>
+		            <li class="area9"><a href="javascript:">남원</a></li>
+		        </ul>
+		    </div>
+		</div>
+		<!--// sunMoonMap -->
+		
+		<!-- sunMoonMap -->
+		<div class="sunMoonMap local_map border-radius-20 overflow-hidden">
+		    <div class="Map_wrap Map_View">
+		    	<div class="Map_nav">
+		    		<ul class="location">
+		    			<li>대한민국</li>
+		    			<li class="active"><strong>제주도</strong></li>
+		    		</ul>
+		    		<a href="javascript:" class="btn_return">대한민국 지도로 돌아가기</a>
+		    	</div><!-- //Map_nav -->
+		        <ul class="Map Jeju">
+		            <li class="area1"><a href="javascript:">제주</a></li>
+		            <li class="area2"><a href="javascript:">성산일출봉</a></li>
+		            <li class="area3"><a href="javascript:">서귀포</a></li>
+		            <li class="area4"><a href="javascript:">제주(레이다기지)</a></li>
+		        </ul>
+		    </div>
+		</div>
+		<!--// sunMoonMap -->
+		
+		<div class="sunMoonMap observatory">
+		    <div class="Modal">
+		        <div class="tit">
+		            <h4 class="location-size h4_title_noimg">전국<em class="point"> (<span id="list_count"></span>)</em></h4>
+		            <p class="info"><i class="bi bi-geo-alt"></i> 원하는 지역을 클릭해주세요.</p>
+		            <ul class="list areaList mobile">
+		
+		            </ul>
+		        </div>
+		    </div>
+		</div>
+	</div>
+	</div>
+</div>
+
+
+
+
+
+<!-- sunMoonMaploc_popup -->
+<div class="modal fade Submodal sunMoonMaploc_popup" tabindex="-1" role="dialog" aria-labelledby="myLargeModalLabel" aria-hidden="true" data-backdrop="static" data-keyboard="false">
+    <div class="modal-dialog" id="printableModal" role="document">
+    	<div class="modal-content">
+    		<div class="modal-header">
+    			<h4 class="h4_title mt_0 mb-0"><span id="title-month-span"></span> <span id="title-location-span"></span>지역 일월출몰/박명시각</h4>
+		        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+	      	</div>
+			<div class="modal-body">
+		        <div class="sunMoonMap_table">
+		            <!-- search_write -->
+		            <form name="searchForm" id="searchForm" class="form-horizontal">
+		                <fieldset>
+		                    <legend>검색샘플</legend>
+		                    <div class="search_write">
+		                        <div class="form-group text-center">
+		                            <span class="txt">입력범위 : 1896년~2051년</span>
+		                            <div class="group_s group" style="vertical-align: top;">
+		                                <input id="yearInput" name="year" class="form-control" size="16" type="text" autocomplete="false" placeholder="년도" title="년도">
+		                            </div>
+		                            <div class="group_s group">
+										<select id="monthInput" name="month" class="form-control form-select">
+										    <option value="1">1월</option>
+										    <option value="2">2월</option>
+										    <option value="3">3월</option>
+										    <option value="4">4월</option>
+										    <option value="5">5월</option>
+										    <option value="6">6월</option>
+										    <option value="7">7월</option>
+										    <option value="8">8월</option>
+										    <option value="9">9월</option>
+										    <option value="10">10월</option>
+										    <option value="11">11월</option>
+										    <option value="12">12월</option>
+										</select>
+		                            </div>
+		                            <a href="javascript:" class="btn btn-blue-deep" id="searchButton">검색</a>
+		                        </div>
+		                    </div>
+		                </fieldset>
+		            </form>
+		            <!-- //search_write -->
+		            <div class="bordList_file_wr sunMoonMap_file_wr mt-3">
+		            	<div class="sunMoonMap_file_con">
+			                <a class="btn btn-blue-deep btn-sm" href="javascript:openPrintWindow('#printableModal')" title="새창열림">화면 프린트하기<i class="bi bi-printer"></i></a>
+			                <a href="#" title="엑셀 다운로드" id="excelLink" class="btn btn-sky btn-sm" target="_blank">자료 다운받기<i class="bi bi-download"></i></a>
+		                </div>
+		                <!-- 월별 이동 -->
+		            	<div class="sunMoonMap_file_con">
+			                <a class="btn btn-sm btn-gray-light-line" id="prevMonthBtn"><i class="bi bi-chevron-left"></i> 이전달</a>
+			                <a class="btn btn-sm btn-gray-light-line" id="nextMonthBtn">다음달 <i class="bi bi-chevron-right"></i></a>
+		                </div>
+		            </div>
+		            <div class="table-responsive mt_10 sunMoonMap_modal_table">
+		                <table class="table tbl_cnt tbl_border tbl_center">
+		                    <caption>2016년 12월 31일 각 지방의 연말 해넘이에 대한 각 지역의 일몰 시간을 확인하실 수 있습니다.</caption>
+		                    <thead>
+		                    <tr>
+		                        <th scope="col" rowspan="2">양력(일)</th>
+		                        <th scope="col" rowspan="2">음력</th>
+		                        <th scope="col" colspan="3">일출몰</th>
+		                        <th scope="col" colspan="3">월출몰</th>
+		                        <th scope="col" colspan="2">시민박명</th>
+		                        <th scope="col" colspan="2">항해박명</th>
+		                        <th scope="col" colspan="2">천문박명</th>
+		                    </tr>
+		                    <tr>
+		                        <th scope="col">출</th>
+		                        <th scope="col">남중</th>
+		                        <th scope="col">몰</th>
+		                        <th scope="col">출</th>
+		                        <th scope="col">남중</th>
+		                        <th scope="col">몰</th>
+		                        <th scope="col">아침</th>
+		                        <th scope="col">저녁</th>
+		                        <th scope="col">아침</th>
+		                        <th scope="col">저녁</th>
+		                        <th scope="col">아침</th>
+		                        <th scope="col">저녁</th>
+		                    </tr>
+		                    </thead>
+		                    <tbody id="sunmoon-table-body">
+		
+		                    </tbody>
+		                </table>
+		            </div><!-- //table-responsive -->
+		        </div>
+	        </div>
+        </div>
+    </div>
+</div>
+<!--// sunMoonMaploc_popup -->
+
+
+<!-- sunMoonMaptwt_popup -->
+<div class="modal fade Submodal sunMoonMaptwt_popup" tabindex="-1" role="dialog" aria-labelledby="myLargeModalLabel" aria-hidden="true" data-backdrop="static" data-keyboard="false">
+    <div class="modal-dialog" role="document">
+    	<div class="modal-content">
+    		<div class="modal-header">
+    			<h4 class="h4_title mt_0 mt-0 mb-0"></h4>
+		        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+	      	</div>
+	      	<div class="modal-body">
+		        <div class="box">
+		            <div class="text-center">
+		                다음은 연말 말일 일몰시각과 새해 일출시각의 자료로서, 관측지의 고도를 0m 기준(수평선과 일치)으로 산출한 값입니다.
+		                해발고도가 높아질수록 일출시각보다 떠오르는 해를 일찍 볼 수 있습니다.
+		            </div>
+		        </div>
+	        	<h5 class="h5_title">각 지역의 일몰/일출시각안내</h5>
+		        <div class="table-responsive">
+		            <table class="table tbl_cnt tbl_border tbl_center">
+		                <caption>주요 명소의 연말 일몰 시각 및 새해 일출 시각을 확인하실 수 있습니다.</caption>
+		                <colgroup>
+		                    <col width="20%" />
+		                    <col width="20%" />
+		                    <col width="20%" />
+		                    <col width="20%" />
+		                    <col width="20%" />
+		                </colgroup>
+		                <thead>
+		                <tr>
+		                    <th rowspan="2" scope="col">지역</th>
+		                    <th colspan="2" scope="col"><span id="lastYear"></span>2025년 12월 31일 연말 일몰</th>
+		                    <th colspan="2" scope="col"><span id="newYear"></span>2026년 1월 1일 새해 일출</th>
+		                </tr>
+		                <tr>
+		                    <th scope="col">시</th>
+		                    <th scope="col">분</th>
+		                    <th scope="col">시</th>
+		                    <th scope="col">분</th>
+		                </tr>
+		                </thead>
+		                <tbody id="sun-rise-set-table-body">
+		
+		                </tbody>
+		            </table>
+		        </div><!-- //table-responsive -->
+	        
+	        
+	        	<h5 class="h5_title">해발고도에 따른 일출시각과의 차이</h5>
+		        <div class="table-responsive">
+		            <table class="table tbl_cnt tbl_border tbl_center">
+		                <caption>해발고도에 따른 일출시각과의 차이에 따른 해발고도와 일출시각차이에 대한 설명입니다.</caption>
+		                <colgroup>
+		                    <col width="50%" />
+		                    <col width="50%" />
+		                </colgroup>
+		                <thead>
+		                <tr>
+		                    <th scope="col">해발고도(m)</th>
+		                    <th scope="col">일출시각차이(min)</th>
+		                </tr>
+		                </thead>
+		                <tbody id="">
+		                	<tr>
+								<td>0</td>
+								<td>0</td>
+							</tr>
+							<tr>
+								<td>20~30</td>
+								<td>-1</td>
+							</tr>
+							<tr>
+								<td>100</td>
+								<td>-2</td>
+							</tr>
+							<tr>
+								<td>200</td>
+								<td>-3</td>
+							</tr>
+		                    <tr>
+		                        <td>400</td>
+		                        <td>-4</td>
+		                    </tr>
+		                    <tr>
+		                        <td>600</td>
+		                        <td>-5</td>
+		                    </tr>
+		                    <tr>
+		                        <td>900</td>
+		                        <td>-6</td>
+		                    </tr>
+		                    <tr>
+		                        <td>1200</td>
+		                        <td>-7</td>
+		                    </tr>
+		                    <tr>
+		                        <td>1550</td>
+		                        <td>-8</td>
+		                    </tr>
+		                    <tr>
+		                        <td>2000</td>
+		                        <td>-9</td>
+		                    </tr>
+		                </tbody>
+		            </table>
+		        </div><!-- //table-responsive -->
+	        </div>
+        </div>
+    </div>
+</div>
+<!--// sunMoonMaptwt_popup -->
+
+</body>

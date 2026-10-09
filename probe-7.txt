@@ -1,0 +1,1567 @@
+URL https://astro.kasi.re.kr/life/pageView/8
+STATUS 200
+TYPE text/html;charset=UTF-8
+LEN 71685
+
+
+
+
+
+
+
+
+
+  
+<head>
+    <script src="/resources/js/life/modify-date.js"></script>
+    <script src="/resources/js/life/common.js"></script>
+    <script> 
+		$(function () {
+            hideModifyDate();
+
+            //$('[data-toggle="popover"]').popover();
+            var popoverTriggerList = document.querySelectorAll('[data-bs-toggle="popover"]');
+
+            popoverTriggerList.forEach(function (el) {
+              new bootstrap.Popover(el);
+            });
+            
+		    var today = $('#today');
+			var result = $('#result');
+			var leapResult = $('#leapResult');
+            var resultList = $('#resultList');
+            
+            if($('div[role="tabpanel"]').attr('id') != 'convertPage2'){
+            	resultList.hide();
+            }
+
+            var dp = $('#dp');
+            var non_dp = $('#non-dp');
+
+            var dateString = '';
+
+            if(dateString == '') {
+                var searchDate = new Date();
+				
+                year = searchDate.getFullYear();
+                month = searchDate.getMonth();
+                date = searchDate.getDate();
+
+                dateString = formatDate(year, month, date);
+            }else{
+                var ymd = dateString.split('-');
+
+                year = parseInt(ymd[0]);
+                month = parseInt(ymd[1]) - 1;
+                date = parseInt(ymd[2]);
+            }
+
+         	//$('#date').text(formatDate(year, month, date));
+            //dp.data('date', dateString);
+            dp.find('input[name="date"]').val(dateString);
+
+			var resultTitle = result.find('h4');
+			//var todayTitle = today.find('h4');
+			var todayTitle = today.find('p');
+            var leapResultTitle = leapResult.find('h4');
+            var resultListTitle = resultList.find('h4');
+            
+
+            var tabpanel = $('div[role="tabpanel"]');
+            getMaxDate();
+            handleDatepicker(1);
+
+            $('input[name="select"]').change(function () {
+                handleDatepicker($(this).val());
+            });
+			
+            defaultSetDate("convertPage1");
+
+            // 탭변경
+            //tabpanel.find('a[role="tab"]').click(resetInput);
+            tabpanel.find('a[role="tab"]').on('click', function() {
+                var tabId = $(this).attr('id');
+                resetInput(tabId);
+            });
+            //$('.btn.btn-gray-light.reset').click(resetInput);
+            
+            $('.btn.btn-gray-light.reset').click(function() {
+                resetInput('reBtn');
+            });
+            
+            
+            function resetInput(tabId) {
+                
+                if(tabId == 'reBtn'){
+                   tabId = $('div[role="tabpanel"]').find('a.active').attr('id');
+                }
+		    	
+                today.show();
+                result.hide();
+                leapResult.hide();
+                resultList.hide();
+
+                tabpanel.find('input').val('');
+
+                var isLeap1 = $('#isLeap1');
+                var isLeap2 = $('#isLeap2');
+
+                isLeap1.val(0);
+                isLeap2.val(1);
+
+                //covertPage2 평달 윤달 구분
+                var isLeap01 = $('#isLeap01');
+                var isLeap02 = $('#isLeap02');
+                var isLeap03 = $('#isLeap03');
+
+                isLeap01.val(1);
+                isLeap02.val(0);
+                isLeap03.val(-1);
+
+                var select1 = $('#select1');
+                var select2 = $('#select2');
+
+                select1.val(1);
+                select2.val(0);
+
+                $('label[for="isLeap1"]').click();
+                $('label[for="select1"]').click();
+
+                dp.find('input[name="date"]').val(dateString);
+
+                var convertPage = "convertPage1";
+                if(tabId == "convertTab2"){
+                	convertPage = "convertPage2"
+                }else if(tabId == "convertTab3"){
+                	convertPage = "convertPage3"
+                }else if(tabId == "convertTab4"){
+                	convertPage = "convertPage4"
+                }else {
+                	convertPage = "convertPage1"
+                }
+
+                defaultSetDate(convertPage);
+            }
+		    
+            //$('button.btn.purple.search').click(function () {
+            $('button.btn.btn-blue.search').click(function () {
+            	
+                var tabpanel = $(this).closest('.tab-pane');
+                var id = tabpanel.attr('id');
+                var checkedTrue = false;
+                
+                if (id == 'convertPage1') {
+                    var yyyy;
+                    var mm;
+                    var dd;
+
+                    if(dp.is(':visible')){
+                        var date = dp.find('input[name="date"]').val();
+                        var splitDate = date.split('-');
+                       
+                        if(splitDate.length == 3){
+	                        yyyy = parseInt(splitDate[0]);
+	                        mm = parseInt(splitDate[1]);
+	                        dd = parseInt(splitDate[2]);
+                        } else{
+                        	yyyy = parseInt(splitDate[1]) * -1;
+ 	                        mm = parseInt(splitDate[2]);
+ 	                        dd = parseInt(splitDate[3]);
+                        }
+                    } else {
+                        yyyy = tabpanel.find('input[name="yyyy"]').val();
+                        mm = tabpanel.find('input[name="mm"]').val();
+                        dd = tabpanel.find('input[name="dd"]').val();
+
+                        yyyy = parseInt(yyyy);
+                        mm = parseInt(mm);
+                        dd = parseInt(dd);
+                    }
+
+                    if(!isNaN(yyyy) && !isNaN(mm) && !isNaN(dd)){
+                        mm = format02d(mm);
+                        dd = format02d(dd);
+
+                        $.ajax({
+                            url : "/life/solc",
+                            data : {
+                                'yyyy' : yyyy,
+                                'mm' : mm,
+                                'dd' : dd
+                            },
+                            success : function(data){
+                                if (data == '') {
+                                    alert('올바른 범위의 날짜를 입력해주세요.');
+                                } else {
+                                	todayTitle.text('양력 ' + yyyy +'년 '+ mm + '월 ' + dd + '일 달력 정보');
+									
+									convert_result(data, "convert1", "convert1", true);
+                                }
+                            }
+                        });
+                    } else {
+                        alert('올바른 범위의 날짜를 입력해주세요.');
+                        return false;
+                    }
+                } else if (id == 'convertPage2') {
+                    var yyyy = tabpanel.find('input[name="yyyy"]').val();
+                    var mm = tabpanel.find('input[name="mm"]').val();
+                    var dd = tabpanel.find('input[name="dd"]').val();
+
+                    yyyy = parseInt(yyyy);
+                    mm = parseInt(mm);
+                    dd = parseInt(dd);
+
+                    var isLeap = tabpanel.find('input[name="isLeapCrt2"]:checked').val();
+                    checkedTrue = tabpanel.find('input[type="checkbox"]').prop("checked");
+                    if(!isNaN(yyyy) && !isNaN(mm) && !isNaN(dd)){
+                        mm = format02d(mm);
+                        dd = format02d(dd);
+                        
+                        $.ajax({
+                            url: "/life/lunc",
+                            data: {
+                                'yyyy': yyyy,
+                                'mm': mm,
+                                'dd': dd
+                            },
+                            success : function(data){
+                                if (data == '') {
+                                    alert('올바른 범위의 날짜를 입력해주세요.');
+                                } else {
+                                    if (data.length > 1) {
+                                    	leapResult.show();
+                                        if (isLeap == "1") {
+                                        	leapResult.show();                                   	
+                                        	$("#" + id + " #today p").text('음력 ' + yyyy + '년 ' + mm + '월 ' + dd + '일 (' + data[0].LUNC_LEAP_MM + '달) 달력 정보');
+                                            convert_result(data[0], "convert2", "convert1", true)
+                                            
+                                            leapResultTitle.text('[부가정보] 음력 ' + yyyy + '년 ' + mm + '월 ' + dd + '일 (' + data[1].LUNC_LEAP_MM + '달) 달력 정보');
+                                            convert_result(data[1], "convert2", "leapConvert", false)
+                                            
+                                        } else if(isLeap == "0"){
+                                        	$("#" + id + " #today p").text('음력 ' + yyyy + '년 ' + mm + '월 ' + dd + '일 (' + data[1].LUNC_LEAP_MM + '달) 달력 정보');
+                                            convert_result(data[1], "convert2", "convert1", true)
+                                            
+                                            leapResultTitle.text('[부가정보] 음력 ' + yyyy + '년 ' + mm + '월 ' + dd + '일 (' + data[0].LUNC_LEAP_MM + '달) 달력 정보');
+                                            convert_result(data[0], "convert2", "leapConvert", false)
+                                            
+                                        } else{ //-1\                                      	
+                                        	
+                                        	$("#" + id + " #today p").text('음력 ' + yyyy + '년 ' + mm + '월 ' + dd + '일 (' + data[0].LUNC_LEAP_MM + '달) 달력 정보');
+                                            convert_result(data[0], "convert2", "convert1", true)
+                                            
+                                            leapResultTitle.text((isLeap == 1 ? '' : '')+'음력 ' + yyyy + '년 ' + mm + '월 ' + dd + '일 (' + data[1].LUNC_LEAP_MM + '달) 달력 정보');
+                                            convert_result(data[1], "convert2", "leapConvert", false)
+                                        }
+                                    } else {
+                                    	leapResult.hide();
+                                    	if (isLeap == 1) {
+                                    		$("#" + id + " #today p").text('음력 ' + yyyy + '년 ' + mm + '월 ' + dd + '일 (' + data[0].LUNC_LEAP_MM + '달) 달력 정보');
+                                        } else {
+                                        	$("#" + id + " #today p").text('음력 ' + yyyy + '년 ' + mm + '월 ' + dd + '일 달력 정보 (' + yyyy + '년 ' + mm + '월 ' + dd + '일은 ' + data[0].LUNC_LEAP_MM + '달입니다.)');
+                                        }
+	                                    convert_result(data[0], "convert2", "convert2", true)
+                                    }
+                                }
+                            }
+                        });
+                    } else {
+                        alert('올바른 범위의 날짜를 입력해주세요.');
+                        return false;
+                    }
+                } else if (id == 'convertPage3') {
+                    var start_yyyy = tabpanel.find('input[name="start_yyyy"]').val();
+                    var end_yyyy = tabpanel.find('input[name="end_yyyy"]').val();
+
+                    var mm = tabpanel.find('input[name="mm"]').val();
+                    var dd = tabpanel.find('input[name="dd"]').val();
+
+                    var isLeap = tabpanel.find('input[name="isLeap"]:checked').val();
+					
+                    checkedTrue = tabpanel.find('input[type="checkbox"]').prop("checked");
+                    
+                    start_yyyy = parseInt(start_yyyy);
+                    end_yyyy = parseInt(end_yyyy);
+                    mm = parseInt(mm);
+                    dd = parseInt(dd);
+                    
+                   if(start_yyyy < -59){
+                    	alert('올바른 범위의 날짜를 입력해주세요.');
+                    	return false;
+                    }
+                    
+                    if(end_yyyy > 2050){
+                    	alert('올바른 범위의 날짜를 입력해주세요.');
+                    	return false;
+                    }
+
+                    if(!isNaN(start_yyyy) && !isNaN(end_yyyy) && !isNaN(mm) && !isNaN(dd)){
+                        mm = format02d(mm);
+                        dd = format02d(dd);
+
+                        $.ajax({
+                            url: "/life/lunc/between",
+                            data: {
+                                'start_yyyy' : start_yyyy,
+                                'end_yyyy' : end_yyyy,
+                                'mm' : mm,
+                                'dd' : dd,
+                                'isLeap' : isLeap
+                            },
+                            success : function(data){
+                                if (data == '') {
+                                    alert('해당하는 데이터가 없습니다.');
+                                } else {
+                                	var strYear = "";
+                                	if(start_yyyy == end_yyyy){
+                                		strYear = start_yyyy + "년 중 ";
+                                	} else{
+                                		strYear = start_yyyy + " ~ " + end_yyyy + "년 기간 중 ";
+                                	}
+                                	
+                                	var strDate = '음력 ' + mm + '월 ' + dd + '일 달력 정보';
+                                	$("#" + id + " #today p").text("양력  " + strYear + strDate);
+                                	convert_resultList(data, "convert3", "convert3-1", true);
+                                }
+                            }
+                        });
+                    } else {
+                        alert('올바른 범위의 날짜를 입력해주세요.');
+                        return false;
+                    }
+                } else {
+                    var jd = tabpanel.find('input[name="jd"]').val();
+                    checkedTrue = tabpanel.find('input[type="checkbox"]').prop("checked");
+                    
+                    jd = parseInt(jd);
+                    if(!isNaN(jd) && jd >= 1699554 && jd <= 2470172){
+                        $.ajax({
+                            url : "/life/jd",
+                            data : {
+                                jd : jd
+                            },
+                            success : function(data){
+                                if (data == '') {
+                                    alert('올바른 범위의 날짜를 입력해주세요.');
+                                } else {
+                                	$("#" + id + " #today p").text('율리우스적일 제 ' + jd +'일 달력 정보');
+                                    convert_result(data, "convert4", "convert4-1", true)
+                                }
+                            }
+                        });
+                    } else {
+                        alert('올바른 범위의 날짜를 입력해주세요.');
+                        return false;
+                    }
+                }
+            });
+
+            
+            function getMaxDate(){
+            	$.ajax({
+                    url: "/life/lunc/getMaxDate",
+                    success : function(data){
+                    	
+                    	$("#dateTxt_convert1").text("※ 입력범위 : -59년 02월 13일 ~ " + data[0].SOLC_YYYY + "년 " + data[0].SOLC_MM + "월 " + data[0].SOLC_DD + "일");
+                    	$("#dateTxt_convert2").text("※ 입력범위 : -59년 01월 01일 ~ " + data[0].LUNC_YYYY + "년 " + data[0].LUNC_MM + "월 " + data[0].LUNC_DD + "일");
+                    }
+            	});
+            }
+            
+			function getJulianDate(yyyy, mm, dd){
+				var julianData;
+            	$.ajax({
+            		url: "/life/julian",
+            		async : false,
+            		data :{
+            			"yyyy" : yyyy
+            			, "mm" : mm
+            			, "dd" : dd
+            		},
+            		success : function(data){
+            			julianData = data;
+            			
+            		}
+            	})
+            	return julianData;
+            }
+            
+
+            function mappingDataToday(data, id) {
+            	var tableName = "";
+                if (data == '') {
+                    alert('올바른 범위의 날짜를 입력해주세요.');
+                } else {
+                	//todayTitle.text("■ 오늘의 날짜정보");
+                	$("#" + id + " #today p").text("오늘의 날짜정보");
+                	if(id == 'convertPage1'){
+                		tableName = "convert1";
+                	}else if(id == 'convertPage2'){
+                		tableName = "convert2";
+                	}else if(id == 'convertPage3'){
+                		tableName = "convert3-1";
+                	}else if(id == 'convertPage4'){
+                		tableName = "convert4-1";
+                	}
+                    convert_result_today(data, tableName, tableName, true);
+                }
+            }
+            
+            function convert_result_today(data, tabpanelId, tableName, resetBoolean){
+            	var tableHtml = "";
+            	var s_yyyy = data.SOLC_YYYY;
+            	var s_mm = data.SOLC_MM;
+            	var s_dd = data.SOLC_DD;
+            	var sumDate = s_yyyy + s_mm + s_dd + "";
+            	if(resetBoolean){
+            		//$("#convert1").empty();
+            		$("#"+tableName).empty();
+            		
+                	$("#leapConvert").empty();
+            	}
+            	
+            	if(Number(sumDate) <= 15821004){
+            		tableHtml += "<tr class='line_bt'><td class='wd01 td_style01'>기준역법</td><td class='wd02 td_style01'>율리우스력</td><td class='wd02 td_style01'>그레고리력</td></tr>";
+            		tableHtml += "<tr class='line_bt'><td class='wd01 td_style01'>양력날짜</td><td class='wd02 td_style01'>" + data.JULIAN_YYYY + "년 " + data.JULIAN_MM + "월 " + data.JULIAN_DD + "일</td>"
+  				  			  + "<td class='wd02 td_style01 bg_color'>" + data.SOLC_YYYY + "년 " + data.SOLC_MM + "월 " + data.SOLC_DD + "일</td></tr>";
+	      			tableHtml += "<tr class='line_bt'><td class='wd01 td_style01'>음력날짜</td><td class='wd02 td_style01'>" + leftData.LUNC_YYYY + "년 " + data.LUNC_MM + "월 " + data.LUNC_DD + "일</td>"
+	      					  + "<td class='wd02 td_style01 bg_color'>" + data.LUNC_YYYY + "년 " + data.LUNC_MM + "월 " + data.LUNC_DD + "일</td></tr>";
+					tableHtml += "<tr class='line_bt'><td class='wd01 td_style01'>음력간지</td><td class='wd02 td_style01'>" + leftData.LUNC_PRCN + "년 " + data.LUNC_WLGN + "월 " + data.LUNC_ILJIN + "일</td>"
+	      					  + "<td class='wd02 td_style01 bg_color'>" + data.LUNC_PRCN + "년 " + data.LUNC_WLGN + "월 " + data.LUNC_ILJIN + "일</td></tr>";
+	 				tableHtml += "<tr class='line_bt'><td class='wd01 td_style01'>요일</td><td class='wd02 td_style01'>" + data.SOLC_WEEK + "요일</td>"
+	      					  + "<td class='wd02 td_style01 bg_color'>" + data.SOLC_WEEK + "요일</td></tr>";
+					tableHtml += "<tr class='line_bt'><td class='wd01 td_style02'>율리우스적일</td><td class='wd02 td_style02'>" + data.SOLC_JD + "일</td>"
+	      					  + "<td class='wd02 td_style02 bg_color'>" + data.SOLC_JD + "일</td></tr>";
+					tableHtml += "<tr class='line_bt'><td class='wd01 td_style02'>윤년(양력)정보</td><td class='wd02 td_style02'>" + data.JULIAN_LeapYear + "년</td>"
+	      					  + "<td class='wd02 td_style02 bg_color'>" + data.SOLC_LEAP_YYYY + "년</td></tr>";
+				  	tableHtml += "<tr><td class='wd01 td_style02'>윤달(음력)정보</td><td class='wd02 td_style02'>" + data.LUNC_LEAP_MM + "달</td>"
+	      					  + "<td class='wd02 td_style02 bg_color'>" + data.LUNC_LEAP_MM + "달</td></tr>";
+            	} else{
+            		tableHtml += "<tr class='line_bt'><td class='wd01 td_style01'>기준역법</td><td class='wd02 td_style01'>그레고리력</td><td class='wd02 td_style01'>율리우스력</td></tr>";
+            		tableHtml += "<tr class='line_bt'><td class='wd01 td_style01'>양력날짜</td><td class='wd02 td_style01 bg_color'>" + data.SOLC_YYYY + "년 " + data.SOLC_MM + "월 " + data.SOLC_DD + "일</td>"
+  				 			  + "<td class='wd02 td_style01'>" + data.JULIAN_YYYY + "년 " + data.JULIAN_MM + "월 " + data.JULIAN_DD + "일</td></tr>";
+		      		tableHtml += "<tr class='line_bt'><td class='wd01 td_style01'>음력날짜</td><td class='wd02 td_style01 bg_color'>" + data.LUNC_YYYY + "년 " + data.LUNC_MM + "월 " + data.LUNC_DD + "일</td>"
+		      				  + "<td class='wd02 td_style01'>" + data.LUNC_YYYY + "년 " + data.LUNC_MM + "월 " + data.LUNC_DD + "일</td></tr>";
+					tableHtml += "<tr class='line_bt'><td class='wd01 td_style01'>음력간지</td><td class='wd02 td_style01 bg_color'>" + data.LUNC_PRCN + "년 " + data.LUNC_WLGN + "월 " + data.LUNC_ILJIN + "일</td>"
+	      					  + "<td class='wd02 td_style01'>" + data.LUNC_PRCN + "년 " + data.LUNC_WLGN + "월 " + data.LUNC_ILJIN + "일</td></tr>";
+	 				tableHtml += "<tr class='line_bt'><td class='wd01 td_style01'>요일</td><td class='wd02 td_style01 bg_color'>" + data.SOLC_WEEK + "요일</td>"
+	      					  + "<td class='wd02 td_style01'>" + data.SOLC_WEEK + "요일</td></tr>";
+					tableHtml += "<tr class='line_bt'><td class='wd01 td_style02'>율리우스적일</td><td class='wd02 td_style02 bg_color'>" + data.SOLC_JD + "일</td>"
+	      					  + "<td class='wd02 td_style02'>" + data.SOLC_JD + "일</td></tr>";
+					tableHtml += "<tr class='line_bt'><td class='wd01 td_style02'>윤년(양력)정보</td><td class='wd02 td_style02 bg_color'>" + data.SOLC_LEAP_YYYY + "년</td>"
+	      					  + "<td class='wd02 td_style02'>" + data.JULIAN_LeapYear + "년</td></tr>";
+				  	tableHtml += "<tr><td class='wd01 td_style02'>윤달(음력)정보</td><td class='wd02 td_style02 bg_color'>" + data.LUNC_LEAP_MM + "달</td>"
+		      				  + "<td class='wd02 td_style02'>" + data.LUNC_LEAP_MM + "달</td></tr>";
+            	}
+            	
+            	$("#" + tableName).append(tableHtml);
+            }
+
+            function convert_result(data, tabpanelId, tableName, resetBoolean){
+            	var tableHtml = "";
+            	if(resetBoolean){
+            		$("#"+tableName).empty();
+                	$("#leapConvert").empty();
+            	}
+            	
+            	if(tabpanelId == "convert1"){
+            		var s_yyyy = data.SOLC_YYYY;
+                	var s_mm = data.SOLC_MM;
+                	var s_dd = data.SOLC_DD;
+                	var sumDate = s_yyyy + s_mm + s_dd + "";
+                	var getjulianData = getJulianDate(s_yyyy, s_mm, s_dd);
+                	var leftData;
+                	var rightData;
+                	
+            		if(Number(sumDate) <= 15821004){
+                		leftData = getjulianData;
+                		rightData = data;
+                		if(leftData == ''){
+                			tableHtml += "<tr class='line_bt'><td class='wd01 td_style01'>기준역법</td><td class='wd02 td_style01'>율리우스력</td><td class='wd02 td_style01'>그레고리력</td></tr>";
+                    		tableHtml += "<tr class='line_bt'><td class='wd01 td_style02'>양력날짜</td><td class='wd02 td_style02' rowspan='7'>해당하는 데이터가 없습니다.</td>"
+          				  			  + "<td class='wd02 td_style02 bg_color'>" + rightData.SOLC_YYYY + "년 " + rightData.SOLC_MM + "월 " + rightData.SOLC_DD + "일</td></tr>";
+    		      			tableHtml += "<tr class='line_bt'><td class='wd01 td_style01'>음력날짜</td>"
+    		      					  + "<td class='wd02 td_style01 bg_color'>" + rightData.LUNC_YYYY + "년 " + rightData.LUNC_MM + "월 " + rightData.LUNC_DD + "일</td></tr>";
+    						tableHtml += "<tr class='line_bt'><td class='wd01 td_style01'>음력간지</td>"
+    		      					  + "<td class='wd02 td_style02 bg_color'>" + rightData.LUNC_PRCN + "년 " + rightData.LUNC_WLGN + "월 " + rightData.LUNC_ILJIN + "일</td></tr>";
+    		 				tableHtml += "<tr class='line_bt'><td class='wd01 td_style02'>요일</td>"
+    		      					  + "<td class='wd02 td_style02 bg_color'>" + rightData.SOLC_WEEK + "요일</td></tr>";
+    						tableHtml += "<tr class='line_bt'><td class='wd01 td_style02'>율리우스적일</td>"
+    		      					  + "<td class='wd02 td_style02 bg_color'>" + rightData.SOLC_JD + "일</td></tr>";
+    						tableHtml += "<tr class='line_bt'><td class='wd01 td_style02'>윤년(양력)정보</td>"
+    		      					  + "<td class='wd02 td_style02 bg_color'>" + rightData.SOLC_LEAP_YYYY + "년</td></tr>";
+    					  	tableHtml += "<tr><td class='wd01 td_style02'>윤달(음력)정보</td>"
+    		      					  + "<td class='wd02 td_style02 bg_color'>" + rightData.LUNC_LEAP_MM + "달</td></tr>";
+                		} else{
+                			tableHtml += "<tr class='line_bt'><td class='wd01 td_style01'>기준역법</td><td class='wd02 td_style01'>율리우스력</td><td class='wd02 td_style01'>그레고리력</td></tr>";
+                    		tableHtml += "<tr class='line_bt'><td class='wd01 td_style02'>양력날짜</td><td class='wd02 td_style02'>" + leftData.JULIAN_YYYY + "년 " + leftData.JULIAN_MM + "월 " + leftData.JULIAN_DD + "일</td>"
+          				  			  + "<td class='wd02 td_style02 bg_color'>" + rightData.SOLC_YYYY + "년 " + rightData.SOLC_MM + "월 " + rightData.SOLC_DD + "일</td></tr>";
+    		      			tableHtml += "<tr class='line_bt'><td class='wd01 td_style01'>음력날짜</td><td class='wd02 td_style01'>" + leftData.LUNC_YYYY + "년 " + leftData.LUNC_MM + "월 " + leftData.LUNC_DD + "일</td>"
+    		      					  + "<td class='wd02 td_style01 bg_color'>" + rightData.LUNC_YYYY + "년 " + rightData.LUNC_MM + "월 " + rightData.LUNC_DD + "일</td></tr>";
+    						tableHtml += "<tr class='line_bt'><td class='wd01 td_style01'>음력간지</td><td class='wd02 td_style01'>" + leftData.LUNC_PRCN + "년 " + leftData.LUNC_WLGN + "월 " + leftData.LUNC_ILJIN + "일</td>"
+    		      					  + "<td class='wd02 td_style01 bg_color'>" + rightData.LUNC_PRCN + "년 " + rightData.LUNC_WLGN + "월 " + rightData.LUNC_ILJIN + "일</td></tr>";
+    		 				tableHtml += "<tr class='line_bt'><td class='wd01 td_style02'>요일</td><td class='wd02 td_style02'>" + leftData.SOLC_WEEK + "요일</td>"
+    		      					  + "<td class='wd02 td_style02 bg_color'>" + rightData.SOLC_WEEK + "요일</td></tr>";
+    						tableHtml += "<tr class='line_bt'><td class='wd01 td_style02'>율리우스적일</td><td class='wd02 td_style02'>" + leftData.SOLC_JD + "일</td>"
+    		      					  + "<td class='wd02 td_style02 bg_color'>" + rightData.SOLC_JD + "일</td></tr>";
+    						tableHtml += "<tr class='line_bt'><td class='wd01 td_style02'>윤년(양력)정보</td><td class='wd02 td_style02'>" + leftData.JULIAN_LeapYear + "년</td>"
+    		      					  + "<td class='wd02 td_style02 bg_color'>" + rightData.SOLC_LEAP_YYYY + "년</td></tr>";
+    					  	tableHtml += "<tr><td class='wd01 td_style02'>윤달(음력)정보</td><td class='wd02 td_style02'>" + leftData.LUNC_LEAP_MM + "달</td>"
+    		      					  + "<td class='wd02 td_style02 bg_color'>" + rightData.LUNC_LEAP_MM + "달</td></tr>";
+                		}
+                	} else{
+                		leftData = data;
+                		rightData = getjulianData;
+                		
+                		if(rightData == ''){
+                			tableHtml += "<tr class='line_bt'><td class='wd01 td_style01'>기준역법</td><td class='wd02 td_style01'>그레고리력</td><td class='wd02 td_style01'>율리우스력</td></tr>";
+                    		tableHtml += "<tr class='line_bt'><td class='wd01 td_style02'>양력날짜</td><td class='wd02 td_style01 bg_color'>" + leftData.SOLC_YYYY + "년 " + leftData.SOLC_MM + "월 " + leftData.SOLC_DD + "일</td>"
+          				 			  + "<td class='wd02 td_style01' rowspan='7'>해당하는 데이터가 없습니다.</td></tr>";
+    			      		tableHtml += "<tr class='line_bt'><td class='wd01 td_style01'>음력날짜</td><td class='wd02 td_style01 bg_color'>" + leftData.LUNC_YYYY + "년 " + leftData.LUNC_MM + "월 " + leftData.LUNC_DD + "일</td></tr>";
+    						tableHtml += "<tr class='line_bt'><td class='wd01 td_style01'>음력간지</td><td class='wd02 td_style01 bg_color'>" + leftData.LUNC_PRCN + "년 " + leftData.LUNC_WLGN + "월 " + leftData.LUNC_ILJIN + "일</td></tr>";
+    		 				tableHtml += "<tr class='line_bt'><td class='wd01 td_style02'>요일</td><td class='wd02 td_style02 bg_color'>" + leftData.SOLC_WEEK + "요일</td></tr>";
+    						tableHtml += "<tr class='line_bt'><td class='wd01 td_style02'>율리우스적일</td><td class='wd02 td_style02 bg_color'>" + leftData.SOLC_JD + "일</td></tr>";
+    						tableHtml += "<tr class='line_bt'><td class='wd01 td_style02'>윤년(양력)정보</td><td class='wd02 td_style02 bg_color'>" + leftData.SOLC_LEAP_YYYY + "년</td></tr>";
+    					  	tableHtml += "<tr><td class='wd01 td_style02'>윤달(음력)정보</td><td class='wd02 td_style02 bg_color'>" + leftData.LUNC_LEAP_MM + "달</td></tr>";
+                		} else{
+                			tableHtml += "<tr class='line_bt'><td class='wd01 td_style01'>기준역법</td><td class='wd02 td_style01'>그레고리력</td><td class='wd02 td_style01'>율리우스력</td></tr>";
+                    		tableHtml += "<tr class='line_bt'><td class='wd01 td_style02'>양력날짜</td><td class='wd02 td_style02 bg_color'>" + leftData.SOLC_YYYY + "년 " + leftData.SOLC_MM + "월 " + leftData.SOLC_DD + "일</td>"
+          				 			  + "<td class='wd02 td_style02'>" + rightData.JULIAN_YYYY + "년 " + rightData.JULIAN_MM + "월 " + rightData.JULIAN_DD + "일</td></tr>";
+    			      		tableHtml += "<tr class='line_bt'><td class='wd01 td_style01'>음력날짜</td><td class='wd02 td_style01 bg_color'>" + leftData.LUNC_YYYY + "년 " + leftData.LUNC_MM + "월 " + leftData.LUNC_DD + "일</td>"
+    			      				  + "<td class='wd02 td_style01'>" + rightData.LUNC_YYYY + "년 " + rightData.LUNC_MM + "월 " + rightData.LUNC_DD + "일</td></tr>";
+    						tableHtml += "<tr class='line_bt'><td class='wd01 td_style01'>음력간지</td><td class='wd02 td_style01 bg_color'>" + leftData.LUNC_PRCN + "년 " + leftData.LUNC_WLGN + "월 " + leftData.LUNC_ILJIN + "일</td>"
+    		      					  + "<td class='wd02 td_style01'>" + rightData.LUNC_PRCN + "년 " + rightData.LUNC_WLGN + "월 " + rightData.LUNC_ILJIN + "일</td></tr>";
+    		 				tableHtml += "<tr class='line_bt'><td class='wd01 td_style02'>요일</td><td class='wd02 td_style02 bg_color'>" + leftData.SOLC_WEEK + "요일</td>"
+    		      					  + "<td class='wd02 td_style02'>" + rightData.SOLC_WEEK + "요일</td></tr>";
+    						tableHtml += "<tr class='line_bt'><td class='wd01 td_style02'>율리우스적일</td><td class='wd02 td_style02 bg_color'>" + leftData.SOLC_JD + "일</td>"
+    		      					  + "<td class='wd02 td_style02'>" + rightData.SOLC_JD + "일</td></tr>";
+    						tableHtml += "<tr class='line_bt'><td class='wd01 td_style02'>윤년(양력)정보</td><td class='wd02 td_style02 bg_color'>" + leftData.SOLC_LEAP_YYYY + "년</td>"
+    		      					  + "<td class='wd02 td_style02'>" + rightData.JULIAN_LeapYear + "년</td></tr>";
+    					  	tableHtml += "<tr><td class='wd01 td_style02'>윤달(음력)정보</td><td class='wd02 td_style02 bg_color'>" + leftData.LUNC_LEAP_MM + "달</td>"
+    			      				  + "<td class='wd02 td_style02'>" + rightData.LUNC_LEAP_MM + "달</td></tr>";
+                		}
+                	}
+                	$("#" + tableName).append(tableHtml);
+            	} else if(tabpanelId == "convert2"){
+            		var m_yyyy = data.LUNC_YYYY;
+	            	var m_mm = data.LUNC_MM;
+	            	var m_dd = data.LUNC_DD;
+	            	var sumDate = m_yyyy + m_mm + m_dd + "";
+            		if(Number(sumDate) <= 15820918){
+            			tableHtml += "<tr class='line_bt'><td class='wd01 td_style01'>기준역법</td><td class='wd02 td_style01'>율리우스력</td><td class='wd02 td_style01'>그레고리력</td></tr>";
+            			tableHtml += "<tr class='line_bt'><td class='wd01 td_style02'>음력날짜</td><td class='wd02 td_style02'>" + data.LUNC_YYYY + "년 " + data.LUNC_MM + "월 " + data.LUNC_DD + "일</td>"
+								  + "<td class='wd02 td_style02 bg_color'>" + data.LUNC_YYYY + "년 " + data.LUNC_MM + "월 " + data.LUNC_DD + "일</td></tr>";
+            			tableHtml += "<tr class='line_bt'><td class='wd01 td_style01'>양력날짜</td><td class='wd02 td_style01'>" + data.JULIAN_YYYY + "년 " + data.JULIAN_MM + "월 " + data.JULIAN_DD + "일</td>"
+  								  + "<td class='wd02 td_style01 bg_color'>" + data.SOLC_YYYY + "년 " + data.SOLC_MM + "월 " + data.SOLC_DD + "일</td></tr>";
+  						tableHtml += "<tr class='line_bt'><td class='wd01 td_style02'>윤년(양력)정보</td><td class='wd02 td_style02'>" + data.JULIAN_LeapYear + "년</td><td class='wd02 td_style02 bg_color'>" + data.SOLC_LEAP_YYYY + "년</td></tr>";
+            		} else{
+            			tableHtml += "<tr class='line_bt'><td class='wd01 td_style01'>기준역법</td><td class='wd02 td_style01'>그레고리력</td><td class='wd02 td_style01'>율리우스력</td></tr>";
+            			tableHtml += "<tr class='line_bt'><td class='wd01 td_style02'>음력날짜</td><td class='wd02 td_style02 bg_color'>" + data.LUNC_YYYY + "년 " + data.LUNC_MM + "월 " + data.LUNC_DD + "일</td>"
+								  + "<td class='wd02 td_style02'>" + data.LUNC_YYYY + "년 " + data.LUNC_MM + "월 " + data.LUNC_DD + "일</td></tr>";
+            			tableHtml += "<tr class='line_bt'><td class='wd01 td_style01'>양력날짜</td><td class='wd02 td_style01 bg_color'>" + data.SOLC_YYYY + "년 " + data.SOLC_MM + "월 " + data.SOLC_DD + "일</td>"
+            					  + "<td class='wd02 td_style01'>" + data.JULIAN_YYYY + "년 " + data.JULIAN_MM + "월 " + data.JULIAN_DD + "일</td></tr>";
+            			tableHtml += "<tr class='line_bt'><td class='wd01 td_style02'>윤년(양력)정보</td><td class='wd02 td_style02 bg_color'>" + data.SOLC_LEAP_YYYY + "년</td><td class='wd02 td_style02'>" + data.JULIAN_LeapYear + "년</td></tr>";		  
+            		}
+            		
+            		tableHtml += "<tr class='line_bt'><td class='wd01 td_style02'>요일</td><td class='wd02 td_style02' colspan='2'>" + data.SOLC_WEEK + "요일</td></tr>";
+            		tableHtml += "<tr class='line_bt'><td class='wd01 td_style02'>율리우스적일</td><td class='td_style02' colspan='2'>" + data.SOLC_JD + "일</td></tr>";
+            		tableHtml += "<tr class='line_bt'><td class='wd01 td_style02'>음력 간지</td><td class='td_style02' colspan='2'>" + data.LUNC_PRCN +"년 " + data.LUNC_WLGN + "월 " + data.LUNC_ILJIN + "일</td></tr>";
+            		tableHtml += "<tr><td class='wd01 td_style02'>윤달(음력) 정보</td><td class='td_style02' colspan='2'>" + data.LUNC_LEAP_MM + "달</td></tr>";
+            		
+            		$("#" + tableName).append(tableHtml);
+            	} else if(tabpanelId == "convert4"){
+            		var standardJd = $("#jd").val();
+            		
+            		if(standardJd <= 2299160){
+            			tableHtml += "<tr class='line_bt'><td class='wd01 td_style01'>기준역볍</td><td class='wd02 td_style01'>율리우스력</td><td class='wd02 td_style01'>그레고리력</td><td class='wd02 td_style01'>음력</td></tr>";
+            			tableHtml += "<tr class='line_bt'><td class='wd01 td_style02'>변환날짜</td><td class='wd02 td_style02'>" + data.JULIAN_YYYY + "년 " + data.JULIAN_MM+ "월 " + data.JULIAN_DD + "일</td>"
+            					  + "<td class='wd02 td_style02 bg_color'>" + data.SOLC_YYYY + "년 " + data.SOLC_MM+ "월 " + data.SOLC_DD + "일</td>"
+            					  + "<td class='wd02 td_style02'>" + data.LUNC_YYYY + "년 " + data.LUNC_MM+ "월 " + data.LUNC_DD + "일</td></tr>";
+            			tableHtml += "<tr class='line_bt'><td class='wd01 td_style02'>윤년/윤달정보</td><td class='wd02 td_style02'>" + data.JULIAN_LeapYear + "년</td><td class='wd02 td_style02 bg_color'>" +  data.SOLC_LEAP_YYYY + "년</td><td class='wd02 td_style02'>" + data.LUNC_LEAP_MM + "달</td></tr>";
+            		} else{
+            			tableHtml += "<tr class='line_bt'><td class='wd01 td_style01'>기준역볍</td><td class='wd02 td_style01'>그레고리력</td><td class='wd02 td_style01'>율리우스력</td><td class='wd02 td_style01'>음력</td></tr>";
+            			tableHtml += "<tr class='line_bt'><td class='wd01 td_style02'>변환날짜</td><td class='wd02 td_style02 bg_color'>" + data.SOLC_YYYY + "년 " + data.SOLC_MM+ "월 " + data.SOLC_DD + "일</td>"
+			  					  + "<td class='wd02 td_style02'>" + data.JULIAN_YYYY + "년 " + data.JULIAN_MM+ "월 " + data.JULIAN_DD + "일</td>"
+			  					  + "<td class='wd02 td_style02'>" + data.LUNC_YYYY + "년 " + data.LUNC_MM+ "월 " + data.LUNC_DD + "일</td></tr>";
+            			tableHtml += "<tr class='line_bt'><td class='wd01 td_style02'>윤년/윤달정보</td><td class='wd02 td_style02 bg_color'>" + data.SOLC_LEAP_YYYY + "년</td><td class='wd02 td_style02'>" +  data.JULIAN_LeapYear + "년</td><td class='wd02 td_style02'>" + data.LUNC_LEAP_MM + "달</td></tr>";
+            		}
+            		
+            		tableHtml += "<tr class='line_bt'><td class='wd01 td_style02'>요일</td><td class='td_style02' colspan='3'>" + data.SOLC_WEEK + "요일</td></tr>";
+            		tableHtml += "<tr><td class='wd01 td_style02'>음력간지</td><td class='td_style02' colspan='3'>" + data.LUNC_PRCN +"년 " + data.LUNC_WLGN + "월 " + data.LUNC_ILJIN + "일</td></tr>";
+            		
+            		$("#" + tableName).append(tableHtml);
+            	}
+            }
+            
+            function convert_resultList(data, tabpanelId, tableName, resetBoolean){
+            	var tableHtml = "";
+            	
+            	if(resetBoolean){
+            		//$("#convert1").empty();
+            		$("#" + tableName).empty();
+                	$("#leapConvert").empty();
+            	}
+            	
+            	if($("#start_yyyy").val() <= 1582){
+            		tableHtml += "<tr class='line_bt'><td class='wd01 td_style01'>번호</td><td class='wd01 td_style01'>율리우스력</td><td class='wd01 td_style01'>그레고리력</td><td class='wd01 td_style01'>요일</td><td class='wd01 td_style01'>음력간지</td></tr>"
+            	} else{
+            		tableHtml += "<tr class='line_bt'><td class='wd01 td_style01'>번호</td><td class='wd01 td_style01'>그레고리력</td><td class='wd01 td_style01'>율리우스력</td><td class='wd01 td_style01'>요일</td><td class='wd01 td_style01'>음력간지</td></tr>"
+            	}
+            	
+            	
+            	for(var i = 0; i < data.length; i++){
+            		
+            		if($("#start_yyyy").val() <= 1582){
+                		tableHtml += "<tr class='line_bt'><td class='wd01 td_style02'>" + (i+1) + "</td>" 
+                				  + "<td class='wd02 td_style02'>" + data[i].JULIAN_YYYY + "년 " + data[i].JULIAN_MM + "월 " + data[i].JULIAN_DD +"일</td>"
+                				  + "<td class='wd02 td_style02 bg_color'>" + data[i].SOLC_YYYY + "년 " + data[i].SOLC_MM + "월 " + data[i].SOLC_DD + "일</td>"
+                				  + "<td class='wd02 td_style02'>" + data[i].SOLC_WEEK + "요일</td>"
+                				  + "<td class='wd02 td_style02'>" + data[i].LUNC_PRCN + "년 " + data[i].LUNC_WLGN + "월 "+ data[i].LUNC_ILJIN + "일</td></tr>"
+                	} else{
+                		tableHtml += "<tr class='line_bt'><td class='wd01 td_style02'>" + (i+1) + "</td>"
+                				  + "<td class='wd02 td_style02 bg_color'>" + data[i].SOLC_YYYY + "년 " + data[i].SOLC_MM + "월 " + data[i].SOLC_DD + "일</td>"
+                				  + "<td class='wd02 td_style02'>" + data[i].JULIAN_YYYY + "년 " + data[i].JULIAN_MM + "월 " + data[i].JULIAN_DD +"일</td>"
+                				  + "<td class='wd02 td_style02'>" + data[i].SOLC_WEEK + "요일</td>"
+                				  + "<td class='wd02 td_style02'>" + data[i].LUNC_PRCN + "년 " + data[i].LUNC_WLGN + "월 "+ data[i].LUNC_ILJIN + "일</td></tr>"
+                	}
+            	}
+            	
+            	$("#" + tableName).append(tableHtml);
+            }
+            
+            function handleDatepicker(val){
+            	
+                if(val == 1) {
+                    dp.hide();
+                    non_dp.show();
+                } else {
+                    dp.show();
+                    non_dp.hide();
+                }
+            }
+            
+            function defaultSetDate(tabId){
+	      		$.ajax({ 
+	                url : "/life/today",
+	                success : function(data){
+	                	mappingDataToday(data, tabId)
+	                }
+	            });
+            }
+
+            $('input').keydown(function () {
+                if (event.keyCode === 13) {
+                    $(this).closest('.tab-pane').find('button.search').click();
+                    return false;
+                }
+            });
+		});
+	</script>
+	
+	<style type="text/css">
+		.ul_search {border-bottom:0;}
+	</style>
+</head>
+<body>
+	<!-- 음양력변환계산 (convertSolarLunar)  -->
+	<div role="tabpanel" class="contents_tab_wr">
+		<!-- depth_3 -->
+	    <ul class="depth_3 convert_tab_wr" role="tablist" style="display:flex;">
+	        <li role="presentation"><a class="active" id="convertTab1" href="#convertPage1" aria-controls="convertPage1" role="tab" data-bs-toggle="tab">양력을 음력으로</a></li>
+	        <li role="presentation"><a id="convertTab2" href="#convertPage2" aria-controls="convertPage2" role="tab" data-bs-toggle="tab">음력을 양력으로</a></li>
+	        <li role="presentation"><a id="convertTab3" href="#convertPage3" aria-controls="convertPage3" role="tab" data-bs-toggle="tab">특정 음력일 찾기</a></li>
+	        <li role="presentation"><a id="convertTab4" href="#convertPage4" aria-controls="convertPage4" role="tab" data-bs-toggle="tab">율리우스적일을 음/양력으로</a></li>
+	    </ul>
+	    <!--// depth_3 -->
+	    <!-- Tab panes -->
+	    <div class="tab-content">
+
+            <!-- convertPage1 -->
+            <div role="tabpanel" class="tab-pane active" id="convertPage1">
+            	
+				<div class="contents_wr contents_wr02">
+					<div class="contents_left border-gray border-radius-20">
+						<div class="con-text">
+<!-- 							<p class="con-h3">■ 변환 설정</p> -->
+							<p class="con-sub">양력 날짜를 입력하여 대응하는 음력 날짜 확인하세요.</p>
+						</div>
+						<div class="con-text">
+							<p class="con-h4">날짜 입력 방식</p>
+							<div class="form-check-inline-wr">
+								<div class="form-check form-check-inline">
+									<input class="form-check-input" type="radio" name="select" id="select1" value="1" checked>
+									<label class="form-check-label" for="select1">직접 입력</label>
+								</div>
+								<div class="form-check form-check-inline">
+									<input class="form-check-input" type="radio" name="select" id="select2" value="0">
+									<label class="form-check-label" for="select2">달력 선택</label>
+								</div>
+							</div>
+						</div>
+						<div class="con-text">
+							<p class="con-h4">양력 날짜 입력</p>
+							<div id="non-dp" class="form-group">
+                                <label for="year01" class="sr-only">년도</label>
+                                <input id="year01" name="yyyy" class="form-control" type="text" maxlength="4" placeholder="년도"/>
+                                <label for="month01" class="sr-only">월</label>
+                                <input id="month01" name="mm" class="form-control" type="text" maxlength="2" placeholder="월"/>
+                                <label for="day01" class="sr-only">일</label>
+                                <input id="day01" name="dd" class="form-control" type="text" maxlength="2" placeholder="일"/>
+							</div>
+							
+							
+							
+
+
+
+<!--     KRDS 공통 날짜 선택 달력 컴포넌트 -->
+
+<!--     사용법: -->
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<style>
+/* =============================================
+   KRDS 달력 컴포넌트 스타일
+   (기존 사이트 CSS와 충돌 방지를 위해 .krds-dp- 접두사 사용)
+   ============================================= */
+.krds-dp-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    width: 100%;
+    gap: 4px;
+}
+.krds-dp-wrap .form-control {
+    flex: 1;
+    cursor: pointer;
+}
+/* 달력 팝업 */
+.krds-dp-popup {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    z-index: 9999;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    width: 300px;
+    padding: 14px;
+    box-sizing: border-box;
+}
+.krds-dp-popup.open { display: block; }
+/* 헤더 */
+.krds-dp-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+.krds-dp-nav {
+    background: none;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    cursor: pointer;
+    width: 28px;
+    height: 28px;
+    font-size: 16px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.krds-dp-nav:hover { background: #f0f0f0; }
+.krds-dp-selects {
+    display: flex;
+    gap: 4px;
+}
+.krds-dp-selects select {
+    border: 0;
+    border-radius: 4px;
+    padding: 3px 23px 3px 6px !important;
+    height:auto !important;
+    width: auto !important;
+    font-size: 15px !important;
+    cursor: pointer;
+/*     background: #fff; */
+	background-position: right 3px center !important
+}
+/* 달력 테이블 */
+.krds-dp-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+.krds-dp-table th {
+    font-size: 12px;
+    color: #888;
+    text-align: center;
+    padding: 4px 0;
+    font-weight: normal;
+}
+.krds-dp-table th:first-child { color: #e53e3e; }
+.krds-dp-table td {
+    text-align: center;
+    padding: 2px 0;
+}
+.krds-dp-table td button {
+    width: 34px;
+    height: 34px;
+    border: none;
+    background: none;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 34px;
+    padding: 0;
+    transition: background 0.15s;
+}
+.krds-dp-table td button:hover:not(:disabled) { background: #ebf4ff; }
+.krds-dp-table td button:disabled              { color: #ccc; cursor: default; }
+.krds-dp-table td button.krds-dp-today         { font-weight: bold; color: var(--color-blue); }
+.krds-dp-table td button.krds-dp-selected      { background: var(--color-blue); color: #fff; }
+.krds-dp-table td button.krds-dp-selected:hover{ background: #2c5282; }
+.krds-dp-table td.krds-dp-sun button           { color: #e53e3e; }
+.krds-dp-table td.krds-dp-sun button.krds-dp-selected { color: #fff; }
+/* 푸터 */
+.krds-dp-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid #eee;
+}
+.krds-dp-footer button {
+    padding: 4px 14px;
+    border-radius: 4px;
+    font-size: 13px;
+    cursor: pointer;
+    border: 1px solid var(--color-gray-light);
+    background: rgba(var(--color-gray-light-rgb), .5);
+}
+.krds-dp-footer .krds-dp-btn-today{background:var(--color-white)}
+.krds-dp-footer button:hover          { background: #f5f5f5; }
+.krds-dp-footer .krds-dp-btn-confirm  { background: var(--color-blue); color: #fff; border-color: var(--color-blue); }
+.krds-dp-footer .krds-dp-btn-confirm:hover { background: #2c5282; }
+</style>
+
+<!-- 달력 래퍼 -->
+<div class="form-group from-group-btn input-append krds-dp-wrap" id="dp">
+
+    <!-- 날짜 input -->
+    <input
+        type="text"
+        id="convertSolarLunarDate"
+        name="date"
+        class="form-control"
+        placeholder="날짜를 선택하세요"
+        value=""
+        readonly
+    />
+
+    <!-- 달력 열기 버튼 (기존 사이트 스타일 유지) -->
+    <a href="#" class="add-on btn btn-gray krds-dp-open-btn" onclick="return false;">
+        <i class="bi bi-calendar-check"></i>
+    </a>
+
+    <!-- 달력 팝업 -->
+    <div class="krds-dp-popup">
+        <div class="krds-dp-head">
+            <button type="button" class="krds-dp-nav krds-dp-prev"><i class="bi bi-chevron-left"></i></button>
+            <div class="krds-dp-selects">
+                <select class="krds-dp-year-sel form-control form-select" aria-label="연도 선택"></select>
+                <select class="krds-dp-month-sel form-control form-select" aria-label="월 선택"></select>
+            </div>
+            <button type="button" class="krds-dp-nav krds-dp-next"><i class="bi bi-chevron-right"></i></button>
+        </div>
+        <table class="krds-dp-table">
+            <thead>
+                <tr>
+                    <th>일</th><th>월</th><th>화</th><th>수</th><th>목</th><th>금</th><th>토</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+        <div class="krds-dp-footer">
+            <button type="button" class="krds-dp-btn-today">오늘</button>
+            <button type="button" class="krds-dp-btn-cancel">취소</button>
+            <button type="button" class="krds-dp-btn-confirm">확인</button>
+        </div>
+    </div>
+</div>
+
+<script type="text/javascript">
+(function() {
+    /* ---- 대상 요소 (wrapperId 기준으로 스코프 한정 → 여러 개 공존 가능) ---- */
+    var wrap    = document.getElementById('dp');
+    if (!wrap) return;
+
+    var inp     = wrap.querySelector('#convertSolarLunarDate');
+    var popup   = wrap.querySelector('.krds-dp-popup');
+    var openBtn = wrap.querySelector('.krds-dp-open-btn');
+
+    var currentYear, currentMonth;
+    var selectedDateStr = ''; // yyyy-mm-dd
+    
+    var minDateStr = '-59-02-13';
+    var maxDateStr = '2050-12-31';
+
+    /* ---- 연도 select 생성 (선택된 연도 기준 ±5년) ---- */
+    function buildYearSelect() {
+        var sel     = popup.querySelector('.krds-dp-year-sel');
+        sel.innerHTML = '';
+        
+        var startYear = minDate ? minDate.year : currentYear - 5;
+        var endYear = maxDate ? maxDate.year : currentYear + 5;
+        
+        for (var y = startYear; y <= endYear; y++) {
+            var opt = document.createElement('option');
+            opt.value       = y;
+            opt.textContent = y + '년';
+            if (y === currentYear) opt.selected = true;
+            sel.appendChild(opt);
+        }
+    }
+
+    /* ---- 월 select 생성 ---- */
+    function buildMonthSelect() {
+        var sel = popup.querySelector('.krds-dp-month-sel');
+        sel.innerHTML = '';
+        for (var m = 1; m <= 12; m++) {
+            var opt = document.createElement('option');
+            opt.value       = m;
+            opt.textContent = String(m).padStart(2, '0') + '월';
+            if (m === currentMonth) opt.selected = true;
+            sel.appendChild(opt);
+        }
+    }
+    
+    /* 날짜 비교 */
+    function parseDateParts(value) {
+        if (!value) {
+            return null;
+        }
+
+        var match = value.match(/^(-?\d{1,4})-(\d{2})-(\d{2})$/);
+
+        if (!match) {
+            return null;
+        }
+
+        return {
+            year: parseInt(match[1], 10),
+            month: parseInt(match[2], 10),
+            day: parseInt(match[3], 10)
+        };
+    }
+
+    function compareDateParts(a, b) {
+        if (a.year !== b.year) {
+            return a.year < b.year ? -1 : 1;
+        }
+
+        if (a.month !== b.month) {
+            return a.month < b.month ? -1 : 1;
+        }
+
+        if (a.day !== b.day) {
+            return a.day < b.day ? -1 : 1;
+        }
+
+        return 0;
+    }
+
+    var minDate = parseDateParts(minDateStr);
+    var maxDate = parseDateParts(maxDateStr);
+
+    function isDateInRange(year, month, day) {
+        var target = {
+            year: year,
+            month: month,
+            day: day
+        };
+
+        if (minDate && compareDateParts(target, minDate) < 0) {
+            return false;
+        }
+
+        if (maxDate && compareDateParts(target, maxDate) > 0) {
+            return false;
+        }
+
+        return true;
+    }
+    
+    function createDate(year, monthIndex, day) {
+        var date = new Date(0);
+        date.setHours(0, 0, 0, 0);
+        date.setFullYear(year, monthIndex, day);
+        return date;
+    }
+
+    /* ---- 달력 테이블 렌더 ---- */
+    function renderCalendar(year, month) {
+        currentYear  = year;
+        currentMonth = month;
+        buildYearSelect();
+        buildMonthSelect();
+
+/*         var firstDay = new Date(year, month - 1, 1).getDay();
+        var lastDate = new Date(year, month, 0).getDate();
+        var prevLast = new Date(year, month - 1, 0).getDate(); */
+        var today = new Date();
+        var firstDay = createDate(year, month - 1, 1).getDay();
+        var lastDate = getDaysInMonth(year, month);
+
+        var prevYear = month === 1 ? year - 1 : year;
+        var prevMonth = month === 1 ? 12 : month - 1;
+        var prevLast = getDaysInMonth(prevYear, prevMonth);
+
+        var tbody = popup.querySelector('.krds-dp-table tbody');
+        tbody.innerHTML = '';
+
+        var dayCount = 0;
+        for (var row = 0; row < 6; row++) {
+            var tr = document.createElement('tr');
+            for (var col = 0; col < 7; col++) {
+                var td  = document.createElement('td');
+                var btn = document.createElement('button');
+                btn.type = 'button';
+
+                var cellDate, cellYear = year, cellMonth = month, disabled = false;
+
+                if (row === 0 && col < firstDay) {
+                    cellDate  = prevLast - firstDay + col + 1;
+                    cellYear  = month === 1 ? year - 1 : year;
+                    cellMonth = month === 1 ? 12 : month - 1;
+                    disabled  = true;
+                } else {
+                    dayCount++;
+                    if (dayCount > lastDate) {
+                        cellDate  = dayCount - lastDate;
+                        cellYear  = month === 12 ? year + 1 : year;
+                        cellMonth = month === 12 ? 1 : month + 1;
+                        disabled  = true;
+                    } else {
+                        cellDate = dayCount;
+                    }
+                }
+
+                btn.textContent = cellDate;
+                
+                var outOfRange = !isDateInRange(
+                	    cellYear,
+                	    cellMonth,
+                	    cellDate
+                );
+
+                if (disabled || outOfRange) {
+                    btn.disabled = true;
+                } else {
+                    var ds = cellYear + '-'
+                           + String(cellMonth).padStart(2,'0') + '-'
+                           + String(cellDate).padStart(2,'0');
+                    btn.setAttribute('data-date', ds);
+
+                    if (cellYear  === today.getFullYear()  &&
+                        cellMonth === today.getMonth() + 1 &&
+                        cellDate  === today.getDate()) {
+                        btn.classList.add('krds-dp-today');
+                    }
+                    if (ds === selectedDateStr) {
+                        btn.classList.add('krds-dp-selected');
+                    }
+
+                    /* 날짜 클릭: 선택만 표시 (확인 버튼으로 최종 반영) */
+                    btn.addEventListener('click', (function(dateStr, b) {
+                        return function() {
+                            selectedDateStr = dateStr;
+                            popup.querySelectorAll('.krds-dp-table button').forEach(function(x) {
+                                x.classList.remove('krds-dp-selected');
+                            });
+                            b.classList.add('krds-dp-selected');
+                        };
+                    })(ds, btn));
+                }
+
+                if (col === 0) td.classList.add('krds-dp-sun');
+                td.appendChild(btn);
+                tr.appendChild(td);
+            }
+            tbody.appendChild(tr);
+            if (dayCount >= lastDate && row >= 4) break;
+        }
+    }
+    
+    function isLeapYear(year) {
+        return year % 4 === 0
+            && (year % 100 !== 0 || year % 400 === 0);
+    }
+
+    function getDaysInMonth(year, month) {
+        if (month === 2) {
+            return isLeapYear(year) ? 29 : 28;
+        }
+
+        if (month === 4 || month === 6 || month === 9 || month === 11) {
+            return 30;
+        }
+
+        return 31;
+    }
+    
+    /* 이전/다음 달 이동 제한 */
+    function isMonthInRange(year, month) {
+        var firstDay = {
+            year: year,
+            month: month,
+            day: 1
+        };
+
+        var lastDay = {
+            year: year,
+            month: month,
+            day: getDaysInMonth(year, month)
+        };
+
+        if (minDate && compareDateParts(lastDay, minDate) < 0) {
+            return false;
+        }
+
+        if (maxDate && compareDateParts(firstDay, maxDate) > 0) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /* ---- 팝업 열기 ---- */
+/*     function openPopup() {
+        var val = inp.value;
+        if (val && /^\d{4}-\d{2}-\d{2}$/.test(val)) {
+            var p = val.split('-');
+            currentYear     = parseInt(p[0]);
+            currentMonth    = parseInt(p[1]);
+            selectedDateStr = val;
+        } else {
+            var t = new Date();
+            currentYear     = t.getFullYear();
+            currentMonth    = t.getMonth() + 1;
+            selectedDateStr = '';
+        }
+        renderCalendar(currentYear, currentMonth);
+        popup.classList.add('open');
+    } */
+    function openPopup() {
+        var val = inp.value;
+        var parsed = parseDateParts(val);
+
+        if (parsed && isDateInRange(parsed.year, parsed.month, parsed.day)) {
+            currentYear = parsed.year;
+            currentMonth = parsed.month;
+            selectedDateStr = val;
+        } else {
+            var t = new Date();
+            currentYear = t.getFullYear();
+            currentMonth = t.getMonth() + 1;
+            selectedDateStr = '';
+        }
+
+        renderCalendar(currentYear, currentMonth);
+        popup.classList.add('open');
+    }
+
+    /* ---- 팝업 닫기 ---- */
+    function closePopup() {
+        popup.classList.remove('open');
+    }
+
+    /* ---- 이벤트 바인딩 ---- */
+    // 달력 아이콘 버튼
+    openBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        popup.classList.contains('open') ? closePopup() : openPopup();
+    });
+
+    // input 클릭으로도 열기
+    inp.addEventListener('click', function(e) {
+        e.stopPropagation();
+        if (!popup.classList.contains('open')) openPopup();
+    });
+
+    // 외부 클릭 시 닫기
+    document.addEventListener('click', function(e) {
+        if (!wrap.contains(e.target)) closePopup();
+    });
+
+    // 이전 달
+/*     popup.querySelector('.krds-dp-prev').addEventListener('click', function() {
+        var m = currentMonth - 1, y = currentYear;
+        if (m < 1) { m = 12; y--; }
+        renderCalendar(y, m);
+    }); */
+    popup.querySelector('.krds-dp-prev').addEventListener('click', function() {
+        var m = currentMonth - 1;
+        var y = currentYear;
+
+        if (m < 1) {
+            m = 12;
+            y--;
+        }
+
+        if (isMonthInRange(y, m)) {
+            renderCalendar(y, m);
+        }
+    });
+
+    // 다음 달
+/*     popup.querySelector('.krds-dp-next').addEventListener('click', function() {
+        var m = currentMonth + 1, y = currentYear;
+        if (m > 12) { m = 1; y++; }
+        renderCalendar(y, m);
+    }); */
+    popup.querySelector('.krds-dp-next').addEventListener('click', function() {
+        var m = currentMonth + 1;
+        var y = currentYear;
+
+        if (m > 12) {
+            m = 1;
+            y++;
+        }
+
+        if (isMonthInRange(y, m)) {
+            renderCalendar(y, m);
+        }
+    });
+
+/*     // 연도 select
+    popup.querySelector('.krds-dp-year-sel').addEventListener('change', function() {
+        renderCalendar(parseInt(this.value), currentMonth);
+    });
+
+    // 월 select
+    popup.querySelector('.krds-dp-month-sel').addEventListener('change', function() {
+        renderCalendar(currentYear, parseInt(this.value));
+    }); */
+    popup.querySelector('.krds-dp-year-sel').addEventListener('change', function() {
+        var year = parseInt(this.value, 10);
+
+        if (isMonthInRange(year, currentMonth)) {
+            renderCalendar(year, currentMonth);
+        }
+    });
+
+    popup.querySelector('.krds-dp-month-sel').addEventListener('change', function() {
+        var month = parseInt(this.value, 10);
+
+        if (isMonthInRange(currentYear, month)) {
+            renderCalendar(currentYear, month);
+        }
+    });
+
+    // 오늘 버튼
+    popup.querySelector('.krds-dp-btn-today').addEventListener('click', function() {
+        var t = new Date();
+        selectedDateStr = t.getFullYear() + '-'
+                        + String(t.getMonth()+1).padStart(2,'0') + '-'
+                        + String(t.getDate()).padStart(2,'0');
+        renderCalendar(t.getFullYear(), t.getMonth() + 1);
+    });
+
+    // 취소 버튼
+    popup.querySelector('.krds-dp-btn-cancel').addEventListener('click', function() {
+        closePopup();
+    });
+
+    // 확인 버튼: input에 값 반영 후 닫기
+    popup.querySelector('.krds-dp-btn-confirm').addEventListener('click', function() {
+        if (selectedDateStr) {
+            inp.value = selectedDateStr;
+            /* name이 다른 hidden input이 별도로 있는 경우도 동기화 */
+            var form = inp.closest('form');
+            if (form) {
+                var hidden = form.querySelector('input[name="date"][type="hidden"]');
+                if (hidden) hidden.value = selectedDateStr;
+            }
+        }
+        closePopup();
+    });
+
+})();
+</script>
+
+							<p class="con-sub con-sub-sm py-2" id="dateTxt_convert1">입력범위<br>- 59년 02월 13일 ~ 2050년 12월 31일</p>
+							<div class="search_btn">
+			                    <button type="button" class="btn btn-blue search">변환하기</button>
+			                    <button type="button" class="btn btn-gray-light reset">다시작성</button>
+			                </div>
+						</div>
+						<div class="con-text mb-0">
+							<p class="con-h4">안내 정보</p>
+							<div class="con-box-wr">
+								<div class="con-box">
+									<p>※ 1582년 로마 교황 그레고리우스 13세는 율리우스력을 그레고리력으로 개정함에 따라 (율리우스력) 1582년 10월 4일 다음 날은 (그레고리력) 1582년 10월 15일이 됨. 연구원은 두 역법 정보를 모두 제공함</p>
+	                          		<p>※ 우리나라의 현행 공식 역법은 그레고리력 (천문법 제5조 [법률 제14906호, 2017. 10. 24.])</p>
+                          		</div>
+								<a href="#" class="con-box-more"><i class="bi bi-chevron-down"></i></a>
+							</div>
+						</div>
+					</div>
+					<div class="contents_right_wr"  id="today">
+						<div class="contents_right">
+							<p class="con-h3">오늘의 날짜정보</p>
+					        <div class="day_search_box mt-2">
+					        <div class="table-responsive">
+					        	<table class="table" id="convert1">
+					        	</table>
+				        	</div>
+					        </div>
+						</div>
+					</div>
+				</div>
+            </div>
+
+
+            <!-- convertPage2 -->
+            <div role="tabpanel" class="tab-pane" id="convertPage2">
+				<div class="contents_wr contents_wr02">
+					<div class="contents_left border-gray border-radius-20">
+						<div class="con-text">
+<!-- 							<p class="con-h3">■ 변환 설정</p> -->
+							<p class="con-sub">음력 날짜를 입력하여 대응하는 양력 날짜 확인하세요.</p>
+						</div>
+						<div class="con-text">
+							<p class="con-h4">음력 날짜 입력</p>
+							<div class="form-group">
+                              	<label for="year02" class="sr-only">년도</label>
+								<input id="year02" name="yyyy" class="form-control group-3" type="text" maxlength="4" placeholder="년도"/>
+								<label for="month02" class="sr-only">월</label>
+								<input id="month02" name="mm" class="form-control group-2" type="text" maxlength="2" placeholder="월"/>
+								<label for="day02" class="sr-only">일</label>
+								<input id="day02" name="dd" class="form-control group-2" type="text" maxlength="2" placeholder="일"/>
+							</div>
+							<div class="form-check-inline-wr mt-3">
+	                            <div class="form-check form-check-inline">
+	                            	<input class="form-check-input" type="radio" name="isLeapCrt2" id="isLeap01" value="1" checked="checked">
+	                                <label class="form-check-label" for="isLeap01">평달</label>
+                                </div>
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="radio" name="isLeapCrt2" id="isLeap02" value="0" > 
+	                                <label class="form-check-label" for="isLeap02">윤달</label>
+                                </div>
+                                <div class="form-check form-check-inline"> 
+                                	<input class="form-check-input" type="radio" name="isLeapCrt2" id="isLeap03" value="-1"> 
+	                                <label class="form-check-label" for="isLeap03">평달인지 윤달인지 알지 못함</label>
+	                            </div>
+                           	</div>
+                           
+							<p class="con-sub con-sub-sm py-2" id="dateTxt_convert2"></p>
+							
+							
+			                <!-- search_btn -->
+			                <div class="search_btn">
+			                    <button type="button" class="btn btn-blue search" id="del_btn">변환하기</button>
+			                    <button type="button" class="btn btn-gray-light reset">다시작성</button>
+			                </div>
+			                <!-- //search_btn -->
+						</div>
+						<div class="con-text mb-0">
+							<p class="con-h4">안내 정보</p>
+							<div class="con-box-wr">
+								<div class="con-box">
+									<p>※ 1582년 로마 교황 그레고리우스 13세는 율리우스력을 그레고리력으로 개정함에 따라 (율리우스력) 1582년 10월 4일 다음 날은 (그레고리력) 1582년 10월 15일이 됨. 연구원은 두 역법 정보를 모두 제공함</p>
+                          			<p>※ 우리나라의 현행 공식 역법은 그레고리력 (천문법 제5조 [법률 제14906호, 2017. 10. 24.])</p>
+                          		</div>
+								<a href="#" class="con-box-more"><i class="bi bi-chevron-down"></i></a>
+							</div>
+						</div>
+					</div>
+					<div class="contents_right_wr"  id="today">
+						<div class="contents_right">
+							<p class="con-h3">오늘의 날짜정보</p>
+					        <div class="day_search_box mt-2">
+					        	<div class="table-responsive">
+					        	<table class="table" id="convert2">
+					        	</table>
+					        	</div>
+					        </div>
+						</div>
+					</div>
+				</div>
+            </div>
+            <!--// convertPage2 -->
+
+
+            <!-- convertPage3 -->
+            <div role="tabpanel" class="tab-pane" id="convertPage3">
+				<div class="contents_wr contents_wr02">
+					<div class="contents_left border-gray border-radius-20">
+						<div class="con-text">
+<!-- 							<p class="con-h3">■ 변환 설정</p> -->
+							<p class="con-sub">양력기간과 찾고 싶은 음력 날짜를 입력하여 대응하는 양력 날짜와 요일 확인하세요.</p>
+						</div>
+						<div class="con-text">
+							<p class="con-h4">양력 년도 입력</p>
+							<div class="form-group">
+                                <label class="sr-only" for="start_yyyy">시작</label>
+                                <input id="start_yyyy" name="start_yyyy" class="form-control group-2" size="16" type="text" placeholder="시작 년도" maxlength="4">
+                                <span class="bar_txt">~</span>
+                                <label class="sr-only" for="end_yyyy">종료</label>
+                                <input id="end_yyyy" name="end_yyyy" class="form-control group-2" size="16" type="text" placeholder="종료 년도" maxlength="4">
+                            </div>
+							<p class="con-sub con-sub-sm py-2">※ 입력범위 : -59년 ~ 2050</p>
+						</div>
+						<div class="con-text">
+							<p class="con-h4">음력 날짜 입력</p>
+							<div class="form-group">
+                                <label for="month03" class="sr-only">월</label>
+                                <input id="month03" name="mm" class="form-control group-2" type="text" maxlength="2" placeholder="월"/>
+                                <label for="day03" class="sr-only">일</label>
+                                <input id="day03" name="dd" class="form-control group-2" type="text" maxlength="2" placeholder="일"/>
+                          	</div>
+                            <div class="form-check-inline-wr mt-3">
+	                            <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="radio" name="isLeap" id="isLeap1" value="1" checked> 
+	                            	<label class="form-check-label" for="isLeap1">평달</label>
+                                </div>
+                                <div class="form-check form-check-inline">
+                                    <input  class="form-check-input" type="radio" name="isLeap" id="isLeap2" value="0">
+                                    <label class="form-check-label" for="isLeap2">윤달</label>
+	                            </div>
+                           	</div>   
+			                 <!-- search_btn -->
+			                <div class="search_btn mt-3">
+			                    <button type="button" class="btn btn-blue search">변환하기</button>
+			                    <button type="button" class="btn btn-gray-light reset">다시작성</button>
+			                </div>
+			                <!-- //search_btn -->
+						</div>
+								
+						<div class="con-text mb-0">
+							<p class="con-h4">안내 정보</p>
+							<div class="con-box-wr">
+								<div class="con-box">
+									<p>※ 1582년 로마 교황 그레고리우스 13세는 율리우스력을 그레고리력으로 개정함에 따라 (율리우스력) 1582년 10월 4일 다음 날은 (그레고리력) 1582년 10월 15일이 됨. 연구원은 두 역법 정보를 모두 제공함</p>
+                        			<p>※ 우리나라의 현행 공식 역법은 그레고리력 (천문법 제5조 [법률 제14906호, 2017. 10. 24.])</p>
+                          		</div>
+								<a href="#" class="con-box-more"><i class="bi bi-chevron-down"></i></a>
+							</div>
+						</div>
+					</div>
+					<div class="contents_right_wr"  id="today">
+						<div class="contents_right" >
+							<p class="con-h3">오늘의 날짜정보</p>
+					        <div class="day_search_box mt-2">
+					        	<div class="table-responsive">
+					        	<table class="table"  id="convert3-1">
+					        	</table>
+					        	</div>
+					        </div>
+						</div>
+					</div>
+				</div>
+            </div>
+            <!--// convertPage3 -->
+
+
+            <!-- convertPage4 -->
+            <div role="tabpanel" class="tab-pane" id="convertPage4">
+				<div class="contents_wr contents_wr02">
+					<div class="contents_left border-gray border-radius-20">
+						<div class="con-text">
+<!-- 							<p class="con-h3">■ 변환 설정</p> -->
+							<p class="con-sub">율리우스 적일(Julian Day Number)을 입력하여 대응하는 양력과 음력 날짜 확인하세요.</p>
+						</div>
+						<div class="con-text">
+							<p class="con-h4">율리우스적일</p>
+							<div class="form-group">
+                               	<span class="bar_txt">제</span>
+                                <label for="jd" class="sr-only">율리우스적일</label>
+                                <input id="jd" name="jd" class="form-control group-2" size="16" type="text" placeholder="율리우스적일" maxlength="7">
+                                <span class="bar_txt">일</span>
+                          	</div>
+                            <p class="con-sub con-sub-sm py-2">※ 입력범위 : 1699554 ~ 2470172</p>
+			                <!-- search_btn -->
+			                <div class="search_btn">
+			                    <button type="button" class="btn btn-blue search">변환하기</button>
+			                    <button type="button" class="btn btn-gray-light reset">다시작성</button>
+			                </div>
+			                <!-- //search_btn -->
+						</div>
+						<div class="con-text mb-0">
+							<p class="con-h4">안내 정보</p>
+							<div class="con-box-wr">
+								<div class="con-box">
+									<p>※ 1582년 로마 교황 그레고리우스 13세는 율리우스력을 그레고리력으로 개정함에 따라 (율리우스력) 1582년 10월 4일 다음 날은 (그레고리력) 1582년 10월 15일이 됨. 연구원은 두 역법 정보를 모두 제공함</p>
+                          			<p>※ 우리나라의 현행 공식 역법은 그레고리력 (천문법 제5조 [법률 제14906호, 2017. 10. 24.])</p>
+                          		</div>
+								<a href="#" class="con-box-more"><i class="bi bi-chevron-down"></i></a>
+							</div>
+						</div>
+					</div>
+					<div class="contents_right_wr"  id="today">
+						<div class="contents_right">
+							<p class="con-h3">오늘의 날짜정보</p>
+					        <div class="day_search_box mt-2">
+					        	<div class="table-responsive">
+					        	<table class="table"  id="convert4-1">
+					        	</table>
+					        	</div>
+					        </div>
+						</div>
+					</div>
+				</div>
+            </div>
+            <!--// convertPage4 -->
+            
+            <script>
+			document.querySelectorAll('.con-box-more').forEach(btn => {
+			  btn.addEventListener('click', function(e) {
+			    e.preventDefault();
+			
+			    const wrapper = this.closest('.con-box-wr');
+			    const box = wrapper.querySelector('.con-box');
+			
+			    if (box.classList.contains('open')) {
+			      box.style.height = '65px';
+			      box.classList.remove('open');
+			    } else {
+			      box.style.height = box.scrollHeight + 'px';
+			      box.classList.add('open');
+			    }
+
+			    wrapper.classList.toggle('open');
+			  });
+			});
+			</script>
+	    </div>
+	</div>
+
+    <div id="leapResult" style="display: none;">
+        <h4 class="h4_title"></h4>
+
+        <div class="day_search_box">
+            <table id="leapConvert">
+        	</table>
+        </div>
+    </div>
+</body>
+ 

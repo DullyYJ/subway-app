@@ -1,0 +1,1034 @@
+URL https://astro.kasi.re.kr/life/pageView/9
+STATUS 200
+TYPE text/html;charset=UTF-8
+LEN 35945
+
+
+
+
+
+
+
+
+
+
+
+	
+	
+	
+
+
+<head>
+	<script src="/resources/js/life/modify-date.js"></script>
+
+	<script src="/resources/js/d3/d3.v4.min.js"></script>
+
+	<link href="/resources/css/d3/clock.css" rel="stylesheet">
+	<script src="/resources/js/d3/clock.js"></script>
+
+	<script src="/resources/js/life/algorithms.js"></script>
+	<script src="/resources/js/life/common.js"></script>
+	<script src="/resources/js/life/delta_t.js"></script>
+	<script src="/resources/js/life/proj4.js"></script>
+
+	
+		
+			<script src="https://ssl.daumcdn.net/dmaps/map_js_init/postcode.v2.js"></script>
+		
+		
+	
+
+	<script type="text/javascript">
+        var timeoffset = 9;
+        var delta_t;
+
+        var dateString = '';
+
+        var year;
+        var month;
+        var date;
+
+		$(function () {
+            hideModifyDate();
+
+            var popoverTriggerList = document.querySelectorAll('[data-bs-toggle="popover"]');
+            popoverTriggerList.forEach(function (el) {
+              new bootstrap.Popover(el);
+            });
+
+            if(dateString == '') {
+                var searchDate = new Date();
+                year  = searchDate.getFullYear();
+                month = searchDate.getMonth();
+                date  = searchDate.getDate();
+                dateString = formatDate(year, month, date);
+            } else {
+                var ymd = dateString.split('-');
+                year  = parseInt(ymd[0]);
+                month = parseInt(ymd[1]) - 1;
+                date  = parseInt(ymd[2]);
+            }
+
+            delta_t = getCurrentDeltaT(year);
+            $('#date').text(formatDate(year, month, date));
+
+            // 달력 input 초기값 세팅 (param.date 가 있으면 그 값, 없으면 오늘)
+            $('#sunriseSunsetDate').val(dateString);
+
+            calcSunrise(126.9671, 37.54980);
+
+            var urlParams = new URLSearchParams(window.location.search);
+            if (!urlParams.has('lat') && !urlParams.has('lng')) {
+                autoDetectLocation();
+            }
+        });
+
+        function calcSunrise(obslong, obslat) {
+            $('#sunrise-clock, #culmination-clock, #sunset-clock').empty();
+
+            setDMS('#long', obslong);
+            setDMS('#lat',  obslat);
+
+            var sun_y, sun_x, sun_H_0_rad, sun_H_0_deg, sun_m_0, sun_m_1, sun_m_2;
+
+            var jd       = date2jd(year, month + 1, date, 0, 0, 0);
+            var sidtime_G = get_apparent_siderial_time(jd, delta_t);
+
+            var sun_ra  = get_geocentric_sun_ra(jd, delta_t);
+            var sun_dec = get_geocentric_sun_dec(jd, delta_t);
+            var sun_H   = sidtime_G + obslong - sun_ra;
+            sun_H = limit_deg(sun_H, 360.0);
+
+            sun_m_0 = (sun_ra - obslong - sidtime_G) / 360.0;
+            sun_m_0 = limit_deg(sun_m_0, 1.0);
+
+            // 일출/일몰
+            var sun_h_0 = -0.8333;
+            sun_y = Math.sin(deg2rad(sun_h_0)) - Math.sin(deg2rad(obslat)) * Math.sin(deg2rad(sun_dec));
+            sun_x = Math.cos(deg2rad(obslat)) * Math.cos(deg2rad(sun_dec));
+            sun_H_0_rad = Math.acos(sun_y / sun_x);
+            sun_H_0_deg = limit_deg(rad2deg(sun_H_0_rad), 180.0);
+            sun_m_1 = limit_deg(sun_m_0 - sun_H_0_deg / 360.0, 1.0) * 24.0 + timeoffset;
+            if (sun_m_1 > 24.0) sun_m_1 -= 24.0;
+            sun_m_2 = limit_deg(sun_m_0 + sun_H_0_deg / 360.0, 1.0) * 24.0 + timeoffset;
+            var sun_m_0_hr = hr2hr(sun_m_0 * 24.0 + timeoffset);
+            var sun_m_1_hr = hr2hr(sun_m_1);
+            var sun_m_2_hr = hr2hr(sun_m_2);
+            var daytime    = hr2hr(sun_m_2 - sun_m_1);
+
+            // 시민박명
+            var sun_h_0_c = -6.0;
+            sun_y = Math.sin(deg2rad(sun_h_0_c)) - Math.sin(deg2rad(obslat)) * Math.sin(deg2rad(sun_dec));
+            sun_x = Math.cos(deg2rad(obslat)) * Math.cos(deg2rad(sun_dec));
+            sun_H_0_deg = limit_deg(rad2deg(Math.acos(sun_y / sun_x)), 180.0);
+            sun_m_1 = limit_deg(sun_m_0 - sun_H_0_deg / 360.0, 1.0) * 24.0 + timeoffset;
+            if (sun_m_1 > 24.0) sun_m_1 -= 24.0;
+            sun_m_2 = limit_deg(sun_m_0 + sun_H_0_deg / 360.0, 1.0) * 24.0 + timeoffset;
+            var sun_m_1_hr_c = hr2hr(sun_m_1);
+            var sun_m_2_hr_c = hr2hr(sun_m_2);
+
+            // 항해박명
+            var sun_h_0_n = -12.0;
+            sun_y = Math.sin(deg2rad(sun_h_0_n)) - Math.sin(deg2rad(obslat)) * Math.sin(deg2rad(sun_dec));
+            sun_x = Math.cos(deg2rad(obslat)) * Math.cos(deg2rad(sun_dec));
+            sun_H_0_deg = limit_deg(rad2deg(Math.acos(sun_y / sun_x)), 180.0);
+            sun_m_1 = limit_deg(sun_m_0 - sun_H_0_deg / 360.0, 1.0) * 24.0 + timeoffset;
+            if (sun_m_1 > 24.0) sun_m_1 -= 24.0;
+            sun_m_2 = limit_deg(sun_m_0 + sun_H_0_deg / 360.0, 1.0) * 24.0 + timeoffset;
+            var sun_m_1_hr_n = hr2hr(sun_m_1);
+            var sun_m_2_hr_n = hr2hr(sun_m_2);
+
+            // 천문박명
+            var sun_h_0_a = -18.0;
+            sun_y = Math.sin(deg2rad(sun_h_0_a)) - Math.sin(deg2rad(obslat)) * Math.sin(deg2rad(sun_dec));
+            sun_x = Math.cos(deg2rad(obslat)) * Math.cos(deg2rad(sun_dec));
+            sun_H_0_deg = limit_deg(rad2deg(Math.acos(sun_y / sun_x)), 180.0);
+            sun_m_1 = limit_deg(sun_m_0 - sun_H_0_deg / 360.0, 1.0) * 24.0 + timeoffset;
+            if (sun_m_1 > 24.0) sun_m_1 -= 24.0;
+            sun_m_2 = limit_deg(sun_m_0 + sun_H_0_deg / 360.0, 1.0) * 24.0 + timeoffset;
+            var sun_m_1_hr_a = hr2hr(sun_m_1);
+            var sun_m_2_hr_a = hr2hr(sun_m_2);
+
+            bindTimeText('.sunrise',      sun_m_1_hr[0],   sun_m_1_hr[1]);
+            drawClock('#sunrise-clock',   sun_m_1_hr[0],   sun_m_1_hr[1]);
+            bindTimeText('.culmination',  sun_m_0_hr[0],   sun_m_0_hr[1]);
+            drawClock('#culmination-clock',sun_m_0_hr[0],  sun_m_0_hr[1]);
+            bindTimeText('.sunset',       sun_m_2_hr[0],   sun_m_2_hr[1]);
+            drawClock('#sunset-clock',    sun_m_2_hr[0],   sun_m_2_hr[1]);
+            $('#daylength').text(format02d(daytime[0]) + '시간 ' + daytime[1] + '분 ');
+
+            bindTimeText2('#civil',   sun_m_1_hr_c[0], sun_m_1_hr_c[1], sun_m_2_hr_c[0], sun_m_2_hr_c[1]);
+            bindTimeText2('#nautical',sun_m_1_hr_n[0], sun_m_1_hr_n[1], sun_m_2_hr_n[0], sun_m_2_hr_n[1]);
+            bindTimeText2('#astro',   sun_m_1_hr_a[0], sun_m_1_hr_a[1], sun_m_2_hr_a[0], sun_m_2_hr_a[1]);
+        }
+
+        function bindTimeText(id, hours, minutes) {
+            $(id).text(format02d(hours) + '시 ' + format02d(minutes) + '분');
+        }
+        function bindTimeText2(id, h1, m1, h2, m2) {
+            $(id).text(format02d(h1) + '시 ' + format02d(m1) + '분 / ' + format02d(h2) + '시 ' + format02d(m2) + '분');
+        }
+
+		function jusoCallBack(roadFullAddr,roadAddrPart1,addrDetail,roadAddrPart2,engAddr,jibunAddr,zipNo,admCd,rnMgtSn,bdMgtSn,detBdNmList,bdNm,bdKdcd,siNm,sggNm,emdNm,liNm,rn,udrtYn,buldMnnm,buldSlno,mtYn,lnbrMnnm,lnbrSlno,emdNo,entX,entY){
+			$('input[name=address]').val(roadAddrPart1);
+			var xyArray  = xyConvert(entX, entY);
+			$('input[name=lat]').val(xyArray[1]);
+			$('input[name=lng]').val(xyArray[0]);
+		}
+
+		function goPopup(){
+			window.name = "popupParent";
+			window.open("/life/jusoPopup","pop","width=570,height=420, scrollbars=yes, resizable=yes");
+		}
+
+		function autoDetectLocation() {
+			if (!navigator.geolocation) return;
+			navigator.geolocation.getCurrentPosition(
+				function(position) {
+					var lat = position.coords.latitude;
+					var lng = position.coords.longitude;
+					getSgisToken(function(accessToken) {
+						if (accessToken == null || accessToken === '') {
+							applyLocation(lat, lng, '현재 위치');
+							return;
+						}
+						$.ajax({
+							url: "https://sgisapi.mods.go.kr/OpenAPI3/addr/rgeocodewgs84.json",
+							type: "GET",
+							data: { accessToken: accessToken, x_coor: lng, y_coor: lat, addr_type: "20" },
+							success: function(res) {
+								var address = '현재 위치';
+								if (res.result && res.result.length > 0) {
+									var r = res.result[0];
+									address = r.sido_nm + (r.sgg_nm ? ' ' + r.sgg_nm : '') + (r.emdong_nm ? ' ' + r.emdong_nm : '');
+								}
+								applyLocation(lat, lng, address);
+							},
+							error: function() {
+								applyLocation(lat, lng, '현재 위치');
+							}
+						});
+					});
+				},
+				function() {},
+				{ timeout: 5000, maximumAge: 60000 }
+			);
+		}
+
+		function getSgisToken(callback) {
+			$.ajax({
+				url: "/sgis/accessToken",
+				type: "GET",
+				dataType: "json",
+				success: function(res) {
+					callback(res != null && res.accessToken ? res.accessToken : null);
+				},
+				error: function() {
+					callback(null);
+				}
+			});
+		}
+
+		function applyLocation(lat, lng, address) {
+			$('input[name=lat]').val(lat);
+			$('input[name=lng]').val(lng);
+			$('input[name=address]').val(address);
+			$('.current-region').text(address);
+			calcSunrise(lng, lat);
+		}
+
+		function toggleClick(){
+			var spanDownUseCheck = $('p.txt_more_btn').find('span.glyphicon-chevron-down').length;
+			var spanUpUseCheck   = $('p.txt_more_btn').find('span.glyphicon-chevron-up').length;
+			if(spanDownUseCheck == 1){
+				$('p.txt_more_btn').find('span.glyphicon-chevron-down').removeClass('glyphicon-chevron-down').addClass('glyphicon-chevron-up');
+			}
+			if(spanUpUseCheck == 1){
+				$('p.txt_more_btn').find('span.glyphicon-chevron-up').removeClass('glyphicon-chevron-up').addClass('glyphicon-chevron-down');
+			}
+		}
+
+		$(function () {
+			$('#sub_wrap').addClass('sunries_wr');
+		});
+	</script>
+</head>
+<body>
+
+<!-- 일출일몰시각계산 (sunriseSunset)  -->
+	<div class="contents_wr contents_wr02">
+		<!-- search_write -->
+		<div class="contents_left border-gray border-radius-20">
+		<form name="searchForm" id="searchForm">
+			<input type="hidden" name="lat" value="37.54980" />
+			<input type="hidden" name="lng" value="126.9671" />
+			<fieldset>
+			<legend>검색샘플</legend>
+
+			<div class="con-text">
+<!-- 				<p class="con-h3">변환 설정</p> -->
+				<p class="con-sub">지금까지 역서가 발행된 연도의 역서자료를 바탕으로 월별, 지역별 해/달 출몰시각을 검색할 수 있습니다.</p>
+			</div>
+
+			<div class="con-text">
+				<p class="con-h4">
+					시간 입력
+					<span tabindex="0" data-bs-toggle="tooltip" data-bs-title="연월일을 써넣지 않고, 지역만 바꿔도 됩니다. 연도범위는 AD 1년부터 AD 6000년까지입니다. 1954년~1961년의 한국표준시는 세계시 +8.5시간으로 현재의 +9시간과 차이가 있습니다.">
+						<i class="bi bi-exclamation-circle-fill"></i>
+					</span>
+				</p>
+
+				
+				
+
+
+
+<!--     KRDS 공통 날짜 선택 달력 컴포넌트 -->
+
+<!--     사용법: -->
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<style>
+/* =============================================
+   KRDS 달력 컴포넌트 스타일
+   (기존 사이트 CSS와 충돌 방지를 위해 .krds-dp- 접두사 사용)
+   ============================================= */
+.krds-dp-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    width: 100%;
+    gap: 4px;
+}
+.krds-dp-wrap .form-control {
+    flex: 1;
+    cursor: pointer;
+}
+/* 달력 팝업 */
+.krds-dp-popup {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    z-index: 9999;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    width: 300px;
+    padding: 14px;
+    box-sizing: border-box;
+}
+.krds-dp-popup.open { display: block; }
+/* 헤더 */
+.krds-dp-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+.krds-dp-nav {
+    background: none;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    cursor: pointer;
+    width: 28px;
+    height: 28px;
+    font-size: 16px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.krds-dp-nav:hover { background: #f0f0f0; }
+.krds-dp-selects {
+    display: flex;
+    gap: 4px;
+}
+.krds-dp-selects select {
+    border: 0;
+    border-radius: 4px;
+    padding: 3px 23px 3px 6px !important;
+    height:auto !important;
+    width: auto !important;
+    font-size: 15px !important;
+    cursor: pointer;
+/*     background: #fff; */
+	background-position: right 3px center !important
+}
+/* 달력 테이블 */
+.krds-dp-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+.krds-dp-table th {
+    font-size: 12px;
+    color: #888;
+    text-align: center;
+    padding: 4px 0;
+    font-weight: normal;
+}
+.krds-dp-table th:first-child { color: #e53e3e; }
+.krds-dp-table td {
+    text-align: center;
+    padding: 2px 0;
+}
+.krds-dp-table td button {
+    width: 34px;
+    height: 34px;
+    border: none;
+    background: none;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 34px;
+    padding: 0;
+    transition: background 0.15s;
+}
+.krds-dp-table td button:hover:not(:disabled) { background: #ebf4ff; }
+.krds-dp-table td button:disabled              { color: #ccc; cursor: default; }
+.krds-dp-table td button.krds-dp-today         { font-weight: bold; color: var(--color-blue); }
+.krds-dp-table td button.krds-dp-selected      { background: var(--color-blue); color: #fff; }
+.krds-dp-table td button.krds-dp-selected:hover{ background: #2c5282; }
+.krds-dp-table td.krds-dp-sun button           { color: #e53e3e; }
+.krds-dp-table td.krds-dp-sun button.krds-dp-selected { color: #fff; }
+/* 푸터 */
+.krds-dp-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid #eee;
+}
+.krds-dp-footer button {
+    padding: 4px 14px;
+    border-radius: 4px;
+    font-size: 13px;
+    cursor: pointer;
+    border: 1px solid var(--color-gray-light);
+    background: rgba(var(--color-gray-light-rgb), .5);
+}
+.krds-dp-footer .krds-dp-btn-today{background:var(--color-white)}
+.krds-dp-footer button:hover          { background: #f5f5f5; }
+.krds-dp-footer .krds-dp-btn-confirm  { background: var(--color-blue); color: #fff; border-color: var(--color-blue); }
+.krds-dp-footer .krds-dp-btn-confirm:hover { background: #2c5282; }
+</style>
+
+<!-- 달력 래퍼 -->
+<div class="form-group from-group-btn input-append krds-dp-wrap" id="dp">
+
+    <!-- 날짜 input -->
+    <input
+        type="text"
+        id="sunriseSunsetDate"
+        name="date"
+        class="form-control"
+        placeholder="날짜를 선택하세요"
+        value=""
+        readonly
+    />
+
+    <!-- 달력 열기 버튼 (기존 사이트 스타일 유지) -->
+    <a href="#" class="add-on btn btn-gray krds-dp-open-btn" onclick="return false;">
+        <i class="bi bi-calendar-check"></i>
+    </a>
+
+    <!-- 달력 팝업 -->
+    <div class="krds-dp-popup">
+        <div class="krds-dp-head">
+            <button type="button" class="krds-dp-nav krds-dp-prev"><i class="bi bi-chevron-left"></i></button>
+            <div class="krds-dp-selects">
+                <select class="krds-dp-year-sel form-control form-select" aria-label="연도 선택"></select>
+                <select class="krds-dp-month-sel form-control form-select" aria-label="월 선택"></select>
+            </div>
+            <button type="button" class="krds-dp-nav krds-dp-next"><i class="bi bi-chevron-right"></i></button>
+        </div>
+        <table class="krds-dp-table">
+            <thead>
+                <tr>
+                    <th>일</th><th>월</th><th>화</th><th>수</th><th>목</th><th>금</th><th>토</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+        <div class="krds-dp-footer">
+            <button type="button" class="krds-dp-btn-today">오늘</button>
+            <button type="button" class="krds-dp-btn-cancel">취소</button>
+            <button type="button" class="krds-dp-btn-confirm">확인</button>
+        </div>
+    </div>
+</div>
+
+<script type="text/javascript">
+(function() {
+    /* ---- 대상 요소 (wrapperId 기준으로 스코프 한정 → 여러 개 공존 가능) ---- */
+    var wrap    = document.getElementById('dp');
+    if (!wrap) return;
+
+    var inp     = wrap.querySelector('#sunriseSunsetDate');
+    var popup   = wrap.querySelector('.krds-dp-popup');
+    var openBtn = wrap.querySelector('.krds-dp-open-btn');
+
+    var currentYear, currentMonth;
+    var selectedDateStr = ''; // yyyy-mm-dd
+    
+    var minDateStr = '1-01-01';
+    var maxDateStr = '6000-12-31';
+
+    /* ---- 연도 select 생성 (선택된 연도 기준 ±5년) ---- */
+    function buildYearSelect() {
+        var sel     = popup.querySelector('.krds-dp-year-sel');
+        sel.innerHTML = '';
+        
+        var startYear = minDate ? minDate.year : currentYear - 5;
+        var endYear = maxDate ? maxDate.year : currentYear + 5;
+        
+        for (var y = startYear; y <= endYear; y++) {
+            var opt = document.createElement('option');
+            opt.value       = y;
+            opt.textContent = y + '년';
+            if (y === currentYear) opt.selected = true;
+            sel.appendChild(opt);
+        }
+    }
+
+    /* ---- 월 select 생성 ---- */
+    function buildMonthSelect() {
+        var sel = popup.querySelector('.krds-dp-month-sel');
+        sel.innerHTML = '';
+        for (var m = 1; m <= 12; m++) {
+            var opt = document.createElement('option');
+            opt.value       = m;
+            opt.textContent = String(m).padStart(2, '0') + '월';
+            if (m === currentMonth) opt.selected = true;
+            sel.appendChild(opt);
+        }
+    }
+    
+    /* 날짜 비교 */
+    function parseDateParts(value) {
+        if (!value) {
+            return null;
+        }
+
+        var match = value.match(/^(-?\d{1,4})-(\d{2})-(\d{2})$/);
+
+        if (!match) {
+            return null;
+        }
+
+        return {
+            year: parseInt(match[1], 10),
+            month: parseInt(match[2], 10),
+            day: parseInt(match[3], 10)
+        };
+    }
+
+    function compareDateParts(a, b) {
+        if (a.year !== b.year) {
+            return a.year < b.year ? -1 : 1;
+        }
+
+        if (a.month !== b.month) {
+            return a.month < b.month ? -1 : 1;
+        }
+
+        if (a.day !== b.day) {
+            return a.day < b.day ? -1 : 1;
+        }
+
+        return 0;
+    }
+
+    var minDate = parseDateParts(minDateStr);
+    var maxDate = parseDateParts(maxDateStr);
+
+    function isDateInRange(year, month, day) {
+        var target = {
+            year: year,
+            month: month,
+            day: day
+        };
+
+        if (minDate && compareDateParts(target, minDate) < 0) {
+            return false;
+        }
+
+        if (maxDate && compareDateParts(target, maxDate) > 0) {
+            return false;
+        }
+
+        return true;
+    }
+    
+    function createDate(year, monthIndex, day) {
+        var date = new Date(0);
+        date.setHours(0, 0, 0, 0);
+        date.setFullYear(year, monthIndex, day);
+        return date;
+    }
+
+    /* ---- 달력 테이블 렌더 ---- */
+    function renderCalendar(year, month) {
+        currentYear  = year;
+        currentMonth = month;
+        buildYearSelect();
+        buildMonthSelect();
+
+/*         var firstDay = new Date(year, month - 1, 1).getDay();
+        var lastDate = new Date(year, month, 0).getDate();
+        var prevLast = new Date(year, month - 1, 0).getDate(); */
+        var today = new Date();
+        var firstDay = createDate(year, month - 1, 1).getDay();
+        var lastDate = getDaysInMonth(year, month);
+
+        var prevYear = month === 1 ? year - 1 : year;
+        var prevMonth = month === 1 ? 12 : month - 1;
+        var prevLast = getDaysInMonth(prevYear, prevMonth);
+
+        var tbody = popup.querySelector('.krds-dp-table tbody');
+        tbody.innerHTML = '';
+
+        var dayCount = 0;
+        for (var row = 0; row < 6; row++) {
+            var tr = document.createElement('tr');
+            for (var col = 0; col < 7; col++) {
+                var td  = document.createElement('td');
+                var btn = document.createElement('button');
+                btn.type = 'button';
+
+                var cellDate, cellYear = year, cellMonth = month, disabled = false;
+
+                if (row === 0 && col < firstDay) {
+                    cellDate  = prevLast - firstDay + col + 1;
+                    cellYear  = month === 1 ? year - 1 : year;
+                    cellMonth = month === 1 ? 12 : month - 1;
+                    disabled  = true;
+                } else {
+                    dayCount++;
+                    if (dayCount > lastDate) {
+                        cellDate  = dayCount - lastDate;
+                        cellYear  = month === 12 ? year + 1 : year;
+                        cellMonth = month === 12 ? 1 : month + 1;
+                        disabled  = true;
+                    } else {
+                        cellDate = dayCount;
+                    }
+                }
+
+                btn.textContent = cellDate;
+                
+                var outOfRange = !isDateInRange(
+                	    cellYear,
+                	    cellMonth,
+                	    cellDate
+                );
+
+                if (disabled || outOfRange) {
+                    btn.disabled = true;
+                } else {
+                    var ds = cellYear + '-'
+                           + String(cellMonth).padStart(2,'0') + '-'
+                           + String(cellDate).padStart(2,'0');
+                    btn.setAttribute('data-date', ds);
+
+                    if (cellYear  === today.getFullYear()  &&
+                        cellMonth === today.getMonth() + 1 &&
+                        cellDate  === today.getDate()) {
+                        btn.classList.add('krds-dp-today');
+                    }
+                    if (ds === selectedDateStr) {
+                        btn.classList.add('krds-dp-selected');
+                    }
+
+                    /* 날짜 클릭: 선택만 표시 (확인 버튼으로 최종 반영) */
+                    btn.addEventListener('click', (function(dateStr, b) {
+                        return function() {
+                            selectedDateStr = dateStr;
+                            popup.querySelectorAll('.krds-dp-table button').forEach(function(x) {
+                                x.classList.remove('krds-dp-selected');
+                            });
+                            b.classList.add('krds-dp-selected');
+                        };
+                    })(ds, btn));
+                }
+
+                if (col === 0) td.classList.add('krds-dp-sun');
+                td.appendChild(btn);
+                tr.appendChild(td);
+            }
+            tbody.appendChild(tr);
+            if (dayCount >= lastDate && row >= 4) break;
+        }
+    }
+    
+    function isLeapYear(year) {
+        return year % 4 === 0
+            && (year % 100 !== 0 || year % 400 === 0);
+    }
+
+    function getDaysInMonth(year, month) {
+        if (month === 2) {
+            return isLeapYear(year) ? 29 : 28;
+        }
+
+        if (month === 4 || month === 6 || month === 9 || month === 11) {
+            return 30;
+        }
+
+        return 31;
+    }
+    
+    /* 이전/다음 달 이동 제한 */
+    function isMonthInRange(year, month) {
+        var firstDay = {
+            year: year,
+            month: month,
+            day: 1
+        };
+
+        var lastDay = {
+            year: year,
+            month: month,
+            day: getDaysInMonth(year, month)
+        };
+
+        if (minDate && compareDateParts(lastDay, minDate) < 0) {
+            return false;
+        }
+
+        if (maxDate && compareDateParts(firstDay, maxDate) > 0) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /* ---- 팝업 열기 ---- */
+/*     function openPopup() {
+        var val = inp.value;
+        if (val && /^\d{4}-\d{2}-\d{2}$/.test(val)) {
+            var p = val.split('-');
+            currentYear     = parseInt(p[0]);
+            currentMonth    = parseInt(p[1]);
+            selectedDateStr = val;
+        } else {
+            var t = new Date();
+            currentYear     = t.getFullYear();
+            currentMonth    = t.getMonth() + 1;
+            selectedDateStr = '';
+        }
+        renderCalendar(currentYear, currentMonth);
+        popup.classList.add('open');
+    } */
+    function openPopup() {
+        var val = inp.value;
+        var parsed = parseDateParts(val);
+
+        if (parsed && isDateInRange(parsed.year, parsed.month, parsed.day)) {
+            currentYear = parsed.year;
+            currentMonth = parsed.month;
+            selectedDateStr = val;
+        } else {
+            var t = new Date();
+            currentYear = t.getFullYear();
+            currentMonth = t.getMonth() + 1;
+            selectedDateStr = '';
+        }
+
+        renderCalendar(currentYear, currentMonth);
+        popup.classList.add('open');
+    }
+
+    /* ---- 팝업 닫기 ---- */
+    function closePopup() {
+        popup.classList.remove('open');
+    }
+
+    /* ---- 이벤트 바인딩 ---- */
+    // 달력 아이콘 버튼
+    openBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        popup.classList.contains('open') ? closePopup() : openPopup();
+    });
+
+    // input 클릭으로도 열기
+    inp.addEventListener('click', function(e) {
+        e.stopPropagation();
+        if (!popup.classList.contains('open')) openPopup();
+    });
+
+    // 외부 클릭 시 닫기
+    document.addEventListener('click', function(e) {
+        if (!wrap.contains(e.target)) closePopup();
+    });
+
+    // 이전 달
+/*     popup.querySelector('.krds-dp-prev').addEventListener('click', function() {
+        var m = currentMonth - 1, y = currentYear;
+        if (m < 1) { m = 12; y--; }
+        renderCalendar(y, m);
+    }); */
+    popup.querySelector('.krds-dp-prev').addEventListener('click', function() {
+        var m = currentMonth - 1;
+        var y = currentYear;
+
+        if (m < 1) {
+            m = 12;
+            y--;
+        }
+
+        if (isMonthInRange(y, m)) {
+            renderCalendar(y, m);
+        }
+    });
+
+    // 다음 달
+/*     popup.querySelector('.krds-dp-next').addEventListener('click', function() {
+        var m = currentMonth + 1, y = currentYear;
+        if (m > 12) { m = 1; y++; }
+        renderCalendar(y, m);
+    }); */
+    popup.querySelector('.krds-dp-next').addEventListener('click', function() {
+        var m = currentMonth + 1;
+        var y = currentYear;
+
+        if (m > 12) {
+            m = 1;
+            y++;
+        }
+
+        if (isMonthInRange(y, m)) {
+            renderCalendar(y, m);
+        }
+    });
+
+/*     // 연도 select
+    popup.querySelector('.krds-dp-year-sel').addEventListener('change', function() {
+        renderCalendar(parseInt(this.value), currentMonth);
+    });
+
+    // 월 select
+    popup.querySelector('.krds-dp-month-sel').addEventListener('change', function() {
+        renderCalendar(currentYear, parseInt(this.value));
+    }); */
+    popup.querySelector('.krds-dp-year-sel').addEventListener('change', function() {
+        var year = parseInt(this.value, 10);
+
+        if (isMonthInRange(year, currentMonth)) {
+            renderCalendar(year, currentMonth);
+        }
+    });
+
+    popup.querySelector('.krds-dp-month-sel').addEventListener('change', function() {
+        var month = parseInt(this.value, 10);
+
+        if (isMonthInRange(currentYear, month)) {
+            renderCalendar(currentYear, month);
+        }
+    });
+
+    // 오늘 버튼
+    popup.querySelector('.krds-dp-btn-today').addEventListener('click', function() {
+        var t = new Date();
+        selectedDateStr = t.getFullYear() + '-'
+                        + String(t.getMonth()+1).padStart(2,'0') + '-'
+                        + String(t.getDate()).padStart(2,'0');
+        renderCalendar(t.getFullYear(), t.getMonth() + 1);
+    });
+
+    // 취소 버튼
+    popup.querySelector('.krds-dp-btn-cancel').addEventListener('click', function() {
+        closePopup();
+    });
+
+    // 확인 버튼: input에 값 반영 후 닫기
+    popup.querySelector('.krds-dp-btn-confirm').addEventListener('click', function() {
+        if (selectedDateStr) {
+            inp.value = selectedDateStr;
+            /* name이 다른 hidden input이 별도로 있는 경우도 동기화 */
+            var form = inp.closest('form');
+            if (form) {
+                var hidden = form.querySelector('input[name="date"][type="hidden"]');
+                if (hidden) hidden.value = selectedDateStr;
+            }
+        }
+        closePopup();
+    });
+
+})();
+</script>
+
+
+				<p class="con-sub con-sub-sm py-2">공백시 현재 연월일로 세팅됩니다. (표준시간대:KST, +9시)</p>
+			</div>
+
+			<div class="con-text mb-0">
+				<p class="con-h4">
+					위치 입력
+					<span tabindex="0" data-bs-toggle="tooltip" data-bs-title="표준시간대가 +9시보다 작거나 큰 지역의 경우, 일출몰남중 시각의 정확도는 보장할 수 없습니다.">
+						<i class="bi bi-exclamation-circle-fill"></i>
+					</span>
+				</p>
+				<div class="form-group from-group-add">
+					<input name="address" value="서울특별시" class="form-control group-6" type="text" readonly="readonly" onclick="javascript:goPopup();" title="새창열림" id="sunriseSunsetAddress">
+					<button type="button" class="btn btn-gray" onclick="javascript:goPopup();" id="addrBtn" value="팝업_domainChk">주소찾기</button>
+				</div>
+				<p class="con-sub con-sub-sm py-2">(표준시간대:KST, +9시)</p>
+			</div>
+
+			<script>
+				document.addEventListener('DOMContentLoaded', function () {
+					document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+						new bootstrap.Tooltip(el, { container: 'body' });
+					});
+				});
+			</script>
+			</fieldset>
+
+			<div class="con-text">
+			<div class="search_btn">
+				<button type="submit" class="btn btn-blue" id="del_btn">검색하기</button>
+				<button type="button" onclick="window.location = window.location.pathname;" class="btn btn-gray-light">다시작성</button>
+			</div>
+			</div>
+
+			<div class="con-text mb-0">
+				<p class="con-h4">안내 정보</p>
+				<div class="con-box-wr">
+					<div class="con-box">
+						<p>※ '일출일몰시각계산' 페이지에서 제공하는 자료는 사용자가 입력한 값에 기반하여 도출된 값이며 '월별 해/달 출몰시각' 페이지에서 제공하는 자료는 국토지리정보원에서 제공하는 해당 도시의 좌표값을 이용하여 계산한 값이므로, 결과값이 소폭 다를 수 있습니다.</p>
+						<p>※ 비공개 또는 공개제한 건물이 포함된 주소정보는 좌표값을 제공하지 않습니다. 인근 주소로 검색하시면 거의 동일한 값을 확인 할 수 있습니다.</p>
+					</div>
+					<a href="#" class="con-box-more"><i class="bi bi-chevron-down"></i></a>
+				</div>
+				<script>
+				document.querySelectorAll('.con-box-more').forEach(function(btn) {
+					btn.addEventListener('click', function(e) {
+						e.preventDefault();
+						var wrapper = this.closest('.con-box-wr');
+						var box     = wrapper.querySelector('.con-box');
+						if (box.classList.contains('open')) {
+							box.style.height = '65px';
+							box.classList.remove('open');
+						} else {
+							box.style.height = box.scrollHeight + 'px';
+							box.classList.add('open');
+						}
+						wrapper.classList.toggle('open');
+					});
+				});
+				</script>
+			</div>
+		</form>
+		</div>
+		<!-- //search_write -->
+		<div class="contents_right_wr">
+			<!-- 결과 -->
+			<div class="contents_right ">
+				<p class="con-h3">일출일몰시각계산 검색결과</p>
+				<div class="con_search_box">
+					<ul class="ul_search">
+						<li class="full"><strong><i class="bi bi-check-circle-fill"></i> 날 짜</strong><span id="date">2017-03-22</span></li>
+						<li><strong><i class="bi bi-check-circle-fill"></i> 지 역</strong><span class="current-region">서울특별시</span></li>
+						<li><strong><i class="bi bi-check-circle-fill"></i> 위 치</strong><span>동경 <em id="long"></em> / 북위 <em id="lat"></em></span></li>
+						<li><strong><i class="bi bi-check-circle-fill"></i> 낮의 길이</strong><span id="daylength"></span></li>
+						<li><strong><i class="bi bi-check-circle-fill"></i> 시민박명(아침/저녁)</strong><span id="civil"></span></li>
+						<li><strong><i class="bi bi-check-circle-fill"></i> 항해박명(아침/저녁)</strong><span id="nautical"></span></li>
+						<li><strong><i class="bi bi-check-circle-fill"></i> 천문박명(아침/저녁)</strong><span id="astro"></span></li>
+					</ul>
+					<!-- Timebox -->
+					<div class="Timebox">
+						<div class="blcok">
+							<div class="watch" id="sunrise-clock"></div>
+							<p class="tit">
+								<strong><i class="bi bi-check-circle-fill"></i> 해뜨는 시각(일출)</strong>
+								<span class="sunrise"></span>
+							</p>
+						</div>
+						<div class="blcok">
+							<div class="watch" id="culmination-clock"></div>
+							<p class="tit">
+								<strong><i class="bi bi-check-circle-fill"></i> 한낮의 시각(남중)</strong>
+								<span class="culmination"></span>
+							</p>
+						</div>
+						<div class="blcok">
+							<div class="watch" id="sunset-clock"></div>
+							<p class="tit">
+								<strong><i class="bi bi-check-circle-fill"></i> 해지는 시각(일몰)</strong>
+								<span class="sunset"></span>
+							</p>
+						</div>
+					</div>
+					<!--// Timebox -->
+				</div>
+			</div>
+			<!-- // 결과 -->
+			<!-- 유의사항 -->
+			<div class="contents_bottom_text ">
+				<p class="con-h3-2">유의사항</p>
+				<ul class="ul_list mt-2">
+					<li><strong>월별 해/달 출몰시각</strong> 페이지는 지금까지 역서가 발행된 연도의 역서자료를 바탕으로 월별, 지역별 해/달 출몰시각을 보여줍니다.</li>
+					<li>지금까지 역서가 발행된 연도의 역서자료는 우리나라에서의 해/달 출몰시각의 정확한 표준이 되며, 역서가 발행되지 않은 과거 또는 미래의 시점에 대한 해/달 출몰시각은 실제 해/달 출몰시각과는 다소 차이가 날 수 있습니다.</li>
+					<li>이 페이지에서는 역서에서보다 폭넓은 시간범위에 대해 일출몰시각을 알 수 있습니다. 그 결과값은 계산과정상의 오차로 인해 실제 값과는 다소 차이가 날 수 있으며, 그 차이는 1분보다 작습니다. 보다 정확한 값은 역서자료를 바탕으로 하는 <strong>'월별 해/달 출몰시각'</strong> 페이지를 참고하시기 바랍니다.</li>
+					<li>
+						<strong>참고문헌</strong>
+						<ul class="ul_list_dot">
+							<li class="fir">"Astronomical Algorithms". Meeus, J. (Second Edition 1998, William-Bell, Inc., Richmond, Virginia, USA)</li>
+							<li>"Theory for the motion of all the planets - The VSOP82 solution", Bretagnon, P., Astronomy and Astrophysics, vol. 114, no. 2, Oct. 1982, p. 278-288</li>
+							<li>"Planetary theories in rectangular and spherical variables - VSOP 87 solutions", Bretagnon, P., Francou, G., Astronomy and Astrophysics (ISSN 0004-6361), vol. 202, no. 1-2, Aug. 1988, p. 309-315</li>
+						</ul>
+					</li>
+					<li class="ul_accordion">
+						<div class="accordion" id="Authors">
+							<div class="accordion-item">
+								<h2 class="accordion-header">
+									<button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#AuthorsOne" aria-expanded="false" aria-controls="AuthorsOne">라이센스 펼쳐보기</button>
+								</h2>
+								<div id="AuthorsOne" class="accordion-collapse collapse" data-bs-parent="#Authors">
+									<div class="accordion-body">
+										<p>Authors:</p>
+										<p>Mike Adair madairATdmsolutions.ca</p>
+										<p>Richard Greenwood richATgreenwoodmap.com</p>
+										<p>Didier Richard didier.richardATign.fr</p>
+										<p>Stephen Irons stephen.ironsATclear.net.nz</p>
+										<p>Olivier Terral oterralATgmail.com</p>
+										<p>Calvin Metcalf cmetcalfATappgeo.com</p>
+										<p>Copyright (c) 2014, Mike Adair, Richard Greenwood, Didier Richard, Stephen Irons, Olivier Terral and Calvin Metcalf</p>
+										<br>
+										<p>Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:</p>
+										<br>
+										<p>The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.</p>
+										<br>
+										<p>THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.</p>
+									</div>
+								</div>
+							</div>
+						</div>
+					</li>
+				</ul>
+				<p class="point_text"><i class="bi bi-check"></i> 본 계산식에서 나온 값들은 어떠한 법적효력도 가지고 있지 않습니다. 참고하시기 바랍니다.</p>
+			</div>
+			<!-- //유의사항 -->
+		</div>
+	</div>
+
+</body>

@@ -1,0 +1,67 @@
+URL https://astro.kasi.re.kr/life/pageView/4
+STATUS 500
+TYPE text/html;charset=UTF-8
+LEN 2103
+
+
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="">
+<meta name="author" content="Mosaddek">
+<meta name="keyword" content="FlatLab, Dashboard, Bootstrap, Admin, Template, Theme, Responsive, Fluid, Retina">
+<link rel="shortcut icon" href="/resources/images/favicon.ico"> 
+
+<title>500</title>
+ 
+<link href="/resources/css/bootstrap.css" rel="stylesheet">
+<link href="/resources/css/font-awesome.min.css" rel="stylesheet">
+<link href="/resources/css/common.css" rel="stylesheet">
+<link href="/resources/css/error.css" rel="stylesheet">
+   
+<script type="text/javascript" src="/resources/js/jquery.min.js"></script>
+   
+<!--[if IE 7]>
+	<link href="/resources/css/bootstrap-ie7.css" rel="stylesheet">
+	<link href="/resources/css/font-awesome-ie7.min.css" rel="stylesheet">
+<![endif]-->
+<!--[if lt IE 9]>
+	<script src="/resources/js/html5shiv.js"></script>
+	<script src="/resources/js/respond.min.js"></script>
+<![endif]-->
+
+<script type="text/javascript">
+	$(function(){
+		var allHeight = $("#wrap").height()/2;
+		var thisHeight = $(".content").height()/2;
+		$(window).resize(function(){
+			allHeight = $("#wrap").height()/2;
+			thisHeight = $(".content").height()/2;
+			$(".content").css({"padding-top":(allHeight-thisHeight)+"px"});
+		});
+		$(".content").css({"padding-top":(allHeight-thisHeight)+"px"});
+	});
+</script>
+</head>
+ <body id="body-500">
+	<section id="wrap">
+        <div class="content">
+      	    <h1><img src="/resources/images/500_type.png" alt="500"></h1>
+	       <div class="txt">
+	        	<strong>내부 서버에 오류가 발생했습니다.</strong>
+	        	<p>
+		        	서버에 오류가 발생하여 요청을 완료할 수 없습니다.<br />
+					프로그램 상 문제이오니 관리자에게 문의하시기 바랍니다. 
+				</p>
+	        </div>
+	        <div class="but">
+			    <button class="prev" onclick="return history.go(-1);"><i class="icon-angle-left"></i>이전 페이지</button>
+			    <button class="home" onclick="return location.href='/';">HOME</button>
+		    </div>
+		</div>
+	</section>
+</body>
+</html>

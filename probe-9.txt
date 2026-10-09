@@ -1,0 +1,1724 @@
+URL https://astro.kasi.re.kr/life/pageView/10
+STATUS 200
+TYPE text/html;charset=UTF-8
+LEN 51664
+
+
+
+
+
+
+
+
+
+
+
+	
+	
+	
+	
+
+
+<head>
+	<script src="/resources/js/life/modify-date.js"></script>
+
+	<script src="/resources/js/d3/d3.v4.min.js"></script>
+
+	<link href="/resources/css/d3/graph.css" rel="stylesheet">
+	<link href="/resources/css/juso.css" rel="stylesheet">
+	<script src="/resources/js/d3/graph.js"></script>
+
+	<script src="/resources/js/life/algorithms.js"></script>
+	<script src="/resources/js/life/common.js"></script>
+	<script src="/resources/js/life/delta_t.js"></script>
+	<script src="/resources/js/life/proj4.js"></script>
+	<script src="/resources/js/life/suncalc.js"></script>
+
+	
+		
+			<script src="https://ssl.daumcdn.net/dmaps/map_js_init/postcode.v2.js"></script>
+		
+		
+	
+
+	<script type="text/javascript">
+        var timeoffset = 9;
+        var delta_t;
+
+        var dateString = '';
+
+        // for testing
+		var output_range = 1;
+
+        var sun_ra_deg = [];
+        var sun_dec_deg = [];
+        var sun_alt_deg = [];
+        var sun_az_deg = [];
+
+        var year, month, date, hour, minute, second;
+        var obslong, obslat, lochigh;
+
+		$(function () {
+            hideModifyDate();
+
+            var popoverTriggerList = document.querySelectorAll('[data-bs-toggle="popover"]');
+            popoverTriggerList.forEach(function (el) {
+              new bootstrap.Popover(el);
+            });
+
+            var dp = $('#dp');
+            var today = new Date();
+
+            var hourGroup = $('#hour_group');
+            var minuteGroup = $('#minute_group');
+            var secondGroup = $('#second_group');
+
+            hour = today.getHours();
+            minute = today.getMinutes();
+            second = today.getSeconds();
+
+            if(dateString == '') {
+                year = today.getFullYear();
+                month = today.getMonth();
+                date = today.getDate();
+                dateString = formatDate(year, month, date);
+            } else {
+                var ymd = dateString.split('-');
+                year = parseInt(ymd[0]);
+                month = parseInt(ymd[1]) - 1;
+                date = parseInt(ymd[2]);
+            }
+
+            delta_t = getCurrentDeltaT(year);
+            dp.find('input[name="date"]').val(dateString);
+
+            obslong = 126.9671;
+            obslat = 37.54980;
+            lochigh = 0;
+
+            calcSolarHeight();
+
+            var urlParams = new URLSearchParams(window.location.search);
+            if (!urlParams.has('lat') && !urlParams.has('lng')) {
+                autoDetectLocation();
+            }
+
+            initTimeInputs(output_range);
+            $('input[name=output_range]').change(function () {
+                initTimeInputs($(this).val());
+            });
+
+            function initTimeInputs(output_range){
+                if (output_range == 1) {
+                    hourGroup.hide();
+                    minuteGroup.hide();
+                    secondGroup.hide();
+                } else if (output_range == 2) {
+                    hourGroup.show();
+                    minuteGroup.show();
+                    secondGroup.show();
+                } else {
+                    hourGroup.show();
+                    minuteGroup.hide();
+                    secondGroup.hide();
+                }
+            }
+        });
+
+        function calcSolarHeight() {
+            sun_ra_deg = [];
+            sun_dec_deg = [];
+            sun_alt_deg = [];
+            sun_az_deg = [];
+
+            $('#graph').empty();
+            $('#sun-height-table').find('tbody').empty();
+
+            setDMS('#long', obslong);
+            setDMS('#lat', obslat);
+
+            var outputText = $('.output');
+            var table = $('#sun-height-table').find('tbody');
+            var dateCol = $('#date-col');
+
+            if (output_range == 1) {
+                outputText.html('<span class="date-format"></span> 태양의 고도 및 방위각 변화');
+                for (var i = 0; i < 24; i++) {
+                    initData(year, month, date, i - timeoffset, 0, 0);
+                    appendTable(i);
+                }
+                drawGraph('#graph', sun_az_deg, sun_alt_deg, month + 1, date);
+            } else if (output_range == 2) {
+                outputText.html('<span class="date-format"></span> '+ hour + '시 ' + minute + '분 '+ second + '초 태양의 고도 및 방위각');
+                initData(year, month, date, hour - timeoffset, minute, second);
+                drawGraph('#graph', sun_az_deg, sun_alt_deg);
+                $('.multi-record-only').hide();
+                appendTable(0);
+            } else {
+                outputText.html(year + '년 ' + (month + 1) + '월 매일 ' + hour + '시 태양의 고도 및 방위각 변화');
+                var sun_alt_deg_range = [];
+                var sun_az_deg_range  = [];
+                var min_alt = 90, min_date;
+                var max_alt = -90, max_date;
+                var d = new Date(year, month + 1, 0);
+                for (var i = 1; i <= d.getDate(); i++) {
+                    initData(year, month, i, hour - timeoffset, 0, 0);
+                    var current = sun_alt_deg[i - 1];
+                    if (current < min_alt) { min_alt = current; min_date = i; }
+                    if (current > max_alt) { max_alt = current; max_date = i; }
+                    appendTable(i - 1, hour);
+                }
+                sun_alt_deg_range.push(min_alt, max_alt);
+                sun_az_deg_range.push(sun_az_deg[min_date-1], sun_az_deg[max_date-1]);
+                drawGraph('#graph', sun_az_deg_range, sun_alt_deg_range);
+                addDescription(year, month, min_date, max_date, hour);
+                dateCol.text('날짜(일) / 시간(시)');
+            }
+
+            $('.date-format').text(formatDateKor(year, month, date));
+
+            function initData(y, m, d, h, i, s) {
+                var jd = date2jd(y, m + 1, d, h, i, s);
+                var jde = get_jde(jd, delta_t);
+                var jce = get_jce(jde);
+                var jme = get_jme(jce);
+                var sun_ra = get_geocentric_sun_ra(jd, delta_t);
+                var sun_dec = get_geocentric_sun_dec(jd, delta_t);
+                var sidtime_G = get_apparent_siderial_time(jd, delta_t);
+                var H = sidtime_G + obslong - sun_ra;
+                H = limit_deg(H, 360.0);
+                var solar_info = get_topocentric_sun_ra_dec(jme, obslat, lochigh, sun_ra, sun_dec, H);
+                sun_ra_deg.push(solar_info[0]);
+                sun_dec_deg.push(solar_info[1]);
+                sun_alt_deg.push(solar_info[3]);
+                sun_az_deg.push(solar_info[4]);
+            }
+
+            function appendTable(i, hour) {
+                var sun_az = sun_az_deg[i];
+                var sun_alt = sun_alt_deg[i];
+                var sun_ra = sun_ra_deg[i];
+                var sun_dec = sun_dec_deg[i];
+                var tr = '<tr>';
+                if (output_range == 1) {
+                    tr += '<td>' + format02d(i) + '</td>';
+                } else if (output_range == 3) {
+                    tr += '<td>' + format02d(i + 1) +' / '+ format02d(hour) + '</td>';
+                }
+                var dms, values;
+                dms = convertToDMS(sun_az, 2);
+                tr += '<td>' + format03d(dms[0]) + ' ' + format02d(dms[1]) + ' ' + format02d02f(dms[2]) + '</td>';
+                dms = convertToDMS(sun_alt, 2);
+                values = (dms[3] == "+") ? format02d(dms[0]) : dms[3] + format02d(dms[0]);
+                tr += '<td>' + values + ' ' + format02d(dms[1]) + ' ' + format02d02f(dms[2]) + '</td>';
+                dms = deg2hour(sun_ra);
+                tr += '<td>' + format02d(dms[0]) + ' ' + format02d(dms[1]) + ' ' + format02d(dms[2]) + '</td>';
+                dms = convertToDMS(sun_dec, 2);
+                values = (dms[3] == "+") ? format02d(dms[0]) : dms[3] + format02d(dms[0]);
+                tr += '<td>' + values + ' ' + format02d(dms[1]) + ' ' + format02d02f(dms[2]) + '</td>';
+                tr += '</tr>';
+                table.append(tr);
+            }
+        }
+		
+		// 팝업페이지에서 주소입력한 정보를 받아서, 현 페이지에 정보를 등록합니다.
+		function jusoCallBack(roadFullAddr,roadAddrPart1,addrDetail,roadAddrPart2,engAddr, jibunAddr, zipNo, admCd, rnMgtSn, bdMgtSn,detBdNmList,bdNm,bdKdcd,siNm,sggNm,emdNm,liNm,rn,udrtYn,buldMnnm,buldSlno,mtYn,lnbrMnnm,lnbrSlno,emdNo,entX,entY){
+			$('input[name=address]').val(roadAddrPart1);
+			
+			console.log("xyConvert(entx, enty)==>", xyConvert(entX,entY));
+			var xyArray = xyConvert(entX, entY);
+			var convertX = xyArray[0];
+			var convertY = xyArray[1];
+			
+			$('input[name=lat]').val(convertY);
+			$('input[name=lng]').val(convertX);
+			
+			var times = SunCalc.getTimes(new Date(), convertY, convertX);
+			var sunrisePos = SunCalc.getPosition(times.sunrise, convertY, convertX);
+			var sunriseAzimuth = sunrisePos.azimuth * 180 / Math.PI;
+			$('input[name=elevation]').val(sunriseAzimuth);
+		}
+		
+		function goPopup(){
+			// 주소검색을 수행할 팝업 페이지를 호출합니다. 호출된 페이지(jusopopup.jsp)에서 실제 주소검색URL(http://www.juso.go.kr/addrlink/addrCoordUrl.do)를 호출하게 됩니다.
+			window.name = "popupParent";
+			window.open("/life/jusoPopup","pop","width=570,height=420, scrollbars=yes, resizable=yes"); 
+		}
+		
+		function autoDetectLocation() {
+			if (!navigator.geolocation) return;
+			navigator.geolocation.getCurrentPosition(
+				function(position) {
+					var lat = position.coords.latitude;
+					var lng = position.coords.longitude;
+					getSgisToken(function(accessToken) {
+						if (accessToken == null || accessToken === '') {
+							applyLocation(lat, lng, '현재 위치');
+							return;
+						}
+						$.ajax({
+							url: "https://sgisapi.mods.go.kr/OpenAPI3/addr/rgeocodewgs84.json",
+							type: "GET",
+							data: { accessToken: accessToken, x_coor: lng, y_coor: lat, addr_type: "20" },
+							success: function(res) {
+								var address = '현재 위치';
+								if (res.result && res.result.length > 0) {
+									var r = res.result[0];
+									address = r.sido_nm + (r.sgg_nm ? ' ' + r.sgg_nm : '') + (r.emdong_nm ? ' ' + r.emdong_nm : '');
+								}
+								applyLocation(lat, lng, address);
+							},
+							error: function() {
+								applyLocation(lat, lng, '현재 위치');
+							}
+						});
+					});
+				},
+				function() {},
+				{ timeout: 5000, maximumAge: 60000 }
+			);
+		}
+
+		function getSgisToken(callback) {
+			$.ajax({
+				url: "/sgis/accessToken",
+				type: "GET",
+				dataType: "json",
+				success: function(res) {
+					callback(res != null && res.accessToken ? res.accessToken : null);
+				},
+				error: function() {
+					callback(null);
+				}
+			});
+		}
+
+		function applyLocation(lat, lng, address) {
+			$('input[name=lat]').val(lat);
+			$('input[name=lng]').val(lng);
+			$('input[name=address]').val(address);
+			$('.current-region').text(address);
+			obslong = lng;
+			obslat = lat;
+			lochigh = 0;
+			calcSolarHeight();
+		}
+
+		function toggleClick(){
+			var spanDownUseCheck = $('p.txt_more_btn').find('span.glyphicon-chevron-down').length;
+			var spanUpUseCheck = $('p.txt_more_btn').find('span.glyphicon-chevron-up').length;
+			
+			if(spanDownUseCheck == 1){
+				$('p.txt_more_btn').find('span.glyphicon-chevron-down').removeClass('glyphicon-chevron-down').addClass('glyphicon-chevron-up');
+			}
+			
+			if(spanUpUseCheck == 1){
+				$('p.txt_more_btn').find('span.glyphicon-chevron-up').removeClass('glyphicon-chevron-up').addClass('glyphicon-chevron-down');
+			}
+		}
+		
+		$(function () {
+			$('#sub_wrap').addClass('sunries_wr');
+		});
+	</script>
+</head>
+<body>
+	<!-- 태양 고도/방위각계산 (solarHeight)  -->
+	<div class="contents_wr contents_wr02">
+		<div class="contents_left border-gray border-radius-20">
+			<div class="con-text">
+<!-- 				<p class="con-h3">■ 변환 설정</p> -->
+				<p class="con-sub">역서에서보다 폭넓은 시간범위와 국내지역에 대해 시각별 태양의 고도와 방위각을 검색하세요.</p>
+			</div>
+			
+			<!-- search_write -->
+			<form name="searchForm" id="searchForm" class="form-horizontal">
+				<input type="hidden" name="useElevation" value="1">
+				<input type="hidden" name="lat" value="37.54980" />
+				<input type="hidden" name="lng" value="126.9671" />
+				<input type="hidden" name="elevation" value="0" />
+				<fieldset>
+				<legend>검색샘플</legend>
+				
+				<div class="con-text">
+					<p class="con-h4">검색 내용 선택</p>
+					<div class="form-check-inline-wr">
+						<div class="form-check form-check-inline">
+							<input class="form-check-input" name="output_range" value="1" id="option1" checked="checked" type="radio">
+							<label class="form-check-label active" for="option1">하루의 태양위치자료(1시간 간격)</label>
+						</div>
+						<div class="form-check form-check-inline">
+							<input class="form-check-input" name="output_range" value="2" id="option2"  type="radio">
+							<label class="form-check-label " for="option2">요청시각의 태양위치자료</label>
+						</div>
+						<div class="form-check form-check-inline">
+							<input class="form-check-input" name="output_range" value="3" id="option3"  type="radio">
+							<label class="form-check-label " for="option3">한 달간 같은 시각의 태양위치자료</label>
+						</div>
+					</div>		
+				</div>
+				
+				<div class="con-text">
+					<p class="con-h4">시간 입력
+						<span tabindex="0" data-bs-toggle="tooltip" data-bs-title="연도범위는 AD 1년부터 AD 6000년까지입니다. 1954년~1961년의 한국표준시는 세계시 +8.5시간으로 현재의 +9시간과 차이가 있습니다.">
+				    		<i class="bi bi-exclamation-circle-fill"></i>
+				  		</span>
+			  		</p>
+			  		
+			  		<!-- 년/월/일 -->
+			  		
+			  		
+
+
+
+<!--     KRDS 공통 날짜 선택 달력 컴포넌트 -->
+
+<!--     사용법: -->
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<style>
+/* =============================================
+   KRDS 달력 컴포넌트 스타일
+   (기존 사이트 CSS와 충돌 방지를 위해 .krds-dp- 접두사 사용)
+   ============================================= */
+.krds-dp-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    width: 100%;
+    gap: 4px;
+}
+.krds-dp-wrap .form-control {
+    flex: 1;
+    cursor: pointer;
+}
+/* 달력 팝업 */
+.krds-dp-popup {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    z-index: 9999;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    width: 300px;
+    padding: 14px;
+    box-sizing: border-box;
+}
+.krds-dp-popup.open { display: block; }
+/* 헤더 */
+.krds-dp-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+.krds-dp-nav {
+    background: none;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    cursor: pointer;
+    width: 28px;
+    height: 28px;
+    font-size: 16px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.krds-dp-nav:hover { background: #f0f0f0; }
+.krds-dp-selects {
+    display: flex;
+    gap: 4px;
+}
+.krds-dp-selects select {
+    border: 0;
+    border-radius: 4px;
+    padding: 3px 23px 3px 6px !important;
+    height:auto !important;
+    width: auto !important;
+    font-size: 15px !important;
+    cursor: pointer;
+/*     background: #fff; */
+	background-position: right 3px center !important
+}
+/* 달력 테이블 */
+.krds-dp-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+.krds-dp-table th {
+    font-size: 12px;
+    color: #888;
+    text-align: center;
+    padding: 4px 0;
+    font-weight: normal;
+}
+.krds-dp-table th:first-child { color: #e53e3e; }
+.krds-dp-table td {
+    text-align: center;
+    padding: 2px 0;
+}
+.krds-dp-table td button {
+    width: 34px;
+    height: 34px;
+    border: none;
+    background: none;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 34px;
+    padding: 0;
+    transition: background 0.15s;
+}
+.krds-dp-table td button:hover:not(:disabled) { background: #ebf4ff; }
+.krds-dp-table td button:disabled              { color: #ccc; cursor: default; }
+.krds-dp-table td button.krds-dp-today         { font-weight: bold; color: var(--color-blue); }
+.krds-dp-table td button.krds-dp-selected      { background: var(--color-blue); color: #fff; }
+.krds-dp-table td button.krds-dp-selected:hover{ background: #2c5282; }
+.krds-dp-table td.krds-dp-sun button           { color: #e53e3e; }
+.krds-dp-table td.krds-dp-sun button.krds-dp-selected { color: #fff; }
+/* 푸터 */
+.krds-dp-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid #eee;
+}
+.krds-dp-footer button {
+    padding: 4px 14px;
+    border-radius: 4px;
+    font-size: 13px;
+    cursor: pointer;
+    border: 1px solid var(--color-gray-light);
+    background: rgba(var(--color-gray-light-rgb), .5);
+}
+.krds-dp-footer .krds-dp-btn-today{background:var(--color-white)}
+.krds-dp-footer button:hover          { background: #f5f5f5; }
+.krds-dp-footer .krds-dp-btn-confirm  { background: var(--color-blue); color: #fff; border-color: var(--color-blue); }
+.krds-dp-footer .krds-dp-btn-confirm:hover { background: #2c5282; }
+</style>
+
+<!-- 달력 래퍼 -->
+<div class="form-group from-group-btn input-append krds-dp-wrap" id="dp">
+
+    <!-- 날짜 input -->
+    <input
+        type="text"
+        id="solarHeightDate"
+        name="date"
+        class="form-control"
+        placeholder="날짜를 선택하세요"
+        value=""
+        readonly
+    />
+
+    <!-- 달력 열기 버튼 (기존 사이트 스타일 유지) -->
+    <a href="#" class="add-on btn btn-gray krds-dp-open-btn" onclick="return false;">
+        <i class="bi bi-calendar-check"></i>
+    </a>
+
+    <!-- 달력 팝업 -->
+    <div class="krds-dp-popup">
+        <div class="krds-dp-head">
+            <button type="button" class="krds-dp-nav krds-dp-prev"><i class="bi bi-chevron-left"></i></button>
+            <div class="krds-dp-selects">
+                <select class="krds-dp-year-sel form-control form-select" aria-label="연도 선택"></select>
+                <select class="krds-dp-month-sel form-control form-select" aria-label="월 선택"></select>
+            </div>
+            <button type="button" class="krds-dp-nav krds-dp-next"><i class="bi bi-chevron-right"></i></button>
+        </div>
+        <table class="krds-dp-table">
+            <thead>
+                <tr>
+                    <th>일</th><th>월</th><th>화</th><th>수</th><th>목</th><th>금</th><th>토</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+        <div class="krds-dp-footer">
+            <button type="button" class="krds-dp-btn-today">오늘</button>
+            <button type="button" class="krds-dp-btn-cancel">취소</button>
+            <button type="button" class="krds-dp-btn-confirm">확인</button>
+        </div>
+    </div>
+</div>
+
+<script type="text/javascript">
+(function() {
+    /* ---- 대상 요소 (wrapperId 기준으로 스코프 한정 → 여러 개 공존 가능) ---- */
+    var wrap    = document.getElementById('dp');
+    if (!wrap) return;
+
+    var inp     = wrap.querySelector('#solarHeightDate');
+    var popup   = wrap.querySelector('.krds-dp-popup');
+    var openBtn = wrap.querySelector('.krds-dp-open-btn');
+
+    var currentYear, currentMonth;
+    var selectedDateStr = ''; // yyyy-mm-dd
+    
+    var minDateStr = '1-01-01';
+    var maxDateStr = '6000-12-31';
+
+    /* ---- 연도 select 생성 (선택된 연도 기준 ±5년) ---- */
+    function buildYearSelect() {
+        var sel     = popup.querySelector('.krds-dp-year-sel');
+        sel.innerHTML = '';
+        
+        var startYear = minDate ? minDate.year : currentYear - 5;
+        var endYear = maxDate ? maxDate.year : currentYear + 5;
+        
+        for (var y = startYear; y <= endYear; y++) {
+            var opt = document.createElement('option');
+            opt.value       = y;
+            opt.textContent = y + '년';
+            if (y === currentYear) opt.selected = true;
+            sel.appendChild(opt);
+        }
+    }
+
+    /* ---- 월 select 생성 ---- */
+    function buildMonthSelect() {
+        var sel = popup.querySelector('.krds-dp-month-sel');
+        sel.innerHTML = '';
+        for (var m = 1; m <= 12; m++) {
+            var opt = document.createElement('option');
+            opt.value       = m;
+            opt.textContent = String(m).padStart(2, '0') + '월';
+            if (m === currentMonth) opt.selected = true;
+            sel.appendChild(opt);
+        }
+    }
+    
+    /* 날짜 비교 */
+    function parseDateParts(value) {
+        if (!value) {
+            return null;
+        }
+
+        var match = value.match(/^(-?\d{1,4})-(\d{2})-(\d{2})$/);
+
+        if (!match) {
+            return null;
+        }
+
+        return {
+            year: parseInt(match[1], 10),
+            month: parseInt(match[2], 10),
+            day: parseInt(match[3], 10)
+        };
+    }
+
+    function compareDateParts(a, b) {
+        if (a.year !== b.year) {
+            return a.year < b.year ? -1 : 1;
+        }
+
+        if (a.month !== b.month) {
+            return a.month < b.month ? -1 : 1;
+        }
+
+        if (a.day !== b.day) {
+            return a.day < b.day ? -1 : 1;
+        }
+
+        return 0;
+    }
+
+    var minDate = parseDateParts(minDateStr);
+    var maxDate = parseDateParts(maxDateStr);
+
+    function isDateInRange(year, month, day) {
+        var target = {
+            year: year,
+            month: month,
+            day: day
+        };
+
+        if (minDate && compareDateParts(target, minDate) < 0) {
+            return false;
+        }
+
+        if (maxDate && compareDateParts(target, maxDate) > 0) {
+            return false;
+        }
+
+        return true;
+    }
+    
+    function createDate(year, monthIndex, day) {
+        var date = new Date(0);
+        date.setHours(0, 0, 0, 0);
+        date.setFullYear(year, monthIndex, day);
+        return date;
+    }
+
+    /* ---- 달력 테이블 렌더 ---- */
+    function renderCalendar(year, month) {
+        currentYear  = year;
+        currentMonth = month;
+        buildYearSelect();
+        buildMonthSelect();
+
+/*         var firstDay = new Date(year, month - 1, 1).getDay();
+        var lastDate = new Date(year, month, 0).getDate();
+        var prevLast = new Date(year, month - 1, 0).getDate(); */
+        var today = new Date();
+        var firstDay = createDate(year, month - 1, 1).getDay();
+        var lastDate = getDaysInMonth(year, month);
+
+        var prevYear = month === 1 ? year - 1 : year;
+        var prevMonth = month === 1 ? 12 : month - 1;
+        var prevLast = getDaysInMonth(prevYear, prevMonth);
+
+        var tbody = popup.querySelector('.krds-dp-table tbody');
+        tbody.innerHTML = '';
+
+        var dayCount = 0;
+        for (var row = 0; row < 6; row++) {
+            var tr = document.createElement('tr');
+            for (var col = 0; col < 7; col++) {
+                var td  = document.createElement('td');
+                var btn = document.createElement('button');
+                btn.type = 'button';
+
+                var cellDate, cellYear = year, cellMonth = month, disabled = false;
+
+                if (row === 0 && col < firstDay) {
+                    cellDate  = prevLast - firstDay + col + 1;
+                    cellYear  = month === 1 ? year - 1 : year;
+                    cellMonth = month === 1 ? 12 : month - 1;
+                    disabled  = true;
+                } else {
+                    dayCount++;
+                    if (dayCount > lastDate) {
+                        cellDate  = dayCount - lastDate;
+                        cellYear  = month === 12 ? year + 1 : year;
+                        cellMonth = month === 12 ? 1 : month + 1;
+                        disabled  = true;
+                    } else {
+                        cellDate = dayCount;
+                    }
+                }
+
+                btn.textContent = cellDate;
+                
+                var outOfRange = !isDateInRange(
+                	    cellYear,
+                	    cellMonth,
+                	    cellDate
+                );
+
+                if (disabled || outOfRange) {
+                    btn.disabled = true;
+                } else {
+                    var ds = cellYear + '-'
+                           + String(cellMonth).padStart(2,'0') + '-'
+                           + String(cellDate).padStart(2,'0');
+                    btn.setAttribute('data-date', ds);
+
+                    if (cellYear  === today.getFullYear()  &&
+                        cellMonth === today.getMonth() + 1 &&
+                        cellDate  === today.getDate()) {
+                        btn.classList.add('krds-dp-today');
+                    }
+                    if (ds === selectedDateStr) {
+                        btn.classList.add('krds-dp-selected');
+                    }
+
+                    /* 날짜 클릭: 선택만 표시 (확인 버튼으로 최종 반영) */
+                    btn.addEventListener('click', (function(dateStr, b) {
+                        return function() {
+                            selectedDateStr = dateStr;
+                            popup.querySelectorAll('.krds-dp-table button').forEach(function(x) {
+                                x.classList.remove('krds-dp-selected');
+                            });
+                            b.classList.add('krds-dp-selected');
+                        };
+                    })(ds, btn));
+                }
+
+                if (col === 0) td.classList.add('krds-dp-sun');
+                td.appendChild(btn);
+                tr.appendChild(td);
+            }
+            tbody.appendChild(tr);
+            if (dayCount >= lastDate && row >= 4) break;
+        }
+    }
+    
+    function isLeapYear(year) {
+        return year % 4 === 0
+            && (year % 100 !== 0 || year % 400 === 0);
+    }
+
+    function getDaysInMonth(year, month) {
+        if (month === 2) {
+            return isLeapYear(year) ? 29 : 28;
+        }
+
+        if (month === 4 || month === 6 || month === 9 || month === 11) {
+            return 30;
+        }
+
+        return 31;
+    }
+    
+    /* 이전/다음 달 이동 제한 */
+    function isMonthInRange(year, month) {
+        var firstDay = {
+            year: year,
+            month: month,
+            day: 1
+        };
+
+        var lastDay = {
+            year: year,
+            month: month,
+            day: getDaysInMonth(year, month)
+        };
+
+        if (minDate && compareDateParts(lastDay, minDate) < 0) {
+            return false;
+        }
+
+        if (maxDate && compareDateParts(firstDay, maxDate) > 0) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /* ---- 팝업 열기 ---- */
+/*     function openPopup() {
+        var val = inp.value;
+        if (val && /^\d{4}-\d{2}-\d{2}$/.test(val)) {
+            var p = val.split('-');
+            currentYear     = parseInt(p[0]);
+            currentMonth    = parseInt(p[1]);
+            selectedDateStr = val;
+        } else {
+            var t = new Date();
+            currentYear     = t.getFullYear();
+            currentMonth    = t.getMonth() + 1;
+            selectedDateStr = '';
+        }
+        renderCalendar(currentYear, currentMonth);
+        popup.classList.add('open');
+    } */
+    function openPopup() {
+        var val = inp.value;
+        var parsed = parseDateParts(val);
+
+        if (parsed && isDateInRange(parsed.year, parsed.month, parsed.day)) {
+            currentYear = parsed.year;
+            currentMonth = parsed.month;
+            selectedDateStr = val;
+        } else {
+            var t = new Date();
+            currentYear = t.getFullYear();
+            currentMonth = t.getMonth() + 1;
+            selectedDateStr = '';
+        }
+
+        renderCalendar(currentYear, currentMonth);
+        popup.classList.add('open');
+    }
+
+    /* ---- 팝업 닫기 ---- */
+    function closePopup() {
+        popup.classList.remove('open');
+    }
+
+    /* ---- 이벤트 바인딩 ---- */
+    // 달력 아이콘 버튼
+    openBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        popup.classList.contains('open') ? closePopup() : openPopup();
+    });
+
+    // input 클릭으로도 열기
+    inp.addEventListener('click', function(e) {
+        e.stopPropagation();
+        if (!popup.classList.contains('open')) openPopup();
+    });
+
+    // 외부 클릭 시 닫기
+    document.addEventListener('click', function(e) {
+        if (!wrap.contains(e.target)) closePopup();
+    });
+
+    // 이전 달
+/*     popup.querySelector('.krds-dp-prev').addEventListener('click', function() {
+        var m = currentMonth - 1, y = currentYear;
+        if (m < 1) { m = 12; y--; }
+        renderCalendar(y, m);
+    }); */
+    popup.querySelector('.krds-dp-prev').addEventListener('click', function() {
+        var m = currentMonth - 1;
+        var y = currentYear;
+
+        if (m < 1) {
+            m = 12;
+            y--;
+        }
+
+        if (isMonthInRange(y, m)) {
+            renderCalendar(y, m);
+        }
+    });
+
+    // 다음 달
+/*     popup.querySelector('.krds-dp-next').addEventListener('click', function() {
+        var m = currentMonth + 1, y = currentYear;
+        if (m > 12) { m = 1; y++; }
+        renderCalendar(y, m);
+    }); */
+    popup.querySelector('.krds-dp-next').addEventListener('click', function() {
+        var m = currentMonth + 1;
+        var y = currentYear;
+
+        if (m > 12) {
+            m = 1;
+            y++;
+        }
+
+        if (isMonthInRange(y, m)) {
+            renderCalendar(y, m);
+        }
+    });
+
+/*     // 연도 select
+    popup.querySelector('.krds-dp-year-sel').addEventListener('change', function() {
+        renderCalendar(parseInt(this.value), currentMonth);
+    });
+
+    // 월 select
+    popup.querySelector('.krds-dp-month-sel').addEventListener('change', function() {
+        renderCalendar(currentYear, parseInt(this.value));
+    }); */
+    popup.querySelector('.krds-dp-year-sel').addEventListener('change', function() {
+        var year = parseInt(this.value, 10);
+
+        if (isMonthInRange(year, currentMonth)) {
+            renderCalendar(year, currentMonth);
+        }
+    });
+
+    popup.querySelector('.krds-dp-month-sel').addEventListener('change', function() {
+        var month = parseInt(this.value, 10);
+
+        if (isMonthInRange(currentYear, month)) {
+            renderCalendar(currentYear, month);
+        }
+    });
+
+    // 오늘 버튼
+    popup.querySelector('.krds-dp-btn-today').addEventListener('click', function() {
+        var t = new Date();
+        selectedDateStr = t.getFullYear() + '-'
+                        + String(t.getMonth()+1).padStart(2,'0') + '-'
+                        + String(t.getDate()).padStart(2,'0');
+        renderCalendar(t.getFullYear(), t.getMonth() + 1);
+    });
+
+    // 취소 버튼
+    popup.querySelector('.krds-dp-btn-cancel').addEventListener('click', function() {
+        closePopup();
+    });
+
+    // 확인 버튼: input에 값 반영 후 닫기
+    popup.querySelector('.krds-dp-btn-confirm').addEventListener('click', function() {
+        if (selectedDateStr) {
+            inp.value = selectedDateStr;
+            /* name이 다른 hidden input이 별도로 있는 경우도 동기화 */
+            var form = inp.closest('form');
+            if (form) {
+                var hidden = form.querySelector('input[name="date"][type="hidden"]');
+                if (hidden) hidden.value = selectedDateStr;
+            }
+        }
+        closePopup();
+    });
+
+})();
+</script>
+
+			  		<!-- //년/월/일 -->
+			  		<!-- 시/분/초 -->
+			  		<div class="form-group mt-2">
+			  		
+			  			<select class="form-control form-select" name="hour" id="hour_group">
+			  				<option value="" >시</option>
+			  				
+							    <option value="0" >
+							        0시
+							    </option>
+							
+							    <option value="1" >
+							        1시
+							    </option>
+							
+							    <option value="2" >
+							        2시
+							    </option>
+							
+							    <option value="3" >
+							        3시
+							    </option>
+							
+							    <option value="4" >
+							        4시
+							    </option>
+							
+							    <option value="5" >
+							        5시
+							    </option>
+							
+							    <option value="6" >
+							        6시
+							    </option>
+							
+							    <option value="7" >
+							        7시
+							    </option>
+							
+							    <option value="8" >
+							        8시
+							    </option>
+							
+							    <option value="9" >
+							        9시
+							    </option>
+							
+							    <option value="10" >
+							        10시
+							    </option>
+							
+							    <option value="11" >
+							        11시
+							    </option>
+							
+							    <option value="12" >
+							        12시
+							    </option>
+							
+							    <option value="13" >
+							        13시
+							    </option>
+							
+							    <option value="14" >
+							        14시
+							    </option>
+							
+							    <option value="15" >
+							        15시
+							    </option>
+							
+							    <option value="16" >
+							        16시
+							    </option>
+							
+							    <option value="17" >
+							        17시
+							    </option>
+							
+							    <option value="18" >
+							        18시
+							    </option>
+							
+							    <option value="19" >
+							        19시
+							    </option>
+							
+							    <option value="20" >
+							        20시
+							    </option>
+							
+							    <option value="21" >
+							        21시
+							    </option>
+							
+							    <option value="22" >
+							        22시
+							    </option>
+							
+							    <option value="23" >
+							        23시
+							    </option>
+							
+						</select>
+						<select class="form-control form-select" name="minute" id="minute_group">
+							<option value="">분</option>
+							
+							    <option value="0" >
+							        0분
+							    </option>
+							
+							    <option value="1" >
+							        1분
+							    </option>
+							
+							    <option value="2" >
+							        2분
+							    </option>
+							
+							    <option value="3" >
+							        3분
+							    </option>
+							
+							    <option value="4" >
+							        4분
+							    </option>
+							
+							    <option value="5" >
+							        5분
+							    </option>
+							
+							    <option value="6" >
+							        6분
+							    </option>
+							
+							    <option value="7" >
+							        7분
+							    </option>
+							
+							    <option value="8" >
+							        8분
+							    </option>
+							
+							    <option value="9" >
+							        9분
+							    </option>
+							
+							    <option value="10" >
+							        10분
+							    </option>
+							
+							    <option value="11" >
+							        11분
+							    </option>
+							
+							    <option value="12" >
+							        12분
+							    </option>
+							
+							    <option value="13" >
+							        13분
+							    </option>
+							
+							    <option value="14" >
+							        14분
+							    </option>
+							
+							    <option value="15" >
+							        15분
+							    </option>
+							
+							    <option value="16" >
+							        16분
+							    </option>
+							
+							    <option value="17" >
+							        17분
+							    </option>
+							
+							    <option value="18" >
+							        18분
+							    </option>
+							
+							    <option value="19" >
+							        19분
+							    </option>
+							
+							    <option value="20" >
+							        20분
+							    </option>
+							
+							    <option value="21" >
+							        21분
+							    </option>
+							
+							    <option value="22" >
+							        22분
+							    </option>
+							
+							    <option value="23" >
+							        23분
+							    </option>
+							
+							    <option value="24" >
+							        24분
+							    </option>
+							
+							    <option value="25" >
+							        25분
+							    </option>
+							
+							    <option value="26" >
+							        26분
+							    </option>
+							
+							    <option value="27" >
+							        27분
+							    </option>
+							
+							    <option value="28" >
+							        28분
+							    </option>
+							
+							    <option value="29" >
+							        29분
+							    </option>
+							
+							    <option value="30" >
+							        30분
+							    </option>
+							
+							    <option value="31" >
+							        31분
+							    </option>
+							
+							    <option value="32" >
+							        32분
+							    </option>
+							
+							    <option value="33" >
+							        33분
+							    </option>
+							
+							    <option value="34" >
+							        34분
+							    </option>
+							
+							    <option value="35" >
+							        35분
+							    </option>
+							
+							    <option value="36" >
+							        36분
+							    </option>
+							
+							    <option value="37" >
+							        37분
+							    </option>
+							
+							    <option value="38" >
+							        38분
+							    </option>
+							
+							    <option value="39" >
+							        39분
+							    </option>
+							
+							    <option value="40" >
+							        40분
+							    </option>
+							
+							    <option value="41" >
+							        41분
+							    </option>
+							
+							    <option value="42" >
+							        42분
+							    </option>
+							
+							    <option value="43" >
+							        43분
+							    </option>
+							
+							    <option value="44" >
+							        44분
+							    </option>
+							
+							    <option value="45" >
+							        45분
+							    </option>
+							
+							    <option value="46" >
+							        46분
+							    </option>
+							
+							    <option value="47" >
+							        47분
+							    </option>
+							
+							    <option value="48" >
+							        48분
+							    </option>
+							
+							    <option value="49" >
+							        49분
+							    </option>
+							
+							    <option value="50" >
+							        50분
+							    </option>
+							
+							    <option value="51" >
+							        51분
+							    </option>
+							
+							    <option value="52" >
+							        52분
+							    </option>
+							
+							    <option value="53" >
+							        53분
+							    </option>
+							
+							    <option value="54" >
+							        54분
+							    </option>
+							
+							    <option value="55" >
+							        55분
+							    </option>
+							
+							    <option value="56" >
+							        56분
+							    </option>
+							
+							    <option value="57" >
+							        57분
+							    </option>
+							
+							    <option value="58" >
+							        58분
+							    </option>
+							
+							    <option value="59" >
+							        59분
+							    </option>
+							
+							    <option value="60" >
+							        60분
+							    </option>
+							
+						</select>
+						<select class="form-control form-select" name="second" id="second_group">
+							<option value="">초</option>
+							
+							    <option value="0" >
+							        0초
+							    </option>
+							
+							    <option value="1" >
+							        1초
+							    </option>
+							
+							    <option value="2" >
+							        2초
+							    </option>
+							
+							    <option value="3" >
+							        3초
+							    </option>
+							
+							    <option value="4" >
+							        4초
+							    </option>
+							
+							    <option value="5" >
+							        5초
+							    </option>
+							
+							    <option value="6" >
+							        6초
+							    </option>
+							
+							    <option value="7" >
+							        7초
+							    </option>
+							
+							    <option value="8" >
+							        8초
+							    </option>
+							
+							    <option value="9" >
+							        9초
+							    </option>
+							
+							    <option value="10" >
+							        10초
+							    </option>
+							
+							    <option value="11" >
+							        11초
+							    </option>
+							
+							    <option value="12" >
+							        12초
+							    </option>
+							
+							    <option value="13" >
+							        13초
+							    </option>
+							
+							    <option value="14" >
+							        14초
+							    </option>
+							
+							    <option value="15" >
+							        15초
+							    </option>
+							
+							    <option value="16" >
+							        16초
+							    </option>
+							
+							    <option value="17" >
+							        17초
+							    </option>
+							
+							    <option value="18" >
+							        18초
+							    </option>
+							
+							    <option value="19" >
+							        19초
+							    </option>
+							
+							    <option value="20" >
+							        20초
+							    </option>
+							
+							    <option value="21" >
+							        21초
+							    </option>
+							
+							    <option value="22" >
+							        22초
+							    </option>
+							
+							    <option value="23" >
+							        23초
+							    </option>
+							
+							    <option value="24" >
+							        24초
+							    </option>
+							
+							    <option value="25" >
+							        25초
+							    </option>
+							
+							    <option value="26" >
+							        26초
+							    </option>
+							
+							    <option value="27" >
+							        27초
+							    </option>
+							
+							    <option value="28" >
+							        28초
+							    </option>
+							
+							    <option value="29" >
+							        29초
+							    </option>
+							
+							    <option value="30" >
+							        30초
+							    </option>
+							
+							    <option value="31" >
+							        31초
+							    </option>
+							
+							    <option value="32" >
+							        32초
+							    </option>
+							
+							    <option value="33" >
+							        33초
+							    </option>
+							
+							    <option value="34" >
+							        34초
+							    </option>
+							
+							    <option value="35" >
+							        35초
+							    </option>
+							
+							    <option value="36" >
+							        36초
+							    </option>
+							
+							    <option value="37" >
+							        37초
+							    </option>
+							
+							    <option value="38" >
+							        38초
+							    </option>
+							
+							    <option value="39" >
+							        39초
+							    </option>
+							
+							    <option value="40" >
+							        40초
+							    </option>
+							
+							    <option value="41" >
+							        41초
+							    </option>
+							
+							    <option value="42" >
+							        42초
+							    </option>
+							
+							    <option value="43" >
+							        43초
+							    </option>
+							
+							    <option value="44" >
+							        44초
+							    </option>
+							
+							    <option value="45" >
+							        45초
+							    </option>
+							
+							    <option value="46" >
+							        46초
+							    </option>
+							
+							    <option value="47" >
+							        47초
+							    </option>
+							
+							    <option value="48" >
+							        48초
+							    </option>
+							
+							    <option value="49" >
+							        49초
+							    </option>
+							
+							    <option value="50" >
+							        50초
+							    </option>
+							
+							    <option value="51" >
+							        51초
+							    </option>
+							
+							    <option value="52" >
+							        52초
+							    </option>
+							
+							    <option value="53" >
+							        53초
+							    </option>
+							
+							    <option value="54" >
+							        54초
+							    </option>
+							
+							    <option value="55" >
+							        55초
+							    </option>
+							
+							    <option value="56" >
+							        56초
+							    </option>
+							
+							    <option value="57" >
+							        57초
+							    </option>
+							
+							    <option value="58" >
+							        58초
+							    </option>
+							
+							    <option value="59" >
+							        59초
+							    </option>
+							
+							    <option value="60" >
+							        60초
+							    </option>
+							
+						</select>
+			  		</div>
+					<!-- //시/분/초 -->
+			  		<p class="con-sub con-sub-sm py-2">연월일을 써넣지 않으면, 현재 연월일로 세팅됩니다. 연월일을 써넣지 않고, 지역만 바꿔도 됩니다. (표준시간대:KST, +9시)</p>
+				</div>
+				<script>
+					/* 툴팁 스크립트 */
+					document.addEventListener('DOMContentLoaded', function () {
+					  document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+					    new bootstrap.Tooltip(el, {
+					      container: 'body'
+					    })
+					  })
+					})
+				</script>
+				
+				<div class="con-text">
+					<p class="con-h4">위치 입력</p>
+					<div class="form-group from-group-add">
+			  			<input name="address" value="서울특별시" class="form-control" type="text" readonly="readonly" onclick="javascript:goPopup();" id="solarHeightAdd" title="새창열림">
+						<button type="button" class="btn btn-gray" onclick="javascript:goPopup();" id="addrBtn" title="새창열림">주소찾기</button>
+			  		</div>
+			  		<p class="con-sub con-sub-sm py-2">표준시간대 : KST, +9시, 표준시간대가 +9시보다 작거나 큰 지역의 경우, 일출몰남중 시각의 정확도는 보장할 수 없습니다.</p>
+				</div>
+				</fieldset>
+				
+				<div class="con-text mb-0">
+					<!-- search_btn -->
+					<div class="search_btn">
+						<button type="submit" class="btn btn-blue" id="del_btn">검색하기</button>
+						<button type="button" onclick="window.location = window.location.pathname" class="btn btn-gray-light">다시작성</button>
+					</div>
+					<!-- //search_btn -->
+				</div>
+			</form>
+			<!-- //search_write -->
+		</div>
+		<div class="contents_right_wr">
+			<div class="contents_right"  id="today">
+				<p class="con-h3">태양고도/방위각계산 검색 결과</p>	
+				<div class="con_search_box">
+					<ul class="ul_search">
+						<li class="full"><strong><i class="bi bi-check-circle-fill"></i> 검색 내용</strong><span class="output"></span></li>
+						<li><strong><i class="bi bi-check-circle-fill"></i> 현재 지역</strong><span class="current-region">서울특별시</span></li>
+						<li><strong><i class="bi bi-check-circle-fill"></i> 현재 위치</strong><span>동경 <em id="long"></em> / 북위 <em id="lat"></em></span></li>
+					</ul>
+					
+					<!-- Graphbox -->
+					<div class="Graphbox table-responsive">
+						<div class="graph" id="graph"></div>
+					</div>
+					<ul class="tit ul_search mt-2">
+			            <li class="justify-content-center box_none">
+		            		<strong><span class="output"></span></strong>
+							<span class="current-region">서울특별시</span>
+						</li>
+					</ul>
+					<!--// Graphbox -->
+				</div>
+				<p class="h4_title mt-4"><span class="output"></span></p>
+				<div class="table-responsive mt-2" id="sun-height-table">
+					<table class="table tbl_cnt tbl_border tbl_center monthly_bg">
+						<caption>태양 고도/방위각 계산의 검색결과에 따른 시간, 방위각, 고도, 적경, 적위를 확인하실 수 있습니다.</caption>
+						<colgroup>
+							<col style="width:20%;" class="multi-record-only">
+							<col style="width:20%;">
+							<col style="width:20%;">
+							<col style="width:20%;">
+							<col style="width:20%;">
+						</colgroup>
+						<thead>
+							<tr>
+								<th scope="col" id="date-col" class="multi-record-only">시간(시)</th>
+								<th scope="col">방위각(도 분 초)</th>
+								<th scope="col">고도(도 분 초)</th>
+								<th scope="col">적경(시 분 초)</th>
+								<th scope="col">적위(도 분 초)</th>
+							</tr>
+						</thead>
+						<tbody>
+			
+					    </tbody>
+					</table>
+				</div>
+			</div>
+			<div class="contents_bottom_text">
+				<p class="con-h3-2">유의사항</p>
+				<ul class="ul_list mt-2">
+					<li><strong>'방위각'</strong>은 북쪽에서 동쪽방향으로 측정한 값(도)입니다.</li>
+					<li><strong>'고도'</strong>는 지평선과 태양사이의 각도입니다.</li>
+					<li>이 페이지에서는 역서에서보다 폭넓은 시간범위와 국내지역에 대해 시각별 태양의 고도와 방위각을 알 수 있습니다. 그 결과 값은 계산과 정상의 오차로 인해 실제 값과는 다소 차이가 날 수 있으며, 그 차이는 1분보다 작습니다.</li>
+					<li><strong>참고문헌</strong>
+						<ul class="ul_list_dot">
+							<li class="fir">"Astronomical Algorithms". Meeus, J. (Second Edition 1998, William-Bell, Inc., Richmond, Virginia, USA)</li>
+							<li>"Theory for the motion of all the planets - The VSOP82 solution", Bretagnon, P., Astronomy and Astrophysics, vol. 114, no. 2, Oct. 1982, p. 278-288</li>
+							<li>"Planetary theories in rectangular and spherical variables - VSOP 87 solutions", Bretagnon, P., Francou, G., Astronomy and Astrophysics (ISSN 0004-6361), vol. 202, no. 1-2, Aug. 1988, p. 309-315</li>
+						</ul>
+					</li>
+					<li class="ul_accordion">
+						<div class="accordion" id="Authors">
+							<div class="accordion-item">
+								<h2 class="accordion-header">
+								<button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#AuthorsOne" aria-expanded="false" aria-controls="AuthorsOne">라이센스 펼쳐보기</button>
+								</h2>
+								<div id="AuthorsOne" class="accordion-collapse collapse" data-bs-parent="#Authors">
+									<div class="accordion-body">
+										<div>
+											<p>Authors:</p>
+											<p>Mike Adair madairATdmsolutions.ca</p>
+											<p>Richard Greenwood richATgreenwoodmap.com</p>
+											<p>Didier Richard didier.richardATign.fr</p>
+											<p>Stephen Irons stephen.ironsATclear.net.nz</p>
+											<p>Olivier Terral oterralATgmail.com</p>
+											<p>Calvin Metcalf cmetcalfATappgeo.com</p>
+											<p>Copyright (c) 2014, Mike Adair, Richard Greenwood, Didier Richard, Stephen Irons, Olivier Terral and Calvin Metcalf</p>
+											<br>
+											<p>Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:</p>
+											<br>
+											<p>The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.</p>
+											<br>
+											<p>THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.</p>
+										</div>
+										<div>
+											<p>Copyright (c) 2014, Vladimir Agafonkin</p>
+											<p>All rights reserved.</p>
+											<br>
+											<p>Redistribution and use in source and binary forms, with or without modification, are</p>
+											<p>permitted provided that the following conditions are met:</p>
+											<br>
+											<p style="margin-left:15px"> 1. Redistributions of source code must retain the above copyright notice, this list of</p>
+											<p style="margin-left:25px">conditions and the following disclaimer.</p>
+											<p style="margin-left:15px">2. Redistributions in binary form must reproduce the above copyright notice, this list</p>
+											<p style="margin-left:25px">of conditions and the following disclaimer in the documentation and/or other materials</p>
+											<p style="margin-left:25px">provided with the distribution.</p>
+											<br>
+											<p>THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY</p>
+											<p>EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF</p>
+											<p>MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE</p>
+											<p>COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,</p>
+											<p>EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF</p>
+											<p>SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)</p>
+											<p>HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR</p>
+											<p>TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS</p>
+											<p>SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.</p>
+										</div>
+									</div>
+								</div>
+							</div>
+						</div>
+					</li>
+				</ul>	
+				<p class="point_text"><i class="bi bi-check"></i> 본 계산식에서 나온 값들은 어떠한 법적효력도 가지고 있지 않습니다. 참고하시기 바랍니다.</p>
+			</div>
+		</div>
+	</div>
+	
+	
+</body>
+ 
