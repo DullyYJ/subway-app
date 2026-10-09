@@ -12,7 +12,7 @@ function body(f){
   t=t.replace(/^\s*module\.exports\s*=[^\n]*\n?/mg,'');
   return t;
 }
-const code='// ===== next-train 시작 =====\n'+body('next-train-data.js')+'\n'+body('next-train.js')+'\n'+body('next-train-worker.js')+'\n// ===== next-train 끝 =====\n';
+const code='// ===== next-train 시작 =====\n'+body('next-train-data.js')+'\n'+body('next-train-tt.js')+'\n'+body('next-train.js')+'\n'+body('next-train-worker.js')+'\n// ===== next-train 끝 =====\n';
 rep('async function handleFetch(request, env, ctx) {',code+'async function handleFetch(request, env, ctx) {');
 rep('\n  if (url.pathname === "/ride-eta") return handleRideEta(request);','\n  if (url.pathname === "/ride-eta") return handleRideEtaNT(request, env);\n  if (url.pathname === "/next-train") return handleNextTrain(request, env);');
 rep('    await xferAnnotateAll(env, _od, ctx);\n    _od.rtwApplied','    await xferAnnotateAll(env, _od, ctx);\n    await ntAttachAll(env, _od, _baseMs, p.get("bf") === "1");\n    _od.rtwApplied');

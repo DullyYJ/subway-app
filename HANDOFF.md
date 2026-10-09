@@ -431,3 +431,9 @@
 - **달라진 점(의도)**: ① 환승 후 구간의 승차역을 '그 구간의 진짜 첫 역'으로 본다(옛 앱은 중복 역 제거 때문에 2번째 역을 쓰는 경우가 있었다) ② 날짜 구분(평일/휴일)은 '탐색 요청 시각' 기준(옛 앱은 그릴 때의 기기 시각) ③ 상세 화면의 역별 시각(`_toggleDetailSec` 목록)은 앱의 실측 역간시간 대신 엔진의 `stopSec` ④ 탐색 후 5분이 지나 타임라인 기준이 기기 시계로 바뀐 경우, 대기(ttWaitMs)는 탐색 시각 기준 값 그대로(옛 앱은 그릴 때마다 다시 계산) — 이때는 어차피 재탐색을 안내한다.
 - **검증**: ① `test/next_train_parity.ui.test.js` — 엔진 vs 옛 앱 계산(`test/fixtures/legacy_timetable.js`, 앱에서 지운 원본 그대로) 15만 건+진행 방향 1.5만 건 차이 0 ② `test/next_train_attach.ui.test.js` — 경로 4,000개(합성)+실제 엔진 응답 경로 990개의 구간별 대기가 옛 타임라인 계산과 같음, KV/fetch/`/next-train`/`/ride-eta` 모의 ③ `test/next_train_app.ui.test.js` — 앱이 엔진 값을 그리고(실제 엔진 코드가 `/next-train` 에 답함) 앱에 시각표 계산이 남지 않음 ④ 옛 앱 vs 새 앱 실제 응답 990회 렌더 비교(대기 737건 포함): 대기·총 소요·모든 시각 라벨 동일 ⑤ 엔진 s10 vs s11 전체 응답 70건 비교: 기존 필드 차이 0(새 필드만 추가).
 - **못 한 것**: 실제 단말·운영 서버에서의 확인(샌드박스에서 workers.dev 접근 불가). 배포 후 확인: `/route-v2-app?...` 응답에 `ntVer`·구간 `ttWaitMs`/`nextTrain`, `/next-train?op=info&line=2호선&from=강남&to=역삼`.
+
+### 시각표 번들 출처 (s13, 2026-10-09) — 중요
+- route-v2 워커가 `gildongmu-tt.phg0643.workers.dev` 를 fetch 로 직접 부르면 **404** 가 온다(같은 계정 워커끼리 workers.dev 호출 제한; 브라우저·앱에서는 정상). s11/s12 는 이 때문에 값이 안 붙었다.
+- s13 부터 번들(`gildongmu-tt` 의 TT_BUNDLE, tt-2026-09-06)을 엔진에 **내장**(`engine/next-train-tt.js`, 생성: `node tools/route-speed/gen_nt_tt.js <번들.json>`). 우선순위: KV(`nt:bundle:v1`) → 서비스 바인딩 `env.TT_SVC` → 내장본.
+- gildongmu-tt 시각표를 새로 배포하면: 새 번들 JSON 을 위 스크립트로 다시 내장하고 엔진을 다시 배포한다(또는 route-v2 에 서비스 바인딩 `TT_SVC` → gildongmu-tt 를 연결하면 엔진 재배포 없이 6시간 안에 반영된다).
+- 확인: `GET /next-train?op=info&line=2호선&from=강남&to=역삼` 응답의 `ver`(번들 버전)·`src`(embed|kv|svc).

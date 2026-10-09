@@ -3,33 +3,36 @@
 // ★ 원칙(YJ): "계산은 전부 엔진이 한다. 앱은 그리기만 한다."
 //   · 경로 응답(/route-v2-app)의 지하철 구간마다 엔진이 다음 열차까지의 대기(ttWaitMs)와 안내용 정보(nextTrain)를 붙여 준다.
 //   · 앱이 승차 시각에 맞춰 다시 물어볼 때는 GET/POST /next-train 으로 묻는다.
-//   · 시각표 데이터는 gildongmu-tt 번들(앱이 쓰던 것과 같은 것)을 불러와 KV 에 6시간 둔다. 못 불러오면 값을 붙이지 않을 뿐 경로는 그대로 나간다.
+//   · 시각표 데이터는 gildongmu-tt 번들(앱이 쓰던 것과 같은 것)을 엔진에 내장해 쓴다(서비스 바인딩 TT_SVC 가 있으면 그쪽 최신본을 KV 에 6시간 두고 우선). 못 불러오면 값을 붙이지 않을 뿐 경로는 그대로 나간다.
 
-var NT_TT_URL = "https://gildongmu-tt.phg0643.workers.dev/tt";
 var NT_KV_KEY = "nt:bundle:v1";
 var NT_TTL_MS = 6 * 3600 * 1000;
 var NT_MAX_WAIT_MIN = 30;         // 앱의 옛 _TT_MAX_WAIT — 대기가 이보다 길면 반영하지 않는다(막차 뒤·시각표 이상)
-var _NT = null, _NT_AT = 0, _NT_P = null, _NT_FAIL_AT = 0, _NT_WHY = '';   // _NT_WHY: 마지막 실패 사유(진단용)
+var _NT = null, _NT_AT = 0, _NT_P = null, _NT_FAIL_AT = 0, _NT_WHY = '', _NT_SRC = '';   // _NT_WHY: 마지막 실패 사유 · _NT_SRC: 지금 쓰는 시각표의 출처(kv|svc|embed) — 진단용
 
 async function ntEnsure(env) {
   if (_NT && Date.now() - _NT_AT < NT_TTL_MS) return _NT;
   if (_NT_P) return _NT_P;
   if (!_NT && _NT_FAIL_AT && Date.now() - _NT_FAIL_AT < 30000) return null;   // 직전에 실패했으면 30초는 다시 시도하지 않는다
   _NT_P = (async function () {
-    var bundle = null, txt = null, why = [];
-    try { if (env && env.ROWS_KV) txt = await env.ROWS_KV.get(NT_KV_KEY, { cacheTtl: 3600 }); else why.push('kv:none'); } catch (e) { why.push('kvget:' + String(e && e.message || e).slice(0, 80)); }
-    if (txt) { try { bundle = JSON.parse(txt); } catch (e) { bundle = null; why.push('kvparse'); } }
-    if (!bundle || !bundle.data) {
-      bundle = null;
+    var bundle = null, txt = null, why = [], src = '';
+    // 1) KV 캐시(서비스 바인딩으로 받아 둔 더 새로운 것)  2) 서비스 바인딩 env.TT_SVC (대시보드에서 gildongmu-tt 를 TT_SVC 로 연결했을 때)  3) 엔진에 내장된 번들
+    //    ※ gildongmu-tt 의 workers.dev 주소를 fetch 로 직접 부르면 같은 계정 워커끼리라 404 가 와서 쓰지 않는다.
+    try { if (env && env.ROWS_KV) txt = await env.ROWS_KV.get(NT_KV_KEY, { cacheTtl: 3600 }); } catch (e) { why.push('kvget:' + String(e && e.message || e).slice(0, 80)); }
+    if (txt) { try { bundle = JSON.parse(txt); src = 'kv'; } catch (e) { bundle = null; why.push('kvparse'); } }
+    if ((!bundle || !bundle.data) && env && env.TT_SVC && typeof env.TT_SVC.fetch === 'function') {
+      bundle = null; src = '';
       try {
-        var r = await fetch(NT_TT_URL);
+        var r = await env.TT_SVC.fetch('https://gildongmu-tt/tt');
         if (r.ok) {
-          txt = await r.text();
-          bundle = JSON.parse(txt);
-          if (!bundle || !bundle.data) why.push('nodata');
-          else if (env && env.ROWS_KV) { try { await env.ROWS_KV.put(NT_KV_KEY, txt, { expirationTtl: NT_TTL_MS / 1000 }); } catch (e) { why.push('kvput:' + String(e && e.message || e).slice(0, 80)); } }
-        } else { why.push('fetch:' + r.status); }
-      } catch (e) { bundle = null; why.push('fetchx:' + String(e && e.message || e).slice(0, 120)); }
+          txt = await r.text(); bundle = JSON.parse(txt); src = 'svc';
+          if (bundle && bundle.data && env.ROWS_KV) { try { await env.ROWS_KV.put(NT_KV_KEY, txt, { expirationTtl: NT_TTL_MS / 1000 }); } catch (e) { why.push('kvput:' + String(e && e.message || e).slice(0, 80)); } }
+        } else { why.push('svc:' + r.status); }
+      } catch (e) { bundle = null; why.push('svcx:' + String(e && e.message || e).slice(0, 120)); }
+    }
+    if (!bundle || !bundle.data) {
+      bundle = null; src = '';
+      try { bundle = JSON.parse(NT_TT_EMBED); src = 'embed'; } catch (e) { bundle = null; why.push('embed:' + String(e && e.message || e).slice(0, 80)); }
     }
     if (!bundle || !bundle.data) { _NT_FAIL_AT = Date.now(); _NT_WHY = why.join(' | ') || 'unknown'; return _NT || null; }   // 실패하면 있던 것을 계속 쓴다
     var d = bundle.data;
@@ -37,7 +40,7 @@ async function ntEnsure(env) {
       _REAL_TT: d._REAL_TT, _GIMPO_TT: d._GIMPO_TT, _BUILTIN_TT: d._BUILTIN_TT, LINE_SCHEDULE: d.LINE_SCHEDULE,
       _REAL_SEG: d._REAL_SEG, _TT_ORDER_HARD: d._TT_ORDER_HARD, _INCHEON_TT: NT_INCHEON_TT, STNORDER: NT_STNORDER
     });
-    _NT.version = bundle.version || null;
+    _NT.version = bundle.version || null; _NT.src = src;
     _NT_AT = Date.now(); _NT_FAIL_AT = 0;
     return _NT;
   })();
@@ -137,7 +140,7 @@ async function handleNextTrain(request, env) {
     var u = new URL(request.url), g = function (k) { return u.searchParams.get(k); };
     var a = ntAnswer(nt, { op: g('op'), line: g('line'), from: g('from'), to: g('to'), term: g('term'), atMin: g('atMin'), baseMs: g('baseMs') });
     if (a.error) return new Response(JSON.stringify(a), { status: 400, headers: H });
-    a.ver = nt.version || null;
+    a.ver = nt.version || null; a.src = nt.src || null;
     return new Response(JSON.stringify(a), { headers: H });
   } catch (e) {
     return new Response(JSON.stringify({ error: String(e && e.message || e) }), { status: 500, headers: H });
@@ -165,4 +168,4 @@ async function handleRideEtaNT(request, env) {
   return handleRideEta(request);
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { ntEnsure: ntEnsure, ntAttachPath: ntAttachPath, ntAttachAll: ntAttachAll, ntAnswer: ntAnswer, handleNextTrain: handleNextTrain, handleRideEtaNT: handleRideEtaNT, _ntReset: function () { _NT = null; _NT_AT = 0; _NT_P = null; _NT_FAIL_AT = 0; _NT_WHY = ''; } };
+if (typeof module !== 'undefined' && module.exports) module.exports = { ntEnsure: ntEnsure, ntAttachPath: ntAttachPath, ntAttachAll: ntAttachAll, ntAnswer: ntAnswer, handleNextTrain: handleNextTrain, handleRideEtaNT: handleRideEtaNT, _ntReset: function () { _NT = null; _NT_AT = 0; _NT_P = null; _NT_FAIL_AT = 0; _NT_WHY = ''; _NT_SRC = ''; } };

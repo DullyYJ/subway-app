@@ -120,43 +120,59 @@ const ri = (a, b) => a + Math.floor(rnd() * (b - a + 1));
     assert.ok(leg.nextTrain && leg.nextTrain.dir); assert.strictEqual(leg.ttWaitMs, undefined);
   });
 
-  // ── ntEnsure: KV·fetch 모의 ──
+  // ── ntEnsure: KV · 서비스 바인딩 · 내장본 ──
   const bundleTxt = JSON.stringify(bundle);
-  const mkKV = (init) => { const m = new Map(init || []); return { m, get: async (k) => m.has(k) ? m.get(k) : null, put: async (k, v, o) => { m.set(k, v); m.opts = o; } }; };
+  const mkKV = (init) => { const m = new Map(init || []); return { m, gets: 0, get: async function (k) { this.gets++; return m.has(k) ? m.get(k) : null; }, put: async (k, v, o) => { m.set(k, v); m.opts = o; } }; };
+  const embedBundle = JSON.parse(W.NT_TT_EMBED);
   const realFetch = global.fetch; let fetchN = 0;
-  global.fetch = async (u) => { fetchN++; if (!String(u).includes('gildongmu-tt')) throw new Error('엉뚱한 주소 ' + u); return { ok: true, text: async () => bundleTxt }; };
-  await t('ntEnsure: KV 에 없으면 gildongmu-tt 에서 받아 KV 에 6시간 둔다 / 이후엔 메모리', async () => {
-    W._ntReset(); const kv = mkKV(); fetchN = 0;
-    const a = await W.ntEnsure({ ROWS_KV: kv }); assert.ok(a && a.version === bundle.version);
-    assert.strictEqual(fetchN, 1); assert.ok(kv.m.has('nt:bundle:v1')); assert.strictEqual(kv.m.opts.expirationTtl, 21600);
-    await W.ntEnsure({ ROWS_KV: kv }); assert.strictEqual(fetchN, 1);
+  global.fetch = async (u) => { fetchN++; throw new Error('gildongmu-tt 를 fetch 로 부르면 안 된다(404): ' + u); };
+  await t('내장 번들: 현재 gildongmu-tt 와 같은 모양(버전·6개 키)', async () => {
+    assert.ok(embedBundle.version); ['_REAL_TT', '_GIMPO_TT', '_BUILTIN_TT', 'LINE_SCHEDULE', '_REAL_SEG', '_TT_ORDER_HARD'].forEach(k => assert.ok(embedBundle.data[k], k));
   });
-  await t('ntEnsure: KV 에 있으면 fetch 하지 않는다', async () => {
+  await t('ntEnsure: KV·바인딩이 없으면 내장본을 쓴다(네트워크 호출 없음) / 이후엔 메모리', async () => {
+    W._ntReset(); fetchN = 0; const a = await W.ntEnsure({}); assert.ok(a && a.version === embedBundle.version && a.src === 'embed'); assert.strictEqual(fetchN, 0);
+    const kv = mkKV(); const a2 = await W.ntEnsure({ ROWS_KV: kv }); assert.ok(a2 === a); assert.strictEqual(kv.gets, 0);
+  });
+  await t('ntEnsure: KV 에 있으면 KV 를 우선한다', async () => {
     W._ntReset(); fetchN = 0; const kv = mkKV([['nt:bundle:v1', bundleTxt]]);
-    assert.ok(await W.ntEnsure({ ROWS_KV: kv })); assert.strictEqual(fetchN, 0);
+    const a = await W.ntEnsure({ ROWS_KV: kv }); assert.ok(a && a.src === 'kv' && a.version === bundle.version); assert.strictEqual(fetchN, 0);
   });
-  await t('ntEnsure: KV 없는 환경(env.ROWS_KV 없음)에서도 동작', async () => { W._ntReset(); assert.ok(await W.ntEnsure({})); });
-  await t('ntEnsure: 동시 호출은 한 번만 불러온다', async () => { W._ntReset(); fetchN = 0; const r = await Promise.all([W.ntEnsure({}), W.ntEnsure({}), W.ntEnsure({})]); assert.strictEqual(fetchN, 1); assert.ok(r[0] === r[1] && r[1] === r[2]); });
-  global.fetch = async () => { throw new Error('offline'); };
-  await t('ntEnsure: 못 불러오면 null, 30초간 재시도하지 않는다', async () => { W._ntReset(); assert.strictEqual(await W.ntEnsure({}), null); let n = 0; global.fetch = async () => { n++; throw new Error('x'); }; assert.strictEqual(await W.ntEnsure({}), null); assert.strictEqual(n, 0); });
+  await t('ntEnsure: 서비스 바인딩(TT_SVC)이 있으면 거기서 받아 KV 에 6시간 둔다', async () => {
+    W._ntReset(); const kv = mkKV(); let called = 0;
+    const svc = { fetch: async (u) => { called++; assert.ok(String(u).endsWith('/tt')); return { ok: true, text: async () => bundleTxt }; } };
+    const a = await W.ntEnsure({ ROWS_KV: kv, TT_SVC: svc }); assert.ok(a && a.src === 'svc' && a.version === bundle.version);
+    assert.strictEqual(called, 1); assert.ok(kv.m.has('nt:bundle:v1')); assert.strictEqual(kv.m.opts.expirationTtl, 21600); assert.strictEqual(fetchN, 0);
+  });
+  await t('ntEnsure: 서비스 바인딩이 실패하면 내장본으로 넘어간다', async () => {
+    W._ntReset(); const a = await W.ntEnsure({ TT_SVC: { fetch: async () => { throw new Error('boom'); } } }); assert.ok(a && a.src === 'embed');
+    W._ntReset(); const b2 = await W.ntEnsure({ TT_SVC: { fetch: async () => ({ ok: false, status: 500 }) } }); assert.ok(b2 && b2.src === 'embed');
+  });
+  await t('ntEnsure: KV 내용이 깨져 있어도 내장본으로 동작', async () => { W._ntReset(); const a = await W.ntEnsure({ ROWS_KV: mkKV([['nt:bundle:v1', '{깨짐']]) }); assert.ok(a && a.src === 'embed'); });
+  await t('ntEnsure: 동시 호출은 한 번만 만든다', async () => { W._ntReset(); const r = await Promise.all([W.ntEnsure({}), W.ntEnsure({}), W.ntEnsure({})]); assert.ok(r[0] && r[0] === r[1] && r[1] === r[2]); });
+  // 내장본까지 못 쓰는 경우(가짜) — 별도 인스턴스
+  const WB = require('./helpers/nt_load')({ embed: 'not json' });
+  await t('ntEnsure: 아무것도 못 쓰면 null + 사유(why), 30초간 재시도하지 않는다', async () => {
+    WB._ntReset(); assert.strictEqual(await WB.ntEnsure({}), null);
+    const r = await WB.handleNextTrain(new Request('https://x/next-train?op=board&line=a&from=b&atMin=1'), {}); assert.strictEqual(r.status, 503); const j = await r.json(); assert.ok(/embed/.test(j.why || ''), j.why);
+  });
   await t('ntAttachAll: 시각표를 못 불러와도 응답은 그대로(값만 안 붙음)', async () => {
-    W._ntReset(); const od = { result: { path: [{ info: {}, subPath: [{ trafficType: 1, lane: [{ name: '2호선' }], startSec: 10, endSec: 100, passStopList: { stations: [{ stationName: '강남' }, { stationName: '역삼' }] } }] }] } };
-    const before = JSON.stringify(od); await W.ntAttachAll({}, od, Date.now(), false); assert.strictEqual(JSON.stringify(od), before);
+    WB._ntReset(); const od = { result: { path: [{ info: {}, subPath: [{ trafficType: 1, lane: [{ name: '2호선' }], startSec: 10, endSec: 100, passStopList: { stations: [{ stationName: '강남' }, { stationName: '역삼' }] } }] }] } };
+    const before = JSON.stringify(od); await WB.ntAttachAll({}, od, Date.now(), false); assert.strictEqual(JSON.stringify(od), before);
   });
   await t('ntAttachAll: 지하철 구간이 없으면 시각표를 불러오지도 않는다', async () => {
-    W._ntReset(); let n = 0; global.fetch = async () => { n++; return { ok: true, text: async () => bundleTxt }; };
-    await W.ntAttachAll({}, { result: { path: [{ info: {}, subPath: [{ trafficType: 3 }] }] } }, Date.now(), false); assert.strictEqual(n, 0);
-    await W.ntAttachAll({}, null, Date.now(), false); await W.ntAttachAll({}, {}, Date.now(), false); await W.ntAttachAll({}, { result: { path: [] } }, Date.now(), false); assert.strictEqual(n, 0);
+    W._ntReset(); const kv = mkKV(); const E = { ROWS_KV: kv };
+    await W.ntAttachAll(E, { result: { path: [{ info: {}, subPath: [{ trafficType: 3 }] }] } }, Date.now(), false); assert.strictEqual(kv.gets, 0);
+    await W.ntAttachAll(E, null, Date.now(), false); await W.ntAttachAll(E, {}, Date.now(), false); await W.ntAttachAll(E, { result: { path: [] } }, Date.now(), false); assert.strictEqual(kv.gets, 0);
   });
-  global.fetch = async () => ({ ok: true, text: async () => bundleTxt });
+  const ENV = { ROWS_KV: mkKV([['nt:bundle:v1', bundleTxt]]) };   // 시험용 축소 번들은 KV 로 넣는다
   await t('ntAttachAll: 경로마다 붙이고 ntVer 를 단다', async () => {
     W._ntReset(); const c = cases.find((c, i) => appRes[i].some(w => w != null));
     const od = { result: { path: [{ info: c.svcWarn ? { svcWarn: c.svcWarn } : {}, subPath: JSON.parse(JSON.stringify(c.legs)) }] } };
-    await W.ntAttachAll({}, od, c.baseMs, c.bf); assert.strictEqual(od.ntVer, bundle.version); assert.ok(od.result.path[0].subPath.some(l => l.ttWaitMs > 0)); assert.strictEqual(od.result.path[0].info.ttApplied, true);
+    await W.ntAttachAll(ENV, od, c.baseMs, c.bf); assert.strictEqual(od.ntVer, bundle.version); assert.ok(od.result.path[0].subPath.some(l => l.ttWaitMs > 0)); assert.strictEqual(od.result.path[0].info.ttApplied, true);
   });
 
   // ── /next-train ──
-  const get = (qs) => W.handleNextTrain(new Request('https://x/next-train?' + qs), {}).then(async r => ({ s: r.status, j: await r.json() }));
+  const get = (qs) => W.handleNextTrain(new Request('https://x/next-train?' + qs), ENV).then(async r => ({ s: r.status, j: await r.json() }));
   const baseDay = Date.UTC(2026, 9, 8, 0, 0) - 9 * 3600e3;
   await t('/next-train?op=board 가 엔진 boardTable 과 같다', async () => {
     const r = await get('op=board&line=' + encodeURIComponent('2호선') + '&from=' + encodeURIComponent('강남') + '&to=' + encodeURIComponent('역삼') + '&atMin=480.5&baseMs=' + (baseDay + 8 * 3600e3));
@@ -178,21 +194,20 @@ const ri = (a, b) => a + Math.floor(rnd() * (b - a + 1));
   await t('/next-train: 인자 부족은 400, OPTIONS 는 204', async () => {
     assert.strictEqual((await get('op=board&line=2호선')).s, 400);
     assert.strictEqual((await get('op=board&line=' + encodeURIComponent('2호선') + '&from=' + encodeURIComponent('강남'))).s, 400);
-    assert.strictEqual((await W.handleNextTrain(new Request('https://x/next-train', { method: 'OPTIONS' }), {})).status, 204);
+    assert.strictEqual((await W.handleNextTrain(new Request('https://x/next-train', { method: 'OPTIONS' }), ENV)).status, 204);
   });
   await t('/next-train POST 여러 건', async () => {
     const items = [{ id: 'a', op: 'board', line: '2호선', from: '강남', to: '역삼', atMin: 600, baseMs: baseDay }, { id: 'b', op: 'times', line: '2호선', from: '강남', to: '역삼', baseMs: baseDay }, { id: 'c', op: 'board', line: '2호선' }];
-    const r = await W.handleNextTrain(new Request('https://x/next-train', { method: 'POST', body: JSON.stringify({ items }) }), {}); const j = await r.json();
+    const r = await W.handleNextTrain(new Request('https://x/next-train', { method: 'POST', body: JSON.stringify({ items }) }), ENV); const j = await r.json();
     assert.strictEqual(j.items.length, 3); assert.deepStrictEqual(j.items.map(x => x.id), ['a', 'b', 'c']); assert.ok(j.items[0].depMin != null); assert.ok(j.items[1].times); assert.ok(j.items[2].error);
   });
-  await t('/next-train: 시각표를 못 불러오면 503', async () => { W._ntReset(); global.fetch = async () => { throw new Error('x'); }; const r = await get('op=board&line=a&from=b&atMin=1'); assert.strictEqual(r.s, 503); });
-
+  
   // ── /ride-eta boardInfo ──
   await t('/ride-eta: boardInfo 가 오면 timetable 을 채워 기존 handleRideEta 로 넘기고, 없으면 그대로 넘긴다', async () => {
-    W._ntReset(); global.fetch = async () => ({ ok: true, text: async () => bundleTxt });
+    W._ntReset(); 
     const seen = []; global.handleRideEta = (req) => req.method !== 'POST' ? Promise.resolve(new Response(null, { status: 204 })) : req.clone().json().then(b => { seen.push(b); return new Response('{}'); });
     const mk = (body) => new Request('https://x/ride-eta', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-    await W.handleRideEtaNT(mk({ nowMs: baseDay + 8 * 3600e3, boardInfo: { boardIdx: 2, line: '2호선', from: '강남', to: '역삼' } }), {});
+    await W.handleRideEtaNT(mk({ nowMs: baseDay + 8 * 3600e3, boardInfo: { boardIdx: 2, line: '2호선', from: '강남', to: '역삼' } }), ENV);
     assert.ok(seen[0].timetable && seen[0].timetable.boardIdx === 2 && seen[0].timetable.times.length > 100); assert.strictEqual(seen[0].boardInfo, undefined);
     await W.handleRideEtaNT(mk({ nowMs: 1, timetable: { boardIdx: 1, times: [1, 2] }, boardInfo: { line: '2호선', from: '강남' } }), {});
     assert.deepStrictEqual(seen[1].timetable, { boardIdx: 1, times: [1, 2] });
