@@ -98,7 +98,8 @@ if (opt['hint-kric'] && fs.existsSync(opt['hint-kric'])) {
 
 // 6) 결과 기록
 const touched = MANAGED.filter(l => diffs[l] && (diffs[l].changed.length || diffs[l].added.length));
-const changed = touched.length > 0 || hinted.length > 0;
+const orientChanged = [...new Set(MANAGED.concat(Object.keys(HINT_SPEC)))].filter(l => !same(fin.data._TT_ORIENT[l], old.data._TT_ORIENT[l]));   // 방향 힌트만 달라져도 '변경' — 버전을 올려야 엔진 캐시가 새 번들로 바뀐다
+const changed = touched.length > 0 || hinted.length > 0 || orientChanged.length > 0;
 if (changed) {
   fin.version = built.version;
   // 같은 날 두 번 바뀌어도 버전이 달라지고 사전순으로 커지도록 뒤에 .2, .3 … 을 붙인다(엔진은 '내장본보다 사전순으로 작은 KV 번들'을 무시한다)
@@ -109,7 +110,7 @@ fs.writeFileSync(opt.out.replace(/\.json$/, '') + '.order.json', JSON.stringify(
 fs.writeFileSync(path.join(dir, 'changed.txt'), changed ? 'yes' : 'no');
 const rejected = MANAGED.filter(l => !verdict[l].ok);
 fs.writeFileSync(path.join(dir, 'rejected.txt'), rejected.map(l => l + ': ' + verdict[l].why).join('\n'));
-const md = ['# 시각표 분기 갱신 보고', '', '- 버전: `' + old.version + '` → `' + fin.version + '`', '- 변경된 노선: ' + (touched.length ? touched.length + '개' : '없음') + (hinted.length ? ' (+ 방향 힌트만 붙인 노선: ' + hinted.join(', ') + ')' : ''), ''];
+const md = ['# 시각표 분기 갱신 보고', '', '- 버전: `' + old.version + '` → `' + fin.version + '`', '- 변경된 노선: ' + (touched.length ? touched.length + '개' : '없음') + (orientChanged.length ? ' (+ 방향 힌트만 달라진 노선: ' + orientChanged.join(', ') + ')' : ''), ''];
 if (hintNotes.length) md.push(...hintNotes, '');
 for (const l of touched) { const d = diffs[l]; md.push('- **' + l + '** — 바뀐 역 ' + d.changed.length + ', 새로 생긴 역 ' + d.added.length + (d.kept.length ? ', 새 자료에 없어 옛 기록 유지 ' + d.kept.length : '') + (d.changed.length ? ' (예: ' + d.changed.slice(0, 5).join(', ') + ')' : '')); }
 if (rejected.length) { md.push('', '## 확인 필요(자동 반영하지 않고 옛 기록 유지)'); for (const l of rejected) md.push('- **' + l + '** — ' + verdict[l].why); }
