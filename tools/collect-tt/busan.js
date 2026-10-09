@@ -9,6 +9,20 @@ async function post(url, body) {
     catch (e) { if (a === 2) throw e; await new Promise(r => setTimeout(r, 1500)); }
   }
 }
+
+// 상세 시각표 table → {on:현재방향라벨, rows:[[hh,[[dest,mm]..](평일),[..](토),[..](일공휴)]]]}
+function parse(html) {
+  const i = html.indexOf('timetable-detail'); if (i < 0) return { rows: [] };
+  const j = html.indexOf('</table>', i); const t = html.slice(i, j);
+  const on = (html.match(/course-on"[^>]*>\s*([^<]*?)\s*<\/a>/) || [])[1] || '';
+  const rows = [];
+  for (const tr of t.split('<tr>').slice(1)) {
+    const hh = (tr.match(/<th scope="row">\s*(\d+)\s*<\/th>/) || [])[1]; if (hh == null) continue;
+    const tds = [...tr.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map(m => [...m[1].matchAll(/<span class="blind">([^<]*?)행<\/span>\s*(\d+)\s*<span class="blind">분/g)].map(x => [x[1], x[2]]));
+    rows.push([hh, tds[0] || [], tds[1] || [], tds[2] || []]);
+  }
+  return { on, rows };
+}
 (async () => {
   const res = {}; let n = 0;
   for (const line of ['1', '2', '3', '4']) {
@@ -18,8 +32,11 @@ async function post(url, body) {
     console.log('호선', line, '역', stations.length);
     res[line] = {};
     for (const s of stations) {
-      try { const html = await post('/homepage/default/stationtime/page/view.do?menu_no=10010103', { s_ho: line, s_station: s.code, s_cho: '' }); res[line][s.code] = { nm: s.nm, html: html.slice(html.indexOf('<body') > 0 ? html.indexOf('timetable') - 3000 : 0).slice(0, 120000) }; n++; }
-      catch (e) { res[line][s.code] = { nm: s.nm, err: String(e.message).slice(0, 80) }; }
+      res[line][s.code] = { nm: s.nm, ud: {} };
+      for (const ud of ['0', '1']) {
+        try { const html = await post('/homepage/default/stationtime/page/view.do?menu_no=10010103', { s_ho: line, s_station: s.code, s_cho: '', updown: ud }); res[line][s.code].ud[ud] = parse(html); n++; }
+        catch (e) { res[line][s.code].ud[ud] = { err: String(e.message).slice(0, 80) }; }
+      }
     }
   }
   fs.writeFileSync(path.join(OUT, 'busan.json'), JSON.stringify(res));
