@@ -29,6 +29,7 @@ jobs:
           - next_train_parity.ui.test.js
           - overlay_stale.ui.test.js
           - holidays.test.js
+          - holidays_decide.test.js
           - ride_eta.test.js
           - ride_evidence.ui.test.js
           - rt_arrival_cands.ui.test.js

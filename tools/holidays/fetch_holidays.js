@@ -6,6 +6,8 @@ const OUT = path.join(__dirname, 'out'); fs.mkdirSync(OUT, { recursive: true });
 const KEY = process.env.TAGO_KEY || '';
 const kstYear = new Date(Date.now() + 9 * 3600e3).getUTCFullYear();
 const years = (process.env.YEARS || '').split(',').filter(Boolean).map(Number); if (!years.length) years.push(kstYear, kstYear + 1);
+// 이름 정리: 정부 API 의 표기('1월1일', '기독탄신일', '대체공휴일(삼일절)')를 앱에서 쓰는 이름으로
+const normName = n => { n = String(n || '').trim(); if (/^대체공휴일/.test(n)) return '대체공휴일'; if (n === '1월1일' || n === '새해') return '신정'; if (n === '기독탄신일' || n === '크리스마스') return '성탄절'; if (/부처님/.test(n)) return '부처님오신날'; if (/^3·1/.test(n)) return '삼일절'; return n; };
 const get = async (url, tries = 3) => { let last; for (let i = 0; i < tries; i++) { try { const r = await fetch(url, { signal: AbortSignal.timeout(30000), headers: { 'user-agent': 'gildongmu-holiday-bot' } }); const t = await r.text(); return { status: r.status, text: t }; } catch (e) { last = e; await new Promise(r => setTimeout(r, 2000)); } } throw last; };
 async function srcA(y) {
   if (!KEY) return { ok: false, err: 'no key' };
@@ -16,7 +18,7 @@ async function srcA(y) {
       if (status !== 200 || text.trim()[0] !== '{') return { ok: false, err: 'status ' + status };
       const j = JSON.parse(text); const h = j.response && j.response.header; if (!h || h.resultCode !== '00') return { ok: false, err: 'code ' + (h && h.resultCode) };
       let it = j.response.body && j.response.body.items && j.response.body.items.item; if (!it) it = []; if (!Array.isArray(it)) it = [it];
-      for (const x of it) if (x.isHoliday === 'Y') { const s = String(x.locdate); ds[s.slice(0, 4) + '-' + s.slice(4, 6) + '-' + s.slice(6, 8)] = x.dateName; }
+      for (const x of it) if (x.isHoliday === 'Y') { const s = String(x.locdate); ds[s.slice(0, 4) + '-' + s.slice(4, 6) + '-' + s.slice(6, 8)] = normName(x.dateName); }
     }
     return { ok: true, dates: ds };
   } catch (e) { return { ok: false, err: String(e.message).replace(KEY, '***').slice(0, 100) }; }
@@ -24,7 +26,7 @@ async function srcA(y) {
 async function srcB(y) {
   try {
     const { status, text } = await get('https://date.nager.at/api/v3/PublicHolidays/' + y + '/KR'); if (status !== 200) return { ok: false, err: 'status ' + status };
-    const ds = {}; for (const x of JSON.parse(text)) if ((x.types || []).includes('Public')) ds[x.date] = x.localName; return { ok: true, dates: ds };
+    const ds = {}; for (const x of JSON.parse(text)) if ((x.types || []).includes('Public')) ds[x.date] = normName(x.localName); return { ok: true, dates: ds };
   } catch (e) { return { ok: false, err: String(e.message).slice(0, 100) }; }
 }
 (async () => {

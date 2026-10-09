@@ -1,0 +1,89 @@
+# 공휴일 자동 갱신 — 매일 새벽(03:40 KST). 정부 특일 API(A)·외부 공개 API(B)·규칙 계산(C)을 대조해 올해·내년 공휴일을 정한다.
+#   · 달라진 게 있으면: ① Cloudflare KV `nt:holidays:v1` 에 올림(엔진이 최대 1시간 안에 반영, 재배포 불필요) ② 저장소의 내장본(engine/holidays-data.js, 앱 내장값, tools/holidays/holidays.json)도 같이 갱신해 main 에 커밋.
+#   · 검증에 실패하면(고정 공휴일 누락, 독립 출처 2개 미만 등) 그 해는 이전 자료를 유지하고 이슈로 알린다. 출처끼리 달라 보류한 날도 이슈로 알린다(같은 내용은 반복하지 않음).
+#   · A(특일 API)가 안 되는 날에도 B+C 로 돌아가며 'provisional' 로 표시한다. A 가 되면 'verified'.
+name: Refresh holidays
+on:
+  schedule:
+    - cron: '40 18 * * *'
+  workflow_dispatch:
+    inputs:
+      dry:
+        description: '시험 실행(커밋·KV 쓰기 없이 보고서만)'
+        type: boolean
+        required: false
+        default: false
+permissions:
+  contents: write
+  issues: write
+concurrency:
+  group: refresh-holidays
+  cancel-in-progress: false
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      KV_NS: dc7124fce2d946768165f47fc58d6b7e
+      OUT: tools/holidays/out
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: 현재 KV 값 받아 이전 자료로 쓰기(없으면 저장소 사본)
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+        run: |
+          mkdir -p $OUT
+          B="https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/storage/kv/namespaces/$KV_NS/values/nt:holidays:v1"
+          if curl -sf "$B" -H "Authorization: Bearer $CF_API_TOKEN" -o $OUT/prior-kv.json && node -e "const o=JSON.parse(require('fs').readFileSync('$OUT/prior-kv.json','utf8'));if(!o.years)process.exit(1)"; then
+            # KV 가 더 새것이면 그것을, 아니면 저장소 사본을 이전 자료로
+            if node -e "const kv=JSON.parse(require('fs').readFileSync('$OUT/prior-kv.json','utf8')),r=JSON.parse(require('fs').readFileSync('tools/holidays/holidays.json','utf8'));process.exit(String(kv.asOf)>=String(r.asOf)?0:1)"; then echo "PRIOR=$OUT/prior-kv.json" >> "$GITHUB_ENV"; fi
+          fi
+      - name: 수집·대조
+        env:
+          TAGO_KEY: ${{ secrets.TAGO_KEY }}
+        run: |
+          node tools/holidays/fetch_holidays.js
+          cat $OUT/report.md >> "$GITHUB_STEP_SUMMARY"
+          echo "CHANGED=$(cat $OUT/changed.txt)" >> "$GITHUB_ENV"
+      - name: 시험(엔진·대조 판정)
+        if: env.CHANGED == 'yes'
+        run: |
+          cp $OUT/holidays.json tools/holidays/holidays.json
+          node tools/holidays/gen_embed.js
+          node tools/holidays/gen_app.js
+          node test/holidays.test.js
+          node test/holidays_decide.test.js
+      - name: Cloudflare KV 에 올리기
+        if: env.CHANGED == 'yes' && inputs.dry != true
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+        run: |
+          set -e
+          B="https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/storage/kv/namespaces/$KV_NS/values/nt:holidays:v1"
+          curl -sf -X PUT "$B" -H "Authorization: Bearer $CF_API_TOKEN" --data-binary @$OUT/holidays.json >/dev/null || { echo "::error::KV 쓰기 실패"; exit 1; }
+          GOT=$(curl -sf "$B" -H "Authorization: Bearer $CF_API_TOKEN" | wc -c); WANT=$(wc -c < $OUT/holidays.json)
+          [ "$GOT" = "$WANT" ] || { echo "::error::KV 읽기 크기 불일치 $GOT != $WANT"; exit 1; }
+      - name: main 에 커밋(내장본 갱신)
+        if: env.CHANGED == 'yes' && inputs.dry != true
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@users.noreply.github.com"
+          git add tools/holidays/holidays.json engine/holidays-data.js www/index.html
+          git diff --cached --quiet || git commit -m "data: 공휴일 자동 갱신" -m "$(cat $OUT/report.md)"
+          for i in 1 2 3; do git pull -q --rebase origin main && git push -q origin HEAD:main && break || sleep 5; done
+      - name: 검증 실패·불일치는 이슈로 알림(중복 방지)
+        if: inputs.dry != true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -s $OUT/issues.txt ]; then
+            T="공휴일 자동 갱신: 확인 필요"
+            if [ -z "$(gh api "repos/$GITHUB_REPOSITORY/issues?state=open&per_page=50" --jq ".[]|select(.title==\"$T\")|.number")" ]; then
+              gh api repos/$GITHUB_REPOSITORY/issues -f title="$T" -f body="$(printf '%s\n\n%s' "$(cat $OUT/issues.txt)" "실행: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID")" >/dev/null
+            fi
+          fi
