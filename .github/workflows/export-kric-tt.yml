@@ -1,0 +1,38 @@
+# D1 의 KRIC 시각표를 data/kric-tt 브랜치로 내보낸다(수동 실행; 메인·APK 빌드와 무관).
+name: Export KRIC timetables
+on:
+  workflow_dispatch:
+    inputs:
+      oprs:
+        description: '운영기관 코드(쉼표)'
+        required: false
+        default: 'DG,DJ,GJ'
+permissions:
+  contents: write
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: D1 에서 읽기
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          OPRS: ${{ inputs.oprs }}
+        run: node tools/collect-tt/export_kric.js
+      - name: 결과 올리기
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@users.noreply.github.com"
+          git checkout --orphan data-kric-tt
+          git rm -rf --cached . >/dev/null 2>&1 || true
+          mkdir -p /tmp/keep && cp tools/collect-tt/out/*.json /tmp/keep/
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp /tmp/keep/*.json .
+          git add -A
+          git commit -m "kric timetables from D1 ($(date -u +%FT%TZ))"
+          git push -f origin HEAD:refs/heads/data/kric-tt
