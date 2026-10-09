@@ -15,6 +15,10 @@ const { NT_STNORDER } = require('../../engine/next-train-data.js');
 const nz = n => String(n || '').replace(/\(.*?\)/g, '').replace(/역$/, '').replace(/\s+/g, '').trim();
 const RT = bundle.data._REAL_TT; bundle.data._TT_ORIENT = bundle.data._TT_ORIENT || {};
 const NONLINEAR = new Set(['경의중앙선']);
+// 경의중앙선: 갈라지는 노선이지만 TAGO 상/하 라벨은 '용산 기준 서쪽(효창공원앞→문산·임진강)으로 갈 때 상, 동쪽(이촌→지평)으로 갈 때 하' 로 일관된다
+//   (2026-10-09 KRIC 열차별 정차 순서와 대조: 인접 106쌍 모두 일치). 그래서 지평→…→용산→…→임진강 한 줄(서울역 지선은 홍대입구와 가좌 사이에 끼움)의 방향 힌트를 만든다.
+//   TAGO 종착역 방향 일관성이 97% 미만이면 힌트를 만들지 않고(시각표 상관으로 되돌아감) 보고서에 남는다.
+const FIXED_ORDER = { '경의중앙선': '지평 용문 원덕 양평 오빈 아신 국수 신원 양수 운길산 팔당 도심 덕소 양정 도농 구리 양원 망우 상봉 중랑 회기 청량리 왕십리 응봉 옥수 한남 서빙고 이촌 용산 효창공원앞 공덕 서강대 홍대입구 서울 신촌 가좌 디지털미디어시티 수색 한국항공대 강매 행신 능곡 대곡 곡산 백마 풍산 일산 탄현 야당 운정 금릉 금촌 월롱 파주 문산 운천 임진강'.split(' ') };
 const ENDBASED = new Set(['GTX-A', '서해선']);   // TAGO 의 상/하가 구간마다 뒤집히는 노선 — 종착역 위치로 방향 키를 다시 정한다(순서는 번들 _TT_ORDER_HARD)               // 갈라지거나 구간이 나뉜 노선 — 방향 힌트를 만들지 않는다(시각표 상관 사용)
 // 대구1·2·광주1·대전1호선은 역 ID/코드 순서가 선로 순서와 다르다(대구1호선 중앙로가 맨 끝으로 밀림) — 선로 순서로 적어 둔 NT_STNORDER 를 그대로 쓴다.
 // ★ 이 노선들의 NT_STNORDER 는 KRIC 역 코드가 커지는 방향(= 하)으로 적는다(광주1호선은 녹동→평동). 방향 힌트의 fwd 가 '하' 로 고정이기 때문.
@@ -92,6 +96,7 @@ for (const f of tagoFiles) {
 for (const l in tagoStn) {
   if (ENDBASED.has(l) && bundle.data._TT_ORDER_HARD[l]) { const order = bundle.data._TT_ORDER_HARD[l].map(nz); bundle.data._TT_ORIENT[l] = { order, fwd: '하' }; stat[l] = Object.assign(stat[l] || {}, { TAGO역: tagoStn[l].length, 방향힌트: 'O(종착역 기준, 번들 순서)' }); lineStations[l] = order; continue; }
   let st = tagoStn[l].sort(idSort); let order = st.map(s => s.nm);
+  if (FIXED_ORDER[l]) { const have = new Set(order); const fixed = FIXED_ORDER[l].filter(n => have.has(n)); order.forEach(n => { if (!fixed.includes(n)) fixed.push(n); }); order = fixed; }
   if (ORDER_FIX[l]) { const have = new Set(order); const fixed = ORDER_FIX[l].filter(n => have.has(n)); order.forEach(n => { if (!fixed.includes(n)) fixed.push(n); }); order = fixed; }
   // 서울 1~9호선: 역 ID 순서가 선로 순서와 다른 노선이 있다(7호선은 석남→장암으로 끊기고 8호선 별내선·9호선 노량진은 뒤섞인다). 번들의 실측 인접 관계(_REAL_SEG)에서 '한 줄'로 이어지는 순서를 만들 수 있을 때만 그 순서를 쓰고, 못 만들면 방향 힌트를 만들지 않는다(엔진이 시각표 상관으로 정한다).
   let seoulPhysical = null;
@@ -104,7 +109,7 @@ for (const l in tagoStn) {
   let loN = 0, hiN = 0;                                                        // U 열차가 번호 작은 쪽/큰 쪽으로 가는 역 수
   for (const s of st) { let lo = 0, hi = 0; s.ends.U.forEach(e => { if (idx[e] == null) return; if (idx[e] < idx[s.nm]) lo++; else if (idx[e] > idx[s.nm]) hi++; }); if (lo > hi) loN++; else if (hi > lo) hiN++; }
   const dec = loN + hiN, major = Math.max(loN, hiN);
-  const ok = !NONLINEAR.has(l) && dec >= 4 && major / dec >= 0.9 && (!/^\d호선$/.test(l) || !!seoulPhysical);
+  const ok = (!NONLINEAR.has(l) || !!FIXED_ORDER[l]) && dec >= 4 && major / dec >= (FIXED_ORDER[l] ? 0.97 : 0.9) && (!/^\d호선$/.test(l) || !!seoulPhysical);
   stat[l] = Object.assign(stat[l] || {}, { TAGO역: st.length, 방향힌트: ok ? 'O' : 'X(U방향 일관 ' + major + '/' + dec + (NONLINEAR.has(l) ? ', 비선형' : '') + ')' });
   if (ok) bundle.data._TT_ORIENT[l] = { order, fwd: loN > hiN ? '하' : '상' };   // U 가 번호 작은 쪽이면 번호 커지는 쪽은 D(하)
   lineStations[l] = order;
