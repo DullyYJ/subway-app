@@ -7619,7 +7619,11 @@ function _htlBoardWatch(){
     var _movedAway = (d0 != null && d0 > _HTL_DEPART_M);
     var _pastDep   = _htlMinPastDeparture();
     var _noFreshNear = (_htlFixAgeMs() > _HTL_FIX_STALE_MS) || _movedAway;
-    var _boardedByTime = (_pastDep != null && _pastDep >= _HTL_BOARD_GRACE_MIN && _noFreshNear);
+    // ★ 2026-10-11: 첫 승차 노드가 버스 정류장이면 시각·기지국·'정류장에서 멀어짐'은 승차 근거로 쓰지 않는다.
+    //   (지하 가정은 지하철용이다. 버스를 놓치고 걸어서 멀어지거나 위치가 잠깐 끊긴 것을 '탔다'로 보면 마커가 혼자 움직인다.)
+    var _busBoard = false;
+    try{ var _bnb = _transitNodeData[_htlBoardIdx()]; _busBoard = !!(_bnb && _bnb.isBus); }catch(eBB){}
+    var _boardedByTime = (!_busBoard && _pastDep != null && _pastDep >= _HTL_BOARD_GRACE_MIN && _noFreshNear);
 
     // ★ 2026-09-15: (c) 기지국 갈래.
     //   지하역에서 GPS가 약하게나마 계속 잡히면 (b)가 성립하지 않아
@@ -7636,7 +7640,7 @@ function _htlBoardWatch(){
         window._boardCellN  = (window._boardCellN || 0) + 1;
       }
     }catch(e){}
-    var _boardedByCell = (_pastDep != null && _pastDep >= _HTL_BOARD_GRACE_MIN
+    var _boardedByCell = (!_busBoard && _pastDep != null && _pastDep >= _HTL_BOARD_GRACE_MIN
                           && _cellMv === true && (window._boardCellN || 0) >= 2);
 
     // ★ 2026-10-04: 복합 증거 갈래 — GPS 이동 + 기지국 변화 + PF 를 함께 본다.
@@ -7659,7 +7663,7 @@ function _htlBoardWatch(){
         }
       }
     }catch(eEv){}
-    if(_evRide || (_htlWait.arrived && (_movedAway || _boardedByTime || _boardedByCell))){
+    if(_evRide || (_htlWait.arrived && !_busBoard && (_movedAway || _boardedByTime || _boardedByCell))){
       var bi2 = _htlBoardIdx();
       if(bi2 >= 0){
         window._gpsMaxIdx = Math.max(window._gpsMaxIdx == null ? -1 : window._gpsMaxIdx, bi2);
@@ -11294,9 +11298,135 @@ function _checkOffRoute(lat, lng, validGps){
 }
 window._checkOffRoute = _checkOffRoute;
 
+// ═══════════════════════════════════════════════════════════════════
+// ★ 2026-10-11 (YJ 제보: "같은 목적지 가는데 추천 안 한 버스가 먼저 와서 탔더니 중간 경로가 달라 에러가 난다.
+//   지나온 경로와 현재 위치를 합치면 어느 버스인지 알 수 있다"):
+//   경로 이탈이 확정되면 예전에는 곧바로 '지금 위치에서 새로 탐색'했다 — 이미 버스를 타고 있는데도 걸어서 정류장에 가
+//   기다리는 새 경로가 그려지고 진행도·시각이 모두 초기화됐다. 이제는 먼저, 엔진이 이번 탐색에서 준 후보 경로 전체
+//   (_allRouteResults.all) 중에서 '지나온 궤적과 현재 위치가 따라가는 경로'가 있는지 본다. 있으면 그 경로로 바꿔 이어서 안내하고(재탐색 없음),
+//   없으면 예전처럼 재탐색한다. 앱이 새 경로를 만들지는 않는다 — 엔진이 준 후보 중에서 실제 이동과 맞는 것을 고를 뿐이다.
+// ═══════════════════════════════════════════════════════════════════
+function _altPathPts(p){
+  var pts = [];
+  try{
+    (p.subPath || []).forEach(function(sp){
+      var st = (sp.passStopList && sp.passStopList.stations) || [];
+      if(st.length){
+        st.forEach(function(q){ var x = parseFloat(q.x), y = parseFloat(q.y); if(isFinite(x) && isFinite(y)) pts.push({ lat: y, lng: x }); });
+      } else {
+        var sx = parseFloat(sp.startX), sy = parseFloat(sp.startY), ex = parseFloat(sp.endX), ey = parseFloat(sp.endY);
+        if(isFinite(sx) && isFinite(sy)) pts.push({ lat: sy, lng: sx });
+        if(isFinite(ex) && isFinite(ey)) pts.push({ lat: ey, lng: ex });
+      }
+    });
+  }catch(e){}
+  return pts;
+}
+// 궤적 점들이 경로선(정류장을 이은 선)에서 떨어진 거리의 평균·최대(m), 마지막 3점 중 최대
+function _trailFit(pts, tr){
+  if(!pts || pts.length < 2 || !tr || !tr.length) return null;
+  var sum = 0, mx = 0, i, j;
+  var dOf = function(q){
+    var b = Infinity;
+    for(j = 0; j < pts.length - 1; j++){ var d = _distToSegM(q.lat, q.lng, pts[j].lat, pts[j].lng, pts[j + 1].lat, pts[j + 1].lng); if(d < b) b = d; }
+    return b;
+  };
+  var ds = [];
+  for(i = 0; i < tr.length; i++){ var di = dOf(tr[i]); ds.push(di); sum += di; if(di > mx) mx = di; }
+  var tail = 0; for(i = Math.max(0, ds.length - 3); i < ds.length; i++) if(ds[i] > tail) tail = ds[i];
+  return { mean: sum / ds.length, max: mx, tail: tail, n: ds.length };
+}
+// 지금 타고 있는 차(버스)가 엔진 후보 중 어느 경로인지 — 못 찾으면 null
+function _matchRiddenRoute(){
+  try{
+    var R = window._allRouteResults; if(!R || !R.all || R.all.length < 2) return null;
+    if(typeof _transitNodeData === 'undefined' || !_transitNodeData || !_transitNodeData.length) return null;
+    var rd = window._rideEv ? window._rideEv() : null;
+    var onVeh = (window._htlBoarded === true) || !!(rd && (rd.now || rd.riding)) || (window._evVehicleNow ? window._evVehicleNow() : false);
+    if(!onVeh) return null;                                   // 걷고 있으면 맞추지 않는다(재탐색)
+    var now = Date.now();
+    var from = Math.max(window._rideEvStartMs ? window._rideEvStartMs - 30000 : 0, now - 480000);
+    var tr = [], i;
+    for(i = 0; i < _ev.trail.length; i++){ var q = _ev.trail[i]; if(q.ts >= from && q.ts >= _ev.floorMs && now - q.ts <= 480000) tr.push({ lat: q.lat, lng: q.lng, ts: q.ts }); }
+    if(tr.length < 4) return null;
+    var curPts = [];
+    for(i = 0; i < _transitNodeData.length; i++){ var n = _transitNodeData[i]; if(n && n.lat != null && n.lng != null) curPts.push({ lat: n.lat, lng: n.lng }); }
+    var curFit = _trailFit(curPts, tr);
+    var best = null, bestFit = null;
+    R.all.forEach(function(pp){
+      if(!pp || !pp.subPath || (pp.info && pp.info.longDist === true)) return;
+      var pts = _altPathPts(pp); if(pts.length < 3) return;
+      var f = _trailFit(pts, tr); if(!f) return;
+      if(!bestFit || f.mean < bestFit.mean){ bestFit = f; best = pp; }
+    });
+    if(!best || !bestFit) return null;
+    if(!(bestFit.mean <= 120 && bestFit.max <= 300 && bestFit.tail <= 200)) return null;   // 지나온 길과 현재 위치가 모두 그 경로 위여야 한다
+    if(curFit && !(bestFit.mean + 60 < curFit.mean)) return null;                          // 지금 보던 경로보다 확실히 잘 맞아야 한다
+    return { path: best, fit: bestFit, cur: curFit, last: tr[tr.length - 1] };
+  }catch(e){ return null; }
+}
+// 맞는 후보로 바꿔 이어서 안내한다(재탐색 없음). 성공하면 true.
+function _applyRiddenRoute(m){
+  try{
+    var routeObj = _convertSinglePathToRoute(m.path);
+    if(!routeObj || !routeObj.sections || !routeObj.sections.length) return false;
+    var keepLocked = window._routeLocked === true, lt = window._lockedRouteType, pend = window._pendingRouteType;
+    window._gpsMaxIdx = -1; window._gpsConfirmIdx = -1; window._timeMaxIdx = -1;
+    window._gpsWaitIdx = null; window._gpsWaitRatio = 0;
+    window._nodePassMs = {}; try{ _etaResetEvidence(); }catch(e0){} window._markerMaxProg = null;
+    window._htlDelaySec = 0; window._htlEarlyAt = 0; window._busAdvMs = 0;
+    window._rideEvKeep = true;
+    _renderTransitResultCard({ routes: [routeObj] }, _transitResultStart, _transitResultDest, 'engine_ridden');
+    try{ _svcApply(routeObj.sections, 'engine_ridden'); }catch(e1){}
+    window._routeLocked = keepLocked; window._lockedRouteType = lt; window._pendingRouteType = pend;
+    // 현재 위치에서 가장 가까운 정류장 노드로 진행도를 맞춘다(타고 있는 중)
+    var bi = -1, bd = Infinity;
+    for(var k = 0; k < _transitNodeData.length; k++){
+      var n = _transitNodeData[k];
+      if(!n || n.lat == null || n.isWalk || n.isOrigin) continue;
+      var d = haversineM(m.last.lat, m.last.lng, n.lat, n.lng); if(d < bd){ bd = d; bi = k; }
+    }
+    if(bi >= 0){
+      window._gpsMaxIdx = bi; window._gpsConfirmIdx = bi; window._htlBoarded = true;
+      window._nodePassMs = window._nodePassMs || {}; window._nodePassMs[bi] = Date.now();
+      try{ _etaSrc(bi, 'gps'); }catch(e2){}
+      try{ if(typeof _recalcArrivalsFrom === 'function') _recalcArrivalsFrom(bi); }catch(e3){}
+    }
+    try{ _ovlDiag('경로맞춤', '타고 있는 차를 엔진 후보에서 찾음 — 지나온 길 평균 ' + Math.round(m.fit.mean) + 'm(보던 경로 ' + (m.cur ? Math.round(m.cur.mean) : '-') + 'm) → 재탐색 없이 이어서 안내'); }catch(e4){}
+    try{ if(typeof toast === 'function') toast('타고 계신 버스에 맞춰 경로를 이어서 안내해요'); }catch(e5){}
+    return true;
+  }catch(e){ return false; }
+}
+// 버스를 타고 있는 동안 20초마다: 지금 보는 경로를 지나온 궤적이 따라가지 않고(경로선에서 멀고) 엔진 후보 중 다른 경로를 따라가면 그 경로로 바꾼다.
+//   (이탈 판정 _checkOffRoute 는 위치 상태기계가 '지하'로 굳어 있으면 건너뛰어 버스 탑승 중에는 사실상 동작하지 않는다 — 그와 별개로 돈다.)
+//   재탐색은 하지 않는다. 두 번 연속 확인돼야 바꾸고, 바꾼 뒤 2분은 다시 보지 않는다.
+function _ridePathWatch(){
+  try{
+    var now = Date.now();
+    if(now - (window._rpwAt || 0) < 20000) return;
+    window._rpwAt = now;
+    if(now < (window._rpwCool || 0)) return;
+    if(window._routeLocked !== true) return;                                   // 확정된 안내 중일 때만(탐색 화면을 건드리지 않는다)
+    if(typeof _baseTimeMs !== 'undefined' && _baseTimeMs != null) return;      // 예상(미래 기준시각) 모드 제외
+    if(window._metroRouteMode === true) return;
+    var g = (window._gpsMaxIdx == null) ? -1 : window._gpsMaxIdx;
+    var cn = (g >= 0 && _transitNodeData) ? _transitNodeData[g] : null;
+    if(!cn || !cn.isBus) { window._rpwHits = 0; return; }                      // 지금 버스 구간일 때만
+    var m = _matchRiddenRoute();
+    if(!m || !m.cur || !(m.cur.mean > 200 && m.cur.tail > 300)){ window._rpwHits = 0; return; }   // 지금 경로가 확실히 안 맞을 때만
+    window._rpwHits = (window._rpwHits || 0) + 1;
+    if(window._rpwHits < 2) return;
+    window._rpwHits = 0;
+    if(_applyRiddenRoute(m)) window._rpwCool = now + 120000;
+  }catch(e){}
+}
+window._ridePathWatch = _ridePathWatch;
+window._matchRiddenRoute = _matchRiddenRoute; window._applyRiddenRoute = _applyRiddenRoute;
+
 // 이탈 확정 시 실제 처리
 function _handleOffRoute(){
   try{
+    try{ var _mr = _matchRiddenRoute(); if(_mr && _applyRiddenRoute(_mr)) return; }catch(eMr){}   // 2026-10-11: 타고 있는 차가 엔진 후보 중 하나면 재탐색 없이 이어서
     if(typeof toast==='function') toast('\uACC4\uD68D\uACFC \uB2E4\uB978 \uAE38\uB85C \uAC00\uACE0 \uC788\uC5B4\uC694. \uD604\uC7AC \uC704\uCE58\uB85C \uACBD\uB85C\uB97C \uB2E4\uC2DC \uCC3E\uC744\uAC8C\uC694');
     // 진행 상태를 모두 리셋해야 새 경로에서 마커가 엉뚱한 곳부터 시작하지 않는다
     window._gpsMaxIdx = -1; window._gpsConfirmIdx = -1; window._timeMaxIdx = -1;
@@ -13372,6 +13502,7 @@ window._gpsBeforeNode = _gpsBeforeNode;
 function _updateTransitGps() {
   try{ if(typeof locTick === 'function') locTick(); }catch(e){}
   try{ if(typeof _pfTick === 'function') _pfTick(); }catch(e){}   // ★ 확률 위치 판단기(그림자/보정)
+  try{ _ridePathWatch(); }catch(e){}   // 2026-10-11: 타고 있는 버스가 엔진 후보 중 다른 경로면 그 경로로 이어서 안내
   try{ if(typeof _progGuard === 'function') _progGuard(); }catch(e){}   // ★ 진행도 상한 확인
   var card = document.getElementById('transitResultCard');
   if(!card || card.style.display==='none') { clearInterval(_transitGpsTimer); return; }
@@ -13701,6 +13832,34 @@ function _updateTransitGps() {
         if(best && best.lat != null && typeof haversineM === 'function') bestDist = haversineM(lat, lng, best.lat, best.lng);
       }
     }catch(eA){}
+    // ★ 2026-10-11 (YJ 제보: "버스를 놓쳤는데 탑승했다고 판단해서 마커가 움직인다 / 마커가 몇 정류장씩 튄다"):
+    //   버스 정류장은 400m 안팎 간격이라, 걸어서 다음 정류장 옆을 지나가기만 해도 '가장 가까운 노드'가 다음 정류장이 되어
+    //   진행도가 올라가 버렸다(타지 않았는데 탄 것으로 처리 → 시각표가 마커를 밀고, 도착 시각이 한꺼번에 '지금'으로 모인다).
+    //   (1) 아직 타지 않았으면(승차 확정·차량 속도 이동 증거 없음) 승차 정류장보다 앞 정류장으로 올리지 않는다.
+    //   (2) 버스 구간은 마지막 GPS 처리 이후 흐른 시간으로 갈 수 있는 정류장 수(15초에 1개 + 1개)를 넘겨 올리지 않는다.
+    //   지하철 노드·근거(차량 이동)가 있는 경우는 건드리지 않는다.
+    try{
+      if(best && best.isBus && bestIdx > _pMax){
+        var _bi9 = (typeof _htlBoardIdx === 'function') ? _htlBoardIdx() : -1;
+        var _rd9 = null; try{ _rd9 = window._rideEv ? window._rideEv() : null; }catch(eR9){}
+        var _veh9 = (window._htlBoarded === true) || !!(_rd9 && (_rd9.now || _rd9.riding)) || (window._evVehicleNow ? window._evVehicleNow() : false);
+        var _cap9 = null;
+        if(_bi9 >= 0 && _transitNodeData[_bi9] && _transitNodeData[_bi9].isBus && !_veh9 && bestIdx > _bi9){
+          _cap9 = Math.max(_pMax, _bi9);
+        } else if(_pMax >= 0 && window._busAdvMs){
+          var _allow9 = 1 + Math.floor(Math.max(0, Date.now() - window._busAdvMs) / 15000);
+          if(bestIdx - _pMax > _allow9) _cap9 = _pMax + _allow9;
+        }
+        if(_cap9 != null && _cap9 < bestIdx){
+          while(_cap9 > _pMax && (!_transitNodeData[_cap9] || _transitNodeData[_cap9].isWalk || _transitNodeData[_cap9].lat == null)) _cap9--;
+          try{ _ovlDiag('버스진행제한', (_veh9 ? '시간당 정류장 수 제한' : '타기 전 승차 정류장 너머로 안 올림') + ' ' + bestIdx + '→' + _cap9); }catch(eL9){}
+          bestIdx = _cap9;
+          if(_transitNodeData[bestIdx]){ best = _transitNodeData[bestIdx];
+            bestDist = (best.lat != null && typeof haversineM === 'function') ? haversineM(lat, lng, best.lat, best.lng) : bestDist; }
+        }
+      }
+    }catch(eB9){}
+    if(!window._busAdvMs || bestIdx > _pMax) window._busAdvMs = Date.now();   // 마지막으로 진행도가 오른 시각(버스 정류장 수 제한의 기준)
     window._gpsMaxIdx = Math.max(_pMax, bestIdx);
     // ★ 시각표 추정이 섞이지 않은 '순수 GPS 확인' 진행도 — 시각 보정의 기준으로만 쓴다.
     //   (_gpsMaxIdx는 포그라운드 복귀·시간 soft 전진 때도 올라가므로 그대로 쓰면
@@ -36863,6 +37022,19 @@ window._evWalkedNear = function(node, radius){
     return any ? (slow >= 15) : null;
   }catch(e){ return null; }
 };
+// 2026-10-11: 지금 차량 속도로 움직이는 중인가 — 최근 15~40초 GPS 의 '순이동'이 80m 이상, 평균 4.5m/s 이상(걷기·뛰기·GPS 흔들림 제외).
+//   _rideEv 는 150초 창의 순이동이라 승차 직후 1~2분 늦다 — 버스를 타자마자 마커가 따라가도록 이 판단을 보조로 쓴다.
+window._evVehicleNow = function(){
+  try{
+    var now = Date.now(), pts = [], i;
+    for(i = 0; i < _ev.trail.length; i++){ var q = _ev.trail[i]; if(now - q.ts <= 40000 && q.ts >= _ev.floorMs) pts.push(q); }
+    if(pts.length < 3) return false;
+    var dt = (pts[pts.length - 1].ts - pts[0].ts) / 1000;
+    if(dt < 15) return false;
+    var d = haversineM(pts[0].lat, pts[0].lng, pts[pts.length - 1].lat, pts[pts.length - 1].lng);
+    return d >= 80 && d / dt >= 4.5;
+  }catch(e){ return false; }
+};
 function _evLog(tag, msg){ if(_ev.lastLog === tag + msg) return; _ev.lastLog = tag + msg; try{ _ovlDiag(tag, msg); }catch(e){} }
 // 지금 열차(탈것)를 타고 이동 중인가 — GPS 이동 · 기지국 변화 · PF 를 함께 본다. 한 번 확인되면 20분간 유지(지하에서 신호가 약해도 풀리지 않게).
 window._rideEv = function(){
@@ -37049,9 +37221,13 @@ function _autoLockOnRide(){
   if(!window._lastHtlNodes || !window._lastHtlNodes.length || !_transitNodeData || !_transitNodeData.length) return false;
   var now = Date.now();
   if(now - (window._autoLockAt || 0) < 60000) return false;
-  var r = window._rideEv ? window._rideEv() : null;
-  if(!r || !r.now) return false;                                   // 지금 실제로 움직이는 중일 때만
   var bi = _htlBoardIdx(); if(bi < 0) return false;
+  var r = window._rideEv ? window._rideEv() : null;
+  // ★ 2026-10-11 (YJ: "사용자 위치추적·탑승 확정이 자동으로 안 되는 것 같다"): 첫 승차가 버스면 _rideEv(150초 창)는 승차 1~2분 뒤에야 켜지고,
+  //   그 사이 버스는 다음 정류장을 이미 지나쳐 아래 '다음 역 쪽으로 가는가' 판정이 영영 통과하지 못했다. 버스는 차량 속도 이동(_evVehicleNow)도 지금 움직임으로 본다.
+  var _bnA = _transitNodeData[bi], _busA = !!(_bnA && _bnA.isBus);
+  var _vehA = _busA && window._evVehicleNow ? window._evVehicleNow() : false;
+  if(!r || !(r.now || _vehA)) return false;                       // 지금 실제로 움직이는 중일 때만
   if(window._evNearNode(_transitNodeData[bi], 400) !== true) return false;
   if(window._evWalkedNear && window._evWalkedNear(_transitNodeData[bi], 300) === false) return false;   // 2026-10-06: 역 옆을 달려 지나간 버스·차는 제외
   if(_evTowardNext(bi) === false) return false;                    // 다음 역 쪽으로 가고 있지 않으면(반대 방향·다른 길) 확정하지 않는다
@@ -37092,7 +37268,19 @@ function _evTowardNext(bi){
       last = p;
     }
     if(!near || !last) return null;
-    return haversineM(last.lat, last.lng, nx.lat, nx.lng) <= haversineM(near.lat, near.lng, nx.lat, nx.lng) - 150;
+    if(haversineM(last.lat, last.lng, nx.lat, nx.lng) <= haversineM(near.lat, near.lng, nx.lat, nx.lng) - 150) return true;
+    // ★ 2026-10-11: 버스는 정류장이 400m 안팎이라 다음 정류장을 이미 지나쳤을 수 있다 — 위 판정이 거짓이 된다.
+    //   승차 정류장 이후 노선 위 정류장(최대 10개) 중 가장 가까운 것이 승차 정류장보다 앞이고(300m 이내),
+    //   승차 정류장에서 300m 넘게 벗어났으면 노선 방향으로 간 것이다(반대 방향·다른 길이면 앞 정류장과 멀어 통과하지 못한다).
+    if(b.isBus){
+      var bj = -1, bd = 1e12, c = 0, jj;
+      for(jj = bi; jj < nd.length && c <= 10; jj++){
+        var q = nd[jj]; if(!q || q.lat == null || q.isWalk || !q.isBus) continue; c++;
+        var dq = haversineM(last.lat, last.lng, q.lat, q.lng); if(dq < bd){ bd = dq; bj = jj; }
+      }
+      if(bj > bi && bd <= 300 && haversineM(last.lat, last.lng, b.lat, b.lng) >= 300) return true;
+    }
+    return false;
   }catch(e){ return null; }
 }
 window._evTowardNext = _evTowardNext;
