@@ -2,6 +2,19 @@
 
 **마지막 갱신: 2026-10-06 (KST)** · 다음 Claude는 이 파일부터 읽고, 아래 "주의·원칙"을 지킨다. **작업 3·4(서구청→서해구청 표기, 번들 누락역 추가)는 [`HANDOFF-작업3-4-서해구청-누락역.md`](HANDOFF-작업3-4-서해구청-누락역.md)로 넘겼다.** **2026-10-06 세션의 최신 변경(엔진 인천2호선 수정 06a~d, 총시간/타임라인 정합 06e·06f, 라이브 스윕 시험, 앱 셀 수정, 시험·시뮬 하네스, 작업 방법·남은 일)은 [`HANDOFF-2026-10-06.md`](HANDOFF-2026-10-06.md)에 있다 — 함께 읽을 것. 원칙: 모든 결정은 엔진이, 앱은 그리기만.**
 
+## 최신 (2026-10-11) — 오버레이·지도보기·버스 승차 보정 (실기기 검증 전)
+- 오버레이가 화면 전체를 덮던 문제: native/OverlayPlugin.java ArrowView 에 onMeasure(높이는 EXACTLY 일 때만 사용, 아니면 0) 추가 (083df65).
+- 세부경로 '지도보기' 에러(null 의 lng): openKakaoNavFromResult/openNaverNavFromResult 가 window._navTo(kind,lat,lng,이름) 으로 통일, _walkHasMe 로 내 위치 없을 때 출발 구간을 만들지 않음. 네이버 웹 대체 주소의 빈 출발은 '-/' 형식(네이버 사이트가 도구에서 막혀 실제 동작 미확인) (2cbc265).
+- 버스 먼저 타는 경로에서 마커가 혼자 움직이거나 몇 정류장씩 튀던 문제 (www/index.html):
+  · _updateTransitGps GPS 분기에 버스 진행 제한: 아직 타지 않았으면(승차 확정·차량 속도 이동 없음) 승차 정류장 너머로 올리지 않고, 타고 있어도 마지막 진행 이후 흐른 시간으로 15초에 1정류장+1 이상 올리지 않음. 진단 태그 버스진행제한.
+  · _htlBoardWatch: 첫 승차가 버스(_busBoard)면 시각·기지국·'정류장에서 멀어짐'을 승차 근거로 쓰지 않음.
+  · window._evVehicleNow(): 최근 15~40초 순이동 80m 이상·평균 4.5m/s 이상이면 차량 이동. _rideEv(150초 창)가 1~2분 늦는 것을 보조.
+  · _autoLockOnRide: 버스 승차는 _evVehicleNow 와 '승차 정류장 이후 노선 위 정류장 쪽으로 300m 넘게 이동'을 인정 → 경로 확정을 안 눌러도 자동 확정.
+- 추천 안 한 버스를 탔을 때: _matchRiddenRoute/_applyRiddenRoute/_ridePathWatch. 지나온 궤적(_ev.trail)이 엔진이 이번 탐색에서 준 후보(_allRouteResults.all) 중 하나에 평균 120m·최대 300m·마지막 200m 이내로 맞고 지금 경로보다 60m 이상 잘 맞으면 재탐색 없이 그 후보로 교체(확정 상태·잠금 유지, 진행도는 현재 위치에서 가장 가까운 정류장). _handleOffRoute 가 재탐색 전에 먼저 시도하고, 버스 구간에서는 20초마다 _ridePathWatch 가 두 번 연속 확인되면 교체(교체 후 2분 쉼). 진단 태그 경로맞춤. 원칙(엔진이 정하고 앱은 그린다) 유지: 앱이 새 경로를 만들지 않고 엔진 후보 중에서만 고른다.
+- 알게 된 것: LOCFSM 은 _htlWaitTick 의 locOnGps 에서만 먹여져 거의 늘 TRANSITION/UNDERGROUND 라 _checkOffRoute 는 버스 탑승 중 사실상 안 돈다(일부러 안 건드림 — 그 대신 _ridePathWatch).
+- 앞으로: 후보에 없는 노선을 탔을 때는 엔진 쪽 'ride-match'(궤적으로 노선 추정)가 필요 — 무거워 보류. 실기기에서 마커가 또 튀면 설정 → 오버레이 진단 기록 → 전체 복사(태그 승차판단·승차확정·PF▶·자동확정·버스진행제한·경로맞춤)를 받아 볼 것.
+- 시험: test/ride_bus_guard.ui.test.js (+ test/helpers/bus_fixture.js, ride_harness.js) 25개 — 놓친 버스·타고 달림·자동 확정·급행 노선 맞춤. 기존 19개 시험 모두 통과(tabs_smoke 는 실시간 대기가 있어 가끔 한 번 실패 후 재실행 통과).
+
 ## 0. 현재 상태 한눈에
 | 대상 | 버전·커밋 | 상태 |
 |---|---|---|
