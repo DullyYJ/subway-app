@@ -2620,7 +2620,7 @@ function _navTo(kind, lat, lng, nameEnc){
         + 'dlat='+dLat+'&dlng='+dLng+'&dname='+encodeURIComponent(name)
         + '&appname=com.dullyyj.subway';
       webUrl='https://map.naver.com/p/directions/'
-        + (me ? (me.lng+','+me.lat+','+encodeURIComponent('내 위치')+',,-1/') : ',,,,/')
+        + (me ? (me.lng+','+me.lat+','+encodeURIComponent('내 위치')+',,-1/') : '-/')
         + dLng+','+dLat+','+encodeURIComponent(name)+',,-1/walk';
     } else {
       appUrl='kakaomap://route?'
@@ -8002,21 +8002,14 @@ function closeTransitDetail() {
   else setup();
   window._setupDetailSheetDrag=setup;
 })();
+// 2026-10-10: 내 위치가 비어 있어도(GPS 미확보) 주소에 null/undefined 가 들어가지 않게 _navTo(내 위치 조회·없으면 도착지만) 로 연다.
 function openKakaoNavFromResult() {
   if(!_transitResultDest) return;
-  _walkState.destLat  = _transitResultDest.lat;
-  _walkState.destLng  = _transitResultDest.lng;
-  _walkState.destName = _transitResultDest.name;
-  if(S.lastGPSFix){ _walkState.myLat=S.lastGPSFix.lat; _walkState.myLng=S.lastGPSFix.lng; }
-  if(typeof openKakaoNav==='function') openKakaoNav();
+  if(typeof window._navTo==='function') window._navTo('kakao', _transitResultDest.lat, _transitResultDest.lng, encodeURIComponent(String(_transitResultDest.name||'')));
 }
 function openNaverNavFromResult() {
   if(!_transitResultDest) return;
-  _walkState.destLat  = _transitResultDest.lat;
-  _walkState.destLng  = _transitResultDest.lng;
-  _walkState.destName = _transitResultDest.name;
-  if(S.lastGPSFix){ _walkState.myLat=S.lastGPSFix.lat; _walkState.myLng=S.lastGPSFix.lng; }
-  if(typeof openNaverNav==='function') openNaverNav();
+  if(typeof window._navTo==='function') window._navTo('naver', _transitResultDest.lat, _transitResultDest.lng, encodeURIComponent(String(_transitResultDest.name||'')));
 }
 window.openKakaoNavFromResult = openKakaoNavFromResult;
 window.openNaverNavFromResult = openNaverNavFromResult;
@@ -28111,14 +28104,16 @@ function _walkUpdateMap() {
   if(refEl)  refEl.textContent  = '📍 ' + new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}) + ' 기준';
 }
 
+/* 내 위치 좌표가 쓸 수 있는 값인지(null·undefined·NaN 이면 주소에 넣지 않는다) */
+function _walkHasMe(a,b){ return a!=null && b!=null && isFinite(parseFloat(a)) && isFinite(parseFloat(b)); }
 /* ── 카카오맵 길안내 딥링크 ── */
 function openKakaoNav() {
   var myLat = _walkState.myLat, myLng = _walkState.myLng;
   var dLat  = _walkState.destLat, dLng = _walkState.destLng, dName = _walkState.destName || '목적지';
   if(!dLat || !dLng) { toast('목적지 좌표를 찾을 수 없습니다'); return; }
   // 카카오맵 앱 길안내 딥링크
-  var url = 'kakaomap://route?sp=' + myLat + ',' + myLng
-    + '&ep=' + dLat + ',' + dLng
+  var url = 'kakaomap://route?' + (_walkHasMe(myLat,myLng) ? 'sp=' + myLat + ',' + myLng + '&' : '')
+    + 'ep=' + dLat + ',' + dLng
     + '&by=FOOT';
   // 앱 없으면 웹으로 fallback
   var webUrl = 'https://map.kakao.com/link/to/' + encodeURIComponent(dName) + ',' + dLat + ',' + dLng;
@@ -28132,11 +28127,11 @@ function openNaverNav() {
   var dLat  = _walkState.destLat, dLng = _walkState.destLng, dName = _walkState.destName || '목적지';
   if(!dLat || !dLng) { toast('목적지 좌표를 찾을 수 없습니다'); return; }
   // 네이버지도 앱 도보 길안내
-  var url = 'nmap://route/walk?slat=' + myLat + '&slng=' + myLng + '&sname=내위치'
-    + '&dlat=' + dLat + '&dlng=' + dLng + '&dname=' + encodeURIComponent(dName)
+  var url = 'nmap://route/walk?' + (_walkHasMe(myLat,myLng) ? 'slat=' + myLat + '&slng=' + myLng + '&sname=내위치&' : '')
+    + 'dlat=' + dLat + '&dlng=' + dLng + '&dname=' + encodeURIComponent(dName)
     + '&appname=com.dullyyj.subway';
   var webUrl = 'https://map.naver.com/p/directions/'
-    + myLng + ',' + myLat + ',%EB%82%B4%EC%9C%84%EC%B9%98,,-1/'
+    + (_walkHasMe(myLat,myLng) ? myLng + ',' + myLat + ',%EB%82%B4%EC%9C%84%EC%B9%98,,-1/' : '-/')
     + dLng + ',' + dLat + ',' + encodeURIComponent(dName) + ',,-1/walk';
   window.location.href = url;
   setTimeout(function(){ window.open(webUrl, '_blank'); }, 1500);
