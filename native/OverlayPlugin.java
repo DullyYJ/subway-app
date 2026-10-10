@@ -119,6 +119,12 @@ public class OverlayPlugin extends Plugin {
         }
         void setGap(float a, float b) { x0 = a; x1 = b; invalidate(); }
         void setLit(boolean on) { lit = on; invalidate(); }
+        // 2026-10-10: 높이를 부모가 정한 값(EXACTLY)일 때만 따른다. 기본 onMeasure 는 wrap_content 부모 안에서 화면 전체 높이를 잡아 오버레이가 화면을 다 덮었다.
+        @Override protected void onMeasure(int wSpec, int hSpec) {
+            int w = MeasureSpec.getSize(wSpec);
+            int h = (MeasureSpec.getMode(hSpec) == MeasureSpec.EXACTLY) ? MeasureSpec.getSize(hSpec) : 0;
+            setMeasuredDimension(w, h);
+        }
         @Override protected void onDraw(Canvas cv) {
             if (x1 - x0 < dp(14)) return;                       // 빈 자리가 너무 좁으면 그리지 않는다
             paint.setColor(lit ? Color.WHITE : Color.parseColor("#6E6E76"));
