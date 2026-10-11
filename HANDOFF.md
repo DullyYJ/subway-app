@@ -567,3 +567,11 @@
 - 앱(www/index.html): _vehTick(15초 간격, _updateTransitGps 안, 차량 속도 이동·승차 증거가 있을 때만) → _vehCands(엔진 후보 중 내 위치 350m 안 버스 구간) → 워커 → _vehApply. 같은 차가 sure/likely 로 두 번 연속 + 내가 차량 속도로 움직이면 window._veh 로 잠금(승차 확정 _vehConfirmBoard, 경로 미확정이면 _autoLockOnRide(true), 보던 경로에 그 버스가 없으면 _applyRiddenRoute 로 엔진 후보로 전환). 잠근 뒤엔 차량 위치를 경로 정류장 선에 투영해(_vehIdxAt, t>=0.85 면 다음 정류장) 진행도·통과시각을 올리고, GPS 는 확인용(차량과 450m 넘게 2번 벌어지거나 목록에서 3번 사라지면 해제). GPS 가드는 window._veh 도 차량 증거로 본다. 워커 실패 3회면 지수 백오프, 미지원 2회면 5분 쉼. 끄기: window._vehOff = true. 진단: 설정 → 오버레이 진단 기록의 차량매칭·차량추적·차량매칭해제·승차확정.
 - 한계: (1) 앱 쪽은 모의 워커로만 시험(test/ride_vehicle_app.ui.test.js 32건), 실제 기기·실제 버스 탑승은 미검증. (2) TAGO 차량 위치는 수십 초 늦을 수 있다(fixes 로 보정). (3) 서울(ws.bus.go.kr) 버스 위치·경기 GBIS 는 연결 안 함(다음 후보). (4) 직접 호출 522 는 BUSAPI 바인딩으로 완화.
 - 시험: 앱 test/ride_vehicle_app.ui.test.js, 워커 단위시험은 route-v2 저장소 test/ride_vehicle.test.mjs(27건).
+
+### 지하철도 '탄 열차'를 따라가기 (2026-10-11 밤)
+- **YJ 요청**: 버스처럼 지하철도 탑승이 판단되면 실시간 열차 위치로 따라가고 GPS 는 확인만.
+- **이미 있던 것**: 서울 realtimePosition 으로 열차 편성(trainNo)을 잠그고 15초마다 위치를 앵커로 타임라인 보정(`_rtLock/_rtPoll/_rtApplyAnchor`). 약점은 ①승차 전에 '가장 가까운 열차'를 잠그면 실제로 탄 열차가 아닐 수 있고 ②반대 방향 열차가 같은 역에 서 있으며 ③GPS 와 안 맞아도 계속 따라간다.
+- **보강(`www/index.html`)**: ①`_rtRecord`가 승차역·이후 역의 열차 위치를 기록 → 승차 확정 뒤 `_rtBoardMatch`가 '내가 움직이기 시작한 때 승차역을 출발한 열차'(출발 시각 차 -100~+60초, 가장 가까운 열차, 둘째와 45초 이내면 애매하므로 고르지 않음)로 다시 잠근다(verified). ②첫 잠금에서 종착역을 엔진(`_ntForward`)에 물어 반대 방향 열차를 뺀다(못 물으면 거르지 않음, 2.5초 제한). ③`_rtGpsVeto`: 열차 구간(앞뒤 1역)에서 1.5km 넘는 GPS 가 서로 다른 3번 나오면 잠금을 풀고 2분간 다시 잠그지 않는다.
+- **끄기 스위치**: `window._rtMatchOff=true` (재매칭·GPS 해제 끔, 예전 동작). 진단(ovlDiag) 태그 열차매칭 / 열차매칭해제.
+- **한계**: 서울 위치 API 가 다루는 노선만(1~9호선, 경의중앙, 수인분당, 공항철도, 경춘, 신분당). 배차 2~3분이면 출발 시각이 겹쳐 애매 → 기존 잠금 유지. 방향 판정은 엔진 /next-train 응답에 달림. 실기기 탑승 검증은 아직 못 함(모의 위치로만 시험).
+- **시험**: test/ride_subway_train.ui.test.js (18건), 전체 회귀 통과.
