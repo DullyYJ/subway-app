@@ -39,9 +39,9 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   console.log('[① 앱 타임라인의 칸을 그대로 읽는다]');
   let a = await fresh();
   let r = await strip(a.page);
-  await t('좌우로 넘겨 볼 수 있게 전체 칸(최대 40)을 보내고, 현위치 칸 번호·시작 위치를 준다', async () => {
+  await t('좌우로 넘겨 볼 수 있게 전체 칸(최대 120)을 보내고, 현위치 칸 번호·시작 위치를 준다', async () => {
     const all = await a.page.evaluate(() => Array.from(document.getElementById('transitHtlTrack').children).filter(c => c.children.length === 4).length);
-    assert.ok(r && r.cells.length === Math.min(all, 40), r.cells.length + '/' + all); assert.strictEqual(r.base, 0); assert.strictEqual(r.cur, 1);
+    assert.ok(r && r.cells.length === Math.min(all, 120), r.cells.length + '/' + all); assert.strictEqual(r.base, 0); assert.strictEqual(r.cur, 1);
   });
   await t('칸 이름이 앱 타임라인의 역명과 같다', async () => {
     const dom = await a.page.evaluate(() => Array.from(document.getElementById('transitHtlTrack').children).filter(c => c.children.length === 4).map(c => c.children[0].textContent.trim()));
@@ -56,6 +56,31 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     assert.ok(/^#[0-9a-f]{6}$/.test(r.theme.bg) && /^#[0-9a-f]{6}$/.test(r.theme.fg) && /^#[0-9a-f]{6}$/.test(r.theme.sub), JSON.stringify(r.theme));
   });
   await t('앱의 첫 칸(도보)은 왼쪽 선이 없다', async () => { await a.page.evaluate(() => { window._gpsMaxIdx = 0; }); const q = await strip(a.page); assert.ok(q.cur + q.base <= 1, String(q.cur)); assert.ok(!q.cells[0].lc && q.cells[0].rc, JSON.stringify(q.cells[0])); });
+
+  console.log('[①-2 아주 긴 경로(칸이 40개를 넘는)도 끝까지 보낸다]');
+  await t('버스 정류장이 많은 긴 경로: 마지막 칸(공덕 뒤 도보)까지 모두 보낸다', async () => {
+    const q = await a.page.evaluate(() => {
+      const st = (n, i) => ({ stationName: n, lat: 37.4 + i * 0.001, lon: 126.6 + i * 0.001 });
+      const bus = []; for (let i = 0; i < 45; i++) bus.push(st('정류장' + i, i));
+      const secs = [
+        { transportation: { type: 3 }, duration: 120, distance: 150 },
+        { transportation: { type: 2, name: '순환43' }, duration: 1800, startSec: 120, endSec: 1920, passStopList: { stationList: bus } },
+        { transportation: { type: 3 }, duration: 180, distance: 200 },
+        { transportation: { type: 1, name: '1호선' }, duration: 600, startSec: 2100, endSec: 2700, passStopList: { stationList: [st('신도림', 50), st('영등포', 51), st('신길', 52)] } },
+        { transportation: { type: 3 }, duration: 300, distance: 300 },
+        { transportation: { type: 1, name: '5호선' }, duration: 900, startSec: 3000, endSec: 3900, passStopList: { stationList: [st('신길', 53), st('여의도', 54), st('여의나루', 55), st('마포', 56), st('공덕', 57)] } },
+        { transportation: { type: 3 }, duration: 240, distance: 300 },
+      ];
+      _renderHtlTrack(secs, { name: '출발', lat: 37.399, lng: 126.599 }, { name: '도착', lat: 37.46, lng: 126.66 }, 90);
+      window._routeLocked = true; window._metroRouteMode = false; window._gpsMaxIdx = 1;
+      const all = Array.from(document.getElementById('transitHtlTrack').children).filter(c => c.children.length === 4).length;
+      const r = _ovlStrip(_pipStations());
+      return { all, n: r.cells.length, last: r.cells.slice(-4).map(c => c.n), names: r.cells.map(c => c.n) };
+    });
+    assert.ok(q.all > 50, '경로 칸 수 ' + q.all);
+    assert.strictEqual(q.n, q.all, q.n + '/' + q.all);
+    assert.ok(q.names.indexOf('공덕') > 40, '공덕 위치 ' + q.names.indexOf('공덕'));
+  });
 
   console.log('[② 현위치가 움직이면 창이 따라가고 끝에서는 멈춘다]');
   await t('현위치 칸 번호가 현위치를 가리킨다', async () => {
