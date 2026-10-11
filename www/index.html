@@ -27991,6 +27991,20 @@ function _ovlLines(){
       if(!r.ovlAt) r.ovlAt = Date.now();
       if(Date.now() - r.ovlAt <= _PIP_RECO_TTL) out.l3 = _pipClampText(r.title, 28);
     }
+    // ★ 2026-10-11 (YJ: "도착 2-3분 전에 오버레이에 주변 식당 추천 — 쿠팡·식당·카페는 이전에 정한 규칙대로"): 하차 10분 전 추천(_arrFireAlertNow)이 만든 문구
+    //   — 시간대 규칙(아침 커피·브런치 / 낮 점심·카페 / 저녁·야식 / 21시 이후 쿠팡 아이템 / 00~07시 없음)과 근처 가게는 그대로 — 를
+    //   도착 3분 전부터 도착할 때까지 오버레이 윗줄에 두 줄로 보여 준다(제목만 20초 뜨던 것을 대신한다). 끄기: window._ovlRecoOff = true
+    try{
+      if(window._ovlRecoOff !== true && r && r.body && r.at && Date.now() - r.at < 25*60*1000
+         && (typeof _notifAllowed !== 'function' || _notifAllowed('arrive_reco'))){
+        var _re = (typeof _arrHomeEta === 'function') ? _arrHomeEta() : null;
+        var _remS = _re ? _re.rem : ((d.min != null && isFinite(d.min)) ? d.min * 60 : null);
+        if(_remS != null && _remS <= 180 && _remS > -30){
+          var _rl = String(r.body).split('\n').map(function(x){ return _pipClampText(x, 26); }).filter(function(x){ return x; }).slice(0, 2);
+          if(_rl.length) out.l3 = _rl.join('\n');
+        }
+      }
+    }catch(eRc){}
   }catch(e){}
   return out;
 }
