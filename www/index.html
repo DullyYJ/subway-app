@@ -13844,6 +13844,8 @@ function _updateTransitGps() {
         var _rd9 = null; try{ _rd9 = window._rideEv ? window._rideEv() : null; }catch(eR9){}
         var _veh9 = (window._htlBoarded === true) || !!(_rd9 && (_rd9.now || _rd9.riding)) || (window._evVehicleNow ? window._evVehicleNow() : false);
         var _cap9 = null;
+        try{ if(_veh9 && window._htlBoarded !== true && Date.now() - (window._vehLogAt || 0) > 20000){ window._vehLogAt = Date.now();
+          _ovlDiag('버스차량판단', '진행 ' + _pMax + '→' + bestIdx + ' 근거: ' + ((_rd9 && _rd9.now) ? '증거now ' : '') + ((_rd9 && _rd9.riding) ? '증거riding ' : '') + ((window._evVehicleNow && window._evVehicleNow()) ? '차량속도' : '')); } }catch(eV9){}
         if(_bi9 >= 0 && _transitNodeData[_bi9] && _transitNodeData[_bi9].isBus && !_veh9 && bestIdx > _bi9){
           _cap9 = Math.max(_pMax, _bi9);
         } else if(_pMax >= 0 && window._busAdvMs){
@@ -37026,13 +37028,24 @@ window._evWalkedNear = function(node, radius){
 //   _rideEv 는 150초 창의 순이동이라 승차 직후 1~2분 늦다 — 버스를 타자마자 마커가 따라가도록 이 판단을 보조로 쓴다.
 window._evVehicleNow = function(){
   try{
-    var now = Date.now(), pts = [], i;
-    for(i = 0; i < _ev.trail.length; i++){ var q = _ev.trail[i]; if(now - q.ts <= 40000 && q.ts >= _ev.floorMs) pts.push(q); }
-    if(pts.length < 3) return false;
-    var dt = (pts[pts.length - 1].ts - pts[0].ts) / 1000;
-    if(dt < 15) return false;
-    var d = haversineM(pts[0].lat, pts[0].lng, pts[pts.length - 1].lat, pts[pts.length - 1].lng);
-    return d >= 80 && d / dt >= 4.5;
+    // GPS 잡음(수십 m)으로 걷는 사람이 '차량 속도'로 보이지 않게: 기간 안의 점들을 앞·가운데·뒤 세 덩어리로 나눠 각 덩어리의 중앙 위치를 비교한다(튄 점 한두 개는 무시된다).
+    //   빠른 판정: 최근 50초, 앞→가운데·가운데→뒤 모두 40m 이상 한 방향으로, 전체 100m 이상·평균 4.5m/s(시속 16km) 이상.
+    //   느린 판정(막히는 길): 최근 5분, 각 250m 이상·전체 700m 이상·평균 2.6m/s 이상 — 걸어서는 5분에 이만큼 가지 못한다.
+    var now = Date.now(), i;
+    var fit = function(winMs, minPts, minSpan, dSeg, dTot, minV){
+      var pts = [];
+      for(i = 0; i < _ev.trail.length; i++){ var q = _ev.trail[i]; if(now - q.ts <= winMs && q.ts >= _ev.floorMs) pts.push(q); }
+      if(pts.length < minPts) return false;
+      if((pts[pts.length - 1].ts - pts[0].ts) / 1000 < minSpan) return false;
+      var k = Math.floor(pts.length / 3);
+      var med = function(arr, key){ var v = arr.map(function(z){ return z[key]; }).sort(function(a, b){ return a - b; }); return v[Math.floor(v.length / 2)]; };
+      var g = function(a, b){ var seg = pts.slice(a, b); return { lat: med(seg, 'lat'), lng: med(seg, 'lng'), ts: med(seg, 'ts') }; };
+      var P1 = g(0, k), P2 = g(k, pts.length - k), P3 = g(pts.length - k, pts.length);
+      var d12 = haversineM(P1.lat, P1.lng, P2.lat, P2.lng), d23 = haversineM(P2.lat, P2.lng, P3.lat, P3.lng), d13 = haversineM(P1.lat, P1.lng, P3.lat, P3.lng);
+      var t13 = (P3.ts - P1.ts) / 1000; if(t13 < minSpan * 0.6) return false;
+      return d12 >= dSeg && d23 >= dSeg && d13 >= dTot && d13 / t13 >= minV && d13 >= 0.8 * (d12 + d23);   // 마지막 식: 한 방향으로 이어서 움직임(왔다갔다 아님)
+    };
+    return fit(50000, 6, 30, 40, 100, 4.5) || fit(300000, 20, 200, 250, 700, 2.6);
   }catch(e){ return false; }
 };
 function _evLog(tag, msg){ if(_ev.lastLog === tag + msg) return; _ev.lastLog = tag + msg; try{ _ovlDiag(tag, msg); }catch(e){} }
