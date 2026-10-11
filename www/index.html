@@ -28374,7 +28374,9 @@ function _ovlCellOf(k){
       } else if(st.borderRadius === '50%'){
         if(st.width === '14px'){ o.dc = _ovlHex(cs.backgroundColor); o.dk = 2; }
         else if(st.width === '12px'){ o.dc = _ovlHex(cs.borderTopColor); o.dk = 1; }
-        else { o.dc = _ovlHex(cs.backgroundColor) || _ovlHex(cs.borderTopColor); o.dk = 3; }
+        else {   // 환승 도보 가운데 점(그라데이션이라 배경색이 투명) — 테두리색(글자색)으로 읽으면 다크모드에서도 검정이라 안 보였다 → 앱 테마의 글자색을 쓴다
+          o.dc = _ovlHex(cs.backgroundColor) || (_ovlThemeColors().fg || '#8e8e93'); o.dk = 3;
+        }
       } else if(!o.dk && st.width === '6px'){ o.dk = 3; o.dc = o.rc || o.lc || '#8e8e93'; }
     }
     if(o.dk === 3 && !o.dc) o.dc = o.rc || o.lc || '#8e8e93';
@@ -34005,17 +34007,57 @@ function _lrBase(){ return (typeof _BOARD_WRITER_URL!=='undefined' && _BOARD_WRI
 //   · 노선 탭은 그 노선 방(서버 /lroom): 대화 + 공식 공지 + 지연·혼잡 제보 버튼. 기존 기능은 그대로 둔다.
 var _LR_KNOWN = _LR_COMMON.concat(['인천1호선','인천2호선','김포골드라인']);
 window._chatSel = 'all';
-function _myLinesList(){
+// ★ 2026-10-12 (YJ: "커뮤니티에 내 경로노선이 앞으로 안나오고 표시가 안돼"): 'my_lines' 를 쌓는 코드가 없어서 칩이 늘 기본 순서였다.
+//   · 화면에 그려진 경로(_lastHtlSections)의 지하철 노선을 경로 순서대로 앞에 둔다(확정 전 미리보기도 포함).
+//   · 경로를 확정(_routeLocked)하면 그 노선들을 my_lines 에 한 번씩 쌓아, 다음에도 자주 타는 노선이 앞에 온다.
+function _routeSubLines(){
+  var out = [];
   try{
-    var a=_safeLS.get('my_lines',[]); if(!Array.isArray(a)) return [];
-    return a.filter(function(x){ return x && _LR_KNOWN.indexOf(x.l)>=0; })
+    var secs = window._lastHtlSections || [];
+    secs.forEach(function(sec){
+      var tr = (sec && sec.transportation) || {};
+      if(tr.type !== 1) return;
+      var nm = String(tr.name || '').replace(/\s+/g, '');
+      if(!nm) return;
+      var hit = _LR_KNOWN.indexOf(nm) >= 0 ? nm : '';
+      if(!hit){ _LR_KNOWN.forEach(function(k){ if(nm.indexOf(k) >= 0 && k.length > hit.length) hit = k; }); }   // '수도권1호선' → '1호선' 처럼 이름에 들어 있는 노선
+      if(hit && out.indexOf(hit) < 0) out.push(hit);
+    });
+  }catch(e){}
+  return out;
+}
+window._routeSubLines = _routeSubLines;
+function _myLinesRecord(){
+  try{
+    if(window._routeLocked !== true) return;
+    var cur = _routeSubLines(); if(!cur.length) return;
+    var sig = cur.join('>') + '|' + (window._journeyFromFixed || '') ;
+    if(window._myLinesSig === sig) return;
+    window._myLinesSig = sig;
+    var a = _safeLS.get('my_lines', []); if(!Array.isArray(a)) a = [];
+    cur.forEach(function(l){
+      var e = null; for(var i = 0; i < a.length; i++){ if(a[i] && a[i].l === l){ e = a[i]; break; } }
+      if(!e){ e = { l: l, n: 0, t: 0 }; a.push(e); }
+      e.n = (e.n || 0) + 1; e.t = Date.now();
+    });
+    _safeLS.set('my_lines', a);
+  }catch(e){}
+}
+function _myLinesList(storedOnly){
+  try{
+    _myLinesRecord();
+    var a=_safeLS.get('my_lines',[]); if(!Array.isArray(a)) a=[];
+    var st = a.filter(function(x){ return x && _LR_KNOWN.indexOf(x.l)>=0; })
       .sort(function(x,y){ return ((y.n||0)-(x.n||0)) || ((y.t||0)-(x.t||0)); })
-      .map(function(x){ return x.l; }).slice(0,6);
+      .map(function(x){ return x.l; });
+    if(storedOnly) return st.slice(0,6);
+    var cur = _routeSubLines();
+    return cur.concat(st.filter(function(l){ return cur.indexOf(l) < 0; })).slice(0,8);
   }catch(e){ return []; }
 }
 window._myLinesList=_myLinesList;
 // 전체 탭에서 글을 쓸 때 붙는 노선 = 내가 가장 많이 타는 노선(없으면 노선 없이 전체에만)
-function _chatPostLine(){ var m=_myLinesList(); return m.length ? m[0] : ''; }
+function _chatPostLine(){ var m=_myLinesList(true); return m.length ? m[0] : ''; }   // 글에 붙는 노선 = 많이 타는 노선(지금 경로와 무관)
 window._chatPostLine=_chatPostLine;
 // 칩 순서(전체 → 내가 탄 노선 → 나머지 호선). 칩 그리기와 좌우 스와이프가 같이 쓴다
 function _chatItems(){
