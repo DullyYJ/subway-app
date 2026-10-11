@@ -39,10 +39,13 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   console.log('[① 앱 타임라인의 칸을 그대로 읽는다]');
   let a = await fresh();
   let r = await strip(a.page);
-  await t('다섯 칸을 만들고 현위치는 둘째 칸(앱 화면과 같은 배치)', async () => { assert.ok(r && r.cells.length === 5, JSON.stringify(r && r.cells.length)); assert.strictEqual(r.cur, 1); });
+  await t('좌우로 넘겨 볼 수 있게 전체 칸(최대 40)을 보내고, 현위치 칸 번호·시작 위치를 준다', async () => {
+    const all = await a.page.evaluate(() => Array.from(document.getElementById('transitHtlTrack').children).filter(c => c.children.length === 4).length);
+    assert.ok(r && r.cells.length === Math.min(all, 40), r.cells.length + '/' + all); assert.strictEqual(r.base, 0); assert.strictEqual(r.cur, 1);
+  });
   await t('칸 이름이 앱 타임라인의 역명과 같다', async () => {
     const dom = await a.page.evaluate(() => Array.from(document.getElementById('transitHtlTrack').children).filter(c => c.children.length === 4).map(c => c.children[0].textContent.trim()));
-    assert.deepStrictEqual(r.cells.map(c => c.n), dom.slice(0, 5), JSON.stringify([r.cells.map(c => c.n), dom]));
+    assert.deepStrictEqual(r.cells.map(c => c.n), dom.slice(0, r.cells.length), JSON.stringify([r.cells.map(c => c.n), dom]));
   });
   await t('시각이 앱과 같다(HH:MM)', async () => { assert.ok(/^\d\d:\d\d$/.test(r.cells[1].t), JSON.stringify(r.cells[1])); assert.ok(/^\d\d:\d\d$/.test(r.cells[2].t)); });
   await t('버스 번호 라벨이 승차 칸에 있다', async () => { assert.ok(r.cells.some(c => /931/.test(c.g)), JSON.stringify(r.cells.map(c => c.g))); });
@@ -52,18 +55,20 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     assert.ok(c.dk === 1, JSON.stringify(c));
     assert.ok(/^#[0-9a-f]{6}$/.test(r.theme.bg) && /^#[0-9a-f]{6}$/.test(r.theme.fg) && /^#[0-9a-f]{6}$/.test(r.theme.sub), JSON.stringify(r.theme));
   });
-  await t('앱의 첫 칸(도보)은 왼쪽 선이 없다', async () => { await a.page.evaluate(() => { window._gpsMaxIdx = 0; }); const q = await strip(a.page); assert.ok(q.cur <= 1, String(q.cur)); assert.ok(!q.cells[0].lc && q.cells[0].rc, JSON.stringify(q.cells[0])); });
+  await t('앱의 첫 칸(도보)은 왼쪽 선이 없다', async () => { await a.page.evaluate(() => { window._gpsMaxIdx = 0; }); const q = await strip(a.page); assert.ok(q.cur + q.base <= 1, String(q.cur)); assert.ok(!q.cells[0].lc && q.cells[0].rc, JSON.stringify(q.cells[0])); });
 
   console.log('[② 현위치가 움직이면 창이 따라가고 끝에서는 멈춘다]');
-  await t('중간 칸이 현위치면 한 칸 앞부터 보인다', async () => {
+  await t('현위치 칸 번호가 현위치를 가리킨다', async () => {
     await a.page.evaluate(() => { window._gpsMaxIdx = 3; }); const q = await strip(a.page);
-    assert.strictEqual(q.cur, 1); const all = await a.page.evaluate(() => Array.from(document.getElementById('transitHtlTrack').children).filter(c => c.children.length === 4).map(c => c.children[0].textContent.trim()));
-    assert.strictEqual(q.cells[1].n, all[3]);
+    assert.strictEqual(q.cur + q.base, 3); const all = await a.page.evaluate(() => Array.from(document.getElementById('transitHtlTrack').children).filter(c => c.children.length === 4).map(c => c.children[0].textContent.trim()));
+    assert.strictEqual(q.cells[q.cur].n, all[3]);
   });
-  await t('마지막 근처에서는 다섯 칸을 채우고 현위치가 뒤로 간다', async () => {
+  await t('마지막 칸이 현위치면 cur 가 마지막 칸이다', async () => {
     const n = await a.page.evaluate(() => _transitNodeData.length);
     await a.page.evaluate((n) => { window._gpsMaxIdx = n - 1; }, n); const q = await strip(a.page);
-    assert.strictEqual(q.cells.length, 5); assert.strictEqual(q.cur, 4);
+    assert.strictEqual(q.cur, q.cells.length - 1);
+    const cnt = await a.page.evaluate(() => Array.from(document.getElementById('transitHtlTrack').children).filter(c => c.children.length === 4).length);
+    assert.strictEqual(q.base + q.cells.length, cnt);
   });
   await t('정류장명 원문은 그대로 보내고(자르기는 네이티브가 한 줄 …로) 줄바꿈 문자는 없다', async () => {
     assert.ok(r.cells.every(c => !/[\n\r]/.test(c.n)));
