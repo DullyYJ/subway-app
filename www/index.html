@@ -27971,6 +27971,7 @@ function _ovlLines(){
       out.track.push(nm == null ? '' : clamp(nm, 40));   // 길이 자르기는 네이티브(한 줄·…)가 한다
     }
     out.cur = 1;
+    try{ var _sp = _ovlStrip(st); if(_sp){ out.strip = _sp.cells; out.scur = _sp.cur; out.theme = _sp.theme; } }catch(eSt){}
     out.moving = !!(_tri[2] && _ovlMoving());   // 다음 역이 있을 때만 화살표가 깜박인다
     var _pad2 = function(n){ return (n < 10 ? '0' : '') + n; };
     var _mm = (d.min != null && isFinite(d.min)) ? Math.max(0, Math.round(d.min)) : null;
@@ -27988,20 +27989,124 @@ function _ovlLines(){
   }catch(e){}
   return out;
 }
+// ★ 2026-10-11 (YJ: "오버레이도 앱의 경로 화면으로 — 앱 화면 그대로, 현위치 글씨만 검은색·나머지 회색, 정류장명은 한 줄로 적당히 잘라"):
+//   앱 경로 화면(타임라인)의 칸을 DOM 에서 그대로 읽어(이름·노선 라벨·시각·점/선 색) 네이티브에 넘긴다. 네이티브는 같은 모양으로 그리기만 한다.
+//   칸을 못 읽으면 예전처럼 역 이름 목록만으로 만든다. 끄기: window._ovlStripOff = true (예전 3칸 문구 데이터만 보냄).
+function _ovlHex(c){
+  try{
+    var m = /rgba?\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)(?:[\s,\/]+([\d.]+))?/.exec(String(c || ''));
+    if(!m) return '';
+    if(m[4] != null && parseFloat(m[4]) === 0) return '';
+    var h = function(n){ n = Math.max(0, Math.min(255, parseInt(n, 10) || 0)); return (n < 16 ? '0' : '') + n.toString(16); };
+    return '#' + h(m[1]) + h(m[2]) + h(m[3]);
+  }catch(e){ return ''; }
+}
+var _ovlThemeCache = null, _ovlThemeAt = 0;
+function _ovlThemeColors(){
+  if(_ovlThemeCache && Date.now() - _ovlThemeAt < 3000) return _ovlThemeCache;
+  var out = { bg:'#ffffff', fg:'#111114', sub:'#8e8e93' };
+  try{
+    var t = document.createElement('span');
+    t.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none;';
+    document.body.appendChild(t);
+    var rd = function(v, def){
+      t.style.color = ''; t.style.color = 'var(' + v + ')';
+      var h = _ovlHex(getComputedStyle(t).color);
+      return h || def;
+    };
+    out.bg = rd('--card', out.bg); out.fg = rd('--text', out.fg); out.sub = rd('--sub', out.sub);
+    document.body.removeChild(t);
+  }catch(e){}
+  _ovlThemeCache = out; _ovlThemeAt = Date.now();
+  return out;
+}
+function _ovlCellOf(k){
+  // 앱 타임라인의 한 칸 = [역명, 노선 라벨, 점·선(axis), 시각] 네 줄(renderTransitTimeline 참고)
+  var c = k.children;
+  var txt = function(el){ return String((el && el.textContent) || '').replace(/\s+/g, ' ').trim(); };
+  var o = { n: txt(c[0]), t: txt(c[3]), g: txt(c[1]), gp: false, gc: '', lc: '', rc: '', dc: '', dk: 0 };
+  try{
+    var sp = c[1].querySelector('span');
+    if(o.g){
+      var bg = sp ? _ovlHex(getComputedStyle(sp).backgroundColor) : '';
+      if(bg){ o.gp = true; o.gc = bg; }
+      else o.gc = _ovlHex(getComputedStyle(sp || c[1]).color);
+    }
+  }catch(e1){}
+  try{
+    var ds = c[2].children;
+    for(var i = 0; i < ds.length; i++){
+      var e = ds[i], st = e.style || {};
+      var cs = getComputedStyle(e);
+      if(st.height === '3px'){
+        var col = _ovlHex(cs.backgroundColor);
+        if(st.left === '0px' || st.left === '0') o.lc = col; else o.rc = col;
+      } else if(st.borderRadius === '50%'){
+        if(st.width === '14px'){ o.dc = _ovlHex(cs.backgroundColor); o.dk = 2; }
+        else if(st.width === '12px'){ o.dc = _ovlHex(cs.borderTopColor); o.dk = 1; }
+        else { o.dc = _ovlHex(cs.backgroundColor) || _ovlHex(cs.borderTopColor); o.dk = 3; }
+      } else if(!o.dk && st.width === '6px'){ o.dk = 3; o.dc = o.rc || o.lc || '#8e8e93'; }
+    }
+    if(o.dk === 3 && !o.dc) o.dc = o.rc || o.lc || '#8e8e93';
+  }catch(e2){}
+  return o;
+}
+function _ovlStrip(st){
+  var out = { cells: [], cur: 0, theme: _ovlThemeColors() };
+  try{
+    if(window._ovlStripOff) return null;
+    var nd = (typeof _transitNodeData !== 'undefined') ? _transitNodeData : null;
+    var N = 5;
+    if(nd && nd.length && window._routeLocked === true && window._metroRouteMode !== true){
+      var raw = Math.max(0, Math.min(_pipHereIdx(), nd.length - 1));
+      var curEl = nd[raw] && nd[raw].el, par = curEl && curEl.parentElement;
+      if(par && curEl.children && curEl.children.length >= 4){
+        var kids = [];
+        for(var i = 0; i < par.children.length; i++){
+          var ch = par.children[i];
+          if(ch.children && ch.children.length === 4 && ch.style && ch.style.flex) kids.push(ch);   // 역·도보 칸(id 없는 중간 도보 포함)
+        }
+        var ci = kids.indexOf(curEl);
+        if(ci >= 0){
+          var s0 = Math.max(0, Math.min(ci - 1, kids.length - N));
+          for(var j = s0; j < Math.min(kids.length, s0 + N); j++) out.cells.push(_ovlCellOf(kids[j]));
+          out.cur = ci - s0;
+          if(out.cells.length) return out;
+        }
+      }
+    }
+    // 예비: 역 이름 목록만(시각·노선 라벨 없이)
+    var P = (st && st.path && st.path.length) ? st.path : null;
+    if(P){
+      var c0 = Math.max(0, Math.min(st.idx < 0 ? 0 : st.idx, P.length - 1));
+      var s1 = Math.max(0, Math.min(c0 - 1, P.length - N));
+      for(var q = s1; q < Math.min(P.length, s1 + N); q++){
+        out.cells.push({ n: String(P[q] || ''), t: '', g: '', gp: false, gc: '', lc: q > 0 ? '#0a84ff' : '', rc: q < P.length - 1 ? '#0a84ff' : '', dc: '#0a84ff', dk: 1 });
+      }
+      out.cur = c0 - s1;
+      if(out.cells.length) return out;
+    }
+  }catch(e){}
+  return null;
+}
+window._ovlStrip = _ovlStrip;
 function _ovlSync(force){
   try{
     var n = _ovlNative();
     if(!n || typeof n.update !== 'function') return;
     var active = !!(_ovlUsable() && _pipHasRoute());   // ★ 2026-10-01: PiP 스위치와 무관(PiP 는 꺼 둠)
     var L = active ? _ovlLines() : { l1:'', l2:'', l3:'', track:[], cur:-1, alert:0, moving:false };
-    var key = (active ? '1' : '0') + '|' + L.l1 + '|' + L.l2 + '|' + L.l3 + '|' + L.track.join('>') + '|' + L.cur + '|' + L.alert + '|' + (L.moving ? 'M' : 'S');
+    var key = (active ? '1' : '0') + '|' + L.l1 + '|' + L.l2 + '|' + L.l3 + '|' + L.track.join('>') + '|' + L.cur + '|' + L.alert + '|' + (L.moving ? 'M' : 'S')
+              + '|' + (L.strip ? JSON.stringify(L.strip) + L.scur + JSON.stringify(L.theme) : '');
     var now = Date.now();
     // 바뀐 게 없으면 보내지 않는다. 다만 켜져 있는 동안엔 20초마다 한 번은 다시 보내 '살아 있음'을 알린다
     // (네이티브는 3분 넘게 소식이 없으면 낡은 값이 남지 않도록 스스로 숨긴다).
     if(!force && key === _ovlLastKey && (!active || (now - _ovlLastAt) < _OVL_HEARTBEAT_MS)) return;
     if(!active && _ovlLastKey === null && !force) { _ovlLastKey = key; return; }   // 처음부터 꺼져 있으면 굳이 알리지 않는다
     _ovlLastKey = key; _ovlLastAt = now;
-    var r = n.update({ active: active, line1: L.l1, track: L.track, cur: L.cur, line2: L.l2, line3: L.l3, alert: L.alert || 0, moving: !!L.moving });
+    var _up = { active: active, line1: L.l1, track: L.track, cur: L.cur, line2: L.l2, line3: L.l3, alert: L.alert || 0, moving: !!L.moving };
+    if(L.strip && L.strip.length){ _up.cells = L.strip; _up.cur = L.scur || 0; _up.theme = L.theme; }   // ★ 2026-10-11: 앱 경로 화면 칸 그대로(네이티브가 같은 모양으로 그림)
+    var r = n.update(_up);
     if(r && typeof r.catch === 'function') r.catch(function(){ _ovlLastKey = null; });   // 실패하면 다음 틱에 다시
   }catch(e){ _ovlLastKey = null; }
 }
