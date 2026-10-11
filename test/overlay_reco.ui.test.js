@@ -49,7 +49,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   });
   await t('한 줄짜리 추천이면 둘째 줄은 비어 있다', async () => { const x = await recoOf({ rem: 100, body: '아침이에요' }); assert.strictEqual(x.a, '아침이에요'); assert.strictEqual(x.b, ''); });
   await t('추천 알림을 설정에서 꺼 두면 오버레이에도 안 뜬다', async () => {
-    const x = await page.evaluate(() => { _notifPrefSet('arrive_reco', 0); window._ovlRecoOff = false; window._ovlRecoDismissAt = undefined; window._pipReco = { title: 't', body: '가\n나', at: Date.now(), ovlAt: Date.now() - 60000 }; window._arrHomeEta = () => ({ arrMs: Date.now() + 100000, rem: 100 }); const r = _ovlLines().reco; const al = _notifAllowed('arrive_reco'); _notifPrefSet('arrive_reco', 1); return [al, !!(r && r.on)]; });
+    const x = await page.evaluate(() => { _notifPrefSet('arrive_reco', 0); window._ovlRecoOff = false; window._ovlRecoDismissAt = undefined; window._pipReco = { title: 't', body: '가\n나', at: Date.now(), ovlAt: Date.now() - 60000 }; window._arrHomeEta = () => ({ arrMs: Date.now() + 100000, rem: 100 }); const r = _ovlLines().reco; const al = _featureAllowed('arrive_reco'); _notifPrefSet('arrive_reco', 1); return [al, !!(r && r.on)]; });
     assert.strictEqual(JSON.stringify(x), JSON.stringify([false, false]));
   });
 
