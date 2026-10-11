@@ -201,12 +201,14 @@ public class OverlayPlugin extends Plugin {
                 }
                 // 점
                 if (here) {
+                    // ★ 2026-10-11 (YJ): 대기 중(정차)엔 노란(주황) 점, 움직이는 중엔 앱 화면처럼 파란 점
+                    int hc = moving ? 0x000A84FF : 0x00F0A500;
                     int ha = Math.round(0x70 * (1f - 0.6f * pulse));
-                    p.setColor((ha << 24) | 0x00F0A500);
+                    p.setColor((ha << 24) | hc);
                     cv.drawCircle(cx, yAx, dp(9) + dp(4) * pulse, p);   // 현위치 둘레 테두리(깜박이며 커졌다 작아짐)
                     int da = Math.round(255 * (1f - 0.55f * pulse));
-                    p.setColor((da << 24) | 0x00F0A500);
-                    cv.drawCircle(cx, yAx, dp(7), p);           // 앱 현위치 점(주황, 깜박임)
+                    p.setColor((da << 24) | hc);
+                    cv.drawCircle(cx, yAx, dp(7), p);           // 앱 현위치 점(대기 주황 · 이동 파랑, 깜박임)
                 } else if (c.dk == 2) {
                     p.setColor(c.dc);
                     cv.drawCircle(cx, yAx, dp(7), p);
