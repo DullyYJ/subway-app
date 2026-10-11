@@ -68,20 +68,20 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   await at(3);   // A2: 환승역(A5, 인덱스 6)까지 3정거장 → 아직 없음
   await t('환승역 3정거장 전에는 알림이 없다', async () => assert.deepStrictEqual(await titles(), []));
   await at(4);   // A3: 환승역까지 2
-  await t('환승 2정거장 전 알림', async () => assert.ok((await titles()).includes('환승 2정거장 전'), JSON.stringify(await titles())));
+  await t('환승 2정거장 전에는 알림이 없다(환승은 1정거장 전부터)', async () => assert.deepStrictEqual(await titles(), []));
   await at(5);
   await t('환승 1정거장 전 알림(환승 준비)', async () => assert.ok((await titles()).includes('환승 준비'), JSON.stringify(await titles())));
   await at(5); await at(4);
-  await t('같은 자리를 다시 지나도 같은 알림이 또 나가지 않는다', async () => { const ts = await titles(); assert.strictEqual(ts.filter(x => x === '환승 준비').length, 1); assert.strictEqual(ts.filter(x => x === '환승 2정거장 전').length, 1); });
+  await t('같은 자리를 다시 지나도 같은 알림이 또 나가지 않는다', async () => { const ts = await titles(); assert.strictEqual(ts.filter(x => x === '환승 준비').length, 1); assert.strictEqual(ts.length, 1, JSON.stringify(ts)); });
   await at(8);   // B2: 도착(B4, 인덱스 10)까지 2
   await t('목적지 2정거장 전 알림', async () => assert.ok((await titles()).includes('목적지 2정거장 전'), JSON.stringify(await titles())));
   await at(9);
   await t('목적지 1정거장 전(곧 하차) 알림', async () => assert.ok((await titles()).includes('곧 하차'), JSON.stringify(await titles())));
   await at(10);
-  await t('목적지 도착 알림', async () => assert.ok((await titles()).includes('목적지 도착'), JSON.stringify(await titles())));
-  await t('알림은 총 5번(환승 2 · 하차 3)이고 채널·아이콘이 붙는다', async () => {
+  await t('목적지 도착(0정거장) 알림은 없다', async () => assert.ok(!(await titles()).includes('목적지 도착'), JSON.stringify(await titles())));
+  await t('알림은 총 3번(환승 1정거장 전 · 목적지 2정거장 전 · 1정거장 전)이고 채널·아이콘이 붙는다', async () => {
     const ln = await page.evaluate(() => window.__ln);
-    assert.strictEqual(ln.length, 5, JSON.stringify(ln.map(n => n.title)));
+    assert.strictEqual(JSON.stringify(ln.map(n => n.title)), JSON.stringify(['환승 준비', '목적지 2정거장 전', '곧 하차']));
     ln.forEach(n => { assert.strictEqual(n.channelId, 'subway_alerts'); assert.ok(n.smallIcon); });
   });
 
@@ -91,14 +91,14 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   await t('환승 알림을 끄면 환승 알림만 사라지고 하차 알림은 그대로', async () => {
     const ts = await titles();
     assert.ok(!ts.some(x => /환승/.test(x)), '환승 알림이 나감: ' + JSON.stringify(ts));
-    assert.strictEqual(JSON.stringify(ts), JSON.stringify(['목적지 2정거장 전', '곧 하차', '목적지 도착']));
+    assert.strictEqual(JSON.stringify(ts), JSON.stringify(['목적지 2정거장 전', '곧 하차']));
   });
   await setup({ arrive: 0 });
   for (const i of [4, 5, 8, 9, 10]) await at(i);
   await t('도착 임박 알림을 끄면 하차 알림만 사라지고 환승 알림은 그대로', async () => {
     const ts = await titles();
     assert.ok(!ts.some(x => /목적지|하차/.test(x)), '하차 알림이 나감: ' + JSON.stringify(ts));
-    assert.strictEqual(JSON.stringify(ts), JSON.stringify(['환승 2정거장 전', '환승 준비']));
+    assert.strictEqual(JSON.stringify(ts), JSON.stringify(['환승 준비']));
   });
   await setup({ transfer: 0, arrive: 0 });
   for (const i of [4, 5, 8, 9, 10]) await at(i);
@@ -126,10 +126,56 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     assert.ok((await page.evaluate(() => window.__ovl.length)) > 0, '오버레이 갱신이 없음');
     assert.ok(await page.evaluate(() => typeof _pipShow === 'undefined' && typeof _pipPaint === 'undefined'), 'PiP 화면 코드가 남아 있음');
   });
+  await t('목적지 경고가 켜질 때 진동 정보(alertAt·alertVibe)가 함께 간다', async () => { const o = await page.evaluate(() => window.__ovl[window.__ovl.length - 1]); assert.strictEqual(o.alertVibe, true, JSON.stringify(o)); assert.ok(o.alertAt > 0, JSON.stringify(o)); });
+  // 환승 장면(같은 역 안 환승: 걷기 노드 없이 노선만 바뀜) — 환승역은 한 정거장 전부터만, 목적지는 두 정거장 전부터
+  await setup(null);
+  const ovlAt = (i) => page.evaluate((i) => { window._htlBoarded = true; window._nodePassMs = { 1: Date.now() - 900000 }; window._nodePassMs[i] = Date.now(); window._gpsMaxIdx = i; window._gpsConfirmIdx = i; window.__ovl.length = 0; _ovlSync(true); const o = window.__ovl[window.__ovl.length - 1]; return { alert: o && o.alert, at: o && o.alertAt, vibe: o && o.alertVibe }; }, i);
+  await ovlAt(3);
+  const o4 = await ovlAt(4);
+  await t('환승역 2정거장 전에는 오버레이 테두리가 켜지지 않는다', async () => assert.strictEqual(o4.alert, 0, JSON.stringify(o4)));
+  const o5 = await ovlAt(5);
+  await t('환승역 1정거장 전에 테두리 1단계 + 진동 정보', async () => { assert.strictEqual(o5.alert, 1, JSON.stringify(o5)); assert.strictEqual(o5.vibe, true); assert.ok(o5.at > 0); });
+  await page.clock.runFor(1500);
+  const o6 = await ovlAt(6);
+  await t('환승역에 도착해 있는 동안은 1단계를 유지한다(경고 시각은 그대로 — 진동이 또 울리지 않는다)', async () => { assert.strictEqual(o6.alert, 1, JSON.stringify(o6)); assert.strictEqual(o6.at, o5.at, JSON.stringify([o5, o6])); });
+  const o7 = await ovlAt(7);
+  await t('환승해 다음 노선을 타면 원복(0)', async () => assert.strictEqual(o7.alert, 0, JSON.stringify(o7)));
+  const o8 = await ovlAt(8);
+  await t('환승 뒤 목적지 2정거장 전에 2단계 — 경고 시각이 새로 찍힌다', async () => { assert.strictEqual(o8.alert, 2, JSON.stringify(o8)); assert.ok(o8.at > o5.at, JSON.stringify([o5, o8])); });
+  const o9 = await ovlAt(9);
+  await t('목적지 1정거장 전에 1단계 — 다시 새 경고 시각', async () => { assert.strictEqual(o9.alert, 1, JSON.stringify(o9)); assert.ok(o9.at >= o8.at); });
+  await page.evaluate(() => { _notifPrefSet('arrive', 0); });
+  const o9b = await ovlAt(9);
+  await t('도착 알림 스위치를 끄면 테두리는 그대로, 진동 정보만 꺼진다', async () => { assert.strictEqual(o9b.alert, 1); assert.strictEqual(o9b.vibe, false, JSON.stringify(o9b)); await page.evaluate(() => { _notifPrefSet('arrive', 1); }); });
   await page.evaluate(() => { window._routeLocked = false; _transitNodeData = null; window._lastHtlNodes = null; S.route = null; window.__ovl.length = 0; _ovlSync(true); });
   await t('여정이 끝나면 오버레이가 꺼진다(active=false)', async () => { const o = await page.evaluate(() => window.__ovl[window.__ovl.length - 1]); assert.ok(o && o.active === false, JSON.stringify(o)); });
 
-  console.log('[하차 전 추천 · 출퇴근 브리핑]');
+  console.log('[상단 알림 정책 — 환승 1정거장 전·목적지 2·1정거장 전 외에는 상단 알림이 없다]');
+  await setup(null);
+  await t('상단 알림 허용 종류는 세 가지뿐(알림·진동 모두)', async () => {
+    const r = await page.evaluate(() => { const ks = ['transfer', 'near_arrive2', 'near_arrive', 'transfer2', 'arrive', 'arrival', 'proximity', 'arrive_reco', 'commute_brief', 'fg_service']; _cmAlarm.on = true; return { n: ks.filter(k => _notifAllowed(k)), v: ks.filter(k => _vibeAllowed(k)) }; });
+    assert.deepStrictEqual(r, { n: ['transfer', 'near_arrive2', 'near_arrive'], v: ['transfer', 'near_arrive2', 'near_arrive'] }, JSON.stringify(r));
+  });
+  await t('하차 전 추천 기능 스위치(_featureAllowed)는 따로 켜져 있다 — 추천은 오버레이 하단·앱 팝업으로 보인다', async () => assert.strictEqual(await page.evaluate(() => _featureAllowed('arrive_reco')), true));
+  await t('화면 밖에서 하차 전 추천이 와도 상단 알림은 나가지 않고, 오버레이용 문구(_pipReco)는 만들어진다', async () => {
+    await page.evaluate(() => { window.__ln.length = 0; window._pipReco = null; _notifOnceReset(); Object.defineProperty(document, 'hidden', { configurable: true, get: () => true }); _arrFireAlertNow('B4', Date.now() + 10 * 60000); });
+    await new Promise(r => setTimeout(r, 700)); await page.clock.runFor(1500);
+    const r = await page.evaluate(() => ({ ln: window.__ln.length, reco: !!(window._pipReco && window._pipReco.title) }));
+    await page.evaluate(() => { delete document.hidden; });
+    assert.deepStrictEqual(r, { ln: 0, reco: true }, JSON.stringify(r));
+  });
+  await t('출퇴근 브리핑 예약·상주 알림도 나가지 않는다', async () => {
+    await page.evaluate(() => { _cmAlarm.on = true; _cmAlarm.days = [0, 1, 2, 3, 4, 5, 6]; window.__ln.length = 0; _cmScheduleOS(); _showForegroundNotif('A1', 'B4', 3); });
+    await page.clock.runFor(300);
+    assert.strictEqual(await page.evaluate(() => window.__ln.length), 0, JSON.stringify(await titles()));
+  });
+  await t('상주 알림이 꺼질 때 예전에 남은 것(id 1)을 한 번 지운다', async () => {
+    const ids = await page.evaluate(() => [].concat(...(window.__cancel || []).map(o => o.notifications.map(n => n.id))));
+    assert.ok(ids.includes(1), JSON.stringify(ids));
+  });
+
+  console.log('[하차 전 추천 · 출퇴근 브리핑 — 예전 동작(window._notifLegacy = true)이 그대로 남아 있는지]');
+  await page.evaluate(() => { window._notifLegacy = true; window.__ln.length = 0; });
   await setup(null);
   await page.evaluate(() => { window.__ln.length = 0; _notifOnceReset(); Object.defineProperty(document, 'hidden', { configurable: true, get: () => true }); _arrFireAlertNow('B4', Date.now() + 10 * 60000); });
   await until(() => window.__ln.some(n => n.extra && n.extra.type === 'arrive_reco'));
@@ -214,6 +260,18 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
       return out;
     });
     assert.deepStrictEqual(titles2, [['환승 2정거장 전'], ['환승 준비'], ['곧 하차'], ['목적지 도착']], JSON.stringify(titles2));   // 4번째 판정에서 '목적지 2정거장 전'은 환승 준비와 겹쳐 빠진다
+  });
+  await page.evaluate(() => { window._notifLegacy = false; window.__ln.length = 0; _notifPrefSet('transfer', 1); _notifPrefSet('arrive', 1); });
+  await t('같은 순간 겹침(기본 정책): 환승 1정거장 전 → 목적지 1정거장 전 순으로 두 번만 나간다', async () => {
+    const titles2 = await page.evaluate(() => {
+      window.__ln.length = 0; _baseTimeMs = null; window._transitAlertFired = {};
+      window._transitSeqIdx = [0, 1, 2, 3, 4, 5, 6];
+      window._transitAlertTargets = [{ seqPos: 5, nodeIdx: 5, name: 'X5', kind: 'transfer', nextLine: '2호선' }, { seqPos: 6, nodeIdx: 6, name: 'X6', kind: 'dest' }];
+      const out = [];
+      [3, 4, 5, 6].forEach(i => { const n0 = window.__ln.length; _checkTransitAlerts(i); out.push(window.__ln.slice(n0).map(n => n.title)); });
+      return out;
+    });
+    assert.deepStrictEqual(titles2, [[], ['환승 준비'], ['곧 하차'], []], JSON.stringify(titles2));
   });
   await t('JS 오류가 없다', async () => assert.deepStrictEqual([...new Set(errs)], []));
   console.log('\n' + pass + ' 통과 / ' + fail + ' 실패');
