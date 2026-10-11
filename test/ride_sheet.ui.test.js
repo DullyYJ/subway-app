@@ -185,8 +185,12 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   await t('시트를 아래로 쓸어 내리면 닫히고 대기 알약이 된다', async () => assert.ok(!x6.sheet && x6.pill && x6.st === 'wait', JSON.stringify(x6)));
   await a.page.clock.runFor(70000);
   await t('닫은 뒤에는 자동으로 다시 올라오지 않는다(같은 차량)', async () => { const x = await a.st(); assert.ok(!x.sheet && x.pill, JSON.stringify(x)); });
-  await a.at('12:51:00'); await a.page.clock.runFor(1500);
-  await t('도착 2분 안이 되어도 닫은 차량은 알약 그대로', async () => { const x = await a.st(); assert.ok(!x.sheet && x.pill, JSON.stringify(x)); });
+  await a.at('12:50:05'); await a.page.clock.runFor(1500);
+  await t('★ 도착이 2분보다 먼 때 닫아 둔 차량도, 2분 안이 되면 자동으로 다시 올라온다', async () => { const x = await a.st(); assert.ok(x.sheet && x.st === 'board' && !x.pill, JSON.stringify(x)); });
+  await swipe(a.page, '#rsSheet', 80, 3); await a.page.clock.runFor(1200);
+  await t('2분 안에서 직접 닫으면 알약이 되고', async () => { const x = await a.st(); assert.ok(!x.sheet && x.pill, JSON.stringify(x)); });
+  await a.at('12:51:20'); await a.page.clock.runFor(1500);
+  await t('그 뒤로는 다시 자동으로 올라오지 않는다(내가 닫은 것)', async () => { const x = await a.st(); assert.ok(!x.sheet && x.pill, JSON.stringify(x)); });
   await swipe(a.page, '#rsPill', -60, 0); await a.page.clock.runFor(1200);
   await t('알약을 위로 쓸면 다시 열린다', async () => assert.ok((await a.st()).sheet));
   await a.page.click('#rsBtn'); await a.page.clock.runFor(800);
