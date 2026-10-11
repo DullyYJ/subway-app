@@ -69,7 +69,44 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   await t('[확인] → 추천이 사라지고 어디로도 안 간다', async () => { const x = await act('recoOk', { label: 'x', call: '_arrGoFoodTab()' }); assert.deepStrictEqual(x, { before: true, after: false, calls: [] }); });
   await t('[보기] 맛집 → 맛집 탭 + 추천 닫힘', async () => { const x = await act('recoGo', { label: 'x', call: '_arrGoFoodTab()' }); assert.deepStrictEqual(x, { before: true, after: false, calls: ['food'] }); });
   await t('[보기] 쿠팡 아이템 → 쿠팡 열기 + 추천 닫힘', async () => { const x = await act('recoGo', { kind: 'shop', item: {} }); assert.deepStrictEqual(x, { before: true, after: false, calls: ['shop'] }); });
-  await t('[보기] 야식 → 주문 팝업 + 추천 닫힘', async () => { const x = await act('recoGo', { kind: 'delivery', menu: '치킨' }); assert.deepStrictEqual(x, { before: true, after: false, calls: ['deli:제목:delivery'] }); });
+  await t('[보기] 야식 → 팝업 없이 바로 배달앱 쪽으로(0.7초 뒤) + 추천 닫힘', async () => {
+    const x = await page.evaluate(async () => { window._ovlRecoOff = false; window._ovlRecoDismissAt = undefined; window._pipReco = { title: 't', body: '가\n나', at: Date.now(), ovlAt: Date.now() - 60000 }; window._arrLast = { at: window._pipReco.at, action: { kind: 'delivery', menu: '쌀국수' }, title: '제목', body: '본문' }; window._arrHomeEta = () => ({ arrMs: Date.now() + 100000, rem: 100 });
+      const calls = []; const keepAuto = window._arrOrderAuto; window._showBriefingModal = () => calls.push('popup'); window._arrOrderAuto = (m) => calls.push('auto:' + m); window._ovlAct('recoGo'); const early = calls.slice(); await new Promise(r => setTimeout(r, 900)); window._arrOrderAuto = keepAuto; return { early, calls, after: !!(_ovlLines().reco && _ovlLines().reco.on) }; });
+    assert.strictEqual(JSON.stringify(x), JSON.stringify({ early: [], calls: ['auto:쌀국수'], after: false }));
+  });
+  console.log('[①-3 설치된 배달앱 바로 켜기 · 없으면 맛집 탭의 가게]');
+  const dlv = (plug, menu) => page.evaluate(async ([plug, menu]) => {
+    const tried = []; const toasts = []; window.toast = (m) => toasts.push(m);
+    window.Capacitor = window.Capacitor || {}; window.Capacitor.Plugins = window.Capacitor.Plugins || {};
+    if (plug === 'none') delete window.Capacitor.Plugins.AppLauncher;
+    else window.Capacitor.Plugins.AppLauncher = { openUrl: async ({ url }) => { tried.push(url.split(':')[0]); const ok = plug.indexOf(url.split(':')[0]) >= 0; return { completed: ok }; } };
+    return await new Promise(res => _dlvOpenInstalled(menu, (ok, k) => res({ ok, k, tried })));
+  }, [plug, menu]);
+  await t('배민이 있으면 배민을 켠다(한 번만 시도)', async () => assert.deepStrictEqual(await dlv(['baemin', 'yogiyo', 'coupangeats'], '쌀국수'), { ok: true, k: 'baemin', tried: ['baemin'] }));
+  await t('배민이 없고 요기요가 있으면 요기요', async () => assert.deepStrictEqual(await dlv(['yogiyo'], '쌀국수'), { ok: true, k: 'yogiyo', tried: ['baemin', 'yogiyo'] }));
+  await t('쿠팡이츠만 있으면 쿠팡이츠', async () => assert.deepStrictEqual(await dlv(['coupangeats'], '치킨'), { ok: true, k: 'coupangeats', tried: ['baemin', 'yogiyo', 'coupangeats'] }));
+  await t('셋 다 없으면 ok=false', async () => assert.deepStrictEqual(await dlv([], '치킨'), { ok: false, k: undefined, tried: ['baemin', 'yogiyo', 'coupangeats'] }));
+  await t('AppLauncher 가 없어도 ok=false(오류 없이)', async () => { const r = await dlv('none', '치킨'); assert.strictEqual(r.ok, false); });
+  await t('설치된 앱이 있으면 맛집 탭으로 가지 않는다 / 없으면 간다', async () => {
+    const r = await page.evaluate(async () => { const calls = []; const keep = window._arrFoodShowPlace; window._arrFoodShowPlace = (m, p) => calls.push('food:' + m + ':' + p); window._arrPlace = { n: '맛나식당' };
+      window.Capacitor.Plugins.AppLauncher = { openUrl: async () => ({ completed: true }) }; _arrOrderAuto('쌀국수'); await new Promise(r => setTimeout(r, 50)); const a = calls.slice();
+      window.Capacitor.Plugins.AppLauncher = { openUrl: async () => ({ completed: false }) }; _arrOrderAuto('쌀국수'); await new Promise(r => setTimeout(r, 50)); window._arrFoodShowPlace = keep; return { a, b: calls.slice() }; });
+    assert.strictEqual(JSON.stringify(r), JSON.stringify({ a: [], b: ['food:쌀국수:맛나식당'] }), JSON.stringify(r));
+  });
+  await t('맛집 탭에서 추천 가게(없으면 메뉴 종류가 맞는 가게)의 카드를 연다', async () => {
+    const r = await page.evaluate(async () => {
+      document.getElementById('foodList') || document.body.insertAdjacentHTML('beforeend', '<div id="foodList"></div>');
+      window._arrGoFoodTab = () => {}; const opened = []; window.toast = () => {};
+      const mk = (nm, cat) => ({ place_name: nm, category_name: cat, x: '126.9', y: '37.5', distance: 100 });
+      const render = (items) => { window._foodAllData = items; const l = document.getElementById('foodList'); l.innerHTML = ''; items.forEach(p => { const c = document.createElement('div'); c.className = 'food-card'; c.innerHTML = '<div class="food-name">' + p.place_name + '</div>'; c.addEventListener('click', () => opened.push(p.place_name)); l.appendChild(c); }); };
+      render([mk('가나다국밥', '음식점 > 한식 > 국밥'), mk('포메인', '음식점 > 아시아음식 > 베트남음식'), mk('맛나식당', '음식점 > 한식')]);
+      _arrFoodShowPlace('쌀국수', '맛나식당'); await new Promise(r => setTimeout(r, 700));
+      _arrFoodShowPlace('쌀국수', null); await new Promise(r => setTimeout(r, 700));
+      _arrFoodShowPlace('피자', null); await new Promise(r => setTimeout(r, 700));
+      return opened; });
+    assert.strictEqual(JSON.stringify(r), JSON.stringify(['맛나식당', '포메인']), JSON.stringify(r));
+  });
+
   await t('[확인] 후 새 추천(다른 at)이 오면 다시 뜬다', async () => {
     const x = await page.evaluate(() => { window._ovlRecoOff = false; window._ovlRecoDismissAt = 12345; window._pipReco = { title: 't', body: '가\n나', at: Date.now(), ovlAt: Date.now() - 60000 }; window._arrHomeEta = () => ({ arrMs: Date.now() + 100000, rem: 100 }); const r = _ovlLines().reco; return !!(r && r.on); });
     assert.strictEqual(x, true);
