@@ -22213,6 +22213,69 @@ function _arrOrder(kind){
 }
 window._arrOrder = _arrOrder;
 
+// ★ 2026-10-11 (YJ: "오버레이에서 주문하기 눌렀더니 앱 화면에서 한 번 더 누르게 돼 — 설치된 배달앱(배민·요기요·쿠팡이츠)을 바로 켜고,
+//   셋 다 없으면 길동무 맛집 탭에서 해당 가게를 찾아서 보여줘"):
+//   설치된 앱 찾기 = 앱 스킴을 차례로 열어 보고(Capacitor AppLauncher: 받아 줄 앱이 없으면 completed=false) 열린 첫 앱에서 멈춘다. 둘 이상이면 먼저 열린 것.
+function _dlvOpenInstalled(query, cb){
+  var done = function(ok, kind){ try{ cb && cb(ok, kind); }catch(e){} };
+  try{
+    var P = window.Capacitor && window.Capacitor.Plugins;
+    if(!(P && P.AppLauncher && typeof P.AppLauncher.openUrl === 'function')){ done(false); return; }
+    var order = ['baemin', 'yogiyo', 'coupangeats'], i = 0, q = String(query || '야식');
+    (function next(){
+      if(i >= order.length){ done(false); return; }
+      var k = order[i++], a = _DLV_APPS[k];
+      var p; try{ p = P.AppLauncher.openUrl({ url: a.app(q) }); }catch(e){ next(); return; }
+      Promise.resolve(p).then(function(r){
+        if(r && r.completed === false){ next(); return; }
+        try{ if(typeof toast === 'function') toast(a.name + '에서 "' + q + '" 찾는 중...'); }catch(e1){}
+        done(true, k);
+      }, function(){ next(); });
+    })();
+  }catch(e){ done(false); }
+}
+window._dlvOpenInstalled = _dlvOpenInstalled;
+// 배달앱이 하나도 없을 때: 맛집 탭을 열고, 추천에 나온 가게(없으면 메뉴 종류가 맞는 가게)를 찾아 지도 카드를 연다
+var _DLV_MENU_KEY = { '쌀국수':['베트남','쌀국수'], '치킨':['치킨'], '피자':['피자'], '족발':['족발','보쌈'], '보쌈':['족발','보쌈'], '떡볶이':['분식','떡볶이'],
+  '햄버거':['햄버거','패스트푸드'], '라면':['분식','라면'], '짜장면':['중식','중국'], '짬뽕':['중식','중국'], '마라탕':['마라','중식','중국'], '돈가스':['돈가스','일식'],
+  '초밥':['초밥','일식'], '곱창':['곱창','막창'], '삼겹살':['고기','삼겹살'], '국밥':['국밥','한식'], '파스타':['양식','파스타'] };
+function _arrFoodShowPlace(menu, placeName){
+  var tries = 0;
+  try{ if(typeof _arrGoFoodTab === 'function') _arrGoFoodTab(); }catch(e0){}
+  var nrm = function(x){ return String(x || '').replace(/<[^>]*>/g, '').replace(/\s/g, ''); };
+  (function poll(){
+    tries++;
+    try{
+      var data = (typeof _foodAllData !== 'undefined' ? _foodAllData : []).filter(function(p){ return p && p.place_name && String(p.place_name).trim(); });
+      var list = document.getElementById('foodList');
+      var cards = list ? list.querySelectorAll('.food-card') : [];
+      if((!data.length || !cards.length) && tries < 24){ setTimeout(poll, 500); return; }
+      var pick = null, want = nrm(placeName);
+      if(want) pick = data.filter(function(p){ return nrm(p.place_name) === want; })[0] || null;
+      if(!pick && menu){
+        var keys = (_DLV_MENU_KEY[menu] || [menu]).map(nrm);
+        pick = data.filter(function(p){ var t = nrm(p.place_name) + nrm(p.category_name); return keys.some(function(k){ return k && t.indexOf(k) >= 0; }); })[0] || null;
+      }
+      if(!pick){ if(typeof toast === 'function') toast('근처에서 ' + (menu ? '"' + menu + '" ' : '') + '가게를 못 찾았어요 · 맛집 탭을 열었어요'); return; }
+      var target = null;
+      for(var i = 0; i < cards.length; i++){
+        var nmEl = cards[i].querySelector('.food-name');
+        if(nmEl && nrm(nmEl.textContent) === nrm(pick.place_name)){ target = cards[i]; break; }
+      }
+      if(target){ try{ target.scrollIntoView({ block: 'center' }); }catch(e2){} target.click(); }
+      if(typeof toast === 'function') toast('근처 가게: ' + pick.place_name);
+    }catch(e){}
+  })();
+}
+window._arrFoodShowPlace = _arrFoodShowPlace;
+// 오버레이 [주문하기]: 설치된 배달앱을 바로 켜고, 없으면 맛집 탭에서 가게를 보여 준다
+function _arrOrderAuto(menu){
+  var m = menu || window._arrOrderMenu || '야식';
+  var pl = null; try{ pl = window._arrPlace && window._arrPlace.n; }catch(e){}
+  _dlvOpenInstalled(m, function(ok){ if(!ok) _arrFoodShowPlace(m, pl); });
+}
+window._arrOrderAuto = _arrOrderAuto;
+
 // ── Gemini(워커 /ai-talk)로 감성 문구 생성 ──
 //   실패하면 기존 로컬 문구를 그대로 쓰므로 항상 안전.
 function _arrAiCopy(menu, destStn, cb, opt){
@@ -28106,7 +28169,7 @@ function _ovlRecoGo(){
     var L = window._arrLast, ac = L && L.action;
     _ovlRecoDismiss();
     if(ac && ac.kind === 'shop' && typeof _arrShopOpen === 'function') _arrShopOpen();
-    else if(ac && ac.kind === 'delivery' && typeof _showBriefingModal === 'function') _showBriefingModal(L.title, L.body, null, ac);
+    else if(ac && ac.kind === 'delivery' && typeof _arrOrderAuto === 'function'){ var _dm = ac.menu || '야식'; setTimeout(function(){ _arrOrderAuto(_dm); }, 700); }   // 앱이 앞으로 온 뒤 배달앱을 켠다
     else if(typeof _arrGoFoodTab === 'function') _arrGoFoodTab();
   }catch(e){}
 }
