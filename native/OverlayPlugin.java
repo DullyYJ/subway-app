@@ -124,6 +124,9 @@ public class OverlayPlugin extends Plugin {
 
     // ★ 2026-10-11: 현재역과 다음역 사이 선이 이동 중이면 깜박인다(예전 화살표 -->를 대신한다. 무엇을 보여줄지·이동 중인지는 웹이 정하고, 여기서는 그리기·깜박임만 한다).
     private StripView stripView;
+    private LinearLayout infoRow;               // ★ 남은시간 줄 + 오른쪽 '대기' 알약
+    private WaitChip waitChip;
+    private int rowWpx = 0;
     private static final long BLINK_MS = 550L;
     private boolean blinkOn = false, blinking = false;
     private final Runnable blinker = new Runnable() {
@@ -149,7 +152,7 @@ public class OverlayPlugin extends Plugin {
             tp.setTextAlign(Paint.Align.CENTER);
         }
         void setLit(boolean on) { lit = on; invalidate(); }
-        int wantH() { return dp(2) + dp(14) + dp(12) + dp(22) + dp(14); }   // ★ 2026-10-11 (YJ: 높이를 조금 줄여줘): 70dp → 64dp
+        int wantH() { return dp(54); }   // ★ 2026-10-11 (YJ: 노선 라벨을 시각 왼쪽으로 옮겨 줄 하나를 줄여줘): 64dp → 54dp
         // 높이는 우리가 정한 값으로 고정한다(부모가 wrap_content 라도 화면 전체를 덮지 않게).
         @Override protected void onMeasure(int wSpec, int hSpec) {
             setMeasuredDimension(MeasureSpec.getSize(wSpec), wantH());
@@ -168,9 +171,8 @@ public class OverlayPlugin extends Plugin {
             int cols = 5;
             float cw = getWidth() / (float) cols;
             float yName = dp(2) + dp(11.5f);
-            float yTag = dp(2) + dp(14) + dp(9.5f);
-            float yAx = dp(2) + dp(14) + dp(12) + dp(10);
-            float yTime = dp(2) + dp(14) + dp(12) + dp(20) + dp(11);
+            float yAx = dp(28);
+            float yTime = dp(49);
             float lw = dp(3);
             for (int i = 0; i < n; i++) {
                 Cell c = strip[i];
@@ -180,23 +182,6 @@ public class OverlayPlugin extends Plugin {
                 int ink = here ? thFg : thSub;
                 // 정류장명(한 줄)
                 text(cv, c.n, cx, yName, cw - dp(3), here ? 11.5f : 10.5f, ink, true);
-                // 노선 라벨
-                if (c.g.length() > 0) {
-                    if (c.pill) {
-                        tp.setTextSize(7f * getResources().getDisplayMetrics().scaledDensity);
-                        tp.setTypeface(Typeface.DEFAULT_BOLD);
-                        CharSequence e = TextUtils.ellipsize(c.g, tp, Math.max(1f, cw - dp(10)), TextUtils.TruncateAt.END);
-                        float w = tp.measureText(e, 0, e.length()) + dp(8);
-                        rf.set(cx - w / 2f, yTag - dp(8.5f), cx + w / 2f, yTag + dp(2.5f));
-                        p.setStyle(Paint.Style.FILL);
-                        p.setColor(c.gc);
-                        cv.drawRoundRect(rf, dp(4), dp(4), p);
-                        tp.setColor(Color.WHITE);
-                        cv.drawText(e, 0, e.length(), cx, yTag, tp);
-                    } else {
-                        text(cv, c.g, cx, yTag, cw - dp(3), 8f, c.gc, true);
-                    }
-                }
                 // 선
                 p.setStyle(Paint.Style.FILL);
                 boolean blinkSeg = moving && !lit && ((i == stripCur && c.hasR) || (i == stripCur + 1 && c.hasL));
@@ -232,8 +217,43 @@ public class OverlayPlugin extends Plugin {
                     p.setColor(c.dc);
                     cv.drawCircle(cx, yAx, dp(3), p);
                 }
-                // 시각
-                text(cv, c.t, cx, yTime, cw - dp(3), 9.5f, ink, true);
+                // 시각 — 노선 라벨(75번 · 환승 · 출발 · 도착)은 시각 왼쪽에 붙여 한 줄로
+                if (c.g.length() > 0) {
+                    float maxRow = cw - dp(3);
+                    float sc = getResources().getDisplayMetrics().scaledDensity;
+                    tp.setTypeface(Typeface.DEFAULT_BOLD);
+                    tp.setTextSize(9.5f * sc);
+                    float tmW = c.t.length() > 0 ? tp.measureText(c.t) : 0f;
+                    float gap = c.t.length() > 0 ? dp(3) : 0f;
+                    float pad = c.pill ? dp(8) : 0f;
+                    tp.setTextSize((c.pill ? 7f : 8f) * sc);
+                    CharSequence e = TextUtils.ellipsize(c.g, tp, Math.max(dp(10), maxRow - tmW - gap - pad), TextUtils.TruncateAt.END);
+                    float gW = tp.measureText(e, 0, e.length()) + pad;
+                    float x0 = cx - (gW + gap + tmW) / 2f;
+                    if (c.pill) {
+                        rf.set(x0, yTime - dp(8.5f), x0 + gW, yTime + dp(2.5f));
+                        p.setStyle(Paint.Style.FILL);
+                        p.setColor(c.gc);
+                        cv.drawRoundRect(rf, dp(4), dp(4), p);
+                        tp.setColor(Color.WHITE);
+                        tp.setTextAlign(Paint.Align.CENTER);
+                        cv.drawText(e, 0, e.length(), x0 + gW / 2f, yTime, tp);
+                    } else {
+                        tp.setColor(c.gc);
+                        tp.setTextAlign(Paint.Align.LEFT);
+                        cv.drawText(e, 0, e.length(), x0, yTime, tp);
+                    }
+                    if (c.t.length() > 0) {
+                        tp.setTextSize(9.5f * sc);
+                        tp.setTypeface(Typeface.DEFAULT_BOLD);
+                        tp.setColor(ink);
+                        tp.setTextAlign(Paint.Align.LEFT);
+                        cv.drawText(c.t, x0 + gW + gap, yTime, tp);
+                    }
+                    tp.setTextAlign(Paint.Align.CENTER);
+                } else {
+                    text(cv, c.t, cx, yTime, cw - dp(3), 9.5f, ink, true);
+                }
             }
         }
     }
@@ -255,7 +275,7 @@ public class OverlayPlugin extends Plugin {
         BoardView(Context c) { super(c); }
         int targetH(String st) {
             if ("board".equals(st) || "undo".equals(st)) return dp(42);
-            if ("wait".equals(st)) return dp(22);
+            if ("wait".equals(st)) return 0;     // ★ 대기 알약은 남은시간 줄 오른쪽으로 옮겼다(줄 하나 절약)
             return dp(9);
         }
         void setState(String st) {
@@ -311,15 +331,7 @@ public class OverlayPlugin extends Plugin {
             float w = getWidth();
             btn.setEmpty();
             if ("wait".equals(shown)) {
-                String s = "대기 · " + rsCh;
-                float tw = Math.min(w - dp(40), mw(s, 10f, true));
-                float pw = tw + dp(24), ph = dp(16), x0 = (w - pw) / 2f, y0 = dp(3);
-                rf.set(x0, y0, x0 + pw, y0 + ph);
-                p.setColor((0x2A << 24) | (thSub & 0x00FFFFFF));
-                cv.drawRoundRect(rf, ph / 2f, ph / 2f, p);
-                p.setColor(0xFFF0A500);
-                cv.drawCircle(x0 + dp(9), y0 + ph / 2f, dp(3), p);
-                txt(cv, s, x0 + dp(16), y0 + ph / 2f + dp(3.6f), tw, 10f, thFg, true, Paint.Align.LEFT);
+                return;
             } else if ("board".equals(shown) || "undo".equals(shown)) {
                 boolean undo = "undo".equals(shown);
                 float padL = dp(4), bw = dp(undo ? 84 : 70), bh = dp(30);
@@ -361,6 +373,41 @@ public class OverlayPlugin extends Plugin {
                 p.setColor((0x59 << 24) | (thSub & 0x00FFFFFF));
                 cv.drawRoundRect(rf, gh / 2f, gh / 2f, p);
             }
+        }
+    }
+
+    /** 남은시간 줄 오른쪽에 붙는 '● 대기 · 75번' 알약(앱 탑승 시트의 대기 상태와 같은 뜻). */
+    private class WaitChip extends View {
+        private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final TextPaint tp = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+        private final RectF rf = new RectF();
+        private String s = "";
+        private float tw = 0f;
+        WaitChip(Context c) { super(c); }
+        void setLabel(String label, int maxW) {
+            String t = "대기 · " + (label == null ? "" : label);
+            tp.setTextSize(10f * getResources().getDisplayMetrics().scaledDensity);
+            tp.setTypeface(Typeface.DEFAULT_BOLD);
+            CharSequence e = TextUtils.ellipsize(t, tp, Math.max(dp(24), maxW - dp(24)), TextUtils.TruncateAt.END);
+            String ns = e.toString();
+            if (!ns.equals(s)) { s = ns; tw = tp.measureText(s); requestLayout(); }
+            invalidate();
+        }
+        int wantW() { return Math.round(tw + dp(24)); }
+        @Override protected void onMeasure(int wSpec, int hSpec) { setMeasuredDimension(wantW(), dp(16)); }
+        @Override protected void onDraw(Canvas cv) {
+            float ph = getHeight();
+            rf.set(0, 0, getWidth(), ph);
+            p.setStyle(Paint.Style.FILL);
+            p.setColor((0x2A << 24) | (thSub & 0x00FFFFFF));
+            cv.drawRoundRect(rf, ph / 2f, ph / 2f, p);
+            p.setColor(0xFFF0A500);
+            cv.drawCircle(dp(9), ph / 2f, dp(3), p);
+            tp.setTextSize(10f * getResources().getDisplayMetrics().scaledDensity);
+            tp.setTypeface(Typeface.DEFAULT_BOLD);
+            tp.setColor(thFg);
+            tp.setTextAlign(Paint.Align.LEFT);
+            cv.drawText(s, dp(16), ph / 2f + dp(3.6f), tp);
         }
     }
 
@@ -681,7 +728,17 @@ public class OverlayPlugin extends Plugin {
         root.addView(t3);                            // 추천 알림 제목은 위(남은시간 줄이 늘 맨 아래)
         root.addView(stripView, new LinearLayout.LayoutParams(rowW, stripView.wantH()));
         root.addView(gap, new LinearLayout.LayoutParams(1, dp(1)));
-        root.addView(t2, new LinearLayout.LayoutParams(rowW, LinearLayout.LayoutParams.WRAP_CONTENT));
+        rowWpx = rowW;
+        infoRow = new LinearLayout(ctx);
+        infoRow.setOrientation(LinearLayout.HORIZONTAL);
+        infoRow.setGravity(Gravity.CENTER);
+        infoRow.addView(t2, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        waitChip = new WaitChip(ctx);
+        LinearLayout.LayoutParams wlp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        wlp.leftMargin = dp(6);
+        waitChip.setVisibility(View.GONE);
+        infoRow.addView(waitChip, wlp);
+        root.addView(infoRow, new LinearLayout.LayoutParams(rowW, LinearLayout.LayoutParams.WRAP_CONTENT));
         boardView = new BoardView(ctx);
         root.addView(boardView, new LinearLayout.LayoutParams(rowW, LinearLayout.LayoutParams.WRAP_CONTENT));   // ★ 탑승 안내 줄(맨 아래)
 
@@ -722,7 +779,7 @@ public class OverlayPlugin extends Plugin {
                         dx = e.getRawX(); dy = e.getRawY(); lastX = dx; lastY = dy; sx = lp.x; sy = lp.y; dragged = false; scrolling = false; swiping = false; armed = false;
                         bx = e.getX(); by = e.getY();
                         // 맨 아래 영역(남은시간 줄 + 탑승 줄): [탑승]·알약 누름 판정에 쓴다
-                        inBottom = boardView != null && e.getY() >= (t2.getVisibility() == View.VISIBLE ? t2.getTop() : boardView.getTop());
+                        inBottom = boardView != null && e.getY() >= (infoRow != null && infoRow.getVisibility() == View.VISIBLE ? infoRow.getTop() : boardView.getTop());
                         // 점·선 줄에서 시작한 좌우 움직임은 칸을 넘겨 보는 스크롤
                         inStrip = stripView != null && e.getY() >= stripView.getTop() && e.getY() <= stripView.getBottom();
                         startPos = scrollPos;
@@ -907,6 +964,17 @@ public class OverlayPlugin extends Plugin {
             t2.setTextColor(thSub);
             t3.setTextColor(thSub);
             if (boardView != null) boardView.setState(rsSt);
+            if (waitChip != null && infoRow != null) {
+                boolean wt = "wait".equals(rsSt);
+                if (wt) {
+                    waitChip.setLabel(rsCh, Math.round(rowWpx * 0.42f));
+                    t2.setMaxWidth(Math.max(dp(80), rowWpx - waitChip.wantW() - dp(6)));
+                } else {
+                    t2.setMaxWidth(rowWpx);
+                }
+                waitChip.setVisibility(wt ? View.VISIBLE : View.GONE);
+                waitChip.invalidate();
+            }
             if (stripView != null) {
                 stripView.invalidate();
                 if (moving && strip.length > 1) startBlink();
@@ -915,6 +983,7 @@ public class OverlayPlugin extends Plugin {
         } catch (Exception ignored) { }
         t2.setText(line2);
         t2.setVisibility(line2.length() > 0 ? View.VISIBLE : View.GONE);
+        if (infoRow != null) infoRow.setVisibility((line2.length() > 0 || (waitChip != null && waitChip.getVisibility() == View.VISIBLE)) ? View.VISIBLE : View.GONE);
         t3.setText(line3);
         t3.setVisibility(line3.length() > 0 ? View.VISIBLE : View.GONE);
         try { applyAlert(); } catch (Exception ignored) { }
