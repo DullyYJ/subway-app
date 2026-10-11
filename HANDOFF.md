@@ -644,3 +644,10 @@
 - **확인 결과**: 추천은 `_arrCheckPreAlert` 가 하차 **10분~1분 전**에 여정당 1회(`_arrFireAlertNow`) 내보내고, 오버레이 윗줄(`line3`)에는 그 **제목만 20초**(`_PIP_RECO_TTL`) 떴다. 메뉴·근처 가게·쿠팡 아이템 본문은 알림·팝업에만 있었다.
 - **고침(`_ovlLines`)**: 같은 추천이 만든 본문(`window._pipReco.body` = `_arrPipText` 줄 — 시간대 규칙·근처 가게·쿠팡 아이템 그대로)의 **첫 두 줄**을 도착 **3분 전부터 도착 30초 뒤까지** `line3` 으로 보낸다(줄당 26자, 네이티브 `t3` 는 이미 2줄까지). 추천이 안 나간 여정(00~07시)·25분 넘은 옛 추천·설정에서 끈 경우(`_notifAllowed('arrive_reco')`)는 안 보인다. 남은 시간은 `_arrHomeEta()` 1순위, 없으면 `_pipData().min`. 끄기 `window._ovlRecoOff = true`. 알림·팝업·10분 전 발사 로직은 그대로.
 - 시간대 규칙(`_arrSlot`): 07:01~10:00 커피·브런치, 10:01~16:59 점심·카페, 17~19시 저녁, 19~21시 야식, 21:01~ 쿠팡 아이템, 00~07시 없음. 시험 `test/overlay_reco.ui.test.js` 18개 통과(CI 매트릭스에는 아직 없음 — ride_sheet·overlay_strip 도 마찬가지). **실기기 확인 필요**: 두 줄이 오버레이 높이를 얼마나 키우는지.
+
+### 2026-10-11 (추가) 도착 전 추천 — 하단 줄 + [보기]·[확인] (윗줄은 경로 유지)
+- YJ 요청: "추천은 오버레이 하단에, 상단은 경로 유지, 추천 아이템 연결 버튼, 끄는 확인 버튼." 위 '도착 전 추천' 항목의 line3 방식은 **폐기**하고 아래로 바꿨다(윗줄 `line3` 은 다시 원래대로: 경로·제목 20초만).
+- 웹(`_ovlLines`): 도착 3분 전~도착 30초 뒤에 `out.reco = {on, a, b, go, at}` (a·b = 추천 본문 첫 두 줄 26자, go = 버튼 글자: 쿠팡 아이템 '쿠팡 보기' / 야식 '주문하기' / 그 외 '맛집 보기'). 조건·시간대 규칙·끄기 스위치(`_ovlRecoOff`)는 그대로. `_ovlSync` 가 `reco` 를 Overlay.update 로 보낸다.
+- 동작: 네이티브 [보기] → `_ovlAct('recoGo')` → `_ovlRecoGo()`: 이 추천을 닫고 쇼핑이면 `_arrShopOpen()`, 야식이면 `_showBriefingModal(...)`, 그 외 `_arrGoFoodTab()` (알림·팝업 버튼과 같은 곳). [확인] → `_ovlAct('recoOk')` → `window._ovlRecoDismissAt = 추천 at` (같은 추천은 다시 안 뜨고 다음 여정의 새 추천은 뜸). `_arrFireAlertNow` 가 `window._arrLast = {at, slot, action, title, body}` 를 남겨 [보기]가 갈 곳을 안다.
+- 네이티브(`OverlayPlugin.java`): `RecoView`(높이 44dp, 맨 아래 줄, 왼쪽 두 줄 문구 + 오른쪽 파란 [보기] · 회색 [확인]). 손가락 오차 6dp. 글자 부분을 누르면 앱 열기, [보기]는 act 후 `openApp()`.
+- 시험: `test/overlay_reco.ui.test.js` 29개(하단 줄 조건·버튼 글자·보기/확인 동작·발사 시 `_arrLast`·시간대 규칙) 통과. **실기기 확인 필요**: 오버레이가 44dp 커지는 정도, [보기]/[확인] 터치 영역, [보기] 뒤 앱이 앞으로 와서 쇼핑·맛집 탭·야식 팝업이 뜨는지.
