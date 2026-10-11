@@ -90,6 +90,14 @@ public class OverlayPlugin extends Plugin {
         int dc = 0xFF0A84FF;                    // 점 색
         int dk = 1;                             // 점 모양: 0 없음 · 1 속이 빈 동그라미 · 2 꽉 찬 점 · 3 작은 점(도보)
     }
+    // ★ 2026-10-11 (YJ: "오버레이에도 탑승 버튼을 앱처럼 — 2분 전 자동으로 나오고, 쓸어 올리면 나오고 쓸어 내리면 숨고"):
+    //   언제 보일지(board 올림 · wait 대기 알약 · undo 되돌리기 · hidden 숨김)와 문구·색은 앱의 탑승 시트 상태(_rs)를 웹이 그대로 넘겨 준다.
+    //   여기서는 그리기와 손짓(쓸어 올림·내림·탑승 누름)을 웹에 알리는 일만 한다.
+    private String rsSt = "hidden", rsK = "", rsCh = "", rsNm = "";
+    private boolean rsHasCbg = false;
+    private int rsCbg = 0xFF0A84FF, rsCfg = 0xFF0A84FF;
+    private float rsBar = -1f;                  // 출발 뒤 남은 비율(0~1), 없으면 -1
+    private BoardView boardView;
     private Cell[] strip = new Cell[0];
     private int stripCur = 0;                   // 현위치 칸 번호(strip 안에서)
     // ★ 2026-10-11 (YJ: "오버레이 좌우 스크롤 가능하게 · 마커도 깜박이게"): 웹이 현위치 앞뒤 칸을 넉넉히(최대 50칸) 보내고,
@@ -141,7 +149,7 @@ public class OverlayPlugin extends Plugin {
             tp.setTextAlign(Paint.Align.CENTER);
         }
         void setLit(boolean on) { lit = on; invalidate(); }
-        int wantH() { return dp(2) + dp(16) + dp(14) + dp(22) + dp(16); }
+        int wantH() { return dp(2) + dp(14) + dp(12) + dp(22) + dp(14); }   // ★ 2026-10-11 (YJ: 높이를 조금 줄여줘): 70dp → 64dp
         // 높이는 우리가 정한 값으로 고정한다(부모가 wrap_content 라도 화면 전체를 덮지 않게).
         @Override protected void onMeasure(int wSpec, int hSpec) {
             setMeasuredDimension(MeasureSpec.getSize(wSpec), wantH());
@@ -159,10 +167,10 @@ public class OverlayPlugin extends Plugin {
             if (n == 0) return;
             int cols = 5;
             float cw = getWidth() / (float) cols;
-            float yName = dp(2) + dp(12.5f);
-            float yTag = dp(2) + dp(16) + dp(10.5f);
-            float yAx = dp(2) + dp(16) + dp(14) + dp(11);
-            float yTime = dp(2) + dp(16) + dp(14) + dp(22) + dp(12);
+            float yName = dp(2) + dp(11.5f);
+            float yTag = dp(2) + dp(14) + dp(9.5f);
+            float yAx = dp(2) + dp(14) + dp(12) + dp(10);
+            float yTime = dp(2) + dp(14) + dp(12) + dp(20) + dp(11);
             float lw = dp(3);
             for (int i = 0; i < n; i++) {
                 Cell c = strip[i];
@@ -228,6 +236,143 @@ public class OverlayPlugin extends Plugin {
                 text(cv, c.t, cx, yTime, cw - dp(3), 9.5f, ink, true);
             }
         }
+    }
+
+
+    /**
+     * 오버레이 맨 아래 줄: 앱의 탑승 시트와 같은 상태를 그린다.
+     *  hidden — 얇은 손잡이(쓸어 올리면 열림) · wait — '대기' 알약 · board — 탑승 안내 + [탑승] 버튼 · undo — '탑승으로 기록했어요' + [되돌리기]
+     * 높이는 상태에 맞게 부드럽게 늘고 준다.
+     */
+    private class BoardView extends View {
+        private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final TextPaint tp = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+        private final RectF rf = new RectF();
+        private final RectF btn = new RectF();
+        private float h = -1f;
+        private String shown = "";
+        private ValueAnimator anim;
+        BoardView(Context c) { super(c); }
+        int targetH(String st) {
+            if ("board".equals(st) || "undo".equals(st)) return dp(42);
+            if ("wait".equals(st)) return dp(22);
+            return dp(9);
+        }
+        void setState(String st) {
+            if (st == null) st = "hidden";
+            boolean first = h < 0f;
+            if (!st.equals(shown) || first) {
+                shown = st;
+                final float to = targetH(st);
+                if (anim != null) { anim.cancel(); anim = null; }
+                if (first) { h = to; requestLayout(); }
+                else {
+                    final float from = h;
+                    anim = ValueAnimator.ofFloat(0f, 1f);
+                    anim.setDuration(240L);
+                    anim.setInterpolator(new DecelerateInterpolator(1.8f));
+                    anim.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+                        @Override public void onAnimationUpdate(ValueAnimator an) {
+                            h = from + (to - from) * (Float) an.getAnimatedValue();
+                            requestLayout();
+                        }
+                    });
+                    anim.start();
+                }
+            }
+            invalidate();
+        }
+        void cancelAnim() { try { if (anim != null) anim.cancel(); } catch (Exception ignored) { } anim = null; }
+        @Override protected void onMeasure(int wSpec, int hSpec) {
+            setMeasuredDimension(MeasureSpec.getSize(wSpec), Math.round(Math.max(0f, h < 0f ? targetH("hidden") : h)));
+        }
+        /** 보이는 버튼(탑승 · 되돌리기)을 눌렀나 — 손가락 오차를 감안해 사방 8dp 넓게. */
+        boolean hitBtn(float x, float y) {
+            if (!("board".equals(shown) || "undo".equals(shown)) || btn.isEmpty()) return false;
+            float m = dp(8);
+            return x >= btn.left - m && x <= btn.right + m && y >= btn.top - m && y <= btn.bottom + m;
+        }
+        private float txt(Canvas cv, String s, float x, float y, float maxW, float sp, int color, boolean bold, Paint.Align al) {
+            if (s == null || s.length() == 0) return 0f;
+            tp.setTextSize(sp * getResources().getDisplayMetrics().scaledDensity);
+            tp.setColor(color);
+            tp.setTypeface(bold ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
+            tp.setTextAlign(al);
+            CharSequence e = TextUtils.ellipsize(s, tp, Math.max(1f, maxW), TextUtils.TruncateAt.END);
+            cv.drawText(e, 0, e.length(), x, y, tp);
+            return tp.measureText(e, 0, e.length());
+        }
+        private float mw(String s, float sp, boolean bold) {
+            tp.setTextSize(sp * getResources().getDisplayMetrics().scaledDensity);
+            tp.setTypeface(bold ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
+            return tp.measureText(s == null ? "" : s);
+        }
+        @Override protected void onDraw(Canvas cv) {
+            float w = getWidth();
+            btn.setEmpty();
+            if ("wait".equals(shown)) {
+                String s = "대기 · " + rsCh;
+                float tw = Math.min(w - dp(40), mw(s, 10f, true));
+                float pw = tw + dp(24), ph = dp(16), x0 = (w - pw) / 2f, y0 = dp(3);
+                rf.set(x0, y0, x0 + pw, y0 + ph);
+                p.setColor((0x2A << 24) | (thSub & 0x00FFFFFF));
+                cv.drawRoundRect(rf, ph / 2f, ph / 2f, p);
+                p.setColor(0xFFF0A500);
+                cv.drawCircle(x0 + dp(9), y0 + ph / 2f, dp(3), p);
+                txt(cv, s, x0 + dp(16), y0 + ph / 2f + dp(3.6f), tw, 10f, thFg, true, Paint.Align.LEFT);
+            } else if ("board".equals(shown) || "undo".equals(shown)) {
+                boolean undo = "undo".equals(shown);
+                float padL = dp(4), bw = dp(undo ? 84 : 70), bh = dp(30);
+                float bt = dp(5);
+                btn.set(w - padL - bw, bt, w - padL, bt + bh);
+                if (undo) {
+                    p.setColor((0x33 << 24) | (thSub & 0x00FFFFFF));
+                    cv.drawRoundRect(btn, bh / 2f, bh / 2f, p);
+                    txt(cv, "되돌리기", btn.centerX(), btn.centerY() + dp(4.6f), bw - dp(8), 13f, thFg, true, Paint.Align.CENTER);
+                    txt(cv, "탑승으로 기록했어요", padL, btn.centerY() + dp(4.6f), btn.left - padL - dp(8), 13f, thFg, true, Paint.Align.LEFT);
+                    return;
+                }
+                p.setColor(0xFF0A84FF);
+                cv.drawRoundRect(btn, bh / 2f, bh / 2f, p);
+                txt(cv, "탑승", btn.centerX(), btn.centerY() + dp(5f), bw - dp(8), 14.5f, 0xFFFFFFFF, true, Paint.Align.CENTER);
+                float maxL = btn.left - padL - dp(8);
+                txt(cv, rsK, padL, dp(4) + dp(11), maxL, 11f, thSub, true, Paint.Align.LEFT);
+                float cy0 = dp(4) + dp(16), ch = dp(17);
+                float cw = Math.min(maxL * 0.55f, mw(rsCh, 10f, true) + dp(12));
+                rf.set(padL, cy0, padL + cw, cy0 + ch);
+                if (rsHasCbg) p.setColor(rsCbg); else p.setColor((0x29 << 24) | (rsCfg & 0x00FFFFFF));
+                cv.drawRoundRect(rf, dp(5), dp(5), p);
+                txt(cv, rsCh, padL + cw / 2f, cy0 + ch / 2f + dp(3.6f), cw - dp(6), 10f, rsCfg, true, Paint.Align.CENTER);
+                String nm = rsNm;
+                txt(cv, nm, padL + cw + dp(7), cy0 + ch / 2f + dp(4.4f), maxL - cw - dp(7), 13f, thFg, true, Paint.Align.LEFT);
+                if (rsBar >= 0f) {
+                    float by = dp(40), bx0 = padL, bx1 = w - padL;
+                    rf.set(bx0, by, bx1, by + dp(2));
+                    p.setColor((0x33 << 24) | (thSub & 0x00FFFFFF));
+                    cv.drawRoundRect(rf, dp(1), dp(1), p);
+                    rf.set(bx0, by, bx0 + (bx1 - bx0) * Math.max(0f, Math.min(1f, rsBar)), by + dp(2));
+                    p.setColor(0xFF0A84FF);
+                    cv.drawRoundRect(rf, dp(1), dp(1), p);
+                }
+            } else {
+                // 손잡이: 위로 쓸어 올리면 탑승 안내가 나온다
+                float gw = dp(28), gh = dp(3.5f);
+                rf.set((w - gw) / 2f, dp(3), (w + gw) / 2f, dp(3) + gh);
+                p.setColor((0x59 << 24) | (thSub & 0x00FFFFFF));
+                cv.drawRoundRect(rf, gh / 2f, gh / 2f, p);
+            }
+        }
+    }
+
+    /** 웹에 손짓을 알린다(웹이 앱 탑승 시트와 똑같이 처리하고 새 상태를 다시 보내 준다). */
+    private void act(String a) {
+        try {
+            if (getBridge() != null && getBridge().getWebView() != null) {
+                try { getBridge().getWebView().resumeTimers(); } catch (Exception ignored) { }
+                getBridge().getWebView().evaluateJavascript(
+                        "try{window._ovlAct&&window._ovlAct('" + a + "');}catch(e){}", null);
+            }
+        } catch (Exception ignored) { }
     }
 
     // ── JS 에서 부르는 메서드 ─────────────────────────────────────
@@ -305,6 +450,17 @@ public class OverlayPlugin extends Plugin {
                 thSub = col(th.optString("sub", ""), Color.parseColor("#8E8E93"));
             }
         } catch (Exception ignored) { }
+        try {
+            JSObject rs = call.getObject("rs");
+            if (rs != null) {
+                rsSt = rs.optString("st", "hidden");
+                rsK = rs.optString("k", ""); rsCh = rs.optString("ch", ""); rsNm = rs.optString("nm", "");
+                String cb = rs.optString("cbg", "");
+                rsHasCbg = cb.length() > 0; rsCbg = col(cb, 0xFF0A84FF);
+                rsCfg = col(rs.optString("cfg", ""), 0xFF0A84FF);
+                rsBar = (float) rs.optDouble("bar", -1);
+            } else { rsSt = "hidden"; }
+        } catch (Exception e) { rsSt = "hidden"; }
         moving = call.getBoolean("moving", false);
         Integer al = call.getInt("alert", 0);
         alertLevel = al == null ? 0 : Math.max(0, Math.min(2, al));
@@ -463,7 +619,7 @@ public class OverlayPlugin extends Plugin {
             attached = false;
         }
         stopBlink();
-        root = null; border = null; borderAnim = null; borderMode = 0; stripView = null; cardBg = null;
+        root = null; border = null; borderAnim = null; borderMode = 0; stripView = null; boardView = null; cardBg = null;
         if (was) attachOrUpdate();
     }
 
@@ -500,7 +656,7 @@ public class OverlayPlugin extends Plugin {
         root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setGravity(Gravity.CENTER_HORIZONTAL);
-        root.setPadding(padH, dp(8), padH, dp(8));
+        root.setPadding(padH, dp(5), padH, dp(2));
         // ★ 2026-10-11: 앱 경로 화면 카드와 같은 모양 — 테마의 카드 바탕 + 얇은 테두리(순수 검정 바탕은 그만)
         cardBg = new GradientDrawable();
         cardBg.setColor(thBg);
@@ -509,7 +665,7 @@ public class OverlayPlugin extends Plugin {
         root.setBackground(cardBg);
 
         t1 = makeText(15, thFg, false);            // (예비 — 앱 칸을 못 받았을 때만 쓴다)
-        t2 = makeText(13, thSub, true);            // 남은시간 · 도착 (회색)
+        t2 = makeText(12, thSub, true);            // 남은시간 · 도착 (회색)
         t3 = makeText(13, thSub, false);           // 추천 알림 제목
         t3.setMaxWidth(rowW);
 
@@ -518,14 +674,16 @@ public class OverlayPlugin extends Plugin {
         t2.setMaxLines(1);
         t2.setHorizontallyScrolling(false);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            t2.setAutoSizeTextTypeUniformWithConfiguration(10, 13, 1, TypedValue.COMPLEX_UNIT_SP);
+            t2.setAutoSizeTextTypeUniformWithConfiguration(10, 12, 1, TypedValue.COMPLEX_UNIT_SP);
         }
         View gap = new View(ctx);
         stripView = new StripView(ctx);
         root.addView(t3);                            // 추천 알림 제목은 위(남은시간 줄이 늘 맨 아래)
         root.addView(stripView, new LinearLayout.LayoutParams(rowW, stripView.wantH()));
-        root.addView(gap, new LinearLayout.LayoutParams(1, dp(4)));
+        root.addView(gap, new LinearLayout.LayoutParams(1, dp(1)));
         root.addView(t2, new LinearLayout.LayoutParams(rowW, LinearLayout.LayoutParams.WRAP_CONTENT));
+        boardView = new BoardView(ctx);
+        root.addView(boardView, new LinearLayout.LayoutParams(rowW, LinearLayout.LayoutParams.WRAP_CONTENT));   // ★ 탑승 안내 줄(맨 아래)
 
         lp = new WindowManager.LayoutParams(
                 maxW,
@@ -546,11 +704,14 @@ public class OverlayPlugin extends Plugin {
 
         final int slop = ViewConfiguration.get(ctx).getScaledTouchSlop();
         root.setOnTouchListener(new View.OnTouchListener() {
-            float dx, dy; int sx, sy; boolean dragged, scrolling, inStrip; float startPos; VelocityTracker vt;
+            float dx, dy; int sx, sy; boolean dragged, scrolling, inStrip, inBottom, swiping; float startPos; float bx, by; VelocityTracker vt;
             @Override public boolean onTouch(View v, MotionEvent e) {
                 switch (e.getAction()) {
                     case MotionEvent.ACTION_DOWN:
-                        dx = e.getRawX(); dy = e.getRawY(); sx = lp.x; sy = lp.y; dragged = false; scrolling = false;
+                        dx = e.getRawX(); dy = e.getRawY(); sx = lp.x; sy = lp.y; dragged = false; scrolling = false; swiping = false;
+                        bx = e.getX(); by = e.getY();
+                        // 맨 아래 영역(남은시간 줄 + 탑승 줄): 세로로 쓸면 탑승 안내를 열고 닫는다(창 이동 대신)
+                        inBottom = boardView != null && e.getY() >= (t2.getVisibility() == View.VISIBLE ? t2.getTop() : boardView.getTop());
                         // 점·선 줄에서 시작한 좌우 움직임은 칸을 넘겨 보는 스크롤, 그 밖은 창 이동
                         inStrip = stripView != null && e.getY() >= stripView.getTop() && e.getY() <= stripView.getBottom();
                         startPos = scrollPos;
@@ -560,11 +721,13 @@ public class OverlayPlugin extends Plugin {
                     case MotionEvent.ACTION_MOVE: {
                         float mx = e.getRawX() - dx, my = e.getRawY() - dy;
                         try { if (vt != null) vt.addMovement(e); } catch (Exception ignored) { }
-                        if (!dragged && !scrolling && (Math.abs(mx) > slop || Math.abs(my) > slop)) {
+                        if (!dragged && !scrolling && !swiping && (Math.abs(mx) > slop || Math.abs(my) > slop)) {
                             if (inStrip && strip.length > 5 && Math.abs(mx) > Math.abs(my)) {
                                 scrolling = true;
                                 userScrolling = true;
                                 main.removeCallbacks(recenter);
+                            } else if (inBottom && Math.abs(my) > Math.abs(mx)) {
+                                swiping = true;
                             } else dragged = true;
                         }
                         if (scrolling && stripView != null && stripView.getWidth() > 0) {
@@ -591,8 +754,21 @@ public class OverlayPlugin extends Plugin {
                             } catch (Exception ignored) { }
                             main.postDelayed(recenter, 10000L);      // 손을 뗀 지 10초 뒤 현위치로 돌아온다
                         }
+                        else if (swiping) {
+                            // ★ 2026-10-11 (YJ): 앱과 똑같이 — 위로 쓸면 탑승 안내 열기, 아래로 쓸면 닫기(대기 알약)
+                            if (e.getAction() == MotionEvent.ACTION_UP) {
+                                float myy = e.getRawY() - dy;
+                                if (myy < -dp(22)) { if (!"board".equals(rsSt)) act("open"); }
+                                else if (myy > dp(22) && "board".equals(rsSt)) act("close");
+                            }
+                        }
                         else if (dragged) savePos();
-                        else if (e.getAction() == MotionEvent.ACTION_UP) openApp();   // 탭하면 앱으로 돌아간다
+                        else if (e.getAction() == MotionEvent.ACTION_UP) {
+                            if (inBottom && boardView != null && boardView.hitBtn(bx - boardView.getLeft(), by - boardView.getTop())) {
+                                act("undo".equals(rsSt) ? "undo" : "press");          // [탑승] / [되돌리기]
+                            } else if (inBottom && "wait".equals(rsSt)) act("pill");   // 대기 알약을 누르면 다시 열린다
+                            else openApp();                                             // 그 밖은 탭하면 앱으로 돌아간다
+                        }
                         try { if (vt != null) { vt.recycle(); vt = null; } } catch (Exception ignored) { }
                         return true;
                     default:
@@ -703,6 +879,7 @@ public class OverlayPlugin extends Plugin {
             if (!userScrolling) scrollPos = followPos(); else scrollPos = clampPos(scrollPos);
             t2.setTextColor(thSub);
             t3.setTextColor(thSub);
+            if (boardView != null) boardView.setState(rsSt);
             if (stripView != null) {
                 stripView.invalidate();
                 if (moving && strip.length > 1) startBlink();
@@ -822,6 +999,7 @@ public class OverlayPlugin extends Plugin {
         stopBlink();
         stopPulse();
         stopFling();
+        try { if (boardView != null) boardView.cancelAnim(); } catch (Exception ignored) { }
         main.removeCallbacks(recenter);
         userScrolling = false;
         stopAlert();                                   // 보이지 않는 동안 애니메이션을 돌리지 않는다(배터리)
