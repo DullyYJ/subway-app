@@ -102,14 +102,15 @@ const pass_through = async (page, n) => {
   const last = seen[seen.length - 1];
   await t('이동하는 동안 진행 위치가 되돌아가지 않고 끝까지 간다', async () => { assert.ok(mono, '진행 위치가 거꾸로 감'); assert.strictEqual(last.gm, nodes.filter(n => !n.w).length > 0 ? nodes.findIndex(n => n.name === '마포') : -1); });
   await t('오버레이의 현재역 칸이 지나는 역을 매번 따라간다', async () => assert.ok(trackOk));
-  await t('환승 2정거장 전 → 환승 준비 → 곧 하차 → 목적지 도착 알림이 순서대로 한 번씩 나간다', async () => {
+  await t('상단 알림은 환승 1정거장 전(환승 준비) → 목적지 1정거장 전(곧 하차)만 순서대로 한 번씩 — 환승 2정거장 전·목적지 도착은 없다', async () => {
     const ts = last.ln.filter(x => /^(환승 2정거장 전|환승 준비|목적지 2정거장 전|곧 하차|목적지 도착)$/.test(x));
-    const idx = ['환승 2정거장 전', '환승 준비', '곧 하차', '목적지 도착'].map(x => ts.indexOf(x));
-    assert.ok(idx.every(i => i >= 0), JSON.stringify(ts)); assert.ok(idx.every((v, k) => k === 0 || v > idx[k - 1]), JSON.stringify(ts));
+    assert.ok(!ts.includes('환승 2정거장 전') && !ts.includes('목적지 도착'), JSON.stringify(ts));
+    const idx = ['환승 준비', '곧 하차'].map(x => ts.indexOf(x));
+    assert.ok(idx.every(i => i >= 0), JSON.stringify(ts)); assert.ok(idx[1] > idx[0], JSON.stringify(ts));
     assert.strictEqual(new Set(ts).size, ts.length, '중복: ' + JSON.stringify(ts));
   });
   await t('하차 전 추천이 한 번만 나간다(앱을 보는 중이면 팝업 하나, 아니면 상단 알림 하나 — 같이 나가지 않는다)', async () => { const n = last.ln.filter(x => /하차 \d+분 전/.test(x)).length, p = last.pop.filter(x => /하차 \d+분 전/.test(x)).length; assert.strictEqual(n + p, 1, JSON.stringify({ ln: last.ln, pop: last.pop.length })); });
-  await t('이동 중 상주 알림(현재역 · 남은시간)이 갱신된다', async () => assert.ok(last.ln.filter(x => / · \d+분$/.test(x)).length >= 2, JSON.stringify(last.ln)));
+  await t('이동 중 상주 알림(현재역 · 남은시간)은 이제 나가지 않는다(상단 알림은 환승·하차 세 시점만)', async () => assert.strictEqual(last.ln.filter(x => / · \d+분$/.test(x)).length, 0, JSON.stringify(last.ln)));
   await t('오버레이 경고 단계가 0 에서 시작해 1 에 도달한다', async () => { const a = await page.evaluate(() => window.__ovl.map(o => o.alert)); assert.ok(a.includes(0) && a.includes(1) && a.indexOf(1) > a.indexOf(0), JSON.stringify(a) + ' / ' + seen.map(x => x.step).join(' | ')); });
 
   console.log('[안내 종료(×) — 모든 갱신이 같이 멈춘다]');
