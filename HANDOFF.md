@@ -667,3 +667,12 @@
 - YJ: "오버레이에서 주문하기 눌렀더니 앱 화면에서 한 번 더 누르게 돼. 설치된 배달앱 중 하나를 켜고(둘 이상이면 아무거나), 셋 다 없으면 맛집 탭에서 해당 가게를 찾아서 보여줘."
 - `_ovlRecoGo`(야식 delivery): 팝업(`_showBriefingModal`) 대신 0.7초 뒤(앱이 앞으로 온 뒤) `_arrOrderAuto(menu)`. `_dlvOpenInstalled` 가 배민→요기요→쿠팡이츠 순으로 `Capacitor.Plugins.AppLauncher.openUrl(앱 스킴)` 을 시도하고 `completed:false`(받아 줄 앱 없음)면 다음으로, 처음 열린 앱에서 멈춘다. 셋 다 없거나 플러그인이 없으면 `_arrFoodShowPlace(menu, 추천 가게명)`: 맛집 탭을 열고 목록이 뜨면 추천 가게(`window._arrPlace.n`) → 없으면 메뉴 종류(`_DLV_MENU_KEY`: 쌀국수→베트남 등)에 맞는 첫 가게의 카드를 열어 지도로 보여 준다. 못 찾으면 토스트만.
 - 알림·팝업의 배달앱 3버튼(`_arrOrder`)은 그대로. 시험 `overlay_reco` 38개. **실기기 확인 필요**: 앱 스킴(baemin://search, yogiyo://search, coupangeats://search)이 실제로 열리는지(스킴이 틀리면 앱만 열리거나 'completed:false'로 다음 앱으로 넘어감), 설치 앱이 없을 때 맛집 카드가 열리는지.
+
+## 2026-10-11 추천 문구 엔진 (광고처럼 보이지 않게 — 날씨·요일·시간·월급날을 읽는다)
+- `www/index.html`: `_arrCx(arrMs)`(상황: 기온·체감·강수확률·일교차·요일·내일 휴일 여부·24~26일) / `_arrHook(slot, cx, menu)`(아침·점심·저녁·야식·쇼핑별 규칙표 `_ARR_HOOKS`, 맞는 규칙이 없으면 `_ARR_HOOK_DEFAULT`) / `_arrPickDrink(cx)`(더우면 아이스·추우면 따뜻한 음료) / `_arrShopLine(it, cx)`(쿠팡 아이템 한 줄: 비·추위·더위 상품은 이름으로 먼저, 그다음 테마 `_ARR_SHOP_SAY`).
+- 규칙: ① 사실만(없는 값은 말하지 않고 다음 규칙으로) ② '추천·할인·구매·지금 주문' 같은 광고 말투 금지 ③ 모든 한 줄 26자 이하(오버레이 한 줄). 같은 날·같은 시각엔 같은 문구, 날짜가 바뀌면 바뀐다.
+- `_arrBuildAlert`: 본문 4번째 줄 = 상황 문구(예전 `_ARR_WIT_*` 위트 대신). 쇼핑은 '오늘의 추천 ·' 라벨을 없애고 상품 이름 + 상황 이유. 반환값에 `hook`·`hookStrong`·`cx`. `_arrPipText`(오버레이 a/b 줄): 음식 = 상황 문구 + 근처 가게(없으면 부드러운 문장), 쇼핑 = 상황 이유 + 상품 이름.
+- `_arrFireAlertNow`: 상황 규칙에 맞은 문구(`hookStrong`)는 AI 문구(`_arrAiCopy`)로 덮어쓰지 않는다. 평범한 날(규칙 없음)엔 예전처럼 AI 문구.
+- 쿠팡 아이템 팝업(`_showBriefingModal` shop)에 상품 사진(`item.i`, 없거나 못 불러오면 숨김). 밥집·카페는 사진 데이터가 없어 넣지 않았다(소상공인 CSV·D1·카카오에 사진 없음 — Google Places 사진은 유료·키 필요).
+- 시험: `test/overlay_reco.ui.test.js` 50건(③ 엔진: 26자·금칙어, 비/추위 우선순위, 날씨 없을 때 지어내지 않음, 월급날, 음료·기온, 아이템 테마 전부, AI 덮어쓰기 조건, 사진). 앞쪽 테스트가 바꾼 함수를 ②부터 되돌리도록 정리.
+- 실기기 확인 필요: 실제 날씨(/weather)가 들어온 상태의 문구, 오버레이 하단 두 줄 길이.
