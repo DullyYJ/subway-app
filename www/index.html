@@ -22665,6 +22665,7 @@ function _arrFireAlertNow(destStn, arrMs){
       try{
         var _pt = _arrPipText(a, slot, destStn, body);
         if(typeof _pipRecoSet === 'function') _pipRecoSet(_pt.title, _pt.lines.join('\n'), []);
+        window._arrLast = { at: (window._pipReco && window._pipReco.at) || 0, slot: slot, action: action, title: a.title, body: body };   // ★ 오버레이 [보기] 가 같은 곳으로 보낸다
       }catch(e){}
 
       var vib = [300,120,300];
@@ -27953,7 +27954,7 @@ function _ovlMoving(){
 }
 window._ovlMoving = _ovlMoving;
 function _ovlLines(){
-  var out = { l1:'', l2:'', l3:'', track:[], cur:-1, alert:0, moving:false };
+  var out = { l1:'', l2:'', l3:'', track:[], cur:-1, alert:0, moving:false, reco:null };
   try{
     var st = _pipStations(), d = _pipData();
     out.alert = _ovlAlertLevel(st);
@@ -27991,17 +27992,20 @@ function _ovlLines(){
       if(!r.ovlAt) r.ovlAt = Date.now();
       if(Date.now() - r.ovlAt <= _PIP_RECO_TTL) out.l3 = _pipClampText(r.title, 28);
     }
-    // ★ 2026-10-11 (YJ: "도착 2-3분 전에 오버레이에 주변 식당 추천 — 쿠팡·식당·카페는 이전에 정한 규칙대로"): 하차 10분 전 추천(_arrFireAlertNow)이 만든 문구
+    // ★ 2026-10-11 (YJ: "추천은 오버레이 하단에, 상단은 경로 그대로 · 추천아이템 연결 버튼 · 끄는 확인 버튼"): 하차 10분 전 추천(_arrFireAlertNow)이 만든 문구
     //   — 시간대 규칙(아침 커피·브런치 / 낮 점심·카페 / 저녁·야식 / 21시 이후 쿠팡 아이템 / 00~07시 없음)과 근처 가게는 그대로 — 를
-    //   도착 3분 전부터 도착할 때까지 오버레이 윗줄에 두 줄로 보여 준다(제목만 20초 뜨던 것을 대신한다). 끄기: window._ovlRecoOff = true
+    //   도착 3분 전부터 도착 30초 뒤까지 오버레이 맨 아래 줄(두 줄 문구 + [보기] [확인])로 보낸다. 윗줄(경로)은 건드리지 않는다. 끄기: window._ovlRecoOff = true
     try{
-      if(window._ovlRecoOff !== true && r && r.body && r.at && Date.now() - r.at < 25*60*1000
+      if(window._ovlRecoOff !== true && r && r.body && r.at && Date.now() - r.at < 25*60*1000 && window._ovlRecoDismissAt !== r.at
          && (typeof _notifAllowed !== 'function' || _notifAllowed('arrive_reco'))){
         var _re = (typeof _arrHomeEta === 'function') ? _arrHomeEta() : null;
         var _remS = _re ? _re.rem : ((d.min != null && isFinite(d.min)) ? d.min * 60 : null);
         if(_remS != null && _remS <= 180 && _remS > -30){
           var _rl = String(r.body).split('\n').map(function(x){ return _pipClampText(x, 26); }).filter(function(x){ return x; }).slice(0, 2);
-          if(_rl.length) out.l3 = _rl.join('\n');
+          if(_rl.length){
+            var _ac = (window._arrLast && window._arrLast.at === r.at && window._arrLast.action) || null;
+            out.reco = { on: true, a: _rl[0], b: _rl[1] || '', go: (_ac && _ac.kind === 'shop') ? '쿠팡 보기' : ((_ac && _ac.kind === 'delivery') ? '주문하기' : '맛집 보기'), at: r.at };
+          }
         }
       }
     }catch(eRc){}
@@ -28089,6 +28093,20 @@ function _ovlRs(){
 }
 window._ovlRs = _ovlRs;
 // 오버레이의 손짓 → 앱 탑승 시트와 똑같은 동작(네이티브가 evaluateJavascript 로 부른다)
+// ★ 2026-10-11: 오버레이 하단 추천 줄의 [확인] = 이 추천은 더 안 보임(다음 여정의 새 추천은 다시 뜸), [보기] = 추천이 가리키던 곳으로(앱 알림·팝업의 버튼과 같다)
+function _ovlRecoDismiss(){
+  try{ var r = window._pipReco; window._ovlRecoDismissAt = r && r.at ? r.at : -1; }catch(e){}
+}
+function _ovlRecoGo(){
+  try{
+    var L = window._arrLast, ac = L && L.action;
+    _ovlRecoDismiss();
+    if(ac && ac.kind === 'shop' && typeof _arrShopOpen === 'function') _arrShopOpen();
+    else if(ac && ac.kind === 'delivery' && typeof _showBriefingModal === 'function') _showBriefingModal(L.title, L.body, null, ac);
+    else if(typeof _arrGoFoodTab === 'function') _arrGoFoodTab();
+  }catch(e){}
+}
+window._ovlRecoGo = _ovlRecoGo; window._ovlRecoDismiss = _ovlRecoDismiss;
 window._ovlAct = function(a){
   try{
     if(a === 'press') _rsPress();
@@ -28096,6 +28114,8 @@ window._ovlAct = function(a){
     else if(a === 'open') _rsOpenManual();
     else if(a === 'close') _rsCloseManual();
     else if(a === 'pill'){ _rs.openUntil = Date.now() + 20000; }
+    else if(a === 'recoGo') _ovlRecoGo();
+    else if(a === 'recoOk') _ovlRecoDismiss();
     _rsTick();
     _ovlSync(true);
   }catch(e){}
@@ -28146,14 +28166,14 @@ function _ovlSync(force){
     var active = !!(_ovlUsable() && _pipHasRoute());   // ★ 2026-10-01: PiP 스위치와 무관(PiP 는 꺼 둠)
     var L = active ? _ovlLines() : { l1:'', l2:'', l3:'', track:[], cur:-1, alert:0, moving:false };
     var key = (active ? '1' : '0') + '|' + L.l1 + '|' + L.l2 + '|' + L.l3 + '|' + L.track.join('>') + '|' + L.cur + '|' + L.alert + '|' + (L.moving ? 'M' : 'S')
-              + '|' + (L.strip ? JSON.stringify(L.strip) + L.scur + '@' + L.sbase + JSON.stringify(L.theme) : '') + '|' + JSON.stringify(L.rs || null);
+              + '|' + (L.strip ? JSON.stringify(L.strip) + L.scur + '@' + L.sbase + JSON.stringify(L.theme) : '') + '|' + JSON.stringify(L.rs || null) + '|' + JSON.stringify(L.reco || null);
     var now = Date.now();
     // 바뀐 게 없으면 보내지 않는다. 다만 켜져 있는 동안엔 20초마다 한 번은 다시 보내 '살아 있음'을 알린다
     // (네이티브는 3분 넘게 소식이 없으면 낡은 값이 남지 않도록 스스로 숨긴다).
     if(!force && key === _ovlLastKey && (!active || (now - _ovlLastAt) < _OVL_HEARTBEAT_MS)) return;
     if(!active && _ovlLastKey === null && !force) { _ovlLastKey = key; return; }   // 처음부터 꺼져 있으면 굳이 알리지 않는다
     _ovlLastKey = key; _ovlLastAt = now;
-    var _up = { active: active, line1: L.l1, track: L.track, cur: L.cur, line2: L.l2, line3: L.l3, alert: L.alert || 0, moving: !!L.moving, rs: L.rs || { st: 'hidden' } };
+    var _up = { active: active, line1: L.l1, track: L.track, cur: L.cur, line2: L.l2, line3: L.l3, alert: L.alert || 0, moving: !!L.moving, rs: L.rs || { st: 'hidden' }, reco: L.reco || { on: false } };
     if(L.strip && L.strip.length){ _up.cells = L.strip; _up.cur = L.scur || 0; _up.base = L.sbase || 0; _up.theme = L.theme; }   // ★ 2026-10-11: 앱 경로 화면 칸 그대로(네이티브가 같은 모양으로 그림)
     var r = n.update(_up);
     if(r && typeof r.catch === 'function') r.catch(function(){ _ovlLastKey = null; });   // 실패하면 다음 틱에 다시
