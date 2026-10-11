@@ -24,6 +24,15 @@ async function newApp(b, respFn, start) {
   page.on('console', m => { const t = m.text(); if (/되돌림|재앵커|놓쳤/.test(t)) stat.msgs.push(t.slice(0, 160)); });
   await page.route('**/*', r => { const u = new URL(r.request().url()); if (u.protocol === 'file:' || u.protocol === 'data:') return r.continue();
     const H = { 'content-type': 'application/json', 'access-control-allow-origin': '*' };
+    // 실시간 차량 위치 워커(gildongmu-ride) 모의 — stat.vehFn(body) 가 돌려주는 JSON 을 그대로 응답(없으면 {ok:false}). 요청 본문은 stat.veh 에 쌓는다.
+    if (/gildongmu-ride/.test(u.host)) {
+      if (r.request().method() === 'OPTIONS') return r.fulfill({ status: 204, headers: Object.assign({ 'access-control-allow-headers': '*', 'access-control-allow-methods': '*' }, H) });
+      let bd = null; try { bd = JSON.parse(r.request().postData() || 'null'); } catch (e) {}
+      (stat.veh = stat.veh || []).push(bd);
+      let o = { ok: false }; try { if (stat.vehFn) o = stat.vehFn(bd); } catch (e) { o = { ok: false, error: String(e.message) }; }
+      if (o === 500) return r.fulfill({ status: 500, headers: H, body: '{}' });
+      return r.fulfill({ status: 200, headers: H, body: JSON.stringify(o) });
+    }
     if (/route-v2/.test(u.host) && /route-v2-app/.test(u.pathname)) { stat.routeReq++; return r.fulfill({ status: 200, headers: H, body: JSON.stringify(respFn()) }); }
     if (/route-v2/.test(u.host)) return r.fulfill({ status: 200, headers: H, body: '{}' });
     return r.fulfill({ status: 200, headers: H, body: '{}' }); });
