@@ -12014,18 +12014,39 @@ async function _rtFetchPositions(leg){
 }
 
 // 탑승역 근처에서 우리 방향 열차의 편성(trainNo) 잠금
+// ★ 2026-10-11: 같은 역에는 반대 방향 열차도 서 있다 — 종착역으로 진행 방향을 엔진에 물어(_ntForward) 반대 방향(false)은 뺀다(못 물으면 거르지 않음).
+//   이미 승차역을 떠난 열차(idx > 승차역)는 탈 수 없는 열차이므로 약한 불이익(0.5)을 준다. 탑승 뒤에는 _rtBoardMatch 가 '내가 출발한 때 승차역에서 출발한 열차'로 다시 고른다.
 async function _rtLock(leg){
   var trains=await _rtFetchPositions(leg);
   if(!trains) return false;
-  var cand=null, best=1e9;
+  var pool=[];
   for(var k=0;k<trains.length;k++){
     var t=trains[k]; var idx=_rtNodeIdxByStn(t.statnNm, leg);
     if(idx<0) continue;                    // 경로에 없는 역 = 반대방향/타경로
     if(idx>leg.boardIdx+2) continue;       // 탑승역 근처(막 지난 열차 포함)만
-    var score=Math.abs(idx-leg.boardIdx);
-    if(score<best){ best=score; cand=t; }
+    pool.push({ t:t, idx:idx });
   }
-  if(!cand || !cand.trainNo) return false;
+  if(!pool.length) return false;
+  var fwd={};
+  try{
+    var nd0=_transitNodeData, bn=nd0[leg.boardIdx], an=nd0[leg.alightIdx], terms=[];
+    pool.forEach(function(p){ var tm=String(p.t.statnTnm||''); if(tm && terms.indexOf(tm)<0) terms.push(tm); });
+    if(terms.length && bn && an && leg.alightIdx>leg.boardIdx && typeof _ntForward==='function'){
+      fwd=await new Promise(function(res){
+        var done=false, to=setTimeout(function(){ if(!done){ done=true; res({}); } }, 2500);
+        try{ _ntForward(leg.lineName, bn.name, an.name, terms, function(m){ if(!done){ done=true; clearTimeout(to); res(m||{}); } }); }
+        catch(e){ if(!done){ done=true; clearTimeout(to); res({}); } }
+      });
+    }
+  }catch(eF){ fwd={}; }
+  var cand=null, best=1e9;
+  for(var q=0;q<pool.length;q++){
+    var p=pool[q]; if(!p.t.trainNo) continue;
+    if(fwd[String(p.t.statnTnm||'')]===false) continue;       // 반대 방향 열차
+    var score=Math.abs(p.idx-leg.boardIdx) + (p.idx>leg.boardIdx ? 0.5 : 0);
+    if(score<best){ best=score; cand=p.t; }
+  }
+  if(!cand) return false;
   window._rtTrain={ lineName:leg.lineName, subwayId:leg.subwayId, trainNo:String(cand.trainNo),
                     boardIdx:leg.boardIdx, alightIdx:leg.alightIdx, lastIdx:-1, backCnt:0 };
   console.log('[RT열차] 편성 잠금:', cand.trainNo, '@', cand.statnNm, leg.lineName);
@@ -13005,6 +13026,95 @@ function _rtApplyAnchor(nodeIdx, sttus){
   } catch(e){}
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// ★ 2026-10-11 (YJ: "버스뿐 아니라 지하철도 — 탔다고 판단되면 실시간 열차 위치로 따라가고 GPS 는 확인만"):
+//   지하철은 열차 위치(realtimePosition)를 이미 따라간다(_rtLock/_rtPoll/_rtApplyAnchor). 부족했던 것 두 가지를 보강한다.
+//   (1) 어느 열차를 탔는지: 예전엔 '승차역에 가장 가까운 열차'를 탑승 전에 한 번 잠그고 끝이었다. 앞차·뒤차를 잡으면 마커가 남의 열차를 따라갔다.
+//       → 탑승이 확정된 뒤(_htlBoarded) '내가 움직이기 시작한 때(_rideEvStartMs) 승차역을 출발한 열차'를 최근 위치 기록에서 찾아 그 열차로 다시 잠근다(verified).
+//         후보가 둘 이상 비슷하면(2~3분 간격 열차) 고르지 않고 기존 잠금을 유지한다.
+//   (2) GPS 확인: 열차가 있는 역 구간(앞뒤 한 칸)에서 내 GPS 가 1.5km 넘게 떨어진 채 3번 연속(지상·역에서 GPS 가 잡힐 때만) 나오면 남의 열차로 보고 잠금을 푼다.
+//   실패·미지원·GPS 없음(지하)이면 기존 동작 그대로. 끄기: window._rtMatchOff = true.
+// ═══════════════════════════════════════════════════════════════════
+window._rtHist = [];
+window._rtVetoUntil = 0;
+function _rtRecord(legB, trains){
+  try{
+    var now=Date.now(), snap={ ts:now, line:legB.lineName, b:legB.boardIdx, m:{} }, any=false;
+    trains.forEach(function(t){
+      if(!t || t.trainNo==null) return;
+      var i=_rtNodeIdxByStn(t.statnNm, legB); if(i<0) return;
+      snap.m[String(t.trainNo)]={ i:i, s:String(t.trainSttus), term:String(t.statnTnm||'') }; any=true;
+    });
+    var H=window._rtHist=(window._rtHist||[]).filter(function(x){ return now-x.ts<=10*60000 && x.line===legB.lineName && x.b===legB.boardIdx; });
+    if(any) H.push(snap);
+    while(H.length>50) H.shift();
+  }catch(e){}
+}
+function _rtBoardMatch(legB){
+  try{
+    if(window._rtMatchOff===true) return;
+    if(Date.now()<(window._rtVetoUntil||0)) return;               // GPS 가 맞지 않다며 푼 직후에는 같은 열차로 다시 잠그지 않는다
+    var tr=window._rtTrain; if(tr && tr.verified) return;
+    if(window._htlBoarded!==true) return;                       // 탑승 확정 뒤에만(열차 출발 시각이 우연히 맞는 것만으로 탄 것으로 보지 않는다)
+    var Tb=window._rideEvStartMs, now=Date.now();
+    if(!Tb || Tb>now || now-Tb>8*60000) return;
+    var rec={};
+    (window._rtHist||[]).forEach(function(sn){
+      if(sn.line!==legB.lineName || sn.b!==legB.boardIdx) return;
+      Object.keys(sn.m).forEach(function(no){
+        var r=sn.m[no], c=rec[no]||(rec[no]={ atLast:0, afterFirst:0, term:r.term });
+        if(r.i===legB.boardIdx){ c.atLast=sn.ts; }
+        else if(r.i>legB.boardIdx){ if(!c.afterFirst) c.afterFirst=sn.ts; }
+      });
+    });
+    var list=[];
+    Object.keys(rec).forEach(function(no){
+      var c=rec[no]; if(!c.atLast) return;
+      // 승차역에서 보이다가 '우리 경로의 다음 역들'에서 보이기 시작해야 후보다 — 승차역에서 출발로만 보인 열차는 반대 방향 열차일 수 있어 뺀다.
+      if(!(c.afterFirst && c.afterFirst>c.atLast)) return;
+      var D=(c.atLast+c.afterFirst)/2;                                         // 마지막으로 승차역에서 보인 때와 처음 다음 역에서 보인 때의 가운데 = 출발
+      var off=D-Tb;                                             // 열차 출발(추정) − 내 움직임 시작(속도 문턱을 넘은 때라 0~45초 늦다)
+      if(off<-100000 || off>60000) return;
+      list.push({ no:no, term:c.term, off:off, score:Math.abs(D-(Tb-20000)) });
+    });
+    if(!list.length) return;
+    list.sort(function(a,b){ return a.score-b.score; });
+    if(list.length>1 && list[1].score-list[0].score<45000){
+      if(now-(window._rtAmbAt||0)>60000){ window._rtAmbAt=now; try{ _ovlDiag('열차매칭', '후보 ' + list.length + '대가 비슷해 고르지 않음(' + list.slice(0,3).map(function(x){ return x.no + ' ' + Math.round(x.off/1000) + 's'; }).join(', ') + ')'); }catch(e1){} }
+      return;
+    }
+    var bst=list[0];
+    if(tr && tr.trainNo===bst.no){ tr.verified=true; try{ _ovlDiag('열차매칭', bst.no + ' 확인 — 승차역 출발이 내 움직임 시작과 ' + Math.round(bst.off/1000) + '초 차'); }catch(e2){} return; }
+    var old=tr?tr.trainNo:null;
+    window._rtTrain={ lineName:legB.lineName, subwayId:legB.subwayId, trainNo:bst.no, boardIdx:legB.boardIdx, alightIdx:legB.alightIdx, lastIdx:-1, backCnt:0, verified:true, gpsFar:0 };
+    try{ _ovlDiag('열차매칭', (old ? ('잠근 ' + old + ' → ') : '') + bst.no + ' (' + bst.term + '행) — 승차역 출발이 내 움직임 시작과 ' + Math.round(bst.off/1000) + '초 차'); }catch(e3){}
+  }catch(e){}
+}
+// GPS 확인: 열차가 있는 역 앞뒤 한 칸 구간선에서 1.5km 넘게 떨어진 채 3번 연속이면 true (GPS 가 없거나 오래되면 false·세지 않음)
+function _rtGpsVeto(leg, tr, idx){
+  try{
+    if(window._rtMatchOff===true) return false;
+    if(window._htlBoarded!==true) return false;
+    var fx=(typeof _vehFix==='function') ? _vehFix() : null; if(!fx) return false;
+    if(fx.ts && tr.gpsAt===fx.ts) return false;               // 같은 점을 두 번 세지 않는다
+    if(fx.ts) tr.gpsAt=fx.ts;
+    var nd=_transitNodeData, pts=[];
+    for(var k=Math.max(0,idx-1); k<=Math.min(nd.length-1,idx+1); k++){
+      var n=nd[k]; if(n && n.isSub && !n.isWalk && n.lat!=null && (n.lineName||'')===leg.lineName) pts.push(n);
+    }
+    if(pts.length<2) return false;
+    var d=1e9;
+    for(var j=0;j<pts.length-1;j++){ var dj=_distToSegM(fx.lat,fx.lng,pts[j].lat,pts[j].lng,pts[j+1].lat,pts[j+1].lng); if(dj<d) d=dj; }
+    if(d>1500) tr.gpsFar=(tr.gpsFar||0)+1; else tr.gpsFar=0;
+    if(tr.gpsFar>=3){
+      try{ _ovlDiag('열차매칭해제', tr.trainNo + ' — 열차가 있는 구간(' + (nd[idx]&&nd[idx].name||'?') + ')에서 내 GPS 가 ' + Math.round(d) + 'm 떨어짐 — 남의 열차로 보고 풀음'); }catch(e){}
+      return true;
+    }
+    return false;
+  }catch(e){ return false; }
+}
+window._rtBoardMatch=_rtBoardMatch; window._rtRecord=_rtRecord; window._rtGpsVeto=_rtGpsVeto;
+
 // 메인 폴: 커버 노선이면 잠금·추적·보정. 미커버/실패면 조용히 폴백.
 async function _rtPoll(){
   try {
@@ -13013,8 +13123,17 @@ async function _rtPoll(){
     var leg=_rtCurrentSubLeg();
     if(!leg || !_rtCovered(leg.lineName)){ window._rtFreshUntil=0; return; }  // 미커버 → GPS/시각표
     leg.subwayId=_rtLineId(leg.lineName);
+    // 2026-10-11: 위치 기록 → 탑승 뒤 '내가 출발한 때 승차역을 출발한 열차'로 다시 잠근다(_rtBoardMatch)
+    try{
+      var _bi=(typeof _htlBoardIdx==='function') ? _htlBoardIdx() : -1, _nd=_transitNodeData;
+      if(_bi>=0 && _nd[_bi] && _nd[_bi].isSub && (_nd[_bi].lineName||'')===leg.lineName && leg.boardIdx>=_bi){
+        var legB={ boardIdx:_bi, alightIdx:leg.alightIdx, lineName:leg.lineName, subwayId:leg.subwayId };
+        var _all=await _rtFetchPositions(leg);
+        if(_all){ _rtRecord(legB, _all); _rtBoardMatch(legB); }
+      }
+    }catch(eM){}
     var tr=window._rtTrain;
-    if(!tr || tr.lineName!==leg.lineName){ await _rtLock(leg); tr=window._rtTrain; if(!tr) return; }
+    if(!tr || tr.lineName!==leg.lineName){ if(Date.now()<(window._rtVetoUntil||0)) return; await _rtLock(leg); tr=window._rtTrain; if(!tr) return; }
     var trains=await _rtFetchPositions(leg); if(!trains) return;
     var me=null;
     for(var i=0;i<trains.length;i++){ if(String(trains[i].trainNo)===tr.trainNo){ me=trains[i]; break; } }
@@ -13024,6 +13143,7 @@ async function _rtPoll(){
     if(idx<tr.lastIdx){ tr.backCnt=(tr.backCnt||0)+1; if(tr.backCnt>=2){ window._rtTrain=null; return; } }
     else { tr.backCnt=0; }
     tr.lastIdx=idx;
+    if(_rtGpsVeto(leg, tr, idx)){ window._rtTrain=null; window._rtVetoUntil=Date.now()+120000; return; }   // GPS 가 이 열차와 안 맞는다 — 풀고 2분간 다시 잠그지 않는다
     _rtApplyAnchor(idx, String(me.trainSttus));
     if(idx>=leg.alightIdx){ window._rtTrain=null; }          // 하차역 도달 → 다음 구간 재잠금
   } catch(e){ /* 조용히 폴백 */ }
