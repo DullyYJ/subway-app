@@ -34,7 +34,9 @@ import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.VelocityTracker;
 import android.view.ViewConfiguration;
+import android.view.animation.DecelerateInterpolator;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
@@ -97,6 +99,7 @@ public class OverlayPlugin extends Plugin {
     private boolean userScrolling = false;
     private float pulse = 0f;                   // 현위치 점 깜박임 0~1
     private ValueAnimator pulseAnim;
+    private ValueAnimator flingAnim;            // 손가락을 떼도 관성으로 미끄러지는 스크롤
     private int thBg = Color.WHITE, thFg = Color.parseColor("#111114"), thSub = Color.parseColor("#8E8E93");
     private GradientDrawable cardBg;
     private boolean moving = false;             // ★ 2026-10-06: 열차가 현재 역을 떠나 다음 역으로 가는 중(웹이 판단해 넘겨 준다) — 화살표가 깜박인다
@@ -543,7 +546,7 @@ public class OverlayPlugin extends Plugin {
 
         final int slop = ViewConfiguration.get(ctx).getScaledTouchSlop();
         root.setOnTouchListener(new View.OnTouchListener() {
-            float dx, dy; int sx, sy; boolean dragged, scrolling, inStrip; float startPos;
+            float dx, dy; int sx, sy; boolean dragged, scrolling, inStrip; float startPos; VelocityTracker vt;
             @Override public boolean onTouch(View v, MotionEvent e) {
                 switch (e.getAction()) {
                     case MotionEvent.ACTION_DOWN:
@@ -551,9 +554,12 @@ public class OverlayPlugin extends Plugin {
                         // 점·선 줄에서 시작한 좌우 움직임은 칸을 넘겨 보는 스크롤, 그 밖은 창 이동
                         inStrip = stripView != null && e.getY() >= stripView.getTop() && e.getY() <= stripView.getBottom();
                         startPos = scrollPos;
+                        stopFling();                                  // 미끄러지던 중에 다시 대면 멈춘다
+                        try { if (vt != null) vt.recycle(); vt = VelocityTracker.obtain(); vt.addMovement(e); } catch (Exception ignored) { vt = null; }
                         return true;
                     case MotionEvent.ACTION_MOVE: {
                         float mx = e.getRawX() - dx, my = e.getRawY() - dy;
+                        try { if (vt != null) vt.addMovement(e); } catch (Exception ignored) { }
                         if (!dragged && !scrolling && (Math.abs(mx) > slop || Math.abs(my) > slop)) {
                             if (inStrip && strip.length > 5 && Math.abs(mx) > Math.abs(my)) {
                                 scrolling = true;
@@ -573,9 +579,21 @@ public class OverlayPlugin extends Plugin {
                     }
                     case MotionEvent.ACTION_UP:
                     case MotionEvent.ACTION_CANCEL:
-                        if (scrolling) main.postDelayed(recenter, 10000L);      // 손을 뗀 지 10초 뒤 현위치로 돌아온다
+                        if (scrolling) {
+                            // ★ 2026-10-11 (YJ: "앱처럼 슬라이딩되어 미끄러지게"): 떼는 순간의 속도로 관성 스크롤
+                            try {
+                                if (vt != null && e.getAction() == MotionEvent.ACTION_UP && stripView != null && stripView.getWidth() > 0) {
+                                    vt.addMovement(e);
+                                    vt.computeCurrentVelocity(1000);
+                                    float cw = stripView.getWidth() / 5f;
+                                    startFling(-vt.getXVelocity() / cw);          // 초당 몇 칸
+                                }
+                            } catch (Exception ignored) { }
+                            main.postDelayed(recenter, 10000L);      // 손을 뗀 지 10초 뒤 현위치로 돌아온다
+                        }
                         else if (dragged) savePos();
                         else if (e.getAction() == MotionEvent.ACTION_UP) openApp();   // 탭하면 앱으로 돌아간다
+                        try { if (vt != null) { vt.recycle(); vt = null; } } catch (Exception ignored) { }
                         return true;
                     default:
                         return false;
@@ -721,13 +739,41 @@ public class OverlayPlugin extends Plugin {
         return Math.max(stripBase, Math.min(stripBase + n - 5, v));
     }
 
+    /** 손가락을 뗀 뒤 관성으로 미끄러지는 스크롤(속도 = 초당 칸 수). 천천히 감속하며 끝에서 멈춘다. */
+    private void startFling(float cellsPerSec) {
+        stopFling();
+        if (stripView == null || !attached) return;
+        float dist = cellsPerSec * 0.38f;                       // 떼는 속도에 비례해 더 미끄러진다
+        if (Math.abs(dist) < 0.25f) return;
+        final float from = scrollPos, to = clampPos(from + dist);
+        if (Math.abs(to - from) < 0.05f) return;
+        long dur = (long) Math.max(320, Math.min(1200, 320 + Math.abs(to - from) * 150));
+        flingAnim = ValueAnimator.ofFloat(0f, 1f);
+        flingAnim.setDuration(dur);
+        flingAnim.setInterpolator(new DecelerateInterpolator(2.2f));
+        flingAnim.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+            @Override public void onAnimationUpdate(ValueAnimator an) {
+                scrollPos = from + (to - from) * (Float) an.getAnimatedValue();
+                if (stripView != null) stripView.invalidate();
+            }
+        });
+        flingAnim.start();
+    }
+
+    private void stopFling() {
+        try { if (flingAnim != null) flingAnim.cancel(); } catch (Exception ignored) { }
+        flingAnim = null;
+    }
+
     private final Runnable recenter = new Runnable() {
         @Override public void run() {
+            stopFling();
             userScrolling = false;
             if (stripView == null || !attached) return;
             final float from = scrollPos, to = followPos();
             ValueAnimator a = ValueAnimator.ofFloat(0f, 1f);
-            a.setDuration(250L);
+            a.setDuration(380L);
+            a.setInterpolator(new DecelerateInterpolator(1.6f));
             a.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
                 @Override public void onAnimationUpdate(ValueAnimator an) {
                     if (userScrolling) { an.cancel(); return; }
@@ -775,6 +821,7 @@ public class OverlayPlugin extends Plugin {
     private void detach() {
         stopBlink();
         stopPulse();
+        stopFling();
         main.removeCallbacks(recenter);
         userScrolling = false;
         stopAlert();                                   // 보이지 않는 동안 애니메이션을 돌리지 않는다(배터리)
