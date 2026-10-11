@@ -228,6 +228,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     await o.page.evaluate(() => { _rs.shrunk = 0; _rs.seen = false; _rs.openUntil = 0; _transitNodeData[1].arrTime = '13:30'; }); await o.page.clock.runFor(1500);
     let r = await lastRs(); assert.ok(r.st === 'hidden' || r.st === 'wait', JSON.stringify(r));
     await o.page.evaluate(() => _ovlAct('open')); r = await lastRs(); assert.strictEqual(r.st, 'board', JSON.stringify(r));
+    await o.page.evaluate(() => { _transitNodeData[1].arrTime = '12:52'; }); await o.page.clock.runFor(1200);   // 도착 1분 반 안(바로 확정되는 시각)
   });
   await t('탑승(press)을 누르면 앱처럼 승차가 확정되고 undo 상태가 오며, 되돌리기(undo)로 복구된다', async () => {
     await o.page.evaluate(() => _ovlAct('press'));
@@ -241,6 +242,51 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   await t('_ovlRsOff 면 항상 숨김', async () => { await o.page.evaluate(() => { window._routeLocked = true; window._ovlRsOff = true; }); await o.page.clock.runFor(1500); const r = await lastRs(); assert.strictEqual(r.st, 'hidden'); });
   await t('페이지 오류 없음(⑦)', async () => assert.deepStrictEqual([...new Set(o.errs)], []));
   await o.ctx.close();
+
+  console.log('[⑧ 도착보다 일찍 누르면 예약만 받고, 그 시각이 되면 확정 — 마커·시각이 튀지 않는다]');
+  const e = await fresh();
+  await e.at('12:49:00'); await e.page.clock.runFor(1500);
+  await e.page.evaluate(() => { _rs.openUntil = Date.now() + 600000; _rsTick(); }); await e.page.clock.runFor(800);
+  const t0 = await e.page.evaluate(() => ({ arr: _transitNodeData.map(n => n.arrTime).join(' '), gm: window._gpsMaxIdx }));
+  await e.page.click('#rsBtn'); await e.page.clock.runFor(1500);
+  let y = await e.st();
+  const g0 = await e.page.evaluate(() => ({ b: window._htlBoarded, pm: JSON.stringify(window._nodePassMs), gm: window._gpsMaxIdx, arr: _transitNodeData.map(n => n.arrTime).join(' '), pend: !!_rs.pend, why: window._boardWhy }));
+  await t('도착 3분 전에 누르면 승차로 기록하지 않고(예약) 마커·통과 기록·시각이 그대로다', async () => {
+    assert.strictEqual(g0.b, false); assert.strictEqual(g0.pm, '{}'); assert.strictEqual(g0.gm, t0.gm); assert.strictEqual(g0.arr, t0.arr); assert.ok(g0.pend);
+  });
+  await t('예약하면 시트는 내려가 대기 알약이 되고 \'탑승 예정\' 되돌리기 안내가 뜬다', async () => {
+    assert.ok(!y.sheet && y.pill && y.undo, JSON.stringify(y));
+    const um = await e.page.evaluate(() => document.getElementById('rsUndo').firstChild.textContent); assert.ok(/탑승 예정/.test(um), um);
+  });
+  await t('오버레이로도 undo 문구가 간다', async () => { const r = await e.page.evaluate(() => _ovlRs()); assert.strictEqual(r.st, 'undo'); assert.ok(/탑승 예정/.test(r.um), JSON.stringify(r)); });
+  await e.page.clock.runFor(8000);
+  await e.at('12:50:20'); await e.page.clock.runFor(1500);
+  await t('도착 1분 반 전까지는 계속 예약 상태(알약)이고 승차 기록이 없다', async () => {
+    const x = await e.st(), g = await e.page.evaluate(() => ({ b: window._htlBoarded, pm: JSON.stringify(window._nodePassMs) }));
+    assert.ok(!x.sheet && x.pill && g.b === false && g.pm === '{}', JSON.stringify([x, g]));
+  });
+  await e.at('12:50:40'); await e.page.clock.runFor(2000);
+  const g1 = await e.page.evaluate(() => ({ b: window._htlBoarded, why: window._boardWhy, pm: Object.keys(window._nodePassMs || {}).join(','), gm: window._gpsMaxIdx, arr: _transitNodeData.map(n => n.arrTime).join(' ') }));
+  await t('도착 1분 반 안이 되면 예약이 확정되어 승차 기록이 남는다(엔진의 확정 지연 보정 3분 안쪽만 반영)', async () => {
+    assert.strictEqual(g1.b, true); assert.strictEqual(g1.why, '탑승 버튼'); assert.strictEqual(g1.pm, '1'); assert.ok(g1.gm >= 1);
+    const dmin = (s) => { const [h, m] = s.split(':').map(Number); return h * 60 + m; };
+    const a0 = t0.arr.split(' ').map(dmin), a1 = g1.arr.split(' ').map(dmin);
+    for (let i = 1; i < a0.length; i++) assert.ok(Math.abs(a1[i] - a0[i]) <= 4, 'shift ' + i + ': ' + a0[i] + '→' + a1[i]);
+  });
+  await t('확정 뒤 마커는 승차 정류장 근처에 머문다(구간을 건너뛰지 않는다)', async () => { const h = await e.page.evaluate(() => (typeof _pipHereIdx === 'function') ? _pipHereIdx() : window._gpsMaxIdx); assert.ok(h <= 2, String(h)); });
+  await t('페이지 오류 없음(⑧)', async () => assert.deepStrictEqual([...new Set(e.errs)], []));
+  await e.ctx.close();
+  const f = await fresh();
+  await f.at('12:49:00'); await f.page.clock.runFor(1500);
+  await f.page.evaluate(() => { _rs.openUntil = Date.now() + 600000; _rsTick(); }); await f.page.clock.runFor(800);
+  await f.page.click('#rsBtn'); await f.page.clock.runFor(800);
+  await f.page.click('#rsUndoBtn'); await f.page.clock.runFor(1200);
+  await t('예약을 되돌리면 예약이 지워지고 시트가 다시 열린다', async () => { const x = await f.st(), p = await f.page.evaluate(() => !!_rs.pend); assert.ok(!p && x.sheet, JSON.stringify(x)); });
+  await f.page.click('#rsBtn'); await f.page.clock.runFor(800);
+  const pn = await f.page.evaluate(() => !!_rs.pend); assert.ok(pn, 'pend not set');
+  await f.page.evaluate(() => { window._rideEv = () => ({ now: true, riding: true }); }); await f.page.clock.runFor(1500);
+  await t('예약 중 타고 있다는 증거(차량 이동)가 잡히면 도착 전이라도 바로 확정된다', async () => { const g = await f.page.evaluate(() => ({ b: window._htlBoarded, pend: !!_rs.pend })); assert.strictEqual(g.b, true); assert.ok(!g.pend); });
+  await f.ctx.close();
 
   await b.close();
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
