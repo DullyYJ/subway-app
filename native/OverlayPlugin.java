@@ -24,6 +24,7 @@ import android.os.Looper;
 import android.provider.Settings;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
+import android.text.TextPaint;
 import android.text.TextUtils;
 import android.text.style.ForegroundColorSpan;
 import android.text.style.RelativeSizeSpan;
@@ -38,6 +39,8 @@ import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+
+import org.json.JSONObject;
 
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
@@ -74,8 +77,21 @@ public class OverlayPlugin extends Plugin {
     private volatile boolean appVisible = true;    // 액티비티가 화면에 보이는가
     private volatile long lastUpdateAt = 0L;
     private String line1 = "", line2 = "", line3 = "";
-    private String[] track = new String[0];     // 출발 – 경로 – 현위치 – 경로 – 도착 (웹이 정해 준 이름들)
-    private int trackCur = -1;                  // 현위치 칸 번호(이 칸만 하얗고, 나머지는 흐린 회색)
+    // ★ 2026-10-11 (YJ: "오버레이도 앱의 경로 화면으로 — 현위치 글씨만 검은색, 나머지는 회색. 정류장명은 한 줄, 길면 적당히 잘라"):
+    //   앱 경로 화면(타임라인)의 칸을 웹이 그대로 읽어 보내 주면(이름·노선 라벨·시각·점/선 색) 여기서는 같은 모양으로 그리기만 한다.
+    private static class Cell {
+        String n = "", t = "", g = "";          // 정류장명 · 시각 · 노선 라벨(931번, ↔ 인천2호선)
+        boolean pill = false;                   // 라벨이 색 배지(환승·출발·도착)인가
+        int gc = 0xFF8E8E93;                    // 라벨 색(배지면 배경색)
+        boolean hasL = false, hasR = false;     // 왼쪽·오른쪽 선이 있는가
+        int lc = 0xFF8E8E93, rc = 0xFF8E8E93;   // 선 색
+        int dc = 0xFF0A84FF;                    // 점 색
+        int dk = 1;                             // 점 모양: 0 없음 · 1 속이 빈 동그라미 · 2 꽉 찬 점 · 3 작은 점(도보)
+    }
+    private Cell[] strip = new Cell[0];
+    private int stripCur = 0;                   // 현위치 칸 번호(strip 안에서)
+    private int thBg = Color.WHITE, thFg = Color.parseColor("#111114"), thSub = Color.parseColor("#8E8E93");
+    private GradientDrawable cardBg;
     private boolean moving = false;             // ★ 2026-10-06: 열차가 현재 역을 떠나 다음 역으로 가는 중(웹이 판단해 넘겨 준다) — 화살표가 깜박인다
     private int alertLevel = 0;                 // 하차 임박: 0 없음 · 2 두 정거장 전(무지개 테두리가 천천히) · 1 한 정거장 전(빠르게)
     private RainbowBorder border;
@@ -86,53 +102,117 @@ public class OverlayPlugin extends Plugin {
     private WindowManager.LayoutParams lp;
     private LinearLayout root;
     private TextView t1, t2, t3;
-    // ★ 2026-10-03 (YJ: "지나간 곳 · 현위치 · 다음정거장 — 세 칸, 아래는 남은시간·도착"): 다섯 칸 → 세 칸. 가운데(현위치) 칸이 화면 정중앙.
-    private final TextView[] cells = new TextView[3];
     private boolean attached = false;
 
-    // ★ 2026-10-06 (YJ: "현재역과 다음역 사이에 화살표 -->. 정차 중엔 회색, 이동 중이면 회색↔흰색으로 자동차 깜박이처럼"):
-    //   역 글자는 움직이지 않는다. 가운데 칸 글자 끝 ~ 다음 칸 글자 시작 사이 '빈 자리'에 맞춰 선 길이를 정하고 오른쪽 끝에 화살촉을 그린다.
-    //   무엇을 보여줄지(이동 중인가)는 웹이 정해서 moving 으로 넘겨 주고, 여기서는 그리기·깜박임만 한다.
-    private ArrowView arrow;
-    private int rowWpx = 0, centerWpx = 0, sideWpx = 0;
+    // ★ 2026-10-11: 현재역과 다음역 사이 선이 이동 중이면 깜박인다(예전 화살표 -->를 대신한다. 무엇을 보여줄지·이동 중인지는 웹이 정하고, 여기서는 그리기·깜박임만 한다).
+    private StripView stripView;
     private static final long BLINK_MS = 550L;
     private boolean blinkOn = false, blinking = false;
     private final Runnable blinker = new Runnable() {
         @Override public void run() {
-            if (!attached || !moving || arrow == null) { blinking = false; return; }
+            if (!attached || !moving || stripView == null) { blinking = false; return; }
             blinkOn = !blinkOn;
-            arrow.setLit(blinkOn);
+            stripView.setLit(blinkOn);
             main.postDelayed(this, BLINK_MS);
         }
     };
 
-    /** 역 사이 화살표(-->) 를 그리는 뷰. 위치는 setGap 으로 받은 가로 구간(행 기준 픽셀) 안에 선을 긋고 오른쪽 끝에 화살촉을 둔다. */
-    private class ArrowView extends View {
-        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private float x0 = 0f, x1 = 0f;
-        private boolean lit = false;
-        ArrowView(Context c) {
+    /**
+     * 앱 경로 화면(타임라인)과 같은 모양으로 다섯 칸을 그리는 뷰: 정류장명 · 노선 라벨 · 점과 선 · 시각.
+     * 현위치 칸만 글씨가 검정(테마의 글자색)이고 나머지는 회색. 정류장명은 한 줄이며 칸보다 길면 끝을 '…' 로 자른다.
+     */
+    private class StripView extends View {
+        private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final TextPaint tp = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+        private final RectF rf = new RectF();
+        private boolean lit = true;
+        StripView(Context c) {
             super(c);
-            paint.setStyle(Paint.Style.STROKE);
-            paint.setStrokeCap(Paint.Cap.ROUND);
-            paint.setStrokeWidth(dp(2.4f));
+            tp.setTextAlign(Paint.Align.CENTER);
         }
-        void setGap(float a, float b) { x0 = a; x1 = b; invalidate(); }
         void setLit(boolean on) { lit = on; invalidate(); }
-        // 2026-10-10: 높이를 부모가 정한 값(EXACTLY)일 때만 따른다. 기본 onMeasure 는 wrap_content 부모 안에서 화면 전체 높이를 잡아 오버레이가 화면을 다 덮었다.
+        int wantH() { return dp(2) + dp(16) + dp(14) + dp(22) + dp(16); }
+        // 높이는 우리가 정한 값으로 고정한다(부모가 wrap_content 라도 화면 전체를 덮지 않게).
         @Override protected void onMeasure(int wSpec, int hSpec) {
-            int w = MeasureSpec.getSize(wSpec);
-            int h = (MeasureSpec.getMode(hSpec) == MeasureSpec.EXACTLY) ? MeasureSpec.getSize(hSpec) : 0;
-            setMeasuredDimension(w, h);
+            setMeasuredDimension(MeasureSpec.getSize(wSpec), wantH());
+        }
+        private void text(Canvas cv, String s, float cx, float y, float maxW, float sp, int color, boolean bold) {
+            if (s == null || s.length() == 0) return;
+            tp.setTextSize(sp * getResources().getDisplayMetrics().scaledDensity);
+            tp.setColor(color);
+            tp.setTypeface(bold ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
+            CharSequence e = TextUtils.ellipsize(s, tp, Math.max(1f, maxW), TextUtils.TruncateAt.END);
+            cv.drawText(e, 0, e.length(), cx, y, tp);
         }
         @Override protected void onDraw(Canvas cv) {
-            if (x1 - x0 < dp(14)) return;                       // 빈 자리가 너무 좁으면 그리지 않는다
-            paint.setColor(lit ? Color.WHITE : Color.parseColor("#6E6E76"));
-            float y = getHeight() / 2f;
-            float head = dp(6.5f);
-            cv.drawLine(x0, y, x1, y, paint);                   // ──
-            cv.drawLine(x1, y, x1 - head, y - head * 0.75f, paint);   // 화살촉 위
-            cv.drawLine(x1, y, x1 - head, y + head * 0.75f, paint);   // 화살촉 아래
+            int n = strip.length;
+            if (n == 0) return;
+            int cols = 5;
+            float cw = getWidth() / (float) cols;
+            float x0 = (getWidth() - cw * n) / 2f;
+            float yName = dp(2) + dp(12.5f);
+            float yTag = dp(2) + dp(16) + dp(10.5f);
+            float yAx = dp(2) + dp(16) + dp(14) + dp(11);
+            float yTime = dp(2) + dp(16) + dp(14) + dp(22) + dp(12);
+            float lw = dp(3);
+            for (int i = 0; i < n; i++) {
+                Cell c = strip[i];
+                float cx = x0 + cw * (i + 0.5f);
+                boolean here = (i == stripCur);
+                int ink = here ? thFg : thSub;
+                // 정류장명(한 줄)
+                text(cv, c.n, cx, yName, cw - dp(3), here ? 11.5f : 10.5f, ink, true);
+                // 노선 라벨
+                if (c.g.length() > 0) {
+                    if (c.pill) {
+                        tp.setTextSize(7f * getResources().getDisplayMetrics().scaledDensity);
+                        tp.setTypeface(Typeface.DEFAULT_BOLD);
+                        CharSequence e = TextUtils.ellipsize(c.g, tp, Math.max(1f, cw - dp(10)), TextUtils.TruncateAt.END);
+                        float w = tp.measureText(e, 0, e.length()) + dp(8);
+                        rf.set(cx - w / 2f, yTag - dp(8.5f), cx + w / 2f, yTag + dp(2.5f));
+                        p.setStyle(Paint.Style.FILL);
+                        p.setColor(c.gc);
+                        cv.drawRoundRect(rf, dp(4), dp(4), p);
+                        tp.setColor(Color.WHITE);
+                        cv.drawText(e, 0, e.length(), cx, yTag, tp);
+                    } else {
+                        text(cv, c.g, cx, yTag, cw - dp(3), 8f, c.gc, true);
+                    }
+                }
+                // 선
+                p.setStyle(Paint.Style.FILL);
+                boolean blinkSeg = moving && !lit && ((i == stripCur && c.hasR) || (i == stripCur + 1 && c.hasL));
+                int al = blinkSeg ? 70 : 255;
+                if (c.hasL) {
+                    p.setColor((c.lc & 0x00FFFFFF) | (al << 24));
+                    cv.drawRect(cx - cw / 2f, yAx - lw / 2f, cx, yAx + lw / 2f, p);
+                }
+                boolean blinkR = moving && !lit && (i == stripCur && c.hasR);
+                if (c.hasR) {
+                    p.setColor((c.rc & 0x00FFFFFF) | ((blinkR ? 70 : 255) << 24));
+                    cv.drawRect(cx, yAx - lw / 2f, cx + cw / 2f, yAx + lw / 2f, p);
+                }
+                // 점
+                if (here) {
+                    p.setColor(0x47F0A500);
+                    cv.drawCircle(cx, yAx, dp(11), p);          // 현위치 둘레 은은한 테두리
+                    p.setColor(0xFFF0A500);
+                    cv.drawCircle(cx, yAx, dp(7), p);           // 앱 현위치 점(주황)
+                } else if (c.dk == 2) {
+                    p.setColor(c.dc);
+                    cv.drawCircle(cx, yAx, dp(7), p);
+                } else if (c.dk == 1) {
+                    p.setColor(c.dc);
+                    cv.drawCircle(cx, yAx, dp(6), p);
+                    p.setColor(thBg);
+                    cv.drawCircle(cx, yAx, dp(3), p);
+                } else if (c.dk == 3) {
+                    p.setColor(c.dc);
+                    cv.drawCircle(cx, yAx, dp(3), p);
+                }
+                // 시각
+                text(cv, c.t, cx, yTime, cw - dp(3), 9.5f, ink, true);
+            }
         }
     }
 
@@ -174,8 +254,8 @@ public class OverlayPlugin extends Plugin {
 
     /**
      * 웹이 주기적으로 부른다. active=false 면 숨긴다.
-     * track/cur: 윗줄 — 출발·경로·현위치·경로·도착 이름 목록과 현위치 칸 번호(현위치만 하얗게, 나머지는 회색).
-     *            track 이 비어 있으면 line1 을 그대로 쓴다.
+     * cells/cur: 윗줄 — 앱 경로 화면의 칸(이름 n · 시각 t · 라벨 g/gp/gc · 선 lc/rc · 점 dc/dk)과 현위치 칸 번호(현위치 글씨만 검정, 나머지는 회색).
+     * theme: 앱 테마의 카드 바탕·글자·보조 글자 색(bg/fg/sub).
      * line2: 가운데 줄(목적지·남은 시간·도착), line3: 선택(추천 알림 제목 등)
      */
     @PluginMethod
@@ -183,13 +263,33 @@ public class OverlayPlugin extends Plugin {
         wanted = call.getBoolean("active", false);
         line1 = nz(call.getString("line1"));
         try {
-            JSArray arr = call.getArray("track");
-            int n = arr == null ? 0 : arr.length();
-            String[] tr = new String[n];
-            for (int i = 0; i < n; i++) tr[i] = arr.optString(i, "");
-            track = tr;
-        } catch (Exception e) { track = new String[0]; }
-        trackCur = call.getInt("cur", -1);
+            JSArray arr = call.getArray("cells");
+            int n = arr == null ? 0 : Math.min(arr.length(), 7);
+            Cell[] cs = new Cell[n];
+            for (int i = 0; i < n; i++) {
+                JSONObject o = arr.getJSONObject(i);
+                Cell c = new Cell();
+                c.n = o.optString("n", ""); c.t = o.optString("t", ""); c.g = o.optString("g", "");
+                c.pill = o.optBoolean("gp", false);
+                c.gc = col(o.optString("gc", ""), 0xFF8E8E93);
+                String l = o.optString("lc", ""), r = o.optString("rc", "");
+                c.hasL = l.length() > 0; c.hasR = r.length() > 0;
+                c.lc = col(l, 0xFF8E8E93); c.rc = col(r, 0xFF8E8E93);
+                c.dc = col(o.optString("dc", ""), 0xFF0A84FF);
+                c.dk = o.optInt("dk", 1);
+                cs[i] = c;
+            }
+            strip = cs;
+        } catch (Exception e) { strip = new Cell[0]; }
+        stripCur = Math.max(0, Math.min(call.getInt("cur", 0), Math.max(0, strip.length - 1)));
+        try {
+            JSObject th = call.getObject("theme");
+            if (th != null) {
+                thBg = col(th.optString("bg", ""), Color.WHITE);
+                thFg = col(th.optString("fg", ""), Color.parseColor("#111114"));
+                thSub = col(th.optString("sub", ""), Color.parseColor("#8E8E93"));
+            }
+        } catch (Exception ignored) { }
         moving = call.getBoolean("moving", false);
         Integer al = call.getInt("alert", 0);
         alertLevel = al == null ? 0 : Math.max(0, Math.min(2, al));
@@ -241,6 +341,14 @@ public class OverlayPlugin extends Plugin {
 
     private static String nz(String s) { return s == null ? "" : s; }
 
+    /** '#rrggbb' 문자열을 색으로(잘못된 값이면 기본값). */
+    private static int col(String s, int def) {
+        try {
+            if (s == null || s.length() == 0) return def;
+            return Color.parseColor(s);
+        } catch (Exception e) { return def; }
+    }
+
     private boolean canDraw() {
         try {
             return Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
@@ -257,7 +365,7 @@ public class OverlayPlugin extends Plugin {
                     boolean stale = (System.currentTimeMillis() - lastUpdateAt) > STALE_MS;
                     boolean show = wanted && !appVisible && !stale && canDraw()
                             && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
-                            && (track.length > 0 || line1.length() > 0);
+                            && (strip.length > 0 || line1.length() > 0);
                     if (show) { rebuildIfResized(); attachOrUpdate(); scheduleCheck(); startTicker(); }
                     else detach();
                 } catch (Exception ignored) { }
@@ -340,7 +448,7 @@ public class OverlayPlugin extends Plugin {
             attached = false;
         }
         stopBlink();
-        root = null; border = null; borderAnim = null; borderMode = 0; arrow = null;
+        root = null; border = null; borderAnim = null; borderMode = 0; stripView = null; cardBg = null;
         if (was) attachOrUpdate();
     }
 
@@ -373,53 +481,35 @@ public class OverlayPlugin extends Plugin {
         int maxW = dm.widthPixels;
         final int padH = dp(8);
         final int rowW = maxW - 2 * padH;
-        final int centerW = Math.round(rowW * 0.36f);   // 현위치(가운데) 칸
-        final int sideW = Math.round((rowW - centerW) / 2f);   // 지나간 곳 · 다음정거장 — 좌우 대칭
 
         root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setGravity(Gravity.CENTER_HORIZONTAL);
         root.setPadding(padH, dp(8), padH, dp(8));
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(Color.BLACK);                 // 순수 검정(PiP 와 같은 규칙)
-        bg.setCornerRadius(dp(14));
-        root.setBackground(bg);
+        // ★ 2026-10-11: 앱 경로 화면 카드와 같은 모양 — 테마의 카드 바탕 + 얇은 테두리(순수 검정 바탕은 그만)
+        cardBg = new GradientDrawable();
+        cardBg.setColor(thBg);
+        cardBg.setCornerRadius(dp(14));
+        cardBg.setStroke(Math.max(1, dp(1)), 0x33808080);
+        root.setBackground(cardBg);
 
-        t1 = makeText(15, Color.WHITE, false);     // (예비 — 다섯 칸을 못 받았을 때만 가운데 칸에 쓴다)
-        t2 = makeText(18, Color.parseColor("#FFD60A"), true);      // ★ 2026-10-01: 14→18 (아래 글자를 키워 달라는 요청)
-        t3 = makeText(14, Color.parseColor("#D4D4DA"), false);
+        t1 = makeText(15, thFg, false);            // (예비 — 앱 칸을 못 받았을 때만 쓴다)
+        t2 = makeText(13, thSub, true);            // 남은시간 · 도착 (회색)
+        t3 = makeText(13, thSub, false);           // 추천 알림 제목
         t3.setMaxWidth(rowW);
 
-        for (int i = 0; i < 3; i++) {
-            TextView c = makeText(i == 1 ? 23.4f : 19.8f, i == 1 ? Color.WHITE : Color.parseColor("#6E6E76"), i == 1);
-            // ★ 2026-10-03 (YJ: "경로는 한 줄만, 정류장이 길면 …으로 잘라"): 세 칸 모두 한 줄, 넘치면 끝을 '…' 로 자른다(글자 크기는 고정).
-            c.setSingleLine(true);
-            c.setMaxLines(1);
-            c.setEllipsize(android.text.TextUtils.TruncateAt.END);
-            cells[i] = c;
-        }
-        // 노란 줄(남은시간 · 도착)은 맨 아래 전체 폭에 한 줄(길면 글자가 스스로 줄어든다)
+        // 남은시간 줄은 맨 아래 전체 폭에 한 줄(길면 글자가 스스로 줄어든다)
         t2.setMaxWidth(rowW);
         t2.setMaxLines(1);
         t2.setHorizontallyScrolling(false);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            t2.setAutoSizeTextTypeUniformWithConfiguration(10, 18, 1, TypedValue.COMPLEX_UNIT_SP);
+            t2.setAutoSizeTextTypeUniformWithConfiguration(10, 13, 1, TypedValue.COMPLEX_UNIT_SP);
         }
-        LinearLayout row = new LinearLayout(ctx);    // 윗줄: 지나간 곳 | 현위치 | 다음정거장 (세로 가운데 정렬)
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.addView(cells[0], new LinearLayout.LayoutParams(sideW, LinearLayout.LayoutParams.WRAP_CONTENT));
-        row.addView(cells[1], new LinearLayout.LayoutParams(centerW, LinearLayout.LayoutParams.WRAP_CONTENT));
-        row.addView(cells[2], new LinearLayout.LayoutParams(sideW, LinearLayout.LayoutParams.WRAP_CONTENT));
         View gap = new View(ctx);
-        rowWpx = rowW; centerWpx = centerW; sideWpx = sideW;
-        arrow = new ArrowView(ctx);
-        FrameLayout rowFrame = new FrameLayout(ctx);     // 윗줄 위에 화살표를 겹쳐 올린다(역 글자 위치는 그대로)
-        rowFrame.addView(row, new FrameLayout.LayoutParams(rowW, FrameLayout.LayoutParams.WRAP_CONTENT));
-        rowFrame.addView(arrow, new FrameLayout.LayoutParams(rowW, FrameLayout.LayoutParams.MATCH_PARENT));
-        root.addView(t3);                            // 추천 알림 제목은 위(노란 줄이 늘 맨 아래)
-        root.addView(rowFrame, new LinearLayout.LayoutParams(rowW, LinearLayout.LayoutParams.WRAP_CONTENT));
-        root.addView(gap, new LinearLayout.LayoutParams(1, dp(6)));
+        stripView = new StripView(ctx);
+        root.addView(t3);                            // 추천 알림 제목은 위(남은시간 줄이 늘 맨 아래)
+        root.addView(stripView, new LinearLayout.LayoutParams(rowW, stripView.wantH()));
+        root.addView(gap, new LinearLayout.LayoutParams(1, dp(4)));
         root.addView(t2, new LinearLayout.LayoutParams(rowW, LinearLayout.LayoutParams.WRAP_CONTENT));
 
         lp = new WindowManager.LayoutParams(
@@ -555,58 +645,25 @@ public class OverlayPlugin extends Plugin {
         } catch (Exception ignored) { }
     }
 
-    /** 윗줄: 현위치 칸만 하얗고 크게, 나머지(출발·경로·도착)는 작고 흐린 회색. 글자만 그린다. */
-    private CharSequence buildTrack() {
-        if (track.length == 0) return line1;
-        final int dim = Color.parseColor("#6E6E76");      // 잘 안 보이는 회색
-        final int sepc = Color.parseColor("#44444B");
-        SpannableStringBuilder sb = new SpannableStringBuilder();
-        for (int i = 0; i < track.length; i++) {
-            if (i > 0) {
-                int a = sb.length();
-                sb.append(" \u203A ");                    // ›
-                sb.setSpan(new ForegroundColorSpan(sepc), a, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-                sb.setSpan(new RelativeSizeSpan(0.8f), a, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-            }
-            int s0 = sb.length();
-            sb.append(track[i]);
-            int e0 = sb.length();
-            if (i == trackCur) {
-                sb.setSpan(new ForegroundColorSpan(Color.WHITE), s0, e0, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-                sb.setSpan(new StyleSpan(Typeface.BOLD), s0, e0, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-                sb.setSpan(new RelativeSizeSpan(1.25f), s0, e0, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-            } else {
-                sb.setSpan(new ForegroundColorSpan(dim), s0, e0, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-                sb.setSpan(new RelativeSizeSpan(0.82f), s0, e0, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-            }
-        }
-        return sb;
-    }
-
     private void attachOrUpdate() {
         if (root == null) build();
-        // 웹이 세 칸(지나간 곳·현위치·다음정거장)을 준다. 예전 웹(다섯 칸)이면 가운데 셋만 쓴다.
-        String[] three = new String[3];
-        if (track.length == 3) {
-            for (int i = 0; i < 3; i++) three[i] = track[i] == null ? "" : track[i];
-        } else if (track.length == 5) {
-            for (int i = 0; i < 3; i++) three[i] = track[i + 1] == null ? "" : track[i + 1];
-        } else {
-            three[0] = ""; three[1] = line1; three[2] = "";   // 예비: 칸을 못 받으면 한 줄 문구를 가운데 칸에
+        // 앱 경로 화면의 칸이 오면 그대로 그린다. 못 받으면(옛 웹) 한 줄 문구만 가운데에 보여 준다.
+        if (strip.length == 0 && line1.length() > 0) {
+            Cell c = new Cell();
+            c.n = line1; c.dk = 0;
+            strip = new Cell[] { c };
+            stripCur = 0;
         }
-        // ★ 2026-10-03 (YJ: "지나간 곳이라는 글자는 예시였어, 직접 쓰지 마"): 비어 있는 칸은 글자를 넣지 않고 그대로 비워 둔다.
-        for (int i = 0; i < 3; i++) {
-            TextView c = cells[i];
-            String nm = three[i] == null ? "" : three[i];
-            c.setText(nm);
-            if (i == 1) {                                   // 현위치 칸: 흰색·굵게
-                c.setTextColor(Color.WHITE);
-                c.setTypeface(Typeface.DEFAULT_BOLD);
-            } else {                                        // 옆 칸: 회색
-                c.setTextColor(Color.parseColor("#6E6E76"));
+        try {
+            if (cardBg != null) cardBg.setColor(thBg);
+            t2.setTextColor(thSub);
+            t3.setTextColor(thSub);
+            if (stripView != null) {
+                stripView.invalidate();
+                if (moving && strip.length > 1) startBlink();
+                else { stopBlink(); stripView.setLit(true); }       // 정차 중: 선은 그대로
             }
-        }
-        try { updateArrow(three); } catch (Exception ignored) { }
+        } catch (Exception ignored) { }
         t2.setText(line2);
         t2.setVisibility(line2.length() > 0 ? View.VISIBLE : View.GONE);
         t3.setText(line3);
@@ -622,27 +679,10 @@ public class OverlayPlugin extends Plugin {
         }
     }
 
-    /** 가운데 칸 글자 끝과 다음 칸 글자 시작 사이 빈 자리를 재서 화살표 길이를 정하고, 이동 중이면 깜박이기 시작한다. */
-    private void updateArrow(String[] three) {
-        if (arrow == null) return;
-        String cur = three[1] == null ? "" : three[1], nxt = three[2] == null ? "" : three[2];
-        if (cur.length() == 0 || nxt.length() == 0) {      // 다음 역이 없으면(종점·출발 전) 화살표도 없다
-            arrow.setGap(0f, 0f); arrow.setLit(false); stopBlink(); return;
-        }
-        float wCur = Math.min(cells[1].getPaint().measureText(cur), centerWpx);
-        float wNxt = Math.min(cells[2].getPaint().measureText(nxt), sideWpx);
-        float pad = dp(7);
-        float a = sideWpx + centerWpx / 2f + wCur / 2f + pad;            // 가운데 글자 오른쪽 끝 + 여백
-        float b = sideWpx + centerWpx + sideWpx / 2f - wNxt / 2f - pad;  // 다음 글자 왼쪽 끝 − 여백
-        arrow.setGap(a, b);
-        if (moving) startBlink();
-        else { stopBlink(); arrow.setLit(false); }                       // 정차 중: 회색 고정
-    }
-
     private void startBlink() {
         if (blinking) return;
         blinking = true; blinkOn = true;
-        if (arrow != null) arrow.setLit(true);
+        if (stripView != null) stripView.setLit(true);
         main.postDelayed(blinker, BLINK_MS);
     }
 
