@@ -19121,9 +19121,10 @@ window.addEventListener('unhandledrejection', function(e) {
       <!-- ★ 하차 10분 전 추천 테스트 -->
       <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
         <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:4px;">🚉 하차 10분 전 추천</div>
-        <p style="font-size:12px;color:var(--sub);margin-bottom:12px;">도착 10분 전에 시간대별로 보내는 추천이에요. 실제 알림과 같은 내용으로 바로 확인해 볼 수 있어요.</p>
+        <p style="font-size:12px;color:var(--sub);margin-bottom:12px;">도착 10분 전에 시간대별로 보내는 추천이에요. 실제 알림과 같은 내용으로 바로 확인해 볼 수 있어요. 버튼을 누르고 홈 화면으로 나가면 오버레이 아래에도 90초간 뜹니다(오버레이를 켜 둔 상태).</p>
         <div style="display:flex;gap:8px;margin-bottom:8px;">
           <button onclick="_arrTestUI('morning')" style="flex:1;padding:11px 4px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);font-family:inherit;">☕ 커피</button>
+          <button onclick="_arrTestUI('lunch')" style="flex:1;padding:11px 4px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);font-family:inherit;">🍱 점심</button>
           <button onclick="_arrTestUI('night')" style="flex:1;padding:11px 4px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);font-family:inherit;">🍗 야식</button>
           <button onclick="_arrTestUI('shop')" style="flex:1;padding:11px 4px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);font-family:inherit;">🛍 쇼핑</button>
         </div>
@@ -22817,10 +22818,12 @@ window._arrTestFire = function(hour, minute){
 //   실제 알림과 같은 경로(_arrFireAlert)를 그대로 태우고, 시간대만 강제로 맞춘다.
 function _arrTestUI(kind){
   try{
-    var hour = (kind === 'morning') ? 8 : (kind === 'night') ? 19 : 21;
-    var label = (kind === 'morning') ? '☕ 커피' : (kind === 'night') ? '🍗 야식' : '🛍 쇼핑';
-    if(typeof toast === 'function') toast(label + ' 추천을 보냅니다');
+    var hour = (kind === 'morning') ? 8 : (kind === 'lunch') ? 13 : (kind === 'night') ? 20 : 22;
+    var label = (kind === 'morning') ? '☕ 커피' : (kind === 'lunch') ? '🍱 점심' : (kind === 'night') ? '🍗 야식' : '🛍 쇼핑';
+    if(typeof toast === 'function') toast(label + ' 추천을 보냅니다 · 홈 화면으로 나가면 오버레이 아래에 90초간 떠요');
+    try{ window._ovlRecoDismissAt = undefined; window._ovlRecoForceUntil = Date.now() + 90000; }catch(eF){}   // ★ 2026-10-11 오버레이 추천 미리보기
     window._arrTestFire(hour, 0);
+    try{ setTimeout(function(){ if(typeof _ovlSync === 'function') _ovlSync(true); }, 1500); }catch(eS){}
     setTimeout(_arrStatusShow, 400);
   }catch(e){
     if(typeof toast === 'function') toast('추천 테스트 실패: ' + (e && e.message));
@@ -28000,7 +28003,8 @@ function _ovlLines(){
          && (typeof _notifAllowed !== 'function' || _notifAllowed('arrive_reco'))){
         var _re = (typeof _arrHomeEta === 'function') ? _arrHomeEta() : null;
         var _remS = _re ? _re.rem : ((d.min != null && isFinite(d.min)) ? d.min * 60 : null);
-        if(_remS != null && _remS <= 180 && _remS > -30){
+        var _rcForce = (window._ovlRecoForceUntil || 0) > Date.now();   // 설정>하차 추천 테스트 버튼: 도착 시각과 상관없이 90초간 미리보기
+        if(_rcForce || (_remS != null && _remS <= 180 && _remS > -30)){
           var _rl = String(r.body).split('\n').map(function(x){ return _pipClampText(x, 26); }).filter(function(x){ return x; }).slice(0, 2);
           if(_rl.length){
             var _ac = (window._arrLast && window._arrLast.at === r.at && window._arrLast.action) || null;
