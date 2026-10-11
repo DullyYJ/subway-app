@@ -59,6 +59,23 @@ let pass = 0; const t = async (name, fn) => { try { await fn(); pass++; console.
     const m = await page.$eval('#chatLineChips', e => ({ sw: e.scrollWidth, cw: e.clientWidth, ov: getComputedStyle(e).overflowX })); assert.ok(m.sw > m.cw + 20 && /auto|scroll/.test(m.ov), JSON.stringify(m));
     assert.strictEqual(await page.evaluate(() => _swipeBlocked(document.querySelector('#chatLineChips .chat-line-chip'))), true);
   });
+  await t('지금 경로의 노선이 전체 바로 뒤 맨 앞에 오고(경로 순서), 확정하면 my_lines 에 쌓인다', async () => {
+    await page.evaluate(() => {
+      window._lastHtlSections = [{ transportation: { type: 3 } }, { transportation: { type: 2, name: '순환43' } }, { transportation: { type: 1, name: '인천1호선' } }, { transportation: { type: 3 } }, { transportation: { type: 1, name: '1호선' } }, { transportation: { type: 1, name: '경춘선' } }];
+      window._routeLocked = false; _chatBarRender();
+    });
+    let c = await chips();
+    assert.deepStrictEqual(c.slice(0, 4).map(x => x.l), ['all', '인천1호선', '1호선', '경춘선'], JSON.stringify(c.slice(0, 5).map(x => x.l)));
+    assert.ok(c.slice(1, 4).every(x => x.t.startsWith('📍')));
+    assert.strictEqual(c.length, 1 + known.length, '칩 중복');
+    const before = await page.evaluate(() => _safeLS.get('my_lines', []).map(x => x.l));
+    assert.ok(!before.includes('인천1호선'), '확정 전엔 쌓이지 않는다');
+    await page.evaluate(() => { window._routeLocked = true; _chatBarRender(); _chatBarRender(); });
+    const after = await page.evaluate(() => _safeLS.get('my_lines', []));
+    ['인천1호선', '1호선', '경춘선'].forEach(l => assert.ok(after.some(x => x.l === l && x.n === 1), l + ' 기록 없음/중복 ' + JSON.stringify(after)));
+    assert.strictEqual(await page.evaluate(() => _chatPostLine()), '5호선', '글에 붙는 노선은 많이 탄 노선');
+    await page.evaluate(() => { window._lastHtlSections = []; window._routeLocked = false; window._myLinesSig = null; _safeLS.set('my_lines', [{ l: '9호선', n: 1, t: Date.now() - 5000 }, { l: '5호선', n: 3, t: Date.now() }]); _chatBarRender(); });
+  });
   if (shots) await page.screenshot({ path: path.join(shots, 'chat_all.png') });
 
   console.log('[전체 방]');
