@@ -557,3 +557,13 @@
 - **시험**: `test/board_writer_gemma.test.mjs`(flash-lite 429 → Gemma 로 459개 생성, 깨진 문장 저장 안 됨, 기존 깨진 AI 글 /lroom·/talks 에서 숨김, 이용자 글 유지) + 기존 16개·speed 통과.
 - **배포 뒤 확인**: `SELECT k,v FROM bw_diag WHERE k IN ('gemmodels','gemuse','linetalks') ORDER BY ts DESC LIMIT 10` — gemmodels 에 gemma 가 있고 linetalks.gem.model 이 gemma 인지. 이 키에서 Gemma 도 404/429 면 같은 정지가 반복되므로 Gemini 유료 전환(결제 설정) 또는 다른 키가 필요.
 - **미확인**: 이 환경에서 Gemini API 에 직접 못 붙어 Gemma 가 이 키에서 실제로 응답하는지는 확인하지 못했다(모의 응답으로만 시험).
+
+
+## 2026-10-11 (밤) 실시간 차량 위치로 탄 버스 따라가기 — 새 워커 gildongmu-ride + 앱 차량 매칭 (엔진 변경 없음)
+- 배경: YJ "승차가 판단되면 지하철이든 버스든 실시간 위치 API 로 경로를 따라가고 GPS 는 확인만". 지하철은 기존 _rtLock/_rtTrain(서울 realtimePosition)이 이미 있다 → 이번에는 버스.
+- 워커: gildongmu-ride (https://gildongmu-ride.phg0643.workers.dev, 소스 = route-v2 저장소 ride-vehicle/index.js, 버전 ride-2026-10-11a). 엔진(route-v2)과 별개 워커라 엔진 배포·위험과 분리. Cloudflare 대시보드에서 코드를 직접 붙여 배포했고(배포본은 주석만 뺀 동일 코드), 서비스 바인딩 BUSAPI→gildongmu-bus 하나로 TAGO 키 없이 동작한다(/health 에서 keys.binding:true 확인). TAGO_KEY 시크릿을 추가하면 직접 호출도 같이 시도한다(800ms 헤지).
+- 엔드포인트: GET /health(버전·키 유무만), POST /vehicle { fix:{lat,lng}, fixes?:[최근 점 ≤4], cands:[{busNo, boardStopId, lat, lng} ≤5], lock?:{routeKey, vehicleno} } → { ok, n, unsupported, lock?:{found,dist,vehicleno,lat,lng,nodenm,ageMs}, match?:{conf:sure|likely|weak, dist, second, vehicleno, routeKey, busNo, lat, lng, nodenm, ageMs} }. 도시코드는 승차 정류장 id 로 근처 정류장 목록에서 찾고(24h 캐시), 노선번호→routeId(6h), 노선 차량 위치(10초) 캐시. 같은 요청은 합친다.
+- 실서버 확인: 인천 58번(정류장 ICB365000290) 차량 6대 인식, 그 차 위치에 내 위치를 두면 conf=sure·lock found. 경기(GGB…)·서울 정류장은 TAGO 도시 미지원이면 unsupported 로 응답 → 앱은 아무것도 안 바꾼다(기존 GPS·PF).
+- 앱(www/index.html): _vehTick(15초 간격, _updateTransitGps 안, 차량 속도 이동·승차 증거가 있을 때만) → _vehCands(엔진 후보 중 내 위치 350m 안 버스 구간) → 워커 → _vehApply. 같은 차가 sure/likely 로 두 번 연속 + 내가 차량 속도로 움직이면 window._veh 로 잠금(승차 확정 _vehConfirmBoard, 경로 미확정이면 _autoLockOnRide(true), 보던 경로에 그 버스가 없으면 _applyRiddenRoute 로 엔진 후보로 전환). 잠근 뒤엔 차량 위치를 경로 정류장 선에 투영해(_vehIdxAt, t>=0.85 면 다음 정류장) 진행도·통과시각을 올리고, GPS 는 확인용(차량과 450m 넘게 2번 벌어지거나 목록에서 3번 사라지면 해제). GPS 가드는 window._veh 도 차량 증거로 본다. 워커 실패 3회면 지수 백오프, 미지원 2회면 5분 쉼. 끄기: window._vehOff = true. 진단: 설정 → 오버레이 진단 기록의 차량매칭·차량추적·차량매칭해제·승차확정.
+- 한계: (1) 앱 쪽은 모의 워커로만 시험(test/ride_vehicle_app.ui.test.js 32건), 실제 기기·실제 버스 탑승은 미검증. (2) TAGO 차량 위치는 수십 초 늦을 수 있다(fixes 로 보정). (3) 서울(ws.bus.go.kr) 버스 위치·경기 GBIS 는 연결 안 함(다음 후보). (4) 직접 호출 522 는 BUSAPI 바인딩으로 완화.
+- 시험: 앱 test/ride_vehicle_app.ui.test.js, 워커 단위시험은 route-v2 저장소 test/ride_vehicle.test.mjs(27건).
