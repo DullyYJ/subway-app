@@ -15,6 +15,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   const __em = require('./helpers/eta_mock'); await __em.installEtaMock(page); __em.autoWait(page);
   await page.clock.install({ time: new Date('2026-10-11T12:30:00+09:00') });
   await page.goto('file://' + html); await page.addStyleTag({ content: '#locDiscOv{display:none !important}' }); await page.clock.runFor(2500);
+  await page.evaluate(() => { window.__keep = { shop: window._arrShopOpen, food: window._arrGoFoodTab, modal: window._showBriefingModal, auto: window._arrOrderAuto }; });   // 앞 테스트들이 바꿔 둔 함수를 ②부터 원래대로
   const lines = (opts) => page.evaluate((o) => {
     window._ovlRecoOff = !!o.off;
     window._pipReco = o.reco === null ? null : { title: '하차 10분 전 · 아라', body: '점심시간이에요. 제육볶음 어떠세요?\n근처엔 한솥, 맘스터치 있어요.\n오늘도 수고했어요.', at: Date.now() - (o.ageMin || 0) * 60000, ovlAt: Date.now() - 60000 };
@@ -71,7 +72,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   await t('[보기] 쿠팡 아이템 → 쿠팡 열기 + 추천 닫힘', async () => { const x = await act('recoGo', { kind: 'shop', item: {} }); assert.deepStrictEqual(x, { before: true, after: false, calls: ['shop'] }); });
   await t('[보기] 야식 → 팝업 없이 바로 배달앱 쪽으로(0.7초 뒤) + 추천 닫힘', async () => {
     const x = await page.evaluate(async () => { window._ovlRecoOff = false; window._ovlRecoDismissAt = undefined; window._pipReco = { title: 't', body: '가\n나', at: Date.now(), ovlAt: Date.now() - 60000 }; window._arrLast = { at: window._pipReco.at, action: { kind: 'delivery', menu: '쌀국수' }, title: '제목', body: '본문' }; window._arrHomeEta = () => ({ arrMs: Date.now() + 100000, rem: 100 });
-      const calls = []; const keepAuto = window._arrOrderAuto; window._showBriefingModal = () => calls.push('popup'); window._arrOrderAuto = (m) => calls.push('auto:' + m); window._ovlAct('recoGo'); const early = calls.slice(); await new Promise(r => setTimeout(r, 900)); window._arrOrderAuto = keepAuto; return { early, calls, after: !!(_ovlLines().reco && _ovlLines().reco.on) }; });
+      const calls = []; const keepAuto = window._arrOrderAuto, keepModal = window._showBriefingModal; window._showBriefingModal = () => calls.push('popup'); window._arrOrderAuto = (m) => calls.push('auto:' + m); window._ovlAct('recoGo'); const early = calls.slice(); await new Promise(r => setTimeout(r, 900)); window._arrOrderAuto = keepAuto; window._showBriefingModal = keepModal; return { early, calls, after: !!(_ovlLines().reco && _ovlLines().reco.on) }; });
     assert.strictEqual(JSON.stringify(x), JSON.stringify({ early: [], calls: ['auto:쌀국수'], after: false }));
   });
   console.log('[①-3 설치된 배달앱 바로 켜기 · 없으면 맛집 탭의 가게]');
@@ -132,16 +133,117 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     assert.strictEqual(r, true);
   });
 
-  console.log('[② 문구는 기존 규칙(시간대·근처 가게·쿠팡 아이템) 그대로 만든 것]');
+  await page.evaluate(() => { const k = window.__keep; window._arrShopOpen = k.shop; window._arrGoFoodTab = k.food; window._showBriefingModal = k.modal; window._arrOrderAuto = k.auto; });
+  console.log('[② 시간대 규칙(아침 커피 / 낮 점심 / 저녁 / 야식 / 밤 쿠팡 아이템 / 00~07시 없음)과 근처 가게는 그대로, 문구는 상황에 맞춘 것]');
   const slotText = (hhmm) => page.evaluate((h) => {
     const arrMs = new Date('2026-10-11T' + h + ':00+09:00').getTime();
     const slot = _arrSlot(arrMs); if (slot === 'none') return { slot, lines: [] };
     const a = _arrBuildAlert('아라', null, arrMs);
-    return { slot, lines: _arrPipText(a, slot, '아라', a.body).lines };
+    return { slot, lines: _arrPipText(a, slot, '아라', a.body).lines, menu: a.menu, shop: a.shop && a.shop.n, body: a.body, hook: a.hook };
   }, hhmm);
-  for (const [h, slot, re] of [['08:30', 'morning', /아침|카페|커피/], ['12:30', 'lunch', /점심/], ['17:30', 'night', /저녁/], ['20:00', 'night', /야식/], ['22:30', 'shop', /오늘의 추천/], ['03:00', 'none', null]]) {
-    await t(h + ' 도착 → ' + slot + (slot === 'shop' ? ' (쿠팡 아이템)' : ''), async () => { const x = await slotText(h); assert.strictEqual(x.slot, slot); if (slot === 'none') assert.deepStrictEqual(x.lines, []); else { assert.ok(x.lines.length >= 2, JSON.stringify(x)); assert.ok(re.test(x.lines.join(' ')), JSON.stringify(x)); } });
+  // 2026-10-11 은 일요일이라 아침·점심·저녁은 '주말', 밤은 '내일 월요일'로 말한다. 점심·저녁·야식은 고른 메뉴 이름이 문구에 들어간다.
+  for (const [h, slot, re] of [['08:30', 'morning', /한 잔|커피|아침|카페/], ['12:30', 'lunch', /점심/], ['17:30', 'night', /저녁/], ['20:00', 'night', /월요일|야식|밤/], ['22:30', 'shop', null], ['03:00', 'none', null]]) {
+    await t(h + ' 도착 → ' + slot + (slot === 'shop' ? ' (쿠팡 아이템)' : ''), async () => {
+      const x = await slotText(h); assert.strictEqual(x.slot, slot);
+      if (slot === 'none') return assert.deepStrictEqual(x.lines, []);
+      assert.ok(x.lines.length >= 2, JSON.stringify(x));
+      const all = x.lines.join(' ');
+      if (re) assert.ok(re.test(all), JSON.stringify(x));
+      if (slot === 'shop') { assert.ok(x.shop && all.indexOf(x.shop.slice(0, 6)) >= 0, '아이템 이름이 있어야: ' + JSON.stringify(x)); assert.ok(!/오늘의 추천/.test(all + x.body), '광고 라벨 금지'); }
+      else if (h !== '08:30') assert.ok(x.menu && all.indexOf(x.menu) >= 0, '메뉴 이름이 문구에 있어야: ' + JSON.stringify(x));
+    });
   }
+
+  console.log('[③ 상황 문구 엔진 — 날씨·요일·월급날을 읽되 없는 값은 말하지 않고, 한 줄은 26자 안쪽]');
+  const WX = (d) => page.evaluate((d) => { window._wxMem = window._wxMem || {}; try { _wxMem = window._wxMem; } catch (e) {} for (const k in _wxMem) delete _wxMem[k]; if (d) _wxMem.t = { ts: Date.now(), data: d }; }, d);
+  const hookAt = (slot, iso, menu) => page.evaluate(([slot, iso, menu]) => { const cx = _arrCx(new Date(iso).getTime()); const r = _arrHook(slot, cx, menu); return { t: r.t, strong: r.strong, cx }; }, [slot, iso, menu]);
+  await t('모든 상황 문구가 {값} 을 채우고도 26자 안쪽, 광고 말투 없음', async () => {
+    const bad = await page.evaluate(() => {
+      const cx = { temp: -8, feel: -12, range: 12, rain: 100, tmin: -10, tmax: 2 }, out = [];
+      for (const slot in _ARR_HOOKS) for (const [, list] of _ARR_HOOKS[slot]) for (const v of list) { const f = _arrFill(v, cx, '부대찌개'); if (f.length > 26 || /\{|\}|undefined|null|NaN/.test(f) || /할인|구매|광고|특가|지금 주문|추천드/.test(f)) out.push(f); }
+      for (const slot in _ARR_HOOK_DEFAULT) for (const v of _ARR_HOOK_DEFAULT[slot]) { const f = _arrFill(v, cx, '부대찌개'); if (f.length > 26 || /\{|\}/.test(f)) out.push(f); }
+      return out;
+    });
+    assert.deepStrictEqual(bad, []);
+  });
+  await t('비 오는 밤(강수 80%) → 야식 문구가 비를 말한다(금요일 규칙보다 먼저)', async () => {
+    await WX({ temp: 14, feel: 13, rain: 80, tmin: 10, tmax: 16, txt: '비' });
+    const r = await hookAt('night', '2026-10-09T20:00:00+09:00', '치킨');   // 금요일
+    assert.ok(r.strong && /비/.test(r.t) && r.t.indexOf('치킨') >= 0, JSON.stringify(r)); await WX(null);
+  });
+  await t('추운 퇴근길(체감 2도) → 저녁 문구에 기온이 들어간다', async () => {
+    await WX({ temp: 4, feel: 2, rain: 0, tmin: 1, tmax: 9, txt: '맑음' });
+    const r = await hookAt('dinner', '2026-10-14T18:00:00+09:00', '국밥'); assert.ok(r.strong && /4도|추운|추워/.test(r.t), JSON.stringify(r)); await WX(null);
+  });
+  await t('날씨 값이 없으면 날씨를 지어내지 않는다(금요일 밤 → 쉬는 날 이야기)', async () => {
+    await WX(null);
+    const r = await hookAt('night', '2026-10-09T20:00:00+09:00', '치킨'); assert.ok(r.strong && /쉬는 날|주말/.test(r.t) && !/도|비/.test(r.t.replace(/도착/g, '')), JSON.stringify(r));
+  });
+  await t('평범한 수요일 밤(날씨·월급날 없음) → 기본 문구, strong 아님', async () => {
+    const r = await hookAt('night', '2026-10-14T20:00:00+09:00', '피자'); assert.strictEqual(r.strong, false); assert.ok(r.t.length > 0 && r.t.length <= 26, JSON.stringify(r));
+  });
+  await t('월급날(25일) 평일 점심 → 월급날 문구', async () => {
+    const r = await hookAt('lunch', '2026-11-25T12:30:00+09:00', '국밥'); assert.ok(r.strong && /월급/.test(r.t), JSON.stringify(r));
+  });
+  await t('같은 날 같은 시각엔 같은 문구', async () => {
+    const r = await page.evaluate(() => { const cx = _arrCx(Date.now()); return [_arrHook('night', cx, '치킨').t, _arrHook('night', cx, '치킨').t]; }); assert.strictEqual(r[0], r[1]);
+  });
+  await t('아침 음료는 기온에 맞는다: 30도 → 아이스 계열, 5도 → 따뜻한 계열', async () => {
+    await WX({ temp: 30, feel: 31, rain: 0, tmin: 24, tmax: 32, txt: '맑음' });
+    const hot = await page.evaluate(() => { const cx = _arrCx(Date.now()), o = []; for (let i = 0; i < 40; i++) o.push(_arrPickDrink(cx)); return o.every(x => _ARR_DRINKS_ICE.indexOf(x) >= 0); });
+    await WX({ temp: 5, feel: 3, rain: 0, tmin: 2, tmax: 9, txt: '맑음' });
+    const cold = await page.evaluate(() => { const cx = _arrCx(Date.now()), o = []; for (let i = 0; i < 40; i++) o.push(_arrPickDrink(cx)); return o.every(x => _ARR_DRINKS_WARM.indexOf(x) >= 0); });
+    await WX(null); assert.deepStrictEqual([hot, cold], [true, true]);
+  });
+  await t('쿠팡 아이템 한 줄: 모든 테마 × 여러 상황에서 비어 있지 않고 26자 안쪽', async () => {
+    const bad = await page.evaluate(() => {
+      const themes = Object.keys(_ARR_SHOP_SAY).concat(['', '없는테마']), out = [];
+      const cxs = [{}, { temp: 3, feel: 0, tmin: 0, tmax: 12, range: 12, rain: 0 }, { temp: 29, rain: 10 }, { temp: 15, rain: 70, range: 4 }];
+      for (const t of themes) for (const c of cxs) for (const d of [[2026, 9, 9], [2026, 9, 10], [2026, 9, 14], [2026, 9, 25]]) {
+        const cx = Object.assign(_arrCx(new Date(d[0], d[1], d[2], 22).getTime()), c);
+        for (const nm of ['테스트 상품', '우산 3단', '기모 후드', '쿨 냉감 티']) { const r = _arrShopLine({ n: nm, _t: t }, cx); if (!r || r.length > 26 || /\{|undefined|NaN/.test(r)) out.push(t + '/' + nm + ': ' + r); }
+      }
+      return out;
+    });
+    assert.deepStrictEqual(bad, []);
+  });
+  await t('우산은 비 올 확률이 높을 때만 확률을 말한다', async () => {
+    const r = await page.evaluate(() => [_arrShopLine({ n: '3단 우산', _t: '' }, Object.assign(_arrCx(Date.now()), { rain: 70, rainSoon: true })), _arrShopLine({ n: '3단 우산', _t: '' }, Object.assign(_arrCx(Date.now()), { rain: 0, rainSoon: false }))]);
+    assert.ok(/70%/.test(r[0]) && !/%/.test(r[1]), JSON.stringify(r));
+  });
+  await t('상황 문구가 맞으면 AI 문구로 덮어쓰지 않고, 평범한 날엔 AI 문구를 쓴다', async () => {
+    const r = await page.evaluate(() => {
+      const keep = { ai: window._arrAiCopy, modal: window._showBriefingModal, notif: window.showNotification, pip: window._pipRecoSet };
+      const out = {};
+      try {
+        let aiCalls = 0, body = null;
+        window._arrAiCopy = function (s, d, cb) { aiCalls++; cb('AI가 쓴 문구'); };
+        window._showBriefingModal = function (t, b) { body = b; }; window.showNotification = function (t, b) { body = b; }; window._pipRecoSet = function () {};
+        try { _arrAiCopy = window._arrAiCopy; _showBriefingModal = window._showBriefingModal; } catch (e) {}
+        const run = (iso, wx) => {
+          for (const k in _wxMem) delete _wxMem[k]; if (wx) _wxMem.t = { ts: Date.now(), data: wx };
+          _notifOnceReset(); aiCalls = 0; body = null; _arrFireAlertNow('아라', new Date(iso).getTime());
+          return { ai: aiCalls, line: body && body.split('\n')[3] };
+        };
+        out.rain = run('2026-10-14T20:00:00+09:00', { temp: 14, feel: 13, rain: 80, tmin: 10, tmax: 16, txt: '비' });
+        out.plain = run('2026-10-14T20:00:00+09:00', null);
+        for (const k in _wxMem) delete _wxMem[k];
+      } finally { window._arrAiCopy = keep.ai; window._showBriefingModal = keep.modal; window.showNotification = keep.notif; window._pipRecoSet = keep.pip; try { _arrAiCopy = keep.ai; _showBriefingModal = keep.modal; } catch (e) {} _notifOnceReset(); }
+      return out;
+    });
+    assert.strictEqual(r.rain.ai, 0, JSON.stringify(r)); assert.ok(/비/.test(r.rain.line), JSON.stringify(r));
+    assert.strictEqual(r.plain.ai, 1, JSON.stringify(r)); assert.strictEqual(r.plain.line, 'AI가 쓴 문구', JSON.stringify(r));
+  });
+  await t('쿠팡 아이템 팝업엔 사진이 뜨고(주소 있을 때만), 밥집·카페 추천 팝업엔 사진이 없다', async () => {
+    const r = await page.evaluate(() => {
+      const q = () => document.querySelector('#briefShopImg');
+      _showBriefingModal('t', 'b', null, { kind: 'shop', item: { n: '가습기', i: 'https://example.com/a.jpg', u: 'https://example.com' } }); const a = q() ? q().getAttribute('src') : null; document.getElementById('briefModalOv').remove();
+      _showBriefingModal('t', 'b', null, { kind: 'shop', item: { n: '가습기' } }); const b = !!q(); document.getElementById('briefModalOv').remove();
+      _showBriefingModal('t', 'b', null, { kind: 'delivery', menu: '치킨' }); const c = !!q(); document.getElementById('briefModalOv').remove();
+      return [a, b, c];
+    });
+    assert.deepStrictEqual(r, ['https://example.com/a.jpg', false, false]);
+  });
   await t('페이지 오류 없음', async () => assert.deepStrictEqual([...new Set(errs)], []));
   await ctx.close(); await b.close();
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
