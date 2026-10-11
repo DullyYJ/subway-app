@@ -27971,7 +27971,7 @@ function _ovlLines(){
       out.track.push(nm == null ? '' : clamp(nm, 40));   // 길이 자르기는 네이티브(한 줄·…)가 한다
     }
     out.cur = 1;
-    try{ var _sp = _ovlStrip(st); if(_sp){ out.strip = _sp.cells; out.scur = _sp.cur; out.theme = _sp.theme; } }catch(eSt){}
+    try{ var _sp = _ovlStrip(st); if(_sp){ out.strip = _sp.cells; out.scur = _sp.cur; out.sbase = _sp.base; out.theme = _sp.theme; } }catch(eSt){}
     out.moving = !!(_tri[2] && _ovlMoving());   // 다음 역이 있을 때만 화살표가 깜박인다
     var _pad2 = function(n){ return (n < 10 ? '0' : '') + n; };
     var _mm = (d.min != null && isFinite(d.min)) ? Math.max(0, Math.round(d.min)) : null;
@@ -28052,11 +28052,11 @@ function _ovlCellOf(k){
   return o;
 }
 function _ovlStrip(st){
-  var out = { cells: [], cur: 0, theme: _ovlThemeColors() };
+  var out = { cells: [], cur: 0, base: 0, theme: _ovlThemeColors() };
   try{
     if(window._ovlStripOff) return null;
     var nd = (typeof _transitNodeData !== 'undefined') ? _transitNodeData : null;
-    var N = 5;
+    var N = 40, BACK = 8;   // ★ 2026-10-11: 좌우로 넘겨 볼 수 있게 현위치 앞 8칸 · 뒤 31칸까지 보낸다(화면에는 다섯 칸만 보인다)
     if(nd && nd.length && window._routeLocked === true && window._metroRouteMode !== true){
       var raw = Math.max(0, Math.min(_pipHereIdx(), nd.length - 1));
       var curEl = nd[raw] && nd[raw].el, par = curEl && curEl.parentElement;
@@ -28068,9 +28068,9 @@ function _ovlStrip(st){
         }
         var ci = kids.indexOf(curEl);
         if(ci >= 0){
-          var s0 = Math.max(0, Math.min(ci - 1, kids.length - N));
+          var s0 = Math.max(0, Math.min(ci - BACK, kids.length - N));
           for(var j = s0; j < Math.min(kids.length, s0 + N); j++) out.cells.push(_ovlCellOf(kids[j]));
-          out.cur = ci - s0;
+          out.cur = ci - s0; out.base = s0;
           if(out.cells.length) return out;
         }
       }
@@ -28079,11 +28079,11 @@ function _ovlStrip(st){
     var P = (st && st.path && st.path.length) ? st.path : null;
     if(P){
       var c0 = Math.max(0, Math.min(st.idx < 0 ? 0 : st.idx, P.length - 1));
-      var s1 = Math.max(0, Math.min(c0 - 1, P.length - N));
+      var s1 = Math.max(0, Math.min(c0 - BACK, P.length - N));
       for(var q = s1; q < Math.min(P.length, s1 + N); q++){
         out.cells.push({ n: String(P[q] || ''), t: '', g: '', gp: false, gc: '', lc: q > 0 ? '#0a84ff' : '', rc: q < P.length - 1 ? '#0a84ff' : '', dc: '#0a84ff', dk: 1 });
       }
-      out.cur = c0 - s1;
+      out.cur = c0 - s1; out.base = s1;
       if(out.cells.length) return out;
     }
   }catch(e){}
@@ -28097,7 +28097,7 @@ function _ovlSync(force){
     var active = !!(_ovlUsable() && _pipHasRoute());   // ★ 2026-10-01: PiP 스위치와 무관(PiP 는 꺼 둠)
     var L = active ? _ovlLines() : { l1:'', l2:'', l3:'', track:[], cur:-1, alert:0, moving:false };
     var key = (active ? '1' : '0') + '|' + L.l1 + '|' + L.l2 + '|' + L.l3 + '|' + L.track.join('>') + '|' + L.cur + '|' + L.alert + '|' + (L.moving ? 'M' : 'S')
-              + '|' + (L.strip ? JSON.stringify(L.strip) + L.scur + JSON.stringify(L.theme) : '');
+              + '|' + (L.strip ? JSON.stringify(L.strip) + L.scur + '@' + L.sbase + JSON.stringify(L.theme) : '');
     var now = Date.now();
     // 바뀐 게 없으면 보내지 않는다. 다만 켜져 있는 동안엔 20초마다 한 번은 다시 보내 '살아 있음'을 알린다
     // (네이티브는 3분 넘게 소식이 없으면 낡은 값이 남지 않도록 스스로 숨긴다).
@@ -28105,7 +28105,7 @@ function _ovlSync(force){
     if(!active && _ovlLastKey === null && !force) { _ovlLastKey = key; return; }   // 처음부터 꺼져 있으면 굳이 알리지 않는다
     _ovlLastKey = key; _ovlLastAt = now;
     var _up = { active: active, line1: L.l1, track: L.track, cur: L.cur, line2: L.l2, line3: L.l3, alert: L.alert || 0, moving: !!L.moving };
-    if(L.strip && L.strip.length){ _up.cells = L.strip; _up.cur = L.scur || 0; _up.theme = L.theme; }   // ★ 2026-10-11: 앱 경로 화면 칸 그대로(네이티브가 같은 모양으로 그림)
+    if(L.strip && L.strip.length){ _up.cells = L.strip; _up.cur = L.scur || 0; _up.base = L.sbase || 0; _up.theme = L.theme; }   // ★ 2026-10-11: 앱 경로 화면 칸 그대로(네이티브가 같은 모양으로 그림)
     var r = n.update(_up);
     if(r && typeof r.catch === 'function') r.catch(function(){ _ovlLastKey = null; });   // 실패하면 다음 틱에 다시
   }catch(e){ _ovlLastKey = null; }
