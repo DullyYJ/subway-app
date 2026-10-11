@@ -536,7 +536,7 @@ public class OverlayPlugin extends Plugin {
         line1 = nz(call.getString("line1"));
         try {
             JSArray arr = call.getArray("cells");
-            int n = arr == null ? 0 : Math.min(arr.length(), 60);
+            int n = arr == null ? 0 : Math.min(arr.length(), 150);    // ★ 2026-10-12: 긴 경로가 중간에 끊기지 않게 60 → 150
             Cell[] cs = new Cell[n];
             for (int i = 0; i < n; i++) {
                 JSONObject o = arr.getJSONObject(i);
