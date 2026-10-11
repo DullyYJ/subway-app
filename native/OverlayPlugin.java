@@ -704,31 +704,52 @@ public class OverlayPlugin extends Plugin {
 
         final int slop = ViewConfiguration.get(ctx).getScaledTouchSlop();
         root.setOnTouchListener(new View.OnTouchListener() {
-            float dx, dy; int sx, sy; boolean dragged, scrolling, inStrip, inBottom, swiping; float startPos; float bx, by; VelocityTracker vt;
+            float dx, dy; int sx, sy; boolean dragged, scrolling, inStrip, inBottom, swiping, armed; float startPos; float bx, by, lastX, lastY; VelocityTracker vt;
+            // ★ 2026-10-11 (YJ: "아래로 슬라이딩하면 오버레이가 같이 내려가고 클릭하면 앱이 열린다 — 개선방안?"):
+            //   세로로 쓸기는 이제 어디서 시작하든 탑승 줄을 여닫는 데만 쓴다(아래로 쓸면 열림 · 위로 쓸면 닫힘). 창 이동은 '꾹 눌러서'(0.45초, 진동) 잡은 뒤에만 한다.
+            //   그래서 쓸다가 창이 같이 끌려 내려가거나, 쓸기가 탭으로 읽혀 앱이 열리는 일이 없다.
+            final Runnable arm = new Runnable() {
+                @Override public void run() {
+                    if (dragged || scrolling || swiping) return;
+                    armed = true;
+                    dx = lastX; dy = lastY; sx = lp.x; sy = lp.y;          // 지금 손가락 위치를 창 이동의 기준점으로
+                    try { root.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS); } catch (Exception ignored) { }
+                }
+            };
             @Override public boolean onTouch(View v, MotionEvent e) {
                 switch (e.getAction()) {
                     case MotionEvent.ACTION_DOWN:
-                        dx = e.getRawX(); dy = e.getRawY(); sx = lp.x; sy = lp.y; dragged = false; scrolling = false; swiping = false;
+                        dx = e.getRawX(); dy = e.getRawY(); lastX = dx; lastY = dy; sx = lp.x; sy = lp.y; dragged = false; scrolling = false; swiping = false; armed = false;
                         bx = e.getX(); by = e.getY();
-                        // 맨 아래 영역(남은시간 줄 + 탑승 줄): 세로로 쓸면 탑승 안내를 열고 닫는다(창 이동 대신)
+                        // 맨 아래 영역(남은시간 줄 + 탑승 줄): [탑승]·알약 누름 판정에 쓴다
                         inBottom = boardView != null && e.getY() >= (t2.getVisibility() == View.VISIBLE ? t2.getTop() : boardView.getTop());
-                        // 점·선 줄에서 시작한 좌우 움직임은 칸을 넘겨 보는 스크롤, 그 밖은 창 이동
+                        // 점·선 줄에서 시작한 좌우 움직임은 칸을 넘겨 보는 스크롤
                         inStrip = stripView != null && e.getY() >= stripView.getTop() && e.getY() <= stripView.getBottom();
                         startPos = scrollPos;
                         stopFling();                                  // 미끄러지던 중에 다시 대면 멈춘다
+                        main.removeCallbacks(arm);
+                        main.postDelayed(arm, 450L);
                         try { if (vt != null) vt.recycle(); vt = VelocityTracker.obtain(); vt.addMovement(e); } catch (Exception ignored) { vt = null; }
                         return true;
                     case MotionEvent.ACTION_MOVE: {
-                        float mx = e.getRawX() - dx, my = e.getRawY() - dy;
+                        lastX = e.getRawX(); lastY = e.getRawY();
+                        float mx = lastX - dx, my = lastY - dy;
                         try { if (vt != null) vt.addMovement(e); } catch (Exception ignored) { }
                         if (!dragged && !scrolling && !swiping && (Math.abs(mx) > slop || Math.abs(my) > slop)) {
-                            if (inStrip && strip.length > 5 && Math.abs(mx) > Math.abs(my)) {
-                                scrolling = true;
-                                userScrolling = true;
-                                main.removeCallbacks(recenter);
-                            } else if (inBottom && Math.abs(my) > Math.abs(mx)) {
-                                swiping = true;
-                            } else dragged = true;
+                            if (armed) {
+                                dragged = true;                                         // 꾹 누른 뒤 움직이면 창 이동
+                            } else {
+                                main.removeCallbacks(arm);
+                                if (inStrip && strip.length > 5 && Math.abs(mx) > Math.abs(my)) {
+                                    scrolling = true;
+                                    userScrolling = true;
+                                    main.removeCallbacks(recenter);
+                                } else if (Math.abs(my) > Math.abs(mx)) {
+                                    swiping = true;                                     // 세로 쓸기: 탑승 줄 열기·닫기
+                                } else {
+                                    swiping = true; startPosIgnore = true;               // 가로로 쓸었지만 칸 줄이 아님: 아무 일 없음(탭으로도 안 읽음)
+                                }
+                            }
                         }
                         if (scrolling && stripView != null && stripView.getWidth() > 0) {
                             scrollPos = clampPos(startPos - mx / (stripView.getWidth() / 5f));
@@ -742,6 +763,7 @@ public class OverlayPlugin extends Plugin {
                     }
                     case MotionEvent.ACTION_UP:
                     case MotionEvent.ACTION_CANCEL:
+                        main.removeCallbacks(arm);
                         if (scrolling) {
                             // ★ 2026-10-11 (YJ: "앱처럼 슬라이딩되어 미끄러지게"): 떼는 순간의 속도로 관성 스크롤
                             try {
@@ -755,26 +777,31 @@ public class OverlayPlugin extends Plugin {
                             main.postDelayed(recenter, 10000L);      // 손을 뗀 지 10초 뒤 현위치로 돌아온다
                         }
                         else if (swiping) {
-                            // ★ 2026-10-11 (YJ): 앱과 똑같이 — 위로 쓸면 탑승 안내 열기, 아래로 쓸면 닫기(대기 알약)
-                            if (e.getAction() == MotionEvent.ACTION_UP) {
+                            // 앱 시트와 같은 동작을 오버레이 어디서든: 아래로 쓸면 탑승 안내 열기, 위로 쓸면 닫기(대기 알약)
+                            if (e.getAction() == MotionEvent.ACTION_UP && !startPosIgnore) {
                                 float myy = e.getRawY() - dy;
-                                if (myy < -dp(22)) { if (!"board".equals(rsSt)) act("open"); }
-                                else if (myy > dp(22) && "board".equals(rsSt)) act("close");
+                                if (myy > dp(22)) { if (!"board".equals(rsSt)) act("open"); }
+                                else if (myy < -dp(22) && "board".equals(rsSt)) act("close");
                             }
+                            startPosIgnore = false;
                         }
                         else if (dragged) savePos();
+                        else if (armed) { /* 꾹 눌렀다가 그냥 뗌: 아무 일 없음 */ }
                         else if (e.getAction() == MotionEvent.ACTION_UP) {
                             if (inBottom && boardView != null && boardView.hitBtn(bx - boardView.getLeft(), by - boardView.getTop())) {
                                 act("undo".equals(rsSt) ? "undo" : "press");          // [탑승] / [되돌리기]
-                            } else if (inBottom && "wait".equals(rsSt)) act("pill");   // 대기 알약을 누르면 다시 열린다
-                            else openApp();                                             // 그 밖은 탭하면 앱으로 돌아간다
+                            } else if (inBottom && ("wait".equals(rsSt) || "hidden".equals(rsSt))) {
+                                act(("wait".equals(rsSt)) ? "pill" : "open");           // 알약·손잡이를 누르면 탑승 줄이 열린다(앱은 안 열림)
+                            } else openApp();                                             // 그 밖은 탭하면 앱으로 돌아간다
                         }
+                        armed = false;
                         try { if (vt != null) { vt.recycle(); vt = null; } } catch (Exception ignored) { }
                         return true;
                     default:
                         return false;
                 }
             }
+            boolean startPosIgnore = false;
         });
     }
 
