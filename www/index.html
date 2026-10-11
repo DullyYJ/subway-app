@@ -11423,6 +11423,221 @@ function _ridePathWatch(){
 window._ridePathWatch = _ridePathWatch;
 window._matchRiddenRoute = _matchRiddenRoute; window._applyRiddenRoute = _applyRiddenRoute;
 
+// ═══════════════════════════════════════════════════════════════════
+// ★ 2026-10-11 (YJ: "승차가 판단되면 그때부터는 실시간 위치 API 로 경로를 파악하고, GPS 는 제대로 가고 있는지 확인만 하면 되지 않느냐"):
+//   버스를 타고 있다는 증거(차량 속도 이동·승차 확정)가 생기면 15초마다 별도 워커(gildongmu-ride)에 '내 위치 + 엔진이 준 후보 버스'를 보내
+//   공공 버스위치(TAGO)에서 내가 탄 차량 1대를 고른다. 두 번 연속 같은 차가 뚜렷하게 가까우면(그리고 내가 차량 속도로 움직이면) 그 차를 '잠근다'.
+//   - 잠근 뒤: 차량 위치가 지나온 정류장을 알려 주고(진행도), GPS 는 그 차가 여전히 내 곁에 있는지 확인만 한다. 450m 넘게 벌어지면 풀고 기존 방식으로 돌아간다.
+//   - 엔진 후보 중 다른 버스를 탄 걸로 밝혀지면 그 경로로 이어서 안내한다(_applyRiddenRoute, 재탐색 없음). 앱이 경로를 만들지는 않는다.
+//   - 워커가 안 열려 있거나 도시가 지원 안 되거나(경기·서울 일부) 실패하면 아무것도 바꾸지 않는다 → 기존 GPS·시각 추정 그대로.
+//   끄기: window._vehOff = true.
+// ═══════════════════════════════════════════════════════════════════
+var _VEH_URL = 'https://gildongmu-ride.phg0643.workers.dev/vehicle';
+var _vehSt = { busy: false, at: 0, fails: 0, until: 0, pend: null, sig: null, unsup: 0 };
+window._veh = null;
+function _vehNo(s){ return String(s == null ? '' : s).replace(/\s+/g, '').replace(/번$/, '').toLowerCase(); }
+function _vehFix(){
+  try{
+    var tr = _ev.trail, p = tr && tr.length ? tr[tr.length - 1] : null;
+    if(p && Date.now() - p.ts <= 45000 && p.ts >= _ev.floorMs) return p;
+  }catch(e){}
+  return null;
+}
+// 엔진 후보 경로의 버스 구간 중 내 위치 350m 안(승차 정류장~하차 정류장 선 위)에 있는 것 — 최대 5개. 잠근 차의 노선은 항상 포함.
+function _vehCands(fx, keepNo){
+  var out = [], seen = {};
+  try{
+    var R = window._allRouteResults, paths = (R && R.all) ? R.all : [];
+    paths.forEach(function(pp){
+      if(!pp || !pp.subPath) return;
+      pp.subPath.forEach(function(sp){
+        if(!sp || sp.trafficType !== 2) return;
+        var no = sp.lane && sp.lane[0] && sp.lane[0].busNo, sid = sp.boardStopId;
+        if(!no || !sid) return;
+        var st = (sp.passStopList && sp.passStopList.stations) || [], pts = [];
+        st.forEach(function(q){ var x = parseFloat(q.x), y = parseFloat(q.y); if(isFinite(x) && isFinite(y)) pts.push({ lat: y, lng: x }); });
+        if(pts.length < 2) return;
+        var key = no + '|' + sid; if(seen[key]) return;
+        var d = Infinity;
+        for(var j = 0; j < pts.length - 1; j++){ var dj = _distToSegM(fx.lat, fx.lng, pts[j].lat, pts[j].lng, pts[j + 1].lat, pts[j + 1].lng); if(dj < d) d = dj; }
+        var keep = keepNo && _vehNo(no) === keepNo;
+        if(d > 350 && !keep) return;
+        seen[key] = 1;
+        out.push({ d: keep ? -1 : d, c: { busNo: String(no), boardStopId: String(sid), lat: pts[0].lat, lng: pts[0].lng }, path: pp });
+      });
+    });
+  }catch(e){}
+  out.sort(function(a, b){ return a.d - b.d; });
+  return out.slice(0, 5);
+}
+// 지금 보는 경로(_transitNodeData)에서 이 노선 번호의 버스 구간 노드 인덱스들 (연속 구간 단위)
+function _vehRuns(busNo){
+  var runs = [], cur = null, nd = window._transitNodeData || (typeof _transitNodeData !== 'undefined' ? _transitNodeData : null);
+  if(!nd) return runs;
+  for(var i = 0; i < nd.length; i++){
+    var n = nd[i];
+    if(n && n.isBus && n.lat != null && _vehNo(n.lineName) === busNo){ if(!cur){ cur = []; runs.push(cur); } cur.push(i); }
+    else if(n && n.isWalk){ cur = null; }
+    else if(n && (n.isSub || (n.isBus && _vehNo(n.lineName) !== busNo))) cur = null;
+  }
+  return runs;
+}
+// 차량 좌표가 구간 위 어디까지 왔는가 — 방금 지난 노드 인덱스(없으면 null). 선에서 200m 넘게 떨어져 있으면 null.
+function _vehIdxAt(run, lat, lng){
+  var nd = _transitNodeData, best = null, bd = Infinity, k;
+  for(k = 0; k < run.length - 1; k++){
+    var a = nd[run[k]], b = nd[run[k + 1]];
+    var d = _distToSegM(lat, lng, a.lat, a.lng, b.lat, b.lng);
+    if(d < bd){
+      bd = d;
+      var kx = 88000, ky = 111000, bx = (b.lng - a.lng) * kx, by = (b.lat - a.lat) * ky, px = (lng - a.lng) * kx, py = (lat - a.lat) * ky;
+      var L2 = bx * bx + by * by, t = L2 > 0 ? Math.max(0, Math.min(1, (px * bx + py * by) / L2)) : 0;
+      best = { seg: k, t: t };
+    }
+  }
+  if(!best || bd > 200) return null;
+  return run[best.seg + (best.t >= 0.85 ? 1 : 0)];
+}
+function _vehRelease(why){
+  var v = window._veh; if(!v) return;
+  window._veh = null; _vehSt.pend = null;
+  try{ _ovlDiag('차량매칭해제', (v.busNo || '?') + ' ' + v.vehicleno + ' — ' + why); }catch(e){}
+}
+function _vehAdvance(idx, v, why){
+  var g = (window._gpsMaxIdx == null) ? -1 : window._gpsMaxIdx;
+  if(idx == null || idx <= g) return false;
+  window._gpsMaxIdx = idx;
+  window._gpsConfirmIdx = Math.max(window._gpsConfirmIdx == null ? -1 : window._gpsConfirmIdx, idx);
+  window._busAdvMs = Date.now();
+  window._nodePassMs = window._nodePassMs || {};
+  if(window._nodePassMs[idx] == null) window._nodePassMs[idx] = Date.now() - Math.min(30000, Math.max(0, (v && v.ageMs) || 0));
+  try{ _etaSrc(idx, 'gps'); }catch(e1){}
+  try{ if(typeof _recalcArrivalsFrom === 'function') _recalcArrivalsFrom(idx); }catch(e2){}
+  try{ _ovlDiag('차량추적', (v.busNo || '?') + ' ' + v.vehicleno + ' 정류장 ' + g + '→' + idx + ' (' + why + ')'); }catch(e3){}
+  return true;
+}
+// 처음 고른 차량으로 승차를 확정한다(대기 모드가 아직 못 잡았더라도).
+function _vehConfirmBoard(run, mt){
+  try{
+    var first = run[0], bi = (typeof _htlBoardIdx === 'function') ? _htlBoardIdx() : -1;
+    window._nodePassMs = window._nodePassMs || {};
+    if(window._nodePassMs[first] == null){ window._nodePassMs[first] = (first === bi && window._rideEvStartMs) ? window._rideEvStartMs : Date.now() - 45000; try{ _etaSrc(first, 'move'); }catch(e0){} }
+    if(first === bi && window._htlBoarded !== true){
+      window._htlBoarded = true;
+      window._boardWhy = '차량매칭 ' + mt.vehicleno;
+      var g = (window._gpsMaxIdx == null) ? -1 : window._gpsMaxIdx;
+      window._gpsMaxIdx = Math.max(g, bi);
+      window._gpsConfirmIdx = Math.max(window._gpsConfirmIdx == null ? -1 : window._gpsConfirmIdx, bi);
+      try{ if(typeof _recalcArrivalsFrom === 'function') _recalcArrivalsFrom(bi); }catch(e1){}
+      try{ if(typeof _htlWaitStop === 'function') _htlWaitStop('차량 매칭'); }catch(e2){}
+      try{ _ovlDiag('승차확정', '차량매칭 ' + (mt.busNo || '?') + ' ' + mt.vehicleno + ' (내 위치와 ' + mt.dist + 'm)'); }catch(e3){}
+    }
+  }catch(e){}
+}
+function _vehApply(res, fx){
+  if(!res || res.ok !== true) return;
+  if(res.unsupported && !res.n){ _vehSt.unsup++; if(_vehSt.unsup >= 2) _vehSt.until = Date.now() + 5 * 60000; return; }
+  _vehSt.unsup = 0;
+  var v = window._veh;
+  if(v){
+    // 잠근 차량 확인: GPS 와 차량이 450m 넘게 벌어지거나 차가 목록에서 사라지면 푼다(내가 내렸거나 다른 차를 탔다)
+    var lk = res.lock;
+    if(!lk || lk.found !== true){
+      v.miss = (v.miss || 0) + 1;
+      if(v.miss >= 3) _vehRelease('위치 목록에서 사라짐');
+      return;
+    }
+    v.miss = 0;
+    if(lk.dist > 450){
+      v.far = (v.far || 0) + 1;
+      if(v.far >= 2){ _vehRelease('내 위치와 ' + lk.dist + 'm 벌어짐 — 내렸거나 다른 차'); }
+      return;
+    }
+    v.far = 0; v.ageMs = lk.ageMs; v.lat = lk.lat; v.lng = lk.lng;
+    var runs = _vehRuns(v.no), ri, idx = null;
+    for(ri = 0; ri < runs.length && idx == null; ri++) idx = _vehIdxAt(runs[ri], lk.lat, lk.lng);
+    var gm = (window._gpsMaxIdx == null) ? -1 : window._gpsMaxIdx;
+    if(idx != null && idx >= gm) _vehAdvance(idx, v, '차량 위치 ' + (lk.nodenm || '') + ' 부근 ' + lk.dist + 'm');
+    else if(Date.now() - (v.logAt || 0) > 60000){ v.logAt = Date.now(); try{ _ovlDiag('차량추적', (v.busNo || '?') + ' ' + v.vehicleno + ' ' + (lk.nodenm || '') + ' (' + lk.dist + 'm, 경로 위 위치 못 맞춤)'); }catch(e){} }
+    return;
+  }
+  // 아직 안 잠갔다 — 확실한 차가 두 번 연속 같은 차여야 하고, 나도 차량 속도로 움직이고 있어야 한다.
+  var mt = res.match;
+  if(!mt || (mt.conf !== 'sure' && mt.conf !== 'likely')){ _vehSt.pend = null; return; }
+  var moving = false; try{ moving = !!(window._evVehicleNow && window._evVehicleNow()); }catch(e0){}
+  try{ var rd = window._rideEv ? window._rideEv() : null; if(rd && rd.now) moving = true; }catch(e00){}
+  if(window._htlBoarded === true) moving = true;
+  var P = _vehSt.pend;
+  if(!P || P.vehicleno !== mt.vehicleno){ _vehSt.pend = { vehicleno: mt.vehicleno, n: 1, at: Date.now() }; return; }
+  P.n++;
+  if(P.n < 2 || !moving) return;
+  _vehSt.pend = null;
+  var no = _vehNo(mt.busNo);
+  // 지금 보는 경로에 이 버스 구간이 없으면 → 엔진 후보 중 그 경로로 바꿔 이어서 안내
+  var runs2 = _vehRuns(no);
+  if(!runs2.length){
+    var cs = _vehCands(fx, no), cd = null;
+    for(var ci = 0; ci < cs.length; ci++){ if(_vehNo(cs[ci].c.busNo) === no){ cd = cs[ci]; break; } }
+    if(!cd || !window._applyRiddenRoute) return;
+    var ok = false;
+    try{ ok = _applyRiddenRoute({ path: cd.path, fit: { mean: 0 }, cur: null, last: { lat: fx.lat, lng: fx.lng } }); }catch(eA){}
+    if(!ok) return;
+    runs2 = _vehRuns(no);
+    if(!runs2.length) return;
+    try{ _ovlDiag('차량매칭', '타고 있는 차가 ' + (mt.busNo || '?') + ' — 엔진 후보 경로로 이어서 안내'); }catch(eD){}
+  }
+  // 이번 내 위치에 가까운 구간(여러 번 도는 노선이면 차량이 있는 쪽)
+  var run = runs2[0], rb = Infinity, rj;
+  for(rj = 0; rj < runs2.length; rj++){
+    for(var kk = 0; kk < runs2[rj].length; kk++){ var nn = _transitNodeData[runs2[rj][kk]]; var dd = haversineM(mt.lat, mt.lng, nn.lat, nn.lng); if(dd < rb){ rb = dd; run = runs2[rj]; } }
+  }
+  window._veh = { vehicleno: mt.vehicleno, routeKey: mt.routeKey, busNo: mt.busNo, no: no, since: Date.now(), far: 0, miss: 0, ageMs: mt.ageMs };
+  try{ _ovlDiag('차량매칭', (mt.busNo || '?') + ' ' + mt.vehicleno + ' 잠금 — 내 위치와 ' + mt.dist + 'm(다음 후보 ' + (mt.second == null ? '없음' : mt.second + 'm') + ', ' + mt.conf + ')'); }catch(eD2){}
+  if(window._routeLocked !== true){ try{ _autoLockOnRide(true); }catch(eL){} }
+  _vehConfirmBoard(run, mt);
+  var ix = _vehIdxAt(run, mt.lat, mt.lng);
+  if(ix != null) _vehAdvance(ix, window._veh, '처음 매칭');
+}
+function _vehTick(){
+  try{
+    if(window._vehOff === true) return;
+    var now = Date.now();
+    if(_vehSt.busy || now < _vehSt.until || now - _vehSt.at < 15000) return;
+    if(typeof _baseTimeMs !== 'undefined' && _baseTimeMs != null) return;
+    if(window._metroRouteMode === true) return;
+    var fx = _vehFix(); if(!fx) return;
+    var rd = null; try{ rd = window._rideEv ? window._rideEv() : null; }catch(e0){}
+    var moving = false; try{ moving = !!(window._evVehicleNow && window._evVehicleNow()); }catch(e1){}
+    var onVeh = !!window._veh || moving || !!(rd && (rd.now || rd.riding)) || window._htlBoarded === true;
+    if(!onVeh) return;
+    // 버스 구간이 있는 경로를 보고 있어야 한다(지하철만 가는 경로는 해당 없음)
+    var cs = _vehCands(fx, window._veh ? window._veh.no : null);
+    if(!cs.length) return;
+    var body = { fix: { lat: fx.lat, lng: fx.lng }, cands: cs.map(function(x){ return x.c; }) };
+    var tr = _ev.trail, fixes = [], want = [10000, 20000, 30000], wi, ti;
+    for(wi = 0; wi < want.length; wi++){
+      for(ti = tr.length - 1; ti >= 0; ti--){ if(now - tr[ti].ts >= want[wi]){ if(now - tr[ti].ts <= want[wi] + 8000) fixes.push({ lat: tr[ti].lat, lng: tr[ti].lng }); break; } }
+    }
+    if(fixes.length) body.fixes = fixes;
+    if(window._veh) body.lock = { routeKey: window._veh.routeKey, vehicleno: window._veh.vehicleno };
+    _vehSt.busy = true; _vehSt.at = now;
+    var sig = window._trackSig, ctl = (typeof AbortController === 'function') ? new AbortController() : null, to = null;
+    if(ctl) to = setTimeout(function(){ try{ ctl.abort(); }catch(e){} }, 8000);
+    var done = function(){ _vehSt.busy = false; if(to) clearTimeout(to); };
+    fetch(_VEH_URL, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal: ctl ? ctl.signal : undefined })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(j){
+        done();
+        if(!j){ _vehSt.fails++; if(_vehSt.fails >= 3) _vehSt.until = Date.now() + Math.min(300000, 30000 * _vehSt.fails); return; }
+        _vehSt.fails = 0;
+        if(window._trackSig !== sig){ window._veh = null; _vehSt.pend = null; return; }   // 그 사이 경로가 바뀌었다
+        _vehApply(j, fx);
+      })
+      .catch(function(){ done(); _vehSt.fails++; if(_vehSt.fails >= 3) _vehSt.until = Date.now() + Math.min(300000, 30000 * _vehSt.fails); });
+  }catch(e){ _vehSt.busy = false; }
+}
+window._vehTick = _vehTick; window._vehApply = _vehApply; window._vehCands = _vehCands;
+
 // 이탈 확정 시 실제 처리
 function _handleOffRoute(){
   try{
@@ -13503,6 +13718,7 @@ function _updateTransitGps() {
   try{ if(typeof locTick === 'function') locTick(); }catch(e){}
   try{ if(typeof _pfTick === 'function') _pfTick(); }catch(e){}   // ★ 확률 위치 판단기(그림자/보정)
   try{ _ridePathWatch(); }catch(e){}   // 2026-10-11: 타고 있는 버스가 엔진 후보 중 다른 경로면 그 경로로 이어서 안내
+  try{ _vehTick(); }catch(e){}   // 2026-10-11: 탄 버스를 실시간 차량 위치(워커)로 찾아 따라간다 — GPS 는 확인용
   try{ if(typeof _progGuard === 'function') _progGuard(); }catch(e){}   // ★ 진행도 상한 확인
   var card = document.getElementById('transitResultCard');
   if(!card || card.style.display==='none') { clearInterval(_transitGpsTimer); return; }
@@ -13842,7 +14058,7 @@ function _updateTransitGps() {
       if(best && best.isBus && bestIdx > _pMax){
         var _bi9 = (typeof _htlBoardIdx === 'function') ? _htlBoardIdx() : -1;
         var _rd9 = null; try{ _rd9 = window._rideEv ? window._rideEv() : null; }catch(eR9){}
-        var _veh9 = (window._htlBoarded === true) || !!(_rd9 && (_rd9.now || _rd9.riding)) || (window._evVehicleNow ? window._evVehicleNow() : false);
+        var _veh9 = (window._htlBoarded === true) || !!window._veh || !!(_rd9 && (_rd9.now || _rd9.riding)) || (window._evVehicleNow ? window._evVehicleNow() : false);
         var _cap9 = null;
         try{ if(_veh9 && window._htlBoarded !== true && Date.now() - (window._vehLogAt || 0) > 20000){ window._vehLogAt = Date.now();
           _ovlDiag('버스차량판단', '진행 ' + _pMax + '→' + bestIdx + ' 근거: ' + ((_rd9 && _rd9.now) ? '증거now ' : '') + ((_rd9 && _rd9.riding) ? '증거riding ' : '') + ((window._evVehicleNow && window._evVehicleNow()) ? '차량속도' : '')); } }catch(eV9){}
@@ -37228,7 +37444,7 @@ function _pfApplyLive(b, now){
 //   '경로 확정'을 안 누르면 추적·위치 판단(PF)·시각 보정이 전부 꺼져 있어, 탑승 중에도 아무것도 따라가지 않았다.
 //   열차를 타고 이동한다는 증거(GPS 이동 + 기지국/PF)가 지금 있고, 그 궤적이 보던 경로의 승차역 400m 안을 지났고,
 //   승차 예정 시각이 지금과 크게 어긋나지 않으면(−15분~+25분) 보던 경로로 확정한 것으로 본다. 한 번 알려 준다.
-function _autoLockOnRide(){
+function _autoLockOnRide(force){
   if(window._routeLocked === true || window._metroRouteMode === true) return false;
   if(typeof _baseTimeMs !== 'undefined' && _baseTimeMs != null) return false;
   if(!window._lastHtlNodes || !window._lastHtlNodes.length || !_transitNodeData || !_transitNodeData.length) return false;
@@ -37240,6 +37456,8 @@ function _autoLockOnRide(){
   //   그 사이 버스는 다음 정류장을 이미 지나쳐 아래 '다음 역 쪽으로 가는가' 판정이 영영 통과하지 못했다. 버스는 차량 속도 이동(_evVehicleNow)도 지금 움직임으로 본다.
   var _bnA = _transitNodeData[bi], _busA = !!(_bnA && _bnA.isBus);
   var _vehA = _busA && window._evVehicleNow ? window._evVehicleNow() : false;
+  // force: 실시간 차량 위치로 같은 차를 찾아낸 경우(_vehApply) — 아래 이동·위치 증거 검사를 건너뛴다(차량 매칭이 더 강한 증거)
+  if(!force){
   if(!r || !(r.now || _vehA)) return false;                       // 지금 실제로 움직이는 중일 때만
   if(window._evNearNode(_transitNodeData[bi], 400) !== true) return false;
   if(window._evWalkedNear && window._evWalkedNear(_transitNodeData[bi], 300) === false) return false;   // 2026-10-06: 역 옆을 달려 지나간 버스·차는 제외
@@ -37248,6 +37466,7 @@ function _autoLockOnRide(){
     var t = _htlDepArrTimes(), depMs = (t && t.dep) ? _etaHmToMs(t.dep) : null;
     if(depMs != null && (now < depMs - 15 * 60000 || now > depMs + 25 * 60000)) return false;
   }catch(e1){}
+  }
   window._autoLockAt = now;
   var type = window._pendingRouteType || 'fast';
   var info = { at: now, bi: bi, btn: null, mbtn: null, boarded: null, state: null };
@@ -37261,7 +37480,7 @@ function _autoLockOnRide(){
   try{ if(typeof toast === 'function') toast('탑승이 감지돼 지금 보는 경로로 안내를 시작해요'); }catch(e4){}
   try{ if(typeof _beginJourneyTracking === 'function') _beginJourneyTracking(); }catch(e5){}
   try{ _pipArmNow(); }catch(e6){}
-  try{ _ovlDiag('자동확정', '탑승 증거 GPS' + r.gps + ' 기지국' + r.cell + ' PF' + r.pf + ' · 승차역 ' + (_transitNodeData[bi].name || '?') + ' 근처 통과 → 경로 확정(' + type + ')'); }catch(e7){}
+  try{ _ovlDiag('자동확정', (force ? '차량 위치 매칭' : ('탑승 증거 GPS' + (r ? r.gps : '-') + ' 기지국' + (r ? r.cell : '-') + ' PF' + (r ? r.pf : '-'))) + ' · 승차역 ' + (_transitNodeData[bi].name || '?') + ' 근처 통과 → 경로 확정(' + type + ')'); }catch(e7){}
   return true;
 }
 window._autoLockOnRide = _autoLockOnRide;
