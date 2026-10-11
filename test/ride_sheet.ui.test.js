@@ -288,6 +288,63 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   await t('예약 중 타고 있다는 증거(차량 이동)가 잡히면 도착 전이라도 바로 확정된다', async () => { const g = await f.page.evaluate(() => ({ b: window._htlBoarded, pend: !!_rs.pend })); assert.strictEqual(g.b, true); assert.ok(!g.pend); });
   await f.ctx.close();
 
+
+  console.log('[⑨ 환승 구간 — 버튼은 \'환승완료\', 위치가 승차 지점에서 멈춰 있으면 하차로 인정, 숨은 이유가 진단에 남는다]');
+  const BUS_LNG = 126.9 + 0.0137 * 3 + 0.002;   // 노드 5(버스 승차) 경도
+  const prep = async () => {
+    const x = await fresh();
+    await x.at('12:51:20'); await x.page.clock.runFor(1500);
+    await x.page.evaluate(() => { window.__lbl1 = document.getElementById('rsBtn').textContent; window.__k1 = document.getElementById('rsK').textContent; });
+    await x.page.click('#rsBtn'); await x.page.clock.runFor(600);
+    await x.page.evaluate(() => { window._gpsMaxIdx = 2; });
+    return x;
+  };
+  const trailAt = (x, pts) => x.page.evaluate(([ps]) => { _ev.trail.length = 0; const now = Date.now(); ps.forEach(p => _ev.trail.push({ lat: 37.5, lng: p[0], ts: now - p[1] * 1000 })); }, [pts]);
+  let h = await prep();
+  await t('첫 구간 버튼은 \'탑승\'', async () => assert.strictEqual(await h.page.evaluate(() => window.__lbl1), '탑승'));
+  await h.at('12:59:20'); await h.page.clock.runFor(1500);
+  await t('앞 구간 하차 전이고 위치도 없으면 환승 시트가 없고, 이유가 진단에 남는다', async () => {
+    const x = await h.st(); assert.ok(!x.sheet && !x.pill, JSON.stringify(x));
+    assert.ok((await h.diag()).some(d => /앞 구간 하차 전/.test(d)), (await h.diag()).join(' | '));
+  });
+  await h.page.clock.runFor(8000);
+  await t('같은 이유는 반복해서 남기지 않는다', async () => assert.ok((await h.diag()).filter(d => /앞 구간 하차 전/.test(d)).length <= 1));
+  await trailAt(h, [[BUS_LNG - 0.0004, 40], [BUS_LNG, 1]]);   // 승차 정류장 바로 앞에서 40초째 거의 안 움직임
+  await h.page.clock.runFor(1500);
+  let hs = await h.st();
+  await t('위치가 승차 지점 150m 안에서 멈춰 있으면 하차로 인정해 시트가 올라온다', async () => { assert.ok(hs.sheet, JSON.stringify(hs)); assert.strictEqual(hs.chip, '58번'); });
+  await t('하차 인정 이유가 진단에 남는다', async () => assert.ok((await h.diag()).some(d => /하차로 인정/.test(d))));
+  await t('환승 구간 버튼은 \'환승완료\'이고 오버레이로도 같은 글자가 간다', async () => {
+    assert.strictEqual(await h.page.evaluate(() => document.getElementById('rsBtn').textContent), '환승완료');
+    const r = await h.page.evaluate(() => _ovlRs()); assert.strictEqual(r.bt, '환승완료', JSON.stringify(r));
+  });
+  await t('환승 구간 안내 문구도 환승으로 나온다', async () => { const k = await h.page.evaluate(() => document.getElementById('rsK').textContent); assert.ok(/환승|도착/.test(k), k); });
+  await h.page.click('#rsBtn'); await h.page.clock.runFor(600);
+  await t('환승완료를 누르면 \'환승 완료로 기록했어요\' 되돌리기 안내가 뜨고 오버레이 문구도 같다', async () => {
+    const um = await h.page.evaluate(() => document.getElementById('rsUndo').firstChild.textContent); assert.ok(/환승 완료로 기록/.test(um), um);
+    const r = await h.page.evaluate(() => _ovlRs()); assert.strictEqual(r.st, 'undo'); assert.ok(/환승 완료로 기록/.test(r.um), JSON.stringify(r));
+  });
+  await t('환승 구간 탑승 확정이 기록된다(기존 동작)', async () => { const g = await h.page.evaluate(() => ({ gm: window._gpsMaxIdx, pass: window._nodePassMs[5] })); assert.ok(g.gm >= 5 && g.pass > 0, JSON.stringify(g)); });
+  await t('페이지 오류 없음(⑨)', async () => assert.deepStrictEqual([...new Set(h.errs)], []));
+  await h.ctx.close();
+
+  h = await prep();
+  await h.at('12:59:20'); await trailAt(h, [[BUS_LNG - 0.0011, 20], [BUS_LNG, 1]]);   // 20초에 98m — 달리는 중(차 안)
+  await h.page.clock.runFor(1500);
+  await t('승차 지점 근처라도 빠르게 움직이는 중(아직 차 안)이면 하차로 보지 않는다', async () => { const x = await h.st(); assert.ok(!x.sheet && !x.pill, JSON.stringify(x)); });
+  await h.ctx.close();
+
+  h = await prep();
+  await h.at('12:59:20'); await trailAt(h, [[BUS_LNG - 0.012, 40], [BUS_LNG - 0.0118, 1]]);   // 1km 이상 떨어져 멈춤
+  await h.page.clock.runFor(1500);
+  await t('승차 지점에서 멀면 하차로 보지 않는다', async () => { const x = await h.st(); assert.ok(!x.sheet && !x.pill, JSON.stringify(x)); });
+  await h.ctx.close();
+
+  h = await fresh();
+  await h.at('12:45:00'); await h.page.clock.runFor(1500);
+  await t('도착이 한참 남아 숨어 있는 이유도 진단에 남는다', async () => assert.ok((await h.diag()).some(d => /숨김/.test(d) && /2분 전에 올림/.test(d)), (await h.diag()).join(' | ')));
+  await h.ctx.close();
+
   await b.close();
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
   process.exit(fail ? 1 : 0);
