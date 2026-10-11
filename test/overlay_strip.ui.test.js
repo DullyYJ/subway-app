@@ -115,6 +115,17 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     const lum = (h) => { const n = parseInt(h.slice(1), 16); return ((n >> 16) * 0.3 + ((n >> 8) & 255) * 0.59 + (n & 255) * 0.11); };
     assert.ok(lum(rd.theme.bg) < lum(rd.theme.fg), JSON.stringify(rd.theme));
   });
+  await t('다크 테마에서 환승 도보 가운데 점이 검정이 아니라 바탕보다 밝다', async () => {
+    const lum = (h) => { const n = parseInt(h.slice(1), 16); return ((n >> 16) * 0.3 + ((n >> 8) & 255) * 0.59 + (n & 255) * 0.11); };
+    const dots = rd.cells.filter(c => c.dk === 3);
+    assert.ok(dots.length > 0, '환승 도보 점이 없다');
+    dots.forEach(c => { assert.ok(/^#[0-9a-f]{6}$/.test(c.dc) && lum(c.dc) > lum(rd.theme.bg) + 60, JSON.stringify(c)); });
+  });
+  await t('라이트 테마에서는 점이 어두워 바탕과 구분된다', async () => {
+    const lum = (h) => { const n = parseInt(h.slice(1), 16); return ((n >> 16) * 0.3 + ((n >> 8) & 255) * 0.59 + (n & 255) * 0.11); };
+    const ql = await strip((await fresh()).page);
+    ql.cells.filter(c => c.dk === 3).forEach(c => assert.ok(lum(c.dc) < lum(ql.theme.bg) - 60, JSON.stringify(c)));
+  });
   await d.ctx.close();
 
   await b.close();
