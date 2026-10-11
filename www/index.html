@@ -28067,7 +28067,7 @@ function _ovlRs(){
     if(r.undo && d.undo.classList.contains('on')) return { st: 'undo', um: (d.undo.firstChild && d.undo.firstChild.textContent) || '' };
     if(r.st !== 'board' && r.st !== 'wait') return o;
     var cs = getComputedStyle(d.chip), am = /rgba\(\s*\d+[\s,]+\d+[\s,]+\d+[\s,\/]+([\d.]+)/.exec(cs.backgroundColor || '');
-    o = { st: r.st, k: d.k.textContent || '', ch: d.chip.textContent || '', nm: d.nm.textContent || '', bar: -1,
+    o = { st: r.st, bt: d.btn.textContent || '탑승', k: d.k.textContent || '', ch: d.chip.textContent || '', nm: d.nm.textContent || '', bar: -1,
           cbg: (am && parseFloat(am[1]) < 0.99) ? '' : _ovlHex(cs.backgroundColor), cfg: _ovlHex(cs.color) };
     if(d.bar.classList.contains('on')){ var mm = /scaleX\(([\d.]+)\)/.exec(d.barI.style.transform || ''); if(mm) o.bar = Math.round(parseFloat(mm[1]) * 20) / 20; }
   }catch(e){}
@@ -37843,7 +37843,26 @@ var _RS_LEAD_MS = 120000;       // 도착 2분 전부터(★ 2026-10-11 YJ: 1분
 var _RS_MANUAL_MS = 600000;     // 사용자가 하단 탭을 위로 밀어 연 시트는 10분(또는 눌러서 탄 것으로 확정·아래로 밀어 닫을 때까지) 유지
 var _RS_SHRINK_MS = 180000;     // 출발 3분 뒤에도 안 눌렀고 움직임이 없으면 줄어든다
 var _RS_EARLY_MS = 90000;       // ★ 2026-10-11 (YJ 제보: 도착 3분 전에 탑승을 눌렀더니 마커가 튄다): 도착 1분 반보다 일찍 누른 것은 '예약'으로만 받고, 그 시각이 되면(또는 타고 있다는 증거가 잡히면) 확정한다
+var _RS_ALIGHT_M = 150;         // ★ 2026-10-11: 환승 구간 — 앞 구간 하차를 진행·시각 추정이 아직 못 잡았어도, 위치가 다음 승차 지점 150m 안에서 멈춰 있으면 내린 것으로 본다
 var _RS_NEAR_M = 600;           // 최신 위치가 있으면 승차 지점 600m 안일 때만 올린다(지하라 위치가 없으면 시각만으로)
+// 진단: 탑승 시트가 왜 숨어 있는지(이유가 바뀔 때만 한 줄)
+function _rsWhy(code, msg){
+  if(_rs.why === code) return; _rs.why = code;
+  try{ if(typeof _ovlDiag === 'function') _ovlDiag('탑승시트', msg); }catch(e){}
+}
+// 위치가 다음 승차 지점 가까이(_RS_ALIGHT_M)에서 멈춰(걷는 속도 이하) 있으면 그 거리(m), 아니면 null
+function _rsAlightGps(nd){
+  try{
+    var fx = (typeof _vehFix === 'function') ? _vehFix() : null;
+    if(!fx || !nd || nd.lat == null || nd.lng == null) return null;
+    var d = haversineM(fx.lat, fx.lng, nd.lat, nd.lng); if(d > _RS_ALIGHT_M) return null;
+    var tr = _ev.trail, o = null;
+    for(var i = tr.length - 2; i >= 0; i--){ if(fx.ts - tr[i].ts >= 20000){ o = tr[i]; break; } }
+    if(!o || fx.ts - o.ts > 120000) return null;
+    var v = haversineM(o.lat, o.lng, fx.lat, fx.lng) / ((fx.ts - o.ts) / 1000);
+    return v <= 2.5 ? Math.round(d) : null;
+  }catch(e){ return null; }
+}
 function _rsLegs(){
   var nd = (typeof _transitNodeData !== 'undefined') ? _transitNodeData : null, out = [], cur = null;
   if(!nd) return out;
@@ -37948,12 +37967,14 @@ function _rsFill(L, depMs, dt, nd, late){
   var d = _rs.dom; if(!d) return;
   if(d.icMode !== L.mode){ d.icMode = L.mode; d.ic.innerHTML = _RS_ICON[L.mode]; }
   var kick;
-  if(late) kick = '타셨다면 눌러 주세요';
-  else if(dt > 150000) kick = '탑승 예정';
+  if(late) kick = L.k > 0 ? '환승하셨다면 눌러 주세요' : '타셨다면 눌러 주세요';
+  else if(dt > 150000) kick = L.k > 0 ? '환승 예정' : '탑승 예정';
   else if(dt > 90000) kick = '2분 안에 도착';
   else if(dt > 45000) kick = '1분 안에 도착';
   else if(dt > -30000) kick = '곧 도착해요';
   else kick = '도착했어요';
+  var bt = L.k > 0 ? '환승완료' : '탑승';
+  if(d.btn.textContent !== bt){ d.btn.textContent = bt; d.btn.style.padding = L.k > 0 ? '0 16px' : ''; }
   var hm = nd && nd.arrTime ? (' · ' + nd.arrTime) : '';
   var nk = kick + hm;
   if(d.k.textContent !== nk) d.k.textContent = nk;
@@ -37980,16 +38001,20 @@ function _rsTick(){
     if(!card || card.style.display === 'none'){ if(_rs.st !== 'hidden') _rsHide(); _rs.seen = false; _rs.key = ''; return; }
     var legs = _rsLegs(), L = null, i;
     for(i = 0; i < legs.length; i++){ if(_rsNotDeparted(legs[i])){ L = legs[i]; break; } }
-    if(!L){ if(_rs.st !== 'hidden') _rsHide(); return; }
+    if(!L){ if(_rs.st !== 'hidden') _rsHide(); if(legs.length) _rsWhy('alldone', '숨김 — 모든 구간 탑승 확정'); return; }
     var nd = _transitNodeData[L.bi], depMs = _etaHmToMs(nd && nd.arrTime);
-    if(depMs == null){ if(_rs.st !== 'hidden') _rsHide(); return; }
+    if(depMs == null){ if(_rs.st !== 'hidden') _rsHide(); _rsWhy('nodep' + L.k, '숨김 — ' + (L.k + 1) + '번째 구간 도착 시각 없음'); return; }
     var now = Date.now(), dt = depMs - now, key = _rsKey(L);
     if(_rs.key !== key){ _rs.key = key; _rs.seen = false; _rs.openUntil = 0; _rs.pend = null; if(_rs.st !== 'hidden') _rsSet('hidden'); }
     _rs.leg = L; _rs.dep = depMs;
     // 환승 구간: 앞 구간을 내린 뒤에만(진행 근거 또는 시각 추정이 앞 구간 하차까지 와야 한다)
     if(L.k > 0){
       var eff = Math.max(window._gpsMaxIdx == null ? -1 : window._gpsMaxIdx, window._timeMaxIdx == null ? -1 : window._timeMaxIdx);
-      if(eff < legs[L.k - 1].ai){ if(_rs.st !== 'hidden') _rsHide(); return; }
+      if(eff < legs[L.k - 1].ai){
+        var ag = _rsAlightGps(nd);
+        if(ag == null){ if(_rs.st !== 'hidden') _rsHide(); _rsWhy('prev' + L.k, '숨김 — 환승 ' + L.k + ': 앞 구간 하차 전 (진행 ' + eff + ' / 하차 ' + legs[L.k - 1].ai + ')'); return; }
+        _rsWhy('gpsalight' + L.k, '환승 ' + L.k + ': 앞 구간 하차로 인정 — 위치가 ' + L.name + ' 승차 지점 ' + ag + 'm 안에서 멈춤 (진행 ' + eff + ' / 하차 ' + legs[L.k - 1].ai + ')');
+      }
     }
     var riding = false;
     try{
@@ -38006,16 +38031,16 @@ function _rsTick(){
     var target;
     if(forced) target = 'board';
     else if(_rs.pend){ target = 'wait'; _rs.shrunk = depMs; }
-    else if(dt > _RS_LEAD_MS) target = _rs.seen ? 'wait' : 'hidden';
+    else if(dt > _RS_LEAD_MS){ target = _rs.seen ? 'wait' : 'hidden'; if(target === 'hidden') _rsWhy('lead' + L.k, '숨김 — ' + (L.k + 1) + '번째 구간 도착 ' + Math.round(dt / 60000) + '분 전(2분 전에 올림)'); }
     else if(late){ target = _rs.seen ? 'wait' : 'hidden'; if(target === 'wait') _rs.shrunk = depMs; }
     else target = 'board';
     if(target === 'board' && _rs.st === 'wait' && _rs.shrunk === depMs && !forced) target = 'wait';   // 같은 차량으로 줄인 뒤에는 움직임 증거가 깜빡여도 다시 올리지 않는다
     if(target === 'board' && !forced && !_rs.seen && _rs.st !== 'board'){
       // 처음 올리기 전: 최신 위치가 있고 승차 지점에서 멀면 올리지 않는다(그 차를 탈 수 없는 자리다)
       var fx = (typeof _vehFix === 'function') ? _vehFix() : null;
-      if(fx && nd.lat != null && haversineM(fx.lat, fx.lng, nd.lat, nd.lng) > _RS_NEAR_M) target = 'hidden';
+      if(fx && nd.lat != null && haversineM(fx.lat, fx.lng, nd.lat, nd.lng) > _RS_NEAR_M){ target = 'hidden'; _rsWhy('far' + L.k, '숨김 — ' + (L.k + 1) + '번째 구간 승차 지점에서 ' + Math.round(haversineM(fx.lat, fx.lng, nd.lat, nd.lng)) + 'm 멂'); }
     }
-    if(target === 'board') _rs.seen = true;
+    if(target === 'board'){ _rs.seen = true; _rs.why = ''; }
     if(target !== 'hidden'){ if(!_rsEnsureDom()) return; _rsFill(L, depMs, dt, nd, -dt >= _RS_SHRINK_MS); }
     _rsSet(target);
     _rsSyncNav();
@@ -38054,7 +38079,7 @@ function _rsPress(commit){
         _rs.undo = { pend: true, key: key };
         try{ _ovlDiag('탑승시트', '일찍 눌러 예약 — 도착 ' + Math.round((depE - now) / 1000) + '초 전 · ' + L.line + ' ' + L.name + ' (도착 1분 반 전에 확정)'); }catch(eD){}
         try{ if(navigator.vibrate) navigator.vibrate(12); }catch(eV){}
-        _rsShowUndo('탑승 예정으로 기록했어요');
+        _rsShowUndo(L.k > 0 ? '환승 예정으로 기록했어요' : '탑승 예정으로 기록했어요');
         _rsTick();
         return;
       }
@@ -38078,7 +38103,7 @@ function _rsPress(commit){
     if(L.mode === 'bus'){ try{ _vehSt.at = 0; _vehSt.until = 0; _vehSt.fails = 0; _vehTick(); }catch(e4){} }
     try{ if(navigator.vibrate) navigator.vibrate(18); }catch(e5){}
     _rsTick();
-    _rsShowUndo();
+    _rsShowUndo(L.k > 0 ? '환승 완료로 기록했어요' : undefined);
   }catch(e){}
 }
 function _rsShowUndo(msg){
