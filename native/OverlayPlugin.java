@@ -93,7 +93,7 @@ public class OverlayPlugin extends Plugin {
     // ★ 2026-10-11 (YJ: "오버레이에도 탑승 버튼을 앱처럼 — 2분 전 자동으로 나오고, 쓸어 올리면 나오고 쓸어 내리면 숨고"):
     //   언제 보일지(board 올림 · wait 대기 알약 · undo 되돌리기 · hidden 숨김)와 문구·색은 앱의 탑승 시트 상태(_rs)를 웹이 그대로 넘겨 준다.
     //   여기서는 그리기와 손짓(쓸어 올림·내림·탑승 누름)을 웹에 알리는 일만 한다.
-    private String rsSt = "hidden", rsK = "", rsCh = "", rsNm = "", rsUm = "";
+    private String rsSt = "hidden", rsK = "", rsCh = "", rsNm = "", rsUm = "", rsBt = "탑승";
     private boolean rsHasCbg = false;
     private int rsCbg = 0xFF0A84FF, rsCfg = 0xFF0A84FF;
     private float rsBar = -1f;                  // 출발 뒤 남은 비율(0~1), 없으면 -1
@@ -334,7 +334,7 @@ public class OverlayPlugin extends Plugin {
                 return;
             } else if ("board".equals(shown) || "undo".equals(shown)) {
                 boolean undo = "undo".equals(shown);
-                float padL = dp(4), bw = dp(undo ? 84 : 70), bh = dp(30);
+                float padL = dp(4), bw = dp(undo ? 84 : Math.max(70f, Math.min(104f, mw(rsBt, 14.5f, true) / getResources().getDisplayMetrics().density + 26f))), bh = dp(30);
                 float bt = dp(5);
                 btn.set(w - padL - bw, bt, w - padL, bt + bh);
                 if (undo) {
@@ -346,7 +346,7 @@ public class OverlayPlugin extends Plugin {
                 }
                 p.setColor(0xFF0A84FF);
                 cv.drawRoundRect(btn, bh / 2f, bh / 2f, p);
-                txt(cv, "탑승", btn.centerX(), btn.centerY() + dp(5f), bw - dp(8), 14.5f, 0xFFFFFFFF, true, Paint.Align.CENTER);
+                txt(cv, rsBt, btn.centerX(), btn.centerY() + dp(5f), bw - dp(8), 14.5f, 0xFFFFFFFF, true, Paint.Align.CENTER);
                 float maxL = btn.left - padL - dp(8);
                 txt(cv, rsK, padL, dp(4) + dp(11), maxL, 11f, thSub, true, Paint.Align.LEFT);
                 float cy0 = dp(4) + dp(16), ch = dp(17);
@@ -501,7 +501,7 @@ public class OverlayPlugin extends Plugin {
             JSObject rs = call.getObject("rs");
             if (rs != null) {
                 rsSt = rs.optString("st", "hidden");
-                rsK = rs.optString("k", ""); rsCh = rs.optString("ch", ""); rsNm = rs.optString("nm", ""); rsUm = rs.optString("um", "");
+                rsK = rs.optString("k", ""); rsCh = rs.optString("ch", ""); rsNm = rs.optString("nm", ""); rsUm = rs.optString("um", ""); rsBt = rs.optString("bt", "탑승"); if (rsBt.length() == 0) rsBt = "탑승";
                 String cb = rs.optString("cbg", "");
                 rsHasCbg = cb.length() > 0; rsCbg = col(cb, 0xFF0A84FF);
                 rsCfg = col(rs.optString("cfg", ""), 0xFF0A84FF);
