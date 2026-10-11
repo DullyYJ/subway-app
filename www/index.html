@@ -21686,8 +21686,15 @@ function _notifPrefGroup(type){
   if(t==='arrive_reco') return 'arrive_reco';
   return null;   // commute_brief(자체 토글)·fg_service 등은 그룹 없음 = 기존 로직 그대로
 }
+// ★ 2026-10-12 (YJ: "오버레이 알림은 환승 1정거장 전 · 목적지 2·1정거장 전만 엣지 하이라이트와 진동, 상단 알림도 이 부분만 하고 나머지는 다 없애줘"):
+//   상단 알림(시스템 알림)과 진동은 아래 세 가지만 나간다. 환승 1정거장 전 = transfer, 목적지 2정거장 전 = near_arrive2, 목적지 1정거장 전 = near_arrive.
+//   그 밖(환승 2정거장 전·목적지 도착·GPS 근접·하차 전 추천·출퇴근 브리핑·상주 알림 문구)은 상단 알림과 진동을 내지 않는다.
+//   하차 전 추천은 오버레이 하단 줄과 앱 안 팝업으로만 보인다(그 기능의 스위치는 _featureAllowed 가 따로 본다).
+//   예전 동작으로 되돌리기: window._notifLegacy = true
+var _NOTIF_TOP = { transfer:1, near_arrive2:1, near_arrive:1 };
 function _vibeAllowed(type){
   var t = String(type || '');
+  if(window._notifLegacy !== true && !_NOTIF_TOP[t]) return false;
   // 브리핑은 알림과 함께 짧게 울린다(사용자가 켠 기능이므로)
   if(t === 'commute_brief'){
     try{ return !!(typeof _cmAlarm !== 'undefined' && _cmAlarm.on); }catch(e){ return false; }
@@ -21705,6 +21712,13 @@ window._vibeAllowed = _vibeAllowed;
 //   → 이 종류만은 정책 상수가 아니라 사용자의 토글을 따른다.
 function _notifAllowed(type){
   var t = String(type||'');
+  if(window._notifLegacy !== true && !_NOTIF_TOP[t]) return false;   // ★ 2026-10-12: 상단 알림은 세 가지만
+  return _featureAllowed(t);
+}
+window._notifAllowed = _notifAllowed;
+// 기능 자체의 스위치(설정 화면 토글) — 상단 알림 정책과 별개. 오버레이 하단 추천·앱 안 팝업이 이걸 본다.
+function _featureAllowed(type){
+  var t = String(type||'');
   if(t === 'commute_brief'){
     try{ return !!(typeof _cmAlarm !== 'undefined' && _cmAlarm.on); }catch(e){ return false; }
   }
@@ -21713,14 +21727,13 @@ function _notifAllowed(type){
   if(g && _notifPrefLoad()[g] === 0) return false;   // 사용자가 설정에서 끔
   return true;
 }
-window._notifAllowed = _notifAllowed;
+window._featureAllowed = _featureAllowed;
 
 // ── 알림 설정 화면: 토글 4개 + 권한 거부 안내 배너 ──────────────────
 var _NOTIF_PREF_LABELS = {
-  arrive:      { icon:'🚉', title:'도착 임박 알림',   desc:'목적지 1~2정거장 전 · 도착 알림' },
-  transfer:    { icon:'🔄', title:'환승 알림',       desc:'환승역 1~2정거장 전 알림' },
-  proximity:   { icon:'📍', title:'근접 알림(GPS)',  desc:'목적지·환승역 300m 이내 진입 시 알림' },
-  arrive_reco: { icon:'☕', title:'하차 전 추천',    desc:'도착 10분 전 카페·야식 추천' }
+  arrive:      { icon:'🚉', title:'도착 임박 알림',   desc:'목적지 2정거장 전 · 1정거장 전 (알림·진동·오버레이 테두리)' },
+  transfer:    { icon:'🔄', title:'환승 알림',       desc:'환승역 1정거장 전 (알림·진동·오버레이 테두리)' },
+  arrive_reco: { icon:'☕', title:'하차 전 추천',    desc:'도착 10분 전 카페·야식 추천 (오버레이 하단·앱 안 팝업)' }
 };
 // ★ 2026-10-03 (익명 정확도 기록): 목적지에 도착하면 '예상한 탑승~하차 분'과 '실제로 걸린 분'을 서버에 한 번 보낸다.
 //   보내는 것: 예상분·실제분·환승 횟수·노선명·시간대(시)·평일 여부·수단 구분. 역 이름·좌표·기기 식별값은 보내지 않는다.
@@ -22934,9 +22947,9 @@ function _arrFireAlertNow(destStn, arrMs){
       //   진동은 따로 울리지 않는다 — 정책(_VIBE_ALLOW)상 하차 추천은 '조용히'.
       //   (PiP 는 2026-10-09 에 코드째 제거했다)
       var _viewing = !document.hidden && typeof _showBriefingModal==='function';
-      _arrDiagSet('stage', (_viewing ? '팝업 표시: ' : '알림 발송: ') + a.title + (_notifAllowed('arrive_reco') ? '' : ' (설정에서 꺼져 있어 차단됨)'));
+      _arrDiagSet('stage', (_viewing ? '팝업 표시: ' : (window._notifLegacy === true ? '알림 발송: ' : '화면 밖 — 오버레이 하단으로만(상단 알림 없음): ')) + a.title + (_featureAllowed('arrive_reco') ? '' : ' (설정에서 꺼져 있어 차단됨)'));
       if(_viewing){
-        if(_notifAllowed('arrive_reco')) _showBriefingModal(a.title, body, null, action);
+        if(_featureAllowed('arrive_reco')) _showBriefingModal(a.title, body, null, action);
       } else if(typeof showNotification==='function'){
         showNotification(a.title, body, { vibrate:vib, type:'arrive_reco' });
       }
@@ -23117,7 +23130,7 @@ function _arrStatusShow(){
     L.push('마지막 발송: ' + (window._arrAlertAt
       ? new Date(window._arrAlertAt).toLocaleTimeString() + '  (30분간 재발송 안 함)'
       : '없음'));
-    L.push('알림 정책: ' + ((typeof _notifAllowed === 'function' && _notifAllowed('arrive_reco')) ? '허용됨' : '차단됨'));
+    L.push('알림 정책: ' + ((typeof _featureAllowed === 'function' && _featureAllowed('arrive_reco')) ? '허용됨' : '차단됨'));
     L.push('마지막 감시: ' + (window._arrLastTickAt ? new Date(window._arrLastTickAt).toLocaleTimeString() : '없음'));
     var _dg = window._arrDiag || {};
     L.push('발사 경과: ' + (_dg.stage || '없음') + (_dg.at ? '  (' + new Date(_dg.at).toLocaleTimeString() + ')' : ''));
@@ -27611,7 +27624,17 @@ function _journeyRemain(){
 
 function _showForegroundNotif(currentStn, destStn, remainStops){
   // ★ 알림 정책: 상주(포그라운드) 알림 비활성화
-  if(typeof _notifAllowed==='function' && !_notifAllowed('fg_service')) return;
+  if(typeof _notifAllowed==='function' && !_notifAllowed('fg_service')){
+    // ★ 2026-10-12: 상주 알림도 끈다. 이전 버전이 남겨 둔 것이 있으면 한 번 지운다.
+    try{
+      if(!window._fgCleared){
+        window._fgCleared = 1;
+        var LN0 = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications;
+        if(LN0 && typeof LN0.cancel === 'function'){ var pr0 = LN0.cancel({ notifications:[{ id:1 }] }); if(pr0 && pr0.catch) pr0.catch(function(){}); }
+      }
+    }catch(e){}
+    return;
+  }
   // ★ 2026-09-02: 노선도 미리보기(내가 그 출발역에 있지 않음)면 상주 알림도 띄우지 않는다.
   if(window._metroRouteMode === true) return;
   if(typeof _baseTimeMs !== 'undefined' && _baseTimeMs != null) return;
@@ -28147,7 +28170,7 @@ window._ovlRefresh = _ovlRefresh;
 //   지금 타고 있는 구간에서 내릴 역까지 남은 정거장 수 → 2 = 두 정거장 전(천천히), 1 = 한 정거장 전·하차역 도착(빠르게), 0 = 표시 없음.
 //   홈에서 확정한 여정은 '지금 타고 있는 구간의 하차역'(다음 도보/환승 직전 노드, 없으면 종점)을, 지하철 탭 여정은 종점을 기준으로 센다.
 //   아직 타기 전(승차역 대기·환승 승차 대기)이거나 걷는 중이면 0 — 타고 있을 때만 알린다. 진행 위치는 화면·알림과 같은 값(_gpsMaxIdx / S.curIdx)을 쓴다.
-function _ovlAlertLevel(st){
+function _ovlAlertLevelRaw(st){
   try{
     var useT = (window._routeLocked === true && window._metroRouteMode !== true
                 && typeof _transitNodeData !== 'undefined' && _transitNodeData && _transitNodeData.length > 0);
@@ -28183,7 +28206,7 @@ function _ovlAlertLevel(st){
       if(released){ L.a = -1; L.lv = 0; }
     }
     // 지금 타고 있는 구간의 단계 계산(기존 규칙)
-    var lv = 0, aNow = -1;
+    var lv = 0, aNow = -1, fin = true;
     var cn = N[c];
     var riding = !!(cn && !cn.isOrigin && !cn.isWalk && (cn.isBus || cn.isSub));
     if(riding && typeof _htlNotDeparted === 'function' && _htlNotDeparted()) riding = false;      // 첫 승차 전
@@ -28193,16 +28216,29 @@ function _ovlAlertLevel(st){
     }
     if(riding){
       aNow = c;
-      while(aNow < n - 1 && !(N[aNow + 1] && N[aNow + 1].isWalk)) aNow++;                       // 이 구간의 하차역
+      // ★ 2026-10-12: 걷기 노드 없이 노선만 바뀌는 환승(같은 역 안 환승)도 구간의 끝으로 본다 — 상단 알림의 환승 판정(_buildTransitAlertTargets)과 같은 기준
+      while(aNow < n - 1 && !(N[aNow + 1] && N[aNow + 1].isWalk)
+            && !(N[aNow + 1] && N[aNow] && (N[aNow + 1].isSub || N[aNow + 1].isBus) && (N[aNow + 1].lineName || '') !== (N[aNow].lineName || ''))) aNow++;   // 이 구간의 하차역
       var rem = aNow - c;
       lv = rem === 2 ? 2 : (rem <= 1 ? 1 : 0);
+      // ★ 2026-10-12 (YJ: "환승은 한 정거장 전, 최종 목적지는 두 정거장 전·한 정거장 전"): 뒤에 더 탈 구간이 있으면(환승역) 2정거장 전은 알리지 않는다.
+      for(var f = aNow + 1; f < n; f++){ var nf = N[f]; if(nf && !nf.isWalk && (nf.isBus || nf.isSub)){ fin = false; break; } }
+      if(!fin && lv === 2) lv = 0;
     }
     if(lv > 0 && aNow >= 0){
-      if(L.a !== aNow){ L.a = aNow; L.lv = lv; }
+      if(L.a !== aNow){ L.a = aNow; L.lv = lv; L.fin = fin; }
       else if(L.lv === 0 || lv < L.lv){ L.lv = lv; }
     }
+    window._ovlAlertFin = (L.a >= 0) ? (L.fin !== false) : fin;
     return (L.a >= 0) ? L.lv : lv;
   }catch(e){ return 0; }
+}
+// ★ 2026-10-12: 단계가 처음 켜지거나 바뀐 시각(alertAt)을 남긴다 — 네이티브가 이 시각이 새로울 때 한 번만 진동한다.
+function _ovlAlertLevel(st){
+  var r = 0;
+  try{ r = _ovlAlertLevelRaw(st) || 0; }catch(e){ r = 0; }
+  if(r !== window._ovlAlertPrev){ window._ovlAlertPrev = r; if(r > 0) window._ovlAlertAt = Date.now(); }
+  return r;
 }
 window._ovlAlertLevel = _ovlAlertLevel;
 // 오버레이에 찍을 세 줄 — 판단 없이 이미 있는 값을 문자열로 옮긴다
@@ -28224,6 +28260,10 @@ function _ovlLines(){
   try{
     var st = _pipStations(), d = _pipData();
     out.alert = _ovlAlertLevel(st);
+    if(out.alert > 0){
+      out.alertAt = window._ovlAlertAt || 0;
+      out.alertVibe = _vibeAllowed(window._ovlAlertFin === false ? 'transfer' : 'near_arrive') ? 1 : 0;   // 설정의 환승/도착 알림 스위치를 따른다
+    }
     var cur = st.cur || d.cur || d.from || '이동 중';
     out.l1 = st.next ? (cur + ' ▸ ' + st.next) : ('● ' + cur);
     // ★ 2026-10-01 (YJ: "출발하면 출발(현위치)-경로1-경로2-경로3-경로4 … 내 위치는 경로가 이동되면 가운데서 고정", 이어서
@@ -28263,7 +28303,7 @@ function _ovlLines(){
     //   도착 3분 전부터 도착 30초 뒤까지 오버레이 맨 아래 줄(두 줄 문구 + [보기] [확인])로 보낸다. 윗줄(경로)은 건드리지 않는다. 끄기: window._ovlRecoOff = true
     try{
       if(window._ovlRecoOff !== true && r && r.body && r.at && Date.now() - r.at < 25*60*1000 && window._ovlRecoDismissAt !== r.at
-         && (typeof _notifAllowed !== 'function' || _notifAllowed('arrive_reco'))){
+         && (typeof _featureAllowed !== 'function' || _featureAllowed('arrive_reco'))){
         var _re = (typeof _arrHomeEta === 'function') ? _arrHomeEta() : null;
         var _remS = _re ? _re.rem : ((d.min != null && isFinite(d.min)) ? d.min * 60 : null);
         var _rcForce = (window._ovlRecoForceUntil || 0) > Date.now();   // 설정>하차 추천 테스트 버튼: 도착 시각과 상관없이 90초간 미리보기
@@ -28432,7 +28472,7 @@ function _ovlSync(force){
     if(!n || typeof n.update !== 'function') return;
     var active = !!(_ovlUsable() && _pipHasRoute());   // ★ 2026-10-01: PiP 스위치와 무관(PiP 는 꺼 둠)
     var L = active ? _ovlLines() : { l1:'', l2:'', l3:'', track:[], cur:-1, alert:0, moving:false };
-    var key = (active ? '1' : '0') + '|' + L.l1 + '|' + L.l2 + '|' + L.l3 + '|' + L.track.join('>') + '|' + L.cur + '|' + L.alert + '|' + (L.moving ? 'M' : 'S')
+    var key = (active ? '1' : '0') + '|' + L.l1 + '|' + L.l2 + '|' + L.l3 + '|' + L.track.join('>') + '|' + L.cur + '|' + L.alert + '|' + (L.alertAt || 0) + '|' + (L.moving ? 'M' : 'S')
               + '|' + (L.strip ? JSON.stringify(L.strip) + L.scur + '@' + L.sbase + JSON.stringify(L.theme) : '') + '|' + JSON.stringify(L.rs || null) + '|' + JSON.stringify(L.reco || null);
     var now = Date.now();
     // 바뀐 게 없으면 보내지 않는다. 다만 켜져 있는 동안엔 20초마다 한 번은 다시 보내 '살아 있음'을 알린다
@@ -28440,7 +28480,7 @@ function _ovlSync(force){
     if(!force && key === _ovlLastKey && (!active || (now - _ovlLastAt) < _OVL_HEARTBEAT_MS)) return;
     if(!active && _ovlLastKey === null && !force) { _ovlLastKey = key; return; }   // 처음부터 꺼져 있으면 굳이 알리지 않는다
     _ovlLastKey = key; _ovlLastAt = now;
-    var _up = { active: active, line1: L.l1, track: L.track, cur: L.cur, line2: L.l2, line3: L.l3, alert: L.alert || 0, moving: !!L.moving, rs: L.rs || { st: 'hidden' }, reco: L.reco || { on: false } };
+    var _up = { active: active, line1: L.l1, track: L.track, cur: L.cur, line2: L.l2, line3: L.l3, alert: L.alert || 0, alertAt: L.alertAt || 0, alertVibe: !!L.alertVibe, moving: !!L.moving, rs: L.rs || { st: 'hidden' }, reco: L.reco || { on: false } };
     if(L.strip && L.strip.length){ _up.cells = L.strip; _up.cur = L.scur || 0; _up.base = L.sbase || 0; _up.theme = L.theme; }   // ★ 2026-10-11: 앱 경로 화면 칸 그대로(네이티브가 같은 모양으로 그림)
     var r = n.update(_up);
     if(r && typeof r.catch === 'function') r.catch(function(){ _ovlLastKey = null; });   // 실패하면 다음 틱에 다시
