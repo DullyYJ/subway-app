@@ -54,14 +54,17 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   let s = await a.st();
   await t('도착 2분 안에 시트가 올라온다(쇼핑센터 탭에서도)', async () => assert.ok(s.sheet && s.st === 'board', JSON.stringify(s)));
   await t('노선·승차역이 보인다', async () => { assert.strictEqual(s.chip, '1호선'); assert.strictEqual(s.nm, 'S0역'); assert.ok(/1분 안에 도착|곧 도착/.test(s.k), s.k); });
-  await t('하단 내비 바로 위에 붙어 있다', async () => {
-    const r = await a.page.evaluate(() => { const sh = document.getElementById('rsSheet').getBoundingClientRect(), nv = document.querySelector('.bnav').getBoundingClientRect(); return { shB: sh.bottom, nvT: nv.top, w: sh.width }; });
-    assert.ok(Math.abs(r.shB - r.nvT) <= 1 && r.w >= 389, JSON.stringify(r));
+  await a.page.waitForTimeout(800);
+  await t('시트는 맨 아래에 붙고, 하단 탭이 시트 높이만큼 위로 올라가 시트 바로 위에 있다', async () => {
+    const r = await a.page.evaluate(() => { const sh = document.getElementById('rsSheet').getBoundingClientRect(), nv = document.querySelector('.bnav').getBoundingClientRect(); return { shB: sh.bottom, shT: sh.top, nvB: nv.bottom, nvT: nv.top, vh: innerHeight, w: sh.width, up: document.documentElement.classList.contains('rs-up') }; });
+    assert.ok(r.up && Math.abs(r.shB - r.vh) <= 1 && Math.abs(r.nvB - r.shT) <= 1.5 && r.w >= 389 && r.nvT < r.shT, JSON.stringify(r));
   });
   await a.page.click('#rsBtn'); await a.page.clock.runFor(600);
   s = await a.st();
   const g = await a.page.evaluate(() => ({ b: window._htlBoarded, gm: window._gpsMaxIdx, pass: window._nodePassMs[1], why: window._boardWhy, press: window._rsPressMs }));
   await t('누르면 시트가 내려가고 되돌리기 안내가 뜬다', async () => assert.ok(!s.sheet && !s.pill && s.undo, JSON.stringify(s)));
+  await a.page.waitForTimeout(800);
+  await t('시트가 내려가면 하단 탭도 맨 아래로 돌아온다', async () => { const r = await a.page.evaluate(() => ({ nvB: document.querySelector('.bnav').getBoundingClientRect().bottom, vh: innerHeight, up: document.documentElement.classList.contains('rs-up') })); assert.ok(!r.up && Math.abs(r.nvB - r.vh) <= 1, JSON.stringify(r)); });
   await t('승차 확정(첫 구간)이 기록된다', async () => { assert.strictEqual(g.b, true); assert.ok(g.gm >= 1); assert.ok(g.pass > 0); assert.strictEqual(g.why, '탑승 버튼'); assert.ok(g.press > 0); });
   await t('진단에 승차확정(탑승 버튼)이 남는다', async () => assert.ok((await a.diag()).some(x => /승차확정/.test(x) && /탑승 버튼/.test(x))));
   await a.page.click('#rsUndoBtn'); await a.page.clock.runFor(1500);
@@ -171,6 +174,12 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   await t('하단 탭을 위로 쓸어 올리면 경로 설정 직후에도 바로 시트가 열린다', async () => assert.ok(x6.sheet && x6.st === 'board' && /탑승 예정/.test(x6.k), JSON.stringify(x6)));
   await a.page.clock.runFor(60000);
   await t('수동으로 연 시트는 도착이 멀어도 닫히지 않고 유지된다', async () => assert.ok((await a.st()).sheet));
+  await a.page.waitForTimeout(700);
+  await t('수동으로 열면 하단 탭이 올라가고 시트가 탭 아래에 있다', async () => { const r = await a.page.evaluate(() => ({ nvB: document.querySelector('.bnav').getBoundingClientRect().bottom, shT: document.getElementById('rsSheet').getBoundingClientRect().top })); assert.ok(Math.abs(r.nvB - r.shT) <= 1.5, JSON.stringify(r)); });
+  await swipe(a.page, '.bnav', 80, 3); await a.page.clock.runFor(1200);
+  x6 = await a.st();
+  await t('올라온 하단 탭을 아래로 쓸어도 닫힌다(대기 알약)', async () => assert.ok(!x6.sheet && x6.pill && x6.st === 'wait', JSON.stringify(x6)));
+  await swipe(a.page, '.bnav', -70, 0); await a.page.clock.runFor(1200);
   await swipe(a.page, '#rsSheet', 80, 3); await a.page.clock.runFor(1200);
   x6 = await a.st();
   await t('시트를 아래로 쓸어 내리면 닫히고 대기 알약이 된다', async () => assert.ok(!x6.sheet && x6.pill && x6.st === 'wait', JSON.stringify(x6)));
