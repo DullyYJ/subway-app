@@ -90,6 +90,13 @@ public class OverlayPlugin extends Plugin {
     }
     private Cell[] strip = new Cell[0];
     private int stripCur = 0;                   // 현위치 칸 번호(strip 안에서)
+    // ★ 2026-10-11 (YJ: "오버레이 좌우 스크롤 가능하게 · 마커도 깜박이게"): 웹이 현위치 앞뒤 칸을 넉넉히(최대 50칸) 보내고,
+    //   화면에는 다섯 칸만 보인다. 손가락으로 좌우로 밀면 넘겨 볼 수 있고, 손을 뗀 지 10초 뒤 현위치로 돌아온다.
+    private int stripBase = 0;                  // strip[0] 이 경로 전체에서 몇 번째 칸인지(칸이 앞에서 잘려 나가도 스크롤 위치를 지키려고)
+    private float scrollPos = 0f;               // 화면 맨 왼쪽 칸의 경로 전체 기준 위치(칸 단위, 소수)
+    private boolean userScrolling = false;
+    private float pulse = 0f;                   // 현위치 점 깜박임 0~1
+    private ValueAnimator pulseAnim;
     private int thBg = Color.WHITE, thFg = Color.parseColor("#111114"), thSub = Color.parseColor("#8E8E93");
     private GradientDrawable cardBg;
     private boolean moving = false;             // ★ 2026-10-06: 열차가 현재 역을 떠나 다음 역으로 가는 중(웹이 판단해 넘겨 준다) — 화살표가 깜박인다
@@ -149,7 +156,6 @@ public class OverlayPlugin extends Plugin {
             if (n == 0) return;
             int cols = 5;
             float cw = getWidth() / (float) cols;
-            float x0 = (getWidth() - cw * n) / 2f;
             float yName = dp(2) + dp(12.5f);
             float yTag = dp(2) + dp(16) + dp(10.5f);
             float yAx = dp(2) + dp(16) + dp(14) + dp(11);
@@ -157,7 +163,8 @@ public class OverlayPlugin extends Plugin {
             float lw = dp(3);
             for (int i = 0; i < n; i++) {
                 Cell c = strip[i];
-                float cx = x0 + cw * (i + 0.5f);
+                float cx = (stripBase + i - scrollPos + 0.5f) * cw;
+                if (cx + cw / 2f < 0f || cx - cw / 2f > getWidth()) continue;      // 화면 밖 칸은 그리지 않는다
                 boolean here = (i == stripCur);
                 int ink = here ? thFg : thSub;
                 // 정류장명(한 줄)
@@ -194,10 +201,12 @@ public class OverlayPlugin extends Plugin {
                 }
                 // 점
                 if (here) {
-                    p.setColor(0x47F0A500);
-                    cv.drawCircle(cx, yAx, dp(11), p);          // 현위치 둘레 은은한 테두리
-                    p.setColor(0xFFF0A500);
-                    cv.drawCircle(cx, yAx, dp(7), p);           // 앱 현위치 점(주황)
+                    int ha = Math.round(0x70 * (1f - 0.6f * pulse));
+                    p.setColor((ha << 24) | 0x00F0A500);
+                    cv.drawCircle(cx, yAx, dp(9) + dp(4) * pulse, p);   // 현위치 둘레 테두리(깜박이며 커졌다 작아짐)
+                    int da = Math.round(255 * (1f - 0.55f * pulse));
+                    p.setColor((da << 24) | 0x00F0A500);
+                    cv.drawCircle(cx, yAx, dp(7), p);           // 앱 현위치 점(주황, 깜박임)
                 } else if (c.dk == 2) {
                     p.setColor(c.dc);
                     cv.drawCircle(cx, yAx, dp(7), p);
@@ -264,7 +273,7 @@ public class OverlayPlugin extends Plugin {
         line1 = nz(call.getString("line1"));
         try {
             JSArray arr = call.getArray("cells");
-            int n = arr == null ? 0 : Math.min(arr.length(), 7);
+            int n = arr == null ? 0 : Math.min(arr.length(), 60);
             Cell[] cs = new Cell[n];
             for (int i = 0; i < n; i++) {
                 JSONObject o = arr.getJSONObject(i);
@@ -282,6 +291,7 @@ public class OverlayPlugin extends Plugin {
             strip = cs;
         } catch (Exception e) { strip = new Cell[0]; }
         stripCur = Math.max(0, Math.min(call.getInt("cur", 0), Math.max(0, strip.length - 1)));
+        stripBase = Math.max(0, call.getInt("base", 0));
         try {
             JSObject th = call.getObject("theme");
             if (th != null) {
@@ -531,16 +541,28 @@ public class OverlayPlugin extends Plugin {
 
         final int slop = ViewConfiguration.get(ctx).getScaledTouchSlop();
         root.setOnTouchListener(new View.OnTouchListener() {
-            float dx, dy; int sx, sy; boolean dragged;
+            float dx, dy; int sx, sy; boolean dragged, scrolling, inStrip; float startPos;
             @Override public boolean onTouch(View v, MotionEvent e) {
                 switch (e.getAction()) {
                     case MotionEvent.ACTION_DOWN:
-                        dx = e.getRawX(); dy = e.getRawY(); sx = lp.x; sy = lp.y; dragged = false;
+                        dx = e.getRawX(); dy = e.getRawY(); sx = lp.x; sy = lp.y; dragged = false; scrolling = false;
+                        // 점·선 줄에서 시작한 좌우 움직임은 칸을 넘겨 보는 스크롤, 그 밖은 창 이동
+                        inStrip = stripView != null && e.getY() >= stripView.getTop() && e.getY() <= stripView.getBottom();
+                        startPos = scrollPos;
                         return true;
                     case MotionEvent.ACTION_MOVE: {
                         float mx = e.getRawX() - dx, my = e.getRawY() - dy;
-                        if (!dragged && (Math.abs(mx) > slop || Math.abs(my) > slop)) dragged = true;
-                        if (dragged) {
+                        if (!dragged && !scrolling && (Math.abs(mx) > slop || Math.abs(my) > slop)) {
+                            if (inStrip && strip.length > 5 && Math.abs(mx) > Math.abs(my)) {
+                                scrolling = true;
+                                userScrolling = true;
+                                main.removeCallbacks(recenter);
+                            } else dragged = true;
+                        }
+                        if (scrolling && stripView != null && stripView.getWidth() > 0) {
+                            scrollPos = clampPos(startPos - mx / (stripView.getWidth() / 5f));
+                            stripView.invalidate();
+                        } else if (dragged) {
                             lp.x = sx + Math.round(mx);
                             lp.y = Math.max(0, sy + Math.round(my));
                             try { wm.updateViewLayout(root, lp); } catch (Exception ignored) { }
@@ -548,8 +570,10 @@ public class OverlayPlugin extends Plugin {
                         return true;
                     }
                     case MotionEvent.ACTION_UP:
-                        if (dragged) savePos();
-                        else openApp();               // 탭하면 앱으로 돌아간다
+                    case MotionEvent.ACTION_CANCEL:
+                        if (scrolling) main.postDelayed(recenter, 10000L);      // 손을 뗀 지 10초 뒤 현위치로 돌아온다
+                        else if (dragged) savePos();
+                        else if (e.getAction() == MotionEvent.ACTION_UP) openApp();   // 탭하면 앱으로 돌아간다
                         return true;
                     default:
                         return false;
@@ -656,6 +680,7 @@ public class OverlayPlugin extends Plugin {
         }
         try {
             if (cardBg != null) cardBg.setColor(thBg);
+            if (!userScrolling) scrollPos = followPos(); else scrollPos = clampPos(scrollPos);
             t2.setTextColor(thSub);
             t3.setTextColor(thSub);
             if (stripView != null) {
@@ -677,6 +702,60 @@ public class OverlayPlugin extends Plugin {
                 attached = false;
             }
         }
+        if (attached) startPulse();
+    }
+
+    /** 현위치가 둘째 칸에 오도록 한 스크롤 위치(보낸 칸 범위 안으로 제한, 다섯 칸보다 적으면 가운데). */
+    private float followPos() {
+        int n = strip.length;
+        if (n <= 5) return stripBase - (5 - n) / 2f;
+        float lo = stripBase, hi = stripBase + n - 5;
+        return Math.max(lo, Math.min(hi, stripBase + stripCur - 1));
+    }
+
+    private float clampPos(float v) {
+        int n = strip.length;
+        if (n <= 5) return stripBase - (5 - n) / 2f;
+        return Math.max(stripBase, Math.min(stripBase + n - 5, v));
+    }
+
+    private final Runnable recenter = new Runnable() {
+        @Override public void run() {
+            userScrolling = false;
+            if (stripView == null || !attached) return;
+            final float from = scrollPos, to = followPos();
+            ValueAnimator a = ValueAnimator.ofFloat(0f, 1f);
+            a.setDuration(250L);
+            a.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+                @Override public void onAnimationUpdate(ValueAnimator an) {
+                    if (userScrolling) { an.cancel(); return; }
+                    scrollPos = from + (to - from) * (Float) an.getAnimatedValue();
+                    if (stripView != null) stripView.invalidate();
+                }
+            });
+            a.start();
+        }
+    };
+
+    /** 현위치 점을 깜박이게 한다(보이는 동안만 돈다). */
+    private void startPulse() {
+        if (pulseAnim != null && pulseAnim.isRunning()) return;
+        pulseAnim = ValueAnimator.ofFloat(0f, 1f);
+        pulseAnim.setDuration(650L);
+        pulseAnim.setRepeatCount(ValueAnimator.INFINITE);
+        pulseAnim.setRepeatMode(ValueAnimator.REVERSE);
+        pulseAnim.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+            @Override public void onAnimationUpdate(ValueAnimator an) {
+                pulse = (Float) an.getAnimatedValue();
+                if (stripView != null) stripView.invalidate();
+            }
+        });
+        pulseAnim.start();
+    }
+
+    private void stopPulse() {
+        try { if (pulseAnim != null) pulseAnim.cancel(); } catch (Exception ignored) { }
+        pulseAnim = null; pulse = 0f;
     }
 
     private void startBlink() {
@@ -693,6 +772,9 @@ public class OverlayPlugin extends Plugin {
 
     private void detach() {
         stopBlink();
+        stopPulse();
+        main.removeCallbacks(recenter);
+        userScrolling = false;
         stopAlert();                                   // 보이지 않는 동안 애니메이션을 돌리지 않는다(배터리)
         main.removeCallbacks(checker);
         if (!journeyOn) { main.removeCallbacks(ticker); ticking = false; }   // 여정이 진행 중이면 오버레이를 내려도 깨우기는 계속한다
