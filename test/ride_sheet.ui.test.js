@@ -1,5 +1,5 @@
 // 탑승 시트 · 대기 알약 — 2026-10-11
-//   경로 확정 + 차량 도착 1분 전에 아래에서 올라오는 '탑승' 시트, 누르면 내려가며 승차 확정(되돌리기 가능),
+//   경로 확정 + 차량 도착 2분 전에 아래에서 올라오는 '탑승' 시트, 누르면 내려가며 승차 확정(되돌리기 가능),
 //   출발 3분 뒤에도 안 눌렀고 움직임 증거가 없으면 '대기' 알약으로 줄어듦, 환승 구간도 같은 방식.
 // 실행: node test/ride_sheet.ui.test.js [html 경로]
 const assert = require('assert'), path = require('path');
@@ -45,14 +45,14 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     return app;
   }
 
-  console.log('[① 도착 1분 전에 올라오고, 어느 탭에서든 보이며, 누르면 내려가 승차를 확정한다]');
+  console.log('[① 도착 2분 전에 올라오고, 어느 탭에서든 보이며, 누르면 내려가 승차를 확정한다]');
   let a = await fresh();
   await a.at('12:45:00'); await a.page.clock.runFor(1500);
   await t('도착 6분 전에는 아무것도 안 뜬다', async () => { const s = await a.st(); assert.ok(!s.sheet && !s.pill, JSON.stringify(s)); });
   await a.page.evaluate(() => switchTab('shop', document.getElementById('ni-shop')));
   await a.at('12:51:10'); await a.page.clock.runFor(1500);
   let s = await a.st();
-  await t('도착 1분 안에 시트가 올라온다(쇼핑센터 탭에서도)', async () => assert.ok(s.sheet && s.st === 'board', JSON.stringify(s)));
+  await t('도착 2분 안에 시트가 올라온다(쇼핑센터 탭에서도)', async () => assert.ok(s.sheet && s.st === 'board', JSON.stringify(s)));
   await t('노선·승차역이 보인다', async () => { assert.strictEqual(s.chip, '1호선'); assert.strictEqual(s.nm, 'S0역'); assert.ok(/1분 안에 도착|곧 도착/.test(s.k), s.k); });
   await t('하단 내비 바로 위에 붙어 있다', async () => {
     const r = await a.page.evaluate(() => { const sh = document.getElementById('rsSheet').getBoundingClientRect(), nv = document.querySelector('.bnav').getBoundingClientRect(); return { shB: sh.bottom, nvT: nv.top, w: sh.width }; });
@@ -71,7 +71,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   await t('JS 오류가 없다', async () => assert.deepStrictEqual([...new Set(a.errs)], []));
   await a.ctx.close();
 
-  console.log('[② 안 누르고 출발 3분이 지나면 알약으로 줄어들고, 다음 차가 1분 안이면 다시 올라온다]');
+  console.log('[② 안 누르고 출발 3분이 지나면 알약으로 줄어들고, 다음 차가 2분 안이면 다시 올라온다]');
   a = await fresh();
   await a.at('12:51:20'); await a.page.clock.runFor(1500);
   await t('올라온다', async () => assert.ok((await a.st()).sheet));
@@ -81,10 +81,10 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   s = await a.st();
   await t('출발 3분 뒤(움직임 없음) 시트가 줄어 대기 알약이 된다', async () => assert.ok(!s.sheet && s.pill && s.st === 'wait', JSON.stringify(s)));
   await a.setDep(1, '12:59');   // 알고리즘이 다음 차(12:59)로 맞췄다
-  await a.at('12:57:00'); await a.page.clock.runFor(1500);
+  await a.at('12:56:30'); await a.page.clock.runFor(1500);
   await t('다음 차가 멀면 알약 그대로', async () => { const x = await a.st(); assert.ok(x.pill && !x.sheet, JSON.stringify(x)); });
-  await a.at('12:58:10'); await a.page.clock.runFor(1500);
-  await t('다음 차 1분 안이면 시트로 다시 올라온다(알약은 사라진다)', async () => { const x = await a.st(); assert.ok(x.sheet && !x.pill, JSON.stringify(x)); });
+  await a.at('12:57:40'); await a.page.clock.runFor(1500);
+  await t('다음 차 2분 안이면 시트로 다시 올라온다(알약은 사라진다)', async () => { const x = await a.st(); assert.ok(x.sheet && !x.pill, JSON.stringify(x)); });
   await a.ctx.close();
 
   console.log('[③ 알약을 누르면 열리고, 움직임 증거가 있으면 줄이지 않는다, 자동 인식은 시트를 내린다]');
@@ -127,8 +127,8 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
 
   console.log('[⑤ 위치 게이트 · 끄기 · 경로 바뀜 · 테마]');
   a = await fresh();
-  await a.at('12:50:50'); await a.page.evaluate(() => { _ev.trail.push({ lat: 37.5, lng: 126.95, ts: Date.now() }); });   // 승차역(126.9)에서 4km 이상 떨어진 최신 위치
-  await a.at('12:51:20'); await a.page.clock.runFor(1500);
+  await a.at('12:49:50'); await a.page.evaluate(() => { _ev.trail.push({ lat: 37.5, lng: 126.95, ts: Date.now() }); });   // 승차역(126.9)에서 4km 이상 떨어진 최신 위치
+  await a.at('12:50:20'); await a.page.clock.runFor(1500);
   await t('최신 위치가 승차역에서 멀면 올리지 않는다', async () => { const x = await a.st(); assert.ok(!x.sheet, JSON.stringify(x)); });
   await a.page.evaluate(() => { _ev.trail.push({ lat: 37.5, lng: 126.9005, ts: Date.now() }); }); await a.page.clock.runFor(1500);
   await t('역 앞에 도착하면 올라온다', async () => assert.ok((await a.st()).sheet));
@@ -147,6 +147,49 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     else { const out = process.env.RS_SHOT; if (out) await a.page.screenshot({ path: out + '_dark.png' }); }
     await a.ctx.close();
   }
+
+  console.log('[⑥ 2분 전 자동 · 하단 탭을 위로 쓸면 바로 열림 · 시트를 아래로 쓸면 닫힘]');
+  const swipe = (page, sel, dy, dx = 0) => page.evaluate(([sel, dy, dx]) => {
+    const el = document.querySelector(sel), r = el.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+    const mk = (cx, cy) => new Touch({ identifier: 1, target: el, clientX: cx, clientY: cy });
+    const fire = (type, cx, cy) => el.dispatchEvent(new TouchEvent(type, { bubbles: true, cancelable: true, touches: type === 'touchend' ? [] : [mk(cx, cy)], changedTouches: [mk(cx, cy)] }));
+    fire('touchstart', x, y); fire('touchmove', x + dx / 2, y + dy / 2); fire('touchmove', x + dx, y + dy); fire('touchend', x + dx, y + dy);
+  }, [sel, dy, dx]);
+  a = await fresh();
+  await a.at('12:49:50'); await a.page.clock.runFor(1500);
+  await t('도착 2분 10초 전에는 아직 안 뜬다', async () => { const x = await a.st(); assert.ok(!x.sheet && !x.pill, JSON.stringify(x)); });
+  await a.at('12:50:10'); await a.page.clock.runFor(1500);
+  await t('도착 2분 안이 되면 자동으로 올라온다', async () => { const x = await a.st(); assert.ok(x.sheet && /2분 안에 도착|1분 안에 도착/.test(x.k), JSON.stringify(x)); });
+  await a.ctx.close();
+  a = await fresh();
+  await a.at('12:44:00'); await a.page.clock.runFor(1500);
+  await t('도착 8분 전: 시트 없음', async () => { const x = await a.st(); assert.ok(!x.sheet && !x.pill, JSON.stringify(x)); });
+  await swipe(a.page, '.bnav', 10, 0); await a.page.clock.runFor(1200);
+  await t('하단 탭을 조금만(10px) 쓸면 열리지 않는다', async () => { const x = await a.st(); assert.ok(!x.sheet, JSON.stringify(x)); });
+  await swipe(a.page, '.bnav', -70, 4); await a.page.clock.runFor(1200);
+  let x6 = await a.st();
+  await t('하단 탭을 위로 쓸어 올리면 경로 설정 직후에도 바로 시트가 열린다', async () => assert.ok(x6.sheet && x6.st === 'board' && /탑승 예정/.test(x6.k), JSON.stringify(x6)));
+  await a.page.clock.runFor(60000);
+  await t('수동으로 연 시트는 도착이 멀어도 닫히지 않고 유지된다', async () => assert.ok((await a.st()).sheet));
+  await swipe(a.page, '#rsSheet', 80, 3); await a.page.clock.runFor(1200);
+  x6 = await a.st();
+  await t('시트를 아래로 쓸어 내리면 닫히고 대기 알약이 된다', async () => assert.ok(!x6.sheet && x6.pill && x6.st === 'wait', JSON.stringify(x6)));
+  await a.page.clock.runFor(70000);
+  await t('닫은 뒤에는 자동으로 다시 올라오지 않는다(같은 차량)', async () => { const x = await a.st(); assert.ok(!x.sheet && x.pill, JSON.stringify(x)); });
+  await a.at('12:51:00'); await a.page.clock.runFor(1500);
+  await t('도착 2분 안이 되어도 닫은 차량은 알약 그대로', async () => { const x = await a.st(); assert.ok(!x.sheet && x.pill, JSON.stringify(x)); });
+  await swipe(a.page, '#rsPill', -60, 0); await a.page.clock.runFor(1200);
+  await t('알약을 위로 쓸면 다시 열린다', async () => assert.ok((await a.st()).sheet));
+  await a.page.click('#rsBtn'); await a.page.clock.runFor(800);
+  await t('열린 시트에서 탑승을 누르면 내려가고 다시 열리지 않는다', async () => { const x = await a.st(); assert.ok(!x.sheet && x.undo, JSON.stringify(x)); });
+  await a.page.clock.runFor(8000); await swipe(a.page, '.bnav', -70, 0); await a.page.clock.runFor(1200);
+  await t('경로 확정 전(경로 없음)에는 쓸어 올려도 아무것도 안 뜬다', async () => {
+    await a.page.evaluate(() => { window._routeLocked = false; _rs.done = {}; }); await a.page.clock.runFor(2000);
+    await swipe(a.page, '.bnav', -70, 0); await a.page.clock.runFor(1200);
+    const x = await a.st(); assert.ok(!x.sheet && !x.pill, JSON.stringify(x));
+  });
+  await t('페이지 오류 없음(⑥)', async () => assert.deepStrictEqual(a.errs, []));
+  await a.ctx.close();
 
   await b.close();
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
