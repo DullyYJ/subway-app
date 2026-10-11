@@ -34,8 +34,8 @@ async function newApp(b, respFn, start) {
   app.feed = async (lat, lng, speed, secs) => {
     app.cur = { lat, lng };
     const has = await page.evaluate(() => typeof window.__bgcb === 'function');
-    if (has) await page.evaluate(([la, ln, sp]) => window.__bgcb({ latitude: la, longitude: ln, accuracy: 10, speed: sp, time: Date.now() }), [lat, lng, speed]);
-    await ctx.setGeolocation({ latitude: lat, longitude: lng, accuracy: 10 });
+    if (has) await page.evaluate(([la, ln, sp]) => window.__bgcb({ latitude: la, longitude: ln, accuracy: (window.__acc || 10), speed: sp, time: Date.now() }), [lat, lng, speed]);
+    await ctx.setGeolocation({ latitude: lat, longitude: lng, accuracy: app.acc || 10 }); if (app.acc) await page.evaluate((a) => { window.__acc = a; }, app.acc);
     await page.clock.runFor(secs * 1000);
   };
   // 점들을 이은 선을 따라 mps 로 이동(tick 초마다 GPS)
