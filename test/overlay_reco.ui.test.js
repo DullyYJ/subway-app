@@ -85,6 +85,16 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     assert.strictEqual(x.reco.a, '아침이에요'); assert.strictEqual(x.reco.b, '근처엔 스타벅스 있어요.'); assert.ok(!/스타벅스/.test(x.l3 || ''));
   });
 
+  await t('테스트 미리보기(_ovlRecoForceUntil)는 도착이 멀어도 오버레이에 뜨고, 시간이 지나면 꺼진다', async () => {
+    const r = await page.evaluate(() => { window._ovlRecoOff = false; window._ovlRecoDismissAt = undefined; window._pipReco = { title: 't', body: '가\n나', at: Date.now(), ovlAt: Date.now() - 60000 }; window._arrHomeEta = () => ({ arrMs: Date.now() + 900000, rem: 900 });
+      const off = !!(_ovlLines().reco && _ovlLines().reco.on); window._ovlRecoForceUntil = Date.now() + 90000; const on = !!(_ovlLines().reco && _ovlLines().reco.on); window._ovlRecoForceUntil = Date.now() - 1; const exp = !!(_ovlLines().reco && _ovlLines().reco.on); return [off, on, exp]; });
+    assert.strictEqual(JSON.stringify(r), JSON.stringify([false, true, false]));
+  });
+  await t('설정의 추천 테스트 버튼(_arrTestUI)이 미리보기를 켠다', async () => {
+    const r = await page.evaluate(() => { window._ovlRecoForceUntil = 0; try{ _notifOnceReset(); }catch(e){} _arrTestUI('lunch'); return window._ovlRecoForceUntil > Date.now(); });
+    assert.strictEqual(r, true);
+  });
+
   console.log('[② 문구는 기존 규칙(시간대·근처 가게·쿠팡 아이템) 그대로 만든 것]');
   const slotText = (hhmm) => page.evaluate((h) => {
     const arrMs = new Date('2026-10-11T' + h + ':00+09:00').getTime();
