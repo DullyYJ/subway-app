@@ -575,3 +575,12 @@
 - **끄기 스위치**: `window._rtMatchOff=true` (재매칭·GPS 해제 끔, 예전 동작). 진단(ovlDiag) 태그 열차매칭 / 열차매칭해제.
 - **한계**: 서울 위치 API 가 다루는 노선만(1~9호선, 경의중앙, 수인분당, 공항철도, 경춘, 신분당). 배차 2~3분이면 출발 시각이 겹쳐 애매 → 기존 잠금 유지. 방향 판정은 엔진 /next-train 응답에 달림. 실기기 탑승 검증은 아직 못 함(모의 위치로만 시험).
 - **시험**: test/ride_subway_train.ui.test.js (18건), 전체 회귀 통과.
+
+### 서울·경기 버스도 '탄 차량' 따라가기 (2026-10-11 밤, ride-2026-10-11b)
+- **요청(YJ)**: 인천(TAGO)만 되던 버스 차량 추적을 서울·경기에도 붙인다. 앱은 변경 없음(워커 응답 형식 그대로, 응답에 src 필드만 추가).
+- **워커(route-v2 ride-vehicle/index.js)**: 후보의 승차 정류소 id 접두사로 갈린다. SEL+9자리 → 서울 TOPIS(busRouteInfo/getBusRouteList 로 노선번호→노선id, buspos/getBusPosByRtid 로 차량 좌표·번호판 plainNo, 자료 시각 dataTm 만큼 ageMs 보정, isrunyn 0 제외). GGB+9자리 → TAGO 도시(수원 등)면 TAGO(좌표 정확)를 먼저, 도시를 못 찾거나 차량이 비면 경기 GBIS(busrouteservice/v2/getBusRouteListv2 번호→노선, getBusRouteStationListv2 정류소 좌표(24시간 캐시, 승차 정류소를 지나는 같은 번호 노선만), buslocationservice/v2/getBusLocationListv2). 그 밖은 기존 TAGO.
+- **경기 GBIS 의 한계**: 차량 좌표가 없고 '있는 정류소 순번 + 상태(0 교차로 통과·1 도착·2 출발)'뿐이다. 그래서 정류소 좌표를 차량 위치로 쓰고, 상태에 따라 있을 만한 구간(pts)까지의 거리로 비교한다(coarse). coarse 는 고르는 기준이 더 보수적(sure 300m·간격 350m 또는 2.5배, likely 500m·간격 300m). 잠금 확인(lock.dist)은 최근 위치(fixes)와 함께 비교한다.
+- **호출량**: 서울 위치 API 도 하루 1만 건 한도를 공유한다. 노선 차량 목록 10초·노선번호 6시간 캐시, 같은 요청 합치기. 한도 응답(headerCd 5 등)이 오면 5분 쉬고(앱은 match 없음 → 기존 방식), 끄기: 워커 환경변수 SEOUL_POS=0. 서울 키는 gildongmu-bus(BUSAPI 바인딩)가 넣는다.
+- **배포**: 대시보드 gildongmu-ride 에 코드 붙여넣고 Deploy(VER ride-2026-10-11b, 끝의 named export 줄은 뺀 것). 실측: 서울 472번 16대 중 sure 매칭(src seoul), 수원 9200 TAGO 경로(src tago), TAGO 가 도시를 못 찾는 정류소 → GBIS(src gbis, 정류소명·순번 정상).
+- **시험**: route-v2 test/ride_vehicle_seoul_gbis.test.mjs(24건) + 기존 ride_vehicle.test.mjs(27건).
+- **미확인**: 실제 서울·경기 버스에 타서 잠그고 따라가는 것은 못 해 봤다(모의·API 응답으로만 확인). 서울 마을버스·심야 번호의 표기(예: N15)와 경기 지역별 같은 번호 중복은 정류소 포함 여부로 가려내지만 실측 안 함.
