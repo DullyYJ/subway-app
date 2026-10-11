@@ -200,6 +200,48 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   await t('페이지 오류 없음(⑥)', async () => assert.deepStrictEqual(a.errs, []));
   await a.ctx.close();
 
+  console.log('[⑦ 오버레이에도 같은 탑승 줄 — 상태·문구가 앱과 같고, 오버레이의 손짓이 앱 시트와 똑같이 동작한다]');
+  const o = await fresh();
+  await o.page.evaluate(() => {
+    window.__ovl = [];
+    window.Capacitor = { Plugins: { Overlay: { update: (u) => { window.__ovl.push(JSON.parse(JSON.stringify(u))); return Promise.resolve({ ok: true }); }, keepAlive: () => Promise.resolve({}), isAvailable: () => Promise.resolve({ supported: true, granted: true, shown: false }) } } };
+    window._ovlUsable = () => true; window._pipHasRoute = () => true;
+  });
+  const lastRs = () => o.page.evaluate(() => { _ovlSync(true); const u = window.__ovl[window.__ovl.length - 1]; return u && u.rs; });
+  await o.at('12:45:00'); await o.page.clock.runFor(1500);
+  let q = await lastRs();
+  await t('도착이 멀면 오버레이 탑승 줄은 숨김(손잡이만)', async () => assert.strictEqual(q.st, 'hidden', JSON.stringify(q)));
+  await o.at('12:50:30'); await o.page.clock.runFor(1500);
+  q = await lastRs();
+  await t('도착 2분 안이 되면 오버레이에도 board 로 올라오고 노선·역·문구가 앱 시트와 같다', async () => {
+    const ap = await o.st();
+    assert.strictEqual(q.st, 'board'); assert.strictEqual(q.ch, ap.chip); assert.strictEqual(q.nm, ap.nm); assert.strictEqual(q.k, ap.k);
+    assert.ok(/^#[0-9a-f]{6}$/.test(q.cfg), JSON.stringify(q));
+  });
+  await t('오버레이 맨 아래 줄을 아래로 쓸어 내리면(close) 앱처럼 대기 알약이 된다', async () => {
+    await o.page.evaluate(() => _ovlAct('close')); const x = await o.st(); const r = await lastRs();
+    assert.strictEqual(x.st, 'wait'); assert.strictEqual(r.st, 'wait'); assert.ok(/^1호선$/.test(r.ch));
+  });
+  await t('대기 알약을 누르면(pill) 다시 board', async () => { await o.page.evaluate(() => _ovlAct('pill')); const r = await lastRs(); assert.strictEqual(r.st, 'board'); });
+  await o.page.evaluate(() => _ovlAct('close'));
+  await t('쓸어 올림(open)은 아직 도착이 멀어도 연다(수동 열기와 같음)', async () => {
+    await o.page.evaluate(() => { _rs.shrunk = 0; _rs.seen = false; _rs.openUntil = 0; _transitNodeData[1].arrTime = '13:30'; }); await o.page.clock.runFor(1500);
+    let r = await lastRs(); assert.ok(r.st === 'hidden' || r.st === 'wait', JSON.stringify(r));
+    await o.page.evaluate(() => _ovlAct('open')); r = await lastRs(); assert.strictEqual(r.st, 'board', JSON.stringify(r));
+  });
+  await t('탑승(press)을 누르면 앱처럼 승차가 확정되고 undo 상태가 오며, 되돌리기(undo)로 복구된다', async () => {
+    await o.page.evaluate(() => _ovlAct('press'));
+    const g = await o.page.evaluate(() => ({ b: window._htlBoarded, why: window._boardWhy }));
+    let r = await lastRs(); assert.strictEqual(g.b, true); assert.strictEqual(g.why, '탑승 버튼'); assert.strictEqual(r.st, 'undo', JSON.stringify(r));
+    await o.page.evaluate(() => _ovlAct('undo'));
+    const g2 = await o.page.evaluate(() => window._htlBoarded); r = await lastRs();
+    assert.strictEqual(g2, false); assert.strictEqual(r.st, 'board', JSON.stringify(r));
+  });
+  await t('경로 확정이 풀리면 오버레이 탑승 줄도 숨는다', async () => { await o.page.evaluate(() => { window._routeLocked = false; }); await o.page.clock.runFor(2000); const r = await lastRs(); assert.strictEqual(r.st, 'hidden', JSON.stringify(r)); });
+  await t('_ovlRsOff 면 항상 숨김', async () => { await o.page.evaluate(() => { window._routeLocked = true; window._ovlRsOff = true; }); await o.page.clock.runFor(1500); const r = await lastRs(); assert.strictEqual(r.st, 'hidden'); });
+  await t('페이지 오류 없음(⑦)', async () => assert.deepStrictEqual([...new Set(o.errs)], []));
+  await o.ctx.close();
+
   await b.close();
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
   process.exit(fail ? 1 : 0);
