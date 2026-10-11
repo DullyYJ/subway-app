@@ -28432,7 +28432,10 @@ function _ovlStrip(st){
   try{
     if(window._ovlStripOff) return null;
     var nd = (typeof _transitNodeData !== 'undefined') ? _transitNodeData : null;
-    var N = 40, BACK = 8;   // ★ 2026-10-11: 좌우로 넘겨 볼 수 있게 현위치 앞 8칸 · 뒤 31칸까지 보낸다(화면에는 다섯 칸만 보인다)
+    // ★ 2026-10-11: 좌우로 넘겨 볼 수 있게 현위치 앞 8칸부터 보낸다(화면에는 다섯 칸만 보인다).
+    // ★ 2026-10-12 (YJ: "오버레이가 신길에서 끊겼어"): 40칸에서 잘라 보내서, 버스·1호선 정류장이 많은 긴 경로는 40번째 칸(신길)에서 끝났다.
+    //   앱 타임라인은 끝까지 있는데 오버레이만 끊긴 것 → 칸 수 제한을 사실상 없앴다(120칸). 네이티브도 150칸까지 받는다.
+    var N = 120, BACK = 8;
     if(nd && nd.length && window._routeLocked === true && window._metroRouteMode !== true){
       var raw = Math.max(0, Math.min(_pipHereIdx(), nd.length - 1));
       var curEl = nd[raw] && nd[raw].el, par = curEl && curEl.parentElement;
