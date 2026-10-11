@@ -22425,6 +22425,7 @@ function _arrBuildAlert(destStn, arrHour, arrMs){
   var isDinner = (slot === 'night') && _arrIsDinner(arrMs);
   var arr  = new Date(arrMs);
   var hhmm = ('0'+arr.getHours()).slice(-2)+':'+('0'+arr.getMinutes()).slice(-2);
+  var cx   = _arrCx(arrMs);   // ★ 2026-10-11: 날씨·요일·시간 상황(문구 엔진)
 
   var lines = [];
   lines.push('하차 ' + remMin + '분 전이에요.');
@@ -22434,21 +22435,24 @@ function _arrBuildAlert(destStn, arrHour, arrMs){
   // ── 19:31~24:00 · 쿠팡 아이템 추천 ──
   if(slot === 'shop'){
     var sp = _arrPickShopItem();
-    var wit = _arrPickDaily(_ARR_WIT_SHOP, arr.getHours() * 7 + arr.getMinutes());
-    lines.push(_arrApplyJosa(wit, sp && sp.item ? sp.item.n : '작은 선물'));
+    var shHook = _arrHook('shop', cx);
+    lines.push(shHook.t);
     if(sp && sp.item){
-      lines.push('🛍 오늘의 추천 · ' + sp.item.n);
-      if(sp.item._cat) lines.push('   ' + sp.item._cat + ' · ' + _arrShopReason(sp.item, sp.ctx));
-      else             lines.push('   ' + _arrShopReason(sp.item, sp.ctx));
+      // ★ 2026-10-11: '오늘의 추천'(광고 라벨) 대신 상품 이름만, 이유는 지금 상황에 맞춘 한 줄
+      lines.push('🛍 ' + sp.item.n);
+      var shWhy = _arrShopLine(sp.item, cx);
+      if(sp.item._cat) lines.push('   ' + sp.item._cat + ' · ' + shWhy);
+      else             lines.push('   ' + shWhy);
     } else {
-      lines.push('🛍 오늘의 추천 아이템을 골라뒀어요');
+      lines.push('🛍 오늘 밤 둘러볼 만한 것들을 골라뒀어요');
     }
     lines.push('');
     lines.push(_ARR_CLOSE_EVE[Math.floor(Math.random()*_ARR_CLOSE_EVE.length)]);
     return {
       title: '🚉 하차 ' + remMin + '분 전' + (destStn ? ' · ' + destStn : '') + ' 🛍',
       body: lines.join('\n'), kind: 'shop', slot: slot, remMin: remMin,
-      shop: sp ? sp.item : null
+      shop: sp ? sp.item : null,
+      hook: shHook.t, hookStrong: shHook.strong, cx: cx
     };
   }
 
@@ -22460,7 +22464,7 @@ function _arrBuildAlert(destStn, arrHour, arrMs){
   var menu;
   if(isMorn){
     // 커피 한 잔 + 브런치 한 가지를 같이 제안
-    menu = _ARR_DRINKS[Math.floor(Math.random()*_ARR_DRINKS.length)];
+    menu = _arrPickDrink(cx);   // ★ 2026-10-11: 추운 날 아이스, 더운 날 따뜻한 음료가 나가지 않게 기온에 맞춘다
   } else {
     // ★ 2026-09-21: 하차지 주변에서 실제로 파는 메뉴 중에서 고른다(없으면 예전 방식)
     var _menuPool = isLunch ? _ARR_LUNCH_MENU : (isDinner ? _ARR_DINNER_MENU : _ARR_NIGHT_MENU);
@@ -22477,9 +22481,9 @@ function _arrBuildAlert(destStn, arrHour, arrMs){
   var spots = _arrSpotsFor(destStn, menu, isMorn ? 'cafe' : 'night', isMorn ? 2 : 3);
   var brunch = isMorn ? _ARR_BRUNCH[Math.floor(Math.random()*_ARR_BRUNCH.length)] : '';
 
-  var wit2 = _arrPickDaily(isMorn ? _ARR_WIT_MORN : (isLunch ? _ARR_WIT_LUNCH : (isDinner ? _ARR_WIT_DINNER : _ARR_WIT_EVE)), arr.getHours());
-  // ★ 2026-10-01: 예전 문구에 '집까지 10분'이 박혀 있어 실제 남은 분으로 바꾼다
-  lines.push(_arrApplyJosa(wit2, menu).replace('집까지 10분', '집까지 ' + remMin + '분'));
+  // ★ 2026-10-11 (YJ: 광고 같지 않게 — 날씨·시간·앞으로의 일을 읽어 그 순간에 맞는 한 줄): 예전 위트 목록 대신 상황 문구 엔진
+  var hk = _arrHook(isMorn ? 'morning' : (isLunch ? 'lunch' : (isDinner ? 'dinner' : 'night')), cx, menu);
+  lines.push(hk.t);
 
   if(isLunch){
     lines.push('🍚 이 근처 한 끼');
@@ -22508,7 +22512,7 @@ function _arrBuildAlert(destStn, arrHour, arrMs){
     }
   } else {
     lines.push('🍗 오늘의 야식 · ' + menu);
-    lines.push('   집 도착에 맞춰 지금 주문하면 딱 맞아요');
+    lines.push('   도착할 때쯤 받도록 미리 시켜 둘 수 있어요');
     if(spots.length){
       lines.push('   근처에서 드실 거면 · ' + spots.join(', '));
     } else if(place){
@@ -22529,7 +22533,8 @@ function _arrBuildAlert(destStn, arrHour, arrMs){
     slot: slot, remMin: remMin, dinner: isDinner,
     menu: menu, brunch: brunch,
     spots: spots,
-    place: place || null
+    place: place || null,
+    hook: hk.t, hookStrong: hk.strong, cx: cx
   };
 }
 
@@ -22568,6 +22573,194 @@ var _PIP_NIGHT_TAIL = [
   '오늘도 수고하셨어요. 내일도 함께해요',
   '나머지는 제게 맡기고 푹 쉬세요'
 ];
+// ══════════════════════════════════════════════════════════════════════
+// ★ 2026-10-11 (YJ: "야식·쿠팡·카페 추천 문구가 광고 같지 않게 — 날씨·시간·앞으로의 일을 읽어서 클릭하고 싶은 상황과 아이템에 맞는 문구로"):
+//   문구 엔진. 규칙은 두 가지다.
+//   ① 사실만 말한다 — 지금 기온·체감·강수확률·일교차(서버 /weather), 도착 시각의 요일·시간, 내일이 쉬는 날인지, 월급날(24~26일). 없는 값은 말하지 않고 다음 규칙으로 넘어간다.
+//   ② 광고 말투를 쓰지 않는다 — '추천·할인·구매·지금 주문' 대신, 그 사람의 그 순간을 먼저 알아봐 주는 한 줄(비·추위·금요일 밤…) 뒤에 가볍게 권한다.
+//   줄 길이: 오버레이 한 줄이 26자라서 모든 한 줄은 그 안에 들어가게 쓴다.
+// ══════════════════════════════════════════════════════════════════════
+function _arrCx(arrMs){
+  var d = new Date(arrMs || Date.now()), wx = null;
+  try{ wx = (typeof _shopWeather === 'function') ? _shopWeather() : null; }catch(e){}
+  var n = function(v){ return (v != null && isFinite(v)) ? Math.round(v) : null; };
+  var temp = wx ? n(wx.temp) : null, feel = (wx && n(wx.feel) != null) ? n(wx.feel) : temp;
+  var tmin = wx ? n(wx.tmin) : null, tmax = wx ? n(wx.tmax) : null;
+  var rain = (wx && wx.rain != null && isFinite(wx.rain)) ? Math.round(wx.rain) : -1;
+  var txt = (wx && wx.txt) ? String(wx.txt) : '';
+  var dow = d.getDay(), dom = d.getDate(), tmr = (dow + 1) % 7;
+  var range = (tmin != null && tmax != null) ? (tmax - tmin) : null;
+  return {
+    h: d.getHours(), dow: dow, dom: dom, mon: dow === 1, fri: dow === 5, sat: dow === 6, sun: dow === 0,
+    weekend: dow === 0 || dow === 6,
+    tmrRest: tmr === 0 || tmr === 6,              // 내일이 토·일
+    tmrWork: tmr >= 1 && tmr <= 5,
+    payday: dom >= 24 && dom <= 26,
+    temp: temp, feel: feel, tmin: tmin, tmax: tmax, range: range, rain: rain, txt: txt,
+    snowy: /눈/.test(txt),
+    rainy: rain >= 50 || /비|소나기|눈/.test(txt),
+    rainSoon: rain >= 30,
+    freezing: feel != null && feel <= 0,
+    cold: feel != null && feel <= 8,
+    cool: feel != null && feel <= 16,
+    warm: temp != null && temp >= 22,
+    hot: temp != null && temp >= 27,
+    swing: range != null && range >= 10,
+    month: d.getMonth() + 1
+  };
+}
+window._arrCx = _arrCx;
+function _arrFill(t, cx, menu){
+  t = String(t || '').replace(/\{(temp|feel|range|rain|tmin|tmax)\}/g, function(_, k){ var v = cx ? cx[k] : null; return v == null ? '' : String(v); });
+  return menu != null ? _arrApplyJosa(t, menu) : t;
+}
+// 같은 날·같은 시각엔 같은 문구, 날짜가 바뀌면 다른 문구
+function _arrVar(list, cx, salt){
+  if(!list || !list.length) return '';
+  var d = new Date(), seed = d.getFullYear() * 400 + (d.getMonth() + 1) * 31 + d.getDate() + (cx && cx.h || 0) * 3 + (salt || 0);
+  return list[Math.abs(seed) % list.length];
+}
+// 상황 규칙: [조건, 문구들]. 위에 있을수록 먼저. 처음 맞는 규칙의 문구를 쓰고 strong=true.
+var _ARR_HOOKS = {
+  morning: [
+    [function(c){ return c.snowy; },            ['눈 오는 아침이에요, 따뜻하게', '눈길엔 따뜻한 한 잔이 힘이 돼요']],
+    [function(c){ return c.rainy; },            ['비 오는 아침엔 따뜻한 한 잔', '빗소리엔 따뜻한 게 어울려요', '비 와서 나서기 싫은 아침이죠']],
+    [function(c){ return c.freezing; },         ['체감 {feel}도, 손부터 녹여요', '영하 날씨엔 따뜻한 한 잔이죠']],
+    [function(c){ return c.cold; },             ['아침 {temp}도, 따뜻한 게 당겨요', '쌀쌀한 아침엔 따뜻한 한 잔']],
+    [function(c){ return c.swing; },            ['오늘 일교차가 {range}도예요', '아침저녁 {range}도 차이, 따뜻하게']],
+    [function(c){ return c.hot; },              ['벌써 {temp}도예요, 시원한 한 잔', '더운 아침엔 시원한 게 제일이죠']],
+    [function(c){ return c.mon; },              ['월요일 아침, 한 잔만 챙겨요', '월요병엔 한 잔이 약이죠']],
+    [function(c){ return c.fri; },              ['금요일이에요, 한 잔으로 가볍게', '오늘만 지나면 주말이에요']],
+    [function(c){ return c.weekend; },          ['주말 아침, 느긋하게 한 잔', '쉬는 날엔 천천히 한 잔이죠']]
+  ],
+  lunch: [
+    [function(c){ return c.snowy; },            ['눈 오는 날 점심은 {menu}', '눈길엔 가까운 곳에서 {menu}']],
+    [function(c){ return c.rainy; },            ['비 와서 멀리 가기 싫죠, {menu}', '빗길엔 가까운 곳에서 {menu}']],
+    [function(c){ return c.cold; },             ['{temp}도라 점심은 {menu}로 데워요', '추운 날 점심은 {menu}가 든든해요']],
+    [function(c){ return c.hot; },              ['{temp}도 더위에 점심은 {menu}', '더운 날엔 점심을 제때 먹어요']],
+    [function(c){ return c.payday && !c.weekend; }, ['월급날이잖아요, 점심은 {menu}', '월급날 점심은 {menu} 어때요']],
+    [function(c){ return c.fri; },              ['금요일 점심은 {menu} 어때요', '한 주 마무리 점심은 {menu}']],
+    [function(c){ return c.mon; },              ['월요일 점심은 {menu}로 힘내요', '월요일엔 든든히 {menu}']],
+    [function(c){ return c.weekend; },          ['주말 점심, 느긋하게 {menu}', '쉬는 날 점심은 {menu} 어때요']]
+  ],
+  dinner: [
+    [function(c){ return c.snowy; },            ['눈 오는 퇴근길, 따끈한 {menu}', '눈길 퇴근엔 {menu}가 위로돼요']],
+    [function(c){ return c.rainy; },            ['비 오는 퇴근길, 따끈한 {menu}', '빗길 퇴근엔 {menu}가 위로돼요']],
+    [function(c){ return c.cold; },             ['{temp}도 퇴근길, {menu}로 데워요', '추운 날 저녁은 {menu}가 제격']],
+    [function(c){ return c.hot; },              ['{temp}도에 지쳤죠, 저녁은 {menu}', '더운 하루 끝, {menu}로 힘내요']],
+    [function(c){ return c.payday && !c.weekend; }, ['월급날이잖아요, 저녁은 {menu}', '월급날 저녁은 {menu} 어때요']],
+    [function(c){ return c.fri; },              ['금요일 저녁은 {menu}로 마무리', '한 주 고생했어요, {menu} 어때요']],
+    [function(c){ return c.mon; },              ['월요일 버텼어요, 저녁은 {menu}', '월요일 퇴근길엔 {menu} 한 끼']],
+    [function(c){ return c.weekend; },          ['주말 저녁이에요, {menu} 어때요', '쉬는 날 저녁은 {menu}로']]
+  ],
+  night: [
+    [function(c){ return c.snowy; },            ['눈 오는 밤엔 {menu}가 제격이죠', '눈 오는 밤, {menu} 시켜 둘까요']],
+    [function(c){ return c.rainy; },            ['비 오는 밤엔 {menu}가 제격이죠', '비 오는 밤, {menu} 시켜 둘까요']],
+    [function(c){ return c.cold; },             ['{temp}도 추운 밤, 따끈한 {menu}', '추운 밤엔 {menu} 생각나죠']],
+    [function(c){ return c.hot; },              ['{temp}도 더운 밤, {menu} 어때요', '더운 밤엔 {menu}가 당기죠']],
+    [function(c){ return c.fri || c.sat; },     ['내일은 쉬는 날, 오늘은 {menu}', '주말 앞둔 밤엔 {menu} 한 번쯤']],
+    [function(c){ return c.sun; },              ['내일 월요일, 든든히 {menu}', '일요일 밤엔 {menu}로 마음 달래요']],
+    [function(c){ return c.payday; },           ['월급날 밤, {menu} 한 번쯤 어때요', '월급날이잖아요, {menu} 어때요']]
+  ],
+  shop: [
+    [function(c){ return c.rainy; },            ['비 오는 밤, 구경하다 가요', '빗소리 들으며 천천히 둘러봐요']],
+    [function(c){ return c.cold; },             ['추운 밤, 이불 속에서 구경해요', '{temp}도 추운 밤, 따뜻하게 둘러봐요']],
+    [function(c){ return c.fri; },              ['한 주 고생했어요, 이제 쉬어요', '쉬는 날 전날 밤, 천천히 구경해요']],
+    [function(c){ return c.sat; },              ['내일도 쉬는 날, 천천히 구경해요', '느긋한 토요일 밤이에요']],
+    [function(c){ return c.sun; },              ['내일 월요일, 오늘은 일찍 쉬어요', '일요일 밤, 내일 준비 하나쯤']],
+    [function(c){ return c.payday; },           ['월급 들어온 날, 하나쯤은요', '월급날 밤, 나한테 하나쯤']]
+  ]
+};
+var _ARR_HOOK_DEFAULT = {
+  morning: ['여유 있으면 한 잔 어때요', '출근 전 한 잔이면 든든해요', '아침엔 한 잔이 시작이죠'],
+  lunch:   ['점심은 {menu} 어때요', '오늘 점심은 {menu}로 정해요', '{menu}로 든든하게 채워요'],
+  dinner:  ['퇴근길 {menu} 한 끼 어때요', '오늘 저녁은 {menu}로 정해 볼까요', '저녁은 {menu}로 든든하게'],
+  night:   ['출출한 시간이죠, {menu} 어때요', '오늘 야식은 {menu}로 골라봤어요', '자기 전 {menu} 한 번쯤 어때요'],
+  shop:    ['하루 끝에 천천히 둘러봐요', '내일의 나를 편하게 해 줄 것들', '퇴근길 구경 삼아 보세요']
+};
+// slot: 'morning' | 'lunch' | 'dinner' | 'night' | 'shop' → { t: 문구, strong: 상황 규칙에 맞았는지 }
+function _arrHook(slot, cx, menu){
+  var rules = _ARR_HOOKS[slot] || [], i, list = null;
+  for(i = 0; i < rules.length; i++){
+    var ok = false; try{ ok = !!rules[i][0](cx); }catch(e){}
+    if(ok){ list = rules[i][1]; break; }
+  }
+  var strong = !!list;
+  if(!list) list = _ARR_HOOK_DEFAULT[slot] || [''];
+  return { t: _arrFill(_arrVar(list, cx, slot.length), cx, menu), strong: strong };
+}
+window._arrHook = _arrHook;
+// 날씨에 맞는 아침 음료(추운 날 아이스, 더운 날 따뜻한 게 나가던 것을 바로잡는다)
+var _ARR_DRINKS_ICE  = ['아이스 아메리카노','콜드브루','자몽 에이드','아이스티','딸기 라떼'];
+var _ARR_DRINKS_WARM = ['따뜻한 라떼','바닐라 라떼','카푸치노','아인슈페너','플랫화이트','헤이즐넛 아메리카노','유자차','녹차 라떼','흑당 밀크티','토피넛 라떼','캐모마일 티'];
+function _arrPickDrink(cx){
+  try{
+    if(cx && (cx.hot || (cx.warm && !cx.rainy))) return _ARR_DRINKS_ICE[Math.floor(Math.random() * _ARR_DRINKS_ICE.length)];
+    if(cx && (cx.cool || cx.rainy || cx.snowy)) return _ARR_DRINKS_WARM[Math.floor(Math.random() * _ARR_DRINKS_WARM.length)];
+  }catch(e){}
+  return _ARR_DRINKS[Math.floor(Math.random() * _ARR_DRINKS.length)];
+}
+// 쿠팡 아이템 한 줄 이유: 상품 테마 + 지금 상황. 26자 안쪽. 맞는 규칙이 없으면 테마 기본 문구.
+var _ARR_SHOP_SAY = {
+  '우천대비':   [[function(c){ return c.rainSoon; }, ['비 소식 {rain}%예요, 미리 챙겨요', '비 올 확률 {rain}%, 가방에 하나']], [null, ['비는 갑자기 오니까 하나쯤', '가방에 하나 있으면 마음 놓여요']]],
+  '커피음료':   [[function(c){ return c.cold; }, ['추운 아침엔 따뜻한 한 잔이죠']], [function(c){ return c.tmrRest; }, ['쉬는 날 아침 여유 한 잔']], [null, ['내일 아침 한 잔이 수월해져요', '아침에 마실 거 미리 쟁여 둬요']]],
+  '아침대용식': [[function(c){ return c.tmrWork; }, ['내일 아침 바쁠 때 한 입 거리', '아침 거르기 쉬운 날 대비해요', '내일 아침 시간을 아껴 줘요']], [null, ['느긋한 아침, 간단히 한 입']]],
+  '브런치':     [[function(c){ return c.tmrRest; }, ['쉬는 날 늦은 아침엔 브런치죠', '내일은 여유롭게 브런치예요']], [null, ['내일 아침은 브런치처럼']]],
+  '셀프케어':   [[function(c){ return c.cold && c.swing; }, ['일교차 큰 날, 피부도 지쳐요']], [function(c){ return c.cold; }, ['추운 날엔 샤워 뒤 관리가 필수']], [null, ['고생한 하루, 나를 한 번 챙겨요', '오늘 밤 피로 풀기 좋아요']]],
+  '생필품':     [[function(c){ return c.payday; }, ['월급날 겸 채워 둘 때예요']], [null, ['떨어지기 전에 채워 두면 편해요', '있는 줄 알았는데 없는 것들']]],
+  '다이어트':   [[function(c){ return c.sun || c.mon; }, ['월요일부터 가볍게 시작해요']], [null, ['가볍게 먹고 싶은 밤을 위해', '내일부터 말고 오늘 한 끼부터']]],
+  '저녁식재료': [[function(c){ return c.weekend || c.fri; }, ['주말 요리 재료 미리 챙겨요']], [null, ['내일 저녁은 직접 해 먹어요', '퇴근길 장보기를 줄여 줘요']]],
+  '정육':       [[function(c){ return c.fri || c.sat; }, ['주말엔 고기가 빠질 수 없죠']], [null, ['고기 당기는 날 있잖아요']]],
+  '신선식품마감': [[null, ['장볼 시간 없던 날 간편하게', '늦은 밤에도 신선하게 챙겨요']]],
+  '캠핑나들이': [[function(c){ return c.rainSoon; }, ['비 그치면 나들이 가요']], [function(c){ return c.month >= 9 && c.month <= 11; }, ['가을 캠핑하기 좋은 철이에요']], [function(c){ return c.fri || c.sat; }, ['이번 주말 나들이 어때요']], [null, ['날 좋은 날을 위해 미리']]],
+  '사무용품':   [[function(c){ return c.tmrWork; }, ['내일 책상이 조금 편해져요']], [null, ['책상에 하나 두면 손이 가요']]],
+  '자기계발':   [[null, ['퇴근 후 20분, 나를 키워요', '오늘 밤 20분이면 충분해요']]],
+  '야식':       [[null, ['출출한 밤에 하나쯤 두면 든든', '배달 말고 집에 쟁여 둘 야식']]],
+  '취미스포츠': [[function(c){ return c.temp != null && c.temp >= 10 && c.temp <= 24 && !c.rainy; }, ['{temp}도, 운동하기 딱 좋은 날씨']], [null, ['퇴근 후 몸 쓰는 취미 어때요']]],
+  '홈파티':     [[function(c){ return c.fri || c.sat; }, ['주말 모임 전에 미리 챙겨요']], [null, ['작은 모임이 생길 때 요긴해요']]],
+  '대량구매':   [[null, ['자주 쓰는 건 묶음이 편해요', '쓰는 만큼 묶음으로 두면 덜 번거로워요']]],
+  '출근룩소품': [[function(c){ return c.swing; }, ['일교차 큰 날 걸치기 좋아요']], [function(c){ return c.tmrWork; }, ['내일 출근룩에 포인트 하나']], [null, ['출근길 분위기를 바꿔 봐요']]]
+};
+function _arrShopLine(it, cx){
+  var nm = String((it && it.n) || ''), t = String((it && it._t) || ''), K = (typeof _SHOP_SEASON_KW !== 'undefined') ? _SHOP_SEASON_KW : {};
+  var pickRule = function(rules){
+    for(var i = 0; i < rules.length; i++){
+      var ok = true; if(rules[i][0]){ try{ ok = !!rules[i][0](cx); }catch(e){ ok = false; } }
+      if(ok) return _arrFill(_arrVar(rules[i][1], cx, nm.length), cx, null);
+    }
+    return '';
+  };
+  // 이름으로 날씨성 상품을 먼저 본다(테마 태그가 없는 상품이 3분의 2)
+  var isRain = (t === '우천대비') || /우산|장화|레인|우비|방수|제습|빗물/.test(nm);
+  var isCold = (K.winter && K.winter.test(nm)) || (K.fall && K.fall.test(nm)) || /조끼|바람막이|가디건|후드|맨투맨|니트/.test(nm);
+  var isHot  = (K.summer && K.summer.test(nm)) || /쿨|냉감|선풍기|서큘레이터|선크림|반팔|반바지|샌들/.test(nm);
+  var r = '';
+  if(isRain){
+    r = cx.rainSoon ? _arrFill(_arrVar(['비 소식 {rain}%예요, 미리 챙겨요', '비 올 확률 {rain}%, 가방에 하나'], cx, nm.length), cx, null)
+                    : _arrVar(['비는 갑자기 오니까 하나쯤', '가방에 하나 있으면 마음 놓여요'], cx, nm.length);
+  } else if(isCold && !isHot){
+    if(cx.temp != null){
+      if(cx.temp <= 5) r = cx.tmin != null ? '내일 아침도 ' + cx.tmin + '도 안팎이에요' : cx.temp + '도라 꽤 추워요, 챙겨 둬요';
+      else if(cx.temp <= 17) r = cx.swing ? '일교차 ' + cx.range + '도, 걸칠 게 필요해요' : cx.temp + '도, 슬슬 챙겨 입을 때예요';
+      else r = '곧 쌀쌀해질 거예요, 미리 준비해요';
+    } else r = '아침저녁으로 쌀쌀해졌어요';
+  } else if(isHot){
+    if(cx.temp != null && cx.temp >= 28) r = cx.temp + '도 무더위, 시원하게 보내요';
+    else if(cx.temp != null && cx.temp >= 22) r = cx.temp + '도, 슬슬 필요해질 거예요';
+    else r = '더워지기 전에 미리 챙겨요';
+  } else if(_ARR_SHOP_SAY[t]){
+    r = pickRule(_ARR_SHOP_SAY[t]);
+  }
+  if(!r){
+    if(cx.payday) r = '월급날 밤, 나한테 하나쯤';
+    else if(cx.fri || cx.sat) r = '쉬는 날 전날 밤에 구경해요';
+    else if(cx.weekend) r = '쉬는 날 여유 있을 때 써 봐요';
+    else r = '오늘 밤 구경 삼아 둘러봐요';
+  }
+  return r;
+}
+window._arrShopLine = _arrShopLine;
+
 // 쿠팡 아이템: 날씨와 상관있는 상품일 때만 날씨/기온을 말한다(패딩 조끼에 강수량은 필요 없다)
 function _arrShopSay(it, ctx){
   var nm = String((it && it.n) || ''), t = String((it && it._t) || '');
@@ -22654,37 +22847,39 @@ function _arrPipText(a, slot, destStn, body){
     if(slot === 'morning'){
       var m = a.menu || '커피', b = a.brunch || '';
       // ★ 2026-10-01: 문장이 길면 '…'로 잘려 '어떠세요?'가 사라지므로, 길 땐 브런치 메뉴를 빼고 문장을 온전히 둔다
-      var _mq = '좋은 아침이에요. 내리시면 ' + m + (b ? _arrJosa(m, '과', '와') + ' ' + b : '') + ' 어떠세요?';
-      if(_mq.length > _PIP_LINE_MAX) _mq = '좋은 아침이에요. 내리시면 ' + m + ' 어떠세요?';
+      var _mq = m + (b ? _arrJosa(m, '과', '와') + ' ' + b : '') + ' 어때요?';
+      if(_mq.length > 26) _mq = m + ' 어때요?';
+      if(a.hook) out.lines.push(a.hook);
       out.lines.push(_mq);
       out.lines.push(near || '내리시면 근처 카페에 잠깐 들러 보세요.');
       out.lines.push(pick(_PIP_MORN_TAIL));
     } else if(slot === 'lunch'){
       var lm = a.menu || '든든한 한 끼';
-      out.lines.push('점심시간이에요. ' + (a.menu ? lm + ' 어떠세요?' : '내리시면 든든하게 챙겨 드세요.'));
-      if(near) out.lines.push(near);
+      out.lines.push(a.hook || ('점심시간이에요. ' + (a.menu ? lm + ' 어떠세요?' : '내리시면 든든하게 챙겨 드세요.')));
+      out.lines.push(near || '내리는 길에 한 번 들러 봐요');
       out.lines.push(pick(_PIP_LUNCH_TAIL));
     } else if(slot === 'shop'){
       var it = a.shop || null, ctx = null;
       try{ ctx = (typeof _shopCtx === 'function') ? _shopCtx() : null; }catch(e){}
       if(it){
-        out.lines.push('오늘의 추천 · ' + it.n);
-        out.lines.push(_arrShopSay(it, ctx));
+        // ★ 2026-10-11: 첫 줄 = 지금 상황에 맞춘 이유, 둘째 줄 = 상품 이름 ('오늘의 추천' 라벨 없음)
+        out.lines.push(typeof _arrShopLine === 'function' && a.cx ? _arrShopLine(it, a.cx) : _arrShopSay(it, ctx));
+        out.lines.push(it.n);
       } else if(wit){
         out.lines.push(wit);
       }
       out.lines.push(pick(_PIP_NIGHT_TAIL));
     } else if(a.dinner){   // 17~19시 — 야식이 아니라 저녁 식사
       var dn = a.menu || '든든한 한 끼';
-      out.lines.push('오늘 저녁은 ' + dn + _arrJosaRo(dn) + ' 골라봤어요.');
-      out.lines.push(near || '내리시면 근처에서 든든히 드세요.');
-      if(wit) out.lines.push(wit);
+      out.lines.push(a.hook || ('오늘 저녁은 ' + dn + _arrJosaRo(dn) + ' 골라봤어요.'));
+      out.lines.push(near || '내리는 길에 한 번 들러 봐요');
+      if(wit && wit !== a.hook) out.lines.push(wit);
       out.lines.push(pick(_PIP_DINNER_TAIL));
     } else {   // night
       var mn = a.menu || '야식';
-      out.lines.push('오늘 야식은 ' + mn + _arrJosaRo(mn) + ' 골라봤어요.');
-      out.lines.push(near || '도착 시간에 맞춰 주문해 두면 딱이에요.');
-      if(wit) out.lines.push(wit);
+      out.lines.push(a.hook || ('오늘 야식은 ' + mn + _arrJosaRo(mn) + ' 골라봤어요.'));
+      out.lines.push(near || '도착할 때쯤 받도록 시켜 둘 수 있어요');
+      if(wit && wit !== a.hook) out.lines.push(wit);
       out.lines.push(pick(_PIP_NIGHT_TAIL));
     }
   }catch(e){}
@@ -22748,7 +22943,8 @@ function _arrFireAlertNow(destStn, arrMs){
     };
 
     // ★ 저녁(야식·쇼핑)엔 Gemini로 하루를 위로하는 문구를 받아 감성 줄 교체
-    if((slot === 'night' || slot === 'shop') && typeof _arrAiCopy === 'function'){
+    // ★ 2026-10-11: 상황 규칙(비·추위·금요일 밤…)에 맞은 문구가 이미 있으면 AI 문구로 덮어쓰지 않는다
+    if((slot === 'night' || slot === 'shop') && !a.hookStrong && typeof _arrAiCopy === 'function'){
       var subject = (slot === 'shop') ? (a.shop ? a.shop.n : '작은 선물') : a.menu;
       var fired = false;
       _arrAiCopy(subject, destStn, function(ai){
@@ -22964,8 +23160,12 @@ function _showBriefingModal(title, body, route, action){
         + '</div>'
         + (_shp
             ? '<div style="margin-top:12px;">'
+              // ★ 2026-10-11: 상품 사진(쿠팡 아이템에만 있다. 못 불러오면 숨긴다)
+              + ((_shp.item && /^https?:\/\//.test(String(_shp.item.i || '')))
+                  ? '<img id="briefShopImg" src="' + esc(_shp.item.i) + '" alt="" referrerpolicy="no-referrer" onerror="this.style.display=\'none\'" style="display:block;width:100%;max-height:180px;object-fit:contain;border-radius:12px;background:#fff;margin-bottom:10px;">'
+                  : '')
               + '<div style="font-size:12px;color:var(--sub);margin-bottom:8px;text-align:center;">'
-              +   (_shp.item && _shp.item.n ? esc(_shp.item.n) + ', 지금 한 번 볼까요?' : '오늘의 추천 아이템 보기')
+              +   (_shp.item && _shp.item.n ? esc(_shp.item.n) + ', 한번 볼까요?' : '골라 둔 아이템 보기')
               + '</div>'
               + '<div style="display:flex;gap:8px;">'
               +   '<button onclick="_arrShopOpen()" style="flex:2;padding:11px 4px;border-radius:11px;border:none;cursor:pointer;font-size:13px;font-weight:800;background:#E94E1B;color:#fff;">쿠팡 구경</button>'
