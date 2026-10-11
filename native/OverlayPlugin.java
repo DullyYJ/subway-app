@@ -98,6 +98,10 @@ public class OverlayPlugin extends Plugin {
     private int rsCbg = 0xFF0A84FF, rsCfg = 0xFF0A84FF;
     private float rsBar = -1f;                  // 출발 뒤 남은 비율(0~1), 없으면 -1
     private BoardView boardView;
+    // ★ 2026-10-11 (YJ: "추천은 오버레이 하단에 · 추천아이템 연결 버튼 · 끄는 확인 버튼"): 도착 3분 전부터 맨 아래에 두 줄 추천 + [보기] [확인]. 문구·시각·갈 곳은 웹이 정한다.
+    private boolean rcOn = false;
+    private String rcA = "", rcB = "", rcGo = "보기";
+    private RecoView recoView;
     private Cell[] strip = new Cell[0];
     private int stripCur = 0;                   // 현위치 칸 번호(strip 안에서)
     // ★ 2026-10-11 (YJ: "오버레이 좌우 스크롤 가능하게 · 마커도 깜박이게"): 웹이 현위치 앞뒤 칸을 넉넉히(최대 50칸) 보내고,
@@ -376,6 +380,67 @@ public class OverlayPlugin extends Plugin {
         }
     }
 
+    /** 맨 아래 추천 줄: 왼쪽 두 줄 문구, 오른쪽 [보기](추천 아이템·맛집으로) [확인](이 추천 끄기). */
+    private class RecoView extends View {
+        private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final TextPaint tp = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+        private final RectF rf = new RectF();
+        private final RectF go = new RectF(), ok = new RectF();
+        RecoView(Context c) { super(c); }
+        @Override protected void onMeasure(int wSpec, int hSpec) {
+            setMeasuredDimension(MeasureSpec.getSize(wSpec), dp(44));
+        }
+        /** 1 = [보기], 2 = [확인], 0 = 버튼 밖(손가락 오차를 감안해 사방 6dp 넓게). */
+        int hit(float x, float y) {
+            float m = dp(6);
+            if (!go.isEmpty() && x >= go.left - m && x <= go.right + m && y >= go.top - m && y <= go.bottom + m) return 1;
+            if (!ok.isEmpty() && x >= ok.left - m && x <= ok.right + m && y >= ok.top - m && y <= ok.bottom + m) return 2;
+            return 0;
+        }
+        private float txt(Canvas cv, String s, float x, float y, float maxW, float sp, int color, boolean bold, Paint.Align al) {
+            if (s == null || s.length() == 0) return 0f;
+            tp.setTextSize(sp * getResources().getDisplayMetrics().scaledDensity);
+            tp.setColor(color);
+            tp.setTypeface(bold ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
+            tp.setTextAlign(al);
+            CharSequence e = TextUtils.ellipsize(s, tp, Math.max(1f, maxW), TextUtils.TruncateAt.END);
+            cv.drawText(e, 0, e.length(), x, y, tp);
+            return tp.measureText(e, 0, e.length());
+        }
+        private float mw(String s, float sp) {
+            tp.setTextSize(sp * getResources().getDisplayMetrics().scaledDensity);
+            tp.setTypeface(Typeface.DEFAULT_BOLD);
+            return tp.measureText(s == null ? "" : s);
+        }
+        @Override protected void onDraw(Canvas cv) {
+            float w = getWidth(), h = getHeight();
+            go.setEmpty(); ok.setEmpty();
+            if (!rcOn) return;
+            p.setStyle(Paint.Style.FILL);
+            rf.set(0, dp(4), w, h - dp(2));
+            p.setColor((0x1A << 24) | (thSub & 0x00FFFFFF));
+            cv.drawRoundRect(rf, dp(10), dp(10), p);
+            float bh = dp(28), by = (h - bh) / 2f + dp(1), gap = dp(6), edge = dp(8);
+            float okW = Math.max(dp(48), mw("확인", 12f) + dp(20));
+            float goW = Math.max(dp(56), mw(rcGo, 12f) + dp(22));
+            ok.set(w - edge - okW, by, w - edge, by + bh);
+            go.set(ok.left - gap - goW, by, ok.left - gap, by + bh);
+            p.setColor(0xFF0A84FF);
+            cv.drawRoundRect(go, bh / 2f, bh / 2f, p);
+            txt(cv, rcGo, go.centerX(), go.centerY() + dp(4.2f), goW - dp(8), 12f, 0xFFFFFFFF, true, Paint.Align.CENTER);
+            p.setColor((0x33 << 24) | (thSub & 0x00FFFFFF));
+            cv.drawRoundRect(ok, bh / 2f, bh / 2f, p);
+            txt(cv, "확인", ok.centerX(), ok.centerY() + dp(4.2f), okW - dp(8), 12f, thFg, true, Paint.Align.CENTER);
+            float tx = edge + dp(2), maxW = go.left - tx - dp(8);
+            if (rcB.length() > 0) {
+                txt(cv, rcA, tx, dp(4) + dp(17), maxW, 12f, thFg, true, Paint.Align.LEFT);
+                txt(cv, rcB, tx, dp(4) + dp(32), maxW, 11f, thSub, false, Paint.Align.LEFT);
+            } else {
+                txt(cv, rcA, tx, h / 2f + dp(4.5f), maxW, 12f, thFg, true, Paint.Align.LEFT);
+            }
+        }
+    }
+
     /** 남은시간 줄 오른쪽에 붙는 '● 대기 · 75번' 알약(앱 탑승 시트의 대기 상태와 같은 뜻). */
     private class WaitChip extends View {
         private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -508,6 +573,14 @@ public class OverlayPlugin extends Plugin {
                 rsBar = (float) rs.optDouble("bar", -1);
             } else { rsSt = "hidden"; }
         } catch (Exception e) { rsSt = "hidden"; }
+        try {
+            JSObject rc = call.getObject("reco");
+            if (rc != null && rc.optBoolean("on", false)) {
+                rcOn = true; rcA = rc.optString("a", ""); rcB = rc.optString("b", ""); rcGo = rc.optString("go", "보기");
+                if (rcGo.length() == 0) rcGo = "보기";
+                if (rcA.length() == 0) rcOn = false;
+            } else { rcOn = false; }
+        } catch (Exception e) { rcOn = false; }
         moving = call.getBoolean("moving", false);
         Integer al = call.getInt("alert", 0);
         alertLevel = al == null ? 0 : Math.max(0, Math.min(2, al));
@@ -666,7 +739,7 @@ public class OverlayPlugin extends Plugin {
             attached = false;
         }
         stopBlink();
-        root = null; border = null; borderAnim = null; borderMode = 0; stripView = null; boardView = null; cardBg = null;
+        root = null; border = null; borderAnim = null; borderMode = 0; stripView = null; boardView = null; recoView = null; cardBg = null;
         if (was) attachOrUpdate();
     }
 
@@ -740,7 +813,10 @@ public class OverlayPlugin extends Plugin {
         infoRow.addView(waitChip, wlp);
         root.addView(infoRow, new LinearLayout.LayoutParams(rowW, LinearLayout.LayoutParams.WRAP_CONTENT));
         boardView = new BoardView(ctx);
-        root.addView(boardView, new LinearLayout.LayoutParams(rowW, LinearLayout.LayoutParams.WRAP_CONTENT));   // ★ 탑승 안내 줄(맨 아래)
+        root.addView(boardView, new LinearLayout.LayoutParams(rowW, LinearLayout.LayoutParams.WRAP_CONTENT));   // ★ 탑승 안내 줄
+        recoView = new RecoView(ctx);
+        recoView.setVisibility(View.GONE);
+        root.addView(recoView, new LinearLayout.LayoutParams(rowW, LinearLayout.LayoutParams.WRAP_CONTENT));    // ★ 추천 줄(맨 아래, 도착 3분 전부터)
 
         lp = new WindowManager.LayoutParams(
                 maxW,
@@ -845,7 +921,11 @@ public class OverlayPlugin extends Plugin {
                         else if (dragged) savePos();
                         else if (armed) { /* 꾹 눌렀다가 그냥 뗌: 아무 일 없음 */ }
                         else if (e.getAction() == MotionEvent.ACTION_UP) {
-                            if (inBottom && boardView != null && boardView.hitBtn(bx - boardView.getLeft(), by - boardView.getTop())) {
+                            int rh = (recoView != null && recoView.getVisibility() == View.VISIBLE && by >= recoView.getTop()) ? recoView.hit(bx - recoView.getLeft(), by - recoView.getTop()) : -1;
+                            if (rh == 1) { act("recoGo"); openApp(); }                    // [보기] — 추천 아이템·맛집으로(앱을 앞으로)
+                            else if (rh == 2) act("recoOk");                               // [확인] — 이 추천 끄기
+                            else if (rh == 0) openApp();                                   // 추천 줄의 글자 부분: 앱으로
+                            else if (inBottom && boardView != null && boardView.hitBtn(bx - boardView.getLeft(), by - boardView.getTop())) {
                                 act("undo".equals(rsSt) ? "undo" : "press");          // [탑승] / [되돌리기]
                             } else if (inBottom && ("wait".equals(rsSt) || "hidden".equals(rsSt))) {
                                 act(("wait".equals(rsSt)) ? "pill" : "open");           // 알약·손잡이를 누르면 탑승 줄이 열린다(앱은 안 열림)
@@ -964,6 +1044,7 @@ public class OverlayPlugin extends Plugin {
             t2.setTextColor(thSub);
             t3.setTextColor(thSub);
             if (boardView != null) boardView.setState(rsSt);
+            if (recoView != null) { recoView.setVisibility(rcOn ? View.VISIBLE : View.GONE); recoView.invalidate(); }
             if (waitChip != null && infoRow != null) {
                 boolean wt = "wait".equals(rsSt);
                 if (wt) {
