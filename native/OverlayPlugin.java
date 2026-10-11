@@ -115,6 +115,7 @@ public class OverlayPlugin extends Plugin {
     private int thBg = Color.WHITE, thFg = Color.parseColor("#111114"), thSub = Color.parseColor("#8E8E93");
     private GradientDrawable cardBg;
     private boolean moving = false;             // ★ 2026-10-06: 열차가 현재 역을 떠나 다음 역으로 가는 중(웹이 판단해 넘겨 준다) — 화살표가 깜박인다
+    private long lastVibeAt = 0L;               // 마지막으로 진동한 경고의 시각(웹이 단계가 바뀐 때 찍어 보냄) — 같은 경고에 두 번 울리지 않는다
     private int alertLevel = 0;                 // 하차 임박: 0 없음 · 2 두 정거장 전(무지개 테두리가 천천히) · 1 한 정거장 전(빠르게)
     private RainbowBorder border;
     private ValueAnimator borderAnim;
@@ -584,6 +585,17 @@ public class OverlayPlugin extends Plugin {
         moving = call.getBoolean("moving", false);
         Integer al = call.getInt("alert", 0);
         alertLevel = al == null ? 0 : Math.max(0, Math.min(2, al));
+        // ★ 2026-10-12 (YJ: "환승 1정거장 전·목적지 2·1정거장 전 — 엣지 하이라이트와 진동"): 테두리와 같은 순간에 진동한다.
+        //   판단은 웹이 한다(alertAt = 단계가 켜지거나 바뀐 시각, alertVibe = 설정에서 진동이 허용됐는지). 여기선 새 경고일 때 한 번만 울린다.
+        try {
+            long alertAt = call.getData().optLong("alertAt", 0L);
+            boolean alertVibe = call.getBoolean("alertVibe", false);
+            if (alertLevel > 0 && alertVibe && alertAt > 0L && alertAt != lastVibeAt
+                    && System.currentTimeMillis() - alertAt < 20000L) {
+                lastVibeAt = alertAt;
+                vibrateAlert(alertLevel);
+            }
+        } catch (Exception ignored) { }
         line2 = nz(call.getString("line2"));
         line3 = nz(call.getString("line3"));
         lastUpdateAt = System.currentTimeMillis();
@@ -978,6 +990,17 @@ public class OverlayPlugin extends Plugin {
         @Override public void setAlpha(int a) { paint.setAlpha(a); }
         @Override public void setColorFilter(ColorFilter f) { paint.setColorFilter(f); }
         @Override public int getOpacity() { return PixelFormat.TRANSLUCENT; }
+    }
+
+    /** 경고 진동. 2단계(두 정거장 전)=두 번, 1단계(한 정거장 전·환승)=세 번. */
+    private void vibrateAlert(int level) {
+        try {
+            android.os.Vibrator v = (android.os.Vibrator) getContext().getSystemService(Context.VIBRATOR_SERVICE);
+            if (v == null || !v.hasVibrator()) return;
+            long[] pat = (level == 1) ? new long[]{0, 300, 100, 300, 100, 300} : new long[]{0, 400, 150, 400};
+            if (Build.VERSION.SDK_INT >= 26) v.vibrate(android.os.VibrationEffect.createWaveform(pat, -1));
+            else v.vibrate(pat, -1);
+        } catch (Exception ignored) { }
     }
 
     /** alert 값에 맞춰 테두리를 켜고(2=6초에 한 바퀴, 1=1.1초에 한 바퀴) 끈다. 메인 스레드에서 부른다. */
