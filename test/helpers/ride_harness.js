@@ -2,6 +2,7 @@
 // GPS 는 context.setGeolocation(앱의 navigator.geolocation)과 BackgroundGeolocation 콜백(확정 뒤 백그라운드 위치)에 같이 넣는다.
 const path = require('path');
 const { chromium } = require('./pw');
+const { rideTrack } = require(path.join(__dirname, '..', '..', 'engine', 'ride-track.js'));
 const html = process.argv[2] && /\.html$/.test(process.argv[2]) ? process.argv[2] : path.join(__dirname, '..', '..', 'www', 'index.html');
 const DEG_PER_M_LNG = 1 / (111320 * Math.cos(37.5547 * Math.PI / 180)), DEG_PER_M_LAT = 1 / 110574;
 
@@ -34,6 +35,13 @@ async function newApp(b, respFn, start) {
       return r.fulfill({ status: 200, headers: H, body: JSON.stringify(o) });
     }
     if (/route-v2/.test(u.host) && /route-v2-app/.test(u.pathname)) { stat.routeReq++; const qs = Object.fromEntries(u.searchParams); (stat.routeQs = stat.routeQs || []).push(qs); return r.fulfill({ status: 200, headers: H, body: JSON.stringify(respFn(qs)) }); }   // respFn 은 요청 쿼리(SX,SY,EX,EY…)를 받을 수 있다(기존 시험은 인자를 안 쓴다)
+    // 2026-10-12: 경로 이탈·후보 맞춤·못 탔다 판정은 진짜 엔진(engine/ride-track.js)으로 답한다. stat.noTrack 이면 예전처럼 빈 응답(엔진이 안 열린 상태).
+    if (/route-v2/.test(u.host) && /ride-track/.test(u.pathname)) {
+      if (r.request().method() === 'OPTIONS') return r.fulfill({ status: 204, headers: Object.assign({ 'access-control-allow-headers': '*', 'access-control-allow-methods': '*' }, H) });
+      if (stat.noTrack) return r.fulfill({ status: 500, headers: H, body: '{}' });
+      try { const P = JSON.parse(r.request().postData() || '{}'); const res = rideTrack(P); stat.trk = (stat.trk || 0) + 1; (stat.trkLog = stat.trkLog || []).push({ t: P.nowMs, off: res.off && res.off.why, dist: res.off && res.off.distM, ridden: res.ridden && res.ridden.id, rOk: res.ridden && res.ridden.ok, nC: (P.cands || []).length, nT: (P.trail || []).length, veh: res.vehicleNow, miss: res.miss && res.miss.why }); if (stat.trkLog.length > 400) stat.trkLog.shift(); return r.fulfill({ status: 200, headers: H, body: JSON.stringify(res) }); }
+      catch (e) { return r.fulfill({ status: 500, headers: H, body: String(e && e.message) }); }
+    }
     if (/route-v2/.test(u.host)) return r.fulfill({ status: 200, headers: H, body: '{}' });
     return r.fulfill({ status: 200, headers: H, body: '{}' }); });
   await page.clock.install({ time: new Date('2026-10-08T21:00:00+09:00') });
