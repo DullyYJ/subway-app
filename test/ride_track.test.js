@@ -38,6 +38,12 @@ ok(!r.off.confirmed, '지하철 진행 중 부정확한 좌표는 이탈 아님 
 // 9) 지하철 진행 중: 벗어난 곳에 가만히 → 면제
 r = T(trail(150, 0, 10, () => ({ lat: 600 / KY, lng: 2000 / KX }) , 15).map((q, i) => [q[0], q[1], q[2] + i * 2e-6, q[3]]), { progIsSub: true });
 ok(!r.off.confirmed, '지하철 진행 중 제자리는 이탈 아님 ' + r.off.why);
+// 9b) 지하철 진행 중: 내려서 걷는 속도(1.3m/s)로 벗어남 → 이탈 / 느리게 어슬렁(0.4m/s)은 면제
+const walkOff = (v) => (s) => ({ lat: 600 / KY, lng: (3000 - s * v) / KX });
+r = T(trail(150, 0, 10, walkOff(1.3), 15), { progIsSub: true });
+ok(r.off.confirmed && r.off.why === 'off_surface_sub', '걷는 속도로 벗어나도 이탈 ' + JSON.stringify(r.off));
+r = T(trail(150, 0, 10, walkOff(0.4), 15), { progIsSub: true });
+ok(!r.off.confirmed && r.off.why === 'sub_still', '어슬렁은 이탈 아님 ' + JSON.stringify(r.off));
 // 10) suppress / notDeparted
 ok(!T(trail(120, 0, 10, offPath), { suppress: ['baseTime'] }).off.confirmed, '예상 시각 모드는 쉰다');
 ok(!T(trail(120, 0, 10, offPath), { notDeparted: true }).off.confirmed, '출발 전은 쉰다');
