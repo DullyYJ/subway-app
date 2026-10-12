@@ -10156,6 +10156,7 @@ function _etaResearchIfStale(){
     if(typeof S !== 'undefined' && S && S.boardedAt) return false;        // 이미 탄 뒤
     if(window._htlBoarded === true) return false;                          // 2026-10-04: 승차 확정 뒤
     try{ if(window._rideEv && window._rideEv().riding) return false; }catch(eR){}   // 2026-10-04: 탑승 증거(GPS·기지국·PF)가 있으면 재탐색 금지
+    try{ if(window._evVehicleNow && window._evVehicleNow()) return false; }catch(eV){}   // 2026-10-12: 차량 속도로 움직이는 중이면(탑승 증거가 쌓이기 직전) 재탐색하지 않는다 — 3분 넘게 늦은 열차가 출발한 직후 유예(4분)가 끝나는 틈
     try{ if(j.depMs != null && window._platGrace && window._platGrace((Date.now() - j.depMs) / 60000)) return false; }catch(eP){}   // 2026-10-04: 승강장에서 늦은 열차를 기다리는 중
     // ★ 2026-09-15: 이동 중에 재탐색이 돌아 '경로를 찾을 수 없습니다'가 떴다.
     //   진행 흔적(GPS 통과 · 지연/단축 보정)이 하나라도 있으면 이미 출발한 것이다.
