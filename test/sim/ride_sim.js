@@ -273,7 +273,8 @@ function judge(r, lay) {
       expect = '경로를 벗어난 뒤 재탐색(현재 위치·같은 도착지)하거나 엔진 후보 경로로 이어서 안내';
       const reacted = rer.length > 0 || r.adopted > 0;
       if (!reacted) issues.push('경로를 벗어났는데 재탐색·경로맞춤이 일어나지 않음');
-      if (rer.length > 3) issues.push('재탐색이 ' + rer.length + '회로 잦음');
+      // strange_place 는 새 경로를 무시하고 1.5km 를 계속 반대로 걸어간다 — 쿨다운(180초)마다 다시 이탈이 맞으므로 5회까지 허용
+      if (rer.length > (r.beh === 'strange_place' ? 5 : 3)) issues.push('재탐색이 ' + rer.length + '회로 잦음');
       if (first && first.errM > 600) issues.push('재탐색 출발 위치가 실제 위치와 ' + first.errM + 'm 어긋남');
       if (first && !first.sameDest) issues.push('재탐색의 도착지가 바뀜');
       if (info.detectSec != null && info.detectSec > 420) issues.push('이탈 후 재탐색까지 ' + info.detectSec + '초');
