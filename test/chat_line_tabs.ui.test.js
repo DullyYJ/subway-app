@@ -76,6 +76,33 @@ let pass = 0; const t = async (name, fn) => { try { await fn(); pass++; console.
     assert.strictEqual(await page.evaluate(() => _chatPostLine()), '5호선', '글에 붙는 노선은 많이 탄 노선');
     await page.evaluate(() => { window._lastHtlSections = []; window._routeLocked = false; window._myLinesSig = null; _safeLS.set('my_lines', [{ l: '9호선', n: 1, t: Date.now() - 5000 }, { l: '5호선', n: 3, t: Date.now() }]); _chatBarRender(); });
   });
+  await t('경로를 × 로 취소하면 취소한 경로의 노선이 앞에서 빠지고, 확정하며 쌓은 기록도 되돌아간다(타기 전이라면)', async () => {
+    const base = await page.evaluate(() => { _chatBarRender(); return { my: _safeLS.get('my_lines', []).map(x => x.l + ':' + x.n), order: _chatItems().slice(0, 4) }; });
+    await page.evaluate(() => {
+      window._lastHtlSections = [{ transportation: { type: 1, name: '인천1호선' } }, { transportation: { type: 1, name: '1호선' } }];
+      window._routeLocked = true; window._htlBoarded = false; _chatBarRender();
+    });
+    let c = await chips();
+    assert.deepStrictEqual(c.slice(0, 3).map(x => x.l), ['all', '인천1호선', '1호선'], '경로 중엔 경로 노선이 앞');
+    assert.ok((await page.evaluate(() => _safeLS.get('my_lines', []))).some(x => x.l === '인천1호선'), '확정하면 쌓인다');
+    await page.evaluate(() => { closeTransitResult(); });
+    c = await chips();
+    assert.deepStrictEqual(c.slice(0, 3).map(x => x.l), base.order.slice(0, 3), '취소하면 경로 노선이 앞에서 빠진다 ' + JSON.stringify(c.slice(0, 4).map(x => x.l)));
+    assert.deepStrictEqual(await page.evaluate(() => _safeLS.get('my_lines', []).map(x => x.l + ':' + x.n)), base.my, '쌓았던 기록이 되돌아간다');
+    assert.strictEqual(await page.evaluate(() => window._lastHtlSections), null);
+  });
+  await t('이미 탑승한 뒤에 닫으면 쌓인 기록은 그대로 두되, 닫은 경로 노선을 앞에 두지는 않는다', async () => {
+    await page.evaluate(() => { _safeLS.set('my_lines', [{ l: '9호선', n: 1, t: Date.now() - 5000 }, { l: '5호선', n: 3, t: Date.now() }]); window._myLinesSig = null; window._myLinesUndo = null; });
+    await page.evaluate(() => {
+      window._lastHtlSections = [{ transportation: { type: 1, name: '인천1호선' } }];
+      window._routeLocked = true; window._htlBoarded = true; _chatBarRender();
+    });
+    await page.evaluate(() => { closeTransitResult(); });
+    assert.ok((await page.evaluate(() => _safeLS.get('my_lines', []))).some(x => x.l === '인천1호선'), '탄 기록은 남는다');
+    const c = await chips();
+    assert.strictEqual(c[1].l, '5호선', '많이 탄 순서로 돌아온다(방금 닫은 경로가 맨 앞이 아니다) ' + JSON.stringify(c.slice(0, 4).map(x => x.l)));
+    await page.evaluate(() => { window._htlBoarded = false; _safeLS.set('my_lines', [{ l: '9호선', n: 1, t: Date.now() - 5000 }, { l: '5호선', n: 3, t: Date.now() }]); window._myLinesSig = null; _chatBarRender(); });
+  });
   if (shots) await page.screenshot({ path: path.join(shots, 'chat_all.png') });
 
   console.log('[전체 방]');
