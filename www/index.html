@@ -32521,6 +32521,9 @@ function _resetRouteInputs(){
 window._resetRouteInputs = _resetRouteInputs;
 
 function closeTransitResult(){
+  // 0) 실시간소통 칩: 취소한 경로의 노선을 앞에 두지 않도록 되돌린다(이미 탑승했다면 쌓인 기록은 그대로 둔다)
+  try{ if(window._htlBoarded !== true) _myLinesRevert(); else window._myLinesSig = null; }catch(e){}
+  window._lastHtlSections = null;
   // 1) GPS 추적 타이머 정지 (이게 살아있으면 혼잡도가 3초마다 다시 채워짐)
   try { if(typeof _transitGpsTimer !== 'undefined' && _transitGpsTimer){ clearInterval(_transitGpsTimer); _transitGpsTimer = null; } } catch(e){}
   try { if(typeof _stopTransitWatch === 'function') _stopTransitWatch(); } catch(e){}
@@ -32543,6 +32546,7 @@ function closeTransitResult(){
   // ★ 2026-10-08: × 로 닫으면 오버레이·백그라운드 GPS·포그라운드 알림·남은 알림 예약도 함께 종료
   try{ if(typeof _cleanupBgTracking === 'function') _cleanupBgTracking(); }catch(e){}
   var rs = document.getElementById('routeStatus'); if(rs) rs.textContent = '설정 필요';
+  try{ if(typeof _chatBarRender === 'function') _chatBarRender(); }catch(e){}   // 실시간소통 칩을 경로 없는 상태로 다시 그린다
   // 5) AI 승무원 즉시 갱신 (경로 없음 브리핑)
   try { if(typeof requestHomeBrief === 'function') requestHomeBrief(false); } catch(e){}
 }
@@ -34069,6 +34073,7 @@ function _myLinesRecord(){
     if(window._myLinesSig === sig) return;
     window._myLinesSig = sig;
     var a = _safeLS.get('my_lines', []); if(!Array.isArray(a)) a = [];
+    try{ window._myLinesUndo = { prev: JSON.parse(JSON.stringify(a)), sig: sig }; }catch(eU){ window._myLinesUndo = null; }   // 경로를 취소하면 이 기록을 되돌린다(_myLinesRevert)
     cur.forEach(function(l){
       var e = null; for(var i = 0; i < a.length; i++){ if(a[i] && a[i].l === l){ e = a[i]; break; } }
       if(!e){ e = { l: l, n: 0, t: 0 }; a.push(e); }
@@ -34077,6 +34082,17 @@ function _myLinesRecord(){
     _safeLS.set('my_lines', a);
   }catch(e){}
 }
+// ★ 2026-10-12 (YJ: "경로취소했는데 실시간소통은 이전 경로 라인을 앞으로 보여주고 있어"): 경로를 × 로 취소하면
+//   · 그려졌던 경로(_lastHtlSections)를 비우고(칩이 더는 그 노선을 앞에 두지 않는다)
+//   · 확정하면서 쌓았던 my_lines 도, 아직 타지 않았다면(_htlBoarded 아님) 쌓기 전 상태로 되돌린다.
+function _myLinesRevert(){
+  try{
+    var u = window._myLinesUndo; window._myLinesUndo = null;
+    if(u && u.sig && u.sig === window._myLinesSig && Array.isArray(u.prev)) _safeLS.set('my_lines', u.prev);
+  }catch(e){}
+  window._myLinesSig = null;
+}
+window._myLinesRevert = _myLinesRevert;
 function _myLinesList(storedOnly){
   try{
     _myLinesRecord();
