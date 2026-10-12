@@ -5861,6 +5861,10 @@ function _doLoadBusStops(lat, lng) {
 // 🗺️ 출발/도착 위치 설정 (지하철역 or 버스정류장)
 // ══════════════════════════════════════════════════════════════
 var _fmapStart = null;  // {type, name, lat, lng, line/nodeId/cityCode}
+// 2026-10-12: 출발지가 '내 위치'(GPS)면 어디서 위치를 받든(앞 화면·백그라운드) 그 좌표를 최신으로 따라간다(정확도 100m 이내만).
+function _myLocFollow(lat, lng, acc){
+  try{ if(_fmapStart && _fmapStart.type === 'gps' && lat != null && lng != null && (acc == null || acc <= 100)){ _fmapStart.lat = lat; _fmapStart.lng = lng; } }catch(e){}
+}
 var _fmapDest  = null;
 
 function _fmapSetLocation(type, loc) {
@@ -8295,6 +8299,9 @@ window._hideRouteLoading = _hideRouteLoading;
   function _resolve(q, existing, cb) {
     // ★ '내 위치'는 절대 키워드 검색하지 않음 — GPS 좌표만 사용
     if(q === '내 위치' || q === '내 위치 찾는 중...'){
+      // ★ 2026-10-12 (YJ: "재탐색했더니 출발이 처음 있던 곳(캠퍼스타운)으로 돌아갔다 — 내 위치는 항상 최신이어야 한다"): 예전에는 처음 잡아 둔 좌표(existing)를 먼저 썼다.
+      //   '내 위치'는 지금 위치다 — 3분 안에 받은 좌표가 있으면 그것을 먼저 쓰고, 없을 때만 저장된 좌표로 간다.
+      if(window._lastGPSLat!=null && window._lastGPSLng!=null && window._lastGPSAt && Date.now() - window._lastGPSAt <= 180000){ cb({type:'gps', name:'내 위치', lat:window._lastGPSLat, lng:window._lastGPSLng}); return; }
       if(existing && existing.lat && existing.lng){ cb(existing); return; }
       if(window._lastGPSLat!=null && window._lastGPSLng!=null){ cb({type:'gps', name:'내 위치', lat:window._lastGPSLat, lng:window._lastGPSLng}); return; }
       cb(null); return;
@@ -11320,6 +11327,9 @@ function _trkPayload(){
   var notDep = false; try{ notDep = (typeof _htlNotDeparted === 'function') ? !!_htlNotDeparted() : false; }catch(e3){}
   var plan = { pts: pts, progIsSub: !!(pn && pn.isSub), progIsBus: !!(pn && pn.isBus), boarded: window._htlBoarded === true, notDeparted: notDep, riding: !!(rd && rd.riding), suppress: suppress };
   if(window._rideEvStartMs) plan.startMs = window._rideEvStartMs;
+  // ★ 2026-10-12 (YJ: "지하철을 잘 타고 가는데 갑자기 경로가 버스로 바뀌었다 — 지하철 탑승 확정이면 이탈 판정을 하면 안 된다"): 지하철 탑승이 확정되고 진행 노드가 지하철이면
+  //   이탈 재탐색도, '타고 있는 차 찾기'(다른 후보 경로로 갈아타기)도 하지 않는다(지하철 선로가 버스 길과 겹쳐 후보 경로에 더 잘 맞는 것으로 읽혔다).
+  var subConf = _trkSubConfirmed(); plan.subConfirmed = subConf; if(subConf) suppress.push('subRiding');
   try{    // 승차 전 지하철 계획: 승차역 좌표를 보내 '걸어서 멀어지는 중인지'를 엔진이 판단하게 한다(버스 승차는 해당 없음)
     if(notDep && typeof _htlBoardIdx === 'function'){
       var bnd = nd[_htlBoardIdx()];
@@ -11334,7 +11344,7 @@ function _trkPayload(){
   var paths = null;
   try{
     var R = window._allRouteResults;
-    if(R && R.all && R.all.length >= 2 && (plan.boarded || plan.riding)){
+    if(R && R.all && R.all.length >= 2 && (plan.boarded || plan.riding) && !subConf){
       paths = []; P.cands = [];
       R.all.forEach(function(pp, ix){
         if(!pp || !pp.subPath) return;
@@ -11396,8 +11406,16 @@ function _trkApply(res, P, paths){
   }catch(e){}
 }
 // 엔진이 고른 후보 → _applyRiddenRoute 가 읽는 모양
+function _trkSubConfirmed(){
+  try{
+    var nd = (typeof _transitNodeData !== 'undefined' && _transitNodeData) ? _transitNodeData : [], g = (window._gpsMaxIdx == null) ? -1 : window._gpsMaxIdx, pn = (g >= 0) ? nd[g] : null;
+    var notDep = (typeof _htlNotDeparted === 'function') ? !!_htlNotDeparted() : false;
+    return window._htlBoarded === true && !!(pn && pn.isSub) && !notDep;
+  }catch(e){ return false; }
+}
 function _trkRidden(res){
   try{
+    if(_trkSubConfirmed()) return null;   // 지하철 탑승 확정 중에는 다른 후보 경로로 갈아타지 않는다
     var r = res && res.ridden, ps = res && res._paths; if(!r || !r.ok || !ps || !ps[r.id]) return null;
     return { path: ps[r.id], fit: { mean: r.mean }, cur: r.curMean == null ? null : { mean: r.curMean }, last: r.last };
   }catch(e){ return null; }
@@ -13830,7 +13848,7 @@ function _startTransitWatch(){
     var la=pos.coords.latitude, ln=pos.coords.longitude, ac=pos.coords.accuracy||99;
     if(la==null||ln==null||isNaN(la)||isNaN(ln)) return;
     if(ac>150) return;                 // 저정확도(실내 튐) 무시
-    window._lastGPSLat=la; window._lastGPSLng=ln; window._lastGPSAt=Date.now();
+    window._lastGPSLat=la; window._lastGPSLng=ln; window._lastGPSAt=Date.now(); _myLocFollow(la, ln, ac);
     if(typeof S!=='undefined') S.lastGPSFix={lat:la,lng:ln,ts:Date.now(),acc:ac};
     // ★ 위치 확보 시 주변 버스 정류장 미리 로드 (탭 열 때 즉시 표시)
     try { if(typeof _prefetchNearStops==='function') _prefetchNearStops(la, ln); } catch(e){}
@@ -27459,7 +27477,7 @@ function _startBgGeolocation(){
       try{
         var _bla = location.latitude, _bln = location.longitude, _bac = location.accuracy || 99;
         if(_bla != null && _bln != null && !isNaN(_bla) && !isNaN(_bln) && _bac <= 150){
-          window._lastGPSLat = _bla; window._lastGPSLng = _bln; window._lastGPSAt = Date.now();
+          window._lastGPSLat = _bla; window._lastGPSLng = _bln; window._lastGPSAt = Date.now(); _myLocFollow(_bla, _bln, _bac);
           if(typeof S !== 'undefined') S.lastGPSFix = { lat:_bla, lng:_bln, ts:Date.now(), acc:_bac };
           if(typeof _transitNodeData !== 'undefined' && _transitNodeData && _transitNodeData.length
              && typeof _updateTransitGps === 'function') _updateTransitGps();
@@ -28607,9 +28625,12 @@ function _ovlDiagShow(){
 }
 window._ovlDiagShow = _ovlDiagShow;
 var _ovlTickRtAt = 0;
+var _ovlTickPrevAt = 0;
 window._ovlNativeTick = function(){
   try{
     var now = Date.now();
+    // 2026-10-12: 네이티브 깨우기 간격을 남긴다 — 화면이 꺼진 동안에도 5초가 유지되는지 다음 시험에서 이 줄로 확인한다(12초 넘게 비면 한 줄).
+    try{ if(_ovlTickPrevAt && now - _ovlTickPrevAt > 12000 && document.hidden) _ovlDiag('틱간격', Math.round((now - _ovlTickPrevAt) / 1000) + '초 만에 깨움(5초 기준)'); _ovlTickPrevAt = now; }catch(eGap){}
     try{ _ovlKeepAliveSync(); }catch(e0){}
     // ★ 2026-10-02: 확정한 여정인데 백그라운드 위치 감시가 없으면(시작 조건 불발·끊김) 여기서 다시 켠다(30초 간격)
     try{
