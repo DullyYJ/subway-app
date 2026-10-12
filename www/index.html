@@ -37483,7 +37483,7 @@ function create(stations, opts){
   for(var dd = -300; dd <= 600; dd += 30) DELAYS.push(dd);   // 2026-10-12: -120 → -300 (인천1호선 실측: 열차가 시각표보다 2분 넘게 빠르다. 하한이 -2분이면 빨리 달리는 열차를 '정차 중'으로 오해)
   var K = DELAYS.length, i;
   var subs = DELAYS.map(function(d){
-    return { delay: d, w: Math.exp(-Math.abs(d) / (d < 0 ? 120 : 200)), P: new Array(M) };
+    return { delay: d, w: Math.exp(-Math.abs(d) / (d < 0 ? 60 : 200)), P: new Array(M) };
   });
   var self = { N: N, M: M, cfg: cfg, lastMs: null };
   var lastGpsTs = 0, lastCellAt = 0;
