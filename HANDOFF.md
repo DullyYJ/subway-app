@@ -709,3 +709,8 @@
 - 증상: 경로를 × 로 취소했는데 실시간소통 칩이 취소한 경로의 노선(📍)을 계속 앞에 보여줬다. 원인 두 가지: ① `closeTransitResult` 가 `window._lastHtlSections`(그려진 경로)를 비우지 않아 `_routeSubLines` 가 계속 그 노선을 돌려줬고, ② 확정할 때 `_myLinesRecord` 가 쌓은 my_lines 기록이 취소 뒤에도 남았다.
 - 수정: `closeTransitResult` 맨 앞에서 (탑승 전이면) `_myLinesRevert` 로 쌓기 전 my_lines 로 되돌리고(`_myLinesUndo` 에 직전 상태 보관), `_lastHtlSections=null`, 닫은 뒤 `_chatBarRender()` 로 칩을 다시 그린다. 이미 탑승(`_htlBoarded`)한 뒤 닫으면 탄 기록은 그대로 두고 앞자리만 비운다.
 - 시험: chat_line_tabs 27건(취소 2건 추가).
+
+## 2026-10-12 탑승 시뮬레이션·역할 분담 점검 (코드 수정 없음)
+- `test/sim/` 에 탑승 시뮬레이션 116건을 추가했다(실행법 README.md, 결과 RESULTS_2026-10-12.md, 표 results/summary.md). 앱 코드는 수정하지 않았고 CI 매트릭스에도 넣지 않았다(느림).
+- 발견: (1) 이탈 감지가 위치 상태머신 입력 부재로 꺼져 있음(locOnGps 는 승차 대기 틱에서만 호출) (2) 재탐색 후 `_pipTrip` 이 복구되지 않아 오버레이가 꺼진 채 유지 (3) 차량이 4분 넘게 늦으면 재탐색 (4) 지하철 먼저 계획은 이탈 면제·타지 않고도 승차 처리 (5) bus_sub 지하 구간 정체. 자세한 줄 번호와 수정 제안은 RESULTS 참고. 수정은 아직 하지 않았다.
+- 엔진/앱 역할 분담 점검은 test/sim/ENGINE_BOUNDARY_AUDIT_2026-10-12.md. 이번 날짜의 혼잡도 분석 머리글(깜박이는 점·혼잡도 표시를 제목 오른쪽으로 이동)도 반영되어 있다.
