@@ -417,6 +417,17 @@ t('승차역 시각은 내가 그 역에 닿는 시각(boardArriveMs)보다 이�
   assert.strictEqual(ok.arr[1], '17:35');
 });
 
+t('지연 수준이 그려진 값과 0.4분 안이면 그린 값을 유지한다(시각이 1분씩 흔들리지 않게), 넘으면 따라간다', () => {
+  const nodes = scene(), base = { nowMs: at(17, 38, 5), nodes: nodes, passes: [P(1, 17, 35, 48, 'board'), P(2, 17, 38, 5)], boarded: true };
+  const r0 = rideEta(base), d0 = r0.delayMin;
+  const r1 = rideEta(Object.assign({}, base, { prevLevelMin: d0 + 0.25, prevAnchorIdx: r0.anchorIdx }));
+  assert.ok(Math.abs(r1.delayMin - (d0 + 0.25)) < 1e-6, '유지 ' + d0 + ' → ' + r1.delayMin);
+  const r2 = rideEta(Object.assign({}, base, { prevLevelMin: d0 + 1.5, prevAnchorIdx: r0.anchorIdx }));
+  assert.ok(Math.abs(r2.delayMin - d0) < 1e-6, '크게 다르면 새 값 ' + r2.delayMin);
+  const r3 = rideEta(Object.assign({}, base, { prevLevelMin: d0 + 0.25, prevAnchorIdx: r0.anchorIdx + 3 }));
+  assert.ok(Math.abs(r3.delayMin - d0) < 1e-6, '앞선 앵커의 값은 쓰지 않는다');
+});
+
 console.log('[Worker 진입점 handleRideEta]');
 (async () => {
   const mkReq = (method, body) => new Request('https://example.test/ride-eta', { method: method, body: body == null ? undefined : (typeof body === 'string' ? body : JSON.stringify(body)), headers: { 'content-type': 'application/json' } });
