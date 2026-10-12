@@ -33,6 +33,8 @@ jobs:
           - holidays_decide.test.js
           - ride_eta.test.js
           - ride_evidence.ui.test.js
+          - ride_track.test.js
+          - ride_track.ui.test.js
           - rt_arrival_cands.ui.test.js
           - shop_version.ui.test.js
           - tabs_smoke.ui.test.js
