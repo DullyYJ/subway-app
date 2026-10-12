@@ -41,7 +41,7 @@ async function makeRunner(app, lay, o) {
       const nd = (typeof _transitNodeData !== 'undefined' && _transitNodeData) ? _transitNodeData : [];
       const ov = window.__ovl.length ? window.__ovl[window.__ovl.length - 1] : null;
       let cn = null; if (ov && ov.cells && ov.cells[ov.cur]) cn = ov.cells[ov.cur].n;
-      return { gm: window._gpsMaxIdx, gc: window._gpsConfirmIdx, boarded: window._htlBoarded === true, locked: window._routeLocked === true, mp: window._markerPos || null,
+      return { tm: window._timeMaxIdx, pfo: (function(){ try { const o = window._pfPosOverride(); return o ? [o.fromIdx, o.toIdx, +(o.ratio||0).toFixed(2)] : null; } catch (e) { return -1; } })(), tl: (function(){ try { const o = window._estimateTimelinePos(); return o ? [o.fromIdx, o.toIdx, +(o.ratio||0).toFixed(2)] : null; } catch (e) { return -1; } })(), gm: window._gpsMaxIdx, gc: window._gpsConfirmIdx, boarded: window._htlBoarded === true, locked: window._routeLocked === true, mp: window._markerPos || null,
         nodes: nd.map(n => [n.name, n.lat, n.lng, n.isWalk ? 1 : 0]), ovl: ov && { active: ov.active, cur: ov.cur, curName: cn, alert: ov.alert, l1: ov.l1 || ov.line1 || '' }, ovN: window.__ovl.length, now: Date.now(),
         src: window._lastRouteSrc || null,
         pip: [(function(){ try { return _pipHasRoute() ? 1 : 0; } catch (e) { return -1; } })(), (function(){ try { return _ovlUsable() ? 1 : 0; } catch (e) { return -1; } })(), window._pipTrip ? 1 : 0, window._routeLocked ? 1 : 0, (typeof LOCFSM !== 'undefined' ? LOCFSM.state : '-')] };
@@ -57,7 +57,7 @@ async function makeRunner(app, lay, o) {
     let ovlM = null;
     if (s.ovl && s.ovl.active && s.ovl.curName) { const i = names.indexOf(s.ovl.curName); if (i >= 0 && s.nodes[i][1] != null) ovlM = W.dist(W.fromLL(s.nodes[i][1], s.nodes[i][2]), R.pos); }
     const smp = { t: Math.round(R.simT), gm: s.gm, truthIdx, boarded: s.boarded, locked: s.locked, markerM: markerM == null ? null : Math.round(markerM), ovlM: ovlM == null ? null : Math.round(ovlM),
-      ovlOn: !!(s.ovl && s.ovl.active), ovlCur: s.ovl ? s.ovl.curName : null, off: Math.round(offPlan(R.pos)), nNodes: s.nodes.length, bursts: baseBursts().length - R.bursts0, onVeh: R.onVeh, src: s.src, pip: s.pip, mp: s.mp ? [s.mp.from, s.mp.to, +(s.mp.ratio || 0).toFixed(2), s.mp.gps ? 1 : 0] : null };
+      ovlOn: !!(s.ovl && s.ovl.active), ovlCur: s.ovl ? s.ovl.curName : null, off: Math.round(offPlan(R.pos)), nNodes: s.nodes.length, bursts: baseBursts().length - R.bursts0, onVeh: R.onVeh, tm: s.tm, pfo: s.pfo, tl: s.tl, src: s.src, pip: s.pip, mp: s.mp ? [s.mp.from, s.mp.to, +(s.mp.ratio || 0).toFixed(2), s.mp.gps ? 1 : 0] : null };
     R.samples.push(smp);
     // 재탐색 이벤트: 새 요청 묶음이 생겼는가
     const bs = baseBursts();
@@ -238,6 +238,7 @@ async function runOne(b, sc) {
   const diag = await app.page.evaluate(() => { try { return (JSON.parse(localStorage.getItem('ovlDiag') || '[]') || []).map(String); } catch (e) { return []; } }).catch(() => []);
   const adopted = diag.filter(x => /경로맞춤/.test(x)).length;
   const rec = { id: sc.id, layout: sc.layout, beh: sc.beh, noise: sc.noise, offset: sc.offset, fsm: sc.fsm || 'asis', wallSec: Math.round((Date.now() - t0) / 1000), crashed, pageErrors: [...new Set(app.errs)].slice(0, 5), adopted, diagTail: diag.slice(-6).map(s => s.slice(0, 140)),
+    trkCalls: app.stat.trk || 0, trkKey: (app.stat.trkLog || []).filter((x, i, a) => i === 0 || x.off !== a[i - 1].off || x.ridden !== a[i - 1].ridden || x.nC !== a[i - 1].nC || x.miss !== a[i - 1].miss).slice(0, 60), diagKey: diag.filter(x => /경로이탈|경로맞춤|경로판정|승차확정|승차판단/.test(x)).slice(0, 30).map(s => s.slice(0, 160)),
     events: R ? R.events : [], devAt: R ? R.devAt : null, simEnd: R ? Math.round(R.simT) : 0, requests: app.stat.routeQs ? burstsOf(app.stat.routeQs).length : 0, samples: R ? R.samples : [] };
   await app.ctx.close();
   return rec;
@@ -290,7 +291,8 @@ function judge(r, lay) {
   if (r.beh === 'stay_home' || r.beh === 'walk_along') {
     const mx = Math.max(-1, ...S.map(s => (s.gm == null ? -1 : s.gm)));
     info.maxGm = mx; info.boardNode = 2;
-    if (mx > 2) issues.push('타지 않았는데 진행도가 승차 정류장(2) 너머 ' + mx + ' 까지 올라감');
+    // 걸어서 노선을 따라가다 다음 역 앞을 지나면(지하철은 역 간격 1km) 진행도가 그 역까지 오르는 것은 '사람의 위치 추적'이지 탑승이 아니다 → walk_along 은 승차 확정 여부만 본다(2026-10-12).
+    if (mx > 2 && r.beh === 'stay_home') issues.push('타지 않았는데 진행도가 승차 정류장(2) 너머 ' + mx + ' 까지 올라감');
     if (S.some(s => s.boarded)) issues.push('타지 않았는데 승차 확정됨');
   }
   return { expect, info, issues, verdict: issues.length ? 'FAIL' : (r.beh === 'skip_transfer' ? 'INFO' : 'PASS') };
