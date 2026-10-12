@@ -28,7 +28,9 @@ var RIDE_ETA_DEFAULTS = {
   // 기지국 선행 통과는 실제 통과보다 1~3분 이르다.
   cellLeadMinSec: 60, cellLeadMaxSec: 180,
   // GPS 통과: 가장 가까웠던 순간 ±15초
-  gpsTolSec: 15,
+  gpsTolSec: 25,      // 2026-10-12: 15 → 25 (역 근처 확인 좌표의 시각 오차를 넉넉히: 정확도 60m 이내 좌표 + 반경 90~160m 최근접 판정)
+  // 2026-10-12 (YJ: 시각이 1~2분씩 계속 바뀌어 보인다): 앱이 마지막으로 그린 지연 수준(prevLevelMin)과 새 수준 차이가 이 값(분) 안이면 그린 값을 유지한다. 새 통과 증거가 실제로 어긋남을 보일 때만 시각이 움직인다.
+  levelDeadbandMin: 0.4,
   // 움직임 시작(src 'move'): 앱이 위치 궤적에서 '달리기가 시작된 때'를 되짚어 찍은 값(앱: 탑승 증거가 선 시각 − 60초). 증거가 서는 때는 출발 뒤 25~120초라
   //   찍힌 값은 실제 출발보다 −35~+60초(이르거나 늦다)에 놓이고, 문턱 근처 오차 ±10초. (실측 전의 가정 — 실차 기록으로 보정할 값)
   moveLagMinSec: -35, moveLagMaxSec: 60, moveTolSec: 10,
@@ -257,6 +259,10 @@ function rideEta(input) {
   }
   var anchor = ps[ps.length - 1];
   var level = legLevel[legOf[anchor.idx]];
+  if (input.prevLevelMin != null && isFinite(+input.prevLevelMin) && O.levelDeadbandMin > 0 && !(input.prevAnchorIdx > anchor.idx) && Math.abs(level - +input.prevLevelMin) < O.levelDeadbandMin && Math.abs(level - +input.prevLevelMin) > 1e-6) {
+    notes.push('지연 수준 ' + (Math.round(level * 100) / 100) + '분은 그려진 값(' + (Math.round(+input.prevLevelMin * 100) / 100) + '분)과 ' + O.levelDeadbandMin + '분 안이라 유지');
+    level = +input.prevLevelMin;
+  }
   if (legKeys.length > 1) notes.push('앞 구간 ' + (legKeys.length - 1) + '개는 자기 구간 통과만으로 고정(뒤 구간 지연에 안 끌려감)');
 
   // ── 7. 노드별 시각 만들기
