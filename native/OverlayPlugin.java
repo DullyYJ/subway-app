@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.animation.ValueAnimator;
 import android.graphics.Canvas;
+import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.ColorFilter;
 import android.graphics.Matrix;
@@ -104,7 +105,13 @@ public class OverlayPlugin extends Plugin {
     // ★ 2026-10-11 (YJ: "추천은 오버레이 하단에 · 추천아이템 연결 버튼 · 끄는 확인 버튼"): 도착 3분 전부터 맨 아래에 두 줄 추천 + [보기] [확인]. 문구·시각·갈 곳은 웹이 정한다.
     private boolean rcOn = false;
     private String rcA = "", rcB = "", rcGo = "보기";
+    // ★ 2026-10-13 (YJ: "도착 전 추천 때 오버레이 하단이 확장되면서 캐릭터 일부가 나와서 추천을 보여줘"): 웹이 정한 캐릭터 둘(rcCh 큰 쪽·rcCh2 작은 쪽)을
+    //   추천 줄 위로 내민다. 그림(www/chars/*.webp)은 앱 자산에서 읽어 그리기만 한다 — 문구·시각·갈 곳은 그대로 웹이 정한다.
+    private long rcAt = 0;
+    private String rcCh = "", rcCh2 = "";
     private RecoView recoView;
+    private static final String[] RC_CHARS = { "dolsom", "lovel", "dudung", "sul", "ppopu", "chaeng" };
+    private final java.util.HashMap<String, Bitmap> rcBmp = new java.util.HashMap<String, Bitmap>();
     private Cell[] strip = new Cell[0];
     private int stripCur = 0;                   // 현위치 칸 번호(strip 안에서)
     // ★ 2026-10-11 (YJ: "오버레이 좌우 스크롤 가능하게 · 마커도 깜박이게"): 웹이 현위치 앞뒤 칸을 넉넉히(최대 50칸) 보내고,
@@ -401,15 +408,44 @@ public class OverlayPlugin extends Plugin {
         }
     }
 
-    /** 맨 아래 추천 줄: 왼쪽 두 줄 문구, 오른쪽 [보기](추천 아이템·맛집으로) [확인](이 추천 끄기). */
+    /** 맨 아래 추천 줄: 왼쪽 두 줄 문구, 오른쪽 [보기](추천 아이템·맛집으로) [확인](이 추천 끄기).
+     *  ★ 2026-10-13: 나타날 때 줄 위쪽이 늘어나며(약 0.4초) 캐릭터 둘이 줄 뒤에서 올라와 위쪽 절반만 내민 채 가만히 까딱거린다(캐릭터마다 몸짓이 다르다).
+     *  그림은 앱 자산(public/chars/*.webp)을 그대로 쓰고, 여기서는 이동·기울기·찌그러짐만 계산한다. 이름·광고 문구는 없다. */
     private class RecoView extends View {
         private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint bp = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
         private final TextPaint tp = new TextPaint(Paint.ANTI_ALIAS_FLAG);
         private final RectF rf = new RectF();
         private final RectF go = new RectF(), ok = new RectF();
+        private final Matrix mx = new Matrix();
+        private long t0 = 0;
+        private String key = "";
+        private boolean laidOut = false;
         RecoView(Context c) { super(c); }
+        private int headDp() { return 36; }
+        /** 추천이 새로 뜨거나 다시 보이면 처음부터 확장·등장을 시작한다(같은 추천이 계속 보이는 중이면 이어서). */
+        void begin(boolean wasVisible) {
+            String k = rcAt + "|" + rcCh + "|" + rcCh2;
+            if (!wasVisible || !k.equals(key)) {
+                key = k; t0 = android.os.SystemClock.uptimeMillis(); laidOut = false;
+                if (rcCh.length() == 0 || rcCh2.length() == 0) {   // 웹이 안 정했으면 추천 시각으로 고정 선택(재그림에도 안 바뀐다)
+                    int a = (int) Math.abs((rcAt / 1000L) % RC_CHARS.length);
+                    if (rcCh.length() == 0) rcCh = RC_CHARS[a];
+                    if (rcCh2.length() == 0) rcCh2 = RC_CHARS[(a + 1 + (int) Math.abs((rcAt / 7L) % (RC_CHARS.length - 1))) % RC_CHARS.length];
+                }
+            }
+            requestLayout();
+        }
+        private float grow() {
+            if (t0 == 0) return 1f;
+            float u = (android.os.SystemClock.uptimeMillis() - t0) / 380f;
+            if (u >= 1f) return 1f;
+            if (u <= 0f) return 0f;
+            return 1f - (1f - u) * (1f - u) * (1f - u);
+        }
         @Override protected void onMeasure(int wSpec, int hSpec) {
-            setMeasuredDimension(MeasureSpec.getSize(wSpec), dp(44));
+            int add = Math.round(dp(headDp()) * grow());
+            setMeasuredDimension(MeasureSpec.getSize(wSpec), dp(44) + add);
         }
         /** 1 = [보기], 2 = [확인], 0 = 버튼 밖(손가락 오차를 감안해 사방 6dp 넓게). */
         int hit(float x, float y) {
@@ -433,15 +469,96 @@ public class OverlayPlugin extends Plugin {
             tp.setTypeface(Typeface.DEFAULT_BOLD);
             return tp.measureText(s == null ? "" : s);
         }
+        private Bitmap bmp(String id) {
+            if (id == null || id.length() == 0) return null;
+            if (rcBmp.containsKey(id)) return rcBmp.get(id);
+            Bitmap b = null;
+            try {
+                java.io.InputStream in = getContext().getAssets().open("public/chars/" + id + ".webp");
+                try { b = android.graphics.BitmapFactory.decodeStream(in); } finally { in.close(); }
+            } catch (Exception ignored) { }
+            rcBmp.put(id, b);
+            return b;
+        }
+        private float ease(float u) {   // 살짝 넘쳤다 돌아오는 등장(오버슛)
+            if (u <= 0f) return 0f;
+            if (u >= 1f) return 1f;
+            float c = 1.9f, x = u - 1f;
+            return 1f + (c + 1f) * x * x * x + c * x * x;
+        }
+        /** 캐릭터 하나: 줄 뒤(feetY)에서 올라와 위쪽만 보인다. who: 0 큰 쪽(왼), 1 작은 쪽(오른). */
+        private void drawChar(Canvas cv, String id, float cx, float feetY, float hPx, float delay, float rise, float t) {
+            Bitmap b = bmp(id);
+            if (b == null) return;
+            float u = (t - delay) / 0.55f;
+            float r = ease(u);
+            if (u <= 0f) return;
+            float sc = hPx / b.getHeight();
+            float bw = b.getWidth() * sc;
+            float dy = (1f - r) * hPx * 0.95f;      // 아래(줄 뒤)에서 올라온다
+            float rot = 0f, sx = 1f, sy = 1f, hop = 0f, sk = 0f;
+            float w = Math.max(0f, t - delay - 0.5f);   // 등장 끝난 뒤의 까딱거림
+            float f = Math.min(1f, w / 0.3f);
+            double tt = t * 6.2831853;
+            if ("dolsom".equals(id)) {            // 솜뭉치 강아지: 통통 두 번 튀고 쉬기
+                float ph = (float) ((w % 1.6f) / 1.6f);
+                float hv = ph < 0.5f ? (float) Math.abs(Math.sin(ph * 2 * Math.PI * 1.0 * 2)) : 0f;
+                hop = hv * dp(4.5f) * f; sy = 1f - 0.07f * (1f - hv) * (ph < 0.5f ? 1f : 0f) * f; sx = 2f - sy; rot = (float) Math.sin(w * 3.1) * 3f * f;
+            } else if ("lovel".equals(id)) {      // 고양이: 느리게 좌우로 몸을 기울인다
+                rot = (float) Math.sin(w * 2.2) * 6f * f; sk = (float) Math.sin(w * 2.2 + 0.8) * 0.05f * f; hop = (float) (Math.sin(w * 4.4) * 0.5 + 0.5) * dp(1.2f) * f;
+            } else if ("dudung".equals(id)) {     // 두더지: 잠깐 숨었다가 불쑥 다시 올라온다
+                float ph = (w % 2.6f);
+                float dd = 0f;
+                if (ph > 1.5f && ph < 1.9f) dd = (float) Math.sin((ph - 1.5f) / 0.4f * Math.PI) * 0.34f;
+                hop = -dd * hPx * f; rot = (float) Math.sin(w * 5.0) * 2f * f; sy = 1f + (dd > 0.02f ? -0.05f : 0f);
+            } else if ("sul".equals(id)) {        // 독수리: 날개를 펴듯 가로로 부풀었다 오므린다
+                float ph = (w % 2.2f);
+                float fl = (ph < 0.9f) ? (float) Math.abs(Math.sin(ph / 0.9f * Math.PI * 3)) : 0f;
+                sx = 1f + 0.10f * fl * f; sy = 1f - 0.04f * fl * f; hop = fl * dp(2.4f) * f; rot = (float) Math.sin(w * 2.0) * 2.5f * f;
+            } else if ("ppopu".equals(id)) {      // 푸들: 신나서 한 번 튀고 한 번 더 작게 튄다
+                float ph = (w % 1.9f);
+                float hv = 0f;
+                if (ph < 0.35f) hv = (float) Math.sin(ph / 0.35f * Math.PI);
+                else if (ph < 0.6f) hv = 0.5f * (float) Math.sin((ph - 0.35f) / 0.25f * Math.PI);
+                hop = hv * dp(5.5f) * f; sy = 1f + 0.05f * hv * f; sx = 1f - 0.03f * hv * f; rot = (float) Math.sin(w * 4.0) * 3.5f * f;
+            } else {                              // 올챙이(챙챙): 몸을 꼬듯 흔든다
+                rot = (float) Math.sin(w * 7.5) * 9f * f; sk = (float) Math.sin(w * 7.5 - 0.9) * 0.10f * f; sy = 1f + (float) Math.sin(w * 15.0) * 0.03f * f; hop = (float) (Math.sin(w * 3.0) * 0.5 + 0.5) * dp(1.5f) * f;
+            }
+            float rr = (r > 1f) ? 1f : r;
+            // 등장 중에는 올라오면서 살짝 기울었다 선다
+            rot += (1f - rr) * (id.hashCode() % 2 == 0 ? -10f : 10f);
+            float footX = cx, footY = feetY + dy - hop - rise;
+            mx.reset();
+            mx.postScale(sc * sx, sc * sy);     // 아래 가운데(발끝)를 기준점으로 쓰려고 먼저 크기만 바꾼다
+            mx.postSkew(sk, 0f, b.getWidth() / 2f * sc * sx, b.getHeight() * sc * sy);
+            mx.postRotate(rot, b.getWidth() / 2f * sc * sx, b.getHeight() * sc * sy);
+            mx.postTranslate(footX - b.getWidth() / 2f * sc * sx, footY - b.getHeight() * sc * sy);
+            cv.drawBitmap(b, mx, bp);
+        }
         @Override protected void onDraw(Canvas cv) {
             float w = getWidth(), h = getHeight();
             go.setEmpty(); ok.setEmpty();
             if (!rcOn) return;
+            float top = h - dp(44);                  // 추천 줄이 시작되는 높이(위쪽은 캐릭터가 나오는 자리)
+            float tsec = t0 == 0 ? 9f : (android.os.SystemClock.uptimeMillis() - t0) / 1000f;
+            // 캐릭터는 줄 뒤에서 올라오므로 줄 위쪽 자리에서만 보이게 자른다(줄 아래로는 안 나온다)
+            if (top > dp(1)) {
+                cv.save();
+                cv.clipRect(0, 0, w, top + dp(5));
+                float big = dp(58), small = dp(46);
+                float feet = top + dp(21);           // 발은 줄 뒤로 숨는다
+                drawChar(cv, rcCh, dp(34), feet, big, 0.10f, 0f, tsec);
+                drawChar(cv, rcCh2, w - dp(52) - dp(20), top + dp(17), small, 0.28f, 0f, tsec);
+                cv.restore();
+            }
             p.setStyle(Paint.Style.FILL);
-            rf.set(0, dp(4), w, h - dp(2));
+            rf.set(0, top + dp(4), w, h - dp(2));
+            // 캐릭터 몸이 비치지 않게 먼저 카드 바탕색으로 한 번 칠한 뒤 옅은 색을 올린다
+            p.setColor(thBg);
+            cv.drawRoundRect(rf, dp(10), dp(10), p);
             p.setColor((0x1A << 24) | (thSub & 0x00FFFFFF));
             cv.drawRoundRect(rf, dp(10), dp(10), p);
-            float bh = dp(28), by = (h - bh) / 2f + dp(1), gap = dp(6), edge = dp(8);
+            float bh = dp(28), by = top + (dp(44) - bh) / 2f + dp(1), gap = dp(6), edge = dp(8);
             float okW = Math.max(dp(48), mw("확인", 12f) + dp(20));
             float goW = Math.max(dp(56), mw(rcGo, 12f) + dp(22));
             ok.set(w - edge - okW, by, w - edge, by + bh);
@@ -454,11 +571,14 @@ public class OverlayPlugin extends Plugin {
             txt(cv, "확인", ok.centerX(), ok.centerY() + dp(4.2f), okW - dp(8), 12f, thFg, true, Paint.Align.CENTER);
             float tx = edge + dp(2), maxW = go.left - tx - dp(8);
             if (rcB.length() > 0) {
-                txt(cv, rcA, tx, dp(4) + dp(17), maxW, 12f, thFg, true, Paint.Align.LEFT);
-                txt(cv, rcB, tx, dp(4) + dp(32), maxW, 11f, thSub, false, Paint.Align.LEFT);
+                txt(cv, rcA, tx, top + dp(4) + dp(17), maxW, 12f, thFg, true, Paint.Align.LEFT);
+                txt(cv, rcB, tx, top + dp(4) + dp(32), maxW, 11f, thSub, false, Paint.Align.LEFT);
             } else {
-                txt(cv, rcA, tx, h / 2f + dp(4.5f), maxW, 12f, thFg, true, Paint.Align.LEFT);
+                txt(cv, rcA, tx, top + dp(44) / 2f + dp(4.5f), maxW, 12f, thFg, true, Paint.Align.LEFT);
             }
+            // 확장 중이면 다음 프레임에 높이를 다시 재고, 확장이 끝나도 보이는 동안은 몸짓을 위해 약 30프레임/초로 다시 그린다
+            if (t0 != 0 && grow() < 1f) postOnAnimation(new Runnable() { @Override public void run() { requestLayout(); } });
+            else postInvalidateDelayed(33);
         }
     }
 
@@ -657,6 +777,8 @@ public class OverlayPlugin extends Plugin {
                 rcOn = true; rcA = rc.optString("a", ""); rcB = rc.optString("b", ""); rcGo = rc.optString("go", "보기");
                 if (rcGo.length() == 0) rcGo = "보기";
                 if (rcA.length() == 0) rcOn = false;
+                rcAt = (long) rc.optDouble("at", 0);
+                rcCh = rc.optString("ch", ""); rcCh2 = rc.optString("ch2", "");
             } else { rcOn = false; }
         } catch (Exception e) { rcOn = false; }
         moving = call.getBoolean("moving", false);
@@ -1283,7 +1405,12 @@ public class OverlayPlugin extends Plugin {
             t2.setTextColor(thSub);
             t3.setTextColor(thSub);
             if (boardView != null) boardView.setState(rsSt);
-            if (recoView != null) { recoView.setVisibility(rcOn ? View.VISIBLE : View.GONE); recoView.invalidate(); }
+            if (recoView != null) {
+                boolean rcWas = recoView.getVisibility() == View.VISIBLE;
+                recoView.setVisibility(rcOn ? View.VISIBLE : View.GONE);
+                if (rcOn) recoView.begin(rcWas);
+                recoView.invalidate();
+            }
             if (waitChip != null && infoRow != null) {
                 boolean wt = "wait".equals(rsSt);
                 if (wt) {
