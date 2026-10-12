@@ -37,6 +37,8 @@ import android.view.View;
 import android.view.VelocityTracker;
 import android.view.ViewConfiguration;
 import android.view.animation.DecelerateInterpolator;
+import android.view.animation.OvershootInterpolator;
+import android.view.ViewTreeObserver;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
@@ -120,6 +122,22 @@ public class OverlayPlugin extends Plugin {
     private RainbowBorder border;
     private ValueAnimator borderAnim;
     private int borderMode = 0;
+
+    // ★ 2026-10-12 (YJ: "위로 한 번 쓸면 알약 — 현재 상황(대기·현위치)만 보여주고, 하차 3정거장 전엔 알약이 깜박이고,
+    //   환승 1정거장 전·목적지 2·1정거장 전엔 알약이 스프링처럼 펼쳐지며 맨 위로 가서 엣지 강조. 알림이 지나면 다시 알약으로"):
+    //   userPill = 사용자가 알약으로 접어 둔 상태(저장됨). 접힌 동안 웹의 경고 단계(alert 1·2)가 켜지면 자동으로 펼쳐 맨 위로 옮기고(원래 위치는 기억),
+    //   경고가 끝나면 다시 알약으로 접어 원래 위치로 돌려놓는다. 알약일 때만 쓰는 신호: pre(목적지 3정거장 전) = 알약 깜박임.
+    //   알약일 때는 테두리·탑승 줄·추천 줄·칸 줄을 그리지 않고, 진동은 모드와 상관없이 기존대로 울린다.
+    private boolean userPill = false;           // 사용자가 접어 둠
+    private boolean curPill = false;            // 지금 그려진 모드(true=알약)
+    private boolean movedForAlert = false;      // 경고로 펼치며 위치를 옮겼다(돌아갈 자리를 restoreX/Y 에 기억)
+    private int restoreX = 0, restoreY = 0, pillX = 0;
+    private long curAlertAt = 0L, dismissedAlertAt = -1L;   // 경고 시각 · 알약으로 다시 접은 경고(같은 경고로는 다시 펼치지 않는다)
+    private boolean preAlert = false;           // 웹: 최종 목적지 3정거장 전
+    private PillView pillView;
+    private View gapView;
+    private int fullW = 0;
+    private ValueAnimator pillBlinkAnim;
 
     private WindowManager wm;
     private WindowManager.LayoutParams lp;
@@ -477,6 +495,52 @@ public class OverlayPlugin extends Plugin {
         }
     }
 
+    /**
+     * ★ 2026-10-12: 알약 모드의 한 줄 — 현재 상황(대기 · 현위치 ▸ 다음역)만 보여준다. 점 색: 대기·정차=주황, 이동 중=파랑.
+     */
+    private class PillView extends View {
+        private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final TextPaint tp = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+        private String s = "";
+        private float tw = 0f;
+        PillView(Context c) { super(c); }
+        void setLabel(String label) {
+            String t = label == null ? "" : label;
+            tp.setTextSize(12f * getResources().getDisplayMetrics().scaledDensity);
+            tp.setTypeface(Typeface.DEFAULT_BOLD);
+            int maxW = Math.max(dp(80), Math.round(realMetrics().widthPixels * 0.72f) - dp(36));
+            String ns = TextUtils.ellipsize(t, tp, maxW, TextUtils.TruncateAt.END).toString();
+            if (!ns.equals(s)) { s = ns; tw = tp.measureText(s); requestLayout(); }
+            invalidate();
+        }
+        @Override protected void onMeasure(int wSpec, int hSpec) { setMeasuredDimension(Math.round(tw + dp(30)), dp(24)); }
+        @Override protected void onDraw(Canvas cv) {
+            float ph = getHeight();
+            boolean wt = "wait".equals(rsSt) || "board".equals(rsSt);
+            p.setStyle(Paint.Style.FILL);
+            p.setColor(moving && !wt ? 0xFF0A84FF : 0xFFF0A500);
+            cv.drawCircle(dp(10), ph / 2f, dp(4), p);
+            tp.setTextSize(12f * getResources().getDisplayMetrics().scaledDensity);
+            tp.setTypeface(Typeface.DEFAULT_BOLD);
+            tp.setColor(thFg);
+            tp.setTextAlign(Paint.Align.LEFT);
+            cv.drawText(s, dp(20), ph / 2f + dp(4.2f), tp);
+        }
+    }
+
+    /** 알약에 보여줄 한 줄 — 대기 중이면 '대기 · 탈 것', 아니면 웹이 만든 '현위치 ▸ 다음역'. */
+    private String pillText() {
+        try {
+            if ("wait".equals(rsSt) || "board".equals(rsSt)) {
+                String lab = rsCh.length() > 0 ? rsCh : rsNm;
+                return lab.length() > 0 ? "대기 · " + lab : "대기";
+            }
+        } catch (Exception ignored) { }
+        if (line1.length() > 0) return line1;
+        if (strip.length > 0) return strip[Math.max(0, Math.min(stripCur, strip.length - 1))].n;
+        return "";
+    }
+
     /** 웹에 손짓을 알린다(웹이 앱 탑승 시트와 똑같이 처리하고 새 상태를 다시 보내 준다). */
     private void act(String a) {
         try {
@@ -583,12 +647,14 @@ public class OverlayPlugin extends Plugin {
             } else { rcOn = false; }
         } catch (Exception e) { rcOn = false; }
         moving = call.getBoolean("moving", false);
+        preAlert = call.getBoolean("pre", false);
         Integer al = call.getInt("alert", 0);
         alertLevel = al == null ? 0 : Math.max(0, Math.min(2, al));
         // ★ 2026-10-12 (YJ: "환승 1정거장 전·목적지 2·1정거장 전 — 엣지 하이라이트와 진동"): 테두리와 같은 순간에 진동한다.
         //   판단은 웹이 한다(alertAt = 단계가 켜지거나 바뀐 시각, alertVibe = 설정에서 진동이 허용됐는지). 여기선 새 경고일 때 한 번만 울린다.
         try {
             long alertAt = call.getData().optLong("alertAt", 0L);
+            curAlertAt = alertAt;
             boolean alertVibe = call.getBoolean("alertVibe", false);
             if (alertLevel > 0 && alertVibe && alertAt > 0L && alertAt != lastVibeAt
                     && System.currentTimeMillis() - alertAt < 20000L) {
@@ -751,7 +817,7 @@ public class OverlayPlugin extends Plugin {
             attached = false;
         }
         stopBlink();
-        root = null; border = null; borderAnim = null; borderMode = 0; stripView = null; boardView = null; recoView = null; cardBg = null;
+        root = null; border = null; borderAnim = null; borderMode = 0; stripView = null; boardView = null; recoView = null; pillView = null; gapView = null; cardBg = null; stopPillBlink();
         if (was) attachOrUpdate();
     }
 
@@ -809,6 +875,7 @@ public class OverlayPlugin extends Plugin {
             t2.setAutoSizeTextTypeUniformWithConfiguration(10, 12, 1, TypedValue.COMPLEX_UNIT_SP);
         }
         View gap = new View(ctx);
+        gapView = gap;
         stripView = new StripView(ctx);
         root.addView(t3);                            // 추천 알림 제목은 위(남은시간 줄이 늘 맨 아래)
         root.addView(stripView, new LinearLayout.LayoutParams(rowW, stripView.wantH()));
@@ -829,6 +896,11 @@ public class OverlayPlugin extends Plugin {
         recoView = new RecoView(ctx);
         recoView.setVisibility(View.GONE);
         root.addView(recoView, new LinearLayout.LayoutParams(rowW, LinearLayout.LayoutParams.WRAP_CONTENT));    // ★ 추천 줄(맨 아래, 도착 3분 전부터)
+        pillView = new PillView(ctx);
+        pillView.setVisibility(View.GONE);
+        root.addView(pillView, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));   // ★ 알약 모드의 한 줄
+        fullW = maxW;
+        curPill = false; movedForAlert = false;
 
         lp = new WindowManager.LayoutParams(
                 maxW,
@@ -846,6 +918,8 @@ public class OverlayPlugin extends Plugin {
         int xLimit = Math.max(0, (dm.widthPixels - maxW) / 2);
         lp.x = Math.max(-xLimit, Math.min(xLimit, sp.getInt("x", 0)));
         lp.y = Math.max(0, Math.min(sp.getInt("y", dp(36)), Math.max(0, dm.heightPixels - dp(120))));   // 상태바 바로 아래
+        userPill = sp.getBoolean("pill", false);
+        pillX = Math.max(-dm.widthPixels / 2, Math.min(dm.widthPixels / 2, sp.getInt("px", 0)));
 
         final int slop = ViewConfiguration.get(ctx).getScaledTouchSlop();
         root.setOnTouchListener(new View.OnTouchListener() {
@@ -867,9 +941,9 @@ public class OverlayPlugin extends Plugin {
                         dx = e.getRawX(); dy = e.getRawY(); lastX = dx; lastY = dy; sx = lp.x; sy = lp.y; dragged = false; scrolling = false; swiping = false; armed = false;
                         bx = e.getX(); by = e.getY();
                         // 맨 아래 영역(남은시간 줄 + 탑승 줄): [탑승]·알약 누름 판정에 쓴다
-                        inBottom = boardView != null && e.getY() >= (infoRow != null && infoRow.getVisibility() == View.VISIBLE ? infoRow.getTop() : boardView.getTop());
+                        inBottom = !curPill && boardView != null && e.getY() >= (infoRow != null && infoRow.getVisibility() == View.VISIBLE ? infoRow.getTop() : boardView.getTop());
                         // 점·선 줄에서 시작한 좌우 움직임은 칸을 넘겨 보는 스크롤
-                        inStrip = stripView != null && e.getY() >= stripView.getTop() && e.getY() <= stripView.getBottom();
+                        inStrip = !curPill && stripView != null && e.getY() >= stripView.getTop() && e.getY() <= stripView.getBottom();
                         startPos = scrollPos;
                         stopFling();                                  // 미끄러지던 중에 다시 대면 멈춘다
                         main.removeCallbacks(arm);
@@ -925,13 +999,20 @@ public class OverlayPlugin extends Plugin {
                             // 앱 시트와 같은 동작을 오버레이 어디서든: 아래로 쓸면 탑승 안내 열기, 위로 쓸면 닫기(대기 알약)
                             if (e.getAction() == MotionEvent.ACTION_UP && !startPosIgnore) {
                                 float myy = e.getRawY() - dy;
-                                if (myy > dp(22)) { if (!"board".equals(rsSt)) act("open"); }
-                                else if (myy < -dp(22) && "board".equals(rsSt)) act("close");
+                                if (curPill) { if (myy > dp(22)) setUserPill(false); }          // 알약에서 아래로 쓸어도 펼쳐진다
+                                else if (myy > dp(22)) { if (!"board".equals(rsSt)) act("open"); }
+                                else if (myy < -dp(22)) {
+                                    if ("board".equals(rsSt)) act("close");                      // 탑승 줄이 열려 있으면 그것부터 닫는다
+                                    else setUserPill(true);                                      // 그다음 위로 쓸면 알약
+                                }
                             }
                             startPosIgnore = false;
                         }
                         else if (dragged) savePos();
                         else if (armed) { /* 꾹 눌렀다가 그냥 뗌: 아무 일 없음 */ }
+                        else if (e.getAction() == MotionEvent.ACTION_UP && curPill) {
+                            setUserPill(false);                                               // 알약을 누르면 펼쳐진다(앱은 안 열림)
+                        }
                         else if (e.getAction() == MotionEvent.ACTION_UP) {
                             int rh = (recoView != null && recoView.getVisibility() == View.VISIBLE && by >= recoView.getTop()) ? recoView.hit(bx - recoView.getLeft(), by - recoView.getTop()) : -1;
                             if (rh == 1) { act("recoGo"); openApp(); }                    // [보기] — 추천 아이템·맛집으로(앱을 앞으로)
@@ -1010,7 +1091,7 @@ public class OverlayPlugin extends Plugin {
             border = new RainbowBorder(dp(14), dp(2.5f));            // 얇은 테두리
             root.setForeground(border);
         }
-        int mode = alertLevel;
+        int mode = curPill ? 0 : alertLevel;        // 알약일 때는 테두리를 그리지 않는다(경고가 켜지면 알약이 먼저 펼쳐진다)
         if (mode == borderMode && (mode == 0 || (borderAnim != null && borderAnim.isRunning()))) return;
         borderMode = mode;
         if (borderAnim != null) { borderAnim.cancel(); borderAnim = null; }
@@ -1030,13 +1111,109 @@ public class OverlayPlugin extends Plugin {
         try { if (borderAnim != null) borderAnim.cancel(); } catch (Exception ignored) { }
         borderAnim = null; borderMode = 0;
         if (border != null) border.setShown(false);
+        stopPillBlink();
     }
 
     private void savePos() {
         try {
-            getContext().getSharedPreferences(PREF, Context.MODE_PRIVATE)
-                    .edit().putInt("x", lp.x).putInt("y", lp.y).apply();
+            SharedPreferences.Editor ed = getContext().getSharedPreferences(PREF, Context.MODE_PRIVATE).edit();
+            if (curPill) { pillX = lp.x; ed.putInt("px", lp.x).putInt("y", lp.y); }       // 알약: 가로 위치는 따로, 세로는 오버레이와 같이
+            else ed.putInt("x", lp.x).putInt("y", lp.y);
+            ed.apply();
         } catch (Exception ignored) { }
+    }
+
+    /** 사용자가 알약으로 접거나(true) 펼친다(false). 접은 상태는 저장된다. 경고로 펼쳐진 중에 접으면 그 경고로는 다시 펼치지 않는다. 메인 스레드에서 부른다. */
+    private void setUserPill(boolean v) {
+        userPill = v;
+        if (v) { if (alertLevel > 0) dismissedAlertAt = curAlertAt; }
+        else dismissedAlertAt = -1L;
+        try { getContext().getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().putBoolean("pill", v).apply(); } catch (Exception ignored) { }
+        attachOrUpdate();
+    }
+
+    /**
+     * 알약 ↔ 펼침 전환. 알약 = 사용자가 접어 둔 상태이면서 지금 켜진 경고가 없을 때(경고가 있어도 이미 접어 끈 경고면 알약).
+     * 경고로 펼칠 땐 알약 위치를 기억하고 맨 위로 옮기며, 경고가 끝나 다시 접을 땐 기억해 둔 위치로 돌려놓는다.
+     */
+    private void applyMode() {
+        if (root == null || lp == null) return;
+        boolean wp = userPill && !(alertLevel > 0 && curAlertAt != dismissedAlertAt);
+        boolean changed = (wp != curPill);
+        if (changed) {
+            if (wp) {                                                   // 접기
+                if (movedForAlert) { lp.x = restoreX; lp.y = restoreY; movedForAlert = false; }
+                else lp.x = pillX;
+            } else {                                                    // 펴기
+                if (userPill) { restoreX = lp.x; restoreY = lp.y; movedForAlert = true; lp.x = 0; lp.y = dp(36); }   // 경고: 맨 위로
+                else { pillX = lp.x; lp.x = 0; movedForAlert = false; }                                              // 사용자가 폄: 제자리
+            }
+            lp.width = wp ? WindowManager.LayoutParams.WRAP_CONTENT : fullW;
+            curPill = wp;
+        }
+        int padH = dp(8);
+        if (wp) {
+            root.setPadding(dp(4), dp(3), dp(4), dp(3));
+            if (cardBg != null) cardBg.setCornerRadius(dp(15));
+            t3.setVisibility(View.GONE);
+            if (stripView != null) stripView.setVisibility(View.GONE);
+            if (gapView != null) gapView.setVisibility(View.GONE);
+            if (infoRow != null) infoRow.setVisibility(View.GONE);
+            if (boardView != null) boardView.setVisibility(View.GONE);
+            if (recoView != null) recoView.setVisibility(View.GONE);
+            if (pillView != null) { pillView.setLabel(pillText()); pillView.setVisibility(View.VISIBLE); pillView.invalidate(); }
+        } else {
+            root.setPadding(padH, dp(5), padH, dp(2));
+            if (cardBg != null) cardBg.setCornerRadius(dp(14));
+            if (pillView != null) pillView.setVisibility(View.GONE);
+            if (stripView != null) stripView.setVisibility(View.VISIBLE);
+            if (gapView != null) gapView.setVisibility(View.VISIBLE);
+            if (boardView != null) boardView.setVisibility(View.VISIBLE);
+        }
+        if (changed && attached) {
+            try { wm.updateViewLayout(root, lp); } catch (Exception ignored) { }
+            popIn();
+        }
+        if (curPill && preAlert) startPillBlink(); else stopPillBlink();
+    }
+
+    /** 모드가 바뀐 직후 스프링처럼(살짝 넘쳤다가 안착) 커지며 나타난다. 위쪽 가운데를 기준으로. */
+    private void popIn() {
+        final View r = root;
+        if (r == null) return;
+        r.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
+            @Override public void onGlobalLayout() {
+                try { r.getViewTreeObserver().removeOnGlobalLayoutListener(this); } catch (Exception ignored) { }
+                try {
+                    r.animate().cancel();
+                    r.setPivotX(r.getWidth() / 2f);
+                    r.setPivotY(0f);
+                    r.setScaleX(0.55f);
+                    r.setScaleY(0.55f);
+                    r.animate().scaleX(1f).scaleY(1f).setDuration(520L).setInterpolator(new OvershootInterpolator(2.4f)).start();
+                } catch (Exception ignored) { }
+            }
+        });
+    }
+
+    /** 목적지 3정거장 전: 알약이 깜박인다(알약일 때만). */
+    private void startPillBlink() {
+        if (root == null || (pillBlinkAnim != null && pillBlinkAnim.isRunning())) return;
+        pillBlinkAnim = ValueAnimator.ofFloat(1f, 0.28f);
+        pillBlinkAnim.setDuration(650L);
+        pillBlinkAnim.setRepeatCount(ValueAnimator.INFINITE);
+        pillBlinkAnim.setRepeatMode(ValueAnimator.REVERSE);
+        pillBlinkAnim.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+            @Override public void onAnimationUpdate(ValueAnimator a) { if (root != null) root.setAlpha((Float) a.getAnimatedValue()); }
+        });
+        pillBlinkAnim.start();
+    }
+
+    private void stopPillBlink() {
+        try { if (pillBlinkAnim != null) pillBlinkAnim.cancel(); } catch (Exception ignored) { }
+        boolean was = pillBlinkAnim != null;
+        pillBlinkAnim = null;
+        if (was && root != null) root.setAlpha(1f);
     }
 
     private void openApp() {
@@ -1090,6 +1267,7 @@ public class OverlayPlugin extends Plugin {
         if (infoRow != null) infoRow.setVisibility((line2.length() > 0 || (waitChip != null && waitChip.getVisibility() == View.VISIBLE)) ? View.VISIBLE : View.GONE);
         t3.setText(line3);
         t3.setVisibility(line3.length() > 0 ? View.VISIBLE : View.GONE);
+        try { applyMode(); } catch (Exception ignored) { }          // ★ 알약 ↔ 펼침(위 줄들의 보임 여부를 알약일 때 덮어쓴다)
         try { applyAlert(); } catch (Exception ignored) { }
         if (!attached) {
             try {
