@@ -22,6 +22,7 @@ jobs:
           - cell_sync.ui.test.js
           - chat_line_tabs.ui.test.js
           - journey_alerts.ui.test.js
+          - loc_disclosure.ui.test.js
           - journey_e2e.ui.test.js
           - latent_refs.ui.test.js
           - next_train_app.ui.test.js
