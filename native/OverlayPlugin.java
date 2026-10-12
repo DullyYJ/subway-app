@@ -528,7 +528,7 @@ public class OverlayPlugin extends Plugin {
         }
     }
 
-    /** 알약에 보여줄 한 줄 — 대기 중이면 '대기 · 탈 것', 아니면 웹이 만든 '현위치 ▸ 다음역'. */
+    /** 알약에 보여줄 한 줄 — 대기 중이면 '대기 · 탈 것', 탄 뒤에는 '현위치 · 도착시각 도착'. */
     private String pillText() {
         try {
             if ("wait".equals(rsSt) || "board".equals(rsSt)) {
@@ -536,9 +536,20 @@ public class OverlayPlugin extends Plugin {
                 return lab.length() > 0 ? "대기 · " + lab : "대기";
             }
         } catch (Exception ignored) { }
-        if (line1.length() > 0) return line1;
-        if (strip.length > 0) return strip[Math.max(0, Math.min(stripCur, strip.length - 1))].n;
-        return "";
+        // ★ 2026-10-12 (YJ: "승차 확정 후에는 현위치와 도착예정시간만"): 탄 뒤에는 '현위치 · 10:06 도착' (웹이 만든 남은시간 줄에서 도착 시각만 뽑는다)
+        String cur = line1;
+        int sp = cur.indexOf(" ▸ ");
+        if (sp > 0) cur = cur.substring(0, sp);
+        if (cur.startsWith("● ")) cur = cur.substring(2);
+        cur = cur.trim();
+        if (cur.length() == 0 && strip.length > 0) cur = strip[Math.max(0, Math.min(stripCur, strip.length - 1))].n;
+        String arr = "";
+        try {
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\d{1,2}:\\d{2})\\s*도착").matcher(line2);
+            if (m.find()) arr = m.group(1);
+        } catch (Exception ignored) { }
+        if (cur.length() == 0) return arr.length() > 0 ? arr + " 도착" : "";
+        return arr.length() > 0 ? cur + " · " + arr + " 도착" : cur;
     }
 
     /** 웹에 손짓을 알린다(웹이 앱 탑승 시트와 똑같이 처리하고 새 상태를 다시 보내 준다). */
