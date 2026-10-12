@@ -33,7 +33,7 @@ async function newApp(b, respFn, start) {
       if (o === 500) return r.fulfill({ status: 500, headers: H, body: '{}' });
       return r.fulfill({ status: 200, headers: H, body: JSON.stringify(o) });
     }
-    if (/route-v2/.test(u.host) && /route-v2-app/.test(u.pathname)) { stat.routeReq++; return r.fulfill({ status: 200, headers: H, body: JSON.stringify(respFn()) }); }
+    if (/route-v2/.test(u.host) && /route-v2-app/.test(u.pathname)) { stat.routeReq++; const qs = Object.fromEntries(u.searchParams); (stat.routeQs = stat.routeQs || []).push(qs); return r.fulfill({ status: 200, headers: H, body: JSON.stringify(respFn(qs)) }); }   // respFn 은 요청 쿼리(SX,SY,EX,EY…)를 받을 수 있다(기존 시험은 인자를 안 쓴다)
     if (/route-v2/.test(u.host)) return r.fulfill({ status: 200, headers: H, body: '{}' });
     return r.fulfill({ status: 200, headers: H, body: '{}' }); });
   await page.clock.install({ time: new Date('2026-10-08T21:00:00+09:00') });
