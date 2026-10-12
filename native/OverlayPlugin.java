@@ -71,7 +71,7 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 @CapacitorPlugin(name = "Overlay")
 public class OverlayPlugin extends Plugin {
 
-    private static final long STALE_MS = 3 * 60 * 1000L;
+    private static final long STALE_MS = 6 * 60 * 1000L;   // 2026-10-12: 3분 → 6분
     private static final long CHECK_MS = 30 * 1000L;
     private static final String PREF = "overlay_pos";
 
@@ -80,6 +80,7 @@ public class OverlayPlugin extends Plugin {
     private volatile boolean wanted = false;       // 웹: 안내 중이고 오버레이를 쓰기로 함
     private volatile boolean appVisible = true;    // 액티비티가 화면에 보이는가
     private volatile long lastUpdateAt = 0L;
+    private volatile long webAliveAt = 0L;     // 웹이 깨우기에 마지막으로 답한 시각
     private String line1 = "", line2 = "", line3 = "";
     // ★ 2026-10-11 (YJ: "오버레이도 앱의 경로 화면으로 — 현위치 글씨만 검은색, 나머지는 회색. 정류장명은 한 줄, 길면 적당히 잘라"):
     //   앱 경로 화면(타임라인)의 칸을 웹이 그대로 읽어 보내 주면(이름·노선 라벨·시각·점/선 색) 여기서는 같은 모양으로 그리기만 한다.
@@ -207,7 +208,8 @@ public class OverlayPlugin extends Plugin {
                 text(cv, c.n, cx, yName, cw - dp(3), here ? 11.5f : 10.5f, ink, true);
                 // 선
                 p.setStyle(Paint.Style.FILL);
-                boolean blinkSeg = moving && !lit && ((i == stripCur && c.hasR) || (i == stripCur + 1 && c.hasL));
+                // ★ 2026-10-12 (YJ: 이동 중에만 역과 역 사이 선이 깜박이게): 깜박이는 선은 현재역→다음역 한 구간뿐이다(이 칸의 오른쪽 절반 + 다음 칸의 왼쪽 절반). 이 칸의 왼쪽(이전역→현재역)은 그대로 둔다.
+                boolean blinkSeg = moving && !lit && (i == stripCur + 1 && c.hasL);
                 int al = blinkSeg ? 70 : 255;
                 if (c.hasL) {
                     p.setColor((c.lc & 0x00FFFFFF) | (al << 24));
@@ -711,6 +713,7 @@ public class OverlayPlugin extends Plugin {
     protected void handleOnDestroy() {
         wanted = false;
         journeyOn = false;
+        try { if (cpuLock != null && cpuLock.isHeld()) cpuLock.release(); } catch (Exception ignoredR2) { }
         main.removeCallbacks(ticker);
         ticking = false;
         appVisible = true;
@@ -742,7 +745,7 @@ public class OverlayPlugin extends Plugin {
         main.post(new Runnable() {
             @Override public void run() {
                 try {
-                    boolean stale = (System.currentTimeMillis() - lastUpdateAt) > STALE_MS;
+                    boolean stale = !journeyOn && (System.currentTimeMillis() - Math.max(lastUpdateAt, webAliveAt)) > STALE_MS;   // 여정 중에는 웹이 잠깐 못 보내도 오버레이를 내리지 않는다   // 2026-10-12: 웹이 깨우기에 답하는 동안은 낡은 것이 아니다
                     boolean show = wanted && !appVisible && !stale && canDraw()
                             && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
                             && (strip.length > 0 || line1.length() > 0);
@@ -769,7 +772,7 @@ public class OverlayPlugin extends Plugin {
     //   → 오버레이가 떠 있는 동안은 네이티브가 5초마다 웹에 '한 번 돌아라' 하고 직접 깨운다.
     //   (스크립트 직접 실행은 타이머 제한을 받지 않는다. 무엇을 계산할지는 웹이 정하고, 여기서는 깨우기만 한다.)
     private static final long TICK_MS = 5 * 1000L;
-    private static final long JOURNEY_STALE_MS = 10 * 60 * 1000L;   // 웹이 10분 넘게 '안내 중'이라고 말해 주지 않으면 스스로 멈춘다
+    private static final long JOURNEY_STALE_MS = 8 * 60 * 60 * 1000L;   // 2026-10-12: 10분 → 8시간 — 웹이 멈춰 keepAlive 를 못 보내도 깨우기는 이어 간다(끝나면 웹이 끄고, 앱이 종료되면 handleOnDestroy 가 끈다)
     private boolean ticking = false;
     private volatile boolean journeyOn = false;    // 웹: 확정한 여정이 진행 중 (오버레이 사용 여부와 무관)
     private volatile long journeyAt = 0L;
@@ -777,21 +780,46 @@ public class OverlayPlugin extends Plugin {
     private final Runnable ticker = new Runnable() {
         @Override public void run() {
             boolean journey = journeyOn && (System.currentTimeMillis() - journeyAt) < JOURNEY_STALE_MS;
-            if (!attached && !journey) { ticking = false; return; }
+            if (!attached && !journey) { ticking = false; try { if (cpuLock != null && cpuLock.isHeld()) cpuLock.release(); } catch (Exception ignoredR) { } return; }
             try { if (attached) rebuildIfResized(); } catch (Exception ignored0) { }
+            // ★ 2026-10-12 (YJ: "앱의 갱신 호출을 못 해도 5초에 한 번은 살려야지"): 화면이 꺼져 CPU 가 잠들면 이 5초 틱도 멈춘다.
+            //   여정 중에는 CPU 를 깨워 두는 락(부분 웨이크락)을 틱마다 90초씩 갱신한다 — 틱이 죽으면 락도 90초 안에 저절로 풀린다.
+            try { holdCpu(); } catch (Exception ignoredW) { }
             try {
                 // 앱이 보이는 동안은 웹이 스스로 돌고 있으니 깨울 필요가 없다. 가려진 동안만 깨운다.
                 if (!appVisible && getBridge() != null && getBridge().getWebView() != null) {
                     // ★ 2026-10-02 (YJ: "앱을 켤 때마다 위치가 바뀌어 있고 오버레이는 실시간으로 안 바뀐다"): 앱이 가려지면 웹뷰의 타이머·렌더가
                     //   멈춘 상태일 수 있다 → 깨우기 직전에 웹뷰 타이머를 다시 살린다(시스템 전체 설정이 아니라 이 웹뷰의 JS 타이머 일시정지 해제).
                     try { getBridge().getWebView().resumeTimers(); } catch (Exception ignored2) { }
+                    // ★ 2026-10-12 (YJ: "앱이 백그라운드로 들어가고 오버레이가 실행돼도 오버레이가 죽으면 안 돼. 계속 깨워야지"):
+                    //   웹뷰가 가려지면 렌더링까지 재워질 수 있다 → 깨울 때마다 onResume 도 불러 JS 실행을 보장하고,
+                    //   웹이 돌려준 값(여정 진행 중이면 true)으로 '여정 진행 중' 표시를 이어 간다 — 웹이 keepAlive 를 못 보내는 동안에도 깨우기가 10분 만에 멈추지 않는다.
+                    try { getBridge().getWebView().onResume(); } catch (Exception ignored3) { }
                     getBridge().getWebView().evaluateJavascript(
-                            "try{window._ovlNativeTick&&window._ovlNativeTick();}catch(e){}", null);
+                            "(function(){try{return !!(window._ovlNativeTick&&window._ovlNativeTick());}catch(e){return false;}})()",
+                            new android.webkit.ValueCallback<String>() {
+                                @Override public void onReceiveValue(String v) {
+                                    webAliveAt = System.currentTimeMillis();
+                                    if ("true".equals(v)) { journeyAt = webAliveAt; }
+                                }
+                            });
                 }
             } catch (Exception ignored) { }
             main.postDelayed(this, TICK_MS);
         }
     };
+
+    private android.os.PowerManager.WakeLock cpuLock = null;
+    private void holdCpu() {
+        if (!journeyOn) { if (cpuLock != null && cpuLock.isHeld()) cpuLock.release(); return; }
+        if (cpuLock == null) {
+            android.os.PowerManager pm = (android.os.PowerManager) getContext().getSystemService(Context.POWER_SERVICE);
+            if (pm == null) return;
+            cpuLock = pm.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "gildongmu:ovl");
+            cpuLock.setReferenceCounted(false);
+        }
+        cpuLock.acquire(90 * 1000L);
+    }
 
     private void startTicker() {
         if (ticking) return;
