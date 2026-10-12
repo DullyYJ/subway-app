@@ -44,6 +44,16 @@ r = T(trail(150, 0, 10, walkOff(1.3), 15), { progIsSub: true });
 ok(r.off.confirmed && r.off.why === 'off_surface_sub', '걷는 속도로 벗어나도 이탈 ' + JSON.stringify(r.off));
 r = T(trail(150, 0, 10, walkOff(0.4), 15), { progIsSub: true });
 ok(!r.off.confirmed && r.off.why === 'sub_still', '어슬렁은 이탈 아님 ' + JSON.stringify(r.off));
+// 9c) 지하철 탑승 확정(subConfirmed) 이면 지상에서 벗어난 좌표가 있어도 이탈이 아니다 / 후보 경로로 갈아타지도 않는다
+r = T(trail(150, 0, 10, offPath, 15), { progIsSub: true, subConfirmed: true });
+ok(!r.off.confirmed && r.off.why === 'sub_confirmed', '지하철 탑승 확정이면 이탈 판정 안 함 ' + JSON.stringify(r.off));
+{ const bulge2 = (lat) => [0, 1000, 2000, 4000, 7000].map((m, i) => ({ lat: (i === 0 || i === 4) ? 0 : lat, lng: m / KX }));
+  const B2 = { id: 'B', pts: bulge2(-1200 / KY) }, A2 = { id: 'A', pts: line(0) };
+  const south2 = (s) => ({ lat: -1200 / KY, lng: (3500 - s * 10) / KX });
+  r = T(trail(200, 0, 10, south2), { pts: line(0), progIsSub: true }, { cands: [A2, B2] });
+  ok(r.ridden && r.ridden.id === 'B' && r.ridden.ok, '확정 전에는 후보 B 로 맞춘다(기존 동작) ' + JSON.stringify(r.ridden));
+  r = T(trail(200, 0, 10, south2), { pts: line(0), progIsSub: true, subConfirmed: true }, { cands: [A2, B2] });
+  ok(!r.ridden, '지하철 탑승 확정이면 후보 경로로 갈아타지 않는다 ' + JSON.stringify(r.ridden)); }
 // 10) suppress / notDeparted
 ok(!T(trail(120, 0, 10, offPath), { suppress: ['baseTime'] }).off.confirmed, '예상 시각 모드는 쉰다');
 ok(!T(trail(120, 0, 10, offPath), { notDeparted: true }).off.confirmed, '출발 전은 쉰다');
