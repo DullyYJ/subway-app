@@ -41,6 +41,8 @@ const t = async (name, fn) => { if (ONLY && !ONLY.test(name)) return; try { awai
   await page.clock.setSystemTime(new Date('2026-10-04T12:51:30+09:00'));
   for (let k = 0; k < 40; k++) { await gps(0, 0, 15); await tick(); await page.clock.runFor(5000); }
   await t('승차역에 3분 서 있으면 탑승 증거가 없고, 정지 증명이 선다', async () => {
+    // 2026-10-12: 정지 증명은 엔진(/ride-track)이 한다 — 첫 호출은 증거를 보내고, 응답이 온 뒤의 호출이 판정을 읽는다.
+    await page.evaluate(() => window._missProof()); await etaWait();
     const r = await page.evaluate(() => ({ ride: window._rideEv().riding, miss: window._missProof() }));
     assert.strictEqual(r.ride, false); assert.strictEqual(r.miss, true);
   });
