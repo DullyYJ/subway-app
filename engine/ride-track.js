@@ -31,7 +31,7 @@ var RIDE_TRACK_DEFAULTS = {
   offMinFixes: 4,         // 그 시간 안에 필요한 서로 다른 좌표 수(좌표가 같은 값으로 반복되면 한 번으로 센다 = 끊긴 GPS)
   offMinSpanSec: 50,      // 첫 좌표와 마지막 좌표가 이만큼 떨어져 있어야 한다(순간 오차 무시)
   // 진행도가 지하철 노드일 때: 지하 진입 직전 튄 좌표와 구분해야 하므로 더 엄격하게. 지상에서 확실히 움직이는 좌표가 충분히 있을 때만 이탈로 본다.
-  subWinSec: 100, subMinFixes: 6, subMinSpanSec: 80, subMinMoveM: 150, subMaxAcc: 60,
+  subWinSec: 100, subMinFixes: 6, subMinSpanSec: 80, subMinMoveM: 90, subMaxAcc: 60,
   freshSec: 25,           // 마지막 좌표가 이보다 오래됐으면 '끊긴 GPS' — 이탈도 못 탔다는 증명도 하지 않는다
   maxAcc: 120,            // 정확도가 이보다 나쁜 좌표는 쓰지 않는다
   // 타고 있는 차 찾기(예전 _matchRiddenRoute): 지나온 길 평균/최대/현재 위치가 후보 경로선에서 떨어진 거리(m)
