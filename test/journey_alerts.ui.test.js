@@ -129,8 +129,9 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   await t('목적지 경고가 켜질 때 진동 정보(alertAt·alertVibe)가 함께 간다', async () => { const o = await page.evaluate(() => window.__ovl[window.__ovl.length - 1]); assert.strictEqual(o.alertVibe, true, JSON.stringify(o)); assert.ok(o.alertAt > 0, JSON.stringify(o)); });
   // 환승 장면(같은 역 안 환승: 걷기 노드 없이 노선만 바뀜) — 환승역은 한 정거장 전부터만, 목적지는 두 정거장 전부터
   await setup(null);
-  const ovlAt = (i) => page.evaluate((i) => { window._htlBoarded = true; window._nodePassMs = { 1: Date.now() - 900000 }; window._nodePassMs[i] = Date.now(); window._gpsMaxIdx = i; window._gpsConfirmIdx = i; window.__ovl.length = 0; _ovlSync(true); const o = window.__ovl[window.__ovl.length - 1]; return { alert: o && o.alert, at: o && o.alertAt, vibe: o && o.alertVibe }; }, i);
-  await ovlAt(3);
+  const ovlAt = (i) => page.evaluate((i) => { window._htlBoarded = true; window._nodePassMs = { 1: Date.now() - 900000 }; window._nodePassMs[i] = Date.now(); window._gpsMaxIdx = i; window._gpsConfirmIdx = i; window.__ovl.length = 0; _ovlSync(true); const o = window.__ovl[window.__ovl.length - 1]; return { alert: o && o.alert, at: o && o.alertAt, vibe: o && o.alertVibe, pre: o && o.pre }; }, i);
+  const o3 = await ovlAt(3);
+  await t('환승역이 3정거장 앞이어도 알약 깜박임 신호(pre)는 최종 목적지 때만이라 꺼져 있다', async () => assert.strictEqual(o3.pre, false, JSON.stringify(o3)));
   const o4 = await ovlAt(4);
   await t('환승역 2정거장 전에는 오버레이 테두리가 켜지지 않는다', async () => assert.strictEqual(o4.alert, 0, JSON.stringify(o4)));
   const o5 = await ovlAt(5);
@@ -140,8 +141,10 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   await t('환승역에 도착해 있는 동안은 1단계를 유지한다(경고 시각은 그대로 — 진동이 또 울리지 않는다)', async () => { assert.strictEqual(o6.alert, 1, JSON.stringify(o6)); assert.strictEqual(o6.at, o5.at, JSON.stringify([o5, o6])); });
   const o7 = await ovlAt(7);
   await t('환승해 다음 노선을 타면 원복(0)', async () => assert.strictEqual(o7.alert, 0, JSON.stringify(o7)));
+  await t('최종 목적지 3정거장 전이면 알약 깜박임 신호(pre)가 켜진다(경고 단계는 아직 0)', async () => { assert.strictEqual(o7.pre, true, JSON.stringify(o7)); });
   const o8 = await ovlAt(8);
   await t('환승 뒤 목적지 2정거장 전에 2단계 — 경고 시각이 새로 찍힌다', async () => { assert.strictEqual(o8.alert, 2, JSON.stringify(o8)); assert.ok(o8.at > o5.at, JSON.stringify([o5, o8])); });
+  await t('목적지 2정거장 전에는 pre 가 꺼지고 경고 단계가 대신 켜진다', async () => assert.strictEqual(o8.pre, false, JSON.stringify(o8)));
   const o9 = await ovlAt(9);
   await t('목적지 1정거장 전에 1단계 — 다시 새 경고 시각', async () => { assert.strictEqual(o9.alert, 1, JSON.stringify(o9)); assert.ok(o9.at >= o8.at); });
   await page.evaluate(() => { _notifPrefSet('arrive', 0); });
