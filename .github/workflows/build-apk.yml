@@ -288,6 +288,8 @@ jobs:
             "android.permission.RECEIVE_BOOT_COMPLETED"
             # 2026-10-01: 다른 앱 위에 길안내 요약을 띄우는 오버레이(사용자가 설정에서 직접 허용해야 동작)
             "android.permission.SYSTEM_ALERT_WINDOW"
+            # 2026-10-12: 여정 중 화면이 꺼져도 오버레이 깨우기 틱(5초)이 멈추지 않게 하는 부분 웨이크락
+            "android.permission.WAKE_LOCK"
           )
           for PERM in "${PERMS[@]}"; do
             grep -q "$PERM" "$M" || \
