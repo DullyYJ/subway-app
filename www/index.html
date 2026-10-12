@@ -28171,6 +28171,7 @@ window._ovlRefresh = _ovlRefresh;
 //   홈에서 확정한 여정은 '지금 타고 있는 구간의 하차역'(다음 도보/환승 직전 노드, 없으면 종점)을, 지하철 탭 여정은 종점을 기준으로 센다.
 //   아직 타기 전(승차역 대기·환승 승차 대기)이거나 걷는 중이면 0 — 타고 있을 때만 알린다. 진행 위치는 화면·알림과 같은 값(_gpsMaxIdx / S.curIdx)을 쓴다.
 function _ovlAlertLevelRaw(st){
+  window._ovlPre = 0;   // ★ 2026-10-12: 최종 목적지 3정거장 전이면 1 — 알약 모드에서 알약이 깜박이는 신호(경고 단계 0 일 때만 쓰인다)
   try{
     var useT = (window._routeLocked === true && window._metroRouteMode !== true
                 && typeof _transitNodeData !== 'undefined' && _transitNodeData && _transitNodeData.length > 0);
@@ -28224,6 +28225,7 @@ function _ovlAlertLevelRaw(st){
       // ★ 2026-10-12 (YJ: "환승은 한 정거장 전, 최종 목적지는 두 정거장 전·한 정거장 전"): 뒤에 더 탈 구간이 있으면(환승역) 2정거장 전은 알리지 않는다.
       for(var f = aNow + 1; f < n; f++){ var nf = N[f]; if(nf && !nf.isWalk && (nf.isBus || nf.isSub)){ fin = false; break; } }
       if(!fin && lv === 2) lv = 0;
+      window._ovlPre = (fin && rem === 3) ? 1 : 0;
     }
     if(lv > 0 && aNow >= 0){
       if(L.a !== aNow){ L.a = aNow; L.lv = lv; L.fin = fin; }
@@ -28264,6 +28266,7 @@ function _ovlLines(){
       out.alertAt = window._ovlAlertAt || 0;
       out.alertVibe = _vibeAllowed(window._ovlAlertFin === false ? 'transfer' : 'near_arrive') ? 1 : 0;   // 설정의 환승/도착 알림 스위치를 따른다
     }
+    out.pre = (out.alert === 0 && window._ovlPre === 1) ? 1 : 0;
     var cur = st.cur || d.cur || d.from || '이동 중';
     out.l1 = st.next ? (cur + ' ▸ ' + st.next) : ('● ' + cur);
     // ★ 2026-10-01 (YJ: "출발하면 출발(현위치)-경로1-경로2-경로3-경로4 … 내 위치는 경로가 이동되면 가운데서 고정", 이어서
@@ -28477,7 +28480,7 @@ function _ovlSync(force){
     if(!n || typeof n.update !== 'function') return;
     var active = !!(_ovlUsable() && _pipHasRoute());   // ★ 2026-10-01: PiP 스위치와 무관(PiP 는 꺼 둠)
     var L = active ? _ovlLines() : { l1:'', l2:'', l3:'', track:[], cur:-1, alert:0, moving:false };
-    var key = (active ? '1' : '0') + '|' + L.l1 + '|' + L.l2 + '|' + L.l3 + '|' + L.track.join('>') + '|' + L.cur + '|' + L.alert + '|' + (L.alertAt || 0) + '|' + (L.moving ? 'M' : 'S')
+    var key = (active ? '1' : '0') + '|' + L.l1 + '|' + L.l2 + '|' + L.l3 + '|' + L.track.join('>') + '|' + L.cur + '|' + L.alert + '|' + (L.alertAt || 0) + '|' + (L.pre ? 'P' : 'p') + '|' + (L.moving ? 'M' : 'S')
               + '|' + (L.strip ? JSON.stringify(L.strip) + L.scur + '@' + L.sbase + JSON.stringify(L.theme) : '') + '|' + JSON.stringify(L.rs || null) + '|' + JSON.stringify(L.reco || null);
     var now = Date.now();
     // 바뀐 게 없으면 보내지 않는다. 다만 켜져 있는 동안엔 20초마다 한 번은 다시 보내 '살아 있음'을 알린다
@@ -28485,7 +28488,7 @@ function _ovlSync(force){
     if(!force && key === _ovlLastKey && (!active || (now - _ovlLastAt) < _OVL_HEARTBEAT_MS)) return;
     if(!active && _ovlLastKey === null && !force) { _ovlLastKey = key; return; }   // 처음부터 꺼져 있으면 굳이 알리지 않는다
     _ovlLastKey = key; _ovlLastAt = now;
-    var _up = { active: active, line1: L.l1, track: L.track, cur: L.cur, line2: L.l2, line3: L.l3, alert: L.alert || 0, alertAt: L.alertAt || 0, alertVibe: !!L.alertVibe, moving: !!L.moving, rs: L.rs || { st: 'hidden' }, reco: L.reco || { on: false } };
+    var _up = { active: active, line1: L.l1, track: L.track, cur: L.cur, line2: L.l2, line3: L.l3, alert: L.alert || 0, alertAt: L.alertAt || 0, alertVibe: !!L.alertVibe, pre: !!L.pre, moving: !!L.moving, rs: L.rs || { st: 'hidden' }, reco: L.reco || { on: false } };
     if(L.strip && L.strip.length){ _up.cells = L.strip; _up.cur = L.scur || 0; _up.base = L.sbase || 0; _up.theme = L.theme; }   // ★ 2026-10-11: 앱 경로 화면 칸 그대로(네이티브가 같은 모양으로 그림)
     var r = n.update(_up);
     if(r && typeof r.catch === 'function') r.catch(function(){ _ovlLastKey = null; });   // 실패하면 다음 틱에 다시
