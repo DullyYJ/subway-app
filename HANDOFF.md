@@ -2,6 +2,17 @@
 
 **마지막 갱신: 2026-10-06 (KST)** · 다음 Claude는 이 파일부터 읽고, 아래 "주의·원칙"을 지킨다. **작업 3·4(서구청→서해구청 표기, 번들 누락역 추가)는 [`HANDOFF-작업3-4-서해구청-누락역.md`](HANDOFF-작업3-4-서해구청-누락역.md)로 넘겼다.** **2026-10-06 세션의 최신 변경(엔진 인천2호선 수정 06a~d, 총시간/타임라인 정합 06e·06f, 라이브 스윕 시험, 앱 셀 수정, 시험·시뮬 하네스, 작업 방법·남은 일)은 [`HANDOFF-2026-10-06.md`](HANDOFF-2026-10-06.md)에 있다 — 함께 읽을 것. 원칙: 모든 결정은 엔진이, 앱은 그리기만.**
 
+## 최신 (2026-10-12) — 이탈·시간 보정을 엔진으로, 지하철 탑승 확정 보호, 오버레이 생존 (실기기 검증 전)
+- 원칙: 엔진은 연산, 앱은 그림. /ride-eta(통과 증거 → 지연 수준 → 노드별 도착, 데드밴드 levelDeadbandMin 0.4, gpsTolSec 25)와 /ride-track(이탈 rtOff·타고 있는 차 rtRidden·못 탔다 rtMiss·멀어짐)은 무상태. 앱 래퍼는 _etaPayload/_etaRequest/_etaApply, _trkPayload/_trkRequest/_trkApply/_trkRidden.
+- 지하철 탑승 확정(_trkSubConfirmed: _htlBoarded===true 이고 진행 노드가 지하철이며 출발 전이 아님)이면 plan.subConfirmed 를 보내 엔진이 이탈 판정(sub_confirmed)과 후보 경로 갈아타기를 하지 않는다. 앱은 subRiding 도 suppress 에 넣고 후보를 보내지 않는다. 엔진 12c 이상이 필요(구버전 엔진은 이 값을 무시).
+- GPS 관문: _GPS_PROG_ACC_M = 60 초과 정확도는 진행에 쓰지 않음('GPS무시' 진단). 되돌림은 _pbCand/_pbOk(8초 이상 간격 두 번). PF GPS_MAX_ACC 80.
+- 재탐색의 '내 위치': _resolve 가 신선한 GPS(3분 이내)를 먼저 씀. _myLocFollow 가 포그라운드·백그라운드 위치 수신 때 _fmapStart(type gps)를 갱신(정확도 100m 이내).
+- 오버레이(native/OverlayPlugin.java): 5초 틱을 ValueCallback 으로 검증, onResume 틱, holdCpu(PARTIAL_WAKE_LOCK 90초씩), STALE 6분(!journeyOn 일 때), 여정 중에는 8시간. 워크플로 PERMS 에 WAKE_LOCK 추가. 로컬 컴파일 못 함 — APK 빌드 결과 확인.
+- 배포 순서: 엔진(수동, ASCII 전용 파일을 대시보드에 붙여넣기) → APK. 배포 후 POST /ride-track 응답의 버전이 route-v2-2026-10-12c 인지 확인. route-v2 자동 배포는 꺼져 있음(2026-10-09~).
+- 주의: 큰 파일(index.html, 엔진 2.4MB)을 웹 편집기로 올릴 때는 raw 원문에 조각 치환을 적용하고 multipart Blob 으로 보낸다(CRLF 변환 방지). 올린 뒤 커밋 oid 주소의 raw 로 해시를 확인한다(기본 raw 는 5분 캐시).
+- 아직 안 한 것: 지상역 영점 보정(검토만 함), PF 정지 증거 비대칭 가중(시뮬 회귀로 보류). 지하철→버스 전환의 원인은 로그 없이 추정이므로 재발 시 오버레이 진단 로그를 받는다.
+- 결과·현황 문서: test/sim/RESULTS_2026-10-12.md 의 '조치 현황'.
+
 ## 최신 (2026-10-11) — 오버레이·지도보기·버스 승차 보정 (실기기 검증 전)
 - 오버레이가 화면 전체를 덮던 문제: native/OverlayPlugin.java ArrowView 에 onMeasure(높이는 EXACTLY 일 때만 사용, 아니면 0) 추가 (083df65).
 - 세부경로 '지도보기' 에러(null 의 lng): openKakaoNavFromResult/openNaverNavFromResult 가 window._navTo(kind,lat,lng,이름) 으로 통일, _walkHasMe 로 내 위치 없을 때 출발 구간을 만들지 않음. 네이버 웹 대체 주소의 빈 출발은 '-/' 형식(네이버 사이트가 도구에서 막혀 실제 동작 미확인) (2cbc265).
