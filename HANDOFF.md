@@ -704,3 +704,8 @@
 - 백그라운드 추적(`_startBgGeolocation`)도 동의 뒤에만 시작(동의 전이면 안내를 띄우고 동의하면 다시 부름, 거부하면 웹 GPS 로만). 상주 알림 문구: '하차 알림을 위해 위치 추적 중 · 도착 전에 알려드릴게요'(플러그인이 `startForeground` 로 띄우는 알림이라 쓸어서 못 지움, 서비스는 `foregroundServiceType=location` 선언 확인).
 - 남은 일: targetSdk 가 Capacitor 6.1.2 기본값 34 — Play 최신 요구(35 이상)에 못 미칠 수 있다. 올리면 안드로이드 15 의 전체화면 강제(상단바 아래로 화면이 들어감)로 레이아웃이 깨질 수 있어 이번엔 손대지 않았다. 올릴 때는 Capacitor 업그레이드 또는 insets 처리 + 실기기 확인이 같이 필요. '서버에 저장하지 않습니다' 문구는 route-v2 워커가 좌표를 저장하지 않는지 확인 후 유지할 것.
 - 시험: test/loc_disclosure.ui.test.js 6건(CI 목록 추가).
+
+## 2026-10-12 경로 취소 시 실시간소통 칩 복귀
+- 증상: 경로를 × 로 취소했는데 실시간소통 칩이 취소한 경로의 노선(📍)을 계속 앞에 보여줬다. 원인 두 가지: ① `closeTransitResult` 가 `window._lastHtlSections`(그려진 경로)를 비우지 않아 `_routeSubLines` 가 계속 그 노선을 돌려줬고, ② 확정할 때 `_myLinesRecord` 가 쌓은 my_lines 기록이 취소 뒤에도 남았다.
+- 수정: `closeTransitResult` 맨 앞에서 (탑승 전이면) `_myLinesRevert` 로 쌓기 전 my_lines 로 되돌리고(`_myLinesUndo` 에 직전 상태 보관), `_lastHtlSections=null`, 닫은 뒤 `_chatBarRender()` 로 칩을 다시 그린다. 이미 탑승(`_htlBoarded`)한 뒤 닫으면 탄 기록은 그대로 두고 앞자리만 비운다.
+- 시험: chat_line_tabs 27건(취소 2건 추가).
