@@ -11025,7 +11025,7 @@ function _plan0Stamp(){
 // 통과 기록의 출처 표시: 'gps' | 'pf' | 'cell' | 'drift' | 'board' — 값(시각)은 그대로 두고 출처만 따로 적는다(엔진이 출처별로 믿는 정도를 정한다)
 function _etaSrc(idx, src){ try{ (window._nodePassSrc = window._nodePassSrc || {})[idx] = src; }catch(e){} }
 function _etaResetEvidence(){
-  window._nodePassSrc = {}; window._nodePassPf = {}; window._etaLive = []; window._etaBoardNext = null; window._etaBoardArrive = null; window._etaBoardShift0 = 0;
+  window._etaLast = null; window._nodePassSrc = {}; window._nodePassPf = {}; window._etaLive = []; window._etaBoardNext = null; window._etaBoardArrive = null; window._etaBoardShift0 = 0;
 }
 function _etaMinToMs(minOfDay){            // 하루 안의 분(kstMinutesAdj 기준) → 지금 기준 가장 가까운 ms
   var nowMin = (typeof kstMinutesAdj === 'function') ? kstMinutesAdj() : (new Date().getHours() * 60 + new Date().getMinutes());
@@ -11043,6 +11043,7 @@ function _etaPayload(){
   var notDep = (typeof _htlNotDeparted === 'function') ? _htlNotDeparted() : false;
   var P = { nowMs: Date.now(), nodes: nodes, passes: passes, boarded: !notDep, notDeparted: !!notDep, tzOffsetMin: -new Date().getTimezoneOffset() };
   try{ if(notDep && typeof _platformWaiting === 'function' && _platformWaiting()) P.platformWaiting = true; }catch(e1){}
+  try{ var _el = window._etaLast; if(!notDep && _el && _el.delayMin != null && isFinite(_el.delayMin) && Date.now() - (_el.at || 0) < 600000){ P.prevLevelMin = _el.delayMin; P.prevAnchorIdx = _el.anchorIdx; } }catch(e0){}   // 그려진 지연 수준 — 엔진이 작은 흔들림은 유지한다
   try{
     var lv = (window._etaLive || []).filter(function(x){ return x && Date.now() - x.at <= _ETA_LIVE_MAX_AGE_MS; });
     if(lv.length) P.live = lv.map(function(x){ return { idx: x.idx, ms: x.ms }; });
@@ -13830,7 +13831,7 @@ function _startTransitWatch(){
     if(la==null||ln==null||isNaN(la)||isNaN(ln)) return;
     if(ac>150) return;                 // 저정확도(실내 튐) 무시
     window._lastGPSLat=la; window._lastGPSLng=ln; window._lastGPSAt=Date.now();
-    if(typeof S!=='undefined') S.lastGPSFix={lat:la,lng:ln,ts:Date.now()};
+    if(typeof S!=='undefined') S.lastGPSFix={lat:la,lng:ln,ts:Date.now(),acc:ac};
     // ★ 위치 확보 시 주변 버스 정류장 미리 로드 (탭 열 때 즉시 표시)
     try { if(typeof _prefetchNearStops==='function') _prefetchNearStops(la, ln); } catch(e){}
   }
@@ -13888,6 +13889,7 @@ function _gpsBeforeNode(lat, lng, idx){
 }
 window._gpsBeforeNode = _gpsBeforeNode;
 
+var _GPS_PROG_ACC_M = 60;   // 진행도·통과 시각에 쓰는 좌표의 정확도 상한(m) — 이보다 나쁜 좌표는 지하·실내 튐으로 본다
 function _updateTransitGps() {
   try{ if(typeof locTick === 'function') locTick(); }catch(e){}
   try{ if(typeof _pfTick === 'function') _pfTick(); }catch(e){}   // ★ 확률 위치 판단기(그림자/보정)
@@ -13934,6 +13936,16 @@ function _updateTransitGps() {
     && lat >= 33 && lat <= 39.5 && lng >= 124 && lng <= 132
     && !isNaN(lat) && !isNaN(lng)
     && !_gpsStale);
+  // ★ 2026-10-12 (YJ 실측: "GPS 를 계속 맞추면 지하에서 튄다 — 역에 도착할 무렵 살아난 좌표만 검수해서 써라"):
+  //   정확도가 나쁜 좌표(기지국·와이파이식 100m 안팎)는 진행도·통과 시각을 건드리지 않는다. 그런 좌표 한 점이 역을 1~2개 앞당기거나 되돌려
+  //   시각표를 -2분/+2분으로 흔들었다. 정확도를 모르는 좌표(옛 경로)는 그대로 쓴다. 이 틱은 시각표 흐름(GPS 미확인 분기)으로 간다.
+  try{
+    var _fxAcc = (typeof S !== 'undefined' && S.lastGPSFix && S.lastGPSFix.acc != null) ? +S.lastGPSFix.acc : null;
+    if(_validGps && _fxAcc != null && isFinite(_fxAcc) && _fxAcc > _GPS_PROG_ACC_M){
+      _validGps = false;
+      if(Date.now() - (window._coarseLogAt || 0) > 30000){ window._coarseLogAt = Date.now(); try{ _ovlDiag('GPS무시', '정확도 ' + Math.round(_fxAcc) + 'm > ' + _GPS_PROG_ACC_M + 'm — 진행도·통과 시각에 쓰지 않음(시각표로 진행)'); }catch(eCl){} }
+    }
+  }catch(eAcc0){}
   if(!_validGps){
     lat = null; lng = null;
   }
@@ -14189,7 +14201,15 @@ function _updateTransitGps() {
     //   한 칸만 앞서 나간 흔한 경우(정확히 1개 역 오차)는 절대 스스로 못 돌아왔다.
     //   실측 GPS가 이미 어떤 역 250m 이내에 확실히 있는데 마커가 그보다 하나라도 앞서
     //   있으면 항상 되돌리도록 -2 → -1 로 완화(거리 조건은 그대로라 오탐 위험은 낮음).
+    // ★ 2026-10-12: 되돌림은 '검수'를 거친다 — 같은 역을 가리키는 좋은 좌표가 8초 이상 간격으로 두 번 이어질 때만(지하에서 살아난 첫 좌표 한 점으로 되돌리지 않는다).
+    var _pbOk = false;
     if(bestIdx >= 0 && bestIdx <= _pMax - 1 && bestDist <= 250){
+      var _pc = window._pbCand;
+      if(_pc && _pc.idx === bestIdx && Date.now() - _pc.at <= 60000){ if(Date.now() - _pc.at >= 8000) _pbOk = true; }
+      else window._pbCand = { idx: bestIdx, at: Date.now() };
+    } else window._pbCand = null;
+    if(_pbOk){
+      window._pbCand = null;
       var _pbNm = (_transitNodeData[bestIdx] && _transitNodeData[bestIdx].name) || '';
       window._gpsMaxIdx = bestIdx;
       window._gpsConfirmIdx = bestIdx;
@@ -14361,7 +14381,7 @@ function _updateTransitGps() {
             if(typeof toast==='function') toast('\uC5F4\uCC28\uB97C \uB193\uCCE4\uC5B4\uC694. \uB2E4\uC74C \uC5F4\uCC28 \uC2DC\uAC04\uC73C\uB85C \uB9DE\uCF54\uC5B4\uC694');
           });
         }
-      } else if(_estP && _estP.fromIdx > bestIdx && bestDist < 400 && Date.now() - _lastRe0 > 60000){
+      } else if(_estP && _estP.fromIdx > bestIdx && bestDist < 200 && Date.now() - _lastRe0 > 60000){   // 2026-10-12: 400m → 200m — 역에 거의 닿았을 때의 확인만 '지금 이 역을 통과'로 찍는다
         // ★ 탑승 후: 시각표가 실제(GPS)보다 앞서 있으면 실제 위치=지금 기준으로 재앵커
         window._reanchorAt = Date.now();
         window._nodePassMs = window._nodePassMs || {};
@@ -21230,7 +21250,7 @@ function _startMyLocationLiveWatch(){
       var lat = pos.coords.latitude, lng = pos.coords.longitude;
       if(isNaN(lat) || isNaN(lng)) return;
       window._lastGPSLat = lat; window._lastGPSLng = lng; window._lastGPSAt = Date.now();
-      try{ if(typeof S !== 'undefined') S.lastGPSFix = { lat: lat, lng: lng, ts: Date.now() }; }catch(e){}
+      try{ if(typeof S !== 'undefined') S.lastGPSFix = { lat: lat, lng: lng, ts: Date.now(), acc: pos.coords.accuracy }; }catch(e){}
       // 출발지가 여전히 "내 위치"(GPS)면 좌표만 조용히 갱신 — 이름/표시는 그대로 둔다
       if(typeof _fmapStart !== 'undefined' && _fmapStart && _fmapStart.type === 'gps'){
         _fmapStart.lat = lat; _fmapStart.lng = lng;
@@ -21277,7 +21297,7 @@ function autoSetStartFromGPS() {
   }
   function _acceptFix(lat, lng){
     window._lastGPSLat = lat; window._lastGPSLng = lng; window._lastGPSAt = Date.now();
-    if(typeof S !== 'undefined') S.lastGPSFix = { lat: lat, lng: lng, ts: Date.now() };
+    if(typeof S !== 'undefined') S.lastGPSFix = { lat: lat, lng: lng, ts: Date.now(), acc: (window._lastFixAcc != null ? window._lastFixAcc : undefined) };
     if(_fmapStart) return;   // ★ 수동/기존 출발지 절대 덮지 않음
     var si = document.getElementById('fmapStartInp');
     if(si && si.value && si.value.indexOf('내 위치 찾는 중') === -1) return;
@@ -27440,7 +27460,7 @@ function _startBgGeolocation(){
         var _bla = location.latitude, _bln = location.longitude, _bac = location.accuracy || 99;
         if(_bla != null && _bln != null && !isNaN(_bla) && !isNaN(_bln) && _bac <= 150){
           window._lastGPSLat = _bla; window._lastGPSLng = _bln; window._lastGPSAt = Date.now();
-          if(typeof S !== 'undefined') S.lastGPSFix = { lat:_bla, lng:_bln, ts:Date.now() };
+          if(typeof S !== 'undefined') S.lastGPSFix = { lat:_bla, lng:_bln, ts:Date.now(), acc:_bac };
           if(typeof _transitNodeData !== 'undefined' && _transitNodeData && _transitNodeData.length
              && typeof _updateTransitGps === 'function') _updateTransitGps();
         }
@@ -27929,7 +27949,10 @@ function _pipHereIdx(){
     if(tp && tp.fromIdx != null){
       var th = (tp.ratio >= 0.9) ? tp.toIdx : tp.fromIdx;
       var cmv = (typeof _cellMovingState === 'function') ? _cellMovingState() : null;
-      if(th > raw && cmv !== false) raw = th;
+      // ★ 2026-10-12 (YJ: "오버레이는 동막에서 멈췄는데 앱은 원인재로 제대로 나오고 있어"): 지하에서는 기지국이 몇 분씩 안 바뀌어 '정지'로 읽힌다(바뀌지 않음 ≠ 멈춤).
+      //   앱 마커는 PF 가 채택한 위치를 따르는데 오버레이만 이 '정지' 판정에 막혀 한 곳에 굳었다. PF 위치가 있으면 둘이 같은 자리를 읽는다.
+      var _pfOn = false; try{ _pfOn = !!(window._pfPosOverride && window._pfPosOverride()); }catch(ePf0){}
+      if(th > raw && (cmv !== false || _pfOn)) raw = th;
     }
     // ★ 2026-10-06: 마커가 GPS 로 그려진 위치를 따른다(한 역까지만 앞서갈 수 있다). 위 주석 참고(_markerPos).
     try{
@@ -28610,7 +28633,9 @@ window._ovlNativeTick = function(){
       try{ if(typeof _rtArrPoll === 'function') _rtArrPoll(); }catch(e3){}
     }
     if(typeof _ovlTick === 'function') _ovlTick(); else _ovlSync();
+    return window._routeLocked === true;   // 네이티브가 '웹이 돌고 있고 여정이 진행 중'임을 알도록 돌려준다
   }catch(e){}
+  return false;
 };
 // 오버레이 권한 안내 모달 — 앱 테마(--card·--text·--sub·--border)를 따른다
 function _showOvlPermDialog(onOk, onCancel){
@@ -28853,7 +28878,7 @@ function _onForegroundResume(){
             var ac = pos.coords.accuracy || 99;
             if(la == null || ln == null || ac > 150) return;
             window._lastGPSLat = la; window._lastGPSLng = ln; window._lastGPSAt = Date.now();
-            if(typeof S !== 'undefined') S.lastGPSFix = { lat:la, lng:ln, ts:Date.now() };
+            if(typeof S !== 'undefined') S.lastGPSFix = { lat:la, lng:ln, ts:Date.now(), acc:ac };
             window._gpsMarkerNeedsSnap = true;
             // 좌표만 넣어두면 다음 추적 틱(1초 이내)이 진행도를 즉시 반영한다.
             // 별도 진입점을 만들지 않는 이유: 진행도 판정은 지하/지상 상태와
@@ -28912,7 +28937,7 @@ function _onForegroundResume(){
           window._lastGPSAt  = Date.now();
           window._lastGPSLat = pos.coords.latitude;
           window._lastGPSLng = pos.coords.longitude;
-          if(typeof S!=='undefined'){ S.lastGPSFix = { lat:pos.coords.latitude, lng:pos.coords.longitude, ts:Date.now() }; }
+          if(typeof S!=='undefined'){ S.lastGPSFix = { lat:pos.coords.latitude, lng:pos.coords.longitude, ts:Date.now(), acc:pos.coords.accuracy }; }
         } catch(e){}
         try { if(typeof _updateTransitGps==='function') _updateTransitGps(); } catch(e){}
       }, function(){
@@ -37380,7 +37405,7 @@ var C = {
   EARLY_BRAKE: 0.12,    // 예정 출발 45초 전보다 이르면 출발 확률을 이만큼으로 줄인다
   BACK_LEAK: 5e-4,      // 한 걸음 되돌아갈 수 있는 아주 작은 누수
   FLOOR: 1e-4,          // 어디든 갈 수 있는 바닥 확률(증거가 틀려도 복구되게)
-  GPS_MAX_ACC: 150,     // 이보다 부정확한 fix 는 쓰지 않는다(m)
+  GPS_MAX_ACC: 80,      // 이보다 부정확한 fix 는 쓰지 않는다(m) — 2026-10-12: 150 → 80 (지하에서 살아난 기지국식 좌표 100m 안팎이 위치를 흔들었다)
   GPS_MAX_AGE_S: 10,    // 이보다 오래된 fix 는 쓰지 않는다
   GPS_EPS: 0.02,        // GPS 이상값 허용
   MOTION_CONF: 0.82,    // 정차/주행 판정이 맞을 확률
@@ -37434,10 +37459,10 @@ function create(stations, opts){
   if(opts) for(var k2 in opts) cfg[k2] = opts[k2];
   var N = stations.length, M = Math.max(1, 2*N - 1);
   var DELAYS = [];
-  for(var dd = -120; dd <= 600; dd += 30) DELAYS.push(dd);
+  for(var dd = -300; dd <= 600; dd += 30) DELAYS.push(dd);   // 2026-10-12: -120 → -300 (인천1호선 실측: 열차가 시각표보다 2분 넘게 빠르다. 하한이 -2분이면 빨리 달리는 열차를 '정차 중'으로 오해)
   var K = DELAYS.length, i;
   var subs = DELAYS.map(function(d){
-    return { delay: d, w: Math.exp(-Math.abs(d) / (d < 0 ? 60 : 200)), P: new Array(M) };
+    return { delay: d, w: Math.exp(-Math.abs(d) / (d < 0 ? 120 : 200)), P: new Array(M) };
   });
   var self = { N: N, M: M, cfg: cfg, lastMs: null };
   var lastGpsTs = 0, lastCellAt = 0;
