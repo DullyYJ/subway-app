@@ -45,7 +45,22 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     // 경로(위도 37.5) 위에서 달린다
     await ride(page, 60, () => 37.5, (s) => 126.9 + 0.0137 * (3 + s / 100));
     await t('경로 위를 달리면 재탐색하지 않는다', async () => { assert.strictEqual(await page.evaluate(() => window.__calls.route), 0); });
-    // 경로에서 800m 북쪽으로 벗어난 채 계속 달린다(지하철 진행 중이어도 지상에서 확실히 벗어나면 이탈)
+    // 경로에서 800m 북쪽으로 벗어난 채 계속 달린다 — 지하철 탑승이 확정된 상태(진행 노드가 지하철)에서는 이탈 판정을 하지 않는다(2026-10-12 YJ)
+    await ride(page, 120, () => LAT(800), (s) => 126.9 + 0.0137 * (3.6 + s / 100));
+    await t('지하철 탑승이 확정이면 경로에서 800m 벗어나도 재탐색하지 않는다', async () => {
+      const r = await page.evaluate(() => ({ c: window.__calls.route, off: window._trk.last && window._trk.last.off }));
+      assert.strictEqual(r.c, 0, JSON.stringify(r));
+    });
+    await t('JS 오류가 없다', async () => { assert.deepStrictEqual(errs.filter(e => !/Failed to fetch|NetworkError|Load failed/.test(e)), []); });
+    await ctx.close();
+  }
+  console.log('[경로 이탈 — 버스 진행 중에는 엔진 판정을 따른다]');
+  {
+    const { ctx, page, errs } = await mk();
+    await page.evaluate(() => { _transitNodeData.forEach((n) => { if (!n.isOrigin) { n.isSub = false; n.isBus = true; } }); window._htlBoarded = true; window._gpsMaxIdx = 3; window._gpsConfirmIdx = 3; });
+    await page.clock.setSystemTime(new Date('2026-10-04T12:58:00+09:00'));
+    await ride(page, 60, () => 37.5, (s) => 126.9 + 0.0137 * (3 + s / 100));
+    await t('경로 위를 달리면 재탐색하지 않는다', async () => { assert.strictEqual(await page.evaluate(() => window.__calls.route), 0); });
     await ride(page, 120, () => LAT(800), (s) => 126.9 + 0.0137 * (3.6 + s / 100));
     await t('경로에서 800m 벗어난 채 2분 가면 엔진이 이탈을 판정하고 앱이 재탐색한다', async () => {
       const r = await page.evaluate(() => ({ c: window.__calls.route, off: window._trk.last && window._trk.last.off }));
