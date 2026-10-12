@@ -7714,6 +7714,14 @@ function _htlBoardWatch(){
     var _boardedByCell = (!_busBoard && _pastDep != null && _pastDep >= _HTL_BOARD_GRACE_MIN
                           && _cellMv === true && (window._boardCellN || 0) >= 2);
 
+    // ★ 2026-10-12: 신선한 GPS 가 걷는 속도로 승차역에서 멀어지는 중이면 열차를 탄 게 아니다(엔진 /ride-track board 판정).
+    //   예전에는 역에서 400m 멀어지거나 출발시각이 지나면 무조건 '탔다'로 확정해서, 안 타고 돌아가거나 노선을 따라 걸어도 진행도가 올랐다(시뮬 지하철 먼저 계획 6건 전부).
+    //   판정은 엔진이 한다. 엔진 응답이 없으면 예전 그대로.
+    try{
+      var _tkv = _trkFresh(), _bdv = _tkv && _tkv.board;
+      if(_bdv && _bdv.walkingAway === true){ _movedAway = false; _boardedByTime = false; _boardedByCell = false; _noFreshNear = false; }
+    }catch(eWk){}
+
     // ★ 2026-10-04: 복합 증거 갈래 — GPS 이동 + 기지국 변화 + PF 를 함께 본다.
     //   (승차역에 '도착했던 기록'(_htlWait.arrived)이 없어도 인정: 이미 역에 있다가 탄 사람은 그 기록이 없다.
     //    12:51 계양 승차를 못 잡아 시각표가 다음 열차로 밀리던 원인)
@@ -8690,6 +8698,8 @@ window._hideRouteLoading = _hideRouteLoading;
         window._routeLocked = true;
         window._lockedRouteType = _rlType;
         _doSelectRouteOption(_rlType);
+        // ★ 2026-10-12: 재탐색 때 검색 시작(8191)이 비운 작은 화면 여정(_pipTrip)을 다시 채운다 — 안 하면 재탐색 뒤 오버레이가 꺼진 채로 남았다(시뮬 15건 전부). 그리기 상태 복구일 뿐 판단이 아니다.
+        try{ if(typeof _pipArmNow === 'function') _pipArmNow(); }catch(ePip){}
       } else {
         // 최단시간 탭 기본 표시 (팝업 없이 — 사용자가 탭 선택 시에만 고정)
         window._routeLocked = false;
@@ -11271,18 +11281,12 @@ window._htlDelayTrack = _htlDelayTrack;
 function _htlEarlyTrack(){ _etaRequest('tick'); }   // 일찍 도착한 만큼의 시각 당김은 통과 기록을 받은 엔진이 한다
 window._htlEarlyTrack = _htlEarlyTrack;
 
-// ── 경로 이탈 감지 ────────────────────────────────────────────────
-//   상황: 계획은 75번인데 먼저 온 77번을 타버렸다. 두 노선은 몇 정거장 뒤부터
-//   길이 갈리는데, 앱은 계속 75번 경로를 안내한다(내릴 곳·환승·도착시각이 전부 틀림).
-//   해결: 실제 GPS가 '계획 경로선'에서 일정 거리 이상, 일정 횟수 연속으로 벗어나면
-//   다른 차를 탄 것으로 보고 현재 위치 기준으로 경로를 다시 찾는다.
-//   ★ 정류장 하나하나와의 거리가 아니라 '노드를 잇는 선분과의 거리'로 재야 한다.
-//     정류장 간격이 넓으면 정상 주행 중에도 가장 가까운 정류장이 수백 m가 되기 때문.
-var _OFF_ROUTE_M    = 350;   // 경로선에서 이만큼 벗어나면 이탈 후보
-var _OFF_ROUTE_HITS = 6;     // 연속 이만큼(약 60초) 이어져야 확정 — 순간 오차 무시
-                             //   3틱은 지하 진입 직전 튄 좌표만으로도 금방 차서 오탐이 잦았다
-var _OFF_ROUTE_COOL = 180000;// 재탐색 후 3분간은 다시 판정하지 않음
-
+// ── 경로 이탈·타고 있는 차·못 탔다 판정 (엔진 /ride-track) ───────────────────────────
+//   ★ 2026-10-12 (YJ: "규칙은 지켜야 해. 엔진은 연산, 앱은 그림그리기"): 이탈 거리 계산·위치 상태머신 게이트·후보 경로 맞춤·'못 탔다' 증명을
+//   전부 엔진(engine/ride-track.js → route-v2 /ride-track)으로 옮겼다. 앱은 위치 궤적과 센서 요약(증거)을 보내고, 돌아온 판정을 그대로 따른다.
+//   엔진이 안 열리거나 실패하면 마지막 판정을 유지한다(앱이 대신 계산하지 않는다) — 이탈·후보 맞춤은 일어나지 않고, '못 탔다'는 증명이 없으므로 재탐색하지 않는다.
+//   예전 이탈 감지는 위치 상태머신이 UNDERGROUND 로 굳으면 건너뛰어 사실상 꺼져 있었고(시뮬 이탈 40건 중 3건 반응), 진행도가 지하철이면 면제였다 → 엔진이 GPS 신선도·정확도·이동량으로 판단한다.
+var _OFF_ROUTE_COOL = 180000;// 재탐색 후 3분간은 다시 판정하지 않음(언제 부를지는 앱이 정하고, 무엇이 맞는지는 엔진이 정한다)
 // 점 → 선분 최단거리(m)
 function _distToSegM(pLat, pLng, aLat, aLng, bLat, bLng){
   var kx = 88000, ky = 111000;                    // 위경도 → m 근사(한국 위도대)
@@ -11296,78 +11300,109 @@ function _distToSegM(pLat, pLng, aLat, aLng, bLat, bLng){
   var qx = ax + dx*t, qy = ay + dy*t;
   return Math.sqrt((px-qx)*(px-qx) + (py-qy)*(py-qy));
 }
-// 현재 좌표와 계획 경로선의 최단거리(m). 좌표가 있는 노드들만 이어서 잰다.
-function _distToPlannedPath(lat, lng){
+
+var _TRK_URL = ((typeof _ROUTE_V2_BASE === 'string' && _ROUTE_V2_BASE) ? _ROUTE_V2_BASE : 'https://route-v2.phg0643.workers.dev') + '/ride-track';
+var _TRK_MIN_GAP_MS = 8000, _TRK_TIMEOUT_MS = 6000, _TRK_FRESH_MS = 25000;
+var _trk = { busy: false, at: 0, fails: 0, seq: 0, last: null, lastAt: 0, sig: null, paths: null, rideHits: 0, rideCool: 0, retryT: null };
+window._trk = _trk;
+// 엔진에 보낼 증거 — 가공 없이 모은다(궤적 · 경로 좌표 · 후보 경로 좌표 · 센서 요약)
+function _trkPayload(){
+  var now = Date.now(), nd = (typeof _transitNodeData !== 'undefined' && _transitNodeData) ? _transitNodeData : [], i;
+  var pts = [];
+  for(i = 0; i < nd.length; i++){ var n = nd[i]; if(n && n.lat != null && n.lng != null) pts.push({ lat: n.lat, lng: n.lng }); }
+  var g = (window._gpsMaxIdx == null) ? -1 : window._gpsMaxIdx, pn = (g >= 0) ? nd[g] : null;
+  var rd = null; try{ rd = window._rideEv ? window._rideEv() : null; }catch(e0){}
+  var suppress = [];
+  try{ if(typeof _baseTimeMs !== 'undefined' && _baseTimeMs != null) suppress.push('baseTime'); }catch(e1){}
+  if(window._metroRouteMode === true) suppress.push('metro');
+  try{ if(typeof _isManualStart === 'function' && _isManualStart()) suppress.push('manualStart'); }catch(e2){}
+  var notDep = false; try{ notDep = (typeof _htlNotDeparted === 'function') ? !!_htlNotDeparted() : false; }catch(e3){}
+  var plan = { pts: pts, progIsSub: !!(pn && pn.isSub), progIsBus: !!(pn && pn.isBus), boarded: window._htlBoarded === true, notDeparted: notDep, riding: !!(rd && rd.riding), suppress: suppress };
+  if(window._rideEvStartMs) plan.startMs = window._rideEvStartMs;
+  try{    // 승차 전 지하철 계획: 승차역 좌표를 보내 '걸어서 멀어지는 중인지'를 엔진이 판단하게 한다(버스 승차는 해당 없음)
+    if(notDep && typeof _htlBoardIdx === 'function'){
+      var bnd = nd[_htlBoardIdx()];
+      if(bnd && bnd.isSub && bnd.lat != null && bnd.lng != null){ plan.boardPt = { lat: bnd.lat, lng: bnd.lng }; plan.departM = _HTL_DEPART_M; }
+    }
+  }catch(e7){}
+  var tr = [];
+  try{ for(i = Math.max(0, _ev.trail.length - 240); i < _ev.trail.length; i++){ var q = _ev.trail[i]; tr.push([q.ts, q.lat, q.lng, q.acc == null ? null : q.acc]); } }catch(e4){}
+  var P = { nowMs: now, floorMs: _ev.floorMs || 0, trail: tr, plan: plan, sensor: { cellN180: _evCellN(180000, now), pfSeg: false } };
+  try{ var b = window._pfBest; if(b && now - b.at < 20000 && b.conf >= 0.7 && b.kind === 'seg') P.sensor.pfSeg = true; }catch(e5){}
+  // 후보 경로: 타고 있다는 증거가 있을 때만 보낸다(걷는 중에는 판정할 일이 없다)
+  var paths = null;
   try{
-    if(typeof _transitNodeData === 'undefined' || !_transitNodeData.length) return null;
-    var pts = [];
-    for(var i=0;i<_transitNodeData.length;i++){
-      var n = _transitNodeData[i];
-      if(n && n.lat != null && n.lng != null) pts.push(n);
+    var R = window._allRouteResults;
+    if(R && R.all && R.all.length >= 2 && (plan.boarded || plan.riding)){
+      paths = []; P.cands = [];
+      R.all.forEach(function(pp, ix){
+        if(!pp || !pp.subPath) return;
+        var cp = _altPathPts(pp); if(cp.length < 3) return;
+        paths[ix] = pp; P.cands.push({ id: ix, pts: cp, longDist: !!(pp.info && pp.info.longDist === true) });
+      });
     }
-    if(pts.length < 2) return null;
-    var best = Infinity;
-    for(var j=0;j<pts.length-1;j++){
-      var d = _distToSegM(lat, lng, pts[j].lat, pts[j].lng, pts[j+1].lat, pts[j+1].lng);
-      if(d < best) best = d;
+  }catch(e6){}
+  _trk.paths = paths;
+  return P;
+}
+function _trkRequest(why){
+  try{
+    if(typeof fetch !== 'function') return;
+    if(!_transitNodeData || !_transitNodeData.length) return;
+    if(!_ev.trail || !_ev.trail.length) return;                               // 증거가 없으면 보낼 것이 없다
+    var now = Date.now();
+    if(now - _trk.at < _TRK_MIN_GAP_MS) return;
+    if(_trk.busy) return;
+    if(window._trkOff === true) return;
+    var P = _trkPayload(); P.want = { off: true, ridden: !!P.cands, miss: true };
+    var sig = window._trackSig, ctl = (typeof AbortController === 'function') ? new AbortController() : null, to = null;
+    _trk.busy = true; _trk.at = now; _trk.seq++; _trk.sig = sig;
+    to = setTimeout(function(){ try{ if(ctl) ctl.abort(); }catch(e){} }, _TRK_TIMEOUT_MS);
+    var paths = _trk.paths;
+    fetch(_TRK_URL, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(P), signal: ctl ? ctl.signal : undefined })
+      .then(function(r){ if(!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function(res){
+        clearTimeout(to); _trk.busy = false; _trk.fails = 0;
+        if(window._trackSig !== sig) return;                                    // 그 사이 경로가 바뀌었다 — 버린다
+        res._paths = paths; _trk.last = res; _trk.lastAt = Date.now();
+        _trkApply(res, P, paths);
+      })
+      .catch(function(err){
+        clearTimeout(to); _trk.busy = false; _trk.fails++;
+        try{ if(_trk.fails === 1 || _trk.fails % 5 === 0) _ovlDiag('경로판정', '엔진 응답 실패 ' + _trk.fails + '번째 · ' + String(err && err.message || err).slice(0, 60) + ' — 마지막 판정 유지'); }catch(e){}
+      });
+  }catch(e){ _trk.busy = false; }
+}
+// 엔진이 준 판정을 따른다(계산 없음)
+function _trkApply(res, P, paths){
+  try{
+    if(!res) return;
+    var now = Date.now();
+    if(res.ridden && res.ridden.ok && res.ridden.curBad && paths && paths[res.ridden.id]){ _trk.rideHits++; } else { _trk.rideHits = 0; }
+    // 버스를 타고 있는 동안: 지금 보는 경로를 지나온 궤적이 따라가지 않고 엔진 후보 중 다른 경로를 따라가면 그 경로로 이어서 안내(두 번 연속 같은 판정이어야 바꾸고, 바꾼 뒤 2분은 쉰다)
+    if(_trk.rideHits >= 2 && now >= _trk.rideCool && window._routeLocked === true){
+      var g = (window._gpsMaxIdx == null) ? -1 : window._gpsMaxIdx, cn = (g >= 0 && _transitNodeData) ? _transitNodeData[g] : null;
+      if(cn && cn.isBus){
+        _trk.rideHits = 0;
+        if(_applyRiddenRoute(_trkRidden(res))) { _trk.rideCool = now + 120000; return; }
+      }
     }
-    return best;
+    if(res.off && res.off.confirmed && !(window._offRouteUntil && now < window._offRouteUntil)){
+      window._offRouteUntil = now + _OFF_ROUTE_COOL;
+      try{ _ovlDiag('경로이탈', '엔진 판정 · 경로선에서 ' + res.off.distM + 'm · ' + res.off.n + '곳/' + res.off.spanSec + '초 (' + res.off.why + ')'); }catch(e1){}
+      _handleOffRoute();
+    }
+  }catch(e){}
+}
+// 엔진이 고른 후보 → _applyRiddenRoute 가 읽는 모양
+function _trkRidden(res){
+  try{
+    var r = res && res.ridden, ps = res && res._paths; if(!r || !r.ok || !ps || !ps[r.id]) return null;
+    return { path: ps[r.id], fit: { mean: r.mean }, cur: r.curMean == null ? null : { mean: r.curMean }, last: r.last };
   }catch(e){ return null; }
 }
-window._distToPlannedPath = _distToPlannedPath;
-
-// GPS 틱마다 호출. 이탈이 확정되면 true.
-function _checkOffRoute(lat, lng, validGps){
-  try{
-    if(!validGps || lat == null || lng == null) return false;
-    if(typeof _baseTimeMs!=='undefined' && _baseTimeMs != null) return false;  // 예상 시각 모드
-    if(window._metroRouteMode === true) return false;
-    if(typeof _isManualStart==='function' && _isManualStart()) return false;
-    // 아직 출발 전이면 판정하지 않는다(정류장까지 걸어가는 동선은 경로선과 무관)
-    if(typeof _htlNotDeparted==='function' && _htlNotDeparted()){ window._offRouteHits = 0; return false; }
-    var now = Date.now();
-    if(window._offRouteUntil && now < window._offRouteUntil) return false;      // 재탐색 쿨다운
-
-    // ★ 2026-08-30: 지하 구간에서는 이탈 판정을 하지 않는다.
-    //   지하로 들어가면 GPS 가 끊기기 직전 수백 m 튄 좌표를 마지막으로 남기고,
-    //   그 좌표가 15초 안이면 유효로 통과해 경로선에서 350m 밖으로 나온다.
-    //   같은 좌표가 계속 재사용되니 3틱이 금방 차서 이탈로 확정됐다.
-    //   → 지하·전이 상태이거나, 실제로 지하철에 타고 있으면 판정을 건너뛴다.
-    //   (이탈 감지는 '계획과 다른 버스를 탔다' 같은 지상 상황을 잡기 위한 것이다)
-    try{
-      if(typeof LOCFSM !== 'undefined' && LOCFSM
-         && (LOCFSM.state === 'UNDERGROUND' || LOCFSM.state === 'TRANSITION')){
-        window._offRouteHits = 0; return false;
-      }
-    }catch(e){}
-    try{
-      // 지하철 구간을 타는 중이면 GPS 가 신뢰할 수 없다
-      var _pi = (window._gpsMaxIdx == null) ? -1 : window._gpsMaxIdx;
-      if(_pi >= 0 && _transitNodeData && _transitNodeData[_pi] && _transitNodeData[_pi].isSub){
-        window._offRouteHits = 0; return false;
-      }
-    }catch(e){}
-    // 좌표가 갱신되지 않고 같은 값이 반복되면(끊긴 상태) 판정하지 않는다
-    try{
-      var _sig = Math.round(lat*1e5) + ',' + Math.round(lng*1e5);
-      if(window._offRouteLastSig === _sig){ return false; }
-      window._offRouteLastSig = _sig;
-    }catch(e){}
-
-    var d = _distToPlannedPath(lat, lng);
-    if(d == null) return false;
-    if(d < _OFF_ROUTE_M){ window._offRouteHits = 0; return false; }
-
-    window._offRouteHits = (window._offRouteHits || 0) + 1;
-    if(window._offRouteHits < _OFF_ROUTE_HITS) return false;
-
-    // 확정 — 상태를 초기화하고 현재 위치 기준으로 다시 찾는다
-    window._offRouteHits = 0;
-    window._offRouteUntil = now + _OFF_ROUTE_COOL;
-    return true;
-  }catch(e){ return false; }
-}
-window._checkOffRoute = _checkOffRoute;
+// 신선한(25초 안) 판정만 쓴다 — 없으면 null
+function _trkFresh(){ return (_trk.last && Date.now() - _trk.lastAt <= _TRK_FRESH_MS) ? _trk.last : null; }
 
 // ═══════════════════════════════════════════════════════════════════
 // ★ 2026-10-11 (YJ 제보: "같은 목적지 가는데 추천 안 한 버스가 먼저 와서 탔더니 중간 경로가 달라 에러가 난다.
@@ -11392,49 +11427,6 @@ function _altPathPts(p){
     });
   }catch(e){}
   return pts;
-}
-// 궤적 점들이 경로선(정류장을 이은 선)에서 떨어진 거리의 평균·최대(m), 마지막 3점 중 최대
-function _trailFit(pts, tr){
-  if(!pts || pts.length < 2 || !tr || !tr.length) return null;
-  var sum = 0, mx = 0, i, j;
-  var dOf = function(q){
-    var b = Infinity;
-    for(j = 0; j < pts.length - 1; j++){ var d = _distToSegM(q.lat, q.lng, pts[j].lat, pts[j].lng, pts[j + 1].lat, pts[j + 1].lng); if(d < b) b = d; }
-    return b;
-  };
-  var ds = [];
-  for(i = 0; i < tr.length; i++){ var di = dOf(tr[i]); ds.push(di); sum += di; if(di > mx) mx = di; }
-  var tail = 0; for(i = Math.max(0, ds.length - 3); i < ds.length; i++) if(ds[i] > tail) tail = ds[i];
-  return { mean: sum / ds.length, max: mx, tail: tail, n: ds.length };
-}
-// 지금 타고 있는 차(버스)가 엔진 후보 중 어느 경로인지 — 못 찾으면 null
-function _matchRiddenRoute(){
-  try{
-    var R = window._allRouteResults; if(!R || !R.all || R.all.length < 2) return null;
-    if(typeof _transitNodeData === 'undefined' || !_transitNodeData || !_transitNodeData.length) return null;
-    var rd = window._rideEv ? window._rideEv() : null;
-    var onVeh = (window._htlBoarded === true) || !!(rd && (rd.now || rd.riding)) || (window._evVehicleNow ? window._evVehicleNow() : false);
-    if(!onVeh) return null;                                   // 걷고 있으면 맞추지 않는다(재탐색)
-    var now = Date.now();
-    var from = Math.max(window._rideEvStartMs ? window._rideEvStartMs - 30000 : 0, now - 480000);
-    var tr = [], i;
-    for(i = 0; i < _ev.trail.length; i++){ var q = _ev.trail[i]; if(q.ts >= from && q.ts >= _ev.floorMs && now - q.ts <= 480000) tr.push({ lat: q.lat, lng: q.lng, ts: q.ts }); }
-    if(tr.length < 4) return null;
-    var curPts = [];
-    for(i = 0; i < _transitNodeData.length; i++){ var n = _transitNodeData[i]; if(n && n.lat != null && n.lng != null) curPts.push({ lat: n.lat, lng: n.lng }); }
-    var curFit = _trailFit(curPts, tr);
-    var best = null, bestFit = null;
-    R.all.forEach(function(pp){
-      if(!pp || !pp.subPath || (pp.info && pp.info.longDist === true)) return;
-      var pts = _altPathPts(pp); if(pts.length < 3) return;
-      var f = _trailFit(pts, tr); if(!f) return;
-      if(!bestFit || f.mean < bestFit.mean){ bestFit = f; best = pp; }
-    });
-    if(!best || !bestFit) return null;
-    if(!(bestFit.mean <= 120 && bestFit.max <= 300 && bestFit.tail <= 200)) return null;   // 지나온 길과 현재 위치가 모두 그 경로 위여야 한다
-    if(curFit && !(bestFit.mean + 60 < curFit.mean)) return null;                          // 지금 보던 경로보다 확실히 잘 맞아야 한다
-    return { path: best, fit: bestFit, cur: curFit, last: tr[tr.length - 1] };
-  }catch(e){ return null; }
 }
 // 맞는 후보로 바꿔 이어서 안내한다(재탐색 없음). 성공하면 true.
 function _applyRiddenRoute(m){
@@ -11468,31 +11460,15 @@ function _applyRiddenRoute(m){
     return true;
   }catch(e){ return false; }
 }
-// 버스를 타고 있는 동안 20초마다: 지금 보는 경로를 지나온 궤적이 따라가지 않고(경로선에서 멀고) 엔진 후보 중 다른 경로를 따라가면 그 경로로 바꾼다.
-//   (이탈 판정 _checkOffRoute 는 위치 상태기계가 '지하'로 굳어 있으면 건너뛰어 버스 탑승 중에는 사실상 동작하지 않는다 — 그와 별개로 돈다.)
-//   재탐색은 하지 않는다. 두 번 연속 확인돼야 바꾸고, 바꾼 뒤 2분은 다시 보지 않는다.
+// 위치 갱신 때마다(타이머) 증거를 엔진에 보낸다(8초에 한 번 이하). 판정은 응답이 오면 _trkApply 가 따른다.
 function _ridePathWatch(){
   try{
-    var now = Date.now();
-    if(now - (window._rpwAt || 0) < 20000) return;
-    window._rpwAt = now;
-    if(now < (window._rpwCool || 0)) return;
     if(window._routeLocked !== true) return;                                   // 확정된 안내 중일 때만(탐색 화면을 건드리지 않는다)
-    if(typeof _baseTimeMs !== 'undefined' && _baseTimeMs != null) return;      // 예상(미래 기준시각) 모드 제외
-    if(window._metroRouteMode === true) return;
-    var g = (window._gpsMaxIdx == null) ? -1 : window._gpsMaxIdx;
-    var cn = (g >= 0 && _transitNodeData) ? _transitNodeData[g] : null;
-    if(!cn || !cn.isBus) { window._rpwHits = 0; return; }                      // 지금 버스 구간일 때만
-    var m = _matchRiddenRoute();
-    if(!m || !m.cur || !(m.cur.mean > 200 && m.cur.tail > 300)){ window._rpwHits = 0; return; }   // 지금 경로가 확실히 안 맞을 때만
-    window._rpwHits = (window._rpwHits || 0) + 1;
-    if(window._rpwHits < 2) return;
-    window._rpwHits = 0;
-    if(_applyRiddenRoute(m)) window._rpwCool = now + 120000;
+    _trkRequest('tick');
   }catch(e){}
 }
-window._ridePathWatch = _ridePathWatch;
-window._matchRiddenRoute = _matchRiddenRoute; window._applyRiddenRoute = _applyRiddenRoute;
+window._ridePathWatch = _ridePathWatch; window._trkRequest = _trkRequest;
+window._applyRiddenRoute = _applyRiddenRoute;
 
 // ═══════════════════════════════════════════════════════════════════
 // ★ 2026-10-11 (YJ: "승차가 판단되면 그때부터는 실시간 위치 API 로 경로를 파악하고, GPS 는 제대로 가고 있는지 확인만 하면 되지 않느냐"):
@@ -11714,7 +11690,7 @@ window._vehTick = _vehTick; window._vehApply = _vehApply; window._vehCands = _ve
 // 이탈 확정 시 실제 처리
 function _handleOffRoute(){
   try{
-    try{ var _mr = _matchRiddenRoute(); if(_mr && _applyRiddenRoute(_mr)) return; }catch(eMr){}   // 2026-10-11: 타고 있는 차가 엔진 후보 중 하나면 재탐색 없이 이어서
+    try{ var _mr = _trkRidden(_trkFresh()); if(_mr && _applyRiddenRoute(_mr)) return; }catch(eMr){}   // 2026-10-11: 타고 있는 차가 엔진 후보 중 하나면 재탐색 없이 이어서 (2026-10-12: 고르는 일은 엔진 /ride-track)
     if(typeof toast==='function') toast('\uACC4\uD68D\uACFC \uB2E4\uB978 \uAE38\uB85C \uAC00\uACE0 \uC788\uC5B4\uC694. \uD604\uC7AC \uC704\uCE58\uB85C \uACBD\uB85C\uB97C \uB2E4\uC2DC \uCC3E\uC744\uAC8C\uC694');
     // 진행 상태를 모두 리셋해야 새 경로에서 마커가 엉뚱한 곳부터 시작하지 않는다
     window._gpsMaxIdx = -1; window._gpsConfirmIdx = -1; window._timeMaxIdx = -1;
@@ -13377,7 +13353,9 @@ function _xferBoardIdxs(){
       if(i <= first) continue;
       var n = _transitNodeData[i], p = _transitNodeData[i - 1];
       if(!n || !p || n.isOrigin || n.isWalk || !(n.isBus || n.isSub)) continue;
-      if(p.isWalk) out.push(i);
+      // ★ 2026-10-12: 사이에 '도보' 노드가 없는 환승(버스→지하철 등 바로 이어지는 경우)도 환승 승차역이다.
+      //   예전에는 도보 노드가 있어야만 환승 고정이 걸려, 버스를 타는 동안 PF 가 첫 지하철역에 앉은 채 마커·오버레이가 환승역에 서 있었다(시뮬 버스→지하철 정상 탑승에서 최대 1.8km 앞섬).
+      if(p.isWalk || (p.isBus && n.isSub) || (p.isSub && n.isBus)) out.push(i);   // (같은 종류끼리 노선만 바뀌는 같은 역 환승은 예전 그대로 — 고정을 걸지 않는다)
     }
   }catch(e){}
   return out;
@@ -14301,8 +14279,8 @@ function _updateTransitGps() {
   if(typeof _checkTransitAlerts==='function') _checkTransitAlerts(window._gpsMaxIdx);
 
   if(_validGps) { try { _maybeRecordPass(bestIdx, bestDist); } catch(e){} }
-  // ★ 경로 이탈 감지: 계획과 다른 차를 탄 경우 현재 위치로 재탐색
-  try { if(_checkOffRoute(lat, lng, _validGps)){ _handleOffRoute(); return; } } catch(e){}
+  // ★ 경로 이탈 감지: 계획과 다른 차를 탄 경우 현재 위치로 재탐색 — 판정은 엔진(/ride-track), 응답이 오면 _trkApply 가 _handleOffRoute 를 부른다
+  try { _trkRequest('gps'); } catch(e){}
   // ★ 연착 반영: 다음 역 예정 시각이 지났는데 아직 현재 역 근처면 그만큼 전체 시각을 밀어줌
   try { _htlDelayTrack(bestIdx, bestDist, _validGps); } catch(e){}
   // ★ 조기 도착 반영: 계획보다 앞서 진행 중이면 그만큼 전체 시각을 당겨줌
@@ -37932,7 +37910,7 @@ function _evSample(now){
     var fx = (typeof S !== 'undefined') ? S.lastGPSFix : null;
     if(fx && fx.lat != null && fx.lng != null && fx.ts && (fx.acc == null || fx.acc <= 120) && now - fx.ts <= 15000){
       var lt = _ev.trail[_ev.trail.length - 1];
-      if(!lt || lt.ts !== fx.ts) _ev.trail.push({ lat: fx.lat, lng: fx.lng, ts: fx.ts });
+      if(!lt || lt.ts !== fx.ts) _ev.trail.push({ lat: fx.lat, lng: fx.lng, ts: fx.ts, acc: (fx.acc == null ? null : fx.acc) });
     }
     while(_ev.trail.length && now - _ev.trail[0].ts > 600000) _ev.trail.shift();
     var cl = (typeof _cellLast !== 'undefined') ? _cellLast : null;
@@ -38043,16 +38021,14 @@ window._rideEvReset = function(why, floor){ _ev.sticky = 0; _ev.cache = null; _e
 // '정말 못 탔다'는 증명: 최근 2분간 GPS 가 역 근처에서 거의 안 움직였고 기지국도 안 바뀌었고 PF 도 주행이 아님.
 //   궤적이 모자라면(지하·GPS 없음) 판단 불가 → 못 탔다고 보지 않는다(시각만으로 다음 열차로 밀지 않는다).
 window._missProof = function(){
+  // 2026-10-12: 증명은 엔진(/ride-track miss)이 한다 — 신선한(25초 안) 위치가 정지를 보일 때만 true. 판정이 없거나 오래됐으면 false(증거 없이 놓쳤다고 하지 않는다).
+  //   (예전: 지하로 들어가며 GPS 가 끊기면 마지막 좌표가 '서 있는 증거'로 남아 늦은 열차가 '놓침'이 됐다.) 다음 판정을 미리 부탁해 둔다.
   try{
-    var r = window._rideEv();
-    if(r.riding || window._htlBoarded === true) return false;
-    var now = Date.now(), sp = _evSpan(120000, now);
-    if(!sp || sp.d80 > 80) return false;
-    if(_evCellN(180000, now) >= 2) return false;
-    var b = window._pfBest;
-    if(b && now - b.at < 20000 && b.conf >= 0.7 && b.kind === 'seg') return false;
-    _evLog('승차판단', '미탑승 증명 정지 ' + Math.round(sp.d80) + 'm/' + Math.round(sp.dt) + '초');
-    return true;
+    try{ _trkRequest('miss'); }catch(e0){}
+    var v = _trkFresh();
+    var r = v && v.miss;
+    if(r && r.proof){ _evLog('승차판단', '미탑승 증명 ' + r.why); return true; }
+    return false;
   }catch(e){ return false; }
 };
 
@@ -38095,6 +38071,8 @@ window._pfPosOverride = function(){
     var A = _pf.A, td = A.td, nd = _transitNodeData, b = window._pfBest;
     if(!nd || !nd[td]) return null;
     try{ var xh = _xferHoldIdx(); if(xh >= 0 && td >= xh) return null; }catch(e1){}   // 환승 승차 대기 중에는 환승 고정 규칙이 맡는다
+    // ★ 2026-10-12: GPS 가 이미 PF 채택 역보다 앞선 역을 확정했으면 PF 는 낡은 것이다 — 마지막 역에서 올라와 걷는 동안 마커가 5km 뒤 역으로 되돌아갔다 돌아오던 원인(시뮬 지하철 정상 탑승).
+    try{ var _gmx = window._gpsMaxIdx; if(_gmx != null && _gmx > td) return null; }catch(e2){}
     var to = -1;
     for(var j = td + 1; j < nd.length; j++){ if(nd[j] && _arrTimeToMin(nd[j].arrTime) != null){ to = j; break; } }
     if(to < 0) return { fromIdx: td, toIdx: td, ratio: 0 };
