@@ -76,34 +76,49 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   await t('새 추천이 뜨면 다시 뽑는다(여러 번 중 한 번은 달라진다)', async () => {
     const seen = new Set(); for (let i = 0; i < 40; i++) { const [a] = await recoOf(); seen.add(a.ch); } assert.ok(seen.size > 1, [...seen].join());
   });
-  console.log('[③-2 광고에 실제 가게·상품 이름 (2026-10-14)]');
+  console.log('[③-2 광고에 실제 가게·상품 이름과 날씨·시간 맞춤 설명 (2026-10-14)]');
   const withAd = (ad) => page.evaluate((ad) => {
     window._ovlRecoOff = false; window._ovlRecoDismissAt = undefined;
     window._pipReco = { title: '하차 10분 전 · 아라', body: '점심시간이에요. 제육볶음 어떠세요?\n근처엔 한솥, 맘스터치 있어요.', at: Date.now(), ovlAt: Date.now() - 60000, ad };
     window._arrLast = { at: window._pipReco.at, action: ad && ad.k === 'shop' ? { kind: 'shop' } : { label: '맛집 위치 보기' } }; window._arrHomeEta = () => ({ arrMs: Date.now() + 100000, rem: 100 });
     return _ovlLines().reco;
   }, ad);
-  await t('식당 광고: 첫 줄에 실제 가게 이름, 둘째 줄에 거리·업종', async () => { const r = await withAd({ k: 'food', a: '스타벅스 인천터미널점', b: '120m · 커피전문점' }); assert.strictEqual(r.a, '스타벅스 인천터미널점'); assert.strictEqual(r.b, '120m · 커피전문점'); assert.strictEqual(r.go, '맛집 보기'); });
-  await t('쿠팡 광고: 첫 줄에 실제 상품 이름, 버튼은 쿠팡 보기', async () => { const r = await withAd({ k: 'shop', a: '코멕스 3단 자동 우산 대형 튼튼한 방풍 우산', b: '비 소식 70%예요, 미리 챙겨요' }); assert.ok(r.a.startsWith('코멕스 3단 자동 우산'), r.a); assert.strictEqual(r.go, '쿠팡 보기'); assert.ok(r.a.length <= 41, r.a); });
-  await t('실제 이름이 없으면(ad 없음) 예전 문구 두 줄로 간다', async () => { const r = await withAd(null); assert.ok(/점심시간이에요/.test(r.a), r.a); });
-  await t('_arrAd: 장소·거리·업종, 이모지 제거, 1km 이상은 km', async () => {
-    const r = await page.evaluate(() => [
-      _arrAd({ place: { n: '이디야커피 ☕ 아라점', d: 230, c: '음식점 > 카페 > 커피전문점' }, spots: [], menu: '아메리카노' }, 'morning'),
-      _arrAd({ place: { n: '대박국밥', d: 1340, c: '음식점 > 한식 > 국밥' }, spots: [] }, 'lunch'),
-      _arrAd({ place: null, spots: ['한솥도시락', '맘스터치'], menu: '도시락' }, 'night'),
-      _arrAd({ place: null, spots: [], menu: '' }, 'lunch'),
-      _arrAd({ shop: { n: '[쿠팡] 휴대용 선풍기' }, cx: null }, 'shop'),
-      _arrAd({ shop: null }, 'shop')]);
-    assert.deepStrictEqual(r[0], { k: 'cafe', a: '이디야커피 아라점', b: '230m · 커피전문점' });
-    assert.deepStrictEqual(r[1], { k: 'food', a: '대박국밥', b: '1.3km · 국밥' });
-    assert.deepStrictEqual(r[2], { k: 'food', a: '한솥도시락', b: '도시락' });
-    assert.strictEqual(r[3], null); assert.strictEqual(r[4].a, '[쿠팡] 휴대용 선풍기'); assert.strictEqual(r[5], null);
+  await t('식당 광고: 첫 줄에 실제 가게 이름, 둘째 줄에 추천 설명, m 에 거리·종류', async () => { const r = await withAd({ k: 'food', a: '스타벅스 인천터미널점', b: '비 오는 아침엔 따뜻한 한 잔 · 따뜻한 라떼 + 소금빵 어때요?', m: '120m · 커피전문점 · 걸어서 2분' }); assert.strictEqual(r.a, '스타벅스 인천터미널점'); assert.ok(/따뜻한 라떼 \+ 소금빵/.test(r.b), r.b); assert.strictEqual(r.m, '120m · 커피전문점 · 걸어서 2분'); assert.strictEqual(r.go, '맛집 보기'); });
+  await t('설명은 두 줄 분량(64자)까지 보낸다', async () => { const long = '가'.repeat(30) + ' ' + '나'.repeat(30) + ' ' + '다'.repeat(20); const r = await withAd({ k: 'food', a: '대박국밥', b: long, m: '' }); assert.ok(r.b.length > 26 && r.b.length <= 65, String(r.b.length)); });
+  await t('쿠팡 광고: 첫 줄에 실제 상품 이름, 버튼은 쿠팡 보기', async () => { const r = await withAd({ k: 'shop', a: '코멕스 3단 자동 우산 대형 튼튼한 방풍 우산', b: '비 소식 70%예요, 미리 챙겨요', m: '생활 · 쿠팡' }); assert.ok(r.a.startsWith('코멕스 3단 자동 우산'), r.a); assert.strictEqual(r.go, '쿠팡 보기'); assert.ok(r.a.length <= 41, r.a); assert.strictEqual(r.m, '생활 · 쿠팡'); });
+  await t('실제 이름이 없으면(ad 없음) 예전 문구 두 줄로 간다', async () => { const r = await withAd(null); assert.ok(/점심시간이에요/.test(r.a), r.a); assert.strictEqual(r.m, ''); });
+  const CXR = () => Object.assign(_arrCx(Date.now()), {});
+  await t('_arrAd 카페(아침): 이름·메뉴+브런치 권유·상황 문구(비)·거리/종류/걸어서 분', async () => {
+    const r = await page.evaluate(() => { const cx = Object.assign(_arrCx(Date.now()), { rainy: true, rain: 80, snowy: false, freezing: false, cold: false });
+      return _arrAd({ place: { n: '이디야커피 ☕ 아라점', d: 230, c: '음식점 > 카페 > 커피전문점' }, spots: [], menu: '따뜻한 라떼', brunch: '소금빵', cx }, 'morning', ''); });
+    assert.strictEqual(r.k, 'cafe'); assert.strictEqual(r.a, '이디야커피 아라점'); assert.strictEqual(r.m, '230m · 커피전문점 · 걸어서 3분');
+    assert.ok(/비|빗/.test(r.b) && /따뜻한 라떼 \+ 소금빵 어때요\?/.test(r.b), r.b);
   });
-  await t('실제 발사 경로(_arrFireAlertNow)가 만든 추천에 ad 가 실린다', async () => {
-    const r = await page.evaluate(() => {
-      const src = String(window._arrFireAlertNow || (typeof _arrFireAlertNow !== 'undefined' ? _arrFireAlertNow : ''));
-      return /_pipReco\.ad\s*=\s*_arrAd\(a, slot\)/.test(src);
-    });
+  await t('_arrAd 점심: 메뉴에 맞는 가게(spots)가 있으면 그 가게와 그 메뉴를 권한다', async () => {
+    const r = await page.evaluate(() => _arrAd({ place: { n: '맘스터치', d: 90, c: '음식점 > 패스트푸드 > 햄버거' }, spots: ['한솥도시락', '김밥천국'], menu: '도시락', cx: Object.assign(_arrCx(Date.now()), { rainy: false, snowy: false, cold: false, hot: false, payday: false, fri: false, mon: false, weekend: false }) }, 'lunch', ''));
+    assert.strictEqual(r.a, '한솥도시락'); assert.ok(/도시락/.test(r.b), r.b); assert.ok(!/햄버거/.test(r.b), r.b);
+  });
+  await t('_arrAd 점심: 메뉴와 상관없이 고른 가게(place)만 있으면 그 가게 업종으로 말한다(안 파는 메뉴를 권하지 않는다)', async () => {
+    const r = await page.evaluate(() => _arrAd({ place: { n: '대박국밥', d: 1340, c: '음식점 > 한식 > 국밥' }, spots: [], menu: '제육볶음', cx: _arrCx(Date.now()) }, 'lunch', ''));
+    assert.strictEqual(r.a, '대박국밥'); assert.ok(/국밥/.test(r.b), r.b); assert.ok(!/제육볶음/.test(r.b), r.b); assert.strictEqual(r.m, '1.3km · 국밥'); assert.ok(r.b.length > 14 && r.b.length <= 64, '설명이 짧다: ' + r.b);
+  });
+  await t('_arrAd 저녁·야식·이모지 제거·정보 없음', async () => {
+    const r = await page.evaluate(() => [
+      _arrAd({ place: { n: '굽네치킨 🍗 아라점', d: 480, c: '음식점 > 치킨' }, spots: [], menu: '치킨', dinner: false, cx: _arrCx(Date.now()) }, 'night', ''),
+      _arrAd({ place: null, spots: [], menu: '' }, 'lunch', ''),
+      _arrAd({ shop: null }, 'shop', '')]);
+    assert.strictEqual(r[0].a, '굽네치킨 아라점'); assert.ok(/치킨/.test(r[0].b), r[0].b); assert.strictEqual(r[0].m, '480m · 치킨 · 걸어서 7분');
+    assert.strictEqual(r[1], null); assert.strictEqual(r[2], null);
+  });
+  await t('_arrAd 쿠팡: 이름 + 상품에 맞춘 설명(비 올 확률) + 분류·쿠팡', async () => {
+    const r = await page.evaluate(() => { const cx = Object.assign(_arrCx(Date.now()), { rain: 70, rainSoon: true, rainy: true });
+      return [_arrAd({ shop: { n: '코멕스 3단 자동 우산', _cat: '생활', _t: '우천대비' }, cx }, 'shop'),
+              _arrAd({ shop: { n: '코멕스 3단 자동 우산', _cat: '생활', _t: '우천대비' }, cx, hook: '비 오는 밤, 구경하다 가요', hookStrong: true }, 'shop')]; });
+    assert.strictEqual(r[0].k, 'shop'); assert.strictEqual(r[0].a, '코멕스 3단 자동 우산'); assert.ok(/비 올 확률이 70%/.test(r[0].b), r[0].b); assert.strictEqual(r[0].m, '생활 · 쿠팡');
+    assert.ok(r[1].b.length > 0 && r[1].b.length <= 64, r[1].b);
+  });
+  await t('실제 발사 경로(_arrFireAlertNow)가 만든 추천에 ad 가 실린다(도착지도 넘긴다)', async () => {
+    const r = await page.evaluate(() => /_pipReco\.ad\s*=\s*_arrAd\(a, slot, destStn\)/.test(String(_arrFireAlertNow)));
     assert.strictEqual(r, true);
   });
   console.log('[④ 3D 렌더링 동작 프레임 (2026-10-13)]');
@@ -161,8 +176,8 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   await t('버튼을 누르면 오버레이에 시연(recoDemo)을 시키고, 누를 때마다 다른 캐릭터 하나가 실려 6종이 모두 나온다', async () => {
     const r = await page.evaluate(() => {
       window.Capacitor = window.Capacitor || {}; window.Capacitor.Plugins = window.Capacitor.Plugins || {};
-      window._foodPublicData = [{ place_name: '스타벅스 인천터미널점', category_name: '음식점 > 카페 > 커피전문점', distance: '120' }, { place_name: '대박국밥', category_name: '음식점 > 한식 > 국밥', distance: '340' }];
-      window._shopPick = () => ({ rec: [{ n: '코멕스 3단 자동 우산' }], ctx: null });
+      window._foodPublicData = [{ place_name: '스타벅스 인천터미널점', category_name: '음식점 > 카페 > 커피전문점', distance: '120' }, { place_name: '대박국밥', category_name: '음식점 > 한식 > 국밥', distance: '340' }, { place_name: '굽네치킨 아라점', category_name: '음식점 > 치킨', distance: '480' }];
+      window._shopPick = () => ({ rec: [{ n: '코멕스 3단 자동 우산', _cat: '생활', _t: '우천대비' }], ctx: null });
       const calls = []; window.Capacitor.Plugins.Overlay = { recoDemo: (o) => { calls.push(o); return Promise.resolve({ ok: true }); } };
       for (let i = 0; i < 6; i++) document.getElementById('rcDemoBtn').click();
       return calls;
@@ -171,16 +186,16 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     const seen = new Set(); for (const c of r) { assert.ok(IDS.includes(c.ch) && c.ch2 === undefined, c.ch); assert.ok(c.a && c.secs >= 10, JSON.stringify(c)); seen.add(c.ch); }
     assert.strictEqual(seen.size, 6, [...seen].join());
   });
-  await t('시연 줄에는 실제 가게·쿠팡 상품 이름이 실리고 카페·쿠팡·식당이 번갈아 나온다', async () => {
+  await t('시연 줄에는 실제 가게·쿠팡 상품 이름과 맞춤 설명이 실리고 식당(카페)·쿠팡이 번갈아 나온다', async () => {
     const r = await page.evaluate(() => {
       const calls = []; window.Capacitor.Plugins.Overlay = { recoDemo: (o) => { calls.push(o); return Promise.resolve({ ok: true }); } };
       for (let i = 0; i < 6; i++) document.getElementById('rcDemoBtn').click();
       return calls;
     });
-    const names = new Set(['스타벅스 인천터미널점', '대박국밥', '코멕스 3단 자동 우산']);
-    for (const c of r) assert.ok(names.has(c.a), c.a);
-    assert.ok(r.some(c => c.go === '쿠팡 보기') && r.some(c => c.go === '맛집 보기'), JSON.stringify(r.map(c => c.go)));
-    assert.ok(r.some(c => c.a === '스타벅스 인천터미널점') && r.some(c => c.a === '대박국밥') && r.some(c => c.a === '코멕스 3단 자동 우산'));
+    const names = new Set(['스타벅스 인천터미널점', '대박국밥', '굽네치킨 아라점', '코멕스 3단 자동 우산']);
+    for (const c of r) { assert.ok(names.has(c.a), c.a); assert.ok(c.b && c.b.length >= 6, '설명 없음: ' + JSON.stringify(c)); assert.ok(c.m && c.m.length > 0, 'm 없음: ' + JSON.stringify(c)); }
+    assert.ok(r.some(c => c.go === '쿠팡 보기' && c.a === '코멕스 3단 자동 우산' && /쿠팡/.test(c.m)), JSON.stringify(r.map(c => c.go)));
+    assert.ok(r.some(c => c.go === '맛집 보기' && c.a !== '코멕스 3단 자동 우산'), JSON.stringify(r.map(c => c.go)));
   });
   await t('가게 목록이 하나도 없어도 가짜 가게 이름을 만들지 않고 안내 문구를 싣는다(쿠팡도 없을 때)', async () => {
     const r = await page.evaluate(() => {
@@ -190,16 +205,18 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     });
     assert.ok(/가게 이름이 여기에 나와요/.test(r.a), r.a);
   });
-  await t('네이티브 추천 줄: 캐릭터 칸이 몸 높이+띄운 높이보다 높아 위아래가 잘리지 않고, 줄을 가리는 clipRect 가 없다', async () => {
+  await t('네이티브 추천 줄: 캐릭터 칸이 몸 높이+띄운 높이보다 높아 위아래가 잘리지 않고, 글자는 키웠고, 줄을 가리는 clipRect 가 없다', async () => {
     const j = fs.readFileSync(path.join(__dirname, '..', 'native', 'OverlayPlugin.java'), 'utf8');
     const rv = j.slice(j.indexOf('private class RecoView'), j.indexOf('private class WaitChip'));
-    const rowDp = +/private int rowDp\(\) \{ return (\d+);/.exec(rv)[1];
-    const body = id => { const m = new RegExp('"' + id + '".equals\\(id\\)\\) return ([\\d.]+)f;').exec(rv.slice(rv.indexOf('private float bodyDp'))); return m ? +m[1] : 50; };
+    const rowMin = +/rowHdp = Math\.max\((\d+)f, barHdp/.exec(rv)[1];
+    const body = id => { const m = new RegExp('"' + id + '".equals\\(id\\)\\) return ([\\d.]+)f;').exec(rv.slice(rv.indexOf('private float bodyDp'))); return m ? +m[1] : 58; };
     const raise = id => { const m = new RegExp('"' + id + '".equals\\(id\\)\\) return new float\\[\\] \\{ [\\d.]+f, [\\d.]+f, [\\d.]+f, [\\d.]+f, ([\\d.]+)f').exec(rv); return m ? +m[1] : 0; };
-    for (const id of IDS) assert.ok(body(id) + raise(id) <= rowDp - 4, id + ' ' + body(id) + '+' + raise(id) + ' > ' + (rowDp - 4));
+    for (const id of IDS) assert.ok(body(id) + raise(id) <= rowMin - 4, id + ' ' + body(id) + '+' + raise(id) + ' > ' + (rowMin - 4));
     assert.ok(!/clipRect/.test(rv), 'clipRect 있음');
     assert.ok(/cv\.scale\(-1f, 1f/.test(rv), '왼쪽으로 갈 때 좌우 반전 없음');
     assert.ok(!/rcCh2/.test(rv), '둘째 캐릭터를 그리면 안 된다');
+    assert.ok(/fitSp\(rcA, textW, 16f/.test(rv) && /wrap\(rcB, textW, 2, 13\.5f\)/.test(rv), '이름 16sp · 설명 13.5sp 두 줄');
+    assert.ok(/stack = \(barW - btnArea - padL\) < dp\(210\)/.test(rv), '좁은 화면 버튼 아래 배치');
   });
   await t('권한이 없으면 안내 문구가 뜨고, 이 버전에 기능이 없으면 그렇게 알린다', async () => {
     const m = await page.evaluate(async () => {
