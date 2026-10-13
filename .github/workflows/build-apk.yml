@@ -39,6 +39,7 @@ jobs:
           - ride_track.test.js
           - ride_track.ui.test.js
           - ride_standby.test.js
+          - sim/standby_sim.js
           - ovl_standby.ui.test.js
           - standby_card.ui.test.js
           - rt_arrival_cands.ui.test.js

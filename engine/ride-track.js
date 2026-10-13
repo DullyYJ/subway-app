@@ -62,6 +62,8 @@ var RIDE_TRACK_DEFAULTS = {
   pressFarM: 800,         // 이보다 멀면 '역에 없다' — 버튼을 거둔다(그 사이는 믿는다)
   busStopNearM: 150,      // 승차 정류장을 '지났다'고 보는 반경(정확도 일부를 뺀 거리)
   busStopAccCap: 50,      // 위 거리에서 빼 주는 정확도의 상한
+  busTrailMaxAgeSec: 570, // 앱 궤적은 10분(600초)보다 오래된 점을 버린다 — 맨 앞 점이 이만큼 오래됐으면 밀려났을 수 있다
+  busTrailCap: 240,       // 앱이 보내는 궤적 점 수의 상한 — 이만큼 차면 오래된 점이 밀려나 '승차 정류장을 지난 적 없음'을 말할 수 없다
   busCoverSlackSec: 20,   // 궤적이 움직임 시작보다 이만큼 앞서 시작해야 '정류장을 지난 적 없음'을 말할 수 있다
   busAheadSec: 300,       // 뒤 정류장에 계획 시각보다 이만큼 먼저 닿으면 앞서 달린 것
   busAheadMinStops: 2,    // 그런 정류장이 이만큼 이상이어야 '버스가 아님'
@@ -392,6 +394,10 @@ function rtBus(P, tr, O, vehNow) {
   if (ahead >= O.busAheadMinStops) { res.state = 'notBus'; res.why = 'ahead'; return res; }
   if (seen === false) {
     // 승차 정류장을 지난 적이 없다 — 궤적이 움직임 시작 전부터 있을 때만 단정한다(오래전에 지나 궤적 밖으로 밀려난 것일 수 있다)
+    // ★ 2026-10-14 (시뮬 bus/faithful: 계획대로 버스를 타는데 10분쯤 뒤 '승용차'로 판정돼 재탐색): 궤적은 최근 busTrailCap 점만 남아 오래된 점이 밀려난다.
+    //   승차 증거 시각(startMs)이 승차 정류장 통과보다 늦으면, 정류장 통과는 밀려나고 궤적 맨 앞은 아직 startMs 보다 앞이라 '지난 적 없음'으로 잘못 읽혔다.
+    //   → 궤적이 점 수 상한에 닿았거나 맨 앞 점이 10분 가까이 됐으면(오래된 점이 밀려났을 수 있다) 단정하지 않는다.
+    if (tr.length >= O.busTrailCap || now - tr[0].ts >= O.busTrailMaxAgeSec * 1000) { res.why = 'trail_capped'; return res; }
     var from = plan.startMs || null;
     if (!from) from = rtMotionStart(tr, O);
     if (from && tr[0].ts <= from - O.busCoverSlackSec * 1000) { res.state = 'notBus'; res.why = 'no_stop'; return res; }

@@ -173,6 +173,15 @@ r = rideTrack({ nowMs: NOW }); ok(r.off.confirmed === false && r.fix.n === 0, '�
   let car = trail(160, 0, 5, (s) => ({ lat: 0, lng: X(2000 + (160 - s) * 12.5) }));
   let r = run(car, { startMs: NOW - 120000, busLeg: { boardPt: BOARD } });
   ok(r.bus && r.bus.state === 'notBus' && r.bus.why === 'no_stop' && r.bus.stopSeen === false, '승용차: 승차 정류장을 지난 적 없다 → notBus/no_stop ' + JSON.stringify(r.bus));
+  // ★ 2026-10-14 시뮬 회귀: 계획대로 버스를 탔는데 궤적 맨 앞이 승차 정류장 통과 뒤로 밀려난 경우(10분 창·240점 상한)는 '승용차'로 단정하면 안 된다
+  {
+    const long = trail(600, 0, 3, (s) => ({ lat: 0, lng: X(1000 + (600 - s) * 12.5) }));   // 600초(3초 간격 200점): 이미 달리는 중, 승차 정류장(0m)은 밀려남
+    const rr = run(long, { startMs: NOW - 540000, busLeg: { boardPt: BOARD } });
+    ok(rr.bus && rr.bus.state !== 'notBus' && rr.bus.why === 'trail_capped', '궤적이 10분 창 끝까지 찼다 → 단정하지 않는다 ' + JSON.stringify(rr.bus));
+    const many = trail(250, 0, 1, (s) => ({ lat: 0, lng: X(1000 + (250 - s) * 12.5) }));   // 251점
+    const r3 = run(many, { startMs: NOW - 200000, busLeg: { boardPt: BOARD } });
+    ok(r3.bus && r3.bus.state !== 'notBus' && r3.bus.why === 'trail_capped', '궤적이 240점 상한에 닿았다 → 단정하지 않는다 ' + JSON.stringify(r3.bus));
+  }
   ok(r.mode === null, '버스 아님이면 GPS 중심 모드를 켜지 않는다 ' + JSON.stringify(r.mode));
   // 버스: 정류장에서 60초 서 있다가 출발(시속 20km 안팎), 궤적은 정류장 도착 전부터
   let bus = trail(200, 140, 5, () => ({ lat: 0, lng: X(10) })).concat(trail(135, 0, 5, (s) => ({ lat: 0, lng: X((140 - s) * 5.5) })));

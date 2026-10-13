@@ -192,6 +192,30 @@ t('버스처럼 시각표 기준이 아닌 여정(timetableFirst 없음)도 GPS 
   const arrTxt = r.last.overlay.cells[5].t; assert.ok(/^\d\d:\d\d$/.test(arrTxt), arrTxt);
 });
 
+t('버스: GPS 가 15분 끊겼다 돌아오면 앞쪽 정류장 통과로 다시 맞춘다(재동기) — 시각표 기준 여정이 아닐 때만', () => {
+  // 정류장 12개(2분 간격, 1.2km). 3번 통과 뒤 GPS 가 끊기고, 15분 뒤 열차가 10번 정류장에 선 채 좌표 두 점이 들어온다.
+  function busState(n) {
+    const nodesB = [{ name: '출발', isOrigin: true }], stopsB = [], seqB = [];
+    for (let i = 1; i <= n; i++) { nodesB.push({ name: 'B' + i, isBus: true, lineName: '931', planMin: PLAN[1] + 2 * (i - 1) }); stopsB.push({ i: i, lat: LAT, lng: LNG0 + DL * (i - 1), arrMs: DAY + (PLAN[1] + 2 * (i - 1)) * 60000, pass: i > 1, fin: i === n, bus: true }); seqB.push(i); }
+    return { v: 1, eta: { nodes: nodesB, passes: [{ idx: 1, ms: at(12, 52, 0), src: 'gps' }, { idx: 2, ms: at(12, 54, 0), src: 'gps' }, { idx: 3, ms: at(12, 56, 0), src: 'gps' }], boarded: true, tzOffsetMin: 540 }, stops: stopsB, trail: [], cfg: { targets: [{ seqPos: n - 1, nodeIdx: n, name: 'B' + n, kind: 'dest' }], seq: seqB, allowed: {}, destName: 'B' + n }, fired: {} };
+  }
+  let st = busState(12);
+  const t1 = at(13, 11, 0);   // 15분 뒤: 계획대로면 10번(12:52+18분=13:10)에 선 시각
+  let r = rideStandby({ nowMs: t1, fixes: [[t1 - 6000, LAT, LNG0 + DL * 9, 15], [t1, LAT, LNG0 + DL * 9 + 0.0001, 15]], state: st });
+  assert.ok(!r.error);
+  assert.ok(r.state.eta.passes.some(p => p.idx === 10), '10번 통과가 반영돼야 한다: ' + JSON.stringify(r.state.eta.passes.map(p => p.idx)));
+  assert.ok(r.curIdx >= 10, 'curIdx ' + r.curIdx);
+  // 반대로 3번 통과 1분 뒤에 10번 근처 좌표가 잡히면(불가능한 점프 — 튄 점·겹치는 길) 건너뛰지 않는다
+  st = busState(12);
+  const t2 = at(12, 57, 0);
+  r = rideStandby({ nowMs: t2, fixes: [[t2 - 6000, LAT, LNG0 + DL * 9, 15], [t2, LAT, LNG0 + DL * 9, 15]], state: st });
+  assert.ok(!r.state.eta.passes.some(p => p.idx === 10), '불가능한 점프를 받아들임');
+  // 점이 하나뿐이면 재동기는 하지 않는다(영점 창 안에 든 점은 기존 영점 규칙이 따로 처리한다)
+  st = busState(12);
+  r = rideStandby({ nowMs: t1, fixes: [[t1, LAT, LNG0 + DL * 9, 15]], state: st });
+  assert.ok(!r.notes.some(x => /재동기/.test(x)), '점 하나로 재동기');
+});
+
 const httpTest = async () => {
   const zlib = require('zlib');
   const body = JSON.stringify({ nowMs: at(12, 55, 0), fixes: [], state: withOvl(mkState()) });

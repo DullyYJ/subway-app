@@ -237,7 +237,7 @@ async function runOne(b, sc) {
   } catch (e) { crashed = String(e && e.message || e).split('\n')[0]; }
   const diag = await app.page.evaluate(() => { try { return (JSON.parse(localStorage.getItem('ovlDiag') || '[]') || []).map(String); } catch (e) { return []; } }).catch(() => []);
   const adopted = diag.filter(x => /경로맞춤/.test(x)).length;
-  const rec = { id: sc.id, layout: sc.layout, beh: sc.beh, noise: sc.noise, offset: sc.offset, fsm: sc.fsm || 'asis', wallSec: Math.round((Date.now() - t0) / 1000), crashed, pageErrors: [...new Set(app.errs)].slice(0, 5), adopted, diagTail: diag.slice(-6).map(s => s.slice(0, 140)),
+  const rec = { id: sc.id, layout: sc.layout, beh: sc.beh, noise: sc.noise, offset: sc.offset, fsm: sc.fsm || 'asis', wallSec: Math.round((Date.now() - t0) / 1000), crashed, pageErrors: [...new Set(app.errs)].slice(0, 5), adopted, diagAll: process.env.SIM_FULLDIAG ? diag.map(s => s.slice(0, 220)) : undefined, diagTail: diag.slice(-6).map(s => s.slice(0, 140)),
     trkCalls: app.stat.trk || 0, trkKey: (app.stat.trkLog || []).filter((x, i, a) => i === 0 || x.off !== a[i - 1].off || x.ridden !== a[i - 1].ridden || x.nC !== a[i - 1].nC || x.miss !== a[i - 1].miss).slice(0, 60), diagKey: diag.filter(x => /경로이탈|경로맞춤|경로판정|승차확정|승차판단/.test(x)).slice(0, 30).map(s => s.slice(0, 160)),
     events: R ? R.events : [], devAt: R ? R.devAt : null, simEnd: R ? Math.round(R.simT) : 0, requests: app.stat.routeQs ? burstsOf(app.stat.routeQs).length : 0, samples: R ? R.samples : [] };
   await app.ctx.close();

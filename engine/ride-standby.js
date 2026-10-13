@@ -127,6 +127,40 @@ function rsOverlay(st, r, curIdx, curPos, now, dest, destName, moving, done) {
   return out;
 }
 
+function rsDistM(aLat, aLng, bLat, bLng) {
+  var R = 6371000, dLat = (bLat - aLat) * Math.PI / 180, dLng = (bLng - aLng) * Math.PI / 180;
+  var h = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(aLat * Math.PI / 180) * Math.cos(bLat * Math.PI / 180) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+// ★ 2026-10-14 (시뮬: 버스는 GPS 가 10분 넘게 끊겼다 돌아오면 영점이 영영 안 잡혔다): ride-track 영점은 '표시 도착 시각 앞 5분~뒤 7분' 창 안의 GPS 만 본다.
+//   시각표 기준이 아닌 여정(버스)에서 GPS 가 오래 끊겨 창이 밀렸다가 돌아오면, 지금 위치가 앞쪽 정류장 근처인데도 창 밖이라 무시됐다.
+//   → 신선한 정확한 좌표 두 점(5초 이상 간격)이 모두 앞쪽 정류장 150m 안이고, 마지막 통과 정류장에서 계획 소요의 40% 이상 지났으면 그 정류장 통과로 본다(정류장 건너뛰기 포함).
+function rsResync(st, now, notes) {
+  var eta = st.eta, tr = st.trail || [], stops = st.stops || [], passes = eta.passes || [], i, k;
+  if (eta.timetableFirst || tr.length < 2 || !stops.length) return;
+  var maxIdx = 0, lastPass = null;
+  for (i = 0; i < passes.length; i++) if (passes[i].idx > maxIdx) { maxIdx = passes[i].idx; lastPass = passes[i]; }
+  if (!lastPass) return;
+  var a = tr[tr.length - 1], b = null;
+  if (now - a[0] > 30000 || (a[3] != null && a[3] > 60)) return;
+  for (i = tr.length - 2; i >= 0; i--) { if (a[0] - tr[i][0] >= 5000 && a[0] - tr[i][0] <= 60000 && (tr[i][3] == null || tr[i][3] <= 60)) { b = tr[i]; break; } }
+  if (!b) return;
+  var lastStop = null; for (i = 0; i < stops.length; i++) if (stops[i].i === maxIdx) lastStop = stops[i];
+  var best = null, bestD = 1e9;
+  for (k = 0; k < stops.length; k++) {
+    var s = stops[k]; if (s.i <= maxIdx) continue;
+    var da = rsDistM(a[1], a[2], s.lat, s.lng), db = rsDistM(b[1], b[2], s.lat, s.lng);
+    if (da > 150 || db > 150) continue;
+    var gap = lastStop ? (s.arrMs - lastStop.arrMs) : 0;
+    if (gap > 0 && lastPass.ms != null && a[0] - lastPass.ms < 0.4 * gap) continue;   // 계획 소요의 40% 도 안 지났으면 건너뛸 수 없다
+    if (da < bestD) { bestD = da; best = s; }
+  }
+  if (!best) return;
+  passes.push({ idx: best.i, ms: a[0], src: 'gps' });
+  if (st.notYet) delete st.notYet[best.i];
+  notes.push('재동기 ' + best.i + '번(GPS 끊김 뒤 위치로 통과 인정, ' + Math.round(bestD) + 'm)');
+}
+
 function rideStandby(req) {
   req = req || {};
   var O = RIDE_STANDBY_DEFAULTS, st = req.state, now = +req.nowMs, notes = [], i;
@@ -157,6 +191,7 @@ function rideStandby(req) {
       });
     }
   }
+  rsResync(st, now, notes);   // 2.5) 버스: 오래 끊겼던 GPS 가 돌아오면 앞쪽 정류장 통과로 다시 맞춘다(시각표 기준 여정은 시각표가 이어가므로 해당 없음)
   // 3) 도착 시각 계산
   var nyList = [], nk;
   for (nk in notYet) { if (now - notYet[nk] <= O.notYetKeepSec * 1000) nyList.push(+nk); else delete notYet[nk]; }
@@ -211,4 +246,4 @@ function handleRideStandby(request) {
   }, function () { return new Response(JSON.stringify({ error: '요청을 읽지 못함' }), { status: 400, headers: H }); });
 }
 
-if (typeof module !== 'undefined') module.exports = { rideStandby: rideStandby, handleRideStandby: handleRideStandby, rsAlerts: rsAlerts, RIDE_STANDBY_DEFAULTS: RIDE_STANDBY_DEFAULTS };
+if (typeof module !== 'undefined') module.exports = { rideStandby: rideStandby, rsResync: rsResync, handleRideStandby: handleRideStandby, rsAlerts: rsAlerts, RIDE_STANDBY_DEFAULTS: RIDE_STANDBY_DEFAULTS };
