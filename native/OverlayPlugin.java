@@ -424,44 +424,36 @@ public class OverlayPlugin extends Plugin {
         }
     }
 
-    /** 맨 아래 추천 줄: 왼쪽 두 줄 문구, 오른쪽 [보기](추천 아이템·맛집으로) [확인](이 추천 끄기).
-     *  ★ 2026-10-13: 나타날 때 줄 위쪽이 늘어나며(약 0.4초) 캐릭터 둘이 줄 뒤에서 올라와 위쪽 절반만 내민 채 가만히 까딱거린다(캐릭터마다 몸짓이 다르다).
-     *  그림은 앱 자산(public/chars3d/*.webp, 3D 렌더링 동작 프레임)을 시간 순으로 그리고, 여기서는 줄 뒤에서 올라오는 움직임만 계산한다. 이름·광고 문구는 없다. */
+    /** 맨 아래 추천 줄: 가게·상품 이름(굵게)과 한 줄 설명, 오른쪽 [보기](추천 아이템·맛집으로) [확인](이 추천 끄기).
+     *  ★ 2026-10-14 (YJ: "캐릭터가 좌우로 움직이게 — 랜덤으로 하나가 우측에서 광고를 쫙 당겨서 나오게 · 위아래로 잘리지 않게"):
+     *  추천이 뜨면 캐릭터 하나(웹이 무작위로 정함)가 오른쪽 화면 밖에서 왼쪽으로 걸어(뛰어·날아·헤엄쳐) 들어오며 줄을 밧줄로 끌어당긴다.
+     *  줄이 자리에 서면 캐릭터는 줄 쪽으로 돌아서서 천천히 움직인다. 캐릭터는 줄 옆 칸 전체를 쓰므로 위·아래·옆 어디도 잘리지 않는다.
+     *  그림은 앱 자산(public/chars3d/*.webp, 3D 렌더링 동작 프레임)을 시간 순으로 그리고(왼쪽으로 갈 때는 좌우 반전), 여기서는 이동·반전만 계산한다.
+     *  가게·상품 이름과 문구는 웹이 정해 넘긴 것을 그대로 쓴다. */
     private class RecoView extends View {
         private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint bp = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
         private final TextPaint tp = new TextPaint(Paint.ANTI_ALIAS_FLAG);
         private final RectF rf = new RectF();
+        private final android.graphics.Path rope = new android.graphics.Path();
         private final RectF go = new RectF(), ok = new RectF();
-        private final Matrix mx = new Matrix();
         private long t0 = 0;
         private String key = "";
-        private boolean laidOut = false;
+        private static final float PULL = 1.15f;            // 줄을 끌고 들어오는 시간(초)
         RecoView(Context c) { super(c); }
-        private int headDp() { return 36; }
-        /** 추천이 새로 뜨거나 다시 보이면 처음부터 확장·등장을 시작한다(같은 추천이 계속 보이는 중이면 이어서). */
+        private int rowDp() { return 62; }                  // 캐릭터가 서는 칸 높이(머리 위 날개·띄운 높이까지 들어간다)
+        private int charW() { return dp(58); }              // 줄 왼쪽에 캐릭터가 서는 칸 너비
+        /** 추천이 새로 뜨거나 다시 보이면 처음부터 끌어오기를 시작한다(같은 추천이 계속 보이는 중이면 이어서). */
         void begin(boolean wasVisible) {
-            String k = rcAt + "|" + rcCh + "|" + rcCh2;
+            String k = rcAt + "|" + rcCh;
             if (!wasVisible || !k.equals(key)) {
-                key = k; t0 = android.os.SystemClock.uptimeMillis(); laidOut = false;
-                if (rcCh.length() == 0 || rcCh2.length() == 0) {   // 웹이 안 정했으면 추천 시각으로 고정 선택(재그림에도 안 바뀐다)
-                    int a = (int) Math.abs((rcAt / 1000L) % RC_CHARS.length);
-                    if (rcCh.length() == 0) rcCh = RC_CHARS[a];
-                    if (rcCh2.length() == 0) rcCh2 = RC_CHARS[(a + 1 + (int) Math.abs((rcAt / 7L) % (RC_CHARS.length - 1))) % RC_CHARS.length];
-                }
+                key = k; t0 = android.os.SystemClock.uptimeMillis();
+                if (rcCh.length() == 0) rcCh = RC_CHARS[(int) Math.abs((rcAt / 1000L) % RC_CHARS.length)];   // 웹이 안 정했으면 추천 시각으로 고정 선택(재그림에도 안 바뀐다)
             }
             requestLayout();
         }
-        private float grow() {
-            if (t0 == 0) return 1f;
-            float u = (android.os.SystemClock.uptimeMillis() - t0) / 380f;
-            if (u >= 1f) return 1f;
-            if (u <= 0f) return 0f;
-            return 1f - (1f - u) * (1f - u) * (1f - u);
-        }
         @Override protected void onMeasure(int wSpec, int hSpec) {
-            int add = Math.round(dp(headDp()) * grow());
-            setMeasuredDimension(MeasureSpec.getSize(wSpec), dp(44) + add);
+            setMeasuredDimension(MeasureSpec.getSize(wSpec), dp(rowDp()));
         }
         /** 1 = [보기], 2 = [확인], 0 = 버튼 밖(손가락 오차를 감안해 사방 6dp 넓게). */
         int hit(float x, float y) {
@@ -485,7 +477,13 @@ public class OverlayPlugin extends Plugin {
             tp.setTypeface(Typeface.DEFAULT_BOLD);
             return tp.measureText(s == null ? "" : s);
         }
-        /** 3D 동작 시트. 지금 쓰는 두 캐릭터 말고는 메모리에서 내린다(시트 하나가 약 4MB). */
+        /** 가게·상품 이름: 칸에 들어가도록 글자를 13sp → 10.5sp 까지 줄여 보고, 그래도 길면 끝을 '…' 로 자른다. */
+        private float fitSp(String s, float maxW, float from, float to) {
+            float sp = from;
+            while (sp > to && mw(s, sp) > maxW) sp -= 0.5f;
+            return sp;
+        }
+        /** 3D 동작 시트. 지금 쓰는 캐릭터 말고는 메모리에서 내린다(시트 하나가 약 4MB). */
         private Bitmap sheet(String id) {
             if (id == null || id.length() == 0) return null;
             Bitmap c = rcSheet.get(id);
@@ -494,7 +492,7 @@ public class OverlayPlugin extends Plugin {
             Long fa = rcSheetFail.get(id);
             if (fa != null && now - fa < 1500L) return null;      // 읽기가 어긋났으면 1.5초 뒤 다시 읽는다(옛 한 장 그림으로 그리지 않는다)
             java.util.Iterator<java.util.Map.Entry<String, Bitmap>> it = rcSheet.entrySet().iterator();
-            while (it.hasNext()) { String k = it.next().getKey(); if (!k.equals(rcCh) && !k.equals(rcCh2)) it.remove(); }
+            while (it.hasNext()) { String k = it.next().getKey(); if (!k.equals(rcCh)) it.remove(); }
             Bitmap b = null;
             try {
                 java.io.InputStream in = getContext().getAssets().open("public/chars3d/" + id + ".webp");
@@ -517,80 +515,90 @@ public class OverlayPlugin extends Plugin {
             if ("sul".equals(id)) return new float[] { 27f, 230.5f, 131f, 20f, 16f };
             return new float[] { 15f, 222.5f, 128f, 13f, 0f };
         }
-        private void drawChar3d(Canvas cv, Bitmap sh, String id, float cx, float feetY, float hPx, float delay, float rise, float t) {
-            float u = (t - delay) / 0.55f;
-            if (u <= 0f) return;
-            float r = ease(u);
-            float rr = (r > 1f) ? 1f : r;
+        /** 몸 높이(dp): 날거나 헤엄치는 캐릭터는 띄운 높이까지 더해도 칸(rowDp − 4)을 넘지 않게 작게 잡는다. */
+        private float bodyDp(String id) {
+            if ("sul".equals(id)) return 38f;
+            if ("chaeng".equals(id)) return 46f;
+            return 50f;
+        }
+        /** face: +1 오른쪽을 봄 · −1 왼쪽을 봄(시트는 오른쪽을 보고 있어 반전해 그린다). lean: 앞으로 기울임(도). ph: 동작 시계(초). */
+        private void drawChar3d(Canvas cv, Bitmap sh, String id, float cx, float baseY, int face, float lean, float ph) {
             float[] c = cfg3(id);
-            float sc = hPx / (c[1] - c[0]);
-            float dy = (1f - r) * hPx * 0.95f;      // 줄 뒤에서 올라온다
-            int idx = ((int) (Math.max(0f, t - delay) * c[3])) % 16;
+            float sc = dp(bodyDp(id)) / (c[1] - c[0]);
+            int idx = ((int) (Math.max(0f, ph) * c[3])) % 16;
             int sx = (idx % 4) * 256, sy = (idx / 4) * 256;
             rSrc.set(sx, sy, sx + 256, sy + 256);
-            float footY = feetY + dy - rise - dp(c[4]);
+            float footY = baseY - dp(c[4]);
             float left = cx - c[2] * sc, topY = footY - c[1] * sc;
             rDst.set(left, topY, left + 256f * sc, topY + 256f * sc);
-            float tilt = (1f - rr) * (id.hashCode() % 2 == 0 ? -10f : 10f);
             cv.save();
-            cv.rotate(tilt, cx, footY);
+            if (lean != 0f) cv.rotate(lean, cx, footY);
+            if (face < 0) cv.scale(-1f, 1f, cx, footY);
             cv.drawBitmap(sh, rSrc, rDst, bp);
             cv.restore();
-        }
-        private float ease(float u) {   // 살짝 넘쳤다 돌아오는 등장(오버슛)
-            if (u <= 0f) return 0f;
-            if (u >= 1f) return 1f;
-            float c = 1.9f, x = u - 1f;
-            return 1f + (c + 1f) * x * x * x + c * x * x;
-        }
-        /** 캐릭터 하나: 줄 뒤(feetY)에서 올라와 위쪽만 보인다(3D 동작 프레임을 시간 순으로 그린다). who: 0 큰 쪽(왼), 1 작은 쪽(오른). */
-        private void drawChar(Canvas cv, String id, float cx, float feetY, float hPx, float delay, float rise, float t) {
-            Bitmap sh3 = sheet(id);
-            if (sh3 != null) drawChar3d(cv, sh3, id, cx, feetY, hPx, delay, rise, t);
         }
         @Override protected void onDraw(Canvas cv) {
             float w = getWidth(), h = getHeight();
             go.setEmpty(); ok.setEmpty();
             if (!rcOn) return;
-            float top = h - dp(44);                  // 추천 줄이 시작되는 높이(위쪽은 캐릭터가 나오는 자리)
-            float tsec = t0 == 0 ? 9f : (android.os.SystemClock.uptimeMillis() - t0) / 1000f;
-            // 캐릭터는 줄 뒤에서 올라오므로 줄 위쪽 자리에서만 보이게 자른다(줄 아래로는 안 나온다)
-            if (top > dp(1)) {
-                cv.save();
-                cv.clipRect(0, 0, w, top + dp(5));
-                float big = dp(58), small = dp(46);
-                float feet = top + dp(21);           // 발은 줄 뒤로 숨는다
-                drawChar(cv, rcCh, dp(34), feet, big, 0.10f, 0f, tsec);
-                drawChar(cv, rcCh2, w - dp(52) - dp(20), top + dp(17), small, 0.28f, 0f, tsec);
-                cv.restore();
+            float t = t0 == 0 ? 9f : (android.os.SystemClock.uptimeMillis() - t0) / 1000f;
+            float u = Math.min(1f, t / PULL);
+            float e = 0.45f * u + 0.55f * (1f - (1f - u) * (1f - u) * (1f - u));     // 처음부터 바로 걷다가 끝에서 서서히 멈춘다
+            float ox = (1f - e) * w;                                                   // 캐릭터와 줄이 함께 오른쪽 밖에서 들어온다
+            boolean arrived = t >= PULL;
+            float cw = charW();
+            float cx = ox + cw / 2f;
+            float baseY = h - dp(4);
+            float barL = ox + cw, barR = ox + w - dp(2), barT = h - dp(52), barB = h - dp(2);
+            if (barL < w) {
+                p.setStyle(Paint.Style.FILL);
+                rf.set(barL, barT, barR, barB);
+                p.setColor(thBg);
+                cv.drawRoundRect(rf, dp(12), dp(12), p);
+                p.setColor((0x1A << 24) | (thSub & 0x00FFFFFF));
+                cv.drawRoundRect(rf, dp(12), dp(12), p);
+                float bh = dp(28), by = (barT + barB) / 2f - bh / 2f, gap = dp(5), edge = dp(8);
+                float okW = Math.max(dp(42), mw("확인", 11.5f) + dp(16));
+                float goW = Math.max(dp(50), mw(rcGo, 11.5f) + dp(18));
+                ok.set(barR - edge - okW, by, barR - edge, by + bh);
+                go.set(ok.left - gap - goW, by, ok.left - gap, by + bh);
+                p.setColor(0xFF0A84FF);
+                cv.drawRoundRect(go, bh / 2f, bh / 2f, p);
+                txt(cv, rcGo, go.centerX(), go.centerY() + dp(4f), goW - dp(6), 11.5f, 0xFFFFFFFF, true, Paint.Align.CENTER);
+                p.setColor((0x33 << 24) | (thSub & 0x00FFFFFF));
+                cv.drawRoundRect(ok, bh / 2f, bh / 2f, p);
+                txt(cv, "확인", ok.centerX(), ok.centerY() + dp(4f), okW - dp(6), 11.5f, thFg, true, Paint.Align.CENTER);
+                float tx = barL + dp(11), maxW = go.left - tx - dp(8);
+                if (rcB.length() > 0) {
+                    float sp = fitSp(rcA, maxW, 13f, 10.5f);
+                    txt(cv, rcA, tx, barT + dp(21), maxW, sp, thFg, true, Paint.Align.LEFT);
+                    txt(cv, rcB, tx, barT + dp(38), maxW, 11f, thSub, false, Paint.Align.LEFT);
+                } else {
+                    float sp = fitSp(rcA, maxW, 13f, 10.5f);
+                    txt(cv, rcA, tx, (barT + barB) / 2f + dp(4.5f), maxW, sp, thFg, true, Paint.Align.LEFT);
+                }
+                // 밧줄: 캐릭터 몸에서 줄 왼쪽 가운데로(줄이 끌려오는 동안은 팽팽, 선 뒤에는 느슨하게 처진다)
+                float ry0 = baseY - dp(17), ry1 = (barT + barB) / 2f, rx0 = cx + dp(8), rx1 = barL + dp(1);
+                p.setStyle(Paint.Style.STROKE);
+                p.setStrokeWidth(dp(2f));
+                p.setStrokeCap(Paint.Cap.ROUND);
+                p.setColor((0xAA << 24) | (thSub & 0x00FFFFFF));
+                rope.reset();
+                float sag = arrived ? dp(3f) : 0f;
+                rope.moveTo(rx0, ry0);
+                rope.quadTo((rx0 + rx1) / 2f, (ry0 + ry1) / 2f + sag, rx1, ry1);
+                cv.drawPath(rope, p);
+                p.setStyle(Paint.Style.FILL);
             }
-            p.setStyle(Paint.Style.FILL);
-            rf.set(0, top + dp(4), w, h - dp(2));
-            // 캐릭터 몸이 비치지 않게 먼저 카드 바탕색으로 한 번 칠한 뒤 옅은 색을 올린다
-            p.setColor(thBg);
-            cv.drawRoundRect(rf, dp(10), dp(10), p);
-            p.setColor((0x1A << 24) | (thSub & 0x00FFFFFF));
-            cv.drawRoundRect(rf, dp(10), dp(10), p);
-            float bh = dp(28), by = top + (dp(44) - bh) / 2f + dp(1), gap = dp(6), edge = dp(8);
-            float okW = Math.max(dp(48), mw("확인", 12f) + dp(20));
-            float goW = Math.max(dp(56), mw(rcGo, 12f) + dp(22));
-            ok.set(w - edge - okW, by, w - edge, by + bh);
-            go.set(ok.left - gap - goW, by, ok.left - gap, by + bh);
-            p.setColor(0xFF0A84FF);
-            cv.drawRoundRect(go, bh / 2f, bh / 2f, p);
-            txt(cv, rcGo, go.centerX(), go.centerY() + dp(4.2f), goW - dp(8), 12f, 0xFFFFFFFF, true, Paint.Align.CENTER);
-            p.setColor((0x33 << 24) | (thSub & 0x00FFFFFF));
-            cv.drawRoundRect(ok, bh / 2f, bh / 2f, p);
-            txt(cv, "확인", ok.centerX(), ok.centerY() + dp(4.2f), okW - dp(8), 12f, thFg, true, Paint.Align.CENTER);
-            float tx = edge + dp(2), maxW = go.left - tx - dp(8);
-            if (rcB.length() > 0) {
-                txt(cv, rcA, tx, top + dp(4) + dp(17), maxW, 12f, thFg, true, Paint.Align.LEFT);
-                txt(cv, rcB, tx, top + dp(4) + dp(32), maxW, 11f, thSub, false, Paint.Align.LEFT);
-            } else {
-                txt(cv, rcA, tx, top + dp(44) / 2f + dp(4.5f), maxW, 12f, thFg, true, Paint.Align.LEFT);
+            Bitmap sh3 = sheet(rcCh);
+            if (sh3 != null) {
+                float ph = arrived ? PULL + (t - PULL) * 0.6f : t;                       // 선 뒤에는 동작을 천천히
+                boolean turned = t >= PULL + 0.3f;                                       // 줄을 다 끌어온 뒤 줄 쪽으로 돌아선다
+                float lean = arrived ? 0f : -5f * (1f - u * 0.6f);                       // 끌 때는 왼쪽으로 몸을 숙인다
+                drawChar3d(cv, sh3, rcCh, cx, baseY, turned ? 1 : -1, turned ? 0f : lean, ph);
             }
-            // 확장 중이면 다음 프레임에 높이를 다시 재고, 확장이 끝나도 보이는 동안은 몸짓을 위해 약 30프레임/초로 다시 그린다
-            if (t0 != 0 && grow() < 1f) postOnAnimation(new Runnable() { @Override public void run() { requestLayout(); } });
+            // 끌어오는 동안은 부드럽게(화면 주기), 선 뒤에는 동작을 위해 약 30프레임/초로 다시 그린다
+            if (!arrived) postOnAnimation(new Runnable() { @Override public void run() { invalidate(); } });
             else postInvalidateDelayed(33);
         }
     }
