@@ -4,7 +4,7 @@
 'use strict';
 const assert = require('assert');
 const path = require('path');
-const { rideStandby, rsAlerts } = require(path.join(__dirname, '..', 'engine', 'ride-standby.js'));
+const { rideStandby, rsAlerts, handleRideStandby } = require(path.join(__dirname, '..', 'engine', 'ride-standby.js'));
 
 let pass = 0, fail = 0;
 const t = (name, fn) => { try { fn(); pass++; console.log('  ok  ', name); } catch (e) { fail++; console.log('  FAIL', name, '\n      ', String(e && e.message).split('\n')[0]); } };
@@ -123,4 +123,86 @@ t('요청 하나의 크기 — 상태 JSON 이 가볍다(5초마다 보낸다)',
   assert.ok(size < 12000, '요청 크기 ' + size);
 });
 
-console.log('ride_standby: pass', pass, 'fail', fail); process.exit(fail ? 1 : 0);
+// ── 오버레이 ─────────────────────────────────────────────
+function withOvl(st) {
+  const cells = [], map = [];
+  for (let i = 1; i <= 5; i++) {
+    cells.push({ n: 'S' + (i - 1), t: '--:--', g: i === 1 ? '인천1호선' : '', gp: false, gc: '#336699', lc: i > 1 ? '#336699' : '', rc: i < 5 ? '#336699' : '', dc: '#336699', dk: i === 1 || i === 5 ? 2 : 1, m: 'S' + (i - 1) + '(이동중)' });
+    map.push(i);
+    if (i === 2) { cells.push({ n: '도보', t: '', g: '', dk: 3, dc: '#8e8e93' }); map.push(-1); }
+  }
+  st.ovl = { cells: cells, map: map, base: 0, theme: { bg: '#ffffff', fg: '#111114', sub: '#8e8e93' } };
+  return st;
+}
+t('오버레이: 그림 틀이 없으면 overlay 는 null, 있으면 칸·현위치·시각이 채워진다', () => {
+  assert.strictEqual(rideStandby({ nowMs: at(12, 55, 0), fixes: [], state: mkState() }).overlay, null);
+  const r = rideStandby({ nowMs: at(12, 55, 0), fixes: [], state: withOvl(mkState()) });
+  const o = r.overlay;
+  assert.ok(o && o.active === true && o.cells.length === 6);
+  assert.ok(/^\d\d:\d\d$/.test(o.cells[0].t), '시각 ' + o.cells[0].t);
+  assert.strictEqual(o.cells[5].t.length, 5);
+  assert.strictEqual(o.base, 0); assert.deepStrictEqual(o.theme, { bg: '#ffffff', fg: '#111114', sub: '#8e8e93' });
+});
+t('오버레이: 열차가 가는 대로 현위치 칸이 움직이고(도보 칸은 건너뜀) 이동 중이면 알약에 다음역(이동중)', () => {
+  let st = withOvl(mkState()), curs = [], pills = new Set(), l1 = [];
+  for (let ms = at(12, 53, 0); ms <= at(13, 1, 0); ms += 5000) {
+    const r = rideStandby({ nowMs: ms, fixes: [[ms, LAT, trainLng(ms, 0), 20]], state: JSON.parse(JSON.stringify(st)) }); st = r.state;
+    curs.push(r.overlay.cur); if (r.overlay.pill) pills.add(r.overlay.pill); l1.push(r.overlay.line1);
+  }
+  for (let i = 1; i < curs.length; i++) assert.ok(curs[i] >= curs[i - 1], '뒤로 감');
+  assert.strictEqual(curs[curs.length - 1], 5);
+  assert.ok(!curs.includes(2), '도보 칸(2번)이 현위치가 됨');
+  assert.ok(pills.size >= 2 && [...pills].every(x => /\(이동중\)$/.test(x)), [...pills].join());
+  assert.ok(l1.some(x => / ▸ /.test(x)) && /^● /.test(l1[l1.length - 1]));
+});
+t('오버레이: 남은시간 줄(목적지 기준)과 하차 임박 단계(2→1→도착하면 0)·[안내 종료] 줄', () => {
+  let st = withOvl(mkState()), lv = [], rsSeen = null, l2 = null, pre = false, atFirst = 0;
+  for (let ms = at(12, 53, 0); ms <= at(13, 1, 0); ms += 5000) {
+    const r = rideStandby({ nowMs: ms, fixes: [[ms, LAT, trainLng(ms, 0), 20]], state: JSON.parse(JSON.stringify(st)) }); st = r.state;
+    if (r.done) break;
+    const o = r.overlay; if (!o || !o.active) continue;
+    if (!l2) l2 = o.line2; if (o.pre) pre = true;
+    if (lv[lv.length - 1] !== o.alert) { lv.push(o.alert); if (o.alert === 2) atFirst = o.alertAt; }
+    if (o.rs.st === 'board') rsSeen = o.rs;
+    assert.strictEqual(o.alertVibe, false);   // 진동은 알림이 한다(중복 방지)
+  }
+  assert.ok(/^남은시간: \d\d시간 \d\d분 · 13:00도착$/.test(l2), l2);
+  assert.deepStrictEqual(lv.filter((x, i) => i === 0 || x !== lv[i - 1]).filter(x => x > 0), [2, 1]);
+  assert.ok(lv[lv.length - 1] === 0 && atFirst > 0 && pre === true);
+  assert.ok(rsSeen && rsSeen.bt === '안내 종료' && rsSeen.nm === 'S4');
+});
+t('오버레이: 안내가 끝나면(done) active:false 로 내려가고, view 에는 재개 카드용 마지막 문구가 있다', () => {
+  let st = withOvl(mkState()), last = null;
+  for (let ms = at(12, 53, 0); ms <= at(13, 6, 0); ms += 5000) {
+    last = rideStandby({ nowMs: ms, fixes: [[ms, LAT, trainLng(ms, 0), 20]], state: JSON.parse(JSON.stringify(st)) }); st = last.state; if (last.done) break;
+  }
+  assert.ok(last.done && last.overlay && last.overlay.active === false);
+  assert.ok(last.view && /도착/.test(last.view.text) && last.view.curIdx >= 5);
+});
+
+t('버스처럼 시각표 기준이 아닌 여정(timetableFirst 없음)도 GPS 통과로 영점이 잡혀 알림이 나간다', () => {
+  const st = withOvl(mkState());
+  delete st.eta.timetableFirst;
+  st.eta.nodes.forEach(n => { if (n.isSub) { n.isSub = false; n.isBus = true; n.lineName = '931'; } });
+  st.stops.forEach(s => { s.bus = true; });
+  const r = ride(st, at(12, 53, 0), at(13, 1, 0), 60);   // 1분 늦게 달린다
+  assert.deepStrictEqual(r.alerts.map(x => x.a.type), ['near_arrive2', 'near_arrive', 'arrive']);
+  assert.ok(r.last.overlay && r.last.overlay.cells.length === 6);
+  const arrTxt = r.last.overlay.cells[5].t; assert.ok(/^\d\d:\d\d$/.test(arrTxt), arrTxt);
+});
+
+const httpTest = async () => {
+  const zlib = require('zlib');
+  const body = JSON.stringify({ nowMs: at(12, 55, 0), fixes: [], state: withOvl(mkState()) });
+  const call = (buf, hdr) => handleRideStandby(new Request('https://x.test/ride-standby', { method: 'POST', body: buf, headers: hdr || {} })).then(r => r.json().then(j => [r.status, j]));
+  const [s1, j1] = await call(body);
+  const gz = zlib.gzipSync(Buffer.from(body));
+  const [s2, j2] = await call(gz, { 'content-encoding': 'gzip' });
+  assert.strictEqual(s1, 200); assert.strictEqual(s2, 200);
+  assert.deepStrictEqual(j2.overlay, j1.overlay);
+  assert.ok(gz.length < body.length / 3, '압축 ' + gz.length + '/' + body.length);
+  const [s3] = await call('이건 JSON 이 아님'); assert.strictEqual(s3, 400);
+};
+
+httpTest().then(() => { pass++; console.log('  ok   HTTP 처리: 평문 JSON 도 gzip 으로 눌러 보낸 JSON 도 같은 답을 준다(데이터 절약)'); }, (e) => { fail++; console.log('  FAIL HTTP 처리', String(e && e.message).split('\n')[0]); })
+  .then(() => { console.log('ride_standby: pass', pass, 'fail', fail); process.exit(fail ? 1 : 0); });

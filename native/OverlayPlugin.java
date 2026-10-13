@@ -78,6 +78,54 @@ public class OverlayPlugin extends Plugin {
 
     private final Handler main = new Handler(Looper.getMainLooper());
 
+    // ★ 2026-10-13 (YJ: "카카오 방식 — 앱을 밀어 닫아도 네이티브가 안내를 이어서 그린다"): 대기 모드.
+    //   액티비티가 사라져도(최근 목록에서 밀어 닫음) 프로세스는 KeepAliveService 덕에 산다. 그때 오버레이 창을 내리지 않고 hosted 로 쥐고 있다가,
+    //   KeepAliveService 가 엔진 답에서 받은 overlay 값을 standbyPush 로 넘기면 그대로 그린다(웹 update 와 같은 모양). 앱을 다시 열면 새 플러그인 인스턴스가 load() 에서 이 창을 거둔다.
+    private static volatile OverlayPlugin live = null;
+    private volatile boolean hosted = false;        // 대기 모드가 이 인스턴스의 오버레이 창을 쥐고 있다
+    private volatile boolean hostedOk = false;      // 넘겨받을 때 오버레이를 쓰는 중이었다(설정에서 껐으면 대기 모드에서도 그리지 않는다)
+
+    @Override
+    public void load() {
+        OverlayPlugin old = live;
+        live = this;
+        if (old != null && old != this && old.hosted) {
+            // 앱이 다시 열렸지만 대기 모드는 계속된다(웹은 새로 떠서 여정을 모른다) — 이 인스턴스가 쥐기를 이어받고 옛 창은 거둔다.
+            // 다음 엔진 답(5초 안)부터 이 인스턴스가 그린다. 앱이 보이는 동안은 숨고, 다시 가려지면(handleOnStop) 뜬다.
+            hostedOk = old.hostedOk; hosted = true;
+            old.hosted = false; old.hostedOk = false; old.wanted = false;
+            final OverlayPlugin o2 = old;
+            main.post(new Runnable() { @Override public void run() { try { o2.detach(); } catch (Throwable ignored) { } } });
+        } else if (old != null && old != this) {
+            old.wanted = false;
+            final OverlayPlugin o3 = old;
+            main.post(new Runnable() { @Override public void run() { try { o3.detach(); } catch (Throwable ignored) { } } });
+        }
+    }
+
+    private void releaseHosted() {
+        hosted = false; hostedOk = false; wanted = false;
+        main.post(new Runnable() { @Override public void run() { try { detach(); } catch (Throwable ignored) { } } });
+    }
+
+    /** KeepAliveService → 엔진이 준 overlay 값을 대기 모드로 쥐고 있는 오버레이에 그린다. 쥔 인스턴스가 없으면 아무 일도 하지 않는다. */
+    static void standbyPush(JSONObject ov) {
+        final OverlayPlugin p = live;
+        if (p == null || !p.hosted || !p.hostedOk || ov == null) return;
+        try {
+            if (!ov.optBoolean("active", false)) { p.wanted = false; p.refresh(); return; }
+            p.applyUpdate(ov);
+            if (!p.hostedOk) p.wanted = false;
+        } catch (Throwable ignored) { }
+    }
+
+    /** 대기 모드가 끝났다 — 쥐고 있던 오버레이를 내린다. */
+    static void standbyHide() {
+        final OverlayPlugin p = live;
+        if (p == null || !p.hosted) return;
+        p.releaseHosted();
+    }
+
     private volatile boolean wanted = false;       // 웹: 안내 중이고 오버레이를 쓰기로 함
     // ★ 2026-10-14 (YJ: "도착 전 추천 때 캐릭터들이 어떻게 나와서 동작하는지 보고 싶어 — 테스트 버튼"): 설정의 [캐릭터 미리보기]가 부르는 시연.
     //   앱이 보이는 중에도 오버레이를 띄워 추천 줄과 캐릭터 둘을 몇 초간 보여 준다. 이 동안 웹의 update 는 무시하고, 끝나면 시연 전 값으로 되돌린다.
@@ -753,6 +801,7 @@ public class OverlayPlugin extends Plugin {
 
     /** 웹에 손짓을 알린다(웹이 앱 탑승 시트와 똑같이 처리하고 새 상태를 다시 보내 준다). */
     private void act(String a) {
+        if (hosted) { actHosted(a); return; }
         try {
             if (getBridge() != null && getBridge().getWebView() != null) {
                 try { getBridge().getWebView().resumeTimers(); } catch (Exception ignored) { }
@@ -760,6 +809,14 @@ public class OverlayPlugin extends Plugin {
                         "try{window._ovlAct&&window._ovlAct('" + a + "');}catch(e){}", null);
             }
         } catch (Exception ignored) { }
+    }
+
+    /** 대기 모드(웹이 없다)에서의 손짓: 알약·손잡이는 앱 열기, [안내 종료]는 서비스 종료. 그 밖(탑승·되돌리기·추천)은 웹이 있어야 하는 일이라 하지 않는다. */
+    private void actHosted(String a) {
+        try {
+            if ("press".equals(a) && "board".equals(rsSt)) { KeepAliveService.send(getContext(), KeepAliveService.ACT_STOP); return; }
+            if ("open".equals(a) || "pill".equals(a)) openApp();
+        } catch (Throwable ignored) { }
     }
 
     // ── JS 에서 부르는 메서드 ─────────────────────────────────────
@@ -807,32 +864,42 @@ public class OverlayPlugin extends Plugin {
     @PluginMethod
     public void update(PluginCall call) {
         if (demoActive()) { call.resolve(new JSObject().put("ok", true).put("shown", attached).put("demo", true)); return; }   // 시연 중에는 웹 값으로 덮지 않는다
-        wanted = call.getBoolean("active", false);
-        line1 = nz(call.getString("line1"));
-        pillCur = nz(call.getString("pill"));
+        if (hosted) { call.resolve(new JSObject().put("ok", true).put("shown", attached).put("hosted", true)); return; }      // 대기 모드가 오버레이를 쥐고 있다 — 낡은 웹 값으로 덮지 않는다
+        applyUpdate(call.getData());
+        call.resolve(new JSObject().put("ok", true).put("shown", attached));
+    }
+
+    /**
+     * 오버레이에 그릴 값을 받아 반영한다. 웹의 update() 와 대기 모드(KeepAliveService 가 엔진 답의 overlay 를 넘김)가 같은 모양의 값을 쓴다.
+     * ★ 2026-10-13 (YJ: "카카오 방식 — 앱이 사라져도 네이티브가 안내를 그린다"): 무엇을 그릴지는 웹(또는 엔진)이 정하고 여기서는 그리기만 한다.
+     */
+    private void applyUpdate(JSONObject o) {
+        wanted = o.optBoolean("active", false);
+        line1 = nz(o.optString("line1", ""));
+        pillCur = nz(o.optString("pill", ""));
         try {
-            JSArray arr = call.getArray("cells");
+            org.json.JSONArray arr = o.optJSONArray("cells");
             int n = arr == null ? 0 : Math.min(arr.length(), 150);    // ★ 2026-10-12: 긴 경로가 중간에 끊기지 않게 60 → 150
             Cell[] cs = new Cell[n];
             for (int i = 0; i < n; i++) {
-                JSONObject o = arr.getJSONObject(i);
+                JSONObject co = arr.getJSONObject(i);
                 Cell c = new Cell();
-                c.n = o.optString("n", ""); c.t = o.optString("t", ""); c.g = o.optString("g", "");
-                c.pill = o.optBoolean("gp", false);
-                c.gc = col(o.optString("gc", ""), 0xFF8E8E93);
-                String l = o.optString("lc", ""), r = o.optString("rc", "");
+                c.n = co.optString("n", ""); c.t = co.optString("t", ""); c.g = co.optString("g", "");
+                c.pill = co.optBoolean("gp", false);
+                c.gc = col(co.optString("gc", ""), 0xFF8E8E93);
+                String l = co.optString("lc", ""), r = co.optString("rc", "");
                 c.hasL = l.length() > 0; c.hasR = r.length() > 0;
                 c.lc = col(l, 0xFF8E8E93); c.rc = col(r, 0xFF8E8E93);
-                c.dc = col(o.optString("dc", ""), 0xFF0A84FF);
-                c.dk = o.optInt("dk", 1);
+                c.dc = col(co.optString("dc", ""), 0xFF0A84FF);
+                c.dk = co.optInt("dk", 1);
                 cs[i] = c;
             }
             strip = cs;
         } catch (Exception e) { strip = new Cell[0]; }
-        stripCur = Math.max(0, Math.min(call.getInt("cur", 0), Math.max(0, strip.length - 1)));
-        stripBase = Math.max(0, call.getInt("base", 0));
+        stripCur = Math.max(0, Math.min(o.optInt("cur", 0), Math.max(0, strip.length - 1)));
+        stripBase = Math.max(0, o.optInt("base", 0));
         try {
-            JSObject th = call.getObject("theme");
+            JSONObject th = o.optJSONObject("theme");
             if (th != null) {
                 thBg = col(th.optString("bg", ""), Color.WHITE);
                 thFg = col(th.optString("fg", ""), Color.parseColor("#111114"));
@@ -840,7 +907,7 @@ public class OverlayPlugin extends Plugin {
             }
         } catch (Exception ignored) { }
         try {
-            JSObject rs = call.getObject("rs");
+            JSONObject rs = o.optJSONObject("rs");
             if (rs != null) {
                 rsSt = rs.optString("st", "hidden");
                 rsK = rs.optString("k", ""); rsCh = rs.optString("ch", ""); rsNm = rs.optString("nm", ""); rsUm = rs.optString("um", ""); rsBt = rs.optString("bt", "탑승"); if (rsBt.length() == 0) rsBt = "탑승";
@@ -851,7 +918,7 @@ public class OverlayPlugin extends Plugin {
             } else { rsSt = "hidden"; }
         } catch (Exception e) { rsSt = "hidden"; }
         try {
-            JSObject rc = call.getObject("reco");
+            JSONObject rc = o.optJSONObject("reco");
             if (rc != null && rc.optBoolean("on", false)) {
                 rcOn = true; rcA = rc.optString("a", ""); rcB = rc.optString("b", ""); rcM = rc.optString("m", ""); rcGo = rc.optString("go", "보기");
                 if (rcGo.length() == 0) rcGo = "보기";
@@ -860,27 +927,26 @@ public class OverlayPlugin extends Plugin {
                 rcCh = rc.optString("ch", ""); rcCh2 = rc.optString("ch2", "");
             } else { rcOn = false; }
         } catch (Exception e) { rcOn = false; }
-        moving = call.getBoolean("moving", false);
-        preAlert = call.getBoolean("pre", false);
-        Integer al = call.getInt("alert", 0);
-        alertLevel = al == null ? 0 : Math.max(0, Math.min(2, al));
+        moving = o.optBoolean("moving", false);
+        preAlert = o.optBoolean("pre", false);
+        int al = o.optInt("alert", 0);
+        alertLevel = Math.max(0, Math.min(2, al));
         // ★ 2026-10-12 (YJ: "환승 1정거장 전·목적지 2·1정거장 전 — 엣지 하이라이트와 진동"): 테두리와 같은 순간에 진동한다.
         //   판단은 웹이 한다(alertAt = 단계가 켜지거나 바뀐 시각, alertVibe = 설정에서 진동이 허용됐는지). 여기선 새 경고일 때 한 번만 울린다.
         try {
-            long alertAt = call.getData().optLong("alertAt", 0L);
+            long alertAt = o.optLong("alertAt", 0L);
             curAlertAt = alertAt;
-            boolean alertVibe = call.getBoolean("alertVibe", false);
+            boolean alertVibe = o.optBoolean("alertVibe", false);
             if (alertLevel > 0 && alertVibe && alertAt > 0L && alertAt != lastVibeAt
                     && System.currentTimeMillis() - alertAt < 20000L) {
                 lastVibeAt = alertAt;
                 vibrateAlert(alertLevel);
             }
         } catch (Exception ignored) { }
-        line2 = nz(call.getString("line2"));
-        line3 = nz(call.getString("line3"));
+        line2 = nz(o.optString("line2", ""));
+        line3 = nz(o.optString("line3", ""));
         lastUpdateAt = System.currentTimeMillis();
         refresh();
-        call.resolve(new JSObject().put("ok", true).put("shown", attached));
     }
 
     /**
@@ -950,6 +1016,13 @@ public class OverlayPlugin extends Plugin {
         call.resolve(new JSObject().put("ok", true));
     }
 
+    /** 다시 열린 앱이 묻는다: 대기 모드(앱이 닫힌 동안 네이티브가 이어 온 안내)가 아직 돌고 있나, 엔진이 마지막으로 만든 문구는 무엇인가. */
+    @PluginMethod
+    public void standbyStatus(PluginCall call) {
+        try { call.resolve(new JSObject(KeepAliveService.standbyViewJson(getContext()))); }
+        catch (Exception e) { call.resolve(new JSObject().put("active", false)); }
+    }
+
     /** 여정이 끝나거나 취소됐다 — 맡겨 둔 상태를 지우고, 대기 모드가 돌고 있으면 끝낸다. */
     @PluginMethod
     public void standbyEnd(PluginCall call) {
@@ -962,7 +1035,7 @@ public class OverlayPlugin extends Plugin {
     public void keepAlive(PluginCall call) {
         // 대기 모드가 돌고 있는 동안(앱을 밀어 닫았다가 다시 열었다) 새로 뜬 웹이 '여정 없음'(off)을 보내도 끄지 않는다. 끝내는 길은 standbyEnd · 알림의 [안내 종료] · 엔진의 done.
         if (KeepAliveService.standbyActive) {
-            if (call.getBoolean("on", false)) { KeepAliveService.send(getContext(), KeepAliveService.ACT_DEACTIVATE); }   // 웹이 여정을 다시 쥐었다 — 주도권을 돌려준다
+            if (call.getBoolean("on", false)) { if (hosted) releaseHosted(); KeepAliveService.send(getContext(), KeepAliveService.ACT_DEACTIVATE); }   // 웹이 여정을 다시 쥐었다 — 주도권을 돌려준다(쥐고 있던 오버레이 창도 웹에 돌려준다)
             else { call.resolve(new JSObject().put("ok", true).put("standby", true)); return; }
         }
         journeyOn = call.getBoolean("on", false);
@@ -1011,14 +1084,24 @@ public class OverlayPlugin extends Plugin {
 
     @Override
     protected void handleOnDestroy() {
-        wanted = false;
         // ★ 2026-10-13: 앱을 밀어 닫아 액티비티가 사라져도 여정 중이고 맡겨 둔 상태가 있으면 서비스를 끄지 않고 대기 모드로 넘긴다(KeepAliveService 가 엔진을 불러 이어간다).
-        boolean handOver = journeyOn && KeepAliveService.hasPacket(getContext());
+        //   이때 오버레이 창도 내리지 않는다 — 이 인스턴스가 hosted 로 쥐고, 엔진이 준 값을 standbyPush 로 받아 그린다(오버레이를 쓰던 경우만).
+        boolean handOver = (journeyOn || hosted) && KeepAliveService.hasPacket(getContext());   // hosted: 앱을 다시 열었다가 또 밀어 닫아도 대기 모드를 이어 간다
+        boolean wasWanted = hosted ? hostedOk : wanted;
         journeyOn = false;
-        if (handOver) KeepAliveService.send(getContext(), KeepAliveService.ACT_ACTIVATE); else stopKeepSvc();
         try { if (cpuLock != null && cpuLock.isHeld()) cpuLock.release(); } catch (Exception ignoredR2) { }
         main.removeCallbacks(ticker);
         ticking = false;
+        if (handOver) {
+            hostedOk = wasWanted;
+            hosted = true;
+            appVisible = false;     // 오버레이는 앱이 안 보일 때 뜨는 것 — 액티비티가 없으니 늘 '안 보임'
+            KeepAliveService.send(getContext(), KeepAliveService.ACT_ACTIVATE);
+            if (!hostedOk) { wanted = false; main.post(new Runnable() { @Override public void run() { detach(); } }); }
+            return;
+        }
+        wanted = false;
+        stopKeepSvc();
         appVisible = true;
         main.post(new Runnable() { @Override public void run() { detach(); } });
     }
@@ -1048,7 +1131,7 @@ public class OverlayPlugin extends Plugin {
         main.post(new Runnable() {
             @Override public void run() {
                 try {
-                    boolean stale = !journeyOn && (System.currentTimeMillis() - Math.max(lastUpdateAt, webAliveAt)) > STALE_MS;   // 여정 중에는 웹이 잠깐 못 보내도 오버레이를 내리지 않는다   // 2026-10-12: 웹이 깨우기에 답하는 동안은 낡은 것이 아니다
+                    boolean stale = !journeyOn && !hosted && (System.currentTimeMillis() - Math.max(lastUpdateAt, webAliveAt)) > STALE_MS;   // 여정 중에는 웹이 잠깐 못 보내도 오버레이를 내리지 않는다   // 2026-10-12: 웹이 깨우기에 답하는 동안은 낡은 것이 아니다
                     boolean show = wanted && (!appVisible || demoActive()) && !stale && canDraw()
                             && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
                             && (strip.length > 0 || line1.length() > 0);
@@ -1082,6 +1165,7 @@ public class OverlayPlugin extends Plugin {
 
     private final Runnable ticker = new Runnable() {
         @Override public void run() {
+            if (hosted) { ticking = false; return; }   // 대기 모드: 웹이 없다 — 깨울 것도, 서비스를 끌 이유도 없다(서비스 수명은 KeepAliveService 가 쥔다)
             boolean journey = journeyOn && (System.currentTimeMillis() - journeyAt) < JOURNEY_STALE_MS;
             if (!attached && !journey) { ticking = false; try { if (cpuLock != null && cpuLock.isHeld()) cpuLock.release(); } catch (Exception ignoredR) { } stopKeepSvc(); return; }
             // ★ 2026-10-13: 여정 중인데 우리 유지 서비스가 없으면 다시 켠다(시작이 막히면 조용히 건너뛴다).

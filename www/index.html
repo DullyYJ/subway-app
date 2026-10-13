@@ -28998,7 +28998,7 @@ window._ovlAct = function(a){
     _ovlSync(true);
   }catch(e){}
 };
-function _ovlStrip(st){
+function _ovlStrip(st, full){
   var out = { cells: [], cur: 0, base: 0, theme: _ovlThemeColors() };
   try{
     if(window._ovlStripOff) return null;
@@ -29006,7 +29006,7 @@ function _ovlStrip(st){
     // ★ 2026-10-11: 좌우로 넘겨 볼 수 있게 현위치 앞 8칸부터 보낸다(화면에는 다섯 칸만 보인다).
     // ★ 2026-10-12 (YJ: "오버레이가 신길에서 끊겼어"): 40칸에서 잘라 보내서, 버스·1호선 정류장이 많은 긴 경로는 40번째 칸(신길)에서 끝났다.
     //   앱 타임라인은 끝까지 있는데 오버레이만 끊긴 것 → 칸 수 제한을 사실상 없앴다(120칸). 네이티브도 150칸까지 받는다.
-    var N = 120, BACK = 8;
+    var N = full ? 150 : 120, BACK = full ? 100000 : 8;   // full: 대기 모드용 — 처음 칸부터 전부(엔진이 현위치 칸을 고른다)
     if(nd && nd.length && window._routeLocked === true && window._metroRouteMode !== true){
       var raw = Math.max(0, Math.min(_pipHereIdx(), nd.length - 1));
       var curEl = nd[raw] && nd[raw].el, par = curEl && curEl.parentElement;
@@ -29019,7 +29019,10 @@ function _ovlStrip(st){
         var ci = kids.indexOf(curEl);
         if(ci >= 0){
           var s0 = Math.max(0, Math.min(ci - BACK, kids.length - N));
-          for(var j = s0; j < Math.min(kids.length, s0 + N); j++) out.cells.push(_ovlCellOf(kids[j]));
+          for(var j = s0; j < Math.min(kids.length, s0 + N); j++){
+            out.cells.push(_ovlCellOf(kids[j]));
+            if(full){ var _mi = -1; for(var _q = 0; _q < nd.length; _q++){ if(nd[_q] && nd[_q].el === kids[j]){ _mi = _q; break; } } (out.map = out.map || []).push(_mi); }   // 칸 → 노드 번호(도보 칸은 -1)
+          }
           out.cur = ci - s0; out.base = s0;
           if(out.cells.length) return out;
         }
@@ -29085,6 +29088,7 @@ function _ovlKeepAliveSync(){
     var want = !!(window._routeLocked === true && typeof _pipHasRoute === 'function' && _pipHasRoute());
     var now = Date.now();
     if(want === _ovlKaOn && (!want || now - _ovlKaAt < 60000)) return;
+    if(want && _ovlKaOn !== true) _ovlLastKey = null;   // 대기 모드가 쥐고 있던 오버레이를 돌려받으면 웹 값을 바로 다시 보낸다
     _ovlKaOn = want; _ovlKaAt = now;
     var r = n.keepAlive({ on: want });
     if(r && typeof r.catch === 'function') r.catch(function(){ _ovlKaOn = null; });
@@ -29094,20 +29098,40 @@ window._ovlKeepAliveSync = _ovlKeepAliveSync;
 
 // ★ 2026-10-13 (YJ: "카카오지하철처럼 안내 로직을 네이티브로"): 대기 모드 — 웹뷰가 사라져도(앱을 최근 목록에서 밀어 닫음) 네이티브(KeepAliveService)가
 //   5초마다 엔진(/ride-standby)을 불러 영점·시각 밀고 당기기·하차 알림을 이어간다. 계산은 전부 엔진이 한다 — 앱은 '여정 상태'를 모아 네이티브에 맡겨 둘 뿐이다.
-//   웹뷰가 살아 있는 동안은 지금처럼 앱이 한다. 지하철 탑승 확정(시각표 기준) 여정만 맡긴다(버스는 GPS 주도라 1단계에서는 프로세스 유지만).
-var _ovlSbAt = 0, _ovlSbSig = '';
+//   웹뷰가 살아 있는 동안은 지금처럼 앱이 한다. 지하철(시각표 기준)·버스(GPS 기준) 모두 맡긴다 — 엔진이 시각표/GPS 증거를 가려 계산한다.
+var _ovlSbAt = 0, _ovlSbSig = '', _ovlSbFrame = { sig: '', at: 0, v: null };
+// 오버레이 '그림 틀' — 앱 경로 화면의 칸(이름·노선 라벨·점/선 색)을 한 번 읽어 맡겨 둔다. 시각·현위치·이동 중·남은시간은 엔진이 매번 채운다.
+//   DOM 을 150칸 읽는 일이라 같은 경로면 60초에 한 번만 다시 읽는다. 끄기: window._ovlStripOff = true (그림 틀 없음 → 대기 모드에서도 오버레이는 안 뜸).
+function _ovlStandbyFrame(){
+  try{
+    if(window._ovlStripOff === true) return null;
+    var now = Date.now(), sig = String(window._trackSig || '');
+    if(_ovlSbFrame.v && _ovlSbFrame.sig === sig && now - _ovlSbFrame.at < 60000) return _ovlSbFrame.v;
+    if(typeof _ovlLabelsEnsure === 'function') _ovlLabelsEnsure();
+    var sp = _ovlStrip(_pipStations(), true);
+    var v = null;
+    if(sp && sp.map && sp.cells.length && sp.cells.length === sp.map.length){
+      sp.cells.forEach(function(c){ if(c){ c.m = _ovlShortMv(c.n) || ''; c.n = _ovlShort(c.n); c.g = _ovlShortLine(c.g); } });
+      v = { cells: sp.cells, map: sp.map, base: sp.base || 0, theme: sp.theme };
+    }
+    _ovlSbFrame = { sig: sig, at: now, v: v };
+    return v;
+  }catch(e){ return null; }
+}
 function _ovlStandbyBuild(){
   try{
     if(window._routeLocked !== true || !_transitNodeData || !_transitNodeData.length) return null;
-    if(typeof _ttFirstOn !== 'function' || !_ttFirstOn()) return null;
     if(typeof _baseTimeMs !== 'undefined' && _baseTimeMs != null) return null;
+    if(typeof _htlNotDeparted === 'function' && _htlNotDeparted()) return null;   // 아직 안 탔다 — 탑승 확정 뒤에 맡긴다
     var stops = _arrEndStops(); if(!stops || !stops.length) return null;
     var eta = _etaPayload(); delete eta.nowMs; delete eta._why;
     var D = (typeof _arrEndDest === 'function') ? _arrEndDest() : null;
     var cfg = { targets: window._transitAlertTargets || [], seq: window._transitSeqIdx || [], allowed: {}, destName: D ? D.name : '' };
     ['transfer2', 'transfer', 'near_arrive2', 'near_arrive', 'arrive'].forEach(function(k){ cfg.allowed[k] = (typeof _notifAllowed === 'function') ? !!_notifAllowed(k) : true; });
     var tr = []; try{ for(var i = Math.max(0, _ev.trail.length - 60); i < _ev.trail.length; i++){ var q = _ev.trail[i]; tr.push([q.ts, q.lat, q.lng, q.acc == null ? null : q.acc]); } }catch(e0){}
-    return { v: 1, tripSig: window._trackSig || '', eta: eta, stops: stops, trail: tr, cfg: cfg, fired: window._transitAlertFired || {}, notYet: {}, etaMs: null };
+    var out = { v: 1, tripSig: window._trackSig || '', eta: eta, stops: stops, trail: tr, cfg: cfg, fired: window._transitAlertFired || {}, notYet: {}, etaMs: null };
+    var ovl = _ovlStandbyFrame(); if(ovl) out.ovl = ovl;
+    return out;
   }catch(e){ return null; }
 }
 function _ovlStandbyPush(force){
@@ -29128,6 +29152,37 @@ function _ovlStandbyEnd(){
   try{ var n = _ovlNative(); if(n && typeof n.standbyEnd === 'function'){ var r = n.standbyEnd(); if(r && typeof r.catch === 'function') r.catch(function(){}); } }catch(e){}
 }
 window._ovlStandbyEnd = _ovlStandbyEnd;
+// ★ 2026-10-13 (YJ: "카카오 방식"): 앱을 밀어 닫아도 네이티브가 안내를 이어 왔다 — 다시 열면 그 상태를 카드로 보여 주고 [안내 종료]를 준다.
+//   (확정한 여정 화면 자체를 복구하지는 않는다 — 안내는 알림창·오버레이에서 계속된다.) 문구는 엔진이 만든 view 를 그대로 그린다.
+var _sbCardT = null;
+function _ovlStandbyCardDraw(s){
+  try{
+    var el = document.getElementById('sbCard');
+    if(!s || s.active !== true){ if(el) el.remove(); if(_sbCardT){ clearTimeout(_sbCardT); _sbCardT = null; } return; }
+    var v = s.view || {}, text = String(v.text || '').replace(/[<>&]/g, ''), l2 = String(v.line2 || '').replace(/[<>&]/g, '');
+    if(!el){
+      el = document.createElement('div'); el.id = 'sbCard';
+      el.style.cssText = 'position:fixed;left:12px;right:12px;top:calc(env(safe-area-inset-top,0px) + 8px);z-index:2147483000;background:var(--card);color:var(--text);border:1px solid var(--border2);border-radius:14px;padding:12px 14px;box-shadow:0 6px 24px rgba(0,0,0,.25);display:flex;align-items:center;gap:10px;font-family:inherit;';
+      el.innerHTML = '<div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:800;">🚇 경로 안내가 이어지고 있어요</div><div id="sbCardTx" style="font-size:12px;color:var(--sub);margin-top:3px;line-height:1.45;word-break:keep-all;"></div></div>'
+        + '<button id="sbCardEnd" style="flex:none;padding:9px 12px;border-radius:10px;border:none;background:var(--gold);color:#121214;font-weight:800;font-size:12.5px;font-family:inherit;cursor:pointer;">안내 종료</button>';
+      document.body.appendChild(el);
+      el.querySelector('#sbCardEnd').onclick = function(){ _ovlStandbyEnd(); var c = document.getElementById('sbCard'); if(c) c.remove(); if(_sbCardT){ clearTimeout(_sbCardT); _sbCardT = null; } };
+    }
+    var tx = el.querySelector('#sbCardTx'); if(tx) tx.textContent = (text || '안내 중') + (l2 ? ' · ' + l2.replace(/^남은시간: /, '') : '');
+    if(_sbCardT) clearTimeout(_sbCardT);
+    _sbCardT = setTimeout(_ovlStandbyCardPoll, 5000);
+  }catch(e){}
+}
+function _ovlStandbyCardPoll(){
+  try{
+    _sbCardT = null;
+    var n = _ovlNative(); if(!n || typeof n.standbyStatus !== 'function') return;
+    var r = n.standbyStatus(); if(!r || typeof r.then !== 'function') return;
+    r.then(_ovlStandbyCardDraw).catch(function(){});
+  }catch(e){}
+}
+window._ovlStandbyCardPoll = _ovlStandbyCardPoll;
+try{ setTimeout(_ovlStandbyCardPoll, 1800); }catch(eSc){}
 // ★ 2026-10-02: 오버레이가 왜 안 바뀌는지 기기에서 바로 볼 수 있게 남기는 기록(최근 600줄, 새로 열어도 유지).
 //   tick 은 20초에 한 줄만, 그 외(BG위치·상태전환·재시작)는 그때마다 한 줄.
 var _ovlDiagBuf = null, _ovlDiagTickAt = 0;

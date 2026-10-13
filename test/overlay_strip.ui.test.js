@@ -57,6 +57,21 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   });
   await t('앱의 첫 칸(도보)은 왼쪽 선이 없다', async () => { await a.page.evaluate(() => { window._gpsMaxIdx = 0; }); const q = await strip(a.page); assert.ok(q.cur + q.base <= 1, String(q.cur)); assert.ok(!q.cells[0].lc && q.cells[0].rc, JSON.stringify(q.cells[0])); });
 
+  console.log('[①-1 대기 모드용 그림 틀 — 칸마다 노드 번호가 따라온다]');
+  await t('full: 처음 칸부터 전부 + 칸→노드 번호(map). 노드가 있는 칸은 그 노드 이름과 같고 도보 칸은 -1', async () => {
+    await a.page.evaluate(() => { window._gpsMaxIdx = 3; });
+    const q = await a.page.evaluate(() => { const r = _ovlStrip(_pipStations(), true); return { n: r.cells.length, map: r.map, base: r.base, names: r.cells.map(c => c.n), nd: _transitNodeData.map(x => x.name) }; });
+    assert.strictEqual(q.base, 0); assert.strictEqual(q.map.length, q.n);
+    let hit = 0; q.map.forEach((m, i) => { if (m >= 0) { hit++; assert.strictEqual(q.nd[m], q.names[i], i + '번 칸'); } });
+    assert.ok(hit >= 6, '노드가 있는 칸 ' + hit); assert.ok(q.map.some(m => m < 0), '도보 칸(-1)이 있어야 한다');
+    for (let i = 1; i < q.map.length; i++) if (q.map[i] >= 0 && q.map[i - 1] >= 0) assert.ok(q.map[i] > q.map[i - 1], '노드 번호가 거꾸로');
+  });
+  await t('_ovlStandbyFrame: 엔진에 맡길 틀(cells·map·theme) — 이름·노선 라벨은 엔진이 준 줄임 값을 쓰고(없으면 원문), 이동 중 문구(m) 자리가 있다', async () => {
+    const f = await a.page.evaluate(() => { window._ovlSbFrame = { sig: '', at: 0, v: null }; return _ovlStandbyFrame(); });
+    assert.ok(f && f.cells.length === f.map.length && f.cells.length > 5 && /^#[0-9a-f]{6}$/.test(f.theme.bg), JSON.stringify(f && f.theme));
+    assert.ok(f.cells.every(c => typeof c.m === 'string'), 'm');
+  });
+
   console.log('[①-2 아주 긴 경로(칸이 40개를 넘는)도 끝까지 보낸다]');
   await t('버스 정류장이 많은 긴 경로: 마지막 칸(공덕 뒤 도보)까지 모두 보낸다', async () => {
     const q = await a.page.evaluate(() => {

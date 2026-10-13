@@ -62,7 +62,7 @@ const ST = [['출발', -20], ['캠퍼스타운', 0], ['동막', 3], ['동춘', 5
     assert.ok(st.cfg.targets.some(x => x.kind === 'dest') && st.cfg.seq.length === ST.length - 1, '알림 대상');
     ['transfer2', 'transfer', 'near_arrive2', 'near_arrive', 'arrive'].forEach(k => assert.strictEqual(typeof st.cfg.allowed[k], 'boolean', k));
     const r = rideStandby({ nowMs: now, fixes: [], state: st });
-    assert.ok(!r.error, r.error); assert.ok(/^다음 /.test(r.ongoing.text), r.ongoing.text); assert.ok(r.state.etaMs.length === ST.length);
+    assert.ok(!r.error, r.error); assert.strictEqual(r.overlay, null, 'DOM 칸이 없으면 그림 틀도 없다(오버레이 없음)'); assert.ok(/^다음 /.test(r.ongoing.text), r.ongoing.text); assert.ok(r.state.etaMs.length === ST.length);
   });
 
   await t('보낸 하차 알림은 상태의 fired 에 실려 네이티브도 안다(같은 알림을 또 울리지 않게)', async () => {
@@ -71,7 +71,7 @@ const ST = [['출발', -20], ['캠퍼스타운', 0], ['동막', 3], ['동춘', 5
     assert.strictEqual(JSON.parse(p.state).fired['6_2'], 1);
   });
 
-  await t('지하철 탑승 확정이 아니면(버스·승차 전) 맡기지 않는다', async () => {
+  await t('승차 전이면 맡기지 않는다(탑승 확정 뒤에 맡긴다)', async () => {
     const n0 = await page.evaluate(() => window.__sb.packets.length);
     await page.evaluate(() => { window._htlBoarded = false; window._ovlSbAt = 0; _ovlStandbyPush(true); });
     assert.strictEqual(await page.evaluate(() => window.__sb.packets.length), n0);

@@ -72,6 +72,16 @@ public class KeepAliveService extends Service {
             return sp.getString("state", null) != null && sp.getString("url", null) != null && System.currentTimeMillis() - sp.getLong("at", 0L) < PACKET_MAX_AGE_MS;
         } catch (Throwable e) { return false; }
     }
+    /** 다시 열린 앱이 읽는 대기 모드 상태: 돌고 있는가 + 엔진이 마지막으로 만든 문구(view). */
+    static String standbyViewJson(Context c) {
+        try {
+            JSONObject r = new JSONObject();
+            r.put("active", standbyActive);
+            String v = c.getSharedPreferences(PREFS, MODE_PRIVATE).getString("view", null);
+            if (v != null) r.put("view", new JSONObject(v));
+            return r.toString();
+        } catch (Throwable e) { return "{\"active\":false}"; }
+    }
     static void clearPacket(Context c) {
         try { c.getSharedPreferences(PREFS, MODE_PRIVATE).edit().clear().apply(); } catch (Throwable ignored) { }
     }
@@ -268,7 +278,7 @@ public class KeepAliveService extends Service {
         ht = null; hh = null;
         try { if (lock != null && lock.isHeld()) lock.release(); } catch (Throwable ignored) { }
         lock = null;
-        if (was) { lastText = ""; showForegroundQuiet(); }
+        if (was) { lastText = ""; showForegroundQuiet(); OverlayPlugin.standbyHide(); }
     }
 
     private void showForegroundQuiet() {
@@ -298,7 +308,14 @@ public class KeepAliveService extends Service {
         }
         fx.append(']');
         String body = "{\"nowMs\":" + now + ",\"fixes\":" + fx + ",\"state\":" + state + "}";
-        String resp = post(url, body);
+        String resp;
+        if (gzipOk) {
+            try { resp = post(url, body, true); }
+            catch (Exception ez) {
+                // 서버가 압축 요청을 못 읽는 옛 버전이면(HTTP 400) 평문으로 돌아가 이 서비스가 도는 동안은 압축을 쓰지 않는다
+                if (String.valueOf(ez.getMessage()).contains("HTTP 400")) { gzipOk = false; resp = post(url, body, false); } else throw ez;
+            }
+        } else resp = post(url, body, false);
         // 보낸 위치만 비운다(그 사이 들어온 새 위치는 남긴다)
         synchronized (fixes) { for (int i = 0; i < batch.size() && !fixes.isEmpty(); i++) fixes.remove(0); }
         JSONObject o = new JSONObject(resp);
@@ -311,12 +328,19 @@ public class KeepAliveService extends Service {
         }
         JSONObject on = o.optJSONObject("ongoing");
         if (on != null) updateNotification(on.optString("text", ""));
+        // 오버레이: 엔진이 만든 값을 쥐고 있는 오버레이 창에 그린다(없으면 아무 일도 안 한다). 다시 열린 앱이 보여 줄 마지막 상태(view)도 적어 둔다.
+        JSONObject ov = o.optJSONObject("overlay");
+        if (ov != null) OverlayPlugin.standbyPush(ov);
+        JSONObject vw = o.optJSONObject("view");
+        if (vw != null) { try { getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString("view", vw.toString()).apply(); } catch (Throwable ignored) { } }
         JSONObject al = o.optJSONObject("alert");
         if (al != null && !al.optString("title", "").isEmpty()) fireAlert(al);
         if (o.optBoolean("done", false)) endStandby(true);
     }
 
-    private static String post(String u, String body) throws Exception {
+    private static volatile boolean gzipOk = true;   // 요청 본문을 gzip 으로 눌러 보낸다(상태가 크고 5초마다 보내서 — 서버 s12 부터 받는다)
+
+    private static String post(String u, String body, boolean gz) throws Exception {
         HttpURLConnection c = (HttpURLConnection) new URL(u).openConnection();
         try {
             c.setConnectTimeout(6000);
@@ -325,6 +349,14 @@ public class KeepAliveService extends Service {
             c.setDoOutput(true);
             c.setRequestProperty("content-type", "application/json");
             byte[] bytes = body.getBytes("UTF-8");
+            if (gz && bytes.length > 2048) {
+                ByteArrayOutputStream bz = new ByteArrayOutputStream();
+                java.util.zip.GZIPOutputStream zo = new java.util.zip.GZIPOutputStream(bz);
+                zo.write(bytes);
+                zo.close();
+                bytes = bz.toByteArray();
+                c.setRequestProperty("content-encoding", "gzip");
+            }
             c.setFixedLengthStreamingMode(bytes.length);
             OutputStream os = c.getOutputStream();
             os.write(bytes);
