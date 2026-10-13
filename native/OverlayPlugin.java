@@ -210,9 +210,12 @@ public class OverlayPlugin extends Plugin {
                 float cx = (stripBase + i - scrollPos + 0.5f) * cw;
                 if (cx + cw / 2f < 0f || cx - cw / 2f > getWidth()) continue;      // 화면 밖 칸은 그리지 않는다
                 boolean here = (i == stripCur);
-                int ink = here ? thFg : thSub;
+                // ★ 2026-10-13 (YJ: "역과 역사이가 깜빡이며 다음역으로 가는 중일때는 다음역 이름을 넣어야 헷갈리지 않을것같아"): 이동 중(선이 깜박이는 동안)엔
+                //   가는 중인 다음 역 이름도 현위치처럼 진하게(글자색) 보여 준다 — 점·크기는 그대로라 '지금 있는 곳'은 여전히 파란 점이 가리킨다.
+                boolean nextHi = moving && i == stripCur + 1 && c.n.length() > 0;
+                int ink = (here || nextHi) ? thFg : thSub;
                 // 정류장명(한 줄)
-                text(cv, c.n, cx, yName, cw - dp(3), here ? 11.5f : 10.5f, ink, true);
+                text(cv, c.n, cx, yName, cw - dp(3), (here || nextHi) ? 11.5f : 10.5f, ink, true);
                 // 선
                 p.setStyle(Paint.Style.FILL);
                 // ★ 2026-10-12 (YJ: 이동 중에만 역과 역 사이 선이 깜박이게): 깜박이는 선은 현재역→다음역 한 구간뿐이다(이 칸의 오른쪽 절반 + 다음 칸의 왼쪽 절반). 이 칸의 왼쪽(이전역→현재역)은 그대로 둔다.
@@ -823,6 +826,30 @@ public class OverlayPlugin extends Plugin {
     protected void handleOnStop() {
         appVisible = false;
         refresh();
+        // ★ 2026-10-13 (YJ: "오버레이가 업데이트가 안되는것같아" — 앱을 뒤로 보냈더니 오버레이가 앱보다 한 역 전을 가리켰다):
+        //   오버레이는 사라지기 직전 웹이 보낸 마지막 값으로 먼저 뜨고, 최신 값은 최대 5초 뒤 틱에서야 들어왔다 → 가려지는 즉시(0.3초·1.5초 뒤 한 번 더) 웹을 깨워 새 값을 받는다.
+        wakeWebSoon(300L);
+        wakeWebSoon(1500L);
+    }
+
+    private void wakeWebSoon(long delayMs) {
+        main.postDelayed(new Runnable() {
+            @Override public void run() {
+                try {
+                    if (appVisible || getBridge() == null || getBridge().getWebView() == null) return;
+                    try { getBridge().getWebView().resumeTimers(); } catch (Exception ignored1) { }
+                    try { getBridge().getWebView().onResume(); } catch (Exception ignored2) { }
+                    getBridge().getWebView().evaluateJavascript(
+                            "(function(){try{return !!(window._ovlNativeTick&&window._ovlNativeTick());}catch(e){return false;}})()",
+                            new android.webkit.ValueCallback<String>() {
+                                @Override public void onReceiveValue(String v) {
+                                    webAliveAt = System.currentTimeMillis();
+                                    if ("true".equals(v)) { journeyAt = webAliveAt; }
+                                }
+                            });
+                } catch (Exception ignored) { }
+            }
+        }, delayMs);
     }
 
     @Override
