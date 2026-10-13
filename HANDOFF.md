@@ -678,4 +678,5 @@
 - **시험**: ride_eta 76 · ride_track 96 · ride_marker_follow.ui 8(옛 앱은 엔진 구간이 낡으면 정지·한 역 늦음으로 재현, 새 앱 통과; 늦는 열차 notYet·빠른 열차 passMs 끝에서 끝까지) · ride_press_labels.ui 16.
 - **한계(정직)**: 지하 구간은 GPS 정확도가 60m 넘는 경우가 많아 그때는 영점이 없다(PF·기지국·시각표로 감). 엔진 답이 계속 안 오면(백그라운드 네트워크 끊김) 진행도가 앞선 역에서 마커가 굳을 수 있다 — `마커` 진단 줄로 확인. 실기기 검증 없음.
 - **후보 경로 오탐 수정**: 추천 안 한 버스(급행 등)로 경로를 바꾼 직후 엔진 `bus` 가 notBus('ahead')로 답해 재탐색이 도는 회귀가 있었다 → 앱이 `_applyRiddenRoute` 뒤 `proof:'ridden'` 을 보내고(엔진 `rtBus` 가 confirmed 로 인정), 엔진은 `ridden.ok` 인데 notBus 면 plausible(`candidate_route`)로 낮춘다. ride_bus_guard 25/0 · ride_car_not_bus 8/0.
+- **엔진 질문 간격 5초**(YJ: "15초는 너무 길다, 앱·오버레이 모두 5초"): `_ETA_TICK_MS` 15000→4500(네이티브 오버레이 틱 5초가 쓸려 나가지 않게 약간 짧게). 오버레이 네이티브 틱(`TICK_MS`)은 원래 5초. 엔진 호출이 3배 늘지만 워커 한 번이 가볍다.
 - **배포 순서**: 워커 s9 먼저, 그다음 APK.

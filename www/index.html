@@ -11073,7 +11073,7 @@ function _rtDwellRatio(elapsedMin, spanMin, dwellMin){
 //   못 받는 동안(오프라인·응답 실패)은 마지막으로 받은 시각이 화면에 그대로 남는다 — 앱이 대신 계산하지 않는다.
 // ══════════════════════════════════════════════════════════════════
 var _ETA_URL = ((typeof _ROUTE_V2_BASE === 'string' && _ROUTE_V2_BASE) ? _ROUTE_V2_BASE : 'https://route-v2.phg0643.workers.dev') + '/ride-eta';
-var _ETA_TIMEOUT_MS = 8000, _ETA_TICK_MS = 15000, _ETA_LIVE_MAX_AGE_MS = 60000;
+var _ETA_TIMEOUT_MS = 8000, _ETA_TICK_MS = 4500, _ETA_LIVE_MAX_AGE_MS = 60000;
 var _etaSt = { busy: false, pending: null, seq: 0, lastAt: 0, fails: 0, retryT: null, okAt: 0, applied: 0 };
 window._etaSt = _etaSt;
 function _plan0Stamp(){
@@ -11149,7 +11149,7 @@ function _etaApply(res, P){
   try{ if(typeof _syncHomeBriefRemaining === 'function') _syncHomeBriefRemaining(); }catch(e4){}
 }
 function _etaNext(){ if(_etaSt.pending){ var w = _etaSt.pending; _etaSt.pending = null; _etaRequest(w === 'tick' ? 'pass' : w); } }
-// why: 'pass'(통과 기록 변화 — 바로) | 'tick'(시간이 흘러야 달라지는 계산: 연착·승강장 대기 — 15초에 한 번) | 그 밖(보정 사유)
+// why: 'pass'(통과 기록 변화 — 바로) | 'tick'(시간이 흘러야 달라지는 계산: 연착·승강장 대기 — 5초에 한 번(YJ 2026-10-13: 15초는 너무 길다 — 앱·오버레이 모두 5초)) | 그 밖(보정 사유)
 function _etaRequest(why){
   try{
     if(typeof _htlMayAdjustTime === 'function' && !_htlMayAdjustTime()) return;
