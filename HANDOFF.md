@@ -626,7 +626,7 @@
 
 ## 2026-10-13(2) 경로 탭 섞임 수정: 최단=복합 최단 · 최소환승=복합 최소환승 · 버스=버스만 · 지하철=지하철만 (YJ: "탭을 누르면 각자 맞는 경로가 나와야 해, 지금 혼합된다")
 - **원인(엔진)**: ① `XPEN.minTransfer` 가 900초라 "환승 1번 줄이려고 15분 더 걸리는 경로"는 안 골라 최소환승이 환승 3번짜리가 나왔다. ② 지하철 탭(`o.subway`)이 `mustSubway` 만 걸려 있어 중간에 버스가 섞였다. **원인(앱)**: `_doSelectRouteOption` 폴백 체인이 sub/bus 경로가 없으면 다른 탭(fast/less/…) 경로로 바꿔 그렸다.
-- **엔진(`route-v2-worker.js`, `route-v2-2026-10-13s2`)**: `XPEN = {minTime:480, minTransfer:7200, minWalk:150}` (최소환승은 시간보다 환승 횟수 우선, 같으면 빠른 쪽). `dijkstraRaw` 에 `opt.noBus` 추가(버스 노드·버스 간선 금지). `_search()`: `subway = {mustSubway, subwayNearest, noBus}`, `bus = {noSubway}`. 지하철만으로 불가능하거나 걸어야 하는 시간이 60분을 넘으면 `subway=null`(= 앱은 "없음"). 시험: `test/tab_modes.test.js` 8건.
+- **엔진(`route-v2-worker.js`, `route-v2-2026-10-13s2`)**: `XPEN = {minTime:480, minTransfer:7200, minWalk:150}` (최소환승은 시간보다 환승 횟수 우선, 같으면 빠른 쪽). `dijkstraRaw` 에 `opt.noBus` 추가(버스 노드·버스 간선 금지). `_search()`: `subway = {mustSubway, subwayNearest, noBus}`, `bus = {noSubway}`. 지하철 탭은 `subwayTabRoute()`: 가까운 역이 걸어서 12분 이내면 버스 없이 지하철만(noBus), 12분 넘게 멀거나 지하철만으론 못 가면 버스+지하철(역까지 버스) 중 더 빠른 쪽 — YJ 정정: "버스를 타야 하는 경우는 버스를 태워야지, 경로없음은 말이 안 된다". 둘 다 없을 때만 null. 시험: `test/tab_modes.test.js` 8건.
 - **앱(`www/index.html`)**: `_showTabNoRoute(type)` — 지하철/버스 탭에 엔진 경로가 없으면 "지하철만으로(버스만으로) 갈 수 있는 경로가 없어요"만 보이고 타임라인·확정 버튼은 숨긴다(`window._tabNoRoute`). 다음에 경로가 그려지면 `_renderTransitResultCard` 첫 줄의 `_clearTabNoRoute()` 가 복원. 폴백 체인은 최단↔최소환승 사이에만 남고 `all[]` 순회도 fast/less 만. 앱은 계산·대체하지 않고 엔진이 준 경로만 그린다. 시험: `test/tab_no_mix.ui.test.js` 13건(예전 앱에서는 4건 실패).
-- **주의**: 출발지 근처에 지하철역이 없으면 지하철 탭은 이제 "없음"이 정상이다(전엔 버스가 섞여 나왔다). 엔진 배포 전까지는 앱만 바뀐 상태 — 엔진을 배포해야 실제 경로가 바뀐다.
+- **주의**: 지하철 탭의 "없음"은 지하철 경로가 정말 하나도 없을 때만 나온다. 버스 탭은 지하철 금지(버스만으로 못 가면 "없음"). 엔진 배포 전까지는 앱만 바뀐 상태 — 엔진을 배포해야 실제 경로가 바뀐다.
 - **실데이터 확인 못 함**: 송도 사례는 이 환경에서 라이브 엔진을 못 불러 합성 그래프 시험으로만 검증했다. 배포 후 송도에서 4개 탭을 직접 눌러 확인 필요.
