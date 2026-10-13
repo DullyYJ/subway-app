@@ -11037,7 +11037,7 @@ function _plan0Stamp(){
 // 통과 기록의 출처 표시: 'gps' | 'pf' | 'cell' | 'drift' | 'board' — 값(시각)은 그대로 두고 출처만 따로 적는다(엔진이 출처별로 믿는 정도를 정한다)
 function _etaSrc(idx, src){ try{ (window._nodePassSrc = window._nodePassSrc || {})[idx] = src; }catch(e){} }
 function _etaResetEvidence(){
-  window._etaLast = null; window._nodePassSrc = {}; window._nodePassPf = {}; window._etaLive = []; window._etaBoardNext = null; window._etaBoardArrive = null; window._etaBoardShift0 = 0;
+  window._etaPos = null; window._etaLast = null; window._nodePassSrc = {}; window._nodePassPf = {}; window._etaLive = []; window._etaBoardNext = null; window._etaBoardArrive = null; window._etaBoardShift0 = 0;
 }
 function _etaMinToMs(minOfDay){            // 하루 안의 분(kstMinutesAdj 기준) → 지금 기준 가장 가까운 ms
   var nowMin = (typeof kstMinutesAdj === 'function') ? kstMinutesAdj() : (new Date().getHours() * 60 + new Date().getMinutes());
@@ -11055,6 +11055,7 @@ function _etaPayload(){
   var notDep = (typeof _htlNotDeparted === 'function') ? _htlNotDeparted() : false;
   var P = { nowMs: Date.now(), nodes: nodes, passes: passes, boarded: !notDep, notDeparted: !!notDep, tzOffsetMin: -new Date().getTimezoneOffset() };
   try{ if(notDep && typeof _platformWaiting === 'function' && _platformWaiting()) P.platformWaiting = true; }catch(e1){}
+  try{ if(!notDep && typeof _ttFirstOn === 'function' && _ttFirstOn()) P.timetableFirst = true; }catch(eTf){}   // ★ 2026-10-13: 지하철 탑승 확정 — 시각표 기준(증거 없음을 연착으로 보지 않는다)
   try{ var _el = window._etaLast; if(!notDep && _el && _el.delayMin != null && isFinite(_el.delayMin) && Date.now() - (_el.at || 0) < 600000){ P.prevLevelMin = _el.delayMin; P.prevAnchorIdx = _el.anchorIdx; } }catch(e0){}   // 그려진 지연 수준 — 엔진이 작은 흔들림은 유지한다
   try{
     var lv = (window._etaLive || []).filter(function(x){ return x && Date.now() - x.at <= _ETA_LIVE_MAX_AGE_MS; });
@@ -11089,6 +11090,7 @@ function _etaApply(res, P){
   if(P && P.notDeparted && typeof res.boardShiftMin === 'number'){   // 승차 전: 홈 브리핑의 기준 분이 '승차역 시각이 밀린 만큼'만 따라가게 한다
     try{ var dsh = res.boardShiftMin - (window._etaBoardShift0 || 0); if(Math.abs(dsh) > 0.001){ if(typeof window._homeRouteBaseMin === 'number') window._homeRouteBaseMin += dsh; window._etaBoardShift0 = res.boardShiftMin; } }catch(eB){}
   }
+  try{ window._etaPos = (P && P.timetableFirst && res.pos) ? res.pos : null; }catch(eEp){}   // ★ 2026-10-13: 엔진이 준 시각표 기준 위치(그리기용)
   _etaSt.okAt = Date.now(); _etaSt.applied++; window._etaLast = { at: _etaSt.okAt, why: P && P._why, notes: res.notes, delayMin: res.delayMin, anchorIdx: res.anchorIdx };
   try{ _fgNotifySync(); }catch(e1){}      // 역이 바뀌면 상주 알림도 즉시
   try{ _aiArrivalSync(); }catch(e2){}     // AI 승무원 카드의 도착시각도 함께
@@ -13474,7 +13476,31 @@ window._evStaleFollow = function(){ return window._evStaleMs() >= 0; };
 //   앱 마커는 시각표대로 계양(18:29)이었다. 원인: 앱을 열 때(포그라운드 복귀 스냅)·상태 표시 등은 시각표 위치를 그대로 믿고 마커를 놓았다.
 //   (실시간 분기에는 '확정 진행도 + 1역까지만'이라는 상한이 있었는데 이 길만 상한이 없었다 — 규칙이 두 벌이었다.)
 //   → 시각표 위치는 어디서 읽든 '실제 근거로 확정된 진행도(_gpsMaxIdx) + 1역'을 넘지 못한다. 근거 없이 두 역 이상 앞서가지 않는다.
+// ★ 2026-10-13 (YJ: "탑승이 확정되면 시간표 기준으로 마커를 움직이면 되는 거잖아. 도착 땐 GPS 확인이고. 앱과 오버레이 마커를 똑같이 하고 싶어"):
+//   지하철 탑승이 확정되면(타고 있는 칸이 지하철) 위치는 시각표가 기준이다 — 위치 계산은 엔진(/ride-eta 의 pos). 앱은 엔진이 준 구간(from→to, t0~t1)을 그리기만 하고,
+//   앱 마커와 오버레이가 모두 이 한 값을 읽는다. 엔진 답이 아직 없으면 기존 방식(PF·시각표 추정)으로 그린다. 끄기: window._ttFirstOff = true
+function _ttFirstOn(){
+  try{
+    if(window._ttFirstOff === true) return false;
+    if(typeof _baseTimeMs !== 'undefined' && _baseTimeMs != null) return false;
+    if(window._routeLocked !== true || window._metroRouteMode === true) return false;
+    return (typeof _trkSubConfirmed === 'function') ? !!_trkSubConfirmed() : false;
+  }catch(e){ return false; }
+}
+window._ttFirstOn = _ttFirstOn;
 function _estimateTimelinePos(){
+  try{    // 엔진(/ride-eta 의 pos)이 준 구간(from→to, t0~t1)을 시간 흐름대로 그리기만 한다 — 위치 계산은 엔진
+    var _ep = window._etaPos;
+    if(_ep && _ep.from != null && _ttFirstOn()){
+      var _r = 0, _to = _ep.to;
+      if(_ep.t0 != null && _ep.t1 != null && _ep.t1 > _ep.t0 && _ep.to !== _ep.from) _r = Math.max(0, Math.min(1, (Date.now() - _ep.t0) / (_ep.t1 - _ep.t0)));
+      else _to = _ep.from;
+      var _fi = _ep.from, _g = window._gpsMaxIdx;
+      if(_g != null && _g > _fi) return { fromIdx: _g, toIdx: _g, ratio: 0 };   // 영점·통과 확인(엔진이 승인한 진행도)이 앞서 있으면 그 역에 둔다
+      try{ var _xh = _xferHoldIdx(); if(_xh >= 0 && _fi >= _xh) return { fromIdx: _xh, toIdx: _xh, ratio: 0 }; }catch(eXh){}   // 환승 승차 대기 고정(기존 규칙)
+      return { fromIdx: _fi, toIdx: _to, ratio: _r };
+    }
+  }catch(eTt){}
   // 2026-10-04: PF(새 위치 판단기)가 채택한 위치가 있으면 그것이 유일한 위치다 — 마커·오버레이·복귀 스냅이 모두 여기를 읽는다.
   try{ if(window._pfPosOverride){ var _pfo = window._pfPosOverride(); if(_pfo) return _pfo; } }catch(ePf){}
   // ★ 2026-10-06 (YJ: "오버레이는 시간이 줄어드는데 역은 안 바뀌어", "동수인데 부평으로 나와"):
@@ -27983,12 +28009,14 @@ function _pipHereIdx(){
       //   (문턱을 낮추는 건 85% 에서 막히는 PF 위치뿐이다 — 시각표 추정은 100% 까지 가므로 예전 0.9 문턱 그대로: 낮추면 근거 없이 지하에서 역을 앞서 보였다)
       var _pfo0 = null; try{ _pfo0 = window._pfPosOverride ? window._pfPosOverride() : null; }catch(ePf1){}
       var _isPfPos = !!(_pfo0 && _pfo0.fromIdx === tp.fromIdx && _pfo0.toIdx === tp.toIdx);
-      var th = (tp.ratio >= (_isPfPos ? _OVL_NEXT_RATIO : 0.9)) ? tp.toIdx : tp.fromIdx;
+      var _ttf = false; try{ _ttf = _ttFirstOn() && !!window._etaPos; }catch(eTf){}
+      // ★ 2026-10-13: 시각표 기준 구간(지하철 탑승 확정)에서는 앱 마커와 같은 값 — 현위치 = 마지막으로 떠난 역(fromIdx), 역 사이는 '이동 중'(_ovlMoving)으로 보여 준다. 문턱 없음.
+      var th = _ttf ? tp.fromIdx : ((tp.ratio >= (_isPfPos ? _OVL_NEXT_RATIO : 0.9)) ? tp.toIdx : tp.fromIdx);
       var cmv = (typeof _cellMovingState === 'function') ? _cellMovingState() : null;
       // ★ 2026-10-12 (YJ: "오버레이는 동막에서 멈췄는데 앱은 원인재로 제대로 나오고 있어"): 지하에서는 기지국이 몇 분씩 안 바뀌어 '정지'로 읽힌다(바뀌지 않음 ≠ 멈춤).
       //   앱 마커는 PF 가 채택한 위치를 따르는데 오버레이만 이 '정지' 판정에 막혀 한 곳에 굳었다. PF 위치가 있으면 둘이 같은 자리를 읽는다.
       var _pfOn = false; try{ _pfOn = !!(window._pfPosOverride && window._pfPosOverride()); }catch(ePf0){}
-      if(th > raw && (cmv !== false || _pfOn)) raw = th;
+      if(th > raw && (_ttf || cmv !== false || _pfOn)) raw = th;
     }
     // ★ 2026-10-06: 마커가 GPS 로 그려진 위치를 따른다(한 역까지만 앞서갈 수 있다). 위 주석 참고(_markerPos).
     try{
@@ -28456,6 +28484,12 @@ function _ovlMoving(){
   try{
     if(window._routeLocked !== true || window._metroRouteMode === true) return false;
     if(typeof _htlNotDeparted === 'function' && _htlNotDeparted()) return false;
+    try{    // ★ 2026-10-13: 시각표 기준 구간은 앱 마커와 같은 위치 — 역과 역 사이(비율 0 초과, 도착 전)면 이동 중, 정차(비율 0)·역 위면 정지
+      if(_ttFirstOn() && window._etaPos){
+        var _p = _estimateTimelinePos();
+        return !!(_p && _p.toIdx > _p.fromIdx && _p.ratio > 0 && _p.ratio < 1);
+      }
+    }catch(eTm){}
     var b = window._pfBest, now = Date.now();
     if(b && b.at && now - b.at <= 30000 && b.conf >= 0.5 && b.kind) return b.kind === 'seg';
     var cm = (typeof _cellMovingState === 'function') ? _cellMovingState() : null;
