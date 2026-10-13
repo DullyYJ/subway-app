@@ -31,6 +31,8 @@ var RIDE_STANDBY_DEFAULTS = {
   trailMax: 60,            // 상태에 담는 궤적 점 수
   trailMaxAgeSec: 600,     // 이보다 오래된 점은 버린다
   notYetKeepSec: 45,       // notYet 증거를 유지하는 시간
+  gpsGapDeadReckonSec: 180, // 시각표 기준이 아닌 여정(버스): GPS 가 이만큼 끊기면 계획 시각표대로 이어간다(멈춰 서 있지 않게)
+  offGiveUpSec: 900,       // 경로를 벗어난 채 이만큼 지나면 안내를 끝낸다(내리고도 서비스가 계속 도는 것을 막는다)
   doneAfterSec: 180,       // 목적지 도착 알림 뒤 이 시간이 지나면 done
   maxStaleSec: 3 * 3600,   // 상태가 이보다 오래 갱신되지 않았으면 done(안전 장치)
   ongoingTitle: '길동무 경로 안내 중'
@@ -137,14 +139,14 @@ function rsDistM(aLat, aLng, bLat, bLng) {
 //   → 신선한 정확한 좌표 두 점(5초 이상 간격)이 모두 앞쪽 정류장 150m 안이고, 마지막 통과 정류장에서 계획 소요의 40% 이상 지났으면 그 정류장 통과로 본다(정류장 건너뛰기 포함).
 function rsResync(st, now, notes) {
   var eta = st.eta, tr = st.trail || [], stops = st.stops || [], passes = eta.passes || [], i, k;
-  if (eta.timetableFirst || tr.length < 2 || !stops.length) return;
+  if (eta.timetableFirst || tr.length < 2 || !stops.length) return false;
   var maxIdx = 0, lastPass = null;
   for (i = 0; i < passes.length; i++) if (passes[i].idx > maxIdx) { maxIdx = passes[i].idx; lastPass = passes[i]; }
-  if (!lastPass) return;
+  if (!lastPass) return false;
   var a = tr[tr.length - 1], b = null;
-  if (now - a[0] > 30000 || (a[3] != null && a[3] > 60)) return;
+  if (now - a[0] > 30000 || (a[3] != null && a[3] > 60)) return false;
   for (i = tr.length - 2; i >= 0; i--) { if (a[0] - tr[i][0] >= 5000 && a[0] - tr[i][0] <= 60000 && (tr[i][3] == null || tr[i][3] <= 60)) { b = tr[i]; break; } }
-  if (!b) return;
+  if (!b) return false;
   var lastStop = null; for (i = 0; i < stops.length; i++) if (stops[i].i === maxIdx) lastStop = stops[i];
   var best = null, bestD = 1e9;
   for (k = 0; k < stops.length; k++) {
@@ -155,10 +157,11 @@ function rsResync(st, now, notes) {
     if (gap > 0 && lastPass.ms != null && a[0] - lastPass.ms < 0.4 * gap) continue;   // 계획 소요의 40% 도 안 지났으면 건너뛸 수 없다
     if (da < bestD) { bestD = da; best = s; }
   }
-  if (!best) return;
+  if (!best) return false;
   passes.push({ idx: best.i, ms: a[0], src: 'gps' });
   if (st.notYet) delete st.notYet[best.i];
   notes.push('재동기 ' + best.i + '번(GPS 끊김 뒤 위치로 통과 인정, ' + Math.round(bestD) + 'm)');
+  return true;
 }
 
 function rideStandby(req) {
@@ -170,11 +173,13 @@ function rideStandby(req) {
   // 1) 궤적 갱신
   var tr = st.trail = st.trail || [], fx = req.fixes || [];
   for (i = 0; i < fx.length; i++) { var f = fx[i]; if (f && isFinite(f[0]) && isFinite(f[1]) && isFinite(f[2]) && (!tr.length || f[0] > tr[tr.length - 1][0])) tr.push([f[0], f[1], f[2], f[3] == null ? null : f[3]]); }
+  for (i = 0; i < fx.length; i++) { if (fx[i] && isFinite(fx[i][0]) && (!st.lastFixMs || fx[i][0] > st.lastFixMs)) st.lastFixMs = fx[i][0]; }
+  if (!st.firstAt) st.firstAt = now;
   while (tr.length && now - tr[0][0] > O.trailMaxAgeSec * 1000) tr.shift();
   if (tr.length > O.trailMax) tr.splice(0, tr.length - O.trailMax);
   // 2) 영점: 정류장 도착 시각을 최신 etaMs 로 맞춰 ride-track 에 묻는다 → 통과 시각(passMs)은 gps 증거로, 아직 안 닿음은 notYet 으로
   var eta = st.eta, passes = (eta.passes = eta.passes || []), notYet = (st.notYet = st.notYet || {});
-  var zero = null;
+  var zero = null, newPass = false;
   if (st.stops && st.stops.length && tr.length) {
     var stops = st.stops.map(function (s) { var o = rsClone(s); if (st.etaMs && st.etaMs[s.i] != null) o.arrMs = st.etaMs[s.i]; return o; });
     var tk = rsTrackFn()({ nowMs: now, trail: tr, plan: { pts: [], boarded: eta.boarded !== false && eta.notDeparted !== true, notDeparted: false, stops: stops, subConfirmed: true, suppress: ['standby'] }, want: { zero: true } });
@@ -185,17 +190,25 @@ function rideStandby(req) {
           var hit = -1; for (var k = 0; k < passes.length; k++) if (passes[k].idx === z.i) { hit = k; break; }
           var np = { idx: z.i, ms: z.passMs, src: 'gps' };
           if (hit >= 0) passes[hit] = np; else passes.push(np);
+          newPass = true;
           delete notYet[z.i];
           notes.push('영점 ' + z.i + '번 통과 반영');
         } else if (z.notYet) { notYet[z.i] = now; }
       });
     }
   }
-  rsResync(st, now, notes);   // 2.5) 버스: 오래 끊겼던 GPS 가 돌아오면 앞쪽 정류장 통과로 다시 맞춘다(시각표 기준 여정은 시각표가 이어가므로 해당 없음)
+  if (rsResync(st, now, notes)) newPass = true;   // 2.5) 버스: 오래 끊겼던 GPS 가 돌아오면 앞쪽 정류장 통과로 다시 맞춘다(시각표 기준 여정은 시각표가 이어가므로 해당 없음)
   // 3) 도착 시각 계산
   var nyList = [], nk;
   for (nk in notYet) { if (now - notYet[nk] <= O.notYetKeepSec * 1000) nyList.push(+nk); else delete notYet[nk]; }
-  var ein = rsClone(eta); ein.nowMs = now; ein.passes = passes; if (nyList.length && eta.timetableFirst) ein.notYet = nyList; else delete ein.notYet;
+  // ★ 2026-10-14 (시뮬: 시각표가 없는 버스가 GPS 를 못 받으면 마커가 멈추고 하차 알림이 영영 안 울렸다): GPS 가 gpsGapDeadReckonSec 넘게 끊기면 계획 시각표대로 이어간다.
+  //   GPS 로 통과 증거(영점·재동기)가 다시 잡힐 때까지 이어간다(증거 없음을 연착으로 밀어 마커가 도로 뒤로 가는 것을 막는다). 시각표 기준 여정(지하철)은 원래 이렇게 돈다.
+  if (!eta.timetableFirst && eta.boarded !== false) {
+    var gapMs = now - (st.lastFixMs || st.firstAt || now);
+    if (gapMs >= O.gpsGapDeadReckonSec * 1000 && !st.dr) { st.dr = true; notes.push('GPS 끊김 ' + Math.round(gapMs / 1000) + '초 — 계획 시각표대로 이어감'); }
+    else if (st.dr && newPass) { st.dr = false; notes.push('GPS 통과 증거 복귀 — 시각표 이어가기 해제'); }
+  } else st.dr = false;
+  var ein = rsClone(eta); ein.nowMs = now; if (st.dr) ein.timetableFirst = true; ein.passes = passes; if (nyList.length && eta.timetableFirst) ein.notYet = nyList; else delete ein.notYet;
   var fired = (st.fired = st.fired || {});
   var r = rsEtaFn()(ein);
   if (!r || !r.etaMs) return { v: 1, state: st, ongoing: { title: O.ongoingTitle, text: '' }, alert: null, done: false, notes: ['도착 시각 계산 실패'] };
@@ -206,7 +219,30 @@ function rideStandby(req) {
   if (r.pos && r.pos.from != null) curIdx = r.pos.from;
   else { for (i = 0; i < nodes.length; i++) if (r.etaMs[i] != null && r.etaMs[i] <= now) curIdx = i; }
   var al = rsAlerts(cfg, fired, curIdx, r.etaMs, now);
-  if (al.alert) {
+  // ★ 2026-10-14 (YJ: "고치지 못한 것 전부 진행 — 카카오지하철처럼 네이티브 활용"): 앱을 닫은 뒤에도 경로를 벗어나면(중간에 내려 걷거나 택시) 알림으로 알린다.
+  //   판정은 ride-track rtOff(지하철 탑승 확정 중에는 '신선하고 정확한 좌표가 2분 가까이 전부 경로선 600m 밖'일 때만). 벗어난 동안에는 하차 알림을 울리지 않는다(내린 사람에게 '곧 하차'는 거짓).
+  var offRes = null, offActive = false;
+  try {
+    var ptsO = (st.stops || []).filter(function (q) { return q && isFinite(q.lat) && isFinite(q.lng); }).map(function (q) { return { lat: q.lat, lng: q.lng }; });
+    if (tr.length && ptsO.length >= 2 && !(st.arrivedAt)) {
+      var tfO = eta.timetableFirst === true;
+      var ot = rsTrackFn()({ nowMs: now, trail: tr, plan: { pts: ptsO, progIsSub: tfO, subConfirmed: tfO, boarded: true, notDeparted: false, suppress: [] }, want: { off: true, ridden: false, miss: false, bus: false, board: false } });
+      offRes = ot && ot.off ? ot.off : null;
+    }
+  } catch (eOff) { notes.push('이탈 판정 실패: ' + (eOff && eOff.message)); }
+  if (offRes && offRes.confirmed) { if (!st.offOn) { st.offOn = now; } offActive = true; }
+  else if (offRes && offRes.why === 'on_path') { st.offOn = 0; st.offAlertAt = 0; }   // 경로선으로 돌아오면 이탈이 끝난 것 — 다음에 벗어나면 다시 알린다
+  else if (st.offOn) offActive = true;   // 판단 근거가 부족한 틱(GPS 끊김 등)은 직전 상태를 유지한다
+  if (offActive) {
+    if (al.alert) { al.alert = null; al.extra = []; }   // 벗어난 동안 하차·환승 알림은 보류(보낸 것으로 처리하지 않는다)
+    var offCfg = (cfg.allowed || {}).offroute;
+    if (offCfg !== false && !st.offAlertAt) {
+      st.offAlertAt = now;
+      al.alert = { key: 'offroute_' + now, type: 'offroute', title: '경로를 벗어났어요', body: '앱을 열면 지금 위치에서 다시 찾아 드려요', vib: [0, 300, 150, 300] };
+      notes.push('이탈 알림(' + (offRes ? offRes.why + ' ' + offRes.distM + 'm' : '유지') + ')');
+    }
+  }
+  if (al.alert && al.alert.type !== 'offroute') {
     fired[al.alert.key] = 1; al.extra.forEach(function (k) { fired[k] = 1; });
     if (/_0$/.test(al.alert.key) && !st.arrivedAt) st.arrivedAt = now;
   }
@@ -219,12 +255,15 @@ function rideStandby(req) {
     var nm = (nodes[nextIdx] && nodes[nextIdx].name) || '', ar = r.arr && r.arr[nextIdx] ? r.arr[nextIdx] : '';
     text = '다음 ' + nm + (ar ? ' ' + ar : '') + (dest && al.curPos >= 0 ? ' · ' + (cfg.destName || dest.name || '목적지') + '까지 ' + Math.max(0, dest.seqPos - al.curPos) + '정거장' : '');
   } else text = '';
+  if (offActive) text = '경로를 벗어났어요 · 앱을 열면 다시 찾아 드려요';
   var done = false;
   if (st.arrivedAt && now - st.arrivedAt >= O.doneAfterSec * 1000) { done = true; notes.push('목적지 도착 ' + O.doneAfterSec + '초 뒤 종료'); }
+  if (offActive && st.offOn && now - st.offOn >= O.offGiveUpSec * 1000) { done = true; notes.push('경로를 벗어난 채 ' + O.offGiveUpSec + '초 — 안내 종료'); }
   var lastAt = st.lastAt || now; if (now - lastAt > O.maxStaleSec * 1000) done = true;
   st.lastAt = now;
   var moving = !!(r.pos && r.pos.moving), overlay = null;
   try { overlay = rsOverlay(st, r, curIdx, al.curPos, now, dest, cfg.destName || (dest && dest.name) || '', moving, done); } catch (eOv) { notes.push('오버레이 계산 실패: ' + (eOv && eOv.message)); }
+  if (offActive && overlay && overlay.active) { overlay.alert = 0; overlay.pre = false; overlay.banner = '경로를 벗어났어요 — 앱을 열면 다시 찾아 드려요'; }
   var view = { text: text, line1: overlay && overlay.line1 || '', line2: overlay && overlay.line2 || '', curIdx: curIdx, at: now };
   return { v: 1, state: st, ongoing: { title: O.ongoingTitle, text: text }, alert: al.alert, done: done, curIdx: curIdx, overlay: overlay, view: view, zero: zero, notes: notes };
 }

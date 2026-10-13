@@ -55,10 +55,11 @@ function run(sc) {
   let st = b.st;
   const t0 = timeAtPos(1, delay, b.plan) + 5000;   // 탑승 직후(영점 1번)
   const arriveMs = timeAtPos(N, delay, b.plan);
-  const tEnd = arriveMs + 6 * 60000;
-  const tunnelFrom = 6, tunnelTo = 12;   // 열차가 정류장 6~12 사이일 때 GPS 없음
+  const tEnd = arriveMs + ((sc.cond === 'leaveWalk' || sc.cond === 'leaveTaxi') ? 25 : 6) * 60000;
+  const tunnelFrom = 6, tunnelTo = 12;
+  const leaveStop = Math.max(3, Math.round(N / 2)), leaveMs = timeAtPos(leaveStop, delay, b.plan), leaveV = sc.cond === 'leaveTaxi' ? 12 : 1.4, leaving = sc.cond === 'leaveWalk' || sc.cond === 'leaveTaxi';   // 열차가 정류장 6~12 사이일 때 GPS 없음
   const killAt = timeAtPos(N > 6 ? Math.round(N / 2) : 3, delay, b.plan) + 20000, killGap = (sc.cond === 'kill15' ? 15 : 5) * 60000;
-  const res = { expectFail: sc.kind === 'bus25' && sc.cond === 'nogps', id: sc.id, kind: sc.kind, delay: delay, cond: sc.cond, ticks: 0, errs: [], alerts: [], doneMs: null, etaErrAtMinus2: null, maxErr: 0, errTicks2: 0, notes: [], lastLv: 0, ovMiss: 0, bytes: 0 };
+  const res = { expectFail: sc.kind === 'short5' && sc.cond === 'leaveWalk', id: sc.id, kind: sc.kind, delay: delay, cond: sc.cond, ticks: 0, errs: [], alerts: [], doneMs: null, etaErrAtMinus2: null, maxErr: 0, errTicks2: 0, notes: [], lastLv: 0, ovMiss: 0, bytes: 0 };
   let ms = t0, lastFixMs = 0, lastDeliveredMs = t0, resumeMs = 0;
   const alertsSeen = [];
   while (ms <= tEnd) {
@@ -77,7 +78,9 @@ function run(sc) {
       if (sc.cond === 'noisy' && r() < 0.03) { dLat += (r() - 0.5) * 2 * 250 / 111320; dLng += (r() - 0.5) * 2 * 250 / M_PER_DLNG; }
       if (fm - lastDeliveredMs > 60000) resumeMs = fm;   // 60초 넘게 끊겼다 돌아온 순간
       lastDeliveredMs = fm;
-      fixes.push([fm, LAT + dLat, LNG0 + DL * (fp - 1) + dLng, acc]);
+      let baseLat = LAT, baseLng = LNG0 + DL * (fp - 1);
+      if (leaving && fm >= leaveMs) { baseLng = LNG0 + DL * (leaveStop - 1); baseLat = LAT + leaveV * (fm - leaveMs) / 1000 / 111320; }   // 정류장에서 내려 북쪽으로 걷거나(1.4m/s) 택시(12m/s)
+      fixes.push([fm, baseLat + dLat, baseLng + dLng, acc]);
     }
     // 틱 간격(네이티브 5초 · 절전이면 30~90초 · 프로세스 종료면 5분 틱 없음)
     const body = JSON.stringify({ nowMs: ms, fixes: fixes, state: st });
@@ -90,7 +93,7 @@ function run(sc) {
     if (!out.overlay) res.ovMiss++;
     const truthCell = Math.max(0, Math.min(N - 1, Math.floor(pos + 1e-9) - 1));
     const blackout = ms - lastDeliveredMs > 60000 || ms - resumeMs < 90000;   // GPS 가 없던 동안과 돌아온 뒤 90초는 오차를 재지 않는다(알 수 없는 구간 — 돌아온 뒤 얼마나 빨리 맞추는지가 아래 '재동기 지연')
-    if (out.overlay && out.overlay.active && ms > t0 + 60000 && !blackout) {
+    if (out.overlay && out.overlay.active && ms > t0 + 60000 && !blackout && !(leaving && ms >= leaveMs)) {
       const e = Math.abs(out.overlay.cur - truthCell);
       res.errs.push(e); if (e > res.maxErr) res.maxErr = e; if (e >= 2) res.errTicks2++;
     }
@@ -109,7 +112,22 @@ function run(sc) {
   res.check = {};
   const count = {}; res.alerts.forEach(a => { count[a.type] = (count[a.type] || 0) + 1; });
   res.count = count;
-  const typeIdeal = ['near_arrive2', 'near_arrive', 'arrive'];
+  if (leaving) {
+    const off = res.alerts.filter(a => a.type === 'offroute');
+    const probsL = [];
+    if (off.length !== 1) probsL.push('이탈 알림 ' + off.length + '번');
+    else {
+      const need = (b.kind === 'bus25' ? 350 : 600) / leaveV + 150;   // 벗어난 거리 + 판정 창(2분)·틱
+      const dl = Math.round((off[0].ms - leaveMs) / 1000); res.check.offroute = dl;
+      if (dl > need + 60) probsL.push('이탈 알림 ' + dl + '초 늦음(기대 ' + Math.round(need) + '초 안)');
+      if (dl < 30) probsL.push('이탈 알림 너무 이름 ' + dl + '초');
+      const after = res.alerts.filter(a => a.ms > off[0].ms && /near_arrive|arrive/.test(a.type));
+      if (after.length) probsL.push('이탈 뒤 하차 알림 ' + after.length + '번');
+      if (res.doneMs == null) probsL.push('done 없음');
+    }
+    res.probsLeave = probsL;
+  }
+  const typeIdeal = leaving ? [] : ['near_arrive2', 'near_arrive', 'arrive'];
   const probs = [];
   typeIdeal.forEach(t => {
     const got = res.alerts.filter(a => a.type === t);
@@ -124,8 +142,9 @@ function run(sc) {
     if (dl < tolEarly) probs.push(t + ' ' + (-dl) + '초 빠름'); if (dl > tolLate) probs.push(t + ' ' + dl + '초 늦음');
   });
   const tr = res.alerts.filter(a => a.type && /transfer|환승/.test(a.type));
-  if (b.targets.length > 1 && tr.length === 0) probs.push('환승 알림 없음');
-  if (res.doneMs == null) probs.push('done 없음'); else { const aa = res.alerts.filter(a => a.type === 'arrive')[0]; const dd = aa ? res.doneMs - aa.ms : null; if (dd == null || dd < 175000 || dd > 180000 + 100000) probs.push('도착 알림 뒤 done 간격 이상 ' + (dd == null ? '(도착 알림 없음)' : Math.round(dd / 1000) + '초')); }
+  if (!leaving && b.targets.length > 1 && tr.length === 0) probs.push('환승 알림 없음');
+  if (leaving) { (res.probsLeave || []).forEach(x => probs.push(x)); }
+  else if (res.doneMs == null) probs.push('done 없음'); else { const aa = res.alerts.filter(a => a.type === 'arrive')[0]; const dd = aa ? res.doneMs - aa.ms : null; if (dd == null || dd < 175000 || dd > 180000 + 100000) probs.push('도착 알림 뒤 done 간격 이상 ' + (dd == null ? '(도착 알림 없음)' : Math.round(dd / 1000) + '초')); }
   if (res.maxErr >= 3) probs.push('현위치 칸 오차 최대 ' + res.maxErr);
   if (res.ovMiss) probs.push('overlay 없음 ' + res.ovMiss + '틱');
   res.errAvg = res.errs.length ? +(res.errs.reduce((a, c) => a + c, 0) / res.errs.length).toFixed(2) : null;
@@ -136,7 +155,7 @@ function run(sc) {
 }
 
 const scs = [];
-['short5', 'long25', 'bus25'].forEach(kind => [-90, 0, 300].forEach(delay => ['clean', 'noisy', 'sparse', 'tunnel', 'nogps', 'doze', 'kill', 'kill15'].forEach(cond => {
+['short5', 'long25', 'bus25'].forEach(kind => [-90, 0, 300].forEach(delay => ['clean', 'noisy', 'sparse', 'tunnel', 'nogps', 'doze', 'kill', 'kill15', 'leaveWalk', 'leaveTaxi'].forEach(cond => {
   if ((cond === 'tunnel' || cond === 'kill15') && kind === 'short5') return;   // 짧은 여정엔 터널·15분 종료가 없다   // 짧은 여정엔 터널 구간이 없다
   scs.push({ id: kind + '/d' + delay + '/' + cond, kind: kind, delay: delay, cond: cond });
 })));
@@ -149,7 +168,7 @@ if (argv('--out')) fs.writeFileSync(argv('--out'), JSON.stringify(out, null, 1))
 const fmt = (x) => x == null ? '-' : x;
 console.log('| 시나리오 | 틱 | 현위치 칸 오차(평균/최대) | 알림 지연(2전/1전/도착, 초) | 도착 2분 전 ETA 오차(초) | done(도착+초) | 결과 |');
 console.log('|---|---|---|---|---|---|---|');
-out.forEach(r => console.log('| ' + r.id + ' | ' + r.ticks + ' | ' + fmt(r.errAvg) + '/' + r.maxErr + ' | ' + ['near_arrive2', 'near_arrive', 'arrive'].map(t => fmt(r.check[t])).join(' / ') + ' | ' + fmt(r.etaErrAtMinus2) + ' | ' + (r.doneMs ? Math.round((r.doneMs - r.idealMs.arrive) / 1000) : '-') + ' | ' + (r.limit ? '한계(예상): GPS 가 한 번도 없으면 시각표가 없는 버스는 움직일 수 없다' : (r.pass ? 'OK' : '**' + r.problems.join('; ') + '**')) + ' |'));
+out.forEach(r => console.log('| ' + r.id + ' | ' + r.ticks + ' | ' + fmt(r.errAvg) + '/' + r.maxErr + ' | ' + ['near_arrive2', 'near_arrive', 'arrive'].map(t => fmt(r.check[t])).join(' / ') + ' | ' + fmt(r.etaErrAtMinus2) + ' | ' + (r.doneMs ? Math.round((r.doneMs - r.idealMs.arrive) / 1000) : '-') + ' | ' + (r.limit ? '한계(예상): 짧은 여정(8분)에서 내려 걸으면 걸어서 경로선 600m 밖으로 나가기 전에 열차가 도착해 도착 알림이 먼저 나간다' : (r.pass ? 'OK' : '**' + r.problems.join('; ') + '**')) + ' |'));
 const bad = out.filter(r => !r.pass);
 console.log('\n총 ' + out.length + '건, 통과 ' + (out.length - bad.length) + ', 문제 ' + bad.length + ', 요청 최대 크기 ' + Math.max.apply(null, out.map(r => r.bytes)) + '바이트');
 process.exit(bad.length ? 1 : 0);

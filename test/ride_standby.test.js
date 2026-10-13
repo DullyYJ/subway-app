@@ -216,6 +216,42 @@ t('버스: GPS 가 15분 끊겼다 돌아오면 앞쪽 정류장 통과로 다�
   assert.ok(!r.notes.some(x => /재동기/.test(x)), '점 하나로 재동기');
 });
 
+t('이탈: 정거장에서 내려 택시로 멀어지면 이탈 알림이 한 번 나가고, 그 뒤 하차 알림은 보류되며, 15분이 지나면 안내를 끝낸다', () => {
+  let st = mkState(), alerts = [], doneAt = null, texts = [];
+  const leaveMs = at(12, 56, 0), stopLng = LNG0 + DL * 2;   // 3번 정거장(12:56)에서 내린다
+  for (let ms = at(12, 53, 0); ms <= at(13, 20, 0); ms += 5000) {
+    const onTrain = ms < leaveMs;
+    const lat = onTrain ? LAT : LAT + 12 * (ms - leaveMs) / 1000 / 111320, lng = onTrain ? trainLng(ms, 0) : stopLng;
+    const r = rideStandby({ nowMs: ms, fixes: [[ms, lat, lng, 15]], state: JSON.parse(JSON.stringify(st)) }); st = r.state;
+    if (r.alert) alerts.push({ ms: ms, a: r.alert });
+    texts.push(r.ongoing.text);
+    if (r.done) { doneAt = ms; break; }
+  }
+  const off = alerts.filter(x => x.a.type === 'offroute');
+  assert.strictEqual(off.length, 1, JSON.stringify(alerts.map(x => x.a.type)));
+  assert.ok(off[0].ms - leaveMs > 30000 && off[0].ms - leaveMs < 260000, '이탈 알림 시각 ' + (off[0].ms - leaveMs) / 1000 + '초 뒤');
+  assert.ok(!alerts.some(x => x.ms > off[0].ms && /near_arrive|arrive/.test(x.a.type)), '이탈 뒤 하차 알림');
+  assert.ok(texts.some(x => /경로를 벗어났어요/.test(x)));
+  assert.ok(doneAt && doneAt - off[0].ms >= 880000 && doneAt - off[0].ms <= 960000, '안내 종료 ' + (doneAt - off[0].ms) / 1000);
+});
+t('이탈: 열차를 계속 타고 가면(지하 GPS 없음·지상 구간) 이탈 알림이 나가지 않는다', () => {
+  const r = ride(mkState(), at(12, 53, 0), at(13, 1, 0), 0);
+  assert.ok(!r.alerts.some(x => x.a.type === 'offroute'));
+  let st = mkState(), n = 0;
+  for (let ms = at(12, 53, 0); ms <= at(13, 1, 0); ms += 5000) { const q = rideStandby({ nowMs: ms, fixes: [], state: JSON.parse(JSON.stringify(st)) }); st = q.state; if (q.alert && q.alert.type === 'offroute') n++; }
+  assert.strictEqual(n, 0);
+});
+t('버스: GPS 가 3분 넘게 없으면 계획 시각표대로 이어가 알림이 나가고, GPS 통과가 다시 잡히면 해제된다', () => {
+  function busS() { const s0 = mkState(); delete s0.eta.timetableFirst; s0.eta.nodes.forEach(n => { if (n.isSub) { n.isSub = false; n.isBus = true; n.lineName = '931'; } }); s0.stops.forEach(q => { q.bus = true; }); return s0; }
+  let st = busS(), types = [], drSeen = false;
+  for (let ms = at(12, 53, 0); ms <= at(13, 1, 0); ms += 5000) {
+    const r = rideStandby({ nowMs: ms, fixes: [], state: JSON.parse(JSON.stringify(st)) }); st = r.state;   // GPS 가 한 번도 없다
+    if (r.alert) types.push(r.alert.type); if (st.dr) drSeen = true;
+  }
+  assert.ok(drSeen, '끊김 이어가기가 켜져야 한다');
+  assert.deepStrictEqual(types, ['near_arrive2', 'near_arrive', 'arrive']);
+});
+
 const httpTest = async () => {
   const zlib = require('zlib');
   const body = JSON.stringify({ nowMs: at(12, 55, 0), fixes: [], state: withOvl(mkState()) });

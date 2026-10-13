@@ -33,7 +33,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   };
   const feed = (page, lat, lng, acc) => page.evaluate(([la, ln, ac]) => { S.lastGPSFix = { lat: la, lng: ln, ts: Date.now(), acc: ac || 15 }; try { _pfTick(); } catch (e) {} }, [lat, lng, acc]);
   const req = async (page) => { await page.evaluate(() => { window._trk.at = 0; window._trkRequest('시험'); }); await page.clock.runFor(100); };
-  const ride = async (page, secs, latOf, lngOf) => { for (let s = 0; s < secs; s += 5) { await feed(page, latOf(s), lngOf(s)); await page.clock.runFor(5000); if (s % 10 === 0) await req(page); } await req(page); };
+  const ride = async (page, secs, latOf, lngOf, acc) => { for (let s = 0; s < secs; s += 5) { await feed(page, latOf(s), lngOf(s), acc); await page.clock.runFor(5000); if (s % 10 === 0) await req(page); } await req(page); };
   const KM = 0.0137 / 1.2;       // 경도 1km ≈ 0.0137/1.2
   const LAT = (m) => 37.5 + m / 111000;
 
@@ -45,11 +45,17 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     // 경로(위도 37.5) 위에서 달린다
     await ride(page, 60, () => 37.5, (s) => 126.9 + 0.0137 * (3 + s / 100));
     await t('경로 위를 달리면 재탐색하지 않는다', async () => { assert.strictEqual(await page.evaluate(() => window.__calls.route), 0); });
-    // 경로에서 800m 북쪽으로 벗어난 채 계속 달린다 — 지하철 탑승이 확정된 상태(진행 노드가 지하철)에서는 이탈 판정을 하지 않는다(2026-10-12 YJ)
-    await ride(page, 120, () => LAT(800), (s) => 126.9 + 0.0137 * (3.6 + s / 100));
-    await t('지하철 탑승이 확정이면 경로에서 800m 벗어나도 재탐색하지 않는다', async () => {
+    // 경로에서 800m 북쪽으로 벗어난 채 2분 가까이 달린다. 정확도가 나쁘면(100m) 지하철 탑승 확정 중에는 판정하지 않는다(2026-10-12 YJ) —
+    // ★ 2026-10-14: 정확도가 좋은(15m) 지상 좌표가 계속 800m 밖이면 중간에 내려 걷거나 택시를 탄 것이므로 재탐색한다.
+    await ride(page, 120, () => LAT(800), (s) => 126.9 + 0.0137 * (3.6 + s / 100), 100);
+    await t('지하철 탑승이 확정이어도 정확도가 나쁜 좌표(100m)로는 재탐색하지 않는다', async () => {
       const r = await page.evaluate(() => ({ c: window.__calls.route, off: window._trk.last && window._trk.last.off }));
       assert.strictEqual(r.c, 0, JSON.stringify(r));
+    });
+    await ride(page, 130, () => LAT(800), (s) => 126.9 + 0.0137 * (4.6 + s / 100), 15);
+    await t('지하철 탑승이 확정이어도 정확한 지상 좌표가 2분 넘게 800m 밖이면 재탐색한다', async () => {
+      const r = await page.evaluate(() => ({ c: window.__calls.route, off: window._trk.last && window._trk.last.off }));
+      assert.ok(r.c >= 1, JSON.stringify(r));
     });
     await t('JS 오류가 없다', async () => { assert.deepStrictEqual(errs.filter(e => !/Failed to fetch|NetworkError|Load failed/.test(e)), []); });
     await ctx.close();

@@ -39451,6 +39451,7 @@ window._autoLockVerify = _autoLockVerify;
 //   그동안은 '놓쳤다'(다음 열차로 재동기화·재탐색)로 보지 않고, 늦는 것으로 보고 시각만 뒤로 민다.
 //   4분이 넘어도 안 타면 기존대로 정지 증명이 있을 때 놓친 것으로 본다.
 var _PLAT_GRACE_MIN = 4;
+var _PLAT_GRACE_BUS_MIN = 10;   // ★ 2026-10-14 (시뮬: 4분 넘게 늦는 버스를 정류장에서 기다리면 놓친 것으로 재탐색): 버스는 늦는 일이 흔하고 실시간 위치가 없어 늦는 차와 놓친 차를 가를 수 없다 → 유예를 10분으로
 function _platformWaiting(){
   try{
     if(window._htlBoarded === true) return false;
@@ -39468,7 +39469,7 @@ function _platGrace(passedMin){
     if(!_platformWaiting()) return false;
     var bi = _htlBoardIdx(), n = _transitNodeData[bi], D = window._platDep0, p = passedMin;
     if(D && D.node === n){ var o = _msToMinOfDay(Date.now()) - D.min; if(o < -720) o += 1440; if(o > 720) o -= 1440; p = o; }
-    return p < _PLAT_GRACE_MIN;
+    return p < ((n && n.isBus) ? _PLAT_GRACE_BUS_MIN : _PLAT_GRACE_MIN);
   }catch(e){ return false; }
 }
 window._platformWaiting = _platformWaiting; window._platGrace = _platGrace;

@@ -62,6 +62,7 @@ var RIDE_TRACK_DEFAULTS = {
   pressFarM: 800,         // 이보다 멀면 '역에 없다' — 버튼을 거둔다(그 사이는 믿는다)
   busStopNearM: 150,      // 승차 정류장을 '지났다'고 보는 반경(정확도 일부를 뺀 거리)
   busStopAccCap: 50,      // 위 거리에서 빼 주는 정확도의 상한
+  subRideWinSec: 120, subRideMinFixes: 4, subRideMinSpanSec: 90, subRideOffM: 600, subRideMaxAcc: 60,   // 지하철 탑승 확정 중 이탈: 신선한 정확한 좌표가 2분 가까이 전부 경로선에서 600m 밖일 때만
   busTrailMaxAgeSec: 570, // 앱 궤적은 10분(600초)보다 오래된 점을 버린다 — 맨 앞 점이 이만큼 오래됐으면 밀려났을 수 있다
   busTrailCap: 240,       // 앱이 보내는 궤적 점 수의 상한 — 이만큼 차면 오래된 점이 밀려나 '승차 정류장을 지난 적 없음'을 말할 수 없다
   busCoverSlackSec: 20,   // 궤적이 움직임 시작보다 이만큼 앞서 시작해야 '정류장을 지난 적 없음'을 말할 수 있다
@@ -130,12 +131,39 @@ function rtDistinct(tr) {
   return out;
 }
 
+// 지하철 탑승 확정 중의 이탈(좁은 규칙) — 위 rtOff 설명 참고
+function rtOffSubRiding(P, tr, O, res) {
+  var plan = P.plan || {}, now = P.nowMs, pts = plan.pts || [], i;
+  if (pts.length < 2) { res.why = 'sub_confirmed'; return res; }
+  var w = rtDistinct(tr.filter(function (p) { return now - p.ts <= O.subRideWinSec * 1000; }));
+  res.n = w.length;
+  if (!w.length) { res.why = 'sub_confirmed'; return res; }
+  var last = w[w.length - 1];
+  if (now - last.ts > O.freshSec * 1000) { res.why = 'sub_confirmed'; return res; }
+  if (w.length < O.subRideMinFixes) { res.why = 'sub_confirmed'; return res; }
+  res.spanSec = Math.round((last.ts - w[0].ts) / 1000);
+  if (last.ts - w[0].ts < O.subRideMinSpanSec * 1000) { res.why = 'sub_confirmed'; return res; }
+  var ds = [];
+  for (i = 0; i < w.length; i++) {
+    if (w[i].acc != null && w[i].acc > O.subRideMaxAcc) { res.why = 'sub_confirmed'; return res; }   // 정확도가 나쁜 좌표(지하 진입·출구 근처 튄 점)가 섞이면 판정하지 않는다
+    ds.push(rtPathDist(w[i].lat, w[i].lng, pts));
+  }
+  res.distM = Math.round(rtMed(ds));
+  if (!(ds[ds.length - 1] > O.subRideOffM)) { res.why = 'on_path'; return res; }          // 지금은 경로선 가까이(복귀·지상 구간 열차)
+  for (i = 0; i < ds.length; i++) if (!(ds[i] > O.subRideOffM)) { res.why = 'sub_confirmed'; return res; }
+  res.confirmed = true; res.why = 'off_sub_riding';
+  return res;
+}
 // ── 이탈 ──────────────────────────────────────────────────────────────────────
 function rtOff(P, tr, O) {
   var plan = P.plan || {}, now = P.nowMs;
   var res = { confirmed: false, distM: null, n: 0, spanSec: 0, why: '' };
-  if (plan.suppress && plan.suppress.length) { res.why = 'suppressed:' + plan.suppress.join(','); return res; }
-  if (plan.subConfirmed === true) { res.why = 'sub_confirmed'; return res; }          // 2026-10-12: 지하철 탑승이 확정이면 이탈 판정을 하지 않는다(YJ)
+  var sup = (plan.suppress || []).filter(function (x) { return x !== 'subRiding'; });          // subRiding = 앱이 '지하철 탑승 확정'으로 본 것 — 아래에서 따로 다룬다
+  if (sup.length) { res.why = 'suppressed:' + sup.join(','); return res; }
+  // 2026-10-12: 지하철 탑승이 확정이면 일반 이탈 판정(경로선 150m 등)은 하지 않는다(YJ: 지하철 잘 타다 버스 경로로 바뀜).
+  // ★ 2026-10-14 (시뮬: 지하철을 타다 중간에 내려 걸어가거나 택시를 타도 영영 재탐색하지 않았다): 좁은 규칙 하나만 둔다 — 신선하고 정확한 지상 좌표가 2분 가까이 '전부' 경로선에서 600m 밖.
+  //   지하(GPS 없음)·지상 구간을 달리는 열차(경로선 위)는 해당 없고, 후보 경로로 갈아타기(rtRidden)는 계속 막는다.
+  if (plan.subConfirmed === true) return rtOffSubRiding(P, tr, O, res);
   if (plan.notDeparted) { res.why = 'not_departed'; return res; }
   var pts = plan.pts || [];
   if (pts.length < 2) { res.why = 'no_path'; return res; }

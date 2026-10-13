@@ -46,7 +46,30 @@ r = T(trail(150, 0, 10, walkOff(0.4), 15), { progIsSub: true });
 ok(!r.off.confirmed && r.off.why === 'sub_still', '어슬렁은 이탈 아님 ' + JSON.stringify(r.off));
 // 9c) 지하철 탑승 확정(subConfirmed) 이면 지상에서 벗어난 좌표가 있어도 이탈이 아니다 / 후보 경로로 갈아타지도 않는다
 r = T(trail(150, 0, 10, offPath, 15), { progIsSub: true, subConfirmed: true });
-ok(!r.off.confirmed && r.off.why === 'sub_confirmed', '지하철 탑승 확정이면 이탈 판정 안 함 ' + JSON.stringify(r.off));
+ok(!r.off.confirmed, '지하철 탑승 확정이면 경로선 600m 이내는 이탈 판정 안 함 ' + JSON.stringify(r.off));
+// 9d) ★ 2026-10-14 지하철 탑승 확정 중에도 '신선하고 정확한 좌표가 2분 가까이 전부 경로선에서 600m 밖'이면 이탈(중간에 내려 걸어가기·택시)
+{
+  const far = (s) => ({ lat: 900 / KY, lng: (3000 - s * 10) / KX });
+  const SUBR = { progIsSub: true, subConfirmed: true };
+  r = T(trail(120, 0, 10, far, 15), SUBR, {}); r = rideTrack({ nowMs: NOW, trail: trail(120, 0, 10, far, 15), plan: plan(Object.assign({ suppress: ['subRiding'] }, SUBR)) });
+  ok(r.off.confirmed && r.off.why === 'off_sub_riding' && r.off.distM >= 890, '지하철 탑승 확정이라도 지상에서 2분간 900m 밖이면 이탈 ' + JSON.stringify(r.off));
+  r = rideTrack({ nowMs: NOW, trail: trail(120, 0, 10, far, 80), plan: plan(Object.assign({ suppress: ['subRiding'] }, SUBR)) });
+  ok(!r.off.confirmed, '정확도 나쁜 좌표는 판정하지 않는다 ' + r.off.why);
+  r = rideTrack({ nowMs: NOW, trail: trail(60, 0, 10, far, 15), plan: plan(Object.assign({ suppress: ['subRiding'] }, SUBR)) });
+  ok(!r.off.confirmed, '60초만으로는 아니다 ' + r.off.why);
+  r = rideTrack({ nowMs: NOW, trail: trail(120, 0, 10, onPath, 15), plan: plan(Object.assign({ suppress: ['subRiding'] }, SUBR)) });
+  ok(!r.off.confirmed && r.off.why === 'on_path', '경로선 위(지상 구간 열차)는 이탈 아님 ' + r.off.why);
+  const mixed = trail(120, 0, 10, far, 15); mixed[mixed.length - 1] = [NOW, 100 / KY, 3000 / KX, 15];
+  r = rideTrack({ nowMs: NOW, trail: mixed, plan: plan(Object.assign({ suppress: ['subRiding'] }, SUBR)) });
+  ok(!r.off.confirmed && r.off.why === 'on_path', '마지막 좌표가 경로선 가까이 돌아오면 이탈 아님(복귀) ' + r.off.why);
+  r = rideTrack({ nowMs: NOW, trail: trail(120, 0, 10, far, 15), plan: plan(Object.assign({ suppress: ['subRiding', 'baseTime'] }, SUBR)) });
+  ok(!r.off.confirmed, '다른 쉬는 이유(baseTime)가 있으면 판정하지 않는다 ' + r.off.why);
+  r = rideTrack({ nowMs: NOW, trail: [], plan: plan(Object.assign({ suppress: ['subRiding'] }, SUBR)) });
+  ok(!r.off.confirmed, '지하(GPS 없음)는 이탈 아님');
+  // 후보 경로로 갈아타기는 여전히 막는다
+  r = rideTrack({ nowMs: NOW, trail: trail(120, 0, 10, far, 15), plan: plan(Object.assign({ suppress: ['subRiding'] }, SUBR)), cands: [{ id: 'X', pts: [{ lat: 900 / KY, lng: 0 }, { lat: 900 / KY, lng: 7000 / KX }] }] });
+  ok(!r.ridden || !r.ridden.ok, '지하철 탑승 확정이면 후보 경로로 갈아타지 않는다');
+}
 { const bulge2 = (lat) => [0, 1000, 2000, 4000, 7000].map((m, i) => ({ lat: (i === 0 || i === 4) ? 0 : lat, lng: m / KX }));
   const B2 = { id: 'B', pts: bulge2(-1200 / KY) }, A2 = { id: 'A', pts: line(0) };
   const south2 = (s) => ({ lat: -1200 / KY, lng: (3500 - s * 10) / KX });
