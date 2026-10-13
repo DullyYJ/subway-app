@@ -944,7 +944,7 @@ public class OverlayPlugin extends Plugin {
     public void keepAlive(PluginCall call) {
         journeyOn = call.getBoolean("on", false);
         if (journeyOn) journeyAt = System.currentTimeMillis();
-        main.post(new Runnable() { @Override public void run() { if (journeyOn) startTicker(); } });
+        main.post(new Runnable() { @Override public void run() { if (journeyOn) { startTicker(); startKeepSvc(); } else stopKeepSvc(); } });
         call.resolve(new JSObject().put("ok", true));
     }
 
@@ -990,6 +990,7 @@ public class OverlayPlugin extends Plugin {
     protected void handleOnDestroy() {
         wanted = false;
         journeyOn = false;
+        stopKeepSvc();
         try { if (cpuLock != null && cpuLock.isHeld()) cpuLock.release(); } catch (Exception ignoredR2) { }
         main.removeCallbacks(ticker);
         ticking = false;
@@ -1057,7 +1058,9 @@ public class OverlayPlugin extends Plugin {
     private final Runnable ticker = new Runnable() {
         @Override public void run() {
             boolean journey = journeyOn && (System.currentTimeMillis() - journeyAt) < JOURNEY_STALE_MS;
-            if (!attached && !journey) { ticking = false; try { if (cpuLock != null && cpuLock.isHeld()) cpuLock.release(); } catch (Exception ignoredR) { } return; }
+            if (!attached && !journey) { ticking = false; try { if (cpuLock != null && cpuLock.isHeld()) cpuLock.release(); } catch (Exception ignoredR) { } stopKeepSvc(); return; }
+            // ★ 2026-10-13: 여정 중인데 우리 유지 서비스가 없으면 다시 켠다(시작이 막히면 조용히 건너뛴다).
+            if (journey && serviceState("KeepAliveService") == 0) startKeepSvc();
             try { if (attached) rebuildIfResized(); } catch (Exception ignored0) { }
             // ★ 2026-10-12 (YJ: "앱의 갱신 호출을 못 해도 5초에 한 번은 살려야지"): 화면이 꺼져 CPU 가 잠들면 이 5초 틱도 멈춘다.
             //   여정 중에는 CPU 를 깨워 두는 락(부분 웨이크락)을 틱마다 90초씩 갱신한다 — 틱이 죽으면 락도 90초 안에 저절로 풀린다.
@@ -1089,7 +1092,9 @@ public class OverlayPlugin extends Plugin {
     // ★ 2026-10-13 (YJ: "서비스가 끊기면 30초마다 되살아나? 텀이 너무 길다 — 4.5초로"): 웹이 가진 '백그라운드 위치 켜짐' 표시(_bgGeoActive)는
     //   서비스가 죽어도 true 로 남아 있어 되살리기가 아예 일어나지 않았다. 틱마다 진짜 서비스 상태를 읽어 웹에 넘긴다.
     //   1 = 살아 있음 · 0 = 없음 · -1 = 읽지 못함(웹은 이 값으로 되살리지 않는다).
-    private int bgServiceState() {
+    private int bgServiceState() { return serviceState("BackgroundGeolocationService"); }
+
+    private int serviceState(String classSuffix) {
         try {
             android.app.ActivityManager am = (android.app.ActivityManager) getContext().getSystemService(Context.ACTIVITY_SERVICE);
             if (am == null) return -1;
@@ -1099,10 +1104,22 @@ public class OverlayPlugin extends Plugin {
             for (android.app.ActivityManager.RunningServiceInfo s : l) {
                 if (s == null || s.service == null) continue;
                 if (!pkg.equals(s.service.getPackageName())) continue;
-                if (s.service.getClassName().endsWith("BackgroundGeolocationService")) return 1;
+                if (s.service.getClassName().endsWith(classSuffix)) return 1;
             }
             return 0;
         } catch (Throwable e) { return -1; }
+    }
+
+    /** 경로 이동 중 프로세스를 포그라운드 우선순위로 올려 두는 서비스(KeepAliveService). 시작이 거부돼도 앱은 영향 없다. */
+    private void startKeepSvc() {
+        try {
+            android.content.Intent i = new android.content.Intent(getContext(), KeepAliveService.class);
+            if (android.os.Build.VERSION.SDK_INT >= 26) getContext().startForegroundService(i); else getContext().startService(i);
+        } catch (Throwable ignored) { }
+    }
+
+    private void stopKeepSvc() {
+        try { getContext().stopService(new android.content.Intent(getContext(), KeepAliveService.class)); } catch (Throwable ignored) { }
     }
 
     private android.os.PowerManager.WakeLock cpuLock = null;
