@@ -2118,6 +2118,7 @@ function _showLocDisclosure(ok, no){
     if(agreed) _markLocDisclosed(); else _locDiscDeclined = true;
     var q = _locDiscQ; _locDiscQ = [];
     q.forEach(function(x){ try { (agreed ? x.ok : x.no)(); } catch(e){} });
+    if(agreed){ try{ setTimeout(function(){ if(typeof _batAsk === 'function') _batAsk('disclosed'); }, 700); }catch(eB){} }   // ★ 2026-10-13: 위치 동의 직후 배터리 최적화 제외 안내
   };
   var ov = document.createElement('div');
   ov.id = 'locDiscOv';
@@ -27692,6 +27693,7 @@ function _beginJourneyTracking(){
     if(typeof _resetAlertFired === 'function') _resetAlertFired();   // ★ 도착임박 알림 중복방지 플래그 초기화 (이전 여정 잔여 방지)
     if(typeof _startBgGeolocation === 'function') _startBgGeolocation();
     if(typeof _askBgPermOnce === 'function') _askBgPermOnce();
+    try{ setTimeout(function(){ if(typeof _batAsk === 'function') _batAsk('journey'); }, 2500); }catch(eB){}   // ★ 2026-10-13: 경로 확정 때 아직 제외 안 돼 있으면 안내(7일 1회)
     // 상시 알림 즉시 1회 표시 (경로 정보 있으면 상세, 없으면 기본 문구)
     var cur = '출발', dest = '목적지', rem = 1;
     if(typeof _transitResultDest !== 'undefined' && _transitResultDest){
@@ -29322,6 +29324,49 @@ function _batRequest(){
   });
 }
 window._batRequest = _batRequest;
+
+// ★ 2026-10-13 (YJ: "앱 설치 시 배터리 최적화 제외 설정도 요청하면 되겠네"): 설정 화면(숨김 카드)에서만 누를 수 있어 대부분 못 보고 지나갔다.
+//   → 위치 안내에 [동의]한 직후 · 앱을 켤 때 · 경로를 확정할 때, 아직 제외가 안 돼 있으면 이유를 먼저 설명하는 안내를 띄운다.
+//   [설정하기] 를 눌러야만 시스템 화면으로 간다(자동 이동 없음). 같은 안내는 7일에 한 번만(나중에를 눌러도 다음 주에 다시) — 이미 제외돼 있으면 아예 안 띄운다.
+var _BAT_ASK_KEY = 'gdm_bat_asked_at', _BAT_ASK_GAP_MS = 7 * 24 * 3600 * 1000;
+function _batAsk(why){
+  try{
+    var n = _batNative();
+    if(!n || typeof n.isIgnoringOptimizations !== 'function' || typeof n.requestIgnoreOptimizations !== 'function') return;   // 웹/구버전 빌드는 건너뜀
+    if(document.getElementById('batAskOv') || document.getElementById('locDiscOv') || document.getElementById('bgPermOv')) return;   // 다른 안내가 떠 있으면 이번엔 건너뜀(다음 기회에)
+    var last = 0; try{ last = parseInt(localStorage.getItem(_BAT_ASK_KEY) || '0', 10) || 0; }catch(e0){}
+    if(last && Date.now() - last < _BAT_ASK_GAP_MS) return;
+    n.isIgnoringOptimizations().then(function(r){
+      if(r && r.ignoring) return;
+      if(document.getElementById('batAskOv') || document.getElementById('locDiscOv') || document.getElementById('bgPermOv')) return;
+      try{ localStorage.setItem(_BAT_ASK_KEY, String(Date.now())); }catch(e1){}
+      var ov = document.createElement('div');
+      ov.id = 'batAskOv';
+      ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true');
+      ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.68);z-index:100000;display:flex;align-items:center;justify-content:center;padding:22px;';
+      ov.innerHTML =
+        '<div style="background:#fff;color:#1c1c1e;border-radius:18px;max-width:380px;width:100%;padding:24px 20px;box-shadow:0 12px 40px rgba(0,0,0,.35);">'
+        + '<div style="font-size:17px;font-weight:800;margin-bottom:14px;">🔋 화면을 꺼도 끊기지 않게</div>'
+        + '<div style="font-size:14px;line-height:1.75;margin-bottom:14px;">'
+          + '지하철·버스를 타는 동안 화면이 꺼져 있어도 <b>내릴 정거장 알림</b>과 <b>오버레이</b>가 계속 움직이려면, '
+          + '기기의 <b>배터리 최적화에서 길동무를 제외</b>해 주셔야 해요. 제외하지 않으면 일부 기기(삼성·샤오미 등)가 이동 중에 앱을 멈출 수 있어요.'
+        + '</div>'
+        + '<div style="font-size:12.5px;line-height:1.7;color:#6b7280;margin-bottom:18px;">'
+          + '· [설정하기]를 누르면 기기의 안내 창이 열려요. 거기서 <b>허용</b>을 눌러 주세요.<br>'
+          + '· 경로 안내 중에만 위치를 쓰고, 설정은 기기 설정에서 언제든 되돌릴 수 있어요.'
+        + '</div>'
+        + '<div style="display:flex;gap:10px;">'
+          + '<button id="batAskNo" style="flex:1;padding:13px;border-radius:11px;border:1px solid #d1d5db;cursor:pointer;font-size:14.5px;font-weight:700;background:#f3f4f6;color:#374151;font-family:inherit;">나중에</button>'
+          + '<button id="batAskOk" style="flex:1.4;padding:13px;border-radius:11px;border:none;cursor:pointer;font-size:14.5px;font-weight:800;background:#0a84ff;color:#fff;font-family:inherit;">설정하기</button>'
+        + '</div></div>';
+      document.body.appendChild(ov);
+      document.getElementById('batAskNo').onclick = function(){ ov.remove(); };
+      document.getElementById('batAskOk').onclick = function(){ ov.remove(); _batRequest(); };
+    }).catch(function(){});
+  }catch(e){}
+}
+window._batAsk = _batAsk;
+try{ setTimeout(function(){ try{ if(typeof _locDisclosed === 'function' && _locDisclosed()) _batAsk('start'); }catch(e){} }, 5000); }catch(e){}
 
 try{
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(_batSyncStat, 300); });
