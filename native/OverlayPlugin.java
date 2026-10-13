@@ -86,7 +86,7 @@ public class OverlayPlugin extends Plugin {
     private boolean sWanted, sRcOn, sMoving;
     private Cell[] sStrip;
     private int sStripCur, sStripBase;
-    private String sLine1 = "", sLine2 = "", sLine3 = "", sRcA = "", sRcB = "", sRcGo = "", sRcCh = "", sRcCh2 = "", sRsSt = "hidden";
+    private String sLine1 = "", sLine2 = "", sLine3 = "", sRcA = "", sRcB = "", sRcM = "", sRcGo = "", sRcCh = "", sRcCh2 = "", sRsSt = "hidden";
     private long sRcAt;
     private boolean demoActive() { return demoUntil > System.currentTimeMillis(); }
     private volatile boolean appVisible = true;    // 액티비티가 화면에 보이는가
@@ -114,7 +114,7 @@ public class OverlayPlugin extends Plugin {
     private BoardView boardView;
     // ★ 2026-10-11 (YJ: "추천은 오버레이 하단에 · 추천아이템 연결 버튼 · 끄는 확인 버튼"): 도착 3분 전부터 맨 아래에 두 줄 추천 + [보기] [확인]. 문구·시각·갈 곳은 웹이 정한다.
     private boolean rcOn = false;
-    private String rcA = "", rcB = "", rcGo = "보기";
+    private String rcA = "", rcB = "", rcM = "", rcGo = "보기";
     // ★ 2026-10-13 (YJ: "도착 전 추천 때 오버레이 하단이 확장되면서 캐릭터 일부가 나와서 추천을 보여줘"): 웹이 정한 캐릭터 둘(rcCh 큰 쪽·rcCh2 작은 쪽)을
     //   추천 줄 위로 내민다. 그림(3D 동작 프레임 www/chars3d/*.webp)은 앱 자산에서 읽어 그리기만 한다 — 문구·시각·갈 곳은 그대로 웹이 정한다.
     private long rcAt = 0;
@@ -424,10 +424,12 @@ public class OverlayPlugin extends Plugin {
         }
     }
 
-    /** 맨 아래 추천 줄: 가게·상품 이름(굵게)과 한 줄 설명, 오른쪽 [보기](추천 아이템·맛집으로) [확인](이 추천 끄기).
-     *  ★ 2026-10-14 (YJ: "캐릭터가 좌우로 움직이게 — 랜덤으로 하나가 우측에서 광고를 쫙 당겨서 나오게 · 위아래로 잘리지 않게"):
+    /** 맨 아래 추천 줄: 가게·상품 이름(굵게) · 지금 날씨·시간에 맞춘 추천 설명(최대 두 줄) · 거리/종류, 오른쪽(좁은 화면은 아래)에 [보기] [확인].
+     *  ★ 2026-10-14 (YJ: "캐릭터가 좌우로 움직이게 — 랜덤 하나가 우측에서 광고를 쫙 당겨서 · 위아래로 잘리지 않게"):
      *  추천이 뜨면 캐릭터 하나(웹이 무작위로 정함)가 오른쪽 화면 밖에서 왼쪽으로 걸어(뛰어·날아·헤엄쳐) 들어오며 줄을 밧줄로 끌어당긴다.
      *  줄이 자리에 서면 캐릭터는 줄 쪽으로 돌아서서 천천히 움직인다. 캐릭터는 줄 옆 칸 전체를 쓰므로 위·아래·옆 어디도 잘리지 않는다.
+     *  ★ 2026-10-14 (YJ: "광고판에 문구가 너무 없다 · 추천 음식/제품 설명 · 글자 키워줘"): 글자를 키우고(이름 16sp · 설명 13.5sp · 버튼 13sp) 설명을 두 줄까지 보인다.
+     *  줄 높이는 글 양에 맞춰 달라진다. 가로가 좁아 글자 칸이 210dp 가 안 되면 버튼을 글 아래 줄로 내리고 거리·종류는 버튼 줄 왼쪽에 둔다.
      *  그림은 앱 자산(public/chars3d/*.webp, 3D 렌더링 동작 프레임)을 시간 순으로 그리고(왼쪽으로 갈 때는 좌우 반전), 여기서는 이동·반전만 계산한다.
      *  가게·상품 이름과 문구는 웹이 정해 넘긴 것을 그대로 쓴다. */
     private class RecoView extends View {
@@ -440,9 +442,13 @@ public class OverlayPlugin extends Plugin {
         private long t0 = 0;
         private String key = "";
         private static final float PULL = 1.15f;            // 줄을 끌고 들어오는 시간(초)
+        // 글 배치(너비·문구가 바뀔 때만 다시 계산한다)
+        private String lkey = "";
+        private boolean stack = false, metaOwn = false;
+        private float nameSp = 16f, goW = 0f, okW = 0f, barHdp = 0f, rowHdp = 70f, baseLast = 26f;
+        private String[] desc = new String[0];
         RecoView(Context c) { super(c); }
-        private int rowDp() { return 62; }                  // 캐릭터가 서는 칸 높이(머리 위 날개·띄운 높이까지 들어간다)
-        private int charW() { return dp(58); }              // 줄 왼쪽에 캐릭터가 서는 칸 너비
+        private int charW() { return dp(66); }              // 줄 왼쪽에 캐릭터가 서는 칸 너비
         /** 추천이 새로 뜨거나 다시 보이면 처음부터 끌어오기를 시작한다(같은 추천이 계속 보이는 중이면 이어서). */
         void begin(boolean wasVisible) {
             String k = rcAt + "|" + rcCh;
@@ -452,8 +458,31 @@ public class OverlayPlugin extends Plugin {
             }
             requestLayout();
         }
+        /** 글자 크기·문구에 맞춰 줄 높이와 버튼 자리를 정한다(dp 단위로 계산해 두고 그릴 때 px 로 바꾼다). */
+        private void layoutFor(float w) {
+            String k = ((int) w) + "|" + rcA + "|" + rcB + "|" + rcM + "|" + rcGo;
+            if (k.equals(lkey)) return;
+            lkey = k;
+            float d = getResources().getDisplayMetrics().density;
+            float barW = w - charW() - dp(2), padL = dp(12);
+            goW = Math.max(dp(56), mwb(rcGo, 13f, true) + dp(24));
+            okW = Math.max(dp(48), mwb("확인", 13f, true) + dp(20));
+            float btnArea = goW + okW + dp(5) + dp(10) + dp(10);
+            stack = (barW - btnArea - padL) < dp(210);
+            float textW = stack ? (barW - padL - dp(12)) : (barW - btnArea - padL);
+            nameSp = fitSp(rcA, textW, 16f, 12f);
+            desc = rcB.length() > 0 ? wrap(rcB, textW, 2, 13.5f) : new String[0];
+            metaOwn = false;
+            if (!stack && rcM.length() > 0) metaOwn = mwb(rcA, nameSp, true) + dp(10) + mwb(rcM, 12f, false) > textW;
+            baseLast = 26f + (desc.length > 0 ? 19f + 18f * (desc.length - 1) : 0f);
+            if (stack) barHdp = baseLast + 12f + 34f + 8f;
+            else barHdp = Math.max(46f, baseLast + (metaOwn ? 17f : 0f) + 10f);
+            rowHdp = Math.max(70f, barHdp + 4f);
+        }
         @Override protected void onMeasure(int wSpec, int hSpec) {
-            setMeasuredDimension(MeasureSpec.getSize(wSpec), dp(rowDp()));
+            int w = MeasureSpec.getSize(wSpec);
+            if (rcOn) layoutFor(w);
+            setMeasuredDimension(w, dp(rowHdp));
         }
         /** 1 = [보기], 2 = [확인], 0 = 버튼 밖(손가락 오차를 감안해 사방 6dp 넓게). */
         int hit(float x, float y) {
@@ -472,16 +501,34 @@ public class OverlayPlugin extends Plugin {
             cv.drawText(e, 0, e.length(), x, y, tp);
             return tp.measureText(e, 0, e.length());
         }
-        private float mw(String s, float sp) {
+        private float mwb(String s, float sp, boolean bold) {
             tp.setTextSize(sp * getResources().getDisplayMetrics().scaledDensity);
-            tp.setTypeface(Typeface.DEFAULT_BOLD);
+            tp.setTypeface(bold ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
             return tp.measureText(s == null ? "" : s);
         }
-        /** 가게·상품 이름: 칸에 들어가도록 글자를 13sp → 10.5sp 까지 줄여 보고, 그래도 길면 끝을 '…' 로 자른다. */
+        /** 가게·상품 이름: 칸에 들어가도록 글자를 from → to sp 까지 줄여 보고, 그래도 길면 끝을 '…' 로 자른다. */
         private float fitSp(String s, float maxW, float from, float to) {
             float sp = from;
-            while (sp > to && mw(s, sp) > maxW) sp -= 0.5f;
+            while (sp > to && mwb(s, sp, true) > maxW) sp -= 0.5f;
             return sp;
+        }
+        /** 설명 문구를 칸 너비에 맞춰 최대 maxLines 줄로 나눈다(띄어쓰기에서 끊고, 마지막 줄이 넘치면 '…'). */
+        private String[] wrap(String s, float maxW, int maxLines, float sp) {
+            java.util.ArrayList<String> out = new java.util.ArrayList<String>();
+            tp.setTextSize(sp * getResources().getDisplayMetrics().scaledDensity);
+            tp.setTypeface(Typeface.DEFAULT);
+            String rest = s == null ? "" : s.trim();
+            while (rest.length() > 0 && out.size() < maxLines) {
+                if (out.size() == maxLines - 1) { out.add(TextUtils.ellipsize(rest, tp, Math.max(1f, maxW), TextUtils.TruncateAt.END).toString()); break; }
+                int n = tp.breakText(rest, true, maxW, null);
+                if (n >= rest.length()) { out.add(rest); break; }
+                if (n < 1) n = 1;
+                int cut = n, sp2 = rest.lastIndexOf(' ', n);
+                if (sp2 >= n / 2) cut = sp2;
+                out.add(rest.substring(0, cut).trim());
+                rest = rest.substring(cut).trim();
+            }
+            return out.toArray(new String[0]);
         }
         /** 3D 동작 시트. 지금 쓰는 캐릭터 말고는 메모리에서 내린다(시트 하나가 약 4MB). */
         private Bitmap sheet(String id) {
@@ -515,11 +562,11 @@ public class OverlayPlugin extends Plugin {
             if ("sul".equals(id)) return new float[] { 27f, 230.5f, 131f, 20f, 16f };
             return new float[] { 15f, 222.5f, 128f, 13f, 0f };
         }
-        /** 몸 높이(dp): 날거나 헤엄치는 캐릭터는 띄운 높이까지 더해도 칸(rowDp − 4)을 넘지 않게 작게 잡는다. */
+        /** 몸 높이(dp): 날거나 헤엄치는 캐릭터는 띄운 높이까지 더해도 칸(줄 최소 높이 70 − 4)을 넘지 않게 작게 잡는다. */
         private float bodyDp(String id) {
-            if ("sul".equals(id)) return 38f;
-            if ("chaeng".equals(id)) return 46f;
-            return 50f;
+            if ("sul".equals(id)) return 44f;
+            if ("chaeng".equals(id)) return 52f;
+            return 58f;
         }
         /** face: +1 오른쪽을 봄 · −1 왼쪽을 봄(시트는 오른쪽을 보고 있어 반전해 그린다). lean: 앞으로 기울임(도). ph: 동작 시계(초). */
         private void drawChar3d(Canvas cv, Bitmap sh, String id, float cx, float baseY, int face, float lean, float ph) {
@@ -541,6 +588,7 @@ public class OverlayPlugin extends Plugin {
             float w = getWidth(), h = getHeight();
             go.setEmpty(); ok.setEmpty();
             if (!rcOn) return;
+            layoutFor(w);
             float t = t0 == 0 ? 9f : (android.os.SystemClock.uptimeMillis() - t0) / 1000f;
             float u = Math.min(1f, t / PULL);
             float e = 0.45f * u + 0.55f * (1f - (1f - u) * (1f - u) * (1f - u));     // 처음부터 바로 걷다가 끝에서 서서히 멈춘다
@@ -549,42 +597,48 @@ public class OverlayPlugin extends Plugin {
             float cw = charW();
             float cx = ox + cw / 2f;
             float baseY = h - dp(4);
-            float barL = ox + cw, barR = ox + w - dp(2), barT = h - dp(52), barB = h - dp(2);
+            float barB = h - dp(2), barT = barB - dp(barHdp);
+            float barL = ox + cw, barR = ox + w - dp(2);
+            float midY = (barT + barB) / 2f;
             if (barL < w) {
                 p.setStyle(Paint.Style.FILL);
                 rf.set(barL, barT, barR, barB);
                 p.setColor(thBg);
-                cv.drawRoundRect(rf, dp(12), dp(12), p);
+                cv.drawRoundRect(rf, dp(14), dp(14), p);
                 p.setColor((0x1A << 24) | (thSub & 0x00FFFFFF));
-                cv.drawRoundRect(rf, dp(12), dp(12), p);
-                float bh = dp(28), by = (barT + barB) / 2f - bh / 2f, gap = dp(5), edge = dp(8);
-                float okW = Math.max(dp(42), mw("확인", 11.5f) + dp(16));
-                float goW = Math.max(dp(50), mw(rcGo, 11.5f) + dp(18));
-                ok.set(barR - edge - okW, by, barR - edge, by + bh);
-                go.set(ok.left - gap - goW, by, ok.left - gap, by + bh);
+                cv.drawRoundRect(rf, dp(14), dp(14), p);
+                float bh = dp(34), edge = dp(10), gap = dp(5);
+                float tx = barL + dp(12);
+                float nameBase = barT + dp(26), lastBase = barT + dp(baseLast);
+                if (stack) {
+                    float by = lastBase + dp(12);
+                    ok.set(barR - edge - okW, by, barR - edge, by + bh);
+                } else {
+                    float by = midY - bh / 2f;
+                    ok.set(barR - edge - okW, by, barR - edge, by + bh);
+                }
+                go.set(ok.left - gap - goW, ok.top, ok.left - gap, ok.bottom);
+                float textW = stack ? (barR - edge - tx) : (go.left - tx - dp(10));
+                // 이름(굵게) + 같은 줄에 거리·종류(자리가 있을 때)
+                float nw = txt(cv, rcA, tx, nameBase, textW, nameSp, thFg, true, Paint.Align.LEFT);
+                if (!stack && rcM.length() > 0 && !metaOwn) txt(cv, rcM, tx + nw + dp(10), nameBase, textW - nw - dp(10), 12f, thSub, false, Paint.Align.LEFT);
+                for (int i = 0; i < desc.length; i++) txt(cv, desc[i], tx, nameBase + dp(19) + dp(18) * i, textW, 13.5f, thFg, false, Paint.Align.LEFT);
+                if (!stack && metaOwn) txt(cv, rcM, tx, lastBase + dp(17), textW, 12f, thSub, false, Paint.Align.LEFT);
+                if (stack && rcM.length() > 0) txt(cv, rcM, tx, go.centerY() + dp(4.5f), go.left - tx - dp(8), 12f, thSub, false, Paint.Align.LEFT);
                 p.setColor(0xFF0A84FF);
                 cv.drawRoundRect(go, bh / 2f, bh / 2f, p);
-                txt(cv, rcGo, go.centerX(), go.centerY() + dp(4f), goW - dp(6), 11.5f, 0xFFFFFFFF, true, Paint.Align.CENTER);
+                txt(cv, rcGo, go.centerX(), go.centerY() + dp(4.6f), goW - dp(6), 13f, 0xFFFFFFFF, true, Paint.Align.CENTER);
                 p.setColor((0x33 << 24) | (thSub & 0x00FFFFFF));
                 cv.drawRoundRect(ok, bh / 2f, bh / 2f, p);
-                txt(cv, "확인", ok.centerX(), ok.centerY() + dp(4f), okW - dp(6), 11.5f, thFg, true, Paint.Align.CENTER);
-                float tx = barL + dp(11), maxW = go.left - tx - dp(8);
-                if (rcB.length() > 0) {
-                    float sp = fitSp(rcA, maxW, 13f, 10.5f);
-                    txt(cv, rcA, tx, barT + dp(21), maxW, sp, thFg, true, Paint.Align.LEFT);
-                    txt(cv, rcB, tx, barT + dp(38), maxW, 11f, thSub, false, Paint.Align.LEFT);
-                } else {
-                    float sp = fitSp(rcA, maxW, 13f, 10.5f);
-                    txt(cv, rcA, tx, (barT + barB) / 2f + dp(4.5f), maxW, sp, thFg, true, Paint.Align.LEFT);
-                }
+                txt(cv, "확인", ok.centerX(), ok.centerY() + dp(4.6f), okW - dp(6), 13f, thFg, true, Paint.Align.CENTER);
                 // 밧줄: 캐릭터 몸에서 줄 왼쪽 가운데로(줄이 끌려오는 동안은 팽팽, 선 뒤에는 느슨하게 처진다)
-                float ry0 = baseY - dp(17), ry1 = (barT + barB) / 2f, rx0 = cx + dp(8), rx1 = barL + dp(1);
+                float ry0 = baseY - dp(19), ry1 = barB - dp(Math.min(barHdp / 2f, 34f)), rx0 = cx + dp(9), rx1 = barL + dp(1);
                 p.setStyle(Paint.Style.STROKE);
                 p.setStrokeWidth(dp(2f));
                 p.setStrokeCap(Paint.Cap.ROUND);
                 p.setColor((0xAA << 24) | (thSub & 0x00FFFFFF));
-                rope.reset();
                 float sag = arrived ? dp(3f) : 0f;
+                rope.reset();
                 rope.moveTo(rx0, ry0);
                 rope.quadTo((rx0 + rx1) / 2f, (ry0 + ry1) / 2f + sag, rx1, ry1);
                 cv.drawPath(rope, p);
@@ -796,7 +850,7 @@ public class OverlayPlugin extends Plugin {
         try {
             JSObject rc = call.getObject("reco");
             if (rc != null && rc.optBoolean("on", false)) {
-                rcOn = true; rcA = rc.optString("a", ""); rcB = rc.optString("b", ""); rcGo = rc.optString("go", "보기");
+                rcOn = true; rcA = rc.optString("a", ""); rcB = rc.optString("b", ""); rcM = rc.optString("m", ""); rcGo = rc.optString("go", "보기");
                 if (rcGo.length() == 0) rcGo = "보기";
                 if (rcA.length() == 0) rcOn = false;
                 rcAt = (long) rc.optDouble("at", 0);
@@ -842,7 +896,7 @@ public class OverlayPlugin extends Plugin {
         if (!demoSaved) {
             sWanted = wanted; sStrip = strip; sStripCur = stripCur; sStripBase = stripBase;
             sLine1 = line1; sLine2 = line2; sLine3 = line3; sRsSt = rsSt; sMoving = moving;
-            sRcOn = rcOn; sRcA = rcA; sRcB = rcB; sRcGo = rcGo; sRcCh = rcCh; sRcCh2 = rcCh2; sRcAt = rcAt;
+            sRcOn = rcOn; sRcA = rcA; sRcB = rcB; sRcM = rcM; sRcGo = rcGo; sRcCh = rcCh; sRcCh2 = rcCh2; sRcAt = rcAt;
             demoSaved = true;
         }
         Cell c0 = new Cell(); c0.n = "지나간 곳"; c0.dk = 1; c0.hasR = true;
@@ -852,7 +906,7 @@ public class OverlayPlugin extends Plugin {
         line1 = ""; line2 = "추천 캐릭터 미리보기 · 실제 알림이 아니에요"; line3 = ""; rsSt = "hidden"; moving = false;
         rcOn = true;
         rcA = nz(call.getString("a")); if (rcA.length() == 0) rcA = "곧 도착해요 · 커피 한 잔 어때요?";
-        rcB = nz(call.getString("b")); rcGo = nz(call.getString("go")); if (rcGo.length() == 0) rcGo = "보기";
+        rcB = nz(call.getString("b")); rcM = nz(call.getString("m")); rcGo = nz(call.getString("go")); if (rcGo.length() == 0) rcGo = "보기";
         rcCh = nz(call.getString("ch")); rcCh2 = nz(call.getString("ch2"));
         rcAt = now;                       // 새 추천으로 보여 처음부터 확장·등장을 다시 시작한다
         wanted = true; lastUpdateAt = now; demoUntil = now + secs * 1000L;
@@ -874,7 +928,7 @@ public class OverlayPlugin extends Plugin {
         demoSaved = false;
         wanted = sWanted; strip = sStrip == null ? new Cell[0] : sStrip; stripCur = sStripCur; stripBase = sStripBase;
         line1 = sLine1; line2 = sLine2; line3 = sLine3; rsSt = sRsSt; moving = sMoving;
-        rcOn = sRcOn; rcA = sRcA; rcB = sRcB; rcGo = sRcGo; rcCh = sRcCh; rcCh2 = sRcCh2; rcAt = sRcAt;
+        rcOn = sRcOn; rcA = sRcA; rcB = sRcB; rcM = sRcM; rcGo = sRcGo; rcCh = sRcCh; rcCh2 = sRcCh2; rcAt = sRcAt;
         refresh();
     }
 
