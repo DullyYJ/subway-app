@@ -98,4 +98,68 @@ ok(r.board && !r.board.walkingAway, '오래된 좌표는 판정 안 함 ' + r.bo
 ok(T(trail(75, 0, 8, walkAway, 15), { notDeparted: false, boardPt: bp }).board === null, '승차 후엔 판정 안 함');
 // 18) 빈 입력
 r = rideTrack({ nowMs: NOW }); ok(r.off.confirmed === false && r.fix.n === 0, '빈 입력 안전');
+// 19) 영점 확인 / 도착 확인 (want.zero) — 시각표 도착 15초 전 ~ 30초 뒤 45초, 정류장 부근 GPS 가 한 번이라도 잡히면 near
+{
+  const stn = (m) => ({ lat: 0, lng: m / KX });
+  const Z = (nowOff, fixes, stops, extra) => {   // nowOff: 도착 시각 대비 지금(초, +는 도착 뒤)
+    const arr = NOW - nowOff * 1000;
+    const st = (stops || [{ i: 2, lat: 0, lng: 3000 / KX, arrMs: arr }]).map(x => Object.assign({ arrMs: arr }, x));
+    const tr = fixes.map(f => [arr + f.t * 1000, f.lat != null ? f.lat : 0, f.lng != null ? f.lng : 3000 / KX, f.acc == null ? 20 : f.acc]);
+    return rideTrack(Object.assign({ nowMs: NOW, trail: tr, plan: plan({ stops: st }), want: { zero: true } }, extra || {}));
+  };
+  let z = Z(-30, [{ t: -40 }]);
+  ok(z.zero.stops.length === 0, '도착 15초보다 전(30초 전)에는 알리지 않는다 ' + JSON.stringify(z.zero));
+  z = Z(-10, [{ t: -12 }]);
+  ok(z.zero.stops[0].state === 'near' && !z.zero.stops[0].apply, '15초 전 창 안: near 이지만 아직 apply 아님(도착 시각 3초 전부터) ' + JSON.stringify(z.zero.stops[0]));
+  z = Z(-2, [{ t: -8 }]);
+  ok(z.zero.stops[0].state === 'near' && z.zero.stops[0].apply, '도착 2초 전: near + apply');
+  z = Z(5, [{ t: -3, lng: 3150 / KX }]);
+  ok(z.zero.stops[0].state === 'near' && z.zero.stops[0].apply, '정류장에서 150m(정확도 20 빼면 130m) → near');
+  const E = 111190;   // 적도(시험 좌표계)에서 1도 = 111.19km — 정류장 기준 동쪽 m 만큼
+  z = Z(5, [{ t: -3, lng: 3000 / KX + 215 / E, acc: 20 }]);
+  ok(z.zero.stops[0].state === 'near', '215m − 정확도 20 = 195m ≤ 200m → near');
+  z = Z(5, [{ t: -3, lng: 3000 / KX + 235 / E, acc: 20 }]);
+  ok(z.zero.stops[0].state === 'pending' && z.zero.stops[0].distM > 200, '235m − 20 = 215m 는 중간 역 기준(200m) 밖 → near 아님(창 안이라 pending) ' + JSON.stringify(z.zero.stops[0]));
+  z = Z(5, []);
+  ok(z.zero.stops[0].state === 'pending' && !z.zero.stops[0].apply, '창 안에 위치가 없으면 pending(벌 없음)');
+  z = Z(40, [{ t: -2, lng: 3000 / KX }]);
+  ok(z.zero.stops[0].state === 'near', '창이 막 끝난 뒤(25초)에도 near 를 알려 준다(중간 역 20초 유지) ' + JSON.stringify(z.zero.stops[0]));
+  z = Z(80, [{ t: -2 }]);
+  ok(z.zero.stops.length === 0, '중간 역은 창이 끝나고 20초가 지나면 더 알리지 않는다');
+  z = Z(-5, [{ t: -8, lat: 600 / KY }], undefined);
+  ok(z.zero.stops[0].state === 'pending', '600m 떨어진 위치만 있어도 창 안이면 pending');
+  z = Z(0, [{ t: -8, acc: 200 }]);
+  ok(z.zero.stops[0].n === 0 && z.zero.stops[0].state === 'pending', '정확도 나쁜 위치(150m 초과)는 근거가 아니다');
+  // 시각표를 바꾸지 않는다 — 출력에 시각 보정 필드가 없다
+  z = Z(0, [{ t: -3 }]);
+  ok(!('arrMs' in z.zero.stops[0]) && !('delay' in z.zero.stops[0]) && !('shiftMs' in z.zero.stops[0]), '출력에 시각 보정이 없다');
+  // 승차 확정 전엔 판정하지 않는다
+  z = rideTrack({ nowMs: NOW, trail: [[NOW - 3000, 0, 3000 / KX, 10]], plan: plan({ boarded: false, stops: [{ i: 2, lat: 0, lng: 3000 / KX, arrMs: NOW }] }), want: { zero: true } });
+  ok(z.zero.stops.length === 0, '승차 확정 전엔 영점 판정 없음');
+  // zero 를 요청하지 않으면 없다
+  ok(rideTrack({ nowMs: NOW, trail: [], plan: plan() }).zero === undefined, 'want 생략 시 zero 없음');
+  // 최종 목적지 verdict
+  const FIN = (nowOff, fixes) => Z(nowOff, fixes, [{ i: 5, lat: 0, lng: 3000 / KX, fin: true }]);
+  z = FIN(10, [{ t: -3 }]);
+  ok(z.zero.final.verdict === 'verify', '창(45초) 안에서는 near 여도 verify(창이 끝나야 종료) ' + JSON.stringify(z.zero.final));
+  z = FIN(31, [{ t: -3 }]);
+  ok(z.zero.final.verdict === 'confirmed', '창이 끝나고 near 가 있으면 confirmed ' + JSON.stringify(z.zero.final));
+  z = FIN(31, [{ t: -3, lng: 3000 / KX + 255 / E, acc: 10 }]);
+  ok(z.zero.final.verdict === 'confirmed', '목적지 기준은 250m(255−10=245m) → confirmed ' + JSON.stringify(z.zero.final));
+  z = FIN(31, []);
+  ok(z.zero.final.verdict === 'unknown', '창이 끝났는데 위치가 없으면 unknown(앱은 버튼) ' + JSON.stringify(z.zero.final));
+  z = FIN(31, [{ t: -3, lat: 400 / KY }]);
+  ok(z.zero.final.verdict === 'unknown' && z.zero.final.state === 'off', '250~600m 애매 → unknown ' + JSON.stringify(z.zero.final));
+  z = FIN(31, [{ t: -3, lat: 1500 / KY }, { t: 0, lat: 1500 / KY }]);
+  ok(z.zero.final.verdict === 'notyet', '600m 넘는 위치만 → notyet(아직 도착 전) ' + JSON.stringify(z.zero.final));
+  // 창이 끝난 뒤 늦게 GPS 가 잡히면 최근 45초로 다시 판정 → confirmed
+  z = FIN(300, [{ t: 100, lat: 1500 / KY }, { t: 290 }]);
+  ok(z.zero.final.verdict === 'confirmed', '5분 뒤 최근 45초 안에 near → confirmed ' + JSON.stringify(z.zero.final));
+  z = FIN(300, [{ t: 100, lat: 1500 / KY }, { t: 285, lat: 1500 / KY }]);
+  ok(z.zero.final.verdict === 'notyet', '5분 뒤에도 최근 45초가 먼 위치뿐 → notyet ' + JSON.stringify(z.zero.final));
+  z = FIN(40 * 60, [{ t: 2390 }]);
+  ok(z.zero.final === null, '30분이 지나면 판정하지 않는다');
+  z = FIN(-1, []);
+  ok(z.zero.final.verdict === 'verify' && z.zero.final.state === 'pending', '도착 1초 전 위치 없음 → verify/pending');
+}
 console.log('ride_track: pass', pass, 'fail', fail); process.exit(fail ? 1 : 0);

@@ -349,6 +349,66 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   await t('도착이 한참 남아 숨어 있는 이유도 진단에 남는다', async () => assert.ok((await h.diag()).some(d => /숨김/.test(d) && /2분 전에 올림/.test(d)), (await h.diag()).join(' | ')));
   await h.ctx.close();
 
+  console.log('[⑩ 탑승을 늦게 눌렀을 때 — 시각표상 1분 전까지 떠난 차는 인정하고 예약 없이 바로 확정(실시간 위치 없는 노선)]');
+  // 엔진(/next-train?op=late) 답을 흉내 낸다 — 앱은 late 가 있을 때만 확정하고, 계산은 하지 않는다
+  const press = async (a, late, delay) => {
+    await a.at('12:49:20'); await a.page.clock.runFor(1500);
+    await a.page.evaluate(([lt, dl]) => { window.__ntq = []; const orig = window._ntAsk; window._ntAsk = function(q, cb){ if(q.op !== 'late') return orig.apply(this, arguments); window.__ntq.push(q); setTimeout(function(){ cb({ dk: '하', depMin: lt, late: lt }); }, dl); }; _rs.openUntil = Date.now() + 600000; _rsTick(); }, [late, delay || 0]);
+    await a.page.clock.runFor(800);
+    await a.page.click('#rsBtn');
+  };
+  const M = (h, m) => h * 60 + m;
+  let u = await fresh();
+  await press(u, M(12, 48));
+  await u.page.clock.runFor(1500);
+  await t('도착 3분 전에 눌렀는데 시각표 1분 전 차(12:48)가 있으면 예약 없이 바로 확정된다', async () => {
+    const g = await u.page.evaluate(() => ({ b: window._htlBoarded, why: window._boardWhy, pend: !!_rs.pend, gm: window._gpsMaxIdx, q: window.__ntq }));
+    assert.strictEqual(g.b, true); assert.strictEqual(g.why, '탑승 버튼'); assert.ok(!g.pend); assert.ok(g.gm >= 1);
+    assert.strictEqual(g.q.length, 1); assert.strictEqual(g.q[0].from, 'S0'); assert.strictEqual(g.q[0].op, 'late'); assert.strictEqual(g.q[0].back, 1); assert.ok(Math.abs(g.q[0].atMin - (12 * 60 + 49 + 21 / 60)) < 0.5, 'atMin ' + g.q[0].atMin);
+  });
+  await t('진단에 1분 전 차량 인정이 남는다', async () => assert.ok((await u.diag()).some(x => /1분 전 차량 인정/.test(x) && /12:48/.test(x))));
+  await t('확정 뒤 마커는 승차 정류장에 머문다', async () => { const h = await u.page.evaluate(() => _pipHereIdx()); assert.ok(h <= 2, String(h)); });
+  await t('페이지 오류 없음(⑩-1)', async () => assert.deepStrictEqual([...new Set(u.errs)], []));
+  await u.ctx.close();
+
+  u = await fresh();
+  await press(u, null);   // 엔진: 1분 전 차 없음(계획한 12:52 는 아직 안 떠남)
+  await u.page.clock.runFor(1500);
+  await t('아직 안 떠난 차(계획한 12:52)뿐이면 기존대로 예약만 받는다', async () => { const g = await u.page.evaluate(() => ({ b: window._htlBoarded, pend: !!_rs.pend })); assert.strictEqual(g.b, false); assert.ok(g.pend); });
+  await u.ctx.close();
+
+  u = await fresh();
+  await press(u, null);   // 엔진: 2분 전 차는 인정하지 않는다(late=null)
+  await u.page.clock.runFor(1500);
+  await t('2분 전에 떠난 차(12:47)는 인정하지 않는다(1분까지만)', async () => { const g = await u.page.evaluate(() => ({ b: window._htlBoarded, pend: !!_rs.pend })); assert.strictEqual(g.b, false); assert.ok(g.pend); });
+  await u.ctx.close();
+
+  u = await fresh();
+  await press(u, null);
+  await u.page.clock.runFor(1500);
+  await t('엔진이 late 를 주지 않으면 기존대로 예약', async () => { const g = await u.page.evaluate(() => ({ b: window._htlBoarded, pend: !!_rs.pend })); assert.strictEqual(g.b, false); assert.ok(g.pend); });
+  await u.ctx.close();
+
+  u = await fresh();
+  await press(u, M(12, 48), 600);
+  await u.page.click('#rsUndoBtn'); await u.page.clock.runFor(1500);
+  await t('답이 오기 전에 예약을 되돌리면 확정하지 않는다', async () => { const g = await u.page.evaluate(() => ({ b: window._htlBoarded, pend: !!_rs.pend })); assert.strictEqual(g.b, false); assert.ok(!g.pend); });
+  await u.ctx.close();
+
+  u = await fresh();
+  await u.page.evaluate(() => { S.lastGPSFix = { lat: 37.5, lng: 126.9 + 0.0137 * 0 + 0.02, ts: Date.now(), acc: 10 }; });
+  await press(u, M(12, 48));
+  await u.page.clock.runFor(1500);
+  await t('승차역에서 600m 넘게 떨어져 있으면(분명히 아직 안 탐) 인정하지 않는다', async () => { const g = await u.page.evaluate(() => ({ b: window._htlBoarded, pend: !!_rs.pend, q: window.__ntq.length })); assert.strictEqual(g.b, false); assert.ok(g.pend); assert.strictEqual(g.q, 0); });
+  await u.ctx.close();
+
+  u = await fresh();
+  await u.page.evaluate(() => { window._rsLateOff = true; });
+  await press(u, M(12, 48));
+  await u.page.clock.runFor(1500);
+  await t('_rsLateOff 면 기존대로 예약', async () => { const g = await u.page.evaluate(() => ({ b: window._htlBoarded, pend: !!_rs.pend })); assert.strictEqual(g.b, false); assert.ok(g.pend); });
+  await u.ctx.close();
+
   await b.close();
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
   process.exit(fail ? 1 : 0);

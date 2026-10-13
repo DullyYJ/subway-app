@@ -163,19 +163,19 @@ const t = async (name, fn) => { if (ONLY && !ONLY.test(name)) return; try { awai
     r1 = await sim({ n: 8, seg: 120, dir: 1, delay: 180, dwell: 30, startAt: '2026-10-04T13:00:00+09:00' });
     // 승강장에서 3분 늦는 열차를 기다리는 동안에도 '놓쳤다'로 보지 않는다(유예 4분, 시각만 뒤로 민다)
     assert.strictEqual(r1.route, 0, '재탐색 ' + r1.route);
-    assert.ok(r1.maxGmAhead <= 0, 'gm 앞섬 ' + r1.maxGmAhead);
-    assert.ok(r1.maxPipAhead <= 0, 'overlay 앞섬 ' + r1.maxPipAhead);
+    assert.ok(r1.maxGmAhead <= 1, 'gm 앞섬 ' + r1.maxGmAhead);   // 2026-10-13: 엔진 영점 — 시각표 도착 3초 전부터 GPS 가 역 부근(200m)에서 잡혔으면 진행도를 그 역으로 맞춘다(도착 직전 몇 초 앞섬은 설계). 1역을 넘는 앞섬은 안 됨
+    assert.ok(r1.maxPipAhead <= 1, 'overlay 앞섬 ' + r1.maxPipAhead);   // 2026-10-13: 오버레이는 역 도착 직전(구간 75%)에 다음 역으로 넘어간다(한 정거장 늦던 문제) — 1역까지는 허용, 그 이상은 안 됨
   });
   await t('역방향(경도 감소)에서도 마커가 증거 없이 역을 지나치지 않는다', async () => {
     const r = await sim({ n: 8, seg: 120, dir: -1, delay: 0, dwell: 30, startAt: '2026-10-04T17:10:00+09:00' });
-    assert.strictEqual(r.route, 0); assert.ok(r.maxGmAhead <= 0, 'gm 앞섬 ' + r.maxGmAhead); assert.ok(r.maxPipAhead <= 0, 'overlay 앞섬 ' + r.maxPipAhead);
+    assert.strictEqual(r.route, 0); assert.ok(r.maxGmAhead <= 1, 'gm 앞섬 ' + r.maxGmAhead); assert.ok(r.maxPipAhead <= 1, 'overlay 앞섬 ' + r.maxPipAhead);
     assert.ok(r.gm >= 6, '끝까지 못 따라감 gm=' + r.gm);
   });
   await t('69분 장거리(23역): 재탐색 0회 · 진행도가 끝까지 따라간다 · 남은 시간 0~2분', async () => {
     const r = await sim({ n: 23, seg: 188, dir: 1, delay: 0, dwell: 30, startAt: '2026-10-04T12:52:00+09:00' });
     assert.strictEqual(r.route, 0, '재탐색 ' + r.route);
     assert.ok(r.gm >= 21, 'gm=' + r.gm);
-    assert.ok(r.maxGmAhead <= 0 && r.maxPipAhead <= 0, 'gm ' + r.maxGmAhead + ' pip ' + r.maxPipAhead);
+    assert.ok(r.maxGmAhead <= 0 && r.maxPipAhead <= 1, 'gm ' + r.maxGmAhead + ' pip ' + r.maxPipAhead);
     assert.ok(r.rem == null || r.rem <= 3, '남은 시간 ' + r.rem);
   });
 
@@ -467,6 +467,21 @@ const t = async (name, fn) => { if (ONLY && !ONLY.test(name)) return; try { awai
   await page.evaluate(() => { window._htlBoarded = true; window._nodePassMs = { 1: Date.now() - 400000, 4: Date.now() - 20000 }; window._gpsMaxIdx = 4; window._gpsConfirmIdx = 4; });
   const here = (mp) => page.evaluate((mp) => { window._markerPos = mp ? Object.assign({ ts: Date.now() }, mp) : null; return _pipHereIdx(); }, mp);
   await t('마커가 GPS 로 다음 역 85% 이상에 그려졌으면 오버레이도 다음 역을 현재 역으로 본다', async () => { assert.strictEqual(await here({ from: 4, to: 5, ratio: 0.9, gps: true }), 5); });
+  const hereCap = (ratio) => page.evaluate((ratio) => { window._markerPos = null; const o = window._pfPosOverride; window._pfPosOverride = () => ({ fromIdx: 4, toIdx: 5, ratio: ratio }); const r = _pipHereIdx(); window._pfPosOverride = o; return r; }, ratio);
+  await t('PF 위치는 비율이 85% 에서 막혀도 75% 를 넘으면 오버레이가 다음 역을 현위치로 본다(한 역 늦던 문제)', async () => { assert.strictEqual(await hereCap(0.85), 5); assert.strictEqual(await hereCap(0.76), 5); });
+  await t('PF 위치가 아직 75% 전이면 오버레이는 현재 역을 유지한다', async () => { assert.strictEqual(await hereCap(0.7), 4); assert.strictEqual(await hereCap(0.3), 4); });
+  await t('PF 가 다음 역을 채택하지 않으면 앱이 혼자 한 역 앞서 읽지 않는다(계산은 엔진, 앱은 그림만 — 영점은 엔진 zero 로만 보정)', async () => {
+    await page.clock.setSystemTime(new Date('2026-10-06T17:43:00+09:00'));
+    const x = await page.evaluate(() => {
+      window._markerPos = null; window._htlBoarded = true; window._gpsMaxIdx = 3; window._gpsConfirmIdx = 3; window._nodePassMs = { 3: Date.now() - 20000 };
+      const bakT = window._pfTrusted, bakA = _pf.A, bakB = window._pfBest;
+      window._pfTrusted = () => true; _pf.A = { td: 3, k: 2, sig: _pf.sig }; window._pfBest = { idx: 2, conf: 0.9, kind: 'seg', at: Date.now() };
+      const o = window._pfPosOverride();
+      window._pfTrusted = bakT; _pf.A = bakA; window._pfBest = bakB;
+      return o;
+    });
+    assert.strictEqual(x.fromIdx, 3, JSON.stringify(x)); assert.ok(x.ratio <= 0.85 + 1e-9);
+  });
   await t('마커가 아직 역 사이 중간이면 오버레이는 그대로(현재 역 유지)', async () => { assert.strictEqual(await here({ from: 4, to: 5, ratio: 0.5, gps: true }), 4); });
   await t('GPS 가 아니라 추정으로 그린 마커는 오버레이를 앞서게 하지 않는다(기존 규칙 유지)', async () => { assert.strictEqual(await here({ from: 4, to: 5, ratio: 0.9, gps: false }), 4); });
   await t('낡은(20초 넘은) 마커 값은 쓰지 않는다', async () => { const r = await page.evaluate(() => { window._markerPos = { from: 4, to: 5, ratio: 0.95, gps: true, ts: Date.now() - 25000 }; return _pipHereIdx(); }); assert.strictEqual(r, 4); });
