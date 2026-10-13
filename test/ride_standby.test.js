@@ -156,12 +156,12 @@ t('오버레이: 열차가 가는 대로 현위치 칸이 움직이고(도보 �
   assert.ok(l1.some(x => / ▸ /.test(x)) && /^● /.test(l1[l1.length - 1]));
 });
 t('오버레이: 남은시간 줄(목적지 기준)과 하차 임박 단계(2→1→도착하면 0)·[안내 종료] 줄', () => {
-  let st = withOvl(mkState()), lv = [], rsSeen = null, l2 = null, pre = false, atFirst = 0;
+  let st = withOvl(mkState()), lv = [], rsSeen = null, l2 = null, pre = false, atFirst = 0, banners = [];
   for (let ms = at(12, 53, 0); ms <= at(13, 1, 0); ms += 5000) {
     const r = rideStandby({ nowMs: ms, fixes: [[ms, LAT, trainLng(ms, 0), 20]], state: JSON.parse(JSON.stringify(st)) }); st = r.state;
     if (r.done) break;
     const o = r.overlay; if (!o || !o.active) continue;
-    if (!l2) l2 = o.line2; if (o.pre) pre = true;
+    if (!l2) l2 = o.line2; if (o.pre) pre = true; if (o.banner && banners[banners.length - 1] !== o.banner) banners.push(o.banner);
     if (lv[lv.length - 1] !== o.alert) { lv.push(o.alert); if (o.alert === 2) atFirst = o.alertAt; }
     if (o.rs.st === 'board') rsSeen = o.rs;
     assert.strictEqual(o.alertVibe, false);   // 진동은 알림이 한다(중복 방지)
@@ -170,6 +170,7 @@ t('오버레이: 남은시간 줄(목적지 기준)과 하차 임박 단계(2→
   assert.deepStrictEqual(lv.filter((x, i) => i === 0 || x !== lv[i - 1]).filter(x => x > 0), [2, 1]);
   assert.ok(lv[lv.length - 1] === 0 && atFirst > 0 && pre === true);
   assert.ok(rsSeen && rsSeen.bt === '안내 종료' && rsSeen.nm === 'S4');
+  assert.ok(banners.some(b => /S4까지 2정거장/.test(b)) && banners.some(b => /다음 정거장 S4/.test(b)) && /S4에 도착/.test(banners[banners.length - 1]), banners.join(' | '));
 });
 t('오버레이: 안내가 끝나면(done) active:false 로 내려가고, view 에는 재개 카드용 마지막 문구가 있다', () => {
   let st = withOvl(mkState()), last = null;

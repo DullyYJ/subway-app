@@ -29154,28 +29154,87 @@ function _ovlStandbyEnd(){
 window._ovlStandbyEnd = _ovlStandbyEnd;
 // ★ 2026-10-13 (YJ: "카카오 방식"): 앱을 밀어 닫아도 네이티브가 안내를 이어 왔다 — 다시 열면 그 상태를 카드로 보여 주고 [안내 종료]를 준다.
 //   (확정한 여정 화면 자체를 복구하지는 않는다 — 안내는 알림창·오버레이에서 계속된다.) 문구는 엔진이 만든 view 를 그대로 그린다.
-var _sbCardT = null;
+var _sbCardT = null, _sbScreenOff = false;
+function _sbEsc(t){ return String(t == null ? '' : t).replace(/[&<>"]/g, function(c){ return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+// ★ 2026-10-13 (YJ: "한계를 우회해줘, 카카오처럼 · 모든 계산은 엔진이 앱은 그림만"): 앱을 밀어 닫았다 다시 열면 웹은 새로 떠서 여정을 모른다.
+//   그래서 네이티브가 이어 온 안내를 엔진이 만든 값(overlay: 칸 시각·현위치·남은시간·하차 임박 문구) 그대로 전체 화면으로 그린다. 앱은 계산하지 않는다.
+//   [홈] 으로 닫아도 위쪽 작은 카드가 남고, [안내 종료] 는 네이티브 안내를 끝낸다.
+function _sbScreenDraw(ov){
+  try{
+    var el = document.getElementById('sbScreen');
+    if(!ov || !ov.cells || !ov.cells.length || ov.active === false){ if(el) el.remove(); return false; }
+    if(!el){
+      el = document.createElement('div'); el.id = 'sbScreen';
+      el.style.cssText = 'position:fixed;inset:0;z-index:2147483100;background:var(--bg);color:var(--text);display:flex;flex-direction:column;font-family:inherit;';
+      el.innerHTML = '<div style="padding:calc(env(safe-area-inset-top,0px) + 12px) 16px 10px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border);">'
+        + '<div style="flex:1;min-width:0;"><div style="font-size:12px;color:var(--sub);">🚇 경로 안내가 이어지고 있어요</div><div id="sbScDest" style="font-size:17px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></div></div>'
+        + '<button id="sbScHome" style="flex:none;padding:8px 12px;border-radius:10px;border:1px solid var(--border2);background:transparent;color:var(--text);font-size:12.5px;font-family:inherit;cursor:pointer;">홈 보기</button></div>'
+        + '<div id="sbScBanner" style="display:none;margin:10px 16px 0;padding:11px 13px;border-radius:12px;font-size:14px;font-weight:800;"></div>'
+        + '<div style="padding:12px 16px 4px;"><div id="sbScL1" style="font-size:19px;font-weight:800;"></div><div id="sbScL2" style="font-size:13px;color:var(--sub);margin-top:4px;"></div></div>'
+        + '<div id="sbScList" style="flex:1;overflow:auto;padding:6px 16px 12px;-webkit-overflow-scrolling:touch;"></div>'
+        + '<div style="padding:10px 16px calc(env(safe-area-inset-bottom,0px) + 14px);border-top:1px solid var(--border);"><button id="sbScEnd" style="width:100%;padding:14px;border-radius:12px;border:none;background:var(--gold);color:#121214;font-weight:800;font-size:15px;font-family:inherit;cursor:pointer;">안내 종료</button></div>';
+      document.body.appendChild(el);
+      el.querySelector('#sbScHome').onclick = function(){ _sbScreenOff = true; var e = document.getElementById('sbScreen'); if(e) e.remove(); };
+      el.querySelector('#sbScEnd').onclick = function(){ _ovlStandbyEnd(); var e = document.getElementById('sbScreen'); if(e) e.remove(); var c = document.getElementById('sbCard'); if(c) c.remove(); if(_sbCardT){ clearTimeout(_sbCardT); _sbCardT = null; } };
+    }
+    el.querySelector('#sbScDest').textContent = ov.destName ? ov.destName + '행' : '목적지';
+    var bn = el.querySelector('#sbScBanner'), lv = ov.alert | 0;
+    if(ov.banner){ bn.style.display = ''; bn.textContent = ov.banner; bn.style.background = lv === 1 ? 'rgba(255,69,58,.16)' : (lv === 2 ? 'rgba(255,159,10,.16)' : 'var(--card2)'); bn.style.color = lv === 1 ? '#ff453a' : (lv === 2 ? '#ff9f0a' : 'var(--text)'); }
+    else bn.style.display = 'none';
+    el.querySelector('#sbScL1').textContent = String(ov.line1 || '').replace(/^● /, '');
+    el.querySelector('#sbScL2').textContent = ov.line2 || '';
+    var cur = ov.cur | 0, h = '', i, c, passed, dot, top, bot;
+    for(i = 0; i < ov.cells.length; i++){
+      c = ov.cells[i] || {}; passed = i < cur;
+      top = c.lc || ''; bot = c.rc || '';
+      dot = c.dk === 2 ? '<span style="width:14px;height:14px;border-radius:50%;background:' + _sbEsc(c.dc || '#0a84ff') + ';"></span>'
+          : (c.dk === 3 ? '<span style="width:7px;height:7px;border-radius:50%;background:' + _sbEsc(c.dc || '#8e8e93') + ';"></span>'
+          : (c.dk === 0 ? '' : '<span style="width:12px;height:12px;border-radius:50%;box-sizing:border-box;border:3px solid ' + _sbEsc(c.dc || '#0a84ff') + ';background:var(--bg);"></span>'));
+      var chip = c.g ? '<span style="display:inline-block;margin-left:6px;font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:9px;' + (c.gp ? 'background:' + _sbEsc(c.gc || '#8e8e93') + ';color:#fff;' : 'color:' + _sbEsc(c.gc || '#8e8e93') + ';border:1px solid ' + _sbEsc(c.gc || '#8e8e93') + ';') + '">' + _sbEsc(c.g) + '</span>' : '';
+      h += '<div data-cur="' + (i === cur ? 1 : 0) + '" style="display:flex;align-items:stretch;min-height:' + (c.dk === 3 ? 30 : 46) + 'px;opacity:' + (passed ? .45 : 1) + ';">'
+        + '<div style="width:50px;flex:none;text-align:right;padding-top:' + (c.dk === 3 ? 4 : 11) + 'px;font-size:12px;color:' + (i === cur ? 'var(--text)' : 'var(--sub)') + ';font-weight:' + (i === cur ? 800 : 500) + ';">' + _sbEsc(c.t || '') + '</div>'
+        + '<div style="width:34px;flex:none;position:relative;display:flex;justify-content:center;">'
+          + '<span style="position:absolute;left:50%;margin-left:-1.5px;top:0;height:50%;width:3px;background:' + (top ? _sbEsc(top) : 'transparent') + ';"></span>'
+          + '<span style="position:absolute;left:50%;margin-left:-1.5px;top:50%;bottom:0;width:3px;background:' + (bot ? _sbEsc(bot) : 'transparent') + ';' + (i === cur && ov.moving ? 'opacity:.5;' : '') + '"></span>'
+          + '<span style="position:relative;align-self:center;display:flex;align-items:center;justify-content:center;">' + dot + '</span></div>'
+        + '<div style="flex:1;min-width:0;display:flex;align-items:center;font-size:' + (c.dk === 3 ? 12 : 15) + 'px;font-weight:' + (i === cur ? 800 : 600) + ';color:' + (i === cur ? 'var(--text)' : (c.dk === 3 ? 'var(--sub)' : 'var(--text)')) + ';">'
+          + '<span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _sbEsc(c.n || '') + '</span>' + chip
+          + (i === cur ? '<span style="margin-left:8px;flex:none;font-size:10.5px;font-weight:800;padding:2px 8px;border-radius:9px;background:' + (ov.moving ? '#0a84ff' : '#f0a500') + ';color:#fff;">' + (ov.moving ? '이동 중' : '현재') + '</span>' : '') + '</div></div>';
+    }
+    var list = el.querySelector('#sbScList'), keep = list.scrollTop, hadCur = list.getAttribute('data-curpos');
+    list.innerHTML = h;
+    if(hadCur !== String(cur)){ list.setAttribute('data-curpos', String(cur)); var ce = list.querySelector('[data-cur="1"]'); if(ce) list.scrollTop = Math.max(0, ce.offsetTop - list.clientHeight / 3); }
+    else list.scrollTop = keep;
+    return true;
+  }catch(e){ return false; }
+}
 function _ovlStandbyCardDraw(s){
   try{
     var el = document.getElementById('sbCard');
-    if(!s || s.active !== true){ if(el) el.remove(); if(_sbCardT){ clearTimeout(_sbCardT); _sbCardT = null; } return; }
-    var v = s.view || {}, text = String(v.text || '').replace(/[<>&]/g, ''), l2 = String(v.line2 || '').replace(/[<>&]/g, '');
-    if(!el){
-      el = document.createElement('div'); el.id = 'sbCard';
-      el.style.cssText = 'position:fixed;left:12px;right:12px;top:calc(env(safe-area-inset-top,0px) + 8px);z-index:2147483000;background:var(--card);color:var(--text);border:1px solid var(--border2);border-radius:14px;padding:12px 14px;box-shadow:0 6px 24px rgba(0,0,0,.25);display:flex;align-items:center;gap:10px;font-family:inherit;';
-      el.innerHTML = '<div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:800;">🚇 경로 안내가 이어지고 있어요</div><div id="sbCardTx" style="font-size:12px;color:var(--sub);margin-top:3px;line-height:1.45;word-break:keep-all;"></div></div>'
-        + '<button id="sbCardEnd" style="flex:none;padding:9px 12px;border-radius:10px;border:none;background:var(--gold);color:#121214;font-weight:800;font-size:12.5px;font-family:inherit;cursor:pointer;">안내 종료</button>';
-      document.body.appendChild(el);
-      el.querySelector('#sbCardEnd').onclick = function(){ _ovlStandbyEnd(); var c = document.getElementById('sbCard'); if(c) c.remove(); if(_sbCardT){ clearTimeout(_sbCardT); _sbCardT = null; } };
+    if(!s || s.active !== true){ if(el) el.remove(); var sc = document.getElementById('sbScreen'); if(sc) sc.remove(); if(_sbCardT){ clearTimeout(_sbCardT); _sbCardT = null; } return; }
+    var shown = false;
+    if(!_sbScreenOff || document.getElementById('sbScreen')) shown = _sbScreenDraw(s.overlay);
+    if(shown){ if(el) el.remove(); }
+    else {
+      var v = s.view || {}, text = String(v.text || '').replace(/[<>&]/g, ''), l2 = String(v.line2 || '').replace(/[<>&]/g, '');
+      if(!el){
+        el = document.createElement('div'); el.id = 'sbCard';
+        el.style.cssText = 'position:fixed;left:12px;right:12px;top:calc(env(safe-area-inset-top,0px) + 8px);z-index:2147483000;background:var(--card);color:var(--text);border:1px solid var(--border2);border-radius:14px;padding:12px 14px;box-shadow:0 6px 24px rgba(0,0,0,.25);display:flex;align-items:center;gap:10px;font-family:inherit;';
+        el.innerHTML = '<div id="sbCardBody" style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:800;">🚇 경로 안내가 이어지고 있어요</div><div id="sbCardTx" style="font-size:12px;color:var(--sub);margin-top:3px;line-height:1.45;word-break:keep-all;"></div></div>'
+          + '<button id="sbCardEnd" style="flex:none;padding:9px 12px;border-radius:10px;border:none;background:var(--gold);color:#121214;font-weight:800;font-size:12.5px;font-family:inherit;cursor:pointer;">안내 종료</button>';
+        document.body.appendChild(el);
+        el.querySelector('#sbCardEnd').onclick = function(){ _ovlStandbyEnd(); var c = document.getElementById('sbCard'); if(c) c.remove(); if(_sbCardT){ clearTimeout(_sbCardT); _sbCardT = null; } };
+        el.querySelector('#sbCardBody').onclick = function(){ _sbScreenOff = false; _ovlStandbyCardPoll(); };   // 카드를 누르면 전체 화면으로
+      }
+      var tx = el.querySelector('#sbCardTx'); if(tx) tx.textContent = (text || '안내 중') + (l2 ? ' · ' + l2.replace(/^남은시간: /, '') : '');
     }
-    var tx = el.querySelector('#sbCardTx'); if(tx) tx.textContent = (text || '안내 중') + (l2 ? ' · ' + l2.replace(/^남은시간: /, '') : '');
     if(_sbCardT) clearTimeout(_sbCardT);
     _sbCardT = setTimeout(_ovlStandbyCardPoll, 5000);
   }catch(e){}
 }
 function _ovlStandbyCardPoll(){
   try{
-    _sbCardT = null;
+    if(_sbCardT){ clearTimeout(_sbCardT); } _sbCardT = null;
     var n = _ovlNative(); if(!n || typeof n.standbyStatus !== 'function') return;
     var r = n.standbyStatus(); if(!r || typeof r.then !== 'function') return;
     r.then(_ovlStandbyCardDraw).catch(function(){});

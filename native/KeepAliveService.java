@@ -45,7 +45,7 @@ import java.util.ArrayList;
  *     · 받은 값을 그리기만 한다: 상주 알림 문구(ongoing.text) · 하차/환승 알림(alert) · 끝내기(done).
  *   → 계산은 엔진, 그림은 앱(네이티브)이라는 원칙 그대로다. 1단계는 지하철 탑승 확정(시각표 기준) 여정만 맡는다.
  *
- * START_NOT_STICKY: 프로세스가 죽으면 상태가 메모리에서 사라진다(저장된 마지막 상태가 있어도 사용자가 앱을 다시 열어야 이어진다).
+ * START_STICKY: 시스템이 메모리 때문에 프로세스를 죽여도 서비스가 되살아나면(intent==null) 저장된 마지막 상태(30분 안)로 웹 없이 대기 모드를 이어간다(되살아난 프로세스에는 오버레이 창을 그릴 화면 컨텍스트가 없어 알림·하차 알림만 이어진다).
  * 여정이 끝나거나(JS standbyEnd) 알림의 [안내 종료]를 누르거나 엔진이 done 을 주면 끝낸다.
  */
 public class KeepAliveService extends Service {
@@ -79,6 +79,8 @@ public class KeepAliveService extends Service {
             r.put("active", standbyActive);
             String v = c.getSharedPreferences(PREFS, MODE_PRIVATE).getString("view", null);
             if (v != null) r.put("view", new JSONObject(v));
+            String ovs = c.getSharedPreferences(PREFS, MODE_PRIVATE).getString("overlay", null);
+            if (ovs != null) r.put("overlay", new JSONObject(ovs));
             return r.toString();
         } catch (Throwable e) { return "{\"active\":false}"; }
     }
@@ -102,10 +104,17 @@ public class KeepAliveService extends Service {
             endStandby(true);
             return START_NOT_STICKY;
         }
+        // ★ 2026-10-13 (YJ: "한계를 우회해줘, 카카오처럼"): 시스템이 메모리 때문에 프로세스를 죽였다가 서비스를 되살리면 intent 가 null 로 온다.
+        //   그때 맡겨 둔 여정 상태(30분 안에 갱신된 것)가 있으면 웹 없이 대기 모드로 곧장 이어간다. 명시적 종료(stopService/stopSelf)는 되살리지 않는다.
+        if (intent == null) {
+            showForeground("앱이 닫혀 있어도 안내를 이어가요");
+            if (hasPacket(this)) startStandby(); else { try { stopForeground(true); } catch (Throwable ignored) { } stopSelf(); return START_NOT_STICKY; }
+            return START_STICKY;
+        }
         showForeground(standbyActive ? "앱이 닫혀 있어도 안내를 이어가요" : "화면을 꺼도 안내가 이어져요");
         if (ACT_ACTIVATE.equals(act)) startStandby();
         else if (ACT_DEACTIVATE.equals(act)) stopStandbyLoop();
-        return START_NOT_STICKY;
+        return START_STICKY;
     }
 
     @Override public void onDestroy() {
@@ -330,7 +339,10 @@ public class KeepAliveService extends Service {
         if (on != null) updateNotification(on.optString("text", ""));
         // 오버레이: 엔진이 만든 값을 쥐고 있는 오버레이 창에 그린다(없으면 아무 일도 안 한다). 다시 열린 앱이 보여 줄 마지막 상태(view)도 적어 둔다.
         JSONObject ov = o.optJSONObject("overlay");
-        if (ov != null) OverlayPlugin.standbyPush(ov);
+        if (ov != null) {
+            OverlayPlugin.standbyPush(ov);
+            try { getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString("overlay", ov.toString()).apply(); } catch (Throwable ignored) { }   // 다시 열린 앱이 전체 화면을 그리는 재료(엔진이 만든 값 그대로)
+        }
         JSONObject vw = o.optJSONObject("view");
         if (vw != null) { try { getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString("view", vw.toString()).apply(); } catch (Throwable ignored) { } }
         JSONObject al = o.optJSONObject("alert");
