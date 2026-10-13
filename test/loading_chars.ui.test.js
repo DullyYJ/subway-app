@@ -1,5 +1,5 @@
 // 경로탐색 로딩 캐릭터 + 오버레이 추천 캐릭터 — 2026-10-13
-//   로딩: 바퀴 자리에서 캐릭터 6종이 무작위로 좌→우로 달린다(캔버스). 로딩이 끝나면 멈춘다. 그림 파일이 없으면 바퀴가 그대로 남는다.
+//   로딩: 바퀴 자리에서 캐릭터 6종이 무작위로 3D 동작(걷기·뛰기·날기·헤엄·땅에서 솟기)으로 좌→우로 지나간다(캔버스). 로딩이 끝나면 멈춘다. 옛 한 장 그림 방식은 없다(2026-10-13).
 //   오버레이: 추천(reco)에 캐릭터 둘(ch, ch2)이 서로 다르게 실려 가고, 같은 추천이 보이는 동안은 안 바뀐다.
 // 실행: node test/loading_chars.ui.test.js [html 경로]
 const assert = require('assert'), path = require('path'), fs = require('fs'), http = require('http');
@@ -22,7 +22,8 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   const hide = () => page.evaluate(() => { document.getElementById('transitLoading').style.display = 'none'; });
 
   console.log('[① 그림 파일]');
-  await t('캐릭터 그림 6개가 있다', async () => { for (const id of IDS) { const f = path.join(__dirname, '..', 'www', 'chars', id + '.webp'); assert.ok(fs.existsSync(f) && fs.statSync(f).size > 2000, id); } });
+  await t('3D 동작 시트 7개가 있다', async () => { for (const f of IDS.map(i => i + '.webp').concat(['dudung_intro.webp'])) { const q = path.join(__dirname, '..', 'www', 'chars3d', f); assert.ok(fs.existsSync(q) && fs.statSync(q).size > 20000, f); } });
+  await t('옛 한 장 그림 폴더(www/chars)는 없다', async () => assert.ok(!fs.existsSync(path.join(__dirname, '..', 'www', 'chars'))));
 
   console.log('[② 로딩 화면]');
   await page.evaluate(() => _RC.ready() || 0); await page.waitForTimeout(2200);
@@ -34,7 +35,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   });
   await t('캔버스에 실제로 그려진다(투명하지 않은 픽셀이 있다)', async () => {
     const n = await page.evaluate(() => { const c = document.querySelector('canvas.rc-cv'); const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let k = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 40) k++; return k; });
-    assert.ok(n > 800, 'px ' + n);
+    assert.ok(n > 300, 'px ' + n);
   });
   for (const id of IDS) {
     await t(id + ': 좌→우로 이동하며 그려진다', async () => {
@@ -73,6 +74,42 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   await t('같은 추천이 보이는 동안은 캐릭터가 안 바뀐다', async () => { const [a, b] = await recoOf(); assert.strictEqual(a.ch + a.ch2, b.ch + b.ch2); });
   await t('새 추천이 뜨면 다시 뽑는다(여러 번 중 한 번은 달라진다)', async () => {
     const seen = new Set(); for (let i = 0; i < 25; i++) { const [a] = await recoOf(); seen.add(a.ch + a.ch2); } assert.ok(seen.size > 1, [...seen].join());
+  });
+  console.log('[④ 3D 렌더링 동작 프레임 (2026-10-13)]');
+  await t('시트가 읽히고 크기가 1024×1024(256px 칸 4×4)다', async () => {
+    const r = await page.evaluate(async () => { const o = {}; for (const id of ['dolsom', 'lovel', 'dudung', 'sul', 'ppopu', 'chaeng', 'dudung_intro']) o[id] = await new Promise(ok => { const im = new Image(); im.onload = () => ok(im.naturalWidth + 'x' + im.naturalHeight); im.onerror = () => ok('err'); im.src = 'chars3d/' + id + '.webp'; }); return o; });
+    for (const k in r) assert.strictEqual(r[k], '1024x1024', k + ' ' + r[k]);
+  });
+  const sig = () => page.evaluate(() => { const c = document.querySelector('canvas.rc-cv'); const W = c.width, H = c.height, d = c.getContext('2d').getImageData(0, 0, W, H).data; let n = 0, sx = 0, sy = 0, hsh = 0; for (let y = 0; y < H; y += 2) for (let x = 0; x < W; x += 2) { const a = d[(y * W + x) * 4 + 3]; if (a > 200) { n++; sx += x; sy += y; hsh = (hsh * 31 + d[(y * W + x) * 4] + 7 * d[(y * W + x) * 4 + 1]) | 0; } } return { n, cx: n ? sx / n / W : -1, cy: n ? sy / n / H : -1, h: hsh }; });
+  await t('3D 모드로 돈다(준비됨 · 캔버스에 표시)', async () => {
+    assert.strictEqual(await page.evaluate(() => _RC.ready()), true);
+    await hide(); await page.evaluate(() => { window._rcForce = 'lovel'; }); await show(); await page.waitForTimeout(900);   // 화면 왼쪽 밖에서 들어오는 시간
+    assert.ok((await sig()).n > 300, '안 그려짐');
+  });
+  for (const id of IDS) {
+    await t(id + ': 동작 프레임이 시간에 따라 바뀐다(몸짓)', async () => {
+      await hide(); await page.evaluate(i => { window._rcForce = i; }, id); await show();
+      await page.waitForTimeout(700); const hs = new Set(); for (let k = 0; k < 8; k++) { await page.waitForTimeout(110); const g = await sig(); if (g.n > 150) hs.add(g.h); }   // 처음 0.7초는 화면 왼쪽 밖에서 들어오는 중
+      assert.ok(hs.size >= 5, '서로 다른 프레임 ' + hs.size);
+    });
+  }
+  await t('두덩: 땅에서 솟아 나온 뒤(약 1초) 걸어 나간다', async () => {
+    await hide(); await page.evaluate(() => { window._rcForce = 'dudung'; }); await show();
+    const xs = []; for (let k = 0; k < 9; k++) { await page.waitForTimeout(220); xs.push((await sig()).cx); }
+    assert.ok(Math.abs(xs[1] - xs[0]) < 0.02 && Math.abs(xs[2] - xs[1]) < 0.02, '솟는 동안은 제자리 ' + xs.map(v => v.toFixed(2)));
+    assert.ok(xs[8] > xs[3] + 0.04, '그 뒤 오른쪽으로 걷는다 ' + xs.map(v => v.toFixed(2)));
+  });
+  await t('시트 읽기가 어긋나도 다시 받아 3D 로 그린다(옛 방식 없음)', async () => {
+    const pg = await ctx.newPage(); const e2 = []; pg.on('pageerror', e => e2.push(e.message)); let bad = 0;
+    await pg.route('**/*', r => { const u = new URL(r.request().url()); if (/\/chars3d\/(dolsom|dudung_intro)\.webp$/.test(u.pathname) && bad < 3) { bad++; return r.abort(); } return (u.protocol === 'file:' || u.hostname === '127.0.0.1') ? r.continue() : r.abort(); });
+    await pg.goto(base + path.basename(html)); await pg.addStyleTag({ content: '#locDiscOv{display:none !important}' });
+    await pg.evaluate(() => { window._rcForce = 'dolsom'; document.getElementById('transitResultBox').style.display = 'block'; document.getElementById('transitLoading').style.display = 'flex'; });
+    let ok = false; for (let k = 0; k < 30 && !ok; k++) { await pg.waitForTimeout(500); ok = await pg.evaluate(() => _RC.ready()); }
+    assert.ok(bad >= 1, '일부러 막은 요청이 없음'); assert.ok(ok, '다시 받아도 준비 안 됨');
+    await pg.waitForTimeout(1200);
+    const r = await pg.evaluate(() => { const c = document.querySelector('canvas.rc-cv'); const d = c && c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; if (d) for (let i = 3; i < d.length; i += 4 * 3) if (d[i] > 200) n++; return n; });
+    assert.ok(r > 300, '3D 가 안 그려짐 ' + r); assert.deepStrictEqual(e2, []);
+    await pg.close();
   });
   await t('JS 오류 없음', async () => assert.deepStrictEqual(errs, []));
   await b.close(); srv.close();
