@@ -6,7 +6,7 @@
 //   앱은 매번 '지금까지의 증거 전부'를 보내고, 이 함수가 노드별 도착시각을 돌려준다(상태 없음 = stateless).
 //
 // 입력  { nowMs, nodes:[{name,isSub,isBus,isWalk,isOrigin,lineName,planMin}], passes:[{idx,ms,src}], boarded,
-//         timetable?:{boardIdx,times[]}, notDeparted?, platformWaiting?, live?:[{idx,ms}], boardNext?:{ms,src,allowEarlier,maxWaitMin}, boardArriveMs?, tzOffsetMin?, opts? }
+//         timetable?:{boardIdx,times[]}, notDeparted?, platformWaiting?, live?:[{idx,ms}], boardNext?:{ms,src,allowEarlier,maxWaitMin}, boardArriveMs?, tzOffsetMin?, timetableFirst?(true 면 증거 없음을 연착으로 밀지 않는다), opts? }
 //   planMin : 처음 안내한 도착 예정(하루 안의 분, 자정을 넘으면 1440 이상). 앱이 덮어쓴 값이 아니라 '원래 값'을 항상 보낸다.
 //   passes  : 통과 증거. src = 'board'(승차 확정) | 'move'(움직임 시작 시각 — 되짚어 찍은 값) | 'gps' | 'pf'(위치 채택) | 'cell'(기지국 선행) | 'drift'
 //             같은 역에 증거가 여러 개여도 된다(예: 기지국 선행 + 뒤이은 PF 채택) — 어느 것을 믿을지는 여기서 정한다.
@@ -67,6 +67,8 @@ var RIDE_ETA_DEFAULTS = {
   // ★ 2026-10-07 (앱의 시각 계산을 엔진으로 옮김 — 'overdue' = 예전 앱의 _pfOverdueShift / _htlDelayTrack):
   //   앵커(마지막 통과) 뒤 첫 정차 노드의 예정 시각이 이만큼(초) 지났는데 도착 증거가 없으면 그만큼 늦는 것이다 → 그 노드를 '지금 + overdueExtraMin 분'으로 미루고 뒤를 같은 폭만큼 민다(최대 overdueMaxMin 분).
   //   엔진은 상태가 없어 매번 같은 식으로 다시 계산하므로 누적되지 않는다.
+  // 정차 시간(초) — 실측 25초(표본 25,997). 시각표 기준 위치(pos)에서 도착 뒤 이만큼은 역 위에 머문다.
+  stopDwellSec: 25,
   overdueSec: 60, overdueMaxMin: 15, overdueExtraMin: 0.5, overdueGain: 1, overdueMode: 'clamp',
   // 승강장에서 열차를 기다리는 중(platformWaiting): 예정 출발이 platMinOverMin 분 넘게 지났고 platGraceMin 분 안이면 늦는 것으로 보고 승차역부터 '지금 + platExtraMin 분'으로 민다(예전 앱의 _platformLateShift).
   platMinOverMin: 1, platGraceMin: 4, platExtraMin: 0.5,
@@ -96,7 +98,34 @@ function _reSrcPri(src) { return src === 'gps' ? 6 : src === 'move' ? 5 : src ==
 // ─────────────────────────────────────────────────────────────────────────────
 // 본체
 // ─────────────────────────────────────────────────────────────────────────────
+// 진입: 도착시각 계산(_rideEtaCore) + (timetableFirst 일 때) 지금 열차가 어느 역 사이 어디쯤인지(pos)
 function rideEta(input) {
+  var r = _rideEtaCore(input);
+  try { if (input && input.timetableFirst === true && input.notDeparted !== true && r && r.etaMs) r.pos = _rePos(input, r); } catch (e) { r.pos = null; }
+  return r;
+}
+// ★ 2026-10-13 (YJ: "계산은 엔진이, 그림은 앱이"): 시각표 기준 위치. 앱은 이 구간(from→to)과 t0·t1 시각만 받아 그 사이를 시간 흐름대로 그린다(위치 계산 없음).
+//   from = 도착 시각이 지난 마지막 노드(단, 통과 증거가 더 앞서 있으면 그 노드 = 바닥), to = 그 다음 노드. 정차(stopDwellSec) 동안은 역 위(ratio 0), 이후 to 의 도착 시각까지 0→1.
+function _rePos(input, r) {
+  var O = _reMerge(RIDE_ETA_DEFAULTS, input.opts), nodes = input.nodes || [], out = r.etaMs, nowMs = +input.nowMs, idxs = [], i, fl = -1;
+  if (!isFinite(nowMs)) nowMs = Date.now();
+  for (i = 0; i < nodes.length; i++) if (out[i] != null) idxs.push(i);
+  if (!idxs.length) return null;
+  var ps = input.passes || [];
+  for (i = 0; i < ps.length; i++) { var pi = +ps[i].idx; if (isFinite(pi) && pi >= 0 && pi < nodes.length && pi > fl) fl = pi; }
+  var f = idxs[0], k;
+  for (k = 0; k < idxs.length; k++) { if (out[idxs[k]] <= nowMs) f = idxs[k]; else break; }
+  if (fl > f) f = fl;
+  var pos = -1;
+  for (k = 0; k < idxs.length; k++) if (idxs[k] === f) { pos = k; break; }
+  if (pos < 0) { for (k = 0; k < idxs.length; k++) if (idxs[k] > f) { pos = Math.max(0, k - 1); break; } if (pos < 0) pos = idxs.length - 1; f = idxs[pos]; }
+  if (pos >= idxs.length - 1) return { from: f, to: f, t0: null, t1: null, ratio: 0, moving: false, floor: fl };
+  var t = idxs[pos + 1], t0 = out[f] + O.stopDwellSec * 1000, t1 = out[t];
+  if (!(t1 - t0 >= 5000)) t0 = out[f];
+  var ratio = t1 > t0 ? Math.max(0, Math.min(1, (nowMs - t0) / (t1 - t0))) : 0;
+  return { from: f, to: t, t0: t0, t1: t1, ratio: Math.round(ratio * 1000) / 1000, moving: ratio > 0 && ratio < 1, floor: fl };
+}
+function _rideEtaCore(input) {
   input = input || {};
   var O = _reMerge(RIDE_ETA_DEFAULTS, input.opts);
   var tz = (typeof input.tzOffsetMin === 'number') ? input.tzOffsetMin : 540;     // 한국 표준시
@@ -318,6 +347,8 @@ function rideEta(input) {
   // (바) 연착: 앵커 뒤 첫 정차 노드의 예정 시각이 지났는데 도착 증거가 없다
   var nxO = -1;
   for (k = anchor.idx + 1; k < n; k++) if (valid[k] && _reIsTransit(nodes[k]) && out[k] != null) { nxO = k; break; }
+  // ★ 2026-10-13 (YJ: "탑승이 확정되면 시간표 기준으로 마커를 움직인다. 도착 때 GPS 로 영점만 본다"): input.timetableFirst === true 면 증거가 없다고 연착으로 밀지 않는다 — 시각표(+통과 증거로 배운 지연)가 기준이다.
+  if (nxO >= 0 && input.timetableFirst === true) { notes.push('시각표 기준: 증거 없음을 연착으로 보지 않음'); nxO = -1; }
   if (nxO >= 0) {
     var overO = (nowMs - out[nxO]) / 1000;
     if (overO >= O.overdueSec) {
@@ -555,4 +586,4 @@ function handleRideEta(request) {
   }, function () { return new Response(JSON.stringify({ error: 'JSON 아님' }), { status: 400, headers: H }); });
 }
 
-if (typeof module !== 'undefined') module.exports = { rideEta: rideEta, handleRideEta: handleRideEta, RIDE_ETA_DEFAULTS: RIDE_ETA_DEFAULTS };
+if (typeof module !== 'undefined') module.exports = { rideEta: rideEta, _rePos: _rePos, handleRideEta: handleRideEta, RIDE_ETA_DEFAULTS: RIDE_ETA_DEFAULTS };
