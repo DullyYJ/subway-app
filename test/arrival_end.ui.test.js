@@ -109,19 +109,21 @@ const DEST_LNG = 126.9 + 0.0137 * 3;
   await t('정확도 150m 넘는 위치는 근거로 쓰지 않는다(버튼으로)', async () => { const x = await a.st(); assert.strictEqual(x.closed, 0); assert.strictEqual(x.s, 'ask'); });
   await a.ctx.close();
 
-  console.log('[⑤ 중간 역 영점 — 시각표 도착 15초 전~30초 뒤 GPS 가 그 역 부근이면 진행도만 맞추고 시각표는 그대로]');
+  console.log('[⑤ 중간 역 영점 — GPS 가 그 역 부근이면 시각표보다 일찍이어도 진행도를 맞추고, 통과 시각만큼 뒤 시각을 당긴다(2026-10-13 YJ: 영점은 시각을 밀고 당겨야 한다)]');
   const S1_LNG = 126.9 + 0.0137;   // 노드 2(S1, 12:54)
   const setMid = (a) => a.page.evaluate(() => { window._htlBoarded = true; window._gpsMaxIdx = 1; window._gpsConfirmIdx = 1; window._nodePassMs = { 1: Date.now() - 100000 }; window.__arr0 = _transitNodeData.map(n => n.arrTime).join(' '); });
   a = await fresh('dest');
   await a.at('12:53:20'); await setMid(a); await a.run(20, { lat: 37.5, lng: S1_LNG, acc: 25 });
-  await t('도착 15초 전(12:53:45)이 지나도 도착 시각(12:54:00) 전에는 진행도를 앞당기지 않는다', async () => assert.strictEqual(await a.page.evaluate(() => window._gpsMaxIdx), 1));
+  await t('시각표보다 일찍(12:53:20, 40초 전) 그 역 부근 GPS 가 확인되면 진행도가 바로 그 역으로 맞춰진다(일찍 닿은 열차)', async () => assert.strictEqual(await a.page.evaluate(() => window._gpsMaxIdx), 2));
   await a.run(25, { lat: 37.5, lng: S1_LNG, acc: 25 });
   await t('도착 시각이 되고 그 역 부근 GPS 가 확인됐으면 진행도가 그 역으로 맞춰진다', async () => assert.strictEqual(await a.page.evaluate(() => window._gpsMaxIdx), 2));
-  await t('시각표(도착 시각)·통과 시각 기록은 바뀌지 않는다', async () => {
+  await t('GPS 통과 시각이 기록되고(통과 기록 2번 역), 뒤 도착 시각이 당겨진다(밀고 당기는 영점)', async () => {
     const g = await a.page.evaluate(() => ({ arr: _transitNodeData.map(n => n.arrTime).join(' '), arr0: window.__arr0, pm: Object.keys(window._nodePassMs).join(',') }));
-    assert.strictEqual(g.arr, g.arr0); assert.strictEqual(g.pm, '1');
+    assert.strictEqual(g.pm, '1,2'); assert.notStrictEqual(g.arr, g.arr0);
+    const last = _t => _t.split(' ').pop();
+    assert.ok(last(g.arr) < last(g.arr0), '목적지 도착 시각이 앞당겨져야 한다 ' + g.arr0 + ' → ' + g.arr);
   });
-  await t('진단에 영점이 남는다', async () => assert.ok((await a.diag()).some(x => /영점/.test(x) && /시각표는 그대로/.test(x))));
+  await t('진단에 영점(통과 시각 반영)이 남는다', async () => assert.ok((await a.diag()).some(x => /영점/.test(x) && /시각 반영/.test(x))));
   await t('중간 역에서는 안내를 종료하지 않는다', async () => assert.strictEqual((await a.st()).closed, 0));
   await t('페이지 오류 없음(⑤-1)', async () => assert.deepStrictEqual([...new Set(a.errs)], []));
   await a.ctx.close();
