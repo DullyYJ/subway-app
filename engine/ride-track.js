@@ -15,10 +15,16 @@
 //                suppress?:[string…] }          판정을 쉬어야 하는 모드(예상 시각·지하철 노선도·수동 출발 등) — 하나라도 있으면 이탈 없음
 //         cands?:[{id,pts:[{lat,lng}…],longDist?}…]   엔진이 이번 탐색에서 준 후보 경로들
 //         sensor?:{ cellN180, pfSeg }            기지국 변화 횟수(180초), PF 가 최근 주행(seg)으로 본 적이 있는지
-//         want?:{ off, ridden, miss } }           (생략하면 전부)
+//         want?:{ off, ridden, miss, zero } }     (생략하면 off·ridden·miss — zero 는 요청할 때만)
+//         plan.stops?:[{ i, lat, lng, arrMs, fin? }…]   (zero 용) 승차 뒤 지나는 역·정류장 — i=앱 노드 번호, arrMs=시각표(엔진이 맞춘 표시) 도착 시각, fin=최종 목적지
 // 출력  { v, fix:{n, ageSec, fresh}, off:{confirmed, distM, n, spanSec, why},
 //         ridden:{id, ok, mean, max, tail, curMean, curTail, curBad, last:{lat,lng}} | null,
 //         miss:{proof, why}, board:{walkingAway, distM, speed, why} | null, vehicleNow }
+//   zero  : (want.zero, plan.boarded 일 때만) 영점 확인 — 각 정류장의 시각표 도착 15초 전 ~ 30초 뒤(45초) 동안 신선한 GPS 가 그 정류장 부근(정확도 반경을 뺀 거리 200m, 최종 목적지는 250m)에 한 번이라도 잡히면
+//           '제대로 달리고 있다' = state 'near'(도착 시각 3초 전부터 apply:true — 앱이 진행도를 그 정류장으로 맞춘다). 시각표는 바꾸지 않는다(엔진 출력에 시각 보정이 없다).
+//           창이 끝났는데 가까운 위치가 없으면 600m 넘는 위치만 있으면 'far', 쓸 위치가 아예 없으면 'none', 그 사이(250~600m)는 'off'. 잡히지 않아도 벌은 없다.
+//           final = 최종 목적지(fin) 판정 verdict: 'verify'(창 안) · 'confirmed'(창 끝에 가까운 위치 있음 → 앱은 안내 종료) · 'notyet'(먼 위치만 → 아직 도착 전) · 'unknown'(위치 없음/애매 → 앱은 [안내 종료] 버튼).
+//           창이 끝난 뒤에도 30분까지는 최근 45초로 다시 판정한다(늦게 도착해 GPS 가 나중에 잡혀도 confirmed 로 바뀐다).
 //   board : 지하철 승차 확정 전(plan.notDeparted)에만. 승차역(plan.boardPt)에서 멀어졌지만 신선한 GPS 가 '걷는 속도'로 이어지면 열차를 탄 게 아니다 → walkingAway.
 //           앱은 이때 '승차역에서 멀어짐·시각 경과·기지국 변화'만으로 승차를 확정하지 않는다(시뮬: 지하철 먼저 계획에서 안 타고 돌아가거나 걸어도 승차로 처리).
 //
@@ -40,7 +46,9 @@ var RIDE_TRACK_DEFAULTS = {
   // 못 탔다는 증명(예전 _missProof)
   // 걷는 중인지(승차 안 함): 승차역에서 departM(기본 400m) 넘게 떨어진 신선한 좌표가 걷는 속도(앞·뒤 덩어리 중앙값 사이 순속도 ≤ 3m/s; 열차는 8m/s 이상)로 이어짐
   walkWinSec: 75, walkMinFixes: 5, walkMinSpanSec: 45, walkMaxSpeed: 3.0, walkDepartM: 400,
-  missWinSec: 120, missD80: 80, missMinSpanSec: 45, missMinFixes: 3, missCellN: 2
+  missWinSec: 120, missD80: 80, missMinSpanSec: 45, missMinFixes: 3, missCellN: 2,
+  // 영점 확인 / 도착 확인
+  zeroLeadSec: 15, zeroWinSec: 45, zeroNearM: 200, zeroFinalNearM: 250, zeroFarM: 600, zeroApplyLeadSec: 3, zeroKeepSec: 20, zeroFinalKeepMin: 30
 };
 
 // ── 기하 ──────────────────────────────────────────────────────────────────────
@@ -227,6 +235,51 @@ function rtBoard(P, tr, O) {
   return res;
 }
 
+// ── 영점 확인 · 도착 확인 ─────────────────────────────────────────────
+function rtZeroStop(s, tr, now, O) {
+  var lead = O.zeroLeadSec * 1000, win = O.zeroWinSec * 1000, ws = s.arrMs - lead, we = ws + win;
+  var active = now >= ws && now <= we, ended = now > we;
+  if (now < ws) return null;
+  var sliding = false;
+  if (ended) {
+    if (s.fin && now - s.arrMs <= O.zeroFinalKeepMin * 60000) sliding = true;       // 최종 목적지는 늦게 도착해도 최근 45초로 다시 본다
+    else if (now - we > O.zeroKeepSec * 1000) return null;                          // 중간 역은 창이 끝난 뒤 잠깐만 알려 준다
+  }
+  var from = sliding ? now - win : ws - 2000, to = sliding ? now : (ended ? we : now);
+  var R = s.fin ? O.zeroFinalNearM : O.zeroNearM, n = 0, near = 0, far = 0, best = null;
+  for (var i = 0; i < tr.length; i++) {
+    var q = tr[i];
+    if (q.ts < from || q.ts > to + 1000) continue;
+    if (q.acc != null && q.acc > 150) continue;
+    var acc = q.acc == null ? 50 : q.acc, d = rtHav(q.lat, q.lng, s.lat, s.lng) - acc;
+    n++;
+    if (best == null || d < best) best = d;
+    if (d <= R) near++; else if (d > O.zeroFarM) far++;
+  }
+  var dt = now - s.arrMs, st;
+  if (near >= 1 && near >= far) st = 'near';
+  else if (active) st = 'pending';
+  else if (far >= 1) st = 'far';
+  else if (n === 0) st = 'none';
+  else st = 'off';
+  var r = { i: s.i, fin: !!s.fin, state: st, apply: (st === 'near' && dt >= -O.zeroApplyLeadSec * 1000), dtSec: Math.round(dt / 1000), n: n, near: near, far: far, distM: best == null ? null : Math.round(best) };
+  if (s.fin) r.verdict = (active && !sliding) ? 'verify' : (st === 'near' ? 'confirmed' : (st === 'far' ? 'notyet' : 'unknown'));
+  return r;
+}
+function rtZero(P, tr, O) {
+  var plan = P.plan || {}, stops = plan.stops || [], now = P.nowMs, out = { stops: [], final: null };
+  if (!plan.boarded || !stops.length) return out;
+  for (var k = 0; k < stops.length; k++) {
+    var s = stops[k];
+    if (!s || !isFinite(s.arrMs) || !isFinite(s.lat) || !isFinite(s.lng)) continue;
+    var r = rtZeroStop(s, tr, now, O);
+    if (!r) continue;
+    out.stops.push(r);
+    if (r.fin) out.final = r;
+  }
+  return out;
+}
+
 // ── 진입 ──────────────────────────────────────────────────────────────────────
 function rideTrack(P) {
   P = P || {};
@@ -243,6 +296,7 @@ function rideTrack(P) {
   if (want.ridden) out.ridden = rtRidden(P, tr, O, out.vehicleNow);
   if (want.miss) out.miss = rtMiss(P, tr, O);
   if (want.board !== false) out.board = rtBoard(P, tr, O);
+  if (want.zero) out.zero = rtZero(P, tr, O);
   return out;
 }
 

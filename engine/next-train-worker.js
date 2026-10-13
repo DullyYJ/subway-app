@@ -116,6 +116,7 @@ async function ntAttachAll(env, od, baseMs, bf) {
 //   GET  ?op=board&line=1호선&from=서울역&to=남영&atMin=480.5&baseMs=…   → { dk:'상'|'하', depMin }
 //        ?op=times (같은 인자)                                            → { dk, times:[…]|null }
 //        ?op=info  (같은 인자, atMin 없음; 기준 시각 = baseMs)             → { info:{found,depMin,firstMin,dir} }
+//        ?op=late&line=…&from=…&to=…&atMin=지금(분)&back=1&baseMs=…         → { dk, depMin, late:출발분|null }  (탑승을 늦게 눌렀을 때: backMin 분 전까지 이미 떠난 차가 있는가)
 //        ?op=fwd&line=…&from=내다음역&to=내릴역&term=열차종착역            → { fwd:true|false|null }  (실시간 도착정보 열차가 내 진행 방향인지)
 //   POST { items:[{ id, op, … }] } → { items:[{ id, … }] }  (한 번에 여러 개)
 function ntAnswer(nt, q) {
@@ -128,6 +129,14 @@ function ntAnswer(nt, q) {
   if (op === 'info') { return { info: nt.metroInfo({ line: line, from: from, to: to, baseMs: baseMs, mins: 0 }) }; }
   var atMin = q.atMin != null && isFinite(+q.atMin) ? +q.atMin : null;
   if (atMin == null) return { error: 'atMin 필요' };
+  // op=late — '탑승을 늦게 눌렀다' 판정: atMin(지금, 분·소수 가능) 기준 시각표상 backMin(기본 1)분 전까지 이미 떠난 차가 있는가.
+  //   분 단위로 본다 — 지금 분이나 backMin 분 전에 출발한 차면 late=그 출발 분(자정 넘으면 1440 이상), 아니면 late=null. (앱은 이 답만 따른다)
+  if (op === 'late') {
+    var back = q.back != null && isFinite(+q.back) ? Math.max(0, Math.min(3, Math.floor(+q.back))) : 1;
+    var nowM = Math.floor(atMin), bl = nt.boardTable({ line: line, from: from, to: to, atMin: nowM - back, baseMs: baseMs });
+    var dep = bl.depMin, ok = dep != null && isFinite(dep) && dep <= nowM && dep >= nowM - back;
+    return { dk: bl.dk, depMin: dep, late: ok ? dep : null };
+  }
   var b = nt.boardTable({ line: line, from: from, to: to, atMin: atMin, baseMs: baseMs });
   return { dk: b.dk, depMin: b.depMin };
 }
