@@ -6950,6 +6950,7 @@ function _renderTransitResultCard(data, start, dest, cacheSource) {
   //   서로 다른 화면에 서로 다른 '현재 위치'가 뜰 수 있다. 새 복합경로 결과를 그릴 땐
   //   그 남은 타이머부터 멈춘다(데이터는 건드리지 않고 시계만 멈춘다 — 안전한 최소 조치).
   if(typeof stopTrainAnim === 'function') stopTrainAnim();
+  try{ _clearTabNoRoute(); }catch(e){}   // ★ 2026-10-13: '경로 없음' 표시 중 숨겼던 부분 복원
   _transitResultStart = start;
   _transitResultDest  = dest;
   _transitResultData  = data;
@@ -9350,6 +9351,46 @@ var _FAV_RADIUS_M   = 500;   // 즐겨찾기 인정 반경(m)
 function _selectBusFavRoute(){ return false; }
 window._selectBusFavRoute=_selectBusFavRoute;
 
+// ★ 2026-10-13 (YJ: "버스탭은 버스만, 지하철탭은 지하철만 — 혼합되면 안 돼"):
+//   지하철/버스 탭은 엔진이 그 수단만으로 만든 경로(sub/bus)만 그린다. 그 경로가 없으면
+//   다른 탭의 경로로 바꿔치기하지 않고 "경로 없음"만 보여준다(앱은 계산·대체하지 않음).
+function _tabNoRouteParts(){
+  var wrap=document.getElementById('transitHtlWrap');
+  var btn=document.getElementById('mainConfirmRouteBtn');
+  return {wrap:wrap, btnRow:(btn&&btn.parentNode)||null};
+}
+function _showTabNoRoute(type){
+  try{
+    var card=document.getElementById('transitResultCard');
+    if(!card) return;
+    var label=(type==='sub')?'지하철':(type==='bus'?'버스':'이 수단');
+    card.style.display='flex';
+    var box=document.getElementById('transitResultBox'); if(box) box.style.display='block';
+    var errBox=document.getElementById('transitResultErr'); if(errBox) errBox.style.display='none';
+    var h=document.getElementById('transitResultHeader');
+    if(h) h.innerHTML='<span id="transitTabNoRouteMsg" style="font-size:14px;font-weight:800;color:var(--text);">'+label+'만으로 갈 수 있는 경로가 없어요</span>';
+    ['transitSplitRow','transitDepRow','transitOfficialRow','transitAlertRow'].forEach(function(id){
+      var e=document.getElementById(id); if(e){ e.style.display='none'; e.innerHTML=''; }
+    });
+    var ld=document.getElementById('ldGradeChips'); if(ld) ld.style.display='none';
+    var parts=_tabNoRouteParts();
+    if(parts.wrap) parts.wrap.style.display='none';
+    if(parts.btnRow) parts.btnRow.style.display='none';
+    window._tabNoRoute=type;
+    window._pendingRouteType=type;
+    _highlightRouteTab(type);
+  }catch(e){ console.warn('[탭 경로없음]', e); }
+}
+function _clearTabNoRoute(){
+  if(!window._tabNoRoute) return;
+  window._tabNoRoute=null;
+  var parts=_tabNoRouteParts();
+  if(parts.wrap) parts.wrap.style.display='';
+  if(parts.btnRow) parts.btnRow.style.display='flex';
+}
+window._showTabNoRoute=_showTabNoRoute;
+window._clearTabNoRoute=_clearTabNoRoute;
+
 function _doSelectRouteOption(type) {
   if(!_allRouteResults) return;
 
@@ -9385,13 +9426,16 @@ function _doSelectRouteOption(type) {
     _selectSubwayNearestRoute();
     // 탭 UI만 즉시 활성화 (결과는 비동기로 채워짐)
     _highlightRouteTab('sub');
+    window._pendingRouteType = 'sub';
     return;
   }
 
   // 버스 탭 특별 처리: 출발지 500m 내 즐겨찾기 정류장이 있으면 그 정류장에서 승차하는 경로(조금 느려도)
   if(type === 'bus'){
     if(_selectBusFavRoute()){ _highlightRouteTab('bus'); return; }
-    // 즐겨찾기 없음/좌표없음 → 아래 일반 버스경로 로직으로 진행
+    // 엔진이 버스만으로 만든 경로(_allRouteResults.bus)만 쓴다. 없으면 다른 탭 경로로 대체하지 않는다.
+    var _busObj = _tryConvert(_allRouteResults.bus);
+    if(!_busObj){ _showTabNoRoute('bus'); return; }
   }
 
   // ★ 2026-09-25 (KTX/ITX 등급선택 연결): 장거리 탭은 fast/less/sub/bus 와 성격이 달라
@@ -9422,9 +9466,10 @@ function _doSelectRouteOption(type) {
     // 2) 실패 시: less(최소환승) → fast → sub → bus → all[0..] 순으로 폴백
     //    (요청대로 최단시간이 비면 최소환승 경로를 대신 사용)
     if(!routeObj){
+      // ★ 2026-10-13: 지하철·버스 전용 경로는 최단/최소환승 탭의 대체물이 아니다(섞이면 안 됨).
       var fbOrder = (type==='fast')
-        ? ['less','sub','bus','fast']   // 최단시간 실패 → 최소환승 우선
-        : ['fast','less','sub','bus'];
+        ? ['less','fast']   // 최단시간 실패 → 최소환승 우선
+        : ['fast','less'];
       for(var _i=0;_i<fbOrder.length && !routeObj;_i++){
         routeObj = _tryConvert(_allRouteResults[fbOrder[_i]]);
       }
@@ -9434,7 +9479,7 @@ function _doSelectRouteOption(type) {
     //   이미 type==='longdist' 분기로 따로 처리되고(대체 불가 원칙, 바로 위 주석 참고),
     //   이 지점에 온 type은 fast/less/bus 뿐이다. 장거리 경로가 이 폴백을 타면
     //   탭 표시(예: '버스')와 실제 내용(심야고속버스 등 장거리)이 어긋난다.
-    if(!routeObj && _allRouteResults.all){
+    if(!routeObj && _allRouteResults.all && (type==='fast' || type==='less')){
       for(var _j=0;_j<_allRouteResults.all.length && !routeObj;_j++){
         var _cand = _allRouteResults.all[_j];
         if(_cand && _cand.info && _cand.info.longDist === true) continue;
@@ -10205,7 +10250,7 @@ function _selectSubwayNearestRoute(){
     // 좌표 없으면 기존 sub 경로라도 시도
     var fb = _allRouteResults && _allRouteResults.sub;
     if(fb){ var r=_convertSinglePathToRoute(fb); if(r&&r.sections&&r.sections.length){ _renderTransitResultCard({routes:[r]}, start, dest, 'engine_sub'); return; } }
-    toast('출발지 위치를 확인할 수 없어요.');
+    _showTabNoRoute('sub');
     return;
   }
 
@@ -10218,7 +10263,7 @@ function _selectSubwayNearestRoute(){
       return;
     }
   }
-  toast('지하철로 가는 경로가 없어요.');
+  _showTabNoRoute('sub');   // ★ 2026-10-13: 다른 탭 경로로 대체하지 않고 '없음'만 표시
 }
 window._selectSubwayNearestRoute = _selectSubwayNearestRoute;
 
