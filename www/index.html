@@ -10928,6 +10928,7 @@ function _fireTransitAlert(tg, remain){
   if(window._transitAlertFired && window._transitAlertFired[key]) return;
   if(!window._transitAlertFired) window._transitAlertFired = {};
   window._transitAlertFired[key] = 1;
+  try{ if(typeof _ovlStandbyPush === 'function') setTimeout(function(){ _ovlStandbyPush(true); }, 0); }catch(eSb){}   // 보낸 알림을 네이티브도 알게(대기 모드가 같은 알림을 또 울리지 않게)
   // ★ 2026-09-22: 정거장 수만 있으면 역간격이 짧을 때 감이 안 온다 — 분 단위도 같이 넣는다.
   var _minTxt = '';
   try{
@@ -11145,6 +11146,7 @@ function _etaApply(res, P){
   _etaSt.okAt = Date.now(); _etaSt.applied++; window._etaLast = { at: _etaSt.okAt, why: P && P._why, notes: res.notes, delayMin: res.delayMin, anchorIdx: res.anchorIdx };
   try{ _fgNotifySync(); }catch(e1){}      // 역이 바뀌면 상주 알림도 즉시
   try{ if(typeof _ovlSync === 'function') _ovlSync(); }catch(eOv){}      // ★ 2026-10-13: 엔진이 새 위치(pos)를 주면 오버레이도 바로 그린다(다음 틱을 기다리지 않는다)
+  try{ if(typeof _ovlStandbyPush === 'function') _ovlStandbyPush(false); }catch(eSb){}   // ★ 2026-10-13: 대기 모드용 여정 상태를 네이티브에 맡겨 둔다(8초에 한 번)
   try{ _aiArrivalSync(); }catch(e2){}     // AI 승무원 카드의 도착시각도 함께
   try{ if(typeof _updateRouteRemaining === 'function') _updateRouteRemaining(); }catch(e3){}   // 헤더 남은시간/브리핑
   try{ if(typeof _syncHomeBriefRemaining === 'function') _syncHomeBriefRemaining(); }catch(e4){}
@@ -29089,6 +29091,43 @@ function _ovlKeepAliveSync(){
   }catch(e){ _ovlKaOn = null; }
 }
 window._ovlKeepAliveSync = _ovlKeepAliveSync;
+
+// ★ 2026-10-13 (YJ: "카카오지하철처럼 안내 로직을 네이티브로"): 대기 모드 — 웹뷰가 사라져도(앱을 최근 목록에서 밀어 닫음) 네이티브(KeepAliveService)가
+//   5초마다 엔진(/ride-standby)을 불러 영점·시각 밀고 당기기·하차 알림을 이어간다. 계산은 전부 엔진이 한다 — 앱은 '여정 상태'를 모아 네이티브에 맡겨 둘 뿐이다.
+//   웹뷰가 살아 있는 동안은 지금처럼 앱이 한다. 지하철 탑승 확정(시각표 기준) 여정만 맡긴다(버스는 GPS 주도라 1단계에서는 프로세스 유지만).
+var _ovlSbAt = 0, _ovlSbSig = '';
+function _ovlStandbyBuild(){
+  try{
+    if(window._routeLocked !== true || !_transitNodeData || !_transitNodeData.length) return null;
+    if(typeof _ttFirstOn !== 'function' || !_ttFirstOn()) return null;
+    if(typeof _baseTimeMs !== 'undefined' && _baseTimeMs != null) return null;
+    var stops = _arrEndStops(); if(!stops || !stops.length) return null;
+    var eta = _etaPayload(); delete eta.nowMs; delete eta._why;
+    var D = (typeof _arrEndDest === 'function') ? _arrEndDest() : null;
+    var cfg = { targets: window._transitAlertTargets || [], seq: window._transitSeqIdx || [], allowed: {}, destName: D ? D.name : '' };
+    ['transfer2', 'transfer', 'near_arrive2', 'near_arrive', 'arrive'].forEach(function(k){ cfg.allowed[k] = (typeof _notifAllowed === 'function') ? !!_notifAllowed(k) : true; });
+    var tr = []; try{ for(var i = Math.max(0, _ev.trail.length - 60); i < _ev.trail.length; i++){ var q = _ev.trail[i]; tr.push([q.ts, q.lat, q.lng, q.acc == null ? null : q.acc]); } }catch(e0){}
+    return { v: 1, tripSig: window._trackSig || '', eta: eta, stops: stops, trail: tr, cfg: cfg, fired: window._transitAlertFired || {}, notYet: {}, etaMs: null };
+  }catch(e){ return null; }
+}
+function _ovlStandbyPush(force){
+  try{
+    var n = _ovlNative();
+    if(!n || typeof n.standbyPacket !== 'function') return;
+    var now = Date.now();
+    if(!force && now - _ovlSbAt < 8000) return;
+    var st = _ovlStandbyBuild(); if(!st) return;
+    _ovlSbAt = now;
+    var url = _ETA_URL.replace(/\/ride-eta$/, '/ride-standby');
+    var r = n.standbyPacket({ state: JSON.stringify(st), url: url });
+    if(r && typeof r.catch === 'function') r.catch(function(){});
+  }catch(e){}
+}
+window._ovlStandbyPush = _ovlStandbyPush;
+function _ovlStandbyEnd(){
+  try{ var n = _ovlNative(); if(n && typeof n.standbyEnd === 'function'){ var r = n.standbyEnd(); if(r && typeof r.catch === 'function') r.catch(function(){}); } }catch(e){}
+}
+window._ovlStandbyEnd = _ovlStandbyEnd;
 // ★ 2026-10-02: 오버레이가 왜 안 바뀌는지 기기에서 바로 볼 수 있게 남기는 기록(최근 600줄, 새로 열어도 유지).
 //   tick 은 20초에 한 줄만, 그 외(BG위치·상태전환·재시작)는 그때마다 한 줄.
 var _ovlDiagBuf = null, _ovlDiagTickAt = 0;
@@ -29573,6 +29612,7 @@ function _cleanupBgTracking(){
   try{  }catch(e){}
 
   _stopBgGeolocation();
+  try{ _ovlStandbyEnd(); }catch(eSbE){}   // ★ 2026-10-13: 여정이 끝나거나 취소되면 네이티브 대기 모드도 끈다
   _clearForegroundNotif();
   _resetAlertFired && _resetAlertFired();
   window._bgAlertFired = {};

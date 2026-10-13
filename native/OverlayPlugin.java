@@ -940,8 +940,31 @@ public class OverlayPlugin extends Plugin {
      * 확정한 여정이 진행되는 동안(오버레이를 쓰든 안 쓰든) 네이티브가 5초마다 웹을 깨우도록 웹이 켜고 끈다.
      * 웹이 60초마다 다시 켜 주지 않으면(10분) 스스로 멈춘다.
      */
+    /**
+     * ★ 2026-10-13 (YJ: "카카오지하철처럼 안내 로직을 네이티브로"): 웹이 '여정 상태'를 네이티브에 맡겨 둔다(대기 모드용). 웹뷰가 사라지면 KeepAliveService 가 이 상태로 엔진을 불러 안내를 이어간다.
+     */
+    @PluginMethod
+    public void standbyPacket(PluginCall call) {
+        String st = call.getString("state"), url = call.getString("url");
+        if (st != null && url != null && url.startsWith("https://")) KeepAliveService.savePacket(getContext(), st, url);
+        call.resolve(new JSObject().put("ok", true));
+    }
+
+    /** 여정이 끝나거나 취소됐다 — 맡겨 둔 상태를 지우고, 대기 모드가 돌고 있으면 끝낸다. */
+    @PluginMethod
+    public void standbyEnd(PluginCall call) {
+        KeepAliveService.clearPacket(getContext());
+        if (KeepAliveService.standbyActive) { stopKeepSvc(); }
+        call.resolve(new JSObject().put("ok", true));
+    }
+
     @PluginMethod
     public void keepAlive(PluginCall call) {
+        // 대기 모드가 돌고 있는 동안(앱을 밀어 닫았다가 다시 열었다) 새로 뜬 웹이 '여정 없음'(off)을 보내도 끄지 않는다. 끝내는 길은 standbyEnd · 알림의 [안내 종료] · 엔진의 done.
+        if (KeepAliveService.standbyActive) {
+            if (call.getBoolean("on", false)) { KeepAliveService.send(getContext(), KeepAliveService.ACT_DEACTIVATE); }   // 웹이 여정을 다시 쥐었다 — 주도권을 돌려준다
+            else { call.resolve(new JSObject().put("ok", true).put("standby", true)); return; }
+        }
         journeyOn = call.getBoolean("on", false);
         if (journeyOn) journeyAt = System.currentTimeMillis();
         main.post(new Runnable() { @Override public void run() { if (journeyOn) { startTicker(); startKeepSvc(); } else stopKeepSvc(); } });
@@ -989,8 +1012,10 @@ public class OverlayPlugin extends Plugin {
     @Override
     protected void handleOnDestroy() {
         wanted = false;
+        // ★ 2026-10-13: 앱을 밀어 닫아 액티비티가 사라져도 여정 중이고 맡겨 둔 상태가 있으면 서비스를 끄지 않고 대기 모드로 넘긴다(KeepAliveService 가 엔진을 불러 이어간다).
+        boolean handOver = journeyOn && KeepAliveService.hasPacket(getContext());
         journeyOn = false;
-        stopKeepSvc();
+        if (handOver) KeepAliveService.send(getContext(), KeepAliveService.ACT_ACTIVATE); else stopKeepSvc();
         try { if (cpuLock != null && cpuLock.isHeld()) cpuLock.release(); } catch (Exception ignoredR2) { }
         main.removeCallbacks(ticker);
         ticking = false;
