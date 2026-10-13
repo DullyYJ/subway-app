@@ -106,12 +106,15 @@ public class OverlayPlugin extends Plugin {
     private boolean rcOn = false;
     private String rcA = "", rcB = "", rcGo = "보기";
     // ★ 2026-10-13 (YJ: "도착 전 추천 때 오버레이 하단이 확장되면서 캐릭터 일부가 나와서 추천을 보여줘"): 웹이 정한 캐릭터 둘(rcCh 큰 쪽·rcCh2 작은 쪽)을
-    //   추천 줄 위로 내민다. 그림(www/chars/*.webp)은 앱 자산에서 읽어 그리기만 한다 — 문구·시각·갈 곳은 그대로 웹이 정한다.
+    //   추천 줄 위로 내민다. 그림(3D 동작 프레임 www/chars3d/*.webp)은 앱 자산에서 읽어 그리기만 한다 — 문구·시각·갈 곳은 그대로 웹이 정한다.
     private long rcAt = 0;
     private String rcCh = "", rcCh2 = "";
     private RecoView recoView;
     private static final String[] RC_CHARS = { "dolsom", "lovel", "dudung", "sul", "ppopu", "chaeng" };
-    private final java.util.HashMap<String, Bitmap> rcBmp = new java.util.HashMap<String, Bitmap>();
+    // ★ 2026-10-13 (YJ: "캐릭터를 3D 렌더링해서 동물답게 — 추천 문구 때도 똑같이 · 예전 방식은 안 돼"): 3D 로 미리 렌더링한 동작 프레임 시트(public/chars3d/<id>.webp, 256px 칸 4×4)를
+    //   시간 순으로 그린다(제자리 걸음·뜀·날갯짓·헤엄). 옛 한 장 그림 방식은 없앴다 — 읽기가 어긋나면 잠시 뒤 다시 읽는다.
+    private final java.util.HashMap<String, Bitmap> rcSheet = new java.util.HashMap<String, Bitmap>();
+    private final java.util.HashMap<String, Long> rcSheetFail = new java.util.HashMap<String, Long>();
     private Cell[] strip = new Cell[0];
     private int stripCur = 0;                   // 현위치 칸 번호(strip 안에서)
     // ★ 2026-10-11 (YJ: "오버레이 좌우 스크롤 가능하게 · 마커도 깜박이게"): 웹이 현위치 앞뒤 칸을 넉넉히(최대 50칸) 보내고,
@@ -413,7 +416,7 @@ public class OverlayPlugin extends Plugin {
 
     /** 맨 아래 추천 줄: 왼쪽 두 줄 문구, 오른쪽 [보기](추천 아이템·맛집으로) [확인](이 추천 끄기).
      *  ★ 2026-10-13: 나타날 때 줄 위쪽이 늘어나며(약 0.4초) 캐릭터 둘이 줄 뒤에서 올라와 위쪽 절반만 내민 채 가만히 까딱거린다(캐릭터마다 몸짓이 다르다).
-     *  그림은 앱 자산(public/chars/*.webp)을 그대로 쓰고, 여기서는 이동·기울기·찌그러짐만 계산한다. 이름·광고 문구는 없다. */
+     *  그림은 앱 자산(public/chars3d/*.webp, 3D 렌더링 동작 프레임)을 시간 순으로 그리고, 여기서는 줄 뒤에서 올라오는 움직임만 계산한다. 이름·광고 문구는 없다. */
     private class RecoView extends View {
         private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint bp = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
@@ -472,16 +475,57 @@ public class OverlayPlugin extends Plugin {
             tp.setTypeface(Typeface.DEFAULT_BOLD);
             return tp.measureText(s == null ? "" : s);
         }
-        private Bitmap bmp(String id) {
+        /** 3D 동작 시트. 지금 쓰는 두 캐릭터 말고는 메모리에서 내린다(시트 하나가 약 4MB). */
+        private Bitmap sheet(String id) {
             if (id == null || id.length() == 0) return null;
-            if (rcBmp.containsKey(id)) return rcBmp.get(id);
+            Bitmap c = rcSheet.get(id);
+            if (c != null) return c;
+            long now = android.os.SystemClock.uptimeMillis();
+            Long fa = rcSheetFail.get(id);
+            if (fa != null && now - fa < 1500L) return null;      // 읽기가 어긋났으면 1.5초 뒤 다시 읽는다(옛 한 장 그림으로 그리지 않는다)
+            java.util.Iterator<java.util.Map.Entry<String, Bitmap>> it = rcSheet.entrySet().iterator();
+            while (it.hasNext()) { String k = it.next().getKey(); if (!k.equals(rcCh) && !k.equals(rcCh2)) it.remove(); }
             Bitmap b = null;
             try {
-                java.io.InputStream in = getContext().getAssets().open("public/chars/" + id + ".webp");
+                java.io.InputStream in = getContext().getAssets().open("public/chars3d/" + id + ".webp");
                 try { b = android.graphics.BitmapFactory.decodeStream(in); } finally { in.close(); }
             } catch (Exception ignored) { }
-            rcBmp.put(id, b);
+            if (b != null && (b.getWidth() < 1024 || b.getHeight() < 1024)) b = null;
+            if (b == null) { rcSheetFail.put(id, now); return null; }
+            rcSheetFail.remove(id);
+            rcSheet.put(id, b);
             return b;
+        }
+        private final android.graphics.Rect rSrc = new android.graphics.Rect();
+        private final RectF rDst = new RectF();
+        /** {칸 안 머리 위 끝, 발(바닥) 높이, 몸 가로 중심, 초당 프레임, 띄울 높이(dp — 날거나 헤엄치는 캐릭터)} — 시트를 만들 때의 값(앱 로딩의 D3 와 같다). */
+        private float[] cfg3(String id) {
+            if ("dolsom".equals(id)) return new float[] { 7f, 214f, 128f, 19f, 0f };
+            if ("lovel".equals(id)) return new float[] { 30f, 214f, 137f, 11f, 0f };
+            if ("ppopu".equals(id)) return new float[] { 5f, 214f, 128f, 19f, 0f };
+            if ("chaeng".equals(id)) return new float[] { 65f, 208f, 148f, 15f, 6f };
+            if ("sul".equals(id)) return new float[] { 36f, 193f, 128f, 20f, 16f };
+            return new float[] { 10f, 218f, 128f, 13f, 0f };
+        }
+        private void drawChar3d(Canvas cv, Bitmap sh, String id, float cx, float feetY, float hPx, float delay, float rise, float t) {
+            float u = (t - delay) / 0.55f;
+            if (u <= 0f) return;
+            float r = ease(u);
+            float rr = (r > 1f) ? 1f : r;
+            float[] c = cfg3(id);
+            float sc = hPx / (c[1] - c[0]);
+            float dy = (1f - r) * hPx * 0.95f;      // 줄 뒤에서 올라온다
+            int idx = ((int) (Math.max(0f, t - delay) * c[3])) % 16;
+            int sx = (idx % 4) * 256, sy = (idx / 4) * 256;
+            rSrc.set(sx, sy, sx + 256, sy + 256);
+            float footY = feetY + dy - rise - dp(c[4]);
+            float left = cx - c[2] * sc, topY = footY - c[1] * sc;
+            rDst.set(left, topY, left + 256f * sc, topY + 256f * sc);
+            float tilt = (1f - rr) * (id.hashCode() % 2 == 0 ? -10f : 10f);
+            cv.save();
+            cv.rotate(tilt, cx, footY);
+            cv.drawBitmap(sh, rSrc, rDst, bp);
+            cv.restore();
         }
         private float ease(float u) {   // 살짝 넘쳤다 돌아오는 등장(오버슛)
             if (u <= 0f) return 0f;
@@ -489,54 +533,10 @@ public class OverlayPlugin extends Plugin {
             float c = 1.9f, x = u - 1f;
             return 1f + (c + 1f) * x * x * x + c * x * x;
         }
-        /** 캐릭터 하나: 줄 뒤(feetY)에서 올라와 위쪽만 보인다. who: 0 큰 쪽(왼), 1 작은 쪽(오른). */
+        /** 캐릭터 하나: 줄 뒤(feetY)에서 올라와 위쪽만 보인다(3D 동작 프레임을 시간 순으로 그린다). who: 0 큰 쪽(왼), 1 작은 쪽(오른). */
         private void drawChar(Canvas cv, String id, float cx, float feetY, float hPx, float delay, float rise, float t) {
-            Bitmap b = bmp(id);
-            if (b == null) return;
-            float u = (t - delay) / 0.55f;
-            float r = ease(u);
-            if (u <= 0f) return;
-            float sc = hPx / b.getHeight();
-            float bw = b.getWidth() * sc;
-            float dy = (1f - r) * hPx * 0.95f;      // 아래(줄 뒤)에서 올라온다
-            float rot = 0f, sx = 1f, sy = 1f, hop = 0f, sk = 0f;
-            float w = Math.max(0f, t - delay - 0.5f);   // 등장 끝난 뒤의 까딱거림
-            float f = Math.min(1f, w / 0.3f);
-            double tt = t * 6.2831853;
-            if ("dolsom".equals(id)) {            // 솜뭉치 강아지: 통통 두 번 튀고 쉬기
-                float ph = (float) ((w % 1.6f) / 1.6f);
-                float hv = ph < 0.5f ? (float) Math.abs(Math.sin(ph * 2 * Math.PI * 1.0 * 2)) : 0f;
-                hop = hv * dp(4.5f) * f; sy = 1f - 0.07f * (1f - hv) * (ph < 0.5f ? 1f : 0f) * f; sx = 2f - sy; rot = (float) Math.sin(w * 3.1) * 3f * f;
-            } else if ("lovel".equals(id)) {      // 고양이: 느리게 좌우로 몸을 기울인다
-                rot = (float) Math.sin(w * 2.2) * 6f * f; sk = (float) Math.sin(w * 2.2 + 0.8) * 0.05f * f; hop = (float) (Math.sin(w * 4.4) * 0.5 + 0.5) * dp(1.2f) * f;
-            } else if ("dudung".equals(id)) {     // 두더지: 잠깐 숨었다가 불쑥 다시 올라온다
-                float ph = (w % 2.6f);
-                float dd = 0f;
-                if (ph > 1.5f && ph < 1.9f) dd = (float) Math.sin((ph - 1.5f) / 0.4f * Math.PI) * 0.34f;
-                hop = -dd * hPx * f; rot = (float) Math.sin(w * 5.0) * 2f * f; sy = 1f + (dd > 0.02f ? -0.05f : 0f);
-            } else if ("sul".equals(id)) {        // 독수리: 날개를 펴듯 가로로 부풀었다 오므린다
-                float ph = (w % 2.2f);
-                float fl = (ph < 0.9f) ? (float) Math.abs(Math.sin(ph / 0.9f * Math.PI * 3)) : 0f;
-                sx = 1f + 0.10f * fl * f; sy = 1f - 0.04f * fl * f; hop = fl * dp(2.4f) * f; rot = (float) Math.sin(w * 2.0) * 2.5f * f;
-            } else if ("ppopu".equals(id)) {      // 푸들: 신나서 한 번 튀고 한 번 더 작게 튄다
-                float ph = (w % 1.9f);
-                float hv = 0f;
-                if (ph < 0.35f) hv = (float) Math.sin(ph / 0.35f * Math.PI);
-                else if (ph < 0.6f) hv = 0.5f * (float) Math.sin((ph - 0.35f) / 0.25f * Math.PI);
-                hop = hv * dp(5.5f) * f; sy = 1f + 0.05f * hv * f; sx = 1f - 0.03f * hv * f; rot = (float) Math.sin(w * 4.0) * 3.5f * f;
-            } else {                              // 올챙이(챙챙): 몸을 꼬듯 흔든다
-                rot = (float) Math.sin(w * 7.5) * 9f * f; sk = (float) Math.sin(w * 7.5 - 0.9) * 0.10f * f; sy = 1f + (float) Math.sin(w * 15.0) * 0.03f * f; hop = (float) (Math.sin(w * 3.0) * 0.5 + 0.5) * dp(1.5f) * f;
-            }
-            float rr = (r > 1f) ? 1f : r;
-            // 등장 중에는 올라오면서 살짝 기울었다 선다
-            rot += (1f - rr) * (id.hashCode() % 2 == 0 ? -10f : 10f);
-            float footX = cx, footY = feetY + dy - hop - rise;
-            mx.reset();
-            mx.postScale(sc * sx, sc * sy);     // 아래 가운데(발끝)를 기준점으로 쓰려고 먼저 크기만 바꾼다
-            mx.postSkew(sk, 0f, b.getWidth() / 2f * sc * sx, b.getHeight() * sc * sy);
-            mx.postRotate(rot, b.getWidth() / 2f * sc * sx, b.getHeight() * sc * sy);
-            mx.postTranslate(footX - b.getWidth() / 2f * sc * sx, footY - b.getHeight() * sc * sy);
-            cv.drawBitmap(b, mx, bp);
+            Bitmap sh3 = sheet(id);
+            if (sh3 != null) drawChar3d(cv, sh3, id, cx, feetY, hPx, delay, rise, t);
         }
         @Override protected void onDraw(Canvas cv) {
             float w = getWidth(), h = getHeight();
