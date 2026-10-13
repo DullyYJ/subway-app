@@ -79,6 +79,16 @@ public class OverlayPlugin extends Plugin {
     private final Handler main = new Handler(Looper.getMainLooper());
 
     private volatile boolean wanted = false;       // 웹: 안내 중이고 오버레이를 쓰기로 함
+    // ★ 2026-10-14 (YJ: "도착 전 추천 때 캐릭터들이 어떻게 나와서 동작하는지 보고 싶어 — 테스트 버튼"): 설정의 [캐릭터 미리보기]가 부르는 시연.
+    //   앱이 보이는 중에도 오버레이를 띄워 추천 줄과 캐릭터 둘을 몇 초간 보여 준다. 이 동안 웹의 update 는 무시하고, 끝나면 시연 전 값으로 되돌린다.
+    private volatile long demoUntil = 0L;
+    private boolean demoSaved = false;
+    private boolean sWanted, sRcOn, sMoving;
+    private Cell[] sStrip;
+    private int sStripCur, sStripBase;
+    private String sLine1 = "", sLine2 = "", sLine3 = "", sRcA = "", sRcB = "", sRcGo = "", sRcCh = "", sRcCh2 = "", sRsSt = "hidden";
+    private long sRcAt;
+    private boolean demoActive() { return demoUntil > System.currentTimeMillis(); }
     private volatile boolean appVisible = true;    // 액티비티가 화면에 보이는가
     private volatile long lastUpdateAt = 0L;
     private volatile long webAliveAt = 0L;     // 웹이 깨우기에 마지막으로 답한 시각
@@ -500,12 +510,12 @@ public class OverlayPlugin extends Plugin {
         private final RectF rDst = new RectF();
         /** {칸 안 머리 위 끝, 발(바닥) 높이, 몸 가로 중심, 초당 프레임, 띄울 높이(dp — 날거나 헤엄치는 캐릭터)} — 시트를 만들 때의 값(앱 로딩의 D3 와 같다). */
         private float[] cfg3(String id) {
-            if ("dolsom".equals(id)) return new float[] { 7f, 214f, 128f, 19f, 0f };
-            if ("lovel".equals(id)) return new float[] { 30f, 214f, 137f, 11f, 0f };
-            if ("ppopu".equals(id)) return new float[] { 5f, 214f, 128f, 19f, 0f };
-            if ("chaeng".equals(id)) return new float[] { 65f, 208f, 148f, 15f, 6f };
-            if ("sul".equals(id)) return new float[] { 36f, 193f, 128f, 20f, 16f };
-            return new float[] { 10f, 218f, 128f, 13f, 0f };
+            if ("dolsom".equals(id)) return new float[] { 8f, 250f, 121f, 19f, 0f };
+            if ("lovel".equals(id)) return new float[] { 8f, 249.5f, 133f, 11f, 0f };
+            if ("ppopu".equals(id)) return new float[] { 8f, 248.5f, 120.5f, 19f, 0f };
+            if ("chaeng".equals(id)) return new float[] { 14f, 244.5f, 154.5f, 15f, 6f };
+            if ("sul".equals(id)) return new float[] { 27f, 230.5f, 131f, 20f, 16f };
+            return new float[] { 15f, 222.5f, 128f, 13f, 0f };
         }
         private void drawChar3d(Canvas cv, Bitmap sh, String id, float cx, float feetY, float hPx, float delay, float rise, float t) {
             float u = (t - delay) / 0.55f;
@@ -732,6 +742,7 @@ public class OverlayPlugin extends Plugin {
      */
     @PluginMethod
     public void update(PluginCall call) {
+        if (demoActive()) { call.resolve(new JSObject().put("ok", true).put("shown", attached).put("demo", true)); return; }   // 시연 중에는 웹 값으로 덮지 않는다
         wanted = call.getBoolean("active", false);
         line1 = nz(call.getString("line1"));
         try {
@@ -805,6 +816,58 @@ public class OverlayPlugin extends Plugin {
         lastUpdateAt = System.currentTimeMillis();
         refresh();
         call.resolve(new JSObject().put("ok", true).put("shown", attached));
+    }
+
+    /**
+     * 설정 [캐릭터 미리보기]: 도착 전 추천 줄과 캐릭터 둘이 나와 움직이는 모습을 secs 초(기본 14) 동안 보여 준다.
+     * 앱이 화면에 있어도 뜬다(시스템 오버레이). 시연 중 다시 부르면 새 캐릭터 둘로 처음부터 다시 보여 주고, 끝나거나 아무 데나 누르면 시연 전 상태로 돌아간다.
+     * 권한이 없으면 ok=false, error=permission.
+     */
+    @PluginMethod
+    public void recoDemo(final PluginCall call) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || !canDraw()) {
+            call.resolve(new JSObject().put("ok", false).put("error", "permission"));
+            return;
+        }
+        final long now = System.currentTimeMillis();
+        final int secs = Math.max(4, Math.min(40, call.getInt("secs", 14)));
+        if (!demoSaved) {
+            sWanted = wanted; sStrip = strip; sStripCur = stripCur; sStripBase = stripBase;
+            sLine1 = line1; sLine2 = line2; sLine3 = line3; sRsSt = rsSt; sMoving = moving;
+            sRcOn = rcOn; sRcA = rcA; sRcB = rcB; sRcGo = rcGo; sRcCh = rcCh; sRcCh2 = rcCh2; sRcAt = rcAt;
+            demoSaved = true;
+        }
+        Cell c0 = new Cell(); c0.n = "지나간 곳"; c0.dk = 1; c0.hasR = true;
+        Cell c1 = new Cell(); c1.n = "미리보기"; c1.dk = 2; c1.hasL = true; c1.hasR = true;
+        Cell c2 = new Cell(); c2.n = "다음 정거장"; c2.dk = 1; c2.hasL = true;
+        strip = new Cell[] { c0, c1, c2 }; stripCur = 1; stripBase = 0;
+        line1 = ""; line2 = "추천 캐릭터 미리보기 · 실제 알림이 아니에요"; line3 = ""; rsSt = "hidden"; moving = false;
+        rcOn = true;
+        rcA = nz(call.getString("a")); if (rcA.length() == 0) rcA = "곧 도착해요 · 커피 한 잔 어때요?";
+        rcB = nz(call.getString("b")); rcGo = nz(call.getString("go")); if (rcGo.length() == 0) rcGo = "보기";
+        rcCh = nz(call.getString("ch")); rcCh2 = nz(call.getString("ch2"));
+        rcAt = now;                       // 새 추천으로 보여 처음부터 확장·등장을 다시 시작한다
+        wanted = true; lastUpdateAt = now; demoUntil = now + secs * 1000L;
+        refresh();
+        main.removeCallbacks(demoEnd);
+        main.postDelayed(demoEnd, secs * 1000L + 150L);
+        call.resolve(new JSObject().put("ok", true).put("shown", attached));
+    }
+
+    private final Runnable demoEnd = new Runnable() {
+        @Override public void run() { if (!demoActive()) endDemo(); }
+    };
+
+    /** 시연을 끝내고 시연 전 값으로 되돌린다(웹의 다음 update 가 곧 최신 값으로 덮는다). */
+    private void endDemo() {
+        demoUntil = 0L;
+        main.removeCallbacks(demoEnd);
+        if (!demoSaved) return;
+        demoSaved = false;
+        wanted = sWanted; strip = sStrip == null ? new Cell[0] : sStrip; stripCur = sStripCur; stripBase = sStripBase;
+        line1 = sLine1; line2 = sLine2; line3 = sLine3; rsSt = sRsSt; moving = sMoving;
+        rcOn = sRcOn; rcA = sRcA; rcB = sRcB; rcGo = sRcGo; rcCh = sRcCh; rcCh2 = sRcCh2; rcAt = sRcAt;
+        refresh();
     }
 
     /**
@@ -895,7 +958,7 @@ public class OverlayPlugin extends Plugin {
             @Override public void run() {
                 try {
                     boolean stale = !journeyOn && (System.currentTimeMillis() - Math.max(lastUpdateAt, webAliveAt)) > STALE_MS;   // 여정 중에는 웹이 잠깐 못 보내도 오버레이를 내리지 않는다   // 2026-10-12: 웹이 깨우기에 답하는 동안은 낡은 것이 아니다
-                    boolean show = wanted && !appVisible && !stale && canDraw()
+                    boolean show = wanted && (!appVisible || demoActive()) && !stale && canDraw()
                             && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
                             && (strip.length > 0 || line1.length() > 0);
                     if (show) { rebuildIfResized(); attachOrUpdate(); scheduleCheck(); startTicker(); }
@@ -1203,7 +1266,8 @@ public class OverlayPlugin extends Plugin {
                         }
                         else if (e.getAction() == MotionEvent.ACTION_UP) {
                             int rh = (recoView != null && recoView.getVisibility() == View.VISIBLE && by >= recoView.getTop()) ? recoView.hit(bx - recoView.getLeft(), by - recoView.getTop()) : -1;
-                            if (rh == 1) { act("recoGo"); openApp(); }                    // [보기] — 추천 아이템·맛집으로(앱을 앞으로)
+                            if (demoActive()) { endDemo(); }                                  // 시연은 어디를 눌러도 닫힌다(실제 동작은 하지 않는다)
+                            else if (rh == 1) { act("recoGo"); openApp(); }                    // [보기] — 추천 아이템·맛집으로(앱을 앞으로)
                             else if (rh == 2) act("recoOk");                               // [확인] — 이 추천 끄기
                             else if (rh == 0) openApp();                                   // 추천 줄의 글자 부분: 앱으로
                             else if (inBottom && boardView != null && boardView.hitBtn(bx - boardView.getLeft(), by - boardView.getTop())) {
@@ -1326,7 +1390,7 @@ public class OverlayPlugin extends Plugin {
      */
     private void applyMode() {
         if (root == null || lp == null) return;
-        boolean wp = userPill && !(alertLevel > 0 && curAlertAt != dismissedAlertAt);
+        boolean wp = userPill && !demoActive() && !(alertLevel > 0 && curAlertAt != dismissedAlertAt);
         boolean changed = (wp != curPill);
         if (changed) {
             if (wp) {                                                   // 접기
