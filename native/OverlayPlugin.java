@@ -93,6 +93,7 @@ public class OverlayPlugin extends Plugin {
     private volatile long lastUpdateAt = 0L;
     private volatile long webAliveAt = 0L;     // 웹이 깨우기에 마지막으로 답한 시각
     private String line1 = "", line2 = "", line3 = "";
+    private String pillCur = "";                 // ★ 2026-10-13: 알약의 현위치 문구(웹이 엔진 값으로 정한다 — 이동 중이면 '다음역(이동중)'). 비면 line1 에서 뽑는다
     // ★ 2026-10-11 (YJ: "오버레이도 앱의 경로 화면으로 — 현위치 글씨만 검은색, 나머지는 회색. 정류장명은 한 줄, 길면 적당히 잘라"):
     //   앱 경로 화면(타임라인)의 칸을 웹이 그대로 읽어 보내 주면(이름·노선 라벨·시각·점/선 색) 여기서는 같은 모양으로 그리기만 한다.
     private static class Cell {
@@ -739,6 +740,7 @@ public class OverlayPlugin extends Plugin {
         if (sp > 0) cur = cur.substring(0, sp);
         if (cur.startsWith("● ")) cur = cur.substring(2);
         cur = cur.trim();
+        if (pillCur.length() > 0) cur = pillCur;      // 이동 중: '다음역(이동중)' — 문구는 웹이 엔진 값으로 정해 보낸다
         if (cur.length() == 0 && strip.length > 0) cur = strip[Math.max(0, Math.min(stripCur, strip.length - 1))].n;
         String arr = "";
         try {
@@ -807,6 +809,7 @@ public class OverlayPlugin extends Plugin {
         if (demoActive()) { call.resolve(new JSObject().put("ok", true).put("shown", attached).put("demo", true)); return; }   // 시연 중에는 웹 값으로 덮지 않는다
         wanted = call.getBoolean("active", false);
         line1 = nz(call.getString("line1"));
+        pillCur = nz(call.getString("pill"));
         try {
             JSArray arr = call.getArray("cells");
             int n = arr == null ? 0 : Math.min(arr.length(), 150);    // ★ 2026-10-12: 긴 경로가 중간에 끊기지 않게 60 → 150

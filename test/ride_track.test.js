@@ -162,4 +162,134 @@ r = rideTrack({ nowMs: NOW }); ok(r.off.confirmed === false && r.fix.n === 0, '�
   z = FIN(-1, []);
   ok(z.zero.final.verdict === 'verify' && z.zero.final.state === 'pending', '도착 1초 전 위치 없음 → verify/pending');
 }
+
+// ── 버스를 정말 탔나 · 위치 잡는 방식(2026-10-13 YJ: 버스 안 타고 승용차를 탔는데 역으로 인식) ─────────────
+{
+  const X = (m) => m / KX;                                   // 동쪽 m → 경도
+  const stopsAt = (xs, planOffS) => xs.map((x, i) => ({ i: i + 2, lat: 0, lng: X(x), arrMs: NOW + planOffS[i] * 1000, bus: true, planMs: NOW + planOffS[i] * 1000 }));
+  const run = (tr, planO) => rideTrack({ nowMs: NOW, trail: tr, plan: plan(Object.assign({ boarded: true, riding: true }, planO)), want: { off: false, ridden: false, miss: false, bus: true } });
+  const BOARD = { lat: 0, lng: X(0) };
+  // 승용차: 정류장(0m)에서 3km 떨어진 곳(2000m)부터 시속 45km 로 달린다. 궤적은 움직임 시작 40초 전부터.
+  let car = trail(160, 0, 5, (s) => ({ lat: 0, lng: X(2000 + (160 - s) * 12.5) }));
+  let r = run(car, { startMs: NOW - 120000, busLeg: { boardPt: BOARD } });
+  ok(r.bus && r.bus.state === 'notBus' && r.bus.why === 'no_stop' && r.bus.stopSeen === false, '승용차: 승차 정류장을 지난 적 없다 → notBus/no_stop ' + JSON.stringify(r.bus));
+  ok(r.mode === null, '버스 아님이면 GPS 중심 모드를 켜지 않는다 ' + JSON.stringify(r.mode));
+  // 버스: 정류장에서 60초 서 있다가 출발(시속 20km 안팎), 궤적은 정류장 도착 전부터
+  let bus = trail(200, 140, 5, () => ({ lat: 0, lng: X(10) })).concat(trail(135, 0, 5, (s) => ({ lat: 0, lng: X((140 - s) * 5.5) })));
+  r = run(bus, { startMs: NOW - 135000, busLeg: { boardPt: BOARD } });
+  ok(r.bus.state === 'plausible' && r.bus.stopSeen === true, '버스: 승차 정류장을 지났다 → plausible ' + JSON.stringify(r.bus));
+  ok(r.mode && r.mode.kind === 'bus' && r.mode.gps === 'heavy' && r.mode.snapM === 500 && r.mode.advanceSec === 8, '버스 탑승 → GPS 를 더 쓰는 모드 ' + JSON.stringify(r.mode));
+  // 확실한 증거(탑승 버튼 · 차량 매칭)가 있으면 정류장을 안 지났어도 confirmed
+  for (const pf of ['button', 'vehicle']) {
+    r = run(car, { startMs: NOW - 120000, busLeg: { boardPt: BOARD, proof: pf } });
+    ok(r.bus.state === 'confirmed' && r.mode && r.mode.kind === 'bus', pf + ' 증거 → confirmed + 버스 모드 ' + JSON.stringify(r.bus));
+  }
+  // 걷는 중(차량 속도 아님, 탑승 증거도 없음) → idle
+  const walk = trail(160, 0, 5, (s) => ({ lat: 0, lng: X(2000 + (160 - s) * 1.2) }));
+  r = run(walk, { riding: false, boarded: false, startMs: null, busLeg: { boardPt: BOARD } });
+  ok(r.bus.state === 'idle', '걷는 중 → idle ' + JSON.stringify(r.bus));
+  // 궤적이 움직임 시작을 덮지 못하면(정류장이 궤적 밖일 수 있다) 단정하지 않는다
+  const shortTr = trail(60, 0, 5, (s) => ({ lat: 0, lng: X(2000 + (60 - s) * 12.5) }));
+  r = run(shortTr, { startMs: NOW - 120000, busLeg: { boardPt: BOARD } });
+  ok(r.bus.state === 'unknown' && r.bus.why === 'trail_short', '궤적이 짧다 → unknown(아무 일도 하지 않는다) ' + JSON.stringify(r.bus));
+  r = run(shortTr, { startMs: null, busLeg: { boardPt: BOARD } });
+  ok(r.bus.state === 'unknown', '움직임 시작 시각을 모르면 → unknown ' + JSON.stringify(r.bus));
+  // 정류장 부근은 지났지만(같은 길에서 출발) 뒤 정류장들에 계획보다 5분 넘게 먼저 닿는다 → 버스가 아니다
+  const fast = trail(160, 0, 5, (s) => ({ lat: 0, lng: X((160 - s) * 14) }));      // 0m 에서 시작, 시속 50km — 2240m 까지
+  const early = stopsAt([800, 1600, 2200], [900, 1500, 2100]);                     // 계획은 15~35분 뒤
+  r = run(fast, { startMs: NOW - 160000, busLeg: { boardPt: BOARD }, stops: early });
+  ok(r.bus.state === 'notBus' && r.bus.why === 'ahead' && r.bus.ahead >= 2, '뒤 정류장에 계획보다 먼저 닿음 → notBus/ahead ' + JSON.stringify(r.bus));
+  // 계획 시각대로 가면 plausible
+  const onTime = stopsAt([800, 1600, 2200], [-100, -40, 10]);
+  r = run(fast, { startMs: NOW - 160000, busLeg: { boardPt: BOARD }, stops: onTime });
+  ok(r.bus.state === 'plausible' && r.bus.ahead === 0, '계획 시각대로 → plausible ' + JSON.stringify(r.bus));
+  // 한 정류장만 앞서면(버스가 조금 일찍 간 것) 버스가 아니라고 하지 않는다
+  const one = stopsAt([800, 1600, 2200], [900, -40, 10]);
+  r = run(fast, { startMs: NOW - 160000, busLeg: { boardPt: BOARD }, stops: one });
+  ok(r.bus.state === 'plausible', '한 정류장만 앞섬 → plausible ' + JSON.stringify(r.bus));
+  // 승용차인데 지하철역에 '확정'돼 있다(YJ 제보) → 확정이어도 버스를 안 탔으면 거짓 — notBus, 모드 없음
+  r = run(car, { subConfirmed: true, startMs: NOW - 120000, busLeg: { boardPt: BOARD } });
+  ok(r.bus.state === 'notBus' && r.mode === null, '거짓 지하철 확정(승용차) → notBus, 시각표 모드를 켜지 않는다 ' + JSON.stringify([r.mode, r.bus]));
+  // 진짜로 버스를 타고 와서 지하철 확정 → 시각표로 움직이고 GPS 는 역마다 영점
+  r = run(bus, { subConfirmed: true, startMs: NOW - 135000, busLeg: { boardPt: BOARD } });
+  ok(r.mode && r.mode.kind === 'sub' && r.mode.gps === 'zero' && r.bus.state === 'plausible', '진짜 버스 뒤 지하철 확정 → mode sub/zero ' + JSON.stringify([r.mode, r.bus]));
+  r = run(car, { subConfirmed: true, startMs: NOW - 120000, busLeg: { boardPt: BOARD, proof: 'button' } });
+  ok(r.mode && r.mode.kind === 'sub' && r.bus.state === 'confirmed', '탑승 버튼 증거 + 지하철 확정 → mode sub ' + JSON.stringify([r.mode, r.bus]));
+  // 앱이 움직임 시작 시각을 모를 때: 궤적 맨 앞이 서 있다 출발했으면 엔진이 직접 찾는다 / 이미 달리는 중에 시작한 궤적이면 단정하지 않는다
+  r = run(car.slice(), { startMs: null, busLeg: { boardPt: BOARD } });
+  ok(r.bus.state === 'unknown', '이미 달리는 궤적(시작을 모름) → unknown ' + JSON.stringify(r.bus));
+  const stillThenCar = trail(160, 100, 5, () => ({ lat: 0, lng: X(2000) })).concat(trail(95, 0, 5, (s) => ({ lat: 0, lng: X(2000 + (100 - s) * 12.5) })));
+  r = run(stillThenCar, { startMs: null, busLeg: { boardPt: BOARD } });
+  ok(r.bus.state === 'notBus' && r.bus.why === 'no_stop', '서 있다 출발한 궤적 → 시작 시각을 엔진이 찾아 notBus ' + JSON.stringify(r.bus));
+  // 승차 정류장 자체의 계획 시각보다 일찍 가 있어도(boardIdx) 앞선 것으로 세지 않는다
+  const earlyBoard = stopsAt([0, 800, 1600], [900, -40, 10]);
+  r = run(fast, { startMs: NOW - 160000, busLeg: { boardPt: BOARD, boardIdx: 2 }, stops: earlyBoard });
+  ok(r.bus.state === 'plausible' && r.bus.ahead === 0, '승차 정류장은 앞선 것으로 세지 않는다 ' + JSON.stringify(r.bus));
+  // 버스 구간 정보가 없으면 bus null, 지하철도 아니면 mode null
+  r = rideTrack({ nowMs: NOW, trail: car, plan: plan({ boarded: true }), want: { off: false, ridden: false, miss: false } });
+  ok(r.bus === null && r.mode === null, 'busLeg 없음 → bus/mode null');
+  // 기존 want({off, ridden, miss}) 로 불러도 bus 를 같이 답한다(요청에 bus 를 쓰지 않아도)
+  r = rideTrack({ nowMs: NOW, trail: car, plan: plan({ boarded: true, startMs: NOW - 120000, busLeg: { boardPt: BOARD } }) });
+  ok(r.bus && r.bus.state === 'notBus', '기본 want 에서도 bus 판정 ' + JSON.stringify(r.bus));
+}
+
+// ── 탑승·환승 버튼을 누른 순간의 GPS 확인(2026-10-13 YJ) ───────────────────────────────
+{
+  const X = (m) => m / KX, PT = { lat: 0, lng: X(0) };
+  const pr = (tr, now) => rideTrack({ nowMs: now || NOW, trail: tr, plan: { pts: [], pressPt: PT }, want: { off: false, ridden: false, miss: false, bus: false, press: true } }).press;
+  let r = pr(trail(20, 0, 5, () => ({ lat: 0, lng: X(100) })));
+  ok(r && r.state === 'at' && r.distM <= 130, '역 100m 안 → at ' + JSON.stringify(r));
+  r = pr(trail(20, 0, 5, () => ({ lat: 0, lng: X(2000) })));
+  ok(r.state === 'away' && r.distM > 1900, '역에서 2km → away ' + JSON.stringify(r));
+  r = pr(trail(20, 0, 5, () => ({ lat: 0, lng: X(500) })));
+  ok(r.state === 'near', '300~800m 사이 → near(믿는다) ' + JSON.stringify(r));
+  r = pr(trail(120, 60, 5, () => ({ lat: 0, lng: X(2000) })));
+  ok(r.state === 'unknown' && r.why === 'stale', '좌표가 오래됐다(지하) → unknown ' + JSON.stringify(r));
+  r = pr([]);
+  ok(r.state === 'unknown' && r.why === 'no_fix', '좌표 없음 → unknown');
+  r = pr(trail(20, 0, 5, () => ({ lat: 0, lng: X(900) }), 200));
+  ok(r.state === 'unknown', '정확도 나쁜 좌표는 쓰지 않는다 ' + JSON.stringify(r));
+  const o = rideTrack({ nowMs: NOW, trail: [], plan: { pts: [] } });
+  ok(o.press === null, 'want.press 가 없으면 press null');
+}
+// 20) 통과 시각(passMs) — 표시 시각보다 일찍·늦게 닿은 열차도 GPS 로 통과 시각을 찾는다(2026-10-13: 선학에 시간표보다 1.2분 빨리 왔는데 시각이 안 맞춰졌다)
+{
+  const stn = { lat: 0, lng: 3000 / KX };
+  const run = (arrOff, fixes, pass) => {   // arrOff: 표시 도착 시각 − 지금(초)
+    const arr = NOW + arrOff * 1000;
+    const tr = fixes.map(f => [NOW + f.t * 1000, 0, 3000 / KX + (f.dx || 0) / KX, f.acc == null ? 20 : f.acc]);
+    return rideTrack({ nowMs: NOW, trail: tr, plan: plan({ stops: [{ i: 2, lat: stn.lat, lng: stn.lng, arrMs: arr, pass: pass }] }), want: { zero: true } });
+  };
+  let z = run(72, [{ t: -20 }], true), s0 = z.zero.stops[0];
+  ok(s0 && s0.passMs === NOW - 20000 && s0.passEarlySec === -92 && s0.apply === true && s0.state === 'near', '일찍 닿음(표시보다 72초 뒤): 통과 시각을 돌려준다 ' + JSON.stringify(s0));
+  z = run(72, [{ t: -20 }], false);
+  ok(z.zero.stops.length === 0, 'pass 표시가 없으면 넓은 창을 보지 않는다(옛 동작)');
+  z = run(72, [{ t: -20, acc: 100 }], true);
+  ok(z.zero.stops.length === 0 || z.zero.stops[0].passMs === undefined, '정확도 60m 넘는 좌표는 통과 시각에 쓰지 않는다 ' + JSON.stringify(z.zero.stops));
+  z = run(-200, [{ t: -50 }], true); s0 = z.zero.stops[0];
+  ok(s0 && s0.passMs === NOW - 50000 && s0.passEarlySec === 150, '늦게 닿음(표시보다 150초 뒤): 통과 시각을 돌려준다 ' + JSON.stringify(s0));
+  z = run(-600, [{ t: -50 }], true);
+  ok(z.zero.stops.length === 0, '표시 시각이 10분 전이면 보지 않는다');
+  z = run(400, [{ t: -20 }], true);
+  ok(z.zero.stops.length === 0, '표시 시각이 6분 넘게 남았으면 보지 않는다');
+  z = run(30, [{ t: -60, dx: 100 }, { t: -40, dx: 30 }, { t: -20, dx: 90 }], true); s0 = z.zero.stops[0];
+  ok(s0 && s0.passMs === NOW - 40000 && s0.passDistM <= 40, '가장 가까웠던 순간(30m)의 시각 ' + JSON.stringify(s0));
+  z = run(30, [{ t: -20, dx: 400 }], true);
+  ok(z.zero.stops.length === 0 || z.zero.stops[0].passMs === undefined, '150m 밖이면 통과로 보지 않는다');
+}
+// 21) 아직 안 닿음(notYet) — 표시 도착 시각이 지났는데 GPS 가 앞 정류장과 이 정류장 '사이'에서 이 정류장과 멀다 → 늦는 열차(엔진이 시각을 민다)
+{
+  const st = (arrOff) => [{ i: 1, lat: 0, lng: 0, arrMs: NOW - 200000 }, { i: 2, lat: 0, lng: 3000 / KX, arrMs: NOW + arrOff * 1000, pass: true }];
+  const run = (arrOff, fixes) => rideTrack({ nowMs: NOW, trail: fixes.map(f => [NOW + f.t * 1000, 0, f.x / KX, f.acc == null ? 20 : f.acc]), plan: plan({ stops: st(arrOff) }), want: { zero: true } });
+  let z = run(-60, [{ t: -10, x: 1900 }]), s2 = z.zero.stops.find(x => x.i === 2);
+  ok(s2 && s2.notYet === true && s2.notYetDistM > 1000, '표시 도착 60초 지남 + 1.1km 앞(두 역 사이) → notYet ' + JSON.stringify(s2));
+  z = run(30, [{ t: -10, x: 1900 }]); ok(!(z.zero.stops.find(x => x.i === 2) || {}).notYet, '아직 표시 도착 시각 전이면 notYet 아님');
+  z = run(-60, [{ t: -10, x: 2800 }]); ok(!(z.zero.stops.find(x => x.i === 2) || {}).notYet, '400m 안이면 notYet 아님(곧 닿는다)');
+  z = run(-60, [{ t: -10, x: 4500 }]); ok(!(z.zero.stops.find(x => x.i === 2) || {}).notYet, '이미 지나쳐 멀어졌으면(두 역 사이가 아님) notYet 아님');
+  z = run(-60, [{ t: -60, x: 1900 }]); ok(!(z.zero.stops.find(x => x.i === 2) || {}).notYet, '좌표가 낡았으면(50초) 판정하지 않는다');
+  z = run(-400, [{ t: -10, x: 1900 }]); ok(!(z.zero.stops.find(x => x.i === 2) || {}).notYet, '표시 도착이 5분 넘게 지났으면 판정하지 않는다');
+  z = run(-60, [{ t: -10, x: 1900, acc: 150 }]); ok(!(z.zero.stops.find(x => x.i === 2) || {}).notYet, '정확도 100m 넘는 좌표는 쓰지 않는다');
+  z = rideTrack({ nowMs: NOW, trail: [[NOW - 10000, 0, 1900 / KX, 20]], plan: plan({ stops: [{ i: 2, lat: 0, lng: 3000 / KX, arrMs: NOW - 60000, pass: true }] }), want: { zero: true } });
+  ok(!(z.zero.stops[0] || {}).notYet, '앞 정류장 정보가 없으면 판정하지 않는다');
+}
 console.log('ride_track: pass', pass, 'fail', fail); process.exit(fail ? 1 : 0);

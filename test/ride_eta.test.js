@@ -14,6 +14,25 @@ let pass = 0, fail = 0;
 const t = (name, fn) => { try { fn(); pass++; console.log('  ok  ', name); } catch (e) { fail++; console.log('  FAIL', name, '\n      ', String(e && e.message).split('\n')[0]); } };
 const tAsync = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', name); } catch (e) { fail++; console.log('  FAIL', name, '\n      ', String(e && e.message).split('\n')[0]); } };
 
+
+// ── 표시 이름: 6글자 넘으면 …, 이동 중 문구(2026-10-13 YJ) ──
+t('표시 이름 — 6글자 이하는 그대로, 넘으면 앞 6글자 + … (역·정류장·버스 이름), 이동 중 문구는 엔진이 만든다', () => {
+  const r = rideEta({ op: 'labels', names: ['동막', '캠퍼스타운', '여섯글자이름', '일곱글자이름이', '송도국제도시역앞'], lines: ['순환43', '인천1호선', '새벽1(송도)', '1234567'] });
+  assert.strictEqual(r.max, 6);
+  assert.deepStrictEqual(r.labels['동막'], { s: '동막', m: '동막(이동중)' });
+  assert.strictEqual(r.labels['캠퍼스타운'].s, '캠퍼스타운');
+  assert.strictEqual(r.labels['여섯글자이름'].s, '여섯글자이름');
+  assert.deepStrictEqual(r.labels['일곱글자이름이'], { s: '일곱글자이름\u2026', m: '일곱글자이름\u2026(이동중)' });
+  assert.strictEqual(r.labels['송도국제도시역앞'].s, '송도국제도시\u2026');
+  assert.strictEqual(r.lines['순환43'], '순환43');
+  assert.strictEqual(r.lines['인천1호선'], '인천1호선');
+  assert.strictEqual(r.lines['새벽1(송도)'], '새벽1(송도\u2026');
+  assert.strictEqual(r.lines['1234567'], '123456\u2026');
+  const r2 = rideEta({ op: 'labels', names: ['동막'], max: 2, movingSuffix: '(달리는 중)' });
+  assert.strictEqual(r2.labels['동막'].m, '동막(달리는 중)');
+});
+
+
 // ── 공통 장면: 출발 + 인천1호선 7개 역(예정 17:35 캠퍼스타운 승차, 역간 2~3분) ──────────────────────────────
 const DAY = Date.parse('2026-10-06T00:00:00+09:00');                       // 한국 자정
 const at = (h, m, s) => DAY + ((h * 60 + m) * 60 + (s || 0)) * 1000;
@@ -25,6 +44,19 @@ function scene(line) {
   NAMES.forEach((n, i) => nodes.push({ name: n, isSub: true, lineName: line || '인천1호선', planMin: BM + OFFS[i] }));
   return nodes;
 }
+t('pos.segs — 앞으로의 구간 목록을 함께 준다(응답이 끊겨도 앱이 시각표대로 이어 그린다)', () => {
+  const nodes = scene();
+  const r = rideEta({ nowMs: at(17, 36), nodes, passes: [{ idx: 1, ms: at(17, 35), src: 'board' }], boarded: true, timetableFirst: true });
+  assert.ok(r.pos && r.pos.segs && r.pos.segs.length >= 5, JSON.stringify(r.pos && r.pos.segs && r.pos.segs.length));
+  const sg = r.pos.segs;
+  assert.strictEqual(sg[0].from, r.pos.from); assert.strictEqual(sg[0].to, r.pos.to); assert.strictEqual(sg[0].t0, r.pos.t0); assert.strictEqual(sg[0].t1, r.pos.t1);
+  for (let i = 1; i < sg.length; i++) { assert.strictEqual(sg[i].from, sg[i - 1].to); assert.ok(sg[i].a >= sg[i - 1].t1 - 1 && sg[i].t1 > sg[i].a); }
+  // 5분 뒤에 새로 묻지 않아도, 같은 목록에서 그 시각이 드는 구간을 찾으면 엔진이 5분 뒤에 계산한 위치와 같다
+  const later = at(17, 41);
+  const fresh = rideEta({ nowMs: later, nodes, passes: [{ idx: 1, ms: at(17, 35), src: 'board' }], boarded: true, timetableFirst: true }).pos;
+  const hit = sg.find(s => later < s.t1) || sg[sg.length - 1];
+  assert.strictEqual(hit.from, fresh.from); assert.strictEqual(hit.to, fresh.to);
+});
 // 환승 장면: 7호선 3역(가·나·다) → 도보 → 2호선 3역(라·마·바). 예정 17:35 승차, 환승 후 17:43 승차
 function xferScene() {
   const mk = (name, min, o) => Object.assign({ name: name, planMin: min }, o);
@@ -331,6 +363,33 @@ t('시각표 기준(timetableFirst): 증거 없이 예정 시각이 지나도 �
   assert.ok(hm(legacy.arr[3]) >= hm('17:41'), '기존: ' + legacy.arr[3]);
   assert.ok(hm(tf.arr[3]) === hm(base.arr[3]), '증거가 없으면 시각이 그대로 ' + base.arr[3] + ' vs ' + tf.arr[3]);
   assert.ok(tf.notes.some(x => /시각표 기준/.test(x)));
+});
+t('GPS 가 아직 안 닿았다고 하면(notYet) 시각표 기준에서도 그 정류장을 연착으로 밀고 마커는 그 앞 구간에 둔다 — 증거 없음만으로는 밀지 않는다', () => {
+  const nodes = scene(), ps = [P(1, 17, 35, 40, 'board'), P(2, 17, 38, 20)];
+  const noEv = run(nodes, ps, at(17, 41, 10), { timetableFirst: true });
+  const ny = run(nodes, ps, at(17, 41, 10), { timetableFirst: true, notYet: [3] });
+  assert.ok(hm(ny.arr[3]) > hm(noEv.arr[3]) || ny.pos.from < noEv.pos.from, 'notYet 가 시각을 밀거나 마커를 앞 구간에 둔다 ' + noEv.arr[3] + ' → ' + ny.arr[3]);
+  assert.ok(ny.pos.from === 2 && ny.pos.to === 3 && ny.pos.moving === true, JSON.stringify(ny.pos));
+  assert.ok(ny.notes.some(x => /아직 안 닿았다/.test(x)), ny.notes.join(' | '));
+  const other = run(nodes, ps, at(17, 41, 10), { timetableFirst: true, notYet: [5] });
+  assert.ok(other.arr[3] === noEv.arr[3], '다음 정류장이 아닌 notYet 는 무시');
+});
+t('영점(GPS 통과)은 뒤 시각의 기준 — 일찍 닿으면 당기고 늦게 닿으면 민다(밀고 당김), 약한 증거 역은 두 GPS 사이를 예정 비율로 나눈다, 몰림이어도 같은 시각으로 뭉치지 않는다', () => {
+  const mid = new Date('2026-10-13T00:00:00+09:00').getTime(), T = (h, m, s) => mid + ((h * 60 + m) * 60 + (s || 0)) * 1000, pl = [null, 18 * 60 + 39, 18 * 60 + 41, 18 * 60 + 43, 18 * 60 + 45, 18 * 60 + 48, 18 * 60 + 53];
+  const nodes = ['출발', '계산', '임학', '박촌', '굴현', '계양', '아라'].map((n, i) => ({ name: n, isSub: i > 0 && i < 6, isOrigin: i === 0, lineName: i < 6 ? '1' : '', planMin: pl[i] }));
+  const go = (ps, now) => rideEta({ nowMs: now, nodes, passes: ps, boarded: true, timetableFirst: true, tzOffsetMin: 540 });
+  const sec = (hhmm) => { const [h, m] = hhmm.split(':').map(Number); return h * 60 + m; };
+  const g = [{ idx: 1, ms: T(18, 34, 0), src: 'gps' }, { idx: 2, ms: T(18, 36, 0), src: 'gps' }];
+  const early = go(g.concat([{ idx: 4, ms: T(18, 38, 30), src: 'gps' }]), T(18, 39, 0));
+  assert.ok(early.arr[5] === '18:42' && early.arr[6] === '18:47', '굴현 18:38:30(예정 18:45 → −6.5분) → 계양·아라도 6.5분 당김 ' + early.arr.join(' '));
+  const late = go(g.concat([{ idx: 4, ms: T(18, 47, 0), src: 'gps' }]), T(18, 47, 10));
+  assert.ok(late.arr[5] === '18:50' && late.arr[6] === '18:55', '굴현 18:47(+2분) → 뒤를 2분 밂 ' + late.arr.join(' '));
+  const mid2 = go(g.concat([{ idx: 3, ms: T(18, 40, 20), src: 'pf' }, { idx: 4, ms: T(18, 40, 30), src: 'gps' }]), T(18, 41, 0));
+  assert.ok(sec(mid2.arr[3]) >= sec('18:37') && sec(mid2.arr[3]) <= sec('18:39') && mid2.arr[3] !== mid2.arr[4], '두 GPS 사이 약한 증거 역은 예정 비율로 ' + mid2.arr.join(' '));
+  const burst = go(g.concat([{ idx: 3, ms: T(18, 40, 10), src: 'pf' }, { idx: 4, ms: T(18, 40, 20), src: 'pf' }]), T(18, 40, 30));
+  assert.ok(burst.arr[3] !== burst.arr[4] && sec(burst.arr[3]) < sec(burst.arr[4]), '몰림(10초 간격 PF) — 박촌·굴현이 같은 시각이 아니다 ' + burst.arr.join(' '));
+  const off = rideEta({ nowMs: T(18, 39, 0), nodes, passes: g.concat([{ idx: 4, ms: T(18, 38, 30), src: 'gps' }]), boarded: true, timetableFirst: true, tzOffsetMin: 540, opts: { zeroFollow: 0 } });
+  assert.ok(off.notes.every(x => !/^영점/.test(x)), '끄면 예전 동작');
 });
 t('시각표 기준 위치(pos): 도착 시각이 지난 마지막 역에서 정차 뒤 다음 역 도착까지 0→1, 증거 없이 연착으로 멈추지 않는다', () => {
   const nodes = scene(), ps = [P(1, 17, 35, 40, 'board'), P(2, 17, 38, 20)];
