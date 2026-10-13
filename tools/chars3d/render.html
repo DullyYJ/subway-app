@@ -1,5 +1,5 @@
 <!doctype html><meta charset=utf-8><body style="margin:0"><canvas id=c></canvas>
-<script src="three.min.js"></script><script src="models.js"></script>
+<script src="three.min.js"></script><script src="tex.js"></script><script src="models.js"></script>
 <script>
 const S=512;const cv=document.getElementById('c');cv.width=cv.height=S;
 const r=new THREE.WebGLRenderer({canvas:cv,alpha:true,antialias:true,preserveDrawingBuffer:true});
@@ -12,7 +12,7 @@ const key=new THREE.DirectionalLight(0xfff3e2,2.1);key.position.set(-3,6,6);key.
 const rim=new THREE.DirectionalLight(0xdfeaff,0.9);rim.position.set(4,3,-4);scene.add(rim);
 const fill=new THREE.DirectionalLight(0xffffff,0.5);fill.position.set(4,2,6);scene.add(fill);
 let cur=null,curId=null,extra=null;
-window.setup=function(id){if(cur)scene.remove(cur);if(extra){scene.remove(extra);extra=null;}const C=CHARS[id];cur=new THREE.Group();const m=C.build();m.userData._m=1;cur.add(m);cur.rotation.y=C.yaw;scene.add(cur);{const v=C.view||[4.9,1.75];cam.left=-v[0]/2;cam.right=v[0]/2;cam.top=v[0]/2;cam.bottom=-v[0]/2;cam.updateProjectionMatrix();const cx=v[2]||0;cam.position.set(cx,v[1]+dist*Math.sin(el),dist*Math.cos(el));cam.lookAt(cx,v[1],0);}cur.userData.model=m;curId=id;};
+window.setup=function(id){if(cur)scene.remove(cur);if(extra){scene.remove(extra);extra=null;}const C=CHARS[id];cur=new THREE.Group();const m=C.build();m.userData._m=1;cur.add(m);cur.rotation.y=C.yaw;scene.add(cur);{const v=window.OV||C.view||[4.9,1.75];cam.left=-v[0]/2;cam.right=v[0]/2;cam.top=v[0]/2;cam.bottom=-v[0]/2;cam.updateProjectionMatrix();const cx=v[2]||0;cam.position.set(cx,v[1]+dist*Math.sin(el),dist*Math.cos(el));cam.lookAt(cx,v[1],0);}cur.userData.model=m;curId=id;};
 window.frame=function(ph,opt){const C=CHARS[curId];C.pose(cur.userData.model,ph);if(opt&&opt.cb)opt.cb(cur,scene);r.render(scene,cam);return cv.toDataURL('image/png');};
 
 let mound=null;const clipPl=new THREE.Plane(new THREE.Vector3(0,1,0),0);
@@ -32,5 +32,5 @@ window.frameIntro=function(u){ // 두더지: 땅에서 솟아 나온다
   mound.userData.chunks.forEach((c,i)=>{const k=Math.max(0,Math.min(1,(u-0.0-i*0.012)/0.5));const ang=i*0.52+0.3,spd=0.9+0.12*(i%4);c.visible=k>0&&k<1;c.position.set(Math.cos(ang)*spd*k*1.2,Math.max(0,1.5*k*(1-k)*4*0.5*(1+0.2*(i%3))),Math.sin(ang)*spd*k*0.9);c.scale.setScalar(0.07+0.04*(i%3));});
   r.render(scene,cam);setClip(m,false);m.position.y=0;return cv.toDataURL('image/png');};
 window.cleanup=function(){if(mound&&mound.parent)cur.remove(mound);};
-window.ready=true;
+window.TEXIMG={};Promise.all(Object.keys(window.TEX).map(k=>new Promise(res=>{const im=new Image();im.onload=()=>{window.TEXIMG[k]=im;res();};im.src=window.TEX[k];}))).then(()=>{window.ready=true;});
 </script>
