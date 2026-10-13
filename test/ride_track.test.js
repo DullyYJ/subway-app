@@ -291,5 +291,8 @@ r = rideTrack({ nowMs: NOW }); ok(r.off.confirmed === false && r.fix.n === 0, '�
   z = run(-60, [{ t: -10, x: 1900, acc: 150 }]); ok(!(z.zero.stops.find(x => x.i === 2) || {}).notYet, '정확도 100m 넘는 좌표는 쓰지 않는다');
   z = rideTrack({ nowMs: NOW, trail: [[NOW - 10000, 0, 1900 / KX, 20]], plan: plan({ stops: [{ i: 2, lat: 0, lng: 3000 / KX, arrMs: NOW - 60000, pass: true }] }), want: { zero: true } });
   ok(!(z.zero.stops[0] || {}).notYet, '앞 정류장 정보가 없으면 판정하지 않는다');
+  // 최종 목적지(fin)에는 넓은 통과 창을 쓰지 않는다 — 도착 몇 분 전 근처를 지나친 GPS 로 안내를 끝내면 안 된다(arrival_end 시험이 잡은 회귀)
+  z = rideTrack({ nowMs: NOW, trail: [[NOW - 20000, 0, 3000 / KX, 20]], plan: plan({ stops: [{ i: 2, lat: 0, lng: 3000 / KX, arrMs: NOW + 240000, pass: true, fin: true }] }), want: { zero: true } });
+  ok(z.zero.stops.length === 0 || (z.zero.stops[0].passMs === undefined && !z.zero.stops[0].apply), '최종 목적지: 도착 4분 전 GPS 는 통과 시각으로 쓰지 않는다 ' + JSON.stringify(z.zero.stops));
 }
 console.log('ride_track: pass', pass, 'fail', fail); process.exit(fail ? 1 : 0);
