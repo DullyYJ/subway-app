@@ -111,6 +111,43 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     assert.ok(r > 300, '3D 가 안 그려짐 ' + r); assert.deepStrictEqual(e2, []);
     await pg.close();
   });
+  console.log('[⑤ 원본 그대로의 3D 캐릭터(2026-10-14) · 추천 캐릭터 미리보기 버튼]');
+  await t('D3 의 바닥줄(base)과 몸 가로 중심(ox)이 시트 그림과 맞는다(발이 줄에 닿는다)', async () => {
+    const r = await page.evaluate(async () => {
+      const o = {};
+      for (const id of ['dolsom', 'lovel', 'dudung', 'sul', 'ppopu', 'chaeng']) {
+        const im = await new Promise(ok => { const i = new Image(); i.onload = () => ok(i); i.src = 'chars3d/' + id + '.webp'; });
+        const c = document.createElement('canvas'); c.width = c.height = 1024; const x = c.getContext('2d'); x.drawImage(im, 0, 0); const d = x.getImageData(0, 0, 1024, 1024).data;
+        let low = -1, top = 999;
+        for (let f = 0; f < 16; f++) { const ox = (f % 4) * 256, oy = Math.floor(f / 4) * 256; for (let y = 0; y < 256; y++) for (let xx = 0; xx < 256; xx += 2) if (d[((oy + y) * 1024 + ox + xx) * 4 + 3] > 24) { if (y > low) low = y; if (y < top) top = y; } }
+        o[id] = { low: low + 1, top: top, base: _RC.d3[id].base };
+      }
+      return o;
+    });
+    for (const id in r) assert.ok(Math.abs(r[id].low - r[id].base) <= 3, id + ' 맨 아래 ' + r[id].low + ' ≠ base ' + r[id].base);
+  });
+  await t('설정에 [추천 캐릭터 미리보기] 버튼이 있다', async () => assert.strictEqual(await page.evaluate(() => !!document.getElementById('rcDemoBtn') && /추천 캐릭터 미리보기/.test(document.getElementById('rcDemoBtn').textContent)), true));
+  await t('버튼을 누르면 오버레이에 시연(recoDemo)을 시키고, 누를 때마다 서로 다른 캐릭터 둘이 실리며 6종이 모두 나온다', async () => {
+    const r = await page.evaluate(() => {
+      window.Capacitor = window.Capacitor || {}; window.Capacitor.Plugins = window.Capacitor.Plugins || {};
+      const calls = []; window.Capacitor.Plugins.Overlay = { recoDemo: (o) => { calls.push(o); return Promise.resolve({ ok: true }); } };
+      for (let i = 0; i < 6; i++) document.getElementById('rcDemoBtn').click();
+      return calls;
+    });
+    assert.strictEqual(r.length, 6);
+    const seen = new Set(); for (const c of r) { assert.ok(IDS.includes(c.ch) && IDS.includes(c.ch2) && c.ch !== c.ch2, c.ch + ',' + c.ch2); assert.ok(c.a && c.a.length <= 26 && c.secs >= 10, JSON.stringify(c)); seen.add(c.ch); seen.add(c.ch2); }
+    assert.strictEqual(seen.size, 6, [...seen].join());
+  });
+  await t('권한이 없으면 안내 문구가 뜨고, 이 버전에 기능이 없으면 그렇게 알린다', async () => {
+    const m = await page.evaluate(async () => {
+      const msgs = []; const old = window.toast; window.toast = (x) => msgs.push(String(x));
+      window.Capacitor.Plugins.Overlay = { recoDemo: () => Promise.resolve({ ok: false, error: 'permission' }) };
+      _ovlRecoDemo(); await new Promise(ok => setTimeout(ok, 80));
+      window.Capacitor.Plugins.Overlay = {}; _ovlRecoDemo();
+      window.toast = old; return msgs;
+    });
+    assert.ok(/다른 앱 위에 표시/.test(m[0] || ''), JSON.stringify(m)); assert.ok(/지원하지 않아요/.test(m[1] || ''), JSON.stringify(m));
+  });
   await t('JS 오류 없음', async () => assert.deepStrictEqual(errs, []));
   await b.close(); srv.close();
   console.log('\n' + pass + ' pass, ' + fail + ' fail'); process.exit(fail ? 1 : 0);
