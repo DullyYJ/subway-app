@@ -38892,78 +38892,39 @@ function _platformLateShift(now){
 }
 window._platformLateShift = _platformLateShift;
 
-/* ── 길동무 캐릭터 6종(둘솜·러블·두덩·술·뽀푸·챙챙) — 경로 탐색 로딩에서 좌→우로 달린다 ──
-   2026-10-13 (YJ: "로딩 바퀴 대신 캐릭터가 랜덤으로 좌측에서 우측으로 뛰어가기, 캐릭터마다 모션이 다르게").
-   스프라이트(www/chars/*.webp, 투명 배경)를 캔버스에 그리되, 1px 가로줄 단위로 밀고 늘려서(물결·날갯짓·출렁임) 실제로 움직이는 것처럼 보이게 한다.
-   순수 장식 — 판단·계산과 무관. #transitLoading 이 보일 때 시작, 숨겨질 때 멈춘다(MutationObserver). 스프라이트 해독이 실패하면 예전 바퀴가 그대로 돈다. */
+/* ── 길동무 캐릭터 6종(돌솜·러블·두덩·술·뽀푸·챙챙) — 경로 탐색 로딩에서 3D 동작으로 좌→우로 지나간다 ──
+   2026-10-13 (YJ: "캐릭터를 3D 렌더링해서 고양이는 걷고 강아지는 뛰고 독수리는 날고 올챙이는 수영하고 두더지는 땅속에서 나오게 · 예전 방식은 안 돼, 무조건 3D").
+   3D 모델을 미리 렌더링한 동작 프레임(www/chars3d/<id>.webp — 256px 칸 4×4 시트, 두덩은 땅에서 솟는 장면 dudung_intro.webp 가 하나 더)을 시간에 맞춰 차례로 그릴 뿐이다(변형 없음).
+   앱 안에 들어 있는 파일이라 실패할 일이 없지만, 읽기가 한 번 어긋나도 다시 받아 3D 로 그린다(옛 한 장 그림 방식은 없앴다). 시트를 받는 동안만 예전 로딩 바퀴가 보인다.
+   순수 장식 — 판단·계산과 무관. #transitLoading 이 보일 때 시작, 숨겨질 때 멈춘다(MutationObserver). */
 var _RC = (function(){
   var ORDER = ['dolsom','lovel','dudung','sul','ppopu','chaeng'];
-  var NAME = { dolsom:'둘솜', lovel:'러블', dudung:'두덩', sul:'술', ppopu:'뽀푸', chaeng:'챙챙' };
-  var imgs = {}, loading = false;
-  function load(cb){
-    if(loading){ if(cb) cb(); return; } loading = true;
-    var left = ORDER.length;
-    ORDER.forEach(function(id){
-      var im = new Image();
-      im.onload = function(){ imgs[id] = im; if(--left === 0 && cb) cb(); };
-      im.onerror = function(){ if(--left === 0 && cb) cb(); };
-      im.src = 'chars/' + id + '.webp';
-    });
-  }
-  function ready(){ for(var i = 0; i < ORDER.length; i++) if(!imgs[ORDER[i]]) return false; return true; }
+  var NAME = { dolsom:'돌솜', lovel:'러블', dudung:'두덩', sul:'술', ppopu:'뽀푸', chaeng:'챙챙' };
   var PI2 = Math.PI * 2;
-  function sn(x){ return Math.sin(x); }
-  // 걸음 하나(phase φ)에서 자세를 낸다. dx/dy 는 px(위쪽이 음수), rot 은 라디안(오른쪽 기울임이 양수).
-  // 줄 단위 변형: wave(위=0 → 아래=1 로 갈수록 가로로 민다), rs(가로 배율을 줄마다 다르게 — 날개 퍼덕임).
-  var MOTION = {
-    dolsom: { T: 2.7, f: 3.4, pose: function(t, ph){            // 통통 튀는 점프 — 착지 때 납작, 공중에선 길쭉, 매번 반대로 갸웃
-      var h = Math.abs(sn(ph)), air = h, land = Math.pow(1 - h, 4);
-      var sy = 1 - 0.09 * land + 0.05 * air; var sx = 1 / Math.pow(sy, 0.6);
-      return { dy: -h * 12, rot: 0.08 * sn(ph), sx: sx, sy: sy, wave: { a: 1.4 * Math.cos(ph) , k: 2.2, p: ph - 1.1, from: 0, to: 0.55 }, shadow: 1 - 0.35 * h, lean: 0.03 };
-    } },
-    lovel: { T: 2.3, f: 2.7, pose: function(t, ph){             // 사뿐사뿐 — 낮게 달리며 몸이 흐르듯 출렁, 몸을 앞으로 숙임
-      var h = Math.abs(sn(ph));
-      return { dy: -h * 5.5, rot: 0.1 + 0.035 * sn(ph), sx: 1 + 0.025 * Math.cos(ph * 2), sy: 1 - 0.03 * Math.cos(ph * 2), wave: { a: 3.2, k: 4.2, p: ph * 1 - 0.4, from: 0.35, to: 1 }, shadow: 1 - 0.2 * h, lean: 0.1 };
-    } },
-    dudung: { T: 3.3, f: 1.9, pose: function(t, ph){            // 뒤뚱뒤뚱 — 좌우로 크게 기울며 한 걸음씩, 삽이 덜렁
-      var h = Math.abs(sn(ph));
-      return { dy: -h * 4, rot: 0.14 * sn(ph), sx: 1 + 0.035 * sn(ph * 2), sy: 1 - 0.035 * sn(ph * 2), wave: { a: 1.6, k: 5, p: ph * 2 + 1, from: 0.5, to: 1 }, shadow: 1 - 0.12 * h, dirt: true, step: ph, lean: 0.02 };
-    } },
-    sul: { T: 2.5, f: 1.15, pose: function(t, ph){              // 날아간다 — 지면에서 떠서 위아래로 일렁이고 날개를 퍼덕
-      var fl = sn(t * PI2 * 3.1);
-      var alt = -26 + 8 * sn(ph);
-      return { dy: alt, rot: 0.12 + 0.035 * sn(ph + 0.8), sx: 1, sy: 1 + 0.025 * fl, rs: { a: 0.17 * fl, c: 0.6, w: 0.2 }, wave: { a: 2.4, k: 3, p: t * PI2 * 3.1 - 1, from: 0.7, to: 1 }, shadow: 0.55 + 0.1 * sn(ph), air: -alt, streak: true, lean: 0.12 };
-    } },
-    ppopu: { T: 2.2, f: 3.0, pose: function(t, ph){             // 통통 질주 — 크게 뛰어오르며 앞으로 쭉, 귀(털)가 늦게 따라온다
-      var h = Math.abs(sn(ph)) + 0.28 * Math.abs(sn(ph * 2 + 0.5)); h = Math.min(1.2, h);
-      var up = Math.cos(ph) * (sn(ph) > 0 ? 1 : -1);
-      var sy = 1 + 0.07 * h - 0.12 * Math.pow(Math.max(0, 1 - h), 3); var sx = 1 / Math.pow(sy, 0.8);
-      return { dy: -h * 14, rot: 0.12 + 0.06 * Math.cos(ph), sx: sx, sy: sy, wave: { a: 2.4 * Math.cos(ph), k: 2.6, p: ph - 1.5, from: 0, to: 0.6 }, shadow: 1 - 0.3 * Math.min(1, h), lean: 0.12 };
-    } },
-    chaeng: { T: 3.1, f: 2.1, pose: function(t, ph){            // 물결 헤엄 — 몸 전체가 S 자로 일렁이고 꼬리 쪽이 크게 흔들린다
-      return { dy: -4 + 2.2 * sn(ph * 2), rot: 0.05 * sn(ph), sx: 1 + 0.02 * sn(ph * 2), sy: 1 - 0.02 * sn(ph * 2), wave: { a: 6, k: 3.2, p: ph * 1 - 0.2, from: 0.15, to: 1, grow: 1.6 }, shadow: 0.8, bubbles: true, lean: 0.03 };
-    } }
+  // cell=화면에 그릴 칸 크기(px) · base=칸 안 바닥 높이(256 기준) · ox=칸 안 몸 중심 가로 위치 · fps=재생 속도 · T=화면을 가로지르는 시간(초) · lift=띄울 높이(px) · sh=그림자 진하기
+  var D3 = {
+    dolsom: { n: 16, fps: 19, cell: 92, base: 214, ox: 128, T: 2.7, sh: 0.34 },     // 뛴다
+    lovel:  { n: 16, fps: 11, cell: 98, base: 214, ox: 137, T: 3.4, sh: 0.34 },     // 걷는다
+    ppopu:  { n: 16, fps: 19, cell: 92, base: 214, ox: 128, T: 2.3, sh: 0.34 },     // 뛴다
+    chaeng: { n: 16, fps: 15, cell: 115, base: 208, ox: 148, T: 3.2, sh: 0.2, lift: 12 },   // 헤엄친다
+    sul:    { n: 16, fps: 20, cell: 140, base: 193, ox: 128, T: 2.6, sh: 0.2 },     // 난다
+    dudung: { n: 16, fps: 13, cell: 104, base: 218, ox: 128, T: 3.5, sh: 0.34, intro: 14, introFps: 14, x0: 0.16 }   // 땅에서 솟아 걷는다
   };
-  function drawChar(ctx, id, x, gy, P, scale){
-    var im = imgs[id]; if(!im) return;
-    var w = im.naturalWidth, h = im.naturalHeight, S = scale;
-    ctx.save();
-    ctx.translate(x, gy + (P.dy || 0));
-    ctx.rotate(P.rot || 0);
-    ctx.scale(P.sx || 1, P.sy || 1);
-    var ROW = 1, wv = P.wave, rs = P.rs;
-    for(var y = 0; y < h; y += ROW){
-      var sh = Math.min(ROW, h - y), yn = y / h, xo = 0, rsc = 1;
-      if(wv && yn >= wv.from){
-        var wt = Math.min(1, (yn - wv.from) / Math.max(0.001, wv.to - wv.from));
-        var env = wv.grow ? Math.pow(wt, wv.grow) : Math.sin(wt * Math.PI * 0.5);
-        xo = wv.a * env * sn(wv.k * yn * PI2 * 0.5 + wv.p);
-      }
-      if(rs){ var d = (yn - rs.c) / rs.w; rsc = 1 + rs.a * Math.exp(-d * d); }
-      var dw = w * S * rsc;
-      ctx.drawImage(im, 0, y, w, sh, -dw / 2 + xo, (y - h) * S, dw, sh * S + 0.7);
+  var sheets = {}, sheetsIntro = {}, loading = false, tries = 0, waiters = [];
+  function ready(){ for(var i = 0; i < ORDER.length; i++) if(!sheets[ORDER[i]]) return false; return !!sheetsIntro.dudung; }
+  function load(cb){
+    if(cb) waiters.push(cb);
+    if(ready()){ var w0 = waiters.splice(0); w0.forEach(function(f){ try{ f(); }catch(e){} }); return; }
+    if(loading) return; loading = true;
+    var left = ORDER.length + 1;
+    function done(){
+      if(--left > 0) return; loading = false;
+      if(ready()){ var w = waiters.splice(0); w.forEach(function(f){ try{ f(); }catch(e){} }); }
+      else if(++tries < 12) setTimeout(function(){ load(); }, Math.min(5000, 700 * tries));   // 어긋나면 다시 받는다
     }
-    ctx.restore();
+    function one(url, put){ var im = new Image(); im.onload = function(){ put(im); done(); }; im.onerror = function(){ done(); }; im.src = url; }
+    ORDER.forEach(function(id){ if(sheets[id]){ done(); return; } one('chars3d/' + id + '.webp', function(im){ sheets[id] = im; }); });
+    if(sheetsIntro.dudung) done(); else one('chars3d/dudung_intro.webp', function(im){ sheetsIntro.dudung = im; });
   }
   var st = null;   // 실행 상태
   function pick(prev){
@@ -38972,7 +38933,7 @@ var _RC = (function(){
   }
   function start(host){
     if(st || !host) return false;
-    if(!ready()){ load(function(){ if(ready() && host.offsetParent !== null) start(host); }); return false; }
+    if(!ready()){ load(function(){ if(host.offsetParent !== null) start(host); }); return false; }
     var cv = host.querySelector('canvas.rc-cv');
     if(!cv){ cv = document.createElement('canvas'); cv.className = 'rc-cv'; host.appendChild(cv); }
     host.classList.add('rc-on');
@@ -38982,41 +38943,30 @@ var _RC = (function(){
     var cs = getComputedStyle(document.documentElement);
     var lineCol = (cs.getPropertyValue('--border') || '').trim() || 'rgba(128,128,128,.4)';
     var reduce = false; try{ reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(e){}
-    var S0 = { id: window._rcForce && imgs[window._rcForce] ? window._rcForce : pick(null), t0: 0, last: 0, parts: [], raf: 0 };
+    var S0 = { id: window._rcForce && D3[window._rcForce] ? window._rcForce : pick(null), t0: 0, raf: 0 };
     host.setAttribute('data-rc', S0.id);
-    var DH = 66;   // 화면 높이(px) — 캐릭터마다 원본 높이가 달라 같은 키로 맞춘다
     function frame(ts){
       if(st !== S0) return;
-      if(!S0.t0){ S0.t0 = ts; S0.last = ts; }
-      var M = MOTION[S0.id], t = (ts - S0.t0) / 1000, u = t / M.T;
-      if(u >= 1){ S0.id = pick(S0.id); host.setAttribute('data-rc', S0.id); S0.t0 = ts; t = 0; u = 0; M = MOTION[S0.id]; S0.parts.length = 0; }
-      var im = imgs[S0.id], sc = DH / im.naturalHeight, cw = im.naturalWidth * sc;
-      var gy = Hc - 12, x = -cw * 0.6 + u * (Wc + cw * 1.2);
-      var ph = t * PI2 * M.f * (reduce ? 0.5 : 1);
-      var P = M.pose(t, ph);
+      if(!S0.t0) S0.t0 = ts;
+      var D, t, Ti, intro, tw, u, rep;
+      for(rep = 0; rep < 2; rep++){
+        D = D3[S0.id]; t = (ts - S0.t0) / 1000; Ti = D.intro ? D.intro / D.introFps : 0; intro = t < Ti; tw = Math.max(0, t - Ti); u = tw / D.T;
+        if(u < 1) break;
+        S0.id = pick(S0.id); host.setAttribute('data-rc', S0.id); S0.t0 = ts;     // 다음 캐릭터
+      }
+      var kk = reduce ? 0.5 : 1, gy = Hc - 12, x;
+      if(D.intro){ var x0 = Wc * D.x0; x = intro ? x0 : x0 + u * (Wc + D.cell * 0.5 - x0); }    // 두덩: 제자리에서 솟은 뒤 걸어 나간다
+      else x = -D.cell * 0.45 + u * (Wc + D.cell * 0.9);
+      var sheet = intro ? sheetsIntro[S0.id] : sheets[S0.id];
+      var idx = intro ? Math.min(D.intro - 1, Math.floor(t * D.introFps * kk)) : Math.floor(tw * D.fps * kk) % D.n;
+      var sc = D.cell / 256;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, Wc, Hc);
-      // 바닥 점선
-      ctx.strokeStyle = lineCol; ctx.lineWidth = 2; ctx.setLineDash([8, 8]); ctx.lineDashOffset = -t * 40;
+      ctx.strokeStyle = lineCol; ctx.lineWidth = 2; ctx.setLineDash([8, 8]); ctx.lineDashOffset = -t * 40;      // 바닥 점선
       ctx.beginPath(); ctx.moveTo(0, gy + 3); ctx.lineTo(Wc, gy + 3); ctx.stroke(); ctx.setLineDash([]);
-      // 그림자(공중에 뜨면 작고 옅게)
-      var shs = P.shadow == null ? 1 : P.shadow;
-      ctx.fillStyle = 'rgba(0,0,0,' + (0.2 * shs).toFixed(3) + ')';
-      ctx.beginPath(); ctx.ellipse(x, gy + 3, cw * 0.36 * shs, 3.2 * shs, 0, 0, PI2); ctx.fill();
-      // 바람줄(날 때) · 흙먼지(두덩) · 물방울(챙챙)
-      var dt = Math.min(0.05, (ts - S0.last) / 1000); S0.last = ts;
-      if(P.streak && Math.random() < 0.35) S0.parts.push({ k: 's', x: x - cw * 0.45, y: gy + P.dy - DH * (0.2 + Math.random() * 0.5), vx: -50, vy: 0, life: 0.5, a: 0.4, r: 0 });
-      if(P.dirt && P.step != null){ var sg = Math.floor(P.step / Math.PI); if(sg !== S0.lastStep){ S0.lastStep = sg; for(var q = 0; q < 3; q++) S0.parts.push({ k: 'd', x: x - cw * 0.2 + (Math.random() - 0.5) * 10, y: gy + 1, vx: -18 - Math.random() * 14, vy: -14 - Math.random() * 12, life: 0.7, a: 0.55, r: 1.6 + Math.random() * 1.6 }); } }
-      if(P.bubbles && Math.random() < 0.12) S0.parts.push({ k: 'b', x: x + (Math.random() - 0.4) * cw * 0.5, y: gy + P.dy - DH * (0.3 + Math.random() * 0.4), vx: -6, vy: -22, life: 0.9, a: 0.5, r: 1.4 + Math.random() * 2 });
-      for(var i = S0.parts.length - 1; i >= 0; i--){
-        var p = S0.parts[i]; p.life -= dt; if(p.life <= 0){ S0.parts.splice(i, 1); continue; }
-        p.x += p.vx * dt; p.y += p.vy * dt; if(p.k === 'd') p.vy += 70 * dt;
-        var al = Math.min(1, p.life / 0.4) * p.a;
-        if(p.k === 's'){ ctx.strokeStyle = 'rgba(160,170,190,' + al.toFixed(3) + ')'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x + 14, p.y); ctx.stroke(); }
-        else if(p.k === 'd'){ ctx.fillStyle = 'rgba(150,112,76,' + al.toFixed(3) + ')'; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, PI2); ctx.fill(); }
-        else { ctx.strokeStyle = 'rgba(120,170,230,' + al.toFixed(3) + ')'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, PI2); ctx.stroke(); }
-      }
-      drawChar(ctx, S0.id, x, gy, P, sc);
+      ctx.fillStyle = 'rgba(0,0,0,' + (D.sh * 0.6).toFixed(3) + ')';                                              // 그림자
+      ctx.beginPath(); ctx.ellipse(x, gy + 3, D.cell * 0.2, 3.4, 0, 0, PI2); ctx.fill();
+      try{ ctx.drawImage(sheet, (idx % 4) * 256, Math.floor(idx / 4) * 256, 256, 256, x - D.ox * sc, gy + 3 - (D.lift || 0) - D.base * sc, D.cell, D.cell); }catch(eD){}
       S0.raf = requestAnimationFrame(frame);
     }
     st = S0; S0.raf = requestAnimationFrame(frame);
@@ -39026,7 +38976,7 @@ var _RC = (function(){
     if(!st) return; var s = st; st = null; try{ cancelAnimationFrame(s.raf); }catch(e){}
     if(host){ host.classList.remove('rc-on'); var cv = host.querySelector('canvas.rc-cv'); if(cv){ var c = cv.getContext('2d'); c.setTransform(1,0,0,1,0,0); c.clearRect(0, 0, cv.width, cv.height); } }
   }
-  return { start: start, stop: stop, load: load, ready: ready, order: ORDER, name: NAME, imgs: imgs, motion: MOTION, drawChar: drawChar };
+  return { start: start, stop: stop, load: load, ready: ready, order: ORDER, name: NAME, d3: D3 };
 })();
 window._RC = _RC;
 
@@ -39044,7 +38994,7 @@ window._RC = _RC;
       }catch(e){}
     }
     try{ new MutationObserver(sync).observe(ld, { attributes: true, attributeFilter: ['style'] }); }catch(e){}
-    setTimeout(function(){ try{ _RC.load(); }catch(e){} }, 1500);   // 첫 탐색 전에 미리 받아 둔다(파일 6개, 약 80KB)
+    try{ _RC.load(); }catch(e){}   // 첫 탐색 전에 미리 읽어 둔다(앱 안 파일 7개, 약 700KB)
   }
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();
