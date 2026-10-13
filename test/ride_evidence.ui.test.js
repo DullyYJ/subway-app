@@ -337,6 +337,7 @@ const t = async (name, fn) => { if (ONLY && !ONLY.test(name)) return; try { awai
   await t('다음 역 예정이 60초 넘게 지났는데 도착 증거가 없으면 엔진이 그 역과 이후 시각을 같은 만큼 밀고(앞당기지 않음), 앱은 받아 그린다', async () => {
     const setup2 = (off) => page.evaluate((off) => {
       const nd = _transitNodeData; const n = new Date(); const nowMin = n.getHours() * 60 + n.getMinutes() + n.getSeconds() / 60;
+      window._ttFirstOff = true;   // 2026-10-13: 이 시험은 '증거 없음을 연착으로 미는' 예전(증거 우선) 규칙을 확인한다 — 시각표 기준(timetableFirst)에서는 밀지 않는다(ride_eta 시험)
       window._etaResetEvidence(); window._nodePassMs = {}; window._routeLocked = true; window._metroRouteMode = false; window._htlBoarded = true; window._gpsMaxIdx = 2;
       for (let i = 0; i < nd.length; i++) { if (nd[i]) { const m = nowMin + off + (i - 3) * 2.5; nd[i]._schedMin = m; nd[i]._plan0 = m; } }
       // 1·2번 역은 이미 지났다(통과 기록)
@@ -425,6 +426,7 @@ const t = async (name, fn) => { if (ONLY && !ONLY.test(name)) return; try { awai
       const names = ['캠퍼스타운', '동막', '동춘', '원인재', '신연수', '선학', '문학경기장'], offs = [0, 3, 5, 7, 8, 10, 12];
       const nodes = [{ name: '출발', lat: 37.5, lng: 126.896, isOrigin: true, isWalk: false, isSub: false, isBus: false, _schedMin: bm - 5, el: null }];
       names.forEach((nm, i) => { const m = bm + offs[i]; nodes.push({ name: nm, lat: 37.5, lng: 126.9 + 0.0137 * i, isSub: true, isBus: false, isWalk: false, isOrigin: false, lineName: '인천1호선', _schedMin: m, el: null, arrTime: ('0' + Math.floor(m / 60)).slice(-2) + ':' + ('0' + Math.floor(m % 60)).slice(-2) }); });
+      window._ttFirstOff = true;   // 2026-10-13: 이 장면들은 PF·마커·기지국 규칙(증거 우선) 시험 — 시각표 기준 위치는 overlay_stale·ride_eta 에서 확인
       _transitNodeData = nodes; window._routeLocked = true; window._metroRouteMode = false; _baseTimeMs = null;
       window._gpsMaxIdx = -1; window._gpsConfirmIdx = -1; window._nodePassMs = {}; window._htlBoarded = false;
     });

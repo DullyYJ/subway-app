@@ -18,8 +18,9 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   await page.clock.runFor(2500);
 
   // 장면: 06:19 출발, 역 8개(2분 간격), 확정(locked). boarded 면 승차 확정 + 첫 역 통과 기록.
-  const setup = async (boarded) => {
-    await page.evaluate(() => {
+  const setup = async (boarded, legacy) => {
+    await page.evaluate((legacy) => {
+      window._ttFirstOff = !!legacy;   // 2026-10-13: 기본은 시각표 기준(엔진 pos). legacy=true 면 예전 증거 우선(PF·+1역 상한) 규칙을 시험한다
       window.fmapDoRoute = function () {};
       const startAt = '2026-10-06T06:19:00+09:00', base = new Date(startAt), midnight = new Date('2026-10-06T00:00:00+09:00');
       const baseMin = (base - midnight) / 60000;
@@ -33,7 +34,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
       const card = document.getElementById('transitResultCard'); if (card) card.style.display = 'block';
       window._rideEvReset && window._rideEvReset('시험'); _ev.trail = []; _ev.cell = []; _ev.cache = null; _ev.cacheAt = 0;
       window._cellMovingState = function () { return window.__cmv === undefined ? null : window.__cmv; };
-    });
+    }, legacy);
     await page.clock.setSystemTime(new Date('2026-10-06T06:19:00+09:00'));
     if (boarded) await page.evaluate(() => { window._htlBoarded = true; window._gpsMaxIdx = 1; window._gpsConfirmIdx = 1; window._nodePassMs = { 1: Date.now() }; window.__cmv = undefined; });
     else await page.evaluate(() => { window.__cmv = undefined; });
@@ -54,8 +55,15 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   const a900 = await here();
   await t('끝까지 따라가고 종점을 넘지 않는다', async () => { assert.ok(a900.pip >= 7 && a900.pip <= 8, 'pip=' + a900.pip); });
 
-  console.log('[기지국이 정차 중이라고 하면 따라가지 않는다]');
-  await setup(true);
+  await t('[시각표 기준] 앱 마커와 오버레이가 같은 위치를 읽는다: 현위치 = 마지막으로 떠난 역, 역 사이면 이동 중 신호', async () => {
+    const g = await page.evaluate(() => { const p = _estimateTimelinePos(); return { p, here: _pipHereIdx(), mv: _ovlMoving(), ep: window._etaPos }; });
+    assert.ok(g.ep && g.ep.from != null, '엔진 pos 가 있어야 함');
+    assert.strictEqual(g.here, g.p.fromIdx, JSON.stringify(g));
+    assert.strictEqual(g.mv, g.p.toIdx > g.p.fromIdx && g.p.ratio > 0 && g.p.ratio < 1, JSON.stringify(g));
+  });
+
+  console.log('[기지국이 정차 중이라고 하면 따라가지 않는다 — 예전 증거 우선 규칙(_ttFirstOff)]');
+  await setup(true, true);
   await page.evaluate(() => { window.__cmv = false; });
   await advance(300);
   const c = await here();
@@ -67,8 +75,8 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   const n = await here();
   await t('승차 확정 전에는 근거가 없어도 승차역 위치(≤ 인덱스 1)에 머문다', async () => { assert.ok(n.pip <= 1, 'pip=' + n.pip); assert.strictEqual(n.stale, -1); });
 
-  console.log('[근거가 돌아오면]');
-  await setup(true);
+  console.log('[근거가 돌아오면 — 예전 증거 우선 규칙(_ttFirstOff)]');
+  await setup(true, true);
   await advance(300);
   await page.evaluate(() => { S.lastGPSFix = { lat: 37.5, lng: 126.9 + 0.0137 * 1, ts: Date.now(), acc: 15 }; });   // 실제는 아직 2번째 역(인덱스 2) 근처
   const r = await here();
@@ -85,9 +93,9 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   }
   await t('GPS 가 계속 오는 동안은 끊김 상태가 한 번도 켜지지 않는다', async () => { assert.strictEqual(bad, 0); });
   console.log('[GPS 로 타다가 지하에서 끊김 — 열차 위치와 비교]');
-  const blindRun = async (delay) => {
+  const blindRun = async (delay, legacy) => {
     await page.goto('file://' + html); await page.clock.runFor(2500);
-    await setup(true);
+    await setup(true, legacy);
     await page.evaluate(() => { Object.defineProperty(document, 'hidden', { get: () => true, configurable: true }); window._appInBackground = true; });
     const L = [];
     for (let sec = 0; sec < 600; sec += 5) {
@@ -103,9 +111,11 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   };
   const b0 = await blindRun(0);
   await t('열차가 시각표대로 가면 지하에서 8분 동안 오차 평균 0.3역 이하, 1역 넘게 어긋나지 않는다', async () => { assert.ok(b0.mae <= 0.5, 'mae=' + b0.mae);   /* 2026-10-13: PF 위치는 구간 75% 에서 다음 역으로 넘어간다(한 정거장 늦던 문제) — 평균 오차가 0.3→0.43 역으로 늘어난 건 설계. 0.5 를 넘으면 안 됨 */ assert.ok(b0.min >= -1 && b0.max <= 1, b0.min + '/' + b0.max); });
-  const b1 = await blindRun(150);
-  await t('열차가 2분 30초 늦어도(GPS 로 지연을 배운 뒤 끊김) 오차 평균 0.3역 이하', async () => { assert.ok(b1.mae <= 0.3, 'mae=' + b1.mae); });
-  await t('그때 실제보다 앞서 표시되는 시간이 25% 이하이고 1역 넘게 앞서지 않는다', async () => { assert.ok(b1.ahead <= 0.25, 'ahead=' + b1.ahead); assert.ok(b1.max <= 1, 'max=' + b1.max); });
+  const b1 = await blindRun(150, true);
+  await t('[예전 증거 우선 규칙] 열차가 2분 30초 늦어도(GPS 로 지연을 배운 뒤 끊김) 오차 평균 0.3역 이하', async () => { assert.ok(b1.mae <= 0.3, 'mae=' + b1.mae); });
+  await t('[예전 증거 우선 규칙] 그때 실제보다 앞서 표시되는 시간이 25% 이하이고 1역 넘게 앞서지 않는다', async () => { assert.ok(b1.ahead <= 0.25, 'ahead=' + b1.ahead); assert.ok(b1.max <= 1, 'max=' + b1.max); });
+  const b2 = await blindRun(150);
+  await t('[시각표 기준] 열차가 2분 30초 늦은 채 지하에서 증거가 끊기면 마커는 시각표대로 가므로 지연만큼 앞선다(2역 넘게는 아님) — GPS·영점이 오면 그 역으로 맞춘다', async () => { assert.ok(b2.max <= 2, 'max=' + b2.max); assert.ok(b2.mae <= 1.6, 'mae=' + b2.mae); });
 
   console.log('[기지국: 모르는 셀 / 학습된 셀]');
   const cellSetup = async () => {

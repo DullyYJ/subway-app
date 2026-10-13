@@ -324,6 +324,29 @@ t('연착: 다음 역 예정 시각이 지났는데 증거가 없으면 그 역�
   assert.ok(late.notes.some(x => /연착/.test(x)), late.notes.join(' | '));
   assert.ok(hm(base.arr[3]) <= hm('17:40'), '증거 전엔 밀리지 않는다 ' + base.arr[3]);
 });
+t('시각표 기준(timetableFirst): 증거 없이 예정 시각이 지나도 연착으로 밀지 않는다(시각표대로 간다) — 끄면 기존대로 밀림', () => {
+  const nodes = scene(), ps = [P(1, 17, 35, 40, 'board'), P(2, 17, 38, 20)];
+  const base = run(nodes, ps, at(17, 38, 30)), tf = run(nodes, ps, at(17, 41, 10), { timetableFirst: true }), legacy = run(nodes, ps, at(17, 41, 10));
+  assert.ok(hm(tf.arr[3]) <= hm('17:40'), '시각표 기준: ' + tf.arr[3]);
+  assert.ok(hm(legacy.arr[3]) >= hm('17:41'), '기존: ' + legacy.arr[3]);
+  assert.ok(hm(tf.arr[3]) === hm(base.arr[3]), '증거가 없으면 시각이 그대로 ' + base.arr[3] + ' vs ' + tf.arr[3]);
+  assert.ok(tf.notes.some(x => /시각표 기준/.test(x)));
+});
+t('시각표 기준 위치(pos): 도착 시각이 지난 마지막 역에서 정차 뒤 다음 역 도착까지 0→1, 증거 없이 연착으로 멈추지 않는다', () => {
+  const nodes = scene(), ps = [P(1, 17, 35, 40, 'board'), P(2, 17, 38, 20)];
+  const r0 = run(nodes, ps, at(17, 38, 30), { timetableFirst: true });
+  assert.ok(r0.pos && r0.pos.from === 2, JSON.stringify(r0.pos));
+  const r1 = run(nodes, ps, at(17, 39, 10), { timetableFirst: true });
+  assert.strictEqual(r1.pos.from, 2); assert.strictEqual(r1.pos.to, 3); assert.ok(r1.pos.ratio > 0 && r1.pos.ratio < 1 && r1.pos.moving, JSON.stringify(r1.pos));
+  const r2 = run(nodes, ps, at(17, 41, 30), { timetableFirst: true });
+  assert.ok(r2.pos.from >= 3, '증거 없이도 시각표대로 지나간다 ' + JSON.stringify(r2.pos));
+  assert.ok(!run(nodes, ps, at(17, 41, 30)).pos, 'timetableFirst 가 아니면 pos 없음');
+});
+t('시각표 기준 위치(pos): 통과 증거가 시각표보다 앞서면 그 역이 바닥이다(뒤로 가지 않는다)', () => {
+  const nodes = scene(), ps = [P(1, 17, 35, 40, 'board'), P(2, 17, 38, 20), P(4, 17, 39, 0)];
+  const r = run(nodes, ps, at(17, 39, 10), { timetableFirst: true });
+  assert.ok(r.pos.from >= 4, JSON.stringify(r.pos));
+});
 t('연착은 상태가 없다: 같은 입력을 두 번 불러도 같은 결과(누적해서 밀리지 않음)', () => {
   const nodes = scene(), ps = [P(1, 17, 35, 40, 'board'), P(2, 17, 38, 20)];
   assert.deepStrictEqual(run(nodes, ps, at(17, 42, 0)).arr, run(nodes, ps, at(17, 42, 0)).arr);
