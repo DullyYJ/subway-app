@@ -968,7 +968,7 @@ public class OverlayPlugin extends Plugin {
                     try { getBridge().getWebView().resumeTimers(); } catch (Exception ignored1) { }
                     try { getBridge().getWebView().onResume(); } catch (Exception ignored2) { }
                     getBridge().getWebView().evaluateJavascript(
-                            "(function(){try{return !!(window._ovlNativeTick&&window._ovlNativeTick());}catch(e){return false;}})()",
+                            "(function(){try{return !!(window._ovlNativeTick&&window._ovlNativeTick(" + bgServiceState() + "));}catch(e){return false;}})()",
                             new android.webkit.ValueCallback<String>() {
                                 @Override public void onReceiveValue(String v) {
                                     webAliveAt = System.currentTimeMillis();
@@ -1073,7 +1073,7 @@ public class OverlayPlugin extends Plugin {
                     //   웹이 돌려준 값(여정 진행 중이면 true)으로 '여정 진행 중' 표시를 이어 간다 — 웹이 keepAlive 를 못 보내는 동안에도 깨우기가 10분 만에 멈추지 않는다.
                     try { getBridge().getWebView().onResume(); } catch (Exception ignored3) { }
                     getBridge().getWebView().evaluateJavascript(
-                            "(function(){try{return !!(window._ovlNativeTick&&window._ovlNativeTick());}catch(e){return false;}})()",
+                            "(function(){try{return !!(window._ovlNativeTick&&window._ovlNativeTick(" + bgServiceState() + "));}catch(e){return false;}})()",
                             new android.webkit.ValueCallback<String>() {
                                 @Override public void onReceiveValue(String v) {
                                     webAliveAt = System.currentTimeMillis();
@@ -1085,6 +1085,25 @@ public class OverlayPlugin extends Plugin {
             main.postDelayed(this, TICK_MS);
         }
     };
+
+    // ★ 2026-10-13 (YJ: "서비스가 끊기면 30초마다 되살아나? 텀이 너무 길다 — 4.5초로"): 웹이 가진 '백그라운드 위치 켜짐' 표시(_bgGeoActive)는
+    //   서비스가 죽어도 true 로 남아 있어 되살리기가 아예 일어나지 않았다. 틱마다 진짜 서비스 상태를 읽어 웹에 넘긴다.
+    //   1 = 살아 있음 · 0 = 없음 · -1 = 읽지 못함(웹은 이 값으로 되살리지 않는다).
+    private int bgServiceState() {
+        try {
+            android.app.ActivityManager am = (android.app.ActivityManager) getContext().getSystemService(Context.ACTIVITY_SERVICE);
+            if (am == null) return -1;
+            java.util.List<android.app.ActivityManager.RunningServiceInfo> l = am.getRunningServices(200);
+            if (l == null) return -1;
+            String pkg = getContext().getPackageName();
+            for (android.app.ActivityManager.RunningServiceInfo s : l) {
+                if (s == null || s.service == null) continue;
+                if (!pkg.equals(s.service.getPackageName())) continue;
+                if (s.service.getClassName().endsWith("BackgroundGeolocationService")) return 1;
+            }
+            return 0;
+        } catch (Throwable e) { return -1; }
+    }
 
     private android.os.PowerManager.WakeLock cpuLock = null;
     private void holdCpu() {

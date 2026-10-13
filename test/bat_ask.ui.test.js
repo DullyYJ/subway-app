@@ -53,7 +53,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     assert.strictEqual(await shown(x), false, '안내가 닫힌다'); await x.ctx.close();
   });
 
-  await t('[나중에]는 요청 없이 닫고, 7일 안에는 다시 묻지 않는다', async () => {
+  await t('[나중에]는 요청 없이 닫고, 다시 묻지 않는다', async () => {
     const x = await fresh({ plugin: true, ignoring: false, disclosed: true });
     await x.page.clock.runFor(7000);
     await x.page.evaluate(() => document.getElementById('batAskNo').click());
@@ -63,10 +63,10 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     assert.strictEqual(await shown(x), false, '바로 다시 뜨면 안 된다'); await x.ctx.close();
   });
 
-  await t('7일이 지난 뒤에는 다시 묻는다', async () => {
-    const x = await fresh({ plugin: true, ignoring: false, disclosed: true, askedAt: new Date('2026-10-05T09:00:00+09:00').getTime() });
-    await x.page.clock.runFor(7000);
-    assert.strictEqual(await shown(x), true); await x.ctx.close();
+  await t('한 번 물었으면 며칠이 지나도 다시 묻지 않는다(처음 설치 때 한 번만)', async () => {
+    const x = await fresh({ plugin: true, ignoring: false, disclosed: true, askedAt: new Date('2026-09-01T09:00:00+09:00').getTime() });
+    await x.page.clock.runFor(8000);
+    assert.strictEqual(await shown(x), false); await x.ctx.close();
   });
 
   await t('이미 제외돼 있으면 띄우지 않는다', async () => {

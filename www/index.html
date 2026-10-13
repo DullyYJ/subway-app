@@ -27693,7 +27693,7 @@ function _beginJourneyTracking(){
     if(typeof _resetAlertFired === 'function') _resetAlertFired();   // ★ 도착임박 알림 중복방지 플래그 초기화 (이전 여정 잔여 방지)
     if(typeof _startBgGeolocation === 'function') _startBgGeolocation();
     if(typeof _askBgPermOnce === 'function') _askBgPermOnce();
-    try{ setTimeout(function(){ if(typeof _batAsk === 'function') _batAsk('journey'); }, 2500); }catch(eB){}   // ★ 2026-10-13: 경로 확정 때 아직 제외 안 돼 있으면 안내(7일 1회)
+    try{ setTimeout(function(){ if(typeof _batAsk === 'function') _batAsk('journey'); }, 2500); }catch(eB){}   // ★ 2026-10-13: 경로 확정 때 아직 제외 안 돼 있으면 안내(평생 1회)
     // 상시 알림 즉시 1회 표시 (경로 정보 있으면 상세, 없으면 기본 문구)
     var cur = '출발', dest = '목적지', rem = 1;
     if(typeof _transitResultDest !== 'undefined' && _transitResultDest){
@@ -29150,17 +29150,38 @@ function _ovlDiagShow(){
   }catch(e){}
 }
 window._ovlDiagShow = _ovlDiagShow;
+
+// ★ 2026-10-13 (YJ: "서비스가 끊기면 30초마다? 텀이 너무 길다 — 4.5초로"):
+//   네이티브 5초 틱이 실제 백그라운드 위치 서비스 상태(svc: 1 있음 · 0 없음 · -1 모름)를 넘겨 준다.
+//   · 없다(0)고 하면 웹의 '켜짐' 표시(_bgGeoActive)가 true 여도 리셋하고 바로 다시 켠다(4.5초 간격). 예전엔 이 표시만 봐서 서비스가 죽어도 되살리지 못했다.
+//   · 연달아 5번 되살려도 안 살면(권한 철회·백그라운드에서 서비스 시작 제한 등) 30초 간격으로 물러난다 — 배터리·폭주 방지.
+//   · 모름(-1)이면 아무것도 하지 않는다(오탐으로 되살리기를 반복하지 않도록).
+//   참고: 상주 알림을 사용자가 밀어 지워도 서비스는 계속 돈다(Android 14+ 는 알림을 못 막는다). 서비스가 도는 것이 중요하다.
+var _BG_RETRY_MS = 4500;
+function _ovlBgGuard(svc, now){
+  if(window._routeLocked !== true){ window._bgRestartN = 0; return; }
+  if(svc === 1){ window._bgRestartN = 0; return; }
+  if(svc !== 0) return;
+  var gap = (window._bgRestartN || 0) >= 5 ? 30000 : _BG_RETRY_MS;
+  if(now - (window._ovlBgRetryAt || 0) < gap) return;
+  window._ovlBgRetryAt = now; window._bgRestartN = (window._bgRestartN || 0) + 1;
+  _bgGeoActive = false; try{ S._bgWatchId = null; }catch(e0){}
+  _ovlDiag('BG서비스없음', '되살림 ' + window._bgRestartN + '회째');
+  _startBgGeolocation();
+}
+window._ovlBgGuard = _ovlBgGuard;
 var _ovlTickRtAt = 0;
 var _ovlTickPrevAt = 0;
-window._ovlNativeTick = function(){
+window._ovlNativeTick = function(svcState){
   try{
     var now = Date.now();
+    try{ _ovlBgGuard(svcState, now); }catch(eG){}
     // 2026-10-12: 네이티브 깨우기 간격을 남긴다 — 화면이 꺼진 동안에도 5초가 유지되는지 다음 시험에서 이 줄로 확인한다(12초 넘게 비면 한 줄).
     try{ if(_ovlTickPrevAt && now - _ovlTickPrevAt > 12000 && document.hidden) _ovlDiag('틱간격', Math.round((now - _ovlTickPrevAt) / 1000) + '초 만에 깨움(5초 기준)'); _ovlTickPrevAt = now; }catch(eGap){}
     try{ _ovlKeepAliveSync(); }catch(e0){}
     // ★ 2026-10-02: 확정한 여정인데 백그라운드 위치 감시가 없으면(시작 조건 불발·끊김) 여기서 다시 켠다(30초 간격)
     try{
-      if(window._routeLocked === true && !_bgGeoActive && now - (window._ovlBgRetryAt||0) > 30000){
+      if(window._routeLocked === true && !_bgGeoActive && now - (window._ovlBgRetryAt||0) >= _BG_RETRY_MS){
         window._ovlBgRetryAt = now;
         _ovlDiag('BG재시작');
         _startBgGeolocation();
@@ -29327,15 +29348,15 @@ window._batRequest = _batRequest;
 
 // ★ 2026-10-13 (YJ: "앱 설치 시 배터리 최적화 제외 설정도 요청하면 되겠네"): 설정 화면(숨김 카드)에서만 누를 수 있어 대부분 못 보고 지나갔다.
 //   → 위치 안내에 [동의]한 직후 · 앱을 켤 때 · 경로를 확정할 때, 아직 제외가 안 돼 있으면 이유를 먼저 설명하는 안내를 띄운다.
-//   [설정하기] 를 눌러야만 시스템 화면으로 간다(자동 이동 없음). 같은 안내는 7일에 한 번만(나중에를 눌러도 다음 주에 다시) — 이미 제외돼 있으면 아예 안 띄운다.
-var _BAT_ASK_KEY = 'gdm_bat_asked_at', _BAT_ASK_GAP_MS = 7 * 24 * 3600 * 1000;
+//   [설정하기] 를 눌러야만 시스템 화면으로 간다(자동 이동 없음). ★ 같은 안내는 평생 한 번만(YJ: "처음 설치 때 한 번만") — 이미 제외돼 있으면 아예 안 띄운다. 나중에 하려면 설정 화면의 카드.
+var _BAT_ASK_KEY = 'gdm_bat_asked_at';
 function _batAsk(why){
   try{
     var n = _batNative();
     if(!n || typeof n.isIgnoringOptimizations !== 'function' || typeof n.requestIgnoreOptimizations !== 'function') return;   // 웹/구버전 빌드는 건너뜀
     if(document.getElementById('batAskOv') || document.getElementById('locDiscOv') || document.getElementById('bgPermOv')) return;   // 다른 안내가 떠 있으면 이번엔 건너뜀(다음 기회에)
     var last = 0; try{ last = parseInt(localStorage.getItem(_BAT_ASK_KEY) || '0', 10) || 0; }catch(e0){}
-    if(last && Date.now() - last < _BAT_ASK_GAP_MS) return;
+    if(last) return;   // 한 번 물었으면 끝 — 이후엔 설정 화면의 카드에서만(YJ: 처음 설치 때 한 번만)
     n.isIgnoringOptimizations().then(function(r){
       if(r && r.ignoring) return;
       if(document.getElementById('batAskOv') || document.getElementById('locDiscOv') || document.getElementById('bgPermOv')) return;
