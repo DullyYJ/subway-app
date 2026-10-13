@@ -19205,7 +19205,7 @@ window.addEventListener('unhandledrejection', function(e) {
           <button onclick="_arrTestUI('shop')" style="flex:1;padding:11px 4px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);font-family:inherit;">🛍 쇼핑</button>
         </div>
         <button id="rcDemoBtn" onclick="_ovlRecoDemo()" style="width:100%;margin-bottom:6px;padding:11px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);font-family:inherit;">추천 캐릭터 미리보기</button>
-        <p style="font-size:11.5px;color:var(--sub);margin:0 0 10px;">캐릭터 하나가 오른쪽에서 추천 줄(실제 가게·쿠팡 상품 이름)을 끌고 들어오는 모습을 14초간 보여 줘요(앱 위에 바로 떠요). 누를 때마다 다른 캐릭터와 다른 종류(카페·쿠팡·식당)가 나오고, 화면을 누르면 닫혀요. '다른 앱 위에 표시' 권한이 필요해요.</p>
+        <p style="font-size:11.5px;color:var(--sub);margin:0 0 10px;">캐릭터 하나가 오른쪽에서 추천 줄(실제 가게·쿠팡 상품 이름)을 끌고 들어오는 모습을 14초간 보여 줘요(앱 위에 바로 떠요). 누를 때마다 다른 캐릭터와 다른 종류(식당·카페·쿠팡)가 나오고, 화면을 누르면 닫혀요. '다른 앱 위에 표시' 권한이 필요해요.</p>
         <button onclick="_arrStatusShow()" style="width:100%;padding:11px;border-radius:10px;border:none;cursor:pointer;font-size:13px;font-weight:800;background:var(--gold);color:#121214;font-family:inherit;">상태 확인</button>
         <div id="arrTestStat" style="margin-top:10px;background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:10px;font-size:11.5px;line-height:1.7;color:var(--text);font-family:monospace;white-space:pre-wrap;">'상태 확인'을 누르면 감시 상태와 남은 시간이 표시됩니다.</div>
       </div>
@@ -22979,27 +22979,80 @@ function _arrPipText(a, slot, destStn, body){
 }
 window._arrPipText = _arrPipText;
 
-// ★ 2026-10-14 (YJ: "광고가 나올 때는 실제 식당명·카페명, 쿠팡은 제품명이 나오도록"): 오버레이 추천 줄에 실제 이름을 싣는다.
-//   a = 가게 이름 또는 상품 이름(굵게), b = 한 줄 설명(거리·업종 / 지금 상황에 맞춘 이유). 실제 이름이 없으면 null → 예전 문구 줄을 쓴다.
-//   이름은 알림을 만든 _arrBuildAlert 가 고른 것(place·spots·shop)을 그대로 쓴다 — 알림 본문·[보기] 와 같은 곳이다.
-function _arrAd(a, slot){
+// ★ 2026-10-14 (YJ: "광고가 나올 때는 실제 식당명·카페명, 쿠팡은 제품명이 나오도록" · "광고판에 문구가 너무 없다 — 제품·식당·카페별로 추천 음식·제품을 날씨·시간에 맞게 설명해서 클릭을 유도"):
+//   오버레이 추천 줄에 실을 내용. a = 가게 이름 또는 상품 이름(굵게) · b = 지금 날씨·시간에 맞춘 추천 설명(두 줄까지) · m = 거리·종류(작게). 실제 이름이 없으면 null → 예전 문구 줄을 쓴다.
+//   이름·메뉴는 알림을 만든 _arrBuildAlert 가 고른 것(place·spots·menu·shop)을 그대로 쓴다 — 알림 본문·[보기] 와 같은 곳이다. 설명 문구는 알림과 같은 상황 문구 엔진(_arrHook·_arrShopLine)이 만든다.
+//   · 식당/카페: 메뉴에 맞는 가게(spots)가 있으면 그 가게 + 그 메뉴를 권한다. 메뉴와 상관없이 고른 가게(place)만 있으면 그 가게의 업종 이름(국밥·햄버거…)으로 문구를 만든다(안 파는 메뉴를 권하지 않는다).
+//   · 쿠팡: 상품 이름 + (상황이 뚜렷하면 상황 문구 · )상품에 맞춘 이유 한 줄, 작은 줄에 상품 분류.
+// 식당·카페 추천 한마디: 업종·메뉴 이름으로 고른다(같은 날·시각엔 같은 문구). 안 파는 것을 말하지 않도록 업종/메뉴 이름에 있는 말만 근거로 한다.
+var _ARR_FOOD_PITCH = [
+  [/국밥|해장|설렁탕|곰탕|순대국|탕|찌개|전골/, ['뜨끈한 국물로 속부터 든든하게', '한 그릇이면 하루가 든든해져요']],
+  [/치킨|통닭/, ['바삭하게 한 입, 고민 끝이에요', '야식은 역시 치킨이죠']],
+  [/햄버거|버거|패스트푸드/, ['빠르게 먹고 여유를 챙겨요', '든든하게 한 손에 쏙']],
+  [/피자|파스타|양식|스테이크/, ['오늘은 기분 내도 괜찮아요', '여유로운 한 끼가 되어 줘요']],
+  [/족발|보쌈|고기|구이|삼겹|곱창|막창/, ['고기 한 점이면 피로가 풀려요', '고생한 나에게 주는 보상이에요']],
+  [/분식|떡볶이|김밥|튀김/, ['간단하지만 든든한 한 끼예요', '가볍게 먹기 좋아요']],
+  [/중식|짜장|짬뽕|마라|탕수/, ['얼큰하고 든든한 한 그릇이에요', '고민될 땐 중식이 답이에요']],
+  [/일식|초밥|회|라멘|돈가스|덮밥/, ['깔끔하게 한 끼 챙겨요', '정갈한 한 끼가 필요한 날이에요']],
+  [/한식|백반|비빔|반찬|도시락/, ['집밥처럼 든든하게 챙겨요', '밥심으로 하루를 버텨요']],
+  [/카페|커피|디저트|베이커리|빵|케이크|티/, ['내리는 길에 잠깐 쉬어 가요', '한 모금이면 기분이 달라져요']]
+];
+var _ARR_FOOD_PITCH_DEFAULT = ['내리는 길에 가볍게 들러 봐요', '근처에서 해결하면 편해요'];
+function _arrAd(a, slot, destStn){
   try{
     if(!a) return null;
     var clean = function(t){ t = String(t == null ? '' : t); try{ if(typeof _stripEmoji === 'function') t = _stripEmoji(t); }catch(e){} return t.replace(/\s+/g, ' ').trim(); };
     if(slot === 'shop'){
       var it = a.shop;
       if(!it || !it.n) return null;
-      var why = '';
-      try{ if(typeof _arrShopLine === 'function' && a.cx) why = _arrShopLine(it, a.cx); }catch(e){}
-      return { k: 'shop', a: clean(it.n), b: clean(why) };
+      // 설명 = 상품에 맞춘 한두 문장(날씨 상품은 기온·강수 · 그 밖은 상품 성격과 시간대). 알림 팝업과 같은 문장 엔진(_arrShopSay)
+      var say = '';
+      try{
+        var cxs = a.cx || {};
+        if(typeof _arrShopSay === 'function') say = _arrShopSay(it, { temp: cxs.temp, rain: cxs.rain, weekend: !!cxs.weekend });
+      }catch(e){}
+      // 상품별 이유 한 줄(_arrShopLine)도 있으면 덧붙인다 — 문장이 너무 일반적이면 그 줄로 바꾸고, 숫자(%·도)가 겹치면 덧붙이지 않는다
+      var line = '';
+      try{ if(typeof _arrShopLine === 'function' && a.cx) line = _arrShopLine(it, a.cx) || ''; }catch(e){}
+      if(!say || /눈여겨볼 만해서|써보기 좋아요/.test(say)) say = line || say;
+      else if(line && line !== say && !(/%/.test(say) && /%/.test(line)) && !(/\d+도/.test(say) && /\d+도/.test(line)) && say.length + line.length + 1 <= 62) say += ' ' + line;
+      return { k: 'shop', a: clean(it.n), b: clean(say), m: clean((it._cat ? it._cat + ' · ' : '') + '쿠팡') };
     }
-    var pl = a.place, nm = (pl && pl.n) ? pl.n : ((a.spots && a.spots[0]) || '');
+    var sl = (slot === 'morning') ? 'morning' : (slot === 'lunch' ? 'lunch' : (a.dinner ? 'dinner' : 'night'));
+    var list = null;
+    try{ if(typeof _arrFoodList === 'function') list = _arrFoodList(destStn); }catch(e){}
+    var find = function(n){ if(list) for(var i = 0; i < list.length; i++) if(list[i] && list[i].n === n) return list[i]; return null; };
+    var pl = a.place, nm = '', info = null, byMenu = false;
+    if(sl !== 'morning' && a.spots && a.spots.length){ nm = a.spots[0]; info = find(nm); byMenu = true; }
+    else if(pl && pl.n){ nm = pl.n; info = pl; }
+    else if(a.spots && a.spots[0]){ nm = a.spots[0]; info = find(nm); byMenu = (sl !== 'morning'); }
     if(!nm) return null;
-    var parts = [], same = !!(pl && pl.n === nm);
-    if(same && pl.d != null && isFinite(pl.d)) parts.push(pl.d >= 1000 ? (pl.d / 1000).toFixed(1) + 'km' : Math.round(pl.d) + 'm');
-    var cat = same ? String(pl.c || '').split('>').pop().trim() : '';
-    if(cat) parts.push(cat); else if(a.menu) parts.push(a.menu);
-    return { k: (slot === 'morning' ? 'cafe' : 'food'), a: clean(nm), b: clean(parts.join(' · ')) };
+    var catTail = info ? String(info.c || '').split('>').pop().trim() : '';
+    var word = (sl === 'morning' || byMenu) ? (a.menu || catTail) : (catTail || a.menu || '');
+    var hk = '';
+    try{ if(typeof _arrHook === 'function') hk = _arrHook(sl, a.cx, word).t || ''; }catch(e){}
+    var d;
+    if(sl === 'morning'){
+      d = hk + (a.menu ? (hk ? ' · ' : '') + a.menu + (a.brunch ? ' + ' + a.brunch : '') + ' 어때요?' : '');
+    } else {
+      d = hk;
+      if(word && d.indexOf(word) < 0) d += (d ? ' · ' : '') + word + ' 어때요?';
+    }
+    if(d.length <= 30){   // 문구가 짧으면 업종에 맞춘 한마디를 덧붙여 설명을 채운다
+      var pitch = '', ptxt = (catTail || '') + ' ' + (word || '') + ' ' + (info ? String(info.c || '') : '');
+      for(var pi = 0; pi < _ARR_FOOD_PITCH.length && !pitch; pi++){
+        if(_ARR_FOOD_PITCH[pi][0].test(ptxt)) pitch = _arrVar(_ARR_FOOD_PITCH[pi][1], a.cx, nm.length);
+      }
+      if(!pitch) pitch = _arrVar(_ARR_FOOD_PITCH_DEFAULT, a.cx, nm.length);
+      d += (d ? ' · ' : '') + pitch;
+    }
+    var parts = [];
+    if(info && info.d != null && isFinite(info.d)){
+      parts.push(info.d >= 1000 ? (info.d / 1000).toFixed(1) + 'km' : Math.round(info.d) + 'm');
+      if(catTail) parts.push(catTail);
+      if(info.d <= 1000) parts.push('걸어서 ' + Math.max(1, Math.round(info.d / 70)) + '분');
+    } else if(catTail) parts.push(catTail);
+    return { k: (sl === 'morning' ? 'cafe' : 'food'), a: clean(nm), b: clean(d), m: clean(parts.join(' · ')) };
   }catch(e){ return null; }
 }
 window._arrAd = _arrAd;
@@ -23040,7 +23093,7 @@ function _arrFireAlertNow(destStn, arrMs){
       try{
         var _pt = _arrPipText(a, slot, destStn, body);
         if(typeof _pipRecoSet === 'function') _pipRecoSet(_pt.title, _pt.lines.join('\n'), []);
-        try{ if(window._pipReco) window._pipReco.ad = _arrAd(a, slot); }catch(eAd){}   // ★ 오버레이 추천 줄에 실을 실제 가게·상품 이름
+        try{ if(window._pipReco) window._pipReco.ad = _arrAd(a, slot, destStn); }catch(eAd){}   // ★ 오버레이 추천 줄에 실을 실제 가게·상품 이름
         window._arrLast = { at: (window._pipReco && window._pipReco.at) || 0, slot: slot, action: action, title: a.title, body: body };   // ★ 오버레이 [보기] 가 같은 곳으로 보낸다
       }catch(e){}
 
@@ -23208,32 +23261,29 @@ function _arrTestUI(kind){
 window._arrTestUI = _arrTestUI;
 
 // ★ 2026-10-14 (YJ: "도착 전 추천 때 캐릭터들이 어떻게 나와서 동작하는지 보고 싶어 — 테스트 버튼 하나"):
-//   그리기 확인용. 네이티브 오버레이에 시연(recoDemo)을 시킨다 — 캐릭터 하나가 오른쪽에서 추천 줄을 끌고 들어오는 장면을 14초간 앱 위에 띄운다(실제 알림·기록과 무관).
-//   줄에는 실제 가게(맛집 탭이 들고 있는 근처 목록)·쿠팡 상품(_shopPick) 이름이 실린다. 누를 때마다 캐릭터와 종류(카페·쿠팡·식당)가 바뀐다.
+//   그리기 확인용. 네이티브 오버레이에 시연(recoDemo)을 시킨다 — 캐릭터 하나가 오른쪽에서 추천 줄을 끌고 들어오는 장면을 14초간 앱 위에 띄운다(실제 알림·발송 기록과 무관).
+//   줄 내용은 실제 알림과 같은 길(_arrBuildAlert → _arrAd)로 만든다: 지금 시간대의 추천(아침 카페·점심·저녁·야식)과 쿠팡 상품을 번갈아, 지금 날씨·시간에 맞춘 설명까지.
+//   가게는 맛집 탭이 들고 있는 근처 목록(_foodPublicData), 쿠팡은 _shopPick 에서 고른다. 누를 때마다 캐릭터(6종)와 종류가 바뀐다.
 //   실제 목록이 하나도 없으면 이름 자리에 안내 문구만 보인다(가짜 가게 이름은 만들지 않는다).
 var _rcDemoN = Math.floor(Math.random() * 6);
 function _ovlAdSample(kind){
   try{
+    var arr = Date.now() + 10 * 60000;
     if(kind === 'shop'){
       var pk = (typeof _shopPick === 'function') ? _shopPick() : null;
       var rec = (pk && pk.rec) ? pk.rec.slice(0, 30) : [];
       if(!rec.length) return null;
       var it = rec[Math.floor(Math.random() * rec.length)], cx = null;
-      try{ cx = (typeof _arrCx === 'function') ? _arrCx(Date.now() + 10 * 60000) : null; }catch(e){}
+      try{ cx = (typeof _arrCx === 'function') ? _arrCx(arr) : null; }catch(e){}
       var ad = _arrAd({ shop: it, cx: cx }, 'shop');
-      return ad ? { a: ad.a, b: ad.b, go: '쿠팡 보기' } : null;
+      return ad ? { a: ad.a, b: ad.b, m: ad.m, go: '쿠팡 보기' } : null;
     }
-    var pub = window._foodPublicData || [], list = [];
-    for(var i = 0; i < pub.length; i++){
-      var x = pub[i]; if(!x || !x.place_name) continue;
-      list.push({ n: x.place_name, c: x.category_name || '', d: (x.distance != null ? parseInt(x.distance, 10) : null) });
-    }
-    var re = (kind === 'cafe') ? _ARR_CAFE_RE : _ARR_NIGHT_RE;
-    var f = list.filter(function(y){ return re.test(String(y.c)); });
-    if(!f.length) return null;
-    var pl = f[Math.floor(Math.random() * f.length)];
-    var ad2 = _arrAd({ place: pl, spots: [], menu: '' }, kind === 'cafe' ? 'morning' : 'lunch');
-    return ad2 ? { a: ad2.a, b: ad2.b, go: '맛집 보기' } : null;
+    // 가게: 지금이 쇼핑 시간대(21시 이후)·심야면 저녁 시간대로 만들어 보여 준다
+    var slot = (typeof _arrSlot === 'function') ? _arrSlot(arr) : 'lunch';
+    if(slot === 'shop' || slot === 'none'){ var d0 = new Date(); d0.setHours(18, 30, 0, 0); arr = d0.getTime(); slot = 'night'; }
+    var alert = _arrBuildAlert('', null, arr);
+    var ad2 = _arrAd(alert, slot, '');
+    return ad2 ? { a: ad2.a, b: ad2.b, m: ad2.m, go: '맛집 보기' } : null;
   }catch(e){ return null; }
 }
 window._ovlAdSample = _ovlAdSample;
@@ -23242,13 +23292,13 @@ function _ovlRecoDemo(){
   try{
     var n = (typeof _ovlNative === 'function') ? _ovlNative() : null;
     if(!n || typeof n.recoDemo !== 'function'){ say('이 앱 버전에서는 미리보기를 지원하지 않아요'); return false; }
-    var CH = ['dolsom','lovel','ppopu','chaeng','sul','dudung'], KINDS = ['cafe','shop','food'];
-    var k0 = _rcDemoN % 3, ch = CH[_rcDemoN % CH.length];
+    var CH = ['dolsom','lovel','ppopu','chaeng','sul','dudung'], KINDS = ['food','shop'];
+    var k0 = _rcDemoN % 2, ch = CH[_rcDemoN % CH.length];
     _rcDemoN++;
     var s = null;
     for(var j = 0; j < KINDS.length && !s; j++) s = _ovlAdSample(KINDS[(k0 + j) % KINDS.length]);
-    if(!s) s = { a: '가게 이름이 여기에 나와요', b: '맛집 탭을 한 번 열면 실제 이름으로 보여요', go: '맛집 보기' };
-    var r = n.recoDemo({ ch: ch, a: s.a, b: s.b, go: s.go, secs: 14 });
+    if(!s) s = { a: '가게 이름이 여기에 나와요', b: '맛집 탭을 한 번 열면 근처 실제 가게 이름과 날씨에 맞춘 추천 설명이 보여요', m: '', go: '맛집 보기' };
+    var r = n.recoDemo({ ch: ch, a: s.a, b: s.b, m: s.m || '', go: s.go, secs: 14 });
     if(r && typeof r.then === 'function'){
       r.then(function(v){ if(v && v.ok === false) say("'다른 앱 위에 표시' 권한이 필요해요 — 아래 스위치를 켜 주세요"); })
        .catch(function(){ say('미리보기를 띄우지 못했어요'); });
@@ -28630,9 +28680,9 @@ function _ovlLines(){
         var _remS = _re ? _re.rem : ((d.min != null && isFinite(d.min)) ? d.min * 60 : null);
         var _rcForce = (window._ovlRecoForceUntil || 0) > Date.now();   // 설정>하차 추천 테스트 버튼: 도착 시각과 상관없이 90초간 미리보기
         if(_rcForce || (_remS != null && _remS <= 180 && _remS > -30)){
-          // ★ 2026-10-14: 실제 가게·상품 이름(r.ad)이 있으면 그것을 첫 줄(굵게)로, 한 줄 설명을 둘째 줄로. 없으면 예전 문구 두 줄.
+          // ★ 2026-10-14: 실제 가게·상품 이름(r.ad)이 있으면 이름(첫 줄 굵게)·추천 설명(두 줄까지)·거리/분류(작게). 없으면 예전 문구 두 줄.
           var _ad = (r.ad && r.ad.a) ? r.ad : null;
-          var _rl = _ad ? [_pipClampText(_ad.a, 40), _pipClampText(_ad.b || '', 28)].filter(function(x){ return x; })
+          var _rl = _ad ? [_pipClampText(_ad.a, 40), _pipClampText(_ad.b || '', 64)].filter(function(x){ return x; })
                         : String(r.body).split('\n').map(function(x){ return _pipClampText(x, 26); }).filter(function(x){ return x; }).slice(0, 2);
           if(_rl.length){
             var _ac = (window._arrLast && window._arrLast.at === r.at && window._arrLast.action) || null;
@@ -28640,7 +28690,7 @@ function _ovlLines(){
               var _o = ['dolsom','lovel','dudung','sul','ppopu','chaeng'];
               r.ovlCh = _o[Math.floor(Math.random() * _o.length)];
             }
-            out.reco = { on: true, ch: r.ovlCh, a: _rl[0], b: _rl[1] || '', go: (_ac && _ac.kind === 'shop') ? '쿠팡 보기' : ((_ac && _ac.kind === 'delivery') ? '주문하기' : '맛집 보기'), at: r.at };
+            out.reco = { on: true, ch: r.ovlCh, a: _rl[0], b: _rl[1] || '', m: _ad ? _pipClampText(_ad.m || '', 32) : '', go: (_ac && _ac.kind === 'shop') ? '쿠팡 보기' : ((_ac && _ac.kind === 'delivery') ? '주문하기' : '맛집 보기'), at: r.at };
           }
         }
       }
