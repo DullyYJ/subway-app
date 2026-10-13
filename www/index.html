@@ -19204,6 +19204,8 @@ window.addEventListener('unhandledrejection', function(e) {
           <button onclick="_arrTestUI('night')" style="flex:1;padding:11px 4px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);font-family:inherit;">🍗 야식</button>
           <button onclick="_arrTestUI('shop')" style="flex:1;padding:11px 4px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);font-family:inherit;">🛍 쇼핑</button>
         </div>
+        <button id="rcDemoBtn" onclick="_ovlRecoDemo()" style="width:100%;margin-bottom:6px;padding:11px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);font-family:inherit;">추천 캐릭터 미리보기</button>
+        <p style="font-size:11.5px;color:var(--sub);margin:0 0 10px;">오버레이 아래에 추천 줄과 캐릭터 둘이 나와 움직이는 모습을 14초간 보여 줘요(앱 위에 바로 떠요). 누를 때마다 다른 캐릭터가 나오고, 화면을 누르면 닫혀요. '다른 앱 위에 표시' 권한이 필요해요.</p>
         <button onclick="_arrStatusShow()" style="width:100%;padding:11px;border-radius:10px;border:none;cursor:pointer;font-size:13px;font-weight:800;background:var(--gold);color:#121214;font-family:inherit;">상태 확인</button>
         <div id="arrTestStat" style="margin-top:10px;background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:10px;font-size:11.5px;line-height:1.7;color:var(--text);font-family:monospace;white-space:pre-wrap;">'상태 확인'을 누르면 감시 상태와 남은 시간이 표시됩니다.</div>
       </div>
@@ -23178,6 +23180,27 @@ function _arrTestUI(kind){
   }
 }
 window._arrTestUI = _arrTestUI;
+
+// ★ 2026-10-14 (YJ: "도착 전 추천 때 캐릭터들이 어떻게 나와서 동작하는지 보고 싶어 — 테스트 버튼 하나"):
+//   그리기 확인용. 네이티브 오버레이에 시연(recoDemo)을 시킨다 — 추천 줄·3D 캐릭터 둘을 14초간 앱 위에 띄운다(실제 알림·기록과 무관).
+//   누를 때마다 캐릭터 조합이 바뀌어 6종이 모두 한 번씩 나온다.
+var _rcDemoN = 0;
+function _ovlRecoDemo(){
+  var say = function(m){ try{ if(typeof toast === 'function') toast(m); }catch(e){} };
+  try{
+    var n = (typeof _ovlNative === 'function') ? _ovlNative() : null;
+    if(!n || typeof n.recoDemo !== 'function'){ say('이 앱 버전에서는 미리보기를 지원하지 않아요'); return false; }
+    var P = [['dolsom','lovel'],['ppopu','chaeng'],['sul','dudung'],['lovel','ppopu'],['chaeng','dolsom'],['dudung','sul']];
+    var pr = P[_rcDemoN++ % P.length];
+    var r = n.recoDemo({ ch: pr[0], ch2: pr[1], a: '곧 도착해요 · 커피 한 잔 어때요?', b: '근처 카페 · 걸어서 2분', go: '맛집 보기', secs: 14 });
+    if(r && typeof r.then === 'function'){
+      r.then(function(v){ if(v && v.ok === false) say("'다른 앱 위에 표시' 권한이 필요해요 — 아래 스위치를 켜 주세요"); })
+       .catch(function(){ say('미리보기를 띄우지 못했어요'); });
+    }
+    return true;
+  }catch(e){ say('미리보기를 띄우지 못했어요'); return false; }
+}
+window._ovlRecoDemo = _ovlRecoDemo;
 
 // 감시 상태 표시
 function _arrStatusShow(){
@@ -38903,12 +38926,12 @@ var _RC = (function(){
   var PI2 = Math.PI * 2;
   // cell=화면에 그릴 칸 크기(px) · base=칸 안 바닥 높이(256 기준) · ox=칸 안 몸 중심 가로 위치 · fps=재생 속도 · T=화면을 가로지르는 시간(초) · lift=띄울 높이(px) · sh=그림자 진하기
   var D3 = {
-    dolsom: { n: 16, fps: 19, cell: 92, base: 214, ox: 128, T: 2.7, sh: 0.34 },     // 뛴다
-    lovel:  { n: 16, fps: 11, cell: 98, base: 214, ox: 137, T: 3.4, sh: 0.34 },     // 걷는다
-    ppopu:  { n: 16, fps: 19, cell: 92, base: 214, ox: 128, T: 2.3, sh: 0.34 },     // 뛴다
-    chaeng: { n: 16, fps: 15, cell: 115, base: 208, ox: 148, T: 3.2, sh: 0.2, lift: 12 },   // 헤엄친다
-    sul:    { n: 16, fps: 20, cell: 140, base: 193, ox: 128, T: 2.6, sh: 0.2 },     // 난다
-    dudung: { n: 16, fps: 13, cell: 104, base: 218, ox: 128, T: 3.5, sh: 0.34, intro: 14, introFps: 14, x0: 0.16 }   // 땅에서 솟아 걷는다
+    dolsom: { n: 16, fps: 19, cell: 86, base: 250, ox: 121, T: 2.7, sh: 0.34 },     // 뛴다
+    lovel:  { n: 16, fps: 11, cell: 88, base: 249.5, ox: 133, T: 3.4, sh: 0.34 },   // 걷는다
+    ppopu:  { n: 16, fps: 19, cell: 88, base: 248.5, ox: 120.5, T: 2.3, sh: 0.34 }, // 뛴다
+    chaeng: { n: 16, fps: 15, cell: 88, base: 244.5, ox: 154.5, T: 3.2, sh: 0.2, lift: 12 },   // 헤엄친다
+    sul:    { n: 16, fps: 20, cell: 104, base: 230.5, ox: 131, T: 2.6, sh: 0.2 },   // 난다
+    dudung: { n: 16, fps: 13, cell: 106, base: 222.5, ox: 128, T: 3.5, sh: 0.34, intro: 14, introFps: 14, x0: 0.16 }   // 땅에서 솟아 걷는다
   };
   var sheets = {}, sheetsIntro = {}, loading = false, tries = 0, waiters = [];
   function ready(){ for(var i = 0; i < ORDER.length; i++) if(!sheets[ORDER[i]]) return false; return !!sheetsIntro.dudung; }
