@@ -228,7 +228,12 @@ const NOW = new Date('2026-10-14T13:00:00+09:00');   // 수요일 13:00
     assert.strictEqual(new Set(s0.map(c => c.id)).size, s0.length, '서로 다른 캐릭터');
     s0.forEach(c => assert(ALL.includes(c.id), c.id));
     const host = await rectOf(x, '#nmTtPlay'), sh = await rectOf(x, '#nmTtSheet');
-    assert(host && host.top >= sh.top && host.top - sh.top < 60 && host.h >= 40, '시트 상단에 있다 ' + JSON.stringify(host));
+    // 2026-10-14 16:07 (YJ): 시트 맨 위 큰 공백(손잡이~제목)을 없애고, 놀이터는 역명 줄의 빈 칸(제목과 ✕ 사이)에 둔다
+    const ttl = await rectOf(x, '#nmTtTitle'), xb = await rectOf(x, '#nmTtX'), hd = await rectOf(x, '.nmp-handle');
+    assert(host && host.h >= 40 && host.right - host.left >= 90, '놀이터 크기 ' + JSON.stringify(host));
+    assert(host.left >= ttl.right - 1 && host.right <= xb.left + 1, '제목 오른쪽·✕ 왼쪽 사이 ' + JSON.stringify([ttl.right, host.left, host.right, xb.left]));
+    assert(Math.abs((host.top + host.bottom) / 2 - (ttl.top + ttl.bottom) / 2) < 8, '역명과 같은 줄');
+    assert(ttl.top - hd.bottom < 30, '손잡이와 제목 사이가 비어 있지 않다 ' + (ttl.top - hd.bottom) + 'px');
     assert.strictEqual(await x.page.evaluate(() => getComputedStyle(document.getElementById('nmTtPlay')).pointerEvents), 'none', '터치를 가로채지 않는다');
     // 그림이 실제로 그려진다 — file:// 의 캔버스는 픽셀을 읽을 수 없으므로(오염) 캔버스가 놀이터 띠 안에 크기를 갖고 보이는지로 확인
     await x.page.clock.runFor(600);
@@ -271,6 +276,55 @@ const NOW = new Date('2026-10-14T13:00:00+09:00');   // 수요일 13:00
     const s = await sheet(x); assert(/방면/.test(s.dirs[1] || '') && s.sum, JSON.stringify(s.dirs));
     const el = await x.page.evaluate(() => { const r = document.getElementById('nmTtPlay').getBoundingClientRect(); const e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return e && (e.id || e.className); });
     assert(!/rc-play/.test(String(el)), '띠 위를 눌러도 캔버스가 받지 않는다: ' + el);
+    assert.deepStrictEqual(x.errs, []); await x.ctx.close();
+  });
+  // ── 장면(배경 그라데이션) · 행동 ──
+  await t('놀이터 장면: 8가지 배경이 있고 다크/파스텔 두 벌 — 다크는 어둡고 파스텔은 밝다', async () => {
+    const x = await fresh(); await openSubway(x);
+    const sc = await x.page.evaluate(() => ({ order: window._RC.sceneOrder, s: window._RC.scenes }));
+    assert(sc.order.length >= 8, '장면 수 ' + sc.order.length);
+    const hex = (h) => { const n = parseInt(h.slice(1), 16); return (0.2126 * (n >> 16) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255)) / 255; };
+    sc.order.forEach(k => { const S = sc.s[k]; assert(S.p.length === 3 && S.d.length === 3, k); assert(S.p.reduce((a, c) => a + hex(c), 0) / 3 > 0.6, k + ' 파스텔은 밝다'); assert(S.d.reduce((a, c) => a + hex(c), 0) / 3 < 0.4, k + ' 다크는 어둡다'); });
+    assert.strictEqual(new Set(sc.order.map(k => sc.s[k].p.join())).size, sc.order.length, '배경이 서로 다르다');
+    await x.ctx.close();
+  });
+  await t('놀이터 장면: 열 때마다 장면이 달라지고(무작위) 시트에 data-scene 이 붙는다 · 강제 지정도 된다', async () => {
+    const x = await fresh(); await openSubway(x); const seen = new Set();
+    for (let k = 0; k < 12; k++) {
+      await openTt(x, '서울역', ['1호선']);
+      for (let i = 0; i < 40 && !(await x.page.evaluate(() => !!window._RC.playScene())); i++) { await new Promise(r => setTimeout(r, 40)); await x.page.clock.runFor(40); }
+      const sn = await x.page.evaluate(() => [window._RC.playScene(), document.getElementById('nmTtPlay').getAttribute('data-scene')]);
+      assert(sn[0] && sn[0] === sn[1], JSON.stringify(sn)); seen.add(sn[0]);
+      await x.page.evaluate(() => nmTtClose()); await x.page.clock.runFor(100);
+    }
+    assert(seen.size >= 3, '장면 종류 ' + [...seen]);
+    await x.page.evaluate(() => { window._rcScene = 'snow'; }); await openTt(x, '서울역', ['1호선']);
+    for (let i = 0; i < 40 && !(await x.page.evaluate(() => !!window._RC.playScene())); i++) { await new Promise(r => setTimeout(r, 40)); await x.page.clock.runFor(40); }
+    assert.strictEqual(await x.page.evaluate(() => window._RC.playScene()), 'snow');
+    assert.deepStrictEqual(x.errs, []); await x.ctx.close();
+  });
+  await t('놀이터 장면: 장면에 따라 행동이 다르다 — 밤은 쉬는 시간이 많고, 눈·꽃잎은 콩콩·빙글이 많다', async () => {
+    const meas = async (scene) => {
+      const x = await fresh(); await openSubway(x); await x.page.evaluate((s) => { window._rcScene = s; }, scene);
+      await openTt(x, '서울역', ['1호선']);
+      for (let i = 0; i < 40 && !(await x.page.evaluate(() => !!window._RC.playState())); i++) { await new Promise(r => setTimeout(r, 40)); await x.page.clock.runFor(40); }
+      const cnt = { walk: 0, hop: 0, spin: 0, rest: 0 }; let tot = 0;
+      for (let i = 0; i < 1500; i++) { await x.page.clock.runFor(60); const st = await x.page.evaluate(() => window._RC.playState()); (st || []).forEach(c => { cnt[c.st]++; tot++; }); }
+      assert.deepStrictEqual(x.errs, []); await x.ctx.close();
+      return { rest: cnt.rest / tot, play: (cnt.hop + cnt.spin) / tot };
+    };
+    const night = await meas('night'), snow = await meas('snow');
+    assert(night.rest > snow.rest + 0.1, '쉬기 night ' + night.rest.toFixed(2) + ' vs snow ' + snow.rest.toFixed(2));
+    assert(snow.play > night.play + 0.1, '콩콩·빙글 snow ' + snow.play.toFixed(2) + ' vs night ' + night.play.toFixed(2));
+  });
+  await t('놀이터 장면: 테마를 바꿔도(다크↔파스텔) 계속 돌고 오류가 없다 · 그리기는 가벼워야 한다(1회 평균 8ms 미만)', async () => {
+    const x = await fresh(); await openSubway(x); await x.page.evaluate(() => { window._rcScene = 'aurora'; window._rcPerf = { ms: 0, n: 0 }; });
+    await openTt(x, '서울역', ['1호선']);
+    for (let i = 0; i < 40 && !(await x.page.evaluate(() => !!window._RC.playState())); i++) { await new Promise(r => setTimeout(r, 40)); await x.page.clock.runFor(40); }
+    await x.page.evaluate(() => applyTheme('dark')); await x.page.clock.runFor(1000);
+    await x.page.evaluate(() => applyTheme('pastel')); await x.page.clock.runFor(1000);
+    const pf = await x.page.evaluate(() => window._rcPerf); assert(pf.n > 20, '그려졌다 ' + pf.n); assert(pf.ms / pf.n < 8, '평균 ' + (pf.ms / pf.n).toFixed(2) + 'ms');
+    assert(await x.page.evaluate(() => !!window._RC.playState()));
     assert.deepStrictEqual(x.errs, []); await x.ctx.close();
   });
   await t('놀이터: 개·고양이 시트 3장이 새 렌더링(다리가 몸에 붙음)으로 교체되어 있다 — 기준선이 시트와 맞는다', async () => {
