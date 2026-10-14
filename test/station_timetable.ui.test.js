@@ -331,6 +331,72 @@ const NOW = new Date('2026-10-14T13:00:00+09:00');   // 수요일 13:00
     assert.deepStrictEqual(x.errs, []); await x.ctx.close();
   });
 
+  await t('역 팝업이 열릴 때도 올라온다: 팝업 transform 애니메이션 + 지도 보이는 끝이 팝업 위쪽 끝을 따라감(tFrom=vh → tTo=vh−H, 320ms), 이미 팝업이 떠 있으면 바로 바꾼다', async () => {
+    const x = await fresh({ plugin: true }); await openSubway(x);
+    await x.page.evaluate(() => { window.__nm.length = 0; });
+    await x.page.evaluate(() => window.__nmEmit('station', { name: '서울역', x: 195, y: 300 })); await x.page.clock.runFor(40);
+    const an = await x.page.evaluate(() => { const p = document.getElementById('svgStationPop'); return p ? { n: p.getAnimations().length, tf: p.getAnimations()[0] && p.getAnimations()[0].effect.getKeyframes().map(k => k.transform) } : null; });
+    assert(an && an.n >= 1 && /translateY\(\d+(\.\d+)?px\)/.test(an.tf[0]) && /translateY\(0px\)/.test(an.tf[1]), '열 때 팝업 transform 애니메이션 ' + JSON.stringify(an));
+    await x.page.clock.runFor(900);
+    const sr = await x.page.evaluate(() => window.__nm.filter(c => c.m === 'setRect').map(c => c.a));
+    const g = await x.page.evaluate(() => { const p = document.getElementById('svgStationPop'); return { h: p.offsetHeight, vh: innerHeight, top: p.getBoundingClientRect().top, tf: p.style.transform }; });
+    assert.strictEqual(sr.length, 1, '팝업이 올라오는 동안 지도 사각형은 한 번만 바뀐다 ' + sr.length);
+    assert(sr[0].anim === 320 && sr[0].tFrom === g.vh && Math.abs(sr[0].tTo - (g.vh - g.h)) < 1 && Math.abs(sr[0].y + sr[0].h - (g.vh - g.h)) < 2, '열기 곡선·길 ' + JSON.stringify(sr[0]));
+    assert.strictEqual(g.tf, '', '다 올라온 뒤 transform 이 남지 않는다'); assert(Math.abs(g.top - (g.vh - g.h)) < 1, '제자리');
+    // 다른 역을 누르면(이미 떠 있음) 올라오는 애니메이션 없이 바로 바뀐다
+    await x.page.evaluate(() => { window.__nm.length = 0; });
+    await x.page.evaluate(() => window.__nmEmit('station', { name: '시청', x: 195, y: 300 })); await x.page.clock.runFor(30);
+    const an2 = await x.page.evaluate(() => { const p = document.getElementById('svgStationPop'); return p ? { n: p.getAnimations().length, tf: p.style.transform, nm: p.querySelector('.nmp-name').textContent } : null; });
+    assert(an2 && an2.tf === '' && /시청/.test(an2.nm) && (await x.page.evaluate(() => window.__nm.filter(c => c.m === 'setRect').length)) === 0, '바로 교체(올라오지 않음, 지도도 안 움직임) ' + JSON.stringify(an2));
+    assert(an2.n === 1, '교체는 작은 효과(페이드)만 ' + an2.n);
+    // 내려가는 중에 다른 역을 누르면 새 팝업은 올라온다(가끔 애니메이션이 빠지던 것)
+    await x.page.clock.runFor(400);
+    await x.page.mouse.click(195, 60); await x.page.clock.runFor(20);
+    await x.page.evaluate(() => window.__nmEmit('station', { name: '종각', x: 195, y: 300 })); await x.page.clock.runFor(30);
+    const an3 = await x.page.evaluate(() => { const p = document.getElementById('svgStationPop'); return p ? { n: p.getAnimations().length, kf: p.getAnimations()[0] && p.getAnimations()[0].effect.getKeyframes().map(k => k.transform), cnt: document.querySelectorAll('#svgStationPop').length } : null; });
+    assert(an3 && an3.cnt === 1 && an3.n >= 1 && /translateY\(\d{2,}/.test(an3.kf[0]), '내려가는 중 눌러도 올라온다 ' + JSON.stringify(an3));
+    await x.page.clock.runFor(900);
+    // 올라오는 도중 만져도(시간표 버튼) 문제없이 시트로 이어진다
+    await x.page.evaluate(() => document.getElementById('nmTtOpenBtn').click()); await x.page.clock.runFor(900);
+    assert(await sheet(x), '시트가 뜬다');
+    assert.deepStrictEqual(x.errs, []); await x.ctx.close();
+  });
+
+  await t('역 팝업을 위로 밀면 시간표가 나온다 — 짧게 밀면 제자리, 아래로 밀면 닫힘은 그대로, 버튼 위에서 시작해도 된다', async () => {
+    const x = await fresh({ plugin: true }); await openSubway(x);
+    const geo = () => x.page.evaluate(() => { const e = document.getElementById('svgStationPop'); if (!e) return null; const r = e.getBoundingClientRect(); return { top: r.top, l: r.left, w: r.width }; });
+    const idle = () => x.page.waitForFunction(() => { const e = document.getElementById('svgStationPop'); return !e || e.getAnimations().length === 0; }, null, { timeout: 5000 });
+    await x.page.evaluate(() => window.__nmEmit('station', { name: '서울역', x: 195, y: 300 })); await x.page.clock.runFor(600); await idle();
+    let g = await geo(); const px = g.l + g.w / 2;
+    // 짧게(30px) 위로 → 제자리, 시간표 안 열림
+    await x.page.mouse.move(px, g.top + 20); await x.page.mouse.down(); await x.page.mouse.move(px, g.top - 10, { steps: 4 }); await x.page.clock.runFor(30);
+    const mid = await x.page.evaluate(() => document.getElementById('svgStationPop').style.transform);
+    assert(/translateY\(-\d+px\)/.test(mid), '밀면 살짝 따라간다 ' + mid);
+    await x.page.mouse.up(); await x.page.clock.runFor(400);
+    assert.strictEqual(await sheet(x), null, '짧게 밀면 시간표 안 열림'); assert(await geo(), '팝업 그대로');
+    // 충분히(120px) 위로 → 시간표
+    g = await geo();
+    await x.page.mouse.move(px, g.top + 20); await x.page.mouse.down(); await x.page.mouse.move(px, g.top - 100, { steps: 6 }); await x.page.clock.runFor(30);
+    await x.page.mouse.up(); await x.page.clock.runFor(100); await settle(x); await x.page.clock.runFor(900);
+    const s = await sheet(x); assert(s && /서울역 시간표/.test(s.title), '위로 밀면 시간표 ' + JSON.stringify(s && s.title));
+    assert.strictEqual(await x.page.evaluate(() => !!document.getElementById('svgStationPop')), false, '팝업은 시트로 바뀐다');
+    // 아래로 밀면 여전히 닫힘
+    await x.page.evaluate(() => nmTtClose()); await x.page.clock.runFor(700);
+    await x.page.evaluate(() => window.__nmEmit('station', { name: '서울역', x: 195, y: 300 })); await x.page.clock.runFor(600); await idle();
+    g = await geo();
+    await x.page.mouse.move(px, g.top + 20); await x.page.mouse.down(); await x.page.mouse.move(px, g.top + 200, { steps: 6 }); await x.page.clock.runFor(30);
+    await x.page.mouse.up(); await x.page.clock.runFor(800);
+    assert.strictEqual(await x.page.evaluate(() => !!document.getElementById('svgStationPop')), false, '아래로 밀면 닫힘');
+    assert.strictEqual(await sheet(x), null);
+    // 시간표 버튼 위에서 시작해 위로 밀어도 시간표가 한 번만 열린다
+    await x.page.evaluate(() => window.__nmEmit('station', { name: '시청', x: 195, y: 300 })); await x.page.clock.runFor(600); await idle();
+    const bt = await x.page.evaluate(() => { const r = document.getElementById('nmTtOpenBtn').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; });
+    await x.page.mouse.move(bt[0], bt[1]); await x.page.mouse.down(); await x.page.mouse.move(bt[0], bt[1] - 140, { steps: 6 }); await x.page.clock.runFor(30);
+    await x.page.mouse.up(); await x.page.clock.runFor(100); await settle(x); await x.page.clock.runFor(900);
+    assert.strictEqual(await x.page.evaluate(() => document.querySelectorAll('#nmTtSheet').length), 1, '시트 하나');
+    assert.deepStrictEqual(x.errs, []); await x.ctx.close();
+  });
+
   await t('웹 노선도의 실제 SVG 역 글자를 눌러도 시간표까지 간다(예전 경로 그대로)', async () => {
     const x = await fresh(); await openSubway(x);
     const ok = await x.page.evaluate(() => {

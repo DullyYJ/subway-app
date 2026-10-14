@@ -75,6 +75,8 @@ const NOW = new Date('2026-10-14T13:00:00+09:00');   // 수요일 13:00
   const openTt = async (x, name, lines) => {
     await pop(x, name, lines); await x.page.clock.runFor(200);
     await x.page.evaluate(() => document.getElementById('nmTtOpenBtn').click()); await x.page.clock.runFor(100); await settle(x); await x.page.clock.runFor(300);
+    // 올라오는 애니메이션(WAAPI 는 실제 시간 320ms)이 끝나야 자리를 재고 끌 수 있다
+    await x.page.waitForFunction(() => ['svgStationPop', 'nmTtSheet'].every(id => { const e = document.getElementById(id); return !e || e.getAnimations().length === 0; }), null, { timeout: 5000 }).catch(() => {});
   };
   const sheet = (x) => x.page.evaluate(() => {
     const s = document.getElementById('nmTtSheet'); if (!s) return null;
@@ -365,7 +367,9 @@ const NOW = new Date('2026-10-14T13:00:00+09:00');   // 수요일 13:00
     assert.deepStrictEqual(x.errs, []); await x.ctx.close();
   });
   // ── 역 팝업의 놀이터 (2026-10-14 18:03 YJ: 역을 누르면 우측 빈 칸에서도 똑같이 움직이고, 시간표를 누르면 같은 배경·캐릭터) ──
-  const waitPlay = async (x) => { for (let i = 0; i < 60 && !(await x.page.evaluate(() => !!window._RC.playState())); i++) { await new Promise(r => setTimeout(r, 50)); await x.page.clock.runFor(50); } };
+  const waitPlay = async (x) => { for (let i = 0; i < 60 && !(await x.page.evaluate(() => !!window._RC.playState())); i++) { await new Promise(r => setTimeout(r, 50)); await x.page.clock.runFor(50); }
+    // 올라오는 애니메이션(WAAPI, 실제 시간 320ms)이 끝나야 자리를 잰다
+    await x.page.waitForFunction(() => ['svgStationPop', 'nmTtSheet'].every(id => { const e = document.getElementById(id); return !e || e.getAnimations().length === 0; }), null, { timeout: 5000 }).catch(() => {}); };
   await t('역 팝업 놀이터: 역명 줄 오른쪽 끝까지 빈 칸에 캐릭터가 나오고 움직이며 버튼·배지를 가리지 않는다', async () => {
     const x = await fresh(); await openSubway(x); await pop(x, '야탑', ['수인분당선']); await x.page.clock.runFor(200); await waitPlay(x);
     const s0 = await x.page.evaluate(() => window._RC.playState()); assert(s0 && s0.length >= 2 && s0.length <= 3, '팝업에서 놀이터 시작 ' + JSON.stringify(s0));
