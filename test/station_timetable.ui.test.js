@@ -160,7 +160,7 @@ const NOW = new Date('2026-10-14T13:00:00+09:00');   // 수요일 13:00
     await click(x, '[data-nmtt-line]', 1);
     assert.strictEqual(x.asked.length, n0, '노선 탭 전환은 새로 묻지 않는다 ' + JSON.stringify(x.asked));
     s = await sheet(x);
-    assert(/공식 시각표 자료가 없어/.test(s.body), s.body);
+    assert(/시간표 자료를\s*아직 받지 못했어요/.test(s.body), s.body);
     assert.deepStrictEqual(s.dirs, []); assert.strictEqual(s.sum, '');
     await click(x, '[data-nmtt-line]', 0);
     s = await sheet(x); assert(/다음 열차/.test(s.sum));

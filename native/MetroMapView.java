@@ -616,6 +616,7 @@ public class MetroMapView extends View {
             if (ld && data.inEn[k]) continue;
             Path p = uiPaths.get(data.inShape[k]);
             if (p == null) { p = buildPath(data, data.inShape[k]); uiPaths.put(data.inShape[k], p); }
+            p.setFillType(data.inEo[k] ? Path.FillType.EVEN_ODD : Path.FillType.WINDING);   // ㅁ·ㅂ 안쪽 구멍
             canvas.save();
             canvas.translate(data.inX[k], data.inY[k]);
             canvas.drawPath(p, tintPaint);

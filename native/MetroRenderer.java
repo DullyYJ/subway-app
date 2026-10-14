@@ -69,13 +69,13 @@ public final class MetroRenderer {
                 if ((fl & 2) != 0) s.fill(d.opShape[i], 0f, 0f, d.opMatrix[i], withState(d.opFill[i], state), evenOdd);
                 if ((fl & 4) != 0) s.stroke(d.opShape[i], d.opMatrix[i], withState(d.opStroke[i], state), d.opSw[i], d.opDash[i], (fl & 16) != 0);
             } else if (kd == MetroMapData.K_GLYPH) {
-                s.fill(d.opShape[i], d.opX[i], d.opY[i], null, withState(d.opFill[i], state), false);
+                s.fill(d.opShape[i], d.opX[i], d.opY[i], null, withState(d.opFill[i], state), d.opEo[i]);
             } else {
                 int a = d.lbInstStart[i], n = d.lbInstCount[i];
                 boolean hl = (i == highlightOp);
                 for (int k = a; k < a + n; k++) {
                     if (lod && d.inEn[k]) continue;
-                    s.fill(d.inShape[k], d.inX[k], d.inY[k], null, withState(hl ? highlightArgb : d.inFill[k], state), false);
+                    s.fill(d.inShape[k], d.inX[k], d.inY[k], null, withState(hl ? highlightArgb : d.inFill[k], state), d.inEo[k]);
                 }
             }
             drawn++;

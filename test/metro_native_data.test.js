@@ -71,12 +71,17 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     ['ALL', 1.0, 0, 1650, 600, 700, false, '한강·서해 물결 클립 구역'],
     ['2호선', 1.0, 1000, 900, 600, 700, false, '2호선 필터 1배'],
     ['신분당선', 0.6, 800, 900, 600, 700, false, '신분당선 필터 0.6배'],
+    // ★ 2026-10-14 실기기에서 ㅁ·ㅂ 안쪽 구멍이 막혀 보였다(마곡나루→"▮곡나루"): 글자 도형은 fill-rule=evenodd 로 구멍을 뚫는다. 글자만 가까이서 엄격히 비교한다.
+    ['ALL', 10.0, 480, 965, 600, 300, false, '마곡나루(마·ㅁ 구멍) 10배', 0.0012],
+    ['ALL', 10.0, 565, 1098, 600, 300, false, '증미(미·ㅁ 구멍) 10배', 0.0012],
+    ['ALL', 10.0, 672, 1082, 600, 300, false, '마포구청(마·포·ㅍ) 10배', 0.0012],
+    ['ALL', 10.0, 2008, 1576, 600, 300, false, '올림픽공원(ㅇ·ㅁ 섞임) 10배', 0.0012],
   ];
-  for (const [f, sc, ox, oy, w, h, lod, name] of cases) {
+  for (const [f, sc, ox, oy, w, h, lod, name, strict] of cases) {
     await t('원본 SVG 와 같은 그림: ' + name, async () => {
       const r = await compare(f, sc, ox, oy, w, h, lod);
-      assert(r.n > 20, '그려진 도형이 너무 적다 ' + JSON.stringify(r));
-      assert(r.bad < 0.004, '다른 픽셀 ' + (r.bad * 100).toFixed(2) + '% (' + JSON.stringify(r) + ')');
+      assert(r.n > (strict ? 5 : 20), '그려진 도형이 너무 적다 ' + JSON.stringify(r));
+      assert(r.bad < (strict || 0.004), '다른 픽셀 ' + (r.bad * 100).toFixed(2) + '% (' + JSON.stringify(r) + ')');
       assert(r.mean < 1.5, '평균 차이 ' + r.mean.toFixed(2));
     });
   }

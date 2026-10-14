@@ -32815,7 +32815,7 @@ function nmTtRender(){
   } else if(T.state === 'nodata' || !d || d.noData || !dir){
     sum.textContent = '';
     body.innerHTML = '<div style="color:#aaa;text-align:center;padding:34px 12px;font-size:14px;line-height:1.6;">' +
-      _nmTtEsc(T.line || '이 노선') + '은(는) 공식 시각표 자료가 없어<br>시간표를 보여드릴 수 없어요.<br><span style="color:#777;font-size:12px;">실시간 도착정보는 경로 탐색 화면에서 확인할 수 있어요.</span></div>';
+      _nmTtEsc(T.line || '이 노선') + '의 시간표 자료를<br>아직 받지 못했어요.<br><span style="color:#777;font-size:12px;">실시간 도착정보는 경로 탐색 화면에서 확인할 수 있어요.</span></div>';
   } else {
     var s = '첫차 ' + _nmTtClock(dir.first) + ' · 막차 ' + _nmTtClock(dir.last);
     if(dir.nextMin != null) s += ' · ' + (dir.tomorrow ? '내일 첫차 ' : '다음 열차 ') + _nmTtClock(dir.nextMin);

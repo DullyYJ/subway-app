@@ -28,9 +28,9 @@ function drawModel(ctx, M, o) {
       if (op.fill != null) { ctx.fillStyle = argb(op.fill); ctx.fill(p, op.evenodd ? 'evenodd' : 'nonzero'); }
       if (op.stroke != null) { ctx.strokeStyle = argb(op.stroke); ctx.lineWidth = op.sw; ctx.lineCap = op.round ? 'round' : 'butt'; ctx.lineJoin = 'miter'; ctx.miterLimit = 4; ctx.setLineDash(op.dash); ctx.stroke(p); ctx.setLineDash([]); }
     } else if (op.kind === 1) {
-      ctx.translate(op.x, op.y); ctx.fillStyle = argb(op.fill); ctx.fill(P(op.shape));
+      ctx.translate(op.x, op.y); ctx.fillStyle = argb(op.fill); ctx.fill(P(op.shape), op.eo ? 'evenodd' : 'nonzero');
     } else {
-      for (const it of op.inst) { if (it.en && o.lod) continue; ctx.save(); ctx.translate(it.x, it.y); ctx.fillStyle = argb(it.fill); ctx.fill(P(it.shape)); ctx.restore(); }
+      for (const it of op.inst) { if (it.en && o.lod) continue; ctx.save(); ctx.translate(it.x, it.y); ctx.fillStyle = argb(it.fill); ctx.fill(P(it.shape), it.eo ? 'evenodd' : 'nonzero'); ctx.restore(); }
     }
     ctx.restore(); drawn++;
   }

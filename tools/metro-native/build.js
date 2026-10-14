@@ -74,7 +74,8 @@ async function extract() {
     if (!_ensureMetroSvg()) throw new Error('SVG 를 못 넣었다');
     const svg = document.querySelector('#svgContainer svg'); svg.classList.remove('lz');
     const defs = svg.querySelector('defs'); const glyph = {}, clips = {};
-    defs.querySelectorAll(':scope > path').forEach(p => { glyph[p.id] = p.getAttribute('d'); });
+    // ★ 글자(글리프) 도형은 안쪽 구멍(ㅁ·ㅂ·ㅇ 등)을 fill-rule=evenodd 로 뚫는 것이 많다 — 규칙을 같이 기록해야 구멍이 막히지 않는다
+    defs.querySelectorAll(':scope > path').forEach(p => { glyph[p.id] = { d: p.getAttribute('d'), eo: getComputedStyle(p).fillRule === 'evenodd' }; });
     defs.querySelectorAll(':scope > clipPath').forEach(c => { const ps = c.querySelectorAll('path'); if (ps.length !== 1 || c.children.length !== 1) throw new Error('clipPath 구조 다름 ' + c.id); clips[c.id] = ps[0].getAttribute('d'); });
     const ops = [], els = [];
     const A = (e, k) => e.getAttribute(k);
@@ -90,7 +91,7 @@ async function extract() {
           ops.push({ k: 2, n: A(e, 'data-n'), a: A(e, 'data-a'), clip, tb: [bb.x, bb.y, bb.width, bb.height],
             uses: [...e.querySelectorAll('use')].map(u => ({ h: A(u, 'href').slice(1), x: +A(u, 'x'), y: +A(u, 'y'), fill: A(u, 'fill'), en: u.classList.contains('en') })),
             // 일부 라벨(검단호수공원·신검단중앙)은 글리프 use 대신 transform 이 붙은 path 를 직접 쓴다 (g.en 안의 영문 포함)
-            raw: [...e.querySelectorAll('path')].map(q => ({ d: A(q, 'd'), tr: A(q, 'transform'), fill: A(q, 'fill'), en: !!q.closest('g.en') })) });
+            raw: [...e.querySelectorAll('path')].map(q => ({ d: A(q, 'd'), tr: A(q, 'transform'), fill: A(q, 'fill'), eo: getComputedStyle(q).fillRule === 'evenodd', en: !!q.closest('g.en') })) });
           for (const c of e.children) {
             const ct = c.tagName.toLowerCase();
             if (!(ct === 'use' || ct === 'path' || ct === 'text' || (ct === 'g' && c.classList.contains('en') && [...c.children].every(z => z.tagName.toLowerCase() === 'path')))) throw new Error('라벨 안 지원하지 않는 요소 ' + ct + ' ' + A(e, 'data-n'));
@@ -127,7 +128,8 @@ function build(data) {
   const strings = [], sIdx = new Map(); const S = (s) => { if (!sIdx.has(s)) { sIdx.set(s, strings.length); strings.push(s); } return sIdx.get(s); };
   const shapes = [], shIdx = new Map();
   const shape = (d) => { if (!shIdx.has(d)) { shIdx.set(d, shapes.length); shapes.push(parseD(d)); } return shIdx.get(d); };
-  const gl = {}; const G = (id) => { if (!(id in data.glyph)) throw new Error('글리프 없음 ' + id); return shape(data.glyph[id]); };
+  const gl = {}; const G = (id) => { if (!(id in data.glyph)) throw new Error('글리프 없음 ' + id); return shape(data.glyph[id].d); };
+  const GE = (id) => !!data.glyph[id].eo;
   const clipId = {}; Object.keys(data.clips).forEach((k, i) => { clipId[k] = i; });
   const clipShape = Object.keys(data.clips).map(k => shape(data.clips[k]));
   const bbox = (sh, m, ox, oy, pad) => {
@@ -150,16 +152,16 @@ function build(data) {
       const sc = m ? Math.max(Math.abs(m[0]), Math.abs(m[3])) : 1;
       ops.push({ kind: 0, clip, shape: si, m, fill, stroke, sw, dash, round: o.cap === 'round', evenodd: o.rule === 'evenodd', bbox: bbox(sh, m, 0, 0, pad / (sc || 1)) });
     } else if (o.k === 1) {
-      const si = G(o.h); ops.push({ kind: 1, clip, shape: si, x: o.x, y: o.y, fill: color(o.fill), bbox: bbox(shapes[si], null, o.x, o.y, 0.5) });
+      const si = G(o.h); ops.push({ kind: 1, clip, shape: si, eo: GE(o.h), x: o.x, y: o.y, fill: color(o.fill), bbox: bbox(shapes[si], null, o.x, o.y, 0.5) });
     } else {
-      let bb = null; const inst = o.uses.map(u => { const si = G(u.h); bb = un(bb, bbox(shapes[si], null, u.x, u.y, 0.5)); return { shape: si, x: u.x, y: u.y, fill: color(u.fill), en: u.en }; });
+      let bb = null; const inst = o.uses.map(u => { const si = G(u.h); bb = un(bb, bbox(shapes[si], null, u.x, u.y, 0.5)); return { shape: si, eo: GE(u.h), x: u.x, y: u.y, fill: color(u.fill), en: u.en }; });
       for (const r of (o.raw || [])) {                       // transform 을 좌표에 구워 넣고 x=y=0 인 인스턴스로 둔다
         const m = parseTransform(r.tr) || [1, 0, 0, 1, 0, 0], sh0 = parseD(r.d), co = sh0.coord.slice();
         for (let i = 0; i < co.length; i += 2) { const x = co[i], y = co[i + 1]; co[i] = m[0] * x + m[2] * y + m[4]; co[i + 1] = m[1] * x + m[3] * y + m[5]; }
         const key = 'baked:' + JSON.stringify([sh0.cmd.join(''), co.map(v => Math.round(v * 1e4) / 1e4)]);
         if (!shIdx.has(key)) { shIdx.set(key, shapes.length); shapes.push({ cmd: sh0.cmd, coord: co }); }
         const si = shIdx.get(key); bb = un(bb, bbox(shapes[si], null, 0, 0, 0.5));
-        inst.push({ shape: si, x: 0, y: 0, fill: r.fill == null ? 0xFF000000 : color(r.fill), en: r.en });
+        inst.push({ shape: si, eo: !!r.eo, x: 0, y: 0, fill: r.fill == null ? 0xFF000000 : color(r.fill), en: r.en });
       }
       bb = un(bb, [o.tb[0], o.tb[1], o.tb[0] + o.tb[2], o.tb[1] + o.tb[3]]);
       ops.push({ kind: 2, clip, name: S(o.n), alt: o.a ? S(o.a) : -1, tb: o.tb, inst, bbox: bb });

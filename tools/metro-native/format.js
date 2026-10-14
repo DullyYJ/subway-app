@@ -10,8 +10,8 @@
 //   u16 nClip; u32 clipShape[nClip]                           ← 클립 번호 → 도형 번호 (op 의 clip 이 이 표의 번호)
 //   u32 nOp; { u8 kind; i16 clip; f32 x0,y0,x1,y1 ; ...kind별... }...      ← 그리는 순서 = SVG 문서 순서
 //        kind 0 도형: u32 shape; u8 flags(1=변환 2=채움 4=선 8=evenodd 16=둥근끝); [f32 m[6] a b c d e f]; [u32 fill]; [u32 stroke; f32 width]; u8 nDash; f32 dash[]
-//        kind 1 글리프: u32 shape; f32 x,y; u32 fill
-//        kind 2 라벨(역명): u32 nameStr; i32 altStr(-1=없음); f32 tx,ty,tw,th; u16 nInst; { u32 shape; f32 x,y; u32 fill; u8 isEn }...
+//        kind 1 글리프: u32 shape(맨 윗비트=1 이면 evenodd 로 채움; 아래 31비트가 도형 번호); f32 x,y; u32 fill
+//        kind 2 라벨(역명): u32 nameStr; i32 altStr(-1=없음); f32 tx,ty,tw,th; u16 nInst; { u32 shape(맨 윗비트=evenodd); f32 x,y; u32 fill; u8 isEn }...
 //   u8 nFilter; { u32 nameStr; u8 state[nOp] }...      ← 호선 필터별 각 도형의 보임 상태(0=숨김, 1~255=불투명도). 앱의 gmFilterLine 결과를 그대로 기록한 것
 'use strict';
 const zlib = require('zlib');
@@ -54,11 +54,11 @@ function encode(m) {
       if (o.stroke != null) { w.u32(o.stroke); w.f32(o.sw); }
       w.u8(o.dash.length); o.dash.forEach(v => w.f32(v));
     } else if (o.kind === 1) {
-      w.u32(o.shape); w.f32(o.x); w.f32(o.y); w.u32(o.fill);
+      w.u32(((o.shape | (o.eo ? 0x80000000 : 0)) >>> 0)); w.f32(o.x); w.f32(o.y); w.u32(o.fill);
     } else {
       w.u32(o.name); w.i32(o.alt); o.tb.forEach(v => w.f32(v));
       w.u16(o.inst.length);
-      for (const it of o.inst) { w.u32(it.shape); w.f32(it.x); w.f32(it.y); w.u32(it.fill); w.u8(it.en ? 1 : 0); }
+      for (const it of o.inst) { w.u32(((it.shape | (it.eo ? 0x80000000 : 0)) >>> 0)); w.f32(it.x); w.f32(it.y); w.u32(it.fill); w.u8(it.en ? 1 : 0); }
     }
   }
   w.u8(m.filters.length);
@@ -94,8 +94,8 @@ function decode(gz) {
       o.fill = (fl & 2) ? u32() : null;
       if (fl & 4) { o.stroke = u32(); o.sw = f32(); } else o.stroke = null;
       const nd = u8(); o.dash = []; for (let k = 0; k < nd; k++) o.dash.push(f32());
-    } else if (o.kind === 1) { o.shape = u32(); o.x = f32(); o.y = f32(); o.fill = u32(); }
-    else { o.name = u32(); o.alt = i32(); o.tb = [f32(), f32(), f32(), f32()]; const ni = u16(); o.inst = []; for (let k = 0; k < ni; k++) o.inst.push({ shape: u32(), x: f32(), y: f32(), fill: u32(), en: !!u8() }); }
+    } else if (o.kind === 1) { const sv = u32(); o.shape = sv & 0x7fffffff; o.eo = (sv >>> 31) === 1; o.x = f32(); o.y = f32(); o.fill = u32(); }
+    else { o.name = u32(); o.alt = i32(); o.tb = [f32(), f32(), f32(), f32()]; const ni = u16(); o.inst = []; for (let k = 0; k < ni; k++) { const sv = u32(); o.inst.push({ shape: sv & 0x7fffffff, eo: (sv >>> 31) === 1, x: f32(), y: f32(), fill: u32(), en: !!u8() }); } }
     m.ops.push(o);
   }
   n = u8();

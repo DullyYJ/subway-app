@@ -36,6 +36,7 @@ public final class MetroMapData {
     public short[] clip;
     public float[] bbox;            // 4*nOp : x0,y0,x1,y1
     public int[] opShape;           // kind 0,1
+    public boolean[] opEo;          // kind 1 : 글리프를 evenodd 로 채우는가(ㅁ·ㅂ 의 안쪽 구멍)
     public byte[] opFlags;          // kind 0 : 1=변환 2=채움 4=선 8=evenodd 16=둥근끝
     public float[][] opMatrix;      // kind 0 (없으면 null)
     public int[] opFill;            // kind 0,1
@@ -49,6 +50,7 @@ public final class MetroMapData {
     public int[] inShape, inFill;
     public float[] inX, inY;
     public boolean[] inEn;
+    public boolean[] inEo;          // 라벨 글자 조각의 evenodd 여부
 
     public String[] filterName;
     public byte[][] filterState;    // [필터][op] 0=숨김 1~255=불투명도
@@ -99,12 +101,12 @@ public final class MetroMapData {
         for (int i = 0; i < ncl; i++) d.clipShape[i] = b.getInt();
         int n = b.getInt(); d.nOp = n;
         d.kind = new byte[n]; d.clip = new short[n]; d.bbox = new float[4 * n];
-        d.opShape = new int[n]; d.opFlags = new byte[n]; d.opMatrix = new float[n][]; d.opFill = new int[n]; d.opStroke = new int[n];
+        d.opShape = new int[n]; d.opEo = new boolean[n]; d.opFlags = new byte[n]; d.opMatrix = new float[n][]; d.opFill = new int[n]; d.opStroke = new int[n];
         d.opSw = new float[n]; d.opDash = new float[n][]; d.opX = new float[n]; d.opY = new float[n];
         d.lbName = new int[n]; d.lbAlt = new int[n]; d.lbTb = new float[4 * n]; d.lbInstStart = new int[n]; d.lbInstCount = new int[n];
         int[] is = new int[1 << 14], ifl = new int[1 << 14];
         float[] ix = new float[1 << 14], iy = new float[1 << 14];
-        boolean[] ie = new boolean[1 << 14];
+        boolean[] ie = new boolean[1 << 14], ieo = new boolean[1 << 14];
         int ni = 0, nl = 0;
         for (int i = 0; i < n; i++) {
             d.kind[i] = b.get(); d.clip[i] = b.getShort();
@@ -121,7 +123,7 @@ public final class MetroMapData {
                 for (int k = 0; k < nd; k++) dash[k] = b.getFloat();
                 d.opDash[i] = dash;
             } else if (kd == K_GLYPH) {
-                d.opShape[i] = b.getInt(); d.opX[i] = b.getFloat(); d.opY[i] = b.getFloat(); d.opFill[i] = b.getInt();
+                int sv = b.getInt(); d.opShape[i] = sv & 0x7FFFFFFF; d.opEo[i] = sv < 0; d.opX[i] = b.getFloat(); d.opY[i] = b.getFloat(); d.opFill[i] = b.getInt();
             } else if (kd == K_LABEL) {
                 d.lbName[i] = b.getInt(); d.lbAlt[i] = b.getInt();
                 for (int k = 0; k < 4; k++) d.lbTb[4 * i + k] = b.getFloat();
@@ -130,17 +132,17 @@ public final class MetroMapData {
                 if (ni + cnt > is.length) {
                     int cap = Math.max(is.length * 2, ni + cnt);
                     is = Arrays.copyOf(is, cap); ifl = Arrays.copyOf(ifl, cap);
-                    ix = Arrays.copyOf(ix, cap); iy = Arrays.copyOf(iy, cap); ie = Arrays.copyOf(ie, cap);
+                    ix = Arrays.copyOf(ix, cap); iy = Arrays.copyOf(iy, cap); ie = Arrays.copyOf(ie, cap); ieo = Arrays.copyOf(ieo, cap);
                 }
                 for (int k = 0; k < cnt; k++) {
-                    is[ni] = b.getInt(); ix[ni] = b.getFloat(); iy[ni] = b.getFloat(); ifl[ni] = b.getInt(); ie[ni] = b.get() != 0;
+                    int sv = b.getInt(); is[ni] = sv & 0x7FFFFFFF; ieo[ni] = sv < 0; ix[ni] = b.getFloat(); iy[ni] = b.getFloat(); ifl[ni] = b.getInt(); ie[ni] = b.get() != 0;
                     ni++;
                 }
                 nl++;
             } else throw new IOException("알 수 없는 op 종류 " + kd);
         }
         d.inShape = Arrays.copyOf(is, ni); d.inFill = Arrays.copyOf(ifl, ni);
-        d.inX = Arrays.copyOf(ix, ni); d.inY = Arrays.copyOf(iy, ni); d.inEn = Arrays.copyOf(ie, ni);
+        d.inX = Arrays.copyOf(ix, ni); d.inY = Arrays.copyOf(iy, ni); d.inEn = Arrays.copyOf(ie, ni); d.inEo = Arrays.copyOf(ieo, ni);
         int nf = b.get() & 0xFF;
         d.filterName = new String[nf]; d.filterState = new byte[nf][];
         for (int i = 0; i < nf; i++) {
