@@ -11191,22 +11191,27 @@ function _etaRequest(why){
     if(typeof fetch !== 'function') return;
     var now = Date.now();
     if(why === 'tick' && now - _etaSt.lastAt < _ETA_TICK_MS) return;
+    // ★ 2026-10-14 (실기기 로그: 백그라운드 26분 동안 엔진 응답이 한 번도 갱신되지 않았다 — 가려진 동안 응답 안 오는 요청이 '진행 중'으로 굳어 새 요청이 영영 막혔다):
+    //   요청이 제한 시간(+여유 3초)을 넘겨도 안 끝났으면 굳은 것으로 보고 끊은 뒤 새로 보낸다(옛 요청의 뒤늦은 응답·실패는 seq 로 버린다).
+    if(_etaSt.busy && now - _etaSt.lastAt > _ETA_TIMEOUT_MS + 3000){ try{ if(_etaSt.ctl) _etaSt.ctl.abort(); }catch(eAb){} _etaSt.busy = false; try{ _ovlDiag('도착시각', '엔진 요청이 ' + Math.round((now - _etaSt.lastAt) / 1000) + '초째 응답 없음 — 끊고 다시 보냄'); }catch(eDg){} }
     if(_etaSt.busy){ _etaSt.pending = why || 'pass'; return; }
     _plan0Stamp();
     var P = _etaPayload(); P._why = why;
     var routeSig = window._trackSig, ctl = (typeof AbortController === 'function') ? new AbortController() : null, to = null;
-    _etaSt.busy = true; _etaSt.lastAt = now; _etaSt.seq++;
+    _etaSt.busy = true; _etaSt.lastAt = now; _etaSt.seq++; _etaSt.ctl = ctl; var mySeq = _etaSt.seq;
     to = setTimeout(function(){ try{ if(ctl) ctl.abort(); }catch(e){} }, _ETA_TIMEOUT_MS);
     var body = JSON.stringify(P);
     fetch(_ETA_URL, { method: 'POST', headers: { 'content-type': 'application/json' }, body: body, signal: ctl ? ctl.signal : undefined })
       .then(function(r){ if(!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(function(res){
-        clearTimeout(to); _etaSt.busy = false; _etaSt.fails = 0;
+        clearTimeout(to); if(mySeq !== _etaSt.seq) return;          // 끊고 다시 보낸 옛 요청의 뒤늦은 응답은 버린다
+        _etaSt.busy = false; _etaSt.fails = 0;
         if(window._trackSig === routeSig) _etaApply(res, P);      // 그 사이 경로가 바뀌었으면 버린다
         _etaNext();
       })
       .catch(function(err){
-        clearTimeout(to); _etaSt.busy = false; _etaSt.fails++;
+        clearTimeout(to); if(mySeq !== _etaSt.seq) return;
+        _etaSt.busy = false; _etaSt.fails++;
         try{ _ovlDiag('도착시각', '엔진 응답 실패 ' + _etaSt.fails + '번째 · ' + String(err && err.message || err).slice(0, 60) + ' — 마지막 시각 유지'); }catch(e){}
         try{ if(_etaSt.retryT) clearTimeout(_etaSt.retryT); _etaSt.retryT = setTimeout(function(){ _etaSt.retryT = null; _etaRequest('retry'); }, Math.min(30000, 4000 * _etaSt.fails)); }catch(e2){}
         _etaNext();
@@ -11591,6 +11596,8 @@ function _altPathPts(p){
 // 맞는 후보로 바꿔 이어서 안내한다(재탐색 없음). 성공하면 true.
 function _applyRiddenRoute(m){
   try{
+    // ★ 2026-10-14 (YJ: "계양역에서 아라역 가는데 갑자기 경로가 버스로 바뀌었어 — 지하철 탑승 확정이면 버스로 바뀌는 건 제한한 거 아니었어?"): 지하철 탑승이 확정된 동안은 어떤 길(차량매칭·이탈·궤적 맞춤)로도 다른 경로로 갈아타지 않는다.
+    if(typeof _trkSubConfirmed === 'function' && _trkSubConfirmed()){ try{ _ovlDiag('경로맞춤', '지하철 탑승 확정 중이라 다른 경로로 바꾸지 않음'); }catch(eSc){} return false; }
     var routeObj = _convertSinglePathToRoute(m.path);
     if(!routeObj || !routeObj.sections || !routeObj.sections.length) return false;
     var keepLocked = window._routeLocked === true, lt = window._lockedRouteType, pend = window._pendingRouteType;
@@ -11744,6 +11751,8 @@ function _vehConfirmBoard(run, mt){
 }
 function _vehApply(res, fx){
   if(!res || res.ok !== true) return;
+  // ★ 2026-10-14: 지하철 탑승 확정 중에는 곁을 지나는 버스(역 위 도로 등)를 '타고 있는 차'로 잠그지 않는다(경로가 버스로 바뀌던 사고). 이미 잠근 것도 푼다.
+  try{ if(typeof _trkSubConfirmed === 'function' && _trkSubConfirmed()){ if(window._veh) _vehRelease('지하철 탑승 확정'); _vehSt.pend = null; return; } }catch(eSv){}
   if(res.unsupported && !res.n){ _vehSt.unsup++; if(_vehSt.unsup >= 2) _vehSt.until = Date.now() + 5 * 60000; return; }
   _vehSt.unsup = 0;
   var v = window._veh;
@@ -11815,6 +11824,7 @@ function _vehTick(){
     if(_vehSt.busy || now < _vehSt.until || now - _vehSt.at < 15000) return;
     if(typeof _baseTimeMs !== 'undefined' && _baseTimeMs != null) return;
     if(window._metroRouteMode === true) return;
+    try{ if(typeof _trkSubConfirmed === 'function' && _trkSubConfirmed()){ if(window._veh) _vehRelease('지하철 탑승 확정'); return; } }catch(eSv2){}   // 지하철 탑승 확정 중에는 버스 차량을 묻지도 않는다
     var fx = _vehFix(); if(!fx) return;
     var rd = null; try{ rd = window._rideEv ? window._rideEv() : null; }catch(e0){}
     var moving = false; try{ moving = !!(window._evVehicleNow && window._evVehicleNow()); }catch(e1){}
@@ -27405,7 +27415,34 @@ function _renderPost(post) {
   el.querySelector('.dc-post-hdr').addEventListener('click', function(){
     var body = el.querySelector('.dc-post-body');
     var open = body.style.display !== 'none';
+    // ★ 2026-10-14 (YJ: "게시글을 보다가 다른 글을 누르면 기존에 보던 글은 접고 새로 누른 글이 나오게 — 누르는 글마다 다 열려서 복잡해"):
+    //   한 번에 한 글만 펼친다. 다른 글을 열면 열려 있던 글을 접고, 누른 글의 머리글이 화면에서 움직이지 않게 스크롤을 맞춘다(위에 있던 글이 접히며 내용이 끌려 올라가므로).
+    var _shiftBy = 0;
+    if(!open){
+      var _top0 = el.getBoundingClientRect().top;
+      var _others = document.querySelectorAll('.dc-post');
+      for(var _oi = 0; _oi < _others.length; _oi++){
+        var _ob = _others[_oi] !== el ? _others[_oi].querySelector('.dc-post-body') : null;
+        if(_ob && _ob.style.display !== 'none') _ob.style.display = 'none';
+      }
+      window._commOpenPosts = {};
+      _shiftBy = _top0;
+    }
     body.style.display = open ? 'none' : 'block';
+    if(!open && _shiftBy !== 0){
+      try{
+        var _d = el.getBoundingClientRect().top - _shiftBy;
+        if(Math.abs(_d) > 1){
+          var _sc = el.parentNode;
+          while(_sc && _sc !== document.body && _sc !== document.documentElement){
+            var _oy = getComputedStyle(_sc).overflowY;
+            if((_oy === 'auto' || _oy === 'scroll') && _sc.scrollHeight > _sc.clientHeight) break;
+            _sc = _sc.parentNode;
+          }
+          if(_sc && _sc !== document.body && _sc !== document.documentElement) _sc.scrollTop += _d; else window.scrollBy(0, _d);
+        }
+      }catch(eSc){}
+    }
     // ★ 열림/닫힘을 기록 — 자동 갱신이 돌아도 본문이 접히지 않게
     window._commOpenPosts = window._commOpenPosts || {};
     if(open) {
@@ -27829,8 +27866,14 @@ function _startBgGeolocation(){
       try{
         var _bla = location.latitude, _bln = location.longitude, _bac = location.accuracy || 99;
         if(_bla != null && _bln != null && !isNaN(_bla) && !isNaN(_bln) && _bac <= 150){
-          window._lastGPSLat = _bla; window._lastGPSLng = _bln; window._lastGPSAt = Date.now(); _myLocFollow(_bla, _bln, _bac);
-          if(typeof S !== 'undefined') S.lastGPSFix = { lat:_bla, lng:_bln, ts:Date.now(), acc:_bac };
+          // ★ 2026-10-14 (실기기 로그: 백그라운드에서 쌓였던 위치가 앱을 켜자 한꺼번에 와서 모두 '지금' 시각이 찍혔다 — 지난 역 전부가 방금 지난 것으로 읽혔다):
+          //   위치가 '잡힌 때'(location.time)를 그대로 쓴다. 없거나 말이 안 되면(미래·1시간 전) 받은 때. 궤적(_ev.trail)에도 제 시각으로 넣어 엔진이 통과 시각을 제대로 읽게 한다.
+          var _bft = Date.now();
+          try{ var _flt = +location.time; if(isFinite(_flt) && _flt > 0 && _flt <= _bft + 2000 && _bft - _flt < 3600000) _bft = Math.min(_bft, _flt); }catch(eFt){}
+          var _bOld = !!(typeof S !== 'undefined' && S.lastGPSFix && S.lastGPSFix.ts > _bft);   // 이미 더 최신 위치가 있으면(몰려 온 옛 위치) 현재 위치 표시는 덮지 않는다
+          if(!_bOld){ window._lastGPSLat = _bla; window._lastGPSLng = _bln; window._lastGPSAt = _bft; _myLocFollow(_bla, _bln, _bac); }
+          if(!_bOld && typeof S !== 'undefined') S.lastGPSFix = { lat:_bla, lng:_bln, ts:_bft, acc:_bac };
+          try{ if(typeof _evAddFix === 'function') _evAddFix(_bla, _bln, _bft, _bac); }catch(eAf){}
           if(typeof _transitNodeData !== 'undefined' && _transitNodeData && _transitNodeData.length
              && typeof _updateTransitGps === 'function') _updateTransitGps();
         }
@@ -28560,7 +28603,7 @@ function _zeroStampPass(s){
   var i = s.i, ms = +s.passMs, now = Date.now();
   if(ms > now + 3000) return;
   var pm = window._nodePassMs = window._nodePassMs || {}, src = window._nodePassSrc = window._nodePassSrc || {};
-  if(src[i] === 'gps' && pm[i] != null && Math.abs(pm[i] - ms) < 15000) return;     // 이미 같은 값
+  if(src[i] === 'gps' && pm[i] != null && Math.abs(pm[i] - ms) < 1000) return;     // 이미 같은 값(1초 안) — 예전엔 15초 안 변화를 버려 초 단위가 쌓이지 않았다(2026-10-14)
   var prev = null; for(var j = i - 1; j >= 0; j--){ if(pm[j] != null){ prev = pm[j]; break; } }
   if(prev != null && ms <= prev + 10000) return;                                       // 앞 역보다 이를 수 없다
   var nx = null; for(var q = i + 1; q < (_transitNodeData || []).length; q++){ if(pm[q] != null && src[q] === 'gps'){ nx = pm[q]; break; } }
@@ -29487,6 +29530,84 @@ function _ovlSyncToggle(){
   }catch(e){}
 }
 window._ovlSyncToggle = _ovlSyncToggle;
+
+// ═══ 처음 설치 때 '다른 앱 위에 표시' 설정창으로 안내 (2026-10-14 YJ: "처음 앱 설치시 다른앱 위에 표시하는 설정창도 들어갈 수 있게") ═══
+//   위치 안내 → 배터리/삼성 절전 안내가 끝난 뒤(다른 안내가 겹치지 않게), 아직 권한이 없으면 이유를 먼저 설명하고 [설정하기] 를 누르면 시스템 '다른 앱 위에 표시' 화면을 연다.
+//   · 평생 한 번만(이후엔 설정 탭의 '다른 앱 위에 표시' 카드) · 이미 허용돼 있으면 안 띄움 · 웹/구버전 빌드(플러그인 없음)·안드로이드 8 미만은 건너뜀
+//   · 앱은 안내를 그리고 시스템 화면으로 보내기만 한다(권한 여부는 네이티브가 답한다). [설정하기]를 누르면 오버레이를 켠 것으로 기록한다(허용하고 돌아오면 바로 동작, 안 하면 설정 카드에 '권한이 필요해요'로 남는다).
+var _OVL_ASK_KEY = 'gdm_ovl_asked_at';
+var _ovlAskVisAt = Date.now();
+function _ovlAskBusy(){
+  return !!(document.getElementById('ovlAskOv') || document.getElementById('batAskOv') || document.getElementById('samAskOv') || document.getElementById('locDiscOv') || document.getElementById('bgPermOv') || document.getElementById('ovlPermOverlay') || window._samFirst || window._samAfterBat);
+}
+function _ovlAsk(why){
+  try{
+    var n = _ovlNative();
+    if(!n || typeof n.isAvailable !== 'function' || typeof n.requestPermission !== 'function') return;
+    var last = 0; try{ last = parseInt(localStorage.getItem(_OVL_ASK_KEY) || '0', 10) || 0; }catch(e0){}
+    if(last) return;                                                  // 평생 한 번
+    if(document.hidden || _ovlAskBusy()) return;
+    if(typeof _locDisclosed === 'function' && !_locDisclosed()) return;   // 위치 안내가 먼저
+    if(Date.now() - _ovlAskVisAt < 2500) return;                      // 시스템 화면에서 막 돌아왔으면 잠깐 쉬었다가(다른 안내가 이어질 수 있다)
+    // 배터리 안내 단계가 끝났는지: 이미 물었거나(키), 이미 제외돼 있거나, 배터리 기능이 없는 빌드
+    var settled = function(cb){
+      try{
+        if(parseInt(localStorage.getItem(_BAT_ASK_KEY) || '0', 10)) return cb(true);
+        var pn = _batNative();
+        if(!pn || typeof pn.isIgnoringOptimizations !== 'function') return cb(true);
+        pn.isIgnoringOptimizations().then(function(r){ cb(!!(r && r.ignoring)); }).catch(function(){ cb(true); });
+      }catch(e){ cb(true); }
+    };
+    settled(function(ok){
+      if(!ok || document.hidden || _ovlAskBusy()) return;
+      _ovlRefresh(function(){
+        if(_ovlSupported === false || _ovlGranted !== false) return;   // 지원 안 함 / 이미 허용 / 알 수 없음
+        if(document.hidden || _ovlAskBusy()) return;
+        try{ if(parseInt(localStorage.getItem(_OVL_ASK_KEY) || '0', 10)) return; localStorage.setItem(_OVL_ASK_KEY, String(Date.now())); }catch(e1){}
+        var ov = document.createElement('div');
+        ov.id = 'ovlAskOv';
+        ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true');
+        ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.68);z-index:100000;display:flex;align-items:center;justify-content:center;padding:22px;';
+        ov.innerHTML =
+          '<div style="background:#fff;color:#1c1c1e;border-radius:18px;max-width:380px;width:100%;padding:24px 20px;box-shadow:0 12px 40px rgba(0,0,0,.35);">'
+          + '<div style="font-size:17px;font-weight:800;margin-bottom:14px;">🪟 다른 앱을 보면서도 내 위치 확인</div>'
+          + '<div style="font-size:14px;line-height:1.75;margin-bottom:14px;">'
+            + '지하철·버스에서 다른 앱을 쓰는 동안에도 <b>현재 역과 남은 시간</b>을 화면 위쪽에 작은 막대로 띄워 드려요. 막대를 누르면 길동무로 돌아와요.'
+          + '</div>'
+          + '<div style="font-size:12.5px;line-height:1.75;color:#374151;background:#f3f4f6;border-radius:10px;padding:10px 12px;margin-bottom:12px;">'
+            + '[설정하기]를 누르면 기기 설정 화면이 열려요<br>① <b>길동무</b>를 찾아 눌러서<br>② <b>다른 앱 위에 표시</b>를 <b>켬</b>으로 바꾸고 돌아오세요'
+          + '</div>'
+          + '<div style="font-size:12px;line-height:1.7;color:#6b7280;margin-bottom:18px;">'
+            + '· 안내 정보만 보여주고 광고는 넣지 않아요.<br>· 나중에 설정 탭의 \'다른 앱 위에 표시\'에서도 켜고 끌 수 있어요.'
+          + '</div>'
+          + '<div style="display:flex;gap:10px;">'
+            + '<button id="ovlAskNo" style="flex:1;padding:13px;border-radius:11px;border:1px solid #d1d5db;cursor:pointer;font-size:14.5px;font-weight:700;background:#f3f4f6;color:#374151;font-family:inherit;">나중에</button>'
+            + '<button id="ovlAskOk" style="flex:1.4;padding:13px;border-radius:11px;border:none;cursor:pointer;font-size:14.5px;font-weight:800;background:#0a84ff;color:#fff;font-family:inherit;">설정하기</button>'
+          + '</div></div>';
+        document.body.appendChild(ov);
+        document.getElementById('ovlAskNo').onclick = function(){ ov.remove(); };
+        document.getElementById('ovlAskOk').onclick = function(){
+          ov.remove();
+          try{ localStorage.setItem(_OVL_KEY, '1'); }catch(e2){}      // 켜기로 고른 것 — 허용하고 돌아오면 바로 뜬다
+          try{ n.requestPermission(); }catch(e3){}
+          try{ _ovlSyncToggle(); }catch(e4){}
+        };
+      });
+    });
+  }catch(e){}
+}
+window._ovlAsk = _ovlAsk;
+try{
+  document.addEventListener('visibilitychange', function(){ _ovlAskVisAt = Date.now(); });
+  window.addEventListener('focus', function(){ _ovlAskVisAt = Date.now(); });
+  // 앱을 켠 뒤 위치·배터리 안내가 지나간 틈에 한 번만 띄운다(2.5초마다 살펴보되, 안내가 이미 끝났으면 곧 멈춘다)
+  var _ovlAskTimer = setInterval(function(){
+    try{
+      if(parseInt(localStorage.getItem(_OVL_ASK_KEY) || '0', 10) || !_ovlNative()){ clearInterval(_ovlAskTimer); return; }
+      _ovlAsk('tick');
+    }catch(e){}
+  }, 2500);
+}catch(e){}
 try{
   setTimeout(function(){ _ovlRefresh(); }, 1500);
   setInterval(function(){ _ovlSync(); }, 5000);
@@ -29568,19 +29689,19 @@ function _batAsk(why){
   try{
     var n = _batNative();
     if(!n || typeof n.isIgnoringOptimizations !== 'function' || typeof n.requestIgnoreOptimizations !== 'function') return;   // 웹/구버전 빌드는 건너뜀
-    if(document.getElementById('batAskOv') || document.getElementById('locDiscOv') || document.getElementById('bgPermOv')) return;   // 다른 안내가 떠 있으면 이번엔 건너뜀(다음 기회에)
+    if(document.getElementById('batAskOv') || document.getElementById('locDiscOv') || document.getElementById('bgPermOv') || document.getElementById('ovlAskOv')) return;   // 다른 안내가 떠 있으면 이번엔 건너뜀(다음 기회에)
     var last = 0; try{ last = parseInt(localStorage.getItem(_BAT_ASK_KEY) || '0', 10) || 0; }catch(e0){}
     if(last) return;   // 한 번 물었으면 끝 — 이후엔 설정 화면의 카드에서만(YJ: 처음 설치 때 한 번만)
     n.isIgnoringOptimizations().then(function(r){
       if(r && r.ignoring) return;
-      if(document.getElementById('batAskOv') || document.getElementById('locDiscOv') || document.getElementById('bgPermOv')) return;
+      if(document.getElementById('batAskOv') || document.getElementById('locDiscOv') || document.getElementById('bgPermOv') || document.getElementById('ovlAskOv')) return;
       // ★ 2026-10-14 (YJ: "누르는 횟수를 줄여줘"): 갤럭시면 배터리 안내와 '자동 절전 제외' 안내를 한 창으로 합친다.
       //   [설정하기] 한 번이면 기기 허용 창 → (돌아오면 자동으로) 삼성 목록 화면까지 이어진다. 두 번째 안내 창과 그 버튼 한 번이 없어진다.
       var sn = _samNative(), samAsked = 0;
       try{ samAsked = parseInt(localStorage.getItem(_SAM_ASK_KEY) || '0', 10) || 0; }catch(e2){}
       var pInfo = (sn && !samAsked) ? sn.deviceInfo().then(function(i){ return !!(i && i.samsung); }).catch(function(){ return false; }) : Promise.resolve(false);
       pInfo.then(function(isSam){
-      if(document.getElementById('batAskOv') || document.getElementById('locDiscOv') || document.getElementById('bgPermOv') || document.getElementById('samAskOv')) return;
+      if(document.getElementById('batAskOv') || document.getElementById('locDiscOv') || document.getElementById('bgPermOv') || document.getElementById('ovlAskOv') || document.getElementById('samAskOv')) return;
       try{ localStorage.setItem(_BAT_ASK_KEY, String(Date.now())); }catch(e1){}
       if(isSam){ try{ localStorage.setItem(_SAM_ASK_KEY, String(Date.now())); }catch(e3){} }   // 합친 창이 두 안내를 한 번에 맡는다
       var ov = document.createElement('div');
@@ -29665,7 +29786,7 @@ window._samOpen = _samOpen;
 function _samAsk(why){
   try{
     var n = _samNative(); if(!n) return;   // 웹/구버전 빌드는 건너뜀
-    var busy = function(){ return !!(document.getElementById('samAskOv') || document.getElementById('batAskOv') || document.getElementById('locDiscOv') || document.getElementById('bgPermOv')); };
+    var busy = function(){ return !!(document.getElementById('samAskOv') || document.getElementById('batAskOv') || document.getElementById('locDiscOv') || document.getElementById('bgPermOv') || document.getElementById('ovlAskOv')); };
     if(busy()) return;   // 다른 안내가 떠 있으면 이번엔 건너뜀(다른 안내가 닫힐 때 다시 이어짐)
     var last = 0; try{ last = parseInt(localStorage.getItem(_SAM_ASK_KEY) || '0', 10) || 0; }catch(e0){}
     if(last) return;   // 평생 한 번
@@ -39527,6 +39648,21 @@ function _evSample(now){
     while(_ev.cell.length && now - _ev.cell[0] > 600000) _ev.cell.shift();
   }catch(e){}
 }
+// 백그라운드에서 받은 위치를 '잡힌 시각' 순서대로 궤적에 넣는다(같은 시각은 한 번만). 앱을 켜는 순간 몰려 오는 옛 위치도 제 시각으로 들어간다.
+function _evAddFix(lat, lng, ts, acc){
+  try{
+    if(!(ts > 0) || lat == null || lng == null) return;
+    var tr = _ev.trail, i = tr.length;
+    while(i > 0 && tr[i - 1].ts > ts) i--;
+    if(i > 0 && tr[i - 1].ts === ts) return;
+    if(i < tr.length && tr[i].ts === ts) return;
+    tr.splice(i, 0, { lat: lat, lng: lng, ts: ts, acc: (acc == null ? null : acc) });
+    var now = Date.now();
+    while(tr.length && now - tr[0].ts > 600000) tr.shift();
+    if(tr.length > 400) tr.splice(0, tr.length - 400);
+  }catch(e){}
+}
+window._evAddFix = _evAddFix;
 // 최근 win ms 동안 GPS 가 움직인 정도 (점 3개 이상, 45초 이상 걸쳐야 판단)
 function _evSpan(win, now){
   var pts = [], i;

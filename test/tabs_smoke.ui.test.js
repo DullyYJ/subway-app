@@ -113,6 +113,20 @@ const vis = (page, id) => page.evaluate(i => { const e = document.getElementById
     const shut = await page.evaluate(() => getComputedStyle(document.querySelector('#commList .dc-post[data-id="101"] .dc-post-body')).display);
     assert.strictEqual(open, 'block'); assert.strictEqual(shut, 'none');
   });
+  await t('다른 글을 누르면 열려 있던 글은 접히고 새로 누른 글만 펼쳐진다(한 번에 한 글) · 누른 글의 머리글 위치는 그대로', async () => {
+    const disp = (id) => page.evaluate((i) => getComputedStyle(document.querySelector('#commList .dc-post[data-id="' + i + '"] .dc-post-body')).display, id);
+    const top = (id) => page.evaluate((i) => document.querySelector('#commList .dc-post[data-id="' + i + '"] .dc-post-hdr').getBoundingClientRect().top, id);
+    await page.click('#commList .dc-post[data-id="101"] .dc-post-hdr'); await page.clock.runFor(300);
+    assert.strictEqual(await disp(101), 'block');
+    const t0 = await top(102);
+    await page.click('#commList .dc-post[data-id="102"] .dc-post-hdr'); await page.clock.runFor(300);
+    assert.strictEqual(await disp(101), 'none', '앞 글은 접힌다'); assert.strictEqual(await disp(102), 'block');
+    assert.strictEqual(await page.evaluate(() => document.querySelectorAll('#commList .dc-post-body').length && [...document.querySelectorAll('#commList .dc-post-body')].filter(b => getComputedStyle(b).display !== 'none').length), 1, '펼쳐진 글은 하나');
+    const t1 = await top(102); assert(Math.abs(t1 - Math.min(t0, 5000)) < 60 || t1 >= 0, '머리글이 화면 밖으로 밀리지 않는다 ' + [t0, t1]);
+    assert.deepStrictEqual(Object.keys(await page.evaluate(() => window._commOpenPosts)), ['102'], '열림 기록도 한 글');
+    await page.click('#commList .dc-post[data-id="102"] .dc-post-hdr'); await page.clock.runFor(300);   // 정리: 다시 누르면 접힘
+    assert.strictEqual(await disp(102), 'none');
+  });
   await t('댓글을 쓰면 글 안에 나타나고 서버로 전송된다', async () => {
     await page.click('#commList .dc-post[data-id="101"] .dc-post-hdr'); await page.clock.runFor(300);
     await page.fill('#dcCmtInp-101', '저도 지금 신도림이에요'); await page.keyboard.press('Enter'); await page.clock.runFor(800);

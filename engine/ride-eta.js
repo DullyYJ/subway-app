@@ -71,7 +71,11 @@ var RIDE_ETA_DEFAULTS = {
   //   엔진은 상태가 없어 매번 같은 식으로 다시 계산하므로 누적되지 않는다.
   // 정차 시간(초) — 실측 25초(표본 25,997). 시각표 기준 위치(pos)에서 도착 뒤 이만큼은 역 위에 머문다.
   stopDwellSec: 25,
-  posSegCount: 14,        // pos.segs — 앞으로 그릴 구간 수(응답이 끊겨도 시각표대로 이어 그리게)
+  // ★ 2026-10-14 (YJ: 인천1호선(실시간 위치 없음) 시험 — 도착 표시가 약 15초 늦다 → 현재보다 10초 일찍 도착으로 판정): 시각표 기준 위치(pos)에서 '중간 경로역'(승차역·최종 목적지 제외)에 닿았다고 보는 시각을
+  //   표시 도착 시각보다 이만큼(초) 앞당긴다. 0 이면 끔. 표시하는 도착 시각(etaMs·arr)은 그대로이고 마커·오버레이가 읽는 pos(from/to/t0/t1/segs)만 당겨진다. (영점 창은 ride-track zeroLeadSec 가 같이 일찍 열린다)
+  arriveEarlySec: 10,
+  // ★ 2026-10-14 (실기기 로그: 부평에서 마커가 멈췄다 — 구간표가 14구간뿐이라 응답이 끊긴 26분 뒤 끝났다): 남은 구간 전부를 준다(상한은 안전장치).
+  posSegCount: 80,        // pos.segs — 앞으로 그릴 구간 수(응답이 끊겨도 시각표대로 끝까지 이어 그리게)
   overdueSec: 60, overdueMaxMin: 15, overdueExtraMin: 0.5, overdueGain: 1, overdueMode: 'clamp',
   // 승강장에서 열차를 기다리는 중(platformWaiting): 예정 출발이 platMinOverMin 분 넘게 지났고 platGraceMin 분 안이면 늦는 것으로 보고 승차역부터 '지금 + platExtraMin 분'으로 민다(예전 앱의 _platformLateShift).
   platMinOverMin: 1, platGraceMin: 4, platExtraMin: 0.5,
@@ -133,23 +137,26 @@ function _rePos(input, r) {
   if (!idxs.length) return null;
   var ps = input.passes || [];
   for (i = 0; i < ps.length; i++) { var pi = +ps[i].idx; if (isFinite(pi) && pi >= 0 && pi < nodes.length && pi > fl) fl = pi; }
+  // 중간 경로역(승차역·최종 목적지 제외)은 arriveEarlySec 만큼 일찍 닿은 것으로 본다 — idxs 안의 자리 k 로 판단
+  var early = Math.max(0, +O.arriveEarlySec || 0) * 1000, last = idxs.length - 1;
+  function eff(kk) { return out[idxs[kk]] - ((kk > 0 && kk < last) ? early : 0); }
   var f = idxs[0], k;
-  for (k = 0; k < idxs.length; k++) { if (out[idxs[k]] <= nowMs) f = idxs[k]; else break; }
+  for (k = 0; k < idxs.length; k++) { if (eff(k) <= nowMs) f = idxs[k]; else break; }
   if (fl > f) f = fl;
   var pos = -1;
   for (k = 0; k < idxs.length; k++) if (idxs[k] === f) { pos = k; break; }
   if (pos < 0) { for (k = 0; k < idxs.length; k++) if (idxs[k] > f) { pos = Math.max(0, k - 1); break; } if (pos < 0) pos = idxs.length - 1; f = idxs[pos]; }
   if (pos >= idxs.length - 1) return { from: f, to: f, t0: null, t1: null, ratio: 0, moving: false, floor: fl, segs: [] };
-  var t = idxs[pos + 1], t0 = out[f] + O.stopDwellSec * 1000, t1 = out[t];
-  if (!(t1 - t0 >= 5000)) t0 = out[f];
+  var t = idxs[pos + 1], t0 = eff(pos) + O.stopDwellSec * 1000, t1 = eff(pos + 1);
+  if (!(t1 - t0 >= 5000)) t0 = eff(pos);
   var ratio = t1 > t0 ? Math.max(0, Math.min(1, (nowMs - t0) / (t1 - t0))) : 0;
   // ★ 2026-10-13 (YJ: 마커가 갑자기 멈추고 노란색 — 백그라운드에서 엔진 응답이 끊기면 마지막 구간이 끝난 채 굳었다): 앞으로의 구간 전부를 함께 준다.
   //   앱은 '지금 시각이 어느 구간(a~t1)에 드는지' 찾아 그리기만 한다 — 응답이 몇 분 끊겨도 시각표대로 이어서 그린다(새 증거가 오면 엔진이 다시 계산한다).
   var segs = [], q, lim = Math.min(idxs.length - 1, pos + O.posSegCount);
   for (q = pos; q < lim; q++) {
-    var fa = idxs[q], fb = idxs[q + 1], s0 = out[fa] + O.stopDwellSec * 1000, s1 = out[fb];
-    if (!(s1 - s0 >= 5000)) s0 = out[fa];
-    segs.push({ from: fa, to: fb, a: out[fa], t0: s0, t1: s1 });
+    var fa = idxs[q], fb = idxs[q + 1], s0 = eff(q) + O.stopDwellSec * 1000, s1 = eff(q + 1);
+    if (!(s1 - s0 >= 5000)) s0 = eff(q);
+    segs.push({ from: fa, to: fb, a: eff(q), t0: s0, t1: s1 });
   }
   return { from: f, to: t, t0: t0, t1: t1, ratio: Math.round(ratio * 1000) / 1000, moving: ratio > 0 && ratio < 1, floor: fl, segs: segs };
 }

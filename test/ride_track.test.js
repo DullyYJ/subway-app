@@ -132,6 +132,30 @@ r = rideTrack({ nowMs: NOW }); ok(r.off.confirmed === false && r.fix.n === 0, '�
   };
   let z = Z(-30, [{ t: -40 }]);
   ok(z.zero.stops.length === 0, '도착 15초보다 전(30초 전)에는 알리지 않는다 ' + JSON.stringify(z.zero));
+  // ★ 2026-10-14 (실기기: 앱을 다시 켜자 쌓였던 위치가 한꺼번에 와 모두 '지금' 시각 — 지난 역 전부가 방금 지난 것으로 읽혔다): 같은 시각인데 멀리 떨어진 좌표는 버리고 최신 것만 쓴다
+  {
+    const mk = (m, back) => ({ i: m, lat: 0, lng: m / KX, arrMs: NOW - back * 1000, pass: true });
+    const stopsB = [mk(3000, 360), mk(5000, 240), mk(7000, 120)];
+    const burst = [[NOW, 0, 3000 / KX, 20], [NOW, 0, 5000 / KX, 20], [NOW, 0, 7000 / KX, 20]];        // 3개 역 자리가 모두 같은 시각
+    let zz = rideTrack({ nowMs: NOW, trail: burst, plan: plan({ stops: stopsB }), want: { zero: true } });
+    const by = (r, i) => r.zero.stops.find(x => x.i === i);
+    ok(!by(zz, 3000) || by(zz, 3000).passMs == null, '몰려 온 옛 좌표로 3000 역 통과를 만들지 않는다 ' + JSON.stringify(zz.zero.stops));
+    ok(!by(zz, 5000) || by(zz, 5000).passMs == null, '5000 역도 마찬가지');
+    ok(by(zz, 7000) && by(zz, 7000).passMs === NOW, '가장 최신 좌표(7000 역 부근)만 남는다 ' + JSON.stringify(by(zz, 7000)));
+    // 제대로 시각이 찍힌 좌표(차례로 지남)는 모두 쓴다
+    const ok3 = [[NOW - 240000, 0, 3000 / KX, 20], [NOW - 120000, 0, 5000 / KX, 20], [NOW - 5000, 0, 7000 / KX, 20]];
+    zz = rideTrack({ nowMs: NOW, trail: ok3, plan: plan({ stops: stopsB }), want: { zero: true } });
+    ok(by(zz, 3000) && by(zz, 3000).passMs === NOW - 240000 && by(zz, 5000) && by(zz, 5000).passMs === NOW - 120000, '시각이 맞는 좌표는 그대로 통과로 쓴다 ' + JSON.stringify(zz.zero.stops));
+  }
+  // ★ 2026-10-14 (YJ: 영점 조절도 일찍 켜지게): 창 = 도착 25초 전 ~ 30초 뒤 (예전 15초 전 ~ 30초 뒤) — 시작만 10초 일찍
+  z = Z(-27, [{ t: -30 }]);
+  ok(z.zero.stops.length === 0, '도착 27초 전은 아직 안 열린다 ' + JSON.stringify(z.zero));
+  z = Z(-24, [{ t: -26 }]);
+  ok(z.zero.stops.length === 1 && z.zero.stops[0].state === 'near' && !z.zero.stops[0].apply, '도착 24초 전(예전엔 닫혀 있던 때)에 이미 열려 near 를 본다 ' + JSON.stringify(z.zero));
+  z = Z(-20, [{ t: -22 }]);
+  ok(z.zero.stops[0].state === 'near' && !z.zero.stops[0].apply, '20초 전: near, apply 는 아직(도착 3초 전부터)');
+  z = Z(28, [{ t: 20 }]);
+  ok(z.zero.stops[0].state === 'near', '창 끝(도착 30초 뒤) 직전 28초까지 그대로 열려 있다(끝은 안 줄였다) ' + JSON.stringify(z.zero.stops[0]));
   z = Z(-10, [{ t: -12 }]);
   ok(z.zero.stops[0].state === 'near' && !z.zero.stops[0].apply, '15초 전 창 안: near 이지만 아직 apply 아님(도착 시각 3초 전부터) ' + JSON.stringify(z.zero.stops[0]));
   z = Z(-2, [{ t: -8 }]);
@@ -296,6 +320,17 @@ r = rideTrack({ nowMs: NOW }); ok(r.off.confirmed === false && r.fix.n === 0, '�
   ok(s0 && s0.passMs === NOW - 20000 && s0.passEarlySec === -92 && s0.apply === true && s0.state === 'near', '일찍 닿음(표시보다 72초 뒤): 통과 시각을 돌려준다 ' + JSON.stringify(s0));
   z = run(72, [{ t: -20 }], false);
   ok(z.zero.stops.length === 0, 'pass 표시가 없으면 넓은 창을 보지 않는다(옛 동작)');
+  // ★ 초 단위 영점: 샘플 사이에 역을 지났으면 가장 가까운 샘플이 아니라 보간한 순간(ms)을 통과 시각으로 쓴다
+  z = run(72, [{ t: -20, dx: -120 }, { t: -10, dx: 80 }], true); s0 = z.zero.stops[0];
+  ok(s0 && s0.passMs === NOW - 14000, '두 샘플 사이(−20초 −120m, −10초 +80m)로 지난 역은 보간한 −14.0초 ' + JSON.stringify(s0));
+  z = run(72, [{ t: -20, dx: -100 }, { t: -10, dx: 100 }], true); s0 = z.zero.stops[0];
+  ok(s0 && s0.passMs === NOW - 15000 && s0.distM !== undefined, '정확히 가운데면 −15.0초 ' + JSON.stringify(s0));
+  z = run(72, [{ t: -50, dx: -120 }, { t: -10, dx: 80 }], true); s0 = z.zero.stops[0];
+  ok(s0 && s0.passMs === NOW - 10000, '샘플 간격이 30초를 넘으면 보간하지 않고 가까운 샘플 그대로 ' + JSON.stringify(s0));
+  z = run(72, [{ t: -20, dx: -120 }, { t: -10, dx: 80, acc: 80 }], true); s0 = z.zero.stops[0];
+  ok(!s0 || s0.passMs === NOW - 20000, '정확도 나쁜 샘플은 보간에도 쓰지 않는다 ' + JSON.stringify(s0));
+  z = run(72, [{ t: -20, dx: -60 }, { t: -10, dx: -20 }], true); s0 = z.zero.stops[0];
+  ok(s0 && s0.passMs === NOW - 10000, '아직 역에 닿기 전(두 샘플 다 한쪽)이면 가까운 샘플 그대로 ' + JSON.stringify(s0));
   z = run(72, [{ t: -20, acc: 100 }], true);
   ok(z.zero.stops.length === 0 || z.zero.stops[0].passMs === undefined, '정확도 60m 넘는 좌표는 통과 시각에 쓰지 않는다 ' + JSON.stringify(z.zero.stops));
   z = run(-200, [{ t: -50 }], true); s0 = z.zero.stops[0];

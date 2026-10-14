@@ -128,6 +128,25 @@ const veh = (app) => app.page.evaluate(() => window._veh ? { v: window._veh.vehi
   await t('_vehOff 이면 워커에 묻지 않는다', async () => assert.strictEqual((app.stat.veh || []).length, 0));
   await app.ctx.close();
 
+  console.log('[⑨ 지하철 탑승 확정 중 — 곁의 버스가 잡혀도 차량 잠금·경로 교체를 하지 않는다 (2026-10-14 계양역 사례)]');
+  app = await H.newApp(b, () => BF.respWithAlt(480)); app.stat.vehFn = (bd) => worker({ busNo: '급행97', aheadM: 20 })(bd);
+  await app.page.evaluate(() => { window._trkSubConfirmed = function () { return true; }; });
+  await app.search(); await app.confirm();
+  const req9 = app.stat.routeReq;
+  await toStopAndWait(app, 45);
+  await app.moveAlong(altStops(3), 8, 5);
+  const st9 = await app.state();
+  await t('버스 차량이 잠기지 않는다', async () => assert.strictEqual(await veh(app), null));
+  await t('경로가 급행97 후보로 바뀌지 않는다', async () => assert.ok(!st9.names.includes('급1정류장'), st9.names.join(',')));
+  await t('워커에 묻지도 않는다', async () => assert.strictEqual((app.stat.veh || []).length, 0));
+  await t('_applyRiddenRoute 가 false 를 돌려주고 경로를 건드리지 않는다', async () => {
+    const r = await app.page.evaluate(() => { try { return _applyRiddenRoute({ routeKey: '23_ICB1', busNo: '급행97' }); } catch (e) { return 'ERR ' + e.message; } });
+    assert.strictEqual(r, false, String(r));
+  });
+  await t('엔진에 다시 묻지 않는다', async () => assert.strictEqual(app.stat.routeReq, req9));
+  await t('JS 오류가 없다', async () => assert.deepStrictEqual([...new Set(app.errs)], []));
+  await app.ctx.close();
+
   await b.close();
   console.log('\n' + pass + ' 통과 / ' + fail + ' 실패');
   process.exit(fail ? 1 : 0);
