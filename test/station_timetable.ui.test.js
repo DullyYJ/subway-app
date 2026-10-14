@@ -49,7 +49,7 @@ const NOW = new Date('2026-10-14T13:00:00+09:00');   // 수요일 13:00
         const rec = (m, a, ret) => { window.__nm.push({ m, a: a || null }); return Promise.resolve(ret); };
         window.Capacitor = { isNativePlatform: () => true, getPlatform: () => 'android', Plugins: { NativeMap: {
           show: (a) => { window.__nm.push({ m: 'show', a }); return Promise.resolve(); },
-          setRect: (a) => rec('setRect', a), hide: () => rec('hide'), destroy: () => rec('destroy'), setFilter: (a) => rec('setFilter', a), fit: () => rec('fit'),
+          setRect: (a) => rec('setRect', a), follow: (a) => rec('follow', a), hide: () => rec('hide'), destroy: () => rec('destroy'), setFilter: (a) => rec('setFilter', a), fit: () => rec('fit'),
           ensureVisible: (a) => rec('ensureVisible', a, { found: true }), setHint: (a) => rec('setHint', a),
           snapshot: (a) => rec('snapshot', a, { data: 'data:image/jpeg;base64,/9j/AAAA' }),
           centerOn: (a) => rec('centerOn', a, { found: true, name: String(a.name) }),
@@ -265,6 +265,69 @@ const NOW = new Date('2026-10-14T13:00:00+09:00');   // 수요일 13:00
     await x.page.evaluate(() => nmTtClose()); await x.page.clock.runFor(20);
     await x.page.evaluate(() => nmTtOpen('시청', ['1호선'])); await x.page.clock.runFor(30);
     assert.strictEqual(await x.page.evaluate(() => document.querySelectorAll('#nmTtSheet').length), 1, '시트는 하나');
+    assert.deepStrictEqual(x.errs, []); await x.ctx.close();
+  });
+
+  await t('지도가 시트 위쪽 끝을 따라간다: 열기(tFrom→tTo, 팝업에서 올 땐 fullH) · 끌 때(follow 로 보이는 끝만) · 놓아 닫기(손가락 자리에서 tFrom) · 놓아 제자리(180ms 되돌림) — 역 팝업·시간표 시트 모두', async () => {
+    const x = await fresh({ plugin: true }); await openSubway(x);
+    const nm = (m) => x.page.evaluate((m) => window.__nm.filter(c => c.m === m).map(c => c.a), m);
+    const reset = () => x.page.evaluate(() => { window.__nm.length = 0; });
+    const geo = (id) => x.page.evaluate((id) => { const e = document.getElementById(id); if (!e) return null; const r = e.getBoundingClientRect(); return { top: r.top, h: e.offsetHeight, vh: innerHeight, l: r.left, w: r.width }; }, id);
+    // ① 팝업에서 시간표를 열면: fullH(지도 전체 높이)에서 시작해 시트 위쪽 끝(vh → vh−H)을 따라 줄어든다
+    await x.page.evaluate(() => window.__nmEmit('station', { name: '서울역', x: 195, y: 300 })); await x.page.clock.runFor(600);
+    await reset();
+    await x.page.evaluate(() => document.getElementById('nmTtOpenBtn').click()); await x.page.clock.runFor(60); await settle(x); await x.page.clock.runFor(900);
+    let sr = await nm('setRect'); let g = await geo('nmTtSheet');
+    assert.strictEqual(sr.length, 1, '열 때 setRect 한 번 ' + sr.length);
+    assert(sr[0].tFrom === g.vh && Math.abs(sr[0].tTo - (g.vh - g.h)) < 1 && sr[0].fullH > sr[0].h, '열기: 시트 위쪽 끝 길 + 전체 높이 ' + JSON.stringify(sr[0]) + ' vh=' + g.vh + ' H=' + g.h);
+    // ② 손가락으로 시트를 끌어내림 → follow(보이는 끝만), 지도 사각형(setRect)은 그대로
+    await reset();
+    const hx = g.l + g.w / 2, hy = g.top + 14;
+    await x.page.mouse.move(hx, hy); await x.page.mouse.down(); await x.page.mouse.move(hx, hy + 40, { steps: 3 }); await x.page.clock.runFor(40);
+    await x.page.mouse.move(hx, hy + 120, { steps: 4 }); await x.page.clock.runFor(40);
+    let fl = await nm('follow');
+    assert(fl.length >= 2, '끄는 동안 follow ' + fl.length);
+    assert.strictEqual((await nm('setRect')).length, 0, '끄는 동안 setRect 없음');
+    const lastF = fl[fl.length - 1];
+    assert(Math.abs(lastF.bottom - (g.vh - g.h + 120 - 8)) < 40 && lastF.bottom > fl[0].bottom - 1, '지도 보이는 끝이 시트 위쪽 끝(' + (g.vh - g.h + 112) + ')을 따라 내려간다 ' + JSON.stringify(fl.map(f => Math.round(f.bottom))));
+    assert(lastF.h > g.top, 'follow 는 전체 크기 사각형 ' + JSON.stringify(lastF));
+    // ②-1 조금만 끌고 놓으면 제자리 — 지도도 180ms 곡선으로 되돌림
+    await x.page.mouse.move(hx, hy + 30, { steps: 3 }); await x.page.clock.runFor(30); await reset();
+    await x.page.mouse.up(); await x.page.clock.runFor(400);
+    sr = await nm('setRect');
+    assert.strictEqual(sr.length, 1, '제자리 setRect 한 번 ' + sr.length);
+    assert(sr[0].anim === 180 && sr[0].e3 === 0.58 && Math.abs(sr[0].tTo - (g.vh - g.h)) < 1 && sr[0].tFrom > sr[0].tTo && Math.abs(sr[0].y + sr[0].h - (g.vh - g.h)) < 2, '되돌림 ' + JSON.stringify(sr[0]));
+    assert(await sheet(x), '조금만 끌면 닫히지 않는다');
+    // ③ 많이 끌고 놓으면 닫힘 — 손가락 자리(tFrom = 멈춘 자리 + dy)에서 이어 내려가고 지도는 전체로
+    await reset();
+    g = await geo('nmTtSheet');
+    await x.page.mouse.move(hx, g.top + 14); await x.page.mouse.down(); await x.page.mouse.move(hx, g.top + 14 + 220, { steps: 6 }); await x.page.clock.runFor(40);
+    await reset(); await x.page.mouse.up(); await x.page.clock.runFor(900);
+    sr = await nm('setRect');
+    assert.strictEqual(sr.length, 1, '닫힘 setRect 한 번 ' + sr.length);
+    const gvb = await x.page.evaluate(() => document.getElementById('gmSvgView').getBoundingClientRect().bottom);
+    assert(sr[0].anim === 240 && sr[0].tFrom > g.vh - g.h + 150 && sr[0].tTo === g.vh + 40 && Math.abs(sr[0].y + sr[0].h - gvb) < 2, '닫기 ' + JSON.stringify(sr[0]));
+    assert.strictEqual(await sheet(x), null, '시트가 사라진다');
+    // ④ 역 팝업: 끌면 follow, 놓아 닫으면 같은 방식, 바깥 눌러 닫아도 같은 방식
+    await x.page.evaluate(() => window.__nmEmit('station', { name: '서울역', x: 195, y: 300 })); await x.page.clock.runFor(600);
+    g = await geo('svgStationPop'); assert(g, '팝업');
+    await reset();
+    const px = g.l + g.w / 2, py = g.top + 14;
+    await x.page.mouse.move(px, py); await x.page.mouse.down(); await x.page.mouse.move(px, py + 160, { steps: 6 }); await x.page.clock.runFor(40);
+    fl = await nm('follow'); assert(fl.length >= 2, '팝업 끌기 follow ' + fl.length);
+    assert.strictEqual((await nm('setRect')).length, 0, '팝업 끌기 중 setRect 없음');
+    await reset(); await x.page.mouse.up(); await x.page.clock.runFor(900);
+    sr = await nm('setRect');
+    assert(sr.length === 1 && sr[0].anim === 240 && sr[0].tFrom > g.top + 100 && sr[0].tTo === g.vh + 40, '팝업 닫기 ' + JSON.stringify(sr));
+    assert.strictEqual(await x.page.evaluate(() => !!document.getElementById('svgStationPop')), false, '팝업이 사라진다');
+    await x.page.evaluate(() => window.__nmEmit('station', { name: '시청', x: 195, y: 300 })); await x.page.clock.runFor(1000);
+    await reset();
+    await x.page.mouse.click(195, 60); await x.page.clock.runFor(20);
+    const mid = await x.page.evaluate(() => { const p = document.getElementById('svgStationPop'); return p ? { closing: !!p._nmClosing, n: p.getAnimations().length } : null; });
+    assert(mid && mid.closing, '바깥을 누르면 내려가는 중 ' + JSON.stringify(mid));
+    await x.page.clock.runFor(700);
+    assert.strictEqual(await x.page.evaluate(() => !!document.getElementById('svgStationPop')), false);
+    assert(!(await x.page.evaluate(() => window.__nm.some(c => c.m === 'follow'))), '바깥 누름엔 follow 없음');
     assert.deepStrictEqual(x.errs, []); await x.ctx.close();
   });
 

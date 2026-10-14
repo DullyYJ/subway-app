@@ -31399,6 +31399,11 @@ function _nmClearSnap(){ var gv = _nmGv(); if(gv && _nm.snap){ gv.style.backgrou
 // 원하는 모습으로 맞춘다. 한 번에 하나씩(겹치면 끝난 뒤 한 번 더). 끝나면 waiters 를 부른다.
 function _nmSync(fitNow){
   if(!_nmActive()) return;
+  if(_nm.following){                                       // 손가락이 시트를 끄는 동안은 지도 크기를 건드리지 않는다(follow 가 보이는 끝만 옮긴다)
+    var Fo = _nm.following;
+    if(Date.now() - Fo.t0 > 8000 || !Fo.el.isConnected){ _nmFollowStop(); _nm.rect = null; }
+    else return;
+  }
   if(fitNow) _nm.wantFit = true;
   if(_nm.busy){ _nm.again = true; return; }
   _nm.busy = true;
@@ -31439,7 +31444,11 @@ function _nmSync(fitNow){
     if(!same){
       _nm.rect = rc;
       var an = _nm.animNext; _nm.animNext = null;
-      if(an && Date.now() - an.at < 600){ arg.anim = an.dur; arg.e1 = an.ease[0]; arg.e2 = an.ease[1]; arg.e3 = an.ease[2]; arg.e4 = an.ease[3]; }   // 네이티브가 시트와 같은 곡선·시간으로 '보이는 끝'을 옮긴다(120Hz)
+      if(an && Date.now() - an.at < 600){
+        arg.anim = an.dur; arg.e1 = an.ease[0]; arg.e2 = an.ease[1]; arg.e3 = an.ease[2]; arg.e4 = an.ease[3];
+        if(an.tFrom != null && an.tTo != null){ arg.tFrom = an.tFrom; arg.tTo = an.tTo; }      // 시트 위쪽 끝이 가는 길 — 지도의 보이는 끝이 그것을 따라간다
+        if(an.fullH) arg.fullH = an.fullH;
+      }   // 네이티브가 시트와 같은 곡선·시간으로 '보이는 끝'을 옮긴다(120Hz)
       steps.push(P.setRect(arg));
     }
     if(_nm.wantFit){ _nm.wantFit = false; steps.push(P.fit()); }
@@ -32647,9 +32656,11 @@ function _nmDragDismiss(el, closeFn, o){
       if(st.fromScroll && scr.scrollTop > 0){ st.y0 = y; st.t0 = Date.now(); return; }   // 목록이 아직 위로 올라갈 수 있다 → 스크롤 우선
       if(dy < 8) return;
       st.on = true; el.style.transition = 'none'; el.style.userSelect = 'none';
+      if(o.onStart){ try{ o.onStart(); }catch(eS){} }
     }
     st.dy = Math.max(0, dy);
     el.style.transform = 'translateY(' + st.dy + 'px)';
+    if(o.onMove){ try{ o.onMove(st.dy); }catch(eM){} }
     if(e && e.cancelable) e.preventDefault();
   }
   function end(e){
@@ -32669,13 +32680,14 @@ function _nmDragDismiss(el, closeFn, o){
     } else {
       el.style.transition = 'transform .18s ease-out';
       el.style.transform = 'translateY(0)';
+      if(o.onSnap){ try{ o.onSnap(dy); }catch(eN){} }
       setTimeout(function(){ el.style.transition = ''; el.style.transform = ''; }, 200);
     }
   }
   el.addEventListener('touchstart', function(e){ if(e.touches.length === 1) begin(e.touches[0].clientY, e.touches[0].clientX, e.target); else st.down = false; }, {passive:true});
   el.addEventListener('touchmove', function(e){ if(e.touches.length === 1) move(e.touches[0].clientY, e.touches[0].clientX, e); }, {passive:false});
   el.addEventListener('touchend', function(e){ end(e); }, true);       // 캡처: 끌었다면 아래 버튼 핸들러보다 먼저 삼킨다
-  el.addEventListener('touchcancel', function(){ if(st.on){ st.on = false; st.down = false; el.style.transition = 'transform .18s ease-out'; el.style.transform = 'translateY(0)'; } else st.down = false; });
+  el.addEventListener('touchcancel', function(){ if(st.on){ st.on = false; st.down = false; el.style.transition = 'transform .18s ease-out'; el.style.transform = 'translateY(0)'; if(o.onSnap){ try{ o.onSnap(st.dy); }catch(eN){} } } else st.down = false; });
   el.addEventListener('mousedown', function(e){ if(e.button === 0) begin(e.clientY, e.clientX, e.target); });
   var mm = function(e){ if(st.down) move(e.clientY, e.clientX, e); };
   var mu = function(e){ if(st.down) end(e); };
@@ -32842,7 +32854,9 @@ function svgShowPopup(name, lines) {
   b3.addEventListener('click', _h3);
   pop.appendChild(b3);
   document.body.appendChild(pop);
-  _nmDragDismiss(pop, function(){ svgRemovePopup(); try{ if(typeof _nmSync === 'function') _nmSync(); }catch(e){} });
+  pop._nmRest = true;                                         // 끄는 동안 지도 크기를 틱마다 바꾸지 않는다
+  _nmDragDismiss(pop, function(){ svgRemovePopup(); try{ if(typeof _nmSync === 'function') _nmSync(); }catch(e){} },
+    { slideOut: function(dy){ svgClosePopup(dy); }, onStart: function(){ _nmFollowStart(pop); }, onMove: _nmFollowMove, onSnap: function(dy){ _nmFollowSnap(pop, dy); } });
   try{ if(window._RC && _RC.playStart) _RC.playStart(nmPlay); }catch(ePl){}
 
   // 외부 클릭 닫기 (딜레이 충분히 주어 버튼 클릭 처리 후 적용)
@@ -32853,7 +32867,7 @@ function svgShowPopup(name, lines) {
       if(bdrop && bdrop.classList.contains('on')) return;
       var p = document.getElementById('svgStationPop');
       if (p && !p.contains(e.target)) {
-        svgRemovePopup();
+        svgClosePopup();
         document.removeEventListener('touchstart', closeIt, true);
         document.removeEventListener('click',      closeIt, true);
       }
@@ -32896,17 +32910,88 @@ function _nmSheetMove(el, from, to, dur, ease, done){
   setTimeout(end, dur + 90);
   return end;
 }
-function _nmSheetPrepareOut(s, fromDy){
-  s._nmClosing = true;
-  s._nmTop = (window.innerHeight || 99999);                // 지도는 '다 내려간 뒤'의 모습으로 늘어난다
-  s.style.pointerEvents = 'none';                          // 지도 가림 판정(elementFromPoint)에 걸리지 않게
-  var hh = s.offsetHeight || 300, started = false, O = _NM_SHEET_OUT;
-  try{ if(typeof _nm !== 'undefined') _nm.animNext = { at: Date.now(), dur: O.dur, ease: O.ease }; }catch(e){}
+// 시트(또는 역 팝업)가 오르내릴 때 뒤의 네이티브 지도가 '시트 위쪽 끝'을 매 프레임 따라가게 한다(2026-10-14 21:42 YJ: "탭이 내려가는 만큼 뒤의 역 이미지가 자연스럽게 나오게").
+//   · 열기·닫기: setRect 에 시트 위쪽 끝의 길(tFrom→tTo)·시간·곡선을 한 번에 → 네이티브가 같은 곡선으로 계산(틈 없음).
+//   · 손가락으로 끌 때: 지도를 전체 크기로 두고 보이는 끝만 따라간다(follow, 프레임당 한 번) → 놓으면 setRect 로 마무리(닫힘/제자리).
+//   계산(시트 위치·지도 사각형)은 이 앱의 레이아웃 측정이고 지도 그림은 네이티브 — 엔진 계산과 무관한 순수 그리기다.
+function _nmFullRect(el){
+  var d = null, hadTop = el._nmTop, hadPe = el.style.pointerEvents;
+  try{ el._nmTop = window.innerHeight || 99999; el.style.pointerEvents = 'none'; d = _nmDesired(); }catch(e){ d = null; }
+  el._nmTop = hadTop; el.style.pointerEvents = hadPe;
+  return (d && d.mode === 'rect') ? d.rect : null;
+}
+function _nmFollowStop(){
+  var F = _nm.following;
+  if(F){ if(F.raf){ try{ cancelAnimationFrame(F.raf); }catch(e){} } _nm.following = null; }
+}
+function _nmFollowStart(el){
+  _nmFollowStop();
+  try{
+    var P = _nmPlugin();
+    if(!_nmActive() || !_nm.shown || !P || typeof P.follow !== 'function') return;
+    var full = _nmFullRect(el); if(!full) return;
+    _nm.following = { el: el, full: full, raf: 0, dy: 0, t0: Date.now() };
+  }catch(e){}
+}
+function _nmFollowMove(dy){
+  var F = _nm.following; if(!F) return;
+  F.dy = dy;
+  if(F.raf) return;
+  F.raf = requestAnimationFrame(function(){
+    F.raf = 0; if(_nm.following !== F) return;
+    try{
+      var P = _nmPlugin(), rest = (window.innerHeight || 0) - F.el.offsetHeight;
+      var r = P.follow({ x: F.full.x, y: F.full.y, w: F.full.w, h: F.full.h, dpr: window.devicePixelRatio || 1, bottom: Math.min(F.full.y + F.full.h, rest + F.dy) });
+      if(r && r.catch) r.catch(function(){});
+    }catch(e){}
+  });
+}
+function _nmFollowSnap(el, dy){            // 손을 떼고 제자리로 돌아올 때 — 지도도 같은 곡선으로 되돌린다
+  if(!_nm.following) return;
+  _nmFollowStop();
+  var vh = window.innerHeight || 99999, rest = vh - el.offsetHeight;
+  _nm.rect = null;                          // 네이티브가 전체 크기인 채로 있으니 제자리 사각형을 다시 보낸다
+  _nm.animNext = { at: Date.now(), dur: 180, ease: [0, 0, 0.58, 1], tFrom: rest + dy, tTo: rest };
+  try{ _nmSync(); }catch(e){}
+}
+function _nmSheetPrepareIn(s){
+  var H = s.offsetHeight, I = _NM_SHEET_IN, started = false, vh = window.innerHeight || 99999;
+  s.style.transform = 'translateY(' + H + 'px)';           // 아직 화면 아래
+  try{
+    if(_nmActive()){
+      var full = _nmFullRect(s);
+      _nm.animNext = { at: Date.now(), dur: I.dur, ease: I.ease, tFrom: vh, tTo: vh - H, fullH: full ? full.h : 0 };
+    }
+  }catch(e){}
   return function(){
     if(started) return; started = true;
-    _nmSheetMove(s, fromDy || 0, hh + 40, O.dur, O.ease, function(){ if(s.parentNode) s.remove(); try{ if(typeof _nmSync === 'function') _nmSync(); }catch(e){} });
+    _nmSheetMove(s, H, 0, I.dur, I.ease, function(){ try{ s.style.transform = ''; }catch(e){} });
   };
 }
+function _nmSheetPrepareOut(s, fromDy, onEnd){
+  _nmFollowStop();
+  s._nmClosing = true;
+  var vh = window.innerHeight || 99999;
+  s._nmTop = vh;                                           // 지도는 '다 내려간 뒤'의 모습으로 늘어난다
+  s.style.pointerEvents = 'none';                          // 지도 가림 판정(elementFromPoint)에 걸리지 않게
+  var hh = s.offsetHeight || 300, started = false, O = _NM_SHEET_OUT;
+  try{ _nm.animNext = { at: Date.now(), dur: O.dur, ease: O.ease, tFrom: vh - hh + (fromDy || 0), tTo: vh + 40 }; }catch(e){}
+  return function(){
+    if(started) return; started = true;
+    _nmSheetMove(s, fromDy || 0, hh + 40, O.dur, O.ease, function(){ try{ if(onEnd) onEnd(); }catch(e0){} if(s.parentNode) s.remove(); try{ if(typeof _nmSync === 'function') _nmSync(); }catch(e){} });
+  };
+}
+// 역 팝업 내리기(끌어서·바깥 눌러서) — 시간표 시트와 같은 방식
+function svgClosePopup(fromDy){
+  var p = document.getElementById('svgStationPop'); if(!p || p._nmClosing) return;
+  if(window._nmNoAnim || !(p.offsetHeight > 0)){ svgRemovePopup(); try{ _nmSync(); }catch(e){} return; }
+  try{ if(p._dragOff) p._dragOff(); }catch(e0){}
+  var goOut = _nmSheetPrepareOut(p, fromDy || 0, function(){ try{ if(window._RC && _RC.playStop) _RC.playStop(); }catch(e1){} });
+  try{ _nmSync(); }catch(e2){}
+  try{ _nmAfterSync(goOut); }catch(e3){ goOut(); }
+  setTimeout(goOut, 120);
+}
+window.svgClosePopup = svgClosePopup;
 
 function nmTtOpen(name, lines){
   var snap = null; try{ if(window._RC && _RC.playSnap && document.getElementById('nmPopPlay')) snap = _RC.playSnap(); }catch(eSn){}   // 팝업에서 놀던 장면을 이어받는다
@@ -32933,14 +33018,12 @@ function nmTtOpen(name, lines){
     '<div id="nmTtBody" style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;"></div>';
   document.body.appendChild(sh);
   sh.querySelector('#nmTtTitle').textContent = name + ' 시간표';
-  _nmDragDismiss(sh, function(){ nmTtClose(); }, { scroller: '#nmTtBody', slideOut: function(dy){ nmTtClose(false, dy); } });
+  _nmDragDismiss(sh, function(){ nmTtClose(); }, { scroller: '#nmTtBody', slideOut: function(dy){ nmTtClose(false, dy); },
+    onStart: function(){ _nmFollowStart(sh); }, onMove: _nmFollowMove, onSnap: function(dy){ _nmFollowSnap(sh, dy); } });
+  var goIn = null;
   try{
-    var hh0 = sh.offsetHeight;
     sh._nmRest = true;                                           // 멈출 자리(지도는 여기까지로 줄어든다 — 올라오는 중·끄는 중에도 그대로)
-    if(hh0 > 0 && !window._nmNoAnim){
-      if(typeof _nm !== 'undefined') _nm.animNext = { at: Date.now(), dur: _NM_SHEET_IN.dur, ease: _NM_SHEET_IN.ease };
-      _nmSheetMove(sh, hh0, 0, _NM_SHEET_IN.dur, _NM_SHEET_IN.ease, function(){ try{ sh.style.transform = ''; }catch(e){} });
-    }
+    if(sh.offsetHeight > 0 && !window._nmNoAnim) goIn = _nmSheetPrepareIn(sh);
   }catch(eAn){}
   try{ if(window._RC && _RC.playStart) _RC.playStart(sh.querySelector('#nmTtPlay'), snap || undefined); }catch(ePl){}
 
@@ -32961,6 +33044,11 @@ function nmTtOpen(name, lines){
   }, 600);
 
   _nmTtAfter();
+  if(goIn){
+    // 지도가 시트를 따라 움직이기 시작한 뒤(네이티브가 받은 뒤)에 시트를 올려 둘이 같이 움직이게 — 안 오면 120ms 뒤 어쨌든 올린다
+    try{ _nmAfterSync(goIn); }catch(eG0){ goIn(); }
+    setTimeout(goIn, 120);
+  }
   nmTtLoad();
 }
 

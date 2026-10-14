@@ -131,7 +131,8 @@ public class NativeMapPlugin extends Plugin {
                 if (call.getFloat("dpr", 0f) > 0f) dpr = call.getFloat("dpr", 1f);
                 int anim = call.getInt("anim", 0) == null ? 0 : call.getInt("anim", 0);
                 if (anim > 0 && view.getVisibility() == View.VISIBLE && animateRect(f(call, "x"), f(call, "y"), w, h, anim,
-                        call.getFloat("e1", 0.4f), call.getFloat("e2", 0f), call.getFloat("e3", 0.2f), call.getFloat("e4", 1f))) {
+                        call.getFloat("e1", 0.4f), call.getFloat("e2", 0f), call.getFloat("e3", 0.2f), call.getFloat("e4", 1f),
+                        call.getFloat("tFrom", Float.NaN), call.getFloat("tTo", Float.NaN), call.getFloat("fullH", 0f))) {
                     call.resolve();
                     return;
                 }
@@ -318,31 +319,46 @@ public class NativeMapPlugin extends Plugin {
         view.setLayoutParams(lpFor(x, y, w, h));
     }
 
-    /** 높이만 바뀌는 사각형 변경을 애니메이션으로. 할 수 없으면 false(호출한 쪽이 곧바로 바꾼다). */
-    private boolean animateRect(float x, float y, float w, float h, int ms, float e1, float e2, float e3, float e4) {
+    /**
+     * 높이만 바뀌는 사각형 변경을 애니메이션으로. 할 수 없으면 false(호출한 쪽이 곧바로 바꾼다).
+     *   tFrom·tTo(CSS px, 화면 위에서부터): 오르내리는 시트의 위쪽 끝이 움직이는 길 — 주면 '보이는 아래쪽 끝'이 매 프레임 그 시트 위쪽 끝을 따라간다
+     *     (같은 시간·같은 곡선이므로 시트가 지나간 자리에 지도가 바로 이어져 흰 틈이 없다). 안 주면 처음 끝 → 나중 끝을 곡선대로 직선 이동.
+     *   fullH(CSS px): 지금 팝업 등으로 줄어 있어도 시작은 이 높이(지도 전체)에서 — 팝업이 사라진 자리를 지도가 먼저 채운다.
+     */
+    private boolean animateRect(float x, float y, float w, float h, int ms, float e1, float e2, float e3, float e4, float tFrom, float tTo, float fullH) {
         if (view == null || root == null) return false;
         ViewGroup.LayoutParams cp = view.getLayoutParams();
         if (!(cp instanceof FrameLayout.LayoutParams)) return false;
         final FrameLayout.LayoutParams cur = (FrameLayout.LayoutParams) cp;
         final FrameLayout.LayoutParams tlp = lpFor(x, y, w, h);
-        final int fromB = clipBottom >= 0 ? clipBottom : cur.height, toB = tlp.height;
+        int curH = cur.height;
+        final int fullPx = fullH > 0f ? Math.round(fullH * dpr) : 0;
+        final int fromB = fullPx > 0 ? fullPx : (clipBottom >= 0 ? clipBottom : curH), toB = tlp.height;
         boolean sameBox = Math.abs(cur.leftMargin - tlp.leftMargin) <= 1 && Math.abs(cur.topMargin - tlp.topMargin) <= 1 && Math.abs(cur.width - tlp.width) <= 1;
         if (!sameBox || fromB == toB || ms < 30) return false;
         cancelRectAnim();
         final int width = tlp.width;
-        if (toB > cur.height) {
+        final FrameLayout.LayoutParams fin = lpFor(x, y, w, h);
+        int bigH = Math.max(Math.max(curH, toB), fromB);
+        if (bigH > curH) {
             // 커지는 쪽: 큰 크기로 먼저 바꾸되 지금 보이는 만큼만 보이게 잘라 두고, 잘라낸 끝을 늘린다
-            tlp.leftMargin = cur.leftMargin; tlp.topMargin = cur.topMargin;
+            tlp.leftMargin = cur.leftMargin; tlp.topMargin = cur.topMargin; tlp.height = bigH;
             view.setLayoutParams(tlp);
         }
         // 줄어드는 쪽: 크기는 끝에서 바꾼다(그동안 큰 채로 두고 아래쪽만 잘라 올린다)
         setClipBottom(fromB, width);
-        final FrameLayout.LayoutParams fin = lpFor(x, y, w, h);
-        ValueAnimator va = ValueAnimator.ofInt(fromB, toB);
+        final int lo = Math.min(fromB, toB), hi = Math.max(fromB, toB);
+        final boolean follow = !Float.isNaN(tFrom) && !Float.isNaN(tTo);
+        final float aPx = follow ? (tFrom - y) * dpr : fromB, bPx = follow ? (tTo - y) * dpr : toB;
+        ValueAnimator va = ValueAnimator.ofFloat(0f, 1f);
         va.setDuration(ms);
         try { va.setInterpolator(new PathInterpolator(e1, e2, e3, e4)); } catch (Throwable t) { /* 기본 보간 */ }
         va.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
-            @Override public void onAnimationUpdate(ValueAnimator a) { setClipBottom((Integer) a.getAnimatedValue(), width); }
+            @Override public void onAnimationUpdate(ValueAnimator a) {
+                float p = (Float) a.getAnimatedValue();
+                int b = Math.round(aPx + (bPx - aPx) * p);
+                setClipBottom(Math.max(lo, Math.min(hi, b)), width);
+            }
         });
         va.addListener(new AnimatorListenerAdapter() {
             private boolean cancelled;
@@ -357,5 +373,31 @@ public class NativeMapPlugin extends Plugin {
         rectAnim = va;
         va.start();
         return true;
+    }
+
+    /**
+     * follow({x,y,w,h,bottom,dpr}) — 손가락이 시트를 끌어내리는 동안 지도를 '전체 크기'로 두고 보이는 아래쪽 끝(bottom, CSS px)만 따라 움직인다.
+     *   (크기를 바꾸지 않으므로 비트맵을 다시 그리지 않는다.) 끝나면 앱이 setRect 로 제자리·닫힘을 알린다.
+     */
+    @PluginMethod
+    public void follow(final PluginCall call) {
+        runUi(call, new Runnable() {
+            @Override public void run() {
+                if (view == null || root == null || view.getVisibility() != View.VISIBLE) { call.resolve(); return; }
+                float x = f(call, "x"), y = f(call, "y"), w = f(call, "w"), h = f(call, "h");
+                if (!(w > 1f && h > 1f)) { call.resolve(); return; }
+                if (call.getFloat("dpr", 0f) > 0f) dpr = call.getFloat("dpr", 1f);
+                cancelRectAnim();
+                FrameLayout.LayoutParams tlp = lpFor(x, y, w, h);
+                ViewGroup.LayoutParams cp = view.getLayoutParams();
+                boolean same = cp instanceof FrameLayout.LayoutParams
+                        && ((FrameLayout.LayoutParams) cp).width == tlp.width && ((FrameLayout.LayoutParams) cp).height == tlp.height
+                        && ((FrameLayout.LayoutParams) cp).leftMargin == tlp.leftMargin && ((FrameLayout.LayoutParams) cp).topMargin == tlp.topMargin;
+                if (!same) view.setLayoutParams(tlp);
+                int bp = Math.round((call.getFloat("bottom", y + h) - y) * dpr);
+                if (bp >= tlp.height) clearClip(); else setClipBottom(Math.max(1, bp), tlp.width);
+                call.resolve();
+            }
+        });
     }
 }
