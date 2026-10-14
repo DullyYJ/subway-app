@@ -17,6 +17,8 @@ jobs:
       matrix:
         file:
           - bus_not_train.ui.test.js
+          - bat_ask.ui.test.js
+          - sam_ask.ui.test.js
           - bus_poll_gap.test.js
           - cell_hop_lead.ui.test.js
           - cell_sync.ui.test.js

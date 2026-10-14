@@ -2118,7 +2118,7 @@ function _showLocDisclosure(ok, no){
     if(agreed) _markLocDisclosed(); else _locDiscDeclined = true;
     var q = _locDiscQ; _locDiscQ = [];
     q.forEach(function(x){ try { (agreed ? x.ok : x.no)(); } catch(e){} });
-    if(agreed){ try{ setTimeout(function(){ if(typeof _batAsk === 'function') _batAsk('disclosed'); }, 700); }catch(eB){} }   // ★ 2026-10-13: 위치 동의 직후 배터리 최적화 제외 안내
+    if(agreed){ try{ setTimeout(function(){ if(typeof _batAsk === 'function') _batAsk('disclosed'); }, 700); }catch(eB){} try{ setTimeout(function(){ if(typeof _samAsk === 'function') _samAsk('disclosed'); }, 1800); }catch(eB2){} }   // ★ 2026-10-13: 위치 동의 직후 배터리 최적화 제외 안내
   };
   var ov = document.createElement('div');
   ov.id = 'locDiscOv';
@@ -19230,6 +19230,15 @@ window.addEventListener('unhandledrejection', function(e) {
         <div id="notifPrefRows"></div>
       </div>
 
+      <!-- ★ 2026-10-14: 갤럭시 전용 — 자동 절전 제외 (삼성 기기에서만 보임, 평소엔 숨김) -->
+      <div id="samSetCard" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
+        <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:4px;">📱 갤럭시 백그라운드 유지</div>
+        <p style="font-size:12px;color:var(--sub);line-height:1.5;margin-bottom:12px;">갤럭시는 며칠 안 쓴 앱을 자동 절전시켜 화면이 꺼진 동안의 하차 알림이 멈출 수 있어요. 길동무를 <b style="color:var(--text);">자동으로 절전하지 않는 앱</b>에 넣어 두면 안전해요.</p>
+        <div id="samSetWarn" style="display:none;background:rgba(255,159,10,.12);border:1px solid rgba(255,159,10,.35);border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#ff9f0a;line-height:1.5;">⚠️ 이 앱의 배터리 사용이 <b>제한됨</b>으로 되어 있어요. 앱 정보 &gt; 배터리에서 <b>제한 없음</b>으로 바꿔 주세요.</div>
+        <button onclick="_samOpen()" style="width:100%;padding:11px;border-radius:10px;border:none;cursor:pointer;font-size:13px;font-weight:800;background:var(--gold);color:#121214;font-family:inherit;">자동 절전 제외 설정 열기</button>
+        <div style="margin-top:10px;font-size:11.5px;line-height:1.6;color:var(--sub);">목록 오른쪽 위 + 를 눌러 길동무를 추가하세요. 추가됐는지는 기기에서 확인해 주세요. 이동 중 최근 앱 화면에서 <b>모두 닫기</b>를 누르면 안내가 멈춰요.</div>
+      </div>
+
       <!-- ★ 2026-10-03: 도착 오차 익명 기록 (끌 수 있음) -->
       <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
         <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:8px;">📊 안내 정확도 향상</div>
@@ -29486,10 +29495,11 @@ function _batRequest(){
     if(r && r.already){
       if(typeof toast === 'function') toast('이미 제외돼 있어요 · 걱정 없어요');
       _batSyncStat();
+      if(window._samAfterBat){ window._samAfterBat = false; setTimeout(function(){ try{ _samAsk('afterBat'); }catch(eS){} }, 800); }
       return;
     }
-    if(r && r.fallback && typeof toast === 'function'){
-      toast('배터리 사용량 화면에서 "제한 없음"으로 바꿔주세요');
+    if(r && r.fallback){
+      _samNote('배터리 사용량 화면에서 "제한 없음"으로 바꿔 주세요');   // ★ 2026-10-14: toast() 는 콘솔 전용이라 사용자에게 안 보였다
     }
     // ★ 시스템 다이얼로그/설정 화면에서 돌아오면 _initAppStateListener 의 포그라운드
     //   전환 처리에서 다시 상태를 확인한다(아래 appStateChange 훅에 추가함).
@@ -29534,13 +29544,111 @@ function _batAsk(why){
           + '<button id="batAskOk" style="flex:1.4;padding:13px;border-radius:11px;border:none;cursor:pointer;font-size:14.5px;font-weight:800;background:#0a84ff;color:#fff;font-family:inherit;">설정하기</button>'
         + '</div></div>';
       document.body.appendChild(ov);
-      document.getElementById('batAskNo').onclick = function(){ ov.remove(); };
-      document.getElementById('batAskOk').onclick = function(){ ov.remove(); _batRequest(); };
+      document.getElementById('batAskNo').onclick = function(){ ov.remove(); setTimeout(function(){ try{ _samAsk('afterBat'); }catch(eS){} }, 500); };   // ★ 2026-10-14: 갤럭시면 이어서 '자동 절전 제외' 안내
+      document.getElementById('batAskOk').onclick = function(){ ov.remove(); window._samAfterBat = true; _batRequest(); };   // 시스템 화면에서 돌아오면(앱 앞으로) 이어서 안내
     }).catch(function(){});
   }catch(e){}
 }
 window._batAsk = _batAsk;
 try{ setTimeout(function(){ try{ if(typeof _locDisclosed === 'function' && _locDisclosed()) _batAsk('start'); }catch(e){} }, 5000); }catch(e){}
+
+// ══════════════════════════════════════════════════════════════
+// ★ 2026-10-14 (YJ: "이앱은 대부분 갤럭시에서 구동될거야"): 갤럭시 '자동 절전' 제외 안내 (네이티브 PowerPlugin.deviceInfo / openAutoSleepSettings)
+//   삼성 One UI 는 일반 안드로이드의 '배터리 최적화 제외'와 별개로, 며칠 안 쓴 앱을 Sleeping 으로 넣어 Job·Alarm·포그라운드 서비스까지 막는다.
+//   사용자가 '자동으로 절전하지 않는 앱'에 넣어 줘야 하는데, 앱이 그 목록에 있는지는 읽을 방법이 없다 → 상태를 지어내 보여 주지 않고 화면만 열어 준다.
+//   ★ 계산은 하지 않는다: 삼성 기기인지(네이티브가 알려 줌)에 따라 안내를 그리고 설정 화면으로 보내기만 한다. 평생 한 번만 묻고, 이후엔 설정 탭 카드에서.
+var _SAM_ASK_KEY = 'gdm_sam_asked_at';
+function _samNative(){
+  try{
+    var n = _batNative();
+    return (n && typeof n.deviceInfo === 'function' && typeof n.openAutoSleepSettings === 'function') ? n : null;
+  }catch(e){ return null; }
+}
+// toast() 는 콘솔에만 쓰는 함수라(사용자에게 안 보임) 화면 아래 안내줄을 직접 그린다. 8초 뒤 또는 앱이 다시 앞으로 올 때 사라진다.
+function _samNote(msg){
+  try{
+    var old = document.getElementById('samNote'); if(old) old.remove();
+    var d = document.createElement('div'); d.id = 'samNote';
+    d.style.cssText = 'position:fixed;left:16px;right:16px;bottom:calc(24px + env(safe-area-inset-bottom,0px));z-index:100001;background:#1c1c1e;color:#fff;border-radius:12px;padding:12px 14px;font-size:13px;line-height:1.55;text-align:center;box-shadow:0 6px 24px rgba(0,0,0,.4);';
+    d.textContent = msg; document.body.appendChild(d);
+    setTimeout(function(){ try{ d.remove(); }catch(e){} }, 8000);
+  }catch(e){}
+}
+function _samOpen(){
+  var n = _samNative();
+  if(!n){ _samNote('이 빌드에는 절전 설정 열기가 없어요'); return; }
+  n.openAutoSleepSettings().then(function(r){
+    if(r && r.target === 'app_details'){
+      _samNote('삼성 목록 화면을 못 열어 앱 정보로 왔어요 · 배터리 > "제한 없음"으로 바꿔 주세요');
+    }
+  }).catch(function(){ _samNote('절전 설정을 열지 못했어요 · 기기 설정 > 배터리에서 직접 열어 주세요'); });
+}
+window._samOpen = _samOpen;
+function _samAsk(why){
+  try{
+    var n = _samNative(); if(!n) return;   // 웹/구버전 빌드는 건너뜀
+    var busy = function(){ return !!(document.getElementById('samAskOv') || document.getElementById('batAskOv') || document.getElementById('locDiscOv') || document.getElementById('bgPermOv')); };
+    if(busy()) return;   // 다른 안내가 떠 있으면 이번엔 건너뜀(다른 안내가 닫힐 때 다시 이어짐)
+    var last = 0; try{ last = parseInt(localStorage.getItem(_SAM_ASK_KEY) || '0', 10) || 0; }catch(e0){}
+    if(last) return;   // 평생 한 번
+    n.deviceInfo().then(function(info){
+      if(!info || !info.samsung) return;   // 갤럭시(삼성)에서만
+      if(busy()) return;
+      try{ localStorage.setItem(_SAM_ASK_KEY, String(Date.now())); }catch(e1){}
+      var ov = document.createElement('div');
+      ov.id = 'samAskOv';
+      ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true');
+      ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.68);z-index:100000;display:flex;align-items:center;justify-content:center;padding:22px;';
+      ov.innerHTML =
+        '<div style="background:#fff;color:#1c1c1e;border-radius:18px;max-width:380px;width:100%;padding:24px 20px;box-shadow:0 12px 40px rgba(0,0,0,.35);">'
+        + '<div style="font-size:17px;font-weight:800;margin-bottom:14px;">📱 갤럭시 절전에서 제외해 주세요</div>'
+        + '<div style="font-size:14px;line-height:1.75;margin-bottom:12px;">'
+          + '갤럭시는 며칠 안 쓴 앱을 자동으로 <b>절전 상태</b>로 만들어, 화면이 꺼진 동안의 <b>하차 알림</b>이 멈출 수 있어요. '
+          + '길동무를 <b>자동으로 절전하지 않는 앱</b>에 넣어 주세요.'
+        + '</div>'
+        + '<div style="font-size:12.5px;line-height:1.75;color:#374151;background:#f3f4f6;border-radius:10px;padding:10px 12px;margin-bottom:12px;">'
+          + '① [설정하기]를 누르면 목록 화면이 열려요<br>② 오른쪽 위 <b>+</b>(추가)를 눌러<br>③ <b>길동무</b>를 고르고 추가해 주세요'
+        + '</div>'
+        + '<div style="font-size:12px;line-height:1.7;color:#6b7280;margin-bottom:18px;">'
+          + '· 화면 모양은 기기·One UI 버전에 따라 조금 달라요.<br>'
+          + '· 이동 중에 최근 앱 화면에서 <b>모두 닫기</b>를 누르면 안내가 멈춰요.'
+        + '</div>'
+        + '<div style="display:flex;gap:10px;">'
+          + '<button id="samAskNo" style="flex:1;padding:13px;border-radius:11px;border:1px solid #d1d5db;cursor:pointer;font-size:14.5px;font-weight:700;background:#f3f4f6;color:#374151;font-family:inherit;">나중에</button>'
+          + '<button id="samAskOk" style="flex:1.4;padding:13px;border-radius:11px;border:none;cursor:pointer;font-size:14.5px;font-weight:800;background:#0a84ff;color:#fff;font-family:inherit;">설정하기</button>'
+        + '</div></div>';
+      document.body.appendChild(ov);
+      document.getElementById('samAskNo').onclick = function(){ ov.remove(); };
+      document.getElementById('samAskOk').onclick = function(){ ov.remove(); _samOpen(); };
+    }).catch(function(){});
+  }catch(e){}
+}
+window._samAsk = _samAsk;
+try{ setTimeout(function(){ try{ if(typeof _locDisclosed === 'function' && _locDisclosed()) _samAsk('start'); }catch(e){} }, 9000); }catch(e){}
+
+// 설정 탭 카드: 갤럭시에서만 보임. 한 번 놓쳤어도 여기서 다시 열 수 있다. 앱 배터리가 '제한됨'이면 경고(읽을 수 있는 값만).
+function _samSyncCard(){
+  try{
+    var card = document.getElementById('samSetCard'); if(!card) return;
+    var n = _samNative(); if(!n){ card.style.display = 'none'; return; }
+    n.deviceInfo().then(function(info){
+      card.style.display = (info && info.samsung) ? 'block' : 'none';
+      if(!(info && info.samsung)) return;
+      var w = document.getElementById('samSetWarn');
+      var P = _batNative();
+      if(w && P && typeof P.backgroundStatus === 'function'){
+        P.backgroundStatus().then(function(st){
+          w.style.display = (st && st.bgRestricted) ? 'block' : 'none';
+        }).catch(function(){ w.style.display = 'none'; });
+      }
+    }).catch(function(){ card.style.display = 'none'; });
+  }catch(e){}
+}
+window._samSyncCard = _samSyncCard;
+try{
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(_samSyncCard, 350); });
+  else setTimeout(_samSyncCard, 350);
+}catch(e){}
 
 try{
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(_batSyncStat, 300); });
@@ -29567,6 +29675,9 @@ function _initAppStateListener(){
           // ★ 2026-09-26: 배터리 최적화 설정 화면에서 돌아왔을 수 있으니 상태를 다시 읽는다
           //   (설정 화면이 열려 있을 때만 반영되고, 없으면 조용히 아무 일도 안 함).
           try{ if(typeof _batSyncStat === 'function') _batSyncStat(); }catch(e){}
+          // ★ 2026-10-14: 배터리 시스템 화면에서 돌아왔고 갤럭시면 이어서 '자동 절전 제외' 안내 / 설정 카드 경고 갱신
+          try{ if(window._samAfterBat){ window._samAfterBat = false; setTimeout(function(){ try{ _samAsk('afterBat'); }catch(eS){} }, 700); } }catch(e){}
+          try{ if(typeof _samSyncCard === 'function') _samSyncCard(); }catch(e){}
           
           _onForegroundResume();   // ★ 복귀 시 마커 튐 방지 + 실제위치 즉시 보정
         } else {
