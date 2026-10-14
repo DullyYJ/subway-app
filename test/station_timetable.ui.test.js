@@ -191,10 +191,10 @@ const NOW = new Date('2026-10-14T13:00:00+09:00');   // 수요일 13:00
   await t('닫기: 시트 바깥 누르기 · 밀어 내리기 · (늦게 온 응답은 무시) — ✕ 버튼은 없다', async () => {
     const x = await fresh(); await openSubway(x); await openTt(x, '서울역', ['1호선']);
     assert.strictEqual(await x.page.evaluate(() => !!document.getElementById('nmTtX')), false, '✕ 버튼은 없다');
-    await x.page.evaluate(() => nmTtClose()); await x.page.clock.runFor(200);
+    await x.page.evaluate(() => nmTtClose()); await x.page.clock.runFor(700);
     assert.strictEqual(await sheet(x), null);
     await openTt(x, '서울역', ['1호선']); await x.page.clock.runFor(900);
-    await x.page.mouse.click(195, 60); await x.page.clock.runFor(300);              // 시트 위쪽 바깥(지도)
+    await x.page.mouse.click(195, 60); await x.page.clock.runFor(700);              // 시트 위쪽 바깥(지도)
     assert.strictEqual(await sheet(x), null);
     // 열자마자 닫기 → 응답이 늦게 와도 시트가 다시 생기지 않는다
     await openTt(x, '서울역', ['1호선']);
@@ -228,6 +228,43 @@ const NOW = new Date('2026-10-14T13:00:00+09:00');   // 수요일 13:00
     const gv = await x.page.evaluate(() => { const g = document.getElementById('gmSvgView').getBoundingClientRect(); return g.bottom; });
     const l2 = r2[r2.length - 1]; assert(Math.abs((l2.y + l2.h) - gv) < 2, '닫힌 뒤 지도 영역 복원 ' + (l2.y + l2.h) + ' vs ' + gv);
     assert.strictEqual((await x.page.evaluate(() => window.__nm.filter(c => c.m === 'snapshot'))).length, 0, '시트는 사진으로 가리지 않고 영역을 줄여 피한다');
+    assert.deepStrictEqual(x.errs, []); await x.ctx.close();
+  });
+
+  await t('부드러운 시트: 올라올 때 · 내려갈 때 시트는 transform 애니메이션이고, 네이티브 지도는 크기를 프레임(150ms 틱)마다 바꾸지 않고 한 번에 곡선·시간(anim,e1~e4)과 함께 받는다', async () => {
+    const x = await fresh({ plugin: true }); await openSubway(x);
+    await x.page.evaluate(() => window.__nmEmit('station', { name: '서울역', x: 195, y: 300 })); await x.page.clock.runFor(600);
+    await x.page.evaluate(() => window.__nm.length = 0);
+    await x.page.evaluate(() => document.getElementById('nmTtOpenBtn').click()); await x.page.clock.runFor(30);
+    const an = await x.page.evaluate(() => { const s = document.getElementById('nmTtSheet'); return s ? { n: s.getAnimations().length, tf: (s.getAnimations()[0] && s.getAnimations()[0].effect.getKeyframes().map(k => k.transform)) } : null; });
+    assert(an && an.n >= 1 && /translateY\(\d+(\.\d+)?px\)/.test(an.tf[0]) && /translateY\(0px\)/.test(an.tf[1]), '열 때 transform 애니메이션 ' + JSON.stringify(an));
+    await x.page.clock.runFor(1200);
+    const op = (await x.page.evaluate(() => window.__nm.filter(c => c.m === 'setRect'))).map(c => c.a);
+    assert.strictEqual(op.length, 1, '시트가 올라오는 동안 지도 사각형은 한 번만 바뀐다(틱마다 X): ' + op.length);
+    assert(op[0].anim === 320 && op[0].e1 === 0.2 && op[0].e2 === 0 && op[0].e3 === 0 && op[0].e4 === 1, '열기 곡선 ' + JSON.stringify(op[0]));
+    const top = await x.page.evaluate(() => document.getElementById('nmTtSheet').getBoundingClientRect().top);
+    assert(Math.abs(op[0].y + op[0].h - top) < 2, '지도 끝 = 시트 멈춘 자리');
+    assert.strictEqual(await x.page.evaluate(() => document.getElementById('nmTtSheet').style.transform), '', '다 올라온 뒤 transform 이 남지 않는다');
+    // 손가락으로 끌어내려도 지도는 그대로(틱마다 크기를 바꾸지 않음)
+    await x.page.evaluate(() => { window.__nm.length = 0; const s = document.getElementById('nmTtSheet'); s.style.transform = 'translateY(120px)'; });
+    await x.page.clock.runFor(600);
+    assert.strictEqual((await x.page.evaluate(() => window.__nm.filter(c => c.m === 'setRect'))).length, 0, '끄는 동안 지도 사각형 변경 없음');
+    await x.page.evaluate(() => { document.getElementById('nmTtSheet').style.transform = ''; window.__nm.length = 0; });
+    await x.page.evaluate(() => nmTtClose());
+    await x.page.clock.runFor(10);
+    const cl = await x.page.evaluate(() => { const s = document.getElementById('nmTtSheet'); return s ? { closing: !!s._nmClosing, n: s.getAnimations().length, pe: s.style.pointerEvents } : null; });
+    assert(cl && cl.closing && cl.pe === 'none', '내려가는 동안 시트가 남아 있다 ' + JSON.stringify(cl));
+    await x.page.clock.runFor(600);
+    assert.strictEqual(await sheet(x), null, '다 내려가면 시트가 사라진다');
+    const rc = (await x.page.evaluate(() => window.__nm.filter(c => c.m === 'setRect'))).map(c => c.a);
+    const gv = await x.page.evaluate(() => document.getElementById('gmSvgView').getBoundingClientRect().bottom);
+    assert.strictEqual(rc.length, 1, '내려갈 때도 지도 사각형 변경은 한 번 ' + rc.length);
+    assert(rc[0].anim === 240 && rc[0].e1 === 0.4 && rc[0].e3 === 0.2 && Math.abs(rc[0].y + rc[0].h - gv) < 2, '닫기 곡선·복원 ' + JSON.stringify(rc[0]));
+    // 내려가는 중에 다른 역 시간표를 열면 옛 시트는 바로 치운다(시트 둘이 겹치지 않는다)
+    await openTt(x, '서울역', ['1호선']); await x.page.clock.runFor(500);
+    await x.page.evaluate(() => nmTtClose()); await x.page.clock.runFor(20);
+    await x.page.evaluate(() => nmTtOpen('시청', ['1호선'])); await x.page.clock.runFor(30);
+    assert.strictEqual(await x.page.evaluate(() => document.querySelectorAll('#nmTtSheet').length), 1, '시트는 하나');
     assert.deepStrictEqual(x.errs, []); await x.ctx.close();
   });
 

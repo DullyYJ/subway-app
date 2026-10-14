@@ -31365,7 +31365,8 @@ function _nmDesired(){
     el = document.getElementById(ids[i]);
     if(!el) continue;
     var sr = el.getBoundingClientRect();
-    if(sr.height > 0 && sr.top < bottom && getComputedStyle(el).display !== 'none') bottom = Math.max(top, sr.top);
+    var stp = (el._nmTop != null) ? el._nmTop : (el._nmRest ? ((window.innerHeight || sr.top) - el.offsetHeight) : sr.top);      // 오르내리는 중인 시트는 '멈출 자리'를 기준으로(움직이는 동안 지도 크기를 프레임마다 바꾸지 않는다)
+    if(sr.height > 0 && stp < bottom && getComputedStyle(el).display !== 'none') bottom = Math.max(top, stp);
   }
   var cols = 5, rows = 7, xx, yy, guard;
   for(guard = 0; guard < 4; guard++){       // 그 밖의 덮개: 가장자리 막대면 피하고, 아니면 덮개
@@ -31435,7 +31436,12 @@ function _nmSync(fitNow){
     }
     var same = _nm.rect && Math.abs(_nm.rect.x - rc.x) < 0.5 && Math.abs(_nm.rect.y - rc.y) < 0.5 && Math.abs(_nm.rect.w - rc.w) < 0.5 && Math.abs(_nm.rect.h - rc.h) < 0.5;
     var steps = [];
-    if(!same){ _nm.rect = rc; steps.push(P.setRect(arg)); }
+    if(!same){
+      _nm.rect = rc;
+      var an = _nm.animNext; _nm.animNext = null;
+      if(an && Date.now() - an.at < 600){ arg.anim = an.dur; arg.e1 = an.ease[0]; arg.e2 = an.ease[1]; arg.e3 = an.ease[2]; arg.e4 = an.ease[3]; }   // 네이티브가 시트와 같은 곡선·시간으로 '보이는 끝'을 옮긴다(120Hz)
+      steps.push(P.setRect(arg));
+    }
     if(_nm.wantFit){ _nm.wantFit = false; steps.push(P.fit()); }
     if(!same) _nmHint(true);
     if(!steps.length){ _nmFlush(); return; }
@@ -32656,6 +32662,7 @@ function _nmDragDismiss(el, closeFn, o){
     var dy = st.dy, v = dy / Math.max(1, Date.now() - st.t0), h = el.offsetHeight || 300;
     el.style.userSelect = '';
     if(dy > Math.max(80, h * 0.25) || (v > 0.55 && dy > 36)){
+      if(o.slideOut){ el.style.transition = 'none'; o.slideOut(dy); return; }
       el.style.transition = 'transform .18s ease-in';
       el.style.transform = 'translateY(' + (h + 40) + 'px)';
       setTimeout(function(){ if(el.parentNode) closeFn(); }, 190);
@@ -32868,6 +32875,39 @@ function _nmTtP2(n){ return (n < 10 ? '0' : '') + n; }
 function _nmTtClock(m){ var x = ((m % 1440) + 1440) % 1440; return _nmTtP2(Math.floor(x / 60)) + ':' + _nmTtP2(x % 60); }
 function _nmTtAfter(){ if(typeof _nmSync === 'function') { try{ _nmSync(); }catch(e){} } }
 
+// ── 시트 올라오기·내려가기 (2026-10-14 YJ: "시간표가 내려갈 때 뒤의 노선도가 끊겨, 올라갈 때도 120Hz 처럼 부드럽게") ──
+//   시트는 transform 애니메이션(WAAPI — 합성기가 돌려 메인 스레드가 바빠도 부드럽다), 뒤의 네이티브 지도는 같은 시간·곡선으로 '보이는 아래쪽 끝'만 옮긴다(_nm.animNext → NativeMap.setRect anim).
+//   예전엔 시트가 움직이는 동안 150ms 마다 지도 크기를 다시 맞춰(비트맵 재생성) 계단처럼 끊겼다.
+var _NM_SHEET_IN = { dur: 320, ease: [0.2, 0, 0, 1] }, _NM_SHEET_OUT = { dur: 240, ease: [0.4, 0, 0.2, 1] };
+function _nmSheetMove(el, from, to, dur, ease, done){
+  var fin = false, a = null, css = 'cubic-bezier(' + ease.join(',') + ')';
+  function end(){ if(fin) return; fin = true; try{ if(a) a.cancel(); }catch(e0){} try{ el.style.transition = ''; }catch(e1){} if(done) done(); }
+  try{
+    if(el.animate){
+      a = el.animate([{ transform: 'translateY(' + from + 'px)' }, { transform: 'translateY(' + to + 'px)' }], { duration: dur, easing: css, fill: 'forwards' });
+      a.onfinish = end;
+    }
+  }catch(e2){ a = null; }
+  if(!a){
+    el.style.transition = 'none'; el.style.transform = 'translateY(' + from + 'px)';
+    void el.offsetHeight;
+    el.style.transition = 'transform ' + dur + 'ms ' + css; el.style.transform = 'translateY(' + to + 'px)';
+  }
+  setTimeout(end, dur + 90);
+  return end;
+}
+function _nmSheetPrepareOut(s, fromDy){
+  s._nmClosing = true;
+  s._nmTop = (window.innerHeight || 99999);                // 지도는 '다 내려간 뒤'의 모습으로 늘어난다
+  s.style.pointerEvents = 'none';                          // 지도 가림 판정(elementFromPoint)에 걸리지 않게
+  var hh = s.offsetHeight || 300, started = false, O = _NM_SHEET_OUT;
+  try{ if(typeof _nm !== 'undefined') _nm.animNext = { at: Date.now(), dur: O.dur, ease: O.ease }; }catch(e){}
+  return function(){
+    if(started) return; started = true;
+    _nmSheetMove(s, fromDy || 0, hh + 40, O.dur, O.ease, function(){ if(s.parentNode) s.remove(); try{ if(typeof _nmSync === 'function') _nmSync(); }catch(e){} });
+  };
+}
+
 function nmTtOpen(name, lines){
   var snap = null; try{ if(window._RC && _RC.playSnap && document.getElementById('nmPopPlay')) snap = _RC.playSnap(); }catch(eSn){}   // 팝업에서 놀던 장면을 이어받는다
   svgRemovePopup();
@@ -32893,7 +32933,15 @@ function nmTtOpen(name, lines){
     '<div id="nmTtBody" style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;"></div>';
   document.body.appendChild(sh);
   sh.querySelector('#nmTtTitle').textContent = name + ' 시간표';
-  _nmDragDismiss(sh, function(){ nmTtClose(); }, { scroller: '#nmTtBody' });
+  _nmDragDismiss(sh, function(){ nmTtClose(); }, { scroller: '#nmTtBody', slideOut: function(dy){ nmTtClose(false, dy); } });
+  try{
+    var hh0 = sh.offsetHeight;
+    sh._nmRest = true;                                           // 멈출 자리(지도는 여기까지로 줄어든다 — 올라오는 중·끄는 중에도 그대로)
+    if(hh0 > 0 && !window._nmNoAnim){
+      if(typeof _nm !== 'undefined') _nm.animNext = { at: Date.now(), dur: _NM_SHEET_IN.dur, ease: _NM_SHEET_IN.ease };
+      _nmSheetMove(sh, hh0, 0, _NM_SHEET_IN.dur, _NM_SHEET_IN.ease, function(){ try{ sh.style.transform = ''; }catch(e){} });
+    }
+  }catch(eAn){}
   try{ if(window._RC && _RC.playStart) _RC.playStart(sh.querySelector('#nmTtPlay'), snap || undefined); }catch(ePl){}
 
   // ✕ 버튼은 없다(2026-10-14 YJ: 밀어 내리면 닫히니 필요 없다). 닫는 길: 아래로 밀기 · 시트 바깥 누르기 · 네이티브 지도 만지기.
@@ -32916,7 +32964,9 @@ function nmTtOpen(name, lines){
   nmTtLoad();
 }
 
-function nmTtClose(silent){
+function nmTtClose(silent, fromDy){
+  var _cs = document.getElementById('nmTtSheet');
+  if(_cs && _cs._nmClosing && !silent) return;                 // 이미 내려가는 중
   if(_nmTt){
     if(_nmTt.outside){
       document.removeEventListener('touchstart', _nmTt.outside, true);
@@ -32925,10 +32975,19 @@ function nmTtClose(silent){
     _nmTt.seq++;                  // 늦게 온 응답은 버린다
   }
   try{ if(window._RC && _RC.playStop) _RC.playStop(); }catch(ePl){}
-  var s = document.getElementById('nmTtSheet');
-  if(s){ try{ if(s._dragOff) s._dragOff(); }catch(e){} s.remove(); }
+  var s = document.getElementById('nmTtSheet'), goOut = null;
+  if(s){
+    try{ if(s._dragOff) s._dragOff(); }catch(e){}
+    if(!silent && !window._nmNoAnim && s.offsetHeight > 0) goOut = _nmSheetPrepareOut(s, fromDy || 0);
+    else s.remove();
+  }
   _nmTt = null;
   if(!silent) _nmTtAfter();
+  if(goOut){
+    // 지도가 늘어나기 시작한 뒤(네이티브가 받은 뒤)에 시트를 내려 둘이 같이 움직이게 — 안 오면 120ms 뒤 어쨌든 내린다
+    try{ if(typeof _nmAfterSync === 'function') _nmAfterSync(goOut); else goOut(); }catch(eG){ goOut(); }
+    setTimeout(goOut, 120);
+  }
 }
 
 // 지금 선택(노선·요일)에 맞는 시간표를 엔진에 묻는다

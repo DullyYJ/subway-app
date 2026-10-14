@@ -1,12 +1,17 @@
 package com.dullyyj.subway;   // ★ MainActivity.java 첫 줄과 같아야 한다
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.graphics.Bitmap;
+import android.graphics.Rect;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Base64;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.animation.PathInterpolator;
 import android.widget.FrameLayout;
 
 import com.getcapacitor.JSObject;
@@ -111,7 +116,11 @@ public class NativeMapPlugin extends Plugin {
         }
     }
 
-    /** 사각형만 바꾼다(팝업이 뜨면 줄이고, 닫히면 되돌림). 보이는 상태를 바꾸지 않는다. */
+    /**
+     * 사각형만 바꾼다(팝업이 뜨면 줄이고, 닫히면 되돌림). 보이는 상태를 바꾸지 않는다.
+     * anim(ms) > 0 이고 높이만 바뀌면 시트가 오르내리는 속도에 맞춰 '보이는 아래쪽 끝'을 부드럽게 옮긴다(ease: 3차 베지어 x1,y1,x2,y2).
+     *   크기를 프레임마다 바꾸면 비트맵을 매번 다시 그려 끊기므로, 실제 크기는 한 번만 바꾸고 그 사이는 잘라내기(clipBounds)로 보여 준다.
+     */
     @PluginMethod
     public void setRect(final PluginCall call) {
         runUi(call, new Runnable() {
@@ -120,6 +129,12 @@ public class NativeMapPlugin extends Plugin {
                 float w = f(call, "w"), h = f(call, "h");
                 if (!(w > 1f && h > 1f)) { call.resolve(); return; }
                 if (call.getFloat("dpr", 0f) > 0f) dpr = call.getFloat("dpr", 1f);
+                int anim = call.getInt("anim", 0) == null ? 0 : call.getInt("anim", 0);
+                if (anim > 0 && view.getVisibility() == View.VISIBLE && animateRect(f(call, "x"), f(call, "y"), w, h, anim,
+                        call.getFloat("e1", 0.4f), call.getFloat("e2", 0f), call.getFloat("e3", 0.2f), call.getFloat("e4", 1f))) {
+                    call.resolve();
+                    return;
+                }
                 layout(f(call, "x"), f(call, "y"), w, h);
                 call.resolve();
             }
@@ -131,6 +146,8 @@ public class NativeMapPlugin extends Plugin {
         runUi(call, new Runnable() {
             @Override public void run() {
                 if (view != null) {
+                    cancelRectAnim();
+                    clearClip();
                     view.setVisibility(View.GONE);
                     ui.removeCallbacks(releaseLater);
                     ui.postDelayed(releaseLater, 30000L);       // 오래 숨겨 두면 큰 비트맵을 놓아준다
@@ -256,9 +273,29 @@ public class NativeMapPlugin extends Plugin {
         });
     }
 
+    private ValueAnimator rectAnim;
+    private int clipBottom = -1;
+
+    private void cancelRectAnim() {
+        if (rectAnim != null) { ValueAnimator a = rectAnim; rectAnim = null; try { a.cancel(); } catch (Throwable t) { /* 무시 */ } }
+    }
+
+    private void setClipBottom(int b, int width) {
+        if (view == null) return;
+        clipBottom = b;
+        try { view.setClipBounds(new Rect(0, 0, Math.max(1, width), Math.max(1, b))); } catch (Throwable t) { /* 무시 */ }
+        view.setVisBottom(b);
+    }
+
+    private void clearClip() {
+        clipBottom = -1;
+        if (view == null) return;
+        try { view.setClipBounds(null); } catch (Throwable t) { /* 무시 */ }
+        view.setVisBottom(-1f);
+    }
+
     /** CSS px 사각형(WebView 기준) → 루트 뷰 안 픽셀 위치. WebView 가 루트 안에서 어디에 있는지를 더한다. */
-    private void layout(float x, float y, float w, float h) {
-        if (view == null || root == null) return;
+    private FrameLayout.LayoutParams lpFor(float x, float y, float w, float h) {
         int offX = 0, offY = 0;
         try {
             View wv = getBridge().getWebView();
@@ -271,6 +308,54 @@ public class NativeMapPlugin extends Plugin {
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(Math.max(1, Math.round(w * dpr)), Math.max(1, Math.round(h * dpr)));
         lp.leftMargin = offX + Math.round(x * dpr);
         lp.topMargin = offY + Math.round(y * dpr);
-        view.setLayoutParams(lp);
+        return lp;
+    }
+
+    private void layout(float x, float y, float w, float h) {
+        if (view == null || root == null) return;
+        cancelRectAnim();
+        clearClip();
+        view.setLayoutParams(lpFor(x, y, w, h));
+    }
+
+    /** 높이만 바뀌는 사각형 변경을 애니메이션으로. 할 수 없으면 false(호출한 쪽이 곧바로 바꾼다). */
+    private boolean animateRect(float x, float y, float w, float h, int ms, float e1, float e2, float e3, float e4) {
+        if (view == null || root == null) return false;
+        ViewGroup.LayoutParams cp = view.getLayoutParams();
+        if (!(cp instanceof FrameLayout.LayoutParams)) return false;
+        final FrameLayout.LayoutParams cur = (FrameLayout.LayoutParams) cp;
+        final FrameLayout.LayoutParams tlp = lpFor(x, y, w, h);
+        final int fromB = clipBottom >= 0 ? clipBottom : cur.height, toB = tlp.height;
+        boolean sameBox = Math.abs(cur.leftMargin - tlp.leftMargin) <= 1 && Math.abs(cur.topMargin - tlp.topMargin) <= 1 && Math.abs(cur.width - tlp.width) <= 1;
+        if (!sameBox || fromB == toB || ms < 30) return false;
+        cancelRectAnim();
+        final int width = tlp.width;
+        if (toB > cur.height) {
+            // 커지는 쪽: 큰 크기로 먼저 바꾸되 지금 보이는 만큼만 보이게 잘라 두고, 잘라낸 끝을 늘린다
+            tlp.leftMargin = cur.leftMargin; tlp.topMargin = cur.topMargin;
+            view.setLayoutParams(tlp);
+        }
+        // 줄어드는 쪽: 크기는 끝에서 바꾼다(그동안 큰 채로 두고 아래쪽만 잘라 올린다)
+        setClipBottom(fromB, width);
+        final FrameLayout.LayoutParams fin = lpFor(x, y, w, h);
+        ValueAnimator va = ValueAnimator.ofInt(fromB, toB);
+        va.setDuration(ms);
+        try { va.setInterpolator(new PathInterpolator(e1, e2, e3, e4)); } catch (Throwable t) { /* 기본 보간 */ }
+        va.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+            @Override public void onAnimationUpdate(ValueAnimator a) { setClipBottom((Integer) a.getAnimatedValue(), width); }
+        });
+        va.addListener(new AnimatorListenerAdapter() {
+            private boolean cancelled;
+            @Override public void onAnimationCancel(Animator a) { cancelled = true; }
+            @Override public void onAnimationEnd(Animator a) {
+                if (cancelled || rectAnim != a || view == null) return;
+                rectAnim = null;
+                clearClip();
+                view.setLayoutParams(fin);
+            }
+        });
+        rectAnim = va;
+        va.start();
+        return true;
     }
 }

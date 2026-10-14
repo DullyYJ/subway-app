@@ -229,6 +229,17 @@ public class MetroMapView extends View {
     }
 
     // ═════════════════════════ 손가락 ═════════════════════════
+    // 시트가 오르내리는 동안 잘라낸(안 보이는) 아래쪽은 만짐을 받지 않는다 — 아래의 웹 시트가 받게 한다. -1 이면 전체.
+    private float visBottom = -1f;
+    private boolean touchBlocked;
+    public void setVisBottom(float b) { visBottom = b; }
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent ev) {
+        if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) touchBlocked = visBottom >= 0f && ev.getY() > visBottom;
+        if (touchBlocked) return false;
+        return super.dispatchTouchEvent(ev);
+    }
+
     @Override
     public boolean onTouchEvent(MotionEvent e) {
         int act = e.getActionMasked();
