@@ -19241,6 +19241,21 @@ window.addEventListener('unhandledrejection', function(e) {
         <div style="margin-top:10px;font-size:11.5px;line-height:1.6;color:var(--sub);">목록 오른쪽 위 + 를 누르고 길동무를 체크(안 보이면 아래 검색창에 입력)한 뒤 추가하세요. 추가됐는지는 기기에서 확인해 주세요. 이동 중 최근 앱 화면에서 <b>모두 닫기</b>를 누르면 안내가 멈춰요.</div>
       </div>
 
+      <!-- ★ 2026-10-14: 네이티브 노선도 (안드로이드 앱에서만 보임) -->
+      <div id="nmSetCard" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <div style="font-size:15px;font-weight:800;color:var(--text);">🗺️ 부드러운 노선도</div>
+          <label style="position:relative;display:inline-block;width:46px;height:26px;">
+            <input type="checkbox" id="nmSetOn" onchange="_nmSetUse(this.checked)" style="opacity:0;width:0;height:0;">
+            <span id="nmSetKnob" style="position:absolute;inset:0;border-radius:13px;background:var(--border2);transition:.2s;cursor:pointer;"></span>
+            <span id="nmSetDot" style="position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.3);"></span>
+          </label>
+        </div>
+        <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">노선도를 기기가 직접 그려서 확대·축소·이동이 부드럽고 글자가 깨지지 않아요. 문제가 있으면 꺼서 예전 방식으로 볼 수 있어요.</p>
+        <div id="nmSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
+        <style>#nmSetOn:checked ~ #nmSetKnob{background:var(--gold);} #nmSetOn:checked ~ #nmSetDot{left:23px;}</style>
+      </div>
+
       <!-- ★ 2026-10-03: 도착 오차 익명 기록 (끌 수 있음) -->
       <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
         <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:8px;">📊 안내 정확도 향상</div>
@@ -27483,6 +27498,7 @@ window.scheduleAutoPost = scheduleAutoPost;
 
 
 function resetMapStyles()     {
+  if(typeof _nmActive === 'function' && _nmActive()){ _nmFilter('ALL'); return; }
   // SVG 노선도 스타일 초기화
   var sc = document.getElementById('svgContainer');
   if(!sc) return;
@@ -31050,6 +31066,7 @@ var _svgInited = false;
 // ★ 2026-09-21: 노선도 SVG(약 2MB)는 <script type="text/x-metro-svg"> 안에 문자열로 두고 필요할 때 DOM 에 넣는다.
 //   시작 시 2MB 를 DOM 으로 파싱하지 않기 위해서다. 아래 호출처가 모두 이 함수를 먼저 부른다.
 function _ensureMetroSvg() {
+  if (typeof _nmActive === 'function' && _nmActive()) return true;   // 네이티브 노선도를 쓰는 동안은 2MB SVG 를 DOM 에 넣지 않는다
   var co = document.getElementById('svgContainer');
   if (!co) return false;
   if (co.querySelector('svg')) return true;
@@ -31073,6 +31090,7 @@ function _metroLines(name) {
 window._metroLines = _metroLines;
 
 function _pzFit() {
+  if (typeof _nmActive === 'function' && _nmActive()) { _nmFit(); return; }   // 네이티브: 맞춤은 네이티브가
   var co = document.getElementById('svgContainer');
   var wr = document.getElementById('gmSvgView');
   if (!co) return;
@@ -31147,6 +31165,293 @@ function _metroCommitZoom(ns, scrollLeft, scrollTop) {
   if (scrollTop  != null) w.scrollTop  = scrollTop;
 }
 window._metroCommitZoom = _metroCommitZoom;
+
+// ══════════════════════════════════════════════════════════════════════════
+// ★ 2026-10-14 네이티브 노선도 (YJ: "노선도 확대·축소할 때 렉이 걸리고 깨진다 → 네이티브로, 기능은 지금처럼 완벽히")
+//   · 안드로이드 앱에서만(NativeMap 플러그인이 있을 때) 노선도 '그림'을 네이티브 화면이 그린다. 웹/브라우저·플러그인 없는 앱은 지금 그대로.
+//   · 앱(JS)이 하는 일은 그대로다: 검색창·호선 버튼·내 위치·역 팝업(출발/도착)·시간표는 전부 웹. 네이티브는 지도 그림과 손가락(밀기·오므리기·역 누르기)만.
+//   · 계산은 하지 않는다. 위치 맞춤·필터 이름만 전달하고, 눌린 역 이름을 받아 예전 클릭과 똑같이 svgShowPopup 으로 넘긴다.
+//   · 네이티브 화면은 WebView 위에 얹히므로, 웹 팝업·모달이 지도 위에 뜨면 (a) 하단 팝업은 그만큼 지도 영역을 줄이고
+//     (b) 그 밖의 덮개는 지도를 잠깐 사진으로 바꿔 깔고 네이티브를 숨긴다. (_nmDesired)
+//   · 안전장치: 플러그인 오류·준비 지연(8초)·빈 화면이면 즉시 예전 웹 SVG 노선도로 돌아간다(_nmFail). 설정에서 끌 수도 있다.
+// ══════════════════════════════════════════════════════════════════════════
+var _nm = { disabled:false, fails:0, failed:false, why:'', shown:false, ready:false, wait:0, rect:null, wantFit:false,
+            started:false, busy:false, again:false, waiters:[], timer:0, listening:false, onCentered:null, offTicks:0, snap:false, hintKey:'' };
+try{
+  _nm.fails = parseInt(localStorage.getItem('gdm_nm_fail') || '0', 10) || 0;
+  _nm.disabled = localStorage.getItem('gdm_nm_off') === '1';
+  _nm.why = localStorage.getItem('gdm_nm_why') || '';
+}catch(e){}
+function _nmPlugin(){
+  try{ var C = window.Capacitor; return (C && C.Plugins && C.Plugins.NativeMap) || null; }catch(e){ return null; }
+}
+// 쓸 수 있는 상태인가: 플러그인이 있고, 꺼져 있지 않고, 이번 실행에서 실패하지 않았고, 연속 실패가 2번 미만
+function _nmActive(){ return !_nm.failed && !_nm.disabled && _nm.fails < 2 && !!_nmPlugin(); }
+window._nmActive = _nmActive;
+function _nmGv(){ return document.getElementById('gmSvgView'); }
+
+// 지금 네이티브 화면이 있어야 할 모습: 꺼짐 / 사각형 / 덮개(지도 대신 사진)
+//   네이티브 화면은 WebView 위에 얹히므로 웹 요소가 지도 위에 뜨면 가려진다. 그래서:
+//   · 위나 아래에 붙은 가로로 넓은 막대·시트(역 팝업, 시간표, 하단 카드 …)는 그만큼 지도 영역을 줄여 피한다 — 지도는 계속 만질 수 있다.
+//   · 그 밖에 지도 한가운데를 덮는 것(모달·떠 있는 버튼 …)은 지도를 사진으로 바꿔 깔고 네이티브를 숨긴다.
+function _nmOuter(el, gv){
+  var o = el, a = el;
+  while(a && a !== document.body && a !== document.documentElement){
+    if(a.contains(gv)) break;
+    o = a;
+    a = a.parentElement;
+  }
+  return o;
+}
+function _nmDesired(){
+  var gv = _nmGv();
+  if(!gv || !gv.offsetParent) return { mode:'off' };
+  var r = gv.getBoundingClientRect();
+  if(r.width < 20 || r.height < 20) return { mode:'off' };
+  var top = r.top, bottom = r.bottom, i, el, ids = ['svgStationPop', 'nmTtSheet'];
+  for(i = 0; i < ids.length; i++){          // 아래에서 올라오는 팝업·시간표
+    el = document.getElementById(ids[i]);
+    if(!el) continue;
+    var sr = el.getBoundingClientRect();
+    if(sr.height > 0 && sr.top < bottom && getComputedStyle(el).display !== 'none') bottom = Math.max(top, sr.top);
+  }
+  var cols = 5, rows = 7, xx, yy, guard;
+  for(guard = 0; guard < 4; guard++){       // 그 밖의 덮개: 가장자리 막대면 피하고, 아니면 덮개
+    if(bottom - top < 110) return { mode:'cover' };
+    var hit = null;
+    for(yy = 0; yy < rows && !hit; yy++){
+      for(xx = 0; xx < cols && !hit; xx++){
+        el = document.elementFromPoint(r.left + 4 + (r.width - 8) * xx / (cols - 1), top + 4 + ((bottom - top) - 8) * yy / (rows - 1));
+        if(el && el !== gv && !gv.contains(el)) hit = el;
+      }
+    }
+    if(!hit) break;
+    var er = _nmOuter(hit, gv).getBoundingClientRect(), mid = (top + bottom) / 2;
+    if(er.width >= r.width * 0.6 && er.top >= mid - 1) bottom = Math.max(top, Math.min(bottom, er.top));
+    else if(er.width >= r.width * 0.6 && er.bottom <= mid + 1) top = Math.min(bottom, Math.max(top, er.bottom));
+    else return { mode:'cover' };
+  }
+  if(guard >= 4) return { mode:'cover' };
+  return { mode:'rect', rect:{ x:r.left, y:top, w:r.width, h:bottom - top } };
+}
+
+function _nmFlush(){
+  _nm.busy = false;
+  if(_nm.again){ _nm.again = false; _nmSync(); return; }
+  var w = _nm.waiters; _nm.waiters = [];
+  for(var i = 0; i < w.length; i++){ try{ w[i](); }catch(e){} }
+}
+function _nmClearSnap(){ var gv = _nmGv(); if(gv && _nm.snap){ gv.style.backgroundImage = ''; _nm.snap = false; } }
+
+// 원하는 모습으로 맞춘다. 한 번에 하나씩(겹치면 끝난 뒤 한 번 더). 끝나면 waiters 를 부른다.
+function _nmSync(fitNow){
+  if(!_nmActive()) return;
+  if(fitNow) _nm.wantFit = true;
+  if(_nm.busy){ _nm.again = true; return; }
+  _nm.busy = true;
+  var P = _nmPlugin(), d, gv = _nmGv();
+  try{ d = _nmDesired(); }catch(e){ d = { mode:'off' }; }
+  try{
+    if(d.mode === 'off'){
+      _nm.offTicks++;
+      if(_nm.shown){ _nm.shown = false; _nmClearSnap(); P.hide().then(_nmFlush, _nmFlush); return; }
+      _nmClearSnap(); _nmFlush(); return;
+    }
+    _nm.offTicks = 0;
+    if(d.mode === 'cover'){
+      if(!_nm.shown){ _nmFlush(); return; }
+      _nm.shown = false;
+      var done = function(){ P.hide().then(_nmFlush, _nmFlush); };
+      if(_nm.ready){
+        P.snapshot({ k:0.5 }).then(function(res){
+          try{ if(res && res.data && gv){ gv.style.backgroundImage = 'url(' + res.data + ')'; gv.style.backgroundSize = '100% 100%'; gv.style.backgroundRepeat = 'no-repeat'; _nm.snap = true; } }catch(e){}
+          done();
+        }, done);
+      } else done();
+      return;
+    }
+    var rc = d.rect, dpr = window.devicePixelRatio || 1;
+    var arg = { x:rc.x, y:rc.y, w:rc.w, h:rc.h, dpr:dpr };
+    if(!_nm.shown){
+      _nm.shown = true;
+      var fit = _nm.wantFit || !_nm.started;
+      arg.fit = fit; arg.filter = (typeof _currentFilterLine !== 'undefined' && _currentFilterLine) ? _currentFilterLine : 'ALL';
+      P.show(arg).then(function(){
+        _nm.started = true; if(fit) _nm.wantFit = false; _nm.rect = rc; _nmClearSnap(); _nmHint(true); _nmFlush();
+      }, function(e){ _nm.shown = false; _nmFail('show: ' + ((e && e.message) || e)); _nmFlush(); });
+      return;
+    }
+    var same = _nm.rect && Math.abs(_nm.rect.x - rc.x) < 0.5 && Math.abs(_nm.rect.y - rc.y) < 0.5 && Math.abs(_nm.rect.w - rc.w) < 0.5 && Math.abs(_nm.rect.h - rc.h) < 0.5;
+    var steps = [];
+    if(!same){ _nm.rect = rc; steps.push(P.setRect(arg)); }
+    if(_nm.wantFit){ _nm.wantFit = false; steps.push(P.fit()); }
+    if(!same) _nmHint(true);
+    if(!steps.length){ _nmFlush(); return; }
+    Promise.all(steps).then(_nmFlush, function(e){ _nmFail('rect: ' + ((e && e.message) || e)); _nmFlush(); });
+  }catch(e){
+    _nm.busy = false; _nmFail('sync: ' + (e && e.message || e));
+  }
+}
+// 동기화가 끝난 뒤 fn 을 부른다(이미 한가하면 곧바로)
+function _nmAfterSync(fn){
+  if(!_nm.busy && !_nm.again){ fn(); return; }
+  _nm.waiters.push(fn);
+}
+
+function _nmHint(force){
+  try{
+    var P = _nmPlugin(), h = document.getElementById('svgHint'); if(!P || !h || !_nm.rect) return;
+    var txt = (h.textContent || '').replace(/\s+/g, ' ').trim();
+    var bottom = Math.max(8, (_nm.rect.y + _nm.rect.h) - ((window.innerHeight || 0) - 72));
+    var key = txt + '|' + Math.round(bottom);
+    if(!force && key === _nm.hintKey) return;
+    _nm.hintKey = key; h.style.display = 'none';
+    P.setHint({ text:txt, bottom:bottom });
+  }catch(e){}
+}
+
+function _nmTick(){
+  if(!_nmActive()){ _nmStop(); return; }
+  if(_nm.shown && !_nm.ready){ _nm.wait += 150; if(_nm.wait > 8000){ _nmFail('8초 안에 첫 그림이 안 나왔다'); return; } }
+  _nmSync();
+  if(!_nm.shown && _nm.offTicks > 8 && !_nm.busy) _nmStop();     // 지도 탭을 떠난 지 오래 — 쉰다(다시 들어오면 _pzFit 이 깨운다)
+}
+function _nmStart(){
+  if(_nm.timer) return;
+  _nm.timer = setInterval(_nmTick, 150);
+  if(!_nm.listening) _nmListen();
+}
+function _nmStop(){ if(_nm.timer){ clearInterval(_nm.timer); _nm.timer = 0; } }
+
+function _nmListen(){
+  var P = _nmPlugin(); if(!P || _nm.listening) return;
+  _nm.listening = true;
+  try{
+    P.addListener('station', _nmOnStation);
+    P.addListener('gesture', _nmOnGesture);
+    P.addListener('ready', function(){ _nm.ready = true; _nm.wait = 0; try{ localStorage.setItem('gdm_nm_fail', '0'); }catch(e){} _nm.fails = 0; _nmSyncCard(); });
+    P.addListener('error', function(e){ _nmFail('native: ' + ((e && e.message) || '')); });
+    P.addListener('centered', function(e){ var f = _nm.onCentered; _nm.onCentered = null; if(f) f(e); });
+  }catch(e){ _nmFail('listen: ' + e); }
+  window.addEventListener('resize', function(){ if(_nmActive()) _nmSync(); });
+}
+
+// 눌린 역 → 예전 text 클릭과 똑같이 처리(이름 정리·제외어·노선 배지·팝업)
+var _NM_SKIP = ['호선','경전철','수도권','도시철도','한강버스','지하철망','노선도','환승'];
+function _nmOnStation(ev){
+  var name = String((ev && ev.name) || '').replace(/\s+/g, '').trim();
+  if(!name || name.length < 2) return;
+  for(var i = 0; i < _NM_SKIP.length; i++) if(name.indexOf(_NM_SKIP[i]) >= 0) return;
+  var lines = _metroLines(name);
+  console.log('[SVG native tap]', name, lines ? lines.join(',') : 'unknown');
+  svgShowPopup(name, lines);
+  _nmSync();
+  _nmAfterSync(function(){ var P = _nmPlugin(); if(P) try{ P.ensureVisible({ name:name }); }catch(e){} });
+}
+// 지도에 손가락이 닿으면 열려 있는 팝업·시간표를 닫는다(웹 지도에서 바깥을 누르면 닫히던 것과 같다)
+function _nmOnGesture(){
+  var bd = document.getElementById('bdrop');
+  if(bd && bd.classList.contains('on')) return;
+  var closed = false;
+  if(document.getElementById('svgStationPop')){ svgRemovePopup(); closed = true; }
+  if(typeof nmTtClose === 'function' && document.getElementById('nmTtSheet')){ nmTtClose(); closed = true; }
+  if(closed) _nmSync();
+}
+
+function _nmFit(){
+  _nmStart();
+  var co = document.getElementById('svgContainer'); if(co) co.style.display = 'none';
+  _nm.wantFit = true; _nmSync();
+}
+function _nmFilter(name){
+  var P = _nmPlugin(); if(!P) return;
+  try{ P.setFilter({ name:name || 'ALL' }); }catch(e){}
+}
+// _mapGoToStation 의 네이티브판 — 찾았는지를 Promise 로 돌려준다
+function _nmGoTo(name, opts){
+  opts = opts || {};
+  var P = _nmPlugin(), nn = String(name || '').replace(/\s+/g, '');
+  var gv = _nmGv();
+  if(!P || !gv || gv.style.display === 'none') return Promise.resolve(false);
+  _nmStart();
+  return new Promise(function(resolve){
+    _nmSync();
+    _nmAfterSync(function(){
+      if(!_nm.shown){ resolve(false); return; }
+      var zoom = (opts.zoom === false) ? 0 : (opts.zoom || 1.6);
+      var finished = false;
+      var fin = function(res){
+        if(finished) return; finished = true; _nm.onCentered = null;
+        if(res && opts.popup !== false){
+          var nm = res.replace(/\s+/g, '').trim(), lines = (typeof _metroLines === 'function') ? _metroLines(nm) : null;
+          if(typeof svgShowPopup === 'function'){ svgShowPopup(nm, lines); _nmSync(); _nmAfterSync(function(){ try{ P.ensureVisible({ name:nm }); }catch(e){} }); }
+        }
+      };
+      P.centerOn({ name:nn, zoom:zoom, flash:true }).then(function(r){
+        if(!r || !r.found){ resolve(false); return; }
+        resolve(true);
+        var rn = r.name || nn;
+        _nm.onCentered = function(){ fin(rn); };
+        setTimeout(function(){ fin(rn); }, 1100);      // 'centered' 가 안 오더라도 팝업은 띄운다
+      }, function(){ resolve(false); });
+    });
+  });
+}
+
+// 웹 SVG 노선도로 되돌아간다 (실패했거나, 설정에서 껐을 때)
+function _nmUseWeb(){
+  var co = document.getElementById('svgContainer'); if(co) co.style.display = '';
+  var h = document.getElementById('svgHint'); if(h) h.style.display = '';
+  var gv = _nmGv(); if(gv){ gv.style.backgroundImage = ''; }
+  _nm.snap = false; _nm.shown = false; _nm.ready = false; _nm.started = false; _nm.rect = null; _nm.hintKey = '';
+  _ensureMetroSvg();
+  if(typeof _pzFit === 'function') _pzFit();
+  if(typeof initSvgInteraction === 'function') initSvgInteraction();
+  if(typeof gmFilterLine === 'function') gmFilterLine((typeof _currentFilterLine !== 'undefined' && _currentFilterLine) || 'ALL');
+}
+function _nmFail(why){
+  if(_nm.failed || _nm.disabled) return;
+  _nm.failed = true; _nm.fails++; _nm.why = String(why || '').slice(0, 140);
+  try{ localStorage.setItem('gdm_nm_fail', String(_nm.fails)); localStorage.setItem('gdm_nm_why', _nm.why); }catch(e){}
+  console.warn('[nativeMap] 웹 노선도로 대체합니다:', _nm.why);
+  _nmStop();
+  var P = _nmPlugin(); try{ if(P) P.destroy(); }catch(e){}
+  _nmUseWeb(); _nmSyncCard();
+}
+// 설정 스위치
+function _nmSetUse(on){
+  var P = _nmPlugin();
+  try{ localStorage.setItem('gdm_nm_off', on ? '0' : '1'); if(on){ localStorage.setItem('gdm_nm_fail', '0'); localStorage.setItem('gdm_nm_why', ''); } }catch(e){}
+  if(on){
+    _nm.disabled = false; _nm.failed = false; _nm.fails = 0; _nm.why = '';
+    var gv = _nmGv(); if(gv && gv.offsetParent && typeof _pzFit === 'function') _pzFit();
+  } else {
+    _nm.disabled = true; _nmStop();
+    try{ if(P) P.destroy(); }catch(e){}
+    _nmUseWeb();
+  }
+  _nmSyncCard();
+}
+window._nmSetUse = _nmSetUse;
+function _nmSyncCard(){
+  try{
+    var card = document.getElementById('nmSetCard'); if(!card) return;
+    if(!_nmPlugin()){ card.style.display = 'none'; return; }
+    card.style.display = 'block';
+    var cb = document.getElementById('nmSetOn'), st = document.getElementById('nmSetStat');
+    if(cb) cb.checked = !_nm.disabled && _nm.fails < 2;
+    var s;
+    if(_nm.disabled) s = '꺼짐 — 예전 웹 노선도를 쓰는 중이에요.';
+    else if(_nm.failed || _nm.fails >= 2) s = '네이티브 지도에 문제가 있어 웹 노선도로 대신 보여주고 있어요' + (_nm.why ? ' (' + _nm.why + ')' : '') + '. 스위치를 껐다 켜면 다시 시도해요.';
+    else s = '켜짐 — 노선도를 기기가 직접 그려 확대·축소가 부드러워요.';
+    if(st) st.textContent = s;
+  }catch(e){}
+}
+window._nmSyncCard = _nmSyncCard;
+try{
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(_nmSyncCard, 400); });
+  else setTimeout(_nmSyncCard, 400);
+}catch(e){}
 
 (function() {
   function setup() {
@@ -32042,6 +32347,7 @@ let _sm={scale:1,x:0,y:0,lastDist:0,px1:0,py1:0,dragging:false,mx:0,my:0};
 // ── 노선도: 특정 역으로 스크롤 + 하이라이트 ──
 function _mapGoToStation(name, opts){
   opts = opts || {};
+  if(_nmActive()) return _nmGoTo(name, opts);      // 네이티브: Promise<boolean> (웹은 boolean)
   _ensureMetroSvg();
   var view = document.getElementById('gmSvgView');
   var svg  = document.querySelector('#svgContainer svg');
@@ -32119,8 +32425,10 @@ function mapGoToMyLocation(){
     if(typeof STNDB==='undefined'){ toast('역 정보를 불러오지 못했어요'); return; }
     var best=null, bd=1e18;
     STNDB.forEach(function(st){ if(st.lat==null||st.lng==null) return; var dx=st.lat-la, dy=st.lng-ln, d=dx*dx+dy*dy; if(d<bd){ bd=d; best=st; } });
-    if(best && _mapGoToStation(best.name, {zoom:1.6, popup:true})) toast('📍 ' + best.name + ' (가장 가까운 역)');
-    else toast('가까운 역을 지도에서 찾지 못했어요');
+    Promise.resolve(best ? _mapGoToStation(best.name, {zoom:1.6, popup:true}) : false).then(function(ok){
+      if(ok) toast('📍 ' + best.name + ' (가장 가까운 역)');
+      else toast('가까운 역을 지도에서 찾지 못했어요');
+    });
   }, function(){ toast('위치 권한이 필요해요'); }, {enableHighAccuracy:true, timeout:8000, maximumAge:30000});
 }
 window.mapGoToMyLocation = mapGoToMyLocation;
@@ -32132,8 +32440,10 @@ function mapSearchStation(q){
   var m = STNDB.find(function(s){ return s.name.replace(/\s+/g,'')===q; })
        || STNDB.find(function(s){ return s.name.replace(/\s+/g,'').indexOf(q)>=0; });
   var nm = m ? m.name : q;
-  if(_mapGoToStation(nm, {zoom:1.6, popup:true})) toast('🔍 ' + nm);
-  else toast('\'' + q + '\' 역을 찾지 못했어요');
+  Promise.resolve(_mapGoToStation(nm, {zoom:1.6, popup:true})).then(function(ok){
+    if(ok) toast('🔍 ' + nm);
+    else toast('\'' + q + '\' 역을 찾지 못했어요');
+  });
 }
 window.mapSearchStation = mapSearchStation;
 var _mapSearchTimer = null;
@@ -32292,6 +32602,24 @@ function svgShowPopup(name, lines) {
   btns.appendChild(b2);
 
   pop.appendChild(btns);
+
+  // ★ 2026-10-14 시간표 버튼 — 출발/도착 버튼(0·1번) 뒤, 따로 한 줄(기존 버튼 순서·동작은 그대로)
+  var b3 = document.createElement('button');
+  b3.id = 'nmTtOpenBtn';
+  b3.style.cssText = 'display:block;width:100%;margin-top:10px;padding:13px;border:none;border-radius:14px;' +
+    'background:#2c2c2e;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;';
+  b3.textContent = '🕒 시간표';
+  var _b3Fired = false;
+  var _h3 = function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    if(_b3Fired) return;
+    _b3Fired = true;
+    nmTtOpen(name, _ls);
+  };
+  b3.addEventListener('touchend', _h3, {passive:false});
+  b3.addEventListener('click', _h3);
+  pop.appendChild(b3);
   document.body.appendChild(pop);
 
   // 외부 클릭 닫기 (딜레이 충분히 주어 버튼 클릭 처리 후 적용)
@@ -32312,10 +32640,247 @@ function svgShowPopup(name, lines) {
   }, 800);
 }
 
+// ═══ 역 시간표 (2026-10-14) ═══════════════════════════════════════════════
+// 노선도에서 역을 누르면 나오는 팝업의 "🕒 시간표" → 아래에서 올라오는 시트.
+// 시각표 자료·요일 판정·방향 이름·다음 열차 계산은 전부 엔진(GET /next-train?op=timetable)이 한다.
+// 앱은 받은 값을 시(時) 단위로 묶어 그리기만 한다. (지어내지 않는다: 공식 자료가 없는 노선은 noData 안내만)
+var _nmTt = null;           // { name, lines, line, day, dk, seq, cache:{}, data, state }
+var _NM_TT_TTL = 60000;     // 같은 (노선,요일) 응답을 다시 쓰는 시간 — 지나면 '다음 열차' 표시가 낡으니 다시 묻는다
+function _nmTtEsc(t){ return String(t == null ? '' : t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function _nmTtP2(n){ return (n < 10 ? '0' : '') + n; }
+// 분(0~) → 'HH:MM' (24시 넘으면 다음날 표기로 그대로 mod 24)
+function _nmTtClock(m){ var x = ((m % 1440) + 1440) % 1440; return _nmTtP2(Math.floor(x / 60)) + ':' + _nmTtP2(x % 60); }
+function _nmTtAfter(){ if(typeof _nmSync === 'function') { try{ _nmSync(); }catch(e){} } }
+
+function nmTtOpen(name, lines){
+  svgRemovePopup();
+  nmTtClose(true);
+  var ls = _lineListClean(lines);
+  _nmTt = { name: name, lines: ls, line: ls[0] || '', day: '', dk: '', seq: 0, cache: {}, data: null, state: 'loading' };
+
+  var sh = document.createElement('div');
+  sh.id = 'nmTtSheet';
+  sh.style.cssText = 'position:fixed;bottom:0;left:0;right:0;height:min(52vh,460px);display:flex;flex-direction:column;' +
+    'background:#1c1c1e;border-top:1.5px solid #444;border-radius:18px 18px 0 0;padding:12px 14px 14px;' +
+    'z-index:100000;box-shadow:0 -6px 30px rgba(0,0,0,.9);color:#fff;box-sizing:border-box;';
+  sh.innerHTML =
+    '<div style="width:40px;height:4px;background:#555;border-radius:2px;margin:0 auto 10px;flex:none;"></div>' +
+    '<div style="display:flex;align-items:center;gap:8px;flex:none;margin-bottom:8px;">' +
+      '<div id="nmTtTitle" style="flex:1;font-size:19px;font-weight:700;"></div>' +
+      '<button id="nmTtX" aria-label="닫기" style="border:none;background:#2c2c2e;color:#ddd;width:34px;height:34px;border-radius:17px;font-size:16px;cursor:pointer;font-family:inherit;">✕</button>' +
+    '</div>' +
+    '<div id="nmTtLines" style="display:flex;gap:6px;overflow-x:auto;flex:none;padding-bottom:6px;"></div>' +
+    '<div id="nmTtDays" style="display:flex;gap:6px;flex:none;margin:2px 0 8px;flex-wrap:wrap;"></div>' +
+    '<div id="nmTtDirs" style="display:flex;gap:6px;flex:none;margin-bottom:8px;"></div>' +
+    '<div id="nmTtSum" style="flex:none;font-size:12px;color:#aaa;margin-bottom:6px;min-height:16px;"></div>' +
+    '<div id="nmTtBody" style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;"></div>';
+  document.body.appendChild(sh);
+  sh.querySelector('#nmTtTitle').textContent = name + ' 시간표';
+
+  var xf = false;
+  var xh = function(e){ e.preventDefault(); e.stopPropagation(); if(xf) return; xf = true; nmTtClose(); };
+  var xb = sh.querySelector('#nmTtX');
+  xb.addEventListener('touchend', xh, {passive:false});
+  xb.addEventListener('click', xh);
+
+  // 시트 바깥을 누르면 닫는다(웹 노선도). 네이티브 노선도에서 지도를 만지면 _nmOnGesture 가 닫는다.
+  _nmTt.outside = function(e){
+    var bdrop = document.getElementById('bdrop');
+    if(bdrop && bdrop.classList.contains('on')) return;
+    var s = document.getElementById('nmTtSheet');
+    if(s && !s.contains(e.target)) nmTtClose();
+  };
+  setTimeout(function(){
+    if(!_nmTt || !document.getElementById('nmTtSheet')) return;
+    document.addEventListener('touchstart', _nmTt.outside, true);
+    document.addEventListener('click', _nmTt.outside, true);
+  }, 600);
+
+  _nmTtAfter();
+  nmTtLoad();
+}
+
+function nmTtClose(silent){
+  if(_nmTt){
+    if(_nmTt.outside){
+      document.removeEventListener('touchstart', _nmTt.outside, true);
+      document.removeEventListener('click', _nmTt.outside, true);
+    }
+    _nmTt.seq++;                  // 늦게 온 응답은 버린다
+  }
+  var s = document.getElementById('nmTtSheet');
+  if(s) s.remove();
+  _nmTt = null;
+  if(!silent) _nmTtAfter();
+}
+
+// 지금 선택(노선·요일)에 맞는 시간표를 엔진에 묻는다
+//   처음 열 때는 이 역의 모든 노선을 한 번에 묻는다(POST items) — 자료 있는 첫 노선을 자동으로 고르고, 노선 탭 전환이 바로 된다.
+function nmTtLoad(){
+  var T = _nmTt; if(!T) return;
+  var key = T.line + '|' + (T.day || '-'), c = T.cache[key], now = Date.now();
+  if(c && now - c.at < _NM_TT_TTL){ T.data = c.data; T.state = 'ok'; nmTtRender(); return; }
+  var my = ++T.seq;
+  T.state = 'loading'; T.data = null;
+  nmTtRender();
+  if(!T.line){ T.state = 'nodata'; nmTtRender(); return; }
+  var fail = function(){ if(_nmTt !== T || T.seq !== my) return; T.state = 'fail'; nmTtRender(); };
+  if(!T.day && T.lines.length > 1){
+    var bm = _ntBaseMs();
+    var items = T.lines.slice(0, 20).map(function(l, i){ return { id: i, op: 'timetable', line: l, from: T.name, baseMs: bm }; });
+    _ntFetch(_ROUTE_V2_BASE + '/next-train', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ items: items }) }, function(j){
+      if(_nmTt !== T || T.seq !== my) return;
+      if(!j || !j.items){ fail(); return; }
+      var at = Date.now(), pick = null, i, it;
+      for(i = 0; i < j.items.length; i++){
+        it = j.items[i];
+        if(!it || it.id == null || !it.dirs || !T.lines[it.id]) continue;
+        T.cache[T.lines[it.id] + '|-'] = { at: at, data: it };
+        if(!pick && !it.noData) pick = T.lines[it.id];
+      }
+      if(pick) T.line = pick;                                // 시각표가 있는 첫 노선
+      var cur = T.cache[T.line + '|-'];
+      if(!cur){ fail(); return; }
+      T.data = cur.data; T.state = 'ok'; T.day = cur.data.dayCode || '';
+      nmTtRender();
+    });
+    return;
+  }
+  _ntAsk({ op: 'timetable', line: T.line, from: T.name, day: T.day, baseMs: _ntBaseMs() }, function(r){
+    if(_nmTt !== T || T.seq !== my) return;                 // 닫혔거나 다른 선택으로 넘어감
+    if(!r || !r.dirs){ fail(); return; }
+    T.cache[key] = { at: Date.now(), data: r };
+    T.data = r; T.state = 'ok';
+    if(!T.day) T.day = r.dayCode || '';                      // 처음엔 엔진이 정한 '오늘'
+    nmTtRender();
+  });
+}
+
+function _nmTtChip(label, on, extra, css){
+  return '<button type="button" ' + extra + ' style="' + (css || 'flex:none;') + 'border:none;border-radius:16px;padding:7px 13px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;' +
+    (on ? 'background:#0a84ff;color:#fff;' : 'background:#2c2c2e;color:#bbb;') + '">' + label + '</button>';
+}
+
+function nmTtRender(){
+  var T = _nmTt, sh = document.getElementById('nmTtSheet');
+  if(!T || !sh) return;
+  var $ = function(id){ return sh.querySelector('#' + id); };
+  var d = T.data;
+
+  // 노선 탭 — 노선이 둘 이상일 때만
+  var le = $('nmTtLines');
+  if(T.lines.length > 1){
+    le.style.display = 'flex';
+    le.innerHTML = T.lines.map(function(l, i){
+      var on = (l === T.line), col = _lineColorOf(l), kc = T.cache[l + '|-'], nod = !!(kc && kc.data && kc.data.noData);
+      return '<button type="button" data-nmtt-line="' + i + '" style="flex:none;border:none;border-radius:16px;padding:7px 13px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;' + (nod && !on ? 'opacity:.5;' : '') +
+        (on ? 'background:' + col + ';color:#fff;' : 'background:#2c2c2e;color:#bbb;') + '">' + _nmTtEsc(l) + '</button>';
+    }).join('');
+  } else {
+    le.style.display = 'flex';
+    le.innerHTML = T.line ? _linePillHtml(T.line) : '';
+  }
+
+  // 요일 칩 — 엔진이 준 days 그대로
+  var de = $('nmTtDays');
+  if(d && d.days && d.days.length){
+    de.style.display = 'flex';
+    de.innerHTML = d.days.map(function(x){
+      return _nmTtChip(_nmTtEsc(x.label) + (x.code === d.today ? ' · 오늘' : ''), x.code === d.dayCode, 'data-nmtt-day="' + _nmTtEsc(x.code) + '"');
+    }).join('');
+  } else { de.style.display = 'none'; de.innerHTML = ''; }
+
+  // 방향 탭
+  var re = $('nmTtDirs'), dir = null;
+  if(d && d.dirs && d.dirs.length){
+    var i;
+    for(i = 0; i < d.dirs.length; i++) if(d.dirs[i].dk === T.dk) dir = d.dirs[i];
+    if(!dir){ dir = d.dirs[0]; T.dk = dir.dk; }
+    re.style.display = 'flex';
+    re.innerHTML = d.dirs.map(function(x){
+      var lab = x.toward ? _nmTtEsc(x.toward) + ' 방면' : (x.dk === '상' ? '상행' : '하행');
+      return '<span style="flex:1;display:block;min-width:0;">' + _nmTtChip(lab, x === dir, 'data-nmtt-dk="' + _nmTtEsc(x.dk) + '"', 'display:block;width:100%;overflow:hidden;text-overflow:ellipsis;') + '</span>';
+    }).join('');
+  } else { re.style.display = 'none'; re.innerHTML = ''; }
+
+  // 요약 + 본문
+  var sum = $('nmTtSum'), body = $('nmTtBody');
+  if(T.state === 'loading'){
+    sum.textContent = '';
+    body.innerHTML = '<div style="color:#888;text-align:center;padding:36px 0;font-size:14px;">시간표를 불러오는 중…</div>';
+  } else if(T.state === 'fail'){
+    sum.textContent = '';
+    body.innerHTML = '<div style="text-align:center;padding:30px 0;"><div style="color:#aaa;font-size:14px;margin-bottom:12px;">시간표를 불러오지 못했어요.</div>' +
+      '<button type="button" id="nmTtRetry" style="border:none;border-radius:14px;background:#0a84ff;color:#fff;padding:10px 20px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;">다시 시도</button></div>';
+  } else if(T.state === 'nodata' || !d || d.noData || !dir){
+    sum.textContent = '';
+    body.innerHTML = '<div style="color:#aaa;text-align:center;padding:34px 12px;font-size:14px;line-height:1.6;">' +
+      _nmTtEsc(T.line || '이 노선') + '은(는) 공식 시각표 자료가 없어<br>시간표를 보여드릴 수 없어요.<br><span style="color:#777;font-size:12px;">실시간 도착정보는 경로 탐색 화면에서 확인할 수 있어요.</span></div>';
+  } else {
+    var s = '첫차 ' + _nmTtClock(dir.first) + ' · 막차 ' + _nmTtClock(dir.last);
+    if(dir.nextMin != null) s += ' · ' + (dir.tomorrow ? '내일 첫차 ' : '다음 열차 ') + _nmTtClock(dir.nextMin);
+    sum.textContent = s;
+    // 시(時)별로 묶기 — 24시 이후(자정 넘은 열차)는 00시대로 보이되 '익일' 표시
+    var rows = [], cur = null, nx = dir.nextMin, isToday = (d.dayCode === d.today);
+    dir.times.forEach(function(t){
+      var h = Math.floor(t / 60);
+      if(!cur || cur.h !== h){ cur = { h: h, m: [] }; rows.push(cur); }
+      cur.m.push(t);
+    });
+    var html = '';
+    rows.forEach(function(r){
+      var chips = r.m.map(function(t){
+        var isNext = (nx != null && t === nx && !dir.tomorrow);
+        var past = isToday && nx != null && t < nx;
+        var st = isNext ? 'background:#0a84ff;color:#fff;font-weight:800;' : (past ? 'color:#555;' : 'color:#eee;');
+        return '<span' + (isNext ? ' id="nmTtNext"' : '') + ' style="display:inline-block;min-width:34px;text-align:center;padding:5px 4px;margin:2px 3px 2px 0;border-radius:8px;font-size:15px;font-variant-numeric:tabular-nums;' + st + '">' + _nmTtP2(t % 60) + '</span>';
+      }).join('');
+      html += '<div style="display:flex;align-items:flex-start;border-bottom:1px solid #2a2a2c;padding:4px 0;">' +
+        '<div style="flex:none;width:52px;padding-top:7px;font-size:13px;font-weight:700;color:#8e8e93;">' + _nmTtP2(r.h % 24) + '시' +
+        (r.h >= 24 ? '<div style="font-size:10px;font-weight:600;color:#666;">익일</div>' : '') + '</div>' +
+        '<div style="flex:1;">' + chips + '</div></div>';
+    });
+    body.innerHTML = html;
+    var nel = body.querySelector('#nmTtNext');
+    if(nel){ try{ body.scrollTop = Math.max(0, body.scrollTop + nel.getBoundingClientRect().top - body.getBoundingClientRect().top - 36); }catch(e){} }
+    else { try{ body.scrollTop = 0; }catch(e){} }
+  }
+
+  // 이벤트(내용을 다시 그릴 때마다 새로 붙인다)
+  var bind = function(sel, fn){
+    var nodes = sh.querySelectorAll(sel);
+    for(var k = 0; k < nodes.length; k++) (function(n){
+      var fired = false;
+      var h = function(e){ e.preventDefault(); e.stopPropagation(); if(fired) return; fired = true; setTimeout(function(){ fired = false; }, 350); fn(n); };
+      n.addEventListener('touchend', h, {passive:false});
+      n.addEventListener('click', h);
+    })(nodes[k]);
+  };
+  bind('[data-nmtt-line]', function(n){
+    var l = T.lines[+n.getAttribute('data-nmtt-line')];
+    if(!l || l === T.line) return;
+    T.line = l; T.day = ''; T.dk = ''; nmTtLoad();
+  });
+  bind('[data-nmtt-day]', function(n){
+    var c = n.getAttribute('data-nmtt-day');
+    if(!c || (T.data && c === T.data.dayCode)) return;
+    T.day = c; nmTtLoad();
+  });
+  bind('[data-nmtt-dk]', function(n){
+    var k = n.getAttribute('data-nmtt-dk');
+    if(k === T.dk) return;
+    T.dk = k; nmTtRender();
+  });
+  bind('#nmTtRetry', function(){ delete T.cache[T.line + '|' + (T.day || '-')]; nmTtLoad(); });
+}
+window.nmTtOpen = nmTtOpen;
+window.nmTtClose = nmTtClose;
+
 // ── 경로 설정 ──────────────────────────────────────────
 
 function initSvgInteraction() {
   if (_svgInited) return;
+  if (_nmActive()) return;     // 네이티브 노선도는 터치를 네이티브가 받는다(_nmOnStation)
   _ensureMetroSvg();
   var svg = document.querySelector('#svgContainer svg');
   if (!svg) { setTimeout(initSvgInteraction, 100); return; }
@@ -32522,6 +33087,7 @@ function gmFilterLine(lineName) {
     activeBtn.style.color = (lineName === 'ALL') ? '#121214' : '#fff';
   }
 
+  if(_nmActive()){ _nmFilter(lineName); return; }   // 네이티브: 필터는 이름만 넘긴다(보임 상태는 데이터에 구워져 있다)
   if(!svgCont) return;
   var svg = svgCont.querySelector('svg');
   if(!svg) return;

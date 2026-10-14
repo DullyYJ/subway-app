@@ -823,6 +823,50 @@ function ntCreate(DATA) {
       var di = ntDayInfo(baseMs); setCtx(di);
       return _ttOfficialTimes(line, stn, dk, di.isHol);
     },
+    // ★ 2026-10-14 역 시간표(노선도에서 역을 눌렀을 때): { line, from(역), baseMs, day?('DAY'|'SAT'|'SUN') } →
+    //   { line, stn, dayCode, today, days:[{code,label}], nowMin, dirs:[{ dk:'상'|'하', toward(종점 방면 이름|null), times:[분…], first, last, nextMin, tomorrow }], noData }
+    //   · times 는 그날 해당 방향 출발 분(자정 넘으면 1440 이상). 앱은 시 단위로 묶어 그리기만 한다.
+    //   · 공식 시각표가 없는 노선(신분당·경의중앙·공항철도 …)은 dirs 가 비고 noData=true — 지어내지 않는다.
+    //   · 토요일 별도 자료가 있는 노선에서만 평일/토/일 세 갈래, 아니면 평일 / 토·일·공휴일 두 갈래.
+    //   · nextMin: 지금(nowMin) 이후 첫 열차. 자정 직후(04시 전)에는 전날 영업일의 자정 넘은 열차(1440+)까지 본다. 오늘 남은 열차가 없으면 tomorrow=true 와 내일 첫차.
+    timetable: function (q) {
+      var base = q.baseMs, di = ntDayInfo(base);
+      var line = String(q.line || ''), stn = String(q.from || '');
+      var nm = _ttNm(stn), rec = (_REAL_TT || {})[line + '|' + nm];
+      var satSep = !!(rec && rec.S);
+      var today = di.dayCode === 'SAT' && !satSep ? 'SUN' : di.dayCode;
+      var code = (q.day === 'DAY' || q.day === 'SAT' || q.day === 'SUN') ? q.day : today;
+      if (code === 'SAT' && !satSep) code = 'SUN';
+      setCtx({ isHol: code !== 'DAY', dayCode: code });
+      var days = satSep ? [{ code: 'DAY', label: '평일' }, { code: 'SAT', label: '토요일' }, { code: 'SUN', label: '일요일·공휴일' }]
+                        : [{ code: 'DAY', label: '평일' }, { code: 'SUN', label: '토·일·공휴일' }];
+      // 방향 이름: 이 역에서 노선 순서상 앞/뒤 이웃으로 가는 열차의 키(_boardDirKey 와 같은 판정)와 그쪽 종점
+      var ord = _ttOrderOf(line) || [], idx = ord.indexOf(nm), toward = {};
+      if (idx >= 0 && line !== '2호선') {        // 2호선은 순환선+지선이라 '종점 방면' 이름을 붙이지 않는다
+        var me = { lineName: line, name: nm };
+        var kf = idx + 1 < ord.length ? _boardDirKey(me, { name: ord[idx + 1] }) : null;
+        var kb = idx > 0 ? _boardDirKey(me, { name: ord[idx - 1] }) : null;
+        // 앞·뒤 이웃이 같은 키로 나오면(2호선 순환선 등) 어느 쪽이 어느 방향인지 알 수 없으니 이름을 붙이지 않는다
+        if (kf && kb && kf === kb) { /* 이름 없음 */ }
+        else { if (kf) toward[kf] = ord[ord.length - 1]; if (kb) toward[kb] = ord[0]; }
+      }
+      if (toward['상'] != null && toward['상'] === toward['하']) toward = {};
+      var dirs = [], k, dk;
+      for (k = 0; k < 2; k++) {
+        dk = k === 0 ? '상' : '하';
+        var tms = _ttOfficialTimes(line, stn, dk, _ctxHol);
+        if (!tms || !tms.length) continue;
+        var eff = di.nowMin, last = tms[tms.length - 1];
+        if (eff < 240 && last >= 1440) eff += 1440;
+        var nx = null, tom = false, i;
+        if (code === today || (today === 'SUN' && code === 'SUN')) {
+          for (i = 0; i < tms.length; i++) if (tms[i] >= eff) { nx = tms[i]; break; }
+          if (nx == null) { nx = tms[0] + 1440; tom = true; }
+        }
+        dirs.push({ dk: dk, toward: toward[dk] != null ? toward[dk] : null, times: tms.slice(), first: tms[0], last: last, nextMin: nx, tomorrow: tom });
+      }
+      return { line: line, stn: stn, dayCode: code, today: today, days: days, nowMin: di.nowMin, dirs: dirs, noData: dirs.length === 0 };
+    },
     dayInfo: ntDayInfo
   };
 }

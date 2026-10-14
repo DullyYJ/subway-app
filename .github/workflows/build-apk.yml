@@ -19,6 +19,9 @@ jobs:
           - bus_not_train.ui.test.js
           - bat_ask.ui.test.js
           - sam_ask.ui.test.js
+          - metro_native_data.test.js
+          - metro_native_java.test.js
+          - metro_native_js.ui.test.js
           - bus_poll_gap.test.js
           - cell_hop_lead.ui.test.js
           - cell_sync.ui.test.js
@@ -33,6 +36,8 @@ jobs:
           - next_train_attach.ui.test.js
           - next_train_late.test.js
           - next_train_parity.ui.test.js
+          - next_train_timetable.test.js
+          - station_timetable.ui.test.js
           - overlay_stale.ui.test.js
           - holidays.test.js
           - holidays_decide.test.js
@@ -128,8 +133,13 @@ jobs:
 
       - name: Sync Capacitor
         run: npx cap sync android
+
+      - name: 네이티브 노선도 데이터가 앱에 들어갔는지 확인
+        run: |
+          test -s android/app/src/main/assets/public/metro_native.bin || { echo "metro_native.bin 이 assets 에 없다 — 네이티브 노선도가 못 뜬다"; exit 1; }
+          ls -l android/app/src/main/assets/public/metro_native.bin
         
-      - name: Install native plugins (기지국 보조측위 + 배터리 최적화 제외 + 다른 앱 위 표시 + 움직임 감지)
+      - name: Install native plugins (기지국 보조측위 + 배터리 최적화 제외 + 다른 앱 위 표시 + 움직임 감지 + 네이티브 노선도)
         run: |
           python3 - << 'PYEOF'
           import os, shutil
@@ -139,7 +149,8 @@ jobs:
           os.makedirs(PKGDIR, exist_ok=True)
 
           # 1) 플러그인 소스 복사
-          for src in ["native/CellInfoPlugin.java", "native/PowerPlugin.java", "native/OverlayPlugin.java", "native/MotionPlugin.java", "native/KeepAliveService.java"]:
+          for src in ["native/CellInfoPlugin.java", "native/PowerPlugin.java", "native/OverlayPlugin.java", "native/MotionPlugin.java", "native/KeepAliveService.java",
+                      "native/MetroMapData.java", "native/MetroCamera.java", "native/MetroRenderer.java", "native/MetroMapView.java", "native/NativeMapPlugin.java"]:
               if not os.path.exists(src):
                   raise SystemExit(src + " 가 없습니다 — 저장소에 올렸는지 확인하세요")
               shutil.copy(src, os.path.join(PKGDIR, os.path.basename(src)))
@@ -160,6 +171,7 @@ jobs:
               "        registerPlugin(PowerPlugin.class);",
               "        registerPlugin(OverlayPlugin.class);",
               "        registerPlugin(MotionPlugin.class);",
+              "        registerPlugin(NativeMapPlugin.class);",
               "        super.onCreate(savedInstanceState);",
               "    }",
               "",
