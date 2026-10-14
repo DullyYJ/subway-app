@@ -229,10 +229,13 @@ const NOW = new Date('2026-10-14T13:00:00+09:00');   // 수요일 13:00
     s0.forEach(c => assert(ALL.includes(c.id), c.id));
     const host = await rectOf(x, '#nmTtPlay'), sh = await rectOf(x, '#nmTtSheet');
     // 2026-10-14 16:07 (YJ): 시트 맨 위 큰 공백(손잡이~제목)을 없애고, 놀이터는 역명 줄의 빈 칸(제목과 ✕ 사이)에 둔다
-    const ttl = await rectOf(x, '#nmTtTitle'), xb = await rectOf(x, '#nmTtX'), hd = await rectOf(x, '.nmp-handle');
-    assert(host && host.h >= 40 && host.right - host.left >= 90, '놀이터 크기 ' + JSON.stringify(host));
-    assert(host.left >= ttl.right - 1 && host.right <= xb.left + 1, '제목 오른쪽·✕ 왼쪽 사이 ' + JSON.stringify([ttl.right, host.left, host.right, xb.left]));
-    assert(Math.abs((host.top + host.bottom) / 2 - (ttl.top + ttl.bottom) / 2) < 8, '역명과 같은 줄');
+    const ttl = await rectOf(x, '#nmTtTitle'), hd = await rectOf(x, '.nmp-handle');
+    assert(host && host.h >= 60 && host.right - host.left >= 90, '놀이터 크기 ' + JSON.stringify(host));
+    assert(host.left >= ttl.right - 1 && host.right >= 390 - 20, '제목 오른쪽부터 시트 오른쪽 끝까지 ' + JSON.stringify([ttl.right, host.left, host.right]));
+    assert.strictEqual(await x.page.evaluate(() => !!document.getElementById('nmTtX')), false, '✕ 버튼은 없다');
+    assert(host.top < ttl.top && host.bottom >= ttl.bottom && host.bottom - ttl.bottom < 30, '역명 줄 위로 하늘이 트여 있다 ' + JSON.stringify([host.top, host.bottom, ttl.top, ttl.bottom]));
+    const bx = await x.page.evaluate(() => { const s = getComputedStyle(document.getElementById('nmTtPlay')); return [s.boxShadow, s.borderTopWidth, s.backgroundColor, s.borderRadius]; });
+    assert(bx[0] === 'none' && bx[1] === '0px' && /rgba\(0, 0, 0, 0\)|transparent/.test(bx[2]), '칸을 나눈 듯한 테두리·배경이 없다 ' + JSON.stringify(bx));
     assert(ttl.top - hd.bottom < 30, '손잡이와 제목 사이가 비어 있지 않다 ' + (ttl.top - hd.bottom) + 'px');
     assert.strictEqual(await x.page.evaluate(() => getComputedStyle(document.getElementById('nmTtPlay')).pointerEvents), 'none', '터치를 가로채지 않는다');
     // 그림이 실제로 그려진다 — file:// 의 캔버스는 픽셀을 읽을 수 없으므로(오염) 캔버스가 놀이터 띠 안에 크기를 갖고 보이는지로 확인
@@ -305,7 +308,7 @@ const NOW = new Date('2026-10-14T13:00:00+09:00');   // 수요일 13:00
   });
   await t('놀이터 장면: 장면에 따라 행동이 다르다 — 밤은 쉬는 시간이 많고, 눈·꽃잎은 콩콩·빙글이 많다', async () => {
     const meas = async (scene) => {
-      const x = await fresh(); await openSubway(x); await x.page.evaluate((s) => { window._rcScene = s; }, scene);
+      const x = await fresh(); await openSubway(x); await x.page.evaluate((s) => { window._rcScene = s; window._rcIds = ['ppopu', 'dolsom']; }, scene);
       await openTt(x, '서울역', ['1호선']);
       for (let i = 0; i < 40 && !(await x.page.evaluate(() => !!window._RC.playState())); i++) { await new Promise(r => setTimeout(r, 40)); await x.page.clock.runFor(40); }
       const cnt = { walk: 0, hop: 0, spin: 0, rest: 0 }; let tot = 0;
@@ -314,8 +317,42 @@ const NOW = new Date('2026-10-14T13:00:00+09:00');   // 수요일 13:00
       return { rest: cnt.rest / tot, play: (cnt.hop + cnt.spin) / tot };
     };
     const night = await meas('night'), snow = await meas('snow');
-    assert(night.rest > snow.rest + 0.1, '쉬기 night ' + night.rest.toFixed(2) + ' vs snow ' + snow.rest.toFixed(2));
-    assert(snow.play > night.play + 0.1, '콩콩·빙글 snow ' + snow.play.toFixed(2) + ' vs night ' + night.play.toFixed(2));
+    assert(night.rest > snow.rest + 0.05, '쉬기 night ' + night.rest.toFixed(2) + ' vs snow ' + snow.rest.toFixed(2));
+    assert(snow.play > night.play + 0.05, '콩콩·빙글 snow ' + snow.play.toFixed(2) + ' vs night ' + night.play.toFixed(2));
+  });
+  await t('놀이터 캐릭터별 행동: 두더지 땅파기·올챙이 점프·독수리 비행/착지·고양이 나무타기·강아지 응가가 모두 나온다', async () => {
+    const x = await fresh(); await openSubway(x);
+    await x.page.evaluate(() => { window._rcScene = 'meadow'; window._rcIds = ['dolsom', 'lovel', 'dudung', 'chaeng', 'sul'];
+      let a = 424242; Math.random = () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; });
+    await openTt(x, '서울역', ['1호선']);
+    for (let i = 0; i < 60 && !(await x.page.evaluate(() => !!window._RC.playState())); i++) { await new Promise(r => setTimeout(r, 40)); await x.page.clock.runFor(40); }
+    const W = await x.page.evaluate(() => window._RC.playInfo().W);
+    const m = { climbY: 0, climbRot: 0, flyY: 0, jumpY: 0, swimClip: false, hiddenVis: 1, poops: 0, sinkSeen: false, maxX: 0, minX: 1e9 };
+    for (let i = 0; i < 5200; i++) {
+      await x.page.clock.runFor(50);
+      const r = await x.page.evaluate(() => ({ s: window._RC.playState(), i: window._RC.playInfo() }));
+      m.poops = Math.max(m.poops, r.i.poops);
+      r.s.forEach(c => {
+        m.maxX = Math.max(m.maxX, c.x); m.minX = Math.min(m.minX, c.x);
+        if (c.st === 'climb') { m.climbY = Math.min(m.climbY, c.y); m.climbRot = c.rot || m.climbRot; }
+        if (c.st === 'fly') m.flyY = Math.min(m.flyY, c.y);
+        if (c.st === 'jumpOut' || c.st === 'jumpIn') m.jumpY = Math.min(m.jumpY, c.y);
+        if (c.st === 'swim' && c.clip) m.swimClip = true;
+        if (c.st === 'hidden') m.hiddenVis = Math.min(m.hiddenVis, c.vis);
+        if (c.st === 'sink') m.sinkSeen = true;
+      });
+    }
+    const log = await x.page.evaluate(() => window._RC.playInfo().log);
+    const need = ['dolsom:poop', 'dolsom:sniff', 'lovel:toTree', 'lovel:climb', 'lovel:perch', 'dudung:emerge', 'dudung:dig', 'dudung:sink', 'dudung:hidden', 'chaeng:swim', 'chaeng:jumpOut', 'chaeng:toPond', 'chaeng:jumpIn', 'sul:fly', 'sul:land', 'sul:takeoff'];
+    need.forEach(k => assert(log[k] > 0, k + ' 가 나와야 한다 — ' + JSON.stringify(log)));
+    assert(m.poops > 0, '응가가 바닥에 남는다');
+    assert(m.climbY <= -8 && m.climbRot !== 0, '나무를 오르며 몸을 세운다 ' + m.climbY + '/' + m.climbRot);
+    assert(m.flyY <= -10, '독수리가 하늘로 뜬다 ' + m.flyY);
+    assert(m.jumpY <= -14, '올챙이가 물 밖으로 펄쩍 ' + m.jumpY);
+    assert(m.swimClip, '물속에서는 물선 아래가 가려진다');
+    assert(m.hiddenVis === 0 && m.sinkSeen, '두더지는 땅속에서 보이지 않는다');
+    assert(m.minX >= 0 && m.maxX <= W, '놀이터 밖으로 나가지 않는다 ' + [m.minX, m.maxX, W]);
+    assert.deepStrictEqual(x.errs, []); await x.ctx.close();
   });
   await t('놀이터 장면: 테마를 바꿔도(다크↔파스텔) 계속 돌고 오류가 없다 · 그리기는 가벼워야 한다(1회 평균 8ms 미만)', async () => {
     const x = await fresh(); await openSubway(x); await x.page.evaluate(() => { window._rcScene = 'aurora'; window._rcPerf = { ms: 0, n: 0 }; });

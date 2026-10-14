@@ -188,9 +188,10 @@ const NOW = new Date('2026-10-14T13:00:00+09:00');   // 수요일 13:00
     assert.deepStrictEqual(x.errs, []); await x.ctx.close();
   });
 
-  await t('닫기: ✕ · 시트 바깥 누르기 · (늦게 온 응답은 무시)', async () => {
+  await t('닫기: 시트 바깥 누르기 · 밀어 내리기 · (늦게 온 응답은 무시) — ✕ 버튼은 없다', async () => {
     const x = await fresh(); await openSubway(x); await openTt(x, '서울역', ['1호선']);
-    await x.page.evaluate(() => document.getElementById('nmTtX').click()); await x.page.clock.runFor(200);
+    assert.strictEqual(await x.page.evaluate(() => !!document.getElementById('nmTtX')), false, '✕ 버튼은 없다');
+    await x.page.evaluate(() => nmTtClose()); await x.page.clock.runFor(200);
     assert.strictEqual(await sheet(x), null);
     await openTt(x, '서울역', ['1호선']); await x.page.clock.runFor(900);
     await x.page.mouse.click(195, 60); await x.page.clock.runFor(300);              // 시트 위쪽 바깥(지도)

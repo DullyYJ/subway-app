@@ -1067,7 +1067,7 @@ return maplibregl$1;
 .nmtt-t{display:inline-block;min-width:34px;text-align:center;padding:5px 4px;margin:2px 3px 2px 0;border-radius:8px;font-size:15px;font-variant-numeric:tabular-nums;color:var(--text);}
 .nmtt-t.past{color:var(--nmp-past);}
 .nmtt-t.next{background:var(--blue);color:#fff;font-weight:800;box-shadow:0 2px 8px var(--nmp-next-sh);}
-#nmTtPlay{position:relative;flex:1 1 90px;min-width:90px;height:46px;border-radius:14px;pointer-events:none;overflow:hidden;box-shadow:inset 0 0 0 1px var(--border2);}
+#nmTtPlay{position:relative;flex:1 1 90px;min-width:90px;height:70px;margin:-24px 0 0;pointer-events:none;}
 #nmTtPlay canvas{position:absolute;left:0;top:0;width:100%;height:100%;}
 *{box-sizing:border-box;margin:0;padding:0;font-family:'Noto Sans KR',sans-serif;-webkit-tap-highlight-color:transparent;}
 html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);}
@@ -32753,7 +32753,6 @@ function nmTtOpen(name, lines){
     '<div style="display:flex;align-items:center;gap:10px;flex:none;margin-bottom:8px;">' +
       '<div id="nmTtTitle" style="flex:0 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:19px;font-weight:700;"></div>' +
       '<div id="nmTtPlay" aria-hidden="true"></div>' +
-      '<button id="nmTtX" aria-label="닫기" class="nmtt-x">✕</button>' +
     '</div>' +
     '<div id="nmTtLines" style="display:flex;gap:6px;overflow-x:auto;flex:none;padding-bottom:6px;"></div>' +
     '<div id="nmTtDays" style="display:flex;gap:6px;flex:none;margin:2px 0 8px;flex-wrap:wrap;"></div>' +
@@ -32765,11 +32764,7 @@ function nmTtOpen(name, lines){
   _nmDragDismiss(sh, function(){ nmTtClose(); }, { scroller: '#nmTtBody' });
   try{ if(window._RC && _RC.playStart) _RC.playStart(sh.querySelector('#nmTtPlay')); }catch(ePl){}
 
-  var xf = false;
-  var xh = function(e){ e.preventDefault(); e.stopPropagation(); if(xf) return; xf = true; nmTtClose(); };
-  var xb = sh.querySelector('#nmTtX');
-  xb.addEventListener('touchend', xh, {passive:false});
-  xb.addEventListener('click', xh);
+  // ✕ 버튼은 없다(2026-10-14 YJ: 밀어 내리면 닫히니 필요 없다). 닫는 길: 아래로 밀기 · 시트 바깥 누르기 · 네이티브 지도 만지기.
 
   // 시트 바깥을 누르면 닫는다(웹 노선도). 네이티브 노선도에서 지도를 만지면 _nmOnGesture 가 닫는다.
   _nmTt.outside = function(e){
@@ -40381,14 +40376,14 @@ var _RC = (function(){
      같은 3D 시트 그림을 시간에 맞춰 그릴 뿐인 장식이다(판단·계산 없음). 시트가 닫히면 멈춘다. 동작 줄이기 설정이면 한 장면만 그린다. */
   // p: 파스텔(위→아래 3색), d: 다크, g: 바닥색 [파스텔, 다크]. w: 행동 비중, spd: 걷는 속도 배수, hop: 콩콩 높이 배수, chase: 친구에게 다가갈 확률, restMul: 쉬는 시간 배수, mark: 쉴 때 떠오르는 표시
   var SCENES = {
-    day:    { p:['#bfe6ff','#e3f5ff','#f7fcff'], d:['#14263f','#1e3a5c','#27507a'], g:['#bfe8c6','#1f3d33'], deco:'clouds', w:{ walk:.30, hop:.30, spin:.20, rest:.20 }, spd:1.0, hop:1.0, chase:.35, restMul:1, mark:'♪' },
-    sunset: { p:['#ffd1b8','#ffb7cf','#d9c2ff'], d:['#3a2342','#6b2f58','#a1475f'], g:['#eeb3b8','#4a2438'], deco:'sunset', w:{ walk:.35, hop:.10, spin:.10, rest:.45 }, spd:.7, hop:.8, chase:.25, restMul:1.4, mark:'♡' },
-    meadow: { p:['#d9f6e3','#c4efd3','#a9e3bd'], d:['#10302a','#14403a','#1b5246'], g:['#8fd3a4','#0f3a2c'], deco:'meadow', w:{ walk:.25, hop:.45, spin:.10, rest:.20 }, spd:1.0, hop:1.2, chase:.55, restMul:.8, mark:'♪' },
-    candy:  { p:['#ffe0ef','#ffd0e8','#e8d3ff'], d:['#35203f','#4a2a58','#6a3a73'], g:['#f7b8d6','#52305f'], deco:'petals', w:{ walk:.20, hop:.30, spin:.40, rest:.10 }, spd:1.1, hop:1.0, chase:.45, restMul:.7, mark:'♡' },
-    snow:   { p:['#e4f1ff','#f2f8ff','#ffffff'], d:['#1a2a44','#243a5a','#31507a'], g:['#dbe9f6','#9fb4cc'], deco:'snow', w:{ walk:.20, hop:.40, spin:.30, rest:.10 }, spd:1.25, hop:1.3, chase:.4, restMul:.6, mark:'✦' },
-    sea:    { p:['#c7f0ff','#9fe0f5','#7fd0ec'], d:['#08283f','#0d3b57','#12506f'], g:['#f6e4b5','#3a4a52'], deco:'sea', w:{ walk:.50, hop:.20, spin:.15, rest:.15 }, spd:1.05, hop:.9, chase:.3, restMul:1, mark:'♪' },
-    night:  { p:['#bcc8ff','#d6cfff','#ecd9ff'], d:['#0b1030','#1a1650','#2c1f6b'], g:['#c9c2f0','#1b1a3c'], deco:'night', w:{ walk:.25, hop:.10, spin:.05, rest:.60 }, spd:.6, hop:.7, chase:.2, restMul:1.7, mark:'z' },
-    aurora: { p:['#d8fff3','#d6e8ff','#ecd8ff'], d:['#06182a','#0a3a4a','#2a1a5a'], g:['#cfe9ee','#10283a'], deco:'aurora', w:{ walk:.30, hop:.30, spin:.30, rest:.10 }, spd:.95, hop:1.1, chase:.35, restMul:.9, mark:'✦' }
+    day:    { p:['#bfe6ff','#e3f5ff','#f7fcff'], d:['#14263f','#1e3a5c','#27507a'], g:['#bfe8c6','#1f3d33'], deco:'clouds', w:{ walk:.30, hop:.30, spin:.20, rest:.20 }, spd:1.0, hop:1.0, chase:.35, sp:1, restMul:1, mark:'♪' },
+    sunset: { p:['#ffd1b8','#ffb7cf','#d9c2ff'], d:['#3a2342','#6b2f58','#a1475f'], g:['#eeb3b8','#4a2438'], deco:'sunset', w:{ walk:.35, hop:.10, spin:.10, rest:.45 }, spd:.7, hop:.8, chase:.25, sp:1, restMul:1.4, mark:'♡' },
+    meadow: { p:['#d9f6e3','#c4efd3','#a9e3bd'], d:['#10302a','#14403a','#1b5246'], g:['#8fd3a4','#0f3a2c'], deco:'meadow', w:{ walk:.25, hop:.45, spin:.10, rest:.20 }, spd:1.0, hop:1.2, chase:.55, sp:1.6, restMul:.8, mark:'♪' },
+    candy:  { p:['#ffe0ef','#ffd0e8','#e8d3ff'], d:['#35203f','#4a2a58','#6a3a73'], g:['#f7b8d6','#52305f'], deco:'petals', w:{ walk:.20, hop:.30, spin:.40, rest:.10 }, spd:1.1, hop:1.0, chase:.45, sp:1.2, restMul:.7, mark:'♡' },
+    snow:   { p:['#e4f1ff','#f2f8ff','#ffffff'], d:['#1a2a44','#243a5a','#31507a'], g:['#dbe9f6','#9fb4cc'], deco:'snow', w:{ walk:.20, hop:.40, spin:.30, rest:.10 }, spd:1.25, hop:1.3, chase:.4, sp:.7, restMul:.6, mark:'✦' },
+    sea:    { p:['#c7f0ff','#9fe0f5','#7fd0ec'], d:['#08283f','#0d3b57','#12506f'], g:['#f6e4b5','#3a4a52'], deco:'sea', w:{ walk:.50, hop:.20, spin:.15, rest:.15 }, spd:1.05, hop:.9, chase:.3, sp:1, restMul:1, mark:'♪' },
+    night:  { p:['#bcc8ff','#d6cfff','#ecd9ff'], d:['#0b1030','#1a1650','#2c1f6b'], g:['#c9c2f0','#1b1a3c'], deco:'night', w:{ walk:.25, hop:.10, spin:.05, rest:.60 }, spd:.6, hop:.7, chase:.2, sp:.6, restMul:1.7, mark:'z' },
+    aurora: { p:['#d8fff3','#d6e8ff','#ecd8ff'], d:['#06182a','#0a3a4a','#2a1a5a'], g:['#cfe9ee','#10283a'], deco:'aurora', w:{ walk:.30, hop:.30, spin:.30, rest:.10 }, spd:.95, hop:1.1, chase:.35, sp:1, restMul:.9, mark:'✦' }
   };
   var SCENE_ORDER = ['day','sunset','meadow','candy','snow','sea','night','aurora'];
   var play = null;
@@ -40399,32 +40394,49 @@ var _RC = (function(){
     if(!ready()){ load(function(){ if(host.isConnected && !play) playStart(host, o); }); return false; }
     o = o || {};
     var cv = document.createElement('canvas'); cv.className = 'rc-play'; host.appendChild(cv);
-    var Wc = host.clientWidth || 160, Hc = host.clientHeight || 46, dpr = Math.min(2.5, window.devicePixelRatio || 1);
+    var Wc = host.clientWidth || 190, Hc = host.clientHeight || 70, dpr = Math.min(2, window.devicePixelRatio || 1);
     cv.width = Math.round(Wc * dpr); cv.height = Math.round(Hc * dpr);
     var ctx = cv.getContext('2d'); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
     var reduce = false; try{ reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(e){}
     var sn = o.scene || window._rcScene; if(!SCENES[sn]) sn = SCENE_ORDER[Math.floor(Math.random() * SCENE_ORDER.length)];
     var SC = SCENES[sn];
     var pool = ORDER.slice(), ids = [], n = o.count || (Math.random() < 0.5 ? 2 : 3);
-    if(o.ids){ ids = o.ids.slice(); } else { while(ids.length < n && pool.length){ ids.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]); } }
-    var gh = Math.max(6, Math.round(Hc * 0.16)), gy = Hc - gh + 2;      // 바닥 띠 높이 · 발 닿는 곳
+    var forced = o.ids || window._rcIds;
+    if(forced && forced.length){ ids = forced.slice(); } else { while(ids.length < n && pool.length){ ids.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]); } }
+    var gy = Hc - 7, FY = gy + 1;                      // 바닥 띠 시작 · 발 닿는 곳
+    var TARGET_H = 34;                                  // 캐릭터 키(px)
+    var KIND = { dolsom: 'dog', ppopu: 'dog', lovel: 'cat', dudung: 'mole', chaeng: 'tad', sul: 'eagle' };
+    var KM = { dog: { walk: 1, hop: 1, spin: 1, rest: 1 }, cat: { walk: 1.2, hop: .7, spin: .4, rest: 1.4 }, mole: { walk: 1.5, hop: .2, spin: 0, rest: .8 }, tad: { walk: .6, hop: 1.8, spin: .8, rest: .6 }, eagle: { walk: 1, hop: 0, spin: 0, rest: 1 } };
     var cs = ids.map(function(id){
-      var D = D3[id], bodyH = (D.base - 8) / 256 * D.cell + (D.lift || 0) * 0.6, k = Math.min(0.62, (Hc - 8) / bodyH);
-      var c = { id: id, D: D, k: k, w: D.cell * k, bodyH: bodyH * k, x: 0, dir: Math.random() < 0.5 ? -1 : 1, st: 'walk', tx: 0, until: 0, t0: 0, fr: Math.random() * 16, dirT: 0, y: 0 };
+      var D = D3[id], bodyH = (D.base - 8) / 256 * D.cell + (D.lift || 0) * 0.6, k = Math.min(0.62, TARGET_H / bodyH), kind = KIND[id] || 'dog';
+      var c = { id: id, kind: kind, km: KM[kind], D: D, k: k, w: D.cell * k, bodyH: bodyH * k, x: 0, dir: Math.random() < 0.5 ? -1 : 1, st: 'walk', tx: 0, until: 0, t0: 0, fr: Math.random() * 16, dirT: 0, y: 0, rot: 0, ang: 0, sq: 0, vis: 1, clip: false, useIntro: false, introIdx: 0, lastSp: -5, ph: Math.random() * 6.28 };
       c.x = rnd(c.w * 0.5, Math.max(c.w * 0.6, Wc - c.w * 0.5));
       c.spd = (D.fps / 16) * D.cell * k * (id === 'lovel' ? 0.9 : 1.0) * SC.spd;
       return c;
     });
-    // ★ 버벅임 줄이기: 캐릭터 16프레임을 '화면에 그릴 크기'로 한 번만 줄여 작은 아틀라스에 담아 두고, 프레임마다는 1:1 로 복사만 한다(매 프레임 256px→30px 축소 연산 없음).
-    //   배경 그라데이션·바닥은 한 번 그려 캐시(테마가 바뀔 때만 다시), 그리기는 30fps 로 제한한다.
-    var atlas = {};
-    cs.forEach(function(c){
+    var has = function(kind){ return cs.some(function(c){ return c.kind === kind; }); };
+    // 장식물(그 캐릭터가 있을 때만): 고양이 → 나무, 올챙이 → 웅덩이
+    var tree = null, pond = null, sideA = Math.random() < 0.5;
+    if(has('cat')) tree = { x: Wc * (sideA ? rnd(.22, .34) : rnd(.66, .78)), th: Math.min(Hc * 0.58, 42) };
+    if(has('tad')) pond = { x: Wc * (sideA ? rnd(.66, .78) : rnd(.22, .34)), rx: Math.min(26, Wc * 0.14) };
+    // ★ 버벅임 줄이기: 캐릭터 16프레임을 '그릴 크기'로 한 번만 줄여 작은 아틀라스에 담고, 프레임마다는 1:1 복사만 한다. 배경은 캐시, 그리기는 30fps.
+    var atlas = {}, atlasIn = {};
+    function mkAtlas(img, c){
       var sc0 = c.D.cell / 256 * c.k, fp = Math.max(8, Math.round(256 * sc0 * dpr)), a = document.createElement('canvas');
       a.width = fp * 4; a.height = fp * 4; var ac = a.getContext('2d'); ac.imageSmoothingEnabled = true; ac.imageSmoothingQuality = 'high';
-      var sh0 = sheets[c.id];
-      for(var fi = 0; fi < 16; fi++){ try{ ac.drawImage(sh0, (fi % 4) * 256, Math.floor(fi / 4) * 256, 256, 256, (fi % 4) * fp, Math.floor(fi / 4) * fp, fp, fp); }catch(eA){} }
-      atlas[c.id] = { cv: a, fp: fp };
-    });
+      for(var fi = 0; fi < 16; fi++){ try{ ac.drawImage(img, (fi % 4) * 256, Math.floor(fi / 4) * 256, 256, 256, (fi % 4) * fp, Math.floor(fi / 4) * fp, fp, fp); }catch(eA){} }
+      return { cv: a, fp: fp };
+    }
+    cs.forEach(function(c){ atlas[c.id] = mkAtlas(sheets[c.id], c); if(c.kind === 'mole' && sheetsIntro.dudung) atlasIn[c.id] = mkAtlas(sheetsIntro.dudung, c); });
+    // 가장자리로 갈수록 투명해지는 마스크(좌우·위) — 시트 배경과 자연스럽게 섞인다
+    var mask = document.createElement('canvas'); mask.width = cv.width; mask.height = cv.height;
+    (function(){
+      var mc = mask.getContext('2d'), im = mc.createImageData(mask.width, mask.height), d = im.data, px, py, fx, fy, a, e;
+      var sm = function(v){ v = Math.max(0, Math.min(1, v)); return v * v * (3 - 2 * v); };
+      for(py = 0; py < mask.height; py++){ fy = sm(py / dpr / (Hc * 0.5)); for(px = 0; px < mask.width; px++){ e = Math.min(px, mask.width - 1 - px) / dpr; fx = sm(e / (Wc * 0.2)); a = Math.round(fx * fy * 255); var q = (py * mask.width + px) * 4; d[q + 3] = a; } }
+      mc.putImageData(im, 0, 0);
+    })();
+    var lay = document.createElement('canvas'); lay.width = cv.width; lay.height = cv.height; var lx = lay.getContext('2d');
     var bgCache = { dark: null, sky: null, gnd: null };
     function bgLayers(dark){
       if(bgCache.dark === dark && bgCache.sky) return bgCache;
@@ -40439,58 +40451,165 @@ var _RC = (function(){
       bgCache.dark = dark; bgCache.sky = sky; bgCache.gnd = gnd; return bgCache;
     }
     // 배경 장식 입자(장면마다 필요한 만큼)
-    var parts = [], np = { snow: 16, petals: 9, night: 22, aurora: 10, sea: 6, meadow: 3, sunset: 3, clouds: 3 }[SC.deco] || 0;
+    var parts = [], np = { snow: 18, petals: 10, night: 24, aurora: 10, sea: 6, meadow: 3, sunset: 3, clouds: 3 }[SC.deco] || 0;
     for(var pi = 0; pi < np; pi++) parts.push({ x: Math.random(), y: Math.random(), s: rnd(0.6, 1.4), ph: Math.random() * 6.28, v: rnd(0.5, 1.2) });
-    var S = { cs: cs, t: 0, last: 0, raf: 0, ids: ids, W: Wc, H: Hc, scene: sn };
+    var S = { cs: cs, t: 0, last: 0, raf: 0, ids: ids, W: Wc, H: Hc, scene: sn, poops: [], pt: [], tree: tree, pond: pond, log: {} };
     host.setAttribute('data-play', ids.join(',')); host.setAttribute('data-scene', sn);
+    var PI = Math.PI, CLIMB_ROT = (window._rcClimb && window._rcClimb.rot != null) ? window._rcClimb.rot : -1.2, CLIMB_DX = (window._rcClimb && window._rcClimb.dx != null) ? window._rcClimb.dx : 3;
+    function ease(u){ return u < 0 ? 0 : u > 1 ? 1 : u * u * (3 - 2 * u); }
+    function clampX(c, x){ return Math.max(c.w * 0.45, Math.min(Wc - c.w * 0.45, x)); }
+    function go(c, st, dur, t){ c.st = st; c.t0 = t; c.until = t + (dur || 0); S.log[c.id + ':' + st] = (S.log[c.id + ':' + st] || 0) + 1; }
+    function spawn(type, x, y, cnt, t){
+      for(var i = 0; i < cnt; i++){
+        var a = type === 'splash' ? rnd(-PI * .95, -PI * .05) : rnd(-PI * .85, -PI * .15), sp = type === 'splash' ? rnd(18, 42) : rnd(14, 34);
+        S.pt.push({ type: type, x: x + rnd(-2, 2), y: y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, age: 0, life: rnd(.45, .85) });
+      }
+      if(S.pt.length > 60) S.pt.splice(0, S.pt.length - 60);
+    }
     function target(c){
       var other = cs[Math.floor(Math.random() * cs.length)];
-      if(other !== c && Math.random() < SC.chase){ c.chase = true; return Math.max(c.w * 0.4, Math.min(Wc - c.w * 0.4, other.x + rnd(-0.8, 0.8) * c.w)); }   // 친구에게 다가간다
+      if(other !== c && other.vis && Math.random() < SC.chase){ c.chase = true; return clampX(c, other.x + rnd(-0.8, 0.8) * c.w); }   // 친구에게 다가간다
       c.chase = false; return rnd(c.w * 0.45, Math.max(c.w * 0.5, Wc - c.w * 0.45));
     }
-    function nextAct(c, t){
-      var r = Math.random(), w = SC.w, tot = w.hop + w.spin + w.rest + w.walk; r *= tot;
+    function generic(c, t){
+      var w = SC.w, km = c.km, wh = w.hop * km.hop, ws = w.spin * km.spin, wr = w.rest * km.rest, ww = w.walk * km.walk, tot = wh + ws + wr + ww, r = Math.random() * tot;
       c.t0 = t;
-      if(c.chase || r < w.hop){ c.st = 'hop'; c.until = t + rnd(1.1, 2.2); }
-      else if(r < w.hop + w.spin){ c.st = 'spin'; c.until = t + rnd(1.0, 1.8); c.dirT = t; }
-      else if(r < w.hop + w.spin + w.rest){ c.st = 'rest'; c.until = t + rnd(0.9, 2.0) * SC.restMul; }
+      if((c.chase && km.hop > 0) || r < wh){ go(c, 'hop', rnd(1.1, 2.2), t); }
+      else if(r < wh + ws){ go(c, 'spin', rnd(1.0, 1.8), t); c.dirT = t; }
+      else if(r < wh + ws + wr){ go(c, 'rest', rnd(0.9, 2.0) * SC.restMul, t); }
       else { c.st = 'walk'; c.tx = target(c); }
     }
-    cs.forEach(function(c){ c.tx = target(c); });
+    // 캐릭터마다 자기만의 놀이 — 도착할 때마다 '특별한 행동'을 먼저 고려하고, 아니면 공통 행동(걷기·콩콩·빙글·쉬기)
+    function decide(c, t){
+      var k = c.kind;
+      if(k === 'dog'){
+        if(t - c.lastSp > 8 && Math.random() < 0.26 * SC.sp){ go(c, 'poop', 2.6, t); c.pooped = false; return; }
+        if(Math.random() < 0.2){ go(c, 'sniff', rnd(1.4, 2.4), t); return; }
+      } else if(k === 'cat'){
+        if(tree && t - c.lastSp > 6 && Math.random() < 0.4 * SC.sp){
+          c.side = c.x < tree.x ? 1 : -1; c.tx = clampX(c, tree.x - c.side * c.w * 0.5); go(c, 'toTree', 0, t); return;
+        }
+      } else if(k === 'mole'){
+        if(t >= c.digAt){ c.dir = c.dir || 1; go(c, 'dig', 1.3, t); return; }
+      } else if(k === 'tad'){
+        if(pond && t >= c.landUntil){ c.side = c.x < pond.x ? -1 : 1; c.tx = clampX(c, pond.x + c.side * pond.rx * 0.95); go(c, 'toPond', 0, t); return; }
+      } else if(k === 'eagle'){
+        if(t >= c.groundUntil){ c.alt = rnd(14, 24); c.dir = c.x < Wc / 2 ? 1 : -1; go(c, 'takeoff', 0.9, t); return; }
+      }
+      generic(c, t);
+    }
+    // 시작 상태
+    cs.forEach(function(c){
+      c.tx = target(c);
+      if(c.kind === 'mole'){ c.digAt = 1e9; c.vis = 0; go(c, 'hidden', 0.5, 0); c.tx = c.x; }
+      else if(c.kind === 'tad' && pond){ c.landUntil = 1e9; c.x = pond.x; go(c, 'swim', rnd(1.2, 2.2), 0); }
+      else if(c.kind === 'eagle'){ c.alt = rnd(14, 24); c.legs = 2; go(c, 'fly', 0, 0); }
+    });
+    function moveToward(c, dt, mul){
+      var dx = c.tx - c.x;
+      if(Math.abs(dx) < 3) return true;
+      c.dir = dx > 0 ? 1 : -1; c.x += c.dir * Math.min(Math.abs(dx), c.spd * (mul || 1) * dt); return false;
+    }
     function step(dt){
-      var t = S.t;
+      var t = S.t, i;
       cs.forEach(function(c){
-        var D = c.D;
-        if(c.st === 'walk'){
-          var dx = c.tx - c.x;
-          if(Math.abs(dx) < 3){ nextAct(c, t); }
-          else { c.dir = dx > 0 ? 1 : -1; c.x += c.dir * Math.min(Math.abs(dx), c.spd * dt); c.fr += dt * D.fps * SC.spd; c.y = 0; }
-        } else if(c.st === 'hop'){
-          c.fr += dt * D.fps * 0.7; c.y = -Math.abs(Math.sin((t - c.t0) * 7.5)) * Math.min(11, Hc * 0.2) * SC.hop;
+        var D = c.D, u = c.until > c.t0 ? (t - c.t0) / (c.until - c.t0) : 0, st = c.st;
+        c.clip = false; c.ang = c.ang * 0.0; c.rot = 0; c.sq = 0; c.vis = 1; c.useIntro = false;
+        if(st === 'walk'){
+          var slow = c.kind === 'eagle' ? 0.5 : 1;
+          if(moveToward(c, dt, slow)) decide(c, t); else { c.fr += dt * D.fps * SC.spd * (c.kind === 'eagle' ? 0.35 : 1); }
+          c.y = 0;
+        } else if(st === 'hop'){
+          c.fr += dt * D.fps * 0.7; c.y = -Math.abs(Math.sin((t - c.t0) * 7.5)) * Math.min(11, Hc * 0.18) * SC.hop;
           if(t >= c.until){ c.y = 0; c.st = 'walk'; c.tx = target(c); }
-        } else if(c.st === 'spin'){
+        } else if(st === 'spin'){
           c.fr += dt * D.fps * 0.45; c.y = 0;
           if(t - c.dirT > 0.42){ c.dir = -c.dir; c.dirT = t; }
           if(t >= c.until){ c.st = 'walk'; c.tx = target(c); }
-        } else {   // rest
+        } else if(st === 'rest'){
           c.fr += dt * D.fps * 0.22; c.y = 0;
           if(t >= c.until){ c.st = 'walk'; c.tx = target(c); }
+        } else if(st === 'sniff'){            // 강아지: 코를 땅에 대고 킁킁
+          c.x = clampX(c, c.x + c.dir * c.spd * 0.28 * dt); c.fr += dt * D.fps * 0.42; c.ang = 0.14 + Math.sin(t * 14) * 0.03; c.y = 0;
+          if(t >= c.until){ c.st = 'walk'; c.tx = target(c); }
+        } else if(st === 'poop'){             // 강아지: 멈춰서 쭈그리고 응가
+          c.y = 0; c.fr = 4;
+          c.sq = (u > 0.14 && u < 0.78) ? 0.2 + Math.sin(u * 60) * 0.02 : 0;
+          c.jit = (u > 0.14 && u < 0.78) ? Math.sin(t * 50) * 0.5 : 0;
+          if(u > 0.58 && !c.pooped){ c.pooped = true; S.poops.push({ x: c.x - c.dir * c.w * 0.3, born: t }); if(S.poops.length > 3) S.poops.shift(); spawn('star', c.x - c.dir * c.w * 0.3, FY - 3, 4, t); }
+          if(t >= c.until){ c.lastSp = t; go(c, 'hop', 0.9, t); }
+        } else if(st === 'toTree'){           // 고양이: 나무 쪽으로 걸어간다
+          c.dir = c.side; if(moveToward(c, dt, 1)){ c.dir = c.side; var ty0 = tree.th * 0.55; c.ty = ty0; go(c, 'climb', ty0 / 20, t); } else c.fr += dt * D.fps; c.y = 0;
+        } else if(st === 'climb'){            // 나무를 타고 오른다(몸을 세워서)
+          c.rot = CLIMB_ROT; c.x = tree.x - c.dir * CLIMB_DX; c.y = -c.ty * ease(u); c.fr += dt * D.fps * 0.9;
+          if(t >= c.until) go(c, 'perch', rnd(2.4, 3.8), t);
+        } else if(st === 'perch'){            // 가지 위에 앉아 쉰다
+          c.x = tree.x + c.dir * 9; c.y = -c.ty; c.fr = 3;
+          if(t >= c.until){ if(Math.random() < 0.5){ c.lx1 = clampX(c, tree.x + c.dir * rnd(24, 42)); go(c, 'leap', 0.75, t); } else go(c, 'down', c.ty / 22, t); }
+        } else if(st === 'down'){             // 뒷걸음으로 내려온다
+          c.rot = CLIMB_ROT; c.x = tree.x - c.dir * CLIMB_DX; c.y = -c.ty * (1 - ease(u)); c.fr -= dt * D.fps * 0.9;
+          if(t >= c.until){ c.x = tree.x - c.dir * c.w * 0.5; c.y = 0; c.lastSp = t; c.st = 'walk'; c.tx = target(c); }
+        } else if(st === 'leap'){             // 훌쩍 뛰어내린다
+          var lx0 = tree.x + c.dir * 9; c.x = lx0 + (c.lx1 - lx0) * u; c.y = -c.ty * (1 - u) * (1 - u) - Math.sin(PI * u) * 9; c.ang = (u - 0.35) * 0.9; c.fr = 8;
+          if(t >= c.until){ c.y = 0; c.lastSp = t; go(c, 'hop', 0.8, t); }
+        } else if(st === 'hidden'){           // 두더지: 땅속에서 흙두둑만 움직인다
+          c.vis = 0; c.y = 0;
+          var dxh = c.tx - c.x; if(Math.abs(dxh) > 2) c.x += (dxh > 0 ? 1 : -1) * Math.min(Math.abs(dxh), 46 * dt);
+          if(Math.random() < dt * 6) spawn('dirt', c.x, FY - 2, 1, t);
+          if(t >= c.until){ go(c, 'emerge', 1.0, t); c.digAt = t + 1 + rnd(3.6, 6); }
+        } else if(st === 'emerge'){           // 땅을 뚫고 솟는다(3D 시트의 솟아나는 장면)
+          c.useIntro = true; c.introIdx = Math.min(D.intro - 1, Math.floor(u * D.intro)); c.y = 0;
+          if(t >= c.until){ c.useIntro = false; c.st = 'walk'; c.tx = target(c); }
+        } else if(st === 'dig'){              // 삽질: 몸을 들썩이며 흙을 튀긴다
+          c.fr = 2; c.y = 0; c.ang = Math.sin(u * 20) * 0.13;
+          if(Math.random() < dt * 22) spawn('dirt', c.x + c.dir * c.w * 0.3, FY - 3, 1, t);
+          if(t >= c.until) go(c, 'sink', 1.0, t);
+        } else if(st === 'sink'){             // 구멍으로 쏙 들어간다(솟는 장면을 거꾸로)
+          c.useIntro = true; c.introIdx = Math.max(0, D.intro - 1 - Math.floor(u * D.intro)); c.y = 0;
+          if(t >= c.until){ c.useIntro = false; c.vis = 0; c.tx = rnd(c.w * 0.5, Wc - c.w * 0.5); go(c, 'hidden', rnd(1.0, 1.9), t); }
+        } else if(st === 'swim'){             // 올챙이: 웅덩이에서 헤엄
+          c.x = pond.x + Math.sin((t - c.t0) * 2.2 + c.ph) * pond.rx * 0.5; c.dir = Math.cos((t - c.t0) * 2.2 + c.ph) > 0 ? 1 : -1;
+          c.fr += dt * D.fps; c.y = c.bodyH * 0.36; c.clip = true;
+          if(t >= c.until){ c.side = Math.random() < 0.5 ? -1 : 1; var lt = pond.x + c.side * (pond.rx + rnd(16, 46)); if(lt < c.w * 0.5 || lt > Wc - c.w * 0.5) c.side = -c.side; c.jx0 = c.x; c.jx1 = clampX(c, pond.x + c.side * (pond.rx + rnd(16, 46))); c.dir = c.side; go(c, 'jumpOut', 0.95, t); spawn('splash', c.x, FY, 7, t); }
+        } else if(st === 'jumpOut'){          // 물에서 펄쩍 뛰어나온다
+          c.x = c.jx0 + (c.jx1 - c.jx0) * u; c.y = -Math.sin(PI * u) * 28 + c.bodyH * 0.36 * Math.max(0, 1 - u * 5); c.clip = c.y > 0.5; c.ang = c.dir * (u - 0.5) * 0.9; c.fr += dt * D.fps * 1.2;
+          if(t >= c.until){ c.y = 0; c.landUntil = t + rnd(3.6, 5.6); c.st = 'walk'; c.tx = target(c); }
+        } else if(st === 'toPond'){           // 웅덩이 가장자리로 걸어간다
+          if(moveToward(c, dt, 1)){ c.jx0 = c.x; c.jx1 = pond.x + rnd(-0.3, 0.3) * pond.rx; c.dir = c.side > 0 ? -1 : 1; go(c, 'jumpIn', 0.8, t); } else c.fr += dt * D.fps; c.y = 0;
+        } else if(st === 'jumpIn'){           // 다시 물로 풍덩
+          c.x = c.jx0 + (c.jx1 - c.jx0) * u; c.y = -Math.sin(PI * u) * 22 + c.bodyH * 0.36 * Math.max(0, (u - 0.8) * 5); c.clip = c.y > 0.5; c.ang = c.dir * (u - 0.5) * 0.9; c.fr += dt * D.fps * 1.2;
+          if(t >= c.until){ spawn('splash', c.x, FY, 7, t); c.landUntil = 1e9; go(c, 'swim', rnd(1.6, 2.6), t); }
+        } else if(st === 'fly'){              // 독수리: 하늘을 날아다닌다
+          if(!c.tx || Math.abs(c.tx - c.x) < 3){
+            if(c.legs-- <= 0){ c.landX = clampX(c, c.x); go(c, 'land', 1.0, t); c.y = -c.alt; return; }
+            c.tx = rnd(c.w * 0.5, Wc - c.w * 0.5);
+          }
+          c.dir = c.tx > c.x ? 1 : -1; c.x += c.dir * Math.min(Math.abs(c.tx - c.x), c.spd * 1.7 * dt); c.fr += dt * D.fps; c.y = -c.alt + Math.sin(t * 3 + c.ph) * 2.2;
+        } else if(st === 'land'){             // 땅으로 내려앉는다
+          c.y = -c.alt * (1 - ease(u)); c.fr += dt * D.fps * (1 - 0.6 * u); c.ang = -0.18 * (1 - u);
+          if(t >= c.until){ c.y = 0; c.groundUntil = t + rnd(3, 5.5); c.st = 'walk'; c.tx = target(c); }
+        } else if(st === 'takeoff'){          // 다시 날아오른다
+          c.y = -c.alt * (1 - Math.pow(1 - ease(u), 2)); c.x = clampX(c, c.x + c.dir * 18 * dt); c.fr += dt * D.fps * 1.2; c.ang = 0.12 * (1 - u);
+          if(t >= c.until){ c.legs = 1 + Math.floor(Math.random() * 2); c.tx = 0; go(c, 'fly', 0, t); }
         }
+        c.ang = c.ang || 0;
       });
+      for(i = S.pt.length - 1; i >= 0; i--){ var p = S.pt[i]; p.age += dt; p.vy += 95 * dt; p.x += p.vx * dt; p.y += p.vy * dt; if(p.age > p.life) S.pt.splice(i, 1); }
+      for(i = S.poops.length - 1; i >= 0; i--) if(t - S.poops[i].born > 8) S.poops.splice(i, 1);
     }
     function cloud(x, y, r, a){ ctx.fillStyle = 'rgba(255,255,255,' + a + ')'; ctx.beginPath(); ctx.ellipse(x, y, r * 1.5, r * 0.62, 0, 0, PI2); ctx.ellipse(x - r * 0.7, y + r * 0.1, r * 0.8, r * 0.5, 0, 0, PI2); ctx.ellipse(x + r * 0.75, y + r * 0.12, r * 0.85, r * 0.5, 0, 0, PI2); ctx.fill(); }
     function deco(dark, t){
       var d = SC.deco, i, q, x, y;
       if(d === 'clouds'){
-        if(!dark){ ctx.fillStyle = 'rgba(255,226,140,.9)'; ctx.beginPath(); ctx.arc(Wc - 16, 13, 7, 0, PI2); ctx.fill(); ctx.fillStyle = 'rgba(255,226,140,.3)'; ctx.beginPath(); ctx.arc(Wc - 16, 13, 12, 0, PI2); ctx.fill(); }
-        else { ctx.fillStyle = 'rgba(255,244,200,.85)'; ctx.beginPath(); ctx.arc(Wc - 16, 13, 6, 0, PI2); ctx.fill(); ctx.fillStyle = 'rgba(14,32,60,.9)'; ctx.beginPath(); ctx.arc(Wc - 13.5, 11.5, 5.4, 0, PI2); ctx.fill(); }
-        for(i = 0; i < parts.length; i++){ q = parts[i]; x = ((q.x * (Wc + 60) + t * 5 * q.v) % (Wc + 60)) - 30; cloud(x, 8 + q.y * (Hc * 0.28), 6 + q.s * 3, dark ? 0.16 : 0.9); }
+        if(!dark){ ctx.fillStyle = 'rgba(255,226,140,.9)'; ctx.beginPath(); ctx.arc(Wc * 0.8, 28, 7, 0, PI2); ctx.fill(); ctx.fillStyle = 'rgba(255,226,140,.3)'; ctx.beginPath(); ctx.arc(Wc * 0.8, 28, 12, 0, PI2); ctx.fill(); }
+        else { ctx.fillStyle = 'rgba(255,244,200,.85)'; ctx.beginPath(); ctx.arc(Wc * 0.8, 28, 6, 0, PI2); ctx.fill(); ctx.fillStyle = 'rgba(14,32,60,.9)'; ctx.beginPath(); ctx.arc(Wc * 0.8 + 2.5, 26.5, 5.4, 0, PI2); ctx.fill(); }
+        for(i = 0; i < parts.length; i++){ q = parts[i]; x = ((q.x * (Wc + 60) + t * 5 * q.v) % (Wc + 60)) - 30; cloud(x, 20 + q.y * (Hc * 0.3), 6 + q.s * 3, dark ? 0.16 : 0.9); }
       } else if(d === 'sunset'){
-        ctx.fillStyle = dark ? 'rgba(255,170,120,.5)' : 'rgba(255,238,190,.95)'; ctx.beginPath(); ctx.arc(Wc * 0.78, gy, Hc * 0.42, Math.PI, 0); ctx.fill();
+        ctx.fillStyle = dark ? 'rgba(255,170,120,.5)' : 'rgba(255,238,190,.95)'; ctx.beginPath(); ctx.arc(Wc * 0.78, gy, Hc * 0.3, Math.PI, 0); ctx.fill();
         ctx.strokeStyle = dark ? 'rgba(255,230,210,.7)' : 'rgba(120,80,110,.55)'; ctx.lineWidth = 1.2;
-        for(i = 0; i < parts.length; i++){ q = parts[i]; x = ((q.x * (Wc + 40) + t * 14 * q.v) % (Wc + 40)) - 20; y = 7 + q.y * 9 + Math.sin(t * 2 + q.ph) * 2; var f = Math.sin(t * 7 + q.ph) * 2.2; ctx.beginPath(); ctx.moveTo(x - 4, y + f); ctx.quadraticCurveTo(x - 1.5, y - 2, x, y); ctx.quadraticCurveTo(x + 1.5, y - 2, x + 4, y + f); ctx.stroke(); }
+        for(i = 0; i < parts.length; i++){ q = parts[i]; x = ((q.x * (Wc + 40) + t * 14 * q.v) % (Wc + 40)) - 20; y = 24 + q.y * 14 + Math.sin(t * 2 + q.ph) * 2; var f = Math.sin(t * 7 + q.ph) * 2.2; ctx.beginPath(); ctx.moveTo(x - 4, y + f); ctx.quadraticCurveTo(x - 1.5, y - 2, x, y); ctx.quadraticCurveTo(x + 1.5, y - 2, x + 4, y + f); ctx.stroke(); }
       } else if(d === 'meadow'){
-        for(i = 0; i < parts.length; i++){ q = parts[i]; x = ((q.x * Wc + Math.sin(t * 0.8 * q.v + q.ph) * 26) + Wc) % Wc; y = 8 + q.y * Hc * 0.3 + Math.sin(t * 2.2 + q.ph) * 4; var wing = Math.abs(Math.sin(t * 9 + q.ph)) * 3 + 0.8;
+        for(i = 0; i < parts.length; i++){ q = parts[i]; x = ((q.x * Wc + Math.sin(t * 0.8 * q.v + q.ph) * 26) + Wc) % Wc; y = 22 + q.y * Hc * 0.4 + Math.sin(t * 2.2 + q.ph) * 4; var wing = Math.abs(Math.sin(t * 9 + q.ph)) * 3 + 0.8;
           ctx.fillStyle = i % 2 ? (dark ? '#ffd27a' : '#ff9bb8') : (dark ? '#9fd8ff' : '#ffc46b'); ctx.beginPath(); ctx.ellipse(x - 2, y, wing, 2.2, -0.5, 0, PI2); ctx.ellipse(x + 2, y, wing, 2.2, 0.5, 0, PI2); ctx.fill(); }
       } else if(d === 'petals'){
         for(i = 0; i < parts.length; i++){ q = parts[i]; y = ((q.y * Hc + t * 9 * q.v) % (Hc + 8)) - 4; x = (q.x * Wc + Math.sin(t * 1.3 + q.ph) * 8 + Wc) % Wc;
@@ -40505,7 +40624,7 @@ var _RC = (function(){
         for(i = 0; i < parts.length; i++){ q = parts[i]; y = Hc - ((q.y * Hc + t * 8 * q.v) % Hc); x = q.x * Wc + Math.sin(t * 2 + q.ph) * 2; ctx.beginPath(); ctx.arc(x, y, 1 + q.s * 0.7, 0, PI2); ctx.fill(); }
       } else if(d === 'night'){
         for(i = 0; i < parts.length; i++){ q = parts[i]; var tw = 0.45 + 0.55 * Math.abs(Math.sin(t * q.v * 1.6 + q.ph)); ctx.fillStyle = dark ? 'rgba(255,255,235,' + tw.toFixed(2) + ')' : 'rgba(255,255,255,' + (tw * 0.95).toFixed(2) + ')'; ctx.beginPath(); ctx.arc(q.x * Wc, 3 + q.y * (Hc * 0.62), 0.7 + q.s * 0.45, 0, PI2); ctx.fill(); }
-        var mx = Wc - 18; ctx.fillStyle = dark ? '#fff3c4' : '#fffbe6'; ctx.beginPath(); ctx.arc(mx, 14, 7, 0, PI2); ctx.fill(); ctx.fillStyle = dark ? '#1a1650' : '#d6cfff'; ctx.beginPath(); ctx.arc(mx + 3, 12, 6.2, 0, PI2); ctx.fill();
+        var mx = Wc * 0.8; ctx.fillStyle = dark ? '#fff3c4' : '#fffbe6'; ctx.beginPath(); ctx.arc(mx, 28, 7, 0, PI2); ctx.fill(); ctx.fillStyle = dark ? '#1a1650' : '#d6cfff'; ctx.beginPath(); ctx.arc(mx + 3, 26, 6.2, 0, PI2); ctx.fill();
         var sp = (t % 9) / 1.4; if(sp < 1){ ctx.strokeStyle = 'rgba(255,255,255,' + (1 - sp).toFixed(2) + ')'; ctx.lineWidth = 1.3; ctx.beginPath(); ctx.moveTo(Wc * 0.2 + sp * Wc * 0.4, 4 + sp * 14); ctx.lineTo(Wc * 0.2 + sp * Wc * 0.4 - 10, 4 + sp * 14 - 5); ctx.stroke(); }
       } else if(d === 'aurora'){
         var cols = dark ? ['rgba(80,255,190,.28)', 'rgba(120,160,255,.26)', 'rgba(220,120,255,.22)'] : ['rgba(90,220,180,.3)', 'rgba(130,170,255,.28)', 'rgba(230,140,255,.25)'];
@@ -40515,27 +40634,86 @@ var _RC = (function(){
         for(i = 0; i < parts.length; i++){ q = parts[i]; var tw2 = 0.4 + 0.6 * Math.abs(Math.sin(t * q.v + q.ph)); ctx.fillStyle = dark ? 'rgba(255,255,255,' + tw2.toFixed(2) + ')' : 'rgba(255,255,255,' + (tw2 * 0.9).toFixed(2) + ')'; ctx.beginPath(); ctx.arc(q.x * Wc, 4 + q.y * Hc * 0.5, 0.8, 0, PI2); ctx.fill(); }
       }
     }
+    function treeCols(dark){
+      var d = SC.deco, trunk = dark ? '#6b4f3a' : '#9a7352', cc;
+      if(d === 'snow') cc = dark ? '#9bb4d0' : '#e6f1ff';
+      else if(d === 'petals' || d === 'sunset') cc = dark ? '#a85a86' : '#ffb3d1';
+      else if(d === 'night' || d === 'aurora') cc = dark ? '#2b3f7a' : '#8da0e8';
+      else if(d === 'sea') cc = dark ? '#2f8a62' : '#5fc98a';
+      else cc = dark ? '#2f7a55' : '#7fd68f';
+      return { trunk: trunk, can: cc };
+    }
+    function drawTree(dark){
+      var tc = treeCols(dark), x = tree.x, th = tree.th, ty = th * 0.55;
+      ctx.fillStyle = tc.trunk; ctx.fillRect(x - 2.2, FY - th, 4.4, th + 1);
+      ctx.strokeStyle = tc.trunk; ctx.lineWidth = 2.4; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(x, FY - ty + 3); ctx.lineTo(x - 11, FY - ty - 3); ctx.moveTo(x, FY - ty + 3); ctx.lineTo(x + 11, FY - ty - 3); ctx.stroke();   // 쉬어 가는 가지
+      ctx.fillStyle = tc.can;
+      if(SC.deco === 'sea'){ ctx.strokeStyle = tc.can; ctx.lineWidth = 3; ctx.lineCap = 'round'; for(var f = -2; f <= 2; f++){ ctx.beginPath(); ctx.moveTo(x, FY - th); ctx.quadraticCurveTo(x + f * 8, FY - th - 9 + Math.abs(f) * 1.5, x + f * 12, FY - th + 3 + Math.abs(f) * 2); ctx.stroke(); } }
+      else { ctx.beginPath(); ctx.arc(x, FY - th - 4, 11, 0, PI2); ctx.arc(x - 9, FY - th + 3, 8, 0, PI2); ctx.arc(x + 9, FY - th + 3, 8, 0, PI2); ctx.fill(); }
+    }
+    function drawPond(dark, t){
+      var x = pond.x, rx = pond.rx;
+      ctx.fillStyle = dark ? '#245f8c' : '#6fc2ee'; ctx.beginPath(); ctx.ellipse(x, FY + 1.2, rx, 4.4, 0, 0, PI2); ctx.fill();
+      ctx.strokeStyle = dark ? 'rgba(170,220,255,.55)' : 'rgba(255,255,255,.85)'; ctx.lineWidth = 1;
+      for(var i = 0; i < 2; i++){ var ph = ((t * 0.5 + i * 0.5) % 1); ctx.beginPath(); ctx.ellipse(x + (i ? rx * 0.3 : -rx * 0.35), FY + 1.2, rx * 0.3 * ph + 2, 1.6 * ph + 0.4, 0, 0, PI2); ctx.globalAlpha = 1 - ph; ctx.stroke(); ctx.globalAlpha = 1; }
+    }
+    function drawPoop(p, t, dark){
+      var age = t - p.born, al = age > 6.4 ? Math.max(0, (8 - age) / 1.6) : 1, sc0 = age < 0.2 ? age / 0.2 : 1;
+      ctx.save(); ctx.globalAlpha = al; ctx.translate(p.x, FY); ctx.scale(sc0, sc0);
+      ctx.fillStyle = '#7d4f26'; ctx.beginPath(); ctx.ellipse(0, -1.4, 4.4, 2.4, 0, 0, PI2); ctx.fill();
+      ctx.fillStyle = '#8f5d2d'; ctx.beginPath(); ctx.ellipse(0.2, -3.6, 3.3, 2, 0, 0, PI2); ctx.fill();
+      ctx.fillStyle = '#a56d37'; ctx.beginPath(); ctx.moveTo(-1.6, -4.8); ctx.quadraticCurveTo(0.4, -9, 1.6, -5.2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,.45)'; ctx.beginPath(); ctx.ellipse(-1.4, -3.9, 0.9, 0.5, -0.4, 0, PI2); ctx.fill();
+      if(age < 3){ ctx.strokeStyle = dark ? 'rgba(220,230,200,.55)' : 'rgba(120,130,90,.5)'; ctx.lineWidth = 0.9; ctx.globalAlpha = al * (1 - age / 3) * 0.8; for(var q = -1; q <= 1; q += 2){ ctx.beginPath(); ctx.moveTo(q * 2, -9); ctx.quadraticCurveTo(q * 2 + 2, -12 + Math.sin(t * 5 + q) , q * 2 - 1, -15); ctx.stroke(); } }
+      ctx.restore();
+    }
+    function drawParticles(dark){
+      S.pt.forEach(function(p){
+        var a = 1 - p.age / p.life; ctx.globalAlpha = Math.max(0, a);
+        ctx.fillStyle = p.type === 'splash' ? (dark ? '#9bd4ff' : '#4fb0ea') : p.type === 'star' ? '#ffe58a' : (dark ? '#8a6240' : '#7a5230');
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.type === 'star' ? 1.5 : 1.3, 0, PI2); ctx.fill();
+      });
+      ctx.globalAlpha = 1;
+    }
     function draw(){
-      var dark = isDarkTheme(), t = S.t, L = bgLayers(dark);
+      var dark = isDarkTheme(), t = S.t, L = bgLayers(dark), i;
+      // ① 배경(하늘·장식·바닥·나무·웅덩이)을 따로 그려 가장자리를 투명하게 → ② 캐릭터는 그 위에
+      lx.setTransform(dpr, 0, 0, dpr, 0, 0); lx.globalCompositeOperation = 'source-over'; lx.clearRect(0, 0, Wc, Hc);
+      var main = ctx; ctx = lx;
+      ctx.drawImage(L.sky, 0, 0, Wc, Hc); deco(dark, t); ctx.drawImage(L.gnd, 0, 0, Wc, Hc);
+      if(pond) drawPond(dark, t);
+      if(tree) drawTree(dark);
+      S.poops.forEach(function(p){ drawPoop(p, t, dark); });
+      cs.forEach(function(c){ if(c.kind === 'mole' && c.st === 'hidden'){ var wob = Math.sin(t * 9) * 0.6; ctx.fillStyle = dark ? '#6b4a33' : '#8a5f3d'; ctx.beginPath(); ctx.ellipse(c.x, FY, 8, 3.4 + wob * 0.3, 0, PI, 0); ctx.fill(); ctx.fillStyle = dark ? '#7d5a40' : '#a2744c'; ctx.beginPath(); ctx.ellipse(c.x - 2, FY - 0.6, 3, 1.4, 0, PI, 0); ctx.fill(); } });
+      ctx.globalCompositeOperation = 'destination-in'; ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(mask, 0, 0); ctx.globalCompositeOperation = 'source-over'; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx = main;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, Wc, Hc);
-      ctx.drawImage(L.sky, 0, 0, Wc, Hc);
-      deco(dark, t);
-      ctx.drawImage(L.gnd, 0, 0, Wc, Hc);
+      ctx.drawImage(lay, 0, 0, Wc, Hc);
       cs.slice().sort(function(a, b){ return a.k - b.k; }).forEach(function(c){
-        var D = c.D, sc = D.cell / 256 * c.k, idx = ((Math.floor(c.fr) % D.n) + D.n) % D.n, at = atlas[c.id];
+        if(!c.vis) return;
+        var D = c.D, sc = D.cell / 256 * c.k, at = c.useIntro && atlasIn[c.id] ? atlasIn[c.id] : atlas[c.id];
         if(!at) return;
-        var lift = (D.lift || 0) * c.k * 0.6;
-        ctx.fillStyle = 'rgba(0,0,0,' + (D.sh * 0.5 * Math.max(0.35, 1 + c.y / 22)).toFixed(3) + ')';                      // 그림자(뛰면 작아진다)
-        ctx.beginPath(); ctx.ellipse(c.x, gy + 2, c.w * 0.2 * Math.max(0.55, 1 + c.y / 30), 2.6, 0, 0, PI2); ctx.fill();
-        ctx.save(); ctx.translate(c.x, gy + 2 + c.y - lift);
-        if(c.dir < 0) ctx.scale(-1, 1);
+        var idx = c.useIntro ? c.introIdx : ((Math.floor(c.fr) % D.n) + D.n) % D.n;
+        var lift = c.kind === 'eagle' ? 0 : (D.lift || 0) * c.k * 0.6, high = Math.max(0, -c.y);
+        if(!c.clip){                                                                                                     // 그림자(높이 뜨면 작고 옅게)
+          ctx.fillStyle = 'rgba(0,0,0,' + (D.sh * 0.5 * Math.max(0.2, 1 - high / 40)).toFixed(3) + ')';
+          ctx.beginPath(); ctx.ellipse(c.x, FY + 1, c.w * 0.2 * Math.max(0.45, 1 - high / 60), 2.6, 0, 0, PI2); ctx.fill();
+        }
+        ctx.save();
+        if(c.clip){ ctx.beginPath(); ctx.rect(0, 0, Wc, FY + 1.5); ctx.clip(); }
+        ctx.translate(c.x + (c.jit || 0), FY + 1 + c.y - lift);
+        ctx.scale(c.dir < 0 ? -1 : 1, 1);
+        if(c.rot) ctx.rotate(c.rot); else if(c.ang) ctx.rotate(c.ang);
+        if(c.sq) ctx.scale(1 + c.sq * 0.35, 1 - c.sq);
         try{ ctx.drawImage(at.cv, (idx % 4) * at.fp, Math.floor(idx / 4) * at.fp, at.fp, at.fp, -D.ox * sc, -D.base * sc, 256 * sc, 256 * sc); }catch(eD){}
         ctx.restore();
-        if(c.st === 'rest'){                                                                                              // 쉬는 중: 머리 위로 표시가 떠오른다
+        if(c.st === 'rest' || c.st === 'perch'){                                                                         // 쉬는 중: 머리 위로 표시가 떠오른다
           var ph = ((t - c.t0) * 0.9) % 1; ctx.globalAlpha = Math.max(0, 1 - ph); ctx.fillStyle = dark ? '#fff6d8' : '#6b6fa8'; ctx.font = '700 ' + Math.round(8 + ph * 3) + 'px sans-serif'; ctx.textAlign = 'center';
-          ctx.fillText(SC.mark, c.x + c.w * 0.22, gy - c.bodyH * 0.95 - ph * 9); ctx.globalAlpha = 1;
+          ctx.fillText(SC.mark, c.x + c.w * 0.22, FY + c.y - c.bodyH * 0.95 - ph * 9); ctx.globalAlpha = 1;
         }
       });
+      if(pond){ ctx.fillStyle = dark ? 'rgba(36,95,140,.5)' : 'rgba(111,194,238,.5)'; ctx.beginPath(); ctx.ellipse(pond.x, FY + 2.6, pond.rx * 0.97, 3, 0, 0, PI); ctx.fill(); }   // 물 앞면(잠긴 느낌)
+      drawParticles(dark);
     }
     function frame(ts){
       if(play !== S) return;
@@ -40554,8 +40732,9 @@ var _RC = (function(){
     var cv = document.querySelector('canvas.rc-play'); if(cv && cv.parentNode){ var h = cv.parentNode; h.removeChild(cv); h.removeAttribute('data-play'); h.removeAttribute('data-scene'); }
   }
   function playScene(){ return play ? play.scene : null; }
-  function playState(){ return play ? play.cs.map(function(c){ return { id: c.id, x: Math.round(c.x * 10) / 10, dir: c.dir, st: c.st, y: Math.round(c.y * 10) / 10, w: Math.round(c.w) }; }) : null; }
-  return { start: start, stop: stop, load: load, ready: ready, order: ORDER, name: NAME, d3: D3, playStart: playStart, playStop: playStop, playState: playState, playScene: playScene, scenes: SCENES, sceneOrder: SCENE_ORDER };
+  function playState(){ return play ? play.cs.map(function(c){ return { id: c.id, kind: c.kind, x: Math.round(c.x * 10) / 10, dir: c.dir, st: c.st, y: Math.round(c.y * 10) / 10, w: Math.round(c.w), vis: c.vis, rot: c.rot, clip: c.clip }; }) : null; }
+  function playInfo(){ return play ? { poops: play.poops.length, tree: play.tree, pond: play.pond, log: play.log, W: play.W, H: play.H } : null; }
+  return { start: start, stop: stop, load: load, ready: ready, order: ORDER, name: NAME, d3: D3, playStart: playStart, playStop: playStop, playState: playState, playScene: playScene, playInfo: playInfo, scenes: SCENES, sceneOrder: SCENE_ORDER };
 })();
 window._RC = _RC;
 
