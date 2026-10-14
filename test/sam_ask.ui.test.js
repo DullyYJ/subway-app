@@ -169,6 +169,8 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     await x.page.clock.runFor(1500);
     assert.strictEqual(await x.page.evaluate(() => getComputedStyle(document.getElementById('samSetCard')).display), 'block');
     assert.strictEqual(await x.page.evaluate(() => getComputedStyle(document.getElementById('samSetWarn')).display), 'none', '제한됨이 아니면 경고 없음');
+    const stx = await x.page.evaluate(() => document.getElementById('samSetStat').innerText);
+    assert(/배터리 최적화 제외: 예/.test(stx) && /작업 집합/.test(stx), '읽은 값을 그대로 보여 준다: ' + stx);
     await x.page.evaluate(() => document.querySelector('#samSetCard button').click()); await x.page.clock.runFor(100);
     assert.strictEqual(await x.page.evaluate(() => window.__samOpen), 1); await x.ctx.close();
     const y = await fresh({ plugin: true, samsung: false, ignoring: true, disclosed: false });

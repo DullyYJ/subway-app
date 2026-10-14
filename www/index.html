@@ -19236,7 +19236,8 @@ window.addEventListener('unhandledrejection', function(e) {
         <p style="font-size:12px;color:var(--sub);line-height:1.5;margin-bottom:12px;">갤럭시는 며칠 안 쓴 앱을 자동 절전시켜 화면이 꺼진 동안의 하차 알림이 멈출 수 있어요. 길동무를 <b style="color:var(--text);">자동으로 절전하지 않는 앱</b>에 넣어 두면 안전해요.</p>
         <div id="samSetWarn" style="display:none;background:rgba(255,159,10,.12);border:1px solid rgba(255,159,10,.35);border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#ff9f0a;line-height:1.5;">⚠️ 이 앱의 배터리 사용이 <b>제한됨</b>으로 되어 있어요. 앱 정보 &gt; 배터리에서 <b>제한 없음</b>으로 바꿔 주세요.</div>
         <button onclick="_samOpen()" style="width:100%;padding:11px;border-radius:10px;border:none;cursor:pointer;font-size:13px;font-weight:800;background:var(--gold);color:#121214;font-family:inherit;">자동 절전 제외 설정 열기</button>
-        <div style="margin-top:10px;font-size:11.5px;line-height:1.6;color:var(--sub);">목록 오른쪽 위 + 를 누르고 아래 검색창에 길동무를 입력해 체크한 뒤 추가하세요. 목록에 안 보이면 이미 추가돼 있을 수 있어요(이전 화면 목록에서 확인). 추가됐는지는 기기에서 확인해 주세요. 이동 중 최근 앱 화면에서 <b>모두 닫기</b>를 누르면 안내가 멈춰요.</div>
+        <div id="samSetStat" style="margin-top:10px;font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">현재 상태: 확인 중…</div>
+        <div style="margin-top:10px;font-size:11.5px;line-height:1.6;color:var(--sub);">목록 오른쪽 위 + 를 누르고 아래 검색창에 길동무를 입력해 체크한 뒤 추가하세요. 목록에 길동무가 없으면 아래 '현재 상태'를 확인해 알려 주세요. 추가됐는지는 기기에서 확인해 주세요. 이동 중 최근 앱 화면에서 <b>모두 닫기</b>를 누르면 안내가 멈춰요.</div>
       </div>
 
       <!-- ★ 2026-10-03: 도착 오차 익명 기록 (끌 수 있음) -->
@@ -24474,6 +24475,7 @@ function switchTab(tab,el){
     if(typeof _notifPermBannerCheck==='function') _notifPermBannerCheck();
     // ★ 2026-09-26: 배터리 최적화 제외 카드도 같은 탭 — 열릴 때마다 최신 상태로 그린다
     if(typeof _batSyncStat==='function') _batSyncStat();
+    try{ if(typeof _samSyncCard==='function') _samSyncCard(); }catch(eSm){}   // ★ 2026-10-14: 갤럭시 카드의 '현재 상태'도 열 때마다 새로
   }
   if(tab!=='home'){
     // 다른 탭 이동 시 폴링 중지
@@ -29653,12 +29655,15 @@ function _samSyncCard(){
     n.deviceInfo().then(function(info){
       card.style.display = (info && info.samsung) ? 'block' : 'none';
       if(!(info && info.samsung)) return;
-      var w = document.getElementById('samSetWarn');
+      var w = document.getElementById('samSetWarn'), sx = document.getElementById('samSetStat');
       var P = _batNative();
       if(w && P && typeof P.backgroundStatus === 'function'){
         P.backgroundStatus().then(function(st){
           w.style.display = (st && st.bgRestricted) ? 'block' : 'none';
-        }).catch(function(){ w.style.display = 'none'; });
+          // 읽을 수 있는 값만 그대로 보여 준다(삼성 '절전 예외 목록'에 들어갔는지는 읽을 수 없다)
+          var BK = ['알 수 없음', '활성', '작업 집합', '자주 사용', '드물게 사용', '제한'];
+          if(sx && st) sx.innerHTML = '현재 상태 · 배터리 최적화 제외: <b>' + (st.ignoring ? '예' : '아니요') + '</b> · 앱 배터리 제한: <b>' + (st.bgRestricted ? '제한됨' : '제한 없음/최적화') + '</b> · 기기가 보는 앱 등급: <b>' + (BK[st.standbyBucket] || BK[0]) + '</b>';
+        }).catch(function(){ w.style.display = 'none'; if(sx) sx.textContent = '현재 상태: 읽지 못했어요'; });
       }
     }).catch(function(){ card.style.display = 'none'; });
   }catch(e){}
