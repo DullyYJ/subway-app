@@ -19236,7 +19236,7 @@ window.addEventListener('unhandledrejection', function(e) {
         <p style="font-size:12px;color:var(--sub);line-height:1.5;margin-bottom:12px;">갤럭시는 며칠 안 쓴 앱을 자동 절전시켜 화면이 꺼진 동안의 하차 알림이 멈출 수 있어요. 길동무를 <b style="color:var(--text);">자동으로 절전하지 않는 앱</b>에 넣어 두면 안전해요.</p>
         <div id="samSetWarn" style="display:none;background:rgba(255,159,10,.12);border:1px solid rgba(255,159,10,.35);border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#ff9f0a;line-height:1.5;">⚠️ 이 앱의 배터리 사용이 <b>제한됨</b>으로 되어 있어요. 앱 정보 &gt; 배터리에서 <b>제한 없음</b>으로 바꿔 주세요.</div>
         <button onclick="_samOpen()" style="width:100%;padding:11px;border-radius:10px;border:none;cursor:pointer;font-size:13px;font-weight:800;background:var(--gold);color:#121214;font-family:inherit;">자동 절전 제외 설정 열기</button>
-        <div style="margin-top:10px;font-size:11.5px;line-height:1.6;color:var(--sub);">목록 오른쪽 위 + 를 눌러 길동무를 추가하세요. 추가됐는지는 기기에서 확인해 주세요. 이동 중 최근 앱 화면에서 <b>모두 닫기</b>를 누르면 안내가 멈춰요.</div>
+        <div style="margin-top:10px;font-size:11.5px;line-height:1.6;color:var(--sub);">목록 오른쪽 위 + 를 누르고 아래 검색창에 길동무를 입력해 체크한 뒤 추가하세요. 목록에 안 보이면 이미 추가돼 있을 수 있어요(이전 화면 목록에서 확인). 추가됐는지는 기기에서 확인해 주세요. 이동 중 최근 앱 화면에서 <b>모두 닫기</b>를 누르면 안내가 멈춰요.</div>
       </div>
 
       <!-- ★ 2026-10-03: 도착 오차 익명 기록 (끌 수 있음) -->
@@ -29547,7 +29547,7 @@ function _batAsk(why){
         + '</div>'
         + (isSam
           ? '<div style="font-size:12.5px;line-height:1.75;color:#374151;background:#f3f4f6;border-radius:10px;padding:10px 12px;margin-bottom:12px;">'
-              + '[설정하기] 한 번이면 이어서 안내해요<br>① 기기 창에서 <b>허용</b><br>② 열리는 목록에서 오른쪽 위 <b>+</b> → <b>길동무</b> → 추가'
+              + '[설정하기] 한 번이면 이어서 안내해요<br>① 기기 창에서 <b>허용</b><br>② 열리는 목록에서 오른쪽 위 <b>+</b> → 아래 <b>검색</b>에 <b>길동무</b> 입력 → 체크 → <b>추가</b>'
             + '</div>'
             + '<div style="font-size:12px;line-height:1.7;color:#6b7280;margin-bottom:18px;">'
               + '· 화면 모양은 기기·One UI 버전에 따라 조금 달라요.<br>· 이동 중에 최근 앱 화면에서 <b>모두 닫기</b>를 누르면 안내가 멈춰요.'
@@ -29626,7 +29626,7 @@ function _samAsk(why){
           + '길동무를 <b>자동으로 절전하지 않는 앱</b>에 넣어 주세요.'
         + '</div>'
         + '<div style="font-size:12.5px;line-height:1.75;color:#374151;background:#f3f4f6;border-radius:10px;padding:10px 12px;margin-bottom:12px;">'
-          + '① [설정하기]를 누르면 목록 화면이 열려요<br>② 오른쪽 위 <b>+</b>(추가)를 눌러<br>③ <b>길동무</b>를 고르고 추가해 주세요'
+          + '① [설정하기]를 누르면 목록 화면이 열려요<br>② 오른쪽 위 <b>+</b>(추가)를 누르고<br>③ 아래 <b>검색</b>에 <b>길동무</b>를 입력해 체크한 뒤 <b>추가</b>를 눌러 주세요'
         + '</div>'
         + '<div style="font-size:12px;line-height:1.7;color:#6b7280;margin-bottom:18px;">'
           + '· 화면 모양은 기기·One UI 버전에 따라 조금 달라요.<br>'
