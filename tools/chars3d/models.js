@@ -7,6 +7,24 @@
   function sh(m) { m.castShadow = true; m.receiveShadow = true; return m; }
   function ell(sx, sy, sz, m, seg) { const g = new T.Mesh(new T.SphereGeometry(1, seg || 28, Math.round((seg || 28) * 0.75)), m); g.scale.set(sx, sy, sz); return sh(g); }
   function limb(len, r, m) { const g = new T.Mesh(new T.CapsuleGeometry(r, Math.max(0.001, len - 2 * r), 6, 14), m); g.position.y = -len / 2; const grp = new T.Group(); grp.add(sh(g)); return grp; }
+
+  // 2026-10-14: 몸·다리가 따로 노는 문제 수정 — 다리를 "엉덩이(어깨) 공 + 허벅지 + 무릎 공 + 정강이 + 발" 한 덩어리로 만든다.
+  // 엉덩이 공은 몸통 안쪽에 박혀 있어서 다리가 흔들려도 몸과 이어져 보이고, 무릎이 접혀 발이 자연스럽게 들린다.
+  function leg2(o, m, pm) {
+    const hip = new T.Group(), knee = new T.Group(), paw = new T.Group();
+    const ball = ell(o.hr[0], o.hr[1], o.hr[2], m, 20); hip.add(ball);
+    const th = limb(o.up, o.ru, m); hip.add(th);
+    knee.position.y = -o.up; hip.add(knee);
+    const kb = ell(o.rk, o.rk, o.rk * 0.95, m, 16); knee.add(kb);
+    const sn = limb(o.lo, o.rl, m); knee.add(sn);
+    paw.position.y = -o.lo; knee.add(paw);
+    const pw = ell(o.paw[0], o.paw[1], o.paw[2], pm || m, 18); pw.position.set(o.paw[3] || 0.06, 0, 0); paw.add(pw);
+    hip.userData = { knee, paw }; return hip;
+  }
+  // 다리 자세: swing = 엉덩이 각도(+는 발이 앞으로), lift = 0..1 발을 들어 올리는 정도(무릎이 뒤로 접힘)
+  function setLeg(lg, swing, lift, kmax, fl) {
+    const U = lg.userData; lg.rotation.z = swing; U.knee.rotation.z = -kmax * lift - 0.08; U.paw.rotation.z = -(swing + U.knee.rotation.z) * (fl === undefined ? 0.85 : fl);
+  }
   function rng(seed) { let s = seed >>> 0 || 1; return () => { s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; return (s % 100000) / 100000; }; }
   function fluff(parent, rx, ry, rz, n, size, m, seed, keep) {
     const geo = new T.SphereGeometry(1, 10, 8), im = new T.InstancedMesh(geo, m, n), R = rng(seed), d = new T.Object3D(); let k = 0, guard = 0;
@@ -68,21 +86,19 @@
     }
     // 꼬리(둥근 털공)
     const tail = new T.Group(); tail.position.set(-0.5, 0.2, 0); body.add(tail); const tb = ell(0.2, 0.2, 0.2, fm, 18); tb.position.set(-0.1, 0.08, 0); tail.add(tb); fluff(tb, 0.2, 0.2, 0.2, 12, 0.14, fm, o.seed + 3); P.tail = tail;
-    // 다리 네 개 [앞오른, 앞왼, 뒤오른, 뒤왼] — 통통한 털 다리 + 발
+    // 다리 네 개 [앞오른, 앞왼, 뒤오른, 뒤왼] — 엉덩이 공이 몸통에 박힌 통통한 털 다리 + 발
     P.legs = [];
-    [[0.3, 0.24], [0.3, -0.24], [-0.3, 0.24], [-0.3, -0.24]].forEach((p, i) => {
-      const lg = new T.Group(); lg.position.set(p[0], -0.22, p[1]); body.add(lg);
-      lg.add(limb(0.42, 0.15, fm));
-      const paw = ell(0.2, 0.11, 0.17, fm, 18); paw.position.set(0.06, -0.42, 0); lg.add(paw); 
-      P.legs.push(lg);
+    [[0.3, 0.23], [0.3, -0.23], [-0.3, 0.23], [-0.3, -0.23]].forEach((p, i) => {
+      const lg = leg2({ hr: [0.2, 0.21, 0.18], up: 0.27, ru: 0.15, rk: 0.135, lo: 0.24, rl: 0.12, paw: [0.2, 0.11, 0.17, 0.06] }, fm);
+      lg.position.set(p[0], -0.12, p[1]); body.add(lg); P.legs.push(lg);
     });
     root.userData = P; return root;
   }
   function poseDog(root, ph, o) {   // ph: 0..1 한 바퀴 — 앞다리 둘·뒷다리 둘이 짝을 지어 크게 휘두르고 몸이 위아래로 튄다
     const P = root.userData, a = ph * Math.PI * 2, g = o.gait || 1, sw = 0.9 * g;
-    P.legs[0].rotation.z = sw * Math.sin(a) + 0.12; P.legs[1].rotation.z = sw * Math.sin(a + 0.35) + 0.12;
-    P.legs[2].rotation.z = sw * Math.sin(a + 2.4) - 0.1; P.legs[3].rotation.z = sw * Math.sin(a + 2.75) - 0.1;
-    root.position.y = (o.air || 0.2) * Math.abs(Math.sin(a + 0.4)) - 0.02;
+    const lgs = [[0, 0.12], [0.35, 0.12], [2.4, -0.1], [2.75, -0.1]];
+    lgs.forEach((q, i) => { const ph2 = a + q[0], sv = Math.sin(ph2), up = Math.max(0, Math.cos(ph2)); setLeg(P.legs[i], 0.8 * sw * sv + q[1], Math.pow(up, 0.8), 1.0 * g + 0.2); });
+    root.position.y = (o.air || 0.2) * 0.8 * Math.abs(Math.sin(a + 0.4)) - 0.02;
     P.body.rotation.z = 0.12 * Math.sin(a + 0.9) * g;
     P.head.rotation.z = -0.1 * Math.sin(a + 0.9) * g + 0.04; P.head.position.y = 0.52 + 0.03 * Math.sin(a * 2);
     P.ears.forEach((e, i) => { e.rotation.z = 0.3 * Math.sin(a + 1.8) * g; e.rotation.x = (i ? 1 : -1) * 0.1; });
@@ -108,15 +124,15 @@
     // 긴 꼬리: 토막 사슬, 끝이 위로 말린다
     P.tailSeg = []; const base = new T.Group(); base.position.set(-0.56, 0.1, 0); body.add(base); let parent = base;
     for (let i = 0; i < 14; i++) { const sg = new T.Group(); sg.position.x = i === 0 ? 0 : -0.1; parent.add(sg); const r = 0.095 - i * 0.002, sp = ell(0.12, r, r, gm, 14); sp.position.x = -0.05; sg.add(sp); P.tailSeg.push(sg); parent = sg; }
-    // 다리: 길고 곧은 앞다리 + 밝은 발
+    // 다리: 어깨·엉덩이 공이 몸통 안쪽에 박힌 길고 가는 다리 + 밝은 발
     P.legs = [];
-    [[0.4, 0.17], [0.4, -0.17], [-0.4, 0.17], [-0.4, -0.17]].forEach((p, i) => { const lg = new T.Group(); lg.position.set(p[0], -0.2, p[1]); body.add(lg);
-      lg.add(limb(0.5, 0.11, gm)); const paw = ell(0.16, 0.08, 0.12, gl, 16); paw.position.set(0.05, -0.5, 0); lg.add(paw); P.legs.push(lg); });
+    [[0.38, 0.15], [0.38, -0.15], [-0.38, 0.15], [-0.38, -0.15]].forEach((p, i) => { const lg = leg2({ hr: [0.17, 0.18, 0.14], up: 0.33, ru: 0.105, rk: 0.092, lo: 0.32, rl: 0.082, paw: [0.16, 0.08, 0.12, 0.05] }, gm, gl);
+      lg.position.set(p[0], -0.05, p[1]); body.add(lg); P.legs.push(lg); });
     root.userData = P; return root;
   }
   function poseCat(root, ph) {   // 느긋하게 걷기: 대각선 다리끼리 짝, 꼬리 물결, 머리 까딱
     const P = root.userData, a = ph * Math.PI * 2, sw = 0.42;
-    P.legs[0].rotation.z = sw * Math.sin(a); P.legs[3].rotation.z = sw * Math.sin(a); P.legs[1].rotation.z = sw * Math.sin(a + Math.PI); P.legs[2].rotation.z = sw * Math.sin(a + Math.PI);
+    [[0, 0], [1, Math.PI], [2, Math.PI], [3, 0]].forEach(q => { const ph2 = a + q[1], up = Math.max(0, Math.cos(ph2)); setLeg(P.legs[q[0]], sw * Math.sin(ph2), Math.pow(up, 0.9), 0.75, 0.9); });
     root.position.y = 0.03 * Math.abs(Math.sin(a * 2)) + 0.02;
     P.body.rotation.y = 0.06 * Math.sin(a); P.body.rotation.z = 0.025 * Math.sin(a * 2);
     P.head.rotation.z = -0.05 * Math.sin(a * 2 + 0.5); P.head.rotation.y = 0.1 * Math.sin(a + 0.6);

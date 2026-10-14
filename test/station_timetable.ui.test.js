@@ -109,13 +109,14 @@ const NOW = new Date('2026-10-14T13:00:00+09:00');   // 수요일 13:00
     assert(/^첫차 \d\d:\d\d · 막차 \d\d:\d\d · 다음 열차 13:\d\d$/.test(s.sum), s.sum);
     assert.strictEqual(s.next, String(d0.nextMin % 60).padStart(2, '0'));
     assert(/^13:/.test(s.sum.split('다음 열차 ')[1]) && Number(s.sum.slice(-2)) === d0.nextMin % 60, s.sum + ' vs ' + d0.nextMin);
-    assert(s.nextBg === 'rgb(10, 132, 255)', '강조 색 ' + s.nextBg);
+    const probe = await x.page.evaluate(() => { const p = document.createElement('i'); p.style.cssText = 'background:var(--blue);color:var(--nmp-past)'; document.body.appendChild(p); const c = getComputedStyle(p); const r = { blue: c.backgroundColor, past: c.color }; p.remove(); return r; });
+    assert(s.nextBg === probe.blue, '강조 색은 테마 파란색(--blue)이어야 한다: ' + s.nextBg + ' vs ' + probe.blue);
     const hours = await x.page.evaluate(() => [...document.querySelectorAll('#nmTtBody > div > div:first-child')].map(n => n.innerText.split('\n')[0]));
     assert(hours.length > 15 && hours[0] === '05시' || hours[0] === '06시', hours.join());
     assert(hours.includes('13시') && hours.includes('00시'), '13시·(자정 넘은) 00시 행: ' + hours.join());
     const n24 = await x.page.evaluate(() => [...document.querySelectorAll('#nmTtBody > div')].filter(r => /익일/.test(r.innerText)).length);
     assert(n24 >= 1, '자정 넘은 열차는 "익일" 표시');
-    const grey = await x.page.evaluate(() => { const sp = [...document.querySelectorAll('#nmTtBody span')].filter(n => n.id !== 'nmTtNext' && /^\d\d$/.test(n.innerText)); const dim = sp.filter(n => getComputedStyle(n).color === 'rgb(85, 85, 85)').length; return [dim, sp.length]; });
+    const grey = await x.page.evaluate((pastCol) => { const sp = [...document.querySelectorAll('#nmTtBody span')].filter(n => n.id !== 'nmTtNext' && /^\d\d$/.test(n.innerText)); const dim = sp.filter(n => getComputedStyle(n).color === pastCol).length; return [dim, sp.length]; }, probe.past);
     assert(grey[0] > 20 && grey[0] < grey[1], '지난 열차만 흐리게 ' + grey);
     // 개수: 화면에 그려진 분 칩 수 = 엔진 times 수
     const cnt = await x.page.evaluate(() => [...document.querySelectorAll('#nmTtBody span')].filter(n => /^\d\d$/.test(n.innerText)).length);

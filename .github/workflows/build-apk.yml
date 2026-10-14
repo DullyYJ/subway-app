@@ -38,6 +38,7 @@ jobs:
           - next_train_parity.ui.test.js
           - next_train_timetable.test.js
           - station_timetable.ui.test.js
+          - timetable_theme_swipe_play.ui.test.js
           - timetable_coverage.ui.test.js
           - overlay_stale.ui.test.js
           - holidays.test.js

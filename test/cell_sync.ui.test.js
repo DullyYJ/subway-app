@@ -28,7 +28,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     _cellMapMem = {}; try { localStorage.removeItem('cellStnMap'); localStorage.removeItem('cellSyncAt'); localStorage.removeItem('cellPlmn'); } catch (e) {}
     window._cellPlmn = null; if (plmn) { window._cellPlmn = plmn; localStorage.setItem('cellPlmn', plmn); }
   }, [plmn, SERVER]);
-  const pull = () => page.evaluate(async () => { _cellPull(true); await new Promise(r => setTimeout(r, 300)); return { urls: window.__urls.slice(), keys: Object.keys(_cellMap()).sort() }; });
+  const pull = () => page.evaluate(async () => { _cellPull(true); await new Promise(r => setTimeout(r, 300)); return { urls: window.__urls.filter(function (u) { return u.indexOf('/cells') >= 0; }), keys: Object.keys(_cellMap()).sort() }; });
 
   console.log('[내려받기]');
   await setup('450-5');
@@ -45,7 +45,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     _cellSeen = null; window._cellRecent = {};
     _cellNoteObservation('450-6-3001-77');
     await new Promise(r => setTimeout(r, 2200));
-    return { plmn: window._cellPlmn, stored: localStorage.getItem('cellPlmn'), urls: window.__urls.slice() };
+    return { plmn: window._cellPlmn, stored: localStorage.getItem('cellPlmn'), urls: window.__urls.filter(function (u) { return u.indexOf('/cells') >= 0; }) };
   });
   await t('관측한 셀에서 통신사를 기억한다', async () => { assert.strictEqual(d.plmn, '450-6'); assert.strictEqual(d.stored, '450-6'); });
   await t('통신사가 새로 정해지면 그 통신사 표를 바로 받는다', async () => { assert.ok(d.urls.some(u => u.indexOf('plmn=450-6') >= 0), JSON.stringify(d.urls)); });

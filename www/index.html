@@ -1040,6 +1040,35 @@ return maplibregl$1;
   --gps-btn-bg:rgba(29,155,240,.12);
   --theme-id:pastel;
 }
+/* ── 노선도 역 팝업·시간표 시트 (2026-10-14): 색은 전부 테마 변수 — 다크·파스텔을 따라간다 ── */
+:root{--nmp-shadow:rgba(0,0,0,.9);--nmp-handle:#555;--nmp-past:#555;--nmp-line:#2a2a2c;--nmp-next-sh:rgba(10,132,255,.35);}
+[data-theme="pastel"]{--nmp-shadow:rgba(40,80,120,.22);--nmp-handle:#c3d6e6;--nmp-past:#b3c4d3;--nmp-line:#e3edf5;--nmp-next-sh:rgba(29,155,240,.3);}
+.nmp{background:var(--card);border-top:1.5px solid var(--border2);color:var(--text);box-shadow:0 -6px 30px var(--nmp-shadow);will-change:transform;}
+.nmp-handle{width:40px;height:4px;background:var(--nmp-handle);border-radius:2px;margin:0 auto 12px;flex:none;}
+.nmp-name{font-size:22px;font-weight:700;color:var(--text);margin-bottom:12px;}
+.nmp-none{color:var(--sub);font-size:12px;}
+.nmp-btn{border:none;border-radius:14px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;}
+.nmp-b-start{background:var(--blue);color:#fff;}
+.nmp-b-dest{background:var(--red);color:#fff;}
+.nmp-b-sec{background:var(--card2);color:var(--text);}
+[data-theme="pastel"] .nmp-b-sec{border:1px solid var(--border2);}
+.nmtt-x{border:none;background:var(--card2);color:var(--sub);width:34px;height:34px;border-radius:17px;font-size:16px;cursor:pointer;font-family:inherit;}
+.nmtt-chip{flex:none;border:none;border-radius:16px;padding:7px 13px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;background:var(--card2);color:var(--sub);}
+[data-theme="pastel"] .nmtt-chip{border:1px solid var(--border2);padding:6px 12px;}
+.nmtt-chip.on{background:var(--blue);color:#fff;border-color:var(--blue);}
+.nmtt-chip.dim{opacity:.5;}
+.nmtt-sum{color:var(--sub);}
+.nmtt-msg{color:var(--sub);text-align:center;font-size:14px;}
+.nmtt-msg small{opacity:.8;font-size:12px;}
+.nmtt-retry{border:none;border-radius:14px;background:var(--blue);color:#fff;padding:10px 20px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;}
+.nmtt-row{display:flex;align-items:flex-start;border-bottom:1px solid var(--nmp-line);padding:4px 0;}
+.nmtt-hour{flex:none;width:52px;padding-top:7px;font-size:13px;font-weight:700;color:var(--sub);}
+.nmtt-hour small{display:block;font-size:10px;font-weight:600;opacity:.75;}
+.nmtt-t{display:inline-block;min-width:34px;text-align:center;padding:5px 4px;margin:2px 3px 2px 0;border-radius:8px;font-size:15px;font-variant-numeric:tabular-nums;color:var(--text);}
+.nmtt-t.past{color:var(--nmp-past);}
+.nmtt-t.next{background:var(--blue);color:#fff;font-weight:800;box-shadow:0 2px 8px var(--nmp-next-sh);}
+#nmTtPlay{position:relative;flex:none;height:50px;margin:-2px 0 2px;pointer-events:none;overflow:hidden;}
+#nmTtPlay canvas{position:absolute;left:0;top:0;width:100%;height:100%;}
 *{box-sizing:border-box;margin:0;padding:0;font-family:'Noto Sans KR',sans-serif;-webkit-tap-highlight-color:transparent;}
 html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);}
 /* ══════════════════════════════════════════
@@ -32469,8 +32498,64 @@ function svgExtractName(el) {
 
 function svgRemovePopup() {
   var p = document.getElementById('svgStationPop');
-  if (p) p.remove();
+  if (p) { try{ if(p._dragOff) p._dragOff(); }catch(e){} p.remove(); }
 }
+// ── 아래로 밀어 닫기 (2026-10-14: YJ "슬라이딩으로 닫을 수 있게") ───────────────────────────
+//   팝업·시간표 시트 공용. 손가락(또는 마우스)을 따라 시트가 내려가고, 충분히 내렸거나 빠르게 털면 닫힌다. 모자라면 제자리로 되돌아온다.
+//   · 시간표 목록(o.scroller)은 맨 위에서 아래로 당길 때만 시트를 끌어내린다(목록을 올려 보는 중이면 스크롤이 우선).
+//   · 가로로 넘기는 노선·요일 탭은 건드리지 않는다. 끌고 나서 손을 뗄 때 아래에 있던 버튼이 눌리지 않게 삼킨다.
+function _nmDragDismiss(el, closeFn, o){
+  o = o || {};
+  var st = { down:false, on:false, y0:0, x0:0, dy:0, t0:0, fromScroll:false, swallow:false };
+  var scr = o.scroller ? el.querySelector(o.scroller) : null;
+  function begin(y, x, t){ st.down = true; st.on = false; st.y0 = y; st.x0 = x; st.dy = 0; st.t0 = Date.now(); st.fromScroll = !!(scr && t && scr.contains(t)); }
+  function move(y, x, e){
+    if(!st.down) return;
+    var dy = y - st.y0;
+    if(Math.abs(dy) > 6 || Math.abs(x - st.x0) > 6) window._nmDragLast = Date.now();   // 끄는 중 — 놓는 자리가 바깥이어도 '바깥 눌림'으로 치지 않게 표시
+    if(!st.on){
+      if(Math.abs(x - st.x0) > Math.abs(dy) + 4){ st.down = false; return; }       // 가로 움직임은 놓아 준다
+      if(st.fromScroll && scr.scrollTop > 0){ st.y0 = y; st.t0 = Date.now(); return; }   // 목록이 아직 위로 올라갈 수 있다 → 스크롤 우선
+      if(dy < 8) return;
+      st.on = true; el.style.transition = 'none'; el.style.userSelect = 'none';
+    }
+    st.dy = Math.max(0, dy);
+    el.style.transform = 'translateY(' + st.dy + 'px)';
+    if(e && e.cancelable) e.preventDefault();
+  }
+  function end(e){
+    if(!st.down) return;
+    st.down = false;
+    if(Date.now() - (window._nmDragLast || 0) < 600) window._nmDragLast = Date.now();
+    if(!st.on) return;
+    st.on = false; st.swallow = true; setTimeout(function(){ st.swallow = false; }, 450);
+    if(e){ try{ e.preventDefault(); e.stopPropagation(); }catch(e0){} }
+    var dy = st.dy, v = dy / Math.max(1, Date.now() - st.t0), h = el.offsetHeight || 300;
+    el.style.userSelect = '';
+    if(dy > Math.max(80, h * 0.25) || (v > 0.55 && dy > 36)){
+      el.style.transition = 'transform .18s ease-in';
+      el.style.transform = 'translateY(' + (h + 40) + 'px)';
+      setTimeout(function(){ if(el.parentNode) closeFn(); }, 190);
+    } else {
+      el.style.transition = 'transform .18s ease-out';
+      el.style.transform = 'translateY(0)';
+      setTimeout(function(){ el.style.transition = ''; el.style.transform = ''; }, 200);
+    }
+  }
+  el.addEventListener('touchstart', function(e){ if(e.touches.length === 1) begin(e.touches[0].clientY, e.touches[0].clientX, e.target); else st.down = false; }, {passive:true});
+  el.addEventListener('touchmove', function(e){ if(e.touches.length === 1) move(e.touches[0].clientY, e.touches[0].clientX, e); }, {passive:false});
+  el.addEventListener('touchend', function(e){ end(e); }, true);       // 캡처: 끌었다면 아래 버튼 핸들러보다 먼저 삼킨다
+  el.addEventListener('touchcancel', function(){ if(st.on){ st.on = false; st.down = false; el.style.transition = 'transform .18s ease-out'; el.style.transform = 'translateY(0)'; } else st.down = false; });
+  el.addEventListener('mousedown', function(e){ if(e.button === 0) begin(e.clientY, e.clientX, e.target); });
+  var mm = function(e){ if(st.down) move(e.clientY, e.clientX, e); };
+  var mu = function(e){ if(st.down) end(e); };
+  document.addEventListener('mousemove', mm);
+  document.addEventListener('mouseup', mu, true);
+  el.addEventListener('click', function(e){ if(st.swallow){ e.preventDefault(); e.stopPropagation(); } }, true);
+  el._dragOff = function(){ document.removeEventListener('mousemove', mm); document.removeEventListener('mouseup', mu, true); };
+}
+window._nmDragDismiss = _nmDragDismiss;
+
 
 
 // ★ 2026-09-02: 노선 배지 표기 정리.
@@ -32542,19 +32627,18 @@ function svgShowPopup(name, lines) {
 
   var pop = document.createElement('div');
   pop.id = 'svgStationPop';
+  pop.className = 'nmp';
   pop.style.cssText =
     'position:fixed;bottom:0;left:0;right:0;' +
-    'background:#1c1c1e;border-top:1.5px solid #444;' +
     'border-radius:18px 18px 0 0;padding:16px 16px 36px;' +
-    'z-index:99999;box-shadow:0 -6px 30px rgba(0,0,0,.9);';
+    'z-index:99999;';
 
-  // 핸들바
-  pop.innerHTML = '<div style="width:40px;height:4px;background:#555;' +
-    'border-radius:2px;margin:0 auto 16px;"></div>';
+  // 핸들바 (아래로 밀어 닫기)
+  pop.innerHTML = '<div class="nmp-handle" style="margin-bottom:16px;"></div>';
 
   // 역명
   var nm = document.createElement('div');
-  nm.style.cssText = 'font-size:22px;font-weight:700;color:#fff;margin-bottom:12px;';
+  nm.className = 'nmp-name';
   nm.textContent = name;
   pop.appendChild(nm);
 
@@ -32565,7 +32649,7 @@ function svgShowPopup(name, lines) {
   var _ls = _lineListClean(lines);
   ld.innerHTML = _ls.length
     ? _ls.map(_linePillHtml).join('')
-    : '<span style="color:#888;font-size:12px;">노선 정보 없음</span>';
+    : '<span class="nmp-none">노선 정보 없음</span>';
   pop.appendChild(ld);
 
   // 버튼 — 터치/클릭 이중 트리거 방지
@@ -32584,8 +32668,8 @@ function svgShowPopup(name, lines) {
   btns.style.cssText = 'display:flex;gap:10px;';
 
   var b1 = document.createElement('button');
-  b1.style.cssText = 'flex:1;padding:15px;border:none;border-radius:14px;' +
-    'background:#0a84ff;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;';
+  b1.className = 'nmp-btn nmp-b-start';
+  b1.style.cssText = 'flex:1;padding:15px;';
   b1.textContent = '🚉 출발역';
   var _h1 = _makeBtnHandler('start');
   b1.addEventListener('touchend', _h1, {passive:false});
@@ -32593,8 +32677,8 @@ function svgShowPopup(name, lines) {
   btns.appendChild(b1);
 
   var b2 = document.createElement('button');
-  b2.style.cssText = 'flex:1;padding:15px;border:none;border-radius:14px;' +
-    'background:#ff375f;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;';
+  b2.className = 'nmp-btn nmp-b-dest';
+  b2.style.cssText = 'flex:1;padding:15px;';
   b2.textContent = '🏁 도착역';
   var _h2 = _makeBtnHandler('dest');
   b2.addEventListener('touchend', _h2, {passive:false});
@@ -32606,8 +32690,8 @@ function svgShowPopup(name, lines) {
   // ★ 2026-10-14 시간표 버튼 — 출발/도착 버튼(0·1번) 뒤, 따로 한 줄(기존 버튼 순서·동작은 그대로)
   var b3 = document.createElement('button');
   b3.id = 'nmTtOpenBtn';
-  b3.style.cssText = 'display:block;width:100%;margin-top:10px;padding:13px;border:none;border-radius:14px;' +
-    'background:#2c2c2e;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;';
+  b3.className = 'nmp-btn nmp-b-sec';
+  b3.style.cssText = 'display:block;width:100%;margin-top:10px;padding:13px;';
   b3.textContent = '🕒 시간표';
   var _b3Fired = false;
   var _h3 = function(e) {
@@ -32621,6 +32705,7 @@ function svgShowPopup(name, lines) {
   b3.addEventListener('click', _h3);
   pop.appendChild(b3);
   document.body.appendChild(pop);
+  _nmDragDismiss(pop, function(){ svgRemovePopup(); try{ if(typeof _nmSync === 'function') _nmSync(); }catch(e){} });
 
   // 외부 클릭 닫기 (딜레이 충분히 주어 버튼 클릭 처리 후 적용)
   setTimeout(function() {
@@ -32660,22 +32745,25 @@ function nmTtOpen(name, lines){
 
   var sh = document.createElement('div');
   sh.id = 'nmTtSheet';
-  sh.style.cssText = 'position:fixed;bottom:0;left:0;right:0;height:min(52vh,460px);display:flex;flex-direction:column;' +
-    'background:#1c1c1e;border-top:1.5px solid #444;border-radius:18px 18px 0 0;padding:12px 14px 14px;' +
-    'z-index:100000;box-shadow:0 -6px 30px rgba(0,0,0,.9);color:#fff;box-sizing:border-box;';
+  sh.className = 'nmp';
+  sh.style.cssText = 'position:fixed;bottom:0;left:0;right:0;height:min(58vh,520px);display:flex;flex-direction:column;' +
+    'border-radius:18px 18px 0 0;padding:12px 14px 14px;z-index:100000;box-sizing:border-box;';
   sh.innerHTML =
-    '<div style="width:40px;height:4px;background:#555;border-radius:2px;margin:0 auto 10px;flex:none;"></div>' +
+    '<div class="nmp-handle" style="margin-bottom:6px;"></div>' +
+    '<div id="nmTtPlay" aria-hidden="true"></div>' +
     '<div style="display:flex;align-items:center;gap:8px;flex:none;margin-bottom:8px;">' +
       '<div id="nmTtTitle" style="flex:1;font-size:19px;font-weight:700;"></div>' +
-      '<button id="nmTtX" aria-label="닫기" style="border:none;background:#2c2c2e;color:#ddd;width:34px;height:34px;border-radius:17px;font-size:16px;cursor:pointer;font-family:inherit;">✕</button>' +
+      '<button id="nmTtX" aria-label="닫기" class="nmtt-x">✕</button>' +
     '</div>' +
     '<div id="nmTtLines" style="display:flex;gap:6px;overflow-x:auto;flex:none;padding-bottom:6px;"></div>' +
     '<div id="nmTtDays" style="display:flex;gap:6px;flex:none;margin:2px 0 8px;flex-wrap:wrap;"></div>' +
     '<div id="nmTtDirs" style="display:flex;gap:6px;flex:none;margin-bottom:8px;"></div>' +
-    '<div id="nmTtSum" style="flex:none;font-size:12px;color:#aaa;margin-bottom:6px;min-height:16px;"></div>' +
+    '<div id="nmTtSum" class="nmtt-sum" style="flex:none;font-size:12px;margin-bottom:6px;min-height:16px;"></div>' +
     '<div id="nmTtBody" style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;"></div>';
   document.body.appendChild(sh);
   sh.querySelector('#nmTtTitle').textContent = name + ' 시간표';
+  _nmDragDismiss(sh, function(){ nmTtClose(); }, { scroller: '#nmTtBody' });
+  try{ if(window._RC && _RC.playStart) _RC.playStart(sh.querySelector('#nmTtPlay')); }catch(ePl){}
 
   var xf = false;
   var xh = function(e){ e.preventDefault(); e.stopPropagation(); if(xf) return; xf = true; nmTtClose(); };
@@ -32687,6 +32775,7 @@ function nmTtOpen(name, lines){
   _nmTt.outside = function(e){
     var bdrop = document.getElementById('bdrop');
     if(bdrop && bdrop.classList.contains('on')) return;
+    if(Date.now() - (window._nmDragLast || 0) < 450) return;   // 시트를 끌다가 바깥에서 놓은 것은 닫는 누름이 아니다
     var s = document.getElementById('nmTtSheet');
     if(s && !s.contains(e.target)) nmTtClose();
   };
@@ -32708,8 +32797,9 @@ function nmTtClose(silent){
     }
     _nmTt.seq++;                  // 늦게 온 응답은 버린다
   }
+  try{ if(window._RC && _RC.playStop) _RC.playStop(); }catch(ePl){}
   var s = document.getElementById('nmTtSheet');
-  if(s) s.remove();
+  if(s){ try{ if(s._dragOff) s._dragOff(); }catch(e){} s.remove(); }
   _nmTt = null;
   if(!silent) _nmTtAfter();
 }
@@ -32757,8 +32847,7 @@ function nmTtLoad(){
 }
 
 function _nmTtChip(label, on, extra, css){
-  return '<button type="button" ' + extra + ' style="' + (css || 'flex:none;') + 'border:none;border-radius:16px;padding:7px 13px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;' +
-    (on ? 'background:#0a84ff;color:#fff;' : 'background:#2c2c2e;color:#bbb;') + '">' + label + '</button>';
+  return '<button type="button" ' + extra + ' class="nmtt-chip' + (on ? ' on' : '') + '" style="' + (css || '') + '">' + label + '</button>';
 }
 
 function nmTtRender(){
@@ -32773,8 +32862,8 @@ function nmTtRender(){
     le.style.display = 'flex';
     le.innerHTML = T.lines.map(function(l, i){
       var on = (l === T.line), col = _lineColorOf(l), kc = T.cache[l + '|-'], nod = !!(kc && kc.data && kc.data.noData);
-      return '<button type="button" data-nmtt-line="' + i + '" style="flex:none;border:none;border-radius:16px;padding:7px 13px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;' + (nod && !on ? 'opacity:.5;' : '') +
-        (on ? 'background:' + col + ';color:#fff;' : 'background:#2c2c2e;color:#bbb;') + '">' + _nmTtEsc(l) + '</button>';
+      return '<button type="button" data-nmtt-line="' + i + '" class="nmtt-chip' + (nod && !on ? ' dim' : '') + '"' +
+        (on ? ' style="background:' + col + ';border-color:' + col + ';color:#fff;"' : '') + '>' + _nmTtEsc(l) + '</button>';
     }).join('');
   } else {
     le.style.display = 'flex';
@@ -32807,15 +32896,15 @@ function nmTtRender(){
   var sum = $('nmTtSum'), body = $('nmTtBody');
   if(T.state === 'loading'){
     sum.textContent = '';
-    body.innerHTML = '<div style="color:#888;text-align:center;padding:36px 0;font-size:14px;">시간표를 불러오는 중…</div>';
+    body.innerHTML = '<div class="nmtt-msg" style="padding:36px 0;">시간표를 불러오는 중…</div>';
   } else if(T.state === 'fail'){
     sum.textContent = '';
-    body.innerHTML = '<div style="text-align:center;padding:30px 0;"><div style="color:#aaa;font-size:14px;margin-bottom:12px;">시간표를 불러오지 못했어요.</div>' +
-      '<button type="button" id="nmTtRetry" style="border:none;border-radius:14px;background:#0a84ff;color:#fff;padding:10px 20px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;">다시 시도</button></div>';
+    body.innerHTML = '<div style="text-align:center;padding:30px 0;"><div class="nmtt-msg" style="margin-bottom:12px;">시간표를 불러오지 못했어요.</div>' +
+      '<button type="button" id="nmTtRetry" class="nmtt-retry">다시 시도</button></div>';
   } else if(T.state === 'nodata' || !d || d.noData || !dir){
     sum.textContent = '';
-    body.innerHTML = '<div style="color:#aaa;text-align:center;padding:34px 12px;font-size:14px;line-height:1.6;">' +
-      _nmTtEsc(T.line || '이 노선') + '의 시간표 자료를<br>아직 받지 못했어요.<br><span style="color:#777;font-size:12px;">실시간 도착정보는 경로 탐색 화면에서 확인할 수 있어요.</span></div>';
+    body.innerHTML = '<div class="nmtt-msg" style="padding:34px 12px;line-height:1.6;">' +
+      _nmTtEsc(T.line || '이 노선') + '의 시간표 자료를<br>아직 받지 못했어요.<br><small>실시간 도착정보는 경로 탐색 화면에서 확인할 수 있어요.</small></div>';
   } else {
     var s = '첫차 ' + _nmTtClock(dir.first) + ' · 막차 ' + _nmTtClock(dir.last);
     if(dir.nextMin != null) s += ' · ' + (dir.tomorrow ? '내일 첫차 ' : '다음 열차 ') + _nmTtClock(dir.nextMin);
@@ -32832,12 +32921,11 @@ function nmTtRender(){
       var chips = r.m.map(function(t){
         var isNext = (nx != null && t === nx && !dir.tomorrow);
         var past = isToday && nx != null && t < nx;
-        var st = isNext ? 'background:#0a84ff;color:#fff;font-weight:800;' : (past ? 'color:#555;' : 'color:#eee;');
-        return '<span' + (isNext ? ' id="nmTtNext"' : '') + ' style="display:inline-block;min-width:34px;text-align:center;padding:5px 4px;margin:2px 3px 2px 0;border-radius:8px;font-size:15px;font-variant-numeric:tabular-nums;' + st + '">' + _nmTtP2(t % 60) + '</span>';
+        return '<span' + (isNext ? ' id="nmTtNext"' : '') + ' class="nmtt-t' + (isNext ? ' next' : (past ? ' past' : '')) + '">' + _nmTtP2(t % 60) + '</span>';
       }).join('');
-      html += '<div style="display:flex;align-items:flex-start;border-bottom:1px solid #2a2a2c;padding:4px 0;">' +
-        '<div style="flex:none;width:52px;padding-top:7px;font-size:13px;font-weight:700;color:#8e8e93;">' + _nmTtP2(r.h % 24) + '시' +
-        (r.h >= 24 ? '<div style="font-size:10px;font-weight:600;color:#666;">익일</div>' : '') + '</div>' +
+      html += '<div class="nmtt-row">' +
+        '<div class="nmtt-hour">' + _nmTtP2(r.h % 24) + '시' +
+        (r.h >= 24 ? '<small>익일</small>' : '') + '</div>' +
         '<div style="flex:1;">' + chips + '</div></div>';
     });
     body.innerHTML = html;
@@ -40214,9 +40302,9 @@ var _RC = (function(){
   var PI2 = Math.PI * 2;
   // cell=화면에 그릴 칸 크기(px) · base=칸 안 바닥 높이(256 기준) · ox=칸 안 몸 중심 가로 위치 · fps=재생 속도 · T=화면을 가로지르는 시간(초) · lift=띄울 높이(px) · sh=그림자 진하기
   var D3 = {
-    dolsom: { n: 16, fps: 19, cell: 86, base: 250, ox: 121, T: 2.7, sh: 0.34 },     // 뛴다
+    dolsom: { n: 16, fps: 19, cell: 86, base: 248.5, ox: 120.8, T: 2.7, sh: 0.34 },     // 뛴다
     lovel:  { n: 16, fps: 11, cell: 88, base: 249.5, ox: 133, T: 3.4, sh: 0.34 },   // 걷는다
-    ppopu:  { n: 16, fps: 19, cell: 88, base: 248.5, ox: 120.5, T: 2.3, sh: 0.34 }, // 뛴다
+    ppopu:  { n: 16, fps: 19, cell: 88, base: 248.5, ox: 120.3, T: 2.3, sh: 0.34 }, // 뛴다
     chaeng: { n: 16, fps: 15, cell: 88, base: 244.5, ox: 154.5, T: 3.2, sh: 0.2, lift: 12 },   // 헤엄친다
     sul:    { n: 16, fps: 20, cell: 104, base: 230.5, ox: 131, T: 2.6, sh: 0.2 },   // 난다
     dudung: { n: 16, fps: 13, cell: 106, base: 222.5, ox: 128, T: 3.5, sh: 0.34, intro: 14, introFps: 14, x0: 0.16 }   // 땅에서 솟아 걷는다
@@ -40287,7 +40375,99 @@ var _RC = (function(){
     if(!st) return; var s = st; st = null; try{ cancelAnimationFrame(s.raf); }catch(e){}
     if(host){ host.classList.remove('rc-on'); var cv = host.querySelector('canvas.rc-cv'); if(cv){ var c = cv.getContext('2d'); c.setTransform(1,0,0,1,0,0); c.clearRect(0, 0, cv.width, cv.height); } }
   }
-  return { start: start, stop: stop, load: load, ready: ready, order: ORDER, name: NAME, d3: D3 };
+  /* ── 시간표 시트 놀이터 (2026-10-14: YJ "시간표를 열면 캐릭터가 랜덤으로 시트 상단에서 돌아다니며 노는 연출") ──
+     시트를 열 때마다 캐릭터 2~3마리를 무작위로 뽑아, 좁은 띠 위에서 걷다가 멈추고·콩콩 뛰고·빙글 돌고·서로에게 다가가 논다.
+     같은 3D 시트 그림을 시간에 맞춰 그릴 뿐인 장식이다(판단·계산 없음). 시트가 닫히면 멈춘다. 동작 줄이기 설정이면 한 장면만 그린다. */
+  var play = null;
+  function rnd(a, b){ return a + Math.random() * (b - a); }
+  function playStart(host, o){
+    if(play || !host) return false;
+    if(!ready()){ load(function(){ if(host.isConnected && !play) playStart(host, o); }); return false; }
+    o = o || {};
+    var cv = document.createElement('canvas'); cv.className = 'rc-play'; host.appendChild(cv);
+    var Wc = host.clientWidth || 320, Hc = host.clientHeight || 50, dpr = Math.min(2.5, window.devicePixelRatio || 1);
+    cv.width = Math.round(Wc * dpr); cv.height = Math.round(Hc * dpr);
+    var ctx = cv.getContext('2d'); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+    var reduce = false; try{ reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(e){}
+    var pool = ORDER.slice(), ids = [], n = o.count || (Math.random() < 0.5 ? 2 : 3);
+    if(o.ids){ ids = o.ids.slice(); } else { while(ids.length < n && pool.length){ ids.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]); } }
+    var gy = Hc - 5;
+    var cs = ids.map(function(id){
+      var D = D3[id], bodyH = (D.base - 8) / 256 * D.cell + (D.lift || 0) * 0.6, k = Math.min(0.62, (Hc - 8) / bodyH);
+      var c = { id: id, D: D, k: k, w: D.cell * k, x: 0, dir: Math.random() < 0.5 ? -1 : 1, st: 'walk', tx: 0, until: 0, t0: 0, fr: Math.random() * 16, dirT: 0, y: 0 };
+      c.x = rnd(c.w * 0.5, Math.max(c.w * 0.6, Wc - c.w * 0.5));
+      c.spd = (D.fps / 16) * D.cell * k * (id === 'lovel' ? 0.9 : 1.0);
+      return c;
+    });
+    var S = { cs: cs, t: 0, last: 0, raf: 0, ids: ids, W: Wc, H: Hc };
+    host.setAttribute('data-play', ids.join(','));
+    function target(c){
+      var other = cs[Math.floor(Math.random() * cs.length)];
+      if(other !== c && Math.random() < 0.35){ c.chase = true; return Math.max(c.w * 0.4, Math.min(Wc - c.w * 0.4, other.x + rnd(-0.8, 0.8) * c.w)); }   // 친구에게 다가간다
+      c.chase = false; return rnd(c.w * 0.45, Math.max(c.w * 0.5, Wc - c.w * 0.45));
+    }
+    function nextAct(c, t){
+      var r = Math.random();
+      c.t0 = t;
+      if(c.chase || r < 0.4){ c.st = 'hop'; c.until = t + rnd(1.1, 2.2); }
+      else if(r < 0.65){ c.st = 'spin'; c.until = t + rnd(1.0, 1.8); c.dirT = t; }
+      else if(r < 0.85){ c.st = 'rest'; c.until = t + rnd(0.9, 2.0); }
+      else { c.st = 'walk'; c.tx = target(c); }
+    }
+    cs.forEach(function(c){ c.tx = target(c); });
+    function step(dt){
+      var t = S.t;
+      cs.forEach(function(c){
+        var D = c.D;
+        if(c.st === 'walk'){
+          var dx = c.tx - c.x;
+          if(Math.abs(dx) < 3){ nextAct(c, t); }
+          else { c.dir = dx > 0 ? 1 : -1; c.x += c.dir * Math.min(Math.abs(dx), c.spd * dt); c.fr += dt * D.fps; c.y = 0; }
+        } else if(c.st === 'hop'){
+          c.fr += dt * D.fps * 0.7; c.y = -Math.abs(Math.sin((t - c.t0) * 7.5)) * Math.min(11, Hc * 0.2);
+          if(t >= c.until){ c.y = 0; c.st = 'walk'; c.tx = target(c); }
+        } else if(c.st === 'spin'){
+          c.fr += dt * D.fps * 0.45; c.y = 0;
+          if(t - c.dirT > 0.42){ c.dir = -c.dir; c.dirT = t; }
+          if(t >= c.until){ c.st = 'walk'; c.tx = target(c); }
+        } else {   // rest
+          c.fr += dt * D.fps * 0.22; c.y = 0;
+          if(t >= c.until){ c.st = 'walk'; c.tx = target(c); }
+        }
+      });
+    }
+    function draw(){
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, Wc, Hc);
+      cs.slice().sort(function(a, b){ return a.k - b.k; }).forEach(function(c){
+        var D = c.D, sc = D.cell / 256 * c.k, idx = ((Math.floor(c.fr) % D.n) + D.n) % D.n, sheet = sheets[c.id];
+        if(!sheet) return;
+        var lift = (D.lift || 0) * c.k * 0.6;
+        ctx.fillStyle = 'rgba(0,0,0,' + (D.sh * 0.5 * Math.max(0.35, 1 + c.y / 22)).toFixed(3) + ')';                      // 그림자(뛰면 작아진다)
+        ctx.beginPath(); ctx.ellipse(c.x, gy + 2, c.w * 0.2 * Math.max(0.55, 1 + c.y / 30), 2.6, 0, 0, PI2); ctx.fill();
+        ctx.save(); ctx.translate(c.x, gy + 2 + c.y - lift);
+        if(c.dir < 0) ctx.scale(-1, 1);
+        try{ ctx.drawImage(sheet, (idx % 4) * 256, Math.floor(idx / 4) * 256, 256, 256, -D.ox * sc, -D.base * sc, 256 * sc, 256 * sc); }catch(eD){}
+        ctx.restore();
+      });
+    }
+    function frame(ts){
+      if(play !== S) return;
+      if(!S.last) S.last = ts;
+      var dt = Math.min(0.05, (ts - S.last) / 1000); S.last = ts; S.t += dt;
+      step(dt); draw();
+      S.raf = requestAnimationFrame(frame);
+    }
+    play = S;
+    if(reduce){ draw(); return true; }
+    S.raf = requestAnimationFrame(frame);
+    return true;
+  }
+  function playStop(){
+    if(!play) return; var s = play; play = null; try{ cancelAnimationFrame(s.raf); }catch(e){}
+    var cv = document.querySelector('canvas.rc-play'); if(cv && cv.parentNode){ var h = cv.parentNode; h.removeChild(cv); h.removeAttribute('data-play'); }
+  }
+  function playState(){ return play ? play.cs.map(function(c){ return { id: c.id, x: Math.round(c.x * 10) / 10, dir: c.dir, st: c.st, y: Math.round(c.y * 10) / 10, w: Math.round(c.w) }; }) : null; }
+  return { start: start, stop: stop, load: load, ready: ready, order: ORDER, name: NAME, d3: D3, playStart: playStart, playStop: playStop, playState: playState };
 })();
 window._RC = _RC;
 
