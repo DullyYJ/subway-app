@@ -12,7 +12,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
 
 (async () => {
   const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--no-sandbox'] });
-  // opt: { plugin, samsung, ignoring, disclosed, batAsked, samAsked, bgRestricted, target, rejectBat }
+  // opt: { plugin, samsung, ignoring, disclosed, batAsked, samAsked, bgRestricted, target, rejectOpen }
   async function fresh(opt) {
     const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, timezoneId: 'Asia/Seoul' });
     const page = await ctx.newPage(); const errs = []; page.on('pageerror', e => errs.push(e.message));
@@ -28,10 +28,10 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
         window.Capacitor = window.Capacitor || {}; window.Capacitor.Plugins = window.Capacitor.Plugins || {};
         window.Capacitor.Plugins.Power = {
           isIgnoringOptimizations: () => Promise.resolve({ ignoring: !!o.ignoring }),
-          requestIgnoreOptimizations: () => { window.__batReq++; return o.rejectBat ? Promise.reject(new Error('x')) : Promise.resolve({ ok: true, already: false }); },
+          requestIgnoreOptimizations: () => { window.__batReq++; return Promise.resolve({ ok: true, already: false }); },
           deviceInfo: () => Promise.resolve({ manufacturer: o.samsung ? 'samsung' : 'Google', model: 'X', sdk: 34, samsung: !!o.samsung }),
           backgroundStatus: () => Promise.resolve({ bgRestricted: !!o.bgRestricted, standbyBucket: 2, ignoring: !!o.ignoring }),
-          openAutoSleepSettings: () => { window.__samOpen++; return Promise.resolve({ ok: true, target: o.target || 'samsung_never_sleeping' }); }
+          openAutoSleepSettings: () => { window.__samOpen++; return o.rejectOpen ? Promise.reject(new Error('x')) : Promise.resolve({ ok: true, target: o.target || 'samsung_never_sleeping' }); }
         };
         window.Capacitor.Plugins.App = { addListener: (ev, cb) => { if (ev === 'appStateChange') window.__appCb = cb; return Promise.resolve({ remove() {} }); } };
       }
@@ -44,8 +44,8 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   const has = (x, id) => x.page.evaluate((i) => !!document.getElementById(i), id);
   const click = (x, id) => x.page.evaluate((i) => document.getElementById(i).click(), id);
 
-  await t('삼성 + 이미 배터리 제외: 앱을 켜고 9초쯤 뒤 안내가 뜨고, 누르기 전엔 화면을 열지 않는다', async () => {
-    const x = await fresh({ plugin: true, samsung: true, ignoring: true, disclosed: true });
+  await t('삼성 + 배터리 안내는 이미 지나감: 앱을 켜고 9초쯤 뒤 갤럭시 안내가 뜨고, 누르기 전엔 화면을 열지 않는다', async () => {
+    const x = await fresh({ plugin: true, samsung: true, ignoring: false, batAsked: true, disclosed: true });
     await x.page.clock.runFor(3000); assert.strictEqual(await has(x, 'samAskOv'), false, '곧바로 뜨면 안 된다');
     await x.page.clock.runFor(8000);
     assert.strictEqual(await has(x, 'samAskOv'), true, '안내가 떠야 한다');
@@ -56,7 +56,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   });
 
   await t('[설정하기]를 누르면 그때 삼성 목록 화면을 한 번 연다', async () => {
-    const x = await fresh({ plugin: true, samsung: true, ignoring: true, disclosed: true });
+    const x = await fresh({ plugin: true, samsung: true, ignoring: false, batAsked: true, disclosed: true });
     await x.page.clock.runFor(11000);
     await click(x, 'samAskOk'); await x.page.clock.runFor(200);
     assert.strictEqual(await x.page.evaluate(() => window.__samOpen), 1);
@@ -64,7 +64,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   });
 
   await t('목록 화면을 못 열어 앱 정보로 갔으면 "제한 없음" 안내줄을 그린다', async () => {
-    const x = await fresh({ plugin: true, samsung: true, ignoring: true, disclosed: true, target: 'app_details' });
+    const x = await fresh({ plugin: true, samsung: true, ignoring: false, batAsked: true, disclosed: true, target: 'app_details' });
     await x.page.clock.runFor(11000);
     await click(x, 'samAskOk'); await x.page.clock.runFor(300);
     const txt = await x.page.evaluate(() => (document.getElementById('samNote') || {}).innerText || '');
@@ -74,7 +74,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   });
 
   await t('[나중에]는 열지 않고 닫고, 다시 묻지 않는다', async () => {
-    const x = await fresh({ plugin: true, samsung: true, ignoring: true, disclosed: true });
+    const x = await fresh({ plugin: true, samsung: true, ignoring: false, batAsked: true, disclosed: true });
     await x.page.clock.runFor(11000);
     await click(x, 'samAskNo');
     assert.strictEqual(await x.page.evaluate(() => window.__samOpen), 0);
@@ -120,25 +120,33 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     assert.strictEqual(await has(x, 'samAskOv'), false, '평생 한 번 — 합친 창이 두 안내를 맡았다'); await x.ctx.close();
   });
 
-  await t('갤럭시 + [설정하기] 한 번: 기기 허용 창 → 돌아오면 두 번째 창 없이 곧바로 삼성 목록이 열린다', async () => {
+  await t('갤럭시 + [설정하기] 한 번: 삼성 목록이 먼저(아직 보이는 동안) → 돌아오면 기기 허용 창', async () => {
     const x = await fresh({ plugin: true, samsung: true, ignoring: false, disclosed: true });
     await x.page.clock.runFor(10500);
-    await click(x, 'batAskOk'); await x.page.clock.runFor(1500);
-    assert.strictEqual(await x.page.evaluate(() => window.__batReq), 1);
-    assert.strictEqual(await x.page.evaluate(() => window.__samOpen), 0, '시스템 창이 떠 있는 동안엔 열지 않는다');
-    await x.page.evaluate(() => window.__appCb && window.__appCb({ isActive: true })); await x.page.clock.runFor(1500);
-    assert.strictEqual(await x.page.evaluate(() => window.__samOpen), 1, '자동으로 삼성 목록');
+    await click(x, 'batAskOk'); await x.page.clock.runFor(300);
+    assert.strictEqual(await x.page.evaluate(() => window.__samOpen), 1, '삼성 목록이 먼저');
+    assert.strictEqual(await x.page.evaluate(() => window.__batReq), 0, '기기 허용 창은 아직 아니다(허용하면 목록에서 앱이 사라진다)');
     assert.strictEqual(await has(x, 'samAskOv'), false, '두 번째 안내 창은 없다');
+    await x.page.evaluate(() => window.__appCb && window.__appCb({ isActive: true })); await x.page.clock.runFor(1500);
+    assert.strictEqual(await x.page.evaluate(() => window.__batReq), 1, '돌아오면 이어서 기기 허용 창');
     await x.page.evaluate(() => window.__appCb({ isActive: true })); await x.page.clock.runFor(1500);
-    assert.strictEqual(await x.page.evaluate(() => window.__samOpen), 1, '앱이 다시 앞으로 와도 또 열지 않는다');
+    assert.strictEqual(await x.page.evaluate(() => window.__batReq), 1, '다시 앞으로 와도 또 요청하지 않는다');
+    assert.strictEqual(await x.page.evaluate(() => window.__samOpen), 1);
     assert.deepStrictEqual(x.errs, []); await x.ctx.close();
   });
 
-  await t('기기 허용 창을 못 열어도(요청 실패) 삼성 목록 단계는 이어진다', async () => {
-    const x = await fresh({ plugin: true, samsung: true, ignoring: false, disclosed: true, rejectBat: true });
+  await t('삼성 목록을 못 열어도(실패) 기기 허용 창 단계는 이어진다', async () => {
+    const x = await fresh({ plugin: true, samsung: true, ignoring: false, disclosed: true, rejectOpen: true });
     await x.page.clock.runFor(10500);
     await click(x, 'batAskOk'); await x.page.clock.runFor(1500);
-    assert.strictEqual(await x.page.evaluate(() => window.__samOpen), 1); await x.ctx.close();
+    assert.strictEqual(await x.page.evaluate(() => window.__batReq), 1); await x.ctx.close();
+  });
+
+  await t('이미 배터리 "제한 없음"인 갤럭시: 삼성 목록에 앱이 안 나오므로 헛걸음시키지 않고 안내를 띄우지 않는다', async () => {
+    const x = await fresh({ plugin: true, samsung: true, ignoring: true, disclosed: true });
+    await x.page.clock.runFor(15000);
+    assert.strictEqual(await has(x, 'samAskOv'), false);
+    assert.strictEqual(await has(x, 'batAskOv'), false); await x.ctx.close();
   });
 
   await t('삼성이 아닌 기기는 예전 그대로: 배터리 안내만, [나중에] 뒤에도 갤럭시 안내 없음', async () => {
@@ -150,7 +158,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     assert.strictEqual(await has(x, 'samAskOv'), false); await x.ctx.close();
   });
 
-  await t('위치 [동의] 직후: 합친 안내 한 창 → [설정하기] → 돌아오면 목록 (겹치지 않음)', async () => {
+  await t('위치 [동의] 직후: 합친 안내 한 창 → [설정하기] → 삼성 목록 → 돌아오면 허용 창 (겹치지 않음)', async () => {
     const x = await fresh({ plugin: true, samsung: true, ignoring: false, disclosed: false });
     await x.page.clock.runFor(1500);
     await x.page.evaluate(() => { try { navigator.geolocation.getCurrentPosition(function () {}, function () {}); } catch (e) {} });
@@ -160,8 +168,9 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     assert.strictEqual(await has(x, 'batAskOv'), true);
     assert.strictEqual(await has(x, 'samAskOv'), false);
     await click(x, 'batAskOk'); await x.page.clock.runFor(500);
+    assert.strictEqual(await x.page.evaluate(() => window.__samOpen), 1);
     await x.page.evaluate(() => window.__appCb && window.__appCb({ isActive: true })); await x.page.clock.runFor(1500);
-    assert.strictEqual(await x.page.evaluate(() => window.__samOpen), 1); await x.ctx.close();
+    assert.strictEqual(await x.page.evaluate(() => window.__batReq), 1); await x.ctx.close();
   });
 
   await t('설정 탭 카드: 삼성에서만 보이고 [열기]가 목록을 연다', async () => {
@@ -169,6 +178,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     await x.page.clock.runFor(1500);
     assert.strictEqual(await x.page.evaluate(() => getComputedStyle(document.getElementById('samSetCard')).display), 'block');
     assert.strictEqual(await x.page.evaluate(() => getComputedStyle(document.getElementById('samSetWarn')).display), 'none', '제한됨이 아니면 경고 없음');
+    assert.strictEqual(await x.page.evaluate(() => getComputedStyle(document.getElementById('samSetTip')).display), 'block', '제한 없음이면 목록에 안 나오는 이유를 설명');
     const stx = await x.page.evaluate(() => document.getElementById('samSetStat').innerText);
     assert(/배터리 최적화 제외: 예/.test(stx) && /작업 집합/.test(stx), '읽은 값을 그대로 보여 준다: ' + stx);
     await x.page.evaluate(() => document.querySelector('#samSetCard button').click()); await x.page.clock.runFor(100);

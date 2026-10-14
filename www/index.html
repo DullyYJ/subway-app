@@ -19237,7 +19237,8 @@ window.addEventListener('unhandledrejection', function(e) {
         <div id="samSetWarn" style="display:none;background:rgba(255,159,10,.12);border:1px solid rgba(255,159,10,.35);border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#ff9f0a;line-height:1.5;">⚠️ 이 앱의 배터리 사용이 <b>제한됨</b>으로 되어 있어요. 앱 정보 &gt; 배터리에서 <b>제한 없음</b>으로 바꿔 주세요.</div>
         <button onclick="_samOpen()" style="width:100%;padding:11px;border-radius:10px;border:none;cursor:pointer;font-size:13px;font-weight:800;background:var(--gold);color:#121214;font-family:inherit;">자동 절전 제외 설정 열기</button>
         <div id="samSetStat" style="margin-top:10px;font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">현재 상태: 확인 중…</div>
-        <div style="margin-top:10px;font-size:11.5px;line-height:1.6;color:var(--sub);">목록 오른쪽 위 + 를 누르고 아래 검색창에 길동무를 입력해 체크한 뒤 추가하세요. 목록에 길동무가 없으면 아래 '현재 상태'를 확인해 알려 주세요. 추가됐는지는 기기에서 확인해 주세요. 이동 중 최근 앱 화면에서 <b>모두 닫기</b>를 누르면 안내가 멈춰요.</div>
+        <div id="samSetTip" style="display:none;margin-top:10px;font-size:11.5px;line-height:1.6;color:var(--text);background:rgba(10,132,255,.10);border:1px solid rgba(10,132,255,.3);border-radius:8px;padding:8px 10px;">앱 배터리가 <b>제한 없음</b>이면 삼성 목록 선택 창에 길동무가 <b>나오지 않아요</b>(이미 가장 높은 설정이에요). 목록에도 넣고 싶으면 앱 정보 &gt; 배터리를 잠시 <b>최적화</b>로 바꿔 추가한 뒤 다시 <b>제한 없음</b>으로 돌려 주세요.</div>
+        <div style="margin-top:10px;font-size:11.5px;line-height:1.6;color:var(--sub);">목록 오른쪽 위 + 를 누르고 길동무를 체크(안 보이면 아래 검색창에 입력)한 뒤 추가하세요. 추가됐는지는 기기에서 확인해 주세요. 이동 중 최근 앱 화면에서 <b>모두 닫기</b>를 누르면 안내가 멈춰요.</div>
       </div>
 
       <!-- ★ 2026-10-03: 도착 오차 익명 기록 (끌 수 있음) -->
@@ -29549,7 +29550,7 @@ function _batAsk(why){
         + '</div>'
         + (isSam
           ? '<div style="font-size:12.5px;line-height:1.75;color:#374151;background:#f3f4f6;border-radius:10px;padding:10px 12px;margin-bottom:12px;">'
-              + '[설정하기] 한 번이면 이어서 안내해요<br>① 기기 창에서 <b>허용</b><br>② 열리는 목록에서 오른쪽 위 <b>+</b> → 아래 <b>검색</b>에 <b>길동무</b> 입력 → 체크 → <b>추가</b>'
+              + '[설정하기] 한 번이면 이어서 안내해요<br>① 열리는 목록에서 오른쪽 위 <b>+</b> → <b>길동무</b> 체크(안 보이면 아래 검색) → <b>추가</b><br>② 돌아오면 나오는 기기 창에서 <b>허용</b>'
             + '</div>'
             + '<div style="font-size:12px;line-height:1.7;color:#6b7280;margin-bottom:18px;">'
               + '· 화면 모양은 기기·One UI 버전에 따라 조금 달라요.<br>· 이동 중에 최근 앱 화면에서 <b>모두 닫기</b>를 누르면 안내가 멈춰요.'
@@ -29564,7 +29565,17 @@ function _batAsk(why){
         + '</div></div>';
       document.body.appendChild(ov);
       document.getElementById('batAskNo').onclick = function(){ ov.remove(); if(!isSam) setTimeout(function(){ try{ _samAsk('afterBat'); }catch(eS){} }, 500); };   // 갤럭시는 합친 창이라 [나중에]면 둘 다 건너뜀(설정 탭 카드에서 다시)
-      document.getElementById('batAskOk').onclick = function(){ ov.remove(); window._samAfterBat = true; window._samAuto = !!isSam; _batRequest(); };   // 시스템 화면에서 돌아오면(앱 앞으로) 이어서
+      document.getElementById('batAskOk').onclick = function(){
+        ov.remove();
+        if(isSam){
+          // ★ 2026-10-14 (실기기 확인: YJ 갤럭시): 앱 배터리가 '제한 없음'이면 삼성 '절전 예외' 선택 목록에 길동무가 안 나온다
+          //   → 순서를 바꾼다: 먼저 삼성 목록(이때는 아직 '최적화'라 보임) → 돌아오면 기기 허용 창(제한 없음).
+          window._samFirst = true;
+          _samOpen(function(){ if(window._samFirst){ window._samFirst = false; _batRequest(); } });   // 목록을 못 열었으면 바로 허용 창으로
+        } else {
+          window._samAfterBat = true; _batRequest();   // 시스템 화면에서 돌아오면(앱 앞으로) 이어서
+        }
+      };
       });
     }).catch(function(){});
   }catch(e){}
@@ -29594,26 +29605,29 @@ function _samNote(msg){
     setTimeout(function(){ try{ d.remove(); }catch(e){} }, 8000);
   }catch(e){}
 }
-function _samOpen(){
+function _samOpen(onFail){
   var n = _samNative();
-  if(!n){ _samNote('이 빌드에는 절전 설정 열기가 없어요'); return; }
+  if(!n){ _samNote('이 빌드에는 절전 설정 열기가 없어요'); if(onFail) onFail(); return; }
   n.openAutoSleepSettings().then(function(r){
     if(r && r.target === 'app_details'){
       _samNote('삼성 목록 화면을 못 열어 앱 정보로 왔어요 · 배터리 > "제한 없음"으로 바꿔 주세요');
     }
-  }).catch(function(){ _samNote('절전 설정을 열지 못했어요 · 기기 설정 > 배터리에서 직접 열어 주세요'); });
+  }).catch(function(){ _samNote('절전 설정을 열지 못했어요 · 기기 설정 > 배터리에서 직접 열어 주세요'); if(onFail) onFail(); });
 }
 window._samOpen = _samOpen;
 function _samAsk(why){
   try{
     var n = _samNative(); if(!n) return;   // 웹/구버전 빌드는 건너뜀
-    if(why === 'afterBat' && window._samAuto){ window._samAuto = false; _samOpen(); return; }   // 합친 안내에서 [설정하기]를 이미 눌렀다 → 두 번째 창 없이 곧바로 삼성 목록 화면
     var busy = function(){ return !!(document.getElementById('samAskOv') || document.getElementById('batAskOv') || document.getElementById('locDiscOv') || document.getElementById('bgPermOv')); };
     if(busy()) return;   // 다른 안내가 떠 있으면 이번엔 건너뜀(다른 안내가 닫힐 때 다시 이어짐)
     var last = 0; try{ last = parseInt(localStorage.getItem(_SAM_ASK_KEY) || '0', 10) || 0; }catch(e0){}
     if(last) return;   // 평생 한 번
     n.deviceInfo().then(function(info){
       if(!info || !info.samsung) return;   // 갤럭시(삼성)에서만
+      var P0 = _batNative();
+      return (P0 && typeof P0.isIgnoringOptimizations === 'function' ? P0.isIgnoringOptimizations() : Promise.resolve({ ignoring: false })).then(function(r0){
+      // ★ 앱 배터리가 이미 '제한 없음'이면 삼성 선택 목록에 길동무가 나오지 않는다(실기기 확인) → 헛걸음시키지 않는다(설정 탭 카드에 방법 설명)
+      if(r0 && r0.ignoring) return;
       if(busy()) return;
       try{ localStorage.setItem(_SAM_ASK_KEY, String(Date.now())); }catch(e1){}
       var ov = document.createElement('div');
@@ -29628,7 +29642,7 @@ function _samAsk(why){
           + '길동무를 <b>자동으로 절전하지 않는 앱</b>에 넣어 주세요.'
         + '</div>'
         + '<div style="font-size:12.5px;line-height:1.75;color:#374151;background:#f3f4f6;border-radius:10px;padding:10px 12px;margin-bottom:12px;">'
-          + '① [설정하기]를 누르면 목록 화면이 열려요<br>② 오른쪽 위 <b>+</b>(추가)를 누르고<br>③ 아래 <b>검색</b>에 <b>길동무</b>를 입력해 체크한 뒤 <b>추가</b>를 눌러 주세요'
+          + '① [설정하기]를 누르면 목록 화면이 열려요<br>② 오른쪽 위 <b>+</b>(추가)를 누르고<br>③ <b>길동무</b>를 체크(안 보이면 아래 <b>검색</b>에 입력)한 뒤 <b>추가</b>를 눌러 주세요'
         + '</div>'
         + '<div style="font-size:12px;line-height:1.7;color:#6b7280;margin-bottom:18px;">'
           + '· 화면 모양은 기기·One UI 버전에 따라 조금 달라요.<br>'
@@ -29641,6 +29655,7 @@ function _samAsk(why){
       document.body.appendChild(ov);
       document.getElementById('samAskNo').onclick = function(){ ov.remove(); };
       document.getElementById('samAskOk').onclick = function(){ ov.remove(); _samOpen(); };
+      });
     }).catch(function(){});
   }catch(e){}
 }
@@ -29660,6 +29675,7 @@ function _samSyncCard(){
       if(w && P && typeof P.backgroundStatus === 'function'){
         P.backgroundStatus().then(function(st){
           w.style.display = (st && st.bgRestricted) ? 'block' : 'none';
+          var tip = document.getElementById('samSetTip'); if(tip) tip.style.display = (st && st.ignoring) ? 'block' : 'none';
           // 읽을 수 있는 값만 그대로 보여 준다(삼성 '절전 예외 목록'에 들어갔는지는 읽을 수 없다)
           var BK = ['알 수 없음', '활성', '작업 집합', '자주 사용', '드물게 사용', '제한'];
           if(sx && st) sx.innerHTML = '현재 상태 · 배터리 최적화 제외: <b>' + (st.ignoring ? '예' : '아니요') + '</b> · 앱 배터리 제한: <b>' + (st.bgRestricted ? '제한됨' : '제한 없음/최적화') + '</b> · 기기가 보는 앱 등급: <b>' + (BK[st.standbyBucket] || BK[0]) + '</b>';
@@ -29700,6 +29716,7 @@ function _initAppStateListener(){
           //   (설정 화면이 열려 있을 때만 반영되고, 없으면 조용히 아무 일도 안 함).
           try{ if(typeof _batSyncStat === 'function') _batSyncStat(); }catch(e){}
           // ★ 2026-10-14: 배터리 시스템 화면에서 돌아왔고 갤럭시면 이어서 '자동 절전 제외' 안내 / 설정 카드 경고 갱신
+          try{ if(window._samFirst){ window._samFirst = false; setTimeout(function(){ try{ _batRequest(); }catch(eB){} }, 700); } }catch(e){}   // 갤럭시: 삼성 목록을 다녀왔으니 이어서 기기 허용 창
           try{ if(window._samAfterBat){ window._samAfterBat = false; setTimeout(function(){ try{ _samAsk('afterBat'); }catch(eS){} }, 700); } }catch(e){}
           try{ if(typeof _samSyncCard === 'function') _samSyncCard(); }catch(e){}
           
