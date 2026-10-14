@@ -29505,6 +29505,7 @@ function _batRequest(){
     //   전환 처리에서 다시 상태를 확인한다(아래 appStateChange 훅에 추가함).
   }).catch(function(e){
     if(typeof toast === 'function') toast('배터리 설정을 열지 못했어요');
+    if(window._samAfterBat){ window._samAfterBat = false; setTimeout(function(){ try{ _samAsk('afterBat'); }catch(eS){} }, 300); }   // 기기 창을 못 열었어도 다음 단계는 이어 준다
   });
 }
 window._batRequest = _batRequest;
@@ -29523,29 +29524,46 @@ function _batAsk(why){
     n.isIgnoringOptimizations().then(function(r){
       if(r && r.ignoring) return;
       if(document.getElementById('batAskOv') || document.getElementById('locDiscOv') || document.getElementById('bgPermOv')) return;
+      // ★ 2026-10-14 (YJ: "누르는 횟수를 줄여줘"): 갤럭시면 배터리 안내와 '자동 절전 제외' 안내를 한 창으로 합친다.
+      //   [설정하기] 한 번이면 기기 허용 창 → (돌아오면 자동으로) 삼성 목록 화면까지 이어진다. 두 번째 안내 창과 그 버튼 한 번이 없어진다.
+      var sn = _samNative(), samAsked = 0;
+      try{ samAsked = parseInt(localStorage.getItem(_SAM_ASK_KEY) || '0', 10) || 0; }catch(e2){}
+      var pInfo = (sn && !samAsked) ? sn.deviceInfo().then(function(i){ return !!(i && i.samsung); }).catch(function(){ return false; }) : Promise.resolve(false);
+      pInfo.then(function(isSam){
+      if(document.getElementById('batAskOv') || document.getElementById('locDiscOv') || document.getElementById('bgPermOv') || document.getElementById('samAskOv')) return;
       try{ localStorage.setItem(_BAT_ASK_KEY, String(Date.now())); }catch(e1){}
+      if(isSam){ try{ localStorage.setItem(_SAM_ASK_KEY, String(Date.now())); }catch(e3){} }   // 합친 창이 두 안내를 한 번에 맡는다
       var ov = document.createElement('div');
       ov.id = 'batAskOv';
       ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true');
       ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.68);z-index:100000;display:flex;align-items:center;justify-content:center;padding:22px;';
       ov.innerHTML =
         '<div style="background:#fff;color:#1c1c1e;border-radius:18px;max-width:380px;width:100%;padding:24px 20px;box-shadow:0 12px 40px rgba(0,0,0,.35);">'
-        + '<div style="font-size:17px;font-weight:800;margin-bottom:14px;">🔋 화면을 꺼도 끊기지 않게</div>'
+        + '<div style="font-size:17px;font-weight:800;margin-bottom:14px;">' + (isSam ? '🔋 갤럭시에서 화면을 꺼도 끊기지 않게' : '🔋 화면을 꺼도 끊기지 않게') + '</div>'
         + '<div style="font-size:14px;line-height:1.75;margin-bottom:14px;">'
           + '지하철·버스를 타는 동안 화면이 꺼져 있어도 <b>내릴 정거장 알림</b>과 <b>오버레이</b>가 계속 움직이려면, '
-          + '기기의 <b>배터리 최적화에서 길동무를 제외</b>해 주셔야 해요. 제외하지 않으면 일부 기기(삼성·샤오미 등)가 이동 중에 앱을 멈출 수 있어요.'
+          + (isSam ? '<b>길동무를 배터리 최적화와 자동 절전에서 제외</b>해 주셔야 해요. 갤럭시는 며칠 안 쓴 앱을 자동으로 절전시켜 이동 중에 멈출 수 있어요.'
+                   : '기기의 <b>배터리 최적화에서 길동무를 제외</b>해 주셔야 해요. 제외하지 않으면 일부 기기(삼성·샤오미 등)가 이동 중에 앱을 멈출 수 있어요.')
         + '</div>'
-        + '<div style="font-size:12.5px;line-height:1.7;color:#6b7280;margin-bottom:18px;">'
-          + '· [설정하기]를 누르면 기기의 안내 창이 열려요. 거기서 <b>허용</b>을 눌러 주세요.<br>'
-          + '· 경로 안내 중에만 위치를 쓰고, 설정은 기기 설정에서 언제든 되돌릴 수 있어요.'
-        + '</div>'
+        + (isSam
+          ? '<div style="font-size:12.5px;line-height:1.75;color:#374151;background:#f3f4f6;border-radius:10px;padding:10px 12px;margin-bottom:12px;">'
+              + '[설정하기] 한 번이면 이어서 안내해요<br>① 기기 창에서 <b>허용</b><br>② 열리는 목록에서 오른쪽 위 <b>+</b> → <b>길동무</b> → 추가'
+            + '</div>'
+            + '<div style="font-size:12px;line-height:1.7;color:#6b7280;margin-bottom:18px;">'
+              + '· 화면 모양은 기기·One UI 버전에 따라 조금 달라요.<br>· 이동 중에 최근 앱 화면에서 <b>모두 닫기</b>를 누르면 안내가 멈춰요.'
+            + '</div>'
+          : '<div style="font-size:12.5px;line-height:1.7;color:#6b7280;margin-bottom:18px;">'
+              + '· [설정하기]를 누르면 기기의 안내 창이 열려요. 거기서 <b>허용</b>을 눌러 주세요.<br>'
+              + '· 경로 안내 중에만 위치를 쓰고, 설정은 기기 설정에서 언제든 되돌릴 수 있어요.'
+            + '</div>')
         + '<div style="display:flex;gap:10px;">'
           + '<button id="batAskNo" style="flex:1;padding:13px;border-radius:11px;border:1px solid #d1d5db;cursor:pointer;font-size:14.5px;font-weight:700;background:#f3f4f6;color:#374151;font-family:inherit;">나중에</button>'
           + '<button id="batAskOk" style="flex:1.4;padding:13px;border-radius:11px;border:none;cursor:pointer;font-size:14.5px;font-weight:800;background:#0a84ff;color:#fff;font-family:inherit;">설정하기</button>'
         + '</div></div>';
       document.body.appendChild(ov);
-      document.getElementById('batAskNo').onclick = function(){ ov.remove(); setTimeout(function(){ try{ _samAsk('afterBat'); }catch(eS){} }, 500); };   // ★ 2026-10-14: 갤럭시면 이어서 '자동 절전 제외' 안내
-      document.getElementById('batAskOk').onclick = function(){ ov.remove(); window._samAfterBat = true; _batRequest(); };   // 시스템 화면에서 돌아오면(앱 앞으로) 이어서 안내
+      document.getElementById('batAskNo').onclick = function(){ ov.remove(); if(!isSam) setTimeout(function(){ try{ _samAsk('afterBat'); }catch(eS){} }, 500); };   // 갤럭시는 합친 창이라 [나중에]면 둘 다 건너뜀(설정 탭 카드에서 다시)
+      document.getElementById('batAskOk').onclick = function(){ ov.remove(); window._samAfterBat = true; window._samAuto = !!isSam; _batRequest(); };   // 시스템 화면에서 돌아오면(앱 앞으로) 이어서
+      });
     }).catch(function(){});
   }catch(e){}
 }
@@ -29587,6 +29605,7 @@ window._samOpen = _samOpen;
 function _samAsk(why){
   try{
     var n = _samNative(); if(!n) return;   // 웹/구버전 빌드는 건너뜀
+    if(why === 'afterBat' && window._samAuto){ window._samAuto = false; _samOpen(); return; }   // 합친 안내에서 [설정하기]를 이미 눌렀다 → 두 번째 창 없이 곧바로 삼성 목록 화면
     var busy = function(){ return !!(document.getElementById('samAskOv') || document.getElementById('batAskOv') || document.getElementById('locDiscOv') || document.getElementById('bgPermOv')); };
     if(busy()) return;   // 다른 안내가 떠 있으면 이번엔 건너뜀(다른 안내가 닫힐 때 다시 이어짐)
     var last = 0; try{ last = parseInt(localStorage.getItem(_SAM_ASK_KEY) || '0', 10) || 0; }catch(e0){}
