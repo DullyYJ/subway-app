@@ -1068,7 +1068,9 @@ return maplibregl$1;
 .nmtt-t.past{color:var(--nmp-past);}
 .nmtt-t.next{background:var(--blue);color:#fff;font-weight:800;box-shadow:0 2px 8px var(--nmp-next-sh);}
 #nmTtPlay{position:relative;flex:1 1 90px;min-width:90px;height:70px;margin:-24px 0 0;pointer-events:none;}
-#nmTtPlay canvas{position:absolute;left:0;top:0;width:100%;height:100%;}
+#nmTtPlay canvas,#nmPopPlay canvas{position:absolute;left:0;top:0;width:100%;height:100%;}
+/* 역 팝업(2026-10-14): 역명 줄 오른쪽 빈 칸에도 같은 놀이터. 바닥이 역명 글자 밑선쯤에 오도록 줄 아래에 맞추고 위로 솟게 한다 */
+#nmPopPlay{position:relative;flex:1 1 90px;min-width:90px;height:70px;margin:-44px 0 -4px;pointer-events:none;}
 *{box-sizing:border-box;margin:0;padding:0;font-family:'Noto Sans KR',sans-serif;-webkit-tap-highlight-color:transparent;}
 html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);}
 /* ══════════════════════════════════════════
@@ -32498,7 +32500,7 @@ function svgExtractName(el) {
 
 function svgRemovePopup() {
   var p = document.getElementById('svgStationPop');
-  if (p) { try{ if(p._dragOff) p._dragOff(); }catch(e){} p.remove(); }
+  if (p) { try{ if(p._dragOff) p._dragOff(); }catch(e){} try{ if(window._RC && _RC.playStop) _RC.playStop(); }catch(ePl){} p.remove(); }
 }
 // ── 아래로 밀어 닫기 (2026-10-14: YJ "슬라이딩으로 닫을 수 있게") ───────────────────────────
 //   팝업·시간표 시트 공용. 손가락(또는 마우스)을 따라 시트가 내려가고, 충분히 내렸거나 빠르게 털면 닫힌다. 모자라면 제자리로 되돌아온다.
@@ -32636,11 +32638,18 @@ function svgShowPopup(name, lines) {
   // 핸들바 (아래로 밀어 닫기)
   pop.innerHTML = '<div class="nmp-handle" style="margin-bottom:16px;"></div>';
 
-  // 역명
+  // 역명 + 오른쪽 빈 칸의 놀이터(2026-10-14 YJ: 시간표 시트와 같은 장면. 시간표를 열면 같은 배경·캐릭터가 이어진다)
+  var nmRow = document.createElement('div');
+  nmRow.style.cssText = 'display:flex;align-items:flex-end;gap:10px;margin-bottom:12px;';
   var nm = document.createElement('div');
   nm.className = 'nmp-name';
+  nm.style.cssText = 'flex:0 1 auto;min-width:0;margin-bottom:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
   nm.textContent = name;
-  pop.appendChild(nm);
+  nmRow.appendChild(nm);
+  var nmPlay = document.createElement('div');
+  nmPlay.id = 'nmPopPlay'; nmPlay.setAttribute('aria-hidden', 'true');
+  nmRow.appendChild(nmPlay);
+  pop.appendChild(nmRow);
 
   // 노선 배지
   var ld = document.createElement('div');
@@ -32706,6 +32715,7 @@ function svgShowPopup(name, lines) {
   pop.appendChild(b3);
   document.body.appendChild(pop);
   _nmDragDismiss(pop, function(){ svgRemovePopup(); try{ if(typeof _nmSync === 'function') _nmSync(); }catch(e){} });
+  try{ if(window._RC && _RC.playStart) _RC.playStart(nmPlay); }catch(ePl){}
 
   // 외부 클릭 닫기 (딜레이 충분히 주어 버튼 클릭 처리 후 적용)
   setTimeout(function() {
@@ -32738,6 +32748,7 @@ function _nmTtClock(m){ var x = ((m % 1440) + 1440) % 1440; return _nmTtP2(Math.
 function _nmTtAfter(){ if(typeof _nmSync === 'function') { try{ _nmSync(); }catch(e){} } }
 
 function nmTtOpen(name, lines){
+  var snap = null; try{ if(window._RC && _RC.playSnap && document.getElementById('nmPopPlay')) snap = _RC.playSnap(); }catch(eSn){}   // 팝업에서 놀던 장면을 이어받는다
   svgRemovePopup();
   nmTtClose(true);
   var ls = _lineListClean(lines);
@@ -32762,7 +32773,7 @@ function nmTtOpen(name, lines){
   document.body.appendChild(sh);
   sh.querySelector('#nmTtTitle').textContent = name + ' 시간표';
   _nmDragDismiss(sh, function(){ nmTtClose(); }, { scroller: '#nmTtBody' });
-  try{ if(window._RC && _RC.playStart) _RC.playStart(sh.querySelector('#nmTtPlay')); }catch(ePl){}
+  try{ if(window._RC && _RC.playStart) _RC.playStart(sh.querySelector('#nmTtPlay'), snap || undefined); }catch(ePl){}
 
   // ✕ 버튼은 없다(2026-10-14 YJ: 밀어 내리면 닫히니 필요 없다). 닫는 길: 아래로 밀기 · 시트 바깥 누르기 · 네이티브 지도 만지기.
 
@@ -40411,14 +40422,15 @@ var _RC = (function(){
       var D = D3[id], bodyH = (D.base - 8) / 256 * D.cell + (D.lift || 0) * 0.6, k = Math.min(0.62, TARGET_H / bodyH), kind = KIND[id] || 'dog';
       var c = { id: id, kind: kind, km: KM[kind], D: D, k: k, w: D.cell * k, bodyH: bodyH * k, x: 0, dir: Math.random() < 0.5 ? -1 : 1, st: 'walk', tx: 0, until: 0, t0: 0, fr: Math.random() * 16, dirT: 0, y: 0, rot: 0, ang: 0, sq: 0, vis: 1, clip: false, useIntro: false, introIdx: 0, lastSp: -5, ph: Math.random() * 6.28 };
       c.x = rnd(c.w * 0.5, Math.max(c.w * 0.6, Wc - c.w * 0.5));
+      if(o.xs && o.xs[id] != null){ c.x = clampX(c, o.xs[id] * Wc); if(o.dirs && o.dirs[id]) c.dir = o.dirs[id]; }          // 팝업 → 시트로 넘어올 때 서 있던 자리 그대로
       c.spd = (D.fps / 16) * D.cell * k * (id === 'lovel' ? 0.9 : 1.0) * SC.spd;
       return c;
     });
     var has = function(kind){ return cs.some(function(c){ return c.kind === kind; }); };
     // 장식물(그 캐릭터가 있을 때만): 고양이 → 나무, 올챙이 → 웅덩이
-    var tree = null, pond = null, sideA = Math.random() < 0.5;
-    if(has('cat')) tree = { x: Wc * (sideA ? rnd(.22, .34) : rnd(.66, .78)), th: Math.min(Hc * 0.58, 42) };
-    if(has('tad')) pond = { x: Wc * (sideA ? rnd(.66, .78) : rnd(.22, .34)), rx: Math.min(26, Wc * 0.14) };
+    var tree = null, pond = null, sideA = o.sideA != null ? !!o.sideA : Math.random() < 0.5;
+    if(has('cat')) tree = { x: Wc * (o.treeX != null ? o.treeX : (sideA ? rnd(.22, .34) : rnd(.66, .78))), th: Math.min(Hc * 0.58, 42) };
+    if(has('tad')) pond = { x: Wc * (o.pondX != null ? o.pondX : (sideA ? rnd(.66, .78) : rnd(.22, .34))), rx: Math.min(26, Wc * 0.14) };
     // ★ 버벅임 줄이기: 캐릭터 16프레임을 '그릴 크기'로 한 번만 줄여 작은 아틀라스에 담고, 프레임마다는 1:1 복사만 한다. 배경은 캐시, 그리기는 30fps.
     var atlas = {}, atlasIn = {};
     function mkAtlas(img, c){
@@ -40453,7 +40465,7 @@ var _RC = (function(){
     // 배경 장식 입자(장면마다 필요한 만큼)
     var parts = [], np = { snow: 18, petals: 10, night: 24, aurora: 10, sea: 6, meadow: 3, sunset: 3, clouds: 3 }[SC.deco] || 0;
     for(var pi = 0; pi < np; pi++) parts.push({ x: Math.random(), y: Math.random(), s: rnd(0.6, 1.4), ph: Math.random() * 6.28, v: rnd(0.5, 1.2) });
-    var S = { cs: cs, t: 0, last: 0, raf: 0, ids: ids, W: Wc, H: Hc, scene: sn, poops: [], pt: [], tree: tree, pond: pond, log: {} };
+    var S = { cs: cs, t: 0, last: 0, raf: 0, ids: ids, W: Wc, H: Hc, scene: sn, sideA: sideA, poops: [], pt: [], tree: tree, pond: pond, log: {} };
     host.setAttribute('data-play', ids.join(',')); host.setAttribute('data-scene', sn);
     var PI = Math.PI, CLIMB_ROT = (window._rcClimb && window._rcClimb.rot != null) ? window._rcClimb.rot : -1.2, CLIMB_DX = (window._rcClimb && window._rcClimb.dx != null) ? window._rcClimb.dx : 3;
     function ease(u){ return u < 0 ? 0 : u > 1 ? 1 : u * u * (3 - 2 * u); }
@@ -40732,9 +40744,16 @@ var _RC = (function(){
     var cv = document.querySelector('canvas.rc-play'); if(cv && cv.parentNode){ var h = cv.parentNode; h.removeChild(cv); h.removeAttribute('data-play'); h.removeAttribute('data-scene'); }
   }
   function playScene(){ return play ? play.scene : null; }
+  // 지금 놀고 있는 장면의 '이어받기용' 설정(장면·캐릭터·서 있는 자리·나무/웅덩이 자리). 없으면 null.
+  //   역 팝업 → 시간표 시트로 넘어갈 때 같은 배경·같은 캐릭터가 같은 자리에서 이어서 논다. (그림 상태일 뿐, 계산이 아니다)
+  function playSnap(){
+    if(!play) return null; var s = play, xs = {}, dirs = {};
+    s.cs.forEach(function(c){ xs[c.id] = c.x / s.W; dirs[c.id] = c.dir; });
+    return { scene: s.scene, ids: s.ids.slice(), xs: xs, dirs: dirs, sideA: s.sideA, treeX: s.tree ? s.tree.x / s.W : null, pondX: s.pond ? s.pond.x / s.W : null };
+  }
   function playState(){ return play ? play.cs.map(function(c){ return { id: c.id, kind: c.kind, x: Math.round(c.x * 10) / 10, dir: c.dir, st: c.st, y: Math.round(c.y * 10) / 10, w: Math.round(c.w), vis: c.vis, rot: c.rot, clip: c.clip }; }) : null; }
   function playInfo(){ return play ? { poops: play.poops.length, tree: play.tree, pond: play.pond, log: play.log, W: play.W, H: play.H } : null; }
-  return { start: start, stop: stop, load: load, ready: ready, order: ORDER, name: NAME, d3: D3, playStart: playStart, playStop: playStop, playState: playState, playScene: playScene, playInfo: playInfo, scenes: SCENES, sceneOrder: SCENE_ORDER };
+  return { start: start, stop: stop, load: load, ready: ready, order: ORDER, name: NAME, d3: D3, playStart: playStart, playStop: playStop, playState: playState, playScene: playScene, playSnap: playSnap, playInfo: playInfo, scenes: SCENES, sceneOrder: SCENE_ORDER };
 })();
 window._RC = _RC;
 

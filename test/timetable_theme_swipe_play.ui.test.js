@@ -364,6 +364,58 @@ const NOW = new Date('2026-10-14T13:00:00+09:00');   // 수요일 13:00
     assert(await x.page.evaluate(() => !!window._RC.playState()));
     assert.deepStrictEqual(x.errs, []); await x.ctx.close();
   });
+  // ── 역 팝업의 놀이터 (2026-10-14 18:03 YJ: 역을 누르면 우측 빈 칸에서도 똑같이 움직이고, 시간표를 누르면 같은 배경·캐릭터) ──
+  const waitPlay = async (x) => { for (let i = 0; i < 60 && !(await x.page.evaluate(() => !!window._RC.playState())); i++) { await new Promise(r => setTimeout(r, 50)); await x.page.clock.runFor(50); } };
+  await t('역 팝업 놀이터: 역명 줄 오른쪽 끝까지 빈 칸에 캐릭터가 나오고 움직이며 버튼·배지를 가리지 않는다', async () => {
+    const x = await fresh(); await openSubway(x); await pop(x, '야탑', ['수인분당선']); await x.page.clock.runFor(200); await waitPlay(x);
+    const s0 = await x.page.evaluate(() => window._RC.playState()); assert(s0 && s0.length >= 2 && s0.length <= 3, '팝업에서 놀이터 시작 ' + JSON.stringify(s0));
+    const host = await rectOf(x, '#nmPopPlay'), nm = await rectOf(x, '.nmp-name'), pp = await rectOf(x, '#svgStationPop');
+    assert(host && host.h >= 60 && host.right - host.left >= 90, '크기 ' + JSON.stringify(host));
+    assert(host.left >= nm.right - 1 && host.right >= pp.right - 20, '역명 오른쪽부터 끝까지 ' + JSON.stringify([nm.right, host.left, host.right]));
+    assert(host.bottom - nm.bottom < 12 && host.bottom >= nm.bottom - 4, '바닥이 역명 줄 근처 ' + JSON.stringify([host.bottom, nm.bottom]));
+    assert(host.top >= pp.top - 1, '팝업 밖으로 나가지 않는다 ' + [host.top, pp.top]);
+    const b1 = await rectOf(x, '.nmp-b-start'); const badge = await x.page.evaluate(() => { const r = document.querySelector('#svgStationPop .nmp-name').parentNode.nextElementSibling.getBoundingClientRect(); return r.top; });
+    assert(host.bottom <= badge + 1 && host.bottom < b1.top, '노선 배지·버튼을 가리지 않는다');
+    const bx = await x.page.evaluate(() => { const e = document.getElementById('nmPopPlay'), s = getComputedStyle(e); return [s.boxShadow, s.borderTopWidth, s.backgroundColor, s.pointerEvents, e.getAttribute('data-scene')]; });
+    assert(bx[0] === 'none' && bx[1] === '0px' && /rgba\(0, 0, 0, 0\)|transparent/.test(bx[2]) && bx[3] === 'none' && bx[4], '칸 구분 없이 장면 표시 ' + JSON.stringify(bx));
+    let moved = 0, prev = s0.map(c => c.x);
+    for (let i = 0; i < 60; i++) { await x.page.clock.runFor(50); const s = await x.page.evaluate(() => window._RC.playState()); s.forEach((c, k) => { if (Math.abs(c.x - prev[k]) > 0.3) moved++; prev[k] = c.x; }); }
+    assert(moved > 20, '움직인다 ' + moved);
+    // 출발역 버튼 순서(0·1번)는 그대로
+    assert.deepStrictEqual(await x.page.evaluate(() => [...document.querySelectorAll('#svgStationPop button')].map(b => b.innerText.trim())), ['🚉 출발역', '🏁 도착역', '🕒 시간표']);
+    assert.deepStrictEqual(x.errs, []); await x.ctx.close();
+  });
+  await t('역 팝업 → 시간표: 같은 배경·같은 캐릭터가 이어지고, 서 있던 자리도 이어받는다', async () => {
+    for (let k = 0; k < 3; k++) {
+      const x = await fresh(); await openSubway(x); await pop(x, '야탑', ['수인분당선']); await x.page.clock.runFor(200); await waitPlay(x); await x.page.clock.runFor(1500);
+      const a = await x.page.evaluate(() => ({ scene: window._RC.playScene(), ids: window._RC.playState().map(c => c.id), hostScene: document.getElementById('nmPopPlay').getAttribute('data-scene'), st: window._RC.playState(), W: window._RC.playInfo().W }));
+      await x.page.evaluate(() => document.getElementById('nmTtOpenBtn').click()); await x.page.clock.runFor(100); await settle(x); await waitPlay(x);
+      const b = await x.page.evaluate(() => ({ scene: window._RC.playScene(), ids: window._RC.playState().map(c => c.id), hostScene: (document.getElementById('nmTtPlay') || {}).getAttribute && document.getElementById('nmTtPlay').getAttribute('data-scene'), st: window._RC.playState(), W: window._RC.playInfo().W, pop: !!document.getElementById('svgStationPop'), popPlay: !!document.getElementById('nmPopPlay'), cvs: document.querySelectorAll('canvas.rc-play').length }));
+      assert.strictEqual(b.scene, a.scene, '같은 배경 ' + a.scene + ' → ' + b.scene); assert.strictEqual(b.hostScene, a.hostScene);
+      assert.deepStrictEqual(b.ids, a.ids, '같은 캐릭터'); assert(!b.pop && !b.popPlay, '팝업은 닫힘'); assert.strictEqual(b.cvs, 1, '캔버스는 하나만');
+      // 서 있던 자리(가로 비율)가 비슷하다 — 시트 시작 직후라 조금만 움직였다
+      b.st.forEach((c, i) => { const fa = a.st.find(q => q.id === c.id).x / a.W, fb = c.x / b.W; if (c.kind !== 'mole') assert(Math.abs(fa - fb) < 0.25, c.id + ' 자리 ' + fa.toFixed(2) + ' → ' + fb.toFixed(2)); });
+      assert.deepStrictEqual(x.errs, []); await x.ctx.close();
+    }
+  });
+  await t('역 팝업 놀이터: 팝업을 닫으면(밀기·바깥) 멈추고 그림이 사라지며, 다른 역을 누르면 새로 시작한다', async () => {
+    const x = await fresh(); await openSubway(x); await pop(x, '야탑', ['수인분당선']); await x.page.clock.runFor(200); await waitPlay(x);
+    await x.page.evaluate(() => svgRemovePopup()); await x.page.clock.runFor(100);
+    assert.strictEqual(await x.page.evaluate(() => window._RC.playState()), null); assert.strictEqual(await x.page.evaluate(() => document.querySelectorAll('canvas.rc-play').length), 0);
+    await pop(x, '서울역', ['1호선']); await x.page.clock.runFor(200); await waitPlay(x);
+    await pop(x, '강남', ['2호선']); await x.page.clock.runFor(200); await waitPlay(x);          // 팝업 위에 팝업: 이전 것은 정리되고 하나만
+    assert.strictEqual(await x.page.evaluate(() => document.querySelectorAll('canvas.rc-play').length), 1);
+    const r0 = await rectOf(x, '#svgStationPop'); const sx = (r0.left + r0.right) / 2;
+    const m = await drag(x, [sx, r0.top + 8], [sx, r0.top + 220], 8); await m.up(); await x.page.clock.runFor(600);
+    assert.strictEqual(await x.page.evaluate(() => !!document.getElementById('svgStationPop')), false, '밀어 닫힘');
+    assert.strictEqual(await x.page.evaluate(() => window._RC.playState()), null, '놀이터도 멈춤');
+    assert.deepStrictEqual(x.errs, []); await x.ctx.close();
+  });
+  await t('역 팝업 놀이터: 팝업을 거치지 않고 시간표를 열어도(이어받을 것 없음) 무작위 장면으로 정상 시작', async () => {
+    const x = await fresh(); await openSubway(x); await x.page.evaluate(() => nmTtOpen('서울역', ['1호선'])); await x.page.clock.runFor(200); await waitPlay(x);
+    assert(await x.page.evaluate(() => !!window._RC.playScene()));
+    assert.deepStrictEqual(x.errs, []); await x.ctx.close();
+  });
   await t('놀이터: 개·고양이 시트 3장이 새 렌더링(다리가 몸에 붙음)으로 교체되어 있다 — 기준선이 시트와 맞는다', async () => {
     const x = await fresh(); await x.page.waitForTimeout(100);
     const cfg = await x.page.evaluate(() => { const d = window._RC.d3; return { dolsom: d.dolsom, lovel: d.lovel, ppopu: d.ppopu }; });
