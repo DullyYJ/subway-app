@@ -14825,6 +14825,7 @@ function _updateTransitGps() {
   // 노드가 바뀌었을 때만 갱신 (불필요한 API 호출 방지)
   if(window._lastCongNodeIdx !== _cgIdx){
     window._lastCongNodeIdx = _cgIdx;
+    try{ if(_cgBest.isBus || _cgBest.isSub) _congLegSig = (_cgBest.isBus ? 'b|' + (_cgBest.lineName || '') : 's|' + (_cgBest.lineName || '') + '|' + _cgBest.name); }catch(eSg){}
     if(_cgBest.isBus && _cgBest.lineName){
       // 버스 구간 → 버스 노선 혼잡도
       // 현재 버스 구간의 정류장 목록 구성 (best 노드 주변 같은 노선 stops)
@@ -19071,10 +19072,6 @@ window.addEventListener('unhandledrejection', function(e) {
         <div class="chart-hdr">
           <span>24시간 혼잡도 <span id="chartSourceLabel" style="font-size:9px;color:var(--sub);">(통계 기반)</span></span>
           <span id="peakLbl" style="color:var(--gold);font-weight:700;">-</span>
-        </div>
-        <div class="chart-tooltip">
-          <span class="chart-tooltip-time" id="chartTooltipTime">현재 시각</span>
-          <span class="chart-tooltip-val" id="chartTooltipVal">-</span>
         </div>
         <div class="chart-scroll-wrap" id="chart24Scroll">
           <div class="bars-24" id="bars24"></div>
@@ -34535,7 +34532,6 @@ function renderChart24(stnName, lineName) {
     bars._chartSig = _chartSig;
     _chart24Center(false);
     setTimeout(function(){ _chart24Center(true); }, 300);
-    try{ var _cv = bars.querySelector('.bar24-col.cur .bar24-fill'); var _cvv = _cv ? Math.round((parseFloat(_cv.style.height) || 0) / _chartBarK()) : 0; showChartTooltip(curH, _cv ? _cvv : 0, true); }catch(eTip){}
   }
 }
 window.renderChart24 = renderChart24;
@@ -34846,6 +34842,8 @@ function updateBusCong(busSection){
         var _p0 = document.getElementById('peakLbl'); if(_p0) _p0.textContent = '-';
         var _bd0 = document.getElementById('congBadge'); if(_bd0){ _bd0.textContent = '-'; _bd0.style.background = 'var(--arex)'; }
       }catch(e0){}
+      // ★ 2026-10-15 (YJ: 버스 혼잡도가 없으면 경로에 있는 지하철 혼잡도를 보여줘): 경로의 지하철(지금 위치 이후 첫 역, 없으면 마지막으로 지난 역)로 대신 채운다
+      try{ _congFallbackSubway(); }catch(eFb){ console.warn('[혼잡도 대체]', eFb); }
       return;
     }
     var pct = res.pct;
@@ -34907,6 +34905,58 @@ function updateBusCong(busSection){
   });
 }
 window.updateBusCong = updateBusCong;
+
+
+// ── 경로를 따라 혼잡도 카드 구간 고르기 (★ 2026-10-15 YJ: 환승하면 지하철 혼잡도도 바뀌어야 한다 / 버스 정보가 없으면 경로의 지하철을) ──
+// 지금 위치(_pipHereIdx: GPS 와 시각표 추정을 합친 값)에서 '타고 있거나 곧 탈' 구간의 노드를 찾는다: 그 노드가 버스·지하철이면 그것, 도보·출발이면 다음 탈것.
+function _congLegNode(idx){
+  var N = (typeof _transitNodeData !== 'undefined') ? _transitNodeData : null;
+  if(!N || !N.length) return null;
+  idx = Math.max(0, Math.min(idx == null ? 0 : idx, N.length - 1));
+  var n = N[idx];
+  if(n && (n.isSub || n.isBus) && n.name) return { i: idx, n: n };
+  for(var j = idx + 1; j < N.length; j++){ if(N[j] && (N[j].isSub || N[j].isBus) && N[j].name) return { i: j, n: N[j] }; }
+  for(var k = idx - 1; k >= 0; k--){ if(N[k] && (N[k].isSub || N[k].isBus) && N[k].name) return { i: k, n: N[k] }; }
+  return null;
+}
+window._congLegNode = _congLegNode;
+function _congSubNodeFrom(idx){
+  var N = (typeof _transitNodeData !== 'undefined') ? _transitNodeData : null;
+  if(!N || !N.length) return null;
+  idx = Math.max(0, Math.min(idx == null ? 0 : idx, N.length - 1));
+  for(var j = idx; j < N.length; j++){ if(N[j] && N[j].isSub && N[j].name) return N[j]; }
+  for(var k = idx - 1; k >= 0; k--){ if(N[k] && N[k].isSub && N[k].name) return N[k]; }
+  return null;
+}
+function _congFallbackSubway(){
+  var idx = 0; try{ idx = _pipHereIdx(); }catch(e){}
+  var sn = _congSubNodeFrom(idx);
+  if(!sn) return false;                                   // 경로에 지하철이 없으면 '정보 없음' 그대로
+  updateCong({ name: sn.name, line: sn.lineName || '' }, true);
+  try{ var m = document.getElementById('congMeta'); if(m) m.textContent = new Date((typeof getBaseTimeMs==='function'?getBaseTimeMs():Date.now())).getHours() + '시 기준 · 버스 정보가 없어 경로의 지하철을 보여줘요'; }catch(e){}
+  return true;
+}
+window._congFallbackSubway = _congFallbackSubway;
+var _congLegSig = '';
+function _congSyncRoute(){
+  try{
+    if(window._routeLocked !== true) return;
+    var leg = _congLegNode(_pipHereIdx()); if(!leg) return;
+    var n = leg.n, sig = (n.isBus ? 'b|' + (n.lineName || '') : 's|' + (n.lineName || '') + '|' + n.name);
+    if(sig === _congLegSig) return;
+    _congLegSig = sig;
+    if(n.isBus && n.lineName){
+      var stops = [], ci = 0;
+      _transitNodeData.forEach(function(nd, i){ if(nd.isBus && nd.lineName === n.lineName && nd.lat){ if(i === leg.i) ci = stops.length; stops.push({ stationName: nd.name, lat: nd.lat, lon: nd.lng }); } });
+      updateBusCong({ name: n.lineName, stops: stops, curStopIdx: ci });
+    } else if(n.isSub){
+      updateCong({ name: n.name, line: n.lineName || '' }, true);
+    }
+  }catch(e){}
+}
+window._congSyncRoute = _congSyncRoute;
+setInterval(_congSyncRoute, 4000);
+setTimeout(_congSyncRoute, 1500);
 
 // ── 혼잡도 카드를 '출발역 설정 전' 대기 상태로 리셋 ──
 function _resetCongToWaiting(){
@@ -35095,7 +35145,6 @@ function _renderBusChart24(hourly){
     bars._chartSig = _chartSig;
     _chart24Center(false);
     setTimeout(function(){ _chart24Center(true); }, 300);
-    try{ var _cv = bars.querySelector('.bar24-col.cur .bar24-fill'); var _cvv = _cv ? Math.round((parseFloat(_cv.style.height) || 0) / _chartBarK()) : 0; showChartTooltip(curH, _cv ? _cvv : 0, true); }catch(eTip){}
   }
 }
 window._renderBusChart24 = _renderBusChart24;
@@ -35126,6 +35175,8 @@ function initChart24Scroll(){
   var scroll=document.getElementById('chart24Scroll');
   if(!scroll) return;
   var _t=null;
+  // 카드 폭이 바뀌거나(탭이 보이기 시작·글꼴 로드) 처음 그려질 때도 현재 시각을 가운데로
+  try{ if(window.ResizeObserver && !scroll._ro){ scroll._ro = new ResizeObserver(function(){ _chart24Center(false); }); scroll._ro.observe(scroll); } }catch(eRo){}
   scroll.addEventListener('scroll',function(){
     clearTimeout(_t);
     _t=setTimeout(function(){
