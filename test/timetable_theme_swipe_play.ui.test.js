@@ -147,7 +147,10 @@ const NOW = new Date('2026-10-14T13:00:00+09:00');   // 수요일 13:00
     const mid = await rectOf(x, '#nmTtSheet'); assert(mid && mid.top > r0.top + 60, '끄는 동안 따라 내려간다 ' + (mid && mid.top - r0.top));
     await m.move(sx, r0.top + 14 + 220); await x.page.clock.runFor(16); await m.up(); await x.page.clock.runFor(400);
     assert.strictEqual(await x.page.evaluate(() => !!document.getElementById('nmTtSheet')), false, '닫혀야 한다');
-    assert.strictEqual(await x.page.evaluate(() => window._RC.playState()), null, '놀이터도 멈춘다');
+    // 아래로 내리면 역 팝업(출발역·도착역)이 되돌아오고, 놀이터는 멈추지 않고 팝업 쪽이 이어받는다(캔버스는 하나)
+    assert.strictEqual(await x.page.evaluate(() => !!document.getElementById('svgStationPop')), true, '팝업이 되돌아온다');
+    await x.page.waitForFunction(() => !!document.querySelector('#svgStationPop #nmPopPlay canvas.rc-play'), null, { timeout: 5000 });
+    assert.strictEqual(await x.page.evaluate(() => document.querySelectorAll('canvas.rc-play').length), 1, '놀이터는 하나(팝업 쪽)');
     assert.deepStrictEqual(x.errs, []); await x.ctx.close();
   });
   await t('밀어 닫기(시트): 조금만 끌고 놓으면 제자리로 돌아온다(닫히지 않음)', async () => {
