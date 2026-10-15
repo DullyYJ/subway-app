@@ -247,7 +247,7 @@ public final class WidgetCore {
     // ───────── 인스턴스(위젯 하나) ─────────
     static final class Inst {
         int id; boolean vertical, dark; float wDp, hDp, den, S; WidgetGeo geo; WidgetSim sim; Bitmap bmp; Canvas cv; AndSurface surf; String[] chars; String cmode = "";
-        float digitW, digitH, padL, padT, padTm; boolean measured;
+        float digitW, digitH, padL, padT, padTm; boolean measured; int measuredFor = -1;
     }
     static final Map<Integer, Inst> INST = new HashMap<Integer, Inst>();
     static Context app; static Handler hdl;
@@ -292,12 +292,49 @@ public final class WidgetCore {
         }
         freeSheets();
     }
-    /** 출퇴근 장면이면 시계를 줄이고, 아니면 원래대로(바뀌었을 때만 글꼴을 다시 잰다). */
-    static void applyCommute(Inst n, boolean commute) {
-        if (n.geo.commute == commute) return;
-        n.geo.setCommute(commute);
-        measureClock(n);
+    /** 출퇴근 장면이면 말풍선·버튼 자리만큼만 시계를 줄이고, 아니면 원래대로(바뀌었을 때만 글꼴을 다시 잰다). say 는 말풍선에 들어갈 글. */
+    static void applyCommute(Inst n, boolean commute, String say) {
+        WidgetGeo g = n.geo;
+        int lines = g.bubLines;
+        if (commute) {
+            // 글자 크기는 줄 수에 따라 다시 정해지고(가로형), 줄 수는 글자 크기에 따라 달라지므로 몇 번 맞춰 본다
+            g.setCommute(true, lines);
+            int prev = -1;
+            for (int i = 0; i < 4; i++) {
+                int l = bubbleLines(n, say);
+                if (l == g.bubLines) break;
+                if (l == prev) { g.setCommute(true, Math.max(l, g.bubLines)); break; }        // 줄 수 ↔ 글자 크기가 서로 오가면 큰 쪽으로 잡아 넘치지 않게
+                prev = g.bubLines; g.setCommute(true, l);
+            }
+        } else g.setCommute(false);
+        if (n.measuredFor != g.bubLines * 2 + (g.commute ? 1 : 0)) { measureClock(n); n.measuredFor = g.bubLines * 2 + (g.commute ? 1 : 0); }
     }
+    /** 말풍선 글이 상자 안에서 몇 줄이 되는지 실제 글꼴로 잰다(줄바꿈은 띄어쓰기에서, 한 낱말이 넘치면 글자 단위로). */
+    static int bubbleLines(Inst n, String say) {
+        WidgetGeo g = n.geo;
+        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        p.setTypeface(Typeface.create("sans-serif", Typeface.BOLD));
+        p.setTextSize(g.bubTs * n.den);
+        float maxW = Math.max(10f, (g.bubW - 2f * g.bubPad) * n.den);
+        return wrapLines(say == null ? "" : say, maxW, p);
+    }
+    static int wrapLines(String say, float maxW, Paint p) {
+        int total = 0;
+        for (String para : say.split("\\n", -1)) {
+            String[] words = para.trim().split(" +");
+            float cur = 0f; int lines = 1; float sp = p.measureText(" ");
+            for (String w : words) {
+                float ww = p.measureText(w);
+                if (cur == 0f) { cur = ww; }
+                else if (cur + sp + ww <= maxW) { cur += sp + ww; }
+                else { lines++; cur = ww; }
+                while (cur > maxW) { lines++; cur -= maxW; }                      // 한 낱말이 한 줄보다 길면 글자 단위로 넘어간다
+            }
+            total += lines;
+        }
+        return Math.max(1, total);
+    }
+    static String sayText(Scene s) { return s.say2.length() > 0 ? s.say1 + "\n" + s.say2 : s.say1; }
     static void measureClock(Inst n) {
         Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
         p.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
@@ -401,11 +438,13 @@ public final class WidgetCore {
         boolean commute = s.kind.length() > 0 && System.currentTimeMillis() < s.until;
         rv.setViewVisibility(cmt, commute ? android.view.View.VISIBLE : android.view.View.GONE);
         if (commute) {
-            rv.setViewPadding(cmt, px(n, g.bubL), px(n, g.bubT), px(n, g.W - (g.bubL + g.bubW)), px(n, g.H - (g.btnT + g.btnH)));
-            String say = s.say2.length() > 0 ? s.say1 + "\n" + s.say2 : s.say1;
-            rv.setTextViewText(bub, say);
-            float bs = Math.max(11f, Math.min(15f, g.bubW / 13f));
-            rv.setTextViewTextSize(bub, TypedValue.COMPLEX_UNIT_DIP, bs);
+            rv.setViewPadding(cmt, px(n, g.bubL), 0, px(n, g.W - (g.bubL + g.bubW)), px(n, g.H - (g.btnT + g.btnH)));     // 위쪽은 비워 둬 아래(버튼)에서부터 쌓는다
+            rv.setTextViewText(bub, sayText(s));
+            rv.setTextViewTextSize(bub, TypedValue.COMPLEX_UNIT_DIP, g.bubTs);            // 시계 > 말풍선 글자 > 버튼 글자
+            rv.setTextViewTextSize(btn, TypedValue.COMPLEX_UNIT_DIP, g.btnTs);
+            int bpv = px(n, Math.max(0f, (g.btnH - g.btnTs * WidgetGeo.LINE_K) / 2f)), bph = px(n, g.btnTs * 1.8f);
+            rv.setViewPadding(btn, bph, bpv, bph, bpv);
+            rv.setViewPadding(bub, px(n, g.bubPad), px(n, g.bubPad), px(n, g.bubPad), px(n, g.bubPad));
             rv.setTextViewText(btn, s.btn.length() > 0 ? s.btn : ("morn".equals(s.kind) ? "출근하기" : "퇴근하기"));
             rv.setOnClickPendingIntent(btn, goIntent(c, s.kind));
             rv.setOnClickPendingIntent(bub, communityIntent(c));
@@ -441,7 +480,7 @@ public final class WidgetCore {
         for (int id : ids(a)) {
             try {
                 Inst n = inst(a, id);
-                applyCommute(n, commute);
+                applyCommute(n, commute, commute ? sayText(s) : "");
                 if (commute) n.sim.setMode(WidgetSim.COMMUTE, s.mood); else n.sim.setMode(WidgetSim.NORMAL, null);
                 if (!running) settleFrame(n);
                 render(n);

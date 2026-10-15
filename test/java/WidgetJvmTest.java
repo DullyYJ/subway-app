@@ -55,9 +55,22 @@ public class WidgetJvmTest {
             ok(g.clkL >= 0 && g.clkR() <= g.W && g.clkT >= g.charH + 3.9f && g.clkB() <= g.H, tag + ": 시계 상자가 위젯 안, 위에 캐릭터가 올라설 여유(" + g.clkT + " >= " + g.charH + ")");
             ok(g.clkW >= (v ? g.W * 0.38f : g.W * 0.45f) || g.clkH >= g.H * 0.40f, tag + ": 시계가 위젯 칸에 크게 들어찬다(" + g.clkW + "x" + g.clkH + " / " + g.W + "x" + g.H + ")");
             WidgetGeo gc = WidgetGeo.of(v, sz[0], sz[1]); gc.setCommute(true);
-            ok(gc.textDp < g.textDp && gc.clkW < g.clkW, tag + ": 출퇴근 장면에서는 시계가 줄어든다(" + g.textDp + "→" + gc.textDp + ")");
+            ok(gc.textDp <= g.textDp && gc.clkW <= g.clkW, tag + ": 출퇴근 장면에서 시계는 커지지 않는다(" + g.textDp + "→" + gc.textDp + ")");
+            ok(gc.textDp > gc.bubTs && gc.bubTs > gc.btnTs && gc.btnTs >= 8f, tag + ": 글자 크기 순서 시계 > 말풍선 > 버튼(" + gc.textDp + " > " + gc.bubTs + " > " + gc.btnTs + ")");
+            ok(gc.btnH >= 24f && gc.btnH >= gc.btnTs * 2f, tag + ": 버튼이 글자에 비례해 넉넉하다(h=" + gc.btnH + ")");
+            ok(Math.abs(gc.bubH - gc.bubbleHeight()) < 0.01f, tag + ": 말풍선 상자 높이는 글 줄 수만큼만(" + gc.bubLines + "줄 → " + gc.bubH + ")");
+            if (v) {
+                float need = gc.charH * 0.25f + 8f + gc.bubH + WidgetGeo.GAP + gc.btnH + WidgetGeo.MARGIN_B, room = gc.H - (gc.charH + 4f) - gc.clkH;
+                ok(room + 0.5f >= need || gc.textDp <= 14.01f, tag + ": (출퇴근) 시계 아래 자리가 말풍선·버튼에 충분(" + room + " >= " + need + ")");
+                float spare = room - need;
+                ok(spare <= 0.30f * gc.textDp + 12f || gc.textDp >= g.textDp - 0.01f, tag + ": 시계는 필요한 만큼만 줄어든다(남는 자리 " + spare + ")");
+            }
+            // 말풍선 글이 길어 줄이 늘면 상자는 그만큼 커지고 시계는 더 줄어든다(넘치지 않는다)
+            WidgetGeo g1 = WidgetGeo.of(v, sz[0], sz[1]); g1.setCommute(true, 1);
+            WidgetGeo g4 = WidgetGeo.of(v, sz[0], sz[1]); g4.setCommute(true, 4);
+            ok(g4.bubH > g1.bubH && g4.textDp <= g1.textDp + 0.01f && g4.btnT + g4.btnH <= g4.H && g4.bubT >= 0, tag + ": 말풍선 줄 수가 늘면 상자가 커지고 위젯 밖으로 안 나간다(" + g1.bubH + "→" + g4.bubH + ")");
             ok(gc.bubL >= 0 && gc.bubL + gc.bubW <= gc.W + 0.01f && gc.btnL >= 0 && gc.btnL + gc.btnW <= gc.W + 0.01f && gc.btnT + gc.btnH <= gc.H && gc.bubT + gc.bubH <= gc.btnT + 0.01f, tag + ": (출퇴근) 말풍선·버튼이 위젯 안에서 겹치지 않음");
-            ok(gc.bubH >= 28f && gc.bubW >= 60f, tag + ": (출퇴근) 말풍선이 글을 담을 만큼 크다(" + gc.bubW + "x" + gc.bubH + ")");
+            ok(gc.bubH >= gc.bubLines * gc.bubTs && gc.bubW >= 60f, tag + ": (출퇴근) 말풍선이 글을 담을 만큼 크다(" + gc.bubW + "x" + gc.bubH + ")");
             ok(gc.clkT + gc.clkH <= gc.H, tag + ": (출퇴근) 줄어든 시계도 위젯 안");
             if (v) ok(gc.bubT >= gc.clkB() + gc.charH * 0.25f, tag + ": 말풍선이 줄 선 캐릭터 아래");
             else ok(gc.bubL >= gc.clkR() + 10f, tag + ": 말풍선이 시계 오른쪽");
@@ -90,7 +103,7 @@ public class WidgetJvmTest {
                 WidgetSim s = new WidgetSim(g, 7, new String[] { "dolsom", "lovel", "sul" });
                 for (int i = 0; i < 300; i++) s.step(0.1f);
                 float clkW0 = g.clkW; g.setCommute(true);
-                ok(g.clkW < clkW0, tag + ": 출퇴근 장면에서는 시계가 줄어든다(" + clkW0 + "→" + g.clkW + ")");
+                ok(g.clkW <= clkW0, tag + ": 출퇴근 장면에서 시계는 커지지 않는다(" + clkW0 + "→" + g.clkW + ")");
                 s.setMode(WidgetSim.COMMUTE, mood);
                 for (int i = 0; i < 150; i++) s.step(0.1f);
                 boolean all = true, nearSlot = true;
@@ -272,7 +285,8 @@ public class WidgetJvmTest {
         WidgetGeo g = WidgetGeo.of(v, W, H);
         WidgetSim s = new WidgetSim(g, seed, ids);
         boolean commute = !mood.equals("normal") && !mood.equals("sleep") && !mood.equals("beddingMid");
-        float t = 0; while (t < secs) { s.step(0.05f); t += 0.05f; if (commute && Math.abs(t - 2f) < 0.026f) { g.setCommute(true); s.setMode(WidgetSim.COMMUTE, mood); } }
+        int bl = System.getProperty("bubLines") != null ? Integer.parseInt(System.getProperty("bubLines")) : 2;
+        float t = 0; while (t < secs) { s.step(0.05f); t += 0.05f; if (commute && Math.abs(t - 2f) < 0.026f) { g.setCommute(true, bl); s.setMode(WidgetSim.COMMUTE, mood); } }
         if (mood.equals("sleep")) { s.bed(true); for (int i = 0; i < 700 && !s.allInBed(); i++) s.step(0.05f); for (int i = 0; i < 30; i++) s.step(0.05f); }
         if (mood.equals("beddingMid")) { s.bed(true); for (int i = 0; i < 25; i++) s.step(0.05f); }
         int S = 4; BufferedImage im = new BufferedImage((int) (W * S), (int) (H * S), BufferedImage.TYPE_INT_ARGB);
@@ -287,9 +301,11 @@ public class WidgetJvmTest {
         gr.setColor(new Color(255, 0, 0, 90)); gr.setStroke(new BasicStroke(1)); gr.drawRect((int) (g.clkL * S), (int) (g.clkT * S), (int) (g.clkW * S), (int) (g.clkH * S));
         if (commute && s.mode == WidgetSim.COMMUTE) {
             gr.setColor(dark ? new Color(0x2A2A30) : Color.WHITE); gr.fillRoundRect((int) (g.bubL * S), (int) (g.bubT * S), (int) (g.bubW * S), (int) (g.bubH * S), 24, 24);
-            gr.setColor(dark ? Color.WHITE : Color.BLACK); gr.setFont(new Font("SansSerif", Font.PLAIN, 11 * S)); gr.drawString("bubble", (g.bubL + 6) * S, (g.bubT + 16) * S);
+            gr.setColor(dark ? Color.WHITE : Color.BLACK); gr.setFont(new Font("SansSerif", Font.BOLD, Math.round(g.bubTs * S)));
+            for (int li = 0; li < g.bubLines; li++) gr.drawString("오늘도 수고 " + (li + 1), (g.bubL + g.bubPad) * S, (g.bubT + g.bubPad + g.bubTs * (1.0f + 1.3f * li)) * S);
+            gr.setFont(new Font("SansSerif", Font.BOLD, Math.round(g.btnTs * S)));
             gr.setColor(dark ? Color.WHITE : Color.BLACK); gr.fillRoundRect((int) (g.btnL * S), (int) (g.btnT * S), (int) (g.btnW * S), (int) (g.btnH * S), 40, 40);
-            gr.setColor(dark ? Color.BLACK : Color.WHITE); gr.drawString("button", (g.btnL + 8) * S, (g.btnT + g.btnH * 0.65f) * S);
+            gr.setColor(dark ? Color.BLACK : Color.WHITE); gr.drawString("퇴근하기", (g.btnL + (g.btnW - gr.getFontMetrics().stringWidth("퇴근하기") / (float) S) / 2f) * S, (g.btnT + g.btnH * 0.5f + g.btnTs * 0.35f) * S);
         }
         WidgetArt.draw(s, new AwtSurface(gr, sheets, S), dark);
         gr.dispose();

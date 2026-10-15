@@ -19474,7 +19474,7 @@ window.addEventListener('unhandledrejection', function(e) {
         </div>
         <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">노선도를 기기가 직접 그려서 확대·축소·이동이 부드럽고 글자가 깨지지 않아요. 문제가 있으면 꺼서 예전 방식으로 볼 수 있어요.</p>
         <div id="nmSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
-        <style>#nmSetOn:checked ~ #nmSetKnob{background:var(--gold);} #nmSetOn:checked ~ #nmSetDot{left:23px;}</style>
+        <style>#nmSetOn:checked ~ #nmSetKnob{background:var(--gold) !important;} #nmSetOn:checked ~ #nmSetDot{left:23px !important;}</style>
       </div>
 
       <!-- ★ 2026-10-03: 도착 오차 익명 기록 (끌 수 있음) -->
@@ -19500,7 +19500,8 @@ window.addEventListener('unhandledrejection', function(e) {
           .cm-sug-item:last-child{border-bottom:none;}
           .cm-sug-item:active{background:var(--bg);}
           .cm-sug-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
-          .cm-sug-line{font-size:10px;font-weight:700;color:var(--sub);margin-left:auto;white-space:nowrap;}
+          .cm-sug-name{flex:0 0 auto;max-width:72%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+          .cm-sug-line{font-size:10px;font-weight:700;color:var(--sub);margin-left:auto;white-space:nowrap;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;}
           .cm-timebtn{width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:9px;padding:11px 10px;color:var(--text);font-size:15px;font-weight:700;box-sizing:border-box;cursor:pointer;text-align:center;letter-spacing:.5px;}
           .cm-timebtn:active{opacity:.7;}
           .cm-tp-seg{flex:1;padding:10px 0;border-radius:10px;font-size:13px;font-weight:800;text-align:center;cursor:pointer;border:1px solid var(--border2);color:var(--sub);background:transparent;}
@@ -24475,7 +24476,7 @@ window._cmSug = function(inp, boxId, typed){
     var safeNm = it.name.replace(/'/g, "\\'");
     html += '<div class="cm-sug-item" onmousedown="event.preventDefault();_cmSugPick(\''+inp.id+'\',\''+boxId+'\',\''+safeNm+'\')">'
           + '<span class="cm-sug-dot" style="background:'+(it.colors[0]||'#888')+';"></span>'
-          + '<span>'+it.name+'</span>'
+          + '<span class="cm-sug-name">'+it.name+'</span>'
           + '<span class="cm-sug-line">지하철 · '+it.lines.slice(0,2).join('·')+(it.lines.length>2?' 외':'')+'</span>'
           + '</div>';
   });
@@ -24505,7 +24506,7 @@ function _cmSugBus(inp, box, q){
         var safeNm = String(nm).replace(/</g,'&lt;').replace(/'/g, "\\'");
         bhtml += '<div class="cm-sug-item" onmousedown="event.preventDefault();_cmSugPickBus(\''+inp.id+'\',\''+box.id+'\',\''+safeNm+'\','+la+','+lo+')">'
               + '<span class="cm-sug-dot" style="background:var(--green);border-radius:3px;"></span>'
-              + '<span>'+String(nm).replace(/</g,'&lt;')+'</span>'
+              + '<span class="cm-sug-name">'+String(nm).replace(/</g,'&lt;')+'</span>'
               + '<span class="cm-sug-line">버스</span>'
               + '</div>';
       });

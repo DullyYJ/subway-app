@@ -231,6 +231,24 @@ const NOW = new Date('2026-10-14T13:00:00+09:00');
     assert.deepStrictEqual(x.errs, []); await x.ctx.close();
   });
 
+  await t('부드러운 노선도 스위치: 켜짐=금색+점 오른쪽, 꺼짐=회색+점 왼쪽 — 눌러서 바뀌고 글자 상태와 모양이 항상 같다', async () => {
+    const x = await fresh({ plugin: true }); await openSubway(x);
+    const look = () => x.page.evaluate(() => {
+      const k = document.getElementById('nmSetKnob'), d = document.getElementById('nmSetDot'), cb = document.getElementById('nmSetOn'), st = document.getElementById('nmSetStat').textContent;
+      const probe = document.createElement('div'); probe.style.background = 'var(--gold)'; document.body.appendChild(probe); const gold = getComputedStyle(probe).backgroundColor; probe.remove();
+      return { on: cb.checked, bg: getComputedStyle(k).backgroundColor, gold, left: getComputedStyle(d).left, textOn: /^켜짐/.test(st), textOff: /^꺼짐/.test(st) };
+    });
+    let r = await look();
+    assert(r.on && r.textOn && r.bg === r.gold && parseFloat(r.left) > 15, '처음(켜짐) 모양이 틀림: ' + JSON.stringify(r));
+    await x.page.evaluate(() => document.getElementById('nmSetKnob').click()); await x.page.clock.runFor(900);      // 스위치를 눌러 끈다
+    r = await look();
+    assert(!r.on && r.textOff && r.bg !== r.gold && parseFloat(r.left) < 10, '끈 뒤 모양이 틀림: ' + JSON.stringify(r));
+    await x.page.evaluate(() => document.getElementById('nmSetKnob').click()); await x.page.clock.runFor(900);      // 다시 켠다
+    r = await look();
+    assert(r.on && r.textOn && r.bg === r.gold && parseFloat(r.left) > 15, '다시 켠 뒤 모양이 틀림: ' + JSON.stringify(r));
+    assert.deepStrictEqual(x.errs, []); await x.ctx.close();
+  });
+
   await t('플러그인이 없으면 설정 카드는 숨겨진다', async () => {
     const x = await fresh({ plugin: false }); await x.page.clock.runFor(800);
     assert.strictEqual(await x.page.evaluate(() => getComputedStyle(document.getElementById('nmSetCard')).display), 'none'); await x.ctx.close();

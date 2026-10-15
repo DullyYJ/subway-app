@@ -46,14 +46,14 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
+        android:gravity="bottom"
         android:visibility="gone">
 
         <TextView
             android:id="@+id/gw_bubble"
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:layout_marginBottom="5dp"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="6dp"
             android:background="@drawable/gdm_bubble_dark"
             android:gravity="center"
             android:padding="8dp"
@@ -64,7 +64,7 @@
         <TextView
             android:id="@+id/gw_btn"
             android:layout_width="wrap_content"
-            android:layout_height="30dp"
+            android:layout_height="wrap_content"
             android:layout_gravity="center_horizontal"
             android:background="@drawable/gdm_btn_dark"
             android:gravity="center"

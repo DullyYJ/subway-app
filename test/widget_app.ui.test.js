@@ -107,11 +107,27 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   });
   await t('앱이 막 켜지는 중(탭 막대가 아직 없음)에 열려도 준비되면 커뮤니티 탭으로 간다', async () => {
     const { ctx, page } = await fresh({ plugin: true, alarm: ALARM, wait: 300 });
-    await page.evaluate(() => { window.__tab = 'community'; });
-    await page.evaluate(() => { const ni = document.getElementById('ni-community'); window.__ni = ni; ni.removeAttribute('id'); window.dispatchEvent(new Event('gdmWidgetGo')); setTimeout(function () { window.__ni.id = 'ni-community'; }, 1200); });
     await page.evaluate(() => { window.__sw = []; const o = window.switchTab; window.switchTab = function (t) { window.__sw.push(t); return o.apply(this, arguments); }; });
-    await page.waitForTimeout(3200);
+    await page.evaluate(() => { const ni = document.getElementById('ni-community'); window.__ni = ni; ni.removeAttribute('id'); window.__tab = 'community'; window.dispatchEvent(new Event('gdmWidgetGo')); setTimeout(function () { window.__ni.id = 'ni-community'; }, 1200); });
+    await page.waitForFunction(() => window.__sw.length >= 1, null, { timeout: 15000 });     // 탭 막대가 생기는 대로(재시도 중) 이동한다
+    await page.waitForTimeout(1200);
     assert.deepStrictEqual(await page.evaluate(() => window.__sw), ['community']); await ctx.close();
+  });
+  await t('출퇴근 장소 자동완성 목록: 역 이름이 가로 한 줄로 나오고(세로로 쪼개지지 않고) 긴 노선 안내는 줄임표로 줄어든다', async () => {
+    const { ctx, page } = await fresh({ plugin: false, alarm: ALARM });
+    const r = await page.evaluate(() => {
+      const inp = document.getElementById('cmToStn'); inp.value = '원인재'; _cmSug(inp, 'cmToSug', 1);
+      const box = document.getElementById('cmToSug'); document.body.appendChild(box);                       // 설정 탭이 숨겨져 있어도 크기를 잴 수 있게 꺼내 놓는다
+      box.style.cssText = 'position:fixed;left:200px;top:20px;width:170px;display:block;z-index:99999;';
+      const it = box.querySelector('.cm-sug-item'); if(!it) return { none: true };
+      const nm = it.querySelector('.cm-sug-name'), ln = it.querySelector('.cm-sug-line');
+      const fs = parseFloat(getComputedStyle(nm).fontSize);
+      return { text: nm.textContent, h: nm.getBoundingClientRect().height, w: nm.getBoundingClientRect().width, fs, lineW: ln.getBoundingClientRect().width, itemH: it.getBoundingClientRect().height, itemW: it.getBoundingClientRect().width, nowrap: getComputedStyle(nm).whiteSpace };
+    });
+    assert(!r.none, '자동완성 항목이 없음');
+    assert(r.h < r.fs * 1.9, '역 이름이 여러 줄로 쪼개짐: ' + JSON.stringify(r));
+    assert(r.w >= r.fs * r.text.length * 0.8, '역 이름 칸이 너무 좁음: ' + JSON.stringify(r));
+    assert(r.itemH < 50, '항목이 너무 높음: ' + JSON.stringify(r)); await ctx.close();
   });
   await t('위젯 추가 버튼 4종이 종류를 넘기고 안내를 띄운다', async () => {
     const { ctx, page } = await fresh({ plugin: true, alarm: ALARM });

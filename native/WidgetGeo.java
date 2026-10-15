@@ -20,13 +20,19 @@ public final class WidgetGeo {
     public float stageL, stageW;
     /** 출퇴근 장면: 말풍선·버튼 */
     public float bubL, bubT, bubW, bubH, btnL, btnT, btnW, btnH;
+    /** 출퇴근 장면 글자 크기(dp): 시계 > 말풍선 > 버튼 순으로 작아진다. 말풍선 줄 수는 실제 글꼴로 잰 쪽(WidgetCore)이 넣어 준다. */
+    public float bubTs, btnTs;
+    public int bubLines = 2;
+    /** 말풍선 안쪽 여백(dp) — 낮은 가로 위젯에서는 좁힌다. */
+    public float bubPad = 8f;
     /** 날짜 글자 자리(왼쪽 위) */
     public float dateL, dateT, dateSp;
 
     public static final float DIGIT_W = 0.56f, COLON_W = 0.26f, DIGIT_H = 0.72f;
 
-    /** 출퇴근 장면에서 시계 글자를 줄이는 최대 비율(말풍선·버튼 자리가 모자라면 더 줄인다). */
-    public static final float COMMUTE_SCALE = 0.5f;
+    /** 말풍선 글줄 높이 배수·안쪽 여백, 말풍선과 버튼 사이·버튼과 아래 가장자리 사이(dp), 버튼 높이/글자 배수, 버튼 글자/말풍선 글자 비율. */
+    public static final float LINE_K = 1.3f, GAP = 6f, MARGIN_B = 8f, BTN_K = 2.5f, BTN_RATIO = 0.88f;
+    public static final float BTN_MIN_H = 30f;
     public boolean commute;
     private WidgetGeo(boolean v, float w, float h) { vertical = v; W = w; H = h; }
 
@@ -39,11 +45,32 @@ public final class WidgetGeo {
     }
 
     /** 출퇴근 장면이면 시계를 줄여 다시 배치한다(글꼴 실측은 호출한 쪽이 measured 로 다시 넣는다). */
-    public void setCommute(boolean c) { if (c == commute) return; commute = c; build(); }
+    public void setCommute(boolean c) { setCommute(c, bubLines); }
+    /** 출퇴근 장면 여부와 말풍선 글 줄 수가 바뀌었을 때만 다시 배치한다. */
+    public void setCommute(boolean c, int lines) {
+        lines = Math.max(1, Math.min(6, lines));
+        if (c == commute && lines == bubLines) return;
+        commute = c; bubLines = lines; build();
+    }
+    /** 말풍선 상자 높이(글 줄 수 × 글자 크기 × 줄 간격 + 위아래 여백). */
+    public float bubbleHeight() { return bubLines * bubTs * LINE_K + 2f * bubPad; }
+    public static float buttonHeight(float btnTs) { return Math.max(BTN_MIN_H, btnTs * BTN_K); }
+    private static float btnHeightFor(boolean vertical, float btnTs) { return vertical ? buttonHeight(btnTs) : Math.max(24f, btnTs * BTN_K); }
+    /** 출퇴근 장면 글자 크기를 정한다 — 상자 폭에 비례해 말풍선 글자를 키우고, 높이가 모자라면(가로형) 줄인다. 시계(T)보다는 늘 작다. */
+    private void sizeText(float boxW, float T) {
+        float ts = vertical ? clamp(boxW / 12.5f, 13f, 18f) : clamp(H * 0.11f, 12f, 18f);   // 가로형은 폭이 좁아 높이에 맞춘다
+        if (!vertical) {
+            bubPad = clamp(H * 0.07f, 4f, 8f);
+            float avail = H - 4f - 6f;
+            while (ts > 8f && bubLines * ts * LINE_K + 2f * bubPad + GAP + btnHeightFor(false, ts * BTN_RATIO) > avail) ts -= 0.5f;
+        }
+        ts = Math.min(ts, Math.max(8f, T - 1f));
+        bubTs = ts; btnTs = ts * BTN_RATIO;
+    }
 
     /**
      * 위젯 칸에 시계가 꽉 차게(배경은 투명이라 시계 크기가 곧 위젯의 모습) — 캐릭터가 시계 위에 오를 머리 공간만 남기고 가운데에 크게 둔다.
-     * 출퇴근 장면에서는 시계를 줄이고(최대 COMMUTE_SCALE, 말풍선·버튼 자리가 모자라면 더) 그 자리에 말풍선과 버튼을 넣는다.
+     * 출퇴근 장면에서는 말풍선(글 줄 수만큼)과 버튼이 들어갈 자리만큼만 시계를 줄인다(시계 > 말풍선 글자 > 버튼 글자).
      */
     private void build() {
         ground = H - 4f;
@@ -54,7 +81,11 @@ public final class WidgetGeo {
             headroom = charH + 4f;
             float tH = (H - headroom - 8f) / DIGIT_H, tW = (W - 16f) / (4 * DIGIT_W + COLON_W);
             T = clamp(Math.min(tH, tW), 16f, 120f);
-            if (commute) T = Math.max(14f, Math.min(T * COMMUTE_SCALE, (W - 136f) / (4 * DIGIT_W + COLON_W)));
+            if (commute) {
+                T = Math.max(14f, Math.min(T, (W - 136f) / (4 * DIGIT_W + COLON_W)));         // 옆에 말풍선·버튼 칸이 들어갈 만큼만 줄인다
+                float sw = Math.max((4 * DIGIT_W + COLON_W) * T, STAGE_PER_CHAR * charH * 3f);
+                sizeText(Math.max(60f, W - 8f - sw - 12f - 8f), T);
+            }
             textDp = T;
             clkW = (4 * DIGIT_W + COLON_W) * T; clkH = DIGIT_H * T; lineH = clkH;
         } else {
@@ -63,9 +94,12 @@ public final class WidgetGeo {
             float tH = (H - headroom - 8f) / (DIGIT_H * 2f + 0.30f), tW = (W - 12f) / (2 * DIGIT_W);
             T = clamp(Math.min(tH, tW), 16f, 120f);
             if (commute) {
-                float below = btnHFor(H) + 10f + 5f + 34f + 8f + 0.25f * charH;     // 시계 아래에 필요한 자리(캐릭터 줄·말풍선·버튼)
+                sizeText(W - 16f, T);
+                // 시계 아래에 필요한 자리(캐릭터 줄 + 말풍선 + 버튼)만 빼고 남는 만큼 — 자리가 넉넉하면 시계는 줄이지 않는다
+                float below = 0.25f * charH + 8f + bubbleHeight() + GAP + btnHeightFor(true, btnTs) + MARGIN_B;
                 float fit = (H - headroom - below) / (DIGIT_H * 2f + 0.30f);
-                T = Math.max(14f, Math.min(T * COMMUTE_SCALE, fit));
+                T = Math.max(14f, Math.min(T, fit));
+                bubTs = Math.min(bubTs, Math.max(8f, T - 1f)); btnTs = bubTs * BTN_RATIO;
             }
             textDp = T;
             lineH = DIGIT_H * T;
@@ -73,7 +107,6 @@ public final class WidgetGeo {
         }
         derive();
     }
-    static float btnHFor(float h) { return BTN_H; }   // 레이아웃의 버튼 높이(30dp)와 같게
 
     /** 실제 글꼴로 잰 시계 숫자 상자(dp)를 받아 나머지 자리를 다시 계산한다(글꼴마다 숫자 폭·높이가 조금 다르다). 세로형의 lineH 는 한 줄 숫자 높이. */
     public void measured(float digitsW, float digitsH, float oneLineH) {
@@ -89,7 +122,7 @@ public final class WidgetGeo {
         float headroom = charH + 4f;
         stageW = clkW;
         if (commute) stageW = Math.max(clkW, STAGE_PER_CHAR * charH * 3f);
-        btnH = btnHFor(H);
+        btnH = commute ? btnHeightFor(vertical, btnTs) : BTN_MIN_H;
         if (!vertical) {
             if (!commute) {
                 stageL = (W - clkW) / 2f;
@@ -102,10 +135,11 @@ public final class WidgetGeo {
             }
             dateL = stageL; dateSp = 11f; dateT = 3f;
             float rl = stageL + stageW + 12f, rr = W - 8f;
-            bubL = rl; bubW = Math.max(60f, rr - rl); bubT = 6f;
+            bubL = rl; bubW = Math.max(60f, rr - rl);
             btnW = Math.min(bubW, 128f); btnL = bubL + (bubW - btnW) / 2f;
-            btnT = H - btnH - 8f;
-            bubH = Math.max(26f, btnT - 4f - bubT);
+            btnT = H - btnH - (commute ? 6f : MARGIN_B);
+            bubH = commute ? bubbleHeight() : 26f;
+            bubT = Math.max(2f, btnT - GAP - bubH);
         } else {
             stageL = (W - stageW) / 2f;
             clkL = (W - clkW) / 2f;
@@ -113,16 +147,15 @@ public final class WidgetGeo {
             else clkT = headroom;
             dateL = 0; dateSp = 11f; dateT = 3f;
             btnW = W - 16f; btnL = 8f;
-            btnT = H - btnH - 10f;
+            btnT = H - btnH - MARGIN_B;
             bubL = 8f; bubW = W - 16f;
-            bubT = clkT + clkH + charH * 0.25f + 8f;
-            bubH = Math.max(30f, btnT - 5f - bubT);
+            bubH = commute ? bubbleHeight() : 30f;
+            bubT = btnT - GAP - bubH;
         }
         stageY = Math.min(ground, clkT + clkH + charH * 0.25f);
     }
     /** 캐릭터 한 마리가 줄 설 때 차지하는 폭(캐릭터 키의 배수) */
     public static final float STAGE_PER_CHAR = 0.82f;
-    public static final float BTN_H = 30f;
 
     public float clkR() { return clkL + clkW; }
     public float clkB() { return clkT + clkH; }
