@@ -42,6 +42,7 @@ jobs:
           - ovl_ask.ui.test.js
           - bg_fix_time.ui.test.js
           - ride_vehicle_app.ui.test.js
+          - bus_pick_flow.ui.test.js
           - timetable_coverage.ui.test.js
           - overlay_stale.ui.test.js
           - holidays.test.js

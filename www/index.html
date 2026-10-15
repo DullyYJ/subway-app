@@ -5382,6 +5382,7 @@ function openBusRoute(cityCode, routeId, routeNo, routeTp, originStop){
   }
   // ★ 어느 정류장에서 눌렀는지 기억 → 내 GPS가 아니라 '그 정류장' 기준으로 방향·순서 표시
   window._brOrigin = null;
+  _brPickIdx = null; try{ _brPickRender(); }catch(ePk0){}      // 눌러 둔 정류장은 새 노선에서 비운다(출발지를 이미 정한 상태는 그대로 이어진다)
   try{
     if(originStop){
       var _oid = String(originStop.nodeid || originStop.nodeId || originStop.arsId || '');
@@ -5415,6 +5416,7 @@ function openBusRoute(cityCode, routeId, routeNo, routeTp, originStop){
   modal.dataset.src = _src;
 
   window._busRouteModalOpen = true;   // ★ 이 화면의 조회를 우선 처리
+  try{ _brPickRender(); }catch(ePk2){}                          // 출발지를 이미 정했으면 '도착지 고르기' 바가 바로 보인다
   // 이전 노선의 요약이 남지 않도록 비운다
   try{ var _fx = document.getElementById('busRouteFixed'); if(_fx) _fx.innerHTML = ''; }catch(e){}
   _loadBusRouteData(cityCode, routeId, _src);
@@ -5575,6 +5577,7 @@ function closeBusRoute(){
   var modal = document.getElementById('busRouteModal');
   if(modal) modal.style.display = 'none';
   window._brOrigin = null;   // 기준 정류장 해제 (다음에 열 때 잘못 적용 방지)
+  _brPickIdx = null; try{ var _pb = document.getElementById('brPickBar'); if(_pb) _pb.style.display = 'none'; }catch(ePk1){}
   window._busRouteModalOpen = false;   // ★ 우선 처리 해제
   // 위치 갱신 타이머 정리
   try{ if(window._busPosTimer){ clearInterval(window._busPosTimer); window._busPosTimer = null; } }catch(e){}
@@ -5587,14 +5590,164 @@ function _brDirCls(cd){
   if(v === '1') return 'down';      // 하행(회차 후)
   return 'na';
 }
-function _brStopMap(el, idx){
+// ═══ 버스 경로에서 출발지·도착지 고르기 (2026-10-15 YJ) ═══════════════════════════════
+//   예전엔 경로 화면에서 정류장을 누르면 그 자리에 지도·네이버/카카오 길찾기가 펼쳐졌다 → 없애고 아래 흐름으로 바꿨다:
+//   ① 정류장을 누르면 화면 하단에 [출발지로 설정] → 누르면 '출발지로 설정되었습니다' 팝업, 경로 화면으로 돌아온다
+//   ② 하단에 '다른 정류장을 누르면 도착지로 설정됩니다' 문구 + [도착지는 역으로 설정] — 다른 정류장을 누르면 '도착지로 설정되었습니다' → 경로탐색(엔진)·홈 이동
+//   ③ [도착지는 역으로 설정] → 노선도(지하철) 탭이 열리고, 역을 누르면 그 역의 시간표 시트 + 하단 [도착지로 설정]만 → 누르면 경로탐색·홈 이동
+//   경로 계산은 전부 엔진(fmapDoRoute → /route)이 한다 — 여기는 선택 상태와 화면(하단 바·팝업)만 그린다.
+window._pick = null;            // { start:{type:'bus',...}, at } — 출발지를 정했고 도착지를 고르는 중
+window._pickDestMode = false;   // 도착지를 '역'으로 고르는 중(노선도 탭)
+var _brPickIdx = null;          // 지금 눌러 둔 정류장(출발지 후보)
+function _pickAlive(){ var P = window._pick; if(P && Date.now() - P.at > 15 * 60000){ window._pick = null; P = null; } return P; }
+function _brStopLoc(st){
+  var m = document.getElementById('busRouteModal'), la = parseFloat(st.gpslati), lo = parseFloat(st.gpslong);
+  return { type:'bus', name:String(st.nodenm || ''), nodeId:String(st.nodeid || st.nodeId || ''), cityCode:(m && m.dataset && m.dataset.cityCode) || '', lat:isNaN(la) ? 0 : la, lng:isNaN(lo) ? 0 : lo };
+}
+function _pickSame(a, b){ return !!(a && b && a.name === b.name); }
+// 작은 안내 팝업(잠깐 떴다 사라진다)
+function _pickPop(msg, sub){
   try{
-    var st = (window._brStops || [])[idx];
-    if(!st) return;
-    if(typeof _busShowMap === 'function') _busShowMap(el, st);
+    var old = document.getElementById('pickPop'); if(old) old.remove();
+    var d = document.createElement('div'); d.id = 'pickPop';
+    d.innerHTML = '<div class="pp-m">' + _ltEsc(msg) + '</div>' + (sub ? '<div class="pp-s">' + _ltEsc(sub) + '</div>' : '');
+    document.body.appendChild(d);
+    requestAnimationFrame(function(){ d.classList.add('on'); });
+    setTimeout(function(){ d.classList.remove('on'); setTimeout(function(){ if(d.parentNode) d.remove(); }, 260); }, 1500);
   }catch(e){}
 }
-window._brStopMap = _brStopMap;
+window._pickPop = _pickPop;
+// 목록 줄의 표시(눌러 둔 줄 · 출발지 줄 · 오른쪽 글자)
+function _brPickPaint(){
+  var body = document.getElementById('busRouteBody'); if(!body) return;
+  var P = _pickAlive(), rows = body.querySelectorAll('.brs-row[data-idx]'), i, r, st, lab, isStart, loc;
+  for(i = 0; i < rows.length; i++){
+    r = rows[i]; var idx = parseInt(r.getAttribute('data-idx'), 10); st = (window._brStops || [])[idx]; if(!st) continue;
+    loc = _brStopLoc(st);
+    isStart = !!(P && P.start && ((P.start.nodeId && P.start.nodeId === loc.nodeId) || (!P.start.nodeId && P.start.name === loc.name)));
+    r.classList.toggle('brs-pick', !P && _brPickIdx === idx);
+    r.classList.toggle('brs-pstart', isStart);
+    lab = r.querySelector('.brs-map');
+    if(lab) lab.textContent = isStart ? '출발지' : (P ? '도착지 ›' : '선택 ›');
+  }
+}
+// 하단 바 — 출발지 고르는 중(누른 정류장이 있을 때만) / 도착지 고르는 중
+function _brPickRender(){
+  var bar = document.getElementById('brPickBar'); if(!bar) return;
+  var P = _pickAlive(), st = (_brPickIdx != null) ? (window._brStops || [])[_brPickIdx] : null, h = '';
+  if(P){
+    h = '<div class="brp-msg">📍 출발지 <b>' + _ltEsc(P.start.name) + '</b><br>다른 정류장을 누르면 <b>도착지로 설정</b>됩니다</div>'
+      + '<div class="brp-btns"><button class="brp-btn brp-main" onclick="_pickToStation()">🚇 도착지는 역으로 설정</button>'
+      + '<button class="brp-btn brp-sub" onclick="_pickCancel()">취소</button></div>';
+  } else if(st){
+    h = '<div class="brp-msg">🚏 <b>' + _ltEsc(st.nodenm || '') + '</b></div>'
+      + '<div class="brp-btns"><button class="brp-btn brp-main" onclick="_pickSetStart()">출발지로 설정</button></div>';
+  }
+  bar.innerHTML = h; bar.style.display = h ? 'block' : 'none';
+}
+function _brStopPick(el, idx){
+  try{
+    var st = (window._brStops || [])[idx]; if(!st) return;
+    var loc = _brStopLoc(st), P = _pickAlive();
+    if(P){
+      if(_pickSame(P.start, loc)){ _pickPop('출발지와 다른 정류장을 눌러 주세요'); return; }
+      _pickFinish(loc);
+      return;
+    }
+    _brPickIdx = idx;
+    _brPickPaint(); _brPickRender();
+  }catch(e){}
+}
+window._brStopMap = _brStopPick;
+window._brStopPick = _brStopPick;
+function _pickSetStart(){
+  try{
+    var st = (_brPickIdx != null) ? (window._brStops || [])[_brPickIdx] : null; if(!st) return;
+    var loc = _brStopLoc(st);
+    _fmapDest = null; if(typeof S !== 'undefined') S.dest = null;                 // 새 출발지 = 새 경로 — 이전 도착지는 비운다(비우지 않으면 곧바로 옛 도착지로 탐색해 버린다)
+    try{ var di = document.getElementById('fmapDestInp'); if(di) di.value = ''; var vd = document.getElementById('valDest'); if(vd){ vd.textContent = '-'; vd.style.opacity = '0.6'; } }catch(e1){}
+    _fmapSetLocation('start', loc);
+    window._pick = { start: loc, at: Date.now() };
+    _brPickIdx = null;
+    _brPickPaint(); _brPickRender();
+    _pickPop('📍 출발지로 설정되었습니다', loc.name);
+  }catch(e){}
+}
+// 출발지는 그대로 두고 처음부터 다시
+function _pickCancel(){
+  window._pick = null; _brPickIdx = null; _pickCancelMode();
+  _brPickPaint(); _brPickRender();
+}
+function _pickEnsureStart(P){
+  try{
+    if(!_fmapStart || _fmapStart.name !== P.start.name){ _fmapDest = null; _fmapSetLocation('start', P.start); }
+  }catch(e){}
+}
+function _pickGoHome(){
+  try{ if(typeof closeBusRoute === 'function') closeBusRoute(); }catch(e0){}
+  try{ if(typeof switchTab === 'function') switchTab('home', document.getElementById('ni-home')); }catch(e1){}
+}
+// 도착지를 정류장으로 정함 → 엔진으로 경로탐색(_fmapSetLocation 이 두 곳이 갖춰지면 자동으로 fmapDoRoute) · 홈으로
+function _pickFinish(loc){
+  var P = window._pick; if(!P) return;
+  window._pick = null; _brPickIdx = null; _pickCancelMode();
+  _pickEnsureStart(P);
+  _fmapSetLocation('dest', loc);
+  _pickGoHome();
+  _pickPop('🏁 도착지로 설정되었습니다', loc.name);
+}
+function _pickToStation(){
+  if(!_pickAlive()) return;
+  try{ if(typeof closeBusRoute === 'function') closeBusRoute(); }catch(e0){}
+  window._mapBusOpened = 1;                                   // 노선도 탭이 처음 열릴 때 '버스로 시작' 준비가 지하철 화면을 덮어쓰지 않게
+  try{ switchTab('map', document.getElementById('ni-map')); }catch(e1){}
+  try{ switchMapInnerTab('subway'); }catch(e2){}
+  window._pickDestMode = true;
+  _pickHint(true);
+}
+// 노선도 아래쪽 안내 글(네이티브 지도에서도 그려진다)
+function _pickHint(on){
+  try{
+    var h = document.getElementById('svgHint'); if(!h) return;
+    if(!h._orig) h._orig = (h.textContent || '').replace(/\s+/g, ' ').trim();
+    h.textContent = on ? '🏁 도착지로 설정할 역을 누르세요' : h._orig;
+    if(typeof _nmHint === 'function') _nmHint(true);
+  }catch(e){}
+}
+function _pickCancelMode(){
+  if(!window._pickDestMode) return;
+  window._pickDestMode = false; _pickHint(false);
+  try{ var f = document.getElementById('nmTtPick'); if(f) f.remove(); }catch(e){}
+}
+// 도착지 선택 중 역을 눌렀을 때: 출발/도착 팝업 대신 곧바로 그 역의 시간표 시트(+ 하단 [도착지로 설정])
+function _pickStationTt(name, lines){
+  _selName = name;
+  try{ svgRemovePopup(); }catch(e){}
+  nmTtOpen(name, lines);
+}
+function _pickDestFromTt(){
+  var T = _nmTt, P = _pickAlive();
+  if(!T){ return; }
+  if(!P){ _pickCancelMode(); return; }
+  var name = T.name, stn = null;
+  try{
+    if(typeof STNDB !== 'undefined'){
+      if(window._selLineHint) stn = STNDB.find(function(s){ return s.name === name && s.line === window._selLineHint; });
+      if(!stn) stn = STNDB.find(function(s){ return s.name === name && (T.lines || []).indexOf(s.line) >= 0; });
+      if(!stn) stn = STNDB.find(function(s){ return s.name === name; });
+    }
+  }catch(e0){}
+  if(!stn){ _pickPop('역 정보를 찾지 못했어요', name); return; }
+  window._pick = null; _brPickIdx = null; _pickCancelMode();
+  try{ nmTtClose(true); }catch(e1){}
+  try{ svgRemovePopup(); }catch(e2){}
+  window._selLineHint = null; window._selRegionHint = null;
+  _pickEnsureStart(P);
+  _fmapSetLocation('dest', { type:'subway', name: stn.name, line: stn.line, lat: stn.lat, lng: stn.lng });
+  _pickGoHome();
+  _pickPop('🏁 도착지로 설정되었습니다', stn.name);
+}
+window._pickToStation = _pickToStation; window._pickSetStart = _pickSetStart; window._pickCancel = _pickCancel; window._pickDestFromTt = _pickDestFromTt; window._pickCancelMode = _pickCancelMode;
 
 function _renderBusRoute(stations, buses){
   var body = document.getElementById('busRouteBody');
@@ -5771,12 +5924,12 @@ function _renderBusRoute(stations, buses){
               + (myEtaTxt ? ' · ' + _ltEsc(myEtaTxt) : '') + '</div>';
       }
 
-      html += '<div class="brs-row' + (here?' brs-here':'') + (isMine?' brs-mine':'') + '" onclick="_brStopMap(this,' + o.idx + ')">'
+      html += '<div class="brs-row' + (here?' brs-here':'') + (isMine?' brs-mine':'') + '" data-idx="' + o.idx + '" onclick="_brStopPick(this,' + o.idx + ')">'
            +    '<div class="' + railCls + '">' + arrow + mark + '</div>'
            +    '<div class="brs-body">'
            +      '<div class="brs-name">' + _ltEsc(s.nodenm || '') + '</div>'
            +      '<div class="brs-meta"><span class="brs-id">' + _ltEsc(s.nodeno || s.nodeid || '') + '</span>'
-           +        '<span class="brs-map">지도 · 길찾기 →</span></div>'
+           +        '<span class="brs-map">선택 ›</span></div>'
            +      note
            +    '</div>'
            + '</div>';
@@ -5790,6 +5943,7 @@ function _renderBusRoute(stations, buses){
   if(fixedEl) fixedEl.innerHTML = topHtml;
   else html = topHtml + html;      // 구조가 없으면 예전처럼 함께 그린다
   body.innerHTML = html;
+  try{ _brPickPaint(); }catch(ePk){}
 
   // ★ 내 위치로 스크롤 (없으면 첫 버스)
   setTimeout(function(){
@@ -14938,6 +15092,7 @@ _loadSavedBusStops();
 
 // 내부 탭 전환
 function switchMapInnerTab(tab) {
+  try{ if(tab !== 'subway' && window._pickDestMode && typeof _pickCancelMode === 'function') _pickCancelMode(); }catch(ePk){}
   var subway = document.getElementById('mapSubwayPanel');
   var bus    = document.getElementById('mapBusPanel');
   var stab   = document.getElementById('mapItabSubway');
@@ -24461,6 +24616,7 @@ window._dedupeStnByName = _dedupeStnByName;
 
 /* ══ 탭 전환 ══ */
 function switchTab(tab,el){
+  try{ if(tab !== 'map' && window._pickDestMode && typeof _pickCancelMode === 'function') _pickCancelMode(); }catch(ePk){}      // 노선도 탭을 떠나면 '도착지 역 고르기'는 끝낸다
   // ★ 2026-08-31: 탭을 바꾸면 열려 있던 시트·모달을 닫는다.
   //   예전엔 노선 상세 시트가 그대로 남아, 홈을 눌러도 노선도가 덮고 있었다.
   try{
@@ -30902,6 +31058,7 @@ try {
          사라졌다. 정류장 목록만 스크롤되도록 영역을 분리한다. -->
     <div id="busRouteFixed" class="bus-route-fixed"></div>
     <div id="busRouteBody" class="bus-route-body"></div>
+    <div id="brPickBar" class="brp-bar" style="display:none;"></div>
   </div>
 </div>
 
@@ -32796,6 +32953,7 @@ function _linePillHtml(line){
 window._linePillHtml = _linePillHtml;
 
 function svgShowPopup(name, lines) {
+  if(window._pickDestMode){ _pickStationTt(name, lines); return; }      // 버스 경로에서 '도착지는 역으로' 고르는 중 — 팝업 대신 시간표 + [도착지로 설정]
   // 이미 자리 잡은 팝업이 떠 있다가 다른 역을 눌렀으면 올라오지 않고 바로 바꾼다(작은 교체 효과만). 내려가는 중이거나 아직 올라오는 중인 팝업은 '떠 있는 것'으로 치지 않는다 —
   // (2026-10-15 YJ: "가끔 애니메이션이 안 나와" — 닫자마자·두 번 연달아 눌렀을 때 옛 팝업이 남아 있어 애니메이션이 빠졌다)
   var _oldPop = document.getElementById('svgStationPop');
@@ -33075,8 +33233,13 @@ function nmTtOpen(name, lines, drag){
     '<div id="nmTtDays" style="display:flex;gap:6px;flex:none;margin:2px 0 8px;flex-wrap:wrap;"></div>' +
     '<div id="nmTtDirs" style="display:flex;gap:6px;flex:none;margin-bottom:8px;"></div>' +
     '<div id="nmTtSum" class="nmtt-sum" style="flex:none;font-size:12px;margin-bottom:6px;min-height:16px;"></div>' +
-    '<div id="nmTtBody" style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;"></div>';
+    '<div id="nmTtBody" style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;"></div>' +
+    (window._pickDestMode ? '<div id="nmTtPick" style="flex:none;padding-top:10px;"><button id="nmTtPickBtn" class="nmp-btn nmp-b-dest" style="display:block;width:100%;padding:15px;">🏁 도착지로 설정</button></div>' : '');
   document.body.appendChild(sh);
+  try{
+    var _pb = sh.querySelector('#nmTtPickBtn');
+    if(_pb){ var _pbFired = false, _pbh = function(e){ e.preventDefault(); e.stopPropagation(); if(_pbFired) return; _pbFired = true; _pickDestFromTt(); }; _pb.addEventListener('touchend', _pbh, {passive:false}); _pb.addEventListener('click', _pbh); }
+  }catch(ePb){}
   sh.querySelector('#nmTtTitle').textContent = name + ' 시간표';
   _nmDragDismiss(sh, function(){ nmTtClose(); }, { scroller: '#nmTtBody', slideOut: function(dy){ nmTtClose(false, dy); },
     onStart: function(){ _nmFollowStart(sh); }, onMove: _nmFollowMove, onSnap: function(dy){ _nmFollowSnap(sh, dy); } });
@@ -39005,6 +39168,21 @@ document.addEventListener('DOMContentLoaded', function() {
 .brs-map{margin-left:auto;font-size:11px;font-weight:700;color:#2f7cf6;opacity:.9;
   background:rgba(47,124,246,.1);padding:3px 9px;border-radius:20px;}
 .brs-note{font-size:12px;font-weight:800;margin-top:5px;}
+.brs-row.brs-pick{background:rgba(47,124,246,.14);}
+.brs-row.brs-pstart{background:rgba(255,159,10,.14);}
+.brs-row.brs-pstart .brs-map{background:rgba(255,159,10,.22);color:#c77700;}
+/* 버스 경로 하단 선택 바 + 안내 팝업 (2026-10-15) */
+.brp-bar{flex:0 0 auto;background:var(--card);border-top:1px solid var(--border);box-shadow:0 -4px 16px rgba(0,0,0,.14);padding:12px 16px calc(14px + env(safe-area-inset-bottom,0px));}
+.brp-msg{font-size:13.5px;line-height:1.5;color:var(--text);margin-bottom:10px;}
+.brp-msg b{font-weight:800;}
+.brp-btns{display:flex;gap:8px;}
+.brp-btn{border:none;border-radius:14px;padding:14px 12px;font-size:15px;font-weight:800;cursor:pointer;}
+.brp-main{flex:1;background:#2f7cf6;color:#fff;}
+.brp-sub{flex:0 0 auto;background:var(--card2);color:var(--sub);border:1px solid var(--border);}
+#pickPop{position:fixed;left:50%;top:42%;transform:translate(-50%,-50%) scale(.94);z-index:2147483000;background:rgba(20,22,28,.92);color:#fff;border-radius:18px;padding:18px 26px;text-align:center;opacity:0;transition:opacity .22s ease,transform .22s ease;pointer-events:none;max-width:82vw;box-shadow:0 8px 30px rgba(0,0,0,.35);}
+#pickPop.on{opacity:1;transform:translate(-50%,-50%) scale(1);}
+#pickPop .pp-m{font-size:16px;font-weight:800;}
+#pickPop .pp-s{font-size:13px;opacity:.8;margin-top:5px;}
 .brs-note.bus{color:#2f7cf6;}
 .brs-note.me{color:#ff3b30;}
 /* ★ 2026-09-29 (YJ 재제보: "아직도 노선이 일자가 아니야") — 좌우 margin(6px)이 이
