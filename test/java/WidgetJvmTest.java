@@ -38,7 +38,9 @@ public class WidgetJvmTest {
         void argb(int c) { g.setColor(new Color(c, true)); }
         public void ellipse(float cx, float cy, float rx, float ry, int argb) { argb(argb); g.fill(new java.awt.geom.Ellipse2D.Float(cx - rx, cy - ry, rx * 2, ry * 2)); }
         public void circle(float cx, float cy, float r, int argb) { ellipse(cx, cy, r, r, argb); }
-        public void poly(float[] xy, int argb) { argb(argb); Path2D.Float p = new Path2D.Float(); p.moveTo(xy[0], xy[1]); for (int i = 2; i < xy.length; i += 2) p.lineTo(xy[i], xy[i + 1]); p.closePath(); g.fill(p); }
+        public void poly(float[] xy, int argb) { argb(argb); g.fill(path(xy)); }
+        Path2D.Float path(float[] xy) { Path2D.Float p = new Path2D.Float(); p.moveTo(xy[0], xy[1]); for (int i = 2; i < xy.length; i += 2) p.lineTo(xy[i], xy[i + 1]); p.closePath(); return p; }
+        public void polyGrad(float[] xy, float y0, float y1, int c0, int c1) { Paint old = g.getPaint(); g.setPaint(new GradientPaint(0f, y0, new Color(c0, true), 0f, Math.max(y1, y0 + 0.5f), new Color(c1, true))); g.fill(path(xy)); g.setPaint(old); }
     }
 
     static final String[] ALL = WidgetSim.ORDER;
@@ -130,40 +132,79 @@ public class WidgetJvmTest {
             ok(s3.isSettled() && n < 600, tag + ": 멈추라고 하면 " + (n / 10f) + "초 안에 바닥에서 쉰다");
             s3.resume();
         }
-        // 잠(zzz): 잠든 동안엔 모두 바닥에 웅크려 숨만 쉬고, 깨우면 다시 돌아다닌다. 출퇴근 중엔 자지 않는다. Z 는 시각에 따라 올라가며 그려진다
+        // 잠자리: 동물마다 종류에 맞는 집이 무작위 자리에 서서히 생기고, 걸어 들어가 자다가 무작위로 깨어 나온다. 위젯을 만지면 모두 즉시 깨어난다
+        for (int sz = 0; sz < 2; sz++) {
+            WidgetGeo gs = sz == 0 ? WidgetGeo.of(false, 230f, 90f) : WidgetGeo.of(true, 170f, 210f);
+            String tag2 = sz == 0 ? "가로" : "세로";
+            String[] six = WidgetSim.ORDER; boolean allKinds = true, noOverlapMostly = true, allSlept = true, hiddenOk = true, wokeRandom = true, housesGone = true, grewSlowly = true; int zs = 0;
+            java.util.Set<Integer> xsSeen = new java.util.HashSet<Integer>(), durs = new java.util.HashSet<Integer>(); java.util.Set<String> kinds = new java.util.HashSet<String>();
+            for (int trial = 0; trial < 40; trial++) {
+                String[] ids = WidgetSim.pickSet(500 + trial, null);
+                WidgetSim sl = new WidgetSim(gs, 100 + trial, ids);
+                for (int i = 0; i < 200; i++) sl.step(0.1f);
+                sl.bed(false);
+                if (sl.houses.size() != 3) allKinds = false;
+                for (WidgetSim.House h : sl.houses) { kinds.add(h.kind); xsSeen.add(Math.round(h.x)); if (!h.kind.equals(WidgetSim.houseKind(h.owner.id))) allKinds = false; if (h.a != 0f) grewSlowly = false; }
+                sl.step(0.1f); for (WidgetSim.House h : sl.houses) if (!(h.a > 0f && h.a < 0.3f)) grewSlowly = false;   // 서서히 생긴다
+                int n = 0; while (!sl.allInBed() && n < 400) { sl.step(0.1f); n++; }
+                if (!sl.allInBed()) allSlept = false;
+                for (WidgetSim.Ch c : sl.cs) { if (Math.abs(c.x - c.home.x) > 0.5f || c.y != gs.ground) allSlept = false; if (WidgetSim.hides(c.home.kind) ? c.alpha > 0.01f : c.alpha < 0.99f) hiddenOk = false; }
+                for (int i = 0; i < 20; i++) sl.step(0.1f);
+                for (WidgetSim.Ch c : sl.cs) if (c.zz < 0.9f) zs++;
+                // 깨어나는 시각은 마리마다 제각각(잠든 순간부터 20~60초 사이)
+                float mn = 1e9f, mx = -1f;
+                for (WidgetSim.Ch c : sl.cs) { float d = c.until - c.t0; mn = Math.min(mn, d); mx = Math.max(mx, d); durs.add(Math.round(d)); }
+                if (mn < 19.9f || mx > 60.1f) wokeRandom = false;
+                float t = 0f; while (t < 130f && !sl.allUp()) { sl.step(0.1f); t += 0.1f; }
+                if (!sl.allUp()) housesGone = false;
+            }
+            if (durs.size() < 15) wokeRandom = false;
+            ok(allKinds && kinds.size() == 5, tag2 + ": 잠자리: 개집·바구니·굴·둥지·연못이 동물에 맞게 생긴다(" + kinds + ")");
+            ok(grewSlowly, tag2 + ": 잠자리: 집이 서서히 나타난다(처음엔 안 보임)");
+            ok(xsSeen.size() >= 20, tag2 + ": 잠자리: 집 자리가 매번 무작위다(" + xsSeen.size() + "곳)");
+            ok(allSlept && hiddenOk, tag2 + ": 잠자리: 모두 자기 집까지 걸어가 들어간다(개집·굴은 안 보이고 바구니·둥지·연못은 보임)");
+            ok(zs == 0, tag2 + ": 잠자리: 자는 동안 머리 위 zzz 가 진해진다");
+            ok(wokeRandom && housesGone, tag2 + ": 잠자리: 마리마다 20~60초 사이 무작위로 깨고 모두 깨면 집이 사라진다");
+        }
         {
-            WidgetGeo gs = WidgetGeo.of(false, 290f, 120f);
+            WidgetGeo gs = WidgetGeo.of(false, 230f, 90f);
             WidgetSim sl = new WidgetSim(gs, 11, new String[] { "dolsom", "lovel", "sul" });
             for (int i = 0; i < 300; i++) sl.step(0.1f);
-            sl.requestSettle(); for (int i = 0; i < 600 && !sl.isSettled(); i++) sl.step(0.1f);
-            sl.sleepOn();
-            boolean still = true, squat = true; float x0 = sl.cs.get(0).x;
-            for (int i = 0; i < 300; i++) { sl.step(0.1f); for (WidgetSim.Ch c : sl.cs) { if (c.st != WidgetSim.REST || c.zone != 0 || c.off != 0 || c.frame != 0) still = false; if (c.sq < 0.05f || c.sq > 0.2f) squat = false; } }
-            ok(sl.sleeping && still && squat && sl.cs.get(0).x == x0, "잠: 30초 동안 모두 바닥에서 웅크려 제자리(걷지도 뛰지도 않음)");
-            final int[] polys = { 0 };
+            sl.bed(true); int n = 0; while (!sl.allInBed() && n < 400) { sl.step(0.1f); n++; }
+            for (int i = 0; i < 1500; i++) sl.step(0.1f);       // 150초 — 깨울 때까지 안 깬다
+            ok(sl.allInBed(), "잠자리: '깨울 때까지' 모드에서는 150초가 지나도 자동으로 깨지 않는다");
+            final int[] polys = { 0, 0 };
             WidgetArt.Surface ps = new WidgetArt.Surface() {
                 public void save() {} public void restore() {} public void translate(float x, float y) {} public void rotate(float d) {} public void scale(float x, float y) {}
                 public void cell(String id, int f, float l, float t, float r, float bb, float al) {}
                 public void ellipse(float a1, float a2, float a3, float a4, int c) {} public void circle(float a1, float a2, float a3, int c) {}
                 public void poly(float[] xy, int c) { if (xy.length == 20) polys[0]++; }
+                public void polyGrad(float[] xy, float y0, float y1, int c0, int c1) { polys[1]++; }
             };
             WidgetArt.draw(sl, ps, false);
-            ok(polys[0] == 3 * 3 * 2, "잠: 캐릭터마다 Z 3개(그림자+글자)가 그려진다(" + polys[0] + "개)");
-            sl.resume();
-            boolean moved = false; for (int i = 0; i < 200; i++) { sl.step(0.1f); for (WidgetSim.Ch c : sl.cs) if (c.st != WidgetSim.REST) moved = true; }
+            ok(polys[0] == 3 * 2 * 3 && polys[1] >= 6, "잠자리: 그림에 Z 가 캐릭터마다 3개씩(그림자+글자) 들어가고 집은 그라데이션으로 그려진다(Z " + polys[0] + " · 그라데이션 " + polys[1] + ")");
+            sl.wakeAll();
+            n = 0; while (!sl.allUp() && n < 200) { sl.step(0.1f); n++; }
+            boolean walkers = false; for (int i = 0; i < 200; i++) { sl.step(0.1f); for (WidgetSim.Ch c : sl.cs) if (c.st != WidgetSim.REST) walkers = true; }
             polys[0] = 0; WidgetArt.draw(sl, ps, false);
-            ok(!sl.sleeping && moved && polys[0] == 0, "잠: 깨우면 다시 돌아다니고 Z 는 사라진다");
-            {
-                WidgetGeo gc = WidgetGeo.of(false, 290f, 120f); WidgetSim sc = new WidgetSim(gc, 3, new String[] { "dolsom", "lovel", "sul" });
-                gc.setCommute(true); sc.setMode(WidgetSim.COMMUTE, "cheer"); sc.sleepOn();
-                ok(!sc.sleeping, "잠: 출퇴근 장면에선 잠들지 않는다");
-                sl.sleepOn(); gc.setCommute(false);
-                gc.setCommute(true); sl.setMode(WidgetSim.COMMUTE, "cheer");
-                for (int i = 0; i < 240; i++) sl.step(0.05f);
-                boolean all = true; for (WidgetSim.Ch c : sl.cs) if (c.st != WidgetSim.CHEER) all = false;
-                ok(!sl.sleeping && all, "잠: 자는 중에 출퇴근이 시작되면 깨어나 줄을 선다");
-                gc.setCommute(false);
-            }
+            ok(sl.allUp() && n < 60 && walkers && polys[0] == 0 && sl.houses.isEmpty(), "잠자리: 위젯을 만지면(wakeAll) " + (n / 10f) + "초 안에 모두 깨어나 집이 사라지고 다시 돌아다닌다");
+            // 자러 가는 길에 깨워도(집에 닿기 전) 바로 일어난다
+            WidgetSim s4 = new WidgetSim(gs, 12, new String[] { "ppopu", "sul", "chaeng" });
+            for (int i = 0; i < 100; i++) s4.step(0.1f);
+            s4.bed(false); for (int i = 0; i < 3; i++) s4.step(0.1f); s4.wakeAll();
+            n = 0; while (!s4.allUp() && n < 200) { s4.step(0.1f); n++; }
+            ok(s4.allUp(), "잠자리: 자러 가는 중에 깨워도 곧 모두 일어난다");
+            // 출퇴근: 자지 않는다 · 자는 중에 시작돼도 깨어나 줄을 선다
+            WidgetGeo gc = WidgetGeo.of(false, 230f, 90f); WidgetSim sc = new WidgetSim(gc, 3, new String[] { "dolsom", "lovel", "sul" });
+            gc.setCommute(true); sc.setMode(WidgetSim.COMMUTE, "cheer"); sc.bed(false);
+            ok(sc.houses.isEmpty(), "잠자리: 출퇴근 장면에선 집이 안 생기고 자지 않는다");
+            gc.setCommute(false);
+            sl.setMode(WidgetSim.NORMAL, null); sl.bed(false); for (int i = 0; i < 80; i++) sl.step(0.1f);
+            gc.setCommute(true); sl.setMode(WidgetSim.COMMUTE, "cheer");
+            for (int i = 0; i < 300; i++) sl.step(0.05f);
+            boolean all = true; for (WidgetSim.Ch c : sl.cs) if (c.st != WidgetSim.CHEER || c.alpha < 0.99f) all = false;
+            ok(all && sl.houses.isEmpty(), "잠자리: 자는 중에 출퇴근이 시작되면 깨어나 줄을 서고 집은 사라진다");
+            gc.setCommute(false);
         }
         // 화면을 켤 때마다 캐릭터 셋이 바뀐다: 매번 직전과 다른 구성, 서로 다른 3마리, 6마리 모두 골고루 등장
         { String[] cur = WidgetSim.pickSet(1, null); boolean always = true, distinct = true; java.util.Set<String> seenIds = new java.util.HashSet<String>();
@@ -179,7 +220,7 @@ public class WidgetJvmTest {
         WidgetArt.Surface cnt = new WidgetArt.Surface() {
             public void save() {} public void restore() {} public void translate(float x, float y) {} public void rotate(float d) {} public void scale(float x, float y) {}
             public void cell(String id, int f, float l, float t, float r, float bb, float al) { cells[0]++; if (f < 0 || f > 15) badFrame[0] = true; }
-            public void ellipse(float a1, float a2, float a3, float a4, int c) {} public void circle(float a1, float a2, float a3, int c) {} public void poly(float[] xy, int c) {}
+            public void ellipse(float a1, float a2, float a3, float a4, int c) {} public void circle(float a1, float a2, float a3, int c) {} public void poly(float[] xy, int c) {} public void polyGrad(float[] xy, float y0, float y1, int c0, int c1) {}
         };
         for (int i = 0; i < 500; i++) { a.step(0.1f); WidgetArt.draw(a, cnt, i % 2 == 0); }
         ok(cells[0] == 500 * 2 && !badFrame[0], "그림 명령: 프레임마다 캐릭터 수만큼 칸을 그리고 칸 번호가 0~15");
@@ -194,9 +235,10 @@ public class WidgetJvmTest {
         for (String id : ALL) { File f = new File(dir, id + ".png"); if (f.exists()) sheets.put(id, ImageIO.read(f)); }
         WidgetGeo g = WidgetGeo.of(v, W, H);
         WidgetSim s = new WidgetSim(g, seed, ids);
-        boolean commute = !mood.equals("normal") && !mood.equals("sleep");
+        boolean commute = !mood.equals("normal") && !mood.equals("sleep") && !mood.equals("beddingMid");
         float t = 0; while (t < secs) { s.step(0.05f); t += 0.05f; if (commute && Math.abs(t - 2f) < 0.026f) { g.setCommute(true); s.setMode(WidgetSim.COMMUTE, mood); } }
-        if (mood.equals("sleep")) { s.requestSettle(); for (int i = 0; i < 600 && !s.isSettled(); i++) s.step(0.05f); s.sleepOn(); for (int i = 0; i < 30; i++) s.step(0.05f); }
+        if (mood.equals("sleep")) { s.bed(true); for (int i = 0; i < 700 && !s.allInBed(); i++) s.step(0.05f); for (int i = 0; i < 30; i++) s.step(0.05f); }
+        if (mood.equals("beddingMid")) { s.bed(true); for (int i = 0; i < 25; i++) s.step(0.05f); }
         int S = 4; BufferedImage im = new BufferedImage((int) (W * S), (int) (H * S), BufferedImage.TYPE_INT_ARGB);
         Graphics2D gr = im.createGraphics(); gr.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON); gr.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
         gr.setColor(dark ? new Color(0x111114) : new Color(0xF4F4F6)); gr.fillRoundRect(0, 0, (int) (W * S), (int) (H * S), 22 * S / 2, 22 * S / 2);
