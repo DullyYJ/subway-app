@@ -1623,12 +1623,18 @@ header h1 em{color:var(--gold);font-style:normal;}
 .bars-24{display:flex;align-items:flex-end;height:var(--bars-h,112px);gap:0;width:max-content;padding-bottom:0;}
 .cong-card.bus{--bars-h:160px;}
 /* ★ 2026-10-15 (YJ): 혼잡도 카드 창의 3D 캐릭터 장면(_CS) — 엔진(/scene)이 켠다: 경로 없음·버스·지하철 타기 전에는 장면만, 지하철 탑승 확정 뒤에만 숨겨져 혼잡도가 보인다(둘은 함께 보이지 않는다). */
-.cong-scene{position:relative;height:150px;border-radius:12px;overflow:hidden;margin:2px 0 10px;border:1px solid var(--border);display:none;background:#9fd0ff;}
-.cong-scene canvas.cs-cv{position:absolute;left:0;top:0;width:100%;height:100%;display:block;}
+.cong-scene{position:relative;height:150px;transition:height .5s cubic-bezier(.22,1,.36,1);border-radius:12px;overflow:hidden;margin:2px 0 10px;border:1px solid var(--border);display:none;background:#9fd0ff;}
+.cong-scene canvas.cs-cv{position:absolute;left:0;top:0;width:100%;height:100%;display:block;object-fit:cover;object-position:50% 100%;}
 .cs-tag{position:absolute;left:8px;top:7px;font-size:10.5px;font-weight:700;color:#fff;background:rgba(12,18,34,.55);padding:3px 9px;border-radius:10px;letter-spacing:0;pointer-events:none;z-index:2;}
 .cong-card.cs-on > :not(.cong-scene){display:none !important;}   /* 장면이 보일 땐 혼잡도(상태·게이지·그래프·칸별)를 보이지 않는다 — 혼잡도는 지하철 탑승 확정 뒤에만(YJ) */
 .cong-card.cs-on{border-left-color:var(--arex) !important;}
+.cong-card.cs-on{padding:10px 10px 10px 12px !important;}
+.cong-card.cs-on .cong-scene{margin:0;}   /* 장면만 보일 땐 안쪽 여백을 줄여 장면에 자리를 더 준다 */
 .cs-hide{display:none !important;}
+#tab-home[data-hf="1"] #liveTalkList > :nth-child(-n+1),#tab-home[data-hf="2"] #liveTalkList > :nth-child(-n+2),#tab-home[data-hf="3"] #liveTalkList > :nth-child(-n+3){display:none !important;}   /* 작은 폰에서 한 화면에 맞추려고 오래된 줄부터 접는다(YJ 07:43) */
+#tab-home[data-hf="1"] .livetalk-list{height:95px;min-height:95px;max-height:95px;}
+#tab-home[data-hf="2"] .livetalk-list{height:70px;min-height:70px;max-height:70px;}
+#tab-home[data-hf="3"] .livetalk-list{height:45px;min-height:45px;max-height:45px;}
 .cong-bus-hint{display:none;flex:1 1 auto;min-width:0;font-size:11.5px;font-weight:700;letter-spacing:0;text-transform:none;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.4;}   /* ★ (YJ 06:00) '혼잡도 분석' 제목줄 가운데에 둔다 — 문구는 엔진이 준다 */
 :root{--cur-ol:#fff;}
 [data-theme="pastel"]{--cur-ol:#111;}
@@ -34923,13 +34929,15 @@ window.updateBusCong = updateBusCong;
 var _SCENE_URL = ((typeof _ROUTE_V2_BASE === 'string' && _ROUTE_V2_BASE) ? _ROUTE_V2_BASE : 'https://route-v2.phg0643.workers.dev') + '/scene';
 var _sceneSt = { busy: false, sig: '', at: 0, key: '', wasLocked: false, congSig: '', seq: 0, fails: 0, lastRes: null };
 window._sceneSt = _sceneSt;
+// 경로 결과 카드가 화면에 나와 있는가(확정 전 포함) — 근거만 엔진에 보낸다
+function _sceneRouteShown(){ try{ var c = document.getElementById('transitResultCard'); return !!(c && c.style.display !== 'none' && c.offsetParent); }catch(e){ return false; } }
 function _scenePayload(){
   var nd = (typeof _transitNodeData !== 'undefined' && _transitNodeData) ? _transitNodeData : [], locked = (window._routeLocked === true), here = 0;
   if(locked){ try{ here = _pipHereIdx(); }catch(e){ here = 0; } }
   if(locked && !_sceneSt.wasLocked) _sceneSt.key = String(Date.now());     // 경로를 확정할 때마다 새 대표 캐릭터(같은 경로 동안은 그대로)
   if(!locked) _sceneSt.key = '';
   _sceneSt.wasLocked = locked;
-  var P = { nowMs: (typeof getBaseTimeMs === 'function' ? getBaseTimeMs() : Date.now()), tzOffsetMin: -new Date().getTimezoneOffset(), locked: locked, key: _sceneSt.key, here: here, boarded: (window._htlBoarded === true),
+  var P = { nowMs: (typeof getBaseTimeMs === 'function' ? getBaseTimeMs() : Date.now()), tzOffsetMin: -new Date().getTimezoneOffset(), locked: locked, routeShown: _sceneRouteShown(), key: _sceneSt.key, here: here, boarded: (window._htlBoarded === true),
     nodes: nd.map(function(n){ return { name: n.name || '', isSub: !!n.isSub, isBus: !!n.isBus, isWalk: !!n.isWalk, isOrigin: !!n.isOrigin, lineName: n.lineName || '', hasLoc: !!n.lat }; }) };
   if(typeof window._lastGPSLat === 'number' && typeof window._lastGPSLng === 'number' && window._lastGPSLat && window._lastGPSLng){ P.lat = window._lastGPSLat; P.lng = window._lastGPSLng; }
   return P;
@@ -34958,7 +34966,7 @@ function _sceneRequest(why){
   try{
     if(typeof fetch !== 'function') return;
     var now = Date.now(), P = _scenePayload();
-    var sig = [P.locked ? 1 : 0, P.here, P.boarded ? 1 : 0, P.nodes.length, P.nodes[0] ? P.nodes[0].name : '', Math.floor(now / 300000)].join('|');   // 바뀐 것이 없으면 5분마다만(시간대·날씨 갱신)
+    var sig = [P.locked ? 1 : 0, P.routeShown ? 1 : 0, P.here, P.boarded ? 1 : 0, P.nodes.length, P.nodes[0] ? P.nodes[0].name : '', Math.floor(now / 300000)].join('|');   // 바뀐 것이 없으면 5분마다만(시간대·날씨 갱신)
     if(why !== 'force' && sig === _sceneSt.sig) return;
     if(_sceneSt.busy && now - _sceneSt.at < 8000) return;
     _sceneSt.busy = true; _sceneSt.at = now; var my = ++_sceneSt.seq, ctl = (typeof AbortController === 'function') ? new AbortController() : null, to = setTimeout(function(){ try{ if(ctl) ctl.abort(); }catch(e){} }, 6000);
@@ -34969,19 +34977,30 @@ function _sceneRequest(why){
   }catch(e){ _sceneSt.busy = false; }
 }
 window._sceneRequest = _sceneRequest;
-// 경로가 없을 때(idle) 장면 칸을 홈 화면 남는 세로 전체로 늘린다(YJ 06:00). 칸 높이만 정하는 배치 계산이다 — 장면 종류는 엔진이 정한다.
+// 경로가 없고 경로 결과도 아직 안 나온 대기 때(엔진이 fill:true), 홈 화면 전체가 스크롤 없이 딱 한 화면에 보이도록 장면 칸 높이만 맞춘다(YJ 07:43).
+//   · 언제 키울지는 엔진이 정한다(fill) — 앱은 '남는 세로가 얼마인지' 재서 칸 높이에 넣을 뿐이다. 경로 결과가 나오기 시작하면(fill:false) 평소 높이(150px)로 부드럽게 돌아간다.
 function _sceneFit(){
   try{
-    var sc = document.getElementById('congScene'), wrap = document.getElementById('tabContentWrap'), card = document.getElementById('congCard');
-    if(!sc || !wrap || !card) return;
-    var last = _sceneSt.lastRes, idle = !!(last && last.mode === 'idle') && sc.style.display === 'block' && !!sc.offsetParent;
-    if(!idle){ if(sc.style.height) sc.style.height = ''; return; }
-    var wr = wrap.getBoundingClientRect(), sr = sc.getBoundingClientRect();
-    var cs = getComputedStyle(card), ss = getComputedStyle(sc), top = sr.top - wr.top + wrap.scrollTop;
-    var extra = (parseFloat(cs.paddingBottom) || 0) + (parseFloat(cs.borderBottomWidth) || 0) + (parseFloat(ss.marginBottom) || 0) + 12;   // 칸 아래 여백(카드 안쪽·테두리·아래 간격)
-    var h = Math.round(wrap.clientHeight - top - extra - 12);
-    h = Math.max(150, Math.min(h, 900));
-    if(Math.abs(h - sr.height) > 1) sc.style.height = h + 'px';
+    var sc = document.getElementById('congScene'), home = document.getElementById('tab-home');
+    if(!sc || !home) return;
+    var last = _sceneSt.lastRes, fill = !!(last && last.mode === 'idle' && last.fill === true) && sc.style.display === 'block' && !!sc.offsetParent;
+    if(!fill){ if(sc.style.height){ sc.style.height = ''; } if(home.getAttribute('data-hf')) home.removeAttribute('data-hf'); return; }
+    var MIN = 90, cs = getComputedStyle(home);
+    function slackNow(){                                                       // 지금 내용 아래에 남는(모자란) 세로 — 보이는 그대로 잰다
+      var hr = home.getBoundingClientRect(), bottom = 0, i, k, kids = home.children;
+      for(i = 0; i < kids.length; i++){ k = kids[i]; if(!k.offsetParent) continue; var r = k.getBoundingClientRect(); if(!r.height) continue; var b = r.bottom + (parseFloat(getComputedStyle(k).marginBottom) || 0); if(b > bottom) bottom = b; }
+      return bottom ? hr.bottom - (parseFloat(cs.paddingBottom) || 0) - bottom : null;
+    }
+    var cur = sc.getBoundingClientRect().height;
+    if(home.getAttribute('data-hf')) home.removeAttribute('data-hf');
+    var slack = slackNow(); if(slack === null) return;
+    if(cur + slack < MIN){                                                     // 작은 폰: 장면을 최소로 줄여도 모자라면 실시간 대화의 오래된 줄부터 접는다(2줄은 남김)
+      var rows = document.getElementById('liveTalkList'), n = 0, rh = 0;
+      if(rows){ var vis = [].filter.call(rows.children, function(e){ return e.offsetParent; }); rh = vis.length ? vis[0].getBoundingClientRect().height + 6 : 0; n = rh ? Math.min(3, Math.max(0, vis.length - 2), Math.ceil((MIN - cur - slack) / rh)) : 0; }
+      if(n > 0){ home.setAttribute('data-hf', String(n)); var s2 = slackNow(); if(s2 !== null) slack = s2; }
+    }
+    var h = Math.max(MIN, Math.min(Math.round(cur + slack), 900));
+    if(Math.abs(h - cur) >= 2 || sc.style.height === '') sc.style.height = h + 'px';
   }catch(e){ console.warn('[장면 높이]', e); }
 }
 window._sceneFit = _sceneFit;
@@ -34993,6 +35012,8 @@ window._congSyncRoute = _congSyncRoute;
     var host = document.getElementById('congScene'), tag = document.getElementById('csTag');
     try{ if(host && typeof _CS !== 'undefined'){ _CS.attach(host, tag); _CS.setFit(_sceneFit); } }catch(e){}
     try{ if(typeof _RC !== 'undefined') _RC.load(); }catch(e2){}
+    try{ if(typeof MutationObserver === 'function'){ var mo = new MutationObserver(function(){ _sceneRequest('tick'); }); ['transitResultCard', 'transitResultBox'].forEach(function(id){ var rc = document.getElementById(id); if(rc) mo.observe(rc, { attributes: true, attributeFilter: ['style', 'class'] }); }); } }catch(e3){}      // 경로 결과가 나오거나 닫히면 곧바로 엔진에 다시 묻는다
+    try{ if(host) host.addEventListener('transitionend', function(ev){ if(ev.propertyName === 'height'){ try{ _CS.refit(); }catch(e4){} } }); }catch(e5){}
     setInterval(function(){ _sceneRequest('tick'); }, 2500);
     setTimeout(function(){ _sceneRequest('force'); }, 1200);
   }
@@ -42337,8 +42358,8 @@ var _CS = (function(){
   function boot(host){
     var cv = host.querySelector('canvas.cs-cv'); if(!cv){ cv = document.createElement('canvas'); cv.className = 'cs-cv'; host.insertBefore(cv, host.firstChild); }
     var PW = host.clientWidth || 300, PH = host.clientHeight || 150, dpr0 = Math.min(2.5, window.devicePixelRatio || 1);
-    // 세로로 키운 장면(경로 없음 · 화면을 꽉 채움): 같은 그림을 k배 크게 그려 하늘·땅·캐릭터가 함께 커진다(그림 크기일 뿐 판단이 아니다)
-    var k = clamp(Math.min(PH / 190, PW / 200), 1, 2), W = PW / k, H = PH / k, dpr = dpr0 * k;
+    // 세로 크기가 다른 장면(경로 없음 · 폰 화면에 맞춤): 같은 그림을 k배로 그려 하늘·땅·캐릭터가 함께 커진다(그림 크기일 뿐 판단이 아니다)
+    var k = PH < 150 ? Math.max(.55, PH / 150) : clamp(Math.min(PH / 190, PW / 200), 1, 2), W = PW / k, H = PH / k, dpr = dpr0 * k;     // 150px 보다 낮으면 같은 그림을 줄여 그린다
     cv.width = Math.round(PW * dpr0); cv.height = Math.round(PH * dpr0); cv.style.width = '100%'; cv.style.height = '100%';
     var ctx = cv.getContext('2d'); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
     var prev = mk(PW * dpr0, PH * dpr0), reduce = false; try{ reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(e){}
@@ -42369,9 +42390,15 @@ var _CS = (function(){
       if(ts - S.last < 31) return;
       var dt = Math.min(.1, (ts - (S.last || ts)) / 1000); S.last = ts; if(S.reduce) dt = 0; S.t += dt; S.frames++;
       if(S.fade > 0) S.fade = Math.max(0, S.fade - dt / .45);
-      if(ts - S.chk > 1000){ S.chk = ts; try{ if(FIT) FIT(); }catch(e0){} var w = S.host.clientWidth, h2 = S.host.clientHeight, d = isDark(); if((w && Math.abs(w - S.PW) > 2) || (h2 && Math.abs(h2 - S.PH) > 2) || d !== S.dark){ var res = S.res; resize(); } }
+      if(ts - S.chk > 1000){ S.chk = ts; try{ if(FIT) FIT(); }catch(e0){} refit(); }
       update(dt); paintAll(dt);
     }catch(e){ if(!S.err){ S.err = String(e && e.message || e); try{ console.warn('[장면]', e); }catch(e2){} } }
+  }
+  // 칸 크기(폭·높이)나 테마가 바뀌었으면 같은 장면을 새 크기로 다시 그린다. 칸 높이가 바뀌는 중(전환 애니메이션)에는 끝난 뒤에 한다.
+  function refit(){
+    if(!S) return;
+    var h = S.host, w = h.clientWidth, h2 = h.clientHeight, d = isDark();
+    if((w && Math.abs(w - S.PW) > 2) || (h2 && Math.abs(h2 - S.PH) > 2) || d !== S.dark) resize();
   }
   function resize(){
     var host = S.host, mode = S.mode, res = S.res, keep = { busColor: S.busColor, busNo: S.busNo, t: S.t };
@@ -42407,7 +42434,7 @@ var _CS = (function(){
     return { running: true, mode: S.mode, slot: S.L.slot, wk: S.L.wk, season: S.L.season, hero: S.res.hero, W: S.W, H: S.H, frames: S.frames, err: S.err || null, tag: H0 && H0.tag ? H0.tag.textContent : '',
       actors: S.actors.map(function(a){ return { id: a.id, st: a.st, x: Math.round(a.x), z: Math.round(a.z * 100) / 100, vis: a.vis, hero: !!a.hero, umb: !!a.umb, leaving: !!a.leaving }; }), seq: S.seq ? { ph: S.seq.ph, busOn: S.seq.busOn, door: Math.round(S.seq.door * 100) / 100 } : null, traffic: S.traffic.length, ride: S.ride ? { speed: Math.round(S.ride.speed * 100) / 100 } : null };
   }
-  return { attach: attach, setFit: function(f){ FIT = f; }, apply: apply, stop: stop, info: info, paint: paint, last: function(){ return LAST; }, _tick: function(sec){ if(!S) return; var n = Math.round(sec * 30); for(var i = 0; i < n; i++){ S.t += 1 / 30; update(1 / 30); } paintAll(1 / 30); } };
+  return { attach: attach, refit: refit, setFit: function(f){ FIT = f; }, apply: apply, stop: stop, info: info, paint: paint, last: function(){ return LAST; }, _tick: function(sec){ if(!S) return; var n = Math.round(sec * 30); for(var i = 0; i < n; i++){ S.t += 1 / 30; update(1 / 30); } paintAll(1 / 30); } };
 })();
 window._CS = _CS;
 

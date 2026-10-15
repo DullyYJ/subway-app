@@ -51,10 +51,10 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     const { ctx, page, errs, st } = await fresh();
     await page.waitForTimeout(1500);
     const sb = await sceneBox(page); assert(sb.show && sb.mode === 'idle' && sb.w > 250, JSON.stringify(sb));
-    // (06:00 YJ) 경로가 없을 땐 장면이 홈 화면 남는 세로를 꽉 채운다(하단 탭 바로 위까지)
-    const fit = await page.evaluate(() => { const s = document.getElementById('congScene').getBoundingClientRect(), w = document.getElementById('tabContentWrap').getBoundingClientRect(); return { h: s.height, gap: w.bottom - s.bottom, wh: w.height }; });
-    assert(fit.h > 300 && fit.gap >= 0 && fit.gap < 64, '세로를 꽉 채운다 ' + JSON.stringify(fit));
-    assert((await info(page)).H > 230, '큰 장면은 같은 그림을 키워 그린다');
+    // (07:43 YJ) 경로가 없을 땐 홈 화면 전체(검색·혼잡도·AI 승무원·실시간 대화)가 스크롤 없이 한 화면에 딱 맞는다 — 장면 높이가 남는 만큼 늘고 줄어든다
+    await page.waitForTimeout(1500);
+    const fit = await page.evaluate(() => { const h = document.getElementById('tab-home'), hr = h.getBoundingClientRect(); let bot = 0; [...h.children].forEach(k => { if (!k.offsetParent) return; const r = k.getBoundingClientRect(); if (r.height) bot = Math.max(bot, r.bottom + (parseFloat(getComputedStyle(k).marginBottom) || 0)); }); const sc = document.getElementById('congScene').getBoundingClientRect(); return { sceneH: Math.round(sc.height), slack: Math.round(hr.bottom - bot), over: h.scrollHeight - h.clientHeight, fill: window._sceneLast && window._sceneLast.fill }; });
+    assert(fit.fill === true && fit.sceneH >= 90 && fit.slack >= 8 && fit.slack <= 30 && fit.over <= 2, '한 화면에 딱 맞는다 ' + JSON.stringify(fit));
     assert(/점심|아침|오후|저녁|밤|새벽/.test(sb.tag) && /맑음/.test(sb.tag), sb.tag);
     await page.evaluate(() => _CS._tick(4)); let i1 = await info(page);
     assert(i1.running && !i1.err && i1.actors.length >= 2 && i1.actors.length <= 3, JSON.stringify(i1));
@@ -130,6 +130,20 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     assert(!sb.show && c.grid && /^지하철/.test(c.lbl), '탑승 확정 ' + JSON.stringify({ sb, c }));
     assert(!errs.length, errs.join('|')); await ctx.close();
   });
+  await t('(07:43 YJ) 경로 결과가 나오기 시작하면(확정 전) 장면이 평소 크기(150px)로 돌아가고, 경로가 닫히면 다시 한 화면에 맞춘다', async () => {
+    const { ctx, page, errs } = await fresh();
+    await page.waitForTimeout(1500);
+    const hh = () => page.evaluate(() => ({ h: Math.round(document.getElementById('congScene').getBoundingClientRect().height), fill: window._sceneLast && window._sceneLast.fill, st: document.getElementById('congScene').style.height }));
+    const a = await hh(); assert(a.fill === true && a.h !== 150 || a.h === 150 && a.fill === true, JSON.stringify(a));
+    await page.evaluate(() => { document.getElementById('transitResultBox').style.display = 'block'; document.getElementById('transitResultCard').style.display = 'flex'; });
+    await page.waitForTimeout(1800);
+    const b2 = await hh(); assert(b2.fill === false && b2.h === 150 && b2.st === '', '경로 결과가 나오면 150px ' + JSON.stringify(b2));
+    assert((await sceneBox(page)).mode === 'idle', '확정 전엔 여전히 idle 장면');
+    await page.evaluate(() => { document.getElementById('transitResultCard').style.display = 'none'; document.getElementById('transitResultBox').style.display = 'none'; });
+    await page.waitForTimeout(2200);
+    const c2 = await hh(); assert(c2.fill === true && c2.h !== 150 && c2.st !== '', '닫으면 다시 맞춤 ' + JSON.stringify(c2));
+    assert(!errs.length, errs.join('|')); await ctx.close();
+  });
   await t('비·눈이면 기다리는 캐릭터가 우산을 쓴다 · 맑으면 쓰지 않는다', async () => {
     for (const [txt, want] of [['비', true], ['눈', true], ['맑음', false]]) {
       const { ctx, page, errs } = await fresh({ wx: { temp: 5, rain: txt === '맑음' ? 0 : 90, txt } });
@@ -161,6 +175,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   await t('앱에는 장면·구간·날씨 판정 코드가 없다(엔진 값만 그린다)', async () => {
     const src = fs.readFileSync(html, 'utf8');
     ['phaseFor', 'function slotOf', 'function wxKind', 'function seasonOf', '_congLegNode', '_congSubNodeFrom', 'function sceneDecide'].forEach(k => assert(!src.includes(k), '앱에 판정 코드가 남아 있다: ' + k));
+    assert(/last\.fill === true/.test(src), '키울지 말지는 엔진의 fill 값을 따른다');
     assert(/_SCENE_URL/.test(src) && /\/scene'/.test(src), '엔진 /scene 호출');
   });
   await t('JS 오류 없음 · 어두운/파스텔 테마 모두 그려진다', async () => {

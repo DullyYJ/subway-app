@@ -3,9 +3,9 @@
 // ★ 원칙(YJ): "모든 연산은 엔진이 한다. 앱은 엔진이 계산한 그림만 그린다."
 //   어떤 장면(idle·wait·ride·alight·없음=지하철 혼잡도)을 보일지 · 혼잡도 카드가 어느 구간(지하철 역·버스 정류장 목록)을 보일지 · 시간대·날씨 종류·계절 ·
 //   대표 캐릭터·등장 순서 · 안내 문구는 전부 여기서 정한다. 앱(www/index.html)은 엔진이 준 값을 그리기만 한다.
-// 입력  sceneDecide({ nowMs, tzOffsetMin, locked, key, here, boarded, nodes:[{name,isSub,isBus,isWalk,isOrigin,lineName,hasLoc}] }, wx|null)
+// 입력  sceneDecide({ nowMs, tzOffsetMin, locked, routeShown, key, here, boarded, nodes:[{name,isSub,isBus,isWalk,isOrigin,lineName,hasLoc}] }, wx|null)
 //        wx = { temp, rain, txt } (Worker 가 subway-api /weather 에서 받는다. 못 받으면 null — 날씨를 지어내지 않는다)
-// 출력  { ok, mode:'idle'|'wait'|'ride'|'alight'|null, nearEnd, hint, tag, look:{slot,slotKo,wk,wxKo,wxKnown,temp,season,night,lit,hidesSun,emo}, hero, cast[],
+// 출력  { ok, fill(idle 이고 경로 결과가 아직 없으면 true), mode:'idle'|'wait'|'ride'|'alight'|null, nearEnd, hint, tag, look:{slot,slotKo,wk,wxKo,wxKnown,temp,season,night,lit,hidesSun,emo}, hero, cast[],
 //         venue:'bus'|'sub'|'street', line(짧은 노선 이름), cong:{ kind:'sub'|null, idx, sig } }   ★ 혼잡도(cong)는 지하철 탑승 확정 뒤(mode:null)에만
 // 맨 아래 module.exports 는 시험(Node)용이고 Worker 에서는 함수 선언만 쓰인다.
 'use strict';
@@ -71,9 +71,10 @@ function sceneDecide(inp, wx) {
   var look = sceneLook(nowMs, tz, wx || null);
   var sigBase = nodes.map(function (n) { return (n.isBus ? "b" : n.isSub ? "s" : n.isWalk ? "w" : "o") + (n.lineName || "") + "|" + (n.name || ""); }).join(">");
   var day = Math.floor((nowMs + tz * 6e4) / 864e5), seedStr = String(inp.key || sigBase) + "#" + day;
-  var out = { ok: true, mode: null, venue: "street", line: "", nearEnd: false, hint: null, tag: "", look: look, hero: SCENE_CHARS[sceneHash(seedStr) % SCENE_CHARS.length], cast: sceneShuffle(SCENE_CHARS, sceneHash(seedStr + "/" + Math.floor(nowMs / 6e5))), cong: { kind: null, idx: -1, sig: "" } };
+  var out = { ok: true, fill: false, mode: null, venue: "street", line: "", nearEnd: false, hint: null, tag: "", look: look, hero: SCENE_CHARS[sceneHash(seedStr) % SCENE_CHARS.length], cast: sceneShuffle(SCENE_CHARS, sceneHash(seedStr + "/" + Math.floor(nowMs / 6e5))), cong: { kind: null, idx: -1, sig: "" } };
   var idleTag = look.emo + " " + look.slotKo + (look.wxKnown ? " \u00B7 " + look.wxKo + (look.temp != null ? " " + look.temp + "\u00B0" : "") : "");
-  if (!locked) { out.mode = "idle"; out.tag = idleTag; return out; }
+  // fill: 경로가 없고(경로 결과도 안 나온 때) 홈 화면을 한 화면에 꽉 채워 보일 때만 true. 경로 결과가 나오기 시작하면(확정 전이라도) false → 앱은 평소 크기로 돌린다
+  if (!locked) { out.mode = "idle"; out.tag = idleTag; out.fill = inp.routeShown !== true; return out; }
   if (!nodes.length) return out;
   var here = Math.max(0, Math.min(isFinite(inp.here) ? inp.here | 0 : 0, nodes.length - 1)), leg = sceneLegNode(nodes, here), j;
   if (!leg) return out;

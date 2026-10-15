@@ -29,6 +29,14 @@ const S = (name, line) => N({ name, isSub: true, lineName: line || '2호선' }),
     const c = decide({ nowMs: ms('2026-10-15T22:00:00'), locked: false }, null);
     assert.strictEqual(c.look.wxKnown, false); assert.strictEqual(c.look.wxKo, ''); assert(!/맑|흐|비|눈/.test(c.tag), '날씨를 못 받으면 날씨를 지어내지 않는다: ' + c.tag); assert(c.look.night);
   });
+  await t('(07:43 YJ) fill: 경로도 경로 결과도 없을 때만 true — 경로 결과가 나오기 시작하면(확정 전) false, 확정 후에도 false', () => {
+    const base = { nowMs: ms('2026-10-16T07:40:00') };
+    assert.strictEqual(decide(Object.assign({ locked: false }, base), null).fill, true);
+    assert.strictEqual(decide(Object.assign({ locked: false, routeShown: false }, base), null).fill, true);
+    const r = decide(Object.assign({ locked: false, routeShown: true }, base), null); assert.strictEqual(r.mode, 'idle'); assert.strictEqual(r.fill, false);
+    const nodes = [{ name: '출발', isOrigin: true }, { name: '도보', isWalk: true }, { name: 'A', isBus: true, lineName: '1', hasLoc: true }, { name: 'B', isBus: true, lineName: '1', hasLoc: true }];
+    for (const here of [0, 1, 2, 3]) assert.strictEqual(decide(Object.assign({ locked: true, here, nodes }, base), null).fill, false, 'locked ' + here);
+  });
   await t('tzOffsetMin 을 따른다(UTC 기기에서도 한국 시각으로 판단)', () => {
     assert.strictEqual(decide({ nowMs: Date.parse('2026-10-15T03:00:00Z'), tzOffsetMin: 540, locked: false }, null).look.slot, 'noon');
     assert.strictEqual(decide({ nowMs: Date.parse('2026-10-15T03:00:00Z'), tzOffsetMin: 0, locked: false }, null).look.slot, 'night');
