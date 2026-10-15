@@ -5578,6 +5578,7 @@ function closeBusRoute(){
   if(modal) modal.style.display = 'none';
   window._brOrigin = null;   // 기준 정류장 해제 (다음에 열 때 잘못 적용 방지)
   _brPickIdx = null; try{ var _pb = document.getElementById('brPickBar'); if(_pb) _pb.style.display = 'none'; }catch(ePk1){}
+  try{ if(!window._pickKeep && window._pick) _pickAbandon(); }catch(ePk3){}      // 출발지만 정하고 화면을 벗어남 → 출발지는 없던 일로(처음부터 다시)
   window._busRouteModalOpen = false;   // ★ 우선 처리 해제
   // 위치 갱신 타이머 정리
   try{ if(window._busPosTimer){ clearInterval(window._busPosTimer); window._busPosTimer = null; } }catch(e){}
@@ -5599,7 +5600,7 @@ function _brDirCls(cd){
 window._pick = null;            // { start:{type:'bus',...}, at } — 출발지를 정했고 도착지를 고르는 중
 window._pickDestMode = false;   // 도착지를 '역'으로 고르는 중(노선도 탭)
 var _brPickIdx = null;          // 지금 눌러 둔 정류장(출발지 후보)
-function _pickAlive(){ var P = window._pick; if(P && Date.now() - P.at > 15 * 60000){ window._pick = null; P = null; } return P; }
+function _pickAlive(){ var P = window._pick; if(P && Date.now() - P.at > 15 * 60000){ _pickAbandon(); P = null; } return P; }
 function _brStopLoc(st){
   var m = document.getElementById('busRouteModal'), la = parseFloat(st.gpslati), lo = parseFloat(st.gpslong);
   return { type:'bus', name:String(st.nodenm || ''), nodeId:String(st.nodeid || st.nodeId || ''), cityCode:(m && m.dataset && m.dataset.cityCode) || '', lat:isNaN(la) ? 0 : la, lng:isNaN(lo) ? 0 : lo };
@@ -5664,20 +5665,42 @@ function _pickSetStart(){
   try{
     var st = (_brPickIdx != null) ? (window._brStops || [])[_brPickIdx] : null; if(!st) return;
     var loc = _brStopLoc(st);
+    var prev = _pickSnap();                                                       // 이 화면을 벗어나면 원래대로 되돌린다(_pickAbandon)
     _fmapDest = null; if(typeof S !== 'undefined') S.dest = null;                 // 새 출발지 = 새 경로 — 이전 도착지는 비운다(비우지 않으면 곧바로 옛 도착지로 탐색해 버린다)
     try{ var di = document.getElementById('fmapDestInp'); if(di) di.value = ''; var vd = document.getElementById('valDest'); if(vd){ vd.textContent = '-'; vd.style.opacity = '0.6'; } }catch(e1){}
     _fmapSetLocation('start', loc);
-    window._pick = { start: loc, at: Date.now() };
+    window._pick = { start: loc, at: Date.now(), prev: prev };
     _brPickIdx = null;
     _brPickPaint(); _brPickRender();
     _pickPop('📍 출발지로 설정되었습니다', loc.name);
   }catch(e){}
 }
-// 출발지는 그대로 두고 처음부터 다시
-function _pickCancel(){
-  window._pick = null; _brPickIdx = null; _pickCancelMode();
-  _brPickPaint(); _brPickRender();
+// 출발지를 고르기 전의 앱 상태(출발·도착 값과 화면 글자)를 적어 둔다
+function _pickSnap(){
+  var g = function(id){ var e = document.getElementById(id); return e ? e : null; };
+  var tx = function(id){ var e = g(id); return e ? e.textContent : null; };
+  return { fs: _fmapStart, fd: _fmapDest, ss: (typeof S !== 'undefined' ? S.start : null), sd: (typeof S !== 'undefined' ? S.dest : null),
+    si: (g('fmapStartInp') || {}).value, di: (g('fmapDestInp') || {}).value, vs: tx('valStart'), ss2: tx('subStart'), ct: tx('curStnTxt'), vd: tx('valDest'), vdo: (g('valDest') || {style:{}}).style.opacity };
 }
+// 출발지를 정한 뒤 이 화면을 벗어나거나 취소하면 그 출발지는 없던 일로 — 고르기 전 상태로 되돌리고 다음엔 처음부터 고른다(2026-10-15 YJ)
+function _pickAbandon(){
+  var P = window._pick;
+  window._pick = null; _brPickIdx = null;
+  try{
+    if(P && P.prev && _fmapStart && _fmapStart.name === P.start.name && _fmapStart.type === 'bus'){      // 그 사이 다른 곳에서 출발지를 바꿨다면 건드리지 않는다
+      var q = P.prev, gi = function(id){ return document.getElementById(id); }, set = function(id, v){ var e = gi(id); if(e && v != null) e.textContent = v; };
+      _fmapStart = q.fs; _fmapDest = q.fd; S.start = q.ss; S.dest = q.sd;
+      var si = gi('fmapStartInp'); if(si && q.si != null) si.value = q.si;
+      var di = gi('fmapDestInp'); if(di && q.di != null) di.value = q.di;
+      set('valStart', q.vs); set('subStart', q.ss2); set('curStnTxt', q.ct); set('valDest', q.vd);
+      var vd = gi('valDest'); if(vd && q.vdo != null) vd.style.opacity = q.vdo;
+      try{ if(typeof updateCong === 'function' && q.ss) setTimeout(function(){ updateCong(q.ss); }, 100); }catch(e1){}
+    }
+  }catch(e){}
+  _pickCancelMode();
+  try{ _brPickPaint(); _brPickRender(); }catch(e2){}
+}
+function _pickCancel(){ _pickAbandon(); }
 function _pickEnsureStart(P){
   try{
     if(!_fmapStart || _fmapStart.name !== P.start.name){ _fmapDest = null; _fmapSetLocation('start', P.start); }
@@ -5698,11 +5721,13 @@ function _pickFinish(loc){
 }
 function _pickToStation(){
   if(!_pickAlive()) return;
+  window._pickKeep = true;                                    // 일부러 경로 화면을 닫고 노선도로 가는 것 — 출발지를 지우지 않는다
   try{ if(typeof closeBusRoute === 'function') closeBusRoute(); }catch(e0){}
   window._mapBusOpened = 1;                                   // 노선도 탭이 처음 열릴 때 '버스로 시작' 준비가 지하철 화면을 덮어쓰지 않게
   try{ switchTab('map', document.getElementById('ni-map')); }catch(e1){}
   try{ switchMapInnerTab('subway'); }catch(e2){}
   window._pickDestMode = true;
+  window._pickKeep = false;
   _pickHint(true);
 }
 // 노선도 아래쪽 안내 글(네이티브 지도에서도 그려진다)
@@ -5747,7 +5772,7 @@ function _pickDestFromTt(){
   _pickGoHome();
   _pickPop('🏁 도착지로 설정되었습니다', stn.name);
 }
-window._pickToStation = _pickToStation; window._pickSetStart = _pickSetStart; window._pickCancel = _pickCancel; window._pickDestFromTt = _pickDestFromTt; window._pickCancelMode = _pickCancelMode;
+window._pickAbandon = _pickAbandon; window._pickToStation = _pickToStation; window._pickSetStart = _pickSetStart; window._pickCancel = _pickCancel; window._pickDestFromTt = _pickDestFromTt; window._pickCancelMode = _pickCancelMode;
 
 function _renderBusRoute(stations, buses){
   var body = document.getElementById('busRouteBody');
@@ -15092,7 +15117,7 @@ _loadSavedBusStops();
 
 // 내부 탭 전환
 function switchMapInnerTab(tab) {
-  try{ if(tab !== 'subway' && window._pickDestMode && typeof _pickCancelMode === 'function') _pickCancelMode(); }catch(ePk){}
+  try{ if(tab !== 'subway' && window._pickDestMode && typeof _pickAbandon === 'function') _pickAbandon(); }catch(ePk){}
   var subway = document.getElementById('mapSubwayPanel');
   var bus    = document.getElementById('mapBusPanel');
   var stab   = document.getElementById('mapItabSubway');
@@ -24616,7 +24641,7 @@ window._dedupeStnByName = _dedupeStnByName;
 
 /* ══ 탭 전환 ══ */
 function switchTab(tab,el){
-  try{ if(tab !== 'map' && window._pickDestMode && typeof _pickCancelMode === 'function') _pickCancelMode(); }catch(ePk){}      // 노선도 탭을 떠나면 '도착지 역 고르기'는 끝낸다
+  try{ if(tab !== 'map' && window._pickDestMode && typeof _pickAbandon === 'function') _pickAbandon(); }catch(ePk){}      // 노선도 탭을 떠나면 '도착지 역 고르기'와 정해 둔 출발지는 없던 일로
   // ★ 2026-08-31: 탭을 바꾸면 열려 있던 시트·모달을 닫는다.
   //   예전엔 노선 상세 시트가 그대로 남아, 홈을 눌러도 노선도가 덮고 있었다.
   try{

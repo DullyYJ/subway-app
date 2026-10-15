@@ -63,7 +63,7 @@ const STOPS = [
 
   await t('[출발지로 설정] → 팝업 "출발지로 설정되었습니다", 경로 화면 유지, 하단은 "다른 정류장을 누르면 도착지로 설정됩니다" + [도착지는 역으로 설정]', async () => {
     const x = await fresh(); await openRoute(x);
-    await x.page.evaluate(() => { _fmapDest = { type: 'bus', name: '옛도착지' }; });        // 이전 도착지가 남아 있어도 곧바로 탐색하지 않는다
+    await x.page.evaluate(() => { _fmapStart = { type: 'subway', name: '내출발' }; S.start = { name: '내출발역', line: '1호선' }; _fmapDest = { type: 'bus', name: '옛도착지' }; });        // 이전 값이 남아 있어도 곧바로 탐색하지 않는다
     await clickRow(x, 1);
     await x.page.evaluate(() => document.querySelector('#brPickBar .brp-main').click()); await x.page.clock.runFor(100);
     assert(/출발지로 설정되었습니다/.test(await pop(x) || ''), '팝업 ' + await pop(x));
@@ -77,9 +77,14 @@ const STOPS = [
     // 출발지와 같은 정류장을 누르면 도착지가 되지 않는다
     await clickRow(x, 1);
     assert.strictEqual((await x.page.evaluate(() => window.__routed.length)), 0); assert(await x.page.evaluate(() => !!_pick), '그대로 도착지 고르는 중');
-    // 다시 열어도(닫았다 열기) 도착지 고르는 중이 이어진다
-    await x.page.evaluate(() => closeBusRoute()); await openRoute(x);
-    assert(/다른 정류장을 누르면/.test((await bar(x)).text), '다시 열어도 하단 안내');
+    // 출발지만 정하고 이 화면을 벗어나면(닫기) 그 출발지는 없던 일 — 고르기 전 상태로 돌아가고 다음엔 처음부터
+    await x.page.evaluate(() => closeBusRoute());
+    const gone = await x.page.evaluate(() => ({ pick: window._pick, s: _fmapStart && _fmapStart.name, d: _fmapDest && _fmapDest.name, ss: S.start && S.start.name }));
+    assert.strictEqual(gone.pick, null, '출발지 흐름 끝'); assert.strictEqual(gone.s, '내출발'); assert.strictEqual(gone.d, '옛도착지'); assert.strictEqual(gone.ss, '내출발역', '앱의 출발지도 원래대로 ' + JSON.stringify(gone));
+    await openRoute(x);
+    assert.strictEqual((await bar(x)).shown, false, '다시 열면 처음부터(하단 바 없음)');
+    await clickRow(x, 2);
+    assert(/출발지로 설정/.test((await bar(x)).btns.join('|')), '처음부터 출발지 선택');
     assert.deepStrictEqual(x.errs, []); await x.ctx.close();
   });
 
@@ -133,9 +138,32 @@ const STOPS = [
     assert.strictEqual(await x.page.evaluate(() => window._pickDestMode), true);
     await x.page.evaluate(() => switchTab('shop', document.getElementById('ni-shop'))); await x.page.clock.runFor(300);
     assert.strictEqual(await x.page.evaluate(() => window._pickDestMode), false, '탭을 떠나면 끝');
+    assert.strictEqual(await x.page.evaluate(() => window._pick), null, '정해 둔 출발지도 없던 일');
     await x.page.evaluate(() => switchTab('map', document.getElementById('ni-map'))); await x.page.clock.runFor(500);
     await x.page.evaluate(() => svgShowPopup('시청', ['1호선', '2호선'])); await x.page.clock.runFor(900);
     assert(await x.page.evaluate(() => !!document.getElementById('svgStationPop') && !document.getElementById('nmTtSheet')), '평소처럼 팝업');
+    assert.deepStrictEqual(x.errs, []); await x.ctx.close();
+  });
+
+
+  await t('이탈하면 출발지 없던 일: 경로 화면 바깥 탭 · 다른 탭 이동 · 노선도에서 버스 화면으로 — 단, [도착지는 역으로 설정]으로 가는 것은 유지', async () => {
+    const x = await fresh(); await openRoute(x);
+    const setStart = async (i) => { await clickRow(x, i); await x.page.evaluate(() => document.querySelector('#brPickBar .brp-main').click()); await x.page.clock.runFor(100); };
+    // ① 시트 바깥(어두운 배경)을 눌러 닫음
+    await setStart(1);
+    await x.page.evaluate(() => document.getElementById('busRouteModal').click()); await x.page.clock.runFor(100);
+    assert.strictEqual(await x.page.evaluate(() => window._pick), null, '바깥 눌러 닫음 → 없던 일');
+    // ② 다른 탭으로 이동
+    await openRoute(x); await setStart(1);
+    await x.page.evaluate(() => switchTab('shop', document.getElementById('ni-shop'))); await x.page.clock.runFor(300);
+    assert.strictEqual(await x.page.evaluate(() => window._pick), null, '탭 이동 → 없던 일');
+    // ③ 역 고르기로 가는 건 유지, 거기서 버스 화면으로 가면 없던 일
+    await x.page.evaluate(() => switchTab('map', document.getElementById('ni-map'))); await x.page.clock.runFor(400);
+    await openRoute(x); await setStart(1);
+    await x.page.evaluate(() => document.querySelector('#brPickBar .brp-main').click()); await x.page.clock.runFor(500);
+    assert(await x.page.evaluate(() => !!window._pick && window._pickDestMode), '역 고르기로 갈 땐 출발지 유지');
+    await x.page.evaluate(() => switchMapInnerTab('bus')); await x.page.clock.runFor(300);
+    assert.strictEqual(await x.page.evaluate(() => window._pick), null, '버스 화면으로 가면 없던 일'); assert.strictEqual(await x.page.evaluate(() => window._pickDestMode), false);
     assert.deepStrictEqual(x.errs, []); await x.ctx.close();
   });
 
