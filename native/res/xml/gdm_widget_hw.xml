@@ -7,6 +7,7 @@
     android:targetCellWidth="3"
     android:targetCellHeight="1"
     android:updatePeriodMillis="0"
+    android:previewImage="@drawable/gdm_preview_hw"
     android:initialLayout="@layout/gdm_widget_h_light"
     android:resizeMode="horizontal|vertical"
     android:widgetCategory="home_screen"

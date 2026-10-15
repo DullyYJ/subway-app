@@ -25,6 +25,23 @@ public final class WidgetSim {
         if ("sul".equals(id)) return new float[] { 27f, 230.5f, 131f, 20f, 16f, 0.76f };
         return new float[] { 15f, 222.5f, 128f, 13f, 0f, 1f };
     }
+    /** 캐릭터 셋(6마리 중 3마리)을 무작위로 뽑는다. prev 가 있으면 그것과 다른 구성이 나온다(화면을 켤 때마다 바뀌어 보이도록). */
+    public static String[] pickSet(long seed, String[] prev) {
+        java.util.Random r = new java.util.Random(seed);
+        String[] out = null;
+        for (int k = 0; k < 24; k++) {
+            java.util.List<String> pool = new java.util.ArrayList<String>(java.util.Arrays.asList(ORDER));
+            java.util.Collections.shuffle(pool, r);
+            out = new String[] { pool.get(0), pool.get(1), pool.get(2) };
+            if (prev == null || !sameSet(out, prev)) break;
+        }
+        return out;
+    }
+    public static boolean sameSet(String[] a, String[] b) {
+        if (a.length != b.length) return false;
+        for (String x : a) { boolean f = false; for (String y : b) if (x.equals(y)) f = true; if (!f) return false; }
+        return true;
+    }
     public static boolean poops(String id) { return "dolsom".equals(id) || "ppopu".equals(id) || "lovel".equals(id); }
 
     public static final class Ch {

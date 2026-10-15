@@ -130,6 +130,10 @@ public class WidgetJvmTest {
             ok(s3.isSettled() && n < 600, tag + ": 멈추라고 하면 " + (n / 10f) + "초 안에 바닥에서 쉰다");
             s3.resume();
         }
+        // 화면을 켤 때마다 캐릭터 셋이 바뀐다: 매번 직전과 다른 구성, 서로 다른 3마리, 6마리 모두 골고루 등장
+        { String[] cur = WidgetSim.pickSet(1, null); boolean always = true, distinct = true; java.util.Set<String> seenIds = new java.util.HashSet<String>();
+          for (int i = 0; i < 300; i++) { String[] nx = WidgetSim.pickSet(1000 + i * 31L, cur); if (WidgetSim.sameSet(nx, cur)) always = false; if (nx.length != 3 || nx[0].equals(nx[1]) || nx[0].equals(nx[2]) || nx[1].equals(nx[2])) distinct = false; for (String x : nx) seenIds.add(x); cur = nx; }
+          ok(always, "화면을 켤 때마다 직전과 다른 캐릭터 구성이 나온다(300번)"); ok(distinct && seenIds.size() == WidgetSim.ORDER.length, "서로 다른 3마리, 6마리 모두 골고루 나온다(" + seenIds.size() + "종)"); }
         // 같은 시드 → 같은 결과(결정성)
         WidgetGeo g = WidgetGeo.of(false, 290f, 120f);
         WidgetSim a = new WidgetSim(g, 42, new String[] { "dolsom", "lovel" }), b = new WidgetSim(g, 42, new String[] { "dolsom", "lovel" });
@@ -181,9 +185,47 @@ public class WidgetJvmTest {
         System.out.println(sb);
     }
 
+    /**
+     * 위젯 고르는 화면에 보일 미리보기 그림(시계 화면 + 캐릭터) 한 장. 실제 위젯은 배경이 투명하지만 미리보기는 카드 위에 놓이므로 옅은 바탕을 깐다.
+     *   java WidgetJvmTest preview <sheetsDir> <out.png> <h|v> <W> <H> <dark|light> <HH:mm>
+     * 캐릭터 셋·모습은 '한 마리는 시계 위, 한 마리는 매달림, 한 마리는 걷는' 장면이 나오는 시드를 찾아 쓴다.
+     */
+    static void preview(String[] a) throws Exception {
+        File dir = new File(a[1]); boolean v = a[3].equals("v"); float W = Float.parseFloat(a[4]), H = Float.parseFloat(a[5]); boolean dark = a[6].equals("dark"); String tm = a[7];
+        Map<String, BufferedImage> sheets = new HashMap<String, BufferedImage>();
+        for (String id : ALL) { File f = new File(dir, id + ".png"); if (f.exists()) sheets.put(id, ImageIO.read(f)); }
+        WidgetGeo g = WidgetGeo.of(v, W, H);
+        WidgetSim s = null; String[] ids = { "dolsom", "lovel", "sul" };
+        for (long seed = 1; seed < 400 && s == null; seed++) {
+            WidgetSim t = new WidgetSim(g, seed, ids);
+            for (int i = 0; i < 1200 && s == null; i++) {
+                t.step(0.05f);
+                boolean top = false, hang = false, ground = false;
+                for (WidgetSim.Ch c : t.cs) { if (c.st == WidgetSim.TOP_REST || c.st == WidgetSim.TOP_WALK) top = true; else if (c.st == WidgetSim.HANG) hang = true; else if (c.zone == 0) ground = true; }
+                if (top && hang && ground) s = t;
+            }
+        }
+        if (s == null) s = new WidgetSim(g, 1, ids);
+        int S = 3; BufferedImage im = new BufferedImage((int) (W * S), (int) (H * S), BufferedImage.TYPE_INT_ARGB);
+        Graphics2D gr = im.createGraphics(); gr.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON); gr.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON); gr.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+        Color c1 = dark ? new Color(0x4A5470) : new Color(0xF6E9E4), c2 = dark ? new Color(0x20263A) : new Color(0xE8DAD8);
+        gr.setPaint(new GradientPaint(0, 0, c1, 0, H * S, c2)); gr.fillRoundRect(0, 0, (int) (W * S), (int) (H * S), 26 * S, 26 * S);
+        gr.setColor(dark ? Color.WHITE : new Color(0x111114));
+        gr.setFont(new Font("SansSerif", Font.BOLD, Math.round(g.textDp * 0.98f * S)));
+        FontMetrics fm = gr.getFontMetrics();
+        { String ref = v ? "00" : tm; float wd = fm.stringWidth(ref) / (float) S, hd = fm.getAscent() * 0.72f / S;   // 글꼴이 달라도 시계 상자(폭·높이)에 맞춘다
+          float k = Math.min(g.clkW / wd, (v ? g.lineH : g.clkH) / hd); gr.setFont(gr.getFont().deriveFont(gr.getFont().getSize2D() * Math.min(1f, k))); fm = gr.getFontMetrics(); }
+        if (!v) gr.drawString(tm, (g.clkL + (g.clkW - fm.stringWidth(tm) / (float) S) / 2f) * S, g.clkB() * S);
+        else { String h1 = tm.substring(0, 2), m1 = tm.substring(3, 5); gr.drawString(h1, (g.clkL + (g.clkW - fm.stringWidth(h1) / (float) S) / 2f) * S, (g.clkT + g.lineH) * S); gr.drawString(m1, (g.clkL + (g.clkW - fm.stringWidth(m1) / (float) S) / 2f) * S, g.clkB() * S); }
+        WidgetArt.draw(s, new AwtSurface(gr, sheets, S), dark);
+        gr.dispose();
+        ImageIO.write(im, "png", new File(a[2]));
+    }
+
     public static void main(String[] a) throws Exception {
         if (a.length > 0 && a[0].equals("check")) check();
         else if (a.length > 0 && a[0].equals("render")) render(a);
+        else if (a.length > 0 && a[0].equals("preview")) preview(a);
         else System.out.println("usage: check | render ...");
         if (fails > 0) System.exit(1);
     }

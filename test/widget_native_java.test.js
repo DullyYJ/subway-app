@@ -42,6 +42,9 @@ res = sys.argv[1]; bad = []; names = set(); ids = set(); refs = set()
 for r, d, fs in os.walk(res):
     for f in fs:
         p = os.path.join(r, f)
+        if f.endswith('.png'):
+            if os.path.basename(r).startswith('drawable'): names.add('drawable/' + f.rsplit('.', 1)[0])
+            continue
         try: minidom.parse(p)
         except Exception as e: bad.append(f + ': ' + str(e))
         t = open(p, encoding='utf-8').read()
@@ -65,7 +68,11 @@ print('BAD', bad); print('MISS', miss)
     assert(!bad.length, '알 수 없는 속성(오타?): ' + bad.join(', '));
     // 배경은 투명: 루트 배경 그림이 없어야 한다
     for (const f of walk(path.join(res, 'layout'), '.xml')) assert(!/gdm_bg_/.test(fs.readFileSync(f, 'utf8')), path.basename(f) + ' 에 배경이 남아 있다');
-    for (const n of ['hb', 'hw', 'vb', 'vw']) assert(fs.existsSync(path.join(res, 'xml', 'gdm_widget_' + n + '.xml')), n + ' 위젯 정의 없음');
+    for (const n of ['hb', 'hw', 'vb', 'vw']) {
+      assert(fs.existsSync(path.join(res, 'xml', 'gdm_widget_' + n + '.xml')), n + ' 위젯 정의 없음');
+      assert(fs.statSync(path.join(res, 'drawable-nodpi', 'gdm_preview_' + n + '.png')).size > 5000, n + ' 미리보기 그림 없음(위젯 고르는 화면에 시계가 안 보인다)');
+      assert(fs.readFileSync(path.join(res, 'xml', 'gdm_widget_' + n + '.xml'), 'utf8').includes('android:previewImage="@drawable/gdm_preview_' + n + '"'), n + ' 위젯 정의가 미리보기를 안 가리킨다');
+    }
   });
   await t('CI 워크플로가 위젯 파일·리소스를 복사하고 MainActivity·매니페스트에 연결한다', async () => {
     const y = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'build-apk.yml'), 'utf8');
@@ -90,6 +97,28 @@ print('BAD', bad); print('MISS', miss)
     assert((o.match(/@xml\/gdm_widget_/g) || []).length === 4);
     assert(o.includes('android:exported="true"') && o.includes('BOOT_COMPLETED'));
     execFileSync('python3', ['-I', '-c', 'import sys;from xml.dom import minidom;minidom.parseString(sys.stdin.read().encode())'], { input: o });
+  });
+  await t('강아지(돌솜·뽀푸) 시트에 꼬리가 있다 — 몸·머리보다 왼쪽으로 꼬리 털뭉치가 나와 있고 칸 밖으로 안 잘린다', async () => {
+    const py = `
+import sys
+from PIL import Image
+import numpy as np
+bad = []
+for n in ['dolsom', 'ppopu']:
+    a = np.asarray(Image.open(sys.argv[1] + '/' + n + '.webp').convert('RGBA'))[..., 3]
+    mins = []
+    for i in range(16):
+        cx, cy = (i % 4) * 256, (i // 4) * 256
+        c = a[cy:cy + 256, cx:cx + 256] > 24
+        xs = np.where(c.any(0))[0]
+        if xs.min() < 3 or xs.max() > 252: bad.append(n + '#' + str(i) + ' 칸 가장자리에 닿음')
+        mins.append(int(xs.min()))
+    # 꼬리가 없던 때는 몸·머리 털의 왼쪽 끝이 36~48px 이었다. 꼬리가 있으면 16프레임 중 절반 이상에서 그보다 왼쪽(<=34px)에 털뭉치가 나온다
+    if sum(1 for m in mins if m <= 34) < 8: bad.append(n + ' 꼬리가 안 보인다(왼쪽 끝 ' + str(mins) + ')')
+print('BAD', bad)
+`;
+    const o = execFileSync('python3', ['-I', '-c', py, path.join(ROOT, 'www', 'chars3d')], { encoding: 'utf-8' });
+    assert(/BAD \[\]/.test(o), o);
   });
   console.log(`\n${pass} pass, ${fail} fail`);
   process.exit(fail ? 1 : 0);

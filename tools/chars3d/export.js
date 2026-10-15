@@ -21,7 +21,8 @@ for(const id of ids){
   const wU=(bx[1]-bx[0]+1)*k,hU=(bx[3]-bx[2]+1)*k,midX=(bx[0]+bx[1])/2,midY=(bx[2]+bx[3])/2;
   const size=Math.max(wU,hU)*1.06;
   const cx=V0[2]+(midX-256)*k,cy=V0[1]+(256-midY)*k/Math.cos(EL);
-  const V=[+size.toFixed(3),+cy.toFixed(3),+cx.toFixed(3)];
+  let V=[+size.toFixed(3),+cy.toFixed(3),+cx.toFixed(3)];
+  if(process.env.FIXV){const fv=JSON.parse(process.env.FIXV)[id];if(fv){V=fv;console.log('FIXV',id,JSON.stringify(V),'측정한 범위로 맞췄다면',JSON.stringify([+size.toFixed(3),+cy.toFixed(3),+cx.toFixed(3)]));}}
   // ② 맞춘 카메라로 다시 렌더
   await p.evaluate(v=>{window.OV=v;},V);await p.evaluate(id=>window.setup(id),id);fs.mkdirSync(`fr/${id}`,{recursive:true});
   let lowest=-1,f2=0;const all=await frames();

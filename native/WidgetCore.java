@@ -265,22 +265,22 @@ public final class WidgetCore {
         n.S = Math.min(den, 1.6f);
         n.geo = WidgetGeo.of(v, w, h);
         measureClock(n);
-        n.chars = pickChars(id);
+        n.chars = pickChars(id, null);
         n.sim = new WidgetSim(n.geo, System.nanoTime() ^ id, n.chars);
         int bw = Math.max(40, Math.round(w * n.S)), bh = Math.max(40, Math.round(h * n.S));
         n.bmp = Bitmap.createBitmap(bw, bh, Bitmap.Config.ARGB_8888); n.cv = new Canvas(n.bmp); n.surf = new AndSurface(n.cv, n.S, n.geo);
         INST.put(id, n);
         return n;
     }
-    /** 하루 동안은 같은 캐릭터 셋(위젯마다 다름), 다음 날 다시 뽑는다. */
-    static String[] pickChars(int id) {
-        Calendar cal = Calendar.getInstance();
-        Random r = new Random(cal.get(Calendar.YEAR) * 1000L + cal.get(Calendar.DAY_OF_YEAR) + id * 7919L);
-        java.util.List<String> pool = new java.util.ArrayList<String>(java.util.Arrays.asList(WidgetSim.ORDER));
-        java.util.Collections.shuffle(pool, r);
-        return new String[] { pool.get(0), pool.get(1), pool.get(2) };
+    static String[] pickChars(int id, String[] prev) { return WidgetSim.pickSet(System.nanoTime() ^ (id * 7919L), prev); }
+    /** 화면이 켜질 때마다 위젯의 캐릭터 셋을 새로 뽑아 갈아 끼운다(그림 판은 다음 그리기 때 새로 읽는다). */
+    static void reshuffle(Context c) {
+        for (Inst n : INST.values()) {
+            n.chars = pickChars(n.id, n.chars);
+            n.sim = new WidgetSim(n.geo, System.nanoTime() ^ n.id, n.chars);
+        }
+        freeSheets();
     }
-    /** 실제 글꼴로 시계 숫자 상자를 재서 배치를 맞춘다(기기 글꼴이 달라도 캐릭터가 시계에 정확히 걸리게). */
     /** 출퇴근 장면이면 시계를 줄이고, 아니면 원래대로(바뀌었을 때만 글꼴을 다시 잰다). */
     static void applyCommute(Inst n, boolean commute) {
         if (n.geo.commute == commute) return;
@@ -434,7 +434,8 @@ public final class WidgetCore {
         @Override public void onReceive(Context c, Intent it) {
             String a = it == null ? null : it.getAction();
             if (Intent.ACTION_SCREEN_OFF.equals(a)) stop(c, true);
-            else if (Intent.ACTION_SCREEN_ON.equals(a) || Intent.ACTION_USER_PRESENT.equals(a)) { evalScene(c); wake(c, "screen"); }
+            else if (Intent.ACTION_SCREEN_ON.equals(a)) { reshuffle(c); evalScene(c); refreshAll(c, true); wake(c, "screen"); }          // 켤 때마다 캐릭터가 바뀐다
+            else if (Intent.ACTION_USER_PRESENT.equals(a)) { evalScene(c); wake(c, "screen"); }                                            // 잠금 해제 때는 다시 안 바꾼다(켜짐 직후 이어서 옴)
         }
     };
     static void ensureReceiver(Context c) {

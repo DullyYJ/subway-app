@@ -84,8 +84,19 @@
       const col = new T.Mesh(new T.TorusGeometry(0.34, 0.065, 10, 36), mat(o.collar, { roughness: 0.55 })); col.position.set(0.34, 0.06, 0); col.rotation.y = Math.PI / 2; col.scale.set(1, 1.0, 1); body.add(sh(col));
       const bk = new T.Mesh(new T.BoxGeometry(0.06, 0.15, 0.13), mat(0xd8d2c6, { metalness: 0.3, roughness: 0.4 })); bk.position.set(0.36, -0.27, 0.0); body.add(sh(bk));
     }
-    // 꼬리(둥근 털공)
-    const tail = new T.Group(); tail.position.set(-0.5, 0.2, 0); body.add(tail); const tb = ell(0.2, 0.2, 0.2, fm, 18); tb.position.set(-0.1, 0.08, 0); tail.add(tb); fluff(tb, 0.2, 0.2, 0.2, 12, 0.14, fm, o.seed + 3); P.tail = tail;
+    // 꼬리(2026-10-15: 위젯에서 꼬리가 안 보인다는 지적) — 엉덩이 위에서 솟아 등 뒤로 말려 올라가는 털뭉치 꼬리(비숑·푸들 꼬리).
+    //   예전엔 몸통 뒤 낮은 곳의 공 하나라 3/4 시점에서 뒷다리·엉덩이에 가려 안 보였다. 이제 등선 위로 솟아 실루엣에 보인다.
+    const tail = new T.Group(); tail.position.set(-0.46, 0.2, 0); body.add(tail);
+    // 비숑(o.tail='long'): 길고 곱슬곱슬한 털 꼬리가 등 뒤로 솟았다 끝이 앞으로 말린다 · 푸들(o.tail='short'): 짧고 둥근 털 꼬리(작은 폼)
+    const TAILS = {
+      long: { f: [24, 0.1], balls: [[-0.08, 0.08, 0.05, 0.14], [-0.2, 0.2, 0.1, 0.15], [-0.3, 0.34, 0.15, 0.155], [-0.35, 0.5, 0.19, 0.155], [-0.36, 0.66, 0.21, 0.15], [-0.29, 0.8, 0.22, 0.14], [-0.18, 0.89, 0.22, 0.12]] },
+      short: { f: [16, 0.08], balls: [[-0.1, 0.12, 0.1, 0.15], [-0.22, 0.3, 0.2, 0.18], [-0.28, 0.46, 0.26, 0.2]] }
+    };
+    const TS = TAILS[o.tail || 'short'];
+    TS.balls.forEach((q, i) => {
+      const tb = ell(q[3], q[3], q[3], fm, 20); tb.position.set(q[0], q[1], q[2]); tail.add(tb); fluff(tb, q[3], q[3], q[3], TS.f[0], TS.f[1], fm, o.seed + 3 + i);
+    });
+    P.tail = tail;
     // 다리 네 개 [앞오른, 앞왼, 뒤오른, 뒤왼] — 엉덩이 공이 몸통에 박힌 통통한 털 다리 + 발
     P.legs = [];
     [[0.3, 0.23], [0.3, -0.23], [-0.3, 0.23], [-0.3, -0.23]].forEach((p, i) => {
@@ -102,7 +113,7 @@
     P.body.rotation.z = 0.12 * Math.sin(a + 0.9) * g;
     P.head.rotation.z = -0.1 * Math.sin(a + 0.9) * g + 0.04; P.head.position.y = 0.52 + 0.03 * Math.sin(a * 2);
     P.ears.forEach((e, i) => { e.rotation.z = 0.3 * Math.sin(a + 1.8) * g; e.rotation.x = (i ? 1 : -1) * 0.1; });
-    P.tail.rotation.z = 0.4 * Math.sin(a * 2 + 1) + 0.3; P.tail.rotation.x = 0.3 * Math.sin(a * 2.0);
+    P.tail.rotation.z = 0.22 * Math.sin(a * 2 + 1) + 0.12; P.tail.rotation.x = 0.25 * Math.sin(a * 2.0);
   }
 
   // ═════ 고양이 (러블) ═════
@@ -271,8 +282,8 @@
 
   window.CHARS = {
     lovel: { name: '러블', build: () => buildCat(), pose: poseCat, yaw: -0.85, frames: 16, view: [3.3, 0.95, -0.12] },
-    dolsom: { name: '돌솜', build: () => buildDog({ fur: 0xeeeeea, bow: 0x3d7edb, seed: 31, tex: 'dolsom_head' }), pose: (r, p) => poseDog(r, p, { gait: 1.0, air: 0.22 }), yaw: -0.85, frames: 16, view: [3.3, 0.95] },
-    ppopu: { name: '뽀푸', build: () => buildDog({ fur: 0xb39a7a, collar: 0x5b3b24, seed: 57, tex: 'ppopu_head' }), pose: (r, p) => poseDog(r, p, { gait: 0.85, air: 0.3 }), yaw: -0.85, frames: 16, view: [3.3, 0.95] },
+    dolsom: { name: '돌솜', build: () => buildDog({ fur: 0xeeeeea, bow: 0x3d7edb, seed: 31, tex: 'dolsom_head', tail: 'long' }), pose: (r, p) => poseDog(r, p, { gait: 1.0, air: 0.22 }), yaw: -0.85, frames: 16, view: [3.3, 0.95] },
+    ppopu: { name: '뽀푸', build: () => buildDog({ fur: 0xb39a7a, collar: 0x5b3b24, seed: 57, tex: 'ppopu_head', tail: 'short' }), pose: (r, p) => poseDog(r, p, { gait: 0.85, air: 0.3 }), yaw: -0.85, frames: 16, view: [3.3, 0.95] },
     chaeng: { name: '챙챙', build: () => buildTadpole(), pose: poseTadpole, yaw: -0.8, frames: 16, view: [3.9, 1.1, -0.3] },
     sul: { name: '술', build: () => buildEagle(), pose: poseEagle, yaw: -0.8, frames: 16, view: [5.6, 1.35] },
     dudung: { name: '두덩', build: () => buildMole(), pose: poseMoleWalk, yaw: -0.85, frames: 16, view: [3.3, 1.05] },
