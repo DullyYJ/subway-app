@@ -5640,7 +5640,7 @@ function _brPickRender(){
       + '<div class="brp-btns"><button class="brp-btn brp-main" onclick="_pickToStation()">🚇 도착지는 역으로 설정</button>'
       + '<button class="brp-btn brp-sub" onclick="_pickCancel()">취소</button></div>';
   } else if(st){
-    h = '<div class="brp-msg">🚏 <b>' + _ltEsc(st.nodenm || '') + '</b></div>'
+    h = '<div class="brp-msg"><b>' + _ltEsc(st.nodenm || '') + '</b></div>'
       + '<div class="brp-btns"><button class="brp-btn brp-main" onclick="_pickSetStart()">출발지로 설정</button></div>';
   }
   bar.innerHTML = h; bar.style.display = h ? 'block' : 'none';
@@ -5813,7 +5813,7 @@ function _renderBusRoute(stations, buses){
   }
   // ★ 기준 정류장으로 접근 중인 가장 가까운 버스
   var myEtaTxt = '', myEtaMin = null;
-  var anchorLabel = anchorIsStop ? ('🚏 ' + (anchorNm || '이 정류장')) : '📍 내 위치';
+  var anchorLabel = anchorIsStop ? (anchorNm || '이 정류장') : '📍 내 위치';
   if(myOrd != null){
     var approaching = buses.filter(function(b){ return (parseInt(b.nodeord)||0) <= myOrd; })
       .sort(function(a,b){ return (parseInt(b.nodeord)||0) - (parseInt(a.nodeord)||0); })[0];
@@ -39069,7 +39069,7 @@ document.addEventListener('DOMContentLoaded', function() {
 .bus-route-refresh{background:var(--card2);border:1px solid var(--border);border-radius:50%;
   width:36px;height:36px;color:var(--text);font-size:16px;cursor:pointer;transition:transform .5s;}
 .bus-route-fixed{flex:0 0 auto;background:var(--card);box-shadow:0 2px 10px rgba(0,0,0,.15);position:relative;z-index:1;}
-.bus-route-body{flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;min-height:0;background:var(--bg);}
+.bus-route-body{flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;min-height:0;background:var(--bg);padding-bottom:56px;}
 
 /* ── 노선 상세(정류장 타임라인) ── */
 .brs-top{background:var(--card);padding:12px 16px 10px;
@@ -39172,7 +39172,7 @@ document.addEventListener('DOMContentLoaded', function() {
 .brs-row.brs-pstart{background:rgba(255,159,10,.14);}
 .brs-row.brs-pstart .brs-map{background:rgba(255,159,10,.22);color:#c77700;}
 /* 버스 경로 하단 선택 바 + 안내 팝업 (2026-10-15) */
-.brp-bar{flex:0 0 auto;background:var(--card);border-top:1px solid var(--border);box-shadow:0 -4px 16px rgba(0,0,0,.14);padding:12px 16px calc(14px + env(safe-area-inset-bottom,0px));}
+.brp-bar{flex:0 0 auto;background:var(--card);border-top:1px solid var(--border);box-shadow:0 -4px 16px rgba(0,0,0,.14);padding:12px 16px calc(14px + 56px + env(safe-area-inset-bottom,0px));}   /* 하단 탭(.bnav 56px)이 시트 아래를 덮으므로 그 위로 올린다 */
 .brp-msg{font-size:13.5px;line-height:1.5;color:var(--text);margin-bottom:10px;}
 .brp-msg b{font-weight:800;}
 .brp-btns{display:flex;gap:8px;}

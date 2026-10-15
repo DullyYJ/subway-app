@@ -52,6 +52,10 @@ const STOPS = [
     const bb = await bar(x);
     assert(bb.shown && /한진/.test(bb.text) && bb.btns.length === 1 && /출발지로 설정/.test(bb.btns[0]), '하단 바 ' + JSON.stringify(bb));
     assert.strictEqual(await x.page.evaluate(() => document.querySelectorAll('#busRouteBody .brs-pick').length), 1, '눌러 둔 줄 표시');
+    // 하단 버튼이 하단 탭(.bnav)에 가려지지 않는다(버튼 한가운데를 눌렀을 때 닿는 것이 그 버튼)
+    const hit = await x.page.evaluate(() => { const b = document.querySelector('#brPickBar .brp-main'), r = b.getBoundingClientRect(), e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2), nv = document.querySelector('.bnav').getBoundingClientRect(); return { ok: e === b || b.contains(e), bottom: r.bottom, navTop: nv.top }; });
+    assert(hit.ok && hit.bottom <= hit.navTop + 1, '버튼이 탭에 가려지지 않는다 ' + JSON.stringify(hit));
+    assert(!(await x.page.evaluate(() => /🚏/.test(document.getElementById('busRouteModal').innerText))), '사람 모양처럼 보이는 정류장 이모지(🚏) 제거');
     await clickRow(x, 2);                                                   // 다른 줄을 누르면 후보만 바뀐다
     assert(/선광/.test((await bar(x)).text) && !(await x.page.evaluate(() => !!(_fmapStart && _fmapStart.name === '선광'))), '후보 변경, 아직 출발지 아님');
     assert.deepStrictEqual(x.errs, []); await x.ctx.close();
