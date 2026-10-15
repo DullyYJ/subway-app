@@ -19571,7 +19571,7 @@ window.addEventListener('unhandledrejection', function(e) {
       <!-- ★ 2026-10-15 캐릭터 시계 위젯 -->
       <div id="gwCard" style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
         <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:4px;">🕒 캐릭터 시계 위젯</div>
-        <p style="font-size:12px;color:var(--sub);margin-bottom:12px;line-height:1.5;">평소엔 캐릭터들이 각자 집(개집·바구니·굴·둥지·연못)에서 자고 있다가, 화면을 켜면 일어나 2분 동안 시계 주변을 돌아다니며 시계에 매달리고 응가도 해요. 위젯을 누르면 앱이 열리며 커뮤니티 탭으로 가요. 배경은 투명이고, 시계가 칸을 꽉 채워요. 위에서 정한 출·퇴근 시각이 되면 캐릭터가 모여 응원하고, 시계가 작아지면서 [출근하기]·[퇴근하기] 버튼이 나와요. 버튼은 3분 동안만 떠 있고, 누르면 앱이 열리며 바로 길찾기를 해요. (블랙=검정 글자, 화이트=흰 글자)</p>
+        <p style="font-size:12px;color:var(--sub);margin-bottom:12px;line-height:1.5;">평소엔 캐릭터들이 각자 집(개집·바구니·굴·둥지·연못)에서 자고 있다가, 화면을 켜면 일어나 정해 둔 시간 동안 시계 주변을 돌아다니며 시계에 매달리고 응가도 해요. 위젯을 누르면 앱이 열리며 커뮤니티 탭으로 가요. 배경은 투명이고, 시계가 칸을 꽉 채워요. 위에서 정한 출·퇴근 시각이 되면 캐릭터가 모여 응원하고, 시계가 작아지면서 [출근하기]·[퇴근하기] 버튼이 나와요. 버튼은 3분 동안만 떠 있고, 누르면 앱이 열리며 바로 길찾기를 해요. (블랙=검정 글자, 화이트=흰 글자)</p>
         <div style="display:flex;gap:8px;margin-bottom:8px;">
           <button onclick="_gwAdd('hb')" style="flex:1;padding:11px 4px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);font-family:inherit;">▭ 가로 블랙</button>
           <button onclick="_gwAdd('hw')" style="flex:1;padding:11px 4px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);font-family:inherit;">▭ 가로 화이트</button>
@@ -19580,7 +19580,16 @@ window.addEventListener('unhandledrejection', function(e) {
           <button onclick="_gwAdd('vb')" style="flex:1;padding:11px 4px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);font-family:inherit;">▯ 세로 블랙</button>
           <button onclick="_gwAdd('vw')" style="flex:1;padding:11px 4px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);font-family:inherit;">▯ 세로 화이트</button>
         </div>
-        <p id="gwNote" style="font-size:11px;color:var(--sub);margin:6px 0 0;line-height:1.5;">출·퇴근 장소를 설정하면 그 쪽 버튼이 나와요.</p>
+        <div style="margin:12px 0 0;padding-top:12px;border-top:1px solid var(--border);">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+            <div style="font-size:13px;font-weight:700;color:var(--text);">🐾 돌아다니는 시간</div>
+            <div id="gwRoamVal" style="font-size:14px;font-weight:800;color:var(--gold);">6분</div>
+          </div>
+          <input type="range" id="gwRoam" min="2" max="10" step="1" value="6" oninput="_gwRoamSet(this.value)" style="width:100%;accent-color:var(--gold);">
+          <div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--sub);margin-top:2px;"><span>2분</span><span>6분 추천</span><span>10분</span></div>
+          <p id="gwRoamNote" style="font-size:11px;color:var(--sub);margin:6px 0 0;line-height:1.55;">6분 추천이에요. 그보다 길면 배터리 소모량이 조금 늘 수 있어요.<br>자고 있는 동물들은 시계 위젯을 눌러 앱에 들어갔다 나오면 깨어나요.</p>
+        </div>
+        <p id="gwNote" style="font-size:11px;color:var(--sub);margin:10px 0 0;line-height:1.5;">출·퇴근 장소를 설정하면 그 쪽 버튼이 나와요.</p>
         <p style="font-size:11px;color:var(--sub);margin:8px 0 0;line-height:1.55;">앱이 백그라운드에서 꺼지면 캐릭터가 화면을 켜도 자고 있을 수 있어요(3분 안에 다시 깨워요). 덜 꺼지게 하려면 <span onclick="_batRequest()" style="text-decoration:underline;cursor:pointer;color:var(--text);">배터리 최적화 제외</span> · <span onclick="_samOpen()" style="text-decoration:underline;cursor:pointer;color:var(--text);">갤럭시 절전 설정 열기</span></p>
       </div>
 
@@ -24075,12 +24084,29 @@ window._cmRouteFor = _cmRouteFor;
 //   출·퇴근 응원 문구는 엔진(/widget-say)이, 경로 계산은 기존 엔진 길찾기(fmapDoRoute)가 한다.
 function _gwPlug(){ try{ return (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.GdmWidget) || null; }catch(e){ return null; } }
 var _gwLast = '';
+// 동물이 한 번 깨어나 돌아다니는 시간(분, 2~10, 기본 6). 앱은 값만 넘기고 시간 재기·움직임은 위젯이 한다.
+function _gwRoamMin(){
+  var v = 6; try{ var x = parseInt(localStorage.getItem('gwRoamMin'), 10); if(x >= 2 && x <= 10) v = x; }catch(e){}
+  return v;
+}
+function _gwRoamUI(){
+  var v = _gwRoamMin(), r = document.getElementById('gwRoam'), l = document.getElementById('gwRoamVal'), n = document.getElementById('gwRoamNote');
+  if(r) r.value = String(v);
+  if(l) l.textContent = v + '분' + (v === 6 ? ' (추천)' : '');
+  if(n) n.firstChild.nodeValue = (v > 6 ? '6분 추천이에요. 그보다 길게 두면 배터리 소모량이 조금 늘 수 있어요.' : '6분 추천이에요. 그보다 길면 배터리 소모량이 조금 늘 수 있어요.');
+}
+window._gwRoamSet = function(v){
+  v = parseInt(v, 10); if(!(v >= 2 && v <= 10)) v = 6;
+  try{ localStorage.setItem('gwRoamMin', String(v)); }catch(e){}
+  _gwRoamUI(); _gwSync(false);
+};
+setTimeout(_gwRoamUI, 0);
 function _gwConfig(){
   var rm = null, re = null;
   try{ rm = _cmRouteFor(true); }catch(e){}
   try{ re = _cmRouteFor(false); }catch(e){}
   var days = (Array.isArray(_cmAlarm.days) && _cmAlarm.days.length) ? _cmAlarm.days.slice() : [0,1,2,3,4,5,6];
-  var c = { on: !!(rm || re), mOn: !!rm, eOn: !!re, morn: _cmAlarm.morn, eve: _cmAlarm.eve, days: days };
+  var c = { on: !!(rm || re), mOn: !!rm, eOn: !!re, morn: _cmAlarm.morn, eve: _cmAlarm.eve, days: days, roam: _gwRoamMin() };
   if(rm && rm.from && isFinite(rm.from.lat) && isFinite(rm.from.lng)){ c.mLat = +rm.from.lat; c.mLng = +rm.from.lng; }
   if(re && re.from && isFinite(re.from.lat) && isFinite(re.from.lng)){ c.eLat = +re.from.lat; c.eLng = +re.from.lng; }
   return c;

@@ -59,6 +59,36 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     const c = await page.evaluate(() => window.__calls.setConfig);
     assert(c.length === n0 + 1 && c[c.length - 1].morn === '08:05', JSON.stringify(c.slice(-2))); await ctx.close();
   });
+  await t('돌아다니는 시간 설정: 슬라이더 2~10분·기본 6분(추천 표기), 바꾸면 위젯에 새로 넘기고 다시 열어도 유지, 안내 문구', async () => {
+    const { ctx, page, errs } = await fresh({ plugin: true, alarm: ALARM });
+    const r = await page.evaluate(() => { const e = document.getElementById('gwRoam'); return { min: e.min, max: e.max, step: e.step, v: e.value, lab: document.getElementById('gwRoamVal').textContent, note: document.getElementById('gwCard').innerText }; });
+    assert(r.min === '2' && r.max === '10' && r.step === '1' && r.v === '6', JSON.stringify(r));
+    assert(/6분/.test(r.lab) && /추천/.test(r.lab), r.lab);
+    assert(/6분 추천/.test(r.note) && /배터리 소모량이 조금 늘 수 있어요/.test(r.note), '추천·배터리 안내 문구 없음');
+    assert(/시계 위젯을 눌러 앱에 들어갔다 나오면 깨어나요/.test(r.note), '깨우는 방법 안내 없음');
+    let c = await page.evaluate(() => window.__calls.setConfig);
+    assert(c[c.length - 1].roam === 6, '처음엔 6분을 넘겨야 한다: ' + JSON.stringify(c[c.length - 1]));
+    const n0 = c.length;
+    await page.evaluate(() => { const e = document.getElementById('gwRoam'); e.value = '10'; e.dispatchEvent(new Event('input', { bubbles: true })); });
+    await page.waitForTimeout(400);
+    c = await page.evaluate(() => window.__calls.setConfig);
+    assert(c.length === n0 + 1 && c[c.length - 1].roam === 10, JSON.stringify(c.slice(-2)));
+    assert((await page.evaluate(() => document.getElementById('gwRoamVal').textContent)) === '10분');
+    await page.evaluate(() => { const e = document.getElementById('gwRoam'); e.value = '2'; e.dispatchEvent(new Event('input', { bubbles: true })); });
+    await page.waitForTimeout(300);
+    assert((await page.evaluate(() => window.__calls.setConfig.slice(-1)[0].roam)) === 2);
+    await page.reload(); await page.waitForTimeout(3200);
+    const after = await page.evaluate(() => ({ v: document.getElementById('gwRoam').value, c: window.__calls.setConfig.slice(-1)[0] }));
+    assert(after.v === '2' && after.c.roam === 2, '다시 열어도 유지: ' + JSON.stringify(after));
+    assert(!errs.length, errs.join('|')); await ctx.close();
+  });
+  await t('돌아다니는 시간에 이상한 값이 저장돼 있으면 6분으로 돌아간다', async () => {
+    const { ctx, page } = await fresh({ plugin: true, alarm: ALARM });
+    await page.evaluate(() => { localStorage.setItem('gwRoamMin', '99'); _gwRoamUI(); _gwSync(false); });
+    await page.waitForTimeout(300);
+    const r = await page.evaluate(() => ({ v: document.getElementById('gwRoam').value, c: window.__calls.setConfig.slice(-1)[0].roam }));
+    assert(r.v === '6' && r.c === 6, JSON.stringify(r)); await ctx.close();
+  });
   await t('장소가 없으면 꺼짐(on=false, mOn=false, eOn=false)', async () => {
     const { ctx, page } = await fresh({ plugin: true, alarm: { on: true, morn: '07:30', eve: '18:30' } });
     const x = await page.evaluate(() => window.__calls.setConfig.slice(-1)[0]);

@@ -273,6 +273,7 @@ public class WidgetJvmTest {
         };
         for (int i = 0; i < 500; i++) { a.step(0.1f); WidgetArt.draw(a, cnt, i % 2 == 0); }
         ok(cells[0] == 500 * 2 && !badFrame[0], "그림 명령: 프레임마다 캐릭터 수만큼 칸을 그리고 칸 번호가 0~15");
+        ok(WidgetSim.roamMs(2) == 120000L && WidgetSim.roamMs(6) == 360000L && WidgetSim.roamMs(10) == 600000L && WidgetSim.roamMs(1) == 360000L && WidgetSim.roamMs(11) == 360000L && WidgetSim.roamMs(0) == 360000L && WidgetSim.roamMs(-5) == 360000L && WidgetSim.ROAM_LEN_MS == 360000L, "돌아다니는 시간: 2~10분은 그대로, 범위 밖·이상한 값은 기본 6분");
         System.out.println(fails == 0 ? "ALL OK" : (fails + " FAIL"));
     }
 
