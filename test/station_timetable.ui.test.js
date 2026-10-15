@@ -404,36 +404,47 @@ const NOW = new Date('2026-10-14T13:00:00+09:00');   // 수요일 13:00
     const reset = () => x.page.evaluate(() => { window.__nm.length = 0; });
     const idle = () => x.page.waitForFunction(() => { const e = document.getElementById('svgStationPop') || document.getElementById('nmTtSheet'); return !e || e.getAnimations().length === 0; }, null, { timeout: 5000 });
     const popGeo = () => x.page.evaluate(() => { const e = document.getElementById('svgStationPop'); if (!e) return null; const r = e.getBoundingClientRect(); return { top: r.top, l: r.left, w: r.width, h: e.offsetHeight, vh: innerHeight }; });
-    const shInfo = () => x.page.evaluate(() => { const s = document.getElementById('nmTtSheet'); if (!s) return null; const m = /translateY\(([\d.]+)px\)/.exec(s.style.transform || ''); return { y: m ? parseFloat(m[1]) : 0, H: s.offsetHeight, pe: s.style.pointerEvents, canvas: !!s.querySelector('#nmTtPlay canvas.rc-play') }; });
+    const shInfo = () => x.page.evaluate(() => { const s = document.getElementById('nmTtSheet'); if (!s) return null; const m = /translateY\(([\d.]+)px\)/.exec(s.style.transform || ''); return { y: m ? parseFloat(m[1]) : 0, H: s.offsetHeight, pe: s.style.pointerEvents, op: s.style.opacity === '' ? null : parseFloat(s.style.opacity), canvas: !!s.querySelector('#nmTtPlay canvas.rc-play') }; });
+    const popSt = () => x.page.evaluate(() => { const e = document.getElementById('svgStationPop'); if (!e) return null; const m = /translateY\((-?[\d.]+)px\)/.exec(e.style.transform || ''), b = /blur\(([\d.]+)px\)/.exec(e.style.filter || ''); return { up: m ? -parseFloat(m[1]) : 0, blur: b ? parseFloat(b[1]) : 0, op: e.style.opacity === '' ? 1 : parseFloat(e.style.opacity), raw: [e.style.transform, e.style.filter, e.style.opacity] }; });
     const popCanvas = () => x.page.evaluate(() => !!document.querySelector('#svgStationPop #nmPopPlay canvas.rc-play'));
     await x.page.evaluate(() => window.__nmEmit('station', { name: '서울역', x: 195, y: 300 })); await x.page.clock.runFor(600); await idle();
     await x.page.waitForFunction(() => !!document.querySelector('#svgStationPop #nmPopPlay canvas.rc-play'), null, { timeout: 5000 });
     let g = await popGeo(); const px = g.l + g.w / 2, cap = g.vh - g.h;
-    // ① 위로 100px 댕김: 시트가 (H−100) 자리에서 손가락을 따라 있고, 팝업은 그대로(캐릭터도), 지도는 follow(보이는 끝=팝업 위쪽 끝 이하로 안 내려옴)
+    // ① 위로 100px 댕김: 시트가 (H−100) 자리에서 손가락을 따라 올라오며 진해지고(투명→), 팝업은 같이 올라가며 서서히 블러·투명해진다(캐릭터는 아직 팝업에서), 지도 끝은 팝업 위쪽 끝을 따라 올라간다
     await reset();
     await x.page.mouse.move(px, g.top + 20); await x.page.mouse.down(); await x.page.mouse.move(px, g.top + 20 - 100, { steps: 5 }); await x.page.clock.runFor(300);
     let si = await shInfo();
     assert(si && Math.abs(si.y - (si.H - 100)) < 3, '시트가 손가락 위치(H−100)에 ' + JSON.stringify(si));
     assert.strictEqual(si.pe, 'none', '끄는 동안 시트는 지도 가림 판정에 끼지 않는다'); assert.strictEqual(si.canvas, false, '아직 시트 캐릭터는 시작 전(팝업에서 놀고 있음)');
-    assert(await popCanvas(), '팝업 캐릭터는 그대로'); assert.strictEqual(await x.page.evaluate(() => document.getElementById('svgStationPop').style.transform), '', '팝업은 안 움직인다');
+    assert(await popCanvas(), '팝업 캐릭터는 그대로');
+    const dk = (cap - (g.vh - si.H)) / si.H;                                        // 팝업은 시트가 다 올라왔을 때 위쪽 끝이 시트 위쪽 끝에 닿도록 올라간다
+    let ps = await popSt();
+    assert(ps && Math.abs(ps.up - 100 * dk) < 2 && Math.abs(ps.blur - (100 / si.H) * 8) < 0.6 && Math.abs(ps.op - Math.max(0, 1 - (100 / si.H) * 1.5)) < 0.03, '팝업이 올라가며 흐려진다 ' + JSON.stringify(ps) + ' dk=' + dk);
+    assert(si.op != null && Math.abs(si.op - Math.min(1, (100 / si.H) * 1.3)) < 0.03, '시간표는 올라온 만큼 진해진다 ' + JSON.stringify(si));
     let fl = await nm('follow'); assert(fl.length >= 1, '끄는 중 follow ' + fl.length);
     assert.strictEqual((await nm('setRect')).length, 0, '끄는 중 setRect 없음');
-    assert(Math.abs(fl[fl.length - 1].bottom - cap) < 2, '아직 시트가 팝업보다 낮아 지도 끝은 팝업 위쪽 끝(' + cap + ') ' + fl[fl.length - 1].bottom);
+    assert(Math.abs(fl[fl.length - 1].bottom - (cap - 100 * dk)) < 2, '지도 끝은 팝업 위쪽 끝(' + (cap - 100 * dk) + ')을 따라 ' + fl[fl.length - 1].bottom);
     // ② 더 댕김(450px — 팝업(316px)보다 높이 올라와야 지도 끝이 움직인다): 시트 위쪽 끝(vh−450)을 따라 지도 끝이 올라온다
     await x.page.mouse.move(px, g.top + 20 - 450, { steps: 5 }); await x.page.clock.runFor(300);
     si = await shInfo(); fl = await nm('follow');
     assert(Math.abs(si.y - (si.H - 450)) < 3, '450px ' + JSON.stringify(si));
-    assert(Math.abs(fl[fl.length - 1].bottom - (g.vh - 450)) < 3 && fl[fl.length - 1].bottom < fl[0].bottom, '지도 끝이 시트 위쪽 끝을 따라 올라온다 ' + JSON.stringify(fl.map(f => Math.round(f.bottom))));
+    ps = await popSt();
+    assert(ps.op < 0.05 && ps.blur > 6 && ps.up > 100 * dk, '많이 올리면 팝업은 거의 안 보인다 ' + JSON.stringify(ps)); assert(si.op > 0.95, '시간표는 거의 진하다 ' + si.op);
+    assert(Math.abs(fl[fl.length - 1].bottom - Math.min(g.vh - 450, cap - 450 * dk)) < 3 && fl[fl.length - 1].bottom < fl[0].bottom, '지도 끝이 단조롭게 올라온다 ' + JSON.stringify(fl.map(f => Math.round(f.bottom))));
     // ③ 놓음 → 손가락 자리(H−450)에서 이어서 끝까지: 지도 setRect 한 번, tFrom=vh−450, tTo=vh−H
     await reset();
     await x.page.mouse.up(); await x.page.clock.runFor(60);
+    const pan = await x.page.evaluate(() => { const e = document.getElementById('svgStationPop'); const a = e && e.getAnimations()[0]; return a ? { kf: a.effect.getKeyframes().map(k => [k.transform, k.filter, k.opacity]), closing: !!e._nmClosing } : null; });
+    assert(pan && pan.closing && pan.kf[1][2] == 0 && /blur\(10px\)/.test(pan.kf[1][1]), '팝업은 끝까지 올라가며 완전히 흐려진 뒤 치워진다 ' + JSON.stringify(pan));
     const an = await x.page.evaluate(() => { const s = document.getElementById('nmTtSheet'); const a = s && s.getAnimations()[0]; return a ? a.effect.getKeyframes().map(k => k.transform) : null; });
+    const aop = await x.page.evaluate(() => { const s = document.getElementById('nmTtSheet'); const a = s && s.getAnimations()[0]; return a ? a.effect.getKeyframes().map(k => k.opacity) : null; });
+    assert(aop && aop[0] > 0.95 && aop[1] == 1, '시간표는 진한 채로 이어서 올라간다 ' + JSON.stringify(aop));
     assert(an && /translateY\(\d+(\.\d+)?px\)/.test(an[0]) && Math.abs(parseFloat(/([\d.]+)px/.exec(an[0])[1]) - (si.H - 450)) < 3 && /translateY\(0px\)/.test(an[1]), '손가락 자리에서 이어서 올라간다 ' + JSON.stringify(an));
     await idle(); await settle(x); await x.page.clock.runFor(900);
     const sr = await nm('setRect');
     assert.strictEqual(sr.length, 1, '지도 사각형 한 번 ' + sr.length);
-    assert(Math.abs(sr[0].tFrom - (g.vh - 450)) < 3 && Math.abs(sr[0].tTo - (g.vh - si.H)) < 1 && sr[0].anim >= 170 && sr[0].anim <= 320 && sr[0].fullH > sr[0].h, '지도 끝 길 ' + JSON.stringify(sr[0]));
-    si = await shInfo(); assert(si && si.y === 0 && si.pe === '', '제자리 ' + JSON.stringify(si));
+    assert(Math.abs(sr[0].tFrom - Math.min(g.vh - 450, cap - 450 * dk)) < 3 && Math.abs(sr[0].tTo - (g.vh - si.H)) < 1 && sr[0].anim >= 170 && sr[0].anim <= 320 && sr[0].fullH > sr[0].h, '지도 끝 길 ' + JSON.stringify(sr[0]));
+    si = await shInfo(); assert(si && si.y === 0 && si.pe === '' && si.op === null, '제자리(스타일 정리) ' + JSON.stringify(si));
     assert.strictEqual(await x.page.evaluate(() => !!document.getElementById('svgStationPop')), false, '팝업은 시트로 바뀐다');
     assert.strictEqual(si.canvas, true, '시트에서 캐릭터가 이어서 논다');
     assert.strictEqual(await x.page.evaluate(() => document.querySelectorAll('canvas.rc-play').length), 1, '놀이터는 하나');
@@ -443,18 +454,19 @@ const NOW = new Date('2026-10-14T13:00:00+09:00');   // 수요일 13:00
     await x.page.waitForFunction(() => !!document.querySelector('#svgStationPop #nmPopPlay canvas.rc-play'), null, { timeout: 5000 });
     g = await popGeo(); await reset();
     await x.page.mouse.move(px, g.top + 20); await x.page.mouse.down(); await x.page.mouse.move(px, g.top + 20 - 40, { steps: 4 }); await x.page.clock.runFor(400);
-    assert(await shInfo(), '40px 댕기는 중 시트가 보인다');
+    assert(await shInfo(), '40px 댕기는 중 시트가 보인다'); assert((await popSt()).blur > 0, '팝업이 살짝 흐려진다');
     await x.page.mouse.up(); await x.page.clock.runFor(60);
     assert.strictEqual(await x.page.evaluate(() => !!document.getElementById('nmTtSheet') && document.getElementById('nmTtSheet')._nmClosing), true, '도로 내려가는 중');
     await x.page.clock.runFor(900);
     assert.strictEqual(await shInfo(), null, '시트가 사라진다'); assert(await popGeo(), '팝업 그대로'); assert(await popCanvas(), '팝업 캐릭터 그대로');
+    await x.page.waitForFunction(() => { const e = document.getElementById('svgStationPop'); return e && !e.style.transform && !e.style.filter && !e.style.opacity; }, null, { timeout: 5000 });   // 팝업은 또렷하게 제자리로(인라인 스타일 정리)
     assert.strictEqual(await x.page.evaluate(() => document.querySelectorAll('canvas.rc-play').length), 1, '놀이터는 하나');
     // ⑤ 위로 댕기다 되돌려 아래로 끌면: 시트는 조용히 치워지고 팝업이 손가락을 따라 내려가 닫힌다
     g = await popGeo(); await reset();
     await x.page.mouse.move(px, g.top + 20); await x.page.mouse.down(); await x.page.mouse.move(px, g.top - 60, { steps: 4 }); await x.page.clock.runFor(300);
     assert(await shInfo(), '위로 가는 중 시트');
     await x.page.mouse.move(px, g.top + 20 + 40, { steps: 6 }); await x.page.clock.runFor(100);
-    assert.strictEqual(await shInfo(), null, '되돌리면 시트는 치워진다');
+    assert.strictEqual(await shInfo(), null, '되돌리면 시트는 치워진다'); assert.deepStrictEqual((await popSt()).raw.slice(1), ['', ''], '팝업 블러·투명도는 곧바로 풀린다');
     await x.page.mouse.move(px, g.top + 20 + 220, { steps: 6 }); await x.page.clock.runFor(100);
     assert(/translateY\([1-9]\d+px\)/.test(await x.page.evaluate(() => document.getElementById('svgStationPop').style.transform)), '팝업이 손가락을 따라 내려간다');
     await x.page.mouse.up(); await x.page.clock.runFor(900);

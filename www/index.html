@@ -32876,11 +32876,10 @@ function _nmDragDismiss(el, closeFn, o){
       st.up = false;
       var dyu = -st.dy, vu = dyu / Math.max(1, Date.now() - st.t0);
       if(dyu > 56 || (vu > 0.55 && dyu > 24)){
-        el.style.transition = 'none'; el.style.transform = '';
-        if(o.onUpEnd){ try{ o.onUpEnd(true, false, vu); }catch(eUe2){} } else { try{ o.onUp(); }catch(eU){} }
+        if(o.onUpEnd){ try{ o.onUpEnd(true, false, vu); }catch(eUe2){} } else { el.style.transition = 'none'; el.style.transform = ''; try{ o.onUp(); }catch(eU){} }
         return;
       }
-      if(o.onUpEnd){ try{ o.onUpEnd(false, false); }catch(eUe3){} el.style.transition = ''; el.style.transform = ''; return; }
+      if(o.onUpEnd){ try{ o.onUpEnd(false, false); }catch(eUe3){} return; }      // 팝업의 되돌림은 onUpEnd 쪽(시간표 시트와 함께 한 곡선)이 맡는다
       el.style.transition = 'transform .18s ease-out'; el.style.transform = 'translateY(0)';
       setTimeout(function(){ el.style.transition = ''; el.style.transform = ''; }, 200);
       return;
@@ -32901,7 +32900,7 @@ function _nmDragDismiss(el, closeFn, o){
   el.addEventListener('touchstart', function(e){ if(e.touches.length === 1) begin(e.touches[0].clientY, e.touches[0].clientX, e.target); else st.down = false; }, {passive:true});
   el.addEventListener('touchmove', function(e){ if(e.touches.length === 1) move(e.touches[0].clientY, e.touches[0].clientX, e); }, {passive:false});
   el.addEventListener('touchend', function(e){ end(e); }, true);       // 캡처: 끌었다면 아래 버튼 핸들러보다 먼저 삼킨다
-  el.addEventListener('touchcancel', function(){ if(st.on && st.up && o.onUpEnd){ st.up = false; st.on = false; st.down = false; try{ o.onUpEnd(false, false); }catch(eUc){} el.style.transition = ''; el.style.transform = ''; } else if(st.on){ st.up = false; st.on = false; st.down = false; el.style.transition = 'transform .18s ease-out'; el.style.transform = 'translateY(0)'; if(o.onSnap){ try{ o.onSnap(st.dy); }catch(eN){} } } else st.down = false; });
+  el.addEventListener('touchcancel', function(){ if(st.on && st.up && o.onUpEnd){ st.up = false; st.on = false; st.down = false; try{ o.onUpEnd(false, false); }catch(eUc){} } else if(st.on){ st.up = false; st.on = false; st.down = false; el.style.transition = 'transform .18s ease-out'; el.style.transform = 'translateY(0)'; if(o.onSnap){ try{ o.onSnap(st.dy); }catch(eN){} } } else st.down = false; });
   el.addEventListener('mousedown', function(e){ if(e.button === 0){ try{ var sl = window.getSelection && window.getSelection(); if(sl && sl.rangeCount) sl.removeAllRanges(); }catch(eSl){} begin(e.clientY, e.clientX, e.target); } });      // 남은 글자 선택이 있으면 끌 때 '끌어가기'로 가로채 끊긴다 — 먼저 지운다
   var mm = function(e){ if(st.down) move(e.clientY, e.clientX, e); };
   var mu = function(e){ if(st.down) end(e); };
@@ -33128,12 +33127,14 @@ function _nmTtAfter(){ if(typeof _nmSync === 'function') { try{ _nmSync(); }catc
 //   시트는 transform 애니메이션(WAAPI — 합성기가 돌려 메인 스레드가 바빠도 부드럽다), 뒤의 네이티브 지도는 같은 시간·곡선으로 '보이는 아래쪽 끝'만 옮긴다(_nm.animNext → NativeMap.setRect anim).
 //   예전엔 시트가 움직이는 동안 150ms 마다 지도 크기를 다시 맞춰(비트맵 재생성) 계단처럼 끊겼다.
 var _NM_SHEET_IN = { dur: 320, ease: [0.2, 0, 0, 1] }, _NM_SHEET_OUT = { dur: 240, ease: [0.4, 0, 0.2, 1] };
-function _nmSheetMove(el, from, to, dur, ease, done){
+function _nmSheetMove(el, from, to, dur, ease, done, op){
   var fin = false, a = null, css = 'cubic-bezier(' + ease.join(',') + ')';
   function end(){ if(fin) return; fin = true; try{ if(a) a.cancel(); }catch(e0){} try{ el.style.transition = ''; }catch(e1){} if(done) done(); }
   try{
     if(el.animate){
-      a = el.animate([{ transform: 'translateY(' + from + 'px)' }, { transform: 'translateY(' + to + 'px)' }], { duration: dur, easing: css, fill: 'forwards' });
+      var k0 = { transform: 'translateY(' + from + 'px)' }, k1 = { transform: 'translateY(' + to + 'px)' };
+      if(op){ k0.opacity = op[0]; k1.opacity = op[1]; }                                   // 끌어 올리던 시트의 '진하기'도 같은 곡선으로 이어서(2026-10-15)
+      a = el.animate([k0, k1], { duration: dur, easing: css, fill: 'forwards' });
       a.onfinish = end;
     }
   }catch(e2){ a = null; }
@@ -33171,15 +33172,15 @@ function _nmFollowStart(el, cap){
     _nm.following = { el: el, full: full, raf: 0, dy: 0, t0: Date.now(), cap: (cap == null ? null : cap) };
   }catch(e){}
 }
-function _nmFollowMove(dy){
+function _nmFollowMove(dy, bottom){
   var F = _nm.following; if(!F) return;
-  F.dy = dy;
+  F.dy = dy; F.bot = (bottom == null ? null : bottom);
   if(F.raf) return;
   F.raf = requestAnimationFrame(function(){
     F.raf = 0; if(_nm.following !== F) return;
     try{
       var P = _nmPlugin(), rest = (window.innerHeight || 0) - F.el.offsetHeight;
-      var r = P.follow({ x: F.full.x, y: F.full.y, w: F.full.w, h: F.full.h, dpr: window.devicePixelRatio || 1, bottom: Math.min(F.full.y + F.full.h, rest + F.dy, F.cap == null ? 1e9 : F.cap) });
+      var r = P.follow({ x: F.full.x, y: F.full.y, w: F.full.w, h: F.full.h, dpr: window.devicePixelRatio || 1, bottom: (F.bot != null) ? Math.min(F.full.y + F.full.h, F.bot) : Math.min(F.full.y + F.full.h, rest + F.dy, F.cap == null ? 1e9 : F.cap) });
       if(r && r.catch) r.catch(function(){});
     }catch(e){}
   });
@@ -33193,7 +33194,7 @@ function _nmFollowSnap(el, dy){            // 손을 떼고 제자리로 돌아�
   try{ _nmSync(); }catch(e){}
 }
 // fromDy(선택): 이미 손가락으로 이만큼 내려간 자리(=아직 안 올라온 높이)에서 이어서 올린다 · tFromOv: 그때 지도의 보이는 끝
-function _nmSheetPrepareIn(s, fromDy, tFromOv){
+function _nmSheetPrepareIn(s, fromDy, tFromOv, op0){
   var H = s.offsetHeight, I = _NM_SHEET_IN, started = false, vh = window.innerHeight || 99999;
   var f = (fromDy == null) ? H : Math.max(0, Math.min(H, fromDy));
   var dur = (fromDy == null || H <= 0) ? I.dur : Math.round(Math.max(170, I.dur * (0.45 + 0.55 * f / H)));
@@ -33207,7 +33208,7 @@ function _nmSheetPrepareIn(s, fromDy, tFromOv){
   }catch(e){}
   return function(){
     if(started) return; started = true;
-    _nmSheetMove(s, f, 0, dur, I.ease, function(){ s._nmIn = false; try{ s.style.transform = ''; }catch(e){} });
+    _nmSheetMove(s, f, 0, dur, I.ease, function(){ s._nmIn = false; try{ s.style.transform = ''; s.style.opacity = ''; }catch(e){} }, (op0 != null) ? [op0, 1] : null);
   };
 }
 function _nmSheetPrepareOut(s, fromDy, onEnd, ov){
@@ -33220,7 +33221,7 @@ function _nmSheetPrepareOut(s, fromDy, onEnd, ov){
   try{ _nm.animNext = { at: Date.now(), dur: O.dur, ease: O.ease, tFrom: (ov && ov.tFrom != null) ? ov.tFrom : vh - hh + (fromDy || 0), tTo: (ov && ov.tTo != null) ? ov.tTo : vh + 40 }; }catch(e){}
   return function(){
     if(started) return; started = true;
-    _nmSheetMove(s, fromDy || 0, hh + 40, O.dur, O.ease, function(){ try{ if(onEnd) onEnd(); }catch(e0){} if(s.parentNode) s.remove(); try{ if(typeof _nmSync === 'function') _nmSync(); }catch(e){} });
+    _nmSheetMove(s, fromDy || 0, hh + 40, O.dur, O.ease, function(){ try{ if(onEnd) onEnd(); }catch(e0){} if(s.parentNode) s.remove(); try{ if(typeof _nmSync === 'function') _nmSync(); }catch(e){} }, (ov && ov.o0 != null) ? [ov.o0, 0] : null);
   };
 }
 // 역 팝업 내리기(끌어서·바깥 눌러서) — 시간표 시트와 같은 방식
@@ -33308,36 +33309,75 @@ function nmTtOpen(name, lines, drag){
 //   · 놓으면: 올라온 만큼에서 이어서 끝까지 올리거나(시트·지도 같은 곡선), 모자라면 같은 자리에서 도로 내려 보낸다(팝업은 그대로).
 function _nmTtDragCtl(sh, snap, popEl){
   var vh = window.innerHeight || 99999, H = sh.offsetHeight || 1, done = false, rev = 0;
-  var cap = (popEl && popEl.offsetHeight > 0) ? vh - popEl.offsetHeight : null;      // 지도의 보이는 끝은 팝업 위쪽 끝보다 아래로 내려가지 않는다
+  var cap = (popEl && popEl.offsetHeight > 0) ? vh - popEl.offsetHeight : null;      // 팝업 위쪽 끝(제자리)
+  // 팝업은 시간표가 올라오는 만큼 위로 올라가며 흐려지고(블러·투명), 시간표는 같은 만큼 진해진다 — 끝에서 팝업 위쪽 끝이 시간표 위쪽 끝(vh−H)에 닿는다.
+  // 그러면 지도의 보이는 끝(팝업·시트 중 위쪽)이 처음 자리 → 시간표 자리로 한 번에 이어져 지도가 줄었다 늘지 않는다.
+  var dk = (cap != null) ? Math.max(0, cap - (vh - H)) / H : 0;
+  function pr(){ return rev / H; }
+  function popOp(p){ return Math.max(0, 1 - p * 1.5); }
+  function shOp(p){ return Math.min(1, p * 1.3); }
+  function popTop(){ return cap != null ? cap - rev * dk : null; }
+  function lastBottom(){ var b = vh - rev, t = popTop(); return t != null ? Math.min(b, t) : b; }
+  function paint(){
+    var p = pr();
+    sh.style.transform = 'translateY(' + (H - rev) + 'px)'; sh.style.opacity = String(shOp(p));
+    if(popEl){ popEl.style.transform = 'translateY(' + (-(rev * dk)).toFixed(1) + 'px)'; popEl.style.filter = 'blur(' + (p * 8).toFixed(1) + 'px)'; popEl.style.opacity = String(popOp(p)); }
+  }
+  function popReset(){ if(popEl){ popEl.style.transform = ''; popEl.style.filter = ''; popEl.style.opacity = ''; popEl.style.willChange = ''; popEl.style.pointerEvents = ''; } }
   sh._nmRest = true; sh._nmTop = vh; sh.style.pointerEvents = 'none';                // 끄는 동안 지도 크기·가림 판정에 끼지 않는다
+  sh.style.willChange = 'transform, opacity'; sh.style.opacity = '0';
   sh.style.transform = 'translateY(' + H + 'px)';
+  if(popEl) popEl.style.willChange = 'transform, filter, opacity';
   _nmFollowStart(sh, cap);
-  function lastBottom(){ var b = vh - rev; return cap != null ? Math.min(b, cap) : b; }
   return {
     sheet: sh,
     move: function(dyUp){
       if(done || !sh.isConnected) return;
       rev = Math.max(0, Math.min(H, dyUp));
-      sh.style.transform = 'translateY(' + (H - rev) + 'px)';
-      _nmFollowMove(H - rev);
+      paint();
+      _nmFollowMove(H - rev, lastBottom());
     },
     end: function(commit, instant){
       if(done) return; done = true;
       _nmFollowStop();
-      if(!sh.isConnected) return;
-      var lb = lastBottom(), fromDy = H - rev;
-      if(instant){ nmTtClose(true); return; }                                          // 되돌려 아래로 끄는 쪽으로 바뀜 — 시트는 조용히 치운다
+      if(!sh.isConnected){ popReset(); return; }
+      var lb = lastBottom(), fromDy = H - rev, p = pr(), I = _NM_SHEET_IN;
+      if(instant){ popReset(); nmTtClose(true); return; }                              // 되돌려 아래로 끄는 쪽으로 바뀜 — 시트는 조용히 치우고 팝업은 제자리
       _nm.rect = null;                                                                 // 네이티브는 전체 크기인 채로 있다 → 목표 사각형을 다시 보낸다
+      var pcur = popEl ? { t: popEl.style.transform || 'translateY(0px)', f: popEl.style.filter || 'blur(0px)', o: popEl.style.opacity === '' ? 1 : parseFloat(popEl.style.opacity) } : null;
       if(commit){
-        sh._nmTop = null; sh.style.pointerEvents = '';
-        try{ svgRemovePopup(); }catch(e0){}
+        sh._nmTop = null; sh.style.pointerEvents = ''; sh.style.willChange = '';
         var goIn = null;
-        if(!window._nmNoAnim) goIn = _nmSheetPrepareIn(sh, fromDy, lb); else sh.style.transform = '';
+        if(!window._nmNoAnim) goIn = _nmSheetPrepareIn(sh, fromDy, lb, shOp(p)); else { sh.style.transform = ''; sh.style.opacity = ''; }
+        if(popEl && popEl.isConnected){                                                // 팝업은 같은 곡선으로 끝까지 올라가며 완전히 흐려진 뒤 치운다
+          popEl._nmClosing = true; popEl.style.pointerEvents = 'none';
+          var dur = Math.round(Math.max(170, I.dur * (0.45 + 0.55 * fromDy / H))), gone = function(){ try{ svgRemovePopup(); }catch(eR){} };
+          if(window._nmNoAnim || !popEl.animate){ gone(); }
+          else {
+            try{
+              var pa = popEl.animate([{ transform: pcur.t, filter: pcur.f, opacity: pcur.o }, { transform: 'translateY(' + (-(H * dk)) + 'px)', filter: 'blur(10px)', opacity: 0 }], { duration: dur, easing: 'cubic-bezier(' + I.ease.join(',') + ')', fill: 'forwards' });
+              pa.onfinish = gone;
+            }catch(eA){ gone(); }
+            setTimeout(gone, dur + 120);
+          }
+        }
         try{ if(window._RC && _RC.playStart) _RC.playStart(sh.querySelector('#nmTtPlay'), snap || undefined); }catch(ePl){}
         _nmTtAfter();
         if(goIn){ try{ _nmAfterSync(goIn); }catch(eG){ goIn(); } setTimeout(goIn, 120); }
       } else {
-        nmTtClose(false, fromDy, { tFrom: lb, tTo: (cap != null ? cap : vh) });         // 팝업은 그대로, 시트만 도로 내려간다
+        sh.style.willChange = '';
+        if(popEl && popEl.isConnected){                                                // 팝업은 제자리로 또렷하게 돌아온다(시트가 내려가는 곡선과 같은 시간)
+          var O = _NM_SHEET_OUT, back = function(){ popReset(); };
+          if(window._nmNoAnim || !popEl.animate){ back(); }
+          else {
+            try{
+              var pb = popEl.animate([{ transform: pcur.t, filter: pcur.f, opacity: pcur.o }, { transform: 'translateY(0px)', filter: 'blur(0px)', opacity: 1 }], { duration: O.dur, easing: 'cubic-bezier(' + O.ease.join(',') + ')' });
+              pb.onfinish = back; pb.oncancel = back;
+            }catch(eB){ back(); }
+            setTimeout(back, O.dur + 120);
+          }
+        }
+        nmTtClose(false, fromDy, { tFrom: lb, tTo: (cap != null ? cap : vh), o0: shOp(p) });         // 시트는 도로 내려가며 옅어진다
       }
     }
   };
