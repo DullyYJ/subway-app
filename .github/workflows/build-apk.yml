@@ -479,7 +479,7 @@ jobs:
           RC=${PIPESTATUS[0]}
           if [ "$RC" != "0" ]; then
             # 실패 원인을 주석(annotation)으로도 남긴다 — 로그 전체를 못 내려받는 환경에서도 읽을 수 있게
-            grep -E "error:|error: |FAILED|What went wrong|Execution failed|cannot find symbol|symbol:|location:" ../gradle-build.log | head -40 | while IFS= read -r l; do echo "::error::${l:0:400}"; done
+            grep -vE "^> Task" ../gradle-build.log | grep -E "error:|\.java:[0-9]+|\.xml:[0-9]+|FAILED|What went wrong|Execution failed|cannot find symbol|AAPT|error: " | head -8 | while IFS= read -r l; do echo "::error::${l:0:400}"; done
           fi
           exit $RC
 
