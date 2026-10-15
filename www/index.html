@@ -19567,6 +19567,21 @@ window.addEventListener('unhandledrejection', function(e) {
         <button onclick="_cmTestFire()" style="width:100%;margin-top:12px;padding:11px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);">🔔 지금 미리보기</button>
       </div>
 
+      <!-- ★ 2026-10-15 캐릭터 시계 위젯 -->
+      <div id="gwCard" style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
+        <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:4px;">🕒 캐릭터 시계 위젯</div>
+        <p style="font-size:12px;color:var(--sub);margin-bottom:12px;line-height:1.5;">시계 주변을 캐릭터들이 돌아다니며 시계에 매달리고 응가도 해요. 위에서 정한 출·퇴근 시각이 되면 캐릭터가 시계 앞에 모여 응원하고, 시계가 작아지면서 [출근하기]·[퇴근하기] 버튼이 나와요. 누르면 앱이 열리며 바로 길찾기를 해요.</p>
+        <div style="display:flex;gap:8px;margin-bottom:8px;">
+          <button onclick="_gwAdd('hb')" style="flex:1;padding:11px 4px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);font-family:inherit;">▭ 가로 블랙</button>
+          <button onclick="_gwAdd('hw')" style="flex:1;padding:11px 4px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);font-family:inherit;">▭ 가로 화이트</button>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:6px;">
+          <button onclick="_gwAdd('vb')" style="flex:1;padding:11px 4px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);font-family:inherit;">▯ 세로 블랙</button>
+          <button onclick="_gwAdd('vw')" style="flex:1;padding:11px 4px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);font-family:inherit;">▯ 세로 화이트</button>
+        </div>
+        <p id="gwNote" style="font-size:11px;color:var(--sub);margin:6px 0 0;line-height:1.5;">출·퇴근 장소를 설정하면 그 쪽 버튼이 나와요.</p>
+      </div>
+
       <!-- ★ 하차 10분 전 추천 테스트 -->
       <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
         <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:4px;">🚉 하차 10분 전 추천</div>
@@ -23831,7 +23846,7 @@ window._showBriefingModal = _showBriefingModal;
 var _cmAlarm = { on:false, morn:'07:30', eve:'18:30', from:'', to:'',
                  days:[1,2,3,4,5], eFrom:'', eTo:'', lastKey:'' };
 try { var _cmSaved = JSON.parse(localStorage.getItem('commuteAlarm')||'null'); if(_cmSaved) _cmAlarm = Object.assign(_cmAlarm, _cmSaved); } catch(e){}
-function _cmPersist(){ try{ localStorage.setItem('commuteAlarm', JSON.stringify(_cmAlarm)); }catch(e){} }
+function _cmPersist(){ try{ localStorage.setItem('commuteAlarm', JSON.stringify(_cmAlarm)); }catch(e){} try{ if(typeof _gwSync==='function') setTimeout(function(){ _gwSync(false); }, 300); }catch(e){} }
 
 // 오늘 보낼 요일인가. 목록이 비어 있으면(옛 설정) 매일 보낸다.
 function _cmDayOn(d){
@@ -24052,6 +24067,71 @@ function _cmRouteFor(isMorn){
   }catch(e){ return null; }
 }
 window._cmRouteFor = _cmRouteFor;
+
+// ══════════ 🕒 캐릭터 시계 위젯 (2026-10-15) ══════════
+//   앱은 '설정값 전달'과 '위젯 버튼으로 열렸을 때 길찾기 시작'만 한다. 시각 비교·움직임·그림은 네이티브 위젯이,
+//   출·퇴근 응원 문구는 엔진(/widget-say)이, 경로 계산은 기존 엔진 길찾기(fmapDoRoute)가 한다.
+function _gwPlug(){ try{ return (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.GdmWidget) || null; }catch(e){ return null; } }
+var _gwLast = '';
+function _gwConfig(){
+  var rm = null, re = null;
+  try{ rm = _cmRouteFor(true); }catch(e){}
+  try{ re = _cmRouteFor(false); }catch(e){}
+  var days = (Array.isArray(_cmAlarm.days) && _cmAlarm.days.length) ? _cmAlarm.days.slice() : [0,1,2,3,4,5,6];
+  var c = { on: !!(rm || re), mOn: !!rm, eOn: !!re, morn: _cmAlarm.morn, eve: _cmAlarm.eve, days: days };
+  if(rm && rm.from && isFinite(rm.from.lat) && isFinite(rm.from.lng)){ c.mLat = +rm.from.lat; c.mLng = +rm.from.lng; }
+  if(re && re.from && isFinite(re.from.lat) && isFinite(re.from.lng)){ c.eLat = +re.from.lat; c.eLng = +re.from.lng; }
+  return c;
+}
+// 설정이 바뀌었을 때만 위젯에 넘긴다(같은 값이면 보내지 않는다).
+function _gwSync(force){
+  try{
+    var P = _gwPlug(); if(!P || !P.setConfig) return;
+    var c = _gwConfig(), j = JSON.stringify(c);
+    _gwNote(c);
+    if(!force && j === _gwLast) return;
+    _gwLast = j;
+    P.setConfig({ json: j });
+  }catch(e){}
+}
+function _gwNote(c){
+  var n = document.getElementById('gwNote'); if(!n) return;
+  n.textContent = c.on ? ((c.mOn ? '출근 ' + c.morn : '') + (c.mOn && c.eOn ? ' · ' : '') + (c.eOn ? '퇴근 ' + c.eve : '') + ' 에 위젯이 응원해요')
+                       : '출·퇴근 장소를 설정하면 그 쪽 버튼이 나와요.';
+}
+window._gwAdd = function(type){
+  var P = _gwPlug();
+  if(!P || !P.requestPin){ _pickPop('앱(APK)에서만 추가할 수 있어요', '홈 화면을 길게 눌러 위젯에서 길동무를 찾아주세요'); return; }
+  _gwSync(true);
+  P.requestPin({ type: type }).then(function(r){
+    if(r && r.ok) _pickPop('홈 화면에 추가할지 물어보면 [추가]를 눌러 주세요', '');
+    else _pickPop('이 런처는 바로 추가를 지원하지 않아요', '홈 화면을 길게 눌러 위젯 → 길동무 캐릭터 시계 를 골라 주세요');
+  }).catch(function(){ _pickPop('위젯 추가를 시작하지 못했어요', '홈 화면을 길게 눌러 위젯에서 추가해 주세요'); });
+};
+// 위젯의 [출근하기]/[퇴근하기] → 설정된 출발·도착으로 길찾기(기존 브리핑 [경로탐색]과 같은 흐름)
+function _gwGo(kind, tries){
+  if(kind !== 'morn' && kind !== 'eve') return;
+  var r = null;
+  try{ r = _cmRouteFor(kind === 'morn'); }catch(e){}
+  if(!r){
+    if((tries||0) < 5){ setTimeout(function(){ _gwGo(kind, (tries||0) + 1); }, 700); return; }   // 앱이 막 켜져 역 정보가 아직일 수 있다
+    _pickPop('출퇴근 장소를 먼저 설정해 주세요', '설정 > 출퇴근 알림'); return;
+  }
+  window._cmBriefRoute = r;
+  _cmRouteFromBriefing();
+}
+window._gwGo = _gwGo;
+function _gwCheckLaunch(){
+  try{
+    var P = _gwPlug(); if(!P || !P.takeLaunch) return;
+    P.takeLaunch().then(function(o){ if(o && o.go) _gwGo(o.go, 0); }).catch(function(){});
+  }catch(e){}
+}
+window.addEventListener('gdmWidgetGo', _gwCheckLaunch);
+document.addEventListener('visibilitychange', function(){ if(!document.hidden){ _gwCheckLaunch(); setTimeout(function(){ _gwSync(false); }, 800); } });
+setTimeout(_gwCheckLaunch, 1200);
+setTimeout(function(){ _gwSync(false); }, 2500);
+setTimeout(function(){ _gwSync(false); }, 7000);     // 역 정보가 늦게 준비된 경우 한 번 더
 
 // ── 브리핑 팝업 '경로탐색': 알림에 설정된 출발지→도착지로 즉시 경로 탐색 ──
 function _cmRouteFromBriefing(){

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="gdm_widget_desc_hb">캐릭터들이 시계 주변을 돌아다녀요 · 가로형 블랙</string>
+    <string name="gdm_widget_desc_hw">캐릭터들이 시계 주변을 돌아다녀요 · 가로형 화이트</string>
+    <string name="gdm_widget_desc_vb">캐릭터들이 시계 주변을 돌아다녀요 · 세로형 블랙</string>
+    <string name="gdm_widget_desc_vw">캐릭터들이 시계 주변을 돌아다녀요 · 세로형 화이트</string>
+</resources>

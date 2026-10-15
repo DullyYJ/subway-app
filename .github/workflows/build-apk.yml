@@ -21,6 +21,8 @@ jobs:
           - sam_ask.ui.test.js
           - metro_native_data.test.js
           - metro_native_java.test.js
+          - widget_native_java.test.js
+          - widget_app.ui.test.js
           - metro_native_js.ui.test.js
           - bus_poll_gap.test.js
           - cell_hop_lead.ui.test.js
@@ -156,15 +158,31 @@ jobs:
 
           # 1) 플러그인 소스 복사
           for src in ["native/CellInfoPlugin.java", "native/PowerPlugin.java", "native/OverlayPlugin.java", "native/MotionPlugin.java", "native/KeepAliveService.java",
-                      "native/MetroMapData.java", "native/MetroCamera.java", "native/MetroRenderer.java", "native/MetroMapView.java", "native/NativeMapPlugin.java"]:
+                      "native/MetroMapData.java", "native/MetroCamera.java", "native/MetroRenderer.java", "native/MetroMapView.java", "native/NativeMapPlugin.java",
+                      # 2026-10-15: 캐릭터 시계 위젯(가로·세로 × 블랙·화이트)
+                      "native/WidgetGeo.java", "native/WidgetSim.java", "native/WidgetArt.java", "native/WidgetCore.java",
+                      "native/GdmWidgetBase.java", "native/GdmWidgetHB.java", "native/GdmWidgetHW.java", "native/GdmWidgetVB.java", "native/GdmWidgetVW.java",
+                      "native/GdmWidgetReceiver.java", "native/GdmWidgetPlugin.java"]:
               if not os.path.exists(src):
                   raise SystemExit(src + " 가 없습니다 — 저장소에 올렸는지 확인하세요")
               shutil.copy(src, os.path.join(PKGDIR, os.path.basename(src)))
+
+          # 1-b) 위젯 리소스(레이아웃·위젯 정의·배경 그림·문구) — cap add android 가 만든 res 위에 덮어 복사
+          RES_SRC = "native/res"
+          RES_DST = "android/app/src/main/res"
+          if not os.path.isdir(RES_SRC):
+              raise SystemExit(RES_SRC + " 가 없습니다 — 위젯 리소스를 저장소에 올렸는지 확인하세요")
+          for root, dirs, files in os.walk(RES_SRC):
+              rel = os.path.relpath(root, RES_SRC)
+              os.makedirs(os.path.join(RES_DST, rel), exist_ok=True)
+              for fn in files:
+                  shutil.copy(os.path.join(root, fn), os.path.join(RES_DST, rel, fn))
 
           # 2) MainActivity 재작성 (cap add android 가 매번 새로 만드므로 통째로 덮어씀)
           MAIN = "\n".join([
               "package " + PKG + ";",
               "",
+              "import android.content.Intent;",
               "import android.os.Bundle;",
               "",
               "import com.getcapacitor.BridgeActivity;",
@@ -178,7 +196,16 @@ jobs:
               "        registerPlugin(OverlayPlugin.class);",
               "        registerPlugin(MotionPlugin.class);",
               "        registerPlugin(NativeMapPlugin.class);",
+              "        registerPlugin(GdmWidgetPlugin.class);",
               "        super.onCreate(savedInstanceState);",
+              "        WidgetCore.captureLaunch(getIntent());",
+              "    }",
+              "",
+              "    @Override",
+              "    protected void onNewIntent(Intent intent) {",
+              "        super.onNewIntent(intent);",
+              "        WidgetCore.captureLaunch(intent);",
+              "        try { getBridge().triggerWindowJSEvent(\"gdmWidgetGo\", \"{}\"); } catch (Exception e) { }",
               "    }",
               "",
               "}",
@@ -352,6 +379,27 @@ jobs:
           if "KeepAliveService" not in s:
               s = s.replace("</application>",
                   '    <service android:name=".KeepAliveService" android:exported="false" android:foregroundServiceType="location" android:stopWithTask="false" />\n    </application>', 1)
+
+          # 2026-10-15: 캐릭터 시계 위젯 4종(가로·세로 × 블랙·화이트) + 알람·부팅 때 깨우는 수신기
+          if "GdmWidgetHB" not in s:
+              def prov(cls, label, xml):
+                  return ('        <receiver android:name=".' + cls + '" android:exported="true" android:label="' + label + '">\n'
+                          '            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>\n'
+                          '            <meta-data android:name="android.appwidget.provider" android:resource="@xml/' + xml + '" />\n'
+                          '        </receiver>\n')
+              blk = (prov("GdmWidgetHB", "길동무 캐릭터 시계 · 가로 블랙", "gdm_widget_hb")
+                     + prov("GdmWidgetHW", "길동무 캐릭터 시계 · 가로 화이트", "gdm_widget_hw")
+                     + prov("GdmWidgetVB", "길동무 캐릭터 시계 · 세로 블랙", "gdm_widget_vb")
+                     + prov("GdmWidgetVW", "길동무 캐릭터 시계 · 세로 화이트", "gdm_widget_vw")
+                     + '        <receiver android:name=".GdmWidgetReceiver" android:exported="false">\n'
+                       '            <intent-filter>\n'
+                       '                <action android:name="android.intent.action.BOOT_COMPLETED" />\n'
+                       '                <action android:name="android.intent.action.TIME_SET" />\n'
+                       '                <action android:name="android.intent.action.TIMEZONE_CHANGED" />\n'
+                       '                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />\n'
+                       '            </intent-filter>\n'
+                       '        </receiver>\n')
+              s = s.replace("</application>", blk + "    </application>", 1)
 
           open(M, "w", encoding="utf-8").write(s)
           print("매니페스트 패치 완료")
