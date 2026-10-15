@@ -58,6 +58,8 @@ public final class WidgetCore {
     public static final String ACTION_TICK = "com.dullyyj.subway.WIDGET_TICK";
     public static final String EXTRA_GO = "gdm_widget_go";
     static final long BURST_MS = 45000L, FRAME_MS = 100L;
+    /** 출퇴근 버튼은 '처음 보인 때'부터 3분만 떠 있고, 안 누르면 다시 시계로 돌아간다. 보이기 전(화면이 꺼져 있던 동안)에는 시작 시각 +90분까지 기다린다. */
+    static final long SHOW_MS = 3L * 60000L, WAIT_MS = 90L * 60000L;
     static final String ENGINE = "https://route-v2.phg0643.workers.dev";
 
     // ───────── 저장값 ─────────
@@ -102,13 +104,13 @@ public final class WidgetCore {
         return s;
     }
     static void clearScene(Context c) {
-        sp(c).edit().remove("scKind").remove("scKey").remove("scSay1").remove("scSay2").remove("scMood").remove("scBtn").remove("scUntil").remove("scFetched").apply();
+        sp(c).edit().remove("scKind").remove("scKey").remove("scSay1").remove("scSay2").remove("scMood").remove("scBtn").remove("scUntil").remove("scFetched").remove("scShown").apply();
     }
     /** 오늘 지금 보여야 할 출퇴근 장면이 있으면 시작하고, 끝난 장면은 치운다. 알람·위젯 갱신·화면 켜짐·탭 때 부른다. */
     public static void evalScene(Context c) {
         Cfg f = cfg(c);
         Scene cur = scene(c); long now = System.currentTimeMillis();
-        if (cur.kind.length() > 0 && now >= cur.until) { clearScene(c); cur = scene(c); }
+        if (cur.kind.length() > 0 && now >= cur.until) { sp(c).edit().putString("lastDone", cur.key).apply(); clearScene(c); cur = scene(c); }   // 안 눌렀어도 끝난 장면은 다시 안 띄운다
         if (!f.on || (cur.kind.equals("morn") && !f.mOn) || (cur.kind.equals("eve") && !f.eOn)) { if (cur.kind.length() > 0) clearScene(c); if (!f.on) return; cur = scene(c); }
         Calendar cal = Calendar.getInstance();
         if (!f.days[cal.get(Calendar.DAY_OF_WEEK) - 1]) { if (cur.kind.length() > 0 && !cur.key.startsWith(ymd(cal))) clearScene(c); return; }
@@ -119,16 +121,16 @@ public final class WidgetCore {
             if (k == 0 ? !f.mOn : !f.eOn) continue;          // 장소가 없는 쪽은 장면을 만들지 않는다(눌러도 갈 곳이 없다)
             long st = startMs(cal, hm(k == 0 ? f.morn : f.eve, k == 0 ? 450 : 1110));
             String key = ymd(cal) + kind;
-            if (now >= st && now < st + 90L * 60000L && !key.equals(lastDone) && st >= bestStart) { best = kind; bestStart = st; }
+            if (now >= st && now < st + WAIT_MS && !key.equals(lastDone) && st >= bestStart) { best = kind; bestStart = st; }
         }
         if (best != null && !(cur.kind.equals(best) && cur.key.equals(ymd(cal) + best))) startScene(c, best, bestStart);
     }
     static void startScene(final Context c, final String kind, long startAt) {
         Calendar cal = Calendar.getInstance();
         final String key = ymd(cal) + kind;
-        long until = startAt + 90L * 60000L;
+        long until = startAt + WAIT_MS;
         SharedPreferences.Editor e = sp(c).edit();
-        e.putString("scKind", kind).putString("scKey", key).putLong("scUntil", until).putBoolean("scFetched", false).putString("scMood", "cheer");
+        e.putString("scKind", kind).putString("scKey", key).putLong("scUntil", until).putLong("scShown", 0L).putBoolean("scFetched", false).putString("scMood", "cheer");
         e.putString("scBtn", "morn".equals(kind) ? "출근하기" : "퇴근하기");
         e.putString("scSay1", "morn".equals(kind) ? "오늘도 화이팅!" : "오늘도 수고 많았어요").putString("scSay2", "");     // 엔진 응답 전·실패 때의 기본 문구
         e.apply();
@@ -172,6 +174,16 @@ public final class WidgetCore {
         Calendar cal = Calendar.getInstance();
         sp(c).edit().putString("lastDone", ymd(cal) + kind).apply();
         clearScene(c); refreshAll(c, true); scheduleNext(c);
+    }
+
+    /** 화면이 켜져 처음 장면이 보이는 순간부터 3분을 센다(그 전엔 기다린다). 3분이 지나면 알람이 장면을 치우고 시계로 돌려 놓는다. */
+    static void armScene(Context c) {
+        Scene cur = scene(c); if (cur.kind.length() == 0) return;
+        SharedPreferences p = sp(c);
+        if (p.getLong("scShown", 0L) != 0L) return;
+        long now = System.currentTimeMillis();
+        p.edit().putLong("scShown", now).putLong("scUntil", Math.min(cur.until, now + SHOW_MS)).apply();
+        scheduleNext(c);
     }
 
     // ───────── 알람 ─────────
@@ -366,8 +378,7 @@ public final class WidgetCore {
         rv.setTextViewTextSize(clock, TypedValue.COMPLEX_UNIT_DIP, g.textDp);
         rv.setViewPadding(clock, Math.round(n.padL), Math.round(Math.max(0f, n.padT)), 0, 0);
         if (n.vertical) { rv.setTextViewTextSize(clockM, TypedValue.COMPLEX_UNIT_DIP, g.textDp); rv.setViewPadding(clockM, Math.round(n.padL), Math.round(Math.max(0f, n.padTm)), 0, 0); }
-        rv.setTextViewTextSize(date, TypedValue.COMPLEX_UNIT_DIP, g.dateSp);
-        rv.setViewPadding(date, n.vertical ? 0 : px(n, g.dateL), px(n, g.dateT), 0, 0);
+        rv.setViewVisibility(date, android.view.View.GONE);        // 배경이 투명하고 위젯이 시계 크기라 날짜는 뺐다
         Scene s = scene(c);
         boolean commute = s.kind.length() > 0 && System.currentTimeMillis() < s.until;
         rv.setViewVisibility(cmt, commute ? android.view.View.VISIBLE : android.view.View.GONE);
@@ -438,6 +449,7 @@ public final class WidgetCore {
         Context a = c.getApplicationContext(); app = a;
         ensureReceiver(a);
         if (ids(a).length == 0 || !screenOn(a)) return;
+        if (!"cfg".equals(why)) armScene(a);                 // 앱을 만지는 중(설정 전달)에는 위젯이 안 보이니 세지 않는다
         burstUntil = SystemClock.uptimeMillis() + BURST_MS;
         for (Inst n : INST.values()) n.sim.resume();
         if (running) return;

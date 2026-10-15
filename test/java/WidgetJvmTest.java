@@ -45,15 +45,20 @@ public class WidgetJvmTest {
     static boolean fin(float v) { return !Float.isNaN(v) && !Float.isInfinite(v); }
 
     static void check() {
-        float[][] sizes = { { 290f, 120f }, { 250f, 110f }, { 360f, 180f }, { 110f, 250f }, { 130f, 320f }, { 170f, 400f } };
+        float[][] sizes = { { 230f, 90f }, { 180f, 80f }, { 300f, 100f }, { 360f, 160f }, { 170f, 210f }, { 130f, 250f }, { 160f, 320f } };
         for (float[] sz : sizes) {
             boolean v = sz[1] > sz[0];
             WidgetGeo g = WidgetGeo.of(v, sz[0], sz[1]);
             String tag = (v ? "세로 " : "가로 ") + (int) sz[0] + "x" + (int) sz[1];
-            ok(g.clkL >= 0 && g.clkR() <= g.W && g.clkT >= g.charH + 3.9f && g.clkB() < g.ground, tag + ": 시계 상자가 위젯 안, 위에 캐릭터가 올라설 여유(" + g.clkT + " >= " + g.charH + ")");
-            ok(g.bubL >= 0 && g.bubL + g.bubW <= g.W + 0.01f && g.btnL >= 0 && g.btnL + g.btnW <= g.W + 0.01f && g.btnT + g.btnH <= g.H && g.bubT + g.bubH <= g.btnT + 0.01f, tag + ": 말풍선·버튼이 위젯 안에서 겹치지 않음");
-            if (v) ok(g.bubT >= g.clkB() + g.charH * 0.25f, tag + ": 말풍선이 줄 선 캐릭터 아래");
-            else ok(g.bubL >= g.clkR() + 10f, tag + ": 말풍선이 시계 오른쪽");
+            ok(g.clkL >= 0 && g.clkR() <= g.W && g.clkT >= g.charH + 3.9f && g.clkB() <= g.H, tag + ": 시계 상자가 위젯 안, 위에 캐릭터가 올라설 여유(" + g.clkT + " >= " + g.charH + ")");
+            ok(g.clkW >= (v ? g.W * 0.38f : g.W * 0.45f) || g.clkH >= g.H * 0.40f, tag + ": 시계가 위젯 칸에 크게 들어찬다(" + g.clkW + "x" + g.clkH + " / " + g.W + "x" + g.H + ")");
+            WidgetGeo gc = WidgetGeo.of(v, sz[0], sz[1]); gc.setCommute(true);
+            ok(gc.textDp < g.textDp && gc.clkW < g.clkW, tag + ": 출퇴근 장면에서는 시계가 줄어든다(" + g.textDp + "→" + gc.textDp + ")");
+            ok(gc.bubL >= 0 && gc.bubL + gc.bubW <= gc.W + 0.01f && gc.btnL >= 0 && gc.btnL + gc.btnW <= gc.W + 0.01f && gc.btnT + gc.btnH <= gc.H && gc.bubT + gc.bubH <= gc.btnT + 0.01f, tag + ": (출퇴근) 말풍선·버튼이 위젯 안에서 겹치지 않음");
+            ok(gc.bubH >= 28f && gc.bubW >= 60f, tag + ": (출퇴근) 말풍선이 글을 담을 만큼 크다(" + gc.bubW + "x" + gc.bubH + ")");
+            ok(gc.clkT + gc.clkH <= gc.H, tag + ": (출퇴근) 줄어든 시계도 위젯 안");
+            if (v) ok(gc.bubT >= gc.clkB() + gc.charH * 0.25f, tag + ": 말풍선이 줄 선 캐릭터 아래");
+            else ok(gc.bubL >= gc.clkR() + 10f, tag + ": 말풍선이 시계 오른쪽");
             ok(g.stageY >= g.clkT && g.stageY <= g.ground, tag + ": 줄 서는 높이가 시계 앞~바닥");
             // 긴 시간 시뮬(시드 3개) — 범위·상태 다양성
             int[] seen = new int[WidgetSim.ST_NAME.length]; boolean allFinite = true, inBounds = true; int maxPoops = 0; boolean dogPoop = false;

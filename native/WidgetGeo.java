@@ -25,8 +25,8 @@ public final class WidgetGeo {
 
     public static final float DIGIT_W = 0.56f, COLON_W = 0.26f, DIGIT_H = 0.72f;
 
-    /** 출퇴근 장면에서 시계 글자를 줄이는 비율(말풍선·버튼 자리를 넓히고 바탕화면을 덜 차지하게). */
-    public static final float COMMUTE_SCALE = 0.62f;
+    /** 출퇴근 장면에서 시계 글자를 줄이는 최대 비율(말풍선·버튼 자리가 모자라면 더 줄인다). */
+    public static final float COMMUTE_SCALE = 0.5f;
     public boolean commute;
     private WidgetGeo(boolean v, float w, float h) { vertical = v; W = w; H = h; }
 
@@ -41,25 +41,39 @@ public final class WidgetGeo {
     /** 출퇴근 장면이면 시계를 줄여 다시 배치한다(글꼴 실측은 호출한 쪽이 measured 로 다시 넣는다). */
     public void setCommute(boolean c) { if (c == commute) return; commute = c; build(); }
 
+    /**
+     * 위젯 칸에 시계가 꽉 차게(배경은 투명이라 시계 크기가 곧 위젯의 모습) — 캐릭터가 시계 위에 오를 머리 공간만 남기고 가운데에 크게 둔다.
+     * 출퇴근 장면에서는 시계를 줄이고(최대 COMMUTE_SCALE, 말풍선·버튼 자리가 모자라면 더) 그 자리에 말풍선과 버튼을 넣는다.
+     */
     private void build() {
-        float sc = commute ? COMMUTE_SCALE : 1f;
-        ground = H - 5f;
+        ground = H - 4f;
+        float headroom;
+        float T;
         if (!vertical) {
-            float T = clamp(Math.min(H * 0.44f, W * 0.38f / (4 * DIGIT_W + COLON_W)), 18f, 64f);
-            T = commute ? Math.max(14f, T * sc) : T;
+            charH = clamp(H * 0.30f, 22f, 40f);
+            headroom = charH + 4f;
+            float tH = (H - headroom - 8f) / DIGIT_H, tW = (W - 16f) / (4 * DIGIT_W + COLON_W);
+            T = clamp(Math.min(tH, tW), 16f, 120f);
+            if (commute) T = Math.max(14f, Math.min(T * COMMUTE_SCALE, (W - 136f) / (4 * DIGIT_W + COLON_W)));
             textDp = T;
             clkW = (4 * DIGIT_W + COLON_W) * T; clkH = DIGIT_H * T; lineH = clkH;
-            charH = clamp(H * 0.30f, 24f, 40f);
         } else {
-            float T = clamp(Math.min(H * 0.19f, W * 0.80f / (2 * DIGIT_W)), 18f, 56f);
-            T = commute ? Math.max(14f, T * sc) : T;
+            charH = clamp(Math.min(W * 0.36f, H * 0.14f), 22f, 40f);
+            headroom = charH + 4f;
+            float tH = (H - headroom - 8f) / (DIGIT_H * 2f + 0.30f), tW = (W - 12f) / (2 * DIGIT_W);
+            T = clamp(Math.min(tH, tW), 16f, 120f);
+            if (commute) {
+                float below = btnHFor(H) + 10f + 5f + 34f + 8f + 0.25f * charH;     // 시계 아래에 필요한 자리(캐릭터 줄·말풍선·버튼)
+                float fit = (H - headroom - below) / (DIGIT_H * 2f + 0.30f);
+                T = Math.max(14f, Math.min(T * COMMUTE_SCALE, fit));
+            }
             textDp = T;
             lineH = DIGIT_H * T;
             clkW = 2 * DIGIT_W * T; clkH = lineH * 2f + T * 0.30f;
-            charH = clamp(Math.min(W * 0.36f, H * 0.14f), 24f, 40f);
         }
         derive();
     }
+    static float btnHFor(float h) { return BTN_H; }   // 레이아웃의 버튼 높이(30dp)와 같게
 
     /** 실제 글꼴로 잰 시계 숫자 상자(dp)를 받아 나머지 자리를 다시 계산한다(글꼴마다 숫자 폭·높이가 조금 다르다). 세로형의 lineH 는 한 줄 숫자 높이. */
     public void measured(float digitsW, float digitsH, float oneLineH) {
@@ -70,30 +84,39 @@ public final class WidgetGeo {
         derive();
     }
 
-    /** 시계 상자·캐릭터 키에서 시계 자리, 날짜, 말풍선·버튼, 줄 서는 높이를 정한다. */
+    /** 시계 상자·캐릭터 키에서 시계 자리, 말풍선·버튼, 줄 서는 높이를 정한다. */
     public void derive() {
+        float headroom = charH + 4f;
         stageW = clkW;
         if (commute) stageW = Math.max(clkW, STAGE_PER_CHAR * charH * 3f);
+        btnH = btnHFor(H);
         if (!vertical) {
-            stageL = clamp(W * 0.05f, 6f, 24f);
-            clkL = stageL + (stageW - clkW) / 2f;
-            clkT = Math.max(charH + 4f, clamp(H * 0.30f, 16f, H - clkH - 40f));
-            dateL = stageL; dateSp = clamp(H * 0.10f, 9f, 13f); dateT = Math.max(3f, clkT - dateSp * 1.7f);
+            if (!commute) {
+                stageL = (W - clkW) / 2f;
+                clkL = stageL;
+                clkT = clamp(H - 8f - clkH, headroom, H);               // 머리 공간을 남기고 아래쪽에 크게
+            } else {
+                stageL = 8f;
+                clkL = stageL + (stageW - clkW) / 2f;
+                clkT = Math.max(headroom, clamp(H * 0.30f, 16f, H - clkH - 40f));
+            }
+            dateL = stageL; dateSp = 11f; dateT = 3f;
             float rl = stageL + stageW + 12f, rr = W - 8f;
-            bubL = rl; bubW = Math.max(60f, rr - rl); bubT = 7f;
-            btnH = BTN_H; btnW = Math.min(bubW, 128f); btnL = bubL + (bubW - btnW) / 2f;
-            btnT = H - btnH - 9f;
-            bubH = Math.max(36f, btnT - 5f - bubT);
+            bubL = rl; bubW = Math.max(60f, rr - rl); bubT = 6f;
+            btnW = Math.min(bubW, 128f); btnL = bubL + (bubW - btnW) / 2f;
+            btnT = H - btnH - 8f;
+            bubH = Math.max(26f, btnT - 4f - bubT);
         } else {
             stageL = (W - stageW) / 2f;
             clkL = (W - clkW) / 2f;
-            clkT = Math.max(charH + 4f, clamp(H * 0.12f, 18f, 60f));
-            dateL = 0; dateSp = clamp(W * 0.11f, 9f, 13f); dateT = Math.max(3f, clkT - dateSp * 1.8f);
-            btnH = BTN_H; btnW = W - 16f; btnL = 8f;
+            if (!commute) clkT = clamp(H - 8f - clkH, headroom, H);
+            else clkT = headroom;
+            dateL = 0; dateSp = 11f; dateT = 3f;
+            btnW = W - 16f; btnL = 8f;
             btnT = H - btnH - 10f;
             bubL = 8f; bubW = W - 16f;
             bubT = clkT + clkH + charH * 0.25f + 8f;
-            bubH = Math.max(34f, btnT - 5f - bubT);
+            bubH = Math.max(30f, btnT - 5f - bubT);
         }
         stageY = Math.min(ground, clkT + clkH + charH * 0.25f);
     }

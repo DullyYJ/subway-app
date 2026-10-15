@@ -185,17 +185,20 @@ public final class WidgetSim {
         if (r < 0.66f && poopOk) { go(c, POOP, 2.6f); return; }
         if (r < 0.86f) {
             // 모서리에 매달린다: 자리가 넉넉한 쪽 모서리
-            boolean leftOk = geo.clkL - hw() * 0.4f >= hw() * 0.8f, rightOk = geo.clkR() + hw() * 0.4f <= geo.W - hw() * 0.8f;
-            if (leftOk || rightOk) {
-                boolean left = leftOk && (!rightOk || rnd.nextBoolean());
-                float hx = left ? geo.clkL - hw() * 0.4f : geo.clkR() + hw() * 0.4f;
-                c.tx = hx; c.face = left ? 1 : -1;
-                c.x0 = c.x; c.y0 = c.y; c.x1 = hx; c.y1 = geo.clkT + geo.charH; c.arc = 3f; c.nextZone = 2; c.nextSt = HANG;
-                c.st = JUMP; c.t0 = time; c.until = time + 0.3f; return;
-            }
+            boolean left = rnd.nextBoolean();
+            float hx = hangX(left);
+            c.tx = hx; c.face = left ? 1 : -1;
+            c.x0 = c.x; c.y0 = c.y; c.x1 = hx; c.y1 = geo.clkT + geo.charH; c.arc = 3f; c.nextZone = 2; c.nextSt = HANG;
+            c.st = JUMP; c.t0 = time; c.until = time + 0.3f; return;
         }
         if (onTop > 4f) { dropDown(c); return; }
         go(c, TOP_REST, rnd(1.2f, 2.4f));
+    }
+    /** 매달리는 자리: 시계 바깥 모서리에 자리가 있으면 거기, 시계가 칸을 꽉 채워 자리가 없으면 숫자 앞(안쪽 모서리). */
+    private float hangX(boolean left) {
+        float outL = geo.clkL - hw() * 0.4f, outR = geo.clkR() + hw() * 0.4f;
+        if (left) return outL >= hw() * 0.8f ? outL : geo.clkL + hw() * 0.45f;
+        return outR <= geo.W - hw() * 0.8f ? outR : geo.clkR() - hw() * 0.45f;
     }
     private void dropDown(Ch c) {
         float side = c.x < geo.clkCx() ? geo.clkL - hw() * 0.6f : geo.clkR() + hw() * 0.6f;

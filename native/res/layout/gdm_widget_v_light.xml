@@ -3,8 +3,7 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/gw_root"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="@drawable/gdm_bg_light">
+    android:layout_height="match_parent">
 
     <TextClock
         android:id="@+id/gw_date"
@@ -28,7 +27,11 @@
         android:fontFamily="sans-serif-medium"
         android:includeFontPadding="false"
         android:singleLine="true"
-        android:textColor="#111114"
+        android:textColor="#FFFFFF"
+        android:shadowColor="#66000000"
+        android:shadowDx="0"
+        android:shadowDy="1"
+        android:shadowRadius="6"
         android:textSize="40dp"/>
 
     <TextClock
@@ -41,7 +44,11 @@
         android:fontFamily="sans-serif-medium"
         android:includeFontPadding="false"
         android:singleLine="true"
-        android:textColor="#111114"
+        android:textColor="#FFFFFF"
+        android:shadowColor="#66000000"
+        android:shadowDx="0"
+        android:shadowDy="1"
+        android:shadowRadius="6"
         android:textSize="40dp"/>
 
     <ImageView
@@ -67,7 +74,7 @@
             android:background="@drawable/gdm_bubble_light"
             android:gravity="center"
             android:padding="8dp"
-            android:textColor="#111114"
+            android:textColor="#FFFFFF"
             android:textSize="13dp"
             android:textStyle="bold"/>
 
@@ -81,7 +88,7 @@
             android:paddingLeft="24dp"
             android:paddingRight="24dp"
             android:singleLine="true"
-            android:textColor="#FFFFFF"
+            android:textColor="#111114"
             android:textSize="14dp"
             android:textStyle="bold"/>
     </LinearLayout>

@@ -23,7 +23,7 @@ public final class WidgetArt {
 
     public static void draw(WidgetSim sim, Surface s, boolean dark) {
         WidgetGeo g = sim.geo;
-        int shadow = dark ? 0x22FFFFFF : 0x30000000;
+        int shadow = 0x2E000000;     // 배경이 투명이라 밝은 배경·어두운 배경 어디서나 보이는 옅은 그림자
         float u = g.charH / 34f;
         // 응가(캐릭터 뒤)
         for (WidgetSim.Poop p : sim.poops) {
