@@ -99,26 +99,31 @@ print('BAD', bad); print('MISS', miss)
     execFileSync('python3', ['-I', '-c', 'import sys;from xml.dom import minidom;minidom.parseString(sys.stdin.read().encode())'], { input: o });
   });
   await t('강아지(돌솜·뽀푸) 시트에 꼬리가 있다 — 몸·머리보다 왼쪽으로 꼬리 털뭉치가 나와 있고 칸 밖으로 안 잘린다', async () => {
-    const py = `
-import sys
-from PIL import Image
-import numpy as np
-bad = []
-for n in ['dolsom', 'ppopu']:
-    a = np.asarray(Image.open(sys.argv[1] + '/' + n + '.webp').convert('RGBA'))[..., 3]
-    mins = []
-    for i in range(16):
-        cx, cy = (i % 4) * 256, (i // 4) * 256
-        c = a[cy:cy + 256, cx:cx + 256] > 24
-        xs = np.where(c.any(0))[0]
-        if xs.min() < 3 or xs.max() > 252: bad.append(n + '#' + str(i) + ' 칸 가장자리에 닿음')
-        mins.append(int(xs.min()))
-    # 꼬리가 없던 때는 몸·머리 털의 왼쪽 끝이 36~48px 이었다. 꼬리가 있으면 16프레임 중 절반 이상에서 그보다 왼쪽(<=34px)에 털뭉치가 나온다
-    if sum(1 for m in mins if m <= 34) < 8: bad.append(n + ' 꼬리가 안 보인다(왼쪽 끝 ' + str(mins) + ')')
-print('BAD', bad)
-`;
-    const o = execFileSync('python3', ['-I', '-c', py, path.join(ROOT, 'www', 'chars3d')], { encoding: 'utf-8' });
-    assert(/BAD \[\]/.test(o), o);
+    // 브라우저(Chromium)로 webp 를 풀어 칸마다 알파가 있는 가장 왼쪽 열을 잰다(CI 에 PIL 이 없어도 되게)
+    const { chromium } = require('./helpers/pw');
+    const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--no-sandbox'] });
+    try {
+      const pg = await b.newPage(); await pg.setContent('<canvas id=c width=1024 height=1024></canvas>');
+      const bad = [];
+      for (const n of ['dolsom', 'ppopu']) {
+        const url = 'data:image/webp;base64,' + fs.readFileSync(path.join(ROOT, 'www', 'chars3d', n + '.webp')).toString('base64');
+        const mins = await pg.evaluate(async u => {
+          const im = new Image(); im.src = u; await im.decode();
+          const c = document.getElementById('c'), x = c.getContext('2d', { willReadFrequently: true }); x.clearRect(0, 0, 1024, 1024); x.drawImage(im, 0, 0);
+          const out = [];
+          for (let i = 0; i < 16; i++) {
+            const cx = (i % 4) * 256, cy = Math.floor(i / 4) * 256, d = x.getImageData(cx, cy, 256, 256).data; let lo = 999, hi = -1;
+            for (let yy = 0; yy < 256; yy++) for (let xx = 0; xx < 256; xx++) if (d[(yy * 256 + xx) * 4 + 3] > 24) { if (xx < lo) lo = xx; if (xx > hi) hi = xx; }
+            out.push([lo, hi]);
+          }
+          return out;
+        }, url);
+        mins.forEach((m, i) => { if (m[0] < 3 || m[1] > 252) bad.push(n + '#' + i + ' 칸 가장자리에 닿음 ' + m); });
+        // 꼬리가 없던 때는 몸·머리 털의 왼쪽 끝이 36~48px 이었다. 꼬리가 있으면 16프레임 중 절반 이상에서 그보다 왼쪽(<=34px)에 털뭉치가 나온다
+        if (mins.filter(m => m[0] <= 34).length < 8) bad.push(n + ' 꼬리가 안 보인다(왼쪽 끝 ' + mins.map(m => m[0]).join(',') + ')');
+      }
+      assert(!bad.length, bad.join(' | '));
+    } finally { await b.close(); }
   });
   console.log(`\n${pass} pass, ${fail} fail`);
   process.exit(fail ? 1 : 0);
