@@ -76,7 +76,15 @@ jobs:
           sudo apt-get install -y fonts-noto-cjk
 
       - name: Run ${{ matrix.file }}
-        run: node test/${{ matrix.file }}
+        run: |
+          set +e
+          node test/${{ matrix.file }} 2>&1 | tee test-run.log
+          RC=${PIPESTATUS[0]}
+          if [ "$RC" != "0" ]; then
+            # 실패한 항목을 주석(annotation)으로도 남긴다 — 로그 전체를 못 내려받는 환경에서도 원인을 읽을 수 있게
+            grep -E -A2 "FAIL|Error|통과 / [1-9]" test-run.log | head -12 | while IFS= read -r l; do echo "::error::${l:0:300}"; done
+          fi
+          exit $RC
 
   build:
     needs: test
