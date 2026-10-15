@@ -60,6 +60,21 @@ public final class WidgetSim {
         if ("nest".equals(kind)) return new float[] { 1.05f, 0.55f };
         return new float[] { 1.1f, 0.42f };
     }
+    // ───────── 정해진 시간(깨어나 돌아다니는 시간) ─────────
+    /** 평소엔 모두 집에서 자고, 정해진 시간(지역 시각 기준 everyMin 분마다 정각부터 len 만큼)에만 나와서 돌아다닌다. */
+    public static final int ROAM_EVERY_MIN = 60; public static final long ROAM_LEN_MS = 120000L;
+    /** ms 가 속한 칸의 시작(지역 시각의 everyMin 배수 분 0초). everyMin 은 60 의 약수여야 한다. */
+    public static long roamPeriodStart(long ms, java.util.TimeZone tz, int everyMin) {
+        java.util.Calendar c = java.util.Calendar.getInstance(tz); c.setTimeInMillis(ms);
+        c.set(java.util.Calendar.MINUTE, c.get(java.util.Calendar.MINUTE) / everyMin * everyMin); c.set(java.util.Calendar.SECOND, 0); c.set(java.util.Calendar.MILLISECOND, 0);
+        return c.getTimeInMillis();
+    }
+    public static boolean roamNow(long ms, java.util.TimeZone tz, int everyMin, long lenMs) { return ms - roamPeriodStart(ms, tz, everyMin) < lenMs; }
+    /** ms 보다 뒤의 다음 칸 시작. */
+    public static long roamNext(long ms, java.util.TimeZone tz, int everyMin) {
+        java.util.Calendar c = java.util.Calendar.getInstance(tz); c.setTimeInMillis(roamPeriodStart(ms, tz, everyMin)); c.add(java.util.Calendar.MINUTE, everyMin);
+        return c.getTimeInMillis();
+    }
     public static boolean poops(String id) { return "dolsom".equals(id) || "ppopu".equals(id) || "lovel".equals(id); }
 
     public static final class Ch {
@@ -135,7 +150,7 @@ public final class WidgetSim {
     }
     /** 이제 멈출 것: 하던 동작을 마치고 바닥에서 가만히 선다(isSettled 가 true 가 되면 그림 갱신을 멈춰도 된다). */
     public void requestSettle() { settling = true; }
-    public void resume() { settling = false; wakeAll(); }
+    public void resume() { settling = false; wakeAll(0f); }
     // ───────── 잠자리 ─────────
     /** 잘 시간: 종류별 집이 무작위 자리에 생기고 모두 자기 집으로 걸어가 들어가 잔다. 출퇴근 중엔 자지 않는다. */
     public void bed(boolean untilTapped) {
@@ -167,17 +182,21 @@ public final class WidgetSim {
     public boolean busy() { for (Ch c : cs) if (c.st != SLEEP) return true; for (House h : houses) if (h.a < 0.999f && h.want) return true; return false; }
     /** 제시간에 못 들어간 것도 억지로 침대로 보낸다. */
     public void snapBed() {
-        for (Ch c : cs) if (c.home != null && c.st != SLEEP) { c.x = c.home.x; c.zone = 0; c.y = geo.ground; c.rot = 0; c.st = SLEEP; c.t0 = time; c.until = forever ? 1e9f : time + rnd(20f, 60f); c.alpha = hides(c.home.kind) ? 0f : 1f; }
+        for (Ch c : cs) if (c.home != null && c.st != SLEEP) { c.x = c.home.x; c.zone = 0; c.y = geo.ground; c.rot = 0; c.st = SLEEP; c.t0 = time; c.until = forever ? 1e9f : time + rnd(20f, 60f); boolean hid = hides(c.home.kind); c.alpha = hid ? 0f : 1f; c.sq = hid ? 0f : 0.22f; c.off = hid ? 0f : c.home.h * 0.12f; c.frame = 0; }
         for (House h : houses) h.a = 1f;
     }
+    /** 지금 당장 모두 집에서 자고 있는 모습으로 만든다(걸어 들어가는 장면 없이): 정해진 시간이 아닐 때 화면이 켜지면 이 모습이다. 출퇴근 중엔 안 한다. */
+    public void asleepNow() { if (mode == COMMUTE) return; bed(true); snapBed(); snapAsleep(); }
     /** 자는 모습으로 그려 둘 때(마지막 정지 그림): zzz·집을 완전히 보이게. */
     public void snapAsleep() { for (Ch c : cs) if (c.st == SLEEP) c.zz = 1f; for (House h : houses) if (h.want) h.a = 1f; }
     /** 모두 깨운다(사람이 위젯을 만졌다·화면이 켜졌다): 한 마리씩 시차를 두고 집에서 나온다. */
-    public void wakeAll() {
+    public void wakeAll() { wakeAll(0f); }
+    /** spread>0 이면 마리마다 0~spread 초 사이 무작위로 깬다(정해진 시간이 되면 제각각 일어나 나오도록). */
+    public void wakeAll(float spread) {
         forever = false; int i = 0;
         for (Ch c : cs) {
             if (c.st == BED_WALK) { c.st = REST; c.t0 = time; c.until = time + 0.2f + 0.3f * i; if (c.home != null) c.home.want = false; c.home = null; }
-            else if (c.st == ENTER || c.st == SLEEP) { startExit(c, 0.25f * i); }
+            else if (c.st == ENTER || c.st == SLEEP) { startExit(c, spread > 0f ? rnd(0f, spread) : 0.25f * i); }
             else if (c.home != null) { if (c.st == JUMP && c.nextSt == BED_WALK) c.nextSt = REST; c.home.want = false; c.home = null; }     // 자러 가려고 시계에서 뛰어내리는 중
             i++;
         }

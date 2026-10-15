@@ -26,7 +26,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
         window.Capacitor = window.Capacitor || {}; window.Capacitor.Plugins = window.Capacitor.Plugins || {};
         window.Capacitor.Plugins.GdmWidget = {
           setConfig: a => { window.__calls.setConfig.push(JSON.parse(a.json)); return Promise.resolve(); },
-          takeLaunch: () => { window.__calls.take++; const g = window.__launch; window.__launch = null; return Promise.resolve({ go: g }); },
+          takeLaunch: () => { window.__calls.take++; const g = window.__launch, tb = window.__tab; window.__launch = null; window.__tab = null; return Promise.resolve({ go: g, tab: tb }); },
           requestPin: a => { window.__calls.pin.push(a.type); return Promise.resolve({ ok: true }); },
           state: () => Promise.resolve({ count: 1, scene: '', say: '', fetched: false })
         };
@@ -91,6 +91,27 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     assert.strictEqual((await page.evaluate(() => window.__routed)).length, 0);
     const msg = await page.evaluate(() => { const e = document.getElementById('pickPop'); return e ? e.textContent : ''; });
     assert(/장소를 먼저 설정/.test(msg), '안내 없음: ' + msg); await ctx.close();
+  });
+  await t('위젯 본체를 눌러 열리면(tab=community) 커뮤니티 탭으로 가고, 한 번만 간다', async () => {
+    const { ctx, page, errs } = await fresh({ plugin: true, alarm: ALARM });
+    await page.evaluate(() => { window.__sw = []; const o = window.switchTab; window.switchTab = function (t, el) { window.__sw.push(t); return o.apply(this, arguments); }; });
+    await page.evaluate(() => { window.__tab = 'community'; window.dispatchEvent(new Event('gdmWidgetGo')); });
+    await page.waitForTimeout(900);
+    assert.deepStrictEqual(await page.evaluate(() => window.__sw), ['community']);
+    const shown = await page.evaluate(() => { const e = document.getElementById('tab-community'); const cs = getComputedStyle(e); return cs.display !== 'none' && cs.visibility !== 'hidden' && e.offsetParent !== null; });
+    assert(shown, '커뮤니티 탭이 안 보임');
+    await page.evaluate(() => { window.dispatchEvent(new Event('gdmWidgetGo')); });
+    await page.waitForTimeout(600);
+    assert.strictEqual((await page.evaluate(() => window.__sw)).length, 1, '두 번 이동함');
+    assert(!errs.length, errs.join('|')); await ctx.close();
+  });
+  await t('앱이 막 켜지는 중(탭 막대가 아직 없음)에 열려도 준비되면 커뮤니티 탭으로 간다', async () => {
+    const { ctx, page } = await fresh({ plugin: true, alarm: ALARM, wait: 300 });
+    await page.evaluate(() => { window.__tab = 'community'; });
+    await page.evaluate(() => { const ni = document.getElementById('ni-community'); window.__ni = ni; ni.removeAttribute('id'); window.dispatchEvent(new Event('gdmWidgetGo')); setTimeout(function () { window.__ni.id = 'ni-community'; }, 1200); });
+    await page.evaluate(() => { window.__sw = []; const o = window.switchTab; window.switchTab = function (t) { window.__sw.push(t); return o.apply(this, arguments); }; });
+    await page.waitForTimeout(3200);
+    assert.deepStrictEqual(await page.evaluate(() => window.__sw), ['community']); await ctx.close();
   });
   await t('위젯 추가 버튼 4종이 종류를 넘기고 안내를 띄운다', async () => {
     const { ctx, page } = await fresh({ plugin: true, alarm: ALARM });

@@ -206,6 +206,42 @@ public class WidgetJvmTest {
             ok(all && sl.houses.isEmpty(), "잠자리: 자는 중에 출퇴근이 시작되면 깨어나 줄을 서고 집은 사라진다");
             gc.setCommute(false);
         }
+        // 정해진 시간: 매시 정각부터 2분만 돌아다닌다(어느 시간대에서도, 반시간 단위 시간대·서머타임 포함)
+        {
+            String[] zones = { "Asia/Seoul", "Asia/Kolkata", "America/New_York", "Australia/Lord_Howe", "UTC" };
+            boolean okAll = true; String why = "";
+            for (String zn : zones) {
+                java.util.TimeZone tz = java.util.TimeZone.getTimeZone(zn);
+                java.util.Calendar c = java.util.Calendar.getInstance(tz); c.clear(); c.set(2026, java.util.Calendar.MARCH, 8, 10, 0, 0);
+                long h10 = c.getTimeInMillis();
+                boolean a1 = WidgetSim.roamNow(h10, tz, 60, 120000L), a2 = WidgetSim.roamNow(h10 + 119999L, tz, 60, 120000L), a3 = !WidgetSim.roamNow(h10 + 120000L, tz, 60, 120000L), a4 = !WidgetSim.roamNow(h10 + 59 * 60000L + 59000L, tz, 60, 120000L), a5 = !WidgetSim.roamNow(h10 - 1000L, tz, 60, 120000L);
+                java.util.Calendar n = java.util.Calendar.getInstance(tz); n.setTimeInMillis(WidgetSim.roamNext(h10 + 30 * 60000L, tz, 60));
+                boolean a6 = n.get(java.util.Calendar.MINUTE) == 0 && n.get(java.util.Calendar.SECOND) == 0 && n.get(java.util.Calendar.HOUR_OF_DAY) == 11;
+                n.setTimeInMillis(WidgetSim.roamNext(h10, tz, 60)); boolean a7 = n.get(java.util.Calendar.HOUR_OF_DAY) == 11 && n.get(java.util.Calendar.MINUTE) == 0;
+                java.util.Calendar s30 = java.util.Calendar.getInstance(tz); s30.setTimeInMillis(WidgetSim.roamPeriodStart(h10 + 41 * 60000L, tz, 30)); boolean a8 = s30.get(java.util.Calendar.MINUTE) == 30 && s30.get(java.util.Calendar.HOUR_OF_DAY) == 10;
+                if (!(a1 && a2 && a3 && a4 && a5 && a6 && a7 && a8)) { okAll = false; why += zn + ":" + a1 + a2 + a3 + a4 + a5 + a6 + a7 + a8 + " "; }
+            }
+            ok(okAll, "정해진 시간: 매시 정각부터 2분만 돌아다닌다(서울·인도·뉴욕·로드하우·UTC) " + why);
+        }
+        // 정해진 시간이 아닐 때: 화면을 켜면 곧장 모두 집에서 자고 있다(걸어 들어가는 장면 없이), 마리마다 무작위로 깨어 나온다
+        for (int sz = 0; sz < 2; sz++) {
+            WidgetGeo gs = sz == 0 ? WidgetGeo.of(false, 230f, 90f) : WidgetGeo.of(true, 170f, 210f); String tag3 = sz == 0 ? "가로" : "세로";
+            boolean asleep = true, sqOk = true, wakeOk = true, upOk = true; java.util.Set<Integer> delays = new java.util.HashSet<Integer>();
+            for (int trial = 0; trial < 40; trial++) {
+                WidgetSim sl = new WidgetSim(gs, 900 + trial, WidgetSim.pickSet(77 + trial, null));
+                sl.asleepNow();
+                if (!sl.allInBed() || sl.houses.size() != 3) asleep = false;
+                for (WidgetSim.House h : sl.houses) if (h.a != 1f) asleep = false;
+                for (WidgetSim.Ch c : sl.cs) { boolean hid = WidgetSim.hides(c.home.kind); if (c.zz != 1f || (hid ? c.alpha != 0f : (c.alpha != 1f || c.sq < 0.2f || c.off <= 0f))) sqOk = false; }
+                sl.wakeAll(20f);
+                float[] first = new float[sl.cs.size()]; java.util.Arrays.fill(first, -1f); float t = 0f;
+                while (t < 40f && !sl.allUp()) { sl.step(0.1f); t += 0.1f; for (int k = 0; k < first.length; k++) if (first[k] < 0f && sl.cs.get(k).st == WidgetSim.REST) first[k] = t; }
+                if (!sl.allUp()) upOk = false;
+                for (float f : first) { if (f < 0f || f > 22f) wakeOk = false; delays.add(Math.round(f)); }
+            }
+            ok(asleep && sqOk, tag3 + ": 정해진 시간이 아닐 때 화면을 켜면 곧장 모두 집에서 자고 있다(zzz 진하게, 안 보이는 건 안 보임)");
+            ok(wakeOk && upOk && delays.size() >= 12, tag3 + ": 정해진 시간이 되면 마리마다 0~20초 사이 무작위로 깨어 나오고 집이 사라진다(깨는 시각 " + delays.size() + "가지)");
+        }
         // 화면을 켤 때마다 캐릭터 셋이 바뀐다: 매번 직전과 다른 구성, 서로 다른 3마리, 6마리 모두 골고루 등장
         { String[] cur = WidgetSim.pickSet(1, null); boolean always = true, distinct = true; java.util.Set<String> seenIds = new java.util.HashSet<String>();
           for (int i = 0; i < 300; i++) { String[] nx = WidgetSim.pickSet(1000 + i * 31L, cur); if (WidgetSim.sameSet(nx, cur)) always = false; if (nx.length != 3 || nx[0].equals(nx[1]) || nx[0].equals(nx[2]) || nx[1].equals(nx[2])) distinct = false; for (String x : nx) seenIds.add(x); cur = nx; }

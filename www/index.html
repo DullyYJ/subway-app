@@ -24121,10 +24121,18 @@ function _gwGo(kind, tries){
   _cmRouteFromBriefing();
 }
 window._gwGo = _gwGo;
+// 위젯 본체를 누르면 앱이 열리며 그 탭으로 간다(지금은 커뮤니티). 앱이 막 켜졌으면 탭 막대가 준비될 때까지 잠깐 기다린다.
+function _gwOpenTab(tab, tries){
+  if(tab !== 'community') return;
+  var el = document.getElementById('ni-' + tab);
+  if(typeof switchTab === 'function' && el){ try{ switchTab(tab, el); }catch(e){} return; }
+  if((tries||0) < 12) setTimeout(function(){ _gwOpenTab(tab, (tries||0) + 1); }, 500);
+}
+window._gwOpenTab = _gwOpenTab;
 function _gwCheckLaunch(){
   try{
     var P = _gwPlug(); if(!P || !P.takeLaunch) return;
-    P.takeLaunch().then(function(o){ if(o && o.go) _gwGo(o.go, 0); }).catch(function(){});
+    P.takeLaunch().then(function(o){ if(o && o.go) _gwGo(o.go, 0); if(o && o.tab) _gwOpenTab(o.tab, 0); }).catch(function(){});
   }catch(e){}
 }
 window.addEventListener('gdmWidgetGo', _gwCheckLaunch);
