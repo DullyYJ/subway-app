@@ -210,7 +210,7 @@ jobs:
               "    }",
               "",
               "    @Override",
-              "    protected void onStop() {",
+              "    public void onStop() {",
               "        super.onStop();",
               "        WidgetCore.onAppLeft(this);",
               "    }",
