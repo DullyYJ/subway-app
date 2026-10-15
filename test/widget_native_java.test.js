@@ -58,6 +58,11 @@ print('BAD', bad); print('MISS', miss)
 `;
     const o = execFileSync('python3', ['-I', '-c', py, res], { encoding: 'utf8' });
     assert(/BAD \[\]/.test(o) && /MISS \[\]/.test(o), o);
+    // 진짜 빌드(aapt)에서만 드러나던 오타 — 속성 이름을 알려진 목록과 대조한다
+    const OK = new Set('layout_width layout_height id textSize textColor singleLine layout_gravity background includeFontPadding format24Hour format12Hour textStyle gravity color shape radius fontFamily widgetCategory visibility updatePeriodMillis targetCellWidth targetCellHeight scaleType resizeMode paddingRight paddingLeft padding orientation minWidth minResizeWidth minResizeHeight minHeight layout_weight layout_marginBottom layout_marginTop layout_marginLeft layout_marginRight initialLayout description contentDescription width previewImage previewLayout configure label'.split(' '));
+    const bad = [];
+    for (const f of walk(res, '.xml')) for (const m of fs.readFileSync(f, 'utf8').matchAll(/android:([A-Za-z0-9_]+)=/g)) if (!OK.has(m[1])) bad.push(path.basename(f) + ':' + m[1]);
+    assert(!bad.length, '알 수 없는 속성(오타?): ' + bad.join(', '));
     for (const n of ['hb', 'hw', 'vb', 'vw']) assert(fs.existsSync(path.join(res, 'xml', 'gdm_widget_' + n + '.xml')), n + ' 위젯 정의 없음');
   });
   await t('CI 워크플로가 위젯 파일·리소스를 복사하고 MainActivity·매니페스트에 연결한다', async () => {
