@@ -30,7 +30,7 @@ const walk = (d, ext, acc = []) => { for (const f of fs.readdirSync(d, { withFil
   await t('안드로이드 부분 스텁 컴파일(WidgetCore·GdmWidget*·플러그인)', async () => {
     const stubs = walk(path.join(__dirname, 'android-stubs'), '.java');
     assert(stubs.length > 20, '스텁이 너무 적다: ' + stubs.length);
-    const srcs = fs.readdirSync(path.join(ROOT, 'native')).filter(f => /^(Widget|GdmWidget).*\.java$/.test(f)).map(f => path.join(ROOT, 'native', f));
+    const srcs = fs.readdirSync(path.join(ROOT, 'native')).filter(f => /^(Widget|GdmWidget|GdmShare).*\.java$/.test(f)).map(f => path.join(ROOT, 'native', f));
     execFileSync('javac', ['-encoding', 'UTF-8', '-d', cls2].concat(stubs, srcs), { env: ENV, stdio: 'pipe' });
   });
   await t('리소스 XML 이 올바르다 + 이름 연결(레이아웃 id·위젯 정의·배경·문구)', async () => {
@@ -82,6 +82,7 @@ print('BAD', bad); print('MISS', miss)
     }
     assert(y.includes('native/res'), '리소스 복사 누락');
     assert(y.includes('registerPlugin(GdmWidgetPlugin.class)'), 'GdmWidgetPlugin 등록 누락');
+    assert(y.includes('native/GdmSharePlugin.java') && y.includes('registerPlugin(GdmSharePlugin.class)') && fs.existsSync(N('GdmSharePlugin')) && fs.existsSync(path.join(ROOT, 'native', 'res', 'xml', 'gdm_share_paths.xml')), '위치 공유 플러그인 복사·등록·경로 정의 누락');
     assert(y.includes('WidgetCore.captureLaunch(getIntent())') && y.includes('onNewIntent'), '위젯에서 앱 열림 처리 누락');
     for (const c of ['GdmWidgetHB', 'GdmWidgetHW', 'GdmWidgetVB', 'GdmWidgetVW', 'GdmWidgetReceiver']) assert(y.includes('".' + c + '"') || y.includes("prov(\"" + c + "\""), c + ' 매니페스트 누락');
     assert(y.includes('public void onStop()') && y.includes('WidgetCore.onAppLeft(this)'), '앱을 닫을 때(onStop) 위젯을 깨우는 연결 누락');
@@ -96,6 +97,7 @@ print('BAD', bad); print('MISS', miss)
     const o = execFileSync('python3', ['-I', '-c', py], { encoding: 'utf8' });
     for (const c of ['.GdmWidgetHB', '.GdmWidgetHW', '.GdmWidgetVB', '.GdmWidgetVW', '.GdmWidgetReceiver']) assert(o.includes('android:name="' + c + '"'), c);
     assert((o.match(/@xml\/gdm_widget_/g) || []).length === 4);
+    assert(o.includes('androidx.core.content.FileProvider') && o.includes('${applicationId}.gdmshare') && o.includes('@xml/gdm_share_paths') && o.includes('android:grantUriPermissions="true"') && o.includes('android:exported="false"'), '위치 공유 FileProvider 가 매니페스트에 안 들어갔다');
     assert(o.includes('android:exported="true"') && o.includes('BOOT_COMPLETED'));
     execFileSync('python3', ['-I', '-c', 'import sys;from xml.dom import minidom;minidom.parseString(sys.stdin.read().encode())'], { input: o });
   });

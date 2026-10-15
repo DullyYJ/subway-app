@@ -3,4 +3,5 @@ package android.content;
 public abstract class Context { public static final int MODE_PRIVATE = 0; public static final String ALARM_SERVICE = "alarm", POWER_SERVICE = "power";
   public abstract Context getApplicationContext(); public abstract SharedPreferences getSharedPreferences(String n, int m); public abstract Object getSystemService(String n);
   public abstract android.content.res.Resources getResources(); public abstract String getPackageName(); public abstract android.content.pm.PackageManager getPackageManager(); public abstract android.content.res.AssetManager getAssets();
+  public abstract java.io.File getCacheDir(); public abstract void startActivity(Intent i);
   public abstract Intent registerReceiver(BroadcastReceiver r, IntentFilter f); }

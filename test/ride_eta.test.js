@@ -59,7 +59,7 @@ t('pos.segs — 앞으로의 구간 목록을 함께 준다(응답이 끊겨도 
 });
 // ★ 2026-10-14 (YJ: 인천1호선 시험 — 도착 표시가 15초쯤 늦다 → 중간역은 일찍 도착으로 → 10초였다가 2026-10-15 YJ 요청으로 5초): arriveEarlySec
 t('arriveEarlySec — 중간 경로역은 표시 도착 시각보다 5초 일찍 닿은 것으로 본다(승차역·최종 목적지는 그대로, 표시 시각 arr·etaMs 도 그대로)', () => {
-  const nodes = scene(), ps = [{ idx: 1, ms: at(17, 35), src: 'board' }];
+  const nodes = scene(), ps = [{ idx: 1, ms: at(17, 35), src: 'gps' }];
   const q = (nowMs, o) => rideEta(Object.assign({ nowMs, nodes, passes: ps, boarded: true, timetableFirst: true }, o || {}));
   const E = q(at(17, 36)).etaMs, E2 = E[2], E3 = E[3];                          // 동막(idx2) · 동춘(idx3) 표시 도착 시각(엔진이 정한 값)
   assert.strictEqual(q(E2 - 7000).pos.from, 1, '동막 도착 7초 전 — 아직 앞 역 쪽');
@@ -81,6 +81,28 @@ t('arriveEarlySec — 중간 경로역은 표시 도착 시각보다 5초 일찍
   assert.strictEqual(last.to, nLast); assert.strictEqual(last.t1, E[nLast]);
   // 마지막 구간 직전 역은 5초 일찍
   assert.strictEqual(last.a, E[nLast - 1] - 5000);
+});
+// ★ 2026-10-15 (YJ: "경유역 도착하며 영점을 맞추고, 도착시간을 초 단위로 다시 맞춘 뒤 이후 마커 도착 표시를 5초 당기자"): 당김은 GPS 영점이 잡힌 뒤, 영점 역보다 뒤의 중간역에만
+t('arriveEarlySec — GPS 영점이 없으면 당기지 않고(시각표 그대로), 영점이 잡히면 그 역보다 뒤 중간역만 영점으로 맞춘 시각에서 5초 당긴다', () => {
+  const nodes = scene(), mk = (ps, nowMs, o) => rideEta(Object.assign({ nowMs, nodes, passes: ps, boarded: true, timetableFirst: true }, o || {}));
+  const board = [{ idx: 1, ms: at(17, 35), src: 'board' }];
+  const E = mk(board, at(17, 36)).etaMs;
+  // 영점 없음(승차 기록뿐) → 도착 시각 4초 전이어도 아직 앞 역(예전엔 5초 일찍 닿은 것으로 봤다)
+  assert.strictEqual(mk(board, E[2] - 4000).pos.from, 1, '영점 전엔 당기지 않는다');
+  assert.strictEqual(mk(board, E[2] + 1000).pos.from, 2);
+  // 약한 증거(move·pf)만 있어도 영점이 아니다
+  assert.strictEqual(mk(board.concat([{ idx: 1, ms: at(17, 35), src: 'pf' }]), E[2] - 4000).pos.from, 1);
+  // 동막(idx2)에서 GPS 영점이 잡히면: 동막은 통과한 역(바닥)이고, 뒤 동춘(idx3)은 영점으로 맞춘 도착 시각 5초 전에 닿은 것으로 본다
+  const zp = board.concat([{ idx: 2, ms: E[2] + 8000, src: 'gps' }]);          // 동막을 8초 늦게 통과
+  const r = mk(zp, E[2] + 20000), E3z = r.etaMs[3];
+  assert.ok(E3z > E[3] && E3z - E[3] <= 9000, '영점이 뒤 도착 시각을 늦게 통과한 만큼(8초 안쪽) 민다: ' + (E3z - E[3]));
+  assert.strictEqual(mk(zp, E3z - 6000).pos.from, 2, '영점으로 맞춘 동춘 도착 6초 전 — 아직 동막');
+  assert.strictEqual(mk(zp, E3z - 4000).pos.from, 3, '4초 전이면 동춘에 닿았다(영점 뒤라 5초 일찍)');
+  // 영점이 있어도 영점 역 자신의 시각은 당기지 않는다(그 역은 실제 통과 시각이 기준)
+  assert.strictEqual(r.pos.segs[0].a, r.etaMs[2], '영점 역은 당기지 않는다');
+  assert.strictEqual(r.pos.segs[1].a, r.etaMs[3] - 5000, '영점 뒤 역은 5초 당긴다');
+  // 옛 방식으로 되돌리는 스위치
+  assert.strictEqual(mk(board, E[2] - 4000, { opts: { arriveEarlyAfterZero: false } }).pos.from, 2);
 });
 t('pos.segs — 남은 구간 전부를 준다(14구간으로 끊기지 않는다: 26분 뒤 마커가 굳은 실기기 사고)', () => {
   const nodes = [{ name: '출발', isOrigin: true, planMin: BM - 5 }];

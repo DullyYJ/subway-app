@@ -23,6 +23,7 @@ jobs:
           - metro_native_java.test.js
           - widget_native_java.test.js
           - widget_app.ui.test.js
+          - share_loc.ui.test.js
           - metro_native_js.ui.test.js
           - bus_poll_gap.test.js
           - cell_hop_lead.ui.test.js
@@ -170,7 +171,9 @@ jobs:
                       # 2026-10-15: 캐릭터 시계 위젯(가로·세로 × 블랙·화이트)
                       "native/WidgetGeo.java", "native/WidgetSim.java", "native/WidgetArt.java", "native/WidgetCore.java",
                       "native/GdmWidgetBase.java", "native/GdmWidgetHB.java", "native/GdmWidgetHW.java", "native/GdmWidgetVB.java", "native/GdmWidgetVW.java",
-                      "native/GdmWidgetReceiver.java", "native/GdmWidgetPlugin.java"]:
+                      "native/GdmWidgetReceiver.java", "native/GdmWidgetPlugin.java",
+                      # 2026-10-15: 내 위치·도착 예정 공유(카카오톡)
+                      "native/GdmSharePlugin.java"]:
               if not os.path.exists(src):
                   raise SystemExit(src + " 가 없습니다 — 저장소에 올렸는지 확인하세요")
               shutil.copy(src, os.path.join(PKGDIR, os.path.basename(src)))
@@ -205,6 +208,7 @@ jobs:
               "        registerPlugin(MotionPlugin.class);",
               "        registerPlugin(NativeMapPlugin.class);",
               "        registerPlugin(GdmWidgetPlugin.class);",
+              "        registerPlugin(GdmSharePlugin.class);",
               "        super.onCreate(savedInstanceState);",
               "        WidgetCore.captureLaunch(getIntent());",
               "    }",
@@ -414,6 +418,13 @@ jobs:
                        '            </intent-filter>\n'
                        '        </receiver>\n')
               s = s.replace("</application>", blk + "    </application>", 1)
+
+          # 2026-10-15: 내 위치 공유 그림을 카카오톡 등에 읽기로 넘기는 FileProvider(앱 캐시 cache/gdmshare 만)
+          if "gdmshare" not in s:
+              s = s.replace("</application>",
+                  '        <provider android:name="androidx.core.content.FileProvider" android:authorities="${applicationId}.gdmshare" android:exported="false" android:grantUriPermissions="true">\n'
+                  '            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/gdm_share_paths" />\n'
+                  '        </provider>\n    </application>', 1)
 
           open(M, "w", encoding="utf-8").write(s)
           print("매니페스트 패치 완료")

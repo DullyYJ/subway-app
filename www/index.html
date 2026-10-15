@@ -19041,7 +19041,7 @@ window.addEventListener('unhandledrejection', function(e) {
 
   <!-- 3순위: 집단지성 혼잡 분석 -->
   <div>
-    <div class="sec" style="justify-content:flex-start;gap:8px;">혼잡도 분석<span id="congLiveDot" class="ldot-live" style="display:none;margin-right:0;"></span><span id="congBadge" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;color:#fff;background:var(--arex);">-</span></div>
+    <div class="sec" style="justify-content:flex-start;gap:8px;">혼잡도 분석<span id="congLiveDot" class="ldot-live" style="display:none;margin-right:0;"></span><span id="congBadge" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;color:#fff;background:var(--arex);">-</span><button id="shareLocBtn" onclick="_shareLoc()" style="margin-left:auto;flex-shrink:0;cursor:pointer;font-family:inherit;font-size:11px;font-weight:700;color:var(--gold);background:transparent;border:1px solid var(--gold);border-radius:12px;padding:3px 10px;white-space:nowrap;letter-spacing:0;">📍 위치 공유</button></div>
     <div class="cong-card" id="congCard" style="border-left-color:var(--arex);">
       <div class="cong-top">
         <div>
@@ -24078,6 +24078,122 @@ function _cmRouteFor(isMorn){
   }catch(e){ return null; }
 }
 window._cmRouteFor = _cmRouteFor;
+
+// ══════════ 📍 내 위치·도착 예정 공유 (2026-10-15) ══════════
+//   YJ: "친구들에게 카톡으로 내 위치와 도착시간을 알려주고 싶어 — 출발지-현위치-도착지 (도착예정시간) [남은시간] + 타임라인을 압축해서"
+//   앱은 화면에 이미 있는 값(현재 위치 역·도착 예정·남은 시간)을 모아 '글'과 '그림'으로 꾸미기만 한다(새 계산 없음 — 위치는 마커와 같은 _pipHereIdx/_estimateTimelinePos,
+//   도착·남은 시간은 화면 헤더와 같은 _journeyEta). 보내는 건 안드로이드 공유(GdmShare 플러그인) — 카카오톡이 있으면 대화 고르기를 바로 열고, 누구에게 보낼지는 사용자가 고른다.
+function _shPad2(n){ return (n < 10 ? '0' : '') + n; }
+function _shHM(ms){ var d = new Date(ms); return _shPad2(d.getHours()) + '시' + _shPad2(d.getMinutes()) + '분'; }
+function _shDur(min){ min = Math.max(0, Math.round(min)); return _shPad2(Math.floor(min / 60)) + '시' + _shPad2(min % 60) + '분'; }
+// 지금 공유할 내용을 모은다. 경로가 확정돼 있지 않으면 { ok:false }.
+function _shLoc(){
+  var out = { ok: false };
+  try{
+    if(typeof _transitNodeData === 'undefined' || !_transitNodeData || !_transitNodeData.length) return out;
+    if(window._routeLocked !== true || window._metroRouteMode === true) return out;
+    var here = (typeof _pipHereIdx === 'function') ? _pipHereIdx() : (window._gpsMaxIdx || 0);
+    var st = [], hit = -1, i, nd, nm, map = {};      // map: 노드 번호 → 역 목록 안의 자리
+    for(i = 0; i < _transitNodeData.length; i++){
+      nd = _transitNodeData[i]; nm = String((nd && nd.name) || '');
+      if(!nm || (nd && (nd.isWalk || nd.isOrigin)) || /^(도보|환승|이동|내 위치|현위치)$/.test(nm)){ map[i] = st.length - 1; continue; }
+      if(st.length && st[st.length - 1].name === nm){ map[i] = st.length - 1; if(i <= here) hit = st.length - 1; continue; }     // 같은 자리 환승은 한 번만
+      if(i <= here) hit = st.length;
+      map[i] = st.length;
+      st.push({ name: nm, time: String((nd && nd.arrTime) || '') });
+    }
+    if(!st.length) return out;
+    if(hit < 0) hit = 0;
+    var ep = null; try{ ep = (typeof _journeyEta === 'function') ? _journeyEta() : ((typeof _etaPair === 'function') ? _etaPair() : null); }catch(e1){}
+    if(!ep || ep.arrMs == null || ep.rem == null || !(ep.rem >= 0)) return out;
+    var fromN = window._journeyFromFixed || (typeof _transitResultStart !== 'undefined' && _transitResultStart && _transitResultStart.name) || st[0].name;
+    var toN = (typeof _transitResultDest !== 'undefined' && _transitResultDest && _transitResultDest.name) || st[st.length - 1].name;
+    var moving = false, curName = st[hit].name, nextName = (hit < st.length - 1) ? st[hit + 1].name : '';
+    try{
+      var tp = (typeof _estimateTimelinePos === 'function') ? _estimateTimelinePos() : null;
+      if(tp && tp.toIdx != null && tp.fromIdx != null && tp.toIdx !== tp.fromIdx && tp.ratio > 0.02 && nextName && map[tp.fromIdx] === hit) moving = true;   // 두 역 사이를 가는 중
+    }catch(e2){}
+    var notDep = false; try{ notDep = (typeof _htlNotDeparted === 'function') && _htlNotDeparted(); }catch(e3){}
+    var cur = moving ? (curName + '→' + nextName + ' 이동 중') : (notDep ? (curName + ' 승차 대기') : curName);
+    return { ok: true, from: String(fromN), cur: cur, to: String(toN), arrMs: ep.arrMs, rem: ep.rem, stations: st, hit: hit, moving: moving };
+  }catch(e){ return out; }
+}
+function _shText(d){
+  return d.from + ' - ' + d.cur + ' - ' + d.to + ' (도착예정시간: ' + _shHM(d.arrMs) + ')\n[남은시간: ' + _shDur(d.rem) + ']';
+}
+// 타임라인을 압축한 그림: 출발역 · 지금 역 앞뒤 · 도착역만 남기고 사이는 …(역 수)로 줄인다. 색은 지금 테마를 따른다.
+function _shPng(d){
+  var cs = getComputedStyle(document.documentElement), v = function(n, f){ var x = (cs.getPropertyValue(n) || '').trim(); return x || f; };
+  var C = { card: v('--card', '#1c1c1e'), text: v('--text', '#f2f2f7'), sub: v('--sub', '#8e8e93'), border: v('--border', '#2c2c2e'), acc: v('--arex', '#0090d2'), cur: v('--blue', '#0a84ff'), gold: v('--gold', '#d4af37') };
+  var font = (getComputedStyle(document.body).fontFamily || 'sans-serif');
+  var W = 360, S = 2, st = d.stations, n = st.length, h = d.hit;
+  var want = {}; want[0] = 1; want[n - 1] = 1; if(h - 1 >= 0) want[h - 1] = 1; want[h] = 1; if(h + 1 < n) want[h + 1] = 1;
+  var idx = Object.keys(want).map(Number).sort(function(a, b){ return a - b; });
+  var slots = [], k;
+  for(k = 0; k < idx.length; k++){
+    if(k > 0 && idx[k] - idx[k - 1] > 1) slots.push({ gap: idx[k] - idx[k - 1] - 1 });
+    slots.push({ i: idx[k] });
+  }
+  var H = 214, cv = document.createElement('canvas'); cv.width = W * S; cv.height = H * S;
+  var g = cv.getContext('2d'); g.scale(S, S);
+  function rr(x, y, w, hh, r){ g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + hh, r); g.arcTo(x + w, y + hh, x, y + hh, r); g.arcTo(x, y + hh, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
+  function fit(t, maxW, px, wt){ g.font = (wt || 600) + ' ' + px + 'px ' + font; var s = String(t); if(g.measureText(s).width <= maxW) return s; while(s.length > 1 && g.measureText(s + '…').width > maxW) s = s.slice(0, -1); return s + '…'; }
+  g.fillStyle = C.card; rr(0, 0, W, H, 18); g.fill();
+  g.strokeStyle = C.border; g.lineWidth = 1; rr(0.5, 0.5, W - 1, H - 1, 18); g.stroke();
+  g.textBaseline = 'alphabetic'; g.textAlign = 'left';
+  g.fillStyle = C.sub; g.font = '600 11px ' + font; g.fillText('길동무 · 내 위치', 18, 26);
+  g.fillStyle = C.text; var _ln = fit(d.from + ' - ' + d.cur + ' - ' + d.to, W - 36, 14, 800); g.fillText(_ln, 18, 48);
+  g.fillStyle = C.sub; g.font = '600 12px ' + font; g.fillText('도착예정시간: ' + _shHM(d.arrMs), 18, 68);
+  g.fillStyle = C.acc; g.font = '900 26px ' + font; g.fillText('남은시간 ' + _shDur(d.rem), 18, 100);
+  // 압축 타임라인
+  var x0 = 18, x1 = W - 18, ly = 138, ns = slots.length, step = ns > 1 ? (x1 - x0 - 40) / (ns - 1) : 0, xs = [];
+  for(k = 0; k < ns; k++) xs.push(ns > 1 ? x0 + 20 + step * k : (x0 + x1) / 2);
+  g.strokeStyle = C.acc; g.globalAlpha = 0.55; g.lineWidth = 3; g.lineCap = 'round'; g.beginPath(); g.moveTo(x0, ly); g.lineTo(x1, ly); g.stroke(); g.globalAlpha = 1;
+  for(k = 0; k < ns; k++){
+    var s = slots[k], x = xs[k];
+    if(s.gap){
+      g.font = '700 11px ' + font; g.textAlign = 'center';
+      g.fillStyle = C.card; g.fillRect(x - 17, ly - 9, 34, 18); g.fillStyle = C.sub; g.fillText('··· ' + s.gap, x, ly + 4);
+      continue;
+    }
+    var passed = s.i < h, isCur = s.i === h, nmx = st[s.i].name, tm = st[s.i].time;
+    if(isCur){
+      g.fillStyle = C.cur; g.globalAlpha = 0.22; g.beginPath(); g.arc(x, ly, 13, 0, 7); g.fill(); g.globalAlpha = 1;
+      g.fillStyle = C.cur; g.beginPath(); g.arc(x, ly, 8, 0, 7); g.fill();
+      g.strokeStyle = C.card; g.lineWidth = 2.5; g.beginPath(); g.arc(x, ly, 8, 0, 7); g.stroke();
+    }else{
+      g.fillStyle = C.card; g.beginPath(); g.arc(x, ly, 6, 0, 7); g.fill();
+      g.strokeStyle = passed ? C.sub : C.acc; g.lineWidth = 2.5; g.globalAlpha = passed ? 0.6 : 1; g.beginPath(); g.arc(x, ly, 6, 0, 7); g.stroke(); g.globalAlpha = 1;
+    }
+    g.textAlign = 'center'; g.fillStyle = isCur ? C.cur : C.text; g.globalAlpha = passed ? 0.55 : 1;
+    var gapNb = (k > 0 && slots[k - 1].gap) || (k < ns - 1 && slots[k + 1].gap);     // 옆이 '···' 표시면 이름이 더 넓게 쓸 수 있다
+    g.fillText(fit(nmx, Math.max(40, Math.min(2 * (W - 6 - x), 2 * (x - 6), step * (gapNb ? 1.75 : 1.05))), 11, isCur ? 800 : 600), x, ly - 22);
+    g.fillStyle = C.sub; g.font = '600 10px ' + font; g.fillText(tm, x, ly + 30); g.globalAlpha = 1;
+  }
+  g.textAlign = 'left'; g.fillStyle = C.sub; g.font = '600 10px ' + font;
+  var left = Math.max(0, n - 1 - h);
+  g.fillText(d.moving ? ('다음 역 ' + st[Math.min(n - 1, h + 1)].name + ' 이동 중 · ' + left + '개 역 남음') : (left > 0 ? (left + '개 역 남음') : '도착했어요'), 18, H - 18);
+  return cv.toDataURL('image/png');
+}
+function _shPlug(){ try{ return (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.GdmShare) || null; }catch(e){ return null; } }
+window._shLoc = _shLoc; window._shText = _shText; window._shPng = _shPng;
+window._shareLoc = function(){
+  var d = _shLoc();
+  if(!d.ok){ _pickPop('경로를 먼저 탐색해 주세요', '탐색한 경로의 내 위치와 도착 예정을 친구에게 보낼 수 있어요'); return; }
+  var text = _shText(d), png = null;
+  try{ png = _shPng(d); }catch(e){}
+  var P = _shPlug();
+  var copyFallback = function(){
+    try{
+      if(navigator.share){ navigator.share({ text: text }).catch(function(){}); return; }
+      if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(text).then(function(){ _pickPop('복사했어요', '카카오톡에 붙여넣어 보내 주세요'); }, function(){ _pickPop('공유하지 못했어요', ''); }); return; }
+    }catch(e){}
+    _pickPop('공유하지 못했어요', '');
+  };
+  if(P && P.shareImage && png){
+    P.shareImage({ png: png, text: text, pkg: 'com.kakao.talk' }).catch(function(){ copyFallback(); });
+  }else copyFallback();
+};
 
 // ══════════ 🕒 캐릭터 시계 위젯 (2026-10-15) ══════════
 //   앱은 '설정값 전달'과 '위젯 버튼으로 열렸을 때 길찾기 시작'만 한다. 시각 비교·움직임·그림은 네이티브 위젯이,
