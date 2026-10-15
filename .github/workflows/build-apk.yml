@@ -472,7 +472,16 @@ jobs:
         run: chmod +x android/gradlew
 
       - name: Build Debug APK
-        run: cd android && ./gradlew assembleDebug
+        run: |
+          cd android
+          set +e
+          ./gradlew assembleDebug 2>&1 | tee ../gradle-build.log
+          RC=${PIPESTATUS[0]}
+          if [ "$RC" != "0" ]; then
+            # 실패 원인을 주석(annotation)으로도 남긴다 — 로그 전체를 못 내려받는 환경에서도 읽을 수 있게
+            grep -E "error:|error: |FAILED|What went wrong|Execution failed|cannot find symbol|symbol:|location:" ../gradle-build.log | head -40 | while IFS= read -r l; do echo "::error::${l:0:400}"; done
+          fi
+          exit $RC
 
       - name: List APK output (디버그)
         if: always()
