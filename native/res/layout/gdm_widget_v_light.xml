@@ -80,13 +80,10 @@
 
         <TextView
             android:id="@+id/gw_btn"
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_gravity="center_horizontal"
             android:background="@drawable/gdm_btn_light"
             android:gravity="center"
-            android:paddingLeft="24dp"
-            android:paddingRight="24dp"
             android:singleLine="true"
             android:textColor="#111114"
             android:textSize="14dp"

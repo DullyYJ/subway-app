@@ -70,6 +70,7 @@ public class WidgetJvmTest {
             WidgetGeo g4 = WidgetGeo.of(v, sz[0], sz[1]); g4.setCommute(true, 4);
             ok(g4.bubH > g1.bubH && g4.textDp <= g1.textDp + 0.01f && g4.btnT + g4.btnH <= g4.H && g4.bubT >= 0, tag + ": 말풍선 줄 수가 늘면 상자가 커지고 위젯 밖으로 안 나간다(" + g1.bubH + "→" + g4.bubH + ")");
             ok(gc.bubL >= 0 && gc.bubL + gc.bubW <= gc.W + 0.01f && gc.btnL >= 0 && gc.btnL + gc.btnW <= gc.W + 0.01f && gc.btnT + gc.btnH <= gc.H && gc.bubT + gc.bubH <= gc.btnT + 0.01f, tag + ": (출퇴근) 말풍선·버튼이 위젯 안에서 겹치지 않음");
+            ok(Math.abs(gc.btnW - gc.bubW) < 0.01f && Math.abs(gc.btnL - gc.bubL) < 0.01f, tag + ": (출퇴근) 버튼 폭이 말풍선 폭과 같다(" + gc.btnW + " vs " + gc.bubW + ")");
             ok(gc.bubH >= gc.bubLines * gc.bubTs && gc.bubW >= 60f, tag + ": (출퇴근) 말풍선이 글을 담을 만큼 크다(" + gc.bubW + "x" + gc.bubH + ")");
             ok(gc.clkT + gc.clkH <= gc.H, tag + ": (출퇴근) 줄어든 시계도 위젯 안");
             if (v) ok(gc.bubT >= gc.clkB() + gc.charH * 0.25f, tag + ": 말풍선이 줄 선 캐릭터 아래");

@@ -136,7 +136,7 @@ public final class WidgetGeo {
             dateL = stageL; dateSp = 11f; dateT = 3f;
             float rl = stageL + stageW + 12f, rr = W - 8f;
             bubL = rl; bubW = Math.max(60f, rr - rl);
-            btnW = Math.min(bubW, 128f); btnL = bubL + (bubW - btnW) / 2f;
+            btnW = bubW; btnL = bubL;                                  // 버튼 폭 = 말풍선 폭
             btnT = H - btnH - (commute ? 6f : MARGIN_B);
             bubH = commute ? bubbleHeight() : 26f;
             bubT = Math.max(2f, btnT - GAP - bubH);

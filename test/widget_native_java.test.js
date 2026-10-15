@@ -61,6 +61,12 @@ print('BAD', bad); print('MISS', miss)
 `;
     const o = execFileSync('python3', ['-I', '-c', py, res], { encoding: 'utf8' });
     assert(/BAD \[\]/.test(o) && /MISS \[\]/.test(o), o);
+    // 출퇴근 버튼 폭 = 말풍선 폭(둘 다 match_parent, 같은 좌우 여백 안)
+    for (const f of fs.readdirSync(path.join(res, 'layout')).filter(x => /^gdm_widget_/.test(x))) {
+      const x = fs.readFileSync(path.join(res, 'layout', f), 'utf8');
+      const blk = id => { const i = x.indexOf('android:id="@+id/' + id + '"'); return x.slice(i, x.indexOf('/>', i)); };
+      assert(/layout_width="match_parent"/.test(blk('gw_btn')) && /layout_width="match_parent"/.test(blk('gw_bubble')), f + ': 버튼·말풍선 폭이 둘 다 match_parent 여야 같다');
+    }
     // 진짜 빌드(aapt)에서만 드러나던 오타 — 속성 이름을 알려진 목록과 대조한다
     const OK = new Set('layout_width layout_height id textSize textColor singleLine layout_gravity background includeFontPadding format24Hour format12Hour textStyle gravity color shape radius fontFamily widgetCategory visibility updatePeriodMillis targetCellWidth targetCellHeight scaleType resizeMode paddingRight paddingLeft padding orientation minWidth minResizeWidth minResizeHeight minHeight layout_weight layout_marginBottom layout_marginTop layout_marginLeft layout_marginRight initialLayout description contentDescription width previewImage previewLayout configure label shadowColor shadowDx shadowDy shadowRadius'.split(' '));
     const bad = [];

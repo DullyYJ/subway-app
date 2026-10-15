@@ -454,8 +454,8 @@ public final class WidgetCore {
             rv.setTextViewText(bub, sayText(s));
             rv.setTextViewTextSize(bub, TypedValue.COMPLEX_UNIT_DIP, g.bubTs);            // 시계 > 말풍선 글자 > 버튼 글자
             rv.setTextViewTextSize(btn, TypedValue.COMPLEX_UNIT_DIP, g.btnTs);
-            int bpv = px(n, Math.max(0f, (g.btnH - g.btnTs * WidgetGeo.LINE_K) / 2f)), bph = px(n, g.btnTs * 1.8f);
-            rv.setViewPadding(btn, bph, bpv, bph, bpv);
+            int bpv = px(n, Math.max(0f, (g.btnH - g.btnTs * WidgetGeo.LINE_K) / 2f));
+            rv.setViewPadding(btn, 0, bpv, 0, bpv);           // 버튼 폭은 말풍선과 같다(match_parent — 둘 다 같은 좌우 여백 안에 있다)
             rv.setViewPadding(bub, px(n, g.bubPad), px(n, g.bubPad), px(n, g.bubPad), px(n, g.bubPad));
             rv.setTextViewText(btn, s.btn.length() > 0 ? s.btn : ("morn".equals(s.kind) ? "출근하기" : "퇴근하기"));
             rv.setOnClickPendingIntent(btn, goIntent(c, s.kind));
