@@ -60,9 +60,10 @@ public final class WidgetSim {
         if ("nest".equals(kind)) return new float[] { 1.05f, 0.55f };
         return new float[] { 1.1f, 0.42f };
     }
-    // ───────── 정해진 시간(깨어나 돌아다니는 시간) ─────────
-    /** 평소엔 모두 집에서 자고, 정해진 시간(지역 시각 기준 everyMin 분마다 정각부터 len 만큼)에만 나와서 돌아다닌다. */
-    public static final int ROAM_EVERY_MIN = 60; public static final long ROAM_LEN_MS = 120000L;
+    // ───────── 깨어나 돌아다니는 시간 ─────────
+    /** 깨울 수 있는 신호(화면 켜짐·잠금 해제·런처 갱신·알람)를 받으면 일어나 ROAM_LEN_MS(2분)만 돌아다니고 다시 집에 들어가 잔다.
+     *  ROAM_EVERY_MIN 분마다 알람이 앱을 깨운다(앱이 꺼져 있어도 신호를 받을 수 있게: 프로세스가 살아야 화면 켜짐을 들을 수 있다). */
+    public static final int ROAM_EVERY_MIN = 10; public static final long ROAM_LEN_MS = 120000L;
     /** ms 가 속한 칸의 시작(지역 시각의 everyMin 배수 분 0초). everyMin 은 60 의 약수여야 한다. */
     public static long roamPeriodStart(long ms, java.util.TimeZone tz, int everyMin) {
         java.util.Calendar c = java.util.Calendar.getInstance(tz); c.setTimeInMillis(ms);
