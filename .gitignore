@@ -3,3 +3,6 @@ android/
 ios/
 .DS_Store
 dist/
+
+# 위젯 안드로이드 스텁 시험용(패키지 이름이 android 라 위의 android/ 규칙에 걸려 예외 처리)
+!test/android-stubs/android/
