@@ -32636,7 +32636,7 @@ function svgExtractName(el) {
 
 function svgRemovePopup() {
   var p = document.getElementById('svgStationPop');
-  if (p) { try{ if(p._dragOff) p._dragOff(); }catch(e){} try{ if(window._RC && _RC.playStop) _RC.playStop(); }catch(ePl){} p.remove(); }
+  if (p) { try{ if(p._dragOff) p._dragOff(); }catch(e){} try{ if(window._RC && _RC.playStop) _RC.playStop(p.querySelector('#nmPopPlay')); }catch(ePl){} p.remove(); }
 }
 // ── 아래로 밀어 닫기 (2026-10-14: YJ "슬라이딩으로 닫을 수 있게") ───────────────────────────
 //   팝업·시간표 시트 공용. 손가락(또는 마우스)을 따라 시트가 내려가고, 충분히 내렸거나 빠르게 털면 닫힌다. 모자라면 제자리로 되돌아온다.
@@ -32656,6 +32656,7 @@ function _nmDragDismiss(el, closeFn, o){
       if(st.fromScroll && scr.scrollTop > 0){ st.y0 = y; st.t0 = Date.now(); return; }   // 목록이 아직 위로 올라갈 수 있다 → 스크롤 우선
       if(o.onUp && dy < -8){                                                                // 위로 밀기(역 팝업 → 시간표)
         st.on = true; st.up = true; el.style.transition = 'none'; el.style.userSelect = 'none';
+        if(o.onUpStart){ try{ o.onUpStart(); }catch(eUs){} }                                  // 시간표 시트가 아래에서 손가락을 따라 올라오기 시작
       } else {
         if(dy < 8) return;
         st.on = true; st.up = false; el.style.transition = 'none'; el.style.userSelect = 'none';
@@ -32663,10 +32664,15 @@ function _nmDragDismiss(el, closeFn, o){
       }
     }
     if(st.up){
-      if(dy >= 0){ st.up = false; if(o.onStart){ try{ o.onStart(); }catch(eS2){} } }       // 위로 가다 되돌려 아래로 → 아래로 끌기
+      if(dy >= 0){                                                                          // 위로 가다 되돌려 아래로 → 아래로 끌기
+        st.up = false;
+        if(o.onUpEnd){ try{ o.onUpEnd(false, true); }catch(eUe){} }
+        if(o.onStart){ try{ o.onStart(); }catch(eS2){} }
+      }
       else {
         st.dy = dy;
-        el.style.transform = 'translateY(' + Math.round(dy * 0.3) + 'px)';                  // 손가락을 살짝만 따라간다(고무줄)
+        if(o.onUpMove){ try{ o.onUpMove(-dy); }catch(eUm){} }                                 // 시트가 손가락을 그대로 따라간다
+        else el.style.transform = 'translateY(' + Math.round(dy * 0.3) + 'px)';              // (따라갈 시트가 없으면 살짝만 — 고무줄)
         if(e && e.cancelable) e.preventDefault();
         return;
       }
@@ -32689,9 +32695,10 @@ function _nmDragDismiss(el, closeFn, o){
       var dyu = -st.dy, vu = dyu / Math.max(1, Date.now() - st.t0);
       if(dyu > 56 || (vu > 0.55 && dyu > 24)){
         el.style.transition = 'none'; el.style.transform = '';
-        try{ o.onUp(); }catch(eU){}
+        if(o.onUpEnd){ try{ o.onUpEnd(true, false, vu); }catch(eUe2){} } else { try{ o.onUp(); }catch(eU){} }
         return;
       }
+      if(o.onUpEnd){ try{ o.onUpEnd(false, false); }catch(eUe3){} el.style.transition = ''; el.style.transform = ''; return; }
       el.style.transition = 'transform .18s ease-out'; el.style.transform = 'translateY(0)';
       setTimeout(function(){ el.style.transition = ''; el.style.transform = ''; }, 200);
       return;
@@ -32712,8 +32719,8 @@ function _nmDragDismiss(el, closeFn, o){
   el.addEventListener('touchstart', function(e){ if(e.touches.length === 1) begin(e.touches[0].clientY, e.touches[0].clientX, e.target); else st.down = false; }, {passive:true});
   el.addEventListener('touchmove', function(e){ if(e.touches.length === 1) move(e.touches[0].clientY, e.touches[0].clientX, e); }, {passive:false});
   el.addEventListener('touchend', function(e){ end(e); }, true);       // 캡처: 끌었다면 아래 버튼 핸들러보다 먼저 삼킨다
-  el.addEventListener('touchcancel', function(){ if(st.on){ st.up = false; st.on = false; st.down = false; el.style.transition = 'transform .18s ease-out'; el.style.transform = 'translateY(0)'; if(o.onSnap){ try{ o.onSnap(st.dy); }catch(eN){} } } else st.down = false; });
-  el.addEventListener('mousedown', function(e){ if(e.button === 0) begin(e.clientY, e.clientX, e.target); });
+  el.addEventListener('touchcancel', function(){ if(st.on && st.up && o.onUpEnd){ st.up = false; st.on = false; st.down = false; try{ o.onUpEnd(false, false); }catch(eUc){} el.style.transition = ''; el.style.transform = ''; } else if(st.on){ st.up = false; st.on = false; st.down = false; el.style.transition = 'transform .18s ease-out'; el.style.transform = 'translateY(0)'; if(o.onSnap){ try{ o.onSnap(st.dy); }catch(eN){} } } else st.down = false; });
+  el.addEventListener('mousedown', function(e){ if(e.button === 0){ try{ var sl = window.getSelection && window.getSelection(); if(sl && sl.rangeCount) sl.removeAllRanges(); }catch(eSl){} begin(e.clientY, e.clientX, e.target); } });      // 남은 글자 선택이 있으면 끌 때 '끌어가기'로 가로채 끊긴다 — 먼저 지운다
   var mm = function(e){ if(st.down) move(e.clientY, e.clientX, e); };
   var mu = function(e){ if(st.down) end(e); };
   document.addEventListener('mousemove', mm);
@@ -32802,7 +32809,7 @@ function svgShowPopup(name, lines) {
   pop.style.cssText =
     'position:fixed;bottom:0;left:0;right:0;' +
     'border-radius:18px 18px 0 0;padding:16px 16px 36px;' +
-    'z-index:99999;';
+    'z-index:99999;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;';      // 끌 때 글자 선택·끌어가기(드래그앤드롭)가 끼어들지 않게
 
   // 핸들바 (아래로 밀어 닫기)
   pop.innerHTML = '<div class="nmp-handle" style="margin-bottom:16px;"></div>';
@@ -32885,7 +32892,11 @@ function svgShowPopup(name, lines) {
   document.body.appendChild(pop);
   pop._nmRest = true;                                         // 끄는 동안 지도 크기를 틱마다 바꾸지 않는다
   _nmDragDismiss(pop, function(){ svgRemovePopup(); try{ if(typeof _nmSync === 'function') _nmSync(); }catch(e){} },
-    { onUp: function(){ if(!pop._nmClosing) nmTtOpen(name, _ls); }, slideOut: function(dy){ svgClosePopup(dy); }, onStart: function(){ _nmFollowStart(pop); }, onMove: _nmFollowMove, onSnap: function(dy){ _nmFollowSnap(pop, dy); } });
+    { onUp: function(){ if(!pop._nmClosing) nmTtOpen(name, _ls); },
+      onUpStart: function(){ if(!pop._nmClosing && !pop._nmIn){ try{ pop._ttCtl = nmTtOpen(name, _ls, pop); }catch(eUp){ pop._ttCtl = null; } } },
+      onUpMove: function(d){ if(pop._ttCtl) pop._ttCtl.move(d); else pop.style.transform = 'translateY(' + Math.round(-d * 0.3) + 'px)'; },
+      onUpEnd: function(commit, instant){ var c = pop._ttCtl; pop._ttCtl = null; if(c) c.end(commit, instant); else if(commit && !pop._nmClosing) nmTtOpen(name, _ls); },
+      slideOut: function(dy){ svgClosePopup(dy); }, onStart: function(){ _nmFollowStart(pop); }, onMove: _nmFollowMove, onSnap: function(dy){ _nmFollowSnap(pop, dy); } });
   try{ if(window._RC && _RC.playStart) _RC.playStart(nmPlay); }catch(ePl){}
   // 올라오기(2026-10-15 YJ: "역 팝업이 열릴 때도 애니메이션") — 시간표 시트와 같은 방식: 팝업은 transform, 뒤의 지도는 팝업 위쪽 끝을 따라 줄어든다
   try{
@@ -32905,6 +32916,7 @@ function svgShowPopup(name, lines) {
       // ★ 수정1: 다른 오버레이(시트/모달) 활성 중에는 팝업 닫기 차단
       var bdrop = document.getElementById('bdrop');
       if(bdrop && bdrop.classList.contains('on')) return;
+      if(Date.now() - (window._nmDragLast || 0) < 450) return;      // 팝업을 끌다가 바깥에서 놓은 것은 닫는 누름이 아니다(위로 댕겨 시간표를 올릴 때 손가락이 팝업 밖으로 나간다)
       var p = document.getElementById('svgStationPop');
       if (p && !p.contains(e.target)) {
         svgClosePopup();
@@ -32955,22 +32967,25 @@ function _nmSheetMove(el, from, to, dur, ease, done){
 //   · 손가락으로 끌 때: 지도를 전체 크기로 두고 보이는 끝만 따라간다(follow, 프레임당 한 번) → 놓으면 setRect 로 마무리(닫힘/제자리).
 //   계산(시트 위치·지도 사각형)은 이 앱의 레이아웃 측정이고 지도 그림은 네이티브 — 엔진 계산과 무관한 순수 그리기다.
 function _nmFullRect(el){
-  var d = null, hadTop = el._nmTop, hadPe = el.style.pointerEvents;
-  try{ el._nmTop = window.innerHeight || 99999; el.style.pointerEvents = 'none'; d = _nmDesired(); }catch(e){ d = null; }
-  el._nmTop = hadTop; el.style.pointerEvents = hadPe;
+  var d = null, vh = window.innerHeight || 99999, list = [], saved = [], i, x;
+  ['svgStationPop', 'nmTtSheet'].forEach(function(id){ x = document.getElementById(id); if(x && list.indexOf(x) < 0) list.push(x); });
+  if(el && list.indexOf(el) < 0) list.push(el);
+  for(i = 0; i < list.length; i++){ saved.push([list[i]._nmTop, list[i].style.pointerEvents]); }       // 팝업·시트 모두 '다 내려간 것'으로 치고 지도 전체 크기를 잰다
+  try{ for(i = 0; i < list.length; i++){ list[i]._nmTop = vh; list[i].style.pointerEvents = 'none'; } d = _nmDesired(); }catch(e){ d = null; }
+  for(i = 0; i < list.length; i++){ list[i]._nmTop = saved[i][0]; list[i].style.pointerEvents = saved[i][1]; }
   return (d && d.mode === 'rect') ? d.rect : null;
 }
 function _nmFollowStop(){
   var F = _nm.following;
   if(F){ if(F.raf){ try{ cancelAnimationFrame(F.raf); }catch(e){} } _nm.following = null; }
 }
-function _nmFollowStart(el){
+function _nmFollowStart(el, cap){
   _nmFollowStop();
   try{
     var P = _nmPlugin();
     if(!_nmActive() || !_nm.shown || !P || typeof P.follow !== 'function') return;
     var full = _nmFullRect(el); if(!full) return;
-    _nm.following = { el: el, full: full, raf: 0, dy: 0, t0: Date.now() };
+    _nm.following = { el: el, full: full, raf: 0, dy: 0, t0: Date.now(), cap: (cap == null ? null : cap) };
   }catch(e){}
 }
 function _nmFollowMove(dy){
@@ -32981,7 +32996,7 @@ function _nmFollowMove(dy){
     F.raf = 0; if(_nm.following !== F) return;
     try{
       var P = _nmPlugin(), rest = (window.innerHeight || 0) - F.el.offsetHeight;
-      var r = P.follow({ x: F.full.x, y: F.full.y, w: F.full.w, h: F.full.h, dpr: window.devicePixelRatio || 1, bottom: Math.min(F.full.y + F.full.h, rest + F.dy) });
+      var r = P.follow({ x: F.full.x, y: F.full.y, w: F.full.w, h: F.full.h, dpr: window.devicePixelRatio || 1, bottom: Math.min(F.full.y + F.full.h, rest + F.dy, F.cap == null ? 1e9 : F.cap) });
       if(r && r.catch) r.catch(function(){});
     }catch(e){}
   });
@@ -32994,29 +33009,32 @@ function _nmFollowSnap(el, dy){            // 손을 떼고 제자리로 돌아�
   _nm.animNext = { at: Date.now(), dur: 180, ease: [0, 0, 0.58, 1], tFrom: rest + dy, tTo: rest };
   try{ _nmSync(); }catch(e){}
 }
-function _nmSheetPrepareIn(s){
+// fromDy(선택): 이미 손가락으로 이만큼 내려간 자리(=아직 안 올라온 높이)에서 이어서 올린다 · tFromOv: 그때 지도의 보이는 끝
+function _nmSheetPrepareIn(s, fromDy, tFromOv){
   var H = s.offsetHeight, I = _NM_SHEET_IN, started = false, vh = window.innerHeight || 99999;
+  var f = (fromDy == null) ? H : Math.max(0, Math.min(H, fromDy));
+  var dur = (fromDy == null || H <= 0) ? I.dur : Math.round(Math.max(170, I.dur * (0.45 + 0.55 * f / H)));
   s._nmIn = true;                                          // 올라오는 중
-  s.style.transform = 'translateY(' + H + 'px)';           // 아직 화면 아래
+  s.style.transform = 'translateY(' + f + 'px)';           // 지금 있는 자리(아직 화면 아래이거나 손가락이 끌어올린 자리)
   try{
     if(_nmActive()){
       var full = _nmFullRect(s);
-      _nm.animNext = { at: Date.now(), dur: I.dur, ease: I.ease, tFrom: vh, tTo: vh - H, fullH: full ? full.h : 0 };
+      _nm.animNext = { at: Date.now(), dur: dur, ease: I.ease, tFrom: (tFromOv != null ? tFromOv : vh - H + f), tTo: vh - H, fullH: full ? full.h : 0 };
     }
   }catch(e){}
   return function(){
     if(started) return; started = true;
-    _nmSheetMove(s, H, 0, I.dur, I.ease, function(){ s._nmIn = false; try{ s.style.transform = ''; }catch(e){} });
+    _nmSheetMove(s, f, 0, dur, I.ease, function(){ s._nmIn = false; try{ s.style.transform = ''; }catch(e){} });
   };
 }
-function _nmSheetPrepareOut(s, fromDy, onEnd){
+function _nmSheetPrepareOut(s, fromDy, onEnd, ov){
   _nmFollowStop();
   s._nmClosing = true;
   var vh = window.innerHeight || 99999;
   s._nmTop = vh;                                           // 지도는 '다 내려간 뒤'의 모습으로 늘어난다
   s.style.pointerEvents = 'none';                          // 지도 가림 판정(elementFromPoint)에 걸리지 않게
   var hh = s.offsetHeight || 300, started = false, O = _NM_SHEET_OUT;
-  try{ _nm.animNext = { at: Date.now(), dur: O.dur, ease: O.ease, tFrom: vh - hh + (fromDy || 0), tTo: vh + 40 }; }catch(e){}
+  try{ _nm.animNext = { at: Date.now(), dur: O.dur, ease: O.ease, tFrom: (ov && ov.tFrom != null) ? ov.tFrom : vh - hh + (fromDy || 0), tTo: (ov && ov.tTo != null) ? ov.tTo : vh + 40 }; }catch(e){}
   return function(){
     if(started) return; started = true;
     _nmSheetMove(s, fromDy || 0, hh + 40, O.dur, O.ease, function(){ try{ if(onEnd) onEnd(); }catch(e0){} if(s.parentNode) s.remove(); try{ if(typeof _nmSync === 'function') _nmSync(); }catch(e){} });
@@ -33027,16 +33045,17 @@ function svgClosePopup(fromDy){
   var p = document.getElementById('svgStationPop'); if(!p || p._nmClosing) return;
   if(window._nmNoAnim || !(p.offsetHeight > 0)){ svgRemovePopup(); try{ _nmSync(); }catch(e){} return; }
   try{ if(p._dragOff) p._dragOff(); }catch(e0){}
-  var goOut = _nmSheetPrepareOut(p, fromDy || 0, function(){ try{ if(window._RC && _RC.playStop) _RC.playStop(); }catch(e1){} });
+  var goOut = _nmSheetPrepareOut(p, fromDy || 0, function(){ try{ if(window._RC && _RC.playStop) _RC.playStop(p.querySelector('#nmPopPlay')); }catch(e1){} });
   try{ _nmSync(); }catch(e2){}
   try{ _nmAfterSync(goOut); }catch(e3){ goOut(); }
   setTimeout(goOut, 120);
 }
 window.svgClosePopup = svgClosePopup;
 
-function nmTtOpen(name, lines){
+// drag(선택): 역 팝업을 위로 댕기는 중이다 — 팝업은 그대로 두고 시트를 화면 아래에 만들어 손가락을 따라 올라오게 한다(컨트롤러를 돌려준다). 손을 떼면 ctl.end(올릴지, 즉시취소).
+function nmTtOpen(name, lines, drag){
   var snap = null; try{ if(window._RC && _RC.playSnap && document.getElementById('nmPopPlay')) snap = _RC.playSnap(); }catch(eSn){}   // 팝업에서 놀던 장면을 이어받는다
-  svgRemovePopup();
+  if(!drag) svgRemovePopup();
   nmTtClose(true);
   var ls = _lineListClean(lines);
   _nmTt = { name: name, lines: ls, line: ls[0] || '', day: '', dk: '', seq: 0, cache: {}, data: null, state: 'loading' };
@@ -33062,11 +33081,13 @@ function nmTtOpen(name, lines){
   _nmDragDismiss(sh, function(){ nmTtClose(); }, { scroller: '#nmTtBody', slideOut: function(dy){ nmTtClose(false, dy); },
     onStart: function(){ _nmFollowStart(sh); }, onMove: _nmFollowMove, onSnap: function(dy){ _nmFollowSnap(sh, dy); } });
   var goIn = null;
-  try{
-    sh._nmRest = true;                                           // 멈출 자리(지도는 여기까지로 줄어든다 — 올라오는 중·끄는 중에도 그대로)
-    if(sh.offsetHeight > 0 && !window._nmNoAnim) goIn = _nmSheetPrepareIn(sh);
-  }catch(eAn){}
-  try{ if(window._RC && _RC.playStart) _RC.playStart(sh.querySelector('#nmTtPlay'), snap || undefined); }catch(ePl){}
+  if(!drag){
+    try{
+      sh._nmRest = true;                                         // 멈출 자리(지도는 여기까지로 줄어든다 — 올라오는 중·끄는 중에도 그대로)
+      if(sh.offsetHeight > 0 && !window._nmNoAnim) goIn = _nmSheetPrepareIn(sh);
+    }catch(eAn){}
+    try{ if(window._RC && _RC.playStart) _RC.playStart(sh.querySelector('#nmTtPlay'), snap || undefined); }catch(ePl){}
+  }
 
   // ✕ 버튼은 없다(2026-10-14 YJ: 밀어 내리면 닫히니 필요 없다). 닫는 길: 아래로 밀기 · 시트 바깥 누르기 · 네이티브 지도 만지기.
 
@@ -33084,6 +33105,7 @@ function nmTtOpen(name, lines){
     document.addEventListener('click', _nmTt.outside, true);
   }, 600);
 
+  if(drag){ nmTtLoad(); return _nmTtDragCtl(sh, snap, drag); }
   _nmTtAfter();
   if(goIn){
     // 지도가 시트를 따라 움직이기 시작한 뒤(네이티브가 받은 뒤)에 시트를 올려 둘이 같이 움직이게 — 안 오면 120ms 뒤 어쨌든 올린다
@@ -33093,7 +33115,47 @@ function nmTtOpen(name, lines){
   nmTtLoad();
 }
 
-function nmTtClose(silent, fromDy){
+// 팝업을 위로 댕기는 손가락을 시트가 그대로 따라간다(2026-10-15 YJ: "역탭 위로 댕기면 아래에서 시간표가 자연스럽게 120Hz 느낌으로").
+//   · 끄는 동안: 시트는 transform(손가락 위치), 뒤의 네이티브 지도는 follow 로 '보이는 아래쪽 끝'만 시트 위쪽 끝(팝업보다는 안 내려오게)을 따라간다.
+//   · 놓으면: 올라온 만큼에서 이어서 끝까지 올리거나(시트·지도 같은 곡선), 모자라면 같은 자리에서 도로 내려 보낸다(팝업은 그대로).
+function _nmTtDragCtl(sh, snap, popEl){
+  var vh = window.innerHeight || 99999, H = sh.offsetHeight || 1, done = false, rev = 0;
+  var cap = (popEl && popEl.offsetHeight > 0) ? vh - popEl.offsetHeight : null;      // 지도의 보이는 끝은 팝업 위쪽 끝보다 아래로 내려가지 않는다
+  sh._nmRest = true; sh._nmTop = vh; sh.style.pointerEvents = 'none';                // 끄는 동안 지도 크기·가림 판정에 끼지 않는다
+  sh.style.transform = 'translateY(' + H + 'px)';
+  _nmFollowStart(sh, cap);
+  function lastBottom(){ var b = vh - rev; return cap != null ? Math.min(b, cap) : b; }
+  return {
+    sheet: sh,
+    move: function(dyUp){
+      if(done || !sh.isConnected) return;
+      rev = Math.max(0, Math.min(H, dyUp));
+      sh.style.transform = 'translateY(' + (H - rev) + 'px)';
+      _nmFollowMove(H - rev);
+    },
+    end: function(commit, instant){
+      if(done) return; done = true;
+      _nmFollowStop();
+      if(!sh.isConnected) return;
+      var lb = lastBottom(), fromDy = H - rev;
+      if(instant){ nmTtClose(true); return; }                                          // 되돌려 아래로 끄는 쪽으로 바뀜 — 시트는 조용히 치운다
+      _nm.rect = null;                                                                 // 네이티브는 전체 크기인 채로 있다 → 목표 사각형을 다시 보낸다
+      if(commit){
+        sh._nmTop = null; sh.style.pointerEvents = '';
+        try{ svgRemovePopup(); }catch(e0){}
+        var goIn = null;
+        if(!window._nmNoAnim) goIn = _nmSheetPrepareIn(sh, fromDy, lb); else sh.style.transform = '';
+        try{ if(window._RC && _RC.playStart) _RC.playStart(sh.querySelector('#nmTtPlay'), snap || undefined); }catch(ePl){}
+        _nmTtAfter();
+        if(goIn){ try{ _nmAfterSync(goIn); }catch(eG){ goIn(); } setTimeout(goIn, 120); }
+      } else {
+        nmTtClose(false, fromDy, { tFrom: lb, tTo: (cap != null ? cap : vh) });         // 팝업은 그대로, 시트만 도로 내려간다
+      }
+    }
+  };
+}
+
+function nmTtClose(silent, fromDy, ov){
   var _cs = document.getElementById('nmTtSheet');
   if(_cs && _cs._nmClosing && !silent) return;                 // 이미 내려가는 중
   if(_nmTt){
@@ -33103,12 +33165,12 @@ function nmTtClose(silent, fromDy){
     }
     _nmTt.seq++;                  // 늦게 온 응답은 버린다
   }
-  try{ if(window._RC && _RC.playStop) _RC.playStop(); }catch(ePl){}
   var s = document.getElementById('nmTtSheet'), goOut = null;
+  var sHost = s ? s.querySelector('#nmTtPlay') : null;
   if(s){
     try{ if(s._dragOff) s._dragOff(); }catch(e){}
-    if(!silent && !window._nmNoAnim && s.offsetHeight > 0) goOut = _nmSheetPrepareOut(s, fromDy || 0);
-    else s.remove();
+    if(!silent && !window._nmNoAnim && s.offsetHeight > 0) goOut = _nmSheetPrepareOut(s, fromDy || 0, function(){ try{ if(window._RC && _RC.playStop) _RC.playStop(sHost); }catch(ePl2){} }, ov);   // 내려가는 동안 캐릭터는 계속 논다
+    else { try{ if(window._RC && _RC.playStop) _RC.playStop(sHost); }catch(ePl){} s.remove(); }
   }
   _nmTt = null;
   if(!silent) _nmTtAfter();
@@ -40725,8 +40787,11 @@ var _RC = (function(){
   function rnd(a, b){ return a + Math.random() * (b - a); }
   function isDarkTheme(){ try{ return document.documentElement.getAttribute('data-theme') !== 'pastel'; }catch(e){ return true; } }
   function playStart(host, o){
-    if(play || !host) return false;
-    if(!ready()){ load(function(){ if(host.isConnected && !play) playStart(host, o); }); return false; }
+    if(!host) return false;
+    // ★ 2026-10-15 (YJ: "가끔 애니메이션이 안 나와" — 팝업 오른쪽 놀이터가 통째로 빠짐): 놀이터는 전역에 하나뿐이라, 닫히는 중인 옛 팝업·시트가 아직 쥐고 있으면
+    //   새 팝업의 playStart 가 조용히 false 로 끝났다(닫히는 애니메이션 도중 다른 역을 누를 때). 이제 가장 나중에 부른 쪽이 이긴다(옛것은 멈춘다).
+    if(play){ if(play.host === host) return false; playStop(); }
+    if(!ready()){ load(function(){ if(host.isConnected && !(play && play.host === host)) playStart(host, o); }); return false; }
     o = o || {};
     var cv = document.createElement('canvas'); cv.className = 'rc-play'; host.appendChild(cv);
     var Wc = host.clientWidth || 190, Hc = host.clientHeight || 70, dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -40789,7 +40854,7 @@ var _RC = (function(){
     // 배경 장식 입자(장면마다 필요한 만큼)
     var parts = [], np = { snow: 18, petals: 10, night: 24, aurora: 10, sea: 6, meadow: 3, sunset: 3, clouds: 3 }[SC.deco] || 0;
     for(var pi = 0; pi < np; pi++) parts.push({ x: Math.random(), y: Math.random(), s: rnd(0.6, 1.4), ph: Math.random() * 6.28, v: rnd(0.5, 1.2) });
-    var S = { cs: cs, t: 0, last: 0, raf: 0, ids: ids, W: Wc, H: Hc, scene: sn, sideA: sideA, poops: [], pt: [], tree: tree, pond: pond, log: {} };
+    var S = { host: host, cs: cs, t: 0, last: 0, raf: 0, ids: ids, W: Wc, H: Hc, scene: sn, sideA: sideA, poops: [], pt: [], tree: tree, pond: pond, log: {} };
     host.setAttribute('data-play', ids.join(',')); host.setAttribute('data-scene', sn);
     var PI = Math.PI, CLIMB_ROT = (window._rcClimb && window._rcClimb.rot != null) ? window._rcClimb.rot : -1.2, CLIMB_DX = (window._rcClimb && window._rcClimb.dx != null) ? window._rcClimb.dx : 3;
     function ease(u){ return u < 0 ? 0 : u > 1 ? 1 : u * u * (3 - 2 * u); }
@@ -41063,9 +41128,13 @@ var _RC = (function(){
     S.raf = requestAnimationFrame(frame);
     return true;
   }
-  function playStop(){
-    if(!play) return; var s = play; play = null; try{ cancelAnimationFrame(s.raf); }catch(e){}
-    var cv = document.querySelector('canvas.rc-play'); if(cv && cv.parentNode){ var h = cv.parentNode; h.removeChild(cv); h.removeAttribute('data-play'); h.removeAttribute('data-scene'); }
+  // only(선택): 그 칸(host)의 놀이터일 때만 멈춘다 — 닫히는 옛 팝업의 늦은 정리가 새 팝업의 놀이터를 끄지 않게
+  function playStop(only){
+    if(!play) return;
+    if(only && play.host && play.host !== only) return;
+    var s = play; play = null; try{ cancelAnimationFrame(s.raf); }catch(e){}
+    var h = s.host, cv = h ? h.querySelector('canvas.rc-play') : document.querySelector('canvas.rc-play');
+    if(cv && cv.parentNode){ h = cv.parentNode; h.removeChild(cv); h.removeAttribute('data-play'); h.removeAttribute('data-scene'); }
   }
   function playScene(){ return play ? play.scene : null; }
   // 지금 놀고 있는 장면의 '이어받기용' 설정(장면·캐릭터·서 있는 자리·나무/웅덩이 자리). 없으면 null.

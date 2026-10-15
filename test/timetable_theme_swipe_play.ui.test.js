@@ -268,6 +268,7 @@ const NOW = new Date('2026-10-14T13:00:00+09:00');   // 수요일 13:00
       const ids = await x.page.evaluate(() => (window._RC.playState() || []).map(c => c.id).sort().join(','));
       sets.add(ids); ids.split(',').forEach(i => seenIds.add(i));
       await x.page.evaluate(() => nmTtClose()); await x.page.clock.runFor(100);
+      await x.page.waitForFunction(() => !document.getElementById('nmTtSheet'), null, { timeout: 5000 });   // 내려가는 동안엔 계속 놀고, 다 내려간 뒤 멈춘다
       assert.strictEqual(await x.page.evaluate(() => window._RC.playState()), null, '닫으면 멈춤');
       assert.strictEqual(await x.page.evaluate(() => document.querySelectorAll('canvas.rc-play').length), 0, '캔버스 제거');
     }
