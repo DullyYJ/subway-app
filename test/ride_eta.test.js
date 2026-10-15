@@ -57,30 +57,30 @@ t('pos.segs — 앞으로의 구간 목록을 함께 준다(응답이 끊겨도 
   const hit = sg.find(s => later < s.t1) || sg[sg.length - 1];
   assert.strictEqual(hit.from, fresh.from); assert.strictEqual(hit.to, fresh.to);
 });
-// ★ 2026-10-14 (YJ: 인천1호선 시험 — 도착 표시가 15초쯤 늦다 → 중간역은 10초 일찍 도착으로): arriveEarlySec
-t('arriveEarlySec — 중간 경로역은 표시 도착 시각보다 10초 일찍 닿은 것으로 본다(승차역·최종 목적지는 그대로, 표시 시각 arr·etaMs 도 그대로)', () => {
+// ★ 2026-10-14 (YJ: 인천1호선 시험 — 도착 표시가 15초쯤 늦다 → 중간역은 일찍 도착으로 → 10초였다가 2026-10-15 YJ 요청으로 5초): arriveEarlySec
+t('arriveEarlySec — 중간 경로역은 표시 도착 시각보다 5초 일찍 닿은 것으로 본다(승차역·최종 목적지는 그대로, 표시 시각 arr·etaMs 도 그대로)', () => {
   const nodes = scene(), ps = [{ idx: 1, ms: at(17, 35), src: 'board' }];
   const q = (nowMs, o) => rideEta(Object.assign({ nowMs, nodes, passes: ps, boarded: true, timetableFirst: true }, o || {}));
   const E = q(at(17, 36)).etaMs, E2 = E[2], E3 = E[3];                          // 동막(idx2) · 동춘(idx3) 표시 도착 시각(엔진이 정한 값)
-  assert.strictEqual(q(E2 - 12000).pos.from, 1, '동막 도착 12초 전 — 아직 앞 역 쪽');
-  assert.strictEqual(q(E2 - 9000).pos.from, 2, '도착 9초 전이면 이미 동막에 닿았다(10초 일찍)');
-  assert.strictEqual(q(E2 - 9000).pos.to, 3);
+  assert.strictEqual(q(E2 - 7000).pos.from, 1, '동막 도착 7초 전 — 아직 앞 역 쪽');
+  assert.strictEqual(q(E2 - 4000).pos.from, 2, '도착 4초 전이면 이미 동막에 닿았다(5초 일찍)');
+  assert.strictEqual(q(E2 - 4000).pos.to, 3);
   // 끄면(0) 예전과 같다
-  assert.strictEqual(q(E2 - 9000, { opts: { arriveEarlySec: 0 } }).pos.from, 1);
+  assert.strictEqual(q(E2 - 4000, { opts: { arriveEarlySec: 0 } }).pos.from, 1);
   assert.strictEqual(q(E2 + 1000, { opts: { arriveEarlySec: 0 } }).pos.from, 2);
   // 표시 도착 시각은 그대로
-  const a = q(E2 - 9000), b = q(E2 - 9000, { opts: { arriveEarlySec: 0 } });
+  const a = q(E2 - 4000), b = q(E2 - 4000, { opts: { arriveEarlySec: 0 } });
   assert.deepStrictEqual(a.etaMs, b.etaMs); assert.deepStrictEqual(a.arr, b.arr);
-  // 구간 시각: 동막 → 동춘 구간은 10초 일찍 시작하고 10초 일찍 끝난다
+  // 구간 시각: 동막 → 동춘 구간은 5초 일찍 시작하고 5초 일찍 끝난다
   const sg = a.pos.segs[0];
-  assert.strictEqual(sg.from, 2); assert.strictEqual(sg.a, E2 - 10000); assert.strictEqual(sg.t0, E2 - 10000 + 25000); assert.strictEqual(sg.t1, E3 - 10000);
+  assert.strictEqual(sg.from, 2); assert.strictEqual(sg.a, E2 - 5000); assert.strictEqual(sg.t0, E2 - 5000 + 25000); assert.strictEqual(sg.t1, E3 - 5000);
   // 앞 구간 끝 = 다음 구간의 도착(a) — 끊기지 않는다
   for (let i = 1; i < a.pos.segs.length; i++) assert.strictEqual(a.pos.segs[i].a, a.pos.segs[i - 1].t1);
   // 최종 목적지(마지막 노드)에는 적용하지 않는다
   const last = a.pos.segs[a.pos.segs.length - 1], nLast = E.length - 1;
   assert.strictEqual(last.to, nLast); assert.strictEqual(last.t1, E[nLast]);
-  // 마지막 구간 직전 역은 10초 일찍
-  assert.strictEqual(last.a, E[nLast - 1] - 10000);
+  // 마지막 구간 직전 역은 5초 일찍
+  assert.strictEqual(last.a, E[nLast - 1] - 5000);
 });
 t('pos.segs — 남은 구간 전부를 준다(14구간으로 끊기지 않는다: 26분 뒤 마커가 굳은 실기기 사고)', () => {
   const nodes = [{ name: '출발', isOrigin: true, planMin: BM - 5 }];
