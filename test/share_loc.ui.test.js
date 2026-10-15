@@ -95,6 +95,31 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     assert(/경로를 먼저 탐색/.test(await page.evaluate(() => (document.getElementById('pickPop') || {}).textContent || '')), '안내 팝업 없음');
     await ctx.close();
   });
+  for (const th of ['dark', 'pastel', 'light']) {
+    await t('안내 팝업이 테마(' + th + ')에 맞고, 제목은 한 줄·아래 글은 두 줄(낱자 "요" 안 남김)', async () => {
+      const { ctx, page, errs } = await fresh({ plugin: true, theme: th });
+      await page.evaluate(t2 => { document.documentElement.setAttribute('data-theme', t2); }, th);
+      await page.evaluate(() => document.getElementById('shareLocBtn').click()); await page.waitForTimeout(500);
+      const r = await page.evaluate(() => {
+        const p = document.getElementById('pickPop'); if (!p) return null;
+        const cs = getComputedStyle(p), card = getComputedStyle(document.documentElement).getPropertyValue('--card').trim();
+        const m = p.querySelector('.pp-m'), s = p.querySelector('.pp-s');
+        const lh = e => parseFloat(getComputedStyle(e).lineHeight) || parseFloat(getComputedStyle(e).fontSize) * 1.3;
+        const probe = document.createElement('div'); probe.style.background = card; document.body.appendChild(probe);
+        const want = getComputedStyle(probe).backgroundColor; probe.remove();
+        return { cls: p.className, bg: cs.backgroundColor, want, mLines: Math.round(m.getBoundingClientRect().height / lh(m)), sLines: Math.round(s.getBoundingClientRect().height / lh(s)), brs: s.querySelectorAll('br').length, sTxt: s.innerText, mTxt: m.innerText };
+      });
+      assert(r, '팝업 없음');
+      assert(/\bsh\b/.test(r.cls), '테마 클래스 없음 ' + r.cls);
+      assert(r.bg === r.want, '배경이 테마 카드색이 아님 ' + r.bg + ' vs ' + r.want);
+      assert(r.mLines === 1, '제목이 한 줄이 아님 ' + r.mLines);
+      assert(r.sLines === 2 && r.brs === 1, '아래 글이 두 줄이 아님 ' + JSON.stringify(r));
+      assert(/^경로를 먼저 탐색해 주세요$/.test(r.mTxt.trim()), r.mTxt);
+      assert(!/^\s*요/m.test(r.sTxt), '낱자 요가 줄 머리에 남음 ' + r.sTxt);
+      if (OUT) await page.screenshot({ path: path.join(OUT, 'popup_' + th + '.png') });
+      assert(!errs.length, errs.join('|')); await ctx.close();
+    });
+  }
   await t('플러그인이 거절하면(카카오톡·공유창을 못 열면) 글만 공유/복사로 이어진다', async () => {
     const { ctx, page, errs } = await fresh({ plugin: true, reject: true });
     await page.evaluate(SETUP, { here: 20, from: '계양', to: '송도달빛축제공원', rem: 29 });

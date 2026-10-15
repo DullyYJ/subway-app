@@ -118,27 +118,36 @@ public final class WidgetCore {
         sp(c).edit().remove("scKind").remove("scKey").remove("scSay1").remove("scSay2").remove("scMood").remove("scBtn").remove("scUntil").remove("scFetched").remove("scShown").apply();
     }
     /** 오늘 지금 보여야 할 출퇴근 장면이 있으면 시작하고, 끝난 장면은 치운다. 알람·위젯 갱신·화면 켜짐·탭 때 부른다. */
-    public static void evalScene(Context c) {
-        Cfg f = cfg(c);
+    public static boolean evalScene(Context c) {
+        Cfg f = cfg(c); boolean started = false;
         Scene cur = scene(c); long now = System.currentTimeMillis();
         if (cur.kind.length() > 0 && now >= cur.until) { sp(c).edit().putString("lastDone", cur.key).apply(); clearScene(c); cur = scene(c); }   // 안 눌렀어도 끝난 장면은 다시 안 띄운다
-        if (!f.on || (cur.kind.equals("morn") && !f.mOn) || (cur.kind.equals("eve") && !f.eOn)) { if (cur.kind.length() > 0) clearScene(c); if (!f.on) return; cur = scene(c); }
+        if (!f.on || (cur.kind.equals("morn") && !f.mOn) || (cur.kind.equals("eve") && !f.eOn)) { if (cur.kind.length() > 0) clearScene(c); if (!f.on) return false; cur = scene(c); }
         Calendar cal = Calendar.getInstance();
-        if (!f.days[cal.get(Calendar.DAY_OF_WEEK) - 1]) { if (cur.kind.length() > 0 && !cur.key.startsWith(ymd(cal))) clearScene(c); return; }
+        if (!f.days[cal.get(Calendar.DAY_OF_WEEK) - 1]) { if (cur.kind.length() > 0 && !cur.key.startsWith(ymd(cal))) clearScene(c); return false; }
+        if (cur.kind.length() > 0) {            // 설정에서 시각을 바꿨으면 옛 시각의 장면은 치운다(새 시각에 다시 뜬다)
+            String want = sceneKey(cal, cur.kind, hm("morn".equals(cur.kind) ? f.morn : f.eve, "morn".equals(cur.kind) ? 450 : 1110));
+            if (!cur.key.equals(want)) { clearScene(c); cur = scene(c); }
+        }
         String lastDone = sp(c).getString("lastDone", "");
         String best = null; long bestStart = 0;
         for (int k = 0; k < 2; k++) {
             String kind = k == 0 ? "morn" : "eve";
             if (k == 0 ? !f.mOn : !f.eOn) continue;          // 장소가 없는 쪽은 장면을 만들지 않는다(눌러도 갈 곳이 없다)
-            long st = startMs(cal, hm(k == 0 ? f.morn : f.eve, k == 0 ? 450 : 1110));
-            String key = ymd(cal) + kind;
+            int sm = hm(k == 0 ? f.morn : f.eve, k == 0 ? 450 : 1110);
+            long st = startMs(cal, sm);
+            String key = sceneKey(cal, kind, sm);
             if (now >= st && now < st + WAIT_MS && !key.equals(lastDone) && st >= bestStart) { best = kind; bestStart = st; }
         }
-        if (best != null && !(cur.kind.equals(best) && cur.key.equals(ymd(cal) + best))) startScene(c, best, bestStart);
+        if (best != null && !(cur.kind.equals(best) && cur.key.equals(sceneKey(cal, best, hm("morn".equals(best) ? f.morn : f.eve, "morn".equals(best) ? 450 : 1110))))) { startScene(c, best, bestStart); started = true; }
+        return started;
     }
+    /** 장면 열쇠 = 날짜 + 출퇴근 + 시작 시각(분). 시각이 열쇠에 들어 있어서, 오늘 앞서 다른 시각으로 한 번 보였거나 눌렀어도 시각을 바꾸면 새 시각에 다시 뜬다. */
+    static String sceneKey(Calendar cal, String kind, int minutes) { return ymd(cal) + kind + minutes; }
     static void startScene(final Context c, final String kind, long startAt) {
         Calendar cal = Calendar.getInstance();
-        final String key = ymd(cal) + kind;
+        final Cfg cf0 = cfg(c);
+        final String key = sceneKey(cal, kind, hm("morn".equals(kind) ? cf0.morn : cf0.eve, "morn".equals(kind) ? 450 : 1110));
         long until = startAt + WAIT_MS;
         SharedPreferences.Editor e = sp(c).edit();
         e.putString("scKind", kind).putString("scKey", key).putLong("scUntil", until).putLong("scShown", 0L).putBoolean("scFetched", false).putString("scMood", "cheer");
@@ -182,8 +191,10 @@ public final class WidgetCore {
     }
     /** 앱이 위젯 버튼으로 열렸다 — 그 장면은 끝낸 것으로 친다(다시 안 뜸). */
     public static void markDone(Context c, String kind) {
-        Calendar cal = Calendar.getInstance();
-        sp(c).edit().putString("lastDone", ymd(cal) + kind).apply();
+        Calendar cal = Calendar.getInstance(); Cfg cf0 = cfg(c);
+        Scene cs = scene(c);
+        String key = (cs.kind.equals(kind) && cs.key.length() > 0) ? cs.key : sceneKey(cal, kind, hm("morn".equals(kind) ? cf0.morn : cf0.eve, "morn".equals(kind) ? 450 : 1110));
+        sp(c).edit().putString("lastDone", key).apply();
         clearScene(c); refreshAll(c, true); scheduleNext(c);
     }
 
@@ -507,7 +518,7 @@ public final class WidgetCore {
             String a = it == null ? null : it.getAction();
             if (Intent.ACTION_SCREEN_OFF.equals(a)) stop(c, true);
             else if (Intent.ACTION_SCREEN_ON.equals(a)) { awakeHold = true; try { reshuffle(c); evalScene(c); refreshAll(c, true); wake(c, "screen"); } finally { awakeHold = false; } }          // 켤 때마다 캐릭터가 바뀐다
-            else if (Intent.ACTION_USER_PRESENT.equals(a)) { evalScene(c); wake(c, "screen"); }                                            // 잠금 해제 때는 다시 안 바꾼다(켜짐 직후 이어서 옴)
+            else if (Intent.ACTION_USER_PRESENT.equals(a)) { if (evalScene(c)) refreshAll(c, true); wake(c, "screen"); }                                            // 잠금 해제 때는 다시 안 바꾼다(켜짐 직후 이어서 옴)
         }
     };
     static void ensureReceiver(Context c) {
@@ -539,7 +550,7 @@ public final class WidgetCore {
     }
     /** 길동무 앱 화면이 닫혀(홈·다른 앱으로 나감) 위젯이 보일 수 있게 됐다: 앱과 위젯은 한 프로세스라 바로 깨운다(설정한 시간 돌아다니고 잔다). */
     public static void onAppLeft(Context c) {
-        try { evalScene(c); wake(c, "app"); } catch (Exception ignored) { }
+        try { if (evalScene(c)) refreshAll(c, true); wake(c, "app"); } catch (Exception ignored) { }
     }
     /** 설정한 '돌아다니는 시간'(기본 6분). */
     static long roamMs(Context c) { return cfg(c).roamMin * 60000L; }

@@ -5607,11 +5607,11 @@ function _brStopLoc(st){
 }
 function _pickSame(a, b){ return !!(a && b && a.name === b.name); }
 // 작은 안내 팝업(잠깐 떴다 사라진다)
-function _pickPop(msg, sub){
+function _pickPop(msg, sub, cls){
   try{
     var old = document.getElementById('pickPop'); if(old) old.remove();
-    var d = document.createElement('div'); d.id = 'pickPop';
-    d.innerHTML = '<div class="pp-m">' + _ltEsc(msg) + '</div>' + (sub ? '<div class="pp-s">' + _ltEsc(sub) + '</div>' : '');
+    var d = document.createElement('div'); d.id = 'pickPop'; if(cls) d.className = cls;     // cls 'sh' = 지금 테마 색을 따르는 모양(위치 공유 안내)
+    d.innerHTML = '<div class="pp-m">' + _ltEsc(msg) + '</div>' + (sub ? '<div class="pp-s">' + _ltEsc(sub).replace(/\n/g, '<br>') + '</div>' : '');
     document.body.appendChild(d);
     requestAnimationFrame(function(){ d.classList.add('on'); });
     setTimeout(function(){ d.classList.remove('on'); setTimeout(function(){ if(d.parentNode) d.remove(); }, 260); }, 1500);
@@ -19549,11 +19549,7 @@ window.addEventListener('unhandledrejection', function(e) {
         <!-- ★ 요일 선택 -->
         <div style="font-size:11px;font-weight:700;color:var(--sub);margin-bottom:5px;">📅 보낼 요일</div>
         <div id="cmDays" style="display:flex;gap:5px;margin-bottom:6px;"></div>
-        <div style="display:flex;gap:6px;margin-bottom:6px;">
-          <span onclick="_cmDayPreset('weekday')" style="flex:1;text-align:center;padding:7px 0;border-radius:8px;border:1px solid var(--border2);font-size:11.5px;font-weight:700;color:var(--sub);cursor:pointer;">평일</span>
-          <span onclick="_cmDayPreset('weekend')" style="flex:1;text-align:center;padding:7px 0;border-radius:8px;border:1px solid var(--border2);font-size:11.5px;font-weight:700;color:var(--sub);cursor:pointer;">주말</span>
-          <span onclick="_cmDayPreset('all')" style="flex:1;text-align:center;padding:7px 0;border-radius:8px;border:1px solid var(--border2);font-size:11.5px;font-weight:700;color:var(--sub);cursor:pointer;">매일</span>
-        </div>
+        <div id="cmDayPresets" style="display:flex;gap:6px;margin-bottom:6px;"></div>
         <p id="cmDaysNote" style="font-size:11px;color:var(--sub);margin:0 0 12px;line-height:1.5;"></p>
         <div style="display:flex;gap:10px;">
           <div style="flex:1;">
@@ -22862,8 +22858,8 @@ function _arrShopReason(it, ctx){
     var t = it && it._t ? it._t : '';
     if(ctx){
       if(t === '\uC6B0\uCC9C\uB300\uBE44' && ctx.rain >= 30) return '내일 비 소식이 있어서 미리 챙겨두면 좋아요';
-      if(ctx.temp != null && ctx.temp <= 5)  return '요즘 아침저녁으로 추워서 하나쯤 있으면 든든해요';
-      if(ctx.temp != null && ctx.temp >= 28) return '더위가 이어지는 날엔 이런 게 은근히 도움돼요';
+      if(ctx.temp != null && ctx.temp <= 5 && !_shopNoWx(it && it.n) && (it && _SHOP_SEASON_KW.winter.test(String(it.n||''))))  return '요즘 아침저녁으로 추워서 하나쯤 있으면 든든해요';
+      if(ctx.temp != null && ctx.temp >= 28 && !_shopNoWx(it && it.n) && (it && _SHOP_SEASON_KW.summer.test(String(it.n||'')))) return '더위가 이어지는 날엔 이런 게 은근히 도움돼요';
       if(ctx.weekend) return '주말에 여유 있을 때 써보기 좋아요';
     }
     var byTheme = {
@@ -23222,8 +23218,9 @@ function _arrShopLine(it, cx){
   };
   // 이름으로 날씨성 상품을 먼저 본다(테마 태그가 없는 상품이 3분의 2)
   var isRain = (t === '우천대비') || /우산|장화|레인|우비|방수|제습|빗물/.test(nm);
-  var isCold = (K.winter && K.winter.test(nm)) || (K.fall && K.fall.test(nm)) || /조끼|바람막이|가디건|후드|맨투맨|니트/.test(nm);
-  var isHot  = (K.summer && K.summer.test(nm)) || /쿨|냉감|선풍기|서큘레이터|선크림|반팔|반바지|샌들/.test(nm);
+  var _nw = (typeof _shopNoWx === 'function') && _shopNoWx(nm);
+  var isCold = !_nw && ((K.winter && K.winter.test(nm)) || (K.fall && K.fall.test(nm)) || /조끼|바람막이|가디건|후드|맨투맨|니트(?!릴)/.test(nm));
+  var isHot  = !_nw && ((K.summer && K.summer.test(nm)) || /쿨|냉감|선풍기|서큘레이터|선크림|반팔|반바지|샌들/.test(nm));
   var r = '';
   if(isRain){
     r = cx.rainSoon ? _arrFill(_arrVar(['비 소식 {rain}%예요, 미리 챙겨요', '비 올 확률 {rain}%, 가방에 하나'], cx, nm.length), cx, null)
@@ -23257,8 +23254,9 @@ function _arrShopSay(it, ctx){
   var K = (typeof _SHOP_SEASON_KW !== 'undefined') ? _SHOP_SEASON_KW : {};
   var rainRe = /우산|장화|레인|우비|방수|제습|빗물/;
   var isRain = (t === '우천대비') || rainRe.test(nm);
-  var isCold = (K.winter && K.winter.test(nm)) || (K.fall && K.fall.test(nm)) || /조끼|바람막이|가디건|후드|맨투맨|니트/.test(nm);
-  var isHot  = (K.summer && K.summer.test(nm)) || /쿨|냉감|선풍기|서큘레이터|선크림|반팔|반바지|샌들/.test(nm);
+  var _nw = (typeof _shopNoWx === 'function') && _shopNoWx(nm);
+  var isCold = !_nw && ((K.winter && K.winter.test(nm)) || (K.fall && K.fall.test(nm)) || /조끼|바람막이|가디건|후드|맨투맨|니트(?!릴)/.test(nm));
+  var isHot  = !_nw && ((K.summer && K.summer.test(nm)) || /쿨|냉감|선풍기|서큘레이터|선크림|반팔|반바지|샌들/.test(nm));
   var temp = (ctx && ctx.temp != null) ? Math.round(ctx.temp) : null;
   var rain = (ctx && ctx.rain != null) ? Math.round(ctx.rain) : -1;
   try{
@@ -24179,16 +24177,16 @@ function _shPlug(){ try{ return (window.Capacitor && window.Capacitor.Plugins &&
 window._shLoc = _shLoc; window._shText = _shText; window._shPng = _shPng;
 window._shareLoc = function(){
   var d = _shLoc();
-  if(!d.ok){ _pickPop('경로를 먼저 탐색해 주세요', '탐색한 경로의 내 위치와 도착 예정을 친구에게 보낼 수 있어요'); return; }
+  if(!d.ok){ _pickPop('경로를 먼저 탐색해 주세요', '탐색한 경로의 내 위치와 도착 예정을\n친구에게 보낼 수 있어요', 'sh'); return; }
   var text = _shText(d), png = null;
   try{ png = _shPng(d); }catch(e){}
   var P = _shPlug();
   var copyFallback = function(){
     try{
       if(navigator.share){ navigator.share({ text: text }).catch(function(){}); return; }
-      if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(text).then(function(){ _pickPop('복사했어요', '카카오톡에 붙여넣어 보내 주세요'); }, function(){ _pickPop('공유하지 못했어요', ''); }); return; }
+      if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(text).then(function(){ _pickPop('복사했어요', '카카오톡에 붙여넣어\n보내 주세요', 'sh'); }, function(){ _pickPop('공유하지 못했어요', '', 'sh'); }); return; }
     }catch(e){}
-    _pickPop('공유하지 못했어요', '');
+    _pickPop('공유하지 못했어요', '', 'sh');
   };
   if(P && P.shareImage && png){
     P.shareImage({ png: png, text: text, pkg: 'com.kakao.talk' }).catch(function(){ copyFallback(); });
@@ -24512,6 +24510,18 @@ function _cmRenderDays(){
       + 'background:' + (sel ? 'var(--chip-on-bg)' : 'transparent') + ';'
       + 'color:' + (sel ? 'var(--chip-on-txt)' : col) + ';">' + nm + '</span>';
   }).join('');
+  var ph = document.getElementById('cmDayPresets');
+  if(ph){
+    var key = on.slice().sort().join(',');
+    var P = [['weekday','평일','1,2,3,4,5'], ['weekend','주말','0,6'], ['all','매일','0,1,2,3,4,5,6']];
+    ph.innerHTML = P.map(function(q){
+      var sel = key === q[2];
+      return '<span data-preset="' + q[0] + '"' + (sel ? ' data-on="1"' : '') + ' onclick="_cmDayPreset(\'' + q[0] + '\')" style="flex:1;text-align:center;padding:9px 0;border-radius:9px;'
+        + 'font-size:13px;font-weight:800;cursor:pointer;border:1px solid ' + (sel ? 'var(--chip-on-bg)' : 'var(--border2)') + ';'
+        + 'background:' + (sel ? 'var(--chip-on-bg)' : 'transparent') + ';'
+        + 'color:' + (sel ? 'var(--chip-on-txt)' : 'var(--text)') + ';">' + q[1] + '</span>';
+    }).join('');
+  }
   var note = document.getElementById('cmDaysNote');
   if(note) note.textContent = on.length ? ('선택한 ' + on.length + '일에만 보내요.')
                                         : '요일을 하나도 고르지 않아 매일 보내요.';
@@ -35863,11 +35873,16 @@ function _shopCtx(){
 //   · 절기는 월 기준, 환절기(2·5·8·11월 후반~)에는 다음 계절을 미리 올린다.
 //     9월에 패딩을 찾는 이유가 그거다. 사람들은 계절을 앞질러 준비한다.
 //   · 날씨는 그날의 사정이라 계절보다 세게 반영한다(비·한파·폭염).
+// ★ 2026-10-15: 이름에 '장갑'·'니트'가 들어가도 날씨와 무관한 살림 용품(고무장갑·위생장갑·니트릴…)은
+//   계절·기온 점수와 '추워서 챙겨요' 문구에서 뺀다(YJ: 추운 날 고무장갑 추천은 아니다).
+var _SHOP_NOWX = /고무장갑|위생장갑|비닐장갑|니트릴|라텍스|설거지|주방장갑|청소장갑|일회용장갑|코팅장갑|수세미|세제|물티슈/;
+function _shopNoWx(nm){ return _SHOP_NOWX.test(String(nm||'')); }
+window._shopNoWx = _shopNoWx;
 var _SHOP_SEASON_KW = {
-  winter: /패딩|다운|기모|플리스|양털|무스탕|코트|목도리|머플러|장갑|귀도리|내복|히트텍|전기요|온수매트|핫팩|가습기|난방|방한|털슬리퍼|수면바지|극세사|롱패딩|니트|스웨터|부츠/,
+  winter: /패딩|다운|기모|플리스|양털|무스탕|코트|목도리|머플러|(?<!고무|위생|니트릴|비닐|설거지|청소|라텍스|일회용|코팅|주방|세차|작업)장갑|귀도리|내복|히트텍|전기요|온수매트|핫팩|가습기|난방|방한|털슬리퍼|수면바지|극세사|롱패딩|니트(?!릴)|스웨터|부츠/,
   spring: /바람막이|윈드브레이커|가디건|트렌치|자켓|재킷|맨투맨|후드|얇은|봄|블라우스|스니커즈|황사|미세먼지|마스크|알레르기|자외선차단/,
   summer: /반팔|반바지|냉감|쿨링|냉각|린넨|메쉬|썬크림|선크림|자외선|선글라스|모자|캡모자|샌들|슬리퍼|아쿠아|수영|래시가드|선풍기|서큘레이터|제습|모기|아이스|쿨매트|부채/,
-  fall:   /후드|후디|맨투맨|가디건|자켓|재킷|니트|스웨터|점퍼|야상|기모|트렌치|경량패딩|조끼|베스트|긴팔|스카프|부츠|워커/
+  fall:   /후드|후디|맨투맨|가디건|자켓|재킷|니트(?!릴)|스웨터|점퍼|야상|기모|트렌치|경량패딩|조끼|베스트|긴팔|스카프|부츠|워커/
 };
 function _shopSeasonNow(d){
   var m = (d || new Date()).getMonth() + 1, day = (d || new Date()).getDate();
@@ -35883,6 +35898,7 @@ function _shopSeasonNow(d){
 function _shopSeasonScore(name, ctx){
   var nm = String(name||'');
   if(!nm) return 0;
+  if(_SHOP_NOWX.test(nm)) return 0;          // 살림 용품은 계절·기온과 무관
   var se = ctx._season || (ctx._season = _shopSeasonNow());
   // ★ 2026-09-20: 서버에 규칙이 올라와 있으면 그걸 쓴다(앱 업데이트 없이 교체).
   //   형식: { kw:{winter:"패딩|기모|...", ...}, w:{cur:90, next:0.7, opp:-70, rain:120, temp:110} }
@@ -39506,6 +39522,10 @@ document.addEventListener('DOMContentLoaded', function() {
 #pickPop.on{opacity:1;transform:translate(-50%,-50%) scale(1);}
 #pickPop .pp-m{font-size:16px;font-weight:800;}
 #pickPop .pp-s{font-size:13px;opacity:.8;margin-top:5px;}
+/* 위치 공유 안내 팝업 — 테마(다크·파스텔)의 카드 색을 따른다. 제목은 한 줄, 설명은 줄바꿈을 직접 정해 낱말이 끊기지 않게 */
+#pickPop.sh{background:var(--card);color:var(--text);border:1px solid var(--border2,var(--border));box-shadow:0 10px 30px rgba(0,0,0,.22);padding:16px 22px;}
+#pickPop.sh .pp-m{white-space:nowrap;color:var(--text);}
+#pickPop.sh .pp-s{opacity:1;color:var(--sub);line-height:1.5;word-break:keep-all;white-space:nowrap;margin-top:6px;}
 .brs-note.bus{color:#2f7cf6;}
 .brs-note.me{color:#ff3b30;}
 /* ★ 2026-09-29 (YJ 재제보: "아직도 노선이 일자가 아니야") — 좌우 margin(6px)이 이
