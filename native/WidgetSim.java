@@ -72,6 +72,7 @@ public final class WidgetSim {
     public int mode = NORMAL;
     public String mood = "cheer";
     public boolean settling = false;
+    public boolean sleeping = false;       // 쿨쿨(zzz): 바닥에 웅크리고 숨만 쉰다
     private final Random rnd;
     public final float[] log = new float[ST_NAME.length];      // 상태별 누적 시간(시험용)
 
@@ -103,18 +104,27 @@ public final class WidgetSim {
 
     public void setMode(int m, String mood_) {
         if (m == mode && (mood_ == null || mood_.equals(mood))) return;
-        mode = m; if (mood_ != null) mood = mood_;
+        mode = m; if (mood_ != null) mood = mood_; sleeping = false;
         for (Ch c : cs) { c.pooped = false; if (mode == COMMUTE) startGather(c); else { c.st = REST; c.t0 = time; c.until = time + 0.3f; } }
     }
     /** 이제 멈출 것: 하던 동작을 마치고 바닥에서 가만히 선다(isSettled 가 true 가 되면 그림 갱신을 멈춰도 된다). */
     public void requestSettle() { settling = true; }
-    public void resume() { settling = false; }
+    public void resume() {
+        settling = false;
+        if (sleeping) {                                    // 잠에서 깬다: 한 마리씩 시차를 두고 움직이기 시작
+            sleeping = false; int i = 0;
+            for (Ch c : cs) { c.st = REST; c.t0 = time; c.until = time + 0.2f + 0.3f * i; c.sq = 0; c.rot = 0; i++; }
+        }
+    }
+    /** 잠든다: 모두 바닥의 쉬는 자리로 모은 뒤 웅크려 숨만 쉰다(그림엔 zzz 가 올라간다). 출퇴근 중엔 자지 않는다. */
+    public void sleepOn() { if (mode == COMMUTE) return; snapSettled(); sleeping = true; }
     public boolean isSettled() {
         for (Ch c : cs) { if (mode == COMMUTE) { if (c.st != CHEER) return false; } else if (c.zone != 0 || c.st != REST) return false; }
         return true;
     }
     /** 모든 것을 바닥의 쉬는 자세로 즉시 되돌린다(화면이 꺼질 때). */
     public void snapSettled() {
+        sleeping = false;
         for (Ch c : cs) { if (mode == COMMUTE) { c.zone = 0; c.off = 0; c.rot = 0; c.frame = 0; continue; } c.zone = 0; c.y = geo.ground; c.off = 0; c.rot = 0; c.sq = 0; c.st = REST; c.t0 = time; c.until = time + 5f; c.x = clampX(c.x, 0); }
         poops.clear(); sparks.clear();
     }
@@ -132,9 +142,12 @@ public final class WidgetSim {
         if (!(dt > 0f)) return;
         if (dt > 0.1f) dt = 0.1f;
         time += dt;
+        int idx = 0;
         for (Ch c : cs) {
             log[c.st] += dt;
-            stepChar(c, dt);
+            if (sleeping) { c.st = REST; c.zone = 0; c.y = geo.ground; c.off = 0; c.frame = 0; c.rot = 0; c.sq = 0.10f + 0.03f * (float) Math.sin(time * 1.7f + idx * 1.3f); }
+            else stepChar(c, dt);
+            idx++;
         }
         for (int i = poops.size() - 1; i >= 0; i--) if (time - poops.get(i).born > 8f) poops.remove(i);
         for (int i = sparks.size() - 1; i >= 0; i--) {

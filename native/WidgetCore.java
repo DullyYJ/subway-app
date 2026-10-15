@@ -44,7 +44,8 @@ import java.util.Random;
  *
  *  ■ 배터리 — 평소엔 아무것도 돌지 않는다.
  *    · 시계 글자는 시스템 TextClock(분이 바뀌어도 우리가 깨어 있을 필요 없음).
- *    · 캐릭터 그림은 '화면이 켜졌을 때(켜짐·잠금해제·위젯 탭·런처 갱신) 잠깐(BURST_MS)'만 FRAME_MS 간격으로 갈아 끼우고, 끝나면 바닥에서 쉬는 자세로 멈춘다. 화면이 꺼지면 즉시 멈춘다.
+ *    · 캐릭터 그림은 화면이 켜져 있는 동안만 갈아 끼운다(켜짐·잠금해제·위젯 탭·런처 갱신이 깨운다): 평소엔 AWAKE_MS(90초) 놀고 → 쉬는 자리로 모여 → SLEEP_MS(30초) zzz 하며 자고(SLEEP_FRAME_MS 간격) → 다시 논다.
+ *      마지막으로 깨운 뒤 SESSION_MS(10분)가 지나면 자는 모습으로 멈춘다. 출퇴근 장면은 자지 않고 BURST_MS(45초) 뒤 줄 선 자세로 멈춘다. 화면이 꺼지면 즉시 멈춘다.
  *    · 출퇴근 시각은 정확 알람(AlarmManager) 한 번 — 계속 시간을 확인하는 루프는 없다.
  *  ■ 계산은 엔진이 한다 — 응원·위로 말은 엔진(/widget-say)이 요일·공휴일·날씨·공지를 보고 고른다. 여기선 받아서 말풍선에 그린다.
  *    (엔진에 닿지 않으면 짧은 기본 문구를 쓴다 — 그림 위에 얹는 글일 뿐이다.) 출퇴근 경로 탐색도 앱을 열어 엔진에 묻는다.
@@ -57,7 +58,8 @@ public final class WidgetCore {
     public static final String ACTION_POKE = "com.dullyyj.subway.WIDGET_POKE";
     public static final String ACTION_TICK = "com.dullyyj.subway.WIDGET_TICK";
     public static final String EXTRA_GO = "gdm_widget_go";
-    static final long BURST_MS = 45000L, FRAME_MS = 100L;
+    static final long BURST_MS = 45000L, FRAME_MS = 100L;                       // 출퇴근 장면: 켜진 뒤 45초
+    static final long AWAKE_MS = 90000L, SLEEP_MS = 30000L, SLEEP_FRAME_MS = 200L, SESSION_MS = 600000L;   // 평소: 90초 놀고 30초 자고 반복, 마지막으로 깨운 뒤 10분까지
     /** 출퇴근 버튼은 '처음 보인 때'부터 3분만 떠 있고, 안 누르면 다시 시계로 돌아간다. 보이기 전(화면이 꺼져 있던 동안)에는 시작 시각 +90분까지 기다린다. */
     static final long SHOW_MS = 3L * 60000L, WAIT_MS = 90L * 60000L;
     static final String ENGINE = "https://route-v2.phg0643.workers.dev";
@@ -426,7 +428,7 @@ public final class WidgetCore {
     }
 
     // ───────── 애니메이션(화면이 켜져 있는 동안 잠깐) ─────────
-    static boolean running; static long burstUntil, last; static boolean rcvOn;
+    static boolean running; static long burstUntil, last, sleepUntil, sessionEnd; static int phase; static boolean rcvOn;   // phase 0 놀기 · 1 쉬는 자리로 모이는 중 · 2 잠
     static boolean screenOn(Context c) {
         try { PowerManager pm = (PowerManager) c.getSystemService(Context.POWER_SERVICE); return pm == null || pm.isInteractive(); } catch (Exception e) { return true; }
     }
@@ -451,18 +453,23 @@ public final class WidgetCore {
         ensureReceiver(a);
         if (ids(a).length == 0 || !screenOn(a)) return;
         if (!"cfg".equals(why)) armScene(a);                 // 앱을 만지는 중(설정 전달)에는 위젯이 안 보이니 세지 않는다
-        burstUntil = SystemClock.uptimeMillis() + BURST_MS;
+        long now = SystemClock.uptimeMillis();
+        burstUntil = now + (anyCommute() ? BURST_MS : AWAKE_MS); sessionEnd = now + SESSION_MS; phase = 0;
         for (Inst n : INST.values()) n.sim.resume();
         if (running) return;
         running = true; last = SystemClock.uptimeMillis();
         handler().post(TICK);
     }
+    static boolean anyCommute() { for (Inst n : INST.values()) if (n.sim.mode == WidgetSim.COMMUTE) return true; return false; }
     static final Runnable TICK = new Runnable() { @Override public void run() {
         if (!running || app == null) return;
         long t0 = SystemClock.uptimeMillis();
         if (!screenOn(app)) { stop(app, true); return; }
         float dt = Math.min(0.1f, (t0 - last) / 1000f); last = t0;
-        boolean settling = t0 >= burstUntil, allDone = true;
+        boolean commute = anyCommute();
+        if (commute && phase == 2) { phase = 0; burstUntil = t0 + BURST_MS; }               // 자는 중에 출퇴근 시간이 되면 깨어 줄을 선다
+        if (phase == 0 && t0 >= burstUntil) phase = 1;
+        boolean settling = phase == 1, allDone = true;
         AppWidgetManager m = AppWidgetManager.getInstance(app);
         int[] ids = ids(app);
         if (ids.length == 0) { stop(app, false); return; }
@@ -476,10 +483,27 @@ public final class WidgetCore {
                 if (!n.sim.isSettled()) allDone = false;
             } catch (Exception ignored) { }
         }
-        if (settling && (allDone || t0 >= burstUntil + 5000L)) { stop(app, true); return; }
+        if (phase == 1 && (allDone || t0 >= burstUntil + 5000L)) {
+            if (commute) { stop(app, true); return; }                                        // 출퇴근 장면: 줄 선 자세로 멈춘다(자지 않는다)
+            phase = 2; sleepUntil = t0 + SLEEP_MS;                                            // 평소: 쉬는 자리로 모이면 잠든다
+            for (Inst n : INST.values()) n.sim.sleepOn();
+        } else if (phase == 2 && t0 >= sleepUntil) {
+            if (t0 >= sessionEnd) { endAsleep(app); return; }                                 // 오래 아무도 안 만졌다: 자는 모습으로 멈춘다
+            phase = 0; burstUntil = t0 + AWAKE_MS;                                            // 깨어나 다시 논다
+            for (Inst n : INST.values()) n.sim.resume();
+        }
         long spent = SystemClock.uptimeMillis() - t0;
-        handler().postDelayed(this, Math.max(10L, FRAME_MS - spent));
+        handler().postDelayed(this, Math.max(10L, (phase == 2 ? SLEEP_FRAME_MS : FRAME_MS) - spent));
     } };
+    /** 오래 놀았으니 자는 모습(zzz)으로 한 번 그려 놓고 끝낸다. 화면을 켜거나 위젯을 만지면 wake 가 깨운다. */
+    static void endAsleep(Context c) {
+        running = false; handler().removeCallbacks(TICK);
+        AppWidgetManager m = AppWidgetManager.getInstance(c.getApplicationContext());
+        for (int id : ids(c)) {
+            try { Inst n = cached(c, id); n.sim.sleepOn(); render(n); m.partiallyUpdateAppWidget(id, views(c, n, false)); } catch (Exception ignored) { }
+        }
+        freeSheets();
+    }
     /** 멈춘다: 모두 바닥에서 쉬는 자세(출퇴근 중엔 줄 선 자세)로 한 번 그려 놓고 끝. */
     static void stop(Context c, boolean finalFrame) {
         running = false; handler().removeCallbacks(TICK);

@@ -130,6 +130,41 @@ public class WidgetJvmTest {
             ok(s3.isSettled() && n < 600, tag + ": 멈추라고 하면 " + (n / 10f) + "초 안에 바닥에서 쉰다");
             s3.resume();
         }
+        // 잠(zzz): 잠든 동안엔 모두 바닥에 웅크려 숨만 쉬고, 깨우면 다시 돌아다닌다. 출퇴근 중엔 자지 않는다. Z 는 시각에 따라 올라가며 그려진다
+        {
+            WidgetGeo gs = WidgetGeo.of(false, 290f, 120f);
+            WidgetSim sl = new WidgetSim(gs, 11, new String[] { "dolsom", "lovel", "sul" });
+            for (int i = 0; i < 300; i++) sl.step(0.1f);
+            sl.requestSettle(); for (int i = 0; i < 600 && !sl.isSettled(); i++) sl.step(0.1f);
+            sl.sleepOn();
+            boolean still = true, squat = true; float x0 = sl.cs.get(0).x;
+            for (int i = 0; i < 300; i++) { sl.step(0.1f); for (WidgetSim.Ch c : sl.cs) { if (c.st != WidgetSim.REST || c.zone != 0 || c.off != 0 || c.frame != 0) still = false; if (c.sq < 0.05f || c.sq > 0.2f) squat = false; } }
+            ok(sl.sleeping && still && squat && sl.cs.get(0).x == x0, "잠: 30초 동안 모두 바닥에서 웅크려 제자리(걷지도 뛰지도 않음)");
+            final int[] polys = { 0 };
+            WidgetArt.Surface ps = new WidgetArt.Surface() {
+                public void save() {} public void restore() {} public void translate(float x, float y) {} public void rotate(float d) {} public void scale(float x, float y) {}
+                public void cell(String id, int f, float l, float t, float r, float bb, float al) {}
+                public void ellipse(float a1, float a2, float a3, float a4, int c) {} public void circle(float a1, float a2, float a3, int c) {}
+                public void poly(float[] xy, int c) { if (xy.length == 20) polys[0]++; }
+            };
+            WidgetArt.draw(sl, ps, false);
+            ok(polys[0] == 3 * 3 * 2, "잠: 캐릭터마다 Z 3개(그림자+글자)가 그려진다(" + polys[0] + "개)");
+            sl.resume();
+            boolean moved = false; for (int i = 0; i < 200; i++) { sl.step(0.1f); for (WidgetSim.Ch c : sl.cs) if (c.st != WidgetSim.REST) moved = true; }
+            polys[0] = 0; WidgetArt.draw(sl, ps, false);
+            ok(!sl.sleeping && moved && polys[0] == 0, "잠: 깨우면 다시 돌아다니고 Z 는 사라진다");
+            {
+                WidgetGeo gc = WidgetGeo.of(false, 290f, 120f); WidgetSim sc = new WidgetSim(gc, 3, new String[] { "dolsom", "lovel", "sul" });
+                gc.setCommute(true); sc.setMode(WidgetSim.COMMUTE, "cheer"); sc.sleepOn();
+                ok(!sc.sleeping, "잠: 출퇴근 장면에선 잠들지 않는다");
+                sl.sleepOn(); gc.setCommute(false);
+                gc.setCommute(true); sl.setMode(WidgetSim.COMMUTE, "cheer");
+                for (int i = 0; i < 240; i++) sl.step(0.05f);
+                boolean all = true; for (WidgetSim.Ch c : sl.cs) if (c.st != WidgetSim.CHEER) all = false;
+                ok(!sl.sleeping && all, "잠: 자는 중에 출퇴근이 시작되면 깨어나 줄을 선다");
+                gc.setCommute(false);
+            }
+        }
         // 화면을 켤 때마다 캐릭터 셋이 바뀐다: 매번 직전과 다른 구성, 서로 다른 3마리, 6마리 모두 골고루 등장
         { String[] cur = WidgetSim.pickSet(1, null); boolean always = true, distinct = true; java.util.Set<String> seenIds = new java.util.HashSet<String>();
           for (int i = 0; i < 300; i++) { String[] nx = WidgetSim.pickSet(1000 + i * 31L, cur); if (WidgetSim.sameSet(nx, cur)) always = false; if (nx.length != 3 || nx[0].equals(nx[1]) || nx[0].equals(nx[2]) || nx[1].equals(nx[2])) distinct = false; for (String x : nx) seenIds.add(x); cur = nx; }
@@ -159,8 +194,9 @@ public class WidgetJvmTest {
         for (String id : ALL) { File f = new File(dir, id + ".png"); if (f.exists()) sheets.put(id, ImageIO.read(f)); }
         WidgetGeo g = WidgetGeo.of(v, W, H);
         WidgetSim s = new WidgetSim(g, seed, ids);
-        boolean commute = !mood.equals("normal");
+        boolean commute = !mood.equals("normal") && !mood.equals("sleep");
         float t = 0; while (t < secs) { s.step(0.05f); t += 0.05f; if (commute && Math.abs(t - 2f) < 0.026f) { g.setCommute(true); s.setMode(WidgetSim.COMMUTE, mood); } }
+        if (mood.equals("sleep")) { s.requestSettle(); for (int i = 0; i < 600 && !s.isSettled(); i++) s.step(0.05f); s.sleepOn(); for (int i = 0; i < 30; i++) s.step(0.05f); }
         int S = 4; BufferedImage im = new BufferedImage((int) (W * S), (int) (H * S), BufferedImage.TYPE_INT_ARGB);
         Graphics2D gr = im.createGraphics(); gr.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON); gr.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
         gr.setColor(dark ? new Color(0x111114) : new Color(0xF4F4F6)); gr.fillRoundRect(0, 0, (int) (W * S), (int) (H * S), 22 * S / 2, 22 * S / 2);

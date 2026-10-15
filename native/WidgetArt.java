@@ -21,6 +21,13 @@ public final class WidgetArt {
         void poly(float[] xy, int argb);
     }
 
+    /** 굵은 Z 한 글자(중심 cx,cy · 반 크기 h). */
+    private static void zed(Surface s, float cx, float cy, float h, int argb) {
+        float t = h * 0.42f, d = t * 1.5f;
+        s.poly(new float[] { cx - h, cy - h, cx + h, cy - h, cx + h, cy - h + t, cx - h + d, cy + h - t, cx + h, cy + h - t, cx + h, cy + h,
+            cx - h, cy + h, cx - h, cy + h - t, cx + h - d, cy - h + t, cx - h, cy - h + t }, argb);
+    }
+
     public static void draw(WidgetSim sim, Surface s, boolean dark) {
         WidgetGeo g = sim.geo;
         int shadow = 0x2E000000;     // 배경이 투명이라 밝은 배경·어두운 배경 어디서나 보이는 옅은 그림자
@@ -63,6 +70,23 @@ public final class WidgetArt {
             float left = cx - f[2] * sc, top = footY - f[1] * sc, sz = 256f * sc;
             s.cell(c.id, ((c.frame % 16) + 16) % 16, left, top, left + sz, top + sz, 1f);
             s.restore();
+        }
+        // 쿨쿨: 머리 위로 Z 가 둥실 떠올랐다 사라진다(시각만으로 계산 — 멈춘 프레임에서도 보인다)
+        if (sim.sleeping) {
+            int i = 0;
+            for (WidgetSim.Ch c : sim.cs) {
+                float charH = g.charH * c.cfg[5], lift = c.cfg[4] * g.charH / 58f, headY = c.y - lift - charH * 0.9f;
+                for (int k = 0; k < 3; k++) {
+                    float p = (sim.time * 0.42f + k / 3f + i * 0.29f) % 1f;
+                    float al = Math.min(1f, p / 0.18f) * Math.min(1f, (1f - p) / 0.4f);
+                    float h = (1.5f + 2.2f * p) * u;
+                    float zx = c.x + c.face * (charH * 0.26f + p * charH * 0.30f) + (float) Math.sin(p * 6.3f + k) * 0.8f * u, zy = headY - p * charH * 0.8f;
+                    zx = Math.max(h + 1f, Math.min(g.W - h - 1f, zx));       // 위젯 가장자리에서 잘리지 않게
+                    zed(s, zx + 0.5f * u, zy + 0.5f * u, h, ((int) (al * 70f) << 24));
+                    zed(s, zx, zy, h, ((int) (al * 255f) << 24) | 0x8A96FF);
+                }
+                i++;
+            }
         }
         // 반짝이·하트
         for (WidgetSim.Spark p : sim.sparks) {
