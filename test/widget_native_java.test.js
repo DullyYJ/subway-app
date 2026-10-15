@@ -84,6 +84,7 @@ print('BAD', bad); print('MISS', miss)
     assert(y.includes('registerPlugin(GdmWidgetPlugin.class)'), 'GdmWidgetPlugin 등록 누락');
     assert(y.includes('WidgetCore.captureLaunch(getIntent())') && y.includes('onNewIntent'), '위젯에서 앱 열림 처리 누락');
     for (const c of ['GdmWidgetHB', 'GdmWidgetHW', 'GdmWidgetVB', 'GdmWidgetVW', 'GdmWidgetReceiver']) assert(y.includes('".' + c + '"') || y.includes("prov(\"" + c + "\""), c + ' 매니페스트 누락');
+    assert(y.includes('protected void onStop()') && y.includes('WidgetCore.onAppLeft(this)'), '앱을 닫을 때(onStop) 위젯을 깨우는 연결 누락');
     assert(y.includes('android.appwidget.action.APPWIDGET_UPDATE') && y.includes('android.appwidget.provider'), '위젯 intent-filter/meta-data 누락');
   });
   await t('매니페스트 패치 파이썬을 실제로 돌려도 위젯 수신기가 들어간다', async () => {

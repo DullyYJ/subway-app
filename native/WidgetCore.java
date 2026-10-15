@@ -536,6 +536,10 @@ public final class WidgetCore {
         running = true; last = SystemClock.uptimeMillis();
         handler().post(TICK);
     }
+    /** 길동무 앱 화면이 닫혀(홈·다른 앱으로 나감) 위젯이 보일 수 있게 됐다: 앱과 위젯은 한 프로세스라 바로 깨운다(2분 돌아다니고 잔다). */
+    public static void onAppLeft(Context c) {
+        try { evalScene(c); wake(c, "app"); } catch (Exception ignored) { }
+    }
     static boolean anyCommute() { for (Inst n : INST.values()) if (n.sim.mode == WidgetSim.COMMUTE) return true; return false; }
     static final Runnable TICK = new Runnable() { @Override public void run() {
         if (!running || app == null) return;
