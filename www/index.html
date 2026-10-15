@@ -1606,7 +1606,8 @@ header h1 em{color:var(--gold);font-style:normal;}
 
 /* CONGESTION CARD */
 .cong-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:14px;border-left-width:4px;}
-.cong-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;}
+.cong-top{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;}
+.cong-top .cong-status{margin:0;text-align:right;white-space:nowrap;flex-shrink:0;}
 .cong-stn{font-size:13px;color:var(--sub);}
 .cong-stn b{color:var(--gold);}
 .cong-meta{font-size:11px;color:var(--sub);}
@@ -1618,14 +1619,18 @@ header h1 em{color:var(--gold);font-style:normal;}
 .chart-scroll-wrap:active{cursor:grabbing;}
 .chart-scroll-wrap::-webkit-scrollbar{height:3px;}
 .chart-scroll-wrap::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
-.bars-24{display:flex;align-items:flex-end;height:80px;gap:0;width:max-content;padding-bottom:0;}
+/* ★ 2026-10-15 (YJ): 그래프 칸을 키웠다(막대 높이는 _chartBarH — 높이 112px 기준, 버스는 칸별 혼잡도가 없어 160px). 현재 시각 막대는 가운데에 오고(_chart24Center) 양끝에 여백을 둬서 새벽·밤 시각도 가운데로 온다. */
+.bars-24{display:flex;align-items:flex-end;height:var(--bars-h,112px);gap:0;width:max-content;padding-bottom:0;}
+.cong-card.bus{--bars-h:160px;}
+:root{--cur-ol:#fff;}
+[data-theme="pastel"]{--cur-ol:#111;}
 /* 운행 시간 바 */
 .bar24-col{display:flex;flex-direction:column;align-items:center;width:28px;cursor:pointer;flex-shrink:0;}
-.bar24-col.cur .bar24-fill{outline:2px solid #fff;outline-offset:1px;}
+.bar24-col.cur .bar24-fill{outline:2px solid var(--cur-ol,#fff);outline-offset:1px;}
 .bar24-fill{width:16px;border-radius:3px 3px 0 0;min-height:4px;transition:height .4s;}
 /* 시간 라벨 — 모든 시간 표시 */
 .bar24-lbl{font-size:8px;color:var(--sub);margin-top:3px;white-space:nowrap;text-align:center;width:28px;}
-.bar24-lbl.cur-lbl{color:#fff;font-weight:700;}
+.bar24-lbl.cur-lbl{color:var(--cur-ol,#fff);font-weight:700;}
 /* 비운행 시간 */
 .bar24-off{display:flex;flex-direction:column;align-items:center;width:28px;cursor:pointer;flex-shrink:0;opacity:0.35;}
 .bar24-fill-off{width:16px;height:4px;border-radius:2px;background:var(--border2);margin-bottom:0;}
@@ -1644,7 +1649,7 @@ header h1 em{color:var(--gold);font-style:normal;}
 /* 차트 선택된 시간 tooltip */
 .chart-tooltip{
   font-size:11px;color:var(--text);padding:4px 0;
-  display:flex;justify-content:space-between;align-items:center;
+  display:flex;justify-content:center;gap:10px;align-items:center;
   padding-right:11px;
 }
 .chart-tooltip-time{font-weight:700;}
@@ -14837,7 +14842,8 @@ function _updateTransitGps() {
     } else if(_cgBest.isSub && _cgBest.name){
       // 지하철 구간 → 기존 지하철역 혼잡도
       if(typeof updateCong==='function'){
-        updateCong({ name: _cgBest.name, line: _cgBest.lineName || '' });
+        // ★ 2026-10-15 (YJ: 버스→지하철 환승 때 칸별 혼잡도가 안 돌아옴): 버스 표시 중(_congMode='bus')이면 force 없이는 지하철 갱신이 통째로 무시됐다. 경로 안의 지하철 노드이므로 force.
+        updateCong({ name: _cgBest.name, line: _cgBest.lineName || '' }, true);
       }
     }
   }
@@ -19048,9 +19054,8 @@ window.addEventListener('unhandledrejection', function(e) {
           <div class="cong-stn">지하철 <b id="congStn">-</b></div>
           <div class="cong-meta" id="congMeta">시간표 기반</div>
         </div>
-        
+        <div class="cong-status" id="congStatusTxt" style="color:var(--sub);">출발역을 설정하세요</div>
       </div>
-      <div class="cong-status" id="congStatusTxt" style="color:var(--sub);">출발역을 설정하세요</div>
       <!-- 혼잡도 게이지 -->
       <div class="cong-gauge-wrap" id="congGaugeWrap" style="display:none;">
         <div class="cong-gauge-label">
@@ -34439,6 +34444,46 @@ function getCong24(stnName, lineName) {
 }
 window.getCong24 = getCong24;
 
+// 막대 높이 배율(%→px): 지하철 0.9(칸 1칸 아래 칸별 혼잡도가 있다), 버스 1.38(칸별이 없어 그래프를 키운다). --bars-h 와 같이 움직인다.
+function _chartBarK(){ return window._congMode === 'bus' ? 1.38 : 0.9; }
+window._chartBarK = _chartBarK;
+// 현재 시각 막대를 그래프 가운데로: 양끝에 반 폭 여백을 줘서 새벽·밤 시각도 가운데에 올 수 있고, 위치는 실제 막대 자리로 잰다(옛 계산은 막대 폭을 30·38로 잘못 가정해 오른쪽으로 치우쳤다).
+function _chart24Center(smooth){
+  try{
+    var sc = document.getElementById('chart24Scroll'), bars = document.getElementById('bars24');
+    if(!sc || !bars) return;
+    var cur = bars.querySelector('.bar24-col.cur'); if(!cur) return;
+    var half = sc.clientWidth / 2;
+    if(!half){                                              // 화면에 안 보이는 탭이면 보일 때 다시 맞춘다
+      if(window.IntersectionObserver && !bars._ioWait){
+        bars._ioWait = true;
+        var io = new IntersectionObserver(function(es){ if(es[0] && es[0].isIntersecting){ io.disconnect(); bars._ioWait = false; _chart24Center(false); } });
+        io.observe(sc);
+      }
+      return;
+    }
+    var pad = Math.max(0, Math.round(half - cur.offsetWidth / 2));
+    bars.style.paddingLeft = pad + 'px'; bars.style.paddingRight = pad + 'px';
+    var sr = sc.getBoundingClientRect(), cr = cur.getBoundingClientRect();
+    var left = sc.scrollLeft + (cr.left + cr.width / 2) - (sr.left + half);
+    sc.scrollTo({ left: Math.max(0, left), behavior: smooth ? 'smooth' : 'auto' });
+  }catch(e){}
+}
+window._chart24Center = _chart24Center;
+
+// 혼잡도 카드를 지하철/버스 표시로 즉시 맞춘다: 지하철이면 칸별 혼잡도, 버스면 칸별을 숨기고 그래프를 키운다(비동기 응답을 기다리지 않는다)
+function _congApplyMode(mode){
+  try{
+    var card = document.getElementById('congCard'), bus = (mode === 'bus');
+    if(card) card.classList.toggle('bus', bus);
+    var t = document.getElementById('carTtl'), g = document.getElementById('carGrid'), n = document.getElementById('busCongNote');
+    if(t) t.style.display = bus ? 'none' : '';
+    if(g) g.style.display = bus ? 'none' : '';
+    if(n && !bus){ n.style.display = 'none'; }
+  }catch(e){}
+}
+window._congApplyMode = _congApplyMode;
+
 // 24시간 바 차트 렌더
 function renderChart24(stnName, lineName) {
   var bars    = document.getElementById('bars24');
@@ -34474,7 +34519,7 @@ function renderChart24(stnName, lineName) {
     }
 
     var col   = v<30 ? '#34c759' : v<60 ? '#ff9f0a' : v<80 ? '#ff6b35' : '#ff3b30';
-    var ht    = Math.max(4, Math.round(v * 0.6));
+    var ht    = Math.max(4, Math.round(v * _chartBarK()));
     var alpha = isCur ? '1' : '0.75';
     return '<div class="bar24-col' + (isCur ? ' cur' : '') + '"'
       + ' onclick="showChartTooltip(' + h + ',' + v + ')">'
@@ -34488,21 +34533,17 @@ function renderChart24(stnName, lineName) {
   var _chartSig = bars.innerHTML;
   if(bars._chartSig !== _chartSig){
     bars._chartSig = _chartSig;
-    setTimeout(function(){
-      var scroll = document.getElementById('chart24Scroll');
-      if(scroll){
-        var BAR_W = 30;
-        scroll.scrollTo({ left: Math.max(0, curH*BAR_W - scroll.clientWidth/2 + BAR_W/2), behavior:'smooth' });
-      }
-    }, 300);
+    _chart24Center(false);
+    setTimeout(function(){ _chart24Center(true); }, 300);
+    try{ var _cv = bars.querySelector('.bar24-col.cur .bar24-fill'); var _cvv = _cv ? Math.round((parseFloat(_cv.style.height) || 0) / _chartBarK()) : 0; showChartTooltip(curH, _cv ? _cvv : 0, true); }catch(eTip){}
   }
 }
 window.renderChart24 = renderChart24;
 
-function showChartTooltip(h, v) {
+function showChartTooltip(h, v, isCur) {
   var el = document.getElementById('chartTooltipTime');
   var vl = document.getElementById('chartTooltipVal');
-  if(el) el.textContent = h + '시';
+  if(el) el.textContent = (isCur ? '현재 ' : '') + h + '시';
   if(vl) vl.textContent = v > 0 ? v + '%' : '운행 없음';
 }
 window.showChartTooltip = showChartTooltip;
@@ -34605,16 +34646,12 @@ function updateCong(stn, force) {
   if(gFill) { gFill.style.width = Math.min(100,pct) + '%'; gFill.style.background = col; }
   if(gPct)  gPct.textContent = pct + '%';
 
-  // 24시간 차트
+  // 24시간 차트(지하철이면 칸별 혼잡도 복원·그래프 높이도 지하철용으로 먼저 맞춘다)
+  _congApplyMode('subway');
   renderChart24(stn.name, stn.line);
 
   // 🚇 지하철 → 칸별 혼잡도 복원 (버스 안내 숨김)
-  var _carTtl  = document.getElementById('carTtl');
-  var _carGrid = document.getElementById('carGrid');
-  var _busNote = document.getElementById('busCongNote');
-  if(_carTtl)  _carTtl.style.display = '';
-  if(_carGrid) _carGrid.style.display = '';
-  if(_busNote) _busNote.style.display = 'none';
+  _congApplyMode('subway');
   var _chartWrap = document.getElementById('chart24Wrap');
   if(_chartWrap) _chartWrap.style.opacity = '1';
 
@@ -34790,6 +34827,7 @@ window._busCongLabel = _busCongLabel;
 function updateBusCong(busSection){
   // 🚌 즉시 버스 모드로 잠금 (비동기 fetch 전에 지하철 덮어쓰기 방지)
   window._congMode = 'bus';
+  _congApplyMode('bus');
   // 라벨 즉시 "버스 N번"으로 (데이터 로딩 전에도 지하철 → 버스 전환)
   var _labelEl0 = document.querySelector('.cong-stn');
   if(_labelEl0) _labelEl0.innerHTML = '버스 <b id="congStn">' + _busCongLabel(busSection.name) + '</b>';
@@ -34799,6 +34837,15 @@ function updateBusCong(busSection){
       // 데이터 없으면 라벨만 버스로 유지 (수치는 비움)
       var labelEl = document.querySelector('.cong-stn');
       if(labelEl) labelEl.innerHTML = '버스 <b id="congStn">' + _busCongLabel(busSection.name) + '</b>';
+      // ★ 앞 지하철 역의 수치·그래프가 버스 이름 아래 남아 있던 것을 치운다
+      try{
+        var _s0 = document.getElementById('congStatusTxt'); if(_s0){ _s0.textContent = '정보 없음'; _s0.style.color = 'var(--sub)'; }
+        var _m0 = document.getElementById('congMeta'); if(_m0) _m0.textContent = '이 버스의 혼잡 통계를 못 받았어요';
+        var _g0 = document.getElementById('congGaugeWrap'); if(_g0) _g0.style.display = 'none';
+        var _b0 = document.getElementById('bars24'); if(_b0){ _b0.innerHTML = ''; _b0._chartSig = ''; }
+        var _p0 = document.getElementById('peakLbl'); if(_p0) _p0.textContent = '-';
+        var _bd0 = document.getElementById('congBadge'); if(_bd0){ _bd0.textContent = '-'; _bd0.style.background = 'var(--arex)'; }
+      }catch(e0){}
       return;
     }
     var pct = res.pct;
@@ -34877,6 +34924,7 @@ function _resetCongToWaiting(){
   var gWrap = document.getElementById('congGaugeWrap'); if(gWrap) gWrap.style.display = 'none';
   var gFill = document.getElementById('congGaugeFill'); if(gFill) gFill.style.width = '0%';
   var gPct  = document.getElementById('congGaugePct'); if(gPct) gPct.textContent = '-';
+  _congApplyMode('subway');
   var carTtl = document.getElementById('carTtl'); if(carTtl) carTtl.style.display = '';
   var carGrid = document.getElementById('carGrid');
   if(carGrid){ carGrid.style.display=''; carGrid.innerHTML = '<div style="font-size:11px;color:var(--sub);padding:6px 0;">출발역 설정 후 표시됩니다</div>'; }
@@ -35030,7 +35078,7 @@ function _renderBusChart24(hourly){
         + '</div>';
     }
     var col   = v<30 ? '#34c759' : v<60 ? '#ff9f0a' : v<80 ? '#ff6b35' : '#ff3b30';
-    var ht    = Math.max(4, Math.round(v * 0.6));
+    var ht    = Math.max(4, Math.round(v * _chartBarK()));
     var alpha = isCur ? '1' : '0.75';
     return '<div class="bar24-col' + (isCur ? ' cur' : '') + '"'
       + ' onclick="showChartTooltip(' + h + ',' + v + ')">'
@@ -35045,13 +35093,9 @@ function _renderBusChart24(hourly){
   var _chartSig = bars.innerHTML;
   if(bars._chartSig !== _chartSig){
     bars._chartSig = _chartSig;
-    setTimeout(function(){
-      var scroll = document.getElementById('chart24Scroll');
-      if(scroll){
-        var BAR_W = 30;
-        scroll.scrollTo({ left: Math.max(0, curH*BAR_W - scroll.clientWidth/2 + BAR_W/2), behavior:'smooth' });
-      }
-    }, 300);
+    _chart24Center(false);
+    setTimeout(function(){ _chart24Center(true); }, 300);
+    try{ var _cv = bars.querySelector('.bar24-col.cur .bar24-fill'); var _cvv = _cv ? Math.round((parseFloat(_cv.style.height) || 0) / _chartBarK()) : 0; showChartTooltip(curH, _cv ? _cvv : 0, true); }catch(eTip){}
   }
 }
 window._renderBusChart24 = _renderBusChart24;
@@ -35085,8 +35129,7 @@ function initChart24Scroll(){
   scroll.addEventListener('scroll',function(){
     clearTimeout(_t);
     _t=setTimeout(function(){
-      var h=new Date().getHours(), BAR_W=38;
-      scroll.scrollTo({left:Math.max(0,h*BAR_W-scroll.clientWidth/2+BAR_W/2),behavior:'smooth'});
+      _chart24Center(true);
     },2000);
   });
 }
