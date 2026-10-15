@@ -10,7 +10,7 @@
 // 맨 아래 module.exports 는 시험(Node)용이고 Worker 에서는 함수 선언만 쓰인다.
 'use strict';
 var SCENE_CHARS = ["dolsom", "lovel", "dudung", "sul", "ppopu", "chaeng"];
-var SCENE_HINT_BUS = "지하철 탑승시 혼잡도가 나와요!";
+var SCENE_HINT_BUS = "지하철을 타면 혼잡도가 나와요";
 var SCENE_SLOT_KO = { dawn: "새벽", morning: "아침", noon: "점심", afternoon: "오후", evening: "저녁", night: "밤" };
 var SCENE_WX_KO = { clear: "맑음", cloudy: "구름", overcast: "흐림", rain: "비", snow: "눈", fog: "안개" };
 var SCENE_WX_CACHE = {};

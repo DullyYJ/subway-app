@@ -2,7 +2,7 @@
 //   · 경로가 없으면: 시간대(새벽·아침·점심·오후·저녁·밤)와 실제 날씨(눈·비·구름·흐림·안개)에 맞는 배경에서 캐릭터 2~3마리가 랜덤으로 나와 논다
 //   · 버스 경로: 타기 전 = 한 마리가 기다림 · 타면 = 버스 안 · 내리면 = 버스에서 내려 친구들과 놀기 · 지하철→버스 환승도 버스 장면
 //   · ★ (23:05 YJ) 혼잡도와 장면은 함께 보이지 않는다: 혼잡도는 '지하철 탑승 확정' 뒤에만, 그 밖(대기·버스·내림·경로 없음)은 장면만
-//   · 버스에서는 '혼잡도 분석' 아래에 "지하철 탑승시 혼잡도가 나와요!"
+//   · 버스에서는 '혼잡도 분석' 제목줄에 "지하철을 타면 혼잡도가 나와요"
 //   · ★ "모든 연산은 엔진이 한다, 앱은 그림만": 장면 종류·구간·시간대·날씨·대표 캐릭터는 엔진(/scene, engine/scene.js)이 정하고 앱에는 그 판정 코드가 없다.
 //     (시험에서는 엔진 함수를 그대로 불러 /scene 응답을 만든다)
 // 실행: node test/cong_scene.ui.test.js [html 경로]
@@ -50,12 +50,16 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   await t('경로가 없으면 장면이 켜지고(idle) 캐릭터 2~3마리가 나와 돌아다닌다 · 빈 혼잡도 칸은 접힌다', async () => {
     const { ctx, page, errs, st } = await fresh();
     await page.waitForTimeout(1500);
-    const sb = await sceneBox(page); assert(sb.show && sb.mode === 'idle' && sb.w > 250 && sb.h === 150, JSON.stringify(sb));
+    const sb = await sceneBox(page); assert(sb.show && sb.mode === 'idle' && sb.w > 250, JSON.stringify(sb));
+    // (06:00 YJ) 경로가 없을 땐 장면이 홈 화면 남는 세로를 꽉 채운다(하단 탭 바로 위까지)
+    const fit = await page.evaluate(() => { const s = document.getElementById('congScene').getBoundingClientRect(), w = document.getElementById('tabContentWrap').getBoundingClientRect(); return { h: s.height, gap: w.bottom - s.bottom, wh: w.height }; });
+    assert(fit.h > 300 && fit.gap >= 0 && fit.gap < 64, '세로를 꽉 채운다 ' + JSON.stringify(fit));
+    assert((await info(page)).H > 230, '큰 장면은 같은 그림을 키워 그린다');
     assert(/점심|아침|오후|저녁|밤|새벽/.test(sb.tag) && /맑음/.test(sb.tag), sb.tag);
     await page.evaluate(() => _CS._tick(4)); let i1 = await info(page);
     assert(i1.running && !i1.err && i1.actors.length >= 2 && i1.actors.length <= 3, JSON.stringify(i1));
-    const xs0 = i1.actors.map(a => a.x).join(','); await page.evaluate(() => _CS._tick(3)); const i2 = await info(page);
-    assert(i2.actors.map(a => a.x).join(',') !== xs0, '캐릭터가 움직여야 한다');
+    const pos0 = i1.actors.map(a => a.x + '/' + a.z).join(','); let moved = false; for (let k = 0; k < 6 && !moved; k++) { await page.evaluate(() => _CS._tick(3)); moved = (await info(page)).actors.map(a => a.x + '/' + a.z).join(',') !== pos0; }
+    assert(moved, '캐릭터가 움직여야 한다');
     const c = await cardState(page); assert(!c.chart && !c.grid, '출발역이 없을 땐 빈 그래프·칸별 칸을 접는다 ' + JSON.stringify(c));
     assert(!(await hintTxt(page)).show, 'idle 에는 버스 안내가 없다');
     assert(!errs.length, errs.join('|')); await ctx.close();
@@ -80,7 +84,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     const sb = await sceneBox(page); assert(sb.show && !/맑|흐|비|눈|구름|안개/.test(sb.tag) && sb.wx === 'clear', JSON.stringify(sb));
     assert(!errs.length, errs.join('|')); await ctx.close();
   });
-  await t('버스 구간: 타기 전 wait(한 마리) → 타고 가는 중 ride → 내림 alight(친구들과 놀기) + 모든 구간에 "지하철 탑승시 혼잡도가 나와요!"', async () => {
+  await t('버스 구간: 타기 전 wait(한 마리) → 타고 가는 중 ride → 내림 alight(친구들과 놀기) + 모든 구간에 "지하철을 타면 혼잡도가 나와요"', async () => {
     const { ctx, page, errs } = await fresh();
     await page.evaluate(ROUTE);
     await go(page, 1, false);                                  // 정류장으로 걸어가는 중
@@ -88,7 +92,9 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     assert(sb.mode === 'wait' && /기다리는/.test(sb.tag), JSON.stringify(sb));
     assert(i.actors.length === 1 && i.actors[0].hero && i.actors[0].st && !i.err, JSON.stringify(i));
     const hero = sb.hero;
-    let h = await hintTxt(page); assert(h.show && h.txt === '지하철 탑승시 혼잡도가 나와요!', JSON.stringify(h));
+    let h = await hintTxt(page); assert(h.show && h.txt === '지하철을 타면 혼잡도가 나와요', JSON.stringify(h));
+    const pos = await page.evaluate(() => { const e = document.getElementById('congBusHint'), t = document.querySelector('#congCard').previousElementSibling; const r = e.getBoundingClientRect(), tr = t.getBoundingClientRect(); return { sameRow: e.parentElement === t, dy: Math.abs((r.top + r.bottom) / 2 - (tr.top + tr.bottom) / 2), w: r.width, sh: document.getElementById('congScene').getBoundingClientRect().height }; });
+    assert(pos.sameRow && pos.dy < 14 && pos.w > 60 && pos.sh === 150, '"혼잡도 분석" 제목줄에 문구, 버스 장면은 150px ' + JSON.stringify(pos));
     let c = await cardState(page); assert(c.cs && !c.grid && !c.chart, '버스 구간엔 혼잡도 없이 장면만 ' + JSON.stringify(c));
     await go(page, 2, true); sb = await sceneBox(page); assert(sb.mode === 'ride' && /타고/.test(sb.tag) && sb.hero === hero, '타고 가는 중 ' + JSON.stringify(sb));
     await go(page, 3, true); sb = await sceneBox(page); assert(sb.mode === 'ride' && /곧 내려요/.test(sb.tag), '내리기 직전(하차벨) ' + JSON.stringify(sb));

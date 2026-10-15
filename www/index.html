@@ -1629,7 +1629,7 @@ header h1 em{color:var(--gold);font-style:normal;}
 .cong-card.cs-on > :not(.cong-scene){display:none !important;}   /* 장면이 보일 땐 혼잡도(상태·게이지·그래프·칸별)를 보이지 않는다 — 혼잡도는 지하철 탑승 확정 뒤에만(YJ) */
 .cong-card.cs-on{border-left-color:var(--arex) !important;}
 .cs-hide{display:none !important;}
-.cong-bus-hint{display:none;font-size:11.5px;color:var(--sub);margin:-2px 0 8px 2px;line-height:1.4;}
+.cong-bus-hint{display:none;flex:1 1 auto;min-width:0;font-size:11.5px;font-weight:700;letter-spacing:0;text-transform:none;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.4;}   /* ★ (YJ 06:00) '혼잡도 분석' 제목줄 가운데에 둔다 — 문구는 엔진이 준다 */
 :root{--cur-ol:#fff;}
 [data-theme="pastel"]{--cur-ol:#111;}
 /* 운행 시간 바 */
@@ -19056,8 +19056,7 @@ window.addEventListener('unhandledrejection', function(e) {
 
   <!-- 3순위: 집단지성 혼잡 분석 -->
   <div>
-    <div class="sec" style="justify-content:flex-start;gap:8px;">혼잡도 분석<span id="congLiveDot" class="ldot-live" style="display:none;margin-right:0;"></span><span id="congBadge" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;color:#fff;background:var(--arex);">-</span><button id="shareLocBtn" onclick="_shareLoc()" style="margin-left:auto;flex-shrink:0;cursor:pointer;font-family:inherit;font-size:11px;font-weight:700;color:var(--gold);background:transparent;border:1px solid var(--gold);border-radius:12px;padding:3px 10px;white-space:nowrap;letter-spacing:0;">📍 위치 공유</button></div>
-    <div class="cong-bus-hint" id="congBusHint"></div>
+    <div class="sec" style="justify-content:flex-start;gap:8px;">혼잡도 분석<span id="congLiveDot" class="ldot-live" style="display:none;margin-right:0;"></span><span id="congBadge" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;color:#fff;background:var(--arex);">-</span><span class="cong-bus-hint" id="congBusHint"></span><button id="shareLocBtn" onclick="_shareLoc()" style="margin-left:auto;flex-shrink:0;cursor:pointer;font-family:inherit;font-size:11px;font-weight:700;color:var(--gold);background:transparent;border:1px solid var(--gold);border-radius:12px;padding:3px 10px;white-space:nowrap;letter-spacing:0;">📍 위치 공유</button></div>
     <div class="cong-card" id="congCard" style="border-left-color:var(--arex);">
       <div class="cong-top">
         <div>
@@ -34918,7 +34917,7 @@ window.updateBusCong = updateBusCong;
 
 // ── 장면·혼잡도 구간은 전부 엔진(/scene)이 정한다 (★ 2026-10-15 YJ: "모든 연산은 엔진이 한다, 앱은 그림만") ──
 //   앱은 '지금까지의 증거'(경로 노드·현재 위치 인덱스·승차 확정 여부·시각·위치)를 보내고, 엔진이 돌려준 값을 그린다:
-//   · mode(idle/wait/ride/alight/없음)·시간대·날씨 종류·대표 캐릭터·안내 문구 → _CS(캔버스 장면)와 '지하철 탑승시 혼잡도가 나와요!' 문구
+//   · mode(idle/wait/ride/alight/없음)·시간대·날씨 종류·대표 캐릭터·안내 문구 → _CS(캔버스 장면)와 '지하철을 타면 혼잡도가 나와요' 문구
 //   · cong(지금 보일 지하철 역 또는 버스 정류장 목록) → updateCong / updateBusCong 를 부를 뿐이다. 이전의 앱 쪽 구간 고르기는 없앴다.
 //   엔진 응답이 없으면(오프라인·옛 엔진) 마지막으로 받은 그대로 둔다(새로 판단하지 않는다).
 var _SCENE_URL = ((typeof _ROUTE_V2_BASE === 'string' && _ROUTE_V2_BASE) ? _ROUTE_V2_BASE : 'https://route-v2.phg0643.workers.dev') + '/scene';
@@ -34939,12 +34938,14 @@ function _sceneApply(res){
   if(!res || res.ok === false) return;
   _sceneSt.lastRes = res; window._sceneLast = res;
   var N = (typeof _transitNodeData !== 'undefined' && _transitNodeData) ? _transitNodeData : [];
+  try{ var _c0 = document.getElementById('congCard'); if(_c0) _c0.classList.toggle('cs-on', !!res.mode); }catch(e0){}      // 장면 칸 위치를 재기 전에 혼잡도 칸부터 접는다
   try{ _CS.apply(res); }catch(e){ console.warn('[장면]', e); }
   try{
     var card = document.getElementById('congCard'), sc = document.getElementById('congScene'), on = !!(sc && sc.style.display === 'block');
     if(card) card.classList.toggle('cs-on', on);
     ['congBadge', 'congLiveDot'].forEach(function(id){ var e = document.getElementById(id); if(e) e.classList.toggle('cs-hide', on); });     // 장면이 보일 땐 혼잡도 배지도 숨긴다
     var hint = document.getElementById('congBusHint'); if(hint){ hint.textContent = res.hint || ''; hint.style.display = res.hint ? 'block' : 'none'; }
+    _sceneFit();
   }catch(e1){}
   var c = res.cong;      // 혼잡도는 엔진이 '지하철 탑승 확정'이라고 한 구간(cong.kind === 'sub')에서만 그린다
   if(c && c.kind === 'sub' && c.sig && c.sig !== _sceneSt.congSig){
@@ -34968,12 +34969,29 @@ function _sceneRequest(why){
   }catch(e){ _sceneSt.busy = false; }
 }
 window._sceneRequest = _sceneRequest;
+// 경로가 없을 때(idle) 장면 칸을 홈 화면 남는 세로 전체로 늘린다(YJ 06:00). 칸 높이만 정하는 배치 계산이다 — 장면 종류는 엔진이 정한다.
+function _sceneFit(){
+  try{
+    var sc = document.getElementById('congScene'), wrap = document.getElementById('tabContentWrap'), card = document.getElementById('congCard');
+    if(!sc || !wrap || !card) return;
+    var last = _sceneSt.lastRes, idle = !!(last && last.mode === 'idle') && sc.style.display === 'block' && !!sc.offsetParent;
+    if(!idle){ if(sc.style.height) sc.style.height = ''; return; }
+    var wr = wrap.getBoundingClientRect(), sr = sc.getBoundingClientRect();
+    var cs = getComputedStyle(card), ss = getComputedStyle(sc), top = sr.top - wr.top + wrap.scrollTop;
+    var extra = (parseFloat(cs.paddingBottom) || 0) + (parseFloat(cs.borderBottomWidth) || 0) + (parseFloat(ss.marginBottom) || 0) + 12;   // 칸 아래 여백(카드 안쪽·테두리·아래 간격)
+    var h = Math.round(wrap.clientHeight - top - extra - 12);
+    h = Math.max(150, Math.min(h, 900));
+    if(Math.abs(h - sr.height) > 1) sc.style.height = h + 'px';
+  }catch(e){ console.warn('[장면 높이]', e); }
+}
+window._sceneFit = _sceneFit;
+try{ window.addEventListener('resize', function(){ setTimeout(_sceneFit, 60); }); }catch(e){}
 function _congSyncRoute(){ _sceneRequest('tick'); }
 window._congSyncRoute = _congSyncRoute;
 (function(){
   function init(){
     var host = document.getElementById('congScene'), tag = document.getElementById('csTag');
-    try{ if(host && typeof _CS !== 'undefined') _CS.attach(host, tag); }catch(e){}
+    try{ if(host && typeof _CS !== 'undefined'){ _CS.attach(host, tag); _CS.setFit(_sceneFit); } }catch(e){}
     try{ if(typeof _RC !== 'undefined') _RC.load(); }catch(e2){}
     setInterval(function(){ _sceneRequest('tick'); }, 2500);
     setTimeout(function(){ _sceneRequest('force'); }, 1200);
@@ -41850,7 +41868,7 @@ var _CS = (function(){
 
   // ── 배경 그림(시간대·날씨·계절마다 한 번만 그려 두고 매 프레임 복사) ──
   function mk(w, h){ var c = document.createElement('canvas'); c.width = Math.max(1, Math.round(w)); c.height = Math.max(1, Math.round(h)); return c; }
-  function geom(W, H){ var hy = Math.round(H * 0.5); return { W: W, H: H, hy: hy, roadY0: hy + 5, nearTop: Math.round(H * 0.7), floor: H - 4 }; }
+  function geom(W, H){ var tall = H > 230, hy = Math.round(H * (tall ? 0.44 : 0.5)); return { W: W, H: H, hy: hy, roadY0: hy + 5, nearTop: Math.round(H * (tall ? 0.62 : 0.7)), floor: H - 4 }; }     // 세로로 큰 장면은 인도를 넓혀 캐릭터가 돌아다닐 자리를 만든다
   function pickOf2(rng, a){ return a[Math.floor(rng() * a.length) % a.length]; }
   function buildBG(L, g, dpr, season, dark){
     var W = g.W, H = g.H, hy = g.hy, tw = Math.ceil(W * 1.7), rng = mulberry(L.slot.length * 977 + L.wk.length * 131 + 7);
@@ -42310,6 +42328,7 @@ var _CS = (function(){
 
   // ── 실행 · 엔진 값 받기 ──
   var H0 = null;                                     // 붙은 칸(host) · 태그
+  var FIT = null;                                    // 칸 높이 맞춤(배관이 등록, 1초마다 불림)
   function isDark(){ try{ return document.documentElement.getAttribute('data-theme') !== 'pastel'; }catch(e){ return true; } }
   function resetBG(){
     var L = S.L, g = S.g, dpr = S.dpr;
@@ -42317,11 +42336,13 @@ var _CS = (function(){
   }
   function boot(host){
     var cv = host.querySelector('canvas.cs-cv'); if(!cv){ cv = document.createElement('canvas'); cv.className = 'cs-cv'; host.insertBefore(cv, host.firstChild); }
-    var W = host.clientWidth || 300, H = host.clientHeight || 150, dpr = Math.min(2.5, window.devicePixelRatio || 1);
-    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); cv.style.width = '100%'; cv.style.height = '100%';
+    var PW = host.clientWidth || 300, PH = host.clientHeight || 150, dpr0 = Math.min(2.5, window.devicePixelRatio || 1);
+    // 세로로 키운 장면(경로 없음 · 화면을 꽉 채움): 같은 그림을 k배 크게 그려 하늘·땅·캐릭터가 함께 커진다(그림 크기일 뿐 판단이 아니다)
+    var k = clamp(Math.min(PH / 190, PW / 200), 1, 2), W = PW / k, H = PH / k, dpr = dpr0 * k;
+    cv.width = Math.round(PW * dpr0); cv.height = Math.round(PH * dpr0); cv.style.width = '100%'; cv.style.height = '100%';
     var ctx = cv.getContext('2d'); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
-    var prev = mk(W * dpr, H * dpr), reduce = false; try{ reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(e){}
-    S = { host: host, cv: cv, ctx: ctx, W: W, H: H, dpr: dpr, g: geom(W, H), t: 0, last: 0, raf: 0, mode: null, res: null, L: null, dark: isDark(), actors: [], traffic: [], pt: [], ripples: [], hero: null, seq: null, prev: prev, fade: 0, busColor: pickOf(BUS_COLORS), busNo: pickOf(BUS_NOS), reduce: reduce, castI: 0, nextCar: 0, spawnAt: 0, chk: 0, frames: 0 };
+    var prev = mk(PW * dpr0, PH * dpr0), reduce = false; try{ reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(e){}
+    S = { host: host, cv: cv, ctx: ctx, W: W, H: H, PW: PW, PH: PH, k: k, dpr: dpr, g: geom(W, H), t: 0, last: 0, raf: 0, mode: null, res: null, L: null, dark: isDark(), actors: [], traffic: [], pt: [], ripples: [], hero: null, seq: null, prev: prev, fade: 0, busColor: pickOf(BUS_COLORS), busNo: pickOf(BUS_NOS), reduce: reduce, castI: 0, nextCar: 0, spawnAt: 0, chk: 0, frames: 0 };
     return S;
   }
   function paintAll(dt){
@@ -42348,7 +42369,7 @@ var _CS = (function(){
       if(ts - S.last < 31) return;
       var dt = Math.min(.1, (ts - (S.last || ts)) / 1000); S.last = ts; if(S.reduce) dt = 0; S.t += dt; S.frames++;
       if(S.fade > 0) S.fade = Math.max(0, S.fade - dt / .45);
-      if(ts - S.chk > 1000){ S.chk = ts; var w = S.host.clientWidth, d = isDark(); if((w && Math.abs(w - S.W) > 2) || d !== S.dark){ var res = S.res; resize(); } }
+      if(ts - S.chk > 1000){ S.chk = ts; try{ if(FIT) FIT(); }catch(e0){} var w = S.host.clientWidth, h2 = S.host.clientHeight, d = isDark(); if((w && Math.abs(w - S.PW) > 2) || (h2 && Math.abs(h2 - S.PH) > 2) || d !== S.dark){ var res = S.res; resize(); } }
       update(dt); paintAll(dt);
     }catch(e){ if(!S.err){ S.err = String(e && e.message || e); try{ console.warn('[장면]', e); }catch(e2){} } }
   }
@@ -42363,7 +42384,7 @@ var _CS = (function(){
     var host = H0 && H0.host; if(!host) return false;
     if(!res || !res.mode){ stop(); host.style.display = 'none'; return false; }
     if(!_RC.ready()){ _RC.load(function(){ if(LAST === res) apply(res); }); host.style.display = 'block'; return false; }
-    host.style.display = 'block';
+    host.style.display = 'block'; try{ if(FIT) FIT(); }catch(e0){}
     if(!S){ boot(host); S.res = res; S.L = paint(res.look); resetBG(); setup(res.mode); paintAll(0); S.raf = requestAnimationFrame(frame); }
     else {
       var modeChanged = S.mode !== res.mode, oldRes = S.res; S.res = res;
@@ -42386,7 +42407,7 @@ var _CS = (function(){
     return { running: true, mode: S.mode, slot: S.L.slot, wk: S.L.wk, season: S.L.season, hero: S.res.hero, W: S.W, H: S.H, frames: S.frames, err: S.err || null, tag: H0 && H0.tag ? H0.tag.textContent : '',
       actors: S.actors.map(function(a){ return { id: a.id, st: a.st, x: Math.round(a.x), z: Math.round(a.z * 100) / 100, vis: a.vis, hero: !!a.hero, umb: !!a.umb, leaving: !!a.leaving }; }), seq: S.seq ? { ph: S.seq.ph, busOn: S.seq.busOn, door: Math.round(S.seq.door * 100) / 100 } : null, traffic: S.traffic.length, ride: S.ride ? { speed: Math.round(S.ride.speed * 100) / 100 } : null };
   }
-  return { attach: attach, apply: apply, stop: stop, info: info, paint: paint, last: function(){ return LAST; }, _tick: function(sec){ if(!S) return; var n = Math.round(sec * 30); for(var i = 0; i < n; i++){ S.t += 1 / 30; update(1 / 30); } paintAll(1 / 30); } };
+  return { attach: attach, setFit: function(f){ FIT = f; }, apply: apply, stop: stop, info: info, paint: paint, last: function(){ return LAST; }, _tick: function(sec){ if(!S) return; var n = Math.round(sec * 30); for(var i = 0; i < n; i++){ S.t += 1 / 30; update(1 / 30); } paintAll(1 / 30); } };
 })();
 window._CS = _CS;
 

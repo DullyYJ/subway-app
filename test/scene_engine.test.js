@@ -46,7 +46,7 @@ const S = (name, line) => N({ name, isSub: true, lineName: line || '2호선' }),
   const BUS = [O, W1, B('A정류장'), B('B정류장'), B('C정류장'), B('D정류장'), W1];
   await t('버스: 혼잡도는 어느 단계에서도 없다 — 타기 전 wait → 타고 가는 중 ride → 내리기 직전 nearEnd → 내림 alight → 도보 alight', () => {
     const at = (h, boarded) => decide({ locked: true, here: h, boarded: !!boarded, nodes: BUS }, null);
-    let r = at(1); assert.strictEqual(r.mode, 'wait'); assert.strictEqual(r.venue, 'bus'); assert.strictEqual(r.cong.kind, null); assert.strictEqual(r.hint, hint); assert.strictEqual(hint, '지하철 탑승시 혼잡도가 나와요!'); assert(/6659 버스를 기다리는/.test(r.tag), r.tag);
+    let r = at(1); assert.strictEqual(r.mode, 'wait'); assert.strictEqual(r.venue, 'bus'); assert.strictEqual(r.cong.kind, null); assert.strictEqual(r.hint, hint); assert.strictEqual(hint, '지하철을 타면 혼잡도가 나와요'); assert(/6659 버스를 기다리는/.test(r.tag), r.tag);
     r = at(2, false); assert.strictEqual(r.mode, 'wait');                      // 정류장에 도착, 아직 안 탔다
     r = at(2, true); assert.strictEqual(r.mode, 'ride');                       // 승차 확정
     r = at(3, false); assert.strictEqual(r.mode, 'ride'); assert.strictEqual(r.nearEnd, false);
