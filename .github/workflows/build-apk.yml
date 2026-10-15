@@ -26,6 +26,8 @@ jobs:
           - share_loc.ui.test.js
           - day_preset_shop_wx.ui.test.js
           - cong_card.ui.test.js
+          - cong_scene.ui.test.js
+          - scene_engine.test.js
           - metro_native_js.ui.test.js
           - bus_poll_gap.test.js
           - cell_hop_lead.ui.test.js

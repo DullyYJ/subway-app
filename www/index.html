@@ -1622,6 +1622,14 @@ header h1 em{color:var(--gold);font-style:normal;}
 /* ★ 2026-10-15 (YJ): 그래프 칸을 키웠다(막대 높이는 _chartBarH — 높이 112px 기준, 버스는 칸별 혼잡도가 없어 160px). 현재 시각 막대는 가운데에 오고(_chart24Center) 양끝에 여백을 둬서 새벽·밤 시각도 가운데로 온다. */
 .bars-24{display:flex;align-items:flex-end;height:var(--bars-h,112px);gap:0;width:max-content;padding-bottom:0;}
 .cong-card.bus{--bars-h:160px;}
+/* ★ 2026-10-15 (YJ): 혼잡도 카드 창의 3D 캐릭터 장면(_CS) — 엔진(/scene)이 켠다: 경로 없음·버스·지하철 타기 전에는 장면만, 지하철 탑승 확정 뒤에만 숨겨져 혼잡도가 보인다(둘은 함께 보이지 않는다). */
+.cong-scene{position:relative;height:150px;border-radius:12px;overflow:hidden;margin:2px 0 10px;border:1px solid var(--border);display:none;background:#9fd0ff;}
+.cong-scene canvas.cs-cv{position:absolute;left:0;top:0;width:100%;height:100%;display:block;}
+.cs-tag{position:absolute;left:8px;top:7px;font-size:10.5px;font-weight:700;color:#fff;background:rgba(12,18,34,.55);padding:3px 9px;border-radius:10px;letter-spacing:0;pointer-events:none;z-index:2;}
+.cong-card.cs-on > :not(.cong-scene){display:none !important;}   /* 장면이 보일 땐 혼잡도(상태·게이지·그래프·칸별)를 보이지 않는다 — 혼잡도는 지하철 탑승 확정 뒤에만(YJ) */
+.cong-card.cs-on{border-left-color:var(--arex) !important;}
+.cs-hide{display:none !important;}
+.cong-bus-hint{display:none;font-size:11.5px;color:var(--sub);margin:-2px 0 8px 2px;line-height:1.4;}
 :root{--cur-ol:#fff;}
 [data-theme="pastel"]{--cur-ol:#111;}
 /* 운행 시간 바 */
@@ -14825,7 +14833,7 @@ function _updateTransitGps() {
   // 노드가 바뀌었을 때만 갱신 (불필요한 API 호출 방지)
   if(window._lastCongNodeIdx !== _cgIdx){
     window._lastCongNodeIdx = _cgIdx;
-    try{ if(_cgBest.isBus || _cgBest.isSub) _congLegSig = (_cgBest.isBus ? 'b|' + (_cgBest.lineName || '') : 's|' + (_cgBest.lineName || '') + '|' + _cgBest.name); }catch(eSg){}
+    try{ if(_cgBest.isBus || _cgBest.isSub) _sceneSt.congSig = (_cgBest.isBus ? 'b|' + (_cgBest.lineName || '') : 's|' + (_cgBest.lineName || '') + '|' + _cgBest.name); }catch(eSg){}
     if(_cgBest.isBus && _cgBest.lineName){
       // 버스 구간 → 버스 노선 혼잡도
       // 현재 버스 구간의 정류장 목록 구성 (best 노드 주변 같은 노선 stops)
@@ -19049,6 +19057,7 @@ window.addEventListener('unhandledrejection', function(e) {
   <!-- 3순위: 집단지성 혼잡 분석 -->
   <div>
     <div class="sec" style="justify-content:flex-start;gap:8px;">혼잡도 분석<span id="congLiveDot" class="ldot-live" style="display:none;margin-right:0;"></span><span id="congBadge" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;color:#fff;background:var(--arex);">-</span><button id="shareLocBtn" onclick="_shareLoc()" style="margin-left:auto;flex-shrink:0;cursor:pointer;font-family:inherit;font-size:11px;font-weight:700;color:var(--gold);background:transparent;border:1px solid var(--gold);border-radius:12px;padding:3px 10px;white-space:nowrap;letter-spacing:0;">📍 위치 공유</button></div>
+    <div class="cong-bus-hint" id="congBusHint"></div>
     <div class="cong-card" id="congCard" style="border-left-color:var(--arex);">
       <div class="cong-top">
         <div>
@@ -19057,6 +19066,8 @@ window.addEventListener('unhandledrejection', function(e) {
         </div>
         <div class="cong-status" id="congStatusTxt" style="color:var(--sub);">출발역을 설정하세요</div>
       </div>
+      <!-- 장면: 경로 없음 · 버스 구간 (엔진 /scene 이 정한 장면을 그린다) -->
+      <div class="cong-scene" id="congScene"><div class="cs-tag" id="csTag"></div></div>
       <!-- 혼잡도 게이지 -->
       <div class="cong-gauge-wrap" id="congGaugeWrap" style="display:none;">
         <div class="cong-gauge-label">
@@ -34842,8 +34853,6 @@ function updateBusCong(busSection){
         var _p0 = document.getElementById('peakLbl'); if(_p0) _p0.textContent = '-';
         var _bd0 = document.getElementById('congBadge'); if(_bd0){ _bd0.textContent = '-'; _bd0.style.background = 'var(--arex)'; }
       }catch(e0){}
-      // ★ 2026-10-15 (YJ: 버스 혼잡도가 없으면 경로에 있는 지하철 혼잡도를 보여줘): 경로의 지하철(지금 위치 이후 첫 역, 없으면 마지막으로 지난 역)로 대신 채운다
-      try{ _congFallbackSubway(); }catch(eFb){ console.warn('[혼잡도 대체]', eFb); }
       return;
     }
     var pct = res.pct;
@@ -34907,60 +34916,75 @@ function updateBusCong(busSection){
 window.updateBusCong = updateBusCong;
 
 
-// ── 경로를 따라 혼잡도 카드 구간 고르기 (★ 2026-10-15 YJ: 환승하면 지하철 혼잡도도 바뀌어야 한다 / 버스 정보가 없으면 경로의 지하철을) ──
-// 지금 위치(_pipHereIdx: GPS 와 시각표 추정을 합친 값)에서 '타고 있거나 곧 탈' 구간의 노드를 찾는다: 그 노드가 버스·지하철이면 그것, 도보·출발이면 다음 탈것.
-function _congLegNode(idx){
-  var N = (typeof _transitNodeData !== 'undefined') ? _transitNodeData : null;
-  if(!N || !N.length) return null;
-  idx = Math.max(0, Math.min(idx == null ? 0 : idx, N.length - 1));
-  var n = N[idx];
-  if(n && (n.isSub || n.isBus) && n.name) return { i: idx, n: n };
-  for(var j = idx + 1; j < N.length; j++){ if(N[j] && (N[j].isSub || N[j].isBus) && N[j].name) return { i: j, n: N[j] }; }
-  for(var k = idx - 1; k >= 0; k--){ if(N[k] && (N[k].isSub || N[k].isBus) && N[k].name) return { i: k, n: N[k] }; }
-  return null;
+// ── 장면·혼잡도 구간은 전부 엔진(/scene)이 정한다 (★ 2026-10-15 YJ: "모든 연산은 엔진이 한다, 앱은 그림만") ──
+//   앱은 '지금까지의 증거'(경로 노드·현재 위치 인덱스·승차 확정 여부·시각·위치)를 보내고, 엔진이 돌려준 값을 그린다:
+//   · mode(idle/wait/ride/alight/없음)·시간대·날씨 종류·대표 캐릭터·안내 문구 → _CS(캔버스 장면)와 '지하철 탑승시 혼잡도가 나와요!' 문구
+//   · cong(지금 보일 지하철 역 또는 버스 정류장 목록) → updateCong / updateBusCong 를 부를 뿐이다. 이전의 앱 쪽 구간 고르기는 없앴다.
+//   엔진 응답이 없으면(오프라인·옛 엔진) 마지막으로 받은 그대로 둔다(새로 판단하지 않는다).
+var _SCENE_URL = ((typeof _ROUTE_V2_BASE === 'string' && _ROUTE_V2_BASE) ? _ROUTE_V2_BASE : 'https://route-v2.phg0643.workers.dev') + '/scene';
+var _sceneSt = { busy: false, sig: '', at: 0, key: '', wasLocked: false, congSig: '', seq: 0, fails: 0, lastRes: null };
+window._sceneSt = _sceneSt;
+function _scenePayload(){
+  var nd = (typeof _transitNodeData !== 'undefined' && _transitNodeData) ? _transitNodeData : [], locked = (window._routeLocked === true), here = 0;
+  if(locked){ try{ here = _pipHereIdx(); }catch(e){ here = 0; } }
+  if(locked && !_sceneSt.wasLocked) _sceneSt.key = String(Date.now());     // 경로를 확정할 때마다 새 대표 캐릭터(같은 경로 동안은 그대로)
+  if(!locked) _sceneSt.key = '';
+  _sceneSt.wasLocked = locked;
+  var P = { nowMs: (typeof getBaseTimeMs === 'function' ? getBaseTimeMs() : Date.now()), tzOffsetMin: -new Date().getTimezoneOffset(), locked: locked, key: _sceneSt.key, here: here, boarded: (window._htlBoarded === true),
+    nodes: nd.map(function(n){ return { name: n.name || '', isSub: !!n.isSub, isBus: !!n.isBus, isWalk: !!n.isWalk, isOrigin: !!n.isOrigin, lineName: n.lineName || '', hasLoc: !!n.lat }; }) };
+  if(typeof window._lastGPSLat === 'number' && typeof window._lastGPSLng === 'number' && window._lastGPSLat && window._lastGPSLng){ P.lat = window._lastGPSLat; P.lng = window._lastGPSLng; }
+  return P;
 }
-window._congLegNode = _congLegNode;
-function _congSubNodeFrom(idx){
-  var N = (typeof _transitNodeData !== 'undefined') ? _transitNodeData : null;
-  if(!N || !N.length) return null;
-  idx = Math.max(0, Math.min(idx == null ? 0 : idx, N.length - 1));
-  for(var j = idx; j < N.length; j++){ if(N[j] && N[j].isSub && N[j].name) return N[j]; }
-  for(var k = idx - 1; k >= 0; k--){ if(N[k] && N[k].isSub && N[k].name) return N[k]; }
-  return null;
-}
-function _congFallbackSubway(){
-  var idx = 0; try{ idx = _pipHereIdx(); }catch(e){}
-  var sn = _congSubNodeFrom(idx);
-  if(!sn) return false;                                   // 경로에 지하철이 없으면 '정보 없음' 그대로
-  updateCong({ name: sn.name, line: sn.lineName || '' }, true);
-  try{ var m = document.getElementById('congMeta'); if(m) m.textContent = new Date((typeof getBaseTimeMs==='function'?getBaseTimeMs():Date.now())).getHours() + '시 기준 · 버스 정보가 없어 경로의 지하철을 보여줘요'; }catch(e){}
-  return true;
-}
-window._congFallbackSubway = _congFallbackSubway;
-var _congLegSig = '';
-function _congSyncRoute(){
+function _sceneApply(res){
+  if(!res || res.ok === false) return;
+  _sceneSt.lastRes = res; window._sceneLast = res;
+  var N = (typeof _transitNodeData !== 'undefined' && _transitNodeData) ? _transitNodeData : [];
+  try{ _CS.apply(res); }catch(e){ console.warn('[장면]', e); }
   try{
-    if(window._routeLocked !== true) return;
-    var leg = _congLegNode(_pipHereIdx()); if(!leg) return;
-    var n = leg.n, sig = (n.isBus ? 'b|' + (n.lineName || '') : 's|' + (n.lineName || '') + '|' + n.name);
-    if(sig === _congLegSig) return;
-    _congLegSig = sig;
-    if(n.isBus && n.lineName){
-      var stops = [], ci = 0;
-      _transitNodeData.forEach(function(nd, i){ if(nd.isBus && nd.lineName === n.lineName && nd.lat){ if(i === leg.i) ci = stops.length; stops.push({ stationName: nd.name, lat: nd.lat, lon: nd.lng }); } });
-      updateBusCong({ name: n.lineName, stops: stops, curStopIdx: ci });
-    } else if(n.isSub){
-      updateCong({ name: n.name, line: n.lineName || '' }, true);
-    }
-  }catch(e){}
+    var card = document.getElementById('congCard'), sc = document.getElementById('congScene'), on = !!(sc && sc.style.display === 'block');
+    if(card) card.classList.toggle('cs-on', on);
+    ['congBadge', 'congLiveDot'].forEach(function(id){ var e = document.getElementById(id); if(e) e.classList.toggle('cs-hide', on); });     // 장면이 보일 땐 혼잡도 배지도 숨긴다
+    var hint = document.getElementById('congBusHint'); if(hint){ hint.textContent = res.hint || ''; hint.style.display = res.hint ? 'block' : 'none'; }
+  }catch(e1){}
+  var c = res.cong;      // 혼잡도는 엔진이 '지하철 탑승 확정'이라고 한 구간(cong.kind === 'sub')에서만 그린다
+  if(c && c.kind === 'sub' && c.sig && c.sig !== _sceneSt.congSig){
+    _sceneSt.congSig = c.sig;
+    try{ var n = N[c.idx]; if(n) updateCong({ name: n.name, line: n.lineName || '' }, true); }catch(e2){ console.warn('[혼잡도 구간]', e2); }
+  }
 }
+window._sceneApply = _sceneApply;
+function _sceneRequest(why){
+  try{
+    if(typeof fetch !== 'function') return;
+    var now = Date.now(), P = _scenePayload();
+    var sig = [P.locked ? 1 : 0, P.here, P.boarded ? 1 : 0, P.nodes.length, P.nodes[0] ? P.nodes[0].name : '', Math.floor(now / 300000)].join('|');   // 바뀐 것이 없으면 5분마다만(시간대·날씨 갱신)
+    if(why !== 'force' && sig === _sceneSt.sig) return;
+    if(_sceneSt.busy && now - _sceneSt.at < 8000) return;
+    _sceneSt.busy = true; _sceneSt.at = now; var my = ++_sceneSt.seq, ctl = (typeof AbortController === 'function') ? new AbortController() : null, to = setTimeout(function(){ try{ if(ctl) ctl.abort(); }catch(e){} }, 6000);
+    fetch(_SCENE_URL, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(P), signal: ctl ? ctl.signal : undefined })
+      .then(function(r){ if(!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function(res){ clearTimeout(to); if(my !== _sceneSt.seq) return; _sceneSt.busy = false; _sceneSt.fails = 0; _sceneSt.sig = sig; _sceneApply(res); })
+      .catch(function(){ clearTimeout(to); if(my !== _sceneSt.seq) return; _sceneSt.busy = false; _sceneSt.fails++; });
+  }catch(e){ _sceneSt.busy = false; }
+}
+window._sceneRequest = _sceneRequest;
+function _congSyncRoute(){ _sceneRequest('tick'); }
 window._congSyncRoute = _congSyncRoute;
-setInterval(_congSyncRoute, 4000);
-setTimeout(_congSyncRoute, 1500);
+(function(){
+  function init(){
+    var host = document.getElementById('congScene'), tag = document.getElementById('csTag');
+    try{ if(host && typeof _CS !== 'undefined') _CS.attach(host, tag); }catch(e){}
+    try{ if(typeof _RC !== 'undefined') _RC.load(); }catch(e2){}
+    setInterval(function(){ _sceneRequest('tick'); }, 2500);
+    setTimeout(function(){ _sceneRequest('force'); }, 1200);
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+})();
 
 // ── 혼잡도 카드를 '출발역 설정 전' 대기 상태로 리셋 ──
 function _resetCongToWaiting(){
   window._congMode = null;
+  try{ _sceneSt.congSig = ''; _sceneSt.sig = ''; }catch(eCw){}
   var _cld0 = document.getElementById('congLiveDot'); if(_cld0) _cld0.style.display = 'none';
   var labelEl = document.querySelector('.cong-stn');
   if(labelEl) labelEl.innerHTML = '지하철 <b id="congStn">-</b>';
@@ -41310,7 +41334,7 @@ var _RC = (function(){
   // cell=화면에 그릴 칸 크기(px) · base=칸 안 바닥 높이(256 기준) · ox=칸 안 몸 중심 가로 위치 · fps=재생 속도 · T=화면을 가로지르는 시간(초) · lift=띄울 높이(px) · sh=그림자 진하기
   var D3 = {
     dolsom: { n: 16, fps: 19, cell: 86, base: 248.5, ox: 120.8, T: 2.7, sh: 0.34 },     // 뛴다
-    lovel:  { n: 16, fps: 11, cell: 88, base: 249.5, ox: 133, T: 3.4, sh: 0.34 },   // 걷는다
+    lovel:  { n: 16, fps: 11, cell: 88, base: 250, ox: 117.9, T: 3.4, sh: 0.34 },   // 걷는다
     ppopu:  { n: 16, fps: 19, cell: 88, base: 248.5, ox: 120.3, T: 2.3, sh: 0.34 }, // 뛴다
     chaeng: { n: 16, fps: 15, cell: 88, base: 244.5, ox: 154.5, T: 3.2, sh: 0.2, lift: 12 },   // 헤엄친다
     sul:    { n: 16, fps: 20, cell: 104, base: 230.5, ox: 131, T: 2.6, sh: 0.2 },   // 난다
@@ -41761,7 +41785,7 @@ var _RC = (function(){
   }
   function playState(){ return play ? play.cs.map(function(c){ return { id: c.id, kind: c.kind, x: Math.round(c.x * 10) / 10, dir: c.dir, st: c.st, y: Math.round(c.y * 10) / 10, w: Math.round(c.w), vis: c.vis, rot: c.rot, clip: c.clip }; }) : null; }
   function playInfo(){ return play ? { poops: play.poops.length, tree: play.tree, pond: play.pond, log: play.log, W: play.W, H: play.H } : null; }
-  return { start: start, stop: stop, load: load, ready: ready, order: ORDER, name: NAME, d3: D3, playStart: playStart, playStop: playStop, playState: playState, playScene: playScene, playSnap: playSnap, playInfo: playInfo, scenes: SCENES, sceneOrder: SCENE_ORDER };
+  return { start: start, stop: stop, load: load, ready: ready, order: ORDER, name: NAME, d3: D3, sheet: function(id){ return sheets[id]; }, intro: function(){ return sheetsIntro.dudung; }, playStart: playStart, playStop: playStop, playState: playState, playScene: playScene, playSnap: playSnap, playInfo: playInfo, scenes: SCENES, sceneOrder: SCENE_ORDER };
 })();
 window._RC = _RC;
 
@@ -41783,6 +41807,589 @@ window._RC = _RC;
   }
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();
+
+
+/* ── 혼잡도 카드 장면(_CS) — 경로를 안 정했을 때 / 버스 구간에서 카드 위쪽 창에 그려지는 3D 캐릭터 애니메이션 ──
+   2026-10-15 (YJ: "경로설정 안했을때 혼잡도 파란창 속에 시간(새벽·아침·점심·오후·저녁)과 실제 날씨(눈·비·구름·흐림…)에 따른 다양한 배경에서 캐릭터들이 랜덤으로 나와 3D로 노는 애니메이션
+   · 버스경로는 혼잡도가 없으니 타기 전엔 캐릭터 하나가 버스를 기다리고, 타면 버스를 타고 가고, 내리면 내려서 친구들과 논다 · 지하철을 타면 혼잡도가 나온다").
+   캐릭터는 미리 렌더링해 둔 3D 동작 시트(_RC)를 시간에 맞춰 그릴 뿐이고(변형 없음), 배경·버스·날씨는 캔버스로 그린 그림이다.
+   ★ "모든 연산은 엔진이 한다, 앱은 그림만": 어떤 장면(idle·wait·ride·alight)을 보일지, 시간대·날씨 종류·계절, 대표 캐릭터·등장 순서, 안내 문구는 전부 엔진(/scene)이 정해서 보낸다(apply 로 받는다).
+   여기서는 그 값을 색·모양·움직임으로 그리기만 한다(하늘 색표·날씨 섞는 비율·캐릭터 걸음 같은 '그림 규칙'은 앱 몫). */
+var _CS = (function(){
+  var PI2 = Math.PI * 2, PI = Math.PI;
+  var STAND = { dolsom: 13, lovel: 10, ppopu: 13, dudung: 12, sul: 13, chaeng: 4 };     // 다리를 모은 '서 있는' 프레임
+  var KIND = { dolsom: 'dog', ppopu: 'dog', lovel: 'cat', dudung: 'mole', chaeng: 'tad', sul: 'eagle' };
+  var KM = { dog: { walk: 1, hop: 1, spin: 1, rest: 1 }, cat: { walk: 1.2, hop: .7, spin: .5, rest: 1.5 }, mole: { walk: 1.5, hop: .3, spin: .1, rest: .8 }, tad: { walk: .8, hop: 1.6, spin: .8, rest: .6 }, eagle: { walk: 1, hop: 0, spin: 0, rest: .6 } };
+  function rnd(a, b){ return a + Math.random() * (b - a); }
+  function pickOf(a){ return a[Math.floor(Math.random() * a.length)]; }
+  function clamp(v, a, b){ return v < a ? a : v > b ? b : v; }
+  function ease(u){ u = clamp(u, 0, 1); return u * u * (3 - 2 * u); }
+  function mulberry(a){ return function(lo, hi){ a |= 0; a = a + 0x6D2B79F5 | 0; var t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; var r = ((t ^ t >>> 14) >>> 0) / 4294967296; return lo == null ? r : lo + r * (hi - lo); }; }
+  function rgb(h){ h = h.replace('#', ''); if(h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2]; return [parseInt(h.substr(0, 2), 16), parseInt(h.substr(2, 2), 16), parseInt(h.substr(4, 2), 16)]; }
+  function hx(r){ return '#' + r.map(function(v){ v = Math.round(clamp(v, 0, 255)); return (v < 16 ? '0' : '') + v.toString(16); }).join(''); }
+  function mix(a, b, t){ var x = rgb(a), y = rgb(b); return hx([x[0] + (y[0] - x[0]) * t, x[1] + (y[1] - x[1]) * t, x[2] + (y[2] - x[2]) * t]); }
+  function shade(a, k){ return k >= 0 ? mix(a, '#ffffff', k) : mix(a, '#000000', -k); }
+  function rr(c, x, y, w, h, r){ r = Math.min(r, w / 2, h / 2); c.beginPath(); c.moveTo(x + r, y); c.lineTo(x + w - r, y); c.quadraticCurveTo(x + w, y, x + w, y + r); c.lineTo(x + w, y + h - r); c.quadraticCurveTo(x + w, y + h, x + w - r, y + h); c.lineTo(x + r, y + h); c.quadraticCurveTo(x, y + h, x, y + h - r); c.lineTo(x, y + r); c.quadraticCurveTo(x, y, x + r, y); c.closePath(); }
+
+  // ── 엔진이 준 시간대·날씨 이름 → 그림 색표(그림 규칙일 뿐 판단이 아니다) ──
+  var SKY = {
+    dawn:      { c: ['#1d2354', '#6a4f93', '#f6a58f'], lum: .62, sun: [.2, .47, 'sun'] },
+    morning:   { c: ['#74c4fb', '#b2e0ff', '#fff0cd'], lum: 1, sun: [.3, .2, 'sun'] },
+    noon:      { c: ['#4aa3f2', '#8accfb', '#d9f1ff'], lum: 1.05, sun: [.5, .1, 'sun'] },
+    afternoon: { c: ['#68b4ee', '#a8d9f7', '#ffe7b5'], lum: .98, sun: [.74, .2, 'sun'] },
+    evening:   { c: ['#3a3a7c', '#d3687a', '#ffbd78'], lum: .7, sun: [.86, .43, 'sun'] },
+    night:     { c: ['#060a22', '#131b4b', '#2a3478'], lum: .32, sun: [.74, .18, 'moon'] }
+  };
+  var WXMIX = { clear: 0, cloudy: .22, overcast: .6, rain: .74, snow: .5, fog: .55 };
+  // lk: 엔진의 look { slot, wk, season, night, lit, hidesSun, ... } → 그릴 때 쓰는 값
+  function paint(lk){
+    var S = SKY[lk.slot] || SKY.noon, wk = lk.wk || 'clear';
+    var gray = mix(wk === 'snow' ? '#d5dde8' : '#8d98a8', '#141a2c', clamp(1 - S.lum, 0, .9) * (wk === 'snow' ? .75 : 1)), m = WXMIX[wk] || 0;
+    return { slot: lk.slot, wk: wk, season: lk.season || 'autumn', c: S.c.map(function(x){ return mix(x, gray, m); }), lum: S.lum, sun: S.sun, night: !!lk.night, lit: !!lk.lit, hidesSun: !!lk.hidesSun };
+  }
+
+  // ── 배경 그림(시간대·날씨·계절마다 한 번만 그려 두고 매 프레임 복사) ──
+  function mk(w, h){ var c = document.createElement('canvas'); c.width = Math.max(1, Math.round(w)); c.height = Math.max(1, Math.round(h)); return c; }
+  function geom(W, H){ var hy = Math.round(H * 0.5); return { W: W, H: H, hy: hy, roadY0: hy + 5, nearTop: Math.round(H * 0.7), floor: H - 4 }; }
+  function pickOf2(rng, a){ return a[Math.floor(rng() * a.length) % a.length]; }
+  function buildBG(L, g, dpr, season, dark){
+    var W = g.W, H = g.H, hy = g.hy, tw = Math.ceil(W * 1.7), rng = mulberry(L.slot.length * 977 + L.wk.length * 131 + 7);
+    var sky = mk(W * dpr, H * dpr), far = mk(tw * dpr, H * dpr), mid = mk(tw * dpr, H * dpr), gnd = mk(W * dpr, H * dpr), c, gr, i, x;
+    // 하늘
+    c = sky.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    gr = c.createLinearGradient(0, 0, 0, hy + 6); gr.addColorStop(0, L.c[0]); gr.addColorStop(.62, L.c[1]); gr.addColorStop(1, L.c[2]); c.fillStyle = gr; c.fillRect(0, 0, W, H);
+    var sx = L.sun[0] * W, sy = L.sun[1] * H, glow = L.hidesSun ? .12 : (L.wk === 'cloudy' ? .5 : 1);
+    if(L.sun[2] === 'sun'){
+      var rg = c.createRadialGradient(sx, sy, 0, sx, sy, H * .5); rg.addColorStop(0, 'rgba(255,236,170,' + (.55 * glow) + ')'); rg.addColorStop(1, 'rgba(255,236,170,0)'); c.fillStyle = rg; c.fillRect(0, 0, W, hy + 8);
+      if(!L.hidesSun){ c.fillStyle = L.slot === 'evening' || L.slot === 'dawn' ? '#ffd7a0' : '#fff2b3'; c.beginPath(); c.arc(sx, sy, 8.5, 0, PI2); c.fill(); c.fillStyle = 'rgba(255,255,255,.55)'; c.beginPath(); c.arc(sx - 2, sy - 2, 4, 0, PI2); c.fill(); }
+    } else {
+      var mg = c.createRadialGradient(sx, sy, 0, sx, sy, 34); mg.addColorStop(0, 'rgba(210,225,255,' + (.35 * glow) + ')'); mg.addColorStop(1, 'rgba(210,225,255,0)'); c.fillStyle = mg; c.fillRect(sx - 40, sy - 40, 80, 80);
+      if(!L.hidesSun){ c.fillStyle = '#f4f1dc'; c.beginPath(); c.arc(sx, sy, 8, 0, PI2); c.fill(); c.fillStyle = 'rgba(200,205,185,.55)'; c.beginPath(); c.arc(sx - 2.5, sy + 1.5, 2, 0, PI2); c.arc(sx + 2.5, sy - 2.5, 1.4, 0, PI2); c.fill(); }
+    }
+    // 먼 도시: 건물 실루엣(+켜진 창)
+    c = far.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    var fcol = mix(L.c[2], L.night ? '#0b1030' : '#39435f', L.night ? .6 : .3), bl = [];
+    x = -6; while(x < tw){ var bw = rng(11, 25), bh = rng(hy * .2, hy * .6); bl.push([x, bw, bh]); x += bw + rng(0, 3); }
+    bl.forEach(function(b){
+      [0, -tw].forEach(function(off){
+        var bx = b[0] + off; if(bx > tw || bx + b[1] < 0) return;
+        c.fillStyle = fcol; c.fillRect(bx, hy + 4 - b[2], b[1], b[2]);
+        c.fillStyle = shade(fcol, .08); c.fillRect(bx, hy + 4 - b[2], b[1], 2);
+        for(var wy = hy + 4 - b[2] + 5; wy < hy - 2; wy += 6) for(var wx = bx + 3; wx < bx + b[1] - 3; wx += 5){
+          if(L.lit && rng() < .33){ c.fillStyle = L.night ? 'rgba(255,226,140,.85)' : 'rgba(255,214,150,.6)'; c.fillRect(wx, wy, 2.2, 2.6); }
+          else if(!L.lit && rng() < .5){ c.fillStyle = 'rgba(255,255,255,.12)'; c.fillRect(wx, wy, 2.2, 2.6); }
+        }
+        if(L.wk === 'snow'){ c.fillStyle = 'rgba(255,255,255,.85)'; c.fillRect(bx, hy + 4 - b[2] - 1, b[1], 2.4); }
+      });
+    });
+    // 가로수(계절 색)
+    c = mid.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    var leaf = season === 'autumn' ? ['#e2893a', '#d9a23b', '#c9602f'] : season === 'spring' ? ['#f2b6cc', '#a9d98b', '#f7c7d8'] : season === 'summer' ? ['#4fa866', '#3f9a5a', '#62b878'] : ['#7a6a5a', '#8a7868', '#6b5d50'];
+    x = 6; while(x < tw){
+      var th = rng(hy * .34, hy * .5), tx = x, tr = rng(9, 14), cc = pickOf2(rng, leaf);
+      [0, -tw].forEach(function(off){
+        var px = tx + off; if(px > tw + 20 || px < -20) return;
+        c.fillStyle = mix('#5b4636', '#000000', L.night ? .5 : .1); c.fillRect(px - 1.4, hy + 4 - th * .62, 2.8, th * .62);
+        var col = mix(cc, L.night ? '#0a1020' : L.lit ? '#3a2a4a' : '#ffffff', L.night ? .6 : L.lit ? .35 : .04);
+        if(L.wk === 'overcast' || L.wk === 'rain') col = mix(col, '#7b8594', .3);
+        c.fillStyle = col; c.beginPath(); c.arc(px, hy + 4 - th * .72, tr, 0, PI2); c.arc(px - tr * .7, hy + 4 - th * .56, tr * .75, 0, PI2); c.arc(px + tr * .7, hy + 4 - th * .56, tr * .75, 0, PI2); c.fill();
+        c.fillStyle = 'rgba(255,255,255,.12)'; c.beginPath(); c.arc(px - tr * .25, hy + 4 - th * .8, tr * .5, 0, PI2); c.fill();
+        if(L.wk === 'snow'){ c.fillStyle = 'rgba(255,255,255,.9)'; c.beginPath(); c.ellipse(px, hy + 4 - th * .72 - tr * .72, tr * .8, 2.6, 0, 0, PI2); c.fill(); }
+      });
+      x += rng(17, 36);
+    }
+    // 땅: 건너편 인도 · 찻길 · 가까운 인도(원근선)
+    c = gnd.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    var wet = L.wk === 'rain', snowy = L.wk === 'snow', lum = L.lum;
+    var walk = mix(dark ? '#cbbfae' : '#e7dccb', '#14182a', clamp(1 - lum, 0, .9) * .7), road = mix('#6c7078', '#0d1018', clamp(1 - lum, 0, .9) * .75), far2 = mix(walk, '#8d8678', .25);
+    if(wet){ walk = mix(walk, '#4b5668', .4); road = mix(road, '#2a313e', .35); }
+    if(snowy){ walk = mix(walk, '#ffffff', .6); road = mix(road, '#cfd8e4', .35); far2 = mix(far2, '#ffffff', .5); }
+    c.fillStyle = far2; c.fillRect(0, hy + 3, W, 3);
+    c.fillStyle = road; c.fillRect(0, g.roadY0, W, g.nearTop - g.roadY0);
+    c.fillStyle = 'rgba(255,255,255,.5)'; for(x = 4; x < W; x += 24) c.fillRect(x, (g.roadY0 + g.nearTop) / 2 - .5, 12, 1.6);
+    gr = c.createLinearGradient(0, g.nearTop, 0, H); gr.addColorStop(0, shade(walk, .06)); gr.addColorStop(1, shade(walk, -.1)); c.fillStyle = gr; c.fillRect(0, g.nearTop, W, H - g.nearTop);
+    c.fillStyle = shade(walk, .2); c.fillRect(0, g.nearTop - 1, W, 2.2); c.fillStyle = 'rgba(0,0,0,.18)'; c.fillRect(0, g.nearTop + 1.2, W, 1.4);
+    c.strokeStyle = 'rgba(0,0,0,.09)'; c.lineWidth = 1;
+    for(i = 1; i <= 5; i++){ var yy = g.nearTop + Math.pow(i / 5, 1.5) * (H - g.nearTop); c.beginPath(); c.moveTo(0, yy); c.lineTo(W, yy); c.stroke(); }
+    for(i = -8; i <= 8; i++){ c.beginPath(); c.moveTo(W / 2 + i * 16, g.nearTop); c.lineTo(W / 2 + i * 44, H); c.stroke(); }
+    if(wet){ for(i = 0; i < 5; i++){ var pxx = rng(.08, .92) * W, pyy = rng(g.nearTop + 10, H - 6), prx = rng(9, 18); c.fillStyle = 'rgba(70,90,120,.55)'; c.beginPath(); c.ellipse(pxx, pyy, prx, prx * .26, 0, 0, PI2); c.fill(); c.fillStyle = 'rgba(210,230,255,.35)'; c.beginPath(); c.ellipse(pxx - prx * .2, pyy - 1, prx * .5, prx * .08, 0, 0, PI2); c.fill(); } }
+    if(snowy){ for(i = 0; i < 9; i++){ var snx = rng(0, 1) * W, sny = rng(g.nearTop + 3, H - 3); c.fillStyle = 'rgba(255,255,255,.85)'; c.beginPath(); c.ellipse(snx, sny, rng(8, 22), rng(2, 4), 0, 0, PI2); c.fill(); } c.fillStyle = 'rgba(255,255,255,.9)'; c.fillRect(0, g.nearTop - 2, W, 2.4); }
+    // 가로등(저녁·밤·새벽엔 불이 켜진다)
+    [.07, .93].forEach(function(fx){
+      var lx = fx * W, ly = g.nearTop + 2, hx2 = lx + (fx < .5 ? 9 : -9);
+      c.fillStyle = '#39404f'; c.fillRect(lx - 1.2, ly - 38, 2.4, 38); c.fillRect(Math.min(lx, hx2) - 1.2, ly - 38, 10.4, 2.2);
+      if(L.lit){ var lg = c.createRadialGradient(hx2, ly - 35, 0, hx2, ly - 35, 38); lg.addColorStop(0, 'rgba(255,224,140,.75)'); lg.addColorStop(1, 'rgba(255,224,140,0)'); c.fillStyle = lg; c.fillRect(hx2 - 40, ly - 76, 80, 80); }
+      c.fillStyle = L.lit ? '#fff0b0' : '#9aa3b2'; c.beginPath(); c.ellipse(hx2, ly - 36, 4, 2.4, 0, 0, PI2); c.fill();
+    });
+    return { sky: sky, far: far, mid: mid, gnd: gnd, tw: tw };
+  }
+
+  // ── 버스·자동차 그림 ──
+  function drawWheel(c, x, y, r, rot){
+    c.fillStyle = '#1a1d24'; c.beginPath(); c.arc(x, y, r, 0, PI2); c.fill();
+    c.fillStyle = '#9aa1ad'; c.beginPath(); c.arc(x, y, r * .5, 0, PI2); c.fill();
+    c.strokeStyle = '#4b5260'; c.lineWidth = Math.max(.8, r * .12);
+    for(var i = 0; i < 4; i++){ var a = rot + i * PI / 2; c.beginPath(); c.moveTo(x, y); c.lineTo(x + Math.cos(a) * r * .5, y + Math.sin(a) * r * .5); c.stroke(); }
+    c.fillStyle = '#d8dde6'; c.beginPath(); c.arc(x, y, r * .15, 0, PI2); c.fill();
+  }
+  // 버스(오른쪽이 앞). o: { color, door(0~1 열림), door2, rot(바퀴), no(노선 글자), dir(1|-1), night }
+  function drawBus(c, cx, gy, L, o){
+    o = o || {}; var h = L * .4, col = o.color || '#2f6fd6', wr = L * .066, y0 = gy - h - wr * .55, x0 = cx - L / 2, i;
+    c.save(); if(o.dir < 0){ c.translate(cx, 0); c.scale(-1, 1); c.translate(-cx, 0); }
+    c.fillStyle = 'rgba(0,0,0,.26)'; c.beginPath(); c.ellipse(cx, gy + 1, L * .5, L * .04, 0, 0, PI2); c.fill();
+    var g = c.createLinearGradient(0, y0, 0, y0 + h); g.addColorStop(0, shade(col, .28)); g.addColorStop(.45, col); g.addColorStop(1, shade(col, -.3));
+    c.fillStyle = g; rr(c, x0, y0, L, h, L * .055); c.fill();
+    c.fillStyle = shade(col, .38); rr(c, x0 + L * .22, y0 - L * .028, L * .26, L * .035, L * .012); c.fill();
+    c.fillStyle = 'rgba(255,255,255,.88)'; c.fillRect(x0, y0 + h * .66, L, h * .07);
+    var wy = y0 + h * .13, wh = h * .42, glassTop = o.night ? '#314a73' : '#cfeaff', glassBot = o.night ? '#1b2845' : '#78acdb';
+    var wg = c.createLinearGradient(0, wy, 0, wy + wh); wg.addColorStop(0, glassTop); wg.addColorStop(1, glassBot);
+    c.fillStyle = wg; rr(c, x0 + L * .05, wy, L * .8, wh, L * .02); c.fill();
+    c.fillStyle = wg; c.beginPath(); c.moveTo(x0 + L * .88, wy); c.lineTo(x0 + L * .975, wy + wh * .12); c.lineTo(x0 + L * .985, wy + wh); c.lineTo(x0 + L * .88, wy + wh); c.closePath(); c.fill();
+    c.fillStyle = shade(col, -.18); for(i = 1; i < 5; i++) c.fillRect(x0 + L * (.05 + i * .16) - 1, wy, 2, wh);
+    c.fillStyle = 'rgba(255,255,255,.3)'; c.beginPath(); c.moveTo(x0 + L * .12, wy); c.lineTo(x0 + L * .2, wy); c.lineTo(x0 + L * .12, wy + wh); c.lineTo(x0 + L * .06, wy + wh); c.closePath(); c.fill();
+    [[.69, .12], [.3, .12]].forEach(function(d, k){
+      var dx = x0 + L * d[0], dw = L * d[1], dy = y0 + h * .13, dh = h * .83 - wr * .2, op = k === 0 ? (o.door || 0) : (o.door2 || 0);
+      c.fillStyle = shade(col, -.35); c.fillRect(dx - 1, dy - 1, dw + 2, dh + 1);
+      if(op > 0){ c.fillStyle = o.night ? '#ffe9b0' : '#3c3f4c'; c.fillRect(dx, dy, dw, dh); c.fillStyle = 'rgba(255,240,200,.35)'; c.fillRect(dx, dy, dw, dh * .4); var pw = dw * .5 * (1 - op); c.fillStyle = wg; c.fillRect(dx, dy, pw, dh * .62); c.fillRect(dx + dw - pw, dy, pw, dh * .62); }
+      else { c.fillStyle = wg; c.fillRect(dx, dy, dw * .47, dh * .62); c.fillRect(dx + dw * .53, dy, dw * .47, dh * .62); c.fillStyle = shade(col, -.05); c.fillRect(dx, dy + dh * .62, dw, dh * .38); }
+    });
+    c.fillStyle = '#10131a'; rr(c, x0 + L * .66, y0 + h * .02, L * .22, h * .1, 2); c.fill();
+    c.fillStyle = '#ffb347'; c.font = 'bold ' + Math.max(5, h * .09) + 'px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; if(o.dir < 0){ c.save(); c.translate(x0 + L * .77, y0 + h * .07); c.scale(-1, 1); c.fillText(o.no || '', 0, 0); c.restore(); } else c.fillText(o.no || '', x0 + L * .77, y0 + h * .07);
+    [.2, .74].forEach(function(f){ var wx = x0 + L * f; c.fillStyle = '#12151c'; c.beginPath(); c.arc(wx, gy - wr, wr * 1.28, Math.PI, 0); c.fill(); drawWheel(c, wx, gy - wr, wr, o.rot || 0); });
+    c.fillStyle = '#fff2b8'; c.beginPath(); c.ellipse(x0 + L - 2, y0 + h * .78, 2.6, 3.4, 0, 0, PI2); c.fill();
+    c.fillStyle = '#e33'; c.fillRect(x0 - 1, y0 + h * .72, 3, 5);
+    if(o.night){ var hg = c.createRadialGradient(x0 + L, y0 + h * .78, 0, x0 + L, y0 + h * .78, L * .4); hg.addColorStop(0, 'rgba(255,240,170,.5)'); hg.addColorStop(1, 'rgba(255,240,170,0)'); c.fillStyle = hg; c.fillRect(x0 + L - 4, y0 + h * .4, L * .5, h * .8); }
+    c.restore();
+  }
+  function drawCar(c, cx, gy, L, o){
+    var h = L * .42, col = o.color || '#e0556c', wr = L * .12, y0 = gy - h - wr * .3;
+    c.save(); if(o.dir < 0){ c.translate(cx, 0); c.scale(-1, 1); c.translate(-cx, 0); }
+    c.fillStyle = 'rgba(0,0,0,.24)'; c.beginPath(); c.ellipse(cx, gy + 1, L * .5, L * .07, 0, 0, PI2); c.fill();
+    var x0 = cx - L / 2, g = c.createLinearGradient(0, y0, 0, y0 + h); g.addColorStop(0, shade(col, .25)); g.addColorStop(1, shade(col, -.28));
+    c.fillStyle = g; rr(c, x0, y0 + h * .38, L, h * .5, h * .22); c.fill();
+    c.beginPath(); c.moveTo(x0 + L * .2, y0 + h * .42); c.quadraticCurveTo(x0 + L * .27, y0, x0 + L * .42, y0); c.lineTo(x0 + L * .64, y0); c.quadraticCurveTo(x0 + L * .78, y0 + h * .05, x0 + L * .84, y0 + h * .42); c.closePath(); c.fill();
+    c.fillStyle = o.night ? '#27375a' : '#bfe3ff'; c.beginPath(); c.moveTo(x0 + L * .26, y0 + h * .4); c.quadraticCurveTo(x0 + L * .31, y0 + h * .1, x0 + L * .43, y0 + h * .1); c.lineTo(x0 + L * .62, y0 + h * .1); c.quadraticCurveTo(x0 + L * .73, y0 + h * .14, x0 + L * .78, y0 + h * .4); c.closePath(); c.fill();
+    c.fillStyle = 'rgba(0,0,0,.25)'; c.fillRect(x0 + L * .5, y0 + h * .1, 1.4, h * .3);
+    [.24, .76].forEach(function(f){ drawWheel(c, x0 + L * f, gy - wr, wr, o.rot || 0); });
+    c.fillStyle = '#fff3b8'; c.beginPath(); c.ellipse(x0 + L - 1.5, y0 + h * .55, 1.8, 2.2, 0, 0, PI2); c.fill();
+    c.restore();
+  }
+
+  // ═══ 장면 실행기 ═══
+  var S = null, LAST = null;               // S: 지금 도는 장면 · LAST: 엔진이 마지막으로 준 값(장면이 아직 없을 때 보관)
+  var TH = 44;                              // 캐릭터 키(px, 가장 가까운 줄 기준)
+  function zy(z){ return S.g.nearTop + 4 + z * (S.g.floor - S.g.nearTop - 4); }     // 깊이(0~1) → 화면 y (원근: 멀수록 위·작게)
+  function zs(z){ return .74 + .34 * clamp(z, -.2, 1.1); }
+  function mkActor(id, x, z, dir){
+    var D = _RC.d3[id], bodyH = (D.base - 8) / 256 * D.cell + (D.lift || 0) * .6, k = Math.min(.8, TH / bodyH), kind = KIND[id] || 'dog';
+    return { id: id, kind: kind, km: KM[kind], D: D, k: k, w: D.cell * k, x: x, z: z, dir: dir || 1, st: 'walk', tx: x, tz: z, t0: 0, until: 0, fr: Math.random() * 16, y: 0, ang: 0, sq: 0, hop: 0, vis: 1, intro: false, ii: 0,
+      alt: kind === 'eagle' ? rnd(14, 24) : 0, life: rnd(15, 26), leaving: false, born: S ? S.t : 0, hero: false, ph: Math.random() * 6, bub: '', bubUntil: 0, spd: (D.fps / 16) * D.cell * k * (id === 'lovel' ? .9 : 1) * .85 };
+  }
+  function sheetOf(a){ return a.intro ? _RC.intro() : _RC.sheet(a.id); }
+  function addPart(type, x, y, n){
+    for(var i = 0; i < n; i++){ var ang = type === 'splash' ? rnd(-PI * .9, -PI * .1) : rnd(-PI * .85, -PI * .15), sp = type === 'splash' ? rnd(16, 38) : rnd(10, 26); S.pt.push({ type: type, x: x + rnd(-3, 3), y: y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, age: 0, life: rnd(.4, .8) }); }
+    if(S.pt.length > 50) S.pt.splice(0, S.pt.length - 50);
+  }
+  function landFx(a){ var wk = S.L.wk, y = zy(a.z); if(S.L.night && wk === 'clear') return; addPart(wk === 'rain' ? 'splash' : wk === 'snow' ? 'puff' : 'dust', a.x, y - 1, wk === 'rain' ? 5 : 3); }
+  function pickTarget(a, friends){
+    var o = friends && friends.length && Math.random() < .42 ? pickOf(friends) : null;
+    if(o && o !== a){ a.chase = true; return { x: clamp(o.x + rnd(-.8, .8) * a.w, a.w * .5, S.W - a.w * .5), z: clamp(o.z + rnd(-.12, .12), 0, 1) }; }
+    a.chase = false; return { x: rnd(a.w * .55, S.W - a.w * .55), z: rnd(.05, .98) };
+  }
+  function nextAct(a){
+    var km = a.km, t = S.t, w = { walk: 1 * km.walk, hop: .9 * km.hop, spin: .5 * km.spin, rest: .8 * km.rest }, tot = w.walk + w.hop + w.spin + w.rest, r = Math.random() * tot;
+    if((a.chase && km.hop > 0) || r < w.hop){ a.st = 'hop'; a.t0 = t; a.until = t + rnd(1.1, 2); return; }
+    if(r < w.hop + w.spin){ a.st = 'spin'; a.t0 = t; a.until = t + rnd(1, 1.7); a.dirT = t; return; }
+    if(r < w.hop + w.spin + w.rest){ a.st = 'rest'; a.t0 = t; a.until = t + rnd(1.2, 2.6) * (S.L.night ? 1.6 : 1); if(S.L.night && Math.random() < .6){ a.bub = 'z'; a.bubUntil = a.until; } return; }
+    var tg = pickTarget(a, S.actors.filter(function(o){ return o !== a && !o.leaving && o.vis; })); a.tx = tg.x; a.tz = tg.z; a.st = 'walk';
+  }
+  function stepActor(a, dt){
+    var t = S.t, D = a.D, u = a.until > a.t0 ? (t - a.t0) / (a.until - a.t0) : 0, st = a.st, W = S.W;
+    a.ang = 0; a.vis = 1; a.y = 0; a.sq = 0; a.intro = false;
+    if(a.kind === 'eagle' && !a.hero){ a.alt = 16 + Math.sin(t * 1.7 + a.x * .03) * 5; }
+    if(st === 'emerge'){ a.intro = true; a.ii = Math.min(D.intro - 1, Math.floor(u * D.intro)); if(t >= a.until){ a.intro = false; nextAct(a); } return; }
+    if(st === 'walk'){
+      var dx = a.tx - a.x, dz = a.tz - a.z;
+      if(Math.abs(dx) < 3 && Math.abs(dz) < .03){ if(a.leaving){ a.dead = true; return; } if(a.onArrive){ var f = a.onArrive; a.onArrive = null; f(a); return; } nextAct(a); }
+      else {
+        if(Math.abs(dx) >= 3){ a.dir = dx > 0 ? 1 : -1; a.x += a.dir * Math.min(Math.abs(dx), a.spd * (a.leaving ? 1.25 : 1) * dt); }
+        a.z += (dz > 0 ? 1 : dz < 0 ? -1 : 0) * Math.min(Math.abs(dz), .28 * dt);
+        a.fr += dt * D.fps * (a.kind === 'eagle' ? .5 : 1);
+      }
+    } else if(st === 'hop'){
+      a.fr += dt * D.fps * .7; var ph = Math.abs(Math.sin((t - a.t0) * 7.2)); a.y = -ph * 9 * zs(a.z) * (a.kind === 'tad' ? 1.2 : 1);
+      var cyc = Math.floor((t - a.t0) * 7.2 / PI); if(cyc !== a.lastCyc){ if(a.lastCyc != null && ph < .3) landFx(a); a.lastCyc = cyc; }
+      if(t >= a.until){ a.lastCyc = null; nextAct(a); }
+    } else if(st === 'spin'){
+      a.fr += dt * D.fps * .4; if(t - a.dirT > .4){ a.dir = -a.dir; a.dirT = t; } if(t >= a.until) nextAct(a);
+    } else if(st === 'rest'){
+      a.fr = STAND[a.id]; a.y = -Math.abs(Math.sin((t - a.t0) * 2.2)) * .8; if(t >= a.until){ a.bub = ''; nextAct(a); }
+    } else if(st === 'stand'){          // 서 있기(대기·하차 장면의 대표 캐릭터)
+      a.fr = STAND[a.id]; a.y = -Math.abs(Math.sin(t * 2.0 + a.ph)) * .9;
+    }
+    a.z = clamp(a.z, -.2, 1.05); a.x = clamp(a.x, -a.w * 1.2, W + a.w * 1.2);
+    if(a.kind === 'tad') a.y -= 2 + Math.sin(t * 2.4 + a.x) * 1.6;
+  }
+  function drawActor(c, a){
+    if(!a.vis) return;
+    var D = a.D, sheet = sheetOf(a); if(!sheet) return;
+    var s = a.k * zs(a.z), sc = D.cell / 256 * s, y = zy(a.z), idx = a.intro ? a.ii : (Math.floor(a.fr) % 16 + 16) % 16, lift = ((D.lift || 0) + a.alt) * zs(a.z) * (a.kind === 'eagle' ? 1 : s / a.k);
+    var shA = (S.L.night ? .22 : .34) * (a.kind === 'eagle' ? .7 : 1) * (S.L.wk === 'rain' || S.L.wk === 'overcast' ? .7 : 1);
+    c.fillStyle = 'rgba(0,0,0,' + (shA * (a.alt ? clamp(1 - a.alt / 60, .5, 1) : 1)).toFixed(3) + ')'; c.beginPath(); c.ellipse(a.x, y + 1, D.cell * s * .2 * (a.sq ? 1.15 : 1), 3.2 * zs(a.z), 0, 0, PI2); c.fill();
+    var sx = (idx % 4) * 256, sy = Math.floor(idx / 4) * 256, dx = -D.ox * sc, dy = -D.base * sc - lift + a.y;
+    c.save(); c.translate(a.x, y); if(a.dir < 0) c.scale(-1, 1); if(a.ang) c.rotate(a.ang);
+    try{ c.drawImage(sheet, sx, sy, 256, 256, dx, dy, D.cell * s, D.cell * s); }catch(e){}
+    c.restore();
+    if(a.umb){ drawUmbrella(c, a.x + a.dir * 2, y - TH * zs(a.z) * .98 + a.y, zs(a.z), a.id); }
+  }
+  function drawUmbrella(c, x, y, s, id){
+    var col = id === 'chaeng' ? '#ffb74d' : id === 'lovel' ? '#ff7aa5' : id === 'dolsom' ? '#5aa9ff' : id === 'ppopu' ? '#7bd88f' : id === 'sul' ? '#ffd54f' : '#b388ff', r = 17 * s;
+    c.save(); c.translate(x, y - 6 * s);
+    c.strokeStyle = '#555c6b'; c.lineWidth = 1.4; c.beginPath(); c.moveTo(0, -1); c.lineTo(0, 15 * s); c.stroke();
+    c.fillStyle = col; c.beginPath(); c.moveTo(-r, 0); c.quadraticCurveTo(-r * .9, -r * .95, 0, -r * 1.02); c.quadraticCurveTo(r * .9, -r * .95, r, 0); c.quadraticCurveTo(r * .5, -3, 0, 0); c.quadraticCurveTo(-r * .5, -3, -r, 0); c.closePath(); c.fill();
+    c.strokeStyle = 'rgba(255,255,255,.55)'; c.lineWidth = .9; c.beginPath(); c.moveTo(0, -r); c.lineTo(0, -1); c.moveTo(-r * .55, -r * .72); c.lineTo(-r * .3, -1); c.moveTo(r * .55, -r * .72); c.lineTo(r * .3, -1); c.stroke();
+    c.restore();
+  }
+
+  // ── 날씨·하늘 움직임 ──
+  function mkWxParts(wk, W, H){
+    var P = { rain: [], snow: [], clouds: [], stars: [], birds: [], fog: [] }, i, nC = { clear: 2, cloudy: 5, overcast: 7, rain: 7, snow: 6, fog: 4 }[wk] || 2;
+    for(i = 0; i < nC; i++) P.clouds.push({ x: Math.random(), y: rnd(.04, .3), s: rnd(.8, 1.5), v: rnd(.5, 1.2) });
+    if(wk === 'rain') for(i = 0; i < 70; i++) P.rain.push({ x: Math.random(), y: Math.random(), v: rnd(.8, 1.3), l: rnd(5, 9) });
+    if(wk === 'snow') for(i = 0; i < 64; i++) P.snow.push({ x: Math.random(), y: Math.random(), v: rnd(.45, 1), r: rnd(.9, 2.2), ph: Math.random() * 6.28 });
+    for(i = 0; i < 40; i++) P.stars.push({ x: Math.random(), y: Math.random() * .45, ph: Math.random() * 6.28, s: rnd(.5, 1.3) });
+    for(i = 0; i < 3; i++) P.birds.push({ x: Math.random(), y: rnd(.1, .3), v: rnd(.6, 1.1), ph: Math.random() * 6.28 });
+    return P;
+  }
+  function cloud(c, x, y, r, col){ c.fillStyle = col; c.beginPath(); c.ellipse(x, y, r * 1.5, r * .6, 0, 0, PI2); c.ellipse(x - r * .75, y + r * .12, r * .85, r * .5, 0, 0, PI2); c.ellipse(x + r * .8, y + r * .14, r * .9, r * .5, 0, 0, PI2); c.ellipse(x - r * .1, y - r * .32, r * .75, r * .55, 0, 0, PI2); c.fill(); }
+  function drawSkyFx(c, t){
+    var L = S.L, W = S.W, g = S.g, i, q, x, y, P = S.P, wk = L.wk;
+    if((L.night || L.slot === 'dawn') && wk !== 'overcast' && wk !== 'rain' && wk !== 'snow'){
+      var sa = L.night ? 1 : .5;
+      for(i = 0; i < P.stars.length; i++){ q = P.stars[i]; c.fillStyle = 'rgba(255,255,255,' + ((.35 + .45 * Math.sin(t * 2 + q.ph)) * sa * (wk === 'cloudy' || wk === 'fog' ? .5 : 1)).toFixed(3) + ')'; c.beginPath(); c.arc(q.x * W, q.y * g.hy, q.s, 0, PI2); c.fill(); }
+      if(L.night && wk === 'clear'){ var ph = (t % 14) / 14; if(ph < .1){ var u = ph / .1; c.strokeStyle = 'rgba(255,255,255,' + (.8 * (1 - u)).toFixed(2) + ')'; c.lineWidth = 1.3; c.beginPath(); c.moveTo(W * (.2 + u * .18), 8 + u * 22); c.lineTo(W * (.2 + u * .18) - 14, 8 + u * 22 - 6); c.stroke(); } }
+    }
+    var dark = L.night ? .75 : L.lit ? .35 : 0, cc = wk === 'overcast' || wk === 'rain' ? mix('#aeb6c2', '#2a3140', clamp(dark + .1, 0, .9)) : wk === 'snow' ? mix('#e3e9f2', '#3a4256', dark) : wk === 'fog' ? mix('#dfe4ea', '#444c5e', dark) : mix('#ffffff', L.slot === 'evening' ? '#ff9f80' : L.slot === 'dawn' ? '#c9a0c0' : '#1c2440', L.night ? .85 : L.lit ? .35 : 0);
+    for(i = 0; i < P.clouds.length; i++){ q = P.clouds[i]; x = ((q.x * (W + 90) + t * 4 * q.v) % (W + 90)) - 45; y = 8 + q.y * g.hy; cloud(c, x, y, 8 * q.s * (wk === 'overcast' || wk === 'rain' ? 1.3 : 1), cc); }
+    if(wk === 'clear' && (L.slot === 'morning' || L.slot === 'noon' || L.slot === 'afternoon')){
+      c.strokeStyle = 'rgba(40,50,70,.55)'; c.lineWidth = 1.1;
+      for(i = 0; i < P.birds.length; i++){ q = P.birds[i]; x = ((q.x * (W + 40) + t * 14 * q.v) % (W + 40)) - 20; y = 14 + q.y * g.hy + Math.sin(t * 1.5 + q.ph) * 3; var f = Math.sin(t * 9 + q.ph) * 2.2; c.beginPath(); c.moveTo(x - 4, y + f); c.quadraticCurveTo(x - 1.5, y - 2, x, y); c.quadraticCurveTo(x + 1.5, y - 2, x + 4, y + f); c.stroke(); }
+    }
+  }
+  function drawWxFront(c, t, clipRects){
+    var L = S.L, W = S.W, H = S.H, P = S.P, i, q, x, y;
+    if(clipRects){ c.save(); c.beginPath(); clipRects.forEach(function(r){ c.rect(r[0], r[1], r[2], r[3]); }); c.clip(); }
+    if(L.wk === 'rain'){
+      c.strokeStyle = L.night ? 'rgba(170,200,255,.5)' : 'rgba(110,140,190,.6)'; c.lineWidth = 1; c.beginPath();
+      for(i = 0; i < P.rain.length; i++){ q = P.rain[i]; y = ((q.y * (H + 20) + t * 210 * q.v) % (H + 20)) - 10; x = (q.x * (W + 30) - y * .22 + W + 30) % (W + 30) - 5; c.moveTo(x, y); c.lineTo(x - 1.6, y - q.l); }
+      c.stroke();
+      for(i = 0; i < S.ripples.length; i++){ var rp = S.ripples[i], u = (t - rp.t0) / .8; if(u >= 1) continue; c.strokeStyle = 'rgba(220,235,255,' + (.55 * (1 - u)).toFixed(2) + ')'; c.lineWidth = .9; c.beginPath(); c.ellipse(rp.x, rp.y, 2 + u * 8, (2 + u * 8) * .28, 0, 0, PI2); c.stroke(); }
+    } else if(L.wk === 'snow'){
+      c.fillStyle = L.night ? 'rgba(255,255,255,.9)' : 'rgba(255,255,255,.95)';
+      for(i = 0; i < P.snow.length; i++){ q = P.snow[i]; y = ((q.y * (H + 8) + t * 22 * q.v) % (H + 8)) - 4; x = (q.x * W + Math.sin(t * .9 + q.ph) * 8 + W) % W; c.globalAlpha = .55 + .4 * q.v; c.beginPath(); c.arc(x, y, q.r, 0, PI2); c.fill(); }
+      c.globalAlpha = 1;
+    } else if(L.wk === 'fog'){
+      for(i = 0; i < 3; i++){ var fy = S.g.hy - 10 + i * 22, fg = c.createLinearGradient(0, fy - 16, 0, fy + 16), off = Math.sin(t * .25 + i * 2) * 14; fg.addColorStop(0, 'rgba(225,230,236,0)'); fg.addColorStop(.5, 'rgba(225,230,236,' + (L.night ? .16 : .42) + ')'); fg.addColorStop(1, 'rgba(225,230,236,0)'); c.fillStyle = fg; c.fillRect(off - 20, fy - 16, W + 40, 32); }
+    }
+    if(clipRects) c.restore();
+  }
+  function drawParts(c, dt){
+    for(var i = S.pt.length - 1; i >= 0; i--){
+      var p = S.pt[i]; p.age += dt; p.vy += 90 * dt; p.x += p.vx * dt; p.y += p.vy * dt; if(p.age > p.life){ S.pt.splice(i, 1); continue; }
+      var al = 1 - p.age / p.life; c.fillStyle = p.type === 'splash' ? 'rgba(160,200,245,' + al.toFixed(2) + ')' : p.type === 'puff' ? 'rgba(255,255,255,' + al.toFixed(2) + ')' : 'rgba(200,185,160,' + (al * .8).toFixed(2) + ')'; c.beginPath(); c.arc(p.x, p.y, p.type === 'puff' ? 1.8 : 1.3, 0, PI2); c.fill();
+    }
+  }
+
+  // ── 찻길 차량 · 정류장 ──
+  var BUS_COLORS = ['#2f6fd6', '#2fa862', '#d6453a', '#e3a21a'], CAR_COLORS = ['#e0556c', '#f0b83a', '#5aa9e6', '#8e7bd6', '#e9eef5', '#4cbf9a'], BUS_NOS = ['146', '3300', '9401', 'N61', '472', '6411'];
+  function laneGy(l){ var g = S.g; return l === 0 ? g.roadY0 + (g.nearTop - g.roadY0) * .4 : g.nearTop - 3; }
+  function laneL(l, bus){ return l === 0 ? (bus ? 66 : 36) : (bus ? 100 : 50); }
+  function spawnTraffic(){
+    var allowNear = !(S.mode === 'alight' && S.seq && S.seq.busOn), lane = allowNear && Math.random() < .55 ? 1 : 0, bus = Math.random() < (S.mode === 'wait' ? .5 : .32), L = laneL(lane, bus), dir = lane === 1 ? 1 : -1;
+    S.traffic.push({ lane: lane, bus: bus, L: L, dir: dir, x: dir > 0 ? -L * .6 : S.W + L * .6, v: lane === 1 ? rnd(46, 66) : rnd(28, 44), color: bus ? pickOf(BUS_COLORS) : pickOf(CAR_COLORS), no: pickOf(BUS_NOS), rot: 0 });
+    return S.traffic[S.traffic.length - 1];
+  }
+  function stepTraffic(dt){
+    var t = S.t;
+    if(S.mode !== 'ride' && t >= S.nextCar && S.traffic.length < 3){
+      var v = spawnTraffic(); S.nextCar = t + rnd(4.5, 9);
+      if(S.mode === 'wait' && S.venue === 'bus' && v.bus && v.lane === 1 && S.hero){ S.hero.bub = '!'; S.hero.bubUntil = t + 1.3; S.hero.dir = -1; S.hero.lookUntil = t + 1.6; }
+    }
+    for(var i = S.traffic.length - 1; i >= 0; i--){ var v2 = S.traffic[i]; v2.x += v2.dir * v2.v * dt; v2.rot += v2.dir * v2.v * dt * .1; if(v2.x < -v2.L || v2.x > S.W + v2.L) S.traffic.splice(i, 1); }
+  }
+  function drawTraffic(c, lane){
+    S.traffic.forEach(function(v){ if(v.lane !== lane) return; var o = { color: v.color, rot: v.rot, no: v.no, dir: v.dir, night: S.L.night || S.L.lit && S.L.slot !== 'dawn' }; (v.bus ? drawBus : drawCar)(c, v.x, laneGy(lane), v.L, o); });
+  }
+  function drawStop(c){
+    var g = S.g, x = S.stopX, gy = g.nearTop + 6, lit = S.L.lit, i;
+    // 정류장 표지(둥근 파란 판 + 버스 그림)
+    c.fillStyle = '#4a5160'; c.fillRect(x - 1.3, gy - 38, 2.6, 38);
+    if(lit){ var sg = c.createRadialGradient(x, gy - 40, 0, x, gy - 40, 22); sg.addColorStop(0, 'rgba(150,200,255,.55)'); sg.addColorStop(1, 'rgba(150,200,255,0)'); c.fillStyle = sg; c.fillRect(x - 24, gy - 64, 48, 48); }
+    c.fillStyle = '#2f6fd6'; c.beginPath(); c.arc(x, gy - 42, 8.5, 0, PI2); c.fill(); c.strokeStyle = '#fff'; c.lineWidth = 1.2; c.stroke();
+    c.fillStyle = '#fff'; rr(c, x - 4.8, gy - 46, 9.6, 7.5, 1.6); c.fill(); c.fillStyle = '#2f6fd6'; c.fillRect(x - 3.6, gy - 44.6, 7.2, 2.8); c.fillStyle = '#fff'; c.beginPath(); c.arc(x - 2.7, gy - 38.5, 1.1, 0, PI2); c.arc(x + 2.7, gy - 38.5, 1.1, 0, PI2); c.fill();
+    // 쉼터(지붕·유리·의자)
+    var sx = x + 24, sw = 58, top = gy - 34;
+    c.fillStyle = 'rgba(160,200,230,' + (lit ? .2 : .26) + ')'; c.fillRect(sx, top + 4, sw, 34);
+    c.strokeStyle = 'rgba(255,255,255,.35)'; c.lineWidth = 1; c.beginPath(); c.moveTo(sx + 6, top + 6); c.lineTo(sx + 16, top + 6); c.moveTo(sx + 30, top + 6); c.lineTo(sx + 36, top + 6); c.stroke();
+    c.fillStyle = '#4a5160'; c.fillRect(sx - 1, top + 2, 2.4, 38); c.fillRect(sx + sw - 1.4, top + 2, 2.4, 38);
+    var rg = c.createLinearGradient(0, top - 2, 0, top + 5); rg.addColorStop(0, '#6b7385'); rg.addColorStop(1, '#3c4352'); c.fillStyle = rg; rr(c, sx - 5, top - 2, sw + 10, 6, 2.6); c.fill();
+    if(S.L.wk === 'snow'){ c.fillStyle = 'rgba(255,255,255,.95)'; rr(c, sx - 5, top - 4, sw + 10, 3.4, 1.6); c.fill(); }
+    c.fillStyle = '#8a6a49'; for(i = 0; i < 3; i++) c.fillRect(sx + 9, top + 24 + i * 2.2, sw - 18, 1.5); c.fillStyle = '#5a4630'; c.fillRect(sx + 11, top + 31, 2.4, 6); c.fillRect(sx + sw - 14, top + 31, 2.4, 6);
+    if(lit){ c.fillStyle = 'rgba(255,238,170,.85)'; c.fillRect(sx + sw - 13, top + 9, 8, 12); }
+  }
+
+  var LINE_COL = { 1: '#0052a4', 2: '#00a84d', 3: '#ef7c1c', 4: '#00a5de', 5: '#996cac', 6: '#cd7c2f', 7: '#747f00', 8: '#e6186c', 9: '#bdb092' };
+  // 지하철역 입구(지붕·계단 입구·노선 표지) — 지하철을 기다릴 때 · 지하철에서 내렸을 때의 장소
+  function drawEntrance(c){
+    var g = S.g, x = S.entX, gy = g.nearTop + 7, lit = S.L.lit, col = LINE_COL[S.res.line] || '#4a6fa5', i;
+    c.fillStyle = '#2b303c'; rr(c, x - 21, gy - 27, 42, 28, 5); c.fill();                                  // 계단 입구(어두운 안쪽)
+    c.fillStyle = '#3d4352'; for(i = 0; i < 4; i++) c.fillRect(x - 17 + i * 3, gy - 22 + i * 5, 34 - i * 6, 2.4);   // 계단
+    if(lit){ var eg = c.createRadialGradient(x, gy - 10, 0, x, gy - 10, 28); eg.addColorStop(0, 'rgba(255,230,160,.5)'); eg.addColorStop(1, 'rgba(255,230,160,0)'); c.fillStyle = eg; c.fillRect(x - 30, gy - 38, 60, 44); }
+    var rg = c.createLinearGradient(0, gy - 38, 0, gy - 26); rg.addColorStop(0, '#8a93a6'); rg.addColorStop(1, '#4a5160'); c.fillStyle = rg; c.beginPath(); c.moveTo(x - 27, gy - 26); c.lineTo(x - 19, gy - 37); c.lineTo(x + 19, gy - 37); c.lineTo(x + 27, gy - 26); c.closePath(); c.fill();   // 지붕
+    if(S.L.wk === 'snow'){ c.fillStyle = 'rgba(255,255,255,.95)'; c.beginPath(); c.moveTo(x - 20, gy - 36); c.lineTo(x - 17, gy - 40); c.lineTo(x + 17, gy - 40); c.lineTo(x + 20, gy - 36); c.closePath(); c.fill(); }
+    c.fillStyle = '#4a5160'; c.fillRect(x - 25, gy - 27, 2.6, 28); c.fillRect(x + 22.4, gy - 27, 2.6, 28);
+    // 노선 표지(동그라미)
+    var sx = x + 36; c.fillStyle = '#4a5160'; c.fillRect(sx - 1.2, gy - 34, 2.4, 34);
+    if(lit){ var sg = c.createRadialGradient(sx, gy - 38, 0, sx, gy - 38, 20); sg.addColorStop(0, 'rgba(255,255,255,.5)'); sg.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = sg; c.fillRect(sx - 22, gy - 60, 44, 44); }
+    c.fillStyle = col; c.beginPath(); c.arc(sx, gy - 39, 8.6, 0, PI2); c.fill(); c.strokeStyle = '#fff'; c.lineWidth = 1.3; c.stroke();
+    c.fillStyle = '#fff'; c.font = 'bold ' + (String(S.res.line || '').length > 1 ? 7 : 10) + 'px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(String(S.res.line || '역'), sx, gy - 38.6);
+  }
+  function drawBubble(c, x, y, text){
+    c.font = 'bold 10px sans-serif'; var w = c.measureText(text).width + 10;
+    c.fillStyle = 'rgba(255,255,255,.95)'; rr(c, x - w / 2, y - 14, w, 15, 6); c.fill();
+    c.beginPath(); c.moveTo(x - 3, y + .5); c.lineTo(x, y + 5); c.lineTo(x + 3, y + .5); c.fill();
+    c.fillStyle = '#2a3142'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(text, x, y - 6);
+  }
+
+  // ── 장면 준비 ──
+  function setup(mode){
+    var t = S.t, res = S.res, W = S.W;
+    S.mode = mode; S.actors = []; S.traffic = []; S.pt = []; S.hero = null; S.seq = null; S.nextCar = t + rnd(1.2, 3); S.spawnAt = t + .2; S.castI = 0; S.ripples = []; S.rideBell = 0;
+    S.stopX = Math.round(W * .3); S.entX = Math.round(W * .36); S.venue = res.venue === 'sub' ? 'sub' : 'bus'; S.baseDir = S.venue === 'sub' ? 1 : -1;
+    var heroId = res.hero && _RC.d3[res.hero] ? res.hero : 'lovel';
+    if(mode === 'wait'){
+      var h = mkActor(heroId, S.venue === 'sub' ? S.entX + 6 : W * .48, S.venue === 'sub' ? .62 : .66, S.baseDir); h.hero = true; h.k *= 1.12; h.w *= 1.12; h.spd *= 1.1; h.st = 'stand'; h.ph = Math.random() * 6; h.umb = S.L.wk === 'rain' || S.L.wk === 'snow'; h.life = 1e9; S.hero = h; S.actors.push(h); S.waitNext = t + rnd(1.5, 3);
+      if(S.venue === 'bus') S.traffic.push({ lane: 1, bus: true, L: laneL(1, true), dir: 1, x: -40, v: 52, color: pickOf(BUS_COLORS), no: pickOf(BUS_NOS), rot: 0 });
+    } else if(mode === 'alight'){
+      var h2 = mkActor(heroId, 0, -.12, -1); h2.hero = true; h2.k *= 1.1; h2.w *= 1.1; h2.vis = 0; h2.life = 1e9; h2.umb = S.L.wk === 'rain' || S.L.wk === 'snow'; h2.st = 'hidden'; S.hero = h2; S.actors.push(h2);
+      S.seq = { ph: 0, t0: t, busOn: S.venue !== 'sub', busX: W * .66, busV: 0, door: 0, L: 120, color: S.busColor };
+    } else if(mode === 'ride'){
+      var h3 = mkActor(heroId, W * .46, 1, 1); h3.hero = true; h3.st = 'stand'; h3.ph = Math.random() * 6; S.hero = h3; S.ride = { scroll: 0, rot: 0, speed: 0, vPrev: 0, acc: 0, cyc: rnd(0, 20), bump: 0, nextBump: t + rnd(1.5, 3.5) };
+    }
+  }
+  function idleManage(){
+    var t = S.t, want = S.W < 260 ? 2 : 3, i, a, alive = 0;
+    S.actors.forEach(function(o){ if(!o.hero && !o.leaving && t - o.born > o.life){ o.leaving = true; o.st = 'walk'; o.tx = o.x < S.W / 2 ? -o.w * 1.1 : S.W + o.w * 1.1; o.tz = o.z; o.onArrive = null; } if(!o.leaving) alive++; });
+    S.actors = S.actors.filter(function(o){ return !o.dead; });
+    var heroIn = S.hero ? 1 : 0;
+    if(alive < want && t >= S.spawnAt && !(S.mode === 'alight' && S.seq && (S.seq.busOn || S.seq.ph < 3))){
+      var cast = S.res.cast && S.res.cast.length ? S.res.cast : _RC.order, id = null, tries = 0;
+      while(tries++ < cast.length){ var cand = cast[S.castI++ % cast.length]; if(!S.actors.some(function(o){ return o.id === cand && !o.leaving; }) && _RC.d3[cand]) { id = cand; break; } }
+      if(id){
+        var left = Math.random() < .5, a2 = mkActor(id, 0, rnd(.1, .95), left ? 1 : -1), D = a2.D;
+        if(id === 'dudung' && D.intro && _RC.intro() && Math.random() < .75){ a2.x = rnd(a2.w, S.W - a2.w); a2.st = 'emerge'; a2.t0 = t; a2.until = t + D.intro / D.introFps; }
+        else { a2.x = left ? -a2.w * .9 : S.W + a2.w * .9; var tg = pickTarget(a2, S.actors.filter(function(o){ return !o.leaving; })); a2.tx = tg.x; a2.tz = tg.z; if(S.hero && S.mode === 'alight' && S.seq && S.seq.ph >= 3){ a2.tx = clamp(S.hero.x + rnd(-1, 1) * 28, a2.w * .5, S.W - a2.w * .5); a2.tz = clamp(S.hero.z + rnd(-.12, .12), 0, 1); a2.chase = true; a2.onArrive = function(o){ o.st = 'hop'; o.t0 = S.t; o.until = S.t + 1.4; }; } }
+        a2.born = t; S.actors.push(a2); S.spawnAt = t + rnd(.9, 2.4);
+      }
+    }
+  }
+  function waitManage(){
+    var t = S.t, h = S.hero; if(!h) return;
+    if(h.bub && t > h.bubUntil) h.bub = '';
+    if(h.lookUntil && t > h.lookUntil){ h.lookUntil = 0; h.dir = S.baseDir; }
+    if(h.st === 'hop' && t >= h.until){ h.st = 'stand'; }
+    if(h.st === 'walk' && !h.onArrive){ h.st = 'stand'; }
+    if(t < S.waitNext || h.st !== 'stand' || h.lookUntil) return;
+    S.waitNext = t + rnd(2.2, 4.2);
+    var r = Math.random();
+    if(r < .3){ h.dir = -S.baseDir; h.lookUntil = t + rnd(1.1, 1.8); }                                   // 반대쪽도 살펴본다
+    else if(r < .55){ h.st = 'hop'; h.t0 = t; h.until = t + .9; h.lastCyc = null; }               // 발을 동동
+    else if(r < .8){ h.tx = clamp(h.x + rnd(-14, 14), S.venue === 'sub' ? S.entX - 40 : S.W * .36, S.venue === 'sub' ? S.entX + 30 : S.W * .62); h.tz = clamp(h.z + rnd(-.06, .06), .55, .85); h.st = 'walk'; h.onArrive = function(o){ o.st = 'stand'; o.dir = S.baseDir; }; }
+    else { h.bub = S.L.night ? 'z' : '…'; h.bubUntil = t + 1.8; }                                  // 하품 · 한숨
+  }
+  function alightManage(dt){
+    var t = S.t, q = S.seq, h = S.hero; if(!q || !h) return;
+    var doorX = q.busX + q.L * .25;
+    if(S.venue === 'sub' && q.ph < 3){                  // 지하철: 역 입구 계단으로 올라와 걸어 나온다
+      if(q.ph === 0 && t - q.t0 > .9){ q.ph = 1; h.vis = 1; h.x = S.entX; h.z = .02; h.dir = -1; h.tx = S.entX - 36; h.tz = .62; h.st = 'walk'; h.onArrive = function(o){ q.ph = 3; q.t3 = S.t; S.spawnAt = S.t + .3; o.st = 'stand'; o.dir = 1; }; }
+      return;
+    }
+    if(q.ph === 0){ q.door = clamp((t - q.t0) / .7, 0, 1); if(t - q.t0 > .9){ q.ph = 1; h.vis = 1; h.x = doorX; h.z = -.1; h.dir = -1; h.tx = q.busX - q.L * .45; h.tz = .6; h.st = 'walk'; h.onArrive = function(o){ q.ph = 2; q.t1 = S.t; o.st = 'stand'; o.dir = -1; }; } }
+    else if(q.ph === 1){ if(h.st !== 'walk' && h.st !== 'stand') h.st = 'walk'; q.door = 1; }
+    else if(q.ph === 2){ q.door = clamp(1 - (t - q.t1) / .6, 0, 1); if(t - q.t1 > 1.0){ q.ph = 2.5; q.t2 = t; } }
+    else if(q.ph === 2.5){ q.busV = Math.min(95, q.busV + 60 * dt); q.busX += q.busV * dt; if(q.busX - q.L / 2 > S.W){ q.busOn = false; q.ph = 3; q.t3 = t; S.spawnAt = t + .3; h.st = 'stand'; h.dir = 1; } }
+    else if(q.ph === 3){ if(h.st === 'stand' && t - q.t3 > 2.4 && Math.random() < dt * .35){ var r = Math.random(); if(r < .5){ h.st = 'hop'; h.t0 = t; h.until = t + 1; } else { h.dir = -h.dir; } } if(h.st === 'hop' && t >= h.until) h.st = 'stand'; }
+    if(h.bub && t > h.bubUntil) h.bub = '';
+  }
+
+  // ═══ 버스 안(타고 가는 중) ═══
+  function rideStep(dt){
+    var R = S.ride, t = S.t, h = S.hero;
+    R.cyc = (R.cyc + dt) % 22;
+    var c = R.cyc, v = c < 4 ? ease(c / 4) : c < 16 ? 1 + Math.sin(c * .9) * .04 : c < 19 ? 1 - ease((c - 16) / 3) : 0;    // 출발 → 달림 → 정차 → 잠깐 섰다가
+    R.acc = (v - R.vPrev) / Math.max(dt, .001); R.vPrev = v; R.speed = v; R.scroll += v * dt * 70; R.rot += v * dt * 9;
+    if(t > R.nextBump){ R.bump = t; R.nextBump = t + rnd(2.5, 5); }
+    R.stopped = v < .02;
+    if(S.res.nearEnd){ if(t >= (S.bellAt || 0)){ S.bellAt = t + 3.2; h.bub = '띵동!'; h.bubUntil = t + 1.5; R.bellT = t; } }
+    if(h.bub && t > h.bubUntil) h.bub = '';
+  }
+  function drawRide(c){
+    var W = S.W, H = S.H, g = S.g, R = S.ride, t = S.t, L = S.L, h = S.hero, D = h.D;
+    var roofY = 7, floorY = H - 37, bodyBot = H - 22, wy0 = 22, wy1 = 76, col = S.busColor;
+    // 길(아래)
+    c.fillStyle = mix('#6c7078', '#0d1018', clamp(1 - L.lum, 0, .9) * .75); c.fillRect(0, H - 14, W, 14);
+    c.fillStyle = 'rgba(255,255,255,.55)'; var dOff = (R.scroll * 1.6) % 30; for(var dx = -dOff; dx < W; dx += 30) c.fillRect(dx, H - 6, 15, 1.8);
+    // 차체(안쪽 벽)
+    var wall = c.createLinearGradient(0, roofY, 0, floorY); wall.addColorStop(0, L.night ? '#4a4f68' : '#e8edf3'); wall.addColorStop(1, L.night ? '#2f3348' : '#cfd7e1');
+    c.fillStyle = shade(col, -.2); rr(c, 4, roofY - 3, W - 8, bodyBot - roofY + 5, 10); c.fill();
+    c.fillStyle = wall; rr(c, 8, roofY, W - 16, floorY - roofY, 7); c.fill();
+    // 창밖(하늘·도시·가로수) — 창 모양으로 잘라서 보여준다
+    var wins = [], pw = (W - 28) / 5, i;
+    for(i = 0; i < 5; i++) wins.push([14 + i * pw + 2, wy0, pw - 4, wy1 - wy0]);
+    c.save(); c.beginPath(); wins.forEach(function(r){ c.rect(r[0], r[1], r[2], r[3]); }); c.clip();
+    c.drawImage(S.bg.sky, 0, 0, W, H);
+    drawSkyFx(c, t);
+    var tw = S.bg.tw, fo = (R.scroll * .35) % tw, mo = (R.scroll * .9) % tw;
+    c.drawImage(S.bg.far, -fo, 0, tw, H); c.drawImage(S.bg.far, tw - fo, 0, tw, H);
+    c.drawImage(S.bg.mid, -mo, 0, tw, H); c.drawImage(S.bg.mid, tw - mo, 0, tw, H);
+    c.fillStyle = mix('#8d8678', '#14182a', clamp(1 - L.lum, 0, .9) * .7); c.fillRect(0, g.hy + 3, W, 40);          // 건너편 인도
+    var lp = (R.scroll * 1.1) % 90; for(var lx = -lp + 20; lx < W; lx += 90){ c.fillStyle = '#39404f'; c.fillRect(lx, g.hy - 18, 2, 24); if(L.lit){ var lg = c.createRadialGradient(lx + 1, g.hy - 19, 0, lx + 1, g.hy - 19, 16); lg.addColorStop(0, 'rgba(255,224,140,.8)'); lg.addColorStop(1, 'rgba(255,224,140,0)'); c.fillStyle = lg; c.fillRect(lx - 16, g.hy - 36, 34, 34); } c.fillStyle = L.lit ? '#fff0b0' : '#9aa3b2'; c.beginPath(); c.arc(lx + 1, g.hy - 19, 2.2, 0, PI2); c.fill(); }
+    if(L.night) { c.fillStyle = 'rgba(6,10,30,.22)'; c.fillRect(0, 0, W, H); }
+    drawWxFront(c, t, null);
+    // 창 유리 반사
+    c.fillStyle = 'rgba(255,255,255,.1)'; wins.forEach(function(r){ c.beginPath(); c.moveTo(r[0] + 6, r[1]); c.lineTo(r[0] + 16, r[1]); c.lineTo(r[0] + 4, r[1] + r[3]); c.lineTo(r[0] - 6, r[1] + r[3]); c.closePath(); c.fill(); });
+    c.restore();
+    // 창틀
+    c.strokeStyle = shade(col, -.25); c.lineWidth = 2.4; wins.forEach(function(r){ rr(c, r[0], r[1], r[2], r[3], 3); c.stroke(); });
+    // 천장 손잡이 봉 + 손잡이
+    c.fillStyle = '#c9ced8'; c.fillRect(12, 14, W - 24, 2.4); c.fillStyle = 'rgba(0,0,0,.18)'; c.fillRect(12, 16.4, W - 24, 1);
+    var sway = Math.sin(t * 2.1 + R.scroll * .01) * .05 - R.acc * .06 + (t - R.bump < .4 ? Math.sin((t - R.bump) * 30) * .05 * (1 - (t - R.bump) / .4) : 0);
+    [W * .28, W * .46, W * .64, W * .82].forEach(function(sx0, k){
+      c.save(); c.translate(sx0, 16); c.rotate(sway * (k % 2 ? 1 : .85)); c.strokeStyle = '#4b5263'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(0, 0); c.lineTo(0, 24); c.stroke();
+      c.strokeStyle = '#ffb347'; c.lineWidth = 2.2; c.beginPath(); c.arc(0, 29, 5, 0, PI2); c.stroke(); c.restore();
+    });
+    // 좌석(창 아래 벽 쪽)
+    var sc2 = shade(col, .1); for(i = 0; i < 4; i++){ var sx1 = 22 + i * (W - 40) / 4 + 6; c.fillStyle = shade(sc2, -.12); rr(c, sx1, floorY - 46, 30, 30, 6); c.fill(); c.fillStyle = sc2; rr(c, sx1 + 2, floorY - 44, 26, 12, 5); c.fill(); c.fillStyle = shade(sc2, -.2); rr(c, sx1 - 3, floorY - 18, 36, 14, 5); c.fill(); c.fillStyle = sc2; rr(c, sx1 - 1, floorY - 18, 32, 8, 4); c.fill(); }
+    // 하차벨 기둥
+    var bx = W * .9; c.fillStyle = '#c9ced8'; c.fillRect(bx - 1.2, 18, 2.4, floorY - 18);
+    var bellOn = S.res.nearEnd && (t - (R.bellT || -9) < 1.6 ? (Math.floor(t * 4) % 2 === 0) : true);
+    c.fillStyle = bellOn ? '#ff5a4d' : '#7a2b28'; c.beginPath(); c.arc(bx, 54, 4.2, 0, PI2); c.fill(); if(bellOn){ var bg2 = c.createRadialGradient(bx, 54, 0, bx, 54, 14); bg2.addColorStop(0, 'rgba(255,90,70,.55)'); bg2.addColorStop(1, 'rgba(255,90,70,0)'); c.fillStyle = bg2; c.fillRect(bx - 14, 40, 28, 28); }
+    // 바닥
+    var fl = c.createLinearGradient(0, floorY - 2, 0, bodyBot); fl.addColorStop(0, L.night ? '#3a3a48' : '#8a8f9b'); fl.addColorStop(1, L.night ? '#22222c' : '#5e626d'); c.fillStyle = fl; c.fillRect(8, floorY - 1, W - 16, bodyBot - floorY + 1);
+    // 대표 캐릭터(서 있다) — 가속·제동에 몸이 쏠리고 길 요철에 통통
+    var k = Math.min(.9, 52 / ((D.base - 8) / 256 * D.cell + (D.lift || 0) * .6)), sc = D.cell / 256 * k, idx = STAND[h.id], sheet = _RC.sheet(h.id);
+    var lean = clamp(-R.acc * .05, -.12, .12) + Math.sin(t * 1.8) * .012, bob = Math.sin(t * 17) * .5 * R.speed - (t - R.bump < .25 ? Math.sin((t - R.bump) / .25 * PI) * 2.6 : 0);
+    var hx = h.x + Math.sin(t * .9) * 1.5, hy = floorY - 1;
+    c.fillStyle = 'rgba(0,0,0,.28)'; c.beginPath(); c.ellipse(hx, hy + 1, D.cell * k * .2, 3, 0, 0, PI2); c.fill();
+    if(sheet){ c.save(); c.translate(hx, hy); c.rotate(lean); if(R.speed > .05 && S.t % 9 < 4.5) {} c.drawImage(sheet, (idx % 4) * 256, Math.floor(idx / 4) * 256, 256, 256, -D.ox * sc, -D.base * sc - (D.lift || 0) * .6 * (k) + bob, D.cell * k, D.cell * k); c.restore(); }
+    if(h.bub) drawBubble(c, hx + 6, hy - 52 * 1.02, h.bub);
+    // 아래 차체(띠 + 바퀴)
+    var bg3 = c.createLinearGradient(0, floorY + 8, 0, bodyBot); bg3.addColorStop(0, col); bg3.addColorStop(1, shade(col, -.3)); c.fillStyle = bg3; rr(c, 4, floorY + 6, W - 8, bodyBot - floorY - 3, 6); c.fill();
+    c.fillStyle = 'rgba(255,255,255,.85)'; c.fillRect(6, floorY + 12, W - 12, 3);
+    [.2, .76].forEach(function(f){ var wx = W * f, wyc = H - 17; c.fillStyle = '#10131a'; c.beginPath(); c.arc(wx, wyc, 14.5, Math.PI, 0); c.fill(); c.fillRect(wx - 14.5, wyc - .5, 29, 1); drawWheel(c, wx, wyc, 11.5, R.rot); });
+    // 앞쪽 행선 표지판
+    c.fillStyle = '#10131a'; rr(c, W - 44, 8, 34, 11, 3); c.fill(); c.fillStyle = '#ffb347'; c.font = 'bold 8px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(S.busNo, W - 27, 13.6);
+    if(L.night){ var gl = c.createLinearGradient(0, roofY, 0, floorY); gl.addColorStop(0, 'rgba(255,225,150,.18)'); gl.addColorStop(1, 'rgba(255,225,150,0)'); c.fillStyle = gl; c.fillRect(8, roofY, W - 16, floorY - roofY); }
+  }
+
+  // ═══ 길거리(기다림·하차·idle) ═══
+  function drawStreet(c, dt){
+    var W = S.W, H = S.H, g = S.g, t = S.t, tw = S.bg.tw;
+    c.drawImage(S.bg.sky, 0, 0, W, H); drawSkyFx(c, t);
+    c.drawImage(S.bg.far, 0, 0, tw, H); c.drawImage(S.bg.mid, 0, 0, tw, H); c.drawImage(S.bg.gnd, 0, 0, W, H);
+    drawTraffic(c, 0);
+    var q = S.seq; if(q && q.busOn) drawBus(c, q.busX, g.nearTop - 3, q.L, { color: q.color, door: q.door, door2: 0, dir: 1, rot: q.busX * .12, no: S.busNo, night: S.L.night });
+    drawTraffic(c, 1);
+    if(S.mode === 'wait' || S.mode === 'alight') (S.venue === 'sub' ? drawEntrance : drawStop)(c);
+    var arr = S.actors.filter(function(a){ return a.vis; }).sort(function(a, b){ return a.z - b.z; });
+    arr.forEach(function(a){ drawActor(c, a); });
+    arr.forEach(function(a){ if(a.bub){ var y = zy(a.z) - TH * zs(a.z) - 6 + a.y, x = a.x + a.dir * a.w * .2; if(a.bub === 'z' || a.bub === '!' || a.bub === '…' || a.bub.length > 1) drawBubble(c, x, y, a.bub); } });
+    drawParts(c, dt);
+    drawWxFront(c, t, null);
+  }
+
+  // ── 실행 · 엔진 값 받기 ──
+  var H0 = null;                                     // 붙은 칸(host) · 태그
+  function isDark(){ try{ return document.documentElement.getAttribute('data-theme') !== 'pastel'; }catch(e){ return true; } }
+  function resetBG(){
+    var L = S.L, g = S.g, dpr = S.dpr;
+    S.bg = buildBG(L, g, dpr, L.season, S.dark); S.bgKey = [L.slot, L.wk, L.season, S.dark, S.W, S.H].join('|'); S.P = mkWxParts(L.wk, S.W, S.H);
+  }
+  function boot(host){
+    var cv = host.querySelector('canvas.cs-cv'); if(!cv){ cv = document.createElement('canvas'); cv.className = 'cs-cv'; host.insertBefore(cv, host.firstChild); }
+    var W = host.clientWidth || 300, H = host.clientHeight || 150, dpr = Math.min(2.5, window.devicePixelRatio || 1);
+    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); cv.style.width = '100%'; cv.style.height = '100%';
+    var ctx = cv.getContext('2d'); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+    var prev = mk(W * dpr, H * dpr), reduce = false; try{ reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(e){}
+    S = { host: host, cv: cv, ctx: ctx, W: W, H: H, dpr: dpr, g: geom(W, H), t: 0, last: 0, raf: 0, mode: null, res: null, L: null, dark: isDark(), actors: [], traffic: [], pt: [], ripples: [], hero: null, seq: null, prev: prev, fade: 0, busColor: pickOf(BUS_COLORS), busNo: pickOf(BUS_NOS), reduce: reduce, castI: 0, nextCar: 0, spawnAt: 0, chk: 0, frames: 0 };
+    return S;
+  }
+  function paintAll(dt){
+    var c = S.ctx; c.setTransform(S.dpr, 0, 0, S.dpr, 0, 0); c.clearRect(0, 0, S.W, S.H);
+    if(S.mode === 'ride') drawRide(c); else drawStreet(c, dt);
+    if(S.dark){ c.fillStyle = 'rgba(8,12,28,.10)'; c.fillRect(0, 0, S.W, S.H); }
+    if(S.fade > 0){ c.save(); c.globalAlpha = clamp(S.fade, 0, 1); c.setTransform(1, 0, 0, 1, 0, 0); c.drawImage(S.prev, 0, 0); c.restore(); }
+  }
+  function update(dt){
+    var t = S.t;
+    if(S.mode !== 'ride'){
+      stepTraffic(dt);
+      if(S.L.wk === 'rain' && Math.random() < dt * 14){ S.ripples.push({ x: rnd(4, S.W - 4), y: rnd(S.g.nearTop + 6, S.g.floor), t0: t }); if(S.ripples.length > 14) S.ripples.shift(); }
+      if(S.mode === 'wait') waitManage(); else if(S.mode === 'alight') alightManage(dt);
+      if(S.mode === 'idle' || S.mode === 'alight') idleManage();
+      S.actors.forEach(function(a){ if(a.hidden) return; if(a.st === 'hidden') return; stepActor(a, dt); });
+    } else rideStep(dt);
+  }
+  function frame(ts){
+    if(!S) return;
+    S.raf = requestAnimationFrame(frame);
+    try{
+      if(document.hidden || !S.host.offsetParent) { S.last = ts; return; }
+      if(ts - S.last < 31) return;
+      var dt = Math.min(.1, (ts - (S.last || ts)) / 1000); S.last = ts; if(S.reduce) dt = 0; S.t += dt; S.frames++;
+      if(S.fade > 0) S.fade = Math.max(0, S.fade - dt / .45);
+      if(ts - S.chk > 1000){ S.chk = ts; var w = S.host.clientWidth, d = isDark(); if((w && Math.abs(w - S.W) > 2) || d !== S.dark){ var res = S.res; resize(); } }
+      update(dt); paintAll(dt);
+    }catch(e){ if(!S.err){ S.err = String(e && e.message || e); try{ console.warn('[장면]', e); }catch(e2){} } }
+  }
+  function resize(){
+    var host = S.host, mode = S.mode, res = S.res, keep = { busColor: S.busColor, busNo: S.busNo, t: S.t };
+    var cvOld = S.cv; S = null; var s = boot(host); s.busColor = keep.busColor; s.busNo = keep.busNo; s.t = keep.t; s.res = res; s.L = paint(res.look); s.dark = isDark(); resetBG(); setup(mode); paintAll(0); s.raf = requestAnimationFrame(frame);
+  }
+  function snapshot(){ try{ var pc = S.prev.getContext('2d'); pc.setTransform(1, 0, 0, 1, 0, 0); pc.clearRect(0, 0, S.prev.width, S.prev.height); pc.drawImage(S.cv, 0, 0); S.fade = 1; }catch(e){} }
+  // 엔진 답을 받아 그린다(공개). res: { mode, look, hero, cast, nearEnd, tag }
+  function apply(res){
+    LAST = res;
+    var host = H0 && H0.host; if(!host) return false;
+    if(!res || !res.mode){ stop(); host.style.display = 'none'; return false; }
+    if(!_RC.ready()){ _RC.load(function(){ if(LAST === res) apply(res); }); host.style.display = 'block'; return false; }
+    host.style.display = 'block';
+    if(!S){ boot(host); S.res = res; S.L = paint(res.look); resetBG(); setup(res.mode); paintAll(0); S.raf = requestAnimationFrame(frame); }
+    else {
+      var modeChanged = S.mode !== res.mode, oldRes = S.res; S.res = res;
+      var L2 = paint(res.look); S.L = L2;
+      if([L2.slot, L2.wk, L2.season, S.dark, S.W, S.H].join('|') !== S.bgKey) resetBG();
+      if(modeChanged){ snapshot(); setup(res.mode); }
+      else if(S.hero && res.hero && oldRes && oldRes.hero !== res.hero && S.mode !== 'idle'){ /* 대표 캐릭터는 경로가 바뀔 때만 바뀐다 */ }
+      if(S.mode === 'wait' || S.mode === 'alight'){ var um = S.L.wk === 'rain' || S.L.wk === 'snow'; if(S.hero) S.hero.umb = um; }
+    }
+    if(H0.tag){ H0.tag.textContent = res.tag || ''; H0.tag.style.display = res.tag ? '' : 'none'; }
+    host.setAttribute('data-cs-mode', res.mode); host.setAttribute('data-cs-slot', res.look.slot); host.setAttribute('data-cs-wx', res.look.wk); host.setAttribute('data-cs-hero', res.hero || '');
+    return true;
+  }
+  function stop(){
+    if(S){ try{ cancelAnimationFrame(S.raf); }catch(e){} var cv = S.cv; try{ var c = cv.getContext('2d'); c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, cv.width, cv.height); }catch(e2){} S = null; }
+  }
+  function attach(host, tag){ H0 = { host: host, tag: tag }; if(host && _RC && !_RC.ready()) { try{ _RC.load(); }catch(e){} } }
+  function info(){
+    if(!S) return { running: false, last: LAST ? LAST.mode : null };
+    return { running: true, mode: S.mode, slot: S.L.slot, wk: S.L.wk, season: S.L.season, hero: S.res.hero, W: S.W, H: S.H, frames: S.frames, err: S.err || null, tag: H0 && H0.tag ? H0.tag.textContent : '',
+      actors: S.actors.map(function(a){ return { id: a.id, st: a.st, x: Math.round(a.x), z: Math.round(a.z * 100) / 100, vis: a.vis, hero: !!a.hero, umb: !!a.umb, leaving: !!a.leaving }; }), seq: S.seq ? { ph: S.seq.ph, busOn: S.seq.busOn, door: Math.round(S.seq.door * 100) / 100 } : null, traffic: S.traffic.length, ride: S.ride ? { speed: Math.round(S.ride.speed * 100) / 100 } : null };
+  }
+  return { attach: attach, apply: apply, stop: stop, info: info, paint: paint, last: function(){ return LAST; }, _tick: function(sec){ if(!S) return; var n = Math.round(sec * 30); for(var i = 0; i < n; i++){ S.t += 1 / 30; update(1 / 30); } paintAll(1 / 30); } };
+})();
+window._CS = _CS;
+
 
 
 // ── 역 사이 지연 반영 (2026-10-04) ──

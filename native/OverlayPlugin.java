@@ -605,7 +605,7 @@ public class OverlayPlugin extends Plugin {
         /** {칸 안 머리 위 끝, 발(바닥) 높이, 몸 가로 중심, 초당 프레임, 띄울 높이(dp — 날거나 헤엄치는 캐릭터)} — 시트를 만들 때의 값(앱 로딩의 D3 와 같다). */
         private float[] cfg3(String id) {
             if ("dolsom".equals(id)) return new float[] { 8f, 248.5f, 120.8f, 19f, 0f };
-            if ("lovel".equals(id)) return new float[] { 8f, 249.5f, 133f, 11f, 0f };
+            if ("lovel".equals(id)) return new float[] { 8f, 250f, 117.9f, 11f, 0f };
             if ("ppopu".equals(id)) return new float[] { 8f, 248.5f, 120.3f, 19f, 0f };
             if ("chaeng".equals(id)) return new float[] { 14f, 244.5f, 154.5f, 15f, 6f };
             if ("sul".equals(id)) return new float[] { 27f, 230.5f, 131f, 20f, 16f };

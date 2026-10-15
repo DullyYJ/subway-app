@@ -116,39 +116,89 @@
     P.tail.rotation.z = 0.22 * Math.sin(a * 2 + 1) + 0.12; P.tail.rotation.x = 0.25 * Math.sin(a * 2.0);
   }
 
-  // ═════ 고양이 (러블) ═════
+  // ═════ 고양이 (러블 = 러시안블루) ═════
+  // 2026-10-15 (YJ: "원본과 너무 다르다 · 러시안블루가 베이스 · 귀엽게 · 꼬리랑 다리가 이상하다"): 마디가 보이는 구슬 사슬 다리·꼬리를 없애고,
+  //   ① 다리 = 허벅지→무릎→정강이가 한 줄로 매끈하게 가늘어지는 통통한 관(관절 공은 같은 반지름이라 이음매가 안 보인다)과 둥근 발 ② 꼬리 = 프레임마다 곡선을 따라 새로 뽑는 매끈한 관(끝이 가늘고 둥글게 말림, 원본의 S자 꼬리)
+  //   ③ 몸 = 가슴이 큰 달걀형(머리가 큰 치비 비율) ④ 귀 = 넓은 밑동의 둥근 삼각형 + 분홍 안쪽 ⑤ 털 = 푸른 회색에 은빛 윤기(sheen)와 밝은 가슴·발.
+  function tubeGeo(pts, rad, seg) {   // pts: Vector3[] 중심선, rad: 각 점의 반지름 → 양 끝이 닫히지 않은 관(끝은 구로 덮는다)
+    const n = pts.length, pos = [], idx = [], nor = [], fr = new T.Vector3(0, 0, 1), up = new T.Vector3(), t = new T.Vector3(), nn = new T.Vector3(), bb = new T.Vector3();
+    for (let i = 0; i < n; i++) {
+      t.subVectors(pts[Math.min(n - 1, i + 1)], pts[Math.max(0, i - 1)]).normalize();
+      nn.crossVectors(t, fr); if (nn.lengthSq() < 1e-6) nn.crossVectors(t, up.set(0, 1, 0)); nn.normalize(); bb.crossVectors(t, nn).normalize();
+      for (let k = 0; k <= seg; k++) {
+        const a = k / seg * Math.PI * 2, cx = Math.cos(a), cy = Math.sin(a);
+        const dx = nn.x * cx + bb.x * cy, dy = nn.y * cx + bb.y * cy, dz = nn.z * cx + bb.z * cy;
+        pos.push(pts[i].x + dx * rad[i], pts[i].y + dy * rad[i], pts[i].z + dz * rad[i]); nor.push(dx, dy, dz);
+      }
+    }
+    for (let i = 0; i < n - 1; i++) for (let k = 0; k < seg; k++) { const a = i * (seg + 1) + k, b = a + seg + 1; idx.push(a, b, a + 1, b, b + 1, a + 1); }
+    const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new T.Float32BufferAttribute(nor, 3)); g.setIndex(idx); return g;
+  }
+  function plushLeg(o, m, pm) {   // 통통한 관 다리: 반지름이 허벅지 r0 → 무릎 r1 → 발목 r2 로 매끈하게 가늘어진다
+    const hip = new T.Group(), knee = new T.Group(), paw = new T.Group();
+    const tg = tubeGeo([new T.Vector3(0, 0, 0), new T.Vector3(0, -o.up * 0.5, 0), new T.Vector3(0, -o.up, 0)], [o.r0, (o.r0 + o.r1) / 2, o.r1], 18); hip.add(sh(new T.Mesh(tg, m)));
+    hip.add(ell(o.r0, o.r0 * 1.05, o.r0, m, 20));                   // 엉덩이·어깨 공(몸통 안쪽)
+    knee.position.y = -o.up; hip.add(knee);
+    knee.add(ell(o.r1, o.r1, o.r1, m, 18));
+    const sg = tubeGeo([new T.Vector3(0, 0, 0), new T.Vector3(0, -o.lo * 0.5, 0), new T.Vector3(0, -o.lo, 0)], [o.r1, (o.r1 + o.r2) / 2, o.r2], 18); knee.add(sh(new T.Mesh(sg, m)));
+    paw.position.y = -o.lo; knee.add(paw);
+    const pw = ell(o.paw[0], o.paw[1], o.paw[2], pm || m, 22); pw.position.set(o.paw[3], -o.paw[1] * 0.25, 0); paw.add(pw);   // 둥근 발(앞으로 살짝)
+    hip.userData = { knee, paw }; return hip;
+  }
   function buildCat() {
-    const root = new T.Group(), gm = mat(0x838d94, { roughness: 0.9 }), gl = mat(0x9ba4aa, { roughness: 0.9 }), P = {};
-    const body = new T.Group(); body.position.y = 0.76; root.add(body); P.body = body;
-    body.add(ell(0.54, 0.3, 0.3, gm, 32)); const belly = ell(0.46, 0.17, 0.22, gl); belly.position.set(0.0, -0.1, 0); body.add(belly);
-    const head = new T.Group(); head.position.set(0.52, 0.38, 0); body.add(head); P.head = head;
-    head.add(ell(0.52, 0.44, 0.52, gm, 36));
-    decal(head, 0.52, 0.44, 0.52, 'lovel_head');
-    // 귀: 머리 위 양쪽 모서리에서 솟은 뾰족한 귀(안쪽 분홍)
+    const root = new T.Group(), P = {};
+    const gm = new T.MeshPhysicalMaterial({ color: 0x83909a, roughness: 0.9, metalness: 0, sheen: 0.35, sheenColor: new T.Color(0xcfdcec), sheenRoughness: 0.6 });
+    const gl = new T.MeshPhysicalMaterial({ color: 0x9aa6ae, roughness: 0.9, metalness: 0, sheen: 0.35, sheenColor: new T.Color(0xe2ecf6), sheenRoughness: 0.6 });
+    const body = new T.Group(); body.position.y = 0.62; root.add(body); P.body = body;
+    // 몸통: 가슴이 크고 엉덩이가 작은 달걀형(세 타원체가 한 덩어리로 겹친다)
+    const chest = ell(0.4, 0.38, 0.36, gm, 34); chest.position.set(0.18, 0.0, 0); body.add(chest);
+    const mid = ell(0.46, 0.34, 0.34, gm, 34); mid.position.set(-0.04, -0.01, 0); body.add(mid);
+    const hipm = ell(0.38, 0.34, 0.34, gm, 34); hipm.position.set(-0.22, -0.01, 0); body.add(hipm);
+    const belly = ell(0.42, 0.18, 0.26, gl, 24); belly.position.set(0.02, -0.2, 0); body.add(belly);
+    const head = new T.Group(); head.position.set(0.5, 0.4, 0); body.add(head); P.head = head;
+    head.add(ell(0.55, 0.47, 0.55, gm, 40));
+    decal(head, 0.55, 0.47, 0.55, 'lovel_head');
+    // 귀: 밑동이 넓고 끝이 둥근 삼각형(원본의 큰 귀) + 분홍 안쪽
     P.ears = [];
-    [1, -1].forEach(s => { const eg = new T.Group(); eg.position.set(-0.02, 0.3, 0.36 * s); head.add(eg);
-      const ec = new T.Mesh(new T.ConeGeometry(0.24, 0.52, 4), gm); ec.position.y = 0.22; ec.rotation.y = Math.PI / 4; ec.scale.set(0.5, 1, 1.35); eg.add(sh(ec));
-      const ei = new T.Mesh(new T.ConeGeometry(0.16, 0.4, 4), mat(0xb98f93)); ei.position.set(0.05, 0.18, 0); ei.rotation.y = Math.PI / 4; ei.scale.set(0.4, 1, 1.2); eg.add(ei); eg.rotation.x = -0.14 * s; P.ears.push(eg); });
-    // 분홍 목줄 + 동그란 이름표
-    const col = new T.Mesh(new T.TorusGeometry(0.22, 0.05, 10, 36), mat(0xd4837f, { roughness: 0.55 })); col.position.set(0.48, 0.16, 0); col.rotation.y = Math.PI / 2; col.scale.set(1, 1.2, 1.3); body.add(sh(col));
-    const tag = ell(0.06, 0.06, 0.02, mat(0xe0a07a, { metalness: 0.4, roughness: 0.35 }), 14); tag.position.set(0.58, -0.04, 0.0); tag.rotation.y = 0; body.add(tag);
-    // 긴 꼬리: 토막 사슬, 끝이 위로 말린다
-    P.tailSeg = []; const base = new T.Group(); base.position.set(-0.56, 0.1, 0); body.add(base); let parent = base;
-    for (let i = 0; i < 14; i++) { const sg = new T.Group(); sg.position.x = i === 0 ? 0 : -0.1; parent.add(sg); const r = 0.095 - i * 0.002, sp = ell(0.12, r, r, gm, 14); sp.position.x = -0.05; sg.add(sp); P.tailSeg.push(sg); parent = sg; }
-    // 다리: 어깨·엉덩이 공이 몸통 안쪽에 박힌 길고 가는 다리 + 밝은 발
+    const pinkM = mat(0xd9a3a8, { roughness: 0.9 });
+    const earGeo = (r, h) => { const pr = [[0.001, 0], [r, 0], [r * 0.97, h * 0.12], [r * 0.82, h * 0.34], [r * 0.58, h * 0.58], [r * 0.34, h * 0.8], [r * 0.15, h * 0.94], [0.001, h]].map(p => new T.Vector2(p[0], p[1])); return new T.LatheGeometry(pr, 32); };
+    [1, -1].forEach(s => {
+      const eg = new T.Group(); eg.position.set(-0.03, 0.2, 0.28 * s); head.add(eg);
+      const ec = new T.Mesh(earGeo(0.27, 0.62), gm); ec.position.y = 0.0; ec.scale.set(0.5, 1, 1.0); eg.add(sh(ec));
+      const ei = new T.Mesh(earGeo(0.19, 0.46), pinkM); ei.position.set(0.075, 0.1, 0); ei.scale.set(0.42, 1, 0.9); eg.add(ei);
+      eg.rotation.x = -0.28 * s; eg.rotation.z = 0.08; P.ears.push(eg);
+    });
+    // 코랄색 목줄 + 금빛 방울
+    const col = new T.Mesh(new T.TorusGeometry(0.25, 0.05, 14, 40), mat(0xe28a84, { roughness: 0.5 })); col.position.set(0.5, 0.1, 0); col.rotation.y = Math.PI / 2; col.scale.set(1, 1.18, 1.22); body.add(sh(col));
+    const bell = ell(0.062, 0.062, 0.062, mat(0xe8b45a, { metalness: 0.55, roughness: 0.3 }), 18); bell.position.set(0.63, -0.1, 0); body.add(bell);
+    // 꼬리: 곡선을 따라 매 프레임 새로 뽑는 매끈한 관(poseCat 에서 갱신)
+    P.tailRoot = new T.Group(); P.tailRoot.position.set(-0.5, 0.04, 0); body.add(P.tailRoot);
+    P.tailMesh = new T.Mesh(new T.BufferGeometry(), gm); sh(P.tailMesh); P.tailRoot.add(P.tailMesh);
+    P.tailTip = ell(0.05, 0.05, 0.05, gm, 14); P.tailRoot.add(P.tailTip); P.tailMat = gm;
+    // 다리 네 개: 짧고 통통한 치비 다리 + 둥근 밝은 발 [앞오른, 앞왼, 뒤오른, 뒤왼]
     P.legs = [];
-    [[0.38, 0.15], [0.38, -0.15], [-0.38, 0.15], [-0.38, -0.15]].forEach((p, i) => { const lg = leg2({ hr: [0.17, 0.18, 0.14], up: 0.33, ru: 0.105, rk: 0.092, lo: 0.32, rl: 0.082, paw: [0.16, 0.08, 0.12, 0.05] }, gm, gl);
-      lg.position.set(p[0], -0.05, p[1]); body.add(lg); P.legs.push(lg); });
+    [[0.3, 0.17], [0.3, -0.17], [-0.3, 0.18], [-0.3, -0.18]].forEach((p, i) => {
+      const lg = plushLeg({ up: 0.2, lo: 0.2, r0: 0.17, r1: 0.135, r2: 0.115, paw: [0.185, 0.1, 0.15, 0.07] }, gm, gl);
+      lg.position.set(p[0], -0.1, p[1]); body.add(lg); P.legs.push(lg);
+    });
     root.userData = P; return root;
   }
-  function poseCat(root, ph) {   // 느긋하게 걷기: 대각선 다리끼리 짝, 꼬리 물결, 머리 까딱
-    const P = root.userData, a = ph * Math.PI * 2, sw = 0.42;
-    [[0, 0], [1, Math.PI], [2, Math.PI], [3, 0]].forEach(q => { const ph2 = a + q[1], up = Math.max(0, Math.cos(ph2)); setLeg(P.legs[q[0]], sw * Math.sin(ph2), Math.pow(up, 0.9), 0.75, 0.9); });
-    root.position.y = 0.03 * Math.abs(Math.sin(a * 2)) + 0.02;
-    P.body.rotation.y = 0.06 * Math.sin(a); P.body.rotation.z = 0.025 * Math.sin(a * 2);
-    P.head.rotation.z = -0.05 * Math.sin(a * 2 + 0.5); P.head.rotation.y = 0.1 * Math.sin(a + 0.6);
-    P.ears.forEach((e, i) => { e.rotation.z = 0.04 * Math.sin(a * 2 + i); });
-    P.tailSeg.forEach((s, i) => { s.rotation.z = (i === 0 ? 0.7 : 0.07) + (i > 9 ? 0.18 : 0) + 0.12 * Math.sin(a - i * 0.45) * (0.6 + i * 0.08); s.rotation.y = 0.08 * Math.sin(a - i * 0.5 + 1); });
+  function poseCat(root, ph) {   // 느긋하게 걷기: 대각선 다리끼리 짝, 꼬리는 S자로 살랑, 머리 까딱
+    const P = root.userData, a = ph * Math.PI * 2, sw = 0.5;
+    [[0, 0], [1, Math.PI], [2, Math.PI], [3, 0]].forEach(q => { const ph2 = a + q[1], up = Math.max(0, Math.cos(ph2)); setLeg(P.legs[q[0]], sw * Math.sin(ph2), Math.pow(up, 0.9), 0.8, 0.9); });
+    root.position.y = 0.025 * Math.abs(Math.sin(a * 2)) + 0.01;
+    P.body.rotation.y = 0.05 * Math.sin(a); P.body.rotation.z = 0.02 * Math.sin(a * 2);
+    P.head.rotation.z = -0.045 * Math.sin(a * 2 + 0.5); P.head.rotation.y = 0.09 * Math.sin(a + 0.6);
+    P.ears.forEach((e, i) => { e.rotation.z = 0.05 + 0.035 * Math.sin(a * 2 + i); });
+    // 꼬리: 엉덩이에서 뒤로 뻗었다가 위로 휘고 끝이 앞으로 말리는 S자(원본). 몸의 흔들림에 늦게 따라온다.
+    const pts = [], rad = [], N = 14, base = [[0, 0, 0], [-0.16, 0.0, 0], [-0.3, 0.1, 0], [-0.38, 0.26, 0], [-0.36, 0.44, 0], [-0.26, 0.58, 0], [-0.13, 0.64, 0], [-0.04, 0.6, 0]];
+    const cr = new T.CatmullRomCurve3(base.map((b, i) => {
+      const w = i / (base.length - 1), sway = 0.1 * Math.sin(a - w * 3.2) * (0.25 + w), lift = 0.04 * Math.sin(a * 2 - w * 2.4) * w;
+      return new T.Vector3(b[0] + lift * 0.4, b[1] + lift, b[2] + sway);
+    }), false, 'catmullrom', 0.5);
+    for (let i = 0; i <= N; i++) { const u = i / N; pts.push(cr.getPoint(u)); rad.push(0.11 - 0.045 * u * u - 0.02 * u); }
+    P.tailMesh.geometry.dispose(); P.tailMesh.geometry = tubeGeo(pts, rad, 16);
+    P.tailTip.position.copy(pts[N]); P.tailTip.scale.setScalar(rad[N]);
   }
 
   // ═════ 올챙이 (챙챙) ═════
@@ -243,7 +293,7 @@
   // ═════ 두더지 (두덩) ═════
   function buildMole() {
     const root = new T.Group(), P = {}, bm = mat(0x9b7a60, { roughness: 0.95 }), skin = mat(0xcf9f86, { roughness: 0.8 }), gold = mat(0xb48a3c, { roughness: 0.45, metalness: 0.45 });
-    const body = new T.Group(); body.position.y = 0.66; root.add(body); P.body = body;
+    const body = new T.Group(); body.position.y = 0.62; root.add(body); P.body = body;
     body.add(ell(0.5, 0.48, 0.52, bm, 36)); decal(body, 0.5, 0.48, 0.52, 'dudung_belly');
     const head = new T.Group(); head.position.set(0.0, 0.56, 0); body.add(head); P.head = head;
     head.add(ell(0.5, 0.4, 0.54, bm, 36)); decal(head, 0.5, 0.4, 0.54, 'dudung_head');
@@ -271,7 +321,7 @@
   }
   function poseMoleWalk(root, ph) {   // 뒤뚱뒤뚱 걷고, 삽을 어깨에 걸쳐 까딱
     const P = root.userData, a = ph * Math.PI * 2;
-    P.body.rotation.x = 0.1 * Math.sin(a); P.body.rotation.z = 0.03 + 0.05 * Math.sin(a); P.body.position.y = 0.66 + 0.06 * Math.abs(Math.sin(a));
+    P.body.rotation.x = 0.1 * Math.sin(a); P.body.rotation.z = 0.03 + 0.05 * Math.sin(a); P.body.position.y = 0.62 + 0.06 * Math.abs(Math.sin(a));
     P.legs[0].rotation.z = 0.6 * Math.sin(a); P.legs[1].rotation.z = 0.6 * Math.sin(a + Math.PI);
     P.legs.forEach((g, i) => { g.position.y = -0.42 + Math.max(0, Math.sin(a + (i ? Math.PI : 0))) * 0.1; });
     P.arms[0].rotation.z = 0.3 + 0.5 * Math.sin(a + Math.PI); P.arms[1].rotation.z = 0.3 + 0.16 * Math.sin(a + 0.4);

@@ -6,6 +6,7 @@
 // 실행: node test/cong_card.ui.test.js [html 경로]
 const assert = require('assert'), path = require('path');
 const { chromium } = require('./helpers/pw');
+const SCENE = require('../engine/scene');       // 장면·혼잡도 구간은 엔진이 정한다 — 시험에서는 같은 엔진 함수로 /scene 을 흉내 낸다
 const html = process.argv[2] && /\.html$/.test(process.argv[2]) ? process.argv[2] : path.join(__dirname, '..', 'www', 'index.html');
 let pass = 0, fail = 0;
 const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', name); } catch (e) { fail++; console.log('  FAIL', name, '\n      ', String(e.message || e).slice(0, 600)); } };
@@ -15,7 +16,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, timezoneId: 'Asia/Seoul' });
     const page = await ctx.newPage(); const errs = [];
     page.on('pageerror', e => errs.push(e.message));
-    await page.route('**/*', r => { const u = new URL(r.request().url()); return (u.protocol === 'file:' || u.protocol === 'data:') ? r.continue() : r.abort(); });
+    await page.route('**/*', r => { const u = new URL(r.request().url()); if (/\/scene$/.test(u.pathname)) return r.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify((() => { const b = r.request().postDataJSON(); return b.locked ? SCENE.sceneDecide(b, null) : { ok: true, mode: null, hint: null, cong: { kind: null, idx: -1, sig: '' }, look: { slot: 'noon', wk: 'clear' } }; })()) }); return (u.protocol === 'file:' || u.protocol === 'data:') ? r.continue() : r.abort(); });
     await page.addInitScript(th => { if (th) { try { localStorage.setItem('theme', th); } catch (e) {} } }, theme || '');
     await page.goto('file://' + html); await page.waitForTimeout(2500);
     if (theme) await page.evaluate(t2 => document.documentElement.setAttribute('data-theme', t2), theme);
@@ -115,27 +116,27 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     window._estimateTimelinePos = () => null; window._htlNotDeparted = () => false;
   };
   const card = (page) => page.evaluate(() => ({ lbl: document.querySelector('.cong-stn').textContent.trim(), grid: getComputedStyle(document.getElementById('carGrid')).display !== 'none', bus: document.getElementById('congCard').classList.contains('bus'), meta: document.getElementById('congMeta').textContent, st: document.getElementById('congStatusTxt').textContent }));
-  await t('(22:12 YJ) 버스 혼잡도를 못 받으면 경로의 지하철 혼잡도를 보여준다', async () => {
+  await t('(23:05 YJ) 버스 구간(기다림·탑승·내림)에서는 혼잡도(상태·게이지·그래프·칸별)가 없고 장면만 보인다', async () => {
     const { ctx, page, errs } = await fresh();
     await page.evaluate(ROUTE);
-    await page.evaluate(() => { _fetchBusCongestion = () => Promise.resolve(null); _congLegSig = ''; window._gpsMaxIdx = 0; _congSyncRoute(); });
-    await page.waitForTimeout(600);
-    const c = await card(page);
-    assert(/^지하철 염창/.test(c.lbl) && c.grid && !c.bus && /버스 정보가 없어/.test(c.meta) && /😊|😐|😰|😱/.test(c.st), JSON.stringify(c));
+    for (const [idx, boarded] of [[0, false], [1, false], [2, false], [2, true]]) {
+      await page.evaluate(([i, bd]) => { window._htlBoarded = bd; window._gpsMaxIdx = i; _fetchBusCongestion = () => Promise.resolve({ pct: 40, busNo: 'M6659', stopName: 'x', hourly: Array.from({ length: 24 }, () => 40) }); _sceneSt.congSig = ''; _sceneRequest('force'); }, [idx, boarded]);
+      await page.waitForTimeout(600);
+      const c = await page.evaluate(() => { const vis = id => { const e = document.getElementById(id); return !!e && getComputedStyle(e).display !== 'none' && e.getBoundingClientRect().height > 0; }; return { scene: vis('congScene'), top: vis('congStatusTxt'), gauge: vis('congGaugeWrap'), chart: vis('chart24Wrap'), grid: vis('carGrid'), note: vis('busCongNote'), badge: vis('congBadge') }; });
+      assert(c.scene && !c.top && !c.gauge && !c.chart && !c.grid && !c.note && !c.badge, `idx ${idx} ${boarded}: ` + JSON.stringify(c));
+    }
     assert(!errs.length, errs.join('|')); await ctx.close();
   });
-  await t('(22:12 YJ) 환승하면 혼잡도가 바뀐다: 버스→지하철(칸별 복귀)·지하철→지하철(역·노선 바뀜)', async () => {
+  await t('(23:05 YJ) 혼잡도는 지하철 탑승 확정 뒤에만: 타기 전엔 장면, 탑승 확정되면 혼잡도(칸별) · 환승하면 다시 장면 → 다음 지하철 탑승 확정 때 혼잡도', async () => {
     const { ctx, page, errs } = await fresh();
     await page.evaluate(ROUTE);
-    await page.evaluate(() => { _fetchBusCongestion = () => Promise.resolve({ pct: 40, busNo: 'M6659', stopName: 'x', hourly: Array.from({ length: 24 }, () => 40) }); _congLegSig = ''; window._gpsMaxIdx = 1; _congSyncRoute(); });
-    await page.waitForTimeout(500);
-    let c = await card(page); assert(/^버스/.test(c.lbl) && !c.grid && c.bus, '버스 구간 ' + JSON.stringify(c));
-    await page.evaluate(() => { window._gpsMaxIdx = 4; _congSyncRoute(); }); await page.waitForTimeout(400);
-    c = await card(page); assert(/^지하철 염창/.test(c.lbl) && c.grid && !c.bus, '9호선 첫 역 ' + JSON.stringify(c));
-    await page.evaluate(() => { window._gpsMaxIdx = 5; _congSyncRoute(); }); await page.waitForTimeout(400);
-    c = await card(page); assert(/^지하철 노량진/.test(c.lbl), '다음 역 ' + JSON.stringify(c));
-    await page.evaluate(() => { window._gpsMaxIdx = 6; _congSyncRoute(); }); await page.waitForTimeout(400);       // 환승 도보 중 → 곧 탈 공항철도
-    c = await card(page); assert(/^지하철 김포공항/.test(c.lbl) && c.grid, '지하철→지하철 환승 ' + JSON.stringify(c));
+    const setp = async (i, bd) => { await page.evaluate(([i2, bd2]) => { window._htlBoarded = bd2; window._gpsMaxIdx = i2; _fetchBusCongestion = () => Promise.resolve(null); _sceneRequest('force'); }, [i, bd]); await page.waitForTimeout(600); };
+    const vis = () => page.evaluate(() => { const v = id => { const e = document.getElementById(id); return !!e && getComputedStyle(e).display !== 'none' && e.getBoundingClientRect().height > 0; }; return { scene: v('congScene'), grid: v('carGrid'), status: v('congStatusTxt'), lbl: document.querySelector('.cong-stn').textContent.trim(), bus: document.getElementById('congCard').classList.contains('bus') }; });
+    await setp(3, true); let c = await vis(); assert(c.scene && !c.grid, '도보(버스→지하철 환승 이동): 지하철을 아직 안 탔다 ' + JSON.stringify(c));
+    await setp(4, true); c = await vis(); assert(c.scene && !c.grid, '염창역 도착, 아직 안 탐(타기 전 = 장면) ' + JSON.stringify(c));
+    await setp(5, true); c = await vis(); assert(!c.scene && c.grid && c.status && /^지하철 노량진/.test(c.lbl) && !c.bus, '탑승 확정(다음 역으로 진행) → 혼잡도 ' + JSON.stringify(c));
+    await setp(6, true); c = await vis(); assert(c.scene && !c.grid, '내려서 환승 도보 → 다시 장면(곧 탈 열차 기다림) ' + JSON.stringify(c));
+    await setp(7, true); c = await vis(); assert(c.scene && !c.grid, '공항철도역에 닿았지만 아직 안 탐 ' + JSON.stringify(c));
     assert(!errs.length, errs.join('|')); await ctx.close();
   });
   await t('카드 폭이 바뀌어도(화면 크기·탭 전환) 현재 시각이 가운데에 남는다', async () => {

@@ -427,7 +427,7 @@ const NOW = new Date('2026-10-14T13:00:00+09:00');   // 수요일 13:00
   await t('놀이터: 개·고양이 시트 3장이 새 렌더링(다리가 몸에 붙음)으로 교체되어 있다 — 기준선이 시트와 맞는다', async () => {
     const x = await fresh(); await x.page.waitForTimeout(100);
     const cfg = await x.page.evaluate(() => { const d = window._RC.d3; return { dolsom: d.dolsom, lovel: d.lovel, ppopu: d.ppopu }; });
-    assert(cfg.dolsom.base === 248.5 && cfg.dolsom.ox === 120.8 && cfg.ppopu.ox === 120.3 && cfg.lovel.base === 249.5, JSON.stringify(cfg));
+    assert(cfg.dolsom.base === 248.5 && cfg.dolsom.ox === 120.8 && cfg.ppopu.ox === 120.3 && cfg.lovel.base === 250, JSON.stringify(cfg));
     await x.ctx.close();
   });
 
