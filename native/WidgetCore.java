@@ -48,7 +48,7 @@ import java.util.Random;
  *    · 시계 글자는 시스템 TextClock(분이 바뀌어도 우리가 깨어 있을 필요 없음).
  *    · 캐릭터 그림은 화면이 켜져 있는 동안만 갈아 끼운다. 동물들은 평소엔 종류에 맞는 집(개집·바구니·굴·둥지·연못, 무작위 자리)에서 zzz 하며 자고 있고(그림 한 장, 루프·갱신 없음),
  *      깨울 수 있는 신호(화면 켜짐·잠금 해제·런처의 위젯 갱신·크기 변경·알람)를 받으면 마리마다 무작위로(0~3초) 일어나 나와 2분(WidgetSim.ROAM_LEN_MS) 돌아다니다가 다시 집으로 들어가 잔다.
- *      ROAM_EVERY_MIN(10분)마다 정확 알람(조용한 내부 타이머, 폰 알림 아님)이 앱을 깨운다 — 앱 프로세스가 죽어 있으면 화면 켜짐을 들을 수 없으므로, 알람이 프로세스를 되살려 수신기를 다시 달아 둔다.
+ *      ROAM_EVERY_MIN(3분)마다 정확 알람(조용한 내부 타이머, 폰 알림 아님)이 앱 프로세스를 되살린다 — 앱 프로세스가 죽어 있으면 화면 켜짐을 들을 수 없으므로, 알람이 프로세스를 되살려 수신기를 다시 달아 둔다(알람마다 움직이진 않고, 마지막 움직임이 끝난 지 10분이 지났을 때만 움직인다).
  *      화면을 켤 때마다 캐릭터 셋은 바뀐다. 위젯 본체를 누르면 앱이 열려 커뮤니티 탭으로 간다(동물을 깨우는 용도가 아님). 출퇴근 장면은 자지 않고 BURST_MS(45초) 뒤 줄 선 자세로 멈춘다. 화면이 꺼지면 즉시 멈춘다.
  *    · 출퇴근 시각은 정확 알람(AlarmManager) 한 번 — 계속 시간을 확인하는 루프는 없다.
  *  ■ 계산은 엔진이 한다 — 응원·위로 말은 엔진(/widget-say)이 요일·공휴일·날씨·공지를 보고 고른다. 여기선 받아서 말풍선에 그린다.
@@ -65,6 +65,8 @@ public final class WidgetCore {
     static final long BURST_MS = 45000L, FRAME_MS = 100L;                       // 출퇴근 장면: 켜진 뒤 45초
     static final long BED_MS = 20000L, SLEEP_FRAME_MS = 200L;               // 집에 들어가는 데 최대 20초 · 모두 잠든 동안 그림 갱신 간격
     static final float ROAM_SPREAD = 3f;                                     // 깨우면 마리마다 0~3초 사이 무작위로 집에서 나온다
+    static final long ROAM_ALARM_COOLDOWN_MS = 600000L;                      // 알람은 프로세스만 되살린다: 마지막 움직임이 끝난 지 10분이 안 됐으면 알람으로는 또 움직이지 않는다
+    static long lastRoamEnd;                                                 // 마지막 움직임이 끝난 시각(uptime)
     static boolean awakeHold;                                                // 화면이 켜지는 순간: 곧장 깨어난 모습으로 시작(집에서 자는 모습을 잠깐 보이지 않게)
     /** 출퇴근 버튼은 '처음 보인 때'부터 3분만 떠 있고, 안 누르면 다시 시계로 돌아간다. 보이기 전(화면이 꺼져 있던 동안)에는 시작 시각 +90분까지 기다린다. */
     static final long SHOW_MS = 3L * 60000L, WAIT_MS = 90L * 60000L;
@@ -484,6 +486,7 @@ public final class WidgetCore {
         if ("cfg".equals(why) && !anyCommute()) return;      // 앱 안에서 설정을 바꾸는 중에는 동물을 깨우지 않는다
         long now = SystemClock.uptimeMillis();
         boolean commute = anyCommute();
+        if ("alarm".equals(why) && !commute && !running && lastRoamEnd != 0L && now - lastRoamEnd < ROAM_ALARM_COOLDOWN_MS) return;   // 이번 알람은 프로세스를 되살리고 수신기를 다시 다는 것으로 끝
         if (running) {
             if (phase == 1 && bedding && !commute) { phase = 0; bedding = false; burstUntil = now + WidgetSim.ROAM_LEN_MS; for (Inst n : INST.values()) n.sim.wakeAll(0f); }   // 자러 가는 중에 신호가 오면 다시 일어난다
             else if (commute) { phase = 0; bedding = false; burstUntil = now + BURST_MS; for (Inst n : INST.values()) n.sim.wakeAll(0f); }
@@ -531,7 +534,7 @@ public final class WidgetCore {
     } };
     /** 모두 집에서 자는 모습(zzz)으로 한 번 그려 놓고 끝낸다. 다음 신호(화면 켜짐·알람 등)가 깨운다. */
     static void endAsleep(Context c) {
-        running = false; handler().removeCallbacks(TICK);
+        running = false; lastRoamEnd = SystemClock.uptimeMillis(); handler().removeCallbacks(TICK);
         AppWidgetManager m = AppWidgetManager.getInstance(c.getApplicationContext());
         for (int id : ids(c)) {
             try { Inst n = cached(c, id); if (!n.sim.allInBed()) n.sim.asleepNow(); n.sim.snapBed(); n.sim.snapAsleep(); render(n); m.partiallyUpdateAppWidget(id, views(c, n, false)); } catch (Exception ignored) { }
@@ -540,7 +543,7 @@ public final class WidgetCore {
     }
     /** 멈춘다: 모두 바닥에서 쉬는 자세(출퇴근 중엔 줄 선 자세)로 한 번 그려 놓고 끝. */
     static void stop(Context c, boolean finalFrame) {
-        running = false; handler().removeCallbacks(TICK);
+        running = false; lastRoamEnd = SystemClock.uptimeMillis(); handler().removeCallbacks(TICK);
         if (finalFrame) {
             AppWidgetManager m = AppWidgetManager.getInstance(c.getApplicationContext());
             for (int id : ids(c)) {

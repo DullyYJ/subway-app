@@ -19570,7 +19570,7 @@ window.addEventListener('unhandledrejection', function(e) {
       <!-- ★ 2026-10-15 캐릭터 시계 위젯 -->
       <div id="gwCard" style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
         <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:4px;">🕒 캐릭터 시계 위젯</div>
-        <p style="font-size:12px;color:var(--sub);margin-bottom:12px;line-height:1.5;">시계 주변을 캐릭터들이 돌아다니며 시계에 매달리고 응가도 해요. 배경은 투명이고, 시계가 칸을 꽉 채워요. 위에서 정한 출·퇴근 시각이 되면 캐릭터가 모여 응원하고, 시계가 작아지면서 [출근하기]·[퇴근하기] 버튼이 나와요. 버튼은 3분 동안만 떠 있고, 누르면 앱이 열리며 바로 길찾기를 해요. (블랙=검정 글자, 화이트=흰 글자)</p>
+        <p style="font-size:12px;color:var(--sub);margin-bottom:12px;line-height:1.5;">평소엔 캐릭터들이 각자 집(개집·바구니·굴·둥지·연못)에서 자고 있다가, 화면을 켜면 일어나 2분 동안 시계 주변을 돌아다니며 시계에 매달리고 응가도 해요. 위젯을 누르면 앱이 열리며 커뮤니티 탭으로 가요. 배경은 투명이고, 시계가 칸을 꽉 채워요. 위에서 정한 출·퇴근 시각이 되면 캐릭터가 모여 응원하고, 시계가 작아지면서 [출근하기]·[퇴근하기] 버튼이 나와요. 버튼은 3분 동안만 떠 있고, 누르면 앱이 열리며 바로 길찾기를 해요. (블랙=검정 글자, 화이트=흰 글자)</p>
         <div style="display:flex;gap:8px;margin-bottom:8px;">
           <button onclick="_gwAdd('hb')" style="flex:1;padding:11px 4px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);font-family:inherit;">▭ 가로 블랙</button>
           <button onclick="_gwAdd('hw')" style="flex:1;padding:11px 4px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);font-family:inherit;">▭ 가로 화이트</button>
@@ -19580,6 +19580,7 @@ window.addEventListener('unhandledrejection', function(e) {
           <button onclick="_gwAdd('vw')" style="flex:1;padding:11px 4px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);font-family:inherit;">▯ 세로 화이트</button>
         </div>
         <p id="gwNote" style="font-size:11px;color:var(--sub);margin:6px 0 0;line-height:1.5;">출·퇴근 장소를 설정하면 그 쪽 버튼이 나와요.</p>
+        <p style="font-size:11px;color:var(--sub);margin:8px 0 0;line-height:1.55;">앱이 백그라운드에서 꺼지면 캐릭터가 화면을 켜도 자고 있을 수 있어요(3분 안에 다시 깨워요). 덜 꺼지게 하려면 <span onclick="_batRequest()" style="text-decoration:underline;cursor:pointer;color:var(--text);">배터리 최적화 제외</span> · <span onclick="_samOpen()" style="text-decoration:underline;cursor:pointer;color:var(--text);">갤럭시 절전 설정 열기</span></p>
       </div>
 
       <!-- ★ 하차 10분 전 추천 테스트 -->

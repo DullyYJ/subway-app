@@ -62,8 +62,8 @@ public final class WidgetSim {
     }
     // ───────── 깨어나 돌아다니는 시간 ─────────
     /** 깨울 수 있는 신호(화면 켜짐·잠금 해제·런처 갱신·알람)를 받으면 일어나 ROAM_LEN_MS(2분)만 돌아다니고 다시 집에 들어가 잔다.
-     *  ROAM_EVERY_MIN 분마다 알람이 앱을 깨운다(앱이 꺼져 있어도 신호를 받을 수 있게: 프로세스가 살아야 화면 켜짐을 들을 수 있다). */
-    public static final int ROAM_EVERY_MIN = 10; public static final long ROAM_LEN_MS = 120000L;
+     *  ROAM_EVERY_MIN 분마다 알람이 앱 프로세스를 되살린다(프로세스가 살아야 화면 켜짐을 들을 수 있다). 알람이 올 때마다 움직이지는 않고, 마지막 움직임이 끝난 지 WidgetCore.ROAM_ALARM_COOLDOWN_MS 가 지났을 때만 움직인다. */
+    public static final int ROAM_EVERY_MIN = 3; public static final long ROAM_LEN_MS = 120000L;
     /** ms 가 속한 칸의 시작(지역 시각의 everyMin 배수 분 0초). everyMin 은 60 의 약수여야 한다. */
     public static long roamPeriodStart(long ms, java.util.TimeZone tz, int everyMin) {
         java.util.Calendar c = java.util.Calendar.getInstance(tz); c.setTimeInMillis(ms);
