@@ -38,6 +38,7 @@ jobs:
           - scene_engine.test.js
           - scene_native_java.test.js
           - scene_native_js.ui.test.js
+          - keyboard_pan.test.js
           - metro_native_js.ui.test.js
           - bus_poll_gap.test.js
           - cell_hop_lead.ui.test.js
@@ -420,6 +421,14 @@ jobs:
                   if need not in vals:
                       vals.append(need)
               s = s.replace(m.group(0), 'android:configChanges="' + "|".join(vals) + '"', 1)
+
+          # 2026-10-16 (YJ: "키보드 올라올 때 화면을 축소시키지 마, 키보드만 올라오는 거야"):
+          #   Capacitor 기본값 adjustResize 는 키보드가 뜨면 웹뷰 높이를 줄여 화면이 찌그러진다.
+          #   adjustPan 은 웹뷰 크기를 그대로 두고 키보드가 위에 덮이며, 입력칸이 가려질 때만 창을 밀어 올린다.
+          if "windowSoftInputMode" in s:
+              s = re.sub(r'android:windowSoftInputMode="[^"]*"', 'android:windowSoftInputMode="adjustPan"', s, count=1)
+          else:
+              s = s.replace('android:name=".MainActivity"', 'android:name=".MainActivity" android:windowSoftInputMode="adjustPan"', 1)
 
           # 2026-10-13: 경로 이동 중 프로세스를 살려 두는 우리 포그라운드 서비스(위치 유형)
           if "KeepAliveService" not in s:
