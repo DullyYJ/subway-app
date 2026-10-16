@@ -72,6 +72,75 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     assert.deepStrictEqual(x.errs, []); await x.ctx.close();
   });
 
+  // ── 2026-10-16 (YJ 로그: 가려진 동안 '엔진 요청이 15초째 응답 없음 — 끊고 다시 보냄' 이 15초마다 · 동막 18:02 / 진행 4→3→4→5) ──
+  const NODES = `[{ name: '출발', isOrigin: true, _schedMin: 1140, lat: 37.50, lng: 126.70 }, { name: 'A', isSub: true, lineName: '인천1호선', _schedMin: 1141, lat: 37.51, lng: 126.70 }, { name: 'B', isSub: true, lineName: '인천1호선', _schedMin: 1143, lat: 37.52, lng: 126.70 }, { name: 'C', isSub: true, lineName: '인천1호선', _schedMin: 1145, lat: 37.53, lng: 126.70 }]`;
+  await t('가려진 동안(15초에 한 번 깨어남)에는 응답이 와 있어도 끊지 않고, 늦게 온 답도 더 새것이 없으면 그린다', async () => {
+    const x = await fresh();
+    const r = await x.page.evaluate(async (NODES) => {
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+      window.__fetches = 0; window.__aborted = 0; window.__resolvers = [];
+      window.fetch = (u, o) => { if (!/ride-eta/.test(String(u))) return new Promise(() => {}); window.__fetches++; return new Promise((res, rej) => { window.__resolvers.push(res); if (o && o.signal) o.signal.addEventListener('abort', () => { window.__aborted++; rej(new Error('abort')); }); }); };
+      window._metroRouteMode = false; window._routeLocked = true;
+      _transitNodeData = eval(NODES); window._trackSig = 'S1';
+      _etaRequest('pass'); return { f: window.__fetches };
+    }, NODES);
+    assert.strictEqual(r.f, 1);
+    await x.page.clock.runFor(16000);       // 가려진 웹뷰가 15초 만에 깨어난 상황
+    const r2 = await x.page.evaluate(() => { _etaRequest('tick'); return { f: window.__fetches, ab: window.__aborted, busy: _etaSt.busy }; });
+    assert.strictEqual(r2.ab, 0, '끊지 않는다 ' + JSON.stringify(r2)); assert.strictEqual(r2.f, 1, '새로 보내지 않고 기다린다 ' + JSON.stringify(r2)); assert.strictEqual(r2.busy, true);
+    const r3 = await x.page.evaluate(async () => {
+      window.__resolvers[0]({ ok: true, json: () => Promise.resolve({ arr: ['18:00', '18:01', '18:02', '18:03'], etaMs: [1, 2, 3, 4], delayMin: 0, anchorIdx: 1 }) });
+      await new Promise(r => setTimeout(r, 0)); return { arr: _transitNodeData.map(n => n.arrTime), busy: _etaSt.busy };
+    });
+    await x.page.clock.runFor(100);
+    const arr = await x.page.evaluate(() => _transitNodeData.map(n => n.arrTime));
+    assert.deepStrictEqual(arr, ['18:00', '18:01', '18:02', '18:03'], JSON.stringify(r3)); assert.deepStrictEqual(x.errs, []); await x.ctx.close();
+  });
+  const pfSetup = (gmSrc) => `(() => {
+    const now = Date.now(); window._routeLocked = true; window._metroRouteMode = false; window._htlBoarded = true;
+    _transitNodeData = ${NODES};
+    window._gpsMaxIdx = 3; window._gpsConfirmIdx = 3; window._nodePassMs = { 3: now - 20000 }; window._nodePassSrc = { 3: '${gmSrc}' }; window._nodePassPf = {};
+    _pf.sig = 'T1'; _pf.st = [{ _td: 1, name: 'A' }, { _td: 2, name: 'B' }, { _td: 3, name: 'C' }]; _pf.A = { sig: 'T1', k: 0, td: 1, cand: -1, candN: 0, candAt: 0, backAt: 0, at: 0 };
+    return now; })()`;
+  await t('PF 의 느린 "앞으로" 채택은 GPS 로 이미 확정한 진행도(4→3)를 되돌리거나 통과 기록을 지우지 않는다', async () => {
+    const x = await fresh();
+    const r = await x.page.evaluate((setup) => {
+      const now = eval(setup); const ms3 = window._nodePassMs[3];
+      _pfAdopt(1, { conf: 0.9, kind: 'seg', delayS: 0, idx: 1 }, now, '앞');
+      return { gm: window._gpsMaxIdx, ms3: window._nodePassMs[3] === ms3, src3: window._nodePassSrc[3], pfTd: _pf.A.td };
+    }, pfSetup('gps'));
+    assert.strictEqual(r.gm, 3, JSON.stringify(r)); assert.ok(r.ms3, JSON.stringify(r)); assert.strictEqual(r.src3, 'gps'); assert.strictEqual(r.pfTd, 2, 'PF 자신은 따라잡는다');
+    assert.deepStrictEqual(x.errs, []); await x.ctx.close();
+  });
+  await t('"뒤로" 채택도 GPS 영점으로 2분 안에 확정한 역은 낮추지 않는다(영점이 아닌 기록이면 예전처럼 낮춘다)', async () => {
+    const x = await fresh();
+    const a = await x.page.evaluate((setup) => { const now = eval(setup); _pfAdopt(1, { conf: 0.9, kind: 'seg', delayS: 0, idx: 1 }, now, '뒤'); return window._gpsMaxIdx; }, pfSetup('gps'));
+    assert.strictEqual(a, 3);
+    const b2 = await x.page.evaluate((setup) => { const now = eval(setup); _pfAdopt(1, { conf: 0.9, kind: 'seg', delayS: 0, idx: 1 }, now, '뒤'); return window._gpsMaxIdx; }, pfSetup('pf'));
+    assert.strictEqual(b2, 2, '낮춤(PF 기록): td=2'); assert.deepStrictEqual(x.errs, []); await x.ctx.close();
+  });
+  await t('엔진이 준 hold(영점 뒤 10초) 안에서는 현위치 역을 정지(노란색)로 그리고, 끝나면 이동(파랑)', async () => {
+    const x = await fresh();
+    const r = await x.page.evaluate((setup) => {
+      const now = eval(setup); window._pfBest = { at: now, conf: 0.9, kind: 'seg', idx: 3 }; window._etaPos = null;
+      const moving0 = _ovlMoving();
+      window._etaHold = { idx: 3, untilMs: now + 8000, src: 'gps' }; const held = _ovlMoving();
+      window._etaHold = { idx: 2, untilMs: now + 8000, src: 'gps' }; const other = _ovlMoving();     // 다른 역의 hold 는 현위치와 무관
+      window._etaHold = { idx: 3, untilMs: now - 1, src: 'gps' }; const expired = _ovlMoving();
+      return { moving0, held, other, expired };
+    }, pfSetup('gps'));
+    assert.deepStrictEqual(r, { moving0: true, held: false, other: true, expired: true }, JSON.stringify(r)); assert.deepStrictEqual(x.errs, []); await x.ctx.close();
+  });
+  await t('_etaApply 가 엔진의 hold 를 받아 두고 hold 가 없으면 지운다', async () => {
+    const x = await fresh();
+    const r = await x.page.evaluate((NODES) => {
+      _transitNodeData = eval(NODES); const base = { arr: ['18:00', '18:01', '18:02', '18:03'], etaMs: [1, 2, 3, 4], delayMin: 0, anchorIdx: 1 };
+      _etaApply(Object.assign({ hold: { idx: 2, untilMs: Date.now() + 5000, src: 'gps' } }, base), { boarded: true });
+      const a = window._etaHold && window._etaHold.idx; _etaApply(Object.assign({ hold: null }, base), { boarded: true }); return { a, b: window._etaHold };
+    }, NODES);
+    assert.deepStrictEqual(r, { a: 2, b: null }, JSON.stringify(r)); assert.deepStrictEqual(x.errs, []); await x.ctx.close();
+  });
+
   await b.close();
   console.log(`\n${pass} pass, ${fail} fail`);
   process.exit(fail ? 1 : 0);

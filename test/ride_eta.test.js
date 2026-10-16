@@ -73,7 +73,7 @@ t('arriveEarlySec — 중간 경로역은 표시 도착 시각보다 5초 일찍
   assert.deepStrictEqual(a.etaMs, b.etaMs); assert.deepStrictEqual(a.arr, b.arr);
   // 구간 시각: 동막 → 동춘 구간은 5초 일찍 시작하고 5초 일찍 끝난다
   const sg = a.pos.segs[0];
-  assert.strictEqual(sg.from, 2); assert.strictEqual(sg.a, E2 - 5000); assert.strictEqual(sg.t0, E2 - 5000 + 25000); assert.strictEqual(sg.t1, E3 - 5000);
+  assert.strictEqual(sg.from, 2); assert.strictEqual(sg.a, E2 - 5000); assert.strictEqual(sg.t0, E2 - 5000 + 10000); assert.strictEqual(sg.t1, E3 - 5000);
   // 앞 구간 끝 = 다음 구간의 도착(a) — 끊기지 않는다
   for (let i = 1; i < a.pos.segs.length; i++) assert.strictEqual(a.pos.segs[i].a, a.pos.segs[i - 1].t1);
   // 최종 목적지(마지막 노드)에는 적용하지 않는다
@@ -587,6 +587,27 @@ t('지연 수준이 그려진 값과 0.4분 안이면 그린 값을 유지한다
 });
 
 console.log('[Worker 진입점 handleRideEta]');
+// ★ 2026-10-16 (YJ: "도착하면 마커가 바로 다음역으로 넘어간다 — GPS 영점을 고려해서 10초 정차(노란색) 후 이동"): hold / markerDwellSec / stopDwellSec 10
+t('hold — 영점(gps) 통과 역에서 통과 시각 + 10초 동안 정차로 알린다(시각표 기준이 아니어도) · 끝나면 없다 · 승차 확정/기지국/목적지는 세우지 않는다', () => {
+  const nodes = scene(), ps = [{ idx: 1, ms: at(17, 35), src: 'board' }, { idx: 2, ms: at(17, 38, 20), src: 'gps' }];
+  const q = (nowMs, o) => rideEta(Object.assign({ nowMs, nodes, passes: ps, boarded: true }, o || {}));    // timetableFirst 아님
+  const E = q(at(17, 38, 25)).etaMs, pass = at(17, 38, 20);
+  assert.strictEqual(E[2], pass, '영점이면 그 역의 시각은 실제 통과 시각');
+  const h = q(pass + 3000).hold; assert.ok(h, 'hold'); assert.strictEqual(h.idx, 2); assert.strictEqual(h.src, 'gps'); assert.strictEqual(h.untilMs, pass + 10000);
+  assert.strictEqual(q(pass + 9900).hold.idx, 2); assert.strictEqual(q(pass + 10100).hold, null, '10초 뒤엔 이동');
+  assert.strictEqual(q(pass - 5000).hold, null, '아직 안 닿았다');
+  assert.strictEqual(rideEta({ nowMs: at(17, 35, 5), nodes, passes: [{ idx: 1, ms: at(17, 35), src: 'board' }], boarded: true }).hold, null, '승차 확정은 도착이 아니다');
+  assert.strictEqual(rideEta({ nowMs: at(17, 36), nodes, passes: [{ idx: 2, ms: at(17, 35, 58), src: 'cell' }], boarded: true }).hold, null, '기지국 선행은 도착이 아니다');
+  const nLast = nodes.length - 1;
+  assert.strictEqual(rideEta({ nowMs: at(17, 50, 3), nodes, passes: [{ idx: 1, ms: at(17, 35), src: 'board' }, { idx: nLast, ms: at(17, 50), src: 'gps' }], boarded: true }).hold, null, '목적지는 세우지 않는다');
+  assert.strictEqual(q(pass + 3000, { opts: { markerDwellSec: 0 } }).hold, null, '끄면 없다');
+});
+t('stopDwellSec 10 — 시각표 기준 위치(pos)에서도 도착 뒤 10초만 역 위에 머문다', () => {
+  const nodes = scene(), ps = [{ idx: 1, ms: at(17, 35), src: 'gps' }];
+  const base = rideEta({ nowMs: at(17, 36), nodes, passes: ps, boarded: true, timetableFirst: true }), E2 = base.etaMs[2] - 5000;
+  const a = rideEta({ nowMs: E2 + 8000, nodes, passes: ps, boarded: true, timetableFirst: true }).pos, b = rideEta({ nowMs: E2 + 12000, nodes, passes: ps, boarded: true, timetableFirst: true }).pos;
+  assert.strictEqual(a.from, 2); assert.strictEqual(a.ratio, 0, '10초 안 — 정차'); assert.ok(b.ratio > 0, '10초 뒤 — 이동');
+});
 (async () => {
   const mkReq = (method, body) => new Request('https://example.test/ride-eta', { method: method, body: body == null ? undefined : (typeof body === 'string' ? body : JSON.stringify(body)), headers: { 'content-type': 'application/json' } });
   await tAsync('POST JSON → 200 + JSON(arr…) + CORS 헤더', async () => {

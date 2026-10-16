@@ -11317,7 +11317,7 @@ function _plan0Stamp(){
 // 통과 기록의 출처 표시: 'gps' | 'pf' | 'cell' | 'drift' | 'board' — 값(시각)은 그대로 두고 출처만 따로 적는다(엔진이 출처별로 믿는 정도를 정한다)
 function _etaSrc(idx, src){ try{ (window._nodePassSrc = window._nodePassSrc || {})[idx] = src; }catch(e){} }
 function _etaResetEvidence(){
-  window._etaPos = null; window._etaNotYet = {}; window._etaLast = null; window._nodePassSrc = {}; window._nodePassPf = {}; window._etaLive = []; window._etaBoardNext = null; window._etaBoardArrive = null; window._etaBoardShift0 = 0;
+  window._etaPos = null; window._etaHold = null; window._etaNotYet = {}; window._etaLast = null; window._nodePassSrc = {}; window._nodePassPf = {}; window._etaLive = []; window._etaBoardNext = null; window._etaBoardArrive = null; window._etaBoardShift0 = 0;
 }
 function _etaMinToMs(minOfDay){            // 하루 안의 분(kstMinutesAdj 기준) → 지금 기준 가장 가까운 ms
   var nowMin = (typeof kstMinutesAdj === 'function') ? kstMinutesAdj() : (new Date().getHours() * 60 + new Date().getMinutes());
@@ -11375,6 +11375,7 @@ function _etaApply(res, P){
   if(P && P.notDeparted && typeof res.boardShiftMin === 'number'){   // 승차 전: 홈 브리핑의 기준 분이 '승차역 시각이 밀린 만큼'만 따라가게 한다
     try{ var dsh = res.boardShiftMin - (window._etaBoardShift0 || 0); if(Math.abs(dsh) > 0.001){ if(typeof window._homeRouteBaseMin === 'number') window._homeRouteBaseMin += dsh; window._etaBoardShift0 = res.boardShiftMin; } }catch(eB){}
   }
+  try{ window._etaHold = (res.hold && res.hold.untilMs) ? { idx: res.hold.idx, untilMs: res.hold.untilMs, src: res.hold.src } : null; }catch(eHo){}   // ★ 2026-10-16: 엔진이 정한 '역에서 정차'(영점 뒤 10초) — 그리기만 한다
   try{ window._etaPos = (P && P.timetableFirst && res.pos) ? res.pos : null; window._etaPosAt = Date.now(); }catch(eEp){}   // ★ 2026-10-13: 엔진이 준 시각표 기준 위치(그리기용)
   _etaSt.okAt = Date.now(); _etaSt.applied++; window._etaLast = { at: _etaSt.okAt, why: P && P._why, notes: res.notes, delayMin: res.delayMin, anchorIdx: res.anchorIdx };
   try{ _fgNotifySync(); }catch(e1){}      // 역이 바뀌면 상주 알림도 즉시
@@ -11395,21 +11396,29 @@ function _etaRequest(why){
     if(why === 'tick' && now - _etaSt.lastAt < _ETA_TICK_MS) return;
     // ★ 2026-10-14 (실기기 로그: 백그라운드 26분 동안 엔진 응답이 한 번도 갱신되지 않았다 — 가려진 동안 응답 안 오는 요청이 '진행 중'으로 굳어 새 요청이 영영 막혔다):
     //   요청이 제한 시간(+여유 3초)을 넘겨도 안 끝났으면 굳은 것으로 보고 끊은 뒤 새로 보낸다(옛 요청의 뒤늦은 응답·실패는 seq 로 버린다).
-    if(_etaSt.busy && now - _etaSt.lastAt > _ETA_TIMEOUT_MS + 3000){ try{ if(_etaSt.ctl) _etaSt.ctl.abort(); }catch(eAb){} _etaSt.busy = false; try{ _ovlDiag('도착시각', '엔진 요청이 ' + Math.round((now - _etaSt.lastAt) / 1000) + '초째 응답 없음 — 끊고 다시 보냄'); }catch(eDg){} }
+    // ★ 2026-10-16 (YJ 로그: 앱이 가려진 동안 '엔진 요청이 15초째 응답 없음 — 끊고 다시 보냄' 이 15초마다 37번, 화면 시각이 시각표 그대로 굳음):
+    //   원인 — 가려진 웹뷰는 15초에 한 번만 깨어난다. 응답은 그 사이에 이미 와 있는데(네이티브 HTTP) 깨어나서 처음 하는 일이 '오래 걸린 요청 끊기'라
+    //   막 도착한 답을 seq 불일치로 버렸다. → 가려진 동안은 끊지 않고 기다린다(60초까지), 늦게 온 답도 더 새로 적용된 것이 없으면 그린다.
+    var _eHid = false; try{ _eHid = (typeof document !== 'undefined' && document.hidden === true); }catch(eHd){}
+    var _eStuck = _ETA_TIMEOUT_MS + 3000 + (_eHid ? 50000 : 0);
+    if(_etaSt.busy && now - _etaSt.lastAt > _eStuck){ try{ if(_etaSt.ctl) _etaSt.ctl.abort(); }catch(eAb){} _etaSt.busy = false; try{ _ovlDiag('도착시각', '엔진 요청이 ' + Math.round((now - _etaSt.lastAt) / 1000) + '초째 응답 없음 — 끊고 다시 보냄'); }catch(eDg){} }
     if(_etaSt.busy){ _etaSt.pending = why || 'pass'; return; }
     _plan0Stamp();
     var P = _etaPayload(); P._why = why;
     var routeSig = window._trackSig, ctl = (typeof AbortController === 'function') ? new AbortController() : null, to = null;
     _etaSt.busy = true; _etaSt.lastAt = now; _etaSt.seq++; _etaSt.ctl = ctl; var mySeq = _etaSt.seq;
-    to = setTimeout(function(){ try{ if(ctl) ctl.abort(); }catch(e){} }, _ETA_TIMEOUT_MS);
+    to = setTimeout(function(){ try{ if(ctl && !(typeof document !== 'undefined' && document.hidden === true)) ctl.abort(); }catch(e){} }, _ETA_TIMEOUT_MS);   // 가려진 동안은 중단 타이머도 믿지 않는다(늦게 깨어난 타이머가 이미 도착한 답을 끊던 것)
     var body = JSON.stringify(P);
     fetch(_ETA_URL, { method: 'POST', headers: { 'content-type': 'application/json' }, body: body, signal: ctl ? ctl.signal : undefined })
       .then(function(r){ if(!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(function(res){
-        clearTimeout(to); if(mySeq !== _etaSt.seq) return;          // 끊고 다시 보낸 옛 요청의 뒤늦은 응답은 버린다
-        _etaSt.busy = false; _etaSt.fails = 0;
-        if(window._trackSig === routeSig) _etaApply(res, P);      // 그 사이 경로가 바뀌었으면 버린다
-        _etaNext();
+        clearTimeout(to);
+        // 끊고 다시 보낸 옛 요청의 답도 '이미 그려진 답보다 새것'이면 그린다(없는 것보다 낫다). 더 새 요청의 답이 이미 그려졌으면 버린다.
+        if(mySeq < (_etaSt.appliedSeq || 0)) return;
+        if(mySeq === _etaSt.seq){ _etaSt.busy = false; }
+        _etaSt.fails = 0;
+        if(window._trackSig === routeSig){ _etaSt.appliedSeq = mySeq; _etaApply(res, P); }      // 그 사이 경로가 바뀌었으면 버린다
+        if(mySeq === _etaSt.seq) _etaNext();
       })
       .catch(function(err){
         clearTimeout(to); if(mySeq !== _etaSt.seq) return;
@@ -29333,6 +29342,10 @@ function _ovlMoving(){
   try{
     if(window._routeLocked !== true || window._metroRouteMode === true) return false;
     if(typeof _htlNotDeparted === 'function' && _htlNotDeparted()) return false;
+    try{    // ★ 2026-10-16 (YJ: "도착하면 마커가 바로 다음역으로 넘어간다 → 영점 뒤 10초 정차(노란색) 후 이동"): 엔진이 준 정차 구간(hold) 안이면, 그 역이 현위치일 때 정지로 그린다
+      var _ho = window._etaHold;
+      if(_ho && Date.now() < _ho.untilMs && _pipHereIdx() === _ho.idx) return false;
+    }catch(eHd){}
     try{    // ★ 2026-10-13: 시각표 기준 구간은 앱 마커와 같은 위치 — 역과 역 사이(비율 0 초과, 도착 전)면 이동 중, 정차(비율 0)·역 위면 정지
       if(_ttFirstOn() && window._etaPos){
         var _p = _estimateTimelinePos();
@@ -29618,7 +29631,8 @@ function _ovlSync(force){
       if(active && now - (window._ovlMkLogAt || 0) >= 30000){
         window._ovlMkLogAt = now;
         var _ep9 = window._etaPos, _tp9 = _estimateTimelinePos();
-        _ovlDiag('마커', '시각표기준=' + (_ttFirstOn() ? 1 : 0) + ' 엔진구간=' + (_ep9 ? (_ep9.from + '→' + _ep9.to + ' ' + Math.round((now - (window._etaPosAt || now)) / 1000) + '초전 구간표' + ((_ep9.segs || []).length)) : '없음')
+        var _why0 = ''; try{ if(!_ttFirstOn()){ var _g0 = (window._gpsMaxIdx == null ? -1 : window._gpsMaxIdx), _n0 = (_transitNodeData || [])[_g0]; _why0 = '(' + (window._ttFirstOff === true ? 'off ' : '') + (window._routeLocked !== true ? '미확정 ' : '') + (window._htlBoarded !== true ? '승차미확정 ' : '') + (_n0 && _n0.isSub ? '' : '진행역지하철아님 ') + ((typeof _htlNotDeparted === 'function' && _htlNotDeparted()) ? '출발전 ' : '') + (_trkBusState() === 'notBus' ? '엔진버스아님판정 ' : '') + ')'; } }catch(eY0){}
+        _ovlDiag('마커', '시각표기준=' + (_ttFirstOn() ? 1 : 0) + _why0 + ' 엔진구간=' + (_ep9 ? (_ep9.from + '→' + _ep9.to + ' ' + Math.round((now - (window._etaPosAt || now)) / 1000) + '초전 구간표' + ((_ep9.segs || []).length)) : '없음')
           + ' 그림=' + (_tp9 ? (_tp9.fromIdx + '→' + _tp9.toIdx + ' ' + (+_tp9.ratio).toFixed(2)) : '-') + ' 이동=' + (L.moving ? 1 : 0) + ' 진행도=' + window._gpsMaxIdx);
       }
     }catch(eMk){}
@@ -40818,6 +40832,17 @@ function _pfAdopt(k, b, now, why){
     }
     if(kk === A.k && why !== '초기') return;
     var prevTd = A.td;
+    // ★ 2026-10-16 (YJ 로그: 동막 도착 → 진행도 4 → PF채택 '앞 2→3' 이 진행도를 3 으로 되돌렸다 → 곧 다시 4 → 동춘을 건너뛰어 5 / 동막 통과 기록이 GPS 시각 대신 늦은 PF 시각으로 덮임):
+    //   PF 는 실제보다 5~70초 늦게 채택한다. PF 의 '앞으로' 채택이 앱 진행도(영점·GPS 로 이미 확정)보다 뒤 역이면 PF 가 따라잡는 중일 뿐이다 — PF 자신의 상태만 옮기고 진행도·통과 기록은 건드리지 않는다.
+    //   '뒤로' 채택(25초 이상 80% 이상으로 되돌아갔다고 본 경우)도 GPS 영점으로 확정한 지 2분 안인 역은 낮추지 않는다(순서: 시각표 1순위 · GPS 영점 2순위 · PF 3순위).
+    if(td < gm && why !== '초기'){
+      var _gSrc = (window._nodePassSrc || {})[gm], _gMs = (window._nodePassMs || {})[gm];
+      if(why === '앞' || (_gSrc === 'gps' && _gMs && now - _gMs < 120000)){
+        A.k = kk; A.td = td; A.at = now; A.cand = -1; A.candN = 0; A.backAt = 0;
+        try{ if(now - (window._pfKeepAt || 0) > 20000){ window._pfKeepAt = now; _ovlDiag('PF보류', st.name + ' 채택은 진행도(앱 ' + gm + ')보다 뒤 — PF 만 따라잡음, 진행도·통과 기록은 그대로(' + why + (_gSrc ? '·' + _gSrc : '') + ')'); } }catch(eK){}
+        return;
+      }
+    }
     A.k = kk; A.td = td; A.at = now; A.cand = -1; A.candN = 0; A.backAt = 0;
     window._nodePassMs = window._nodePassMs || {};
     var gc = (window._gpsConfirmIdx == null ? -1 : window._gpsConfirmIdx);
