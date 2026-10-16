@@ -3039,7 +3039,7 @@ function _foodLoadNearby(force){
     }
     var key = near ? near.name.replace(/역$/,'') : '내주변';
     var label = document.getElementById('foodDestLabel');
-    if(label) label.textContent = near ? ('📍 ' + key + '역 인근') : '';
+    if(label) label.textContent = near ? (key + '역 인근') : '';
     _foodCurFilter = _foodCurFilter || '\uc804\uccb4';
     _foodFromStn(key);   // \uc624\ud504\ub77c\uc778 CSV \uc778\uadfc \uc74c\uc2dd\uc810 (\uac00\uc7a5 \uac00\uae4c\uc6b4 \uc5ed \uae30\uc900)
   }
@@ -3088,7 +3088,7 @@ function loadFoodTab(force) {
     return;
   }
 
-  if(label) label.textContent = '📍 ' + String(destStn).replace(/역$/, '') + '역 인근';
+  if(label) label.textContent = String(destStn).replace(/역$/, '') + '역 인근';
   _foodCurFilter = _foodCurFilter || '\uc804\uccb4';
   _foodFromStn(destStn);   // \uc624\ud504\ub77c\uc778 CSV(\uc18c\uc0c1\uacf5\uc778 \uc0c1\uac00\uc815\ubcf4) \uc778\uadfc \uc74c\uc2dd\uc810
 }
