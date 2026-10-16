@@ -2,7 +2,7 @@
 //   · 경로가 없으면: 시간대(새벽·아침·점심·오후·저녁·밤)와 실제 날씨(눈·비·구름·흐림·안개)에 맞는 배경에서 캐릭터 2~3마리가 랜덤으로 나와 논다
 //   · 버스 경로: 타기 전 = 한 마리가 기다림 · 타면 = 버스 안 · 내리면 = 버스에서 내려 친구들과 놀기 · 지하철→버스 환승도 버스 장면
 //   · ★ (23:05 YJ) 혼잡도와 장면은 함께 보이지 않는다: 혼잡도는 '지하철 탑승 확정' 뒤에만, 그 밖(대기·버스·내림·경로 없음)은 장면만
-//   · 버스에서는 '혼잡도 분석' 제목줄에 "지하철을 타면 혼잡도가 나와요"
+//   · 버스에서는 '혼잡도 분석' 제목줄에 "지하철을 타면 혼잡도가 표시돼요"
 //   · ★ "모든 연산은 엔진이 한다, 앱은 그림만": 장면 종류·구간·시간대·날씨·대표 캐릭터는 엔진(/scene, engine/scene.js)이 정하고 앱에는 그 판정 코드가 없다.
 //     (시험에서는 엔진 함수를 그대로 불러 /scene 응답을 만든다)
 // 실행: node test/cong_scene.ui.test.js [html 경로]
@@ -61,7 +61,8 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     const pos0 = i1.actors.map(a => a.x + '/' + a.z).join(','); let moved = false; for (let k = 0; k < 6 && !moved; k++) { await page.evaluate(() => _CS._tick(3)); moved = (await info(page)).actors.map(a => a.x + '/' + a.z).join(',') !== pos0; }
     assert(moved, '캐릭터가 움직여야 한다');
     const c = await cardState(page); assert(!c.chart && !c.grid, '출발역이 없을 땐 빈 그래프·칸별 칸을 접는다 ' + JSON.stringify(c));
-    assert(!(await hintTxt(page)).show, 'idle 에는 버스 안내가 없다');
+    const hi = await hintTxt(page); assert(hi.show && hi.txt === '지하철을 타면 혼잡도가 표시돼요', '(09:21 YJ) 경로 없음에도 같은 안내 문구 ' + JSON.stringify(hi));
+    assert((await page.evaluate(() => document.querySelector('#tab-home .sec').firstChild.textContent.trim())) === '혼잡도', "제목은 '혼잡도'");
     assert(!errs.length, errs.join('|')); await ctx.close();
   });
   await t('시간대 6가지 × 날씨 6가지: 엔진이 정한 값 그대로 배경이 바뀐다(앱이 정하지 않는다)', async () => {
@@ -84,7 +85,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     const sb = await sceneBox(page); assert(sb.show && !/맑|흐|비|눈|구름|안개/.test(sb.tag) && sb.wx === 'clear', JSON.stringify(sb));
     assert(!errs.length, errs.join('|')); await ctx.close();
   });
-  await t('버스 구간: 타기 전 wait(한 마리) → 타고 가는 중 ride → 내림 alight(친구들과 놀기) + 모든 구간에 "지하철을 타면 혼잡도가 나와요"', async () => {
+  await t('버스 구간: 타기 전 wait(한 마리) → 타고 가는 중 ride → 내림 alight(친구들과 놀기) + 모든 구간에 "지하철을 타면 혼잡도가 표시돼요"', async () => {
     const { ctx, page, errs } = await fresh();
     await page.evaluate(ROUTE);
     await go(page, 1, false);                                  // 정류장으로 걸어가는 중
@@ -92,7 +93,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     assert(sb.mode === 'wait' && /기다리는/.test(sb.tag), JSON.stringify(sb));
     assert(i.actors.length === 1 && i.actors[0].hero && i.actors[0].st && !i.err, JSON.stringify(i));
     const hero = sb.hero;
-    let h = await hintTxt(page); assert(h.show && h.txt === '지하철을 타면 혼잡도가 나와요', JSON.stringify(h));
+    let h = await hintTxt(page); assert(h.show && h.txt === '지하철을 타면 혼잡도가 표시돼요', JSON.stringify(h));
     const pos = await page.evaluate(() => { const e = document.getElementById('congBusHint'), t = document.querySelector('#congCard').previousElementSibling; const r = e.getBoundingClientRect(), tr = t.getBoundingClientRect(); return { sameRow: e.parentElement === t, dy: Math.abs((r.top + r.bottom) / 2 - (tr.top + tr.bottom) / 2), w: r.width, sh: document.getElementById('congScene').getBoundingClientRect().height }; });
     assert(pos.sameRow && pos.dy < 14 && pos.w > 60 && pos.sh === 150, '"혼잡도 분석" 제목줄에 문구, 버스 장면은 150px ' + JSON.stringify(pos));
     let c = await cardState(page); assert(c.cs && !c.grid && !c.chart, '버스 구간엔 혼잡도 없이 장면만 ' + JSON.stringify(c));
@@ -142,6 +143,53 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     await page.evaluate(() => { document.getElementById('transitResultCard').style.display = 'none'; document.getElementById('transitResultBox').style.display = 'none'; });
     await page.waitForTimeout(2200);
     const c2 = await hh(); assert(c2.fill === true && c2.h !== 150 && c2.st !== '', '닫으면 다시 맞춤 ' + JSON.stringify(c2));
+    assert(!errs.length, errs.join('|')); await ctx.close();
+  });
+  // 캐릭터 화면 좌표(칸 안 좌표 → 화면)
+  const where = (page) => page.evaluate(() => { const i = _CS.info(), r = document.getElementById('congScene').getBoundingClientRect(); return { W: i.W, H: i.H, r: { l: r.left, t: r.top, w: r.width, h: r.height }, actors: i.actors.map(a => ({ id: a.id, st: a.st, x: a.x, z: a.z, held: a.held, sx: r.left + a.x / i.W * r.width, sy: r.top + a.cy / i.H * r.height })) }; });
+  await t('(09:21 YJ) 캐릭터를 꾹 누르면 들려 손가락을 따라오고, 놓은 자리에 내려앉아 잠깐 머문다', async () => {
+    const { ctx, page, errs } = await fresh();
+    await page.waitForTimeout(1500);
+    // 가운데로 모아 두고(시험용: 엔진이 정한 장면은 그대로, 위치만 고정) 잡는다
+    await page.evaluate(() => _CS._tick(6));
+    let w = await where(page); const a0 = w.actors.filter(a => a.sx > w.r.l + 20 && a.sx < w.r.l + w.r.w - 20)[0]; assert(a0, '화면 안 캐릭터 ' + JSON.stringify(w.actors));
+    await page.mouse.move(a0.sx, a0.sy); await page.mouse.down(); await page.waitForTimeout(520);
+    let i = await info(page); assert(i.drag && i.actors.some(a => a.held), '꾹 누르면 잡힌다 ' + JSON.stringify(i.actors));
+    const tx = w.r.l + w.r.w * .8, ty = w.r.t + w.r.h * .72;
+    await page.mouse.move(tx, ty, { steps: 8 }); await page.waitForTimeout(700);
+    w = await where(page); const h = w.actors.find(a => a.held); assert(h && Math.abs(h.sx - tx) < 14, '손가락을 따라온다 ' + JSON.stringify(h) + ' target ' + tx);
+    await page.mouse.up(); await page.waitForTimeout(1500);
+    i = await info(page); const d = i.actors.find(a => a.id === a0.id); assert(!i.drag && d && !d.held && (d.st === 'rest' || d.st === 'stand') && Math.abs(d.x - Math.round((tx - w.r.l) / w.r.w * w.W)) < 12, '놓은 자리에 선다 ' + JSON.stringify(d));
+    await page.waitForTimeout(1500); i = await info(page); const d2 = i.actors.find(a => a.id === a0.id); assert(d2 && Math.abs(d2.x - d.x) < 6, '잠깐 그 자리에 머문다 ' + JSON.stringify([d, d2]));
+    assert(!errs.length, errs.join('|')); await ctx.close();
+  });
+  await t('하늘 한가운데에서 놓으면 땅으로 떨어진다 · 길게 누르기 전에 손가락이 움직이면 잡히지 않는다(스크롤 우선)', async () => {
+    const { ctx, page, errs } = await fresh();
+    await page.waitForTimeout(1500); await page.evaluate(() => _CS._tick(6));
+    let w = await where(page); const a0 = w.actors.filter(a => a.sx > w.r.l + 20 && a.sx < w.r.l + w.r.w - 20)[0]; assert(a0);
+    await page.mouse.move(a0.sx, a0.sy); await page.mouse.down(); await page.mouse.move(a0.sx + 30, a0.sy + 4, { steps: 3 }); await page.waitForTimeout(600);
+    assert(!(await info(page)).drag, '움직이면 잡히지 않는다'); await page.mouse.up();
+    w = await where(page); const b = w.actors.filter(a => a.sx > w.r.l + 20 && a.sx < w.r.l + w.r.w - 20)[0]; assert(b);
+    await page.mouse.move(b.sx, b.sy); await page.mouse.down(); await page.waitForTimeout(520);
+    await page.mouse.move(w.r.l + w.r.w * .5, w.r.t + w.r.h * .12, { steps: 6 }); await page.waitForTimeout(500);
+    const sky = (await where(page)).actors.find(a => a.held); assert(sky && sky.sy < w.r.t + w.r.h * .45, '하늘 높이 들려 있다 ' + JSON.stringify(sky));
+    await page.mouse.up(); await page.waitForTimeout(1800);
+    const i = await info(page), d = i.actors.find(a => a.id === b.id); assert(d && !d.held && (d.st === 'rest' || d.st === 'stand') && d.z <= -.1, '도로 건너편 끝에 내려앉는다 ' + JSON.stringify(d));
+    assert(!errs.length, errs.join('|')); await ctx.close();
+  });
+  await t('버스 안(ride)에서는 잡히지 않는다 · 정류장 대기의 대표 캐릭터는 잡아서 옮기면 그 자리에 머문다', async () => {
+    const { ctx, page, errs } = await fresh();
+    await page.evaluate(ROUTE); await go(page, 3, true);
+    assert((await sceneBox(page)).mode === 'ride');
+    const r = await page.evaluate(() => { const e = document.getElementById('congScene').getBoundingClientRect(); return { l: e.left, t: e.top, w: e.width, h: e.height }; });
+    await page.mouse.move(r.l + r.w * .46, r.t + r.h * .6); await page.mouse.down(); await page.waitForTimeout(520);
+    assert(!(await info(page)).drag, 'ride 에서는 잡히지 않는다'); await page.mouse.up();
+    await go(page, 1, false); await page.evaluate(() => _CS._tick(2));
+    let w = await where(page); const hh = w.actors[0]; assert(hh && (await sceneBox(page)).mode === 'wait');
+    await page.mouse.move(hh.sx, hh.sy); await page.mouse.down(); await page.waitForTimeout(520); assert((await info(page)).drag, '대기 캐릭터도 잡힌다');
+    await page.mouse.move(r.l + r.w * .85, r.t + r.h * .7, { steps: 6 }); await page.waitForTimeout(500); await page.mouse.up(); await page.waitForTimeout(1500);
+    await page.evaluate(() => _CS._tick(5)); const i = await info(page); const d = i.actors[0];
+    assert(d.x > w.W * .7 && !d.held, '놓은 자리에 머문다(정류장으로 되돌아가지 않는다) ' + JSON.stringify(d));
     assert(!errs.length, errs.join('|')); await ctx.close();
   });
   await t('비·눈이면 기다리는 캐릭터가 우산을 쓴다 · 맑으면 쓰지 않는다', async () => {

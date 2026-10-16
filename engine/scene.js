@@ -10,7 +10,7 @@
 // 맨 아래 module.exports 는 시험(Node)용이고 Worker 에서는 함수 선언만 쓰인다.
 'use strict';
 var SCENE_CHARS = ["dolsom", "lovel", "dudung", "sul", "ppopu", "chaeng"];
-var SCENE_HINT_BUS = "지하철을 타면 혼잡도가 나와요";
+var SCENE_HINT_BUS = "지하철을 타면 혼잡도가 표시돼요";
 var SCENE_SLOT_KO = { dawn: "새벽", morning: "아침", noon: "점심", afternoon: "오후", evening: "저녁", night: "밤" };
 var SCENE_WX_KO = { clear: "맑음", cloudy: "구름", overcast: "흐림", rain: "비", snow: "눈", fog: "안개" };
 var SCENE_WX_CACHE = {};
@@ -74,7 +74,7 @@ function sceneDecide(inp, wx) {
   var out = { ok: true, fill: false, mode: null, venue: "street", line: "", nearEnd: false, hint: null, tag: "", look: look, hero: SCENE_CHARS[sceneHash(seedStr) % SCENE_CHARS.length], cast: sceneShuffle(SCENE_CHARS, sceneHash(seedStr + "/" + Math.floor(nowMs / 6e5))), cong: { kind: null, idx: -1, sig: "" } };
   var idleTag = look.emo + " " + look.slotKo + (look.wxKnown ? " \u00B7 " + look.wxKo + (look.temp != null ? " " + look.temp + "\u00B0" : "") : "");
   // fill: 경로가 없고(경로 결과도 안 나온 때) 홈 화면을 한 화면에 꽉 채워 보일 때만 true. 경로 결과가 나오기 시작하면(확정 전이라도) false → 앱은 평소 크기로 돌린다
-  if (!locked) { out.mode = "idle"; out.tag = idleTag; out.fill = inp.routeShown !== true; return out; }
+  if (!locked) { out.mode = "idle"; out.tag = idleTag; out.fill = inp.routeShown !== true; out.hint = SCENE_HINT_BUS; return out; }
   if (!nodes.length) return out;
   var here = Math.max(0, Math.min(isFinite(inp.here) ? inp.here | 0 : 0, nodes.length - 1)), leg = sceneLegNode(nodes, here), j;
   if (!leg) return out;
