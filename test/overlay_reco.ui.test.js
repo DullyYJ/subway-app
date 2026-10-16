@@ -276,6 +276,35 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     });
     assert.deepStrictEqual(r, ['https://example.com/a.jpg', false, false]);
   });
+  console.log('[④ 맛집 보기 = 앱에서 그 가게를 연다 · 쿠팡 보기 = 그 상품 링크 (2026-10-17)]');
+  await t('[맛집 보기]: 맛집 탭으로 가서 목록의 같은 이름 카드를 눌러 지도 패널을 연다', async () => {
+    const r = await page.evaluate(async () => {
+      const k = window.__keep; window._arrGoFoodTab = k.food;
+      _foodFromStn = function(){ const l = document.getElementById('foodList'); l.innerHTML = '<div class="food-card" id="fcA"><div class="food-name">다른집</div></div><div class="food-card" id="fcB"><div class="food-name">대박국밥</div></div>'; };
+      window.__clicked = [];
+      document.addEventListener('click', e => { const c = e.target.closest && e.target.closest('.food-card'); if(c){ window.__clicked.push(c.id); if(c.id === 'fcB'){ const p = document.createElement('div'); p.className = 'food-map-panel'; document.getElementById('foodList').appendChild(p); } } }, true);
+      window._arrLast = { at: Date.now(), ad: { pn: '대박국밥', pi: { c: '음식점 > 한식 > 국밥', d: 120 } }, stn: '아라역', action: { label: 'x', call: '_arrGoFoodTab()' } };
+      window._ovlRecoGo();
+      await new Promise(ok => setTimeout(ok, 50));
+      return 1;
+    });
+    await page.clock.runFor(3000);
+    const x = await page.evaluate(() => ({ clicked: window.__clicked, tab: !!document.querySelector('#tab-food.active, #tab-food.on'), lb: document.getElementById('foodDestLabel').textContent }));
+    assert.deepStrictEqual(x.clicked, ['fcB'], JSON.stringify(x)); assert.strictEqual(x.lb, '아라역 인근');
+  });
+  await t('[맛집 보기]: 목록에 그 가게가 없으면 추천이 들고 있던 정보로 카드를 만들어 연다', async () => {
+    await page.evaluate(() => { _foodFromStn = function(){ document.getElementById('foodList').innerHTML = '<div class="food-card" id="fcA"><div class="food-name">다른집</div></div>'; };
+      window.__clicked = []; window._arrLast = { at: Date.now(), ad: { pn: '없는집', pi: { c: '음식점 > 한식', d: 80 } }, stn: '아라', action: { label: 'x', call: '_arrGoFoodTab()' } }; window._ovlRecoGo(); });
+    await page.clock.runFor(6000);
+    const x = await page.evaluate(() => Array.from(document.querySelectorAll('#foodList .food-name')).map(e => e.textContent.trim()));
+    assert.strictEqual(x[0], '없는집', JSON.stringify(x));
+  });
+  await t('[쿠팡 보기]: 그 상품 링크를 허용된 열기(openExternalApp)로 연다', async () => {
+    const r = await page.evaluate(() => { const got = []; window._arrShopOpen = window.__keep.shop; window.openExternalApp = (u) => got.push(u);
+      window._arrShopItem = { n: '가습기', u: 'https://link.coupang.com/a/abc' }; window._arrLast = { at: Date.now(), action: { kind: 'shop', item: window._arrShopItem } }; window._ovlRecoGo(); return got; });
+    await page.clock.runFor(1000);
+    assert.deepStrictEqual(r, ['https://link.coupang.com/a/abc']);
+  });
   await t('페이지 오류 없음', async () => assert.deepStrictEqual([...new Set(errs)], []));
   await ctx.close(); await b.close();
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
