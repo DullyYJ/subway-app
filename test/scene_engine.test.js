@@ -37,6 +37,20 @@ const S = (name, line) => N({ name, isSub: true, lineName: line || '2호선' }),
     const nodes = [{ name: '출발', isOrigin: true }, { name: '도보', isWalk: true }, { name: 'A', isBus: true, lineName: '1', hasLoc: true }, { name: 'B', isBus: true, lineName: '1', hasLoc: true }];
     for (const here of [0, 1, 2, 3]) assert.strictEqual(decide(Object.assign({ locked: true, here, nodes }, base), null).fill, false, 'locked ' + here);
   });
+  await t('(10:23 YJ) 대표 캐릭터: 키마다 6종이 골고루(독수리만 나오지 않는다) · 같은 키라도 탈것 구간이 다르면 다르게 뽑힌다 · 같은 키·같은 구간이면 그대로', () => {
+    const NODES = [{ name: 'o', isOrigin: true }, { name: 'w', isWalk: true }, { name: 'A', isBus: true, lineName: '43', hasLoc: true }, { name: 'B', isBus: true, lineName: '43', hasLoc: true }, { name: 'w', isWalk: true }, { name: 'C', isBus: true, lineName: '6633', hasLoc: true }, { name: 'D', isBus: true, lineName: '6633', hasLoc: true }];
+    const cnt = {}; let legDiff = 0;
+    for (let i = 0; i < 360; i++) {
+      const key = String(1760580000000 + i * 7919 + (i * i) % 977), base = { nowMs: ms('2026-10-16T10:20:00'), locked: true, key, boarded: false, nodes: NODES };
+      const a = decide(Object.assign({ here: 1 }, base), null), b = decide(Object.assign({ here: 4 }, base), null), a2 = decide(Object.assign({ here: 2 }, base), null);
+      cnt[a.hero] = (cnt[a.hero] || 0) + 1; if (a.hero !== b.hero) legDiff++;
+      assert.strictEqual(a.hero, decide(Object.assign({ here: 1 }, base), null).hero, '같은 키·같은 구간이면 그대로');
+      assert.strictEqual(a.hero, a2.hero, '같은 구간 안에서는 그대로(here 1→2)');
+    }
+    assert.strictEqual(Object.keys(cnt).length, 6, '6종 모두: ' + JSON.stringify(cnt));
+    Object.values(cnt).forEach(v => assert(v >= 360 / 6 * .6 && v <= 360 / 6 * 1.45, '치우치지 않는다 ' + JSON.stringify(cnt)));
+    assert(legDiff > 360 * .6, '구간이 다르면 대체로 다른 캐릭터 ' + legDiff);
+  });
   await t('tzOffsetMin 을 따른다(UTC 기기에서도 한국 시각으로 판단)', () => {
     assert.strictEqual(decide({ nowMs: Date.parse('2026-10-15T03:00:00Z'), tzOffsetMin: 540, locked: false }, null).look.slot, 'noon');
     assert.strictEqual(decide({ nowMs: Date.parse('2026-10-15T03:00:00Z'), tzOffsetMin: 0, locked: false }, null).look.slot, 'night');

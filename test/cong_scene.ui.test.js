@@ -16,7 +16,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--no-sandbox'] });
   async function fresh(opt) {
     opt = opt || {};
-    const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, timezoneId: 'Asia/Seoul', deviceScaleFactor: 2 });
+    const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, timezoneId: 'Asia/Seoul', deviceScaleFactor: 2, hasTouch: !!opt.touch, isMobile: !!opt.touch });
     const page = await ctx.newPage(); const errs = [], st = { wx: opt.wx === undefined ? { temp: 12, rain: 10, txt: '맑음' } : opt.wx, fail: false, calls: 0, last: null };
     page.on('pageerror', e => errs.push(e.message));
     await page.route('**/*', r => {
@@ -163,6 +163,28 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     await page.waitForTimeout(1500); i = await info(page); const d2 = i.actors.find(a => a.id === a0.id); assert(d2 && Math.abs(d2.x - d.x) < 6, '잠깐 그 자리에 머문다 ' + JSON.stringify([d, d2]));
     assert(!errs.length, errs.join('|')); await ctx.close();
   });
+  await t('(10:18 YJ) 손가락(터치)으로도 따라다닌다 — 길게 누른 뒤 pointercancel·lostpointercapture 가 와도 놓은 것으로 보지 않고, touchend 로만 놓는다 · 잡은 동안 화면은 스크롤되지 않는다', async () => {
+    const { ctx, page, errs } = await fresh({ touch: true });
+    await page.evaluate(() => { document.getElementById('transitResultBox').style.display = 'block'; document.getElementById('transitResultCard').style.display = 'flex'; _sceneRequest('force'); });
+    await page.waitForTimeout(2500); await page.evaluate(() => { document.getElementById('congScene').scrollIntoView({ block: 'center' }); _CS._tick(6); }); await page.waitForTimeout(500);
+    const cdp = await ctx.newCDPSession(page), tp = (type, x, y) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y, id: 1 }] });
+    const w = await where(page), a = w.actors.filter(a => a.sx > w.r.l + 30 && a.sx < w.r.l + w.r.w - 30)[0]; assert(a, JSON.stringify(w.actors)); const cx = w.r.l + w.r.w / 2, ddx = (cx - a.sx) / 10;
+    const st0 = await page.evaluate(() => document.getElementById('tab-home').scrollTop);
+    // 투명 판: 캐릭터 몸 위에는 touch-action:none 판이 놓인다
+    const pad = await page.evaluate(([x, y]) => { const e = document.elementFromPoint(x, y); return e && e.className + '|' + getComputedStyle(e).touchAction; }, [a.sx, a.sy]); assert(/cs-pad\|none/.test(pad), '캐릭터 위에 판 ' + pad);
+    await tp('touchStart', a.sx, a.sy); await page.waitForTimeout(550);
+    assert((await info(page)).drag, '꾹 누르면 잡힌다');
+    await page.evaluate(() => { const h = document.getElementById('congScene'); ['pointercancel', 'lostpointercapture'].forEach(n => h.dispatchEvent(new PointerEvent(n, { pointerId: 1, pointerType: 'touch', bubbles: true }))); });
+    assert((await info(page)).drag, '가짜 pointercancel 로는 놓지 않는다');
+    for (let k = 1; k <= 10; k++) { await tp('touchMove', a.sx + k * ddx, a.sy - k * 3); await page.waitForTimeout(40); }
+    await page.waitForTimeout(300);
+    const w2 = await where(page), h = w2.actors.find(x => x.held); const fx = a.sx + 10 * ddx;
+    assert(h && Math.abs(h.sx - fx) < 12, '손가락을 따라온다 ' + JSON.stringify(h) + ' finger ' + fx);
+    assert((await page.evaluate(() => document.getElementById('tab-home').scrollTop)) === st0, '잡은 동안 스크롤되지 않는다');
+    await tp('touchEnd'); await page.waitForTimeout(1200);
+    assert(!(await info(page)).drag, 'touchend 로 놓는다');
+    assert(!errs.length, errs.join('|')); await ctx.close();
+  });
   await t('하늘 한가운데에서 놓으면 땅으로 떨어진다 · 길게 누르기 전에 손가락이 움직이면 잡히지 않는다(스크롤 우선)', async () => {
     const { ctx, page, errs } = await fresh();
     await page.waitForTimeout(1500); await page.evaluate(() => _CS._tick(6));
@@ -174,7 +196,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     await page.mouse.move(w.r.l + w.r.w * .5, w.r.t + w.r.h * .12, { steps: 6 }); await page.waitForTimeout(500);
     const sky = (await where(page)).actors.find(a => a.held); assert(sky && sky.sy < w.r.t + w.r.h * .45, '하늘 높이 들려 있다 ' + JSON.stringify(sky));
     await page.mouse.up(); await page.waitForTimeout(1800);
-    const i = await info(page), d = i.actors.find(a => a.id === b.id); assert(d && !d.held && (d.st === 'rest' || d.st === 'stand') && d.z <= -.1, '도로 건너편 끝에 내려앉는다 ' + JSON.stringify(d));
+    const i = await info(page), d = i.actors.find(a => a.id === sky.id); assert(d && !d.held && (d.st === 'rest' || d.st === 'stand') && d.z <= -.1, '도로 건너편 끝에 내려앉는다 ' + JSON.stringify(d));
     assert(!errs.length, errs.join('|')); await ctx.close();
   });
   await t('버스 안(ride)에서는 잡히지 않는다 · 정류장 대기의 대표 캐릭터는 잡아서 옮기면 그 자리에 머문다', async () => {

@@ -1632,7 +1632,8 @@ header h1 em{color:var(--gold);font-style:normal;}
 .cong-card.cs-on .cong-scene{margin:0;}   /* 장면만 보일 땐 안쪽 여백을 줄여 장면에 자리를 더 준다 */
 .cs-hide{display:none !important;}
 .cong-scene{touch-action:pan-y;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;}
-.cong-scene.cs-grab{cursor:grabbing;}   /* 캐릭터를 꾹 눌러 옮길 수 있다(YJ 09:21) */
+.cong-scene.cs-grab{cursor:grabbing;}
+.cong-scene .cs-pad{position:absolute;left:0;top:0;touch-action:none;background:transparent;display:none;z-index:2;}   /* 캐릭터를 꾹 눌러 옮길 수 있다(YJ 09:21) */
 #tab-home[data-hf="1"] #liveTalkList > :nth-child(-n+1),#tab-home[data-hf="2"] #liveTalkList > :nth-child(-n+2),#tab-home[data-hf="3"] #liveTalkList > :nth-child(-n+3){display:none !important;}   /* 작은 폰에서 한 화면에 맞추려고 오래된 줄부터 접는다(YJ 07:43) */
 #tab-home[data-hf="1"] .livetalk-list{height:95px;min-height:95px;max-height:95px;}
 #tab-home[data-hf="2"] .livetalk-list{height:70px;min-height:70px;max-height:70px;}
@@ -42279,23 +42280,35 @@ var _CS = (function(){
     });
     return best;
   }
+  function tpos(t){ var r = S.host.getBoundingClientRect(); return { x: (t.clientX - r.left) / Math.max(1, r.width) * S.W, y: (t.clientY - r.top) / Math.max(1, r.height) * S.H }; }
   function bindDrag(host){
     if(!host || host._csDrag) return; host._csDrag = true;
     host.addEventListener('pointerdown', function(ev){
       if(!S || S.mode === 'ride' || DRAG || (ev.pointerType === 'mouse' && ev.button)) return;
       var p = gpos(ev), a = hitActor(p.x, p.y); if(!a) return;
       if(PEND) clearTimeout(PEND.timer);
-      PEND = { a: a, id: ev.pointerId, sx: ev.clientX, sy: ev.clientY, timer: setTimeout(function(){ grab(); }, 380) };
+      PEND = { a: a, id: ev.pointerId, sx: ev.clientX, sy: ev.clientY, touch: ev.pointerType !== 'mouse', timer: setTimeout(function(){ grab(); }, 380) };
     });
     host.addEventListener('pointermove', function(ev){
       if(PEND){ if(Math.hypot(ev.clientX - PEND.sx, ev.clientY - PEND.sy) > 10){ clearTimeout(PEND.timer); PEND = null; } return; }
       if(DRAG && ev.pointerId === DRAG.id && S){ var p = gpos(ev); DRAG.fx = p.x; DRAG.fy = p.y; if(ev.cancelable) ev.preventDefault(); }
     });
-    var up = function(ev){ if(PEND){ clearTimeout(PEND.timer); PEND = null; } if(DRAG && (!ev || ev.pointerId === DRAG.id)) release(); };
-    host.addEventListener('pointerup', up); host.addEventListener('pointercancel', up);
-    host.addEventListener('lostpointercapture', function(ev){ if(DRAG && ev.pointerId === DRAG.id) release(); });
-    host.addEventListener('touchmove', function(ev){ if(DRAG && ev.cancelable) ev.preventDefault(); }, { passive: false });      // 들고 있는 동안 화면이 같이 스크롤되지 않게
+    // 손가락(터치)은 pointercancel·lostpointercapture 가 길게 누른 직후에 잘못 올 수 있어 놓은 것으로 보지 않고, touchend/touchcancel 로만 놓는다. 마우스는 pointerup 으로 놓는다.
+    var up = function(ev){
+      if(PEND){ clearTimeout(PEND.timer); PEND = null; }
+      if(DRAG && (!ev || ev.pointerId === DRAG.id)){ if(ev && ev.pointerType && ev.pointerType !== 'mouse' && (ev.type === 'pointercancel' || ev.type === 'lostpointercapture')) return; release(); }
+    };
+    host.addEventListener('pointerup', up); host.addEventListener('pointercancel', up); host.addEventListener('lostpointercapture', up);
+    host.addEventListener('touchmove', function(ev){
+      if(!S) return; var t = ev.touches && ev.touches[0]; if(!t) return;
+      if(PEND && PEND.touch){ if(Math.hypot(t.clientX - PEND.sx, t.clientY - PEND.sy) > 10){ clearTimeout(PEND.timer); PEND = null; } return; }
+      if(DRAG){ var p = tpos(t); DRAG.fx = p.x; DRAG.fy = p.y; if(ev.cancelable) ev.preventDefault(); }      // 들고 있는 동안 화면이 같이 스크롤되지 않게
+    }, { passive: false });
+    var tend = function(){ if(PEND && PEND.touch){ clearTimeout(PEND.timer); PEND = null; } if(DRAG) release(); };
+    host.addEventListener('touchend', tend); host.addEventListener('touchcancel', tend);
     host.addEventListener('contextmenu', function(ev){ ev.preventDefault(); });
+    host.addEventListener('dragstart', function(ev){ ev.preventDefault(); });
+    host.addEventListener('selectstart', function(ev){ ev.preventDefault(); });
   }
   function grab(){
     var P = PEND; PEND = null; if(!S || !P || !P.a || P.a.dead || S.actors.indexOf(P.a) < 0 || S.mode === 'ride') return;
@@ -42306,6 +42319,20 @@ var _CS = (function(){
     try{ S.host.classList.add('cs-grab'); }catch(e1){}
     try{ if(navigator.vibrate) navigator.vibrate(14); }catch(e2){}
     addPart('puff', a.x, zy(a.z) - 2, 3);
+  }
+  // 캐릭터 몸 위에만 놓이는 투명 판: 여기서 시작한 손가락은 브라우저가 스크롤로 가져가지 않아(touch-action:none) 길게 누르기·끌기가 끊기지 않는다. 그 밖은 평소처럼 스크롤된다.
+  var PADS = [];
+  function syncPads(){
+    var host = S && S.host; if(!host) return;
+    var fx = S.PW / S.W, fy = S.PH / S.H, n = 0;
+    if(S.mode !== 'ride') S.actors.forEach(function(a){
+      if(!a.vis || a.hidden || a.st === 'hidden' || a.dead) return;
+      var zz = zs(a.z), h = TH * zz * (a.hero ? 1.1 : 1), feet = zy(a.z) + a.y - (a.alt || 0) * zz, hw = Math.max(15, h * .52) + 6;
+      var pd = PADS[n]; if(!pd){ pd = document.createElement('div'); pd.className = 'cs-pad'; host.appendChild(pd); PADS[n] = pd; }
+      pd.style.display = 'block'; pd.style.width = (hw * 2 * fx).toFixed(1) + 'px'; pd.style.height = ((h + 16) * fy).toFixed(1) + 'px';
+      pd.style.transform = 'translate(' + ((a.x - hw) * fx).toFixed(1) + 'px,' + ((feet - h - 8) * fy).toFixed(1) + 'px)'; n++;
+    });
+    for(; n < PADS.length; n++) if(PADS[n].style.display !== 'none') PADS[n].style.display = 'none';
   }
   function heldStep(a, dt){
     var d = DRAG; if(!d || d.a !== a){ a.held = false; return; }
@@ -42446,6 +42473,7 @@ var _CS = (function(){
     if(S.mode === 'ride') drawRide(c); else drawStreet(c, dt);
     if(S.dark){ c.fillStyle = 'rgba(8,12,28,.10)'; c.fillRect(0, 0, S.W, S.H); }
     if(S.fade > 0){ c.save(); c.globalAlpha = clamp(S.fade, 0, 1); c.setTransform(1, 0, 0, 1, 0, 0); c.drawImage(S.prev, 0, 0); c.restore(); }
+    try{ syncPads(); }catch(e){}
   }
   function update(dt){
     var t = S.t;
