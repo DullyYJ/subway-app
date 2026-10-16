@@ -834,6 +834,32 @@ public class OverlayPlugin extends Plugin {
         } catch (Exception ignored) { }
     }
 
+    /**
+     * ★ 2026-10-16 (YJ: "종료는 앱 종료로 정확히 해줘. 도착 거의 전이니까 앱 종료해도 상관없을 거야"): 광고의 [종료] = 앱 완전 종료.
+     * 웹이 살아 있으면 먼저 알려 추천을 닫고 스스로 정리하게 한 뒤(recoEnd), 웹 없이도 되도록 여기서 직접 끝낸다 —
+     * 대기 서비스 중지 · 화면 켜 둠 해제 · 오버레이 내림 · 알림 모두 지움 · 화면(액티비티)을 최근 앱 목록에서도 지움 · 프로세스 종료.
+     */
+    private void quitApp() {
+        try { act("recoEnd"); } catch (Throwable ignored) { }
+        main.postDelayed(new Runnable() { @Override public void run() { finishQuit(); } }, 350L);
+    }
+
+    private void finishQuit() {
+        journeyOn = false; wanted = false;
+        try { KeepAliveService.send(getContext(), KeepAliveService.ACT_STOP); } catch (Throwable ignored) { }
+        stopKeepSvc();
+        try { if (cpuLock != null && cpuLock.isHeld()) cpuLock.release(); } catch (Throwable ignored) { }
+        try { detach(); } catch (Throwable ignored) { }
+        try {
+            android.app.NotificationManager nm = (android.app.NotificationManager) getContext().getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm != null) nm.cancelAll();
+        } catch (Throwable ignored) { }
+        try { Activity a = getActivity(); if (a != null) { if (Build.VERSION.SDK_INT >= 21) a.finishAndRemoveTask(); else a.finish(); } } catch (Throwable ignored) { }
+        main.postDelayed(new Runnable() { @Override public void run() {
+            try { android.os.Process.killProcess(android.os.Process.myPid()); } catch (Throwable ignored) { }
+        } }, 300L);
+    }
+
     /** 대기 모드(웹이 없다)에서의 손짓: 알약·손잡이는 앱 열기, [안내 종료]는 서비스 종료. 그 밖(탑승·되돌리기·추천)은 웹이 있어야 하는 일이라 하지 않는다. */
     private void actHosted(String a) {
         try {
@@ -1504,7 +1530,7 @@ public class OverlayPlugin extends Plugin {
                             if (demoActive()) { endDemo(); }                                  // 시연은 어디를 눌러도 닫힌다(실제 동작은 하지 않는다)
                             else if (rh == 1) { act("recoGo"); openApp(); }                    // [보기] — 추천 아이템·맛집으로(앱을 앞으로)
                             else if (rh == 3) { act("recoBus"); openApp(); }                   // [주변버스 보기] — 노선도의 버스 > 주변 정류장으로(앱을 앞으로)
-                            else if (rh == 2) act("recoOk");                               // [종료] — 이 추천 끄기
+                            else if (rh == 2) quitApp();                                   // [종료] — 앱을 완전히 끝낸다(도착 직전이라 안내를 이어갈 필요 없음)
                             else if (rh == 0) openApp();                                   // 추천 줄의 글자 부분: 앱으로
                             else if (inBottom && boardView != null && boardView.hitBtn(bx - boardView.getLeft(), by - boardView.getTop())) {
                                 act("undo".equals(rsSt) ? "undo" : "press");          // [탑승] / [되돌리기]

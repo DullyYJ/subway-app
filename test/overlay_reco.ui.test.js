@@ -87,6 +87,20 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     assert.deepStrictEqual(x.shop.slice(0, 3), ['맛집 보기', '주변버스 보기', '종료']); assert.ok(x.shop.includes('쿠팡 구경'));
     assert.deepStrictEqual(x.plain, ['확인', '다른 일']);   // 도착 추천이 아닌 브리핑은 예전 그대로
   });
+  await t('[종료] → 추천을 닫고 앱 종료를 요청한다(정확히 앱 종료)', async () => {
+    const x = await page.evaluate(async () => { window._ovlRecoOff = false; window._ovlRecoDismissAt = undefined; window._pipReco = { title: 't', body: '가\n나', at: Date.now(), ovlAt: Date.now() - 60000 }; window._arrLast = null; window._arrHomeEta = () => ({ arrMs: Date.now() + 100000, rem: 100 });
+      const calls = []; const k = window._exitConfirm; window._exitConfirm = () => calls.push('exit');
+      const before = !!(_ovlLines().reco && _ovlLines().reco.on); window._ovlAct('recoEnd'); window._exitConfirm = k;
+      return { before, after: !!(_ovlLines().reco && _ovlLines().reco.on), calls }; });
+    assert.deepStrictEqual(x, { before: true, after: false, calls: ['exit'] });
+  });
+  await t('앱 안 도착 팝업의 [종료]도 앱 종료를 요청한다', async () => {
+    const x = await page.evaluate(() => { const calls = []; const k = window._exitConfirm; window._exitConfirm = () => calls.push('exit');
+      window.__keep.modal('제목', '본문', null, { label: '맛집 위치 보기', call: '_arrGoFoodTab()', arr: true });
+      const ov = document.getElementById('briefModalOv'); const b = Array.from(ov.querySelectorAll('button')).find(x => x.textContent.trim() === '종료'); b.click();
+      window._exitConfirm = k; return { calls, closed: !document.getElementById('briefModalOv') }; });
+    assert.deepStrictEqual(x, { calls: ['exit'], closed: true });
+  });
   await t('[보기] 맛집 → 맛집 탭 + 추천 닫힘', async () => { const x = await act('recoGo', { label: 'x', call: '_arrGoFoodTab()' }); assert.deepStrictEqual(x, { before: true, after: false, calls: ['food'] }); });
   await t('[보기] 쿠팡 아이템 → 쿠팡 열기 + 추천 닫힘', async () => { const x = await act('recoGo', { kind: 'shop', item: {} }); assert.deepStrictEqual(x, { before: true, after: false, calls: ['shop'] }); });
   await t('[보기] 야식 → 팝업 없이 바로 배달앱 쪽으로(0.7초 뒤) + 추천 닫힘', async () => {
