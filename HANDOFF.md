@@ -886,3 +886,10 @@
 - **출시 전 삭제**: `www/index.html` 에서 `TEST-BUTTONS:BEGIN` ~ `TEST-BUTTONS:END` 두 구간(설정 카드 HTML, JS 블록) + `_ovlSync`·`_ovlKeepAliveSync`·`_ovlNativeTick` 안의 `// TEST-BUTTONS (출시 전 삭제)` 한 줄씩 + `test/overlay_test_buttons.ui.test.js` + CI 매트릭스 한 줄.
 - 시험: `overlay_test_buttons.ui` 12.
 - 한계: 실제 여정·엔진 판단은 거치지 않는다(네이티브가 그리는 모습만 확인). [종료]는 진짜 앱 종료다.
+
+## 2026-10-16(8) 도착 광고 문구 재설계 + 커뮤니티 제목 제거 + 맛집 헤더 정리 (YJ 스크린샷)
+- 광고(`_arrAd`): 식당·카페 첫 줄 = "가게 이름 · 추천 메뉴", 둘째 줄 = 날씨·요일·월급날 문구(`_arrHook`) + 그 메뉴 권유 한 문장(카페는 아침 음료). 거리·종류·"걸어서 N분"(`m`)은 비운다. 쿠팡도 같은 느낌: 첫 줄 = 상품 이름, 둘째 줄 = 상황 감성 한 줄(`_arrShopLine`, 없으면 `_arrShopSay`), 분류·"쿠팡" 표기 삭제. 앱 JS만 변경(네이티브는 `m` 이 비면 그리지 않음 — 기존 동작).
+- 커뮤니티 탭: 상단 "🔥 커뮤니티" 제목 줄 삭제 → 칩 줄이 그만큼 위로(하단 탭이 이름을 알려 준다).
+- 맛집 탭: "내 주변 맛집" 글자 삭제, "📍 ○○역 인근"을 "도착역 맛집" 제목 옆으로. 도착역이 있을 때도 같은 자리에 "○○역 인근".
+- 시험: `loading_chars.ui` 45 · `tabs_smoke.ui` 53 · overlay_reco/test_buttons/journey_alerts/journey_e2e 통과.
+- 한계: 실제 가게·메뉴는 알림을 만든 `_arrBuildAlert` 가 고른 것을 그대로 쓰므로, 가게 목록이 비면 예전 문구 줄로 간다. 화면 배치는 실기기 확인 전(헤더 줄바꿈은 flex-wrap).

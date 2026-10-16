@@ -285,7 +285,7 @@ const vis = (page, id) => page.evaluate(i => { const e = document.getElementById
   await t('맛집 탭: 경로가 없으면 내 위치 근처 역 기준으로 서버 맛집이 뜬다', async () => {
     const r = await page.evaluate(() => ({ label: document.getElementById('foodDestLabel').textContent, txt: document.getElementById('foodList').innerText }));
     const dg = await page.evaluate(() => JSON.stringify({ d: window._foodSrvDiag, p: window._foodPubDiag, f: _foodCurFilter, n: (_foodPublicData || []).length }));
-    assert.ok(/내 주변 맛집/.test(r.label), r.label); if (!/국밥집/.test(r.txt)) assert.fail(dg + ' ' + r.txt.slice(0, 60)); assert.ok(/서울역 국밥집/.test(r.txt), r.txt.slice(0, 100));
+    assert.ok(/역 인근/.test(r.label) && !/내 주변/.test(r.label), r.label); if (!/국밥집/.test(r.txt)) assert.fail(dg + ' ' + r.txt.slice(0, 60)); assert.ok(/서울역 국밥집/.test(r.txt), r.txt.slice(0, 100));
   });
   await t('맛집 카테고리 칩(카페)을 누르면 해당 가게만, 전체를 누르면 모두 보인다', async () => {
     await page.evaluate(() => [...document.querySelectorAll('.food-chip')].find(e => e.textContent.includes('카페')).click()); await page.clock.runFor(500);

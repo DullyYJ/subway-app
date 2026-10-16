@@ -3039,7 +3039,7 @@ function _foodLoadNearby(force){
     }
     var key = near ? near.name.replace(/역$/,'') : '내주변';
     var label = document.getElementById('foodDestLabel');
-    if(label) label.textContent = near ? ('📍 내 주변 맛집 (' + key + '역 인근)') : '📍 내 주변 맛집';
+    if(label) label.textContent = near ? ('📍 ' + key + '역 인근') : '';
     _foodCurFilter = _foodCurFilter || '\uc804\uccb4';
     _foodFromStn(key);   // \uc624\ud504\ub77c\uc778 CSV \uc778\uadfc \uc74c\uc2dd\uc810 (\uac00\uc7a5 \uac00\uae4c\uc6b4 \uc5ed \uae30\uc900)
   }
@@ -3081,14 +3081,14 @@ function loadFoodTab(force) {
 
   if(!destStn) {
     // ★ 도착역 미설정 → 현재 위치(GPS) 기준 주변 맛집
-    if(label) label.textContent = '내 주변 맛집 찾는 중...';
+    if(label) label.textContent = '위치 확인 중...';
     if(list && (!_foodAllData || !_foodAllData.length))
       list.innerHTML = '<div class="food-loading"><div class="food-spinner"></div>내 위치 확인 중...</div>';
     _foodLoadNearby(force);
     return;
   }
 
-  if(label) label.textContent = destStn + ' \uc5ed \uc8fc\ubcc0 \ub9db\uc9d1';
+  if(label) label.textContent = '📍 ' + String(destStn).replace(/역$/, '') + '역 인근';
   _foodCurFilter = _foodCurFilter || '\uc804\uccb4';
   _foodFromStn(destStn);   // \uc624\ud504\ub77c\uc778 CSV(\uc18c\uc0c1\uacf5\uc778 \uc0c1\uac00\uc815\ubcf4) \uc778\uadfc \uc74c\uc2dd\uc810
 }
@@ -19360,11 +19360,7 @@ window.addEventListener('unhandledrejection', function(e) {
 <div class="tab-body" id="tab-community" style="padding:0;gap:0;overflow:hidden;">
   <!-- 고정 헤더 영역 (스크롤 안됨) -->
   <div class="comm-fixed-top">
-    <!-- 헤더: 제목 -->
-    <div class="comm-header">
-      <span class="comm-title">🔥 커뮤니티</span>
-    </div>
-
+    <!-- ★ 2026-10-16 (YJ: "상단 커뮤니티 글자를 지우고 그만큼 화면을 위로 올려줘"): 제목 줄을 없앴다. 하단 탭이 이미 '커뮤니티'를 알려 준다. -->
     <!-- 카테고리 칩 -->
     <div class="filter-row" id="filterRow">
       <div class="chip" id="chipLiveTalk" onclick="showChatTab(this)">🔴실시간소통</div>
@@ -19884,8 +19880,8 @@ window.addEventListener('unhandledrejection', function(e) {
   <!-- 헤더 (고정) -->
   <div class="food-header" style="flex-shrink:0;">
     <div>
-      <div class="food-title">🍽️ 도착역 맛집</div>
-      <div class="food-dest" id="foodDestLabel">도착역을 설정하면 맛집을 추천해드려요</div>
+      <!-- ★ 2026-10-16 (YJ: "내 주변 맛집 글자는 지우고 ○○○ 인근은 도착역 맛집 옆에"): 제목 옆에 '○○역 인근' 을 둔다 -->
+      <div class="food-title">🍽️ 도착역 맛집<span class="food-dest" id="foodDestLabel">도착역을 설정하면 맛집을 추천해드려요</span></div>
     </div>
     <button class="food-refresh-btn" onclick="loadFoodTab(true)">🔄 새로고침</button>
   </div>
@@ -23483,18 +23479,15 @@ function _arrAd(a, slot, destStn){
     if(slot === 'shop'){
       var it = a.shop;
       if(!it || !it.n) return null;
-      // 설명 = 상품에 맞춘 한두 문장(날씨 상품은 기온·강수 · 그 밖은 상품 성격과 시간대). 알림 팝업과 같은 문장 엔진(_arrShopSay)
-      var say = '';
+      // ★ 2026-10-16 (YJ: "쿠팡도 식당·카페처럼 — 제품명 + 감성 한 줄, 분류·쿠팡 표기는 지워줘"): 첫 줄 = 상품 이름, 둘째 줄 = 지금 날씨·요일·시간에 맞춘 감성 한마디(_arrShopLine). m(분류·쿠팡)은 비운다.
+      var line = '', say = '';
+      try{ if(typeof _arrShopLine === 'function' && a.cx) line = _arrShopLine(it, a.cx) || ''; }catch(e){}
       try{
         var cxs = a.cx || {};
         if(typeof _arrShopSay === 'function') say = _arrShopSay(it, { temp: cxs.temp, rain: cxs.rain, weekend: !!cxs.weekend });
       }catch(e){}
-      // 상품별 이유 한 줄(_arrShopLine)도 있으면 덧붙인다 — 문장이 너무 일반적이면 그 줄로 바꾸고, 숫자(%·도)가 겹치면 덧붙이지 않는다
-      var line = '';
-      try{ if(typeof _arrShopLine === 'function' && a.cx) line = _arrShopLine(it, a.cx) || ''; }catch(e){}
-      if(!say || /눈여겨볼 만해서|써보기 좋아요/.test(say)) say = line || say;
-      else if(line && line !== say && !(/%/.test(say) && /%/.test(line)) && !(/\d+도/.test(say) && /\d+도/.test(line)) && say.length + line.length + 1 <= 62) say += ' ' + line;
-      return { k: 'shop', a: clean(it.n), b: clean(say), m: clean((it._cat ? it._cat + ' · ' : '') + '쿠팡') };
+      var shopB = line || say;
+      return { k: 'shop', a: clean(it.n), b: clean(shopB), m: '' };
     }
     var sl = (slot === 'morning') ? 'morning' : (slot === 'lunch' ? 'lunch' : (a.dinner ? 'dinner' : 'night'));
     var list = null;
@@ -23509,28 +23502,25 @@ function _arrAd(a, slot, destStn){
     var word = (sl === 'morning' || byMenu) ? (a.menu || catTail) : (catTail || a.menu || '');
     var hk = '';
     try{ if(typeof _arrHook === 'function') hk = _arrHook(sl, a.cx, word).t || ''; }catch(e){}
-    var d;
-    if(sl === 'morning'){
-      d = hk + (a.menu ? (hk ? ' · ' : '') + a.menu + (a.brunch ? ' + ' + a.brunch : '') + ' 어때요?' : '');
-    } else {
-      d = hk;
-      if(word && d.indexOf(word) < 0) d += (d ? ' · ' : '') + word + ' 어때요?';
-    }
-    if(d.length <= 30){   // 문구가 짧으면 업종에 맞춘 한마디를 덧붙여 설명을 채운다
-      var pitch = '', ptxt = (catTail || '') + ' ' + (word || '') + ' ' + (info ? String(info.c || '') : '');
+    // ★ 2026-10-16 (YJ: "식당명·추천메뉴 / 감성적으로 메뉴 추천, 카페도 날씨·일자 문구로 메뉴 추천, 거리·종류는 지워줘")
+    //   첫 줄 = "가게 이름 · 추천 메뉴" · 둘째 줄 = 날씨·요일·월급날에 맞춘 감성 문구 + 그 메뉴 권유 한 문장. m(거리·종류·걸어서 N분)은 비운다.
+    var d = String(hk || '').replace(/\s*어때요\??$/, '').trim();
+    if(!word){
+      if(!d) d = _arrVar(_ARR_FOOD_PITCH_DEFAULT, a.cx, nm.length);
+    } else if(!d){
+      var pitch = '', ptxt = (catTail || '') + ' ' + word + ' ' + (info ? String(info.c || '') : '');
       for(var pi = 0; pi < _ARR_FOOD_PITCH.length && !pitch; pi++){
         if(_ARR_FOOD_PITCH[pi][0].test(ptxt)) pitch = _arrVar(_ARR_FOOD_PITCH[pi][1], a.cx, nm.length);
       }
-      if(!pitch) pitch = _arrVar(_ARR_FOOD_PITCH_DEFAULT, a.cx, nm.length);
-      d += (d ? ' · ' : '') + pitch;
+      d = pitch ? (pitch + '. ' + word + ' 어때요?') : (word + ' 어때요?');
+    } else if(d.slice(-word.length) === word){
+      d += ' 어때요?';                                   // "…점심은 국밥" → "…점심은 국밥 어때요?"
+    } else if(d.indexOf(word) >= 0){
+      // 문구 안에 이미 메뉴가 있다(…로 데워요 등) — 그대로 둔다
+    } else {
+      d += (/[요죠다]$/.test(d) ? '. ' : ', ') + word + ' 어때요?';
     }
-    var parts = [];
-    if(info && info.d != null && isFinite(info.d)){
-      parts.push(info.d >= 1000 ? (info.d / 1000).toFixed(1) + 'km' : Math.round(info.d) + 'm');
-      if(catTail) parts.push(catTail);
-      if(info.d <= 1000) parts.push('걸어서 ' + Math.max(1, Math.round(info.d / 70)) + '분');
-    } else if(catTail) parts.push(catTail);
-    return { k: (sl === 'morning' ? 'cafe' : 'food'), a: clean(nm), b: clean(d), m: clean(parts.join(' · ')) };
+    return { k: (sl === 'morning' ? 'cafe' : 'food'), a: clean(word ? nm + ' · ' + word : nm), b: clean(d), m: '' };
   }catch(e){ return null; }
 }
 window._arrAd = _arrAd;
@@ -29706,7 +29696,7 @@ function _ovlTestPayload(T, now){
   var rem = Math.max(0, _OVT_STN.length - 1 - cur);
   var reco = { on: false };
   if(m === 'reco' && window._ovlRecoDismissAt === undefined){   // [맛집 보기]·[주변버스 보기]를 누르면 _ovlRecoDismiss 가 값을 채워 추천이 닫힌다
-    reco = { on: true, ch: 'dolsom', a: '테스트 식당 · 돈가스', b: '내리는 길에 한 번 들러 봐요', m: '120m · 식당', go: '맛집 보기', bus: '주변버스 보기', end: '종료', at: ph.at };
+    reco = { on: true, ch: 'dolsom', a: '테스트 식당 · 돈가스', b: '비 오는 점심엔 따끈한 돈가스 어때요?', m: '', go: '맛집 보기', bus: '주변버스 보기', end: '종료', at: ph.at };
   }
   return { active: true, line1: _OVT_STN[cur][0], pill: '', track: _OVT_STN.map(function(x){ return x[0]; }), cur: cur, base: 0, theme: _ovlThemeColors(), cells: cells,
            line2: '남은시간: 00시간 0' + rem + '분 · 18:48도착', line3: '', alert: lv, alertAt: lv ? ph.at : 0, alertVibe: lv > 0, pre: false, moving: false,
@@ -39604,7 +39594,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
 .food-header{padding:16px 16px 8px;display:flex;align-items:center;justify-content:space-between;}
 .food-title{font-size:18px;font-weight:800;color:var(--text);}
-.food-dest{font-size:13px;color:var(--gold);font-weight:600;margin-top:2px;}
+.food-title{display:flex;align-items:baseline;flex-wrap:wrap;column-gap:8px;}
+.food-dest{font-size:13px;color:var(--gold);font-weight:600;}
 .food-refresh-btn{background:var(--card);border:1px solid var(--border);border-radius:20px;
   padding:6px 14px;font-size:12px;color:var(--sub);cursor:pointer;}
 .food-filter{display:flex;gap:8px;padding:0 16px 12px;overflow-x:auto;-webkit-overflow-scrolling:touch;}
