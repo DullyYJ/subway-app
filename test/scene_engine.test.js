@@ -108,6 +108,19 @@ const S = (name, line) => N({ name, isSub: true, lineName: line || '2호선' }),
     const seen = new Set(); for (let i = 0; i < 40; i++) seen.add(decide({ nowMs: ms('2026-10-15T09:00:00'), locked: true, key: 'route' + i, here: 1, nodes: BUS }, null).hero);
     assert(seen.size >= 4, '여러 캐릭터가 골고루 뽑힌다: ' + [...seen]);
   });
+  await t('캐릭터 특성(YJ 10-16): 6종 모두 착지 연출·동작 대본이 있고, 가을·눈 올 때만 낙엽 다이빙이 들어간다', () => {
+    const LAND = { dolsom: 'cotton', ppopu: 'pose', dudung: 'dig', lovel: 'flip', sul: 'fly', chaeng: 'puddle' };
+    const sp = { dolsom: ['shake', 'tailchase', 'loaf', 'ball', 'mirror'], ppopu: ['dig', 'bone', 'dance', 'slide'], lovel: ['punch', 'box', 'stretch', 'melt', 'pounce'], dudung: ['shades', 'flag', 'lens', 'dust', 'vanish'], sul: ['glasses', 'stumble', 'feather', 'binoc', 'hover'], chaeng: ['dash', 'flop', 'hide', 'bubbles', 'dew'] };
+    const aut = decide({ nowMs: ms('2026-10-16T12:00:00'), locked: false }, null), sum = decide({ nowMs: ms('2026-07-16T12:00:00'), locked: false }, null), snow = decide({ nowMs: ms('2026-01-16T12:00:00'), locked: false }, { txt: '눈', temp: -2, rain: 80 });
+    Object.keys(LAND).forEach(id => {
+      assert.strictEqual(aut.traits[id].land, LAND[id]);
+      sp[id].forEach(x => assert(aut.traits[id].acts.includes(x), id + ' 동작 ' + x));
+      assert(aut.traits[id].acts.includes('walk'), '걷기가 사이에 끼는지');
+    });
+    assert(aut.traits.ppopu.acts.includes('dive') && snow.traits.ppopu.acts.includes('dive'), '가을·눈에는 다이빙');
+    assert(!sum.traits.ppopu.acts.includes('dive'), '여름엔 다이빙 없음');
+    const a2 = decide({ nowMs: ms('2026-10-16T12:01:00'), locked: false }, null); assert.deepStrictEqual(a2.traits, aut.traits, '같은 시각대(10분)면 같은 대본');
+  });
   await t('잘못된 입력에도 죽지 않는다', () => {
     assert.strictEqual(decide({ locked: true, nodes: [] }, null).mode, null); assert.strictEqual(decide({ locked: true, here: 99, nodes: BUS }, null).mode, 'alight'); assert.strictEqual(decide(null, null).mode, 'idle');
     assert.strictEqual(decide({ locked: true, here: -5, nodes: BUS }, null).mode, 'wait');

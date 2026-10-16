@@ -159,8 +159,9 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     await page.mouse.move(tx, ty, { steps: 8 }); await page.waitForTimeout(700);
     w = await where(page); const h = w.actors.find(a => a.held); assert(h && Math.abs(h.sx - tx) < 14, '손가락을 따라온다 ' + JSON.stringify(h) + ' target ' + tx);
     await page.mouse.up(); await page.waitForTimeout(1500);
-    i = await info(page); const d = i.actors.find(a => a.id === a0.id); assert(!i.drag && d && !d.held && (d.st === 'rest' || d.st === 'stand') && Math.abs(d.x - Math.round((tx - w.r.l) / w.r.w * w.W)) < 12, '놓은 자리에 선다 ' + JSON.stringify(d));
-    await page.waitForTimeout(1500); i = await info(page); const d2 = i.actors.find(a => a.id === a0.id); assert(d2 && Math.abs(d2.x - d.x) < 6, '잠깐 그 자리에 머문다 ' + JSON.stringify([d, d2]));
+    i = await info(page); const d = i.actors.find(a => a.id === a0.id); const OKST = ['act', 'walk', 'stand', 'hop', 'spin', 'rest', 'emerge'];
+    assert(!i.drag && d && !d.held && OKST.includes(d.st) && (d.land === 'fly' || Math.abs(d.x - Math.round((tx - w.r.l) / w.r.w * w.W)) < 14), '놓은 자리에 내려앉는다 ' + JSON.stringify(d));
+    await page.waitForTimeout(1500); i = await info(page); const d2 = i.actors.find(a => a.id === a0.id); assert(d2 && !d2.held && d2.st !== 'fall', '놓자마자 가만있지 않고 바로 움직인다(동작·걷기) ' + JSON.stringify([d, d2]));
     assert(!errs.length, errs.join('|')); await ctx.close();
   });
   await t('(10:18 YJ) 손가락(터치)으로도 따라다닌다 — 길게 누른 뒤 pointercancel·lostpointercapture 가 와도 놓은 것으로 보지 않고, touchend 로만 놓는다 · 잡은 동안 화면은 스크롤되지 않는다', async () => {
@@ -196,7 +197,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     await page.mouse.move(w.r.l + w.r.w * .5, w.r.t + w.r.h * .12, { steps: 6 }); await page.waitForTimeout(500);
     const sky = (await where(page)).actors.find(a => a.held); assert(sky && sky.sy < w.r.t + w.r.h * .45, '하늘 높이 들려 있다 ' + JSON.stringify(sky));
     await page.mouse.up(); await page.waitForTimeout(1800);
-    const i = await info(page), d = i.actors.find(a => a.id === sky.id); assert(d && !d.held && (d.st === 'rest' || d.st === 'stand') && d.z <= -.1, '도로 건너편 끝에 내려앉는다 ' + JSON.stringify(d));
+    const i = await info(page), d = i.actors.find(a => a.id === sky.id); assert(d && !d.held && ['act', 'walk', 'stand', 'hop', 'spin', 'rest', 'emerge'].includes(d.st) && (d.land === 'fly' || d.z <= -.1), '도로 건너편 끝에 내려앉는다 ' + JSON.stringify(d));
     assert(!errs.length, errs.join('|')); await ctx.close();
   });
   await t('버스 안(ride)에서는 잡히지 않는다 · 정류장 대기의 대표 캐릭터는 잡아서 옮기면 그 자리에 머문다', async () => {
@@ -241,6 +242,30 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     }
     assert(heroes.size >= 2, '대표 캐릭터가 골고루 뽑힌다: ' + [...heroes]);
     assert(!errs.length, errs.join('|')); await ctx.close();
+  });
+  await t('(12:00 YJ) 캐릭터별 동작·착지 연출: 엔진 대본(traits)의 모든 동작이 오류 없이 돌아가고, 놓으면 엔진이 정한 land 대로 내려앉은 뒤 바로 움직인다', async () => {
+    const { ctx, page, errs } = await fresh({ wx: { temp: -2, rain: 80, txt: '눈' } });     // 눈 → 다이빙(dive)까지 포함
+    await page.waitForTimeout(1200);
+    const traits = await page.evaluate(() => _CS.last().traits); const LAND = { dolsom: 'cotton', ppopu: 'pose', dudung: 'dig', lovel: 'flip', sul: 'fly', chaeng: 'puddle' };
+    for (const id of Object.keys(LAND)) {
+      assert(traits[id] && traits[id].land === LAND[id], id + ' 착지 연출은 엔진이 준다: ' + JSON.stringify(traits[id]));
+      const acts = [...new Set(traits[id].acts.filter(x => !['walk', 'hop', 'spin', 'rest'].includes(x)))];
+      for (const act of acts) {
+        await page.evaluate(([id, act]) => _CS._play(id, act, true), [id, act]);
+        for (let k = 0; k < 6; k++) { await page.evaluate(() => _CS._tick(1)); const i = await info(page); assert(!i.err, id + ':' + act + ' ' + i.err); }
+        const a = (await info(page)).actors[0]; assert(a && ['act', 'walk', 'stand', 'hop', 'spin', 'rest', 'emerge'].includes(a.st), id + ':' + act + ' 끝나면 이어서 움직인다 ' + JSON.stringify(a));
+      }
+      await page.evaluate(i => _CS._drop(i, 70, true), id);
+      const seen = new Set(); for (let k = 0; k < 14; k++) { await page.evaluate(() => _CS._tick(.5)); const a = (await info(page)).actors[0]; if (a) { seen.add(a.act || a.st); assert(!a.held, id + ' 놓았는데 들려 있다'); } }
+      assert(seen.has('L_' + LAND[id]) || LAND[id] === 'fly' && seen.has('flyaway'), id + ' 착지 연출이 나온다: ' + [...seen]);
+      const z = (await info(page)).actors[0]; assert(z && z.st !== 'fall' && z.st !== 'held' && z.vis, id + ' 연출 뒤 멈춰 있지 않다 ' + JSON.stringify(z));
+    }
+    assert(!errs.length, errs.join('|')); await ctx.close();
+  });
+  await t('(12:00 YJ) 동작을 고르는 코드가 앱에 없다 — 엔진 traits 이름대로만 한다', async () => {
+    const src = fs.readFileSync(html, 'utf8');
+    assert(!/var km = a\.km, t = S\.t, w = \{ walk/.test(src), '앱이 가중치로 동작을 고르던 코드가 남아 있다');
+    assert(/S\.res\.traits\[a\.id\]/.test(src) && /function landOf/.test(src), '엔진 traits 를 따른다');
   });
   await t('앱에는 장면·구간·날씨 판정 코드가 없다(엔진 값만 그린다)', async () => {
     const src = fs.readFileSync(html, 'utf8');
