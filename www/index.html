@@ -42209,7 +42209,8 @@ var _CS = (function(){
     var t = S.t, res = S.res, W = S.W;
     dragReset(); S.mode = mode; S.actors = []; S.traffic = []; S.pt = []; S.hero = null; S.seq = null; S.nextCar = t + rnd(1.2, 3); S.spawnAt = t + .2; S.castI = 0; S.ripples = []; S.rideBell = 0;
     S.stopX = Math.round(W * .3); S.entX = Math.round(W * .36); S.venue = res.venue === 'sub' ? 'sub' : 'bus'; S.baseDir = S.venue === 'sub' ? 1 : -1;
-    var heroId = res.hero && _RC.d3[res.hero] ? res.hero : 'lovel';
+    var heroId = res.hero && _RC.d3[res.hero] ? res.hero : null;     // 대표 캐릭터는 엔진이 정한다. 없으면 앱이 대신 고르지 않고 캐릭터 없이 배경만 그린다
+    if(!heroId && mode !== 'idle') { mode = 'idle'; S.mode = 'idle'; }     // 엔진이 대표 캐릭터를 안 줬으면 주인공 장면 대신 배경만
     if(mode === 'wait'){
       var h = mkActor(heroId, S.venue === 'sub' ? S.entX + 6 : W * .48, S.venue === 'sub' ? .62 : .66, S.baseDir); h.hero = true; h.k *= 1.12; h.w *= 1.12; h.spd *= 1.1; h.st = 'stand'; h.ph = Math.random() * 6; h.umb = S.L.wk === 'rain' || S.L.wk === 'snow'; h.life = 1e9; S.hero = h; S.actors.push(h); S.waitNext = t + rnd(1.5, 3);
       if(S.venue === 'bus') S.traffic.push({ lane: 1, bus: true, L: laneL(1, true), dir: 1, x: -40, v: 52, color: pickOf(BUS_COLORS), no: pickOf(BUS_NOS), rot: 0 });
@@ -42226,7 +42227,7 @@ var _CS = (function(){
     S.actors = S.actors.filter(function(o){ return !o.dead; });
     var heroIn = S.hero ? 1 : 0;
     if(alive < want && t >= S.spawnAt && !(S.mode === 'alight' && S.seq && (S.seq.busOn || S.seq.ph < 3))){
-      var cast = S.res.cast && S.res.cast.length ? S.res.cast : _RC.order, id = null, tries = 0;
+      var cast = S.res.cast && S.res.cast.length ? S.res.cast : [], id = null, tries = 0;     // 등장 순서도 엔진이 정한다(없으면 아무도 안 나온다)
       while(tries++ < cast.length){ var cand = cast[S.castI++ % cast.length]; if(!S.actors.some(function(o){ return o.id === cand && !o.leaving; }) && _RC.d3[cand]) { id = cand; break; } }
       if(id){
         var left = Math.random() < .5, a2 = mkActor(id, 0, rnd(.1, .95), left ? 1 : -1), D = a2.D;

@@ -246,6 +246,8 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     const src = fs.readFileSync(html, 'utf8');
     ['phaseFor', 'function slotOf', 'function wxKind', 'function seasonOf', '_congLegNode', '_congSubNodeFrom', 'function sceneDecide'].forEach(k => assert(!src.includes(k), '앱에 판정 코드가 남아 있다: ' + k));
     assert(/last\.fill === true/.test(src), '키울지 말지는 엔진의 fill 값을 따른다');
+    assert(!/res\.hero && _RC\.d3\[res\.hero\] \? res\.hero : '/.test(src), '대표 캐릭터를 엔진이 안 줬다고 앱이 대신 고르면 안 된다');
+    assert(!/S\.res\.cast : _RC\.order/.test(src), '등장 순서를 엔진이 안 줬다고 앱이 대신 정하면 안 된다');
     assert(/_SCENE_URL/.test(src) && /\/scene'/.test(src), '엔진 /scene 호출');
   });
   await t('JS 오류 없음 · 어두운/파스텔 테마 모두 그려진다', async () => {
