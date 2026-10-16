@@ -32,11 +32,12 @@ t('추천 줄: 버튼 이름(bus·end)을 웹이 보내고 못 받으면 기본 
   assert.ok(/rcEnd = rc\.optString\("end", ""\); if \(rcEnd\.length\(\) == 0\) rcEnd = "종료";/.test(j));
 });
 t('[주변버스 보기]는 웹에 recoBus 를 알리고 앱을 앞으로 가져온다', () => assert.ok(/rh == 3\) \{ act\("recoBus"\); openApp\(\); \}/.test(j)));
-t('[종료]는 앱을 완전히 끝낸다: 웹에 recoEnd 를 알리고, 서비스·화면 켜 둠·오버레이·알림·액티비티·프로세스를 정리한다', () => {
+t('[종료]는 앱을 완전히 끝낸다: 웹에 recoEnd 를 알리고, 서비스·화면 켜 둠·오버레이·알림·액티비티를 정리하고 프로세스(시계 위젯)는 살려 둔다', () => {
   assert.ok(/else if \(rh == 2\) quitApp\(\);/.test(j));
   assert.ok(/act\("recoEnd"\)/.test(body('private void quitApp()')));
   const q = body('private void finishQuit()');
-  for (const re of [/KeepAliveService\.ACT_STOP/, /stopKeepSvc\(\)/, /cpuLock\.release\(\)/, /detach\(\)/, /cancelAll\(\)/, /finishAndRemoveTask\(\)/, /killProcess\(/]) assert.ok(re.test(q), String(re));
+  for (const re of [/KeepAliveService\.ACT_STOP/, /stopKeepSvc\(\)/, /cpuLock\.release\(\)/, /detach\(\)/, /cancelAll\(\)/, /finishAndRemoveTask\(\)/, /WidgetCore\.onAppLeft\(/]) assert.ok(re.test(q), String(re));
+  assert.ok(!/killProcess|System\.exit/.test(j), '프로세스를 죽이면 시계 위젯 동물들이 멈춘다');
 });
 t('버튼 눌림 판정은 셋 모두(겹치면 손가락에 가까운 쪽)', () => { const h = body('int hit(float x, float y)'); assert.ok(/RectF\[\] rs = \{ go, bus, ok \};/.test(h) && /int\[\] id = \{ 1, 3, 2 \};/.test(h)); });
 console.log('\n' + pass + ' pass, ' + fail + ' fail'); process.exit(fail ? 1 : 0);

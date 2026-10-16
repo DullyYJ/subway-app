@@ -89,10 +89,10 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   });
   await t('[종료] → 추천을 닫고 앱 종료를 요청한다(정확히 앱 종료)', async () => {
     const x = await page.evaluate(async () => { window._ovlRecoOff = false; window._ovlRecoDismissAt = undefined; window._pipReco = { title: 't', body: '가\n나', at: Date.now(), ovlAt: Date.now() - 60000 }; window._arrLast = null; window._arrHomeEta = () => ({ arrMs: Date.now() + 100000, rem: 100 });
-      const calls = []; const k = window._exitConfirm; window._exitConfirm = () => calls.push('exit');
-      const before = !!(_ovlLines().reco && _ovlLines().reco.on); window._ovlAct('recoEnd'); window._exitConfirm = k;
+      const calls = []; const k = window._exitConfirm, kc = window.closeTransitResult; window._exitConfirm = () => calls.push('exit'); window.closeTransitResult = () => calls.push('close');
+      const before = !!(_ovlLines().reco && _ovlLines().reco.on); window._ovlAct('recoEnd'); window._exitConfirm = k; window.closeTransitResult = kc;
       return { before, after: !!(_ovlLines().reco && _ovlLines().reco.on), calls }; });
-    assert.deepStrictEqual(x, { before: true, after: false, calls: ['exit'] });
+    assert.deepStrictEqual(x, { before: true, after: false, calls: ['close', 'exit'] });   // 여정 정리(GPS·알림·오버레이) 뒤 앱 종료
   });
   await t('앱 안 도착 팝업의 [종료]도 앱 종료를 요청한다', async () => {
     const x = await page.evaluate(() => { const calls = []; const k = window._exitConfirm; window._exitConfirm = () => calls.push('exit');

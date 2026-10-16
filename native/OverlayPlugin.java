@@ -837,7 +837,8 @@ public class OverlayPlugin extends Plugin {
     /**
      * ★ 2026-10-16 (YJ: "종료는 앱 종료로 정확히 해줘. 도착 거의 전이니까 앱 종료해도 상관없을 거야"): 광고의 [종료] = 앱 완전 종료.
      * 웹이 살아 있으면 먼저 알려 추천을 닫고 스스로 정리하게 한 뒤(recoEnd), 웹 없이도 되도록 여기서 직접 끝낸다 —
-     * 대기 서비스 중지 · 화면 켜 둠 해제 · 오버레이 내림 · 알림 모두 지움 · 화면(액티비티)을 최근 앱 목록에서도 지움 · 프로세스 종료.
+     * 대기 서비스 중지 · 화면 켜 둠 해제 · 오버레이 내림 · 알림 모두 지움 · 화면(액티비티)을 최근 앱 목록에서도 지움.
+     * ★ 프로세스는 남겨 둔다(YJ: "앱 종료 전 시계 위젯은 살려둬야 동물들이 돌아다니지") — 위젯 동물 애니메이션이 이 프로세스의 핸들러로 돈다.
      */
     private void quitApp() {
         try { act("recoEnd"); } catch (Throwable ignored) { }
@@ -855,9 +856,8 @@ public class OverlayPlugin extends Plugin {
             if (nm != null) nm.cancelAll();
         } catch (Throwable ignored) { }
         try { Activity a = getActivity(); if (a != null) { if (Build.VERSION.SDK_INT >= 21) a.finishAndRemoveTask(); else a.finish(); } } catch (Throwable ignored) { }
-        main.postDelayed(new Runnable() { @Override public void run() {
-            try { android.os.Process.killProcess(android.os.Process.myPid()); } catch (Throwable ignored) { }
-        } }, 300L);
+        try { WidgetCore.onAppLeft(getContext()); } catch (Throwable ignored) { }      // 화면이 닫혔으니 시계 위젯 동물들을 바로 깨운다
+        // ★ 프로세스는 죽이지 않는다 — 홈 화면 시계 위젯(동물들이 돌아다님)은 앱과 같은 프로세스에서 움직인다(WidgetCore). 화면·서비스·오버레이만 끝낸다.
     }
 
     /** 대기 모드(웹이 없다)에서의 손짓: 알약·손잡이는 앱 열기, [안내 종료]는 서비스 종료. 그 밖(탑승·되돌리기·추천)은 웹이 있어야 하는 일이라 하지 않는다. */

@@ -29603,6 +29603,8 @@ function _ovlRecoEnd(){
   try{
     _ovlRecoDismiss();
     var ov = document.getElementById('briefModalOv'); if(ov) ov.remove();
+    // 여정 정리(백그라운드 GPS·알림·오버레이·타이머) — 프로세스는 남겨 두므로(시계 위젯 동물들) 웹이 스스로 모두 멈춰야 한다
+    try{ if(typeof closeTransitResult === 'function') closeTransitResult(); else if(typeof _cleanupBgTracking === 'function') _cleanupBgTracking(); }catch(e1){}
     if(typeof _exitConfirm === 'function') _exitConfirm();
   }catch(e){}
 }

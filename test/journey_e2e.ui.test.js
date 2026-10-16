@@ -114,9 +114,9 @@ const pass_through = async (page, n) => {
   await t('오버레이 경고 단계가 0 에서 시작해 1 에 도달한다', async () => { const a = await page.evaluate(() => window.__ovl.map(o => o.alert)); assert.ok(a.includes(0) && a.includes(1) && a.indexOf(1) > a.indexOf(0), JSON.stringify(a) + ' / ' + seen.map(x => x.step).join(' | ')); });
 
   console.log('[안내 종료(×) — 모든 갱신이 같이 멈춘다]');
-  await t('하차 전 추천 팝업이 떠 있으면 [종료]로 닫힌다(2026-10-16: 버튼이 맛집 보기·주변버스 보기·종료)', async () => {
+  await t('하차 전 추천 팝업이 떠 있으면 바깥을 눌러 닫힌다(2026-10-16: 버튼은 맛집 보기·주변버스 보기·종료 — [종료]는 앱 종료라 여정까지 닫는다)', async () => {
     assert.ok(await page.evaluate(() => !!document.getElementById('briefModalOv')), '팝업이 안 떴음');
-    await page.click('#briefModalOv button:last-child'); await page.clock.runFor(300);
+    await page.click('#briefModalOv', { position: { x: 4, y: 4 } }); await page.clock.runFor(300);
     assert.ok(await page.evaluate(() => !document.getElementById('briefModalOv')));
   });
   await page.click('#transitResultCard button[onclick="closeTransitResult()"]'); await page.clock.runFor(8000);
