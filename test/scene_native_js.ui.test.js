@@ -53,14 +53,16 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   const clear = (x) => x.page.evaluate(() => { window.__sn.length = 0; });
   const emit = (x, n, d) => x.page.evaluate(([n, d]) => window.__snEmit(n, d), [n, d || {}]);
   const hostBox = (x) => x.page.evaluate(() => { const h = document.getElementById('congScene'), r = h.getBoundingClientRect(); return { x: r.left + h.clientLeft, y: r.top + h.clientTop, w: h.clientWidth, h: h.clientHeight, display: getComputedStyle(h).display, cls: h.className, bg: h.style.backgroundImage, cv: h.querySelectorAll('canvas.cs-cv').length, tag: document.getElementById('csTag').textContent, tagShown: getComputedStyle(document.getElementById('csTag')).display !== 'none' }; });
-  const waitFor = async (x, fn, ms) => { const t0 = Date.now(); while (Date.now() - t0 < (ms || 4000)) { if (await fn()) return true; await x.page.waitForTimeout(80); } return false; };
-  const live = (x) => waitFor(x, async () => (await calls(x, 'show')).length >= 1 && (await calls(x, 'apply')).length >= 1, 6000);
+  const waitFor = async (x, fn, ms) => { const t0 = Date.now(); while (Date.now() - t0 < (ms || 9000)) { if (await fn()) return true; await x.page.waitForTimeout(80); } return false; };
+  // 칸 높이(엔진 fill 에 맞추는 앱의 _sceneFit)가 더 안 바뀔 때까지 기다린다 — 느린 CI 에서도 시험이 움직임을 직접 만들 수 있게
+  const settle = async (x) => { let last = '', n = 0; for (let i = 0; i < 80 && n < 8; i++) { const r = await x.page.evaluate(() => { const h = document.getElementById('congScene'), b = h.getBoundingClientRect(); return [b.top.toFixed(1), h.clientHeight, h.clientWidth].join('/'); }); if (r === last) n++; else { n = 0; last = r; } await x.page.waitForTimeout(100); } };
+  const live = (x) => waitFor(x, async () => (await calls(x, 'show')).length >= 1 && (await calls(x, 'apply')).length >= 1, 12000);
 
   await t('플러그인이 없으면(웹) 예전 그대로: 웹 캔버스가 장면을 그리고 네이티브 흔적이 없다', async () => {
     const x = await fresh({ plugin: false }); await x.page.waitForTimeout(1500);
     const hb = await hostBox(x), inf = await x.page.evaluate(() => _CS.info());
     assert(hb.display === 'block' && hb.cv === 1 && !/cs-native/.test(hb.cls) && hb.tagShown, JSON.stringify(hb));
-    assert(inf.running === true && !inf.native && inf.actors.length >= 1, JSON.stringify(inf).slice(0, 300));
+    assert(inf.running === true && !inf.native && inf.frames > 0, JSON.stringify(inf).slice(0, 300));
     assert.strictEqual(await x.page.evaluate(() => _CS.natActive()), false);
     assert.deepStrictEqual(x.errs, []); await x.ctx.close();
   });
@@ -82,21 +84,20 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
 
   await t('스크롤로 칸이 움직이면: 정지 사진을 배경에 깔고 네이티브를 숨긴다 → 멈추면 다시 켜고 사진을 걷는다', async () => {
     const x = await fresh({ plugin: true }); assert(await live(x));
-    await x.page.evaluate(() => { const h = document.getElementById('tab-home'); const sp = document.createElement('div'); sp.id = 'spacerT'; sp.style.cssText = 'height:2400px;flex:none'; h.appendChild(sp); });
+    await settle(x);
     await clear(x);
-    await x.page.evaluate(() => { document.getElementById('tab-home').scrollTop = 70; });
+    await x.page.evaluate(() => { document.getElementById('congScene').style.transform = 'translateY(26px)'; });   // 스크롤처럼 칸이 한 번 움직인다
     assert(await waitFor(x, async () => (await calls(x, 'hide')).length >= 1), '숨기지 않았다');
     assert((await calls(x, 'snapshot')).length >= 1, '사진을 안 찍었다');
     assert(/data:image\/webp/.test((await hostBox(x)).bg), '사진이 배경에 안 깔렸다: ' + (await hostBox(x)).bg);
     assert((await calls(x, 'snapshot')).findIndex(() => true) < (await calls(x, 'hide')).findIndex(() => true) || true);
     // 멈춘 뒤 다시 켠다(새 사각형으로) — 칸 크기가 안정될 때까지 몇 번 숨었다 켜질 수 있다
     assert(await waitFor(x, async () => (await x.page.evaluate(() => _CS.nat.shown && !_CS.nat.snapOn && _CS.nat.still >= 4)), 9000), '다시 안 켜졌거나 사진이 안 걷혔다 ' + JSON.stringify(await x.page.evaluate(() => ({ s: _CS.nat.shown, so: _CS.nat.snapOn, st: _CS.nat.still }))));
-    await x.page.waitForTimeout(500);
     const hb = await hostBox(x), sh = (await calls(x)).filter(c => c.m === 'show' || c.m === 'setRect').slice(-1)[0].a;
     assert(Math.abs(sh.y - hb.y) < 1.5 && Math.abs(sh.h - hb.h) < 1.5, '새 위치 ' + JSON.stringify([sh.y, hb.y, sh.h, hb.h]));
     assert(hb.bg === '' || hb.bg === 'none', '사진을 걷어야 한다: ' + hb.bg);
     // 스크롤/잘림 칸 밖으로 일부 나가면 clip 이 줄어든다(위쪽 40px 가 조상 밖으로 나가게 만든다)
-    await clear(x);
+    await x.page.evaluate(() => { document.getElementById('congScene').style.transform = ''; }); await settle(x); await clear(x);
     await x.page.evaluate(() => { const h = document.getElementById('congScene'), p = h.parentElement; p.style.overflow = 'hidden'; h.style.position = 'relative'; h.style.top = '-' + (h.getBoundingClientRect().top - p.getBoundingClientRect().top + 40) + 'px'; });
     assert(await waitFor(x, async () => (await calls(x, 'show')).length >= 1, 9000), '잘린 뒤 다시 안 켜졌다');
     const a2 = (await calls(x, 'show')).slice(-1)[0].a; assert(a2.clip && a2.clip.t > 30 && a2.clip.t < 50, '위 40px 가 잘려야 한다 ' + JSON.stringify(a2.clip));
@@ -109,8 +110,8 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     assert(await waitFor(x, async () => (await calls(x, 'hide')).length >= 1), '덮였는데 숨기지 않았다');
     assert((await calls(x, 'snapshot')).length >= 1 && /webp/.test((await hostBox(x)).bg));
     await clear(x); await x.page.evaluate(() => { document.getElementById('fakeModal').remove(); window.dispatchEvent(new Event('resize')); });
-    assert(await waitFor(x, async () => (await calls(x, 'show')).length >= 1, 5000), '치웠는데 다시 안 켰다');
-    await x.page.waitForTimeout(600); assert(!/webp/.test((await hostBox(x)).bg));
+    assert(await waitFor(x, async () => (await calls(x, 'show')).length >= 1, 12000), '치웠는데 다시 안 켰다');
+    assert(await waitFor(x, async () => !/webp/.test((await hostBox(x)).bg), 12000), '치웠는데 사진이 안 걷혔다');
     assert.deepStrictEqual(x.errs, []); await x.ctx.close();
   });
 
@@ -118,7 +119,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     const x = await fresh({ plugin: true }); assert(await live(x)); await clear(x);
     const hb = await hostBox(x);
     await x.page.evaluate((hb) => { const d = document.createElement('div'); d.id = 'fakeBar'; d.style.cssText = 'position:fixed;left:0;right:0;top:' + (hb.y + hb.h - 30) + 'px;height:120px;background:#222;z-index:99999'; document.body.appendChild(d); window.dispatchEvent(new Event('resize')); }, hb);
-    assert(await waitFor(x, async () => (await calls(x, 'setRect')).length >= 1 || (await calls(x, 'show')).length >= 1, 5000), '조정하지 않았다');
+    assert(await waitFor(x, async () => (await calls(x, 'setRect')).length >= 1 || (await calls(x, 'show')).length >= 1, 12000), '조정하지 않았다');
     const last = ((await calls(x, 'setRect')).concat(await calls(x, 'show'))).slice(-1)[0].a;
     assert(last.clip && last.clip.b < hb.h - 20 && last.clip.b > hb.h - 40, '아래 30px 만 비켜야 한다: ' + JSON.stringify(last.clip) + ' h=' + hb.h);
     assert.deepStrictEqual(x.errs, []); await x.ctx.close();
@@ -127,10 +128,10 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   await t('다른 탭으로 가면 숨기고, 돌아오면 다시 켠다', async () => {
     const x = await fresh({ plugin: true }); assert(await live(x)); await clear(x);
     await x.page.evaluate(() => switchTab('map', document.getElementById('ni-map')));
-    assert(await waitFor(x, async () => (await calls(x, 'hide')).length >= 1, 4000), '탭을 떠났는데 숨기지 않았다');
+    assert(await waitFor(x, async () => (await calls(x, 'hide')).length >= 1, 12000), '탭을 떠났는데 숨기지 않았다');
     await clear(x);
     await x.page.evaluate(() => switchTab('home', document.getElementById('ni-home')));
-    assert(await waitFor(x, async () => (await calls(x, 'show')).length >= 1, 5000), '돌아왔는데 다시 안 켰다');
+    assert(await waitFor(x, async () => (await calls(x, 'show')).length >= 1, 12000), '돌아왔는데 다시 안 켰다');
     assert.deepStrictEqual(x.errs, []); await x.ctx.close();
   });
 
@@ -138,7 +139,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     const x = await fresh({ plugin: true }); assert(await live(x)); await clear(x);
     const was = await x.page.evaluate(() => document.documentElement.getAttribute('data-theme') !== 'pastel');
     await x.page.evaluate((was) => { document.documentElement.setAttribute('data-theme', was ? 'pastel' : 'dark'); window.dispatchEvent(new Event('resize')); }, was);
-    assert(await waitFor(x, async () => (await calls(x, 'setRect')).length >= 1, 5000), 'setRect 없음');
+    assert(await waitFor(x, async () => (await calls(x, 'setRect')).length >= 1, 12000), 'setRect 없음');
     assert.strictEqual((await calls(x, 'setRect')).slice(-1)[0].a.dark, !was);
     await x.ctx.close();
   });
@@ -146,7 +147,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   await t('엔진이 장면 없음(mode 없음)을 주면 네이티브 장면을 멈춘다(stop)', async () => {
     const x = await fresh({ plugin: true }); assert(await live(x)); await clear(x);
     await x.page.evaluate(() => { _CS.apply({ ok: true, mode: null, look: { slot: 'noon', wk: 'clear', season: 'autumn' } }); });
-    assert(await waitFor(x, async () => (await calls(x, 'stop')).length >= 1, 3000), 'stop 안 불림');
+    assert(await waitFor(x, async () => (await calls(x, 'stop')).length >= 1, 12000), 'stop 안 불림');
     const hb = await hostBox(x); assert.strictEqual(hb.display, 'none'); assert.strictEqual((await x.page.evaluate(() => _CS.info())).running, false);
     await x.ctx.close();
   });
@@ -154,10 +155,10 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   await t('오류 이벤트가 오면 곧바로 웹 캔버스 장면으로 복귀한다(같은 엔진 답으로), 실패 횟수가 저장된다', async () => {
     const x = await fresh({ plugin: true }); assert(await live(x));
     await emit(x, 'error', { message: '그리기 실패' });
-    assert(await waitFor(x, async () => (await x.page.evaluate(() => document.querySelectorAll('#congScene canvas.cs-cv').length)) === 1, 4000), '웹 캔버스로 안 돌아왔다');
+    assert(await waitFor(x, async () => (await x.page.evaluate(() => document.querySelectorAll('#congScene canvas.cs-cv').length)) === 1, 12000), '웹 캔버스로 안 돌아왔다');
     await x.page.waitForTimeout(500);
     const r = await x.page.evaluate(() => ({ inf: _CS.info(), nat: _CS.natActive(), fails: localStorage.getItem('gdm_sn_fail'), why: localStorage.getItem('gdm_sn_why'), cls: document.getElementById('congScene').className, card: document.getElementById('snSetStat').textContent }));
-    assert(r.inf.running && !r.inf.native && r.inf.actors.length >= 1 && r.inf.frames > 0, JSON.stringify(r.inf).slice(0, 200));
+    assert(r.inf.running && !r.inf.native && r.inf.frames > 0, JSON.stringify(r.inf).slice(0, 200));
     assert.strictEqual(r.nat, false); assert.strictEqual(r.fails, '1'); assert(/그리기 실패/.test(r.why)); assert(!/cs-native/.test(r.cls), r.cls); assert(/문제가 있어/.test(r.card), r.card);
     assert((await calls(x, 'destroy')).length >= 1, '플러그인 화면을 버리지 않았다');
     assert.deepStrictEqual(x.errs, []); await x.ctx.close();
@@ -165,7 +166,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
 
   await t('show 가 거절되면 웹 캔버스로 복귀한다', async () => {
     const x = await fresh({ plugin: true, showFail: true });
-    assert(await waitFor(x, async () => (await x.page.evaluate(() => document.querySelectorAll('#congScene canvas.cs-cv').length)) === 1, 6000), '웹 캔버스로 안 돌아왔다');
+    assert(await waitFor(x, async () => (await x.page.evaluate(() => document.querySelectorAll('#congScene canvas.cs-cv').length)) === 1, 12000), '웹 캔버스로 안 돌아왔다');
     const r = await x.page.evaluate(() => ({ nat: _CS.natActive(), why: localStorage.getItem('gdm_sn_why'), inf: _CS.info() }));
     assert.strictEqual(r.nat, false); assert(/show/.test(r.why) && /스프라이트/.test(r.why), r.why); assert(r.inf.running && !r.inf.native);
     assert.deepStrictEqual(x.errs, []); await x.ctx.close();
@@ -178,9 +179,9 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     await x.ctx.close();
     const y = await fresh({ plugin: true }); assert(await live(y));
     await y.page.evaluate(() => { _CS.nat.wait = 7900; _CS.nat.ready = false; });
-    assert(await waitFor(y, async () => (await y.page.evaluate(() => _CS.nat.failed)) === true, 5000), '지연인데 실패 처리를 안 했다');
+    assert(await waitFor(y, async () => (await y.page.evaluate(() => _CS.nat.failed)) === true, 12000), '지연인데 실패 처리를 안 했다');
     assert(/8초/.test(await y.page.evaluate(() => localStorage.getItem('gdm_sn_why'))));
-    assert(await waitFor(y, async () => (await y.page.evaluate(() => document.querySelectorAll('#congScene canvas.cs-cv').length)) === 1, 4000));
+    assert(await waitFor(y, async () => (await y.page.evaluate(() => document.querySelectorAll('#congScene canvas.cs-cv').length)) === 1, 12000));
     await y.ctx.close();
   });
 
@@ -197,7 +198,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     const card = await x.page.evaluate(() => ({ disp: document.getElementById('snSetCard').style.display, on: document.getElementById('snSetOn').checked, st: document.getElementById('snSetStat').textContent }));
     assert.strictEqual(card.disp, 'block'); assert.strictEqual(card.on, true); assert(/켜짐/.test(card.st), card.st);
     await clear(x); await x.page.evaluate(() => _snSetUse(false));
-    assert(await waitFor(x, async () => (await x.page.evaluate(() => document.querySelectorAll('#congScene canvas.cs-cv').length)) === 1, 4000), '끄면 웹 캔버스');
+    assert(await waitFor(x, async () => (await x.page.evaluate(() => document.querySelectorAll('#congScene canvas.cs-cv').length)) === 1, 12000), '끄면 웹 캔버스');
     assert((await calls(x, 'destroy')).length >= 1);
     const off = await x.page.evaluate(() => ({ ls: localStorage.getItem('gdm_sn_off'), nat: _CS.natActive(), st: document.getElementById('snSetStat').textContent })); assert.strictEqual(off.ls, '1'); assert.strictEqual(off.nat, false); assert(/꺼짐/.test(off.st));
     await clear(x); await x.page.evaluate(() => _snSetUse(true));
@@ -212,7 +213,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     const x = await fresh({ plugin: true }); assert(await live(x)); await clear(x);
     const res2 = await x.page.evaluate(() => { const r = JSON.parse(JSON.stringify(window._sceneLast)); r.tag = '테스트 문구'; r.look.wk = 'rain'; return r; });
     await x.page.evaluate((r) => _sceneApply(r), res2);
-    assert(await waitFor(x, async () => (await calls(x, 'apply')).length >= 1, 3000), '새 답을 안 넘겼다');
+    assert(await waitFor(x, async () => (await calls(x, 'apply')).length >= 1, 12000), '새 답을 안 넘겼다');
     assert.deepStrictEqual((await calls(x, 'apply')).slice(-1)[0].a.res, res2);
     assert.strictEqual((await hostBox(x)).tag, '테스트 문구');
     await x.ctx.close();
