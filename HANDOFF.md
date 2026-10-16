@@ -819,3 +819,31 @@
 - **(10:18~10:23 추가, YJ: ① 캐릭터가 손가락을 안 따라다님 ② 버스 대기 때 독수리만 나옴)** — ① 실기기 원인은 확인하지 못했다(헤드리스에서는 따라옴). 안드로이드 WebView 에서 길게 누른 직후 `pointercancel`/`lostpointercapture` 가 와서 '놓은 것'으로 처리되던 것으로 의심 → 터치는 `touchend`/`touchcancel` 로만 놓고, 손가락 위치는 `touchmove` 로도 받는다. 캐릭터 몸 위에만 투명 판(`.cs-pad`, `touch-action:none`)을 깔아 거기서 시작한 손가락은 브라우저가 스크롤로 가져가지 않게 했다(대신 캐릭터 몸 위에서 시작한 쓸기는 스크롤되지 않음). 시험: 가짜 pointercancel 을 보내도 안 놓고 따라옴. ② 엔진 **s31**: 대표 캐릭터(`hero`)·등장 순서를 경로 확정 키 + 탈것 구간(leg)마다 새로 뽑는다(같은 경로라도 구간이 바뀌면 다른 캐릭터, 360번 시험에서 6종이 골고루·구간별로 다름). 독수리가 계속 나온 정확한 원인은 못 찾았다 — 해시 분포는 고르다. 가능성: 같은 경로를 같은 키로 다시 보는 경우. **엔진 s31 을 붙여 넣어야** 한다.
 - **(10:39 YJ: "모든 계산은 엔진이, 앱은 그림만 그린다 원칙 지켜야 해" — 점검 결과)** 앱 안에 엔진이 정하지 않은 결정 두 곳이 남아 있어 제거했다: ① 엔진이 `hero` 를 안 줬을 때 앱이 `'lovel'` 로 대신 정하던 것 → 안 주면 주인공 장면 대신 배경만 그린다(idle 로 그림), ② 엔진이 `cast` 를 안 줬을 때 앱의 `_RC.order` 로 등장 순서를 대신 정하던 것 → 안 나온다. 정적 검사(`앱에는 …판정 코드가 없다`)에 이 둘이 다시 생기지 않게 추가. 남은 것은 그림 연출뿐(걸음 걸이·동동·하품 같은 장식 동작, 손가락 좌표→그림 좌표 변환, 놓은 자리에 내려앉는 모양). 장면 종류·캐릭터·순서·키울지·안내문은 전부 엔진 값.
 - **(12:00~12:30 YJ: 놓으면 바로 움직이기 · 캐릭터별 동작 다양화(TXT) · 캐릭터별 착지 연출)** 엔진 **s32**: `/scene` 응답에 `traits:{id:{land, acts[]}}` 추가(`engine/scene.js` `SCENE_LAND`·`SCENE_ACTS`·`sceneTraits`). 동작 대본은 전용 동작을 시드로 섞고 사이에 기본 동작(걷기·콩콩·돌기·쉬기)을 끼운 것, 낙엽 다이빙(dive)은 가을·눈 올 때만. **앱은 이름대로 그리기만 한다**: `ACT` 표(몸 기울이기·늘이기·소품·반짝이·땅 위 그림), `nextName` 이 엔진 `acts` 를 차례로 꺼낸다(앱의 가중치 랜덤 삭제). 착지(`land`): dolsom=cotton(몸이 부풀었다 복구 + 하트) · ppopu=pose(두 발 착지 + 포즈 + 씨익 스티커) · dudung=dig(땅속 2초 → 나와서 화냄) · lovel=flip(앞 한 바퀴) · sul=fly(날개 펴고 다른 곳에 착지) · chaeng=puddle(웅덩이 + 첨벙). 놓자마자 바로 다음 동작(엔진 대본)을 한다(예전엔 6~9초 쉬었음). **원칙 주의(YJ)**: 하얀강아지 '솜사탕'은 별도 그림을 덧붙이지 않고 캐릭터 몸 자체가 자연스럽게 커졌다 복구되게 했다(정체성 보호). 소품(선글라스·쌍안경·개껌·돋보기·깃발·상자·거울 …)은 TXT 대로 덧그린다. 캐릭터 그림은 미리 렌더링한 걷기 16장뿐이라 새 동작은 기울이기·늘이기·돌리기(옆면 뒤집기)로 흉내낸다 — 팔·표정이 바뀌는 진짜 동작은 아님. 실기기 미확인. 네이티브 미채택(이유는 보고). 테스트: `cong_scene.ui.test.js` 18개(6종 모든 동작·착지가 오류 없이 돈다), `scene_engine.test.js` 14개. 임시 훅 `_CS._play/_drop`(시험 전용).
+
+## 2026-10-16 캐릭터 장면 네이티브화 (YJ: "우리 앱 자체를 네이티브로 — 백엔드 엔진(/scene)과 캐릭터/놀이터 비즈니스 로직·데이터 구조는 그대로, 프론트엔드·렌더링을 Kotlin/Jetpack Compose Canvas + 햅틱으로 · 60~120fps · 6종 캐릭터 드래그/착륙 햅틱 · 360x740 반응형·스크롤 꼬임 해결")
+
+**범위(내가 정한 해석)**: 혼잡도 카드 위 '캐릭터 장면'(렌더링·터치·진동)만 네이티브로 옮겼다. 앱 전체(검색·경로·설정 등)는 여전히 WebView(HTML) 화면이다 — 한 번에 앱 전체를 Kotlin 으로 다시 짜는 건 엔진/로직을 그대로 두는 조건과 검증 가능성 모두에서 현실적이지 않아서 장면부터 했다. **엔진(`/scene`, `engine/scene.js`)과 웹 `_CS` 로직은 한 줄도 바꾸지 않았다**(웹 `_CS` 는 플러그인이 없거나 실패하면 그대로 자동 대체 화면).
+
+### 구조 (계산은 엔진, 그림은 네이티브)
+- 엔진 `/scene` 답 JSON → 앱(JS `_CS.apply`)이 **한 글자도 안 고치고** `SceneNative.apply({res})` 로 전달 → `SceneDriver` → `SceneCore`(**순수 자바**, android.* 없음; 움직임·그림·터치·진동 이름 결정) → `SceneCv` 인터페이스 → `AndroidCv` → Compose `Canvas` 의 `nativeCanvas`(GPU).
+- 파일(`native/`): `SceneCore/Acts/Art/Model/Util/Cv/Haptics.java`(순수 자바 코어, 웹 `_CS` 이식), `AndroidCv.java`, `SceneDriver.java`, `SceneHost.java`(터치 투명), `SceneNativePlugin.java`(Capacitor 플러그인 "SceneNative"), `SceneCompose.kt`(ComposeView + `withFrameNanos` 프레임 시계), `inject_kotlin_compose.py`(CI 가 `cap add android` 뒤 Gradle 에 Kotlin 1.9.22·Compose 컴파일러 1.5.8·BOM 2024.02.00 주입).
+- 프레임: 평소 60Hz(배터리), 만지거나 잡거나 놓은 뒤 3.2초(착륙 연출)는 화면 주사율 그대로(최대 120Hz, `preferredRefreshRate` 힌트).
+- 진동(`SceneHaptics`): grab·release·flap·land(_cotton/pose/dig/flip/fly/puddle)·angry·hearts·grin·thud·splash → `VibrationEffect.createWaveform`. 설정 카드에서 끌 수 있고 플러그인 `setHaptics` 로 전달.
+- **스크롤 꼬임 해결**: `MainActivity.dispatchTouchEvent` → `SceneNativePlugin.route(ev)`. 캐릭터 위 DOWN 은 코어가 '대기'로 받고(꾹 0.38초, 10dp 이내) 웹뷰에도 동시에 전달. 10dp 넘게 움직이면 웹뷰 스크롤(코어는 포기), 꾹 눌러 잡히면 웹뷰에 CANCEL 을 직접 보내고 이후 MOVE/UP 은 장면이 삼킴 → 스크롤과 드래그가 섞이지 않는다.
+- **스크롤·팝업과의 동기화**: 오버레이는 웹 스크롤을 지연 없이 못 따라가므로 JS 가 칸이 움직이거나(스크롤)·덮이거나(`elementFromPoint` 격자)·다른 탭이면 네이티브를 `hide` 하고 같은 그림의 WebP 정지 사진(`snapshot`)을 호스트 배경으로 깔았다가, 4프레임 정지 후 다시 `show`. 스크롤 영역 밖으로 나간 부분은 `clip` 으로 자른다. 위/아래에 붙은 넓은 막대는 그만큼만 비켜 준다.
+- **안전장치**: 플러그인 오류 이벤트·`show` 거절·8초 안에 첫 그림(ready) 없음 → 즉시 웹 캔버스 장면으로 복귀(같은 엔진 답), 실패 횟수 `gdm_sn_fail` 저장(연속 2회면 다음 실행부터 안 씀), 설정 카드(`#snSetCard`) 스위치(`gdm_sn_off`)로 끄기/켜기.
+
+### CI(`.github/workflows/build-apk.yml`)
+네이티브 파일 복사·플러그인 등록·`MainActivity` 터치 전달 수정·`inject_kotlin_compose.py` 실행이 추가됐고, 시험 매트릭스에 `scene_native_java.test.js`·`scene_native_js.ui.test.js` 가 들어갔다. **Gradle/Compose 실제 빌드는 CI 에서만 확인된다**(로컬은 npm/maven 접근 불가). 빌드가 깨지면 workflow_dispatch 의 `skip_tests` 로 Gradle 쪽만 반복하며 고친다.
+
+### 시험(로컬 통과)
+- `test/java/SceneJvmTest.java` + `scene_native_java.test.js`(14, 진짜 android.jar API33 로 안드로이드 계층 컴파일·kotlinc 로 Kotlin 컴파일·Gradle 주입·CI 템플릿): 웹↔자바 **같은 시드 난수로 초 단위 상태·픽셀 비교**(장면 14종 + 6종 착지)가 일치.
+- `scene_native_js.ui.test.js`(14, 가짜 SceneNative): 엔진 답 무가공 전달·사각형/clip/dpr/dark·스크롤/팝업/막대/탭 전환 숨김·복귀·stop·오류/거절/8초 지연 폴백·실패 카운터·설정 스위치·플러그인 없는 웹 무변화.
+- 기존 `cong_scene`·`scene_engine`·`cong_card`·`metro_native_js` 등 회귀 통과.
+
+### 한계(정직)
+- **실기기 미검증**: 햅틱 세기/타이밍, 120Hz, 주사율 힌트, 터치 분배, 스크롤 시 사진 교체 체감은 CI 빌드 APK 로 YJ 가 확인해야 한다. Compose 컴파일도 CI 에서 처음 검증된다.
+- 스크롤을 시작하면 2~4프레임 지연 뒤 정지 사진으로 바뀌고, 스크롤 중엔 캐릭터가 멈춰 보인다(멈추면 이어서 움직임).
+- 앱의 나머지 화면은 아직 WebView. 장면 코드는 웹 `_CS`(JS)와 네이티브 코어(Java) 두 벌 — 장면 규칙을 바꿀 땐 둘 다 맞춰야 한다(패리티 시험이 어긋남을 잡는다).
+- **웹 `_CS` 버그 발견**: `dance` 동작이 음표를 영영 안 낸다(`a.act.n` 과 `S.every(A,'n',…)` 키 충돌). 패리티를 위해 자바에 `WEB_DANCE_NOTE_BUG=true` 로 똑같이 재현. 고치려면 웹·자바 양쪽 키 이름을 바꾸고 이 상수를 false 로.
+- 끄는 법: 설정 → 네이티브 장면 스위치(`gdm_sn_off`=1). 문제가 계속 나면 자동으로도 꺼진다.
