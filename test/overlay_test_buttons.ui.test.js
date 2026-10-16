@@ -25,7 +25,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   console.log('[설정 카드]');
   await t('설정에 테스트 카드(전체 시나리오·평상시·추천·2정거장 전·1정거장 전·중지)가 있고 삭제 표시가 붙어 있다', async () => {
     const x = await page.evaluate(() => { const c = document.getElementById('ovlTestCard'); return c ? Array.from(c.querySelectorAll('button')).map(b => b.textContent.trim()) : null; });
-    assert.deepStrictEqual(x, ['▶ 전체 시나리오 (75초)', '평상시', '추천', '2정거장 전', '1정거장 전', '■ 테스트 중지']);
+    assert.deepStrictEqual(x, ['▶ 전체 시나리오 (75초)', '평상시', '추천', '2정거장 전', '1정거장 전', '⏱ 앱 자동종료 (15초 뒤 진짜 종료)', '■ 테스트 중지']);
     const src = require('fs').readFileSync(html, 'utf8');
     assert.ok(src.includes('TEST-BUTTONS:BEGIN') && src.includes('TEST-BUTTONS:END'));
   });
@@ -39,10 +39,19 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   await t('평상시: 경고 0 · 추천 없음 · 다섯 칸 · 현위치 박촌', async () => { await page.evaluate(() => _ovlTestStart('plain')); const u = await last(); assert.strictEqual(u.active, true); assert.strictEqual(u.alert, 0); assert.strictEqual(u.reco.on, false); assert.strictEqual(u.cells.length, 5); assert.strictEqual(u.cells[u.cur].n, '박촌'); });
   await t('2정거장 전: alert 2 · 현위치 굴현(아라까지 2역) · 진동 신호', async () => { await page.evaluate(() => _ovlTestStart('alert2')); const u = await last(); assert.strictEqual(u.alert, 2); assert.strictEqual(u.cells[u.cur].n, '굴현'); assert.ok(u.alertAt > 0 && u.alertVibe === true); });
   await t('1정거장 전: alert 1 · 현위치 계양', async () => { await page.evaluate(() => _ovlTestStart('alert1')); const u = await last(); assert.strictEqual(u.alert, 1); assert.strictEqual(u.cells[u.cur].n, '계양'); });
-  await t('추천: 버튼 이름이 맛집 보기 · 주변버스 보기 · 종료', async () => { await page.evaluate(() => _ovlTestStart('reco')); const u = await last(); assert.strictEqual(u.reco.on, true); assert.strictEqual(u.reco.go, '맛집 보기'); assert.strictEqual(u.reco.bus, '주변버스 보기'); assert.strictEqual(u.reco.end, '종료'); });
-  await t('추천의 [주변버스 보기]를 누르면(웹이 받으면) 추천이 닫힌다', async () => {
-    const x = await page.evaluate(() => { const k = [window.switchTab, window.switchMapInnerTab, window.switchBusView]; window.switchTab = () => {}; window.switchMapInnerTab = () => {}; window.switchBusView = () => {}; window._ovlAct('recoBus'); window.switchTab = k[0]; window.switchMapInnerTab = k[1]; window.switchBusView = k[2]; return window.__ups[window.__ups.length - 1].reco.on; });
+  await t('추천: 버튼은 맛집 보기 · 확인 둘뿐이다(주변버스 보기·종료는 없다)', async () => { await page.evaluate(() => _ovlTestStart('reco')); const u = await last(); assert.strictEqual(u.reco.on, true); assert.strictEqual(u.reco.go, '맛집 보기'); assert.strictEqual(u.reco.ok, '확인'); assert.ok(u.reco.bus === undefined && u.reco.end === undefined, JSON.stringify(u.reco)); });
+  await t('추천의 [확인]을 누르면(웹이 받으면) 추천이 닫힌다', async () => {
+    const x = await page.evaluate(() => { window._ovlAct('recoOk'); return window.__ups[window.__ups.length - 1].reco.on; });
     assert.strictEqual(x, false);
+  });
+  await t('1정거장 전: 내릴 준비 줄(getoff) — 제목 · 응원 문구 · [앱 종료] 하나, 추천 줄은 비운다', async () => {
+    await page.evaluate(() => _ovlTestStart('alert1')); const u = await last();
+    assert.strictEqual(u.getoff.on, true); assert.strictEqual(u.getoff.a, '내릴 준비를 해주세요'); assert.ok(u.getoff.b && u.getoff.b.length > 3); assert.strictEqual(u.getoff.end, '앱 종료'); assert.strictEqual(u.reco.on, false);
+    await page.evaluate(() => _ovlTestStart('alert2')); const v = await last(); assert.strictEqual(v.getoff.on, false, '2정거장 전엔 내릴 준비 줄이 없다');
+  });
+  await t('앱 자동종료 예약: 15초 뒤 시각을 quit.at 으로 보낸다', async () => {
+    await page.evaluate(() => _ovlTestStart('quit')); const ups = await page.evaluate(() => window.__ups.filter(u => u.quit)); const q = ups[ups.length - 1].quit;
+    assert.ok(q && q.at > 0, JSON.stringify(ups.map(u => u.quit)));
   });
   await t('시험 중에는 앱이 가려져도 네이티브가 웹을 깨우도록 keepAlive 를 켠다', async () => { await page.evaluate(() => _ovlTestStart('plain')); const ka = await page.evaluate(() => window.__ka); assert.ok(ka.includes(true), JSON.stringify(ka)); });
 

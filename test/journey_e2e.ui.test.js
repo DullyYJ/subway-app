@@ -4,6 +4,7 @@
 const assert = require('assert'), path = require('path');
 const { chromium } = require('./helpers/pw');
 const { resp } = require('./helpers/engine_fixture');
+const { rideEta } = require(path.join(__dirname, '..', 'engine', 'ride-eta.js'));
 const html = process.argv[2] || path.join(__dirname, '..', 'www', 'index.html');
 let pass = 0, fail = 0;
 const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', name); } catch (e) { fail++; console.log('  FAIL', name, '\n      ', String(e.message).split('\n')[0]); } };
@@ -26,7 +27,11 @@ async function newApp(b) {
   await page.route('**/*', r => {
     const u = new URL(r.request().url()); if (u.protocol === 'file:' || u.protocol === 'data:') return r.continue();
     const H = { 'content-type': 'application/json', 'access-control-allow-origin': '*' };
-    if (/route-v2/.test(u.host)) return r.fulfill({ status: 200, headers: H, body: JSON.stringify(resp()) });
+    if (/route-v2/.test(u.host)) {
+      // ★ 2026-10-17: 도착 전 순서(op:'arrive')는 실제 엔진(engine/ride-eta.js)이 답한다 — 앱은 그 값만 그린다
+      try { const bd = JSON.parse(r.request().postData() || '{}'); if (bd.op === 'arrive') return r.fulfill({ status: 200, headers: H, body: JSON.stringify(rideEta(bd)) }); } catch (e) {}
+      return r.fulfill({ status: 200, headers: H, body: JSON.stringify(resp()) });
+    }
     return r.fulfill({ status: 200, headers: H, body: '{}' });
   });
   await page.clock.install({ time: new Date('2026-10-08T21:00:00+09:00') });
@@ -110,6 +115,21 @@ const pass_through = async (page, n) => {
     assert.strictEqual(new Set(ts).size, ts.length, '중복: ' + JSON.stringify(ts));
   });
   await t('하차 전 추천이 한 번만 나간다(앱을 보는 중이면 팝업 하나, 아니면 상단 알림 하나 — 같이 나가지 않는다)', async () => { const n = last.ln.filter(x => /하차 \d+분 전/.test(x)).length, p = last.pop.filter(x => /하차 \d+분 전/.test(x)).length; assert.strictEqual(n + p, 1, JSON.stringify({ ln: last.ln, pop: last.pop.length })); });
+  await t('도착 전 순서(2026-10-17): 한 정거장 전에 내릴 준비 줄(getoff)이 오고 [앱 종료] 버튼, 그 전엔 없다', async () => {
+    const g = await page.evaluate(() => window.__ovl.map(o => o.getoff && o.getoff.on ? o.getoff.a + '|' + o.getoff.end : '-'));
+    assert.ok(g.includes('내릴 준비를 해주세요|앱 종료'), JSON.stringify(g)); assert.strictEqual(g[0], '-');
+  });
+  await t('도착 전 순서: 추천은 마지막 대중교통 하차 기준 창에서만 — 버튼 맛집/쿠팡 보기 · 확인, 내릴 준비가 오면 추천 줄은 비운다', async () => {
+    const r = await page.evaluate(() => window.__ovl.filter(o => o.reco && o.reco.on).map(o => o.reco));
+    assert.ok(r.length > 0, '추천이 한 번도 안 실렸다'); assert.ok(r.every(x => /맛집 보기|쿠팡 보기/.test(x.go) && x.ok === '확인' && x.bus === undefined), JSON.stringify(r[0]));
+    const both = await page.evaluate(() => window.__ovl.filter(o => o.reco && o.reco.on && o.getoff && o.getoff.on).length); assert.strictEqual(both, 0);
+  });
+  await t('하차 판정 뒤 3분 뒤 앱 종료 시각(quit.at)이 네이티브에 간다(엔진이 정한 값)', async () => {
+    await pass_through(page, Object.assign({}, nodes[nodes.length - 1], { sched: null })); await pass_through(page, Object.assign({}, nodes[nodes.length - 1], { sched: null }));   // 마지막 대중교통(마포)을 내려 도보 구간으로 들어선다
+    const al = await page.evaluate(() => ({ a: _arrive.res.alighted, q: _arrive.res.quitAtMs, at: _arrive.res.alightedAt })); assert.strictEqual(al.a, true); assert.strictEqual(al.q - al.at, 180000, '하차 판정 + 3분');
+    const q = await page.evaluate(() => window.__ovl.filter(o => o.quit && o.quit.at > 0).map(o => o.quit.at));
+    assert.ok(q.length > 0, '종료 예약이 안 갔다'); assert.strictEqual(new Set(q).size, 1, '예약 시각이 흔들린다: ' + JSON.stringify([...new Set(q)]));
+  });
   await t('이동 중 상주 알림(현재역 · 남은시간)은 이제 나가지 않는다(상단 알림은 환승·하차 세 시점만)', async () => assert.strictEqual(last.ln.filter(x => / · \d+분$/.test(x)).length, 0, JSON.stringify(last.ln)));
   await t('오버레이 경고 단계가 0 에서 시작해 1 에 도달한다', async () => { const a = await page.evaluate(() => window.__ovl.map(o => o.alert)); assert.ok(a.includes(0) && a.includes(1) && a.indexOf(1) > a.indexOf(0), JSON.stringify(a) + ' / ' + seen.map(x => x.step).join(' | ')); });
 

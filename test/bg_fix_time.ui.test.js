@@ -53,7 +53,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     const x = await fresh();
     const r = await x.page.evaluate(async () => {
       window.__fetches = 0; window.__aborted = 0; window.__resolvers = [];
-      window.fetch = (u, o) => { if (!/ride-eta/.test(String(u))) return new Promise(() => {}); if (o && /"op":"row"/.test(String(o.body || ''))) return new Promise(() => {}); window.__fetches++; return new Promise((res, rej) => { window.__resolvers.push(res); if (o && o.signal) o.signal.addEventListener('abort', () => { window.__aborted++; rej(new Error('abort')); }); }); };
+      window.fetch = (u, o) => { if (!/ride-eta/.test(String(u))) return new Promise(() => {}); if (o && /"op":"(row|arrive)"/.test(String(o.body || ''))) return new Promise(() => {}); window.__fetches++; return new Promise((res, rej) => { window.__resolvers.push(res); if (o && o.signal) o.signal.addEventListener('abort', () => { window.__aborted++; rej(new Error('abort')); }); }); };
       window._metroRouteMode = false; window._routeLocked = true;
       _transitNodeData = [{ name: '출발', isOrigin: true, _schedMin: 1140, lat: 37.50, lng: 126.70 }, { name: 'A', isSub: true, lineName: '인천1호선', _schedMin: 1141, lat: 37.51, lng: 126.70 }, { name: 'B', isSub: true, lineName: '인천1호선', _schedMin: 1143, lat: 37.52, lng: 126.70 }];
       _etaRequest('pass'); const f1 = window.__fetches, busy1 = _etaSt.busy;
@@ -79,7 +79,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     const r = await x.page.evaluate(async (NODES) => {
       Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
       window.__fetches = 0; window.__aborted = 0; window.__resolvers = [];
-      window.fetch = (u, o) => { if (!/ride-eta/.test(String(u))) return new Promise(() => {}); if (o && /"op":"row"/.test(String(o.body || ''))) return new Promise(() => {}); window.__fetches++; return new Promise((res, rej) => { window.__resolvers.push(res); if (o && o.signal) o.signal.addEventListener('abort', () => { window.__aborted++; rej(new Error('abort')); }); }); };
+      window.fetch = (u, o) => { if (!/ride-eta/.test(String(u))) return new Promise(() => {}); if (o && /"op":"(row|arrive)"/.test(String(o.body || ''))) return new Promise(() => {}); window.__fetches++; return new Promise((res, rej) => { window.__resolvers.push(res); if (o && o.signal) o.signal.addEventListener('abort', () => { window.__aborted++; rej(new Error('abort')); }); }); };
       window._metroRouteMode = false; window._routeLocked = true;
       _transitNodeData = eval(NODES); window._trackSig = 'S1';
       _etaRequest('pass'); return { f: window.__fetches };

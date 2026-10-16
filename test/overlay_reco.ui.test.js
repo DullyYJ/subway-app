@@ -31,11 +31,11 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     window._arrHomeEta = () => (o.rem == null ? null : { arrMs: Date.now() + o.rem * 1000, rem: o.rem });
     return _ovlLines().reco;
   }, opts);
-  await t('도착 10분 전엔 하단 추천이 없다(이제 5분 전부터)', async () => assert.ok(!(await recoOf({ rem: 600 })) || (await recoOf({ rem: 600 })).on !== true));
-  await t('도착 5분 전부터 추천 첫 두 줄이 하단에 뜬다', async () => { const x = await recoOf({ rem: 290 }); assert.strictEqual(x.on, true); assert.strictEqual(x.a, '점심시간이에요. 제육볶음 어떠세요?'); assert.strictEqual(x.b, '근처엔 한솥, 맘스터치 있어요.'); });
+  await t('하차 10분 전엔 하단 추천이 없다(이제 7분 전부터)', async () => assert.ok(!(await recoOf({ rem: 600 })) || (await recoOf({ rem: 600 })).on !== true));
+  await t('하차 7분 전부터 추천 첫 두 줄이 하단에 뜬다', async () => { const x = await recoOf({ rem: 410 }); assert.strictEqual(x.on, true); assert.strictEqual(x.a, '점심시간이에요. 제육볶음 어떠세요?'); assert.strictEqual(x.b, '근처엔 한솥, 맘스터치 있어요.'); });
   await t('도착 직전(10초 전)에도 보인다', async () => assert.strictEqual((await recoOf({ rem: 10 })).on, true));
   await t('도착한 지 30초가 넘으면 사라진다', async () => { const x = await recoOf({ rem: -60 }); assert.ok(!x || x.on !== true); });
-  await t('5분보다 이르면(6분 전) 아직 안 뜬다', async () => { const x = await recoOf({ rem: 360 }); assert.ok(!x || x.on !== true); });
+  await t('7분보다 이르면(8분 전) 아직 안 뜬다', async () => { const x = await recoOf({ rem: 480 }); assert.ok(!x || x.on !== true); });
   await t('추천이 나간 적 없으면(00~07시 등) 아무것도 안 뜬다', async () => { const x = await recoOf({ rem: 120, reco: null }); assert.ok(!x || x.on !== true); });
   await t('25분 넘은 옛 추천은 쓰지 않는다', async () => { const x = await recoOf({ rem: 120, ageMin: 40 }); assert.ok(!x || x.on !== true); });
   await t('끄기 스위치(_ovlRecoOff)가 동작한다', async () => { const x = await recoOf({ rem: 120, off: true }); assert.ok(!x || x.on !== true); });
@@ -56,8 +56,8 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   console.log('[①-2 보기 버튼 이름 · 보기/확인 동작]');
   await t('맛집(낮·아침·17~19시)은 [맛집 보기]', async () => assert.strictEqual((await recoOf({ rem: 100, last: { slot: 'lunch', action: { label: '맛집 위치 보기', call: '_arrGoFoodTab()' } } })).go, '맛집 보기'));
   await t('쿠팡 아이템(21시 이후)은 [쿠팡 보기]', async () => assert.strictEqual((await recoOf({ rem: 100, last: { slot: 'shop', action: { kind: 'shop', item: {} } } })).go, '쿠팡 보기'));
-  await t('야식은 [주문하기]', async () => assert.strictEqual((await recoOf({ rem: 100, last: { slot: 'night', action: { kind: 'delivery', menu: '치킨' } } })).go, '주문하기'));
-  await t('버튼 이름: [맛집 보기] [주변버스 보기] [종료] 를 엔진 값처럼 함께 보낸다', async () => { const x = await recoOf({ rem: 100, last: { slot: 'lunch', action: { label: '맛집 위치 보기', call: '_arrGoFoodTab()' } } }); assert.strictEqual(x.go, '맛집 보기'); assert.strictEqual(x.bus, '주변버스 보기'); assert.strictEqual(x.end, '종료'); });
+  await t('야식도 [맛집 보기](2026-10-17: 버튼은 맛집/쿠팡 보기 + 확인뿐)', async () => assert.strictEqual((await recoOf({ rem: 100, last: { slot: 'night', action: { kind: 'delivery', menu: '치킨' } } })).go, '맛집 보기'));
+  await t('버튼 이름: [맛집 보기]·[확인] 둘뿐(주변버스·종료 없음)', async () => { const x = await recoOf({ rem: 100, last: { slot: 'lunch', action: { label: '맛집 위치 보기', call: '_arrGoFoodTab()' } } }); assert.strictEqual(x.go, '맛집 보기'); assert.strictEqual(x.ok, '확인'); assert.ok(!('bus' in x) && !('end' in x), JSON.stringify(Object.keys(x))); });
   const act = (a, last) => page.evaluate(([a, last]) => {
     window._ovlRecoOff = false; window._ovlRecoDismissAt = undefined;
     window._pipReco = { title: 't', body: '가\n나', at: Date.now(), ovlAt: Date.now() - 60000 };
@@ -69,22 +69,14 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     const after = _ovlLines().reco; return { before, after: !!(after && after.on), calls };
   }, [a, last]);
   await t('[확인] → 추천이 사라지고 어디로도 안 간다', async () => { const x = await act('recoOk', { label: 'x', call: '_arrGoFoodTab()' }); assert.deepStrictEqual(x, { before: true, after: false, calls: [] }); });
-  await t('[주변버스 보기] → 노선도 탭의 버스(주변 정류장)로 + 추천 닫힘', async () => {
-    const x = await page.evaluate(async () => { window._ovlRecoOff = false; window._ovlRecoDismissAt = undefined; window._pipReco = { title: 't', body: '가\n나', at: Date.now(), ovlAt: Date.now() - 60000 }; window._arrLast = null; window._arrHomeEta = () => ({ arrMs: Date.now() + 100000, rem: 100 });
-      const calls = []; const k1 = window.switchTab, k2 = window.switchMapInnerTab, k3 = window.switchBusView;
-      window.switchTab = (tab) => calls.push('tab:' + tab); window.switchMapInnerTab = (m) => calls.push('inner:' + m); window.switchBusView = (m) => calls.push('view:' + m);
-      const before = !!(_ovlLines().reco && _ovlLines().reco.on); window._ovlAct('recoBus'); await new Promise(r => setTimeout(r, 300));
-      window.switchTab = k1; window.switchMapInnerTab = k2; window.switchBusView = k3; return { before, after: !!(_ovlLines().reco && _ovlLines().reco.on), calls }; });
-    assert.strictEqual(JSON.stringify(x), JSON.stringify({ before: true, after: false, calls: ['tab:map', 'inner:bus', 'view:near'] }));
-  });
-  await t('앱 안 도착 팝업도 같은 세 버튼: 맛집 보기 · 주변버스 보기 · 종료 (야식·쿠팡은 아래 줄이 그대로)', async () => {
+  await t('앱 안 도착 팝업도 같은 두 버튼: 맛집 보기(쿠팡이면 쿠팡 보기) · 확인 (야식은 배달앱 줄이 아래에 그대로)', async () => {
     const x = await page.evaluate(() => { const k = window.__keep; const out = {};
       for (const [nm, ac] of [['food', { label: '맛집 위치 보기', call: '_arrGoFoodTab()', arr: true }], ['deli', { kind: 'delivery', menu: '치킨', arr: true }], ['shop', { kind: 'shop', item: { n: 'x' }, arr: true }], ['plain', { label: '다른 일', call: 'void 0' }]]) {
         k.modal('제목', '본문', null, ac); const ov = document.getElementById('briefModalOv'); out[nm] = Array.from(ov.querySelectorAll('button')).map(b => b.textContent.trim()); ov.remove(); }
       return out; });
-    assert.deepStrictEqual(x.food, ['맛집 보기', '주변버스 보기', '종료']);
-    assert.deepStrictEqual(x.deli.slice(0, 3), ['맛집 보기', '주변버스 보기', '종료']); assert.ok(x.deli.includes('배달의민족'));
-    assert.deepStrictEqual(x.shop.slice(0, 3), ['맛집 보기', '주변버스 보기', '종료']); assert.ok(x.shop.includes('쿠팡 구경'));
+    assert.deepStrictEqual(x.food, ['맛집 보기', '확인']);
+    assert.deepStrictEqual(x.deli.slice(0, 2), ['맛집 보기', '확인']); assert.ok(x.deli.includes('배달의민족'));
+    assert.deepStrictEqual(x.shop, ['쿠팡 보기', '확인']);
     assert.deepStrictEqual(x.plain, ['확인', '다른 일']);   // 도착 추천이 아닌 브리핑은 예전 그대로
   });
   await t('[종료] → 추천을 닫고 앱 종료를 요청한다(정확히 앱 종료)', async () => {
@@ -94,12 +86,19 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
       return { before, after: !!(_ovlLines().reco && _ovlLines().reco.on), calls }; });
     assert.deepStrictEqual(x, { before: true, after: false, calls: ['close', 'exit'] });   // 여정 정리(GPS·알림·오버레이) 뒤 앱 종료
   });
-  await t('앱 안 도착 팝업의 [종료]도 앱 종료를 요청한다', async () => {
-    const x = await page.evaluate(() => { const calls = []; const k = window._exitConfirm; window._exitConfirm = () => calls.push('exit');
+  await t('앱 안 도착 팝업: [확인]은 추천만 닫고, [맛집 보기]는 그 가게를 연다', async () => {
+    const x = await page.evaluate(() => { const calls = []; const kp = window._arrOpenPlace, kf = window._arrGoFoodTab;
+      window._arrOpenPlace = () => calls.push('place'); window._arrGoFoodTab = () => calls.push('foodtab');
+      window._pipReco = { title: 't', body: '가\n나', at: Date.now(), ovlAt: Date.now() - 60000 }; window._ovlRecoDismissAt = undefined;
+      window._arrLast = { at: window._pipReco.at, action: { label: 'x', call: '_arrGoFoodTab()' }, ad: { pn: '맛나식당' }, stn: '아라' };
       window.__keep.modal('제목', '본문', null, { label: '맛집 위치 보기', call: '_arrGoFoodTab()', arr: true });
-      const ov = document.getElementById('briefModalOv'); const b = Array.from(ov.querySelectorAll('button')).find(x => x.textContent.trim() === '종료'); b.click();
-      window._exitConfirm = k; return { calls, closed: !document.getElementById('briefModalOv') }; });
-    assert.deepStrictEqual(x, { calls: ['exit'], closed: true });
+      let ov = document.getElementById('briefModalOv'); Array.from(ov.querySelectorAll('button')).find(b => b.textContent.trim() === '확인').click();
+      const closed1 = !document.getElementById('briefModalOv'), dis = window._ovlRecoDismissAt === window._pipReco.at;
+      window._ovlRecoDismissAt = undefined;
+      window.__keep.modal('제목', '본문', null, { label: '맛집 위치 보기', call: '_arrGoFoodTab()', arr: true });
+      ov = document.getElementById('briefModalOv'); Array.from(ov.querySelectorAll('button')).find(b => b.textContent.trim() === '맛집 보기').click();
+      window._arrOpenPlace = kp; window._arrGoFoodTab = kf; return { closed1, dis, calls }; });
+    assert.deepStrictEqual(x, { closed1: true, dis: true, calls: ['place'] });
   });
   await t('[보기] 맛집 → 맛집 탭 + 추천 닫힘', async () => { const x = await act('recoGo', { label: 'x', call: '_arrGoFoodTab()' }); assert.deepStrictEqual(x, { before: true, after: false, calls: ['food'] }); });
   await t('[보기] 쿠팡 아이템 → 쿠팡 열기 + 추천 닫힘', async () => { const x = await act('recoGo', { kind: 'shop', item: {} }); assert.deepStrictEqual(x, { before: true, after: false, calls: ['shop'] }); });

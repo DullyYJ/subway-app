@@ -19668,16 +19668,17 @@ window.addEventListener('unhandledrejection', function(e) {
         <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:4px;">🧪 오버레이 테스트 <span style="font-size:11px;color:var(--gold);font-weight:700;">출시 전 삭제</span></div>
         <p style="font-size:12px;color:var(--sub);margin:0 0 10px;line-height:1.6;">가짜 여정(임학→아라)을 오버레이에 보내 접힘·펼침·무지개·버튼을 실기기로 확인해요. '다른 앱 위에 표시'를 켜 두고, 버튼을 누른 뒤 <b>홈 화면으로 나가세요</b>. 알약으로 접어 두려면 오버레이를 위로 쓸어 올리세요(접힌 상태는 기억돼요).</p>
         <button onclick="_ovlTestStart('all')" style="width:100%;margin-bottom:8px;padding:12px;border-radius:10px;border:none;cursor:pointer;font-size:13px;font-weight:800;background:var(--gold);color:#121214;font-family:inherit;">▶ 전체 시나리오 (75초)</button>
-        <p style="font-size:11.5px;color:var(--sub);margin:0 0 10px;line-height:1.55;">0~15초 평상시(이때 알약으로 접기) → 15~30초 추천(접혀 있어도 펼쳐짐) → 30~45초 2정거장 전(알약 둘레 무지개, 펼치지 않음) → 45~60초 1정거장 전(펼침+빠른 무지개+진동) → 마무리</p>
+        <p style="font-size:11.5px;color:var(--sub);margin:0 0 10px;line-height:1.55;">0~15초 평상시(이때 알약으로 접기) → 15~30초 추천(접혀 있어도 펼쳐짐) → 30~45초 2정거장 전(알약 둘레 무지개, 펼치지 않음) → 45~60초 1정거장 전(펼침+빠른 무지개+진동+캐릭터+'내릴 준비를 해주세요'+응원 문구+[앱 종료]) → 마무리</p>
         <div style="display:flex;gap:8px;margin-bottom:8px;">
           <button onclick="_ovlTestStart('plain')" style="flex:1;padding:11px 4px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);font-family:inherit;">평상시</button>
           <button onclick="_ovlTestStart('reco')" style="flex:1;padding:11px 4px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);font-family:inherit;">추천</button>
           <button onclick="_ovlTestStart('alert2')" style="flex:1;padding:11px 4px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);font-family:inherit;">2정거장 전</button>
           <button onclick="_ovlTestStart('alert1')" style="flex:1;padding:11px 4px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);font-family:inherit;">1정거장 전</button>
         </div>
+        <button onclick="_ovlTestStart('quit')" style="width:100%;margin-bottom:8px;padding:11px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);font-family:inherit;">⏱ 앱 자동종료 (15초 뒤 진짜 종료)</button>
         <button onclick="_ovlTestStop()" style="width:100%;padding:11px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);font-family:inherit;">■ 테스트 중지</button>
         <p id="ovlTestStat" style="font-size:11.5px;color:var(--sub);margin:8px 0 0;line-height:1.55;"></p>
-        <p style="font-size:11px;color:var(--sub);margin:6px 0 0;line-height:1.55;">※ 추천 줄의 [종료]는 진짜 앱 종료예요(이때 시계 위젯 동물이 계속 움직이는지 확인). [맛집 보기]·[주변버스 보기]는 앱을 앞으로 가져와 해당 화면을 열어요.</p>
+        <p style="font-size:11px;color:var(--sub);margin:6px 0 0;line-height:1.55;">※ [앱 종료]·자동종료는 진짜 앱 종료예요(이때 시계 위젯 동물이 계속 움직이는지 확인). 추천의 [맛집 보기]는 앱을 앞으로 가져와 가게 화면을, [확인]은 추천만 닫아요(테스트 가짜 추천이라 가게는 실제로 없어요).</p>
       </div>
       <!-- TEST-BUTTONS:END -->
 
@@ -22433,7 +22434,7 @@ function showNotification(title, body, opts){
 //   · 매일 다른 위트 문구 + (오전) 하루 화이팅 / (저녁) 하루 마무리 문구
 // ══════════════════════════════════════════════════════════════════════
 // ★ 2026-10-16 (YJ: "도착 10분 전 말고 도착 5분 전으로"): 10 → 5 (알림·오버레이 추천 줄이 같은 값을 쓴다)
-var _ARR_PRE_MIN = 5;           // 도착 몇 분 전에 알릴지
+var _ARR_PRE_MIN = 7;           // ★ 2026-10-17 (YJ: "최종경로 도착 7분전에 추천문구"): 마지막 대중교통을 내리기 몇 분 전에 추천을 보일지(5→7). 기준은 최종 목적지가 아니라 마지막 대중교통 하차.
 var _ARR_CAFE_M  = 500;         // 카페 반경(m)
 var _ARR_NIGHT_M = 1000;        // 야식 식당 반경(m)
 
@@ -22642,6 +22643,8 @@ function _arrEnsureFood(destStn, cb){
     if(_arrFoodCache.stn === destStn && _arrFoodCache.items.length
        && Date.now() - _arrFoodCache.at < _ARR_FOOD_TTL) return fin();
     var c = (typeof _homeBriefCoord==='function') ? _homeBriefCoord('dest', destStn) : null;
+    var _ac = window._arrAlightCoord;                          // ★ 2026-10-17: 마지막 하차 정류장·역의 좌표가 있으면 그 근처 가게를 받는다
+    if(_ac && _ac.name === destStn && _ac.lat != null && _ac.lng != null) c = { lat: _ac.lat, lng: _ac.lng };
     if(!c || c.lat == null || c.lng == null) return fin();
     var base = (typeof _foodServerBase==='function') ? _foodServerBase() : '';
     if(!base) return fin();
@@ -23520,7 +23523,7 @@ function _arrAd(a, slot, destStn){
     } else {
       d += (/[요죠다]$/.test(d) ? '. ' : ', ') + word + ' 어때요?';
     }
-    return { k: (sl === 'morning' ? 'cafe' : 'food'), a: clean(word ? nm + ' · ' + word : nm), b: clean(d), m: '' };
+    return { k: (sl === 'morning' ? 'cafe' : 'food'), a: clean(word ? nm + ' · ' + word : nm), b: clean(d), m: '', pn: nm, pi: info || null };   // pn·pi: [맛집 보기]가 앱에서 그 가게를 열 때 쓴다
   }catch(e){ return null; }
 }
 window._arrAd = _arrAd;
@@ -23565,7 +23568,7 @@ function _arrFireAlertNow(destStn, arrMs){
         var _pt = _arrPipText(a, slot, destStn, body);
         if(typeof _pipRecoSet === 'function') _pipRecoSet(_pt.title, _pt.lines.join('\n'), []);
         try{ if(window._pipReco) window._pipReco.ad = _arrAd(a, slot, destStn); }catch(eAd){}   // ★ 오버레이 추천 줄에 실을 실제 가게·상품 이름
-        window._arrLast = { at: (window._pipReco && window._pipReco.at) || 0, slot: slot, action: action, title: a.title, body: body };   // ★ 오버레이 [보기] 가 같은 곳으로 보낸다
+        window._arrLast = { at: (window._pipReco && window._pipReco.at) || 0, slot: slot, action: action, title: a.title, body: body, ad: (window._pipReco && window._pipReco.ad) || null, stn: destStn || '' };   // ★ 오버레이 [보기] 가 같은 곳으로 보낸다
       }catch(e){}
 
       var vib = [300,120,300];
@@ -23611,7 +23614,13 @@ function _arrShopOpen(){
     var ov = document.getElementById('briefModalOv'); if(ov) ov.remove();
     var url = (it && it.u) ? it.u : 'https://www.coupang.com/';
     if(typeof toast === 'function') toast('🛍 쿠팡에서 열고 있어요');
-    try{ window.open(url, '_blank'); }catch(e){ window.location.href = url; }
+    // ★ 2026-10-17 (YJ: "쿠팡보기면 쿠팡에 해당 링크가 접속되어야 해"): 쇼핑 탭의 상품 카드와 같은 열기(openExternalApp — 허용된 쿠팡 주소만)로 그 상품 링크를 연다.
+    //   오버레이에서 눌러 앱이 막 앞으로 오는 중이면 화면이 자리 잡은 뒤(0.6초) 연다.
+    var go = function(){
+      try{ if(typeof openExternalApp === 'function') { openExternalApp(url); return; } }catch(e0){}
+      try{ window.open(url, '_blank'); }catch(e){ window.location.href = url; }
+    };
+    if(document.hidden) setTimeout(go, 600); else go();
   }catch(e){}
 }
 window._arrShopOpen = _arrShopOpen;
@@ -23626,6 +23635,53 @@ function _arrGoShopTab(){
   }catch(e){}
 }
 window._arrGoShopTab = _arrGoShopTab;
+
+// ★ 2026-10-17 (YJ: "맛집보기 누르면 앱에서 해당 맛집을 열어줘야 해"): 추천에 나온 그 가게를 맛집 탭에서 찾아 지도 패널까지 연다.
+//   마지막으로 내리는 정류장·역 기준 목록을 불러오고(_foodFromStn), 목록에서 가게 이름이 같은 카드를 눌러 길찾기 지도를 펼친다.
+//   목록에 없으면 추천이 들고 있던 가게 정보로 카드를 만들어 맨 위에 올려 같은 지도를 연다.
+function _arrOpenPlace(){
+  try{
+    var ov = document.getElementById('briefModalOv'); if(ov) ov.remove();
+    var L = window._arrLast, ad = L && L.ad, nm = ad && ad.pn;
+    if(!nm){ _arrGoFoodTab(); return; }
+    var stn = String((L && L.stn) || (window._arrAlightCoord && window._arrAlightCoord.name) || '').replace(/역$/, '');
+    var el = document.getElementById('ni-food');
+    if(typeof switchTab === 'function') switchTab('food', el);
+    setTimeout(function(){
+      try{
+        if(stn && typeof _foodFromStn === 'function'){
+          var lb = document.getElementById('foodDestLabel'); if(lb) lb.textContent = stn + '역 인근';
+          _foodCurFilter = '\uc804\uccb4'; _foodFromStn(stn);
+        } else if(typeof loadFoodTab === 'function') loadFoodTab(false);
+      }catch(e1){}
+      var tries = 0, clicked = 0;
+      var find = function(){
+        var cs = document.querySelectorAll('#foodList .food-card');
+        for(var i = 0; i < cs.length; i++){ var f = cs[i].querySelector('.food-name'); if(f && f.textContent.trim() === String(nm).trim()) return cs[i]; }
+        return null;
+      };
+      var tick = function(){
+        tries++;
+        var card = find();
+        if(card){
+          var open = !!document.querySelector('#foodList .food-map-panel');
+          if(!open && clicked < 3){ clicked++; try{ card.scrollIntoView({ block: 'center' }); }catch(e2){} try{ card.click(); }catch(e3){} }
+          if(open || clicked >= 3) return;
+        } else if(tries === 8){   // 4초가 지나도 목록에 없다 → 추천이 들고 있던 정보로 카드를 만든다
+          try{
+            var pi = ad.pi || {}, list = document.getElementById('foodList');
+            var c2 = (typeof _foodMakeCard === 'function' && list) ? _foodMakeCard({ place_name: nm, category_name: pi.c || '', road_address_name: pi.a || '', distance: pi.d, x: '', y: '' }, 0, true) : null;
+            if(c2){ list.insertBefore(c2, list.firstChild); c2.click(); }
+          }catch(e4){}
+          return;
+        }
+        if(tries < 16) setTimeout(tick, 500);
+      };
+      setTimeout(tick, 400);
+    }, 250);
+  }catch(e){}
+}
+window._arrOpenPlace = _arrOpenPlace;
 
 // 팝업의 '맛집 보기' → 맛집 탭 이동
 function _arrGoFoodTab(){
@@ -23644,7 +23700,7 @@ function _arrCheckPreAlert(arrMs, remSecs){
     if(typeof _baseTimeMs!=='undefined' && _baseTimeMs != null) return;   // 예상(미래) 모드 제외
     if(!arrMs || remSecs == null) return;
     if(remSecs > _ARR_PRE_MIN*60 || remSecs < 60) return;                 // 5분~1분 구간에서만
-    var dest = _arrDestName();
+    var dest = (window._arrAlightCoord && window._arrAlightCoord.name) || _arrDestName();   // ★ 2026-10-17: 추천 가게는 마지막으로 내리는 곳 근처에서 고른다
     var key  = String(arrMs) + '|' + (dest||'');
     if(window._arrAlertKey === key) return;                               // 이번 여정 1회
     // ★ 2026-09-02: 재동기화로 도착 예정 시각이 조금 바뀌면 key 가 달라져 두 번 뜰 수 있었다.
@@ -23677,8 +23733,13 @@ function _arrHomeEta(){
     if(window._routeLocked !== true) return null;                      // 확정한 여정만
     if(typeof _pipHasRoute !== 'function' || !_pipHasRoute()) return null;   // 예상시각·미리보기·종료된 여정 제외
     var je = (typeof _journeyEta === 'function') ? _journeyEta() : null;
-    if(!je || je.preview || !je.arrMs) return null;
-    return { arrMs: je.arrMs, rem: Math.round((je.arrMs - Date.now()) / 1000) };
+    if(!je || je.preview) return null;
+    // ★ 2026-10-17 (YJ: "이 알람 기준은 최종 목적지 도착이 아니야. 마지막 대중교통을 하차하는 순서일 때 적용"): 기준 시각 = 엔진(/ride-eta op:'arrive')이 정한
+    //   '마지막 대중교통 하차' 시각. 하차 뒤 10분을 더 걸어가는 경로여도 하차 7분 전에 뜬다. 엔진 답이 아직 없으면 null(추천을 만들지 않는다).
+    var ae = _arrAlightEta();
+    if(!ae) return null;
+    window._arrAlightCoord = { name: ae.name, lat: ae.lat, lng: ae.lng };
+    return { arrMs: ae.arrMs, rem: ae.rem, name: ae.name };
   }catch(e){ return null; }
 }
 window._arrHomeEta = _arrHomeEta;
@@ -23840,9 +23901,9 @@ function _showBriefingModal(title, body, route, action){
         + '<div style="font-size:14px;color:var(--text);line-height:1.7;white-space:pre-line;">' + esc(body) + '</div>'
         + ((action && action.arr === true)
           ? '<div style="display:flex;gap:8px;margin-top:18px;">'
-            +   '<button onclick="_arrGoFoodTab()" style="flex:1;padding:12px 4px;border-radius:11px;border:none;cursor:pointer;font-size:14px;font-weight:700;background:#2f7cf6;color:#fff;">맛집 보기</button>'
-            +   '<button onclick="_ovlRecoBus()" style="flex:1.3;padding:12px 4px;border-radius:11px;border:none;cursor:pointer;font-size:14px;font-weight:700;background:rgba(47,124,246,.16);color:#2f7cf6;">주변버스 보기</button>'
-            +   '<button onclick="_ovlRecoEnd()" style="flex:.8;padding:12px 4px;border-radius:11px;border:none;cursor:pointer;font-size:14px;font-weight:700;background:var(--gold);color:#121214;">종료</button>'
+            // ★ 2026-10-17 (YJ: "버튼은 맛집보기(쿠팡일 경우는 쿠팡보기), 확인"): 맛집 보기 = 앱에서 그 가게 · 쿠팡 보기 = 그 상품 링크
+            +   '<button onclick="_ovlRecoGo()" style="flex:1.4;padding:12px 4px;border-radius:11px;border:none;cursor:pointer;font-size:14px;font-weight:700;background:#2f7cf6;color:#fff;">' + (_shp ? '쿠팡 보기' : '맛집 보기') + '</button>'
+            +   '<button onclick="_ovlRecoDismiss();document.getElementById(\'briefModalOv\').remove()" style="flex:1;padding:12px 4px;border-radius:11px;border:none;cursor:pointer;font-size:14px;font-weight:700;background:var(--gold);color:#121214;">확인</button>'
             + '</div>'
           : '<div style="display:flex;gap:8px;margin-top:18px;">'
         +   '<button onclick="document.getElementById(\'briefModalOv\').remove()" style="flex:1;padding:12px 6px;border-radius:11px;border:none;cursor:pointer;font-size:14px;font-weight:700;background:var(--gold);color:#121214;">확인</button>'
@@ -23862,10 +23923,10 @@ function _showBriefingModal(title, body, route, action){
               + '<div style="font-size:12px;color:var(--sub);margin-bottom:8px;text-align:center;">'
               +   (_shp.item && _shp.item.n ? esc(_shp.item.n) + ', 한번 볼까요?' : '골라 둔 아이템 보기')
               + '</div>'
-              + '<div style="display:flex;gap:8px;">'
+              + ((action && action.arr === true) ? '' : '<div style="display:flex;gap:8px;">'
               +   '<button onclick="_arrShopOpen()" style="flex:2;padding:11px 4px;border-radius:11px;border:none;cursor:pointer;font-size:13px;font-weight:800;background:#E94E1B;color:#fff;">쿠팡 구경</button>'
               +   '<button onclick="_arrGoShopTab()" style="flex:1;padding:11px 4px;border-radius:11px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);">더 보기</button>'
-              + '</div>'
+              + '</div>')
             + '</div>'
             : '')
         + (_dlv
@@ -29057,6 +29118,7 @@ function _arrEndFinish(why){
     if(_arrEnd) _arrEnd.st = 'done';
     if(_arrEnd) _arrEnd.doneAt = Date.now();
     try{ _ovlDiag('도착종료', why + ' — 안내를 종료'); }catch(e0){}
+    try{ _arriveEnsure(true); }catch(eAq){}   // ★ 2026-10-17: 도착 확인 = 하차 판정 → 여정을 닫기 전에 엔진에 마지막으로 물어 앱 종료 시각(3분 뒤)을 받아 둔다
     var b = document.getElementById('arrEndBar'); if(b) b.classList.remove('on');
     try{ closeTransitResult(); }catch(e1){}
     try{ if(typeof toast === 'function') toast('도착했어요. 안내를 종료했어요'); }catch(e2){}
@@ -29183,6 +29245,8 @@ function _arrEndPoll(){
 }
 function _ovlTick(){
   try{ _arrEndPoll(); }catch(eAe){}
+  try{ _arriveEnsure(); }catch(eAr){}      // ★ 2026-10-17: 마지막 하차 기준 도착 전 순서(엔진 답을 받아 둔다)
+  try{ _arrQuitCheck(); }catch(eQc){}      // ★ 2026-10-17: 하차 판정 3분 뒤 앱 종료(웹뷰만 있을 때의 안전망)
   // ★ 2026-10-09: PiP(작은 요약 화면)는 완전히 걷어냈다(_PIP_FEATURE=false 로 꺼 둔 지 오래였다).
   //   이 틱은 이제 다른 앱 위 오버레이·백그라운드 깨우기만 갱신한다(이름은 호출처가 많아 _ovlTick 으로 바꿨다).
   try{ _ovlSync(); }catch(e2){}                          // ★ 2026-10-01: 다른 앱 위 오버레이도 같은 여정 값으로 갱신
@@ -29292,12 +29356,97 @@ function _ovlRefresh(cb){
   }catch(e){ if(cb) cb(); }
 }
 window._ovlRefresh = _ovlRefresh;
+// ══════════════════════════════════════════════════════════════════════════
+// ★ 2026-10-17 (YJ: "도착 전 순서를 바꾸자 — 마지막 대중교통 하차 7분 전 추천(맛집/쿠팡 보기 · 확인) → 2정거장 전 알약·경로 하이라이트 → 1정거장 전 화면 펼침+캐릭터+'내릴 준비를 해주세요'+응원 문구 →
+//   하차 판정 3분 뒤 앱 자동 종료. 기준은 최종 목적지가 아니라 경로의 마지막 대중교통을 내리는 순서(내린 뒤 10분을 더 걸어도 같다). 모든 계산은 엔진이, 앱은 그림만"):
+//   앱은 증거(노드별 도착 시각·현재 진행 노드·차량 안인지·환승 대기인지·도착 확인 여부)를 /ride-eta op:'arrive' 에 보내고, 엔진이 정한 값만 쓴다 —
+//   마지막 하차 노드와 시각 · 추천 문구를 보일 시각 창 · 두/한 정거장 전 단계 · 내릴 준비 문구(날짜·시간·날씨에 맞춘 응원) · 하차 판정 시각과 앱 종료 시각.
+//   앱이 하는 일은 지금 시각이 엔진이 준 창 안인지 비교하는 것뿐이다. 엔진 답이 없으면(오프라인·옛 엔진) 추천·내릴 준비·자동 종료는 만들지 않는다(두/한 정거장 전 단계만 예전 계산으로 이어 간다).
+//   끄기: window._arriveOff = true
+var _arrive = { jsig: '', sig: '', res: null, at: 0, busy: false, nextTry: 0, alightedAt: null };
+function _arrEv(){      // 증거 모으기(판단 없음) — _ovlAlertLevelRaw 가 쓰는 것과 같은 값
+  var out = { c: -1, riding: false, hold: false };
+  try{
+    var N = _transitNodeData; if(!N || !N.length) return out;
+    var c = _pipHereIdx(); out.c = c;
+    var cn = N[c], riding = !!(cn && !cn.isOrigin && !cn.isWalk && (cn.isBus || cn.isSub));
+    if(riding && typeof _htlNotDeparted === 'function' && _htlNotDeparted()) riding = false;
+    var h = (typeof _xferHoldIdx === 'function') ? _xferHoldIdx() : -1;
+    if(riding && h >= 0 && c === h){ out.hold = true; riding = false; }
+    out.riding = riding;
+  }catch(e){}
+  return out;
+}
+function _arriveReset(){
+  _arrive = { jsig: '', sig: '', res: null, at: 0, busy: false, nextTry: 0, alightedAt: null };
+  window._arrQuitAt = 0; window._arrQuitCancel = true;     // 새 여정이 시작되면 이전 여정의 앱 종료 예약을 취소한다
+  window._arrAlightCoord = null; window._ovlFinLv = 0;
+}
+function _arriveEnsure(force){
+  try{
+    if(typeof fetch !== 'function' || window._arriveOff === true) return;
+    var N = (typeof _transitNodeData !== 'undefined') ? _transitNodeData : null;
+    var useT = !!(window._routeLocked === true && window._metroRouteMode !== true && N && N.length > 0 && (typeof _baseTimeMs === 'undefined' || _baseTimeMs == null));
+    if(!useT && !(force === true && N && N.length > 0 && _arrive.jsig)) return;      // force: 도착 확인으로 여정을 닫기 직전 마지막 질문. 여정이 닫혀도 앱 종료 예약(_arrQuitAt)은 지우지 않는다 — 하차 3분 뒤에 끝나야 한다
+    var nodes = [], i, n, jsig = '', tsig = '';
+    for(i = 0; i < N.length; i++){
+      n = N[i]; if(!n) continue;
+      var ms = null; try{ ms = n.arrTime ? _etaHmToMs(n.arrTime) : null; }catch(e0){}
+      nodes.push({ isWalk: !!n.isWalk, isOrigin: !!n.isOrigin, isSub: !!n.isSub, isBus: !!n.isBus, lineName: n.lineName || '', name: n.name || '', lat: (n.lat != null ? n.lat : null), lng: (n.lng != null ? n.lng : null), ms: ms });
+      jsig += (n.name || '') + '/' + (n.lineName || '') + '|'; tsig += (ms || '') + ',';
+    }
+    var A = _arrive;
+    if(A.jsig !== jsig){ if(A.jsig) _arriveReset(); A = _arrive; A.jsig = jsig; }
+    var ev = _arrEv(), alt = !!(_arrEnd && _arrEnd.st === 'done');
+    var sig = tsig + '#' + ev.c + (ev.riding ? 'R' : 'r') + (ev.hold ? 'H' : 'h') + (alt ? 'A' : 'a');
+    var now = Date.now(), due = !!(A.res && A.res.nextAtMs && now >= A.res.nextAtMs && now - A.at > 2000);
+    if(force !== true){ if(A.busy || now < A.nextTry) return; if(A.sig === sig && !due) return; }
+    A.busy = true; A.nextTry = now + 3000;
+    var cx = {}; try{ cx = _arrCx(now) || {}; }catch(e1){}
+    var body = { op: 'arrive', nowMs: now, nodes: nodes, idx: ev.c, riding: ev.riding, hold: ev.hold, alighted: alt, alightedAt: A.alightedAt, preMin: _ARR_PRE_MIN, quitAfterSec: 180,
+                 wx: { rainy: !!cx.rainy, snowy: !!cx.snowy, temp: (cx.temp != null ? cx.temp : null) } };
+    var jsNow = A.jsig;
+    fetch(_ETA_URL, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+      .then(function(r){ if(!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function(res){
+        var B = _arrive; B.busy = false;
+        if(B.jsig !== jsNow) return;
+        if(!res || res.v !== 1 || res.ok !== true || !res.alight){ B.nextTry = Date.now() + 20000; return; }
+        B.res = res; B.sig = sig; B.at = Date.now();
+        if(res.alightedAt) B.alightedAt = res.alightedAt;
+        if(res.quitAtMs){ window._arrQuitAt = res.quitAtMs; window._arrQuitCancel = false; }
+        try{ _ovlLastKey = null; _ovlSync(true); }catch(e2){}
+      })
+      .catch(function(){ _arrive.busy = false; _arrive.nextTry = Date.now() + 10000; });
+  }catch(e){ try{ _arrive.busy = false; }catch(e9){} }
+}
+window._arriveEnsure = _arriveEnsure;
+// 엔진이 정한 '마지막 대중교통 하차' (이름·좌표·시각). 없으면 null
+function _arrAlightEta(){
+  try{
+    var r = _arrive.res; if(!r || !r.ok || !r.alight || r.alight.ms == null) return null;
+    return { arrMs: r.alight.ms, rem: Math.round((r.alight.ms - Date.now()) / 1000), name: r.alight.name || '', lat: r.alight.lat, lng: r.alight.lng, idx: r.alight.idx };
+  }catch(e){ return null; }
+}
+window._arrAlightEta = _arrAlightEta;
+// 웹뷰만 있을 때(네이티브 오버레이가 없을 때)의 앱 종료 — 하차 판정 3분 뒤(엔진이 준 시각). 네이티브가 있으면 네이티브 타이머가 같은 시각에 끝낸다.
+function _arrQuitCheck(){
+  try{
+    var at = window._arrQuitAt || 0;
+    if(at > 0 && Date.now() >= at && !window._arrQuitDone){
+      window._arrQuitDone = true;
+      try{ _ovlDiag('앱종료', '하차 판정 3분 뒤 — 앱을 종료'); }catch(e0){}
+      _ovlRecoEnd();
+    }
+  }catch(e){}
+}
 // ★ 2026-10-02 (YJ: "2정거장 전엔 오버레이 모서리가 얇은 무지개빛으로 천천히 돌고, 1정거장 전엔 빨리 돌면서 곧 내려야 한다는 표시"):
 //   지금 타고 있는 구간에서 내릴 역까지 남은 정거장 수 → 2 = 두 정거장 전(천천히), 1 = 한 정거장 전·하차역 도착(빠르게), 0 = 표시 없음.
 //   홈에서 확정한 여정은 '지금 타고 있는 구간의 하차역'(다음 도보/환승 직전 노드, 없으면 종점)을, 지하철 탭 여정은 종점을 기준으로 센다.
 //   아직 타기 전(승차역 대기·환승 승차 대기)이거나 걷는 중이면 0 — 타고 있을 때만 알린다. 진행 위치는 화면·알림과 같은 값(_gpsMaxIdx / S.curIdx)을 쓴다.
 function _ovlAlertLevelRaw(st){
   window._ovlPre = 0;   // ★ 2026-10-12: 최종 목적지 3정거장 전이면 1 — 알약 모드에서 알약이 깜박이는 신호(경고 단계 0 일 때만 쓰인다)
+  window._ovlFinLv = 0; // ★ 2026-10-17: 마지막 대중교통 한 정거장 전이면 1 — 오버레이에 '내릴 준비' 줄(getoff)을 싣는 신호
   try{
     var useT = (window._routeLocked === true && window._metroRouteMode !== true
                 && typeof _transitNodeData !== 'undefined' && _transitNodeData && _transitNodeData.length > 0);
@@ -29352,12 +29501,17 @@ function _ovlAlertLevelRaw(st){
       for(var f = aNow + 1; f < n; f++){ var nf = N[f]; if(nf && !nf.isWalk && (nf.isBus || nf.isSub)){ fin = false; break; } }
       if(!fin && lv === 2) lv = 0;
       window._ovlPre = (fin && rem === 3) ? 1 : 0;
+      if(fin){   // ★ 2026-10-17: 마지막 구간의 두/한 정거장 전 단계는 엔진 값을 따른다(지금 진행 노드에 대한 답일 때만 — 아니면 위 예전 계산으로 이어 간다)
+        var _E = _arrive.res;
+        if(_E && _E.ok && _E.idx === c && _E.left != null && _E.alight && _E.alight.idx === aNow){ lv = _E.level | 0; window._ovlPre = _E.pre ? 1 : 0; }
+      }
     }
     if(lv > 0 && aNow >= 0){
       if(L.a !== aNow){ L.a = aNow; L.lv = lv; L.fin = fin; }
       else if(L.lv === 0 || lv < L.lv){ L.lv = lv; }
     }
     window._ovlAlertFin = (L.a >= 0) ? (L.fin !== false) : fin;
+    window._ovlFinLv = ((L.a >= 0) ? (L.fin !== false && L.lv === 1) : (fin && lv === 1)) ? 1 : 0;
     return (L.a >= 0) ? L.lv : lv;
   }catch(e){ return 0; }
 }
@@ -29472,7 +29626,7 @@ function _ovlLines(){
         var _re = (typeof _arrHomeEta === 'function') ? _arrHomeEta() : null;
         var _remS = _re ? _re.rem : ((d.min != null && isFinite(d.min)) ? d.min * 60 : null);
         var _rcForce = (window._ovlRecoForceUntil || 0) > Date.now();   // 설정>하차 추천 테스트 버튼: 도착 시각과 상관없이 90초간 미리보기
-        if(_rcForce || (_remS != null && _remS <= _ARR_PRE_MIN * 60 && _remS > -30)){
+        if(_rcForce || (_remS != null && _remS <= _ARR_PRE_MIN * 60 && _remS > -30 && window._ovlFinLv !== 1)){
           // ★ 2026-10-14: 실제 가게·상품 이름(r.ad)이 있으면 이름(첫 줄 굵게)·추천 설명(두 줄까지)·거리/분류(작게). 없으면 예전 문구 두 줄.
           var _ad = (r.ad && r.ad.a) ? r.ad : null;
           var _rl = _ad ? [_pipClampText(_ad.a, 40), _pipClampText(_ad.b || '', 64)].filter(function(x){ return x; })
@@ -29483,11 +29637,23 @@ function _ovlLines(){
               var _o = ['dolsom','lovel','dudung','sul','ppopu','chaeng'];
               r.ovlCh = _o[Math.floor(Math.random() * _o.length)];
             }
-            out.reco = { on: true, ch: r.ovlCh, a: _rl[0], b: _rl[1] || '', m: _ad ? _pipClampText(_ad.m || '', 32) : '', go: (_ac && _ac.kind === 'shop') ? '쿠팡 보기' : ((_ac && _ac.kind === 'delivery') ? '주문하기' : '맛집 보기'), bus: '주변버스 보기', end: '종료', at: r.at };
+            out.reco = { on: true, ch: r.ovlCh, a: _rl[0], b: _rl[1] || '', m: _ad ? _pipClampText(_ad.m || '', 32) : '', go: (_ac && _ac.kind === 'shop') ? '쿠팡 보기' : '맛집 보기', ok: '확인', at: r.at };   // ★ 2026-10-17 (YJ: "버튼은 맛집보기(쿠팡이면 쿠팡보기), 확인")
           }
         }
       }
     }catch(eRc){}
+    // ★ 2026-10-17 (YJ: "최종도착경로가 한 정거장 전이면 화면 펼쳐지면서 캐릭터 나오고 '내릴 준비를 해주세요' + 날짜·시간에 맞는 응원 문구, 앱 종료 버튼"):
+    //   마지막 대중교통 한 정거장 전(_ovlFinLv)이면 추천 줄 자리에 캐릭터와 함께 싣는다. 문구는 엔진(op:'arrive')이 날짜·시간·날씨에 맞춰 준 것을 그대로 쓴다(엔진 답 전엔 기존 응원 문구 목록).
+    try{
+      if(window._ovlFinLv === 1 && window._ovlGetoffOff !== true){
+        var _gE = _arrive.res, _gt = (_gE && _gE.getoff && _gE.getoff.title) || '내릴 준비를 해주세요', _gc = (_gE && _gE.getoff && _gE.getoff.cheer) || '';
+        if(!_gc){ try{ var _gcx = _arrCx(Date.now()); _gc = _arrVar((_gcx.h < 14 ? _ARR_CHEER_MORN : _ARR_CLOSE_EVE), _gcx, 7); }catch(eGc){ _gc = '오늘도 수고 많았어요'; } }
+        var _gAt = window._ovlAlertAt || 0;
+        if(window._ovlGetoffChAt !== _gAt || !window._ovlGetoffCh){ window._ovlGetoffChAt = _gAt; var _go = ['dolsom','lovel','dudung','sul','ppopu','chaeng']; window._ovlGetoffCh = _go[Math.floor(Math.random() * _go.length)]; }
+        out.getoff = { on: true, ch: window._ovlGetoffCh, a: _pipClampText(_gt, 20), b: _pipClampText(_gc, 40), end: '앱 종료', at: _gAt };
+        out.reco = null;
+      }
+    }catch(eGo){}
   }catch(e){}
   return out;
 }
@@ -29588,25 +29754,14 @@ function _ovlRecoGo(){
   try{
     var L = window._arrLast, ac = L && L.action;
     _ovlRecoDismiss();
+    // ★ 2026-10-17: [쿠팡 보기] = 그 상품 링크, [맛집 보기] = 앱에서 그 가게(야식 시간대도 같다 — 배달앱 버튼은 팝업 아래 보조로만)
     if(ac && ac.kind === 'shop' && typeof _arrShopOpen === 'function') _arrShopOpen();
-    else if(ac && ac.kind === 'delivery' && typeof _arrOrderAuto === 'function'){ var _dm = ac.menu || '야식'; setTimeout(function(){ _arrOrderAuto(_dm); }, 700); }   // 앱이 앞으로 온 뒤 배달앱을 켠다
+    else if(L && L.ad && L.ad.pn && typeof _arrOpenPlace === 'function') _arrOpenPlace();
+    else if(ac && ac.kind === 'delivery' && typeof _arrOrderAuto === 'function'){ var _dm = ac.menu || '야식'; setTimeout(function(){ _arrOrderAuto(_dm); }, 700); }   // 가게 정보가 없을 때만 예전처럼
     else if(typeof _arrGoFoodTab === 'function') _arrGoFoodTab();
   }catch(e){}
 }
-// ★ 2026-10-16 (YJ: "맛집보기 · 주변버스보기 · 종료"): [주변버스 보기] = 노선도 탭의 버스 > 주변 정류장으로. 추천은 닫는다.
-function _ovlRecoBus(){
-  try{
-    _ovlRecoDismiss();
-    var ov = document.getElementById('briefModalOv'); if(ov) ov.remove();
-    var el = document.getElementById('ni-map');
-    if(typeof switchTab === 'function') switchTab('map', el);
-    setTimeout(function(){
-      try{ if(typeof switchMapInnerTab === 'function') switchMapInnerTab('bus'); }catch(e1){}
-      try{ if(typeof switchBusView === 'function') switchBusView('near'); }catch(e2){}
-    }, 150);
-  }catch(e){}
-}
-// ★ 2026-10-16 (YJ: "종료는 앱 종료로 정확히 해줘"): [종료] = 앱 종료(네이티브가 서비스·오버레이·프로세스까지 끝낸다). 웹은 추천을 닫고 앱 종료를 요청한다.
+// ★ 2026-10-16 (YJ: "종료는 앱 종료로 정확히 해줘"): 앱 종료(네이티브가 서비스·오버레이·화면까지 끝낸다). 웹은 추천을 닫고 앱 종료를 요청한다. ★ 2026-10-17: 내릴 준비의 [앱 종료]와 하차 3분 뒤 자동 종료가 쓴다.
 function _ovlRecoEnd(){
   try{
     _ovlRecoDismiss();
@@ -29616,7 +29771,7 @@ function _ovlRecoEnd(){
     if(typeof _exitConfirm === 'function') _exitConfirm();
   }catch(e){}
 }
-window._ovlRecoGo = _ovlRecoGo; window._ovlRecoDismiss = _ovlRecoDismiss; window._ovlRecoBus = _ovlRecoBus; window._ovlRecoEnd = _ovlRecoEnd;
+window._ovlRecoGo = _ovlRecoGo; window._ovlRecoDismiss = _ovlRecoDismiss; window._ovlRecoEnd = _ovlRecoEnd;
 window._ovlAct = function(a){
   try{
     if(a === 'press' && _arrEnd && _arrEnd.st === 'ask'){ _arrEndFinish('오버레이 버튼'); return; }
@@ -29627,7 +29782,6 @@ window._ovlAct = function(a){
     else if(a === 'pill'){ _rs.openUntil = Date.now() + 20000; }
     else if(a === 'recoGo') _ovlRecoGo();
     else if(a === 'recoOk') _ovlRecoDismiss();
-    else if(a === 'recoBus') _ovlRecoBus();
     else if(a === 'recoEnd') _ovlRecoEnd();
     _rsTick();
     _ovlSync(true);
@@ -29696,11 +29850,15 @@ function _ovlTestPayload(T, now){
   var rem = Math.max(0, _OVT_STN.length - 1 - cur);
   var reco = { on: false };
   if(m === 'reco' && window._ovlRecoDismissAt === undefined){   // [맛집 보기]·[주변버스 보기]를 누르면 _ovlRecoDismiss 가 값을 채워 추천이 닫힌다
-    reco = { on: true, ch: 'dolsom', a: '테스트 식당 · 돈가스', b: '비 오는 점심엔 따끈한 돈가스 어때요?', m: '', go: '맛집 보기', bus: '주변버스 보기', end: '종료', at: ph.at };
+    reco = { on: true, ch: 'dolsom', a: '테스트 식당 · 돈가스', b: '비 오는 점심엔 따끈한 돈가스 어때요?', m: '', go: '맛집 보기', ok: '확인', at: ph.at };
   }
-  return { active: true, line1: _OVT_STN[cur][0], pill: '', track: _OVT_STN.map(function(x){ return x[0]; }), cur: cur, base: 0, theme: _ovlThemeColors(), cells: cells,
+  var getoff = { on: false };
+  if(m === 'alert1') getoff = { on: true, ch: 'lovel', a: '내릴 준비를 해주세요', b: '오늘 하루도 수고 많았어요', end: '앱 종료', at: ph.at };   // ★ 2026-10-17: 한 정거장 전 = 내릴 준비 + 응원 문구 + [앱 종료]
+  var P0 = { active: true, line1: _OVT_STN[cur][0], pill: '', track: _OVT_STN.map(function(x){ return x[0]; }), cur: cur, base: 0, theme: _ovlThemeColors(), cells: cells,
            line2: '남은시간: 00시간 0' + rem + '분 · 18:48도착', line3: '', alert: lv, alertAt: lv ? ph.at : 0, alertVibe: lv > 0, pre: false, moving: false,
-           rs: { st: 'hidden' }, reco: reco };
+           rs: { st: 'hidden' }, reco: reco, getoff: getoff };
+  if(m === 'quit' && !T.quitSent){ T.quitSent = true; P0.quit = { at: Date.now() + 15000 }; }   // ★ 2026-10-17: 15초 뒤 앱 자동 종료 예약(진짜 종료 — 시계 위젯은 남는지 확인)
+  return P0;
 }
 var _ovlTestLastAt = 0, _ovlTestLastKey = '';
 function _ovlTestSend(n, force){
@@ -29710,7 +29868,7 @@ function _ovlTestSend(n, force){
     if(!force && key === _ovlTestLastKey && now - _ovlTestLastAt < 3000) return;
     _ovlTestLastKey = key; _ovlTestLastAt = now;
     var r = n.update(P); if(r && typeof r.catch === 'function') r.catch(function(){ _ovlTestLastKey = ''; });
-    var st = document.getElementById('ovlTestStat'); if(st){ var ph = _ovlTestPhase(T, now); st.textContent = '진행 중 · 지금 단계: ' + ({ plain: '평상시', reco: '추천', alert2: '2정거장 전', alert1: '1정거장 전' }[ph.mode]) + ' · ' + Math.max(0, Math.round((T.until - now) / 1000)) + '초 남음'; }
+    var st = document.getElementById('ovlTestStat'); if(st){ var ph = _ovlTestPhase(T, now); st.textContent = '진행 중 · 지금 단계: ' + ({ plain: '평상시', reco: '추천', alert2: '2정거장 전', alert1: '1정거장 전(내릴 준비)', quit: '앱 자동종료 예약(15초 뒤)' }[ph.mode]) + ' · ' + Math.max(0, Math.round((T.until - now) / 1000)) + '초 남음'; }
   }catch(e){}
 }
 function _ovlTestStart(mode){
@@ -29745,7 +29903,7 @@ function _ovlSync(force){
     var active = !!(_ovlUsable() && _pipHasRoute());   // ★ 2026-10-01: PiP 스위치와 무관(PiP 는 꺼 둠)
     var L = active ? _ovlLines() : { l1:'', l2:'', l3:'', track:[], cur:-1, alert:0, moving:false };
     var key = (active ? '1' : '0') + '|' + L.l1 + '|' + L.l2 + '|' + L.l3 + '|' + L.track.join('>') + '|' + L.cur + '|' + L.alert + '|' + (L.alertAt || 0) + '|' + (L.pre ? 'P' : 'p') + '|' + (L.moving ? 'M' : 'S') + '|' + (L.pill || '')
-              + '|' + (L.strip ? JSON.stringify(L.strip) + L.scur + '@' + L.sbase + JSON.stringify(L.theme) : '') + '|' + JSON.stringify(L.rs || null) + '|' + JSON.stringify(L.reco || null);
+              + '|' + (L.strip ? JSON.stringify(L.strip) + L.scur + '@' + L.sbase + JSON.stringify(L.theme) : '') + '|' + JSON.stringify(L.rs || null) + '|' + JSON.stringify(L.reco || null) + '|' + JSON.stringify(L.getoff || null) + '|' + (window._arrQuitAt || 0) + (window._arrQuitCancel ? 'C' : '');
     var now = Date.now();
     try{   // ★ 2026-10-13: 마커가 굳거나(주황) 늦을 때 원인을 로그로 가리려고 30초마다 '무엇을 보고 그렸나'를 남긴다(읽기만)
       if(active && now - (window._ovlMkLogAt || 0) >= 30000){
@@ -29765,7 +29923,11 @@ function _ovlSync(force){
       var _cn = (L.scur || 0) + '@' + (L.sbase || 0);
       if(active && _cn !== window._ovlLastCurKey){ window._ovlLastCurKey = _cn; _ovlDiag('오버레이송신', '현위치 칸 ' + _cn + ' ' + (L.l1 || '')); }
     }catch(eDg){}
-    var _up = { active: active, line1: L.l1, pill: L.pill || '', track: L.track, cur: L.cur, line2: L.l2, line3: L.l3, alert: L.alert || 0, alertAt: L.alertAt || 0, alertVibe: !!L.alertVibe, pre: !!L.pre, moving: !!L.moving, rs: L.rs || { st: 'hidden' }, reco: L.reco || { on: false } };
+    var _up = { active: active, line1: L.l1, pill: L.pill || '', track: L.track, cur: L.cur, line2: L.l2, line3: L.l3, alert: L.alert || 0, alertAt: L.alertAt || 0, alertVibe: !!L.alertVibe, pre: !!L.pre, moving: !!L.moving, rs: L.rs || { st: 'hidden' }, reco: L.reco || { on: false }, getoff: L.getoff || { on: false } };
+    // ★ 2026-10-17: 하차 판정 3분 뒤 앱 종료 예약(엔진이 준 시각). 네이티브가 이 시각에 앱을 끝낸다 — 키가 없으면 변경 없음, at:0 이면 예약 취소(새 여정)
+    var _qa = window._arrQuitAt || 0;
+    if(_qa > 0) _up.quit = { at: _qa };
+    else if(window._arrQuitCancel){ _up.quit = { at: 0 }; window._arrQuitCancel = false; }
     if(L.strip && L.strip.length){ _up.cells = L.strip; _up.cur = L.scur || 0; _up.base = L.sbase || 0; _up.theme = L.theme; }   // ★ 2026-10-11: 앱 경로 화면 칸 그대로(네이티브가 같은 모양으로 그림)
     var r = n.update(_up);
     if(r && typeof r.catch === 'function') r.catch(function(){ _ovlLastKey = null; });   // 실패하면 다음 틱에 다시

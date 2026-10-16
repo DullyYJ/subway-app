@@ -638,6 +638,55 @@ t('row — 전환 종류: 생성(오른쪽에서 밀기) · 환승(위에서 내
   assert.strictEqual(k(null, true, [false]).kind, 'push_in'); assert.strictEqual(k('엉뚱', true, [false]).kind, 'push_in');
   assert.strictEqual(k('board', true, [true, false]).ease.length, 4);
 });
+// ── 도착 전 순서(op:'arrive') — 기준은 최종 목적지가 아니라 '마지막 대중교통 하차'(2026-10-17 YJ) ──
+const NOW0 = Date.UTC(2026, 9, 16, 9, 0, 0);           // KST 2026-10-16(금) 18:00
+const mn = (m) => NOW0 + m * 60000;
+// 지하철 3정거장 + 도보 10분(마지막 하차 뒤 걸어서 목적지)
+const arrNodes = () => [
+  { isOrigin: true, name: '출발', ms: null },
+  { isSub: true, lineName: '2호선', name: 'A', ms: mn(5) }, { isSub: true, lineName: '2호선', name: 'B', ms: mn(8) },
+  { isSub: true, lineName: '2호선', name: 'C', ms: mn(11) }, { isSub: true, lineName: '2호선', name: 'D', ms: mn(14) },
+  { isWalk: true, name: '도보', ms: mn(24) }, { name: '목적지', isWalk: true, ms: mn(24) }
+];
+const arrive = (o) => rideEta(Object.assign({ op: 'arrive', nowMs: NOW0, nodes: arrNodes(), idx: 1, riding: true }, o || {}));
+t('arrive — 하차 기준은 마지막 대중교통(D)이다. 뒤의 도보 10분이 있어도 목적지 도착 시각을 쓰지 않는다', () => {
+  const r = arrive(); assert.strictEqual(r.ok, true); assert.strictEqual(r.alight.name, 'D'); assert.strictEqual(r.alight.ms, mn(14));
+  assert.strictEqual(r.reco.fromMs, mn(14) - 7 * 60000, '하차 7분 전부터 추천'); assert.ok(r.reco.untilMs > mn(14));
+});
+t('arrive — 두 정거장 전 level 2 · 한 정거장 전 level 1 · 그 앞은 0 (마지막 구간을 타는 중일 때만)', () => {
+  assert.strictEqual(arrive({ idx: 1 }).level, 0); assert.strictEqual(arrive({ idx: 1 }).left, 3); assert.strictEqual(arrive({ idx: 1 }).pre, 1, '세 정거장 전 = 알약 깜박임 신호');
+  assert.strictEqual(arrive({ idx: 2 }).level, 2); assert.strictEqual(arrive({ idx: 2 }).left, 2);
+  assert.strictEqual(arrive({ idx: 3 }).level, 1); assert.strictEqual(arrive({ idx: 4 }).level, 1);
+  assert.strictEqual(arrive({ idx: 3, riding: false }).level, 0, '타기 전·걷는 중이면 0'); assert.strictEqual(arrive({ idx: 3, hold: true }).level, 0, '환승 승차 대기면 0');
+});
+t('arrive — 환승 경로: 앞 구간을 타는 중에는 마지막 구간 단계가 아니다(level 0, left null)', () => {
+  const nodes = [{ isOrigin: true, ms: null }, { isSub: true, lineName: '1호선', name: 'P', ms: mn(4) }, { isSub: true, lineName: '1호선', name: 'Q', ms: mn(8) },
+    { isBus: true, lineName: '30번', name: 'R', ms: mn(12) }, { isBus: true, lineName: '30번', name: 'S', ms: mn(16) }, { isBus: true, lineName: '30번', name: 'T', ms: mn(20) }];
+  const a = rideEta({ op: 'arrive', nowMs: NOW0, nodes, idx: 2, riding: true }); assert.strictEqual(a.alight.name, 'T'); assert.strictEqual(a.level, 0); assert.strictEqual(a.left, null);
+  const b = rideEta({ op: 'arrive', nowMs: NOW0, nodes, idx: 4, riding: true }); assert.strictEqual(b.level, 1); assert.strictEqual(b.legStart, 3);
+});
+t('arrive — 내릴 준비 문구는 엔진이 날짜·시간·날씨에 맞춰 준다(금요일 저녁 · 비 · 월급날 · 주말)', () => {
+  const fri = arrive({ idx: 3 }); assert.strictEqual(fri.getoff.title, '내릴 준비를 해주세요'); assert.ok(/주말|금요일|고생/.test(fri.getoff.cheer), fri.getoff.cheer);
+  assert.ok(/빗길|우산|비 오는/.test(arrive({ idx: 3, wx: { rainy: true } }).getoff.cheer));
+  assert.ok(/눈/.test(arrive({ idx: 3, wx: { snowy: true } }).getoff.cheer));
+  const sat = rideEta({ op: 'arrive', nowMs: Date.UTC(2026, 9, 17, 3, 0, 0), nodes: arrNodes().map(n => Object.assign({}, n, { ms: n.ms == null ? null : n.ms - NOW0 + Date.UTC(2026, 9, 17, 3, 0, 0) })), idx: 3, riding: true }); // 토요일 낮 12시
+  assert.ok(/주말|쉬는 날/.test(sat.getoff.cheer), sat.getoff.cheer);
+  assert.strictEqual(arrive({ idx: 3 }).getoff.cheer, arrive({ idx: 3 }).getoff.cheer, '같은 시각엔 같은 문구');
+});
+t('arrive — 하차 판정 3분 뒤 앱 종료 시각(quitAtMs). 판정 시각은 한 번 정해지면 안 움직인다', () => {
+  const a = arrive({ idx: 4, alighted: false }); assert.strictEqual(a.alighted, false); assert.strictEqual(a.quitAtMs, null);
+  const b = arrive({ idx: 5, alighted: true }); assert.strictEqual(b.alighted, true); assert.strictEqual(b.alightedAt, NOW0); assert.strictEqual(b.quitAtMs, NOW0 + 180000);
+  const c = arrive({ nowMs: NOW0 + 60000, idx: 5, alighted: true, alightedAt: NOW0 }); assert.strictEqual(c.quitAtMs, NOW0 + 180000, '다시 물어도 처음 판정 + 3분');
+  assert.strictEqual(arrive({ idx: 5 }).alighted, true, '진행 노드가 하차 노드를 지났으면 하차로 본다');
+  assert.strictEqual(arrive({ idx: 4, alighted: true, quitAfterSec: 60 }).quitAtMs, NOW0 + 60000);
+});
+t('arrive — 값이 모자라면 ok:false 로 답한다(앱은 그리지 않는다) · nextAtMs 는 다음 경계 시각', () => {
+  assert.strictEqual(rideEta({ op: 'arrive', nowMs: NOW0, nodes: [{ isWalk: true, ms: mn(3) }] }).ok, false);
+  assert.strictEqual(rideEta({ op: 'arrive', nowMs: NOW0, nodes: [{ isSub: true, name: 'X', ms: null }] }).ok, false);
+  assert.strictEqual(rideEta({ op: 'arrive', nowMs: NOW0, nodes: [] }).ok, false);
+  assert.strictEqual(arrive().nextAtMs, mn(14) - 7 * 60000, '추천 시작 시각이 다음 경계');
+  assert.strictEqual(arrive({ nowMs: mn(8) }).nextAtMs, mn(14) + 30000, '추천 끝 시각이 다음 경계');
+});
 (async () => {
   const mkReq = (method, body) => new Request('https://example.test/ride-eta', { method: method, body: body == null ? undefined : (typeof body === 'string' ? body : JSON.stringify(body)), headers: { 'content-type': 'application/json' } });
   await tAsync('POST JSON → 200 + JSON(arr…) + CORS 헤더', async () => {
