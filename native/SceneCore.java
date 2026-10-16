@@ -83,6 +83,9 @@ public final class SceneCore {
     final Host host; final SceneCv factory; final SceneUtil.Rng R;
     boolean laid, running; double PW, PH, dens = 1, k = 1, W, H, dpr = 1; boolean dark = true, reduce;
     SceneArt.Geom g; double t, fade; long frames;
+    /** TV 전원 전환(2026-10-16, YJ: "경로 탐색·취소·애니메이션이 바뀔 때 TV 처럼 화면이 꺼졌다 켜지게"): 장면이 바뀌는 순간부터 지난 초(없으면 -1). */
+    double tv = -1;
+    static final double TV_OFF = .30, TV_HOLD = .08, TV_ON = .42, TV_T = TV_OFF + TV_HOLD + TV_ON;
     String mode; SceneModel.Res res, LAST; SceneArt.Pal L; SceneArt.Bg bg; SceneCv.Layer prev;
     List<Actor> actors = new ArrayList<>(); List<Traffic> traffic = new ArrayList<>(); List<Pt> pt = new ArrayList<>(); List<Gfx> gfx = new ArrayList<>(); List<Ripple> ripples = new ArrayList<>();
     Actor hero; Seq seq; Ride ride; double nextCar, spawnAt, waitNext, bellAt; int castI;
@@ -384,7 +387,7 @@ public final class SceneCore {
     }
     /** 손가락이 캐릭터 위에 닿았다. 캐릭터가 있으면 true(길게 누르기 대기 시작) */
     public boolean down(double xdp, double ydp) {
-        if (!running || "ride".equals(mode) || DRAG != null) return false;
+        if (!running || "ride".equals(mode) || DRAG != null || tv >= 0) return false;      // TV 전환 중에는 집지 못한다
         Actor a = hitActor(xdp / k, ydp / k); if (a == null) return false;
         Pend p = new Pend(); p.a = a; p.t0 = t; p.sxdp = xdp; p.sydp = ydp; PEND = p; return true;
     }
@@ -399,7 +402,7 @@ public final class SceneCore {
     /** 손가락이 닿았거나 · 잡혀 있거나 · 놓은 뒤 떨어지고 착륙 연출 중이면 true — 안드로이드가 이때만 화면 주사율을 끝까지(120Hz) 쓰고, 평소엔 60Hz 로 아낀다. */
     public boolean interactive() {
         if (!running) return false;
-        if (DRAG != null || PEND != null || t < hotUntil) return true;
+        if (DRAG != null || PEND != null || t < hotUntil || tv >= 0) return true;          // TV 전환도 끝까지 부드럽게(주사율 그대로)
         for (Actor a : actors) if (a.st.equals("held") || a.st.equals("fall")) return true;
         return false;
     }
@@ -828,7 +831,7 @@ public final class SceneCore {
         int bc = css(pickOf(BUS_COLORS)); String bn = pickOf(BUS_NOS); if (!keepBus || busNo == null) { busColor = bc; busNo = bn; }
         double kk = PH < 150 ? Math.max(.55, PH / 150) : clamp(Math.min(PH / 190, PW / 200), 1, 2);       // 150px 보다 낮으면 같은 그림을 줄여 그린다
         k = kk; W = PW / kk; H = PH / kk; dpr = dens * kk; g = SceneArt.geom(W, H);
-        fade = 0; frames = 0; error = null; prev = null; running = true;
+        fade = 0; tv = -1; frames = 0; error = null; prev = null; running = true;
     }
     /** 칸 크기(dp)·화면 밀도·테마를 알려 준다. 바뀌었으면 같은 장면을 새 크기로 다시 만든다. */
     public void layout(double pwDp, double phDp, double density, boolean isDark) {
@@ -857,14 +860,17 @@ public final class SceneCore {
     }
     /** 장면이 바뀔 때 옛 장면을 한 장 찍어 두고 서서히 사라지게 한다 */
     void snapshot() {
-        try { prev = factory.newLayer(W, H, dpr); SceneCv pc = prev.cv(); paintAll(pc, 0); fade = 1; } catch (RuntimeException e) { prev = null; fade = 0; }
+        if (reduce) { prev = null; tv = -1; return; }                                  // 움직임 줄이기: 전환 연출 없이 바로 바뀐다
+        try { prev = factory.newLayer(W, H, dpr); SceneCv pc = prev.cv(); paintAll(pc, 0); tv = 0; } catch (RuntimeException e) { prev = null; tv = -1; }
     }
-    public void stop() { dragReset(); hotUntil = 0; running = false; actors = new ArrayList<>(); prev = null; fade = 0; }
+    public void stop() { dragReset(); hotUntil = 0; running = false; actors = new ArrayList<>(); prev = null; fade = 0; tv = -1; }
     public boolean isRunning() { return running; }
     public SceneModel.Res last() { return LAST; }
     public String tag() { return running && res != null && res.tag != null ? res.tag : ""; }
     public double scaleDevice() { return dpr; }
     public double fade() { return fade; }
+    /** TV 전환이 진행 중이면 시작 뒤 지난 초, 아니면 -1. */
+    public double tv() { return tv; }
     public SceneCv.Layer prevLayer() { return prev; }
     public double designW() { return W; }
     public double designH() { return H; }
@@ -874,7 +880,7 @@ public final class SceneCore {
         if (!running) return;
         if (reduce) dt = 0;
         dt = Math.min(.1, Math.max(0, dt)); dtLast = dt; t += dt; frames++;
-        if (fade > 0) fade = Math.max(0, fade - dt / .45);
+        if (tv >= 0) { tv += dt; if (tv >= TV_T) { tv = -1; prev = null; } }
         // 꾹 누르기: 정해진 시간이 지나면 잡힌다
         if (PEND != null && t - PEND.t0 >= LONGPRESS) grab();
         try {
@@ -897,15 +903,53 @@ public final class SceneCore {
         if ("ride".equals(mode)) drawRide(c); else drawStreet(c, dt);
         if (dark) { c.fillStyle("rgba(8,12,28,.10)"); c.fillRect(0, 0, W, H); }
     }
+    // ═══ TV 전원 전환 ═══
+    //   꺼짐(0.30초): 옛 장면이 위아래로 납작해져 하얀 선이 되고, 선이 좌우로 줄어 점이 된다.
+    //   암전(0.08초): 점이 깜빡이며 사라진다.   켜짐(0.42초): 점→가로선이 번지고, 선이 위아래로 열리며 새 장면이 하얗게 번쩍이다 제 밝기로 돌아온다.
+    //   언제 바뀌는지는 엔진(/scene 의 mode)이 정한다 — 여기서는 받은 장면을 그릴 뿐이다. 웹 _CS 의 tvDraw 와 같은 수식(웹이 예비 화면이 될 때 똑같이 보이게).
+    static double eIn(double x) { x = clamp(x, 0, 1); return x * x; }
+    static double eOut(double x) { x = clamp(x, 0, 1); double u = 1 - x; return 1 - u * u * u; }
+    static final int TV_BLACK = 0xFF04060C;
+    void tvDraw(SceneCv c) {
+        double cx = W / 2, cy = H / 2;
+        c.fillStyle(TV_BLACK); c.fillRect(0, 0, W, H);
+        if (tv < TV_OFF) {
+            double a = tv / TV_OFF, sx = 1, sy = 1;
+            if (a < .72) sy = 1 - .985 * eIn(a / .72); else { sy = .015; sx = 1 - eIn((a - .72) / .28); }
+            if (prev != null) { c.save(); c.translate(cx, cy); c.scale(Math.max(sx, .001), Math.max(sy, .001)); c.drawImage(prev, -W / 2, -H / 2, W, H); c.restore(); }
+            double rw = Math.max(sx * W, 2.5), rh = Math.max(sy * H, 2);
+            c.globalAlpha(clamp(.12 + .88 * a * a, 0, 1)); c.fillStyle(0xFFFFFFFF); c.fillRect(cx - rw / 2, cy - rh / 2, rw, rh); c.globalAlpha(1);
+        } else if (tv < TV_OFF + TV_HOLD) {
+            double k = 1 - (tv - TV_OFF) / TV_HOLD;
+            c.globalAlpha(clamp(k, 0, 1)); c.fillStyle(0xFFFFFFFF); c.fillRect(cx - 1.25, cy - 1, 2.5, 2); c.globalAlpha(1);
+        } else {
+            double b = (tv - TV_OFF - TV_HOLD) / TV_ON;
+            if (b < .22) {
+                double rw = Math.max(W * eOut(b / .22), 2.5);
+                c.fillStyle(0xFFFFFFFF); c.fillRect(cx - rw / 2, cy - 1, rw, 2);
+            } else {
+                double p = (b - .22) / .78, rh = Math.max(H * eOut(p), 2);
+                c.save(); SceneUtil.rr(c, 0, cy - rh / 2, W, rh, 0); c.clip();
+                paintAll(c, dtLast); dtLast = 0;
+                c.globalAlpha(clamp(.9 * (1 - p) * (1 - p), 0, 1)); c.fillStyle(0xFFFFFFFF); c.fillRect(0, cy - rh / 2, W, rh); c.globalAlpha(1);
+                c.restore();
+                c.globalAlpha(clamp(.9 * (1 - p), 0, 1)); c.fillStyle(0xFFFFFFFF); c.fillRect(0, cy - rh / 2 - 1, W, 2); c.fillRect(0, cy + rh / 2 - 1, W, 2); c.globalAlpha(1);
+            }
+        }
+    }
     /** 한 프레임을 그린다. c 의 바닥 변환은 '화면 픽셀' 그대로(여기서 장면 좌표로 확대한다). */
     static final int HOST_BG = 0xFF9FD0FF; static final double HOST_RADIUS = 11;
     public void render(SceneCv c) {
         if (!running || bg == null) return;
         c.save(); c.scale(dpr, dpr);
         // 웹에서는 호스트 div(.cong-scene)의 CSS 가 하던 일: 연파랑 바탕(#9fd0ff)과 둥근 모서리(12px − 테두리 1px). 네이티브는 캔버스가 직접 한다.
-        SceneUtil.rr(c, 0, 0, W, H, HOST_RADIUS); c.clip(); c.fillStyle(HOST_BG); c.fillRect(0, 0, W, H);
-        try { paintAll(c, dtLast); dtLast = 0; } catch (RuntimeException e) { if (error == null) error = String.valueOf(e); }
-        if (fade > 0 && prev != null) { c.globalAlpha(clamp(fade, 0, 1)); c.drawImage(prev, 0, 0, W, H); c.globalAlpha(1); }
+        SceneUtil.rr(c, 0, 0, W, H, HOST_RADIUS); c.clip();
+        if (tv >= 0) {
+            try { tvDraw(c); } catch (RuntimeException e) { if (error == null) error = String.valueOf(e); }
+        } else {
+            c.fillStyle(HOST_BG); c.fillRect(0, 0, W, H);
+            try { paintAll(c, dtLast); dtLast = 0; } catch (RuntimeException e) { if (error == null) error = String.valueOf(e); }
+        }
         c.restore();
     }
 

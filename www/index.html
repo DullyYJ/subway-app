@@ -42706,7 +42706,7 @@ var _CS = (function(){
   function bindDrag(host){
     if(!host || host._csDrag) return; host._csDrag = true;
     host.addEventListener('pointerdown', function(ev){
-      if(!S || S.mode === 'ride' || DRAG || (ev.pointerType === 'mouse' && ev.button)) return;
+      if(!S || S.mode === 'ride' || S.tv >= 0 || DRAG || (ev.pointerType === 'mouse' && ev.button)) return;      // TV 전환 중에는 못 집는다
       var p = gpos(ev), a = hitActor(p.x, p.y); if(!a) return;
       if(PEND) clearTimeout(PEND.timer);
       PEND = { a: a, id: ev.pointerId, sx: ev.clientX, sy: ev.clientY, touch: ev.pointerType !== 'mouse', timer: setTimeout(function(){ grab(); }, 380) };
@@ -42919,17 +42919,52 @@ var _CS = (function(){
     cv.width = Math.round(PW * dpr0); cv.height = Math.round(PH * dpr0); cv.style.width = '100%'; cv.style.height = '100%';
     var ctx = cv.getContext('2d'); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
     var prev = mk(PW * dpr0, PH * dpr0), reduce = false; try{ reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(e){}
-    S = { host: host, cv: cv, ctx: ctx, W: W, H: H, PW: PW, PH: PH, k: k, dpr: dpr, g: geom(W, H), t: 0, last: 0, raf: 0, mode: null, res: null, L: null, dark: isDark(), actors: [], traffic: [], pt: [], ripples: [], hero: null, seq: null, prev: prev, fade: 0, busColor: pickOf(BUS_COLORS), busNo: pickOf(BUS_NOS), reduce: reduce, castI: 0, nextCar: 0, spawnAt: 0, chk: 0, frames: 0 };
+    S = { host: host, cv: cv, ctx: ctx, W: W, H: H, PW: PW, PH: PH, k: k, dpr: dpr, g: geom(W, H), t: 0, last: 0, raf: 0, mode: null, res: null, L: null, dark: isDark(), actors: [], traffic: [], pt: [], ripples: [], hero: null, seq: null, prev: prev, fade: 0, tv: -1, busColor: pickOf(BUS_COLORS), busNo: pickOf(BUS_NOS), reduce: reduce, castI: 0, nextCar: 0, spawnAt: 0, chk: 0, frames: 0 };
     return S;
+  }
+  function paintScene(c, dt){
+    if(S.mode === 'ride') drawRide(c); else drawStreet(c, dt);
+    if(S.dark){ c.fillStyle = 'rgba(8,12,28,.10)'; c.fillRect(0, 0, S.W, S.H); }
+  }
+  // TV 전원 전환(2026-10-16, YJ: "경로 탐색·취소·애니메이션이 바뀔 때 TV 처럼 화면이 꺼졌다 켜지게"). 네이티브 SceneCore.tvDraw 와 같은 수식 —
+  // 꺼짐 0.30초(옛 장면이 납작한 선 → 점) · 암전 0.08초 · 켜짐 0.42초(점 → 가로선 → 위아래로 열리며 번쩍). 언제 바뀌는지는 엔진(mode)이 정한다.
+  var TV_OFF = .30, TV_HOLD = .08, TV_ON = .42, TV_T = TV_OFF + TV_HOLD + TV_ON;
+  function tvIn(x){ x = clamp(x, 0, 1); return x * x; }
+  function tvOut(x){ x = clamp(x, 0, 1); var u = 1 - x; return 1 - u * u * u; }
+  function tvDraw(c, dt){
+    var W = S.W, H = S.H, cx = W / 2, cy = H / 2, tv = S.tv;
+    c.fillStyle = '#04060c'; c.fillRect(0, 0, W, H);
+    if(tv < TV_OFF){
+      var a = tv / TV_OFF, sx = 1, sy = 1;
+      if(a < .72) sy = 1 - .985 * tvIn(a / .72); else { sy = .015; sx = 1 - tvIn((a - .72) / .28); }
+      if(S.prev){ c.save(); c.translate(cx, cy); c.scale(Math.max(sx, .001), Math.max(sy, .001)); c.drawImage(S.prev, -W / 2, -H / 2, W, H); c.restore(); }
+      var rw = Math.max(sx * W, 2.5), rh = Math.max(sy * H, 2);
+      c.globalAlpha = clamp(.12 + .88 * a * a, 0, 1); c.fillStyle = '#fff'; c.fillRect(cx - rw / 2, cy - rh / 2, rw, rh); c.globalAlpha = 1;
+    } else if(tv < TV_OFF + TV_HOLD){
+      var k = 1 - (tv - TV_OFF) / TV_HOLD;
+      c.globalAlpha = clamp(k, 0, 1); c.fillStyle = '#fff'; c.fillRect(cx - 1.25, cy - 1, 2.5, 2); c.globalAlpha = 1;
+    } else {
+      var b = (tv - TV_OFF - TV_HOLD) / TV_ON;
+      if(b < .22){
+        var w2 = Math.max(W * tvOut(b / .22), 2.5);
+        c.fillStyle = '#fff'; c.fillRect(cx - w2 / 2, cy - 1, w2, 2);
+      } else {
+        var p = (b - .22) / .78, h2 = Math.max(H * tvOut(p), 2);
+        c.save(); c.beginPath(); c.rect(0, cy - h2 / 2, W, h2); c.clip();
+        paintScene(c, dt);
+        c.globalAlpha = clamp(.9 * (1 - p) * (1 - p), 0, 1); c.fillStyle = '#fff'; c.fillRect(0, cy - h2 / 2, W, h2); c.globalAlpha = 1;
+        c.restore();
+        c.globalAlpha = clamp(.9 * (1 - p), 0, 1); c.fillStyle = '#fff'; c.fillRect(0, cy - h2 / 2 - 1, W, 2); c.fillRect(0, cy + h2 / 2 - 1, W, 2); c.globalAlpha = 1;
+      }
+    }
   }
   function paintAll(dt){
     var c = S.ctx; c.setTransform(S.dpr, 0, 0, S.dpr, 0, 0); c.clearRect(0, 0, S.W, S.H);
-    if(S.mode === 'ride') drawRide(c); else drawStreet(c, dt);
-    if(S.dark){ c.fillStyle = 'rgba(8,12,28,.10)'; c.fillRect(0, 0, S.W, S.H); }
-    if(S.fade > 0){ c.save(); c.globalAlpha = clamp(S.fade, 0, 1); c.setTransform(1, 0, 0, 1, 0, 0); c.drawImage(S.prev, 0, 0); c.restore(); }
+    if(S.tv >= 0) tvDraw(c, dt); else paintScene(c, dt);
     try{ syncPads(); }catch(e){}
   }
   function update(dt){
+    if(S.tv >= 0){ S.tv += dt; if(S.tv >= TV_T){ S.tv = -1; } }                    // TV 전환 시계(네이티브 SceneCore.update 와 같은 자리)
     var t = S.t;
     if(S.mode !== 'ride'){
       stepTraffic(dt);
@@ -42947,7 +42982,6 @@ var _CS = (function(){
       if(document.hidden || !S.host.offsetParent) { S.last = ts; return; }
       if(ts - S.last < (DRAG ? 15 : 31)) return;
       var dt = Math.min(.1, (ts - (S.last || ts)) / 1000); S.last = ts; if(S.reduce) dt = 0; S.t += dt; S.frames++;
-      if(S.fade > 0) S.fade = Math.max(0, S.fade - dt / .45);
       if(ts - S.chk > 1000){ S.chk = ts; try{ if(FIT) FIT(); }catch(e0){} refit(); }
       update(dt); paintAll(dt);
     }catch(e){ if(!S.err){ S.err = String(e && e.message || e); try{ console.warn('[장면]', e); }catch(e2){} } }
@@ -42962,7 +42996,7 @@ var _CS = (function(){
     var host = S.host, mode = S.mode, res = S.res, keep = { busColor: S.busColor, busNo: S.busNo, t: S.t };
     var cvOld = S.cv; S = null; var s = boot(host); s.busColor = keep.busColor; s.busNo = keep.busNo; s.t = keep.t; s.res = res; s.L = paint(res.look); s.dark = isDark(); resetBG(); setup(mode); paintAll(0); s.raf = requestAnimationFrame(frame);
   }
-  function snapshot(){ try{ var pc = S.prev.getContext('2d'); pc.setTransform(1, 0, 0, 1, 0, 0); pc.clearRect(0, 0, S.prev.width, S.prev.height); pc.drawImage(S.cv, 0, 0); S.fade = 1; }catch(e){} }
+  function snapshot(){ if(S.reduce){ S.tv = -1; return; } try{ var pc = S.prev.getContext('2d'); pc.setTransform(1, 0, 0, 1, 0, 0); pc.clearRect(0, 0, S.prev.width, S.prev.height); pc.drawImage(S.cv, 0, 0); S.tv = 0; }catch(e){ S.tv = -1; } }
   // ══════════════════════════════════════════════════════════════════════════
   // ★ 2026-10-16 네이티브 장면 (YJ: "프론트엔드와 렌더링 방식을 웹뷰 캔버스에서 안드로이드 순수 네이티브(Kotlin / Jetpack Compose Canvas · 햅틱)로 완전 전환")
   //   원칙은 그대로다 — 계산은 엔진(/scene)이, 그림은 앱이. 앱(JS)은 엔진 답(res)을 그대로 SceneNative 플러그인에 넘기고 '장면 칸이 어디 있는지'만 알려 준다.
@@ -43061,7 +43095,7 @@ var _CS = (function(){
   // 네이티브를 끝낸다(destroy 면 플러그인의 화면·운전석까지 버린다)
   function natEnd(destroy){
     natCancelTimer();
-    NAT.shown = false; NAT.busy = false; NAT.again = false; NAT.sent = null; NAT.prev = null; NAT.still = 0; NAT.coverRes = null; NAT.wait = 0; NAT.last = null;
+    NAT.shown = false; NAT.busy = false; NAT.again = false; NAT.sent = null; NAT.prev = null; NAT.still = 0; NAT.coverRes = null; NAT.wait = 0; NAT.last = null; NAT.hFail = 0; NAT.hBusy = false; NAT.snapBusy = false;
     natClearSnap();
     try{ if(H0 && H0.host) H0.host.classList.remove('cs-native'); }catch(e){}
     var P = natPlugin(); try{ if(P && (NAT.started || destroy)) (destroy ? P.destroy() : P.stop()); }catch(e2){}
@@ -43094,7 +43128,7 @@ var _CS = (function(){
   function natToSnap(){
     if(NAT.snapBusy) return;
     var P = natPlugin(), host = H0 && H0.host; if(!P || !host) return;
-    NAT.snapBusy = true;
+    NAT.snapBusy = true; NAT.snapAt = natNow();
     function done(){ NAT.shown = false; NAT.snapBusy = false; NAT.prevArg = null; }
     function hide(){ try{ P.hide().then(done, done); }catch(e){ done(); } }
     try{
@@ -43108,7 +43142,7 @@ var _CS = (function(){
     var P = natPlugin(); if(!P) return;
     if(NAT.busy || NAT.snapBusy){ NAT.again = true; return; }
     var arg = natArg(d), host = H0.host;
-    NAT.busy = true;
+    NAT.busy = true; NAT.busyAt = natNow();
     if(!NAT.shown){
       P.show(arg).then(function(){
         NAT.shown = true; NAT.prevArg = arg; NAT.started = true;
@@ -43127,6 +43161,26 @@ var _CS = (function(){
     if(!steps.length){ NAT.busy = false; return; }
     Promise.all(steps).then(natBusyDone, function(e){ NAT.busy = false; natFail('rect: ' + ((e && e.message) || e)); });
   }
+  // 네이티브가 정말 보이고 그리고 있는지 2초마다 확인한다. 앱이 '켜져 있다'고 믿는데 네이티브가 숨어 있거나(어긋남) · 장면이 멈췄거나 · 프레임 시계가 죽었으면 다시 켠다.
+  // 되살려도 3번 연속 그대로면 웹 캔버스로 돌아간다(멈춘 화면을 그냥 두지 않는다).
+  function natHealth(now){
+    var P = natPlugin();
+    if(!P || typeof P.status !== 'function' || !NAT.shown || NAT.busy || NAT.snapBusy || NAT.hBusy || !NAT.res) return;
+    if(now - (NAT.hAt || 0) < 2000) return;
+    NAT.hAt = now; NAT.hBusy = true;
+    var res0 = NAT.res;
+    function bad(why){ NAT.hFail = (NAT.hFail || 0) + 1; NAT.shown = false; NAT.sent = null; NAT.prevArg = null; NAT.still = 4; try{ console.warn('[네이티브 장면] 되살림:', why); }catch(e){}; if(NAT.hFail >= 3) natFail('멈춤 3번 — ' + why); }
+    try{
+      P.status().then(function(st){
+        NAT.hBusy = false;
+        if(!NAT.shown || NAT.res !== res0 || !st) return;
+        if(st.visible === false) return bad('네이티브가 숨어 있다');
+        if(st.running === false) return bad('장면이 멈춰 있다');
+        if(typeof st.age === 'number' && st.age > 1500) return bad('프레임 시계가 죽었다 ' + st.age + 'ms');
+        NAT.hFail = 0;
+      }, function(){ NAT.hBusy = false; });
+    }catch(e){ NAT.hBusy = false; }
+  }
   function natTick(){
     NAT.timer = 0; NAT.tk = ''; NAT.wake = false;
     try{
@@ -43135,6 +43189,9 @@ var _CS = (function(){
       if(now - NAT.fitAt > 1000){ NAT.fitAt = now; try{ if(FIT) FIT(); }catch(e0){} }
       if(NAT.shown && !NAT.ready){ NAT.wait += Math.min(500, now - (NAT.t0 || now)); if(NAT.wait > 8000){ natFail('8초 안에 첫 그림이 안 나왔다'); return; } }
       NAT.t0 = now;
+      // 안전망(2026-10-16, YJ: "스크롤을 위아래로 흔들면 애니메이션이 먹통이 돼"): 응답이 영영 안 오는 호출이 깃발을 쥐고 있으면 놓아주고 다음 틱에 다시 켠다(show 는 여러 번 불러도 안전)
+      if(NAT.busy && now - NAT.busyAt > 2500){ NAT.busy = false; NAT.again = false; NAT.shown = false; NAT.sent = null; }
+      if(NAT.snapBusy && now - NAT.snapAt > 2500){ NAT.snapBusy = false; NAT.shown = false; NAT.sent = null; }
       if(document.hidden){ NAT.tk = 'to'; NAT.timer = setTimeout(natTick, 400); return; }
       var d = host.style.display === 'none' ? { mode: 'off' } : natDesired(host, now);
       var m = d.m, moved = true;
@@ -43145,7 +43202,7 @@ var _CS = (function(){
       else if(d.mode === 'cover' || moved || NAT.still < 4){                               // 움직이는 중·덮여 있음 → 사진으로
         if(NAT.shown) natToSnap();
         NAT.fast = Math.max(NAT.fast, now + 300);
-      } else natLive(d);                                                                    // 4프레임(≈0.07초) 가만히 있으면 네이티브를 켠다
+      } else { natLive(d); natHealth(now); }                                               // 4프레임(≈0.07초) 가만히 있으면 네이티브를 켠다(그 뒤 2초마다 네이티브가 정말 살아 있는지 본다)
     }catch(e){ try{ console.warn('[네이티브 장면 tick]', e); }catch(e1){} }
     natSched();
   }
@@ -43158,7 +43215,7 @@ var _CS = (function(){
     natListen();
     NAT.fast = natNow() + 600;
     if(NAT.shown && !NAT.busy && !NAT.snapBusy){                                // 이미 켜져 있으면 새 장면을 바로 넘긴다
-      natEach(function(P){ var rr = res; NAT.busy = true; P.apply({ res: rr }).then(function(){ NAT.sent = rr; natBusyDone(); }, function(e){ NAT.busy = false; natFail('apply: ' + ((e && e.message) || e)); }); });
+      natEach(function(P){ var rr = res; NAT.busy = true; NAT.busyAt = natNow(); P.apply({ res: rr }).then(function(){ NAT.sent = rr; natBusyDone(); }, function(e){ NAT.busy = false; natFail('apply: ' + ((e && e.message) || e)); }); });
     }
     natSched(true); natSyncCard();
     return true;
@@ -43221,7 +43278,7 @@ var _CS = (function(){
   function info(){
     if(!S && NAT.res && natActive()) return { running: true, native: true, shown: NAT.shown, ready: NAT.ready, snap: NAT.snapOn, mode: NAT.res.mode, hero: NAT.res.hero || null, tag: H0 && H0.tag ? H0.tag.textContent : '', actors: [] };
     if(!S) return { running: false, last: LAST ? LAST.mode : null };
-    return { running: true, drag: !!DRAG, mode: S.mode, slot: S.L.slot, wk: S.L.wk, season: S.L.season, hero: S.res.hero, W: S.W, H: S.H, frames: S.frames, err: S.err || null, tag: H0 && H0.tag ? H0.tag.textContent : '',
+    return { running: true, drag: !!DRAG, tv: Math.round(S.tv * 1000) / 1000, mode: S.mode, slot: S.L.slot, wk: S.L.wk, season: S.L.season, hero: S.res.hero, W: S.W, H: S.H, frames: S.frames, err: S.err || null, tag: H0 && H0.tag ? H0.tag.textContent : '',
       actors: S.actors.map(function(a){ return { id: a.id, st: a.st, cy: Math.round(zy(a.z) + a.y - TH * zs(a.z) * .5), held: !!a.held, act: a.act ? a.act.n : '', stk: a.stk ? a.stk.k : '', land: a.landK || '', x: Math.round(a.x), z: Math.round(a.z * 100) / 100, vis: a.vis, hero: !!a.hero, umb: !!a.umb, leaving: !!a.leaving }; }), seq: S.seq ? { ph: S.seq.ph, busOn: S.seq.busOn, door: Math.round(S.seq.door * 100) / 100 } : null, traffic: S.traffic.length, ride: S.ride ? { speed: Math.round(S.ride.speed * 100) / 100 } : null };
   }
   return { _play: function(id, name, solo){ if(!S) return false; var a = S.actors.filter(function(o){ return o.id === id && !o.leaving; })[0]; if(!a){ a = mkActor(id, S.W * .5, .62, 1); a.born = S.t; S.actors.push(a); } a.life = 1e9; a.leaving = false; if(solo){ S.actors = [a]; S.spawnAt = S.t + 1e9; S.gfx = []; S.pt = []; a.x = S.W * .5; a.z = .62; } startAct(a, name); return true; }, _drop: function(id, hgt, solo){ if(!S) return false; var a = S.actors.filter(function(o){ return o.id === id && !o.leaving; })[0]; if(!a){ a = mkActor(id, S.W * .5, .62, 1); a.born = S.t; S.actors.push(a); } a.life = 1e9; if(solo){ S.actors = [a]; S.spawnAt = S.t + 1e9; S.gfx = []; S.pt = []; a.x = S.W * .5; a.z = .62; } a.altSave = a.alt; a.alt = 0; a.act = null; a.y = -(hgt || 60); a.prevSt = 'walk'; releaseActor(a); return true; }, attach: attach, refit: refit, _hit: function(x, y){ if(!S) return null; var a = hitActor(x, y); return a ? a.id : null; }, setFit: function(f){ FIT = f; }, apply: apply, stop: stop, info: info, nat: NAT, natActive: natActive, natSetUse: natSetUse, natSyncCard: natSyncCard, paint: paint, last: function(){ return LAST; }, _tick: function(sec){ if(!S) return; var n = Math.round(sec * 30); for(var i = 0; i < n; i++){ S.t += 1 / 30; update(1 / 30); } paintAll(1 / 30); } };

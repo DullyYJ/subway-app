@@ -54,12 +54,17 @@ public class SceneNativePlugin extends Plugin implements SceneDriver.Listener {
     private boolean shown, composeOn, hotRefresh;
     private Rect clip;                       // 장면 틀 기준 보이는 부분(px). null 이면 전부.
     private final int[] loc = new int[2];
+    private static final long STALE_MS = 1500L;
 
     // 손가락 추적
     private boolean tracking, swallowing;
     private long downTime;
 
     private final Runnable coolRefresh = new Runnable() { @Override public void run() { setRefresh(false); } };
+    /** 숨은 지 3초가 지나도 안 돌아오면 그때서야 Compose 를 거둔다(스크롤을 흔들 때마다 만들고 부수지 않는다). */
+    private final Runnable lateDispose = new Runnable() {
+        @Override public void run() { if (!shown && compose != null && composeOn) { SceneCompose.hide(compose); composeOn = false; } }
+    };
 
     // ───────────── 표시 / 숨김 ─────────────
     /** show({x,y,w,h,dpr,dark,haptics,clip:{l,t,r,b}}) — CSS px 사각형(WebView 기준). 처음이면 틀과 운전석을 만든다. */
@@ -86,9 +91,13 @@ public class SceneNativePlugin extends Plugin implements SceneDriver.Listener {
                     root.addView(host, new FrameLayout.LayoutParams(1, 1));
                 }
                 current = SceneNativePlugin.this;
+                ui.removeCallbacks(lateDispose);
                 place(call);
                 host.setVisibility(View.VISIBLE);
-                if (!composeOn) { SceneCompose.show(compose, driver); composeOn = true; }
+                // 프레임 시계가 죽어 있으면(0.. 1.5초 넘게 한 번도 안 불렸다) 새로 만든다 — 앱이 '멈춤'을 알아채고 다시 켜 달라고 했을 때도 같은 길
+                if (composeOn && driver.frameAgeMs() > STALE_MS) { try { SceneCompose.hide(compose); } catch (Throwable t) { /* 무시 */ } composeOn = false; }
+                if (!composeOn) { SceneCompose.show(compose, driver); composeOn = true; driver.touchClock(); }
+                driver.setPaused(false);
                 shown = true;
                 call.resolve(new JSObject().put("loaded", driver.isLoaded()));
             }
@@ -169,9 +178,10 @@ public class SceneNativePlugin extends Plugin implements SceneDriver.Listener {
     private void hideNow() {
         endTrack();
         if (host != null) host.setVisibility(View.GONE);
-        if (compose != null && composeOn) { SceneCompose.hide(compose); composeOn = false; }       // 프레임 시계를 끈다
+        if (driver != null) driver.setPaused(true);                                                // 움직임·그리기는 바로 쉰다
         shown = false;
         setRefresh(false);
+        ui.removeCallbacks(lateDispose); ui.postDelayed(lateDispose, 3000L);                       // 오래 숨어 있을 때만 프레임 시계를 끈다
     }
 
     @PluginMethod
@@ -183,6 +193,8 @@ public class SceneNativePlugin extends Plugin implements SceneDriver.Listener {
 
     private void teardown() {
         hideNow();
+        ui.removeCallbacks(lateDispose);
+        if (compose != null && composeOn) { try { SceneCompose.hide(compose); } catch (Throwable t) { /* 무시 */ } composeOn = false; }
         try { if (root != null && host != null) root.removeView(host); } catch (Throwable t) { /* 이미 빠짐 */ }
         host = null; compose = null; composeOn = false;
         if (driver != null) { driver.destroy(); driver = null; }
@@ -222,7 +234,9 @@ public class SceneNativePlugin extends Plugin implements SceneDriver.Listener {
     public void status(final PluginCall call) {
         runUi(call, new Runnable() {
             @Override public void run() {
-                JSObject o = new JSObject().put("active", host != null).put("visible", shown).put("loaded", driver != null && driver.isLoaded());
+                JSObject o = new JSObject().put("active", host != null).put("visible", shown && host != null && host.getVisibility() == View.VISIBLE).put("loaded", driver != null && driver.isLoaded());
+                // age: 프레임 시계(Compose)가 마지막으로 불린 뒤 지난 ms — 보이는 동안 크면 시계가 죽은 것(앱이 보고 다시 켠다). 안 보이면 -1.
+                o.put("age", (shown && composeOn && driver != null) ? (int) Math.min(Integer.MAX_VALUE, driver.frameAgeMs()) : -1);
                 o.put("running", driver != null && driver.isRunning());
                 if (driver != null && driver.mode() != null) o.put("mode", driver.mode());
                 call.resolve(o);

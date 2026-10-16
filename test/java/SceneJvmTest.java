@@ -46,9 +46,27 @@ public class SceneJvmTest {
     public static void main(String[] a) throws Exception {
         System.setProperty("java.awt.headless", "true");
         if (a.length > 0 && a[0].equals("render")) { render(a); return; }
+        if (a.length > 0 && a[0].equals("tvframes")) { tvFrames(a); return; }
         check(new File(a.length > 1 ? a[1] : "."));
         System.out.println(fails == 0 ? "ALL OK" : ("FAILED " + fails));
         System.exit(fails == 0 ? 0 : 1);
+    }
+
+    // ═══ TV 전환 눈으로 보기: java SceneJvmTest tvframes <시트폴더> <출력접두> <idle.json> <wait.json> ═══
+    static void tvFrames(String[] a) throws Exception {
+        File sheets = new File(a[1]); int W = 340, H = 120; double dens = 2.0;
+        TestHost h = new TestHost();
+        for (String id : SceneModel.ORDER) { File f = new File(sheets, id + ".png"); if (f.exists()) h.sheets.put(id, new AwtCv.Img(ImageIO.read(f))); }
+        File fi = new File(sheets, "dudung_intro.png"); if (fi.exists()) h.intro = new AwtCv.Img(ImageIO.read(fi));
+        SceneCore c = core(h, 7); c.layout(W, H, dens, false); c.apply(SceneModel.parse(read(new File(a[3])))); c.debugTick(3);
+        c.apply(SceneModel.parse(read(new File(a[4]))));
+        double[] ts = { 0, .08, .16, .22, .27, .31, .36, .40, .45, .52, .60, .70, .79, .85 }; double at = 0;
+        for (double tt : ts) {
+            double d = tt - at; at = tt; if (d > 0) { int n = (int) Math.round(d * 30); for (int i = 0; i < n; i++) c.update(1.0 / 30); }
+            BufferedImage im = canvasImg((int) (W * dens), (int) (H * dens)); draw(c, im);
+            ImageIO.write(im, "png", new File(a[2] + String.format("%03d", Math.round(tt * 100)) + ".png"));
+            System.out.println("tv=" + String.format("%.3f", c.tv()) + " at " + tt);
+        }
     }
 
     // ═══ 그림 한 장 ═══
@@ -199,12 +217,25 @@ public class SceneJvmTest {
             ok(c.mode().equals("idle") && c.actors.isEmpty(), "대표 캐릭터가 없으면 캐릭터 없이 배경만(앱이 대신 고르지 않음): " + c.mode() + " " + c.actors.size());
             ok(!c.apply(SceneModel.parse("{\"ok\":true,\"mode\":null,\"look\":{\"slot\":\"noon\"}}")) && !c.isRunning(), "mode 가 없으면 장면을 멈춘다");
         }
-        // 7) 장면이 바뀔 때 옛 장면이 서서히 사라진다
+        // 7) 장면이 바뀔 때 TV 전원 전환(꺼짐 → 암전 → 켜짐)
         {
             TestHost h = fakeHost(); SceneCore c = core(h, 1); c.layout(340, 190, 2.75, true);
-            c.apply(scn.get("scn_idle_noon_clear")); c.debugTick(2); c.apply(scn.get("scn_wait_bus_rain"));
-            ok(c.fade() > .9 && c.prevLayer() != null && c.mode().equals("wait"), "장면 전환: 옛 장면 한 장이 남고 서서히 사라진다 fade=" + c.fade());
-            c.debugTick(1); ok(c.fade() == 0, "0.45초 뒤 사라진다");
+            c.apply(scn.get("scn_idle_noon_clear")); c.debugTick(2);
+            ok(c.tv() < 0, "전환 전에는 TV 전환이 없다 tv=" + c.tv());
+            c.apply(scn.get("scn_wait_bus_rain"));
+            ok(c.tv() == 0 && c.prevLayer() != null && c.mode().equals("wait"), "장면 전환: 옛 장면 한 장을 쥐고 TV 꺼짐이 시작된다 tv=" + c.tv());
+            ok(c.interactive(), "TV 전환 중에는 주사율을 끝까지 쓴다");
+            ok(!c.down(100, 100), "TV 전환 중에는 캐릭터를 집지 못한다");
+            c.debugTick(.2); ok(c.tv() > .15 && c.tv() < SceneCore.TV_OFF, "꺼지는 중 tv=" + c.tv());
+            c.debugTick(.5); ok(c.tv() > SceneCore.TV_OFF + SceneCore.TV_HOLD && c.tv() < SceneCore.TV_T, "켜지는 중 tv=" + c.tv());
+            c.debugTick(.5); ok(c.tv() < 0 && c.prevLayer() == null, "0.8초 뒤 끝난다(옛 그림도 놓는다)");
+            // 같은 장면을 다시 받아도(모드 그대로) 전환하지 않는다
+            c.apply(scn.get("scn_wait_bus_rain")); ok(c.tv() < 0, "같은 장면 재적용은 전환 없음");
+            // 크기만 바뀌어 다시 만들 때도 전환하지 않는다
+            c.layout(300, 150, 2.75, true); ok(c.tv() < 0, "크기 변경은 전환 없음");
+            // 장면 없음 → 멈춤은 전환 없이
+            c.apply(scn.get("scn_idle_noon_clear")); ok(c.tv() == 0, "다른 장면으로 바뀌면 다시 전환");
+            c.apply(SceneModel.parse("{\"ok\":true,\"mode\":null,\"look\":{\"slot\":\"noon\"}}")); ok(c.tv() < 0 && !c.isRunning(), "장면 없음으로 멈추면 전환 상태도 정리");
         }
         // 8) 진동 무늬표: 코어가 알리는 이름마다 무늬가 있고 모양이 올바르다
         for (String n : SceneHaptics.names()) { String e = SceneHaptics.check(n); ok(e == null, "진동 무늬 " + n + (e == null ? "" : " — " + e)); }

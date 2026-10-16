@@ -9,6 +9,7 @@ import android.graphics.Typeface;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 
@@ -53,6 +54,8 @@ public final class SceneDriver implements SceneCore.Host {
     private AndroidCv.AImg intro;
     private volatile boolean loaded;
     private boolean loading, destroyed, errored, hotNow, haptics = true;
+    private volatile boolean paused;                 // 숨어 있는 동안: 프레임 시계는 그대로 두고 움직임 계산·그리기만 쉰다(숨김/표시를 되풀이해도 Compose 를 다시 만들지 않는다)
+    private volatile long frameAt = SystemClock.uptimeMillis();   // 프레임 시계가 마지막으로 불린 시각(죽었는지 확인용)
     private float density = 1f;
     private int pxW, pxH;
     private long lastNanos;
@@ -130,12 +133,20 @@ public final class SceneDriver implements SceneCore.Host {
     public boolean isRunning() { return core.isRunning(); }
     public String mode() { return core.mode(); }
     public void setHaptics(boolean on) { haptics = on; }
+    /** 숨는 동안 true. 풀면 다음 프레임부터 이어서 움직인다(시간 점프 없이 새로 시작). */
+    public void setPaused(boolean p) { paused = p; lastNanos = 0; if (p) setHot(false); }
+    public boolean isPaused() { return paused; }
+    /** 프레임 시계가 마지막으로 불린 뒤 지난 ms. 크면 시계(Compose)가 죽은 것이다. */
+    public long frameAgeMs() { return SystemClock.uptimeMillis() - frameAt; }
+    /** 시계를 새로 만들었을 때(재생성) 나이를 0 으로 되돌린다. */
+    public void touchClock() { frameAt = SystemClock.uptimeMillis(); }
     public SceneCore core() { return core; }
 
     // ───────────── 프레임 ─────────────
     /** Compose 프레임 시계가 부른다. 다시 그려야 하면 true. */
     public boolean frame(long nanos) {
-        if (!core.isRunning() || !loaded) { lastNanos = 0; return false; }
+        frameAt = SystemClock.uptimeMillis();
+        if (paused || !core.isRunning() || !loaded) { lastNanos = 0; return false; }
         boolean hot = core.interactive();
         if (hot != hotNow) setHot(hot);
         if (lastNanos == 0) { lastNanos = nanos; return true; }

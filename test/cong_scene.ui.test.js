@@ -283,6 +283,28 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
       assert(!errs.length, errs.join('|')); await ctx.close();
     }
   });
+  await t('(17:45 YJ) 장면이 바뀌면(경로 탐색·취소 등) TV 전원처럼 꺼졌다 켜진다 — 같은 장면 재적용·크기 변경은 아님, 못 집음', async () => {
+    const { ctx, page, errs } = await fresh(); await page.waitForTimeout(800);
+    const r = await page.evaluate(() => {
+      const last = JSON.parse(JSON.stringify(_CS.last())), w = JSON.parse(JSON.stringify(last)); w.mode = last.mode === 'wait' ? 'idle' : 'wait';
+      const out = { before: _CS.info().tv };
+      _CS.apply(w); out.tv0 = _CS.info().tv;
+      _CS._tick(.2); out.tvOff = _CS.info().tv;                                     // 꺼지는 중: 옛 장면이 납작해지고 가장자리는 어두워진다
+      _CS._tick(.17); out.tvHold = _CS.info().tv;   // 암전
+      _CS._tick(.3); out.tvOn = _CS.info().tv;                                        // 켜지는 중
+      _CS._tick(.5); out.tvEnd = _CS.info().tv;
+      _CS.apply(w); out.tvSame = _CS.info().tv;                                       // 같은 장면 재적용: 전환 없음
+      return out;
+    });
+    assert.strictEqual(r.before, -1, 'TV 전환은 평소엔 없다');
+    assert.strictEqual(r.tv0, 0, '장면이 바뀌는 순간 시작');
+    assert(r.tvOff > .15 && r.tvOff < .3, '꺼지는 중 ' + r.tvOff);
+    assert(r.tvHold > .3 && r.tvHold < .38, '암전 ' + r.tvHold);
+    assert(r.tvOn > .38 && r.tvOn < .8, '켜지는 중 ' + r.tvOn);
+    assert.strictEqual(r.tvEnd, -1, '0.8초 뒤 끝난다');
+    assert.strictEqual(r.tvSame, -1, '같은 장면은 전환 없음');
+    assert.deepStrictEqual(errs, []); await ctx.close();
+  });
   await b.close();
   console.log(`\ncong_scene: ${pass} pass ${fail} fail`);
   process.exit(fail ? 1 : 0);
