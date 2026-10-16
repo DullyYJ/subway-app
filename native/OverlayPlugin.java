@@ -164,6 +164,8 @@ public class OverlayPlugin extends Plugin {
     // ★ 2026-10-11 (YJ: "추천은 오버레이 하단에 · 추천아이템 연결 버튼 · 끄는 확인 버튼"): 도착 3분 전부터 맨 아래에 두 줄 추천 + [보기] [확인]. 문구·시각·갈 곳은 웹이 정한다.
     private boolean rcOn = false;
     private String rcA = "", rcB = "", rcM = "", rcGo = "보기";
+    // ★ 2026-10-16 (YJ: "도착즈음 나오는 광고에서 버튼을 맛집보기 · 주변버스보기 · 종료"): 버튼이 셋 — [rcGo] [rcBus] [rcEnd]. 이름은 웹이 정해 보내고, 못 받으면 아래 기본 이름을 쓴다.
+    private String rcBus = "주변버스 보기", rcEnd = "종료";
     // ★ 2026-10-13 (YJ: "도착 전 추천 때 오버레이 하단이 확장되면서 캐릭터 일부가 나와서 추천을 보여줘"): 웹이 정한 캐릭터 둘(rcCh 큰 쪽·rcCh2 작은 쪽)을
     //   추천 줄 위로 내민다. 그림(3D 동작 프레임 www/chars3d/*.webp)은 앱 자산에서 읽어 그리기만 한다 — 문구·시각·갈 곳은 그대로 웹이 정한다.
     private long rcAt = 0;
@@ -203,6 +205,8 @@ public class OverlayPlugin extends Plugin {
     private boolean movedForAlert = false;      // 경고로 펼치며 위치를 옮겼다(돌아갈 자리를 restoreX/Y 에 기억)
     private int restoreX = 0, restoreY = 0, pillX = 0;
     private long curAlertAt = 0L, dismissedAlertAt = -1L;   // 경고 시각 · 알약으로 다시 접은 경고(같은 경고로는 다시 펼치지 않는다)
+    // ★ 2026-10-16 (YJ: "오버레이가 접혀 있어도 추천이 뜨면 펴지면서 나와야 해"): 접힌 중에 새 추천(rcAt)이 오면 알약이 펼쳐져 추천 줄을 보여 준다. 사용자가 그 추천으로 다시 접으면 같은 추천으로는 다시 펼치지 않는다.
+    private long dismissedRecoAt = -1L;
     private boolean preAlert = false;           // 웹: 최종 목적지 3정거장 전
     private PillView pillView;
     private View gapView;
@@ -487,14 +491,16 @@ public class OverlayPlugin extends Plugin {
         private final TextPaint tp = new TextPaint(Paint.ANTI_ALIAS_FLAG);
         private final RectF rf = new RectF();
         private final android.graphics.Path rope = new android.graphics.Path();
-        private final RectF go = new RectF(), ok = new RectF();
+        private final RectF go = new RectF(), ok = new RectF(), bus = new RectF();
         private long t0 = 0;
         private String key = "";
         private static final float PULL = 1.15f;            // 줄을 끌고 들어오는 시간(초)
         // 글 배치(너비·문구가 바뀔 때만 다시 계산한다)
         private String lkey = "";
-        private boolean stack = false, metaOwn = false;
-        private float nameSp = 16f, goW = 0f, okW = 0f, barHdp = 0f, rowHdp = 70f, baseLast = 26f;
+        private boolean metaOwn = false;
+        private float blkW = 0f;
+        private static final float BLK_H_DP = 56f;       // 버튼 블록 높이(26 + 4 + 26)
+        private float nameSp = 16f, goW = 0f, okW = 0f, busW = 0f, btnSp = 13f, barHdp = 0f, rowHdp = 70f, baseLast = 26f;
         private String[] desc = new String[0];
         RecoView(Context c) { super(c); }
         private int charW() { return dp(66); }              // 줄 왼쪽에 캐릭터가 서는 칸 너비
@@ -509,23 +515,30 @@ public class OverlayPlugin extends Plugin {
         }
         /** 글자 크기·문구에 맞춰 줄 높이와 버튼 자리를 정한다(dp 단위로 계산해 두고 그릴 때 px 로 바꾼다). */
         private void layoutFor(float w) {
-            String k = ((int) w) + "|" + rcA + "|" + rcB + "|" + rcM + "|" + rcGo;
+            String k = ((int) w) + "|" + rcA + "|" + rcB + "|" + rcM + "|" + rcGo + "|" + rcBus + "|" + rcEnd;
             if (k.equals(lkey)) return;
             lkey = k;
             float d = getResources().getDisplayMetrics().density;
             float barW = w - charW() - dp(2), padL = dp(12);
-            goW = Math.max(dp(56), mwb(rcGo, 13f, true) + dp(24));
-            okW = Math.max(dp(48), mwb("확인", 13f, true) + dp(20));
-            float btnArea = goW + okW + dp(5) + dp(10) + dp(10);
-            stack = (barW - btnArea - padL) < dp(210);
-            float textW = stack ? (barW - padL - dp(12)) : (barW - btnArea - padL);
+            // ★ 2026-10-16 (YJ: "버튼은 이쪽(오른쪽 위)으로 옮겨줘. 확장 길이가 너무 길어"): 버튼 셋을 글 아래 줄로 내리지 않고 오른쪽에 모아 둔다.
+            //   1행 [맛집 보기][종료] · 2행 [주변버스 보기](가로 폭은 1행과 같게) — 높이가 글 두 줄과 비슷해 줄이 짧아진다.
+            float gapB = dp(5);
+            btnSp = 12.5f;
+            while (true) {
+                goW = Math.max(dp(52), mwb(rcGo, btnSp, true) + dp(16));
+                busW = Math.max(dp(52), mwb(rcBus, btnSp, true) + dp(16));
+                okW = Math.max(dp(40), mwb(rcEnd, btnSp, true) + dp(16));
+                blkW = Math.max(goW + gapB + okW, busW);
+                if (btnSp <= 11f || blkW <= barW * 0.46f) break;
+                btnSp -= 0.5f;
+            }
+            float textW = barW - padL - blkW - dp(10) - dp(10) - dp(8);
             nameSp = fitSp(rcA, textW, 16f, 12f);
             desc = rcB.length() > 0 ? wrap(rcB, textW, 2, 13.5f) : new String[0];
             metaOwn = false;
-            if (!stack && rcM.length() > 0) metaOwn = mwb(rcA, nameSp, true) + dp(10) + mwb(rcM, 12f, false) > textW;
+            if (rcM.length() > 0) metaOwn = mwb(rcA, nameSp, true) + dp(10) + mwb(rcM, 12f, false) > textW;
             baseLast = 26f + (desc.length > 0 ? 19f + 18f * (desc.length - 1) : 0f);
-            if (stack) barHdp = baseLast + 12f + 34f + 8f;
-            else barHdp = Math.max(46f, baseLast + (metaOwn ? 17f : 0f) + 10f);
+            barHdp = Math.max(BLK_H_DP + 12f, baseLast + (metaOwn ? 17f : 0f) + 10f);
             rowHdp = Math.max(70f, barHdp + 4f);
         }
         @Override protected void onMeasure(int wSpec, int hSpec) {
@@ -533,12 +546,22 @@ public class OverlayPlugin extends Plugin {
             if (rcOn) layoutFor(w);
             setMeasuredDimension(w, dp(rowHdp));
         }
-        /** 1 = [보기], 2 = [확인], 0 = 버튼 밖(손가락 오차를 감안해 사방 6dp 넓게). */
+        /** 1 = [맛집 보기]류, 3 = [주변버스 보기], 2 = [종료], 0 = 버튼 밖(손가락 오차를 감안해 사방 6dp 넓게, 겹치면 손가락에 가까운 쪽). */
         int hit(float x, float y) {
             float m = dp(6);
-            if (!go.isEmpty() && x >= go.left - m && x <= go.right + m && y >= go.top - m && y <= go.bottom + m) return 1;
-            if (!ok.isEmpty() && x >= ok.left - m && x <= ok.right + m && y >= ok.top - m && y <= ok.bottom + m) return 2;
-            return 0;
+            RectF[] rs = { go, bus, ok };
+            int[] id = { 1, 3, 2 };
+            int best = 0; float bd = Float.MAX_VALUE;
+            for (int i = 0; i < 3; i++) {
+                RectF r = rs[i];
+                if (r.isEmpty()) continue;
+                if (x >= r.left - m && x <= r.right + m && y >= r.top - m && y <= r.bottom + m) {
+                    float d = Math.abs(x - r.centerX());
+                    if (x >= r.left && x <= r.right) d = -1f;       // 버튼 안을 눌렀으면 그 버튼이 먼저
+                    if (d < bd) { bd = d; best = id[i]; }
+                }
+            }
+            return best;
         }
         private float txt(Canvas cv, String s, float x, float y, float maxW, float sp, int color, boolean bold, Paint.Align al) {
             if (s == null || s.length() == 0) return 0f;
@@ -635,7 +658,7 @@ public class OverlayPlugin extends Plugin {
         }
         @Override protected void onDraw(Canvas cv) {
             float w = getWidth(), h = getHeight();
-            go.setEmpty(); ok.setEmpty();
+            go.setEmpty(); ok.setEmpty(); bus.setEmpty();
             if (!rcOn) return;
             layoutFor(w);
             float t = t0 == 0 ? 9f : (android.os.SystemClock.uptimeMillis() - t0) / 1000f;
@@ -656,30 +679,30 @@ public class OverlayPlugin extends Plugin {
                 cv.drawRoundRect(rf, dp(14), dp(14), p);
                 p.setColor((0x1A << 24) | (thSub & 0x00FFFFFF));
                 cv.drawRoundRect(rf, dp(14), dp(14), p);
-                float bh = dp(34), edge = dp(10), gap = dp(5);
+                float bh = dp(26), vg = dp(4), edge = dp(10), gap = dp(5);
                 float tx = barL + dp(12);
                 float nameBase = barT + dp(26), lastBase = barT + dp(baseLast);
-                if (stack) {
-                    float by = lastBase + dp(12);
-                    ok.set(barR - edge - okW, by, barR - edge, by + bh);
-                } else {
-                    float by = midY - bh / 2f;
-                    ok.set(barR - edge - okW, by, barR - edge, by + bh);
-                }
-                go.set(ok.left - gap - goW, ok.top, ok.left - gap, ok.bottom);
-                float textW = stack ? (barR - edge - tx) : (go.left - tx - dp(10));
+                // 버튼 블록: 줄의 오른쪽 가운데. 1행 [맛집 보기][종료], 2행 [주변버스 보기]
+                float blkR = barR - edge, blkL = blkR - blkW;
+                float blkT = midY - (bh * 2f + vg) / 2f;
+                ok.set(blkR - okW, blkT, blkR, blkT + bh);
+                go.set(blkL, blkT, ok.left - gap, blkT + bh);
+                bus.set(blkL, blkT + bh + vg, blkR, blkT + bh * 2f + vg);
+                float textW = blkL - tx - dp(8);
                 // 이름(굵게) + 같은 줄에 거리·종류(자리가 있을 때)
                 float nw = txt(cv, rcA, tx, nameBase, textW, nameSp, thFg, true, Paint.Align.LEFT);
-                if (!stack && rcM.length() > 0 && !metaOwn) txt(cv, rcM, tx + nw + dp(10), nameBase, textW - nw - dp(10), 12f, thSub, false, Paint.Align.LEFT);
+                if (rcM.length() > 0 && !metaOwn) txt(cv, rcM, tx + nw + dp(10), nameBase, textW - nw - dp(10), 12f, thSub, false, Paint.Align.LEFT);
                 for (int i = 0; i < desc.length; i++) txt(cv, desc[i], tx, nameBase + dp(19) + dp(18) * i, textW, 13.5f, thFg, false, Paint.Align.LEFT);
-                if (!stack && metaOwn) txt(cv, rcM, tx, lastBase + dp(17), textW, 12f, thSub, false, Paint.Align.LEFT);
-                if (stack && rcM.length() > 0) txt(cv, rcM, tx, go.centerY() + dp(4.5f), go.left - tx - dp(8), 12f, thSub, false, Paint.Align.LEFT);
+                if (metaOwn) txt(cv, rcM, tx, lastBase + dp(17), textW, 12f, thSub, false, Paint.Align.LEFT);
                 p.setColor(0xFF0A84FF);
                 cv.drawRoundRect(go, bh / 2f, bh / 2f, p);
-                txt(cv, rcGo, go.centerX(), go.centerY() + dp(4.6f), goW - dp(6), 13f, 0xFFFFFFFF, true, Paint.Align.CENTER);
+                txt(cv, rcGo, go.centerX(), go.centerY() + dp(4.4f), go.width() - dp(6), btnSp, 0xFFFFFFFF, true, Paint.Align.CENTER);
+                p.setColor((0x26 << 24) | 0x000A84FF);                                  // [주변버스 보기]: 옅은 파랑 바탕에 파란 글씨
+                cv.drawRoundRect(bus, bh / 2f, bh / 2f, p);
+                txt(cv, rcBus, bus.centerX(), bus.centerY() + dp(4.4f), bus.width() - dp(6), btnSp, 0xFF0A84FF, true, Paint.Align.CENTER);
                 p.setColor((0x33 << 24) | (thSub & 0x00FFFFFF));
                 cv.drawRoundRect(ok, bh / 2f, bh / 2f, p);
-                txt(cv, "확인", ok.centerX(), ok.centerY() + dp(4.6f), okW - dp(6), 13f, thFg, true, Paint.Align.CENTER);
+                txt(cv, rcEnd, ok.centerX(), ok.centerY() + dp(4.4f), ok.width() - dp(6), btnSp, thFg, true, Paint.Align.CENTER);
                 // 밧줄: 캐릭터 몸에서 줄 왼쪽 가운데로(줄이 끌려오는 동안은 팽팽, 선 뒤에는 느슨하게 처진다)
                 float ry0 = baseY - dp(19), ry1 = barB - dp(Math.min(barHdp / 2f, 34f)), rx0 = cx + dp(9), rx1 = barL + dp(1);
                 p.setStyle(Paint.Style.STROKE);
@@ -922,6 +945,8 @@ public class OverlayPlugin extends Plugin {
             if (rc != null && rc.optBoolean("on", false)) {
                 rcOn = true; rcA = rc.optString("a", ""); rcB = rc.optString("b", ""); rcM = rc.optString("m", ""); rcGo = rc.optString("go", "보기");
                 if (rcGo.length() == 0) rcGo = "보기";
+                rcBus = rc.optString("bus", ""); if (rcBus.length() == 0) rcBus = "주변버스 보기";
+                rcEnd = rc.optString("end", ""); if (rcEnd.length() == 0) rcEnd = "종료";
                 if (rcA.length() == 0) rcOn = false;
                 rcAt = (long) rc.optDouble("at", 0);
                 rcCh = rc.optString("ch", ""); rcCh2 = rc.optString("ch2", "");
@@ -1478,7 +1503,8 @@ public class OverlayPlugin extends Plugin {
                             int rh = (recoView != null && recoView.getVisibility() == View.VISIBLE && by >= recoView.getTop()) ? recoView.hit(bx - recoView.getLeft(), by - recoView.getTop()) : -1;
                             if (demoActive()) { endDemo(); }                                  // 시연은 어디를 눌러도 닫힌다(실제 동작은 하지 않는다)
                             else if (rh == 1) { act("recoGo"); openApp(); }                    // [보기] — 추천 아이템·맛집으로(앱을 앞으로)
-                            else if (rh == 2) act("recoOk");                               // [확인] — 이 추천 끄기
+                            else if (rh == 3) { act("recoBus"); openApp(); }                   // [주변버스 보기] — 노선도의 버스 > 주변 정류장으로(앱을 앞으로)
+                            else if (rh == 2) act("recoOk");                               // [종료] — 이 추천 끄기
                             else if (rh == 0) openApp();                                   // 추천 줄의 글자 부분: 앱으로
                             else if (inBottom && boardView != null && boardView.hitBtn(bx - boardView.getLeft(), by - boardView.getTop())) {
                                 act("undo".equals(rsSt) ? "undo" : "press");          // [탑승] / [되돌리기]
@@ -1517,6 +1543,7 @@ public class OverlayPlugin extends Plugin {
             paint.setStrokeWidth(strokePx);
         }
         void setAngle(float a) { angle = a; invalidateSelf(); }
+        void setRadius(float r) { if (r != radius) { radius = r; invalidateSelf(); } }
         void setShown(boolean v) { visible = v; invalidateSelf(); }
         @Override protected void onBoundsChange(android.graphics.Rect b) {
             rect.set(b);
@@ -1553,7 +1580,8 @@ public class OverlayPlugin extends Plugin {
             border = new RainbowBorder(dp(14), dp(2.5f));            // 얇은 테두리
             root.setForeground(border);
         }
-        int mode = curPill ? 0 : alertLevel;        // 알약일 때는 테두리를 그리지 않는다(경고가 켜지면 알약이 먼저 펼쳐진다)
+        border.setRadius(curPill ? dp(15) : dp(14));   // 알약은 알약 모양 그대로 둘러싼다
+        int mode = alertLevel;                      // ★ 2026-10-16: 알약일 때도 그린다 — 두 정거장 전엔 알약 둘레에 무지개(천천히), 한 정거장 전엔 알약이 펼쳐지며 빠르게
         if (mode == borderMode && (mode == 0 || (borderAnim != null && borderAnim.isRunning()))) return;
         borderMode = mode;
         if (borderAnim != null) { borderAnim.cancel(); borderAnim = null; }
@@ -1588,8 +1616,8 @@ public class OverlayPlugin extends Plugin {
     /** 사용자가 알약으로 접거나(true) 펼친다(false). 접은 상태는 저장된다. 경고로 펼쳐진 중에 접으면 그 경고로는 다시 펼치지 않는다. 메인 스레드에서 부른다. */
     private void setUserPill(boolean v) {
         userPill = v;
-        if (v) { if (alertLevel > 0) dismissedAlertAt = curAlertAt; }
-        else dismissedAlertAt = -1L;
+        if (v) { if (alertLevel > 0) dismissedAlertAt = curAlertAt; if (rcOn) dismissedRecoAt = rcAt; }
+        else { dismissedAlertAt = -1L; dismissedRecoAt = -1L; }
         try { getContext().getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().putBoolean("pill", v).apply(); } catch (Exception ignored) { }
         attachOrUpdate();
     }
@@ -1600,7 +1628,11 @@ public class OverlayPlugin extends Plugin {
      */
     private void applyMode() {
         if (root == null || lp == null) return;
-        boolean wp = userPill && !demoActive() && !(alertLevel > 0 && curAlertAt != dismissedAlertAt);
+        // 접힌 알약이 저절로 펼쳐지는 때: ① 한 정거장 전(alert 1, 환승 1정거장 전 포함) ② 새 추천이 뜰 때.
+        //   두 정거장 전(alert 2)은 펼치지 않고 알약 둘레에 무지개 테두리만 돈다(applyAlert).
+        boolean alertOpen = alertLevel == 1 && curAlertAt != dismissedAlertAt;
+        boolean recoOpen = rcOn && rcAt != dismissedRecoAt;
+        boolean wp = userPill && !demoActive() && !alertOpen && !recoOpen;
         boolean changed = (wp != curPill);
         if (changed) {
             if (wp) {                                                   // 접기

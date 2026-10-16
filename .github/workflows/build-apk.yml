@@ -39,6 +39,10 @@ jobs:
           - scene_native_java.test.js
           - scene_native_js.ui.test.js
           - keyboard_pan.test.js
+          - row_native.test.js
+          - route_row.ui.test.js
+          - overlay_pill_native.test.js
+          - overlay_reco.ui.test.js
           - metro_native_js.ui.test.js
           - bus_poll_gap.test.js
           - cell_hop_lead.ui.test.js
@@ -193,7 +197,9 @@ jobs:
                       # 2026-10-16: 네이티브 장면(Kotlin/Compose Canvas + 햅틱) — 순수 자바 코어(Scene*) + 안드로이드 계층 + 코틀린 막
                       "native/SceneCv.java", "native/SceneUtil.java", "native/SceneModel.java", "native/SceneArt.java", "native/SceneCore.java", "native/SceneActs.java",
                       "native/SceneHaptics.java", "native/AndroidCv.java", "native/SceneDriver.java", "native/SceneHost.java", "native/SceneNativePlugin.java",
-                      "native/SceneCompose.kt"]:
+                      "native/SceneCompose.kt",
+                      # 2026-10-16: 경로 카드 버튼 줄(탑승·환승·도착) 전환 연출
+                      "native/RowCore.java", "native/RowOverlayView.java", "native/RowNativePlugin.java"]:
               if not os.path.exists(src):
                   raise SystemExit(src + " 가 없습니다 — 저장소에 올렸는지 확인하세요")
               shutil.copy(src, os.path.join(PKGDIR, os.path.basename(src)))
@@ -229,6 +235,7 @@ jobs:
               "        registerPlugin(MotionPlugin.class);",
               "        registerPlugin(NativeMapPlugin.class);",
               "        registerPlugin(SceneNativePlugin.class);",
+              "        registerPlugin(RowNativePlugin.class);",
               "        registerPlugin(GdmWidgetPlugin.class);",
               "        registerPlugin(GdmSharePlugin.class);",
               "        super.onCreate(savedInstanceState);",

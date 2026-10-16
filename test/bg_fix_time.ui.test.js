@@ -53,7 +53,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     const x = await fresh();
     const r = await x.page.evaluate(async () => {
       window.__fetches = 0; window.__aborted = 0; window.__resolvers = [];
-      window.fetch = (u, o) => { if (!/ride-eta/.test(String(u))) return new Promise(() => {}); window.__fetches++; return new Promise((res, rej) => { window.__resolvers.push(res); if (o && o.signal) o.signal.addEventListener('abort', () => { window.__aborted++; rej(new Error('abort')); }); }); };
+      window.fetch = (u, o) => { if (!/ride-eta/.test(String(u))) return new Promise(() => {}); if (o && /"op":"row"/.test(String(o.body || ''))) return new Promise(() => {}); window.__fetches++; return new Promise((res, rej) => { window.__resolvers.push(res); if (o && o.signal) o.signal.addEventListener('abort', () => { window.__aborted++; rej(new Error('abort')); }); }); };
       window._metroRouteMode = false; window._routeLocked = true;
       _transitNodeData = [{ name: '출발', isOrigin: true, _schedMin: 1140, lat: 37.50, lng: 126.70 }, { name: 'A', isSub: true, lineName: '인천1호선', _schedMin: 1141, lat: 37.51, lng: 126.70 }, { name: 'B', isSub: true, lineName: '인천1호선', _schedMin: 1143, lat: 37.52, lng: 126.70 }];
       _etaRequest('pass'); const f1 = window.__fetches, busy1 = _etaSt.busy;
@@ -79,7 +79,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     const r = await x.page.evaluate(async (NODES) => {
       Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
       window.__fetches = 0; window.__aborted = 0; window.__resolvers = [];
-      window.fetch = (u, o) => { if (!/ride-eta/.test(String(u))) return new Promise(() => {}); window.__fetches++; return new Promise((res, rej) => { window.__resolvers.push(res); if (o && o.signal) o.signal.addEventListener('abort', () => { window.__aborted++; rej(new Error('abort')); }); }); };
+      window.fetch = (u, o) => { if (!/ride-eta/.test(String(u))) return new Promise(() => {}); if (o && /"op":"row"/.test(String(o.body || ''))) return new Promise(() => {}); window.__fetches++; return new Promise((res, rej) => { window.__resolvers.push(res); if (o && o.signal) o.signal.addEventListener('abort', () => { window.__aborted++; rej(new Error('abort')); }); }); };
       window._metroRouteMode = false; window._routeLocked = true;
       _transitNodeData = eval(NODES); window._trackSig = 'S1';
       _etaRequest('pass'); return { f: window.__fetches };
@@ -139,6 +139,29 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
       const a = window._etaHold && window._etaHold.idx; _etaApply(Object.assign({ hold: null }, base), { boarded: true }); return { a, b: window._etaHold };
     }, NODES);
     assert.deepStrictEqual(r, { a: 2, b: null }, JSON.stringify(r)); assert.deepStrictEqual(x.errs, []); await x.ctx.close();
+  });
+
+  await t('탑승 버튼 없이 자동 감지로 탄 지하철도 시각표 기준이 켜진다(진행이 승차역을 넘으면) · 승차역 전이면 꺼짐 · 엔진이 버스 아님이라 하면 꺼짐', async () => {
+    const x = await fresh();
+    const r = await x.page.evaluate((NODES) => {
+      window._routeLocked = true; window._metroRouteMode = false; window._htlBoarded = false; _transitNodeData = eval(NODES); window._nodePassMs = {};
+      window._gpsMaxIdx = 0; const before = _ttFirstOn();
+      window._gpsMaxIdx = 2; const after = _ttFirstOn();
+      window._busVerdict = { state: 'notBus', at: Date.now() }; const car = _ttFirstOn(); window._busVerdict = null;
+      window._routeLocked = false; const unlocked = _ttFirstOn();
+      return { before, after, car, unlocked };
+    }, NODES);
+    assert.deepStrictEqual(r, { before: false, after: true, car: false, unlocked: false }, JSON.stringify(r)); assert.deepStrictEqual(x.errs, []); await x.ctx.close();
+  });
+  await t('시각표 기준(엔진 pos 있음)에서는 늦은 영점·PF 의 hold 가 마커를 멈춰 세우지 않는다(엔진 pos 가 정차·이동을 정한다)', async () => {
+    const x = await fresh();
+    const r = await x.page.evaluate((NODES) => {
+      window._routeLocked = true; window._metroRouteMode = false; window._htlBoarded = true; _transitNodeData = eval(NODES); window._gpsMaxIdx = 2; window._gpsConfirmIdx = 2; window._nodePassMs = {};
+      const n = Date.now(); window._etaPos = { from: 2, to: 3, t0: n - 30000, t1: n + 60000, ratio: .3, moving: true, floor: 2, segs: [{ from: 2, to: 3, a: n - 40000, t0: n - 30000, t1: n + 60000 }] }; window._etaPosAt = n;
+      window._etaHold = { idx: 2, untilMs: n + 8000, src: 'pf' };
+      return { tt: _ttFirstOn(), moving: _ovlMoving() };
+    }, NODES);
+    assert.deepStrictEqual(r, { tt: true, moving: true }, JSON.stringify(r)); assert.deepStrictEqual(x.errs, []); await x.ctx.close();
   });
 
   await b.close();

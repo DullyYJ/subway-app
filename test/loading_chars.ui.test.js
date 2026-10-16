@@ -216,7 +216,9 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     assert.ok(/cv\.scale\(-1f, 1f/.test(rv), '왼쪽으로 갈 때 좌우 반전 없음');
     assert.ok(!/rcCh2/.test(rv), '둘째 캐릭터를 그리면 안 된다');
     assert.ok(/fitSp\(rcA, textW, 16f/.test(rv) && /wrap\(rcB, textW, 2, 13\.5f\)/.test(rv), '이름 16sp · 설명 13.5sp 두 줄');
-    assert.ok(/stack = \(barW - btnArea - padL\) < dp\(210\)/.test(rv), '좁은 화면 버튼 아래 배치');
+    // 2026-10-16: 버튼 셋을 글 아래 줄로 내리지 않고 오른쪽 위 블록(1행 맛집 보기·종료, 2행 주변버스 보기)에 모은다 — 줄이 길어지지 않게
+    assert.ok(!/\bstack\b/.test(rv) && /BLK_H_DP/.test(rv) && /bus\.set\(blkL/.test(rv) && /go\.set\(blkL/.test(rv) && /ok\.set\(blkR - okW/.test(rv), '버튼은 오른쪽 블록');
+    const bh = +/BLK_H_DP = (\d+)f/.exec(rv)[1]; assert.ok(bh + 12 <= rowMin, '버튼 블록 높이가 줄 최소 높이 안: ' + bh);
   });
   await t('권한이 없으면 안내 문구가 뜨고, 이 버전에 기능이 없으면 그렇게 알린다', async () => {
     const m = await page.evaluate(async () => {

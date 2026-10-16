@@ -601,12 +601,42 @@ t('hold — 영점(gps) 통과 역에서 통과 시각 + 10초 동안 정차로 
   const nLast = nodes.length - 1;
   assert.strictEqual(rideEta({ nowMs: at(17, 50, 3), nodes, passes: [{ idx: 1, ms: at(17, 35), src: 'board' }, { idx: nLast, ms: at(17, 50), src: 'gps' }], boarded: true }).hold, null, '목적지는 세우지 않는다');
   assert.strictEqual(q(pass + 3000, { opts: { markerDwellSec: 0 } }).hold, null, '끄면 없다');
+  // 위치 채택(pf)은 실제보다 늦게 찍힌다 — 그래도 '기록한 시각'부터 10초는 그 역에 세운다(정차 없이 다음 역으로 넘어가 보이지 않게)
+  const pfp = at(17, 40, 0), qp = (nowMs) => rideEta({ nowMs, nodes, passes: [{ idx: 1, ms: at(17, 35), src: 'board' }, { idx: 2, ms: pfp, src: 'pf' }], boarded: true }).hold;
+  assert.strictEqual(qp(pfp + 2000).idx, 2); assert.strictEqual(qp(pfp + 2000).src, 'pf'); assert.strictEqual(qp(pfp + 2000).atMs, pfp); assert.strictEqual(qp(pfp + 2000).untilMs, pfp + 10000);
+  assert.strictEqual(qp(pfp + 10500), null);
 });
 t('stopDwellSec 10 — 시각표 기준 위치(pos)에서도 도착 뒤 10초만 역 위에 머문다', () => {
   const nodes = scene(), ps = [{ idx: 1, ms: at(17, 35), src: 'gps' }];
   const base = rideEta({ nowMs: at(17, 36), nodes, passes: ps, boarded: true, timetableFirst: true }), E2 = base.etaMs[2] - 5000;
   const a = rideEta({ nowMs: E2 + 8000, nodes, passes: ps, boarded: true, timetableFirst: true }).pos, b = rideEta({ nowMs: E2 + 12000, nodes, passes: ps, boarded: true, timetableFirst: true }).pos;
   assert.strictEqual(a.from, 2); assert.strictEqual(a.ratio, 0, '10초 안 — 정차'); assert.ok(b.ratio > 0, '10초 뒤 — 이동');
+});
+// ★ 2026-10-16 (YJ: 탑승 → 환승 → 도착 버튼 줄): op 'row' — 어떤 칸이 보이고 어떻게 전환하는지는 엔진이 정한다
+t('row — 확정 전 none · 확정 뒤 탑승 · 첫 구간을 타면 환승(남은 구간 있을 때) · 마지막 구간까지 타면 도착', () => {
+  const row = (locked, done, prev) => rideEta({ op: 'row', locked, legs: done.map(d => ({ done: d })), prev });
+  assert.strictEqual(row(false, [false, false]).slot, 'none'); assert.strictEqual(row(false, [false]).cols, 2);
+  const a = row(true, [false, false]); assert.strictEqual(a.slot, 'board'); assert.strictEqual(a.label, '탑승'); assert.strictEqual(a.leg, 0); assert.strictEqual(a.cols, 3); assert.strictEqual(a.transfers, 1);
+  const b = row(true, [true, false]); assert.strictEqual(b.slot, 'transfer'); assert.strictEqual(b.label, '환승'); assert.strictEqual(b.leg, 1);
+  const c = row(true, [true, true]); assert.strictEqual(c.slot, 'arrive'); assert.strictEqual(c.label, '도착'); assert.strictEqual(c.leg, -1);
+  const d = row(true, [true, false, false]); assert.strictEqual(d.slot, 'transfer'); assert.strictEqual(d.leg, 1, '환승이 둘이면 두 번째 구간 탑승 전까지 환승');
+  assert.strictEqual(row(true, [true, true, false]).slot, 'transfer'); assert.strictEqual(row(true, [true, true, false]).leg, 2);
+  assert.strictEqual(row(true, [true]).slot, 'arrive', '환승 없는 경로는 탑승 뒤 바로 도착'); assert.strictEqual(row(true, [false]).transfers, 0);
+  assert.strictEqual(row(true, []).slot, 'none', '대중교통 구간이 없으면 칸 없음');
+  assert.strictEqual(row(true, [false, true]).slot, 'board', '앞 구간을 안 탔으면 뒤 구간 기록은 보지 않는다');
+});
+t('row — 전환 종류: 생성(오른쪽에서 밀기) · 환승(위에서 내려옴) · 도착(아래에서 올라옴) · 되돌리기는 반대', () => {
+  const k = (prev, locked, done) => rideEta({ op: 'row', locked, legs: done.map(d => ({ done: d })), prev }).anim;
+  assert.strictEqual(k('none', true, [false, false]).kind, 'push_in'); assert.ok(k('none', true, [false, false]).ms > 0);
+  assert.strictEqual(k('board', true, [true, false]).kind, 'slide_down');
+  assert.strictEqual(k('transfer', true, [true, true]).kind, 'slide_up');
+  assert.strictEqual(k('board', true, [true]).kind, 'slide_up', '환승 없는 경로: 탑승 → 도착');
+  assert.strictEqual(k('transfer', true, [false, false]).kind, 'slide_up', '탑승 되돌림');
+  assert.strictEqual(k('arrive', true, [true, false]).kind, 'slide_down', '도착 되돌림');
+  assert.strictEqual(k('board', false, [false, false]).kind, 'push_out', '경로 취소');
+  assert.strictEqual(k('board', true, [false, false]).kind, 'none'); assert.strictEqual(k('board', true, [false, false]).ms, 0);
+  assert.strictEqual(k(null, true, [false]).kind, 'push_in'); assert.strictEqual(k('엉뚱', true, [false]).kind, 'push_in');
+  assert.strictEqual(k('board', true, [true, false]).ease.length, 4);
 });
 (async () => {
   const mkReq = (method, body) => new Request('https://example.test/ride-eta', { method: method, body: body == null ? undefined : (typeof body === 'string' ? body : JSON.stringify(body)), headers: { 'content-type': 'application/json' } });

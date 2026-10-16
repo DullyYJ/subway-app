@@ -9509,6 +9509,7 @@ function confirmCurrentRoute(){
   if(typeof toast === 'function') toast(optName + ' 경로로 확정했어요');
   if(typeof _beginJourneyTracking === 'function') _beginJourneyTracking();   // ★ 백그라운드 추적 시작
   _pipArmNow();   // ★ 2026-09-20: 확정했으면 작은 화면도 바로 준비
+  try{ setTimeout(function(){ if(typeof _rowSync === 'function') _rowSync(true); }, 30); }catch(eRw){}   // ★ 2026-10-16: 탑승 칸(엔진이 정함)
 }
 window.confirmCurrentRoute = confirmCurrentRoute;
 
@@ -11415,6 +11416,7 @@ function _etaRequest(why){
         clearTimeout(to);
         // 끊고 다시 보낸 옛 요청의 답도 '이미 그려진 답보다 새것'이면 그린다(없는 것보다 낫다). 더 새 요청의 답이 이미 그려졌으면 버린다.
         if(mySeq < (_etaSt.appliedSeq || 0)) return;
+        try{ var _lat = Date.now() - now; if(_lat > 8000 || mySeq !== _etaSt.seq) _ovlDiag('도착시각', '늦은 엔진 응답 ' + Math.round(_lat / 1000) + '초 만에 적용' + (mySeq !== _etaSt.seq ? '(다시 보낸 뒤에 도착한 옛 요청)' : '')); }catch(eLt){}
         if(mySeq === _etaSt.seq){ _etaSt.busy = false; }
         _etaSt.fails = 0;
         if(window._trackSig === routeSig){ _etaSt.appliedSeq = mySeq; _etaApply(res, P); }      // 그 사이 경로가 바뀌었으면 버린다
@@ -11767,7 +11769,17 @@ function _trkSubConfirmed(){
     var nd = (typeof _transitNodeData !== 'undefined' && _transitNodeData) ? _transitNodeData : [], g = (window._gpsMaxIdx == null) ? -1 : window._gpsMaxIdx, pn = (g >= 0) ? nd[g] : null;
     var notDep = (typeof _htlNotDeparted === 'function') ? !!_htlNotDeparted() : false;
     if(_trkBusState() === 'notBus') return false;   // 2026-10-13: 엔진이 '버스를 타지 않았다'고 하는 동안은 역에 있어도 지하철 탑승 확정이 아니다(승용차)
-    return window._htlBoarded === true && !!(pn && pn.isSub) && !notDep;
+    // ★ 2026-10-16 (YJ 로그 두 번 모두 '시각표기준=0' — 지하철을 타는 내내 마커가 시각표가 아닌 PF 채택을 따라가며 역 앞(0.85)에서 기다리다 정차 없이 넘어갔다 · YJ: "시간표는 부동의 1순위"):
+    //   탑승 버튼을 누르지 않아도 진행이 승차역을 넘었으면(= 출발 전이 아님, _htlNotDeparted) 탄 것이다 — 탑승 시트도 같은 판정으로 '모든 구간 탑승 확정'이라며 숨는다.
+    //   예전엔 _htlBoarded(명시 확정)까지 요구해, 자동 감지로 탄 여정은 끝까지 시각표 기준이 꺼졌다.
+    //   ※ 단, 지하철 앞에 버스 구간이 있는 경로(버스 → 지하철)는 '버스를 실제로 탔다'는 근거(엔진 판정 confirmed/plausible 을 한 번이라도 받음)가 있어야 한다 —
+    //     승용차로 역 곁을 지나가는 경우를 지하철 탑승으로 보지 않는다(2026-10-13 규칙 유지). 근거가 없으면 예전처럼 명시 확정(_htlBoarded)만 인정한다.
+    var _bs = _trkBusState();
+    if(_bs === 'confirmed' || _bs === 'plausible') window._busRodeRef = nd;
+    var _busBefore = false;
+    for(var _bi = 0; _bi < g && _bi < nd.length; _bi++){ if(nd[_bi] && nd[_bi].isBus && !nd[_bi].isWalk){ _busBefore = true; break; } }
+    var _auto = window._routeLocked === true && (!_busBefore || window._busRodeRef === nd);
+    return (window._htlBoarded === true || _auto) && !!(pn && pn.isSub) && !notDep;
   }catch(e){ return false; }
 }
 function _trkRidden(res){
@@ -19054,17 +19066,21 @@ window.addEventListener('unhandledrejection', function(e) {
       </div>
 
       <!-- ── 세부경로 / 경로확정 버튼 ── -->
-      <div style="margin-top:10px;display:flex;gap:8px;">
-        <button onclick="openTransitDetail()"
-          style="flex:1;padding:11px;background:var(--card2);border:1px solid var(--border);
-          border-radius:12px;color:var(--text);font-size:13px;font-weight:700;cursor:pointer;">
+      <!-- ★ 2026-10-16 (YJ): 경로를 확정하면 오른쪽에 탑승 → 환승 → 도착 칸이 생긴다. 어떤 칸이고 어떻게 바뀌는지는 엔진(/ride-eta op:'row')이 정하고, 전환 연출은 네이티브(RowNative)가 그린다.
+           웹 버튼은 늘 '최종 모양'이다(연출 중엔 네이티브가 위에 떠서 가리고, 끝나면 이 버튼이 그대로 보인다). 세 버튼 너비는 같다(flex:1;min-width:0). -->
+      <div id="routeActRow" style="margin-top:10px;display:flex;gap:8px;position:relative;">
+        <button id="routeDetailBtn" onclick="openTransitDetail()"
+          style="flex:1 1 0;min-width:0;box-sizing:border-box;padding:11px 2px;background:var(--card2);border:1px solid var(--border);
+          border-radius:12px;color:var(--text);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;overflow:hidden;">
           🗺️ 세부경로 보기
         </button>
         <button id="mainConfirmRouteBtn" onclick="confirmCurrentRoute()"
-          style="flex:1;padding:11px;background:#2f7cf6;border:none;
-          border-radius:12px;color:#fff;font-size:13px;font-weight:800;cursor:pointer;">
+          style="flex:1 1 0;min-width:0;box-sizing:border-box;padding:11px 2px;background:#2f7cf6;border:1px solid transparent;
+          border-radius:12px;color:#fff;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap;overflow:hidden;">
           ✅ 경로 확정
         </button>
+        <button id="routeSlotBtn" type="button" data-slot="none" onclick="_rowPress()"
+          style="display:none;flex:1 1 0;min-width:0;box-sizing:border-box;padding:11px 2px;border:1px solid transparent;border-radius:12px;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap;overflow:hidden;"></button>
       </div>
     </div>
     <div id="transitResultErr" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;text-align:center;color:var(--sub);font-size:13px;"></div>
@@ -19637,8 +19653,8 @@ window.addEventListener('unhandledrejection', function(e) {
 
       <!-- ★ 하차 10분 전 추천 테스트 -->
       <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
-        <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:4px;">🚉 하차 10분 전 추천</div>
-        <p style="font-size:12px;color:var(--sub);margin-bottom:12px;">도착 10분 전에 시간대별로 보내는 추천이에요. 실제 알림과 같은 내용으로 바로 확인해 볼 수 있어요. 버튼을 누르고 홈 화면으로 나가면 오버레이 아래에도 90초간 뜹니다(오버레이를 켜 둔 상태).</p>
+        <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:4px;">🚉 하차 5분 전 추천</div>
+        <p style="font-size:12px;color:var(--sub);margin-bottom:12px;">도착 5분 전에 시간대별로 보내는 추천이에요. 실제 알림과 같은 내용으로 바로 확인해 볼 수 있어요. 버튼을 누르면 오버레이 아래에도 90초간 뜹니다(오버레이를 켜 둔 상태 — 접혀 있어도 저절로 펼쳐져요).</p>
         <div style="display:flex;gap:8px;margin-bottom:8px;">
           <button onclick="_arrTestUI('morning')" style="flex:1;padding:11px 4px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);font-family:inherit;">☕ 커피</button>
           <button onclick="_arrTestUI('lunch')" style="flex:1;padding:11px 4px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);font-family:inherit;">🍱 점심</button>
@@ -22252,7 +22268,7 @@ window._featureAllowed = _featureAllowed;
 var _NOTIF_PREF_LABELS = {
   arrive:      { icon:'🚉', title:'도착 임박 알림',   desc:'목적지 2정거장 전 · 1정거장 전 (알림·진동·오버레이 테두리)' },
   transfer:    { icon:'🔄', title:'환승 알림',       desc:'환승역 1정거장 전 (알림·진동·오버레이 테두리)' },
-  arrive_reco: { icon:'☕', title:'하차 전 추천',    desc:'도착 10분 전 카페·야식 추천 (오버레이 하단·앱 안 팝업)' }
+  arrive_reco: { icon:'☕', title:'하차 전 추천',    desc:'도착 5분 전 카페·야식 추천 (오버레이 하단·앱 안 팝업)' }
 };
 // ★ 2026-10-03 (익명 정확도 기록): 목적지에 도착하면 '예상한 탑승~하차 분'과 '실제로 걸린 분'을 서버에 한 번 보낸다.
 //   보내는 것: 예상분·실제분·환승 횟수·노선명·시간대(시)·평일 여부·수단 구분. 역 이름·좌표·기기 식별값은 보내지 않는다.
@@ -22402,7 +22418,8 @@ function showNotification(title, body, opts){
 //   · 도착 예정이 오후 5시 이후 → 도착지 반경 1km 식당에서 야식 추천
 //   · 매일 다른 위트 문구 + (오전) 하루 화이팅 / (저녁) 하루 마무리 문구
 // ══════════════════════════════════════════════════════════════════════
-var _ARR_PRE_MIN = 10;          // 도착 몇 분 전에 알릴지
+// ★ 2026-10-16 (YJ: "도착 10분 전 말고 도착 5분 전으로"): 10 → 5 (알림·오버레이 추천 줄이 같은 값을 쓴다)
+var _ARR_PRE_MIN = 5;           // 도착 몇 분 전에 알릴지
 var _ARR_CAFE_M  = 500;         // 카페 반경(m)
 var _ARR_NIGHT_M = 1000;        // 야식 식당 반경(m)
 
@@ -22449,7 +22466,7 @@ var _ARR_WIT_EVE = [
   '오늘 애쓴 마음, {menu}으로 달래줘요',
   '내일 걱정은 잠시 접어두고 {menu} 한 그릇',
   '하루의 끝, {menu}만큼 좋은 마무리도 없어요',
-  '집까지 10분, 오늘의 보상은 {menu}로 정했어요'
+  '집까지 5분, 오늘의 보상은 {menu}로 정했어요'
 ];
 // 19:31~24:00 쇼핑 추천용 — {item} = 상품명
 var _ARR_WIT_SHOP = [
@@ -23529,6 +23546,9 @@ function _arrFireAlertNow(destStn, arrMs){
     else if(slot === 'shop')    action = { kind:'shop', item:a.shop };
     else                        action = { label:'맛집 위치 보기', call:'_arrGoFoodTab()' };
 
+    // ★ 2026-10-16 (YJ: "도착즈음 나오는 광고에서 버튼을 맛집보기 · 주변버스보기 · 종료로"): 도착 전 추천 팝업은 위 세 버튼으로 통일한다(오버레이 추천 줄과 같다).
+    action.arr = true;
+
     var icon = (slot === 'shop') ? '🛍' : (slot === 'morning' ? '☕' : '🍗');
 
     var send = function(body){
@@ -23615,7 +23635,7 @@ function _arrCheckPreAlert(arrMs, remSecs){
   try{
     if(typeof _baseTimeMs!=='undefined' && _baseTimeMs != null) return;   // 예상(미래) 모드 제외
     if(!arrMs || remSecs == null) return;
-    if(remSecs > _ARR_PRE_MIN*60 || remSecs < 60) return;                 // 10분~1분 구간에서만
+    if(remSecs > _ARR_PRE_MIN*60 || remSecs < 60) return;                 // 5분~1분 구간에서만
     var dest = _arrDestName();
     var key  = String(arrMs) + '|' + (dest||'');
     if(window._arrAlertKey === key) return;                               // 이번 여정 1회
@@ -23810,7 +23830,13 @@ function _showBriefingModal(title, body, route, action){
         '<div style="background:var(--card);border:1px solid var(--border);border-radius:18px;max-width:420px;width:100%;padding:22px 20px;box-shadow:0 16px 48px rgba(0,0,0,.35);">'
         + '<div style="font-size:17px;font-weight:800;color:var(--text);margin-bottom:12px;line-height:1.4;">' + esc(title) + '</div>'
         + '<div style="font-size:14px;color:var(--text);line-height:1.7;white-space:pre-line;">' + esc(body) + '</div>'
-        + '<div style="display:flex;gap:8px;margin-top:18px;">'
+        + ((action && action.arr === true)
+          ? '<div style="display:flex;gap:8px;margin-top:18px;">'
+            +   '<button onclick="_arrGoFoodTab()" style="flex:1;padding:12px 4px;border-radius:11px;border:none;cursor:pointer;font-size:14px;font-weight:700;background:#2f7cf6;color:#fff;">맛집 보기</button>'
+            +   '<button onclick="_ovlRecoBus()" style="flex:1.3;padding:12px 4px;border-radius:11px;border:none;cursor:pointer;font-size:14px;font-weight:700;background:rgba(47,124,246,.16);color:#2f7cf6;">주변버스 보기</button>'
+            +   '<button onclick="document.getElementById(\'briefModalOv\').remove()" style="flex:.8;padding:12px 4px;border-radius:11px;border:none;cursor:pointer;font-size:14px;font-weight:700;background:var(--gold);color:#121214;">종료</button>'
+            + '</div>'
+          : '<div style="display:flex;gap:8px;margin-top:18px;">'
         +   '<button onclick="document.getElementById(\'briefModalOv\').remove()" style="flex:1;padding:12px 6px;border-radius:11px;border:none;cursor:pointer;font-size:14px;font-weight:700;background:var(--gold);color:#121214;">확인</button>'
         +   (_hasRoute
               ? '<button onclick="_cmRouteFromBriefing()" style="flex:1;padding:12px 6px;border-radius:11px;border:none;cursor:pointer;font-size:14px;font-weight:700;background:#2f7cf6;color:#fff;">경로탐색</button>'
@@ -23818,7 +23844,7 @@ function _showBriefingModal(title, body, route, action){
         +   (_act
               ? '<button onclick="' + esc(_act.call) + '" style="flex:1;padding:12px 6px;border-radius:11px;border:none;cursor:pointer;font-size:14px;font-weight:700;background:#2f7cf6;color:#fff;">' + esc(_act.label) + '</button>'
               : '')
-        + '</div>'
+        + '</div>')
         + (_shp
             ? '<div style="margin-top:12px;">'
               // ★ 2026-10-11: 상품 사진(쿠팡 아이템에만 있다. 못 불러오면 숨긴다)
@@ -29344,7 +29370,8 @@ function _ovlMoving(){
     if(typeof _htlNotDeparted === 'function' && _htlNotDeparted()) return false;
     try{    // ★ 2026-10-16 (YJ: "도착하면 마커가 바로 다음역으로 넘어간다 → 영점 뒤 10초 정차(노란색) 후 이동"): 엔진이 준 정차 구간(hold) 안이면, 그 역이 현위치일 때 정지로 그린다
       var _ho = window._etaHold;
-      if(_ho && Date.now() < _ho.untilMs && _pipHereIdx() === _ho.idx) return false;
+      var _ttMode = false; try{ _ttMode = _ttFirstOn() && !!window._etaPos; }catch(eTt){}
+      if(!_ttMode && _ho && Date.now() < _ho.untilMs && _pipHereIdx() === _ho.idx) return false;   // 시각표 기준(1순위)에서는 엔진 pos 가 정차(10초)·이동을 정한다 — 늦은 영점·PF 가 멈춰 세우지 않는다
     }catch(eHd){}
     try{    // ★ 2026-10-13: 시각표 기준 구간은 앱 마커와 같은 위치 — 역과 역 사이(비율 0 초과, 도착 전)면 이동 중, 정차(비율 0)·역 위면 정지
       if(_ttFirstOn() && window._etaPos){
@@ -29437,7 +29464,7 @@ function _ovlLines(){
         var _re = (typeof _arrHomeEta === 'function') ? _arrHomeEta() : null;
         var _remS = _re ? _re.rem : ((d.min != null && isFinite(d.min)) ? d.min * 60 : null);
         var _rcForce = (window._ovlRecoForceUntil || 0) > Date.now();   // 설정>하차 추천 테스트 버튼: 도착 시각과 상관없이 90초간 미리보기
-        if(_rcForce || (_remS != null && _remS <= 180 && _remS > -30)){
+        if(_rcForce || (_remS != null && _remS <= _ARR_PRE_MIN * 60 && _remS > -30)){
           // ★ 2026-10-14: 실제 가게·상품 이름(r.ad)이 있으면 이름(첫 줄 굵게)·추천 설명(두 줄까지)·거리/분류(작게). 없으면 예전 문구 두 줄.
           var _ad = (r.ad && r.ad.a) ? r.ad : null;
           var _rl = _ad ? [_pipClampText(_ad.a, 40), _pipClampText(_ad.b || '', 64)].filter(function(x){ return x; })
@@ -29448,7 +29475,7 @@ function _ovlLines(){
               var _o = ['dolsom','lovel','dudung','sul','ppopu','chaeng'];
               r.ovlCh = _o[Math.floor(Math.random() * _o.length)];
             }
-            out.reco = { on: true, ch: r.ovlCh, a: _rl[0], b: _rl[1] || '', m: _ad ? _pipClampText(_ad.m || '', 32) : '', go: (_ac && _ac.kind === 'shop') ? '쿠팡 보기' : ((_ac && _ac.kind === 'delivery') ? '주문하기' : '맛집 보기'), at: r.at };
+            out.reco = { on: true, ch: r.ovlCh, a: _rl[0], b: _rl[1] || '', m: _ad ? _pipClampText(_ad.m || '', 32) : '', go: (_ac && _ac.kind === 'shop') ? '쿠팡 보기' : ((_ac && _ac.kind === 'delivery') ? '주문하기' : '맛집 보기'), bus: '주변버스 보기', end: '종료', at: r.at };
           }
         }
       }
@@ -29558,7 +29585,20 @@ function _ovlRecoGo(){
     else if(typeof _arrGoFoodTab === 'function') _arrGoFoodTab();
   }catch(e){}
 }
-window._ovlRecoGo = _ovlRecoGo; window._ovlRecoDismiss = _ovlRecoDismiss;
+// ★ 2026-10-16 (YJ: "맛집보기 · 주변버스보기 · 종료"): [주변버스 보기] = 노선도 탭의 버스 > 주변 정류장으로. 추천은 닫는다.
+function _ovlRecoBus(){
+  try{
+    _ovlRecoDismiss();
+    var ov = document.getElementById('briefModalOv'); if(ov) ov.remove();
+    var el = document.getElementById('ni-map');
+    if(typeof switchTab === 'function') switchTab('map', el);
+    setTimeout(function(){
+      try{ if(typeof switchMapInnerTab === 'function') switchMapInnerTab('bus'); }catch(e1){}
+      try{ if(typeof switchBusView === 'function') switchBusView('near'); }catch(e2){}
+    }, 150);
+  }catch(e){}
+}
+window._ovlRecoGo = _ovlRecoGo; window._ovlRecoDismiss = _ovlRecoDismiss; window._ovlRecoBus = _ovlRecoBus;
 window._ovlAct = function(a){
   try{
     if(a === 'press' && _arrEnd && _arrEnd.st === 'ask'){ _arrEndFinish('오버레이 버튼'); return; }
@@ -29569,6 +29609,7 @@ window._ovlAct = function(a){
     else if(a === 'pill'){ _rs.openUntil = Date.now() + 20000; }
     else if(a === 'recoGo') _ovlRecoGo();
     else if(a === 'recoOk') _ovlRecoDismiss();
+    else if(a === 'recoBus') _ovlRecoBus();
     _rsTick();
     _ovlSync(true);
   }catch(e){}
@@ -41342,6 +41383,179 @@ function _rsUndo(){
   }catch(e){}
 }
 window._rsOpenManual = _rsOpenManual; window._rsCloseManual = _rsCloseManual; window._rsTick = _rsTick; window._rsPress = _rsPress; window._rsUndo = _rsUndo; window._rsLegs = _rsLegs;
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+// ★ 2026-10-16 (YJ: "경로 선택하면 체크한 부분에 탑승 버튼 — 왼쪽 두 버튼이 줄고 오른쪽에서 밀고 들어옴, 세 버튼 크기 같게 / 환승은 위에서 내려오며 탑승을 아래로 / 도착은 아래에서 올라오며 환승을 위로.
+//   모든 계산은 엔진이 그림은 앱이, 애니메이션은 네이티브"): 경로 카드 맨 아래 줄(#routeActRow)의 오른쪽 칸.
+//   · 어떤 칸이 되는지·전환 종류·시간·곡선은 엔진(/ride-eta op:'row')이 정한다. 앱은 증거(확정 여부·구간별 탑승 확정 — 탑승 시트 _rs 와 같은 근거)만 보내고 받은 대로 그린다.
+//   · 웹 버튼(#routeSlotBtn)은 늘 최종 모양. 전환 연출은 네이티브 RowNative.play(웹 버튼의 겉모양·자리를 넘김)가 그 위에 0.4초 떠서 그리고 끝나면 사라진다.
+//     네이티브가 없거나 실패하면 같은 식(RowCore 와 같은 수식)으로 웹이 그린다. 스크롤·화면 이동이 있으면 연출을 접고 최종 모양을 바로 보인다.
+//   · 누름: 탑승·환승 = 탑승 시트의 [탑승]과 같은 확정(_rsPress — 일찍 누르면 예약, 환승은 앞 구간을 내린 뒤에만) · 도착 = 안내 종료(_arrEndFinish).
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+var _row = { slot: 'none', sig: null, busy: false, at: 0, fails: 0, leg: -1, spec: null, anim: null, trackSig: null };
+var _ROW_COLORS = { board: { bg: '#0a84ff', fg: '#ffffff' }, transfer: { bg: '#bf5af2', fg: '#ffffff' }, arrive: { bg: '#e8b84a', fg: '#121214' } };
+function _rowEls(){ return { row: document.getElementById('routeActRow'), a: document.getElementById('routeDetailBtn'), b: document.getElementById('mainConfirmRouteBtn'), c: document.getElementById('routeSlotBtn') }; }
+// 증거: 확정 여부와 구간별 탑승 확정(탑승 시트와 같은 판정 _rsNotDeparted). 판단은 엔진.
+function _rowEvidence(){
+  var legs = [], locked = false;
+  try{
+    locked = window._routeLocked === true && window._metroRouteMode !== true && !(typeof _baseTimeMs !== 'undefined' && _baseTimeMs != null);
+    var card = document.getElementById('transitResultCard'); if(!card || card.style.display === 'none') locked = false;
+    if(locked){ var L = _rsLegs(); for(var i = 0; i < L.length; i++) legs.push({ done: !_rsNotDeparted(L[i]), mode: L[i].mode }); }
+  }catch(e){}
+  return { locked: locked, legs: legs };
+}
+function _rowSpecOf(el, label){
+  var cs = getComputedStyle(el), bw = parseFloat(cs.borderTopWidth) || 0;
+  return { t: label != null ? label : (el.textContent || '').replace(/\s+/g, ' ').trim(), bg: cs.backgroundColor, fg: cs.color, bd: bw > 0 ? cs.borderTopColor : '', fs: parseFloat(cs.fontSize) || 12, br: parseFloat(cs.borderTopLeftRadius) || 12, b: (parseInt(cs.fontWeight, 10) || 400) >= 600 };
+}
+function _rowCardBg(el){
+  try{ for(var n = el; n && n.nodeType === 1; n = n.parentNode){ var c = getComputedStyle(n).backgroundColor; if(c && c !== 'transparent' && !/rgba\(\s*0,\s*0,\s*0,\s*0\s*\)/.test(c)) return c; } }catch(e){}
+  return 'rgb(18,18,20)';
+}
+function _rowEase(t, z){          // CSS cubic-bezier 와 같은 곡선(RowCore.ease 와 같은 식)
+  if(t <= 0) return 0; if(t >= 1) return 1;
+  var lo = 0, hi = 1, u = t, bz = function(u, p1, p2){ var v = 1 - u; return 3 * v * v * u * p1 + 3 * v * u * u * p2 + u * u * u; };
+  for(var i = 0; i < 24; i++){ u = (lo + hi) / 2; if(bz(u, z[0], z[2]) < t) lo = u; else hi = u; }
+  return bz(u, z[1], z[3]);
+}
+// RowCore.frame 과 같은 수식 — 웹 대체 연출과 시험이 쓴다. 반환 { a,b,c,o: [보임,x,y,w,h] }
+function _rowFrame(kind, p, W, H, g){
+  p = Math.max(0, Math.min(1, p));
+  var w2 = (W - g) / 2, w3 = (W - 2 * g) / 3, x3 = 2 * (w3 + g), o = { a: null, b: null, c: null, o: null };
+  if(kind === 'push_in' || kind === 'push_out'){
+    var q = kind === 'push_out' ? 1 - p : p, wa = w2 + (w3 - w2) * q;
+    o.a = [1, 0, 0, wa, H]; o.b = [1, wa + g, 0, wa, H]; o.c = [1, 2 * (wa + g), 0, w3, H]; return o;
+  }
+  o.a = [1, 0, 0, w3, H]; o.b = [1, w3 + g, 0, w3, H];
+  if(kind === 'slide_down'){ o.c = [1, x3, -H * (1 - p), w3, H]; o.o = [1, x3, H * p, w3, H]; }
+  else if(kind === 'slide_up'){ o.c = [1, x3, H * (1 - p), w3, H]; o.o = [1, x3, -H * p, w3, H]; }
+  else o.c = [1, x3, 0, w3, H];
+  return o;
+}
+window._rowFrame = _rowFrame;
+function _rowPaintSlot(slot, label){
+  var E = _rowEls(); if(!E.c) return;
+  var c = _ROW_COLORS[slot];
+  if(!c){ E.c.style.display = 'none'; E.c.setAttribute('data-slot', 'none'); E.c.textContent = ''; return; }
+  E.c.textContent = label; E.c.style.background = c.bg; E.c.style.color = c.fg; E.c.style.display = ''; E.c.setAttribute('data-slot', slot);
+}
+function _rowCleanupWeb(){ try{ var o = document.getElementById('routeActAnim'); if(o) o.remove(); }catch(e){} if(_row.anim && _row.anim.raf){ try{ cancelAnimationFrame(_row.anim.raf); }catch(e1){} } _row.anim = null; }
+// 웹 대체 연출(네이티브가 없을 때): 줄 위에 카드 바탕색 덮개를 얹고 네 조각을 같은 수식으로 움직인다.
+function _rowPlayWeb(spec){
+  var E = _rowEls(); if(!E.row) return false;
+  _rowCleanupWeb();
+  var r = E.row.getBoundingClientRect(), W = r.width, H = r.height, g = spec.gap;
+  var ov = document.createElement('div'); ov.id = 'routeActAnim';
+  ov.style.cssText = 'position:absolute;left:0;top:0;width:' + W + 'px;height:' + H + 'px;overflow:hidden;pointer-events:none;background:' + spec.bg + ';z-index:3;';
+  var els = {};
+  ['o', 'c', 'b', 'a'].forEach(function(k){
+    var it = spec.items[k]; if(!it) return;
+    var d = document.createElement('div');
+    d.style.cssText = 'position:absolute;display:flex;align-items:center;justify-content:center;white-space:nowrap;overflow:hidden;box-sizing:border-box;font-family:inherit;'
+      + 'background:' + it.bg + ';color:' + it.fg + ';font-size:' + it.fs + 'px;font-weight:' + (it.b ? 800 : 400) + ';border-radius:' + it.br + 'px;' + (it.bd ? 'border:1px solid ' + it.bd + ';' : '');
+    d.textContent = it.t; ov.appendChild(d); els[k] = d;
+  });
+  E.row.appendChild(ov);
+  var t0 = performance.now(), A = { raf: 0 }; _row.anim = A;
+  function step(){
+    var t = Math.min(1, (performance.now() - t0) / Math.max(1, spec.ms)), f = _rowFrame(spec.kind, _rowEase(t, spec.ease), W, H, g);
+    for(var k in els){ var v = f[k]; if(!v){ els[k].style.display = 'none'; continue; } els[k].style.display = 'flex'; els[k].style.left = v[1] + 'px'; els[k].style.top = v[2] + 'px'; els[k].style.width = v[3] + 'px'; els[k].style.height = v[4] + 'px'; }
+    if(t >= 1){ _rowCleanupWeb(); return; }
+    A.raf = requestAnimationFrame(step);
+  }
+  step();
+  return true;
+}
+function _rowPlay(res, prevLabel, prevSpec){
+  var E = _rowEls(); if(!E.row || !E.a || !E.b || !E.c) return;
+  var an = res.anim || {}, kind = an.kind;
+  if(!kind || kind === 'none' || !(an.ms > 0)) return;
+  try{ if(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return; }catch(eM){}
+  var card = document.getElementById('transitResultCard');
+  if(!card || card.style.display === 'none' || document.hidden === true) return;
+  var rc = E.row.getBoundingClientRect(); if(!(rc.width > 40 && rc.height > 10)) return;
+  var vh = window.innerHeight || 800; if(rc.bottom < 0 || rc.top > vh) return;      // 화면 밖이면 연출 없이 최종 모양
+  var g = parseFloat(getComputedStyle(E.row).columnGap || getComputedStyle(E.row).gap) || 8;
+  var items = { a: _rowSpecOf(E.a), b: _rowSpecOf(E.b) };
+  var curSlot = res.slot, newSpec = (curSlot !== 'none') ? _rowSpecOf(E.c) : null;
+  if(kind === 'push_out'){ items.c = prevSpec; }
+  else { items.c = newSpec; if(kind === 'slide_down' || kind === 'slide_up') items.o = prevSpec; }
+  if(!items.c) return;
+  var bg = _rowCardBg(E.row);
+  var spec = { kind: kind, ms: an.ms, ease: an.ease || [0.2, 0, 0, 1], gap: g, items: items, bg: bg };
+  var N = null; try{ var C = window.Capacitor; N = (C && C.Plugins && C.Plugins.RowNative) || null; }catch(eN){}
+  window._rowLast = { kind: kind, ms: an.ms, native: !!N, items: { a: items.a && items.a.t, b: items.b && items.b.t, c: items.c && items.c.t, o: items.o && items.o.t } };
+  if(N && typeof N.play === 'function' && window._rowNativeOff !== true){
+    try{
+      var pr = N.play({ x: rc.left, y: rc.top, w: rc.width, h: rc.height, dpr: window.devicePixelRatio || 1, gap: g, kind: kind, ms: an.ms, ease: spec.ease, bg: bg, items: items });
+      if(pr && typeof pr.catch === 'function') pr.catch(function(err){ try{ _ovlDiag('버튼줄', '네이티브 연출 실패 — 웹으로: ' + String(err && err.message || err).slice(0, 60)); }catch(e){} _rowPlayWeb(spec); });
+      return;
+    }catch(eP){ /* 아래 웹 대체 */ }
+  }
+  _rowPlayWeb(spec);
+}
+function _rowApply(res, prevSlot, prevSpec, prevLabel){
+  try{
+    var E = _rowEls(); if(!E.c) return;
+    _row.leg = res.leg;
+    _rowPaintSlot(res.slot, res.label);
+    _row.slot = res.slot;
+    if(res.slot !== prevSlot) _rowPlay(res, prevLabel, prevSpec);
+  }catch(e){}
+}
+function _rowSync(force){
+  try{
+    var E = _rowEls(); if(!E.c || typeof fetch !== 'function') return;
+    var ev = _rowEvidence(), sig = (ev.locked ? '1' : '0') + ':' + ev.legs.map(function(l){ return l.done ? 1 : 0; }).join('') + '|' + (window._trackSig || '');
+    var now = Date.now();
+    if(window._trackSig !== _row.trackSig){ _row.trackSig = window._trackSig; if(_row.slot !== 'none' && !ev.locked){ /* 아래에서 엔진이 none 으로 */ } }
+    if(!force && sig === _row.sig) return;
+    if(_row.busy && now - _row.at < 8000) return;
+    if(_row.fails > 0 && now - _row.at < Math.min(30000, 3000 * _row.fails)) return;
+    _row.busy = true; _row.at = now;
+    var prevSlot = _row.slot, prevLabel = E.c.textContent || '', prevSpec = null;
+    try{ if(prevSlot !== 'none' && E.c.style.display !== 'none') prevSpec = _rowSpecOf(E.c); }catch(eS){}
+    var body = JSON.stringify({ op: 'row', locked: ev.locked, legs: ev.legs, prev: prevSlot });
+    var ctl = (typeof AbortController === 'function') ? new AbortController() : null, to = setTimeout(function(){ try{ if(ctl) ctl.abort(); }catch(e){} }, 8000);
+    fetch(_ETA_URL, { method: 'POST', headers: { 'content-type': 'application/json' }, body: body, signal: ctl ? ctl.signal : undefined })
+      .then(function(r){ if(!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function(res){
+        clearTimeout(to); _row.busy = false; _row.fails = 0;
+        if(!res || !res.slot) return;
+        _row.sig = sig;
+        // 그 사이 증거가 바뀌었으면(눌렀다·되돌렸다) 이 답은 낡았다 — 다음 틱이 다시 묻는다
+        var ev2 = _rowEvidence(), sig2 = (ev2.locked ? '1' : '0') + ':' + ev2.legs.map(function(l){ return l.done ? 1 : 0; }).join('') + '|' + (window._trackSig || '');
+        if(sig2 !== sig) _row.sig = null;
+        _rowApply(res, prevSlot, prevSpec, prevLabel);
+      })
+      .catch(function(err){ clearTimeout(to); _row.busy = false; _row.fails++; try{ if(_row.fails === 1) _ovlDiag('버튼줄', '엔진 응답 실패 — 마지막 모양 유지: ' + String(err && err.message || err).slice(0, 50)); }catch(e){} });
+  }catch(e){ _row.busy = false; }
+}
+window._rowSync = _rowSync; window._rowApply = _rowApply; window._rowEvidence = _rowEvidence;
+// 탑승·환승·도착 칸을 눌렀다 — 칸의 뜻은 엔진이 정했고(_row.slot · _row.leg), 앱은 기존 확정 동작을 부르기만 한다.
+function _rowPress(){
+  try{
+    var slot = _row.slot;
+    if(slot === 'arrive'){ _arrEndFinish('도착 버튼'); return; }
+    if(slot !== 'board' && slot !== 'transfer') return;
+    var legs = _rsLegs(), L = legs[_row.leg];
+    if(!L){ return; }
+    if(L.k > 0){      // 환승: 앞 구간을 내린 뒤에만(탑승 시트와 같은 규칙)
+      var eff = Math.max(window._gpsMaxIdx == null ? -1 : window._gpsMaxIdx, window._timeMaxIdx == null ? -1 : window._timeMaxIdx);
+      if(eff < legs[L.k - 1].ai){
+        var nd0 = _transitNodeData[L.bi], ag = null; try{ ag = _rsAlightGps(nd0); }catch(eA){}
+        if(ag == null){ try{ if(typeof toast === 'function') toast('앞 구간을 내린 뒤에 눌러 주세요'); }catch(eT){} return; }
+      }
+    }
+    _rs.leg = L;
+    _rsPress();
+    setTimeout(function(){ try{ _rowSync(true); }catch(e){} }, 60);
+  }catch(e){}
+}
+window._rowPress = _rowPress;
+try{ setInterval(function(){ _rowSync(false); }, 1000); }catch(eRw){}
+
 try{ setInterval(_rsTick, 1000); }catch(eRs){}
 try{ if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _rsInitSwipe); else _rsInitSwipe(); }catch(eRs2){}
 // 자동 확정 뒤 검증: 5분(이동 중이면 10분) 안에 승차 확정·다음 역 진행이 안 보이면 오탐으로 보고 확정을 거둔다(수동 확정은 건드리지 않는다).
