@@ -43,6 +43,7 @@ jobs:
           - route_row.ui.test.js
           - overlay_pill_native.test.js
           - overlay_reco.ui.test.js
+          - overlay_test_buttons.ui.test.js
           - metro_native_js.ui.test.js
           - bus_poll_gap.test.js
           - cell_hop_lead.ui.test.js

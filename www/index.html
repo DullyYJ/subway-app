@@ -19667,6 +19667,24 @@ window.addEventListener('unhandledrejection', function(e) {
         <div id="arrTestStat" style="margin-top:10px;background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:10px;font-size:11.5px;line-height:1.7;color:var(--text);font-family:monospace;white-space:pre-wrap;">'상태 확인'을 누르면 감시 상태와 남은 시간이 표시됩니다.</div>
       </div>
 
+      <!-- TEST-BUTTONS:BEGIN (출시 전 이 블록과 JS 의 TEST-BUTTONS 블록, _ovlSync/_ovlKeepAliveSync 의 _ovlTest 줄을 지울 것 — HANDOFF 2026-10-16(7) 참고) -->
+      <div id="ovlTestCard" style="background:var(--card);border:1px dashed var(--gold);border-radius:14px;padding:16px;margin-top:12px;">
+        <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:4px;">🧪 오버레이 테스트 <span style="font-size:11px;color:var(--gold);font-weight:700;">출시 전 삭제</span></div>
+        <p style="font-size:12px;color:var(--sub);margin:0 0 10px;line-height:1.6;">가짜 여정(임학→아라)을 오버레이에 보내 접힘·펼침·무지개·버튼을 실기기로 확인해요. '다른 앱 위에 표시'를 켜 두고, 버튼을 누른 뒤 <b>홈 화면으로 나가세요</b>. 알약으로 접어 두려면 오버레이를 위로 쓸어 올리세요(접힌 상태는 기억돼요).</p>
+        <button onclick="_ovlTestStart('all')" style="width:100%;margin-bottom:8px;padding:12px;border-radius:10px;border:none;cursor:pointer;font-size:13px;font-weight:800;background:var(--gold);color:#121214;font-family:inherit;">▶ 전체 시나리오 (75초)</button>
+        <p style="font-size:11.5px;color:var(--sub);margin:0 0 10px;line-height:1.55;">0~15초 평상시(이때 알약으로 접기) → 15~30초 추천(접혀 있어도 펼쳐짐) → 30~45초 2정거장 전(알약 둘레 무지개, 펼치지 않음) → 45~60초 1정거장 전(펼침+빠른 무지개+진동) → 마무리</p>
+        <div style="display:flex;gap:8px;margin-bottom:8px;">
+          <button onclick="_ovlTestStart('plain')" style="flex:1;padding:11px 4px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);font-family:inherit;">평상시</button>
+          <button onclick="_ovlTestStart('reco')" style="flex:1;padding:11px 4px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);font-family:inherit;">추천</button>
+          <button onclick="_ovlTestStart('alert2')" style="flex:1;padding:11px 4px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);font-family:inherit;">2정거장 전</button>
+          <button onclick="_ovlTestStart('alert1')" style="flex:1;padding:11px 4px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);font-family:inherit;">1정거장 전</button>
+        </div>
+        <button onclick="_ovlTestStop()" style="width:100%;padding:11px;border-radius:10px;border:1px solid var(--border2);cursor:pointer;font-size:13px;font-weight:700;background:transparent;color:var(--text);font-family:inherit;">■ 테스트 중지</button>
+        <p id="ovlTestStat" style="font-size:11.5px;color:var(--sub);margin:8px 0 0;line-height:1.55;"></p>
+        <p style="font-size:11px;color:var(--sub);margin:6px 0 0;line-height:1.55;">※ 추천 줄의 [종료]는 진짜 앱 종료예요(이때 시계 위젯 동물이 계속 움직이는지 확인). [맛집 보기]·[주변버스 보기]는 앱을 앞으로 가져와 해당 화면을 열어요.</p>
+      </div>
+      <!-- TEST-BUTTONS:END -->
+
       <!-- ★ 다른 앱 위에 표시(오버레이) -->
       <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
         <!-- ★ 2026-10-01: 다른 앱 위에 표시(오버레이) — 다른 앱을 쓰는 동안 현재역·남은시간을 화면 맨 위에 작은 막대로 -->
@@ -29670,10 +29688,70 @@ function _ovlStrip(st, full){
   return null;
 }
 window._ovlStrip = _ovlStrip;
+// ── TEST-BUTTONS:BEGIN (출시 전 삭제) ─────────────────────────────────────────────
+// 설정 > '🧪 오버레이 테스트': 가짜 여정을 오버레이에 직접 보내 접힘/펼침·2정거장 무지개·1정거장 펼침·추천 줄·버튼을 실기기로 확인한다.
+//   실제 여정·엔진 값과 무관(읽기 전용 흉내) — 진짜 판단은 없고 네이티브가 그리는 모습만 본다. 삭제할 때: 이 블록 + _ovlSync/_ovlKeepAliveSync/_ovlNativeTick 의 '_ovlTest' 줄 + 설정 카드(ovlTestCard).
+var _OVT_STN = [['임학', '18:35'], ['박촌', '18:37'], ['굴현', '18:41'], ['계양', '18:43'], ['아라', '18:48']];
+function _ovlTestPhase(T, now){
+  if(T.mode !== 'all') return { mode: T.mode, at: T.t0 };
+  var names = ['plain', 'reco', 'alert2', 'alert1', 'plain'], i = Math.min(names.length - 1, Math.floor((now - T.t0) / 15000));
+  return { mode: names[i], at: T.t0 + i * 15000 };
+}
+function _ovlTestPayload(T, now){
+  var ph = _ovlTestPhase(T, now), m = ph.mode, cur = (m === 'alert2') ? 2 : ((m === 'alert1' || m === 'reco') ? 3 : 1);
+  var cells = _OVT_STN.map(function(sn, i){
+    return { n: sn[0], t: sn[1], g: '', gp: false, gc: '', lc: i > 0 ? '#8fa8d8' : '', rc: i < _OVT_STN.length - 1 ? '#8fa8d8' : '', dc: '#6f9bd8', dk: i === cur ? 2 : 1 };
+  });
+  var lv = (m === 'alert2') ? 2 : (m === 'alert1' ? 1 : 0);
+  var rem = Math.max(0, _OVT_STN.length - 1 - cur);
+  var reco = { on: false };
+  if(m === 'reco' && window._ovlRecoDismissAt === undefined){   // [맛집 보기]·[주변버스 보기]를 누르면 _ovlRecoDismiss 가 값을 채워 추천이 닫힌다
+    reco = { on: true, ch: 'dolsom', a: '테스트 식당 · 돈가스', b: '내리는 길에 한 번 들러 봐요', m: '120m · 식당', go: '맛집 보기', bus: '주변버스 보기', end: '종료', at: ph.at };
+  }
+  return { active: true, line1: _OVT_STN[cur][0], pill: '', track: _OVT_STN.map(function(x){ return x[0]; }), cur: cur, base: 0, theme: _ovlThemeColors(), cells: cells,
+           line2: '남은시간: 00시간 0' + rem + '분 · 18:48도착', line3: '', alert: lv, alertAt: lv ? ph.at : 0, alertVibe: lv > 0, pre: false, moving: false,
+           rs: { st: 'hidden' }, reco: reco };
+}
+var _ovlTestLastAt = 0, _ovlTestLastKey = '';
+function _ovlTestSend(n, force){
+  try{
+    var T = window._ovlTest, now = Date.now();
+    var P = _ovlTestPayload(T, now), key = JSON.stringify(P);
+    if(!force && key === _ovlTestLastKey && now - _ovlTestLastAt < 3000) return;
+    _ovlTestLastKey = key; _ovlTestLastAt = now;
+    var r = n.update(P); if(r && typeof r.catch === 'function') r.catch(function(){ _ovlTestLastKey = ''; });
+    var st = document.getElementById('ovlTestStat'); if(st){ var ph = _ovlTestPhase(T, now); st.textContent = '진행 중 · 지금 단계: ' + ({ plain: '평상시', reco: '추천', alert2: '2정거장 전', alert1: '1정거장 전' }[ph.mode]) + ' · ' + Math.max(0, Math.round((T.until - now) / 1000)) + '초 남음'; }
+  }catch(e){}
+}
+function _ovlTestStart(mode){
+  try{
+    var say = function(m){ try{ if(typeof toast === 'function') toast(m); }catch(e){} };
+    if(!_ovlUsable()){ say("오버레이가 꺼져 있거나 권한이 없어요 — '다른 앱 위에 표시'를 먼저 켜 주세요"); return; }
+    var now = Date.now();
+    window._ovlRecoDismissAt = undefined;
+    window._ovlTest = { mode: mode, t0: now, until: now + (mode === 'all' ? 75000 : 180000) };
+    _ovlTestLastKey = '';
+    try{ _ovlKeepAliveSync(); }catch(e1){}
+    _ovlSync(true);
+    say('홈 화면으로 나가서 오버레이를 확인하세요' + (mode === 'all' ? ' (15초 뒤부터 단계가 바뀌어요)' : ''));
+  }catch(e){}
+}
+function _ovlTestStop(){
+  try{
+    window._ovlTest = null; window._ovlRecoDismissAt = undefined;
+    var st = document.getElementById('ovlTestStat'); if(st) st.textContent = '중지했어요.';
+    _ovlLastKey = null; try{ _ovlKeepAliveSync(); }catch(e1){}
+    _ovlSync(true);
+  }catch(e){}
+}
+window._ovlTestStart = _ovlTestStart; window._ovlTestStop = _ovlTestStop;
+function _ovlTestOn(){ var T = window._ovlTest; if(!T) return false; if(Date.now() >= T.until){ _ovlTestStop(); return false; } return true; }
+// ── TEST-BUTTONS:END ───────────────────────────────────────────────────────────────
 function _ovlSync(force){
   try{
     var n = _ovlNative();
     if(!n || typeof n.update !== 'function') return;
+    if(window._ovlTest && _ovlTestOn()){ _ovlTestSend(n, force); return; }   // TEST-BUTTONS (출시 전 삭제)
     var active = !!(_ovlUsable() && _pipHasRoute());   // ★ 2026-10-01: PiP 스위치와 무관(PiP 는 꺼 둠)
     var L = active ? _ovlLines() : { l1:'', l2:'', l3:'', track:[], cur:-1, alert:0, moving:false };
     var key = (active ? '1' : '0') + '|' + L.l1 + '|' + L.l2 + '|' + L.l3 + '|' + L.track.join('>') + '|' + L.cur + '|' + L.alert + '|' + (L.alertAt || 0) + '|' + (L.pre ? 'P' : 'p') + '|' + (L.moving ? 'M' : 'S') + '|' + (L.pill || '')
@@ -29714,6 +29792,7 @@ function _ovlKeepAliveSync(){
     var n = _ovlNative();
     if(!n || typeof n.keepAlive !== 'function') return;
     var want = !!(window._routeLocked === true && typeof _pipHasRoute === 'function' && _pipHasRoute());
+    if(window._ovlTest && _ovlTestOn()) want = true;   // TEST-BUTTONS (출시 전 삭제): 시험 중엔 앱이 가려져도 네이티브가 웹을 깨운다
     var now = Date.now();
     if(want === _ovlKaOn && (!want || now - _ovlKaAt < 60000)) return;
     if(want && _ovlKaOn !== true) _ovlLastKey = null;   // 대기 모드가 쥐고 있던 오버레이를 돌려받으면 웹 값을 바로 다시 보낸다
@@ -29983,6 +30062,7 @@ window._ovlNativeTick = function(svcState){
       try{ if(typeof _rtArrPoll === 'function') _rtArrPoll(); }catch(e3){}
     }
     if(typeof _ovlTick === 'function') _ovlTick(); else _ovlSync();
+    if(window._ovlTest && _ovlTestOn()) return true;   // TEST-BUTTONS (출시 전 삭제)
     return window._routeLocked === true;   // 네이티브가 '웹이 돌고 있고 여정이 진행 중'임을 알도록 돌려준다
   }catch(e){}
   return false;
