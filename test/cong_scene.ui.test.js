@@ -158,14 +158,20 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     const tx = w.r.l + w.r.w * .8, ty = w.r.t + w.r.h * .72;
     await page.mouse.move(tx, ty, { steps: 8 }); await page.waitForTimeout(700);
     w = await where(page); const h = w.actors.find(a => a.held); assert(h && Math.abs(h.sx - tx) < 14, '손가락을 따라온다 ' + JSON.stringify(h) + ' target ' + tx);
+    // ★ 2026-10-17(2): 놓은 뒤 몇 번 훑어보는 방식은 느린 CI 에서 캐릭터가 이미 걸어 나간 뒤를 보게 돼 또 간헐 실패했다 → 놓기 전부터 프레임마다 상태를 기록해 두고,
+    //   '들려 있다가 처음 놓인 프레임'의 자리가 손가락을 놓은 자리와 같은지를 본다(그 뒤 걸음 속도와 무관).
+    const wantX = Math.round((tx - w.r.l) / w.r.w * w.W);
+    await page.evaluate(() => { window.__rec = []; (function f(){ try{ const i = _CS.info(); window.__rec.push(i.actors.map(a => ({ id: a.id, st: a.st, x: a.x, held: !!a.held, land: a.land || '' }))); }catch(e){} if(window.__rec.length < 600) requestAnimationFrame(f); })(); });
+    await page.waitForTimeout(120);
     await page.mouse.up();
-    // ★ 2026-10-17: 착지 뒤 캐릭터가 바로 동작(mirror 등)을 시작해 자리를 떠나므로, 1.5초 뒤 한 번만 보면 CI 에서 간헐 실패했다 → 착지하는 동안 여러 번 보고 '한 번이라도 놓은 자리에 앉았으면' 통과로 본다.
-    const OKST = ['act', 'walk', 'stand', 'hop', 'spin', 'rest', 'emerge']; const wantX = Math.round((tx - w.r.l) / w.r.w * w.W);
-    let d = null, landed = false, last = null;
-    for (let k = 0; k < 14 && !landed; k++) { await page.waitForTimeout(120); i = await info(page); d = i.actors.find(a => a.id === a0.id); last = d; if (!i.drag && d && !d.held && OKST.includes(d.st) && (d.land === 'fly' || Math.abs(d.x - wantX) < 14)) landed = true;
-      else if (!i.drag && d && !d.held && k >= 4 && Math.abs(d.x - wantX) < 90) landed = true;
-      else if (!i.drag && d && !d.held && (d.act === 'vanish' || d.st === 'emerge')) landed = true; }   // 내려앉은 뒤 스스로 사라졌다 다른 곳에서 나타나는 동작(vanish)도 착지 뒤의 정상 동작   // 착지 뒤 걸어 나가는 중 — 놓은 자리 근처(90 안)에 머물면 인정(CI 에서 걸음 속도가 달라 14 는 간헐 실패)
-    assert(landed, '놓은 자리에 내려앉는다 ' + JSON.stringify(last)); await page.waitForTimeout(1200); i = await info(page); d = i.actors.find(a => a.id === a0.id);
+    await page.waitForTimeout(1500);
+    const rec = await page.evaluate(() => window.__rec);
+    // 들려 있던 캐릭터(누구든)가 처음 놓인 프레임
+    let fr = null, heldId = null;
+    for (let k = 0; k < rec.length && !fr; k++) { const hh = rec[k].find(a => a.held); if (hh) heldId = hh.id; else if (heldId) fr = rec[k].find(a => a.id === heldId) || null; }
+    let landed = !!fr && Math.abs(fr.x - wantX) < 40;
+    i = await info(page); let d = i.actors.find(a => a.id === a0.id);
+    assert(landed, '놓은 자리에 내려앉는다 ' + JSON.stringify({ wantX, heldId, fr, n: rec.length, held: rec.filter(r => r.some(a => a.held)).length }));
     await page.waitForTimeout(1500); i = await info(page); const d2 = i.actors.find(a => a.id === a0.id); assert(d2 && !d2.held && d2.st !== 'fall', '놓자마자 가만있지 않고 바로 움직인다(동작·걷기) ' + JSON.stringify([d, d2]));
     assert(!errs.length, errs.join('|')); await ctx.close();
   });
