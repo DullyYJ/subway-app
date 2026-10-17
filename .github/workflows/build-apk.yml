@@ -39,6 +39,7 @@ jobs:
           - scene_native_java.test.js
           - scene_native_js.ui.test.js
           - htl_native_js.ui.test.js
+          - transfer_row.ui.test.js
           - keyboard_pan.test.js
           - row_native.test.js
           - htl_native.test.js

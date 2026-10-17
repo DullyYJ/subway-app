@@ -288,6 +288,17 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     assert.ok(await waitFor(B, async () => (await calls(B, '', 'r:transitOfficialRow')).some(c => c.a && c.a.runs && c.a.runs.some(r => r.t === '짧은 안내'))), '바뀐 내용을 안 보냈다');
     await B.ctx.close();
   });
+  await t('환승 안내 줄(transitXferRow): 엔진이 준 환승 문장을 줄별로 그대로 넘기고(앱은 읽기만), 내용이 바뀌면 update', async () => {
+    const B = await fresh({ plugin: true, on: true });
+    await B.page.evaluate(() => { const r = document.getElementById('transitXferRow'); document.getElementById('hbox').appendChild(r); r.style.margin = '0 14px 8px';
+      _renderXferRow({ transfers: [{ kind: 'line', at: '구로', boardAt: '구로', fromType: 1, fromLine: '1호선', toType: 1, toLine: '천안급행', walkMin: 1 }] }); });
+    await waitFor(B, has(B, 'show', 'r:transitXferRow'));
+    const s = (await lastCall(B, 'show', 'r:transitXferRow')).a, tx = s.runs.filter(r => !r.k).map(r => r.t).join('');
+    assert.ok(s.runs[0].k === 'r', '배경 상자'); assert.ok(/환승1번/.test(tx.replace(/\s/g, '')) && /구로/.test(tx) && /천안급행/.test(tx), tx);
+    await clear(B); await B.page.evaluate(() => { _renderXferRow({ transfers: [{ kind: 'walk', at: '아라', boardAt: '아라역', toType: 2, toLine: '931', walkMin: 5 }] }); });
+    assert.ok(await waitFor(B, async () => (await calls(B, '', 'r:transitXferRow')).some(c => c.a && c.a.runs && c.a.runs.some(r => /931/.test(r.t || '')))), '바뀐 환승 문장을 안 보냈다');
+    await B.ctx.close();
+  });
   await t('머리줄이 팝업에 덮이면 숨고, 영역마다 따로 판단한다', async () => {
     const B = await fresh({ plugin: true, on: true }); await waitFor(B, has(B, 'show', 'hd')); await waitFor(B, has(B, 'show', 'tl'));
     await clear(B); await B.page.evaluate(() => { const hb = document.getElementById('transitResultHeader').parentElement.getBoundingClientRect(); const o = document.createElement('div'); o.id = 'popHd'; o.style.cssText = 'position:fixed;left:0;width:390px;top:' + (hb.top - 4) + 'px;height:' + (hb.height + 8) + 'px;z-index:9999;background:#000'; document.body.appendChild(o); });

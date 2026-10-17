@@ -6684,7 +6684,21 @@ function _htlMayAdjustTime(){
 }
 window._htlMayAdjustTime = _htlMayAdjustTime;
 
-function _renderHtlTrack(sections, start, dest, totalMin) {
+// 엔진이 '여기서 열차를 갈아탄다'고 알려 준 역(info.transfers 의 kind 'train')에 해당하는 항목을 찾는다 — 이름이 같은 첫 역에만.
+function _trainChgAt(sg, st, transfers){
+  try{
+    if(!sg || sg.type!==1 || !Array.isArray(transfers) || !sg.trainChanges) return null;
+    var nm=String((st&&st.stationName)||'').replace(/역$/,'').trim();
+    var used=sg._tcUsed=sg._tcUsed||{};   // sg 는 그릴 때마다 새로 만들어지므로(sections 는 그대로) 원본 데이터는 건드리지 않는다
+    for(var i=0;i<sg.trainChanges.length;i++){
+      var tc=sg.trainChanges[i];
+      if(!tc || used[i]) continue;
+      if(String(tc.at||'').replace(/역$/,'').trim()===nm){ used[i]=1; return tc; }
+    }
+  }catch(e){}
+  return null;
+}
+function _renderHtlTrack(sections, start, dest, totalMin, transfers) {
   // 마지막으로 그린 시각과 인자 (진단용)
   try{ window._lastHtlArgs = { start: start, dest: dest, totalMin: totalMin }; window._htlDrawnAt = Date.now(); }catch(e){}
   var track = document.getElementById('transitHtlTrack');
@@ -6707,7 +6721,15 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
             boardStopId:(sec.boardStopId || null), waitReal:!!sec.waitReal, waitLive:!!sec.waitLive,
             waitEstimated:!!sec.waitEstimated,
             ttWaitMs:(sec.ttWaitMs!=null ? sec.ttWaitMs : null),
+            trainChanges:(Array.isArray(sec.trainChanges) ? sec.trainChanges : null),
             stops:stops.slice()};
+  });
+  // ★ 2026-10-17: 엔진이 알려 준 환승(info.transfers)을 그릴 자리에 붙인다. 어디가 환승인지는 엔진이 정했고, 여기서는 위치만 찾는다.
+  //   · xferSecIdx = 환승 이동 구간(도보) → 그 구간 노드가 '환승' 으로 그려진다   · 바로 이어 타는 경우(버스끼리 등) = 다음 구간의 첫 노드
+  (Array.isArray(transfers) ? transfers : []).forEach(function(t){
+    if(!t || t.kind==='train') return;
+    if(t.xferSecIdx!=null && segs[t.xferSecIdx] && segs[t.xferSecIdx].type===3) segs[t.xferSecIdx].xf = t;
+    else if(t.secIdx!=null && segs[t.secIdx+1]) segs[t.secIdx+1].xfIn = t;
   });
 
   // ★ 2026-09-04: 엔진이 구간별 시각을 준 경우 앱은 그리기만 한다.
@@ -6908,7 +6930,7 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
       var nextType=0,nextName='';
       for(var a=si-1;a>=0;a--){ if(segs[a].type!==3){pC=_segCol(segs[a]);break;} }
       for(var b=si+1;b<segs.length;b++){ if(segs[b].type!==3){nC=_segCol(segs[b]);nextType=segs[b].type;nextName=segs[b].name;break;} }
-      pts.push({type:'walk',pC:pC,nC:nC, durSec:sg.dur,
+      pts.push({type:'walk',pC:pC,nC:nC, durSec:sg.dur, xf:(sg.xf||null),
                 nextType:nextType, nextLabel:_lineLabel(nextType,nextName), nextCol:nC,
                 lbl:secMin>0?secMin+'분':(Math.round(sg.dist)+'m')});
       return;
@@ -6949,6 +6971,8 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
       }
       pts.push({type:'stn',nm:_nm(st.stationName||''),col:col,lC:lC,
                 lineNm:sg.name, lineLabel:_lineLabel(sg.type,sg.name),
+                xfIn:((ni===0 && sg.xfIn) ? sg.xfIn : null),
+                trainChg:_trainChgAt(sg, st, transfers),
                 arrT:arrT,isF:isF,isL:isL,ni:ni,
                 segType:sg.type, isSub:sg.type===1,isBus:sg.type===2,
                 isLongdist:(sg.type===4),
@@ -6978,7 +7002,10 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
     //   글자를 굵고 크게 키워, 촘촘한 지하철/버스 정류장들 사이에서도 한눈에
     //   "수도권 쪽"과 "지방 쪽" 지점이 구분되게 한다(다른 노드는 그대로 10px).
     var row1=isWalk
-      ? '<div style="height:30px;display:flex;align-items:flex-end;justify-content:center;font-size:9px;color:var(--sub);padding-bottom:2px;">도보</div>'
+      ? (pt.xf
+          // ★ 2026-10-17: 엔진이 '여기서 갈아탄다'고 한 이동은 '도보' 가 아니라 '환승' 으로, 눈에 띄게 그린다.
+          ? '<div style="height:30px;display:flex;align-items:flex-end;justify-content:center;font-size:11px;font-weight:800;color:var(--gold);padding-bottom:2px;">환승</div>'
+          : '<div style="height:30px;display:flex;align-items:flex-end;justify-content:center;font-size:9px;color:var(--sub);padding-bottom:2px;">도보</div>')
       : ('<div style="height:30px;display:flex;align-items:flex-end;justify-content:center;font-size:'+(pt.isLongdist?'11px':'10px')+';font-weight:'+(pt.isLongdist?'800':'600')+';color:'+(pt.isLongdist?pt.col:'var(--text)')+';text-align:center;overflow:hidden;width:100%;padding:0 2px;box-sizing:border-box;">'+_ltEsc(pt.nm)+'</div>');
 
     // 행2: 환승배지 / 노선라벨 / 빈칸
@@ -6994,7 +7021,7 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
       var _hadTransitBefore = pts.slice(0,pi).some(function(p){return p.type==='stn';});
       if(_hadTransitBefore && pt.nextLabel){
         row2='<div style="height:18px;display:flex;align-items:center;justify-content:center;">'
-          +'<span style="font-size:6.5px;font-weight:800;color:#fff;background:'+(pt.nextCol||'#0a84ff')
+          +'<span style="font-size:'+(pt.xf?'8':'6.5')+'px;font-weight:800;color:#fff;background:'+(pt.nextCol||'#0a84ff')
           +';border-radius:4px;padding:1px 4px;white-space:nowrap;letter-spacing:.2px;">↔ '+_ltEsc(pt.nextLabel)+'</span>'
           +'</div>';
       } else {
@@ -7002,6 +7029,15 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
       }
     } else if(pt.isF){
       row2='<div style="height:18px;line-height:18px;font-size:7px;font-weight:700;color:'+pt.col+';text-align:center;overflow:hidden;width:100%;">'+_ltEsc(pt.lineLabel||pt.lineNm)+'</div>';
+    } else if(pt.trainChg){
+      // ★ 2026-10-17: 같은 노선 안에서 일반↔급행 열차를 갈아타는 역 — 노선 이름이 같아 예전엔 아무 표시도 없었다.
+      row2='<div style="height:18px;display:flex;align-items:center;justify-content:center;">'
+        +'<span style="font-size:8px;font-weight:800;color:#fff;background:'+pt.col
+        +';border-radius:4px;padding:1px 4px;white-space:nowrap;letter-spacing:.2px;">↔ '+(pt.trainChg.to==='express'?'급행':'일반')+' 환승</span></div>';
+    } else if(pt.xfIn){
+      row2='<div style="height:18px;display:flex;align-items:center;justify-content:center;">'
+        +'<span style="font-size:8px;font-weight:800;color:#fff;background:'+pt.col
+        +';border-radius:4px;padding:1px 4px;white-space:nowrap;letter-spacing:.2px;">↔ '+_ltEsc(pt.lineLabel||pt.lineNm)+'</span></div>';
     } else if(pt.ni===0){
       var _prevPt=(pi>0)?pts[pi-1]:null;
       var _prevWasWalk=_prevPt&&_prevPt.type==='walk';
@@ -7256,11 +7292,12 @@ function _renderTransitResultCard(data, start, dest, cacheSource) {
 
   // ★ 2026-10-03: 승차·대기·도보 분리 + 선택 이유 한 줄
   try{ _renderSplitRow(route); }catch(e){}
+  try{ _renderXferRow(route); }catch(e){}
   try{ _depCompareStart(route); }catch(e){}
   try{ if(typeof _lrRouteAlertStart==='function') _lrRouteAlertStart(route); }catch(e){}
 
   // 복합경로 가로 타임라인 렌더
-  _renderHtlTrack(sections, start, dest, totalMin);
+  _renderHtlTrack(sections, start, dest, totalMin, route.transfers || null);
   // 2026-10-04: 엔진 총 소요와 화면 타임라인(앱이 얹은 시각표 대기 포함)이 어긋나면 사용자가 보는 타임라인을 기준으로 맞춘다.
   try{
     var _tl = window._htlTlTotalMin;
@@ -7274,7 +7311,10 @@ function _renderTransitResultCard(data, start, dest, cacheSource) {
   }catch(eTot){}
 
   // ★ 2026-09-25 (KTX/ITX 등급선택): 장거리 경로(route.ld)일 때만 등급·수단 칩을 그린다.
-  try{ if(typeof _renderLdGradeChips==='function') _renderLdGradeChips(route.ld || null); }catch(e){}
+  //   ★ 2026-10-17 (YJ: "최단시간에 저 고르는 게 왜 뜨지?"): 최단시간이 장거리 열차 경로와 같은 경로일 때
+  //   route.ld 가 같이 따라와 '열차 13:47 ▾' 상자가 최단시간 탭에도 떴다. 수단·편을 고르는 곳은 '🚄 장거리' 탭뿐이다 —
+  //   장거리 탭이 그릴 때만(cacheSource 'engine_longdist') 그리고, 나머지 탭에서는 숨긴다(고른 편의 값 자체는 그대로 둔다).
+  try{ if(typeof _renderLdGradeChips==='function') _renderLdGradeChips(cacheSource==='engine_longdist' ? (route.ld || null) : null); }catch(e){}
 
   // ★ 2026-09-28 (YJ 지시로 '탑승 시간대 혼잡 예측' 카드 자체를 삭제함 — 아래 '혼잡도 분석'
   //   카드가 실시간 위치추적 기반으로 대체함): 여기서 부르던 _renderTransitCongestion(sections)
@@ -9608,7 +9648,7 @@ function _showTabNoRoute(type){
     var errBox=document.getElementById('transitResultErr'); if(errBox) errBox.style.display='none';
     var h=document.getElementById('transitResultHeader');
     if(h) h.innerHTML='<span id="transitTabNoRouteMsg" style="font-size:14px;font-weight:800;color:var(--text);">'+label+'만으로 갈 수 있는 경로가 없어요</span>';
-    ['transitSplitRow','transitDepRow','transitOfficialRow','transitAlertRow'].forEach(function(id){
+    ['transitSplitRow','transitXferRow','transitDepRow','transitOfficialRow','transitAlertRow'].forEach(function(id){
       var e=document.getElementById(id); if(e){ e.style.display='none'; e.innerHTML=''; }
     });
     var ld=document.getElementById('ldGradeChips'); if(ld) ld.style.display='none';
@@ -10677,6 +10717,37 @@ function _renderSplitRow(route){
 }
 window._renderSplitRow=_renderSplitRow;
 
+// ★ 2026-10-17 (YJ: "환승이 필요한 부분은 알려줘야해" — 카카오는 '구로 하차 → 환승 도보 1분 → 구로 천안급행' 으로 알려 준다):
+//   환승이 어디서·무엇에서 무엇으로 일어나는지는 엔진이 info.transfers 로 정해 준다(s36). 여기서는 문장으로 옮겨 그리기만 한다.
+//   옛 엔진 응답(transfers 없음)이면 아무것도 지어내지 않고 숨긴다.
+function _xferLine(t){
+  var f=function(type,name){ name=String(name||'').trim(); if(!name) return type===2?'버스':'열차'; return (type===2 && /^[0-9-]+$/.test(name)) ? name+'번' : name; };
+  var at=String(t.at||'').trim(), wm=Math.round(t.walkMin||0);
+  var walkTxt=(t.kind==='train') ? '' : (wm>0 ? ' · 도보 '+wm+'분' : '');
+  if(t.kind==='train'){
+    return at+'에서 '+(t.service==='express'?'급행':'일반')+' 열차로 갈아타요 ('+f(1,t.fromLine)+' 안에서 열차가 바뀌어요)';
+  }
+  if(t.kind==='walk'){
+    var to=String(t.boardAt||'').trim();
+    return at+' 하차'+(wm>0?' → 도보 '+wm+'분':'')+' → '+(to&&to!==at?to+'에서 ':'')+f(t.toType,t.toLine)+' 승차';
+  }
+  return at+'에서 '+f(t.fromType,t.fromLine)+' → '+f(t.toType,t.toLine)+' 환승'+walkTxt;
+}
+function _renderXferRow(route){
+  var el=document.getElementById('transitXferRow');
+  if(!el) return;
+  var xs=(route && Array.isArray(route.transfers)) ? route.transfers : [];
+  var h='';
+  if(xs.length){
+    h+='<div><b>🔁 환승 '+xs.length+'번</b></div>';
+    xs.forEach(function(t,i){ if(t) h+='<div>'+(i+1)+'. '+_ltEsc(_xferLine(t))+'</div>'; });
+  }
+  el.innerHTML=h;
+  el.style.display=h?'block':'none';
+}
+window._renderXferRow=_renderXferRow;
+window._xferLine=_xferLine;
+
 // ★ 2026-10-03 (개선안 1 — 출발 시각 비교): 지금 출발 / 10분 뒤 / 20분 뒤 중 언제 가야 가장 일찍 도착하는지.
 //   급행·배차가 드문 구간에선 조금 늦게 출발하는 편이 먼저 도착하기도 한다. 계산은 전부 엔진(baseMs 로 시각을 바꿔 물음)이고,
 //   앱은 도착 시각을 나란히 보여 주기만 한다. 경로가 그려진 뒤 1.2초 후 조용히 2~3번 물어보며 실패하면 아무것도 안 보인다.
@@ -10798,6 +10869,7 @@ function _convertSinglePathToRoute(path) {
       boardStopId: (sp.boardStopId || null),
       waitReal:  !!sp.waitReal,
       waitLive:  !!sp.waitLive,
+      trainChanges: (Array.isArray(sp.trainChanges) ? sp.trainChanges : null),   // ★ 2026-10-17: 같은 노선 안에서 일반↔급행 열차를 갈아타는 역(엔진 s36)
       xpWaitSec: (sp.xpWaitSec!=null ? sp.xpWaitSec : null),   // ★ 2026-10-03: 급행 기다리는 초(엔진 03bi) — 승차/대기 분리용
       xfer: (sp.xfer || null), exitFast: (sp.exitFast || null), stnName: (sp.endName || sp.startName || ''),   // ★ 2026-10-03: 환승 호차-문·빠른하차(엔진 03bk)
       xferWaitSec: (sp.xferWaitSec!=null ? sp.xferWaitSec : null),
@@ -10823,6 +10895,9 @@ function _convertSinglePathToRoute(path) {
     },
     sections: sections,
     why: _routeWhyText(path),   // ★ 2026-10-03: 왜 이 경로인지(엔진 탭·소요·환승 근거)
+    // ★ 2026-10-17 (YJ: "환승이 필요한 부분은 알려줘야해"): 어디서 갈아타는지는 엔진이 정해 info.transfers 로 준다(s36).
+    //   앱은 그 목록을 그대로 옮겨 그리기만 한다 — 옛 엔진 응답이면 null(지어내지 않는다).
+    transfers: (Array.isArray(info.transfers) ? info.transfers : null),
     // ★ 2026-09-25 (KTX/ITX 등급선택): 장거리 경로일 때만 채워짐 — 세부경로 화면이
     //   이 값으로 등급·수단 선택 칩을 그린다(_renderLdGradeChips). 판단은 여전히 엔진 몫,
     //   여기선 응답을 그대로 옮겨 담을 뿐이다.
@@ -14264,7 +14339,9 @@ window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
         var hit = null;
         for(j = 0; j < rows && !hit; j++) for(i = 0; i < cols && !hit; i++){
           el = document.elementFromPoint(left + 3 + (right - left - 6) * i / (cols - 1), top + 3 + (bottom - top - 6) * j / (rows - 1));
-          if(el && el !== w && !w.contains(el)) hit = el;
+          // ★ 2026-10-17: 조상(부모·카드)은 자식을 덮을 수 없다. 둥근 모서리 줄(환승·안내 줄)은 소수점 높이에서 모서리 표본이
+          //   바깥(부모)을 짚어 '덮였다'로 오판해 네이티브가 영영 안 켜졌다.
+          if(el && el !== w && !w.contains(el) && !el.contains(w)) hit = el;
         }
         if(!hit) return { cover: false, vt: top, vb: bottom };
         var o = hit, a = hit; while(a && a !== document.body && a !== document.documentElement){ o = a; a = a.parentElement; if(a && a.contains(w)) break; }
@@ -14468,7 +14545,7 @@ window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
   var HD = makeRegion('hd', paintCfg(function(){ var h = document.getElementById('transitResultHeader'); return h && h.parentElement; }));      // 머리줄 한 줄(분 숫자·구간명·즐겨찾기·×)
   var TB = makeRegion('tb', paintCfg(function(){ return document.getElementById('routeOptionTabs'); }));                                           // 경로 옵션 탭(최단시간·최소환승·지하철·버스)
   // 경로 카드의 안내 문구 줄들(승차·대기·도보 분리 / 출발 비교 / 공식 안내 / 경고) — 여러 줄도 줄별로 읽는다
-  ['transitSplitRow', 'transitDepRow', 'transitOfficialRow', 'transitAlertRow'].forEach(function(rid){
+  ['transitSplitRow', 'transitXferRow', 'transitDepRow', 'transitOfficialRow', 'transitAlertRow'].forEach(function(rid){
     makeRegion('r:' + rid, paintCfg(function(){ return document.getElementById(rid); }));
   });
   window._htlNatMk = TL.mk;                               // _placeGpsMarkerSmooth 가 알려 준다(타임라인 영역만)
@@ -19425,6 +19502,8 @@ window.addEventListener('unhandledrejection', function(e) {
       </div>
       <!-- ★ 2026-10-03: 승차·대기·도보 분리 + 왜 이 경로인지 -->
       <div id="transitSplitRow" style="display:none;font-size:12px;line-height:1.5;color:var(--sub);margin:-2px 0 8px;"></div>
+      <!-- ★ 2026-10-17: 환승 안내 — 엔진이 알려 준 환승 지점(info.transfers)만 그대로 적는다 -->
+      <div id="transitXferRow" style="display:none;font-size:12px;line-height:1.55;color:var(--text);margin:0 0 8px;padding:7px 10px;border-radius:10px;background:rgba(255,159,10,.12);border:1px solid rgba(255,159,10,.4);"></div>
       <div id="transitDepRow" style="display:none;font-size:12px;line-height:1.5;color:var(--sub);margin:0 0 8px;"></div>
       <div id="transitOfficialRow" style="display:none;font-size:12px;line-height:1.5;color:var(--text);margin:0 0 8px;padding:7px 10px;border-radius:10px;background:rgba(10,132,255,.12);border:1px solid rgba(10,132,255,.35);"></div>
       <div id="transitAlertRow" style="display:none;font-size:12px;line-height:1.5;color:var(--text);margin:0 0 8px;padding:7px 10px;border-radius:10px;background:rgba(255,69,58,.12);border:1px solid rgba(255,69,58,.35);"></div>
