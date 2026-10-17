@@ -1374,7 +1374,7 @@ header h1 em{color:var(--gold);font-style:normal;}
 /* ── 복합경로 전용 트랙 ── */
 /* ★ 2026-10-17 네이티브 경로 화면이 그리는 동안 웹 타임라인은 레이아웃만 남기고 가린다(P2) */
 .htl-nat-on #transitHtlTrack{visibility:hidden;}
-#transitResultHeader.htl-nat-on-hd > *{visibility:hidden;}      /* 머리줄(P4a): 네이티브가 그리는 동안 글자만 가린다(자리·측정은 그대로, 영역 자신은 눌림 판정에 남는다) */
+.htl-nat-op{opacity:0 !important;}      /* 그림 영역(P4b): 네이티브가 그리는 동안 웹 요소는 투명으로 제자리에 남는다 — 눌림은 웹이 그대로 받는다(opacity 는 눌림 판정에 영향 없음) */
 #transitHtlTrack{display:inline-flex;flex-wrap:nowrap;align-items:flex-start;min-width:max-content;padding:6px 14px;gap:0;position:relative;}
 /* htl-stn 너비는 inline style로 처리 */
 #transitResultCard{display:flex;flex-direction:column;}
@@ -14172,20 +14172,61 @@ window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
     if(!cells.length) return null;
     return { cells: cells, tw: tr.scrollWidth, theme: themeOf(w) };
   }
-  // ── 영역 'hd': 한 줄 글자 덩어리 읽기(웹이 정한 자리·글꼴 크기·색을 그대로. 여러 줄로 접히면 읽지 않는다 = 웹이 그린다) ──
-  function runsOf(host){
-    var tw = document.createTreeWalker(host, NodeFilter.SHOW_TEXT), runs = [], n, hr = host.getBoundingClientRect(), lim = host.parentElement;
-    while((n = tw.nextNode())){
-      var t = String(n.nodeValue || '').replace(/\s+/g, ' ').trim(); if(!t) continue;
-      var rg = document.createRange(); rg.selectNodeContents(n); var rs = rg.getClientRects(); if(!rs.length) continue;
-      if(rs.length > 1) return null;
-      var r = rs[0], el = n.parentElement, cs = getComputedStyle(el), right = r.right, a = el;
-      while(a && a !== lim){ var sa = getComputedStyle(a); if(/(hidden|clip)/.test(sa.overflowX)) right = Math.min(right, a.getBoundingClientRect().right); a = a.parentElement; }     // 말줄임: 보이는 오른쪽 끝까지만
-      runs.push({ t: t, x: r.left - hr.left - host.clientLeft, y: r.top - hr.top - host.clientTop, w: Math.max(1, right - r.left), h: r.height,
-                  s: parseFloat(cs.fontSize) || 12, c: rgba(cs.color, opOf(el, lim)), b: (parseInt(cs.fontWeight, 10) || 400) >= 600 });
+  // ── 그림 영역(hd·tb …): 웹이 배치한 요소의 배경·테두리(둥근 모서리)와 한 줄 글자를 DOM 순서대로 읽는다(2026-10-17 P4b) ──
+  //   네이티브는 받은 자리에 그대로 그린다(배치·줄바꿈 계산 없음). 그리지 못하는 것(그림·캔버스·입력칸·그라데이션·::before/::after 내용·변 마다 다른 테두리·여러 줄로 접힌 글자)이
+  //   하나라도 있으면 null = 그 영역은 웹이 그린다(기능은 그대로 — 눌림은 늘 웹 요소가 받는다: 네이티브가 그리는 동안 웹은 투명(opacity:0)으로 제자리에 남는다).
+  function paintOf(host){
+    var hr = host.getBoundingClientRect(), ox = hr.left, oy = hr.top, out = [], bad = false;       // 테두리 상자 기준(호스트 자신의 배경·테두리·안쪽 여백까지 네이티브가 덮는다)
+    function px(v){ return parseFloat(v) || 0; }
+    function rad(cs, w, h){
+      var vs = [cs.borderTopLeftRadius, cs.borderTopRightRadius, cs.borderBottomRightRadius, cs.borderBottomLeftRadius].map(function(v){ return /%/.test(v) ? parseFloat(v) / 100 * Math.min(w, h) : px(v); });
+      return (vs[0] + vs[1] + vs[2] + vs[3]) / 4;
     }
-    return runs.length ? runs : null;
+    // 글자 한 덩어리를 줄별로 나눈다(웹이 이미 줄바꿈을 끝냈다 — 글자마다 자리를 재서 같은 줄끼리 묶는다)
+    function lines(n){
+      var s = String(n.nodeValue || ''), rg = document.createRange(), ls = [], cur = null;
+      for(var i = 0; i < s.length; ){
+        var cp = s.codePointAt(i), len = cp > 0xFFFF ? 2 : 1, ch = s.substr(i, len); i += len;
+        rg.setStart(n, i - len); rg.setEnd(n, i);
+        var rs = rg.getClientRects(); if(!rs.length) continue;                      // 접힌 공백(줄 끝·맨 앞)은 자리가 없다
+        var r = rs[0]; if(!(r.width > 0) && !/\S/.test(ch)) continue;
+        if(!cur || Math.abs(r.top - cur.top) > Math.max(2, r.height * 0.5)){ cur = { t: '', left: r.left, top: r.top, right: r.right, h: r.height }; ls.push(cur); }
+        cur.t += ch; cur.right = Math.max(cur.right, r.right); cur.h = Math.max(cur.h, r.height);
+      }
+      ls.forEach(function(l){ l.t = l.t.replace(/\s+$/, ''); });
+      return ls.filter(function(l){ return l.t.length; });
+    }
+    function text(n, el){
+      if(!/\S/.test(String(n.nodeValue || ''))) return;
+      var cs = getComputedStyle(el), ls = lines(n); if(!ls.length) return;
+      var clipR = Infinity, a = el;
+      while(a && a !== host.parentElement){ var sa = getComputedStyle(a); if(/(hidden|clip)/.test(sa.overflowX)) clipR = Math.min(clipR, a.getBoundingClientRect().right); a = a.parentElement; }
+      var col = rgba(cs.color, opOf(el, host)), size = parseFloat(cs.fontSize) || 12, bold = (parseInt(cs.fontWeight, 10) || 400) >= 600;
+      ls.forEach(function(l){
+        var vr = (l.right > clipR + 0.5) ? clipR : hr.right;                         // 말줄임이 필요한 줄만 보이는 끝에서 자른다 — 그 밖엔 여유를 둬 글꼴 폭 차이로 '…' 이 생기지 않게
+        out.push({ t: l.t, x: l.left - ox, y: l.top - oy, w: Math.max(1, vr - l.left), h: l.h, s: size, c: col, b: bold });
+      });
+    }
+    function walk(el){
+      if(bad) return;
+      var cs = getComputedStyle(el);
+      if(cs.display === 'none' || cs.visibility === 'hidden') return;
+      if(/^(IMG|CANVAS|VIDEO|INPUT|TEXTAREA|SELECT|IFRAME|OBJECT)$/i.test(el.tagName) || (window.SVGElement && el instanceof SVGElement)){ bad = true; return; }
+      if(cs.backgroundImage !== 'none'){ bad = true; return; }
+      var c1 = getComputedStyle(el, '::before').content, c2 = getComputedStyle(el, '::after').content;
+      if((c1 && c1 !== 'none' && c1 !== 'normal' && c1 !== '""') || (c2 && c2 !== 'none' && c2 !== 'normal' && c2 !== '""')){ bad = true; return; }
+      var bw = [cs.borderTopWidth, cs.borderRightWidth, cs.borderBottomWidth, cs.borderLeftWidth].map(px), hasB = bw[0] > 0 || bw[1] > 0 || bw[2] > 0 || bw[3] > 0;
+      if(hasB && !(bw[0] === bw[1] && bw[1] === bw[2] && bw[2] === bw[3])){ bad = true; return; }
+      var op = opOf(el, host), fill = rgba(cs.backgroundColor, op), sc = hasB ? rgba(cs.borderTopColor, op) : '';
+      if(fill || sc){ var r = el.getBoundingClientRect(); out.push({ k: 'r', x: r.left - ox, y: r.top - oy, w: r.width, h: r.height, r: rad(cs, r.width, r.height), f: fill, sc: sc, sw: hasB ? bw[0] : 0 }); }
+      for(var n = el.firstChild; n && !bad; n = n.nextSibling){
+        if(n.nodeType === 3) text(n, el); else if(n.nodeType === 1) walk(n);
+      }
+    }
+    walk(host);
+    return (!bad && out.length) ? out : null;
   }
+  function boxOf(h){ var r = h.getBoundingClientRect(); return { L: r.left, T: r.top, W: r.width, H: r.height, cl: r.left, ct: r.top, cr: r.right, cb: r.bottom }; }
 
   // ── 영역 하나(상태·반복 확인·켜고 끄기) ──
   function makeRegion(id, cfg){
@@ -14415,18 +14456,20 @@ window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
     webIs: function(){ var w = document.getElementById('transitHtlWrap'); return !!(w && w.classList.contains('htl-nat-on')); },
     webSet: function(on){ var w = document.getElementById('transitHtlWrap'); if(w) w.classList.toggle('htl-nat-on', on); }
   });
-  var HD = makeRegion('hd', {
-    marker: false,
-    host: function(){ return document.getElementById('transitResultHeader'); },
-    observeEl: function(){ return document.getElementById('transitResultHeader'); },
-    extract: function(){
-      var h = document.getElementById('transitResultHeader'); if(!h || !h.offsetParent) return null;
-      var runs = runsOf(h); if(!runs) return null;
-      return { runs: runs, theme: themeOf(h) };
-    },
-    box: function(h){ var r = h.getBoundingClientRect(); return { L: r.left + h.clientLeft, T: r.top + h.clientTop, W: h.clientWidth, H: h.clientHeight, cl: r.left + h.clientLeft, ct: r.top + h.clientTop, cr: r.left + h.clientLeft + h.clientWidth, cb: r.top + h.clientTop + h.clientHeight }; },
-    webIs: function(){ var h = document.getElementById('transitResultHeader'); return !!(h && h.classList.contains('htl-nat-on-hd')); },
-    webSet: function(on){ var h = document.getElementById('transitResultHeader'); if(h) h.classList.toggle('htl-nat-on-hd', on); }
+  function paintCfg(hostFn){
+    return {
+      marker: false, host: hostFn, observeEl: hostFn,
+      extract: function(){ var h = hostFn(); if(!h || !h.offsetParent) return null; var it = paintOf(h); return it ? { runs: it, theme: themeOf(h.parentElement || h) } : null; },      // 바탕은 호스트 뒤의 면(카드)
+      box: boxOf,
+      webIs: function(){ var h = hostFn(); return !!(h && h.classList.contains('htl-nat-op')); },
+      webSet: function(on){ var h = hostFn(); if(h) h.classList.toggle('htl-nat-op', on); }
+    };
+  }
+  var HD = makeRegion('hd', paintCfg(function(){ var h = document.getElementById('transitResultHeader'); return h && h.parentElement; }));      // 머리줄 한 줄(분 숫자·구간명·즐겨찾기·×)
+  var TB = makeRegion('tb', paintCfg(function(){ return document.getElementById('routeOptionTabs'); }));                                           // 경로 옵션 탭(최단시간·최소환승·지하철·버스)
+  // 경로 카드의 안내 문구 줄들(승차·대기·도보 분리 / 출발 비교 / 공식 안내 / 경고) — 여러 줄도 줄별로 읽는다
+  ['transitSplitRow', 'transitDepRow', 'transitOfficialRow', 'transitAlertRow'].forEach(function(rid){
+    makeRegion('r:' + rid, paintCfg(function(){ return document.getElementById(rid); }));
   });
   window._htlNatMk = TL.mk;                               // _placeGpsMarkerSmooth 가 알려 준다(타임라인 영역만)
 
@@ -14471,7 +14514,7 @@ window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
       if(st) st.textContent = s;
     }catch(e){}
   }
-  window._htlNat = { H: TL.H, HD: HD.H, G: G, kick: kick, setUse: setUse, syncCard: syncCard, active: active, extract: tlExtract, runsOf: runsOf };
+  window._htlNat = { H: TL.H, HD: HD.H, TB: TB.H, G: G, kick: kick, setUse: setUse, syncCard: syncCard, active: active, extract: tlExtract, paintOf: paintOf };
   window._htlSetUse = function(on){ try{ setUse(on); }catch(e){} };
   try{ if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(function(){ try{ syncCard(); kick(); }catch(e){} }, 500); }); else setTimeout(function(){ try{ syncCard(); kick(); }catch(e){} }, 500); }catch(eH){}
 })();

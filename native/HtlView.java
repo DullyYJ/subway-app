@@ -81,7 +81,19 @@ public class HtlView extends View {
             cv.save();
             cv.scale(dpr, dpr);
             for (HtlCore.Run r : runs) {
-                if (r == null || r.t.length() == 0) continue;
+                if (r == null) continue;
+                if (r.box) {                                   // 배경·테두리(둥근 모서리)
+                    float rad = HtlCore.clampRadius(r.r, r.w, r.h);
+                    if ((r.fill >>> 24) != 0) { p.setStyle(Paint.Style.FILL); p.setColor(r.fill); rf.set(r.x, r.y, r.x + r.w, r.y + r.h); cv.drawRoundRect(rf, rad, rad, p); }
+                    if (r.sw > 0f && (r.stroke >>> 24) != 0) {
+                        p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(r.sw); p.setColor(r.stroke);
+                        rf.set(r.x + r.sw / 2f, r.y + r.sw / 2f, r.x + r.w - r.sw / 2f, r.y + r.h - r.sw / 2f);
+                        float ir = Math.max(0f, rad - r.sw / 2f); cv.drawRoundRect(rf, ir, ir, p);
+                        p.setStyle(Paint.Style.FILL);
+                    }
+                    continue;
+                }
+                if (r.t.length() == 0) continue;
                 tp.setTextAlign(Paint.Align.LEFT);
                 tp.setTextSize(r.size); tp.setColor(r.color); tp.setFakeBoldText(false);
                 tp.setTypeface(r.bold ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);

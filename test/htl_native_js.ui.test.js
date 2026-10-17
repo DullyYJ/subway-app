@@ -42,8 +42,8 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
       // 타임라인을 눈에 보이는 시험용 상자로 옮긴다(실제 화면에서는 홈 경로 카드 안에 있다)
       const wrap = document.getElementById('transitHtlWrap');
       const box = document.createElement('div'); box.id = 'hbox'; box.style.cssText = 'position:fixed;left:0;top:200px;width:390px;z-index:5;background:#fff;';
-      document.body.appendChild(box); const hd = document.getElementById('transitResultHeader'); box.appendChild(hd); box.appendChild(wrap); wrap.style.display = 'block';
-      hd.style.cssText = 'display:flex;align-items:baseline;gap:5px;overflow:hidden;width:300px;margin:6px 14px;';
+      document.body.appendChild(box); const hd = document.getElementById('transitResultHeader'); box.appendChild(hd.parentElement); const tabs = document.getElementById('routeOptionTabs'); tabs.style.display = 'flex'; tabs.style.margin = '0 14px 10px'; box.appendChild(tabs); box.appendChild(wrap); wrap.style.display = 'block'; hd.parentElement.style.cssText = 'display:flex;align-items:center;gap:8px;margin:6px 14px 8px;'; window._openFavPopup = () => { window.__fav = (window.__fav || 0) + 1; }; window.selectRouteOption = (k) => { window.__tab = k; };
+      hd.style.cssText = 'display:flex;align-items:baseline;gap:5px;overflow:hidden;width:200px;flex:none;';
       window.__setHd = (min, s, d) => { hd.innerHTML = '<span id="transitResultMinNum" style="font-size:28px;font-weight:900;color:var(--text);line-height:1;">' + min + '</span><span id="transitResultMinUnit" style="font-size:14px;color:var(--sub);margin-right:8px;">분</span><span style="font-size:12px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;">' + s + ' → ' + d + '</span>'; };
       window.__setHd(30, '출발', '도착');
       const st = (n, i) => ({ stationName: n, lat: 37.58 + i * 0.002, lon: 126.7 + i * 0.002 });
@@ -198,42 +198,99 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   });
   await A.ctx.close();
 
-  console.log('[⑤-2 경로 카드 머리줄(hd) — 웹이 배치한 글자를 그대로 넘긴다]');
-  const hdBox = (x) => x.page.evaluate(() => { const h = document.getElementById('transitResultHeader'), r = h.getBoundingClientRect(); return { x: r.left + h.clientLeft, y: r.top + h.clientTop, w: h.clientWidth, h: h.clientHeight }; });
-  await t('머리줄 영역(id hd)이 별도 뷰로 켜진다: 사각형이 웹 머리줄과 같고 글자 덩어리(분 숫자·"분"·구간명)가 자리·크기·색과 함께 온다', async () => {
+  console.log('[⑤-2 그림 영역 — 머리줄 행(hd)·경로 옵션 탭(tb): 웹이 배치한 상자·글자를 그대로 넘기고, 눌림은 웹이 받는다]');
+  const boxOf = (x, sel) => x.page.evaluate((sel) => { const h = document.querySelector(sel), r = h.getBoundingClientRect(); return { x: r.left + h.clientLeft, y: r.top + h.clientTop, w: h.clientWidth, h: h.clientHeight }; }, sel);
+  const HDSEL = '#transitResultHeader';
+  const hdRowBox = (x) => x.page.evaluate(() => { const h = document.getElementById('transitResultHeader').parentElement, r = h.getBoundingClientRect(); return { x: r.left + h.clientLeft, y: r.top + h.clientTop, w: h.clientWidth, h: h.clientHeight }; });
+  const centerOf = (x, sel) => x.page.evaluate((sel) => { const r = document.querySelector(sel).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }, sel);
+  await t('머리줄 행(id hd)이 별도 뷰로 켜진다: 사각형이 웹 행과 같고, 글자(분 숫자·"분"·구간명·즐겨찾기·×)와 상자(즐겨찾기 테두리)가 자리·크기·색과 함께 온다', async () => {
     const B = await fresh({ plugin: true, on: true }); await waitFor(B, has(B, 'show', 'hd'));
-    const s = (await lastCall(B, 'show', 'hd')).a, bx = await hdBox(B);
+    const s = (await lastCall(B, 'show', 'hd')).a, bx = await hdRowBox(B);
     assert.ok(Math.abs(s.x - bx.x) < 1 && Math.abs(s.y - bx.y) < 1 && Math.abs(s.w - bx.w) < 1 && Math.abs(s.h - bx.h) < 1, JSON.stringify([s.x, s.y, s.w, s.h, bx]));
-    assert.ok(s.runs && s.runs.length === 3 && !s.cells, JSON.stringify(s.runs));
-    assert.deepStrictEqual(s.runs.map(r => r.t), ['30', '분', '출발 → 도착']);
-    const [a, b, c] = s.runs;
+    assert.ok(s.runs && !s.cells, JSON.stringify(s.runs));
+    const tx = s.runs.filter(r => r.k !== 'r'), bxs = s.runs.filter(r => r.k === 'r');
+    assert.deepStrictEqual(tx.map(r => r.t), ['30', '분', '출발 → 도착', '⭐ 즐겨찾기', '×']);
+    const [a, b, c] = tx;
     assert.ok(a.s === 28 && a.b === true && /^rgba\(/.test(a.c), JSON.stringify(a)); assert.ok(b.s === 14 && b.b === false, JSON.stringify(b)); assert.ok(c.s === 12);
-    assert.ok(b.x > a.x + 10 && c.x > b.x + 10 && a.x >= 0 && a.x < 4, JSON.stringify(s.runs.map(r => r.x)));
-    assert.ok(a.h > 20 && Math.abs((a.y + a.h) - bx.h) < bx.h, '글자 상자');
+    assert.ok(b.x > a.x + 10 && c.x > b.x + 10 && a.x >= 0 && a.x < 4, JSON.stringify(tx.map(r => r.x)));
     assert.ok(c.w > 20 && c.x + c.w <= bx.w + 1, '구간명은 보이는 폭 안 ' + JSON.stringify(c));
+    const fav = bxs.find(r => r.sc); assert.ok(fav && fav.sw === 1 && fav.r >= 10 && /^rgba\(/.test(fav.sc) && fav.w > 40 && fav.h > 10, JSON.stringify(bxs));
+    assert.ok(s.runs.indexOf(fav) < s.runs.indexOf(tx[3]), '상자가 자기 글자보다 먼저(아래에) 온다 — DOM 순서');
     assert.ok(/^rgba\(/.test(s.theme.bg), JSON.stringify(s.theme));
     assert.strictEqual((await lastCall(B, 'show', 'tl')).a.id, 'tl', '타임라인 영역도 따로 켜진다');
     await B.ctx.close();
   });
-  await t('머리줄: 네이티브가 그리는 동안 웹 글자는 가려지고(자리는 그대로), 숫자가 바뀌면 update 로 새 글자를 보낸다', async () => {
+  await t('머리줄: 네이티브가 그리는 동안 웹은 투명(opacity 0)으로 제자리에 남고, 즐겨찾기 버튼은 그대로 눌린다 · 숫자가 바뀌면 update', async () => {
     const B = await fresh({ plugin: true, on: true }); await waitFor(B, has(B, 'show', 'hd')); await emit(B, 'ready', { id: 'hd' });
-    assert.ok(await waitFor(B, async () => await B.page.evaluate(() => document.getElementById('transitResultHeader').classList.contains('htl-nat-on-hd'))), '웹 머리줄을 안 가렸다');
-    const o = await B.page.evaluate(() => { const h = document.getElementById('transitResultHeader'); return { span: getComputedStyle(h.firstChild).visibility, host: getComputedStyle(h).visibility, w: h.clientWidth, n: h.firstChild.offsetWidth }; });
-    assert.strictEqual(o.span, 'hidden'); assert.strictEqual(o.host, 'visible'); assert.ok(o.w > 100 && o.n > 10, JSON.stringify(o));
+    assert.ok(await waitFor(B, async () => await B.page.evaluate(() => document.getElementById('transitResultHeader').parentElement.classList.contains('htl-nat-op'))), '웹 행을 안 가렸다');
+    const o = await B.page.evaluate(() => { const h = document.getElementById('transitResultHeader').parentElement; return { op: getComputedStyle(h).opacity, w: h.clientWidth, n: h.firstElementChild.offsetWidth }; });
+    assert.strictEqual(o.op, '0'); assert.ok(o.w > 100 && o.n > 10, JSON.stringify(o));
+    const c = await centerOf(B, '#favToggleBtn2'); await B.page.mouse.click(c.x, c.y);
+    assert.strictEqual(await B.page.evaluate(() => window.__fav), 1, '투명이어도 즐겨찾기 버튼이 눌려야 한다');
     await clear(B); await B.page.evaluate(() => { document.getElementById('transitResultMinNum').textContent = '31'; });
     assert.ok(await waitFor(B, async () => (await calls(B, 'update', 'hd')).some(c => c.a.runs && c.a.runs[0].t === '31')), '바뀐 숫자를 안 보냈다');
     await B.ctx.close();
   });
-  await t('머리줄: 글자가 여러 줄로 접히면 읽지 않는다(웹이 그린다) — 네이티브를 숨긴다', async () => {
+  await t('글자가 여러 줄로 접히면 줄별로 읽는다 — 줄마다 자리(y)가 다르고 이어 붙이면 원문 그대로(이모지 포함)', async () => {
     const B = await fresh({ plugin: true, on: true }); await waitFor(B, has(B, 'show', 'hd'));
-    await clear(B); await B.page.evaluate(() => { const h = document.getElementById('transitResultHeader'); h.style.width = '120px'; h.style.display = 'block'; h.lastChild.style.cssText = 'white-space:normal;display:inline;'; h.lastChild.textContent = '아주아주아주아주 긴 출발지 이름 → 아주아주아주아주 긴 도착지 이름'; });
-    assert.ok(await waitFor(B, has(B, 'hide', 'hd')), '접힌 글자인데 네이티브를 숨기지 않았다');
-    assert.strictEqual(await B.page.evaluate(() => document.getElementById('transitResultHeader').classList.contains('htl-nat-on-hd')), false);
+    const r = await B.page.evaluate(() => {
+      const h = document.getElementById('transitResultHeader'); h.style.width = '120px'; h.style.display = 'block'; h.lastChild.style.cssText = 'white-space:normal;display:inline;font-size:12px;';
+      const src = '아주아주아주아주 긴 출발지 이름 🚇 → 아주아주아주아주 긴 도착지 이름'; h.lastChild.textContent = src;
+      const it = window._htlNat.paintOf(h.parentElement); const tx = it.filter(x => !x.k && x.s === 12);
+      return { src, lines: tx.map(x => ({ t: x.t, y: Math.round(x.y), x: Math.round(x.x) })) };
+    });
+    assert.ok(r.lines.length >= 3, JSON.stringify(r.lines));
+    assert.ok(new Set(r.lines.map(l => l.y)).size === r.lines.length, '줄마다 y 가 다르다 ' + JSON.stringify(r.lines));
+    assert.strictEqual(r.lines.map(l => l.t).join('').replace(/\s/g, ''), r.src.replace(/\s/g, ''), '이어 붙이면 원문');
+    await B.ctx.close();
+  });
+  await t('그릴 수 없는 것(그라데이션 배경·그림·::before 내용)이 있으면 그 영역은 웹이 그린다', async () => {
+    const B = await fresh({ plugin: true, on: true }); await waitFor(B, has(B, 'show', 'hd'));
+    const r = await B.page.evaluate(() => {
+      const h = document.getElementById('transitResultHeader').parentElement, out = {};
+      const fav = document.getElementById('favToggleBtn2'), old = fav.style.cssText;
+      fav.style.backgroundImage = 'linear-gradient(red, blue)'; out.grad = window._htlNat.paintOf(h); fav.style.cssText = old;
+      const im = document.createElement('img'); im.width = 4; im.height = 4; h.appendChild(im); out.img = window._htlNat.paintOf(h); im.remove();
+      out.ok = !!window._htlNat.paintOf(h); return out;
+    });
+    assert.strictEqual(r.grad, null, '그라데이션'); assert.strictEqual(r.img, null, '그림'); assert.strictEqual(r.ok, true, '원래대로면 읽힌다');
+    await B.ctx.close();
+  });
+  await t('경로 옵션 탭(id tb): 버튼 상자(채움·테두리·둥근 모서리)와 글자가 오고, 선택한 탭의 색이 바뀌면 update, 탭은 투명이어도 그대로 눌린다', async () => {
+    const B = await fresh({ plugin: true, on: true }); await waitFor(B, has(B, 'show', 'tb')); await emit(B, 'ready', { id: 'tb' });
+    const s = (await lastCall(B, 'show', 'tb')).a, bx = await boxOf(B, '#routeOptionTabs');
+    assert.ok(Math.abs(s.x - bx.x) < 1 && Math.abs(s.y - bx.y) < 1 && Math.abs(s.w - bx.w) < 1, JSON.stringify([s.x, s.y, s.w, bx]));
+    const bxs = s.runs.filter(r => r.k === 'r'), tx = s.runs.filter(r => r.k !== 'r');
+    assert.strictEqual(bxs.length, 4, '보이는 탭 4개(장거리 탭은 숨김) ' + JSON.stringify(bxs.map(b => b.w)));
+    assert.ok(bxs.every(b => b.r >= 8 && b.sw >= 1 && /^rgba\(/.test(b.f) && /^rgba\(/.test(b.sc)), JSON.stringify(bxs[0]));
+    assert.deepStrictEqual(tx.map(r => r.t), ['⚡ 최단시간', '🔀 최소환승', '🚇 지하철', '🚌 버스']);
+    assert.ok(tx.every((r, i) => r.x >= bxs[i].x && r.x + 1 < bxs[i].x + bxs[i].w), '글자는 자기 버튼 안');
+    assert.ok(await waitFor(B, async () => await B.page.evaluate(() => document.getElementById('routeOptionTabs').classList.contains('htl-nat-op'))), '웹 탭을 안 가렸다');
+    const c = await centerOf(B, '#routeTabLess'); await B.page.mouse.click(c.x, c.y);
+    assert.strictEqual(await B.page.evaluate(() => window.__tab), 'less', '투명이어도 탭이 눌려야 한다');
+    await clear(B);
+    await B.page.evaluate(() => { const a = document.getElementById('routeTabFast'), l = document.getElementById('routeTabLess'); a.style.background = 'var(--card2)'; a.style.color = 'var(--sub)'; l.style.background = 'var(--gold)'; l.style.color = '#fff'; });
+    assert.ok(await waitFor(B, async () => (await calls(B, 'update', 'tb')).length > 0), '선택이 바뀌었는데 안 보냈다');
+    const u = (await lastCall(B, 'update', 'tb')).a; assert.notStrictEqual(JSON.stringify(u.runs), JSON.stringify(s.runs));
+    await B.ctx.close();
+  });
+  await t('안내 문구 줄(공식 안내 등): 호스트 자신의 배경·테두리·안쪽 여백까지 테두리 상자로 덮고, 여러 줄 글자를 줄별로 보낸다 · 내용이 바뀌면 update', async () => {
+    const B = await fresh({ plugin: true, on: true });
+    await B.page.evaluate(() => { const r = document.getElementById('transitOfficialRow'); document.getElementById('hbox').appendChild(r); r.style.display = 'block'; r.style.margin = '0 14px 8px'; r.innerHTML = '공식 안내: <b>인천2호선</b>은 현재 정상 운행 중이에요. 평소보다 5분 일찍 출발하면 환승이 여유로워요.'; });
+    await waitFor(B, has(B, 'show', 'r:transitOfficialRow'));
+    const s = (await lastCall(B, 'show', 'r:transitOfficialRow')).a, bx = await B.page.evaluate(() => { const r = document.getElementById('transitOfficialRow').getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; });
+    assert.ok(Math.abs(s.x - bx.x) < 1 && Math.abs(s.y - bx.y) < 1 && Math.abs(s.w - bx.w) < 1 && Math.abs(s.h - bx.h) < 1, '테두리 상자와 같다 ' + JSON.stringify([s.x, s.y, s.w, s.h, bx]));
+    const host = s.runs[0]; assert.ok(host.k === 'r' && host.x === 0 && host.y === 0 && Math.abs(host.w - bx.w) < 1 && host.sw >= 1 && host.r >= 8 && /^rgba\(/.test(host.f), JSON.stringify(host));
+    const tx = s.runs.filter(r => !r.k); assert.ok(tx.length >= 3, '여러 줄 ' + JSON.stringify(tx.map(t => t.t)));
+    assert.ok(tx.some(t => t.b === true && /인천2호선/.test(t.t)), '굵은 글씨');
+    assert.ok(tx.every(t => t.x >= 8), '안쪽 여백(padding)을 지킨다');
+    await clear(B); await B.page.evaluate(() => { document.getElementById('transitOfficialRow').innerHTML = '짧은 안내'; });
+    assert.ok(await waitFor(B, async () => (await calls(B, '', 'r:transitOfficialRow')).some(c => c.a && c.a.runs && c.a.runs.some(r => r.t === '짧은 안내'))), '바뀐 내용을 안 보냈다');
     await B.ctx.close();
   });
   await t('머리줄이 팝업에 덮이면 숨고, 영역마다 따로 판단한다', async () => {
-    const B = await fresh({ plugin: true, on: true }); await waitFor(B, has(B, 'show', 'hd'));
-    await clear(B); await B.page.evaluate(() => { const hb = document.getElementById('transitResultHeader').getBoundingClientRect(); const o = document.createElement('div'); o.id = 'popHd'; o.style.cssText = 'position:fixed;left:0;width:390px;top:' + (hb.top - 4) + 'px;height:' + (hb.height + 8) + 'px;z-index:9999;background:#000'; document.body.appendChild(o); });
+    const B = await fresh({ plugin: true, on: true }); await waitFor(B, has(B, 'show', 'hd')); await waitFor(B, has(B, 'show', 'tl'));
+    await clear(B); await B.page.evaluate(() => { const hb = document.getElementById('transitResultHeader').parentElement.getBoundingClientRect(); const o = document.createElement('div'); o.id = 'popHd'; o.style.cssText = 'position:fixed;left:0;width:390px;top:' + (hb.top - 4) + 'px;height:' + (hb.height + 8) + 'px;z-index:9999;background:#000'; document.body.appendChild(o); });
     assert.ok(await waitFor(B, has(B, 'hide', 'hd')), '덮였는데 안 숨었다');
     assert.strictEqual((await calls(B, 'hide', 'tl')).length, 0, '덮이지 않은 타임라인은 그대로여야 한다');
     await B.ctx.close();

@@ -70,6 +70,8 @@ public class HtlJvmTest {
         ok(near(HtlCore.baseline(0f, 16f, -12f, 4f), 12f), "글꼴 상자와 글자 상자 높이가 같으면 기준선은 −ascent");
         HtlCore.Run r = new HtlCore.Run();
         ok(r.t.equals("") && r.size > 0f && !r.bold, "Run 기본값");
+        ok(!r.box && r.fill == 0 && r.sw == 0f, "Run 은 기본이 글자(상자 아님)");
+        ok(near(HtlCore.clampRadius(30f, 40f, 20f), 10f) && near(HtlCore.clampRadius(4f, 40f, 20f), 4f) && near(HtlCore.clampRadius(-3f, 40f, 20f), 0f), "반지름은 짧은 변의 절반까지(알약 모양)");
 
         System.out.println(fails == 0 ? "ALL OK" : (fails + " FAIL"));
         System.exit(fails == 0 ? 0 : 1);

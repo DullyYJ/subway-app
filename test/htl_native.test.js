@@ -61,7 +61,7 @@ function findAndroidJar() {
     const p = fs.readFileSync(N('HtlNativePlugin.java'), 'utf8'), v = fs.readFileSync(N('HtlView.java'), 'utf8');
     assert.ok(/Map<String, HtlView> views/.test(p) && /idOf\(call\)/.test(p), '영역별 뷰');
     assert.ok(/optJSONArray\("runs"\)/.test(p) && /setRuns\(/.test(p), 'runs 적용');
-    assert.ok(/runs != null[\s\S]{0,1500}HtlCore\.baseline/.test(v), '기준선은 코어 계산');
+    assert.ok(/runs != null[\s\S]{0,3500}HtlCore\.baseline/.test(v), '기준선은 코어 계산');
     assert.ok(!/StaticLayout|breakText|measureText[\s\S]{0,40}split/.test(v.split('runs != null')[1].split('cv.save();')[0] + ''), '줄바꿈 금지');
   });
   await t('CI 워크플로가 파일을 복사하고 MainActivity 에 HtlNativePlugin 을 등록한다', async () => {

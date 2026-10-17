@@ -34,6 +34,18 @@ public final class HtlCore {
         public float size = 12f;
         public int color = 0xFF000000;
         public boolean bold;
+        // 상자(box=true): 웹 요소의 배경·테두리(둥근 모서리). 글자 덩어리와 같은 목록에 DOM 순서대로 들어 있다 — 뒤에 오는 것이 위에 그려진다.
+        public boolean box;
+        public float r;                        // 모서리 반지름(CSS px)
+        public int fill;                       // 배경색(투명이면 0)
+        public int stroke;                     // 테두리색(없으면 0)
+        public float sw;                       // 테두리 두께
+    }
+
+    /** 반지름이 상자 짧은 변의 절반을 넘지 않게. */
+    public static float clampRadius(float r, float w, float h) {
+        float m = Math.min(w, h) / 2f;
+        return r < 0f ? 0f : (r > m ? m : r);
     }
 
     /** 글자 상자(높이 h) 안에서 글꼴 상자(ascent<0, descent>0)를 가운데에 놓았을 때의 기준선 y. */

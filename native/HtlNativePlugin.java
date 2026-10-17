@@ -207,6 +207,9 @@ public class HtlNativePlugin extends Plugin {
                         r.t = o.optString("t", ""); r.x = (float) o.optDouble("x", 0); r.y = (float) o.optDouble("y", 0);
                         r.w = (float) o.optDouble("w", 0); r.h = (float) o.optDouble("h", 0); r.size = (float) o.optDouble("s", 12);
                         r.color = HtlCore.color(o.optString("c", ""), 0xFF111114); r.bold = o.optBoolean("b", false);
+                        if ("r".equals(o.optString("k", ""))) {                     // 상자(배경·테두리)
+                            r.box = true; r.r = (float) o.optDouble("r", 0); r.fill = HtlCore.color(o.optString("f", ""), 0); r.stroke = HtlCore.color(o.optString("sc", ""), 0); r.sw = (float) o.optDouble("sw", 0);
+                        }
                     }
                     rs[i] = r;
                 }
