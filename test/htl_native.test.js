@@ -41,8 +41,8 @@ function findAndroidJar() {
     const cap = path.join(out, 'cap'), j = path.join(out, 'j'); fs.mkdirSync(cap); fs.mkdirSync(j);
     let r = spawnSync('javac', ['-encoding', 'UTF-8', '-cp', jar, '-d', cap].concat(walk(path.join(__dirname, 'android-stubs', 'com'), '.java')), { env: ENV, encoding: 'utf8' });
     assert.strictEqual(r.status, 0, '캐퍼시터 스텁: ' + (r.stderr || '').slice(0, 800));
-    r = spawnSync('javac', ['-encoding', 'UTF-8', '-Xlint:all', '-Xlint:-deprecation', '-Xlint:-this-escape', '-cp', [jar, cap].join(path.delimiter), '-d', j, N('HtlCore.java'), N('HtlView.java'), N('HtlNativePlugin.java')], { env: ENV, encoding: 'utf8' });
-    assert.strictEqual(r.status, 0, (r.stderr || '').slice(0, 2000));
+    r = spawnSync('javac', ['-encoding', 'UTF-8', '-Xlint:all', '-Xlint:-deprecation', '-cp', [jar, cap].join(path.delimiter), '-d', j, N('HtlCore.java'), N('HtlView.java'), N('HtlNativePlugin.java')], { env: ENV, encoding: 'utf8' });
+    assert.strictEqual(r.status, 0, (r.stderr || '').split('\n').filter(l => !/^Picked up/.test(l)).join(' / ').slice(0, 1500));
     assert(fs.existsSync(path.join(j, 'com', 'dullyyj', 'subway', 'HtlNativePlugin.class')));
   });
   await t('뷰는 손가락을 가져가지 않는다(웹뷰가 스크롤) · 숨는 동안은 다시 그리지 않는다 · 마커가 있을 때만 화면 박자로 그린다', async () => {
