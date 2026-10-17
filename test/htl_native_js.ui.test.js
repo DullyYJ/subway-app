@@ -104,11 +104,11 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     assert.ok(cs.some(c => c.dk === 3), '도보 점'); assert.ok(cs.every(c => c.nf > 5 && c.tf > 5), '글자 크기');
     assert.ok(cs.some(c => c.gp && /^rgba\(/.test(c.gc)), '환승/장거리 배지');
   });
-  await t('웹 타임라인은 그대로 그려져 있다(네이티브 밑에서 이어받을 수 있게 숨기지 않는다)', async () => {
-    const o = await A.page.evaluate(() => { const tr = document.getElementById('transitHtlTrack'); return { op: getComputedStyle(tr).opacity, vis: getComputedStyle(tr).visibility }; });
-    assert.strictEqual(o.op, '1'); assert.strictEqual(o.vis, 'visible');
+  await t('네이티브가 첫 그림을 그린 뒤(ready)부터 웹 타임라인은 visibility:hidden 으로 가린다 — 레이아웃(칸 위치·폭)은 그대로', async () => {
+    assert.ok(await waitFor(A, async () => await A.page.evaluate(() => document.getElementById('transitHtlWrap').classList.contains('htl-nat-on'))), '웹 타임라인을 안 가렸다');
+    const o = await A.page.evaluate(() => { const tr = document.getElementById('transitHtlTrack'); return { vis: getComputedStyle(tr).visibility, w: tr.offsetWidth, h: tr.offsetHeight, c: tr.children[1].offsetLeft }; });
+    assert.strictEqual(o.vis, 'hidden'); assert.ok(o.w > 300 && o.h > 90 && o.c > 0, JSON.stringify(o));
   });
-
   console.log('[③ 마커]');
   await t('웹이 마커를 처음 놓으면: 네이티브도 그 자리에 바로 놓는다(snap) — 트랙 좌표 · 점 가운데 y', async () => {
     await clear(A);
@@ -155,6 +155,15 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     assert.ok(Math.abs(s.sx - 120) < 1.5, '스크롤 위치도 이어서 ' + s.sx);
     assert.ok(Math.abs(s.x - bx.x) < 1);
   });
+  await t('네이티브가 숨으면 웹 타임라인이 먼저 돌아온다(빈 화면이 없게) — hide 호출 시점에 이미 가림이 풀려 있다', async () => {
+    await A.page.evaluate(() => { window.__webAtHide = null; const P = window.Capacitor.Plugins.HtlNative, h = P.hide; P.hide = () => { window.__webAtHide = document.getElementById('transitHtlWrap').classList.contains('htl-nat-on'); return h(); }; });
+    await clear(A);
+    await A.page.evaluate(() => { document.getElementById('hbox').style.top = '270px'; });
+    assert.ok(await waitFor(A, has(A, 'hide')), '안 숨었다');
+    assert.strictEqual(await A.page.evaluate(() => window.__webAtHide), false, 'hide 때 웹이 아직 가려져 있다');
+    assert.ok(await waitFor(A, has(A, 'show')), '다시 안 켜졌다');
+    assert.ok(await waitFor(A, async () => await A.page.evaluate(() => document.getElementById('transitHtlWrap').classList.contains('htl-nat-on'))), '다시 켜졌는데 웹을 안 가렸다');
+  });
   await t('웹 팝업이 덮으면 숨고, 걷히면 다시 켠다', async () => {
     await clear(A);
     await A.page.evaluate(() => { const o = document.createElement('div'); o.id = 'testPop'; o.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.5)'; document.body.appendChild(o); });
@@ -194,6 +203,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     await clear(x); await x.page.evaluate(() => { document.getElementById('hbox').style.top = '230px'; }); await x.page.waitForTimeout(900);
     assert.strictEqual((await calls(x, 'show')).length, 0, '실패 뒤에 다시 켜졌다');
     const st = await x.page.evaluate(() => ({ f: localStorage.getItem('gdm_htl_fail'), w: localStorage.getItem('gdm_htl_why'), s: document.getElementById('htlSetStat').textContent, on: document.getElementById('htlSetOn').checked }));
+    assert.strictEqual(await x.page.evaluate(() => document.getElementById('transitHtlWrap').classList.contains('htl-nat-on')), false, '실패했는데 웹 타임라인이 가려진 채다');
     assert.strictEqual(st.f, '1'); assert.ok(/뷰 오류/.test(st.w)); assert.ok(/문제가 있어/.test(st.s), st.s); assert.deepStrictEqual(x.errs, []); await x.ctx.close();
   });
   await t('show 가 거절되면 웹만 쓴다', async () => {
@@ -223,6 +233,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     await clear(x); await x.page.evaluate(() => { const c = document.getElementById('htlSetOn'); c.checked = false; c.dispatchEvent(new Event('change')); });
     assert.ok(await waitFor(x, has(x, 'destroy')), '끄기 안 됨');
     assert.strictEqual(await x.page.evaluate(() => localStorage.getItem('gdm_htl_on')), '0');
+    assert.strictEqual(await x.page.evaluate(() => document.getElementById('transitHtlWrap').classList.contains('htl-nat-on')), false, '끄면 웹 타임라인이 다시 보여야 한다');
     await clear(x); await x.page.evaluate(() => { document.getElementById('hbox').style.top = '240px'; }); await x.page.waitForTimeout(900);
     assert.strictEqual((await calls(x, 'show')).length, 0, '꺼졌는데 켜졌다');
     await x.page.evaluate(() => { const c = document.getElementById('htlSetOn'); c.checked = true; c.dispatchEvent(new Event('change')); });

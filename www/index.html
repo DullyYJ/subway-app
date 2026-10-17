@@ -1372,6 +1372,8 @@ header h1 em{color:var(--gold);font-style:normal;}
 .htl-wrap::-webkit-scrollbar{height:0;}
 .htl-track{display:inline-flex;align-items:flex-start;min-width:100%;padding:0 14px;}
 /* ── 복합경로 전용 트랙 ── */
+/* ★ 2026-10-17 네이티브 경로 화면이 그리는 동안 웹 타임라인은 레이아웃만 남기고 가린다(P2) */
+.htl-nat-on #transitHtlTrack{visibility:hidden;}
 #transitHtlTrack{display:inline-flex;flex-wrap:nowrap;align-items:flex-start;min-width:max-content;padding:6px 14px;gap:0;position:relative;}
 /* htl-stn 너비는 inline style로 처리 */
 #transitResultCard{display:flex;flex-direction:column;}
@@ -14106,7 +14108,7 @@ window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
   var K_ON = 'gdm_htl_on', K_F = 'gdm_htl_fail', K_W = 'gdm_htl_why';
   var H = { on: false, fails: 0, failed: false, why: '', shown: false, ready: false, busy: false, busyAt: 0, again: false, hideBusy: false, hideAt: 0, timer: 0, tk: '', fast: 0,
             listening: false, started: false, prevArg: null, prev: null, still: 0, cover: null, coverAt: 0, clipEls: null, clipAt: 0, cur: null, curKey: '', sent: '', exAt: 0, dirty: true,
-            mkT: null, mkSeen: null, mkOn: false, wbKey: '', sx: -1, hAt: 0, hFail: 0, hBusy: false, wait: 0, t0: 0, obs: null, kicked: false, showAt: 0 };
+            mkT: null, mkSeen: null, mkOn: false, wbKey: '', sx: -1, hAt: 0, hFail: 0, hBusy: false, wait: 0, t0: 0, obs: null, kicked: false, showAt: 0, webOff: false };
   try{ H.on = localStorage.getItem(K_ON) === '1'; H.fails = parseInt(localStorage.getItem(K_F) || '0', 10) || 0; H.why = localStorage.getItem(K_W) || ''; }catch(eS){}
   function plug(){ try{ var C = window.Capacitor; return (C && C.Plugins && C.Plugins.HtlNative) || null; }catch(e){ return null; } }
   function active(){ return H.on && !H.failed && H.fails < 2 && !!plug(); }
@@ -14260,6 +14262,17 @@ window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
     if(H.shown && !H.busy && !H.hideBusy){ var P = plug(); if(P){ try{ sendMk(P, false); }catch(e){ fail('marker: ' + (e && e.message || e)); } } }
   };
 
+  // ── 웹 타임라인 가리기(P2) ──
+  //   네이티브가 첫 그림을 그린 뒤(ready, 또는 0.4초)부터 아래 웹 타임라인을 visibility:hidden 으로 가린다(레이아웃은 그대로라 칸 위치·측정은 같다). 이중으로 그리지 않아 웹뷰 부담이 줄어든다.
+  //   네이티브를 숨기기 '전에' 먼저 되돌린다 — 웹이 곧바로 이어받아 빈 화면이 안 생긴다. 끄기: window._htlKeepWeb = true
+  function webHide(on){
+    var w = wrapEl(); if(!w) return;
+    on = !!on && window._htlKeepWeb !== true;
+    if(on === H.webOff && w.classList.contains('htl-nat-on') === on) return;
+    H.webOff = on; w.classList.toggle('htl-nat-on', on);
+  }
+  function webSync(t){ webHide(H.shown && !H.busy && !H.hideBusy && (H.ready || t - H.showAt > 400) && t - H.showAt > 120); }
+
   // ── 켜고 끄기 ──
   function fail(why){
     if(H.failed || !H.on) return;
@@ -14269,11 +14282,12 @@ window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
     end(true); syncCard();
   }
   function end(destroy){
-    cancel();
+    cancel(); webHide(false);
     H.shown = false; H.busy = false; H.again = false; H.hideBusy = false; H.sent = ''; H.prevArg = null; H.prev = null; H.still = 0; H.cover = null; H.mkOn = false; H.mkSeen = null; H.wbKey = ''; H.sx = -1; H.wait = 0; if(destroy) H.ready = false;
     var P = plug(); try{ if(P && (H.started || destroy)) (destroy ? P.destroy() : P.hide()); }catch(e){}
   }
   function hideNative(){
+    webHide(false);
     if(H.hideBusy) return;
     var P = plug(); if(!P) return;
     H.hideBusy = true; H.hideAt = now();
@@ -14353,8 +14367,9 @@ window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
       H.still = moved ? 0 : H.still + 1;
       if(d.mode === 'off'){ if(H.shown) hideNative(); H.still = 0; }
       else if(d.mode === 'cover' || moved || H.still < 4){ if(H.shown) hideNative(); H.fast = Math.max(H.fast, t + 300); }      // 움직이는 중·덮여 있음 → 웹 타임라인
-      else { live(d); health(t); }                                                                                                  // 4프레임(≈0.07초) 가만히 있으면 네이티브를 켠다
+      else { live(d); health(t); webSync(t); }                                                                                                  // 4프레임(≈0.07초) 가만히 있으면 네이티브를 켠다
     }catch(e){ try{ console.warn('[네이티브 타임라인 tick]', e); }catch(e1){} }
+    try{ webSync(now()); }catch(e2){}
     sched();
   }
   function onScroll(){ if(!H.shown || H.busy || H.hideBusy) return; var w = wrapEl(), P = plug(); if(!w || !P) return; if(Math.abs(w.scrollLeft - H.sx) < 0.5) return; H.sx = w.scrollLeft; try{ P.scroll({ sx: H.sx }); }catch(e){ fail('scroll: ' + (e && e.message || e)); } }
