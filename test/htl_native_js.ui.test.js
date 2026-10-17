@@ -29,7 +29,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
         window.Capacitor = { isNativePlatform: () => true, getPlatform: () => 'android', Plugins: { HtlNative: {
           show: (a) => { window.__hn.push({ m: 'show', a: JSON.parse(JSON.stringify(a)) }); return o.showFail ? Promise.reject(new Error('뷰를 못 만듦')) : Promise.resolve({ cells: (a.cells || []).length }); },
           setRect: (a) => rec('setRect', a), update: (a) => rec('update', a, { cells: (a.cells || []).length }), scroll: (a) => rec('scroll', a), marker: (a) => rec('marker', a),
-          hide: () => rec('hide'), destroy: () => rec('destroy'),
+          hide: (a) => rec('hide', a), destroy: (a) => rec('destroy', a),
           status: () => Promise.resolve(window.__status ? window.__status() : { visible: true, cells: 99, age: 20 }),
           addListener: (n, f) => { (window.__hnL[n] = window.__hnL[n] || []).push(f); return Promise.resolve({ remove() {} }); }
         } } };
@@ -42,7 +42,10 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
       // 타임라인을 눈에 보이는 시험용 상자로 옮긴다(실제 화면에서는 홈 경로 카드 안에 있다)
       const wrap = document.getElementById('transitHtlWrap');
       const box = document.createElement('div'); box.id = 'hbox'; box.style.cssText = 'position:fixed;left:0;top:200px;width:390px;z-index:5;background:#fff;';
-      document.body.appendChild(box); box.appendChild(wrap); wrap.style.display = 'block';
+      document.body.appendChild(box); const hd = document.getElementById('transitResultHeader'); box.appendChild(hd); box.appendChild(wrap); wrap.style.display = 'block';
+      hd.style.cssText = 'display:flex;align-items:baseline;gap:5px;overflow:hidden;width:300px;margin:6px 14px;';
+      window.__setHd = (min, s, d) => { hd.innerHTML = '<span id="transitResultMinNum" style="font-size:28px;font-weight:900;color:var(--text);line-height:1;">' + min + '</span><span id="transitResultMinUnit" style="font-size:14px;color:var(--sub);margin-right:8px;">분</span><span style="font-size:12px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;">' + s + ' → ' + d + '</span>'; };
+      window.__setHd(30, '출발', '도착');
       const st = (n, i) => ({ stationName: n, lat: 37.58 + i * 0.002, lon: 126.7 + i * 0.002 });
       const secs = [
         { transportation: { type: 3 }, duration: 120, distance: 150 },
@@ -57,13 +60,13 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     });
     return { ctx, page, errs };
   }
-  const calls = (x, m) => x.page.evaluate(m => window.__hn.filter(c => !m || c.m === m), m);
+  const calls = (x, m, id) => x.page.evaluate(([m, id]) => window.__hn.filter(c => (!m || c.m === m) && (id === '*' || !c.a || !c.a.id || c.a.id === (id || 'tl'))), [m, id || 'tl']);      // 기본은 타임라인('tl') 영역 호출만
   const clear = (x) => x.page.evaluate(() => { window.__hn.length = 0; });
   const emit = (x, n, d) => x.page.evaluate(([n, d]) => window.__hnEmit(n, d), [n, d || {}]);
   const waitFor = async (x, fn, ms) => { const t0 = Date.now(); while (Date.now() - t0 < (ms || 9000)) { if (await fn()) return true; await x.page.waitForTimeout(80); } return false; };
-  const has = (x, m) => async () => (await calls(x, m)).length > 0;
+  const has = (x, m, id) => async () => (await calls(x, m, id)).length > 0;
   const wrapBox = (x) => x.page.evaluate(() => { const w = document.getElementById('transitHtlWrap'), tr = document.getElementById('transitHtlTrack'), r = w.getBoundingClientRect(), tb = tr.getBoundingClientRect(); return { x: r.left + w.clientLeft, y: tb.top, w: w.clientWidth, h: tr.offsetHeight, sw: tr.scrollWidth }; });
-  const lastCall = async (x, m) => { const c = await calls(x, m); return c[c.length - 1]; };
+  const lastCall = async (x, m, id) => { const c = await calls(x, m, id); return c[c.length - 1]; };
 
   console.log('[① 플러그인이 없거나 꺼져 있으면 예전 그대로]');
   await t('플러그인이 없으면(웹): 아무 일도 없다 · 설정 카드도 안 보인다', async () => {
@@ -73,7 +76,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   });
   await t('플러그인이 있어도 설정이 꺼져 있으면(기본) 호출이 하나도 없다 · 카드는 보이고 스위치는 꺼짐', async () => {
     const x = await fresh({ plugin: true, on: false }); await x.page.waitForTimeout(1800);
-    assert.strictEqual((await calls(x)).length, 0, JSON.stringify(await calls(x)));
+    assert.strictEqual((await calls(x, '', '*')).length, 0, JSON.stringify(await calls(x, '', '*')));
     const c = await x.page.evaluate(() => ({ d: getComputedStyle(document.getElementById('htlSetCard')).display, on: document.getElementById('htlSetOn').checked, s: document.getElementById('htlSetStat').textContent }));
     assert.strictEqual(c.d, 'block'); assert.strictEqual(c.on, false); assert.ok(/꺼짐/.test(c.s), c.s);
     assert.deepStrictEqual(x.errs, []); await x.ctx.close();
@@ -195,6 +198,47 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   });
   await A.ctx.close();
 
+  console.log('[⑤-2 경로 카드 머리줄(hd) — 웹이 배치한 글자를 그대로 넘긴다]');
+  const hdBox = (x) => x.page.evaluate(() => { const h = document.getElementById('transitResultHeader'), r = h.getBoundingClientRect(); return { x: r.left + h.clientLeft, y: r.top + h.clientTop, w: h.clientWidth, h: h.clientHeight }; });
+  await t('머리줄 영역(id hd)이 별도 뷰로 켜진다: 사각형이 웹 머리줄과 같고 글자 덩어리(분 숫자·"분"·구간명)가 자리·크기·색과 함께 온다', async () => {
+    const B = await fresh({ plugin: true, on: true }); await waitFor(B, has(B, 'show', 'hd'));
+    const s = (await lastCall(B, 'show', 'hd')).a, bx = await hdBox(B);
+    assert.ok(Math.abs(s.x - bx.x) < 1 && Math.abs(s.y - bx.y) < 1 && Math.abs(s.w - bx.w) < 1 && Math.abs(s.h - bx.h) < 1, JSON.stringify([s.x, s.y, s.w, s.h, bx]));
+    assert.ok(s.runs && s.runs.length === 3 && !s.cells, JSON.stringify(s.runs));
+    assert.deepStrictEqual(s.runs.map(r => r.t), ['30', '분', '출발 → 도착']);
+    const [a, b, c] = s.runs;
+    assert.ok(a.s === 28 && a.b === true && /^rgba\(/.test(a.c), JSON.stringify(a)); assert.ok(b.s === 14 && b.b === false, JSON.stringify(b)); assert.ok(c.s === 12);
+    assert.ok(b.x > a.x + 10 && c.x > b.x + 10 && a.x >= 0 && a.x < 4, JSON.stringify(s.runs.map(r => r.x)));
+    assert.ok(a.h > 20 && Math.abs((a.y + a.h) - bx.h) < bx.h, '글자 상자');
+    assert.ok(c.w > 20 && c.x + c.w <= bx.w + 1, '구간명은 보이는 폭 안 ' + JSON.stringify(c));
+    assert.ok(/^rgba\(/.test(s.theme.bg), JSON.stringify(s.theme));
+    assert.strictEqual((await lastCall(B, 'show', 'tl')).a.id, 'tl', '타임라인 영역도 따로 켜진다');
+    await B.ctx.close();
+  });
+  await t('머리줄: 네이티브가 그리는 동안 웹 글자는 가려지고(자리는 그대로), 숫자가 바뀌면 update 로 새 글자를 보낸다', async () => {
+    const B = await fresh({ plugin: true, on: true }); await waitFor(B, has(B, 'show', 'hd')); await emit(B, 'ready', { id: 'hd' });
+    assert.ok(await waitFor(B, async () => await B.page.evaluate(() => document.getElementById('transitResultHeader').classList.contains('htl-nat-on-hd'))), '웹 머리줄을 안 가렸다');
+    const o = await B.page.evaluate(() => { const h = document.getElementById('transitResultHeader'); return { span: getComputedStyle(h.firstChild).visibility, host: getComputedStyle(h).visibility, w: h.clientWidth, n: h.firstChild.offsetWidth }; });
+    assert.strictEqual(o.span, 'hidden'); assert.strictEqual(o.host, 'visible'); assert.ok(o.w > 100 && o.n > 10, JSON.stringify(o));
+    await clear(B); await B.page.evaluate(() => { document.getElementById('transitResultMinNum').textContent = '31'; });
+    assert.ok(await waitFor(B, async () => (await calls(B, 'update', 'hd')).some(c => c.a.runs && c.a.runs[0].t === '31')), '바뀐 숫자를 안 보냈다');
+    await B.ctx.close();
+  });
+  await t('머리줄: 글자가 여러 줄로 접히면 읽지 않는다(웹이 그린다) — 네이티브를 숨긴다', async () => {
+    const B = await fresh({ plugin: true, on: true }); await waitFor(B, has(B, 'show', 'hd'));
+    await clear(B); await B.page.evaluate(() => { const h = document.getElementById('transitResultHeader'); h.style.width = '120px'; h.style.display = 'block'; h.lastChild.style.cssText = 'white-space:normal;display:inline;'; h.lastChild.textContent = '아주아주아주아주 긴 출발지 이름 → 아주아주아주아주 긴 도착지 이름'; });
+    assert.ok(await waitFor(B, has(B, 'hide', 'hd')), '접힌 글자인데 네이티브를 숨기지 않았다');
+    assert.strictEqual(await B.page.evaluate(() => document.getElementById('transitResultHeader').classList.contains('htl-nat-on-hd')), false);
+    await B.ctx.close();
+  });
+  await t('머리줄이 팝업에 덮이면 숨고, 영역마다 따로 판단한다', async () => {
+    const B = await fresh({ plugin: true, on: true }); await waitFor(B, has(B, 'show', 'hd'));
+    await clear(B); await B.page.evaluate(() => { const hb = document.getElementById('transitResultHeader').getBoundingClientRect(); const o = document.createElement('div'); o.id = 'popHd'; o.style.cssText = 'position:fixed;left:0;width:390px;top:' + (hb.top - 4) + 'px;height:' + (hb.height + 8) + 'px;z-index:9999;background:#000'; document.body.appendChild(o); });
+    assert.ok(await waitFor(B, has(B, 'hide', 'hd')), '덮였는데 안 숨었다');
+    assert.strictEqual((await calls(B, 'hide', 'tl')).length, 0, '덮이지 않은 타임라인은 그대로여야 한다');
+    await B.ctx.close();
+  });
+
   console.log('[⑥ 안전장치]');
   await t('네이티브 error 이벤트 → 즉시 destroy · 더는 켜지 않는다 · 실패 횟수 저장 · 설정 문구', async () => {
     const x = await fresh({ plugin: true, on: true }); assert.ok(await waitFor(x, has(x, 'show')));
@@ -213,7 +257,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   });
   await t('이미 두 번 실패한 기기는 처음부터 안 쓴다(호출 없음)', async () => {
     const x = await fresh({ plugin: true, on: true, fails: 2 }); await x.page.waitForTimeout(1800);
-    assert.strictEqual((await calls(x)).length, 0, JSON.stringify(await calls(x))); await x.ctx.close();
+    assert.strictEqual((await calls(x, '', '*')).length, 0, JSON.stringify(await calls(x, '', '*'))); await x.ctx.close();
   });
   await t('첫 그림 준비 신호(ready)가 오면 실패 횟수를 0 으로 되돌린다', async () => {
     const x = await fresh({ plugin: true, on: true, fails: 1 }); assert.ok(await waitFor(x, has(x, 'show')));

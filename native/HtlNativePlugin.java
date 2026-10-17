@@ -5,6 +5,8 @@ import android.graphics.Rect;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.View;
+import java.util.HashMap;
+import java.util.Map;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
@@ -26,16 +28,17 @@ import org.json.JSONObject;
  *   · 이 플러그인 + HtlView + HtlCore: 받은 값을 그대로 그린다. 손가락은 받지 않는다(웹뷰가 스크롤).
  *   · 안전장치: 실패하면 error 이벤트를 보내고, 웹은 곧바로 예전 DOM 타임라인으로 돌아간다. 설정에서 끌 수도 있다(기본 꺼짐).
  *
- *   show({x,y,w,h,dpr,clip:{l,t,r,b},theme:{bg,fg,sub},cells:[…],tw,sx}) · setRect · update({cells,tw,theme}) · scroll({sx}) ·
+ *   영역(id): "tl"=가로 타임라인(기본) · "hd"=경로 카드 머리줄(글자 덩어리). 모든 호출에 id 를 줄 수 있고(없으면 tl) 영역마다 뷰가 따로다.
+ *   show({id,x,y,w,h,dpr,clip:{l,t,r,b},theme:{bg,fg,sub},cells:[…],runs:[{t,x,y,w,h,s,c,b}],tw,sx}) · setRect · update({cells,tw,theme}) · scroll({sx}) ·
  *   marker({on,x,y,ms,snap,wait,badge}) (x 가 없으면 wait·badge 만 바꾼다) · hide() · destroy() · status() → {visible,cells,age}
  */
 @CapacitorPlugin(name = "HtlNative")
 public class HtlNativePlugin extends Plugin {
     private final Handler ui = new Handler(Looper.getMainLooper());
-    private HtlView view;
+    private final Map<String, HtlView> views = new HashMap<String, HtlView>();
+    private final Map<String, Boolean> shownMap = new HashMap<String, Boolean>();
+    private final Map<String, Float> dprMap = new HashMap<String, Float>();
     private ViewGroup root;
-    private float dpr = 1f;
-    private boolean shown;
 
     private interface Job { void run() throws Exception; }
     private void runUi(final PluginCall call, final Job job) {
@@ -51,30 +54,37 @@ public class HtlNativePlugin extends Plugin {
     }
     private static float f(PluginCall c, String k) { Float v = c.getFloat(k); return v == null ? 0f : v; }
     private static boolean has(PluginCall c, String k) { try { return c.getData() != null && c.getData().has(k); } catch (Throwable t) { return false; } }
+    private static String idOf(PluginCall c) { String s = c.getString("id", "tl"); return (s == null || s.length() == 0) ? "tl" : s; }
+    private float dprOf(String id) { Float d = dprMap.get(id); return d == null ? 1f : d; }
+    private boolean isShown(String id) { Boolean b = shownMap.get(id); return b != null && b; }
 
     @PluginMethod
     public void show(final PluginCall call) {
         runUi(call, new Job() {
             @Override public void run() throws Exception {
+                final String id = idOf(call);
                 float w = f(call, "w"), h = f(call, "h");
                 if (!(w > 8f && h > 8f)) { call.reject("사각형 크기가 없다"); return; }
                 Activity act = getActivity();
                 root = (ViewGroup) act.findViewById(android.R.id.content);
                 if (root == null) { call.reject("루트 뷰가 없다"); return; }
-                dpr = call.getFloat("dpr", 0f) > 0f ? call.getFloat("dpr", 1f) : getContext().getResources().getDisplayMetrics().density;
+                float d = call.getFloat("dpr", 0f) > 0f ? call.getFloat("dpr", 1f) : getContext().getResources().getDisplayMetrics().density;
+                dprMap.put(id, d);
+                HtlView view = views.get(id);
                 if (view == null) {
                     view = new HtlView(getContext());
-                    view.setFirstDraw(new Runnable() { @Override public void run() { try { notifyListeners("ready", new JSObject()); } catch (Throwable ignored) { } } });
+                    view.setFirstDraw(new Runnable() { @Override public void run() { try { notifyListeners("ready", new JSObject().put("id", id)); } catch (Throwable ignored) { } } });
                     root.addView(view, new FrameLayout.LayoutParams(1, 1));
+                    views.put(id, view);
                 }
-                view.setDpr(dpr);
-                applyTheme(call);
-                applyCells(call);
+                view.setDpr(d);
+                applyTheme(view, call);
+                applyContent(view, call);
                 if (has(call, "sx")) view.setScroll(f(call, "sx"));
-                place(call);
+                place(view, id, call);
                 view.bringToFront();
                 view.setVisibility(View.VISIBLE);
-                shown = true;
+                shownMap.put(id, true);
                 call.resolve(new JSObject().put("cells", view.cellCount()));
             }
         });
@@ -84,23 +94,25 @@ public class HtlNativePlugin extends Plugin {
     public void setRect(final PluginCall call) {
         runUi(call, new Job() {
             @Override public void run() throws Exception {
+                String id = idOf(call); HtlView view = views.get(id);
                 if (view == null) { call.resolve(); return; }
                 if (!(f(call, "w") > 8f && f(call, "h") > 8f)) { call.resolve(); return; }
-                if (call.getFloat("dpr", 0f) > 0f) { dpr = call.getFloat("dpr", 1f); view.setDpr(dpr); }
-                place(call);
+                if (call.getFloat("dpr", 0f) > 0f) { float d = call.getFloat("dpr", 1f); dprMap.put(id, d); view.setDpr(d); }
+                place(view, id, call);
                 call.resolve();
             }
         });
     }
 
-    /** 칸 목록·테마·트랙 폭을 바꾼다(보이는 상태는 그대로). */
+    /** 칸 목록·글자 덩어리·테마·트랙 폭을 바꾼다(보이는 상태는 그대로). */
     @PluginMethod
     public void update(final PluginCall call) {
         runUi(call, new Job() {
             @Override public void run() throws Exception {
+                HtlView view = views.get(idOf(call));
                 if (view == null) { call.resolve(); return; }
-                applyTheme(call);
-                applyCells(call);
+                applyTheme(view, call);
+                applyContent(view, call);
                 if (has(call, "sx")) view.setScroll(f(call, "sx"));
                 call.resolve(new JSObject().put("cells", view.cellCount()));
             }
@@ -110,7 +122,7 @@ public class HtlNativePlugin extends Plugin {
     @PluginMethod
     public void scroll(final PluginCall call) {
         runUi(call, new Job() {
-            @Override public void run() throws Exception { if (view != null) view.setScroll(f(call, "sx")); call.resolve(); }
+            @Override public void run() throws Exception { HtlView v = views.get(idOf(call)); if (v != null) v.setScroll(f(call, "sx")); call.resolve(); }
         });
     }
 
@@ -118,6 +130,7 @@ public class HtlNativePlugin extends Plugin {
     public void marker(final PluginCall call) {
         runUi(call, new Job() {
             @Override public void run() throws Exception {
+                HtlView view = views.get(idOf(call));
                 if (view != null) {
                     boolean on = call.getBoolean("on", false);
                     if (on && !has(call, "x")) view.setMarkerFlags(call.getBoolean("wait", false), call.getString("badge", ""));      // 위치 없이 깜박임·뱃지만
@@ -129,25 +142,31 @@ public class HtlNativePlugin extends Plugin {
         });
     }
 
+    /** id 가 있으면 그 영역만, 없으면 모든 영역을 숨긴다. */
     @PluginMethod
     public void hide(final PluginCall call) {
         runUi(call, new Job() {
-            @Override public void run() throws Exception { hideNow(); call.resolve(); }
+            @Override public void run() throws Exception { if (has(call, "id")) hideOne(idOf(call)); else for (String k : new java.util.ArrayList<String>(views.keySet())) hideOne(k); call.resolve(); }
         });
     }
 
-    private void hideNow() {
-        if (view != null) view.setVisibility(View.GONE);
-        shown = false;
+    private void hideOne(String id) {
+        HtlView v = views.get(id);
+        if (v != null) v.setVisibility(View.GONE);
+        shownMap.put(id, false);
     }
 
     @PluginMethod
     public void destroy(final PluginCall call) {
         runUi(call, new Job() {
             @Override public void run() throws Exception {
-                hideNow();
-                try { if (root != null && view != null) root.removeView(view); } catch (Throwable ignored) { }
-                view = null;
+                java.util.List<String> ids = new java.util.ArrayList<String>();
+                if (has(call, "id")) ids.add(idOf(call)); else ids.addAll(views.keySet());
+                for (String k : ids) {
+                    hideOne(k);
+                    try { HtlView v = views.get(k); if (root != null && v != null) root.removeView(v); } catch (Throwable ignored) { }
+                    views.remove(k);
+                }
                 call.resolve();
             }
         });
@@ -158,8 +177,9 @@ public class HtlNativePlugin extends Plugin {
     public void status(final PluginCall call) {
         runUi(call, new Job() {
             @Override public void run() throws Exception {
+                String id = idOf(call); HtlView view = views.get(id);
                 JSObject o = new JSObject();
-                o.put("visible", view != null && view.getVisibility() == View.VISIBLE && shown);
+                o.put("visible", view != null && view.getVisibility() == View.VISIBLE && isShown(id));
                 o.put("cells", view == null ? 0 : view.cellCount());
                 o.put("age", view == null ? -1 : (int) Math.min(Integer.MAX_VALUE, view.drawAgeMs()));
                 call.resolve(o);
@@ -168,14 +188,32 @@ public class HtlNativePlugin extends Plugin {
     }
 
     // ───────────── 받은 값 적용 ─────────────
-    private void applyTheme(PluginCall call) {
+    private void applyTheme(HtlView view, PluginCall call) {
         JSObject t = null;
         try { t = call.getObject("theme"); } catch (Throwable e) { t = null; }
         if (t == null) return;
         view.setTheme(HtlCore.color(t.optString("bg", ""), 0xFFFFFFFF), HtlCore.color(t.optString("fg", ""), 0xFF111114), HtlCore.color(t.optString("sub", ""), 0xFF8E8E93));
     }
 
-    private void applyCells(PluginCall call) throws Exception {
+    private void applyContent(HtlView view, PluginCall call) throws Exception {
+        if (has(call, "runs")) {                                     // 글자 덩어리 영역
+            JSONArray ra = call.getData().optJSONArray("runs");
+            if (ra != null) {
+                HtlCore.Run[] rs = new HtlCore.Run[ra.length()];
+                for (int i = 0; i < rs.length; i++) {
+                    JSONObject o = ra.optJSONObject(i);
+                    HtlCore.Run r = new HtlCore.Run();
+                    if (o != null) {
+                        r.t = o.optString("t", ""); r.x = (float) o.optDouble("x", 0); r.y = (float) o.optDouble("y", 0);
+                        r.w = (float) o.optDouble("w", 0); r.h = (float) o.optDouble("h", 0); r.size = (float) o.optDouble("s", 12);
+                        r.color = HtlCore.color(o.optString("c", ""), 0xFF111114); r.bold = o.optBoolean("b", false);
+                    }
+                    rs[i] = r;
+                }
+                view.setRuns(rs);
+            }
+            return;
+        }
         if (!has(call, "cells")) return;
         JSONArray arr = call.getData().optJSONArray("cells");
         if (arr == null) return;
@@ -200,7 +238,8 @@ public class HtlNativePlugin extends Plugin {
     }
 
     /** 틀의 자리·크기·잘림. 좌표는 CSS px(웹뷰 기준). */
-    private void place(PluginCall call) {
+    private void place(HtlView view, String id, PluginCall call) {
+        float dpr = dprOf(id);
         float x = f(call, "x"), y = f(call, "y"), w = f(call, "w"), h = f(call, "h");
         int offX = 0, offY = 0;
         try {

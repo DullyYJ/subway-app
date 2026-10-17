@@ -57,6 +57,13 @@ function findAndroidJar() {
     assert.ok(!/URL\(|HttpURLConnection|Random/.test(p), '순수 전달');
     for (const m of ['show', 'setRect', 'update', 'scroll', 'marker', 'hide', 'destroy', 'status']) assert.ok(new RegExp('public void ' + m + '\\(').test(p), m + ' 메서드');
   });
+  await t('영역(id)마다 뷰가 따로고, 글자 덩어리(runs)는 웹이 정한 자리에 그대로 그린다(줄바꿈·배치 계산 없음)', async () => {
+    const p = fs.readFileSync(N('HtlNativePlugin.java'), 'utf8'), v = fs.readFileSync(N('HtlView.java'), 'utf8');
+    assert.ok(/Map<String, HtlView> views/.test(p) && /idOf\(call\)/.test(p), '영역별 뷰');
+    assert.ok(/optJSONArray\("runs"\)/.test(p) && /setRuns\(/.test(p), 'runs 적용');
+    assert.ok(/runs != null[\s\S]{0,1500}HtlCore\.baseline/.test(v), '기준선은 코어 계산');
+    assert.ok(!/StaticLayout|breakText|measureText[\s\S]{0,40}split/.test(v.split('runs != null')[1].split('cv.save();')[0] + ''), '줄바꿈 금지');
+  });
   await t('CI 워크플로가 파일을 복사하고 MainActivity 에 HtlNativePlugin 을 등록한다', async () => {
     const y = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'build-apk.yml'), 'utf8');
     for (const f of ['HtlCore.java', 'HtlView.java', 'HtlNativePlugin.java']) assert.ok(y.includes('native/' + f), f + ' 복사');

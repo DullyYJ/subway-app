@@ -65,6 +65,12 @@ public class HtlJvmTest {
         ok(HtlCore.withAlpha(0xFF112233, 0.5f) == (0x80 << 24 | 0x112233), "투명도 곱");
         ok(HtlCore.TRACK_H > 100f && HtlCore.TRACK_H < 140f, "트랙 높이 " + HtlCore.TRACK_H);
 
+        // 글자 덩어리: 글꼴 상자를 글자 상자 가운데에
+        ok(near(HtlCore.baseline(10f, 20f, -12f, 4f), 10f + (20f - 16f) / 2f + 12f), "기준선 = 상자 가운데 정렬 " + HtlCore.baseline(10f, 20f, -12f, 4f));
+        ok(near(HtlCore.baseline(0f, 16f, -12f, 4f), 12f), "글꼴 상자와 글자 상자 높이가 같으면 기준선은 −ascent");
+        HtlCore.Run r = new HtlCore.Run();
+        ok(r.t.equals("") && r.size > 0f && !r.bold, "Run 기본값");
+
         System.out.println(fails == 0 ? "ALL OK" : (fails + " FAIL"));
         System.exit(fails == 0 ? 0 : 1);
     }

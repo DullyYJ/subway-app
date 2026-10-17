@@ -27,6 +27,20 @@ public final class HtlCore {
         public float x, w = 64f;                // 트랙 안 왼쪽 가장자리 x · 폭
     }
 
+    /** 글자 한 덩어리 — 웹이 이미 배치한 한 줄 글자(텍스트 노드)의 자리·모양을 그대로 받는다(네이티브는 줄바꿈·배치를 하지 않는다). */
+    public static final class Run {
+        public String t = "";
+        public float x, y, w, h;               // 칸 안 왼쪽 위(CSS px) · 보이는 최대 폭(w) · 글자 상자 높이(h)
+        public float size = 12f;
+        public int color = 0xFF000000;
+        public boolean bold;
+    }
+
+    /** 글자 상자(높이 h) 안에서 글꼴 상자(ascent<0, descent>0)를 가운데에 놓았을 때의 기준선 y. */
+    public static float baseline(float y, float h, float ascent, float descent) {
+        return y + (h - (descent - ascent)) / 2f - ascent;
+    }
+
     /** 줄 높이(웹 행1~행4와 같다): 이름 30 · 라벨 18 · 선·점 26 · 시각 16(위 여백 3). 트랙 위 여백 6. */
     public static final float TOP = 6f, R1 = 30f, R2 = 18f, R3 = 26f, R4 = 16f, T4GAP = 3f;
     public static final float LINE_Y = 12f, LINE_H = 3f;          // 선: 줄 위에서 12, 두께 3

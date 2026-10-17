@@ -27,6 +27,7 @@ public class HtlView extends View {
     private volatile long lastDraw = 0L;
     private boolean drewOnce = false;
     private Runnable onFirst;
+    private HtlCore.Run[] runs = null;                 // 글자 덩어리 모드(경로 카드 머리줄 등) — 있으면 칸·마커 대신 이것만 그린다
 
     public HtlView(Context c) {
         super(c);
@@ -40,11 +41,13 @@ public class HtlView extends View {
 
     public void setFirstDraw(Runnable r) { onFirst = r; }
     public long drawAgeMs() { return lastDraw == 0L ? Long.MAX_VALUE : SystemClock.uptimeMillis() - lastDraw; }
-    public int cellCount() { return core.cells.length; }
+    public int cellCount() { return runs != null ? runs.length : core.cells.length; }
 
     public void setDpr(float d) { if (d > 0f) dpr = d; invalidate(); }
     public void setTheme(int bgc, int fgc, int subc) { bg = bgc; fg = fgc; sub = subc; invalidate(); }
     public void setCells(HtlCore.Cell[] cs, float trackW) { core.set(cs, trackW); invalidate(); }
+    public void setRuns(HtlCore.Run[] r) { runs = r; invalidate(); }
+    public int runCount() { return runs == null ? 0 : runs.length; }
     public void setScroll(float s) { sx = s; invalidate(); }
     public float scroll() { return sx; }
 
@@ -74,6 +77,23 @@ public class HtlView extends View {
         p.setStyle(Paint.Style.FILL);
         p.setColor(bg);
         cv.drawRect(0, 0, getWidth(), getHeight(), p);
+        if (runs != null) {                                   // 글자 덩어리: 웹이 정한 자리에 그대로(줄바꿈·배치는 하지 않는다)
+            cv.save();
+            cv.scale(dpr, dpr);
+            for (HtlCore.Run r : runs) {
+                if (r == null || r.t.length() == 0) continue;
+                tp.setTextAlign(Paint.Align.LEFT);
+                tp.setTextSize(r.size); tp.setColor(r.color); tp.setFakeBoldText(false);
+                tp.setTypeface(r.bold ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
+                Paint.FontMetrics fm = tp.getFontMetrics();
+                CharSequence e = TextUtils.ellipsize(r.t, tp, Math.max(1f, r.w), TextUtils.TruncateAt.END);
+                cv.drawText(e, 0, e.length(), r.x, HtlCore.baseline(r.y, r.h, fm.ascent, fm.descent), tp);
+            }
+            tp.setTextAlign(Paint.Align.CENTER);
+            cv.restore();
+            if (!drewOnce) { drewOnce = true; if (onFirst != null) post(onFirst); }
+            return;
+        }
         cv.save();
         cv.scale(dpr, dpr);                                   // 이제부터 좌표는 CSS px
         float viewW = getWidth() / dpr;
