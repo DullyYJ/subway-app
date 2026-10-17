@@ -145,6 +145,23 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     const c2 = await hh(); assert(c2.fill === true && c2.h !== 150 && c2.st !== '', '닫으면 다시 맞춤 ' + JSON.stringify(c2));
     assert(!errs.length, errs.join('|')); await ctx.close();
   });
+  await t('(10:12 YJ) 다른 탭에 다녀와도 장면 높이가 줄었다 커지지 않는다 — 떠나 있는 동안 높이를 지우지 않고, 돌아오면 애니메이션 없이 바로 맞춘다', async () => {
+    const { ctx, page, errs } = await fresh();
+    await page.setViewportSize({ width: 390, height: 1500 }); await page.waitForTimeout(2200);
+    const hh = () => page.evaluate(() => ({ h: Math.round(document.getElementById('congScene').getBoundingClientRect().height), st: document.getElementById('congScene').style.height, tr: document.getElementById('congScene').style.transition }));
+    const a = await hh(); assert(a.st !== '' && a.h > 160, '처음엔 한 화면에 맞춰 커져 있다 ' + JSON.stringify(a));
+    await page.evaluate(() => switchTab('community', document.getElementById('ni-community')));
+    await page.evaluate(() => { _sceneFit(); _sceneFit(); });      // 네이티브 장면은 홈이 숨어 있어도 1초마다 맞춤(FIT)을 부른다 — 이때 높이가 지워지면 안 된다
+    await page.waitForTimeout(700);
+    const away = await hh(); assert(away.st === a.st, '다른 탭에 가 있는 동안 맞춰 둔 높이를 지우지 않는다 ' + JSON.stringify([a, away]));
+    // 돌아온 직후(애니메이션 없이) 높이가 그대로 — 프레임마다 재서 한 번도 줄지 않았는지 본다
+    await page.evaluate(() => { window.__hs = []; const sc = document.getElementById('congScene'); (function f(){ window.__hs.push(Math.round(sc.getBoundingClientRect().height)); if (window.__hs.length < 40) requestAnimationFrame(f); })(); switchTab('home', document.getElementById('ni-home')); });
+    await page.waitForTimeout(900);
+    const hs = await page.evaluate(() => window.__hs.filter(v => v > 0));
+    assert(hs.length > 5 && Math.min(...hs) >= a.h - 3, '돌아온 뒤 높이가 한 번도 줄지 않는다 ' + JSON.stringify({ a: a.h, hs }));
+    const b2 = await hh(); assert(Math.abs(b2.h - a.h) <= 3 && b2.tr === '', '돌아오면 같은 높이 · 전환 효과는 다시 켜 둔다 ' + JSON.stringify([a, b2]));
+    assert(!errs.length, errs.join('|')); await ctx.close();
+  });
   // 캐릭터 화면 좌표(칸 안 좌표 → 화면)
   const where = (page) => page.evaluate(() => { const i = _CS.info(), r = document.getElementById('congScene').getBoundingClientRect(); return { W: i.W, H: i.H, r: { l: r.left, t: r.top, w: r.width, h: r.height }, actors: i.actors.map(a => ({ id: a.id, st: a.st, x: a.x, z: a.z, held: a.held, sx: r.left + a.x / i.W * r.width, sy: r.top + a.cy / i.H * r.height })) }; });
   await t('(09:21 YJ) 캐릭터를 꾹 누르면 들려 손가락을 따라오고, 놓은 자리에 내려앉아 잠깐 머문다', async () => {

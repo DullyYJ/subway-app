@@ -25413,6 +25413,17 @@ function switchTab(tab,el){
   });
   // 홈탭 진입 시 출발역 있으면 혼잡도 자동 갱신
   if(tab==='home'){
+    // ★ 2026-10-17: 홈으로 돌아오면 장면 높이를 애니메이션 없이 곧바로 다시 맞춘다(다른 탭에서 오는 동안 높이가 변했을 때 '줄었다 커지는' 모습이 안 보이게). 이어서 한 번 더 부드럽게 보정.
+    try{
+      var _scH = document.getElementById('congScene');
+      if(_scH){
+        _scH.style.transition = 'none';
+        try{ if(typeof _sceneFit === 'function') _sceneFit(); }catch(eF){}
+        try{ if(typeof _CS !== 'undefined') _CS.refit(); }catch(eR){}
+        requestAnimationFrame(function(){ requestAnimationFrame(function(){ try{ _scH.style.transition = ''; }catch(e1){} }); });
+        setTimeout(function(){ try{ _sceneFit(); }catch(e2){} }, 350);
+      }
+    }catch(eSc){}
     if(S&&S.start){
       setTimeout(()=>updateCong(S.start), 200);
       // 홈 탭 복귀 시 출발역 폴링 재시작
@@ -35637,7 +35648,10 @@ function _sceneFit(){
   try{
     var sc = document.getElementById('congScene'), home = document.getElementById('tab-home');
     if(!sc || !home) return;
-    var last = _sceneSt.lastRes, fill = !!(last && last.mode === 'idle' && last.fill === true) && sc.style.display === 'block' && !!sc.offsetParent;
+    var last = _sceneSt.lastRes, modeFill = !!(last && last.mode === 'idle' && last.fill === true) && sc.style.display === 'block', fill = modeFill && !!sc.offsetParent;
+    // ★ 2026-10-17 (YJ: "다른 탭에 다녀오면 애니메이션 크기가 압축됐다가 다시 켜져"): 다른 탭에 가 있는 동안(홈이 숨겨져 offsetParent 가 없음)에는 맞춰 둔 높이를 지우지 않는다 —
+    //   예전엔 이때 높이를 비워 150px 로 접혔다가 돌아온 뒤에야 다시 키웠다. 장면이 '아예 없어졌거나 경로가 나온 경우'(modeFill 아님)만 평소 높이로 돌린다.
+    if(modeFill && !fill) return;
     if(!fill){ if(sc.style.height){ sc.style.height = ''; } if(home.getAttribute('data-hf')) home.removeAttribute('data-hf'); return; }
     var MIN = 90, cs = getComputedStyle(home);
     function slackNow(){                                                       // 지금 내용 아래에 남는(모자란) 세로 — 보이는 그대로 잰다
