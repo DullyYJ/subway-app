@@ -7118,6 +7118,7 @@ function _renderHtlTrack(sections, start, dest, totalMin) {
     return;
   }
 
+  try{ if(window._htlNat) window._htlNat.kick(); }catch(eHk){}   // 네이티브 타임라인(켜져 있을 때만)이 새 칸을 읽는다
   if(typeof _startTransitGpsTracking==='function') _startTransitGpsTracking(nodes);
 
   // ★ 승차 대기 모드 진입 판단
@@ -14087,10 +14088,331 @@ function _placeGpsMarkerSmooth(fromNd, toNd, ratio){
     ring.style.left = cx + 'px'; ring.style.top = yTop + 'px';
     ring.style.transform = 'translateX(-50%)'; ring.style.display = 'block';
   }
+  try{ if(window._htlNatMk) window._htlNatMk(cx, yTop + 7, snap, snap ? 0 : _transMs); }catch(eHn){}   // 네이티브 타임라인(켜져 있을 때만)에게 마커가 갈 곳을 알린다
   window._gpsMarkerNeedsSnap = false;   // 스냅 완료
   window._markerTransMsOverride = null;  // 1회성 오버라이드 해제
 }
 window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
+
+// ══════════════════════════════════════════════════════════════════════════
+// ★ 2026-10-17 네이티브 홈 경로 타임라인 (YJ: "앱 자체를 웹뷰에서 네이티브로 — 화면 단위 점진 이전, 첫 화면은 홈 경로 화면" / 네이티브 이전 P1)
+//   원칙은 그대로다 — 계산은 엔진이, 그림은 앱이. 경로·시각·마커 위치는 지금처럼 웹이 정하고(바뀐 것 없음), 이 코드는 웹이 이미 그린 칸(DOM)을 읽어
+//   HtlNative 플러그인에 그대로 넘기고 '칸이 어디 있는지·얼마나 스크롤됐는지·마커가 어디로 몇 ms 동안 가는지'만 알려 준다. 손가락은 웹뷰가 그대로 받는다(스크롤·탭 불변).
+//   · 안드로이드 앱 + HtlNative 플러그인이 있을 때만, 설정에서 켠 경우에만(기본 꺼짐 — 실기기 확인 뒤 기본값을 바꾼다). 웹/브라우저·플러그인 없음·꺼짐 = 예전 그대로.
+//   · 네이티브 화면은 WebView 위에 얹히므로 칸이 움직이는 동안(페이지 스크롤·화면 전환)·팝업이 덮는 동안에는 숨긴다 — 아래 웹 타임라인은 늘 그려져 있어 곧바로 이어진다(가로 스크롤은 숨기지 않고 따라간다).
+//   · 안전장치: 플러그인 오류·준비 지연(8초)·상태 이상 3번이면 즉시 웹 타임라인만 쓴다(네이티브 숨김). 연속 2번 실패하면 다음 실행부터 웹. 설정 스위치를 껐다 켜면 다시 시도.
+// ══════════════════════════════════════════════════════════════════════════
+(function(){
+  var K_ON = 'gdm_htl_on', K_F = 'gdm_htl_fail', K_W = 'gdm_htl_why';
+  var H = { on: false, fails: 0, failed: false, why: '', shown: false, ready: false, busy: false, busyAt: 0, again: false, hideBusy: false, hideAt: 0, timer: 0, tk: '', fast: 0,
+            listening: false, started: false, prevArg: null, prev: null, still: 0, cover: null, coverAt: 0, clipEls: null, clipAt: 0, cur: null, curKey: '', sent: '', exAt: 0, dirty: true,
+            mkT: null, mkSeen: null, mkOn: false, wbKey: '', sx: -1, hAt: 0, hFail: 0, hBusy: false, wait: 0, t0: 0, obs: null, kicked: false, showAt: 0 };
+  try{ H.on = localStorage.getItem(K_ON) === '1'; H.fails = parseInt(localStorage.getItem(K_F) || '0', 10) || 0; H.why = localStorage.getItem(K_W) || ''; }catch(eS){}
+  function plug(){ try{ var C = window.Capacitor; return (C && C.Plugins && C.Plugins.HtlNative) || null; }catch(e){ return null; } }
+  function active(){ return H.on && !H.failed && H.fails < 2 && !!plug(); }
+  function now(){ return (window.performance && performance.now) ? performance.now() : Date.now(); }
+  function wrapEl(){ return document.getElementById('transitHtlWrap'); }
+  function trackEl(){ return document.getElementById('transitHtlTrack'); }
+  function isMk(n){ var e = n && n.nodeType === 3 ? n.parentNode : n; var id = e && e.id; return id === 'htl-gps-marker-dot' || id === 'htl-gps-marker-ring' || id === 'htlWaitBadge'; }
+
+  // ── 칸 읽기(웹이 그린 DOM 그대로: 역명 · 노선 라벨 · 점/선 · 시각 네 줄) ──
+  function rgba(s, op){      // 계산된 색 → 'rgba(r,g,b,a)'(투명도 곱함). 못 읽으면 ''
+    var m = /rgba?\(([^)]+)\)/.exec(s || ''); if(!m) return '';
+    var p = m[1].split(/[\s,\/]+/).filter(Boolean), a = p.length > 3 ? parseFloat(p[3]) : 1;
+    a = (a == a ? a : 1) * (op == null ? 1 : op);
+    if(!(a > 0)) return '';
+    return 'rgba(' + Math.round(parseFloat(p[0])) + ',' + Math.round(parseFloat(p[1])) + ',' + Math.round(parseFloat(p[2])) + ',' + (Math.round(a * 1000) / 1000) + ')';
+  }
+  function opOf(el, stop){ var o = 1; while(el && el !== stop){ var v = parseFloat(getComputedStyle(el).opacity); if(v === v) o *= v; el = el.parentElement; } return o; }
+  function cellOf(k, tr){
+    var c = k.children, r1 = c[0], r2 = c[1], r3 = c[2], r4 = c[3];
+    var txt = function(el){ return String((el && el.textContent) || '').replace(/\s+/g, ' ').trim(); };
+    var ok = opOf(k, tr);                                                // 칸 자신의 투명도(지나간 칸 흐림 등) — 트랙은 뺀다
+    var o = { n: txt(r1), t: txt(r4), g: txt(r2), gp: false, x: k.offsetLeft, w: k.offsetWidth };
+    var s1 = getComputedStyle(r1); o.nc = rgba(s1.color, ok); o.nf = parseFloat(s1.fontSize) || 10; o.nb = (parseInt(s1.fontWeight, 10) || 400) >= 600;
+    var s4 = getComputedStyle(r4); o.tc = rgba(s4.color, ok); o.tf = parseFloat(s4.fontSize) || 9; o.tb = (parseInt(s4.fontWeight, 10) || 400) >= 600;
+    o.gc = ''; o.gf = 8;
+    if(o.g){
+      var sp = r2.querySelector('span'), sb = sp ? getComputedStyle(sp) : null, bgc = sb ? rgba(sb.backgroundColor, ok) : '';
+      if(bgc){ o.gp = true; o.gc = bgc; o.gf = parseFloat(sb.fontSize) || 7.5; }
+      else { var s2 = getComputedStyle(sp || r2); o.gc = rgba(s2.color, ok); o.gf = parseFloat(s2.fontSize) || 8; }
+    }
+    o.lc = ''; o.rc = ''; o.dc = ''; o.dk = 0;
+    var ds = r3.children;
+    for(var i = 0; i < ds.length; i++){
+      var e = ds[i], st = e.style || {}, cs = getComputedStyle(e);
+      if(st.height === '3px'){ var col = rgba(cs.backgroundColor, ok); if(st.left === '0px' || st.left === '0') o.lc = col; else o.rc = col; }
+      else if(st.borderRadius === '50%'){
+        if(st.width === '14px'){ o.dc = rgba(cs.backgroundColor, ok); o.dk = 2; }
+        else if(st.width === '12px'){ o.dc = rgba(cs.borderTopColor, ok); o.dk = 1; }
+        else { o.dk = 3; o.dc = rgba(cs.backgroundColor, ok) || (/rgba?\([^)]+\)/.exec(cs.backgroundImage || '') ? rgba(/rgba?\([^)]+\)/.exec(cs.backgroundImage)[0], ok) : ''); }
+      }
+    }
+    if(o.dk === 3 && !o.dc) o.dc = o.rc || o.lc || 'rgba(142,142,147,1)';
+    return o;
+  }
+  function bgOf(el){ while(el){ var b = getComputedStyle(el).backgroundColor, m = /rgba?\(/.test(b) && !/,\s*0\)$/.test(b) && b !== 'rgba(0, 0, 0, 0)'; if(m) return b; el = el.parentElement; } return 'rgb(255,255,255)'; }
+  function extract(){
+    var tr = trackEl(), w = wrapEl(); if(!tr || !w) return null;
+    var cells = [], ch = tr.children;
+    for(var i = 0; i < ch.length; i++){
+      var k = ch[i]; if(!k.children || k.children.length !== 4 || isMk(k)) continue;
+      try{ cells.push(cellOf(k, tr)); }catch(e){}
+    }
+    if(!cells.length) return null;
+    var th = { bg: rgba(bgOf(w)) || 'rgba(255,255,255,1)', fg: '', sub: '' };
+    try{ var ts = _ovlThemeColors(); th.fg = ts.fg; th.sub = ts.sub; }catch(e1){}
+    return { cells: cells, tw: tr.scrollWidth, theme: th };
+  }
+  function refresh(t, force){
+    if(!force && !H.dirty && t - H.exAt < 600) return;
+    H.dirty = false; H.exAt = t;
+    var c = null; try{ c = extract(); }catch(e){}
+    H.cur = c; H.curKey = c ? JSON.stringify([c.cells, c.tw, c.theme]) : '';
+  }
+
+  // ── 칸의 사각형 · 잘림 · 덮임(장면 네이티브와 같은 방식) ──
+  function clipEls(host){
+    var t = now(); if(H.clipEls && t - H.clipAt < 1000) return H.clipEls;
+    var list = [], a = host.parentElement;
+    while(a && a !== document.body && a !== document.documentElement){
+      try{ var cs = getComputedStyle(a); if(/(auto|scroll|hidden|clip)/.test(cs.overflowX + ' ' + cs.overflowY)) list.push(a); }catch(e){}
+      a = a.parentElement;
+    }
+    H.clipEls = list; H.clipAt = t; return list;
+  }
+  function measure(w, tr){
+    var wr = w.getBoundingClientRect(), tb = tr.getBoundingClientRect(), W = w.clientWidth, Ht = Math.min(tr.offsetHeight, w.clientHeight || tr.offsetHeight);
+    if(!(W > 8 && Ht > 8) || !w.offsetParent) return null;
+    var L = wr.left + w.clientLeft, T = tb.top;
+    var vl = Math.max(0, wr.left + w.clientLeft), vt = Math.max(0, wr.top + w.clientTop), vr = Math.min(window.innerWidth || 0, wr.left + w.clientLeft + W), vb = Math.min(window.innerHeight || 0, wr.top + w.clientTop + w.clientHeight);
+    clipEls(w).forEach(function(a){ var ar = a.getBoundingClientRect(); vl = Math.max(vl, ar.left); vt = Math.max(vt, ar.top); vr = Math.min(vr, ar.right); vb = Math.min(vb, ar.bottom); });
+    var il = Math.max(L, vl), it = Math.max(T, vt), ir = Math.min(L + W, vr), ib = Math.min(T + Ht, vb);
+    if(ir - il < 6 || ib - it < 6) return { x: L, y: T, w: W, h: Ht, vis: false };
+    return { x: L, y: T, w: W, h: Ht, vis: true, vl: il, vt: it, vr: ir, vb: ib };
+  }
+  function coverOf(w, m){
+    var top = m.vt, bottom = m.vb, left = m.vl, right = m.vr, cols = 5, rows = 3, i, j, g, el;
+    for(g = 0; g < 4; g++){
+      if(bottom - top < 24 || right - left < 40) return { cover: true };
+      var hit = null;
+      for(j = 0; j < rows && !hit; j++) for(i = 0; i < cols && !hit; i++){
+        el = document.elementFromPoint(left + 3 + (right - left - 6) * i / (cols - 1), top + 3 + (bottom - top - 6) * j / (rows - 1));
+        if(el && el !== w && !w.contains(el)) hit = el;
+      }
+      if(!hit) return { cover: false, vt: top, vb: bottom };
+      var o = hit, a = hit; while(a && a !== document.body && a !== document.documentElement){ o = a; a = a.parentElement; if(a && a.contains(w)) break; }
+      var er = o.getBoundingClientRect(), mid = (top + bottom) / 2;
+      if(er.width >= (right - left) * 0.6 && er.top >= mid - 1) bottom = Math.max(top, Math.min(bottom, er.top));
+      else if(er.width >= (right - left) * 0.6 && er.bottom <= mid + 1) top = Math.min(bottom, Math.max(top, er.bottom));
+      else return { cover: true };
+    }
+    return { cover: true };
+  }
+  function desired(w, tr, t){
+    var m = measure(w, tr);
+    if(!m || !m.vis) return { mode: 'off', m: m };
+    if(!H.cover || t - H.coverAt > 150 || H.still < 1){ H.cover = coverOf(w, m); H.coverAt = t; }
+    var c = H.cover; if(c.cover) return { mode: 'cover', m: m };
+    var vt = Math.max(m.vt, c.vt != null ? c.vt : m.vt), vb = Math.min(m.vb, c.vb != null ? c.vb : m.vb);
+    if(vb - vt < 6) return { mode: 'cover', m: m };
+    return { mode: 'rect', m: m, clip: { l: m.vl - m.x, t: vt - m.y, r: m.vr - m.x, b: vb - m.y } };
+  }
+  function rectArg(d){
+    var m = d.m, o = { x: m.x, y: m.y, w: m.w, h: m.h, dpr: window.devicePixelRatio || 1 };
+    if(d.clip) o.clip = { l: d.clip.l, t: d.clip.t, r: d.clip.r, b: d.clip.b };
+    return o;
+  }
+  function same(a, b){
+    if(!a || !b) return false;
+    function q(x){ return Math.abs(a[x] - b[x]) < 0.5; }
+    if(!(q('x') && q('y') && q('w') && q('h'))) return false;
+    var ca = a.clip, cb = b.clip; if(!ca && !cb) return true; if(!ca || !cb) return false;
+    return Math.abs(ca.l - cb.l) < 0.5 && Math.abs(ca.t - cb.t) < 0.5 && Math.abs(ca.r - cb.r) < 0.5 && Math.abs(ca.b - cb.b) < 0.5;
+  }
+
+  // ── 마커(웹 점이 가는 곳을 그대로) ──
+  function dotEl(){ return window._htlGpsDot || document.getElementById('htl-gps-marker-dot'); }
+  function mkState(){
+    var d = dotEl(), tr = trackEl();
+    if(!d || !tr || d.parentNode !== tr || d.style.display !== 'block') return { on: false };
+    var cs = getComputedStyle(d), b = document.getElementById('htlWaitBadge');
+    return { on: true, x: parseFloat(cs.left) || 0, y: (parseFloat(cs.top) || 0) + 7, tx: parseFloat(d.style.left) || 0, ty: (parseFloat(d.style.top) || 0) + 7,
+             wait: d.classList.contains('htl-gps-wait'), badge: (b && b.style.display !== 'none') ? String(b.textContent || '') : '' };
+  }
+  function sendMk(P, first){
+    var s = mkState();
+    if(!s.on){ if(H.mkOn){ H.mkOn = false; P.marker({ on: false }); } return; }
+    var T = H.mkT;
+    if(first || !H.mkOn){                                      // 처음 켤 때: 웹 점이 지금 있는 자리(이동 중이면 그 순간 위치)로 놓고, 남은 이동을 이어 간다
+      H.mkOn = true; H.mkSeen = T; H.wbKey = s.wait + '|' + s.badge;
+      P.marker({ on: true, x: s.x, y: s.y, ms: 0, snap: true, wait: s.wait, badge: s.badge });
+      var rem = T ? Math.max(0, T.ms - (now() - T.at)) : 0;
+      if(rem > 50 && Math.abs(s.tx - s.x) > 0.5) P.marker({ on: true, x: s.tx, y: s.ty, ms: rem, snap: false, wait: s.wait, badge: s.badge });
+      return;
+    }
+    if(T && T !== H.mkSeen){ H.mkSeen = T; H.wbKey = s.wait + '|' + s.badge; P.marker({ on: true, x: T.x, y: T.y, ms: T.ms, snap: T.snap, wait: s.wait, badge: s.badge }); return; }
+    var wb = s.wait + '|' + s.badge;
+    if(wb !== H.wbKey){ H.wbKey = wb; P.marker({ on: true, wait: s.wait, badge: s.badge }); }       // 위치 없이 깜박임·뱃지만 바꾼다
+  }
+  window._htlNatMk = function(x, y, snap, ms){          // _placeGpsMarkerSmooth 가 알려 준다
+    H.mkT = { x: x, y: y, ms: ms || 0, snap: !!snap, at: now() };
+    if(H.shown && !H.busy && !H.hideBusy){ var P = plug(); if(P){ try{ sendMk(P, false); }catch(e){ fail('marker: ' + (e && e.message || e)); } } }
+  };
+
+  // ── 켜고 끄기 ──
+  function fail(why){
+    if(H.failed || !H.on) return;
+    H.failed = true; H.fails++; H.why = String(why || '').slice(0, 140);
+    try{ localStorage.setItem(K_F, String(H.fails)); localStorage.setItem(K_W, H.why); }catch(e){}
+    try{ console.warn('[네이티브 타임라인] 웹 타임라인만 씁니다:', H.why); }catch(e1){}
+    end(true); syncCard();
+  }
+  function end(destroy){
+    cancel();
+    H.shown = false; H.busy = false; H.again = false; H.hideBusy = false; H.sent = ''; H.prevArg = null; H.prev = null; H.still = 0; H.cover = null; H.mkOn = false; H.mkSeen = null; H.wbKey = ''; H.sx = -1; H.wait = 0; if(destroy) H.ready = false;
+    var P = plug(); try{ if(P && (H.started || destroy)) (destroy ? P.destroy() : P.hide()); }catch(e){}
+  }
+  function hideNative(){
+    if(H.hideBusy) return;
+    var P = plug(); if(!P) return;
+    H.hideBusy = true; H.hideAt = now();
+    function done(){ H.shown = false; H.hideBusy = false; H.prevArg = null; H.mkOn = false; H.sent = ''; }
+    try{ P.hide().then(done, done); }catch(e){ done(); }
+  }
+  function payload(){ var c = H.cur; return c ? { cells: c.cells, tw: c.tw, theme: c.theme, sx: (wrapEl() ? wrapEl().scrollLeft : 0) } : null; }
+  function busyDone(){ H.busy = false; if(H.again){ H.again = false; H.fast = now() + 400; sched(); } }
+  function live(d){
+    var P = plug(); if(!P) return;
+    if(H.busy || H.hideBusy){ H.again = true; return; }
+    var arg = rectArg(d), pl = payload(); if(!pl) return;
+    H.busy = true; H.busyAt = now();
+    if(!H.shown){
+      var key = H.curKey;
+      for(var k in pl) arg[k] = pl[k];
+      P.show(arg).then(function(){
+        H.shown = true; H.started = true; H.prevArg = rectArg(d); H.sent = key; H.sx = pl.sx; H.showAt = now();
+        try{ sendMk(P, true); }catch(e){ fail('marker: ' + (e && e.message || e)); }
+        busyDone();
+      }, function(e){ H.busy = false; fail('show: ' + ((e && e.message) || e)); });
+      return;
+    }
+    var steps = [];
+    if(!same(H.prevArg, arg)){ H.prevArg = arg; steps.push(P.setRect(arg)); }
+    if(H.curKey !== H.sent){ var k2 = H.curKey; steps.push(P.update(pl).then(function(){ H.sent = k2; H.sx = pl.sx; })); }
+    var w = wrapEl(); if(w && Math.abs(w.scrollLeft - H.sx) >= 0.5){ H.sx = w.scrollLeft; steps.push(P.scroll({ sx: H.sx })); }
+    try{ sendMk(P, false); }catch(e2){ H.busy = false; fail('marker: ' + (e2 && e2.message || e2)); return; }
+    if(!steps.length){ H.busy = false; return; }
+    Promise.all(steps).then(busyDone, function(e){ H.busy = false; fail('rect: ' + ((e && e.message) || e)); });
+  }
+  function health(t){
+    var P = plug();
+    if(!P || typeof P.status !== 'function' || !H.shown || H.busy || H.hideBusy || H.hBusy) return;
+    if(t - H.hAt < 2000) return;
+    H.hAt = t; H.hBusy = true;
+    function bad(why){ H.hFail++; H.shown = false; H.sent = ''; H.prevArg = null; H.mkOn = false; H.still = 4; try{ console.warn('[네이티브 타임라인] 되살림:', why); }catch(e){}; if(H.hFail >= 3) fail('멈춤 3번 — ' + why); }
+    try{
+      P.status().then(function(st){
+        H.hBusy = false;
+        if(!H.shown || !st) return;
+        if(st.visible === false) return bad('네이티브가 숨어 있다');
+        if(typeof st.cells === 'number' && st.cells === 0 && H.cur && H.cur.cells.length) return bad('칸이 비어 있다');
+        if(H.mkOn && typeof st.age === 'number' && st.age >= 0 && st.age > 1500) return bad('마커 시계가 죽었다 ' + st.age + 'ms');
+        H.hFail = 0;
+      }, function(){ H.hBusy = false; });
+    }catch(e){ H.hBusy = false; }
+  }
+
+  // ── 반복 확인(움직임 신호가 있으면 프레임마다, 없으면 느리게) ──
+  function cancel(){ if(!H.timer) return; try{ if(H.tk === 'raf') cancelAnimationFrame(H.timer); else clearTimeout(H.timer); }catch(e){} H.timer = 0; H.tk = ''; }
+  function wake(){ if(!active()) return; H.fast = now() + 800; if(!H.timer || H.tk !== 'raf') sched(true); }
+  function sched(immediate){
+    if(!active() || !H.kicked) return;
+    if(H.timer && !immediate) return;
+    cancel();
+    var fast = now() < H.fast;
+    if(fast && typeof requestAnimationFrame === 'function'){ H.tk = 'raf'; H.timer = requestAnimationFrame(tick); }
+    else { H.tk = 'to'; H.timer = setTimeout(tick, H.shown ? 150 : 300); }
+  }
+  function tick(){
+    H.timer = 0; H.tk = '';
+    try{
+      if(!active()) return;
+      var w = wrapEl(), tr = trackEl(), t = now();
+      if(!w || !tr){ H.tk = 'to'; H.timer = setTimeout(tick, 800); return; }
+      if(H.shown && !H.ready){ H.wait += Math.min(500, t - (H.t0 || t)); if(H.wait > 8000){ fail('8초 안에 첫 그림이 안 나왔다'); return; } }
+      H.t0 = t;
+      if(H.busy && t - H.busyAt > 2500){ H.busy = false; H.again = false; H.shown = false; H.sent = ''; }       // 응답이 영영 안 오는 호출을 놓아준다
+      if(H.hideBusy && t - H.hideAt > 2500){ H.hideBusy = false; H.shown = false; H.sent = ''; }
+      if(document.hidden){ if(H.shown) hideNative(); H.tk = 'to'; H.timer = setTimeout(tick, 500); return; }
+      refresh(t, false);
+      var d = H.cur ? desired(w, tr, t) : { mode: 'off', m: null };
+      var m = d.m, moved = true;
+      if(m && H.prev) moved = !(Math.abs(H.prev.x - m.x) < 0.5 && Math.abs(H.prev.y - m.y) < 0.5 && Math.abs(H.prev.w - m.w) < 0.5 && Math.abs(H.prev.h - m.h) < 0.5);
+      H.prev = m ? { x: m.x, y: m.y, w: m.w, h: m.h } : null;
+      H.still = moved ? 0 : H.still + 1;
+      if(d.mode === 'off'){ if(H.shown) hideNative(); H.still = 0; }
+      else if(d.mode === 'cover' || moved || H.still < 4){ if(H.shown) hideNative(); H.fast = Math.max(H.fast, t + 300); }      // 움직이는 중·덮여 있음 → 웹 타임라인
+      else { live(d); health(t); }                                                                                                  // 4프레임(≈0.07초) 가만히 있으면 네이티브를 켠다
+    }catch(e){ try{ console.warn('[네이티브 타임라인 tick]', e); }catch(e1){} }
+    sched();
+  }
+  function onScroll(){ if(!H.shown || H.busy || H.hideBusy) return; var w = wrapEl(), P = plug(); if(!w || !P) return; if(Math.abs(w.scrollLeft - H.sx) < 0.5) return; H.sx = w.scrollLeft; try{ P.scroll({ sx: H.sx }); }catch(e){ fail('scroll: ' + (e && e.message || e)); } }
+  function listen(){
+    var P = plug(); if(!P || H.listening) return; H.listening = true;
+    try{
+      P.addListener('ready', function(){ H.ready = true; H.wait = 0; H.fails = 0; try{ localStorage.setItem(K_F, '0'); }catch(e){} syncCard(); });
+      P.addListener('error', function(e){ fail('native: ' + ((e && e.message) || '')); });
+    }catch(e){ fail('listen: ' + e); return; }
+    ['resize', 'orientationchange', 'touchstart', 'transitionstart', 'transitionend', 'animationstart'].forEach(function(n){ window.addEventListener(n, wake, true); });
+    window.addEventListener('scroll', wake, true);
+    try{ document.addEventListener('visibilitychange', wake); }catch(e3){}
+    try{ var w = wrapEl(); if(w) w.addEventListener('scroll', onScroll, { passive: true }); }catch(e4){}
+  }
+  function watch(){
+    if(H.obs || typeof MutationObserver !== 'function') return;
+    var tr = trackEl(); if(!tr) return;
+    try{
+      H.obs = new MutationObserver(function(recs){
+        for(var i = 0; i < recs.length; i++){
+          var r = recs[i];
+          if(r.type === 'childList'){ var all = true, ns = [].slice.call(r.addedNodes).concat([].slice.call(r.removedNodes)); for(var j = 0; j < ns.length; j++) if(!isMk(ns[j])) all = false; if(all && ns.length) continue; }
+          else if(isMk(r.target) || (r.target && r.target.closest && r.target.closest('#htl-gps-marker-dot,#htl-gps-marker-ring,#htlWaitBadge'))) continue;
+          H.dirty = true; return;
+        }
+      });
+      H.obs.observe(tr, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['style', 'class'] });
+    }catch(e){ H.obs = null; }
+  }
+  // 타임라인을 (다시) 그렸다 — 앱이 _renderHtlTrack 끝에서 알려 준다
+  function kick(){
+    if(!active()) return;
+    H.kicked = true; H.dirty = true; H.cover = null; listen(); watch(); H.fast = now() + 800; sched(true);
+  }
+  function setUse(on){
+    try{ localStorage.setItem(K_ON, on ? '1' : '0'); if(on){ localStorage.setItem(K_F, '0'); localStorage.setItem(K_W, ''); } }catch(e){}
+    if(on){ H.on = true; H.failed = false; H.fails = 0; H.why = ''; kick(); }
+    else { H.on = false; end(true); }
+    syncCard();
+  }
+  function syncCard(){
+    try{
+      var card = document.getElementById('htlSetCard'); if(!card) return;
+      if(!plug()){ card.style.display = 'none'; return; }
+      card.style.display = 'block';
+      var cb = document.getElementById('htlSetOn'), st = document.getElementById('htlSetStat');
+      if(cb) cb.checked = H.on && H.fails < 2;
+      var s;
+      if(!H.on) s = '꺼짐 — 예전 방식(웹 화면)으로 그려요.';
+      else if(H.failed || H.fails >= 2) s = '네이티브 경로 화면에 문제가 있어 웹 화면으로 대신 보여주고 있어요' + (H.why ? ' (' + H.why + ')' : '') + '. 스위치를 껐다 켜면 다시 시도해요.';
+      else s = '켜짐 — 경로 화면의 타임라인과 현재 위치 점을 기기가 직접 그려요(실험 중).';
+      if(st) st.textContent = s;
+    }catch(e){}
+  }
+  window._htlNat = { H: H, kick: kick, setUse: setUse, syncCard: syncCard, active: active, extract: extract, tick: tick };
+  window._htlSetUse = function(on){ try{ setUse(on); }catch(e){} };
+  try{ if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(function(){ try{ syncCard(); kick(); }catch(e){} }, 500); }); else setTimeout(function(){ try{ syncCard(); kick(); }catch(e){} }, 500); }catch(eH){}
+})();
 
 // 남은 소요시간(분) — 마지막 arrTime 기준 (시간 경과에 따라 감소)
 function _routeRemainingMin(){
@@ -19533,6 +19855,21 @@ window.addEventListener('unhandledrejection', function(e) {
         <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">캐릭터 장면을 기기가 직접 그려서 더 부드럽고(최대 120Hz), 캐릭터를 꾹 눌러 옮기고 놓을 때 진동이 와요. 문제가 있으면 꺼서 예전 방식으로 볼 수 있어요.</p>
         <div id="snSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
         <style>#snSetOn:checked ~ #snSetKnob{background:var(--gold) !important;} #snSetOn:checked ~ #snSetDot{left:23px !important;}</style>
+      </div>
+
+      <!-- ★ 2026-10-17: 네이티브 경로 화면(홈 타임라인) — 안드로이드 앱에서만 보임, 기본 꺼짐(실험) -->
+      <div id="htlSetCard" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <div style="font-size:15px;font-weight:800;color:var(--text);">🧪 네이티브 경로 화면</div>
+          <label style="position:relative;display:inline-block;width:46px;height:26px;">
+            <input type="checkbox" id="htlSetOn" onchange="_htlSetUse(this.checked)" style="opacity:0;width:0;height:0;">
+            <span id="htlSetKnob" style="position:absolute;inset:0;border-radius:13px;background:var(--border2);transition:.2s;cursor:pointer;"></span>
+            <span id="htlSetDot" style="position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.3);"></span>
+          </label>
+        </div>
+        <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">홈 경로 화면의 가로 타임라인과 현재 위치 점을 웹이 아니라 기기가 직접 그려요(앱 전체를 네이티브로 옮기는 첫 단계). 문제가 있으면 자동으로 예전 방식으로 돌아가요.</p>
+        <div id="htlSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
+        <style>#htlSetOn:checked ~ #htlSetKnob{background:var(--gold) !important;} #htlSetOn:checked ~ #htlSetDot{left:23px !important;}</style>
       </div>
 
       <!-- ★ 2026-10-03: 도착 오차 익명 기록 (끌 수 있음) -->

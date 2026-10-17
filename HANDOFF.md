@@ -935,3 +935,28 @@
 1. 이번 APK 에서 도착 전 순서(오버레이 네이티브 변경)가 실기기에서 잘 도는지 확인(`🧪 오버레이 테스트`).
 2. P1: `HtlCore.java`(순수 자바: 칸 폭·스크롤 한계·현위치 가운데 맞춤·관성) + `HtlView`/`HtlNativePlugin`(Capacitor "HtlNative": show·setRect·update·hide·snapshot·status) + JS 연결을 장면의 `nat*` 함수들에서 공통 함수로 뽑아 두 군데가 같이 쓰게 한다. 패리티 시험: 같은 칸 목록을 웹 DOM 과 자바 코어가 같은 칸 위치·색·글자로 내는지.
 3. 설정 카드에 스위치 + 실패 이유 표시(장면 카드 `#snSetCard` 와 같은 모양).
+
+## 2026-10-17(11) 네이티브 이전 P1 구현 — 홈 경로 화면 가로 타임라인 (설정 스위치 `🧪 네이티브 경로 화면`, 기본 꺼짐)
+(YJ: "핸드오프는 실패했어. 일단 점진적 네이티브 진행해줘" — 실패 원인은 불안정한 `cong_scene.ui` 시험이었고 (커밋 1046c14) 안정화함)
+
+**구조(원칙 그대로: 계산은 엔진·웹이, 그림은 네이티브가)**
+- `native/HtlCore.java` — 순수 자바(안드로이드·네트워크·시계 없음). 칸을 가로 좌표에 놓기 · 스크롤 한계 · 보이는 칸 · 마커의 선형 이동(웹 `left Nms linear` 와 같음) · CSS 색(`#rgb`·`#rrggbb`·`#aarrggbb`·`rgb()`·`rgba()`) 읽기. JVM 시험 `test/java/HtlJvmTest.java`(29개).
+- `native/HtlView.java` — 칸 4줄(이름·노선 라벨/배지·선과 점·시각)과 마커(점·번지는 고리·승차 대기 주황 맥박·뱃지)를 그린다. 손가락은 받지 않는다(`dispatchTouchEvent`/`onTouchEvent` 가 false) → 웹뷰가 그대로 스크롤·탭을 받는다.
+- `native/HtlNativePlugin.java` — Capacitor "HtlNative": `show · setRect · update · scroll · marker · hide · destroy · status`, 이벤트 `ready`(첫 그림)·`error`. `marker` 는 `x` 가 없으면 `wait`·`badge` 만 바꾼다.
+- `www/index.html` — `_placeGpsMarkerSmooth` 뒤의 즉시실행 블록(`window._htlNat`): 웹이 그린 DOM 칸을 읽어(이름·시각·노선 라벨·점/선/글자 색(rgba·투명도 반영)·글자 크기·칸 x/폭) 플러그인에 넘기고, 칸 사각형·가로 스크롤·마커(`_placeGpsMarkerSmooth` 끝의 `_htlNatMk` 훅이 목표 x·y·ms·snap 을 알림)만 전달. `_renderHtlTrack` 끝에서 `_htlNat.kick()`.
+- 설정 카드 `#htlSetCard`(플러그인이 있을 때만 보임) · 키 `gdm_htl_on`(기본 꺼짐) · `gdm_htl_fail` · `gdm_htl_why`.
+
+**동작 규칙**
+- 칸이 세로로 움직이는 동안(페이지 스크롤·화면 전환)·팝업이 덮는 동안·다른 탭에서는 네이티브를 숨긴다 — 웹 타임라인을 숨기지 않고 늘 그려 두기 때문에 곧바로 웹이 이어받는다. 약 4프레임 가만히 있으면 다시 켠다. 가로 스크롤은 숨기지 않고 `scroll({sx})` 로 따라간다.
+- 다시 켤 때 마커는 웹 점이 있는 자리(이동 중이면 그 순간의 위치)에 먼저 놓고 남은 이동을 잇는다.
+- 안전장치: `error` 이벤트·`show` 거절·8초 안에 첫 그림(`ready`) 없음·상태 점검(2초마다) 3번 이상 → `fail()` = destroy + 웹만 사용 + 실패 횟수 저장, 2번 누적되면 다음 실행부터 안 씀. `ready` 가 오면 횟수 0. 설정 스위치를 껐다 켜면 다시 시도.
+- 상태 점검에서 `age`(마지막 그림 후 경과)는 마커가 보일 때만 본다(정지 화면은 다시 그리지 않으므로).
+
+**시험**: `test/htl_native.test.js`(JVM·android.jar 컴파일·구조) · `test/htl_native_js.ui.test.js`(가짜 플러그인: 꺼짐/없음=호출 0, 칸·색·점 모양·자리 패리티, 마커 snap/이동/대기 뱃지, 가로 스크롤 추적, 세로 이동·팝업 덮임 시 숨김/재개, 재렌더·테마 변경 시 update, error·show 거절·누적 실패·ready·상태 이상 3번·스위치 끔/켬). CI 매트릭스에 둘 다 등록, `MainActivity` 생성부에 `registerPlugin(HtlNativePlugin.class)`.
+
+**정직한 한계 / 실기기에서 볼 것**
+- 아직 실기기 미확인(APK 로 확인 필요). 웹 타임라인이 네이티브 밑에 그대로 그려져 있어 지금 단계는 '그림 주체 교체'일 뿐 배터리·속도 이득은 거의 없다(P2 이후 웹 칸을 숨기면서 생김).
+- 가로 스크롤을 웹뷰가 받고 네이티브가 따라가므로 1~2프레임 늦게 따라올 수 있다 — 거슬리면 스크롤 중에도 숨기는 쪽으로 바꿀 수 있다(`H.fast` 구간).
+- 글꼴은 웹(Noto Sans KR)과 기기 기본(Typeface.DEFAULT)이 달라 글자 폭이 조금 다를 수 있다. 마커는 점·고리·대기 맥박·뱃지만 재현.
+- 칸 탭·길게 누르기(P3), 지나간 역 흐림 등 CSS 상태 완전 이관(P2), 카드 머리줄·버튼 행(P4)은 아직.
+- 확인 순서: 설정 → `🧪 네이티브 경로 화면` 켜기 → 경로 화면에서 ① 칸 모양이 웹과 같은지 ② 가로로 넘길 때 ③ 위아래로 스크롤할 때 깜박임 ④ 팝업이 덮일 때 ⑤ 현재 위치 점이 움직일 때 ⑥ 다크/파스텔 전환.

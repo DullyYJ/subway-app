@@ -38,8 +38,10 @@ jobs:
           - scene_engine.test.js
           - scene_native_java.test.js
           - scene_native_js.ui.test.js
+          - htl_native_js.ui.test.js
           - keyboard_pan.test.js
           - row_native.test.js
+          - htl_native.test.js
           - route_row.ui.test.js
           - overlay_pill_native.test.js
           - overlay_reco.ui.test.js
@@ -200,7 +202,9 @@ jobs:
                       "native/SceneHaptics.java", "native/AndroidCv.java", "native/SceneDriver.java", "native/SceneHost.java", "native/SceneNativePlugin.java",
                       "native/SceneCompose.kt",
                       # 2026-10-16: 경로 카드 버튼 줄(탑승·환승·도착) 전환 연출
-                      "native/RowCore.java", "native/RowOverlayView.java", "native/RowNativePlugin.java"]:
+                      "native/RowCore.java", "native/RowOverlayView.java", "native/RowNativePlugin.java",
+                      # 2026-10-17: 홈 경로 화면 가로 타임라인 네이티브(점진 이전 P1)
+                      "native/HtlCore.java", "native/HtlView.java", "native/HtlNativePlugin.java"]:
               if not os.path.exists(src):
                   raise SystemExit(src + " 가 없습니다 — 저장소에 올렸는지 확인하세요")
               shutil.copy(src, os.path.join(PKGDIR, os.path.basename(src)))
@@ -237,6 +241,7 @@ jobs:
               "        registerPlugin(NativeMapPlugin.class);",
               "        registerPlugin(SceneNativePlugin.class);",
               "        registerPlugin(RowNativePlugin.class);",
+              "        registerPlugin(HtlNativePlugin.class);",
               "        registerPlugin(GdmWidgetPlugin.class);",
               "        registerPlugin(GdmSharePlugin.class);",
               "        super.onCreate(savedInstanceState);",
