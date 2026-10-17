@@ -94,8 +94,9 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     assert(i.actors.length === 1 && i.actors[0].hero && i.actors[0].st && !i.err, JSON.stringify(i));
     const hero = sb.hero;
     let h = await hintTxt(page); assert(h.show && h.txt === '지하철을 타면 혼잡도가 표시돼요', JSON.stringify(h));
+    for (let k = 0; k < 30; k++) { const hgt = await page.evaluate(() => document.getElementById('congScene').getBoundingClientRect().height); if (Math.abs(hgt - 150) < 0.6) break; await page.waitForTimeout(100); }      // 높이 전환(0.5초)이 끝날 때까지(느린 CI 에서 149.89 로 재던 간헐 실패)
     const pos = await page.evaluate(() => { const e = document.getElementById('congBusHint'), t = document.querySelector('#congCard').previousElementSibling; const r = e.getBoundingClientRect(), tr = t.getBoundingClientRect(); return { sameRow: e.parentElement === t, dy: Math.abs((r.top + r.bottom) / 2 - (tr.top + tr.bottom) / 2), w: r.width, sh: document.getElementById('congScene').getBoundingClientRect().height }; });
-    assert(pos.sameRow && pos.dy < 14 && pos.w > 60 && pos.sh === 150, '"혼잡도 분석" 제목줄에 문구, 버스 장면은 150px ' + JSON.stringify(pos));
+    assert(pos.sameRow && pos.dy < 14 && pos.w > 60 && Math.abs(pos.sh - 150) < 0.6, '"혼잡도 분석" 제목줄에 문구, 버스 장면은 150px ' + JSON.stringify(pos));
     let c = await cardState(page); assert(c.cs && !c.grid && !c.chart, '버스 구간엔 혼잡도 없이 장면만 ' + JSON.stringify(c));
     await go(page, 2, true); sb = await sceneBox(page); assert(sb.mode === 'ride' && /타고/.test(sb.tag) && sb.hero === hero, '타고 가는 중 ' + JSON.stringify(sb));
     await go(page, 3, true); sb = await sceneBox(page); assert(sb.mode === 'ride' && /곧 내려요/.test(sb.tag), '내리기 직전(하차벨) ' + JSON.stringify(sb));
