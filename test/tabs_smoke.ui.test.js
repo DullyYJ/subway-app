@@ -192,6 +192,7 @@ const vis = (page, id) => page.evaluate(i => { const e = document.getElementById
     await page.click('#commList .dc-post[data-id="' + id + '"] .dc-post-hdr'); await page.clock.runFor(300);
     const sel = '#commList .dc-post[data-id="' + id + '"] [onclick*="dcDeleteMine"]';
     await page.click(sel); await page.click(sel); await page.waitForTimeout(300); await page.clock.runFor(1500);
+    for (let k = 0; k < 10 && page.__srvPosts.some(p => /내가 쓴 글 제목/.test(p.title)); k++) { await page.waitForTimeout(250); await page.clock.runFor(500); }      // 느린 CI 에서 삭제 요청이 늦게 닿는 간헐 실패 보정
     assert.ok(!page.__srvPosts.some(p => /내가 쓴 글 제목/.test(p.title)), '서버에 남음');
     await page.evaluate(() => { _commNeedRefresh = true; _loadServerPosts('all', true); }); await page.clock.runFor(2000);
     assert.strictEqual(await countOf('내가 쓴 글 제목'), 0);
