@@ -191,7 +191,9 @@ const vis = (page, id) => page.evaluate(i => { const e = document.getElementById
     const id = await page.evaluate(() => (_myPosts.find(p => /내가 쓴 글 제목/.test(p.title)) || {}).id);
     await page.click('#commList .dc-post[data-id="' + id + '"] .dc-post-hdr'); await page.clock.runFor(300);
     const sel = '#commList .dc-post[data-id="' + id + '"] [onclick*="dcDeleteMine"]';
-    await page.click(sel); await page.click(sel); await page.waitForTimeout(300); await page.clock.runFor(1500);
+    // 느린 CI 에서 page.click 이 '요소가 안정될 때까지' 30초를 기다리다 실패하던 간헐 문제 → 같은 onclick 을 DOM 에서 직접 두 번 누른다(첫 번째는 확인 상태로 바뀌고 다시 그려질 수 있어 매번 새로 찾는다)
+    const tapDom = () => page.evaluate((id) => { const b = document.querySelector('#commList .dc-post[data-id="' + id + '"] [onclick*="dcDeleteMine"]'); if (b) b.click(); return !!b; }, id);
+    assert.ok(await tapDom(), '삭제 버튼이 있다'); await page.waitForTimeout(150); assert.ok(await tapDom(), '확인 상태에서도 삭제 버튼이 있다'); await page.waitForTimeout(300); await page.clock.runFor(1500);
     for (let k = 0; k < 10 && page.__srvPosts.some(p => /내가 쓴 글 제목/.test(p.title)); k++) { await page.waitForTimeout(250); await page.clock.runFor(500); }      // 느린 CI 에서 삭제 요청이 늦게 닿는 간헐 실패 보정
     assert.ok(!page.__srvPosts.some(p => /내가 쓴 글 제목/.test(p.title)), '서버에 남음');
     await page.evaluate(() => { _commNeedRefresh = true; _loadServerPosts('all', true); }); await page.clock.runFor(2000);
