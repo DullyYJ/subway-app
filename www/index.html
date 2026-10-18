@@ -14476,7 +14476,7 @@ window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
       try{
         if(!active()) return;
         var w = cfg.host(), t = now();
-        if(!w){ H.tk = 'to'; H.timer = setTimeout(tick, 800); return; }
+        if(!w){ if(H.shown && !H.hideBusy) hideNative(); H.tk = 'to'; H.timer = setTimeout(tick, H.shown ? 150 : 800); return; }      // 칸이 사라졌으면(맛집 목록 다시 그림 등) 네이티브도 곧바로 거둔다
         if(H.shown && !H.ready){ H.wait += Math.min(500, t - (H.t0 || t)); if(H.wait > 8000){ G_fail('8초 안에 첫 그림이 안 나왔다(' + id + ')'); return; } }
         H.t0 = t;
         if(H.busy && t - H.busyAt > 2500){ H.busy = false; H.again = false; H.shown = false; H.sent = ''; }       // 응답이 영영 안 오는 호출을 놓아준다
