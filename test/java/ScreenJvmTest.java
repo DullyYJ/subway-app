@@ -337,6 +337,35 @@ public class ScreenJvmTest {
         long fms = (System.nanoTime() - tf) / 1000000L;
         ok(fms < 300 && fbig.body.length == 300 && fbig.bodyRange(0f, 700f)[1] < 20, "카드 300장 읽기+배치 " + fms + "ms · 보이는 건 몇 장만");
 
+        // ── 뉴스 화면: 뉴스 줄(news) ──
+        String nwJ = "{\"t\":\"news\",\"pad\":[14,0,14,0],\"title\":\"코스피 급등 소식\",\"sub\":\"증시 · 3분 전\",\"act\":{\"a\":\"call\",\"v\":\"nw.4\"}}";
+        String nchipsJ = "{\"t\":\"chips\",\"pad\":[14,4,14,6],\"gap\":6,\"h\":30,\"onc\":\"gold\",\"onfg\":\"#121214\",\"items\":[{\"label\":\"전체\",\"on\":true,\"act\":{\"a\":\"cat\",\"v\":\"전체\"}},{\"label\":\"증시\",\"act\":{\"a\":\"cat\",\"v\":\"증시\"}}]}";
+        String newsJ = "{\"ok\":true,\"v\":1,\"screen\":\"news\",\"rev\":\"n1:x\",\"cover\":\"tab\",\"head\":[" + nchipsJ + "],\"body\":[{\"t\":\"spacer\",\"h\":8}," + nwJ + "," + nwJ.replace("nw.4", "nw.9").replace("코스피 급등 소식", "아주 긴 기사 제목 아주 긴 기사 제목 아주 긴 기사 제목 아주 긴 기사 제목 아주 긴 기사 제목 아주 긴 기사 제목 아주 긴 기사 제목 아주 긴 기사 제목 아주 긴 기사 제목 아주 긴 기사 제목 아주 긴 기사 제목 아주 긴 기사 제목 아주 긴 기사 제목 아주 긴 기사 제목") + ",{\"t\":\"spacer\",\"h\":72}]}";
+        ScreenCore.Screen ns = ScreenCore.load(newsJ);
+        ok(ns.head.size() == 1 && ns.body.size() == 4 && ns.skipped == 0, "뉴스 화면을 읽는다(모르는 노드 없음)");
+        ok(bad(newsJ.replace("\"title\":\"코스피 급등 소식\",", "")), "news 는 title 필수");
+        ok(bad(newsJ.replace("\"act\":{\"a\":\"call\",\"v\":\"nw.4\"}", "\"x\":1")), "news 는 act 필수");
+        ok(bad(newsJ.replace("\"v\":\"nw.4\"", "\"v\":\"nw 4\"")), "news 행동 이름이 올바르지 않으면 거절");
+        ScreenCore.Screen oldNs = ScreenCore.load(newsJ.replace("\"t\":\"news\"", "\"t\":\"future3\""));
+        ok(oldNs.skipped == 2 && oldNs.body.size() == 2, "뉴스 줄을 모르는 옛 앱은 건너뛴다(깨지지 않음)");
+        ScreenCore.Layout NL = ScreenCore.layout(ns, 360f, M);
+        ScreenCore.Item n0 = NL.body[0], n1 = NL.body[1];
+        float chevW = M.width("\u203A", 13f, false);
+        ok(n0.kind == ScreenCore.K_NEWS && near(n0.x, 14f) && near(n0.w, 332f) && near(n0.y, 8f), "뉴스 줄 자리: 좌우 14, 위 간격 8");
+        ok(near(n0.textX, 14f + 4f + 3f + 10f) && near(n0.bx, 14f + 4f), "제목은 금색 막대 오른쪽 10 띄움");
+        ok(n0.lines.length == 1 && n0.lines2.length == 1 && near(n0.h, 13f + 14f * 1.45f + 4f + 11f * 1.45f + 13f + 1f), "한 줄 제목 높이 = 위아래 13 + 제목 + 4 + 작은 글 + 선 1");
+        ok(near(n0.tagX, 14f + 332f - 4f - chevW), "› 는 오른쪽 끝(안쪽 4)");
+        ok(n1.lines.length == ScreenCore.NEWS_MAXLINES && n1.lines[n1.lines.length - 1].endsWith("\u2026") && near(n1.h, 13f + 14f * 1.45f * 4f + 4f + 11f * 1.45f + 13f + 1f), "긴 제목은 4줄까지 … 로 줄임");
+        ok(near(n1.y, n0.y + n0.h) && near(NL.bodyH, 8f + n0.h + n1.h + 72f), "줄은 이어 붙고 아래 간격 72");
+        ScreenCore.Act na = NL.hitBody(n0.x + 40f, n0.y + 10f);
+        ok(na != null && na.a.equals("call") && na.v.equals("nw.4"), "뉴스 줄을 누르면 그 번호");
+        long tn = System.nanoTime();
+        StringBuilder nw300 = new StringBuilder();
+        for (int i = 0; i < 300; i++) { if (i > 0) nw300.append(','); nw300.append(nwJ.replace("nw.4", "nw." + i)); }
+        ScreenCore.Layout nbig = ScreenCore.layout(ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"news\",\"head\":[],\"body\":[" + nw300 + "]}"), 360f, M);
+        long nms = (System.nanoTime() - tn) / 1000000L;
+        ok(nms < 300 && nbig.body.length == 300 && nbig.bodyRange(0f, 700f)[1] < 25, "뉴스 300줄 읽기+배치 " + nms + "ms · 보이는 건 몇 줄만");
+
         // ── 시간(400장 배치 + 10만 번 범위 찾기) ──
         long t0 = System.nanoTime();
         ScreenCore.Layout big = ScreenCore.layout(ScreenCore.load(screen(1000)), 360f, M);
