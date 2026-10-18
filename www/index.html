@@ -2456,6 +2456,14 @@ var _foodCache     = {};   // { 역명: { ts, data } }
 var _foodAllData   = [];   // 현재 로드된 전체 맛집 목록
 var _foodCurFilter = '전체';
 var _foodPublicData = [];   // 공공데이터 맛집 (하단)
+// ★ 2026-10-18 서버 구동 네이티브 맛집 화면: 엔진이 화면 문구를 정하려면 '지금 상태'를 사실로 알려야 한다(문구는 엔진이 정한다 — 여기서는 사실만 적는다).
+//   st: idle(경로 없음) · locating(내 위치 확인 중) · noperm(위치 권한 없음) · loading(주변 음식점 불러오는 중) · none(등록 음식점 정보 없음) · ready(목록 있음/빈 결과)
+var _foodUiState = { stn: '', st: 'idle' };
+function _foodUi(stn, st){
+  if(stn != null) _foodUiState.stn = (stn === '내주변') ? '' : String(stn).replace(/역$/, '');
+  _foodUiState.st = st;
+  try{ if(window._scrFood) window._scrFood.changed(); }catch(e){}
+}
 var _foodPubCache   = {};   // 공공데이터 캐시
 
 // ★ 2026-09-15: 카페 / 밥집 / 육식 / 회집 / 주점 5분류.
@@ -2670,6 +2678,7 @@ function _foodNearbyPool(cLat, cLng, radiusM, ownKey){
 window._foodNearbyPool=_foodNearbyPool;
 
 function _foodFromStn(destStn){
+  _foodUi(destStn, 'ready');
   var list=document.getElementById('foodList');
   var arr=_stnFoodLookup(destStn);
   _foodStnCoord=_foodResolveCoord(destStn)||null; if(_foodStnCoord) _foodStnCoord.name=String(destStn);
@@ -2684,11 +2693,13 @@ function _foodFromStn(destStn){
     _foodAllData=[];
     // ★ 2026-09-14: 내장 목록이 없어도 여기서 끝내지 않는다 — 서버에 물어본다.
     if(_foodStnCoord && typeof _foodFromServer==='function'){
+      _foodUi(destStn, 'loading');
       if(list) list.innerHTML='<div class="food-loading"><div class="food-spinner"></div>'+_ltEsc(String(destStn))+' \uc8fc\ubcc0 \uc74c\uc2dd\uc810 \ubd88\ub7ec\uc624\ub294 \uc911...</div>';
       _foodFromServer(_foodStnCoord.lat, _foodStnCoord.lng, String(destStn));
       if(typeof _fetchPublicFood==='function') _fetchPublicFood(String(destStn), _foodStnCoord.lat, _foodStnCoord.lng);
       return;
     }
+    _foodUi(destStn, 'none');
     if(list) list.innerHTML='<div class="food-empty">\uD83C\uDF7D\uFE0F<br>'+_ltEsc(String(destStn))+' \uc5ed \uc778\uadfc \ub4f1\ub85d \uc74c\uc2dd\uc810 \uc815\ubcf4\uac00 \uc5c6\uc5b4\uc694</div>';
     return;
   }
@@ -3052,6 +3063,7 @@ function _foodLoadNearby(force){
       function(){
         var label = document.getElementById('foodDestLabel');
         var list = document.getElementById('foodList');
+        _foodUi('', 'noperm');
         if(label) label.textContent = '도착역을 설정하면 맛집을 추천해드려요';
         if(list) list.innerHTML = '<div class="food-empty">📍<br>위치 권한을 허용하거나<br>경로를 설정하면 맛집을 추천해드려요!</div>';
       },
@@ -3084,6 +3096,7 @@ function loadFoodTab(force) {
 
   if(!destStn) {
     // ★ 도착역 미설정 → 현재 위치(GPS) 기준 주변 맛집
+    _foodUi('', 'locating');
     if(label) label.textContent = '위치 확인 중...';
     if(list && (!_foodAllData || !_foodAllData.length))
       list.innerHTML = '<div class="food-loading"><div class="food-spinner"></div>내 위치 확인 중...</div>';
@@ -3128,6 +3141,8 @@ function _naverMapWebUrl(place) {
 
 // 맛집 목록 렌더링
 function _renderFoodList() {
+  if(_foodUiState.st === 'loading') _foodUiState.st = 'ready';      // 목록(또는 불러오기 실패/빈 결과)이 나왔다
+  try{ if(window._scrFood) window._scrFood.changed(); }catch(eSf){}      // 서버 구동 네이티브 맛집 화면: 받아 둔 가게 목록이 바뀌었으니 엔진에 새 화면을 받는다(켜져 있을 때만)
   var list = document.getElementById('foodList');
   if(!list) return;
   if(typeof _foodCloseMap==='function') _foodCloseMap();   // 목록 재생성 시 열린 지도 참조 초기화
@@ -14581,13 +14596,14 @@ window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
   //   머리(제목·'○○역 인근'·새로고침 단추) · 카테고리 칩 6개(가로로 밀리는 줄이라 칩마다 따로 — 밀리는 동안은 웹) · 안내 문구(빈 상태·불러오기 실패) · 맛집 칸(앞 20개).
   //   스크롤하는 동안은 영역이 '움직임'으로 보아 웹이 그리고, 멈추면(≈0.07초) 네이티브가 그린다. 뒤쪽 칸·공공데이터 구분줄·불러오는 중 빙글이는 계속 웹.
   //   칸의 눌림 줄임(:active scale) 은 투명한 웹에서만 일어나 안 보인다 — 눌러서 지도 여는 동작은 그대로.
-  makeRegion('fd:hdr', paintCfg(function(){ return document.querySelector('#tab-food .food-header'); }));
-  makeRegion('fd:msg', paintCfg(function(){ var l = document.getElementById('foodList'); return l ? l.querySelector(':scope > .food-empty') : null; }));
+  function fdOwned(){ try{ return !!(window._scrFood && window._scrFood.owns()); }catch(e){ return false; } }      // 서버 구동 네이티브 맛집 화면이 맛집 탭을 통째로 맡는 동안은 이 영역들이 쉰다(둘이 겹쳐 그리지 않게)
+  makeRegion('fd:hdr', paintCfg(function(){ return fdOwned() ? null : document.querySelector('#tab-food .food-header'); }));
+  makeRegion('fd:msg', paintCfg(function(){ if(fdOwned()) return null; var l = document.getElementById('foodList'); return l ? l.querySelector(':scope > .food-empty') : null; }));
   [0, 1, 2, 3, 4, 5].forEach(function(i){
-    makeRegion('fd:k' + i, paintCfg(function(){ var f = document.getElementById('foodFilter'); return f ? (f.querySelectorAll('.food-chip')[i] || null) : null; }));
+    makeRegion('fd:k' + i, paintCfg(function(){ if(fdOwned()) return null; var f = document.getElementById('foodFilter'); return f ? (f.querySelectorAll('.food-chip')[i] || null) : null; }));
   });
   for(var fdi = 0; fdi < 20; fdi++) (function(i){
-    makeRegion('fd:c' + i, paintCfg(function(){ var l = document.getElementById('foodList'); return l ? (l.querySelectorAll(':scope > .food-card')[i] || null) : null; }));
+    makeRegion('fd:c' + i, paintCfg(function(){ if(fdOwned()) return null; var l = document.getElementById('foodList'); return l ? (l.querySelectorAll(':scope > .food-card')[i] || null) : null; }));
   })(fdi);
   var foodWatched = false;
   function watchFood(){                                  // 맛집 목록이 새로 그려지면(칸이 바뀌면) 영역들이 새 칸을 다시 읽게 깨운다
@@ -18781,6 +18797,7 @@ window._exitConfirm = _exitConfirm;
 window._exitCancel  = _exitCancel;
 
 function handleBackPress(){
+  try{ if(window._scrFood && window._scrFood.closeSheet()){ _backPressCount = 0; return true; } }catch(eSf){}      // 서버 구동 맛집 화면에서 연 지도 시트가 열려 있으면 그것부터 닫는다
   try{ if(window._scrSet && window._scrSet.closeSheet()){ _backPressCount = 0; return true; } }catch(eSh){}      // 서버 구동 설정 화면에서 연 웹 카드 시트가 열려 있으면 그것부터 닫는다
   // ① 종료 팝업이 열려있으면 팝업 닫기
   var pop = document.getElementById('exitConfirmPopup');
@@ -20253,6 +20270,21 @@ window.addEventListener('unhandledrejection', function(e) {
         <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">지금 보고 있는 이 설정 화면을 엔진이 화면 구성까지 정해 내려주고, 기기가 직접 그려요. 끄면 예전 웹 설정 화면으로 돌아가요.</p>
         <div id="scrsSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
         <style>#scrsSetOn:checked ~ #scrsSetKnob{background:var(--gold) !important;} #scrsSetOn:checked ~ #scrsSetDot{left:23px !important;}</style>
+      </div>
+
+      <!-- ★ 2026-10-18: 서버 구동 네이티브 맛집 화면 — 안드로이드 앱에서만 보임, 기본 꺼짐(실험) -->
+      <div id="scrfSetCard" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <div style="font-size:15px;font-weight:800;color:var(--text);">네이티브 맛집 화면</div>
+          <label style="position:relative;display:inline-block;width:46px;height:26px;">
+            <input type="checkbox" id="scrfSetOn" onchange="_scrfSetUse(this.checked)" style="opacity:0;width:0;height:0;">
+            <span id="scrfSetKnob" style="position:absolute;inset:0;border-radius:13px;background:var(--border2);transition:.2s;cursor:pointer;"></span>
+            <span id="scrfSetDot" style="position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.3);"></span>
+          </label>
+        </div>
+        <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">맛집 탭의 머리줄·카테고리 칩·맛집 목록을 엔진이 분류·거르기·문구까지 정해 내려주고, 기기가 직접 그려요(부드러운 스크롤). 가게를 누르면 길찾기 지도가 열려요. 문제가 생기면 예전 웹 화면으로 돌아가요.</p>
+        <div id="scrfSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
+        <style>#scrfSetOn:checked ~ #scrfSetKnob{background:var(--gold) !important;} #scrfSetOn:checked ~ #scrfSetDot{left:23px !important;}</style>
       </div>
 
       <!-- ★ 2026-10-03: 도착 오차 익명 기록 (끌 수 있음) -->
@@ -24374,6 +24406,7 @@ function _arrOpenPlace(){
           _foodCurFilter = '\uc804\uccb4'; _foodFromStn(stn);
         } else if(typeof loadFoodTab === 'function') loadFoodTab(false);
       }catch(e1){}
+      try{ if(window._scrFood && window._scrFood.active()){ window._scrFood.openNamed(nm, ad.pi || {}); return; } }catch(eNf){}      // 서버 구동 네이티브 맛집 화면: 받아 둔 목록에서 그 가게를 찾아 지도 시트를 연다
       var tries = 0, clicked = 0;
       var find = function(){
         var cs = document.querySelectorAll('#foodList .food-card');
@@ -25746,6 +25779,7 @@ window._dedupeStnByName = _dedupeStnByName;
 function switchTab(tab,el){
   try{ if(window._htlNat) window._htlNat.kick(); }catch(eNk){}      // 네이티브 그림 영역(켜져 있을 때만)이 새로 보이는 탭의 내용을 읽는다
   try{ if(window._scrShop) setTimeout(function(){ window._scrShop.kick(); }, 0); }catch(eSk){}
+  try{ if(window._scrFood) setTimeout(function(){ window._scrFood.kick(); }, 0); }catch(eSf2){}      // 서버 구동 네이티브 맛집 화면(켜져 있을 때만)
   try{ if(window._scrSet) setTimeout(function(){ window._scrSet.kick(); }, 0); }catch(eSs){}      // 서버 구동 네이티브 설정 화면(켜져 있을 때만)      // 서버 구동 네이티브 쇼핑 화면(켜져 있을 때만) — 탭 전환이 끝난 뒤 보이면 올린다
   try{ if(tab !== 'map' && window._pickDestMode && typeof _pickAbandon === 'function') _pickAbandon(); }catch(ePk){}      // 노선도 탭을 떠나면 '도착지 역 고르기'와 정해 둔 출발지는 없던 일로
   // ★ 2026-08-31: 탭을 바꾸면 열려 있던 시트·모달을 닫는다.
@@ -37715,6 +37749,7 @@ window.refreshShop=refreshShop;
     try{ if(window._CS && _CS.natState){ var ns = _CS.natState(); if(ns.h) f.feat.sn = { h: 1, on: ns.on ? 1 : 0, f: ns.f ? 1 : 0, w: ns.w || '' }; } }catch(e){}
     try{ var H = window._htlNat, hc = document.getElementById('htlSetCard'); if(H && H.G && hc && hc.style.display === 'block') f.feat.htl = { h: 1, on: H.G.on ? 1 : 0, f: (H.G.failed || H.G.fails >= 2) ? 1 : 0, w: H.G.why || '' }; }catch(e){}
     try{ var SS = window._scrShop && _scrShop.S, c2 = document.getElementById('scrSetCard'); if(SS && c2 && c2.style.display === 'block') f.feat.scr = { h: 1, on: SS.on ? 1 : 0, f: (SS.failed || SS.fails >= 2) ? 1 : 0, w: SS.why || '', b: SS.badFresh > 0 ? 1 : 0 }; }catch(e){}
+    try{ var SF = window._scrFood && _scrFood.S, c3 = document.getElementById('scrfSetCard'); if(SF && c3 && c3.style.display === 'block') f.feat.scrf = { h: 1, on: SF.on ? 1 : 0, f: (SF.failed || SF.fails >= 2) ? 1 : 0, w: SF.why || '', b: SF.badFresh > 0 ? 1 : 0 }; }catch(e){}
     f.feat.scrs = { h: 1, on: S.on ? 1 : 0, f: (S.failed || S.fails >= 2) ? 1 : 0, w: S.why || '', b: S.badFresh > 0 ? 1 : 0 };
     return f;
   }
@@ -37839,6 +37874,7 @@ window.refreshShop=refreshShop;
       else if(key === 'f.sn') window._snSetUse(on);
       else if(key === 'f.htl') window._htlSetUse(on);
       else if(key === 'f.scr') window._scrSetUse(on);
+      else if(key === 'f.scrf') window._scrfSetUse(on);
       else if(key === 'f.scrs'){ setUse(on); return; }
       else return;                                                             // 모르는 키는 무시
     }catch(e){}
@@ -38007,6 +38043,339 @@ window.refreshShop=refreshShop;
   window._scrSet = { S: S, kick: kick, setUse: setUse, syncCard: syncCard, active: active, owns: function(){ return active() && S.good; }, facts: facts, closeSheet: closeSheet, openSheet: openSheet, present: present, refresh: refresh, tick: tick };
   window._scrsSetUse = function(on){ try{ setUse(on); }catch(e){} };
   try{ if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(function(){ try{ syncCard(); kick(); }catch(e){} }, 700); }); else setTimeout(function(){ try{ syncCard(); kick(); }catch(e){} }, 700); }catch(eH){}
+  try{ document.addEventListener('visibilitychange', function(){ if(!document.hidden) kick(); else if(S.shown) hideNative(); }); }catch(eV){}
+})();
+
+// ══════════════════════════════════════════════════════════════════════════
+// ★ 2026-10-18 서버 구동 네이티브 화면 3호: 맛집 탭 (YJ: "이후 나머지부분도 다 네이티브해줘")
+//   원칙은 쇼핑·설정과 같다 — 계산은 엔진이, 그림은 앱이. 업종 분류·칩 거르기·공공데이터와 중복 정리·거리/별점/길찾기 문구·빈 상태 문구·화면 구성은 엔진 POST /screen/food 가 정한다.
+//   이 코드는 (1) 앱이 받아 둔 가게 목록(원자료: _foodAllData·_foodPublicData)과 지금 상태(도착역·불러오는 중·고른 칩)를 엔진에 보내고 (2) 받은 JSON 글을 그대로 ScreenNative 플러그인(id 'food')에 넘기고
+//   (3) 눌린 행동만 기존 웹 함수로 이어 준다(칩 → 고른 칩 바꾸기 · 새로고침 → loadFoodTab(true) · 가게 → 웹 지도 시트). 분류·문구·순서를 여기서 정하지 않는다.
+//   · 가게 목록을 받아 오는 일(내장 목록 · 맛집 서버 · 공공데이터)은 예전 그대로 웹이 한다. 데이터가 바뀔 때마다(_renderFoodList) 엔진에 새 화면을 받는다.
+//   · 가게 카드를 누르면: 그 순간 앱이 보냈던 목록(스냅샷)에서 눌린 번호의 가게를 찾아, 기존 웹 지도(_foodShowMap: 도보 길찾기·네이버/카카오 앱 열기)를 '시트'에 띄운다. 뒤로가면 시트를 닫고 네이티브가 이어받는다.
+//   · 로컬 캐시: 같은 요청(같은 가게 목록·상태)의 마지막 정상 화면을 저장해 두었다가 처음 열 때 바로 그리고, 칩을 오가며 같은 요청이 반복되면 네트워크 없이 바로 그린다. 엔진 응답이 틀린 모양이면 버린다. 아무것도 못 그리면 예전 웹 맛집 화면.
+//   · 안드로이드 앱 + ScreenNative 플러그인 + 설정 스위치(기본 꺼짐)일 때만. 팝업이 덮는 동안은 네이티브를 숨기고 웹이 이어받는다. 이 동안 예전 '맛집 영역(fd:*)' 네이티브는 쉰다.
+// ══════════════════════════════════════════════════════════════════════════
+(function(){
+  var K_ON = 'gdm_scrf_on', K_F = 'gdm_scrf_fail', K_W = 'gdm_scrf_why', K_C = 'gdm_scrf_c';
+  var BASE = ((typeof _ROUTE_V2_BASE === 'string' && _ROUTE_V2_BASE) ? _ROUTE_V2_BASE : 'https://route-v2.phg0643.workers.dev') + '/screen/food';
+  var ID = 'food', CHIPS = ['전체', '카페', '밥집', '육식', '회집', '주점'];
+  var S = { on: false, fails: 0, failed: false, why: '', listening: false, shown: false, ready: false, good: false, cur: '', curRev: '', curFlt: '', src: '', fk: '', snap: null, stash: null, rect: null, rk: '',
+            chg: 0, chgAt: 0, still: 0, timer: 0, showAt: 0, pending: false, busy: 0, fetchAt: 0, badFresh: 0, stBad: 0, stAt: 0, typing: false, chT: 0, memo: {}, memoK: [], inflight: '', waited: false };
+  try{ S.on = localStorage.getItem(K_ON) === '1'; S.fails = parseInt(localStorage.getItem(K_F) || '0', 10) || 0; S.why = localStorage.getItem(K_W) || ''; }catch(eS){}
+  function plug(){ try{ var C = window.Capacitor; return (C && C.Plugins && C.Plugins.ScreenNative) || null; }catch(e){ return null; } }
+  function active(){ return S.on && !S.failed && S.fails < 2 && !!plug(); }
+  function now(){ return (window.performance && performance.now) ? performance.now() : Date.now(); }
+  function tabEl(){ return document.getElementById('tab-food'); }
+  function tabOpen(){ var t = tabEl(); return !!(t && t.classList.contains('active') && t.offsetParent && !document.hidden); }
+  function hashOf(s){ var h = 5381; for(var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36) + ':' + s.length; }
+
+  // ── 엔진에 보낼 것(읽기만 한다 — 분류·거르기·문구는 엔진이) ──
+  function row(p){ return [String(p.place_name || ''), String(p.category_name || ''), String(p.road_address_name || ''), p.distance == null ? null : (parseInt(p.distance, 10) || 0)]; }
+  function snapshot(){
+    var c = (typeof _foodAllData !== 'undefined' && _foodAllData) || [], p = (typeof _foodPublicData !== 'undefined' && _foodPublicData) || [];
+    return { c: c.slice(0, 300), p: p.slice(0, 800) };
+  }
+  function facts(){
+    var u = (typeof _foodUiState !== 'undefined' && _foodUiState) || {};
+    return { stn: u.stn || '', st: u.st || 'idle', flt: (typeof _foodCurFilter !== 'undefined' && _foodCurFilter) || '전체', fail: (typeof _foodSrvFail !== 'undefined' && _foodSrvFail) ? 1 : 0 };
+  }
+  function request(){
+    var sn = snapshot();
+    var txt = JSON.stringify({ cap: 4, f: facts(), c: sn.c.map(row), p: sn.p.map(row) });
+    return { sn: sn, txt: txt, fk: hashOf(txt), idle: !sn.c.length && !sn.p.length && facts().st === 'idle' };
+  }
+
+  // ── 캐시(저장본: 마지막 정상 화면 하나) + 이번 실행 동안의 짧은 기억(칩을 오갈 때 바로 그리려고) ──
+  function cacheGet(){ try{ var o = JSON.parse(localStorage.getItem(K_C) || 'null'); return (o && typeof o.txt === 'string' && o.txt.length > 20 && typeof o.fk === 'string') ? o : null; }catch(e){ return null; } }
+  function cachePut(fk, txt, rev){ try{ localStorage.setItem(K_C, JSON.stringify({ ts: Date.now(), fk: fk, rev: rev || '', txt: txt })); }catch(e){} }
+  function cacheDrop(){ try{ localStorage.removeItem(K_C); }catch(e){} }
+  function memoPut(fk, txt){
+    if(!S.memo[fk]) S.memoK.push(fk);
+    S.memo[fk] = txt;
+    while(S.memoK.length > 8){ delete S.memo[S.memoK.shift()]; }
+  }
+
+  // ── 테마(앱 색 → 플러그인) ──
+  var colEl = null;
+  function css(v, def){
+    try{
+      if(!colEl){ colEl = document.createElement('span'); colEl.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none;'; document.body.appendChild(colEl); }
+      colEl.style.color = ''; colEl.style.color = 'var(' + v + ', ' + def + ')';
+      return getComputedStyle(colEl).color || def;
+    }catch(e){ return def; }
+  }
+  function palette(){
+    var pastel = document.documentElement.getAttribute('data-theme') === 'pastel';
+    return { bg: css('--bg', '#0b0f14'), card: css('--card', '#1b2129'), border: css('--border', 'rgba(255,255,255,.2)'), border2: css('--border2', '#3a3a3c'), text: css('--text', '#f2f4f7'),
+             sub: css('--sub', '#9aa4b2'), gold: css('--gold', '#f0b429'), orange: css('--orange', '#f07830'), imgbg: pastel ? '#e8f4ff' : css('--prod-img-bg', '#252528') };
+  }
+
+  // ── 사각형: 맛집 탭 전체 ──
+  function rectNow(){
+    var b = tabEl(); if(!b || !tabOpen()) return null;
+    var r = b.getBoundingClientRect();
+    if(!(r.width > 40 && r.height > 120)) return null;
+    return { L: r.left, T: r.top, W: r.width, H: r.height };
+  }
+  function covered(r){
+    try{
+      var t = tabEl(), pts = [[r.L + r.W / 2, r.T + 18], [r.L + 12, r.T + r.H - 12], [r.L + r.W - 12, r.T + r.H - 12]];
+      for(var i = 0; i < pts.length; i++){ var e = document.elementFromPoint(pts[i][0], pts[i][1]); if(e && !t.contains(e)) return true; }
+    }catch(e){}
+    return false;
+  }
+  function place(r){ return { x: r.L, y: r.T, w: r.W, h: r.H, dpr: window.devicePixelRatio || 1, clip: { l: 0, t: 0, r: r.W, b: r.H } }; }
+  function rkey(r){ return [r.L, r.T, r.W, r.H].map(function(v){ return Math.round(v * 2) / 2; }).join(','); }
+
+  // ── 엔진에서 받기 ──
+  function fetchScreen(req){
+    var my = ++S.busy, ctl = (typeof AbortController === 'function') ? new AbortController() : null;
+    var to = setTimeout(function(){ try{ if(ctl) ctl.abort(); }catch(e){} }, 8000);
+    S.fetchAt = now();
+    return fetch(BASE, { method: 'POST', body: req.txt, headers: { 'Content-Type': 'text/plain;charset=UTF-8' }, signal: ctl ? ctl.signal : undefined, cache: 'no-store' })
+      .then(function(r){ clearTimeout(to); if(!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+      .then(function(txt){ return my === S.busy ? txt : null; })               // 더 새 요청이 있으면 이 답은 버린다
+      .catch(function(){ clearTimeout(to); return null; });
+  }
+  function sane(txt){                                                         // 겉모양만 본다(진짜 검증은 플러그인)
+    try{ var j = JSON.parse(txt); return (j && j.ok === true && j.v === 1 && j.screen === 'food' && Array.isArray(j.head) && Array.isArray(j.body)) ? j : null; }catch(e){ return null; }
+  }
+
+  // ── 플러그인에 올리기 ──
+  // z = { txt, src, fk, sn }  sn = 이 화면을 만들 때 엔진에 보낸 가게 목록(눌린 번호를 풀어 줄 스냅샷)
+  var SH = null;
+  function present(z, keep){
+    var P = plug(); if(!P || !active()) return Promise.resolve(false);
+    var j = sane(z.txt);
+    if(!j) return Promise.resolve(onInvalid(z.src, 'shape'));
+    var r = S.rect || rectNow();
+    var args = { id: ID, json: z.txt, palette: palette(), keepScroll: !!keep };
+    var p;
+    if(!S.shown){
+      if(!r || SH || covered(r)){ S.stash = z; return Promise.resolve(false); }  // 지금은 못 보인다(다른 탭·시트·팝업) — 보일 때 tick 이 올린다
+      Object.assign(args, place(r));
+      S.showAt = now(); S.ready = false;
+      p = P.show(args);
+    } else p = P.update(args);
+    return Promise.resolve(p).then(function(){
+      if(!S.shown){ S.shown = true; if(r){ S.rect = r; S.rk = rkey(r); } }
+      S.good = true; S.cur = z.txt; S.curRev = j.rev || ''; S.src = z.src; S.still = 0; S.snap = z.sn; S.stash = null;
+      S.curFlt = (j.info && j.info.flt) || '';
+      if(z.fk) S.fk = z.fk;
+      memoPut(z.fk, z.txt);
+      if(z.src === 'fresh'){ S.badFresh = 0; cachePut(z.fk, z.txt, S.curRev); }
+      syncCard();
+      return true;
+    }).catch(function(e){
+      var m = String((e && (e.message || e)) || '');
+      if(/^invalid/.test(m)) return onInvalid(z.src, m);
+      fail('show: ' + m); return false;
+    });
+  }
+  // 검증을 통과하지 못한 JSON: 저장본이면 버리고 새로 받는다 · 엔진 새 응답이면 버리고 · 아무것도 못 그리면 웹 화면
+  function onInvalid(src, why){
+    try{ console.warn('[네이티브 맛집] 화면 JSON 이 올바르지 않아 버립니다(' + src + '):', why); }catch(e){}
+    if(src === 'cache'){ cacheDrop(); S.fk = ''; refresh(true); return false; }
+    S.badFresh++; S.why = String(why || '').slice(0, 120); S.fk = '';
+    try{ localStorage.setItem(K_W, S.why); }catch(e){}
+    if(!S.good && !S.shown) fail('엔진 화면 오류: ' + S.why); else syncCard();
+    return false;
+  }
+  // 요청(가게 목록·상태)이 바뀌었을 때만(force 면 늘) 엔진에서 새 화면을 받는다. 같은 요청의 기억이 있으면 네트워크 없이.
+  function refresh(force){
+    if(!active()) return Promise.resolve(false);
+    var req = request();
+    if(!force && S.good && req.fk === S.fk){ S.stash = null; return Promise.resolve(false); }      // 못 보이는 동안 쌓인 화면이 있어도 요청이 원래대로 돌아왔으면 지금 화면이 맞다
+    if(!force && S.inflight === req.fk) return Promise.resolve(false);                              // 같은 요청이 이미 가는 중
+    if(!force && S.memo[req.fk]) return present({ txt: S.memo[req.fk], src: 'memo', fk: req.fk, sn: req.sn }, S.curFlt === facts().flt);
+    S.fk = req.fk; S.inflight = req.fk;
+    return fetchScreen(req).then(function(txt){
+      if(S.inflight === req.fk) S.inflight = '';
+      if(!txt || !active()){ if(!txt && S.fk === req.fk) S.fk = ''; return false; }          // 못 받았으면 다음 확인이 다시 시도한다
+      if(req.fk !== S.fk) return false;                                       // 그새 요청이 또 바뀌었다 — 다음 확인이 다시 받는다
+      return present({ txt: txt, src: 'fresh', fk: req.fk, sn: req.sn }, S.good && S.curFlt === facts().flt);
+    });
+  }
+  function changed(){                                                         // 가게 목록·상태가 바뀌었다(웹이 알린다). 연달아 와도 한 번만.
+    if(!active()) return;
+    if(S.chT) clearTimeout(S.chT);
+    S.chT = setTimeout(function(){ S.chT = 0; if(!active() || !tabOpen()) return; if(!S.good && !S.stash && !S.pending) kick(); else refresh(false); }, 80);
+  }
+
+  // ── 눌린 행동(허용 목록만) ──
+  function setFilter(v){
+    if(CHIPS.indexOf(v) < 0) return;
+    try{ _foodCurFilter = v; }catch(e){}
+    try{ var cs = document.querySelectorAll('#foodFilter .food-chip'); for(var i = 0; i < cs.length; i++) cs[i].classList.toggle('on', (cs[i].textContent || '').indexOf(v) >= 0); }catch(e1){}
+    refresh(false);
+  }
+  function onAction(e){
+    if(!e || e.id !== ID) return;
+    if(e.a === 'cat') setFilter(String(e.v || ''));
+    else if(e.a === 'refresh'){ try{ loadFoodTab(true); }catch(e1){} }
+    else if(e.a === 'call'){
+      var m = /^fm\.(c|p)\.(\d+)$/.exec(String(e.v || ''));
+      if(m && S.snap){ var p = (m[1] === 'c' ? S.snap.c : S.snap.p)[parseInt(m[2], 10)]; if(p) openSheet(p, m[1] === 'p'); }
+    }
+  }
+
+  // ── 지도 시트: 기존 웹 지도(_foodShowMap)를 그대로 옮겨 연다(도보 길찾기·지도앱 열기가 그대로 산다). 닫으면 네이티브가 이어받는다 ──
+  function openSheet(p, isPub){
+    if(typeof _foodMakeCard !== 'function' || typeof _foodShowMap !== 'function') return;
+    closeSheet();
+    var ov = document.createElement('div');
+    ov.id = 'scrfSheet';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:60000;background:var(--bg);display:flex;flex-direction:column;';
+    var bar = document.createElement('div');
+    bar.style.cssText = 'display:flex;align-items:center;gap:8px;padding:calc(10px + env(safe-area-inset-top,0px)) 12px 10px;border-bottom:1px solid var(--border);flex-shrink:0;';
+    var bk = document.createElement('button');
+    bk.textContent = '‹ 맛집';
+    bk.style.cssText = 'background:none;border:none;color:var(--text);font-size:15px;font-weight:700;padding:6px 8px;cursor:pointer;font-family:inherit;';
+    bk.onclick = function(){ closeSheet(); };
+    var ti = document.createElement('div');
+    ti.textContent = '길찾기 · 지도';
+    ti.style.cssText = 'flex:1;font-size:15px;font-weight:800;color:var(--text);text-align:center;margin-right:56px;';
+    bar.appendChild(bk); bar.appendChild(ti);
+    var body = document.createElement('div');
+    body.className = 'food-list';
+    body.style.cssText = 'flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-top:12px;';
+    ov.appendChild(bar); ov.appendChild(body);
+    document.body.appendChild(ov);
+    SH = { ov: ov };
+    hideNative();
+    var card = null;
+    try{ card = _foodMakeCard(p, 0, !!isPub); }catch(e){}
+    if(card){ body.appendChild(card); try{ _foodShowMap(card, p); }catch(e2){} }
+  }
+  function closeSheet(){
+    if(!SH) return false;
+    var h = SH; SH = null;
+    try{ if(typeof _foodCloseMap === 'function') _foodCloseMap(); }catch(e){}
+    try{ if(h.ov && h.ov.parentNode) h.ov.parentNode.removeChild(h.ov); }catch(e2){}
+    setTimeout(kick, 0);
+    return true;
+  }
+  // 하차 추천의 '맛집 보기'가 부른다: 이름이 같은 가게를 받아 둔 목록에서 찾아(없으면 추천이 들고 있던 정보로) 지도 시트를 연다
+  function openNamed(nm, pi){
+    var name = String(nm || '').trim(), tries = 0;
+    function find(){
+      var lists = [[(typeof _foodAllData !== 'undefined' && _foodAllData) || [], false], [(typeof _foodPublicData !== 'undefined' && _foodPublicData) || [], true]];
+      for(var k = 0; k < lists.length; k++) for(var i = 0; i < lists[k][0].length; i++){ var q = lists[k][0][i]; if(q && String(q.place_name || '').trim() === name) return { p: q, pub: lists[k][1] }; }
+      return null;
+    }
+    (function step(){
+      tries++;
+      var f = find();
+      if(f){ openSheet(f.p, f.pub); return; }
+      if(tries >= 8){ pi = pi || {}; openSheet({ place_name: name, category_name: pi.c || '', road_address_name: pi.a || '', distance: pi.d, x: '', y: '' }, true); return; }
+      setTimeout(step, 500);
+    })();
+  }
+
+  // ── 켜고 끄기 ──
+  function fail(why){
+    if(S.failed || !S.on) return;
+    S.failed = true; S.fails++; S.why = String(why || '').slice(0, 140);
+    try{ localStorage.setItem(K_F, String(S.fails)); localStorage.setItem(K_W, S.why); }catch(e){}
+    try{ console.warn('[네이티브 맛집] 웹 화면만 씁니다:', S.why); }catch(e1){}
+    end(true); syncCard();
+    try{ if(typeof _renderFoodList === 'function') _renderFoodList(); }catch(e2){}
+  }
+  function hideNative(){ var P = plug(); if(P && S.shown){ S.shown = false; S.ready = false; try{ P.hide({ id: ID }); }catch(e){} } }
+  function end(destroy){
+    if(S.timer){ clearTimeout(S.timer); S.timer = 0; }
+    if(S.chT){ clearTimeout(S.chT); S.chT = 0; }
+    var P = plug();
+    if(P && (S.shown || destroy)){ try{ P.hide({ id: ID }); if(destroy) P.destroy({ id: ID }); }catch(e){} }
+    S.shown = false; S.ready = false; S.good = false; S.cur = ''; S.rect = null; S.rk = ''; S.fk = ''; S.snap = null; S.stash = null; S.memo = {}; S.memoK = [];
+    closeSheet();
+  }
+  function listen(){
+    var P = plug(); if(!P || S.listening) return; S.listening = true;
+    try{
+      P.addListener('ready', function(e){ if(e && e.id && e.id !== ID) return; S.ready = true; S.fails = 0; try{ localStorage.setItem(K_F, '0'); }catch(e2){} syncCard(); });
+      P.addListener('error', function(e){ if(e && e.id && e.id !== ID) return; if(e && e.kind === 'invalid') return; fail('native: ' + ((e && e.message) || '')); });
+      P.addListener('action', onAction);
+    }catch(e){ fail('listen: ' + e); return; }
+    try{
+      new MutationObserver(function(){ if(S.shown && active()){ try{ plug().update({ id: ID, palette: palette() }); }catch(e3){} } }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    }catch(e4){}
+  }
+
+  // ── 반복 확인: 사각형 따라가기 · 움직임/덮임이면 숨김 · 못 올린 화면 올리기 · 8초 지연·상태 이상 ──
+  function tick(){
+    S.timer = 0;
+    if(!active()) return;
+    var t = now(), r = tabOpen() ? rectNow() : null;
+    if(!r){
+      if(S.shown) hideNative();
+      S.rect = null; S.rk = ''; S.chg = 0;
+      if(!tabOpen()){ S.waited = false; return; }                              // 맛집 탭을 떠났다 — 다시 열리면 kick 이 깨운다
+      S.timer = setTimeout(tick, 200); return;
+    }
+    var k = rkey(r);
+    if(k !== S.rk){ S.chg = (t - S.chgAt < 450) ? S.chg + 1 : 1; S.chgAt = t; S.rk = k; S.rect = r; S.still = 0; }
+    else S.still++;
+    var moving = S.chg >= 3 && S.still < 3;
+    var cov = !moving && (!!SH || covered(r));
+    if(moving || cov){ if(S.shown) hideNative(); }
+    else if(S.good || S.stash){
+      if(!S.shown){ if(S.stash) present(S.stash, false); else present({ txt: S.cur, src: S.src || 'cache', fk: S.fk, sn: S.snap }, true); }
+      else if(S.still === 0 || S.still === 2){ try{ plug().setRect(place(r)); }catch(e){} }
+    }
+    if(S.shown && !S.ready && t - S.showAt > 8000){ fail('ready timeout'); return; }
+    if(S.shown && S.ready && t - S.stAt > 2000){
+      S.stAt = t;
+      Promise.resolve(plug().status({ id: ID })).then(function(st){
+        if(!S.shown) return;
+        if(st && st.visible && (st.age == null || st.age < 120000 || st.age < 0)) S.stBad = 0; else if(++S.stBad >= 3) fail('status ' + JSON.stringify(st));
+      }).catch(function(){ if(++S.stBad >= 3) fail('status 오류'); });
+    }
+    if(!S.good && !S.pending && !S.stash && t - S.fetchAt > 5000) kick();     // 못 받았으면 5초마다 다시
+    S.timer = setTimeout(tick, (S.chg >= 2 && S.still < 6) ? 60 : 160);
+  }
+  function kick(){
+    if(!active()) return;
+    listen();
+    if(!tabOpen()){ if(S.shown) hideNative(); return; }
+    if(!S.timer) S.timer = setTimeout(tick, 30);
+    var t = now();
+    if(!S.good && !S.pending && !S.stash){                                     // 처음 열림: 같은 요청의 저장본이 있으면 곧바로, 아니면 엔진에서
+      var req = request();
+      if(!S.waited && req.idle){ S.waited = true; setTimeout(kick, 450); return; }      // 탭을 막 열어 아직 상태(위치 확인 중·목록)가 정해지기 전이면 잠깐 기다린다 — '경로를 설정하면…' 안내가 깜빡 비치지 않게
+      S.pending = true;
+      var c = cacheGet(), p = Promise.resolve(false);
+      if(c && c.fk === req.fk){ S.fk = req.fk; p = present({ txt: c.txt, src: 'cache', fk: req.fk, sn: req.sn }, false); }
+      p.then(function(){ return refresh(true); }).then(function(){ S.pending = false; }, function(){ S.pending = false; });
+    } else if(S.good && t - S.fetchAt > 20000 && !S.pending){                  // 다시 열림: 20초 넘었으면 조용히 새로 확인
+      S.pending = true; refresh(true).then(function(){ S.pending = false; }, function(){ S.pending = false; });
+    }
+  }
+  function setUse(on){
+    try{ localStorage.setItem(K_ON, on ? '1' : '0'); if(on){ localStorage.setItem(K_F, '0'); localStorage.setItem(K_W, ''); } }catch(e){}
+    if(on){ S.on = true; S.failed = false; S.fails = 0; S.why = ''; S.badFresh = 0; kick(); }
+    else { S.on = false; end(true); try{ if(typeof _renderFoodList === 'function') _renderFoodList(); }catch(e2){} }
+    syncCard();
+  }
+  function syncCard(){
+    try{
+      var card = document.getElementById('scrfSetCard'); if(!card) return;
+      if(!plug()){ card.style.display = 'none'; return; }
+      if(card.style.display !== 'block') card.style.display = 'block';
+      var cb = document.getElementById('scrfSetOn'), st = document.getElementById('scrfSetStat');
+      if(cb) cb.checked = S.on && S.fails < 2;
+      var s;
+      if(!S.on) s = '꺼짐 — 예전 방식(웹 맛집 화면)으로 그려요.';
+      else if(S.failed || S.fails >= 2) s = '네이티브 맛집 화면에 문제가 있어 웹 화면으로 대신 보여주고 있어요' + (S.why ? ' (' + S.why + ')' : '') + '. 스위치를 껐다 켜면 다시 시도해요.';
+      else if(S.badFresh > 0) s = '엔진이 준 화면이 올바르지 않아 저장해 둔 화면을 쓰고 있어요' + (S.why ? ' (' + S.why + ')' : '') + '.';
+      else s = '켜짐 — 맛집 탭의 머리줄·칩·목록을 엔진이 정한 대로 기기가 직접 그려요(실험 중).';
+      if(st && st.textContent !== s) st.textContent = s;
+    }catch(e){}
+  }
+  window._scrFood = { S: S, kick: kick, setUse: setUse, syncCard: syncCard, active: active, owns: function(){ return active() && S.good; }, changed: changed, closeSheet: closeSheet, openSheet: openSheet, openNamed: openNamed, present: present, refresh: refresh, request: request, tick: tick };
+  window._scrfSetUse = function(on){ try{ setUse(on); }catch(e){} };
+  try{ if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(function(){ try{ syncCard(); kick(); }catch(e){} }, 800); }); else setTimeout(function(){ try{ syncCard(); kick(); }catch(e){} }, 800); }catch(eH){}
   try{ document.addEventListener('visibilitychange', function(){ if(!document.hidden) kick(); else if(S.shown) hideNative(); }); }catch(eV){}
 })();
 
