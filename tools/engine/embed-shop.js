@@ -1,4 +1,4 @@
-// engine/shop.js + shop-worker.js · engine/settings.js + settings-worker.js · engine/food.js + food-worker.js 를 route-v2-worker.ascii.js 에 내장한다(비 ASCII 는 \uXXXX 로). 다시 돌려도 같은 결과(표지 사이를 갈아 끼움).
+// engine/shop.js + shop-worker.js · engine/settings.js + settings-worker.js · engine/food.js + food-worker.js · engine/news.js + news-worker.js 를 route-v2-worker.ascii.js 에 내장한다(비 ASCII 는 \uXXXX 로). 다시 돌려도 같은 결과(표지 사이를 갈아 끼움).
 //  node tools/engine/embed-shop.js [--version route-v2-YYYY-MM-DDsNN]
 const fs = require('fs'), path = require('path');
 const root = path.join(__dirname, '../..');
@@ -8,7 +8,8 @@ const esc = s => s.replace(/[\u0080-￿]/g, c => '\\u' + c.charCodeAt(0).toStrin
 const SETS = [
   { name: 'SHOP', src: 'engine/shop.js', glue: 'engine/shop-worker.js', path: '/screen/shop', fn: 'handleScreenShop', anchor: '  if (url.pathname === "/scene") return handleScene(request);\n' },
   { name: 'SETTINGS', src: 'engine/settings.js', glue: 'engine/settings-worker.js', path: '/screen/settings', fn: 'handleScreenSettings', anchor: '  if (url.pathname === "/screen/shop") return handleScreenShop(request);\n' },
-  { name: 'FOOD', src: 'engine/food.js', glue: 'engine/food-worker.js', path: '/screen/food', fn: 'handleScreenFood', anchor: '  if (url.pathname === "/screen/settings") return handleScreenSettings(request);\n' }
+  { name: 'FOOD', src: 'engine/food.js', glue: 'engine/food-worker.js', path: '/screen/food', fn: 'handleScreenFood', anchor: '  if (url.pathname === "/screen/settings") return handleScreenSettings(request);\n' },
+  { name: 'NEWS', src: 'engine/news.js', glue: 'engine/news-worker.js', path: '/screen/news', fn: 'handleScreenNews', anchor: '  if (url.pathname === "/screen/food") return handleScreenFood(request);\n' }
 ];
 let all = '';
 for (const S of SETS) {
