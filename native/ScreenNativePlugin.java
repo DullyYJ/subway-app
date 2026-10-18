@@ -31,7 +31,7 @@ import java.util.Map;
  *   show({id,x,y,w,h,dpr,clip,json,palette,keepScroll}) · update({id,json,palette,keepScroll}) · setRect({id,x,y,w,h,dpr,clip}) · hide({id}) · destroy({id}) · status({id}) → {visible,items,age,scroll}
  *   이벤트: ready({id}) 첫 그림 · error({id,message,kind}) · action({id,a,v,url[,empty]}) · input({id,on}) 검색 입력칸 포커스
  *   검색줄(search 노드): 기기의 진짜 입력칸(EditText)을 검색줄 자리에 올린다. 검색 실행 → action {a:'search', v:검색어, url:엔진의 tpl, empty:엔진의 empty}.
- *   palette: { bg, card, border, text, sub, gold, orange, imgbg } CSS 색 문자열 — 앱 테마(다크/파스텔)를 웹이 읽어 넘긴다.
+ *   palette: { bg, card, border, border2, text, sub, gold, orange, imgbg } CSS 색 문자열 — 앱 테마(다크/파스텔)를 웹이 읽어 넘긴다.
  */
 @CapacitorPlugin(name = "ScreenNative")
 public class ScreenNativePlugin extends Plugin {
@@ -153,6 +153,18 @@ public class ScreenNativePlugin extends Plugin {
         });
     }
 
+    /** 짧은 알림 — 네이티브 화면이 웹뷰를 덮고 있으면 웹의 토스트가 가려지므로 앱이 직접 띄운다. */
+    @PluginMethod
+    public void toast(final PluginCall call) {
+        final String text = call.getString("text", "");
+        runUi(call, new Job() {
+            @Override public void run() throws Exception {
+                if (text != null && text.length() > 0) android.widget.Toast.makeText(getContext(), text, android.widget.Toast.LENGTH_SHORT).show();
+                call.resolve();
+            }
+        });
+    }
+
     @PluginMethod
     public void status(final PluginCall call) {
         runUi(call, new Job() {
@@ -182,8 +194,21 @@ public class ScreenNativePlugin extends Plugin {
 
     private ScreenView.Listener listenerFor(final String id) {
         return new ScreenView.Listener() {
+            private JSObject base(ScreenCore.Act a) {
+                JSObject o = new JSObject().put("id", id).put("a", a.a).put("v", a.v).put("url", a.url).put("key", a.key);
+                try {
+                    ScreenView sv = views.get(id);
+                    JSObject fo = new JSObject();
+                    if (sv != null) for (Map.Entry<String, String> e : sv.fields().entrySet()) fo.put(e.getKey(), e.getValue());
+                    o.put("fields", fo);
+                } catch (Throwable ignored) { }
+                return o;
+            }
             @Override public void onAction(ScreenCore.Act a) {
-                try { notifyListeners("action", new JSObject().put("id", id).put("a", a.a).put("v", a.v).put("url", a.url)); } catch (Throwable ignored) { }
+                try { notifyListeners("action", base(a)); } catch (Throwable ignored) { }
+            }
+            @Override public void onSet(ScreenCore.Act a, boolean on) {
+                try { notifyListeners("action", base(a).put("on", on)); } catch (Throwable ignored) { }
             }
             @Override public void onSearch(ScreenCore.Act a, String q) {
                 try { notifyListeners("action", new JSObject().put("id", id).put("a", a.a).put("v", q == null ? "" : q).put("url", a.tpl).put("empty", a.empty)); } catch (Throwable ignored) { }
@@ -201,7 +226,7 @@ public class ScreenNativePlugin extends Plugin {
         JSObject t = null;
         try { t = call.getObject("palette"); } catch (Throwable e) { t = null; }
         if (t == null) return;
-        int[] c = new int[9];
+        int[] c = new int[10];
         c[ScreenView.R_BG] = ScreenCore.color(t.optString("bg", ""), 0xFF0B0F14);
         c[ScreenView.R_CARD] = ScreenCore.color(t.optString("card", ""), 0xFF1B2129);
         c[ScreenView.R_BORDER] = ScreenCore.color(t.optString("border", ""), 0x33FFFFFF);
@@ -211,6 +236,7 @@ public class ScreenNativePlugin extends Plugin {
         c[ScreenView.R_ORANGE] = ScreenCore.color(t.optString("orange", ""), 0xFFF07830);
         c[ScreenView.R_IMGBG] = ScreenCore.color(t.optString("imgbg", ""), 0xFF252528);
         c[ScreenView.R_WHITE] = 0xFFFFFFFF;
+        c[ScreenView.R_BORDER2] = ScreenCore.color(t.optString("border2", ""), 0xFF3A3A3C);
         view.setPalette(c);
     }
 

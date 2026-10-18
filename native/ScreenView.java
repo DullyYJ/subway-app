@@ -51,6 +51,8 @@ import java.util.concurrent.Executors;
 public class ScreenView extends View {
     public interface Listener {
         void onAction(ScreenCore.Act a);
+        /** 스위치를 눌렀다 — 화면은 이미 뒤집혀 있다(on = 새 상태). 앱이 실제로 바꾸고, 엔진 새 화면이 오면 그걸로 덮어쓴다. */
+        void onSet(ScreenCore.Act a, boolean on);
         /** 검색줄에서 검색 실행(입력칸 글자 q, 비었을 수 있다). 무슨 주소를 열지는 엔진이 정한 a.tpl/a.empty 를 웹이 쓴다. */
         void onSearch(ScreenCore.Act a, String q);
         /** 검색 입력칸이 포커스를 얻거나 잃음(키보드가 올라오면 웹뷰 크기가 바뀌므로 웹이 '움직임'으로 오해해 숨기지 않게 알린다). */
@@ -59,14 +61,14 @@ public class ScreenView extends View {
     }
 
     // 색 역할 (ScreenCore 의 color 이름과 같은 순서)
-    public static final int R_BG = 0, R_CARD = 1, R_BORDER = 2, R_TEXT = 3, R_SUB = 4, R_GOLD = 5, R_ORANGE = 6, R_IMGBG = 7, R_WHITE = 8;
+    public static final int R_BG = 0, R_CARD = 1, R_BORDER = 2, R_TEXT = 3, R_SUB = 4, R_GOLD = 5, R_ORANGE = 6, R_IMGBG = 7, R_WHITE = 8, R_BORDER2 = 9;
 
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final TextPaint tp = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final RectF rf = new RectF(), rf2 = new RectF();
     private final Runnable firstDrawCb = new Runnable() { @Override public void run() { if (listener != null) listener.onFirstDraw(); } };
     private final Paint bmpPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
-    private final int[] pal = { 0xFF0B0F14, 0xFF1B2129, 0x33FFFFFF, 0xFFF2F4F7, 0xFF9AA4B2, 0xFFF0B429, 0xFFF07830, 0xFF252528, 0xFFFFFFFF };
+    private final int[] pal = { 0xFF0B0F14, 0xFF1B2129, 0x33FFFFFF, 0xFFF2F4F7, 0xFF9AA4B2, 0xFFF0B429, 0xFFF07830, 0xFF252528, 0xFFFFFFFF, 0x4DFFFFFF };
     private ScreenCore.Screen screen;
     private ScreenCore.Layout lay;
     private float dpr = 1f, scrollY = 0f, scrollX = 0f;
@@ -86,6 +88,10 @@ public class ScreenView extends View {
     private int inL = -1, inT = -1, inW = -1, inH = -1;        // 마지막으로 놓은 입력칸 자리(바뀔 때만 다시 놓는다)
     private boolean inFront, inShown;
     private ScreenCore.Act inAct;
+    private EditText editor;                                  // 글자 입력칸(field 노드)을 누르면 그 자리에 뜨는 진짜 입력칸
+    private String editKey;
+    private int eL = -1, eT = -1, eW = -1, eH = -1;            // 마지막으로 놓은 글자 입력칸 자리
+    private final Map<String, String> fieldVals = new HashMap<String, String>(), fieldBase = new HashMap<String, String>();
     private final ScreenCore.Measurer measurer = new ScreenCore.Measurer() {
         @Override public float width(String s, float size, boolean bold) {
             tp.setTypeface(bold ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
@@ -104,6 +110,8 @@ public class ScreenView extends View {
     }
 
     public void setListener(Listener l) { listener = l; }
+    /** 입력칸 글자 모음(키 → 글자). 앱이 call 행동을 처리할 때 함께 받는다. */
+    public Map<String, String> fields() { return new HashMap<String, String>(fieldVals); }
     public long drawAgeMs() { return lastDraw == 0L ? Long.MAX_VALUE : SystemClock.uptimeMillis() - lastDraw; }
     public int itemCount() { return lay == null ? 0 : lay.head.length + lay.body.length; }
     public float scrollPos() { return scrollY; }
@@ -123,6 +131,12 @@ public class ScreenView extends View {
         if (screen == null || getWidth() <= 0) { lay = null; invalidate(); syncLater(); return; }
         lay = ScreenCore.layout(screen, getWidth() / dpr, measurer);
         clampScroll();
+        for (ScreenCore.Item it : lay.body) {                                                   // 입력칸 글자: 엔진이 준 기본값이 바뀐 때만 덮는다(쓰던 글자가 새 화면에 지워지지 않게)
+            if (it.kind != ScreenCore.K_FIELD) continue;
+            String pb = fieldBase.get(it.key);
+            if (pb == null || !pb.equals(it.value)) { fieldVals.put(it.key, it.value); fieldBase.put(it.key, it.value); }
+        }
+        if (editKey != null) { ScreenCore.Item f = fieldByKey(editKey); if (f != null) ensureEditVisible(f); }
         invalidate();
         syncLater();
     }
@@ -151,7 +165,7 @@ public class ScreenView extends View {
                 inChips = inHead && lay.chipsTop >= 0f && y >= lay.chipsTop * dpr && y < lay.chipsBot * dpr;
                 mode = 3;
                 pressed = findItem(x, y);
-                if (pressed != null && pressed.act == null) pressed = null;
+                if (pressed != null && pressed.act == null && pressed.kind != ScreenCore.K_FIELD) pressed = null;
                 invalidate();
                 return true;
             }
@@ -174,6 +188,8 @@ public class ScreenView extends View {
                     if (SystemClock.uptimeMillis() - downT < 600 && pressed != null && listener != null) {
                         ScreenCore.Item pi = pressed; ScreenCore.Act a = pi.act; pressed = null; invalidate();
                         if (pi.kind == ScreenCore.K_SEARCH) tapSearch(pi, x / dpr, y / dpr);
+                        else if (pi.kind == ScreenCore.K_FIELD) beginEdit(pi);
+                        else if (pi.kind == ScreenCore.K_TOGGLE) { blurInput(); pi.on = !pi.on; invalidate(); listener.onSet(a, pi.on); }     // 화면은 바로 뒤집는다(엔진 새 화면을 기다리지 않는다)
                         else { blurInput(); listener.onAction(a); }
                     }
                 } else if (mode == 1 || mode == 2) {
@@ -201,13 +217,13 @@ public class ScreenView extends View {
         if (y < lay.headH) {
             for (ScreenCore.Item it : lay.head) {
                 float hx = it.fixed ? x : x + scrollX;
-                if (hx >= it.x && hx < it.x + it.w && y >= it.y && y < it.y + it.h) return it;
+                if ((it.act != null || it.kind == ScreenCore.K_FIELD) && ScreenCore.Layout.hits(it, hx, y)) return it;
             }
             return null;
         }
         float by = y - lay.headH + scrollY;
         int[] r = lay.bodyRange(by, by + 0.01f);
-        for (int i = r[0]; i < r[1]; i++) { ScreenCore.Item it = lay.body[i]; if (x >= it.x && x < it.x + it.w && by >= it.y && by < it.y + it.h) return it; }
+        for (int i = r[0]; i < r[1]; i++) { ScreenCore.Item it = lay.body[i]; if ((it.act != null || it.kind == ScreenCore.K_FIELD) && ScreenCore.Layout.hits(it, x, by)) return it; }
         return null;
     }
 
@@ -225,8 +241,12 @@ public class ScreenView extends View {
         if ("bg".equals(r)) return pal[R_BG]; if ("card".equals(r)) return pal[R_CARD]; if ("border".equals(r)) return pal[R_BORDER];
         if ("text".equals(r)) return pal[R_TEXT]; if ("sub".equals(r)) return pal[R_SUB]; if ("gold".equals(r)) return pal[R_GOLD];
         if ("orange".equals(r)) return pal[R_ORANGE]; if ("imgbg".equals(r)) return pal[R_IMGBG]; if ("white".equals(r)) return pal[R_WHITE];
+        if ("border2".equals(r)) return pal[R_BORDER2];
         return 0;
     }
+
+    /** 색(역할 이름 또는 ARGB). null 이면 def. */
+    private int cc(ScreenCore.Col c, int def) { if (c == null) return def; return c.role != null ? roleColor(c.role) : c.argb; }
 
     @Override protected void onDraw(Canvas cv) {
         long now = SystemClock.uptimeMillis();
@@ -272,6 +292,11 @@ public class ScreenView extends View {
             case ScreenCore.K_BUTTON: drawButton(cv, it); break;
             case ScreenCore.K_BOX: drawBox(cv, it); break;
             case ScreenCore.K_SEARCH: drawSearch(cv, it); break;
+            case ScreenCore.K_PANEL: drawPanel(cv, it); break;
+            case ScreenCore.K_TOGGLE: drawToggle(cv, it); break;
+            case ScreenCore.K_NAV: drawNav(cv, it); break;
+            case ScreenCore.K_SELECT: drawSelect(cv, it); break;
+            case ScreenCore.K_FIELD: drawField(cv, it); break;
             default: break;
         }
     }
@@ -343,16 +368,128 @@ public class ScreenView extends View {
 
     private void drawButton(Canvas cv, ScreenCore.Item it) {
         rf.set(it.x, it.y, it.x + it.w, it.y + it.h);
-        p.setStyle(Paint.Style.FILL); p.setColor(pal[R_CARD]);
-        cv.drawRoundRect(rf, 12f, 12f, p);
-        if (it == pressed) { p.setColor(0x14808080); cv.drawRoundRect(rf, 12f, 12f, p); }
-        p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(pal[R_BORDER]);
-        rf2.set(it.x + 0.5f, it.y + 0.5f, it.x + it.w - 0.5f, it.y + it.h - 0.5f);
-        cv.drawRoundRect(rf2, 11.5f, 11.5f, p);
+        p.setStyle(Paint.Style.FILL); p.setColor(cc(it.fill, pal[R_CARD]));
+        cv.drawRoundRect(rf, it.radius, it.radius, p);
+        if (it == pressed) { p.setColor(0x14808080); cv.drawRoundRect(rf, it.radius, it.radius, p); }
+        int lc = cc(it.line, pal[R_BORDER]);
+        if ((lc >>> 24) != 0) {
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(lc);
+            rf2.set(it.x + 0.5f, it.y + 0.5f, it.x + it.w - 0.5f, it.y + it.h - 0.5f);
+            cv.drawRoundRect(rf2, it.radius - 0.5f, it.radius - 0.5f, p);
+        }
         p.setStyle(Paint.Style.FILL);
-        setText(it.size, false, pal[R_SUB]); tp.setTextAlign(Paint.Align.CENTER);
+        setText(it.size, it.bold, cc(it.tc, pal[R_SUB])); tp.setTextAlign(Paint.Align.CENTER);
         cv.drawText(it.lines.length > 0 ? it.lines[0] : it.label, it.x + it.w / 2f, base(it.y, it.h, 0), tp);
         tp.setTextAlign(Paint.Align.LEFT);
+    }
+
+    private void drawPanel(Canvas cv, ScreenCore.Item it) {
+        rf.set(it.x, it.y, it.x + it.w, it.y + it.h);
+        if (it.fill != null) { p.setStyle(Paint.Style.FILL); p.setColor(cc(it.fill, 0)); cv.drawRoundRect(rf, it.radius, it.radius, p); }
+        if (it.line != null) {
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(cc(it.line, 0));
+            rf2.set(it.x + 0.5f, it.y + 0.5f, it.x + it.w - 0.5f, it.y + it.h - 0.5f);
+            cv.drawRoundRect(rf2, it.radius - 0.5f, it.radius - 0.5f, p);
+            p.setStyle(Paint.Style.FILL);
+        }
+    }
+
+    private void drawTopLine(Canvas cv, ScreenCore.Item it) {
+        p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(pal[R_BORDER]);
+        cv.drawLine(it.x, it.y + 0.5f, it.x + it.w, it.y + 0.5f, p);
+        p.setStyle(Paint.Style.FILL);
+    }
+
+    private void drawToggle(Canvas cv, ScreenCore.Item it) {
+        if (it.top) drawTopLine(cv, it);
+        setText(it.size, it.bold, cc(it.tc, pal[R_TEXT]));
+        for (int k = 0; k < it.lines.length; k++) cv.drawText(it.lines[k], it.textX, base(it.textY + k * it.lineH, it.lineH, k), tp);
+        if (it.lines2.length > 0) {
+            float y2 = it.textY + it.lines.length * it.lineH + 2f;
+            setText(it.size2, false, cc(it.sc, pal[R_SUB]));
+            for (int k = 0; k < it.lines2.length; k++) cv.drawText(it.lines2[k], it.textX, base(y2 + k * it.lineH2, it.lineH2, k), tp);
+        }
+        float r = it.sh / 2f;
+        rf.set(it.sx, it.sy, it.sx + it.sw, it.sy + it.sh);
+        p.setStyle(Paint.Style.FILL); p.setColor(it.on ? cc(it.ac, 0xFF30D158) : pal[R_BORDER2]);
+        cv.drawRoundRect(rf, r, r, p);
+        float d = it.sh - 6f, kx = it.on ? it.sx + it.sw - 3f - d : it.sx + 3f;
+        p.setColor(0x33000000); cv.drawCircle(kx + d / 2f, it.sy + 3f + d / 2f + 1f, d / 2f, p);      // 그림자
+        p.setColor(0xFFFFFFFF); cv.drawCircle(kx + d / 2f, it.sy + 3f + d / 2f, d / 2f, p);
+    }
+
+    private void drawNav(Canvas cv, ScreenCore.Item it) {
+        if (it.top) drawTopLine(cv, it);
+        if (it == pressed) { rf.set(it.x, it.y, it.x + it.w, it.y + it.h); p.setStyle(Paint.Style.FILL); p.setColor(0x14808080); cv.drawRoundRect(rf, 8f, 8f, p); }
+        setText(it.size, false, cc(it.tc, pal[R_TEXT]));
+        cv.drawText(it.lines.length > 0 ? it.lines[0] : "", it.textX, base(it.textY, it.lineH, 0), tp);
+        int sc = cc(it.sc, pal[R_SUB]);
+        setText(13f, false, sc); tp.setTextAlign(Paint.Align.RIGHT);
+        cv.drawText("\u203A", it.x + it.w, base(it.textY, it.lineH, 0), tp);
+        if (it.label.length() > 0) { setText(it.size2, false, sc); tp.setTextAlign(Paint.Align.RIGHT); cv.drawText(it.label, it.sx - 8f, base(it.textY, it.lineH, 0), tp); }
+        tp.setTextAlign(Paint.Align.LEFT);
+    }
+
+    private void drawSelect(Canvas cv, ScreenCore.Item it) {
+        rf.set(it.x, it.y, it.x + it.w, it.y + it.h);
+        p.setStyle(Paint.Style.FILL); p.setColor(cc(it.fill, pal[R_CARD]));
+        cv.drawRoundRect(rf, it.radius, it.radius, p);
+        if (it == pressed) { p.setColor(0x14808080); cv.drawRoundRect(rf, it.radius, it.radius, p); }
+        p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(2f); p.setColor(it.on ? cc(it.ac, pal[R_GOLD]) : cc(it.line, pal[R_BORDER]));
+        rf2.set(it.x + 1f, it.y + 1f, it.x + it.w - 1f, it.y + it.h - 1f);
+        cv.drawRoundRect(rf2, it.radius - 1f, it.radius - 1f, p);
+        p.setStyle(Paint.Style.FILL);
+        if (it.prevC.length == 5) {                                                  // 미리보기 칸: 위 55% · 아래 45% · 막대 셋
+            float x = it.sx, y = it.sy, w = it.sw, h = it.sh, cut = y + h * 0.55f;
+            cv.save();
+            rf.set(x, y, x + w, y + h); cv.clipRect(rf);
+            p.setColor(cc(it.prevC[0], 0)); cv.drawRect(x, y, x + w, cut, p);
+            p.setColor(cc(it.prevC[1], 0)); cv.drawRect(x, cut, x + w, y + h, p);
+            p.setColor(cc(it.prevC[2], 0)); cv.drawRect(x, cut, x + w, cut + 1f, p);
+            float bw = (w - 8f - 6f) / 3f, by = cut + (y + h - cut) / 2f - 2f;
+            for (int k = 0; k < 3; k++) {
+                p.setColor(cc(it.prevC[k == 0 ? 3 : 4], 0));
+                rf.set(x + 4f + k * (bw + 3f), by, x + 4f + k * (bw + 3f) + bw, by + 4f); cv.drawRoundRect(rf, 2f, 2f, p);
+            }
+            cv.restore();
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(cc(it.prevC[2], 0));
+            rf2.set(x + 0.5f, y + 0.5f, x + w - 0.5f, y + h - 0.5f); cv.drawRoundRect(rf2, 9.5f, 9.5f, p);
+            p.setStyle(Paint.Style.FILL);
+        }
+        setText(it.size, true, cc(it.tc, pal[R_TEXT]));
+        for (int k = 0; k < it.lines.length; k++) cv.drawText(it.lines[k], it.textX, base(it.textY + k * it.lineH, it.lineH, k), tp);
+        if (it.lines2.length > 0) {
+            float y2 = it.textY + it.lines.length * it.lineH + 2f;
+            setText(it.size2, false, cc(it.sc, pal[R_SUB]));
+            for (int k = 0; k < it.lines2.length; k++) cv.drawText(it.lines2[k], it.textX, base(y2 + k * it.lineH2, it.lineH2, k), tp);
+        }
+        if (it.on) {                                                                 // 체크 원
+            p.setStyle(Paint.Style.FILL); p.setColor(cc(it.ac2, pal[R_GOLD]));
+            cv.drawCircle(it.bx + 11f, it.by + 11f, 11f, p);
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(2f); p.setStrokeCap(Paint.Cap.ROUND); p.setColor(cc(it.tcCk, 0xFF121214));
+            cv.drawLine(it.bx + 6.5f, it.by + 11.5f, it.bx + 9.8f, it.by + 14.8f, p);
+            cv.drawLine(it.bx + 9.8f, it.by + 14.8f, it.bx + 15.5f, it.by + 7.8f, p);
+            p.setStyle(Paint.Style.FILL); p.setStrokeCap(Paint.Cap.BUTT);
+        }
+    }
+
+    private void drawField(Canvas cv, ScreenCore.Item it) {
+        rf.set(it.x, it.y, it.x + it.w, it.y + it.h);
+        if (it.fill != null) { p.setStyle(Paint.Style.FILL); p.setColor(cc(it.fill, 0)); cv.drawRoundRect(rf, it.radius, it.radius, p); }
+        boolean editing = it.key.equals(editKey);
+        if (it.line != null) {
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(editing ? 1.5f : 1f); p.setColor(editing ? pal[R_GOLD] : cc(it.line, 0));
+            rf2.set(it.x + 0.5f, it.y + 0.5f, it.x + it.w - 0.5f, it.y + it.h - 0.5f);
+            cv.drawRoundRect(rf2, it.radius - 0.5f, it.radius - 0.5f, p);
+            p.setStyle(Paint.Style.FILL);
+        }
+        if (editing) return;                                                         // 편집 중엔 진짜 입력칸이 이 자리에 글자를 그린다
+        String v = fieldVals.get(it.key);
+        boolean empty = v == null || v.length() == 0;
+        setText(it.size, false, empty ? alpha(cc(it.sc, pal[R_SUB]), 0.8f) : cc(it.tc, pal[R_TEXT]));
+        cv.save(); rf.set(it.x + 6f, it.y, it.x + it.w - 6f, it.y + it.h); cv.clipRect(rf);
+        cv.drawText(empty ? it.label : v, it.textX, base(it.y, it.h, 0), tp);
+        cv.restore();
     }
 
     /** 굵은 구간이 섞인 글: 줄마다 조각을 차례로 그린다(새 글자·객체를 만들지 않는다 — 조각은 배치 때 미리 나눠 뒀다). */
@@ -370,24 +507,24 @@ public class ScreenView extends View {
 
     private void drawBox(Canvas cv, ScreenCore.Item it) {
         rf.set(it.x, it.y, it.x + it.w, it.y + it.h);
-        if (it.fillRole != null || it.fillC != 0) {
-            p.setStyle(Paint.Style.FILL); p.setColor(it.fillRole != null ? roleColor(it.fillRole) : it.fillC);
+        if (it.fill != null) {
+            p.setStyle(Paint.Style.FILL); p.setColor(cc(it.fill, 0));
             cv.drawRoundRect(rf, it.radius, it.radius, p);
         }
-        if (it.lineRole != null || it.lineC != 0) {
-            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(it.lineRole != null ? roleColor(it.lineRole) : it.lineC);
+        if (it.line != null) {
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(cc(it.line, 0));
             rf2.set(it.x + 0.5f, it.y + 0.5f, it.x + it.w - 0.5f, it.y + it.h - 0.5f);
             cv.drawRoundRect(rf2, it.radius - 0.5f, it.radius - 0.5f, p);
             p.setStyle(Paint.Style.FILL);
         }
-        int c = roleColor(it.color);
+        int c = it.tc != null ? cc(it.tc, 0) : roleColor(it.color);
         setText(it.size, it.bold, c);
         if (it.segs != null) { drawRich(cv, it, it.textX, it.textY, c); return; }
         for (int k = 0; k < it.lines.length; k++) cv.drawText(it.lines[k], it.textX, base(it.textY + k * it.lineH, it.lineH, k), tp);
     }
 
     private void drawSearch(Canvas cv, ScreenCore.Item it) {
-        int accent = it.accentRole != null ? roleColor(it.accentRole) : it.accentC;
+        int accent = cc(it.ac, 0xFFE63329);
         rf.set(it.x, it.y, it.x + it.w, it.y + it.h);
         p.setStyle(Paint.Style.FILL); p.setColor(pal[R_CARD]);
         cv.drawRoundRect(rf, it.radius, it.radius, p);
@@ -463,11 +600,13 @@ public class ScreenView extends View {
         }
     }
     private void blurInput() {
+        endEdit();
         if (input == null || !input.hasFocus()) return;
         try { ((InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(input.getWindowToken(), 0); } catch (Throwable ignored) { }
         input.clearFocus();
     }
     private void hideInput() {
+        endEdit();
         if (input == null) return;
         blurInput();
         if (input.getVisibility() != View.GONE) input.setVisibility(View.GONE);
@@ -507,7 +646,7 @@ public class ScreenView extends View {
     }
     private int maxLen = -1;
     private boolean syncQ;
-    private final Runnable syncRun = new Runnable() { @Override public void run() { syncQ = false; syncInput(); } };
+    private final Runnable syncRun = new Runnable() { @Override public void run() { syncQ = false; syncInput(); syncEditor(); } };
     /** 배치 도중에 자식 뷰를 건드리지 않도록 한 박자 뒤로 미룬다(여러 번 불려도 한 번). */
     private void syncLater() { if (!syncQ) { syncQ = true; post(syncRun); } }
     @Override protected void onLayout(boolean changed, int l, int t, int r, int b) { super.onLayout(changed, l, t, r, b); syncLater(); }
@@ -518,8 +657,104 @@ public class ScreenView extends View {
     }
     @Override protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
+        endEdit();
+        if (editor != null && editor.getParent() instanceof ViewGroup) ((ViewGroup) editor.getParent()).removeView(editor);
         if (input != null) { blurInput(); if (input.getParent() instanceof ViewGroup) ((ViewGroup) input.getParent()).removeView(input); inShown = false; inL = inT = inW = inH = -1; }
     }
+    // ───────────── 글자 입력칸(field) 편집 ─────────────
+    private ScreenCore.Item fieldByKey(String k) {
+        if (lay == null || k == null) return null;
+        for (ScreenCore.Item it : lay.body) if (it.kind == ScreenCore.K_FIELD && k.equals(it.key)) return it;
+        return null;
+    }
+    private void ensureEditor() {
+        if (editor != null) return;
+        EditText e = new EditText(getContext());
+        e.setBackground(null);
+        e.setPadding(0, 0, 0, 0);
+        e.setSingleLine(true);
+        e.setIncludeFontPadding(false);
+        e.setGravity(Gravity.CENTER_VERTICAL);
+        e.setInputType(InputType.TYPE_CLASS_TEXT);
+        e.setImeOptions(EditorInfo.IME_ACTION_DONE);
+        e.setOnEditorActionListener(new TextView.OnEditorActionListener() {
+            @Override public boolean onEditorAction(TextView v, int actionId, KeyEvent ev) { blurInput(); return true; }
+        });
+        e.setOnFocusChangeListener(new View.OnFocusChangeListener() {
+            @Override public void onFocusChange(View v, boolean has) {
+                if (!has) commitEdit();
+                if (listener != null) listener.onInputFocus(has);
+            }
+        });
+        editor = e;
+    }
+    private void beginEdit(ScreenCore.Item it) {
+        ensureEditor();
+        blurInput();
+        ViewGroup par = getParent() instanceof ViewGroup ? (ViewGroup) getParent() : null;
+        if (par == null) return;
+        if (editor.getParent() != par) {
+            if (editor.getParent() instanceof ViewGroup) ((ViewGroup) editor.getParent()).removeView(editor);
+            par.addView(editor, new FrameLayout.LayoutParams(1, 1));
+        }
+        editKey = it.key;
+        String v = fieldVals.get(it.key);
+        editor.setText(v == null ? "" : v);
+        editor.setTextColor(cc(it.tc, pal[R_TEXT]));
+        editor.setHintTextColor(alpha(cc(it.sc, pal[R_SUB]), 0.8f));
+        editor.setHint(it.label);
+        editor.setTextSize(TypedValue.COMPLEX_UNIT_DIP, it.size);
+        editor.setFilters(new InputFilter[] { new InputFilter.LengthFilter(Math.max(1, it.maxlen)) });
+        eL = eT = eW = eH = -1;
+        ensureEditVisible(it);
+        editor.setVisibility(View.VISIBLE);
+        syncEditor();
+        editor.bringToFront();
+        editor.requestFocus();
+        editor.setSelection(editor.getText().length());
+        try { ((InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE)).showSoftInput(editor, 0); } catch (Throwable ignored) { }
+        invalidate();
+    }
+    /** 편집 중인 칸이 본문 보이는 영역 안에 오도록 스크롤한다(키보드가 올라와 영역이 줄어든 뒤에도). */
+    private void ensureEditVisible(ScreenCore.Item f) {
+        if (lay == null || f == null) return;
+        float vh = bodyViewH();
+        if (vh <= f.h + 16f) return;
+        if (f.y + f.h + 8f > scrollY + vh) scrollY = f.y + f.h + 8f - vh;
+        if (f.y - 8f < scrollY) scrollY = f.y - 8f;
+        scrollY = ScreenCore.clamp(scrollY, lay.bodyMaxScroll(vh));
+        flingY.forceFinished(true);
+    }
+    private void syncEditor() {
+        if (editKey == null || editor == null) return;
+        ScreenCore.Item f = fieldByKey(editKey);
+        ViewGroup par = getParent() instanceof ViewGroup ? (ViewGroup) getParent() : null;
+        if (f == null || par == null || getVisibility() != View.VISIBLE) { endEdit(); return; }
+        float topDp = lay.headH + f.y - scrollY;
+        if (topDp < lay.headH - 1f || topDp + f.h > viewHdp() + 1f) { endEdit(); return; }     // 화면 밖으로 밀렸다
+        int l = getLeft() + Math.round((f.x + 13f) * dpr), t = getTop() + Math.round(topDp * dpr);
+        int w = Math.max(1, Math.round((f.w - 26f) * dpr)), h = Math.max(1, Math.round(f.h * dpr));
+        if (l != eL || t != eT || w != eW || h != eH) {
+            eL = l; eT = t; eW = w; eH = h;
+            FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(w, h);
+            lp.leftMargin = l; lp.topMargin = t;
+            editor.setLayoutParams(lp);
+        }
+    }
+    private void commitEdit() {
+        if (editKey != null && editor != null) fieldVals.put(editKey, String.valueOf(editor.getText()));
+        editKey = null;
+        if (editor != null && editor.getVisibility() != View.GONE) editor.setVisibility(View.GONE);
+        invalidate();
+    }
+    /** 편집을 끝내고(글자는 보관) 키보드를 내린다. */
+    private void endEdit() {
+        if (editor == null || editKey == null) return;
+        try { ((InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(editor.getWindowToken(), 0); } catch (Throwable ignored) { }
+        editor.clearFocus();
+        commitEdit();
+    }
+
     /** 클리핑이 바뀌어도 입력칸이 어긋나지 않게 플러그인이 setClipBounds 뒤에 부른다. */
     public void resyncInput() { syncLater(); }
 
