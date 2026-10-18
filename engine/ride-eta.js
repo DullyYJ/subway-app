@@ -76,9 +76,10 @@ var RIDE_ETA_DEFAULTS = {
   //   엔진은 상태가 없어 매번 같은 식으로 다시 계산하므로 누적되지 않는다.
   // 정차 시간(초) — 실측 25초(표본 25,997). 시각표 기준 위치(pos)에서 도착 뒤 이만큼은 역 위에 머문다.
   // ★ 2026-10-16 (YJ: "역에 도착하면 마커가 바로 다음역으로 넘어간다 — GPS 영점을 고려해서 10초 동안 정차(노란색) 후 이동"): 25 → 10초.
-  stopDwellSec: 10,
+  // ★ 2026-10-19 (YJ: "각 역에 도착하면 12초 동안 문이 열린다고 생각해줘 — 시간표상 역에 도착하면 12초 정지(정지 중엔 GPS 영점) 하고 다음 역으로. 버스는 네비게이션처럼 GPS 기준이니 적용 X"): 10 → 12초, 지하철 역에만(버스 정류장은 0).
+  stopDwellSec: 12,
   // 영점(GPS 통과)을 받은 역에서 마커가 멈춰 있어야 하는 시간(초). 통과 시각(영점이면 실제 통과 시각) + 이만큼까지 hold 로 알린다 — 시각표 기준 위치(pos)를 못 쓰는 경우에도 앱이 그린다.
-  markerDwellSec: 10,
+  markerDwellSec: 12,
   // ★ 2026-10-14 (YJ: 인천1호선(실시간 위치 없음) 시험 — 도착 표시가 약 15초 늦다 → 현재보다 10초 일찍 도착으로 판정): 시각표 기준 위치(pos)에서 '중간 경로역'(승차역·최종 목적지 제외)에 닿았다고 보는 시각을
   //   표시 도착 시각보다 이만큼(초) 앞당긴다. 0 이면 끔. 표시하는 도착 시각(etaMs·arr)은 그대로이고 마커·오버레이가 읽는 pos(from/to/t0/t1/segs)만 당겨진다. (영점 창은 ride-track zeroLeadSec 가 같이 일찍 열린다)
   // ★ 2026-10-15 (YJ: 마커가 다음 역에 너무 일찍 올라간다 → 10초를 5초로): 값만 10 → 5.
@@ -99,7 +100,10 @@ var RIDE_ETA_DEFAULTS = {
   // 다음 차 시각(boardNext)을 반영하는 최대 대기(분) — 첫차 대기·운행 종료 같은 값은 반영하지 않는다(예전 앱 _maxWait)
   boardMaxWaitMin: 30,
   // 표시 반올림: 'round'(가장 가까운 분) | 'floor'(내림 — 예전 앱)
-  rounding: 'round'
+  rounding: 'floor',
+  // ★ 2026-10-19 (YJ: "역 도착 시간이 06시38분이면 우리는 06시38분30초에 도착했다고 확정한다 — 거기서부터는 이전 규칙을 따른다"): 시각표의 분 단위 시각(06:38)은 그 분 안(38:00~38:59)의 어느 때든 될 수 있어 가운데(:30)를 도착으로 본다.
+  //   예정 시각(planMs)을 이만큼(초) 뒤로 놓고, 화면 시각(HH:MM)은 분의 몫(floor)으로 쓴다 — 06:38:30 은 '06:38' 로 보인다.
+  planSecOffset: 30
 };
 
 function _reFold(d) { return d - Math.round(d / 1440) * 1440; }          // 자정 접힘: 차이를 ±12시간 안으로
@@ -267,14 +271,15 @@ function _rePos(input, r) {
   for (k = 0; k < idxs.length; k++) if (idxs[k] === f) { pos = k; break; }
   if (pos < 0) { for (k = 0; k < idxs.length; k++) if (idxs[k] > f) { pos = Math.max(0, k - 1); break; } if (pos < 0) pos = idxs.length - 1; f = idxs[pos]; }
   if (pos >= idxs.length - 1) return { from: f, to: f, t0: null, t1: null, ratio: 0, moving: false, floor: fl, segs: [] };
-  var t = idxs[pos + 1], t0 = eff(pos) + O.stopDwellSec * 1000, t1 = eff(pos + 1);
+  var dwMs = function (nodeIdx) { var nn = nodes[nodeIdx]; return (nn && nn.isBus) ? 0 : O.stopDwellSec * 1000; };      // 정차(문 열림)는 지하철 역만 — 버스는 GPS 기준이라 정차를 두지 않는다
+  var t = idxs[pos + 1], t0 = eff(pos) + dwMs(idxs[pos]), t1 = eff(pos + 1);
   if (!(t1 - t0 >= 5000)) t0 = eff(pos);
   var ratio = t1 > t0 ? Math.max(0, Math.min(1, (nowMs - t0) / (t1 - t0))) : 0;
   // ★ 2026-10-13 (YJ: 마커가 갑자기 멈추고 노란색 — 백그라운드에서 엔진 응답이 끊기면 마지막 구간이 끝난 채 굳었다): 앞으로의 구간 전부를 함께 준다.
   //   앱은 '지금 시각이 어느 구간(a~t1)에 드는지' 찾아 그리기만 한다 — 응답이 몇 분 끊겨도 시각표대로 이어서 그린다(새 증거가 오면 엔진이 다시 계산한다).
   var segs = [], q, lim = Math.min(idxs.length - 1, pos + O.posSegCount);
   for (q = pos; q < lim; q++) {
-    var fa = idxs[q], fb = idxs[q + 1], s0 = eff(q) + O.stopDwellSec * 1000, s1 = eff(q + 1);
+    var fa = idxs[q], fb = idxs[q + 1], s0 = eff(q) + dwMs(fa), s1 = eff(q + 1);
     if (!(s1 - s0 >= 5000)) s0 = eff(q);
     segs.push({ from: fa, to: fb, a: eff(q), t0: s0, t1: s1 });
   }
@@ -291,6 +296,7 @@ function _reHold(input, r) {
   for (i = 0; i < ps.length; i++) {
     var P = ps[i], ix = +(P && P.idx), sr = (P && P.src) || 'pf';
     if (!isFinite(ix) || ix < 0 || ix >= nodes.length - 1 || sr === 'board' || sr === 'cell' || sr === 'drift') continue;
+    if (nodes[ix] && nodes[ix].isBus) continue;        // 버스 정류장은 정차(hold)를 두지 않는다(2026-10-19)
     if (r.etaMs[ix] == null) continue;
     if (!best || ix > best.idx) best = { idx: ix, src: sr, ms: +P.ms };
   }
@@ -324,7 +330,7 @@ function _rideEtaCore(input) {
     var pmI = nodes[i] && nodes[i].planMin;
     valid[i] = (pmI != null && isFinite(+pmI));
     if (!valid[i]) { planMs[i] = null; continue; }
-    if (firstValid < 0) { firstValid = i; chain = +pmI; ms0 = nowMs + _reFold(+pmI - nowMin) * 60000; }
+    if (firstValid < 0) { firstValid = i; chain = +pmI; ms0 = nowMs + _reFold(+pmI - nowMin) * 60000 + (+O.planSecOffset || 0) * 1000; }
     else chain += _reFold(+pmI - (+nodes[prevValid].planMin));
     planMs[i] = ms0 + (chain - (+nodes[firstValid].planMin)) * 60000;
     prevValid = i;

@@ -1,0 +1,119 @@
+// 길동무 — 홈 탭 경로 입력 카드(출발/도착 입력·자동완성·위치 감지·바꾸기·경로 탐색·기준시각) 화면 엔진 순수 계산 모듈 (route-v2 Worker 에 붙여 넣는 순수 함수; 단일 출처)
+//
+// ★ 원칙(YJ): "모든 연산은 엔진이 한다. 앱은 엔진이 계산한 그림만 그린다."  (2026-10-18 서버 구동 화면 8호 — 홈 탭 경로 입력)
+//   예전엔 www/index.html 의 홈 카드(HTML)와 fmapSearch(자동완성 줄 그리기) · _updateBaseTimeDisplay(기준시각 글) 가 이 모두를 직접 만들었다.
+//   이제 웹은 '원자료'(입력칸 글자 · 어느 칸이 눌려 있나 · 고른 출발/도착이 있나 · 지하철역/버스정류장/장소 후보 · 기준시각 ms)만 보내고,
+//   엔진이 몇 줄을 어떤 순서·딱지·글로 보일지, 단추 글·흐림, 기준시각 문구를 정해 화면 JSON 으로 내려 준다. 앱(네이티브)은 그리기만 한다.
+//   후보를 모으는 일(STNDB 걸러내기 · TAGO 버스정류장 · 카카오 장소 검색)과 고른 뒤 출발/도착을 정하고 경로를 찾는 일은 예전 그대로 웹 데이터 계층이 한다.
+//
+// 입력  homeScreen({ cap }, facts, data)
+//        cap   = 앱이 그릴 수 있는 화면 규격 수준(7 이상이어야 만든다)
+//        facts = { start, dest: 입력칸 글자, active: ''|'start'|'dest'(키보드가 올라온 칸), startSet, destSet: 고른 출발/도착이 있나, gps: 위치 감지 중인가,
+//                  base: { ms(기준시각 ms 또는 null), tzo(분, JS getTimezoneOffset), today:[y,m,d](기기 날짜), hol(주말·공휴일) } }
+//        data  = { u:[{n, l}] 지하철역 후보, b:[{n, d}] 버스정류장 후보(d = 미터), p:[{n, a}] 장소 후보 }  — 눌려 있는 칸의 글자에 대한 후보만
+// 출력  { ok, v:1, screen:'home', cover:'chips', head:[], body:[panel…], info:{h, active, ready, rows} }
+//        행동: rt.gps(위치 감지) · rt.swap(바꾸기) · rt.go(경로 탐색) · rt.enter(키보드 확인) · bt.pick(기준시각 열기) · bt.now(현재로) · sg.u.<i> / sg.b.<i> / sg.p.<i>(후보 고르기: 후보 배열의 순번)
+// 맨 아래 module.exports 는 시험(Node)용이고 Worker 에서는 함수 선언만 쓰인다.
+'use strict';
+var HOME_SCREEN_V = 1;
+var HOME_ROW_H = 48, HOME_SUG_H = 44, HOME_MAX_SUG = 7, HOME_PANEL_B = 4;
+var HOME_SWAP_ICON = 'M16 17.01V10h-2v7.01h-3L15 21l4-3.99h-3zM9 3L5 6.99h3V14h2V6.99h3L9 3z';   // www/index.html 의 바꾸기 단추 SVG 와 같다
+function homeHash(s) {
+  var h = 5381;
+  for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+function homeStr(v, max) { return typeof v === 'string' ? v.slice(0, max) : ''; }
+function homeFacts(f) {
+  f = (f && typeof f === 'object') ? f : {};
+  var b = (f.base && typeof f.base === 'object') ? f.base : {};
+  var ms = (typeof b.ms === 'number' && isFinite(b.ms)) ? b.ms : null;
+  var today = null;
+  if (Array.isArray(b.today) && b.today.length === 3) {
+    var y = Math.floor(Number(b.today[0])), m = Math.floor(Number(b.today[1])), d = Math.floor(Number(b.today[2]));
+    if (isFinite(y) && isFinite(m) && isFinite(d)) today = [y, m, d];
+  }
+  var tzo = Number(b.tzo); if (!isFinite(tzo) || Math.abs(tzo) > 1000) tzo = -540;
+  return {
+    start: homeStr(f.start, 120), dest: homeStr(f.dest, 120),
+    active: f.active === 'start' || f.active === 'dest' ? f.active : '',
+    startSet: !!f.startSet, destSet: !!f.destSet, gps: !!f.gps,
+    base: { ms: ms, tzo: tzo, today: today, hol: !!b.hol }
+  };
+}
+// 기준시각 문구: '현재' | '오늘 오후 2:30' | '내일 오전 9:05' | '10/25(토) 오후 1:00'  (예전 _updateBaseTimeDisplay 와 같은 글)
+function homeBaseLabel(base) {
+  if (base.ms == null) return '현재';
+  var d = new Date(base.ms - base.tzo * 60000);                       // 기기 시각으로 옮긴 값(UTC getter 로 읽는다)
+  var by = d.getUTCFullYear(), bm = d.getUTCMonth(), bd = d.getUTCDate(), h = d.getUTCHours(), mi = d.getUTCMinutes();
+  var label;
+  var t = base.today;
+  var diff = t ? Math.round((Date.UTC(by, bm, bd) - Date.UTC(t[0], t[1], t[2])) / 86400000) : null;
+  if (diff === 0) label = '오늘';
+  else if (diff === 1) label = '내일';
+  else label = (bm + 1) + '/' + bd + '(' + '일월화수목금토'.charAt(d.getUTCDay()) + ')';
+  return label + ' ' + (h < 12 ? '오전' : '오후') + ' ' + ((h % 12) || 12) + ':' + ('0' + mi).slice(-2);
+}
+function homeDist(m) {
+  m = Number(m);
+  if (!isFinite(m) || m <= 0) return '';
+  return m >= 1000 ? (Math.round(m / 100) / 10) + 'km' : Math.round(m) + 'm';
+}
+// 후보 고르기: 종류마다 3줄씩 먼저, 남는 자리를 지하철 → 버스 → 장소 순으로 채워 모두 7줄까지. 보이는 순서는 지하철 · 버스 · 장소.
+function homePick(data) {
+  data = (data && typeof data === 'object') ? data : {};
+  var kinds = [
+    { k: 'u', arr: Array.isArray(data.u) ? data.u : [] },
+    { k: 'b', arr: Array.isArray(data.b) ? data.b : [] },
+    { k: 'p', arr: Array.isArray(data.p) ? data.p : [] }
+  ];
+  var take = { u: 0, b: 0, p: 0 }, left = HOME_MAX_SUG, i;
+  for (i = 0; i < kinds.length; i++) { var n0 = Math.min(3, kinds[i].arr.length, left); take[kinds[i].k] = n0; left -= n0; }
+  for (i = 0; i < kinds.length && left > 0; i++) { var more = Math.min(kinds[i].arr.length - take[kinds[i].k], left); take[kinds[i].k] += more; left -= more; }
+  var rows = [];
+  kinds.forEach(function (K) {
+    for (var j = 0; j < take[K.k]; j++) {
+      var c = K.arr[j];
+      if (!c || typeof c !== 'object') continue;
+      var name = homeStr(c.n, 120);
+      if (!name) continue;
+      var r = { t: 'sug', name: name, act: { a: 'call', v: 'sg.' + K.k + '.' + j } };
+      if (K.k === 'u') { r.badge = '지하철'; r.bc = '#0a84ff'; r.sub = homeStr(c.l, 60); }
+      else if (K.k === 'b') { r.badge = '버스'; r.bc = '#00b341'; r.sub = homeDist(c.d); }
+      else { r.badge = '장소'; r.bc = '#5e5ce6'; r.sub = homeStr(c.a, 100); }
+      rows.push(r);
+    }
+  });
+  if (rows.length) rows[rows.length - 1].last = true;
+  return rows;
+}
+function homeScreen(inp, factsIn, dataIn) {
+  inp = inp || {};
+  if (!(Number(inp.cap) >= 7)) return { ok: false, error: 'cap' };
+  var f = homeFacts(factsIn);
+  var sugs = f.active && (f.active === 'start' ? f.start : f.dest).trim() ? homePick(dataIn) : [];
+  var ready = (f.startSet && f.destSet) || (f.start.trim().length > 0 && f.dest.trim().length > 0);
+  var act = function (v) { return { a: 'call', v: v }; };
+  var kids = [];
+  kids.push({ t: 'inbar', key: 'start', hint: '출발지 검색', value: f.start, maxlen: 60, h: HOME_ROW_H, size: 15, bold: true, r: 0, fill: '', line: '', dot: '#0a84ff',
+    btn: f.gps ? '감지 중' : '위치 감지', bh: 30, bsize: 12, onc: '#0a84ff', ckf: '#ffffff', watch: true, dim: f.gps, act: act('rt.gps'), eact: act('rt.enter') });
+  kids.push({ t: 'swap', size: 34, fill: '#0a84ff', line: 'bg', tc: 'white', icon: HOME_SWAP_ICON, act: act('rt.swap') });
+  var rowsS = f.active === 'start' ? sugs : [], rowsD = f.active === 'dest' ? sugs : [];
+  rowsS.forEach(function (r) { kids.push(r); });
+  kids.push({ t: 'divider' });
+  kids.push({ t: 'inbar', key: 'dest', hint: '도착지 검색', value: f.dest, maxlen: 60, h: HOME_ROW_H, size: 15, bold: true, r: 0, fill: '', line: '', dot: '#ff3b30',
+    btn: '경로 탐색', bh: 30, bsize: 12, onc: 'gold', ckf: '#121214', watch: true, dim: !ready, act: act('rt.go'), eact: act('rt.enter') });
+  rowsD.forEach(function (r) { kids.push(r); });
+  kids.push({ t: 'divider' });
+  var custom = f.base.ms != null;
+  var timeRow = { t: 'sug', badge: '기준시각', bc: 'sub', name: homeBaseLabel(f.base), sub: (f.base.hol ? '주말·공휴일' : '평일') + (custom ? '' : ' · 눌러서 시각 변경'), last: true, act: act('bt.pick') };
+  if (custom) { timeRow.btn = '현재'; timeRow.bact = act('bt.now'); }
+  kids.push(timeRow);
+  var body = [{ t: 'panel', pad: [0, 0, 0, HOME_PANEL_B], ip: [0, 0, 0, 0], r: 16, kids: kids }];
+  var h = 2 + HOME_ROW_H + 1 + HOME_ROW_H + 1 + HOME_SUG_H + (rowsS.length + rowsD.length) * HOME_SUG_H + HOME_PANEL_B;
+  var out = { ok: true, v: 1, screen: 'home', cover: 'chips', head: [], body: body, info: { h: h, active: f.active, ready: ready, rows: rowsS.length + rowsD.length } };
+  out.rev = 'h' + HOME_SCREEN_V + ':' + homeHash(JSON.stringify(body));
+  return out;
+}
+
+if (typeof module !== 'undefined' && module.exports) module.exports = { homeScreen: homeScreen, homeFacts: homeFacts, homeBaseLabel: homeBaseLabel, homePick: homePick, homeDist: homeDist, HOME_SWAP_ICON: HOME_SWAP_ICON };

@@ -37,6 +37,10 @@
 //   press : (want.press 일 때) 탑승·환승 버튼을 누른 순간 승차역(plan.pressPt)에 있나 — { state:'at'|'near'|'away'|'unknown', distM, ageSec }. 앱은 'away'(800m 밖) 일 때만 버튼을 거둔다.
 //   mode  : 지금 위치를 무엇으로 잡을지(엔진이 정한다, 앱은 따른다). { kind:'sub', gps:'zero' }  지하철 탑승 확정 = 시각표로 움직이고 GPS 는 역마다 영점만 ·
 //           { kind:'bus', gps:'heavy', snapM, advanceSec }  버스 탑승(확정·그럴듯함) = GPS 를 더 쓴다(정류장 투영 반경 snapM, 정류장 진행 간격 advanceSec) · 없으면 null
+//   motion: (2026-10-19) 네비게이션식 '지금 달리는 중인가' — { moving: true|false|null(모른다), speedMps, n, ageSec }. 최근 14초 좋은 좌표의 순 이동 속도(1.4m/s↑ 달림 · 0.7m/s↓ 정지). 앱은 버스 구간 마커의 달림/정지(노랑)를 이 값으로 그린다.
+//   busPos: (2026-10-19) 버스를 타는 중(plan.progIsBus 이거나 bus.state confirmed/plausible, notBus 아님) · plan.boarded 일 때, 같은 구간(plan.stops[].lg)의 버스 정류장을 이은 선 위 지금 위치.
+//           { lg, offM(선에서 떨어진 m), fromI·toI(지금 위치 앞·뒤 정류장 앱 번호), ratio, distAlong, passed:[{i, ms}](이미 지난 정류장과 통과 시각 — 선 위 이동 거리로 초 단위 보간), passedUnknown:[i](궤적이 시작할 때 이미 지나 있어 시각을 모르는 정류장) }
+//           앱은 진행도를 그 정류장까지 올리고 시각을 통과 증거(gps)로 적어 보낸다 → 엔진(ride-eta)이 남은 정류장 시각을 당기거나 민다. 선에서 busPosOffM(150m) 넘게 벗어나면 주지 않는다.
 //
 // 이 파일은 의존성이 없다. 맨 아래 module.exports 는 시험(Node)용이고 Worker 에서는 함수 선언만 쓰인다.
 'use strict';
@@ -76,7 +80,12 @@ var RIDE_TRACK_DEFAULTS = {
   //   pass:true 인 정류장은 '표시 도착 시각 앞뒤' 넓은 창에서 GPS 가 그 정류장 150m 안(정확도 60m 이하 좌표)에 든 가장 가까운 순간을 통과 시각(passMs)으로 돌려준다 — 앱은 그 시각을 통과 증거로 엔진에 다시 보낸다.
   passAheadSec: 300, passLateSec: 420, passBackSec: 300, passNearM: 150, passAccM: 60, passInterpMaxGapSec: 30,
   // ★ 2026-10-13 (YJ: "마커도 계속 엔진에 위치를 물어보고 영점 잡고 보정해야지 — 밀거나 당기거나"): 늦게 오는 열차 — 표시 도착 시각이 지났는데 신선한 GPS 가 '앞 정류장과 이 정류장 사이'에서 이 정류장과 notYetFarM 넘게 떨어져 있으면 notYet:true(아직 안 닿음). 앱은 이 증거를 /ride-eta 에 보내고 엔진이 뒤 시각을 민다.
-  notYetFarM: 400, notYetMaxLateSec: 300, notYetBetween: 1.25, notYetAccM: 100
+  notYetFarM: 400, notYetMaxLateSec: 300, notYetBetween: 1.25, notYetAccM: 100,
+  // ★ 2026-10-19 (YJ: "버스는 지상이 대부분이니까 네비게이션처럼 GPS 를 써 · 버스가 계속 움직이는데 마커는 정지(노랑)"): 움직임 · 버스 위치.
+  //   motion : 신선한 좌표 몇 개의 '순 이동 속도'(m/s)로 지금 달리는 중인지 본다(지하철 PF 의 정차 판정과 무관 — 네비게이션식).
+  //   busPos : 버스 구간 정류장을 이은 선 위에서 지금 위치(정류장 사이 비율)와 이미 지난 정류장의 통과 시각(선 위 이동 거리로 보간).
+  motionWinSec: 14, motionMinSpanSec: 4, motionMaxAcc: 60, motionMoveMps: 1.4, motionStopMps: 0.7,
+  busPosOffM: 150, busPosFixAccM: 60, busPosMinStops: 2, busPosMinGapM: 15
 };
 
 // ── 기하 ──────────────────────────────────────────────────────────────────────
@@ -483,6 +492,90 @@ function rtPress(P, tr, O) {
   else { res.state = 'near'; res.why = 'between'; }
   return res;
 }
+// ── 움직임(네비게이션식) ─────────────────────────────────────────────────────────
+//   최근 motionWinSec 안의 좋은 좌표 처음~끝의 순 이동 거리(정확도의 절반씩을 뺀다)를 시간으로 나눈 속도. 좌표가 모자라거나 오래되면 moving:null(모른다).
+//   moving: true(≥ motionMoveMps) · false(≤ motionStopMps) · 그 사이는 직전 값을 알 수 없으므로 null — 앱은 null 이면 기존 판정을 쓴다.
+function rtMotion(tr, now, O) {
+  var res = { moving: null, speedMps: null, n: 0, ageSec: null };
+  var pts = [], i;
+  for (i = 0; i < tr.length; i++) { var q = tr[i]; if (now - q.ts <= O.motionWinSec * 1000 && (q.acc == null || q.acc <= O.motionMaxAcc)) pts.push(q); }
+  res.n = pts.length;
+  if (tr.length) res.ageSec = Math.round((now - tr[tr.length - 1].ts) / 1000);
+  if (pts.length < 2) return res;
+  var a = pts[0], b = pts[pts.length - 1], dt = (b.ts - a.ts) / 1000;
+  if (dt < O.motionMinSpanSec || now - b.ts > O.freshSec * 1000) return res;
+  var d = rtHav(a.lat, a.lng, b.lat, b.lng) - ((a.acc == null ? 20 : a.acc) + (b.acc == null ? 20 : b.acc)) / 2;
+  var v = Math.max(0, d) / dt;
+  res.speedMps = Math.round(v * 10) / 10;
+  if (v >= O.motionMoveMps) res.moving = true; else if (v <= O.motionStopMps) res.moving = false;
+  return res;
+}
+// ── 버스 위치(정류장을 이은 선 위) ───────────────────────────────────────────────
+//   plan.stops[].lg = 같은 노선·같은 탈것으로 이어진 구간 번호, bus = 버스 정류장. 같은 lg 의 버스 정류장을 순서대로 이어 선으로 본다.
+//   각 구간에서 최신 좌표가 선에서 busPosOffM 이내인 구간을 고른다(가장 가까운 것). 좌표 → 선 위 이동 거리(m)로 바꿔 두면 정류장마다 '그 거리를 넘어선 순간'이 통과 시각이다
+//   (마지막으로 정류장 앞이던 좌표 ↔ 처음 정류장 뒤인 좌표 사이를 거리 비율로 보간 — 좌표 간격이 30초 넘어도 거리로 보간하므로 초 단위가 맞는다).
+//   반환: { lg, offM, fromI, toI, ratio, distAlong, passed:[{i, ms}], passedUnknown:[i…] }  — 최신 좌표 앞의 정류장 i 는 모두 지난 것이고, 시각을 알면 ms.
+function rtBusPos(P, tr, O) {
+  var plan = P.plan || {}, stops = plan.stops || [], now = P.nowMs;
+  if (!plan.boarded || !stops.length || !tr.length) return null;
+  var last = null, k;
+  for (k = tr.length - 1; k >= 0; k--) { if (tr[k].acc == null || tr[k].acc <= O.busPosFixAccM) { last = tr[k]; break; } }
+  if (!last || now - last.ts > O.freshSec * 1000) return null;
+  var legs = {}, order = [];
+  for (k = 0; k < stops.length; k++) {
+    var s = stops[k];
+    if (!s || s.bus !== true || s.lg == null || !isFinite(s.lat) || !isFinite(s.lng)) continue;
+    if (!legs[s.lg]) { legs[s.lg] = []; order.push(s.lg); }
+    legs[s.lg].push(s);
+  }
+  var best = null, g;
+  for (g = 0; g < order.length; g++) {
+    var L = legs[order[g]];
+    if (L.length < O.busPosMinStops) continue;
+    var cum = [0], j;
+    for (j = 1; j < L.length; j++) cum.push(cum[j - 1] + rtHav(L[j - 1].lat, L[j - 1].lng, L[j].lat, L[j].lng));
+    var pr = rtBusProject(L, cum, last.lat, last.lng);
+    if (pr && pr.off <= O.busPosOffM && (!best || pr.off < best.pr.off)) best = { lg: order[g], L: L, cum: cum, pr: pr };
+  }
+  if (!best) return null;
+  var L2 = best.L, cum2 = best.cum, pr2 = best.pr;
+  var out = { lg: best.lg, offM: Math.round(pr2.off), fromI: L2[pr2.seg].i, toI: L2[Math.min(L2.length - 1, pr2.seg + 1)].i, ratio: Math.round(pr2.ratio * 1000) / 1000, distAlong: Math.round(pr2.s), passed: [], passedUnknown: [] };
+  // 궤적 → 선 위 거리(선에서 busPosOffM 안인 좌표만)
+  var xs = [];
+  for (k = 0; k < tr.length; k++) {
+    var q = tr[k]; if (q.acc != null && q.acc > O.busPosFixAccM) continue;
+    var p = rtBusProject(L2, cum2, q.lat, q.lng);
+    if (p && p.off <= O.busPosOffM) xs.push({ ts: q.ts, s: p.s });
+  }
+  var sNow = pr2.s;
+  for (k = 1; k < L2.length; k++) {                       // 첫 정류장은 승차(지난 것이 아니다)
+    var sk = cum2[k];
+    if (sNow < sk + O.busPosMinGapM) continue;             // 아직 안 지났다(정류장 바로 뒤 몇 m 는 같은 정류장으로 본다)
+    var lb = -1, x;
+    for (x = 0; x < xs.length; x++) { if (xs[x].s < sk) lb = x; }
+    if (lb < 0) { out.passedUnknown.push(L2[k].i); continue; }       // 궤적이 시작할 때 이미 지나 있었다 — 시각을 모른다
+    var A = xs[lb], B = xs[lb + 1];
+    if (!B || B.s < sk) { out.passedUnknown.push(L2[k].i); continue; }
+    var ms = (B.s > A.s) ? Math.round(A.ts + (sk - A.s) / (B.s - A.s) * (B.ts - A.ts)) : B.ts;
+    if (ms > now + 1000) ms = now;
+    out.passed.push({ i: L2[k].i, ms: ms });
+  }
+  return out;
+}
+// 점 → 정류장 선(꺾은선) 투영: { seg, ratio, s(선 위 거리 m), off(선에서 떨어진 m) }
+function rtBusProject(L, cum, lat, lng) {
+  var bestD = Infinity, res = null, j;
+  for (j = 0; j < L.length - 1; j++) {
+    var d = rtSegDist(lat, lng, L[j].lat, L[j].lng, L[j + 1].lat, L[j + 1].lng);
+    if (d < bestD) {
+      var kx = 88000, ky = 111000, ax = L[j].lng * kx, ay = L[j].lat * ky, bx = L[j + 1].lng * kx, by = L[j + 1].lat * ky, px = lng * kx, py = lat * ky;
+      var dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy, t = l2 ? ((px - ax) * dx + (py - ay) * dy) / l2 : 0;
+      t = Math.max(0, Math.min(1, t));
+      bestD = d; res = { seg: j, ratio: t, s: cum[j] + t * (cum[j + 1] - cum[j]), off: d };
+    }
+  }
+  return res;
+}
 // 위치를 무엇으로 잡을지 — 엔진이 정한다(앱은 따른다)
 function rtMode(P, O, bus) {
   var plan = P.plan || {};
@@ -503,7 +596,7 @@ function rideTrack(P) {
   var want = P.want || { off: true, ridden: true, miss: true };
   var tr = rtTrail(P, O), last = tr.length ? tr[tr.length - 1] : null;
   var out = { v: 1, fix: { n: tr.length, ageSec: last ? Math.round((P.nowMs - last.ts) / 1000) : null, fresh: !!(last && P.nowMs - last.ts <= O.freshSec * 1000) },
-              off: null, ridden: null, miss: null, board: null, vehicleNow: false, bus: null, mode: null, press: null };
+              off: null, ridden: null, miss: null, board: null, vehicleNow: false, bus: null, mode: null, press: null, motion: null, busPos: null };
   out.vehicleNow = rtVehicleNow(tr, P.nowMs);
   if (want.off) out.off = rtOff(P, tr, O);
   if (want.ridden) out.ridden = rtRidden(P, tr, O, out.vehicleNow);
@@ -514,6 +607,9 @@ function rideTrack(P) {
   // ★ 2026-10-13: 궤적이 후보 버스 경로(엔진 후보 중 다른 번호 — 급행 등)를 따라 달리면 '버스를 탔다'는 뜻이다. 계획 시각보다 먼저 닿는 건 더 빠른 버스라서지 승용차가 아니다 → notBus 로 보지 않는다.
   if (out.bus && out.bus.state === 'notBus' && out.ridden && out.ridden.ok) { out.bus.state = 'plausible'; out.bus.why = 'candidate_route'; }
   if (want.press === true) out.press = rtPress(P, tr, O);
+  out.motion = tr.length ? rtMotion(tr, P.nowMs, O) : null;
+  // 버스 위치: 버스를 타고 있다고 볼 근거가 있을 때(진행도가 버스 노드이거나 엔진이 버스로 봄)만 — 승용차(notBus)면 주지 않는다
+  if (want.bus !== false && (!out.bus || out.bus.state !== 'notBus') && ((P.plan && P.plan.progIsBus === true) || (out.bus && (out.bus.state === 'confirmed' || out.bus.state === 'plausible')))) out.busPos = rtBusPos(P, tr, O);
   out.mode = rtMode(P, O, out.bus);
   return out;
 }

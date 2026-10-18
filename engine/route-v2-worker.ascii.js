@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-18s47";
+var ENGINE_VERSION = "route-v2-2026-10-19s49";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -8043,7 +8043,7 @@ var RIDE_ETA_DEFAULTS = {
   // \u2605 2026-10-13: GPS \ud1b5\uacfc(\uc601\uc810)\uac00 \ub4a4 \uc2dc\uac01\uc758 \uae30\uc900 \u2014 \ud1b5\uacfc \u2212 \uc608\uc815\uc744 \uadf8\ub300\ub85c \uc9c0\uc5f0 \uc218\uc900\uc73c\ub85c(\ubc00\uace0 \ub2f9\uae40). 0 \uc774\uba74 \uc608\uc804(\ubd80\ub4dc\ub7ec\uc6b4 \ucd94\uc815)\ub300\ub85c.
   zeroFollow: 1, zeroMaxJumpMin: 6,
   // \u2605 2026-10-18 (\uac1c\uc120 \ud6c4\ubcf4 1\uc21c\uc704: \uace1\uc120 \uc120\ub85c \uc704\uce58 \uc624\ucc28 \ub4f1\uc73c\ub85c GPS \ud1b5\uacfc \ud558\ub098\uac00 \uc798\ubabb \ucc0d\ud600\ub3c4 \uc2dc\uac01\ud45c \ub3c4\ucc29\uc2dc\uac01\uc774 \ud06c\uac8c \ud754\ub4e4\ub9ac\uc9c0 \uc54a\uac8c \u2014 '\ucc38\uace0\ub9cc \ud558\uace0 \uc2dc\uac01\ud45c\ub294 \uc548 \ubc14\uafbc\ub2e4'):
-  //   \ud55c \uad6c\uac04\uc5d0\uc11c GPS \ud1b5\uacfc\uac00 '\ud558\ub098\ubfd0'(\ud63c\uc790)\uc77c \ub54c, \uadf8 \ud1b5\uacfc\uac00 \uae30\uc900 \uc218\uc900(\uc571\uc774 \ub9c8\uc9c0\ub9c9\uc73c\ub85c \uadf8\ub9b0 \uc9c0\uc5f0 prevLevelMin, \uc5c6\uc73c\uba74 \ucd94\uc815 \uc218\uc900, \uc5c6\uc73c\uba74 \uc2dc\uac01\ud45c 0\ubd84)\uc5d0\uc11c zeroSoloMaxMin \ubd84 \ub118\uac8c \ubc97\uc5b4\ub098\uba74
+  //   \ud55c \uad6c\uac04\uc5d0\uc11c GPS \ud1b5\uacfc\uac00 '\ud558\ub098\ubfd0'(\ud63c\uc790)\uc77c \ub54c, \uadf8 \ud1b5\uacfc\uac00 \uae30\uc900 \uc218\uc900(\uc571\uc774 \ub9c8\uc9c0\ub9c9\uc73c\ub85c \uadf8\ub9b0 \uc9c0\uc5f0 prevLevelMin, \uc5c6\uc73c\uba74 \ucd94\uc815 \uc218\uc900, \uc5c6\uc73c\uba74 \uc2dc\uac01\ud45c 0\ubd84)\uc5d0\uc11c zeroSoloMaxMin \ubd84(\uae30\ubcf8 8) \ub118\uac8c \ubc97\uc5b4\ub098\uba74
   //   \ud655\uc778 \uc548 \ub41c \uc99d\uac70\ub85c \ub450\uace0 \uc2dc\uac01\uc744 \ubc14\uafb8\uc9c0 \uc54a\ub294\ub2e4(\uadf8 \ud1b5\uacfc\uc758 \uc2dc\uac01 \uc790\uccb4\ub294 \uc99d\uac70\ub85c \uacc4\uc18d \ub4e4\uace0 \uac04\ub2e4). \uac19\uc740 \uad6c\uac04\uc5d0\uc11c GPS \ud1b5\uacfc\uac00 \ud558\ub098 \ub354 \uc624\uba74 \ub354\ub294 '\ud63c\uc790'\uac00 \uc544\ub2c8\ubbc0\ub85c \uc608\uc804\ucc98\ub7fc \ub530\ub978\ub2e4(\ub450 \ubc88\uc9f8 \ud1b5\uacfc\uac00 \ud655\uc778\ud574 \uc900 \uc148).
   //   0 \uc774\uba74 \ub054(\uc608\uc804 \ub3d9\uc791). \uc791\uc740 \uc5b4\uae0b\ub0a8(zeroSoloMaxMin \uc548\ucabd)\uc740 \uc608\uc804\ucc98\ub7fc \uace7\ubc14\ub85c \ubc00\uace0 \ub2f9\uae34\ub2e4.
   zeroSoloMaxMin: 8,
@@ -8085,9 +8085,10 @@ var RIDE_ETA_DEFAULTS = {
   //   \uc5d4\uc9c4\uc740 \uc0c1\ud0dc\uac00 \uc5c6\uc5b4 \ub9e4\ubc88 \uac19\uc740 \uc2dd\uc73c\ub85c \ub2e4\uc2dc \uacc4\uc0b0\ud558\ubbc0\ub85c \ub204\uc801\ub418\uc9c0 \uc54a\ub294\ub2e4.
   // \uc815\ucc28 \uc2dc\uac04(\ucd08) \u2014 \uc2e4\uce21 25\ucd08(\ud45c\ubcf8 25,997). \uc2dc\uac01\ud45c \uae30\uc900 \uc704\uce58(pos)\uc5d0\uc11c \ub3c4\ucc29 \ub4a4 \uc774\ub9cc\ud07c\uc740 \uc5ed \uc704\uc5d0 \uba38\ubb38\ub2e4.
   // \u2605 2026-10-16 (YJ: "\uc5ed\uc5d0 \ub3c4\ucc29\ud558\uba74 \ub9c8\ucee4\uac00 \ubc14\ub85c \ub2e4\uc74c\uc5ed\uc73c\ub85c \ub118\uc5b4\uac04\ub2e4 \u2014 GPS \uc601\uc810\uc744 \uace0\ub824\ud574\uc11c 10\ucd08 \ub3d9\uc548 \uc815\ucc28(\ub178\ub780\uc0c9) \ud6c4 \uc774\ub3d9"): 25 \u2192 10\ucd08.
-  stopDwellSec: 10,
+  // \u2605 2026-10-19 (YJ: "\uac01 \uc5ed\uc5d0 \ub3c4\ucc29\ud558\uba74 12\ucd08 \ub3d9\uc548 \ubb38\uc774 \uc5f4\ub9b0\ub2e4\uace0 \uc0dd\uac01\ud574\uc918 \u2014 \uc2dc\uac04\ud45c\uc0c1 \uc5ed\uc5d0 \ub3c4\ucc29\ud558\uba74 12\ucd08 \uc815\uc9c0(\uc815\uc9c0 \uc911\uc5d4 GPS \uc601\uc810) \ud558\uace0 \ub2e4\uc74c \uc5ed\uc73c\ub85c. \ubc84\uc2a4\ub294 \ub124\ube44\uac8c\uc774\uc158\ucc98\ub7fc GPS \uae30\uc900\uc774\ub2c8 \uc801\uc6a9 X"): 10 \u2192 12\ucd08, \uc9c0\ud558\ucca0 \uc5ed\uc5d0\ub9cc(\ubc84\uc2a4 \uc815\ub958\uc7a5\uc740 0).
+  stopDwellSec: 12,
   // \uc601\uc810(GPS \ud1b5\uacfc)\uc744 \ubc1b\uc740 \uc5ed\uc5d0\uc11c \ub9c8\ucee4\uac00 \uba48\ucdb0 \uc788\uc5b4\uc57c \ud558\ub294 \uc2dc\uac04(\ucd08). \ud1b5\uacfc \uc2dc\uac01(\uc601\uc810\uc774\uba74 \uc2e4\uc81c \ud1b5\uacfc \uc2dc\uac01) + \uc774\ub9cc\ud07c\uae4c\uc9c0 hold \ub85c \uc54c\ub9b0\ub2e4 \u2014 \uc2dc\uac01\ud45c \uae30\uc900 \uc704\uce58(pos)\ub97c \ubabb \uc4f0\ub294 \uacbd\uc6b0\uc5d0\ub3c4 \uc571\uc774 \uadf8\ub9b0\ub2e4.
-  markerDwellSec: 10,
+  markerDwellSec: 12,
   // \u2605 2026-10-14 (YJ: \uc778\ucc9c1\ud638\uc120(\uc2e4\uc2dc\uac04 \uc704\uce58 \uc5c6\uc74c) \uc2dc\ud5d8 \u2014 \ub3c4\ucc29 \ud45c\uc2dc\uac00 \uc57d 15\ucd08 \ub2a6\ub2e4 \u2192 \ud604\uc7ac\ubcf4\ub2e4 10\ucd08 \uc77c\ucc0d \ub3c4\ucc29\uc73c\ub85c \ud310\uc815): \uc2dc\uac01\ud45c \uae30\uc900 \uc704\uce58(pos)\uc5d0\uc11c '\uc911\uac04 \uacbd\ub85c\uc5ed'(\uc2b9\ucc28\uc5ed\u00b7\ucd5c\uc885 \ubaa9\uc801\uc9c0 \uc81c\uc678)\uc5d0 \ub2ff\uc558\ub2e4\uace0 \ubcf4\ub294 \uc2dc\uac01\uc744
   //   \ud45c\uc2dc \ub3c4\ucc29 \uc2dc\uac01\ubcf4\ub2e4 \uc774\ub9cc\ud07c(\ucd08) \uc55e\ub2f9\uae34\ub2e4. 0 \uc774\uba74 \ub054. \ud45c\uc2dc\ud558\ub294 \ub3c4\ucc29 \uc2dc\uac01(etaMs\u00b7arr)\uc740 \uadf8\ub300\ub85c\uc774\uace0 \ub9c8\ucee4\u00b7\uc624\ubc84\ub808\uc774\uac00 \uc77d\ub294 pos(from/to/t0/t1/segs)\ub9cc \ub2f9\uaca8\uc9c4\ub2e4. (\uc601\uc810 \ucc3d\uc740 ride-track zeroLeadSec \uac00 \uac19\uc774 \uc77c\ucc0d \uc5f4\ub9b0\ub2e4)
   // \u2605 2026-10-15 (YJ: \ub9c8\ucee4\uac00 \ub2e4\uc74c \uc5ed\uc5d0 \ub108\ubb34 \uc77c\ucc0d \uc62c\ub77c\uac04\ub2e4 \u2192 10\ucd08\ub97c 5\ucd08\ub85c): \uac12\ub9cc 10 \u2192 5.
@@ -8108,7 +8109,10 @@ var RIDE_ETA_DEFAULTS = {
   // \ub2e4\uc74c \ucc28 \uc2dc\uac01(boardNext)\uc744 \ubc18\uc601\ud558\ub294 \ucd5c\ub300 \ub300\uae30(\ubd84) \u2014 \uccab\ucc28 \ub300\uae30\u00b7\uc6b4\ud589 \uc885\ub8cc \uac19\uc740 \uac12\uc740 \ubc18\uc601\ud558\uc9c0 \uc54a\ub294\ub2e4(\uc608\uc804 \uc571 _maxWait)
   boardMaxWaitMin: 30,
   // \ud45c\uc2dc \ubc18\uc62c\ub9bc: 'round'(\uac00\uc7a5 \uac00\uae4c\uc6b4 \ubd84) | 'floor'(\ub0b4\ub9bc \u2014 \uc608\uc804 \uc571)
-  rounding: 'round'
+  rounding: 'floor',
+  // \u2605 2026-10-19 (YJ: "\uc5ed \ub3c4\ucc29 \uc2dc\uac04\uc774 06\uc2dc38\ubd84\uc774\uba74 \uc6b0\ub9ac\ub294 06\uc2dc38\ubd8430\ucd08\uc5d0 \ub3c4\ucc29\ud588\ub2e4\uace0 \ud655\uc815\ud55c\ub2e4 \u2014 \uac70\uae30\uc11c\ubd80\ud130\ub294 \uc774\uc804 \uaddc\uce59\uc744 \ub530\ub978\ub2e4"): \uc2dc\uac01\ud45c\uc758 \ubd84 \ub2e8\uc704 \uc2dc\uac01(06:38)\uc740 \uadf8 \ubd84 \uc548(38:00~38:59)\uc758 \uc5b4\ub290 \ub54c\ub4e0 \ub420 \uc218 \uc788\uc5b4 \uac00\uc6b4\ub370(:30)\ub97c \ub3c4\ucc29\uc73c\ub85c \ubcf8\ub2e4.
+  //   \uc608\uc815 \uc2dc\uac01(planMs)\uc744 \uc774\ub9cc\ud07c(\ucd08) \ub4a4\ub85c \ub193\uace0, \ud654\uba74 \uc2dc\uac01(HH:MM)\uc740 \ubd84\uc758 \ubaab(floor)\uc73c\ub85c \uc4f4\ub2e4 \u2014 06:38:30 \uc740 '06:38' \ub85c \ubcf4\uc778\ub2e4.
+  planSecOffset: 30
 };
 
 function _reFold(d) { return d - Math.round(d / 1440) * 1440; }          // \uc790\uc815 \uc811\ud798: \ucc28\uc774\ub97c \u00b112\uc2dc\uac04 \uc548\uc73c\ub85c
@@ -8276,14 +8280,15 @@ function _rePos(input, r) {
   for (k = 0; k < idxs.length; k++) if (idxs[k] === f) { pos = k; break; }
   if (pos < 0) { for (k = 0; k < idxs.length; k++) if (idxs[k] > f) { pos = Math.max(0, k - 1); break; } if (pos < 0) pos = idxs.length - 1; f = idxs[pos]; }
   if (pos >= idxs.length - 1) return { from: f, to: f, t0: null, t1: null, ratio: 0, moving: false, floor: fl, segs: [] };
-  var t = idxs[pos + 1], t0 = eff(pos) + O.stopDwellSec * 1000, t1 = eff(pos + 1);
+  var dwMs = function (nodeIdx) { var nn = nodes[nodeIdx]; return (nn && nn.isBus) ? 0 : O.stopDwellSec * 1000; };      // \uc815\ucc28(\ubb38 \uc5f4\ub9bc)\ub294 \uc9c0\ud558\ucca0 \uc5ed\ub9cc \u2014 \ubc84\uc2a4\ub294 GPS \uae30\uc900\uc774\ub77c \uc815\ucc28\ub97c \ub450\uc9c0 \uc54a\ub294\ub2e4
+  var t = idxs[pos + 1], t0 = eff(pos) + dwMs(idxs[pos]), t1 = eff(pos + 1);
   if (!(t1 - t0 >= 5000)) t0 = eff(pos);
   var ratio = t1 > t0 ? Math.max(0, Math.min(1, (nowMs - t0) / (t1 - t0))) : 0;
   // \u2605 2026-10-13 (YJ: \ub9c8\ucee4\uac00 \uac11\uc790\uae30 \uba48\ucd94\uace0 \ub178\ub780\uc0c9 \u2014 \ubc31\uadf8\ub77c\uc6b4\ub4dc\uc5d0\uc11c \uc5d4\uc9c4 \uc751\ub2f5\uc774 \ub04a\uae30\uba74 \ub9c8\uc9c0\ub9c9 \uad6c\uac04\uc774 \ub05d\ub09c \ucc44 \uad73\uc5c8\ub2e4): \uc55e\uc73c\ub85c\uc758 \uad6c\uac04 \uc804\ubd80\ub97c \ud568\uaed8 \uc900\ub2e4.
   //   \uc571\uc740 '\uc9c0\uae08 \uc2dc\uac01\uc774 \uc5b4\ub290 \uad6c\uac04(a~t1)\uc5d0 \ub4dc\ub294\uc9c0' \ucc3e\uc544 \uadf8\ub9ac\uae30\ub9cc \ud55c\ub2e4 \u2014 \uc751\ub2f5\uc774 \uba87 \ubd84 \ub04a\uaca8\ub3c4 \uc2dc\uac01\ud45c\ub300\ub85c \uc774\uc5b4\uc11c \uadf8\ub9b0\ub2e4(\uc0c8 \uc99d\uac70\uac00 \uc624\uba74 \uc5d4\uc9c4\uc774 \ub2e4\uc2dc \uacc4\uc0b0\ud55c\ub2e4).
   var segs = [], q, lim = Math.min(idxs.length - 1, pos + O.posSegCount);
   for (q = pos; q < lim; q++) {
-    var fa = idxs[q], fb = idxs[q + 1], s0 = eff(q) + O.stopDwellSec * 1000, s1 = eff(q + 1);
+    var fa = idxs[q], fb = idxs[q + 1], s0 = eff(q) + dwMs(fa), s1 = eff(q + 1);
     if (!(s1 - s0 >= 5000)) s0 = eff(q);
     segs.push({ from: fa, to: fb, a: eff(q), t0: s0, t1: s1 });
   }
@@ -8300,6 +8305,7 @@ function _reHold(input, r) {
   for (i = 0; i < ps.length; i++) {
     var P = ps[i], ix = +(P && P.idx), sr = (P && P.src) || 'pf';
     if (!isFinite(ix) || ix < 0 || ix >= nodes.length - 1 || sr === 'board' || sr === 'cell' || sr === 'drift') continue;
+    if (nodes[ix] && nodes[ix].isBus) continue;        // \ubc84\uc2a4 \uc815\ub958\uc7a5\uc740 \uc815\ucc28(hold)\ub97c \ub450\uc9c0 \uc54a\ub294\ub2e4(2026-10-19)
     if (r.etaMs[ix] == null) continue;
     if (!best || ix > best.idx) best = { idx: ix, src: sr, ms: +P.ms };
   }
@@ -8333,7 +8339,7 @@ function _rideEtaCore(input) {
     var pmI = nodes[i] && nodes[i].planMin;
     valid[i] = (pmI != null && isFinite(+pmI));
     if (!valid[i]) { planMs[i] = null; continue; }
-    if (firstValid < 0) { firstValid = i; chain = +pmI; ms0 = nowMs + _reFold(+pmI - nowMin) * 60000; }
+    if (firstValid < 0) { firstValid = i; chain = +pmI; ms0 = nowMs + _reFold(+pmI - nowMin) * 60000 + (+O.planSecOffset || 0) * 1000; }
     else chain += _reFold(+pmI - (+nodes[prevValid].planMin));
     planMs[i] = ms0 + (chain - (+nodes[firstValid].planMin)) * 60000;
     prevValid = i;
@@ -8413,8 +8419,8 @@ function _rideEtaCore(input) {
     kept.push(ps[ii]); if (ps[ii].ms > lastMs) lastMs = ps[ii].ms;
   }
   ps = kept;
-  // \u2605 2026-10-18 (\uac1c\uc120 \ud6c4\ubcf4 1\uc21c\uc704): \ud604\uc7ac \uad6c\uac04\uc5d0 GPS \ud1b5\uacfc\uac00 \ud558\ub098\ubfd0\uc774\uace0 \uae30\uc900(\uc571\uc774 \uadf8\ub9b0 \uc9c0\uc5f0 prevLevelMin, \uc5c6\uc73c\uba74 \uc2dc\uac01\ud45c 0\ubd84)\uc5d0\uc11c zeroSoloMaxMin \ubd84 \ub118\uac8c \ubc97\uc5b4\ub0ac\uc73c\uba74, \ud655\uc778\ub420 \ub54c\uae4c\uc9c0 \uc99d\uac70\uc5d0\uc11c \ube80\ub2e4(\ucc38\uace0\ub9cc \u2014 \uc2dc\uac01\ud45c \uadf8\ub300\ub85c).
-  //   (\uace1\uc120 \uc120\ub85c\xb7\uac00\ub824\uc9c4 \ud558\ub298\ub85c GPS \ud1b5\uacfc \ud558\ub098\uac00 \uc798\ubabb \ucc0d\ud600\ub3c4 \ub3c4\ucc29 \uc2dc\uac01 \uc804\uccb4\uac00 \ud754\ub4e4\ub9ac\uc9c0 \uc54a\uac8c. \uac19\uc740 \uad6c\uac04\uc5d0\uc11c GPS \ud1b5\uacfc\uac00 \ud558\ub098 \ub354 \uc624\uba74 \ub354\ub294 '\ud63c\uc790'\uac00 \uc544\ub2c8\ubbc0\ub85c \ub458 \ub2e4 \uc608\uc804\ucc98\ub7fc \uc4f4\ub2e4.)
+  // \u2605 2026-10-18 (\uac1c\uc120 \ud6c4\ubcf4 1\uc21c\uc704): \ud604\uc7ac \uad6c\uac04\uc5d0 GPS \ud1b5\uacfc\uac00 \ud558\ub098\ubfd0\uc774\uace0 \uae30\uc900(\uc571\uc774 \uadf8\ub9b0 \uc9c0\uc5f0 prevLevelMin, \uc5c6\uc73c\uba74 \uc2dc\uac01\ud45c 0\ubd84)\uc5d0\uc11c zeroSoloMaxMin \ubd84(\uae30\ubcf8 8) \ub118\uac8c \ubc97\uc5b4\ub0ac\uc73c\uba74, \ud655\uc778\ub420 \ub54c\uae4c\uc9c0 \uc99d\uac70\uc5d0\uc11c \ube80\ub2e4(\ucc38\uace0\ub9cc \u2014 \uc2dc\uac01\ud45c \uadf8\ub300\ub85c).
+  //   (\uace1\uc120 \uc120\ub85c\u00b7\uac00\ub824\uc9c4 \ud558\ub298\ub85c GPS \ud1b5\uacfc \ud558\ub098\uac00 \uc798\ubabb \ucc0d\ud600\ub3c4 \ub3c4\ucc29 \uc2dc\uac01 \uc804\uccb4\uac00 \ud754\ub4e4\ub9ac\uc9c0 \uc54a\uac8c. \uac19\uc740 \uad6c\uac04\uc5d0\uc11c GPS \ud1b5\uacfc\uac00 \ud558\ub098 \ub354 \uc624\uba74 \ub354\ub294 '\ud63c\uc790'\uac00 \uc544\ub2c8\ubbc0\ub85c \ub458 \ub2e4 \uc608\uc804\ucc98\ub7fc \uc4f4\ub2e4.)
   if (O.zeroSoloMaxMin > 0 && ps.length) {
     var soloLeg = legOf[ps[ps.length - 1].idx], soloAt = -1, soloN = 0;
     for (ii = 0; ii < ps.length; ii++) if (ps[ii].src === 'gps' && legOf[ps[ii].idx] === soloLeg) { soloN++; soloAt = ii; }
@@ -8874,6 +8880,10 @@ function handleRideEta(request) {
 //   press : (want.press \uc77c \ub54c) \ud0d1\uc2b9\u00b7\ud658\uc2b9 \ubc84\ud2bc\uc744 \ub204\ub978 \uc21c\uac04 \uc2b9\ucc28\uc5ed(plan.pressPt)\uc5d0 \uc788\ub098 \u2014 { state:'at'|'near'|'away'|'unknown', distM, ageSec }. \uc571\uc740 'away'(800m \ubc16) \uc77c \ub54c\ub9cc \ubc84\ud2bc\uc744 \uac70\ub454\ub2e4.
 //   mode  : \uc9c0\uae08 \uc704\uce58\ub97c \ubb34\uc5c7\uc73c\ub85c \uc7a1\uc744\uc9c0(\uc5d4\uc9c4\uc774 \uc815\ud55c\ub2e4, \uc571\uc740 \ub530\ub978\ub2e4). { kind:'sub', gps:'zero' }  \uc9c0\ud558\ucca0 \ud0d1\uc2b9 \ud655\uc815 = \uc2dc\uac01\ud45c\ub85c \uc6c0\uc9c1\uc774\uace0 GPS \ub294 \uc5ed\ub9c8\ub2e4 \uc601\uc810\ub9cc \u00b7
 //           { kind:'bus', gps:'heavy', snapM, advanceSec }  \ubc84\uc2a4 \ud0d1\uc2b9(\ud655\uc815\u00b7\uadf8\ub7f4\ub4ef\ud568) = GPS \ub97c \ub354 \uc4f4\ub2e4(\uc815\ub958\uc7a5 \ud22c\uc601 \ubc18\uacbd snapM, \uc815\ub958\uc7a5 \uc9c4\ud589 \uac04\uaca9 advanceSec) \u00b7 \uc5c6\uc73c\uba74 null
+//   motion: (2026-10-19) \ub124\ube44\uac8c\uc774\uc158\uc2dd '\uc9c0\uae08 \ub2ec\ub9ac\ub294 \uc911\uc778\uac00' \u2014 { moving: true|false|null(\ubaa8\ub978\ub2e4), speedMps, n, ageSec }. \ucd5c\uadfc 14\ucd08 \uc88b\uc740 \uc88c\ud45c\uc758 \uc21c \uc774\ub3d9 \uc18d\ub3c4(1.4m/s\u2191 \ub2ec\ub9bc \u00b7 0.7m/s\u2193 \uc815\uc9c0). \uc571\uc740 \ubc84\uc2a4 \uad6c\uac04 \ub9c8\ucee4\uc758 \ub2ec\ub9bc/\uc815\uc9c0(\ub178\ub791)\ub97c \uc774 \uac12\uc73c\ub85c \uadf8\ub9b0\ub2e4.
+//   busPos: (2026-10-19) \ubc84\uc2a4\ub97c \ud0c0\ub294 \uc911(plan.progIsBus \uc774\uac70\ub098 bus.state confirmed/plausible, notBus \uc544\ub2d8) \u00b7 plan.boarded \uc77c \ub54c, \uac19\uc740 \uad6c\uac04(plan.stops[].lg)\uc758 \ubc84\uc2a4 \uc815\ub958\uc7a5\uc744 \uc774\uc740 \uc120 \uc704 \uc9c0\uae08 \uc704\uce58.
+//           { lg, offM(\uc120\uc5d0\uc11c \ub5a8\uc5b4\uc9c4 m), fromI\u00b7toI(\uc9c0\uae08 \uc704\uce58 \uc55e\u00b7\ub4a4 \uc815\ub958\uc7a5 \uc571 \ubc88\ud638), ratio, distAlong, passed:[{i, ms}](\uc774\ubbf8 \uc9c0\ub09c \uc815\ub958\uc7a5\uacfc \ud1b5\uacfc \uc2dc\uac01 \u2014 \uc120 \uc704 \uc774\ub3d9 \uac70\ub9ac\ub85c \ucd08 \ub2e8\uc704 \ubcf4\uac04), passedUnknown:[i](\uada4\uc801\uc774 \uc2dc\uc791\ud560 \ub54c \uc774\ubbf8 \uc9c0\ub098 \uc788\uc5b4 \uc2dc\uac01\uc744 \ubaa8\ub974\ub294 \uc815\ub958\uc7a5) }
+//           \uc571\uc740 \uc9c4\ud589\ub3c4\ub97c \uadf8 \uc815\ub958\uc7a5\uae4c\uc9c0 \uc62c\ub9ac\uace0 \uc2dc\uac01\uc744 \ud1b5\uacfc \uc99d\uac70(gps)\ub85c \uc801\uc5b4 \ubcf4\ub0b8\ub2e4 \u2192 \uc5d4\uc9c4(ride-eta)\uc774 \ub0a8\uc740 \uc815\ub958\uc7a5 \uc2dc\uac01\uc744 \ub2f9\uae30\uac70\ub098 \ubbfc\ub2e4. \uc120\uc5d0\uc11c busPosOffM(150m) \ub118\uac8c \ubc97\uc5b4\ub098\uba74 \uc8fc\uc9c0 \uc54a\ub294\ub2e4.
 //
 // \uc774 \ud30c\uc77c\uc740 \uc758\uc874\uc131\uc774 \uc5c6\ub2e4. \ub9e8 \uc544\ub798 module.exports \ub294 \uc2dc\ud5d8(Node)\uc6a9\uc774\uace0 Worker \uc5d0\uc11c\ub294 \ud568\uc218 \uc120\uc5b8\ub9cc \uc4f0\uc778\ub2e4.
 
@@ -8912,7 +8922,12 @@ var RIDE_TRACK_DEFAULTS = {
   //   pass:true \uc778 \uc815\ub958\uc7a5\uc740 '\ud45c\uc2dc \ub3c4\ucc29 \uc2dc\uac01 \uc55e\ub4a4' \ub113\uc740 \ucc3d\uc5d0\uc11c GPS \uac00 \uadf8 \uc815\ub958\uc7a5 150m \uc548(\uc815\ud655\ub3c4 60m \uc774\ud558 \uc88c\ud45c)\uc5d0 \ub4e0 \uac00\uc7a5 \uac00\uae4c\uc6b4 \uc21c\uac04\uc744 \ud1b5\uacfc \uc2dc\uac01(passMs)\uc73c\ub85c \ub3cc\ub824\uc900\ub2e4 \u2014 \uc571\uc740 \uadf8 \uc2dc\uac01\uc744 \ud1b5\uacfc \uc99d\uac70\ub85c \uc5d4\uc9c4\uc5d0 \ub2e4\uc2dc \ubcf4\ub0b8\ub2e4.
   passAheadSec: 300, passLateSec: 420, passBackSec: 300, passNearM: 150, passAccM: 60, passInterpMaxGapSec: 30,
   // \u2605 2026-10-13 (YJ: "\ub9c8\ucee4\ub3c4 \uacc4\uc18d \uc5d4\uc9c4\uc5d0 \uc704\uce58\ub97c \ubb3c\uc5b4\ubcf4\uace0 \uc601\uc810 \uc7a1\uace0 \ubcf4\uc815\ud574\uc57c\uc9c0 \u2014 \ubc00\uac70\ub098 \ub2f9\uae30\uac70\ub098"): \ub2a6\uac8c \uc624\ub294 \uc5f4\ucc28 \u2014 \ud45c\uc2dc \ub3c4\ucc29 \uc2dc\uac01\uc774 \uc9c0\ub0ac\ub294\ub370 \uc2e0\uc120\ud55c GPS \uac00 '\uc55e \uc815\ub958\uc7a5\uacfc \uc774 \uc815\ub958\uc7a5 \uc0ac\uc774'\uc5d0\uc11c \uc774 \uc815\ub958\uc7a5\uacfc notYetFarM \ub118\uac8c \ub5a8\uc5b4\uc838 \uc788\uc73c\uba74 notYet:true(\uc544\uc9c1 \uc548 \ub2ff\uc74c). \uc571\uc740 \uc774 \uc99d\uac70\ub97c /ride-eta \uc5d0 \ubcf4\ub0b4\uace0 \uc5d4\uc9c4\uc774 \ub4a4 \uc2dc\uac01\uc744 \ubbfc\ub2e4.
-  notYetFarM: 400, notYetMaxLateSec: 300, notYetBetween: 1.25, notYetAccM: 100
+  notYetFarM: 400, notYetMaxLateSec: 300, notYetBetween: 1.25, notYetAccM: 100,
+  // \u2605 2026-10-19 (YJ: "\ubc84\uc2a4\ub294 \uc9c0\uc0c1\uc774 \ub300\ubd80\ubd84\uc774\ub2c8\uae4c \ub124\ube44\uac8c\uc774\uc158\ucc98\ub7fc GPS \ub97c \uc368 \u00b7 \ubc84\uc2a4\uac00 \uacc4\uc18d \uc6c0\uc9c1\uc774\ub294\ub370 \ub9c8\ucee4\ub294 \uc815\uc9c0(\ub178\ub791)"): \uc6c0\uc9c1\uc784 \u00b7 \ubc84\uc2a4 \uc704\uce58.
+  //   motion : \uc2e0\uc120\ud55c \uc88c\ud45c \uba87 \uac1c\uc758 '\uc21c \uc774\ub3d9 \uc18d\ub3c4'(m/s)\ub85c \uc9c0\uae08 \ub2ec\ub9ac\ub294 \uc911\uc778\uc9c0 \ubcf8\ub2e4(\uc9c0\ud558\ucca0 PF \uc758 \uc815\ucc28 \ud310\uc815\uacfc \ubb34\uad00 \u2014 \ub124\ube44\uac8c\uc774\uc158\uc2dd).
+  //   busPos : \ubc84\uc2a4 \uad6c\uac04 \uc815\ub958\uc7a5\uc744 \uc774\uc740 \uc120 \uc704\uc5d0\uc11c \uc9c0\uae08 \uc704\uce58(\uc815\ub958\uc7a5 \uc0ac\uc774 \ube44\uc728)\uc640 \uc774\ubbf8 \uc9c0\ub09c \uc815\ub958\uc7a5\uc758 \ud1b5\uacfc \uc2dc\uac01(\uc120 \uc704 \uc774\ub3d9 \uac70\ub9ac\ub85c \ubcf4\uac04).
+  motionWinSec: 14, motionMinSpanSec: 4, motionMaxAcc: 60, motionMoveMps: 1.4, motionStopMps: 0.7,
+  busPosOffM: 150, busPosFixAccM: 60, busPosMinStops: 2, busPosMinGapM: 15
 };
 
 // \u2500\u2500 \uae30\ud558 \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
@@ -9319,6 +9334,90 @@ function rtPress(P, tr, O) {
   else { res.state = 'near'; res.why = 'between'; }
   return res;
 }
+// \u2500\u2500 \uc6c0\uc9c1\uc784(\ub124\ube44\uac8c\uc774\uc158\uc2dd) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+//   \ucd5c\uadfc motionWinSec \uc548\uc758 \uc88b\uc740 \uc88c\ud45c \ucc98\uc74c~\ub05d\uc758 \uc21c \uc774\ub3d9 \uac70\ub9ac(\uc815\ud655\ub3c4\uc758 \uc808\ubc18\uc529\uc744 \ube80\ub2e4)\ub97c \uc2dc\uac04\uc73c\ub85c \ub098\ub208 \uc18d\ub3c4. \uc88c\ud45c\uac00 \ubaa8\uc790\ub77c\uac70\ub098 \uc624\ub798\ub418\uba74 moving:null(\ubaa8\ub978\ub2e4).
+//   moving: true(\u2265 motionMoveMps) \u00b7 false(\u2264 motionStopMps) \u00b7 \uadf8 \uc0ac\uc774\ub294 \uc9c1\uc804 \uac12\uc744 \uc54c \uc218 \uc5c6\uc73c\ubbc0\ub85c null \u2014 \uc571\uc740 null \uc774\uba74 \uae30\uc874 \ud310\uc815\uc744 \uc4f4\ub2e4.
+function rtMotion(tr, now, O) {
+  var res = { moving: null, speedMps: null, n: 0, ageSec: null };
+  var pts = [], i;
+  for (i = 0; i < tr.length; i++) { var q = tr[i]; if (now - q.ts <= O.motionWinSec * 1000 && (q.acc == null || q.acc <= O.motionMaxAcc)) pts.push(q); }
+  res.n = pts.length;
+  if (tr.length) res.ageSec = Math.round((now - tr[tr.length - 1].ts) / 1000);
+  if (pts.length < 2) return res;
+  var a = pts[0], b = pts[pts.length - 1], dt = (b.ts - a.ts) / 1000;
+  if (dt < O.motionMinSpanSec || now - b.ts > O.freshSec * 1000) return res;
+  var d = rtHav(a.lat, a.lng, b.lat, b.lng) - ((a.acc == null ? 20 : a.acc) + (b.acc == null ? 20 : b.acc)) / 2;
+  var v = Math.max(0, d) / dt;
+  res.speedMps = Math.round(v * 10) / 10;
+  if (v >= O.motionMoveMps) res.moving = true; else if (v <= O.motionStopMps) res.moving = false;
+  return res;
+}
+// \u2500\u2500 \ubc84\uc2a4 \uc704\uce58(\uc815\ub958\uc7a5\uc744 \uc774\uc740 \uc120 \uc704) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+//   plan.stops[].lg = \uac19\uc740 \ub178\uc120\u00b7\uac19\uc740 \ud0c8\uac83\uc73c\ub85c \uc774\uc5b4\uc9c4 \uad6c\uac04 \ubc88\ud638, bus = \ubc84\uc2a4 \uc815\ub958\uc7a5. \uac19\uc740 lg \uc758 \ubc84\uc2a4 \uc815\ub958\uc7a5\uc744 \uc21c\uc11c\ub300\ub85c \uc774\uc5b4 \uc120\uc73c\ub85c \ubcf8\ub2e4.
+//   \uac01 \uad6c\uac04\uc5d0\uc11c \ucd5c\uc2e0 \uc88c\ud45c\uac00 \uc120\uc5d0\uc11c busPosOffM \uc774\ub0b4\uc778 \uad6c\uac04\uc744 \uace0\ub978\ub2e4(\uac00\uc7a5 \uac00\uae4c\uc6b4 \uac83). \uc88c\ud45c \u2192 \uc120 \uc704 \uc774\ub3d9 \uac70\ub9ac(m)\ub85c \ubc14\uafd4 \ub450\uba74 \uc815\ub958\uc7a5\ub9c8\ub2e4 '\uadf8 \uac70\ub9ac\ub97c \ub118\uc5b4\uc120 \uc21c\uac04'\uc774 \ud1b5\uacfc \uc2dc\uac01\uc774\ub2e4
+//   (\ub9c8\uc9c0\ub9c9\uc73c\ub85c \uc815\ub958\uc7a5 \uc55e\uc774\ub358 \uc88c\ud45c \u2194 \ucc98\uc74c \uc815\ub958\uc7a5 \ub4a4\uc778 \uc88c\ud45c \uc0ac\uc774\ub97c \uac70\ub9ac \ube44\uc728\ub85c \ubcf4\uac04 \u2014 \uc88c\ud45c \uac04\uaca9\uc774 30\ucd08 \ub118\uc5b4\ub3c4 \uac70\ub9ac\ub85c \ubcf4\uac04\ud558\ubbc0\ub85c \ucd08 \ub2e8\uc704\uac00 \ub9de\ub294\ub2e4).
+//   \ubc18\ud658: { lg, offM, fromI, toI, ratio, distAlong, passed:[{i, ms}], passedUnknown:[i\u2026] }  \u2014 \ucd5c\uc2e0 \uc88c\ud45c \uc55e\uc758 \uc815\ub958\uc7a5 i \ub294 \ubaa8\ub450 \uc9c0\ub09c \uac83\uc774\uace0, \uc2dc\uac01\uc744 \uc54c\uba74 ms.
+function rtBusPos(P, tr, O) {
+  var plan = P.plan || {}, stops = plan.stops || [], now = P.nowMs;
+  if (!plan.boarded || !stops.length || !tr.length) return null;
+  var last = null, k;
+  for (k = tr.length - 1; k >= 0; k--) { if (tr[k].acc == null || tr[k].acc <= O.busPosFixAccM) { last = tr[k]; break; } }
+  if (!last || now - last.ts > O.freshSec * 1000) return null;
+  var legs = {}, order = [];
+  for (k = 0; k < stops.length; k++) {
+    var s = stops[k];
+    if (!s || s.bus !== true || s.lg == null || !isFinite(s.lat) || !isFinite(s.lng)) continue;
+    if (!legs[s.lg]) { legs[s.lg] = []; order.push(s.lg); }
+    legs[s.lg].push(s);
+  }
+  var best = null, g;
+  for (g = 0; g < order.length; g++) {
+    var L = legs[order[g]];
+    if (L.length < O.busPosMinStops) continue;
+    var cum = [0], j;
+    for (j = 1; j < L.length; j++) cum.push(cum[j - 1] + rtHav(L[j - 1].lat, L[j - 1].lng, L[j].lat, L[j].lng));
+    var pr = rtBusProject(L, cum, last.lat, last.lng);
+    if (pr && pr.off <= O.busPosOffM && (!best || pr.off < best.pr.off)) best = { lg: order[g], L: L, cum: cum, pr: pr };
+  }
+  if (!best) return null;
+  var L2 = best.L, cum2 = best.cum, pr2 = best.pr;
+  var out = { lg: best.lg, offM: Math.round(pr2.off), fromI: L2[pr2.seg].i, toI: L2[Math.min(L2.length - 1, pr2.seg + 1)].i, ratio: Math.round(pr2.ratio * 1000) / 1000, distAlong: Math.round(pr2.s), passed: [], passedUnknown: [] };
+  // \uada4\uc801 \u2192 \uc120 \uc704 \uac70\ub9ac(\uc120\uc5d0\uc11c busPosOffM \uc548\uc778 \uc88c\ud45c\ub9cc)
+  var xs = [];
+  for (k = 0; k < tr.length; k++) {
+    var q = tr[k]; if (q.acc != null && q.acc > O.busPosFixAccM) continue;
+    var p = rtBusProject(L2, cum2, q.lat, q.lng);
+    if (p && p.off <= O.busPosOffM) xs.push({ ts: q.ts, s: p.s });
+  }
+  var sNow = pr2.s;
+  for (k = 1; k < L2.length; k++) {                       // \uccab \uc815\ub958\uc7a5\uc740 \uc2b9\ucc28(\uc9c0\ub09c \uac83\uc774 \uc544\ub2c8\ub2e4)
+    var sk = cum2[k];
+    if (sNow < sk + O.busPosMinGapM) continue;             // \uc544\uc9c1 \uc548 \uc9c0\ub0ac\ub2e4(\uc815\ub958\uc7a5 \ubc14\ub85c \ub4a4 \uba87 m \ub294 \uac19\uc740 \uc815\ub958\uc7a5\uc73c\ub85c \ubcf8\ub2e4)
+    var lb = -1, x;
+    for (x = 0; x < xs.length; x++) { if (xs[x].s < sk) lb = x; }
+    if (lb < 0) { out.passedUnknown.push(L2[k].i); continue; }       // \uada4\uc801\uc774 \uc2dc\uc791\ud560 \ub54c \uc774\ubbf8 \uc9c0\ub098 \uc788\uc5c8\ub2e4 \u2014 \uc2dc\uac01\uc744 \ubaa8\ub978\ub2e4
+    var A = xs[lb], B = xs[lb + 1];
+    if (!B || B.s < sk) { out.passedUnknown.push(L2[k].i); continue; }
+    var ms = (B.s > A.s) ? Math.round(A.ts + (sk - A.s) / (B.s - A.s) * (B.ts - A.ts)) : B.ts;
+    if (ms > now + 1000) ms = now;
+    out.passed.push({ i: L2[k].i, ms: ms });
+  }
+  return out;
+}
+// \uc810 \u2192 \uc815\ub958\uc7a5 \uc120(\uaebe\uc740\uc120) \ud22c\uc601: { seg, ratio, s(\uc120 \uc704 \uac70\ub9ac m), off(\uc120\uc5d0\uc11c \ub5a8\uc5b4\uc9c4 m) }
+function rtBusProject(L, cum, lat, lng) {
+  var bestD = Infinity, res = null, j;
+  for (j = 0; j < L.length - 1; j++) {
+    var d = rtSegDist(lat, lng, L[j].lat, L[j].lng, L[j + 1].lat, L[j + 1].lng);
+    if (d < bestD) {
+      var kx = 88000, ky = 111000, ax = L[j].lng * kx, ay = L[j].lat * ky, bx = L[j + 1].lng * kx, by = L[j + 1].lat * ky, px = lng * kx, py = lat * ky;
+      var dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy, t = l2 ? ((px - ax) * dx + (py - ay) * dy) / l2 : 0;
+      t = Math.max(0, Math.min(1, t));
+      bestD = d; res = { seg: j, ratio: t, s: cum[j] + t * (cum[j + 1] - cum[j]), off: d };
+    }
+  }
+  return res;
+}
 // \uc704\uce58\ub97c \ubb34\uc5c7\uc73c\ub85c \uc7a1\uc744\uc9c0 \u2014 \uc5d4\uc9c4\uc774 \uc815\ud55c\ub2e4(\uc571\uc740 \ub530\ub978\ub2e4)
 function rtMode(P, O, bus) {
   var plan = P.plan || {};
@@ -9339,7 +9438,7 @@ function rideTrack(P) {
   var want = P.want || { off: true, ridden: true, miss: true };
   var tr = rtTrail(P, O), last = tr.length ? tr[tr.length - 1] : null;
   var out = { v: 1, fix: { n: tr.length, ageSec: last ? Math.round((P.nowMs - last.ts) / 1000) : null, fresh: !!(last && P.nowMs - last.ts <= O.freshSec * 1000) },
-              off: null, ridden: null, miss: null, board: null, vehicleNow: false, bus: null, mode: null, press: null };
+              off: null, ridden: null, miss: null, board: null, vehicleNow: false, bus: null, mode: null, press: null, motion: null, busPos: null };
   out.vehicleNow = rtVehicleNow(tr, P.nowMs);
   if (want.off) out.off = rtOff(P, tr, O);
   if (want.ridden) out.ridden = rtRidden(P, tr, O, out.vehicleNow);
@@ -9350,6 +9449,9 @@ function rideTrack(P) {
   // \u2605 2026-10-13: \uada4\uc801\uc774 \ud6c4\ubcf4 \ubc84\uc2a4 \uacbd\ub85c(\uc5d4\uc9c4 \ud6c4\ubcf4 \uc911 \ub2e4\ub978 \ubc88\ud638 \u2014 \uae09\ud589 \ub4f1)\ub97c \ub530\ub77c \ub2ec\ub9ac\uba74 '\ubc84\uc2a4\ub97c \ud0d4\ub2e4'\ub294 \ub73b\uc774\ub2e4. \uacc4\ud68d \uc2dc\uac01\ubcf4\ub2e4 \uba3c\uc800 \ub2ff\ub294 \uac74 \ub354 \ube60\ub978 \ubc84\uc2a4\ub77c\uc11c\uc9c0 \uc2b9\uc6a9\ucc28\uac00 \uc544\ub2c8\ub2e4 \u2192 notBus \ub85c \ubcf4\uc9c0 \uc54a\ub294\ub2e4.
   if (out.bus && out.bus.state === 'notBus' && out.ridden && out.ridden.ok) { out.bus.state = 'plausible'; out.bus.why = 'candidate_route'; }
   if (want.press === true) out.press = rtPress(P, tr, O);
+  out.motion = tr.length ? rtMotion(tr, P.nowMs, O) : null;
+  // \ubc84\uc2a4 \uc704\uce58: \ubc84\uc2a4\ub97c \ud0c0\uace0 \uc788\ub2e4\uace0 \ubcfc \uadfc\uac70\uac00 \uc788\uc744 \ub54c(\uc9c4\ud589\ub3c4\uac00 \ubc84\uc2a4 \ub178\ub4dc\uc774\uac70\ub098 \uc5d4\uc9c4\uc774 \ubc84\uc2a4\ub85c \ubd04)\ub9cc \u2014 \uc2b9\uc6a9\ucc28(notBus)\uba74 \uc8fc\uc9c0 \uc54a\ub294\ub2e4
+  if (want.bus !== false && (!out.bus || out.bus.state !== 'notBus') && ((P.plan && P.plan.progIsBus === true) || (out.bus && (out.bus.state === 'confirmed' || out.bus.state === 'plausible')))) out.busPos = rtBusPos(P, tr, O);
   out.mode = rtMode(P, O, out.bus);
   return out;
 }
@@ -9367,6 +9469,8 @@ function handleRideTrack(request) {
     return new Response(JSON.stringify(out), { headers: H });
   }, function () { return new Response(JSON.stringify({ error: 'JSON \uc544\ub2d8' }), { status: 400, headers: H }); });
 }
+
+
 // ===== ride-track \ub05d =====
 // ===== ride-standby (\ub300\uae30 \ubaa8\ub4dc: \uc6f9\ubdf0\uac00 \uc0ac\ub77c\uc838\ub3c4 \ub124\uc774\ud2f0\ube0c\uac00 \uc774\uc5b4\ubc1b\ub294 \uc548\ub0b4 \uc5d4\uc9c4) \uc2dc\uc791 =====
 // \uae38\ub3d9\ubb34 \u2014 \ub300\uae30 \ubaa8\ub4dc(\uc6f9\ubdf0\uac00 \uc0ac\ub77c\uc838\ub3c4 \ub124\uc774\ud2f0\ube0c\uac00 \uc774\uc5b4\ubc1b\ub294 \uc548\ub0b4) \uc5d4\uc9c4 (route-v2 Worker \uc5d0 \ubd99\uc5ec \ub123\ub294 \uc21c\uc218 \ud568\uc218)
@@ -11453,7 +11557,7 @@ async function handleScreenShop(request) {
 //        facts = \uc571\uc774 \ubaa8\uc740 \uae30\uae30 \uc0ac\uc2e4(\uc804\ubd80 \uc120\ud0dd \u2014 \uc5c6\uc73c\uba74 \uae30\ubcf8\uac12):
 //          id: \ud604\uc7ac \ucee4\ubba4\ub2c8\ud2f0 \uc544\uc774\ub514('' \uc774\uba74 \uc5c6\uc74c) \u00b7 np:{arrive,transfer,arrive_reco: 1|0} \u00b7 npd: \uc54c\ub9bc \uad8c\ud55c \uac70\ubd80(1|0) \u00b7 rl: \ub3c4\ucc29 \uc624\ucc28 \uae30\ub85d(1|0)
 //          th: 'dark'|'pastel' \u00b7 sam: \uac24\ub7ed\uc2dc(1|0) \u00b7 samw: \uc571 \ubc30\ud130\ub9ac '\uc81c\ud55c\ub428'(1|0) \u00b7 errn: \uc624\ub958 \ub85c\uadf8 \uac1c\uc218 \u00b7 cm: \ucd9c\ud1f4\uadfc \uc54c\ub9bc(1|0|\uc5c6\uc74c) \u00b7 ovl: \uc624\ubc84\ub808\uc774(1|0|\uc5c6\uc74c)
-//          feat: { nm|sn|htl|scr|scrs|scrf|scrn|scrb|scrc|scrt : { h: \uc774 \uae30\ub2a5\uc774 \uc788\ub098(1|0), on: \uc2a4\uc704\uce58(1|0), f: \ubb38\uc81c\ub85c \uc6f9\uc73c\ub85c \ub3cc\uc544\uac14\ub098(1|0), w: \ubb38\uc81c \uc0ac\uc720, b: \uc800\uc7a5\ubcf8 \uc0ac\uc6a9 \uc911(1|0) } }
+//          feat: { nm|sn|htl|scr|scrs|scrf|scrn|scrb|scrc|scrt|scrh : { h: \uc774 \uae30\ub2a5\uc774 \uc788\ub098(1|0), on: \uc2a4\uc704\uce58(1|0), f: \ubb38\uc81c\ub85c \uc6f9\uc73c\ub85c \ub3cc\uc544\uac14\ub098(1|0), w: \ubb38\uc81c \uc0ac\uc720, b: \uc800\uc7a5\ubcf8 \uc0ac\uc6a9 \uc911(1|0) } }
 // \ucd9c\ub825  { ok, v:1, screen:'settings', rev, cover:'tab', head:[], body:[\ub178\ub4dc\u2026] }  \u2190 \ub178\ub4dc \uc885\ub958\ub294 native/ScreenCore.java \uc640 \uac19\ub2e4
 //        panel{kids} \u00b7 text \u00b7 box \u00b7 toggle{key} \u00b7 navrow{act} \u00b7 select{act:{a:'sel'}} \u00b7 field{key} \u00b7 button \u00b7 spacer
 //        act = {a:'set',key} (\uc2a4\uc704\uce58 \u2014 \uc571\uc774 \uba3c\uc800 \ub4a4\uc9d1\uace0 \uc54c\ub9b0\ub2e4) | {a:'call',v} (\uc571 \uc548 \ud568\uc218 \ud638\ucd9c: saveId\u00b7clearId\u00b7pol.*\u00b7errlog) | {a:'web',v} (\uc6f9 \uce74\ub4dc \uc5f4\uae30) | {a:'sel',v} (\uace0\ub974\uae30)
@@ -11488,7 +11592,9 @@ var SETTINGS_FEATS = [
   { k: 'scrc', title: '\ub124\uc774\ud2f0\ube0c \uc2e4\uc2dc\uac04\uc18c\ud1b5 \ud654\uba74', desc: '\ucee4\ubba4\ub2c8\ud2f0 > \uc2e4\uc2dc\uac04\uc18c\ud1b5\uc758 \ub178\uc120 \uce69\u00b7\uacf5\uc9c0 \ubc30\ub108\u00b7\ub300\ud654 \ub9d0\ud48d\uc120\u00b7\uc785\ub825\uc904\uc744 \uc5d4\uc9c4\uc774 \uc815\ud574 \ub0b4\ub824\uc8fc\uace0, \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694(\ubd80\ub4dc\ub7ec\uc6b4 \uc2a4\ud06c\ub864). \ubb38\uc81c\uac00 \uc0dd\uae30\uba74 \uc608\uc804 \uc6f9 \ud654\uba74\uc73c\ub85c \ub3cc\uc544\uac00\uc694.',
     off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9 \uc2e4\uc2dc\uac04\uc18c\ud1b5 \ud654\uba74)\uc73c\ub85c \uadf8\ub824\uc694.', bad: '\ub124\uc774\ud2f0\ube0c \uc2e4\uc2dc\uac04\uc18c\ud1b5 \ud654\uba74\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc6f9 \ud654\uba74\uc73c\ub85c \ub300\uc2e0 \ubcf4\uc5ec\uc8fc\uace0 \uc788\uc5b4\uc694', stale: '\uc5d4\uc9c4\uc774 \uc900 \ud654\uba74\uc774 \uc62c\ubc14\ub974\uc9c0 \uc54a\uc544 \uc800\uc7a5\ud574 \ub454 \ud654\uba74\uc744 \uc4f0\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \uc2e4\uc2dc\uac04\uc18c\ud1b5\uc758 \ub178\uc120 \uce69\u00b7\uacf5\uc9c0 \ubc30\ub108\u00b7\ub300\ud654 \ub9d0\ud48d\uc120\u00b7\uc785\ub825\uc904\uc744 \uc5d4\uc9c4\uc774 \uc815\ud55c \ub300\ub85c \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694(\uc2e4\ud5d8 \uc911).' },
   { k: 'scrt', title: '\ub124\uc774\ud2f0\ube0c \ud0ed \ub9c9\ub300', desc: '\ud654\uba74 \ub9e8 \uc544\ub798 \ud0ed \ub9c9\ub300(\ucee4\ubba4\ub2c8\ud2f0\u00b7\ub178\uc120\ub3c4\u00b7\ud648\u00b7\uc1fc\ud551\uc13c\ud130\u00b7\ub9db\uc9d1)\ub97c \uc5d4\uc9c4\uc774 \uc815\ud574 \ub0b4\ub824\uc8fc\uace0, \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694. \ubb38\uc81c\uac00 \uc0dd\uae30\uba74 \uc608\uc804 \uc6f9 \ud0ed \ub9c9\ub300\ub85c \ub3cc\uc544\uac00\uc694.',
-    off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9 \ud0ed \ub9c9\ub300)\uc73c\ub85c \uadf8\ub824\uc694.', bad: '\ub124\uc774\ud2f0\ube0c \ud0ed \ub9c9\ub300\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc6f9 \ud654\uba74\uc73c\ub85c \ub300\uc2e0 \ubcf4\uc5ec\uc8fc\uace0 \uc788\uc5b4\uc694', stale: '\uc5d4\uc9c4\uc774 \uc900 \ud654\uba74\uc774 \uc62c\ubc14\ub974\uc9c0 \uc54a\uc544 \uc800\uc7a5\ud574 \ub454 \ud654\uba74\uc744 \uc4f0\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \ud654\uba74 \ub9e8 \uc544\ub798 \ud0ed \ub9c9\ub300(\ucee4\ubba4\ub2c8\ud2f0\u00b7\ub178\uc120\ub3c4\u00b7\ud648\u00b7\uc1fc\ud551\uc13c\ud130\u00b7\ub9db\uc9d1)\ub97c \uc5d4\uc9c4\uc774 \uc815\ud55c \ub300\ub85c \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694(\uc2e4\ud5d8 \uc911).' }
+    off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9 \ud0ed \ub9c9\ub300)\uc73c\ub85c \uadf8\ub824\uc694.', bad: '\ub124\uc774\ud2f0\ube0c \ud0ed \ub9c9\ub300\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc6f9 \ud654\uba74\uc73c\ub85c \ub300\uc2e0 \ubcf4\uc5ec\uc8fc\uace0 \uc788\uc5b4\uc694', stale: '\uc5d4\uc9c4\uc774 \uc900 \ud654\uba74\uc774 \uc62c\ubc14\ub974\uc9c0 \uc54a\uc544 \uc800\uc7a5\ud574 \ub454 \ud654\uba74\uc744 \uc4f0\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \ud654\uba74 \ub9e8 \uc544\ub798 \ud0ed \ub9c9\ub300(\ucee4\ubba4\ub2c8\ud2f0\u00b7\ub178\uc120\ub3c4\u00b7\ud648\u00b7\uc1fc\ud551\uc13c\ud130\u00b7\ub9db\uc9d1)\ub97c \uc5d4\uc9c4\uc774 \uc815\ud55c \ub300\ub85c \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694(\uc2e4\ud5d8 \uc911).' },
+  { k: 'scrh', title: '\ub124\uc774\ud2f0\ube0c \uacbd\ub85c \uc785\ub825', desc: '\ud648 \ud0ed\uc758 \ucd9c\ubc1c\u00b7\ub3c4\ucc29 \uc785\ub825\uce78, \uc790\ub3d9\uc644\uc131 \ubaa9\ub85d, \uc704\uce58 \uac10\uc9c0\u00b7\ubc14\uafb8\uae30\u00b7\uacbd\ub85c \ud0d0\uc0c9 \ub2e8\ucd94, \uae30\uc900\uc2dc\uac01 \uc904\uc744 \uc5d4\uc9c4\uc774 \uc815\ud574 \ub0b4\ub824\uc8fc\uace0, \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694. \uae00\uc790\ub97c \uc4f0\ub294 \ub3d9\uc548 \uc790\ub3d9\uc644\uc131\uc774 \ubc14\ub85c \ub530\ub77c\uc640\uc694. \ubb38\uc81c\uac00 \uc0dd\uae30\uba74 \uc608\uc804 \uc6f9 \uce74\ub4dc\ub85c \ub3cc\uc544\uac00\uc694.',
+    off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9 \uacbd\ub85c \uc785\ub825 \uce74\ub4dc)\uc73c\ub85c \uadf8\ub824\uc694.', bad: '\ub124\uc774\ud2f0\ube0c \uacbd\ub85c \uc785\ub825\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc6f9 \uce74\ub4dc\ub85c \ub300\uc2e0 \ubcf4\uc5ec\uc8fc\uace0 \uc788\uc5b4\uc694', stale: '\uc5d4\uc9c4\uc774 \uc900 \ud654\uba74\uc774 \uc62c\ubc14\ub974\uc9c0 \uc54a\uc544 \uc800\uc7a5\ud574 \ub454 \ud654\uba74\uc744 \uc4f0\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \ud648 \ud0ed\uc758 \uacbd\ub85c \uc785\ub825 \uce74\ub4dc\ub97c \uc5d4\uc9c4\uc774 \uc815\ud55c \ub300\ub85c \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694(\uc2e4\ud5d8 \uc911).' }
 ];
 
 function settingsFlag(v, def) { return v == null ? def : (v === 1 || v === true || v === '1'); }
@@ -12506,6 +12612,144 @@ async function handleScreenTabs(request) {
 }
 // ===== TABS ENGINE END =====
 
+// ===== HOME ENGINE BEGIN =====
+// \uae38\ub3d9\ubb34 \u2014 \ud648 \ud0ed \uacbd\ub85c \uc785\ub825 \uce74\ub4dc(\ucd9c\ubc1c/\ub3c4\ucc29 \uc785\ub825\u00b7\uc790\ub3d9\uc644\uc131\u00b7\uc704\uce58 \uac10\uc9c0\u00b7\ubc14\uafb8\uae30\u00b7\uacbd\ub85c \ud0d0\uc0c9\u00b7\uae30\uc900\uc2dc\uac01) \ud654\uba74 \uc5d4\uc9c4 \uc21c\uc218 \uacc4\uc0b0 \ubaa8\ub4c8 (route-v2 Worker \uc5d0 \ubd99\uc5ec \ub123\ub294 \uc21c\uc218 \ud568\uc218; \ub2e8\uc77c \ucd9c\ucc98)
+//
+// \u2605 \uc6d0\uce59(YJ): "\ubaa8\ub4e0 \uc5f0\uc0b0\uc740 \uc5d4\uc9c4\uc774 \ud55c\ub2e4. \uc571\uc740 \uc5d4\uc9c4\uc774 \uacc4\uc0b0\ud55c \uadf8\ub9bc\ub9cc \uadf8\ub9b0\ub2e4."  (2026-10-18 \uc11c\ubc84 \uad6c\ub3d9 \ud654\uba74 8\ud638 \u2014 \ud648 \ud0ed \uacbd\ub85c \uc785\ub825)
+//   \uc608\uc804\uc5d4 www/index.html \uc758 \ud648 \uce74\ub4dc(HTML)\uc640 fmapSearch(\uc790\ub3d9\uc644\uc131 \uc904 \uadf8\ub9ac\uae30) \u00b7 _updateBaseTimeDisplay(\uae30\uc900\uc2dc\uac01 \uae00) \uac00 \uc774 \ubaa8\ub450\ub97c \uc9c1\uc811 \ub9cc\ub4e4\uc5c8\ub2e4.
+//   \uc774\uc81c \uc6f9\uc740 '\uc6d0\uc790\ub8cc'(\uc785\ub825\uce78 \uae00\uc790 \u00b7 \uc5b4\ub290 \uce78\uc774 \ub20c\ub824 \uc788\ub098 \u00b7 \uace0\ub978 \ucd9c\ubc1c/\ub3c4\ucc29\uc774 \uc788\ub098 \u00b7 \uc9c0\ud558\ucca0\uc5ed/\ubc84\uc2a4\uc815\ub958\uc7a5/\uc7a5\uc18c \ud6c4\ubcf4 \u00b7 \uae30\uc900\uc2dc\uac01 ms)\ub9cc \ubcf4\ub0b4\uace0,
+//   \uc5d4\uc9c4\uc774 \uba87 \uc904\uc744 \uc5b4\ub5a4 \uc21c\uc11c\u00b7\ub531\uc9c0\u00b7\uae00\ub85c \ubcf4\uc77c\uc9c0, \ub2e8\ucd94 \uae00\u00b7\ud750\ub9bc, \uae30\uc900\uc2dc\uac01 \ubb38\uad6c\ub97c \uc815\ud574 \ud654\uba74 JSON \uc73c\ub85c \ub0b4\ub824 \uc900\ub2e4. \uc571(\ub124\uc774\ud2f0\ube0c)\uc740 \uadf8\ub9ac\uae30\ub9cc \ud55c\ub2e4.
+//   \ud6c4\ubcf4\ub97c \ubaa8\uc73c\ub294 \uc77c(STNDB \uac78\ub7ec\ub0b4\uae30 \u00b7 TAGO \ubc84\uc2a4\uc815\ub958\uc7a5 \u00b7 \uce74\uce74\uc624 \uc7a5\uc18c \uac80\uc0c9)\uacfc \uace0\ub978 \ub4a4 \ucd9c\ubc1c/\ub3c4\ucc29\uc744 \uc815\ud558\uace0 \uacbd\ub85c\ub97c \ucc3e\ub294 \uc77c\uc740 \uc608\uc804 \uadf8\ub300\ub85c \uc6f9 \ub370\uc774\ud130 \uacc4\uce35\uc774 \ud55c\ub2e4.
+//
+// \uc785\ub825  homeScreen({ cap }, facts, data)
+//        cap   = \uc571\uc774 \uadf8\ub9b4 \uc218 \uc788\ub294 \ud654\uba74 \uaddc\uaca9 \uc218\uc900(7 \uc774\uc0c1\uc774\uc5b4\uc57c \ub9cc\ub4e0\ub2e4)
+//        facts = { start, dest: \uc785\ub825\uce78 \uae00\uc790, active: ''|'start'|'dest'(\ud0a4\ubcf4\ub4dc\uac00 \uc62c\ub77c\uc628 \uce78), startSet, destSet: \uace0\ub978 \ucd9c\ubc1c/\ub3c4\ucc29\uc774 \uc788\ub098, gps: \uc704\uce58 \uac10\uc9c0 \uc911\uc778\uac00,
+//                  base: { ms(\uae30\uc900\uc2dc\uac01 ms \ub610\ub294 null), tzo(\ubd84, JS getTimezoneOffset), today:[y,m,d](\uae30\uae30 \ub0a0\uc9dc), hol(\uc8fc\ub9d0\u00b7\uacf5\ud734\uc77c) } }
+//        data  = { u:[{n, l}] \uc9c0\ud558\ucca0\uc5ed \ud6c4\ubcf4, b:[{n, d}] \ubc84\uc2a4\uc815\ub958\uc7a5 \ud6c4\ubcf4(d = \ubbf8\ud130), p:[{n, a}] \uc7a5\uc18c \ud6c4\ubcf4 }  \u2014 \ub20c\ub824 \uc788\ub294 \uce78\uc758 \uae00\uc790\uc5d0 \ub300\ud55c \ud6c4\ubcf4\ub9cc
+// \ucd9c\ub825  { ok, v:1, screen:'home', cover:'chips', head:[], body:[panel\u2026], info:{h, active, ready, rows} }
+//        \ud589\ub3d9: rt.gps(\uc704\uce58 \uac10\uc9c0) \u00b7 rt.swap(\ubc14\uafb8\uae30) \u00b7 rt.go(\uacbd\ub85c \ud0d0\uc0c9) \u00b7 rt.enter(\ud0a4\ubcf4\ub4dc \ud655\uc778) \u00b7 bt.pick(\uae30\uc900\uc2dc\uac01 \uc5f4\uae30) \u00b7 bt.now(\ud604\uc7ac\ub85c) \u00b7 sg.u.<i> / sg.b.<i> / sg.p.<i>(\ud6c4\ubcf4 \uace0\ub974\uae30: \ud6c4\ubcf4 \ubc30\uc5f4\uc758 \uc21c\ubc88)
+// \ub9e8 \uc544\ub798 module.exports \ub294 \uc2dc\ud5d8(Node)\uc6a9\uc774\uace0 Worker \uc5d0\uc11c\ub294 \ud568\uc218 \uc120\uc5b8\ub9cc \uc4f0\uc778\ub2e4.
+'use strict';
+var HOME_SCREEN_V = 1;
+var HOME_ROW_H = 48, HOME_SUG_H = 44, HOME_MAX_SUG = 7, HOME_PANEL_B = 4;
+var HOME_SWAP_ICON = 'M16 17.01V10h-2v7.01h-3L15 21l4-3.99h-3zM9 3L5 6.99h3V14h2V6.99h3L9 3z';   // www/index.html \uc758 \ubc14\uafb8\uae30 \ub2e8\ucd94 SVG \uc640 \uac19\ub2e4
+function homeHash(s) {
+  var h = 5381;
+  for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+function homeStr(v, max) { return typeof v === 'string' ? v.slice(0, max) : ''; }
+function homeFacts(f) {
+  f = (f && typeof f === 'object') ? f : {};
+  var b = (f.base && typeof f.base === 'object') ? f.base : {};
+  var ms = (typeof b.ms === 'number' && isFinite(b.ms)) ? b.ms : null;
+  var today = null;
+  if (Array.isArray(b.today) && b.today.length === 3) {
+    var y = Math.floor(Number(b.today[0])), m = Math.floor(Number(b.today[1])), d = Math.floor(Number(b.today[2]));
+    if (isFinite(y) && isFinite(m) && isFinite(d)) today = [y, m, d];
+  }
+  var tzo = Number(b.tzo); if (!isFinite(tzo) || Math.abs(tzo) > 1000) tzo = -540;
+  return {
+    start: homeStr(f.start, 120), dest: homeStr(f.dest, 120),
+    active: f.active === 'start' || f.active === 'dest' ? f.active : '',
+    startSet: !!f.startSet, destSet: !!f.destSet, gps: !!f.gps,
+    base: { ms: ms, tzo: tzo, today: today, hol: !!b.hol }
+  };
+}
+// \uae30\uc900\uc2dc\uac01 \ubb38\uad6c: '\ud604\uc7ac' | '\uc624\ub298 \uc624\ud6c4 2:30' | '\ub0b4\uc77c \uc624\uc804 9:05' | '10/25(\ud1a0) \uc624\ud6c4 1:00'  (\uc608\uc804 _updateBaseTimeDisplay \uc640 \uac19\uc740 \uae00)
+function homeBaseLabel(base) {
+  if (base.ms == null) return '\ud604\uc7ac';
+  var d = new Date(base.ms - base.tzo * 60000);                       // \uae30\uae30 \uc2dc\uac01\uc73c\ub85c \uc62e\uae34 \uac12(UTC getter \ub85c \uc77d\ub294\ub2e4)
+  var by = d.getUTCFullYear(), bm = d.getUTCMonth(), bd = d.getUTCDate(), h = d.getUTCHours(), mi = d.getUTCMinutes();
+  var label;
+  var t = base.today;
+  var diff = t ? Math.round((Date.UTC(by, bm, bd) - Date.UTC(t[0], t[1], t[2])) / 86400000) : null;
+  if (diff === 0) label = '\uc624\ub298';
+  else if (diff === 1) label = '\ub0b4\uc77c';
+  else label = (bm + 1) + '/' + bd + '(' + '\uc77c\uc6d4\ud654\uc218\ubaa9\uae08\ud1a0'.charAt(d.getUTCDay()) + ')';
+  return label + ' ' + (h < 12 ? '\uc624\uc804' : '\uc624\ud6c4') + ' ' + ((h % 12) || 12) + ':' + ('0' + mi).slice(-2);
+}
+function homeDist(m) {
+  m = Number(m);
+  if (!isFinite(m) || m <= 0) return '';
+  return m >= 1000 ? (Math.round(m / 100) / 10) + 'km' : Math.round(m) + 'm';
+}
+// \ud6c4\ubcf4 \uace0\ub974\uae30: \uc885\ub958\ub9c8\ub2e4 3\uc904\uc529 \uba3c\uc800, \ub0a8\ub294 \uc790\ub9ac\ub97c \uc9c0\ud558\ucca0 \u2192 \ubc84\uc2a4 \u2192 \uc7a5\uc18c \uc21c\uc73c\ub85c \ucc44\uc6cc \ubaa8\ub450 7\uc904\uae4c\uc9c0. \ubcf4\uc774\ub294 \uc21c\uc11c\ub294 \uc9c0\ud558\ucca0 \u00b7 \ubc84\uc2a4 \u00b7 \uc7a5\uc18c.
+function homePick(data) {
+  data = (data && typeof data === 'object') ? data : {};
+  var kinds = [
+    { k: 'u', arr: Array.isArray(data.u) ? data.u : [] },
+    { k: 'b', arr: Array.isArray(data.b) ? data.b : [] },
+    { k: 'p', arr: Array.isArray(data.p) ? data.p : [] }
+  ];
+  var take = { u: 0, b: 0, p: 0 }, left = HOME_MAX_SUG, i;
+  for (i = 0; i < kinds.length; i++) { var n0 = Math.min(3, kinds[i].arr.length, left); take[kinds[i].k] = n0; left -= n0; }
+  for (i = 0; i < kinds.length && left > 0; i++) { var more = Math.min(kinds[i].arr.length - take[kinds[i].k], left); take[kinds[i].k] += more; left -= more; }
+  var rows = [];
+  kinds.forEach(function (K) {
+    for (var j = 0; j < take[K.k]; j++) {
+      var c = K.arr[j];
+      if (!c || typeof c !== 'object') continue;
+      var name = homeStr(c.n, 120);
+      if (!name) continue;
+      var r = { t: 'sug', name: name, act: { a: 'call', v: 'sg.' + K.k + '.' + j } };
+      if (K.k === 'u') { r.badge = '\uc9c0\ud558\ucca0'; r.bc = '#0a84ff'; r.sub = homeStr(c.l, 60); }
+      else if (K.k === 'b') { r.badge = '\ubc84\uc2a4'; r.bc = '#00b341'; r.sub = homeDist(c.d); }
+      else { r.badge = '\uc7a5\uc18c'; r.bc = '#5e5ce6'; r.sub = homeStr(c.a, 100); }
+      rows.push(r);
+    }
+  });
+  if (rows.length) rows[rows.length - 1].last = true;
+  return rows;
+}
+function homeScreen(inp, factsIn, dataIn) {
+  inp = inp || {};
+  if (!(Number(inp.cap) >= 7)) return { ok: false, error: 'cap' };
+  var f = homeFacts(factsIn);
+  var sugs = f.active && (f.active === 'start' ? f.start : f.dest).trim() ? homePick(dataIn) : [];
+  var ready = (f.startSet && f.destSet) || (f.start.trim().length > 0 && f.dest.trim().length > 0);
+  var act = function (v) { return { a: 'call', v: v }; };
+  var kids = [];
+  kids.push({ t: 'inbar', key: 'start', hint: '\ucd9c\ubc1c\uc9c0 \uac80\uc0c9', value: f.start, maxlen: 60, h: HOME_ROW_H, size: 15, bold: true, r: 0, fill: '', line: '', dot: '#0a84ff',
+    btn: f.gps ? '\uac10\uc9c0 \uc911' : '\uc704\uce58 \uac10\uc9c0', bh: 30, bsize: 12, onc: '#0a84ff', ckf: '#ffffff', watch: true, dim: f.gps, act: act('rt.gps'), eact: act('rt.enter') });
+  kids.push({ t: 'swap', size: 34, fill: '#0a84ff', line: 'bg', tc: 'white', icon: HOME_SWAP_ICON, act: act('rt.swap') });
+  var rowsS = f.active === 'start' ? sugs : [], rowsD = f.active === 'dest' ? sugs : [];
+  rowsS.forEach(function (r) { kids.push(r); });
+  kids.push({ t: 'divider' });
+  kids.push({ t: 'inbar', key: 'dest', hint: '\ub3c4\ucc29\uc9c0 \uac80\uc0c9', value: f.dest, maxlen: 60, h: HOME_ROW_H, size: 15, bold: true, r: 0, fill: '', line: '', dot: '#ff3b30',
+    btn: '\uacbd\ub85c \ud0d0\uc0c9', bh: 30, bsize: 12, onc: 'gold', ckf: '#121214', watch: true, dim: !ready, act: act('rt.go'), eact: act('rt.enter') });
+  rowsD.forEach(function (r) { kids.push(r); });
+  kids.push({ t: 'divider' });
+  var custom = f.base.ms != null;
+  var timeRow = { t: 'sug', badge: '\uae30\uc900\uc2dc\uac01', bc: 'sub', name: homeBaseLabel(f.base), sub: (f.base.hol ? '\uc8fc\ub9d0\u00b7\uacf5\ud734\uc77c' : '\ud3c9\uc77c') + (custom ? '' : ' \u00b7 \ub20c\ub7ec\uc11c \uc2dc\uac01 \ubcc0\uacbd'), last: true, act: act('bt.pick') };
+  if (custom) { timeRow.btn = '\ud604\uc7ac'; timeRow.bact = act('bt.now'); }
+  kids.push(timeRow);
+  var body = [{ t: 'panel', pad: [0, 0, 0, HOME_PANEL_B], ip: [0, 0, 0, 0], r: 16, kids: kids }];
+  var h = 2 + HOME_ROW_H + 1 + HOME_ROW_H + 1 + HOME_SUG_H + (rowsS.length + rowsD.length) * HOME_SUG_H + HOME_PANEL_B;
+  var out = { ok: true, v: 1, screen: 'home', cover: 'chips', head: [], body: body, info: { h: h, active: f.active, ready: ready, rows: rowsS.length + rowsD.length } };
+  out.rev = 'h' + HOME_SCREEN_V + ':' + homeHash(JSON.stringify(body));
+  return out;
+}
+// \ud648 \ud0ed \uacbd\ub85c \uc785\ub825 \uc5d4\uc9c4 Worker \uc5f0\uacb0\ubd80 \u2014 POST /screen/home (engine/home.js \uc758 homeScreen \uc744 \ubd80\ub978\ub2e4). route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/screen/home") return handleScreenHome(request);` \ub97c \ub123\ub294\ub2e4.
+//   \ubcf8\ubb38(JSON \uae00, Content-Type: text/plain \uc73c\ub85c \ubcf4\ub0b4 \uc0ac\uc804 \uc694\uccad\uc744 \ud53c\ud55c\ub2e4): { cap(7 \uc774\uc0c1), f:{start,dest,active,startSet,destSet,base}, d:{u,b,p} }
+//   \uc5d4\uc9c4\uc740 \uc544\ubb34\uac83\ub3c4 \uc800\uc7a5\ud558\uc9c0 \uc54a\ub294\ub2e4. \uac1c\uc778 \uc2dd\ubcc4 \uc815\ubcf4\ub294 \uc624\uac00\uc9c0 \uc54a\ub294\ub2e4.
+async function handleScreenHome(request) {
+  var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Cache-Control": "no-store" };
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: H });
+  if (request.method !== "POST") return new Response(JSON.stringify({ ok: false, error: "post-only" }), { status: 405, headers: H });
+  var raw = await request.text();
+  if (raw.length > 40000) return new Response(JSON.stringify({ ok: false, error: "body-too-long" }), { status: 413, headers: H });
+  var body;
+  try { body = JSON.parse(raw); } catch (e) { return new Response(JSON.stringify({ ok: false, error: "bad-json" }), { status: 400, headers: H }); }
+  if (!body || typeof body !== "object") return new Response(JSON.stringify({ ok: false, error: "bad-body" }), { status: 400, headers: H });
+  var out;
+  try { out = homeScreen({ cap: Number(body.cap) || 0 }, body.f, body.d); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2) }), { status: 500, headers: H }); }
+  if (!out || !out.ok) return new Response(JSON.stringify(out || { ok: false, error: "fail" }), { status: 400, headers: H });
+  out.ver = ENGINE_VERSION;
+  return new Response(JSON.stringify(out), { headers: H });
+}
+// ===== HOME ENGINE END =====
+
 async function handleFetch(request, env, ctx) {
   try { await holEnsure(env); } catch (e) {}
   const url = new URL(request.url);
@@ -12523,6 +12767,7 @@ async function handleFetch(request, env, ctx) {
   if (url.pathname === "/screen/board") return handleScreenBoard(request);
   if (url.pathname === "/screen/chat") return handleScreenChat(request);
   if (url.pathname === "/screen/tabs") return handleScreenTabs(request);
+  if (url.pathname === "/screen/home") return handleScreenHome(request);
   if (url.pathname === "/stops-near") {
     const lat = parseFloat(url.searchParams.get("lat"));
     const lng = parseFloat(url.searchParams.get("lng"));
