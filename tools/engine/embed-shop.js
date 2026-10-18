@@ -1,4 +1,4 @@
-// engine/shop.js + shop-worker.js · engine/settings.js + settings-worker.js · engine/food.js + food-worker.js · engine/news.js + news-worker.js 를 route-v2-worker.ascii.js 에 내장한다(비 ASCII 는 \uXXXX 로). 다시 돌려도 같은 결과(표지 사이를 갈아 끼움).
+// engine/shop.js + shop-worker.js · engine/settings.js + settings-worker.js · engine/food.js + food-worker.js · engine/news.js + news-worker.js · engine/board.js + board-worker.js · engine/chat.js + chat-worker.js · engine/tabs.js + tabs-worker.js 를 route-v2-worker.ascii.js 에 내장한다(비 ASCII 는 \uXXXX 로). 다시 돌려도 같은 결과(표지 사이를 갈아 끼움).
 //  node tools/engine/embed-shop.js [--version route-v2-YYYY-MM-DDsNN]
 const fs = require('fs'), path = require('path');
 const root = path.join(__dirname, '../..');
@@ -9,7 +9,10 @@ const SETS = [
   { name: 'SHOP', src: 'engine/shop.js', glue: 'engine/shop-worker.js', path: '/screen/shop', fn: 'handleScreenShop', anchor: '  if (url.pathname === "/scene") return handleScene(request);\n' },
   { name: 'SETTINGS', src: 'engine/settings.js', glue: 'engine/settings-worker.js', path: '/screen/settings', fn: 'handleScreenSettings', anchor: '  if (url.pathname === "/screen/shop") return handleScreenShop(request);\n' },
   { name: 'FOOD', src: 'engine/food.js', glue: 'engine/food-worker.js', path: '/screen/food', fn: 'handleScreenFood', anchor: '  if (url.pathname === "/screen/settings") return handleScreenSettings(request);\n' },
-  { name: 'NEWS', src: 'engine/news.js', glue: 'engine/news-worker.js', path: '/screen/news', fn: 'handleScreenNews', anchor: '  if (url.pathname === "/screen/food") return handleScreenFood(request);\n' }
+  { name: 'NEWS', src: 'engine/news.js', glue: 'engine/news-worker.js', path: '/screen/news', fn: 'handleScreenNews', anchor: '  if (url.pathname === "/screen/food") return handleScreenFood(request);\n' },
+  { name: 'BOARD', src: 'engine/board.js', glue: 'engine/board-worker.js', path: '/screen/board', fn: 'handleScreenBoard', anchor: '  if (url.pathname === "/screen/news") return handleScreenNews(request);\n' },
+  { name: 'CHAT', src: 'engine/chat.js', glue: 'engine/chat-worker.js', path: '/screen/chat', fn: 'handleScreenChat', anchor: '  if (url.pathname === "/screen/board") return handleScreenBoard(request);\n' },
+  { name: 'TABS', src: 'engine/tabs.js', glue: 'engine/tabs-worker.js', path: '/screen/tabs', fn: 'handleScreenTabs', anchor: '  if (url.pathname === "/screen/chat") return handleScreenChat(request);\n' }
 ];
 let all = '';
 for (const S of SETS) {
