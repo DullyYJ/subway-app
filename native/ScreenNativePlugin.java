@@ -30,6 +30,7 @@ import java.util.Map;
  *
  *   show({id,x,y,w,h,dpr,clip,json,palette,keepScroll}) · update({id,json,palette,keepScroll}) · setRect({id,x,y,w,h,dpr,clip}) · setField({id,key,value}) · hide({id}) · destroy({id}) · status({id}) → {visible,items,age,scroll}
  *   이벤트: ready({id}) 첫 그림 · error({id,message,kind}) · action({id,a,v,url[,empty]}) · input({id,on}) 검색 입력칸 포커스
+ *          text({id,key,value,kind}) watch 입력줄의 글자 바뀜(edit)·포커스(focus)·잃음(blur) · size({id,h}) 그려진 내용 높이(dp)
  *   검색줄(search 노드): 기기의 진짜 입력칸(EditText)을 검색줄 자리에 올린다. 검색 실행 → action {a:'search', v:검색어, url:엔진의 tpl, empty:엔진의 empty}.
  *   palette: { bg, card, card2, nav, border, border2, text, sub, gold, orange, imgbg } CSS 색 문자열 — 앱 테마(다크/파스텔)를 웹이 읽어 넘긴다.
  */
@@ -236,6 +237,12 @@ public class ScreenNativePlugin extends Plugin {
             }
             @Override public void onInputFocus(boolean on) {
                 try { notifyListeners("input", new JSObject().put("id", id).put("on", on)); } catch (Throwable ignored) { }
+            }
+            @Override public void onText(String key, String value, String kind) {
+                try { notifyListeners("text", new JSObject().put("id", id).put("key", key).put("value", value == null ? "" : value).put("kind", kind)); } catch (Throwable ignored) { }
+            }
+            @Override public void onContentH(float dp) {
+                try { notifyListeners("size", new JSObject().put("id", id).put("h", Math.round(dp * 10f) / 10f)); } catch (Throwable ignored) { }
             }
             @Override public void onFirstDraw() {
                 try { notifyListeners("ready", new JSObject().put("id", id)); } catch (Throwable ignored) { }

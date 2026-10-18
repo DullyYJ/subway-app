@@ -33,6 +33,9 @@ import java.util.Map;
  *     cmt    { pad, nick, nc, s, time, ind }                                                 댓글 한 줄: 글쓴이·시각 + 아래 줄바꿈 글(ind = 답글 들여쓰기)
  *     btnrow { pad, gap, h, items:[{label, on, right, fill, line, tc, act}] }               작은 단추 줄(반응 단추·삭제/신고). right 인 것은 오른쪽 끝에 붙는다
  *     inbar  { pad, key, hint, value, maxlen, h, r, btn, act, fill, line, tc, sc, onc, ckf } 글자 입력칸 + 오른쪽 단추 한 줄(댓글 달기·채팅 보내기). 단추를 누르면 입력된 글과 함께 act 를 알린다
+ *     inbar 확장: dot(왼쪽 동그라미 색) · bold · bh(단추 높이) · bsize(단추 글자) · watch(글자가 바뀔 때마다 알림) · dim(단추 흐리게·눌려도 무시) · eact(키보드 확인 키 행동) — 홈 탭 출발/도착 입력
+ *     swap   { size, fill, line, tc, icon(SVG path d), act }                                 두 줄 경계 한가운데 얹히는 동그란 단추(출발↔도착 바꾸기). 높이를 차지하지 않는다
+ *     sug    { pad, badge, bc, name, sub, last, btn, bact, act }                             한 줄 목록(자동완성·기준시각): 종류 딱지 · 이름(굵게) · 작은 글 · (오른쪽 작은 단추). 높이 44
  *     msg    { pad, mine, pre, nick, s, time, badge, bc, go, fill, tc, act }                 채팅 말풍선(내 것은 오른쪽·금색). act 가 있으면 go('신고') 글자 자리만 눌린다
  *     tabbar { pad, h, fill, line, onc, sc, items:[{label, icon(SVG path d), on, badge, act}] } 아래 탭 막대: 칸마다 아이콘 + 글자
  *     act    { a:'cat', v } | { a:'open', url } | { a:'refresh' } | { a:'search', tpl('{q}' 포함 http(s)), empty(http(s)) }
@@ -166,6 +169,10 @@ public final class ScreenCore {
         public float padL, padT, padR, padB;
         public float gap = 6f, h = 0f, size = 12f, lh = 1.35f, alpha = 1f;
         public int cols = 2, maxLines = 0;
+        public float bh = 0f, bsize = 0f;                  // inbar: 단추 높이·글자 크기(0 이면 줄 높이·입력칸 글자 크기)
+        public String dot = "";                            // inbar: 왼쪽 동그라미 색(출발/도착 점)
+        public boolean watch;                              // inbar: 글자가 바뀔 때마다 앱이 웹에 알린다(자동완성)
+        public Act bact;                                   // sug: 오른쪽 작은 단추의 행동
         public boolean bold, on;
         public String color = "text", bg = "", align = "left";
         public String s = "", label = "", badge = "", name = "", tag = "", img = "", fb = "";
@@ -481,6 +488,26 @@ public final class ScreenCore {
             n.top = optBool(m, "top", false);
             n.fill = roleOrCss(m, "fill", "card"); n.line = roleOrCss(m, "line", "border2"); n.tc = roleOrCss(m, "tc", "text"); n.sc = roleOrCss(m, "sc", "sub");
             n.onc = roleOrCss(m, "onc", "gold"); if (n.onc.length() == 0) n.onc = "gold"; n.chk = roleOrCss(m, "ckf", "#121214"); if (n.chk.length() == 0) n.chk = "#121214";
+            n.dot = roleOrCss(m, "dot", ""); n.bold = optBool(m, "bold", false); n.watch = optBool(m, "watch", false);
+            n.on = optBool(m, "dim", false); n.bact = act(m.get("eact"), false);              // dim = 단추를 흐리게(눌러도 아무 일 없음) · eact = 키보드의 확인 키 행동(없으면 단추 행동)
+            n.bh = optNum(m, "bh", 0f, 0f, 60f); n.bsize = optNum(m, "bsize", 0f, 0f, 30f);
+            if (n.bh > 0f && n.bh < 20f) throw new ParseError("inbar: bh 는 0 또는 20 이상");
+            if (n.bsize > 0f && n.bsize < 8f) throw new ParseError("inbar: bsize 는 0 또는 8 이상");
+        } else if ("swap".equals(t)) {
+            n.size = optNum(m, "size", 34f, 20f, 60f);                                                           // 지름
+            n.fill = roleOrCss(m, "fill", "#0a84ff"); if (n.fill.length() == 0) n.fill = "#0a84ff";
+            n.line = roleOrCss(m, "line", "bg"); n.tc = roleOrCss(m, "tc", "white"); if (n.tc.length() == 0) n.tc = "white";
+            n.value = optStr(m, "icon", "", 900); n.pathOps = pathOps(n.value);                                  // 24x24 안의 SVG path d
+            n.act = act(m.get("act"), true);
+        } else if ("sug".equals(t)) {
+            pad(m, n);
+            n.badge = optStr(m, "badge", "", 12);
+            n.name = optStr(m, "name", "", 120); if (n.name.length() == 0) throw new ParseError("sug: name 없음");
+            n.sub = optStr(m, "sub", "", 160); n.on = optBool(m, "last", false);
+            n.accent = roleOrCss(m, "bc", "sub"); if (n.accent.length() == 0) n.accent = "sub";
+            n.label = optStr(m, "btn", "", 6);
+            if (n.label.length() > 0) n.bact = act(m.get("bact"), true);
+            n.act = act(m.get("act"), true);
         } else if ("msg".equals(t)) {
             pad(m, n);
             n.mine = optBool(m, "mine", false); n.nick = optStr(m, "nick", "", 40); n.pre = optStr(m, "pre", "", 24);
@@ -520,7 +547,9 @@ public final class ScreenCore {
     public static Screen load(String json) throws ParseError { return validate(parse(json)); }
 
     // ═════════════ ③ 배치 ═════════════
-    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14, K_NEWS = 15, K_POSTH = 16, K_CMT = 17, K_RBTN = 18, K_INBAR = 19, K_MSG = 20, K_TAB = 21;
+    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14, K_NEWS = 15, K_POSTH = 16, K_CMT = 17, K_RBTN = 18, K_INBAR = 19, K_MSG = 20, K_TAB = 21, K_SUG = 22, K_SWAP = 23;
+    /** 홈 경로 입력 치수(웹 홈 탭 출발/도착 카드·자동완성과 같다) */
+    public static final float SUG_H = 44f, SUG_PADX = 14f, SUG_BADGE = 11f, SUG_NAME = 14f, SUG_SUB = 11f, SUG_PILL_PX = 6f, SUG_GAP = 6f, SUG_BTN = 11f, SUG_BTN_PADX = 9f, SUG_BTN_H = 26f;
     /** 게시글 카드·댓글·말풍선 치수(웹 .dc-* / .chat-bub-* 와 같다) */
     public static final float POST_PADX = 14f, POST_PADT = 12f, POST_META_GAP = 8f, POST_PADB = 10f, POST_TITLE = 14f, POST_TITLE_LH = 1.4f, POST_BADGE = 10f, POST_BADGE_PX = 7f, POST_BADGE_GAP = 8f, POST_META = 11f, POST_BODYPAD = 14f,
             CMT_NICK = 11f, CMT_TXT = 12f, CMT_TIME = 10f, CMT_IND = 14f, RBTN_PADX = 12f, RBTN_SIZE = 12f,
@@ -563,6 +592,9 @@ public final class ScreenCore {
         public float[] pathOps = new float[0];       // 탭 아이콘(절대 좌표 M/L/C/Z 로 풀어 둔 것: [연산, 좌표…])
         public float btnLX, btnLW, zoneX, zoneY, zoneW, zoneH;   // 말풍선 '신고' 글자 자리 · 입력줄 단추 글자 자리
         public Col fill2;                            // 말풍선 글자색 따로 필요할 때
+        public Col dotC;                             // 입력줄 왼쪽 동그라미 색(없으면 null)
+        public boolean watch;                        // 입력줄: 글자 바뀜을 알린다
+        public Act act2;                             // 자동완성 줄 오른쪽 작은 단추
         public float starX, badgeX, badgePw, distX, distPw, goX, metaY, metaH, subY, subLH2;   // 장소 카드 한 줄(별점·딱지·거리·길찾기) 자리 / 머리줄 작은 글 자리
         public Act act;
     }
@@ -765,7 +797,30 @@ public final class ScreenCore {
         float innerW = Math.max(1f, width - n.padL - n.padR);
         float ox = x0 + n.padL;
         if ("spacer".equals(n.t)) return y + n.h;
+        if ("swap".equals(n.t)) {                                                    // 두 줄의 경계 한가운데에 얹히는 동그란 단추 — 높이를 차지하지 않는다
+            float d = n.size;
+            Item it = new Item(); it.kind = K_SWAP; it.w = d; it.h = d; it.x = x0 + (width - d) / 2f; it.y = y - d / 2f; it.act = n.act; it.radius = d / 2f;
+            it.fill = col(n.fill, new Col(null, 0xFF0A84FF)); it.line = col(n.line, new Col("bg", 0)); it.tc = col(n.tc, new Col("white", 0)); it.pathOps = n.pathOps;
+            out.add(it);
+            return y;
+        }
         y += n.padT;
+        if ("sug".equals(n.t)) {                                                     // 자동완성 한 줄: 종류 딱지 + 이름(굵게) + 작은 글 (+ 오른쪽 작은 단추)
+            float pillW = n.badge.length() > 0 ? m.width(n.badge, SUG_BADGE, true) + SUG_PILL_PX * 2f : 0f;
+            float sbw = n.label.length() > 0 ? m.width(n.label, SUG_BTN, true) + SUG_BTN_PADX * 2f : 0f;
+            float nx = ox + SUG_PADX + (pillW > 0f ? pillW + SUG_GAP : 0f), avail = Math.max(30f, ox + innerW - SUG_PADX - nx - (sbw > 0f ? sbw + SUG_GAP : 0f));
+            String nm = ellipsize(n.name, avail, SUG_NAME, true, m);
+            float nw = m.width(nm, SUG_NAME, true);
+            String sb = n.sub.length() > 0 && avail - nw - SUG_GAP >= 24f ? ellipsize(n.sub, avail - nw - SUG_GAP, SUG_SUB, false, m) : "";
+            Item it = new Item(); it.kind = K_SUG; it.x = ox; it.y = y; it.w = innerW; it.h = SUG_H; it.act = n.act; it.on = n.on;
+            it.badge = n.badge; it.badgeW = pillW; it.bx = ox + SUG_PADX;
+            it.lines = new String[] { nm }; it.size = SUG_NAME; it.bold = true; it.textX = nx;
+            it.label = sb; it.size2 = SUG_SUB; it.tagX = nx + nw + SUG_GAP;
+            it.ac = col(n.accent, new Col("sub", 0));
+            if (sbw > 0f) { it.go = n.label; it.act2 = n.bact; it.sw = sbw; it.sh = SUG_BTN_H; it.btx = ox + innerW - SUG_PADX - sbw; it.bty = y + (SUG_H - SUG_BTN_H) / 2f; }
+            out.add(it);
+            return y + SUG_H + n.padB;
+        }
         if ("text".equals(n.t)) {
             boolean rich = n.hl.length > 0;
             List<String> ls = wrap(n.s, innerW, n.size, n.bold || rich, n.maxLines, m);        // 굵은 구간이 있으면 줄바꿈은 굵은 폭으로 잰다(넘치지 않게)
@@ -1011,12 +1066,16 @@ public final class ScreenCore {
             return y + rowH + (wrap2 ? rowH + 4f : 0f) + n.padB;
         }
         if ("inbar".equals(t0(n))) {
-            float btnW = m.width(n.label, n.size, true) + INBAR_BTN_PADX * 2f;
+            float bsz = n.bsize > 0f ? n.bsize : n.size;
+            float btnW = m.width(n.label, bsz, true) + INBAR_BTN_PADX * 2f;
+            float btnH = n.bh > 0f ? Math.min(n.bh, n.h) : n.h;
             Item it = new Item(); it.kind = K_INBAR; it.x = ox; it.y = y; it.w = innerW; it.h = n.h; it.radius = n.r;
             it.key = n.key; it.label = n.hint; it.value = n.value; it.maxlen = n.maxlen; it.size = n.size; it.act = n.act; it.badge = n.label;
+            it.bold = n.bold; it.size2 = n.bsize > 0f ? n.bsize : 0f; it.watch = n.watch; it.on = n.on; it.act2 = n.bact;
             it.ix = ox; it.iy = y; it.iw = Math.max(40f, innerW - btnW - INBAR_GAP); it.ih = n.h;
-            it.btx = ox + innerW - btnW; it.bty = y; it.sw = btnW; it.sh = n.h; it.top = n.top;
+            it.btx = ox + innerW - btnW; it.bty = y + (n.h - btnH) / 2f; it.sw = btnW; it.sh = btnH; it.top = n.top;
             it.textX = ox + 14f;
+            if (n.dot.length() > 0) { it.dotC = col(n.dot, null); it.bx = ox + 14f + 5f; it.by = y + n.h / 2f; it.textX = ox + 14f + 10f + 10f; }       // 동그라미(지름 10) + 간격 10 → 글자
             it.fill = col(n.fill, null); it.line = col(n.line, null); it.tc = col(n.tc, new Col("text", 0)); it.sc = col(n.sc, new Col("sub", 0));
             it.ac = col(n.onc, new Col("gold", 0)); it.ac2 = col(n.chk, new Col(null, 0xFF121214));
             out.add(it);
