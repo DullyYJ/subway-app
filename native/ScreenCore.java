@@ -28,6 +28,7 @@ import java.util.Map;
  *     bar    { pad, title, sub, btn, act }                                                   머리줄: 제목 + 금색 작은 글(예: '○○역 인근') + 오른쪽 알약 단추(btn 이 있으면 act 필수)
  *     place  { pad, rank, pub, name, sub, stars, badge, dist, go, act }                    장소 카드(맛집): 순위 동그라미 · 이름 · 업종/주소 · 별점/딱지/거리/길찾기 글. pub=true 면 순위 칸은 글자 없이 흐리게
  *     divider { pad }                                                                      가는 가로선
+ *     news   { pad, title, sub, act }                                                      뉴스 줄(커뮤니티): 왼쪽 금색 막대 · 줄바꿈 제목(최대 4줄) · 작은 글(분류 · N분 전) · 오른쪽 ›. 아래에 가는 선
  *     act    { a:'cat', v } | { a:'open', url } | { a:'refresh' } | { a:'search', tpl('{q}' 포함 http(s)), empty(http(s)) }
  *            | { a:'set', key } | { a:'call', v:이름 } | { a:'web', v:이름 } | { a:'sel', v:값 }   (call/web/sel 은 웹이 허용 목록에 있는 것만 실행한다)
  *   screen.cover = 'tab'(탭 맨 위부터 덮음: 안내 상자·검색줄 포함) | 'chips'(기본, 칩 줄부터). 앱이 cap=2 를 보냈을 때만 엔진이 'tab' 을 준다.
@@ -406,6 +407,11 @@ public final class ScreenCore {
             n.sub = optStr(m, "sub", "", 200); n.tag = optStr(m, "stars", "", 10); n.badge = optStr(m, "badge", "", 20);
             n.label = optStr(m, "dist", "", 12); n.title = optStr(m, "go", "", 30);
             n.act = act(m.get("act"), true);
+        } else if ("news".equals(t)) {
+            pad(m, n);
+            n.title = optStr(m, "title", "", 200); if (n.title.length() == 0) throw new ParseError("news: title 없음");
+            n.sub = optStr(m, "sub", "", 60);
+            n.act = act(m.get("act"), true);
         } else if ("divider".equals(t)) {
             pad(m, n);
         } else if ("spacer".equals(t)) {
@@ -434,9 +440,11 @@ public final class ScreenCore {
     public static Screen load(String json) throws ParseError { return validate(parse(json)); }
 
     // ═════════════ ③ 배치 ═════════════
-    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14;
+    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14, K_NEWS = 15;
     /** 맛집 머리줄·장소 카드 치수(웹 .food-* 와 같다) */
-    public static final float BAR_TITLE = 18f, BAR_SUB = 13f, BAR_BTN = 12f, BAR_LH = 1.4f, PLACE_PAD = 14f, PLACE_RANK = 24f, PLACE_GAP = 12f, PLACE_NAME = 15f, PLACE_SUB = 12f, PLACE_META = 11f, PLACE_STAR = 13f, PLACE_PILL_H = 20f;
+    public static final float BAR_TITLE = 18f, BAR_SUB = 13f, BAR_BTN = 12f, BAR_LH = 1.4f, PLACE_PAD = 14f, PLACE_RANK = 24f, PLACE_GAP = 12f, PLACE_NAME = 15f, PLACE_SUB = 12f, PLACE_META = 11f, PLACE_STAR = 13f, PLACE_PILL_H = 20f,
+            NEWS_PADV = 13f, NEWS_PADX = 4f, NEWS_BARW = 3f, NEWS_GAP = 10f, NEWS_TITLE = 14f, NEWS_SUB = 11f, NEWS_LH = 1.45f, NEWS_CHEV = 13f;
+    public static final int NEWS_MAXLINES = 4;
     /** 검색줄 치수(웹 쿠팡 검색줄과 같다): 알약 높이 · 왼쪽 배지 · 오른쪽 단추 · 안쪽 여백 */
     public static final float SEARCH_H = 44f, SEARCH_BADGE = 20f, SEARCH_BTN = 30f, SEARCH_PADL = 14f, SEARCH_PADR = 8f, SEARCH_GAP = 8f;
     public static final float CARD_PAD = 8f, CARD_IMG_H = 78f, CARD_IMG_GAP = 5f, CARD_NAME_SIZE = 11f, CARD_LH = 1.35f, CARD_TAG_GAP = 6f, CHIP_PADX = 12f;
@@ -791,6 +799,22 @@ public final class ScreenCore {
             it.ac = col("gold", null); it.tc = col("text", null); it.sc = col("sub", null);
             out.add(it);
             return y + h + n.padB;
+        }
+        if ("news".equals(n.t)) {
+            float chevW = m.width("\u203A", NEWS_CHEV, false);
+            float tx = ox + NEWS_PADX + NEWS_BARW + NEWS_GAP, tw = Math.max(40f, innerW - NEWS_PADX * 2f - NEWS_BARW - NEWS_GAP * 2f - chevW);
+            float tlh = NEWS_TITLE * NEWS_LH, slh = NEWS_SUB * NEWS_LH;
+            List<String> tl = wrap(n.title, tw, NEWS_TITLE, true, NEWS_MAXLINES, m);
+            Item it = new Item(); it.kind = K_NEWS; it.x = ox; it.y = y; it.w = innerW; it.act = n.act;
+            it.lines = tl.toArray(new String[0]); it.size = NEWS_TITLE; it.bold = true; it.lineH = tlh;
+            it.textX = tx; it.textY = y + NEWS_PADV;
+            it.lines2 = n.sub.length() > 0 ? new String[] { ellipsize(n.sub, tw, NEWS_SUB, false, m) } : new String[0]; it.size2 = NEWS_SUB; it.lineH2 = slh;
+            it.subY = it.textY + tlh * tl.size() + 4f;
+            it.h = NEWS_PADV + tlh * tl.size() + (n.sub.length() > 0 ? 4f + slh : 0f) + NEWS_PADV + 1f;
+            it.bx = ox + NEWS_PADX; it.by = y + NEWS_PADV + 2f; it.sh = Math.max(4f, it.h - NEWS_PADV - 1f - (NEWS_PADV + 2f));
+            it.tagX = ox + innerW - NEWS_PADX - chevW; it.metaY = y + NEWS_PADV + 3f;
+            out.add(it);
+            return y + it.h + n.padB;
         }
         if ("place".equals(n.t)) {
             float infoX = ox + 1f + PLACE_PAD + PLACE_RANK + PLACE_GAP, infoW = Math.max(40f, innerW - 2f - PLACE_PAD * 2f - PLACE_RANK - PLACE_GAP);

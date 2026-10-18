@@ -316,6 +316,7 @@ public class ScreenView extends View {
             case ScreenCore.K_BAR: drawBar(cv, it); break;
             case ScreenCore.K_PLACE: drawPlace(cv, it); break;
             case ScreenCore.K_DIV: drawDivider(cv, it); break;
+            case ScreenCore.K_NEWS: drawNews(cv, it); break;
             default: break;
         }
     }
@@ -404,6 +405,20 @@ public class ScreenView extends View {
             setText(ScreenCore.PLACE_META, false, pal[R_SUB]); cv.drawText(it.dist, it.distX + 8f, base(my, mh, 0), tp);
         }
         if (it.go.length() > 0) { setText(ScreenCore.PLACE_META, true, 0xFF03C75A); cv.drawText(it.go, it.goX, base(my, mh, 0), tp); }
+    }
+
+    /** 뉴스 줄: 왼쪽 금색 막대 · 제목(굵게, 여러 줄) · 작은 글 · 오른쪽 › · 아래 가는 선. */
+    private void drawNews(Canvas cv, ScreenCore.Item it) {
+        if (it == pressed) { rf.set(it.x, it.y, it.x + it.w, it.y + it.h); p.setStyle(Paint.Style.FILL); p.setColor(0x14808080); cv.drawRoundRect(rf, 8f, 8f, p); }
+        p.setStyle(Paint.Style.FILL); p.setColor(pal[R_GOLD]);
+        rf.set(it.bx, it.by, it.bx + ScreenCore.NEWS_BARW, it.by + it.sh); cv.drawRoundRect(rf, 1.5f, 1.5f, p);
+        setText(it.size, true, pal[R_TEXT]);
+        for (int k = 0; k < it.lines.length; k++) cv.drawText(it.lines[k], it.textX, base(it.textY + k * it.lineH, it.lineH, k), tp);
+        if (it.lines2.length > 0) { setText(it.size2, false, pal[R_SUB]); cv.drawText(it.lines2[0], it.textX, base(it.subY, it.lineH2, 0), tp); }
+        setText(ScreenCore.NEWS_CHEV, false, pal[R_SUB]); cv.drawText("\u203A", it.tagX, base(it.metaY, ScreenCore.NEWS_CHEV * ScreenCore.NEWS_LH, 0), tp);
+        p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(pal[R_BORDER]);
+        cv.drawLine(it.x, it.y + it.h - 0.5f, it.x + it.w, it.y + it.h - 0.5f, p);
+        p.setStyle(Paint.Style.FILL);
     }
 
     private void drawDivider(Canvas cv, ScreenCore.Item it) {
