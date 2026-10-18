@@ -21,7 +21,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     opt = opt || {};
     const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, timezoneId: 'Asia/Seoul', deviceScaleFactor: 2 });
     const page = await ctx.newPage(); const errs = []; page.on('pageerror', e => errs.push(e.message));
-    const x = { ctx, page, errs, reqs: [], serve: opt.serve || 'ok', delay: opt.delay || 0 };
+    const x = { ctx, page, errs, reqs: [], serve: opt.serve || 'ok', delay: opt.delay || 0, nocap: !!opt.nocap };
     await page.route('**/*', async r => {
       const u = new URL(r.request().url());
       if (u.protocol === 'file:') return r.continue();
@@ -30,7 +30,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
         if (x.delay) await new Promise(res => setTimeout(res, x.delay));
         if (x.serve === 'down') return r.abort();
         const cat = u.searchParams.get('cat') || '추천';
-        const scr = E.shopScreen({ nowMs: Date.now(), cat }, SHOPDATA, null, null);
+        const scr = E.shopScreen({ nowMs: Date.now(), cat, cap: x.nocap ? 0 : Number(u.searchParams.get('cap')) || 0 }, SHOPDATA, null, null);
         let body = JSON.stringify(scr);
         if (x.serve === 'shape') body = JSON.stringify({ ok: true, v: 2, screen: 'shop' });
         if (x.serve === 'bad') { const o = JSON.parse(body); o.body[0].items[0].act = { a: 'open', url: 'javascript:alert(1)' }; body = JSON.stringify(o); }
@@ -99,12 +99,12 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
 
   console.log('[② 켜면: 엔진 JSON 을 그대로 넘긴다]');
   const A = await fresh({ plugin: true, on: true });
-  await t('쇼핑 탭을 열면 엔진에 요청하고, 받은 JSON 글을 한 글자도 안 고치고 show 한다 · 사각형은 칩 줄부터 탭 맨 아래', async () => {
+  await t('쇼핑 탭을 열면 엔진에 요청하고, 받은 JSON 글을 한 글자도 안 고치고 show 한다 · 사각형은 탭 맨 위(안내 상자·검색줄 포함)부터 맨 아래', async () => {
     await openShop(A); assert.ok(await waitFor(A, has(A, 'show')), 'show 가 없다');
     assert.ok(A.reqs.length >= 1 && /cat=%EC%B6%94%EC%B2%9C/.test(A.reqs[0]), A.reqs.join(' '));
     const s = (await last(A, 'show')).a;
     assert.strictEqual(typeof s.json, 'string'); assert.strictEqual(s.json, A.lastBody, '엔진 글과 다르다');
-    const bx = await A.page.evaluate(() => { const t = document.getElementById('tab-shop').getBoundingClientRect(), c = document.getElementById('shopCats').getBoundingClientRect(); return { x: t.left, y: c.top, w: t.width, h: t.bottom - c.top }; });
+    const bx = await A.page.evaluate(() => { const t = document.getElementById('tab-shop').getBoundingClientRect(); return { x: t.left, y: t.top, w: t.width, h: t.bottom - t.top }; });
     assert.ok(Math.abs(s.x - bx.x) < 1 && Math.abs(s.y - bx.y) < 1 && Math.abs(s.w - bx.w) < 1 && Math.abs(s.h - bx.h) < 1, JSON.stringify([s.x, s.y, s.w, s.h, bx]));
     assert.strictEqual(s.id, 'shop'); assert.strictEqual(s.dpr, 2); assert.strictEqual(s.keepScroll, false);
     assert.ok(s.h > 300, '높이 ' + s.h);
@@ -114,7 +114,8 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     const s = (await last(A, 'show')).a, j = JSON.parse(s.json);
     assert.strictEqual(j.v, 1); assert.strictEqual(j.cat, '추천'); assert.strictEqual(j.body[0].items.length, 100);
     const eng = E.shopScreen({ nowMs: Date.now(), cat: '추천' }, SHOPDATA, null, null);
-    assert.strictEqual(j.head[0].items.length, eng.head[0].items.length);
+    const chipsOf = (o) => o.head.find(n => n.t === 'chips');
+    assert.strictEqual(chipsOf(j).items.length, chipsOf(eng).items.length);
   });
   await t('ready 가 오면 정상: 실패 횟수 0 · 저장본이 저장된다(엔진 글 그대로) · 웹 영역(sh:*)은 쉰다', async () => {
     await emit(A, 'ready', { id: 'shop' }); await A.page.waitForTimeout(200);
@@ -169,13 +170,13 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   });
   await t('사각형이 연달아 바뀌는 동안(탭 전환·키보드)은 숨기고, 멈추면 setRect/올림', async () => {
     await openShop(A); await waitFor(A, async () => (await calls(A, 'show')).length + (await calls(A, 'update')).length > 0); await clear(A);
-    await A.page.evaluate(() => { const h = document.getElementById('shopCats'); let i = 0; window.__mv = setInterval(() => { h.style.marginTop = (3 + (i++ % 11) * 2) + 'px'; }, 53); });
+    await A.page.evaluate(() => { const h = document.getElementById('tab-shop'); let i = 0; window.__mv = setInterval(() => { h.style.marginBottom = (3 + (i++ % 11) * 6) + 'px'; }, 53); });      // 키보드가 올라오는 것처럼 탭 아래쪽이 연달아 바뀐다
     assert.ok(await waitFor(A, has(A, 'hide'), 3000), '움직이는데 숨기지 않았다');
-    await A.page.evaluate(() => { clearInterval(window.__mv); document.getElementById('shopCats').style.marginTop = ''; }); await clear(A);
+    await A.page.evaluate(() => { clearInterval(window.__mv); document.getElementById('tab-shop').style.marginBottom = ''; }); await clear(A);
     assert.ok(await waitFor(A, async () => (await calls(A, 'show')).length + (await calls(A, 'update')).length > 0, 4000), '멈춘 뒤 다시 올리지 않았다');
   });
   await t('테마가 바뀌면 팔레트만 다시 보낸다', async () => {
-    await clear(A); await A.page.evaluate(() => document.documentElement.setAttribute('data-theme', document.documentElement.getAttribute('data-theme') === 'pastel' ? 'dark' : 'pastel'));
+    await waitFor(A, async () => (await st(A)).shown, 4000); await clear(A); await A.page.evaluate(() => document.documentElement.setAttribute('data-theme', document.documentElement.getAttribute('data-theme') === 'pastel' ? 'dark' : 'pastel'));
     assert.ok(await waitFor(A, has(A, 'update')), 'palette update 없음');
     const u = (await last(A, 'update')).a; assert.ok(u.palette && !u.json);
     await A.ctx.close();
@@ -250,6 +251,58 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     await x.page.evaluate(() => _scrSetUse(false)); await x.page.waitForTimeout(300);
     assert.ok((await calls(x, 'destroy')).length >= 1); await clear(x);
     await x.page.evaluate(() => _scrSetUse(true)); assert.ok(await waitFor(x, has(x, 'show')), '다시 켜도 안 뜬다'); await x.ctx.close();
+  });
+
+  console.log('[⑧ 안내 상자·검색줄(cap=2)]');
+  await t('앱은 cap=2 를 보내고, 엔진은 안내 상자·검색줄·칩 순서의 머리와 cover:tab 을 준다', async () => {
+    const x = await fresh({ plugin: true, on: true }); await openShop(x); assert.ok(await waitFor(x, has(x, 'show')), 'show 없음');
+    assert.ok(x.reqs.every(q => /[?&]cap=2(&|$)/.test(q)), x.reqs.join(' '));
+    const j = JSON.parse((await last(x, 'show')).a.json);
+    assert.deepStrictEqual(j.head.map(n => n.t), ['box', 'search', 'chips']); assert.strictEqual(j.cover, 'tab');
+    assert.strictEqual(j.head[1].act.a, 'search'); assert.ok(j.head[1].act.tpl.includes('{q}')); assert.ok(/^https:\/\//.test(j.head[1].act.empty));
+    await x.ctx.close();
+  });
+  await t('옛 엔진(cap 무시, cover 없음)이면 예전처럼 칩 줄부터 덮는다 — 안내·검색줄은 웹 그대로', async () => {
+    const x = await fresh({ plugin: true, on: true, nocap: true }); await openShop(x); assert.ok(await waitFor(x, has(x, 'show')), 'show 없음');
+    const s = (await last(x, 'show')).a, j = JSON.parse(s.json); assert.deepStrictEqual(j.head.map(n => n.t), ['chips']); assert.ok(!j.cover);
+    const cy = await x.page.evaluate(() => document.getElementById('shopCats').getBoundingClientRect().top);
+    assert.ok(Math.abs(s.y - cy) < 1, s.y + ' vs ' + cy); await x.ctx.close();
+  });
+  await t('저장본이 옛 모양(cover 없음)이고 새 응답이 cover:tab 이면 사각형을 다시 재서 setRect 한다', async () => {
+    const old = await fresh({ plugin: true, on: true, nocap: true }); await openShop(old); await waitFor(old, has(old, 'show')); await emit(old, 'ready', { id: 'shop' }); await old.page.waitForTimeout(200);
+    const oldTxt = JSON.parse(await cacheOf(old, '추천')).txt; await old.ctx.close();
+    const x = await fresh({ plugin: true, on: true, cache: { 추천: oldTxt }, cacheTs: Date.now() - 10 * 60000 });
+    await openShop(x); assert.ok(await waitFor(x, has(x, 'show')), '저장본 show 없음'); await x.page.waitForTimeout(300);
+    assert.ok(await waitFor(x, has(x, 'update'), 6000), '새 응답 update 없음');
+    const top = await x.page.evaluate(() => document.getElementById('tab-shop').getBoundingClientRect().top);
+    assert.ok(await waitFor(x, async () => (await calls(x, 'setRect')).some(c => Math.abs(c.a.y - top) < 1), 4000), 'cover 가 바뀌었는데 사각형을 안 바꿨다');
+    await x.ctx.close();
+  });
+  await t('검색 행동(검색어 있음): 엔진의 tpl 로 쿠팡 검색 주소를 만들어 연다(웹은 주소를 정하지 않는다)', async () => {
+    const x = await fresh({ plugin: true, on: true }); await openShop(x); await waitFor(x, has(x, 'show')); await emit(x, 'ready', { id: 'shop' });
+    await x.page.evaluate(() => { window.__open = []; window._newsOpenInApp = function (u, t) { window.__open.push([u, t]); }; });
+    const j = JSON.parse((await last(x, 'show')).a.json), act = j.head[1].act;
+    await emit(x, 'action', { id: 'shop', a: 'search', v: ' 우산 ', url: act.tpl, empty: act.empty }); await x.page.waitForTimeout(150);
+    const o = await x.page.evaluate(() => window.__open);
+    assert.deepStrictEqual(o, [['https://www.coupang.com/np/search?q=' + encodeURIComponent('우산'), '쿠팡']], JSON.stringify(o)); await x.ctx.close();
+  });
+  await t('검색 행동(검색어 없음): 엔진이 준 empty(파트너스 추적 링크)를 연다', async () => {
+    const x = await fresh({ plugin: true, on: true }); await openShop(x); await waitFor(x, has(x, 'show')); await emit(x, 'ready', { id: 'shop' });
+    await x.page.evaluate(() => { window.__open = []; window._newsOpenInApp = function (u, t) { window.__open.push([u, t]); }; });
+    const act = JSON.parse((await last(x, 'show')).a.json).head[1].act;
+    await emit(x, 'action', { id: 'shop', a: 'search', v: '   ', url: act.tpl, empty: act.empty }); await x.page.waitForTimeout(150);
+    assert.deepStrictEqual(await x.page.evaluate(() => window.__open), [[act.empty, '쿠팡']]); assert.strictEqual(act.empty, 'https://coupa.ng/coRT4D'); await x.ctx.close();
+  });
+  await t('검색 입력 중(키보드로 웹뷰 크기가 바뀌는 중)에는 숨기지 않고 따라간다 · 입력이 끝나면 예전 규칙', async () => {
+    const x = await fresh({ plugin: true, on: true }); await openShop(x); await waitFor(x, has(x, 'show')); await emit(x, 'ready', { id: 'shop' });
+    await emit(x, 'input', { id: 'shop', on: true }); await clear(x);
+    await x.page.evaluate(() => { const h = document.getElementById('tab-shop'); let i = 0; window.__mv = setInterval(() => { h.style.marginBottom = (3 + (i++ % 11) * 6) + 'px'; }, 53); });
+    await x.page.waitForTimeout(1500);
+    assert.strictEqual((await calls(x, 'hide')).length, 0, '입력 중인데 숨겼다 — 키보드가 닫힌다');
+    assert.ok((await calls(x, 'setRect')).length >= 3, '사각형을 따라가지 않았다');
+    await emit(x, 'input', { id: 'shop', on: false }); await clear(x);
+    assert.ok(await waitFor(x, has(x, 'hide'), 3000), '입력이 끝나도 움직임 규칙이 안 돌아왔다');
+    await x.page.evaluate(() => { clearInterval(window.__mv); document.getElementById('tab-shop').style.marginBottom = ''; }); await x.ctx.close();
   });
 
   await b.close();

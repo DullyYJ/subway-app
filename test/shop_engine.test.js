@@ -84,6 +84,25 @@ console.log('동등성 대조 ' + cases.length + '건');
   ok(!s4.body[0].items.some(c => /javascript:/.test(c.act.url)), '위험한 링크는 싣지 않음');
   ok(!s4.body[0].items.some(c => c.img && !/^https?:/.test(c.img)), '위험한 이미지 주소 제외');
   ok(JSON.stringify(s).length < 60000, '추천 화면 JSON 크기 ' + JSON.stringify(s).length);
+  // cap 없음(옛 앱) = 예전 모양 그대로: 칩만, cover 없음
+  ok(s.head.length === 1 && s.head[0].t === 'chips' && s.cover === undefined, 'cap 없으면 옛 모양(칩만, cover 없음)');
+  // cap=2(새 앱): 안내 상자 + 검색줄 + 칩
+  const c2 = E.shopScreen({ nowMs: t, tzOffsetMin: 540, cap: 2 }, data, null, { temp: 14, rain: 20 });
+  ok(c2.cover === 'tab' && c2.head.map(n => n.t).join() === 'box,search,chips', 'cap=2: 상자·검색줄·칩 + cover=tab');
+  ok(JSON.stringify(c2.body) === JSON.stringify(s.body) && JSON.stringify(c2.head[2]) === JSON.stringify(s.head[0]), 'cap 이 있어도 본문·칩은 같다(추천 계산은 그대로)');
+  const bxn = c2.head[0];
+  ok(/쿠팡 파트너스 활동/.test(bxn.s) && /수수료를 제공받습니다/.test(bxn.s), '대가성 문구가 상자에 있다(공정위 표시)');
+  ok(bxn.hl.length === 2 && bxn.s.slice(bxn.hl[0][0], bxn.hl[0][1]) === '쿠팡 파트너스 활동' && bxn.s.slice(bxn.hl[1][0], bxn.hl[1][1]) === '일정액의 수수료를 제공받습니다.', '굵은 구간이 웹과 같은 두 곳');
+  const sch = c2.head[1];
+  ok(sch.act.a === 'search' && sch.act.tpl === 'https://www.coupang.com/np/search?q={q}' && sch.act.empty === 'https://coupa.ng/coRT4D', '검색 주소·파트너스 링크는 엔진이 정한다');
+  ok(sch.hint === '쿠팡에서 검색' && sch.maxlen === 60 && sch.max === 340, '검색줄 힌트·길이·폭(웹과 같다)');
+  // 웹(index.html)의 안내 문구와 검색 주소·파트너스 링크가 엔진 값과 같은가(옛 웹 폴백과 어긋나면 수수료 링크가 달라진다)
+  ok(html.indexOf("var _COUPANG_PARTNER_URL = 'https://coupa.ng/coRT4D'") > 0, '웹의 파트너스 링크 = 엔진 값');
+  ok(html.indexOf("https://www.coupang.com/np/search?q=' + encodeURIComponent(q)") > 0, '웹의 기본 검색 주소 = 엔진 tpl 과 같은 형식');
+  ok(html.indexOf('이 페이지의 상품 링크는 <b>쿠팡 파트너스 활동</b>의 일환으로,') > 0 && html.indexOf('<b>일정액의 수수료를 제공받습니다.</b>') > 0, '웹 안내 문구 = 엔진 문구(굵은 곳 포함)');
+  // 워커 쿼리: cap 읽기
+  const wsrc = fs.readFileSync(path.join(__dirname, '../engine/shop-worker.js'), 'utf8');
+  ok(/cap: Number\(q\.get\("cap"\)\) \|\| 0/.test(wsrc), '워커가 cap 쿼리를 읽는다');
 }
 
 // ③ 워커 내장 사본
@@ -128,6 +147,10 @@ console.log('동등성 대조 ' + cases.length + '건');
     ok(weatherAsked >= 1, '위치를 주면 엔진이 날씨를 받는다');
     const direct = E.shopScreen({ nowMs: t }, data, null, { temp: 4, rain: 70 });
     ok(JSON.stringify(j.body[0].items.map(c => c.act.url)) === JSON.stringify(direct.body[0].items.map(c => c.act.url)), '워커와 직접 계산이 같은 결과');
+    const rc = await w.fetch(new Request('https://x/screen/shop?cap=2&now=' + t), {}, { waitUntil() {} });
+    const jc = await rc.json();
+    ok(jc.cover === 'tab' && jc.head.map(n => n.t).join() === 'box,search,chips', '워커: cap=2 이면 상자·검색줄 포함');
+    ok(!j.cover && j.head.length === 1, '워커: cap 없으면 옛 모양');
     const r2 = await w.fetch(new Request('https://x/screen/shop?cat=' + encodeURIComponent(W.cats[2].c) + '&now=' + t), {}, { waitUntil() {} });
     const j2 = await r2.json();
     ok(j2.cat === W.cats[2].c, '워커 카테고리 선택');
