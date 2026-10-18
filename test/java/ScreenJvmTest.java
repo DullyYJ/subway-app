@@ -1,0 +1,158 @@
+package com.dullyyj.subway;
+
+import java.util.List;
+
+/** ScreenCore(서버 구동 화면: JSON 읽기·검증·배치·눌림) 시험 — 안드로이드 없이 JVM. 사용: java ScreenJvmTest */
+public class ScreenJvmTest {
+    static int fails = 0, oks = 0;
+    static void ok(boolean c, String name) { System.out.println((c ? "ok   " : "FAIL ") + name); if (c) oks++; else fails++; }
+    static boolean near(float a, float b) { return Math.abs(a - b) < 0.02f; }
+
+    // 영문 0.5em · 한글 등 1em · 공백 0.3em
+    static final ScreenCore.Measurer M = new ScreenCore.Measurer() {
+        public float width(String s, float size, boolean bold) {
+            float w = 0; for (int i = 0; i < s.length(); i++) { char c = s.charAt(i); w += (c == ' ' ? 0.3f : (c < 128 ? 0.5f : 1f)) * size * (bold ? 1.05f : 1f); }
+            return w;
+        }
+    };
+
+    static String card(String name, String url) { return "{\"t\":\"card\",\"name\":\"" + name + "\",\"tag\":\"최저가 ›\",\"fb\":\"X\",\"img\":\"https://img/a.jpg\",\"act\":{\"a\":\"open\",\"url\":\"" + url + "\"}}"; }
+    static String screen(int n) {
+        StringBuilder g = new StringBuilder();
+        for (int i = 0; i < n; i++) { if (i > 0) g.append(','); g.append(card("상품" + i, "https://link.coupang.com/a/" + i)); }
+        return "{\"ok\":true,\"v\":1,\"screen\":\"shop\",\"rev\":\"r1\",\"head\":[{\"t\":\"chips\",\"pad\":[14,4,14,4],\"gap\":6,\"h\":30,\"items\":["
+            + "{\"label\":\"추천\",\"badge\":\"100\",\"on\":true,\"act\":{\"a\":\"cat\",\"v\":\"추천\"}},{\"label\":\"식사\",\"badge\":\"229\",\"on\":false,\"act\":{\"a\":\"cat\",\"v\":\"식사\"}},{\"label\":\"음료\",\"badge\":\"101\",\"act\":{\"a\":\"cat\",\"v\":\"음료\"}}]}],"
+            + "\"body\":[{\"t\":\"grid\",\"cols\":2,\"gap\":8,\"pad\":[14,4,14,0],\"items\":[" + g + "]},"
+            + "{\"t\":\"text\",\"pad\":[16,10,16,0],\"size\":10,\"color\":\"sub\",\"s\":\"이 페이지의 상품 링크는 쿠팡 파트너스 활동의 일환으로, 수수료를 제공받습니다.\"},"
+            + "{\"t\":\"spacer\",\"h\":10},{\"t\":\"button\",\"pad\":[14,0,14,0],\"s\":\"지금 바로 새로고침\",\"size\":11,\"h\":40,\"act\":{\"a\":\"refresh\"}},{\"t\":\"spacer\",\"h\":14}]}";
+    }
+    static boolean bad(String json) { try { ScreenCore.load(json); return false; } catch (ScreenCore.ParseError e) { return true; } }
+
+    public static void main(String[] a) throws Exception {
+        // ── JSON 읽기 ──
+        Object o = ScreenCore.parse("{\"a\":[1,2.5,-3e2,true,false,null,\"x\\n\\u00e9\\\"\"],\"b\":{}}");
+        ok(o instanceof java.util.Map, "객체를 읽는다");
+        ok(bad("{\"ok\":true"), "닫히지 않은 JSON 은 거절");
+        ok(bad(""), "빈 글은 거절");
+        ok(bad("{\"a\":1} x"), "뒤에 남은 글자는 거절");
+        ok(bad("{'a':1}"), "작은따옴표 JSON 은 거절");
+        StringBuilder deep = new StringBuilder(); for (int i = 0; i < 60; i++) deep.append('['); for (int i = 0; i < 60; i++) deep.append(']');
+        ok(bad(deep.toString()), "너무 깊은 중첩은 거절");
+        boolean tooBig; try { ScreenCore.parse(new String(new char[ScreenCore.MAX_JSON + 1]).replace('\0', ' ')); tooBig = false; } catch (ScreenCore.ParseError e) { tooBig = true; }
+        ok(tooBig, "너무 큰 입력은 거절");
+        ok(bad("{\"a\":\"\\q\"}") && bad("{\"a\":\"\\u12\"}"), "잘못된 이스케이프는 거절");
+
+        // ── 검증 ──
+        ScreenCore.Screen s = ScreenCore.load(screen(6));
+        ok(s.id.equals("shop") && s.rev.equals("r1") && s.head.size() == 1 && s.body.size() == 5, "정상 화면을 읽는다");
+        ok(s.head.get(0).items.size() == 3 && s.head.get(0).items.get(0).on && s.head.get(0).items.get(0).act.v.equals("추천"), "칩과 행동");
+        ok(bad(screen(1).replace("\"v\":1", "\"v\":2")), "모르는 규격(v=2)은 거절 → 폴백");
+        ok(bad(screen(1).replace("\"v\":1,", "")), "v 없으면 거절");
+        ok(bad(screen(1).replace("\"ok\":true", "\"ok\":false")), "엔진이 실패를 알리면 거절");
+        ok(bad(screen(1).replace("\"screen\":\"shop\",", "")), "screen 없으면 거절");
+        ok(bad(screen(1).replace("\"head\":[{", "\"head\":{")), "head 가 배열이 아니면 거절");
+        ok(bad(screen(1).replace("\"name\":\"상품0\"", "\"name\":5")), "카드 이름이 글자가 아니면 거절");
+        ok(bad(screen(1).replace("https://link.coupang.com/a/0", "javascript:alert(1)")), "http(s) 가 아닌 링크는 거절");
+        ok(bad(screen(1).replace("\"a\":\"open\"", "\"a\":\"format\"")), "모르는 행동은 거절");
+        ok(bad(screen(1).replace("\"cols\":2", "\"cols\":9")), "칸 수 범위 밖은 거절");
+        ok(bad(screen(1).replace("\"pad\":[14,4,14,0]", "\"pad\":[14,4]")), "pad 가 4개가 아니면 거절");
+        ok(bad(screen(1).replace("\"color\":\"sub\"", "\"color\":\"#ff0000\"")), "모르는 색 이름은 거절(엔진은 역할 이름만 쓴다)");
+        ScreenCore.Screen s2 = ScreenCore.load(screen(2).replace("{\"t\":\"spacer\",\"h\":10}", "{\"t\":\"hologram\",\"x\":1},{\"t\":\"spacer\",\"h\":10}"));
+        ok(s2.skipped == 1 && s2.body.size() == 5, "모르는 노드 종류는 건너뛴다(앞으로 늘려도 옛 앱이 안 깨진다)");
+        ScreenCore.Screen s3 = ScreenCore.load(screen(1).replace("https://img/a.jpg", "file:///etc/passwd"));
+        ok(s3.body.get(0).items.get(0).img.length() == 0, "이상한 그림 주소는 그림만 뺀다(카드는 그대로)");
+        ok(bad("{\"ok\":true,\"v\":1,\"screen\":\"shop\",\"head\":[],\"body\":[]}"), "그릴 것이 없으면 거절");
+        // 노드 수 한도
+        boolean many; try { ScreenCore.load(screen(ScreenCore.MAX_NODES + 50)); many = false; } catch (ScreenCore.ParseError e) { many = true; }
+        ok(many, "노드가 너무 많으면 거절");
+
+        // ── 글 나누기 ──
+        List<String> w1 = ScreenCore.wrap("hello world foo", 40f, 10f, false, 0, M);   // 영문 5px/글자 → 8자
+        ok(w1.size() >= 2 && w1.get(0).equals("hello"), "공백에서 줄을 나눈다 " + w1);
+        List<String> w2 = ScreenCore.wrap("가나다라마바사아자차", 30f, 10f, false, 0, M);   // 한글 10px → 3자
+        ok(w2.size() == 4 && w2.get(0).equals("가나다"), "공백이 없으면 글자 단위로 나눈다 " + w2);
+        List<String> w3 = ScreenCore.wrap("가나다라마바사아자차카타파하", 30f, 10f, false, 2, M);
+        ok(w3.size() == 2 && w3.get(1).endsWith("\u2026") && M.width(w3.get(1), 10f, false) <= 30f + 0.01f, "줄 수 한도를 넘으면 … 으로 줄인다 " + w3);
+        ok(ScreenCore.wrap("abc", 100f, 10f, false, 0, M).size() == 1, "짧으면 한 줄");
+        ok(ScreenCore.wrap("", 100f, 10f, false, 0, M).size() == 0, "빈 글은 줄 없음");
+        ok(ScreenCore.wrap("가\n나", 100f, 10f, false, 0, M).size() == 2, "줄바꿈 글자");
+        String e1 = ScreenCore.ellipsize("가나다라마바사", 35f, 10f, false, M);
+        ok(e1.equals("가나\u2026") && M.width(e1, 10f, false) <= 35f, "한 줄 줄이기 " + e1);
+
+        // ── 배치 ──
+        ScreenCore.Layout L = ScreenCore.layout(s, 360f, M);
+        ok(L.head.length == 3, "칩 3개");
+        ok(near(L.head[0].x, 14f) && near(L.head[0].y, 4f) && near(L.head[0].h, 30f), "첫 칩 자리");
+        ok(near(L.head[1].x, L.head[0].x + L.head[0].w + 6f), "칩 사이 간격 6");
+        ok(near(L.headH, 4f + 30f + 4f), "머리 높이 = 위 여백 + 칩 + 아래 여백");
+        ok(near(L.head[0].w, 24f + M.width("추천", 12f, true) + 6f + M.width("100", 12f, true)), "칩 폭 = 좌우 12 + 라벨 + 6 + 뱃지");
+        float cw = (360f - 28f - 8f) / 2f;
+        ScreenCore.Item c0 = L.body[0], c1 = L.body[1], c2 = L.body[2];
+        ok(c0.kind == ScreenCore.K_CARD && near(c0.w, cw) && near(c1.w, cw), "카드 폭 = (폭 − 좌우 여백 − 간격) / 2 : " + cw);
+        ok(near(c0.x, 14f) && near(c1.x, 14f + cw + 8f) && near(c0.y, 4f) && near(c1.y, 4f), "한 줄에 두 장");
+        ok(near(c2.y, c0.y + c0.h + 8f), "다음 줄은 높이 + 간격 8 아래");
+        ok(near(c0.h, c1.h), "한 줄 카드는 높이가 같다");
+        ok(near(c0.ih, 78f) && near(c0.iw, cw - 18f), "그림 칸 78 높이");
+        ok(c0.lines.length == 1 && c0.tag.equals("최저가 ›"), "카드 이름 한 줄 + 최저가");
+        ok(near(c0.tagX, c0.x + c0.w - 1f - 8f - c0.tagW), "최저가는 오른쪽 안쪽에 붙는다");
+        // 6장 = 3줄
+        ScreenCore.Item last = null; for (ScreenCore.Item it : L.body) if (it.kind == ScreenCore.K_CARD) last = it;
+        ok(near(last.y, 4f + 2f * (c0.h + 8f)), "6장은 3줄");
+        ScreenCore.Item btn = null, txt = null; for (ScreenCore.Item it : L.body) { if (it.kind == ScreenCore.K_BUTTON) btn = it; if (it.kind == ScreenCore.K_TEXT) txt = it; }
+        ok(btn != null && txt != null && txt.y > last.y + last.h && btn.y > txt.y + txt.h && near(btn.h, 40f), "카드 → 문구 → 단추 순서");
+        ok(near(L.bodyH, btn.y + btn.h + 14f), "본문 높이 = 마지막 단추 + 아래 여백");
+        // 긴 이름은 두 줄
+        ScreenCore.Screen sl = ScreenCore.load(screen(2).replace("상품0", "아주 긴 상품 이름 아주 긴 상품 이름 아주 긴 상품 이름 아주 긴 상품 이름"));
+        ScreenCore.Layout LL = ScreenCore.layout(sl, 360f, M);
+        ok(LL.body[0].lines.length == 2 && LL.body[0].lines[1].endsWith("\u2026"), "긴 이름은 두 줄까지, 넘치면 …");
+        ok(LL.body[0].h > L.body[0].h && near(LL.body[0].h, LL.body[1].h), "두 줄 카드가 있으면 그 줄 전체가 높아진다");
+        // 칩 내용 폭 → 가로로 밀 수 있나
+        ScreenCore.Layout narrow = ScreenCore.layout(s, 120f, M);
+        ok(narrow.headMaxScroll() > 0f, "좁으면 칩 줄이 가로로 밀린다");
+        ok(near(L.headMaxScroll(), 0f) || L.headContentW > 360f, "넓으면 밀 필요 없다");
+
+        // ── 보이는 조각·눌림 ──
+        ScreenCore.Layout B = ScreenCore.layout(ScreenCore.load(screen(400)), 360f, M);
+        int[] r0 = B.bodyRange(0f, 600f);
+        ok(r0[0] == 0 && r0[1] > 4 && r0[1] < 40, "맨 위 600dp 에는 카드 몇 장만 걸친다 " + r0[0] + "~" + r0[1]);
+        float mid = B.bodyH / 2f;
+        int[] r1 = B.bodyRange(mid, mid + 600f);
+        ok(r1[0] > 50 && r1[1] > r1[0] && r1[1] - r1[0] < 40, "중간에서도 보이는 만큼만 " + r1[0] + "~" + r1[1]);
+        boolean okAll = true; int[] rs = B.bodyRange(0f, B.bodyH);
+        ok(rs[0] == 0 && rs[1] == B.body.length, "전체 범위는 전부");
+        ScreenCore.Item pick = B.body[100];
+        ScreenCore.Act ha = B.hitBody(pick.x + 5f, pick.y + 5f);
+        ok(ha != null && ha.a.equals("open") && ha.url.endsWith("/100"), "카드를 누르면 그 카드 링크 " + (ha == null ? "null" : ha.url));
+        ok(B.hitBody(1f, pick.y + 5f) == null, "여백을 누르면 아무 일도 없다");
+        ok(B.hitBody(pick.x + pick.w + 2f, pick.y + 5f) == null, "카드 사이 간격도 아무 일 없다");
+        ScreenCore.Act hc = L.hitHead(L.head[1].x + 3f, 10f);
+        ok(hc != null && hc.a.equals("cat") && hc.v.equals("식사"), "칩을 누르면 그 카테고리");
+        ok(L.hitHead(L.head[1].x + 3f, 100f) == null, "칩 줄 밖은 없음");
+        ScreenCore.Item bt = null; for (ScreenCore.Item it : L.body) if (it.kind == ScreenCore.K_BUTTON) bt = it;
+        ScreenCore.Act hb = L.hitBody(bt.x + 10f, bt.y + 10f);
+        ok(hb != null && hb.a.equals("refresh"), "단추를 누르면 새로고침");
+
+        // ── 시간(400장 배치 + 10만 번 범위 찾기) ──
+        long t0 = System.nanoTime();
+        ScreenCore.Layout big = ScreenCore.layout(ScreenCore.load(screen(1000)), 360f, M);
+        long ms = (System.nanoTime() - t0) / 1000000L;
+        ok(ms < 400, "1000장 읽기+배치 " + ms + "ms");
+        t0 = System.nanoTime();
+        int acc = 0;
+        for (int i = 0; i < 100000; i++) { int[] rr = big.bodyRange((i % 1000) * 3f, (i % 1000) * 3f + 700f); acc += rr[1] - rr[0]; }
+        long ms2 = (System.nanoTime() - t0) / 1000000L;
+        ok(ms2 < 400 && acc > 0, "범위 찾기 10만 번 " + ms2 + "ms");
+
+        // ── 색·스크롤 ──
+        ok(ScreenCore.color("#f07830", 0) == 0xFFF07830 && ScreenCore.color("#fff", 0) == 0xFFFFFFFF, "색 읽기 #");
+        ok(ScreenCore.color("rgb(10, 20, 30)", 0) == 0xFF0A141E, "색 읽기 rgb()");
+        ok(ScreenCore.color("rgba(255,255,255,.5)", 0) == 0x80FFFFFF, "색 읽기 rgba()");
+        ok(ScreenCore.color("이상한", 7) == 7 && ScreenCore.color(null, 9) == 9, "못 읽으면 기본값");
+        ok(near(ScreenCore.clamp(-5f, 100f), 0f) && near(ScreenCore.clamp(500f, 100f), 100f) && near(ScreenCore.clamp(40f, 100f), 40f), "스크롤 한계");
+        ok(near(ScreenCore.rubber(-20f, 100f), -10f) && near(ScreenCore.rubber(140f, 100f), 120f) && near(ScreenCore.rubber(30f, 100f), 30f), "끝에서 저항");
+        ok(near(B.bodyMaxScroll(700f), B.bodyH - 700f) && near(B.bodyMaxScroll(1e9f), 0f), "본문 스크롤 한계");
+
+        System.out.println(fails == 0 ? "ALL OK (" + oks + ")" : fails + " FAIL");
+        System.exit(fails == 0 ? 0 : 1);
+    }
+}
