@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-18s46";
+var ENGINE_VERSION = "route-v2-2026-10-18s47";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -1555,6 +1555,35 @@ function dijkstraRaw(G, busCoord, busNm, sLat, sLng, eLat, eLng, mode, opt) {
     path.splice(i, 1);
     pk[path[i]] = "walk";
     i--;
+  }
+  // 2026-10-19 (YJ screenshot: "no need to ride the bus, yet the route says ride"): a single short bus hop (< HOP_WALK_M)
+  //   that is immediately followed by boarding ANOTHER bus line at the stop we got off at (bus -> bus transfer) is replaced by walking
+  //   to that stop. Case A: the hop starts at the access stop (path[0]) -> drop it and start from the second stop (its access walk is already in starts).
+  //   Case B: mid-route -> turn the hop into a walk edge when one exists between the two stops.
+  for (let i = 1; i + 1 < path.length; i++) {
+    if (pk[path[i]] !== "bus" || pk[path[i + 1]] !== "bus" || pl[path[i]] === pl[path[i + 1]]) continue;
+    if (pk[path[i - 1]] === "bus" && pl[path[i - 1]] === pl[path[i]]) continue;
+    const a = dec(path[i - 1]), b = dec(path[i]);
+    if (a.charCodeAt(0) !== 66 || b.charCodeAt(0) !== 66) continue;
+    const ca = busCoord[a.slice(2)], cb = busCoord[b.slice(2)];
+    if (!ca || !cb || hav(ca[0], ca[1], cb[0], cb[1]) >= HOP_WALK_M) continue;
+    if (i === 1) {
+      let wa = -1, wb = -1;
+      for (const [s, w] of starts) {
+        const k = enc(s, 0);
+        if (k === path[0]) wa = w;
+        else if (k === path[1]) wb = w;
+      }
+      if (wa < 0 || wb < 0 || wb > wa + 500) continue;
+      path.shift();
+      pk[path[0]] = "access";
+      pl[path[0]] = void 0;
+      i--;
+    } else {
+      if (!pickEdge(adj[a], b, "walk")) continue;
+      pk[path[i]] = "walk";
+      pl[path[i]] = void 0;
+    }
   }
   let real = 0;
   for (const [s, w] of starts) if (enc(s, 0) === path[0]) {
