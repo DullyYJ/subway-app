@@ -142,7 +142,7 @@ ok(S.ok && S.v === 1 && S.screen === 'food' && S.cover === 'tab' && /^f1:/.test(
     const post = b => call('https://x/screen/food', { method: 'POST', body: b, headers: { 'Content-Type': 'text/plain;charset=UTF-8' } });
     const r = await post(body), j = await r.json();
     ok(r.status === 200 && j.ok && j.screen === 'food', '워커 응답 200');
-    ok(/route-v2-2026-10-18s\d\d/.test(j.ver), '엔진 버전 표시 ' + j.ver);
+    ok(/route-v2-2026-10-\d\ds\d\d/.test(j.ver), '엔진 버전 표시 ' + j.ver);
     ok(JSON.stringify(j.body) === JSON.stringify(S.body) && j.rev === S.rev, '워커와 직접 계산이 같은 결과');
     ok((await (await post(JSON.stringify({ cap: 3, f: {}, c: [], p: [] }))).json()).ok === false, '워커: cap 부족이면 거절');
     ok((await post('{oops')).status === 400, '워커: 깨진 본문은 400');

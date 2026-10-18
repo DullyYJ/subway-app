@@ -274,7 +274,7 @@ const t = async (name, fn) => { if (ONLY && !ONLY.test(name)) return; try { awai
     }, r.b0);
     assert.ok(Math.abs(r2.d1 - 2.5) < 0.2, JSON.stringify(r2));
     assert.ok(Math.abs(r2.d2 - r2.d1) < 1e-6 && Math.abs(r2.d5 - r2.d1) < 1e-6, '이후 모든 시각이 같은 만큼 ' + JSON.stringify(r2));
-    assert.strictEqual(r2.d0, 0, JSON.stringify(r2)); assert.ok(r2.keep, JSON.stringify(r2));
+    assert.ok(Math.abs(r2.d0) <= 0.51, JSON.stringify(r2)); assert.ok(r2.keep, JSON.stringify(r2));   // 2026-10-19: 출발점도 도착 :30 규칙의 0.5분만 다르다(승강장 지연 2분은 밀지 않는다)
     await platSetup(5, true);
     await page.evaluate(() => { window._etaSt.lastAt = 0; _platformLateShift(Date.now()); });
     await etaWait();
@@ -545,7 +545,7 @@ const t = async (name, fn) => { if (ONLY && !ONLY.test(name)) return; try { awai
   await page.evaluate(() => { window._gpsMaxIdx = 5; window._nodePassMs[5] = Date.now(); _etaSrc(5, 'gps'); _recalcArrivalsFrom(5); });
   await etaWait();
   await t('환승 열차를 탄 지 50초 만에 다음 역 선행 통과가 찍혀도 그 역 시각이 시각표보다 1분 넘게 앞서지 않는다', async () => {
-    const a = await times(); assert.ok(a[4] >= '18:13', JSON.stringify(a)); assert.ok(a[3] >= '18:10', JSON.stringify(a));
+    const a = await times(); assert.ok(a[4] >= '18:12', JSON.stringify(a)); assert.ok(a[3] >= '18:09', JSON.stringify(a));   // 2026-10-19: 표시는 분 내림(18:12:40 → 18:12) — 예전 반올림 18:13 / 18:10
   });
 
   console.log('[기준 시각 — 선행 통과 하나에 도착 예정이 끌려가지 않는다(최근 3개 지연값 중 최대)]');

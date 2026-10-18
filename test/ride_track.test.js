@@ -362,4 +362,64 @@ r = rideTrack({ nowMs: NOW }); ok(r.off.confirmed === false && r.fix.n === 0, '�
   z = rideTrack({ nowMs: NOW, trail: [[NOW - 20000, 0, 3000 / KX, 20]], plan: plan({ stops: [{ i: 2, lat: 0, lng: 3000 / KX, arrMs: NOW + 240000, pass: true, fin: true }] }), want: { zero: true } });
   ok(z.zero.stops.length === 0 || (z.zero.stops[0].passMs === undefined && !z.zero.stops[0].apply), '최종 목적지: 도착 4분 전 GPS 는 통과 시각으로 쓰지 않는다 ' + JSON.stringify(z.zero.stops));
 }
+
+// ── 2026-10-19 버스: 움직임(motion) · 정류장 선 위 위치/통과 시각(busPos) ──────────────────────────
+{
+  const BX = 88900, LAT0 = 37;   // 위도 37도: 경도 1도 ≈ 88.9km — m → 좌표
+  const E = (m, dlat) => ({ lat: LAT0 + (dlat || 0) / KY, lng: 127 + m / BX });
+  const bstops = (extra) => [0, 1, 2, 3, 4].map(k => Object.assign({ i: 10 + k, lat: LAT0, lng: 127 + (k * 500) / BX, arrMs: NOW + k * 60000, bus: true, lg: 1 }, extra || {}));
+  const BP = (tr, plo) => rideTrack({ nowMs: NOW, trail: tr, plan: Object.assign({ pts: [], progIsBus: true, boarded: true, riding: true, stops: bstops() }, plo || {}), want: { bus: true } });
+  // 버스: 10 m/s 로 동쪽 — s초 전 위치 = 1700m - 10*s
+  const run = (s) => E(1700 - 10 * s);
+  let r = BP(trail(60, 0, 2, run, 10));
+  ok(r.motion && r.motion.moving === true && r.motion.speedMps > 8, '10m/s → 달리는 중 ' + JSON.stringify(r.motion));
+  r = BP(trail(30, 0, 2, () => E(1000), 10));
+  ok(r.motion && r.motion.moving === false, '제자리 → 정지 ' + JSON.stringify(r.motion));
+  r = BP(trail(30, 0, 2, () => E(1000), 100));
+  ok(r.motion && r.motion.moving === null, '정확도 나쁜 좌표뿐이면 모른다(null) ' + JSON.stringify(r.motion));
+  r = BP(trail(120, 60, 2, run, 10));
+  ok(r.motion && r.motion.moving === null, '마지막 좌표가 60초 전이면 모른다');
+  r = BP(trail(60, 0, 2, () => ({ lat: LAT0, lng: 127 + 1000 / BX + 2e-5 * Math.sin(Math.random() * 6) }), 12));
+  ok(r.motion && r.motion.moving === false, '제자리 흔들림(몇 m)은 정지 ' + JSON.stringify(r.motion));
+  // 선 위 위치 · 통과 시각
+  r = BP(trail(60, 0, 2, run, 10));
+  const bp = r.busPos;
+  ok(bp && bp.lg === 1 && bp.fromI === 13 && bp.toI === 14 && Math.abs(bp.ratio - 0.4) < 0.05, '1700m → 13·14 사이 비율 0.4 ' + JSON.stringify(bp));
+  ok(bp.passed.some(x => x.i === 13) && bp.passedUnknown.includes(11) && bp.passedUnknown.includes(12), '앞 정류장은 모두 지났다(1500m 정류장 13 은 시각을 안다)');
+  const p11 = bp.passed.find(x => x.i === 11), p12 = bp.passed.find(x => x.i === 12);
+  // 500m = (1700-500)/10 = 120초 전 → 궤적이 60초 전부터라 시각을 모른다(passedUnknown) / 1000m = 70초 전 역시 모름 / 1700-1500=... 
+  ok(!p11 && bp.passedUnknown.includes(11), '궤적이 시작할 때 이미 지난 정류장은 시각을 모른다(passedUnknown) ' + JSON.stringify(bp));
+  r = BP(trail(150, 0, 3, (s) => E(1700 - 10 * s), 10));
+  const q = r.busPos, a11 = q.passed.find(x => x.i === 11), a12 = q.passed.find(x => x.i === 12);
+  ok(a11 && Math.abs(a11.ms - (NOW - 120000)) <= 1500, '500m 정류장 통과 = 120초 전(초 단위 보간) ' + (a11 && (NOW - a11.ms)));
+  ok(a12 && Math.abs(a12.ms - (NOW - 70000)) <= 1500, '1000m 정류장 통과 = 70초 전 ' + (a12 && (NOW - a12.ms)));
+  ok(!q.passed.some(x => x.i === 14) && !q.passedUnknown.includes(14), '아직 안 닿은 정류장(14)은 지난 것이 아니다');
+  // 좌표 간격이 30초 넘게 벌어져도(앱이 가려져 있을 때) 거리 비율로 보간
+  const sparse = [[150000, 200], [90000, 800], [30000, 1400], [2000, 1680]].map(([a, m]) => [NOW - a, E(m).lat, E(m).lng, 10]);
+  r = BP(sparse);
+  const sp11 = r.busPos.passed.find(x => x.i === 11), sp12 = r.busPos.passed.find(x => x.i === 12);
+  ok(sp11 && Math.abs(sp11.ms - (NOW - 120000)) <= 1500, '성긴 좌표도 선 위 거리로 보간(500m=120초 전) ' + (sp11 && (NOW - sp11.ms)));
+  ok(sp12 && Math.abs(sp12.ms - (NOW - 70000)) <= 1500, '성긴 좌표 1000m=70초 전 ' + (sp12 && (NOW - sp12.ms)));
+  // 선에서 150m 넘게 벗어나면 위치를 주지 않는다
+  r = BP(trail(60, 0, 2, () => E(1000, 400), 10));
+  ok(r.busPos === null, '선에서 400m 떨어진 좌표는 busPos 없음');
+  // 버스가 아니라고 보면(notBus) 주지 않는다 / 진행도가 버스가 아니고 엔진도 버스로 안 봤으면 주지 않는다
+  r = BP(trail(150, 0, 3, run, 10), { progIsBus: false, riding: false });
+  ok(r.busPos === null, '버스 근거가 없으면 busPos 없음 ' + JSON.stringify(r.bus && r.bus.state));
+  // 승차 전(boarded false)엔 주지 않는다
+  r = BP(trail(150, 0, 3, run, 10), { boarded: false });
+  ok(r.busPos === null, '승차 전에는 busPos 없음');
+  // 지하철 정류장(bus:false)은 선에 넣지 않는다
+  r = BP(trail(150, 0, 3, run, 10), { stops: bstops().map((x, k) => k === 2 ? Object.assign({}, x, { bus: false }) : x) });
+  ok(r.busPos && !r.busPos.passed.some(x => x.i === 12), '버스가 아닌 노드는 통과로 세지 않는다');
+  // 두 구간(버스→버스 환승): 위치가 맞는 구간을 고른다
+  const two = bstops().concat([0, 1, 2].map(k => ({ i: 30 + k, lat: LAT0 + 3000 / KY, lng: 127 + (k * 500) / BX, arrMs: NOW + 600000 + k * 60000, bus: true, lg: 2 })));
+  r = BP(trail(150, 0, 3, run, 10), { stops: two });
+  ok(r.busPos && r.busPos.lg === 1, '여러 구간 중 위치가 맞는 구간(lg 1)을 고른다');
+  r = BP(trail(60, 0, 2, (s) => E(200 + 10 * (60 - s), 3000), 10), { stops: two });
+  ok(r.busPos && r.busPos.lg === 2, '두 번째 버스 구간 위치 lg 2 ' + JSON.stringify(r.busPos));
+  // 엔진이 notBus 로 보면 주지 않는다 (승차 정류장을 지난 적 없음)
+  r = rideTrack({ nowMs: NOW, trail: trail(150, 0, 3, run, 10), plan: { pts: [], progIsBus: true, boarded: true, riding: true, stops: bstops(), busLeg: { boardPt: { lat: 5, lng: 5 }, boardIdx: 10 } }, want: { bus: true } });
+  ok(!(r.bus && r.bus.state === 'notBus') || r.busPos === null, 'notBus 면 busPos 없음');
+}
 console.log('ride_track: pass', pass, 'fail', fail); process.exit(fail ? 1 : 0);

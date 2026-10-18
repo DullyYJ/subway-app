@@ -184,7 +184,7 @@ ok(S.ok && S.v === 1 && S.screen === 'news' && S.cover === 'tab' && /^n1:/.test(
     const nowRows = [['코스피 2,700 돌파', 'https://a.example/1', '연합뉴스', Date.now() - 5 * MIN, '사회', ''], ['손흥민 골', 'https://a.example/2', '', Date.now() - HR, '', '']];
     const r = await post(JSON.stringify({ cap: 5, f: { cat: '전체' }, n: nowRows })), j = await r.json();
     ok(r.status === 200 && j.ok && j.screen === 'news' && newsN(j).length === 2, '워커 응답 200');
-    ok(/route-v2-2026-10-18s\d\d/.test(j.ver), '엔진 버전 표시 ' + j.ver);
+    ok(/route-v2-2026-10-\d\ds\d\d/.test(j.ver), '엔진 버전 표시 ' + j.ver);
     const d = await (await post(JSON.stringify({ cap: 5, d: nowRows[0] }))).json();
     ok(d.ok && d.detail.cat === '증시' && d.detail.src === '연합뉴스', '워커: 상세 응답');
     ok((await (await post(JSON.stringify({ cap: 4, f: {}, n: [] }))).json()).ok === false, '워커: cap 부족이면 거절');

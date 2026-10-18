@@ -133,7 +133,7 @@ ok(S.ok && S.v === 1 && S.screen === 'board' && S.cover === 'tab' && /^b1:/.test
     const post_ = b => call('https://x/screen/board', { method: 'POST', body: b, headers: { 'Content-Type': 'text/plain;charset=UTF-8' } });
     const rows = ROWS.map(r => Array.isArray(r) && typeof r[5] === 'number' ? Object.assign([], r, { 5: Date.now() - 5 * MIN }) : r);
     const r = await post_(JSON.stringify({ cap: 6, f: { rep: ['d'] }, p: rows })), j = await r.json();
-    ok(r.status === 200 && j.ok && j.screen === 'board' && post(j).length === 4 && /route-v2-2026-10-18s\d\d/.test(j.ver), '워커 응답 200 ' + j.ver);
+    ok(r.status === 200 && j.ok && j.screen === 'board' && post(j).length === 4 && /route-v2-2026-10-\d\ds\d\d/.test(j.ver), '워커 응답 200 ' + j.ver);
     ok((await (await post_(JSON.stringify({ cap: 5, f: {}, p: [] }))).json()).ok === false, '워커: cap 부족이면 거절');
     ok((await post_('{oops')).status === 400 && (await post_('x'.repeat(1500001))).status === 413 && (await call('https://x/screen/board')).status === 405, '워커: 깨진 본문 400 · 큰 본문 413 · GET 405');
     const ro = await call('https://x/screen/board', { method: 'OPTIONS' });

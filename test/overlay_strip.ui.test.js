@@ -143,6 +143,109 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   });
   await d.ctx.close();
 
+  console.log('[⑤ 환승 버튼이 떠 있으면 마커는 환승 칸에서 기다린다 — 2026-10-19]');
+  const x = await fresh();
+  await t('환승 버튼(board) + 다음 구간 탑승 노드가 앞에 있으면 현위치 칸이 환승 도보 칸이다 · xfer 표시', async () => {
+    const q = await x.page.evaluate(() => {
+      const nd = _transitNodeData; let bi = -1;
+      for (let i = 0; i < nd.length; i++) if (nd[i] && nd[i].isSub) { bi = i; break; }
+      window._gpsMaxIdx = bi - 1;
+      const before = _ovlStrip(_pipStations());
+      window._rs.st = 'board'; window._rs.leg = { k: 1, bi, ai: bi, mode: 'sub', line: '인천2호선', name: '아라' };
+      const r = _ovlStrip(_pipStations());
+      const cell = r.cells[r.cur];
+      return { bi, b: before.cur + before.base, c: r.cur + r.base, xfer: !!r.xfer, dk: cell.dk, names: r.cells.map(c => c.n), n: cell.n };
+    });
+    assert.ok(q.xfer, JSON.stringify(q)); assert.ok(q.c > q.b, JSON.stringify(q));
+  });
+  await t('환승 버튼이 없으면(hidden) 옮기지 않는다 · 첫 구간(k=0)도 옮기지 않는다', async () => {
+    const q = await x.page.evaluate(() => {
+      const nd = _transitNodeData; let bi = -1; for (let i = 0; i < nd.length; i++) if (nd[i] && nd[i].isSub) { bi = i; break; }
+      window._rs.st = 'hidden'; const a = _ovlStrip(_pipStations());
+      window._rs.st = 'board'; window._rs.leg = { k: 0, bi, ai: bi, mode: 'sub', line: 'x', name: 'y' }; const c = _ovlStrip(_pipStations());
+      window._rs.st = 'hidden'; window._rs.leg = null;
+      return { a: !!a.xfer, c: !!c.xfer };
+    });
+    assert.deepStrictEqual(q, { a: false, c: false });
+  });
+  await t('환승 칸에서 기다리는 동안 _ovlLines 의 moving 은 거짓', async () => {
+    const q = await x.page.evaluate(() => {
+      const nd = _transitNodeData; let bi = -1; for (let i = 0; i < nd.length; i++) if (nd[i] && nd[i].isSub) { bi = i; break; }
+      window._rs.st = 'board'; window._rs.leg = { k: 1, bi, ai: bi, mode: 'sub', line: '인천2호선', name: '아라' };
+      const o = _ovlLines(); window._rs.st = 'hidden'; window._rs.leg = null; return { m: o.moving, sc: o.scur };
+    });
+    assert.strictEqual(q.m, false, JSON.stringify(q));
+  });
+  await x.ctx.close();
+
+  console.log('[⑥ 버스를 탈 때 — 마커의 달림/정지는 엔진이 본 GPS 속도(motion), 진행도·통과 시각은 엔진 busPos 를 따른다 — 2026-10-19]');
+  const y = await fresh();
+  const setup = () => y.page.evaluate(() => {
+    const nd = _transitNodeData; const bus = []; for (let i = 0; i < nd.length; i++) if (nd[i] && nd[i].isBus && !nd[i].isWalk) bus.push(i);
+    window._htlBoarded = true; window._busVerdict = null; window._nodePassMs = {}; window._nodePassSrc = {}; window._gpsMaxIdx = bus[1]; window._gpsConfirmIdx = bus[1];
+    return { bus, here: _pipHereIdx() };
+  });
+  await t('버스 구간: 엔진 motion 이 moving:true 면 달리는 중(PF 가 정차라고 해도) · false 면 정지', async () => {
+    const q0 = await setup();
+    const q = await y.page.evaluate(() => {
+      window._pfBest = { at: Date.now(), conf: 0.9, kind: 'dwell' };
+      window._trkMotion = { v: { moving: true, speedMps: 8 }, at: Date.now() }; const a = _ovlMoving(), la = _ovlLines().moving;
+      window._trkMotion = { v: { moving: false, speedMps: 0 }, at: Date.now() }; const c = _ovlMoving();
+      window._trkMotion = { v: { moving: null }, at: Date.now() }; window._pfBest = { at: Date.now(), conf: 0.9, kind: 'seg' }; const d = _ovlMoving();
+      window._trkMotion = { v: { moving: false }, at: Date.now() - 60000 }; const e = _ovlMoving();   // 낡은 판정은 따르지 않는다 → 기존(PF seg)
+      return { a, la, c, d, e, here: _pipHereIdx(), isBus: !!_transitNodeData[_pipHereIdx()].isBus };
+    });
+    assert.ok(q.isBus, JSON.stringify([q0, q]));
+    assert.strictEqual(q.a, true, JSON.stringify(q)); assert.strictEqual(q.la, true, JSON.stringify(q)); assert.strictEqual(q.c, false, JSON.stringify(q));
+    assert.strictEqual(q.d, true, '판단 못 하면(null) 기존 판정으로 ' + JSON.stringify(q)); assert.strictEqual(q.e, true, '낡은 motion 은 무시 ' + JSON.stringify(q));
+  });
+  await t('엔진이 버스가 아니라고 하면(notBus) motion 을 따르지 않는다', async () => {
+    const q = await y.page.evaluate(() => { window._busVerdict = { state: 'notBus', at: Date.now() }; window._pfBest = null; window._trkMotion = { v: { moving: true }, at: Date.now() }; const r = _ovlMoving(); window._busVerdict = null; return r; });
+    assert.strictEqual(q, false);
+  });
+  await t('busPos: 지난 정류장까지 진행도가 오르고, 시각을 아는 정류장은 통과 증거(gps)로 적힌다', async () => {
+    const q0 = await setup();
+    const q = await y.page.evaluate((bus) => {
+      const t0 = Date.now() - 20000; _busPosFollow({ lg: 1, offM: 8, fromI: bus[3], toI: bus[4], ratio: 0.3, passed: [{ i: bus[3], ms: t0 }], passedUnknown: [bus[2]] });
+      return { gm: window._gpsMaxIdx, gc: window._gpsConfirmIdx, ms: _nodePassMs[bus[3]], src: _nodePassSrc[bus[3]], t0, unk: _nodePassMs[bus[2]] };
+    }, q0.bus);
+    assert.strictEqual(q.gm, q0.bus[3], JSON.stringify(q)); assert.ok(q.gc >= q0.bus[3]); assert.strictEqual(q.src, 'gps'); assert.ok(Math.abs(q.ms - q.t0) < 1500, JSON.stringify(q));
+    assert.ok(q.unk == null, '시각을 모르는 정류장은 시각을 만들어 적지 않는다');
+  });
+  await t('busPos: 이미 gps 로 확정한 정류장 시각은 밀거나 당기지 않는다', async () => {
+    const q0 = await setup();
+    const q = await y.page.evaluate((bus) => {
+      const fixed = Date.now() - 40000; _nodePassMs[bus[2]] = fixed; _nodePassSrc[bus[2]] = 'gps';
+      _busPosFollow({ lg: 1, offM: 8, fromI: bus[2], toI: bus[3], ratio: 0.5, passed: [{ i: bus[2], ms: fixed + 9000 }], passedUnknown: [] });
+      return { fixed, now: _nodePassMs[bus[2]] };
+    }, q0.bus);
+    assert.strictEqual(q.now, q.fixed);
+  });
+  await t('busPos: 엔진이 notBus 라 하면 · 승차 확정 전이면 진행도를 올리지 않는다', async () => {
+    const q0 = await setup();
+    const q = await y.page.evaluate((bus) => {
+      window._busVerdict = { state: 'notBus', at: Date.now() };
+      _busPosFollow({ lg: 1, offM: 8, passed: [{ i: bus[3], ms: Date.now() - 5000 }], passedUnknown: [] }); const a = window._gpsMaxIdx;
+      window._busVerdict = null; window._htlBoarded = false;
+      _busPosFollow({ lg: 1, offM: 8, passed: [{ i: bus[3], ms: Date.now() - 5000 }], passedUnknown: [] }); const c = window._gpsMaxIdx;
+      window._htlBoarded = true; return { a, c };
+    }, q0.bus);
+    assert.strictEqual(q.a, q0.bus[1]); assert.strictEqual(q.c, q0.bus[1]);
+  });
+  await t('버스를 타고 있는 동안 PF 가 지하철 역을 채택하지 않는다(진행도가 버스 노드)', async () => {
+    const q0 = await setup();
+    const q = await y.page.evaluate(() => {
+      const nd = _transitNodeData; let si = -1; for (let i = 0; i < nd.length; i++) if (nd[i] && nd[i].isSub) { si = i; break; }
+      if (!window._pf || !_pf.st) return { skip: true };
+      const before = window._gpsMaxIdx, keep = _pf.st; _pf.st = [{ name: nd[si].name, _td: si }]; _pf.A = _pf.A || { k: -1, td: -1 };
+      try { _pfAdopt(0, {}, Date.now(), '앞'); } catch (e) { return { err: String(e) }; }
+      _pf.st = keep; return { before, after: window._gpsMaxIdx, si };
+    });
+    assert.ok(!q.skip, 'PF 상태 없음'); assert.ok(!q.err, JSON.stringify(q)); assert.strictEqual(q.after, q.before, JSON.stringify(q));
+  });
+  await t('페이지 오류 없음(⑥)', async () => assert.deepStrictEqual([...new Set(y.errs)], []));
+  await y.ctx.close();
+
   await b.close();
   console.log(`\n${pass} 통과, ${fail} 실패`); process.exit(fail ? 1 : 0);
 })();

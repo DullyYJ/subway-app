@@ -138,6 +138,25 @@ function findAndroidJar() {
     for (const n of ['post', 'cmt', 'btnrow', 'inbar', 'msg', 'tabbar']) assert.ok(new RegExp('"' + n + '"\\.equals\\(t\\)').test(c) && new RegExp('"' + n + '"\\.equals\\((t0\\()?n(\\))?\\.?t?\\)').test(c) || c.includes('"' + n + '".equals'), n + ' 읽기·배치');
     assert.ok(/public static float\[\] pathOps\(/.test(c) && /sc\.foot\.add\(/.test(c), '코어: 경로 읽기 · foot');
   });
+  await t('홈 경로 입력 노드: 동그라미·굵은 글·작은 단추·확인 키(eact)·흐린 단추(dim) · 목록줄(sug) · 바꾸기 단추(swap) · 글자 바뀜/높이 이벤트 · 위에 그려진 것이 먼저 눌린다', async () => {
+    const v = fs.readFileSync(path.join(ROOT, 'native', 'ScreenView.java'), 'utf8'), p = fs.readFileSync(path.join(ROOT, 'native', 'ScreenNativePlugin.java'), 'utf8'), c = fs.readFileSync(path.join(ROOT, 'native', 'ScreenCore.java'), 'utf8');
+    for (const k of ['SUG:drawSug', 'SWAP:drawSwap']) {
+      const [kind, fn] = k.split(':');
+      assert.ok(new RegExp('case ScreenCore\\.K_' + kind + ': ' + fn + '\\(').test(v), 'drawItem 연결 ' + k);
+      assert.ok(new RegExp('private void ' + fn + '\\(').test(v), fn + ' 정의');
+    }
+    for (const k of ['K_SUG = 22', 'K_SWAP = 23']) assert.ok(c.includes(k), k);
+    for (const n of ['swap', 'sug']) assert.ok(c.includes('"' + n + '".equals(t)') && c.includes('"' + n + '".equals(n.t)'), n + ' 읽기·배치');
+    assert.ok(/it\.dotC != null/.test(v) && /cv\.drawCircle\(it\.bx, it\.by, 5f/.test(v), '입력줄 왼쪽 동그라미');
+    assert.ok(/setText\(it\.size, it\.bold,/.test(v) && /it\.size2 > 0f \? it\.size2 : it\.size/.test(v), '입력줄 굵은 글 · 단추 글 크기 따로');
+    assert.ok(/void onText\(String key, String value, String kind\)/.test(v) && /void onContentH\(float dp\)/.test(v) && /TextWatcher/.test(v) && /editSilent/.test(v), '글자 바뀜·내용 높이 알림 (웹이 비운 글은 알리지 않음)');
+    assert.ok(/"text"/.test(p) && /"size"/.test(p) && /@Override public void onText\(/.test(p) && /@Override public void onContentH\(/.test(p), '플러그인: text · size 이벤트');
+    assert.ok(/for \(int i = r\[1\] - 1; i >= r\[0\]; i--\)/.test(v), '눌림은 위에 그려진 것(바꾸기 단추)부터 찾는다');
+    assert.ok(/pi\.act2 != null && x \/ dpr >= pi\.btx/.test(v) && /cur\.act2 != null \? cur\.act2 : cur\.act/.test(v), '목록줄 오른쪽 단추 · 확인 키 행동');
+    assert.ok(/if \(!it\.on\) fireInbar\(/.test(v), '흐린 단추는 눌려도 무시');
+    const draw = v.slice(v.indexOf('protected void onDraw'), v.indexOf('// ───────────── 검색 입력칸'));
+    assert.ok(!/\bnew\s+[A-Z]/.test(draw), '그리기 구간에 new: ' + (draw.match(/\bnew\s+[A-Z]\w*/) || [''])[0]);
+  });
   await t('CI 워크플로가 파일을 복사하고 MainActivity 에 ScreenNativePlugin 을 등록한다', async () => {
     const y = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'build-apk.yml'), 'utf8');
     for (const f of ['ScreenCore.java', 'ScreenView.java', 'ScreenNativePlugin.java']) assert.ok(y.includes('native/' + f), f + ' 복사');

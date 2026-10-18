@@ -409,6 +409,67 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   await t('_rsLateOff 면 기존대로 예약', async () => { const g = await u.page.evaluate(() => ({ b: window._htlBoarded, pend: !!_rs.pend })); assert.strictEqual(g.b, false); assert.ok(g.pend); });
   await u.ctx.close();
 
+  console.log('[⑪ 환승완료/탑승 = 그 시각에 탄 것 — 방금 떠난 차(late)가 있으면 그 차, 없으면 다음 차(depMin). 버튼 바닥 — 2026-10-19]');
+  const KST = (hh, mm, ss) => new Date('2026-10-11T' + hh + ':' + mm + ':' + (ss || '00') + '+09:00').getTime();
+  const pressTrain = async (ans, pre) => {
+    const a = await fresh();
+    await a.at('12:51:20'); await a.page.clock.runFor(1500);   // 12:51:21 — 계획 12:52 까지 40초 안이라 예약 없이 바로 확정
+    await a.page.evaluate(([ans, pre]) => {
+      window.__ntq = []; const orig = window._ntAsk;
+      window._ntAsk = function (q, cb) { if (q.op !== 'late') return orig.apply(this, arguments); window.__ntq.push(q); setTimeout(function () { cb(ans); }, 20); };
+      if (pre) pre(); _rs.openUntil = Date.now() + 600000; _rsTick();
+    }, [ans, null]);
+    await a.page.clock.runFor(800);
+    if (pre) await a.page.evaluate(pre);
+    await a.page.click('#rsBtn'); await a.page.clock.runFor(1500);
+    return a;
+  };
+  let v = await pressTrain({ late: M(12, 50), depMin: M(12, 52) });
+  await t('1분 전에 막 떠난 차(late 12:50)가 있으면 그 차(12:50:30)를 탄 것으로 적는다 · 질의는 한 번', async () => {
+    const g = await v.page.evaluate(() => ({ ms: window._nodePassMs[1], src: window._nodePassSrc && window._nodePassSrc[1], q: window.__ntq, b: window._htlBoarded, fl: _rsFloorIdx() }));
+    assert.strictEqual(g.b, true); assert.strictEqual(g.q.length, 1, JSON.stringify(g.q)); assert.strictEqual(g.ms, KST('12', '50', '30'), new Date(g.ms).toISOString()); assert.strictEqual(g.src, 'board'); assert.strictEqual(g.fl, 1);
+  });
+  await t('진단에 \'방금 떠난 차를 탄 것으로 봄\' 이 남는다', async () => assert.ok((await v.diag()).some(x => /방금 떠난 차/.test(x) && /12:50/.test(x)), (await v.diag()).join(' | ')));
+  await v.page.click('#rsUndoBtn'); await v.page.clock.runFor(800);
+  await t('되돌리면 버튼 바닥이 풀린다', async () => assert.strictEqual(await v.page.evaluate(() => _rsFloorIdx()), -1));
+  await v.ctx.close();
+
+  v = await pressTrain({ late: null, depMin: M(12, 52) });
+  await t('방금 떠난 차가 없으면 다음 차(12:52:30)를 탄 것으로 적는다', async () => {
+    const g = await v.page.evaluate(() => ({ ms: window._nodePassMs[1], src: window._nodePassSrc && window._nodePassSrc[1] }));
+    assert.strictEqual(g.ms, KST('12', '52', '30'), new Date(g.ms).toISOString()); assert.strictEqual(g.src, 'board');
+  });
+  await t('진단에 \'다음 차를 탄 것으로 봄\'', async () => assert.ok((await v.diag()).some(x => /다음 차/.test(x))));
+  await v.ctx.close();
+
+  v = await pressTrain({ late: null, depMin: M(12, 51) + 13 });
+  await t('다음 차가 12분 넘게 멀면 건드리지 않는다(누른 시각 그대로)', async () => {
+    const g = await v.page.evaluate(() => ({ ms: window._nodePassMs[1], now: Date.now() }));
+    assert.ok(Math.abs(g.ms - g.now) < 5000, JSON.stringify(g));
+  });
+  await v.ctx.close();
+
+  v = await pressTrain({ late: M(12, 50), depMin: M(12, 52) }, () => { window._nodePassMs = window._nodePassMs || {}; window._nodePassSrc = window._nodePassSrc || {}; window._nodePassMs[1] = Date.now() - 20000; window._nodePassSrc[1] = 'gps'; window.__gpsPass = window._nodePassMs[1]; });
+  await t('이미 GPS 로 확인된 승차역 통과가 있으면 그것을 지킨다', async () => {
+    const g = await v.page.evaluate(() => ({ ms: window._nodePassMs[1], keep: window.__gpsPass, src: window._nodePassSrc[1] }));
+    assert.strictEqual(g.ms, g.keep); assert.strictEqual(g.src, 'gps');
+  });
+  await v.ctx.close();
+
+  v = await pressTrain({ late: M(12, 50), depMin: M(12, 52) }, null);
+  await t('버튼 바닥: 누른 노드 아래로는 PF 도 GPS 되돌림도 진행도를 내리지 못한다', async () => {
+    const g = await v.page.evaluate(() => {
+      const before = window._gpsMaxIdx; const fl = _rsFloorIdx();
+      window._gpsMaxIdx = 3;   // 앞으로 나갔다가
+      const nd = _transitNodeData; const keep = _pf && _pf.st; let after = null, err = null;
+      try { _pf.st = [{ name: nd[0].name, _td: 0 }]; _pf.A = _pf.A || { k: -1, td: -1 }; _pfAdopt(0, {}, Date.now(), '뒤'); after = window._gpsMaxIdx; } catch (e) { err = String(e); }
+      _pf.st = keep; return { before, fl, after, err };
+    });
+    assert.ok(!g.err, JSON.stringify(g)); assert.ok(g.fl >= 1, JSON.stringify(g)); assert.ok(g.after >= g.fl, '바닥 아래로 내려가지 않음 ' + JSON.stringify(g));
+  });
+  await t('페이지 오류 없음(⑪)', async () => assert.deepStrictEqual([...new Set(v.errs)], []));
+  await v.ctx.close();
+
   await b.close();
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
   process.exit(fail ? 1 : 0);

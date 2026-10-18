@@ -56,7 +56,7 @@ const html = fs.readFileSync(R('www/index.html'), 'utf8');
     const w = (await import(tmp)).default, call = (u, init) => w.fetch(new Request(u, init), {}, { waitUntil() { } });
     const post = b => call('https://x/screen/tabs', { method: 'POST', body: b, headers: { 'Content-Type': 'text/plain;charset=UTF-8' } });
     const r = await post(JSON.stringify({ cap: 6, f: { tab: 'map' } })), j = await r.json();
-    ok(r.status === 200 && j.ok && j.screen === 'tabs' && j.body[0].items[1].on && /route-v2-2026-10-18s\d\d/.test(j.ver), '워커 응답 200 ' + j.ver);
+    ok(r.status === 200 && j.ok && j.screen === 'tabs' && j.body[0].items[1].on && /route-v2-2026-10-\d\ds\d\d/.test(j.ver), '워커 응답 200 ' + j.ver);
     ok((await (await post(JSON.stringify({ cap: 5, f: {} }))).json()).ok === false, '워커: cap 부족이면 거절');
     ok((await post('{oops')).status === 400 && (await post('x'.repeat(20001))).status === 413 && (await call('https://x/screen/tabs')).status === 405, '워커: 깨진 본문 400 · 큰 본문 413 · GET 405');
     const ro = await call('https://x/screen/tabs', { method: 'OPTIONS' });

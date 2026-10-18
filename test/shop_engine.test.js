@@ -143,7 +143,7 @@ console.log('동등성 대조 ' + cases.length + '건');
     const r = await w.fetch(new Request('https://x/screen/shop?lat=37.5&lng=127&now=' + t), {}, { waitUntil() {} });
     const j = await r.json();
     ok(r.status === 200 && j.ok && j.screen === 'shop', '워커 응답 200');
-    ok(/route-v2-2026-10-18s4\d/.test(j.ver), '엔진 버전 표시 ' + j.ver);
+    ok(/route-v2-2026-10-\d\ds\d\d/.test(j.ver), '엔진 버전 표시 ' + j.ver);
     ok(weatherAsked >= 1, '위치를 주면 엔진이 날씨를 받는다');
     const direct = E.shopScreen({ nowMs: t }, data, null, { temp: 4, rain: 70 });
     ok(JSON.stringify(j.body[0].items.map(c => c.act.url)) === JSON.stringify(direct.body[0].items.map(c => c.act.url)), '워커와 직접 계산이 같은 결과');
