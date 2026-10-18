@@ -299,6 +299,33 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     assert.ok(await waitFor(B, async () => (await calls(B, '', 'r:transitXferRow')).some(c => c.a && c.a.runs && c.a.runs.some(r => /931/.test(r.t || '')))), '바뀐 환승 문장을 안 보냈다');
     await B.ctx.close();
   });
+  await t('혼잡도 카드(2026-10-18): 상단 글자·게이지·칸별 칸·제목이 영역으로 그려지고(웹은 투명 · 눌림 그대로), 내용이 바뀌면 update, 24시간 막대는 영역이 아니다 · 끄면 호출 없음', async () => {
+    const B = await fresh({ plugin: true, on: true });
+    await B.page.evaluate(() => {
+      const c = document.getElementById('congCard'); document.getElementById('hbox').appendChild(c); c.style.margin = '0 14px 8px';
+      document.getElementById('congStn').textContent = '부평'; document.getElementById('congMeta').textContent = '시간표 기반';
+      document.getElementById('congStatusTxt').textContent = '여유'; document.getElementById('congStatusTxt').style.color = '#2ecc71';
+      const g = document.getElementById('congGaugeWrap'); g.style.display = 'block'; document.getElementById('congGaugePct').textContent = '35%';
+      const f = document.getElementById('congGaugeFill'); f.style.transition = 'none'; f.style.width = '35%';
+      document.getElementById('carGrid').innerHTML = [1, 2, 3, 4].map(i => '<div class="car-cell"><span>' + i + '</span><b>' + (i % 2 ? '보통' : '여유') + '</b></div>').join('');
+    });
+    await waitFor(B, has(B, 'show', 'cs:top')); await waitFor(B, has(B, 'show', 'cs:gauge')); await waitFor(B, has(B, 'show', 'cs:cars'));
+    const top = (await lastCall(B, 'show', 'cs:top')).a, txt = top.runs.filter(r => !r.k).map(r => r.t).join('');
+    assert.ok(/부평/.test(txt) && /시간표 기반/.test(txt) && /여유/.test(txt), '상단 글자 ' + txt);
+    const g = (await lastCall(B, 'show', 'cs:gauge')).a; assert.ok(g.runs.some(r => r.k === 'r') && g.runs.some(r => /35%/.test(r.t || '')), '게이지: 채움 막대 상자 + 글자 ' + JSON.stringify(g.runs).slice(0, 300));
+    const cars = (await lastCall(B, 'show', 'cs:cars')).a; assert.strictEqual(cars.runs.filter(r => r.k === 'r').length, 4, '칸 4개의 테두리 상자'); assert.ok(cars.runs.filter(r => !r.k).length >= 8, '칸 글자');
+    assert.ok(await waitFor(B, async () => await B.page.evaluate(() => ['congStn', 'congGaugeWrap', 'carGrid'].every(id => { const e = document.getElementById(id); const h = id === 'congStn' ? e.closest('.cong-top') : e; return h.classList.contains('htl-nat-op'); }))), '웹을 안 가렸다');
+    const regs = await B.page.evaluate(() => (window.__hn || []).filter(c => c.m === 'show').map(c => c.a && c.a.id));
+    assert.ok(!regs.some(id => /chart|bars/.test(String(id))), '24시간 막대는 영역이 아니다 ' + regs.join(','));
+    await clear(B); await B.page.evaluate(() => { document.getElementById('congStatusTxt').textContent = '혼잡'; });
+    assert.ok(await waitFor(B, async () => (await calls(B, '', 'cs:top')).some(c => c.a && c.a.runs && c.a.runs.some(r => r.t === '혼잡'))), '바뀐 상태를 안 보냈다');
+    await B.ctx.close();
+    const O = await fresh({ plugin: true, on: false });
+    await O.page.evaluate(() => { const c = document.getElementById('congCard'); document.getElementById('hbox').appendChild(c); document.getElementById('congStn').textContent = '부평'; });
+    await new Promise(r => setTimeout(r, 1500));
+    assert.strictEqual(await O.page.evaluate(() => (window.__hn || []).length), 0, '끄면(기본) 플러그인 호출이 하나도 없다');
+    await O.ctx.close();
+  });
   await t('머리줄이 팝업에 덮이면 숨고, 영역마다 따로 판단한다', async () => {
     const B = await fresh({ plugin: true, on: true }); await waitFor(B, has(B, 'show', 'hd')); await waitFor(B, has(B, 'show', 'tl'));
     await clear(B); await B.page.evaluate(() => { const hb = document.getElementById('transitResultHeader').parentElement.getBoundingClientRect(); const o = document.createElement('div'); o.id = 'popHd'; o.style.cssText = 'position:fixed;left:0;width:390px;top:' + (hb.top - 4) + 'px;height:' + (hb.height + 8) + 'px;z-index:9999;background:#000'; document.body.appendChild(o); });
