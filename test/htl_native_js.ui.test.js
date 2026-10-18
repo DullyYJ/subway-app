@@ -375,12 +375,55 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     // 스크롤: 멈춘 뒤 보이는 줄로 바뀌고, 지나간 줄(문서 앞쪽)은 투명이 풀린다
     await clear(B); await B.page.evaluate(() => { document.getElementById('shopScrollView').scrollTop = 800; });
     assert.ok(await waitFor(B, async () => { const c = await calls(B, '', 'sh:p0'); return c.some(x => x.a && x.a.runs && !/상품0\b/.test(txt(x.a)) && /상품\d+/.test(txt(x.a))); }, 20000), '스크롤을 멈췄는데 보이는 줄로 안 바뀌었다');
+    // 멈춘 뒤 이전 줄의 글자가 새 칸 위에 그려지면 안 된다(영역이 가리키는 칸이 바뀌면 예전 내용을 버리고 새로 읽는다) — 스크롤 직후부터의 모든 show/update 글자가 지금 투명 처리된(=네이티브가 그리는) 줄 안에 있어야 한다
+    await B.page.waitForTimeout(1500);
+    const stale = await B.page.evaluate(() => { const ok = Array.from(document.querySelectorAll('#shopGrid .prod-row.htl-nat-op')).map(e => e.textContent.replace(/\s+/g, '')); return ok.length; });
+    assert.ok(stale > 0, '스크롤 뒤 네이티브가 그리는 줄이 없다');
     assert.ok(await waitFor(B, async () => await B.page.evaluate(() => { const r = document.querySelectorAll('#shopGrid .prod-row'); return !r[0].classList.contains('htl-nat-op') && Array.from(r).filter(e => e.classList.contains('htl-nat-op')).length <= 14; })), '지나간 줄에 투명이 남았다(글자가 사라져 보인다)');
     const dim = await B.page.evaluate(() => { const sv = document.getElementById('shopScrollView').getBoundingClientRect(); return Array.from(document.querySelectorAll('#shopGrid .prod-row.htl-nat-op')).filter(e => { const r = e.getBoundingClientRect(); return r.bottom < sv.top || r.top > sv.bottom; }).length; });
     assert.strictEqual(dim, 0, '화면 밖 줄이 투명하다 ' + dim);
     // 칩을 다시 그리면(카테고리 바꿈) 영역이 새 내용을 읽는다
     await clear(B); await B.page.evaluate(() => { _renderShopCats({ rec: [1, 2], order: ['음료'], byCat: { '음료': [1] } }); });
     assert.ok(await waitFor(B, async () => (await calls(B, '', 'sh:k1')).length > 0 || (await calls(B, '', 'sh:k2')).length > 0 || (await calls(B, 'hide', 'sh:k2')).length > 0), '바뀐 칩을 안 읽었다');
+    assert.deepStrictEqual(B.errs, []);
+    await B.ctx.close();
+    const O = await fresh({ plugin: true, on: false });
+    await O.page.evaluate(setup); await new Promise(r => setTimeout(r, 1500));
+    assert.strictEqual(await O.page.evaluate(() => (window.__hn || []).length), 0, '끄면(기본) 플러그인 호출이 하나도 없다');
+    await O.ctx.close();
+  });
+  await t('설정 탭(2026-10-18): 글자 블록(제목·설명·단추)이 영역으로 그려지고 입력칸·스위치는 웹 그대로 · 스크롤 멈춘 뒤 새 블록을 읽고(이전 글자가 안 남는다) · 투명도가 걸리면 웹이 그린다 · 끄면 호출 없음', async () => {
+    const setup = () => { const b = document.getElementById('settingsTabView'); b.style.cssText = 'display:block;position:fixed;left:0;top:0;width:390px;height:700px;z-index:9;background:#fff;overflow-y:auto;overflow-x:hidden;'; document.body.appendChild(b);
+      for (let i = 0; i < 30; i++) { const d = document.createElement('div'); d.style.cssText = 'background:#eee;border:1px solid #ccc;border-radius:14px;padding:16px;margin-top:12px;'; d.innerHTML = '<div style="font-size:15px;font-weight:800;">블록제목' + i + '</div><p style="font-size:12px;">설명 글자 ' + i + ' 입니다</p>'; b.appendChild(d); } window._htlNat.kick(); };      // 탭이 열리면 앱이 하는 kick
+    const B = await fresh({ plugin: true, on: true, autoReady: true });
+    await B.page.evaluate(setup);
+    assert.ok(await waitFor(B, has(B, 'show', 'ss:b0')), '설정 블록이 안 켜졌다');
+    await waitFor(B, has(B, 'show', 'ss:b3'));
+    const txt = (a) => a.runs.filter(r => !r.k).map(r => r.t).join('|');
+    const all = await B.page.evaluate(() => window.__hn.filter(c => c.m === 'show' && c.a && /^ss:/.test(c.a.id)).map(c => c.a.runs.filter(r => !r.k).map(r => r.t).join('|')));
+    assert.ok(all.some(t => /커뮤니티 아이디/.test(t)) && all.some(t => /아이디 저장/.test(t)), '아이디 카드 글자·단추가 그려져야 한다 ' + JSON.stringify(all).slice(0, 300));
+    await waitFor(B, async () => await B.page.evaluate(() => document.querySelectorAll('#settingsTabView .htl-nat-op').length >= 3));
+    const dim = await B.page.evaluate(() => Array.from(document.querySelectorAll('#settingsTabView .htl-nat-op')).map(e => ({ bad: !!e.querySelector('input,textarea,select,svg,img,canvas'), n: e.textContent.trim().slice(0, 12) })));
+    assert.ok(dim.length >= 3 && dim.every(d => !d.bad), '입력칸이 든 요소가 투명 처리됐다: ' + JSON.stringify(dim));
+    assert.strictEqual(await B.page.evaluate(() => document.getElementById('commIdInput').classList.contains('htl-nat-op')), false, '입력칸은 웹 그대로');
+    await B.page.fill('#commIdInput', 'abc'); assert.strictEqual(await B.page.evaluate(() => document.getElementById('commIdInput').value), 'abc', '입력은 웹이 받는다');
+    // 스크롤 직후(표시 표시부터)의 모든 show/update 글자가 지금 네이티브가 그리는 블록 안에 있어야 한다 = 이전 블록 글자가 새 자리에 안 남는다
+    const t0txt = txt((await lastCall(B, 'show', 'ss:b0')).a);
+    // 가만히 두면 깜박이지 않는다(켜졌다 꺼졌다 반복 = 실기기에서 글자가 번쩍인다): 3초 동안 hide/show/update 가 하나도 없어야 한다
+    await B.page.waitForTimeout(1500); await clear(B); await B.page.waitForTimeout(3000);
+    const flick = await B.page.evaluate(() => window.__hn.filter(c => c.a && /^ss:/.test(c.a.id) && /^(show|hide|update|destroy)$/.test(c.m)).map(c => c.m + ':' + c.a.id));
+    assert.deepStrictEqual(flick, [], '가만히 있는데 영역이 깜박인다: ' + JSON.stringify(flick.slice(0, 8)));
+    await clear(B); await B.page.evaluate(() => { document.getElementById('settingsTabView').scrollTop = 1300; });
+    assert.ok(await waitFor(B, async () => { const c = await calls(B, 'show', 'ss:b0'); return c.some(x => txt(x.a) !== t0txt); }, 20000), '스크롤을 멈췄는데 새 블록이 안 그려졌다');
+    await B.page.waitForTimeout(1500);
+    const bad = await B.page.evaluate(() => { const ok = Array.from(document.querySelectorAll('#settingsTabView .htl-nat-op')).map(e => e.textContent.replace(/\s+/g, '')).join('¶');
+      return window.__hn.filter(c => (c.m === 'show' || c.m === 'update') && c.a && /^ss:/.test(c.a.id) && c.a.runs).map(c => c.a.runs.filter(r => !r.k).map(r => r.t.replace(/\s+/g, '')).filter(t => t.length >= 4)).flat().filter(t => !ok.includes(t)).slice(0, 5); });
+    assert.deepStrictEqual(bad, [], '지금 네이티브가 안 그리는 블록의 글자가 그려졌다(이전 글자 잔상): ' + JSON.stringify(bad));
+    const dim2 = await B.page.evaluate(() => { const sv = document.getElementById('settingsTabView').getBoundingClientRect(); return Array.from(document.querySelectorAll('#settingsTabView .htl-nat-op')).filter(e => { const r = e.getBoundingClientRect(); return r.bottom < sv.top || r.top > sv.bottom; }).length; });
+    assert.strictEqual(dim2, 0, '화면 밖 블록이 투명하다(글자가 사라져 보인다) ' + dim2);
+    // 투명도가 걸린 화면은 읽지 않는다 → 웹이 그린다
+    await clear(B); await B.page.evaluate(() => { document.getElementById('settingsTabView').style.opacity = '0.5'; });
+    assert.ok(await waitFor(B, async () => await B.page.evaluate(() => document.querySelectorAll('#settingsTabView .htl-nat-op').length === 0)), '투명도가 걸렸는데 웹이 가려진 채다');
     assert.deepStrictEqual(B.errs, []);
     await B.ctx.close();
     const O = await fresh({ plugin: true, on: false });
