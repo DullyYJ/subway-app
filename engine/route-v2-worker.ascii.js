@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-18s41";
+var ENGINE_VERSION = "route-v2-2026-10-18s42";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -11093,10 +11093,13 @@ async function handleScene(request) {
 //        wx   = { temp, rain } | null  (Worker \uac00 subway-api /weather \uc5d0\uc11c \ubc1b\ub294\ub2e4. \ubabb \ubc1b\uc73c\uba74 null \u2014 \ub0a0\uc528\ub97c \uc9c0\uc5b4\ub0b4\uc9c0 \uc54a\ub294\ub2e4)
 // \ucd9c\ub825  { ok, v:1, screen:'shop', rev, cat, seed, head:[\ub178\ub4dc\u2026], body:[\ub178\ub4dc\u2026] }  \u2190 \ub178\ub4dc \uc885\ub958\ub294 native/ScreenCore.java \uc640 \uac19\ub2e4
 //        chips{items:[{label,badge,on,act}]} \u00b7 grid{cols,gap,items:[card{img,fb,name,tag,act}]} \u00b7 text \u00b7 button \u00b7 spacer
-//        act = {a:'cat',v} | {a:'open',url} | {a:'refresh'}
+//        box{s,hl,fill,line\u2026}(\ub300\uac00\uc131 \uc548\ub0b4 \uc0c1\uc790) \u00b7 search{hint,act:{a:'search',tpl,empty}}(\ucfe0\ud321 \uac80\uc0c9\uc904) \u2014 \uc785\ub825 inp.cap>=2 (\uc0c8 \uc571)\uc77c \ub54c\ub9cc head \uc5d0 \uc2e4\ub9ac\uace0 cover:'tab'
+//        act = {a:'cat',v} | {a:'open',url} | {a:'refresh'} | {a:'search',tpl,empty}
 // \ub9e8 \uc544\ub798 module.exports \ub294 \uc2dc\ud5d8(Node)\uc6a9\uc774\uace0 Worker \uc5d0\uc11c\ub294 \ud568\uc218 \uc120\uc5b8\ub9cc \uc4f0\uc778\ub2e4.
 'use strict';
 var SHOP_PICK_N = 100;
+var SHOP_SEARCH_TPL = 'https://www.coupang.com/np/search?q={q}';          // \ucfe0\ud321 \uac80\uc0c9 \uacb0\uacfc \uc8fc\uc18c({q} \uc5d0 \uac80\uc0c9\uc5b4)
+var SHOP_PARTNER_URL = 'https://coupa.ng/coRT4D';                         // \uac80\uc0c9\uc5b4 \uc5c6\uc774 \ub204\ub974\uba74 \ud30c\ud2b8\ub108\uc2a4 \ucd94\uc801 \ub9c1\ud06c(\uc218\uc218\ub8cc \uc778\uc2dd)
 var SHOP_REC_CAT = '\ucd94\ucc9c';     // '\ucd94\ucc9c'
 var SHOP_CAT_EMOJI = { '\uc2dd\uc0ac': '\ud83c\udf71', '\uc74c\ub8cc': '\u2615', '\ud328\uc158': '\ud83d\udc54', '\ubdf0\ud2f0': '\ud83d\udc84', '\uac74\uac15': '\ud83d\udc8a', '\uc0dd\ud65c': '\ud83e\uddf4', '\uc644\uad6c': '\ud83e\uddf8' };
 
@@ -11330,10 +11333,11 @@ function shopScreen(inp, data, cfg, wx) {
     if (shopOk(it.i)) c.img = it.i;
     cards.push(c);
   });
-  return {
+  var chipsNode = { t: 'chips', pad: [14, 4, 14, 4], gap: 6, h: 30, items: chips };
+  var out = {
     ok: true, v: 1, screen: 'shop', cat: cat, seed: pick.seed,
     rev: pick.seed + ':' + cat + ':' + cards.length,
-    head: [{ t: 'chips', pad: [14, 4, 14, 4], gap: 6, h: 30, items: chips }],
+    head: [chipsNode],
     body: [
       { t: 'grid', cols: 2, gap: 8, pad: [14, 4, 14, 0], items: cards },
       { t: 'text', pad: [16, 10, 16, 0], size: 10, color: 'sub', lh: 1.5, alpha: 0.8,
@@ -11343,12 +11347,32 @@ function shopScreen(inp, data, cfg, wx) {
       { t: 'spacer', h: 14 }
     ]
   };
+  // cap>=2 (\uc0c8 \uc571): \ub300\uac00\uc131 \uc548\ub0b4 \uc0c1\uc790\uc640 \ucfe0\ud321 \uac80\uc0c9\uc904\uae4c\uc9c0 \uc5d4\uc9c4\uc774 \ub0b4\ub824 \uc900\ub2e4 \u2192 \uc571\uc740 \ud0ed \ub9e8 \uc704\ubd80\ud130 \ub36e\ub294\ub2e4(cover:'tab').
+  //   \uc61b \uc571(cap \uc5c6\uc74c)\uc5d0\ub294 \uc608\uc804 \ubaa8\uc591 \uadf8\ub300\ub85c \u2014 \uc548\ub0b4\u00b7\uac80\uc0c9\uc904\uc740 \uc6f9\uc774 \ub9e1\ub294\ub2e4.
+  if (Number(inp.cap) >= 2) {
+    var notice = shopRich([['\uc774 \ud398\uc774\uc9c0\uc758 \uc0c1\ud488 \ub9c1\ud06c\ub294 ', 0], ['\ucfe0\ud321 \ud30c\ud2b8\ub108\uc2a4 \ud65c\ub3d9', 1], ['\uc758 \uc77c\ud658\uc73c\ub85c, \uc774\uc5d0 \ub530\ub978 ', 0], ['\uc77c\uc815\uc561\uc758 \uc218\uc218\ub8cc\ub97c \uc81c\uacf5\ubc1b\uc2b5\ub2c8\ub2e4.', 1]]);
+    out.cover = 'tab';
+    out.head = [
+      { t: 'box', pad: [14, 14, 14, 8], ip: [12, 8, 12, 8], s: notice.s, hl: notice.hl, size: 11.5, lh: 1.5, color: 'text',
+        fill: 'rgba(255,149,0,0.12)', line: 'rgba(255,149,0,0.35)', r: 10 },
+      { t: 'search', pad: [14, 0, 14, 4], max: 340, hint: '\ucfe0\ud321\uc5d0\uc11c \uac80\uc0c9', badge: 'C', accent: '#e63329', maxlen: 60,
+        act: { a: 'search', tpl: SHOP_SEARCH_TPL, empty: SHOP_PARTNER_URL } },
+      chipsNode
+    ];
+  }
+  return out;
+}
+// [[\uae00, \uad75\uac8c 0|1], \u2026] \u2192 \uc774\uc5b4 \ubd99\uc778 \uae00 + \uad75\uc740 \uad6c\uac04 [[\uc2dc\uc791,\ub05d],\u2026] (\uc571\uc774 \uad75\uae30\ub9cc \uadf8\ub9b0\ub2e4)
+function shopRich(parts) {
+  var s = '', hl = [];
+  parts.forEach(function (p) { if (p[1]) hl.push([s.length, s.length + p[0].length]); s += p[0]; });
+  return { s: s, hl: hl };
 }
 // \uc1fc\ud551 \ud654\uba74 \uc5d4\uc9c4 Worker \uc5f0\uacb0\ubd80 \u2014 GET /screen/shop (engine/shop.js \uc758 shopScreen \uc744 \ubd80\ub978\ub2e4). route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/screen/shop") return handleScreenShop(request);` \ub97c \ub123\ub294\ub2e4.
 //   \u00b7 \uc0c1\ud488: \uc1fc\ud551 \uc11c\ubc84(gildongmu-shop) /shop \uc758 data \ub97c 60\ucd08 \uba54\ubaa8\ub9ac\uc5d0 \ub454\ub2e4. \uc11c\ubc84\uac00 \uc7a0\uae50 \uc548 \ub418\uba74 \ub9c8\uc9c0\ub9c9\uc73c\ub85c \ubc1b\uc740 \uac83\uc744 \uc4f4\ub2e4(\uc5c6\uc73c\uba74 503 \u2014 \uc571\uc740 \uc800\uc7a5\ud574 \ub454 \ud654\uba74 \ub610\ub294 \uc608\uc804 \uc6f9 \uc1fc\ud551\uc73c\ub85c \uac04\ub2e4).
 //   \u00b7 \uc6b4\uc601 \uc124\uc815: gildongmu-food /app-config?k=shop (\uacc4\uc808 \uaddc\uce59) 10\ubd84. \ubabb \ubc1b\uc73c\uba74 null \u2192 \ub0b4\uc7a5 \uaddc\uce59.
 //   \u00b7 \ub0a0\uc528: \uc7a5\uba74 \uc5d4\uc9c4\uacfc \uac19\uc740 sceneWeather(lat,lng) (subway-api /weather, 10\ubd84 \uce90\uc2dc). \uc704\uce58\ub97c \uc548 \uc8fc\uba74 \ub0a0\uc528 \uc5c6\uc774 \uacc4\uc0b0\ud55c\ub2e4.
-//   \ucffc\ub9ac: cat(\uce74\ud14c\uace0\ub9ac, \uae30\ubcf8 \ucd94\ucc9c) \u00b7 lat \u00b7 lng \u00b7 now(ms, \uc2dc\ud5d8\uc6a9) \u00b7 tz(\ubd84, \uae30\ubcf8 540)
+//   \ucffc\ub9ac: cat(\uce74\ud14c\uace0\ub9ac, \uae30\ubcf8 \ucd94\ucc9c) \u00b7 lat \u00b7 lng \u00b7 now(ms, \uc2dc\ud5d8\uc6a9) \u00b7 tz(\ubd84, \uae30\ubcf8 540) \u00b7 cap(\uc571\uc774 \uadf8\ub9b4 \uc218 \uc788\ub294 \ud654\uba74 \uaddc\uaca9 \uc218\uc900, 2 \uc774\uc0c1\uc774\uba74 \uc548\ub0b4 \uc0c1\uc790\u00b7\uac80\uc0c9\uc904 \ud3ec\ud568)
 var SHOP_API_URL = "https://gildongmu-shop.phg0643.workers.dev";
 var SHOP_CFG_URL = "https://gildongmu-food.phg0643.workers.dev/app-config?k=shop";
 var SHOP_MEM = { data: null, ts: 0, ver: "", cfg: null, cfgTs: 0 };
@@ -11378,7 +11402,7 @@ async function handleScreenShop(request) {
   if (!mem.data) return new Response(JSON.stringify({ ok: false, error: "no-data" }), { status: 503, headers: H });
   var lat = Number(q.get("lat")), lng = Number(q.get("lng")), wx = null;
   if (q.get("lat") != null && q.get("lng") != null) { try { wx = await sceneWeather(lat, lng); } catch (e) { wx = null; } }
-  var inp = { nowMs: q.get("now") ? Number(q.get("now")) : Date.now(), tzOffsetMin: q.get("tz") ? Number(q.get("tz")) : 540, cat: q.get("cat") || "" };
+  var inp = { nowMs: q.get("now") ? Number(q.get("now")) : Date.now(), tzOffsetMin: q.get("tz") ? Number(q.get("tz")) : 540, cat: q.get("cat") || "", cap: Number(q.get("cap")) || 0 };
   var out;
   try { out = shopScreen(inp, mem.data, mem.cfg, wx); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2) }), { status: 500, headers: H }); }
   if (!out || !out.ok) return new Response(JSON.stringify(out || { ok: false, error: "fail" }), { status: 503, headers: H });

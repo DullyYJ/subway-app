@@ -11,10 +11,13 @@
 //        wx   = { temp, rain } | null  (Worker 가 subway-api /weather 에서 받는다. 못 받으면 null — 날씨를 지어내지 않는다)
 // 출력  { ok, v:1, screen:'shop', rev, cat, seed, head:[노드…], body:[노드…] }  ← 노드 종류는 native/ScreenCore.java 와 같다
 //        chips{items:[{label,badge,on,act}]} · grid{cols,gap,items:[card{img,fb,name,tag,act}]} · text · button · spacer
-//        act = {a:'cat',v} | {a:'open',url} | {a:'refresh'}
+//        box{s,hl,fill,line…}(대가성 안내 상자) · search{hint,act:{a:'search',tpl,empty}}(쿠팡 검색줄) — 입력 inp.cap>=2 (새 앱)일 때만 head 에 실리고 cover:'tab'
+//        act = {a:'cat',v} | {a:'open',url} | {a:'refresh'} | {a:'search',tpl,empty}
 // 맨 아래 module.exports 는 시험(Node)용이고 Worker 에서는 함수 선언만 쓰인다.
 'use strict';
 var SHOP_PICK_N = 100;
+var SHOP_SEARCH_TPL = 'https://www.coupang.com/np/search?q={q}';          // 쿠팡 검색 결과 주소({q} 에 검색어)
+var SHOP_PARTNER_URL = 'https://coupa.ng/coRT4D';                         // 검색어 없이 누르면 파트너스 추적 링크(수수료 인식)
 var SHOP_REC_CAT = '추천';     // '추천'
 var SHOP_CAT_EMOJI = { '식사': '🍱', '음료': '☕', '패션': '👔', '뷰티': '💄', '건강': '💊', '생활': '🧴', '완구': '🧸' };
 
@@ -248,10 +251,11 @@ function shopScreen(inp, data, cfg, wx) {
     if (shopOk(it.i)) c.img = it.i;
     cards.push(c);
   });
-  return {
+  var chipsNode = { t: 'chips', pad: [14, 4, 14, 4], gap: 6, h: 30, items: chips };
+  var out = {
     ok: true, v: 1, screen: 'shop', cat: cat, seed: pick.seed,
     rev: pick.seed + ':' + cat + ':' + cards.length,
-    head: [{ t: 'chips', pad: [14, 4, 14, 4], gap: 6, h: 30, items: chips }],
+    head: [chipsNode],
     body: [
       { t: 'grid', cols: 2, gap: 8, pad: [14, 4, 14, 0], items: cards },
       { t: 'text', pad: [16, 10, 16, 0], size: 10, color: 'sub', lh: 1.5, alpha: 0.8,
@@ -261,6 +265,26 @@ function shopScreen(inp, data, cfg, wx) {
       { t: 'spacer', h: 14 }
     ]
   };
+  // cap>=2 (새 앱): 대가성 안내 상자와 쿠팡 검색줄까지 엔진이 내려 준다 → 앱은 탭 맨 위부터 덮는다(cover:'tab').
+  //   옛 앱(cap 없음)에는 예전 모양 그대로 — 안내·검색줄은 웹이 맡는다.
+  if (Number(inp.cap) >= 2) {
+    var notice = shopRich([['이 페이지의 상품 링크는 ', 0], ['쿠팡 파트너스 활동', 1], ['의 일환으로, 이에 따른 ', 0], ['일정액의 수수료를 제공받습니다.', 1]]);
+    out.cover = 'tab';
+    out.head = [
+      { t: 'box', pad: [14, 14, 14, 8], ip: [12, 8, 12, 8], s: notice.s, hl: notice.hl, size: 11.5, lh: 1.5, color: 'text',
+        fill: 'rgba(255,149,0,0.12)', line: 'rgba(255,149,0,0.35)', r: 10 },
+      { t: 'search', pad: [14, 0, 14, 4], max: 340, hint: '쿠팡에서 검색', badge: 'C', accent: '#e63329', maxlen: 60,
+        act: { a: 'search', tpl: SHOP_SEARCH_TPL, empty: SHOP_PARTNER_URL } },
+      chipsNode
+    ];
+  }
+  return out;
+}
+// [[글, 굵게 0|1], …] → 이어 붙인 글 + 굵은 구간 [[시작,끝],…] (앱이 굵기만 그린다)
+function shopRich(parts) {
+  var s = '', hl = [];
+  parts.forEach(function (p) { if (p[1]) hl.push([s.length, s.length + p[0].length]); s += p[0]; });
+  return { s: s, hl: hl };
 }
 
 if (typeof module !== 'undefined' && module.exports) module.exports = { shopScreen: shopScreen, shopPick: shopPick, shopClock: shopClock, shopSeasonScore: shopSeasonScore, shopSeasonNow: shopSeasonNow, shopRng: shopRng, SHOP_PICK_N: SHOP_PICK_N, SHOP_REC_CAT: SHOP_REC_CAT };
