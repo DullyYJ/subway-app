@@ -25,6 +25,9 @@ import java.util.Map;
  *     navrow { pad, title, sub, size, act, top, vp }                                       오른쪽에 › 가 있는 줄(sub = 오른쪽 작은 상태 글자)
  *     select { pad, title, sub, on, act:{a:'sel',v}, fill, line, onl, tc, sc, prev:[색×5], chk, ckf }  미리보기 칸이 있는 고르기 카드(테마 등)
  *     field  { pad, key, hint, value, maxlen, h, fill, line, r, size }                    글자 입력칸(누르면 기기의 진짜 입력칸이 그 자리에 뜬다)
+ *     bar    { pad, title, sub, btn, act }                                                   머리줄: 제목 + 금색 작은 글(예: '○○역 인근') + 오른쪽 알약 단추(btn 이 있으면 act 필수)
+ *     place  { pad, rank, pub, name, sub, stars, badge, dist, go, act }                    장소 카드(맛집): 순위 동그라미 · 이름 · 업종/주소 · 별점/딱지/거리/길찾기 글. pub=true 면 순위 칸은 글자 없이 흐리게
+ *     divider { pad }                                                                      가는 가로선
  *     act    { a:'cat', v } | { a:'open', url } | { a:'refresh' } | { a:'search', tpl('{q}' 포함 http(s)), empty(http(s)) }
  *            | { a:'set', key } | { a:'call', v:이름 } | { a:'web', v:이름 } | { a:'sel', v:값 }   (call/web/sel 은 웹이 허용 목록에 있는 것만 실행한다)
  *   screen.cover = 'tab'(탭 맨 위부터 덮음: 안내 상자·검색줄 포함) | 'chips'(기본, 칩 줄부터). 앱이 cap=2 를 보냈을 때만 엔진이 'tab' 을 준다.
@@ -298,6 +301,8 @@ public final class ScreenCore {
         if (++sc.nodes > MAX_NODES) throw new ParseError("노드가 너무 많다");
         if ("chips".equals(t)) {
             pad(m, n); n.gap = optNum(m, "gap", 6f, 0f, 60f); n.h = optNum(m, "h", 30f, 16f, 80f);
+            n.onc = roleOrCss(m, "onc", "orange"); if (n.onc.length() == 0) n.onc = "orange";                   // 켜진 칩 바탕(쇼핑 주황 · 맛집 금색)
+            n.tc = roleOrCss(m, "onfg", "white"); if (n.tc.length() == 0) n.tc = "white";                       // 켜진 칩 글자색
             for (Object io : asArr(m.get("items"), "chips.items")) {
                 Map<String, Object> im = asObj(io, "chip");
                 Node c = new Node(); c.t = "chip";
@@ -389,6 +394,20 @@ public final class ScreenCore {
             n.maxlen = (int) optNum(m, "maxlen", 60f, 1f, 120f);
             n.act = act(m.get("act"), true);
             if (!"search".equals(n.act.a)) throw new ParseError("search: act 는 search 여야 한다");
+        } else if ("bar".equals(t)) {
+            pad(m, n);
+            n.title = optStr(m, "title", "", 60); if (n.title.length() == 0) throw new ParseError("bar: title 없음");
+            n.sub = optStr(m, "sub", "", 80); n.label = optStr(m, "btn", "", 16);
+            if (n.label.length() > 0) n.act = act(m.get("act"), true); else n.act = act(m.get("act"), false);
+        } else if ("place".equals(t)) {
+            pad(m, n);
+            n.s = optStr(m, "rank", "", 6); n.on = optBool(m, "pub", false);
+            n.name = optStr(m, "name", "", 120); if (n.name.length() == 0) throw new ParseError("place: name 없음");
+            n.sub = optStr(m, "sub", "", 200); n.tag = optStr(m, "stars", "", 10); n.badge = optStr(m, "badge", "", 20);
+            n.label = optStr(m, "dist", "", 12); n.title = optStr(m, "go", "", 30);
+            n.act = act(m.get("act"), true);
+        } else if ("divider".equals(t)) {
+            pad(m, n);
         } else if ("spacer".equals(t)) {
             n.h = optNum(m, "h", 8f, 0f, 400f);
         } else { sc.skipped++; return null; }
@@ -415,7 +434,9 @@ public final class ScreenCore {
     public static Screen load(String json) throws ParseError { return validate(parse(json)); }
 
     // ═════════════ ③ 배치 ═════════════
-    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11;
+    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14;
+    /** 맛집 머리줄·장소 카드 치수(웹 .food-* 와 같다) */
+    public static final float BAR_TITLE = 18f, BAR_SUB = 13f, BAR_BTN = 12f, BAR_LH = 1.4f, PLACE_PAD = 14f, PLACE_RANK = 24f, PLACE_GAP = 12f, PLACE_NAME = 15f, PLACE_SUB = 12f, PLACE_META = 11f, PLACE_STAR = 13f, PLACE_PILL_H = 20f;
     /** 검색줄 치수(웹 쿠팡 검색줄과 같다): 알약 높이 · 왼쪽 배지 · 오른쪽 단추 · 안쪽 여백 */
     public static final float SEARCH_H = 44f, SEARCH_BADGE = 20f, SEARCH_BTN = 30f, SEARCH_PADL = 14f, SEARCH_PADR = 8f, SEARCH_GAP = 8f;
     public static final float CARD_PAD = 8f, CARD_IMG_H = 78f, CARD_IMG_GAP = 5f, CARD_NAME_SIZE = 11f, CARD_LH = 1.35f, CARD_TAG_GAP = 6f, CHIP_PADX = 12f;
@@ -445,6 +466,9 @@ public final class ScreenCore {
         public String label = "", badge = "", tag = "", img = "", fb = "";
         public float labelW, badgeW, tagX, tagW;    // 칩: 라벨·뱃지 폭 · 카드: 최저가 글자 자리
         public float ix, iy, iw, ih;                // 카드 그림 자리
+        public String go = "", dist = "", stars = "", rank = "";           // 장소 카드: 길찾기 글 · 거리 · 별점 · 순위
+        public boolean pub;
+        public float starX, badgeX, badgePw, distX, distPw, goX, metaY, metaH, subY, subLH2;   // 장소 카드 한 줄(별점·딱지·거리·길찾기) 자리 / 머리줄 작은 글 자리
         public Act act;
     }
 
@@ -487,6 +511,7 @@ public final class ScreenCore {
         /** 이 조각이 (x, y) 에서 눌리나. 스위치 줄은 스위치(+8dp)만, 나머지는 조각 전체. */
         public static boolean hits(Item m, float x, float y) {
             if (m.kind == K_TOGGLE) return x >= m.sx - 8f && x < m.sx + m.sw + 8f && y >= m.sy - 8f && y < m.sy + m.sh + 8f;
+            if (m.kind == K_BAR) return x >= m.sx - 6f && x < m.sx + m.sw + 6f && y >= m.sy - 6f && y < m.sy + m.sh + 6f;      // 머리줄은 오른쪽 단추만
             return x >= m.x && x < m.x + m.w && y >= m.y && y < m.y + m.h;
         }
         private static Act hit(Item[] it, float[] maxB, float x, float y) {
@@ -559,7 +584,7 @@ public final class ScreenCore {
                 y += n.padT;
                 for (Node c : n.items) {
                     Item it = new Item(); it.kind = K_CHIP; it.label = c.label; it.badge = c.badge; it.on = c.on; it.act = c.act;
-                    it.size = 12f; it.bold = true;
+                    it.size = 12f; it.bold = true; it.ac = col(n.onc, new Col("orange", 0)); it.tc = col(n.tc, new Col("white", 0));
                     it.labelW = m.width(c.label, 12f, true);
                     it.badgeW = c.badge.length() > 0 ? m.width(c.badge, 12f, true) : 0f;
                     it.w = CHIP_PADX * 2 + it.labelW + (c.badge.length() > 0 ? 6f + it.badgeW : 0f);
@@ -739,6 +764,57 @@ public final class ScreenCore {
             it.textX = ox + 13f;
             out.add(it);
             return y + n.h + n.padB;
+        }
+        if ("divider".equals(n.t)) {
+            Item it = new Item(); it.kind = K_DIV; it.x = ox; it.y = y; it.w = innerW; it.h = 1f;
+            out.add(it);
+            return y + 1f + n.padB;
+        }
+        if ("bar".equals(n.t)) {
+            float btnW = 0f, btnH = 0f;
+            if (n.label.length() > 0) { btnW = m.width(n.label, BAR_BTN, false) + 28f + 2f; btnH = BAR_BTN * BAR_LH + 12f + 2f; }
+            float region = Math.max(40f, innerW - (btnW > 0f ? btnW + 8f : 0f));
+            float tlh = BAR_TITLE * BAR_LH, slh = BAR_SUB * BAR_LH;
+            String title = ellipsize(n.title, region, BAR_TITLE, true, m);
+            float tw = m.width(title, BAR_TITLE, true);
+            String sub = n.sub.length() > 0 ? ellipsize(n.sub, region, BAR_SUB, true, m) : "";
+            float sw = sub.length() > 0 ? m.width(sub, BAR_SUB, true) : 0f;
+            boolean same = sub.length() == 0 || tw + 8f + sw <= region;
+            float blockH = tlh + (sub.length() > 0 && !same ? slh : 0f);
+            float h = Math.max(blockH, btnH);
+            Item it = new Item(); it.kind = K_BAR; it.x = ox; it.y = y; it.w = innerW; it.h = h; it.act = n.act;
+            it.lines = new String[] { title }; it.size = BAR_TITLE; it.bold = true; it.lineH = tlh;
+            it.textX = ox; it.textY = y + (h - blockH) / 2f;
+            it.label = sub; it.size2 = BAR_SUB; it.lineH2 = slh; it.top = same;
+            it.tagX = same ? ox + tw + 8f : ox; it.tagW = sw; it.subY = same ? it.textY : it.textY + tlh;
+            it.badge = n.label; it.sw = btnW; it.sh = btnH; it.sx = ox + innerW - btnW; it.sy = y + (h - btnH) / 2f;
+            it.ac = col("gold", null); it.tc = col("text", null); it.sc = col("sub", null);
+            out.add(it);
+            return y + h + n.padB;
+        }
+        if ("place".equals(n.t)) {
+            float infoX = ox + 1f + PLACE_PAD + PLACE_RANK + PLACE_GAP, infoW = Math.max(40f, innerW - 2f - PLACE_PAD * 2f - PLACE_RANK - PLACE_GAP);
+            float nlh = PLACE_NAME * BAR_LH, slh = PLACE_SUB * BAR_LH;
+            List<String> sl = n.sub.length() > 0 ? wrap(n.sub, infoW, PLACE_SUB, false, 2, m) : new ArrayList<String>();
+            Item it = new Item(); it.kind = K_PLACE; it.x = ox; it.y = y; it.w = innerW; it.act = n.act; it.radius = 16f;
+            it.rank = n.s; it.pub = n.on;
+            it.bx = ox + 1f + PLACE_PAD; it.by = y + 1f + PLACE_PAD;
+            it.lines = new String[] { ellipsize(n.name, infoW, PLACE_NAME, true, m) }; it.size = PLACE_NAME; it.bold = true; it.lineH = nlh;
+            it.textX = infoX; it.textY = y + 1f + PLACE_PAD;
+            it.lines2 = sl.toArray(new String[0]); it.size2 = PLACE_SUB; it.lineH2 = slh;
+            it.subY = it.textY + nlh + 3f;
+            it.metaY = it.subY + slh * sl.size() + (sl.isEmpty() ? 0f : 5f); it.metaH = PLACE_PILL_H;
+            // 한 줄: 별점 | 딱지 | 거리 | 길찾기 (웹 .food-meta 와 같은 간격 8)
+            float cx = infoX, right = infoX + infoW;
+            it.stars = n.tag; it.badge = n.badge; it.dist = n.label;
+            if (n.tag.length() > 0) { it.starX = cx; cx += m.width(n.tag, PLACE_STAR, true) + 8f; }
+            if (n.badge.length() > 0) { it.badgeX = cx; it.badgePw = m.width(n.badge, PLACE_META, false) + 16f; cx += it.badgePw + 8f; }
+            if (n.label.length() > 0) { it.distX = cx; it.distPw = m.width(n.label, PLACE_META, false) + 16f; cx += it.distPw + 8f; }
+            if (n.title.length() > 0 && right - cx >= 24f) { it.goX = cx; it.go = ellipsize(n.title, right - cx, PLACE_META, true, m); }
+            it.h = 1f + PLACE_PAD + nlh + 3f + slh * sl.size() + (sl.isEmpty() ? 0f : 5f) + PLACE_PILL_H + PLACE_PAD + 1f;
+            it.fill = col("card", null); it.line = col("border", null);
+            out.add(it);
+            return y + it.h + n.padB;
         }
         if ("grid".equals(n.t)) {
             int cols = n.cols;

@@ -313,20 +313,27 @@ public class ScreenView extends View {
             case ScreenCore.K_NAV: drawNav(cv, it); break;
             case ScreenCore.K_SELECT: drawSelect(cv, it); break;
             case ScreenCore.K_FIELD: drawField(cv, it); break;
+            case ScreenCore.K_BAR: drawBar(cv, it); break;
+            case ScreenCore.K_PLACE: drawPlace(cv, it); break;
+            case ScreenCore.K_DIV: drawDivider(cv, it); break;
             default: break;
         }
     }
 
     private void drawChip(Canvas cv, ScreenCore.Item it) {
         float rad = it.h / 2f;
-        int border = it.on ? pal[R_ORANGE] : 0x738C8C8C;
+        int onFill = cc(it.ac, pal[R_ORANGE]);
+        boolean tinted = it.ac != null && !"orange".equals(it.ac.role);              // 맛집 칩: 꺼진 칩도 카드색 바탕(웹 .food-chip)
+        int border = it.on ? onFill : 0x738C8C8C;
         rf.set(it.x, it.y, it.x + it.w, it.y + it.h);
-        if (it.on) { p.setStyle(Paint.Style.FILL); p.setColor(pal[R_ORANGE]); cv.drawRoundRect(rf, rad, rad, p); }
+        if (it.on) { p.setStyle(Paint.Style.FILL); p.setColor(onFill); cv.drawRoundRect(rf, rad, rad, p); }
+        else if (tinted) { p.setStyle(Paint.Style.FILL); p.setColor(pal[R_CARD]); cv.drawRoundRect(rf, rad, rad, p); }
+        if (it == pressed) { p.setStyle(Paint.Style.FILL); p.setColor(0x14808080); cv.drawRoundRect(rf, rad, rad, p); }
         p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(border);
         rf2.set(it.x + 0.5f, it.y + 0.5f, it.x + it.w - 0.5f, it.y + it.h - 0.5f);
         cv.drawRoundRect(rf2, rad - 0.5f, rad - 0.5f, p);
         p.setStyle(Paint.Style.FILL);
-        int fg = it.on ? pal[R_WHITE] : pal[R_TEXT];
+        int fg = it.on ? cc(it.tc, pal[R_WHITE]) : (tinted ? pal[R_SUB] : pal[R_TEXT]);
         setText(12f, true, fg);
         float b = base(it.y, it.h, 0);
         cv.drawText(it.label, it.x + ScreenCore.CHIP_PADX, b, tp);
@@ -334,6 +341,75 @@ public class ScreenView extends View {
             tp.setColor(alpha(fg, 0.7f));
             cv.drawText(it.badge, it.x + ScreenCore.CHIP_PADX + it.labelW + 6f, b, tp);
         }
+    }
+
+    /** 맛집 머리줄: 제목 + 금색 작은 글('○○역 인근') + 오른쪽 알약 단추. */
+    private void drawBar(Canvas cv, ScreenCore.Item it) {
+        setText(it.size, true, pal[R_TEXT]);
+        float tb = base(it.textY, it.lineH, 0);
+        cv.drawText(it.lines.length > 0 ? it.lines[0] : "", it.textX, tb, tp);
+        if (it.label.length() > 0) {
+            setText(it.size2, true, pal[R_GOLD]);
+            float sb = it.top ? tb : base(it.subY, it.lineH2, 0);                    // 한 줄이면 제목과 같은 글자 밑선
+            cv.drawText(it.label, it.tagX, sb, tp);
+        }
+        if (it.badge.length() > 0) {
+            float rad = it.sh / 2f;
+            rf.set(it.sx, it.sy, it.sx + it.sw, it.sy + it.sh);
+            p.setStyle(Paint.Style.FILL); p.setColor(pal[R_CARD]); cv.drawRoundRect(rf, rad, rad, p);
+            if (it == pressed) { p.setColor(0x14808080); cv.drawRoundRect(rf, rad, rad, p); }
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(pal[R_BORDER]);
+            rf2.set(it.sx + 0.5f, it.sy + 0.5f, it.sx + it.sw - 0.5f, it.sy + it.sh - 0.5f);
+            cv.drawRoundRect(rf2, rad - 0.5f, rad - 0.5f, p);
+            p.setStyle(Paint.Style.FILL);
+            setText(ScreenCore.BAR_BTN, false, pal[R_SUB]); tp.setTextAlign(Paint.Align.CENTER);
+            cv.drawText(it.badge, it.sx + it.sw / 2f, base(it.sy, it.sh, 0), tp);
+            tp.setTextAlign(Paint.Align.LEFT);
+        }
+    }
+
+    /** 맛집 장소 카드: 순위 동그라미 · 이름 · 업종/주소 · (별점|공공데이터 딱지)·거리·길찾기 글. */
+    private void drawPlace(Canvas cv, ScreenCore.Item it) {
+        float rad = it.radius;
+        rf.set(it.x, it.y, it.x + it.w, it.y + it.h);
+        p.setStyle(Paint.Style.FILL); p.setColor(pal[R_CARD]); cv.drawRoundRect(rf, rad, rad, p);
+        if (it == pressed) { p.setColor(0x14808080); cv.drawRoundRect(rf, rad, rad, p); }
+        p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(pal[R_BORDER]);
+        rf2.set(it.x + 0.5f, it.y + 0.5f, it.x + it.w - 0.5f, it.y + it.h - 0.5f);
+        cv.drawRoundRect(rf2, rad - 0.5f, rad - 0.5f, p);
+        p.setStyle(Paint.Style.FILL);
+        // 순위 동그라미
+        float rr = ScreenCore.PLACE_RANK / 2f;
+        p.setColor(it.pub ? 0x33808088 : pal[R_GOLD]);
+        cv.drawCircle(it.bx + rr, it.by + rr, rr, p);
+        if (it.rank.length() > 0) {
+            setText(11f, true, 0xFF121214); tp.setTextAlign(Paint.Align.CENTER);
+            cv.drawText(it.rank, it.bx + rr, base(it.by, ScreenCore.PLACE_RANK, 0), tp);
+            tp.setTextAlign(Paint.Align.LEFT);
+        }
+        // 이름 · 업종/주소
+        setText(it.size, true, pal[R_TEXT]);
+        cv.drawText(it.lines.length > 0 ? it.lines[0] : "", it.textX, base(it.textY, it.lineH, 0), tp);
+        setText(it.size2, false, pal[R_SUB]);
+        for (int k = 0; k < it.lines2.length; k++) cv.drawText(it.lines2[k], it.textX, base(it.subY + k * it.lineH2, it.lineH2, k), tp);
+        // 한 줄
+        float mh = it.metaH, my = it.metaY;
+        if (it.stars.length() > 0) { setText(ScreenCore.PLACE_STAR, true, 0xFFFFD60A); cv.drawText(it.stars, it.starX, base(my, mh, 0), tp); }
+        if (it.badge.length() > 0) {
+            rf.set(it.badgeX, my, it.badgeX + it.badgePw, my + mh); p.setColor(0x29787880); cv.drawRoundRect(rf, mh / 2f, mh / 2f, p);
+            setText(ScreenCore.PLACE_META, false, pal[R_SUB]); cv.drawText(it.badge, it.badgeX + 8f, base(my, mh, 0), tp);
+        }
+        if (it.dist.length() > 0) {
+            rf.set(it.distX, my, it.distX + it.distPw, my + mh); p.setColor(pal[R_BG]); cv.drawRoundRect(rf, mh / 2f, mh / 2f, p);
+            setText(ScreenCore.PLACE_META, false, pal[R_SUB]); cv.drawText(it.dist, it.distX + 8f, base(my, mh, 0), tp);
+        }
+        if (it.go.length() > 0) { setText(ScreenCore.PLACE_META, true, 0xFF03C75A); cv.drawText(it.go, it.goX, base(my, mh, 0), tp); }
+    }
+
+    private void drawDivider(Canvas cv, ScreenCore.Item it) {
+        p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(pal[R_BORDER]);
+        cv.drawLine(it.x, it.y + 0.5f, it.x + it.w, it.y + 0.5f, p);
+        p.setStyle(Paint.Style.FILL);
     }
 
     private void drawCard(Canvas cv, ScreenCore.Item it) {
