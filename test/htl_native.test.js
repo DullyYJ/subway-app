@@ -41,7 +41,7 @@ function findAndroidJar() {
     const cap = path.join(out, 'cap'), j = path.join(out, 'j'); fs.mkdirSync(cap); fs.mkdirSync(j);
     let r = spawnSync('javac', ['-encoding', 'UTF-8', '-cp', jar, '-d', cap].concat(walk(path.join(__dirname, 'android-stubs', 'com'), '.java')), { env: ENV, encoding: 'utf8' });
     assert.strictEqual(r.status, 0, '캐퍼시터 스텁: ' + (r.stderr || '').slice(0, 800));
-    r = spawnSync('javac', ['-encoding', 'UTF-8', '-Xlint:all', '-Xlint:-deprecation', '-cp', [jar, cap].join(path.delimiter), '-d', j, N('HtlCore.java'), N('HtlView.java'), N('HtlNativePlugin.java')], { env: ENV, encoding: 'utf8' });
+    r = spawnSync('javac', ['-encoding', 'UTF-8', '-Xlint:all', '-Xlint:-deprecation', '-cp', [jar, cap].join(path.delimiter), '-d', j, N('HtlCore.java'), N('HtlView.java'), N('HtlNativePlugin.java'), N('ScreenCore.java'), N('ScreenView.java')], { env: ENV, encoding: 'utf8' });   // HtlView 가 글꼴을 ScreenView.face() 로 받는다
     assert.strictEqual(r.status, 0, (r.stderr || '').split('\n').filter(l => !/^Picked up/.test(l)).join(' / ').slice(0, 1500));
     assert(fs.existsSync(path.join(j, 'com', 'dullyyj', 'subway', 'HtlNativePlugin.class')));
   });
