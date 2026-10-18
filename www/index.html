@@ -20233,7 +20233,7 @@ window.addEventListener('unhandledrejection', function(e) {
             <span id="scrSetDot" style="position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.3);"></span>
           </label>
         </div>
-        <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">쇼핑 탭의 카테고리와 상품 목록을 엔진이 화면 구성까지 정해 내려주고, 기기가 직접 그려요(부드러운 스크롤). 마지막 화면은 저장해 두어 바로 뜨고, 문제가 생기면 예전 웹 화면으로 돌아가요.</p>
+        <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">쇼핑 탭의 안내 문구·쿠팡 검색줄·카테고리·상품 목록을 엔진이 화면 구성까지 정해 내려주고, 기기가 직접 그려요(부드러운 스크롤). 마지막 화면은 저장해 두어 바로 뜨고, 문제가 생기면 예전 웹 화면으로 돌아가요.</p>
         <div id="scrSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
         <style>#scrSetOn:checked ~ #scrSetKnob{background:var(--gold) !important;} #scrSetOn:checked ~ #scrSetDot{left:23px !important;}</style>
       </div>
@@ -27349,8 +27349,11 @@ var _COUPANG_APP_PKG     = 'com.coupang.mobile';
 //        안드로이드 App Links 라우팅이 생략되고 쿠팡 앱 대신 브라우저가 뜬다(실측).
 //     → OS에게 판단을 맡기려면 AppLauncher 플러그인이 필요하다. 있으면 그걸 쓰고,
 //       없으면 intent:// → 웹 순으로 최선을 다한다.
-function _openCoupangQuery(q){
-  var web = 'https://www.coupang.com/np/search?q=' + encodeURIComponent(q);
+function _openCoupangQuery(q, tpl){
+  // tpl = 엔진이 정해 준 검색 주소('{q}' 자리에 검색어, 서버 구동 네이티브 쇼핑 화면). 없으면 예전 주소.
+  var web = (typeof tpl === 'string' && /^https?:\/\//i.test(tpl) && tpl.indexOf('{q}') >= 0)
+    ? tpl.replace('{q}', encodeURIComponent(q))
+    : 'https://www.coupang.com/np/search?q=' + encodeURIComponent(q);
   var opened = false;
   var goWeb = function(){
     if(opened) return; opened = true;
@@ -37377,7 +37380,8 @@ window.refreshShop=refreshShop;
 //   · 폴백: 엔진 응답이 틀린 모양이면(플러그인 검증 'invalid') 그 응답은 버리고 저장본을 그대로 쓴다. 저장본도 없으면 예전 웹 쇼핑 화면(_shopPick)이 이어받는다.
 //     플러그인 오류·첫 그림 8초 지연·상태 이상도 즉시 웹으로. 연속 2번 실패하면 다음 실행부터 웹. 웹 쇼핑 화면은 늘 뒤에서 그려져 있다(네이티브가 덮는다).
 //   · 안드로이드 앱 + ScreenNative 플러그인이 있고, 설정 스위치(기본 꺼짐)를 켠 경우에만. 웹/브라우저·플러그인 없음·꺼짐 = 예전 그대로.
-//   · 덮는 범위: 카테고리 칩 줄부터 탭 맨 아래까지(안내 상자·쿠팡 검색줄은 웹). 이 동안 예전 '쇼핑 영역(sh:*)' 네이티브는 쉰다.
+//   · 덮는 범위: 엔진이 cover:'tab' 을 주면(앱이 cap=2 를 보냈을 때) 탭 맨 위부터(대가성 안내 상자·쿠팡 검색줄 포함, 검색 입력은 기기의 진짜 입력칸),
+//     아니면 카테고리 칩 줄부터 탭 맨 아래까지(안내 상자·쿠팡 검색줄은 웹). 이 동안 예전 '쇼핑 영역(sh:*)' 네이티브는 쉰다.
 //   · 탭이 움직이는 동안·팝업이 덮는 동안에는 네이티브를 숨기고 웹이 이어받는다.
 // ══════════════════════════════════════════════════════════════════════════
 (function(){
@@ -37385,7 +37389,7 @@ window.refreshShop=refreshShop;
   var BASE = ((typeof _ROUTE_V2_BASE === 'string' && _ROUTE_V2_BASE) ? _ROUTE_V2_BASE : 'https://route-v2.phg0643.workers.dev') + '/screen/shop';
   var REC = '추천';
   var S = { on: false, fails: 0, failed: false, why: '', listening: false, shown: false, ready: false, good: false, cat: REC, cur: '', curRev: '', curCat: '',
-            rect: null, rk: '', chg: 0, chgAt: 0, still: 0, timer: 0, showAt: 0, pending: false, busy: 0, fetchAt: 0, cacheUsed: false, badFresh: 0, stBad: 0, stAt: 0, src: '', pre: [], preT: 0, hid: 0 };
+            rect: null, rk: '', chg: 0, chgAt: 0, still: 0, timer: 0, showAt: 0, pending: false, busy: 0, fetchAt: 0, cacheUsed: false, badFresh: 0, stBad: 0, stAt: 0, src: '', pre: [], preT: 0, hid: 0, cover: 'chips', typing: false };
   try{ S.on = localStorage.getItem(K_ON) === '1'; S.fails = parseInt(localStorage.getItem(K_F) || '0', 10) || 0; S.why = localStorage.getItem(K_W) || ''; }catch(eS){}
   function plug(){ try{ var C = window.Capacitor; return (C && C.Plugins && C.Plugins.ScreenNative) || null; }catch(e){ return null; } }
   function active(){ return S.on && !S.failed && S.fails < 2 && !!plug(); }
@@ -37414,11 +37418,12 @@ window.refreshShop=refreshShop;
   }
 
   // ── 사각형: 칩 줄 위쪽부터 탭 맨 아래, 탭 폭 ──
-  function rectNow(){
+  function rectNow(cover){
     var t = tabEl(), c = document.getElementById('shopCats'); if(!t || !c || !tabOpen()) return null;
     var tr = t.getBoundingClientRect(), cr = c.getBoundingClientRect();
-    if(!(tr.width > 40 && tr.bottom - cr.top > 80)) return null;
-    return { L: tr.left, T: cr.top, W: tr.width, H: tr.bottom - cr.top, cl: tr.left, ct: cr.top, cr: tr.right, cb: tr.bottom };
+    var top = ((cover || S.cover) === 'tab') ? tr.top : cr.top;                 // 'tab' = 안내 상자·검색줄까지 엔진이 내려 준 화면
+    if(!(tr.width > 40 && tr.bottom - top > 80)) return null;
+    return { L: tr.left, T: top, W: tr.width, H: tr.bottom - top, cl: tr.left, ct: top, cr: tr.right, cb: tr.bottom };
   }
   function covered(r){
     try{
@@ -37440,7 +37445,7 @@ window.refreshShop=refreshShop;
   function fetchScreen(cat, force){
     var my = ++S.busy, p = pos(), ctl = (typeof AbortController === 'function') ? new AbortController() : null;
     var to = setTimeout(function(){ try{ if(ctl) ctl.abort(); }catch(e){} }, 8000);
-    var u = BASE + '?cat=' + encodeURIComponent(cat) + (p ? '&lat=' + p[0] + '&lng=' + p[1] : '') + (force ? '&t=' + Date.now() : '');
+    var u = BASE + '?cat=' + encodeURIComponent(cat) + '&cap=2' + (p ? '&lat=' + p[0] + '&lng=' + p[1] : '') + (force ? '&t=' + Date.now() : '');
     S.fetchAt = now();
     return fetch(u, { signal: ctl ? ctl.signal : undefined, cache: 'no-cache' })
       .then(function(r){ clearTimeout(to); if(!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
@@ -37456,7 +37461,9 @@ window.refreshShop=refreshShop;
     var P = plug(); if(!P || !active()) return Promise.resolve(false);
     var j = sane(txt);
     if(!j){ return Promise.resolve(onInvalid(src, cat, 'shape')); }
-    var r = S.rect || rectNow();
+    var cv = (j.cover === 'tab') ? 'tab' : 'chips', coverChanged = (cv !== S.cover);
+    if(coverChanged){ S.cover = cv; S.rect = null; S.rk = ''; }                  // 덮는 범위가 바뀌면 사각형을 다시 잰다(저장본이 옛 모양일 때 등)
+    var r = S.rect || rectNow(cv);
     var args = { id: 'shop', json: txt, palette: palette(), keepScroll: !!keep };
     var p;
     if(!S.shown){
@@ -37464,7 +37471,10 @@ window.refreshShop=refreshShop;
       Object.assign(args, place(r));
       S.showAt = now(); S.ready = false;
       p = P.show(args);
-    } else p = P.update(args);
+    } else {
+      p = P.update(args);
+      if(coverChanged && r){ try{ P.setRect(place(r)); }catch(eR){} S.rect = r; S.rk = rkey(r); }
+    }
     return Promise.resolve(p).then(function(){
       if(!S.shown){ S.shown = true; if(r){ S.rect = r; S.rk = rkey(r); } }
       S.good = true; S.cur = txt; S.curRev = j.rev || ''; S.curCat = j.cat || cat; S.src = src; S.still = 0;
@@ -37509,7 +37519,9 @@ window.refreshShop=refreshShop;
   function schedulePrefetch(){
     if(S.preT || !active()) return;
     try{
-      var j = JSON.parse(S.cur), chips = (j.head[0] && j.head[0].items) || [];
+      var j = JSON.parse(S.cur), cn = null, chips = [];
+      for(var hi = 0; hi < j.head.length; hi++){ if(j.head[hi] && j.head[hi].t === 'chips'){ cn = j.head[hi]; break; } }
+      chips = (cn && cn.items) || [];
       S.pre = chips.map(function(c){ return c.label; }).filter(function(n){ var c2 = cacheGet(n); return !c2 || (Date.now() - (c2.ts || 0)) > 30 * 60000; });
     }catch(e){ return; }
     var step = function(){
@@ -37526,6 +37538,11 @@ window.refreshShop=refreshShop;
     if(!e || e.id && e.id !== 'shop') return;
     if(e.a === 'cat' && e.v){ showCat(e.v, false); }
     else if(e.a === 'open' && e.url){ try{ openExternalApp(e.url); }catch(e0){} }
+    else if(e.a === 'search'){                                                    // 검색줄: 주소는 엔진이 정했다(tpl/empty) — 웹은 앱을 여는 일만 한다
+      var q = String(e.v || '').trim();
+      if(q){ try{ _openCoupangQuery(q, e.url); }catch(e5){} }
+      else if(e.empty){ try{ if(typeof _newsOpenInApp === 'function') _newsOpenInApp(e.empty, '쿠팡'); else window.open(e.empty, '_blank'); }catch(e6){} }
+    }
     else if(e.a === 'refresh'){
       showCat(S.cat, true).then(function(){ try{ toast('🛍 지금 요일·날씨·시간대에 맞추 재배열!'); }catch(e1){} });
     }
@@ -37554,6 +37571,7 @@ window.refreshShop=refreshShop;
       P.addListener('ready', function(e){ if(e && e.id && e.id !== 'shop') return; S.ready = true; S.fails = 0; try{ localStorage.setItem(K_F, '0'); }catch(e2){} syncCard(); });
       P.addListener('error', function(e){ if(e && e.kind === 'invalid') return; fail('native: ' + ((e && e.message) || '')); });
       P.addListener('action', onAction);
+      P.addListener('input', function(e){ if(e && e.id && e.id !== 'shop') return; S.typing = !!(e && e.on); S.still = 0; });      // 검색 입력 중 = 키보드로 웹뷰 크기가 바뀌어도 숨기지 않고 따라간다
     }catch(e){ fail('listen: ' + e); return; }
     try{
       new MutationObserver(function(){ if(S.shown && active()){ try{ plug().update({ id: 'shop', palette: palette() }); }catch(e3){} } }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
@@ -37574,14 +37592,15 @@ window.refreshShop=refreshShop;
     var k = rkey(r);
     if(k !== S.rk){ S.chg = (t - S.chgAt < 450) ? S.chg + 1 : 1; S.chgAt = t; S.rk = k; S.rect = r; S.still = 0; }
     else S.still++;
-    var moving = S.chg >= 3 && S.still < 3;                    // 몇 번 연달아 바뀌는 중 = 탭 전환·키보드 올라오는 중
-    var cov = !moving && covered(r);
+    var moving = !S.typing && S.chg >= 3 && S.still < 3;      // 몇 번 연달아 바뀌는 중 = 탭 전환·키보드 올라오는 중(검색 입력 중이면 키보드는 우리 것이니 숨기지 않는다)
+    var cov = !moving && !S.typing && covered(r);
     if(moving || cov){
       if(S.shown){ hideNative(); }
     } else if(S.good){
       if(!S.shown){ present(S.cur, S.src || 'cache', S.curCat || S.cat, true); }
       else if(S.still === 0 || S.still === 2){ try{ plug().setRect(place(r)); }catch(e){} }
     }
+    if(!S.shown && S.typing) S.typing = false;                  // 숨겨졌으면 입력칸도 내려갔다(포커스 이벤트가 안 올 수 있다)
     // 첫 그림 8초 지연
     if(S.shown && !S.ready && t - S.showAt > 8000) { fail('ready timeout'); return; }
     // 상태 확인 2초마다
@@ -37625,7 +37644,7 @@ window.refreshShop=refreshShop;
       if(!S.on) s = '꺼짐 — 예전 방식(웹 쇼핑 화면)으로 그려요.';
       else if(S.failed || S.fails >= 2) s = '네이티브 쇼핑 화면에 문제가 있어 웹 화면으로 대신 보여주고 있어요' + (S.why ? ' (' + S.why + ')' : '') + '. 스위치를 깜다 켜면 다시 시도해요.';
       else if(S.badFresh > 0) s = '엔진이 준 화면이 올바르지 않아 저장해 둔 화면을 쓰고 있어요' + (S.why ? ' (' + S.why + ')' : '') + '.';
-      else s = '켜짐 — 쇼핑 탭의 카테고리와 상품 목록을 엔진이 정한 대로 기기가 직접 그려요(실험 중).';
+      else s = '켜짐 — 쇼핑 탭의 안내·검색줄·카테고리·상품 목록을 엔진이 정한 대로 기기가 직접 그려요(실험 중).';
       if(st && st.textContent !== s) st.textContent = s;
     }catch(e){}
   }
