@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-18s44";
+var ENGINE_VERSION = "route-v2-2026-10-18s45";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -11424,7 +11424,7 @@ async function handleScreenShop(request) {
 //        facts = \uc571\uc774 \ubaa8\uc740 \uae30\uae30 \uc0ac\uc2e4(\uc804\ubd80 \uc120\ud0dd \u2014 \uc5c6\uc73c\uba74 \uae30\ubcf8\uac12):
 //          id: \ud604\uc7ac \ucee4\ubba4\ub2c8\ud2f0 \uc544\uc774\ub514('' \uc774\uba74 \uc5c6\uc74c) \u00b7 np:{arrive,transfer,arrive_reco: 1|0} \u00b7 npd: \uc54c\ub9bc \uad8c\ud55c \uac70\ubd80(1|0) \u00b7 rl: \ub3c4\ucc29 \uc624\ucc28 \uae30\ub85d(1|0)
 //          th: 'dark'|'pastel' \u00b7 sam: \uac24\ub7ed\uc2dc(1|0) \u00b7 samw: \uc571 \ubc30\ud130\ub9ac '\uc81c\ud55c\ub428'(1|0) \u00b7 errn: \uc624\ub958 \ub85c\uadf8 \uac1c\uc218 \u00b7 cm: \ucd9c\ud1f4\uadfc \uc54c\ub9bc(1|0|\uc5c6\uc74c) \u00b7 ovl: \uc624\ubc84\ub808\uc774(1|0|\uc5c6\uc74c)
-//          feat: { nm|sn|htl|scr|scrs|scrf : { h: \uc774 \uae30\ub2a5\uc774 \uc788\ub098(1|0), on: \uc2a4\uc704\uce58(1|0), f: \ubb38\uc81c\ub85c \uc6f9\uc73c\ub85c \ub3cc\uc544\uac14\ub098(1|0), w: \ubb38\uc81c \uc0ac\uc720, b: \uc800\uc7a5\ubcf8 \uc0ac\uc6a9 \uc911(1|0) } }
+//          feat: { nm|sn|htl|scr|scrs|scrf|scrn : { h: \uc774 \uae30\ub2a5\uc774 \uc788\ub098(1|0), on: \uc2a4\uc704\uce58(1|0), f: \ubb38\uc81c\ub85c \uc6f9\uc73c\ub85c \ub3cc\uc544\uac14\ub098(1|0), w: \ubb38\uc81c \uc0ac\uc720, b: \uc800\uc7a5\ubcf8 \uc0ac\uc6a9 \uc911(1|0) } }
 // \ucd9c\ub825  { ok, v:1, screen:'settings', rev, cover:'tab', head:[], body:[\ub178\ub4dc\u2026] }  \u2190 \ub178\ub4dc \uc885\ub958\ub294 native/ScreenCore.java \uc640 \uac19\ub2e4
 //        panel{kids} \u00b7 text \u00b7 box \u00b7 toggle{key} \u00b7 navrow{act} \u00b7 select{act:{a:'sel'}} \u00b7 field{key} \u00b7 button \u00b7 spacer
 //        act = {a:'set',key} (\uc2a4\uc704\uce58 \u2014 \uc571\uc774 \uba3c\uc800 \ub4a4\uc9d1\uace0 \uc54c\ub9b0\ub2e4) | {a:'call',v} (\uc571 \uc548 \ud568\uc218 \ud638\ucd9c: saveId\u00b7clearId\u00b7pol.*\u00b7errlog) | {a:'web',v} (\uc6f9 \uce74\ub4dc \uc5f4\uae30) | {a:'sel',v} (\uace0\ub974\uae30)
@@ -11451,7 +11451,9 @@ var SETTINGS_FEATS = [
   { k: 'scrs', title: '\ub124\uc774\ud2f0\ube0c \uc124\uc815 \ud654\uba74', desc: '\uc9c0\uae08 \ubcf4\uace0 \uc788\ub294 \uc774 \uc124\uc815 \ud654\uba74\uc744 \uc5d4\uc9c4\uc774 \ud654\uba74 \uad6c\uc131\uae4c\uc9c0 \uc815\ud574 \ub0b4\ub824\uc8fc\uace0, \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694. \ub044\uba74 \uc608\uc804 \uc6f9 \uc124\uc815 \ud654\uba74\uc73c\ub85c \ub3cc\uc544\uac00\uc694.',
     off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9 \uc124\uc815 \ud654\uba74)\uc73c\ub85c \uadf8\ub824\uc694.', bad: '\ub124\uc774\ud2f0\ube0c \uc124\uc815 \ud654\uba74\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc6f9 \ud654\uba74\uc73c\ub85c \ub300\uc2e0 \ubcf4\uc5ec\uc8fc\uace0 \uc788\uc5b4\uc694', stale: '\uc5d4\uc9c4\uc774 \uc900 \ud654\uba74\uc774 \uc62c\ubc14\ub974\uc9c0 \uc54a\uc544 \uc800\uc7a5\ud574 \ub454 \ud654\uba74\uc744 \uc4f0\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \uc124\uc815 \ud654\uba74\uc744 \uc5d4\uc9c4\uc774 \uc815\ud55c \ub300\ub85c \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694(\uc2e4\ud5d8 \uc911).' },
   { k: 'scrf', title: '\ub124\uc774\ud2f0\ube0c \ub9db\uc9d1 \ud654\uba74', desc: '\ub9db\uc9d1 \ud0ed\uc758 \uba38\ub9ac\uc904\u00b7\uce74\ud14c\uace0\ub9ac \uce69\u00b7\ub9db\uc9d1 \ubaa9\ub85d\uc744 \uc5d4\uc9c4\uc774 \ubd84\ub958\u00b7\uac70\ub974\uae30\u00b7\ubb38\uad6c\uae4c\uc9c0 \uc815\ud574 \ub0b4\ub824\uc8fc\uace0, \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694(\ubd80\ub4dc\ub7ec\uc6b4 \uc2a4\ud06c\ub864). \uac00\uac8c\ub97c \ub204\ub974\uba74 \uae38\ucc3e\uae30 \uc9c0\ub3c4\uac00 \uc5f4\ub824\uc694. \ubb38\uc81c\uac00 \uc0dd\uae30\uba74 \uc608\uc804 \uc6f9 \ud654\uba74\uc73c\ub85c \ub3cc\uc544\uac00\uc694.',
-    off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9 \ub9db\uc9d1 \ud654\uba74)\uc73c\ub85c \uadf8\ub824\uc694.', bad: '\ub124\uc774\ud2f0\ube0c \ub9db\uc9d1 \ud654\uba74\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc6f9 \ud654\uba74\uc73c\ub85c \ub300\uc2e0 \ubcf4\uc5ec\uc8fc\uace0 \uc788\uc5b4\uc694', stale: '\uc5d4\uc9c4\uc774 \uc900 \ud654\uba74\uc774 \uc62c\ubc14\ub974\uc9c0 \uc54a\uc544 \uc800\uc7a5\ud574 \ub454 \ud654\uba74\uc744 \uc4f0\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \ub9db\uc9d1 \ud0ed\uc758 \uba38\ub9ac\uc904\u00b7\uce69\u00b7\ubaa9\ub85d\uc744 \uc5d4\uc9c4\uc774 \uc815\ud55c \ub300\ub85c \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694(\uc2e4\ud5d8 \uc911).' }
+    off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9 \ub9db\uc9d1 \ud654\uba74)\uc73c\ub85c \uadf8\ub824\uc694.', bad: '\ub124\uc774\ud2f0\ube0c \ub9db\uc9d1 \ud654\uba74\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc6f9 \ud654\uba74\uc73c\ub85c \ub300\uc2e0 \ubcf4\uc5ec\uc8fc\uace0 \uc788\uc5b4\uc694', stale: '\uc5d4\uc9c4\uc774 \uc900 \ud654\uba74\uc774 \uc62c\ubc14\ub974\uc9c0 \uc54a\uc544 \uc800\uc7a5\ud574 \ub454 \ud654\uba74\uc744 \uc4f0\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \ub9db\uc9d1 \ud0ed\uc758 \uba38\ub9ac\uc904\u00b7\uce69\u00b7\ubaa9\ub85d\uc744 \uc5d4\uc9c4\uc774 \uc815\ud55c \ub300\ub85c \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694(\uc2e4\ud5d8 \uc911).' },
+  { k: 'scrn', title: '\ub124\uc774\ud2f0\ube0c \ub274\uc2a4 \ud654\uba74', desc: '\ucee4\ubba4\ub2c8\ud2f0 > \ub274\uc2a4\uc758 \uce74\ud14c\uace0\ub9ac \uce69\u00b7\uae30\uc0ac \ubaa9\ub85d\uc744 \uc5d4\uc9c4\uc774 \ubd84\ub958\u00b7\uac70\ub974\uae30\u00b7\uc2dc\uac04 \ubb38\uad6c\uae4c\uc9c0 \uc815\ud574 \ub0b4\ub824\uc8fc\uace0, \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694(\ubd80\ub4dc\ub7ec\uc6b4 \uc2a4\ud06c\ub864). \uae30\uc0ac\ub97c \ub204\ub974\uba74 \uc694\uc57d\uacfc \uc6d0\ubb38 \ubcf4\uae30\uac00 \uc5f4\ub824\uc694. \ubb38\uc81c\uac00 \uc0dd\uae30\uba74 \uc608\uc804 \uc6f9 \ud654\uba74\uc73c\ub85c \ub3cc\uc544\uac00\uc694.',
+    off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9 \ub274\uc2a4 \ud654\uba74)\uc73c\ub85c \uadf8\ub824\uc694.', bad: '\ub124\uc774\ud2f0\ube0c \ub274\uc2a4 \ud654\uba74\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc6f9 \ud654\uba74\uc73c\ub85c \ub300\uc2e0 \ubcf4\uc5ec\uc8fc\uace0 \uc788\uc5b4\uc694', stale: '\uc5d4\uc9c4\uc774 \uc900 \ud654\uba74\uc774 \uc62c\ubc14\ub974\uc9c0 \uc54a\uc544 \uc800\uc7a5\ud574 \ub454 \ud654\uba74\uc744 \uc4f0\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \ub274\uc2a4 \ud0ed\uc758 \uce69\u00b7\uae30\uc0ac \ubaa9\ub85d\uc744 \uc5d4\uc9c4\uc774 \uc815\ud55c \ub300\ub85c \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694(\uc2e4\ud5d8 \uc911).' }
 ];
 
 function settingsFlag(v, def) { return v == null ? def : (v === 1 || v === true || v === '1'); }
@@ -11747,6 +11749,277 @@ async function handleScreenFood(request) {
 }
 // ===== FOOD ENGINE END =====
 
+// ===== NEWS ENGINE BEGIN =====
+// \uae38\ub3d9\ubb34 \u2014 \ub274\uc2a4 \ud654\uba74 \uc5d4\uc9c4(\ubd84\ub958\u00b7\uac70\ub974\uae30\u00b7\uc911\ubcf5 \uc815\ub9ac\u00b7\uc2dc\uac04 \ubb38\uad6c\u00b7\uc0c1\uc138 \ubb38\uad6c\u00b7\ud654\uba74 \uad6c\uc131 JSON) \uc21c\uc218 \uacc4\uc0b0 \ubaa8\ub4c8 (route-v2 Worker \uc5d0 \ubd99\uc5ec \ub123\ub294 \uc21c\uc218 \ud568\uc218; \ub2e8\uc77c \ucd9c\ucc98)
+//
+// \u2605 \uc6d0\uce59(YJ): "\ubaa8\ub4e0 \uc5f0\uc0b0\uc740 \uc5d4\uc9c4\uc774 \ud55c\ub2e4. \uc571\uc740 \uc5d4\uc9c4\uc774 \uacc4\uc0b0\ud55c \uadf8\ub9bc\ub9cc \uadf8\ub9b0\ub2e4."  (2026-10-18 \uc11c\ubc84 \uad6c\ub3d9 \ud654\uba74 4\ud638 \u2014 \ucee4\ubba4\ub2c8\ud2f0 > \ub274\uc2a4)
+//   \uc608\uc804\uc5d4 \ub274\uc2a4 \ud0ed\uc758 \uce74\ud14c\uace0\ub9ac \ubd84\ub958 \uaddc\uce59\u00b7\uc7a1\uc74c(\ubb36\uc74c \uae30\uc0ac) \uac70\ub974\uae30\u00b7\uc911\ubcf5 \uc815\ub9ac\u00b7'\uc804\uccb4'\uc758 \uace8\uace0\ub8e8 \ubf51\uae30\u00b7'3\uc77c \ucef7'\u00b7'N\ubd84 \uc804' \ubb38\uad6c\u00b7\uc0c1\uc138 \ud31d\uc5c5\uc758 \uc694\uc57d \uc815\ub9ac/\uc5b8\ub860\uc0ac \uc774\ub984\uc774 www/index.html \uc548\uc5d0 \uc788\uc5c8\ub2e4.
+//   \uc774\uc81c \uc571\uc740 '\ubc1b\uc544 \ub454 \uae30\uc0ac \ubaa9\ub85d(\uc6d0\uc790\ub8cc)'\uacfc '\uace0\ub978 \uce69'\ub9cc \ubcf4\ub0b4\uace0, \uc5d4\uc9c4\uc774 \ubb34\uc5c7\uc744 \uc5b4\ub5a4 \uc21c\uc11c\ub85c \ubcf4\uc77c\uc9c0\u00b7\ubb38\uad6c\ub294 \ubb34\uc5c7\uc778\uc9c0\uae4c\uc9c0 \uc815\ud574 \ud654\uba74 JSON \uc73c\ub85c \ub0b4\ub824 \uc900\ub2e4.
+//   \uc571(\ub124\uc774\ud2f0\ube0c ScreenCore/ScreenView)\uc740 \uadf8 JSON \uc744 \uac80\uc99d\ud574 \uadf8\ub9ac\uae30\ub9cc \ud55c\ub2e4. \uc6f9 \ub274\uc2a4 \ud654\uba74\uc740 \ud3f4\ubc31(\uc5d4\uc9c4\u00b7\ub124\uc774\ud2f0\ube0c\uac00 \uc548 \ub420 \ub54c)\uc73c\ub85c\ub9cc \ub0a8\ub294\ub2e4.
+//   \u203b \uc544\ub798 '\uc6f9\uc5d0\uc11c \uc62e\uaca8 \uc628 \ubd80\ubd84'(\ubd84\ub958 \uaddc\uce59\u00b7\ub514\ucf54\ub4dc\u00b7\uc694\uc57d \uc815\ub9ac\u00b7\uc5b8\ub860\uc0ac \uc774\ub984)\uc740 www/index.html \uc758 _NEWS_RULES/_htmlDecode/_newsCleanDesc/_newsSourceLabel/_newsClassify \uc640 \uae00\uc790 \uadf8\ub300\ub85c \uac19\ub2e4
+//     (test/news_engine.test.js \uac00 \uc6f9 \ud568\uc218\uc640 \uac19\uc740 \uacb0\uacfc\ub97c \ub0b4\ub294\uc9c0 \ub300\uc870\ud55c\ub2e4).
+//
+// \uc785\ub825  newsScreen({ cap, now }, facts, rows)
+//        cap   = \uc571\uc774 \uadf8\ub9b4 \uc218 \uc788\ub294 \ud654\uba74 \uaddc\uaca9 \uc218\uc900(5 \uc774\uc0c1\uc774\uc5b4\uc57c \ub274\uc2a4 \ud654\uba74\uc744 \ub9cc\ub4e0\ub2e4)
+//        facts = { cat: \uace0\ub978 \uce69('\uc804\uccb4'|'\uc99d\uc2dc'|\u2026) }
+//        rows  = [\uae30\uc0ac\u2026]   \uae30\uc0ac = [\uc81c\ubaa9, \ub9c1\ud06c, \uc5b8\ub860\uc0ac, \uc2dc\uac01(ms), \ubc1b\uc744 \ub54c \uc11c\ubc84\uac00 \ubd99\uc778 \ubd84\ub958, \uc694\uc57d]
+// \ucd9c\ub825  { ok, v:1, screen:'news', rev, cover:'tab', head:[chips], body:[news\u2026|text|spacer], info:{cat,n,all} }
+//        news{title,sub,act:{a:'call',v:'nw.<\ubc88\ud638>'}}  \u2014 \ubc88\ud638 = \uc571\uc774 \ubcf4\ub0b8 \ubc30\uc5f4\uc758 \uc6d0\ub798 \uc704\uce58(\ub204\ub974\uba74 \uc571\uc774 \uadf8 \uae30\uc0ac\uc758 \uc0c1\uc138\ub97c \uc5d4\uc9c4\uc5d0 \ubb3b\ub294\ub2e4)
+//      newsDetail({ cap, now }, row) \u2192 { ok, v:1, detail:{ cat, title, meta, desc, empty, src, notice, btn } }  \uc0c1\uc138 \ud31d\uc5c5\uc5d0 \uadf8\ub300\ub85c \uc4f8 \ubb38\uad6c
+// \ub9e8 \uc544\ub798 module.exports \ub294 \uc2dc\ud5d8(Node)\uc6a9\uc774\uace0 Worker \uc5d0\uc11c\ub294 \ud568\uc218 \uc120\uc5b8\ub9cc \uc4f0\uc778\ub2e4.
+'use strict';
+var NEWS_SCREEN_V = 1;
+var NW_CATS = ['\uc804\uccb4','\uc99d\uc2dc','\uacbd\uc81c','\uc0ac\ud68c','\uc815\uce58','\uc5f0\uc608','\uc2a4\ud3ec\uce20','IT'];
+var NW_QUOTE_MAX = 200;                 // \uc694\uc57d \ub178\ucd9c \uc0c1\ud55c(\uc6f9 _NEWS_POLICY.quoteMaxChars)
+var NW_MAX_IN = 1200;                   // \ubc1b\ub294 \uae30\uc0ac \uc218 \uc0c1\ud55c(\uc6f9 \uc800\uc7a5\uc18c \uc0c1\ud55c\uacfc \uac19\ub2e4)
+var NW_MAX_SHOW = 300;                  // \ud55c \ubc88\uc5d0 \ubcf4\ub0b4\ub294 \uae30\uc0ac \uc904 \uc218 \uc0c1\ud55c
+var NW_ALL_MAX = 200;                   // '\uc804\uccb4' \uce69\uc5d0\uc11c \ubf51\ub294 \uc218(\uc6f9\uacfc \uac19\ub2e4)
+var NW_FRESH_MS = 3 * 24 * 3600 * 1000; // '\uc804\uccb4' \uce69\uc740 3\uc77c \uc548 \uae30\uc0ac\ub9cc(\uc6f9\uacfc \uac19\ub2e4)
+
+// \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 \uc6f9\uc5d0\uc11c \uc62e\uaca8 \uc628 \ubd80\ubd84(\uae00\uc790 \uadf8\ub300\ub85c) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+var NW_RULES = [
+  // \u2605 \ubbf8\uad6d \uc99d\uc2dc \uc6a9\uc5b4\ub97c \ub300\ud3ed \ubcf4\uac15 \u2014 '\ub274\uc695\uc99d\uc2dc\u00b7\uc6d4\uac00\u00b7\uc11c\ud559\uac1c\ubbf8' \uac19\uc740 \uae30\uc0ac\uac00 \uacbd\uc81c\ub85c \uc0c8\uc5b4\ub098\uac14\ub2e4.
+  //   \uc774 \uaddc\uce59\uc774 \ubaa9\ub85d \ub9e8 \uc55e\uc774\ub77c \uacbd\uc81c \uaddc\uce59\ubcf4\ub2e4 \uba3c\uc800 \uc7a1\ud78c\ub2e4.
+  { cat:'\uc99d\uc2dc', re:/(\ucf54\uc2a4\ud53c|\ucf54\uc2a4\ub2e5|\uc99d\uc2dc|\uc8fc\uac00|\uc8fc\uc2dd|\uc0c1\ud55c\uac00|\ud558\ud55c\uac00|\uae09\ub4f1\uc8fc|\uae09\ub77d\uc8fc|\uc2dc\uac00\ucd1d\uc561|\uacf5\ubaa8\uc8fc|IPO\b|\uc0c1\uc7a5\ud3d0\uc9c0|\uae30\uad00\s*\uc21c\ub9e4\uc218|\uc678\uad6d\uc778\s*\uc21c\ub9e4(\uc218|\ub3c4)|\ubc30\ub2f9\uae08|ETF|\ub098\uc2a4\ub2e5|\ub2e4\uc6b0\s*(\uc9c0\uc218|\uc874\uc2a4)|S&P\s*5?00?|\ub2c8\ucf00\uc774|\uc99d\uad8c\uac00|\uacf5\ub9e4\ub3c4|\uc7a5\uc911|\uc885\uac00|\uac1c\uc7a5|\ud3d0\uc7a5|\ub9e4\uc218\uc138|\ub9e4\ub3c4\uc138|\ud14c\ub9c8\uc8fc|\uc6b0\uc120\uc8fc|\ubc18\ub4f1\uc7a5|\uc57d\uc138\uc7a5|\uac15\uc138\uc7a5|\uc9c0\ubd84\s*(\uc778\uc218|\ub9e4\uac01|\ucde8\ub4dd)|\ub274\uc695\s*\uc99d\uc2dc|\ubbf8\uad6d\s*\uc99d\uc2dc|\uc6d4\uac00|\uc11c\ud559\s*\uac1c\ubbf8|\ub3d9\ud559\s*\uac1c\ubbf8|\ud544\ub77c\ub378\ud53c\uc544\s*\ubc18\ub3c4\uccb4|VIX|\ub7ec\uc140\s*2000|\ube14\ub8e8\uce69|\uc0ac\uc774\ub4dc\uce74|\uc11c\ud0b7\ube0c\ub808\uc774\ucee4|\uc5b4\ub2dd\s*(\uc11c\ud504\ub77c\uc774\uc988|\uc1fc\ud06c)|\uc2e4\uc801\s*\ubc1c\ud45c|\ubaa9\ud45c\uc8fc\uac00|\uc99d\uad8c\uc0ac\s*(\ub9ac\ud3ec\ud2b8|\uc804\ub9dd)|\uc560\ub110\ub9ac\uc2a4\ud2b8|\uc0c1\uc7a5\s*\uccab\ub0a0|\ub530\uc0c1|\uc7a5\s*\ub9c8\uac10|\ud504\ub9ac\ub9c8\ucf13|\uc2dc\uac04\uc678\s*\uac70\ub798)/ },
+  { cat:'\uc2a4\ud3ec\uce20', re:/(\ud504\ub85c\uc57c\uad6c|KBO|\uba54\uc774\uc800\ub9ac\uadf8|MLB|\ucd95\uad6c|K\ub9ac\uadf8|\ud504\ub9ac\ubbf8\uc5b4\ub9ac\uadf8|EPL|\uc190\ud765\ubbfc|\uc774\uac15\uc778|\uae40\ubbfc\uc7ac|\ub18d\uad6c|KBL|NBA|\ubc30\uad6c|V\ub9ac\uadf8|\uace8\ud504|LPGA|PGA|\uc62c\ub9bc\ud53d|\uc6d4\ub4dc\ucef5|\uc544\uc2dc\uc548\uac8c\uc784|\uad6d\uac00\ub300\ud45c|\uc120\ubc1c\s*\ud22c\uc218|\ud648\ub7f0|\ud0c0\uc728|\uc2b9\uc810|\uc5f0\uc2b9|\uc5f0\ud328|\uc804\uc801|\ub9ac\uadf8\s*\uc21c\uc704|\uc911\uac04\uc21c\uc704|\uc6b0\uc2b9\s*\ud6c4\ubcf4|\uc774\uc801|FA\s*\uacc4\uc57d|\uad6c\ub2e8|\uac10\ub3c5\s*(\uc120\uc784|\uacbd\uc9c8)|[A-Z]{1,3}FC\b|FC\b|\uc720\ub098\uc774\ud2f0\ub4dc|(\uc624\ub298|\ub0b4\uc77c|\uc5b4\uc81c)\uc758\s*\uacbd\uae30|\uacbd\uae30\s*\uacb0\uacfc|0-[0-9]|[0-9]-[0-9]\s*(\uc2b9|\ud328|\ubb34)|\uc11d\ud328|\uc644\uc2b9|\uc644\ubd09|\uc120\ub450\s*\uacbd\uc7c1|\uacb0\uc2b9\ud0c0|\ub05d\ub0b4\uae30|\uc5ed\uc804\uc2b9|\ubb34\ub4dd\uc810|\ud0c0\uc810|\ub3c4\ub8e8|\uc0bc\uc9c4|\uc548\ud0c0|\ud22c\uad6c|\ucd9c\ub8e8|\ub450\uc0b0|\uae30\uc544|KIA|\ud55c\ud654|\ub86f\ub370|\uc0bc\uc131\s*\ub77c\uc774\uc628\uc988|LG\s*\ud2b8\uc708\uc2a4|\ud0a4\uc6c0|SSG|NC\s*\ub2e4\uc774\ub178\uc2a4|kt\s*\uc704\uc988)/ },
+  { cat:'\uc5f0\uc608', re:/(\uc544\uc774\ub3cc|\uac00\uc218|\ubc30\uc6b0|\ub4dc\ub77c\ub9c8|\uc601\ud654|\uc608\ub2a5|\ubc29\uc1a1\uc778|\ucf58\uc11c\ud2b8|\uc568\ubc94|\ucef4\ubc31|\ub370\ubdd4|\uc74c\uc6d0|\ube4c\ubcf4\ub4dc|K-?\ud31d|\uc544\uc774\uc720|BTS|\ubc29\ud0c4|\ube14\ub799\ud551\ud06c|\ub274\uc9c4\uc2a4|\uc138\ube10\ud2f4|\ub137\ud50c\ub9ad\uc2a4|\ub514\uc988\ub2c8\+|\uc2dc\uccad\ub960|\ubc15\uc2a4\uc624\ud53c\uc2a4|\uc5f4\uc560|\uacb0\ud63c\s*\ubc1c\ud45c|\uc774\ud63c\s*\ubc1c\ud45c|\uc18c\uc18d\uc0ac|\ud32c\ubbf8\ud305|\ubb34\ub300\s*\uc778\uc0ac|\uce90\uc2a4\ud305|OST|\uc608\ub2a5\s*\ucd9c\uc5f0)/ },
+  { cat:'\uc815\uce58', re:/(\ub300\ud1b5\ub839|\uad6d\ud68c|\uc5ec\ub2f9|\uc57c\ub2f9|\uc815\ub2f9|\uc758\uc6d0|\uc7a5\uad00|\ucd1d\ub9ac|\uccad\uc640\ub300|\ub300\ud1b5\ub839\uc2e4|\uc120\uac70|\ub300\uc120|\ucd1d\uc120|\uacf5\ucc9c|\ud0c4\ud575|\ud2b9\uac80|\uad6d\uc815\uac10\uc0ac|\uac1c\uac01|\uc678\uad50\ubd80|\uc815\uc0c1\ud68c\ub2f4|\ubd81\ud55c|\ubbf8\uc0ac\uc77c\s*\ubc1c\uc0ac|\uad6d\ubc29\ubd80|\ud55c\ubbf8|\ud55c\uc77c|\ud55c\uc911\s*\uc815\uc0c1|\uc608\uc0b0\uc548|\uc2dc\uc815\uc5f0\uc124|\uad6d\uc815\s*\uacfc\uc81c)/ },
+  { cat:'\uacbd\uc81c', re:/(\ud658\uc728|\uae08\ub9ac|\ubb3c\uac00|\uc778\ud50c\ub808|\uae30\uc900\uae08\ub9ac|\ud55c\uad6d\uc740\ud589|\uc218\ucd9c|\uc218\uc785|\ubb34\uc5ed\uc218\uc9c0|GDP|\uacbd\uae30\s*\uce68\uccb4|\ubd80\ub3d9\uc0b0|\uc9d1\uac12|\uc804\uc138|\uc544\ud30c\ud2b8\s*\uac12|\ubd84\uc591|\ub300\ucd9c|\uac00\uacc4\ubd80\ucc44|\uc2e4\uc5c5\ub960|\uace0\uc6a9\s*\uc9c0\ud45c|\uc720\uac00|\uad6d\uc81c\uc720\uac00|\uc6d0\uc790\uc7ac|\uad00\uc138|\uc7ac\uc815|\uc138\uae08|\uc5f0\uae08|\uad6d\ubbfc\uc5f0\uae08|\uc740\ud589|\ubcf4\ud5d8|\uce74\ub4dc\uc0ac|\uc790\uc601\uc5c5|\uc18c\ube44\uc790\ubb3c\uac00|\uacbd\uc0c1\uc218\uc9c0|\ub0b4\uc218)/ },
+  { cat:'IT',   re:/(\uc778\uacf5\uc9c0\ub2a5|\bAI\b|\ucc57\ubd07|\ucc57GPT|ChatGPT|\ubc18\ub3c4\uccb4|\uba54\ubaa8\ub9ac|\ud30c\uc6b4\ub4dc\ub9ac|\uc2a4\ub9c8\ud2b8\ud3f0|\uac24\ub7ed\uc2dc|\uc544\uc774\ud3f0|\uc560\ud50c|\uc0bc\uc131\uc804\uc790|LG\uc804\uc790|\ub124\uc774\ubc84|\uce74\uce74\uc624|\uad6c\uae00|\uba54\ud0c0|\uc5d4\ube44\ub514\uc544|\ud14c\uc2ac\ub77c|\uc804\uae30\ucc28|\ubc30\ud130\ub9ac|\uc790\uc728\uc8fc\ud589|\ub85c\ubd07|\ud074\ub77c\uc6b0\ub4dc|\ub370\uc774\ud130\uc13c\ud130|\ud574\ud0b9|\ubcf4\uc548\s*\ucde8\uc57d|\uac1c\uc778\uc815\ubcf4\s*\uc720\ucd9c|\uc571\s*\ucd9c\uc2dc|\ud50c\ub7ab\ud3fc|\uc2a4\ud0c0\ud2b8\uc5c5|\ube14\ub85d\uccb4\uc778|\uac00\uc0c1\uc790\uc0b0|\ube44\ud2b8\ucf54\uc778|\ucf54\uc778|\uba54\ud0c0\ubc84\uc2a4|\ud1b5\uc2e0\uc0ac|5G|6G|\uc704\uc131|\uc6b0\uc8fc\s*\ubc1c\uc0ac|\ub204\ub9ac\ud638)/ },
+  { cat:'\uc0ac\ud68c', re:/(\uacbd\ucc30|\uac80\ucc30|\ubc95\uc6d0|\uc7ac\ud310|\ud310\uacb0|\uad6c\uc18d|\uae30\uc18c|\uc0ac\uac74|\uc0ac\uace0|\ud654\uc7ac|\uc9c0\uc9c4|\ud0dc\ud48d|\ud638\uc6b0|\ud3ed\uc5fc|\ud55c\ud30c|\ubbf8\uc138\uba3c\uc9c0|\uad50\ud1b5\uc0ac\uace0|\uc74c\uc8fc\uc6b4\uc804|\ud559\uad50|\uad50\uc721|\uc785\uc2dc|\uc218\ub2a5|\uc758\ub8cc|\ubcd1\uc6d0|\uc758\uc0ac|\uac04\ud638|\ucf54\ub85c\ub098|\uac10\uc5fc|\ubc31\uc2e0|\ubcf5\uc9c0|\ucd9c\uc0b0\uc728|\uace0\ub839\ud654|\uc9c0\ud558\ucca0|\ubc84\uc2a4\s*\ud30c\uc5c5|\ucca0\ub3c4|\uacf5\ud56d|\uc0b0\ubd88|\uc2e4\uc885|\uad6c\uc870|\ud3ed\uc6b0|\ub300\uc124|\uc8fc\uc758\ubcf4|\uacbd\ubcf4)/ }
+];
+
+var NW_NOISE = /(\uc774\s*\uc2dc\uac01\s*\ud5e4\ub4dc\ub77c\uc778|\ud5e4\ub4dc\ub77c\uc778\s*\ubaa8\uc74c|\uc8fc\uc694\s*\ub274\uc2a4\s*\ube0c\ub9ac\ud551|\uc624\ub298\uc758\s*\uc8fc\uc694\s*\ub274\uc2a4|\ub274\uc2a4\s*\ube0c\ub9ac\ud551)|^\s*\[(\ubd80\uace0|\uc778\uc0ac|\ub3d9\uc815|\uc54c\ub9bc|\uacf5\uc9c0|\uc815\uc815|\uc0ac\uace0)\]/;
+
+function nwNoise(title){
+  try{ return NW_NOISE.test(String(title || '')); }catch(e){ return false; }
+}
+
+var NW_ENT = {
+  nbsp:' ', amp:'&', lt:'<', gt:'>', quot:'"', apos:"'", ldquo:'\u201C', rdquo:'\u201D',
+  lsquo:'\u2018', rsquo:'\u2019', hellip:'\u2026', middot:'\u00B7', mdash:'\u2014',
+  ndash:'\u2013', laquo:'\u00AB', raquo:'\u00BB', bull:'\u2022', deg:'\u00B0',
+  times:'\u00D7', copy:'\u00A9', reg:'\u00AE', trade:'\u2122', euro:'\u20AC',
+  won:'\u20A9', percnt:'%', lsaquo:'\u2039', rsaquo:'\u203A', prime:'\u2032'
+};
+
+function nwDecode(str){
+  var t = String(str == null ? '' : str);
+  // \uc774\uc911\u00b7\uc0bc\uc911 \uc778\ucf54\ub529 \ub300\ube44 \ucd5c\ub300 3\ud68c \ubc18\ubcf5
+  for(var pass = 0; pass < 3; pass++){
+    var before = t;
+    t = t.replace(/&#x([0-9a-fA-F]+);/g, function(_, h){
+          try{ return String.fromCodePoint(parseInt(h, 16)); }catch(e){ return _; }
+        })
+        .replace(/&#(\d+);/g, function(_, d){
+          try{ return String.fromCodePoint(parseInt(d, 10)); }catch(e){ return _; }
+        })
+        .replace(/&([a-zA-Z]+);/g, function(_, name){
+          var k = name.toLowerCase();
+          return (NW_ENT[k] != null) ? NW_ENT[k] : _;
+        });
+    if(t === before) break;
+  }
+  return t;
+}
+
+function nwCleanDesc(raw){
+  try{
+    var t = String(raw || '');
+    t = nwDecode(t);                                   // \uc5d4\ud2f0\ud2f0 \uba3c\uc800 \ub514\ucf54\ub4dc
+    t = t.replace(/<[^>]*>/g, ' ');                       // \uadf8 \ub4a4 \ud0dc\uadf8 \uc81c\uac70
+    t = nwDecode(t);                                   // \ud0dc\uadf8 \uc548\uc5d0 \uc228\uc5b4 \uc788\ub358 \uc5d4\ud2f0\ud2f0 \uc7ac\ucc98\ub9ac
+    t = t.replace(/\s+/g,' ').trim();
+    t = t.replace(/^[\(\[][^\)\]]{0,20}[\)\]]\s*/,'');    // \uc55e\uba38\ub9ac (\uc11c\uc6b8=\uc5f0\ud569\ub274\uc2a4) \ub4f1
+    t = t.replace(/^[\uac00-\ud7a3]{2,4}\s*(\uae30\uc790|\ud2b9\ud30c\uc6d0)\s*=\s*/,'');  // \uae30\uc790\uba85 \uc11c\ub450 \uc81c\uac70
+    t = t.replace(/^[<\[]\s*(\uc575\ucee4|\uae30\uc790|\ub9ac\ud3ec\ud2b8|\ucd9c\uc5f0)\s*[>\]]\s*/,'');
+    t = t.replace(/^[\(\[]\s*/,'').replace(/\s*[\)\]]$/,'');
+    if(t.length < 15) return '';                          // \uc758\ubbf8 \uc5c6\ub294 \uc870\uac01\uc740 \ubc84\ub9bc
+    if(t.length > NW_QUOTE_MAX)
+      t = t.slice(0, NW_QUOTE_MAX).replace(/\s\S*$/,'') + '\u2026';
+    return t;
+  }catch(e){ return ''; }
+}
+
+function nwSourceLabel(it){
+  var s = (it && it.source) ? String(it.source).trim() : '';
+  if(!s || s === '\ub274\uc2a4'){
+    try{
+      var h = new URL(it.link).hostname.replace(/^www\./,'');
+      var map = {
+        'yna.co.kr':'\uc5f0\ud569\ub274\uc2a4','etnews.com':'\uc804\uc790\uc2e0\ubb38','news1.kr':'\ub274\uc2a41','newsis.com':'\ub274\uc2dc\uc2a4',
+        'mk.co.kr':'\ub9e4\uc77c\uacbd\uc81c','hankyung.com':'\ud55c\uad6d\uacbd\uc81c','edaily.co.kr':'\uc774\ub370\uc77c\ub9ac','sedaily.com':'\uc11c\uc6b8\uacbd\uc81c',
+        'chosun.com':'\uc870\uc120\uc77c\ubcf4','donga.com':'\ub3d9\uc544\uc77c\ubcf4','joongang.co.kr':'\uc911\uc559\uc77c\ubcf4','hani.co.kr':'\ud55c\uaca8\ub808',
+        'khan.co.kr':'\uacbd\ud5a5\uc2e0\ubb38','ytn.co.kr':'YTN','sbs.co.kr':'SBS','kbs.co.kr':'KBS','mbc.co.kr':'MBC',
+        'jtbc.co.kr':'JTBC','mt.co.kr':'\uba38\ub2c8\ud22c\ub370\uc774','fnnews.com':'\ud30c\uc774\ub0b8\uc15c\ub274\uc2a4','asiae.co.kr':'\uc544\uc2dc\uc544\uacbd\uc81c'
+      };
+      for(var k in map){ if(h === k || h.endsWith('.'+k)) return map[k]; }
+      return h;
+    }catch(e){ return '\uc5b8\ub860\uc0ac'; }
+  }
+  return s;
+}
+
+function nwRuleCat(text){
+  try{
+    var t = String(text || '');
+    for(var i=0;i<NW_RULES.length;i++){
+      if(NW_RULES[i].re.test(t)) return NW_RULES[i].cat;
+    }
+  }catch(e){}
+  return '';
+}
+
+function nwClassify(it){
+  try{
+    // \u2605 2026-09-02: \uc81c\ubaa9\uc73c\ub85c \uba3c\uc800 \ud310\ub2e8\ud55c\ub2e4.
+    //   \uc694\uc57d\ubb38\uc5d0\ub294 \uad00\ub828\uae30\uc0ac \ubaa9\ub85d\uc774 \ud1b5\uc9f8\ub85c \ub538\ub824\uc624\ub294 \uacbd\uc6b0\uac00 \uc788\uc5b4(\uad6c\uae00 \ub274\uc2a4\u00b7\uc885\ud569 \ud53c\ub4dc),
+    //   \uc5f0\uc608 \uae30\uc0ac\uac00 \uc694\uc57d\uc5d0 \uc11e\uc778 '\ucf54\uc2a4\ud53c' \ud55c \ub2e8\uc5b4 \ub54c\ubb38\uc5d0 \uc99d\uc2dc\ub85c \ub118\uc5b4\uac00\uace4 \ud588\ub2e4.
+    var byTitle = nwRuleCat(String((it && it.title) || ''));
+    if(byTitle) return byTitle;
+    var byBoth = nwRuleCat(String((it && it.title) || '') + ' ' + String((it && it.desc) || ''));
+    if(byBoth) return byBoth;
+  }catch(e){}
+  // \uaddc\uce59\uc5d0 \uc548 \uac78\ub9ac\uba74 \uc11c\ubc84\uac00 \uc900 \ubd84\ub958 \uc720\uc9c0 (\ub2e8, \uc6b0\ub9ac \uce74\ud14c\uace0\ub9ac\uc5d0 \uc788\ub294 \uac12\ub9cc)
+  var sv = (it && it.cat) ? String(it.cat).trim() : '';
+  if(/^(IT|\uc544\uc774\ud2f0|\ud14c\ud06c|\uacfc\ud559)$/i.test(sv)) return 'IT';
+  if(/^(\ubb38\ud654|\uc0dd\ud65c)$/.test(sv)) return '\uc5f0\uc608';
+  if(/^(\uad6d\uc81c|\uc138\uacc4)$/.test(sv)) return '\uc0ac\ud68c';
+  return (NW_CATS.indexOf(sv) > 0) ? sv : '\uc0ac\ud68c';
+}
+
+// \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 \uc5d4\uc9c4 \ucabd \uc0c8 \ubd80\ubd84 \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+function nwAgo(ts, now) {                          // \uc6f9 _newsAgo \uc640 \uac19\ub2e4(\ud604\uc7ac \uc2dc\uac01\ub9cc \uc778\uc790\ub85c)
+  var m = Math.floor((now - ts) / 60000);
+  if (m < 1) return '\ubc29\uae08';
+  if (m < 60) return m + '\ubd84 \uc804';
+  var h = Math.floor(m / 60);
+  if (h < 24) return h + '\uc2dc\uac04 \uc804';
+  return Math.floor(h / 24) + '\uc77c \uc804';
+}
+function nwStr(v, n) { return typeof v === 'string' ? v.slice(0, n) : (typeof v === 'number' ? String(v).slice(0, n) : ''); }
+function nwHash(s) {                               // djb2 \u2014 \uac19\uc740 \ud654\uba74\uc774\uba74 \uac19\uc740 rev
+  var h = 5381;
+  for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+function nwFacts(f) {
+  f = (f && typeof f === 'object') ? f : {};
+  return { cat: NW_CATS.indexOf(f.cat) >= 0 ? f.cat : '\uc804\uccb4' };
+}
+// \uae30\uc0ac \ud55c \uac74 \u2192 { i, title, link, source, ts, cat, desc }  (\uc81c\ubaa9\uc774 \uc5c6\uac70\ub098 \uc7a1\uc74c\uc774\uba74 null)
+function nwOne(a, i, now) {
+  if (!Array.isArray(a)) return null;
+  var raw = typeof a[0] === 'string' ? a[0].slice(0, 300) : '';
+  if (!raw || !raw.trim() || nwNoise(raw)) return null;
+  var ts = Number(a[3]);
+  var it = {
+    i: i, key: raw.replace(/\s/g, ''),
+    title: nwDecode(raw).replace(/\s+/g, ' ').trim(),
+    link: nwStr(a[1], 400), source: nwDecode(nwStr(a[2], 80)).trim(),
+    ts: isFinite(ts) && ts > 0 ? ts : now,
+    cat: nwStr(a[4], 20), desc: nwDecode(nwStr(a[5], 400))
+  };
+  if (!it.title) return null;
+  it.cat = nwClassify(it);
+  return it;
+}
+function nwList(rows, now) {
+  var out = [], have = {};
+  if (!Array.isArray(rows)) return out;
+  for (var i = 0; i < rows.length && i < NW_MAX_IN; i++) {
+    var it = nwOne(rows[i], i, now);
+    if (!it) continue;
+    if (have[it.key] || (it.link && have['L:' + it.link])) continue;     // \uc81c\ubaa9\u00b7\ub9c1\ud06c\uac00 \uac19\uc740 \uae30\uc0ac\ub294 \ud55c \ubc88\ub9cc
+    have[it.key] = 1; if (it.link) have['L:' + it.link] = 1;
+    out.push(it);
+  }
+  return out;
+}
+function nwPick(all, cat, now) {
+  var items;
+  if (cat === '\uc804\uccb4') {
+    var cut = now - NW_FRESH_MS, byCat = {};
+    all.filter(function (it) { return !(it.ts && it.ts < cut); }).forEach(function (it) { (byCat[it.cat] = byCat[it.cat] || []).push(it); });
+    Object.keys(byCat).forEach(function (k) { byCat[k].sort(function (a, b) { return (b.ts || 0) - (a.ts || 0); }); });
+    var order = NW_CATS.filter(function (c) { return c !== '\uc804\uccb4' && byCat[c]; });
+    items = [];
+    for (var r = 0; items.length < NW_ALL_MAX; r++) {
+      var added = false;
+      for (var oi = 0; oi < order.length; oi++) { var arr = byCat[order[oi]]; if (arr && arr[r]) { items.push(arr[r]); added = true; } }
+      if (!added) break;
+    }
+  } else {
+    items = all.filter(function (it) { return it.cat === cat; }).sort(function (a, b) { return (b.ts || 0) - (a.ts || 0); });
+  }
+  return items;
+}
+
+function newsScreen(inp, factsIn, rowsIn) {
+  inp = inp || {};
+  if (!(Number(inp.cap) >= 5)) return { ok: false, error: 'cap' };
+  var now = Number(inp.now) > 0 ? Number(inp.now) : Date.now();
+  var f = nwFacts(factsIn);
+  var all = nwList(rowsIn, now), items = nwPick(all, f.cat, now);
+  var head = [
+    { t: 'chips', pad: [14, 4, 14, 6], gap: 6, h: 30, onc: 'gold', onfg: '#121214',
+      items: NW_CATS.map(function (c) { return { label: c, on: c === f.cat, act: { a: 'cat', v: c } }; }) }
+  ];
+  var body = [];
+  if (!items.length) {
+    body.push({ t: 'text', s: f.cat === '\uc804\uccb4' ? '\ub274\uc2a4 \ubd88\ub7ec\uc624\ub294 \uc911...' : f.cat + ' \ub274\uc2a4\ub97c \ubd88\ub7ec\uc624\ub294 \uc911...', size: 14, color: 'sub', lh: 1.8, align: 'center', pad: [20, 40, 20, 40] });
+  } else {
+    body.push({ t: 'spacer', h: 8 });
+    for (var k = 0; k < items.length && k < NW_MAX_SHOW; k++) {
+      var it = items[k];
+      body.push({ t: 'news', pad: [14, 0, 14, 0], title: it.title, sub: it.cat + (it.ts ? ' \u00b7 ' + nwAgo(it.ts, now) : ''), act: { a: 'call', v: 'nw.' + it.i } });
+    }
+    body.push({ t: 'spacer', h: 72 });
+  }
+  var out = { ok: true, v: 1, screen: 'news', cover: 'tab', head: head, body: body, info: { cat: f.cat, n: items.length, all: all.length } };
+  out.rev = 'n' + NEWS_SCREEN_V + ':' + nwHash(JSON.stringify([head, body]));
+  return out;
+}
+
+// \uc0c1\uc138 \ud31d\uc5c5 \ubb38\uad6c(\uc6f9 _openNewsDetail \uc774 \uc9c1\uc811 \ub9cc\ub4e4\ub358 \uac83)
+function newsDetail(inp, row) {
+  inp = inp || {};
+  if (!(Number(inp.cap) >= 5)) return { ok: false, error: 'cap' };
+  var now = Number(inp.now) > 0 ? Number(inp.now) : Date.now();
+  var it = nwOne(row, 0, now);
+  if (!it) return { ok: false, error: 'item' };
+  var src = nwSourceLabel(it), clean = nwCleanDesc(it.desc);
+  return { ok: true, v: 1, detail: {
+    cat: it.cat, title: it.title, meta: (it.ts ? nwAgo(it.ts, now) + ' \u00b7 ' : '') + src,
+    desc: clean, empty: clean ? '' : '\uc774 \ub9e4\uccb4\ub294 \uc694\uc57d\uc744 \uc81c\uacf5\ud558\uc9c0 \uc54a\uc544\uc694. \uc544\ub798 \ubc84\ud2bc\uc73c\ub85c \uc6d0\ubb38\uc5d0\uc11c \uc804\uccb4 \ub0b4\uc6a9\uc744 \ud655\uc778\ud558\uc138\uc694.',
+    src: src, notice: '\ucd9c\ucc98 \u00b7 ' + src + '\n\uc81c\ubaa9\uacfc \uc694\uc57d\uc740 \ubc1c\ucdcc\uc774\uba70 \uc800\uc791\uad8c\uc740 \ud574\ub2f9 \uc5b8\ub860\uc0ac\uc5d0 \uc788\uc2b5\ub2c8\ub2e4. \uc804\uccb4 \ub0b4\uc6a9\uc740 \uc6d0\ubb38\uc5d0\uc11c \ud655\uc778\ud558\uc138\uc694.',
+    btn: src + ' \uc6d0\ubb38 \ubcf4\uae30 \u203a', close: '\ub2eb\uae30', open: /^https?:\/\//i.test(it.link) ? 1 : 0 } };
+}
+// \ub274\uc2a4 \ud654\uba74 \uc5d4\uc9c4 Worker \uc5f0\uacb0\ubd80 \u2014 POST /screen/news (engine/news.js \uc758 newsScreen\u00b7newsDetail \uc744 \ubd80\ub978\ub2e4). route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/screen/news") return handleScreenNews(request);` \ub97c \ub123\ub294\ub2e4.
+//   \ubcf8\ubb38(JSON \uae00, Content-Type: text/plain \uc73c\ub85c \ubcf4\ub0b4 \uc0ac\uc804 \uc694\uccad\uc744 \ud53c\ud55c\ub2e4):
+//     \ubaa9\ub85d  { cap(5 \uc774\uc0c1), f:{cat}, n:[\uae30\uc0ac\u2026] }   \uae30\uc0ac = [\uc81c\ubaa9, \ub9c1\ud06c, \uc5b8\ub860\uc0ac, \uc2dc\uac01(ms), \uc11c\ubc84 \ubd84\ub958, \uc694\uc57d]
+//     \uc0c1\uc138  { cap(5 \uc774\uc0c1), d:\uae30\uc0ac }                \u2192 { ok, v:1, detail:{\u2026} }  (\uc0c1\uc138 \ud31d\uc5c5\uc5d0 \uc4f8 \ubb38\uad6c)
+//   \uc5d4\uc9c4\uc740 \uc544\ubb34\uac83\ub3c4 \uc800\uc7a5\ud558\uc9c0 \uc54a\ub294\ub2e4(\uc774 \uae30\uae30\uac00 \ubcf4\ub0b8 \uae30\uc0ac \ubaa9\ub85d\uc73c\ub85c \ud654\uba74\uc744 \uacc4\uc0b0\ud574 \ub3cc\ub824\uc904 \ubfd0). \uac1c\uc778 \uc2dd\ubcc4 \uc815\ubcf4\ub294 \uc624\uac00\uc9c0 \uc54a\ub294\ub2e4.
+async function handleScreenNews(request) {
+  var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Cache-Control": "no-store" };
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: H });
+  if (request.method !== "POST") return new Response(JSON.stringify({ ok: false, error: "post-only" }), { status: 405, headers: H });
+  var raw = await request.text();
+  if (raw.length > 1500000) return new Response(JSON.stringify({ ok: false, error: "body-too-long" }), { status: 413, headers: H });
+  var body;
+  try { body = JSON.parse(raw); } catch (e) { return new Response(JSON.stringify({ ok: false, error: "bad-json" }), { status: 400, headers: H }); }
+  if (!body || typeof body !== "object") return new Response(JSON.stringify({ ok: false, error: "bad-body" }), { status: 400, headers: H });
+  var out;
+  try {
+    var inp = { cap: Number(body.cap) || 0, now: Date.now() };
+    out = body.d !== undefined ? newsDetail(inp, body.d) : newsScreen(inp, body.f, body.n);
+  } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2) }), { status: 500, headers: H }); }
+  if (!out || !out.ok) return new Response(JSON.stringify(out || { ok: false, error: "fail" }), { status: 400, headers: H });
+  out.ver = ENGINE_VERSION;
+  return new Response(JSON.stringify(out), { headers: H });
+}
+// ===== NEWS ENGINE END =====
+
 async function handleFetch(request, env, ctx) {
   try { await holEnsure(env); } catch (e) {}
   const url = new URL(request.url);
@@ -11760,6 +12033,7 @@ async function handleFetch(request, env, ctx) {
   if (url.pathname === "/screen/shop") return handleScreenShop(request);
   if (url.pathname === "/screen/settings") return handleScreenSettings(request);
   if (url.pathname === "/screen/food") return handleScreenFood(request);
+  if (url.pathname === "/screen/news") return handleScreenNews(request);
   if (url.pathname === "/stops-near") {
     const lat = parseFloat(url.searchParams.get("lat"));
     const lng = parseFloat(url.searchParams.get("lng"));
