@@ -72,7 +72,7 @@ function findAndroidJar() {
     assert.ok(/pi\.on = !pi\.on/.test(v) && /listener\.onSet\(/.test(v), '스위치: 화면을 먼저 뒤집고 set 알림');
     assert.ok(/ensureEditor\(|beginEdit\(/.test(v) && /commitEdit\(/.test(v) && /endEdit\(/.test(v), '입력칸 편집: 눌렀을 때 만들고 끝나면 글자를 모으고 뗀다');
     assert.ok(/public Map<String, String> fields\(\)/.test(v), 'fields() 로 글자 모음');
-    assert.ok(/R_BORDER2/.test(v) && /new int\[10\]/.test(p) && /"border2"/.test(p), '두 번째 테두리색 팔레트');
+    assert.ok(/R_BORDER2/.test(v) && /new int\[12\]/.test(p) && /"border2"/.test(p), '두 번째 테두리색 팔레트');
     assert.ok(/onSet\(ScreenCore\.Act a, boolean on\)/.test(p) && /put\("on", on\)/.test(p) && /put\("fields", fo\)/.test(p), '플러그인: set 이벤트에 on · 모든 행동에 fields');
     assert.ok(/public void toast\(/.test(p) && /Toast\.makeText/.test(p), '앱이 직접 띄우는 토스트');
   });
@@ -118,6 +118,25 @@ function findAndroidJar() {
     assert.ok(seg.length > 300 && !/\bnew\s+[A-Z]/.test(seg), '뉴스 그리기 구간에 new 가 있다');
     const c = fs.readFileSync(N('ScreenCore.java'), 'utf8');
     assert.ok(/K_NEWS = 15/.test(c) && /"news"\.equals\(t\)/.test(c) && /"news"\.equals\(n\.t\)/.test(c), '코어가 뉴스 줄을 안다(읽기 + 배치)');
+  });
+  await t('게시판·채팅·탭 노드: 펼침 카드(post)·댓글·단추 줄·입력줄·말풍선·탭 막대·아래 고정 줄을 그리고 코어가 안다 · 그릴 때 새 객체 없음', async () => {
+    const v = fs.readFileSync(N('ScreenView.java'), 'utf8'), c = fs.readFileSync(N('ScreenCore.java'), 'utf8'), p = fs.readFileSync(N('ScreenNativePlugin.java'), 'utf8');
+    for (const k of ['POSTH:drawPostHead', 'CMT:drawCmt', 'RBTN:drawRbtn', 'INBAR:drawInbar', 'MSG:drawMsg', 'TAB:drawTab']) {
+      const [kind, fn] = k.split(':');
+      assert.ok(new RegExp('case ScreenCore\\.K_' + kind + ': ' + fn + '\\(').test(v), 'drawItem 연결 ' + k);
+      assert.ok(new RegExp('private void ' + fn + '\\(').test(v), fn + ' 정의');
+    }
+    const draw = v.slice(v.indexOf('protected void onDraw'), v.indexOf('// ───────────── 검색 입력칸'));
+    assert.ok(!/\bnew\s+[A-Z]/.test(draw), '그리기 구간에 new: ' + (draw.match(/\bnew\s+[A-Z]\w*/) || [''])[0]);
+    assert.ok(/pathFor\(/.test(draw) && /private android\.graphics\.Path pathFor\(/.test(v) && /iconPaths\.get\(/.test(v), '아이콘 경로는 한 번만 만들어 둔다(그릴 때 만들지 않음)');
+    assert.ok(/lay\.footH/.test(draw) && /lay\.foot\[i\]/.test(draw) && /footTop\(\)/.test(v), '아래 고정 줄을 그리고 본문 영역에서 뺀다');
+    assert.ok(/private void toggleOpen\(/.test(v) && /openKey = wasOn \? "" : key/.test(v) && /topOnScreen/.test(v) && /listener\.onSet\(a, !wasOn\)/.test(v), '게시글 펼침: 앱이 바로 토글 · 눌린 머리 위치 유지 · on 알림');
+    assert.ok(/private void tapInbar\(/.test(v) && /private void fireInbar\(/.test(v) && /IME_ACTION_SEND/.test(v) && /public void setField\(/.test(v), '입력줄: 단추·키보드 보내기 · 웹이 글자를 비울 수 있다');
+    assert.ok(/editInFoot/.test(v) && /K_INBAR/.test(v.slice(v.indexOf('private ScreenCore.Item fieldByKey'))), '입력칸 찾기는 본문과 아래 고정 줄 모두');
+    assert.ok(/public void setField\(final PluginCall call\)/.test(p) && /"card2"/.test(p) && /"nav"/.test(p), '플러그인: setField · card2/nav 팔레트');
+    for (const k of ['K_POSTH = 16', 'K_CMT = 17', 'K_RBTN = 18', 'K_INBAR = 19', 'K_MSG = 20', 'K_TAB = 21']) assert.ok(c.includes(k), k);
+    for (const n of ['post', 'cmt', 'btnrow', 'inbar', 'msg', 'tabbar']) assert.ok(new RegExp('"' + n + '"\\.equals\\(t\\)').test(c) && new RegExp('"' + n + '"\\.equals\\((t0\\()?n(\\))?\\.?t?\\)').test(c) || c.includes('"' + n + '".equals'), n + ' 읽기·배치');
+    assert.ok(/public static float\[\] pathOps\(/.test(c) && /sc\.foot\.add\(/.test(c), '코어: 경로 읽기 · foot');
   });
   await t('CI 워크플로가 파일을 복사하고 MainActivity 에 ScreenNativePlugin 을 등록한다', async () => {
     const y = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'build-apk.yml'), 'utf8');
