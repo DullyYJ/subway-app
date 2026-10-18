@@ -29,7 +29,8 @@ import java.util.Map;
  *   · ScreenView: 검증된 화면을 그린다 — 자체 세로/가로 스크롤(관성), 눌림 처리.
  *
  *   show({id,x,y,w,h,dpr,clip,json,palette,keepScroll}) · update({id,json,palette,keepScroll}) · setRect({id,x,y,w,h,dpr,clip}) · hide({id}) · destroy({id}) · status({id}) → {visible,items,age,scroll}
- *   이벤트: ready({id}) 첫 그림 · error({id,message,kind}) · action({id,a,v,url})
+ *   이벤트: ready({id}) 첫 그림 · error({id,message,kind}) · action({id,a,v,url[,empty]}) · input({id,on}) 검색 입력칸 포커스
+ *   검색줄(search 노드): 기기의 진짜 입력칸(EditText)을 검색줄 자리에 올린다. 검색 실행 → action {a:'search', v:검색어, url:엔진의 tpl, empty:엔진의 empty}.
  *   palette: { bg, card, border, text, sub, gold, orange, imgbg } CSS 색 문자열 — 앱 테마(다크/파스텔)를 웹이 읽어 넘긴다.
  */
 @CapacitorPlugin(name = "ScreenNative")
@@ -184,6 +185,12 @@ public class ScreenNativePlugin extends Plugin {
             @Override public void onAction(ScreenCore.Act a) {
                 try { notifyListeners("action", new JSObject().put("id", id).put("a", a.a).put("v", a.v).put("url", a.url)); } catch (Throwable ignored) { }
             }
+            @Override public void onSearch(ScreenCore.Act a, String q) {
+                try { notifyListeners("action", new JSObject().put("id", id).put("a", a.a).put("v", q == null ? "" : q).put("url", a.tpl).put("empty", a.empty)); } catch (Throwable ignored) { }
+            }
+            @Override public void onInputFocus(boolean on) {
+                try { notifyListeners("input", new JSObject().put("id", id).put("on", on)); } catch (Throwable ignored) { }
+            }
             @Override public void onFirstDraw() {
                 try { notifyListeners("ready", new JSObject().put("id", id)); } catch (Throwable ignored) { }
             }
@@ -230,5 +237,6 @@ public class ScreenNativePlugin extends Plugin {
             if (r.right <= r.left || r.bottom <= r.top) r.set(0, 0, 1, 1);
         }
         try { view.setClipBounds(r); } catch (Throwable t) { /* 무시 */ }
+        try { view.resyncInput(); } catch (Throwable t) { /* 무시 */ }
     }
 }

@@ -18,7 +18,10 @@ import java.util.Map;
  *     text   { pad, s, size, bold, color, alpha, lh, align, lines }               줄바꿈 글
  *     button { pad, s, size, h, act }                                             넓은 단추
  *     spacer { h }
- *     act    { a:'cat', v } | { a:'open', url } | { a:'refresh' }
+ *     box    { pad, ip, s, hl:[[시작,끝]…], size, lh, color, fill, line, r }       테두리·바탕이 있는 안내 상자(hl = 굵은 글자 구간). fill/line = 색 역할 이름 또는 CSS 색
+ *     search { pad, max, hint, badge, accent, maxlen, act:{a:'search',tpl,empty} } 검색줄(알약). 입력은 기기의 진짜 입력칸(EditText)이 받는다
+ *     act    { a:'cat', v } | { a:'open', url } | { a:'refresh' } | { a:'search', tpl('{q}' 포함 http(s)), empty(http(s)) }
+ *   screen.cover = 'tab'(탭 맨 위부터 덮음: 안내 상자·검색줄 포함) | 'chips'(기본, 칩 줄부터). 앱이 cap=2 를 보냈을 때만 엔진이 'tab' 을 준다.
  *   모르는 노드 종류는 건너뛴다(앞으로 늘려도 옛 앱이 안 깨진다). 아는 종류인데 모양이 틀리면 화면 전체를 거절한다(깨진 화면을 그리지 않는다).
  *   좌표 단위는 dp(CSS px 와 같다) — 그릴 때 밀도를 곱한다.
  */
@@ -132,7 +135,7 @@ public final class ScreenCore {
 
     // ═════════════ ② 모델 + 검증 ═════════════
     public static final class Act {
-        public String a = "", v = "", url = "";
+        public String a = "", v = "", url = "", tpl = "", empty = "";
     }
     /** 노드 하나(chips·grid·text·button·spacer) 또는 그 안의 항목(chip·card). */
     public static final class Node {
@@ -143,11 +146,15 @@ public final class ScreenCore {
         public boolean bold, on;
         public String color = "text", bg = "", align = "left";
         public String s = "", label = "", badge = "", name = "", tag = "", img = "", fb = "";
+        public float ipL = 12f, ipT = 8f, ipR = 12f, ipB = 8f, r = 10f, max = 340f;
+        public int maxlen = 60;
+        public String fill = "", line = "", hint = "", accent = "#e63329";
+        public int[][] hl = new int[0][];
         public Act act;
         public List<Node> items = new ArrayList<Node>();
     }
     public static final class Screen {
-        public String id = "", rev = "";
+        public String id = "", rev = "", cover = "chips";
         public List<Node> head = new ArrayList<Node>(), body = new ArrayList<Node>();
         public int skipped = 0, nodes = 0;
     }
@@ -213,8 +220,51 @@ public final class ScreenCore {
         if ("cat".equals(a.a)) { a.v = optStr(m, "v", "", 60); if (a.v.length() == 0) throw new ParseError("act cat: v 없음"); }
         else if ("open".equals(a.a)) { a.url = optStr(m, "url", "", 1500); if (!httpUrl(a.url)) throw new ParseError("act open: 주소가 http(s) 가 아니다"); }
         else if ("refresh".equals(a.a)) { }
+        else if ("search".equals(a.a)) {
+            a.tpl = optStr(m, "tpl", "", 1500); a.empty = optStr(m, "empty", "", 1500);
+            if (!httpUrl(a.tpl) || a.tpl.indexOf("{q}") < 0) throw new ParseError("act search: tpl 은 {q} 가 든 http(s) 주소여야 한다");
+            if (!httpUrl(a.empty)) throw new ParseError("act search: empty 가 http(s) 가 아니다");
+        }
         else throw new ParseError("모르는 행동 " + a.a);
         return a;
+    }
+
+    private static final int BAD_COLOR = 0x01234567;
+    /** 색 역할 이름이거나 CSS 색(#rgb·#rrggbb·rgb()·rgba())이어야 한다. */
+    private static String roleOrCss(Map<String, Object> m, String k, String def) throws ParseError {
+        String v = optStr(m, k, def, 60);
+        if (v.length() == 0 || role(v)) return v;
+        if (color(v, BAD_COLOR) == BAD_COLOR) throw new ParseError(k + ": 읽을 수 없는 색 " + v);
+        return v;
+    }
+    private static int[][] hl(Map<String, Object> m, int len) throws ParseError {
+        Object v = m.get("hl");
+        if (v == null) return new int[0][];
+        List<Object> l = asArr(v, "hl");
+        if (l.size() > 20) throw new ParseError("hl: 너무 많다");
+        int[][] r = new int[l.size()][];
+        int prevEnd = 0;
+        for (int i = 0; i < r.length; i++) {
+            List<Object> p = asArr(l.get(i), "hl 구간");
+            if (p.size() != 2 || !(p.get(0) instanceof Double) || !(p.get(1) instanceof Double)) throw new ParseError("hl: [시작,끝] 이어야 한다");
+            int a = ((Double) p.get(0)).intValue(), b = ((Double) p.get(1)).intValue();
+            if (a < prevEnd || b <= a || b > len) throw new ParseError("hl: 범위 밖 " + a + "-" + b);
+            r[i] = new int[] { a, b }; prevEnd = b;
+        }
+        return r;
+    }
+    private static void ip(Map<String, Object> m, Node n) throws ParseError {
+        Object v = m.get("ip");
+        if (v == null) return;
+        List<Object> l = asArr(v, "ip");
+        if (l.size() != 4) throw new ParseError("ip: 네 개여야 한다");
+        float[] f = new float[4];
+        for (int i = 0; i < 4; i++) {
+            if (!(l.get(i) instanceof Double)) throw new ParseError("ip: 수가 아니다");
+            f[i] = ((Double) l.get(i)).floatValue();
+            if (f[i] < 0f || f[i] > 80f) throw new ParseError("ip: 범위 밖");
+        }
+        n.ipL = f[0]; n.ipT = f[1]; n.ipR = f[2]; n.ipB = f[3];
     }
 
     private static Node node(Object o, Screen sc) throws ParseError {
@@ -253,9 +303,26 @@ public final class ScreenCore {
             n.alpha = optNum(m, "alpha", 1f, 0f, 1f); n.lh = optNum(m, "lh", 1.35f, 1f, 3f);
             n.align = optStr(m, "align", "left", 8); if (!"left".equals(n.align) && !"center".equals(n.align) && !"right".equals(n.align)) throw new ParseError("align");
             n.maxLines = (int) optNum(m, "lines", 0f, 0f, 50f);
+            n.hl = hl(m, n.s.length());
         } else if ("button".equals(t)) {
             pad(m, n); n.s = optStr(m, "s", "", 80); if (n.s.length() == 0) throw new ParseError("button: s 없음");
             n.size = optNum(m, "size", 12f, 6f, 40f); n.h = optNum(m, "h", 40f, 20f, 120f); n.act = act(m.get("act"), true);
+        } else if ("box".equals(t)) {
+            pad(m, n); ip(m, n);
+            n.s = optStr(m, "s", "", MAX_STR); if (n.s.length() == 0) throw new ParseError("box: s 없음");
+            n.hl = hl(m, n.s.length());
+            n.size = optNum(m, "size", 12f, 6f, 40f); n.lh = optNum(m, "lh", 1.35f, 1f, 3f);
+            n.color = optStr(m, "color", "text", 12); if (!role(n.color)) throw new ParseError("color: 모르는 색 " + n.color);
+            n.fill = roleOrCss(m, "fill", ""); n.line = roleOrCss(m, "line", "");
+            n.r = optNum(m, "r", 10f, 0f, 40f);
+        } else if ("search".equals(t)) {
+            pad(m, n);
+            n.max = optNum(m, "max", 340f, 160f, 800f);
+            n.hint = optStr(m, "hint", "", 40); n.badge = optStr(m, "badge", "", 2);
+            n.accent = roleOrCss(m, "accent", "#e63329"); if (n.accent.length() == 0) n.accent = "#e63329";
+            n.maxlen = (int) optNum(m, "maxlen", 60f, 1f, 120f);
+            n.act = act(m.get("act"), true);
+            if (!"search".equals(n.act.a)) throw new ParseError("search: act 는 search 여야 한다");
         } else if ("spacer".equals(t)) {
             n.h = optNum(m, "h", 8f, 0f, 400f);
         } else { sc.skipped++; return null; }
@@ -272,6 +339,7 @@ public final class ScreenCore {
         Screen sc = new Screen();
         sc.id = optStr(m, "screen", "", 40); if (sc.id.length() == 0) throw new ParseError("screen 없음");
         sc.rev = optStr(m, "rev", "", 120);
+        sc.cover = optStr(m, "cover", "chips", 8); if (!"tab".equals(sc.cover) && !"chips".equals(sc.cover)) throw new ParseError("cover: 모르는 값 " + sc.cover);
         for (Object o : asArr(m.get("head"), "head")) { Node n = node(o, sc); if (n != null) sc.head.add(n); }
         for (Object o : asArr(m.get("body"), "body")) { Node n = node(o, sc); if (n != null) sc.body.add(n); }
         if (sc.head.isEmpty() && sc.body.isEmpty()) throw new ParseError("그릴 것이 없다");
@@ -281,7 +349,9 @@ public final class ScreenCore {
     public static Screen load(String json) throws ParseError { return validate(parse(json)); }
 
     // ═════════════ ③ 배치 ═════════════
-    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4;
+    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6;
+    /** 검색줄 치수(웹 쿠팡 검색줄과 같다): 알약 높이 · 왼쪽 배지 · 오른쪽 단추 · 안쪽 여백 */
+    public static final float SEARCH_H = 44f, SEARCH_BADGE = 20f, SEARCH_BTN = 30f, SEARCH_PADL = 14f, SEARCH_PADR = 8f, SEARCH_GAP = 8f;
     public static final float CARD_PAD = 8f, CARD_IMG_H = 78f, CARD_IMG_GAP = 5f, CARD_NAME_SIZE = 11f, CARD_LH = 1.35f, CARD_TAG_GAP = 6f, CHIP_PADX = 12f;
 
     /** 그릴 조각 하나. 좌표는 속한 영역(머리 또는 본문) 안의 dp. */
@@ -293,6 +363,13 @@ public final class ScreenCore {
         public boolean bold, on;
         public String color = "text", bg = "", align = "left";
         public float alpha = 1f;
+        public boolean fixed;                        // 머리에서 가로로 안 밀리는 조각(안내 상자·검색줄)
+        public String[][] segs;                      // hl 이 있으면 줄마다 [조각…] (null 이면 줄 전체 한 가지 굵기)
+        public boolean[][] segBold;
+        public int fillC, lineC, accentC; public String fillRole, lineRole, accentRole;   // box/search 색(역할 이름이면 Role, 아니면 ARGB)
+        public float radius = 10f;
+        public float bx, by, btx, bty;               // 검색줄: 배지 · 단추 왼쪽위 (영역 좌표)
+        public int maxlen = 60;
         public String label = "", badge = "", tag = "", img = "", fb = "";
         public float labelW, badgeW, tagX, tagW;    // 칩: 라벨·뱃지 폭 · 카드: 최저가 글자 자리
         public float ix, iy, iw, ih;                // 카드 그림 자리
@@ -302,7 +379,7 @@ public final class ScreenCore {
     /** 배치 결과. */
     public static final class Layout {
         public Item[] head = new Item[0], body = new Item[0];
-        public float headH, headContentW, bodyH, width;
+        public float headH, headContentW, bodyH, width, chipsTop = -1f, chipsBot = -1f;
         float[] headMaxB = new float[0], bodyMaxB = new float[0];     // 앞에서부터 가장 아래쪽(이진 탐색용)
         float headMaxH, bodyMaxH;
 
@@ -326,7 +403,15 @@ public final class ScreenCore {
         }
         /** 본문 좌표 (x, y) 에서 눌린 행동. 없으면 null. */
         public Act hitBody(float x, float y) { return hit(body, bodyMaxB, x, y); }
-        public Act hitHead(float x, float y) { return hit(head, null, x, y); }
+        /** 머리에서 눌린 행동. 칩은 가로로 밀린 만큼(scrollX) 보정, 고정 조각(안내·검색줄)은 그대로. */
+        public Act hitHead(float x, float y) { return hitHead(x, y, 0f); }
+        public Act hitHead(float x, float y, float scrollX) {
+            for (Item m : head) {
+                float px = m.fixed ? x : x + scrollX;
+                if (m.act != null && px >= m.x && px < m.x + m.w && y >= m.y && y < m.y + m.h) return m.act;
+            }
+            return null;
+        }
         private static Act hit(Item[] it, float[] maxB, float x, float y) {
             if (maxB != null) {
                 int[] r = range(it, maxB, y, y + 0.01f);
@@ -405,8 +490,13 @@ public final class ScreenCore {
                     hi.add(it); x += it.w + n.gap;
                 }
                 contentW = Math.max(contentW, x - n.gap + n.padR);
+                L.chipsTop = y - n.padT; L.chipsBot = y + n.h + n.padB;
                 y += n.h + n.padB;
-            } else y = stack(n, width, y, hi, m);
+            } else {
+                int from = hi.size();
+                y = stack(n, width, y, hi, m);
+                for (int q = from; q < hi.size(); q++) hi.get(q).fixed = true;
+            }
         }
         L.head = hi.toArray(new Item[0]); L.headH = y; L.headContentW = contentW;
         // 본문
@@ -423,18 +513,78 @@ public final class ScreenCore {
         return r;
     }
 
+    private static void colors(Item it, String fill, String line, String accent) {
+        it.fillRole = role(fill) ? fill : null; it.fillC = (fill.length() > 0 && !role(fill)) ? color(fill, 0) : 0;
+        it.lineRole = role(line) ? line : null; it.lineC = (line.length() > 0 && !role(line)) ? color(line, 0) : 0;
+        it.accentRole = role(accent) ? accent : null; it.accentC = (accent.length() > 0 && !role(accent)) ? color(accent, 0xFFE63329) : 0;
+    }
+
+    /** 줄마다 굵은 구간/아닌 구간 조각으로 나눈다(그릴 때 새 글자를 안 만들도록 미리). 줄은 원문 안에서 차례로 찾는다. 못 찾는 줄(… 으로 줄인 줄)은 굵기 없이. */
+    private static void richSegs(Item it, String s, int[][] hl) {
+        int nl = it.lines.length;
+        it.segs = new String[nl][]; it.segBold = new boolean[nl][];
+        int cur = 0;
+        for (int k = 0; k < nl; k++) {
+            String ln = it.lines[k];
+            int st = ln.length() == 0 ? cur : s.indexOf(ln, cur);
+            if (st < 0) { it.segs[k] = new String[] { ln }; it.segBold[k] = new boolean[] { false }; continue; }
+            int en = st + ln.length();
+            cur = en;
+            List<String> ps = new ArrayList<String>(); List<Boolean> bs = new ArrayList<Boolean>();
+            int pos = st;
+            for (int[] h : hl) {
+                int a = Math.max(st, h[0]), b = Math.min(en, h[1]);
+                if (b <= a) continue;
+                if (a > pos) { ps.add(s.substring(pos, a)); bs.add(Boolean.FALSE); }
+                ps.add(s.substring(a, b)); bs.add(Boolean.TRUE); pos = b;
+            }
+            if (pos < en) { ps.add(s.substring(pos, en)); bs.add(Boolean.FALSE); }
+            if (ps.isEmpty()) { ps.add(ln); bs.add(Boolean.FALSE); }
+            it.segs[k] = ps.toArray(new String[0]);
+            it.segBold[k] = new boolean[bs.size()];
+            for (int q = 0; q < bs.size(); q++) it.segBold[k][q] = bs.get(q);
+        }
+    }
+
     /** 노드 하나를 y 에서부터 쌓고 다음 y 를 돌려준다. */
     private static float stack(Node n, float width, float y, List<Item> out, Measurer m) {
         float innerW = Math.max(1f, width - n.padL - n.padR);
         if ("spacer".equals(n.t)) return y + n.h;
         y += n.padT;
         if ("text".equals(n.t)) {
-            List<String> ls = wrap(n.s, innerW, n.size, n.bold, n.maxLines, m);
+            boolean rich = n.hl.length > 0;
+            List<String> ls = wrap(n.s, innerW, n.size, n.bold || rich, n.maxLines, m);        // 굵은 구간이 있으면 줄바꿈은 굵은 폭으로 잰다(넘치지 않게)
             Item it = new Item(); it.kind = K_TEXT; it.x = n.padL; it.y = y; it.w = innerW;
             it.lines = ls.toArray(new String[0]); it.size = n.size; it.bold = n.bold; it.color = n.color; it.alpha = n.alpha; it.align = n.align;
             it.lineH = n.size * n.lh; it.h = it.lineH * ls.size(); it.textX = n.padL; it.textY = y;
+            if (rich) richSegs(it, n.s, n.hl);
             out.add(it);
             return y + it.h + n.padB;
+        }
+        if ("box".equals(n.t)) {
+            float innerBoxW = Math.max(1f, innerW - 2f - n.ipL - n.ipR);
+            boolean rich = n.hl.length > 0;
+            List<String> ls = wrap(n.s, innerBoxW, n.size, rich, 0, m);
+            Item it = new Item(); it.kind = K_BOX; it.x = n.padL; it.y = y; it.w = innerW;
+            it.lines = ls.toArray(new String[0]); it.size = n.size; it.bold = false; it.color = n.color; it.lineH = n.size * n.lh;
+            it.h = 2f + n.ipT + it.lineH * ls.size() + n.ipB;
+            it.textX = n.padL + 1f + n.ipL; it.textY = y + 1f + n.ipT; it.radius = n.r;
+            colors(it, n.fill, n.line, "");
+            if (rich) richSegs(it, n.s, n.hl);
+            out.add(it);
+            return y + it.h + n.padB;
+        }
+        if ("search".equals(n.t)) {
+            Item it = new Item(); it.kind = K_SEARCH;
+            it.w = Math.min(n.max, innerW); it.x = n.padL + (innerW - it.w) / 2f; it.y = y; it.h = SEARCH_H;
+            it.label = n.hint; it.badge = n.badge; it.act = n.act; it.maxlen = n.maxlen; it.radius = SEARCH_H / 2f;
+            it.bx = it.x + 1f + SEARCH_PADL; it.by = y + (SEARCH_H - SEARCH_BADGE) / 2f;
+            it.btx = it.x + it.w - 1f - SEARCH_PADR - SEARCH_BTN; it.bty = y + (SEARCH_H - SEARCH_BTN) / 2f;
+            it.ix = it.bx + SEARCH_BADGE + SEARCH_GAP; it.iw = Math.max(20f, it.btx - SEARCH_GAP - it.ix);
+            it.ih = SEARCH_BTN; it.iy = it.bty;
+            colors(it, "", "", n.accent);
+            out.add(it);
+            return y + SEARCH_H + n.padB;
         }
         if ("button".equals(n.t)) {
             Item it = new Item(); it.kind = K_BUTTON; it.x = n.padL; it.y = y; it.w = innerW; it.h = n.h;

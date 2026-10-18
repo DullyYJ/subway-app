@@ -10,13 +10,25 @@ import android.graphics.Typeface;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.graphics.Rect;
+import android.text.InputFilter;
+import android.text.InputType;
 import android.text.TextPaint;
 import android.util.LruCache;
+import android.util.TypedValue;
+import android.view.Gravity;
+import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
 import android.view.View;
 import android.view.ViewConfiguration;
+import android.view.ViewGroup;
+import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputMethodManager;
+import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.OverScroller;
+import android.widget.TextView;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -32,13 +44,17 @@ import java.util.concurrent.Executors;
 
 /**
  * 서버 구동 화면을 그리는 뷰 — 2026-10-18. 엔진이 준 화면 JSON(ScreenCore.Screen)을 그대로 그린다. 무엇을 보일지 정하지 않는다.
- *   · 머리(칩 줄)는 위에 고정, 가로로 밀린다. 본문은 세로로 밀린다 — 손가락 따라가기 + 관성(OverScroller) + 화면 박자(postInvalidateOnAnimation).
+ *   · 머리는 위에 고정. 머리 안의 칩 줄만 가로로 밀리고(안내 상자·검색줄은 고정) 본문은 세로로 밀린다 — 손가락 따라가기 + 관성(OverScroller) + 화면 박자(postInvalidateOnAnimation).
  *   · 그릴 때 새로 만드는 객체가 없다(Paint·RectF·Path 재사용). 화면 밖 조각은 이진 탐색으로 건너뛴다. 그림은 백그라운드에서 받아 LruCache + 파일 캐시에 둔다.
  *   · 좌표는 dp. 그릴 때 밀도(dpr)를 한 번 곱한다. 글자 폭도 같은 Paint 로 잰다.
  */
 public class ScreenView extends View {
     public interface Listener {
         void onAction(ScreenCore.Act a);
+        /** 검색줄에서 검색 실행(입력칸 글자 q, 비었을 수 있다). 무슨 주소를 열지는 엔진이 정한 a.tpl/a.empty 를 웹이 쓴다. */
+        void onSearch(ScreenCore.Act a, String q);
+        /** 검색 입력칸이 포커스를 얻거나 잃음(키보드가 올라오면 웹뷰 크기가 바뀌므로 웹이 '움직임'으로 오해해 숨기지 않게 알린다). */
+        void onInputFocus(boolean on);
         void onFirstDraw();
     }
 
@@ -60,12 +76,16 @@ public class ScreenView extends View {
     private float downX, downY, lastX, lastY, downBodyY;
     private long downT;
     private int mode = 0;                                  // 0 없음 · 1 본문 세로 · 2 머리 가로 · 3 눌러보는 중
-    private boolean inHead;
+    private boolean inHead, inChips;
     private ScreenCore.Item pressed;
     private Listener listener;
     private boolean drewOnce;
     private volatile long lastDraw = 0L;
     private final Handler ui = new Handler(Looper.getMainLooper());
+    private EditText input;                                   // 검색줄의 진짜 입력칸(기기 키보드·붙여넣기·한글 조합은 안드로이드가 한다)
+    private int inL = -1, inT = -1, inW = -1, inH = -1;        // 마지막으로 놓은 입력칸 자리(바뀔 때만 다시 놓는다)
+    private boolean inFront, inShown;
+    private ScreenCore.Act inAct;
     private final ScreenCore.Measurer measurer = new ScreenCore.Measurer() {
         @Override public float width(String s, float size, boolean bold) {
             tp.setTypeface(bold ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
@@ -88,7 +108,7 @@ public class ScreenView extends View {
     public int itemCount() { return lay == null ? 0 : lay.head.length + lay.body.length; }
     public float scrollPos() { return scrollY; }
     public void setDpr(float d) { if (d > 0f && d != dpr) { dpr = d; relayout(); } }
-    public void setPalette(int[] c) { for (int i = 0; i < pal.length && i < c.length; i++) pal[i] = c[i]; invalidate(); }
+    public void setPalette(int[] c) { for (int i = 0; i < pal.length && i < c.length; i++) pal[i] = c[i]; styleInput(); invalidate(); }
 
     /** 새 화면을 올린다. keepScroll 이면 위치를 유지(같은 목록 갱신), 아니면 맨 위로. */
     public void setScreen(ScreenCore.Screen s, boolean keepScroll) {
@@ -100,10 +120,11 @@ public class ScreenView extends View {
     }
 
     private void relayout() {
-        if (screen == null || getWidth() <= 0) { lay = null; invalidate(); return; }
+        if (screen == null || getWidth() <= 0) { lay = null; invalidate(); syncLater(); return; }
         lay = ScreenCore.layout(screen, getWidth() / dpr, measurer);
         clampScroll();
         invalidate();
+        syncLater();
     }
     @Override protected void onSizeChanged(int w, int h, int ow, int oh) { super.onSizeChanged(w, h, ow, oh); relayout(); }
 
@@ -127,6 +148,7 @@ public class ScreenView extends View {
                 flingY.forceFinished(true); flingX.forceFinished(true);
                 downX = lastX = x; downY = lastY = y; downT = SystemClock.uptimeMillis();
                 inHead = y < lay.headH * dpr;
+                inChips = inHead && lay.chipsTop >= 0f && y >= lay.chipsTop * dpr && y < lay.chipsBot * dpr;
                 mode = 3;
                 pressed = findItem(x, y);
                 if (pressed != null && pressed.act == null) pressed = null;
@@ -138,8 +160,9 @@ public class ScreenView extends View {
                 if (mode == 3) {
                     if (Math.abs(x - downX) > slop || Math.abs(y - downY) > slop) {
                         pressed = null;
-                        mode = inHead ? 2 : 1;
+                        mode = inHead ? (inChips ? 2 : 0) : 1;                  // 머리는 칩 줄만 가로로 민다(안내 상자·검색줄은 고정)
                         if (inHead && Math.abs(y - downY) > Math.abs(x - downX) * 2f) mode = 0;     // 머리를 위아래로 쓸면 무시
+                        if (mode == 1) blurInput();                                              // 목록을 밀기 시작하면 키보드를 내린다
                     } else return true;
                 }
                 if (mode == 1) { scrollY = ScreenCore.clamp(scrollY - dy / dpr, lay.bodyMaxScroll(bodyViewH())); lastY = y; invalidate(); }
@@ -148,7 +171,11 @@ public class ScreenView extends View {
             }
             case MotionEvent.ACTION_UP: {
                 if (mode == 3) {
-                    if (SystemClock.uptimeMillis() - downT < 600 && pressed != null && listener != null) { ScreenCore.Act a = pressed.act; pressed = null; invalidate(); listener.onAction(a); }
+                    if (SystemClock.uptimeMillis() - downT < 600 && pressed != null && listener != null) {
+                        ScreenCore.Item pi = pressed; ScreenCore.Act a = pi.act; pressed = null; invalidate();
+                        if (pi.kind == ScreenCore.K_SEARCH) tapSearch(pi, x / dpr, y / dpr);
+                        else { blurInput(); listener.onAction(a); }
+                    }
                 } else if (mode == 1 || mode == 2) {
                     vt.computeCurrentVelocity(1000, maxFling);
                     if (mode == 1) {
@@ -172,8 +199,10 @@ public class ScreenView extends View {
     private ScreenCore.Item findItem(float px, float py) {
         float x = px / dpr, y = py / dpr;
         if (y < lay.headH) {
-            float hx = x + scrollX;
-            for (ScreenCore.Item it : lay.head) if (hx >= it.x && hx < it.x + it.w && y >= it.y && y < it.y + it.h) return it;
+            for (ScreenCore.Item it : lay.head) {
+                float hx = it.fixed ? x : x + scrollX;
+                if (hx >= it.x && hx < it.x + it.w && y >= it.y && y < it.y + it.h) return it;
+            }
             return null;
         }
         float by = y - lay.headH + scrollY;
@@ -224,9 +253,10 @@ public class ScreenView extends View {
         cv.drawRect(0f, 0f, w, lay.headH, p);
         cv.save();
         cv.clipRect(0f, 0f, w, lay.headH);
+        for (int i = 0; i < lay.head.length; i++) { ScreenCore.Item it = lay.head[i]; if (it.fixed) drawItem(cv, it); }      // 안내 상자·검색줄(고정)
         cv.translate(-scrollX, 0f);
-        int[] hr = lay.headRange(scrollX - 4f, scrollX + w + 4f);
-        for (int i = hr[0]; i < hr[1]; i++) drawItem(cv, lay.head[i]);
+        float x0 = scrollX - 4f, x1 = scrollX + w + 4f;
+        for (int i = 0; i < lay.head.length; i++) { ScreenCore.Item it = lay.head[i]; if (!it.fixed && it.x + it.w >= x0 && it.x <= x1) drawItem(cv, it); }   // 칩 줄(가로로 밀림)
         cv.restore();
         cv.restore();
 
@@ -240,6 +270,8 @@ public class ScreenView extends View {
             case ScreenCore.K_CARD: drawCard(cv, it); break;
             case ScreenCore.K_TEXT: drawTextBlock(cv, it); break;
             case ScreenCore.K_BUTTON: drawButton(cv, it); break;
+            case ScreenCore.K_BOX: drawBox(cv, it); break;
+            case ScreenCore.K_SEARCH: drawSearch(cv, it); break;
             default: break;
         }
     }
@@ -299,6 +331,7 @@ public class ScreenView extends View {
     private void drawTextBlock(Canvas cv, ScreenCore.Item it) {
         int c = alpha(roleColor(it.color), it.alpha);
         setText(it.size, it.bold, c);
+        if (it.segs != null) { drawRich(cv, it, it.textX, it.textY, c); return; }
         for (int k = 0; k < it.lines.length; k++) {
             float x = it.x;
             if ("center".equals(it.align)) { tp.setTextAlign(Paint.Align.CENTER); x = it.x + it.w / 2f; }
@@ -321,6 +354,174 @@ public class ScreenView extends View {
         cv.drawText(it.lines.length > 0 ? it.lines[0] : it.label, it.x + it.w / 2f, base(it.y, it.h, 0), tp);
         tp.setTextAlign(Paint.Align.LEFT);
     }
+
+    /** 굵은 구간이 섞인 글: 줄마다 조각을 차례로 그린다(새 글자·객체를 만들지 않는다 — 조각은 배치 때 미리 나눠 뒀다). */
+    private void drawRich(Canvas cv, ScreenCore.Item it, float x0, float y0, int color) {
+        for (int k = 0; k < it.segs.length; k++) {
+            float x = x0, b = -1f;
+            for (int q = 0; q < it.segs[k].length; q++) {
+                setText(it.size, it.segBold[k][q], color);
+                if (b < 0f) b = base(y0 + k * it.lineH, it.lineH, k);
+                cv.drawText(it.segs[k][q], x, b, tp);
+                x += tp.measureText(it.segs[k][q]);
+            }
+        }
+    }
+
+    private void drawBox(Canvas cv, ScreenCore.Item it) {
+        rf.set(it.x, it.y, it.x + it.w, it.y + it.h);
+        if (it.fillRole != null || it.fillC != 0) {
+            p.setStyle(Paint.Style.FILL); p.setColor(it.fillRole != null ? roleColor(it.fillRole) : it.fillC);
+            cv.drawRoundRect(rf, it.radius, it.radius, p);
+        }
+        if (it.lineRole != null || it.lineC != 0) {
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(it.lineRole != null ? roleColor(it.lineRole) : it.lineC);
+            rf2.set(it.x + 0.5f, it.y + 0.5f, it.x + it.w - 0.5f, it.y + it.h - 0.5f);
+            cv.drawRoundRect(rf2, it.radius - 0.5f, it.radius - 0.5f, p);
+            p.setStyle(Paint.Style.FILL);
+        }
+        int c = roleColor(it.color);
+        setText(it.size, it.bold, c);
+        if (it.segs != null) { drawRich(cv, it, it.textX, it.textY, c); return; }
+        for (int k = 0; k < it.lines.length; k++) cv.drawText(it.lines[k], it.textX, base(it.textY + k * it.lineH, it.lineH, k), tp);
+    }
+
+    private void drawSearch(Canvas cv, ScreenCore.Item it) {
+        int accent = it.accentRole != null ? roleColor(it.accentRole) : it.accentC;
+        rf.set(it.x, it.y, it.x + it.w, it.y + it.h);
+        p.setStyle(Paint.Style.FILL); p.setColor(pal[R_CARD]);
+        cv.drawRoundRect(rf, it.radius, it.radius, p);
+        p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(pal[R_BORDER]);
+        rf2.set(it.x + 0.5f, it.y + 0.5f, it.x + it.w - 0.5f, it.y + it.h - 0.5f);
+        cv.drawRoundRect(rf2, it.radius - 0.5f, it.radius - 0.5f, p);
+        p.setStyle(Paint.Style.FILL); p.setColor(accent);
+        float r1 = ScreenCore.SEARCH_BADGE / 2f;
+        cv.drawCircle(it.bx + r1, it.by + r1, r1, p);
+        if (it.badge.length() > 0) {
+            setText(12f, true, pal[R_WHITE]); tp.setTextAlign(Paint.Align.CENTER);
+            cv.drawText(it.badge, it.bx + r1, base(it.by, ScreenCore.SEARCH_BADGE, 0), tp);
+            tp.setTextAlign(Paint.Align.LEFT);
+        }
+        float r2 = ScreenCore.SEARCH_BTN / 2f, cx = it.btx + r2, cy = it.bty + r2;
+        p.setStyle(Paint.Style.FILL); p.setColor(accent);
+        cv.drawCircle(cx, cy, r2, p);
+        if (it == pressed) { p.setColor(0x33000000); cv.drawCircle(cx, cy, r2, p); }
+        p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1.8f); p.setStrokeCap(Paint.Cap.ROUND); p.setColor(pal[R_WHITE]);
+        cv.drawCircle(cx - 1.3f, cy - 1.3f, 4.4f, p);                      // 돋보기
+        cv.drawLine(cx + 1.9f, cy + 1.9f, cx + 5.4f, cy + 5.4f, p);
+        p.setStyle(Paint.Style.FILL); p.setStrokeCap(Paint.Cap.BUTT);
+    }
+
+    // ───────────── 검색 입력칸(진짜 EditText) ─────────────
+    private ScreenCore.Item searchItem() {
+        if (lay == null) return null;
+        for (ScreenCore.Item it : lay.head) if (it.kind == ScreenCore.K_SEARCH) return it;
+        return null;
+    }
+    private void ensureInput() {
+        if (input != null) return;
+        EditText e = new EditText(getContext());
+        e.setBackground(null);
+        e.setPadding(0, 0, 0, 0);
+        e.setSingleLine(true);
+        e.setIncludeFontPadding(false);
+        e.setGravity(Gravity.CENTER_VERTICAL);
+        e.setInputType(InputType.TYPE_CLASS_TEXT);
+        e.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
+        e.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13f);
+        e.setOnEditorActionListener(new TextView.OnEditorActionListener() {
+            @Override public boolean onEditorAction(TextView v, int actionId, KeyEvent ev) {
+                boolean enter = ev != null && ev.getKeyCode() == KeyEvent.KEYCODE_ENTER && ev.getAction() == KeyEvent.ACTION_DOWN;
+                if (actionId == EditorInfo.IME_ACTION_SEARCH || actionId == EditorInfo.IME_ACTION_DONE || enter) { submitSearch(); return true; }
+                return false;
+            }
+        });
+        e.setOnFocusChangeListener(new View.OnFocusChangeListener() {
+            @Override public void onFocusChange(View v, boolean has) { if (listener != null) listener.onInputFocus(has); }
+        });
+        input = e;
+        styleInput();
+    }
+    private void styleInput() {
+        if (input == null) return;
+        input.setTextColor(pal[R_TEXT]);
+        input.setHintTextColor(alpha(pal[R_SUB], 0.8f));
+    }
+    private void submitSearch() {
+        if (listener == null || inAct == null) return;
+        String q = input == null ? "" : String.valueOf(input.getText()).trim();
+        blurInput();
+        listener.onSearch(inAct, q);
+    }
+    private void tapSearch(ScreenCore.Item it, float xdp, float ydp) {
+        boolean onBtn = xdp >= it.btx - 4f && xdp < it.btx + ScreenCore.SEARCH_BTN + 4f && ydp >= it.bty - 4f && ydp < it.bty + ScreenCore.SEARCH_BTN + 4f;
+        if (onBtn) { inAct = it.act; submitSearch(); return; }
+        ensureInput(); syncInput();
+        if (input != null && input.getVisibility() == View.VISIBLE) {                // 알약의 다른 곳을 눌러도 입력칸에 커서를 준다
+            input.requestFocus();
+            try { ((InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE)).showSoftInput(input, 0); } catch (Throwable ignored) { }
+        }
+    }
+    private void blurInput() {
+        if (input == null || !input.hasFocus()) return;
+        try { ((InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(input.getWindowToken(), 0); } catch (Throwable ignored) { }
+        input.clearFocus();
+    }
+    private void hideInput() {
+        if (input == null) return;
+        blurInput();
+        if (input.getVisibility() != View.GONE) input.setVisibility(View.GONE);
+        inShown = false;
+    }
+    /** 입력칸을 검색줄 자리에 맞춘다. 검색줄이 없거나 뷰가 안 보이거나 잘려(clip) 있으면 숨긴다. 자리가 같으면 아무것도 안 한다. */
+    private void syncInput() {
+        ScreenCore.Item si = searchItem();
+        ViewGroup par = getParent() instanceof ViewGroup ? (ViewGroup) getParent() : null;
+        if (si == null || par == null || getVisibility() != View.VISIBLE || getWidth() <= 0) { hideInput(); return; }
+        ensureInput();
+        inAct = si.act;
+        if (input.getParent() != par) {
+            if (input.getParent() instanceof ViewGroup) ((ViewGroup) input.getParent()).removeView(input);
+            par.addView(input, new FrameLayout.LayoutParams(1, 1));
+            inFront = true;
+        }
+        int w = Math.max(1, Math.round(si.iw * dpr)), h = Math.max(1, Math.round(si.ih * dpr));
+        int l = getLeft() + Math.round(si.ix * dpr), t = getTop() + Math.round(si.iy * dpr);
+        Rect cb = null;
+        try { cb = getClipBounds(); } catch (Throwable ignored) { }
+        if (cb != null) {                                                                    // 잘려 보이면(팝업·탭 이동 중) 입력칸은 내린다
+            int rl = Math.round(si.ix * dpr), rt = Math.round(si.iy * dpr);
+            if (rl < cb.left || rt < cb.top || rl + w > cb.right || rt + h > cb.bottom) { hideInput(); return; }
+        }
+        String hint = si.label == null ? "" : si.label;
+        if (!hint.contentEquals(input.getHint() == null ? "" : input.getHint())) input.setHint(hint);
+        if (si.maxlen != maxLen) { maxLen = si.maxlen; input.setFilters(new InputFilter[] { new InputFilter.LengthFilter(maxLen) }); }
+        if (l != inL || t != inT || w != inW || h != inH || input.getParent() != par) {
+            inL = l; inT = t; inW = w; inH = h;
+            FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(w, h);
+            lp.leftMargin = l; lp.topMargin = t;
+            input.setLayoutParams(lp);
+        }
+        if (input.getVisibility() != View.VISIBLE) input.setVisibility(View.VISIBLE);
+        if (!inShown || !inFront) { inShown = true; inFront = true; input.bringToFront(); }
+    }
+    private int maxLen = -1;
+    private boolean syncQ;
+    private final Runnable syncRun = new Runnable() { @Override public void run() { syncQ = false; syncInput(); } };
+    /** 배치 도중에 자식 뷰를 건드리지 않도록 한 박자 뒤로 미룬다(여러 번 불려도 한 번). */
+    private void syncLater() { if (!syncQ) { syncQ = true; post(syncRun); } }
+    @Override protected void onLayout(boolean changed, int l, int t, int r, int b) { super.onLayout(changed, l, t, r, b); syncLater(); }
+    @Override protected void onVisibilityChanged(View changedView, int vis) {
+        super.onVisibilityChanged(changedView, vis);
+        if (changedView != this) return;
+        if (vis != View.VISIBLE) hideInput(); else { inShown = false; syncLater(); }
+    }
+    @Override protected void onDetachedFromWindow() {
+        super.onDetachedFromWindow();
+        if (input != null) { blurInput(); if (input.getParent() instanceof ViewGroup) ((ViewGroup) input.getParent()).removeView(input); inShown = false; inL = inT = inW = inH = -1; }
+    }
+    /** 클리핑이 바뀌어도 입력칸이 어긋나지 않게 플러그인이 setClipBounds 뒤에 부른다. */
+    public void resyncInput() { syncLater(); }
 
     /** 그림을 받아 두는 곳 — 메모리(LruCache) → 파일 → 네트워크. 받는 일은 백그라운드, 끝나면 화면 박자에 맞춰 다시 그린다. */
     static final class ImageBank {
