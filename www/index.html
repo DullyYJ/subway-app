@@ -7666,6 +7666,10 @@ var _PROG_LOOKAHEAD  = 1;
 var _PASS_MAX_AGE_MS = 30*60*1000;   // 이보다 오래된 통과 기록은 근거로 안 쓴다
 window._PASS_MAX_AGE_MS = _PASS_MAX_AGE_MS;
 
+// ★ 2026-10-19 (YJ 로그 06:18 — 환승완료를 눌렀는데 06:19:49 에 GPS 가 가까운 '아라역4번출구'(버스 정류장)를 보고 진행도를 6 으로 되돌리고 승차 통과 기록(7)도 지워,
+//   엔진이 '못 탄 것'으로 보고 다음 차(06:27)로 10분 밀었다): 탑승·환승 버튼은 '관측'이다 — 누른 구간의 승차 노드(bi) 아래로는 GPS·PF·셀 어느 쪽도 진행도를 내리지 못한다(되돌리기 버튼만 풀어 준다).
+function _rsFloorIdx(){ var f = window._rsFloor; return (f && f.sig === (window._trackSig || '') && f.idx != null) ? f.idx : -1; }
+window._rsFloorIdx = _rsFloorIdx;
 function _progEvidenceIdx(){
   var e = (window._gpsConfirmIdx == null ? -1 : window._gpsConfirmIdx);
   try{
@@ -7692,6 +7696,7 @@ function _progGuard(){
       var bi = _htlBoardIdx();
       if(bi >= 0 && cap > bi) cap = bi;
     }
+    if(cap < _rsFloorIdx()) cap = _rsFloorIdx();   // 버튼으로 확정한 승차 노드 아래로는 내리지 않는다
     if(cap < 0) cap = 0;
     if(cap >= _transitNodeData.length) cap = _transitNodeData.length - 1;
     if(max > cap){
@@ -11301,9 +11306,9 @@ function _arrTimeToMin(s){
 // ── 실시간 위치 미커버 노선 정차(dwell) 모델 ─────────────────────
 //   실시간 열차위치 API가 없는 지하철 노선(인천1·2호선, 지방선 등)은 시각표+GPS로만
 //   위치를 그려서, 열차가 아직 역에 서 있는데 마커가 먼저 출발해 앞서가는 일이 있었음.
-//   → 역 도착 후 30초간은 출발역에 고정(정차)했다가 이후 다음 역으로 이동시킨다.
+//   → 역 도착 후 12초간은 출발역에 고정(정차)했다가 이후 다음 역으로 이동시킨다.
 //   실시간 커버 노선(서울1~9호선 등)은 API가 위치를 직접 보정하므로 정차 미적용.
-var _RT_NOCOVER_DWELL_MIN = 0.5;   // 30초
+var _RT_NOCOVER_DWELL_MIN = 0.2;   // 12초 — 2026-10-19 YJ: 각 역 문 열림 12초(엔진 stopDwellSec 과 같은 값; 30초였다)
 function _rtNoCover(nd){
   if(!nd || !nd.isSub) return false;
   if(typeof _rtCovered==='function' && _rtCovered(nd.lineName||'')) return false;  // 커버 노선=API 보정
@@ -11716,6 +11721,21 @@ function _distToSegM(pLat, pLng, aLat, aLng, bLat, bLng){
 
 var _TRK_URL = ((typeof _ROUTE_V2_BASE === 'string' && _ROUTE_V2_BASE) ? _ROUTE_V2_BASE : 'https://route-v2.phg0643.workers.dev') + '/ride-track';
 var _TRK_MIN_GAP_MS = 8000, _TRK_TIMEOUT_MS = 6000, _TRK_FRESH_MS = 25000;
+// ★ 2026-10-19 (YJ: "영점은 역·정류장 도착 후 5초 안에 조절돼야 해"): 표시 도착 시각 앞 30초~뒤 40초 안에는 엔진에 묻는 간격을 2.5초로 줄인다(그 밖에는 8초).
+//   (엔진이 도착을 알아채는 데 걸리는 시간 = 이 간격 + 응답 시간. 8초 간격이면 도착한 뒤 최대 8초+ 걸렸다.) 끄기: window._trkNearGapOff = true
+var _TRK_NEAR_GAP_MS = 2500;
+function _trkGapMs(now){
+  try{
+    if(window._trkNearGapOff === true || window._htlBoarded !== true || !_transitNodeData) return _TRK_MIN_GAP_MS;
+    for(var i = 0; i < _transitNodeData.length; i++){
+      var n = _transitNodeData[i];
+      if(!n || n.isWalk || n.isOrigin || !(n.isSub || n.isBus)) continue;
+      var am = _etaHmToMs(n.arrTime); if(am == null) continue;
+      var dt = now - am; if(dt >= -30000 && dt <= 40000) return _TRK_NEAR_GAP_MS;
+    }
+  }catch(e){}
+  return _TRK_MIN_GAP_MS;
+}
 var _trk = { busy: false, at: 0, fails: 0, seq: 0, last: null, lastAt: 0, sig: null, paths: null, rideHits: 0, rideCool: 0, retryT: null, notBusHits: 0, notBusCool: 0 };
 window._trk = _trk;
 // 첫 대중교통이 버스이고 그 버스 구간이 끝나기 전이면 승차 정류장 좌표와 '확실한 증거' 이름을 돌려준다(없으면 null). 계산 없음.
@@ -11800,7 +11820,7 @@ function _trkRequest(why){
     var noTrail = !_ev.trail || !_ev.trail.length;
     if(noTrail && !(window._htlBoarded === true && window._routeLocked === true)) return;   // 증거가 없으면 보낼 것이 없다(승차 확정 뒤엔 '위치 없음'도 엔진이 알아야 한다 — 도착 확인 버튼)
     var now = Date.now();
-    if(now - _trk.at < _TRK_MIN_GAP_MS) return;
+    if(now - _trk.at < _trkGapMs(now)) return;
     if(_trk.busy) return;
     if(window._trkOff === true) return;
     var P = _trkPayload(); P.want = { off: true, ridden: !!P.cands, miss: true, bus: true };
@@ -11825,6 +11845,34 @@ function _trkRequest(why){
       });
   }catch(e){ _trk.busy = false; }
 }
+// ★ 2026-10-19 (YJ: "버스는 지상이 대부분이니까 네비게이션처럼 GPS 를 사용 · 새벽·야간엔 시간표보다 빠르거나 정차 없이 지나치니 지난 정류장 기준으로 남은 시각을 당기고 밀어"):
+//   엔진(/ride-track busPos)이 정류장을 이은 선 위 지금 위치와 '이미 지난 정류장'(시각을 아는 것 passed · 모르는 것 passedUnknown)을 준다.
+//   앱은 진행도를 그 정류장까지 올리고, 시각을 아는 정류장은 통과 증거(gps)로 적어 엔진에 다시 보낸다 → 엔진이 남은 정류장 시각을 당기거나 민다.
+//   이미 GPS 로 확정한 정류장의 시각은 건드리지 않는다. 끄기: window._busPosOff = true
+function _busPosFollow(bp){
+  try{
+    if(window._busPosOff === true || !bp || window._routeLocked !== true || window._htlBoarded !== true) return;
+    if(_trkBusState() === 'notBus') return;
+    var nd = (typeof _transitNodeData !== 'undefined' && _transitNodeData) ? _transitNodeData : [];
+    var src = window._nodePassSrc = window._nodePassSrc || {}, top = -1, stamped = 0;
+    (bp.passed || []).forEach(function(p){
+      if(!p || p.i == null || !nd[p.i] || !nd[p.i].isBus) return;
+      if(p.i > top) top = p.i;
+      if(src[p.i] === 'gps' || src[p.i] === 'move') return;          // 이미 확인한 통과는 밀거나 당기지 않는다
+      try{ _zeroStampPass({ i: p.i, passMs: p.ms }); stamped++; }catch(e0){}
+    });
+    (bp.passedUnknown || []).forEach(function(i){ if(i != null && nd[i] && nd[i].isBus && i > top) top = i; });
+    var gm = (window._gpsMaxIdx == null) ? -1 : window._gpsMaxIdx;
+    if(top > gm && top >= _rsFloorIdx()){
+      window._gpsMaxIdx = top;
+      if(window._gpsConfirmIdx == null || window._gpsConfirmIdx < top) window._gpsConfirmIdx = top;
+      window._busAdvMs = Date.now();
+      try{ _ovlDiag('버스위치', '엔진: 정류장 선 위 ' + (bp.offM == null ? '-' : bp.offM) + 'm · 진행 ' + gm + '→' + top + (stamped ? ' · 통과 시각 ' + stamped + '곳 반영' : '')); }catch(e1){}
+      try{ if(typeof _etaRequest === 'function') _etaRequest('pass'); }catch(e2){}
+    }
+  }catch(e){}
+}
+window._busPosFollow = _busPosFollow;
 // 엔진이 준 판정을 따른다(계산 없음)
 function _trkApply(res, P, paths){
   try{
@@ -11841,6 +11889,8 @@ function _trkApply(res, P, paths){
       _handleOffRoute();
       return;
     }
+    window._trkMotion = res.motion ? { v: res.motion, at: now } : null;            // ★ 2026-10-19: 엔진이 본 '지금 달리는 중인가'(버스는 네비게이션식 — _ovlMoving 이 따른다)
+    if(res.busPos) _busPosFollow(res.busPos);                                       // ★ 2026-10-19: 버스 정류장 선 위 위치·통과 시각(엔진)을 그대로 따른다
     if(res.zero) _zeroFollow(res.zero);                                             // ★ 2026-10-13: 영점 · 도착 확인(엔진 판정을 그대로 따른다)
     if(res.ridden && res.ridden.ok && res.ridden.curBad && paths && paths[res.ridden.id]){ _trk.rideHits++; } else { _trk.rideHits = 0; }
     // 버스를 타고 있는 동안: 지금 보는 경로를 지나온 궤적이 따라가지 않고 엔진 후보 중 다른 경로를 따라가면 그 경로로 이어서 안내(두 번 연속 같은 판정이어야 바꾸고, 바꾼 뒤 2분은 쉰다)
@@ -15302,7 +15352,7 @@ function _updateTransitGps() {
       var _gcI = (window._gpsConfirmIdx == null ? -1 : window._gpsConfirmIdx);
       var _nA = (_pMax > 0) ? _transitNodeData[_pMax] : null;
       if(_nA && window._cellMaxIdx === _pMax && _gcI < _pMax && _nA.isSub && _nA.lat != null && typeof haversineM === 'function'
-         && haversineM(lat, lng, _nA.lat, _nA.lng) > 500 && _gpsBeforeNode(lat, lng, _pMax)){
+         && _pMax - 1 >= _rsFloorIdx() && haversineM(lat, lng, _nA.lat, _nA.lng) > 500 && _gpsBeforeNode(lat, lng, _pMax)){
         console.log('[진행도 되돌림] 추정이 앞서감 ' + _pMax + ' → ' + (_pMax - 1) + ' (GPS: ' + (_nA.name||'') + ' 아직 못 옴)');
         window._gpsMaxIdx = _pMax - 1;
         window._cellMaxIdx = null;
@@ -15325,7 +15375,7 @@ function _updateTransitGps() {
     //   있으면 항상 되돌리도록 -2 → -1 로 완화(거리 조건은 그대로라 오탐 위험은 낮음).
     // ★ 2026-10-12: 되돌림은 '검수'를 거친다 — 같은 역을 가리키는 좋은 좌표가 8초 이상 간격으로 두 번 이어질 때만(지하에서 살아난 첫 좌표 한 점으로 되돌리지 않는다).
     var _pbOk = false;
-    if(bestIdx >= 0 && bestIdx <= _pMax - 1 && bestDist <= 250){
+    if(bestIdx >= 0 && bestIdx <= _pMax - 1 && bestDist <= 250 && bestIdx >= _rsFloorIdx()){
       var _pc = window._pbCand;
       if(_pc && _pc.idx === bestIdx && Date.now() - _pc.at <= 60000){ if(Date.now() - _pc.at >= 8000) _pbOk = true; }
       else window._pbCand = { idx: bestIdx, at: Date.now() };
@@ -19588,7 +19638,7 @@ window.addEventListener('unhandledrejection', function(e) {
 <div class="tab-body" id="tab-home">
 
   <!-- ── 출발/도착 검색 카드 (항상 표시) ── -->
-  <div style="padding:0 0 4px;">
+  <div id="homeRouteWrap" style="padding:0 0 4px;">
     <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:visible;position:relative;">
 
       <!-- 출발지 행 -->
@@ -20347,6 +20397,21 @@ window.addEventListener('unhandledrejection', function(e) {
         <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">화면 맨 아래 탭 막대(커뮤니티·노선도·홈·쇼핑센터·맛집)를 엔진이 정해 내려주고, 기기가 직접 그려요. 문제가 생기면 예전 웹 탭 막대로 돌아가요.</p>
         <div id="scrtSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
         <style>#scrtSetOn:checked ~ #scrtSetKnob{background:var(--gold) !important;} #scrtSetOn:checked ~ #scrtSetDot{left:23px !important;}</style>
+      </div>
+
+      <!-- ★ 2026-10-18: 서버 구동 네이티브 홈 경로 입력 — 안드로이드 앱에서만 보임, 기본 꺼짐(실험) -->
+      <div id="scrhSetCard" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <div style="font-size:15px;font-weight:800;color:var(--text);">네이티브 경로 입력</div>
+          <label style="position:relative;display:inline-block;width:46px;height:26px;">
+            <input type="checkbox" id="scrhSetOn" onchange="_scrhSetUse(this.checked)" style="opacity:0;width:0;height:0;">
+            <span id="scrhSetKnob" style="position:absolute;inset:0;border-radius:13px;background:var(--border2);transition:.2s;cursor:pointer;"></span>
+            <span id="scrhSetDot" style="position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.3);"></span>
+          </label>
+        </div>
+        <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">홈 탭의 출발·도착 입력칸, 자동완성 목록, 위치 감지·바꾸기·경로 탐색 단추, 기준시각 줄을 엔진이 정해 내려주고, 기기가 직접 그려요. 글자를 쓰는 동안 자동완성이 바로 따라와요. 문제가 생기면 예전 웹 카드로 돌아가요.</p>
+        <div id="scrhSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
+        <style>#scrhSetOn:checked ~ #scrhSetKnob{background:var(--gold) !important;} #scrhSetOn:checked ~ #scrhSetDot{left:23px !important;}</style>
       </div>
 
       <!-- ★ 2026-10-03: 도착 오차 익명 기록 (끌 수 있음) -->
@@ -22703,7 +22768,18 @@ function _sampleBestGPS(onDone, onErr){
 }
 window._sampleBestGPS = _sampleBestGPS;
 
+// ★ 2026-10-19 (YJ: "경로탐색 후 다시 위치확인 버튼을 누르면 내 위치를 다시 갱신하고 경로탐색을 자동으로 해줘"):
+//   이미 경로를 찾아 결과가 떠 있는 상태(안내를 시작해 확정한 경우는 제외)에서 위치 감지를 다시 누르면, 새 위치를 출발지로 정한 뒤 같은 도착지로 다시 탐색한다.
+//   (탐색 자체는 예전 그대로 fmapDoRoute — 앱이 새로 계산하는 것은 없다.) 끄기: window._locReSearchOff = true
+function _locHadResult(){
+  try{
+    if(window._routeLocked === true) return false;
+    var c = document.getElementById('transitResultCard');
+    return !!(c && c.style.display && c.style.display !== 'none');   // 결과 카드가 떠 있다(flex)
+  }catch(e){ return false; }
+}
 function triggerGPS(){
+  var _hadRes = (window._locReSearchOff === true) ? false : _locHadResult();
   _gpsSetBusy(true);
 
   if(!navigator.geolocation){
@@ -22729,6 +22805,15 @@ function triggerGPS(){
     _setStartToMyLocation(lat, lng);
     if(acc > 120) toast('📍 내 위치로 설정 (GPS 정확도 낮음 ±'+Math.round(acc)+'m)');
     else toast('📍 내 위치로 설정했어요');
+    if(_hadRes){   // 결과가 떠 있었다면 새 위치로 같은 도착지를 자동으로 다시 탐색
+      try{
+        var _dI = document.getElementById('fmapDestInp');
+        if((_dI && _dI.value.trim()) || (typeof _fmapDest !== 'undefined' && _fmapDest)){
+          try{ _ovlDiag && _ovlDiag('위치감지', '결과가 떠 있어 새 위치로 자동 재탐색'); }catch(eD){}
+          setTimeout(function(){ try{ if(window._routeLocked !== true) fmapDoRoute(); }catch(eR){} }, 60);
+        }
+      }catch(eS){}
+    }
   }, function(err){
     _gpsSetBusy(false);
     var msg = '위치 권한이 필요합니다.';
@@ -25844,6 +25929,7 @@ function switchTab(tab,el){
   try{ if(window._scrNews) setTimeout(function(){ window._scrNews.kick(); }, 0); }catch(eSn3){}      // 서버 구동 네이티브 뉴스 화면(켜져 있을 때만)
   try{ if(window._scrBoard) setTimeout(function(){ window._scrBoard.kick(); }, 0); }catch(eSb3){}      // 서버 구동 네이티브 게시판(켜져 있을 때만)
   try{ if(window._scrChat) setTimeout(function(){ window._scrChat.kick(); }, 0); }catch(eSc3){}      // 서버 구동 네이티브 실시간소통(켜져 있을 때만)
+  try{ if(window._scrHome) setTimeout(function(){ window._scrHome.kick(); }, 0); }catch(eSh3){}      // 서버 구동 네이티브 홈 경로 입력(켜져 있을 때만)
   try{ if(window._scrTabs) setTimeout(function(){ window._scrTabs.changed(); }, 60); }catch(eSt3){}      // 서버 구동 네이티브 탭 막대: 켜진 칸이 바뀐다
   try{ if(window._scrFood) setTimeout(function(){ window._scrFood.kick(); }, 0); }catch(eSf2){}      // 서버 구동 네이티브 맛집 화면(켜져 있을 때만)
   try{ if(window._scrSet) setTimeout(function(){ window._scrSet.kick(); }, 0); }catch(eSs){}      // 서버 구동 네이티브 설정 화면(켜져 있을 때만)      // 서버 구동 네이티브 쇼핑 화면(켜져 있을 때만) — 탭 전환이 끝난 뒤 보이면 올린다
@@ -29980,12 +30066,16 @@ function _arrEndStops(){
     var nd = (typeof _transitNodeData !== 'undefined') ? _transitNodeData : null; if(!nd || !nd.length) return out;
     var D = _arrEndDest(), _firstTr = -1;
     for(var i0 = 0; i0 < nd.length; i0++){ var n0 = nd[i0]; if(n0 && !n0.isWalk && !n0.isOrigin && (n0.isSub || n0.isBus)){ _firstTr = i0; break; } }
+    var _lgN = 0;   // 같은 노선·같은 탈것으로 이어진 구간 번호(엔진이 버스 정류장을 선으로 이을 때 구간을 가른다)
     for(var i = 0; i < nd.length; i++){
       var n = nd[i];
       if(!n || n.isWalk || n.isOrigin || !(n.isSub || n.isBus) || n.lat == null || n.lng == null) continue;
+      var _pv0 = nd[i - 1];
+      if(!_pv0 || _pv0.isWalk || _pv0.isOrigin || (_pv0.lineName || '') !== (n.lineName || '') || !!_pv0.isBus !== !!n.isBus) _lgN++;
       var am = null; try{ am = _etaHmToMs(n.arrTime); }catch(e0){}
       if(am == null) continue;
       var o = { i: i, lat: n.lat, lng: n.lng, arrMs: am };
+      if(n.isBus) o.lg = _lgN;
       try{ var pm9 = _trkPlanMs(n._plan0); if(pm9 != null) o.planMs = pm9; if(n.isBus) o.bus = true; }catch(eP9){}   // 처음 계획 시각 — 엔진이 '버스가 아니다(계획보다 먼저 닿음)'를 가를 때 쓴다
       if(D && D.idx === i) o.fin = true;
       try{    // ★ 2026-10-13: 통과 시각을 GPS 로 아직 못 박지 못한 역(승차역 뒤)은 '표시 시각 앞뒤 넓은 창'에서 엔진이 통과 시각을 찾게 한다(일찍·늦게 닿은 열차)
@@ -30371,6 +30461,10 @@ function _ovlMoving(){
   try{
     if(window._routeLocked !== true || window._metroRouteMode === true) return false;
     if(typeof _htlNotDeparted === 'function' && _htlNotDeparted()) return false;
+    try{    // ★ 2026-10-19 (YJ: "버스가 계속 움직이는데 마커는 정지(노랑)으로 유지"): 버스를 타고 있으면 지하철 위치 판단기(PF)의 정차 판정이 아니라 엔진이 본 GPS 속도(motion)를 따른다
+      var _bn = window._transitNodeData, _bh = _pipHereIdx(), _bnd = _bn && _bn[_bh], _tmo = window._trkMotion;
+      if(window._busMotionOff !== true && _bnd && _bnd.isBus && !_bnd.isWalk && _tmo && Date.now() - _tmo.at <= 30000 && _tmo.v && _tmo.v.moving != null && _trkBusState() !== 'notBus') return _tmo.v.moving === true;
+    }catch(eBm){}
     try{    // ★ 2026-10-16 (YJ: "도착하면 마커가 바로 다음역으로 넘어간다 → 영점 뒤 10초 정차(노란색) 후 이동"): 엔진이 준 정차 구간(hold) 안이면, 그 역이 현위치일 때 정지로 그린다
       var _ho = window._etaHold;
       var _ttMode = false; try{ _ttMode = _ttFirstOn() && !!window._etaPos; }catch(eTt){}
@@ -30440,9 +30534,10 @@ function _ovlLines(){
       out.track.push(nm == null ? '' : _ovlShort(clamp(nm, 40)));   // 6글자 줄임은 엔진이 만든 값(_ovlShort)
     }
     out.cur = 1;
-    try{ var _sp = _ovlStrip(st); if(_sp){ _sp.cells.forEach(function(c){ if(c){ c.n = _ovlShort(c.n); c.g = _ovlShortLine(c.g); } }); out.strip = _sp.cells; out.scur = _sp.cur; out.sbase = _sp.base; out.theme = _sp.theme; } }catch(eSt){}
+    var _xf = false;
+    try{ var _sp = _ovlStrip(st); if(_sp){ _sp.cells.forEach(function(c){ if(c){ c.n = _ovlShort(c.n); c.g = _ovlShortLine(c.g); } }); out.strip = _sp.cells; out.scur = _sp.cur; out.sbase = _sp.base; out.theme = _sp.theme; _xf = !!_sp.xfer; } }catch(eSt){}
     try{ out.rs = _ovlRs(); }catch(eRs){}   // ★ 2026-10-11: 앱 탑승 시트(_rs)와 같은 상태를 오버레이 맨 아래 줄에도
-    out.moving = !!(_tri[2] && _ovlMoving());   // 다음 역이 있을 때만 화살표가 깜박인다
+    out.moving = !!(_tri[2] && !_xf && _ovlMoving());   // 환승 칸에서 기다리는 중이면 정지   // 다음 역이 있을 때만 화살표가 깜박인다
     // 알약 문구의 현위치: 이동 중이면 '다음역(이동중)'(엔진이 만든 m), 아니면 현재 역 — 앱은 고르기만 한다
     try{ out.pill = (out.moving && _tri[2]) ? (_ovlShortMv(_tri[2]) || '') : ''; }catch(ePl){}
     var _pad2 = function(n){ return (n < 10 ? '0' : '') + n; };
@@ -30628,6 +30723,23 @@ window._ovlAct = function(a){
     _ovlSync(true);
   }catch(e){}
 };
+// ★ 2026-10-19 (YJ: "환승버튼이 나오면 마커가 환승에가서 대기해야해"): 환승 버튼(탑승 시트·알약)이 떠 있는 동안 오버레이 마커는 '환승' 칸(없으면 환승 직전 역)에서 멈춰 기다린다.
+//   환승 도보 칸은 노드가 아니라 _pipHereIdx 로는 닿지 못한다 — 칸 목록에서 다음 구간 탑승 노드 바로 앞 칸을 찾아 현위치 칸을 그쪽으로 옮길 뿐(계산 아님). 못 찾으면 -1.
+function _ovlXferCell(kids, ci, nd){
+  var r = window._rs;
+  if(!r || window._rsOff === true || window._ovlRsOff === true) return -1;
+  if(r.st !== 'board' && r.st !== 'wait') return -1;
+  var L = r.leg; if(!L || !(L.k > 0)) return -1;
+  var bn = nd[L.bi], bEl = bn && bn.el, bj = bEl ? kids.indexOf(bEl) : -1;
+  if(bj <= ci + 0) return -1;
+  var j, q, isNode;
+  for(j = bj - 1; j > ci; j--){
+    isNode = false;
+    for(q = 0; q < nd.length; q++){ if(nd[q] && nd[q].el === kids[j]){ isNode = true; break; } }
+    if(!isNode) return j;       // 환승 도보 칸
+  }
+  return (bj - 1 > ci) ? bj - 1 : -1;   // 도보 칸이 없는 같은 자리 환승: 앞 구간의 마지막 역
+}
 function _ovlStrip(st, full){
   var out = { cells: [], cur: 0, base: 0, theme: _ovlThemeColors() };
   try{
@@ -30647,13 +30759,15 @@ function _ovlStrip(st, full){
           if(ch.children && ch.children.length === 4 && ch.style && ch.style.flex) kids.push(ch);   // 역·도보 칸(id 없는 중간 도보 포함)
         }
         var ci = kids.indexOf(curEl);
+        var _xfer = false;
+        if(!full && ci >= 0){ try{ var _xj = _ovlXferCell(kids, ci, nd); if(_xj > ci){ ci = _xj; _xfer = true; } }catch(eXf){} }   // ★ 2026-10-19 (YJ: "환승버튼이 나오면 마커가 환승에가서 대기해야해")
         if(ci >= 0){
           var s0 = Math.max(0, Math.min(ci - BACK, kids.length - N));
           for(var j = s0; j < Math.min(kids.length, s0 + N); j++){
             out.cells.push(_ovlCellOf(kids[j]));
             if(full){ var _mi = -1; for(var _q = 0; _q < nd.length; _q++){ if(nd[_q] && nd[_q].el === kids[j]){ _mi = _q; break; } } (out.map = out.map || []).push(_mi); }   // 칸 → 노드 번호(도보 칸은 -1)
           }
-          out.cur = ci - s0; out.base = s0;
+          out.cur = ci - s0; out.base = s0; if(_xfer) out.xfer = true;
           if(out.cells.length) return out;
         }
       }
@@ -37824,6 +37938,7 @@ window.refreshShop=refreshShop;
     try{ var Xscrb = window._scrBoard && _scrBoard.S, cscrb = document.getElementById('scrbSetCard'); if(Xscrb && cscrb && cscrb.style.display === 'block') f.feat.scrb = { h: 1, on: Xscrb.on ? 1 : 0, f: (Xscrb.failed || Xscrb.fails >= 2) ? 1 : 0, w: Xscrb.why || '', b: Xscrb.badFresh > 0 ? 1 : 0 }; }catch(e){}
     try{ var Xscrc = window._scrChat && _scrChat.S, cscrc = document.getElementById('scrcSetCard'); if(Xscrc && cscrc && cscrc.style.display === 'block') f.feat.scrc = { h: 1, on: Xscrc.on ? 1 : 0, f: (Xscrc.failed || Xscrc.fails >= 2) ? 1 : 0, w: Xscrc.why || '', b: Xscrc.badFresh > 0 ? 1 : 0 }; }catch(e){}
     try{ var Xscrt = window._scrTabs && _scrTabs.S, cscrt = document.getElementById('scrtSetCard'); if(Xscrt && cscrt && cscrt.style.display === 'block') f.feat.scrt = { h: 1, on: Xscrt.on ? 1 : 0, f: (Xscrt.failed || Xscrt.fails >= 2) ? 1 : 0, w: Xscrt.why || '', b: Xscrt.badFresh > 0 ? 1 : 0 }; }catch(e){}
+    try{ var Xscrh = window._scrHome && _scrHome.S, cscrh = document.getElementById('scrhSetCard'); if(Xscrh && cscrh && cscrh.style.display === 'block') f.feat.scrh = { h: 1, on: Xscrh.on ? 1 : 0, f: (Xscrh.failed || Xscrh.fails >= 2) ? 1 : 0, w: Xscrh.why || '', b: Xscrh.badFresh > 0 ? 1 : 0 }; }catch(e){}
     f.feat.scrs = { h: 1, on: S.on ? 1 : 0, f: (S.failed || S.fails >= 2) ? 1 : 0, w: S.why || '', b: S.badFresh > 0 ? 1 : 0 };
     return f;
   }
@@ -37862,7 +37977,7 @@ window.refreshShop=refreshShop;
     }catch(e){}
     return false;
   }
-  function place(r){ return { x: r.L, y: r.T, w: r.W, h: r.H, dpr: window.devicePixelRatio || 1, clip: { l: 0, t: 0, r: r.W, b: r.H } }; }
+  function place(r){ return { id: ID, x: r.L, y: r.T, w: r.W, h: r.H, dpr: window.devicePixelRatio || 1, clip: { l: 0, t: 0, r: r.W, b: r.H } }; }
   function rkey(r){ return [r.L, r.T, r.W, r.H].map(function(v){ return Math.round(v * 2) / 2; }).join(','); }
 
   // ── 엔진에서 받기 ──
@@ -37953,6 +38068,7 @@ window.refreshShop=refreshShop;
       else if(key === 'f.scrb') window._scrbSetUse(on);
       else if(key === 'f.scrc') window._scrcSetUse(on);
       else if(key === 'f.scrt') window._scrtSetUse(on);
+      else if(key === 'f.scrh') window._scrhSetUse(on);
       else if(key === 'f.scrs'){ setUse(on); return; }
       else return;                                                             // 모르는 키는 무시
     }catch(e){}
@@ -38203,7 +38319,7 @@ window.refreshShop=refreshShop;
     }catch(e){}
     return false;
   }
-  function place(r){ return { x: r.L, y: r.T, w: r.W, h: r.H, dpr: window.devicePixelRatio || 1, clip: { l: 0, t: 0, r: r.W, b: r.H } }; }
+  function place(r){ return { id: ID, x: r.L, y: r.T, w: r.W, h: r.H, dpr: window.devicePixelRatio || 1, clip: { l: 0, t: 0, r: r.W, b: r.H } }; }
   function rkey(r){ return [r.L, r.T, r.W, r.H].map(function(v){ return Math.round(v * 2) / 2; }).join(','); }
 
   // ── 엔진에서 받기 ──
@@ -38547,7 +38663,7 @@ window.refreshShop=refreshShop;
     }catch(e){}
     return false;
   }
-  function place(r){ return { x: r.L, y: r.T, w: r.W, h: r.H, dpr: window.devicePixelRatio || 1, clip: { l: 0, t: 0, r: r.W, b: r.H } }; }
+  function place(r){ return { id: ID, x: r.L, y: r.T, w: r.W, h: r.H, dpr: window.devicePixelRatio || 1, clip: { l: 0, t: 0, r: r.W, b: r.H } }; }
   function rkey(r){ return [r.L, r.T, r.W, r.H].map(function(v){ return Math.round(v * 2) / 2; }).join(','); }
 
   // ── 엔진에서 받기 ──
@@ -38870,8 +38986,8 @@ window.refreshShop=refreshShop;
       }catch(e){}
       return !!(cfg.blocked && cfg.blocked());
     }
-    function place(r){ return { x: r.L, y: r.T, w: r.W, h: r.H, dpr: window.devicePixelRatio || 1, clip: { l: 0, t: 0, r: r.W, b: r.H } }; }
-    function rkey(r){ return [r.L, r.T, r.W, r.H].map(function(v){ return Math.round(v * 2) / 2; }).join(','); }
+    function place(r){ return { id: ID, x: r.L, y: r.T, w: r.W, h: r.H, dpr: window.devicePixelRatio || 1, clip: r.clip || { l: 0, t: 0, r: r.W, b: r.H } }; }
+    function rkey(r){ return [r.L, r.T, r.W, r.H].concat(r.clip ? [r.clip.t, r.clip.b] : []).map(function(v){ return Math.round(v * 2) / 2; }).join(','); }
 
     // ── 엔진에서 받기 ──
     function post(body, ms){
@@ -38982,6 +39098,7 @@ window.refreshShop=refreshShop;
         P.addListener('error', function(e){ if(e && e.id && e.id !== ID) return; if(e && e.kind === 'invalid') return; fail('native: ' + ((e && e.message) || '')); });
         P.addListener('input', function(e){ if(e && e.id && e.id !== ID) return; S.typing = !!(e && e.on); S.still = 0; });      // 글자 입력 중 = 키보드로 웹뷰 크기가 바뀌어도 숨기지 않고 따라간다
         P.addListener('action', onAction);
+        if(cfg.listen) cfg.listen(P, api);
       }catch(e){ fail('listen: ' + e); return; }
       try{
         new MutationObserver(function(){ if(S.shown && active()){ try{ plug().update({ id: ID, palette: palette() }); }catch(e3){} } }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
@@ -39324,6 +39441,186 @@ window.refreshShop=refreshShop;
     });
     window._scrTabs = kit;
     window._scrtSetUse = function(on){ try{ kit.setUse(on); }catch(e){} };
+  })();
+
+  // ═════════════ 홈 탭 경로 입력 ═════════════
+  //   출발/도착 입력칸·자동완성·위치 감지·바꾸기·경로 탐색·기준시각 줄을 엔진(POST /screen/home)이 정하고 기기가 그린다.
+  //   이 코드는 (1) 입력칸 글자·눌린 칸·고른 출발/도착·기준시각 ms 같은 원자료와 후보(STNDB 걸러내기 · TAGO 버스정류장 · 카카오 장소; 예전 fmapSearch 와 같은 자료)를 엔진에 보내고
+  //   (2) 받은 JSON 을 그대로 플러그인(id 'home')에 넘기고 (3) 눌린 행동만 이어 준다(허용 목록: rt.* · bt.* · sg.<종류>.<번호>). 후보 고르기·출발/도착 정하기·경로 찾기는 예전 웹 함수(_fmapSetLocation · fmapDoRoute …)가 그대로 한다.
+  //   · 네이티브 입력칸의 글자는 웹 입력칸(fmapStartInp · fmapDestInp)에 그대로 옮겨 적는다 — 예전 웹 로직이 같은 값을 읽는다. 웹 카드는 아래에 그대로 두고(폴백) 네이티브가 그 위를 덮는다.
+  (function(){
+    var kit;
+    var HS = { active: '', last: '', h: 0, bt: 0, c: { start: { q: '', nq: '', u: [], b: [], p: [], uS: [], bS: [], pS: [], t: 0 }, dest: { q: '', nq: '', u: [], b: [], p: [], uS: [], bS: [], pS: [], t: 0 } } };
+    function wrap(){ return document.getElementById('homeRouteWrap'); }
+    function inp(k){ return document.getElementById(k === 'start' ? 'fmapStartInp' : 'fmapDestInp'); }
+    function val(k){ var e = inp(k); return e ? String(e.value || '') : ''; }
+    function open(){
+      try{
+        var t = document.getElementById('tab-home'), w = wrap();
+        return !!(t && w && t.classList.contains('active') && w.offsetParent && !document.hidden);
+      }catch(e){ return false; }
+    }
+    function rect(){
+      try{
+        var w = wrap(), sc = document.getElementById('tabContentWrap'); if(!w) return null;
+        var r = w.getBoundingClientRect(), v = sc ? sc.getBoundingClientRect() : { top: 0, bottom: window.innerHeight };
+        var t = Math.max(r.top, v.top), b = Math.min(r.bottom, v.bottom);
+        if(!(r.width > 40 && r.height > 40 && b - t > 30)) return null;
+        return { L: r.left, T: r.top, W: r.width, H: r.height, clip: { l: 0, t: t - r.top, r: r.width, b: b - r.top } };
+      }catch(e){ return null; }
+    }
+    function gpsBusy(){ try{ var b = document.getElementById('homeGpsBtn'); return !!(b && b.disabled); }catch(e){ return false; } }
+    function baseMs(){ try{ return (typeof _baseTimeMs !== 'undefined' && _baseTimeMs != null) ? Number(_baseTimeMs) : null; }catch(e){ return null; } }
+    function holiday(){ try{ return !!_isHolidayOrWeekend(); }catch(e){ return false; } }
+    function startSet(){ try{ return !!(typeof _fmapStart !== 'undefined' && _fmapStart); }catch(e){ return false; } }
+    function destSet(){ try{ return !!(typeof _fmapDest !== 'undefined' && _fmapDest); }catch(e){ return false; } }
+
+    // ── 후보 모으기(예전 fmapSearch 와 같은 자료 — 걸러내기·순서·문구는 엔진이 한다) ──
+    function gather(k){
+      var c = HS.c[k], q = val(k).trim();
+      if(c.q !== q){ c.q = q; c.b = []; c.p = []; c.bS = []; c.pS = []; if(c.t){ clearTimeout(c.t); c.t = 0; } if(!q) c.nq = ''; }
+      c.u = []; c.uS = [];
+      if(!q) return;
+      try{
+        var m = _dedupeStnByName(STNDB.filter(function(s){ return s.name.indexOf(q) >= 0; })).slice(0, 8);
+        c.uS = m; c.u = m.map(function(s){ return { n: s.name, l: s.lineLabel || '' }; });
+      }catch(e){}
+      if(q.length >= 2 && c.nq !== q){
+        c.nq = q;
+        c.t = setTimeout(function(){
+          c.t = 0;
+          if(c.q !== q) return;
+          try{
+            if(typeof _busStopSearchByName === 'function') _busStopSearchByName(q, function(stops){
+              if(c.q !== q || !stops) return;
+              c.bS = stops.slice(0, 5); c.b = c.bS.map(function(x){ return { n: String(x.nodenm || x.nodeName || ''), d: Number(x.dist) || 0 }; });
+              kit.changed();
+            });
+          }catch(e1){}
+          try{
+            _kakaoLocal('search/keyword.json', 'query=' + encodeURIComponent(q) + '&size=5')
+              .then(function(r){ if(!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+              .then(function(data){
+                if(c.q !== q) return;
+                var docs = (data.documents || []).filter(function(d){ return parseFloat(d.y || 0) && parseFloat(d.x || 0); }).slice(0, 5);
+                c.pS = docs; c.p = docs.map(function(d){ return { n: String(d.place_name || ''), a: String(d.road_address_name || d.address_name || '') }; });
+                kit.changed();
+              }).catch(function(){});
+          }catch(e2){}
+        }, 300);
+      }
+    }
+    function pend(){ var c = HS.active ? HS.c[HS.active] : null; return c ? (c.q + '|' + c.u.length + '|' + c.b.length + '|' + c.p.length) : ''; }
+    function sigNow(){
+      var d = new Date();
+      return [val('start'), val('dest'), HS.active, startSet() ? 1 : 0, destSet() ? 1 : 0, baseMs(), gpsBusy() ? 1 : 0, d.getDate(), pend(), holiday() ? 1 : 0].join('\u0001');
+    }
+    function request(){
+      var d = new Date(), f = {
+        start: val('start'), dest: val('dest'), active: HS.active, startSet: startSet(), destSet: destSet(), gps: gpsBusy(),
+        base: { ms: baseMs(), tzo: d.getTimezoneOffset(), today: [d.getFullYear(), d.getMonth(), d.getDate()], hol: holiday() }
+      }, dd = {};
+      if(HS.active){ gather(HS.active); var c = HS.c[HS.active]; dd = { u: c.u, b: c.b, p: c.p }; }
+      var txt = JSON.stringify({ cap: 7, f: f, d: dd });
+      return { txt: txt, fk: kit.hash(txt), idle: false, key: 'home', snap: null, sig: sigNow() };
+    }
+
+    // ── 높이: 네이티브가 그린 내용 높이를 웹 감싸개가 따른다(자동완성이 늘면 아래 웹 내용이 밀린다) ──
+    function applyH(){
+      try{
+        var w = wrap(); if(!w || !(HS.h > 20)) return;
+        if(!(kit.S.shown || kit.S.good)) return;
+        w.style.boxSizing = 'border-box'; w.style.overflow = 'hidden'; w.style.flexShrink = '0'; w.style.height = HS.h + 'px';      // flex 칸이라 줄어들지 않게
+      }catch(e){}
+    }
+    function unH(){ try{ var w = wrap(); if(w){ w.style.height = ''; w.style.overflow = ''; w.style.boxSizing = ''; w.style.flexShrink = ''; } }catch(e){} }
+
+    // ── 네이티브 글자 → 웹 입력칸 ──
+    function mirror(fields){
+      if(!fields) return;
+      ['start', 'dest'].forEach(function(k){
+        if(typeof fields[k] === 'string'){ var e = inp(k); if(e && e.value !== fields[k]) e.value = fields[k]; }
+      });
+      try{ if(typeof _updateRouteBtn === 'function') _updateRouteBtn(); }catch(e){}
+    }
+    function setActive(k){
+      if(HS.bt){ clearTimeout(HS.bt); HS.bt = 0; }
+      HS.active = k; if(k) HS.last = k;
+    }
+    function listen(P){
+      P.addListener('text', function(e){
+        if(!e || e.id !== 'home') return;
+        var k = e.key === 'dest' ? 'dest' : (e.key === 'start' ? 'start' : ''); if(!k) return;
+        if(e.kind === 'blur'){
+          if(HS.bt) clearTimeout(HS.bt);
+          HS.bt = setTimeout(function(){ HS.bt = 0; if(HS.active === k){ HS.active = ''; kit.changed(); } }, 400);      // 후보를 누르는 행동이 뒤따라 오면 그 사이엔 아직 남아 있다
+          return;
+        }
+        var ev = inp(k);
+        if(e.kind === 'edit' && ev && ev.value !== String(e.value || '')){ ev.value = String(e.value || ''); try{ _updateRouteBtn(); }catch(x){} }
+        setActive(k); kit.S.still = 0; kit.changed();
+      });
+      P.addListener('size', function(e){
+        if(!e || e.id !== 'home') return;
+        var h = Number(e.h); if(!(h > 20 && h < 3000)) return;
+        HS.h = h; applyH();
+      });
+    }
+
+    // ── 후보 고르기(예전 fmapSearch 의 눌림 처리와 같다) ──
+    function choose(kind, idx){
+      var k = HS.active || HS.last; if(!k) return;
+      var c = HS.c[k], e = inp(k); if(!c || !e) return;
+      var loc = null, name = '';
+      if(kind === 'u'){
+        var s = c.uS[idx]; if(!s) return;
+        name = s.name; loc = { type: 'subway', name: s.name, line: s.line, lat: s.lat, lng: s.lng };
+      } else if(kind === 'b'){
+        var stop = c.bS[idx]; if(!stop) return;
+        name = stop.nodenm || stop.nodeName || '';
+        loc = { type: 'bus', name: name, nodeId: stop.nodeid || stop.nodeId,
+                cityCode: (typeof _tagoCityCode === 'function' ? _tagoCityCode(stop) : '') || stop.citycode || stop.cityCode || '',
+                lat: parseFloat(stop.gpslati || stop.gpsLati || 0), lng: parseFloat(stop.gpslong || stop.gpsLong || 0) };
+      } else {
+        var doc = c.pS[idx]; if(!doc) return;
+        name = doc.place_name || '';
+        loc = { type: 'address', name: name, lat: parseFloat(doc.y || 0), lng: parseFloat(doc.x || 0) };
+      }
+      if(!loc || !name) return;
+      e.value = name;
+      c.q = name; c.u = []; c.b = []; c.p = []; c.uS = []; c.bS = []; c.pS = [];
+      HS.active = '';
+      kit.setField(k, name);
+      try{ _fmapSetLocation(k, loc); }catch(x){}
+      kit.changed();
+    }
+    function act(e){
+      if(e.a !== 'call') return;
+      var v = String(e.v || ''), m = /^sg\.([ubp])\.(\d{1,2})$/.exec(v);
+      mirror(e.fields);
+      if(m){ choose(m[1], parseInt(m[2], 10)); return; }
+      if(v === 'rt.gps'){ try{ fmapGpsLocate(); }catch(x){} setTimeout(function(){ kit.changed(); }, 60); return; }
+      if(v === 'rt.swap'){
+        try{ swapFmapRoute(); }catch(x2){}
+        kit.setField('start', val('start')); kit.setField('dest', val('dest'));
+        HS.active = ''; kit.changed(); return;
+      }
+      if(v === 'rt.go' || v === 'rt.enter'){
+        if(val('start').trim() && val('dest').trim()){ HS.active = ''; try{ fmapDoRoute(); }catch(x3){} }
+        else if(v === 'rt.go') toastW('출발지와 도착지를 입력해주세요.');
+        kit.changed(); return;
+      }
+      if(v === 'bt.pick'){ try{ openDtPicker(); }catch(x4){} return; }
+      if(v === 'bt.now'){ try{ clearBaseTime(); }catch(x5){} setTimeout(function(){ kit.changed(); }, 60); return; }
+    }
+    kit = window._scrKit({
+      id: 'home', kp: 'gdm_scrh', ep: '/screen/home', screen: 'home', label: '경로 입력', card: 'scrh', cache: false, waitIdle: false, bucket: 0, idleMs: 200,
+      onText: '홈 탭의 출발·도착 입력칸과 자동완성, 단추, 기준시각 줄을 엔진이 정한 대로 기기가 직접 그려요(실험 중).',
+      root: wrap, open: open, rect: rect, request: request, act: act, sig: sigNow, sigMs: 350, listen: listen,
+      webClear: applyH, webBack: unH, onEnd: unH
+    });
+    window._scrHome = kit;
+    window._scrhSetUse = function(on){ try{ kit.setUse(on); }catch(e){} };
   })();
 })();
 
@@ -43798,6 +44095,13 @@ function _pfAdopt(k, b, now, why){
   try{
     var A = _pf.A, st = _pf.st[k]; if(!st) return;
     var kk = k, td = st._td, q, j;
+    try{    // ★ 2026-10-19 (YJ 로그: 버스를 타는데 PF 가 지하철 역에 '정차 88~90%' 로 붙어 마커가 노랗게 멈춤): 버스를 타고 있는 동안은 지하철 역으로 채택하지 않는다(버스 위치는 엔진 busPos·GPS 가 정한다)
+      var _gB = (window._gpsMaxIdx == null ? -1 : window._gpsMaxIdx), _nB = _transitNodeData[_gB], _tB = _transitNodeData[td], _tmB = _trkMode();
+      if(window._pfBusGuardOff !== true && _tB && !_tB.isBus && ((_tmB && _tmB.kind === 'bus') || (_nB && _nB.isBus && !_nB.isWalk))){
+        if(now - (window._pfBusAt || 0) > 30000){ window._pfBusAt = now; try{ _ovlDiag('PF보류', st.name + ' 채택 안 함 — 버스를 타고 있는 동안은 지하철 역으로 보지 않음'); }catch(eB){} }
+        return;
+      }
+    }catch(eBg){}
     try{
       var xh = _xferHoldIdx();    // 환승 승차 확인(GPS·기지국) 전에는 그 역 너머로 채택하지 않는다
       if(xh >= 0 && td > xh){ j = -1; for(q = 0; q < _pf.st.length; q++){ if(_pf.st[q]._td <= xh) j = q; } if(j < 0 || j === A.k) return; kk = j; td = _pf.st[j]._td; }
@@ -43816,6 +44120,7 @@ function _pfAdopt(k, b, now, why){
         if(v && v.ts && now - v.ts <= 15000 && gn && gn.lat != null && haversineM(v.lat, v.lng, gn.lat, gn.lng) < 300) return;
       }catch(e3){}
     }
+    if(td < gm && td < _rsFloorIdx()) return;   // 탑승·환승 버튼으로 확정한 노드 아래로는 PF 도 내리지 못한다(2026-10-19)
     if(kk === A.k && why !== '초기') return;
     var prevTd = A.td;
     // ★ 2026-10-16 (YJ 로그: 동막 도착 → 진행도 4 → PF채택 '앞 2→3' 이 진행도를 3 으로 되돌렸다 → 곧 다시 4 → 동춘을 건너뛰어 5 / 동막 통과 기록이 GPS 시각 대신 늦은 PF 시각으로 덮임):
@@ -44217,13 +44522,43 @@ function _rsLateCheck(L, key){
       if(!r || r.late == null || !isFinite(r.late)) return;
       if(!_rs.pend || _rs.pend.key !== key || !_rs.leg || _rsKey(_rs.leg) !== key) return;   // 그 사이 되돌렸거나 확정·구간이 바뀜
       try{ _ovlDiag('탑승시트', '1분 전 차량 인정 — 시각표 ' + _fmtMinHM(r.late) + ' 차로 보고 예약 없이 바로 확정'); }catch(e1){}
-      _rsPress(true);
+      _rsPress(true, r);   // 같은 답을 '어느 차를 탔나' 판정에도 쓴다(엔진에 또 묻지 않는다)
     }catch(e){}
   });
 }
 window._rsLateCheck = _rsLateCheck;
+// ★ 2026-10-19 (YJ: "환승완료는 그 시간에 다음 대중교통을 탔다는 뜻. 다음 차가 3분 뒤거나 1분 전에 막 출발했으면 1분 전에 출발한 차를 탄 것으로 보고, 그게 아니면 다음 대중교통을 탄 것이다 — 그 뒤 다음 역에서 영점"):
+//   누른 시각 기준으로 어느 차를 탔는지는 엔진(/next-train op=late)이 시각표로 가른다 — late(방금 떠난 차: 지금 분·한 분 전) 가 있으면 그 차, 없으면 depMin(다음 차).
+//   앱은 답의 출발 시각을 '승차역 통과(board)' 로 적고 시각을 다시 짜게 할 뿐이다. 다음 역에서는 평소처럼 영점(GPS)이 바로잡는다.
+//   지하철 구간만(버스는 시각표가 없다). 답이 늦게 와도 그 사이 되돌렸거나 다시 눌렀으면 버린다. 다음 차가 12분 넘게 멀면 건드리지 않는다. 끄기: window._rsPickOff = true
+var _RS_PICK_MAX_MIN = 12;
+function _rsPressTrain(L, key, pressMs, pre){
+  try{
+    if(window._rsPickOff === true || !L || L.mode !== 'sub') return;
+    var nd = (typeof _transitNodeData !== 'undefined') ? _transitNodeData : null, n = nd && nd[L.bi], nx = nd && nd[L.bi + 1];
+    if(!n) return;
+    var nowM = (typeof kstMinutesAdj === 'function') ? kstMinutesAdj() : (new Date().getHours() * 60 + new Date().getMinutes());
+    var cbT = function(r){
+      try{
+        if(!r || window._rsPressMs !== pressMs || !_rs.done[key]) return;
+        var m = (r.late != null && isFinite(r.late)) ? r.late : ((r.depMin != null && isFinite(r.depMin)) ? r.depMin : null);
+        if(m == null) return;
+        var d = m - nowM; if(d < -720) d += 1440; if(d > 720) d -= 1440;
+        if(d > _RS_PICK_MAX_MIN) return;
+        var t = Date.now(), ms = t - (t % 60000) + d * 60000 + 30000;   // 시각표 06:17 → 06:17:30 에 출발(엔진의 :30 규칙과 같다 — 2026-10-19)
+        var pm = window._nodePassMs || (window._nodePassMs = {}), sr = window._nodePassSrc || (window._nodePassSrc = {});
+        if(pm[L.bi] != null && _rsStrongSrc(sr[L.bi])) return;       // GPS·이동으로 이미 확인된 통과가 있으면 그것을 지킨다
+        pm[L.bi] = ms; try{ _etaSrc(L.bi, 'board'); }catch(e0){}
+        try{ _ovlDiag('승차확정', (r.late != null ? '방금 떠난 차(시각표 ' : '다음 차(시각표 ') + _fmtMinHM(m) + ')를 탄 것으로 봄 · ' + L.line + ' ' + L.name); }catch(e1){}
+        try{ if(typeof _recalcArrivalsFrom === 'function') _recalcArrivalsFrom(L.bi); }catch(e2){}
+      }catch(e){}
+    };
+    if(pre) cbT(pre); else _ntAsk({ op: 'late', line: L.line, from: n.name, to: (nx && nx.name) || '', atMin: nowM, back: _RS_LATE_BACK_MIN, baseMs: _ntBaseMs() }, cbT);
+  }catch(e){}
+}
+window._rsPressTrain = _rsPressTrain;
 // 누름: 이 구간 차량을 탔다고 확정한다.
-function _rsPress(commit){
+function _rsPress(commit, pre){
   try{
     var L = _rs.leg; if(!L) return;
     var now = Date.now(), bi = L.bi, key = _rsKey(L);
@@ -44251,6 +44586,7 @@ function _rsPress(commit){
     _rs.undo = { key: key, bi: bi, k: L.k, htl: window._htlBoarded, gm: window._gpsMaxIdx, gc: window._gpsConfirmIdx, pass: pm0[bi], src: _src0[bi], pf: _pf0[bi], later: (function(){ var o = {}; for(var kk in pm0){ if(+kk > bi && !_rsStrongSrc(_src0[kk])) o[kk] = { ms: pm0[kk], src: _src0[kk] }; } return o; })(), why: window._boardWhy, press: window._rsPressMs, cool: window._rerouteCooldownUntil };
     _rs.done[key] = true;
     window._rsPressMs = now;
+    window._rsFloor = { sig: window._trackSig || '', idx: bi, at: now };   // 2026-10-19: 버튼 관측 = 진행도 바닥
     window._htlBoarded = true;
     window._boardWhy = '탑승 버튼';
     window._gpsMaxIdx = Math.max(window._gpsMaxIdx == null ? -1 : window._gpsMaxIdx, bi);
@@ -44270,6 +44606,7 @@ function _rsPress(commit){
     _rsTick();
     _rsShowUndo(L.k > 0 ? '환승 완료로 기록했어요' : undefined);
     try{ _rsPressVerify(key, bi, now); }catch(e6){}   // 2026-10-13: 눌렀다면 승차역에 있어야 한다 — GPS 를 한 번 더 확인(판정은 엔진 /ride-track press)
+    try{ _rsPressTrain(L, key, now, pre); }catch(e7){}   // 2026-10-19: 어느 차를 탔는지(방금 떠난 차 · 다음 차)는 엔진이 시각표로 가른다
   }catch(e){}
 }
 // 확인한 시각(GPS·이동·실시간)은 강한 증거 — 추정(pf·cell)·이전 버튼 기록은 약하다
@@ -44311,6 +44648,7 @@ function _rsUndo(){
     if(_rs.dom) _rs.dom.undo.classList.remove('on');
     if(u.pend){ _rs.pend = null; _rs.shrunk = 0; _rs.seen = false; _rs.openUntil = Date.now() + 20000; try{ _ovlDiag('탑승시트', '예약 되돌림'); }catch(eP){} _rsTick(); return; }
     _rs.done[u.key] = false;
+    window._rsFloor = null;
     if(u.k === 0) window._htlBoarded = u.htl;
     window._gpsMaxIdx = u.gm; window._gpsConfirmIdx = u.gc; window._boardWhy = u.why; window._rsPressMs = u.press;
     window._rerouteCooldownUntil = u.cool;
