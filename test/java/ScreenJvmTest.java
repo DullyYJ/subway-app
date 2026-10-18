@@ -132,6 +132,73 @@ public class ScreenJvmTest {
         ScreenCore.Act hb = L.hitBody(bt.x + 10f, bt.y + 10f);
         ok(hb != null && hb.a.equals("refresh"), "단추를 누르면 새로고침");
 
+
+        // ── 안내 상자 · 검색줄 (cap=2 화면) ──
+        String notice = "이 페이지의 상품 링크는 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.";
+        int hl1a = notice.indexOf("쿠팡 파트너스 활동"), hl1b = hl1a + "쿠팡 파트너스 활동".length(), hl2a = notice.indexOf("일정액"), hl2b = notice.length();
+        String boxJ = "{\"t\":\"box\",\"pad\":[14,14,14,8],\"ip\":[12,8,12,8],\"s\":\"" + notice + "\",\"hl\":[[" + hl1a + "," + hl1b + "],[" + hl2a + "," + hl2b + "]],\"size\":11.5,\"lh\":1.5,\"color\":\"text\",\"fill\":\"rgba(255,149,0,0.12)\",\"line\":\"rgba(255,149,0,0.35)\",\"r\":10}";
+        String srchJ = "{\"t\":\"search\",\"pad\":[14,0,14,4],\"max\":340,\"hint\":\"쿠팡에서 검색\",\"badge\":\"C\",\"accent\":\"#e63329\",\"maxlen\":60,\"act\":{\"a\":\"search\",\"tpl\":\"https://www.coupang.com/np/search?q={q}\",\"empty\":\"https://coupa.ng/coRT4D\"}}";
+        String chipsJ = "{\"t\":\"chips\",\"pad\":[14,4,14,4],\"gap\":6,\"h\":30,\"items\":[{\"label\":\"추천\",\"badge\":\"100\",\"on\":true,\"act\":{\"a\":\"cat\",\"v\":\"추천\"}},{\"label\":\"식사\",\"badge\":\"229\",\"act\":{\"a\":\"cat\",\"v\":\"식사\"}}]}";
+        String capScreen = screen(4).replace("\"rev\":\"r1\",", "\"rev\":\"r1\",\"cover\":\"tab\",").replaceFirst("\"head\":\\[\\{\"t\":\"chips\".*?\\]\\}\\],\"body\"", "\"head\":[" + boxJ + "," + srchJ + "," + chipsJ + "],\"body\"");
+        ScreenCore.Screen cs = ScreenCore.load(capScreen);
+        ok(cs.cover.equals("tab") && cs.head.size() == 3 && cs.head.get(0).t.equals("box") && cs.head.get(1).t.equals("search") && cs.head.get(2).t.equals("chips"), "cap=2 화면: 상자·검색줄·칩, cover=tab");
+        ok(s.cover.equals("chips"), "cover 없으면 chips(예전 화면)");
+        ok(cs.head.get(0).hl.length == 2 && cs.head.get(1).act.tpl.contains("{q}") && cs.head.get(1).act.empty.equals("https://coupa.ng/coRT4D") && cs.head.get(1).maxlen == 60, "상자 굵은 구간 · 검색 행동");
+        ok(bad(capScreen.replace("{q}", "")), "검색 tpl 에 {q} 가 없으면 거절");
+        ok(bad(capScreen.replace("\"empty\":\"https://coupa.ng/coRT4D\"", "\"empty\":\"javascript:alert(1)\"")), "검색 empty 가 http(s) 가 아니면 거절");
+        ok(bad(capScreen.replace("\"empty\":\"https://coupa.ng/coRT4D\"", "\"x\":1")), "검색 empty 가 없으면 거절");
+        ok(bad(capScreen.replace("[" + hl1a + "," + hl1b + "]", "[" + hl1a + "," + (notice.length() + 5) + "]")), "굵은 구간이 글 밖이면 거절");
+        ok(bad(capScreen.replace("[" + hl1a + "," + hl1b + "]", "[" + hl1b + "," + hl1a + "]")), "굵은 구간의 시작이 끝보다 뒤면 거절");
+        ok(bad(capScreen.replace("rgba(255,149,0,0.12)", "주황색")), "읽을 수 없는 CSS 색은 거절");
+        ok(bad(capScreen.replace("\"s\":\"" + notice + "\"", "\"s\":\"\"")), "상자 글이 비면 거절");
+        ok(bad(capScreen.replace("\"a\":\"search\"", "\"a\":\"refresh\"")), "검색줄의 행동이 search 가 아니면 거절");
+        ok(bad(capScreen.replace("\"cover\":\"tab\"", "\"cover\":\"zzz\"")), "모르는 cover 는 거절");
+        ok(bad(capScreen.replace("\"maxlen\":60", "\"maxlen\":0")), "maxlen 범위 밖은 거절");
+        ok(bad(screen(1).replace("\"a\":\"open\"", "\"a\":\"search\"")), "search 행동에 tpl 이 없으면 거절");
+        ScreenCore.Layout CL = ScreenCore.layout(cs, 360f, M);
+        ScreenCore.Item bx = CL.head[0], sr = CL.head[1], ch0 = CL.head[2];
+        ok(bx.kind == ScreenCore.K_BOX && sr.kind == ScreenCore.K_SEARCH && ch0.kind == ScreenCore.K_CHIP, "머리 순서: 상자 → 검색줄 → 칩");
+        ok(bx.fixed && sr.fixed && !ch0.fixed, "상자·검색줄은 고정, 칩만 가로로 밀린다");
+        ok(near(bx.x, 14f) && near(bx.y, 14f) && near(bx.w, 332f), "상자 자리 (여백 14)");
+        ok(bx.lines.length >= 2 && near(bx.h, 2f + 8f + bx.lineH * bx.lines.length + 8f), "상자 높이 = 테두리 2 + 안쪽 위아래 8 + 줄 수 × 줄 높이");
+        ok(near(sr.y, bx.y + bx.h + 8f) && near(sr.h, 44f), "검색줄은 상자 아래 8, 높이 44");
+        ok(near(sr.w, 332f) && near(sr.x, 14f), "좁은 화면에서는 폭 가득");
+        ok(near(ch0.y, sr.y + 44f + 4f + 4f), "칩 줄은 검색줄 + 아래 여백 4 + 칩 위 여백 4 아래");
+        ok(near(CL.headH, ch0.y + 30f + 4f), "머리 높이 = 칩 줄 끝 + 4");
+        ok(near(CL.chipsTop, sr.y + 44f + 4f) && near(CL.chipsBot, CL.headH), "칩 줄 범위(칩 줄만 가로로 밀 수 있는 곳)");
+        ScreenCore.Layout CW = ScreenCore.layout(cs, 480f, M);
+        ok(near(CW.head[1].w, 340f) && near(CW.head[1].x, 14f + (452f - 340f) / 2f), "넓으면 검색줄은 최대 340 에 가운데");
+        ok(near(sr.bx, sr.x + 1f + 14f) && near(sr.btx, sr.x + sr.w - 1f - 8f - 30f) && near(sr.ix, sr.bx + 20f + 8f) && near(sr.iw, sr.btx - 8f - sr.ix) && near(sr.ih, 30f), "검색줄 안: 배지 · 입력칸 · 단추 자리");
+        ok(sr.iw > 100f, "입력칸 폭이 쓸 만하다 " + sr.iw);
+        ScreenCore.Layout CN = ScreenCore.layout(cs, 120f, M);
+        ok(CN.headMaxScroll() > 0f && CN.headContentW > 120f, "칩이 넘치면 가로로 밀린다(상자·검색줄은 안 셈 — 상자는 좁은 폭에 맞춰 줄바꿈)");
+        ok(CN.head[0].lines.length > bx.lines.length, "좁으면 상자 글이 더 많은 줄");
+        // 굵은 구간 조각
+        ok(bx.segs != null && bx.segs.length == bx.lines.length, "줄마다 조각");
+        StringBuilder boldAll = new StringBuilder(), allTxt = new StringBuilder();
+        for (int k = 0; k < bx.segs.length; k++) for (int q = 0; q < bx.segs[k].length; q++) { allTxt.append(bx.segs[k][q]); if (bx.segBold[k][q]) boldAll.append(bx.segs[k][q]); }
+        ok(allTxt.toString().replace(" ", "").equals(notice.replace(" ", "")), "조각을 이으면 원문(공백 제외)");
+        ok(boldAll.toString().replace(" ", "").equals(("쿠팡 파트너스 활동" + "일정액의 수수료를 제공받습니다.").replace(" ", "")), "굵은 조각 = 지정한 두 구간만: " + boldAll);
+        ScreenCore.Layout CS = ScreenCore.layout(cs, 200f, M);   // 줄이 더 많아져도 구간이 줄을 넘나들며 이어진다
+        StringBuilder bold2 = new StringBuilder(); for (int k = 0; k < CS.head[0].segs.length; k++) for (int q = 0; q < CS.head[0].segs[k].length; q++) if (CS.head[0].segBold[k][q]) bold2.append(CS.head[0].segs[k][q]);
+        ok(bold2.toString().replace(" ", "").equals(("쿠팡 파트너스 활동" + "일정액의 수수료를 제공받습니다.").replace(" ", "")), "줄이 바뀌어도 굵은 구간이 같다: " + bold2);
+        ok(bx.fillC == 0x1FFF9500 || bx.fillC == 0x1EFF9500 || ((bx.fillC >>> 24) > 0x10 && (bx.fillC >>> 24) < 0x30), "상자 바탕 = CSS rgba 를 읽는다 " + Integer.toHexString(bx.fillC));
+        ok(sr.accentC == 0xFFE63329 && sr.accentRole == null, "검색 강조색 #e63329");
+        // 눌림
+        ScreenCore.Act hs = CL.hitHead(sr.x + 40f, sr.y + 20f);
+        ok(hs != null && hs.a.equals("search"), "검색줄을 누르면 search 행동");
+        ok(CL.hitHead(bx.x + 20f, bx.y + 10f) == null, "안내 상자를 눌러도 아무 일 없다");
+        ScreenCore.Act hc2 = CL.hitHead(ch0.x + 3f, ch0.y + 5f, 0f);
+        ok(hc2 != null && hc2.a.equals("cat"), "칩은 그대로 눌린다");
+        ScreenCore.Act hs2 = CL.hitHead(sr.x + 40f, sr.y + 20f, 200f);
+        ok(hs2 != null && hs2.a.equals("search"), "칩 줄을 밀어도 검색줄 위치는 그대로(고정)");
+        ScreenCore.Act hc3 = CL.hitHead(ch0.x + 3f - 30f, ch0.y + 5f, 30f);
+        ok(hc3 != null && hc3.a.equals("cat"), "칩은 민 만큼 보정해서 눌린다");
+
+        // ── 옛 앱 호환: 모르는 새 노드는 건너뛴다(옛 앱 시뮬레이션: 모르는 종류로 바꿔 읽기) ──
+        ScreenCore.Screen old = ScreenCore.load(capScreen.replace("\"t\":\"box\"", "\"t\":\"future\"").replace("\"t\":\"search\"", "\"t\":\"future2\""));
+        ok(old.head.size() == 1 && old.skipped >= 2, "모르는 노드(옛 앱이 새 상자·검색줄을 만난 경우)는 건너뛰고 칩만 그린다");
+
         // ── 시간(400장 배치 + 10만 번 범위 찾기) ──
         long t0 = System.nanoTime();
         ScreenCore.Layout big = ScreenCore.layout(ScreenCore.load(screen(1000)), 360f, M);
