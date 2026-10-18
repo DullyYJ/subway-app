@@ -53,9 +53,12 @@ jobs:
           - news_engine.test.js
           - screen_news_js.ui.test.js
           - tabs_engine.test.js
+          - home_engine.test.js
           - board_engine.test.js
           - chat_engine.test.js
           - screen_bct_js.ui.test.js
+          - screen_home_js.ui.test.js
+          - locate_research.ui.test.js
           - route_row.ui.test.js
           - overlay_pill_native.test.js
           - overlay_reco.ui.test.js
