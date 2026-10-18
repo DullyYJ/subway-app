@@ -48,6 +48,8 @@ jobs:
           - shop_engine.test.js
           - settings_engine.test.js
           - screen_set_js.ui.test.js
+          - food_engine.test.js
+          - screen_food_js.ui.test.js
           - route_row.ui.test.js
           - overlay_pill_native.test.js
           - overlay_reco.ui.test.js
