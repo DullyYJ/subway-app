@@ -61,14 +61,14 @@ public class ScreenView extends View {
     }
 
     // 색 역할 (ScreenCore 의 color 이름과 같은 순서)
-    public static final int R_BG = 0, R_CARD = 1, R_BORDER = 2, R_TEXT = 3, R_SUB = 4, R_GOLD = 5, R_ORANGE = 6, R_IMGBG = 7, R_WHITE = 8, R_BORDER2 = 9;
+    public static final int R_BG = 0, R_CARD = 1, R_BORDER = 2, R_TEXT = 3, R_SUB = 4, R_GOLD = 5, R_ORANGE = 6, R_IMGBG = 7, R_WHITE = 8, R_BORDER2 = 9, R_CARD2 = 10, R_NAV = 11;
 
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final TextPaint tp = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final RectF rf = new RectF(), rf2 = new RectF();
     private final Runnable firstDrawCb = new Runnable() { @Override public void run() { if (listener != null) listener.onFirstDraw(); } };
     private final Paint bmpPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
-    private final int[] pal = { 0xFF0B0F14, 0xFF1B2129, 0x33FFFFFF, 0xFFF2F4F7, 0xFF9AA4B2, 0xFFF0B429, 0xFFF07830, 0xFF252528, 0xFFFFFFFF, 0x4DFFFFFF };
+    private final int[] pal = { 0xFF0B0F14, 0xFF1B2129, 0x33FFFFFF, 0xFFF2F4F7, 0xFF9AA4B2, 0xFFF0B429, 0xFFF07830, 0xFF252528, 0xFFFFFFFF, 0x4DFFFFFF, 0xFF2C2C2E, 0xFF161618 };
     private ScreenCore.Screen screen;
     private ScreenCore.Layout lay;
     private float dpr = 1f, scrollY = 0f, scrollX = 0f;
@@ -78,7 +78,9 @@ public class ScreenView extends View {
     private float downX, downY, lastX, lastY, downBodyY;
     private long downT;
     private int mode = 0;                                  // 0 없음 · 1 본문 세로 · 2 머리 가로 · 3 눌러보는 중
-    private boolean inHead, inChips;
+    private boolean inHead, inChips, inFoot;
+    private String openKey;                                // 펼친 게시글 id (null = 엔진이 준 표시를 따름 · "" = 모두 접음)
+    private final Map<float[], android.graphics.Path> iconPaths = new HashMap<float[], android.graphics.Path>();
     private ScreenCore.Item pressed;
     private Listener listener;
     private boolean drewOnce;
@@ -136,30 +138,48 @@ public class ScreenView extends View {
 
     /** 새 화면을 올린다. keepScroll 이면 위치를 유지(같은 목록 갱신), 아니면 맨 위로. */
     public void setScreen(ScreenCore.Screen s, boolean keepScroll) {
+        boolean stick = s != null && "bottom".equals(s.anchor) && (!keepScroll || nearBottom());
         screen = s;
-        if (!keepScroll) { scrollY = 0f; scrollX = 0f; }
+        iconPaths.clear();
+        if (!keepScroll) { scrollY = 0f; scrollX = 0f; openKey = null; }
         flingY.forceFinished(true); flingX.forceFinished(true);
         pressed = null; mode = 0;
         relayout();
+        if (stick && lay != null) { scrollY = lay.bodyMaxScroll(bodyViewH()); invalidate(); }
+    }
+    /** 맨 아래에서 80dp 안에 있으면 참(채팅 자동 따라가기 판단). 아직 배치 전이면 참. */
+    private boolean nearBottom() {
+        if (lay == null) return true;
+        return lay.bodyMaxScroll(bodyViewH()) - scrollY <= 80f;
     }
 
     private void relayout() {
         if (screen == null || getWidth() <= 0) { lay = null; invalidate(); syncLater(); return; }
-        lay = ScreenCore.layout(screen, getWidth() / dpr, measurer);
+        lay = ScreenCore.layout(screen, getWidth() / dpr, measurer, openKey);
         clampScroll();
-        for (ScreenCore.Item it : lay.body) {                                                   // 입력칸 글자: 엔진이 준 기본값이 바뀐 때만 덮는다(쓰던 글자가 새 화면에 지워지지 않게)
-            if (it.kind != ScreenCore.K_FIELD) continue;
-            String pb = fieldBase.get(it.key);
-            if (pb == null || !pb.equals(it.value)) { fieldVals.put(it.key, it.value); fieldBase.put(it.key, it.value); }
-        }
+        syncFieldBases(lay.body); syncFieldBases(lay.foot);
         if (editKey != null) { ScreenCore.Item f = fieldByKey(editKey); if (f != null) ensureEditVisible(f); }
         invalidate();
         syncLater();
     }
-    @Override protected void onSizeChanged(int w, int h, int ow, int oh) { super.onSizeChanged(w, h, ow, oh); relayout(); }
+    /** 입력칸 글자: 엔진이 준 기본값이 바뀐 때만 덮는다(쓰던 글자가 새 화면에 지워지지 않게). */
+    private void syncFieldBases(ScreenCore.Item[] arr) {
+        for (ScreenCore.Item it : arr) {
+            if (it.kind != ScreenCore.K_FIELD && it.kind != ScreenCore.K_INBAR) continue;
+            String pb = fieldBase.get(it.key);
+            if (pb == null || !pb.equals(it.value)) { fieldVals.put(it.key, it.value); fieldBase.put(it.key, it.value); }
+        }
+    }
+    @Override protected void onSizeChanged(int w, int h, int ow, int oh) {
+        super.onSizeChanged(w, h, ow, oh);
+        boolean stick = screen != null && "bottom".equals(screen.anchor) && nearBottom();
+        relayout();
+        if (stick && lay != null) { scrollY = lay.bodyMaxScroll(bodyViewH()); invalidate(); }
+    }
 
     private float viewHdp() { return getHeight() / dpr; }
-    private float bodyViewH() { return Math.max(0f, viewHdp() - (lay == null ? 0f : lay.headH)); }
+    private float bodyViewH() { return Math.max(0f, viewHdp() - (lay == null ? 0f : lay.headH + lay.footH)); }
+    private float footTop() { return viewHdp() - (lay == null ? 0f : lay.footH); }
     private void clampScroll() {
         if (lay == null) return;
         scrollY = ScreenCore.clamp(scrollY, lay.bodyMaxScroll(bodyViewH()));
@@ -179,9 +199,11 @@ public class ScreenView extends View {
                 downX = lastX = x; downY = lastY = y; downT = SystemClock.uptimeMillis();
                 inHead = y < lay.headH * dpr;
                 inChips = inHead && lay.chipsTop >= 0f && y >= lay.chipsTop * dpr && y < lay.chipsBot * dpr;
+                inFoot = lay.footH > 0f && !inHead && y >= footTop() * dpr;
                 mode = 3;
                 pressed = findItem(x, y);
                 if (pressed != null && pressed.act == null && pressed.kind != ScreenCore.K_FIELD) pressed = null;
+                pressInFoot = inFoot;
                 invalidate();
                 return true;
             }
@@ -190,7 +212,7 @@ public class ScreenView extends View {
                 if (mode == 3) {
                     if (Math.abs(x - downX) > slop || Math.abs(y - downY) > slop) {
                         pressed = null;
-                        mode = inHead ? (inChips ? 2 : 0) : 1;                  // 머리는 칩 줄만 가로로 민다(안내 상자·검색줄은 고정)
+                        mode = inHead ? (inChips ? 2 : 0) : (inFoot ? 0 : 1);   // 머리는 칩 줄만 가로로 민다(안내 상자·검색줄은 고정) · 아래 고정 줄은 안 밀린다
                         if (inHead && Math.abs(y - downY) > Math.abs(x - downX) * 2f) mode = 0;     // 머리를 위아래로 쓸면 무시
                         if (mode == 1) blurInput();                                              // 목록을 밀기 시작하면 키보드를 내린다
                     } else return true;
@@ -205,6 +227,8 @@ public class ScreenView extends View {
                         ScreenCore.Item pi = pressed; ScreenCore.Act a = pi.act; pressed = null; invalidate();
                         if (pi.kind == ScreenCore.K_SEARCH) tapSearch(pi, x / dpr, y / dpr);
                         else if (pi.kind == ScreenCore.K_FIELD) beginEdit(pi);
+                        else if (pi.kind == ScreenCore.K_INBAR) tapInbar(pi, x / dpr, pressInFoot);
+                        else if (pi.kind == ScreenCore.K_POSTH) toggleOpen(pi);
                         else if (pi.kind == ScreenCore.K_TOGGLE) { blurInput(); pi.on = !pi.on; invalidate(); listener.onSet(a, pi.on); }     // 화면은 바로 뒤집는다(엔진 새 화면을 기다리지 않는다)
                         else { blurInput(); listener.onAction(a); }
                     }
@@ -226,10 +250,49 @@ public class ScreenView extends View {
             default: return true;
         }
     }
+    private boolean pressInFoot;
+    /** 게시글 머리를 눌렀다 — 앱이 바로 펼치고(한 번에 한 글) 눌린 머리가 화면에서 움직이지 않게 스크롤을 맞춘다. 알림은 on(펼침) 으로. */
+    private void toggleOpen(ScreenCore.Item hd) {
+        blurInput();
+        boolean wasOn = hd.on; String key = hd.key; ScreenCore.Act a = hd.act;
+        float topOnScreen = hd.y - scrollY;
+        openKey = wasOn ? "" : key;
+        flingY.forceFinished(true);
+        relayout();
+        if (lay != null) {
+            for (ScreenCore.Item q : lay.body) { if (q.kind == ScreenCore.K_POSTH && key.equals(q.key)) { scrollY = ScreenCore.clamp(q.y - topOnScreen, lay.bodyMaxScroll(bodyViewH())); break; } }
+        }
+        invalidate();
+        if (listener != null) listener.onSet(a, !wasOn);
+    }
+    private void tapInbar(ScreenCore.Item it, float xdp, boolean inFootRegion) {
+        if (xdp >= it.btx - 4f && xdp < it.btx + it.sw + 4f) { fireInbar(it, inFootRegion); return; }
+        beginEdit(it);
+    }
+    /** 입력줄 단추(또는 키보드의 보내기): 쓰던 글을 보관하고 행동을 알린다. 아래 고정 줄이면 키보드를 그대로 두고(이어 쓰기), 본문 안이면 내린다. */
+    private void fireInbar(ScreenCore.Item it, boolean inFootRegion) {
+        if (editKey != null && editor != null) fieldVals.put(editKey, String.valueOf(editor.getText()));
+        if (!inFootRegion) blurInput();
+        invalidate();
+        if (listener != null && it.act != null) listener.onAction(it.act);
+    }
+    /** 웹이 입력칸 글자를 바꾼다(보낸 뒤 비우기 등). 편집 중이면 진짜 입력칸도 같이. */
+    public void setField(String key, String value) {
+        if (key == null) return;
+        String v = value == null ? "" : value;
+        fieldVals.put(key, v);
+        if (editor != null && key.equals(editKey)) { editor.setText(v); editor.setSelection(editor.getText().length()); }
+        invalidate();
+    }
     private void finishTouch() { pressed = null; mode = 0; if (vt != null) { vt.recycle(); vt = null; } }
 
     private ScreenCore.Item findItem(float px, float py) {
         float x = px / dpr, y = py / dpr;
+        if (lay.footH > 0f && y >= footTop()) {
+            float fy = y - footTop();
+            for (ScreenCore.Item it : lay.foot) if ((it.act != null || it.kind == ScreenCore.K_FIELD) && ScreenCore.Layout.hits(it, x, fy)) return it;
+            return null;
+        }
         if (y < lay.headH) {
             for (ScreenCore.Item it : lay.head) {
                 float hx = it.fixed ? x : x + scrollX;
@@ -257,7 +320,7 @@ public class ScreenView extends View {
         if ("bg".equals(r)) return pal[R_BG]; if ("card".equals(r)) return pal[R_CARD]; if ("border".equals(r)) return pal[R_BORDER];
         if ("text".equals(r)) return pal[R_TEXT]; if ("sub".equals(r)) return pal[R_SUB]; if ("gold".equals(r)) return pal[R_GOLD];
         if ("orange".equals(r)) return pal[R_ORANGE]; if ("imgbg".equals(r)) return pal[R_IMGBG]; if ("white".equals(r)) return pal[R_WHITE];
-        if ("border2".equals(r)) return pal[R_BORDER2];
+        if ("border2".equals(r)) return pal[R_BORDER2]; if ("card2".equals(r)) return pal[R_CARD2]; if ("nav".equals(r)) return pal[R_NAV];
         return 0;
     }
 
@@ -279,9 +342,9 @@ public class ScreenView extends View {
         float w = getWidth() / dpr, h = getHeight() / dpr;
         // 본문(머리 아래로 잘라서)
         cv.save();
-        cv.clipRect(0f, lay.headH, w, h);
+        cv.clipRect(0f, lay.headH, w, h - lay.footH);
         cv.translate(0f, lay.headH - scrollY);
-        int[] r = lay.bodyRange(scrollY - 4f, scrollY + (h - lay.headH) + 4f);
+        int[] r = lay.bodyRange(scrollY - 4f, scrollY + (h - lay.headH - lay.footH) + 4f);
         for (int i = r[0]; i < r[1]; i++) drawItem(cv, lay.body[i]);
         cv.restore();
         // 머리(위에 고정, 본문 위에 덮음)
@@ -294,6 +357,18 @@ public class ScreenView extends View {
         float x0 = scrollX - 4f, x1 = scrollX + w + 4f;
         for (int i = 0; i < lay.head.length; i++) { ScreenCore.Item it = lay.head[i]; if (!it.fixed && it.x + it.w >= x0 && it.x <= x1) drawItem(cv, it); }   // 칩 줄(가로로 밀림)
         cv.restore();
+        if (lay.footH > 0f) {                                                                    // 아래 고정 줄(채팅 입력줄): 배경 + 위 선 + 조각
+            cv.save();
+            cv.clipRect(0f, h - lay.footH, w, h);
+            cv.translate(0f, h - lay.footH);
+            p.setStyle(Paint.Style.FILL); p.setColor(pal[R_BG]);
+            cv.drawRect(0f, 0f, w, lay.footH, p);
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(pal[R_BORDER]);
+            cv.drawLine(0f, 0.5f, w, 0.5f, p);
+            p.setStyle(Paint.Style.FILL);
+            for (int i = 0; i < lay.foot.length; i++) drawItem(cv, lay.foot[i]);
+            cv.restore();
+        }
         cv.restore();
 
         if (!drewOnce) { drewOnce = true; post(firstDrawCb); }
@@ -317,6 +392,12 @@ public class ScreenView extends View {
             case ScreenCore.K_PLACE: drawPlace(cv, it); break;
             case ScreenCore.K_DIV: drawDivider(cv, it); break;
             case ScreenCore.K_NEWS: drawNews(cv, it); break;
+            case ScreenCore.K_POSTH: drawPostHead(cv, it); break;
+            case ScreenCore.K_CMT: drawCmt(cv, it); break;
+            case ScreenCore.K_RBTN: drawRbtn(cv, it); break;
+            case ScreenCore.K_INBAR: drawInbar(cv, it); break;
+            case ScreenCore.K_MSG: drawMsg(cv, it); break;
+            case ScreenCore.K_TAB: drawTab(cv, it); break;
             default: break;
         }
     }
@@ -422,7 +503,7 @@ public class ScreenView extends View {
     }
 
     private void drawDivider(Canvas cv, ScreenCore.Item it) {
-        p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(pal[R_BORDER]);
+        p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor("border2".equals(it.bg) ? pal[R_BORDER2] : pal[R_BORDER]);
         cv.drawLine(it.x, it.y + 0.5f, it.x + it.w, it.y + 0.5f, p);
         p.setStyle(Paint.Style.FILL);
     }
@@ -656,7 +737,126 @@ public class ScreenView extends View {
         p.setStyle(Paint.Style.FILL); p.setStrokeCap(Paint.Cap.BUTT);
     }
 
+    private void drawPostHead(Canvas cv, ScreenCore.Item it) {
+        if (it == pressed) { rf.set(it.x, it.y, it.x + it.w, it.y + it.h); p.setStyle(Paint.Style.FILL); p.setColor(0x14808080); cv.drawRoundRect(rf, 11f, 11f, p); }
+        if (it.badge.length() > 0) {
+            float bh = ScreenCore.POST_BADGE * 1.4f + 4f;
+            rf.set(it.bx, it.by, it.bx + it.badgeW, it.by + bh);
+            p.setStyle(Paint.Style.FILL); p.setColor(cc(it.ac, 0xFF8E8E93)); cv.drawRoundRect(rf, 5f, 5f, p);
+            setText(ScreenCore.POST_BADGE, true, pal[R_WHITE]); tp.setTextAlign(Paint.Align.CENTER);
+            cv.drawText(it.badge, it.bx + it.badgeW / 2f, base(it.by, bh, 0), tp);
+            tp.setTextAlign(Paint.Align.LEFT);
+        }
+        setText(it.size, true, pal[R_TEXT]);
+        for (int k = 0; k < it.lines.length; k++) cv.drawText(it.lines[k], it.textX, base(it.textY + k * it.lineH, it.lineH, k), tp);
+        if (it.tag.length() > 0) { setText(it.size2, true, pal[R_GOLD]); cv.drawText(it.tag, it.tagX, base(it.metaY, it.lineH2, 0), tp); }
+        if (it.label.length() > 0) { setText(it.size2, false, pal[R_SUB]); cv.drawText(it.label, it.distX, base(it.metaY, it.lineH2, 0), tp); }
+    }
+    private void drawCmt(Canvas cv, ScreenCore.Item it) {
+        setText(it.size2, true, cc(it.ac, 0xFF5E5CE6));
+        cv.drawText(it.tag, it.x, base(it.metaY, it.lineH2, 0), tp);
+        if (it.label.length() > 0) { setText(ScreenCore.CMT_TIME, false, pal[R_SUB]); cv.drawText(it.label, it.tagX, base(it.metaY, it.lineH2, 0), tp); }
+        setText(it.size, false, pal[R_TEXT]);
+        for (int k = 0; k < it.lines.length; k++) cv.drawText(it.lines[k], it.textX, base(it.textY + k * it.lineH, it.lineH, k), tp);
+    }
+    private void drawRbtn(Canvas cv, ScreenCore.Item it) {
+        rf.set(it.x, it.y, it.x + it.w, it.y + it.h);
+        p.setStyle(Paint.Style.FILL); p.setColor(cc(it.fill, pal[R_CARD2])); cv.drawRoundRect(rf, it.radius, it.radius, p);
+        if (it == pressed) { p.setColor(0x22808080); cv.drawRoundRect(rf, it.radius, it.radius, p); }
+        p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(cc(it.line, pal[R_BORDER2]));
+        rf2.set(it.x + 0.5f, it.y + 0.5f, it.x + it.w - 0.5f, it.y + it.h - 0.5f); cv.drawRoundRect(rf2, it.radius - 0.5f, it.radius - 0.5f, p);
+        p.setStyle(Paint.Style.FILL);
+        setText(it.size, true, cc(it.tc, pal[R_SUB])); tp.setTextAlign(Paint.Align.CENTER);
+        cv.drawText(it.label, it.x + it.w / 2f, base(it.y, it.h, 0), tp);
+        tp.setTextAlign(Paint.Align.LEFT);
+    }
+    private void drawInbar(Canvas cv, ScreenCore.Item it) {
+        boolean editing = it.key.equals(editKey);
+        rf.set(it.ix, it.iy, it.ix + it.iw, it.iy + it.ih);
+        if (it.fill != null) { p.setStyle(Paint.Style.FILL); p.setColor(cc(it.fill, 0)); cv.drawRoundRect(rf, it.radius, it.radius, p); }
+        if (it.line != null) {
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(editing ? 1.5f : 1f); p.setColor(editing ? pal[R_GOLD] : cc(it.line, 0));
+            rf2.set(it.ix + 0.5f, it.iy + 0.5f, it.ix + it.iw - 0.5f, it.iy + it.ih - 0.5f); cv.drawRoundRect(rf2, it.radius - 0.5f, it.radius - 0.5f, p);
+            p.setStyle(Paint.Style.FILL);
+        }
+        if (!editing) {
+            String v = fieldVals.get(it.key);
+            boolean empty = v == null || v.length() == 0;
+            setText(it.size, false, empty ? alpha(cc(it.sc, pal[R_SUB]), 0.8f) : cc(it.tc, pal[R_TEXT]));
+            cv.save(); rf.set(it.ix + 8f, it.iy, it.ix + it.iw - 8f, it.iy + it.ih); cv.clipRect(rf);
+            cv.drawText(empty ? it.label : v, it.textX, base(it.iy, it.ih, 0), tp);
+            cv.restore();
+        }
+        rf.set(it.btx, it.bty, it.btx + it.sw, it.bty + it.sh);
+        p.setStyle(Paint.Style.FILL); p.setColor(cc(it.ac, pal[R_GOLD])); cv.drawRoundRect(rf, it.radius, it.radius, p);
+        if (it == pressed) { p.setColor(0x33000000); cv.drawRoundRect(rf, it.radius, it.radius, p); }
+        setText(it.size, true, cc(it.ac2, 0xFF121214)); tp.setTextAlign(Paint.Align.CENTER);
+        cv.drawText(it.badge, it.btx + it.sw / 2f, base(it.bty, it.sh, 0), tp);
+        tp.setTextAlign(Paint.Align.LEFT);
+    }
+    private void drawMsg(Canvas cv, ScreenCore.Item it) {
+        if (it.tag.length() > 0) { setText(it.size2, false, pal[R_SUB]); cv.drawText(it.tag, it.x, base(it.y, it.lineH2, 0), tp); }
+        rf.set(it.x, it.sy, it.x + it.w, it.sy + it.sh);
+        p.setStyle(Paint.Style.FILL); p.setColor(cc(it.fill, pal[R_CARD2])); cv.drawRoundRect(rf, it.radius, it.radius, p);
+        if (it.badge.length() > 0) { setText(10f, true, cc(it.ac, 0xFFFF453A)); cv.drawText(it.badge, it.bx, base(it.by, 14f, 0), tp); }
+        setText(it.size, false, cc(it.tc, pal[R_TEXT]));
+        for (int k = 0; k < it.lines.length; k++) cv.drawText(it.lines[k], it.textX, base(it.textY + k * it.lineH, it.lineH, k), tp);
+        float th = ScreenCore.MSG_TIME * 1.35f;
+        if (it.label.length() > 0) { setText(ScreenCore.MSG_TIME, false, pal[R_SUB]); cv.drawText(it.label, it.x, base(it.metaY, th, 0), tp); }
+        if (it.go.length() > 0) {
+            int sub = alpha(pal[R_SUB], it == pressed ? 1f : 0.75f);
+            setText(ScreenCore.MSG_TIME, false, sub);
+            cv.drawText(" · ", it.btnLX, base(it.metaY, th, 0), tp);
+            cv.drawText(it.go, it.zoneX, base(it.metaY, th, 0), tp);
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(0.8f); p.setColor(sub);
+            cv.drawLine(it.zoneX, it.metaY + th - 1f, it.zoneX + it.zoneW, it.metaY + th - 1f, p);
+            p.setStyle(Paint.Style.FILL);
+        }
+    }
+    private void drawTab(Canvas cv, ScreenCore.Item it) {
+        rf.set(it.x, it.y, it.x + it.w, it.y + it.h);
+        p.setStyle(Paint.Style.FILL); p.setColor(cc(it.fill, pal[R_NAV])); cv.drawRect(rf, p);
+        if (it == pressed) { p.setColor(0x14808080); cv.drawRect(rf, p); }
+        p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(pal[R_BORDER]);
+        cv.drawLine(it.x, it.y + 0.5f, it.x + it.w, it.y + 0.5f, p);
+        p.setStyle(Paint.Style.FILL);
+        int col = it.on ? cc(it.ac, pal[R_GOLD]) : cc(it.sc, pal[R_SUB]);
+        float cx = it.x + it.w / 2f, lh = ScreenCore.TAB_LABEL * 1.4f, top = it.y + (it.h - (ScreenCore.TAB_ICON + 4f + lh)) / 2f;
+        android.graphics.Path ph = it.pathOps.length > 0 ? pathFor(it) : null;
+        if (ph != null) {
+            float sc = ScreenCore.TAB_ICON / 24f;
+            cv.save(); cv.translate(cx - ScreenCore.TAB_ICON / 2f, top); cv.scale(sc, sc);
+            p.setColor(col); cv.drawPath(ph, p);
+            cv.restore();
+        }
+        setText(ScreenCore.TAB_LABEL, it.on, col); tp.setTextAlign(Paint.Align.CENTER);
+        cv.drawText(it.label, cx, base(top + ScreenCore.TAB_ICON + 4f, lh, 0), tp);
+        if (it.badge.length() > 0) {
+            float bx = cx + ScreenCore.TAB_ICON / 2f, by = top + 2f;
+            p.setColor(0xFFFF3B30); cv.drawCircle(bx, by, 7f, p);
+            setText(9f, true, pal[R_WHITE]); cv.drawText(it.badge, bx, base(by - 7f, 14f, 0), tp);
+        }
+        tp.setTextAlign(Paint.Align.LEFT);
+    }
+
     // ───────────── 검색 입력칸(진짜 EditText) ─────────────
+    /** 아이콘 경로(M/L/C/Z 풀어 둔 배열)를 안드로이드 Path 로. 처음 한 번만 만들고 화면이 바뀔 때까지 쓴다. */
+    private android.graphics.Path pathFor(ScreenCore.Item it) {
+        android.graphics.Path ph = iconPaths.get(it.pathOps);
+        if (ph != null) return ph;
+        ph = new android.graphics.Path();
+        float[] o = it.pathOps; int i = 0;
+        while (i < o.length) {
+            int op = (int) o[i++];
+            if (op == ScreenCore.OP_M) { ph.moveTo(o[i], o[i + 1]); i += 2; }
+            else if (op == ScreenCore.OP_L) { ph.lineTo(o[i], o[i + 1]); i += 2; }
+            else if (op == ScreenCore.OP_C) { ph.cubicTo(o[i], o[i + 1], o[i + 2], o[i + 3], o[i + 4], o[i + 5]); i += 6; }
+            else if (op == ScreenCore.OP_Z) ph.close();
+            else break;
+        }
+        iconPaths.put(it.pathOps, ph);
+        return ph;
+    }
     private ScreenCore.Item searchItem() {
         if (lay == null) return null;
         for (ScreenCore.Item it : lay.head) if (it.kind == ScreenCore.K_SEARCH) return it;
@@ -769,9 +969,11 @@ public class ScreenView extends View {
         if (input != null) { blurInput(); if (input.getParent() instanceof ViewGroup) ((ViewGroup) input.getParent()).removeView(input); inShown = false; inL = inT = inW = inH = -1; }
     }
     // ───────────── 글자 입력칸(field) 편집 ─────────────
+    private boolean editInFoot;
     private ScreenCore.Item fieldByKey(String k) {
         if (lay == null || k == null) return null;
-        for (ScreenCore.Item it : lay.body) if (it.kind == ScreenCore.K_FIELD && k.equals(it.key)) return it;
+        for (ScreenCore.Item it : lay.body) if ((it.kind == ScreenCore.K_FIELD || it.kind == ScreenCore.K_INBAR) && k.equals(it.key)) { editInFoot = false; return it; }
+        for (ScreenCore.Item it : lay.foot) if ((it.kind == ScreenCore.K_FIELD || it.kind == ScreenCore.K_INBAR) && k.equals(it.key)) { editInFoot = true; return it; }
         return null;
     }
     private void ensureEditor() {
@@ -785,7 +987,11 @@ public class ScreenView extends View {
         e.setInputType(InputType.TYPE_CLASS_TEXT);
         e.setImeOptions(EditorInfo.IME_ACTION_DONE);
         e.setOnEditorActionListener(new TextView.OnEditorActionListener() {
-            @Override public boolean onEditorAction(TextView v, int actionId, KeyEvent ev) { blurInput(); return true; }
+            @Override public boolean onEditorAction(TextView v, int actionId, KeyEvent ev) {
+                ScreenCore.Item cur = fieldByKey(editKey);
+                if (cur != null && cur.kind == ScreenCore.K_INBAR) { fireInbar(cur, editInFoot); return true; }          // 키보드의 보내기 = 입력줄 단추
+                blurInput(); return true;
+            }
         });
         e.setOnFocusChangeListener(new View.OnFocusChangeListener() {
             @Override public void onFocusChange(View v, boolean has) {
@@ -805,11 +1011,13 @@ public class ScreenView extends View {
             par.addView(editor, new FrameLayout.LayoutParams(1, 1));
         }
         editKey = it.key;
+        fieldByKey(it.key);                                                                                        // editInFoot 갱신
         String v = fieldVals.get(it.key);
         editor.setText(v == null ? "" : v);
         editor.setTextColor(cc(it.tc, pal[R_TEXT]));
         editor.setHintTextColor(alpha(cc(it.sc, pal[R_SUB]), 0.8f));
         editor.setHint(it.label);
+        editor.setImeOptions(it.kind == ScreenCore.K_INBAR ? EditorInfo.IME_ACTION_SEND : EditorInfo.IME_ACTION_DONE);
         editor.setTypeface(face(false)); editor.setTextSize(TypedValue.COMPLEX_UNIT_DIP, it.size);
         editor.setFilters(new InputFilter[] { new InputFilter.LengthFilter(Math.max(1, it.maxlen)) });
         eL = eT = eW = eH = -1;
@@ -824,7 +1032,7 @@ public class ScreenView extends View {
     }
     /** 편집 중인 칸이 본문 보이는 영역 안에 오도록 스크롤한다(키보드가 올라와 영역이 줄어든 뒤에도). */
     private void ensureEditVisible(ScreenCore.Item f) {
-        if (lay == null || f == null) return;
+        if (lay == null || f == null || editInFoot) return;
         float vh = bodyViewH();
         if (vh <= f.h + 16f) return;
         if (f.y + f.h + 8f > scrollY + vh) scrollY = f.y + f.h + 8f - vh;
@@ -837,10 +1045,12 @@ public class ScreenView extends View {
         ScreenCore.Item f = fieldByKey(editKey);
         ViewGroup par = getParent() instanceof ViewGroup ? (ViewGroup) getParent() : null;
         if (f == null || par == null || getVisibility() != View.VISIBLE) { endEdit(); return; }
-        float topDp = lay.headH + f.y - scrollY;
-        if (topDp < lay.headH - 1f || topDp + f.h > viewHdp() + 1f) { endEdit(); return; }     // 화면 밖으로 밀렸다
-        int l = getLeft() + Math.round((f.x + 13f) * dpr), t = getTop() + Math.round(topDp * dpr);
-        int w = Math.max(1, Math.round((f.w - 26f) * dpr)), h = Math.max(1, Math.round(f.h * dpr));
+        float topDp = editInFoot ? footTop() + f.y : lay.headH + f.y - scrollY;
+        if (!editInFoot && (topDp < lay.headH - 1f || topDp + f.h > footTop() + 1f)) { endEdit(); return; }     // 화면 밖으로 밀렸다(아래 고정 줄에 가려져도)
+        boolean ib = f.kind == ScreenCore.K_INBAR;
+        float exDp = ib ? f.ix + 14f : f.x + 13f, ewDp = ib ? f.iw - 28f : f.w - 26f;
+        int l = getLeft() + Math.round(exDp * dpr), t = getTop() + Math.round(topDp * dpr);
+        int w = Math.max(1, Math.round(ewDp * dpr)), h = Math.max(1, Math.round((ib ? f.ih : f.h) * dpr));
         if (l != eL || t != eT || w != eW || h != eH) {
             eL = l; eT = t; eW = w; eH = h;
             FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(w, h);

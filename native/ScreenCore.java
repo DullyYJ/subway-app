@@ -29,8 +29,16 @@ import java.util.Map;
  *     place  { pad, rank, pub, name, sub, stars, badge, dist, go, act }                    장소 카드(맛집): 순위 동그라미 · 이름 · 업종/주소 · 별점/딱지/거리/길찾기 글. pub=true 면 순위 칸은 글자 없이 흐리게
  *     divider { pad }                                                                      가는 가로선
  *     news   { pad, title, sub, act }                                                      뉴스 줄(커뮤니티): 왼쪽 금색 막대 · 줄바꿈 제목(최대 4줄) · 작은 글(분류 · N분 전) · 오른쪽 ›. 아래에 가는 선
+ *     post   { pad, id, title, cat, catc, nick, meta, open, kids:[…] }                     게시글 카드(아코디언): 머리(분류 딱지·제목·글쓴이·메타)를 누르면 앱이 바로 펼치고 접는다(한 번에 한 글). 펼치면 kids 를 쌓는다
+ *     cmt    { pad, nick, nc, s, time, ind }                                                 댓글 한 줄: 글쓴이·시각 + 아래 줄바꿈 글(ind = 답글 들여쓰기)
+ *     btnrow { pad, gap, h, items:[{label, on, right, fill, line, tc, act}] }               작은 단추 줄(반응 단추·삭제/신고). right 인 것은 오른쪽 끝에 붙는다
+ *     inbar  { pad, key, hint, value, maxlen, h, r, btn, act, fill, line, tc, sc, onc, ckf } 글자 입력칸 + 오른쪽 단추 한 줄(댓글 달기·채팅 보내기). 단추를 누르면 입력된 글과 함께 act 를 알린다
+ *     msg    { pad, mine, pre, nick, s, time, badge, bc, go, fill, tc, act }                 채팅 말풍선(내 것은 오른쪽·금색). act 가 있으면 go('신고') 글자 자리만 눌린다
+ *     tabbar { pad, h, fill, line, onc, sc, items:[{label, icon(SVG path d), on, badge, act}] } 아래 탭 막대: 칸마다 아이콘 + 글자
  *     act    { a:'cat', v } | { a:'open', url } | { a:'refresh' } | { a:'search', tpl('{q}' 포함 http(s)), empty(http(s)) }
- *            | { a:'set', key } | { a:'call', v:이름 } | { a:'web', v:이름 } | { a:'sel', v:값 }   (call/web/sel 은 웹이 허용 목록에 있는 것만 실행한다)
+ *            | { a:'set', key } | { a:'call', v:이름 } | { a:'web', v:이름 } | { a:'sel', v:값 } | { a:'tog', v:글번호 }   (call/web/sel 은 웹이 허용 목록에 있는 것만 실행한다. tog = post 펼침 — 앱이 직접 펼치고 알리기만 한다)
+ *   screen.anchor = 'bottom' (선택) 채팅처럼 새 글이 아래에 붙는 화면 — 처음 열릴 때와, 사용자가 맨 아래 근처에 있을 때 갱신되면 맨 아래로 붙는다.
+ *   screen.foot = [노드…] (선택) 화면 맨 아래에 고정되는 줄(채팅 입력줄). 키보드가 올라와 화면이 줄어도 입력줄은 맨 아래에 붙는다.
  *   screen.cover = 'tab'(탭 맨 위부터 덮음: 안내 상자·검색줄 포함) | 'chips'(기본, 칩 줄부터). 앱이 cap=2 를 보냈을 때만 엔진이 'tab' 을 준다.
  *   모르는 노드 종류는 건너뛴다(앞으로 늘려도 옛 앱이 안 깨진다). 아는 종류인데 모양이 틀리면 화면 전체를 거절한다(깨진 화면을 그리지 않는다).
  *   좌표 단위는 dp(CSS px 와 같다) — 그릴 때 밀도를 곱한다.
@@ -167,6 +175,9 @@ public final class ScreenCore {
         public String key = "", title = "", sub = "", value = "";
         public String fill = "", line = "", hint = "", accent = "#e63329", tc = "", sc = "", onc = "", onl = "", chk = "", ckf = "";
         public String[] prev = new String[0];
+        public boolean mine, right, ind;
+        public String nick = "", pre = "", time = "";
+        public float[] pathOps = new float[0];
         public List<Node> kids = new ArrayList<Node>();
         public int[][] hl = new int[0][];
         public Act act;
@@ -174,11 +185,12 @@ public final class ScreenCore {
     }
     public static final class Screen {
         public String id = "", rev = "", cover = "chips";
-        public List<Node> head = new ArrayList<Node>(), body = new ArrayList<Node>();
+        public List<Node> head = new ArrayList<Node>(), body = new ArrayList<Node>(), foot = new ArrayList<Node>();
+        public String anchor = "";
         public int skipped = 0, nodes = 0;
     }
 
-    private static final String[] ROLES = { "bg", "card", "border", "text", "sub", "gold", "orange", "imgbg", "white", "border2", "none" };
+    private static final String[] ROLES = { "bg", "card", "border", "text", "sub", "gold", "orange", "imgbg", "white", "border2", "none", "card2", "nav" };
     private static boolean role(String s) { for (String r : ROLES) if (r.equals(s)) return true; return false; }
     private static boolean httpUrl(String u) {
         if (u == null || u.length() == 0 || u.length() > 1500) return false;
@@ -246,7 +258,7 @@ public final class ScreenCore {
         else if ("open".equals(a.a)) { a.url = optStr(m, "url", "", 1500); if (!httpUrl(a.url)) throw new ParseError("act open: 주소가 http(s) 가 아니다"); }
         else if ("refresh".equals(a.a)) { }
         else if ("set".equals(a.a)) { a.key = optStr(m, "key", "", 40); if (!ident(a.key)) throw new ParseError("act set: key 가 올바르지 않다"); }
-        else if ("call".equals(a.a) || "web".equals(a.a) || "sel".equals(a.a)) { a.v = optStr(m, "v", "", 40); if (!ident(a.v)) throw new ParseError("act " + a.a + ": v 가 올바르지 않다"); }
+        else if ("call".equals(a.a) || "web".equals(a.a) || "sel".equals(a.a) || "tog".equals(a.a)) { a.v = optStr(m, "v", "", 40); if (!ident(a.v)) throw new ParseError("act " + a.a + ": v 가 올바르지 않다"); }
         else if ("search".equals(a.a)) {
             a.tpl = optStr(m, "tpl", "", 1500); a.empty = optStr(m, "empty", "", 1500);
             if (!httpUrl(a.tpl) || a.tpl.indexOf("{q}") < 0) throw new ParseError("act search: tpl 은 {q} 가 든 http(s) 주소여야 한다");
@@ -309,6 +321,7 @@ public final class ScreenCore {
                 Node c = new Node(); c.t = "chip";
                 c.label = optStr(im, "label", "", 60); if (c.label.length() == 0) throw new ParseError("chip: label 없음");
                 c.badge = optStr(im, "badge", "", 20); c.on = optBool(im, "on", false); c.act = act(im.get("act"), false);
+                c.fill = roleOrCss(im, "c", "");                                                                      // 칩마다 켜진 바탕색(실시간소통 노선 색)
                 n.items.add(c); sc.nodes++;
                 if (sc.nodes > MAX_NODES) throw new ParseError("노드가 너무 많다");
             }
@@ -412,6 +425,71 @@ public final class ScreenCore {
             n.title = optStr(m, "title", "", 200); if (n.title.length() == 0) throw new ParseError("news: title 없음");
             n.sub = optStr(m, "sub", "", 60);
             n.act = act(m.get("act"), true);
+        } else if ("tabbar".equals(t)) {
+            pad(m, n);
+            n.h = optNum(m, "h", 56f, 32f, 96f);
+            n.fill = roleOrCss(m, "fill", "nav"); if (n.fill.length() == 0) n.fill = "nav";
+            n.line = roleOrCss(m, "line", "border"); n.onc = roleOrCss(m, "onc", "gold"); if (n.onc.length() == 0) n.onc = "gold";
+            n.sc = roleOrCss(m, "sc", "sub"); if (n.sc.length() == 0) n.sc = "sub";
+            List<Object> its = asArr(m.get("items"), "tabbar.items");
+            if (its.size() < 2 || its.size() > 6) throw new ParseError("tabbar: 칸은 2~6개");
+            for (Object io : its) {
+                Map<String, Object> im = asObj(io, "tab");
+                Node c = new Node(); c.t = "tab";
+                c.label = optStr(im, "label", "", 12); if (c.label.length() == 0) throw new ParseError("tab: label 없음");
+                c.value = optStr(im, "icon", "", 900); c.pathOps = pathOps(c.value);
+                c.on = optBool(im, "on", false); c.badge = optStr(im, "badge", "", 4); c.act = act(im.get("act"), true);
+                n.items.add(c); sc.nodes++;
+            }
+        } else if ("post".equals(t)) {
+            pad(m, n);
+            n.key = optStr(m, "id", "", 40); if (!ident(n.key)) throw new ParseError("post: id 가 올바르지 않다");
+            n.title = optStr(m, "title", "", 300); if (n.title.length() == 0) throw new ParseError("post: title 없음");
+            n.badge = optStr(m, "cat", "", 12); n.tc = roleOrCss(m, "catc", "#8e8e93");
+            n.tag = optStr(m, "nick", "", 40); n.sub = optStr(m, "meta", "", 160); n.on = optBool(m, "open", false);
+            n.fill = roleOrCss(m, "fill", "card"); n.line = roleOrCss(m, "line", "border");
+            for (Object ko : asArr(m.get("kids"), "post.kids")) {
+                Map<String, Object> km = asObj(ko, "post 안 노드");
+                String kt = optStr(km, "t", "", 20);
+                if ("post".equals(kt) || "panel".equals(kt) || "grid".equals(kt) || "chips".equals(kt) || "search".equals(kt) || "tabbar".equals(kt)) throw new ParseError("post 안에 " + kt + " 를 둘 수 없다");
+                Node kn = node(ko, sc);
+                if (kn != null) n.kids.add(kn);
+            }
+        } else if ("cmt".equals(t)) {
+            pad(m, n);
+            n.nick = optStr(m, "nick", "", 40); if (n.nick.length() == 0) throw new ParseError("cmt: nick 없음");
+            n.s = optStr(m, "s", "", 600); n.time = optStr(m, "time", "", 16); n.ind = optBool(m, "ind", false);
+            n.tc = roleOrCss(m, "nc", "#5e5ce6"); if (n.tc.length() == 0) n.tc = "#5e5ce6";
+        } else if ("btnrow".equals(t)) {
+            pad(m, n); n.gap = optNum(m, "gap", 8f, 0f, 60f); n.h = optNum(m, "h", 30f, 20f, 60f);
+            for (Object io : asArr(m.get("items"), "btnrow.items")) {
+                Map<String, Object> im = asObj(io, "btn");
+                Node c = new Node(); c.t = "rbtn";
+                c.label = optStr(im, "label", "", 40); if (c.label.length() == 0) throw new ParseError("btn: label 없음");
+                c.on = optBool(im, "on", false); c.right = optBool(im, "right", false); c.act = act(im.get("act"), true);
+                c.fill = roleOrCss(im, "fill", "card2"); c.line = roleOrCss(im, "line", "border2"); c.tc = roleOrCss(im, "tc", "sub");
+                n.items.add(c); sc.nodes++;
+                if (sc.nodes > MAX_NODES) throw new ParseError("노드가 너무 많다");
+            }
+        } else if ("inbar".equals(t)) {
+            pad(m, n);
+            n.key = optStr(m, "key", "", 40); if (!ident(n.key)) throw new ParseError("inbar: key 가 올바르지 않다");
+            n.hint = optStr(m, "hint", "", 60); n.value = optStr(m, "value", "", 120); n.maxlen = (int) optNum(m, "maxlen", 120f, 1f, 300f);
+            n.h = optNum(m, "h", 40f, 28f, 80f); n.r = optNum(m, "r", 9f, 0f, 40f); n.size = optNum(m, "size", 13f, 8f, 30f);
+            n.label = optStr(m, "btn", "", 8); if (n.label.length() == 0) throw new ParseError("inbar: btn 없음");
+            n.act = act(m.get("act"), true);
+            n.top = optBool(m, "top", false);
+            n.fill = roleOrCss(m, "fill", "card"); n.line = roleOrCss(m, "line", "border2"); n.tc = roleOrCss(m, "tc", "text"); n.sc = roleOrCss(m, "sc", "sub");
+            n.onc = roleOrCss(m, "onc", "gold"); if (n.onc.length() == 0) n.onc = "gold"; n.chk = roleOrCss(m, "ckf", "#121214"); if (n.chk.length() == 0) n.chk = "#121214";
+        } else if ("msg".equals(t)) {
+            pad(m, n);
+            n.mine = optBool(m, "mine", false); n.nick = optStr(m, "nick", "", 40); n.pre = optStr(m, "pre", "", 24);
+            n.s = optStr(m, "s", "", 600); if (n.s.length() == 0) throw new ParseError("msg: s 없음");
+            n.time = optStr(m, "time", "", 12); n.badge = optStr(m, "badge", "", 10); n.accent = roleOrCss(m, "bc", "#ff453a"); if (n.accent.length() == 0) n.accent = "#ff453a";
+            n.title = optStr(m, "go", "", 8);
+            n.act = act(m.get("act"), false);
+            n.fill = roleOrCss(m, "fill", n.mine ? "gold" : "card2"); if (n.fill.length() == 0) n.fill = n.mine ? "gold" : "card2";
+            n.tc = roleOrCss(m, "tc", n.mine ? "#121214" : "text"); if (n.tc.length() == 0) n.tc = n.mine ? "#121214" : "text";
         } else if ("divider".equals(t)) {
             pad(m, n);
         } else if ("spacer".equals(t)) {
@@ -431,16 +509,22 @@ public final class ScreenCore {
         sc.id = optStr(m, "screen", "", 40); if (sc.id.length() == 0) throw new ParseError("screen 없음");
         sc.rev = optStr(m, "rev", "", 120);
         sc.cover = optStr(m, "cover", "chips", 8); if (!"tab".equals(sc.cover) && !"chips".equals(sc.cover)) throw new ParseError("cover: 모르는 값 " + sc.cover);
+        sc.anchor = optStr(m, "anchor", "", 8); if (!"".equals(sc.anchor) && !"bottom".equals(sc.anchor)) throw new ParseError("anchor: 모르는 값 " + sc.anchor);
         for (Object o : asArr(m.get("head"), "head")) { Node n = node(o, sc); if (n != null) sc.head.add(n); }
         for (Object o : asArr(m.get("body"), "body")) { Node n = node(o, sc); if (n != null) sc.body.add(n); }
-        if (sc.head.isEmpty() && sc.body.isEmpty()) throw new ParseError("그릴 것이 없다");
+        if (m.get("foot") != null) for (Object o : asArr(m.get("foot"), "foot")) { Node n = node(o, sc); if (n != null) sc.foot.add(n); }
+        if (sc.head.isEmpty() && sc.body.isEmpty() && sc.foot.isEmpty()) throw new ParseError("그릴 것이 없다");
         return sc;
     }
 
     public static Screen load(String json) throws ParseError { return validate(parse(json)); }
 
     // ═════════════ ③ 배치 ═════════════
-    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14, K_NEWS = 15;
+    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14, K_NEWS = 15, K_POSTH = 16, K_CMT = 17, K_RBTN = 18, K_INBAR = 19, K_MSG = 20, K_TAB = 21;
+    /** 게시글 카드·댓글·말풍선 치수(웹 .dc-* / .chat-bub-* 와 같다) */
+    public static final float POST_PADX = 14f, POST_PADT = 12f, POST_META_GAP = 8f, POST_PADB = 10f, POST_TITLE = 14f, POST_TITLE_LH = 1.4f, POST_BADGE = 10f, POST_BADGE_PX = 7f, POST_BADGE_GAP = 8f, POST_META = 11f, POST_BODYPAD = 14f,
+            CMT_NICK = 11f, CMT_TXT = 12f, CMT_TIME = 10f, CMT_IND = 14f, RBTN_PADX = 12f, RBTN_SIZE = 12f,
+            MSG_MAXF = 0.74f, MSG_PADX = 11f, MSG_PADY = 8f, MSG_TXT = 13f, MSG_LH = 1.45f, MSG_NICK = 11f, MSG_TIME = 9f, MSG_RAD = 13f, INBAR_BTN_PADX = 14f, INBAR_GAP = 8f, TAB_ICON = 20f, TAB_LABEL = 10f;
     /** 맛집 머리줄·장소 카드 치수(웹 .food-* 와 같다) */
     public static final float BAR_TITLE = 18f, BAR_SUB = 13f, BAR_BTN = 12f, BAR_LH = 1.4f, PLACE_PAD = 14f, PLACE_RANK = 24f, PLACE_GAP = 12f, PLACE_NAME = 15f, PLACE_SUB = 12f, PLACE_META = 11f, PLACE_STAR = 13f, PLACE_PILL_H = 20f,
             NEWS_PADV = 13f, NEWS_PADX = 4f, NEWS_BARW = 3f, NEWS_GAP = 10f, NEWS_TITLE = 14f, NEWS_SUB = 11f, NEWS_LH = 1.45f, NEWS_CHEV = 13f;
@@ -476,14 +560,17 @@ public final class ScreenCore {
         public float ix, iy, iw, ih;                // 카드 그림 자리
         public String go = "", dist = "", stars = "", rank = "";           // 장소 카드: 길찾기 글 · 거리 · 별점 · 순위
         public boolean pub;
+        public float[] pathOps = new float[0];       // 탭 아이콘(절대 좌표 M/L/C/Z 로 풀어 둔 것: [연산, 좌표…])
+        public float btnLX, btnLW, zoneX, zoneY, zoneW, zoneH;   // 말풍선 '신고' 글자 자리 · 입력줄 단추 글자 자리
+        public Col fill2;                            // 말풍선 글자색 따로 필요할 때
         public float starX, badgeX, badgePw, distX, distPw, goX, metaY, metaH, subY, subLH2;   // 장소 카드 한 줄(별점·딱지·거리·길찾기) 자리 / 머리줄 작은 글 자리
         public Act act;
     }
 
     /** 배치 결과. */
     public static final class Layout {
-        public Item[] head = new Item[0], body = new Item[0];
-        public float headH, headContentW, bodyH, width, chipsTop = -1f, chipsBot = -1f;
+        public Item[] head = new Item[0], body = new Item[0], foot = new Item[0];
+        public float headH, headContentW, bodyH, footH, width, chipsTop = -1f, chipsBot = -1f;
         float[] headMaxB = new float[0], bodyMaxB = new float[0];     // 앞에서부터 가장 아래쪽(이진 탐색용)
         float headMaxH, bodyMaxH;
 
@@ -520,6 +607,7 @@ public final class ScreenCore {
         public static boolean hits(Item m, float x, float y) {
             if (m.kind == K_TOGGLE) return x >= m.sx - 8f && x < m.sx + m.sw + 8f && y >= m.sy - 8f && y < m.sy + m.sh + 8f;
             if (m.kind == K_BAR) return x >= m.sx - 6f && x < m.sx + m.sw + 6f && y >= m.sy - 6f && y < m.sy + m.sh + 6f;      // 머리줄은 오른쪽 단추만
+            if (m.kind == K_MSG) return m.act != null && x >= m.zoneX - 6f && x < m.zoneX + m.zoneW + 6f && y >= m.zoneY - 6f && y < m.zoneY + m.zoneH + 6f;      // 말풍선은 '신고' 글자 자리만
             return x >= m.x && x < m.x + m.w && y >= m.y && y < m.y + m.h;
         }
         private static Act hit(Item[] it, float[] maxB, float x, float y) {
@@ -529,6 +617,11 @@ public final class ScreenCore {
                 return null;
             }
             for (Item m : it) if (m.act != null && x >= m.x && x < m.x + m.w && y >= m.y && y < m.y + m.h) return m.act;
+            return null;
+        }
+        /** 아래 고정 줄(foot)에서 눌린 행동. x·y 는 foot 영역 안 좌표. */
+        public Act hitFoot(float x, float y) {
+            for (Item m : foot) if (m.act != null && hits(m, x, y)) return m.act;
             return null;
         }
         /** 머리 칩 줄을 가로로 얼마나 밀 수 있나(0 이상). */
@@ -580,7 +673,10 @@ public final class ScreenCore {
         return stripEnd(s.substring(0, lo)) + e;
     }
 
-    public static Layout layout(Screen sc, float width, Measurer m) {
+    public static Layout layout(Screen sc, float width, Measurer m) { return layout(sc, width, m, null); }
+
+    /** openKey: 펼쳐 둘 post 의 id. null 이면 엔진이 준 open 표시를 따르고, 빈 글자면 모두 접는다. */
+    public static Layout layout(Screen sc, float width, Measurer m, String openKey) {
         Layout L = new Layout();
         L.width = width;
         // 머리: 칩 줄은 한 줄이라 가로로 놓는다. 머리 노드는 위에서 아래로 쌓는다.
@@ -592,7 +688,7 @@ public final class ScreenCore {
                 y += n.padT;
                 for (Node c : n.items) {
                     Item it = new Item(); it.kind = K_CHIP; it.label = c.label; it.badge = c.badge; it.on = c.on; it.act = c.act;
-                    it.size = 12f; it.bold = true; it.ac = col(n.onc, new Col("orange", 0)); it.tc = col(n.tc, new Col("white", 0));
+                    it.size = 12f; it.bold = true; it.ac = col(c.fill.length() > 0 ? c.fill : n.onc, new Col("orange", 0)); it.tc = col(n.tc, new Col("white", 0));
                     it.labelW = m.width(c.label, 12f, true);
                     it.badgeW = c.badge.length() > 0 ? m.width(c.badge, 12f, true) : 0f;
                     it.w = CHIP_PADX * 2 + it.labelW + (c.badge.length() > 0 ? 6f + it.badgeW : 0f);
@@ -604,7 +700,7 @@ public final class ScreenCore {
                 y += n.h + n.padB;
             } else {
                 int from = hi.size();
-                y = stack(n, 0f, width, y, hi, m);
+                y = stack(n, 0f, width, y, hi, m, openKey);
                 for (int q = from; q < hi.size(); q++) hi.get(q).fixed = true;
             }
         }
@@ -612,8 +708,13 @@ public final class ScreenCore {
         // 본문
         List<Item> bi = new ArrayList<Item>();
         y = 0f;
-        for (Node n : sc.body) y = stack(n, 0f, width, y, bi, m);
+        for (Node n : sc.body) y = stack(n, 0f, width, y, bi, m, openKey);
         L.body = bi.toArray(new Item[0]); L.bodyH = y;
+        // 아래 고정 줄
+        List<Item> fi = new ArrayList<Item>();
+        y = 0f;
+        for (Node n : sc.foot) y = stack(n, 0f, width, y, fi, m, openKey);
+        L.foot = fi.toArray(new Item[0]); L.footH = y;
         L.headMaxB = maxB(L.head); L.bodyMaxB = maxB(L.body);
         return L;
     }
@@ -622,6 +723,8 @@ public final class ScreenCore {
         for (int i = 0; i < it.length; i++) { mx = Math.max(mx, it[i].y + it[i].h); r[i] = mx; }
         return r;
     }
+
+    private static String t0(Node n) { return n.t; }
 
     /** 색 이름/CSS → Col. 비었으면 null(그리지 않는다). 못 읽는 CSS 는 def. */
     static Col col(String s, Col def) {
@@ -658,7 +761,7 @@ public final class ScreenCore {
     }
 
     /** 노드 하나를 y 에서부터 쌓고 다음 y 를 돌려준다. x0 = 이 노드를 담는 칸의 왼쪽(패널 안이면 패널 안쪽), width = 그 칸의 폭. */
-    private static float stack(Node n, float x0, float width, float y, List<Item> out, Measurer m) {
+    private static float stack(Node n, float x0, float width, float y, List<Item> out, Measurer m, String ok) {
         float innerW = Math.max(1f, width - n.padL - n.padR);
         float ox = x0 + n.padL;
         if ("spacer".equals(n.t)) return y + n.h;
@@ -711,7 +814,7 @@ public final class ScreenCore {
             pn.fill = col(n.fill, null); pn.line = col(n.line, null);
             out.add(pn);
             float cy = y + 1f + n.ipT, cx = ox + 1f + n.ipL, cw = Math.max(1f, innerW - 2f - n.ipL - n.ipR);
-            for (Node k : n.kids) cy = stack(k, cx, cw, cy, out, m);
+            for (Node k : n.kids) cy = stack(k, cx, cw, cy, out, m, ok);
             pn.h = (cy + n.ipB + 1f) - y;
             return y + pn.h + n.padB;
         }
@@ -840,6 +943,125 @@ public final class ScreenCore {
             out.add(it);
             return y + it.h + n.padB;
         }
+        if ("post".equals(n.t)) {
+            boolean open = ok == null ? n.on : ok.equals(n.key);
+            Item pn = new Item(); pn.kind = K_PANEL; pn.x = ox; pn.y = y; pn.w = innerW; pn.radius = 12f;
+            pn.fill = col(n.fill, null); pn.line = col(n.line, null);
+            out.add(pn);
+            float hx = ox + 1f, hw = innerW - 2f, hy = y + 1f;
+            float badgePw = n.badge.length() > 0 ? m.width(n.badge, POST_BADGE, true) + POST_BADGE_PX * 2f : 0f;
+            float lead = badgePw > 0f ? badgePw + POST_BADGE_GAP : 0f;
+            float titleW = Math.max(40f, hw - POST_PADX * 2f - lead), tlh = POST_TITLE * POST_TITLE_LH;
+            List<String> tl = wrap(n.title, titleW, POST_TITLE, true, 4, m);
+            float titleH = Math.max(tl.size() * tlh, badgePw > 0f ? POST_BADGE * 1.4f + 4f : 0f);
+            float metaLH = POST_META * 1.4f;
+            Item hd = new Item(); hd.kind = K_POSTH; hd.x = hx; hd.y = hy; hd.w = hw; hd.key = n.key; hd.on = open;
+            hd.act = new Act(); hd.act.a = "tog"; hd.act.v = n.key;
+            hd.lines = tl.toArray(new String[0]); hd.size = POST_TITLE; hd.bold = true; hd.lineH = tlh;
+            hd.textX = hx + POST_PADX + lead; hd.textY = hy + POST_PADT;
+            hd.badge = n.badge; hd.badgeW = badgePw; hd.bx = hx + POST_PADX; hd.by = hd.textY + 1f; hd.ac = col(n.tc, new Col(null, 0xFF8E8E93));
+            hd.tag = n.tag; hd.tagW = n.tag.length() > 0 ? m.width(n.tag, POST_META, true) : 0f; hd.tagX = hx + POST_PADX;
+            hd.label = n.sub; hd.size2 = POST_META; hd.lineH2 = metaLH;
+            hd.distX = hd.tagX + hd.tagW + (hd.tagW > 0f && n.sub.length() > 0 ? 5f : 0f);
+            hd.labelW = Math.max(20f, hx + hw - POST_PADX - hd.distX);
+            if (n.sub.length() > 0) hd.label = ellipsize(n.sub, hd.labelW, POST_META, false, m);
+            hd.metaY = hd.textY + titleH + POST_META_GAP;
+            hd.h = POST_PADT + titleH + POST_META_GAP + metaLH + POST_PADB;
+            out.add(hd);
+            float cy = hy + hd.h;
+            if (open && !n.kids.isEmpty()) {
+                Item dv = new Item(); dv.kind = K_DIV; dv.x = hx; dv.y = cy; dv.w = hw; dv.h = 1f; dv.bg = "border2";
+                out.add(dv);
+                cy += 1f + POST_BODYPAD;
+                float kx = hx + POST_BODYPAD, kw = Math.max(40f, hw - POST_BODYPAD * 2f);
+                for (Node k : n.kids) cy = stack(k, kx, kw, cy, out, m, ok);
+                cy += POST_BODYPAD;
+            }
+            pn.h = (cy + 1f) - y;
+            return y + pn.h + n.padB;
+        }
+        if ("cmt".equals(t0(n))) {
+            float ind = n.ind ? CMT_IND : 0f, w = Math.max(40f, innerW - ind), nlh = CMT_NICK * 1.4f, tlh = CMT_TXT * 1.5f;
+            List<String> tl = wrap(n.s, w, CMT_TXT, false, 0, m);
+            Item it = new Item(); it.kind = K_CMT; it.x = ox + ind; it.y = y; it.w = w;
+            it.tag = (n.ind ? "↳ " : "") + n.nick; it.tagW = m.width(it.tag, CMT_NICK, true);
+            it.label = n.time; it.labelW = n.time.length() > 0 ? m.width(n.time, CMT_TIME, false) : 0f;
+            it.tagX = it.x + it.tagW + 6f; it.metaY = y;
+            it.lines = tl.toArray(new String[0]); it.size = CMT_TXT; it.lineH = tlh; it.size2 = CMT_NICK; it.lineH2 = nlh;
+            it.textX = it.x; it.textY = y + nlh + 2f; it.ac = col(n.tc, new Col(null, 0xFF5E5CE6));
+            it.h = nlh + 2f + tlh * tl.size();
+            out.add(it);
+            return y + it.h + n.padB;
+        }
+        if ("btnrow".equals(t0(n))) {
+            float lx = ox, rx = ox + innerW, rowH = n.h, need = 0f;
+            int nl = 0, nr = 0;
+            for (Node c : n.items) { float bw = m.width(c.label, RBTN_SIZE, true) + RBTN_PADX * 2f + 2f; need += bw; if (c.right) nr++; else nl++; }
+            need += n.gap * Math.max(0, nl + nr - 1);
+            boolean wrap2 = need > innerW && nr > 0 && nl > 0;      // 좁으면 오른쪽 단추는 둘째 줄로
+            float yy = y;
+            for (Node c : n.items) {
+                float bw = m.width(c.label, RBTN_SIZE, true) + RBTN_PADX * 2f + 2f;
+                Item it = new Item(); it.kind = K_RBTN; it.y = (c.right && wrap2) ? y + rowH + 4f : y; it.w = bw; it.h = rowH; it.label = c.label; it.on = c.on; it.act = c.act; it.size = RBTN_SIZE; it.radius = 8f;
+                it.fill = col(c.fill, new Col("card2", 0)); it.line = col(c.line, new Col("border2", 0)); it.tc = col(c.tc, new Col("sub", 0));
+                if (c.right) { rx -= bw; it.x = rx; rx -= n.gap; }
+                else { it.x = lx; lx += bw + n.gap; }
+                out.add(it);
+            }
+            return y + rowH + (wrap2 ? rowH + 4f : 0f) + n.padB;
+        }
+        if ("inbar".equals(t0(n))) {
+            float btnW = m.width(n.label, n.size, true) + INBAR_BTN_PADX * 2f;
+            Item it = new Item(); it.kind = K_INBAR; it.x = ox; it.y = y; it.w = innerW; it.h = n.h; it.radius = n.r;
+            it.key = n.key; it.label = n.hint; it.value = n.value; it.maxlen = n.maxlen; it.size = n.size; it.act = n.act; it.badge = n.label;
+            it.ix = ox; it.iy = y; it.iw = Math.max(40f, innerW - btnW - INBAR_GAP); it.ih = n.h;
+            it.btx = ox + innerW - btnW; it.bty = y; it.sw = btnW; it.sh = n.h; it.top = n.top;
+            it.textX = ox + 14f;
+            it.fill = col(n.fill, null); it.line = col(n.line, null); it.tc = col(n.tc, new Col("text", 0)); it.sc = col(n.sc, new Col("sub", 0));
+            it.ac = col(n.onc, new Col("gold", 0)); it.ac2 = col(n.chk, new Col(null, 0xFF121214));
+            out.add(it);
+            return y + n.h + n.padB;
+        }
+        if ("msg".equals(t0(n))) {
+            float maxBub = innerW * MSG_MAXF, inner = Math.max(30f, maxBub - MSG_PADX * 2f);
+            List<String> tl = wrap(n.s, inner, MSG_TXT, false, 0, m);
+            float tw = 0f; for (String l : tl) tw = Math.max(tw, m.width(l, MSG_TXT, false));
+            float badgeH = n.badge.length() > 0 ? 10f * 1.4f + 2f : 0f, badgeW = n.badge.length() > 0 ? m.width(n.badge, 10f, true) : 0f;
+            float bw = Math.min(maxBub, Math.max(tw, badgeW) + MSG_PADX * 2f), lh = MSG_TXT * MSG_LH;
+            String nickLine = n.mine ? "" : ellipsize((n.pre.length() > 0 ? n.pre + " " : "") + n.nick, innerW, MSG_NICK, false, m);
+            float nickH = nickLine.length() > 0 ? MSG_NICK * 1.35f + 3f : 0f;
+            float bubH = MSG_PADY * 2f + badgeH + lh * tl.size(), timeH = 3f + MSG_TIME * 1.35f;
+            Item it = new Item(); it.kind = K_MSG; it.y = y; it.w = bw; it.x = n.mine ? ox + innerW - bw : ox; it.on = n.mine; it.act = n.act; it.radius = MSG_RAD;
+            it.lines = tl.toArray(new String[0]); it.size = MSG_TXT; it.lineH = lh;
+            it.tag = nickLine; it.size2 = MSG_NICK; it.lineH2 = MSG_NICK * 1.35f;
+            it.sy = y + nickH; it.sh = bubH;                                    // 말풍선 사각형(위쪽)
+            it.badge = n.badge; it.badgeW = badgeW; it.ac = col(n.accent, new Col(null, 0xFFFF453A));
+            it.textX = it.x + MSG_PADX; it.textY = it.sy + MSG_PADY + badgeH; it.bx = it.x + MSG_PADX; it.by = it.sy + MSG_PADY;
+            it.fill = col(n.fill, new Col("card2", 0)); it.tc = col(n.tc, new Col("text", 0));
+            it.label = n.time; it.metaY = it.sy + bubH + 3f; it.labelW = n.time.length() > 0 ? m.width(n.time, MSG_TIME, false) : 0f;
+            it.go = (n.act != null && n.title.length() > 0) ? n.title : "";
+            if (it.go.length() > 0) {
+                float sepW = m.width(" · ", MSG_TIME, false);
+                it.zoneX = it.x + it.labelW + sepW; it.zoneW = m.width(it.go, MSG_TIME, false); it.zoneY = it.metaY - 2f; it.zoneH = MSG_TIME * 1.35f + 4f;
+                it.btnLX = it.x + it.labelW;
+            }
+            it.h = nickH + bubH + timeH;
+            out.add(it);
+            return y + it.h + n.padB;
+        }
+        if ("tabbar".equals(t0(n))) {
+            int cnt = n.items.size();
+            float cw = width / cnt;
+            for (int k = 0; k < cnt; k++) {
+                Node c = n.items.get(k);
+                Item it = new Item(); it.kind = K_TAB; it.x = x0 + k * cw; it.y = y; it.w = cw; it.h = n.h; it.act = c.act; it.on = c.on;
+                it.label = c.label; it.badge = c.badge; it.pathOps = c.pathOps; it.size = TAB_LABEL;
+                it.fill = col(n.fill, new Col("nav", 0)); it.line = col(n.line, new Col("border", 0)); it.ac = col(n.onc, new Col("gold", 0)); it.sc = col(n.sc, new Col("sub", 0));
+                it.labelW = m.width(c.label, TAB_LABEL, c.on);
+                out.add(it);
+            }
+            return y + n.h + n.padB;
+        }
         if ("grid".equals(n.t)) {
             int cols = n.cols;
             float cw = (innerW - n.gap * (cols - 1)) / cols;
@@ -897,6 +1119,151 @@ public final class ScreenCore {
         return def;
     }
     private static int clamp(int v) { return v < 0 ? 0 : (v > 255 ? 255 : v); }
+
+    // ═════════════ ⑥ 아이콘 경로(SVG path d) ═════════════
+    /** 연산 코드: 0 M(x,y) · 1 L(x,y) · 2 C(x1,y1,x2,y2,x,y) · 3 Z. 모두 절대 좌표. */
+    public static final int OP_M = 0, OP_L = 1, OP_C = 2, OP_Z = 3, PATH_MAX_OPS = 500;
+
+    private static final class PD {
+        final String s; int i = 0;
+        float[] out = new float[96]; int n = 0, ops = 0;
+        float cx, cy, sx, sy, lcx, lcy;       // 현재점 · 시작점 · 직전 제어점(S/T 용)
+        PD(String s) { this.s = s; }
+        void put(float v) { if (n == out.length) out = java.util.Arrays.copyOf(out, n * 2); out[n++] = v; }
+        void op(int c, float... a) throws ParseError {
+            if (++ops > PATH_MAX_OPS) throw new ParseError("경로가 너무 길다");
+            put(c); for (float v : a) put(v);
+        }
+        void skipSep() { while (i < s.length()) { char c = s.charAt(i); if (c == ' ' || c == ',' || c == '\n' || c == '\t' || c == '\r') i++; else break; } }
+        boolean hasNum() { skipSep(); if (i >= s.length()) return false; char c = s.charAt(i); return c == '-' || c == '+' || c == '.' || (c >= '0' && c <= '9'); }
+        float num() throws ParseError {
+            skipSep();
+            int st = i;
+            if (i < s.length() && (s.charAt(i) == '-' || s.charAt(i) == '+')) i++;
+            boolean dot = false, dig = false;
+            while (i < s.length()) {
+                char c = s.charAt(i);
+                if (c >= '0' && c <= '9') { dig = true; i++; }
+                else if (c == '.' && !dot) { dot = true; i++; }
+                else break;
+            }
+            if (!dig) throw new ParseError("경로: 수가 아니다 @" + st);
+            if (i < s.length() && (s.charAt(i) == 'e' || s.charAt(i) == 'E')) {
+                int sv = i; i++;
+                if (i < s.length() && (s.charAt(i) == '-' || s.charAt(i) == '+')) i++;
+                int ds = i; while (i < s.length() && s.charAt(i) >= '0' && s.charAt(i) <= '9') i++;
+                if (ds == i) i = sv;
+            }
+            try { float f = Float.parseFloat(s.substring(st, i)); if (Float.isNaN(f) || Float.isInfinite(f) || Math.abs(f) > 5000f) throw new ParseError("경로: 수 범위"); return f; }
+            catch (NumberFormatException e) { throw new ParseError("경로: 수"); }
+        }
+        boolean flag() throws ParseError {
+            skipSep();
+            if (i >= s.length()) throw new ParseError("경로: 플래그");
+            char c = s.charAt(i++);
+            if (c == '0') return false; if (c == '1') return true;
+            throw new ParseError("경로: 호 플래그");
+        }
+    }
+
+    /** SVG 경로 문자열 d → 절대 좌표 연산 배열. M/L/H/V/C/S/Q/T/A/Z(대소문자) 를 읽는다. 틀리면 ParseError. 빈 글이면 빈 배열. */
+    public static float[] pathOps(String d) throws ParseError {
+        if (d == null || d.trim().length() == 0) return new float[0];
+        if (d.length() > 900) throw new ParseError("경로가 너무 길다");
+        PD p = new PD(d);
+        char cmd = 0; boolean first = true;
+        while (true) {
+            p.skipSep();
+            if (p.i >= d.length()) break;
+            char c = d.charAt(p.i);
+            if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) { cmd = c; p.i++; if (cmd == 'z' || cmd == 'Z') { p.op(OP_Z); p.cx = p.sx; p.cy = p.sy; p.lcx = p.cx; p.lcy = p.cy; first = false; continue; } }
+            else if (cmd == 0) throw new ParseError("경로: 명령이 없다");
+            else if (!p.hasNum()) throw new ParseError("경로: 뜻밖의 글자");
+            if (first && cmd != 'M' && cmd != 'm') throw new ParseError("경로: M 으로 시작해야 한다");
+            first = false;
+            boolean rel = cmd >= 'a';
+            char u = Character.toUpperCase(cmd);
+            float ox = rel ? p.cx : 0f, oy = rel ? p.cy : 0f;
+            switch (u) {
+                case 'M': {
+                    float x = p.num() + ox, y = p.num() + oy;
+                    p.op(OP_M, x, y); p.cx = p.sx = x; p.cy = p.sy = y; p.lcx = x; p.lcy = y;
+                    cmd = rel ? 'l' : 'L';                         // M 뒤 짝은 L
+                    break;
+                }
+                case 'L': { float x = p.num() + ox, y = p.num() + oy; p.op(OP_L, x, y); p.cx = x; p.cy = y; p.lcx = x; p.lcy = y; break; }
+                case 'H': { float x = p.num() + ox; p.op(OP_L, x, p.cy); p.cx = x; p.lcx = p.cx; p.lcy = p.cy; break; }
+                case 'V': { float y = p.num() + oy; p.op(OP_L, p.cx, y); p.cy = y; p.lcx = p.cx; p.lcy = p.cy; break; }
+                case 'C': {
+                    float x1 = p.num() + ox, y1 = p.num() + oy, x2 = p.num() + ox, y2 = p.num() + oy, x = p.num() + ox, y = p.num() + oy;
+                    p.op(OP_C, x1, y1, x2, y2, x, y); p.lcx = x2; p.lcy = y2; p.cx = x; p.cy = y; break;
+                }
+                case 'S': {
+                    float x2 = p.num() + ox, y2 = p.num() + oy, x = p.num() + ox, y = p.num() + oy;
+                    float x1 = 2f * p.cx - p.lcx, y1 = 2f * p.cy - p.lcy;
+                    p.op(OP_C, x1, y1, x2, y2, x, y); p.lcx = x2; p.lcy = y2; p.cx = x; p.cy = y; break;
+                }
+                case 'Q': {
+                    float qx = p.num() + ox, qy = p.num() + oy, x = p.num() + ox, y = p.num() + oy;
+                    quad(p, qx, qy, x, y); break;
+                }
+                case 'T': {
+                    float x = p.num() + ox, y = p.num() + oy;
+                    quad(p, 2f * p.cx - p.lcx, 2f * p.cy - p.lcy, x, y); break;
+                }
+                case 'A': {
+                    float rx = p.num(), ry = p.num(), rot = p.num(); boolean fa = p.flag(), fs = p.flag();
+                    float x = p.num() + ox, y = p.num() + oy;
+                    arc(p, p.cx, p.cy, rx, ry, rot, fa, fs, x, y); p.cx = x; p.cy = y; p.lcx = x; p.lcy = y; break;
+                }
+                default: throw new ParseError("경로: 모르는 명령 " + cmd);
+            }
+        }
+        if (p.ops == 0) throw new ParseError("경로: 비었다");
+        return java.util.Arrays.copyOf(p.out, p.n);
+    }
+    private static void quad(PD p, float qx, float qy, float x, float y) throws ParseError {
+        float c1x = p.cx + 2f / 3f * (qx - p.cx), c1y = p.cy + 2f / 3f * (qy - p.cy), c2x = x + 2f / 3f * (qx - x), c2y = y + 2f / 3f * (qy - y);
+        p.op(OP_C, c1x, c1y, c2x, c2y, x, y); p.lcx = qx; p.lcy = qy; p.cx = x; p.cy = y;
+    }
+    private static double ang(double ux, double uy, double vx, double vy) {
+        double a = Math.atan2(ux * vy - uy * vx, ux * vx + uy * vy);
+        return a;
+    }
+    /** SVG 호 → 3차 곡선 조각들. */
+    private static void arc(PD p, float x1, float y1, float rx, float ry, float rotDeg, boolean fa, boolean fs, float x2, float y2) throws ParseError {
+        if (x1 == x2 && y1 == y2) return;
+        rx = Math.abs(rx); ry = Math.abs(ry);
+        if (rx == 0f || ry == 0f) { p.op(OP_L, x2, y2); return; }
+        double phi = Math.toRadians(rotDeg), cp = Math.cos(phi), sp = Math.sin(phi);
+        double dx2 = (x1 - x2) / 2.0, dy2 = (y1 - y2) / 2.0;
+        double x1p = cp * dx2 + sp * dy2, y1p = -sp * dx2 + cp * dy2;
+        double lam = (x1p * x1p) / ((double) rx * rx) + (y1p * y1p) / ((double) ry * ry);
+        if (lam > 1.0) { double sl = Math.sqrt(lam); rx = (float) (rx * sl); ry = (float) (ry * sl); }
+        double rx2 = (double) rx * rx, ry2 = (double) ry * ry;
+        double num = rx2 * ry2 - rx2 * y1p * y1p - ry2 * x1p * x1p, den = rx2 * y1p * y1p + ry2 * x1p * x1p;
+        double coef = (fa == fs ? -1.0 : 1.0) * Math.sqrt(Math.max(0.0, num / den));
+        double cxp = coef * (rx * y1p / ry), cyp = coef * (-ry * x1p / rx);
+        double cx = cp * cxp - sp * cyp + (x1 + x2) / 2.0, cy = sp * cxp + cp * cyp + (y1 + y2) / 2.0;
+        double th1 = ang(1, 0, (x1p - cxp) / rx, (y1p - cyp) / ry);
+        double dth = ang((x1p - cxp) / rx, (y1p - cyp) / ry, (-x1p - cxp) / rx, (-y1p - cyp) / ry);
+        if (!fs && dth > 0) dth -= 2 * Math.PI; else if (fs && dth < 0) dth += 2 * Math.PI;
+        int segs = (int) Math.ceil(Math.abs(dth) / (Math.PI / 2) - 1e-9); if (segs < 1) segs = 1;
+        double delta = dth / segs, t = 4.0 / 3.0 * Math.tan(delta / 4.0), a = th1;
+        for (int k = 0; k < segs; k++) {
+            double c1 = Math.cos(a), s1 = Math.sin(a), a2 = a + delta, c2 = Math.cos(a2), s2 = Math.sin(a2);
+            double[] e1 = { c1 - t * s1, s1 + t * c1 }, e2 = { c2 + t * s2, s2 - t * c2 }, e3 = { c2, s2 };
+            float[] o = new float[6];
+            double[][] pts = { e1, e2, e3 };
+            for (int q = 0; q < 3; q++) {
+                double ex = pts[q][0] * rx, ey = pts[q][1] * ry;
+                o[q * 2] = (float) (cp * ex - sp * ey + cx); o[q * 2 + 1] = (float) (sp * ex + cp * ey + cy);
+            }
+            if (k == segs - 1) { o[4] = x2; o[5] = y2; }
+            p.op(OP_C, o[0], o[1], o[2], o[3], o[4], o[5]);
+            a = a2;
+        }
+    }
 
     // ═════════════ ⑤ 스크롤 물리(손가락 따라가기·관성) ═════════════
     /** 스크롤 위치를 [0, max] 로. */

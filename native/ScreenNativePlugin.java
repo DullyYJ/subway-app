@@ -28,10 +28,10 @@ import java.util.Map;
  *   · 이 플러그인: JSON 을 검증(ScreenCore.load)한다. 모양이 틀리면 그리지 않고 reject + error 이벤트 → 웹이 저장본/예전 웹 화면으로 폴백한다.
  *   · ScreenView: 검증된 화면을 그린다 — 자체 세로/가로 스크롤(관성), 눌림 처리.
  *
- *   show({id,x,y,w,h,dpr,clip,json,palette,keepScroll}) · update({id,json,palette,keepScroll}) · setRect({id,x,y,w,h,dpr,clip}) · hide({id}) · destroy({id}) · status({id}) → {visible,items,age,scroll}
+ *   show({id,x,y,w,h,dpr,clip,json,palette,keepScroll}) · update({id,json,palette,keepScroll}) · setRect({id,x,y,w,h,dpr,clip}) · setField({id,key,value}) · hide({id}) · destroy({id}) · status({id}) → {visible,items,age,scroll}
  *   이벤트: ready({id}) 첫 그림 · error({id,message,kind}) · action({id,a,v,url[,empty]}) · input({id,on}) 검색 입력칸 포커스
  *   검색줄(search 노드): 기기의 진짜 입력칸(EditText)을 검색줄 자리에 올린다. 검색 실행 → action {a:'search', v:검색어, url:엔진의 tpl, empty:엔진의 empty}.
- *   palette: { bg, card, border, border2, text, sub, gold, orange, imgbg } CSS 색 문자열 — 앱 테마(다크/파스텔)를 웹이 읽어 넘긴다.
+ *   palette: { bg, card, card2, nav, border, border2, text, sub, gold, orange, imgbg } CSS 색 문자열 — 앱 테마(다크/파스텔)를 웹이 읽어 넘긴다.
  */
 @CapacitorPlugin(name = "ScreenNative")
 public class ScreenNativePlugin extends Plugin {
@@ -127,6 +127,19 @@ public class ScreenNativePlugin extends Plugin {
                 if (!(f(call, "w") > 8f && f(call, "h") > 8f)) { call.resolve(); return; }
                 if (call.getFloat("dpr", 0f) > 0f) { float d = call.getFloat("dpr", 1f); dprMap.put(id, d); view.setDpr(d); }
                 place(view, id, call);
+                call.resolve();
+            }
+        });
+    }
+
+    /** 입력칸(field·inbar) 글자를 웹이 바꾼다 — 보낸 뒤 비우기 등. setField({id,key,value}) */
+    @PluginMethod
+    public void setField(final PluginCall call) {
+        runUi(call, new Job() {
+            @Override public void run() throws Exception {
+                ScreenView view = views.get(idOf(call));
+                String key = call.getString("key", "");
+                if (view != null && key != null && key.length() > 0) view.setField(key, call.getString("value", ""));
                 call.resolve();
             }
         });
@@ -234,7 +247,7 @@ public class ScreenNativePlugin extends Plugin {
         JSObject t = null;
         try { t = call.getObject("palette"); } catch (Throwable e) { t = null; }
         if (t == null) return;
-        int[] c = new int[10];
+        int[] c = new int[12];
         c[ScreenView.R_BG] = ScreenCore.color(t.optString("bg", ""), 0xFF0B0F14);
         c[ScreenView.R_CARD] = ScreenCore.color(t.optString("card", ""), 0xFF1B2129);
         c[ScreenView.R_BORDER] = ScreenCore.color(t.optString("border", ""), 0x33FFFFFF);
@@ -245,6 +258,8 @@ public class ScreenNativePlugin extends Plugin {
         c[ScreenView.R_IMGBG] = ScreenCore.color(t.optString("imgbg", ""), 0xFF252528);
         c[ScreenView.R_WHITE] = 0xFFFFFFFF;
         c[ScreenView.R_BORDER2] = ScreenCore.color(t.optString("border2", ""), 0xFF3A3A3C);
+        c[ScreenView.R_CARD2] = ScreenCore.color(t.optString("card2", ""), 0xFF2C2C2E);
+        c[ScreenView.R_NAV] = ScreenCore.color(t.optString("nav", ""), 0xFF161618);
         view.setPalette(c);
     }
 
