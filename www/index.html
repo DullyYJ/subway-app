@@ -14655,6 +14655,7 @@ window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
   var ssAll = { t: -1e9, list: [], dirty: true }, ssVis = { t: -1e9, list: [] };
   var SS_BAD = 'img,canvas,video,input,textarea,select,iframe,object,svg';
   function ssBox(){ return document.getElementById('settingsTabView'); }
+  function ssOwned(){ try{ return !!(window._scrSet && window._scrSet.owns()); }catch(e){ return false; } }      // 서버 구동 네이티브 설정 화면이 설정 탭을 통째로 맡는 동안은 이 영역들이 쉰다(둘이 겹쳐 그리지 않게)
   function ssBuild(){
     var box = ssBox(), out = [];
     if(!box) return out;
@@ -14671,7 +14672,7 @@ window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
   function ssVisible(){                                    // 보이는 블록(스크롤 영역에 걸친 것) 앞 24개, 문서 순서. 0.12초 안엔 다시 안 잰다
     var t = now(); if(t - ssVis.t < 120) return ssVis.list;
     ssVis.t = t; ssVis.list = [];
-    var box = ssBox(); if(!box || !box.offsetWidth || !box.offsetHeight) return ssVis.list;
+    var box = ssBox(); if(!box || !box.offsetWidth || !box.offsetHeight || ssOwned()) return ssVis.list;
     if(ssAll.dirty && t - ssAll.t > 300){ ssAll.list = ssBuild(); ssAll.dirty = false; ssAll.t = t; }
     var br = box.getBoundingClientRect(), L = ssAll.list;
     for(var i = 0; i < L.length && ssVis.list.length < 40; i++){
@@ -18780,6 +18781,7 @@ window._exitConfirm = _exitConfirm;
 window._exitCancel  = _exitCancel;
 
 function handleBackPress(){
+  try{ if(window._scrSet && window._scrSet.closeSheet()){ _backPressCount = 0; return true; } }catch(eSh){}      // 서버 구동 설정 화면에서 연 웹 카드 시트가 열려 있으면 그것부터 닫는다
   // ① 종료 팝업이 열려있으면 팝업 닫기
   var pop = document.getElementById('exitConfirmPopup');
   if(pop && pop.style.display === 'flex'){
@@ -20238,6 +20240,21 @@ window.addEventListener('unhandledrejection', function(e) {
         <style>#scrSetOn:checked ~ #scrSetKnob{background:var(--gold) !important;} #scrSetOn:checked ~ #scrSetDot{left:23px !important;}</style>
       </div>
 
+      <!-- ★ 2026-10-18: 서버 구동 네이티브 설정 화면 — 안드로이드 앱에서만 보임, 기본 꺼짐(실험) -->
+      <div id="scrsSetCard" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <div style="font-size:15px;font-weight:800;color:var(--text);">네이티브 설정 화면</div>
+          <label style="position:relative;display:inline-block;width:46px;height:26px;">
+            <input type="checkbox" id="scrsSetOn" onchange="_scrsSetUse(this.checked)" style="opacity:0;width:0;height:0;">
+            <span id="scrsSetKnob" style="position:absolute;inset:0;border-radius:13px;background:var(--border2);transition:.2s;cursor:pointer;"></span>
+            <span id="scrsSetDot" style="position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.3);"></span>
+          </label>
+        </div>
+        <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">지금 보고 있는 이 설정 화면을 엔진이 화면 구성까지 정해 내려주고, 기기가 직접 그려요. 끄면 예전 웹 설정 화면으로 돌아가요.</p>
+        <div id="scrsSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
+        <style>#scrsSetOn:checked ~ #scrsSetKnob{background:var(--gold) !important;} #scrsSetOn:checked ~ #scrsSetDot{left:23px !important;}</style>
+      </div>
+
       <!-- ★ 2026-10-03: 도착 오차 익명 기록 (끌 수 있음) -->
       <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
         <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:8px;">📊 안내 정확도 향상</div>
@@ -20245,7 +20262,7 @@ window.addEventListener('unhandledrejection', function(e) {
       </div>
 
       <!-- ★ 출퇴근 브리핑 알림 -->
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
+      <div id="cmCard" style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
           <div style="font-size:15px;font-weight:800;color:var(--text);">⏰ 출퇴근 브리핑 알림</div>
           <label style="position:relative;display:inline-block;width:46px;height:26px;">
@@ -20351,7 +20368,7 @@ window.addEventListener('unhandledrejection', function(e) {
       </div>
 
       <!-- ★ 하차 10분 전 추천 테스트 -->
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
+      <div id="arrCard" style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
         <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:4px;">🚉 하차 5분 전 추천</div>
         <p style="font-size:12px;color:var(--sub);margin-bottom:12px;">도착 5분 전에 시간대별로 보내는 추천이에요. 실제 알림과 같은 내용으로 바로 확인해 볼 수 있어요. 버튼을 누르면 오버레이 아래에도 90초간 뜹니다(오버레이를 켜 둔 상태 — 접혀 있어도 저절로 펼쳐져요).</p>
         <div style="display:flex;gap:8px;margin-bottom:8px;">
@@ -20386,7 +20403,7 @@ window.addEventListener('unhandledrejection', function(e) {
       <!-- TEST-BUTTONS:END -->
 
       <!-- ★ 다른 앱 위에 표시(오버레이) -->
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
+      <div id="ovlCard" style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
         <!-- ★ 2026-10-01: 다른 앱 위에 표시(오버레이) — 다른 앱을 쓰는 동안 현재역·남은시간을 화면 맨 위에 작은 막대로 -->
         <div style="margin:0;padding:0;">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
@@ -25728,7 +25745,8 @@ window._dedupeStnByName = _dedupeStnByName;
 /* ══ 탭 전환 ══ */
 function switchTab(tab,el){
   try{ if(window._htlNat) window._htlNat.kick(); }catch(eNk){}      // 네이티브 그림 영역(켜져 있을 때만)이 새로 보이는 탭의 내용을 읽는다
-  try{ if(window._scrShop) setTimeout(function(){ window._scrShop.kick(); }, 0); }catch(eSk){}      // 서버 구동 네이티브 쇼핑 화면(켜져 있을 때만) — 탭 전환이 끝난 뒤 보이면 올린다
+  try{ if(window._scrShop) setTimeout(function(){ window._scrShop.kick(); }, 0); }catch(eSk){}
+  try{ if(window._scrSet) setTimeout(function(){ window._scrSet.kick(); }, 0); }catch(eSs){}      // 서버 구동 네이티브 설정 화면(켜져 있을 때만)      // 서버 구동 네이티브 쇼핑 화면(켜져 있을 때만) — 탭 전환이 끝난 뒤 보이면 올린다
   try{ if(tab !== 'map' && window._pickDestMode && typeof _pickAbandon === 'function') _pickAbandon(); }catch(ePk){}      // 노선도 탭을 떠나면 '도착지 역 고르기'와 정해 둔 출발지는 없던 일로
   // ★ 2026-08-31: 탭을 바꾸면 열려 있던 시트·모달을 닫는다.
   //   예전엔 노선 상세 시트가 그대로 남아, 홈을 눌러도 노선도가 덮고 있었다.
@@ -37654,6 +37672,344 @@ window.refreshShop=refreshShop;
   try{ document.addEventListener('visibilitychange', function(){ if(!document.hidden) kick(); else if(S.shown) hideNative(); }); }catch(eV){}
 })();
 
+// ══════════════════════════════════════════════════════════════════════════
+// ★ 2026-10-18 서버 구동 네이티브 화면 2호: 설정 탭 (YJ: "사용자용 카드만 네이티브")
+//   원칙은 쇼핑과 같다 — 계산은 엔진이, 그림은 앱이. 무엇을 어떤 순서로·어떤 문구로 보일지는 엔진 GET /screen/settings 가 정한다.
+//   이 코드는 (1) 기기 사실(facts: 아이디·알림 켜짐·테마·기능 스위치 상태 등)을 모아 엔진에 보내고 (2) 받은 JSON 글을 그대로 ScreenNative 플러그인(id 'settings')에 넘기고
+//   (3) 눌린 행동만 기존 웹 함수로 이어 준다. 문구·순서·보임/숨김을 여기서 정하지 않는다.
+//   · 행동: set(스위치 — 화면은 앱이 먼저 뒤집고, 여기서 진짜 설정을 바꾼 뒤 엔진에 새 화면을 받는다) · call(아이디 저장/삭제·약관·오류 로그, 허용 목록만) · sel(테마) ·
+//     web(입력이 많은 카드 — 기존 웹 카드를 그대로 '시트'에 옮겨 연다: 출퇴근 브리핑·시계 위젯·추천 시험·오버레이·개발자 도구·갤럭시 절전).
+//   · 로컬 캐시: 마지막 정상 화면을 저장해 두고(기기 사실이 같을 때) 설정 탭을 열면 바로 그린다. 엔진 응답이 틀린 모양이면 버리고 저장본을, 그것도 없으면 예전 웹 설정 화면이 이어받는다.
+//   · 안드로이드 앱 + ScreenNative 플러그인 + 설정 스위치(기본 꺼짐)일 때만. 팝업(약관·오류 로그·웹 카드 시트)이 덮는 동안은 네이티브를 숨기고 웹이 이어받는다.
+// ══════════════════════════════════════════════════════════════════════════
+(function(){
+  var K_ON = 'gdm_scrs_on', K_F = 'gdm_scrs_fail', K_W = 'gdm_scrs_why', K_C = 'gdm_scrs_c';
+  var BASE = ((typeof _ROUTE_V2_BASE === 'string' && _ROUTE_V2_BASE) ? _ROUTE_V2_BASE : 'https://route-v2.phg0643.workers.dev') + '/screen/settings';
+  var ID = 'settings';
+  var S = { on: false, fails: 0, failed: false, why: '', listening: false, shown: false, ready: false, good: false, cur: '', curRev: '', src: '', fk: '', rect: null, rk: '',
+            chg: 0, chgAt: 0, still: 0, timer: 0, showAt: 0, pending: false, busy: 0, fetchAt: 0, badFresh: 0, stBad: 0, stAt: 0, typing: false, pollAt: 0, slowAt: 0 };
+  try{ S.on = localStorage.getItem(K_ON) === '1'; S.fails = parseInt(localStorage.getItem(K_F) || '0', 10) || 0; S.why = localStorage.getItem(K_W) || ''; }catch(eS){}
+  function plug(){ try{ var C = window.Capacitor; return (C && C.Plugins && C.Plugins.ScreenNative) || null; }catch(e){ return null; } }
+  function active(){ return S.on && !S.failed && S.fails < 2 && !!plug(); }
+  function now(){ return (window.performance && performance.now) ? performance.now() : Date.now(); }
+  function tabEl(){ return document.getElementById('tab-community'); }
+  function boxEl(){ return document.getElementById('settingsTabView'); }
+  function tabOpen(){
+    var t = tabEl(), b = boxEl();
+    return !!(t && b && t.classList.contains('active') && b.offsetParent && b.style.display !== 'none' && !document.hidden);
+  }
+
+  // ── 기기 사실(엔진에 보낸다) — 읽기만 한다. 문구나 보임/숨김 판단은 하지 않는다 ──
+  function facts(){
+    var f = { feat: {} };
+    try{ f.id = (typeof _getCommId === 'function' ? _getCommId() : '') || ''; }catch(e){}
+    try{ var pf = _notifPrefLoad(); f.np = {}; ['arrive', 'transfer', 'arrive_reco'].forEach(function(k){ f.np[k] = pf[k] !== 0 ? 1 : 0; }); }catch(e){}
+    try{ var bn = document.getElementById('notifPermBanner'); f.npd = (bn && bn.style.display === 'block') ? 1 : 0; }catch(e){}
+    try{ f.rl = _rideLogOn() ? 1 : 0; }catch(e){}
+    try{ f.th = _themeNow(); }catch(e){}
+    try{ var sc = document.getElementById('samSetCard'), sw = document.getElementById('samSetWarn'); f.sam = (sc && sc.style.display === 'block') ? 1 : 0; f.samw = (sw && sw.style.display === 'block') ? 1 : 0; }catch(e){}
+    try{ f.errn = (typeof _errList === 'function') ? _errList().length : 0; }catch(e){}
+    try{ var cm = document.getElementById('cmAlarmOn'); if(cm) f.cm = cm.checked ? 1 : 0; }catch(e){}
+    try{ var ov = document.getElementById('ovlToggle'); if(ov) f.ovl = ov.checked ? 1 : 0; }catch(e){}
+    try{ if(typeof _nmPlugin === 'function' && _nmPlugin()) f.feat.nm = { h: 1, on: _nm.disabled ? 0 : 1, f: (_nm.failed || _nm.fails >= 2) ? 1 : 0, w: _nm.why || '' }; }catch(e){}
+    try{ if(window._CS && _CS.natState){ var ns = _CS.natState(); if(ns.h) f.feat.sn = { h: 1, on: ns.on ? 1 : 0, f: ns.f ? 1 : 0, w: ns.w || '' }; } }catch(e){}
+    try{ var H = window._htlNat, hc = document.getElementById('htlSetCard'); if(H && H.G && hc && hc.style.display === 'block') f.feat.htl = { h: 1, on: H.G.on ? 1 : 0, f: (H.G.failed || H.G.fails >= 2) ? 1 : 0, w: H.G.why || '' }; }catch(e){}
+    try{ var SS = window._scrShop && _scrShop.S, c2 = document.getElementById('scrSetCard'); if(SS && c2 && c2.style.display === 'block') f.feat.scr = { h: 1, on: SS.on ? 1 : 0, f: (SS.failed || SS.fails >= 2) ? 1 : 0, w: SS.why || '', b: SS.badFresh > 0 ? 1 : 0 }; }catch(e){}
+    f.feat.scrs = { h: 1, on: S.on ? 1 : 0, f: (S.failed || S.fails >= 2) ? 1 : 0, w: S.why || '', b: S.badFresh > 0 ? 1 : 0 };
+    return f;
+  }
+
+  // ── 캐시(저장본: 마지막 정상 화면 하나) ──
+  function cacheGet(){ try{ var o = JSON.parse(localStorage.getItem(K_C) || 'null'); return (o && typeof o.txt === 'string' && o.txt.length > 20 && typeof o.fk === 'string') ? o : null; }catch(e){ return null; } }
+  function cachePut(fk, txt, rev){ try{ localStorage.setItem(K_C, JSON.stringify({ ts: Date.now(), fk: fk, rev: rev || '', txt: txt })); }catch(e){} }
+  function cacheDrop(){ try{ localStorage.removeItem(K_C); }catch(e){} }
+
+  // ── 테마(앱 색 → 플러그인) ──
+  var colEl = null;
+  function css(v, def){
+    try{
+      if(!colEl){ colEl = document.createElement('span'); colEl.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none;'; document.body.appendChild(colEl); }
+      colEl.style.color = ''; colEl.style.color = 'var(' + v + ', ' + def + ')';
+      return getComputedStyle(colEl).color || def;
+    }catch(e){ return def; }
+  }
+  function palette(){
+    var pastel = document.documentElement.getAttribute('data-theme') === 'pastel';
+    return { bg: css('--bg', '#0b0f14'), card: css('--card', '#1b2129'), border: css('--border', 'rgba(255,255,255,.2)'), border2: css('--border2', '#3a3a3c'), text: css('--text', '#f2f4f7'),
+             sub: css('--sub', '#9aa4b2'), gold: css('--gold', '#f0b429'), orange: css('--orange', '#f07830'), imgbg: pastel ? '#e8f4ff' : css('--prod-img-bg', '#252528') };
+  }
+
+  // ── 사각형: 설정 화면 전체 ──
+  function rectNow(){
+    var b = boxEl(); if(!b || !tabOpen()) return null;
+    var r = b.getBoundingClientRect();
+    if(!(r.width > 40 && r.height > 120)) return null;
+    return { L: r.left, T: r.top, W: r.width, H: r.height };
+  }
+  function covered(r){
+    try{
+      var t = tabEl(), pts = [[r.L + r.W / 2, r.T + 18], [r.L + 12, r.T + r.H - 12], [r.L + r.W - 12, r.T + r.H - 12]];
+      for(var i = 0; i < pts.length; i++){ var e = document.elementFromPoint(pts[i][0], pts[i][1]); if(e && !t.contains(e)) return true; }
+    }catch(e){}
+    return false;
+  }
+  function place(r){ return { x: r.L, y: r.T, w: r.W, h: r.H, dpr: window.devicePixelRatio || 1, clip: { l: 0, t: 0, r: r.W, b: r.H } }; }
+  function rkey(r){ return [r.L, r.T, r.W, r.H].map(function(v){ return Math.round(v * 2) / 2; }).join(','); }
+
+  // ── 엔진에서 받기 ──
+  function fetchScreen(fk, force){
+    var my = ++S.busy, ctl = (typeof AbortController === 'function') ? new AbortController() : null;
+    var to = setTimeout(function(){ try{ if(ctl) ctl.abort(); }catch(e){} }, 8000);
+    var u = BASE + '?cap=3&f=' + encodeURIComponent(fk) + (force ? '&t=' + Date.now() : '');
+    S.fetchAt = now();
+    return fetch(u, { signal: ctl ? ctl.signal : undefined, cache: 'no-cache' })
+      .then(function(r){ clearTimeout(to); if(!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+      .then(function(txt){ return my === S.busy ? txt : null; })               // 더 새 요청이 있으면 이 답은 버린다
+      .catch(function(){ clearTimeout(to); return null; });
+  }
+  function sane(txt){                                                         // 겉모양만 본다(진짜 검증은 플러그인)
+    try{ var j = JSON.parse(txt); return (j && j.ok === true && j.v === 1 && j.screen === 'settings' && Array.isArray(j.head) && Array.isArray(j.body)) ? j : null; }catch(e){ return null; }
+  }
+
+  // ── 플러그인에 올리기 ──
+  function present(txt, src, fk, keep){
+    var P = plug(); if(!P || !active()) return Promise.resolve(false);
+    var j = sane(txt);
+    if(!j) return Promise.resolve(onInvalid(src, 'shape'));
+    var r = S.rect || rectNow();
+    var args = { id: ID, json: txt, palette: palette(), keepScroll: !!keep };
+    var p;
+    if(!S.shown){
+      if(!r) return Promise.resolve(false);                                    // 설정 탭이 안 보이면 올리지 않는다(보일 때 다시 시도)
+      Object.assign(args, place(r));
+      S.showAt = now(); S.ready = false;
+      p = P.show(args);
+    } else p = P.update(args);
+    return Promise.resolve(p).then(function(){
+      if(!S.shown){ S.shown = true; if(r){ S.rect = r; S.rk = rkey(r); } }
+      S.good = true; S.cur = txt; S.curRev = j.rev || ''; S.src = src; S.still = 0; if(fk) S.fk = fk;
+      if(src === 'fresh'){ S.badFresh = 0; cachePut(fk || S.fk, txt, S.curRev); }
+      syncCard();
+      return true;
+    }).catch(function(e){
+      var m = String((e && (e.message || e)) || '');
+      if(/^invalid/.test(m)) return onInvalid(src, m);
+      fail('show: ' + m); return false;
+    });
+  }
+  // 검증을 통과하지 못한 JSON: 저장본이면 버리고 새로 받는다 · 엔진 새 응답이면 버리고(저장본이 있으면 그대로) · 아무것도 못 그리면 웹 화면
+  function onInvalid(src, why){
+    try{ console.warn('[네이티브 설정] 화면 JSON 이 올바르지 않아 버립니다(' + src + '):', why); }catch(e){}
+    if(src === 'cache'){ cacheDrop(); refresh(true); return false; }
+    S.badFresh++; S.why = String(why || '').slice(0, 120);
+    try{ localStorage.setItem(K_W, S.why); }catch(e){}
+    if(!S.good && !S.shown) fail('엔진 화면 오류: ' + S.why); else syncCard();
+    return false;
+  }
+  // 기기 사실이 바뀌었을 때만(force 면 늘) 엔진에서 새 화면을 받는다
+  function refresh(force){
+    if(!active()) return Promise.resolve(false);
+    var fk = JSON.stringify(facts());
+    if(!force && S.good && fk === S.fk) return Promise.resolve(false);
+    S.fk = fk;
+    return fetchScreen(fk, !!force).then(function(txt){
+      if(!txt || !active()) return false;
+      if(fk !== S.fk) return false;                                           // 그새 사실이 또 바뀌었다 — 다음 확인이 다시 받는다
+      return present(txt, 'fresh', fk, S.good);
+    });
+  }
+  function refreshSoon(force){ setTimeout(function(){ refresh(force); }, 60); }
+
+  // ── 눌린 행동(허용 목록만) ──
+  function nativeToast(t){
+    var P = plug(); if(!P || !S.shown || typeof P.toast !== 'function') return;
+    try{ var m = String(t || '').replace(/^[^\w가-힣]+/, ''); if(m) P.toast({ text: m }); }catch(e){}
+  }
+  function withToast(fn){                                                      // 웹 toast 는 네이티브 화면 밑에 가려지므로 이 호출 동안만 기기 토스트로 돌린다
+    var old = window.toast;
+    window.toast = function(m){ try{ if(old) old(m); }catch(e){} nativeToast(m); };
+    try{ fn(); }catch(e1){} finally { window.toast = old; }
+  }
+  function doSet(key, on){
+    var m = /^n\.(arrive|transfer|arrive_reco)$/.exec(String(key || ''));
+    try{
+      if(m){ _notifPrefSet(m[1], on); nativeToast((on ? '켰어요: ' : '껐어요: ') + ((_NOTIF_PREF_LABELS[m[1]] || {}).title || m[1])); }
+      else if(key === 'rl'){ _safeLS.set('rideLogOff', on ? 0 : 1); try{ _rideLogRender(); }catch(e0){} nativeToast((on ? '켰어요' : '껐어요') + ': 도착 오차 익명 기록'); }
+      else if(key === 'f.nm') _nmSetUse(on);
+      else if(key === 'f.sn') window._snSetUse(on);
+      else if(key === 'f.htl') window._htlSetUse(on);
+      else if(key === 'f.scr') window._scrSetUse(on);
+      else if(key === 'f.scrs'){ setUse(on); return; }
+      else return;                                                             // 모르는 키는 무시
+    }catch(e){}
+    refreshSoon(true);                                                         // 진짜 상태로 화면을 다시 받는다(바꾸지 못했으면 스위치가 제자리로 돌아온다)
+  }
+  function doCall(v, fields){
+    if(v === 'saveId'){
+      var inp = document.getElementById('commIdInput'); if(inp) inp.value = String((fields && fields.cid) || '');
+      withToast(function(){ _saveCommId(); }); refreshSoon(true);
+    } else if(v === 'clearId'){ withToast(function(){ _clearCommId(); }); refreshSoon(true); }
+    else if(v === 'pol.privacy' || v === 'pol.location' || v === 'pol.opensource'){ hideNative(); openPolicy(v.slice(4)); }
+    else if(v === 'errlog'){ hideNative(); openErrLog(); }
+  }
+  function onAction(e){
+    if(!e || e.id !== ID) return;
+    if(e.a === 'set') doSet(e.key, !!e.on);
+    else if(e.a === 'sel'){ if(e.v === 'dark' || e.v === 'pastel'){ try{ applyTheme(e.v); }catch(x){} refreshSoon(true); } }
+    else if(e.a === 'web') openSheet(e.v);
+    else if(e.a === 'call') doCall(e.v, e.fields || {});
+  }
+
+  // ── 웹 카드 시트: 입력이 많은 카드는 기존 웹 카드를 그대로 옮겨 연다(아이디·핸들러·상태 갱신이 그대로 산다). 닫으면 제자리로 돌려놓는다 ──
+  var SHEETS = { cm: ['cmCard', '출퇴근 브리핑 알림'], gw: ['gwCard', '캐릭터 시계 위젯'], arr: ['arrCard', '하차 5분 전 추천'], ovl: ['ovlCard', '다른 앱 위에 표시'], dev: ['ovlTestCard', '개발자 도구'], sam: ['samSetCard', '갤럭시 백그라운드 유지'] };
+  var SH = null;
+  function openSheet(k){
+    var d = SHEETS[k]; if(!d) return;
+    var el = document.getElementById(d[0]); if(!el) return;
+    closeSheet();
+    var ov = document.createElement('div');
+    ov.id = 'scrsSheet';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:60000;background:var(--bg);display:flex;flex-direction:column;';
+    var bar = document.createElement('div');
+    bar.style.cssText = 'display:flex;align-items:center;gap:8px;padding:calc(10px + env(safe-area-inset-top,0px)) 12px 10px;border-bottom:1px solid var(--border);flex-shrink:0;';
+    var bk = document.createElement('button');
+    bk.textContent = '‹ 설정';
+    bk.style.cssText = 'background:none;border:none;color:var(--text);font-size:15px;font-weight:700;padding:6px 8px;cursor:pointer;font-family:inherit;';
+    bk.onclick = function(){ closeSheet(); };
+    var ti = document.createElement('div');
+    ti.textContent = d[1];
+    ti.style.cssText = 'flex:1;font-size:15px;font-weight:800;color:var(--text);text-align:center;margin-right:56px;';
+    bar.appendChild(bk); bar.appendChild(ti);
+    var body = document.createElement('div');
+    body.style.cssText = 'flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:4px 14px 40px;';
+    ov.appendChild(bar); ov.appendChild(body);
+    document.body.appendChild(ov);
+    SH = { el: el, parent: el.parentNode, next: el.nextSibling, display: el.style.display, mt: el.style.marginTop, ov: ov };
+    el.style.display = 'block'; el.style.marginTop = '12px';
+    body.appendChild(el);
+    hideNative();
+    try{ if(k === 'sam' && typeof _samSyncCard === 'function') _samSyncCard(); }catch(e){}
+  }
+  function closeSheet(){
+    if(!SH) return false;
+    var h = SH; SH = null;
+    try{
+      h.el.style.display = h.display; h.el.style.marginTop = h.mt;
+      if(h.parent){ if(h.next && h.next.parentNode === h.parent) h.parent.insertBefore(h.el, h.next); else h.parent.appendChild(h.el); }
+    }catch(e){}
+    try{ if(h.ov && h.ov.parentNode) h.ov.parentNode.removeChild(h.ov); }catch(e2){}
+    try{ if(typeof _samSyncCard === 'function') _samSyncCard(); }catch(e3){}
+    refreshSoon(true);                                                         // 시트에서 바꾼 것(출퇴근 켜짐 등)이 오른쪽 글에 반영된다
+    return true;
+  }
+
+  // ── 켜고 끄기 ──
+  function fail(why){
+    if(S.failed || !S.on) return;
+    S.failed = true; S.fails++; S.why = String(why || '').slice(0, 140);
+    try{ localStorage.setItem(K_F, String(S.fails)); localStorage.setItem(K_W, S.why); }catch(e){}
+    try{ console.warn('[네이티브 설정] 웹 화면만 씁니다:', S.why); }catch(e1){}
+    end(true); syncCard();
+  }
+  function hideNative(){ var P = plug(); if(P && S.shown){ S.shown = false; S.ready = false; try{ P.hide({ id: ID }); }catch(e){} } }
+  function end(destroy){
+    if(S.timer){ clearTimeout(S.timer); S.timer = 0; }
+    var P = plug();
+    if(P && (S.shown || destroy)){ try{ P.hide({ id: ID }); if(destroy) P.destroy({ id: ID }); }catch(e){} }
+    S.shown = false; S.ready = false; S.good = false; S.cur = ''; S.rect = null; S.rk = ''; S.fk = '';
+  }
+  function listen(){
+    var P = plug(); if(!P || S.listening) return; S.listening = true;
+    try{
+      P.addListener('ready', function(e){ if(e && e.id && e.id !== ID) return; S.ready = true; S.fails = 0; try{ localStorage.setItem(K_F, '0'); }catch(e2){} syncCard(); });
+      P.addListener('error', function(e){ if(e && e.id && e.id !== ID) return; if(e && e.kind === 'invalid') return; fail('native: ' + ((e && e.message) || '')); });
+      P.addListener('action', onAction);
+      P.addListener('input', function(e){ if(e && e.id && e.id !== ID) return; S.typing = !!(e && e.on); S.still = 0; });      // 글자 입력 중 = 키보드로 웹뷰 크기가 바뀌어도 숨기지 않고 따라간다
+    }catch(e){ fail('listen: ' + e); return; }
+    try{
+      new MutationObserver(function(){ if(S.shown && active()){ try{ plug().update({ id: ID, palette: palette() }); }catch(e3){} refreshSoon(false); } }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    }catch(e4){}
+  }
+
+  // ── 반복 확인: 사각형 따라가기 · 움직임/덮임이면 숨김 · 사실 바뀜 확인 · 8초 지연·상태 이상 ──
+  function tick(){
+    S.timer = 0;
+    if(!active()) return;
+    var t = now(), r = tabOpen() ? rectNow() : null;
+    if(!r){
+      if(S.shown) hideNative();
+      S.rect = null; S.rk = ''; S.chg = 0;
+      if(!tabOpen()) return;                                                   // 설정 탭을 떠났다 — 다시 열리면 kick 이 깨운다
+      S.timer = setTimeout(tick, 200); return;
+    }
+    var k = rkey(r);
+    if(k !== S.rk){ S.chg = (t - S.chgAt < 450) ? S.chg + 1 : 1; S.chgAt = t; S.rk = k; S.rect = r; S.still = 0; }
+    else S.still++;
+    var moving = !S.typing && S.chg >= 3 && S.still < 3;
+    var cov = !moving && !S.typing && covered(r);
+    if(moving || cov){ if(S.shown) hideNative(); }
+    else if(S.good){
+      if(!S.shown) present(S.cur, S.src || 'cache', S.fk, true);
+      else if(S.still === 0 || S.still === 2){ try{ plug().setRect(place(r)); }catch(e){} }
+    }
+    if(!S.shown && S.typing) S.typing = false;
+    if(S.shown && !S.ready && t - S.showAt > 8000){ fail('ready timeout'); return; }
+    if(S.shown && S.ready && t - S.stAt > 2000){
+      S.stAt = t;
+      Promise.resolve(plug().status({ id: ID })).then(function(st){
+        if(!S.shown) return;
+        if(st && st.visible && (st.age == null || st.age < 120000 || st.age < 0)) S.stBad = 0; else if(++S.stBad >= 3) fail('status ' + JSON.stringify(st));
+      }).catch(function(){ if(++S.stBad >= 3) fail('status 오류'); });
+    }
+    if(S.shown && S.ready && !S.typing){                                       // 기기 사실이 바뀌었나(0.7초마다 한 번 읽는다) — 바뀌었을 때만 엔진에서 새로 받는다
+      if(t - S.pollAt > 700){ S.pollAt = t; refresh(false); }
+      if(t - S.slowAt > 4000){ S.slowAt = t; try{ _notifPermBannerCheck(); }catch(e5){} try{ _samSyncCard(); }catch(e6){} }       // 권한·갤럭시 상태는 읽는 데 시간이 걸려 따로 갱신한다
+    }
+    S.timer = setTimeout(tick, (S.chg >= 2 && S.still < 6) ? 60 : 160);
+  }
+  function kick(){
+    if(!active()) return;
+    listen();
+    if(!tabOpen()){ if(S.shown) hideNative(); return; }
+    if(!S.timer) S.timer = setTimeout(tick, 30);
+    var t = now();
+    if(!S.good && !S.pending){                                                 // 처음 열림: 같은 기기 사실의 저장본이 있으면 곧바로, 아니면 엔진에서
+      S.pending = true;
+      try{ _notifPermBannerCheck(); }catch(e){}
+      var fk = JSON.stringify(facts()), c = cacheGet(), p = Promise.resolve(false);
+      if(c && c.fk === fk){ S.fk = fk; p = present(c.txt, 'cache', fk, false); }
+      p.then(function(){ return refresh(true); }).then(function(){ S.pending = false; }, function(){ S.pending = false; });      // 저장본으로 먼저 그렸더라도 엔진의 최신 화면을 한 번 받아 제자리 갱신한다
+    } else if(S.good && t - S.fetchAt > 20000 && !S.pending){                  // 다시 열림: 20초 넘었으면 조용히 새로 확인
+      S.pending = true; refresh(true).then(function(){ S.pending = false; }, function(){ S.pending = false; });
+    }
+  }
+  function setUse(on){
+    try{ localStorage.setItem(K_ON, on ? '1' : '0'); if(on){ localStorage.setItem(K_F, '0'); localStorage.setItem(K_W, ''); } }catch(e){}
+    if(on){ S.on = true; S.failed = false; S.fails = 0; S.why = ''; S.badFresh = 0; kick(); }
+    else { S.on = false; end(true); }
+    syncCard();
+  }
+  function syncCard(){
+    try{
+      var card = document.getElementById('scrsSetCard'); if(!card) return;
+      if(!plug()){ card.style.display = 'none'; return; }
+      if(card.style.display !== 'block') card.style.display = 'block';
+      var cb = document.getElementById('scrsSetOn'), st = document.getElementById('scrsSetStat');
+      if(cb) cb.checked = S.on && S.fails < 2;
+      var s;
+      if(!S.on) s = '꺼짐 — 예전 방식(웹 설정 화면)으로 그려요.';
+      else if(S.failed || S.fails >= 2) s = '네이티브 설정 화면에 문제가 있어 웹 화면으로 대신 보여주고 있어요' + (S.why ? ' (' + S.why + ')' : '') + '. 스위치를 껐다 켜면 다시 시도해요.';
+      else if(S.badFresh > 0) s = '엔진이 준 화면이 올바르지 않아 저장해 둔 화면을 쓰고 있어요' + (S.why ? ' (' + S.why + ')' : '') + '.';
+      else s = '켜짐 — 설정 화면을 엔진이 정한 대로 기기가 직접 그려요(실험 중).';
+      if(st && st.textContent !== s) st.textContent = s;
+    }catch(e){}
+  }
+  window._scrSet = { S: S, kick: kick, setUse: setUse, syncCard: syncCard, active: active, owns: function(){ return active() && S.good; }, facts: facts, closeSheet: closeSheet, openSheet: openSheet, present: present, refresh: refresh, tick: tick };
+  window._scrsSetUse = function(on){ try{ setUse(on); }catch(e){} };
+  try{ if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(function(){ try{ syncCard(); kick(); }catch(e){} }, 700); }); else setTimeout(function(){ try{ syncCard(); kick(); }catch(e){} }, 700); }catch(eH){}
+  try{ document.addEventListener('visibilitychange', function(){ if(!document.hidden) kick(); else if(S.shown) hideNative(); }); }catch(eV){}
+})();
+
 
 // ── 커뮤니티 ────────────────────────────────────────────────
 var _commFilter='all';
@@ -38569,6 +38925,7 @@ function showSettingsTab(el){
   if(fab) fab.style.display='none';
   _renderIdBox();
   try { if(typeof _errRefreshBadge==='function') _errRefreshBadge(); } catch(e){}
+  try{ if(window._scrSet) setTimeout(function(){ window._scrSet.kick(); }, 0); }catch(eSs2){}      // 서버 구동 네이티브 설정 화면
   try{ if(window._htlNat) window._htlNat.kick(); }catch(eNk){}                       // 설정 화면이 열렸다 — 네이티브 영역들이 곧바로 읽게(꺼져 있으면 아무 일 없음)
 }
 window.showSettingsTab = showSettingsTab;
@@ -44769,7 +45126,7 @@ var _CS = (function(){
     return { running: true, drag: !!DRAG, tv: Math.round(S.tv * 1000) / 1000, mode: S.mode, slot: S.L.slot, wk: S.L.wk, season: S.L.season, hero: S.res.hero, W: S.W, H: S.H, frames: S.frames, err: S.err || null, tag: H0 && H0.tag ? H0.tag.textContent : '',
       actors: S.actors.map(function(a){ return { id: a.id, st: a.st, cy: Math.round(zy(a.z) + a.y - TH * zs(a.z) * .5), held: !!a.held, act: a.act ? a.act.n : '', stk: a.stk ? a.stk.k : '', land: a.landK || '', x: Math.round(a.x), z: Math.round(a.z * 100) / 100, vis: a.vis, hero: !!a.hero, umb: !!a.umb, leaving: !!a.leaving }; }), seq: S.seq ? { ph: S.seq.ph, busOn: S.seq.busOn, door: Math.round(S.seq.door * 100) / 100 } : null, traffic: S.traffic.length, ride: S.ride ? { speed: Math.round(S.ride.speed * 100) / 100 } : null };
   }
-  return { _play: function(id, name, solo){ if(!S) return false; var a = S.actors.filter(function(o){ return o.id === id && !o.leaving; })[0]; if(!a){ a = mkActor(id, S.W * .5, .62, 1); a.born = S.t; S.actors.push(a); } a.life = 1e9; a.leaving = false; if(solo){ S.actors = [a]; S.spawnAt = S.t + 1e9; S.gfx = []; S.pt = []; a.x = S.W * .5; a.z = .62; } startAct(a, name); return true; }, _drop: function(id, hgt, solo){ if(!S) return false; var a = S.actors.filter(function(o){ return o.id === id && !o.leaving; })[0]; if(!a){ a = mkActor(id, S.W * .5, .62, 1); a.born = S.t; S.actors.push(a); } a.life = 1e9; if(solo){ S.actors = [a]; S.spawnAt = S.t + 1e9; S.gfx = []; S.pt = []; a.x = S.W * .5; a.z = .62; } a.altSave = a.alt; a.alt = 0; a.act = null; a.y = -(hgt || 60); a.prevSt = 'walk'; releaseActor(a); return true; }, attach: attach, refit: refit, _hit: function(x, y){ if(!S) return null; var a = hitActor(x, y); return a ? a.id : null; }, setFit: function(f){ FIT = f; }, apply: apply, stop: stop, info: info, nat: NAT, natActive: natActive, natSetUse: natSetUse, natSyncCard: natSyncCard, paint: paint, last: function(){ return LAST; }, _tick: function(sec){ if(!S) return; var n = Math.round(sec * 30); for(var i = 0; i < n; i++){ S.t += 1 / 30; update(1 / 30); } paintAll(1 / 30); } };
+  return { natState: function(){ return { h: !!natPlugin(), on: !NAT.disabled, f: !!(NAT.failed || NAT.fails >= 2), w: NAT.why || '' }; }, _play: function(id, name, solo){ if(!S) return false; var a = S.actors.filter(function(o){ return o.id === id && !o.leaving; })[0]; if(!a){ a = mkActor(id, S.W * .5, .62, 1); a.born = S.t; S.actors.push(a); } a.life = 1e9; a.leaving = false; if(solo){ S.actors = [a]; S.spawnAt = S.t + 1e9; S.gfx = []; S.pt = []; a.x = S.W * .5; a.z = .62; } startAct(a, name); return true; }, _drop: function(id, hgt, solo){ if(!S) return false; var a = S.actors.filter(function(o){ return o.id === id && !o.leaving; })[0]; if(!a){ a = mkActor(id, S.W * .5, .62, 1); a.born = S.t; S.actors.push(a); } a.life = 1e9; if(solo){ S.actors = [a]; S.spawnAt = S.t + 1e9; S.gfx = []; S.pt = []; a.x = S.W * .5; a.z = .62; } a.altSave = a.alt; a.alt = 0; a.act = null; a.y = -(hgt || 60); a.prevSt = 'walk'; releaseActor(a); return true; }, attach: attach, refit: refit, _hit: function(x, y){ if(!S) return null; var a = hitActor(x, y); return a ? a.id : null; }, setFit: function(f){ FIT = f; }, apply: apply, stop: stop, info: info, nat: NAT, natActive: natActive, natSetUse: natSetUse, natSyncCard: natSyncCard, paint: paint, last: function(){ return LAST; }, _tick: function(sec){ if(!S) return; var n = Math.round(sec * 30); for(var i = 0; i < n; i++){ S.t += 1 / 30; update(1 / 30); } paintAll(1 / 30); } };
 })();
 window._CS = _CS;
 window._snSetUse = function(on){ try{ _CS.natSetUse(on); }catch(e){} };
