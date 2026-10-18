@@ -283,6 +283,60 @@ public class ScreenJvmTest {
         long qms = (System.nanoTime() - q0) / 1000000L;
         ok(qms < 400 && ML.bodyH > 150f * 30f, "스위치 150개 읽기+배치 " + qms + "ms");
 
+        // ── 맛집 화면: 머리줄(bar) · 장소 카드(place) · 구분선(divider) · 켜진 칩 색 ──
+        String fbarJ = "{\"t\":\"bar\",\"pad\":[16,16,16,8],\"title\":\"도착역 맛집\",\"sub\":\"강남역 인근\",\"btn\":\"새로고침\",\"act\":{\"a\":\"refresh\"}}";
+        String fchipsJ = "{\"t\":\"chips\",\"pad\":[16,0,16,12],\"gap\":8,\"h\":30,\"onc\":\"gold\",\"onfg\":\"#121214\",\"items\":[{\"label\":\"전체\",\"on\":true,\"act\":{\"a\":\"cat\",\"v\":\"전체\"}},{\"label\":\"카페\",\"act\":{\"a\":\"cat\",\"v\":\"카페\"}}]}";
+        String plJ = "{\"t\":\"place\",\"pad\":[12,0,12,10],\"rank\":\"1\",\"name\":\"맛있는 국밥집\",\"sub\":\"국밥 · 역삼로 12\",\"stars\":\"★★★★★\",\"dist\":\"320m\",\"go\":\"길찾기 · 지도 →\",\"act\":{\"a\":\"call\",\"v\":\"fm.c.7\"}}";
+        String pbJ = "{\"t\":\"place\",\"pad\":[12,0,12,10],\"rank\":\"\",\"pub\":true,\"name\":\"공공 식당\",\"sub\":\"한식\",\"badge\":\"공공데이터\",\"dist\":\"1.2km\",\"go\":\"길찾기 · 지도 →\",\"act\":{\"a\":\"call\",\"v\":\"fm.p.3\"}}";
+        String foodJ = "{\"ok\":true,\"v\":1,\"screen\":\"food\",\"rev\":\"f1:x\",\"cover\":\"tab\",\"head\":[" + fbarJ + "," + fchipsJ + "],\"body\":[" + plJ + ",{\"t\":\"divider\",\"pad\":[12,8,12,0]}," + pbJ + ",{\"t\":\"spacer\",\"h\":80}]}";
+        ScreenCore.Screen fs = ScreenCore.load(foodJ);
+        ok(fs.head.size() == 2 && fs.body.size() == 4 && fs.skipped == 0 && fs.cover.equals("tab"), "맛집 화면을 읽는다(모르는 노드 없음)");
+        ok(bad(foodJ.replace("\"title\":\"도착역 맛집\",", "")), "bar 는 title 필수");
+        ok(bad(foodJ.replace("\"btn\":\"새로고침\",\"act\":{\"a\":\"refresh\"}", "\"btn\":\"새로고침\"")), "bar 단추가 있으면 act 필수");
+        ok(bad(foodJ.replace("\"name\":\"맛있는 국밥집\",", "")), "place 는 name 필수");
+        ok(bad(foodJ.replace("\"v\":\"fm.c.7\"", "\"v\":\"fm c 7\"")), "place 행동 이름이 올바르지 않으면 거절");
+        ok(bad(foodJ.replace("\"act\":{\"a\":\"call\",\"v\":\"fm.c.7\"}", "\"x\":1")), "place 는 act 필수");
+        ok(bad(foodJ.replace("\"onc\":\"gold\"", "\"onc\":\"nonsense\"")), "칩 켜진 색이 이상하면 거절");
+        ScreenCore.Layout FL = ScreenCore.layout(fs, 360f, M);
+        ok(FL.head.length == 3 && FL.head[0].kind == ScreenCore.K_BAR && FL.head[0].fixed && FL.head[1].kind == ScreenCore.K_CHIP && !FL.head[1].fixed, "머리 = 머리줄(고정) + 칩(밀림)");
+        ScreenCore.Item bar = FL.head[0];
+        float btnW = M.width("새로고침", 12f, false) + 30f;
+        ok(near(bar.sw, btnW) && near(bar.sx, 16f + (360f - 32f) - btnW), "단추는 오른쪽 끝");
+        ok(bar.top && near(bar.tagX, 16f + M.width("도착역 맛집", 18f, true) + 8f), "제목 옆 작은 글은 8 띄워 같은 줄(웹 baseline)");
+        ok(near(bar.h, Math.max(18f * 1.4f, 12f * 1.4f + 14f)) && near(bar.y, 16f), "머리줄 높이 = 제목 줄 높이");
+        ok(FL.head[1].y >= bar.y + bar.h + 8f - 0.01f && near(FL.chipsTop, bar.y + bar.h + 8f), "칩 줄은 머리줄 아래");
+        ok(FL.head[1].ac != null && "gold".equals(FL.head[1].ac.role) && FL.head[1].tc != null && FL.head[1].tc.role == null, "칩 켜진 색: 금색 바탕 · 글자 #121214");
+        ok(ScreenCore.layout(s, 360f, M).head[0].ac != null && "orange".equals(ScreenCore.layout(s, 360f, M).head[0].ac.role), "쇼핑 칩은 예전처럼 주황");
+        ScreenCore.Layout narrowF = ScreenCore.layout(ScreenCore.load(foodJ.replace("강남역 인근", "아주아주 긴 역 이름 근처 인근 인근")), 300f, M);
+        ok(!narrowF.head[0].top && narrowF.head[0].subY > narrowF.head[0].textY && narrowF.head[0].h > bar.h, "좁으면 작은 글이 아래 줄로 내려간다");
+        ScreenCore.Item p0 = FL.body[0], pp = FL.body[2];
+        ok(p0.kind == ScreenCore.K_PLACE && near(p0.x, 12f) && near(p0.w, 336f) && near(p0.y, 0f), "장소 카드 자리: 좌우 12");
+        ok(near(p0.textX, 12f + 1f + 14f + 24f + 12f) && near(p0.bx, 12f + 1f + 14f), "이름은 순위 동그라미 오른쪽 12 띄움");
+        ok(p0.lines.length == 1 && p0.lines2.length == 1 && p0.rank.equals("1") && p0.stars.length() == 5 && !p0.pub, "이름 한 줄 · 업종 줄 · 순위·별점");
+        ok(near(p0.starX, p0.textX) && near(p0.distX, p0.starX + M.width("★★★★★", 13f, true) + 8f) && p0.goX > p0.distX + p0.distPw, "한 줄: 별점 → 거리 → 길찾기(간격 8)");
+        ok(near(p0.h, 1f + 14f + 21f + 3f + 16.8f + 5f + 20f + 14f + 1f), "카드 높이 = 테두리·안쪽 14·이름 21+3·업종 16.8+5·한 줄 20");
+        ok(pp.pub && pp.rank.length() == 0 && pp.stars.length() == 0 && pp.badge.equals("공공데이터") && near(pp.distX, pp.badgeX + pp.badgePw + 8f), "공공데이터 카드: 딱지 → 거리");
+        ok(FL.body[1].kind == ScreenCore.K_DIV && near(FL.body[1].y, p0.y + p0.h + 10f + 8f) && near(FL.body[1].h, 1f), "구분선은 카드 아래 간격 10 + 8");
+        ScreenCore.Act ph = FL.hitBody(p0.x + 30f, p0.y + 30f);
+        ok(ph != null && ph.a.equals("call") && ph.v.equals("fm.c.7"), "카드를 누르면 그 번호");
+        ok(FL.hitBody(p0.x + 30f, p0.y + p0.h + 3f) == null, "카드 사이 간격은 무반응");
+        ScreenCore.Act ba = FL.hitHead(bar.sx + 5f, bar.sy + 5f);
+        ok(ba != null && ba.a.equals("refresh"), "머리줄 단추를 누르면 새로고침");
+        ok(FL.hitHead(20f, bar.y + 5f) == null, "머리줄 제목 쪽은 무반응");
+        ScreenCore.Act cc2 = FL.hitHead(FL.head[2].x + 3f, FL.chipsTop + 12f);
+        ok(cc2 != null && cc2.a.equals("cat") && cc2.v.equals("카페"), "칩을 누르면 그 업종");
+        ScreenCore.Screen longName = ScreenCore.load(foodJ.replace("맛있는 국밥집", "아주 긴 가게 이름 아주 긴 가게 이름 아주 긴 가게 이름 아주 긴 가게 이름"));
+        ScreenCore.Item ln = ScreenCore.layout(longName, 360f, M).body[0];
+        ok(ln.lines.length == 1 && ln.lines[0].endsWith("\u2026") && M.width(ln.lines[0], 15f, true) <= 336f - 2f - 28f - 24f - 12f + 0.01f, "긴 이름은 한 줄로 … 줄임");
+        ScreenCore.Screen manyP = ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"food\",\"head\":[],\"body\":[" + plJ.replace("\"sub\":\"국밥 · 역삼로 12\"", "\"sub\":\"아주 긴 업종과 주소 아주 긴 업종과 주소 아주 긴 업종과 주소 아주 긴 업종과 주소 아주 긴 업종과 주소 아주 긴 업종과 주소\"") + "]}");
+        ok(ScreenCore.layout(manyP, 360f, M).body[0].lines2.length == 2, "업종/주소는 두 줄까지");
+        long tf = System.nanoTime();
+        StringBuilder pl300 = new StringBuilder();
+        for (int i = 0; i < 300; i++) { if (i > 0) pl300.append(','); pl300.append(plJ.replace("fm.c.7", "fm.c." + i)); }
+        ScreenCore.Layout fbig = ScreenCore.layout(ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"food\",\"head\":[],\"body\":[" + pl300 + "]}"), 360f, M);
+        long fms = (System.nanoTime() - tf) / 1000000L;
+        ok(fms < 300 && fbig.body.length == 300 && fbig.bodyRange(0f, 700f)[1] < 20, "카드 300장 읽기+배치 " + fms + "ms · 보이는 건 몇 장만");
+
         // ── 시간(400장 배치 + 10만 번 범위 찾기) ──
         long t0 = System.nanoTime();
         ScreenCore.Layout big = ScreenCore.layout(ScreenCore.load(screen(1000)), 360f, M);
