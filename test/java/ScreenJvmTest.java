@@ -26,6 +26,7 @@ public class ScreenJvmTest {
             + "{\"t\":\"text\",\"pad\":[16,10,16,0],\"size\":10,\"color\":\"sub\",\"s\":\"이 페이지의 상품 링크는 쿠팡 파트너스 활동의 일환으로, 수수료를 제공받습니다.\"},"
             + "{\"t\":\"spacer\",\"h\":10},{\"t\":\"button\",\"pad\":[14,0,14,0],\"s\":\"지금 바로 새로고침\",\"size\":11,\"h\":40,\"act\":{\"a\":\"refresh\"}},{\"t\":\"spacer\",\"h\":14}]}";
     }
+    static String wrapBody(String node) { return "{\"ok\":true,\"v\":1,\"screen\":\"t\",\"head\":[],\"body\":[" + node + "]}"; }
     static boolean bad(String json) { try { ScreenCore.load(json); return false; } catch (ScreenCore.ParseError e) { return true; } }
 
     public static void main(String[] a) throws Exception {
@@ -182,8 +183,8 @@ public class ScreenJvmTest {
         ScreenCore.Layout CS = ScreenCore.layout(cs, 200f, M);   // 줄이 더 많아져도 구간이 줄을 넘나들며 이어진다
         StringBuilder bold2 = new StringBuilder(); for (int k = 0; k < CS.head[0].segs.length; k++) for (int q = 0; q < CS.head[0].segs[k].length; q++) if (CS.head[0].segBold[k][q]) bold2.append(CS.head[0].segs[k][q]);
         ok(bold2.toString().replace(" ", "").equals(("쿠팡 파트너스 활동" + "일정액의 수수료를 제공받습니다.").replace(" ", "")), "줄이 바뀌어도 굵은 구간이 같다: " + bold2);
-        ok(bx.fillC == 0x1FFF9500 || bx.fillC == 0x1EFF9500 || ((bx.fillC >>> 24) > 0x10 && (bx.fillC >>> 24) < 0x30), "상자 바탕 = CSS rgba 를 읽는다 " + Integer.toHexString(bx.fillC));
-        ok(sr.accentC == 0xFFE63329 && sr.accentRole == null, "검색 강조색 #e63329");
+        ok(bx.fill != null && bx.fill.role == null && (bx.fill.argb >>> 24) > 0x10 && (bx.fill.argb >>> 24) < 0x30 && (bx.fill.argb & 0xFFFFFF) == 0xFF9500, "상자 바탕 = CSS rgba 를 읽는다 " + (bx.fill == null ? "null" : Integer.toHexString(bx.fill.argb)));
+        ok(sr.ac != null && sr.ac.role == null && sr.ac.argb == 0xFFE63329, "검색 강조색 #e63329");
         // 눌림
         ScreenCore.Act hs = CL.hitHead(sr.x + 40f, sr.y + 20f);
         ok(hs != null && hs.a.equals("search"), "검색줄을 누르면 search 행동");
@@ -198,6 +199,89 @@ public class ScreenJvmTest {
         // ── 옛 앱 호환: 모르는 새 노드는 건너뛴다(옛 앱 시뮬레이션: 모르는 종류로 바꿔 읽기) ──
         ScreenCore.Screen old = ScreenCore.load(capScreen.replace("\"t\":\"box\"", "\"t\":\"future\"").replace("\"t\":\"search\"", "\"t\":\"future2\""));
         ok(old.head.size() == 1 && old.skipped >= 2, "모르는 노드(옛 앱이 새 상자·검색줄을 만난 경우)는 건너뛰고 칩만 그린다");
+
+
+        // ── 설정 화면 노드(panel·toggle·navrow·select·field·button 변형) ──
+        String setJson = "{\"ok\":true,\"v\":1,\"screen\":\"settings\",\"rev\":\"x\",\"cover\":\"tab\",\"head\":[],\"body\":["
+            + "{\"t\":\"panel\",\"pad\":[14,12,14,0],\"kids\":["
+            + "{\"t\":\"text\",\"s\":\"알림 설정\",\"size\":14,\"bold\":true},"
+            + "{\"t\":\"toggle\",\"key\":\"n.arrive\",\"title\":\"도착 알림\",\"sub\":\"도착 직전에 알려 드려요\",\"on\":true},"
+            + "{\"t\":\"toggle\",\"key\":\"n.transfer\",\"title\":\"환승 알림\",\"top\":true,\"on\":false},"
+            + "{\"t\":\"navrow\",\"title\":\"출퇴근 브리핑 알림\",\"sub\":\"켜짐\",\"top\":true,\"act\":{\"a\":\"web\",\"v\":\"brief\"}},"
+            + "{\"t\":\"field\",\"key\":\"commId\",\"hint\":\"아이디 2~12자\",\"value\":\"\",\"maxlen\":12},"
+            + "{\"t\":\"button\",\"s\":\"저장\",\"fill\":\"gold\",\"tc\":\"#121214\",\"bold\":true,\"act\":{\"a\":\"call\",\"v\":\"saveId\"}}"
+            + "]},"
+            + "{\"t\":\"select\",\"title\":\"다크\",\"sub\":\"어두운 화면\",\"on\":true,\"act\":{\"a\":\"sel\",\"v\":\"dark\"},\"fill\":\"#18181a\",\"onl\":\"#d4af37\",\"prev\":[\"#111\",\"#222\",\"#333\",\"#d4af37\",\"#fff\"]},"
+            + "{\"t\":\"select\",\"title\":\"파스텔\",\"on\":false,\"act\":{\"a\":\"sel\",\"v\":\"pastel\"}}]}";
+        ScreenCore.Screen ss = ScreenCore.load(setJson);
+        ok(ss.cover.equals("tab") && ss.body.size() == 3 && ss.body.get(0).t.equals("panel") && ss.body.get(0).kids.size() == 6, "설정 화면을 읽는다(panel 안에 노드 6개)");
+        ScreenCore.Layout SL = ScreenCore.layout(ss, 360f, M);
+        ScreenCore.Item pn = null, tg1 = null, tg2 = null, nv = null, fd = null, sbt = null, se1 = null, se2 = null;
+        for (ScreenCore.Item it : SL.body) {
+            if (it.kind == ScreenCore.K_PANEL) pn = it; else if (it.kind == ScreenCore.K_TOGGLE) { if (tg1 == null) tg1 = it; else tg2 = it; }
+            else if (it.kind == ScreenCore.K_NAV) nv = it; else if (it.kind == ScreenCore.K_FIELD) fd = it; else if (it.kind == ScreenCore.K_BUTTON) sbt = it;
+            else if (it.kind == ScreenCore.K_SELECT) { if (se1 == null) se1 = it; else se2 = it; }
+        }
+        ok(pn != null && tg1 != null && tg2 != null && nv != null && fd != null && sbt != null && se1 != null && se2 != null, "배치 결과에 모든 종류가 있다");
+        ok(near(pn.x, 14f) && near(pn.y, 12f) && near(pn.w, 332f), "패널 자리(여백 14·12)");
+        ok(tg1.x > pn.x && tg1.x + tg1.w < pn.x + pn.w && near(tg1.x, pn.x + 1f + 16f) && near(tg1.w, pn.w - 2f - 32f), "패널 안 노드는 테두리 1 + 안쪽 16 만큼 들어간다");
+        ok(pn.h > 0f && near(pn.y + pn.h, sbt.y + sbt.h + 16f + 1f), "패널 높이 = 마지막 자식 끝 + 안쪽 16 + 테두리 1 (" + pn.h + ")");
+        ok(tg1.on && !tg2.on && tg1.key.equals("n.arrive") && tg1.act.a.equals("set") && tg1.act.key.equals("n.arrive"), "스위치: 상태·키·set 행동");
+        ok(tg1.lines2.length >= 1 && tg2.lines2.length == 0 && tg1.h > tg2.h - 0.01f, "설명 줄이 있으면 더 높거나 같다");
+        ok(tg2.top && tg2.h >= 1f + 9f + 25f + 9f - 0.01f, "윗선이 있으면 높이에 1 더해진다 " + tg2.h);
+        ok(near(tg1.sx + tg1.sw, tg1.x + tg1.w) && tg1.sy >= tg1.y && tg1.sy + tg1.sh <= tg1.y + tg1.h, "스위치는 오른쪽 끝, 줄 안에");
+        ok(ScreenCore.Layout.hits(tg1, tg1.sx + 4f, tg1.sy + 4f) && !ScreenCore.Layout.hits(tg1, tg1.x + 3f, tg1.sy + 4f), "스위치 줄은 스위치(+8dp) 만 눌린다");
+        ok(ScreenCore.Layout.hits(tg1, tg1.sx - 6f, tg1.sy + 4f), "스위치 바깥 8dp 까지 눌림(손가락 여유)");
+        ok(nv.act.a.equals("web") && nv.act.v.equals("brief") && nv.label.equals("켜짐") && nv.labelW > 0f && ScreenCore.Layout.hits(nv, nv.x + 5f, nv.y + 5f), "이동 줄: web 행동·오른쪽 글·줄 전체 눌림");
+        ok(fd.key.equals("commId") && fd.maxlen == 12 && fd.label.equals("아이디 2~12자") && near(fd.h, 44f) && fd.act == null, "입력칸: 키·글자수·힌트·높이 44, 눌림 행동은 앱 내부(편집)");
+        ok(sbt.fill.role.equals("gold") && sbt.tc.role == null && sbt.tc.argb == 0xFF121214 && sbt.act.a.equals("call") && sbt.act.v.equals("saveId"), "버튼 변형: 금색 바탕 + CSS 글자색 + call 행동");
+        ok(se1.on && !se2.on && se1.act.a.equals("sel") && se1.act.v.equals("dark") && se1.prevC.length == 5 && se2.prevC.length == 0, "고르기 카드: 상태·행동·미리보기 5색");
+        ok(se1.fill.role == null && se1.fill.argb == 0xFF18181A && se1.ac.argb == 0xFFD4AF37 && se2.fill.role.equals("card") && se2.ac.role.equals("gold"), "고르기 카드 색: CSS 색 / 기본 역할");
+        ok(se1.h >= 4f + 28f + 52f - 0.01f, "고르기 카드 높이 >= 미리보기 칸 + 여백");
+        // 눌림: 패널 안 항목도 본문 좌표로 눌린다
+        ScreenCore.Act shb = SL.hitBody(sbt.x + 20f, sbt.y + 10f);
+        ok(shb != null && shb.a.equals("call") && shb.v.equals("saveId"), "패널 안 버튼 눌림");
+        ScreenCore.Act ht = SL.hitBody(tg1.sx + 5f, tg1.sy + 5f);
+        ok(ht != null && ht.a.equals("set") && ht.key.equals("n.arrive"), "패널 안 스위치 눌림");
+        ok(SL.hitBody(pn.x + 3f, pn.y + 3f) == null, "패널 빈 곳은 아무 일 없다");
+        ScreenCore.Act hs3 = SL.hitBody(se2.x + 30f, se2.y + 10f);
+        ok(hs3 != null && hs3.a.equals("sel") && hs3.v.equals("pastel"), "고르기 카드 눌림");
+        // 검증(거절)
+        String t1 = "{\"t\":\"toggle\",\"key\":\"k\",\"title\":\"x\"}";
+        ok(!bad(wrapBody(t1)), "스위치 최소 형태는 통과");
+        ok(bad(wrapBody("{\"t\":\"toggle\",\"title\":\"x\"}")), "스위치 key 없으면 거절");
+        ok(bad(wrapBody("{\"t\":\"toggle\",\"key\":\"한글\",\"title\":\"x\"}")), "스위치 key 에 한글이 있으면 거절");
+        ok(bad(wrapBody("{\"t\":\"toggle\",\"key\":\"k\"}")), "스위치 title 없으면 거절");
+        ok(bad(wrapBody("{\"t\":\"navrow\",\"title\":\"x\"}")), "이동 줄 act 없으면 거절");
+        ok(bad(wrapBody("{\"t\":\"navrow\",\"title\":\"x\",\"act\":{\"a\":\"web\",\"v\":\"a b\"}}")), "web 행동 v 에 공백이 있으면 거절");
+        ok(bad(wrapBody("{\"t\":\"navrow\",\"title\":\"x\",\"act\":{\"a\":\"call\"}}")), "call 행동 v 없으면 거절");
+        ok(bad(wrapBody("{\"t\":\"select\",\"title\":\"x\",\"act\":{\"a\":\"call\",\"v\":\"q\"}}")), "고르기 카드 행동이 sel 이 아니면 거절");
+        ok(bad(wrapBody("{\"t\":\"select\",\"title\":\"x\",\"act\":{\"a\":\"sel\",\"v\":\"q\"},\"prev\":[\"#111\",\"#222\"]}")), "미리보기 색이 5개가 아니면 거절");
+        ok(bad(wrapBody("{\"t\":\"select\",\"title\":\"x\",\"act\":{\"a\":\"sel\",\"v\":\"q\"},\"prev\":[\"#111\",\"#222\",\"#333\",\"#444\",\"nope\"]}")), "미리보기 색을 못 읽으면 거절");
+        ok(bad(wrapBody("{\"t\":\"field\",\"hint\":\"x\"}")), "입력칸 key 없으면 거절");
+        ok(bad(wrapBody("{\"t\":\"field\",\"key\":\"k\",\"h\":500}")), "입력칸 높이 범위 밖은 거절");
+        ok(bad(wrapBody("{\"t\":\"panel\",\"kids\":[{\"t\":\"panel\",\"kids\":[]}]}")), "패널 안에 패널은 거절(중첩 금지)");
+        ok(bad(wrapBody("{\"t\":\"panel\",\"kids\":[{\"t\":\"grid\",\"items\":[]}]}")), "패널 안에 격자는 거절");
+        ok(bad(wrapBody("{\"t\":\"panel\",\"kids\":[{\"t\":\"search\",\"act\":{\"a\":\"search\",\"tpl\":\"https://a/{q}\",\"empty\":\"https://a\"}}]}")), "패널 안에 검색줄은 거절");
+        ok(bad(wrapBody("{\"t\":\"panel\",\"fill\":\"junk\",\"kids\":[]}")), "패널 바탕색을 못 읽으면 거절");
+        ok(bad(wrapBody("{\"t\":\"panel\"}")), "패널 kids 없으면 거절");
+        ok(!bad(wrapBody("{\"t\":\"panel\",\"kids\":[{\"t\":\"future\",\"x\":1},{\"t\":\"text\",\"s\":\"a\"}]}")), "패널 안 모르는 노드는 건너뛰고 통과");
+        ScreenCore.Screen so = ScreenCore.load(wrapBody("{\"t\":\"panel\",\"kids\":[{\"t\":\"future\",\"x\":1},{\"t\":\"text\",\"s\":\"a\"}]}"));
+        ok(so.skipped == 1 && so.body.get(0).kids.size() == 1, "건너뛴 개수 1, 남은 자식 1");
+        ScreenCore.Layout BL = ScreenCore.layout(ScreenCore.load(wrapBody("{\"t\":\"box\",\"s\":\"경고\",\"tc\":\"#ff453a\",\"fill\":\"rgba(255,69,58,.12)\"}")), 360f, M);
+        ok(BL.body[0].tc != null && BL.body[0].tc.argb == 0xFFFF453A && BL.body[0].fill.argb != 0, "상자 글자색 tc(CSS 색)");
+        ok(bad(wrapBody("{\"t\":\"box\",\"s\":\"x\",\"tc\":\"junk\"}")), "상자 글자색을 못 읽으면 거절");
+        ok(ScreenCore.ident("n.arrive_reco") && ScreenCore.ident("a:b-c") && !ScreenCore.ident("") && !ScreenCore.ident("a b") && !ScreenCore.ident("가") && !ScreenCore.ident(new String(new char[41]).replace('\0', 'a')), "식별자 규칙");
+        // 옛 앱 시뮬레이션: 새 노드를 모르는 앱은 전부 건너뛰고 '그릴 것이 없다' 로 거절 → 웹 폴백
+        String oldSet = setJson.replace("\"panel\"", "\"zz\"").replace("\"select\"", "\"zz2\"");
+        ok(bad(oldSet), "새 노드만 있는 화면을 옛 앱이 만나면 거절(→ 웹 폴백)");
+        // 설정 화면 배치 시간
+        StringBuilder manyT = new StringBuilder();
+        for (int i = 0; i < 150; i++) { if (i > 0) manyT.append(','); manyT.append("{\"t\":\"toggle\",\"key\":\"k").append(i).append("\",\"title\":\"항목 ").append(i).append("\",\"sub\":\"설명 설명 설명 설명 설명 설명 설명 설명\",\"top\":true}"); }
+        long q0 = System.nanoTime();
+        ScreenCore.Layout ML = ScreenCore.layout(ScreenCore.load(wrapBody("{\"t\":\"panel\",\"kids\":[" + manyT + "]}")), 360f, M);
+        long qms = (System.nanoTime() - q0) / 1000000L;
+        ok(qms < 400 && ML.bodyH > 150f * 30f, "스위치 150개 읽기+배치 " + qms + "ms");
 
         // ── 시간(400장 배치 + 10만 번 범위 찾기) ──
         long t0 = System.nanoTime();
