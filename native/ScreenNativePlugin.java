@@ -41,6 +41,14 @@ public class ScreenNativePlugin extends Plugin {
     private final Map<String, Float> dprMap = new HashMap<String, Float>();
     private ViewGroup root;
 
+    // 글꼴(Noto Sans KR)은 앱이 뜰 때 뒤에서 미리 읽어 둔다 — 첫 화면에서 글꼴 읽느라 멈추지 않게.
+    @Override
+    public void load() {
+        final android.content.Context c = getContext();
+        if (c == null) return;
+        new Thread(new Runnable() { @Override public void run() { try { ScreenView.preloadFaces(c); } catch (Throwable ignored) { } } }, "scr-font").start();
+    }
+
     private interface Job { void run() throws Exception; }
     private void runUi(final PluginCall call, final Job job) {
         ui.post(new Runnable() {

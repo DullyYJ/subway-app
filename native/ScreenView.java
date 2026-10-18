@@ -82,6 +82,21 @@ public class ScreenView extends View {
     private ScreenCore.Item pressed;
     private Listener listener;
     private boolean drewOnce;
+
+    // ── 글꼴: 웹은 'Noto Sans KR'(구글 웹폰트)로 그린다. 기기 기본 글꼴은 한글이 작고 가늘어 보이므로 같은 글꼴을 앱에 넣어(CI 가 내려받아 assets/fonts 에) 쓴다.
+    //    파일이 없거나 읽기 실패면 기기 기본 글꼴로 되돌아간다(화면은 그대로 뜬다).
+    private static volatile Typeface faceR, faceB;
+    private static volatile boolean facesTried;
+    public static synchronized void preloadFaces(Context c) {
+        if (facesTried) return;
+        facesTried = true;
+        try { faceR = Typeface.createFromAsset(c.getAssets(), "fonts/NotoSansKR-Regular.ttf"); } catch (Throwable e) { faceR = null; }
+        try { faceB = Typeface.createFromAsset(c.getAssets(), "fonts/NotoSansKR-Bold.ttf"); } catch (Throwable e) { faceB = null; }
+    }
+    static Typeface face(boolean bold) {
+        Typeface t = bold ? faceB : faceR;
+        return t != null ? t : (bold ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
+    }
     private volatile long lastDraw = 0L;
     private final Handler ui = new Handler(Looper.getMainLooper());
     private EditText input;                                   // 검색줄의 진짜 입력칸(기기 키보드·붙여넣기·한글 조합은 안드로이드가 한다)
@@ -94,7 +109,7 @@ public class ScreenView extends View {
     private final Map<String, String> fieldVals = new HashMap<String, String>(), fieldBase = new HashMap<String, String>();
     private final ScreenCore.Measurer measurer = new ScreenCore.Measurer() {
         @Override public float width(String s, float size, boolean bold) {
-            tp.setTypeface(bold ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
+            tp.setTypeface(face(bold));
             tp.setTextSize(size * dpr);
             return tp.measureText(s) / dpr;
         }
@@ -107,6 +122,7 @@ public class ScreenView extends View {
         slop = vc.getScaledTouchSlop(); minFling = vc.getScaledMinimumFlingVelocity(); maxFling = vc.getScaledMaximumFlingVelocity();
         flingY = new OverScroller(c); flingX = new OverScroller(c);
         ImageBank.init(c);
+        preloadFaces(c);
     }
 
     public void setListener(Listener l) { listener = l; }
@@ -233,7 +249,7 @@ public class ScreenView extends View {
         return top + (h - (fm.descent - fm.ascent)) / 2f - fm.ascent;
     }
     private void setText(float size, boolean bold, int color) {
-        tp.setTypeface(bold ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
+        tp.setTypeface(face(bold));
         tp.setTextSize(size); tp.setColor(color); tp.setTextAlign(Paint.Align.LEFT);
     }
     private static int alpha(int c, float a) { return ((int) (((c >>> 24) & 0xFF) * a) << 24) | (c & 0xFFFFFF); }
@@ -565,7 +581,7 @@ public class ScreenView extends View {
         e.setGravity(Gravity.CENTER_VERTICAL);
         e.setInputType(InputType.TYPE_CLASS_TEXT);
         e.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
-        e.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13f);
+        e.setTypeface(face(false)); e.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13f);
         e.setOnEditorActionListener(new TextView.OnEditorActionListener() {
             @Override public boolean onEditorAction(TextView v, int actionId, KeyEvent ev) {
                 boolean enter = ev != null && ev.getKeyCode() == KeyEvent.KEYCODE_ENTER && ev.getAction() == KeyEvent.ACTION_DOWN;
@@ -703,7 +719,7 @@ public class ScreenView extends View {
         editor.setTextColor(cc(it.tc, pal[R_TEXT]));
         editor.setHintTextColor(alpha(cc(it.sc, pal[R_SUB]), 0.8f));
         editor.setHint(it.label);
-        editor.setTextSize(TypedValue.COMPLEX_UNIT_DIP, it.size);
+        editor.setTypeface(face(false)); editor.setTextSize(TypedValue.COMPLEX_UNIT_DIP, it.size);
         editor.setFilters(new InputFilter[] { new InputFilter.LengthFilter(Math.max(1, it.maxlen)) });
         eL = eT = eW = eH = -1;
         ensureEditVisible(it);
