@@ -503,6 +503,38 @@ public class ScreenJvmTest {
         ok(near(ScreenCore.rubber(-20f, 100f), -10f) && near(ScreenCore.rubber(140f, 100f), 120f) && near(ScreenCore.rubber(30f, 100f), 30f), "끝에서 저항");
         ok(near(B.bodyMaxScroll(700f), B.bodyH - 700f) && near(B.bodyMaxScroll(1e9f), 0f), "본문 스크롤 한계");
 
+        // ── 홈 탭 경로 입력(inbar 확장 · swap · sug) ──
+        String hAct = "{\"a\":\"call\",\"v\":\"x\"}";
+        String panel = "{\"t\":\"panel\",\"pad\":[0,0,0,4],\"ip\":[0,0,0,0],\"r\":16,\"kids\":["
+            + "{\"t\":\"inbar\",\"key\":\"start\",\"hint\":\"출발지 검색\",\"value\":\"강남\",\"h\":48,\"size\":15,\"bold\":true,\"dot\":\"#0a84ff\",\"bh\":30,\"bsize\":12,\"btn\":\"위치 감지\",\"onc\":\"#0a84ff\",\"ckf\":\"#ffffff\",\"fill\":\"none\",\"line\":\"none\",\"watch\":true,\"act\":" + hAct + "},"
+            + "{\"t\":\"swap\",\"size\":34,\"icon\":\"M16 17.01V10h-2v7.01h-3L15 21l4-3.99h-3zM9 3L5 6.99h3V14h2V6.99h3L9 3z\",\"act\":" + hAct + "},"
+            + "{\"t\":\"divider\"},"
+            + "{\"t\":\"inbar\",\"key\":\"dest\",\"hint\":\"도착지 검색\",\"h\":48,\"size\":15,\"dot\":\"#ff3b30\",\"bh\":30,\"bsize\":12,\"btn\":\"경로 탐색\",\"watch\":true,\"act\":" + hAct + "},"
+            + "{\"t\":\"sug\",\"badge\":\"지하철\",\"name\":\"강남역\",\"sub\":\"2호선\",\"act\":" + hAct + "},"
+            + "{\"t\":\"sug\",\"name\":\"기준시각 현재\",\"sub\":\"평일\",\"last\":true,\"btn\":\"현재\",\"bact\":" + hAct + ",\"act\":" + hAct + "}]}";
+        ScreenCore.Screen hsNew = ScreenCore.load(wrapBody(panel));
+        ScreenCore.Layout HL = ScreenCore.layout(hsNew, 360f, M);
+        int nIn = 0, nSw = 0, nSug = 0; ScreenCore.Item swI = null, in0 = null, in1 = null, sg0 = null, sg1 = null;
+        for (ScreenCore.Item q : HL.body) {
+            if (q.kind == ScreenCore.K_INBAR) { nIn++; if (in0 == null) in0 = q; else in1 = q; }
+            if (q.kind == ScreenCore.K_SWAP) { nSw++; swI = q; }
+            if (q.kind == ScreenCore.K_SUG) { nSug++; if (sg0 == null) sg0 = q; else sg1 = q; }
+        }
+        ok(nIn == 2 && nSw == 1 && nSug == 2, "홈 카드: 입력줄 2 · 바꾸기 1 · 목록줄 2");
+        ok(in0 != null && in0.dotC != null && in0.bold && in0.watch && near(in0.sh, 30f) && near(in0.size2, 12f) && near(in0.bty, in0.y + 9f), "입력줄: 동그라미·굵게·단추 높이 30 가운데");
+        ok(in0 != null && near(in0.textX, in0.x + 34f) && near(in0.bx, in0.x + 19f), "입력줄: 동그라미 오른쪽에서 글자 시작");
+        ok(swI != null && in0 != null && in1 != null && near(swI.y + swI.h / 2f, in0.y + in0.h) && in1.y > in0.y + in0.h, "바꾸기 단추는 두 줄 경계 한가운데(높이 안 차지)");
+        ok(in1 != null && swI != null && near(in1.y, in0.y + 48f + 1f), "바꾸기 단추는 높이를 쓰지 않는다(분리선 1 만)");
+        ok(sg0 != null && near(sg0.h, ScreenCore.SUG_H) && sg0.badgeW > 0f && sg0.sw == 0f && sg0.act2 == null, "목록줄: 높이 44 · 딱지");
+        ok(sg1 != null && sg1.go.equals("현재") && sg1.act2 != null && sg1.sw > 0f && sg1.btx + sg1.sw <= sg1.x + sg1.w && sg1.on, "목록줄: 오른쪽 작은 단추 · 마지막 표시");
+        ok(bad(wrapBody("{\"t\":\"swap\",\"size\":34}")) && bad(wrapBody("{\"t\":\"sug\",\"act\":" + hAct + "}")) && bad(wrapBody("{\"t\":\"sug\",\"name\":\"a\",\"btn\":\"x\",\"act\":" + hAct + "}")), "swap/sug 모양이 틀리면 거절");
+        ok(bad(wrapBody("{\"t\":\"inbar\",\"key\":\"k\",\"btn\":\"x\",\"bh\":10,\"act\":" + hAct + "}")), "inbar bh 10 은 거절");
+        float expectH = 2f + 48f + 1f + 48f + ScreenCore.SUG_H * 2f + 4f;
+        ok(near(HL.bodyH, expectH), "홈 카드 높이 = 줄 높이의 합 (" + HL.bodyH + " vs " + expectH + ")");
+        ScreenCore.Item hit = null;
+        for (int i = HL.body.length - 1; i >= 0; i--) { ScreenCore.Item q = HL.body[i]; if (q.act != null && ScreenCore.Layout.hits(q, swI.x + swI.w / 2f, in0.y + in0.h)) { hit = q; break; } }
+        ok(hit == swI, "경계를 누르면 바꾸기 단추가 눌린다(뒤에서부터 찾기)");
+
         System.out.println(fails == 0 ? "ALL OK (" + oks + ")" : fails + " FAIL");
         System.exit(fails == 0 ? 0 : 1);
     }
