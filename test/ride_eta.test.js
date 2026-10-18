@@ -467,35 +467,34 @@ t('영점은 초 단위까지 뒤 시각을 밀고 당긴다 — GPS 통과가 �
   assert.strictEqual(c.etaMs[6] - a.etaMs[6], 15000);
   assert.ok(Math.abs(a.delayMin - 1.62) < 0.01, 'delayMin=' + a.delayMin);
 });
-// ★ 2026-10-18 (개선 후보 1순위): 한 구간에서 GPS 통과가 하나뿐이고 기준(그린 수준, 없으면 시각표)에서 3분 넘게 벗어나면 확인될 때까지 참고만 한다 — 잘못 찍힌 GPS 통과 하나가 시각표를 흔들지 못하게
-t('영점 보수화 — 혼자인 GPS 통과가 시각표에서 3분 넘게 벗어나면 시각을 안 바꾼다(참고만), 그린 수준과 가깝거나 두 번째 GPS 통과가 오면 따른다, 작은 어긋남은 바로 따른다, 0 이면 끔', () => {
+// ★ 2026-10-18 (개선 후보 1순위): 한 구간에서 GPS 통과가 하나뿐이고 기준(그린 수준, 없으면 시각표)에서 8분 넘게 벗어나면 확인될 때까지 참고만 한다 — 잘못 찍힌 GPS 통과 하나가 시각표를 크게 흔들지 못하게. (처음엔 3분이었으나 standby 시뮬 d300(5분 늦은 열차)에서 진짜 지연까지 늦게 따라가 8분으로 올림)
+t('영점 보수화 — 혼자인 GPS 통과가 시각표에서 8분 넘게 벗어나면 시각을 안 바꾼다(참고만), 그린 수준과 가깝거나 두 번째 GPS 통과가 오면 따른다, 5분 정도 진짜 지연은 바로 따른다, 0 이면 끔', () => {
   const mid = new Date('2026-10-13T00:00:00+09:00').getTime(), T = (h, m, s) => mid + ((h * 60 + m) * 60 + (s || 0)) * 1000, pl = [null, 18 * 60 + 39, 18 * 60 + 41, 18 * 60 + 43, 18 * 60 + 45, 18 * 60 + 48, 18 * 60 + 53];
   const nodes = ['출발', '계산', '임학', '박촌', '굴현', '계양', '아라'].map((n, i) => ({ name: n, isSub: i > 0 && i < 6, isOrigin: i === 0, lineName: i < 6 ? '1' : '', planMin: pl[i] }));
-  const go = (ps, extra) => rideEta(Object.assign({ nowMs: T(18, 52, 0), nodes, passes: ps, boarded: true, timetableFirst: true, tzOffsetMin: 540 }, extra || {}));
+  const go = (ps, extra) => rideEta(Object.assign({ nowMs: T(19, 2, 0), nodes, passes: ps, boarded: true, timetableFirst: true, tzOffsetMin: 540 }, extra || {}));
   const board = { idx: 1, ms: T(18, 39, 0), src: 'board' };
   const base = go([board]);
-  // 굴현(예정 18:45)을 18:50:30(+5.5분)에 통과했다는 GPS 통과 하나뿐
-  const solo = [board, { idx: 4, ms: T(18, 50, 30), src: 'gps' }];
+  // 굴현(예정 18:45)을 18:54:30(+9.5분)에 통과했다는 GPS 통과 하나뿐
+  const solo = [board, { idx: 4, ms: T(18, 54, 30), src: 'gps' }];
   const a = go(solo);
-  assert.strictEqual(a.etaMs[5], base.etaMs[5], '혼자인 +5.5분 GPS 통과는 뒤 시각을 바꾸지 않는다(시각표 그대로): ' + (a.etaMs[5] - base.etaMs[5]) / 1000);
+  assert.strictEqual(a.etaMs[5], base.etaMs[5], '혼자인 +9.5분 GPS 통과는 뒤 시각을 바꾸지 않는다(시각표 그대로): ' + (a.etaMs[5] - base.etaMs[5]) / 1000);
   assert.strictEqual(a.etaMs[6], base.etaMs[6]);
   assert.ok(a.notes.some(x => /참고만/.test(x)), a.notes.join(' | '));
-  // 앱이 이미 +5.4분을 그려 둔 상태(prevLevelMin)면 가까우니 따른다
-  const b = go(solo, { prevLevelMin: 5.4 });
-  assert.strictEqual(b.etaMs[5], T(18, 48, 0) + 330000, '그린 수준(+5.4)과 3분 안이라 +5.5분 그대로 반영: ' + (b.etaMs[5] - T(18, 48, 0)) / 1000);
+  // 앱이 이미 +9.4분을 그려 둔 상태(prevLevelMin)면 가까우니 따른다
+  const b = go(solo, { prevLevelMin: 9.4 });
+  assert.strictEqual(b.etaMs[5], T(18, 48, 0) + 570000, '그린 수준(+9.4)과 8분 안이라 +9.5분 그대로 반영: ' + (b.etaMs[5] - T(18, 48, 0)) / 1000);
   // 같은 구간에서 두 번째 GPS 통과가 오면 더는 혼자가 아니다 — 예전처럼 따른다
-  const c = go(solo.concat([{ idx: 5, ms: T(18, 53, 30), src: 'gps' }]));
-  assert.strictEqual(c.etaMs[5], T(18, 53, 30), '두 번째 GPS 통과(계양)가 오면 그 시각을 그대로');
-  assert.ok(c.etaMs[6] - base.etaMs[6] >= 5 * 60000, '뒤(아라)도 밀린다: ' + (c.etaMs[6] - base.etaMs[6]) / 1000);
-  // 작은 어긋남(+1.5분)은 혼자여도 바로 따른다
+  const c = go(solo.concat([{ idx: 5, ms: T(18, 57, 30), src: 'gps' }]));
+  assert.strictEqual(c.etaMs[5], T(18, 57, 30), '두 번째 GPS 통과(계양)가 오면 그 시각을 그대로');
+  assert.ok(c.etaMs[6] >= T(18, 53, 0) + 8 * 60000, '뒤(아라)도 예정(18:53)보다 8분 넘게 밀린다: ' + (c.etaMs[6] - T(18, 53, 0)) / 1000);
+  // 진짜 지연(+5분)·작은 어긋남(+1.5분)은 혼자여도 바로 따른다 (standby 시뮬 d300 이 이걸 요구)
   const d = go([board, { idx: 4, ms: T(18, 46, 30), src: 'gps' }]);
   assert.strictEqual(d.etaMs[5], T(18, 48, 0) + 90000, '+1.5분은 바로 반영');
-  // 끄면(0) 예전 동작: 혼자여도 +5.5분을 곧바로 반영
+  const d5 = go([board, { idx: 4, ms: T(18, 50, 0), src: 'gps' }]);
+  assert.strictEqual(d5.etaMs[5], T(18, 48, 0) + 300000, '+5분 지연도 바로 반영');
+  // 끄면(0) 예전 동작: 혼자여도 +9.5분을 곧바로 반영
   const e = go(solo, { opts: { zeroSoloMaxMin: 0 } });
-  assert.strictEqual(e.etaMs[5], T(18, 48, 0) + 330000, '끄면 예전처럼 곧바로 반영');
-  // 당기는 쪽(−4분)도 같은 규칙
-  const f = go([board, { idx: 4, ms: T(18, 41, 0), src: 'gps' }]);
-  assert.strictEqual(f.etaMs[5], base.etaMs[5], '혼자인 −4분 GPS 통과도 참고만');
+  assert.strictEqual(e.etaMs[5], T(18, 48, 0) + 570000, '끄면 예전처럼 곧바로 반영');
 });
 t('시각표 기준 위치(pos): 도착 시각이 지난 마지막 역에서 정차 뒤 다음 역 도착까지 0→1, 증거 없이 연착으로 멈추지 않는다', () => {
   const nodes = scene(), ps = [P(1, 17, 35, 40, 'board'), P(2, 17, 38, 20)];
