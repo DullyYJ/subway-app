@@ -33,6 +33,11 @@ var RIDE_ETA_DEFAULTS = {
   levelDeadbandMin: 0.4,
   // ★ 2026-10-13: GPS 통과(영점)가 뒤 시각의 기준 — 통과 − 예정을 그대로 지연 수준으로(밀고 당김). 0 이면 예전(부드러운 추정)대로.
   zeroFollow: 1, zeroMaxJumpMin: 6,
+  // ★ 2026-10-18 (개선 후보 1순위: 곡선 선로 위치 오차 등으로 GPS 통과 하나가 잘못 찍혀도 시각표 도착시각이 크게 흔들리지 않게 — '참고만 하고 시각표는 안 바꾼다'):
+  //   한 구간에서 GPS 통과가 '하나뿐'(혼자)일 때, 그 통과가 기준 수준(앱이 마지막으로 그린 지연 prevLevelMin, 없으면 추정 수준, 없으면 시각표 0분)에서 zeroSoloMaxMin 분 넘게 벗어나면
+  //   확인 안 된 증거로 두고 시각을 바꾸지 않는다(그 통과의 시각 자체는 증거로 계속 들고 간다). 같은 구간에서 GPS 통과가 하나 더 오면 더는 '혼자'가 아니므로 예전처럼 따른다(두 번째 통과가 확인해 준 셈).
+  //   0 이면 끔(예전 동작). 작은 어긋남(zeroSoloMaxMin 안쪽)은 예전처럼 곧바로 밀고 당긴다.
+  zeroSoloMaxMin: 3,
   // 움직임 시작(src 'move'): 앱이 위치 궤적에서 '달리기가 시작된 때'를 되짚어 찍은 값(앱: 탑승 증거가 선 시각 − 60초). 증거가 서는 때는 출발 뒤 25~120초라
   //   찍힌 값은 실제 출발보다 −35~+60초(이르거나 늦다)에 놓이고, 문턱 근처 오차 ±10초. (실측 전의 가정 — 실차 기록으로 보정할 값)
   moveLagMinSec: -35, moveLagMaxSec: 60, moveTolSec: 10,
@@ -399,6 +404,20 @@ function _rideEtaCore(input) {
     kept.push(ps[ii]); if (ps[ii].ms > lastMs) lastMs = ps[ii].ms;
   }
   ps = kept;
+  // ★ 2026-10-18 (개선 후보 1순위): 현재 구간에 GPS 통과가 하나뿐이고 기준(앱이 그린 지연 prevLevelMin, 없으면 시각표 0분)에서 zeroSoloMaxMin 분 넘게 벗어났으면, 확인될 때까지 증거에서 뺀다(참고만 — 시각표 그대로).
+  //   (곡선 선로·가려진 하늘로 GPS 통과 하나가 잘못 찍혀도 도착 시각 전체가 흔들리지 않게. 같은 구간에서 GPS 통과가 하나 더 오면 더는 '혼자'가 아니므로 둘 다 예전처럼 쓴다.)
+  if (O.zeroSoloMaxMin > 0 && ps.length) {
+    var soloLeg = legOf[ps[ps.length - 1].idx], soloAt = -1, soloN = 0;
+    for (ii = 0; ii < ps.length; ii++) if (ps[ii].src === 'gps' && legOf[ps[ii].idx] === soloLeg) { soloN++; soloAt = ii; }
+    if (soloN === 1) {
+      var soloP = ps[soloAt], soloLv = (soloP.ms - planMs[soloP.idx]) / 60000;
+      var soloRef = (input.prevLevelMin != null && isFinite(+input.prevLevelMin)) ? +input.prevLevelMin : 0;
+      if (isFinite(soloLv) && Math.abs(soloLv - soloRef) > O.zeroSoloMaxMin) {
+        notes.push('영점: ' + (nodes[soloP.idx].name || soloP.idx) + ' GPS 통과 ' + (Math.round(soloLv * 10) / 10) + '분이 기준(' + (Math.round(soloRef * 10) / 10) + '분)에서 ' + O.zeroSoloMaxMin + '분 넘게 벗어났고 확인해 줄 다른 GPS 통과가 없어 참고만 함(시각 그대로)');
+        ps = ps.filter(function (q, qi) { return qi !== soloAt; });
+      }
+    }
+  }
   if (!ps.length) {
     planOnly();
     notes.push('통과 증거 없음: 예정 그대로');
