@@ -27,7 +27,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
       if (o.plugin) {
         const rec = (m, a, ret) => { window.__hn.push({ m, a: a === undefined ? null : JSON.parse(JSON.stringify(a)) }); return Promise.resolve(ret); };
         window.Capacitor = { isNativePlatform: () => true, getPlatform: () => 'android', Plugins: { HtlNative: {
-          show: (a) => { window.__hn.push({ m: 'show', a: JSON.parse(JSON.stringify(a)) }); return o.showFail ? Promise.reject(new Error('뷰를 못 만듦')) : Promise.resolve({ cells: (a.cells || []).length }); },
+          show: (a) => { window.__hn.push({ m: 'show', a: JSON.parse(JSON.stringify(a)) }); if (o.autoReady) setTimeout(() => window.__hnEmit('ready', { id: a.id }), 30); return o.showFail ? Promise.reject(new Error('뷰를 못 만듦')) : Promise.resolve({ cells: (a.cells || []).length }); },
           setRect: (a) => rec('setRect', a), update: (a) => rec('update', a, { cells: (a.cells || []).length }), scroll: (a) => rec('scroll', a), marker: (a) => rec('marker', a),
           hide: (a) => rec('hide', a), destroy: (a) => rec('destroy', a),
           status: () => Promise.resolve(window.__status ? window.__status() : { visible: true, cells: 99, age: 20 }),
@@ -159,7 +159,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     assert.ok(Math.abs(s.x - bx.x) < 1);
   });
   await t('네이티브가 숨으면 웹 타임라인이 먼저 돌아온다(빈 화면이 없게) — hide 호출 시점에 이미 가림이 풀려 있다', async () => {
-    await A.page.evaluate(() => { window.__webAtHide = null; const P = window.Capacitor.Plugins.HtlNative, h = P.hide; P.hide = () => { window.__webAtHide = document.getElementById('transitHtlWrap').classList.contains('htl-nat-on'); return h(); }; });
+    await A.page.evaluate(() => { window.__webAtHide = null; const P = window.Capacitor.Plugins.HtlNative, h = P.hide; P.hide = (a) => { if (!a || !a.id || a.id === 'tl') window.__webAtHide = document.getElementById('transitHtlWrap').classList.contains('htl-nat-on'); return h(a); }; });      // 타임라인('tl') 숨김만 본다 — 다른 영역의 hide 가 값을 덮어쓰면 부하 때 흔들렸다
     await clear(A);
     await A.page.evaluate(() => { document.getElementById('hbox').style.top = '270px'; });
     assert.ok(await waitFor(A, has(A, 'hide')), '안 숨었다');
@@ -330,9 +330,10 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     const setup = () => { const f = document.getElementById('tab-food'); f.style.cssText = 'display:flex;position:fixed;left:0;top:0;width:390px;height:700px;z-index:9;background:#fff;flex-direction:column;overflow:hidden;'; document.body.appendChild(f);
       document.getElementById('foodDestLabel').textContent = '부평역 인근'; const l = document.getElementById('foodList'); l.innerHTML = '';
       [1, 2, 3].forEach(i => l.appendChild(_foodMakeCard({ place_name: '맛집' + i, category_name: '음식점 > 한식 > 국밥', road_address_name: '인천 부평구 부평대로 ' + i, distance: String(100 * i) }, i - 1, false))); };
-    const B = await fresh({ plugin: true, on: true });
+    const B = await fresh({ plugin: true, on: true, autoReady: true });
     await B.page.evaluate(setup);
     await waitFor(B, has(B, 'show', 'fd:hdr')); await waitFor(B, has(B, 'show', 'fd:k0')); await waitFor(B, has(B, 'show', 'fd:c0')); await waitFor(B, has(B, 'show', 'fd:c2'));
+    // autoReady: 진짜 네이티브처럼 첫 그림을 그리면 ready 를 보낸다(안 보내면 8초 뒤 '첫 그림이 안 나왔다'로 꺼진다 — 느린 CI 에서 걸렸다)
     const hd = (await lastCall(B, 'show', 'fd:hdr')).a, ht = hd.runs.filter(r => !r.k).map(r => r.t).join('');
     assert.ok(/도착역 맛집/.test(ht) && /부평역 인근/.test(ht) && /새로고침/.test(ht), '머리 글자 ' + ht);
     const k0 = (await lastCall(B, 'show', 'fd:k0')).a; assert.ok(k0.runs.some(r => r.k === 'r') && k0.runs.some(r => /전체/.test(r.t || '')), '칩: 상자 + 글자 ' + JSON.stringify(k0.runs).slice(0, 200));
@@ -341,10 +342,12 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     assert.ok(c0.runs.filter(r => r.k === 'r').length >= 3, '칸 상자 + 순위 동그라미 + 거리 알약 ' + c0.runs.filter(r => r.k === 'r').length);
     assert.ok(await waitFor(B, async () => await B.page.evaluate(() => document.querySelector('#tab-food .food-header').classList.contains('htl-nat-op') && document.querySelectorAll('#foodList > .food-card')[0].classList.contains('htl-nat-op'))), '웹이 투명으로 제자리에 안 남았다');
     assert.strictEqual((await calls(B, 'show', 'fd:c3')).length, 0, '칸이 3개뿐이면 4번째 영역은 안 켜진다');
-    await clear(B); await B.page.evaluate(() => { document.querySelectorAll('.food-chip')[1].click ? foodFilterCat(document.querySelectorAll('.food-chip')[1], '카페') : 0; });
+    await clear(B); await B.page.evaluate(() => { foodFilterCat(document.querySelectorAll('.food-chip')[1], '카페'); });
     assert.ok(await waitFor(B, async () => (await calls(B, '', 'fd:k1')).length > 0 && (await calls(B, '', 'fd:k0')).length > 0), '바뀐 칩 상태를 안 보냈다');
-    await clear(B); await B.page.evaluate(() => { document.getElementById('foodList').innerHTML = '<div class="food-empty">😢<br>해당 카테고리 음식점이 없습니다.</div>'; });
-    assert.ok(await waitFor(B, has(B, 'show', 'fd:msg')), '빈 상태 문구 영역이 안 켜졌다');
+    // 주의: 여기서 clear 하지 않는다 — 앱이 칩을 바꾸며 이미 빈 상태 문구를 그렸으면 fd:msg 는 그때 켜졌고(같은 글자면 update 도 없다), 여기서 비우면 '안 켜졌다'로 오판한다
+    await B.page.evaluate(() => { document.getElementById('foodList').innerHTML = '<div class="food-empty">😢<br>해당 카테고리 음식점이 없습니다.</div>'; });
+    assert.ok(await waitFor(B, has(B, 'show', 'fd:msg'), 20000), '빈 상태 문구 영역이 안 켜졌다');
+    assert.ok(await waitFor(B, async () => await B.page.evaluate(() => { const e = document.querySelector('#foodList > .food-empty'); return !!e && e.classList.contains('htl-nat-op'); })), '새로 그려진 안내 문구가 투명 처리가 안 됐다(웹/네이티브가 둘 다 보이거나 둘 다 안 보임)');
     await B.ctx.close();
     const O = await fresh({ plugin: true, on: false });
     await O.page.evaluate(setup); await new Promise(r => setTimeout(r, 1500));
