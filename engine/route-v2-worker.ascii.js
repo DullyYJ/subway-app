@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-18s42";
+var ENGINE_VERSION = "route-v2-2026-10-18s43";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -11411,6 +11411,195 @@ async function handleScreenShop(request) {
 }
 // ===== SHOP ENGINE END =====
 
+// ===== SETTINGS ENGINE BEGIN =====
+// \uae38\ub3d9\ubb34 \u2014 \uc124\uc815 \ud654\uba74 \uc5d4\uc9c4(\ud654\uba74 \uad6c\uc131 JSON) \uc21c\uc218 \uacc4\uc0b0 \ubaa8\ub4c8 (route-v2 Worker \uc5d0 \ubd99\uc5ec \ub123\ub294 \uc21c\uc218 \ud568\uc218; \ub2e8\uc77c \ucd9c\ucc98)
+//
+// \u2605 \uc6d0\uce59(YJ): "\ubaa8\ub4e0 \uc5f0\uc0b0\uc740 \uc5d4\uc9c4\uc774 \ud55c\ub2e4. \uc571\uc740 \uc5d4\uc9c4\uc774 \uacc4\uc0b0\ud55c \uadf8\ub9bc\ub9cc \uadf8\ub9b0\ub2e4."  (2026-10-18 \uc11c\ubc84 \uad6c\ub3d9 \ud654\uba74 2\ud638 \u2014 \uc124\uc815 \ud0ed)
+//   \uc608\uc804\uc5d4 \uc124\uc815 \ud0ed\uc758 \uae00\u00b7\uc21c\uc11c\u00b7\uc0c1\ud0dc \ubb38\uad6c\uac00 www/index.html \uc548\uc5d0 \ud769\uc5b4\uc838 \uc788\uc5c8\ub2e4(\ucf1c\uc9d0/\uaebc\uc9d0/\ubb38\uc81c \ubb38\uad6c, \uc5b4\ub5a4 \uce74\ub4dc\ub97c \uc5b8\uc81c \ubcf4\uc77c\uc9c0 \ub4f1).
+//   \uc774\uc81c \uc571\uc740 '\uae30\uae30 \uc0ac\uc2e4(facts)'\ub9cc \ubaa8\uc544 \ubcf4\ub0b4\uace0, \uc5d4\uc9c4\uc774 \ubb34\uc5c7\uc744 \uc5b4\ub5a4 \uc21c\uc11c\ub85c \ubcf4\uc77c\uc9c0\u00b7\ubb38\uad6c\ub294 \ubb34\uc5c7\uc778\uc9c0\uae4c\uc9c0 \uc815\ud574 \ud654\uba74 JSON \uc73c\ub85c \ub0b4\ub824 \uc900\ub2e4.
+//   \uc571(\ub124\uc774\ud2f0\ube0c ScreenCore/ScreenView)\uc740 \uadf8 JSON \uc744 \uac80\uc99d\ud574 \uadf8\ub9ac\uae30\ub9cc \ud55c\ub2e4. \uc6f9 \uc124\uc815 \ud654\uba74\uc740 \ud3f4\ubc31(\uc5d4\uc9c4\u00b7\ub124\uc774\ud2f0\ube0c\uac00 \uc548 \ub420 \ub54c)\uc73c\ub85c\ub9cc \ub0a8\ub294\ub2e4.
+//
+// \uc785\ub825  settingsScreen({ cap }, facts)
+//        cap   = \uc571\uc774 \uadf8\ub9b4 \uc218 \uc788\ub294 \ud654\uba74 \uaddc\uaca9 \uc218\uc900(3 \uc774\uc0c1\uc774\uc5b4\uc57c \uc124\uc815 \ud654\uba74\uc744 \ub9cc\ub4e0\ub2e4)
+//        facts = \uc571\uc774 \ubaa8\uc740 \uae30\uae30 \uc0ac\uc2e4(\uc804\ubd80 \uc120\ud0dd \u2014 \uc5c6\uc73c\uba74 \uae30\ubcf8\uac12):
+//          id: \ud604\uc7ac \ucee4\ubba4\ub2c8\ud2f0 \uc544\uc774\ub514('' \uc774\uba74 \uc5c6\uc74c) \u00b7 np:{arrive,transfer,arrive_reco: 1|0} \u00b7 npd: \uc54c\ub9bc \uad8c\ud55c \uac70\ubd80(1|0) \u00b7 rl: \ub3c4\ucc29 \uc624\ucc28 \uae30\ub85d(1|0)
+//          th: 'dark'|'pastel' \u00b7 sam: \uac24\ub7ed\uc2dc(1|0) \u00b7 samw: \uc571 \ubc30\ud130\ub9ac '\uc81c\ud55c\ub428'(1|0) \u00b7 errn: \uc624\ub958 \ub85c\uadf8 \uac1c\uc218 \u00b7 cm: \ucd9c\ud1f4\uadfc \uc54c\ub9bc(1|0|\uc5c6\uc74c) \u00b7 ovl: \uc624\ubc84\ub808\uc774(1|0|\uc5c6\uc74c)
+//          feat: { nm|sn|htl|scr|scrs : { h: \uc774 \uae30\ub2a5\uc774 \uc788\ub098(1|0), on: \uc2a4\uc704\uce58(1|0), f: \ubb38\uc81c\ub85c \uc6f9\uc73c\ub85c \ub3cc\uc544\uac14\ub098(1|0), w: \ubb38\uc81c \uc0ac\uc720, b: \uc800\uc7a5\ubcf8 \uc0ac\uc6a9 \uc911(1|0) } }
+// \ucd9c\ub825  { ok, v:1, screen:'settings', rev, cover:'tab', head:[], body:[\ub178\ub4dc\u2026] }  \u2190 \ub178\ub4dc \uc885\ub958\ub294 native/ScreenCore.java \uc640 \uac19\ub2e4
+//        panel{kids} \u00b7 text \u00b7 box \u00b7 toggle{key} \u00b7 navrow{act} \u00b7 select{act:{a:'sel'}} \u00b7 field{key} \u00b7 button \u00b7 spacer
+//        act = {a:'set',key} (\uc2a4\uc704\uce58 \u2014 \uc571\uc774 \uba3c\uc800 \ub4a4\uc9d1\uace0 \uc54c\ub9b0\ub2e4) | {a:'call',v} (\uc571 \uc548 \ud568\uc218 \ud638\ucd9c: saveId\u00b7clearId\u00b7pol.*\u00b7errlog) | {a:'web',v} (\uc6f9 \uce74\ub4dc \uc5f4\uae30) | {a:'sel',v} (\uace0\ub974\uae30)
+// \ub9e8 \uc544\ub798 module.exports \ub294 \uc2dc\ud5d8(Node)\uc6a9\uc774\uace0 Worker \uc5d0\uc11c\ub294 \ud568\uc218 \uc120\uc5b8\ub9cc \uc4f0\uc778\ub2e4.
+'use strict';
+var SETTINGS_SCREEN_V = 1;
+
+// \uc2a4\uc704\uce58 \ud0a4 \u2192 \uc54c\ub9bc \uc885\ub958 \uc774\ub984
+var SETTINGS_NOTIF = [
+  { key: 'arrive', title: '\ub3c4\ucc29 \uc784\ubc15 \uc54c\ub9bc', desc: '\ubaa9\uc801\uc9c0 2\uc815\uac70\uc7a5 \uc804 \u00b7 1\uc815\uac70\uc7a5 \uc804 (\uc54c\ub9bc\u00b7\uc9c4\ub3d9\u00b7\uc624\ubc84\ub808\uc774 \ud14c\ub450\ub9ac)' },
+  { key: 'transfer', title: '\ud658\uc2b9 \uc54c\ub9bc', desc: '\ud658\uc2b9\uc5ed 1\uc815\uac70\uc7a5 \uc804 (\uc54c\ub9bc\u00b7\uc9c4\ub3d9\u00b7\uc624\ubc84\ub808\uc774 \ud14c\ub450\ub9ac)' },
+  { key: 'arrive_reco', title: '\ud558\ucc28 \uc804 \ucd94\ucc9c', desc: '\ub3c4\ucc29 5\ubd84 \uc804 \uce74\ud398\u00b7\uc57c\uc2dd \ucd94\ucc9c (\uc624\ubc84\ub808\uc774 \ud558\ub2e8\u00b7\uc571 \uc548 \ud31d\uc5c5)' }
+];
+// \uc2e4\ud5d8 \uae30\ub2a5 \uce74\ub4dc \u2014 \uc704\uc5d0\uc11c\ubd80\ud130 \uc774 \uc21c\uc11c\ub85c \ubcf4\uc778\ub2e4
+var SETTINGS_FEATS = [
+  { k: 'nm', title: '\ubd80\ub4dc\ub7ec\uc6b4 \ub178\uc120\ub3c4', desc: '\ub178\uc120\ub3c4\ub97c \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc11c \ud655\ub300\u00b7\ucd95\uc18c\u00b7\uc774\ub3d9\uc774 \ubd80\ub4dc\ub7fd\uace0 \uae00\uc790\uac00 \uae68\uc9c0\uc9c0 \uc54a\uc544\uc694. \ubb38\uc81c\uac00 \uc788\uc73c\uba74 \uaebc\uc11c \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \ubcfc \uc218 \uc788\uc5b4\uc694.',
+    off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \uc6f9 \ub178\uc120\ub3c4\ub97c \uc4f0\ub294 \uc911\uc774\uc5d0\uc694.', bad: '\ub124\uc774\ud2f0\ube0c \uc9c0\ub3c4\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc6f9 \ub178\uc120\ub3c4\ub85c \ub300\uc2e0 \ubcf4\uc5ec\uc8fc\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \ub178\uc120\ub3c4\ub97c \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824 \ud655\ub300\u00b7\ucd95\uc18c\uac00 \ubd80\ub4dc\ub7ec\uc6cc\uc694.' },
+  { k: 'sn', title: '\ubd80\ub4dc\ub7ec\uc6b4 \uce90\ub9ad\ud130 \uc7a5\uba74', desc: '\uce90\ub9ad\ud130 \uc7a5\uba74\uc744 \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc11c \ub354 \ubd80\ub4dc\ub7fd\uace0(\ucd5c\ub300 120Hz), \uce90\ub9ad\ud130\ub97c \uafb9 \ub20c\ub7ec \uc62e\uae30\uace0 \ub193\uc744 \ub54c \uc9c4\ub3d9\uc774 \uc640\uc694. \ubb38\uc81c\uac00 \uc788\uc73c\uba74 \uaebc\uc11c \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \ubcfc \uc218 \uc788\uc5b4\uc694.',
+    off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9 \ud654\uba74)\uc73c\ub85c \uadf8\ub824\uc694.', bad: '\ub124\uc774\ud2f0\ube0c \uc7a5\uba74\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc6f9 \ud654\uba74\uc73c\ub85c \ub300\uc2e0 \ubcf4\uc5ec\uc8fc\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824 \ub354 \ubd80\ub4dc\ub7fd\uace0, \uce90\ub9ad\ud130\ub97c \ub193\uc744 \ub54c \uc9c4\ub3d9\uc774 \uc640\uc694.' },
+  { k: 'htl', title: '\ub124\uc774\ud2f0\ube0c \uacbd\ub85c \ud654\uba74', desc: '\ud648 \uacbd\ub85c \ud654\uba74\uc758 \uac00\ub85c \ud0c0\uc784\ub77c\uc778\uacfc \ud604\uc7ac \uc704\uce58 \uc810\uc744 \uc6f9\uc774 \uc544\ub2c8\ub77c \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694(\uc571 \uc804\uccb4\ub97c \ub124\uc774\ud2f0\ube0c\ub85c \uc62e\uae30\ub294 \uccab \ub2e8\uacc4). \ubb38\uc81c\uac00 \uc788\uc73c\uba74 \uc790\ub3d9\uc73c\ub85c \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \ub3cc\uc544\uac00\uc694.',
+    off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9 \ud654\uba74)\uc73c\ub85c \uadf8\ub824\uc694.', bad: '\ub124\uc774\ud2f0\ube0c \uacbd\ub85c \ud654\uba74\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc6f9 \ud654\uba74\uc73c\ub85c \ub300\uc2e0 \ubcf4\uc5ec\uc8fc\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \uacbd\ub85c \uce74\ub4dc \uba38\ub9ac\uc904\u00b7\ud0c0\uc784\ub77c\uc778\u00b7\ud604\uc7ac \uc704\uce58 \uc810\uc744 \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694(\uc2e4\ud5d8 \uc911).' },
+  { k: 'scr', title: '\ub124\uc774\ud2f0\ube0c \uc1fc\ud551 \ud654\uba74', desc: '\uc1fc\ud551 \ud0ed\uc758 \uc548\ub0b4 \ubb38\uad6c\u00b7\ucfe0\ud321 \uac80\uc0c9\uc904\u00b7\uce74\ud14c\uace0\ub9ac\u00b7\uc0c1\ud488 \ubaa9\ub85d\uc744 \uc5d4\uc9c4\uc774 \ud654\uba74 \uad6c\uc131\uae4c\uc9c0 \uc815\ud574 \ub0b4\ub824\uc8fc\uace0, \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694(\ubd80\ub4dc\ub7ec\uc6b4 \uc2a4\ud06c\ub864). \ub9c8\uc9c0\ub9c9 \ud654\uba74\uc740 \uc800\uc7a5\ud574 \ub450\uc5b4 \ubc14\ub85c \ub728\uace0, \ubb38\uc81c\uac00 \uc0dd\uae30\uba74 \uc608\uc804 \uc6f9 \ud654\uba74\uc73c\ub85c \ub3cc\uc544\uac00\uc694.',
+    off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9 \uc1fc\ud551 \ud654\uba74)\uc73c\ub85c \uadf8\ub824\uc694.', bad: '\ub124\uc774\ud2f0\ube0c \uc1fc\ud551 \ud654\uba74\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc6f9 \ud654\uba74\uc73c\ub85c \ub300\uc2e0 \ubcf4\uc5ec\uc8fc\uace0 \uc788\uc5b4\uc694', stale: '\uc5d4\uc9c4\uc774 \uc900 \ud654\uba74\uc774 \uc62c\ubc14\ub974\uc9c0 \uc54a\uc544 \uc800\uc7a5\ud574 \ub454 \ud654\uba74\uc744 \uc4f0\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \uc1fc\ud551 \ud0ed\uc758 \uc548\ub0b4\u00b7\uac80\uc0c9\uc904\u00b7\uce74\ud14c\uace0\ub9ac\u00b7\uc0c1\ud488 \ubaa9\ub85d\uc744 \uc5d4\uc9c4\uc774 \uc815\ud55c \ub300\ub85c \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694(\uc2e4\ud5d8 \uc911).' },
+  { k: 'scrs', title: '\ub124\uc774\ud2f0\ube0c \uc124\uc815 \ud654\uba74', desc: '\uc9c0\uae08 \ubcf4\uace0 \uc788\ub294 \uc774 \uc124\uc815 \ud654\uba74\uc744 \uc5d4\uc9c4\uc774 \ud654\uba74 \uad6c\uc131\uae4c\uc9c0 \uc815\ud574 \ub0b4\ub824\uc8fc\uace0, \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694. \ub044\uba74 \uc608\uc804 \uc6f9 \uc124\uc815 \ud654\uba74\uc73c\ub85c \ub3cc\uc544\uac00\uc694.',
+    off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9 \uc124\uc815 \ud654\uba74)\uc73c\ub85c \uadf8\ub824\uc694.', bad: '\ub124\uc774\ud2f0\ube0c \uc124\uc815 \ud654\uba74\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc6f9 \ud654\uba74\uc73c\ub85c \ub300\uc2e0 \ubcf4\uc5ec\uc8fc\uace0 \uc788\uc5b4\uc694', stale: '\uc5d4\uc9c4\uc774 \uc900 \ud654\uba74\uc774 \uc62c\ubc14\ub974\uc9c0 \uc54a\uc544 \uc800\uc7a5\ud574 \ub454 \ud654\uba74\uc744 \uc4f0\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \uc124\uc815 \ud654\uba74\uc744 \uc5d4\uc9c4\uc774 \uc815\ud55c \ub300\ub85c \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694(\uc2e4\ud5d8 \uc911).' }
+];
+
+function settingsFlag(v, def) { return v == null ? def : (v === 1 || v === true || v === '1'); }
+function settingsStr(v, n) { return typeof v === 'string' ? v.slice(0, n) : ''; }
+function settingsFacts(f) {
+  f = (f && typeof f === 'object') ? f : {};
+  var np = (f.np && typeof f.np === 'object') ? f.np : {}, feat = (f.feat && typeof f.feat === 'object') ? f.feat : {};
+  var o = {
+    id: settingsStr(f.id, 12), np: {}, npd: settingsFlag(f.npd, false), rl: settingsFlag(f.rl, true), th: f.th === 'dark' ? 'dark' : 'pastel',
+    sam: settingsFlag(f.sam, false), samw: settingsFlag(f.samw, false), errn: Math.max(0, Math.min(999, Math.floor(Number(f.errn) || 0))),
+    cm: f.cm == null ? null : settingsFlag(f.cm, false), ovl: f.ovl == null ? null : settingsFlag(f.ovl, false), feat: {}
+  };
+  SETTINGS_NOTIF.forEach(function (n) { o.np[n.key] = settingsFlag(np[n.key], true); });          // \uc54c\ub9bc\uc740 \uae30\ubcf8 \ucf1c\uc9d0(\uc800\uc7a5\uac12\uc774 0 \uc77c \ub54c\ub9cc \uaebc\uc9d0)
+  SETTINGS_FEATS.forEach(function (d) {
+    var x = (feat[d.k] && typeof feat[d.k] === 'object') ? feat[d.k] : {};
+    o.feat[d.k] = { h: settingsFlag(x.h, false), on: settingsFlag(x.on, false), f: settingsFlag(x.f, false), w: settingsStr(x.w, 140), b: settingsFlag(x.b, false) };
+  });
+  return o;
+}
+function settingsHash(s) {                       // djb2 \u2014 \uac19\uc740 \ud654\uba74\uc774\uba74 \uac19\uc740 rev (\uc571\uc774 '\ubc14\ub00c\uc5c8\ub098'\ub9cc \ubcf8\ub2e4)
+  var h = 5381;
+  for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+function settingsStat(d, x) {
+  if (!x.on) return d.off;
+  if (x.f) return d.bad + (x.w ? ' (' + x.w + ')' : '') + '. \uc2a4\uc704\uce58\ub97c \uaed0\ub2e4 \ucf1c\uba74 \ub2e4\uc2dc \uc2dc\ub3c4\ud574\uc694.';
+  if (x.b && d.stale) return d.stale + (x.w ? ' (' + x.w + ')' : '') + '.';
+  return d.ok;
+}
+
+// \u2500\u2500 \ub178\ub4dc \ub9cc\ub4e4\uae30(\ubaa8\uc591 \ud55c \uacf3) \u2500\u2500
+function settingsTitleN(s, mb) { return { t: 'text', s: s, size: 15, bold: true, color: 'text', pad: [0, 0, 0, mb == null ? 4 : mb], lh: 1.3 }; }
+function settingsDescN(s, mb, hl) { var n = { t: 'text', s: s, size: 12, color: 'sub', lh: 1.5, pad: [0, 0, 0, mb == null ? 12 : mb] }; if (hl) n.hl = hl; return n; }
+function settingsPanelN(kids, mt) { return { t: 'panel', pad: [14, mt == null ? 12 : mt, 14, 0], ip: [16, 16, 16, 16], fill: 'card', line: 'border', r: 14, kids: kids }; }
+function settingsBoldN(parts) {                           // [[\uae00, \uad75\uac8c 0|1], \u2026] \u2192 { s, hl }
+  var s = '', hl = [];
+  parts.forEach(function (p) { if (p[1]) hl.push([s.length, s.length + p[0].length]); s += p[0]; });
+  return { s: s, hl: hl };
+}
+function settingsStatN(s) { return { t: 'box', s: s, size: 11.5, lh: 1.6, color: 'text', fill: 'bg', line: 'border', r: 8, ip: [10, 8, 10, 8], pad: [0, 0, 0, 0] }; }
+function settingsNavN(title, sub, act, top) { var n = { t: 'navrow', title: title, act: act, top: !!top, size: 13 }; if (sub) n.sub = sub; return n; }
+
+function settingsScreen(inp, factsIn) {
+  inp = inp || {};
+  if (!(Number(inp.cap) >= 3)) return { ok: false, error: 'cap' };
+  var f = settingsFacts(factsIn), body = [];
+
+  // 1) \ucee4\ubba4\ub2c8\ud2f0 \uc544\uc774\ub514
+  var idKids = [settingsTitleN('\ucee4\ubba4\ub2c8\ud2f0 \uc544\uc774\ub514', 6)];
+  var d1 = settingsBoldN([['\uc544\uc774\ub514\ub97c \ub4f1\ub85d\ud558\uba74 \uac8c\uc2dc\uae00 \uc791\uc131\uacfc \uc2e4\uc2dc\uac04 \ucc44\ud305\uc5d0 \ucc38\uc5ec\ud560 \uc218 \uc788\uc5b4\uc694.\n\uc544\uc774\ub514 \uc5c6\uc774\ub3c4 \uae00\uacfc \ucc44\ud305\uc744 ', 0], ['\uad6c\uacbd', 1], ['\ud558\ub294 \uac74 \uc790\uc720\ub86d\uac8c \uac00\ub2a5\ud569\ub2c8\ub2e4.', 0]]);
+  idKids.push(settingsDescN(d1.s, 14, d1.hl));
+  if (f.id) {
+    var cur = settingsBoldN([['\ud604\uc7ac \uc544\uc774\ub514  ', 0], [f.id, 1]]);
+    idKids.push({ t: 'box', s: cur.s, hl: cur.hl, size: 14, lh: 1.4, color: 'gold', fill: '#1c1c1e', line: '', tc: 'gold', r: 10, ip: [13, 11, 13, 11], pad: [0, 0, 0, 12] });
+  }
+  idKids.push({ t: 'field', key: 'cid', hint: '\uc544\uc774\ub514 \uc785\ub825 (2~12\uc790, \ud55c\uae00/\uc601\ubb38/\uc22b\uc790)', value: f.id, maxlen: 12, h: 44, size: 14, r: 9, pad: [0, 0, 0, 10] });
+  idKids.push({ t: 'button', s: '\uc544\uc774\ub514 \uc800\uc7a5', size: 14, h: 44, r: 10, bold: true, fill: 'gold', line: 'none', tc: '#121214', act: { a: 'call', v: 'saveId' } });
+  if (f.id) idKids.push({ t: 'button', s: '\uc544\uc774\ub514 \uc0ad\uc81c', size: 12, h: 38, r: 10, bold: true, fill: 'none', line: 'border2', tc: '#ff453a', pad: [0, 8, 0, 0], act: { a: 'call', v: 'clearId' } });
+  body.push(settingsPanelN(idKids, 16));
+  body.push({ t: 'text', s: '\uc544\uc774\ub514\ub294 \uc774 \uae30\uae30\uc5d0\ub9cc \uc800\uc7a5\ub418\uba70,\n\uc791\uc131\ud55c \uae00\u00b7\ucc44\ud305\uc5d0 \ud45c\uc2dc\ub429\ub2c8\ub2e4.', size: 11, color: 'sub', lh: 1.5, align: 'center', pad: [16, 14, 16, 0] });
+
+  // 2) \uc54c\ub9bc \uc124\uc815
+  var nk = [settingsTitleN('\uc54c\ub9bc \uc124\uc815', 4), settingsDescN('\ubc1b\uace0 \uc2f6\uc740 \uc54c\ub9bc\ub9cc \uace8\ub77c\uc11c \ucf1c\uace0 \ub04c \uc218 \uc788\uc5b4\uc694. \ub044\uba74 \uc9c4\ub3d9\ub3c4 \ud568\uaed8 \uaebc\uc838\uc694.', 12)];
+  if (f.npd) nk.push({ t: 'box', s: '\uc54c\ub9bc \uad8c\ud55c\uc774 \uaebc\uc838 \uc788\uc5b4\uc694. \uae30\uae30 \uc124\uc815 > \uc571 > \uae38\ub3d9\ubb34 > \uc54c\ub9bc\uc5d0\uc11c \ud5c8\uc6a9\ud574\uc8fc\uc138\uc694.', size: 12, lh: 1.5, tc: '#ff453a', color: 'text', fill: 'rgba(255,69,58,0.12)', line: 'rgba(255,69,58,0.35)', r: 10, ip: [12, 10, 12, 10], pad: [0, 0, 0, 4] });
+  SETTINGS_NOTIF.forEach(function (n, i) {
+    nk.push({ t: 'toggle', key: 'n.' + n.key, title: n.title, sub: n.desc, on: !!f.np[n.key], top: true, vp: 9, size: 13.5, ssize: 11, onc: '#30d158' });
+  });
+  body.push(settingsPanelN(nk));
+
+  // 3) \uac24\ub7ed\uc2dc \uc804\uc6a9
+  if (f.sam) {
+    var sk = [settingsTitleN('\uac24\ub7ed\uc2dc \ubc31\uadf8\ub77c\uc6b4\ub4dc \uc720\uc9c0', 4)];
+    var sd = settingsBoldN([['\uac24\ub7ed\uc2dc\ub294 \uba70\uce60 \uc548 \uc4f4 \uc571\uc744 \uc790\ub3d9 \uc808\uc804\uc2dc\ucf1c \ud654\uba74\uc774 \uaebc\uc9c4 \ub3d9\uc548\uc758 \ud558\ucc28 \uc54c\ub9bc\uc774 \uba48\ucd9c \uc218 \uc788\uc5b4\uc694. \uae38\ub3d9\ubb34\ub97c ', 0], ['\uc790\ub3d9\uc73c\ub85c \uc808\uc804\ud558\uc9c0 \uc54a\ub294 \uc571', 1], ['\uc5d0 \ub123\uc5b4 \ub450\uba74 \uc548\uc804\ud574\uc694.', 0]]);
+    sk.push(settingsDescN(sd.s, 8, sd.hl));
+    if (f.samw) sk.push({ t: 'box', s: '\uc774 \uc571\uc758 \ubc30\ud130\ub9ac \uc0ac\uc6a9\uc774 \uc81c\ud55c\ub428\uc73c\ub85c \ub418\uc5b4 \uc788\uc5b4\uc694. \uc571 \uc815\ubcf4 > \ubc30\ud130\ub9ac\uc5d0\uc11c \uc81c\ud55c \uc5c6\uc74c\uc73c\ub85c \ubc14\uafd4 \uc8fc\uc138\uc694.', size: 12, lh: 1.5, tc: '#ff9f0a', color: 'text', fill: 'rgba(255,159,10,0.12)', line: 'rgba(255,159,10,0.35)', r: 10, ip: [12, 10, 12, 10], pad: [0, 0, 0, 4] });
+    sk.push(settingsNavN('\uc790\ub3d9 \uc808\uc804 \uc81c\uc678 \uc124\uc815 \uc5f4\uae30', f.samw ? '\uc81c\ud55c\ub428' : '', { a: 'web', v: 'sam' }, true));
+    body.push(settingsPanelN(sk));
+  }
+
+  // 4) \uc2e4\ud5d8 \uae30\ub2a5(\uc788\ub294 \uac83\ub9cc)
+  SETTINGS_FEATS.forEach(function (d) {
+    var x = f.feat[d.k];
+    if (!x.h) return;
+    var on = x.on && !x.f;
+    body.push(settingsPanelN([
+      { t: 'toggle', key: 'f.' + d.k, title: d.title, on: on, big: true, size: 15, vp: 0, onc: 'gold', pad: [0, 0, 0, 6] },
+      settingsDescN(d.desc, 8),
+      settingsStatN(settingsStat(d, x))
+    ]));
+  });
+
+  // 5) \uc548\ub0b4 \uc815\ud655\ub3c4
+  body.push(settingsPanelN([
+    settingsTitleN('\uc548\ub0b4 \uc815\ud655\ub3c4 \ud5a5\uc0c1', 2),
+    { t: 'toggle', key: 'rl', title: '\ub3c4\ucc29 \uc624\ucc28 \uc775\uba85 \uae30\ub85d', sub: '\ubaa9\uc801\uc9c0\uc5d0 \ub3c4\ucc29\ud558\uba74 \uc608\uc0c1 \uc2dc\uac04\uacfc \uc2e4\uc81c \uc2dc\uac04\uc758 \ucc28\uc774\ub9cc \uc775\uba85\uc73c\ub85c \ubcf4\ub0b4\uc694. \uc5ed \uc774\ub984\u00b7\uc704\uce58\u00b7\uae30\uae30 \uc815\ubcf4\ub294 \ubcf4\ub0b4\uc9c0 \uc54a\uc544\uc694.', on: f.rl, vp: 6, size: 13.5, ssize: 11, onc: '#30d158' }
+  ]));
+
+  // 6) \uc6f9 \uce74\ub4dc\ub85c \uc774\uc5b4\uc9c0\ub294 \uae30\ub2a5\ub4e4(\ubcf5\uc7a1\ud55c \uc785\ub825\u00b7\uc2dc\ud5d8 \ub3c4\uad6c\ub294 \uae30\uc874 \uc6f9 \uce74\ub4dc\ub97c \uadf8\ub300\ub85c \uc5f0\ub2e4)
+  var wk = [settingsTitleN('\uae30\ub2a5 \uc124\uc815', 2), settingsDescN('\uc2dc\uac04\u00b7\uc7a5\uc18c\u00b7\uc2dc\ud5d8\ucc98\ub7fc \uc785\ub825\uc774 \ub9ce\uc740 \uc124\uc815\uc740 \ub20c\ub7ec\uc11c \uc5f4\uc5b4\uc694.', 4)];
+  wk.push(settingsNavN('\ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551 \uc54c\ub9bc', f.cm == null ? '' : (f.cm ? '\ucf1c\uc9d0' : '\uaebc\uc9d0'), { a: 'web', v: 'cm' }, true));
+  wk.push(settingsNavN('\uce90\ub9ad\ud130 \uc2dc\uacc4 \uc704\uc82f', '', { a: 'web', v: 'gw' }, true));
+  wk.push(settingsNavN('\ud558\ucc28 5\ubd84 \uc804 \ucd94\ucc9c \uc2dc\ud5d8', '', { a: 'web', v: 'arr' }, true));
+  wk.push(settingsNavN('\ub2e4\ub978 \uc571 \uc704\uc5d0 \ud45c\uc2dc', f.ovl == null ? '' : (f.ovl ? '\ucf1c\uc9d0' : '\uaebc\uc9d0'), { a: 'web', v: 'ovl' }, true));
+  wk.push(settingsNavN('\uac1c\ubc1c\uc790 \ub3c4\uad6c', '', { a: 'web', v: 'dev' }, true));
+  body.push(settingsPanelN(wk));
+
+  // 7) \ud14c\ub9c8
+  var dk = f.th === 'dark';
+  body.push(settingsPanelN([
+    settingsTitleN('\ud14c\ub9c8 \uc124\uc815', 4), settingsDescN('\uc571 \uc804\uccb4 \uc0c9\uc0c1 \ud14c\ub9c8\ub97c \ubcc0\uacbd\ud560 \uc218 \uc788\uc5b4\uc694.', 14),
+    { t: 'select', title: '\ub2e4\ud06c \ube14\ub799', sub: '\uae4a\uace0 \uc120\uba85\ud55c \ub2e4\ud06c \ud14c\ub9c8', on: dk, act: { a: 'sel', v: 'dark' }, fill: '#18181a', line: 'border', onl: '#d4af37', tc: '#f2f2f7', sc: '#8e8e93', chk: '#d4af37', ckf: '#121214',
+      prev: ['#121214', '#1c1c1e', '#3a3a3c', '#d4af37', '#3a3a3c'], pad: [0, 0, 0, 10] },
+    { t: 'select', title: '\ud558\ub298 \ud30c\uc2a4\ud154', sub: '\ub9d1\uace0 \uc2dc\uc6d0\ud55c \ud558\ub298\uc0c9 \ud14c\ub9c8', on: !dk, act: { a: 'sel', v: 'pastel' }, fill: 'card', line: 'border', onl: '#1d9bf0', chk: '#1d9bf0', ckf: '#ffffff',
+      prev: ['#f0f4f8', '#ffffff', '#dce8f0', '#1d9bf0', '#dce8f0'] }
+  ]));
+
+  // 8) \uc57d\uad00
+  body.push(settingsPanelN([
+    settingsTitleN('\uc57d\uad00 \ubc0f \uc815\ucc45', 4),
+    settingsNavN('\uac1c\uc778\uc815\ubcf4\ucc98\ub9ac\ubc29\uce68', '', { a: 'call', v: 'pol.privacy' }, true),
+    settingsNavN('\uc704\uce58\uae30\ubc18\uc11c\ube44\uc2a4 \uc774\uc6a9\uc57d\uad00', '', { a: 'call', v: 'pol.location' }, true),
+    settingsNavN('\ub370\uc774\ud130 \ucd9c\ucc98 \ubc0f \uace0\uc9c0', '', { a: 'call', v: 'pol.opensource' }, true),
+    settingsNavN('\uc624\ub958 \ub85c\uadf8', f.errn > 0 ? String(f.errn) : '', { a: 'call', v: 'errlog' }, true)
+  ]));
+  body.push({ t: 'spacer', h: 28 });
+
+  var out = { ok: true, v: 1, screen: 'settings', cover: 'tab', head: [], body: body };
+  out.rev = 's' + SETTINGS_SCREEN_V + ':' + settingsHash(JSON.stringify(body));
+  return out;
+}
+// \uc124\uc815 \ud654\uba74 \uc5d4\uc9c4 Worker \uc5f0\uacb0\ubd80 \u2014 GET /screen/settings (engine/settings.js \uc758 settingsScreen \uc744 \ubd80\ub978\ub2e4). route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/screen/settings") return handleScreenSettings(request);` \ub97c \ub123\ub294\ub2e4.
+//   \ucffc\ub9ac: cap(\uc571\uc774 \uadf8\ub9b4 \uc218 \uc788\ub294 \ud654\uba74 \uaddc\uaca9 \uc218\uc900, 3 \uc774\uc0c1) \u00b7 f(\uc571\uc774 \ubaa8\uc740 \uae30\uae30 \uc0ac\uc2e4 JSON \u2014 \uae38\uc774 3000 \uc790 \uc774\ud558)
+//   \uc5d4\uc9c4\uc740 \uc544\ubb34\uac83\ub3c4 \uc800\uc7a5\ud558\uc9c0 \uc54a\ub294\ub2e4(\uc774 \uae30\uae30\uc758 \uc0ac\uc2e4\ub9cc \ubc1b\uc544 \ud654\uba74\uc744 \uacc4\uc0b0\ud574 \ub3cc\ub824\uc900\ub2e4). \uac1c\uc778 \uc2dd\ubcc4 \uc815\ubcf4\ub294 \uc544\uc774\ub514(\uc774 \uae30\uae30 \ud654\uba74\uc5d0 \ub418\ub3cc\ub824 \uc904 \ubfd0)\ub9cc \uc624\uac04\ub2e4.
+async function handleScreenSettings(request) {
+  var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Cache-Control": "no-store" };
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: H });
+  var q = new URL(request.url).searchParams, facts = null, raw = q.get("f");
+  if (raw) {
+    if (raw.length > 3000) return new Response(JSON.stringify({ ok: false, error: "facts-too-long" }), { status: 400, headers: H });
+    try { facts = JSON.parse(raw); } catch (e) { return new Response(JSON.stringify({ ok: false, error: "facts-bad-json" }), { status: 400, headers: H }); }
+  }
+  var out;
+  try { out = settingsScreen({ cap: Number(q.get("cap")) || 0 }, facts); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2) }), { status: 500, headers: H }); }
+  if (!out || !out.ok) return new Response(JSON.stringify(out || { ok: false, error: "fail" }), { status: 400, headers: H });
+  out.ver = ENGINE_VERSION;
+  return new Response(JSON.stringify(out), { headers: H });
+}
+// ===== SETTINGS ENGINE END =====
+
 async function handleFetch(request, env, ctx) {
   try { await holEnsure(env); } catch (e) {}
   const url = new URL(request.url);
@@ -11422,6 +11611,7 @@ async function handleFetch(request, env, ctx) {
   if (url.pathname === "/widget-say") return handleWidgetSay(request, env, ctx);
   if (url.pathname === "/scene") return handleScene(request);
   if (url.pathname === "/screen/shop") return handleScreenShop(request);
+  if (url.pathname === "/screen/settings") return handleScreenSettings(request);
   if (url.pathname === "/stops-near") {
     const lat = parseFloat(url.searchParams.get("lat"));
     const lng = parseFloat(url.searchParams.get("lng"));

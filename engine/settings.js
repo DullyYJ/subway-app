@@ -1,0 +1,171 @@
+// 길동무 — 설정 화면 엔진(화면 구성 JSON) 순수 계산 모듈 (route-v2 Worker 에 붙여 넣는 순수 함수; 단일 출처)
+//
+// ★ 원칙(YJ): "모든 연산은 엔진이 한다. 앱은 엔진이 계산한 그림만 그린다."  (2026-10-18 서버 구동 화면 2호 — 설정 탭)
+//   예전엔 설정 탭의 글·순서·상태 문구가 www/index.html 안에 흩어져 있었다(켜짐/꺼짐/문제 문구, 어떤 카드를 언제 보일지 등).
+//   이제 앱은 '기기 사실(facts)'만 모아 보내고, 엔진이 무엇을 어떤 순서로 보일지·문구는 무엇인지까지 정해 화면 JSON 으로 내려 준다.
+//   앱(네이티브 ScreenCore/ScreenView)은 그 JSON 을 검증해 그리기만 한다. 웹 설정 화면은 폴백(엔진·네이티브가 안 될 때)으로만 남는다.
+//
+// 입력  settingsScreen({ cap }, facts)
+//        cap   = 앱이 그릴 수 있는 화면 규격 수준(3 이상이어야 설정 화면을 만든다)
+//        facts = 앱이 모은 기기 사실(전부 선택 — 없으면 기본값):
+//          id: 현재 커뮤니티 아이디('' 이면 없음) · np:{arrive,transfer,arrive_reco: 1|0} · npd: 알림 권한 거부(1|0) · rl: 도착 오차 기록(1|0)
+//          th: 'dark'|'pastel' · sam: 갤럭시(1|0) · samw: 앱 배터리 '제한됨'(1|0) · errn: 오류 로그 개수 · cm: 출퇴근 알림(1|0|없음) · ovl: 오버레이(1|0|없음)
+//          feat: { nm|sn|htl|scr|scrs : { h: 이 기능이 있나(1|0), on: 스위치(1|0), f: 문제로 웹으로 돌아갔나(1|0), w: 문제 사유, b: 저장본 사용 중(1|0) } }
+// 출력  { ok, v:1, screen:'settings', rev, cover:'tab', head:[], body:[노드…] }  ← 노드 종류는 native/ScreenCore.java 와 같다
+//        panel{kids} · text · box · toggle{key} · navrow{act} · select{act:{a:'sel'}} · field{key} · button · spacer
+//        act = {a:'set',key} (스위치 — 앱이 먼저 뒤집고 알린다) | {a:'call',v} (앱 안 함수 호출: saveId·clearId·pol.*·errlog) | {a:'web',v} (웹 카드 열기) | {a:'sel',v} (고르기)
+// 맨 아래 module.exports 는 시험(Node)용이고 Worker 에서는 함수 선언만 쓰인다.
+'use strict';
+var SETTINGS_SCREEN_V = 1;
+
+// 스위치 키 → 알림 종류 이름
+var SETTINGS_NOTIF = [
+  { key: 'arrive', title: '도착 임박 알림', desc: '목적지 2정거장 전 · 1정거장 전 (알림·진동·오버레이 테두리)' },
+  { key: 'transfer', title: '환승 알림', desc: '환승역 1정거장 전 (알림·진동·오버레이 테두리)' },
+  { key: 'arrive_reco', title: '하차 전 추천', desc: '도착 5분 전 카페·야식 추천 (오버레이 하단·앱 안 팝업)' }
+];
+// 실험 기능 카드 — 위에서부터 이 순서로 보인다
+var SETTINGS_FEATS = [
+  { k: 'nm', title: '부드러운 노선도', desc: '노선도를 기기가 직접 그려서 확대·축소·이동이 부드럽고 글자가 깨지지 않아요. 문제가 있으면 꺼서 예전 방식으로 볼 수 있어요.',
+    off: '꺼짐 — 예전 웹 노선도를 쓰는 중이에요.', bad: '네이티브 지도에 문제가 있어 웹 노선도로 대신 보여주고 있어요', ok: '켜짐 — 노선도를 기기가 직접 그려 확대·축소가 부드러워요.' },
+  { k: 'sn', title: '부드러운 캐릭터 장면', desc: '캐릭터 장면을 기기가 직접 그려서 더 부드럽고(최대 120Hz), 캐릭터를 꾹 눌러 옮기고 놓을 때 진동이 와요. 문제가 있으면 꺼서 예전 방식으로 볼 수 있어요.',
+    off: '꺼짐 — 예전 방식(웹 화면)으로 그려요.', bad: '네이티브 장면에 문제가 있어 웹 화면으로 대신 보여주고 있어요', ok: '켜짐 — 기기가 직접 그려 더 부드럽고, 캐릭터를 놓을 때 진동이 와요.' },
+  { k: 'htl', title: '네이티브 경로 화면', desc: '홈 경로 화면의 가로 타임라인과 현재 위치 점을 웹이 아니라 기기가 직접 그려요(앱 전체를 네이티브로 옮기는 첫 단계). 문제가 있으면 자동으로 예전 방식으로 돌아가요.',
+    off: '꺼짐 — 예전 방식(웹 화면)으로 그려요.', bad: '네이티브 경로 화면에 문제가 있어 웹 화면으로 대신 보여주고 있어요', ok: '켜짐 — 경로 카드 머리줄·타임라인·현재 위치 점을 기기가 직접 그려요(실험 중).' },
+  { k: 'scr', title: '네이티브 쇼핑 화면', desc: '쇼핑 탭의 안내 문구·쿠팡 검색줄·카테고리·상품 목록을 엔진이 화면 구성까지 정해 내려주고, 기기가 직접 그려요(부드러운 스크롤). 마지막 화면은 저장해 두어 바로 뜨고, 문제가 생기면 예전 웹 화면으로 돌아가요.',
+    off: '꺼짐 — 예전 방식(웹 쇼핑 화면)으로 그려요.', bad: '네이티브 쇼핑 화면에 문제가 있어 웹 화면으로 대신 보여주고 있어요', stale: '엔진이 준 화면이 올바르지 않아 저장해 둔 화면을 쓰고 있어요', ok: '켜짐 — 쇼핑 탭의 안내·검색줄·카테고리·상품 목록을 엔진이 정한 대로 기기가 직접 그려요(실험 중).' },
+  { k: 'scrs', title: '네이티브 설정 화면', desc: '지금 보고 있는 이 설정 화면을 엔진이 화면 구성까지 정해 내려주고, 기기가 직접 그려요. 끄면 예전 웹 설정 화면으로 돌아가요.',
+    off: '꺼짐 — 예전 방식(웹 설정 화면)으로 그려요.', bad: '네이티브 설정 화면에 문제가 있어 웹 화면으로 대신 보여주고 있어요', stale: '엔진이 준 화면이 올바르지 않아 저장해 둔 화면을 쓰고 있어요', ok: '켜짐 — 설정 화면을 엔진이 정한 대로 기기가 직접 그려요(실험 중).' }
+];
+
+function settingsFlag(v, def) { return v == null ? def : (v === 1 || v === true || v === '1'); }
+function settingsStr(v, n) { return typeof v === 'string' ? v.slice(0, n) : ''; }
+function settingsFacts(f) {
+  f = (f && typeof f === 'object') ? f : {};
+  var np = (f.np && typeof f.np === 'object') ? f.np : {}, feat = (f.feat && typeof f.feat === 'object') ? f.feat : {};
+  var o = {
+    id: settingsStr(f.id, 12), np: {}, npd: settingsFlag(f.npd, false), rl: settingsFlag(f.rl, true), th: f.th === 'dark' ? 'dark' : 'pastel',
+    sam: settingsFlag(f.sam, false), samw: settingsFlag(f.samw, false), errn: Math.max(0, Math.min(999, Math.floor(Number(f.errn) || 0))),
+    cm: f.cm == null ? null : settingsFlag(f.cm, false), ovl: f.ovl == null ? null : settingsFlag(f.ovl, false), feat: {}
+  };
+  SETTINGS_NOTIF.forEach(function (n) { o.np[n.key] = settingsFlag(np[n.key], true); });          // 알림은 기본 켜짐(저장값이 0 일 때만 꺼짐)
+  SETTINGS_FEATS.forEach(function (d) {
+    var x = (feat[d.k] && typeof feat[d.k] === 'object') ? feat[d.k] : {};
+    o.feat[d.k] = { h: settingsFlag(x.h, false), on: settingsFlag(x.on, false), f: settingsFlag(x.f, false), w: settingsStr(x.w, 140), b: settingsFlag(x.b, false) };
+  });
+  return o;
+}
+function settingsHash(s) {                       // djb2 — 같은 화면이면 같은 rev (앱이 '바뀌었나'만 본다)
+  var h = 5381;
+  for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+function settingsStat(d, x) {
+  if (!x.on) return d.off;
+  if (x.f) return d.bad + (x.w ? ' (' + x.w + ')' : '') + '. 스위치를 껐다 켜면 다시 시도해요.';
+  if (x.b && d.stale) return d.stale + (x.w ? ' (' + x.w + ')' : '') + '.';
+  return d.ok;
+}
+
+// ── 노드 만들기(모양 한 곳) ──
+function settingsTitleN(s, mb) { return { t: 'text', s: s, size: 15, bold: true, color: 'text', pad: [0, 0, 0, mb == null ? 4 : mb], lh: 1.3 }; }
+function settingsDescN(s, mb, hl) { var n = { t: 'text', s: s, size: 12, color: 'sub', lh: 1.5, pad: [0, 0, 0, mb == null ? 12 : mb] }; if (hl) n.hl = hl; return n; }
+function settingsPanelN(kids, mt) { return { t: 'panel', pad: [14, mt == null ? 12 : mt, 14, 0], ip: [16, 16, 16, 16], fill: 'card', line: 'border', r: 14, kids: kids }; }
+function settingsBoldN(parts) {                           // [[글, 굵게 0|1], …] → { s, hl }
+  var s = '', hl = [];
+  parts.forEach(function (p) { if (p[1]) hl.push([s.length, s.length + p[0].length]); s += p[0]; });
+  return { s: s, hl: hl };
+}
+function settingsStatN(s) { return { t: 'box', s: s, size: 11.5, lh: 1.6, color: 'text', fill: 'bg', line: 'border', r: 8, ip: [10, 8, 10, 8], pad: [0, 0, 0, 0] }; }
+function settingsNavN(title, sub, act, top) { var n = { t: 'navrow', title: title, act: act, top: !!top, size: 13 }; if (sub) n.sub = sub; return n; }
+
+function settingsScreen(inp, factsIn) {
+  inp = inp || {};
+  if (!(Number(inp.cap) >= 3)) return { ok: false, error: 'cap' };
+  var f = settingsFacts(factsIn), body = [];
+
+  // 1) 커뮤니티 아이디
+  var idKids = [settingsTitleN('커뮤니티 아이디', 6)];
+  var d1 = settingsBoldN([['아이디를 등록하면 게시글 작성과 실시간 채팅에 참여할 수 있어요.\n아이디 없이도 글과 채팅을 ', 0], ['구경', 1], ['하는 건 자유롭게 가능합니다.', 0]]);
+  idKids.push(settingsDescN(d1.s, 14, d1.hl));
+  if (f.id) {
+    var cur = settingsBoldN([['현재 아이디  ', 0], [f.id, 1]]);
+    idKids.push({ t: 'box', s: cur.s, hl: cur.hl, size: 14, lh: 1.4, color: 'gold', fill: '#1c1c1e', line: '', tc: 'gold', r: 10, ip: [13, 11, 13, 11], pad: [0, 0, 0, 12] });
+  }
+  idKids.push({ t: 'field', key: 'cid', hint: '아이디 입력 (2~12자, 한글/영문/숫자)', value: f.id, maxlen: 12, h: 44, size: 14, r: 9, pad: [0, 0, 0, 10] });
+  idKids.push({ t: 'button', s: '아이디 저장', size: 14, h: 44, r: 10, bold: true, fill: 'gold', line: 'none', tc: '#121214', act: { a: 'call', v: 'saveId' } });
+  if (f.id) idKids.push({ t: 'button', s: '아이디 삭제', size: 12, h: 38, r: 10, bold: true, fill: 'none', line: 'border2', tc: '#ff453a', pad: [0, 8, 0, 0], act: { a: 'call', v: 'clearId' } });
+  body.push(settingsPanelN(idKids, 16));
+  body.push({ t: 'text', s: '아이디는 이 기기에만 저장되며,\n작성한 글·채팅에 표시됩니다.', size: 11, color: 'sub', lh: 1.5, align: 'center', pad: [16, 14, 16, 0] });
+
+  // 2) 알림 설정
+  var nk = [settingsTitleN('알림 설정', 4), settingsDescN('받고 싶은 알림만 골라서 켜고 끌 수 있어요. 끄면 진동도 함께 꺼져요.', 12)];
+  if (f.npd) nk.push({ t: 'box', s: '알림 권한이 꺼져 있어요. 기기 설정 > 앱 > 길동무 > 알림에서 허용해주세요.', size: 12, lh: 1.5, tc: '#ff453a', color: 'text', fill: 'rgba(255,69,58,0.12)', line: 'rgba(255,69,58,0.35)', r: 10, ip: [12, 10, 12, 10], pad: [0, 0, 0, 4] });
+  SETTINGS_NOTIF.forEach(function (n, i) {
+    nk.push({ t: 'toggle', key: 'n.' + n.key, title: n.title, sub: n.desc, on: !!f.np[n.key], top: true, vp: 9, size: 13.5, ssize: 11, onc: '#30d158' });
+  });
+  body.push(settingsPanelN(nk));
+
+  // 3) 갤럭시 전용
+  if (f.sam) {
+    var sk = [settingsTitleN('갤럭시 백그라운드 유지', 4)];
+    var sd = settingsBoldN([['갤럭시는 며칠 안 쓴 앱을 자동 절전시켜 화면이 꺼진 동안의 하차 알림이 멈출 수 있어요. 길동무를 ', 0], ['자동으로 절전하지 않는 앱', 1], ['에 넣어 두면 안전해요.', 0]]);
+    sk.push(settingsDescN(sd.s, 8, sd.hl));
+    if (f.samw) sk.push({ t: 'box', s: '이 앱의 배터리 사용이 제한됨으로 되어 있어요. 앱 정보 > 배터리에서 제한 없음으로 바꿔 주세요.', size: 12, lh: 1.5, tc: '#ff9f0a', color: 'text', fill: 'rgba(255,159,10,0.12)', line: 'rgba(255,159,10,0.35)', r: 10, ip: [12, 10, 12, 10], pad: [0, 0, 0, 4] });
+    sk.push(settingsNavN('자동 절전 제외 설정 열기', f.samw ? '제한됨' : '', { a: 'web', v: 'sam' }, true));
+    body.push(settingsPanelN(sk));
+  }
+
+  // 4) 실험 기능(있는 것만)
+  SETTINGS_FEATS.forEach(function (d) {
+    var x = f.feat[d.k];
+    if (!x.h) return;
+    var on = x.on && !x.f;
+    body.push(settingsPanelN([
+      { t: 'toggle', key: 'f.' + d.k, title: d.title, on: on, big: true, size: 15, vp: 0, onc: 'gold', pad: [0, 0, 0, 6] },
+      settingsDescN(d.desc, 8),
+      settingsStatN(settingsStat(d, x))
+    ]));
+  });
+
+  // 5) 안내 정확도
+  body.push(settingsPanelN([
+    settingsTitleN('안내 정확도 향상', 2),
+    { t: 'toggle', key: 'rl', title: '도착 오차 익명 기록', sub: '목적지에 도착하면 예상 시간과 실제 시간의 차이만 익명으로 보내요. 역 이름·위치·기기 정보는 보내지 않아요.', on: f.rl, vp: 6, size: 13.5, ssize: 11, onc: '#30d158' }
+  ]));
+
+  // 6) 웹 카드로 이어지는 기능들(복잡한 입력·시험 도구는 기존 웹 카드를 그대로 연다)
+  var wk = [settingsTitleN('기능 설정', 2), settingsDescN('시간·장소·시험처럼 입력이 많은 설정은 눌러서 열어요.', 4)];
+  wk.push(settingsNavN('출퇴근 브리핑 알림', f.cm == null ? '' : (f.cm ? '켜짐' : '꺼짐'), { a: 'web', v: 'cm' }, true));
+  wk.push(settingsNavN('캐릭터 시계 위젯', '', { a: 'web', v: 'gw' }, true));
+  wk.push(settingsNavN('하차 5분 전 추천 시험', '', { a: 'web', v: 'arr' }, true));
+  wk.push(settingsNavN('다른 앱 위에 표시', f.ovl == null ? '' : (f.ovl ? '켜짐' : '꺼짐'), { a: 'web', v: 'ovl' }, true));
+  wk.push(settingsNavN('개발자 도구', '', { a: 'web', v: 'dev' }, true));
+  body.push(settingsPanelN(wk));
+
+  // 7) 테마
+  var dk = f.th === 'dark';
+  body.push(settingsPanelN([
+    settingsTitleN('테마 설정', 4), settingsDescN('앱 전체 색상 테마를 변경할 수 있어요.', 14),
+    { t: 'select', title: '다크 블랙', sub: '깊고 선명한 다크 테마', on: dk, act: { a: 'sel', v: 'dark' }, fill: '#18181a', line: 'border', onl: '#d4af37', tc: '#f2f2f7', sc: '#8e8e93', chk: '#d4af37', ckf: '#121214',
+      prev: ['#121214', '#1c1c1e', '#3a3a3c', '#d4af37', '#3a3a3c'], pad: [0, 0, 0, 10] },
+    { t: 'select', title: '하늘 파스텔', sub: '맑고 시원한 하늘색 테마', on: !dk, act: { a: 'sel', v: 'pastel' }, fill: 'card', line: 'border', onl: '#1d9bf0', chk: '#1d9bf0', ckf: '#ffffff',
+      prev: ['#f0f4f8', '#ffffff', '#dce8f0', '#1d9bf0', '#dce8f0'] }
+  ]));
+
+  // 8) 약관
+  body.push(settingsPanelN([
+    settingsTitleN('약관 및 정책', 4),
+    settingsNavN('개인정보처리방침', '', { a: 'call', v: 'pol.privacy' }, true),
+    settingsNavN('위치기반서비스 이용약관', '', { a: 'call', v: 'pol.location' }, true),
+    settingsNavN('데이터 출처 및 고지', '', { a: 'call', v: 'pol.opensource' }, true),
+    settingsNavN('오류 로그', f.errn > 0 ? String(f.errn) : '', { a: 'call', v: 'errlog' }, true)
+  ]));
+  body.push({ t: 'spacer', h: 28 });
+
+  var out = { ok: true, v: 1, screen: 'settings', cover: 'tab', head: [], body: body };
+  out.rev = 's' + SETTINGS_SCREEN_V + ':' + settingsHash(JSON.stringify(body));
+  return out;
+}
+
+if (typeof module !== 'undefined' && module.exports) module.exports = { settingsScreen: settingsScreen, settingsFacts: settingsFacts, settingsStat: settingsStat, settingsHash: settingsHash, SETTINGS_FEATS: SETTINGS_FEATS, SETTINGS_NOTIF: SETTINGS_NOTIF };
