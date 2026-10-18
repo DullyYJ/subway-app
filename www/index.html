@@ -14548,6 +14548,15 @@ window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
   ['transitSplitRow', 'transitXferRow', 'transitDepRow', 'transitOfficialRow', 'transitAlertRow'].forEach(function(rid){
     makeRegion('r:' + rid, paintCfg(function(){ return document.getElementById(rid); }));
   });
+  // ★ 2026-10-18 (네이티브 이전 4번째 화면: 혼잡도 카드 — YJ: '목표는 기능을 100% 유지하며 전부 네이티브로'): 홈 아래쪽 혼잡도 카드에서 글자·상자뿐인 부분을 같은 방식으로 그린다.
+  //   웹은 레이아웃·내용·눌림을 그대로 맡고(투명하게 제자리), 네이티브가 그 위에 그림만 그린다. 24시간 막대(가로 스크롤)와 장면(이미 네이티브 Canvas)은 제외 — 계속 웹이 그린다.
+  //   설정 스위치(`네이티브 경로 화면`)가 꺼져 있으면 예전과 똑같다. 읽을 수 없는 것(그라데이션·그림 등)이 섞이면 그 영역만 웹이 그린다.
+  [['cs:top', function(){ var s0 = document.getElementById('congStn'); return s0 && s0.closest ? s0.closest('.cong-top') : null; }],       // 지하철 역 이름 · 기준 문구 · 혼잡 상태 글자
+   ['cs:gauge', function(){ return document.getElementById('congGaugeWrap'); }],                                                          // 혼잡도 게이지(글자 + 채움 막대)
+   ['cs:carttl', function(){ return document.getElementById('carTtl'); }],                                                                // '칸별 혼잡 예상도' 제목
+   ['cs:cars', function(){ return document.getElementById('carGrid'); }],                                                                 // 칸별 혼잡 칸들(테두리 상자 + 글자)
+   ['cs:busnote', function(){ return document.getElementById('busCongNote'); }]                                                           // 버스 구간 안내 문구
+  ].forEach(function(c){ makeRegion(c[0], paintCfg(c[1])); });
   window._htlNatMk = TL.mk;                               // _placeGpsMarkerSmooth 가 알려 준다(타임라인 영역만)
 
   // ── 전체 켜고 끄기 ──
