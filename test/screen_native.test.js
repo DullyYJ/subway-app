@@ -91,6 +91,16 @@ function findAndroidJar() {
     for (const m of ['show', 'update', 'setRect', 'hide', 'destroy', 'status']) assert.ok(new RegExp('public void ' + m + '\\(').test(p), m + ' 메서드');
     assert.ok(/@CapacitorPlugin\(name = "ScreenNative"\)/.test(p));
   });
+  await t('글꼴: 웹과 같은 Noto Sans KR 를 쓴다(assets/fonts) · 없으면 기기 기본으로 · CI 가 글꼴을 만들어 넣는다', async () => {
+    const v = fs.readFileSync(N('ScreenView.java'), 'utf8'), p = fs.readFileSync(N('ScreenNativePlugin.java'), 'utf8'), y = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'build-apk.yml'), 'utf8');
+    assert.ok(/fonts\/NotoSansKR-Regular\.ttf/.test(v) && /fonts\/NotoSansKR-Bold\.ttf/.test(v), '보통·굵게 글꼴 파일');
+    assert.ok(/Typeface\.DEFAULT_BOLD : Typeface\.DEFAULT/.test(v), '글꼴 없으면 기기 기본으로');
+    assert.ok(!/setTypeface\(bold \? Typeface\.DEFAULT_BOLD/.test(v), '직접 기본 글꼴을 쓰지 않고 face() 를 거친다');
+    assert.ok((v.match(/face\(/g) || []).length >= 5, '재기·그리기·입력칸이 같은 글꼴');
+    assert.ok(/preloadFaces/.test(p) && /public void load\(\)/.test(p), '앱이 뜰 때 뒤에서 미리 읽는다');
+    assert.ok(/Bundle Noto Sans KR/.test(y) && /assets\/fonts\/NotoSansKR-/.test(y) && /instantiateVariableFont/.test(y), 'CI 글꼴 만들기');
+    assert.ok(y.indexOf('Bundle Noto Sans KR') < y.indexOf('Generate launcher icons'), '안드로이드 폴더가 만들어진 뒤');
+  });
   await t('CI 워크플로가 파일을 복사하고 MainActivity 에 ScreenNativePlugin 을 등록한다', async () => {
     const y = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'build-apk.yml'), 'utf8');
     for (const f of ['ScreenCore.java', 'ScreenView.java', 'ScreenNativePlugin.java']) assert.ok(y.includes('native/' + f), f + ' 복사');
