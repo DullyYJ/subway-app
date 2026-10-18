@@ -5,6 +5,7 @@ import java.util.List;
 /** ScreenCore(서버 구동 화면: JSON 읽기·검증·배치·눌림) 시험 — 안드로이드 없이 JVM. 사용: java ScreenJvmTest */
 public class ScreenJvmTest {
     static int fails = 0, oks = 0;
+    static float lkN2(ScreenCore.Layout L) { for (ScreenCore.Item q : L.body) if (q.kind == ScreenCore.K_RBTN && q.label.startsWith("좋아요")) return q.y; return -1f; }
     static void ok(boolean c, String name) { System.out.println((c ? "ok   " : "FAIL ") + name); if (c) oks++; else fails++; }
     static boolean near(float a, float b) { return Math.abs(a - b) < 0.02f; }
 
@@ -365,6 +366,122 @@ public class ScreenJvmTest {
         ScreenCore.Layout nbig = ScreenCore.layout(ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"news\",\"head\":[],\"body\":[" + nw300 + "]}"), 360f, M);
         long nms = (System.nanoTime() - tn) / 1000000L;
         ok(nms < 300 && nbig.body.length == 300 && nbig.bodyRange(0f, 700f)[1] < 25, "뉴스 300줄 읽기+배치 " + nms + "ms · 보이는 건 몇 줄만");
+
+        // ── 아이콘 경로(SVG path d) ──
+        float[] pc = ScreenCore.pathOps("M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z");
+        ok(pc.length > 30 && pc[0] == ScreenCore.OP_M && near(pc[1], 20f) && near(pc[2], 2f), "아이콘 경로를 읽는다(M 20 2 로 시작)");
+        ok(pc[3] == ScreenCore.OP_L && near(pc[4], 4f) && near(pc[5], 2f), "H 는 같은 높이의 L 로 풀린다");
+        float[] ar = ScreenCore.pathOps("M0 0a5 5 0 0 1 10 0");
+        ok(ar.length == 3 + 7 * 2 && ar[3] == ScreenCore.OP_C && near(ar[ar.length - 2], 10f) && near(ar[ar.length - 1], 0f), "호(A)는 곡선 둘로 풀려 끝점이 맞다");
+        float[] rel = ScreenCore.pathOps("m1 1 2 0 0 2z");
+        ok(rel.length == 3 + 3 + 3 + 1 && near(rel[3 + 1], 3f) && near(rel[3 + 1 + 1], 1f), "m 뒤에 오는 짝은 선(l)으로 읽는다");
+        ok(ScreenCore.pathOps("").length == 0, "빈 경로는 그리지 않는다(허용)");
+        boolean pbad = true;
+        for (String bp : new String[] { "L1 1", "M1", "M1 1x", "M1 1 Z9", "M1 1 a1 1 0 2 1 3 3", "M" + new String(new char[1000]).replace('\0', '1') }) { try { ScreenCore.pathOps(bp); pbad = false; } catch (ScreenCore.ParseError e) { } }
+        ok(pbad, "잘못된 경로(M 없음·수 부족·모르는 글자·호 플래그·너무 김)는 거절");
+
+        // ── 아래 탭 막대(tabbar) ──
+        String ICON = "M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z";
+        String tabJ = "{\"t\":\"tabbar\",\"h\":56,\"items\":["
+            + "{\"label\":\"커뮤니티\",\"icon\":\"" + ICON + "\",\"act\":{\"a\":\"call\",\"v\":\"tab.community\"}},"
+            + "{\"label\":\"노선도\",\"icon\":\"" + ICON + "\",\"act\":{\"a\":\"call\",\"v\":\"tab.map\"}},"
+            + "{\"label\":\"홈\",\"icon\":\"" + ICON + "\",\"on\":true,\"act\":{\"a\":\"call\",\"v\":\"tab.home\"}},"
+            + "{\"label\":\"쇼핑센터\",\"icon\":\"" + ICON + "\",\"badge\":\"3\",\"act\":{\"a\":\"call\",\"v\":\"tab.shop\"}},"
+            + "{\"label\":\"맛집\",\"icon\":\"" + ICON + "\",\"act\":{\"a\":\"call\",\"v\":\"tab.food\"}}]}";
+        ScreenCore.Screen ts = ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"tabs\",\"head\":[],\"body\":[" + tabJ + "]}");
+        ScreenCore.Layout TL = ScreenCore.layout(ts, 360f, M);
+        ok(TL.body.length == 5 && TL.body[0].kind == ScreenCore.K_TAB && near(TL.body[0].w, 72f) && near(TL.body[4].x, 288f) && near(TL.bodyH, 56f), "탭 막대: 다섯 칸이 폭을 똑같이 나눈다(높이 56)");
+        ok(TL.body[2].on && !TL.body[1].on && TL.body[3].badge.equals("3") && TL.body[0].pathOps.length > 10, "켜진 칸·배지·아이콘 경로");
+        ScreenCore.Act ta = TL.hitBody(150f, 20f);
+        ok(ta != null && ta.v.equals("tab.home"), "가운데 칸을 누르면 홈");
+        ok(bad(wrapBody(tabJ.replace("M10 20v-6", "Q"))), "탭 아이콘 경로가 틀리면 화면 전체를 거절");
+        ok(bad(wrapBody(tabJ.replace("\"label\":\"홈\",", ""))), "탭 칸에 label 없으면 거절");
+        ok(bad(wrapBody("{\"t\":\"tabbar\",\"items\":[{\"label\":\"홈\",\"icon\":\"\",\"act\":{\"a\":\"call\",\"v\":\"tab.home\"}}]}")), "탭은 2칸 이상");
+
+        ScreenCore.Screen as0 = ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"chat\",\"anchor\":\"bottom\",\"head\":[],\"body\":[{\"t\":\"spacer\",\"h\":10}]}");
+        ok("bottom".equals(as0.anchor) && "".equals(ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"chat\",\"head\":[],\"body\":[{\"t\":\"spacer\",\"h\":10}]}").anchor), "anchor: bottom 을 읽고, 없으면 빈 값");
+        ok(bad("{\"ok\":true,\"v\":1,\"screen\":\"chat\",\"anchor\":\"top\",\"head\":[],\"body\":[{\"t\":\"spacer\",\"h\":10}]}"), "anchor: 모르는 값은 거절");
+
+        // ── 게시글 카드(post: 아코디언) · 댓글 · 단추 줄 · 입력줄 ──
+        String kidsJ = "[{\"t\":\"text\",\"s\":\"본문 내용입니다 본문 내용입니다\",\"size\":13,\"lh\":1.8,\"pad\":[0,0,0,12]},"
+            + "{\"t\":\"btnrow\",\"pad\":[0,0,0,12],\"gap\":8,\"h\":30,\"items\":[{\"label\":\"좋아요 3\",\"act\":{\"a\":\"call\",\"v\":\"bd.r.0.like\"}},{\"label\":\"ㅋㅋ 1\",\"on\":true,\"fill\":\"#0a84ff22\",\"line\":\"#0a84ff\",\"tc\":\"#0a84ff\",\"act\":{\"a\":\"call\",\"v\":\"bd.r.0.lol\"}},{\"label\":\"신고\",\"right\":true,\"act\":{\"a\":\"call\",\"v\":\"bd.x.0\"}}]},"
+            + "{\"t\":\"cmt\",\"pad\":[0,10,0,7],\"nick\":\"출근러\",\"s\":\"저도 그랬어요 정말 공감합니다\",\"time\":\"3분 전\"},"
+            + "{\"t\":\"cmt\",\"pad\":[0,0,0,7],\"nick\":\"답글러\",\"s\":\"ㅋㅋ\",\"time\":\"방금\",\"ind\":true},"
+            + "{\"t\":\"inbar\",\"pad\":[0,8,0,0],\"key\":\"cmt.0\",\"hint\":\"댓글 남기기\",\"btn\":\"등록\",\"h\":36,\"r\":8,\"act\":{\"a\":\"call\",\"v\":\"bd.c.0\"}}]";
+        String postJ = "{\"t\":\"post\",\"pad\":[12,0,12,8],\"id\":\"p1\",\"title\":\"오늘 지하철 정말 붐비네요\",\"cat\":\"혼잡\",\"catc\":\"#ff6b35\",\"nick\":\"빨간모자\",\"meta\":\"3분 전 · 조회 12 · 댓글 2\",\"kids\":" + kidsJ + "}";
+        String post2J = postJ.replace("\"p1\"", "\"p2\"").replace("bd.", "bd2.").replace("cmt.0", "cmt.1").replace("오늘 지하철 정말 붐비네요", "두번째 글");
+        ScreenCore.Screen ps = ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"board\",\"head\":[],\"body\":[" + postJ + "," + post2J + "]}");
+        ok(ps.body.size() == 2 && ps.body.get(0).kids.size() == 5 && ps.skipped == 0, "게시글 카드를 읽는다(안 노드 5개)");
+        ScreenCore.Layout PL0 = ScreenCore.layout(ps, 360f, M, "");
+        ok(PL0.body.length == 4 && PL0.body[0].kind == ScreenCore.K_PANEL && PL0.body[1].kind == ScreenCore.K_POSTH && !PL0.body[1].on && PL0.body[3].kind == ScreenCore.K_POSTH, "모두 접으면 카드마다 틀+머리만 그린다");
+        float hdr = PL0.body[1].h;
+        ok(near(hdr, 12f + 14f * 1.4f + 8f + 11f * 1.4f + 10f) && near(PL0.body[0].h, 1f + hdr + 1f) && near(PL0.body[2].y, 1f + hdr + 1f + 8f), "접힌 카드 높이 = 위 12 + 제목 + 8 + 메타 + 아래 10 (+테두리 2) 그리고 카드 사이 8");
+        ok(PL0.body[1].badge.equals("혼잡") && PL0.body[1].tag.equals("빨간모자") && PL0.body[1].label.startsWith("3분 전"), "머리: 분류 딱지 · 글쓴이 · 메타");
+        ok(near(PL0.body[1].textX, 12f + 1f + 14f + M.width("혼잡", 10f, true) + 14f + 8f), "제목은 딱지 오른쪽 8 띄움");
+        ScreenCore.Layout PL1 = ScreenCore.layout(ps, 360f, M, "p1");
+        ok(PL1.body.length == 12 && PL1.body[1].on && PL1.body[2].kind == ScreenCore.K_DIV, "p1 을 펼치면 구분선 + 안 노드들이 쌓인다");
+        int kc = 0, rb = 0, ib = 0; for (ScreenCore.Item q : PL1.body) { if (q.kind == ScreenCore.K_CMT) kc++; if (q.kind == ScreenCore.K_RBTN) rb++; if (q.kind == ScreenCore.K_INBAR) ib++; }
+        ok(kc == 2 && rb == 3 && ib == 1, "댓글 2 · 단추 3 · 입력줄 1");
+        ScreenCore.Layout PLd = ScreenCore.layout(ps, 360f, M);
+        ok(PLd.body[1].on == false && PLd.body.length == 4, "open 표시가 없으면 접힌 채로(기본)");
+        ScreenCore.Screen psOpen = ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"board\",\"head\":[],\"body\":[" + postJ.replace("\"kids\"", "\"open\":true,\"kids\"") + "," + post2J + "]}");
+        ok(ScreenCore.layout(psOpen, 360f, M).body[1].on && !ScreenCore.layout(psOpen, 360f, M, "").body[1].on && ScreenCore.layout(psOpen, 360f, M, "p2").body[ScreenCore.layout(psOpen, 360f, M, "p2").body.length - 1].kind != ScreenCore.K_POSTH, "엔진의 open 표시를 따르고, openKey 가 있으면 그걸 따른다");
+        ScreenCore.Layout PL2 = ScreenCore.layout(ps, 360f, M, "p2");
+        ok(PL2.body[1].on == false && PL2.body[PL2.body.length - 1].kind != ScreenCore.K_PANEL && near(PL2.body[2].y, PL0.body[2].y), "p2 를 펼치면 p1 은 접혀 있고 p2 위치는 그대로");
+        ScreenCore.Act tg = PL0.hitBody(100f, PL0.body[1].y + 10f);
+        ok(tg != null && tg.a.equals("tog") && tg.v.equals("p1"), "머리를 누르면 tog p1");
+        ScreenCore.Item inb = null, cm0 = null, rbn = null; for (ScreenCore.Item q : PL1.body) { if (q.kind == ScreenCore.K_INBAR) inb = q; if (q.kind == ScreenCore.K_CMT && cm0 == null) cm0 = q; if (q.kind == ScreenCore.K_RBTN && q.label.equals("신고")) rbn = q; }
+        ok(inb != null && inb.act.v.equals("bd.c.0") && inb.key.equals("cmt.0") && near(inb.iw + inb.sw + ScreenCore.INBAR_GAP, inb.w) && near(inb.btx, inb.x + inb.w - inb.sw), "입력줄: 입력칸 + 8 + 단추가 한 줄을 채운다");
+        ok(cm0 != null && cm0.lines.length >= 1 && near(cm0.h, 11f * 1.4f + 2f + 12f * 1.5f * cm0.lines.length) && near(cm0.textY, cm0.y + 11f * 1.4f + 2f), "댓글: 글쓴이 줄 + 본문 줄");
+        ok(rbn != null && near(rbn.x + rbn.w, PL1.body[1].x + PL1.body[1].w - 14f), "right 단추는 오른쪽 끝에 붙는다");
+        ScreenCore.Layout PLn = ScreenCore.layout(ps, 190f, M, "p1");
+        ScreenCore.Item rbN = null, lkN = null; for (ScreenCore.Item q : PLn.body) { if (q.kind == ScreenCore.K_RBTN && q.label.equals("신고")) rbN = q; if (q.kind == ScreenCore.K_RBTN && q.label.startsWith("좋아요")) lkN = q; }
+        ok(rbN != null && lkN != null && rbN.y > lkN.y + lkN.h && rbN.x + rbN.w <= 190f - 12f - 1f - 13f, "좁아서 한 줄에 안 들어가면 right 단추는 둘째 줄로 내려간다");
+        ok(near(PLn.bodyH - ScreenCore.layout(ps, 190f, M, "p1").bodyH, 0f) && rbn != null && near(rbn.y, lkN2(PL1)), "넓으면 같은 줄(둘째 줄 없음)");
+        ScreenCore.Act ca = PL1.hitBody(inb.x + 5f, inb.y + 5f);
+        ok(ca != null && ca.v.equals("bd.c.0"), "입력줄 자리를 누르면 그 글의 댓글 행동");
+        ok(bad(wrapBody(postJ.replace("\"id\":\"p1\"", "\"id\":\"p 1\""))), "post id 가 올바르지 않으면 거절");
+        ok(bad(wrapBody(postJ.replace("\"title\":\"오늘 지하철 정말 붐비네요\",", ""))), "post 는 title 필수");
+        ok(bad(wrapBody(postJ.replace("{\"t\":\"cmt\",\"pad\":[0,10,0,7]", "{\"t\":\"post\",\"id\":\"z\",\"title\":\"x\",\"kids\":[]}, {\"t\":\"cmt\",\"pad\":[0,10,0,7]"))), "post 안에 post 는 거절");
+        ok(bad(wrapBody(postJ.replace("\"nick\":\"출근러\"", "\"nick\":\"\""))), "cmt 는 nick 필수");
+        ok(bad(wrapBody(postJ.replace("\"btn\":\"등록\"", "\"btn\":\"\""))), "inbar 는 btn 필수");
+        ok(bad(wrapBody(postJ.replace("\"key\":\"cmt.0\"", "\"key\":\"c m t\""))), "inbar key 가 올바르지 않으면 거절");
+        ok(bad(wrapBody(postJ.replace("\"v\":\"bd.c.0\"", "\"v\":\"bd c 0\""))), "행동 이름이 올바르지 않으면 거절");
+        ScreenCore.Screen oldPs = ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"board\",\"head\":[],\"body\":[" + postJ.replace("\"t\":\"post\"", "\"t\":\"future9\"") + ",{\"t\":\"spacer\",\"h\":8}]}");
+        ok(oldPs.skipped == 1 && oldPs.body.size() == 1, "post 를 모르는 옛 앱은 건너뛴다(깨지지 않음)");
+
+        // ── 채팅 말풍선(msg) · 아래 고정 줄(foot) ──
+        String msgJ = "{\"t\":\"msg\",\"pad\":[12,0,12,10],\"pre\":\"(2호선)\",\"nick\":\"지하철러\",\"s\":\"오늘 사람 진짜 많네요 다들 힘내세요 오늘 사람 진짜 많네요 다들 힘내세요\",\"time\":\"09:12\",\"go\":\"신고\",\"act\":{\"a\":\"call\",\"v\":\"ch.x.7\"}}";
+        String mineJ = "{\"t\":\"msg\",\"pad\":[12,0,12,10],\"mine\":true,\"nick\":\"나\",\"s\":\"안녕하세요\",\"time\":\"09:13\"}";
+        String footJ = "{\"t\":\"inbar\",\"pad\":[12,10,12,10],\"key\":\"chat\",\"hint\":\"메시지를 입력하세요...\",\"btn\":\"전송\",\"h\":38,\"r\":19,\"maxlen\":200,\"act\":{\"a\":\"call\",\"v\":\"ch.send\"}}";
+        ScreenCore.Screen chs = ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"chat\",\"head\":[],\"body\":[" + msgJ + "," + mineJ + "],\"foot\":[" + footJ + "]}");
+        ScreenCore.Layout CHL = ScreenCore.layout(chs, 360f, M);
+        ScreenCore.Item m0 = CHL.body[0], m1 = CHL.body[1];
+        ok(CHL.body.length == 2 && m0.kind == ScreenCore.K_MSG && !m0.on && m1.on, "말풍선 둘(남의 것 · 내 것)");
+        ok(near(m0.x, 12f) && m0.w <= (336f * 0.74f) + 0.01f && m0.lines.length >= 2, "남의 말풍선: 왼쪽 12, 폭은 336 의 74% 이하, 긴 글은 줄바꿈");
+        ok(near(m1.x + m1.w, 12f + 336f) && near(m1.w, M.width("안녕하세요", 13f, false) + 22f), "내 말풍선: 오른쪽 끝, 폭은 글 + 좌우 11");
+        ok(m0.tag.equals("(2호선) 지하철러") && m1.tag.length() == 0, "남의 것에만 글쓴이 줄");
+        ok(near(m0.h, 11f * 1.35f + 3f + 16f + 13f * 1.45f * m0.lines.length + 3f + 9f * 1.35f) && near(m1.y, m0.h + 10f), "말풍선 높이 = 글쓴이 + 풀 + 글 + 시각, 사이 10");
+        ScreenCore.Act ra = CHL.hitBody(m0.zoneX + 2f, m0.zoneY + 3f), rb2 = CHL.hitBody(m0.x + 5f, m0.sy + 8f);
+        ok(ra != null && ra.v.equals("ch.x.7") && rb2 == null, "'신고' 글자 자리만 눌리고 말풍선 몸통은 안 눌린다");
+        ok(CHL.hitBody(m1.x + 3f, m1.sy + 3f) == null, "act 없는 내 말풍선은 안 눌린다");
+        ok(CHL.foot.length == 1 && CHL.foot[0].kind == ScreenCore.K_INBAR && near(CHL.footH, 10f + 38f + 10f), "foot: 입력줄 하나, 높이 = 위아래 10 + 38");
+        ok(CHL.hitFoot(CHL.foot[0].btx + 4f, CHL.foot[0].y + 4f).v.equals("ch.send") && CHL.hitFoot(5f, 5f) == null, "foot 단추 자리를 누르면 전송 · 바깥은 없음");
+        ok(near(CHL.foot[0].iw + CHL.foot[0].sw + ScreenCore.INBAR_GAP, 336f), "foot 입력칸 + 단추 = 줄 폭");
+        ok(near(CHL.bodyMaxScroll(500f - CHL.footH), Math.max(0f, CHL.bodyH - (500f - CHL.footH))), "본문 스크롤 한계는 foot 을 뺀 높이로");
+        ok(ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"c\",\"head\":[],\"body\":[],\"foot\":[" + footJ + "]}").foot.size() == 1, "foot 만 있는 화면도 읽는다");
+        ok(bad("{\"ok\":true,\"v\":1,\"screen\":\"c\",\"head\":[],\"body\":[],\"foot\":{}}"), "foot 이 배열이 아니면 거절");
+        ok(bad(wrapBody(msgJ.replace("\"s\":\"오늘 사람 진짜 많네요 다들 힘내세요 오늘 사람 진짜 많네요 다들 힘내세요\",", ""))), "msg 는 s 필수");
+        String chipC = "{\"t\":\"chips\",\"items\":[{\"label\":\"2호선\",\"on\":true,\"c\":\"#00a84d\",\"act\":{\"a\":\"cat\",\"v\":\"2호선\"}},{\"label\":\"전체\",\"act\":{\"a\":\"cat\",\"v\":\"all\"}}]}";
+        ScreenCore.Layout CCL = ScreenCore.layout(ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"c\",\"head\":[" + chipC + "],\"body\":[]}"), 360f, M);
+        ok(CCL.head[0].ac.argb == 0xFF00A84D && CCL.head[1].ac.role.equals("orange"), "칩마다 켜진 색(c)을 줄 수 있다");
+        ok(bad("{\"ok\":true,\"v\":1,\"screen\":\"c\",\"head\":[" + chipC.replace("#00a84d", "초록") + "],\"body\":[]}"), "칩 색을 못 읽으면 거절");
+        long tp0 = System.nanoTime();
+        StringBuilder p60 = new StringBuilder();
+        for (int i = 0; i < 90; i++) { if (i > 0) p60.append(','); p60.append(postJ.replace("\"p1\"", "\"p" + i + "\"")); }
+        ScreenCore.Layout pbig = ScreenCore.layout(ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"board\",\"head\":[],\"body\":[" + p60 + "]}"), 360f, M, "p45");
+        long pms = (System.nanoTime() - tp0) / 1000000L;
+        ok(pms < 400 && pbig.bodyRange(0f, 700f)[1] < 30, "글 90개(하나 펼침) 읽기+배치 " + pms + "ms · 보이는 건 몇 개만");
 
         // ── 시간(400장 배치 + 10만 번 범위 찾기) ──
         long t0 = System.nanoTime();
