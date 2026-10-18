@@ -14600,17 +14600,18 @@ window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
   // ★ 2026-10-18 (네이티브 이전 6번째 화면: 쇼핑 탭 — YJ: '웹 기능 그대로 이식 · 렉 없이 · 100% 네이티브'): 같은 방식. 웹은 배치·내용·눌림(상품 열기)을 그대로 맡고 투명하게 제자리, 네이티브는 그림만.
   //   대가성 안내 상자 · 카테고리 칩(최대 10) · 하단 안내 문구 · 상품 칸의 '이름 + 최저가' 줄(지금 화면에 보이는 앞 14개 — 스크롤을 멈추면 그 자리의 줄을 다시 읽는다).
   //   상품 사진은 그림이라 웹이 그대로 그린다(사진 칸은 투명 처리 안 함). 검색 입력줄(입력칸)·새로고침 단추(아이콘)도 웹.
+  function shOwned(){ try{ return !!(window._scrShop && window._scrShop.owns()); }catch(e){ return false; } }      // 서버 구동 네이티브 쇼핑 화면이 칩·목록을 맡는 동안은 이 영역들이 쉰다(둘이 겹쳐 그리지 않게)
   makeRegion('sh:note', paintCfg(function(){ return document.querySelector('#tab-shop .shop-fixed-hdr > div:first-of-type'); }));
-  makeRegion('sh:foot', paintCfg(function(){ return document.querySelector('#shopScrollView > p'); }));
+  makeRegion('sh:foot', paintCfg(function(){ return shOwned() ? null : document.querySelector('#shopScrollView > p'); }));
   for(var shc = 0; shc < 10; shc++) (function(i){
-    makeRegion('sh:k' + i, paintCfg(function(){ var f = document.getElementById('shopCats'); return f ? (f.children[i] || null) : null; }));
+    makeRegion('sh:k' + i, paintCfg(function(){ if(shOwned()) return null; var f = document.getElementById('shopCats'); return f ? (f.children[i] || null) : null; }));
   })(shc);
   var shVis = { t: -1e9, list: [] };
   function shopRows(){                                    // 화면(스크롤 영역)에 걸친 상품 줄들, 문서 순서. 0.12초 안에는 다시 안 잰다(영역 14개가 한 번씩만 묻는다)
     var t = now(); if(t - shVis.t < 120) return shVis.list;
     shVis.t = t; shVis.list = [];
     var sv = document.getElementById('shopScrollView'), g = document.getElementById('shopGrid');
-    if(!sv || !g || !sv.offsetParent) return shVis.list;
+    if(!sv || !g || !sv.offsetParent || shOwned()) return shVis.list;
     var sr = sv.getBoundingClientRect(), ch = g.children;
     for(var i = 0; i < ch.length && shVis.list.length < 14; i++){
       var c = ch[i]; if(!c.classList || !c.classList.contains('prod')) continue;
@@ -20222,6 +20223,21 @@ window.addEventListener('unhandledrejection', function(e) {
         <style>#htlSetOn:checked ~ #htlSetKnob{background:var(--gold) !important;} #htlSetOn:checked ~ #htlSetDot{left:23px !important;}</style>
       </div>
 
+      <!-- ★ 2026-10-18: 서버 구동 네이티브 쇼핑 화면 — 안드로이드 앱에서만 보임, 기본 꺼짐(실험) -->
+      <div id="scrSetCard" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <div style="font-size:15px;font-weight:800;color:var(--text);">🧪 네이티브 쇼핑 화면</div>
+          <label style="position:relative;display:inline-block;width:46px;height:26px;">
+            <input type="checkbox" id="scrSetOn" onchange="_scrSetUse(this.checked)" style="opacity:0;width:0;height:0;">
+            <span id="scrSetKnob" style="position:absolute;inset:0;border-radius:13px;background:var(--border2);transition:.2s;cursor:pointer;"></span>
+            <span id="scrSetDot" style="position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.3);"></span>
+          </label>
+        </div>
+        <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">쇼핑 탭의 카테고리와 상품 목록을 엔진이 화면 구성까지 정해 내려주고, 기기가 직접 그려요(부드러운 스크롤). 마지막 화면은 저장해 두어 바로 뜨고, 문제가 생기면 예전 웹 화면으로 돌아가요.</p>
+        <div id="scrSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
+        <style>#scrSetOn:checked ~ #scrSetKnob{background:var(--gold) !important;} #scrSetOn:checked ~ #scrSetDot{left:23px !important;}</style>
+      </div>
+
       <!-- ★ 2026-10-03: 도착 오차 익명 기록 (끌 수 있음) -->
       <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
         <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:8px;">📊 안내 정확도 향상</div>
@@ -25712,6 +25728,7 @@ window._dedupeStnByName = _dedupeStnByName;
 /* ══ 탭 전환 ══ */
 function switchTab(tab,el){
   try{ if(window._htlNat) window._htlNat.kick(); }catch(eNk){}      // 네이티브 그림 영역(켜져 있을 때만)이 새로 보이는 탭의 내용을 읽는다
+  try{ if(window._scrShop) setTimeout(function(){ window._scrShop.kick(); }, 0); }catch(eSk){}      // 서버 구동 네이티브 쇼핑 화면(켜져 있을 때만) — 탭 전환이 끝난 뒤 보이면 올린다
   try{ if(tab !== 'map' && window._pickDestMode && typeof _pickAbandon === 'function') _pickAbandon(); }catch(ePk){}      // 노선도 탭을 떠나면 '도착지 역 고르기'와 정해 둔 출발지는 없던 일로
   // ★ 2026-08-31: 탭을 바꾸면 열려 있던 시트·모달을 닫는다.
   //   예전엔 노선 상세 시트가 그대로 남아, 홈을 눌러도 노선도가 덮고 있었다.
@@ -37142,7 +37159,7 @@ function _shopScore(theme, ctx, rng, name){
     else if(ctx.rain>=30) sc += 80;
     else if(ctx.rain>=0)  sc -= 55;        // 비 예보 없으면 우산류 후순위
   }
-  if(theme==='\uCE94\uD551\uB098\uB4E4\uC774' || theme==='\uCDE8\uBBF8\uC2A4\uD3EC\uCE20'){  // 캠핑나들이·취미스포츠
+  if(theme==='\uCEA0\uD551\uB098\uB4E4\uC774' || theme==='\uCDE8\uBBF8\uC2A4\uD3EC\uCE20'){  // 캠핑나들이·취미스포츠
     if(ctx.rain>=60)      sc -= 60;
     else if(ctx.rain>=30) sc -= 25;
   }
@@ -37158,7 +37175,7 @@ function _shopScore(theme, ctx, rng, name){
   }
   // 요일
   if(ctx.weekend){
-    if(theme==='\uCE94\uD551\uB098\uB4E4\uC774' || theme==='\uD648\uD30C\uD2F0' || theme==='\uCDE8\uBBF8\uC2A4\uD3EC\uCE20' || theme==='\uBE0C\uB7F0\uCE58') sc += 18;
+    if(theme==='\uCEA0\uD551\uB098\uB4E4\uC774' || theme==='\uD648\uD30C\uD2F0' || theme==='\uCDE8\uBBF8\uC2A4\uD3EC\uCE20' || theme==='\uBE0C\uB7F0\uCE58') sc += 18;
   } else {
     if(theme==='\uC0AC\uBB34\uC6A9\uD488' || theme==='\uCD9C\uADFC\uB8E9\uC18C\uD488' || theme==='\uCEE4\uD53C\uC74C\uB8CC') sc += 12;
   }
@@ -37351,6 +37368,272 @@ function refreshShop(){
   toast('\uD83D\uDECD \uC9C0\uAE08 \uC694\uC77C\u00B7\uB0A0\uC528\u00B7\uC2DC\uAC04\uB300\uC5D0 \uB9DE\uCD94 \uC7AC\uBC30\uC5F4!');
 }
 window.refreshShop=refreshShop;
+
+// ══════════════════════════════════════════════════════════════════════════
+// ★ 2026-10-18 서버 구동 네이티브 화면 1호: 쇼핑 탭 (YJ: "최종목표는 웹뷰를 100% 네이티브로 — 엔진이 화면 구성까지 내려주는 방식, 로컬 캐시·검증 실패 폴백 포함")
+//   원칙: 계산은 엔진이, 그림은 앱이. 추천 100선(시간·요일·날씨·계절 점수)과 화면 구성(칩·카드·문구·단추)은 엔진 GET /screen/shop 이 정한다.
+//   이 코드는 (1) 받은 JSON 글을 그대로 ScreenNative 플러그인에 넘기고 (2) 눌린 행동(칩 선택·상품 열기·새로고침)만 처리한다. 추천·정렬·문구를 만들지 않는다.
+//   · 로컬 캐시: 플러그인이 '그릴 수 있다'고 받아들인 마지막 JSON 을 카테고리별로 저장해 두고, 쇼핑 탭을 열면 네트워크를 기다리지 않고 곧바로 그린다. 새 JSON 이 오면 제자리 갱신.
+//   · 폴백: 엔진 응답이 틀린 모양이면(플러그인 검증 'invalid') 그 응답은 버리고 저장본을 그대로 쓴다. 저장본도 없으면 예전 웹 쇼핑 화면(_shopPick)이 이어받는다.
+//     플러그인 오류·첫 그림 8초 지연·상태 이상도 즉시 웹으로. 연속 2번 실패하면 다음 실행부터 웹. 웹 쇼핑 화면은 늘 뒤에서 그려져 있다(네이티브가 덮는다).
+//   · 안드로이드 앱 + ScreenNative 플러그인이 있고, 설정 스위치(기본 꺼짐)를 켠 경우에만. 웹/브라우저·플러그인 없음·꺼짐 = 예전 그대로.
+//   · 덮는 범위: 카테고리 칩 줄부터 탭 맨 아래까지(안내 상자·쿠팡 검색줄은 웹). 이 동안 예전 '쇼핑 영역(sh:*)' 네이티브는 쉰다.
+//   · 탭이 움직이는 동안·팝업이 덮는 동안에는 네이티브를 숨기고 웹이 이어받는다.
+// ══════════════════════════════════════════════════════════════════════════
+(function(){
+  var K_ON = 'gdm_scr_on', K_F = 'gdm_scr_fail', K_W = 'gdm_scr_why', K_C = 'gdm_scr_c:';
+  var BASE = ((typeof _ROUTE_V2_BASE === 'string' && _ROUTE_V2_BASE) ? _ROUTE_V2_BASE : 'https://route-v2.phg0643.workers.dev') + '/screen/shop';
+  var REC = '추천';
+  var S = { on: false, fails: 0, failed: false, why: '', listening: false, shown: false, ready: false, good: false, cat: REC, cur: '', curRev: '', curCat: '',
+            rect: null, rk: '', chg: 0, chgAt: 0, still: 0, timer: 0, showAt: 0, pending: false, busy: 0, fetchAt: 0, cacheUsed: false, badFresh: 0, stBad: 0, stAt: 0, src: '', pre: [], preT: 0, hid: 0 };
+  try{ S.on = localStorage.getItem(K_ON) === '1'; S.fails = parseInt(localStorage.getItem(K_F) || '0', 10) || 0; S.why = localStorage.getItem(K_W) || ''; }catch(eS){}
+  function plug(){ try{ var C = window.Capacitor; return (C && C.Plugins && C.Plugins.ScreenNative) || null; }catch(e){ return null; } }
+  function active(){ return S.on && !S.failed && S.fails < 2 && !!plug(); }
+  function now(){ return (window.performance && performance.now) ? performance.now() : Date.now(); }
+  function tabEl(){ return document.getElementById('tab-shop'); }
+  function tabOpen(){ var t = tabEl(); return !!(t && t.classList.contains('active') && t.offsetParent && !document.hidden); }
+
+  // ── 캐시(저장본) ──
+  function cacheGet(cat){ try{ var o = JSON.parse(localStorage.getItem(K_C + cat) || 'null'); return (o && typeof o.txt === 'string' && o.txt.length > 20) ? o : null; }catch(e){ return null; } }
+  function cachePut(cat, txt, rev){ try{ localStorage.setItem(K_C + cat, JSON.stringify({ ts: Date.now(), rev: rev || '', txt: txt })); }catch(e){} }
+  function cacheDrop(cat){ try{ localStorage.removeItem(K_C + cat); }catch(e){} }
+
+  // ── 테마(앱 색 → 플러그인) ──
+  var colEl = null;
+  function css(v, def){
+    try{
+      if(!colEl){ colEl = document.createElement('span'); colEl.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none;'; document.body.appendChild(colEl); }
+      colEl.style.color = ''; colEl.style.color = 'var(' + v + ', ' + def + ')';
+      return getComputedStyle(colEl).color || def;
+    }catch(e){ return def; }
+  }
+  function palette(){
+    var pastel = document.documentElement.getAttribute('data-theme') === 'pastel';
+    return { bg: css('--bg', '#0b0f14'), card: css('--card', '#1b2129'), border: css('--border', 'rgba(255,255,255,.2)'), text: css('--text', '#f2f4f7'),
+             sub: css('--sub', '#9aa4b2'), gold: css('--gold', '#f0b429'), orange: css('--orange', '#f07830'), imgbg: pastel ? '#e8f4ff' : css('--prod-img-bg', '#252528') };
+  }
+
+  // ── 사각형: 칩 줄 위쪽부터 탭 맨 아래, 탭 폭 ──
+  function rectNow(){
+    var t = tabEl(), c = document.getElementById('shopCats'); if(!t || !c || !tabOpen()) return null;
+    var tr = t.getBoundingClientRect(), cr = c.getBoundingClientRect();
+    if(!(tr.width > 40 && tr.bottom - cr.top > 80)) return null;
+    return { L: tr.left, T: cr.top, W: tr.width, H: tr.bottom - cr.top, cl: tr.left, ct: cr.top, cr: tr.right, cb: tr.bottom };
+  }
+  function covered(r){
+    try{
+      var t = tabEl(), pts = [[r.L + r.W / 2, r.T + 18], [r.L + 12, r.T + r.H - 12], [r.L + r.W - 12, r.T + r.H - 12]];
+      for(var i = 0; i < pts.length; i++){ var e = document.elementFromPoint(pts[i][0], pts[i][1]); if(e && !t.contains(e)) return true; }
+    }catch(e){}
+    return false;
+  }
+  function place(r){ return { x: r.L, y: r.T, w: r.W, h: r.H, dpr: window.devicePixelRatio || 1, clip: { l: 0, t: 0, r: r.W, b: r.H } }; }
+  function rkey(r){ return [r.L, r.T, r.W, r.H].map(function(v){ return Math.round(v * 2) / 2; }).join(','); }
+
+  // ── 엔진에서 받기 ──
+  function pos(){
+    var la = window._lastGPSLat, ln = window._lastGPSLng;
+    if(typeof la === 'number' && typeof ln === 'number' && la && ln) return [la, ln];
+    try{ var best = null, ts = 0; for(var k in _wxMem){ var w = _wxMem[k]; if(w && w.ts > ts){ ts = w.ts; best = k; } } if(best){ var p = best.split(','); var a = parseFloat(p[0]), b = parseFloat(p[1]); if(a && b) return [a, b]; } }catch(e){}
+    return null;
+  }
+  function fetchScreen(cat, force){
+    var my = ++S.busy, p = pos(), ctl = (typeof AbortController === 'function') ? new AbortController() : null;
+    var to = setTimeout(function(){ try{ if(ctl) ctl.abort(); }catch(e){} }, 8000);
+    var u = BASE + '?cat=' + encodeURIComponent(cat) + (p ? '&lat=' + p[0] + '&lng=' + p[1] : '') + (force ? '&t=' + Date.now() : '');
+    S.fetchAt = now();
+    return fetch(u, { signal: ctl ? ctl.signal : undefined, cache: 'no-cache' })
+      .then(function(r){ clearTimeout(to); if(!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+      .then(function(txt){ if(my !== S.busy && cat !== S.cat) return null; return txt; })
+      .catch(function(){ clearTimeout(to); return null; });
+  }
+  function sane(txt){                                       // 겉모양만 본다(진짜 검증은 플러그인) — 아니면 아예 안 넘긴다
+    try{ var j = JSON.parse(txt); return (j && j.ok === true && j.v === 1 && Array.isArray(j.head) && Array.isArray(j.body)) ? j : null; }catch(e){ return null; }
+  }
+
+  // ── 플러그인에 올리기 ──
+  function present(txt, src, cat, keep){
+    var P = plug(); if(!P || !active()) return Promise.resolve(false);
+    var j = sane(txt);
+    if(!j){ return Promise.resolve(onInvalid(src, cat, 'shape')); }
+    var r = S.rect || rectNow();
+    var args = { id: 'shop', json: txt, palette: palette(), keepScroll: !!keep };
+    var p;
+    if(!S.shown){
+      if(!r) return Promise.resolve(false);                  // 탭이 안 보이면 올리지 않는다(보일 때 다시 시도)
+      Object.assign(args, place(r));
+      S.showAt = now(); S.ready = false;
+      p = P.show(args);
+    } else p = P.update(args);
+    return Promise.resolve(p).then(function(){
+      if(!S.shown){ S.shown = true; if(r){ S.rect = r; S.rk = rkey(r); } }
+      S.good = true; S.cur = txt; S.curRev = j.rev || ''; S.curCat = j.cat || cat; S.src = src; S.still = 0;
+      if(src === 'fresh'){ S.badFresh = 0; cachePut(S.curCat, txt, S.curRev); }
+      syncCard(); schedulePrefetch();
+      return true;
+    }).catch(function(e){
+      var m = String((e && (e.message || e)) || '');
+      if(/^invalid/.test(m)) return onInvalid(src, cat, m);
+      fail('show: ' + m); return false;
+    });
+  }
+  // 검증을 통과하지 못한 JSON: 저장본이면 버리고 새로 받는다 · 엔진 새 응답이면 버리고(저장본이 있으면 그대로 쓴다) · 아무것도 못 그리면 웹 화면
+  function onInvalid(src, cat, why){
+    try{ console.warn('[네이티브 쇼핑] 화면 JSON 이 올바르지 않아 버립니다(' + src + '):', why); }catch(e){}
+    if(src === 'cache'){ cacheDrop(cat); S.cacheUsed = false; refreshFromEngine(cat, true); return false; }
+    S.badFresh++; S.why = String(why || '').slice(0, 120);
+    try{ localStorage.setItem(K_W, S.why); }catch(e){}
+    if(!S.good && !S.shown) { fail('엔진 화면 오류: ' + S.why); }
+    else syncCard();
+    return false;
+  }
+  function refreshFromEngine(cat, force){
+    if(!active()) return Promise.resolve(false);
+    return fetchScreen(cat, force).then(function(txt){
+      if(!txt || !active()) return false;
+      if(cat !== S.cat) { var j0 = sane(txt); if(j0) cachePut(cat, txt, j0.rev || ''); return false; }        // 그새 다른 카테고리로 옮겼으면 저장만
+      var keep = (S.curCat === cat);
+      return present(txt, 'fresh', cat, keep);
+    });
+  }
+  function showCat(cat, force){
+    S.cat = cat;
+    var c = cacheGet(cat);
+    var p = Promise.resolve(false);
+    if(c && !force){ S.cacheUsed = true; p = present(c.txt, 'cache', cat, false); }
+    // 저장본이 이 시각 것이면 새로 안 받아도 된다(추천 시드는 한 시간 단위) — 그래도 5분이 지났으면 확인한다
+    var stale = !c || force || (Date.now() - (c.ts || 0)) > 5 * 60000;
+    return p.then(function(){ if(stale) return refreshFromEngine(cat, !!force); return false; });
+  }
+  // 다른 카테고리를 한가할 때 미리 받아 둔다 → 칩을 눌렀을 때 곧바로 바뀐다
+  function schedulePrefetch(){
+    if(S.preT || !active()) return;
+    try{
+      var j = JSON.parse(S.cur), chips = (j.head[0] && j.head[0].items) || [];
+      S.pre = chips.map(function(c){ return c.label; }).filter(function(n){ var c2 = cacheGet(n); return !c2 || (Date.now() - (c2.ts || 0)) > 30 * 60000; });
+    }catch(e){ return; }
+    var step = function(){
+      S.preT = 0; if(!active() || !tabOpen() || !S.pre.length) return;
+      var n = S.pre.shift();
+      if(n === S.cat){ S.preT = setTimeout(step, 50); return; }
+      fetchScreen(n, false).then(function(txt){ var j2 = txt && sane(txt); if(j2) cachePut(n, txt, j2.rev || ''); S.preT = setTimeout(step, 600); });
+    };
+    S.preT = setTimeout(step, 1500);
+  }
+
+  // ── 눌린 행동 ──
+  function onAction(e){
+    if(!e || e.id && e.id !== 'shop') return;
+    if(e.a === 'cat' && e.v){ showCat(e.v, false); }
+    else if(e.a === 'open' && e.url){ try{ openExternalApp(e.url); }catch(e0){} }
+    else if(e.a === 'refresh'){
+      showCat(S.cat, true).then(function(){ try{ toast('🛍 지금 요일·날씨·시간대에 맞추 재배열!'); }catch(e1){} });
+    }
+  }
+
+  // ── 켜고 끄기 ──
+  function fail(why){
+    if(S.failed || !S.on) return;
+    S.failed = true; S.fails++; S.why = String(why || '').slice(0, 140);
+    try{ localStorage.setItem(K_F, String(S.fails)); localStorage.setItem(K_W, S.why); }catch(e){}
+    try{ console.warn('[네이티브 쇼핑] 웹 화면만 씁니다:', S.why); }catch(e1){}
+    end(true); syncCard();
+    try{ if(typeof renderShop === 'function') renderShop(); }catch(e2){}
+  }
+  function hideNative(){ var P = plug(); if(P && S.shown){ S.shown = false; S.ready = false; try{ P.hide({ id: 'shop' }); }catch(e){} } }
+  function end(destroy){
+    if(S.timer){ clearTimeout(S.timer); S.timer = 0; }
+    if(S.preT){ clearTimeout(S.preT); S.preT = 0; }
+    var P = plug();
+    if(P && (S.shown || destroy)){ try{ P.hide({ id: 'shop' }); if(destroy) P.destroy({ id: 'shop' }); }catch(e){} }
+    S.shown = false; S.ready = false; S.good = false; S.cur = ''; S.rect = null; S.rk = '';
+  }
+  function listen(){
+    var P = plug(); if(!P || S.listening) return; S.listening = true;
+    try{
+      P.addListener('ready', function(e){ if(e && e.id && e.id !== 'shop') return; S.ready = true; S.fails = 0; try{ localStorage.setItem(K_F, '0'); }catch(e2){} syncCard(); });
+      P.addListener('error', function(e){ if(e && e.kind === 'invalid') return; fail('native: ' + ((e && e.message) || '')); });
+      P.addListener('action', onAction);
+    }catch(e){ fail('listen: ' + e); return; }
+    try{
+      new MutationObserver(function(){ if(S.shown && active()){ try{ plug().update({ id: 'shop', palette: palette() }); }catch(e3){} } }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    }catch(e4){}
+  }
+
+  // ── 반복 확인: 사각형 따라가기 · 움직임/덮임이면 숨김 · 8초 지연·상태 이상 ──
+  function tick(){
+    S.timer = 0;
+    if(!active()) return;
+    var t = now(), r = tabOpen() ? rectNow() : null;
+    if(!r){
+      if(S.shown) hideNative();
+      S.rect = null; S.rk = ''; S.chg = 0;
+      if(!tabOpen()){ return; }                               // 탭을 떠났다 — 다시 열리면 kick 이 깨운다
+      S.timer = setTimeout(tick, 200); return;
+    }
+    var k = rkey(r);
+    if(k !== S.rk){ S.chg = (t - S.chgAt < 450) ? S.chg + 1 : 1; S.chgAt = t; S.rk = k; S.rect = r; S.still = 0; }
+    else S.still++;
+    var moving = S.chg >= 3 && S.still < 3;                    // 몇 번 연달아 바뀌는 중 = 탭 전환·키보드 올라오는 중
+    var cov = !moving && covered(r);
+    if(moving || cov){
+      if(S.shown){ hideNative(); }
+    } else if(S.good){
+      if(!S.shown){ present(S.cur, S.src || 'cache', S.curCat || S.cat, true); }
+      else if(S.still === 0 || S.still === 2){ try{ plug().setRect(place(r)); }catch(e){} }
+    }
+    // 첫 그림 8초 지연
+    if(S.shown && !S.ready && t - S.showAt > 8000) { fail('ready timeout'); return; }
+    // 상태 확인 2초마다
+    if(S.shown && S.ready && t - S.stAt > 2000){
+      S.stAt = t;
+      Promise.resolve(plug().status({ id: 'shop' })).then(function(st){
+        if(!S.shown) return;
+        if(st && st.visible && (st.age == null || st.age < 120000 || st.age < 0)) S.stBad = 0; else if(++S.stBad >= 3) fail('status ' + JSON.stringify(st));
+      }).catch(function(){ if(++S.stBad >= 3) fail('status 오류'); });
+    }
+    S.timer = setTimeout(tick, (S.chg >= 2 && S.still < 6) ? 60 : 160);
+  }
+  var firstAt = 0;
+  function kick(){
+    if(!active()){ return; }
+    listen();
+    if(!tabOpen()){ if(S.shown) hideNative(); return; }
+    if(!S.timer) S.timer = setTimeout(tick, 30);
+    var t = now();
+    if(!S.good && !S.pending){                                 // 처음 열림: 저장본이 있으면 곧바로, 없으면 엔진에서
+      S.pending = true; firstAt = t;
+      showCat(S.cat, false).then(function(){ S.pending = false; }, function(){ S.pending = false; });
+    } else if(S.good && t - S.fetchAt > 20000 && !S.pending){ // 다시 열림: 20초 넘었으면 조용히 새로 확인
+      S.pending = true; refreshFromEngine(S.cat, false).then(function(){ S.pending = false; }, function(){ S.pending = false; });
+    }
+  }
+  function setUse(on){
+    try{ localStorage.setItem(K_ON, on ? '1' : '0'); if(on){ localStorage.setItem(K_F, '0'); localStorage.setItem(K_W, ''); } }catch(e){}
+    if(on){ S.on = true; S.failed = false; S.fails = 0; S.why = ''; S.badFresh = 0; kick(); }
+    else { S.on = false; end(true); }
+    syncCard();
+  }
+  function syncCard(){
+    try{
+      var card = document.getElementById('scrSetCard'); if(!card) return;
+      if(!plug()){ card.style.display = 'none'; return; }
+      if(card.style.display !== 'block') card.style.display = 'block';
+      var cb = document.getElementById('scrSetOn'), st = document.getElementById('scrSetStat');
+      if(cb) cb.checked = S.on && S.fails < 2;
+      var s;
+      if(!S.on) s = '꺼짐 — 예전 방식(웹 쇼핑 화면)으로 그려요.';
+      else if(S.failed || S.fails >= 2) s = '네이티브 쇼핑 화면에 문제가 있어 웹 화면으로 대신 보여주고 있어요' + (S.why ? ' (' + S.why + ')' : '') + '. 스위치를 깜다 켜면 다시 시도해요.';
+      else if(S.badFresh > 0) s = '엔진이 준 화면이 올바르지 않아 저장해 둔 화면을 쓰고 있어요' + (S.why ? ' (' + S.why + ')' : '') + '.';
+      else s = '켜짐 — 쇼핑 탭의 카테고리와 상품 목록을 엔진이 정한 대로 기기가 직접 그려요(실험 중).';
+      if(st && st.textContent !== s) st.textContent = s;
+    }catch(e){}
+  }
+  window._scrShop = { S: S, kick: kick, setUse: setUse, syncCard: syncCard, active: active, owns: function(){ return active() && S.good; }, present: present, showCat: showCat, tick: tick };
+  window._scrSetUse = function(on){ try{ setUse(on); }catch(e){} };
+  try{ if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(function(){ try{ syncCard(); kick(); }catch(e){} }, 600); }); else setTimeout(function(){ try{ syncCard(); kick(); }catch(e){} }, 600); }catch(eH){}
+  try{ document.addEventListener('visibilitychange', function(){ if(!document.hidden) kick(); else if(S.shown) hideNative(); }); }catch(eV){}
+})();
 
 
 // ── 커뮤니티 ────────────────────────────────────────────────
