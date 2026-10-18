@@ -14315,7 +14315,7 @@ window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
   function makeRegion(id, cfg){
     var H = { id: id, shown: false, ready: false, busy: false, busyAt: 0, again: false, hideBusy: false, hideAt: 0, timer: 0, tk: '', fast: 0, started: false, prevArg: null, prev: null, still: 0,
               cover: null, coverAt: 0, clipEls: null, clipAt: 0, cur: null, curKey: '', sent: '', exAt: 0, dirty: true, mkT: null, mkSeen: null, mkOn: false, wbKey: '', sx: -1, hAt: 0, hFail: 0,
-              hBusy: false, wait: 0, t0: 0, obs: null, kicked: false, showAt: 0, webOff: false };
+              hBusy: false, wait: 0, t0: 0, obs: null, kicked: false, showAt: 0, webOff: false, hostEl: null };
     function refresh(t, force){
       if(!force && !H.dirty && t - H.exAt < 600) return;
       H.dirty = false; H.exAt = t;
@@ -14493,12 +14493,16 @@ window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
         if(!active()) return;
         var w = cfg.host(), t = now();
         if(!w){ if(H.shown && !H.hideBusy) hideNative(); H.tk = 'to'; H.timer = setTimeout(tick, H.shown ? 150 : 800); return; }      // 칸이 사라졌으면(맛집 목록 다시 그림 등) 네이티브도 곧바로 거둔다
+        if(w !== H.hostEl){                              // 이 영역이 가리키는 칸이 다른 요소로 바뀌었다(스크롤로 줄이 바뀜·목록 다시 그림): 예전 내용은 버리고(남아 있으면 이전 글자가 새 칸 위에 그려진다) 새로 읽는다
+          H.hostEl = w; H.cur = null; H.curKey = ''; H.dirty = true; H.cover = null; H.still = 0;
+          if(H.obs){ try{ H.obs.disconnect(); }catch(eO){} H.obs = null; } watch();
+        }
         if(H.shown && !H.ready){ H.wait += Math.min(500, t - (H.t0 || t)); if(H.wait > 8000){ G_fail('8초 안에 첫 그림이 안 나왔다(' + id + ')'); return; } }
         H.t0 = t;
         if(H.busy && t - H.busyAt > 2500){ H.busy = false; H.again = false; H.shown = false; H.sent = ''; }       // 응답이 영영 안 오는 호출을 놓아준다
         if(H.hideBusy && t - H.hideAt > 2500){ H.hideBusy = false; H.shown = false; H.sent = ''; }
         if(document.hidden){ if(H.shown) hideNative(); H.tk = 'to'; H.timer = setTimeout(tick, 500); return; }
-        refresh(t, false);
+        if(t - scrollAt >= 100) refresh(t, false);       // 스크롤 중엔 글자 읽기(범위마다 글자 위치를 재는 비싼 일)를 미룬다 — 멈춘 뒤(0.1초) 읽는다(120Hz 스크롤)
         var d = H.cur ? desired(w, t) : { mode: 'off', m: null };
         var m = d.m, moved = true;
         if(m && H.prev) moved = !(Math.abs(H.prev.x - m.x) < 0.5 && Math.abs(H.prev.y - m.y) < 0.5 && Math.abs(H.prev.w - m.w) < 0.5 && Math.abs(H.prev.h - m.h) < 0.5);
@@ -14615,13 +14619,27 @@ window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
     }
     return shVis.list;
   }
-  for(var shp = 0; shp < 14; shp++) (function(i){
-    var cf = paintCfg(function(){ return shopRows()[i] || null; }), last = null;
-    // 칸이 스크롤로 다른 줄로 바뀌어도 이전 줄에 투명이 남지 않게 한다(남으면 글자가 사라져 보인다)
+  // 칸이 스크롤로 다른 요소로 바뀌어도 이전 요소에 투명이 남지 않게 한다(남으면 글자가 사라져 보인다)
+  // 요소를 칸에 '고정'해 배정한다: 보이는 동안은 같은 칸을 지키고, 화면을 벗어난 칸만 비워 새 요소가 채운다(목록 앞쪽이 늘고 줄 때마다 칸 번호가 밀리면 모든 영역이 새로 읽혀 깜박인다)
+  function stableSlots(visFn, n){
+    var slots = [], key = -1e9, i;
+    for(i = 0; i < n; i++) slots[i] = null;
+    return function(){
+      var t = now(); if(t - key < 120) return slots; key = t;
+      var vis = visFn(), j;
+      for(j = 0; j < n; j++) if(slots[j] && (!slots[j].isConnected || vis.indexOf(slots[j]) < 0)) slots[j] = null;
+      for(j = 0; j < vis.length; j++){ if(slots.indexOf(vis[j]) >= 0) continue; var f = slots.indexOf(null); if(f < 0) break; slots[f] = vis[j]; }
+      return slots;
+    };
+  }
+  function slotCfg(listFn, i){
+    var cf = paintCfg(function(){ return listFn()[i] || null; }), last = null;
     cf.webIs = function(){ var h = cf.host(); if(last && last !== h && last.classList.contains('htl-nat-op')) return null; return !!(h && h.classList.contains('htl-nat-op')); };
     cf.webSet = function(on){ var h = cf.host(); if(last && last !== h) last.classList.remove('htl-nat-op'); last = h; if(h) h.classList.toggle('htl-nat-op', on); };
-    makeRegion('sh:p' + i, cf);
-  })(shp);
+    return cf;
+  }
+  var shSlots = stableSlots(shopRows, 14);
+  for(var shp = 0; shp < 14; shp++) makeRegion('sh:p' + shp, slotCfg(shSlots, shp));
   var shopWatched = false;
   function watchShop(){                                   // 상품·칩이 새로 그려지면 영역들이 새 내용을 다시 읽게 깨운다
     if(shopWatched || typeof MutationObserver !== 'function') return;
@@ -14630,6 +14648,64 @@ window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
     try{ var mo = new MutationObserver(function(){ shVis.t = -1e9; if(active()) kick(); }); mo.observe(g, { childList: true }); mo.observe(c, { childList: true }); }catch(e){ shopWatched = false; }
   }
   try{ document.addEventListener('DOMContentLoaded', watchShop); watchShop(); }catch(eS){}
+  // ★ 2026-10-18 (네이티브 이전 7번째 화면: 설정 탭 — YJ: '계산은 엔진, 앱은 그림만'): 같은 방식. 설정 화면의 글자 블록(카드 제목·설명·상태 상자·단추)을 화면에 보이는 앞 24개까지 그린다.
+  //   블록 = 입력칸·그림·스위치(입력칸 포함)가 없는, 글자가 있는 가장 큰 요소(카드 전체가 글자·단추뿐이면 카드째). 입력칸·스위치·테마 고르기 같은 것은 웹이 그대로 그린다. 눌림·입력은 늘 웹이 받는다.
+  //   안 보이는 카드(display:none)는 블록이 아니다. 투명도가 걸린 블록은 읽지 않는다(웹이 그린다). 설정 안에 스크롤이 생기면 쇼핑과 같이 멈춘 뒤 그 자리의 블록을 다시 읽는다.
+  var ssAll = { t: -1e9, list: [], dirty: true }, ssVis = { t: -1e9, list: [] };
+  var SS_BAD = 'img,canvas,video,input,textarea,select,iframe,object,svg';
+  function ssBox(){ return document.getElementById('settingsTabView'); }
+  function ssBuild(){
+    var box = ssBox(), out = [];
+    if(!box) return out;
+    (function walk(el){
+      for(var c = el.firstElementChild; c && out.length < 240; c = c.nextElementSibling){
+        if(/^(SCRIPT|STYLE|BR|INPUT|TEXTAREA|SELECT|IMG|CANVAS|VIDEO|IFRAME|OBJECT)$/i.test(c.tagName) || (window.SVGElement && c instanceof SVGElement)) continue;
+        var cs = getComputedStyle(c); if(cs.display === 'none' || cs.visibility === 'hidden') continue;
+        if(c.querySelector(SS_BAD)){ walk(c); continue; }               // 입력칸 등이 섞였으면 안으로 들어가 글자 조각만 고른다
+        if(/\S/.test(c.textContent || '')) out.push(c);
+      }
+    })(box);
+    return out;
+  }
+  function ssVisible(){                                    // 보이는 블록(스크롤 영역에 걸친 것) 앞 24개, 문서 순서. 0.12초 안엔 다시 안 잰다
+    var t = now(); if(t - ssVis.t < 120) return ssVis.list;
+    ssVis.t = t; ssVis.list = [];
+    var box = ssBox(); if(!box || !box.offsetWidth || !box.offsetHeight) return ssVis.list;
+    if(ssAll.dirty && t - ssAll.t > 300){ ssAll.list = ssBuild(); ssAll.dirty = false; ssAll.t = t; }
+    var br = box.getBoundingClientRect(), L = ssAll.list;
+    for(var i = 0; i < L.length && ssVis.list.length < 40; i++){
+      if(!L[i].isConnected) continue;
+      var r = L[i].getBoundingClientRect(); if(r.bottom <= br.top || r.top >= br.bottom || r.height < 8) continue;
+      ssVis.list.push(L[i]);
+    }
+    return ssVis.list;
+  }
+  var ssSlots = stableSlots(ssVisible, 24);
+  for(var ssi = 0; ssi < 24; ssi++) (function(i){
+    var cf = slotCfg(ssSlots, i), ex0 = cf.extract;
+    cf.extract = function(){                                                       // 투명도가 걸린 블록은 웹이 그린다 — 단 우리가 건 투명(htl-nat-op, 웹을 가리는 것)은 셈하지 않는다(셈하면 그릴 때마다 '투명하다'고 읽혀 켜졌다 꺼졌다 한다)
+      var h = cf.host(); if(!h) return null; var b = ssBox(), stop = b && b.parentElement, o = opOf(h.parentElement, stop);
+      if(!h.classList.contains('htl-nat-op')){ var v = parseFloat(getComputedStyle(h).opacity); if(v === v) o *= v; }
+      if(o < 0.999) return null; return ex0();
+    };
+    makeRegion('ss:b' + i, cf);
+  })(ssi);
+  var setWatched = false;
+  function watchSet(){                                    // 설정 화면 내용이 바뀌면(카드 보임/숨김·상태 글자) 블록 목록을 다시 만들고 영역들을 깨운다
+    if(setWatched || typeof MutationObserver !== 'function') return;
+    var b = ssBox(); if(!b) return;
+    setWatched = true;
+    try{
+      new MutationObserver(function(recs){
+        for(var i = 0; i < recs.length; i++){
+          var r = recs[i];
+          if(r.type === 'attributes' && r.attributeName === 'class'){ var o = String(r.oldValue || '').replace(/\bhtl-nat-op\b/g, '').replace(/\s+/g, ' ').trim(), n = String(r.target.className || '').replace(/\bhtl-nat-op\b/g, '').replace(/\s+/g, ' ').trim(); if(o === n) continue; }      // 우리가 바꾼 투명 클래스는 무시
+          ssAll.dirty = true; return;      // 목록만 '다시 만들 것'으로 표시한다 — 영역을 깨우지 않는다(상태 글자가 바뀔 때마다 깨우면 영역 ↔ 글자 갱신이 서로를 부르는 되먹임이 생긴다). 영역은 자기 칸 안 변화를 스스로 보고, 칸이 바뀌면 다음 확인 때 알아챈다
+        }
+      }).observe(b, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['style', 'class'], attributeOldValue: true });
+    }catch(e){ setWatched = false; }
+  }
+  try{ document.addEventListener('DOMContentLoaded', watchSet); watchSet(); }catch(eT){}
   window._htlNatMk = TL.mk;                               // _placeGpsMarkerSmooth 가 알려 준다(타임라인 영역만)
 
   // ── 전체 켜고 끄기 ──
@@ -14660,7 +14736,7 @@ window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
   var scrollTg = [], scrollRaf = false;
   function wakeAll(){ each(function(r){ r.wake(); }); }
   // 화면을 (다시) 그렸다 — 앱이 _renderHtlTrack 끝에서 알려 준다(머리줄은 그 직전에 채워진다)
-  function kick(){ if(!active()) return; listen(); try{ watchFood(); }catch(eF){} try{ watchShop(); }catch(eS2){} each(function(r){ r.kick(); }); }
+  function kick(){ if(!active()) return; listen(); try{ watchFood(); }catch(eF){} try{ watchShop(); }catch(eS2){} try{ watchSet(); }catch(eT2){} each(function(r){ r.kick(); }); }
   function setUse(on){
     try{ localStorage.setItem(K_ON, on ? '1' : '0'); if(on){ localStorage.setItem(K_F, '0'); localStorage.setItem(K_W, ''); } }catch(e){}
     if(on){ G.on = true; G.failed = false; G.fails = 0; G.why = ''; kick(); }
@@ -14671,14 +14747,14 @@ window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
     try{
       var card = document.getElementById('htlSetCard'); if(!card) return;
       if(!plug()){ card.style.display = 'none'; return; }
-      card.style.display = 'block';
+      if(card.style.display !== 'block') card.style.display = 'block';
       var cb = document.getElementById('htlSetOn'), st = document.getElementById('htlSetStat');
       if(cb) cb.checked = G.on && G.fails < 2;
       var s;
       if(!G.on) s = '꺼짐 — 예전 방식(웹 화면)으로 그려요.';
       else if(G.failed || G.fails >= 2) s = '네이티브 경로 화면에 문제가 있어 웹 화면으로 대신 보여주고 있어요' + (G.why ? ' (' + G.why + ')' : '') + '. 스위치를 껐다 켜면 다시 시도해요.';
       else s = '켜짐 — 경로 카드 머리줄·타임라인·현재 위치 점을 기기가 직접 그려요(실험 중).';
-      if(st) st.textContent = s;
+      if(st && st.textContent !== s) st.textContent = s;                     // 같으면 다시 쓰지 않는다(쓸 때마다 화면 변화 관찰자가 깨어나 영역 ↔ 글자 갱신이 맞물려 깜박였다)
     }catch(e){}
   }
   window._htlNat = { H: TL.H, HD: HD.H, TB: TB.H, G: G, kick: kick, setUse: setUse, syncCard: syncCard, active: active, extract: tlExtract, paintOf: paintOf };
@@ -38191,6 +38267,7 @@ function showSettingsTab(el){
   if(fab) fab.style.display='none';
   _renderIdBox();
   try { if(typeof _errRefreshBadge==='function') _errRefreshBadge(); } catch(e){}
+  try{ if(window._htlNat) window._htlNat.kick(); }catch(eNk){}                       // 설정 화면이 열렸다 — 네이티브 영역들이 곧바로 읽게(꺼져 있으면 아무 일 없음)
 }
 window.showSettingsTab = showSettingsTab;
 
