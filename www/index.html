@@ -18797,6 +18797,7 @@ window._exitConfirm = _exitConfirm;
 window._exitCancel  = _exitCancel;
 
 function handleBackPress(){
+  try{ if(window._scrNews && window._scrNews.closeDetail()){ _backPressCount = 0; return true; } }catch(eSn4){}      // 서버 구동 뉴스 화면에서 연 기사 팝업이 열려 있으면 그것부터 닫는다
   try{ if(window._scrFood && window._scrFood.closeSheet()){ _backPressCount = 0; return true; } }catch(eSf){}      // 서버 구동 맛집 화면에서 연 지도 시트가 열려 있으면 그것부터 닫는다
   try{ if(window._scrSet && window._scrSet.closeSheet()){ _backPressCount = 0; return true; } }catch(eSh){}      // 서버 구동 설정 화면에서 연 웹 카드 시트가 열려 있으면 그것부터 닫는다
   // ① 종료 팝업이 열려있으면 팝업 닫기
@@ -20285,6 +20286,21 @@ window.addEventListener('unhandledrejection', function(e) {
         <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">맛집 탭의 머리줄·카테고리 칩·맛집 목록을 엔진이 분류·거르기·문구까지 정해 내려주고, 기기가 직접 그려요(부드러운 스크롤). 가게를 누르면 길찾기 지도가 열려요. 문제가 생기면 예전 웹 화면으로 돌아가요.</p>
         <div id="scrfSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
         <style>#scrfSetOn:checked ~ #scrfSetKnob{background:var(--gold) !important;} #scrfSetOn:checked ~ #scrfSetDot{left:23px !important;}</style>
+      </div>
+
+      <!-- ★ 2026-10-18: 서버 구동 네이티브 뉴스 화면(커뮤니티) — 안드로이드 앱에서만 보임, 기본 꺼짐(실험) -->
+      <div id="scrnSetCard" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <div style="font-size:15px;font-weight:800;color:var(--text);">네이티브 뉴스 화면</div>
+          <label style="position:relative;display:inline-block;width:46px;height:26px;">
+            <input type="checkbox" id="scrnSetOn" onchange="_scrnSetUse(this.checked)" style="opacity:0;width:0;height:0;">
+            <span id="scrnSetKnob" style="position:absolute;inset:0;border-radius:13px;background:var(--border2);transition:.2s;cursor:pointer;"></span>
+            <span id="scrnSetDot" style="position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.3);"></span>
+          </label>
+        </div>
+        <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">커뮤니티 > 뉴스의 카테고리 칩·기사 목록을 엔진이 분류·거르기·시간 문구까지 정해 내려주고, 기기가 직접 그려요(부드러운 스크롤). 기사를 누르면 요약과 원문 보기가 열려요. 문제가 생기면 예전 웹 화면으로 돌아가요.</p>
+        <div id="scrnSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
+        <style>#scrnSetOn:checked ~ #scrnSetKnob{background:var(--gold) !important;} #scrnSetOn:checked ~ #scrnSetDot{left:23px !important;}</style>
       </div>
 
       <!-- ★ 2026-10-03: 도착 오차 익명 기록 (끌 수 있음) -->
@@ -25779,6 +25795,7 @@ window._dedupeStnByName = _dedupeStnByName;
 function switchTab(tab,el){
   try{ if(window._htlNat) window._htlNat.kick(); }catch(eNk){}      // 네이티브 그림 영역(켜져 있을 때만)이 새로 보이는 탭의 내용을 읽는다
   try{ if(window._scrShop) setTimeout(function(){ window._scrShop.kick(); }, 0); }catch(eSk){}
+  try{ if(window._scrNews) setTimeout(function(){ window._scrNews.kick(); }, 0); }catch(eSn3){}      // 서버 구동 네이티브 뉴스 화면(켜져 있을 때만)
   try{ if(window._scrFood) setTimeout(function(){ window._scrFood.kick(); }, 0); }catch(eSf2){}      // 서버 구동 네이티브 맛집 화면(켜져 있을 때만)
   try{ if(window._scrSet) setTimeout(function(){ window._scrSet.kick(); }, 0); }catch(eSs){}      // 서버 구동 네이티브 설정 화면(켜져 있을 때만)      // 서버 구동 네이티브 쇼핑 화면(켜져 있을 때만) — 탭 전환이 끝난 뒤 보이면 올린다
   try{ if(tab !== 'map' && window._pickDestMode && typeof _pickAbandon === 'function') _pickAbandon(); }catch(ePk){}      // 노선도 탭을 떠나면 '도착지 역 고르기'와 정해 둔 출발지는 없던 일로
@@ -27154,7 +27171,7 @@ function _newsMerge(news, hintCat){
       if(hintCat && (!auto || auto === '사회')) item.cat = hintCat;
       add.push(item);
     });
-    if(add.length) _NEWSFEED.items = add.concat(_NEWSFEED.items || []);
+    if(add.length){ _NEWSFEED.items = add.concat(_NEWSFEED.items || []); try{ if(window._scrNews) window._scrNews.changed(); }catch(eSn){} }      // 서버 구동 네이티브 뉴스 화면: 받아 둔 기사가 바뀌었으니 엔진에 새 화면을 받는다(켜져 있을 때만)
   }catch(e){}
 }
 window._newsMerge = _newsMerge;
@@ -27169,6 +27186,7 @@ function _newsAgo(ts){
   return Math.floor(h / 24) + '일 전';
 }
 function _renderNewsTab(list){
+  try{ if(window._scrNews && window._scrNews.owns()){ window._scrNews.changed(); return; } }catch(eSn){}      // 서버 구동 네이티브 뉴스 화면이 맡는 동안은 웹 뉴스 목록을 만들지 않는다(꺼지면 곧바로 다시 만든다)
   var cats = (typeof _NEWS_CATS !== 'undefined') ? _NEWS_CATS : ['전체','사회','정치','경제','연예','스포츠','IT'];
   var chips = cats.map(function(c){
     var on = (c === _newsCatSel);
@@ -37750,6 +37768,7 @@ window.refreshShop=refreshShop;
     try{ var H = window._htlNat, hc = document.getElementById('htlSetCard'); if(H && H.G && hc && hc.style.display === 'block') f.feat.htl = { h: 1, on: H.G.on ? 1 : 0, f: (H.G.failed || H.G.fails >= 2) ? 1 : 0, w: H.G.why || '' }; }catch(e){}
     try{ var SS = window._scrShop && _scrShop.S, c2 = document.getElementById('scrSetCard'); if(SS && c2 && c2.style.display === 'block') f.feat.scr = { h: 1, on: SS.on ? 1 : 0, f: (SS.failed || SS.fails >= 2) ? 1 : 0, w: SS.why || '', b: SS.badFresh > 0 ? 1 : 0 }; }catch(e){}
     try{ var SF = window._scrFood && _scrFood.S, c3 = document.getElementById('scrfSetCard'); if(SF && c3 && c3.style.display === 'block') f.feat.scrf = { h: 1, on: SF.on ? 1 : 0, f: (SF.failed || SF.fails >= 2) ? 1 : 0, w: SF.why || '', b: SF.badFresh > 0 ? 1 : 0 }; }catch(e){}
+    try{ var SN = window._scrNews && _scrNews.S, c4 = document.getElementById('scrnSetCard'); if(SN && c4 && c4.style.display === 'block') f.feat.scrn = { h: 1, on: SN.on ? 1 : 0, f: (SN.failed || SN.fails >= 2) ? 1 : 0, w: SN.why || '', b: SN.badFresh > 0 ? 1 : 0 }; }catch(e){}
     f.feat.scrs = { h: 1, on: S.on ? 1 : 0, f: (S.failed || S.fails >= 2) ? 1 : 0, w: S.why || '', b: S.badFresh > 0 ? 1 : 0 };
     return f;
   }
@@ -37875,6 +37894,7 @@ window.refreshShop=refreshShop;
       else if(key === 'f.htl') window._htlSetUse(on);
       else if(key === 'f.scr') window._scrSetUse(on);
       else if(key === 'f.scrf') window._scrfSetUse(on);
+      else if(key === 'f.scrn') window._scrnSetUse(on);
       else if(key === 'f.scrs'){ setUse(on); return; }
       else return;                                                             // 모르는 키는 무시
     }catch(e){}
@@ -38379,6 +38399,360 @@ window.refreshShop=refreshShop;
   try{ document.addEventListener('visibilitychange', function(){ if(!document.hidden) kick(); else if(S.shown) hideNative(); }); }catch(eV){}
 })();
 
+// ══════════════════════════════════════════════════════════════════════════
+// ★ 2026-10-18 서버 구동 네이티브 화면 4호: 커뮤니티 > 뉴스 (YJ: "모든 계산은 엔진이, 앱이 그림을 그린다는 규칙 유지")
+//   원칙은 쇼핑·설정·맛집과 같다 — 계산은 엔진이, 그림은 앱이. 카테고리 분류 규칙·묶음/사고성 기사 거르기·중복 정리·'전체'에서 골고루 뽑기·3일 컷·'N분 전' 문구·상세 팝업의 요약 정리/언론사 이름·화면 구성은 엔진 POST /screen/news 가 정한다.
+//   이 코드는 (1) 앱이 받아 둔 기사 목록(원자료: _NEWSFEED.items)과 고른 칩(_newsCatSel)을 엔진에 보내고 (2) 받은 JSON 글을 그대로 ScreenNative 플러그인(id 'news')에 넘기고
+//   (3) 눌린 행동만 이어 준다(칩 → _newsCatSel 바꾸기 · 기사 → 엔진이 준 상세 문구로 웹 팝업(원문 보기는 인앱 브라우저)). 분류·문구·순서를 여기서 정하지 않는다.
+//   · 기사를 받아 오는 일(서버 /news/all · /newsfeed · 저장본)은 예전 그대로 웹이 한다. 기사가 바뀔 때마다(_newsMerge) 엔진에 새 화면을 받는다.
+//   · 기사 줄을 누르면: 그 순간 앱이 보냈던 목록(스냅샷)에서 눌린 번호의 기사를 찾아 엔진에 상세 문구를 묻고, 받은 글로 팝업(#newsDetailOv)을 띄운다. 엔진 응답이 없으면 예전 웹 팝업(_openNewsDetail).
+//   · 로컬 캐시: 같은 칩의 마지막 정상 화면을 저장해 두었다가 처음 열 때 바로 그린다(이때는 줄이 눌리지 않고 새 화면이 오면 눌린다). 엔진 응답이 틀린 모양이면 버린다.
+//   · 안드로이드 앱 + ScreenNative 플러그인 + 설정 스위치(기본 꺼짐)일 때만. 팝업이 덮는 동안은 네이티브를 숨기고 웹이 이어받는다. 켜져 있는 동안 웹 뉴스 목록은 만들지 않는다(꺼지면 곧바로 다시 만든다).
+//   · 스와이프로 탭/카테고리 넘기기는 네이티브 위에서는 되지 않는다(칩을 누른다) — 기기 확인 대상.
+// ══════════════════════════════════════════════════════════════════════════
+(function(){
+  var K_ON = 'gdm_scrn_on', K_F = 'gdm_scrn_fail', K_W = 'gdm_scrn_why', K_C = 'gdm_scrn_c';
+  var BASE = ((typeof _ROUTE_V2_BASE === 'string' && _ROUTE_V2_BASE) ? _ROUTE_V2_BASE : 'https://route-v2.phg0643.workers.dev') + '/screen/news';
+  var ID = 'news', CATS = ['전체', '증시', '경제', '사회', '정치', '연예', '스포츠', 'IT'], BUCKET = 300000;
+  var S = { on: false, fails: 0, failed: false, why: '', listening: false, shown: false, ready: false, good: false, cur: '', curRev: '', curCat: '', src: '', fk: '', snap: null, stash: null, rect: null, rk: '',
+            chg: 0, chgAt: 0, still: 0, timer: 0, showAt: 0, pending: false, busy: 0, fetchAt: 0, badFresh: 0, stBad: 0, stAt: 0, chT: 0, memo: {}, memoK: [], inflight: '', waitAt: 0 };
+  try{ S.on = localStorage.getItem(K_ON) === '1'; S.fails = parseInt(localStorage.getItem(K_F) || '0', 10) || 0; S.why = localStorage.getItem(K_W) || ''; }catch(eS){}
+  function plug(){ try{ var C = window.Capacitor; return (C && C.Plugins && C.Plugins.ScreenNative) || null; }catch(e){ return null; } }
+  function active(){ return S.on && !S.failed && S.fails < 2 && !!plug(); }
+  function now(){ return (window.performance && performance.now) ? performance.now() : Date.now(); }
+  function tabEl(){ return document.getElementById('tab-community'); }
+  function listEl(){ return document.getElementById('commScrollView'); }
+  function tabOpen(){                                                          // 커뮤니티 탭이 보이고, 그 안에서 '뉴스'가 열려 있나(게시판·실시간소통·설정이 아니라)
+    try{
+      var t = tabEl(), sv = listEl();
+      if(!(t && t.classList.contains('active') && t.offsetParent && !document.hidden)) return false;
+      if(typeof _commFilter === 'undefined' || _commFilter !== '뉴스') return false;
+      return !!(sv && sv.offsetParent);
+    }catch(e){ return false; }
+  }
+  function hashOf(s){ var h = 5381; for(var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36) + ':' + s.length; }
+  function cat(){ var c = (typeof _newsCatSel !== 'undefined' && _newsCatSel) || '전체'; return CATS.indexOf(c) >= 0 ? c : '전체'; }
+
+  // ── 엔진에 보낼 것(읽기만 한다 — 분류·거르기·문구는 엔진이) ──
+  function snapshot(){
+    try{ if(typeof _newsStoreHydrate === 'function') _newsStoreHydrate(); }catch(e){}
+    var a = (typeof _NEWSFEED !== 'undefined' && _NEWSFEED && _NEWSFEED.items) || [], out = [];
+    for(var i = 0; i < a.length && out.length < 1200; i++){
+      var x = a[i]; if(!x || !x.title) continue;
+      out.push([String(x.title), String(x.link || ''), String(x.source || ''), x.ts || 0, String(x._srcCat || x.cat || ''), x.desc ? String(x.desc).slice(0, 400) : '']);
+    }
+    return out;
+  }
+  function request(){
+    var rows = snapshot();
+    var txt = JSON.stringify({ cap: 5, f: { cat: cat() }, n: rows });
+    return { rows: rows, txt: txt, fk: hashOf(txt) + ':' + Math.floor(Date.now() / BUCKET), idle: !rows.length };      // 5분이 지나면 같은 목록이라도 새로 받는다('N분 전' 글이 낡지 않게)
+  }
+
+  // ── 캐시(저장본: 마지막 정상 화면 하나) + 이번 실행 동안의 짧은 기억(칩을 오갈 때 바로 그리려고) ──
+  function cacheGet(){ try{ var o = JSON.parse(localStorage.getItem(K_C) || 'null'); return (o && typeof o.txt === 'string' && o.txt.length > 20 && typeof o.cat === 'string') ? o : null; }catch(e){ return null; } }
+  function cachePut(c, txt, rev){ try{ localStorage.setItem(K_C, JSON.stringify({ ts: Date.now(), cat: c, rev: rev || '', txt: txt })); }catch(e){} }
+  function cacheDrop(){ try{ localStorage.removeItem(K_C); }catch(e){} }
+  function memoPut(fk, txt){
+    if(!S.memo[fk]) S.memoK.push(fk);
+    S.memo[fk] = txt;
+    while(S.memoK.length > 8){ delete S.memo[S.memoK.shift()]; }
+  }
+
+  // ── 테마(앱 색 → 플러그인) ──
+  var colEl = null;
+  function css(v, def){
+    try{
+      if(!colEl){ colEl = document.createElement('span'); colEl.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none;'; document.body.appendChild(colEl); }
+      colEl.style.color = ''; colEl.style.color = 'var(' + v + ', ' + def + ')';
+      return getComputedStyle(colEl).color || def;
+    }catch(e){ return def; }
+  }
+  function palette(){
+    var pastel = document.documentElement.getAttribute('data-theme') === 'pastel';
+    return { bg: css('--bg', '#0b0f14'), card: css('--card', '#1b2129'), border: css('--border', 'rgba(255,255,255,.2)'), border2: css('--border2', '#3a3a3c'), text: css('--text', '#f2f4f7'),
+             sub: css('--sub', '#9aa4b2'), gold: css('--gold', '#f0b429'), orange: css('--orange', '#f07830'), imgbg: pastel ? '#e8f4ff' : css('--prod-img-bg', '#252528') };
+  }
+
+  // ── 사각형: 커뮤니티 칩 줄(실시간소통·게시판·뉴스·설정) 아래부터 탭 맨 아래까지 ──
+  function rectNow(){
+    var b = tabEl(), fr = document.getElementById('filterRow'); if(!b || !fr || !tabOpen()) return null;
+    var r = b.getBoundingClientRect(), f = fr.getBoundingClientRect();
+    var top = f.bottom;
+    if(!(r.width > 40 && r.bottom - top > 120)) return null;
+    return { L: r.left, T: top, W: r.width, H: r.bottom - top };
+  }
+  function covered(r){
+    try{
+      var t = tabEl(), pts = [[r.L + r.W / 2, r.T + 18], [r.L + 12, r.T + r.H - 12], [r.L + r.W - 12, r.T + r.H - 12]];
+      for(var i = 0; i < pts.length; i++){ var e = document.elementFromPoint(pts[i][0], pts[i][1]); if(e && !t.contains(e)) return true; }
+    }catch(e){}
+    return false;
+  }
+  function place(r){ return { x: r.L, y: r.T, w: r.W, h: r.H, dpr: window.devicePixelRatio || 1, clip: { l: 0, t: 0, r: r.W, b: r.H } }; }
+  function rkey(r){ return [r.L, r.T, r.W, r.H].map(function(v){ return Math.round(v * 2) / 2; }).join(','); }
+
+  // ── 엔진에서 받기 ──
+  function post(body, ms, track){
+    var my = track ? ++S.busy : 0, ctl = (typeof AbortController === 'function') ? new AbortController() : null;
+    var to = setTimeout(function(){ try{ if(ctl) ctl.abort(); }catch(e){} }, ms || 8000);
+    return fetch(BASE, { method: 'POST', body: body, headers: { 'Content-Type': 'text/plain;charset=UTF-8' }, signal: ctl ? ctl.signal : undefined, cache: 'no-store' })
+      .then(function(r){ clearTimeout(to); if(!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+      .then(function(txt){ return { txt: txt, my: my }; })
+      .catch(function(){ clearTimeout(to); return null; });
+  }
+  function fetchScreen(req){
+    S.fetchAt = now();
+    return post(req.txt, 10000, true).then(function(o){ return (o && o.my === S.busy) ? o.txt : null; });      // 더 새 요청이 있으면 이 답은 버린다
+  }
+  function sane(txt){                                                         // 겉모양만 본다(진짜 검증은 플러그인)
+    try{ var j = JSON.parse(txt); return (j && j.ok === true && j.v === 1 && j.screen === 'news' && Array.isArray(j.head) && Array.isArray(j.body)) ? j : null; }catch(e){ return null; }
+  }
+
+  // ── 웹 뉴스 칩 줄: 네이티브가 맡는 동안 숨기고, 놓으면 웹이 다시 그린다 ──
+  function webBar(show){
+    try{ var b = document.getElementById('newsCatBar'); if(b && !show) b.style.display = 'none'; }catch(e){}
+  }
+  function webClear(){                                                        // 네이티브가 맡으면 웹 뉴스 줄은 비운다(보이지 않는 줄을 수백 개 들고 있지 않게)
+    try{ if(typeof _commFilter !== 'undefined' && _commFilter === '뉴스'){ var l = document.getElementById('commList'); if(l && l.firstElementChild) l.innerHTML = ''; window._newsRenderSeq = (window._newsRenderSeq || 0) + 1; } }catch(e){}
+  }
+  function webBack(){
+    try{ if(typeof _commFilter !== 'undefined' && _commFilter === '뉴스' && typeof _renderNewsTab === 'function'){ var l = document.getElementById('commList'); if(l) _renderNewsTab(l); } }catch(e){}
+  }
+
+  // ── 플러그인에 올리기 ──
+  // z = { txt, src, fk, rows }  rows = 이 화면을 만들 때 엔진에 보낸 기사 목록(눌린 번호를 풀어 줄 스냅샷; 저장본은 null → 줄이 눌리지 않는다)
+  var DET = null;
+  function present(z, keep){
+    var P = plug(); if(!P || !active()) return Promise.resolve(false);
+    var j = sane(z.txt);
+    if(!j) return Promise.resolve(onInvalid(z.src, 'shape'));
+    var r = S.rect || rectNow();
+    var args = { id: ID, json: z.txt, palette: palette(), keepScroll: !!keep };
+    var p;
+    if(!S.shown){
+      if(!r || DET || covered(r)){ S.stash = z; return Promise.resolve(false); }  // 지금은 못 보인다(다른 탭·팝업) — 보일 때 tick 이 올린다
+      Object.assign(args, place(r));
+      S.showAt = now(); S.ready = false;
+      p = P.show(args);
+    } else p = P.update(args);
+    return Promise.resolve(p).then(function(){
+      if(!S.shown){ S.shown = true; if(r){ S.rect = r; S.rk = rkey(r); } }
+      S.good = true; S.cur = z.txt; S.curRev = j.rev || ''; S.src = z.src; S.still = 0; S.snap = z.rows; S.stash = null;
+      S.curCat = (j.info && j.info.cat) || '';
+      if(z.fk) S.fk = z.fk;
+      if(z.fk) memoPut(z.fk, z.txt);
+      if(z.src === 'fresh'){ S.badFresh = 0; cachePut(S.curCat, z.txt, S.curRev); }
+      webBar(false); webClear();
+      syncCard();
+      return true;
+    }).catch(function(e){
+      var m = String((e && (e.message || e)) || '');
+      if(/^invalid/.test(m)) return onInvalid(z.src, m);
+      fail('show: ' + m); return false;
+    });
+  }
+  // 검증을 통과하지 못한 JSON: 저장본이면 버리고 새로 받는다 · 엔진 새 응답이면 버리고 · 아무것도 못 그리면 웹 화면
+  function onInvalid(src, why){
+    try{ console.warn('[네이티브 뉴스] 화면 JSON 이 올바르지 않아 버립니다(' + src + '):', why); }catch(e){}
+    if(src === 'cache'){ cacheDrop(); S.fk = ''; refresh(true); return false; }
+    S.badFresh++; S.why = String(why || '').slice(0, 120); S.fk = '';
+    try{ localStorage.setItem(K_W, S.why); }catch(e){}
+    if(!S.good && !S.shown) fail('엔진 화면 오류: ' + S.why); else syncCard();
+    return false;
+  }
+  // 요청(기사 목록·칩)이 바뀌었을 때만(force 면 늘) 엔진에서 새 화면을 받는다. 같은 요청의 기억이 있으면 네트워크 없이.
+  function refresh(force){
+    if(!active()) return Promise.resolve(false);
+    var req = request();
+    if(!force && S.good && req.fk === S.fk){ S.stash = null; return Promise.resolve(false); }      // 못 보이는 동안 쌓인 화면이 있어도 요청이 원래대로 돌아왔으면 지금 화면이 맞다
+    if(!force && S.inflight === req.fk) return Promise.resolve(false);                              // 같은 요청이 이미 가는 중
+    if(!force && S.memo[req.fk]) return present({ txt: S.memo[req.fk], src: 'memo', fk: req.fk, rows: req.rows }, S.curCat === cat());
+    S.fk = req.fk; S.inflight = req.fk;
+    return fetchScreen(req).then(function(txt){
+      if(S.inflight === req.fk) S.inflight = '';
+      if(!txt || !active()){ if(!txt && S.fk === req.fk) S.fk = ''; return false; }          // 못 받았으면 다음 확인이 다시 시도한다
+      if(req.fk !== S.fk) return false;                                       // 그새 요청이 또 바뀌었다 — 다음 확인이 다시 받는다
+      return present({ txt: txt, src: 'fresh', fk: req.fk, rows: req.rows }, S.good && S.curCat === cat());
+    });
+  }
+  function changed(){                                                         // 기사 목록·칩이 바뀌었다(웹이 알린다). 연달아 와도 한 번만.
+    if(!active()) return;
+    if(S.chT) clearTimeout(S.chT);
+    S.chT = setTimeout(function(){ S.chT = 0; if(!active() || !tabOpen()) return; if(!S.good && !S.stash && !S.pending) kick(); else refresh(false); }, 80);
+  }
+
+  // ── 눌린 행동(허용 목록만) ──
+  function setCat(v){
+    if(CATS.indexOf(v) < 0) return;
+    try{ _newsCatSel = v; }catch(e){}
+    refresh(false);
+  }
+  function onAction(e){
+    if(!e || e.id !== ID) return;
+    if(e.a === 'cat') setCat(String(e.v || ''));
+    else if(e.a === 'call'){
+      var m = /^nw\.(\d+)$/.exec(String(e.v || ''));
+      if(m && S.snap){ var row = S.snap[parseInt(m[1], 10)]; if(row) openDetail(row); }
+    }
+  }
+
+  // ── 상세 팝업: 문구는 엔진이 정한다(요약 정리·언론사 이름·안내 글). 엔진 응답이 없으면 예전 웹 팝업 ──
+  function openDetail(row){
+    post(JSON.stringify({ cap: 5, d: row }), 6000).then(function(o){
+      var j = null; try{ j = o && JSON.parse(o.txt); }catch(e){}
+      if(j && j.ok === true && j.detail && typeof j.detail.title === 'string') showDetail(j.detail, row);
+      else legacyDetail(row);
+    });
+  }
+  function legacyDetail(row){
+    try{ window._NEWS_SHOWN = [{ title: row[0], link: row[1], source: row[2], ts: row[3], cat: row[4], desc: row[5] }]; if(typeof _openNewsDetail === 'function') _openNewsDetail(0); }catch(e){}
+  }
+  function showDetail(d, row){
+    closeDetail();
+    var ov = document.createElement('div');
+    ov.id = 'newsDetailOv';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:flex-end;justify-content:center;';
+    var box = document.createElement('div');
+    box.style.cssText = 'background:var(--card);border-radius:20px 20px 0 0;width:100%;max-width:560px;max-height:85vh;overflow-y:auto;padding:22px 20px calc(20px + env(safe-area-inset-bottom));box-sizing:border-box;';
+    function el(tag, css2, txt){ var x = document.createElement(tag); x.style.cssText = css2; if(txt != null) x.textContent = txt; box.appendChild(x); return x; }
+    el('div', 'width:36px;height:4px;border-radius:2px;background:var(--border2);margin:0 auto 16px;');
+    el('div', 'display:inline-block;font-size:11px;font-weight:800;color:var(--chip-on-txt);background:var(--chip-on-bg);padding:3px 9px;border-radius:6px;margin-bottom:10px;', d.cat);
+    el('div', 'font-size:18px;font-weight:800;color:var(--text);line-height:1.45;margin-bottom:8px;', d.title);
+    el('div', 'font-size:12px;color:var(--sub);margin-bottom:16px;', d.meta);
+    if(d.desc) el('div', 'font-size:14px;color:var(--text);line-height:1.75;margin-bottom:8px;white-space:pre-line;', d.desc);
+    else el('div', 'font-size:14px;color:var(--sub);line-height:1.7;margin-bottom:8px;', d.empty);
+    el('div', 'font-size:11px;color:var(--sub);line-height:1.6;margin-bottom:18px;padding:9px 11px;border-radius:9px;background:var(--card2);white-space:pre-line;', d.notice);
+    if(d.open){
+      var ob = el('button', 'width:100%;padding:14px;border-radius:12px;border:none;cursor:pointer;font-size:15px;font-weight:800;background:var(--gold);color:#121214;font-family:inherit;', d.btn);
+      ob.id = 'newsOpenBtn';
+      ob.addEventListener('click', function(){                                // 앱을 벗어나지 않고 인앱 브라우저로 원문 열기
+        if(typeof _newsOpenInApp === 'function') _newsOpenInApp(row[1], d.src); else if(typeof openNewsUrl === 'function') openNewsUrl(row[1]);
+      });
+    }
+    var cb = el('button', 'width:100%;padding:12px;margin-top:8px;border-radius:12px;border:none;cursor:pointer;font-size:14px;font-weight:700;background:transparent;color:var(--sub);font-family:inherit;', d.close || '닫기');
+    cb.id = 'newsCloseBtn';
+    cb.addEventListener('click', closeDetail);
+    ov.appendChild(box);
+    ov.addEventListener('click', function(ev){ if(ev.target === ov) closeDetail(); });
+    document.body.appendChild(ov);
+    DET = ov;
+    if(S.shown) hideNative();
+  }
+  function closeDetail(){
+    var ov = DET || document.getElementById('newsDetailOv');
+    DET = null;
+    if(!ov) return false;
+    try{ if(ov.parentNode) ov.parentNode.removeChild(ov); }catch(e){}
+    setTimeout(kick, 0);
+    return true;
+  }
+
+  // ── 켜고 끄기 ──
+  function fail(why){
+    if(S.failed || !S.on) return;
+    S.failed = true; S.fails++; S.why = String(why || '').slice(0, 140);
+    try{ localStorage.setItem(K_F, String(S.fails)); localStorage.setItem(K_W, S.why); }catch(e){}
+    try{ console.warn('[네이티브 뉴스] 웹 화면만 씁니다:', S.why); }catch(e1){}
+    end(true); syncCard(); webBack();
+  }
+  function hideNative(){ var P = plug(); if(P && S.shown){ S.shown = false; S.ready = false; try{ P.hide({ id: ID }); }catch(e){} } }
+  function end(destroy){
+    if(S.timer){ clearTimeout(S.timer); S.timer = 0; }
+    if(S.chT){ clearTimeout(S.chT); S.chT = 0; }
+    var P = plug();
+    if(P && (S.shown || destroy)){ try{ P.hide({ id: ID }); if(destroy) P.destroy({ id: ID }); }catch(e){} }
+    S.shown = false; S.ready = false; S.good = false; S.cur = ''; S.rect = null; S.rk = ''; S.fk = ''; S.snap = null; S.stash = null; S.memo = {}; S.memoK = [];
+    closeDetail();
+  }
+  function listen(){
+    var P = plug(); if(!P || S.listening) return; S.listening = true;
+    try{
+      P.addListener('ready', function(e){ if(e && e.id && e.id !== ID) return; S.ready = true; S.fails = 0; try{ localStorage.setItem(K_F, '0'); }catch(e2){} syncCard(); });
+      P.addListener('error', function(e){ if(e && e.id && e.id !== ID) return; if(e && e.kind === 'invalid') return; fail('native: ' + ((e && e.message) || '')); });
+      P.addListener('action', onAction);
+    }catch(e){ fail('listen: ' + e); return; }
+    try{
+      new MutationObserver(function(){ if(S.shown && active()){ try{ plug().update({ id: ID, palette: palette() }); }catch(e3){} } }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    }catch(e4){}
+  }
+
+  // ── 반복 확인: 사각형 따라가기 · 움직임/덮임이면 숨김 · 못 올린 화면 올리기 · 8초 지연·상태 이상 ──
+  function tick(){
+    S.timer = 0;
+    if(!active()) return;
+    var t = now(), r = tabOpen() ? rectNow() : null;
+    if(!r){
+      if(S.shown) hideNative();
+      S.rect = null; S.rk = ''; S.chg = 0;
+      if(!tabOpen()){ S.waitAt = 0; return; }                              // 뉴스를 떠났다 — 다시 열리면 kick 이 깨운다
+      S.timer = setTimeout(tick, 200); return;
+    }
+    var k = rkey(r);
+    if(k !== S.rk){ S.chg = (t - S.chgAt < 450) ? S.chg + 1 : 1; S.chgAt = t; S.rk = k; S.rect = r; S.still = 0; }
+    else S.still++;
+    var moving = S.chg >= 3 && S.still < 3;
+    var cov = !moving && (!!DET || covered(r));
+    if(moving || cov){ if(S.shown) hideNative(); }
+    else if(S.good || S.stash){
+      if(!S.shown){ if(S.stash) present(S.stash, false); else present({ txt: S.cur, src: S.src || 'cache', fk: S.fk, rows: S.snap }, true); }
+      else if(S.still === 0 || S.still === 2){ try{ plug().setRect(place(r)); }catch(e){} }
+    }
+    if(S.shown && !S.ready && t - S.showAt > 8000){ fail('ready timeout'); return; }
+    if(S.shown && S.ready && t - S.stAt > 2000){
+      S.stAt = t;
+      Promise.resolve(plug().status({ id: ID })).then(function(st){
+        if(!S.shown) return;
+        if(st && st.visible && (st.age == null || st.age < 120000 || st.age < 0)) S.stBad = 0; else if(++S.stBad >= 3) fail('status ' + JSON.stringify(st));
+      }).catch(function(){ if(++S.stBad >= 3) fail('status 오류'); });
+    }
+    if(!S.good && !S.pending && !S.stash && t - S.fetchAt > 5000) kick();     // 못 받았으면 5초마다 다시
+    S.timer = setTimeout(tick, (S.chg >= 2 && S.still < 6) ? 60 : 160);
+  }
+  function kick(){
+    if(!active()) return;
+    listen();
+    if(!tabOpen()){ if(S.shown) hideNative(); return; }
+    if(!S.timer) S.timer = setTimeout(tick, 30);
+    var t = now();
+    if(!S.good && !S.pending && !S.stash){                                     // 처음 열림: 같은 칩의 저장본이 있으면 곧바로, 아니면 엔진에서
+      var req = request();
+      if(req.idle){ var tw = now(); if(!S.waitAt){ S.waitAt = tw; setTimeout(kick, 450); return; } if(tw - S.waitAt < 440) return; }      // 막 열어 아직 저장된 기사가 올라오기 전이면 잠깐 기다린다 — '불러오는 중' 안내가 깜빡 비치지 않게
+      S.pending = true;
+      var c = cacheGet(), p = Promise.resolve(false);
+      if(c && c.cat === cat()){ p = present({ txt: c.txt, src: 'cache', fk: '', rows: null }, false); }
+      p.then(function(){ return refresh(true); }).then(function(){ S.pending = false; }, function(){ S.pending = false; });
+    } else if(S.good && t - S.fetchAt > 20000 && !S.pending){                  // 다시 열림: 20초 넘었으면 조용히 새로 확인
+      S.pending = true; refresh(true).then(function(){ S.pending = false; }, function(){ S.pending = false; });
+    }
+  }
+  function setUse(on){
+    try{ localStorage.setItem(K_ON, on ? '1' : '0'); if(on){ localStorage.setItem(K_F, '0'); localStorage.setItem(K_W, ''); } }catch(e){}
+    if(on){ S.on = true; S.failed = false; S.fails = 0; S.why = ''; S.badFresh = 0; kick(); }
+    else { S.on = false; end(true); webBack(); }
+    syncCard();
+  }
+  function syncCard(){
+    try{
+      var card = document.getElementById('scrnSetCard'); if(!card) return;
+      if(!plug()){ card.style.display = 'none'; return; }
+      if(card.style.display !== 'block') card.style.display = 'block';
+      var cb = document.getElementById('scrnSetOn'), st = document.getElementById('scrnSetStat');
+      if(cb) cb.checked = S.on && S.fails < 2;
+      var s;
+      if(!S.on) s = '꺼짐 — 예전 방식(웹 뉴스 화면)으로 그려요.';
+      else if(S.failed || S.fails >= 2) s = '네이티브 뉴스 화면에 문제가 있어 웹 화면으로 대신 보여주고 있어요' + (S.why ? ' (' + S.why + ')' : '') + '. 스위치를 껐다 켜면 다시 시도해요.';
+      else if(S.badFresh > 0) s = '엔진이 준 화면이 올바르지 않아 저장해 둔 화면을 쓰고 있어요' + (S.why ? ' (' + S.why + ')' : '') + '.';
+      else s = '켜짐 — 뉴스 탭의 칩·기사 목록을 엔진이 정한 대로 기기가 직접 그려요(실험 중).';
+      if(st && st.textContent !== s) st.textContent = s;
+    }catch(e){}
+  }
+  window._scrNews = { S: S, kick: kick, setUse: setUse, syncCard: syncCard, active: active, owns: function(){ return active() && S.good; }, changed: changed, closeDetail: closeDetail, openDetail: openDetail, present: present, refresh: refresh, request: request, tick: tick };
+  window._scrnSetUse = function(on){ try{ setUse(on); }catch(e){} };
+  try{ if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(function(){ try{ syncCard(); kick(); }catch(e){} }, 900); }); else setTimeout(function(){ try{ syncCard(); kick(); }catch(e){} }, 900); }catch(eH){}
+  try{ document.addEventListener('visibilitychange', function(){ if(!document.hidden) kick(); else if(S.shown) hideNative(); }); }catch(eV){}
+})();
+
 
 // ── 커뮤니티 ────────────────────────────────────────────────
 var _commFilter='all';
@@ -38652,7 +39026,7 @@ try{
 function filterCat(el,cat){
   _commFilter=cat;
   // 뉴스 탭이 아니면 카테고리 칩 바를 숨긴다 (고정 헤더에 있으므로 직접 제어)
-  try{ var _ncb=document.getElementById('newsCatBar'); if(_ncb) _ncb.style.display = (cat==='뉴스') ? 'flex' : 'none'; }catch(e){}
+  try{ var _ncb=document.getElementById('newsCatBar'); if(_ncb) _ncb.style.display = (cat==='뉴스' && !(window._scrNews && window._scrNews.owns())) ? 'flex' : 'none'; }catch(e){}
   document.querySelectorAll('#filterRow .chip').forEach(function(c){c.classList.remove('on');});
   if(el) el.classList.add('on');
   // 게시글 뷰 표시, 채팅/설정 뷰 숨김
@@ -38674,6 +39048,7 @@ function filterCat(el,cat){
   }
   if(typeof renderCommList==='function') renderCommList();
   else if(typeof renderFeed==='function') renderFeed();
+  try{ if(window._scrNews) window._scrNews.kick(); }catch(eSn){}      // 서버 구동 네이티브 뉴스 화면: 뉴스가 열렸으면 올리고, 다른 칩이면 숨긴다
 }
 window.filterCat = filterCat;
 
@@ -38688,6 +39063,7 @@ function showChatTab(el){
   if(sv) sv.style.display='none';
   if(fab) fab.style.display='none';  // 채팅 입력창이 있으므로 글쓰기 FAB 숨김
   _chatShowPane();
+  try{ if(window._scrNews) window._scrNews.kick(); }catch(eSn){}      // 서버 구동 네이티브 뉴스 화면을 숨긴다
 }
 window.showChatTab = showChatTab;
 
@@ -39295,6 +39671,7 @@ function showSettingsTab(el){
   _renderIdBox();
   try { if(typeof _errRefreshBadge==='function') _errRefreshBadge(); } catch(e){}
   try{ if(window._scrSet) setTimeout(function(){ window._scrSet.kick(); }, 0); }catch(eSs2){}      // 서버 구동 네이티브 설정 화면
+  try{ if(window._scrNews) window._scrNews.kick(); }catch(eSn2){}      // 서버 구동 네이티브 뉴스 화면을 숨긴다
   try{ if(window._htlNat) window._htlNat.kick(); }catch(eNk){}                       // 설정 화면이 열렸다 — 네이티브 영역들이 곧바로 읽게(꺼져 있으면 아무 일 없음)
 }
 window.showSettingsTab = showSettingsTab;
