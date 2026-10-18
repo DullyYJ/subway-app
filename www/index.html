@@ -14557,6 +14557,26 @@ window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
    ['cs:cars', function(){ return document.getElementById('carGrid'); }],                                                                 // 칸별 혼잡 칸들(테두리 상자 + 글자)
    ['cs:busnote', function(){ return document.getElementById('busCongNote'); }]                                                           // 버스 구간 안내 문구
   ].forEach(function(c){ makeRegion(c[0], paintCfg(c[1])); });
+  // ★ 2026-10-18 (네이티브 이전 5번째 화면: 맛집 탭 — YJ: '네이티브화 계속 진행'): 같은 방식(웹은 레이아웃·내용·눌림을 그대로 맡고 투명하게 제자리, 네이티브가 그림만).
+  //   머리(제목·'○○역 인근'·새로고침 단추) · 카테고리 칩 6개(가로로 밀리는 줄이라 칩마다 따로 — 밀리는 동안은 웹) · 안내 문구(빈 상태·불러오기 실패) · 맛집 칸(앞 20개).
+  //   스크롤하는 동안은 영역이 '움직임'으로 보아 웹이 그리고, 멈추면(≈0.07초) 네이티브가 그린다. 뒤쪽 칸·공공데이터 구분줄·불러오는 중 빙글이는 계속 웹.
+  //   칸의 눌림 줄임(:active scale) 은 투명한 웹에서만 일어나 안 보인다 — 눌러서 지도 여는 동작은 그대로.
+  makeRegion('fd:hdr', paintCfg(function(){ return document.querySelector('#tab-food .food-header'); }));
+  makeRegion('fd:msg', paintCfg(function(){ var l = document.getElementById('foodList'); return l ? l.querySelector(':scope > .food-empty') : null; }));
+  [0, 1, 2, 3, 4, 5].forEach(function(i){
+    makeRegion('fd:k' + i, paintCfg(function(){ var f = document.getElementById('foodFilter'); return f ? (f.querySelectorAll('.food-chip')[i] || null) : null; }));
+  });
+  for(var fdi = 0; fdi < 20; fdi++) (function(i){
+    makeRegion('fd:c' + i, paintCfg(function(){ var l = document.getElementById('foodList'); return l ? (l.querySelectorAll(':scope > .food-card')[i] || null) : null; }));
+  })(fdi);
+  var foodWatched = false;
+  function watchFood(){                                  // 맛집 목록이 새로 그려지면(칸이 바뀌면) 영역들이 새 칸을 다시 읽게 깨운다
+    if(foodWatched || typeof MutationObserver !== 'function') return;
+    var l = document.getElementById('foodList'); if(!l) return;
+    foodWatched = true;
+    try{ new MutationObserver(function(){ if(active()) kick(); }).observe(l, { childList: true }); }catch(e){ foodWatched = false; }
+  }
+  try{ document.addEventListener('DOMContentLoaded', watchFood); watchFood(); }catch(eW){}
   window._htlNatMk = TL.mk;                               // _placeGpsMarkerSmooth 가 알려 준다(타임라인 영역만)
 
   // ── 전체 켜고 끄기 ──
@@ -14579,7 +14599,7 @@ window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
   }
   function wakeAll(){ each(function(r){ r.wake(); }); }
   // 화면을 (다시) 그렸다 — 앱이 _renderHtlTrack 끝에서 알려 준다(머리줄은 그 직전에 채워진다)
-  function kick(){ if(!active()) return; listen(); each(function(r){ r.kick(); }); }
+  function kick(){ if(!active()) return; listen(); try{ watchFood(); }catch(eF){} each(function(r){ r.kick(); }); }
   function setUse(on){
     try{ localStorage.setItem(K_ON, on ? '1' : '0'); if(on){ localStorage.setItem(K_F, '0'); localStorage.setItem(K_W, ''); } }catch(e){}
     if(on){ G.on = true; G.failed = false; G.fails = 0; G.why = ''; kick(); }
@@ -25554,6 +25574,7 @@ window._dedupeStnByName = _dedupeStnByName;
 
 /* ══ 탭 전환 ══ */
 function switchTab(tab,el){
+  try{ if(window._htlNat) window._htlNat.kick(); }catch(eNk){}      // 네이티브 그림 영역(켜져 있을 때만)이 새로 보이는 탭의 내용을 읽는다
   try{ if(tab !== 'map' && window._pickDestMode && typeof _pickAbandon === 'function') _pickAbandon(); }catch(ePk){}      // 노선도 탭을 떠나면 '도착지 역 고르기'와 정해 둔 출발지는 없던 일로
   // ★ 2026-08-31: 탭을 바꾸면 열려 있던 시트·모달을 닫는다.
   //   예전엔 노선 상세 시트가 그대로 남아, 홈을 눌러도 노선도가 덮고 있었다.
