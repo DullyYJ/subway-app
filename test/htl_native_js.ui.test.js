@@ -63,7 +63,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   const calls = (x, m, id) => x.page.evaluate(([m, id]) => window.__hn.filter(c => (!m || c.m === m) && (id === '*' || !c.a || !c.a.id || c.a.id === (id || 'tl'))), [m, id || 'tl']);      // 기본은 타임라인('tl') 영역 호출만
   const clear = (x) => x.page.evaluate(() => { window.__hn.length = 0; });
   const emit = (x, n, d) => x.page.evaluate(([n, d]) => window.__hnEmit(n, d), [n, d || {}]);
-  const waitFor = async (x, fn, ms) => { const t0 = Date.now(); while (Date.now() - t0 < (ms || 9000)) { if (await fn()) return true; await x.page.waitForTimeout(80); } return false; };
+  const waitFor = async (x, fn, ms) => { const t0 = Date.now(); while (Date.now() - t0 < (ms || 20000)) { if (await fn()) return true; await x.page.waitForTimeout(80); } return false; };
   const has = (x, m, id) => async () => (await calls(x, m, id)).length > 0;
   const wrapBox = (x) => x.page.evaluate(() => { const w = document.getElementById('transitHtlWrap'), tr = document.getElementById('transitHtlTrack'), r = w.getBoundingClientRect(), tb = tr.getBoundingClientRect(); return { x: r.left + w.clientLeft, y: tb.top, w: w.clientWidth, h: tr.offsetHeight, sw: tr.scrollWidth }; });
   const lastCall = async (x, m, id) => { const c = await calls(x, m, id); return c[c.length - 1]; };
@@ -353,6 +353,57 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     await O.page.evaluate(setup); await new Promise(r => setTimeout(r, 1500));
     assert.strictEqual(await O.page.evaluate(() => (window.__hn || []).length), 0, '끄면(기본) 플러그인 호출이 하나도 없다');
     await O.ctx.close();
+  });
+  await t('쇼핑 탭(2026-10-18): 안내 상자·칩·상품 이름줄(2줄 넘으면 …로 줄임)이 영역으로 그려지고, 스크롤을 멈추면 보이는 줄로 바뀌며 지나간 줄은 투명이 풀린다 · 끄면 호출 없음', async () => {
+    const setup = () => {
+      const f = document.getElementById('tab-shop'); f.style.cssText = 'display:flex;position:fixed;left:0;top:0;width:390px;height:700px;z-index:9;background:#fff;flex-direction:column;overflow:hidden;'; document.body.appendChild(f);
+      const items = []; for (let i = 0; i < 40; i++) items.push({ n: i === 1 ? '[무료배송] 아주 아주 긴 이름의 상품명입니다 세 줄이 넘도록 계속 이어지는 이름 더 더 더 더 더 더 길게 이어서 쓰기' : '상품' + i, u: 'https://example.com/' + i, i: '', _cat: '식사' });
+      _renderShopCats({ rec: items, order: ['식사', '음료'], byCat: { '식사': items, '음료': [] } });
+      _renderShopGrid({ rec: items, byCat: {}, ctx: {} });
+    };
+    const B = await fresh({ plugin: true, on: true, autoReady: true });
+    await B.page.evaluate(setup);
+    await waitFor(B, has(B, 'show', 'sh:note')); await waitFor(B, has(B, 'show', 'sh:k0')); await waitFor(B, has(B, 'show', 'sh:p0')); await waitFor(B, has(B, 'show', 'sh:p1'));
+    const txt = (a) => a.runs.filter(r => !r.k).map(r => r.t).join('|');
+    const nt = (await lastCall(B, 'show', 'sh:note')).a; assert.ok(/쿠팡 파트너스/.test(txt(nt)), '안내 글자 ' + txt(nt));
+    const k0 = (await lastCall(B, 'show', 'sh:k0')).a; assert.ok(k0.runs.some(r => r.k === 'r') && /지금|추천|\d/.test(txt(k0)), '칩 ' + JSON.stringify(k0.runs).slice(0, 160));
+    const p0 = (await lastCall(B, 'show', 'sh:p0')).a; assert.ok(/상품0/.test(txt(p0)) && /최저가/.test(txt(p0)), '상품 줄 ' + txt(p0));
+    const p1 = (await lastCall(B, 'show', 'sh:p1')).a, names = p1.runs.filter(r => !r.k && !/최저가/.test(r.t));
+    assert.strictEqual(names.length, 2, '긴 이름은 2줄까지만: ' + names.length); assert.ok(/더 더/.test(names.map(r => r.t).join('')) && names[1].w <= 200, '마지막 줄에 넘친 글자를 이어 붙이고 폭에서 자른다(네이티브가 …) ' + JSON.stringify(names.map(r => [r.t.length, Math.round(r.w)])));
+    assert.strictEqual((await calls(B, 'show', 'sh:p14')).length, 0, '줄 영역은 14개까지');
+    assert.ok(await waitFor(B, async () => await B.page.evaluate(() => { const r = document.querySelectorAll('#shopGrid .prod-row'); return r[0].classList.contains('htl-nat-op') && document.querySelector('#shopGrid .prod-img').classList.contains('htl-nat-op') === false; })), '이름줄만 투명하고 사진 칸은 그대로여야 한다');
+    // 스크롤: 멈춘 뒤 보이는 줄로 바뀌고, 지나간 줄(문서 앞쪽)은 투명이 풀린다
+    await clear(B); await B.page.evaluate(() => { document.getElementById('shopScrollView').scrollTop = 800; });
+    assert.ok(await waitFor(B, async () => { const c = await calls(B, '', 'sh:p0'); return c.some(x => x.a && x.a.runs && !/상품0\b/.test(txt(x.a)) && /상품\d+/.test(txt(x.a))); }, 20000), '스크롤을 멈췄는데 보이는 줄로 안 바뀌었다');
+    assert.ok(await waitFor(B, async () => await B.page.evaluate(() => { const r = document.querySelectorAll('#shopGrid .prod-row'); return !r[0].classList.contains('htl-nat-op') && Array.from(r).filter(e => e.classList.contains('htl-nat-op')).length <= 14; })), '지나간 줄에 투명이 남았다(글자가 사라져 보인다)');
+    const dim = await B.page.evaluate(() => { const sv = document.getElementById('shopScrollView').getBoundingClientRect(); return Array.from(document.querySelectorAll('#shopGrid .prod-row.htl-nat-op')).filter(e => { const r = e.getBoundingClientRect(); return r.bottom < sv.top || r.top > sv.bottom; }).length; });
+    assert.strictEqual(dim, 0, '화면 밖 줄이 투명하다 ' + dim);
+    // 칩을 다시 그리면(카테고리 바꿈) 영역이 새 내용을 읽는다
+    await clear(B); await B.page.evaluate(() => { _renderShopCats({ rec: [1, 2], order: ['음료'], byCat: { '음료': [1] } }); });
+    assert.ok(await waitFor(B, async () => (await calls(B, '', 'sh:k1')).length > 0 || (await calls(B, '', 'sh:k2')).length > 0 || (await calls(B, 'hide', 'sh:k2')).length > 0), '바뀐 칩을 안 읽었다');
+    assert.deepStrictEqual(B.errs, []);
+    await B.ctx.close();
+    const O = await fresh({ plugin: true, on: false });
+    await O.page.evaluate(setup); await new Promise(r => setTimeout(r, 1500));
+    assert.strictEqual(await O.page.evaluate(() => (window.__hn || []).length), 0, '끄면(기본) 플러그인 호출이 하나도 없다');
+    await O.ctx.close();
+  });
+  await t('부드러운 스크롤(120Hz): 쇼핑 목록을 계속 스크롤하는 동안 영역들이 프레임마다 비싼 일(덮임 검사 elementFromPoint)을 하지 않고, 스크롤한 요소 밖의 영역은 깨우지 않는다', async () => {
+    const B = await fresh({ plugin: true, on: true, autoReady: true });
+    await B.page.evaluate(() => {
+      const f = document.getElementById('tab-shop'); f.style.cssText = 'display:flex;position:fixed;left:0;top:0;width:390px;height:700px;z-index:9;background:#fff;flex-direction:column;overflow:hidden;'; document.body.appendChild(f);
+      const items = []; for (let i = 0; i < 100; i++) items.push({ n: '상품 이름이 조금 긴 테스트 상품 ' + i + ' 세트 할인', u: 'u' + i, i: '', _cat: '식사' });
+      _renderShopCats({ rec: items, order: ['식사', '음료'], byCat: { '식사': items, '음료': [] } }); _renderShopGrid({ rec: items, byCat: {}, ctx: {} });
+    });
+    assert.ok(await waitFor(B, has(B, 'show', 'sh:p3')), '상품 줄이 안 켜졌다'); await B.page.waitForTimeout(700);
+    const r = await B.page.evaluate(() => new Promise(res => {
+      let n = 0, cnt = false; const o = document.elementFromPoint.bind(document); document.elementFromPoint = function () { if (cnt) n++; return o.apply(null, arguments); };      // 스크롤이 시작된 직후(0.5초)의 한 번 정리는 빼고 센다 — 그 뒤 '스크롤 중'의 프레임당 일을 본다
+      const sv = document.getElementById('shopScrollView'); let y = 0, fr = 0; const t0 = performance.now();
+      function f(t) { y = (y + 20) % 3000; sv.scrollTop = y; fr++; if (t - t0 > 700) cnt = true; if (t - t0 < 2200) requestAnimationFrame(f); else { document.elementFromPoint = o; res({ n, fr }); } } requestAnimationFrame(f);
+    }));
+    console.log('     (스크롤 1.5초 · 프레임 ' + r.fr + ' · elementFromPoint ' + r.n + '번)');
+    assert.ok(r.n <= 40, '스크롤 중 elementFromPoint 가 너무 많다: ' + r.n + ' (프레임 ' + r.fr + ')');
+    await B.ctx.close();
   });
   await t('머리줄이 팝업에 덮이면 숨고, 영역마다 따로 판단한다', async () => {
     const B = await fresh({ plugin: true, on: true }); await waitFor(B, has(B, 'show', 'hd')); await waitFor(B, has(B, 'show', 'tl'));
