@@ -326,6 +326,31 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     assert.strictEqual(await O.page.evaluate(() => (window.__hn || []).length), 0, '끄면(기본) 플러그인 호출이 하나도 없다');
     await O.ctx.close();
   });
+  await t('맛집 탭(2026-10-18): 머리·칩 6개·맛집 칸이 영역으로 그려지고(웹은 투명 · 눌림 그대로), 칩을 바꾸면 update, 안내 문구(빈 상태)도 · 끄면 호출 없음', async () => {
+    const setup = () => { const f = document.getElementById('tab-food'); f.style.cssText = 'display:flex;position:fixed;left:0;top:0;width:390px;height:700px;z-index:9;background:#fff;flex-direction:column;overflow:hidden;'; document.body.appendChild(f);
+      document.getElementById('foodDestLabel').textContent = '부평역 인근'; const l = document.getElementById('foodList'); l.innerHTML = '';
+      [1, 2, 3].forEach(i => l.appendChild(_foodMakeCard({ place_name: '맛집' + i, category_name: '음식점 > 한식 > 국밥', road_address_name: '인천 부평구 부평대로 ' + i, distance: String(100 * i) }, i - 1, false))); };
+    const B = await fresh({ plugin: true, on: true });
+    await B.page.evaluate(setup);
+    await waitFor(B, has(B, 'show', 'fd:hdr')); await waitFor(B, has(B, 'show', 'fd:k0')); await waitFor(B, has(B, 'show', 'fd:c0')); await waitFor(B, has(B, 'show', 'fd:c2'));
+    const hd = (await lastCall(B, 'show', 'fd:hdr')).a, ht = hd.runs.filter(r => !r.k).map(r => r.t).join('');
+    assert.ok(/도착역 맛집/.test(ht) && /부평역 인근/.test(ht) && /새로고침/.test(ht), '머리 글자 ' + ht);
+    const k0 = (await lastCall(B, 'show', 'fd:k0')).a; assert.ok(k0.runs.some(r => r.k === 'r') && k0.runs.some(r => /전체/.test(r.t || '')), '칩: 상자 + 글자 ' + JSON.stringify(k0.runs).slice(0, 200));
+    const c0 = (await lastCall(B, 'show', 'fd:c0')).a, ct = c0.runs.filter(r => !r.k).map(r => r.t).join('|');
+    assert.ok(/맛집1/.test(ct) && /국밥/.test(ct) && /길찾기/.test(ct), '맛집 칸 글자 ' + ct);
+    assert.ok(c0.runs.filter(r => r.k === 'r').length >= 3, '칸 상자 + 순위 동그라미 + 거리 알약 ' + c0.runs.filter(r => r.k === 'r').length);
+    assert.ok(await waitFor(B, async () => await B.page.evaluate(() => document.querySelector('#tab-food .food-header').classList.contains('htl-nat-op') && document.querySelectorAll('#foodList > .food-card')[0].classList.contains('htl-nat-op'))), '웹이 투명으로 제자리에 안 남았다');
+    assert.strictEqual((await calls(B, 'show', 'fd:c3')).length, 0, '칸이 3개뿐이면 4번째 영역은 안 켜진다');
+    await clear(B); await B.page.evaluate(() => { document.querySelectorAll('.food-chip')[1].click ? foodFilterCat(document.querySelectorAll('.food-chip')[1], '카페') : 0; });
+    assert.ok(await waitFor(B, async () => (await calls(B, '', 'fd:k1')).length > 0 && (await calls(B, '', 'fd:k0')).length > 0), '바뀐 칩 상태를 안 보냈다');
+    await clear(B); await B.page.evaluate(() => { document.getElementById('foodList').innerHTML = '<div class="food-empty">😢<br>해당 카테고리 음식점이 없습니다.</div>'; });
+    assert.ok(await waitFor(B, has(B, 'show', 'fd:msg')), '빈 상태 문구 영역이 안 켜졌다');
+    await B.ctx.close();
+    const O = await fresh({ plugin: true, on: false });
+    await O.page.evaluate(setup); await new Promise(r => setTimeout(r, 1500));
+    assert.strictEqual(await O.page.evaluate(() => (window.__hn || []).length), 0, '끄면(기본) 플러그인 호출이 하나도 없다');
+    await O.ctx.close();
+  });
   await t('머리줄이 팝업에 덮이면 숨고, 영역마다 따로 판단한다', async () => {
     const B = await fresh({ plugin: true, on: true }); await waitFor(B, has(B, 'show', 'hd')); await waitFor(B, has(B, 'show', 'tl'));
     await clear(B); await B.page.evaluate(() => { const hb = document.getElementById('transitResultHeader').parentElement.getBoundingClientRect(); const o = document.createElement('div'); o.id = 'popHd'; o.style.cssText = 'position:fixed;left:0;width:390px;top:' + (hb.top - 4) + 'px;height:' + (hb.height + 8) + 'px;z-index:9999;background:#000'; document.body.appendChild(o); });
