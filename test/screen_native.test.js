@@ -111,6 +111,14 @@ function findAndroidJar() {
     const c = fs.readFileSync(N('ScreenCore.java'), 'utf8');
     assert.ok(/K_BAR = 12, K_PLACE = 13, K_DIV = 14/.test(c) && /"bar"\.equals\(t\)/.test(c) && /"place"\.equals\(t\)/.test(c) && /"divider"\.equals\(t\)/.test(c), '코어가 세 노드를 안다');
   });
+  await t('뉴스 노드: 뉴스 줄(news)을 그리고(금색 막대·제목·작은 글·›·아래 선) 코어가 안다 · 그릴 때 새 객체 없음', async () => {
+    const v = fs.readFileSync(N('ScreenView.java'), 'utf8');
+    assert.ok(/drawNews\(/.test(v) && /case ScreenCore\.K_NEWS: drawNews/.test(v), '뉴스 줄 그리기 + drawItem 연결');
+    const seg = v.slice(v.indexOf('private void drawNews'), v.indexOf('private void drawDivider'));
+    assert.ok(seg.length > 300 && !/\bnew\s+[A-Z]/.test(seg), '뉴스 그리기 구간에 new 가 있다');
+    const c = fs.readFileSync(N('ScreenCore.java'), 'utf8');
+    assert.ok(/K_NEWS = 15/.test(c) && /"news"\.equals\(t\)/.test(c) && /"news"\.equals\(n\.t\)/.test(c), '코어가 뉴스 줄을 안다(읽기 + 배치)');
+  });
   await t('CI 워크플로가 파일을 복사하고 MainActivity 에 ScreenNativePlugin 을 등록한다', async () => {
     const y = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'build-apk.yml'), 'utf8');
     for (const f of ['ScreenCore.java', 'ScreenView.java', 'ScreenNativePlugin.java']) assert.ok(y.includes('native/' + f), f + ' 복사');
