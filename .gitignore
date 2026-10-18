@@ -6,3 +6,9 @@ dist/
 
 # 위젯 안드로이드 스텁 시험용(패키지 이름이 android 라 위의 android/ 규칙에 걸려 예외 처리)
 !test/android-stubs/android/
+
+# route-sweep 작업 파일(큰 자료는 올리지 않는다)
+tools/route-sweep/eng.mjs
+tools/route-sweep/bundle.json
+tools/route-sweep/kric_all.json
+tools/route-sweep/*.jsonl
