@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-18s43";
+var ENGINE_VERSION = "route-v2-2026-10-18s44";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -11424,7 +11424,7 @@ async function handleScreenShop(request) {
 //        facts = \uc571\uc774 \ubaa8\uc740 \uae30\uae30 \uc0ac\uc2e4(\uc804\ubd80 \uc120\ud0dd \u2014 \uc5c6\uc73c\uba74 \uae30\ubcf8\uac12):
 //          id: \ud604\uc7ac \ucee4\ubba4\ub2c8\ud2f0 \uc544\uc774\ub514('' \uc774\uba74 \uc5c6\uc74c) \u00b7 np:{arrive,transfer,arrive_reco: 1|0} \u00b7 npd: \uc54c\ub9bc \uad8c\ud55c \uac70\ubd80(1|0) \u00b7 rl: \ub3c4\ucc29 \uc624\ucc28 \uae30\ub85d(1|0)
 //          th: 'dark'|'pastel' \u00b7 sam: \uac24\ub7ed\uc2dc(1|0) \u00b7 samw: \uc571 \ubc30\ud130\ub9ac '\uc81c\ud55c\ub428'(1|0) \u00b7 errn: \uc624\ub958 \ub85c\uadf8 \uac1c\uc218 \u00b7 cm: \ucd9c\ud1f4\uadfc \uc54c\ub9bc(1|0|\uc5c6\uc74c) \u00b7 ovl: \uc624\ubc84\ub808\uc774(1|0|\uc5c6\uc74c)
-//          feat: { nm|sn|htl|scr|scrs : { h: \uc774 \uae30\ub2a5\uc774 \uc788\ub098(1|0), on: \uc2a4\uc704\uce58(1|0), f: \ubb38\uc81c\ub85c \uc6f9\uc73c\ub85c \ub3cc\uc544\uac14\ub098(1|0), w: \ubb38\uc81c \uc0ac\uc720, b: \uc800\uc7a5\ubcf8 \uc0ac\uc6a9 \uc911(1|0) } }
+//          feat: { nm|sn|htl|scr|scrs|scrf : { h: \uc774 \uae30\ub2a5\uc774 \uc788\ub098(1|0), on: \uc2a4\uc704\uce58(1|0), f: \ubb38\uc81c\ub85c \uc6f9\uc73c\ub85c \ub3cc\uc544\uac14\ub098(1|0), w: \ubb38\uc81c \uc0ac\uc720, b: \uc800\uc7a5\ubcf8 \uc0ac\uc6a9 \uc911(1|0) } }
 // \ucd9c\ub825  { ok, v:1, screen:'settings', rev, cover:'tab', head:[], body:[\ub178\ub4dc\u2026] }  \u2190 \ub178\ub4dc \uc885\ub958\ub294 native/ScreenCore.java \uc640 \uac19\ub2e4
 //        panel{kids} \u00b7 text \u00b7 box \u00b7 toggle{key} \u00b7 navrow{act} \u00b7 select{act:{a:'sel'}} \u00b7 field{key} \u00b7 button \u00b7 spacer
 //        act = {a:'set',key} (\uc2a4\uc704\uce58 \u2014 \uc571\uc774 \uba3c\uc800 \ub4a4\uc9d1\uace0 \uc54c\ub9b0\ub2e4) | {a:'call',v} (\uc571 \uc548 \ud568\uc218 \ud638\ucd9c: saveId\u00b7clearId\u00b7pol.*\u00b7errlog) | {a:'web',v} (\uc6f9 \uce74\ub4dc \uc5f4\uae30) | {a:'sel',v} (\uace0\ub974\uae30)
@@ -11449,7 +11449,9 @@ var SETTINGS_FEATS = [
   { k: 'scr', title: '\ub124\uc774\ud2f0\ube0c \uc1fc\ud551 \ud654\uba74', desc: '\uc1fc\ud551 \ud0ed\uc758 \uc548\ub0b4 \ubb38\uad6c\u00b7\ucfe0\ud321 \uac80\uc0c9\uc904\u00b7\uce74\ud14c\uace0\ub9ac\u00b7\uc0c1\ud488 \ubaa9\ub85d\uc744 \uc5d4\uc9c4\uc774 \ud654\uba74 \uad6c\uc131\uae4c\uc9c0 \uc815\ud574 \ub0b4\ub824\uc8fc\uace0, \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694(\ubd80\ub4dc\ub7ec\uc6b4 \uc2a4\ud06c\ub864). \ub9c8\uc9c0\ub9c9 \ud654\uba74\uc740 \uc800\uc7a5\ud574 \ub450\uc5b4 \ubc14\ub85c \ub728\uace0, \ubb38\uc81c\uac00 \uc0dd\uae30\uba74 \uc608\uc804 \uc6f9 \ud654\uba74\uc73c\ub85c \ub3cc\uc544\uac00\uc694.',
     off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9 \uc1fc\ud551 \ud654\uba74)\uc73c\ub85c \uadf8\ub824\uc694.', bad: '\ub124\uc774\ud2f0\ube0c \uc1fc\ud551 \ud654\uba74\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc6f9 \ud654\uba74\uc73c\ub85c \ub300\uc2e0 \ubcf4\uc5ec\uc8fc\uace0 \uc788\uc5b4\uc694', stale: '\uc5d4\uc9c4\uc774 \uc900 \ud654\uba74\uc774 \uc62c\ubc14\ub974\uc9c0 \uc54a\uc544 \uc800\uc7a5\ud574 \ub454 \ud654\uba74\uc744 \uc4f0\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \uc1fc\ud551 \ud0ed\uc758 \uc548\ub0b4\u00b7\uac80\uc0c9\uc904\u00b7\uce74\ud14c\uace0\ub9ac\u00b7\uc0c1\ud488 \ubaa9\ub85d\uc744 \uc5d4\uc9c4\uc774 \uc815\ud55c \ub300\ub85c \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694(\uc2e4\ud5d8 \uc911).' },
   { k: 'scrs', title: '\ub124\uc774\ud2f0\ube0c \uc124\uc815 \ud654\uba74', desc: '\uc9c0\uae08 \ubcf4\uace0 \uc788\ub294 \uc774 \uc124\uc815 \ud654\uba74\uc744 \uc5d4\uc9c4\uc774 \ud654\uba74 \uad6c\uc131\uae4c\uc9c0 \uc815\ud574 \ub0b4\ub824\uc8fc\uace0, \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694. \ub044\uba74 \uc608\uc804 \uc6f9 \uc124\uc815 \ud654\uba74\uc73c\ub85c \ub3cc\uc544\uac00\uc694.',
-    off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9 \uc124\uc815 \ud654\uba74)\uc73c\ub85c \uadf8\ub824\uc694.', bad: '\ub124\uc774\ud2f0\ube0c \uc124\uc815 \ud654\uba74\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc6f9 \ud654\uba74\uc73c\ub85c \ub300\uc2e0 \ubcf4\uc5ec\uc8fc\uace0 \uc788\uc5b4\uc694', stale: '\uc5d4\uc9c4\uc774 \uc900 \ud654\uba74\uc774 \uc62c\ubc14\ub974\uc9c0 \uc54a\uc544 \uc800\uc7a5\ud574 \ub454 \ud654\uba74\uc744 \uc4f0\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \uc124\uc815 \ud654\uba74\uc744 \uc5d4\uc9c4\uc774 \uc815\ud55c \ub300\ub85c \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694(\uc2e4\ud5d8 \uc911).' }
+    off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9 \uc124\uc815 \ud654\uba74)\uc73c\ub85c \uadf8\ub824\uc694.', bad: '\ub124\uc774\ud2f0\ube0c \uc124\uc815 \ud654\uba74\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc6f9 \ud654\uba74\uc73c\ub85c \ub300\uc2e0 \ubcf4\uc5ec\uc8fc\uace0 \uc788\uc5b4\uc694', stale: '\uc5d4\uc9c4\uc774 \uc900 \ud654\uba74\uc774 \uc62c\ubc14\ub974\uc9c0 \uc54a\uc544 \uc800\uc7a5\ud574 \ub454 \ud654\uba74\uc744 \uc4f0\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \uc124\uc815 \ud654\uba74\uc744 \uc5d4\uc9c4\uc774 \uc815\ud55c \ub300\ub85c \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694(\uc2e4\ud5d8 \uc911).' },
+  { k: 'scrf', title: '\ub124\uc774\ud2f0\ube0c \ub9db\uc9d1 \ud654\uba74', desc: '\ub9db\uc9d1 \ud0ed\uc758 \uba38\ub9ac\uc904\u00b7\uce74\ud14c\uace0\ub9ac \uce69\u00b7\ub9db\uc9d1 \ubaa9\ub85d\uc744 \uc5d4\uc9c4\uc774 \ubd84\ub958\u00b7\uac70\ub974\uae30\u00b7\ubb38\uad6c\uae4c\uc9c0 \uc815\ud574 \ub0b4\ub824\uc8fc\uace0, \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694(\ubd80\ub4dc\ub7ec\uc6b4 \uc2a4\ud06c\ub864). \uac00\uac8c\ub97c \ub204\ub974\uba74 \uae38\ucc3e\uae30 \uc9c0\ub3c4\uac00 \uc5f4\ub824\uc694. \ubb38\uc81c\uac00 \uc0dd\uae30\uba74 \uc608\uc804 \uc6f9 \ud654\uba74\uc73c\ub85c \ub3cc\uc544\uac00\uc694.',
+    off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9 \ub9db\uc9d1 \ud654\uba74)\uc73c\ub85c \uadf8\ub824\uc694.', bad: '\ub124\uc774\ud2f0\ube0c \ub9db\uc9d1 \ud654\uba74\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc6f9 \ud654\uba74\uc73c\ub85c \ub300\uc2e0 \ubcf4\uc5ec\uc8fc\uace0 \uc788\uc5b4\uc694', stale: '\uc5d4\uc9c4\uc774 \uc900 \ud654\uba74\uc774 \uc62c\ubc14\ub974\uc9c0 \uc54a\uc544 \uc800\uc7a5\ud574 \ub454 \ud654\uba74\uc744 \uc4f0\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \ub9db\uc9d1 \ud0ed\uc758 \uba38\ub9ac\uc904\u00b7\uce69\u00b7\ubaa9\ub85d\uc744 \uc5d4\uc9c4\uc774 \uc815\ud55c \ub300\ub85c \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694(\uc2e4\ud5d8 \uc911).' }
 ];
 
 function settingsFlag(v, def) { return v == null ? def : (v === 1 || v === true || v === '1'); }
@@ -11600,6 +11602,151 @@ async function handleScreenSettings(request) {
 }
 // ===== SETTINGS ENGINE END =====
 
+// ===== FOOD ENGINE BEGIN =====
+// \uae38\ub3d9\ubb34 \u2014 \ub9db\uc9d1 \ud654\uba74 \uc5d4\uc9c4(\ubd84\ub958\u00b7\uac70\ub974\uae30\u00b7\uc911\ubcf5 \uc815\ub9ac\u00b7\ubb38\uad6c\u00b7\ud654\uba74 \uad6c\uc131 JSON) \uc21c\uc218 \uacc4\uc0b0 \ubaa8\ub4c8 (route-v2 Worker \uc5d0 \ubd99\uc5ec \ub123\ub294 \uc21c\uc218 \ud568\uc218; \ub2e8\uc77c \ucd9c\ucc98)
+//
+// \u2605 \uc6d0\uce59(YJ): "\ubaa8\ub4e0 \uc5f0\uc0b0\uc740 \uc5d4\uc9c4\uc774 \ud55c\ub2e4. \uc571\uc740 \uc5d4\uc9c4\uc774 \uacc4\uc0b0\ud55c \uadf8\ub9bc\ub9cc \uadf8\ub9b0\ub2e4."  (2026-10-18 \uc11c\ubc84 \uad6c\ub3d9 \ud654\uba74 3\ud638 \u2014 \ub9db\uc9d1 \ud0ed)
+//   \uc608\uc804\uc5d4 \ub9db\uc9d1 \ud0ed\uc758 \uc5c5\uc885 \ubd84\ub958(_foodKind)\u00b7\uce74\ud14c\uace0\ub9ac \uac70\ub974\uae30\u00b7\uacf5\uacf5\ub370\uc774\ud130\uc640 \uc911\ubcf5 \uc815\ub9ac\u00b7\uac70\ub9ac \uae00\uc790\u00b7\ubcc4\uc810\u00b7'\uae38\ucc3e\uae30' \ubb38\uad6c\u00b7\ube48 \uc0c1\ud0dc \ubb38\uad6c\uac00 www/index.html \uc548\uc5d0 \uc788\uc5c8\ub2e4.
+//   \uc774\uc81c \uc571\uc740 '\ubc1b\uc544 \ub454 \uac00\uac8c \ubaa9\ub85d(\uc6d0\uc790\ub8cc)'\uacfc '\uc9c0\uae08 \uc0c1\ud0dc(\ub3c4\ucc29\uc5ed\u00b7\ubd88\ub7ec\uc624\ub294 \uc911\u00b7\uace0\ub978 \uce69)'\ub9cc \ubcf4\ub0b4\uace0, \uc5d4\uc9c4\uc774 \ubb34\uc5c7\uc744 \uc5b4\ub5a4 \uc21c\uc11c\ub85c \ubcf4\uc77c\uc9c0\u00b7\ubb38\uad6c\ub294 \ubb34\uc5c7\uc778\uc9c0\uae4c\uc9c0 \uc815\ud574 \ud654\uba74 JSON \uc73c\ub85c \ub0b4\ub824 \uc900\ub2e4.
+//   \uc571(\ub124\uc774\ud2f0\ube0c ScreenCore/ScreenView)\uc740 \uadf8 JSON \uc744 \uac80\uc99d\ud574 \uadf8\ub9ac\uae30\ub9cc \ud55c\ub2e4. \uc6f9 \ub9db\uc9d1 \ud654\uba74\uc740 \ud3f4\ubc31(\uc5d4\uc9c4\u00b7\ub124\uc774\ud2f0\ube0c\uac00 \uc548 \ub420 \ub54c)\uc73c\ub85c\ub9cc \ub0a8\ub294\ub2e4.
+//
+// \uc785\ub825  foodScreen({ cap }, facts, items)
+//        cap   = \uc571\uc774 \uadf8\ub9b4 \uc218 \uc788\ub294 \ud654\uba74 \uaddc\uaca9 \uc218\uc900(4 \uc774\uc0c1\uc774\uc5b4\uc57c \ub9db\uc9d1 \ud654\uba74\uc744 \ub9cc\ub4e0\ub2e4)
+//        facts = { stn: \ub3c4\ucc29\uc5ed(\ub610\ub294 \uac00\uc7a5 \uac00\uae4c\uc6b4 \uc5ed) \uc774\ub984('\uc5ed' \uc5c6\uc774) \u00b7 st: 'idle'|'locating'|'noperm'|'loading'|'none'|'ready' \u00b7 flt: \uace0\ub978 \uce69 \u00b7 fail: \ub9db\uc9d1 \uc11c\ubc84 \uc694\uccad \uc2e4\ud328(1|0) }
+//        items = { c: [\uac00\uac8c\u2026], p: [\uac00\uac8c\u2026] }   \uac00\uac8c = [\uc774\ub984, \uc5c5\uc885, \ub3c4\ub85c\uba85\uc8fc\uc18c, \uac70\ub9ac(m)]
+//                c = \ub0b4\uc7a5\u00b7\ucd94\ucc9c \ubaa9\ub85d(\uc704\ucabd\uc5d0 \uc21c\uc704\uc640 \ubcc4\uc810\uc73c\ub85c), p = \uacf5\uacf5\ub370\uc774\ud130\u00b7\uc11c\ubc84 \ubaa9\ub85d(\uc544\ub798\ucabd\uc5d0 '\uacf5\uacf5\ub370\uc774\ud130' \ub531\uc9c0\ub85c)
+// \ucd9c\ub825  { ok, v:1, screen:'food', rev, cover:'tab', head:[bar, chips], body:[\ub178\ub4dc\u2026], info:{cur,pub,flt} }  \u2190 \ub178\ub4dc \uc885\ub958\ub294 native/ScreenCore.java \uc640 \uac19\ub2e4
+//        bar{title,sub,btn,act} \u00b7 chips{items[{label,on,act:{a:'cat',v}}], onc, onfg} \u00b7 place{rank,pub,name,sub,stars,badge,dist,go,act:{a:'call',v:'fm.c.<\ubc88\ud638>'|'fm.p.<\ubc88\ud638>'}} \u00b7 divider \u00b7 text \u00b7 spacer
+//        \uac00\uac8c\ub97c \ub204\ub974\uba74 \uc571\uc774 \ubcf4\ub0c8\ub358 \ubaa9\ub85d\uc758 \uadf8 \ubc88\ud638 \uac00\uac8c\ub97c \uc9c0\ub3c4 \uc2dc\ud2b8\ub85c \uc5f0\ub2e4(\ubc88\ud638 = \uc571\uc774 \ubcf4\ub0b8 \ubc30\uc5f4\uc758 \uc6d0\ub798 \uc704\uce58).
+// \ub9e8 \uc544\ub798 module.exports \ub294 \uc2dc\ud5d8(Node)\uc6a9\uc774\uace0 Worker \uc5d0\uc11c\ub294 \ud568\uc218 \uc120\uc5b8\ub9cc \uc4f0\uc778\ub2e4.
+'use strict';
+var FOOD_SCREEN_V = 1;
+var FOOD_CHIPS = ['\uc804\uccb4', '\uce74\ud398', '\ubc25\uc9d1', '\uc721\uc2dd', '\ud68c\uc9d1', '\uc8fc\uc810'];
+var FOOD_MAX_SHOW = 150;          // \uc704\u00b7\uc544\ub798 \ubaa9\ub85d \uac01\uac01 \ucd5c\ub300 \uac1c\uc218(\uc6f9\uacfc \uac19\ub2e4)
+var FOOD_MAX_IN_C = 400, FOOD_MAX_IN_P = 1500;
+var FOOD_STATES = ['idle', 'locating', 'noperm', 'loading', 'none', 'ready'];
+
+// \uc5c5\uc885 \u2192 \uce69 \ubd84\ub958. \uc21c\uc11c\uac00 \uc911\uc694\ud558\ub2e4(\ud68c\uc9d1\uc744 \uc721\uc2dd\ubcf4\ub2e4 \uba3c\uc800 \u2014 '\ucc38\uce58\ud68c \uc804\ubb38'\uc5d0 '\ucc38\uce58'\uac00 \uc721\ub958\ub85c \uc624\uc778\ub418\uc9c0 \uc54a\uac8c)
+function foodKind(cat) {
+  cat = String(cat || '').toLowerCase();
+  if (/\uce74\ud398|\ucee4\ud53c|\ub514\uc800\ud2b8|\ubca0\uc774\ucee4\ub9ac|\uc81c\uacfc|\ube75\uc9d1|\ube0c\ub7f0\uce58|\ud2f0\ud558\uc6b0\uc2a4|\uc544\uc774\uc2a4\ud06c\ub9bc|\ube59\uc218|\ub3c4\ub11b|\uc2a4\ubb34\ub514|\ubc00\ud06c\ud2f0|\ucc28\uc804\ubb38|\uce74\ud398\ud14c\ub9ac\uc544/.test(cat)) return '\uce74\ud398';
+  if (/\uc220\uc9d1|\uc8fc\uc810|\ud638\ud504|\uc0dd\ub9e5\uc8fc|\ub9e5\uc8fc|\ud3ec\uc7a5\ub9c8\ucc28|\ud3ec\ucc28|\uc640\uc778|\uce75\ud14c\uc77c|\uc704\uc2a4\ud0a4|\uc0ac\ucf00|\uc774\uc790\uce74\uc57c|\ud38d|\uc720\ud765|\ubc14\(|bar/.test(cat)) return '\uc8fc\uc810';
+  if (/\ud68c\/\ucd08\ubc25|\ud68c\s*\uc804\ubb38|\ud69f\uc9d1|\ubb3c\ud68c|\uc0dd\uc120\ud68c|\ud574\uc0b0\ubb3c|\uc870\uac1c|\uc624\uc9d5\uc5b4|\uc7a5\uc5b4|\ud574\ubb3c|\uc218\uc0b0|\uc2a4\uc2dc|\ucd08\ubc25|\uc0ac\uc2dc\ubbf8|\ub300\uac8c|\ud0b9\ud06c\ub7a9|\ub099\uc9c0|\ubb38\uc5b4|\uc804\ubcf5|\uad74|\ucc38\uce58|\uc5f0\uc5b4|\uad11\uc5b4|\uc6b0\ub7ed|\ubc29\uc5b4|\uc544\uad6c|\ubcf5\uc5b4/.test(cat)) return '\ud68c\uc9d1';
+  if (/\uace0\uae30|\uc721\ub958|\uad6c\uc774|\uc0bc\uacb9|\ubaa9\uc0b4|\uac08\ube44|\uacf1\ucc3d|\ub9c9\ucc3d|\ub300\ucc3d|\uce58\ud0a8|\ub2ed|\uc624\ub9ac|\uc2a4\ud14c\uc774\ud06c|\ubc14\ube44\ud050|\uc22f\ubd88|\ud6c8\uc81c|\uc871\ubc1c|\ubcf4\uc308|\ub3fc\uc9c0|\uc18c\uace0\uae30|\ud55c\uc6b0|\uc591\uaf2c\uce58|\uc721\ud68c|\ud584\ubc84\uac70|\ubc84\uac70|\uc815\uc721|\uc0e4\ube0c|\ubd88\uace0\uae30|\ub3c8\uac00\uc2a4|\ubd80\ub300\ucc0c\uac1c|\uac10\uc790\ud0d5/.test(cat)) return '\uc721\uc2dd';
+  return '\ubc25\uc9d1';
+}
+function foodCatSimple(cat) {                      // '\uc74c\uc2dd > \ud55c\uc2dd > \uad6d\ubc25' \u2192 '\uad6d\ubc25'
+  if (!cat) return '\uc74c\uc2dd\uc810';
+  var c = String(cat).split(/\s*>\s*/);
+  return c[c.length - 1] || c[0] || '\uc74c\uc2dd\uc810';
+}
+function foodDist(m) {
+  m = parseInt(m, 10) || 0;
+  return m >= 1000 ? (m / 1000).toFixed(1) + 'km' : m + 'm';
+}
+function foodStars(idx) {                          // \uc21c\uc704\ub85c \ubcc4\uc810 \ucd94\uc815(\uc778\uae30\uc21c \uc815\ub82c\uc774\ub77c)
+  return idx < 3 ? '\u2605\u2605\u2605\u2605\u2605' : idx < 6 ? '\u2605\u2605\u2605\u2605' : idx < 10 ? '\u2605\u2605\u2605' : '\u2605\u2605';
+}
+function foodStr(v, n) { return typeof v === 'string' ? v.slice(0, n) : (typeof v === 'number' ? String(v).slice(0, n) : ''); }
+function foodNameOf(v) { return foodStr(v, 120).replace(/<[^>]*>/g, '').trim(); }
+function foodKey(name) { return String(name || '').replace(/\s/g, ''); }
+
+function foodFacts(f) {
+  f = (f && typeof f === 'object') ? f : {};
+  var stn = foodStr(f.stn, 30).replace(/\uc5ed$/, '');
+  var st = FOOD_STATES.indexOf(f.st) >= 0 ? f.st : (stn ? 'ready' : 'idle');
+  var flt = FOOD_CHIPS.indexOf(f.flt) >= 0 ? f.flt : '\uc804\uccb4';
+  return { stn: stn, st: st, flt: flt, fail: f.fail === 1 || f.fail === true || f.fail === '1' };
+}
+// \uac00\uac8c \ubc30\uc5f4 [\uc774\ub984, \uc5c5\uc885, \uc8fc\uc18c, \uac70\ub9ac, \uc704\ub3c4, \uacbd\ub3c4] \u2192 { n, c, a, d, i(\uc6d0\ub798 \ubc88\ud638) }. \uc774\ub984 \uc5c6\ub294 \uac74 \ube80\ub2e4(\ube48 \uce74\ub4dc \ubc29\uc9c0)
+function foodList(arr, max) {
+  var out = [];
+  if (!Array.isArray(arr)) return out;
+  for (var i = 0; i < arr.length && i < max; i++) {
+    var a = arr[i];
+    if (!Array.isArray(a)) continue;
+    var n = foodNameOf(a[0]);
+    if (!n) continue;
+    var d = Number(a[3]);
+    out.push({ n: n, c: foodStr(a[1], 120), a: foodStr(a[2], 160), d: isFinite(d) ? d : null, i: i });
+  }
+  return out;
+}
+function foodHash(s) {                             // djb2 \u2014 \uac19\uc740 \ud654\uba74\uc774\uba74 \uac19\uc740 rev
+  var h = 5381;
+  for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+
+function foodMsgN(s) { return { t: 'text', s: s, size: 14, color: 'sub', lh: 1.8, align: 'center', pad: [20, 60, 20, 60] }; }
+function foodPlaceN(p, rank, pub, idxPrefix) {
+  var addr = p.a ? ' \u00b7 ' + p.a.split(' ').slice(-2).join(' ') : '';
+  var n = { t: 'place', pad: [12, 0, 12, 10], rank: rank, name: p.n, sub: foodCatSimple(p.c) + addr, dist: foodDist(p.d), go: '\uae38\ucc3e\uae30 \u00b7 \uc9c0\ub3c4 \u2192', act: { a: 'call', v: 'fm.' + idxPrefix + '.' + p.i } };
+  if (pub) { n.pub = true; n.badge = '\uacf5\uacf5\ub370\uc774\ud130'; } else n.stars = foodStars(Number(rank) - 1);
+  return n;
+}
+
+function foodScreen(inp, factsIn, itemsIn) {
+  inp = inp || {};
+  if (!(Number(inp.cap) >= 4)) return { ok: false, error: 'cap' };
+  var f = foodFacts(factsIn), it = (itemsIn && typeof itemsIn === 'object') ? itemsIn : {};
+  var all = foodList(it.c, FOOD_MAX_IN_C), allP = foodList(it.p, FOOD_MAX_IN_P);
+  var match = function (p) { return f.flt === '\uc804\uccb4' || foodKind(p.c) === f.flt; };
+  var cur = all.filter(match), pub = allP.filter(match);
+  var seen = {};                                    // \uc704\ucabd \ubaa9\ub85d\uc5d0 \uc774\ubbf8 \uc788\ub294 \uc0c1\ud638\ub294 \uacf5\uacf5\ub370\uc774\ud130\uc5d0\uc11c \ube80\ub2e4(\uc911\ubcf5 \ubc29\uc9c0)
+  cur.forEach(function (p) { seen[foodKey(p.n)] = 1; });
+  pub = pub.filter(function (p) { return !seen[foodKey(p.n)]; });
+
+  var label = f.stn && (f.st === 'ready' || f.st === 'loading' || f.st === 'none') ? f.stn + '\uc5ed \uc778\uadfc' : (f.st === 'locating' ? '\uc704\uce58 \ud655\uc778 \uc911...' : '\ub3c4\ucc29\uc5ed\uc744 \uc124\uc815\ud558\uba74 \ub9db\uc9d1\uc744 \ucd94\ucc9c\ud574\ub4dc\ub824\uc694');
+  var head = [
+    { t: 'bar', pad: [16, 16, 16, 8], title: '\ub3c4\ucc29\uc5ed \ub9db\uc9d1', sub: label, btn: '\uc0c8\ub85c\uace0\uce68', act: { a: 'refresh' } },
+    { t: 'chips', pad: [16, 0, 16, 12], gap: 8, h: 30, onc: 'gold', onfg: '#121214',
+      items: FOOD_CHIPS.map(function (c) { return { label: c, on: c === f.flt, act: { a: 'cat', v: c } }; }) }
+  ];
+
+  var body = [];
+  if (f.st === 'idle') body.push(foodMsgN('\uacbd\ub85c\ub97c \uc124\uc815\ud558\uba74\n\ub3c4\ucc29\uc5ed \uc8fc\ubcc0 \ub9db\uc9d1\uc744 \ucd94\ucc9c\ud574\ub4dc\ub824\uc694!'));
+  else if (f.st === 'locating') body.push(foodMsgN('\ub0b4 \uc704\uce58 \ud655\uc778 \uc911...'));
+  else if (f.st === 'noperm') body.push(foodMsgN('\uc704\uce58 \uad8c\ud55c\uc744 \ud5c8\uc6a9\ud558\uac70\ub098\n\uacbd\ub85c\ub97c \uc124\uc815\ud558\uba74 \ub9db\uc9d1\uc744 \ucd94\ucc9c\ud574\ub4dc\ub824\uc694!'));
+  else if (!cur.length && !pub.length) {
+    if (f.st === 'loading') body.push(foodMsgN((f.stn || '\uc774\uacf3') + ' \uc8fc\ubcc0 \uc74c\uc2dd\uc810 \ubd88\ub7ec\uc624\ub294 \uc911...'));
+    else if (f.st === 'none' && !all.length && !allP.length) body.push(foodMsgN((f.stn || '\uc774\uacf3') + '\uc5ed \uc778\uadfc \ub4f1\ub85d \uc74c\uc2dd\uc810 \uc815\ubcf4\uac00 \uc5c6\uc5b4\uc694'));
+    else if (f.fail) body.push(foodMsgN('\ub9db\uc9d1 \uc815\ubcf4\ub97c \ubd88\ub7ec\uc624\uc9c0 \ubabb\ud588\uc5b4\uc694.\n\uc7a0\uc2dc \ub4a4 \uc0c8\ub85c\uace0\uce68\uc744 \ub20c\ub7ec\uc8fc\uc138\uc694.'));
+    else body.push(foodMsgN('\ud574\ub2f9 \uce74\ud14c\uace0\ub9ac \uc74c\uc2dd\uc810\uc774 \uc5c6\uc2b5\ub2c8\ub2e4.'));
+  } else {
+    var n = 0, k;
+    for (k = 0; k < cur.length && n < FOOD_MAX_SHOW; k++, n++) body.push(foodPlaceN(cur[k], String(n + 1), false, 'c'));
+    if (pub.length) {
+      body.push({ t: 'divider', pad: [12, 8, 12, 0] });
+      body.push({ t: 'text', s: '\uacf5\uacf5\ub370\uc774\ud130 \u00b7 \uc8fc\ubcc0 ' + (f.flt === '\uc804\uccb4' ? '\uc74c\uc2dd\uc810' : f.flt) + ' ' + pub.length + '\uacf3', size: 12, bold: true, color: 'sub', pad: [14, 12, 14, 6] });
+      for (k = 0, n = 0; k < pub.length && n < FOOD_MAX_SHOW; k++, n++) body.push(foodPlaceN(pub[k], '', true, 'p'));
+    }
+    body.push({ t: 'spacer', h: 80 });
+  }
+  var out = { ok: true, v: 1, screen: 'food', cover: 'tab', head: head, body: body, info: { cur: cur.length, pub: pub.length, flt: f.flt } };
+  out.rev = 'f' + FOOD_SCREEN_V + ':' + foodHash(JSON.stringify([head, body]));
+  return out;
+}
+// \ub9db\uc9d1 \ud654\uba74 \uc5d4\uc9c4 Worker \uc5f0\uacb0\ubd80 \u2014 POST /screen/food (engine/food.js \uc758 foodScreen \uc744 \ubd80\ub978\ub2e4). route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/screen/food") return handleScreenFood(request);` \ub97c \ub123\ub294\ub2e4.
+//   \ubcf8\ubb38(JSON \uae00, Content-Type: text/plain \uc73c\ub85c \ubcf4\ub0b4 \uc0ac\uc804 \uc694\uccad\uc744 \ud53c\ud55c\ub2e4): { cap(4 \uc774\uc0c1), f:{stn,st,flt,fail}, c:[\uac00\uac8c\u2026], p:[\uac00\uac8c\u2026] }  \uac00\uac8c = [\uc774\ub984, \uc5c5\uc885, \uc8fc\uc18c, \uac70\ub9ac]
+//   \uc5d4\uc9c4\uc740 \uc544\ubb34\uac83\ub3c4 \uc800\uc7a5\ud558\uc9c0 \uc54a\ub294\ub2e4(\uc774 \uae30\uae30\uac00 \ubcf4\ub0b8 \uac00\uac8c \ubaa9\ub85d\uc73c\ub85c \ud654\uba74\uc744 \uacc4\uc0b0\ud574 \ub3cc\ub824\uc904 \ubfd0). \uac1c\uc778 \uc2dd\ubcc4 \uc815\ubcf4\ub294 \uc624\uac00\uc9c0 \uc54a\ub294\ub2e4.
+async function handleScreenFood(request) {
+  var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Cache-Control": "no-store" };
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: H });
+  if (request.method !== "POST") return new Response(JSON.stringify({ ok: false, error: "post-only" }), { status: 405, headers: H });
+  var raw = await request.text();
+  if (raw.length > 600000) return new Response(JSON.stringify({ ok: false, error: "body-too-long" }), { status: 413, headers: H });
+  var body;
+  try { body = JSON.parse(raw); } catch (e) { return new Response(JSON.stringify({ ok: false, error: "bad-json" }), { status: 400, headers: H }); }
+  if (!body || typeof body !== "object") return new Response(JSON.stringify({ ok: false, error: "bad-body" }), { status: 400, headers: H });
+  var out;
+  try { out = foodScreen({ cap: Number(body.cap) || 0 }, body.f, { c: body.c, p: body.p }); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2) }), { status: 500, headers: H }); }
+  if (!out || !out.ok) return new Response(JSON.stringify(out || { ok: false, error: "fail" }), { status: 400, headers: H });
+  out.ver = ENGINE_VERSION;
+  return new Response(JSON.stringify(out), { headers: H });
+}
+// ===== FOOD ENGINE END =====
+
 async function handleFetch(request, env, ctx) {
   try { await holEnsure(env); } catch (e) {}
   const url = new URL(request.url);
@@ -11612,6 +11759,7 @@ async function handleFetch(request, env, ctx) {
   if (url.pathname === "/scene") return handleScene(request);
   if (url.pathname === "/screen/shop") return handleScreenShop(request);
   if (url.pathname === "/screen/settings") return handleScreenSettings(request);
+  if (url.pathname === "/screen/food") return handleScreenFood(request);
   if (url.pathname === "/stops-near") {
     const lat = parseFloat(url.searchParams.get("lat"));
     const lng = parseFloat(url.searchParams.get("lng"));
