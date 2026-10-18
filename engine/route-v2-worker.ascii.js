@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-18s40";
+var ENGINE_VERSION = "route-v2-2026-10-18s41";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -11079,6 +11079,314 @@ async function handleScene(request) {
 }
 // ===== \uc7a5\uba74 \uc5d4\uc9c4 \ub05d =====
 
+// ===== SHOP ENGINE BEGIN =====
+// \uae38\ub3d9\ubb34 \u2014 \uc1fc\ud551 \ud654\uba74 \uc5d4\uc9c4(\ucd94\ucc9c 100\uc120 \uacc4\uc0b0 + \ud654\uba74 \uad6c\uc131 JSON) \uc21c\uc218 \uacc4\uc0b0 \ubaa8\ub4c8 (route-v2 Worker \uc5d0 \ubd99\uc5ec \ub123\ub294 \uc21c\uc218 \ud568\uc218; \ub2e8\uc77c \ucd9c\ucc98)
+//
+// \u2605 \uc6d0\uce59(YJ): "\ubaa8\ub4e0 \uc5f0\uc0b0\uc740 \uc5d4\uc9c4\uc774 \ud55c\ub2e4. \uc571\uc740 \uc5d4\uc9c4\uc774 \uacc4\uc0b0\ud55c \uadf8\ub9bc\ub9cc \uadf8\ub9b0\ub2e4."  (2026-10-18 \uc11c\ubc84 \uad6c\ub3d9 \ud654\uba74 1\ud638 \u2014 \uc1fc\ud551 \ud0ed)
+//   \uc608\uc804\uc5d4 www/index.html \uc758 _shopPick(~300\uc904: \uc2dc\ub4dc\u00b7\uacc4\uc808\u00b7\ub0a0\uc528\u00b7\uc2dc\uac04\ub300\u00b7\uc694\uc77c \uc810\uc218, \uce74\ud14c\uace0\ub9ac \ud3b8\uc911 \ubc29\uc9c0)\uc774 \uc571 \uc548\uc5d0 \uc788\uc5c8\ub2e4.
+//   \uc774\uc81c \uadf8 \uacc4\uc0b0\uc774 \uc5ec\uae30\ub85c \uc62e\uaca8\uc84c\uace0, \uc5d4\uc9c4\uc740 '\ubb34\uc5c7\uc744 \uc5b4\ub5a4 \uc21c\uc11c\ub85c \ubcf4\uc77c\uc9c0'\uae4c\uc9c0 \ud654\uba74 JSON \uc73c\ub85c \ub0b4\ub824 \uc900\ub2e4.
+//   \uc571(\ub124\uc774\ud2f0\ube0c ScreenCore/ScreenView)\uc740 \uadf8 JSON \uc744 \uac80\uc99d\ud574 \uadf8\ub9ac\uae30\ub9cc \ud55c\ub2e4. \uc6f9\uc758 _shopPick \uc740 \ud3f4\ubc31(\uc5d4\uc9c4\u00b7\ub124\uc774\ud2f0\ube0c\uac00 \uc548 \ub420 \ub54c)\uc73c\ub85c\ub9cc \ub0a8\ub294\ub2e4.
+//
+// \uc785\ub825  shopScreen({ nowMs, tzOffsetMin(\uae30\ubcf8 540=KST), cat('\ucd94\ucc9c'|\uce74\ud14c\uace0\ub9ac \uc774\ub984), }, data, cfg, wx)
+//        data = \uc1fc\ud551 \uc11c\ubc84(gildongmu-shop) /shop \uc758 data  { WEEKDAY:[{h1,h2,time,label,items:[{n,t,u,i}]}], WEEKEND:[\u2026], CATS:[{c,items:[{n,u,i}]}] }
+//        cfg  = \uc6b4\uc601 \uc124\uc815(/app-config?k=shop) { kw:{winter,spring,summer,fall}, w:{cur,next,opp,rain,temp} } | null
+//        wx   = { temp, rain } | null  (Worker \uac00 subway-api /weather \uc5d0\uc11c \ubc1b\ub294\ub2e4. \ubabb \ubc1b\uc73c\uba74 null \u2014 \ub0a0\uc528\ub97c \uc9c0\uc5b4\ub0b4\uc9c0 \uc54a\ub294\ub2e4)
+// \ucd9c\ub825  { ok, v:1, screen:'shop', rev, cat, seed, head:[\ub178\ub4dc\u2026], body:[\ub178\ub4dc\u2026] }  \u2190 \ub178\ub4dc \uc885\ub958\ub294 native/ScreenCore.java \uc640 \uac19\ub2e4
+//        chips{items:[{label,badge,on,act}]} \u00b7 grid{cols,gap,items:[card{img,fb,name,tag,act}]} \u00b7 text \u00b7 button \u00b7 spacer
+//        act = {a:'cat',v} | {a:'open',url} | {a:'refresh'}
+// \ub9e8 \uc544\ub798 module.exports \ub294 \uc2dc\ud5d8(Node)\uc6a9\uc774\uace0 Worker \uc5d0\uc11c\ub294 \ud568\uc218 \uc120\uc5b8\ub9cc \uc4f0\uc778\ub2e4.
+'use strict';
+var SHOP_PICK_N = 100;
+var SHOP_REC_CAT = '\ucd94\ucc9c';     // '\ucd94\ucc9c'
+var SHOP_CAT_EMOJI = { '\uc2dd\uc0ac': '\ud83c\udf71', '\uc74c\ub8cc': '\u2615', '\ud328\uc158': '\ud83d\udc54', '\ubdf0\ud2f0': '\ud83d\udc84', '\uac74\uac15': '\ud83d\udc8a', '\uc0dd\ud65c': '\ud83e\uddf4', '\uc644\uad6c': '\ud83e\uddf8' };
+
+// \uc9c0\uc5ed \uc2dc\uac01(KST \ub4f1) \ud544\ub4dc \u2014 Date \uc758 UTC getter \ub97c \uc4f0\ub294 \ub300\uc2e0 nowMs + \uc624\ud504\uc14b\uc73c\ub85c \uacc4\uc0b0
+function shopClock(nowMs, tzOffsetMin) {
+  var d = new Date(nowMs + (tzOffsetMin == null ? 540 : tzOffsetMin) * 60000);
+  return { y: d.getUTCFullYear(), mo: d.getUTCMonth() + 1, d: d.getUTCDate(), h: d.getUTCHours(), dow: d.getUTCDay() };
+}
+// \ub0a0\uc9dc+\uc2dc\uac04(\uc2dc\uac01) \uae30\ubc18 \uc2dc\ub4dc \u2014 \uac19\uc740 \ub0a0 \uac19\uc740 \uc2dc\uac04\ub300\uc5d4 \ub3d9\uc77c \uacb0\uacfc
+function shopSeedOf(ck) { return ck.y * 1000000 + ck.mo * 10000 + ck.d * 100 + ck.h; }
+// \uc2dc\ub4dc PRNG(mulberry32)
+function shopRng(seed) {
+  var a = seed >>> 0;
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    var t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+// \uc0c1\ud488 URL \u2192 \uc0c1\ud669 \ud14c\ub9c8 \ub9e4\ud551 (WEEKDAY\u00b7WEEKEND \uc758 t)
+function shopThemeMap(data) {
+  var m = {};
+  ['WEEKDAY', 'WEEKEND'].forEach(function (dk) {
+    ((data && data[dk]) || []).forEach(function (sl) {
+      ((sl && sl.items) || []).forEach(function (it) { if (it && it.u && it.t && !m[it.u]) m[it.u] = it.t; });
+    });
+  });
+  return m;
+}
+function shopCurSlotIdx(slots, h) {
+  for (var i = 0; i < slots.length; i++) {
+    var s = slots[i];
+    if (s.h2 > s.h1 ? (h >= s.h1 && h < s.h2) : (h >= s.h1 || h < s.h2)) return i;
+  }
+  return (h >= 1 && h < 9) ? slots.length - 1 : 0;
+}
+// \uc9c0\uae08 \uc0c1\ud669(\uc694\uc77c\u00b7\uc2dc\uac04\ub300\u00b7\ub0a0\uc528) \ucee8\ud14d\uc2a4\ud2b8
+function shopCtx(data, ck, wx) {
+  var weekend = ck.dow === 0 || ck.dow === 6;
+  var slots = (weekend ? data.WEEKEND : data.WEEKDAY) || [];
+  var idx = shopCurSlotIdx(slots, ck.h);
+  var now = {}, adj = {};
+  var cur = slots[idx] || null;
+  ((cur && cur.items) || []).forEach(function (it) { if (it && it.t) now[it.t] = 1; });
+  [idx - 1, idx + 1].forEach(function (k) {
+    var s2 = slots[((k % slots.length) + slots.length) % slots.length];
+    ((s2 && s2.items) || []).forEach(function (it) { if (it && it.t && !now[it.t]) adj[it.t] = 1; });
+  });
+  return {
+    weekend: weekend, slotIdx: idx, slot: cur, now: now, adj: adj,
+    rain: (wx && wx.rain != null) ? wx.rain : -1,
+    temp: (wx && wx.temp != null) ? wx.temp : null
+  };
+}
+
+// \uc774\ub984\uc5d0 '\uc7a5\uac11'\u00b7'\ub2c8\ud2b8'\uac00 \ub4e4\uc5b4\uac00\ub3c4 \ub0a0\uc528\uc640 \ubb34\uad00\ud55c \uc0b4\ub9bc \uc6a9\ud488(\uace0\ubb34\uc7a5\uac11\u00b7\uc704\uc0dd\uc7a5\uac11\u00b7\ub2c8\ud2b8\ub9b4\u2026)\uc740 \uacc4\uc808\u00b7\uae30\uc628 \uc810\uc218\uc5d0\uc11c \ube80\ub2e4
+var SHOP_NOWX = /\uace0\ubb34\uc7a5\uac11|\uc704\uc0dd\uc7a5\uac11|\ube44\ub2d0\uc7a5\uac11|\ub2c8\ud2b8\ub9b4|\ub77c\ud14d\uc2a4|\uc124\uac70\uc9c0|\uc8fc\ubc29\uc7a5\uac11|\uccad\uc18c\uc7a5\uac11|\uc77c\ud68c\uc6a9\uc7a5\uac11|\ucf54\ud305\uc7a5\uac11|\uc218\uc138\ubbf8|\uc138\uc81c|\ubb3c\ud2f0\uc288/;
+var SHOP_SEASON_KW = {
+  winter: /\ud328\ub529|\ub2e4\uc6b4|\uae30\ubaa8|\ud50c\ub9ac\uc2a4|\uc591\ud138|\ubb34\uc2a4\ud0d5|\ucf54\ud2b8|\ubaa9\ub3c4\ub9ac|\uba38\ud50c\ub7ec|(?<!\uace0\ubb34|\uc704\uc0dd|\ub2c8\ud2b8\ub9b4|\ube44\ub2d0|\uc124\uac70\uc9c0|\uccad\uc18c|\ub77c\ud14d\uc2a4|\uc77c\ud68c\uc6a9|\ucf54\ud305|\uc8fc\ubc29|\uc138\ucc28|\uc791\uc5c5)\uc7a5\uac11|\uadc0\ub3c4\ub9ac|\ub0b4\ubcf5|\ud788\ud2b8\ud14d|\uc804\uae30\uc694|\uc628\uc218\ub9e4\ud2b8|\ud56b\ud329|\uac00\uc2b5\uae30|\ub09c\ubc29|\ubc29\ud55c|\ud138\uc2ac\ub9ac\ud37c|\uc218\uba74\ubc14\uc9c0|\uadf9\uc138\uc0ac|\ub871\ud328\ub529|\ub2c8\ud2b8(?!\ub9b4)|\uc2a4\uc6e8\ud130|\ubd80\uce20/,
+  spring: /\ubc14\ub78c\ub9c9\uc774|\uc708\ub4dc\ube0c\ub808\uc774\ucee4|\uac00\ub514\uac74|\ud2b8\ub80c\uce58|\uc790\ucf13|\uc7ac\ud0b7|\ub9e8\ud22c\ub9e8|\ud6c4\ub4dc|\uc587\uc740|\ubd04|\ube14\ub77c\uc6b0\uc2a4|\uc2a4\ub2c8\ucee4\uc988|\ud669\uc0ac|\ubbf8\uc138\uba3c\uc9c0|\ub9c8\uc2a4\ud06c|\uc54c\ub808\ub974\uae30|\uc790\uc678\uc120\ucc28\ub2e8/,
+  summer: /\ubc18\ud314|\ubc18\ubc14\uc9c0|\ub0c9\uac10|\ucfe8\ub9c1|\ub0c9\uac01|\ub9b0\ub128|\uba54\uc26c|\uc36c\ud06c\ub9bc|\uc120\ud06c\ub9bc|\uc790\uc678\uc120|\uc120\uae00\ub77c\uc2a4|\ubaa8\uc790|\ucea1\ubaa8\uc790|\uc0cc\ub4e4|\uc2ac\ub9ac\ud37c|\uc544\ucfe0\uc544|\uc218\uc601|\ub798\uc2dc\uac00\ub4dc|\uc120\ud48d\uae30|\uc11c\ud058\ub808\uc774\ud130|\uc81c\uc2b5|\ubaa8\uae30|\uc544\uc774\uc2a4|\ucfe8\ub9e4\ud2b8|\ubd80\ucc44/,
+  fall:   /\ud6c4\ub4dc|\ud6c4\ub514|\ub9e8\ud22c\ub9e8|\uac00\ub514\uac74|\uc790\ucf13|\uc7ac\ud0b7|\ub2c8\ud2b8(?!\ub9b4)|\uc2a4\uc6e8\ud130|\uc810\ud37c|\uc57c\uc0c1|\uae30\ubaa8|\ud2b8\ub80c\uce58|\uacbd\ub7c9\ud328\ub529|\uc870\ub07c|\ubca0\uc2a4\ud2b8|\uae34\ud314|\uc2a4\uce74\ud504|\ubd80\uce20|\uc6cc\ucee4/
+};
+function shopSeasonNow(ck) {
+  var m = ck.mo, day = ck.d, cur, next;
+  if (m === 12 || m === 1 || m === 2) { cur = 'winter'; next = 'spring'; }
+  else if (m >= 3 && m <= 5) { cur = 'spring'; next = 'summer'; }
+  else if (m >= 6 && m <= 8) { cur = 'summer'; next = 'fall'; }
+  else { cur = 'fall'; next = 'winter'; }
+  var late = ((m === 2 || m === 5 || m === 8 || m === 11) && day >= 15) || (m === 9) || (m === 12 && day >= 15);
+  return { cur: cur, next: next, lean: late ? 0.7 : 0.35 };
+}
+function shopSeasonScore(name, ctx, cfg) {
+  var nm = String(name || '');
+  if (!nm) return 0;
+  if (SHOP_NOWX.test(nm)) return 0;
+  var se = ctx._season;
+  if (cfg && cfg.kw) {                    // \uc6b4\uc601 \uc124\uc815(\uc11c\ubc84)\uc774 \uc788\uc73c\uba74 \uadf8 \uaddc\uce59, \uc774\uc0c1\ud558\uba74 \ub0b4\uc7a5 \uaddc\uce59
+    try {
+      if (!ctx._srvKw) {
+        ctx._srvKw = {};
+        ['winter', 'spring', 'summer', 'fall'].forEach(function (k) {
+          var pat = cfg.kw[k];
+          if (typeof pat === 'string' && pat) ctx._srvKw[k] = new RegExp(pat);
+        });
+      }
+      if (!Object.keys(ctx._srvKw).length) throw new Error('empty');
+      var W = cfg.w || {};
+      var kw = ctx._srvKw, sc2 = 0;
+      var wCur = (W.cur != null) ? W.cur : 90, wNext = (W.next != null) ? W.next : se.lean;
+      if (kw[se.cur] && kw[se.cur].test(nm)) sc2 += wCur;
+      if (kw[se.next] && kw[se.next].test(nm)) sc2 += Math.round(wCur * wNext);
+      var opp2 = { winter: 'summer', summer: 'winter', spring: 'winter', fall: 'summer' }[se.cur];
+      if (kw[opp2] && kw[opp2].test(nm) && !(kw[se.cur] && kw[se.cur].test(nm))) sc2 += (W.opp != null) ? W.opp : -70;
+      if (ctx.rain >= 50 && /\uc6b0\uc0b0|\ub808\uc778|\ubc29\uc218|\uc7a5\ud654|\uc6b0\ube44|\uc81c\uc2b5/.test(nm)) sc2 += (W.rain != null) ? W.rain : 120;
+      if (ctx.temp != null) {
+        var wt = (W.temp != null) ? W.temp : 110;
+        if (ctx.temp <= 5 && kw.winter && kw.winter.test(nm)) sc2 += wt;
+        if (ctx.temp >= 28 && kw.summer && kw.summer.test(nm)) sc2 += wt;
+        if (ctx.temp <= 5 && kw.summer && kw.summer.test(nm)) sc2 -= wt * 0.8;
+        if (ctx.temp >= 28 && kw.winter && kw.winter.test(nm)) sc2 -= wt * 0.8;
+      }
+      return sc2;
+    } catch (e) { }
+  }
+  var sc = 0;
+  if (SHOP_SEASON_KW[se.cur] && SHOP_SEASON_KW[se.cur].test(nm)) sc += 90;
+  if (SHOP_SEASON_KW[se.next] && SHOP_SEASON_KW[se.next].test(nm)) sc += Math.round(90 * se.lean);
+  var opp = { winter: 'summer', summer: 'winter', spring: 'winter', fall: 'summer' }[se.cur];
+  if (SHOP_SEASON_KW[opp] && SHOP_SEASON_KW[opp].test(nm) && !(SHOP_SEASON_KW[se.cur] && SHOP_SEASON_KW[se.cur].test(nm))) sc -= 70;
+  if (ctx.rain >= 50 && /\uc6b0\uc0b0|\ub808\uc778|\ubc29\uc218|\uc7a5\ud654|\uc6b0\ube44|\uc81c\uc2b5/.test(nm)) sc += 120;
+  if (ctx.temp != null) {
+    if (ctx.temp <= 5 && SHOP_SEASON_KW.winter.test(nm)) sc += 110;
+    if (ctx.temp >= 28 && SHOP_SEASON_KW.summer.test(nm)) sc += 110;
+    if (ctx.temp <= 5 && SHOP_SEASON_KW.summer.test(nm)) sc -= 90;
+    if (ctx.temp >= 28 && SHOP_SEASON_KW.winter.test(nm)) sc -= 90;
+  }
+  return sc;
+}
+// \uc0c1\ud488 1\uac1c \uc810\uc218 \u2014 \uc2dc\uac04\ub300(\ud604\uc7ac/\uc778\uc811 \uc2ac\ub86f) + \uc694\uc77c + \ub0a0\uc528(\uac15\uc218\u00b7\uae30\uc628)
+function shopScore(theme, ctx, rng, name, cfg) {
+  var sc = rng() * 12;
+  sc += shopSeasonScore(name, ctx, cfg);
+  if (!theme) return sc - 12;
+  if (ctx.now[theme]) sc += 100;
+  else if (ctx.adj[theme]) sc += 45;
+  if (theme === '\uc6b0\ucc9c\ub300\ube44') {
+    if (ctx.rain >= 60) sc += 150;
+    else if (ctx.rain >= 30) sc += 80;
+    else if (ctx.rain >= 0) sc -= 55;
+  }
+  if (theme === '\ucea0\ud551\ub098\ub4e4\uc774' || theme === '\ucde8\ubbf8\uc2a4\ud3ec\uce20') {
+    if (ctx.rain >= 60) sc -= 60;
+    else if (ctx.rain >= 30) sc -= 25;
+  }
+  if (ctx.temp != null) {
+    if (ctx.temp <= 5) {
+      if (theme === '\ucee4\ud53c\uc74c\ub8cc' || theme === '\uc57c\uc2dd' || theme === '\uc140\ud504\ucf00\uc5b4') sc += 25;
+    }
+    if (ctx.temp >= 28) {
+      if (theme === '\ub2e4\uc774\uc5b4\ud2b8' || theme === '\ube0c\ub7f0\uce58') sc += 20;
+      if (theme === '\uc57c\uc2dd') sc -= 10;
+    }
+  }
+  if (ctx.weekend) {
+    if (theme === '\ucea0\ud551\ub098\ub4e4\uc774' || theme === '\ud648\ud30c\ud2f0' || theme === '\ucde8\ubbf8\uc2a4\ud3ec\uce20' || theme === '\ube0c\ub7f0\uce58') sc += 18;
+  } else {
+    if (theme === '\uc0ac\ubb34\uc6a9\ud488' || theme === '\ucd9c\uadfc\ub8e9\uc18c\ud488' || theme === '\ucee4\ud53c\uc74c\ub8cc') sc += 12;
+  }
+  return sc;
+}
+// \uac19\uc740 \uc774\ub984 \uc0c1\ud488\uc774 \uc5f0\ub2ec\uc544 \ub098\uc624\uc9c0 \uc54a\ub3c4\ub85d \ub77c\uc6b4\ub4dc\ub85c\ube48 \uc815\ub82c
+function shopSpread(arr) {
+  var g = {}, keys = [];
+  arr.forEach(function (x) {
+    var k = String(x.n || '').replace(/\s/g, '');
+    if (!g[k]) { g[k] = []; keys.push(k); }
+    g[k].push(x);
+  });
+  var out = [], more = true;
+  for (var r = 0; more; r++) {
+    more = false;
+    for (var i = 0; i < keys.length; i++) { var a = g[keys[i]]; if (a[r]) { out.push(a[r]); more = true; } }
+  }
+  return out;
+}
+// \ucd94\ucc9c 100\uc120(\uc2dc\uac04\u00b7\uc694\uc77c\u00b7\ub0a0\uc528 \uae30\ubc18) + \uce74\ud14c\uace0\ub9ac\ubcc4 \uc804\uccb4 \ubaa9\ub85d \u2014 \uc571 _shopPick \uacfc \uac19\uc740 \uacb0\uacfc\uc5ec\uc57c \ud55c\ub2e4(\uc2dc\ud5d8\uc774 \ub300\uc870)
+function shopPick(data, ck, wx, cfg) {
+  var rainB = (wx && wx.rain != null) ? Math.round(wx.rain / 20) : -1;
+  var tempB = (wx && wx.temp != null) ? Math.round(wx.temp / 5) : -99;
+  var seasonB = ck.mo * 3 + Math.min(2, Math.floor((ck.d - 1) / 10));
+  var seed = shopSeedOf(ck) * 1000 + (rainB + 1) * 20 + (tempB + 20) + seasonB * 7;
+  var rng = shopRng(seed);
+  var cats = (data && data.CATS) || [];
+  var order = cats.map(function (c) { return c.c; });
+  var themes = shopThemeMap(data);
+  var ctx = shopCtx(data, ck, wx);
+  ctx._season = shopSeasonNow(ck);
+
+  var byCat = {}, scored = [];
+  cats.forEach(function (c) {
+    var list = (c.items || []).map(function (x) { return { n: x.n, u: x.u, i: x.i, _cat: c.c, _t: themes[x.u] || '' }; });
+    var spread = shopSpread(list);
+    spread.forEach(function (it) { it._s = shopScore(it._t, ctx, rng, it.n, cfg); });
+    spread.sort(function (a, b) { return b._s - a._s; });
+    byCat[c.c] = spread;
+    spread.forEach(function (it) { scored.push({ it: it, s: it._s }); });
+  });
+  scored.sort(function (a, b) { return b.s - a.s; });
+  var cap = Math.max(12, Math.ceil(SHOP_PICK_N * 0.34));
+  var cnt = {}, nmCnt = {}, used = {}, rec = [];
+  [1, 2].forEach(function (nmMax) {
+    for (var i = 0; i < scored.length && rec.length < SHOP_PICK_N; i++) {
+      var it = scored[i].it, cn = it._cat;
+      if (used[it.u]) continue;
+      if ((cnt[cn] || 0) >= cap) continue;
+      var nk = String(it.n || '').replace(/\s/g, '');
+      if ((nmCnt[nk] || 0) >= nmMax) continue;
+      cnt[cn] = (cnt[cn] || 0) + 1; nmCnt[nk] = (nmCnt[nk] || 0) + 1;
+      used[it.u] = 1; rec.push(it);
+    }
+  });
+  for (var j = 0; j < scored.length && rec.length < SHOP_PICK_N; j++) {
+    var t2 = scored[j].it;
+    if (used[t2.u]) continue;
+    used[t2.u] = 1; rec.push(t2);
+  }
+  return { seed: seed, rec: rec, byCat: byCat, order: order, ctx: ctx };
+}
+
+// \u2500\u2500 \ud654\uba74 \uad6c\uc131 JSON \u2500\u2500
+function shopOk(u) { return typeof u === 'string' && /^https?:\/\//i.test(u); }
+function shopScreen(inp, data, cfg, wx) {
+  inp = inp || {};
+  if (!data || !data.CATS || !data.CATS.length || !data.WEEKDAY || !data.WEEKDAY.length) return { ok: false, error: 'no-data' };
+  var nowMs = isFinite(inp.nowMs) ? Number(inp.nowMs) : Date.now();
+  var ck = shopClock(nowMs, inp.tzOffsetMin);
+  var pick = shopPick(data, ck, wx, cfg);
+  var cat = String(inp.cat || SHOP_REC_CAT);
+  if (cat !== SHOP_REC_CAT && !pick.byCat[cat]) cat = SHOP_REC_CAT;
+  var items = cat === SHOP_REC_CAT ? pick.rec : (pick.byCat[cat] || []);
+  var tabs = [{ c: SHOP_REC_CAT, n: pick.rec.length }].concat(pick.order.map(function (cn) { return { c: cn, n: (pick.byCat[cn] || []).length }; }));
+  var chips = tabs.map(function (o) {
+    return { label: o.c, badge: String(o.n), on: o.c === cat, act: { a: 'cat', v: o.c } };
+  });
+  var cards = [];
+  items.forEach(function (it) {
+    if (!shopOk(it.u)) return;                       // \ub9c1\ud06c\uac00 \uc5c6\uac70\ub098 \uc774\uc0c1\ud55c \uc0c1\ud488\uc740 \uc2e3\uc9c0 \uc54a\ub294\ub2e4
+    var c = { t: 'card', name: String(it.n || '').slice(0, 80), tag: '\ucd5c\uc800\uac00 \u203a', fb: SHOP_CAT_EMOJI[it._cat] || '\ud83d\udecd\ufe0f', act: { a: 'open', url: it.u } };
+    if (shopOk(it.i)) c.img = it.i;
+    cards.push(c);
+  });
+  return {
+    ok: true, v: 1, screen: 'shop', cat: cat, seed: pick.seed,
+    rev: pick.seed + ':' + cat + ':' + cards.length,
+    head: [{ t: 'chips', pad: [14, 4, 14, 4], gap: 6, h: 30, items: chips }],
+    body: [
+      { t: 'grid', cols: 2, gap: 8, pad: [14, 4, 14, 0], items: cards },
+      { t: 'text', pad: [16, 10, 16, 0], size: 10, color: 'sub', lh: 1.5, alpha: 0.8,
+        s: '\uc774 \ud398\uc774\uc9c0\uc758 \uc0c1\ud488 \ub9c1\ud06c\ub294 \ucfe0\ud321 \ud30c\ud2b8\ub108\uc2a4 \ud65c\ub3d9\uc758 \uc77c\ud658\uc73c\ub85c, \uc774\uc5d0 \ub530\ub978 \uc77c\uc815\uc561\uc758 \uc218\uc218\ub8cc\ub97c \uc81c\uacf5\ubc1b\uc2b5\ub2c8\ub2e4.' },
+      { t: 'spacer', h: 10 },
+      { t: 'button', pad: [14, 0, 14, 0], s: '\uc9c0\uae08 \ubc14\ub85c \uc0c8\ub85c\uace0\uce68', size: 11, h: 40, act: { a: 'refresh' } },
+      { t: 'spacer', h: 14 }
+    ]
+  };
+}
+// \uc1fc\ud551 \ud654\uba74 \uc5d4\uc9c4 Worker \uc5f0\uacb0\ubd80 \u2014 GET /screen/shop (engine/shop.js \uc758 shopScreen \uc744 \ubd80\ub978\ub2e4). route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/screen/shop") return handleScreenShop(request);` \ub97c \ub123\ub294\ub2e4.
+//   \u00b7 \uc0c1\ud488: \uc1fc\ud551 \uc11c\ubc84(gildongmu-shop) /shop \uc758 data \ub97c 60\ucd08 \uba54\ubaa8\ub9ac\uc5d0 \ub454\ub2e4. \uc11c\ubc84\uac00 \uc7a0\uae50 \uc548 \ub418\uba74 \ub9c8\uc9c0\ub9c9\uc73c\ub85c \ubc1b\uc740 \uac83\uc744 \uc4f4\ub2e4(\uc5c6\uc73c\uba74 503 \u2014 \uc571\uc740 \uc800\uc7a5\ud574 \ub454 \ud654\uba74 \ub610\ub294 \uc608\uc804 \uc6f9 \uc1fc\ud551\uc73c\ub85c \uac04\ub2e4).
+//   \u00b7 \uc6b4\uc601 \uc124\uc815: gildongmu-food /app-config?k=shop (\uacc4\uc808 \uaddc\uce59) 10\ubd84. \ubabb \ubc1b\uc73c\uba74 null \u2192 \ub0b4\uc7a5 \uaddc\uce59.
+//   \u00b7 \ub0a0\uc528: \uc7a5\uba74 \uc5d4\uc9c4\uacfc \uac19\uc740 sceneWeather(lat,lng) (subway-api /weather, 10\ubd84 \uce90\uc2dc). \uc704\uce58\ub97c \uc548 \uc8fc\uba74 \ub0a0\uc528 \uc5c6\uc774 \uacc4\uc0b0\ud55c\ub2e4.
+//   \ucffc\ub9ac: cat(\uce74\ud14c\uace0\ub9ac, \uae30\ubcf8 \ucd94\ucc9c) \u00b7 lat \u00b7 lng \u00b7 now(ms, \uc2dc\ud5d8\uc6a9) \u00b7 tz(\ubd84, \uae30\ubcf8 540)
+var SHOP_API_URL = "https://gildongmu-shop.phg0643.workers.dev";
+var SHOP_CFG_URL = "https://gildongmu-food.phg0643.workers.dev/app-config?k=shop";
+var SHOP_MEM = { data: null, ts: 0, ver: "", cfg: null, cfgTs: 0 };
+async function shopFetchJson(u, ms) {
+  var ac = new AbortController(), t = setTimeout(function () { ac.abort(); }, ms);
+  try { var r = await fetch(u, { signal: ac.signal }); clearTimeout(t); return r.ok ? await r.json() : null; }
+  catch (e) { clearTimeout(t); return null; }
+}
+async function shopLoad() {
+  var now = Date.now();
+  if (!SHOP_MEM.data || now - SHOP_MEM.ts > 60000) {
+    var j = await shopFetchJson(SHOP_API_URL + "/shop", 4000);
+    if (j && j.ok && j.data && j.data.CATS && j.data.CATS.length && j.data.WEEKDAY && j.data.WEEKDAY.length) { SHOP_MEM.data = j.data; SHOP_MEM.ver = String(j.version || ""); SHOP_MEM.ts = now; }
+  }
+  if (now - SHOP_MEM.cfgTs > 600000) {
+    SHOP_MEM.cfgTs = now;                                   // \uc2e4\ud328\ud574\ub3c4 10\ubd84\uc740 \ub2e4\uc2dc \ubb3b\uc9c0 \uc54a\ub294\ub2e4
+    var c = await shopFetchJson(SHOP_CFG_URL, 2500);
+    if (c && c.ok && c.v && typeof c.v === "object") SHOP_MEM.cfg = c.v;
+  }
+  return SHOP_MEM;
+}
+async function handleScreenShop(request) {
+  var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Cache-Control": "no-store" };
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: H });
+  var u = new URL(request.url), q = u.searchParams;
+  var mem = await shopLoad();
+  if (!mem.data) return new Response(JSON.stringify({ ok: false, error: "no-data" }), { status: 503, headers: H });
+  var lat = Number(q.get("lat")), lng = Number(q.get("lng")), wx = null;
+  if (q.get("lat") != null && q.get("lng") != null) { try { wx = await sceneWeather(lat, lng); } catch (e) { wx = null; } }
+  var inp = { nowMs: q.get("now") ? Number(q.get("now")) : Date.now(), tzOffsetMin: q.get("tz") ? Number(q.get("tz")) : 540, cat: q.get("cat") || "" };
+  var out;
+  try { out = shopScreen(inp, mem.data, mem.cfg, wx); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2) }), { status: 500, headers: H }); }
+  if (!out || !out.ok) return new Response(JSON.stringify(out || { ok: false, error: "fail" }), { status: 503, headers: H });
+  out.ver = ENGINE_VERSION; out.shopVer = mem.ver;
+  return new Response(JSON.stringify(out), { headers: H });
+}
+// ===== SHOP ENGINE END =====
+
 async function handleFetch(request, env, ctx) {
   try { await holEnsure(env); } catch (e) {}
   const url = new URL(request.url);
@@ -11089,6 +11397,7 @@ async function handleFetch(request, env, ctx) {
   if (url.pathname === "/holidays") return handleHolidays(request, env);
   if (url.pathname === "/widget-say") return handleWidgetSay(request, env, ctx);
   if (url.pathname === "/scene") return handleScene(request);
+  if (url.pathname === "/screen/shop") return handleScreenShop(request);
   if (url.pathname === "/stops-near") {
     const lat = parseFloat(url.searchParams.get("lat"));
     const lng = parseFloat(url.searchParams.get("lng"));
