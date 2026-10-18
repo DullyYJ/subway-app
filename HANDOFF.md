@@ -1068,3 +1068,17 @@
 **YJ가 해야 할 일**: Cloudflare route-v2 워커에 `engine/route-v2-worker.ascii.js`(s41) 전체를 붙여 넣고 Deploy. 확인: 루트 `version` = `route-v2-2026-10-18s41`, `…/screen/shop?cat=추천` 이 `ok:true` JSON. 그 뒤 APK 를 받아 설정 → '네이티브 쇼핑 화면' 켜기. (새 워커는 필요 없다.)
 **실기기 미검증(정직)**: 안드로이드 계층(`ScreenView`·플러그인)은 로컬에 `android.jar` 가 없어 문법만 확인, 실제 컴파일은 CI. ① 스크롤 120Hz 체감·관성 ② 글꼴 폭 차이로 말줄임 위치 ③ 그림 로딩 속도·깜박임 ④ 웹→네이티브 전환 시 겹침(칩 줄 위쪽 간격 4px 가정) ⑤ 키보드 올라올 때(검색줄 입력) 숨김/복귀 ⑥ 다크/파스텔 색. 엔진의 `rain` 값이 앱 날씨(`_wxMem`)와 같은 필드인지는 같은 `/weather` 응답이라 가정(실제 값은 라이브에서 확인).
 **다음**: 쇼핑 검색 입력줄(네이티브 EditText) → 설정 → 맛집 → 커뮤니티 → 하단 탭 막대 순으로 같은 틀(`ScreenCore` 노드 종류 추가 + 엔진 화면 JSON)로 옮긴다. 노드가 늘 때는 `ScreenJvmTest` 와 `screen_native_js` 에 검증/폴백 시험을 같이 넣을 것(규격 변경은 `v` 를 올리고 옛 `v` 는 앱이 거절 → 저장본/웹으로 폴백).
+
+## 2026-10-18 (밤 6) 서버 구동 네이티브 쇼핑 — 안내 상자·쿠팡 검색줄까지 (엔진 s42, `ScreenCore` 노드 `box`·`search`)
+**목표**: 쇼핑 탭에서 웹으로 남아 있던 맨 위 두 조각(대가성 안내 상자, 쿠팡 검색 입력줄)을 네이티브로. 이제 네이티브가 **탭 맨 위부터** 덮는다. 계산은 엔진·앱은 그림 원칙 그대로.
+- **엔진 `/screen/shop?cap=2`**: 앱이 `cap=2`(= 상자·검색줄을 그릴 수 있다)를 보내면 `head` 가 `[box, search, chips]` 이고 `cover:'tab'`. 안 보내면(옛 앱) 예전 모양 그대로 `[chips]`. → **엔진을 먼저 배포해도, APK 를 먼저 받아도 서로 안 깨진다**(옛 APK + 새 엔진 = 칩만 / 새 APK + 옛 엔진 = 예전처럼 칩 줄부터 덮고 안내·검색줄은 웹). 저장본이 옛 모양이면 새 응답이 올 때 사각형을 다시 재서 `setRect`.
+  · 검색 주소 템플릿(`https://www.coupang.com/np/search?q={q}`)과 파트너스 추적 링크(`https://coupa.ng/coRT4D`, 검색어 없이 누르면 이 링크 → 수수료 인식)는 **엔진이 정한다**(`SHOP_SEARCH_TPL`/`SHOP_PARTNER_URL`). 웹은 앱을 여는 일(`_openCoupangQuery(q, tpl)` 의 AppLauncher/intent/웹 순서)만 한다. 웹의 옛 상수와 같은 값인지 `shop_engine.test.js` 가 대조.
+  · 대가성 문구는 `shopRich` 로 글 + 굵은 구간(`hl`)을 엔진이 만든다(웹과 같은 두 곳이 굵게).
+- **`ScreenCore`(검증·배치)**: `box{pad,ip,s,hl,size,lh,color,fill,line,r}` · `search{pad,max,hint,badge,accent,maxlen,act:{a:'search',tpl,empty}}` · `screen.cover`. 색은 역할 이름 또는 CSS 색(읽을 수 없으면 화면 전체 거절). `search` 행동은 tpl 에 `{q}` 가 있는 http(s) 와 http(s) empty 가 없으면 거절. 머리 조각은 `fixed`(상자·검색줄)와 칩(가로로 밈)으로 나뉘고 `chipsTop/chipsBot` 이 칩 줄 범위. 굵은 구간은 줄바꿈 뒤 줄별 조각(`segs/segBold`)으로 미리 쪼개 그릴 때 새 객체를 안 만든다(줄바꿈은 굵은 폭으로 재서 넘치지 않게). 모르는 노드는 건너뛴다 → 옛 앱이 새 JSON 을 받아도 칩만 그림.
+- **`ScreenView`**: 상자·검색줄(알약·C 배지·돋보기 단추) 그리기. 검색 입력은 **진짜 `EditText`**(한글 조합·붙여넣기·키보드 검색 키는 안드로이드가 한다)를 검색줄 입력 자리에 올린다 — 뷰가 안 보이거나 잘리면(clip) 내리고, 목록을 밀기 시작하거나 칩을 누르면 키보드를 내린다. 검색 키/돋보기 단추 → 플러그인 `action {a:'search', v:검색어, url:tpl, empty}`. 머리는 칩 줄에서만 가로로 밀린다.
+- **웹 접착(`_scrShop`)**: 요청에 `&cap=2`, 사각형 위쪽은 `cover==='tab'` 이면 탭 맨 위. 플러그인 `input` 이벤트(검색 입력 포커스)가 켜져 있는 동안은 **키보드가 올라와 웹뷰 크기가 연달아 바뀌어도 숨기지 않고 따라간다**(안 그러면 키보드가 켜지자마자 네이티브가 숨겨져 키보드가 닫힌다).
+- **시험**: `ScreenJvmTest` 109(+40: 검증 거절 12종·머리 배치·검색줄 자리·굵은 구간 조각·고정/밀림 눌림·옛 앱 건너뜀) · `shop_engine` 277(+13: cap 유무·문구·검색 주소/링크 = 웹 값·워커 cap) · `screen_native_js` 29(+6 ⑧: cap=2 요청·옛 엔진·저장본 cover 전환·검색 행동 2종·입력 중 숨김 안 함) · `screen_native` 7(+1: EditText·검색 키·길이·포커스·잘림·키보드 내리기).
+- **기기 미검증(정직)**: 안드로이드 계층(`EditText` 얹기·z순서·IME)은 로컬에 `android.jar` 가 없어 문법만 눈으로 점검, 실제 컴파일은 CI. 실기기에서 확인: ① 입력칸이 알약 안 제자리에 정확히 얹히는지(1px 어긋남·글자 높이) ② 키보드가 올라올 때 웹뷰가 줄어드는 방식(adjustResize/Pan)에서 네이티브 뷰·입력칸이 따라오는지, 입력 중 깜박임 ③ 검색 → 쿠팡 앱/웹 열림 ④ 다크/파스텔에서 입력 글자·힌트 색 ⑤ 안내 상자 줄바꿈 위치가 웹과 같은지(굵은 글자 폭으로 재서 웹보다 한 줄 더 나올 수 있음).
+- **YJ가 할 일**: Cloudflare route-v2 워커에 `engine/route-v2-worker.ascii.js`(s42) 전체를 붙여 넣고 Deploy → 루트 `version` = `route-v2-2026-10-18s42`, `…/screen/shop?cap=2` 의 `head` 가 `box,search,chips`. 새 APK 에서 설정 '네이티브 쇼핑 화면'이 켜져 있으면 바로 적용.
+- **다음**: 설정 탭(스위치·입력칸 노드 필요: `switch`, `field` 등) → 맛집 → 커뮤니티 → 하단 탭 막대. 노드를 늘 때는 지금처럼 `cap` 을 올려(3…) 옛 앱과 새 엔진이 서로 안 깨지게 할 것.
+
