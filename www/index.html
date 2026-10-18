@@ -14188,6 +14188,7 @@ window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
   var REG = {};
   try{ G.on = localStorage.getItem(K_ON) === '1'; G.fails = parseInt(localStorage.getItem(K_F) || '0', 10) || 0; G.why = localStorage.getItem(K_W) || ''; }catch(eS){}
   function plug(){ try{ var C = window.Capacitor; return (C && C.Plugins && C.Plugins.HtlNative) || null; }catch(e){ return null; } }
+  var scrollAt = -1e9;
   function active(){ return G.on && !G.failed && G.fails < 2 && !!plug(); }
   function now(){ return (window.performance && performance.now) ? performance.now() : Date.now(); }
   function isMk(n){ var e = n && n.nodeType === 3 ? n.parentNode : n; var id = e && e.id; return id === 'htl-gps-marker-dot' || id === 'htl-gps-marker-ring' || id === 'htlWaitBadge'; }
@@ -14276,9 +14277,16 @@ window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
       var cs = getComputedStyle(el), ls = lines(n); if(!ls.length) return;
       var clipR = Infinity, a = el;
       while(a && a !== host.parentElement){ var sa = getComputedStyle(a); if(/(hidden|clip)/.test(sa.overflowX)) clipR = Math.min(clipR, a.getBoundingClientRect().right); a = a.parentElement; }
+      // 줄 수 제한(-webkit-line-clamp: 상품명 2줄 등): 웹은 N줄만 보이고 끝에 '…'. 넘친 줄의 글자를 마지막 줄에 이어 붙이고 그 줄은 요소 오른쪽 끝에서 자른다(네이티브가 '…'로 줄임).
+      var lc = parseInt(cs.webkitLineClamp, 10), ell = false;
+      if(lc > 0 && ls.length > lc){
+        var rest = ls.slice(lc).map(function(l){ return l.t; }).join(' ');
+        ls = ls.slice(0, lc); ls[lc - 1].t += ' ' + rest; ell = true;
+        clipR = Math.min(clipR, el.getBoundingClientRect().right);
+      }
       var col = rgba(cs.color, opOf(el, host)), size = parseFloat(cs.fontSize) || 12, bold = (parseInt(cs.fontWeight, 10) || 400) >= 600;
-      ls.forEach(function(l){
-        var vr = (l.right > clipR + 0.5) ? clipR : hr.right;                         // 말줄임이 필요한 줄만 보이는 끝에서 자른다 — 그 밖엔 여유를 둬 글꼴 폭 차이로 '…' 이 생기지 않게
+      ls.forEach(function(l, li){
+        var vr = ((ell && li === ls.length - 1) || l.right > clipR + 0.5) ? clipR : hr.right;                         // 말줄임이 필요한 줄만 보이는 끝에서 자른다 — 그 밖엔 여유를 둬 글꼴 폭 차이로 '…' 이 생기지 않게
         out.push({ t: l.t, x: l.left - ox, y: l.top - oy, w: Math.max(1, vr - l.left), h: l.h, s: size, c: col, b: bold });
       });
     }
@@ -14355,7 +14363,9 @@ window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
     function desired(w, t){
       var m = measure(w);
       if(!m || !m.vis) return { mode: 'off', m: m };
-      if(!H.cover || t - H.coverAt > 150 || H.still < 1){ H.cover = coverOf(w, m); H.coverAt = t; }
+      // 움직이는 중(스크롤·전환)이면 어차피 웹이 그린다 → 비싼 덮임 검사(elementFromPoint 최대 15번)를 건너뛴다. 멈추는 첫 프레임(still<1)에 한 번 한다 — 120Hz 스크롤에서 프레임마다 영역 수만큼 맞히기를 하면 끊긴다.
+      if(H.prev && (Math.abs(H.prev.x - m.x) >= 0.5 || Math.abs(H.prev.y - m.y) >= 0.5 || Math.abs(H.prev.w - m.w) >= 0.5 || Math.abs(H.prev.h - m.h) >= 0.5)) return { mode: 'moving', m: m };
+      if(!H.cover || (t - H.coverAt > 150 && t - scrollAt > 500) || H.still < 1){ H.cover = coverOf(w, m); H.coverAt = t; }      // 어디선가 스크롤 중(0.5초 안)이면 가만히 있는 영역의 덮임 재검사도 미룬다(프레임 끊김 방지)
       var c = H.cover; if(c.cover) return { mode: 'cover', m: m };
       var vt = Math.max(m.vt, c.vt != null ? c.vt : m.vt), vb = Math.min(m.vb, c.vb != null ? c.vb : m.vb);
       if(vb - vt < 6) return { mode: 'cover', m: m };
@@ -14462,7 +14472,13 @@ window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
     }
     // 반복 확인(움직임 신호가 있으면 프레임마다, 없으면 느리게)
     function cancel(){ if(!H.timer) return; try{ if(H.tk === 'raf') cancelAnimationFrame(H.timer); else clearTimeout(H.timer); }catch(e){} H.timer = 0; H.tk = ''; }
-    function wake(){ if(!active()) return; H.fast = now() + 800; if(!H.timer || H.tk !== 'raf') sched(true); }
+    function wake(){
+      if(!active()) return;
+      var t = now();
+      if(H.timer && H.tk === 'raf' && H.fast - t > 400) return;                      // 이미 프레임마다 보는 중이면 다시 깨우지 않는다(스크롤 이벤트는 프레임마다 온다)
+      try{ var h = cfg.host(); if(!h || !h.getClientRects().length) return; }catch(e){}   // 안 보이는 탭의 영역은 빠른 모드로 깨우지 않는다
+      H.fast = t + 800; if(!H.timer || H.tk !== 'raf') sched(true);
+    }
     function sched(immediate){
       if(!active() || !H.kicked) return;
       if(H.timer && !immediate) return;
@@ -14577,6 +14593,43 @@ window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
     try{ new MutationObserver(function(){ if(active()) kick(); }).observe(l, { childList: true }); }catch(e){ foodWatched = false; }
   }
   try{ document.addEventListener('DOMContentLoaded', watchFood); watchFood(); }catch(eW){}
+  // ★ 2026-10-18 (네이티브 이전 6번째 화면: 쇼핑 탭 — YJ: '웹 기능 그대로 이식 · 렉 없이 · 100% 네이티브'): 같은 방식. 웹은 배치·내용·눌림(상품 열기)을 그대로 맡고 투명하게 제자리, 네이티브는 그림만.
+  //   대가성 안내 상자 · 카테고리 칩(최대 10) · 하단 안내 문구 · 상품 칸의 '이름 + 최저가' 줄(지금 화면에 보이는 앞 14개 — 스크롤을 멈추면 그 자리의 줄을 다시 읽는다).
+  //   상품 사진은 그림이라 웹이 그대로 그린다(사진 칸은 투명 처리 안 함). 검색 입력줄(입력칸)·새로고침 단추(아이콘)도 웹.
+  makeRegion('sh:note', paintCfg(function(){ return document.querySelector('#tab-shop .shop-fixed-hdr > div:first-of-type'); }));
+  makeRegion('sh:foot', paintCfg(function(){ return document.querySelector('#shopScrollView > p'); }));
+  for(var shc = 0; shc < 10; shc++) (function(i){
+    makeRegion('sh:k' + i, paintCfg(function(){ var f = document.getElementById('shopCats'); return f ? (f.children[i] || null) : null; }));
+  })(shc);
+  var shVis = { t: -1e9, list: [] };
+  function shopRows(){                                    // 화면(스크롤 영역)에 걸친 상품 줄들, 문서 순서. 0.12초 안에는 다시 안 잰다(영역 14개가 한 번씩만 묻는다)
+    var t = now(); if(t - shVis.t < 120) return shVis.list;
+    shVis.t = t; shVis.list = [];
+    var sv = document.getElementById('shopScrollView'), g = document.getElementById('shopGrid');
+    if(!sv || !g || !sv.offsetParent) return shVis.list;
+    var sr = sv.getBoundingClientRect(), ch = g.children;
+    for(var i = 0; i < ch.length && shVis.list.length < 14; i++){
+      var c = ch[i]; if(!c.classList || !c.classList.contains('prod')) continue;
+      var r = c.getBoundingClientRect(); if(r.bottom <= sr.top) continue; if(r.top >= sr.bottom) break;
+      var row = c.querySelector(':scope > .prod-row'); if(row) shVis.list.push(row);
+    }
+    return shVis.list;
+  }
+  for(var shp = 0; shp < 14; shp++) (function(i){
+    var cf = paintCfg(function(){ return shopRows()[i] || null; }), last = null;
+    // 칸이 스크롤로 다른 줄로 바뀌어도 이전 줄에 투명이 남지 않게 한다(남으면 글자가 사라져 보인다)
+    cf.webIs = function(){ var h = cf.host(); if(last && last !== h && last.classList.contains('htl-nat-op')) return null; return !!(h && h.classList.contains('htl-nat-op')); };
+    cf.webSet = function(on){ var h = cf.host(); if(last && last !== h) last.classList.remove('htl-nat-op'); last = h; if(h) h.classList.toggle('htl-nat-op', on); };
+    makeRegion('sh:p' + i, cf);
+  })(shp);
+  var shopWatched = false;
+  function watchShop(){                                   // 상품·칩이 새로 그려지면 영역들이 새 내용을 다시 읽게 깨운다
+    if(shopWatched || typeof MutationObserver !== 'function') return;
+    var g = document.getElementById('shopGrid'), c = document.getElementById('shopCats'); if(!g || !c) return;
+    shopWatched = true;
+    try{ var mo = new MutationObserver(function(){ shVis.t = -1e9; if(active()) kick(); }); mo.observe(g, { childList: true }); mo.observe(c, { childList: true }); }catch(e){ shopWatched = false; }
+  }
+  try{ document.addEventListener('DOMContentLoaded', watchShop); watchShop(); }catch(eS){}
   window._htlNatMk = TL.mk;                               // _placeGpsMarkerSmooth 가 알려 준다(타임라인 영역만)
 
   // ── 전체 켜고 끄기 ──
@@ -14594,12 +14647,20 @@ window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
       P.addListener('error', function(e){ G_fail('native: ' + ((e && e.message) || '')); });
     }catch(e){ G_fail('listen: ' + e); return; }
     ['resize', 'orientationchange', 'touchstart', 'transitionstart', 'transitionend', 'animationstart'].forEach(function(n){ window.addEventListener(n, wakeAll, true); });
-    window.addEventListener('scroll', wakeAll, true);
+    window.addEventListener('scroll', function(e){ scrollAt = now();
+                                           // 스크롤한 요소 '안'의 영역만 깨운다(그 밖은 움직이지 않는다) · 프레임당 한 번만 모은다
+      var tg = e && e.target; if(!tg || tg === document || tg === document.documentElement || tg === document.body){ wakeAll(); return; }
+      scrollTg[scrollTg.length] = tg;
+      if(scrollRaf) return; scrollRaf = true;
+      var run = function(){ scrollRaf = false; var ts = scrollTg; scrollTg = []; each(function(r){ var h = null; try{ h = r.cfg.host(); }catch(e0){} if(!h) return; for(var i = 0; i < ts.length; i++) if(ts[i].contains && ts[i].contains(h)){ r.wake(); return; } }); };
+      if(typeof requestAnimationFrame === 'function') requestAnimationFrame(run); else setTimeout(run, 16);
+    }, true);
     try{ document.addEventListener('visibilitychange', wakeAll); }catch(e3){}
   }
+  var scrollTg = [], scrollRaf = false;
   function wakeAll(){ each(function(r){ r.wake(); }); }
   // 화면을 (다시) 그렸다 — 앱이 _renderHtlTrack 끝에서 알려 준다(머리줄은 그 직전에 채워진다)
-  function kick(){ if(!active()) return; listen(); try{ watchFood(); }catch(eF){} each(function(r){ r.kick(); }); }
+  function kick(){ if(!active()) return; listen(); try{ watchFood(); }catch(eF){} try{ watchShop(); }catch(eS2){} each(function(r){ r.kick(); }); }
   function setUse(on){
     try{ localStorage.setItem(K_ON, on ? '1' : '0'); if(on){ localStorage.setItem(K_F, '0'); localStorage.setItem(K_W, ''); } }catch(e){}
     if(on){ G.on = true; G.failed = false; G.fails = 0; G.why = ''; kick(); }
