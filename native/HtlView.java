@@ -66,7 +66,7 @@ public class HtlView extends View {
     private void text(Canvas cv, String s, float cx, float base, float maxW, float size, int color, boolean bold) {
         if (s == null || s.length() == 0) return;
         tp.setTextSize(size); tp.setColor(color); tp.setFakeBoldText(false);
-        tp.setTypeface(bold ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
+        tp.setTypeface(ScreenView.face(bold));
         CharSequence e = TextUtils.ellipsize(s, tp, Math.max(1f, maxW), TextUtils.TruncateAt.END);
         cv.drawText(e, 0, e.length(), cx, base, tp);
     }
@@ -96,7 +96,7 @@ public class HtlView extends View {
                 if (r.t.length() == 0) continue;
                 tp.setTextAlign(Paint.Align.LEFT);
                 tp.setTextSize(r.size); tp.setColor(r.color); tp.setFakeBoldText(false);
-                tp.setTypeface(r.bold ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
+                tp.setTypeface(ScreenView.face(r.bold));
                 Paint.FontMetrics fm = tp.getFontMetrics();
                 CharSequence e = TextUtils.ellipsize(r.t, tp, Math.max(1f, r.w), TextUtils.TruncateAt.END);
                 cv.drawText(e, 0, e.length(), r.x, HtlCore.baseline(r.y, r.h, fm.ascent, fm.descent), tp);
@@ -123,7 +123,7 @@ public class HtlView extends View {
             if (c.g.length() > 0) {
                 if (c.pill) {
                     float pad = 4.5f;
-                    tp.setTextSize(c.gf); tp.setTypeface(Typeface.DEFAULT_BOLD);
+                    tp.setTextSize(c.gf); tp.setTypeface(ScreenView.face(true));
                     float tw = Math.min(tp.measureText(c.g), c.w - 2f - pad * 2f);
                     float bw = tw + pad * 2f, bh = c.gf * 1.25f + 2f;
                     rf.set(cx - bw / 2f, r2 + (HtlCore.R2 - bh) / 2f, cx + bw / 2f, r2 + (HtlCore.R2 + bh) / 2f);
@@ -160,7 +160,7 @@ public class HtlView extends View {
             p.setColor(0xFFFFFFFF); cv.drawCircle(mx, my, 7f * sc, p);
             p.setColor(mc); cv.drawCircle(mx, my, 5f * sc, p);
             if (mk.wait && mk.badge.length() > 0) {            // 승차 대기 뱃지: 마커 위 주황 알약
-                tp.setTextSize(9f); tp.setTypeface(Typeface.DEFAULT_BOLD);
+                tp.setTextSize(9f); tp.setTypeface(ScreenView.face(true));
                 float bw = tp.measureText(mk.badge) + 14f, bh = 12f, by = my - 7f - 9f - bh / 2f;
                 rf.set(mx - bw / 2f, by - bh / 2f, mx + bw / 2f, by + bh / 2f);
                 p.setColor(0xFFFF9F0A); cv.drawRoundRect(rf, 6f, 6f, p);
