@@ -101,6 +101,16 @@ function findAndroidJar() {
     assert.ok(/Bundle Noto Sans KR/.test(y) && /assets\/fonts\/NotoSansKR-/.test(y) && /instantiateVariableFont/.test(y), 'CI 글꼴 만들기');
     assert.ok(y.indexOf('Bundle Noto Sans KR') < y.indexOf('Generate launcher icons'), '안드로이드 폴더가 만들어진 뒤');
   });
+  await t('맛집 노드: 머리줄(bar)·장소 카드(place)·구분선(divider)을 그리고 눌린 칩 색을 엔진 글대로 칠한다 · 그릴 때 새 객체 없음', async () => {
+    const v = fs.readFileSync(N('ScreenView.java'), 'utf8');
+    assert.ok(/drawBar\(/.test(v) && /drawPlace\(/.test(v) && /drawDivider\(/.test(v), '머리줄·장소 카드·구분선 그리기');
+    assert.ok(/case ScreenCore\.K_BAR: drawBar/.test(v) && /case ScreenCore\.K_PLACE: drawPlace/.test(v) && /case ScreenCore\.K_DIV: drawDivider/.test(v), 'drawItem 에 연결');
+    const seg = v.slice(v.indexOf('private void drawBar'), v.indexOf('private void drawCard'));
+    assert.ok(seg.length > 500 && !/\bnew\s+[A-Z]/.test(seg), '맛집 그리기 구간에 new 가 있다');
+    assert.ok(/cc\(it\.ac, pal\[R_ORANGE\]\)/.test(v) && /cc\(it\.tc, pal\[R_WHITE\]\)/.test(v), '켜진 칩 색은 엔진 글(onc/onfg) 대로, 없으면 예전 주황');
+    const c = fs.readFileSync(N('ScreenCore.java'), 'utf8');
+    assert.ok(/K_BAR = 12, K_PLACE = 13, K_DIV = 14/.test(c) && /"bar"\.equals\(t\)/.test(c) && /"place"\.equals\(t\)/.test(c) && /"divider"\.equals\(t\)/.test(c), '코어가 세 노드를 안다');
+  });
   await t('CI 워크플로가 파일을 복사하고 MainActivity 에 ScreenNativePlugin 을 등록한다', async () => {
     const y = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'build-apk.yml'), 'utf8');
     for (const f of ['ScreenCore.java', 'ScreenView.java', 'ScreenNativePlugin.java']) assert.ok(y.includes('native/' + f), f + ' 복사');
