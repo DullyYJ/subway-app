@@ -66,6 +66,16 @@ function findAndroidJar() {
     assert.ok(/notifyListeners\("input"/.test(p) && /put\("empty", a\.empty\)/.test(p) && /put\("url", a\.tpl\)/.test(p), '플러그인: input 이벤트 · 검색 행동에 tpl/empty 를 실어 보냄');
     assert.ok(/resyncInput\(\)/.test(p), '자리/잘림이 바뀌면 입력칸도 맞춘다');
   });
+  await t('설정 노드: 스위치는 바로 뒤집고 set 이벤트 · 입력칸은 눌렀을 때만 만든다 · 글자 모음(fields) · 앱 토스트', async () => {
+    const v = fs.readFileSync(N('ScreenView.java'), 'utf8'), p = fs.readFileSync(N('ScreenNativePlugin.java'), 'utf8');
+    assert.ok(/drawPanel\(/.test(v) && /drawToggle\(/.test(v) && /drawNav\(/.test(v) && /drawSelect\(/.test(v) && /drawField\(/.test(v), '패널·스위치·이동줄·고르기·입력칸 그리기');
+    assert.ok(/pi\.on = !pi\.on/.test(v) && /listener\.onSet\(/.test(v), '스위치: 화면을 먼저 뒤집고 set 알림');
+    assert.ok(/ensureEditor\(|beginEdit\(/.test(v) && /commitEdit\(/.test(v) && /endEdit\(/.test(v), '입력칸 편집: 눌렀을 때 만들고 끝나면 글자를 모으고 뗀다');
+    assert.ok(/public Map<String, String> fields\(\)/.test(v), 'fields() 로 글자 모음');
+    assert.ok(/R_BORDER2/.test(v) && /new int\[10\]/.test(p) && /"border2"/.test(p), '두 번째 테두리색 팔레트');
+    assert.ok(/onSet\(ScreenCore\.Act a, boolean on\)/.test(p) && /put\("on", on\)/.test(p) && /put\("fields", fo\)/.test(p), '플러그인: set 이벤트에 on · 모든 행동에 fields');
+    assert.ok(/public void toast\(/.test(p) && /Toast\.makeText/.test(p), '앱이 직접 띄우는 토스트');
+  });
   await t('그림 받기: 백그라운드 스레드 + 메모리/파일 캐시 + 실패 재시도 간격 + 크기 한도', async () => {
     const v = fs.readFileSync(N('ScreenView.java'), 'utf8');
     assert.ok(/newFixedThreadPool/.test(v) && /LruCache/.test(v) && /scr_img/.test(v), '풀·캐시');
