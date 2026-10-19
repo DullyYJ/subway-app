@@ -81,6 +81,39 @@ const U = n => Array.from({ length: n }, (_, i) => ({ n: '강남' + i, l: '2호�
   ok(r.out.every(l => Number(l.split(' ')[2]) === 0), '건너뛴 노드 없음');
   ok(r.out.every((l, i) => Math.abs(Number(l.split(' ')[3]) - cases[i].info.h) < 0.02), '앱이 배치한 본문 높이 == info.h ' + r.out.map((l, i) => l.split(' ')[3] + '/' + cases[i].info.h));
 }
+// ── ⑨ 지하철 후보를 엔진이 직접 거른다 (2026-10-19) ──
+{
+  const ST = require('../engine/home-stations').HOME_STNS;
+  ok(Array.isArray(ST) && ST.length > 900 && ST.every(r => Array.isArray(r) && r.length === 4 && typeof r[0] === 'string' && typeof r[1] === 'string' && isFinite(r[2]) && isFinite(r[3])), '역 표 모양');
+  const sg = s => kids(s).filter(x => x.t === 'sug' && x.act.v.startsWith('sg.'));
+  // 예전 웹 방식과 같은 결과: 걸러내기(이름에 글자 포함) → 같은 이름은 하나로(호선을 ' · ' 로) → 8개까지
+  const ref = q => { const m = ST.filter(r => r[0].indexOf(q) >= 0), seen = new Set(), reps = m.filter(r => !seen.has(r[0]) && seen.add(r[0])); return reps.slice(0, 8).map(r => ({ n: r[0], l: m.filter(x => x[0] === r[0]).map(x => x[1]).filter((v, i, a) => a.indexOf(v) === i).join(' \u00b7 '), r })); };
+  for (const q of ['강남', '서울', '역', '신', '수원', '용두', '없는역이름']) {
+    const f = E.homeStnFind(q), want = ref(q);
+    ok(f.u.length === want.length && f.u.every((x, i) => x.n === want[i].n && x.l === want[i].l) && f.pk.every((x, i) => x.name === want[i].r[0] && x.line === want[i].r[1] && x.lat === want[i].r[2] && x.lng === want[i].r[3]), '예전 웹 걸러내기와 같다: ' + q + ' ' + f.u.length + '개');
+  }
+  ok(E.homeStnFind('').u.length === 0 && E.homeStnFind('   ').u.length === 0 && E.homeStnFind(null).u.length === 0 && E.homeStnFind(5).u.length === 0, '빈 글자·이상한 값은 후보 없음');
+  ok(E.homeStnFind('  강남  ').u.length === E.homeStnFind('강남').u.length, '앞뒤 공백은 무시');
+  ok(E.homeStnFind('역').u.length === 8, '8개까지');
+  // 화면: data.u 가 없으면 엔진이 거른다 + info.pk + info.sx
+  let s = E.homeScreen({ cap: 7 }, { start: '강남', active: 'start' }, { b: B(1), p: [] });
+  ok(s.info.sx === 1 && s.info.pk && s.info.pk.u.length === E.homeStnFind('강남').u.length, 'info.sx · info.pk.u');
+  ok(sg(s)[0].badge === '지하철' && sg(s)[0].act.v === 'sg.u.0' && sg(s)[0].name === E.homeStnFind('강남').u[0].n && sg(s)[0].sub === E.homeStnFind('강남').u[0].l, '엔진이 거른 지하철 줄');
+  ok(sg(s).some(x => x.act.v === 'sg.b.0'), '버스 줄은 웹이 보낸 그대로');
+  s = E.homeScreen({ cap: 7 }, { start: '', dest: '용두', active: 'dest' }, {});
+  ok(sg(s).length > 0 && s.info.pk.u[0].name.indexOf('용두') >= 0, '도착 칸이 눌려 있으면 도착 글자로 거른다');
+  // 호환: 웹이 u 배열을 보내면(폴백) 그 후보를 그대로 쓰고 pk 는 없다
+  s = E.homeScreen({ cap: 7 }, { start: '강남', active: 'start' }, { u: U(2) });
+  ok(sg(s).length === 2 && sg(s)[0].name === '강남0' && s.info.pk === undefined && s.info.sx === 1, '웹이 u 를 보내면 예전 그대로(폴백)');
+  s = E.homeScreen({ cap: 7 }, { start: '강남', active: 'start' }, { u: [] });
+  ok(sg(s).length === 0 && s.info.pk === undefined, '웹이 빈 u 를 보내도 그대로(엔진이 덮지 않는다)');
+  s = E.homeScreen({ cap: 7 }, { start: '', active: 'start' }, {});
+  ok(sg(s).length === 0 && s.info.pk === undefined, '글자가 비면 거르지 않는다');
+  s = E.homeScreen({ cap: 7 }, { start: '강남', active: '' }, {});
+  ok(sg(s).length === 0 && s.info.pk === undefined, '칸이 눌려 있지 않으면 거르지 않는다');
+  const r2 = screenCheck([E.homeScreen({ cap: 7 }, { start: '강남', active: 'start' }, { b: B(3), p: P(3) })]);
+  ok(!r2.err && r2.out.every(l => l.startsWith('OK ')), '엔진이 거른 화면도 앱 검증기를 통과 ' + (r2.err || r2.out.join('|')));
+}
 // ── ⑥ 워커 내장 ──
 {
   const w = fs.readFileSync(R('engine/route-v2-worker.ascii.js'), 'utf8');
@@ -92,8 +125,9 @@ const U = n => Array.from({ length: n }, (_, i) => ({ n: '강남' + i, l: '2호�
   ok(body.indexOf(esc(src)) >= 0 && body.indexOf(esc(fs.readFileSync(R('engine/home-worker.js'), 'utf8').trimEnd())) >= 0, '워커 내장 사본이 소스와 같다');
   ok(w.indexOf('if (url.pathname === "/screen/home") return handleScreenHome(request);') > 0, '경로 등록');
   ok(!/[^\x00-\x7f]/.test(body), '내장 블록은 ASCII 만');
+  { let st = fs.readFileSync(R('engine/home-stations.js'), 'utf8'); st = st.slice(0, st.indexOf('if (typeof module')).trimEnd().replace(/^'use strict';\n/m, ''); ok(body.indexOf(esc(st)) >= 0, '워커에 지하철역 표가 내장돼 있다(소스와 같다)'); }
   const other = w.slice(0, i) + w.slice(j);
-  ok(['homeScreen', 'homeFacts', 'homeHash', 'homeStr', 'homeBaseLabel', 'homePick', 'homeDist', 'HOME_SWAP_ICON', 'HOME_SCREEN_V', 'HOME_ROW_H', 'handleScreenHome'].every(n => !new RegExp('^(async\\s+)?(function|var)\\s+' + n + '\\b', 'm').test(other)), '다른 엔진과 이름이 겹치지 않는다');
+  ok(['homeScreen', 'homeStnFind', 'HOME_STNS', 'HOME_SX', 'HOME_STN_MAX', 'homeFacts', 'homeHash', 'homeStr', 'homeBaseLabel', 'homePick', 'homeDist', 'HOME_SWAP_ICON', 'HOME_SCREEN_V', 'HOME_ROW_H', 'handleScreenHome'].every(n => !new RegExp('^(async\\s+)?(function|var)\\s+' + n + '\\b', 'm').test(other)), '다른 엔진과 이름이 겹치지 않는다');
 }
 // ── ⑦ 워커 끝에서 끝까지 ──
 (async () => {
@@ -105,6 +139,9 @@ const U = n => Array.from({ length: n }, (_, i) => ({ n: '강남' + i, l: '2호�
     const r = await post(JSON.stringify({ cap: 7, f: { start: '강', active: 'start' }, d: { u: [{ n: '강남', l: '2호선' }] } })), j = await r.json();
     ok(r.status === 200 && j.ok && j.screen === 'home' && j.body[0].kids.some(x => x.t === 'sug' && x.act.v === 'sg.u.0') && /route-v2-2026-10-\d\ds\d\d/.test(j.ver), '워커 응답 200 ' + j.ver);
     ok((await (await post(JSON.stringify({ cap: 6, f: {} }))).json()).ok === false, '워커: cap 부족이면 거절');
+    { const j2 = await (await post(JSON.stringify({ cap: 7, f: { start: '강남', active: 'start' }, d: { b: [], p: [] } }))).json(), want = E.homeStnFind('강남');
+      ok(j2.ok && j2.info.sx === 1 && j2.info.pk.u.length === want.u.length && j2.info.pk.u[0].name === want.pk[0].name && j2.body[0].kids.filter(x => x.t === 'sug').length >= want.u.length, '워커: u 를 안 보내면 엔진이 역을 거른다(내장된 역 표) ' + (j2.info && j2.info.pk && j2.info.pk.u.length)); }
+    { const j3 = await (await post(JSON.stringify({ cap: 7, f: { start: '강남', active: 'start' }, d: { u: [{ n: 'X', l: 'y' }] } }))).json(); ok(j3.info.pk === undefined && j3.body[0].kids.some(x => x.t === 'sug' && x.name === 'X'), '워커: u 를 보내면 예전 그대로'); }
     ok((await post('{oops')).status === 400 && (await post('x'.repeat(40001))).status === 413 && (await call('https://x/screen/home')).status === 405, '워커: 깨진 본문 400 · 큰 본문 413 · GET 405');
     const ro = await call('https://x/screen/home', { method: 'OPTIONS' });
     ok(ro.status === 204 && r.headers.get('access-control-allow-origin') === '*' && r.headers.get('cache-control') === 'no-store', '워커: OPTIONS 204 · CORS · no-store');
