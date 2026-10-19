@@ -13,10 +13,18 @@
 //        data  = { u:[{n, l}] 지하철역 후보, b:[{n, d}] 버스정류장 후보(d = 미터), p:[{n, a}] 장소 후보 }  — 눌려 있는 칸의 글자에 대한 후보만
 // 출력  { ok, v:1, screen:'home', cover:'chips', head:[], body:[panel…], info:{h, active, ready, rows} }
 //        행동: rt.gps(위치 감지) · rt.swap(바꾸기) · rt.go(경로 탐색) · rt.enter(키보드 확인) · bt.pick(기준시각 열기) · bt.now(현재로) · sg.u.<i> / sg.b.<i> / sg.p.<i>(후보 고르기: 후보 배열의 순번)
+//
+// ★ 2026-10-19 (5번 2단계: 후보 검색을 웹 밖으로) — 지하철 후보는 엔진이 직접 걸러낸다.
+//   data.u 가 배열로 오면 예전 그대로 그 후보를 쓰고(웹이 STNDB 로 걸러 보내던 방식 — 폴백), data.u 가 없으면 눌려 있는 칸의 글자로 엔진이 자기 역 표(HOME_STNS)에서 걸러
+//   (같은 걸러내기·같은 이름 합치기·같은 순서·8개까지) 지하철 줄을 만든다. 이때 눌린 후보로 출발/도착을 정하려면 이름·호선·좌표가 필요하니 info.pk.u[번호] 로 함께 준다.
+//   info.sx = 1 은 '이 엔진은 역을 직접 거른다'는 표시(웹이 옛 엔진인지 알아보는 데 쓴다).
 // 맨 아래 module.exports 는 시험(Node)용이고 Worker 에서는 함수 선언만 쓰인다.
 'use strict';
 var HOME_SCREEN_V = 1;
 var HOME_ROW_H = 48, HOME_SUG_H = 44, HOME_MAX_SUG = 7, HOME_PANEL_B = 4;
+var HOME_STN_MAX = 8, HOME_SX = 1;
+var HOME_STNS;                                                       // Worker 에서는 앞에 붙은 engine/home-stations.js 가 채운다. Node(시험)에서는 아래에서 불러온다.
+if (typeof HOME_STNS === 'undefined' || !HOME_STNS) { try { if (typeof require === 'function') HOME_STNS = require('./home-stations').HOME_STNS; } catch (eHs) {} }
 var HOME_SWAP_ICON = 'M16 17.01V10h-2v7.01h-3L15 21l4-3.99h-3zM9 3L5 6.99h3V14h2V6.99h3L9 3z';   // www/index.html 의 바꾸기 단추 SVG 와 같다
 function homeHash(s) {
   var h = 5381;
@@ -87,11 +95,37 @@ function homePick(data) {
   if (rows.length) rows[rows.length - 1].last = true;
   return rows;
 }
+// 지하철 후보: 이름에 글자가 들어 있는 역을 표 순서대로 모아 같은 이름은 하나로 합치고(호선은 ' · ' 로 이어 붙임) 8개까지. 앱의 예전 걸러내기(STNDB.filter → _dedupeStnByName → slice 8)와 같다.
+function homeStnFind(q) {
+  q = typeof q === 'string' ? q.trim() : '';
+  var out = { u: [], pk: [] };
+  if (!q || !Array.isArray(HOME_STNS)) return out;
+  var reps = [], seen = {}, lines = {}, i, s;
+  for (i = 0; i < HOME_STNS.length; i++) {
+    s = HOME_STNS[i];
+    if (!s || typeof s[0] !== 'string' || s[0].indexOf(q) < 0) continue;
+    if (!Object.prototype.hasOwnProperty.call(seen, s[0])) { seen[s[0]] = 1; reps.push(s); lines[s[0]] = [s[1]]; }
+    else if (lines[s[0]].indexOf(s[1]) < 0) lines[s[0]].push(s[1]);
+  }
+  for (i = 0; i < reps.length && i < HOME_STN_MAX; i++) {
+    s = reps[i];
+    out.u.push({ n: s[0], l: lines[s[0]].join(' \u00b7 ') });
+    out.pk.push({ name: s[0], line: s[1], lat: s[2], lng: s[3] });
+  }
+  return out;
+}
 function homeScreen(inp, factsIn, dataIn) {
   inp = inp || {};
   if (!(Number(inp.cap) >= 7)) return { ok: false, error: 'cap' };
   var f = homeFacts(factsIn);
-  var sugs = f.active && (f.active === 'start' ? f.start : f.dest).trim() ? homePick(dataIn) : [];
+  var txt = f.active ? (f.active === 'start' ? f.start : f.dest).trim() : '';
+  var pk = null;
+  if (txt && !(dataIn && typeof dataIn === 'object' && Array.isArray(dataIn.u))) {      // 웹이 지하철 후보를 안 보냈으면 엔진이 직접 거른다
+    var fd = homeStnFind(txt);
+    dataIn = Object.assign({}, (dataIn && typeof dataIn === 'object') ? dataIn : {}, { u: fd.u });
+    pk = { u: fd.pk };
+  }
+  var sugs = txt ? homePick(dataIn) : [];
   var ready = (f.startSet && f.destSet) || (f.start.trim().length > 0 && f.dest.trim().length > 0);
   var act = function (v) { return { a: 'call', v: v }; };
   var kids = [];
@@ -111,9 +145,10 @@ function homeScreen(inp, factsIn, dataIn) {
   kids.push(timeRow);
   var body = [{ t: 'panel', pad: [0, 0, 0, HOME_PANEL_B], ip: [0, 0, 0, 0], r: 16, kids: kids }];
   var h = 2 + HOME_ROW_H + 1 + HOME_ROW_H + 1 + HOME_SUG_H + (rowsS.length + rowsD.length) * HOME_SUG_H + HOME_PANEL_B;
-  var out = { ok: true, v: 1, screen: 'home', cover: 'chips', head: [], body: body, info: { h: h, active: f.active, ready: ready, rows: rowsS.length + rowsD.length } };
+  var out = { ok: true, v: 1, screen: 'home', cover: 'chips', head: [], body: body, info: { h: h, active: f.active, ready: ready, rows: rowsS.length + rowsD.length, sx: HOME_SX } };
+  if (pk) out.info.pk = pk;
   out.rev = 'h' + HOME_SCREEN_V + ':' + homeHash(JSON.stringify(body));
   return out;
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { homeScreen: homeScreen, homeFacts: homeFacts, homeBaseLabel: homeBaseLabel, homePick: homePick, homeDist: homeDist, HOME_SWAP_ICON: HOME_SWAP_ICON };
+if (typeof module !== 'undefined' && module.exports) module.exports = { homeScreen: homeScreen, homeStnFind: homeStnFind, homeFacts: homeFacts, homeBaseLabel: homeBaseLabel, homePick: homePick, homeDist: homeDist, HOME_SWAP_ICON: HOME_SWAP_ICON };
