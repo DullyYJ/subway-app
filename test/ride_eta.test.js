@@ -705,7 +705,7 @@ const arrive = (o) => rideEta(Object.assign({ op: 'arrive', nowMs: NOW0, nodes: 
 t('arrive — 하차 기준은 마지막 대중교통(D)이다. 뒤의 도보 10분이 있어도 목적지 도착 시각을 쓰지 않는다', () => {
   const r = arrive(); assert.strictEqual(r.ok, true); assert.strictEqual(r.alight.name, 'D'); assert.strictEqual(r.alight.ms, mn(14));
   assert.strictEqual(r.reco.fromMs, mn(14) - 7 * 60000, '하차 7분 전부터 추천'); assert.ok(r.reco.untilMs > mn(14));
-  assert.strictEqual(r.reco.untilMs, mn(14) + 30000, '도착 30초 뒤까지'); assert.strictEqual(r.reco.ttlMs, 25 * 60000, '묵은 추천은 25분 뒤 숨김');
+  assert.strictEqual(r.reco.untilMs, mn(14) + 30000, '도착 30초 뒤까지'); assert.strictEqual(r.reco.ttlMs, 25 * 60000, '묵은 추천은 25분 뒤 숨김'); assert.strictEqual(r.reco.holdMs, 30000, '하단 줄은 보인 뒤 30초는 그대로(깜박임 방지 · 엔진이 정한 값)');
 });
 t('arrive — 두 정거장 전 level 2 · 한 정거장 전 level 1 · 그 앞은 0 (마지막 구간을 타는 중일 때만)', () => {
   assert.strictEqual(arrive({ idx: 1 }).level, 0); assert.strictEqual(arrive({ idx: 1 }).left, 3); assert.strictEqual(arrive({ idx: 1 }).pre, 1, '세 정거장 전 = 알약 깜박임 신호');

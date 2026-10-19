@@ -29,7 +29,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
         window.Capacitor = { isNativePlatform: () => true, getPlatform: () => 'android', Plugins: { HtlNative: {
           show: (a) => { window.__hn.push({ m: 'show', a: JSON.parse(JSON.stringify(a)) }); if (o.autoReady) setTimeout(() => window.__hnEmit('ready', { id: a.id }), 30); return o.showFail ? Promise.reject(new Error('뷰를 못 만듦')) : Promise.resolve({ cells: (a.cells || []).length }); },
           setRect: (a) => rec('setRect', a), update: (a) => rec('update', a, { cells: (a.cells || []).length }), scroll: (a) => rec('scroll', a), marker: (a) => rec('marker', a),
-          hide: (a) => rec('hide', a), destroy: (a) => rec('destroy', a),
+          hide: (a) => { window.__hn.push({ m: 'hide', a: JSON.parse(JSON.stringify(a)), t: performance.now() }); return window.__hideHold ? new Promise(r => { window.__hideRes = r; }) : Promise.resolve(); }, destroy: (a) => rec('destroy', a),
           status: () => Promise.resolve(window.__status ? window.__status() : { visible: true, cells: 99, age: 20 }),
           addListener: (n, f) => { (window.__hnL[n] = window.__hnL[n] || []).push(f); return Promise.resolve({ remove() {} }); }
         } } };
@@ -453,6 +453,31 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     await clear(B); await B.page.evaluate(() => { const hb = document.getElementById('transitResultHeader').parentElement.getBoundingClientRect(); const o = document.createElement('div'); o.id = 'popHd'; o.style.cssText = 'position:fixed;left:0;width:390px;top:' + (hb.top - 4) + 'px;height:' + (hb.height + 8) + 'px;z-index:9999;background:#000'; document.body.appendChild(o); });
     assert.ok(await waitFor(B, has(B, 'hide', 'hd')), '덮였는데 안 숨었다');
     assert.strictEqual((await calls(B, 'hide', 'tl')).length, 0, '덮이지 않은 타임라인은 그대로여야 한다');
+    await B.ctx.close();
+  });
+
+  console.log('[⑤-3 스크롤 잔상(2026-10-19 · YJ: "네이티브 경로 화면을 켜면 스크롤 잔상")]');
+  const hdOp = (x) => x.page.evaluate(() => getComputedStyle(document.getElementById('transitResultHeader').parentElement).opacity);
+  await t('네이티브가 떠 있는 영역: 스크롤 이벤트 즉시 숨긴다 · 네이티브가 숨은 뒤에야 웹 글자를 되돌린다(두 글자가 겹쳐 보이는 순간이 없다)', async () => {
+    const B = await fresh({ plugin: true, on: true, autoReady: true }); await waitFor(B, has(B, 'show', 'hd'));
+    assert.ok(await waitFor(B, async () => (await hdOp(B)) === '0'), '네이티브가 그리는 동안 웹은 투명이어야 한다');
+    await clear(B); await B.page.evaluate(() => { window.__hideHold = true; });
+    // 스크롤 이벤트(문서 스크롤)를 한 번 보낸다 — 다음 프레임의 tick 을 기다리지 않고 곧바로 hide 가 가야 한다
+    await B.page.evaluate(() => { window.dispatchEvent(new Event('scroll')); document.dispatchEvent(new Event('scroll')); });
+    assert.ok((await calls(B, 'hide', 'hd')).length >= 1, '스크롤 이벤트 안에서 곧바로 hide 가 불려야 한다');
+    await B.page.waitForTimeout(250);
+    assert.strictEqual(await hdOp(B), '0', 'hide 가 아직 끝나지 않았는데 웹 글자를 되돌렸다 → 네이티브 글자와 겹친다');
+    await B.page.evaluate(() => { window.__hideHold = false; window.__hideRes && window.__hideRes(); });
+    assert.ok(await waitFor(B, async () => (await hdOp(B)) !== '0', 3000), 'hide 가 끝나면 웹 글자가 돌아와야 한다');
+    assert.deepStrictEqual(B.errs, []); await B.ctx.close();
+  });
+  await t('스크롤 요소가 영역 밖이면(영역이 안 움직임) 숨기지 않는다 · 끄기(_htlHideNowOff)', async () => {
+    const B = await fresh({ plugin: true, on: true, autoReady: true }); await waitFor(B, has(B, 'show', 'hd'));
+    await B.page.waitForTimeout(500); await clear(B);
+    await B.page.evaluate(() => { const d = document.createElement('div'); d.id = 'otherScroll'; d.style.cssText = 'position:fixed;left:0;top:700px;width:100px;height:50px;overflow:auto;'; document.body.appendChild(d); d.dispatchEvent(new Event('scroll')); });
+    assert.strictEqual((await calls(B, 'hide', 'hd')).length, 0, '다른 요소의 스크롤에 숨으면 안 된다');
+    await clear(B); await B.page.evaluate(() => { window._htlHideNowOff = true; document.dispatchEvent(new Event('scroll')); });
+    assert.strictEqual((await calls(B, 'hide', 'hd')).length, 0, '끄면 이벤트 안에서 숨기지 않는다(다음 프레임 tick 이 알아서)');
     await B.ctx.close();
   });
 

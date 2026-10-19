@@ -315,7 +315,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     const ams = now + rem * 1000;
     const res = RE.rideEta({ op: 'arrive', nowMs: now, nodes: nodesAt(ams), idx: 1, riding: true });
     return page.evaluate(([res, rem, extra]) => {
-      window._ovlRecoOff = false; window._ovlRecoDismissAt = undefined;
+      window._ovlRowHold = null; window._ovlRecoOff = false; window._ovlRecoDismissAt = undefined;
       window._pipReco = { title: 't', body: '가\n나', at: Date.now() - ((extra && extra.ageMin) || 0) * 60000, ovlAt: Date.now() - 60000 };
       window._arrLast = null; window._ovlRecoForceUntil = 0;
       window._arrive = Object.assign(window._arrive || {}, { res: res, jsig: 'x' });
@@ -335,7 +335,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   }
   await t('엔진 창 안이어도 25분(ttlMs) 넘은 묵은 추천은 숨긴다', async () => { const x = await winOf(300, { ageMin: 26 }); assert.strictEqual(x.on, false); });
   await t('엔진 창이 있으면 앱 쪽 옛 남은 초(rem)는 보지 않는다 — 창 밖이면 rem 이 작아도 숨김', async () => {
-    const r = await page.evaluate(() => { const now = Date.now(); window._ovlRecoOff = false; window._ovlRecoDismissAt = undefined; window._ovlRecoForceUntil = 0; window._arrLast = null;
+    const r = await page.evaluate(() => { const now = Date.now(); window._ovlRowHold = null; window._ovlRecoOff = false; window._ovlRecoDismissAt = undefined; window._ovlRecoForceUntil = 0; window._arrLast = null;
       window._pipReco = { title: 't', body: '가\n나', at: now, ovlAt: now - 60000 };
       window._arrHomeEta = () => ({ arrMs: now + 100000, rem: 100, reco: { fromMs: now + 200000, untilMs: now + 700000, ttlMs: 1500000 } });
       const a = _ovlLines().reco;
@@ -344,12 +344,58 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     assert.deepStrictEqual(r, [false, true]);
   });
   await t('창 값이 이상하면(없음 · NaN) 예전 규칙으로 판단한다', async () => {
-    const r = await page.evaluate(() => { const now = Date.now(); window._ovlRecoOff = false; window._ovlRecoDismissAt = undefined; window._ovlRecoForceUntil = 0; window._arrLast = null;
+    const r = await page.evaluate(() => { const now = Date.now(); window._ovlRowHold = null; window._ovlRecoOff = false; window._ovlRecoDismissAt = undefined; window._ovlRecoForceUntil = 0; window._arrLast = null;
       window._pipReco = { title: 't', body: '가\n나', at: now, ovlAt: now - 60000 };
       window._arrHomeEta = () => ({ arrMs: now + 100000, rem: 100, reco: null }); const a = _ovlLines().reco;
-      window._arrHomeEta = () => ({ arrMs: now + 900000, rem: 900, reco: null }); const b = _ovlLines().reco;
+      window._ovlRowHold = null; window._arrHomeEta = () => ({ arrMs: now + 900000, rem: 900, reco: null }); const b = _ovlLines().reco;
       return [!!(a && a.on), !!(b && b.on)]; });
     assert.deepStrictEqual(r, [true, false]);
+  });
+  console.log('[⑥ 하단 줄(추천 · 내릴 준비)은 입력이 흔들려도 켜졌다 꺼졌다 하지 않는다 — 엔진이 준 holdMs(30초) 동안 붙잡는다 · s62]');
+  // 진짜 엔진 답(reco.holdMs 포함)을 넣고, 한 정거장 전 신호(_ovlFinLv)를 직접 흔들어 본다
+  const holdSetup = async (withHold) => page.evaluate(([res, withHold]) => {
+    const now = Date.now();
+    if(!withHold) delete res.reco.holdMs;
+    window._ovlRowHold = null; window._ovlRowKind = undefined; window._ovlRecoOff = false; window._ovlRecoDismissAt = undefined; window._ovlGetoffOff = false; window._ovlRecoForceUntil = 0;
+    window._pipReco = { title: 't', body: '가\n나', at: now, ovlAt: now - 60000 }; window._arrLast = null;
+    window._arrive = Object.assign(window._arrive || {}, { res: res, jsig: 'hold1' });
+    window._routeLocked = true; window._pipHasRoute = () => true; window._journeyEta = () => ({ preview: false });
+    window._arrHomeEta = window.__homeEta0;
+    window.__fin = 0; window._ovlAlertLevel = function(){ window._ovlFinLv = window.__fin; return 0; };
+    return true;
+  }, [res0, withHold]);
+  const res0 = await (async () => { const now = await page.evaluate(() => Date.now()); return RE.rideEta({ op: 'arrive', nowMs: now, nodes: nodesAt(now + 300000), idx: 1, riding: true }); })();
+  const row = () => page.evaluate(() => { const o = _ovlLines(); return o.getoff ? 'g' : (o.reco ? 'r' : 'n'); });
+  const setFin = (v) => page.evaluate((v) => { window.__fin = v; }, v);
+  const age = (ms) => page.evaluate((ms) => { window._ovlRowHold.at -= ms; }, ms);
+  await t('엔진 답에 holdMs 30초가 온다', async () => assert.strictEqual(res0.reco.holdMs, 30000));
+  await t('내릴 준비가 보이다가 한 정거장 전 신호가 잠깐 꺼져도(추천 창 안) 내릴 준비 그대로 — 추천과 번갈아 깜박이지 않는다', async () => {
+    await holdSetup(true); await setFin(1); assert.strictEqual(await row(), 'g');
+    await setFin(0); assert.strictEqual(await row(), 'g', '신호가 꺼졌어도 붙잡는다(추천으로 바뀌지 않는다)');
+    await setFin(1); assert.strictEqual(await row(), 'g');
+    await setFin(0); await age(31000); assert.strictEqual(await row(), 'r', '30초 넘게 흔들리면 그때 추천으로 내려간다');
+  });
+  await t('추천이 보이다가 창 판단이 잠깐 빠져도(없음) 30초는 그대로, 넘으면 사라진다', async () => {
+    await holdSetup(true); assert.strictEqual(await row(), 'r');
+    await page.evaluate(() => { window._ovlRecoOff = false; window._arrHomeEta = () => ({ arrMs: Date.now() + 1e6, rem: 1000, reco: { fromMs: Date.now() + 5e5, untilMs: Date.now() + 9e5, ttlMs: 1500000, holdMs: 30000 } }); });
+    assert.strictEqual(await row(), 'r', '창 밖으로 흔들려도 붙잡는다');
+    await age(31000); assert.strictEqual(await row(), 'n', '붙잡는 시간이 지나면 사라진다');
+  });
+  await t('[확인]으로 닫은 추천은 붙잡지 않는다 · 끄기(_ovlRowHoldOff)면 예전처럼', async () => {
+    await holdSetup(true); assert.strictEqual(await row(), 'r');
+    await page.evaluate(() => { window._ovlRecoDismissAt = window._pipReco.at; });
+    assert.strictEqual(await row(), 'n', '닫은 추천은 곧바로 사라진다');
+    await holdSetup(true); await setFin(1); assert.strictEqual(await row(), 'g'); await page.evaluate(() => { window._ovlRowHoldOff = true; }); await setFin(0);
+    assert.strictEqual(await row(), 'r', '끄면 예전처럼 곧바로 바뀐다'); await page.evaluate(() => { window._ovlRowHoldOff = false; });
+  });
+  await t('엔진 답에 holdMs 가 없으면(옛 엔진) 예전과 같다 — 붙잡지 않는다', async () => {
+    await holdSetup(false); await setFin(1); assert.strictEqual(await row(), 'g'); await setFin(0);
+    assert.strictEqual(await row(), 'r');
+  });
+  await t('새 여정(jsig 가 바뀜)이면 붙잡은 줄을 버린다', async () => {
+    await holdSetup(true); await setFin(1); assert.strictEqual(await row(), 'g');
+    await page.evaluate(() => { window._arrive.jsig = 'hold2'; window.__fin = 0; window._pipReco = null; });
+    assert.strictEqual(await row(), 'n');
   });
   await t('페이지 오류 없음', async () => assert.deepStrictEqual([...new Set(errs)], []));
   await ctx.close(); await b.close();
