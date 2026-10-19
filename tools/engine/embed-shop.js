@@ -15,7 +15,8 @@ const SETS = [
   { name: 'TABS', src: 'engine/tabs.js', glue: 'engine/tabs-worker.js', path: '/screen/tabs', fn: 'handleScreenTabs', anchor: '  if (url.pathname === "/screen/chat") return handleScreenChat(request);\n' },
   { name: 'HOME', pre: ['engine/home-stations.js'], src: 'engine/home.js', glue: 'engine/home-worker.js', path: '/screen/home', fn: 'handleScreenHome', anchor: '  if (url.pathname === "/screen/tabs") return handleScreenTabs(request);\n' },
   { name: 'CCHIPS', src: 'engine/cchips.js', glue: 'engine/cchips-worker.js', path: '/screen/cchips', fn: 'handleScreenCchips', anchor: '  if (url.pathname === "/screen/home") return handleScreenHome(request);\n' },
-  { name: 'WRITE', src: 'engine/write.js', glue: 'engine/write-worker.js', path: '/screen/write', fn: 'handleScreenWrite', anchor: '  if (url.pathname === "/screen/cchips") return handleScreenCchips(request);\n' }
+  { name: 'WRITE', src: 'engine/write.js', glue: 'engine/write-worker.js', path: '/screen/write', fn: 'handleScreenWrite', anchor: '  if (url.pathname === "/screen/cchips") return handleScreenCchips(request);\n' },
+  { name: 'RHEAD', src: 'engine/rhead.js', glue: 'engine/rhead-worker.js', path: '/screen/rhead', fn: 'handleScreenRhead', anchor: '  if (url.pathname === "/screen/write") return handleScreenWrite(request);\n' }
 ];
 let all = '';
 for (const S of SETS) {

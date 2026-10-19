@@ -431,6 +431,18 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     assert.strictEqual(await O.page.evaluate(() => (window.__hn || []).length), 0, '끄면(기본) 플러그인 호출이 하나도 없다');
     await O.ctx.close();
   });
+  await t('설정 탭(2026-10-20): 스크롤이 서서히 멈추는 꼬리(프레임당 0.5px 미만)에서 네이티브가 켜졌다 꺼졌다 되풀이하지 않는다(실기기 "글씨가 자글자글")', async () => {
+    const B = await fresh({ plugin: true, on: true, autoReady: true });
+    await B.page.evaluate(() => { const b = document.getElementById('settingsTabView'); b.style.cssText = 'display:block;position:fixed;left:0;top:0;width:390px;height:700px;z-index:9;background:#fff;overflow-y:auto;overflow-x:hidden;'; document.body.appendChild(b);
+      for (let i = 0; i < 30; i++) { const d = document.createElement('div'); d.style.cssText = 'background:#eee;border:1px solid #ccc;border-radius:14px;padding:16px;margin-top:12px;'; d.innerHTML = '<div style="font-size:15px;font-weight:800;">블록제목' + i + '</div><p style="font-size:12px;">설명 글자 ' + i + ' 입니다</p>'; b.appendChild(d); } window._htlNat.kick(); });
+    assert.ok(await waitFor(B, has(B, 'show', 'ss:b0')), '설정 블록이 안 켜졌다');
+    await B.page.waitForTimeout(1200); await clear(B);
+    for (let i = 0; i < 25; i++) { await B.page.evaluate(() => { document.getElementById('settingsTabView').scrollTop += 0.5; }); await B.page.waitForTimeout(90); }
+    const flips = await B.page.evaluate(() => window.__hn.filter(c => c.a && /^ss:/.test(c.a.id) && (c.m === 'show' || c.m === 'hide')).length);
+    assert.ok(flips <= 40, '느리게 멈추는 스크롤에서 켜짐·꺼짐이 ' + flips + '번 일어났다(되풀이 = 자글자글)');
+    assert.ok(await waitFor(B, async () => (await calls(B, 'show', 'ss:b0')).length >= 1, 8000), '멈춘 뒤에는 다시 켜져야 한다');
+    await B.ctx.close();
+  });
   await t('부드러운 스크롤(120Hz): 쇼핑 목록을 계속 스크롤하는 동안 영역들이 프레임마다 비싼 일(덮임 검사 elementFromPoint)을 하지 않고, 스크롤한 요소 밖의 영역은 깨우지 않는다', async () => {
     const B = await fresh({ plugin: true, on: true, autoReady: true });
     await B.page.evaluate(() => {

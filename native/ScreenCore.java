@@ -35,6 +35,7 @@ import java.util.Map;
  *     inbar  { pad, key, hint, value, maxlen, h, r, btn, act, fill, line, tc, sc, onc, ckf } 글자 입력칸 + 오른쪽 단추 한 줄(댓글 달기·채팅 보내기). 단추를 누르면 입력된 글과 함께 act 를 알린다
  *     inbar 확장: dot(왼쪽 동그라미 색) · bold · bh(단추 높이) · bsize(단추 글자) · watch(글자가 바뀔 때마다 알림) · dim(단추 흐리게·눌려도 무시) · eact(키보드 확인 키 행동) — 홈 탭 출발/도착 입력
  *     swap   { size, fill, line, tc, icon(SVG path d), act }                                 두 줄 경계 한가운데 얹히는 동그란 단추(출발↔도착 바꾸기). 높이를 차지하지 않는다
+ *     rhd    { pad, num, unit, s, btn, act, xact }                                     경로 결과 머리줄: 큰 분 숫자(num) · 단위(unit) · 구간명(s) · 오른쪽 즐겨찾기 알약(btn+act) · 닫기 ×(xact)
  *     sug    { pad, badge, bc, name, sub, last, btn, bact, act }                             한 줄 목록(자동완성·기준시각): 종류 딱지 · 이름(굵게) · 작은 글 · (오른쪽 작은 단추). 높이 44
  *     msg    { pad, mine, pre, nick, s, time, badge, bc, go, fill, tc, act }                 채팅 말풍선(내 것은 오른쪽·금색). act 가 있으면 go('신고') 글자 자리만 눌린다
  *     tabbar { pad, h, fill, line, onc, sc, items:[{label, icon(SVG path d), on, badge, act}] } 아래 탭 막대: 칸마다 아이콘 + 글자
@@ -42,6 +43,7 @@ import java.util.Map;
  *            | { a:'set', key } | { a:'call', v:이름 } | { a:'web', v:이름 } | { a:'sel', v:값 } | { a:'tog', v:글번호 }   (call/web/sel 은 웹이 허용 목록에 있는 것만 실행한다. tog = post 펼침 — 앱이 직접 펼치고 알리기만 한다)
  *   screen.anchor = 'bottom' (선택) 채팅처럼 새 글이 아래에 붙는 화면 — 처음 열릴 때와, 사용자가 맨 아래 근처에 있을 때 갱신되면 맨 아래로 붙는다.
  *   screen.foot = [노드…] (선택) 화면 맨 아래에 고정되는 줄(채팅 입력줄). 키보드가 올라와 화면이 줄어도 입력줄은 맨 아래에 붙는다.
+ *   screen.bg = 'bg'(기본) | 'card' | 'card2' (선택) 화면 바탕 색 — 카드 안에 놓이는 화면(경로 결과 윗부분)은 'card'.
  *   screen.cover = 'tab'(탭 맨 위부터 덮음: 안내 상자·검색줄 포함) | 'chips'(기본, 칩 줄부터). 앱이 cap=2 를 보냈을 때만 엔진이 'tab' 을 준다.
  *   모르는 노드 종류는 건너뛴다(앞으로 늘려도 옛 앱이 안 깨진다). 아는 종류인데 모양이 틀리면 화면 전체를 거절한다(깨진 화면을 그리지 않는다).
  *   좌표 단위는 dp(CSS px 와 같다) — 그릴 때 밀도를 곱한다.
@@ -195,7 +197,7 @@ public final class ScreenCore {
     public static final class Screen {
         public String id = "", rev = "", cover = "chips";
         public List<Node> head = new ArrayList<Node>(), body = new ArrayList<Node>(), foot = new ArrayList<Node>();
-        public String anchor = "";
+        public String anchor = "", bg = "bg";                  // bg: 화면 바탕 색 역할(기본 bg = 페이지 바탕 · card = 카드 안에 놓이는 화면)
         public int skipped = 0, nodes = 0;
     }
 
@@ -512,6 +514,14 @@ public final class ScreenCore {
             n.line = roleOrCss(m, "line", "bg"); n.tc = roleOrCss(m, "tc", "white"); if (n.tc.length() == 0) n.tc = "white";
             n.value = optStr(m, "icon", "", 900); n.pathOps = pathOps(n.value);                                  // 24x24 안의 SVG path d
             n.act = act(m.get("act"), true);
+        } else if ("rhd".equals(t)) {                                                                      // 경로 결과 머리줄: 큰 분 숫자 + 단위 + 구간명 + (즐겨찾기 알약) + (닫기 ×)
+            pad(m, n);
+            n.title = optStr(m, "num", "", 6); n.name = optStr(m, "msg", "", 80);                                 // msg 가 있으면 숫자 대신 안내 한 줄(고른 탭에 경로가 없을 때)
+            if (n.title.length() == 0 && n.name.length() == 0) throw new ParseError("rhd: num 또는 msg 가 있어야 한다");
+            n.badge = optStr(m, "unit", "", 6); n.s = optStr(m, "s", "", 80); n.label = optStr(m, "btn", "", 12);
+            n.act = n.label.length() > 0 ? act(m.get("act"), true) : null;
+            n.bact = act(m.get("xact"), false);
+            if (n.act == null && n.bact == null) throw new ParseError("rhd: 누를 곳(act/xact)이 없다");
         } else if ("sug".equals(t)) {
             pad(m, n);
             n.badge = optStr(m, "badge", "", 12);
@@ -549,6 +559,7 @@ public final class ScreenCore {
         sc.id = optStr(m, "screen", "", 40); if (sc.id.length() == 0) throw new ParseError("screen 없음");
         sc.rev = optStr(m, "rev", "", 120);
         sc.cover = optStr(m, "cover", "chips", 8); if (!"tab".equals(sc.cover) && !"chips".equals(sc.cover)) throw new ParseError("cover: 모르는 값 " + sc.cover);
+        sc.bg = optStr(m, "bg", "bg", 8); if (!"bg".equals(sc.bg) && !"card".equals(sc.bg) && !"card2".equals(sc.bg)) throw new ParseError("bg: 모르는 값 " + sc.bg);
         sc.anchor = optStr(m, "anchor", "", 8); if (!"".equals(sc.anchor) && !"bottom".equals(sc.anchor)) throw new ParseError("anchor: 모르는 값 " + sc.anchor);
         for (Object o : asArr(m.get("head"), "head")) { Node n = node(o, sc); if (n != null) sc.head.add(n); }
         for (Object o : asArr(m.get("body"), "body")) { Node n = node(o, sc); if (n != null) sc.body.add(n); }
@@ -560,7 +571,9 @@ public final class ScreenCore {
     public static Screen load(String json) throws ParseError { return validate(parse(json)); }
 
     // ═════════════ ③ 배치 ═════════════
-    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14, K_NEWS = 15, K_POSTH = 16, K_CMT = 17, K_RBTN = 18, K_INBAR = 19, K_MSG = 20, K_TAB = 21, K_SUG = 22, K_SWAP = 23;
+    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14, K_NEWS = 15, K_POSTH = 16, K_CMT = 17, K_RBTN = 18, K_INBAR = 19, K_MSG = 20, K_TAB = 21, K_SUG = 22, K_SWAP = 23, K_RHD = 24;
+    /** 경로 결과 머리줄 치수(웹 #transitResultHeader 와 같다: 분 숫자 28 · 단위 14 · 구간명 12 · 즐겨찾기 알약 11 · 닫기 ×) */
+    public static final float RHD_H = 34f, RHD_NUM = 28f, RHD_UNIT = 14f, RHD_ROUTE = 12f, RHD_BTN = 11f, RHD_BTN_PX = 8f, RHD_BTN_H = 22f, RHD_X = 28f, RHD_MSG = 14f;
     /** 홈 경로 입력 치수(웹 홈 탭 출발/도착 카드·자동완성과 같다) */
     public static final float SUG_H = 44f, SUG_PADX = 14f, SUG_BADGE = 11f, SUG_NAME = 14f, SUG_SUB = 11f, SUG_PILL_PX = 6f, SUG_GAP = 6f, SUG_BTN = 11f, SUG_BTN_PADX = 9f, SUG_BTN_H = 26f;
     /** 게시글 카드·댓글·말풍선 치수(웹 .dc-* / .chat-bub-* 와 같다) */
@@ -617,6 +630,7 @@ public final class ScreenCore {
     public static final class Layout {
         public Item[] head = new Item[0], body = new Item[0], foot = new Item[0];
         public float headH, headContentW, bodyH, footH, width, chipsTop = -1f, chipsBot = -1f;
+        public String bg = "bg";                                          // 화면 바탕 색 역할
         float[] headMaxB = new float[0], bodyMaxB = new float[0];     // 앞에서부터 가장 아래쪽(이진 탐색용)
         float headMaxH, bodyMaxH;
 
@@ -638,6 +652,11 @@ public final class ScreenCore {
             while (to < it.length && it[to].x < x1) to++;
             return new int[] { from, to };
         }
+        /** 경로 결과 머리줄에서 x(dp) 가 닫기 × 쪽이면 닫기 행동, 아니면 즐겨찾기 행동. */
+        public static Act rhdAct(Item it, float x) {
+            if (it.on && x >= it.btx - 8f) return it.act2 != null ? it.act2 : it.act;
+            return it.act;
+        }
         /** 본문 좌표 (x, y) 에서 눌린 행동. 없으면 null. */
         public Act hitBody(float x, float y) { return hit(body, bodyMaxB, x, y); }
         /** 머리에서 눌린 행동. 칩은 가로로 밀린 만큼(scrollX) 보정, 고정 조각(안내·검색줄)은 그대로. */
@@ -652,6 +671,7 @@ public final class ScreenCore {
         /** 이 조각이 (x, y) 에서 눌리나. 스위치 줄은 스위치(+8dp)만, 나머지는 조각 전체. */
         public static boolean hits(Item m, float x, float y) {
             if (m.kind == K_TOGGLE) return x >= m.sx - 8f && x < m.sx + m.sw + 8f && y >= m.sy - 8f && y < m.sy + m.sh + 8f;
+            if (m.kind == K_RHD) return (m.sw > 0f && x >= m.sx - 6f && x < m.sx + m.sw + 6f && y >= m.sy - 6f && y < m.sy + m.sh + 6f) || (m.on && x >= m.btx - 6f && x < m.btx + RHD_X + 6f && y >= m.bty - 6f && y < m.bty + RHD_X + 6f);      // 머리줄은 두 단추 자리만
             if (m.kind == K_BAR) return x >= m.sx - 6f && x < m.sx + m.sw + 6f && y >= m.sy - 6f && y < m.sy + m.sh + 6f;      // 머리줄은 오른쪽 단추만
             if (m.kind == K_MSG) return m.act != null && x >= m.zoneX - 6f && x < m.zoneX + m.zoneW + 6f && y >= m.zoneY - 6f && y < m.zoneY + m.zoneH + 6f;      // 말풍선은 '신고' 글자 자리만
             return x >= m.x && x < m.x + m.w && y >= m.y && y < m.y + m.h;
@@ -725,6 +745,7 @@ public final class ScreenCore {
     public static Layout layout(Screen sc, float width, Measurer m, String openKey) {
         Layout L = new Layout();
         L.width = width;
+        L.bg = sc.bg;
         // 머리: 칩 줄은 한 줄이라 가로로 놓는다. 머리 노드는 위에서 아래로 쌓는다.
         List<Item> hi = new ArrayList<Item>();
         float y = 0f, contentW = width;
@@ -819,6 +840,26 @@ public final class ScreenCore {
             return y;
         }
         y += n.padT;
+        if ("rhd".equals(n.t)) {                                                     // 경로 결과 머리줄: 분 숫자 · 단위 · 구간명 (+ 즐겨찾기 알약) (+ 닫기 ×)
+            boolean isMsg = n.name.length() > 0 && n.title.length() == 0;
+            float numW = isMsg ? 0f : m.width(n.title, RHD_NUM, true), unitW = (!isMsg && n.badge.length() > 0) ? m.width(n.badge, RHD_UNIT, false) : 0f;
+            float favW = n.label.length() > 0 ? m.width(n.label, RHD_BTN, true) + RHD_BTN_PX * 2f + 2f : 0f;
+            float xW = n.bact != null ? RHD_X : 0f;
+            float unitX = ox + numW + 5f, routeX = isMsg ? ox : unitX + unitW + 13f;
+            float rightW = (favW > 0f ? favW + 8f : 0f) + (xW > 0f ? xW + 4f : 0f);
+            float avail = ox + innerW - rightW - routeX - 8f;
+            String route = isMsg ? ellipsize(n.name, Math.max(30f, avail), RHD_MSG, true, m) : (n.s.length() > 0 && avail >= 30f ? ellipsize(n.s, avail, RHD_ROUTE, false, m) : "");
+            Item it = new Item(); it.kind = K_RHD; it.x = ox; it.y = y; it.w = innerW; it.h = RHD_H;
+            it.lines = new String[] { n.title }; it.size = RHD_NUM; it.bold = true; it.textX = ox;
+            it.label = isMsg ? "" : n.badge; it.size2 = RHD_UNIT; it.tagX = unitX;
+            it.go = route; it.zoneX = routeX; it.tag = isMsg ? "m" : "";
+            it.on = n.bact != null;
+            if (favW > 0f) { it.badge = n.label; it.sw = favW; it.sh = RHD_BTN_H; it.sx = ox + innerW - xW - (xW > 0f ? 4f : 0f) - favW; it.sy = y + (RHD_H - RHD_BTN_H) / 2f; }
+            if (xW > 0f) { it.btx = ox + innerW - xW; it.bty = y + (RHD_H - RHD_X) / 2f; }
+            it.act = n.act != null ? n.act : n.bact; it.act2 = n.act != null ? n.bact : null;
+            out.add(it);
+            return y + RHD_H + n.padB;
+        }
         if ("sug".equals(n.t)) {                                                     // 자동완성 한 줄: 종류 딱지 + 이름(굵게) + 작은 글 (+ 오른쪽 작은 단추)
             float pillW = n.badge.length() > 0 ? m.width(n.badge, SUG_BADGE, true) + SUG_PILL_PX * 2f : 0f;
             float sbw = n.label.length() > 0 ? m.width(n.label, SUG_BTN, true) + SUG_BTN_PADX * 2f : 0f;

@@ -236,6 +236,7 @@ public class ScreenView extends View {
                         else if (pi.kind == ScreenCore.K_INBAR) tapInbar(pi, x / dpr, pressInFoot);
                         else if (pi.kind == ScreenCore.K_POSTH) toggleOpen(pi);
                         else if (pi.kind == ScreenCore.K_SUG && pi.act2 != null && x / dpr >= pi.btx - 6f) { blurInput(); listener.onAction(pi.act2); }
+                        else if (pi.kind == ScreenCore.K_RHD) { blurInput(); listener.onAction(ScreenCore.Layout.rhdAct(pi, x / dpr)); }
                         else if (pi.kind == ScreenCore.K_TOGGLE) { blurInput(); pi.on = !pi.on; invalidate(); listener.onSet(a, pi.on); }     // 화면은 바로 뒤집는다(엔진 새 화면을 기다리지 않는다)
                         else { blurInput(); listener.onAction(a); }
                     }
@@ -338,7 +339,7 @@ public class ScreenView extends View {
     @Override protected void onDraw(Canvas cv) {
         long now = SystemClock.uptimeMillis();
         lastDraw = now;
-        p.setStyle(Paint.Style.FILL); p.setColor(pal[R_BG]);
+        p.setStyle(Paint.Style.FILL); p.setColor(lay == null ? pal[R_BG] : roleColor(lay.bg));      // 바탕: 화면이 정한 색 역할(카드 안 화면은 card)
         cv.drawRect(0, 0, getWidth(), getHeight(), p);
         if (lay == null) return;
         boolean moving = false;
@@ -356,7 +357,7 @@ public class ScreenView extends View {
         for (int i = r[0]; i < r[1]; i++) drawItem(cv, lay.body[i]);
         cv.restore();
         // 머리(위에 고정, 본문 위에 덮음)
-        p.setStyle(Paint.Style.FILL); p.setColor(pal[R_BG]);
+        p.setStyle(Paint.Style.FILL); p.setColor(roleColor(lay.bg));
         cv.drawRect(0f, 0f, w, lay.headH, p);
         cv.save();
         cv.clipRect(0f, 0f, w, lay.headH);
@@ -369,7 +370,7 @@ public class ScreenView extends View {
             cv.save();
             cv.clipRect(0f, h - lay.footH, w, h);
             cv.translate(0f, h - lay.footH);
-            p.setStyle(Paint.Style.FILL); p.setColor(pal[R_BG]);
+            p.setStyle(Paint.Style.FILL); p.setColor(roleColor(lay.bg));
             cv.drawRect(0f, 0f, w, lay.footH, p);
             p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(pal[R_BORDER]);
             cv.drawLine(0f, 0.5f, w, 0.5f, p);
@@ -408,6 +409,7 @@ public class ScreenView extends View {
             case ScreenCore.K_TAB: drawTab(cv, it); break;
             case ScreenCore.K_SUG: drawSug(cv, it); break;
             case ScreenCore.K_SWAP: drawSwap(cv, it); break;
+            case ScreenCore.K_RHD: drawRhd(cv, it); break;
             default: break;
         }
     }
@@ -826,6 +828,35 @@ public class ScreenView extends View {
         setText(it.size2 > 0f ? it.size2 : it.size, true, it.on ? alpha(cc(it.ac2, 0xFF121214), 0.6f) : cc(it.ac2, 0xFF121214)); tp.setTextAlign(Paint.Align.CENTER);
         cv.drawText(it.badge, it.btx + it.sw / 2f, base(it.bty, it.sh, 0), tp);
         tp.setTextAlign(Paint.Align.LEFT);
+    }
+    /** 경로 결과 머리줄: 큰 분 숫자 + 단위 + 구간명(같은 글자 밑선) + 오른쪽 즐겨찾기 알약 + 닫기 ×. */
+    private void drawRhd(Canvas cv, ScreenCore.Item it) {
+        boolean isMsg = "m".equals(it.tag);                                              // 안내 한 줄(고른 탭에 경로가 없을 때): 숫자·단위 없이 굵은 글
+        if (isMsg) { setText(ScreenCore.RHD_MSG, true, pal[R_TEXT]); cv.drawText(it.go, it.zoneX, base(it.y, it.h, 0), tp); }
+        else {
+            setText(it.size, true, pal[R_TEXT]);
+            float bl = base(it.y, it.h, 0);
+            cv.drawText(it.lines[0], it.textX, bl, tp);
+            if (it.label.length() > 0) { setText(it.size2, false, pal[R_SUB]); cv.drawText(it.label, it.tagX, bl, tp); }
+            if (it.go.length() > 0) { setText(ScreenCore.RHD_ROUTE, false, pal[R_SUB]); cv.drawText(it.go, it.zoneX, bl, tp); }
+        }
+        if (it.sw > 0f) {
+            float rad = it.sh / 2f;
+            rf.set(it.sx, it.sy, it.sx + it.sw, it.sy + it.sh);
+            if (it == pressed) { p.setStyle(Paint.Style.FILL); p.setColor(0x22808080); cv.drawRoundRect(rf, rad, rad, p); }
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(pal[R_GOLD]);
+            rf2.set(it.sx + 0.5f, it.sy + 0.5f, it.sx + it.sw - 0.5f, it.sy + it.sh - 0.5f);
+            cv.drawRoundRect(rf2, rad - 0.5f, rad - 0.5f, p);
+            p.setStyle(Paint.Style.FILL);
+            setText(ScreenCore.RHD_BTN, true, pal[R_GOLD]); tp.setTextAlign(Paint.Align.CENTER);
+            cv.drawText(it.badge, it.sx + it.sw / 2f, base(it.sy, it.sh, 0), tp);
+            tp.setTextAlign(Paint.Align.LEFT);
+        }
+        if (it.on) {
+            setText(22f, false, pal[R_SUB]); tp.setTextAlign(Paint.Align.CENTER);
+            cv.drawText("\u00d7", it.btx + ScreenCore.RHD_X / 2f, base(it.bty, ScreenCore.RHD_X, 0), tp);
+            tp.setTextAlign(Paint.Align.LEFT);
+        }
     }
     /** 한 줄 목록(자동완성·기준시각): 종류 딱지 + 이름(굵게) + 작은 글 + (오른쪽 작은 단추). 마지막 줄이 아니면 아래에 가는 선. */
     private void drawSug(Canvas cv, ScreenCore.Item it) {

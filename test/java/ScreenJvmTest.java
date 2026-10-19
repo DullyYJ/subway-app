@@ -579,6 +579,32 @@ public class ScreenJvmTest {
         for (int i = HL.body.length - 1; i >= 0; i--) { ScreenCore.Item q = HL.body[i]; if (q.act != null && ScreenCore.Layout.hits(q, swI.x + swI.w / 2f, in0.y + in0.h)) { hit = q; break; } }
         ok(hit == swI, "경계를 누르면 바꾸기 단추가 눌린다(뒤에서부터 찾기)");
 
+        // ── 경로 결과 머리줄(rhd) ──
+        String fav = "{\"a\":\"call\",\"v\":\"rh.fav\"}", cls = "{\"a\":\"call\",\"v\":\"rh.close\"}";
+        ScreenCore.Layout RL = ScreenCore.layout(ScreenCore.load(wrapBody("{\"t\":\"rhd\",\"num\":\"24\",\"unit\":\"분\",\"s\":\"부평 \u2192 두정\",\"btn\":\"즐겨찾기\",\"act\":" + fav + ",\"xact\":" + cls + ",\"pad\":[0,0,0,8]}")), 360f, M);
+        ScreenCore.Item rh = RL.body.length == 1 ? RL.body[0] : null;
+        ok(rh != null && rh.kind == ScreenCore.K_RHD && near(rh.h, ScreenCore.RHD_H) && rh.lines[0].equals("24") && rh.label.equals("분") && rh.go.equals("부평 \u2192 두정"), "머리줄: 숫자·단위·구간명");
+        ok(rh != null && near(RL.bodyH, ScreenCore.RHD_H + 8f), "머리줄 높이 = 34 + 아래 여백");
+        ok(rh != null && rh.sw > 0f && rh.on && rh.btx + ScreenCore.RHD_X <= rh.x + rh.w + 0.01f && rh.sx + rh.sw <= rh.btx, "머리줄: 즐겨찾기 알약은 닫기 × 왼쪽, 둘 다 줄 안");
+        ok(rh != null && rh.zoneX > rh.tagX && rh.zoneX + 20f < rh.sx, "머리줄: 구간명은 단위 오른쪽 · 알약 왼쪽");
+        ok(rh != null && ScreenCore.Layout.hits(rh, rh.sx + 4f, rh.sy + 4f) && ScreenCore.Layout.hits(rh, rh.btx + 4f, rh.bty + 4f) && !ScreenCore.Layout.hits(rh, rh.x + 10f, rh.y + 10f), "머리줄: 두 단추 자리만 눌린다");
+        ok(rh != null && ScreenCore.Layout.rhdAct(rh, rh.sx + 4f).v.equals("rh.fav") && ScreenCore.Layout.rhdAct(rh, rh.btx + 4f).v.equals("rh.close"), "머리줄: 누른 자리에 맞는 행동(즐겨찾기/닫기)");
+        ScreenCore.Layout RL2 = ScreenCore.layout(ScreenCore.load(wrapBody("{\"t\":\"rhd\",\"num\":\"7\",\"unit\":\"분\",\"s\":\"가나다\",\"xact\":" + cls + "}")), 360f, M);
+        ScreenCore.Item rh2 = RL2.body.length == 1 ? RL2.body[0] : null;
+        ok(rh2 != null && rh2.sw == 0f && rh2.on && rh2.act != null && ScreenCore.Layout.rhdAct(rh2, rh2.btx + 4f).v.equals("rh.close") && ScreenCore.Layout.hits(rh2, rh2.btx + 4f, rh2.bty + 4f), "즐겨찾기가 없으면 닫기 × 만");
+        ScreenCore.Layout RL3 = ScreenCore.layout(ScreenCore.load(wrapBody("{\"t\":\"rhd\",\"num\":\"24\",\"unit\":\"분\",\"s\":\"아주아주아주아주아주아주아주아주아주아주아주긴출발역이름 \u2192 아주아주아주아주아주아주아주아주아주긴도착역이름\",\"btn\":\"즐겨찾기\",\"act\":" + fav + ",\"xact\":" + cls + "}")), 280f, M);
+        ok(RL3.body.length == 1 && RL3.body[0].go.length() > 0 && RL3.body[0].go.endsWith("\u2026") && RL3.body[0].zoneX + M.width(RL3.body[0].go, ScreenCore.RHD_ROUTE, false) <= RL3.body[0].sx + 0.5f, "긴 구간명은 …으로 줄여 알약을 안 덮는다");
+        ScreenCore.Layout RL4 = ScreenCore.layout(ScreenCore.load(wrapBody("{\"t\":\"rhd\",\"msg\":\"버스만으로 갈 수 있는 경로가 없어요\",\"btn\":\"즐겨찾기\",\"act\":" + fav + ",\"xact\":" + cls + "}")), 360f, M);
+        ScreenCore.Item rh4 = RL4.body.length == 1 ? RL4.body[0] : null;
+        ok(rh4 != null && "m".equals(rh4.tag) && rh4.go.equals("버스만으로 갈 수 있는 경로가 없어요") && near(rh4.zoneX, rh4.x) && rh4.label.length() == 0 && rh4.sw > 0f && rh4.on, "안내 한 줄: 왼쪽 끝에서 시작 · 숫자·단위 없음 · 단추는 그대로");
+        ok(RL4.body[0].zoneX + M.width(RL4.body[0].go, ScreenCore.RHD_MSG, true) <= RL4.body[0].sx + 0.5f, "안내 한 줄은 즐겨찾기 알약을 안 덮는다");
+        ok(bad(wrapBody("{\"t\":\"rhd\",\"unit\":\"분\",\"xact\":" + cls + "}")) && bad(wrapBody("{\"t\":\"rhd\",\"num\":\"1\"}")) && bad(wrapBody("{\"t\":\"rhd\",\"num\":\"1\",\"btn\":\"x\"}")), "머리줄 모양이 틀리면 거절(num 없음 · 누를 곳 없음 · btn 인데 act 없음)");
+
+        // ── 화면 바탕 색(bg) ──
+        String bgBase = "{\"ok\":true,\"v\":1,\"screen\":\"x\",\"head\":[],\"body\":[{\"t\":\"spacer\",\"h\":4}]";
+        ok("bg".equals(ScreenCore.layout(ScreenCore.load(bgBase + "}"), 300f, M).bg) && "card".equals(ScreenCore.layout(ScreenCore.load(bgBase + ",\"bg\":\"card\"}"), 300f, M).bg) && "card2".equals(ScreenCore.layout(ScreenCore.load(bgBase + ",\"bg\":\"card2\"}"), 300f, M).bg), "화면 바탕: 기본 bg · card · card2");
+        ok(bad(bgBase + ",\"bg\":\"gold\"}") && bad(bgBase + ",\"bg\":\"#fff\"}"), "화면 바탕은 bg/card/card2 만");
+
         System.out.println(fails == 0 ? "ALL OK (" + oks + ")" : fails + " FAIL");
         System.exit(fails == 0 ? 0 : 1);
     }

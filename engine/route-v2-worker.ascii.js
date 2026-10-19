@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-19s70";
+var ENGINE_VERSION = "route-v2-2026-10-20s71";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -11733,7 +11733,7 @@ async function handleScreenShop(request) {
 //        facts = \uc571\uc774 \ubaa8\uc740 \uae30\uae30 \uc0ac\uc2e4(\uc804\ubd80 \uc120\ud0dd \u2014 \uc5c6\uc73c\uba74 \uae30\ubcf8\uac12):
 //          id: \ud604\uc7ac \ucee4\ubba4\ub2c8\ud2f0 \uc544\uc774\ub514('' \uc774\uba74 \uc5c6\uc74c) \u00b7 np:{arrive,transfer,arrive_reco: 1|0} \u00b7 npd: \uc54c\ub9bc \uad8c\ud55c \uac70\ubd80(1|0) \u00b7 rl: \ub3c4\ucc29 \uc624\ucc28 \uae30\ub85d(1|0)
 //          th: 'dark'|'pastel' \u00b7 sam: \uac24\ub7ed\uc2dc(1|0) \u00b7 samw: \uc571 \ubc30\ud130\ub9ac '\uc81c\ud55c\ub428'(1|0) \u00b7 errn: \uc624\ub958 \ub85c\uadf8 \uac1c\uc218 \u00b7 cm: \ucd9c\ud1f4\uadfc \uc54c\ub9bc(1|0|\uc5c6\uc74c) \u00b7 ovl: \uc624\ubc84\ub808\uc774(1|0|\uc5c6\uc74c)
-//          feat: { nm|sn|htl|scr|scrs|scrf|scrn|scrb|scrc|scrt|scrq|scrw|scrh|sbh|cnd|rtf|sto|ra|npol|arw|cmw|rtx|e2 : { h: \uc774 \uae30\ub2a5\uc774 \uc788\ub098(1|0), on: \uc2a4\uc704\uce58(1|0), f: \ubb38\uc81c\ub85c \uc6f9\uc73c\ub85c \ub3cc\uc544\uac14\ub098(1|0), w: \ubb38\uc81c \uc0ac\uc720, b: \uc800\uc7a5\ubcf8 \uc0ac\uc6a9 \uc911(1|0) } }
+//          feat: { nm|sn|htl|scr|scrs|scrf|scrn|scrb|scrc|scrt|scrq|scrw|scrh|scrr|sbh|cnd|rtf|sto|ra|npol|arw|cmw|rtx|e2 : { h: \uc774 \uae30\ub2a5\uc774 \uc788\ub098(1|0), on: \uc2a4\uc704\uce58(1|0), f: \ubb38\uc81c\ub85c \uc6f9\uc73c\ub85c \ub3cc\uc544\uac14\ub098(1|0), w: \ubb38\uc81c \uc0ac\uc720, b: \uc800\uc7a5\ubcf8 \uc0ac\uc6a9 \uc911(1|0) } }
 // \ucd9c\ub825  { ok, v:1, screen:'settings', rev, cover:'tab', head:[], body:[\ub178\ub4dc\u2026] }  \u2190 \ub178\ub4dc \uc885\ub958\ub294 native/ScreenCore.java \uc640 \uac19\ub2e4
 //        panel{kids} \u00b7 text \u00b7 box \u00b7 toggle{key} \u00b7 navrow{act} \u00b7 select{act:{a:'sel'}} \u00b7 field{key} \u00b7 button \u00b7 spacer
 //        act = {a:'set',key} (\uc2a4\uc704\uce58 \u2014 \uc571\uc774 \uba3c\uc800 \ub4a4\uc9d1\uace0 \uc54c\ub9b0\ub2e4) | {a:'call',v} (\uc571 \uc548 \ud568\uc218 \ud638\ucd9c: saveId\u00b7clearId\u00b7pol.*\u00b7errlog) | {a:'web',v} (\uc6f9 \uce74\ub4dc \uc5f4\uae30) | {a:'sel',v} (\uace0\ub974\uae30)
@@ -11784,6 +11784,8 @@ var SETTINGS_FEATS = [
     off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9 \uae00\uc4f0\uae30 \uc2dc\ud2b8)\uc73c\ub85c \uadf8\ub824\uc694.', bad: '\ub124\uc774\ud2f0\ube0c \uae00\uc4f0\uae30 \uc2dc\ud2b8\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc6f9 \uc2dc\ud2b8\ub85c \ub300\uc2e0 \ubcf4\uc5ec\uc8fc\uace0 \uc788\uc5b4\uc694', stale: '\uc5d4\uc9c4\uc774 \uc900 \ud654\uba74\uc774 \uc62c\ubc14\ub974\uc9c0 \uc54a\uc544 \uc800\uc7a5\ud574 \ub454 \ud654\uba74\uc744 \uc4f0\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \ucee4\ubba4\ub2c8\ud2f0 \'\uc81c\ubcf4 \uae00\uc4f0\uae30\' \uc2dc\ud2b8\ub97c \uc5d4\uc9c4\uc774 \uc815\ud55c \ub300\ub85c \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694(\uc2e4\ud5d8 \uc911).' },
   { k: 'scrh', title: '\ub124\uc774\ud2f0\ube0c \uacbd\ub85c \uc785\ub825', desc: '\ud648 \ud0ed\uc758 \ucd9c\ubc1c\u00b7\ub3c4\ucc29 \uc785\ub825\uce78, \uc790\ub3d9\uc644\uc131 \ubaa9\ub85d, \uc704\uce58 \uac10\uc9c0\u00b7\ubc14\uafb8\uae30\u00b7\uacbd\ub85c \ud0d0\uc0c9 \ub2e8\ucd94, \uae30\uc900\uc2dc\uac01 \uc904\uc744 \uc5d4\uc9c4\uc774 \uc815\ud574 \ub0b4\ub824\uc8fc\uace0, \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694. \uae00\uc790\ub97c \uc4f0\ub294 \ub3d9\uc548 \uc790\ub3d9\uc644\uc131\uc774 \ubc14\ub85c \ub530\ub77c\uc640\uc694. \ubb38\uc81c\uac00 \uc0dd\uae30\uba74 \uc608\uc804 \uc6f9 \uce74\ub4dc\ub85c \ub3cc\uc544\uac00\uc694.',
     off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9 \uacbd\ub85c \uc785\ub825 \uce74\ub4dc)\uc73c\ub85c \uadf8\ub824\uc694.', bad: '\ub124\uc774\ud2f0\ube0c \uacbd\ub85c \uc785\ub825\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc6f9 \uce74\ub4dc\ub85c \ub300\uc2e0 \ubcf4\uc5ec\uc8fc\uace0 \uc788\uc5b4\uc694', stale: '\uc5d4\uc9c4\uc774 \uc900 \ud654\uba74\uc774 \uc62c\ubc14\ub974\uc9c0 \uc54a\uc544 \uc800\uc7a5\ud574 \ub454 \ud654\uba74\uc744 \uc4f0\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \ud648 \ud0ed\uc758 \uacbd\ub85c \uc785\ub825 \uce74\ub4dc\ub97c \uc5d4\uc9c4\uc774 \uc815\ud55c \ub300\ub85c \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694(\uc2e4\ud5d8 \uc911).' },
+  { k: 'scrr', title: '\ub124\uc774\ud2f0\ube0c \uacbd\ub85c \uacb0\uacfc \uc717\ubd80\ubd84', desc: '\ud648 \uacbd\ub85c \uacb0\uacfc \uce74\ub4dc\uc758 \uba38\ub9ac\uc904(\uc18c\uc694 \uc2dc\uac04\u00b7\uad6c\uac04\u00b7\uc990\uaca8\ucc3e\uae30\u00b7\ub2eb\uae30), \uc2b9\ucc28\u00b7\ub300\uae30\u00b7\ub3c4\ubcf4 \uc694\uc57d, \ud658\uc2b9 \uc548\ub0b4, \uacbd\ub85c \ud0ed(\ucd5c\ub2e8\uc2dc\uac04\u00b7\ucd5c\uc18c\ud658\uc2b9\u00b7\uc9c0\ud558\ucca0\u00b7\ubc84\uc2a4)\uc744 \uc5d4\uc9c4\uc774 \uc815\ud574 \ub0b4\ub824\uc8fc\uace0, \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694. \ubb38\uc81c\uac00 \uc0dd\uae30\uba74 \uc608\uc804 \uc6f9 \uce74\ub4dc\ub85c \ub3cc\uc544\uac00\uc694.',
+    off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9 \uacb0\uacfc \uce74\ub4dc)\uc73c\ub85c \uadf8\ub824\uc694.', bad: '\ub124\uc774\ud2f0\ube0c \uacb0\uacfc \uce74\ub4dc \uc717\ubd80\ubd84\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc6f9 \uce74\ub4dc\ub85c \ub300\uc2e0 \ubcf4\uc5ec\uc8fc\uace0 \uc788\uc5b4\uc694', stale: '\uc5d4\uc9c4\uc774 \uc900 \ud654\uba74\uc774 \uc62c\ubc14\ub974\uc9c0 \uc54a\uc544 \uc800\uc7a5\ud574 \ub454 \ud654\uba74\uc744 \uc4f0\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \uacb0\uacfc \uce74\ub4dc\uc758 \uba38\ub9ac\uc904\u00b7\uc694\uc57d\u00b7\ud658\uc2b9 \uc548\ub0b4\u00b7\uacbd\ub85c \ud0ed\uc744 \uc5d4\uc9c4\uc774 \uc815\ud55c \ub300\ub85c \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694(\uc2e4\ud5d8 \uc911).' },
   { k: 'sbh', title: '\uac00\ub824\uc9c4 \ub3d9\uc548 \uc5d4\uc9c4\uc774 \uc774\uc5b4\ubc1b\uae30', desc: '\uc571\uc744 \ud648 \ud654\uba74\uc774\ub098 \ub2e4\ub978 \uc571\uc73c\ub85c \ubcf4\ub0b8 \ub3d9\uc548\uc5d0\ub3c4 \uc5d4\uc9c4\uc774 \uc548\ub0b4\ub97c \ubc14\ub85c \uc774\uc5b4\ubc1b\uc544 \uc601\uc810\u00b7\ub3c4\ucc29 \uc2dc\uac01\u00b7\ud558\ucc28 \uc54c\ub9bc\uc744 \uacc4\uc18d \ub9de\ucdb0\uc694. \uc571\uc744 \ub2e4\uc2dc \uc5f4\uba74 \uadf8 \uacb0\uacfc\ub97c \uc774\uc5b4\uc11c \uc368\uc694. \ubb38\uc81c\uac00 \uc0dd\uae30\uba74 \uc608\uc804 \ubc29\uc2dd(\uac00\ub824\uc9c4 \ub3d9\uc548 \uc6f9\uc744 \uae68\uc6cc \uacc4\uc0b0)\uc73c\ub85c \ub3cc\uc544\uac00\uc694.',
     off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uac00\ub824\uc9c4 \ub3d9\uc548 \uc6f9\uc744 \uae68\uc6cc \uacc4\uc0b0)\uc73c\ub85c \uc774\uc5b4\uac00\uc694.', bad: '\uc5d4\uc9c4 \uc774\uc5b4\ubc1b\uae30\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \ub300\uc2e0 \uc774\uc5b4\uac00\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \uc571\uc774 \uac00\ub824\uc9c0\uba74 \uc5d4\uc9c4\uc774 \uc548\ub0b4\ub97c \ubc14\ub85c \uc774\uc5b4\ubc1b\uace0, \ub2e4\uc2dc \uc5f4\uba74 \uadf8 \uacb0\uacfc\ub97c \uc774\uc5b4\uc11c \uc368\uc694(\uc2e4\ud5d8 \uc911).' },
   { k: 'cnd', title: '\ud6c4\ubcf4 \uac80\uc0c9\uc744 \uc571\uacfc \uc5d4\uc9c4\uc774 \ud558\uae30', desc: '\ud648 \ud0ed\uc5d0\uc11c \ucd9c\ubc1c\u00b7\ub3c4\ucc29\uc744 \uc785\ub825\ud560 \ub54c \ub098\uc624\ub294 \ud6c4\ubcf4 \uc911 \uc9c0\ud558\ucca0\uc5ed\uc740 \uc5d4\uc9c4\uc774 \uc9c1\uc811 \ucc3e\uace0, \ubc84\uc2a4\uc815\ub958\uc7a5\uacfc \uc7a5\uc18c\ub294 \uc571 \ubcf8\uccb4\uac00 \uc9c1\uc811 \ucc3e\uc544\uc694. \uc6f9\uc774 \ub9e1\ub358 \uac80\uc0c9\uc744 \uc904\uc5ec \uc785\ub825\uc774 \ub354 \ubd80\ub4dc\ub7ec\uc6cc\uc838\uc694. \ubb38\uc81c\uac00 \uc0dd\uae30\uba74 \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \ub3cc\uc544\uac00\uc694.',
@@ -16431,6 +16433,197 @@ async function handleScreenWrite(request) {
 }
 // ===== WRITE ENGINE END =====
 
+// ===== RHEAD ENGINE BEGIN =====
+// \uae38\ub3d9\ubb34 \u2014 \ud648 '\uacbd\ub85c \uacb0\uacfc \uce74\ub4dc' \uc717\ubd80\ubd84 \uc5d4\uc9c4 (route-v2 Worker \uc5d0 \ubd99\uc5ec \ub123\ub294 \uc21c\uc218 \ud568\uc218; \ub2e8\uc77c \ucd9c\ucc98)
+//
+// \u2605 \uc6d0\uce59(YJ): "\ubaa8\ub4e0 \uc5f0\uc0b0\uc740 \uc5d4\uc9c4\uc774 \ud55c\ub2e4. \uc571\uc740 \uc5d4\uc9c4\uc774 \uacc4\uc0b0\ud55c \uadf8\ub9bc\ub9cc \uadf8\ub9b0\ub2e4."  (2026-10-20 s71 \u2014 \uacb0\uacfc \uce74\ub4dc \uc717\ubd80\ubd84)
+//   \uc608\uc804\uc5d4 www/index.html \uc758 _renderTransitResultCard / _renderSplitRow / _renderXferRow / _doorTipLines / _xferLine \uc774
+//   \uba38\ub9ac\uc904('24\ubd84 \ubd80\ud3c9 \u2192 \ub450\uc815')\u00b7'\uc804\uccb4 N\ubd84 \u00b7 \uc2b9\ucc28 \u00b7 \ub300\uae30 \u00b7 \ub3c4\ubcf4' \uc904\u00b7\uc65c \uc774 \uacbd\ub85c\uc778\uc9c0\u00b7\ud638\ucc28/\ubb38 \uc548\ub0b4\u00b7\ud658\uc2b9 \uc548\ub0b4 \ubb38\uc7a5\uc744 \uc6f9\uc5d0\uc11c \uc9c0\uc5c8\ub2e4.
+//   \uc774\uc81c \uc571\uc740 '\uae30\uae30 \uc0ac\uc2e4'(\ucd1d \uc18c\uc694 \ubd84 \u00b7 \ucd9c\ubc1c/\ub3c4\ucc29 \uc774\ub984 \u00b7 \ub098\ub208 \ubd84 \u00b7 \uc5d4\uc9c4\uc774 \uc900 \uc774\uc720 \u00b7 \ud638\ucc28/\ubb38 \uc6d0\uc790\ub8cc \u00b7 \ud658\uc2b9 \uc6d0\uc790\ub8cc \u00b7 \ub20c\ub9b0 \ud0ed)\ub9cc \ubcf4\ub0b4\uace0,
+//   \uc5d4\uc9c4\uc774 \uae00\u00b7\uc21c\uc11c\u00b7\ub2e8\ucd94\ub97c \uc815\ud574 \ud654\uba74 JSON \uc73c\ub85c \ub0b4\ub824 \uc900\ub2e4. \uc571(\ub124\uc774\ud2f0\ube0c ScreenCore/ScreenView)\uc740 \uadf8\ub9ac\uae30\ub9cc \ud558\uace0
+//   \ub204\ub974\uba74 {a:'call', v:'rh.fav'|'rh.close'|'rh.tab.<\uc885\ub958>'} \ub9cc \uc54c\ub9b0\ub2e4(\uc990\uaca8\ucc3e\uae30 \uc5f4\uae30\u00b7\uce74\ub4dc \ub2eb\uae30\u00b7\ud0ed \uace0\ub974\uae30\ub294 \uc608\uc804 \uc6f9 \ud568\uc218\uac00 \uadf8\ub300\ub85c \ud55c\ub2e4).
+//   \uc6f9 \uce74\ub4dc\ub294 \ud3f4\ubc31(\uc5d4\uc9c4\u00b7\ub124\uc774\ud2f0\ube0c\uac00 \uc548 \ub420 \ub54c)\uc73c\ub85c\ub9cc \ub0a8\ub294\ub2e4.
+//
+// \uc785\ub825  rheadScreen({ cap, part }, facts)
+//        cap   = \uc571\uc774 \uadf8\ub9b4 \uc218 \uc788\ub294 \ud654\uba74 \uaddc\uaca9 \uc218\uc900(10 \uc774\uc0c1\uc774\uc5b4\uc57c \ub9cc\ub4e0\ub2e4 \u2014 \uba38\ub9ac\uc904 \ub178\ub4dc rhd \uac00 10)
+//        part  = 'h'(\uba38\ub9ac\uc904 + \uc694\uc57d \uc904 + \ud658\uc2b9 \uc548\ub0b4) | 't'(\uacbd\ub85c \uc635\uc158 \ud0ed \uc904)
+//        facts = { m: \ucd1d \uc18c\uc694 \ubd84, a: \ucd9c\ubc1c \uc774\ub984, b: \ub3c4\ucc29 \uc774\ub984, fav: \uc990\uaca8\ucc3e\uae30 \ub2e8\ucd94\ub97c \ubcf4\uc77c\uc9c0(0|1),
+//                  sp: {ride,wait,walk}(\ubd84) | null, why: \uc5d4\uc9c4\uc774 \uc900 \uc774\uc720 \uae00,
+//                  dx: [{s,dc,dd,bc,bd,to,secs}](\ud658\uc2b9 \ud638\ucc28\u00b7\ubb38 \uc6d0\uc790\ub8cc), ex: {s, l:[{fac,door}]} | null(\ud558\ucc28 \ube60\ub978 \ubb38),
+//                  xs: [{kind,at,walkMin,boardAt,toType,toLine,fromType,fromLine,service}](\ud658\uc2b9 \uc6d0\uc790\ub8cc),
+//                  tab: \uc9c0\uae08 \uace0\ub978 \ud0ed('fast'|'less'|'sub'|'bus'|'longdist'), ld: \uc7a5\uac70\ub9ac \ud0ed\uc744 \ubcf4\uc77c\uc9c0(0|1),
+//                  u: \uc774\ub3d9 \uc911\uc774\ub77c \uc22b\uc790\uac00 '\ub0a8\uc740 \uc2dc\uac04'\uc778\uc9c0(0|1), nr: \uacbd\ub85c\uac00 \uc5c6\ub294 \ud0ed \uc774\ub984('sub'|'bus'|\u2026; \ube44\uba74 \uc815\uc0c1) }
+// \ucd9c\ub825  { ok, v:1, screen:'rhead', cover:'tab', bg:'card', head:[], body:[\ub178\ub4dc\u2026], info:{part} }
+// \ub9e8 \uc544\ub798 module.exports \ub294 \uc2dc\ud5d8(Node)\uc6a9\uc774\uace0 Worker \uc5d0\uc11c\ub294 \ud568\uc218 \uc120\uc5b8\ub9cc \uc4f0\uc778\ub2e4.
+'use strict';
+var RHEAD_SCREEN_V = 1;
+var RHEAD_TABS = [['fast', '\ucd5c\ub2e8\uc2dc\uac04'], ['less', '\ucd5c\uc18c\ud658\uc2b9'], ['sub', '\uc9c0\ud558\ucca0'], ['bus', '\ubc84\uc2a4'], ['longdist', '\uc7a5\uac70\ub9ac']];
+// \uc0c8 \ub124\uc774\ud2f0\ube0c \uae00\uc5d0\ub294 \uc774\ubaa8\uc9c0\ub97c \uc4f0\uc9c0 \uc54a\ub294\ub2e4
+var RHEAD_EMOJI = /[\u2600-\u27BF\u2B00-\u2BFF\uFE0F\u200D]|[\uD83C-\uD83E][\uDC00-\uDFFF]/g;      // \uadf8\ub9bc \uc774\ubaa8\uc9c0\u00b7\uae30\ud638\ub9cc(\ud654\uc0b4\ud45c \u2192 \ub294 \ubb38\uc7a5\uc5d0 \uc4f0\uc774\ub2c8 \ub0a8\uae34\ub2e4)
+
+function rheadHash(s) {                               // djb2 \u2014 \uac19\uc740 \ud654\uba74\uc774\uba74 \uac19\uc740 rev
+  var h = 5381;
+  for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+function rheadStr(v, max) {
+  if (v == null) return '';
+  var s = String(v).replace(RHEAD_EMOJI, '');
+  return s.length > max ? s.slice(0, max) : s;
+}
+function rheadInt(v, lo, hi) {
+  var n = Math.round(Number(v));
+  if (!isFinite(n)) n = 0;
+  return n < lo ? lo : (n > hi ? hi : n);
+}
+// '\uc740/\ub294' \uac19\uc740 \ubc1b\uce68 \uc870\uc0ac(\uc608\uc804 \uc6f9 _arrJosa \uc640 \uac19\ub2e4) \u2014 \ud55c\uae00\uc774 \uc544\ub2c8\uba74 \ubc1b\uce68 \uc788\ub294 \ucabd
+function rheadJosa(word, withBatchim, withoutBatchim) {
+  var ch = String(word == null ? '' : word).trim().slice(-1);
+  var code = ch.charCodeAt(0);
+  if (!(code >= 0xAC00 && code <= 0xD7A3)) return withBatchim;
+  return ((code - 0xAC00) % 28) ? withBatchim : withoutBatchim;
+}
+function rheadDoor(d) {                               // '7-2' \u2192 '7\ud638\ucc28 2\ubc88 \ubb38'
+  var m = String(d == null ? '' : d).match(/^(\d+)\s*-\s*(\d+)$/);
+  return m ? (m[1] + '\ud638\ucc28 ' + m[2] + '\ubc88 \ubb38') : '';
+}
+function rheadList(v, max) { return Array.isArray(v) ? v.slice(0, max) : []; }
+
+// \ud658\uc2b9 \ud55c \uc904 \ubb38\uc7a5(\uc608\uc804 \uc6f9 _xferLine \uacfc \uac19\uc740 \ubb38\uad6c)
+function rheadXferLine(t) {
+  var f = function (type, name) {
+    name = String(name == null ? '' : name).trim();
+    if (!name) return type === 2 ? '\ubc84\uc2a4' : '\uc5f4\ucc28';
+    return (type === 2 && /^[0-9-]+$/.test(name)) ? name + '\ubc88' : name;
+  };
+  var at = String(t.at == null ? '' : t.at).trim(), wm = Math.round(Number(t.walkMin) || 0);
+  var walkTxt = (t.kind === 'train') ? '' : (wm > 0 ? ' \u00b7 \ub3c4\ubcf4 ' + wm + '\ubd84' : '');
+  if (t.kind === 'train') {
+    return at + '\uc5d0\uc11c ' + (t.service === 'express' ? '\uae09\ud589' : '\uc77c\ubc18') + ' \uc5f4\ucc28\ub85c \uac08\uc544\ud0c0\uc694 (' + f(1, t.fromLine) + ' \uc548\uc5d0\uc11c \uc5f4\ucc28\uac00 \ubc14\ub00c\uc5b4\uc694)';
+  }
+  if (t.kind === 'walk') {
+    var to = String(t.boardAt == null ? '' : t.boardAt).trim();
+    return at + ' \ud558\ucc28' + (wm > 0 ? ' \u2192 \ub3c4\ubcf4 ' + wm + '\ubd84' : '') + ' \u2192 ' + (to && to !== at ? to + '\uc5d0\uc11c ' : '') + f(Number(t.toType), t.toLine) + ' \uc2b9\ucc28';
+  }
+  return at + '\uc5d0\uc11c ' + f(Number(t.fromType), t.fromLine) + ' \u2192 ' + f(Number(t.toType), t.toLine) + ' \ud658\uc2b9' + walkTxt;
+}
+
+// \ud658\uc2b9 \ud638\ucc28-\ubb38 \u00b7 \ub3c4\ucc29\uc5ed \ube60\ub978 \ud558\ucc28 \uc904(\uc608\uc804 \uc6f9 _doorTipLines \uc640 \uac19\uc740 \ubb38\uad6c)
+function rheadDoorLines(dx, ex) {
+  var out = [];
+  rheadList(dx, 8).forEach(function (x) {
+    if (!x || typeof x !== 'object') return;
+    var dc = rheadStr(x.dc, 6), dd = rheadStr(x.dd, 6), bc = rheadStr(x.bc, 6), bd = rheadStr(x.bd, 6);
+    if (!(dc && dd && bc && bd)) return;
+    var to = rheadStr(x.to, 8), s = rheadStr(x.s, 30);
+    var tl = /^\d+$/.test(to) ? (to + '\ud638\uc120 ') : '';
+    var t = (s ? s + ' \ud658\uc2b9: ' : '\ud658\uc2b9: ') + dc + '\ud638\ucc28 ' + dd + '\ubc88 \ubb38\uc5d0\uc11c \ub0b4\ub9ac\uba74 ' + tl + bc + '\ud638\ucc28 ' + bd + '\ubc88 \ubb38\uc774 \uac00\uae4c\uc6cc\uc694';
+    var secs = Number(x.secs);
+    if (secs > 0) t += ' (\ud658\uc2b9 \uc57d ' + Math.max(1, Math.round(secs / 60)) + '\ubd84)';
+    out.push(t);
+  });
+  if (ex && typeof ex === 'object') {
+    var parts = rheadList(ex.l, 6).map(function (f) {
+      if (!f) return '';
+      var l = rheadDoor(f.door); if (!l) return '';
+      var fc = rheadStr(f.fac, 20) || '\ucd9c\uad6c';
+      return fc + rheadJosa(fc, '\uc740', '\ub294') + ' ' + l;
+    }).filter(Boolean);
+    if (parts.length) { var es = rheadStr(ex.s, 30); out.push((es ? es + ' \ud558\ucc28: ' : '\ud558\ucc28: ') + parts.join(', ') + '\uc774 \uac00\uae4c\uc6cc\uc694'); }
+  }
+  return out;
+}
+
+function rheadFacts(f) {
+  f = (f && typeof f === 'object') ? f : {};
+  var sp = null;
+  if (f.sp && typeof f.sp === 'object') {
+    sp = { ride: rheadInt(f.sp.ride, 0, 9999), wait: rheadInt(f.sp.wait, 0, 9999), walk: rheadInt(f.sp.walk, 0, 9999) };
+  }
+  var tab = String(f.tab == null ? 'fast' : f.tab);
+  if (!RHEAD_TABS.some(function (t) { return t[0] === tab; })) tab = 'fast';
+  return {
+    m: rheadInt(f.m, 0, 9999), a: rheadStr(f.a, 40), b: rheadStr(f.b, 40),
+    fav: (f.fav === 1 || f.fav === true) ? 1 : 0,
+    sp: sp, why: rheadStr(f.why, 400).replace(/\s+/g, ' ').trim(),
+    dx: rheadList(f.dx, 8), ex: (f.ex && typeof f.ex === 'object') ? f.ex : null,
+    xs: rheadList(f.xs, 8).filter(function (t) { return t && typeof t === 'object'; }),
+    tab: tab, ld: (f.ld === 1 || f.ld === true) ? 1 : 0,
+    u: (f.u === 1 || f.u === true) ? 1 : 0, nr: rheadStr(f.nr, 12).replace(/[^a-z]/g, '')
+  };
+}
+
+function rheadHeadNodes(f) {
+  var nm = function (s) { return String(s || '').replace(/\uc5ed$/, ''); };
+  if (f.nr) {                                           // \uace0\ub978 \ud0ed\ub9cc\uc73c\ub85c\ub294 \uac08 \uc218 \uc788\ub294 \uacbd\ub85c\uac00 \uc5c6\ub2e4 \u2014 \uba38\ub9ac\uc904\uc5d0 \uc548\ub0b4 \ud55c \uc904\ub9cc(\uc608\uc804 \uc6f9 _showTabNoRoute \uc640 \uac19\uc740 \ubb38\uad6c)
+    var lb = f.nr === 'sub' ? '\uc9c0\ud558\ucca0' : (f.nr === 'bus' ? '\ubc84\uc2a4' : '\uc774 \uc218\ub2e8');
+    return [{ t: 'rhd', pad: [0, 0, 0, 8], msg: lb + '\ub9cc\uc73c\ub85c \uac08 \uc218 \uc788\ub294 \uacbd\ub85c\uac00 \uc5c6\uc5b4\uc694', xact: { a: 'call', v: 'rh.close' }, btn: '\uc990\uaca8\ucc3e\uae30', act: { a: 'call', v: 'rh.fav' } }];
+  }
+  var route = (nm(f.a) || nm(f.b)) ? (nm(f.a) + ' \u2192 ' + nm(f.b)) : '';
+  var head = { t: 'rhd', pad: [0, 0, 0, 8], num: String(f.m), unit: f.u ? '\ubd84 \ub0a8\uc74c' : '\ubd84', s: route, xact: { a: 'call', v: 'rh.close' } };
+  if (f.fav) { head.btn = '\uc990\uaca8\ucc3e\uae30'; head.act = { a: 'call', v: 'rh.fav' }; }
+  var nodes = [head];
+  var lines = [];
+  if (f.sp) {
+    var sp = f.sp, t = '\uc2b9\ucc28 ' + sp.ride + '\ubd84';
+    if (sp.wait > 0) t += ' \u00b7 \ub300\uae30 ' + sp.wait + '\ubd84';
+    if (sp.walk > 0) t += ' \u00b7 \ub3c4\ubcf4\u00b7\ud658\uc2b9 ' + sp.walk + '\ubd84';
+    nodes.push({ t: 'text', s: '\uc804\uccb4 ' + (sp.ride + sp.wait + sp.walk) + '\ubd84 \u00b7 ' + t, size: 12, bold: true, color: 'text', lh: 1.5, pad: [0, 0, 0, 0] });
+  }
+  if (f.why) nodes.push({ t: 'text', s: f.why, size: 12, color: 'sub', lh: 1.5, pad: [0, 0, 0, 0] });
+  rheadDoorLines(f.dx, f.ex).forEach(function (s) { nodes.push({ t: 'text', s: s, size: 12, color: 'sub', lh: 1.5, pad: [0, 0, 0, 0] }); });
+  if (nodes.length > 1) nodes[nodes.length - 1].pad = [0, 0, 0, 8];
+  if (f.xs.length) {
+    var h1 = '\ud658\uc2b9 ' + f.xs.length + '\ubc88', parts = [h1];
+    f.xs.forEach(function (t, i) { parts.push((i + 1) + '. ' + rheadXferLine(t).replace(RHEAD_EMOJI, '').slice(0, 160)); });
+    nodes.push({ t: 'box', s: parts.join('\n'), hl: [[0, h1.length]], size: 12, lh: 1.55, color: 'text', fill: 'rgba(255,159,10,0.12)', line: 'rgba(255,159,10,0.4)', r: 10, ip: [10, 7, 10, 7], pad: [0, 0, 0, 8] });
+  }
+  return nodes;
+}
+
+function rheadTabNodes(f) {
+  var kids = [];
+  RHEAD_TABS.forEach(function (tb) {
+    if (tb[0] === 'longdist' && !f.ld) return;
+    var on = tb[0] === f.tab;
+    var n = { t: 'button', s: tb[1], size: 11, h: 32, r: 10, bold: true, act: { a: 'call', v: 'rh.tab.' + tb[0] } };
+    if (on) { n.fill = 'gold'; n.line = 'gold'; n.tc = '#ffffff'; }
+    else { n.fill = 'card2'; n.line = 'border'; n.tc = 'sub'; }
+    kids.push(n);
+  });
+  return [{ t: 'row', gap: 6, pad: [0, 0, 0, 0], kids: kids }];
+}
+
+function rheadScreen(inp, factsIn) {
+  inp = inp || {};
+  if (!(Number(inp.cap) >= 10)) return { ok: false, error: 'cap' };
+  var part = inp.part === 't' ? 't' : 'h';
+  var f = rheadFacts(factsIn);
+  var body = part === 't' ? rheadTabNodes(f) : rheadHeadNodes(f);
+  var out = { ok: true, v: 1, screen: 'rhead', cover: 'tab', bg: 'card', head: [], body: body, info: { part: part } };      // \uce74\ub4dc \uc548\uc5d0 \ub193\uc774\ub294 \ud654\uba74 \u2014 \ubc14\ud0d5\uc740 \uce74\ub4dc\uc0c9
+  out.rev = 'r' + RHEAD_SCREEN_V + part + ':' + rheadHash(JSON.stringify(body));
+  return out;
+}
+// \uacbd\ub85c \uacb0\uacfc \uce74\ub4dc \uc717\ubd80\ubd84 \uc5d4\uc9c4 Worker \uc5f0\uacb0\ubd80 \u2014 POST /screen/rhead (engine/rhead.js \uc758 rheadScreen \uc744 \ubd80\ub978\ub2e4). route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/screen/rhead") return handleScreenRhead(request);` \ub97c \ub123\ub294\ub2e4.
+//   \ubcf8\ubb38(JSON \uae00, Content-Type: text/plain \uc73c\ub85c \ubcf4\ub0b4 \uc0ac\uc804 \uc694\uccad\uc744 \ud53c\ud55c\ub2e4): { cap(10 \uc774\uc0c1), part:"h"|"t", f:{m,a,b,fav,sp,why,dx,ex,xs,tab,ld} }
+//   \uc5d4\uc9c4\uc740 \uc544\ubb34\uac83\ub3c4 \uc800\uc7a5\ud558\uc9c0 \uc54a\ub294\ub2e4. \uac1c\uc778 \uc2dd\ubcc4 \uc815\ubcf4\ub294 \uc624\uac00\uc9c0 \uc54a\ub294\ub2e4.
+async function handleScreenRhead(request) {
+  var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Cache-Control": "no-store" };
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: H });
+  if (request.method !== "POST") return new Response(JSON.stringify({ ok: false, error: "post-only" }), { status: 405, headers: H });
+  var raw = await request.text();
+  if (raw.length > 40000) return new Response(JSON.stringify({ ok: false, error: "body-too-long" }), { status: 413, headers: H });
+  var body;
+  try { body = JSON.parse(raw); } catch (e) { return new Response(JSON.stringify({ ok: false, error: "bad-json" }), { status: 400, headers: H }); }
+  if (!body || typeof body !== "object") return new Response(JSON.stringify({ ok: false, error: "bad-body" }), { status: 400, headers: H });
+  var out;
+  try { out = rheadScreen({ cap: Number(body.cap) || 0, part: body.part }, body.f); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2) }), { status: 500, headers: H }); }
+  if (!out || !out.ok) return new Response(JSON.stringify(out || { ok: false, error: "fail" }), { status: 400, headers: H });
+  out.ver = ENGINE_VERSION;
+  return new Response(JSON.stringify(out), { headers: H });
+}
+// ===== RHEAD ENGINE END =====
+
 async function handleFetch(request, env, ctx) {
   try { await holEnsure(env); } catch (e) {}
   const url = new URL(request.url);
@@ -16459,6 +16652,7 @@ async function handleFetch(request, env, ctx) {
   if (url.pathname === "/screen/home") return handleScreenHome(request);
   if (url.pathname === "/screen/cchips") return handleScreenCchips(request);
   if (url.pathname === "/screen/write") return handleScreenWrite(request);
+  if (url.pathname === "/screen/rhead") return handleScreenRhead(request);
   if (url.pathname === "/stops-near") {
     const lat = parseFloat(url.searchParams.get("lat"));
     const lng = parseFloat(url.searchParams.get("lng"));

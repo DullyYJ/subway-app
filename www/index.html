@@ -7793,6 +7793,7 @@ function _renderTransitResultCard(data, start, dest, cacheSource) {
   // ★ 실제 다음 차 시각으로 타임라인 보정
   try { if(typeof _applyRealBoardTime==='function') setTimeout(_applyRealBoardTime, 400); } catch(e){}
   try { if(typeof _updatePreviewHighlight==='function') _updatePreviewHighlight(); } catch(e){}
+  try{ if(window._scrRhead) setTimeout(function(){ window._scrRhead.kick(); window._scrRhead.changed(); }, 0); }catch(eRh){}      // 서버 구동 네이티브 결과 카드 윗부분
 }
 window._renderTransitResultCard = _renderTransitResultCard;
 
@@ -10154,6 +10155,7 @@ function _showTabNoRoute(type){
     window._tabNoRoute=type;
     window._pendingRouteType=type;
     _highlightRouteTab(type);
+    try{ if(window._scrRhead) setTimeout(function(){ window._scrRhead.kick(); window._scrRhead.changed(); }, 0); }catch(eRh){}
   }catch(e){ console.warn('[탭 경로없음]', e); }
 }
 function _clearTabNoRoute(){
@@ -11194,6 +11196,7 @@ function _registerDoorTips(sections){
 function _renderSplitRow(route){
   var el=document.getElementById('transitSplitRow');
   if(!el) return;
+  window._rhRoute=route||null;   // 서버 구동 네이티브 결과 윗부분(_scrRhead)이 이 경로의 원자료(이유·환승·호차/문)를 엔진에 그대로 보낸다
   var _tot=Math.round(((route&&route.summary&&route.summary.duration)||0)/60);
   try{ var _tl=window._htlTlTotalMin; if(_tl!=null && isFinite(_tl) && _tl>0 && Math.abs(_tl-_tot)<=15) _tot=Math.round(_tl); }catch(eT){}
   var sp=null, spText='';
@@ -15225,7 +15228,9 @@ window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
         H.prev = m ? { x: m.x, y: m.y, w: m.w, h: m.h } : null;
         H.still = moved ? 0 : H.still + 1;
         if(d.mode === 'off'){ if(H.shown) hideNative(); H.still = 0; }
-        else if(d.mode === 'cover' || moved || H.still < 4){ if(H.shown) hideNative(); H.fast = Math.max(H.fast, t + 300); }      // 움직이는 중·덮여 있음 → 웹
+        else if(d.mode === 'cover' || moved || H.still < 4 || t - (H.scAt || -1e9) < 250){ if(H.shown) hideNative(); H.fast = Math.max(H.fast, t + 300); }      // 움직이는 중·덮여 있음 → 웹
+        // ★ 2026-10-20 (YJ: "네이티브 경로 화면을 키면 설정 글씨가 자글자글" — 손가락을 떼고 스크롤이 서서히 멈추는 꼬리에서 한 프레임 0.5px 미만으로 움직이면 '가만히'로 읽혀
+        //   네이티브가 켜지고, 곧 스크롤 이벤트가 와서 다시 꺼지기를 4프레임마다 되풀이해 웹 글자와 네이티브 글자가 번갈아 보였다): 이 영역을 지나는 스크롤 이벤트가 마지막으로 온 뒤 0.25초는 켜지 않는다.
         else { live(d); health(t); webSync(t); }                                                                                   // 4프레임(≈0.07초) 가만히 있으면 네이티브를 켠다
       }catch(e){ try{ console.warn('[네이티브 경로 화면 tick:' + id + ']', e); }catch(e1){} }
       try{ webSync(now()); }catch(e2){}
@@ -15278,11 +15283,12 @@ window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
       webSet: function(on){ var h = hostFn(); if(h) h.classList.toggle('htl-nat-op', on); }
     };
   }
-  var HD = makeRegion('hd', paintCfg(function(){ var h = document.getElementById('transitResultHeader'); return h && h.parentElement; }));      // 머리줄 한 줄(분 숫자·구간명·즐겨찾기·×)
-  var TB = makeRegion('tb', paintCfg(function(){ return document.getElementById('routeOptionTabs'); }));                                           // 경로 옵션 탭(최단시간·최소환승·지하철·버스)
+  function rhOwned(){ try{ return !!(window._scrRhead && window._scrRhead.owns()); }catch(e){ return false; } }      // 서버 구동 네이티브 결과 윗부분이 머리줄·요약·환승·탭을 맡는 동안은 이 영역들이 쉰다(둘이 겹쳐 그리지 않게)
+  var HD = makeRegion('hd', paintCfg(function(){ if(rhOwned()) return null; var h = document.getElementById('transitResultHeader'); return h && h.parentElement; }));      // 머리줄 한 줄(분 숫자·구간명·즐겨찾기·×)
+  var TB = makeRegion('tb', paintCfg(function(){ if(rhOwned()) return null; return document.getElementById('routeOptionTabs'); }));                                           // 경로 옵션 탭(최단시간·최소환승·지하철·버스)
   // 경로 카드의 안내 문구 줄들(승차·대기·도보 분리 / 출발 비교 / 공식 안내 / 경고) — 여러 줄도 줄별로 읽는다
   ['transitSplitRow', 'transitXferRow', 'transitDepRow', 'transitOfficialRow', 'transitAlertRow'].forEach(function(rid){
-    makeRegion('r:' + rid, paintCfg(function(){ return document.getElementById(rid); }));
+    makeRegion('r:' + rid, paintCfg(function(){ if(rhOwned() && (rid === 'transitSplitRow' || rid === 'transitXferRow')) return null; return document.getElementById(rid); }));
   });
   // ★ 2026-10-18 (네이티브 이전 4번째 화면: 혼잡도 카드 — YJ: '목표는 기능을 100% 유지하며 전부 네이티브로'): 홈 아래쪽 혼잡도 카드에서 글자·상자뿐인 부분을 같은 방식으로 그린다.
   //   웹은 레이아웃·내용·눌림을 그대로 맡고(투명하게 제자리), 네이티브가 그 위에 그림만 그린다. 24시간 막대(가로 스크롤)와 장면(이미 네이티브 Canvas)은 제외 — 계속 웹이 그린다.
@@ -15444,11 +15450,11 @@ window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
     ['resize', 'orientationchange', 'touchstart', 'transitionstart', 'transitionend', 'animationstart'].forEach(function(n){ window.addEventListener(n, wakeAll, true); });
     window.addEventListener('scroll', function(e){ scrollAt = now();
                                            // 스크롤한 요소 '안'의 영역만 깨운다(그 밖은 움직이지 않는다) · 프레임당 한 번만 모은다
-      var tg = e && e.target; if(!tg || tg === document || tg === document.documentElement || tg === document.body){ each(function(r){ if(r.H.shown) r.hideNow(); }); wakeAll(); return; }   // 페이지 스크롤: 떠 있는 네이티브는 즉시 숨긴다(잔상)
+      var tg = e && e.target; if(!tg || tg === document || tg === document.documentElement || tg === document.body){ var tn = now(); each(function(r){ r.H.scAt = tn; if(r.H.shown) r.hideNow(); }); wakeAll(); return; }   // 페이지 스크롤: 떠 있는 네이티브는 즉시 숨긴다(잔상)
       scrollTg[scrollTg.length] = tg;
       each(function(r){ if(!r.H.shown || r.H.hideBusy) return; var h = null; try{ h = r.cfg.host(); }catch(e0){} var se = null; try{ se = r.cfg.scrollEl && r.cfg.scrollEl(); }catch(e1){} if(se === tg) return; if(h && tg.contains && tg.contains(h)) r.hideNow(); });   // ★ 네이티브가 떠 있는 영역은 스크롤 이벤트 즉시 숨긴다(잔상)
       if(scrollRaf) return; scrollRaf = true;
-      var run = function(){ scrollRaf = false; var ts = scrollTg; scrollTg = []; each(function(r){ var h = null; try{ h = r.cfg.host(); }catch(e0){} if(!h) return; for(var i = 0; i < ts.length; i++) if(ts[i].contains && ts[i].contains(h)){ r.wake(); return; } }); };
+      var run = function(){ scrollRaf = false; var ts = scrollTg; scrollTg = []; var tn = now(); each(function(r){ var h = null; try{ h = r.cfg.host(); }catch(e0){} if(!h) return; for(var i = 0; i < ts.length; i++) if(ts[i].contains && ts[i].contains(h)){ r.H.scAt = tn; r.wake(); return; } }); };
       if(typeof requestAnimationFrame === 'function') requestAnimationFrame(run); else setTimeout(run, 16);
     }, true);
     try{ document.addEventListener('visibilitychange', wakeAll); }catch(e3){}
@@ -20401,6 +20407,8 @@ window.addEventListener('unhandledrejection', function(e) {
     <!-- 결과 -->
     <div id="transitResultCard" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:14px;flex-direction:column;">
 
+      <!-- ★ 2026-10-20 (s71): 머리줄 · 요약 줄 · 환승 안내를 한 감싸개(#trHeadWrap)에 둔다 — 서버 구동 네이티브 결과 윗부분(_scrRhead)이 이 감싸개를 덮는다(아래 웹 내용은 폴백) -->
+      <div id="trHeadWrap" style="display:flex;flex-direction:column;">
       <!-- ── 헤더 행 ── -->
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
         <div id="transitResultHeader" style="flex:1;min-width:0;display:flex;align-items:baseline;gap:5px;overflow:hidden;"></div>
@@ -20414,6 +20422,7 @@ window.addEventListener('unhandledrejection', function(e) {
       <div id="transitSplitRow" style="display:none;font-size:12px;line-height:1.5;color:var(--sub);margin:-2px 0 8px;"></div>
       <!-- ★ 2026-10-17: 환승 안내 — 엔진이 알려 준 환승 지점(info.transfers)만 그대로 적는다 -->
       <div id="transitXferRow" style="display:none;font-size:12px;line-height:1.55;color:var(--text);margin:0 0 8px;padding:7px 10px;border-radius:10px;background:rgba(255,159,10,.12);border:1px solid rgba(255,159,10,.4);"></div>
+      </div><!-- /trHeadWrap -->
       <div id="transitDepRow" style="display:none;font-size:12px;line-height:1.5;color:var(--sub);margin:0 0 8px;"></div>
       <div id="transitOfficialRow" style="display:none;font-size:12px;line-height:1.5;color:var(--text);margin:0 0 8px;padding:7px 10px;border-radius:10px;background:rgba(10,132,255,.12);border:1px solid rgba(10,132,255,.35);"></div>
       <div id="transitAlertRow" style="display:none;font-size:12px;line-height:1.5;color:var(--text);margin:0 0 8px;padding:7px 10px;border-radius:10px;background:rgba(255,69,58,.12);border:1px solid rgba(255,69,58,.35);"></div>
@@ -21115,6 +21124,21 @@ window.addEventListener('unhandledrejection', function(e) {
         <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">홈 탭의 출발·도착 입력칸, 자동완성 목록, 위치 감지·바꾸기·경로 탐색 단추, 기준시각 줄을 엔진이 정해 내려주고, 기기가 직접 그려요. 글자를 쓰는 동안 자동완성이 바로 따라와요. 문제가 생기면 예전 웹 카드로 돌아가요.</p>
         <div id="scrhSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
         <style>#scrhSetOn:checked ~ #scrhSetKnob{background:var(--gold) !important;} #scrhSetOn:checked ~ #scrhSetDot{left:23px !important;}</style>
+      </div>
+
+      <!-- ★ 2026-10-20: 서버 구동 네이티브 경로 결과 윗부분 — 안드로이드 앱에서만 보임, 기본 꺼짐(실험) -->
+      <div id="scrrSetCard" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <div style="font-size:15px;font-weight:800;color:var(--text);">네이티브 경로 결과 윗부분</div>
+          <label style="position:relative;display:inline-block;width:46px;height:26px;">
+            <input type="checkbox" id="scrrSetOn" onchange="_scrrSetUse(this.checked)" style="opacity:0;width:0;height:0;">
+            <span id="scrrSetKnob" style="position:absolute;inset:0;border-radius:13px;background:var(--border2);transition:.2s;cursor:pointer;"></span>
+            <span id="scrrSetDot" style="position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.3);"></span>
+          </label>
+        </div>
+        <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">홈 경로 결과 카드의 머리줄(소요 시간·구간·즐겨찾기·닫기), 승차·대기·도보 요약, 환승 안내, 경로 탭(최단시간·최소환승·지하철·버스)을 엔진이 정해 내려주고, 기기가 직접 그려요. 문제가 생기면 예전 웹 카드로 돌아가요.</p>
+        <div id="scrrSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
+        <style>#scrrSetOn:checked ~ #scrrSetKnob{background:var(--gold) !important;} #scrrSetOn:checked ~ #scrrSetDot{left:23px !important;}</style>
       </div>
 
       <!-- ★ 2026-10-19: 숨김 인계 — 앱이 가려지면 엔진(/ride-standby)이 안내를 이어받는다. 안드로이드 앱에서만 보임, 기본 꺼짐(실험) -->
@@ -27354,7 +27378,8 @@ function switchTab(tab,el){
   try{ if(window._scrNews) setTimeout(function(){ window._scrNews.kick(); }, 0); }catch(eSn3){}      // 서버 구동 네이티브 뉴스 화면(켜져 있을 때만)
   try{ if(window._scrBoard) setTimeout(function(){ window._scrBoard.kick(); }, 0); }catch(eSb3){}      // 서버 구동 네이티브 게시판(켜져 있을 때만)
   try{ if(window._scrChat) setTimeout(function(){ window._scrChat.kick(); }, 0); }catch(eSc3){}      // 서버 구동 네이티브 실시간소통(켜져 있을 때만)
-  try{ if(window._scrHome) setTimeout(function(){ window._scrHome.kick(); }, 0); }catch(eSh3){}      // 서버 구동 네이티브 홈 경로 입력(켜져 있을 때만)
+  try{ if(window._scrHome) setTimeout(function(){ window._scrHome.kick(); }, 0); }catch(eSh3){}
+  try{ if(window._scrRhead) setTimeout(function(){ window._scrRhead.kick(); }, 0); }catch(eRh3){}      // 서버 구동 네이티브 결과 카드 윗부분(켜져 있을 때만)      // 서버 구동 네이티브 홈 경로 입력(켜져 있을 때만)
   try{ if(window._scrCchips) setTimeout(function(){ window._scrCchips.kick(); }, 0); }catch(eSq3){}      // 서버 구동 네이티브 커뮤니티 칩 줄(켜져 있을 때만): 커뮤니티 탭이 열리면 올리고, 떠나면 숨긴다
   try{ if(window._scrTabs) setTimeout(function(){ window._scrTabs.changed(); }, 60); }catch(eSt3){}      // 서버 구동 네이티브 탭 막대: 켜진 칸이 바뀐다
   try{ if(window._scrFood) setTimeout(function(){ window._scrFood.kick(); }, 0); }catch(eSf2){}      // 서버 구동 네이티브 맛집 화면(켜져 있을 때만)
@@ -37981,6 +38006,7 @@ function closeTransitResult(){
   try{ if(typeof _chatBarRender === 'function') _chatBarRender(); }catch(e){}   // 실시간소통 칩을 경로 없는 상태로 다시 그린다
   // 5) AI 승무원 즉시 갱신 (경로 없음 브리핑)
   try { if(typeof requestHomeBrief === 'function') requestHomeBrief(false); } catch(e){}
+  try{ if(window._scrRhead) setTimeout(function(){ window._scrRhead.kick(); }, 0); }catch(eRh){}      // 서버 구동 네이티브 결과 카드 윗부분: 닫으면 걷는다
 }
 window.closeTransitResult = closeTransitResult;
 
@@ -39488,6 +39514,7 @@ window.refreshShop=refreshShop;
     try{ var Xscrq = window._scrCchips && _scrCchips.S, cscrq = document.getElementById('scrqSetCard'); if(Xscrq && cscrq && cscrq.style.display === 'block') f.feat.scrq = { h: 1, on: Xscrq.on ? 1 : 0, f: (Xscrq.failed || Xscrq.fails >= 2) ? 1 : 0, w: Xscrq.why || '', b: Xscrq.badFresh > 0 ? 1 : 0 }; }catch(e){}
     try{ var Xscrw = window._scrWrite && _scrWrite.S, cscrw = document.getElementById('scrwSetCard'); if(Xscrw && cscrw && cscrw.style.display === 'block') f.feat.scrw = { h: 1, on: Xscrw.on ? 1 : 0, f: (Xscrw.failed || Xscrw.fails >= 2) ? 1 : 0, w: Xscrw.why || '', b: Xscrw.badFresh > 0 ? 1 : 0 }; }catch(e){}
     try{ var Xscrh = window._scrHome && _scrHome.S, cscrh = document.getElementById('scrhSetCard'); if(Xscrh && cscrh && cscrh.style.display === 'block') f.feat.scrh = { h: 1, on: Xscrh.on ? 1 : 0, f: (Xscrh.failed || Xscrh.fails >= 2) ? 1 : 0, w: Xscrh.why || '', b: Xscrh.badFresh > 0 ? 1 : 0 }; }catch(e){}
+    try{ var Xscrr = window._scrRhead && _scrRhead.S, cscrr = document.getElementById('scrrSetCard'); if(Xscrr && cscrr && cscrr.style.display === 'block') f.feat.scrr = { h: 1, on: Xscrr.on ? 1 : 0, f: (Xscrr.failed || Xscrr.fails >= 2 || _scrRhead.S2.failed || _scrRhead.S2.fails >= 2) ? 1 : 0, w: Xscrr.why || _scrRhead.S2.why || '', b: Xscrr.badFresh > 0 ? 1 : 0 }; }catch(e){}
     try{ if(typeof _sbhSyncCard === 'function') _sbhSyncCard(); var csbh = document.getElementById('sbhSetCard'); if(csbh && csbh.style.display === 'block') f.feat.sbh = { h: 1, on: _sbhOn() ? 1 : 0, f: 0, w: '' }; }catch(e){}
     try{ if(typeof _cndSyncCard === 'function') _cndSyncCard(); var ccnd = document.getElementById('cndSetCard'); if(ccnd && ccnd.style.display === 'block') f.feat.cnd = { h: 1, on: (_cndOn() && !_cndBad()) ? 1 : 0, f: _cndBad() ? 1 : 0, w: '' }; }catch(e){}
     try{ if(typeof _rtfSyncCard === 'function') _rtfSyncCard(); var crtf = document.getElementById('rtfSetCard'); if(crtf && crtf.style.display === 'block') f.feat.rtf = { h: 1, on: (_rtfOn() && !_rtfBad()) ? 1 : 0, f: _rtfBad() ? 1 : 0, w: '' }; }catch(e){}
@@ -39641,6 +39668,7 @@ window.refreshShop=refreshShop;
       else if(key === 'f.scrn') window._scrnSetUse(on);
       else if(key === 'f.scrb') window._scrbSetUse(on);
       else if(key === 'f.scrc') window._scrcSetUse(on);
+      else if(key === 'f.scrr') window._scrrSetUse(on);
       else if(key === 'f.scrt') window._scrtSetUse(on);
       else if(key === 'f.scrq') window._scrqSetUse(on);
       else if(key === 'f.scrw') window._scrwSetUse(on);
@@ -41401,6 +41429,121 @@ window.refreshShop=refreshShop;
     });
     window._scrWrite = kit;
     window._scrwSetUse = function(on){ try{ kit.setUse(on); }catch(e){} };
+  })();
+
+  // ═════════════ 홈 '경로 결과 카드' 윗부분(머리줄 · 요약 줄 · 환승 안내 · 경로 탭) ═════════════
+  //   머리줄('24분 부평 → 두정' · 즐겨찾기 · ×)·'전체 N분 · 승차 · 대기 · 도보'·왜 이 경로인지·호차/문 안내·환승 안내(감싸개 #trHeadWrap)와 경로 탭 줄(#routeOptionTabs)의 글·순서·단추를
+//   엔진(POST /screen/rhead, cap 10)이 정하고 기기가 그린다. 앱은 지금 DOM 에 있는 사실(머리 숫자·단위·경로 없는 탭·출발/도착 이름·나눈 분·엔진이 준 이유·호차/문·환승 원자료·눌린 탭)만 보낸다.
+//   누르면 예전 웹 함수가 그대로 일한다: rh.fav → _openFavPopup · rh.close → closeTransitResult · rh.tab.<종류> → selectRouteOption — 허용 목록 밖은 무시.
+//   웹 줄들은 아래에 그대로 두고(폴백) 네이티브가 그 위를 덮는다. 네이티브가 맡는 동안 웹 줄의 속만 감춘다(자리는 그대로). 높이는 네이티브가 그린 내용 높이를 감싸개가 따른다(줄이 늘면 아래 웹 내용이 밀린다).
+  (function(){
+    var K1, K2, R = { cap: 0 }, HH = { rhead: 0, rtabs: 0 };
+    var TABS = ['fast', 'less', 'sub', 'bus', 'longdist'];
+    function gEl(id){ return document.getElementById(id); }
+    function headEl(){ return gEl('trHeadWrap'); }
+    function tabsEl(){ return gEl('routeOptionTabs'); }
+    try{ var st = document.createElement('style'); st.textContent = '#trHeadWrap.rh-own > *{visibility:hidden !important;} #routeOptionTabs.rh-own > *{visibility:hidden !important;}'; document.head.appendChild(st); }catch(eSt){}
+    function own(el, on){ try{ if(el) el.classList.toggle('rh-own', !!on); }catch(e){} }
+    function applyH(el, h){ try{ if(!el || !(h > 8 && h < 2000)) return; el.style.boxSizing = 'border-box'; el.style.overflow = 'hidden'; el.style.flexShrink = '0'; el.style.height = h + 'px'; }catch(e){} }
+    function unH(el){ try{ if(el){ el.style.height = ''; el.style.overflow = ''; el.style.boxSizing = ''; el.style.flexShrink = ''; } }catch(e){} }
+    function probe(){                                                           // 규격 10(머리줄 노드 rhd)을 아는 새 APK 일 때만 — 옛 APK 는 status 에 cap 이 없거나 작아서 웹 그대로
+      if(R.cap) return;
+      var P = K1 && K1.plug(); if(!P || typeof P.status !== 'function'){ R.cap = 3; return; }
+      R.cap = -1;
+      Promise.resolve(P.status({ id: 'rhead' })).then(function(st){ R.cap = (st && st.cap >= 10) ? 10 : 3; try{ K1.kick(); K2.kick(); }catch(e){} }, function(){ R.cap = 3; });
+    }
+    function cardOpen(){
+      try{
+        var t = gEl('tab-home'), c = gEl('transitResultCard');
+        return !!(t && c && t.classList.contains('active') && c.style.display !== 'none' && c.offsetParent && !document.hidden);
+      }catch(e){ return false; }
+    }
+    function gate(){ if(R.cap === 10) return true; if(!R.cap) probe(); return false; }
+    function rectOf(w){
+      try{
+        var sc = gEl('tabContentWrap'); if(!w) return null;
+        var r = w.getBoundingClientRect(), v = sc ? sc.getBoundingClientRect() : { top: 0, bottom: window.innerHeight };
+        var t = Math.max(r.top, v.top), b = Math.min(r.bottom, v.bottom);
+        if(!(r.width > 40 && r.height > 14 && b - t > 10)) return null;
+        return { L: r.left, T: r.top, W: r.width, H: r.height, clip: { l: 0, t: t - r.top, r: r.width, b: b - r.top } };
+      }catch(e){ return null; }
+    }
+    function openHead(){ var o = cardOpen() && !!headEl() && !!(gEl('transitResultMinNum') || window._tabNoRoute) && gate(); if(!o){ own(headEl(), false); unH(headEl()); } return o; }
+    function openTabs(){ var o = cardOpen() && !!tabsEl() && tabsEl().offsetHeight > 10 && gate(); if(!o){ own(tabsEl(), false); unH(tabsEl()); } return o; }
+
+    // ── 사실: 지금 DOM 에 있는 값을 그대로 읽는다(글을 짓지 않는다) ──
+    function nameOf(v){ try{ return (v && v.name) ? String(v.name) : ''; }catch(e){ return ''; } }
+    function headFacts(){
+      var f = { m: 0, a: '', b: '', fav: 1, sp: null, why: '', dx: [], ex: null, xs: [], u: 0, nr: '' };
+      try{ f.nr = String(window._tabNoRoute || ''); }catch(e0){}
+      try{ var ne = gEl('transitResultMinNum'); if(ne) f.m = parseInt(ne.textContent, 10) || 0; }catch(e1){}
+      try{ var ue = gEl('transitResultMinUnit'); f.u = (ue && /남음/.test(String(ue.textContent))) ? 1 : 0; }catch(e2){}
+      try{ f.a = nameOf(typeof _transitResultStart !== 'undefined' ? _transitResultStart : null); f.b = nameOf(typeof _transitResultDest !== 'undefined' ? _transitResultDest : null); }catch(e3){}
+      try{ var sp = window._routeSplitNow; if(sp && typeof sp === 'object') f.sp = { ride: sp.ride, wait: sp.wait, walk: sp.walk }; }catch(e4){}
+      try{
+        var r = window._rhRoute;
+        if(r && typeof r === 'object'){
+          f.why = r.why ? String(r.why) : '';
+          (Array.isArray(r.transfers) ? r.transfers : []).slice(0, 8).forEach(function(t){
+            if(t) f.xs.push({ kind: t.kind, at: t.at, walkMin: t.walkMin, boardAt: t.boardAt, toType: t.toType, toLine: t.toLine, fromType: t.fromType, fromLine: t.fromLine, service: t.service });
+          });
+          var secs = Array.isArray(r.sections) ? r.sections : [];
+          secs.forEach(function(sc){
+            var x = sc && sc.xfer;
+            if(x && x.dropCar && x.dropDoor && x.boardCar && x.boardDoor && f.dx.length < 8) f.dx.push({ s: sc.stnName, dc: x.dropCar, dd: x.dropDoor, bc: x.boardCar, bd: x.boardDoor, to: x.to, secs: x.secs });
+          });
+          for(var i = secs.length - 1; i >= 0; i--){
+            var e = secs[i] && secs[i].exitFast;
+            if(e && e.length){ f.ex = { s: secs[i].stnName, l: e.slice(0, 6).map(function(q){ return { fac: q && q.fac, door: q && q.door }; }) }; break; }
+          }
+        }
+      }catch(e5){}
+      return f;
+    }
+    function tabFacts(){
+      var tab = 'fast', ld = 0;
+      try{ TABS.forEach(function(t){ var b = gEl('routeTab' + t.charAt(0).toUpperCase() + t.slice(1)); if(b && b.classList.contains('route-tab-on')) tab = t; }); }catch(e){}
+      try{ var lb = gEl('routeTabLongdist'); ld = (lb && lb.style.display !== 'none') ? 1 : 0; }catch(e2){}
+      return { m: 0, tab: tab, ld: ld };
+    }
+    function reqHead(){ var txt = JSON.stringify({ cap: 10, part: 'h', f: headFacts() }), fk = K1.hash(txt); return { txt: txt, fk: fk, idle: false, key: '', snap: null, sig: fk }; }
+    function reqTabs(){ var txt = JSON.stringify({ cap: 10, part: 't', f: tabFacts() }), fk = K2.hash(txt); return { txt: txt, fk: fk, idle: false, key: '', snap: null, sig: fk }; }
+    function act(e){
+      if(e.a !== 'call') return;
+      var m = /^rh\.(fav|close|tab\.(fast|less|sub|bus|longdist))$/.exec(String(e.v || '')); if(!m) return;
+      try{
+        if(m[1] === 'fav') _openFavPopup();
+        else if(m[1] === 'close') closeTransitResult();
+        else selectRouteOption(m[2]);
+      }catch(x){}
+      setTimeout(function(){ try{ K1.changed(); K2.changed(); }catch(e){} }, 30);
+    }
+    function listen(id, el){
+      return function(P){
+        P.addListener('size', function(e){
+          if(!e || e.id !== id) return;
+          var h = Number(e.h); if(!(h > 8 && h < 2000)) return;
+          HH[id] = h; applyH(el(), h);
+        });
+      };
+    }
+    var TXT = '결과 카드 윗부분(머리줄·요약·환승 안내·경로 탭)을 엔진이 정한 대로 기기가 직접 그려요(실험 중).';
+    K1 = window._scrKit({
+      id: 'rhead', kp: 'gdm_scrr', ep: '/screen/rhead', screen: 'rhead', label: '결과 카드', card: 'scrr', cache: false, waitIdle: false, bucket: 0, idleMs: 250, onText: TXT,
+      root: headEl, open: openHead, rect: function(){ return rectOf(headEl()); }, request: reqHead, act: act, sig: function(){ return reqHead().sig; }, sigMs: 400,
+      listen: listen('rhead', headEl),
+      webClear: function(){ own(headEl(), true); applyH(headEl(), HH.rhead); }, webBack: function(){ own(headEl(), false); unH(headEl()); }, onEnd: function(){ own(headEl(), false); unH(headEl()); }
+    });
+    K2 = window._scrKit({
+      id: 'rtabs', kp: 'gdm_scrr2', ep: '/screen/rhead', screen: 'rhead', label: '경로 탭', card: 'scrrx', cache: false, waitIdle: false, bucket: 0, idleMs: 250, onText: TXT,
+      root: tabsEl, open: openTabs, rect: function(){ return rectOf(tabsEl()); }, request: reqTabs, act: act, sig: function(){ return reqTabs().sig; }, sigMs: 400,
+      listen: listen('rtabs', tabsEl),
+      webClear: function(){ own(tabsEl(), true); applyH(tabsEl(), HH.rtabs); }, webBack: function(){ own(tabsEl(), false); unH(tabsEl()); }, onEnd: function(){ own(tabsEl(), false); unH(tabsEl()); }
+    });
+    // 두 줄은 한 스위치로 함께 켜고 끈다(같은 설정). 켜짐 여부·문제 표시는 머리줄 쪽(K1)을 따른다.
+    try{ if(localStorage.getItem('gdm_scrr_on') !== localStorage.getItem('gdm_scrr2_on')) localStorage.setItem('gdm_scrr2_on', localStorage.getItem('gdm_scrr_on') === '1' ? '1' : '0'); }catch(eSync){}
+    window._scrRhead = { S: K1.S, S2: K2.S, kick: function(){ try{ K1.kick(); K2.kick(); }catch(e){} }, changed: function(){ try{ K1.changed(); K2.changed(); }catch(e){} }, owns: function(){ try{ return K1.owns() || K2.owns(); }catch(e){ return false; } }, k1: K1, k2: K2 };
+    window._scrrSetUse = function(on){ try{ K1.setUse(on); K2.setUse(on); }catch(e){} };
   })();
 
   // ═════════════ 홈 탭 경로 입력 ═════════════
