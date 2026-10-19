@@ -39374,6 +39374,7 @@ window.refreshShop=refreshShop;
     if(k !== S.rk){ S.chg = (t - S.chgAt < 450) ? S.chg + 1 : 1; S.chgAt = t; S.rk = k; S.rect = r; S.still = 0; }
     else S.still++;
     var moving = !S.typing && S.chg >= 3 && S.still < 3;      // 몇 번 연달아 바뀌는 중 = 탭 전환·키보드 올라오는 중(검색 입력 중이면 키보드는 우리 것이니 숨기지 않는다)
+    if(S.still >= 3) S.chg = 0;                                // 가만히 3번 확인되면 '연달아 바뀜' 기록을 지운다(안 지우면 화면을 올릴 때마다 still 이 0 이 되어 다시 '움직임' 으로 판정 → 올림·숨김이 끝없이 반복)
     var cov = !moving && !S.typing && covered(r);
     if(moving || cov){
       if(S.shown){ hideNative(); }
@@ -39946,6 +39947,7 @@ window.refreshShop=refreshShop;
     if(k !== S.rk){ S.chg = (t - S.chgAt < 450) ? S.chg + 1 : 1; S.chgAt = t; S.rk = k; S.rect = r; S.still = 0; }
     else S.still++;
     var moving = !S.typing && S.chg >= 3 && S.still < 3;
+    if(S.still >= 3) S.chg = 0;                                // 가만히 3번 확인되면 '연달아 바뀜' 기록을 지운다(안 지우면 화면을 올릴 때마다 still 이 0 이 되어 다시 '움직임' 으로 판정 → 올림·숨김이 끝없이 반복)
     var cov = !moving && !S.typing && covered(r);
     if(moving || cov){ if(S.shown) hideNative(); }
     else if(S.good){
@@ -40299,6 +40301,7 @@ window.refreshShop=refreshShop;
     if(k !== S.rk){ S.chg = (t - S.chgAt < 450) ? S.chg + 1 : 1; S.chgAt = t; S.rk = k; S.rect = r; S.still = 0; }
     else S.still++;
     var moving = S.chg >= 3 && S.still < 3;
+    if(S.still >= 3) S.chg = 0;                                // 가만히 3번 확인되면 '연달아 바뀜' 기록을 지운다(안 지우면 화면을 올릴 때마다 still 이 0 이 되어 다시 '움직임' 으로 판정 → 올림·숨김이 끝없이 반복)
     var cov = !moving && (!!SH || covered(r));
     if(moving || cov){ if(S.shown) hideNative(); }
     else if(S.good || S.stash){
@@ -40669,6 +40672,7 @@ window.refreshShop=refreshShop;
     if(k !== S.rk){ S.chg = (t - S.chgAt < 450) ? S.chg + 1 : 1; S.chgAt = t; S.rk = k; S.rect = r; S.still = 0; }
     else S.still++;
     var moving = S.chg >= 3 && S.still < 3;
+    if(S.still >= 3) S.chg = 0;                                // 가만히 3번 확인되면 '연달아 바뀜' 기록을 지운다(안 지우면 화면을 올릴 때마다 still 이 0 이 되어 다시 '움직임' 으로 판정 → 올림·숨김이 끝없이 반복)
     var cov = !moving && (!!DET || covered(r));
     if(moving || cov){ if(S.shown) hideNative(); }
     else if(S.good || S.stash){
@@ -40940,6 +40944,7 @@ window.refreshShop=refreshShop;
       if(k !== S.rk){ S.chg = (t - S.chgAt < 450) ? S.chg + 1 : 1; S.chgAt = t; S.rk = k; S.rect = r; S.still = 0; }
       else S.still++;
       var moving = !S.typing && S.chg >= 3 && S.still < 3;
+      if(S.still >= 3) S.chg = 0;                                // 가만히 3번 확인되면 '연달아 바뀜' 기록을 지운다(안 지우면 화면을 올릴 때마다 still 이 0 이 되어 다시 '움직임' 으로 판정 → 올림·숨김이 끝없이 반복)
       var cov = !moving && !S.typing && covered(r);
       if(moving || cov){ if(S.shown) hideNative(); }
       else if(S.good || S.stash){

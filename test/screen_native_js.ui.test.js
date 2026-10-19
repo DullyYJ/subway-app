@@ -175,6 +175,13 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     await A.page.evaluate(() => { clearInterval(window.__mv); document.getElementById('tab-shop').style.marginBottom = ''; }); await clear(A);
     assert.ok(await waitFor(A, async () => (await calls(A, 'show')).length + (await calls(A, 'update')).length > 0, 4000), '멈춘 뒤 다시 올리지 않았다');
   });
+  await t('움직임이 멈추고 다시 올라온 뒤에는 숨김·올림이 되풀이되지 않는다(가만히 있으면 그대로)', async () => {
+    assert.ok(await waitFor(A, async () => (await st(A)).shown, 8000), '다시 올라오지 않았다');
+    await A.page.waitForTimeout(900); await clear(A); await A.page.waitForTimeout(1500);
+    const c = await calls(A); assert.strictEqual(c.filter(x => x.m === 'hide').length, 0, '가만히 있는데 숨겼다: ' + JSON.stringify(c.map(x => x.m)));
+    assert.strictEqual(c.filter(x => x.m === 'show').length, 0, '가만히 있는데 다시 올렸다');
+    assert.strictEqual((await st(A)).shown, true);
+  });
   await t('테마가 바뀌면 팔레트만 다시 보낸다', async () => {
     await waitFor(A, async () => (await st(A)).shown, 4000); await clear(A); await A.page.evaluate(() => document.documentElement.setAttribute('data-theme', document.documentElement.getAttribute('data-theme') === 'pastel' ? 'dark' : 'pastel'));
     assert.ok(await waitFor(A, has(A, 'update')), 'palette update 없음');
