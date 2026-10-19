@@ -11222,6 +11222,7 @@ function _buildTransitAlertTargets(){
 }
 function _checkTransitAlerts(curNodeIdx){
   try {
+    if(window._sbHanded === true) return;                                  // 2026-10-19: 숨김 인계 중 — 엔진(서비스)이 알림을 울린다(같은 알림을 두 번 울리지 않는다)
     if(typeof _baseTimeMs!=='undefined' && _baseTimeMs != null) return;   // 예상(미래) 모드 제외
     var targets = window._transitAlertTargets, seq = window._transitSeqIdx;
     if(!targets || !targets.length || !seq || !seq.length) return;
@@ -11815,6 +11816,7 @@ function _trkPayload(){
 }
 function _trkRequest(why){
   try{
+    if(window._sbHanded === true) return;                                   // 2026-10-19: 숨김 인계 중 — 엔진(서비스)이 영점을 맞추고 있다
     if(typeof fetch !== 'function') return;
     if(!_transitNodeData || !_transitNodeData.length) return;
     var noTrail = !_ev.trail || !_ev.trail.length;
@@ -20412,6 +20414,21 @@ window.addEventListener('unhandledrejection', function(e) {
         <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">홈 탭의 출발·도착 입력칸, 자동완성 목록, 위치 감지·바꾸기·경로 탐색 단추, 기준시각 줄을 엔진이 정해 내려주고, 기기가 직접 그려요. 글자를 쓰는 동안 자동완성이 바로 따라와요. 문제가 생기면 예전 웹 카드로 돌아가요.</p>
         <div id="scrhSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
         <style>#scrhSetOn:checked ~ #scrhSetKnob{background:var(--gold) !important;} #scrhSetOn:checked ~ #scrhSetDot{left:23px !important;}</style>
+      </div>
+
+      <!-- ★ 2026-10-19: 숨김 인계 — 앱이 가려지면 엔진(/ride-standby)이 안내를 이어받는다. 안드로이드 앱에서만 보임, 기본 꺼짐(실험) -->
+      <div id="sbhSetCard" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <div style="font-size:15px;font-weight:800;color:var(--text);">가려진 동안 엔진이 이어받기</div>
+          <label style="position:relative;display:inline-block;width:46px;height:26px;">
+            <input type="checkbox" id="sbhSetOn" onchange="_sbhSetUse(this.checked)" style="opacity:0;width:0;height:0;">
+            <span id="sbhSetKnob" style="position:absolute;inset:0;border-radius:13px;background:var(--border2);transition:.2s;cursor:pointer;"></span>
+            <span id="sbhSetDot" style="position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.3);"></span>
+          </label>
+        </div>
+        <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">앱을 홈 화면이나 다른 앱으로 보낸 동안에도 엔진이 안내를 바로 이어받아 영점·도착 시각·하차 알림을 계속 맞춰요. 앱을 다시 열면 그 결과를 이어서 써요. 문제가 생기면 예전 방식(가려진 동안 웹을 깨워 계산)으로 돌아가요.</p>
+        <div id="sbhSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
+        <style>#sbhSetOn:checked ~ #sbhSetKnob{background:var(--gold) !important;} #sbhSetOn:checked ~ #sbhSetDot{left:23px !important;}</style>
       </div>
 
       <!-- ★ 2026-10-03: 도착 오차 익명 기록 (끌 수 있음) -->
@@ -30952,12 +30969,13 @@ function _ovlStandbyPush(force){
   try{
     var n = _ovlNative();
     if(!n || typeof n.standbyPacket !== 'function') return;
+    if(window._sbHanded === true) return;       // 숨김 인계 중 — 서비스가 쥔 상태가 더 새것이다
     var now = Date.now();
     if(!force && now - _ovlSbAt < 8000) return;
     var st = _ovlStandbyBuild(); if(!st) return;
     _ovlSbAt = now;
     var url = _ETA_URL.replace(/\/ride-eta$/, '/ride-standby');
-    var r = n.standbyPacket({ state: JSON.stringify(st), url: url });
+    var r = n.standbyPacket({ state: JSON.stringify(st), url: url, handoff: _sbhOn() });
     if(r && typeof r.catch === 'function') r.catch(function(){});
   }catch(e){}
 }
@@ -30966,6 +30984,89 @@ function _ovlStandbyEnd(){
   try{ var n = _ovlNative(); if(n && typeof n.standbyEnd === 'function'){ var r = n.standbyEnd(); if(r && typeof r.catch === 'function') r.catch(function(){}); } }catch(e){}
 }
 window._ovlStandbyEnd = _ovlStandbyEnd;
+
+// ══════════════════════════════════════════════════════════════
+// ★ 2026-10-19 (YJ: "앱이 가려지면 응답이 몰려서 영점이 늦다 — 자바로"): 숨김 인계.
+//   설정 스위치(gdm_sbh, 기본 꺼짐)를 켜면 앱이 화면에서 가려지는 순간 네이티브(KeepAliveService)가 엔진(/ride-standby)으로 안내를 이어받는다
+//   (영점 · 도착 시각 밀고 당기기 · 하차 알림 · 오버레이 — 앱이 닫혔을 때와 같은 길). 웹은 그동안 알림·영점 요청을 내지 않는다(_sbHanded).
+//   다시 보이면 웹이 standbyTake 로 서비스가 쥔 엔진 상태를 돌려받아(통과 시각 · 보낸 알림) 그대로 이어 쓴다. 계산은 모두 엔진이 한 값이다 — 여기서는 받아 적기만 한다.
+//   돌려받지 못하면(8초) 네이티브가 인계를 거두고 웹이 예전처럼 스스로 잇는다.
+var _SBH_KEY = 'gdm_sbh', _sbhBusy = false;
+function _sbhOn(){ try{ return localStorage.getItem(_SBH_KEY) === '1'; }catch(e){ return false; } }
+window._sbhOn = _sbhOn;
+function _sbhAvail(){ try{ var n = _ovlNative(); return !!(n && typeof n.standbyTake === 'function' && typeof n.standbyPacket === 'function'); }catch(e){ return false; } }
+function _sbhSyncCard(){
+  try{
+    var card = document.getElementById('sbhSetCard'); if(!card) return;
+    if(!_sbhAvail()){ if(card.style.display !== 'none') card.style.display = 'none'; return; }
+    if(card.style.display !== 'block') card.style.display = 'block';
+    var on = _sbhOn(), cb = document.getElementById('sbhSetOn'), st = document.getElementById('sbhSetStat');
+    if(cb && cb.checked !== on) cb.checked = on;
+    var s = on ? '켜짐 — 앱이 가려지면 엔진이 안내를 바로 이어받고, 다시 열면 그 결과를 이어서 써요(실험 중).' : '꺼짐 — 예전 방식(가려진 동안 웹을 깨워 계산)으로 이어가요.';
+    if(st && st.textContent !== s) st.textContent = s;
+  }catch(e){}
+}
+window._sbhSyncCard = _sbhSyncCard;
+function _sbhSetUse(on){
+  try{ localStorage.setItem(_SBH_KEY, on ? '1' : '0'); }catch(e){}
+  try{ _ovlStandbyPush(true); }catch(e1){}      // 네이티브가 새 설정을 바로 알게 한다(다음 패킷에 handoff 가 실려 간다)
+  _sbhSyncCard();
+}
+window._sbhSetUse = _sbhSetUse;
+// 서비스가 쥔 엔진 상태에서 웹이 모르는 것만 받아 적는다(GPS 통과 시각 · 이미 보낸 알림). 판정·계산은 하지 않는다.
+function _sbAdopt(r){
+  var out = { passes: 0, fired: 0, raised: false };
+  try{
+    var st = r && r.state; if(!st || !st.eta) return out;
+    if(st.tripSig && window._trackSig && st.tripSig !== window._trackSig) return out;   // 다른 여정(그 사이 경로가 바뀌었다)
+    var pm = window._nodePassMs = window._nodePassMs || {}, src = window._nodePassSrc = window._nodePassSrc || {};
+    var floor = (typeof _rsFloorIdx === 'function') ? _rsFloorIdx() : -1;
+    (st.eta.passes || []).forEach(function(p){
+      if(!p || p.src !== 'gps' || p.idx == null || p.ms == null || !isFinite(p.ms)) return;
+      if(p.idx < floor) return;                                                         // 환승완료 바닥 아래는 건드리지 않는다
+      if(src[p.idx] === 'gps' && pm[p.idx] != null && Math.abs(pm[p.idx] - p.ms) < 1000) return;   // 웹이 이미 아는 값
+      var gm = (window._gpsMaxIdx == null) ? -1 : window._gpsMaxIdx;
+      if(gm < p.idx){
+        window._gpsMaxIdx = p.idx;
+        if(window._gpsConfirmIdx == null || window._gpsConfirmIdx < p.idx) window._gpsConfirmIdx = p.idx;
+        out.raised = true;
+      }
+      try{ _zeroStampPass({ i: p.idx, passMs: p.ms }); out.passes++; }catch(e0){}
+    });
+    var fired = st.fired || {}, wf = (window._transitAlertFired = window._transitAlertFired || {});
+    Object.keys(fired).forEach(function(k){ if(!wf[k]){ wf[k] = 1; out.fired++; } });
+    if(out.raised || out.passes){ try{ if(typeof _etaRequest === 'function') _etaRequest('pass'); }catch(e1){} }
+  }catch(e){}
+  return out;
+}
+window._sbAdopt = _sbAdopt;
+function _sbHandback(){
+  try{
+    var n = _ovlNative();
+    if(!n || typeof n.standbyTake !== 'function'){ window._sbHanded = false; return; }
+    if(_sbhBusy) return;
+    _sbhBusy = true;
+    var fin = function(r){
+      _sbhBusy = false; window._sbHanded = false;
+      try{
+        if(!r || !r.handoff) return;
+        var o = _sbAdopt(r);
+        window._sbhLast = { at: Date.now(), passes: o.passes, fired: o.fired, raised: o.raised, done: !!r.done };
+        try{ _ovlDiag('인계', '서비스가 이어받은 안내를 돌려받음 · 통과 ' + o.passes + '곳' + (o.raised ? ' · 진행도 반영' : '') + ' · 보낸 알림 ' + o.fired + '개'); }catch(e2){}
+        try{ _ovlStandbyPush(true); }catch(e3){}
+        try{ _ovlSync(true); }catch(e4){}
+        try{ _trkRequest('handback'); }catch(e5){}
+      }catch(e){}
+    };
+    var pr = n.standbyTake();
+    if(pr && typeof pr.then === 'function') pr.then(fin, function(){ fin(null); }); else fin(null);
+  }catch(e){ _sbhBusy = false; window._sbHanded = false; }
+}
+window._sbHandback = _sbHandback;
+try{
+  document.addEventListener('visibilitychange', function(){ if(!document.hidden && (_sbhOn() || window._sbHanded === true)) _sbHandback(); });
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(_sbhSyncCard, 1200); }); else setTimeout(_sbhSyncCard, 1200);
+}catch(eSb){}
 // ★ 2026-10-13 (YJ: "카카오 방식"): 앱을 밀어 닫아도 네이티브가 안내를 이어 왔다 — 다시 열면 그 상태를 카드로 보여 주고 [안내 종료]를 준다.
 //   (확정한 여정 화면 자체를 복구하지는 않는다 — 안내는 알림창·오버레이에서 계속된다.) 문구는 엔진이 만든 view 를 그대로 그린다.
 var _sbCardT = null, _sbScreenOff = false;
@@ -31637,6 +31738,7 @@ function _initAppStateListener(){
 function _onForegroundResume(){
   try {
     window._appInBackground = false;
+    try{ if(typeof _sbHandback === 'function' && (_sbhOn() || window._sbHanded === true)) _sbHandback(); }catch(eSbh){}   // 2026-10-19: 숨김 인계 — 서비스가 이어받은 안내를 먼저 돌려받는다
     // ★ 2026-09-04: 확정 전 경로 카드를 오래 띄워 뒀다면 시각이 지나 있다 → 다시 탐색한다
     try{
       if(window._routeLocked !== true && typeof _routeBaseStale==='function' && _routeBaseStale()
@@ -37939,6 +38041,7 @@ window.refreshShop=refreshShop;
     try{ var Xscrc = window._scrChat && _scrChat.S, cscrc = document.getElementById('scrcSetCard'); if(Xscrc && cscrc && cscrc.style.display === 'block') f.feat.scrc = { h: 1, on: Xscrc.on ? 1 : 0, f: (Xscrc.failed || Xscrc.fails >= 2) ? 1 : 0, w: Xscrc.why || '', b: Xscrc.badFresh > 0 ? 1 : 0 }; }catch(e){}
     try{ var Xscrt = window._scrTabs && _scrTabs.S, cscrt = document.getElementById('scrtSetCard'); if(Xscrt && cscrt && cscrt.style.display === 'block') f.feat.scrt = { h: 1, on: Xscrt.on ? 1 : 0, f: (Xscrt.failed || Xscrt.fails >= 2) ? 1 : 0, w: Xscrt.why || '', b: Xscrt.badFresh > 0 ? 1 : 0 }; }catch(e){}
     try{ var Xscrh = window._scrHome && _scrHome.S, cscrh = document.getElementById('scrhSetCard'); if(Xscrh && cscrh && cscrh.style.display === 'block') f.feat.scrh = { h: 1, on: Xscrh.on ? 1 : 0, f: (Xscrh.failed || Xscrh.fails >= 2) ? 1 : 0, w: Xscrh.why || '', b: Xscrh.badFresh > 0 ? 1 : 0 }; }catch(e){}
+    try{ if(typeof _sbhSyncCard === 'function') _sbhSyncCard(); var csbh = document.getElementById('sbhSetCard'); if(csbh && csbh.style.display === 'block') f.feat.sbh = { h: 1, on: _sbhOn() ? 1 : 0, f: 0, w: '' }; }catch(e){}
     f.feat.scrs = { h: 1, on: S.on ? 1 : 0, f: (S.failed || S.fails >= 2) ? 1 : 0, w: S.why || '', b: S.badFresh > 0 ? 1 : 0 };
     return f;
   }
@@ -38069,6 +38172,7 @@ window.refreshShop=refreshShop;
       else if(key === 'f.scrc') window._scrcSetUse(on);
       else if(key === 'f.scrt') window._scrtSetUse(on);
       else if(key === 'f.scrh') window._scrhSetUse(on);
+      else if(key === 'f.sbh') window._sbhSetUse(on);
       else if(key === 'f.scrs'){ setUse(on); return; }
       else return;                                                             // 모르는 키는 무시
     }catch(e){}
