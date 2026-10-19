@@ -20431,6 +20431,21 @@ window.addEventListener('unhandledrejection', function(e) {
         <style>#sbhSetOn:checked ~ #sbhSetKnob{background:var(--gold) !important;} #sbhSetOn:checked ~ #sbhSetDot{left:23px !important;}</style>
       </div>
 
+      <!-- ★ 2026-10-19: 후보 검색을 앱과 엔진이 하기 — 지하철역은 엔진, 버스정류장·장소는 앱 본체(HomeSearch 플러그인). 안드로이드 앱에서만 보임, 기본 꺼짐(실험) -->
+      <div id="cndSetCard" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <div style="font-size:15px;font-weight:800;color:var(--text);">후보 검색을 앱과 엔진이 하기</div>
+          <label style="position:relative;display:inline-block;width:46px;height:26px;">
+            <input type="checkbox" id="cndSetOn" onchange="_cndSetUse(this.checked)" style="opacity:0;width:0;height:0;">
+            <span id="cndSetKnob" style="position:absolute;inset:0;border-radius:13px;background:var(--border2);transition:.2s;cursor:pointer;"></span>
+            <span id="cndSetDot" style="position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.3);"></span>
+          </label>
+        </div>
+        <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">홈 탭에서 출발·도착을 입력할 때 나오는 후보 중 지하철역은 엔진이 직접 찾고, 버스정류장과 장소는 앱 본체가 직접 찾아요. 웹이 맡던 검색을 줄여 입력이 더 부드러워져요. 문제가 생기면 예전 방식으로 돌아가요.</p>
+        <div id="cndSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
+        <style>#cndSetOn:checked ~ #cndSetKnob{background:var(--gold) !important;} #cndSetOn:checked ~ #cndSetDot{left:23px !important;}</style>
+      </div>
+
       <!-- ★ 2026-10-03: 도착 오차 익명 기록 (끌 수 있음) -->
       <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
         <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:8px;">📊 안내 정확도 향상</div>
@@ -38042,6 +38057,7 @@ window.refreshShop=refreshShop;
     try{ var Xscrt = window._scrTabs && _scrTabs.S, cscrt = document.getElementById('scrtSetCard'); if(Xscrt && cscrt && cscrt.style.display === 'block') f.feat.scrt = { h: 1, on: Xscrt.on ? 1 : 0, f: (Xscrt.failed || Xscrt.fails >= 2) ? 1 : 0, w: Xscrt.why || '', b: Xscrt.badFresh > 0 ? 1 : 0 }; }catch(e){}
     try{ var Xscrh = window._scrHome && _scrHome.S, cscrh = document.getElementById('scrhSetCard'); if(Xscrh && cscrh && cscrh.style.display === 'block') f.feat.scrh = { h: 1, on: Xscrh.on ? 1 : 0, f: (Xscrh.failed || Xscrh.fails >= 2) ? 1 : 0, w: Xscrh.why || '', b: Xscrh.badFresh > 0 ? 1 : 0 }; }catch(e){}
     try{ if(typeof _sbhSyncCard === 'function') _sbhSyncCard(); var csbh = document.getElementById('sbhSetCard'); if(csbh && csbh.style.display === 'block') f.feat.sbh = { h: 1, on: _sbhOn() ? 1 : 0, f: 0, w: '' }; }catch(e){}
+    try{ if(typeof _cndSyncCard === 'function') _cndSyncCard(); var ccnd = document.getElementById('cndSetCard'); if(ccnd && ccnd.style.display === 'block') f.feat.cnd = { h: 1, on: (_cndOn() && !_cndBad()) ? 1 : 0, f: _cndBad() ? 1 : 0, w: '' }; }catch(e){}
     f.feat.scrs = { h: 1, on: S.on ? 1 : 0, f: (S.failed || S.fails >= 2) ? 1 : 0, w: S.why || '', b: S.badFresh > 0 ? 1 : 0 };
     return f;
   }
@@ -38173,6 +38189,7 @@ window.refreshShop=refreshShop;
       else if(key === 'f.scrt') window._scrtSetUse(on);
       else if(key === 'f.scrh') window._scrhSetUse(on);
       else if(key === 'f.sbh') window._sbhSetUse(on);
+      else if(key === 'f.cnd') window._cndSetUse(on);
       else if(key === 'f.scrs'){ setUse(on); return; }
       else return;                                                             // 모르는 키는 무시
     }catch(e){}
@@ -39132,6 +39149,7 @@ window.refreshShop=refreshShop;
         if(z.fk) S.fk = z.fk;
         if(z.fk) memoPut(z.fk, z.txt);
         if(z.src === 'fresh'){ S.badFresh = 0; cachePut(S.curKey, z.txt, S.curRev); }
+        try{ if(cfg.onPresent) cfg.onPresent(j, z); }catch(eOp){}                  // 화면마다 받은 응답을 살펴볼 수 있다(홈: 엔진이 새 기능을 아는지)
         try{ if(cfg.webClear) cfg.webClear(); }catch(e){}
         syncCard();
         return true;
@@ -39580,37 +39598,94 @@ window.refreshShop=refreshShop;
     function destSet(){ try{ return !!(typeof _fmapDest !== 'undefined' && _fmapDest); }catch(e){ return false; } }
 
     // ── 후보 모으기(예전 fmapSearch 와 같은 자료 — 걸러내기·순서·문구는 엔진이 한다) ──
+    //   ★ 2026-10-19 (5번 2단계) '후보 검색을 앱과 엔진이 하기'(설정 스위치 gdm_cnd, 기본 꺼짐)를 켜면:
+    //     · 지하철역: 웹이 STNDB 로 걸러 보내지 않는다 — 엔진이 자기 역 표로 직접 거르고, 고르는 데 필요한 이름·호선·좌표는 응답의 info.pk.u 로 받는다.
+    //     · 버스정류장·장소: 웹이 fetch 하지 않는다 — 앱 본체(HomeSearch 플러그인)가 직접 찾고(디바운스·저장본) 'cands' 이벤트로 결과(raw·disp)를 준다.
+    //     · 폴백: 플러그인이 없거나 query 가 거절되거나 엔진이 새 기능(info.sx)을 모르면 이 스위치를 쓰지 않은 것처럼 예전 방식(아래 webBus·webPlace·STNDB)으로 돌아간다.
+    //       한 종류만 실패하면(통신 오류) 그 종류만 예전 방식으로 다시 찾는다. 예전 방식은 그대로 남아 있다.
+    var CK = 'gdm_cnd', CKW = 'gdm_cnd_why';
+    function cndOn(){ try{ return localStorage.getItem(CK) === '1'; }catch(e){ return false; } }
+    function hsPlug(){
+      try{ var C = window.Capacitor, P = C && C.Plugins && C.Plugins.HomeSearch; return (P && typeof P.query === 'function' && typeof P.addListener === 'function') ? P : null; }catch(e){ return null; }
+    }
+    function cndUse(){ return cndOn() && !HS.cndBad && !!hsPlug(); }
+    function cndSync(){ try{ if(typeof window._cndSyncCard === 'function') window._cndSyncCard(); }catch(e){} }
+    function webBus(c, q){
+      try{
+        if(typeof _busStopSearchByName === 'function') _busStopSearchByName(q, function(stops){
+          if(c.q !== q || !stops) return;
+          c.bS = stops.slice(0, 5); c.b = c.bS.map(function(x){ return { n: String(x.nodenm || x.nodeName || ''), d: Number(x.dist) || 0 }; });
+          kit.changed();
+        });
+      }catch(e1){}
+    }
+    function webPlace(c, q){
+      try{
+        _kakaoLocal('search/keyword.json', 'query=' + encodeURIComponent(q) + '&size=5')
+          .then(function(r){ if(!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+          .then(function(data){
+            if(c.q !== q) return;
+            var docs = (data.documents || []).filter(function(d){ return parseFloat(d.y || 0) && parseFloat(d.x || 0); }).slice(0, 5);
+            c.pS = docs; c.p = docs.map(function(d){ return { n: String(d.place_name || ''), a: String(d.road_address_name || d.address_name || '') }; });
+            kit.changed();
+          }).catch(function(){});
+      }catch(e2){}
+    }
+    function cndFail(why, redo){
+      if(HS.cndBad) return;
+      HS.cndBad = true;
+      try{ localStorage.setItem(CKW, String(why || '').slice(0, 100)); }catch(e){}
+      try{ console.warn('[후보 검색] 예전 방식으로 돌아갑니다:', why); }catch(e0){}
+      cndSync();
+      if(redo !== false){ ['start', 'dest'].forEach(function(k){ HS.c[k].nq = ''; }); kit.changed(); }      // 지금 글자를 예전 방식으로 다시 찾는다
+    }
+    function onCands(e){
+      try{
+        if(!e || (e.kind !== 'b' && e.kind !== 'p') || typeof e.q !== 'string') return;
+        ['start', 'dest'].forEach(function(k){
+          var c = HS.c[k]; if(c.q !== e.q) return;
+          if(e.ok === true && Array.isArray(e.raw) && Array.isArray(e.disp)){
+            if(e.kind === 'b'){ c.bS = e.raw.slice(0, 5); c.b = e.disp.slice(0, 5); } else { c.pS = e.raw.slice(0, 5); c.p = e.disp.slice(0, 5); }
+            kit.changed();
+          } else if(e.ok === false){                                           // 통신 오류 — 이 종류만 예전 방식으로
+            if(e.kind === 'b') webBus(c, e.q); else webPlace(c, e.q);
+          }
+        });
+      }catch(x){}
+    }
+    function cndListen(){
+      var P = hsPlug(); if(!P || HS.cndL) return;
+      HS.cndL = true;
+      try{ P.addListener('cands', onCands); }catch(e){ HS.cndL = false; cndFail('listener', false); }
+    }
+    function cndQuery(c, q){
+      var P = hsPlug(); if(!P){ webBus(c, q); webPlace(c, q); return; }
+      cndListen();
+      try{
+        var r = P.query({ q: q, base: (typeof _SERVER_URL === 'string' ? _SERVER_URL : '') });
+        if(r && typeof r.then === 'function') r.then(null, function(er){ cndFail('query: ' + ((er && er.message) || er)); });
+      }catch(e){ cndFail('query: ' + e); }
+    }
     function gather(k){
       var c = HS.c[k], q = val(k).trim();
       if(c.q !== q){ c.q = q; c.b = []; c.p = []; c.bS = []; c.pS = []; if(c.t){ clearTimeout(c.t); c.t = 0; } if(!q) c.nq = ''; }
       c.u = []; c.uS = [];
       if(!q) return;
-      try{
-        var m = _dedupeStnByName(STNDB.filter(function(s){ return s.name.indexOf(q) >= 0; })).slice(0, 8);
-        c.uS = m; c.u = m.map(function(s){ return { n: s.name, l: s.lineLabel || '' }; });
-      }catch(e){}
+      var nat = cndUse();
+      if(!nat){
+        try{
+          var m = _dedupeStnByName(STNDB.filter(function(s){ return s.name.indexOf(q) >= 0; })).slice(0, 8);
+          c.uS = m; c.u = m.map(function(s){ return { n: s.name, l: s.lineLabel || '' }; });
+        }catch(e){}
+      }
       if(q.length >= 2 && c.nq !== q){
         c.nq = q;
+        if(nat){ cndQuery(c, q); return; }                                      // 앱 본체가 디바운스(300ms)·저장본까지 한다
         c.t = setTimeout(function(){
           c.t = 0;
           if(c.q !== q) return;
-          try{
-            if(typeof _busStopSearchByName === 'function') _busStopSearchByName(q, function(stops){
-              if(c.q !== q || !stops) return;
-              c.bS = stops.slice(0, 5); c.b = c.bS.map(function(x){ return { n: String(x.nodenm || x.nodeName || ''), d: Number(x.dist) || 0 }; });
-              kit.changed();
-            });
-          }catch(e1){}
-          try{
-            _kakaoLocal('search/keyword.json', 'query=' + encodeURIComponent(q) + '&size=5')
-              .then(function(r){ if(!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-              .then(function(data){
-                if(c.q !== q) return;
-                var docs = (data.documents || []).filter(function(d){ return parseFloat(d.y || 0) && parseFloat(d.x || 0); }).slice(0, 5);
-                c.pS = docs; c.p = docs.map(function(d){ return { n: String(d.place_name || ''), a: String(d.road_address_name || d.address_name || '') }; });
-                kit.changed();
-              }).catch(function(){});
-          }catch(e2){}
+          webBus(c, q);
+          webPlace(c, q);
         }, 300);
       }
     }
@@ -39624,9 +39699,12 @@ window.refreshShop=refreshShop;
         start: val('start'), dest: val('dest'), active: HS.active, startSet: startSet(), destSet: destSet(), gps: gpsBusy(),
         base: { ms: baseMs(), tzo: d.getTimezoneOffset(), today: [d.getFullYear(), d.getMonth(), d.getDate()], hol: holiday() }
       }, dd = {};
-      if(HS.active){ gather(HS.active); var c = HS.c[HS.active]; dd = { u: c.u, b: c.b, p: c.p }; }
+      var nat = false;
+      if(HS.active){ gather(HS.active); var c = HS.c[HS.active]; nat = cndUse(); dd = nat ? { b: c.b, p: c.p } : { u: c.u, b: c.b, p: c.p }; }      // 앱·엔진 검색이면 지하철 후보(u)를 보내지 않는다 — 엔진이 직접 거른다
       var txt = JSON.stringify({ cap: 7, f: f, d: dd });
-      return { txt: txt, fk: kit.hash(txt), idle: false, key: 'home', snap: null, sig: sigNow() };
+      var fk = kit.hash(txt);
+      HS.natFk = (nat && f.active && (f.active === 'start' ? f.start : f.dest).trim()) ? fk : '';
+      return { txt: txt, fk: fk, idle: false, key: 'home', snap: null, sig: sigNow() };
     }
 
     // ── 높이: 네이티브가 그린 내용 높이를 웹 감싸개가 따른다(자동완성이 늘면 아래 웹 내용이 밀린다) ──
@@ -39677,7 +39755,12 @@ window.refreshShop=refreshShop;
       var c = HS.c[k], e = inp(k); if(!c || !e) return;
       var loc = null, name = '';
       if(kind === 'u'){
-        var s = c.uS[idx]; if(!s) return;
+        var s = c.uS[idx];
+        if(!s){                                                                // 엔진이 거른 후보: 응답의 info.pk.u 에 이름·호선·좌표가 있다
+          var pk = null; try{ var I = kit.S.info; pk = (I && I.pk && I.pk.u && I.pk.u[idx]) || null; }catch(ep){}
+          if(!pk || !pk.name) return;
+          s = { name: String(pk.name), line: pk.line, lat: pk.lat, lng: pk.lng };
+        }
         name = s.name; loc = { type: 'subway', name: s.name, line: s.line, lat: s.lat, lng: s.lng };
       } else if(kind === 'b'){
         var stop = c.bS[idx]; if(!stop) return;
@@ -39721,9 +39804,40 @@ window.refreshShop=refreshShop;
       id: 'home', kp: 'gdm_scrh', ep: '/screen/home', screen: 'home', label: '경로 입력', card: 'scrh', cache: false, waitIdle: false, bucket: 0, idleMs: 200,
       onText: '홈 탭의 출발·도착 입력칸과 자동완성, 단추, 기준시각 줄을 엔진이 정한 대로 기기가 직접 그려요(실험 중).',
       root: wrap, open: open, rect: rect, request: request, act: act, sig: sigNow, sigMs: 350, listen: listen,
-      webClear: applyH, webBack: unH, onEnd: unH
+      webClear: applyH, webBack: unH, onEnd: unH,
+      onPresent: function(j, z){                                               // 엔진이 지하철 후보를 직접 거르는 새 기능(info.sx)을 모르면(옛 엔진) 예전 방식으로
+        try{ if(z && z.src === 'fresh' && HS.natFk && z.fk === HS.natFk && !(j && j.info && j.info.sx === 1)) cndFail('엔진이 아직 역 검색을 못 해요'); }catch(e){}
+      }
     });
     window._scrHome = kit;
+    // ── 설정 스위치(후보 검색을 앱과 엔진이 하기) ──
+    window._cndOn = cndOn;
+    window._cndAvail = function(){ return !!hsPlug(); };
+    window._cndBad = function(){ return !!HS.cndBad; };
+    window._cndSetUse = function(on){
+      try{ localStorage.setItem(CK, on ? '1' : '0'); if(on) localStorage.setItem(CKW, ''); }catch(e){}
+      if(on) HS.cndBad = false;
+      ['start', 'dest'].forEach(function(k){ var c = HS.c[k]; c.q = ''; c.nq = ''; c.b = []; c.p = []; c.bS = []; c.pS = []; c.u = []; c.uS = []; });
+      try{ var Pc = hsPlug(); if(!on && Pc && typeof Pc.cancel === 'function') Pc.cancel(); }catch(e1){}
+      cndSync();
+      try{ kit.changed(); }catch(e2){}
+    };
+    window._cndSyncCard = function(){
+      try{
+        var card = document.getElementById('cndSetCard'); if(!card) return;
+        if(!hsPlug()){ if(card.style.display !== 'none') card.style.display = 'none'; return; }
+        if(card.style.display !== 'block') card.style.display = 'block';
+        var on = cndOn(), cb = document.getElementById('cndSetOn'), st = document.getElementById('cndSetStat'), why = '';
+        try{ why = localStorage.getItem(CKW) || ''; }catch(e){}
+        if(cb) cb.checked = on && !HS.cndBad;
+        var t;
+        if(!on) t = '꺼짐 — 예전 방식(웹이 역·정류장·장소를 찾아요)으로 이어가요.';
+        else if(HS.cndBad) t = '앱·엔진 검색에 문제가 있어 예전 방식으로 대신 이어가고 있어요' + (why ? ' (' + why + ')' : '') + '. 스위치를 껐다 켜면 다시 시도해요.';
+        else t = '켜짐 — 지하철역은 엔진이, 버스정류장·장소는 앱 본체가 찾아요(실험 중).' + ((window._scrHome && _scrHome.active && _scrHome.active()) ? '' : ' 네이티브 경로 입력이 켜져 있을 때 쓰여요.');
+        if(st && st.textContent !== t) st.textContent = t;
+      }catch(e3){}
+    };
+    try{ if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(cndSync, 1300); }); else setTimeout(cndSync, 1300); }catch(eC){}
     window._scrhSetUse = function(on){ try{ kit.setUse(on); }catch(e){} };
   })();
 })();
