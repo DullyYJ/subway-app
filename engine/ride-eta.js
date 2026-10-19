@@ -178,8 +178,9 @@ function rideRow(input) {
 //          level(0|2|1 — 2=두 정거장 전 · 1=한 정거장 전), pre(0|1 — 세 정거장 전), reco:{fromMs,untilMs,ttlMs}(추천 문구를 보이는 시각 창 + 추천이 만들어진 지 이만큼(ms)이 지나면 묵은 것으로 보고 숨긴다),
 //          getoff:{title,cheer}(내릴 준비 문구 — 날짜·시간·날씨에 맞춘 응원), alighted:bool, alightedAt, quitAtMs(하차 판정 + quitAfterSec | null), nextAtMs(다음에 다시 물을 시각) }
 //   앱은 now 가 reco 창 안인지만 비교하고, 받은 level·문구·quitAtMs 를 그대로 그린다. 값이 모자라면(ok:false) 그리지 않는다.
+//   ★ 2026-10-19 (s62, YJ: "하단문구가 계속 사라졌다 나왔다"): reco.holdMs — 오버레이 맨 아래 줄(추천·내릴 준비)이 한 번 보인 뒤 입력(진행 칸·승차 판정)이 잠깐 흔들려도 이만큼(기본 30초)은 그대로 둔다. 앱은 마지막으로 보인 시각과 비교만 한다.
 //   ★ 2026-10-19 (s61): 오버레이 추천 줄 '보임 시점'(도착 7분 전~30초 뒤 · 묵은 추천 25분)의 숫자도 이 창(fromMs·untilMs·ttlMs)이 정한다 — 앱은 지금 시각과 비교만 한다.
-var ARRIVE_DEFAULTS = { preMin: 7, quitAfterSec: 180, recoEndSec: 30, recoTtlSec: 1500, tzMin: 540 };
+var ARRIVE_DEFAULTS = { preMin: 7, quitAfterSec: 180, recoEndSec: 30, recoTtlSec: 1500, rowHoldSec: 30, tzMin: 540 };
 var ARR_CHEER = {
   rain:    ['빗길 미끄러우니 천천히 내려요', '비 오는 날, 우산 챙기고 조심히 가요'],
   snow:    ['눈길 미끄러우니 천천히 내려요', '눈 오는 날, 발밑 조심해요'],
@@ -240,7 +241,7 @@ function rideArrive(input) {
   return {
     v: 1, ok: true, alight: { idx: ai, name: an.name || '', lat: an.lat != null ? an.lat : null, lng: an.lng != null ? an.lng : null, ms: ams },
     legStart: ls, idx: idx, left: left, level: level, pre: (onFinal && left === 3) ? 1 : 0,
-    reco: { fromMs: fromMs, untilMs: untilMs, ttlMs: ttlMs },
+    reco: { fromMs: fromMs, untilMs: untilMs, ttlMs: ttlMs, holdMs: O.rowHoldSec * 1000 },
     getoff: { title: '내릴 준비를 해주세요', cheer: reArrCheer(now, tz, input && input.wx) },
     alighted: alighted, alightedAt: alightedAt, quitAtMs: quitAtMs, nextAtMs: nxt
   };

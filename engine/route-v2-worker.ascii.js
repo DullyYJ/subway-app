@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-19s61";
+var ENGINE_VERSION = "route-v2-2026-10-19s62";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -8249,8 +8249,9 @@ function rideRow(input) {
 //          level(0|2|1 \u2014 2=\ub450 \uc815\uac70\uc7a5 \uc804 \u00b7 1=\ud55c \uc815\uac70\uc7a5 \uc804), pre(0|1 \u2014 \uc138 \uc815\uac70\uc7a5 \uc804), reco:{fromMs,untilMs,ttlMs}(\ucd94\ucc9c \ubb38\uad6c\ub97c \ubcf4\uc774\ub294 \uc2dc\uac01 \ucc3d + \ucd94\ucc9c\uc774 \ub9cc\ub4e4\uc5b4\uc9c4 \uc9c0 \uc774\ub9cc\ud07c(ms)\uc774 \uc9c0\ub098\uba74 \ubb35\uc740 \uac83\uc73c\ub85c \ubcf4\uace0 \uc228\uae34\ub2e4),
 //          getoff:{title,cheer}(\ub0b4\ub9b4 \uc900\ube44 \ubb38\uad6c \u2014 \ub0a0\uc9dc\u00b7\uc2dc\uac04\u00b7\ub0a0\uc528\uc5d0 \ub9de\ucd98 \uc751\uc6d0), alighted:bool, alightedAt, quitAtMs(\ud558\ucc28 \ud310\uc815 + quitAfterSec | null), nextAtMs(\ub2e4\uc74c\uc5d0 \ub2e4\uc2dc \ubb3c\uc744 \uc2dc\uac01) }
 //   \uc571\uc740 now \uac00 reco \ucc3d \uc548\uc778\uc9c0\ub9cc \ube44\uad50\ud558\uace0, \ubc1b\uc740 level\u00b7\ubb38\uad6c\u00b7quitAtMs \ub97c \uadf8\ub300\ub85c \uadf8\ub9b0\ub2e4. \uac12\uc774 \ubaa8\uc790\ub77c\uba74(ok:false) \uadf8\ub9ac\uc9c0 \uc54a\ub294\ub2e4.
+//   \u2605 2026-10-19 (s62, YJ: "\ud558\ub2e8\ubb38\uad6c\uac00 \uacc4\uc18d \uc0ac\ub77c\uc84c\ub2e4 \ub098\uc654\ub2e4"): reco.holdMs \u2014 \uc624\ubc84\ub808\uc774 \ub9e8 \uc544\ub798 \uc904(\ucd94\ucc9c\u00b7\ub0b4\ub9b4 \uc900\ube44)\uc774 \ud55c \ubc88 \ubcf4\uc778 \ub4a4 \uc785\ub825(\uc9c4\ud589 \uce78\u00b7\uc2b9\ucc28 \ud310\uc815)\uc774 \uc7a0\uae50 \ud754\ub4e4\ub824\ub3c4 \uc774\ub9cc\ud07c(\uae30\ubcf8 30\ucd08)\uc740 \uadf8\ub300\ub85c \ub454\ub2e4. \uc571\uc740 \ub9c8\uc9c0\ub9c9\uc73c\ub85c \ubcf4\uc778 \uc2dc\uac01\uacfc \ube44\uad50\ub9cc \ud55c\ub2e4.
 //   \u2605 2026-10-19 (s61): \uc624\ubc84\ub808\uc774 \ucd94\ucc9c \uc904 '\ubcf4\uc784 \uc2dc\uc810'(\ub3c4\ucc29 7\ubd84 \uc804~30\ucd08 \ub4a4 \u00b7 \ubb35\uc740 \ucd94\ucc9c 25\ubd84)\uc758 \uc22b\uc790\ub3c4 \uc774 \ucc3d(fromMs\u00b7untilMs\u00b7ttlMs)\uc774 \uc815\ud55c\ub2e4 \u2014 \uc571\uc740 \uc9c0\uae08 \uc2dc\uac01\uacfc \ube44\uad50\ub9cc \ud55c\ub2e4.
-var ARRIVE_DEFAULTS = { preMin: 7, quitAfterSec: 180, recoEndSec: 30, recoTtlSec: 1500, tzMin: 540 };
+var ARRIVE_DEFAULTS = { preMin: 7, quitAfterSec: 180, recoEndSec: 30, recoTtlSec: 1500, rowHoldSec: 30, tzMin: 540 };
 var ARR_CHEER = {
   rain:    ['\ube57\uae38 \ubbf8\ub044\ub7ec\uc6b0\ub2c8 \ucc9c\ucc9c\ud788 \ub0b4\ub824\uc694', '\ube44 \uc624\ub294 \ub0a0, \uc6b0\uc0b0 \ucc59\uae30\uace0 \uc870\uc2ec\ud788 \uac00\uc694'],
   snow:    ['\ub208\uae38 \ubbf8\ub044\ub7ec\uc6b0\ub2c8 \ucc9c\ucc9c\ud788 \ub0b4\ub824\uc694', '\ub208 \uc624\ub294 \ub0a0, \ubc1c\ubc11 \uc870\uc2ec\ud574\uc694'],
@@ -8311,7 +8312,7 @@ function rideArrive(input) {
   return {
     v: 1, ok: true, alight: { idx: ai, name: an.name || '', lat: an.lat != null ? an.lat : null, lng: an.lng != null ? an.lng : null, ms: ams },
     legStart: ls, idx: idx, left: left, level: level, pre: (onFinal && left === 3) ? 1 : 0,
-    reco: { fromMs: fromMs, untilMs: untilMs, ttlMs: ttlMs },
+    reco: { fromMs: fromMs, untilMs: untilMs, ttlMs: ttlMs, holdMs: O.rowHoldSec * 1000 },
     getoff: { title: '\ub0b4\ub9b4 \uc900\ube44\ub97c \ud574\uc8fc\uc138\uc694', cheer: reArrCheer(now, tz, input && input.wx) },
     alighted: alighted, alightedAt: alightedAt, quitAtMs: quitAtMs, nextAtMs: nxt
   };
