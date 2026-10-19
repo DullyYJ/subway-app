@@ -20910,6 +20910,21 @@ window.addEventListener('unhandledrejection', function(e) {
         <style>#raSetOn:checked ~ #raSetKnob{background:var(--gold) !important;} #raSetOn:checked ~ #raSetDot{left:23px !important;}</style>
       </div>
 
+      <!-- ★ 2026-10-19: 알림 종류 허용 여부를 엔진이 정하기 — 상단 알림·진동·기능 허용 여부를 엔진이 정한다. 기본 꺼짐 -->
+      <div id="npolSetCard" style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <div style="font-size:15px;font-weight:800;color:var(--text);">알림 종류 허용 여부를 엔진이 정하기</div>
+          <label style="position:relative;display:inline-block;width:46px;height:26px;">
+            <input type="checkbox" id="npolSetOn" onchange="_npSetUse(this.checked)" style="opacity:0;width:0;height:0;">
+            <span id="npolSetKnob" style="position:absolute;inset:0;border-radius:13px;background:var(--border2);transition:.2s;cursor:pointer;"></span>
+            <span id="npolSetDot" style="position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.3);"></span>
+          </label>
+        </div>
+        <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">하차·환승 알림을 상단 알림으로 보낼지, 진동을 줄지, 오버레이 하단 추천 같은 기능을 켤지를 웹이 아니라 엔진이 정해요. 설정에서 끈 알림 종류와 출퇴근 브리핑 설정은 그대로 따라요. 엔진에 물을 수 없으면 예전 방식으로 바로 정해요.</p>
+        <div id="npolSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
+        <style>#npolSetOn:checked ~ #npolSetKnob{background:var(--gold) !important;} #npolSetOn:checked ~ #npolSetDot{left:23px !important;}</style>
+      </div>
+
       <!-- ★ 2026-10-03: 도착 오차 익명 기록 (끌 수 있음) -->
       <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
         <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:8px;">📊 안내 정확도 향상</div>
@@ -23637,7 +23652,80 @@ function _notifPrefGroup(type){
 //   하차 전 추천은 오버레이 하단 줄과 앱 안 팝업으로만 보인다(그 기능의 스위치는 _featureAllowed 가 따로 본다).
 //   예전 동작으로 되돌리기: window._notifLegacy = true
 var _NOTIF_TOP = { transfer:1, near_arrive2:1, near_arrive:1 };
-function _vibeAllowed(type){
+// ── 알림 종류 허용 여부 — 엔진이 정한다(2026-10-19, 5번 5단계 첫 조각) ──
+//   설정 스위치 '알림 종류 허용 여부를 엔진이 정하기'(gdm_npol, 기본 꺼짐). 켜면 '이 알림을 상단 알림으로 보낼까(_notifAllowed) · 진동을 줄까(_vibeAllowed) · 이 기능을 켤까(_featureAllowed)'를
+//   웹의 정책 표(_NOTIF_ALLOW·_VIBE_ALLOW·_NOTIF_TOP)가 아니라 엔진(/notif-policy)이 정한다. 웹은 '사용자가 켜 둔 상태(종류별 스위치·출퇴근 브리핑·예전 모드)'만 알리고, 돌아온 표를 그대로 따른다.
+//   부르는 쪽이 바로 답을 받아야 해서(동기) 엔진 표를 받아 두고 쓴다 — 상태가 바뀌면(스위치를 건드리면) 표가 낡은 것이므로 새 표가 올 때까지는 예전 규칙으로 답한다(두 규칙은 같다).
+//   폴백(전부 자동): 스위치 꺼짐 · 엔진 응답 없음(2.5초)·오류·이상한 응답 → 예전 웹 규칙(…Local)으로 바로 답하고 60초 동안은 엔진에 묻지 않는다.
+var _NP = { bad: false, until: 0, why: '', busy: false, sig: '', tbl: null, asks: 0, ok: 0, hits: 0, seq: 0 };
+function _npOn(){ try{ return localStorage.getItem('gdm_npol') === '1'; }catch(e){ return false; } }
+function _npDown(){ return _NP.until > Date.now(); }
+function _npUse(){ return _npOn() && !_npDown(); }
+function _npState(){
+  var cm = false; try{ cm = !!(typeof _cmAlarm !== 'undefined' && _cmAlarm.on); }catch(e){}
+  return { prefs: Object.assign({}, _notifPrefLoad()), legacy: window._notifLegacy === true, cm: cm };
+}
+function _npFail(why){
+  _NP.bad = true; _NP.until = Date.now() + 60000; _NP.why = String(why || '').slice(0, 40); _NP.busy = false; _NP.tbl = null; _NP.sig = '';
+  try{ if(typeof window._npSyncCard === 'function') window._npSyncCard(); }catch(e){}
+}
+function _npGood(j){
+  if(!j || j.ok !== true || j.v !== 1 || !j.types || typeof j.types !== 'object') return false;
+  var ks = Object.keys(j.types);
+  if(!ks.length) return false;
+  for(var i = 0; i < ks.length; i++){ var e = j.types[ks[i]]; if(!e || (e.n !== 0 && e.n !== 1) || (e.v !== 0 && e.v !== 1) || (e.f !== 0 && e.f !== 1)) return false; }
+  return true;
+}
+function _npRefresh(st, sig){
+  if(_NP.busy) return;
+  _NP.busy = true; _NP.asks++; var my = ++_NP.seq, done = false;
+  var fail = function(why){ if(done) return; done = true; clearTimeout(tm); if(my === _NP.seq) _npFail(why); };
+  var tm = setTimeout(function(){ fail('시간 초과'); }, 2500);
+  try{
+    fetch(_ROUTE_V2_BASE + '/notif-policy', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(st) })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(j){
+        if(done) return;
+        if(!_npGood(j)){ fail('응답 이상'); return; }
+        done = true; clearTimeout(tm); _NP.busy = false; _NP.ok++; _NP.tbl = j.types; _NP.sig = sig;
+        try{ if(typeof window._npSyncCard === 'function') window._npSyncCard(); }catch(e2){}
+      })
+      .catch(function(){ fail('통신 실패'); });
+  }catch(e3){ fail('요청 실패'); }
+}
+// 엔진 표의 답(true/false). 표가 없거나 낡았으면 null(= 예전 규칙으로).
+function _npAnswer(type, k){
+  try{
+    if(!_npUse()) return null;
+    var st = _npState(), sig = JSON.stringify(st);
+    if(_NP.tbl && _NP.sig === sig){ _NP.hits++; var e = _NP.tbl[String(type || '')]; return e ? e[k] === 1 : false; }
+    _npRefresh(st, sig);
+  }catch(e){}
+  return null;
+}
+window._npOn = _npOn;
+window._npState2 = _NP;
+window._npSetUse = function(on){
+  try{ localStorage.setItem('gdm_npol', on ? '1' : '0'); }catch(e){}
+  _NP.bad = false; _NP.until = 0; _NP.why = ''; _NP.sig = ''; _NP.tbl = null; _NP.busy = false; _NP.seq++;
+  if(on){ try{ _npAnswer('transfer', 'n'); }catch(e1){} }
+  try{ if(typeof window._npSyncCard === 'function') window._npSyncCard(); }catch(e2){}
+};
+window._npSyncCard = function(){
+  try{
+    var card = document.getElementById('npolSetCard'); if(!card) return;
+    var on = _npOn(), bad = on && _npDown(), cb = document.getElementById('npolSetOn'), st = document.getElementById('npolSetStat');
+    if(cb) cb.checked = on && !bad;
+    var t;
+    if(!on) t = '꺼짐 — 예전 방식(웹이 알림 허용 여부를 정해요)으로 이어가요.';
+    else if(bad) t = '엔진에 물을 수 없어 예전 방식으로 대신 이어가고 있어요' + (_NP.why ? ' (' + _NP.why + ')' : '') + '. 잠시 뒤 다시 엔진에 물어요.';
+    else t = '켜짐 — 알림·진동 허용 여부를 엔진이 정해요(실험 중).' + (_NP.hits ? ' 엔진 표로 ' + _NP.hits + '번 답했어요.' : '');
+    if(st && st.textContent !== t) st.textContent = t;
+  }catch(e3){}
+};
+try{ if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(function(){ if(window._npSyncCard) window._npSyncCard(); try{ if(_npUse()) _npAnswer('transfer', 'n'); }catch(e){} }, 1500); }); else setTimeout(function(){ if(window._npSyncCard) window._npSyncCard(); try{ if(_npUse()) _npAnswer('transfer', 'n'); }catch(e){} }, 1500); }catch(eNp){}
+function _vibeAllowed(type){ var r = _npAnswer(type, 'v'); return r !== null ? r : _vibeAllowedLocal(type); }
+function _vibeAllowedLocal(type){
   var t = String(type || '');
   if(window._notifLegacy !== true && !_NOTIF_TOP[t]) return false;
   // 브리핑은 알림과 함께 짧게 울린다(사용자가 켠 기능이므로)
@@ -23655,14 +23743,16 @@ window._vibeAllowed = _vibeAllowed;
 //   사용자가 설정에서 직접 켜는 '출퇴근 브리핑'까지 같이 꺼졌다.
 //   토글은 켜지는데 showNotification 이 조용히 return 해서 아무 일도 안 일어났다.
 //   → 이 종류만은 정책 상수가 아니라 사용자의 토글을 따른다.
-function _notifAllowed(type){
+function _notifAllowed(type){ var r = _npAnswer(type, 'n'); return r !== null ? r : _notifAllowedLocal(type); }
+function _notifAllowedLocal(type){
   var t = String(type||'');
   if(window._notifLegacy !== true && !_NOTIF_TOP[t]) return false;   // ★ 2026-10-12: 상단 알림은 세 가지만
-  return _featureAllowed(t);
+  return _featureAllowedLocal(t);
 }
 window._notifAllowed = _notifAllowed;
 // 기능 자체의 스위치(설정 화면 토글) — 상단 알림 정책과 별개. 오버레이 하단 추천·앱 안 팝업이 이걸 본다.
-function _featureAllowed(type){
+function _featureAllowed(type){ var r = _npAnswer(type, 'f'); return r !== null ? r : _featureAllowedLocal(type); }
+function _featureAllowedLocal(type){
   var t = String(type||'');
   if(t === 'commute_brief'){
     try{ return !!(typeof _cmAlarm !== 'undefined' && _cmAlarm.on); }catch(e){ return false; }
@@ -23673,6 +23763,7 @@ function _featureAllowed(type){
   return true;
 }
 window._featureAllowed = _featureAllowed;
+window._notifAllowedLocal = _notifAllowedLocal; window._vibeAllowedLocal = _vibeAllowedLocal; window._featureAllowedLocal = _featureAllowedLocal;
 
 // ── 알림 설정 화면: 토글 4개 + 권한 거부 안내 배너 ──────────────────
 var _NOTIF_PREF_LABELS = {
@@ -38523,6 +38614,7 @@ window.refreshShop=refreshShop;
     try{ if(typeof _sbhSyncCard === 'function') _sbhSyncCard(); var csbh = document.getElementById('sbhSetCard'); if(csbh && csbh.style.display === 'block') f.feat.sbh = { h: 1, on: _sbhOn() ? 1 : 0, f: 0, w: '' }; }catch(e){}
     try{ if(typeof _cndSyncCard === 'function') _cndSyncCard(); var ccnd = document.getElementById('cndSetCard'); if(ccnd && ccnd.style.display === 'block') f.feat.cnd = { h: 1, on: (_cndOn() && !_cndBad()) ? 1 : 0, f: _cndBad() ? 1 : 0, w: '' }; }catch(e){}
     try{ if(typeof _rtfSyncCard === 'function') _rtfSyncCard(); var crtf = document.getElementById('rtfSetCard'); if(crtf && crtf.style.display === 'block') f.feat.rtf = { h: 1, on: (_rtfOn() && !_rtfBad()) ? 1 : 0, f: _rtfBad() ? 1 : 0, w: '' }; }catch(e){}
+    try{ if(typeof _npSyncCard === 'function') _npSyncCard(); var cnp = document.getElementById('npolSetCard'); if(cnp && cnp.style.display !== 'none') f.feat.npol = { h: 1, on: (_npOn() && !_npDown()) ? 1 : 0, f: (_npOn() && _npDown()) ? 1 : 0, w: '' }; }catch(e){}
     try{ if(typeof _raSyncCard === 'function') _raSyncCard(); var cra = document.getElementById('raSetCard'); if(cra && cra.style.display !== 'none') f.feat.ra = { h: 1, on: (_raOn() && !_raDown()) ? 1 : 0, f: (_raOn() && _raDown()) ? 1 : 0, w: '' }; }catch(e){}
     try{ if(typeof _stoSyncCard === 'function') _stoSyncCard(); var csto = document.getElementById('stoSetCard'); if(csto && csto.style.display === 'block') f.feat.sto = { h: 1, on: (_stoOn() && !_stoBad()) ? 1 : 0, f: _stoBad() ? 1 : 0, w: '' }; }catch(e){}
     f.feat.scrs = { h: 1, on: S.on ? 1 : 0, f: (S.failed || S.fails >= 2) ? 1 : 0, w: S.why || '', b: S.badFresh > 0 ? 1 : 0 };
@@ -38660,6 +38752,7 @@ window.refreshShop=refreshShop;
       else if(key === 'f.rtf') window._rtfSetUse(on);
       else if(key === 'f.sto') window._stoSetUse(on);
       else if(key === 'f.ra') window._raSetUse(on);
+      else if(key === 'f.npol') window._npSetUse(on);
       else if(key === 'f.scrs'){ setUse(on); return; }
       else return;                                                             // 모르는 키는 무시
     }catch(e){}
