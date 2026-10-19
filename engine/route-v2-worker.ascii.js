@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-19s58";
+var ENGINE_VERSION = "route-v2-2026-10-19s59";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -11712,7 +11712,7 @@ var SETTINGS_FEATS = [
     off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9\uc774 \ucd94\ucc9c \uc2dc\uc810\uc744 \uc815\ud574\uc694)\uc73c\ub85c \uc774\uc5b4\uac00\uc694.', bad: '\uc5d4\uc9c4\uc5d0 \ubb3c\uc744 \uc218 \uc5c6\uc5b4 \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \ub300\uc2e0 \uc774\uc5b4\uac00\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \ud558\ucc28 \uc804 \ucd94\ucc9c\uc744 \uc5b8\uc81c \ubcf4\ub0bc\uc9c0 \uc5d4\uc9c4\uc774 \uc815\ud574\uc694(\uc2e4\ud5d8 \uc911).' },
   { k: 'cmw', title: '\ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551 \uc2dc\uac01\uc744 \uc5d4\uc9c4\uc774 \uc815\ud558\uae30', desc: '\ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551 \uc54c\ub9bc\uc744 \uc9c0\uae08 \ubcf4\ub0bc\uc9c0(\uc124\uc815\ud55c \uc2dc\uac01\u00b7\uc694\uc77c\u00b7\uac19\uc740 \ubd84\uc5d0 \ud55c \ubc88\ub9cc)\uc640, \uc55e\uc73c\ub85c 4\uc8fc\uce58 \uc608\uc57d \uc54c\ub9bc\uc744 \uba87 \uc6d4 \uba87 \uc77c \uba87 \uc2dc\uc5d0 \uac78\uc9c0\ub97c \uc6f9\uc774 \uc544\ub2c8\ub77c \uc5d4\uc9c4\uc774 \uc815\ud574\uc694. \uc54c\ub9bc \ub0b4\uc6a9(\ub0a0\uc528\u00b7\ud63c\uc7a1\ub3c4)\uacfc \uc7a5\uc18c\ub294 \uadf8\ub300\ub85c \uc571\uc5d0\uc11c \ub9cc\ub4e4\uace0 \uc5d4\uc9c4\uc5d0 \ubcf4\ub0b4\uc9c0 \uc54a\uc544\uc694. \uc5d4\uc9c4\uc5d0 \ubb3c\uc744 \uc218 \uc5c6\uc73c\uba74 \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \ubc14\ub85c \uc815\ud574\uc694.',
     off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9\uc774 \ube0c\ub9ac\ud551 \uc2dc\uac01\uc744 \uc815\ud574\uc694)\uc73c\ub85c \uc774\uc5b4\uac00\uc694.', bad: '\uc5d4\uc9c4\uc5d0 \ubb3c\uc744 \uc218 \uc5c6\uc5b4 \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \ub300\uc2e0 \uc774\uc5b4\uac00\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551\uc744 \uc5b8\uc81c \uc6b8\ub9b4\uc9c0 \uc5d4\uc9c4\uc774 \uc815\ud574\uc694(\uc2e4\ud5d8 \uc911).' },
-  { k: 'rtx', title: '\ud558\ucc28 \uc804 \ucd94\ucc9c \ubb38\uad6c\ub97c \uc5d4\uc9c4\uc774 \ub9cc\ub4e4\uae30', desc: '\ub0b4\ub9ac\uae30 7\ubd84 \uc804 \ucd94\ucc9c \uc54c\ub9bc\uc758 \ubcf8\ubb38(\ub0a0\uc528\u00b7\uc694\uc77c\uc5d0 \ub9de\ucd98 \ud55c \uc904, \uba54\ub274\uc640 \uac00\uac8c \uace0\ub974\uae30, \uc904 \ub9de\ucda4)\uacfc \uc791\uc740 \ud654\uba74\u00b7\uc624\ubc84\ub808\uc774 \ucd94\ucc9c \uc904\uc758 \ubb38\uad6c\ub97c \uc6f9\uc774 \uc544\ub2c8\ub77c \uc5d4\uc9c4\uc774 \ub9cc\ub4e4\uc5b4\uc694. \uc571\uc740 \uc9c0\uae08 \ub0a0\uc528\uc640 \ub3c4\ucc29\uc9c0 \uadfc\ucc98 \uac00\uac8c \ubaa9\ub85d, \ucd5c\uadfc \ucd94\ucc9c\ud55c \uacf3\ub9cc \uc5d4\uc9c4\uc5d0 \ubcf4\ub0b4\uc694. \uc5d4\uc9c4\uc5d0 \ubb3c\uc744 \uc218 \uc5c6\uc73c\uba74 \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \ubc14\ub85c \ub9cc\ub4e4\uc5b4\uc694.',
+  { k: 'rtx', title: '\ud558\ucc28 \uc804 \ucd94\ucc9c \ubb38\uad6c\ub97c \uc5d4\uc9c4\uc774 \ub9cc\ub4e4\uae30', desc: '\ub0b4\ub9ac\uae30 7\ubd84 \uc804 \ucd94\ucc9c \uc54c\ub9bc\uc758 \ubcf8\ubb38(\ub0a0\uc528\u00b7\uc694\uc77c\uc5d0 \ub9de\ucd98 \ud55c \uc904, \uba54\ub274\uc640 \uac00\uac8c \uace0\ub974\uae30, \uc904 \ub9de\ucda4)\uacfc \uc791\uc740 \ud654\uba74\u00b7\uc624\ubc84\ub808\uc774 \ucd94\ucc9c \uc904\uc758 \ubb38\uad6c\ub97c \uc6f9\uc774 \uc544\ub2c8\ub77c \uc5d4\uc9c4\uc774 \ub9cc\ub4e4\uc5b4\uc694. \uc571\uc740 \uc9c0\uae08 \ub0a0\uc528\uc640 \ub3c4\ucc29\uc9c0(\uc5ed\u00b7\uc815\ub958\uc7a5) \uc88c\ud45c, \ucd5c\uadfc \ucd94\ucc9c\ud55c \uacf3\ub9cc \uc5d4\uc9c4\uc5d0 \ubcf4\ub0b4\uc694. \ucfe0\ud321 \uc0c1\ud488 \uace0\ub974\uae30\uc640 \ub3c4\ucc29\uc9c0 \uadfc\ucc98 \uac00\uac8c \ubaa9\ub85d \ubc1b\uae30\ub3c4 \uc5d4\uc9c4\uc774 \ud574\uc694. \uc5d4\uc9c4\uc5d0 \ubb3c\uc744 \uc218 \uc5c6\uc73c\uba74 \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \ubc14\ub85c \ub9cc\ub4e4\uc5b4\uc694.',
     off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9\uc774 \ucd94\ucc9c \ubb38\uad6c\ub97c \ub9cc\ub4e4\uc5b4\uc694)\uc73c\ub85c \uc774\uc5b4\uac00\uc694.', bad: '\uc5d4\uc9c4\uc5d0 \ubb3c\uc744 \uc218 \uc5c6\uc5b4 \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \ub300\uc2e0 \uc774\uc5b4\uac00\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \ud558\ucc28 \uc804 \ucd94\ucc9c \ubb38\uad6c\ub97c \uc5d4\uc9c4\uc774 \ub9cc\ub4e4\uc5b4\uc694(\uc2e4\ud5d8 \uc911).' }
 ];
 
@@ -14063,12 +14063,14 @@ function handleCommuteAlarm(request) {
 //   \ud558\ucc28 \uc804 \ucd94\ucc9c \uc54c\ub9bc\uc758 '\ubcf8\ubb38 \ub9cc\ub4e4\uae30' \u2014 \u2460 \ub0a0\uc528\u00b7\uc694\uc77c\u00b7\uc2dc\uac04\uc73c\ub85c \uc0c1\ud669 \uc77d\uae30(cx) \u2461 \uc0c1\ud669 \ubb38\uad6c \uace0\ub974\uae30(hook) \u2462 \uba54\ub274\u00b7\uac00\uac8c \uace0\ub974\uae30(\uc74c\ub8cc\u00b7\ube0c\ub7f0\uce58\u00b7\ubc25\uc9d1\u00b7\uadfc\ucc98 \uac00\uac8c) \u2463 \uc904 \ub9de\ucdb0 \uc870\ub9bd(\uc81c\ubaa9\u00b7\ubcf8\ubb38)
 //   \uc740 \uc608\uc804\uc5d4 \uc6f9(www/index.html)\uc758 _arrBuildAlert \u00b7 _arrCx \u00b7 _arrHook \u00b7 _arrShopLine \u00b7 _arrPickPlace \u00b7 _arrSpotsFor \u2026 \uac00 \ud588\ub2e4. \uc774 \ubaa8\ub4c8\uc740 \uac19\uc740 \uaddc\uce59\uc744 \uc5d4\uc9c4\uc774 \ud558\uac8c \ud55c\ub2e4.
 //   \uc544\ub798 \ud45c(\ubb38\uad6c \ud480 \u00b7 \uc0c1\ud669 \uaddc\uce59 \u00b7 \uc870\uc0ac \ud568\uc218)\ub294 \uc6f9 \ucf54\ub4dc\ub97c \uae00\uc790 \uadf8\ub300\ub85c \uc62e\uae34 \uac83\uc774\ub77c \ubb38\uad6c\uac00 \uac19\ub2e4. \uc571(\uc6f9)\uc740 '\uc9c0\uae08 \ub0a0\uc528 \u00b7 \uadfc\ucc98 \uac00\uac8c \ubaa9\ub85d \u00b7 \ucd5c\uadfc \ucd94\ucc9c\ud55c \uacf3 \u00b7 \uace0\ub978 \ucfe0\ud321 \uc0c1\ud488 \u00b7 \ubb34\uc791\uc704 \uc528\uc557' \ub9cc \uc54c\ub9ac\uace0,
-//   \ub3cc\uc544\uc628 \uc81c\ubaa9\u00b7\ubcf8\ubb38\u00b7\uba54\ub274\u00b7\uac00\uac8c\ub97c \uadf8\ub300\ub85c \ubcf4\uc5ec\uc900\ub2e4. (\ucfe0\ud321 \uc0c1\ud488 *\uace0\ub974\uae30* \u00b7 \uc791\uc740 \ud654\uba74(PiP) \ubb38\uad6c \u00b7 \uc624\ubc84\ub808\uc774 \uad11\uace0 \uc904\uc740 \uc774 \uc870\uac01 \ubc16 \u2014 \uc6f9\uc5d0 \ub0a8\ub294\ub2e4.)
+//   \ub3cc\uc544\uc628 \uc81c\ubaa9\u00b7\ubcf8\ubb38\u00b7\uba54\ub274\u00b7\uac00\uac8c\ub97c \uadf8\ub300\ub85c \ubcf4\uc5ec\uc900\ub2e4. (\uc791\uc740 \ud654\uba74(PiP) \ubb38\uad6c \u00b7 \uc624\ubc84\ub808\uc774 \uad11\uace0 \uc904\uc740 2\ub2e8\uacc4, \ucfe0\ud321 \uc0c1\ud488 \uace0\ub974\uae30 \u00b7 \uac00\uac8c \ubaa9\ub85d \ubc1b\uae30\ub294 3\ub2e8\uacc4\uc5d0\uc11c \uc5d4\uc9c4\uc73c\ub85c \uc654\ub2e4.)
 //   \uc2dc\uac04\uc740 \ud55c\uad6d\uc2dc\uac04 \uae30\uc900(\uc608\uc804 \uc6f9\uc740 \uae30\uae30 \uc2dc\uac04\ub300; \ud55c\uad6d \uc571\uc774\ub77c \uac19\ub2e4). \ubb34\uc791\uc704\ub294 \uc528\uc557(seed)\uc73c\ub85c \uc815\ud574 \uac19\uc740 \uc785\ub825\uc774\uba74 \uac19\uc740 \uacb0\uacfc(\uc2dc\ud5d8\uc774 \uac00\ub2a5\ud558\ub2e4).
 //
 // \ucd9c\ub825\uc5d0\ub294 \ub354\ud574\uc11c pip:{title,lines}(\uc791\uc740 \ud654\uba74 \ubb38\uad6c) \u00b7 ad:{k,a,b,m,pn,piIdx}|null(\uc624\ubc84\ub808\uc774 \ucd94\ucc9c \uc904) \ub3c4 \ub4e4\uc5b4 \uc788\ub2e4(\uc54c\ub9bc \ubcf8\ubb38 \uadf8\ub300\ub85c \uc4f8 \ub54c).
 //   recoPip({ a:{remMin,menu,brunch,hook,spots,shopN,cx,dinner}, slot, dest, body, nowMs, seed }) \u2192 { v:1, pip } \u2014 \ubcf8\ubb38 \ud55c \uc904\uc774 AI \ubb38\uad6c\ub85c \ubc14\ub010 \uacbd\uc6b0 \uc791\uc740 \ud654\uba74 \ubb38\uad6c\ub9cc \ub2e4\uc2dc \ub9cc\ub4e0\ub2e4.
-// recoAlert({ arrMs, nowMs, dest, weather:{temp,feel,tmin,tmax,rain,txt}|null, food:[{n,c,d}]|null, recent:[\uc774\ub984\u2026], shop:{n,_t,_cat}|null, seed })
+// 3\ub2e8\uacc4(2026-10-19): \u2464 \ucfe0\ud321 \uc0c1\ud488 \uace0\ub974\uae30(pickShop:1 + shopRecent:[\uc774\ub984\u2026] \u2192 \uc5d4\uc9c4\uc774 \uc1fc\ud551 \uc11c\ubc84 \ubaa9\ub85d\uc5d0\uc11c \uace8\ub77c shopItem:{n,u,i,_cat,_t} \ub85c \ub3cc\ub824\uc900\ub2e4; \ubabb \uace0\ub974\uba74 shopMiss:true)
+//   \u2465 \ub3c4\ucc29\uc9c0 \uac00\uac8c \ubaa9\ub85d \ubc1b\uae30(foodPref:'server' + loc:{lat,lng}=\uc5ed\u00b7\uc815\ub958\uc7a5 \uc88c\ud45c \u2192 \uc5d4\uc9c4\uc774 \ub9db\uc9d1 \uc11c\ubc84\uc5d0\uc11c \ubc1b\uc544 foods:[{n,c,a,d}] \ub85c \ub3cc\ub824\uc900\ub2e4; \ubabb \ubc1b\uc73c\uba74 \uc571\uc774 \ubcf4\ub0b8 food \ub97c \uc4f4\ub2e4)
+// recoAlert({ arrMs, nowMs, dest, weather:{temp,feel,tmin,tmax,rain,txt}|null, food:[{n,c,d}]|null, recent:[\uc774\ub984\u2026], shop:{n,_t,_cat}|null, seed, pickShop?, shopRecent?, foodPref?, loc? }, ext?)
 //   \u2192 { v:1, slot, kind, title, body, remMin, dinner, menu, brunch, spots, placeIdx(-1=\uc5c6\uc74c), hook, hookStrong, cx, shop(true|false) }   (\uc2ac\ub86f\uc774 'none' \uc774\uba74 { v:1, slot:'none' })
 
 var RTX_V = 1;
@@ -14669,6 +14671,8 @@ function rtxBuild(inp) {
   // \u2500\u2500 19:31~24:00 \u00b7 \ucfe0\ud321 \uc544\uc774\ud15c \ucd94\ucc9c \u2500\u2500
   if (slot === 'shop') {
     var it = (inp.shop && inp.shop.n) ? inp.shop : null;
+    var picked = null;
+    if (!it && inp.pickShop) { picked = rtxPickShopItem(inp); if (picked) it = picked; }     // \uc571\uc774 \uace0\ub978 \uc0c1\ud488\uc774 \uc5c6\uc73c\uba74 \uc5d4\uc9c4\uc774 \uace0\ub978\ub2e4
     var shHook = rtxHook('shop', cx);
     lines.push(shHook.t);
     if (it) {
@@ -14681,11 +14685,14 @@ function rtxBuild(inp) {
     }
     lines.push('');
     lines.push(RTX_CLOSE_EVE[Math.floor(RTX_RND() * RTX_CLOSE_EVE.length)]);
-    return {
+    var shopOut = {
       v: RTX_V, title: '\ud83d\ude89 \ud558\ucc28 ' + remMin + '\ubd84 \uc804' + (destStn ? ' \u00b7 ' + destStn : '') + ' \ud83d\udecd',
       body: lines.join('\n'), kind: 'shop', slot: slot, remMin: remMin,
       shop: !!it, hook: shHook.t, hookStrong: shHook.strong, cx: cx
     };
+    if (picked) shopOut.shopItem = picked;                                           // \uc5d4\uc9c4\uc774 \uace0\ub978 \uc0c1\ud488(\ub9c1\ud06c\u00b7\uadf8\ub9bc \ud3ec\ud568)
+    else if (inp.pickShop && !(inp.shop && inp.shop.n)) shopOut.shopMiss = true;      // \ubabb \uace8\ub790\ub2e4 \u2192 \uc571\uc774 \uc608\uc804 \uaddc\uce59\uc73c\ub85c \uace0\ub974\uace0 \ub2e4\uc2dc \ubb3b\ub294\ub2e4
+    return shopOut;
   }
 
   var isLunch = (slot === 'lunch');
@@ -14776,18 +14783,52 @@ function rtxClean(b) {
   if (Array.isArray(b.food)) food = b.food.slice(0, 300).map(function (x) { x = (x && typeof x === 'object') ? x : {}; return { n: rtxStr(x.n, 60), c: rtxStr(x.c, 100), d: rtxNum(x.d) }; });
   var recent = Array.isArray(b.recent) ? b.recent.slice(0, 40).map(function (x) { return rtxStr(x, 60); }) : [];
   var sh = (b.shop && typeof b.shop === 'object' && typeof b.shop.n === 'string' && b.shop.n) ? { n: rtxStr(b.shop.n, 120), _t: rtxStr(b.shop._t, 30), _cat: rtxStr(b.shop._cat, 40) } : null;
-  return { arrMs: Number(b.arrMs), nowMs: Number(b.nowMs), dest: rtxStr(b.dest, 60), weather: wx, food: food, recent: recent, shop: sh, seed: Number(b.seed) };
+  var shopRecent = Array.isArray(b.shopRecent) ? b.shopRecent.slice(0, 40).map(function (x) { return rtxStr(x, 120); }) : [];
+  return { arrMs: Number(b.arrMs), nowMs: Number(b.nowMs), dest: rtxStr(b.dest, 60), weather: wx, food: food, recent: recent, shop: sh, seed: Number(b.seed),
+           pickShop: b.pickShop === 1 || b.pickShop === true, shopRecent: shopRecent, foodPref: b.foodPref === 'server' ? 'server' : '', loc: rtxLoc(b.loc), ext: null };
 }
-function recoAlert(b) {
+// \ub3c4\ucc29\uc9c0 \uc88c\ud45c(\uc5ed\u00b7\uc815\ub958\uc7a5 \uc88c\ud45c \u2014 \uc9d1\u00b7\uc9c1\uc7a5 \uc88c\ud45c\uac00 \uc544\ub2c8\ub2e4). \ud55c\uad6d \ubc94\uc704 \ubc16\uc774\uac70\ub098 \uc22b\uc790\uac00 \uc544\ub2c8\uba74 \uc5c6\ub294 \uac83\uc73c\ub85c \ubcf8\ub2e4
+function rtxLoc(v) {
+  if (!v || typeof v !== 'object') return null;
+  var la = Number(v.lat), ln = Number(v.lng);
+  if (!isFinite(la) || !isFinite(ln) || la < 33 || la > 39 || ln < 124 || ln > 132) return null;
+  return { lat: Math.round(la * 100000) / 100000, lng: Math.round(ln * 100000) / 100000 };
+}
+// \ucfe0\ud321 \uc0c1\ud488 \uace0\ub974\uae30 \u2014 \uc1fc\ud551 \uc5d4\uc9c4(shop.js)\uc758 \ucd94\ucc9c 100\uc120\uc5d0\uc11c \uc704 30\uac1c \uc911 \ucd5c\uadfc \ucd94\ucc9c\ud558\uc9c0 \uc54a\uc740 \uac83 \ud558\ub098(\uc608\uc804 \uc6f9 _arrPickShopItem \uacfc \uac19\uc740 \uaddc\uce59, \ubb34\uc791\uc704\ub9cc \uc528\uc557\uc73c\ub85c)
+function rtxShopFn(name) { var f = (name === 'pick') ? (typeof shopPick === 'function' ? shopPick : null) : (typeof shopClock === 'function' ? shopClock : null); if (f) return f; var m = require('./shop'); return name === 'pick' ? m.shopPick : m.shopClock; }
+function rtxPickShopItem(inp) {
+  try {
+    var ex = inp.ext && inp.ext.shop;
+    if (!ex || !ex.data) return null;
+    var pick = rtxShopFn('pick')(ex.data, rtxShopFn('clock')(inp.nowMs, 540), inp.weather || null, ex.cfg || null);
+    var rec = (pick && pick.rec) ? pick.rec.slice(0, 30) : [];
+    if (!rec.length) return null;
+    var recent = inp.shopRecent || [];
+    var pool = rec.filter(function (x) { return recent.indexOf(x.n) < 0; });
+    if (!pool.length) pool = rec;
+    var it = pool[Math.floor(RTX_RND() * pool.length)];
+    if (!it || !it.n || typeof it.u !== 'string' || !/^https?:\/\//i.test(it.u)) return null;     // \ub9c1\ud06c\uac00 \uc774\uc0c1\ud55c \uc0c1\ud488\uc740 \uc4f0\uc9c0 \uc54a\ub294\ub2e4
+    return { n: rtxStr(it.n, 120), u: it.u, i: (typeof it.i === 'string' && /^https?:\/\//i.test(it.i)) ? it.i : '', _cat: rtxStr(it._cat, 40), _t: rtxStr(it._t, 30) };
+  } catch (e) { return null; }
+}
+function recoAlert(b, ext) {
   var inp = rtxClean(b);
   if (!isFinite(inp.arrMs) || !isFinite(inp.nowMs)) return { v: RTX_V, slot: 'none', bad: true };
+  inp.ext = (ext && typeof ext === 'object') ? ext : {};
+  // \uac00\uac8c \ubaa9\ub85d: \uc571\uc774 '\uc11c\ubc84 \ubaa9\ub85d\uc73c\ub85c' \ud558\ub77c\uace0 \ud588\uace0 \uc5d4\uc9c4\uc774 \ub9db\uc9d1 \uc11c\ubc84\uc5d0\uc11c \ubc1b\uc544 \uc654\uc73c\uba74 \uadf8\uac78 \uc4f4\ub2e4(\uc5c6\uc73c\uba74 \uc571\uc774 \ubcf4\ub0b8 \ubaa9\ub85d)
+  var foodsOut = null;
+  if (inp.foodPref === 'server' && inp.ext.foods && inp.ext.foods.length) {
+    foodsOut = inp.ext.foods.slice(0, 200);
+    inp.food = foodsOut.map(function (x) { return { n: x.n, c: x.c, d: x.d }; });
+  }
   var r = rtxBuild(inp);
   if (r.slot === 'none') return r;
+  if (foodsOut && r.slot !== 'shop') r.foods = foodsOut;
   // \uc791\uc740 \ud654\uba74 \ubb38\uad6c \u00b7 \uc624\ubc84\ub808\uc774 \ucd94\ucc9c \uc904 \u2014 \uc608\uc804\uc5d4 \uc54c\ub9bc\uc744 \ubcf4\ub0b8 \ub4a4 \uc6f9\uc774 \uc54c\ub9bc \uc815\ubcf4(a)\ub85c \ub530\ub85c \ub9cc\ub4e4\uc5c8\ub2e4. \uac19\uc740 \uc815\ubcf4\ub85c \uc5d4\uc9c4\uc774 \uc774\uc5b4\uc11c \ub9cc\ub4e0\ub2e4(\ubb34\uc791\uc704 \ud750\ub984\ub3c4 \uc774\uc5b4\uc9c4\ub2e4).
   RTX_FOOD = inp.food;
   var a = { title: r.title, body: r.body, kind: r.kind, slot: r.slot, remMin: r.remMin, dinner: r.dinner, menu: r.menu, brunch: r.brunch, spots: r.spots,
             place: (r.placeIdx >= 0 && inp.food) ? inp.food[r.placeIdx] : null, hook: r.hook, hookStrong: r.hookStrong, cx: r.cx };
-  if (r.kind === 'shop') { a.shop = inp.shop || null; delete a.place; delete a.dinner; delete a.menu; delete a.brunch; delete a.spots; }
+  if (r.kind === 'shop') { a.shop = r.shopItem || inp.shop || null; delete a.place; delete a.dinner; delete a.menu; delete a.brunch; delete a.spots; }
   try { r.pip = rtxPipText(a, r.slot, inp.dest, r.body); } catch (e) { r.pip = null; }
   try { r.ad = rtxAd(a, r.slot, inp.dest); } catch (e2) { r.ad = null; }
   return r;
@@ -14806,6 +14847,36 @@ function recoPip(b) {
   return { v: RTX_V, pip: rtxPipText(a, slot, rtxStr(b.dest, 60), rtxStr(b.body, 2000)) };
 }
 
+// \u2500\u2500 \ubc14\uae65 \uc790\uc6d0(\uc1fc\ud551 \uc0c1\ud488 \ubaa9\ub85d \u00b7 \ub9db\uc9d1 \uc11c\ubc84) \u2014 Worker \uc548\uc5d0\uc11c\ub9cc \ubd80\ub978\ub2e4. \uc2dc\ud5d8\uc740 rtxSetLoaders \ub85c \uac00\uc9dc\ub97c \ub07c\uc6b4\ub2e4 \u2500\u2500
+var RTX_FOOD_URL = 'https://gildongmu-food.phg0643.workers.dev';
+var RTX_FOOD_MEM = {};
+var RTX_LOADERS = { shop: null, food: null };
+function rtxSetLoaders(o) { RTX_LOADERS = { shop: (o && o.shop) || null, food: (o && o.food) || null }; RTX_FOOD_MEM = {}; }
+function rtxLoadShop() {
+  if (RTX_LOADERS.shop) return Promise.resolve().then(RTX_LOADERS.shop).catch(function () { return null; });
+  if (typeof shopLoad !== 'function') return Promise.resolve(null);
+  return shopLoad().then(function (m) { return (m && m.data) ? { data: m.data, cfg: m.cfg || null } : null; }, function () { return null; });
+}
+function rtxLoadFood(loc) {
+  if (RTX_LOADERS.food) return Promise.resolve().then(function () { return RTX_LOADERS.food(loc); }).catch(function () { return null; });
+  var key = loc.lat + ',' + loc.lng, now = Date.now(), hit = RTX_FOOD_MEM[key];
+  if (hit && now - hit.ts < 600000) return Promise.resolve(hit.items);
+  if (typeof fetch !== 'function') return Promise.resolve(null);
+  var ac = (typeof AbortController === 'function') ? new AbortController() : null;
+  var tm = ac ? setTimeout(function () { ac.abort(); }, 1800) : null;
+  return fetch(RTX_FOOD_URL + '/food?lat=' + loc.lat + '&lng=' + loc.lng + '&r=800&limit=200', ac ? { signal: ac.signal } : undefined)
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (d) {
+      if (tm) clearTimeout(tm);
+      var it = (d && Array.isArray(d.items)) ? d.items.slice(0, 200).map(function (x) { x = (x && typeof x === 'object') ? x : {}; return { n: rtxStr(x.n, 60), c: rtxStr(x.c, 100), a: rtxStr(x.a, 120), d: rtxNum(x.d) }; }).filter(function (x) { return !!x.n; }) : [];
+      if (!it.length) return null;
+      if (Object.keys(RTX_FOOD_MEM).length > 40) RTX_FOOD_MEM = {};
+      RTX_FOOD_MEM[key] = { ts: now, items: it };
+      return it;
+    })
+    .catch(function () { if (tm) clearTimeout(tm); return null; });
+}
+
 // \u2500\u2500 Worker \uc5f0\uacb0\ubd80 \u2014 POST /reco-text {\u2026} (handleFetch \uc5d0 \uae38\uc744 \ub454\ub2e4) \u2500\u2500
 function handleRecoText(request) {
   var H = { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'access-control-allow-methods': 'POST, OPTIONS', 'access-control-allow-headers': 'content-type', 'cache-control': 'no-store' };
@@ -14815,10 +14886,21 @@ function handleRecoText(request) {
     if (raw.length > 60000) return new Response(JSON.stringify({ ok: false, error: 'body-too-long' }), { status: 413, headers: H });
     var body;
     try { body = JSON.parse(raw); } catch (e0) { return new Response(JSON.stringify({ ok: false, error: 'bad-json' }), { status: 400, headers: H }); }
-    var out;
-    try { out = (body && body.op === 'pip') ? recoPip(body) : recoAlert(body); } catch (e) { return new Response(JSON.stringify({ ok: false, error: String(e && e.message || e) }), { status: 500, headers: H }); }
-    out.ok = true;
-    return new Response(JSON.stringify(out), { headers: H });
+    var isPip = !!(body && body.op === 'pip');
+    var needShop = false, loc = null;
+    if (!isPip && body && typeof body === 'object') {
+      try {
+        var sl = rtxArrFn('slot')(Number(body.arrMs));
+        needShop = sl === 'shop' && (body.pickShop === 1 || body.pickShop === true) && !(body.shop && body.shop.n);
+        if (sl !== 'shop' && sl !== 'none' && body.foodPref === 'server') loc = rtxLoc(body.loc);
+      } catch (e1) { /* \uc2dc\uac04\ub300\ub97c \ubabb \uc77d\uc73c\uba74 \uc544\ubb34\uac83\ub3c4 \uc548 \ubc1b\ub294\ub2e4 */ }
+    }
+    return Promise.all([needShop ? rtxLoadShop() : null, loc ? rtxLoadFood(loc) : null]).then(function (res) {
+      var out;
+      try { out = isPip ? recoPip(body) : recoAlert(body, { shop: res[0], foods: res[1] }); } catch (e) { return new Response(JSON.stringify({ ok: false, error: String(e && e.message || e) }), { status: 500, headers: H }); }
+      out.ok = true;
+      return new Response(JSON.stringify(out), { headers: H });
+    });
   }, function () { return new Response(JSON.stringify({ ok: false, error: 'read-fail' }), { status: 400, headers: H }); });
 }
 

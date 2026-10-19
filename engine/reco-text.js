@@ -4,12 +4,14 @@
 //   하차 전 추천 알림의 '본문 만들기' — ① 날씨·요일·시간으로 상황 읽기(cx) ② 상황 문구 고르기(hook) ③ 메뉴·가게 고르기(음료·브런치·밥집·근처 가게) ④ 줄 맞춰 조립(제목·본문)
 //   은 예전엔 웹(www/index.html)의 _arrBuildAlert · _arrCx · _arrHook · _arrShopLine · _arrPickPlace · _arrSpotsFor … 가 했다. 이 모듈은 같은 규칙을 엔진이 하게 한다.
 //   아래 표(문구 풀 · 상황 규칙 · 조사 함수)는 웹 코드를 글자 그대로 옮긴 것이라 문구가 같다. 앱(웹)은 '지금 날씨 · 근처 가게 목록 · 최근 추천한 곳 · 고른 쿠팡 상품 · 무작위 씨앗' 만 알리고,
-//   돌아온 제목·본문·메뉴·가게를 그대로 보여준다. (쿠팡 상품 *고르기* · 작은 화면(PiP) 문구 · 오버레이 광고 줄은 이 조각 밖 — 웹에 남는다.)
+//   돌아온 제목·본문·메뉴·가게를 그대로 보여준다. (작은 화면(PiP) 문구 · 오버레이 광고 줄은 2단계, 쿠팡 상품 고르기 · 가게 목록 받기는 3단계에서 엔진으로 왔다.)
 //   시간은 한국시간 기준(예전 웹은 기기 시간대; 한국 앱이라 같다). 무작위는 씨앗(seed)으로 정해 같은 입력이면 같은 결과(시험이 가능하다).
 //
 // 출력에는 더해서 pip:{title,lines}(작은 화면 문구) · ad:{k,a,b,m,pn,piIdx}|null(오버레이 추천 줄) 도 들어 있다(알림 본문 그대로 쓸 때).
 //   recoPip({ a:{remMin,menu,brunch,hook,spots,shopN,cx,dinner}, slot, dest, body, nowMs, seed }) → { v:1, pip } — 본문 한 줄이 AI 문구로 바뀐 경우 작은 화면 문구만 다시 만든다.
-// recoAlert({ arrMs, nowMs, dest, weather:{temp,feel,tmin,tmax,rain,txt}|null, food:[{n,c,d}]|null, recent:[이름…], shop:{n,_t,_cat}|null, seed })
+// 3단계(2026-10-19): ⑤ 쿠팡 상품 고르기(pickShop:1 + shopRecent:[이름…] → 엔진이 쇼핑 서버 목록에서 골라 shopItem:{n,u,i,_cat,_t} 로 돌려준다; 못 고르면 shopMiss:true)
+//   ⑥ 도착지 가게 목록 받기(foodPref:'server' + loc:{lat,lng}=역·정류장 좌표 → 엔진이 맛집 서버에서 받아 foods:[{n,c,a,d}] 로 돌려준다; 못 받으면 앱이 보낸 food 를 쓴다)
+// recoAlert({ arrMs, nowMs, dest, weather:{temp,feel,tmin,tmax,rain,txt}|null, food:[{n,c,d}]|null, recent:[이름…], shop:{n,_t,_cat}|null, seed, pickShop?, shopRecent?, foodPref?, loc? }, ext?)
 //   → { v:1, slot, kind, title, body, remMin, dinner, menu, brunch, spots, placeIdx(-1=없음), hook, hookStrong, cx, shop(true|false) }   (슬롯이 'none' 이면 { v:1, slot:'none' })
 'use strict';
 
@@ -611,6 +613,8 @@ function rtxBuild(inp) {
   // ── 19:31~24:00 · 쿠팡 아이템 추천 ──
   if (slot === 'shop') {
     var it = (inp.shop && inp.shop.n) ? inp.shop : null;
+    var picked = null;
+    if (!it && inp.pickShop) { picked = rtxPickShopItem(inp); if (picked) it = picked; }     // 앱이 고른 상품이 없으면 엔진이 고른다
     var shHook = rtxHook('shop', cx);
     lines.push(shHook.t);
     if (it) {
@@ -623,11 +627,14 @@ function rtxBuild(inp) {
     }
     lines.push('');
     lines.push(RTX_CLOSE_EVE[Math.floor(RTX_RND() * RTX_CLOSE_EVE.length)]);
-    return {
+    var shopOut = {
       v: RTX_V, title: '🚉 하차 ' + remMin + '분 전' + (destStn ? ' · ' + destStn : '') + ' 🛍',
       body: lines.join('\n'), kind: 'shop', slot: slot, remMin: remMin,
       shop: !!it, hook: shHook.t, hookStrong: shHook.strong, cx: cx
     };
+    if (picked) shopOut.shopItem = picked;                                           // 엔진이 고른 상품(링크·그림 포함)
+    else if (inp.pickShop && !(inp.shop && inp.shop.n)) shopOut.shopMiss = true;      // 못 골랐다 → 앱이 예전 규칙으로 고르고 다시 묻는다
+    return shopOut;
   }
 
   var isLunch = (slot === 'lunch');
@@ -718,18 +725,52 @@ function rtxClean(b) {
   if (Array.isArray(b.food)) food = b.food.slice(0, 300).map(function (x) { x = (x && typeof x === 'object') ? x : {}; return { n: rtxStr(x.n, 60), c: rtxStr(x.c, 100), d: rtxNum(x.d) }; });
   var recent = Array.isArray(b.recent) ? b.recent.slice(0, 40).map(function (x) { return rtxStr(x, 60); }) : [];
   var sh = (b.shop && typeof b.shop === 'object' && typeof b.shop.n === 'string' && b.shop.n) ? { n: rtxStr(b.shop.n, 120), _t: rtxStr(b.shop._t, 30), _cat: rtxStr(b.shop._cat, 40) } : null;
-  return { arrMs: Number(b.arrMs), nowMs: Number(b.nowMs), dest: rtxStr(b.dest, 60), weather: wx, food: food, recent: recent, shop: sh, seed: Number(b.seed) };
+  var shopRecent = Array.isArray(b.shopRecent) ? b.shopRecent.slice(0, 40).map(function (x) { return rtxStr(x, 120); }) : [];
+  return { arrMs: Number(b.arrMs), nowMs: Number(b.nowMs), dest: rtxStr(b.dest, 60), weather: wx, food: food, recent: recent, shop: sh, seed: Number(b.seed),
+           pickShop: b.pickShop === 1 || b.pickShop === true, shopRecent: shopRecent, foodPref: b.foodPref === 'server' ? 'server' : '', loc: rtxLoc(b.loc), ext: null };
 }
-function recoAlert(b) {
+// 도착지 좌표(역·정류장 좌표 — 집·직장 좌표가 아니다). 한국 범위 밖이거나 숫자가 아니면 없는 것으로 본다
+function rtxLoc(v) {
+  if (!v || typeof v !== 'object') return null;
+  var la = Number(v.lat), ln = Number(v.lng);
+  if (!isFinite(la) || !isFinite(ln) || la < 33 || la > 39 || ln < 124 || ln > 132) return null;
+  return { lat: Math.round(la * 100000) / 100000, lng: Math.round(ln * 100000) / 100000 };
+}
+// 쿠팡 상품 고르기 — 쇼핑 엔진(shop.js)의 추천 100선에서 위 30개 중 최근 추천하지 않은 것 하나(예전 웹 _arrPickShopItem 과 같은 규칙, 무작위만 씨앗으로)
+function rtxShopFn(name) { var f = (name === 'pick') ? (typeof shopPick === 'function' ? shopPick : null) : (typeof shopClock === 'function' ? shopClock : null); if (f) return f; var m = require('./shop'); return name === 'pick' ? m.shopPick : m.shopClock; }
+function rtxPickShopItem(inp) {
+  try {
+    var ex = inp.ext && inp.ext.shop;
+    if (!ex || !ex.data) return null;
+    var pick = rtxShopFn('pick')(ex.data, rtxShopFn('clock')(inp.nowMs, 540), inp.weather || null, ex.cfg || null);
+    var rec = (pick && pick.rec) ? pick.rec.slice(0, 30) : [];
+    if (!rec.length) return null;
+    var recent = inp.shopRecent || [];
+    var pool = rec.filter(function (x) { return recent.indexOf(x.n) < 0; });
+    if (!pool.length) pool = rec;
+    var it = pool[Math.floor(RTX_RND() * pool.length)];
+    if (!it || !it.n || typeof it.u !== 'string' || !/^https?:\/\//i.test(it.u)) return null;     // 링크가 이상한 상품은 쓰지 않는다
+    return { n: rtxStr(it.n, 120), u: it.u, i: (typeof it.i === 'string' && /^https?:\/\//i.test(it.i)) ? it.i : '', _cat: rtxStr(it._cat, 40), _t: rtxStr(it._t, 30) };
+  } catch (e) { return null; }
+}
+function recoAlert(b, ext) {
   var inp = rtxClean(b);
   if (!isFinite(inp.arrMs) || !isFinite(inp.nowMs)) return { v: RTX_V, slot: 'none', bad: true };
+  inp.ext = (ext && typeof ext === 'object') ? ext : {};
+  // 가게 목록: 앱이 '서버 목록으로' 하라고 했고 엔진이 맛집 서버에서 받아 왔으면 그걸 쓴다(없으면 앱이 보낸 목록)
+  var foodsOut = null;
+  if (inp.foodPref === 'server' && inp.ext.foods && inp.ext.foods.length) {
+    foodsOut = inp.ext.foods.slice(0, 200);
+    inp.food = foodsOut.map(function (x) { return { n: x.n, c: x.c, d: x.d }; });
+  }
   var r = rtxBuild(inp);
   if (r.slot === 'none') return r;
+  if (foodsOut && r.slot !== 'shop') r.foods = foodsOut;
   // 작은 화면 문구 · 오버레이 추천 줄 — 예전엔 알림을 보낸 뒤 웹이 알림 정보(a)로 따로 만들었다. 같은 정보로 엔진이 이어서 만든다(무작위 흐름도 이어진다).
   RTX_FOOD = inp.food;
   var a = { title: r.title, body: r.body, kind: r.kind, slot: r.slot, remMin: r.remMin, dinner: r.dinner, menu: r.menu, brunch: r.brunch, spots: r.spots,
             place: (r.placeIdx >= 0 && inp.food) ? inp.food[r.placeIdx] : null, hook: r.hook, hookStrong: r.hookStrong, cx: r.cx };
-  if (r.kind === 'shop') { a.shop = inp.shop || null; delete a.place; delete a.dinner; delete a.menu; delete a.brunch; delete a.spots; }
+  if (r.kind === 'shop') { a.shop = r.shopItem || inp.shop || null; delete a.place; delete a.dinner; delete a.menu; delete a.brunch; delete a.spots; }
   try { r.pip = rtxPipText(a, r.slot, inp.dest, r.body); } catch (e) { r.pip = null; }
   try { r.ad = rtxAd(a, r.slot, inp.dest); } catch (e2) { r.ad = null; }
   return r;
@@ -748,6 +789,36 @@ function recoPip(b) {
   return { v: RTX_V, pip: rtxPipText(a, slot, rtxStr(b.dest, 60), rtxStr(b.body, 2000)) };
 }
 
+// ── 바깥 자원(쇼핑 상품 목록 · 맛집 서버) — Worker 안에서만 부른다. 시험은 rtxSetLoaders 로 가짜를 끼운다 ──
+var RTX_FOOD_URL = 'https://gildongmu-food.phg0643.workers.dev';
+var RTX_FOOD_MEM = {};
+var RTX_LOADERS = { shop: null, food: null };
+function rtxSetLoaders(o) { RTX_LOADERS = { shop: (o && o.shop) || null, food: (o && o.food) || null }; RTX_FOOD_MEM = {}; }
+function rtxLoadShop() {
+  if (RTX_LOADERS.shop) return Promise.resolve().then(RTX_LOADERS.shop).catch(function () { return null; });
+  if (typeof shopLoad !== 'function') return Promise.resolve(null);
+  return shopLoad().then(function (m) { return (m && m.data) ? { data: m.data, cfg: m.cfg || null } : null; }, function () { return null; });
+}
+function rtxLoadFood(loc) {
+  if (RTX_LOADERS.food) return Promise.resolve().then(function () { return RTX_LOADERS.food(loc); }).catch(function () { return null; });
+  var key = loc.lat + ',' + loc.lng, now = Date.now(), hit = RTX_FOOD_MEM[key];
+  if (hit && now - hit.ts < 600000) return Promise.resolve(hit.items);
+  if (typeof fetch !== 'function') return Promise.resolve(null);
+  var ac = (typeof AbortController === 'function') ? new AbortController() : null;
+  var tm = ac ? setTimeout(function () { ac.abort(); }, 1800) : null;
+  return fetch(RTX_FOOD_URL + '/food?lat=' + loc.lat + '&lng=' + loc.lng + '&r=800&limit=200', ac ? { signal: ac.signal } : undefined)
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (d) {
+      if (tm) clearTimeout(tm);
+      var it = (d && Array.isArray(d.items)) ? d.items.slice(0, 200).map(function (x) { x = (x && typeof x === 'object') ? x : {}; return { n: rtxStr(x.n, 60), c: rtxStr(x.c, 100), a: rtxStr(x.a, 120), d: rtxNum(x.d) }; }).filter(function (x) { return !!x.n; }) : [];
+      if (!it.length) return null;
+      if (Object.keys(RTX_FOOD_MEM).length > 40) RTX_FOOD_MEM = {};
+      RTX_FOOD_MEM[key] = { ts: now, items: it };
+      return it;
+    })
+    .catch(function () { if (tm) clearTimeout(tm); return null; });
+}
+
 // ── Worker 연결부 — POST /reco-text {…} (handleFetch 에 길을 둔다) ──
 function handleRecoText(request) {
   var H = { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'access-control-allow-methods': 'POST, OPTIONS', 'access-control-allow-headers': 'content-type', 'cache-control': 'no-store' };
@@ -757,11 +828,22 @@ function handleRecoText(request) {
     if (raw.length > 60000) return new Response(JSON.stringify({ ok: false, error: 'body-too-long' }), { status: 413, headers: H });
     var body;
     try { body = JSON.parse(raw); } catch (e0) { return new Response(JSON.stringify({ ok: false, error: 'bad-json' }), { status: 400, headers: H }); }
-    var out;
-    try { out = (body && body.op === 'pip') ? recoPip(body) : recoAlert(body); } catch (e) { return new Response(JSON.stringify({ ok: false, error: String(e && e.message || e) }), { status: 500, headers: H }); }
-    out.ok = true;
-    return new Response(JSON.stringify(out), { headers: H });
+    var isPip = !!(body && body.op === 'pip');
+    var needShop = false, loc = null;
+    if (!isPip && body && typeof body === 'object') {
+      try {
+        var sl = rtxArrFn('slot')(Number(body.arrMs));
+        needShop = sl === 'shop' && (body.pickShop === 1 || body.pickShop === true) && !(body.shop && body.shop.n);
+        if (sl !== 'shop' && sl !== 'none' && body.foodPref === 'server') loc = rtxLoc(body.loc);
+      } catch (e1) { /* 시간대를 못 읽으면 아무것도 안 받는다 */ }
+    }
+    return Promise.all([needShop ? rtxLoadShop() : null, loc ? rtxLoadFood(loc) : null]).then(function (res) {
+      var out;
+      try { out = isPip ? recoPip(body) : recoAlert(body, { shop: res[0], foods: res[1] }); } catch (e) { return new Response(JSON.stringify({ ok: false, error: String(e && e.message || e) }), { status: 500, headers: H }); }
+      out.ok = true;
+      return new Response(JSON.stringify(out), { headers: H });
+    });
   }, function () { return new Response(JSON.stringify({ ok: false, error: 'read-fail' }), { status: 400, headers: H }); });
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { recoAlert: recoAlert, recoPip: recoPip, rtxCx: rtxCx, rtxHook: rtxHook, rtxShopLine: rtxShopLine, rtxFixJosa: rtxFixJosa, rtxMulberry: rtxMulberry, handleRecoText: handleRecoText, RTX_V: RTX_V };
+if (typeof module !== 'undefined' && module.exports) module.exports = { recoAlert: recoAlert, recoPip: recoPip, rtxCx: rtxCx, rtxHook: rtxHook, rtxShopLine: rtxShopLine, rtxFixJosa: rtxFixJosa, rtxMulberry: rtxMulberry, handleRecoText: handleRecoText, rtxSetLoaders: rtxSetLoaders, RTX_V: RTX_V };
