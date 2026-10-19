@@ -13,6 +13,10 @@
 //   osOk : OS 예약 알림이 걸려 있으면 앱이 또 보내지 않는다(두 번 울림 방지)
 // cmOccurrences({ nowMs, morn, eve, days })
 //   → { v:1, morn:[ms…], eve:[ms…] }   앞으로 28일치(선택한 요일만, 지금보다 2초 넘게 뒤인 시각만)
+// 2026-10-19(s64) cmPreDue({ nowMs, morn, eve, days, ageMorn, ageEve })  (op:'pre')  ← 출퇴근 경로 '미리 받기' 때를 정한다(예전 웹 _commutePrefetch 의 시각 판단)
+//   → { v:1, due:[ 'morn' | 'eve' … ] }   지금이 그 시각의 -45분 ~ +20분 안이고(자정 넘김 처리) 설정한 요일이며, 같은 구간을 20분 안에 이미 받지 않았으면 그 이름이 들어 있다(출근 → 퇴근 순서).
+//   ageMorn / ageEve : 앱이 그 구간(집↔회사)을 마지막으로 미리 받은 지 몇 ms 지났나(없으면 null). 구간 이름·좌표는 보내지 않는다 — 시각·요일·경과 시간만.
+//   앱은 due 순서대로 저장된 장소(좌표)가 있는 첫 것만 받는다(예전과 같다: 한 번에 한 구간).
 'use strict';
 
 var CM_ALARM_V = 1;
@@ -78,7 +82,27 @@ function cmOccurrences(o) {
   return { v: CM_ALARM_V, morn: cmOne(now, o.morn, days), eve: cmOne(now, o.eve, days) };
 }
 
-// ── Worker 연결부 — POST /commute-alarm {op:'due'|'occ', …} (handleFetch 에 길을 둔다) ──
+var CM_PRE_BEFORE = 45, CM_PRE_AFTER = 20, CM_PRE_AGE_MS = 20 * 60 * 1000;
+function cmHm(str) { var m = /^(\d{1,2}):(\d{2})$/.exec(String(str == null ? '' : str)); return m ? (+m[1]) * 60 + (+m[2]) : null; }
+function cmPreDue(o) {
+  o = o || {};
+  var r = { v: CM_ALARM_V, due: [] };
+  var now = Number(o.nowMs); if (!isFinite(now)) return r;
+  var p = cmParts(now);
+  if (!cmDayOn(o.days, p.dow)) return r;                                   // 설정한 요일에만(비어 있으면 매일)
+  var nowM = p.h * 60 + p.mi;
+  [['morn', o.morn, o.ageMorn], ['eve', o.eve, o.ageEve]].forEach(function (c) {
+    var tm = cmHm(c[1]); if (tm == null) return;
+    var diff = nowM - tm; if (diff > 720) diff -= 1440; if (diff < -720) diff += 1440;
+    if (diff < -CM_PRE_BEFORE || diff > CM_PRE_AFTER) return;
+    var age = (c[2] === null || c[2] === undefined || c[2] === '') ? null : Number(c[2]);
+    if (age !== null && isFinite(age) && age < CM_PRE_AGE_MS) return;     // 같은 구간은 20분에 한 번만
+    r.due.push(c[0]);
+  });
+  return r;
+}
+
+// ── Worker 연결부 — POST /commute-alarm {op:'due'|'occ'|'pre', …} (handleFetch 에 길을 둔다) ──
 function handleCommuteAlarm(request) {
   var H = { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'access-control-allow-methods': 'POST, OPTIONS', 'access-control-allow-headers': 'content-type', 'cache-control': 'no-store' };
   if (request.method === 'OPTIONS') return Promise.resolve(new Response(null, { status: 204, headers: H }));
@@ -88,10 +112,10 @@ function handleCommuteAlarm(request) {
     var body;
     try { body = JSON.parse(raw); } catch (e0) { return new Response(JSON.stringify({ ok: false, error: 'bad-json' }), { status: 400, headers: H }); }
     var out;
-    try { out = (body && body.op === 'occ') ? cmOccurrences(body) : cmDue(body); } catch (e) { return new Response(JSON.stringify({ ok: false, error: String(e && e.message || e) }), { status: 500, headers: H }); }
+    try { out = (body && body.op === 'occ') ? cmOccurrences(body) : (body && body.op === 'pre') ? cmPreDue(body) : cmDue(body); } catch (e) { return new Response(JSON.stringify({ ok: false, error: String(e && e.message || e) }), { status: 500, headers: H }); }
     out.ok = true;
     return new Response(JSON.stringify(out), { headers: H });
   }, function () { return new Response(JSON.stringify({ ok: false, error: 'read-fail' }), { status: 400, headers: H }); });
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { cmDue: cmDue, cmOccurrences: cmOccurrences, handleCommuteAlarm: handleCommuteAlarm, CM_ALARM_V: CM_ALARM_V, CM_OS_DAYS: CM_OS_DAYS };
+if (typeof module !== 'undefined' && module.exports) module.exports = { cmDue: cmDue, cmOccurrences: cmOccurrences, cmPreDue: cmPreDue, handleCommuteAlarm: handleCommuteAlarm, CM_ALARM_V: CM_ALARM_V, CM_OS_DAYS: CM_OS_DAYS };

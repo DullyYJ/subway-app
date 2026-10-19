@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-19s63";
+var ENGINE_VERSION = "route-v2-2026-10-19s64";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -13978,6 +13978,10 @@ async function handleScreenHome(request) {
 //   osOk : OS \uc608\uc57d \uc54c\ub9bc\uc774 \uac78\ub824 \uc788\uc73c\uba74 \uc571\uc774 \ub610 \ubcf4\ub0b4\uc9c0 \uc54a\ub294\ub2e4(\ub450 \ubc88 \uc6b8\ub9bc \ubc29\uc9c0)
 // cmOccurrences({ nowMs, morn, eve, days })
 //   \u2192 { v:1, morn:[ms\u2026], eve:[ms\u2026] }   \uc55e\uc73c\ub85c 28\uc77c\uce58(\uc120\ud0dd\ud55c \uc694\uc77c\ub9cc, \uc9c0\uae08\ubcf4\ub2e4 2\ucd08 \ub118\uac8c \ub4a4\uc778 \uc2dc\uac01\ub9cc)
+// 2026-10-19(s64) cmPreDue({ nowMs, morn, eve, days, ageMorn, ageEve })  (op:'pre')  \u2190 \ucd9c\ud1f4\uadfc \uacbd\ub85c '\ubbf8\ub9ac \ubc1b\uae30' \ub54c\ub97c \uc815\ud55c\ub2e4(\uc608\uc804 \uc6f9 _commutePrefetch \uc758 \uc2dc\uac01 \ud310\ub2e8)
+//   \u2192 { v:1, due:[ 'morn' | 'eve' \u2026 ] }   \uc9c0\uae08\uc774 \uadf8 \uc2dc\uac01\uc758 -45\ubd84 ~ +20\ubd84 \uc548\uc774\uace0(\uc790\uc815 \ub118\uae40 \ucc98\ub9ac) \uc124\uc815\ud55c \uc694\uc77c\uc774\uba70, \uac19\uc740 \uad6c\uac04\uc744 20\ubd84 \uc548\uc5d0 \uc774\ubbf8 \ubc1b\uc9c0 \uc54a\uc558\uc73c\uba74 \uadf8 \uc774\ub984\uc774 \ub4e4\uc5b4 \uc788\ub2e4(\ucd9c\uadfc \u2192 \ud1f4\uadfc \uc21c\uc11c).
+//   ageMorn / ageEve : \uc571\uc774 \uadf8 \uad6c\uac04(\uc9d1\u2194\ud68c\uc0ac)\uc744 \ub9c8\uc9c0\ub9c9\uc73c\ub85c \ubbf8\ub9ac \ubc1b\uc740 \uc9c0 \uba87 ms \uc9c0\ub0ac\ub098(\uc5c6\uc73c\uba74 null). \uad6c\uac04 \uc774\ub984\u00b7\uc88c\ud45c\ub294 \ubcf4\ub0b4\uc9c0 \uc54a\ub294\ub2e4 \u2014 \uc2dc\uac01\u00b7\uc694\uc77c\u00b7\uacbd\uacfc \uc2dc\uac04\ub9cc.
+//   \uc571\uc740 due \uc21c\uc11c\ub300\ub85c \uc800\uc7a5\ub41c \uc7a5\uc18c(\uc88c\ud45c)\uac00 \uc788\ub294 \uccab \uac83\ub9cc \ubc1b\ub294\ub2e4(\uc608\uc804\uacfc \uac19\ub2e4: \ud55c \ubc88\uc5d0 \ud55c \uad6c\uac04).
 
 var CM_ALARM_V = 1;
 var CM_OS_DAYS = 28;
@@ -14042,7 +14046,27 @@ function cmOccurrences(o) {
   return { v: CM_ALARM_V, morn: cmOne(now, o.morn, days), eve: cmOne(now, o.eve, days) };
 }
 
-// \u2500\u2500 Worker \uc5f0\uacb0\ubd80 \u2014 POST /commute-alarm {op:'due'|'occ', \u2026} (handleFetch \uc5d0 \uae38\uc744 \ub454\ub2e4) \u2500\u2500
+var CM_PRE_BEFORE = 45, CM_PRE_AFTER = 20, CM_PRE_AGE_MS = 20 * 60 * 1000;
+function cmHm(str) { var m = /^(\d{1,2}):(\d{2})$/.exec(String(str == null ? '' : str)); return m ? (+m[1]) * 60 + (+m[2]) : null; }
+function cmPreDue(o) {
+  o = o || {};
+  var r = { v: CM_ALARM_V, due: [] };
+  var now = Number(o.nowMs); if (!isFinite(now)) return r;
+  var p = cmParts(now);
+  if (!cmDayOn(o.days, p.dow)) return r;                                   // \uc124\uc815\ud55c \uc694\uc77c\uc5d0\ub9cc(\ube44\uc5b4 \uc788\uc73c\uba74 \ub9e4\uc77c)
+  var nowM = p.h * 60 + p.mi;
+  [['morn', o.morn, o.ageMorn], ['eve', o.eve, o.ageEve]].forEach(function (c) {
+    var tm = cmHm(c[1]); if (tm == null) return;
+    var diff = nowM - tm; if (diff > 720) diff -= 1440; if (diff < -720) diff += 1440;
+    if (diff < -CM_PRE_BEFORE || diff > CM_PRE_AFTER) return;
+    var age = (c[2] === null || c[2] === undefined || c[2] === '') ? null : Number(c[2]);
+    if (age !== null && isFinite(age) && age < CM_PRE_AGE_MS) return;     // \uac19\uc740 \uad6c\uac04\uc740 20\ubd84\uc5d0 \ud55c \ubc88\ub9cc
+    r.due.push(c[0]);
+  });
+  return r;
+}
+
+// \u2500\u2500 Worker \uc5f0\uacb0\ubd80 \u2014 POST /commute-alarm {op:'due'|'occ'|'pre', \u2026} (handleFetch \uc5d0 \uae38\uc744 \ub454\ub2e4) \u2500\u2500
 function handleCommuteAlarm(request) {
   var H = { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'access-control-allow-methods': 'POST, OPTIONS', 'access-control-allow-headers': 'content-type', 'cache-control': 'no-store' };
   if (request.method === 'OPTIONS') return Promise.resolve(new Response(null, { status: 204, headers: H }));
@@ -14052,7 +14076,7 @@ function handleCommuteAlarm(request) {
     var body;
     try { body = JSON.parse(raw); } catch (e0) { return new Response(JSON.stringify({ ok: false, error: 'bad-json' }), { status: 400, headers: H }); }
     var out;
-    try { out = (body && body.op === 'occ') ? cmOccurrences(body) : cmDue(body); } catch (e) { return new Response(JSON.stringify({ ok: false, error: String(e && e.message || e) }), { status: 500, headers: H }); }
+    try { out = (body && body.op === 'occ') ? cmOccurrences(body) : (body && body.op === 'pre') ? cmPreDue(body) : cmDue(body); } catch (e) { return new Response(JSON.stringify({ ok: false, error: String(e && e.message || e) }), { status: 500, headers: H }); }
     out.ok = true;
     return new Response(JSON.stringify(out), { headers: H });
   }, function () { return new Response(JSON.stringify({ ok: false, error: 'read-fail' }), { status: 400, headers: H }); });
