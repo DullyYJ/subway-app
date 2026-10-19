@@ -1327,3 +1327,11 @@
 - **시험**: `ride_eta` 97(holdMs) · `overlay_reco.ui` 76(⑥ 하단 줄 붙잡기 6건) · `htl_native_js.ui` 37(⑤-3 잔상 2건) · `bus_quiet.ui` 6(새 파일; 옛 코드에선 4건 실패 확인).
 - **YJ가 할 일**: 워커에 `engine/route-v2-worker.ascii.js`(s62) 붙여 넣고 Deploy → `version` = `route-v2-2026-10-19s62`(s53~s61 포함). 새 앱에서 ② 네이티브 경로 화면을 켜고 스크롤 잔상, ③ 버스 탭 새로고침, ① 도착 즈음 하단 줄을 확인.
 - **기기 미검증**: ①②③ 전부. 특히 ① 은 원인 미확인(보강만).
+
+## 2026-10-19 엔진 s63 — 네이티브화 4단계 첫 조각: 저녁·야식·쇼핑 'AI 위로 문구'를 엔진이 받아 끼운다
+- **옮긴 것**: 예전엔 앱(`_arrAiCopy`)이 AI 서버(`/ai-talk` · `nightsnack`)에서 한 줄을 받아 검사(60자 이하 · 정치/분쟁 금지어)하고 본문 네 번째 줄에 조사를 맞춰 끼운 뒤 작은 화면 문구를 엔진에 다시 물었다(왕복 2번 + 앱 계산). 이제 앱이 `/reco-text` 에 `aiCopy:1` 만 얹어 보내면(저녁·야식·쇼핑, 상황 문구가 약할 때 = `hookStrong` 아님, 본문 4줄 이상) 엔진이 AI 서버에서 받아(2.5초 제한) 같은 검사를 하고 끼운 뒤 **작은 화면 문구·오버레이 줄까지 그 본문으로** 한 번에 돌려준다(같은 씨앗 → 나머지는 그대로). 엔진 `engine/reco-text.js`: `rtxAiClean` · `rtxLoadAi` · `rtxAiSubject` · 로더 `ai`(시험용 주입) · 응답 `aiTried:true`(받아 보았다) / `ai:true`(끼웠다).
+- **앱(`www/index.html`)**: `_rtxPrefetch` 가 저녁·야식·쇼핑에 `aiCopy:1`(대기 +3초) · `_rtxUnpack` 은 `ai` 키만 빼고 `aiTried` 는 남김 · `_arrFireAlertNow` 는 `a.aiTried===true` 면 웹 `_arrAiCopy` 와 pip 재요청을 건너뛴다. **폴백**: 엔진이 꺼졌거나 실패·옛 엔진(aiTried 없음)이면 예전 웹 길(`_arrAiCopy`) 그대로. 끄기 `window._rtxAiOff = true`.
+- **엔진이 AI 를 못 받은 경우**: 본문은 AI 줄 없이 그대로 + `aiTried:true` (앱이 또 부르지 않는다 — 같은 서버를 두 번 두드려 봐야 같은 결과).
+- **시험**: `reco_text` 에 ⑦ 구간(rtxAiClean · 끼우기 · 결정성 · hookStrong 제외 · 연결부 aiCopy · 실패 5종) · `reco_rtx.ui` 에 s63 5건(엔진이 받음 · 못 받음 · 점심 제외 · 옛 엔진 · 끄기).
+- **YJ가 할 일**: `engine/route-v2-worker.ascii.js`(s63) Deploy → `version` = `route-v2-2026-10-19s63`. 저녁/야식 도착 알림에 AI 한 줄이 들어가는지 확인.
+- **기기 미검증**: 전부(웹 시험은 가짜 AI 서버로만).
