@@ -2436,6 +2436,184 @@ window._rtfSyncCard = function(){
   }catch(e3){}
 };
 try{ if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(_rjSync, 1400); }); else setTimeout(_rjSync, 1400); }catch(eR){}
+// ── 설정·저장값을 앱 본체에도 보관하기 (★ 2026-10-19 · 5번 4단계) ─────────────────────────────────────────
+//   설정 스위치 '설정·저장값을 앱 본체에도 보관하기'(gdm_sto, 기본 꺼짐). 켜면 설정 스위치·즐겨찾기 같은 저장값을 앱 본체(Store 플러그인)에도 한 벌 보관한다.
+//   어떤 키를 보관할지 · 웹과 앱 본체 중 어느 쪽 값을 따를지는 엔진(/store-policy · /store-merge)이 정한다. 웹은 정책을 받아 '그 키면 같이 보관' 하고, 맞추기 결과(어느 키를 어느 쪽으로)를 그대로 따른다.
+//   ★ 값은 서버로 보내지 않는다 — 엔진에는 키·글자 수·지문(FNV-1a)만 보낸다. 값 복사는 이 기기 안(웹 ↔ 앱 본체)에서만.
+//   웹 저장소(localStorage)는 그대로 쓴다(읽기도 예전 그대로). 웹 저장소가 지워졌으면 부팅 때 앱 본체 값을 되돌리고 한 번 다시 연다.
+//   폴백(전부 자동): 플러그인이 없음 · 보관/맞추기 실패 → 아무 일도 안 한다(예전 방식 = 웹 저장소만). 엔진에 못 물으면(옛 엔진·통신 실패) '되돌리기'만 최소 규칙으로. 스위치를 껐다 켜면 다시 시도.
+var _STO_POL0 = {"v":1,"exact":["app_theme","notifPref","ovlOn","commuteAlarm","mk_comm_id","mk_favorites","mk_radius","mk_r","mk_pt","mk_pts","savedBusStops","busStopAlias","busNearOrder","postOwnerKey","myPosts","reportedPosts","gwRoamMin","bgPermGuided","ovlHint","pfLive","pfLive2","rideLogOff","busProxyUrl","shopApiUrl","foodServer","cellServer"],"prefix":["gdm_"],"denyExact":["gdm_err_log"],"denySuffix":["_c","_fail","_why"],"maxValue":20000,"maxKeys":160,"maxTotal":160000,"sentinel":"gdm_sto_seen"};   // 엔진 storePolicy() 와 같은 처음 값(엔진에서 받으면 바뀜) — 시험이 엔진과 같은지 확인한다
+var _ST = { pol: null, bad: false, q: {}, dl: {}, timer: 0, booted: false, booting: false, last: null, eng: true };
+var _stoRawSet = function(k, v){ try{ localStorage.setItem(k, v); }catch(e){} };
+function _stoOn(){ try{ return localStorage.getItem('gdm_sto') === '1'; }catch(e){ return false; } }
+function _stoPlug(){
+  try{ var C = window.Capacitor, P = C && C.Plugins && C.Plugins.Store; return (P && typeof P.snapshot === 'function' && typeof P.apply === 'function') ? P : null; }catch(e){ return null; }
+}
+function _stoUse(){ return _stoOn() && !_ST.bad && !!_stoPlug(); }
+function _stoSyncSoon(){ try{ if(typeof window._stoSyncCard === 'function') window._stoSyncCard(); }catch(e){} }
+function _stoFail(why){
+  if(_ST.bad) return;
+  _ST.bad = true;
+  try{ localStorage.setItem('gdm_sto_why', String(why || '').slice(0, 60)); }catch(e){}
+  _stoSyncSoon();
+}
+function _stoPol(){ return _ST.pol || _STO_POL0; }
+function _stoPolOk(p){
+  try{
+    if(!p || p.v !== 1 || !Array.isArray(p.exact) || !Array.isArray(p.prefix) || !Array.isArray(p.denyExact) || !Array.isArray(p.denySuffix) || typeof p.sentinel !== 'string') return false;
+    var all = p.exact.concat(p.prefix, p.denyExact, p.denySuffix);
+    for(var i = 0; i < all.length; i++) if(typeof all[i] !== 'string') return false;
+    return isFinite(p.maxValue) && isFinite(p.maxKeys) && isFinite(p.maxTotal);
+  }catch(e){ return false; }
+}
+// 엔진이 준 정책(데이터)에 이 키가 들어 있나 — 목록 찾기일 뿐 판단은 엔진 몫(엔진 storeEligible 과 같은 순서)
+function _stoEligible(k){
+  try{
+    var p = _stoPol(), i;
+    if(typeof k !== 'string' || !k || k.length > 64 || !/^[A-Za-z0-9_:.\-]+$/.test(k)) return false;
+    for(i = 0; i < p.denyExact.length; i++) if(k === p.denyExact[i]) return false;
+    for(i = 0; i < p.denySuffix.length; i++){ var sx = p.denySuffix[i]; if(k.length > sx.length && k.slice(-sx.length) === sx) return false; }
+    for(i = 0; i < p.exact.length; i++) if(k === p.exact[i]) return true;
+    for(i = 0; i < p.prefix.length; i++) if(k.indexOf(p.prefix[i]) === 0) return true;
+  }catch(e){}
+  return false;
+}
+function _stoHash(str){   // FNV-1a 32비트 · UTF-16 글자 단위 · 16진 8자리 (엔진 storeHash 와 같다)
+  var h = 0x811c9dc5;
+  for(var i = 0; i < str.length; i++){ h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  var x = h.toString(16); while(x.length < 8) x = '0' + x;
+  return x;
+}
+function _stoSig(o){ var r = {}; for(var k in o){ if(Object.prototype.hasOwnProperty.call(o, k) && typeof o[k] === 'string') r[k] = { n: o[k].length, h: _stoHash(o[k]) }; } return r; }
+function _stoCollect(){
+  var W = {};
+  try{ for(var i = 0; i < localStorage.length; i++){ var k = localStorage.key(i); if(_stoEligible(k)){ var v = localStorage.getItem(k); if(typeof v === 'string') W[k] = v; } } }catch(e){}
+  return W;
+}
+// 쓰기가 일어날 때마다 앱 본체에도 알린다(0.5초 모아서). gdm_sto 스위치 자체는 꺼도 알려서 '껐다'가 앱 본체에도 남게 한다.
+function _stoNote(k, v, del){
+  if(typeof k !== 'string') return;
+  if(k === 'gdm_sto'){ if(!_stoPlug()) return; }
+  else if(!_ST.booted || !_stoUse() || !_stoEligible(k)) return;
+  if(del){ delete _ST.q[k]; _ST.dl[k] = 1; } else { delete _ST.dl[k]; _ST.q[k] = String(v); }
+  if(!_ST.timer) _ST.timer = setTimeout(_stoFlush, 500);
+}
+function _stoFlush(){
+  _ST.timer = 0;
+  var P = _stoPlug(); if(!P) return;
+  var set = _ST.q, dk = Object.keys(_ST.dl);
+  _ST.q = {}; _ST.dl = {};
+  if(!Object.keys(set).length && !dk.length) return;
+  try{
+    Promise.resolve(P.apply({ json: JSON.stringify({ set: set, del: dk }) })).then(function(r){
+      if(!r || r.ok !== true){ _stoFail('보관 실패'); return; }
+      _ST.last = { at: Date.now(), n: r.n }; _stoSyncSoon();
+    }, function(){ _stoFail('보관 호출 거절'); });
+  }catch(e){ _stoFail('보관 예외'); }
+}
+try{
+  var _stP = Storage.prototype, _stSet = _stP.setItem, _stRem = _stP.removeItem;
+  _stoRawSet = function(k, v){ try{ _stSet.call(localStorage, k, v); }catch(e){} };
+  _stP.setItem = function(k, v){ _stSet.apply(this, arguments); try{ if(this === localStorage) _stoNote(k, v, false); }catch(e){} };
+  _stP.removeItem = function(k){ _stRem.apply(this, arguments); try{ if(this === localStorage) _stoNote(k, null, true); }catch(e){} };
+}catch(eSt){}
+// 엔진에 '어느 키를 어느 쪽으로 옮길지' 묻는다(값이 아니라 키·길이·지문만 보낸다)
+function _stoAsk(W, nat){
+  return new Promise(function(ok, no){
+    var done = false, tm = setTimeout(function(){ if(!done){ done = true; no(new Error('timeout')); } }, 7000);
+    try{
+      fetch(_ROUTE_V2_BASE + '/store-merge', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ web: _stoSig(W), nat: _stoSig(nat) }) })
+        .then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(j){
+          if(done) return; done = true; clearTimeout(tm);
+          if(j && j.ok === true && Array.isArray(j.toWeb) && Array.isArray(j.toNat) && Array.isArray(j.delNat)) ok(j); else no(new Error('bad'));
+        })
+        .catch(function(e){ if(!done){ done = true; clearTimeout(tm); no(e); } });
+    }catch(e){ if(!done){ done = true; clearTimeout(tm); no(e); } }
+  });
+}
+// 엔진에 못 물었을 때의 최소 규칙: 웹 저장소가 지워졌으면(표시 없음·앱 본체엔 있음) 앱 본체 값을 되돌리기만 한다. 그 밖에는 아무것도 안 한다.
+function _stoLocalRes(W, nat){
+  var S = _stoPol().sentinel, res = { ok: true, restore: false, reload: false, toWeb: [], toNat: [], delNat: [], local: true };
+  if(!Object.prototype.hasOwnProperty.call(W, S) && Object.prototype.hasOwnProperty.call(nat, S)){
+    res.restore = true;
+    Object.keys(nat).forEach(function(k){ res.toWeb.push(k); if(k !== S && _stoEligible(k)) res.reload = true; });
+  }
+  return res;
+}
+function _stoApply(P, res, W, nat){
+  var S = _stoPol().sentinel, i, k, v, restored = 0;
+  for(i = 0; i < res.toWeb.length; i++){ k = res.toWeb[i]; v = (k === S) ? '1' : nat[k]; if(typeof v === 'string' && _stoEligible(k)){ _stoRawSet(k, v); if(k !== S) restored++; } }
+  var set = {}, del = [], ns = 0;
+  for(i = 0; i < res.toNat.length; i++){ k = res.toNat[i]; v = (k === S) ? '1' : W[k]; if(typeof v === 'string' && _stoEligible(k)){ set[k] = v; ns++; } }
+  for(i = 0; i < res.delNat.length; i++){ k = res.delNat[i]; if(_stoEligible(k)) del.push(k); }
+  var after = function(n){
+    _ST.last = { at: Date.now(), n: n, restored: restored };
+    if(res.reload && restored > 0){ try{ if(!sessionStorage.getItem('gdm_sto_rl')){ sessionStorage.setItem('gdm_sto_rl', '1'); location.reload(); } }catch(e){} }
+  };
+  if(!ns && !del.length){ after(Object.keys(nat).length); return Promise.resolve(); }
+  return Promise.resolve(P.apply({ json: JSON.stringify({ set: set, del: del }) })).then(function(r){
+    if(!r || r.ok !== true) throw new Error('apply');
+    after(r.n);
+  });
+}
+function _stoPolRefresh(){
+  try{
+    fetch(_ROUTE_V2_BASE + '/store-policy').then(function(r){ return r.ok ? r.json() : null; }).then(function(p){
+      if(_stoPolOk(p)){ _ST.pol = p; try{ localStorage.setItem('stoPolicyCache', JSON.stringify(p)); }catch(e){} }
+    }).catch(function(){});
+  }catch(e){}
+}
+function _stoBoot(){
+  var P = _stoPlug();
+  if(!P || _ST.booting) return;
+  _ST.booting = true;
+  var fin = function(){ _ST.booting = false; _ST.booted = true; _stoSyncSoon(); };
+  var snap;
+  try{ snap = Promise.resolve(P.snapshot()); }catch(e){ fin(); return; }
+  snap.then(function(s){
+    var nat = {}; try{ nat = JSON.parse((s && s.json) || '{}') || {}; }catch(e0){ nat = {}; }
+    var cur = null; try{ cur = localStorage.getItem('gdm_sto'); }catch(e1){}
+    if(!(cur === '1' || (cur === null && nat.gdm_sto === '1'))){ fin(); return; }    // 켜지 않았다(웹 저장소가 지워진 경우엔 앱 본체에 켠 기록이 있으면 켠 것으로 본다)
+    var W = _stoCollect();
+    _ST.q = {}; _ST.dl = {};                                                         // 지금까지 모인 쓰기는 이 맞추기가 다 본다
+    _stoAsk(W, nat).then(function(res){ _ST.eng = true; return res; }, function(){ _ST.eng = false; return _stoLocalRes(W, nat); })
+      .then(function(res){ return _stoApply(P, res, W, nat); })
+      .then(fin, function(){ _stoFail('맞추기 실패'); fin(); });
+    _stoPolRefresh();
+  }, function(){ _stoFail('읽기 거절'); fin(); });
+}
+window._stoOn = _stoOn;
+window._stoAvail = function(){ return !!_stoPlug(); };
+window._stoBad = function(){ return !!_ST.bad; };
+window._stoState = _ST;
+window._stoSetUse = function(on){
+  try{ localStorage.setItem('gdm_sto', on ? '1' : '0'); if(on) localStorage.setItem('gdm_sto_why', ''); }catch(e){}
+  if(on){ _ST.bad = false; _stoBoot(); }
+  _stoSyncSoon();
+};
+window._stoSyncCard = function(){
+  try{
+    var card = document.getElementById('stoSetCard'); if(!card) return;
+    if(!_stoPlug()){ if(card.style.display !== 'none') card.style.display = 'none'; return; }
+    if(card.style.display !== 'block') card.style.display = 'block';
+    var on = _stoOn(), cb = document.getElementById('stoSetOn'), st = document.getElementById('stoSetStat'), why = '';
+    try{ why = localStorage.getItem('gdm_sto_why') || ''; }catch(e){}
+    if(cb) cb.checked = on && !_ST.bad;
+    var t;
+    if(!on) t = '꺼짐 — 예전 방식(웹 화면 저장소에만)으로 보관해요.';
+    else if(_ST.bad) t = '앱 본체 보관에 문제가 있어 예전 방식으로 대신 이어가고 있어요' + (why ? ' (' + why + ')' : '') + '. 스위치를 껐다 켜면 다시 시도해요.';
+    else {
+      t = '켜짐 — 설정과 저장값을 앱 본체에도 보관해요(실험 중).';
+      if(_ST.last && _ST.last.n != null) t += ' 앱 본체에 ' + _ST.last.n + '개 보관 중.';
+      if(_ST.last && _ST.last.restored) t += ' 웹 저장소가 지워져 ' + _ST.last.restored + '개를 되돌렸어요.';
+      if(!_ST.eng) t += ' (엔진이 맞추기를 못 해 되돌리기만 해요.)';
+    }
+    if(st && st.textContent !== t) st.textContent = t;
+  }catch(e3){}
+};
+try{ var _stc = JSON.parse(localStorage.getItem('stoPolicyCache') || 'null'); if(_stoPolOk(_stc)) _ST.pol = _stc; }catch(eSc){}
+try{ if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(_stoBoot, 1500); setTimeout(_stoSyncSoon, 1500); }); else { setTimeout(_stoBoot, 1500); setTimeout(_stoSyncSoon, 1500); } }catch(eSb){}
 // ── 지하철 '다음 열차' — 시각표 계산은 전부 엔진(GET/POST /next-train)이 한다. 앱은 묻고, 받은 값을 그리기만 한다. ──
 //   (2026-10-09: 앱에 있던 시각표 데이터·방향 판정·다음 열차 계산을 엔진으로 옮겼다. 경로 응답에는 구간마다
 //    ttWaitMs(타임라인 대기)·nextTrain(안내용)이 이미 붙어 오고, 여기서는 '승차 시각에 맞춰 다시 묻는' 경우만 다룬다.)
@@ -11360,7 +11538,108 @@ function _buildTransitAlertTargets(){
   }
   window._transitAlertTargets = targets;
 }
+// ── 하차·환승 알림 시점 — 엔진이 정한다(2026-10-19, 5번 4단계) ──
+//   설정 스위치 '하차·환승 알림 시점을 엔진이 정하기'(gdm_ra, 기본 꺼짐). 켜면 앱을 보고 있는 동안의 하차·환승 알림이 '언제·무슨 문구·무슨 진동으로' 울릴지를 엔진(/ride-alert)이 정한다.
+//   앱(웹)은 '지금 몇 번째 노드인가 · 이미 보낸 알림 · 사용자가 끈 종류'를 알리고, 돌아온 알림을 그대로 울리기만 한다. (앱을 가렸을 때의 규칙 rsAlerts 와 같은 규칙)
+//   엔진에는 노선·역 이름과 몇 번째 노드인지만 보낸다(위치 좌표·개인 값은 보내지 않는다).
+//   폴백(전부 자동): 스위치 꺼짐 · 엔진 응답 없음(2.5초)·오류·이상한 응답 → 예전 웹 규칙(_checkTransitAlertsLocal)으로 바로 정하고, 60초 동안은 엔진에 묻지 않는다.
+var _RA = { bad: false, until: 0, why: '', busy: false, sig: '', ndRef: null, ndSig: '', asks: 0, ok: 0, last: null, seq: 0 };
+function _raOn(){ try{ return localStorage.getItem('gdm_ra') === '1'; }catch(e){ return false; } }
+function _raDown(){ return _RA.until > Date.now(); }
+function _raUse(){ return _raOn() && !_raDown(); }
+function _raFail(why){
+  _RA.bad = true; _RA.until = Date.now() + 60000; _RA.why = String(why || '').slice(0, 40); _RA.busy = false; _RA.sig = '';
+  try{ if(typeof window._raSyncCard === 'function') window._raSyncCard(); }catch(e){}
+}
+function _raNodes(nd){
+  var out = [];
+  for(var i = 0; i < nd.length; i++){ var x = nd[i]; out.push(x ? { k: x.isSub ? 's' : (x.isBus ? 'b' : null), l: x.lineName || '', n: x.name || '' } : { k: null, l: '', n: '' }); }
+  return out;
+}
+function _raAllowed(){
+  var a = {};
+  ['transfer2', 'transfer', 'near_arrive2', 'near_arrive', 'arrive'].forEach(function(k){ a[k] = (typeof _notifAllowed === 'function') ? !!_notifAllowed(k) : true; });
+  return a;
+}
+function _raFire(r){
+  var a = r.alert;
+  if(!window._transitAlertFired) window._transitAlertFired = {};
+  (r.extra || []).forEach(function(k){ window._transitAlertFired[k] = 1; });
+  if(window._transitAlertFired[a.key]) return;
+  window._transitAlertFired[a.key] = 1;
+  try{ if(typeof _ovlStandbyPush === 'function') setTimeout(function(){ _ovlStandbyPush(true); }, 0); }catch(eSb){}
+  if(typeof showNotification === 'function') showNotification(a.title, a.body, { vibrate: a.vib, type: a.type });
+  else { if(typeof _vibrateFor === 'function') _vibrateFor(a.type, a.vib); if(typeof toast === 'function') toast(a.title + ' · ' + a.body); }
+}
+function _raGood(j){
+  if(!j || j.ok !== true || j.v !== 1 || !('alert' in j)) return false;
+  var a = j.alert;
+  if(a === null) return true;
+  return !!(a && typeof a.key === 'string' && typeof a.type === 'string' && typeof a.title === 'string' && typeof a.body === 'string' && Array.isArray(a.vib));
+}
+function _raCheck(curNodeIdx){
+  var nd = (typeof _transitNodeData !== 'undefined' && _transitNodeData) ? _transitNodeData : null;
+  var targets = window._transitAlertTargets, seq = window._transitSeqIdx;
+  if(!nd || !targets || !targets.length || !seq || !seq.length) return;
+  var fired = window._transitAlertFired || {}, allowed = _raAllowed();
+  if(_RA.ndRef !== nd || _RA.ndLen !== nd.length){ _RA.ndRef = nd; _RA.ndLen = nd.length; _RA.ndSig = _raNodes(nd).map(function(x){ return (x.k || '-') + '/' + x.l + '/' + x.n; }).join('|'); }
+  var sig = curNodeIdx + '#' + Object.keys(fired).sort().join(',') + '#' + ['transfer2', 'transfer', 'near_arrive2', 'near_arrive', 'arrive'].map(function(k){ return allowed[k] ? 1 : 0; }).join('') + '#' + _RA.ndSig;
+  if(_RA.busy || sig === _RA.sig) return;                  // 같은 상태는 다시 묻지 않는다(바뀐 게 없으면 답도 같다)
+  _RA.busy = true; _RA.sig = sig; var my = ++_RA.seq, done = false;
+  var eta = {};
+  seq.forEach(function(i){ var x = nd[i]; if(x && x.arrTime) eta[i] = x.arrTime; });
+  var jr = null; try{ var j0 = (typeof _journeyRemain === 'function') ? _journeyRemain() : null; if(j0 && j0.min != null) jr = j0.min; }catch(e0){}
+  var tn = new Date(), body = { nodes: _raNodes(nd), allowed: allowed, fired: fired, curIdx: curNodeIdx, nowMin: tn.getHours() * 60 + tn.getMinutes() + tn.getSeconds() / 60, eta: eta, jr: jr };
+  _RA.asks++;
+  var fallback = function(why){
+    if(done) return; done = true; clearTimeout(tm);
+    if(my === _RA.seq){ _raFail(why); try{ _checkTransitAlertsLocal(curNodeIdx); }catch(e1){} }
+  };
+  var tm = setTimeout(function(){ fallback('시간 초과'); }, 2500);
+  try{
+    fetch(_ROUTE_V2_BASE + '/ride-alert', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(j){
+        if(done) return;
+        if(!_raGood(j)){ fallback('응답 이상'); return; }
+        done = true; clearTimeout(tm); _RA.busy = false; _RA.ok++; _RA.last = j.alert ? j.alert.type : null;
+        if(my !== _RA.seq) return;
+        if(window._sbHanded === true || (typeof _baseTimeMs !== 'undefined' && _baseTimeMs != null)) return;   // 기다리는 동안 숨김 인계·예상 모드가 됐다
+        if(j.alert){ _raFire(j); _RA.sig = ''; }                       // 보낸 게 있으면 상태가 바뀌었으니 다음 판정은 새로 묻는다(없으면 같은 상태는 다시 묻지 않는다)
+        try{ if(typeof window._raSyncCard === 'function') window._raSyncCard(); }catch(e2){}
+      })
+      .catch(function(){ fallback('통신 실패'); });
+  }catch(e3){ fallback('요청 실패'); }
+}
 function _checkTransitAlerts(curNodeIdx){
+  try{
+    if(window._sbHanded === true) return;                                  // 숨김 인계 중 — 엔진(서비스)이 알림을 울린다
+    if(typeof _baseTimeMs !== 'undefined' && _baseTimeMs != null) return;  // 예상(미래) 모드 제외
+    if(_raUse()){ _raCheck(curNodeIdx); return; }
+  }catch(e){}
+  _checkTransitAlertsLocal(curNodeIdx);
+}
+window._raOn = _raOn;
+window._raState = _RA;
+window._raSetUse = function(on){
+  try{ localStorage.setItem('gdm_ra', on ? '1' : '0'); }catch(e){}
+  _RA.bad = false; _RA.until = 0; _RA.why = ''; _RA.sig = ''; _RA.busy = false;
+  try{ if(typeof window._raSyncCard === 'function') window._raSyncCard(); }catch(e2){}
+};
+window._raSyncCard = function(){
+  try{
+    var card = document.getElementById('raSetCard'); if(!card) return;
+    var on = _raOn(), bad = on && _raDown(), cb = document.getElementById('raSetOn'), st = document.getElementById('raSetStat');
+    if(cb) cb.checked = on && !bad;
+    var t;
+    if(!on) t = '꺼짐 — 예전 방식(웹이 알림 시점을 정해요)으로 이어가요.';
+    else if(bad) t = '엔진에 물을 수 없어 예전 방식으로 대신 이어가고 있어요' + (_RA.why ? ' (' + _RA.why + ')' : '') + '. 잠시 뒤 다시 엔진에 물어요.';
+    else t = '켜짐 — 하차·환승 알림이 울릴 때를 엔진이 정해요(실험 중).' + (_RA.ok ? ' 엔진 응답 ' + _RA.ok + '번.' : '');
+    if(st && st.textContent !== t) st.textContent = t;
+  }catch(e3){}
+};
+try{ if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(function(){ if(window._raSyncCard) window._raSyncCard(); }, 1500); }); else setTimeout(function(){ if(window._raSyncCard) window._raSyncCard(); }, 1500); }catch(eRa){}
+function _checkTransitAlertsLocal(curNodeIdx){
   try {
     if(window._sbHanded === true) return;                                  // 2026-10-19: 숨김 인계 중 — 엔진(서비스)이 알림을 울린다(같은 알림을 두 번 울리지 않는다)
     if(typeof _baseTimeMs!=='undefined' && _baseTimeMs != null) return;   // 예상(미래) 모드 제외
@@ -20599,6 +20878,36 @@ window.addEventListener('unhandledrejection', function(e) {
         <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">경로를 찾을 때 경로 서버에 묻는 일과 받은 결과 보관을 웹이 아니라 앱 본체가 해요. 어떤 응답을 그릴지, 언제 다시 물을지는 엔진이 정해 주고 앱은 따라요. 문제가 생기면 예전 방식으로 돌아가요.</p>
         <div id="rtfSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
         <style>#rtfSetOn:checked ~ #rtfSetKnob{background:var(--gold) !important;} #rtfSetOn:checked ~ #rtfSetDot{left:23px !important;}</style>
+      </div>
+
+      <!-- ★ 2026-10-19: 설정·저장값을 앱 본체에도 보관하기 — 웹 저장소가 지워져도 설정이 돌아오고 앱 본체의 다른 기능도 읽을 수 있게(Store 플러그인). 안드로이드 앱에서만 보임, 기본 꺼짐 -->
+      <div id="stoSetCard" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <div style="font-size:15px;font-weight:800;color:var(--text);">설정·저장값을 앱 본체에도 보관하기</div>
+          <label style="position:relative;display:inline-block;width:46px;height:26px;">
+            <input type="checkbox" id="stoSetOn" onchange="_stoSetUse(this.checked)" style="opacity:0;width:0;height:0;">
+            <span id="stoSetKnob" style="position:absolute;inset:0;border-radius:13px;background:var(--border2);transition:.2s;cursor:pointer;"></span>
+            <span id="stoSetDot" style="position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.3);"></span>
+          </label>
+        </div>
+        <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">설정 스위치와 즐겨찾기 같은 저장값을 웹 화면 저장소에만 두지 않고 앱 본체에도 한 벌 보관해요. 웹 화면 저장소가 지워져도 설정이 돌아오고, 앱 본체의 다른 기능도 이 값을 읽을 수 있어요. 어떤 값을 보관할지는 엔진이 정해요. 문제가 생기면 예전 방식(웹 저장소만)으로 돌아가요.</p>
+        <div id="stoSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
+        <style>#stoSetOn:checked ~ #stoSetKnob{background:var(--gold) !important;} #stoSetOn:checked ~ #stoSetDot{left:23px !important;}</style>
+      </div>
+
+      <!-- ★ 2026-10-19: 하차·환승 알림 시점을 엔진이 정하기 — 앱을 보고 있는 동안의 알림 시점·문구·진동을 엔진이 정한다. 기본 꺼짐 -->
+      <div id="raSetCard" style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <div style="font-size:15px;font-weight:800;color:var(--text);">하차·환승 알림 시점을 엔진이 정하기</div>
+          <label style="position:relative;display:inline-block;width:46px;height:26px;">
+            <input type="checkbox" id="raSetOn" onchange="_raSetUse(this.checked)" style="opacity:0;width:0;height:0;">
+            <span id="raSetKnob" style="position:absolute;inset:0;border-radius:13px;background:var(--border2);transition:.2s;cursor:pointer;"></span>
+            <span id="raSetDot" style="position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.3);"></span>
+          </label>
+        </div>
+        <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">앱을 보고 있는 동안의 하차·환승 알림(환승 2정거장 전·환승 준비·목적지 2정거장 전·곧 하차·목적지 도착)이 언제 울릴지, 무슨 문구와 진동으로 울릴지를 웹이 아니라 엔진이 정해요. 앱을 가렸을 때 쓰는 규칙과 같아요. 엔진에 물을 수 없으면 예전 방식으로 바로 정해요.</p>
+        <div id="raSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
+        <style>#raSetOn:checked ~ #raSetKnob{background:var(--gold) !important;} #raSetOn:checked ~ #raSetDot{left:23px !important;}</style>
       </div>
 
       <!-- ★ 2026-10-03: 도착 오차 익명 기록 (끌 수 있음) -->
@@ -38214,6 +38523,8 @@ window.refreshShop=refreshShop;
     try{ if(typeof _sbhSyncCard === 'function') _sbhSyncCard(); var csbh = document.getElementById('sbhSetCard'); if(csbh && csbh.style.display === 'block') f.feat.sbh = { h: 1, on: _sbhOn() ? 1 : 0, f: 0, w: '' }; }catch(e){}
     try{ if(typeof _cndSyncCard === 'function') _cndSyncCard(); var ccnd = document.getElementById('cndSetCard'); if(ccnd && ccnd.style.display === 'block') f.feat.cnd = { h: 1, on: (_cndOn() && !_cndBad()) ? 1 : 0, f: _cndBad() ? 1 : 0, w: '' }; }catch(e){}
     try{ if(typeof _rtfSyncCard === 'function') _rtfSyncCard(); var crtf = document.getElementById('rtfSetCard'); if(crtf && crtf.style.display === 'block') f.feat.rtf = { h: 1, on: (_rtfOn() && !_rtfBad()) ? 1 : 0, f: _rtfBad() ? 1 : 0, w: '' }; }catch(e){}
+    try{ if(typeof _raSyncCard === 'function') _raSyncCard(); var cra = document.getElementById('raSetCard'); if(cra && cra.style.display !== 'none') f.feat.ra = { h: 1, on: (_raOn() && !_raDown()) ? 1 : 0, f: (_raOn() && _raDown()) ? 1 : 0, w: '' }; }catch(e){}
+    try{ if(typeof _stoSyncCard === 'function') _stoSyncCard(); var csto = document.getElementById('stoSetCard'); if(csto && csto.style.display === 'block') f.feat.sto = { h: 1, on: (_stoOn() && !_stoBad()) ? 1 : 0, f: _stoBad() ? 1 : 0, w: '' }; }catch(e){}
     f.feat.scrs = { h: 1, on: S.on ? 1 : 0, f: (S.failed || S.fails >= 2) ? 1 : 0, w: S.why || '', b: S.badFresh > 0 ? 1 : 0 };
     return f;
   }
@@ -38347,6 +38658,8 @@ window.refreshShop=refreshShop;
       else if(key === 'f.sbh') window._sbhSetUse(on);
       else if(key === 'f.cnd') window._cndSetUse(on);
       else if(key === 'f.rtf') window._rtfSetUse(on);
+      else if(key === 'f.sto') window._stoSetUse(on);
+      else if(key === 'f.ra') window._raSetUse(on);
       else if(key === 'f.scrs'){ setUse(on); return; }
       else return;                                                             // 모르는 키는 무시
     }catch(e){}
