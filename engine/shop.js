@@ -287,4 +287,4 @@ function shopRich(parts) {
   return { s: s, hl: hl };
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { shopScreen: shopScreen, shopPick: shopPick, shopClock: shopClock, shopSeasonScore: shopSeasonScore, shopSeasonNow: shopSeasonNow, shopRng: shopRng, SHOP_PICK_N: SHOP_PICK_N, SHOP_REC_CAT: SHOP_REC_CAT };
+if (typeof module !== 'undefined' && module.exports) module.exports = { shopScreen: shopScreen, shopPick: shopPick, shopClock: shopClock, shopSeasonScore: shopSeasonScore, shopSeasonNow: shopSeasonNow, shopRng: shopRng, SHOP_PICK_N: SHOP_PICK_N, SHOP_REC_CAT: SHOP_REC_CAT, SHOP_SEASON_KW: SHOP_SEASON_KW, SHOP_NOWX: SHOP_NOWX };
