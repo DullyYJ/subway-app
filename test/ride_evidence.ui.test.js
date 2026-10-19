@@ -274,7 +274,7 @@ const t = async (name, fn) => { if (ONLY && !ONLY.test(name)) return; try { awai
     }, r.b0);
     assert.ok(Math.abs(r2.d1 - 2.5) < 0.2, JSON.stringify(r2));
     assert.ok(Math.abs(r2.d2 - r2.d1) < 1e-6 && Math.abs(r2.d5 - r2.d1) < 1e-6, '이후 모든 시각이 같은 만큼 ' + JSON.stringify(r2));
-    assert.ok(Math.abs(r2.d0) <= 0.51, JSON.stringify(r2)); assert.ok(r2.keep, JSON.stringify(r2));   // 2026-10-19: 출발점도 도착 :30 규칙의 0.5분만 다르다(승강장 지연 2분은 밀지 않는다)
+    assert.ok(Math.abs(r2.d0) <= 0.84, JSON.stringify(r2)); assert.ok(r2.keep, JSON.stringify(r2));   // 2026-10-19: 출발점도 도착 :50 규칙의 0.83분(50초)만 다르다(승강장 지연 2분은 밀지 않는다)
     await platSetup(5, true);
     await page.evaluate(() => { window._etaSt.lastAt = 0; _platformLateShift(Date.now()); });
     await etaWait();
