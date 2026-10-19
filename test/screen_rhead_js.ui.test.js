@@ -147,6 +147,35 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     assert.deepStrictEqual(A.errs, []); await A.ctx.close();
   });
 
+  console.log('[③-2 공식 공지 · 지연 제보 줄(part n)]');
+  {
+    const N = await fresh({ plugin: true, on: true }); await drawCard(N);
+    await N.page.evaluate(() => { window.__rooms = []; window._lrOpenRoom = (l) => window.__rooms.push(l); });
+    await t('웹이 공지 줄을 보여 줄 때만(자리가 있을 때만) 공지 줄을 요청한다 · 사실(노선·공지 원자료·분 단위 시각)만 보낸다', async () => {
+      await N.page.waitForTimeout(800); assert.ok(!N.reqs.some(q => q.part === 'n'), '보일 것이 없는데 요청했다');
+      await N.page.evaluate(() => { const nw = Date.now(); _offCache.data = { ok: true, lines: { '1호선': { text: '1호선 신도림 무정차 통과', ts: nw - 4 * 60000 } } }; _offCache.at = nw; _routeOfficialRow({ why: '', sections: [{ transportation: { type: 1, name: '1호선' } }] }); document.getElementById('trNoteWrap').scrollIntoView({ block: 'center' }); });
+      assert.ok(await waitFor(N, async () => (await puts(N, 'rnote')).length >= 1), 'rnote show 가 없다: ' + JSON.stringify(N.reqs.filter(q => q.part === 'n')).slice(0, 300));
+      const q = N.reqs.filter(q => q.part === 'n').pop(); assert.strictEqual(q.cap, 10); assert.deepStrictEqual(q.f.ln, ['1호선']); assert.ok(/무정차/.test(q.f.off['1호선'].text)); assert.strictEqual(q.f.now % 60000, 0);
+      const box = nodes(await lastJ(N, 'rnote')).find(n => n.t === 'box'); assert.ok(box && /^서울교통공사 공지 · 1호선 신도림 무정차 통과 \(\d+분 전\)$/.test(box.s), JSON.stringify(box));
+      assert.ok(await waitFor(N, async () => await own(N, 'trNoteWrap'), 6000), '웹 줄 속을 안 가렸다');
+    });
+    await t("'size' 이벤트로 공지 줄 높이를 따르고 · 웹 줄이 사라지면 자리를 돌려준다", async () => {
+      await emit(N, 'size', { id: 'rnote', h: 60 }); await N.page.waitForTimeout(150);
+      assert.strictEqual(await N.page.evaluate(() => document.getElementById('trNoteWrap').offsetHeight), 60);
+      await N.page.evaluate(() => { _rnOff = null; window._rnOff = null; const e = document.getElementById('transitOfficialRow'); e.style.display = 'none'; e.innerHTML = ''; });
+      assert.ok(await waitFor(N, async () => !(await own(N, 'trNoteWrap')), 6000), '웹 줄이 없는데 가린 채다');
+      assert.notStrictEqual(await N.page.evaluate(() => document.getElementById('trNoteWrap').style.height), '60px', '높이를 안 풀었다');
+    });
+    await t('지연 제보 3명 이상이면 제보 상자와 "노선 방 보기" 단추 · 누르면 예전 _lrOpenRoom(노선)', async () => {
+      await N.page.evaluate(() => { window._rnAl = { lines: { '1호선': { reporters: 4, stations: [{ stn: '구로', n: 3 }] } } }; const e = document.getElementById('transitAlertRow'); e.style.display = 'block'; e.innerHTML = '제보'; _scrRhead.changed(); });
+      assert.ok(await waitFor(N, async () => nodes(await lastJ(N, 'rnote')).some(n => /1호선 최근 30분 지연 제보 4명 \(구로 부근\)/.test(n.s || ''))), '제보 상자가 안 올라갔다');
+      const bt = nodes(await lastJ(N, 'rnote')).find(n => n.act && /^rh\.room\./.test(n.act.v)); assert.ok(bt && bt.s === '노선 방 보기');
+      await act(N, 'rnote', { a: 'call', v: bt.act.v }); await act(N, 'rnote', { a: 'call', v: 'rh.room.5' }); await act(N, 'rnote', { a: 'call', v: 'rh.room.x' }); await N.page.waitForTimeout(150);
+      assert.deepStrictEqual(await N.page.evaluate(() => window.__rooms), ['1호선'], '노선 방 열기/무시가 틀렸다');
+      assert.deepStrictEqual(N.errs, []); await N.ctx.close();
+    });
+  }
+
   console.log('[④ 폴백·스위치]');
   await t('엔진이 죽으면 웹 카드 · 실패 표시', async () => {
     const x = await fresh({ plugin: true, on: true, serve: 'down' }); await drawCard(x);

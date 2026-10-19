@@ -10,13 +10,14 @@
 //
 // 입력  rheadScreen({ cap, part }, facts)
 //        cap   = 앱이 그릴 수 있는 화면 규격 수준(10 이상이어야 만든다 — 머리줄 노드 rhd 가 10)
-//        part  = 'h'(머리줄 + 요약 줄 + 환승 안내) | 't'(경로 옵션 탭 줄)
+//        part  = 'h'(머리줄 + 요약 줄 + 환승 안내) | 't'(경로 옵션 탭 줄) | 'n'(공식 공지 · 지연 제보 줄)
 //        facts = { m: 총 소요 분, a: 출발 이름, b: 도착 이름, fav: 즐겨찾기 단추를 보일지(0|1),
 //                  sp: {ride,wait,walk}(분) | null, why: 엔진이 준 이유 글,
 //                  dx: [{s,dc,dd,bc,bd,to,secs}](환승 호차·문 원자료), ex: {s, l:[{fac,door}]} | null(하차 빠른 문),
 //                  xs: [{kind,at,walkMin,boardAt,toType,toLine,fromType,fromLine,service}](환승 원자료),
 //                  tab: 지금 고른 탭('fast'|'less'|'sub'|'bus'|'longdist'), ld: 장거리 탭을 보일지(0|1),
-//                  u: 이동 중이라 숫자가 '남은 시간'인지(0|1), nr: 경로가 없는 탭 이름('sub'|'bus'|…; 비면 정상) }
+//                  u: 이동 중이라 숫자가 '남은 시간'인지(0|1), nr: 경로가 없는 탭 이름('sub'|'bus'|…; 비면 정상),
+//                  ln: 내 경로의 지하철 노선 이름들, off: { 노선: {text,title,ts,estimated,suspect} }(서버가 준 공지 원자료), al: { 노선: {reporters, stations} }, now: 지금 시각(ms) }
 // 출력  { ok, v:1, screen:'rhead', cover:'tab', bg:'card', head:[], body:[노드…], info:{part} }
 // 맨 아래 module.exports 는 시험(Node)용이고 Worker 에서는 함수 선언만 쓰인다.
 'use strict';
@@ -113,8 +114,67 @@ function rheadFacts(f) {
     dx: rheadList(f.dx, 8), ex: (f.ex && typeof f.ex === 'object') ? f.ex : null,
     xs: rheadList(f.xs, 8).filter(function (t) { return t && typeof t === 'object'; }),
     tab: tab, ld: (f.ld === 1 || f.ld === true) ? 1 : 0,
-    u: (f.u === 1 || f.u === true) ? 1 : 0, nr: rheadStr(f.nr, 12).replace(/[^a-z]/g, '')
+    u: (f.u === 1 || f.u === true) ? 1 : 0, nr: rheadStr(f.nr, 12).replace(/[^a-z]/g, ''),
+    ln: rheadList(f.ln, 6).map(function (l) { return rheadStr(l, 24).trim(); }).filter(Boolean),
+    off: (f.off && typeof f.off === 'object') ? f.off : {}, offAt: Number(f.offAt) > 0 ? Number(f.offAt) : 0,
+    al: (f.al && typeof f.al === 'object') ? f.al : {}, now: Number(f.now) > 0 ? Number(f.now) : 0
   };
+}
+
+// ── 공식 공지 · 지연 제보 줄(예전 웹 _routeOfficialRow · _lrRouteAlertStart 와 같은 문구, 그림말 제외) ──
+function rheadAgo(ts, now) {                          // '방금' · 'N분 전' · 'N시간 전'
+  var m = Math.max(0, Math.round((now - Number(ts || 0)) / 60000));
+  return m < 1 ? '방금' : (m < 60 ? m + '분 전' : Math.round(m / 60) + '시간 전');
+}
+function rheadJoin(parts) {                           // [[글, 굵게(0|1)], …] → { s, hl }
+  var s = '', hl = [];
+  parts.forEach(function (p) { if (p[1] && p[0].length) hl.push([s.length, s.length + p[0].length]); s += p[0]; });
+  return { s: s, hl: hl };
+}
+function rheadOffParts(l, n, now) {
+  var txt = rheadStr(n.text || n.title || '', 400).replace(/\s+/g, ' ').trim();
+  if (n.estimated) {                                  // 도착 간격으로 짐작한 것(공식 공지 아님) — 지연 의심만 보인다
+    return [[l + ' 지연 의심 (도착 간격 기준 추정)', 1], [' · ' + txt + ' (' + rheadAgo(n.ts, now) + ' · 공식 공지 아님)', 0]];
+  }
+  if (txt.length > 110) txt = txt.slice(0, 108).replace(/\s+\S*$/, '') + '…';
+  var pre = (txt.indexOf(l) === 0) ? '' : l + ' — ';
+  return [['서울교통공사 공지', 1], [' · ' + pre + txt + ' (' + rheadAgo(n.ts, now) + ')', 0]];
+}
+function rheadNoteNodes(f) {
+  var now = f.now || 0, out = [], i;
+  var offLines = [];
+  f.ln.forEach(function (l) {
+    var n = f.off[l];
+    if (!n || typeof n !== 'object') return;
+    if (n.estimated && !n.suspect) return;            // 짐작한 '정상' 은 경로 카드에 올리지 않는다
+    offLines.push(rheadOffParts(l, n, now));
+  });
+  if (offLines.length) {
+    var parts = [];
+    offLines.forEach(function (p, k) { if (k) parts.push(['\n', 0]); p.forEach(function (x) { parts.push(x); }); });
+    var j = rheadJoin(parts), b = { t: 'box', s: j.s, size: 12, lh: 1.5, color: 'text', fill: 'rgba(10,132,255,0.12)', line: 'rgba(10,132,255,0.35)', r: 10, ip: [10, 7, 10, 7], pad: [0, 0, 0, 8] };
+    if (j.hl.length) b.hl = j.hl;
+    out.push(b);
+  }
+  var al = [], first = -1;
+  f.ln.forEach(function (l, k) {
+    var a = f.al[l];
+    if (!a || typeof a !== 'object' || !(Number(a.reporters) >= 3)) return;
+    var st = rheadList(a.stations, 1)[0], t = l + ' 최근 30분 지연 제보 ' + rheadInt(a.reporters, 0, 9999) + '명' + (st && st.stn ? ' (' + rheadStr(st.stn, 20) + ' 부근)' : '');
+    if (first < 0) first = k;
+    al.push([t, 1]);
+  });
+  if (al.length) {
+    var ap = [];
+    al.forEach(function (p, k) { if (k) ap.push([' · ', 0]); ap.push(p); });
+    ap.push([' — 시간 여유를 두고 이동하세요.', 0]);
+    var aj = rheadJoin(ap), ab = { t: 'box', s: aj.s, size: 12, lh: 1.5, color: 'text', fill: 'rgba(255,69,58,0.12)', line: 'rgba(255,69,58,0.35)', r: 10, ip: [10, 7, 10, 7], pad: [0, 0, 0, 4] };
+    if (aj.hl.length) ab.hl = aj.hl;
+    out.push(ab);
+    out.push({ t: 'row', gap: 6, pad: [0, 0, 0, 8], kids: [{ t: 'button', s: '노선 방 보기', size: 11, h: 28, r: 10, bold: true, fill: 'card2', line: 'border', tc: 'gold', act: { a: 'call', v: 'rh.room.' + first } }] });
+  }
+  if (!out.length) out.push({ t: 'spacer', h: 0 });     // 보일 것이 없다 — 높이 0
+  return out;
 }
 
 function rheadHeadNodes(f) {
@@ -161,9 +221,9 @@ function rheadTabNodes(f) {
 function rheadScreen(inp, factsIn) {
   inp = inp || {};
   if (!(Number(inp.cap) >= 10)) return { ok: false, error: 'cap' };
-  var part = inp.part === 't' ? 't' : 'h';
+  var part = inp.part === 't' ? 't' : (inp.part === 'n' ? 'n' : 'h');
   var f = rheadFacts(factsIn);
-  var body = part === 't' ? rheadTabNodes(f) : rheadHeadNodes(f);
+  var body = part === 't' ? rheadTabNodes(f) : (part === 'n' ? rheadNoteNodes(f) : rheadHeadNodes(f));
   var out = { ok: true, v: 1, screen: 'rhead', cover: 'tab', bg: 'card', head: [], body: body, info: { part: part } };      // 카드 안에 놓이는 화면 — 바탕은 카드색
   out.rev = 'r' + RHEAD_SCREEN_V + part + ':' + rheadHash(JSON.stringify(body));
   return out;

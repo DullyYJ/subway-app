@@ -134,8 +134,43 @@ const web = new Function(
   ok(w.indexOf('if (url.pathname === "/screen/rhead") return handleScreenRhead(request);') > 0, '경로 등록');
   ok(!/[^\x00-\x7f]/.test(body), '내장 블록은 ASCII 만');
   const other = w.slice(0, i) + w.slice(j);
-  const names = ['rheadScreen', 'rheadFacts', 'rheadHash', 'rheadStr', 'rheadInt', 'rheadJosa', 'rheadDoor', 'rheadList', 'rheadXferLine', 'rheadDoorLines', 'rheadHeadNodes', 'rheadTabNodes', 'RHEAD_SCREEN_V', 'RHEAD_TABS', 'RHEAD_EMOJI', 'handleScreenRhead'];
+  const names = ['rheadScreen', 'rheadFacts', 'rheadHash', 'rheadStr', 'rheadInt', 'rheadJosa', 'rheadDoor', 'rheadList', 'rheadXferLine', 'rheadDoorLines', 'rheadHeadNodes', 'rheadTabNodes', 'rheadAgo', 'rheadJoin', 'rheadOffParts', 'rheadNoteNodes', 'RHEAD_SCREEN_V', 'RHEAD_TABS', 'RHEAD_EMOJI', 'handleScreenRhead'];
   ok(names.every(n => !new RegExp('^(async\\s+)?(function|var)\\s+' + n + '\\b', 'm').test(other)), '다른 엔진과 이름이 겹치지 않는다');
+}
+// ── ⑨ 공식 공지 · 지연 제보 줄(part n): 옛 웹 _offText 와 문구가 같다 ──
+{
+  const webN = new Function('_ltEsc', '_offAgo', cut('function _offText(l, n){', 'function _lrRenderOfficial') + '\nreturn _offText;');
+  const NOW = 1760000000000, esc = x => String(x), ago = ts => { const m = Math.max(0, Math.round((NOW - ts) / 60000)); return m < 1 ? '방금' : (m < 60 ? m + '분 전' : Math.round(m / 60) + '시간 전'); };
+  const wt = webN(esc, ago), strip = h => h.replace(/<[^>]+>/g, '').replace(/[☀-➿⬀-⯿️‍]|[\uD83C-\uD83E][\uDC00-\uDFFF]/g, '').replace(/^\s+/, '');
+  const N = f => E.rheadScreen({ cap: 10, part: 'n' }, Object.assign({ now: NOW }, f));
+  const cases = [
+    ['2호선', { text: '2호선 신도림역 무정차 통과 중입니다', ts: NOW - 5 * 60000 }],
+    ['1호선', { text: '열차 지연', title: '', ts: NOW - 90 * 60000 }],
+    ['3호선', { text: 'x '.repeat(80), ts: NOW - 30000 }],
+    ['4호선', { text: '도착 간격이 벌어졌어요', ts: NOW - 3 * 60000, estimated: true, suspect: true }],
+  ];
+  cases.forEach(c => {
+    const o = N({ ln: [c[0]], off: { [c[0]]: c[1] } }), b = o.body[0];
+    ok(b && b.t === 'box' && b.s === strip(wt(c[0], c[1])).replace(/\s+$/, ''), '공지 문구가 웹과 같다(' + c[0] + '): ' + (b && b.s));
+    ok(b.fill === 'rgba(10,132,255,0.12)' && b.hl && b.hl[0][0] === 0, '파란 상자 + 앞부분 굵게(' + c[0] + ')');
+  });
+  const none = N({ ln: ['2호선'], off: { '2호선': { text: '정상', ts: NOW, estimated: true } } });
+  ok(none.body.length === 1 && none.body[0].t === 'spacer' && none.body[0].h === 0, '짐작한 정상은 올리지 않는다 → 높이 0');
+  ok(N({}).body[0].t === 'spacer', '아무 사실이 없으면 높이 0');
+  const two = N({ ln: ['2호선', '1호선'], off: { '2호선': { text: 'a', ts: NOW }, '1호선': { text: 'b', ts: NOW } } });
+  ok(two.body[0].s.split('\n').length === 2 && two.body[0].hl.length === 2, '노선이 둘이면 한 상자 두 줄 · 굵게 둘');
+  const al = N({ ln: ['2호선', '인천2호선'], al: { '2호선': { reporters: 2, stations: [{ stn: '강남', n: 2 }] }, '인천2호선': { reporters: 4, stations: [{ stn: '검단오류', n: 3 }] } } });
+  ok(al.body.length === 2 && al.body[0].s === '인천2호선 최근 30분 지연 제보 4명 (검단오류 부근) — 시간 여유를 두고 이동하세요.', '제보 3명 이상만: ' + (al.body[0] && al.body[0].s));
+  ok(al.body[1].kids[0].act.v === 'rh.room.1' && al.body[0].fill === 'rgba(255,69,58,0.12)', '노선 방 보기 단추(rh.room.<순번>) + 빨간 상자');
+  const both = N({ ln: ['2호선'], off: { '2호선': { text: 'a', ts: NOW } }, al: { '2호선': { reporters: 3, stations: [] } } });
+  ok(both.body.length === 3 && both.body[0].fill.indexOf('10,132,255') > 0 && both.body[1].s.indexOf('2호선 최근 30분 지연 제보 3명 — ') === 0, '공지 + 제보 + 단추 세 덩이');
+  {
+    const sc = [N({ ln: ['2호선'], off: { '2호선': { text: 'a', ts: NOW } }, al: { '2호선': { reporters: 5, stations: [{ stn: 'x', n: 1 }] } } }), none, N({}), both];
+    const r = screenCheck(sc); ok(!r.err && r.out.length === sc.length && r.out.every(l => l.startsWith('OK ') && Number(l.split(' ')[2]) === 0), '앱 검증기 통과(part n) ' + (r.err || r.out.join('|')));
+  }
+  ok(!flat(both.body).some(n => EMOJI.test(JSON.stringify(n))), 'part n 에 이모지 없음');
+  const bad = N({ ln: ['2호선', 5, null, 'x'.repeat(99)], off: 'zz', al: [1, 2], now: 'abc' }); ok(bad.ok && bad.body.length >= 1, '이상한 값에도 죽지 않는다');
+  ok(E.rheadScreen({ cap: 10, part: 'n' }, { ln: ['2호선'], off: { '2호선': { text: 'a', ts: NOW } }, now: NOW }).rev !== E.rheadScreen({ cap: 10, part: 'h' }, { m: 5 }).rev, 'rev 가 부분마다 다르다');
 }
 // ── ⑧ 워커 끝에서 끝까지 ──
 (async () => {
@@ -145,7 +180,7 @@ const web = new Function(
     const w = (await import(tmp)).default, call = (u, init) => w.fetch(new Request(u, init), {}, { waitUntil() { } });
     const post = b => call('https://x/screen/rhead', { method: 'POST', body: b, headers: { 'Content-Type': 'text/plain;charset=UTF-8' } });
     const f = { m: 31, a: '신도림역', b: '수원역', fav: 1, sp: { ride: 25, wait: 2, walk: 4 }, why: '가장 빨리 도착하는 경로예요.', xs: [{ at: '신도림', fromType: 1, fromLine: '1호선', toType: 1, toLine: '2호선', walkMin: 3 }], tab: 'sub', ld: 0 };
-    for (const part of ['h', 't']) {
+    for (const part of ['h', 't', 'n']) {
       const r = await post(JSON.stringify({ cap: 10, part, f })), j = await r.json();
       ok(r.status === 200 && j.ok && j.screen === 'rhead' && j.info.part === part && /route-v2-2026-10-\d\ds\d\d/.test(j.ver), '워커 응답 200(' + part + ') ' + j.ver);
       const direct = E.rheadScreen({ cap: 10, part }, f); ok(JSON.stringify(Object.assign({}, j, { ver: undefined })) === JSON.stringify(Object.assign({}, direct, { ver: undefined })), '워커 응답 = 직접 계산(' + part + ')');
@@ -158,7 +193,7 @@ const web = new Function(
   try { fs.unlinkSync(tmp); } catch (e) { }
   if (html.indexOf('window._scrRhead = ') >= 0) {
     const has = t => html.indexOf(t) >= 0;
-    ok(has("'/screen/rhead'") && has("/^rh\\.(fav|close|tab\\.(fast|less|sub|bus|longdist))$/"), '웹: 결과 카드 연결부 + 엔진 주소 + rh.<행동> 만 처리');
+    ok(has("'/screen/rhead'") && has("/^rh\\.(fav|close|room\\.(\\d)|tab\\.(fast|less|sub|bus|longdist))$/"), '웹: 결과 카드 연결부 + 엔진 주소 + rh.<행동> 만 처리');
   }
   console.log(`rhead_engine: ${pass} pass, ${fail} fail`);
   process.exit(fail ? 1 : 0);

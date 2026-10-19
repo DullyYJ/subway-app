@@ -15288,7 +15288,7 @@ window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
   var TB = makeRegion('tb', paintCfg(function(){ if(rhOwned()) return null; return document.getElementById('routeOptionTabs'); }));                                           // 경로 옵션 탭(최단시간·최소환승·지하철·버스)
   // 경로 카드의 안내 문구 줄들(승차·대기·도보 분리 / 출발 비교 / 공식 안내 / 경고) — 여러 줄도 줄별로 읽는다
   ['transitSplitRow', 'transitXferRow', 'transitDepRow', 'transitOfficialRow', 'transitAlertRow'].forEach(function(rid){
-    makeRegion('r:' + rid, paintCfg(function(){ if(rhOwned() && (rid === 'transitSplitRow' || rid === 'transitXferRow')) return null; return document.getElementById(rid); }));
+    makeRegion('r:' + rid, paintCfg(function(){ if(rhOwned() && (rid === 'transitSplitRow' || rid === 'transitXferRow' || rid === 'transitOfficialRow' || rid === 'transitAlertRow')) return null; return document.getElementById(rid); }));
   });
   // ★ 2026-10-18 (네이티브 이전 4번째 화면: 혼잡도 카드 — YJ: '목표는 기능을 100% 유지하며 전부 네이티브로'): 홈 아래쪽 혼잡도 카드에서 글자·상자뿐인 부분을 같은 방식으로 그린다.
   //   웹은 레이아웃·내용·눌림을 그대로 맡고(투명하게 제자리), 네이티브가 그 위에 그림만 그린다. 24시간 막대(가로 스크롤)와 장면(이미 네이티브 Canvas)은 제외 — 계속 웹이 그린다.
@@ -20424,8 +20424,10 @@ window.addEventListener('unhandledrejection', function(e) {
       <div id="transitXferRow" style="display:none;font-size:12px;line-height:1.55;color:var(--text);margin:0 0 8px;padding:7px 10px;border-radius:10px;background:rgba(255,159,10,.12);border:1px solid rgba(255,159,10,.4);"></div>
       </div><!-- /trHeadWrap -->
       <div id="transitDepRow" style="display:none;font-size:12px;line-height:1.5;color:var(--sub);margin:0 0 8px;"></div>
+      <div id="trNoteWrap"><!-- 서버 구동 네이티브 결과 카드(rnote)가 덮는 자리 -->
       <div id="transitOfficialRow" style="display:none;font-size:12px;line-height:1.5;color:var(--text);margin:0 0 8px;padding:7px 10px;border-radius:10px;background:rgba(10,132,255,.12);border:1px solid rgba(10,132,255,.35);"></div>
       <div id="transitAlertRow" style="display:none;font-size:12px;line-height:1.5;color:var(--text);margin:0 0 8px;padding:7px 10px;border-radius:10px;background:rgba(255,69,58,.12);border:1px solid rgba(255,69,58,.35);"></div>
+      </div><!-- /trNoteWrap -->
 
       <!-- ── 경로 옵션 탭 (최단시간/최소환승) ── -->
       <div id="routeOptionTabs" style="display:none;gap:6px;margin-bottom:10px;flex-wrap:nowrap;">
@@ -21136,7 +21138,7 @@ window.addEventListener('unhandledrejection', function(e) {
             <span id="scrrSetDot" style="position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.3);"></span>
           </label>
         </div>
-        <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">홈 경로 결과 카드의 머리줄(소요 시간·구간·즐겨찾기·닫기), 승차·대기·도보 요약, 환승 안내, 경로 탭(최단시간·최소환승·지하철·버스)을 엔진이 정해 내려주고, 기기가 직접 그려요. 문제가 생기면 예전 웹 카드로 돌아가요.</p>
+        <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">홈 경로 결과 카드의 머리줄(소요 시간·구간·즐겨찾기·닫기), 승차·대기·도보 요약, 환승 안내, 경로 탭(최단시간·최소환승·지하철·버스), 공식 공지·지연 제보 줄을 엔진이 정해 내려주고, 기기가 직접 그려요. 문제가 생기면 예전 웹 카드로 돌아가요.</p>
         <div id="scrrSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
         <style>#scrrSetOn:checked ~ #scrrSetKnob{background:var(--gold) !important;} #scrrSetOn:checked ~ #scrrSetDot{left:23px !important;}</style>
       </div>
@@ -39514,7 +39516,7 @@ window.refreshShop=refreshShop;
     try{ var Xscrq = window._scrCchips && _scrCchips.S, cscrq = document.getElementById('scrqSetCard'); if(Xscrq && cscrq && cscrq.style.display === 'block') f.feat.scrq = { h: 1, on: Xscrq.on ? 1 : 0, f: (Xscrq.failed || Xscrq.fails >= 2) ? 1 : 0, w: Xscrq.why || '', b: Xscrq.badFresh > 0 ? 1 : 0 }; }catch(e){}
     try{ var Xscrw = window._scrWrite && _scrWrite.S, cscrw = document.getElementById('scrwSetCard'); if(Xscrw && cscrw && cscrw.style.display === 'block') f.feat.scrw = { h: 1, on: Xscrw.on ? 1 : 0, f: (Xscrw.failed || Xscrw.fails >= 2) ? 1 : 0, w: Xscrw.why || '', b: Xscrw.badFresh > 0 ? 1 : 0 }; }catch(e){}
     try{ var Xscrh = window._scrHome && _scrHome.S, cscrh = document.getElementById('scrhSetCard'); if(Xscrh && cscrh && cscrh.style.display === 'block') f.feat.scrh = { h: 1, on: Xscrh.on ? 1 : 0, f: (Xscrh.failed || Xscrh.fails >= 2) ? 1 : 0, w: Xscrh.why || '', b: Xscrh.badFresh > 0 ? 1 : 0 }; }catch(e){}
-    try{ var Xscrr = window._scrRhead && _scrRhead.S, cscrr = document.getElementById('scrrSetCard'); if(Xscrr && cscrr && cscrr.style.display === 'block') f.feat.scrr = { h: 1, on: Xscrr.on ? 1 : 0, f: (Xscrr.failed || Xscrr.fails >= 2 || _scrRhead.S2.failed || _scrRhead.S2.fails >= 2) ? 1 : 0, w: Xscrr.why || _scrRhead.S2.why || '', b: Xscrr.badFresh > 0 ? 1 : 0 }; }catch(e){}
+    try{ var Xscrr = window._scrRhead && _scrRhead.S, cscrr = document.getElementById('scrrSetCard'); if(Xscrr && cscrr && cscrr.style.display === 'block') f.feat.scrr = { h: 1, on: Xscrr.on ? 1 : 0, f: (Xscrr.failed || Xscrr.fails >= 2 || _scrRhead.S2.failed || _scrRhead.S2.fails >= 2 || _scrRhead.S3.failed || _scrRhead.S3.fails >= 2) ? 1 : 0, w: Xscrr.why || _scrRhead.S2.why || _scrRhead.S3.why || '', b: Xscrr.badFresh > 0 ? 1 : 0 }; }catch(e){}
     try{ if(typeof _sbhSyncCard === 'function') _sbhSyncCard(); var csbh = document.getElementById('sbhSetCard'); if(csbh && csbh.style.display === 'block') f.feat.sbh = { h: 1, on: _sbhOn() ? 1 : 0, f: 0, w: '' }; }catch(e){}
     try{ if(typeof _cndSyncCard === 'function') _cndSyncCard(); var ccnd = document.getElementById('cndSetCard'); if(ccnd && ccnd.style.display === 'block') f.feat.cnd = { h: 1, on: (_cndOn() && !_cndBad()) ? 1 : 0, f: _cndBad() ? 1 : 0, w: '' }; }catch(e){}
     try{ if(typeof _rtfSyncCard === 'function') _rtfSyncCard(); var crtf = document.getElementById('rtfSetCard'); if(crtf && crtf.style.display === 'block') f.feat.rtf = { h: 1, on: (_rtfOn() && !_rtfBad()) ? 1 : 0, f: _rtfBad() ? 1 : 0, w: '' }; }catch(e){}
@@ -41437,12 +41439,13 @@ window.refreshShop=refreshShop;
 //   누르면 예전 웹 함수가 그대로 일한다: rh.fav → _openFavPopup · rh.close → closeTransitResult · rh.tab.<종류> → selectRouteOption — 허용 목록 밖은 무시.
 //   웹 줄들은 아래에 그대로 두고(폴백) 네이티브가 그 위를 덮는다. 네이티브가 맡는 동안 웹 줄의 속만 감춘다(자리는 그대로). 높이는 네이티브가 그린 내용 높이를 감싸개가 따른다(줄이 늘면 아래 웹 내용이 밀린다).
   (function(){
-    var K1, K2, R = { cap: 0 }, HH = { rhead: 0, rtabs: 0 };
+    var K1, K2, K3, R = { cap: 0 }, HH = { rhead: 0, rtabs: 0, rnote: 0 };
     var TABS = ['fast', 'less', 'sub', 'bus', 'longdist'];
     function gEl(id){ return document.getElementById(id); }
     function headEl(){ return gEl('trHeadWrap'); }
     function tabsEl(){ return gEl('routeOptionTabs'); }
-    try{ var st = document.createElement('style'); st.textContent = '#trHeadWrap.rh-own > *{visibility:hidden !important;} #routeOptionTabs.rh-own > *{visibility:hidden !important;}'; document.head.appendChild(st); }catch(eSt){}
+    function noteEl(){ return gEl('trNoteWrap'); }
+    try{ var st = document.createElement('style'); st.textContent = '#trHeadWrap.rh-own > *{visibility:hidden !important;} #routeOptionTabs.rh-own > *{visibility:hidden !important;} #trNoteWrap.rh-own > *{visibility:hidden !important;}'; document.head.appendChild(st); }catch(eSt){}
     function own(el, on){ try{ if(el) el.classList.toggle('rh-own', !!on); }catch(e){} }
     function applyH(el, h){ try{ if(!el || !(h > 8 && h < 2000)) return; el.style.boxSizing = 'border-box'; el.style.overflow = 'hidden'; el.style.flexShrink = '0'; el.style.height = h + 'px'; }catch(e){} }
     function unH(el){ try{ if(el){ el.style.height = ''; el.style.overflow = ''; el.style.boxSizing = ''; el.style.flexShrink = ''; } }catch(e){} }
@@ -41450,7 +41453,7 @@ window.refreshShop=refreshShop;
       if(R.cap) return;
       var P = K1 && K1.plug(); if(!P || typeof P.status !== 'function'){ R.cap = 3; return; }
       R.cap = -1;
-      Promise.resolve(P.status({ id: 'rhead' })).then(function(st){ R.cap = (st && st.cap >= 10) ? 10 : 3; try{ K1.kick(); K2.kick(); }catch(e){} }, function(){ R.cap = 3; });
+      Promise.resolve(P.status({ id: 'rhead' })).then(function(st){ R.cap = (st && st.cap >= 10) ? 10 : 3; try{ K1.kick(); K2.kick(); K3.kick(); }catch(e){} }, function(){ R.cap = 3; });
     }
     function cardOpen(){
       try{
@@ -41471,6 +41474,10 @@ window.refreshShop=refreshShop;
     function openHead(){ var o = cardOpen() && !!headEl() && !!(gEl('transitResultMinNum') || window._tabNoRoute) && gate(); if(!o){ own(headEl(), false); unH(headEl()); } return o; }
     function openTabs(){ var o = cardOpen() && !!tabsEl() && tabsEl().offsetHeight > 10 && gate(); if(!o){ own(tabsEl(), false); unH(tabsEl()); } return o; }
 
+    function noteShown(){                                                        // 웹이 공지·제보 줄을 보여 주는 중일 때만(자리가 있어야 덮을 수 있다) — 보일 것인지의 글은 엔진이 짓는다
+      try{ return ['transitOfficialRow', 'transitAlertRow'].some(function(id){ var e = gEl(id); return !!(e && e.style.display !== 'none' && e.offsetHeight > 4); }); }catch(e){ return false; }
+    }
+    function openNote(){ var o = cardOpen() && !!noteEl() && noteShown() && gate(); if(!o){ own(noteEl(), false); unH(noteEl()); } return o; }
     // ── 사실: 지금 DOM 에 있는 값을 그대로 읽는다(글을 짓지 않는다) ──
     function nameOf(v){ try{ return (v && v.name) ? String(v.name) : ''; }catch(e){ return ''; } }
     function headFacts(){
@@ -41507,16 +41514,27 @@ window.refreshShop=refreshShop;
       return { m: 0, tab: tab, ld: ld };
     }
     function reqHead(){ var txt = JSON.stringify({ cap: 10, part: 'h', f: headFacts() }), fk = K1.hash(txt); return { txt: txt, fk: fk, idle: false, key: '', snap: null, sig: fk }; }
+    function noteFacts(){
+      var f = { ln: [], off: {}, offAt: 0, al: {}, now: Math.floor(Date.now() / 60000) * 60000 };
+      try{
+        f.ln = Array.isArray(window._rnLn) ? window._rnLn.slice(0, 6) : [];
+        var o = window._rnOff; if(o && o.lines){ f.offAt = o.at || 0; f.ln.forEach(function(l){ var n = o.lines[l]; if(n) f.off[l] = { text: n.text, title: n.title, ts: n.ts, estimated: n.estimated ? 1 : 0, suspect: n.suspect ? 1 : 0 }; }); }
+        var a = window._rnAl; if(a && a.lines){ f.ln.forEach(function(l){ var x = a.lines[l]; if(x) f.al[l] = { reporters: x.reporters, stations: (x.stations || []).slice(0, 1) }; }); }
+      }catch(e){}
+      return f;
+    }
+    function reqNote(){ var txt = JSON.stringify({ cap: 10, part: 'n', f: noteFacts() }), fk = K3.hash(txt); return { txt: txt, fk: fk, idle: false, key: '', snap: null, sig: fk }; }
     function reqTabs(){ var txt = JSON.stringify({ cap: 10, part: 't', f: tabFacts() }), fk = K2.hash(txt); return { txt: txt, fk: fk, idle: false, key: '', snap: null, sig: fk }; }
     function act(e){
       if(e.a !== 'call') return;
-      var m = /^rh\.(fav|close|tab\.(fast|less|sub|bus|longdist))$/.exec(String(e.v || '')); if(!m) return;
+      var m = /^rh\.(fav|close|room\.(\d)|tab\.(fast|less|sub|bus|longdist))$/.exec(String(e.v || '')); if(!m) return;
       try{
         if(m[1] === 'fav') _openFavPopup();
         else if(m[1] === 'close') closeTransitResult();
-        else selectRouteOption(m[2]);
+        else if(m[2] != null){ var ln = (window._rnLn || [])[Number(m[2])]; if(ln) _lrOpenRoom(ln); }
+        else selectRouteOption(m[3]);
       }catch(x){}
-      setTimeout(function(){ try{ K1.changed(); K2.changed(); }catch(e){} }, 30);
+      setTimeout(function(){ try{ K1.changed(); K2.changed(); K3.changed(); }catch(e){} }, 30);
     }
     function listen(id, el){
       return function(P){
@@ -41527,7 +41545,9 @@ window.refreshShop=refreshShop;
         });
       };
     }
-    var TXT = '결과 카드 윗부분(머리줄·요약·환승 안내·경로 탭)을 엔진이 정한 대로 기기가 직접 그려요(실험 중).';
+    var TXT = '결과 카드 윗부분(머리줄·요약·환승 안내·경로 탭·공지 줄)을 엔진이 정한 대로 기기가 직접 그려요(실험 중).';
+    // 세 틀의 켜짐 저장값을 머리줄 쪽에 맞춘다(틀을 만들기 '전에' — 만들 때 읽는다)
+    try{ var on1 = localStorage.getItem('gdm_scrr_on') === '1' ? '1' : '0'; if(localStorage.getItem('gdm_scrr2_on') !== on1) localStorage.setItem('gdm_scrr2_on', on1); if(localStorage.getItem('gdm_scrr3_on') !== on1) localStorage.setItem('gdm_scrr3_on', on1); }catch(eSync){}
     K1 = window._scrKit({
       id: 'rhead', kp: 'gdm_scrr', ep: '/screen/rhead', screen: 'rhead', label: '결과 카드', card: 'scrr', cache: false, waitIdle: false, bucket: 0, idleMs: 250, onText: TXT,
       root: headEl, open: openHead, rect: function(){ return rectOf(headEl()); }, request: reqHead, act: act, sig: function(){ return reqHead().sig; }, sigMs: 400,
@@ -41540,10 +41560,15 @@ window.refreshShop=refreshShop;
       listen: listen('rtabs', tabsEl),
       webClear: function(){ own(tabsEl(), true); applyH(tabsEl(), HH.rtabs); }, webBack: function(){ own(tabsEl(), false); unH(tabsEl()); }, onEnd: function(){ own(tabsEl(), false); unH(tabsEl()); }
     });
-    // 두 줄은 한 스위치로 함께 켜고 끈다(같은 설정). 켜짐 여부·문제 표시는 머리줄 쪽(K1)을 따른다.
-    try{ if(localStorage.getItem('gdm_scrr_on') !== localStorage.getItem('gdm_scrr2_on')) localStorage.setItem('gdm_scrr2_on', localStorage.getItem('gdm_scrr_on') === '1' ? '1' : '0'); }catch(eSync){}
-    window._scrRhead = { S: K1.S, S2: K2.S, kick: function(){ try{ K1.kick(); K2.kick(); }catch(e){} }, changed: function(){ try{ K1.changed(); K2.changed(); }catch(e){} }, owns: function(){ try{ return K1.owns() || K2.owns(); }catch(e){ return false; } }, k1: K1, k2: K2 };
-    window._scrrSetUse = function(on){ try{ K1.setUse(on); K2.setUse(on); }catch(e){} };
+    K3 = window._scrKit({
+      id: 'rnote', kp: 'gdm_scrr3', ep: '/screen/rhead', screen: 'rhead', label: '공지 줄', card: 'scrrn', cache: false, waitIdle: false, bucket: 0, idleMs: 250, onText: TXT,
+      root: noteEl, open: openNote, rect: function(){ return rectOf(noteEl()); }, request: reqNote, act: act, sig: function(){ return reqNote().sig + '|' + noteShown(); }, sigMs: 500,
+      listen: listen('rnote', noteEl),
+      webClear: function(){ own(noteEl(), true); applyH(noteEl(), HH.rnote); }, webBack: function(){ own(noteEl(), false); unH(noteEl()); }, onEnd: function(){ own(noteEl(), false); unH(noteEl()); }
+    });
+    // 세 틀은 한 스위치로 함께 켜고 끈다(같은 설정). 켜짐 여부·문제 표시는 머리줄 쪽(K1)을 따른다.
+    window._scrRhead = { S: K1.S, S2: K2.S, S3: K3.S, kick: function(){ try{ K1.kick(); K2.kick(); K3.kick(); }catch(e){} }, changed: function(){ try{ K1.changed(); K2.changed(); K3.changed(); }catch(e){} }, owns: function(){ try{ return K1.owns() || K2.owns() || K3.owns(); }catch(e){ return false; } }, k1: K1, k2: K2, k3: K3 };
+    window._scrrSetUse = function(on){ try{ K1.setUse(on); K2.setUse(on); K3.setUse(on); }catch(e){} };
   })();
 
   // ═════════════ 홈 탭 경로 입력 ═════════════
@@ -42374,10 +42399,13 @@ function _lrRenderOfficial(line){
 function _routeOfficialRow(route){
   var el=document.getElementById('transitOfficialRow'); if(!el) return;
   try{
-    if(!route || route.why===undefined){ el.style.display='none'; return; }
+    if(!route || route.why===undefined){ el.style.display='none'; window._rnLn=null; window._rnOff=null; return; }
     var lines=[]; (route.sections||[]).forEach(function(sc){ var nm=(sc.transportation||{}).name; if((sc.transportation||{}).type===1 && nm && lines.indexOf(nm)<0) lines.push(nm); });
-    if(!lines.length){ el.style.display='none'; return; }
+    window._rnLn=lines.slice(0,6);      // 서버 구동 네이티브 결과 카드(rnote)에 넘기는 사실: 내 경로의 지하철 노선
+    if(!lines.length){ el.style.display='none'; window._rnOff=null; return; }
     _offGet(function(j){
+      window._rnOff = j ? { at: _offCache.at || 0, lines: j.lines || {} } : null;      // 공지 원자료(글은 엔진이 짓는다)
+      try{ if(window._scrRhead) window._scrRhead.changed(); }catch(eRn){}
       var parts=[]; lines.forEach(function(l){ var n=j && j.lines && j.lines[l]; if(n && !(n.estimated && !n.suspect)) parts.push(_offText(l,n)); });
       if(!parts.length){ el.style.display='none'; el.innerHTML=''; return; }
       el.innerHTML=parts.join('<br>'); el.style.display='block';
@@ -42506,14 +42534,16 @@ function _lrRouteAlertStart(route){
   try{ _routeOfficialRow(route); }catch(e0){}
   var el=document.getElementById('transitAlertRow'); if(!el) return;
   try{
-    if(!route || route.why===undefined){ el.style.display='none'; return; }
+    if(!route || route.why===undefined){ el.style.display='none'; window._rnAl=null; return; }
     var lines=[]; (route.sections||[]).forEach(function(sc){ var nm=(sc.transportation||{}).name; if((sc.transportation||{}).type===1 && nm && lines.indexOf(nm)<0) lines.push(nm); });
-    if(!lines.length){ el.style.display='none'; return; }
+    if(!lines.length){ el.style.display='none'; window._rnAl=null; return; }
     var key=lines.join(',');
     if(_lrAlertAsk.key===key && Date.now()-_lrAlertAsk.at<60000) return;
     _lrAlertAsk={ key:key, at:Date.now() };
     fetch(_lrBase()+'/lalerts?lines='+encodeURIComponent(key)).then(function(r){ return r.ok?r.json():null; }).then(function(j){
       if(!j||!j.ok){ return; }
+      window._rnAl = { lines: j.lines || {} };      // 지연 제보 원자료(글은 엔진이 짓는다)
+      try{ if(window._scrRhead) window._scrRhead.changed(); }catch(eRn){}
       var parts=[];
       lines.forEach(function(l){ var a=(j.lines||{})[l]; if(a && a.reporters>=3){ var st=(a.stations||[])[0]; parts.push('<b>'+_ltEsc(l)+'</b> 최근 30분 지연 제보 '+a.reporters+'명'+(st?' ('+_ltEsc(st.stn)+' 부근)':'')); } });
       if(!parts.length){ el.style.display='none'; el.innerHTML=''; return; }
