@@ -20940,6 +20940,21 @@ window.addEventListener('unhandledrejection', function(e) {
         <style>#arwSetOn:checked ~ #arwSetKnob{background:var(--gold) !important;} #arwSetOn:checked ~ #arwSetDot{left:23px !important;}</style>
       </div>
 
+      <!-- ★ 2026-10-19: 출퇴근 브리핑 시각을 엔진이 정하기 — 브리핑을 언제 울릴지(지금 보낼 분 · 4주치 예약)를 엔진이 정한다. 기본 꺼짐 -->
+      <div id="cmwSetCard" style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <div style="font-size:15px;font-weight:800;color:var(--text);">출퇴근 브리핑 시각을 엔진이 정하기</div>
+          <label style="position:relative;display:inline-block;width:46px;height:26px;">
+            <input type="checkbox" id="cmwSetOn" onchange="_cmwSetUse(this.checked)" style="opacity:0;width:0;height:0;">
+            <span id="cmwSetKnob" style="position:absolute;inset:0;border-radius:13px;background:var(--border2);transition:.2s;cursor:pointer;"></span>
+            <span id="cmwSetDot" style="position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.3);"></span>
+          </label>
+        </div>
+        <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">출퇴근 브리핑 알림을 지금 보낼지(설정한 시각·요일·같은 분에 한 번만)와, 앞으로 4주치 예약 알림을 몇 월 몇 일 몇 시에 걸지를 웹이 아니라 엔진이 정해요. 알림 내용(날씨·혼잡도)과 장소는 그대로 앱에서 만들고 엔진에 보내지 않아요. 엔진에 물을 수 없으면 예전 방식으로 바로 정해요.</p>
+        <div id="cmwSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
+        <style>#cmwSetOn:checked ~ #cmwSetKnob{background:var(--gold) !important;} #cmwSetOn:checked ~ #cmwSetDot{left:23px !important;}</style>
+      </div>
+
       <!-- ★ 2026-10-03: 도착 오차 익명 기록 (끌 수 있음) -->
       <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
         <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:8px;">📊 안내 정확도 향상</div>
@@ -26092,7 +26107,117 @@ window._cmTestFire = function(){
 };
 
 // 분 단위 체크 스케줄러 (앱 실행 중)
+// ── 출퇴근 브리핑 '언제 울릴까' — 엔진이 정한다(2026-10-19, 5번 5단계 셋째 조각) ──
+//   설정 스위치 '출퇴근 브리핑 시각을 엔진이 정하기'(gdm_cmw, 기본 꺼짐). 켜면 ① 앱이 켜져 있을 때 '지금 브리핑을 보낼 분인가'(요일 · 출근/퇴근 시각과 같은 분 · 같은 분에 한 번만)
+//   ② 앞으로 4주치 예약 알림을 몇 월 며칠 몇 시에 걸지 를 웹 규칙(_cmTickLocal · _cmOccurrences)이 아니라 엔진(/commute-alarm)이 정한다.
+//   웹은 '지금 시각 · 켜짐 · 출근/퇴근 시각 · 요일 · 지난번 보낸 기록'만 알리고, 돌아온 판정을 그대로 따른다. 장소(집·회사)와 알림 내용(날씨·혼잡도)은 엔진에 보내지 않는다.
+//   엔진이 '다시 물을 때까지 기다릴 시간'도 알려 줘서(대상 분이 가까워지면 매번), 30초마다 도는 감시가 하루 종일 엔진을 부르지 않는다.
+//   폴백(전부 자동): 스위치 꺼짐 · 엔진 응답 없음(2.5초)·오류·이상한 응답 → 예전 웹 규칙(_cmTickLocal · _cmScheduleOSLocal)으로 바로 정하고 60초 동안은 엔진에 묻지 않는다.
+var _CMW = { bad: false, until: 0, why: '', busy: false, nextAt: 0, sig: '', asks: 0, ok: 0, fires: 0, seq: 0, occSeq: 0, occOk: 0 };
+function _cmwOn(){ try{ return localStorage.getItem('gdm_cmw') === '1'; }catch(e){ return false; } }
+function _cmwDown(){ return _CMW.until > Date.now(); }
+function _cmwUse(){ return _cmwOn() && !_cmwDown(); }
+function _cmwFail(why){
+  _CMW.bad = true; _CMW.until = Date.now() + 60000; _CMW.why = String(why || '').slice(0, 40); _CMW.busy = false; _CMW.nextAt = 0;
+  try{ if(typeof window._cmwSyncCard === 'function') window._cmwSyncCard(); }catch(e){}
+}
+function _cmwGood(j){
+  return !!(j && j.ok === true && j.v === 1 && (j.fire === null || j.fire === 'morn' || j.fire === 'eve') && typeof j.key === 'string' && typeof j.askMs === 'number' && isFinite(j.askMs));
+}
+function _cmwGoodOcc(j){
+  var ok = function(a){ return Array.isArray(a) && a.length <= 40 && a.every(function(x){ return typeof x === 'number' && isFinite(x); }); };
+  return !!(j && j.ok === true && j.v === 1 && ok(j.morn) && ok(j.eve));
+}
+function _cmwSig(){ return [!!_cmAlarm.on, _cmAlarm.morn, _cmAlarm.eve, JSON.stringify(_cmAlarm.days || null)].join('|'); }
+function _cmwTick(){
+  var now = Date.now(), sig = _cmwSig();
+  if(sig !== _CMW.sig){ _CMW.sig = sig; _CMW.nextAt = 0; }      // 시각·요일을 바꾸면 기다리지 않고 바로 묻는다
+  if(_CMW.busy || now < _CMW.nextAt) return;
+  var body = { nowMs: now, on: _cmAlarm.on === true, osOk: window._cmOsOk === true, morn: _cmAlarm.morn, eve: _cmAlarm.eve, days: _cmAlarm.days, lastKey: _cmAlarm.lastKey || '' };
+  _CMW.busy = true; _CMW.asks++; var my = ++_CMW.seq, done = false;
+  var fail = function(why){
+    if(done) return; done = true; clearTimeout(tm);
+    if(my === _CMW.seq){ _cmwFail(why); try{ _cmTickLocal(); }catch(e1){} }
+  };
+  var tm = setTimeout(function(){ fail('시간 초과'); }, 2500);
+  try{
+    fetch(_ROUTE_V2_BASE + '/commute-alarm', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(j){
+        if(done) return;
+        if(!_cmwGood(j)){ fail('응답 이상'); return; }
+        done = true; clearTimeout(tm); _CMW.busy = false; _CMW.ok++;
+        _CMW.nextAt = Date.now() + Math.max(0, Math.min(600000, j.askMs));
+        if(my !== _CMW.seq) return;
+        if(j.fire && _cmwSig() === sig){
+          if(!_cmAlarm.on || window._cmOsOk === true) return;      // 기다리는 동안 꺼졌거나 OS 예약이 걸렸다
+          if(_cmAlarm.lastKey === j.key) return;                   // 기다리는 동안 이미 보냈다(두 번 울리지 않게)
+          _CMW.fires++;
+          _cmAlarm.lastKey = j.key; _cmPersist(); _fireCommuteBriefing(j.fire);
+        }
+        try{ if(typeof window._cmwSyncCard === 'function') window._cmwSyncCard(); }catch(e2){}
+      })
+      .catch(function(){ fail('통신 실패'); });
+  }catch(e3){ fail('요청 실패'); }
+}
 function _cmTick(){
+  try{
+    if(!_cmAlarm.on) return;
+    if(window._cmOsOk === true) return;                            // OS 예약이 걸려 있으면 앱이 또 보내지 않는다
+    if(_cmwUse()){ _cmwTick(); return; }
+  }catch(e){}
+  _cmTickLocal();
+}
+// 예약 알림 시각 4주치 — 엔진이 정한 시각 목록으로 예약한다
+function _cmScheduleOS(){
+  try{
+    var LN = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications;
+    if(LN && _cmAlarm.on && _cmwUse()){
+      var my = ++_CMW.occSeq, done = false;
+      var fail = function(why){
+        if(done) return; done = true; clearTimeout(tm);
+        if(my === _CMW.occSeq){ _cmwFail(why); try{ _cmScheduleOSLocal(null); }catch(e1){} }
+      };
+      var tm = setTimeout(function(){ fail('시간 초과'); }, 2500);
+      fetch(_ROUTE_V2_BASE + '/commute-alarm', { method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ op: 'occ', nowMs: Date.now(), morn: _cmAlarm.morn, eve: _cmAlarm.eve, days: _cmAlarm.days }) })
+        .then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(j){
+          if(done) return;
+          if(!_cmwGoodOcc(j)){ fail('응답 이상'); return; }
+          done = true; clearTimeout(tm); _CMW.occOk++;
+          if(my !== _CMW.occSeq) return;                           // 더 나중에 불린 예약이 있으면 이건 버린다
+          _cmScheduleOSLocal({ morn: j.morn, eve: j.eve });
+          try{ if(typeof window._cmwSyncCard === 'function') window._cmwSyncCard(); }catch(e2){}
+        })
+        .catch(function(){ fail('통신 실패'); });
+      return;
+    }
+  }catch(e){}
+  _cmScheduleOSLocal(null);
+}
+window._cmwOn = _cmwOn;
+window._cmTickLocal = _cmTickLocal; window._cmOccurrences = _cmOccurrences; window._cmScheduleOSLocal = _cmScheduleOSLocal;
+window._cmwStat = _CMW;
+window._cmwSetUse = function(on){
+  try{ localStorage.setItem('gdm_cmw', on ? '1' : '0'); }catch(e){}
+  _CMW.bad = false; _CMW.until = 0; _CMW.why = ''; _CMW.busy = false; _CMW.nextAt = 0; _CMW.seq++; _CMW.occSeq++;
+  try{ if(typeof window._cmwSyncCard === 'function') window._cmwSyncCard(); }catch(e2){}
+};
+window._cmwSyncCard = function(){
+  try{
+    var card = document.getElementById('cmwSetCard'); if(!card) return;
+    var on = _cmwOn(), bad = on && _cmwDown(), cb = document.getElementById('cmwSetOn'), st = document.getElementById('cmwSetStat');
+    if(cb) cb.checked = on && !bad;
+    var t;
+    if(!on) t = '꺼짐 — 예전 방식(웹이 브리핑 시각을 정해요)으로 이어가요.';
+    else if(bad) t = '엔진에 물을 수 없어 예전 방식으로 대신 이어가고 있어요' + (_CMW.why ? ' (' + _CMW.why + ')' : '') + '. 잠시 뒤 다시 엔진에 물어요.';
+    else t = '켜짐 — 출퇴근 브리핑을 언제 울릴지 엔진이 정해요(실험 중).' + ((_CMW.ok + _CMW.occOk) ? ' 엔진 응답 ' + (_CMW.ok + _CMW.occOk) + '번.' : '');
+    if(st && st.textContent !== t) st.textContent = t;
+  }catch(e3){}
+};
+try{ if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(function(){ if(window._cmwSyncCard) window._cmwSyncCard(); }, 1500); }); else setTimeout(function(){ if(window._cmwSyncCard) window._cmwSyncCard(); }, 1500); }catch(eCmw){}
+function _cmTickLocal(){
   if(!_cmAlarm.on) return;
   // ★ 2026-10-09: OS 예약 알림이 걸려 있으면 같은 시각에 앱이 또 보내지 않는다(두 번 울림 방지).
   //   OS 예약이 없는 경우(웹·예약 실패)에만 앱이 직접 보낸다.
@@ -26134,7 +26259,7 @@ function _cmOccurrences(hh, mi, days, now){
   }
   return out;
 }
-function _cmScheduleOS(){
+function _cmScheduleOSLocal(occ){
   try{
     var LN = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications;
     if(!LN) return;
@@ -26152,7 +26277,8 @@ function _cmScheduleOS(){
     // ★ 2026-09-16: extra 에 종류를 담는다. 탭 처리가 이걸 보고 최신 브리핑을 팝업으로 띄운다.
     // ★ 2026-09-16: 요일 반복(on:{weekday}, repeats:true)은 안드로이드에서 부정확 알람이라 절전 중 밀리거나 건너뛰었다
     //   → '정확한 시각(at)' 알람만 쓴다.
-    var morn = _cmOccurrences(mh, mm, days, now), eve = _cmOccurrences(eh, em, days, now);
+    var morn = occ ? occ.morn.map(function(ms){ return new Date(ms); }) : _cmOccurrences(mh, mm, days, now);       // occ: 엔진이 정한 시각 목록(스위치 켬)
+    var eve = occ ? occ.eve.map(function(ms){ return new Date(ms); }) : _cmOccurrences(eh, em, days, now);
     morn.forEach(function(t, i){
       list.push({ id:_CM_ID_MORN+i, title:'🌅 출근길 브리핑', body:'날씨와 혼잡도 요약이 준비됐어요 — 탭해서 확인하세요',
                   schedule:{ at:t, allowWhileIdle:true },
@@ -38717,6 +38843,7 @@ window.refreshShop=refreshShop;
     try{ if(typeof _sbhSyncCard === 'function') _sbhSyncCard(); var csbh = document.getElementById('sbhSetCard'); if(csbh && csbh.style.display === 'block') f.feat.sbh = { h: 1, on: _sbhOn() ? 1 : 0, f: 0, w: '' }; }catch(e){}
     try{ if(typeof _cndSyncCard === 'function') _cndSyncCard(); var ccnd = document.getElementById('cndSetCard'); if(ccnd && ccnd.style.display === 'block') f.feat.cnd = { h: 1, on: (_cndOn() && !_cndBad()) ? 1 : 0, f: _cndBad() ? 1 : 0, w: '' }; }catch(e){}
     try{ if(typeof _rtfSyncCard === 'function') _rtfSyncCard(); var crtf = document.getElementById('rtfSetCard'); if(crtf && crtf.style.display === 'block') f.feat.rtf = { h: 1, on: (_rtfOn() && !_rtfBad()) ? 1 : 0, f: _rtfBad() ? 1 : 0, w: '' }; }catch(e){}
+    try{ if(typeof _cmwSyncCard === 'function') _cmwSyncCard(); var ccmw = document.getElementById('cmwSetCard'); if(ccmw && ccmw.style.display !== 'none') f.feat.cmw = { h: 1, on: (_cmwOn() && !_cmwDown()) ? 1 : 0, f: (_cmwOn() && _cmwDown()) ? 1 : 0, w: '' }; }catch(e){}
     try{ if(typeof _arwSyncCard === 'function') _arwSyncCard(); var carw = document.getElementById('arwSetCard'); if(carw && carw.style.display !== 'none') f.feat.arw = { h: 1, on: (_arwOn() && !_arwDown()) ? 1 : 0, f: (_arwOn() && _arwDown()) ? 1 : 0, w: '' }; }catch(e){}
     try{ if(typeof _npSyncCard === 'function') _npSyncCard(); var cnp = document.getElementById('npolSetCard'); if(cnp && cnp.style.display !== 'none') f.feat.npol = { h: 1, on: (_npOn() && !_npDown()) ? 1 : 0, f: (_npOn() && _npDown()) ? 1 : 0, w: '' }; }catch(e){}
     try{ if(typeof _raSyncCard === 'function') _raSyncCard(); var cra = document.getElementById('raSetCard'); if(cra && cra.style.display !== 'none') f.feat.ra = { h: 1, on: (_raOn() && !_raDown()) ? 1 : 0, f: (_raOn() && _raDown()) ? 1 : 0, w: '' }; }catch(e){}
@@ -38858,6 +38985,7 @@ window.refreshShop=refreshShop;
       else if(key === 'f.ra') window._raSetUse(on);
       else if(key === 'f.npol') window._npSetUse(on);
       else if(key === 'f.arw') window._arwSetUse(on);
+      else if(key === 'f.cmw') window._cmwSetUse(on);
       else if(key === 'f.scrs'){ setUse(on); return; }
       else return;                                                             // 모르는 키는 무시
     }catch(e){}
