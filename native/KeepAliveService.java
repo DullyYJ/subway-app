@@ -57,13 +57,22 @@ public class KeepAliveService extends Service {
     static final String ACT_STOP = "gdm.standby.STOP";
     private static final String PREFS = "gdm_standby";
     private static final long STEP_MS = 5000L;
+    private static final long STEP_MIN_MS = 2000L, STEP_MAX_MS = 8000L;   // 엔진이 알려 주는 다음 호출 간격(nextMs)의 안전 범위
     private static final long PACKET_MAX_AGE_MS = 30 * 60 * 1000L;   // 이보다 오래 갱신 안 된 상태는 쓰지 않는다(웹뷰가 오래전에 멈춘 여정)
 
     /** 대기 모드가 돌고 있는가 — OverlayPlugin 이 읽는다(웹이 다시 켜져도 keepAlive(off) 로 끄지 않게). */
     static volatile boolean standbyActive = false;
+    /** ★ 2026-10-19 (숨김 인계): 앱이 아직 살아 있는데 화면에서 가려져 이 서비스가 안내를 이어받았다. 웹이 돌려받을 때까지 웹이 맡기는 상태(savePacket)로 덮지 않는다. */
+    static volatile boolean handoff = false;
+    /** 서비스가 엔진에서 받아 쥐고 있는 가장 새 상태(JSON 글자) — 웹이 돌려받을 때 읽는다(SharedPreferences 에 적는 것보다 늘 새것). */
+    static volatile String liveState = null;
+    static volatile long liveAt = 0L;
+    /** 인계 중 엔진이 끝(done)을 알렸다 — 웹이 돌려받을 때 알 수 있게. */
+    static volatile boolean liveDone = false;
 
     // ── 웹이 맡겨 두는 상태 (SharedPreferences) ──
     static void savePacket(Context c, String state, String url) {
+        if (standbyActive && handoff) return;   // 인계 중에는 서비스가 쥔 상태가 더 새것이다 — 웹의 낡은 값으로 덮지 않는다
         try { c.getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString("state", state).putString("url", url).putLong("at", System.currentTimeMillis()).apply(); } catch (Throwable ignored) { }
     }
     static boolean hasPacket(Context c) {
@@ -81,6 +90,18 @@ public class KeepAliveService extends Service {
             if (v != null) r.put("view", new JSONObject(v));
             String ovs = c.getSharedPreferences(PREFS, MODE_PRIVATE).getString("overlay", null);
             if (ovs != null) r.put("overlay", new JSONObject(ovs));
+            return r.toString();
+        } catch (Throwable e) { return "{\"active\":false}"; }
+    }
+    /** 웹이 돌려받을 때 읽는 값: 서비스가 쥔 가장 새 상태와 엔진이 만든 마지막 문구. 상태가 없으면 state 는 빠진다. */
+    static String standbyTakeJson(Context c) {
+        try {
+            JSONObject r = new JSONObject(standbyViewJson(c));
+            String st = liveState;
+            if (st == null) { try { st = c.getSharedPreferences(PREFS, MODE_PRIVATE).getString("state", null); } catch (Throwable ignored) { } }
+            if (st != null) r.put("state", new JSONObject(st));
+            r.put("at", liveAt);
+            r.put("done", liveDone);
             return r.toString();
         } catch (Throwable e) { return "{\"active\":false}"; }
     }
@@ -227,6 +248,7 @@ public class KeepAliveService extends Service {
     private PowerManager.WakeLock lock;
     private String state, url;
     private int fails = 0;
+    private volatile long nextDelayMs = STEP_MS;   // 엔진이 정한 다음 호출까지의 간격(영점이 도착 5초 안에 잡히도록 도착 앞뒤엔 짧다). 계산은 엔진, 여기서는 따르기만 한다.
     private final ArrayList<double[]> fixes = new ArrayList<double[]>();   // {ts, lat, lng, acc(0=모름)}
 
     private final LocationListener ll = new LocationListener() {
@@ -246,7 +268,7 @@ public class KeepAliveService extends Service {
         @Override public void run() {
             if (!standbyActive) return;
             try { step(); } catch (Throwable e) { fails++; }
-            if (standbyActive && hh != null) hh.postDelayed(this, STEP_MS);
+            if (standbyActive && hh != null) hh.postDelayed(this, nextDelayMs);
         }
     };
 
@@ -258,6 +280,8 @@ public class KeepAliveService extends Service {
         if (state == null || url == null) { endStandby(true); return; }
         standbyActive = true;
         fails = 0;
+        nextDelayMs = STEP_MS;
+        liveState = state; liveAt = System.currentTimeMillis(); liveDone = false;
         ht = new HandlerThread("gdm-standby");
         ht.start();
         hh = new Handler(ht.getLooper());
@@ -325,14 +349,18 @@ public class KeepAliveService extends Service {
                 if (String.valueOf(ez.getMessage()).contains("HTTP 400")) { gzipOk = false; resp = post(url, body, false); } else throw ez;
             }
         } else resp = post(url, body, false);
+        if (!standbyActive) return;   // 응답을 기다리는 사이 웹이 안내를 돌려받았다 — 낡은 응답으로 알림·오버레이를 건드리지 않는다(웹이 받아 간 상태와 어긋난 알림이 나가지 않게)
         // 보낸 위치만 비운다(그 사이 들어온 새 위치는 남긴다)
         synchronized (fixes) { for (int i = 0; i < batch.size() && !fixes.isEmpty(); i++) fixes.remove(0); }
         JSONObject o = new JSONObject(resp);
         if (o.has("error")) { fails++; if (o.optBoolean("done", false)) endStandby(true); return; }
         fails = 0;
+        long nm = o.optLong("nextMs", 0L);
+        nextDelayMs = (nm >= STEP_MIN_MS && nm <= STEP_MAX_MS) ? nm : STEP_MS;
         JSONObject ns = o.optJSONObject("state");
         if (ns != null) {
             state = ns.toString();
+            liveState = state; liveAt = System.currentTimeMillis();
             try { getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString("state", state).putLong("at", System.currentTimeMillis()).apply(); } catch (Throwable ignored) { }
         }
         JSONObject on = o.optJSONObject("ongoing");
@@ -347,7 +375,7 @@ public class KeepAliveService extends Service {
         if (vw != null) { try { getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString("view", vw.toString()).apply(); } catch (Throwable ignored) { } }
         JSONObject al = o.optJSONObject("alert");
         if (al != null && !al.optString("title", "").isEmpty()) fireAlert(al);
-        if (o.optBoolean("done", false)) endStandby(true);
+        if (o.optBoolean("done", false)) { liveDone = true; endStandby(true); }
     }
 
     private static volatile boolean gzipOk = true;   // 요청 본문을 gzip 으로 눌러 보낸다(상태가 크고 5초마다 보내서 — 서버 s12 부터 받는다)

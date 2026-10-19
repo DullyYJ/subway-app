@@ -84,6 +84,12 @@ public class OverlayPlugin extends Plugin {
     private static volatile OverlayPlugin live = null;
     private volatile boolean hosted = false;        // 대기 모드가 이 인스턴스의 오버레이 창을 쥐고 있다
     private volatile boolean hostedOk = false;      // 넘겨받을 때 오버레이를 쓰는 중이었다(설정에서 껐으면 대기 모드에서도 그리지 않는다)
+    // ★ 2026-10-19 (숨김 인계 — YJ: "앱이 가려지면 응답이 몰려 영점이 늦다"): 설정 스위치가 켜져 있으면(웹이 standbyPacket 의 handoff 로 알린다) 앱이 화면에서 가려지는 순간
+    //   웹뷰를 깨워 가며 안내를 잇는 대신 KeepAliveService(엔진 /ride-standby)가 이어받는다 — 앱이 살아 있어도 마찬가지. 다시 보이면 웹이 standbyTake 로 서비스가 쥔 상태를 돌려받는다.
+    private volatile boolean handoffOk = false;     // 웹이 '숨김 인계 허용'을 알려 왔다
+    private volatile boolean handoff = false;       // 지금 가려진 채 서비스가 이어받고 있다(앱 프로세스는 살아 있다)
+    private volatile long handoffAt = 0L;
+    private static final long HANDBACK_GIVEUP_MS = 8000L;   // 앱이 다시 보이고 이 시간이 지나도 웹이 상태를 돌려받지 않으면 서비스를 멈추고 웹이 스스로 잇게 한다(예전 동작)
 
     @Override
     public void load() {
@@ -1088,8 +1094,96 @@ public class OverlayPlugin extends Plugin {
     @PluginMethod
     public void standbyPacket(PluginCall call) {
         String st = call.getString("state"), url = call.getString("url");
+        handoffOk = call.getBoolean("handoff", false);
         if (st != null && url != null && url.startsWith("https://")) KeepAliveService.savePacket(getContext(), st, url);
-        call.resolve(new JSObject().put("ok", true));
+        call.resolve(new JSObject().put("ok", true).put("handoff", handoff));
+    }
+
+    /**
+     * 웹이 다시 살아나(앱이 다시 보임) 서비스가 이어받아 온 안내를 돌려받는다. 서비스가 쥔 가장 새 엔진 상태(통과 증거·보낸 알림 등)를 그대로 주고,
+     * 서비스의 대기 루프는 멈추며 쥐고 있던 오버레이 창은 웹에 돌려준다. 계산은 하지 않는다 — 상태는 엔진이 만든 그대로 웹이 받아 쓴다.
+     */
+    @PluginMethod
+    public void standbyTake(PluginCall call) {
+        JSObject r;
+        try { r = new JSObject(KeepAliveService.standbyTakeJson(getContext())); }
+        catch (Exception e) { r = new JSObject().put("active", false); }
+        boolean was = handoff;
+        try { r.put("handoff", was); } catch (Exception ignored) { }
+        if (was) endHandoff(true);
+        call.resolve(r);
+    }
+
+    /** 인계를 끝낸다 — 서비스 대기 루프를 멈추고 오버레이 창을 웹에 돌려준다(서비스 자체는 여정이 이어지는 동안 계속 산다). */
+    private void endHandoff(boolean stopLoop) {
+        handoff = false;
+        KeepAliveService.handoff = false;
+        main.removeCallbacks(handback);
+        if (hosted) {
+            // 오버레이 창은 내리지 않고 웹이 쓰던 상태로 되돌려 준다(앱이 보이는 동안은 어차피 숨는다) — 웹이 다음 update 로 값을 다시 채운다.
+            hosted = false; wanted = hostedOk; hostedOk = false;
+            refresh();
+        }
+        // 인계 동안 멈춰 있던 5초 깨우기(웹이 다시 가려졌는데 인계가 안 될 때의 예전 길)를 되살린다
+        main.post(new Runnable() { @Override public void run() { try { if (journeyOn) startTicker(); } catch (Throwable ignored) { } } });
+        if (stopLoop) KeepAliveService.send(getContext(), KeepAliveService.ACT_DEACTIVATE);
+    }
+
+    private long handbackSince = 0L;
+    private final Runnable handback = new Runnable() {
+        @Override public void run() {
+            if (!handoff) return;
+            long now = System.currentTimeMillis();
+            if (!appVisible) { handbackSince = 0L; return; }    // 다시 가려졌다 — 인계를 이어 간다
+            if (handbackSince == 0L) handbackSince = now;
+            if (now - handbackSince >= HANDBACK_GIVEUP_MS) {
+                // 웹이 끝내 돌려받지 않았다(웹뷰가 아직 못 살아났거나 접착 코드가 없는 옛 웹) — 서비스를 멈추고 웹이 스스로 잇게 한다(예전 동작).
+                endHandoff(true);
+                return;
+            }
+            try {
+                if (getBridge() != null && getBridge().getWebView() != null) {
+                    getBridge().getWebView().evaluateJavascript("try{window._sbHandback&&window._sbHandback();}catch(e){}", null);
+                }
+            } catch (Exception ignored) { }
+            main.postDelayed(this, 1000L);
+        }
+    };
+
+    /** 가려진 직후: 웹이 최신 여정 상태를 맡기게 한 다음(0.7초) 서비스가 이어받게 한다. 그 사이 다시 보이면 그만두고, 인계가 안 되면 예전처럼 웹을 깨워 잇는다. */
+    private void startHandoffSoon() {
+        try {
+            if (getBridge() != null && getBridge().getWebView() != null) {
+                try { getBridge().getWebView().resumeTimers(); } catch (Exception ignored1) { }
+                try { getBridge().getWebView().onResume(); } catch (Exception ignored2) { }
+                getBridge().getWebView().evaluateJavascript("try{window._ovlStandbyPush&&window._ovlStandbyPush(true);}catch(e){}", null);
+            }
+        } catch (Exception ignored) { }
+        main.postDelayed(new Runnable() {
+            @Override public void run() {
+                if (appVisible || handoff || hosted) return;
+                if (!tryHandoff()) { wakeWebSoon(0L); wakeWebSoon(1500L); }
+            }
+        }, 700L);
+    }
+
+    /** 서비스가 이어받게 한다. 조건이 안 맞으면 false(예전처럼 웹을 깨우며 잇는다). */
+    private boolean tryHandoff() {
+        try {
+            if (!handoffOk || !journeyOn || hosted || handoff) return false;
+            if (!KeepAliveService.hasPacket(getContext())) return false;
+            if (getBridge() != null && getBridge().getWebView() != null) {
+                // 웹이 자기 알림·위치 요청을 멈추게 한다(서비스와 둘이서 같은 알림을 두 번 울리지 않게)
+                getBridge().getWebView().evaluateJavascript("try{window._sbHanded=true;}catch(e){}", null);
+            }
+            handoffAt = System.currentTimeMillis();
+            hostedOk = wanted;
+            hosted = true;
+            handoff = true;
+            KeepAliveService.handoff = true;
+            KeepAliveService.send(getContext(), KeepAliveService.ACT_ACTIVATE);
+            return true;
+        } catch (Throwable e) { return false; }
     }
 
     /** 다시 열린 앱이 묻는다: 대기 모드(앱이 닫힌 동안 네이티브가 이어 온 안내)가 아직 돌고 있나, 엔진이 마지막으로 만든 문구는 무엇인가. */
@@ -1110,6 +1204,7 @@ public class OverlayPlugin extends Plugin {
     @PluginMethod
     public void keepAlive(PluginCall call) {
         // 대기 모드가 돌고 있는 동안(앱을 밀어 닫았다가 다시 열었다) 새로 뜬 웹이 '여정 없음'(off)을 보내도 끄지 않는다. 끝내는 길은 standbyEnd · 알림의 [안내 종료] · 엔진의 done.
+        if (handoff) { call.resolve(new JSObject().put("ok", true).put("standby", true).put("handoff", true)); return; }   // 숨김 인계 중 — 돌려주는 길은 standbyTake 하나(상태를 받기 전에 끄지 않는다)
         if (KeepAliveService.standbyActive) {
             if (call.getBoolean("on", false)) { if (hosted) releaseHosted(); KeepAliveService.send(getContext(), KeepAliveService.ACT_DEACTIVATE); }   // 웹이 여정을 다시 쥐었다 — 주도권을 돌려준다(쥐고 있던 오버레이 창도 웹에 돌려준다)
             else { call.resolve(new JSObject().put("ok", true).put("standby", true)); return; }
@@ -1126,6 +1221,7 @@ public class OverlayPlugin extends Plugin {
     protected void handleOnStop() {
         appVisible = false;
         refresh();
+        if (handoffOk && journeyOn && !hosted && !handoff && KeepAliveService.hasPacket(getContext())) { startHandoffSoon(); return; }   // 숨김 인계: 서비스(엔진)가 이어받는다 — 웹을 깨워 가며 잇지 않는다
         // ★ 2026-10-13 (YJ: "오버레이가 업데이트가 안되는것같아" — 앱을 뒤로 보냈더니 오버레이가 앱보다 한 역 전을 가리켰다):
         //   오버레이는 사라지기 직전 웹이 보낸 마지막 값으로 먼저 뜨고, 최신 값은 최대 5초 뒤 틱에서야 들어왔다 → 가려지는 즉시(0.3초·1.5초 뒤 한 번 더) 웹을 깨워 새 값을 받는다.
         wakeWebSoon(300L);
@@ -1156,12 +1252,14 @@ public class OverlayPlugin extends Plugin {
     protected void handleOnStart() {
         appVisible = true;
         refresh();
+        if (handoff) { handbackSince = 0L; main.removeCallbacks(handback); main.postDelayed(handback, 200L); }   // 다시 보인다 — 웹이 서비스가 쥔 상태를 돌려받게 한다
     }
 
     @Override
     protected void handleOnDestroy() {
         // ★ 2026-10-13: 앱을 밀어 닫아 액티비티가 사라져도 여정 중이고 맡겨 둔 상태가 있으면 서비스를 끄지 않고 대기 모드로 넘긴다(KeepAliveService 가 엔진을 불러 이어간다).
         //   이때 오버레이 창도 내리지 않는다 — 이 인스턴스가 hosted 로 쥐고, 엔진이 준 값을 standbyPush 로 받아 그린다(오버레이를 쓰던 경우만).
+        handoff = false; KeepAliveService.handoff = false; main.removeCallbacks(handback);   // 앱이 완전히 닫힌다 — 숨김 인계는 끝나고 아래 대기 모드(앱 닫힘)가 이어받는다
         boolean handOver = (journeyOn || hosted) && KeepAliveService.hasPacket(getContext());   // hosted: 앱을 다시 열었다가 또 밀어 닫아도 대기 모드를 이어 간다
         boolean wasWanted = hosted ? hostedOk : wanted;
         journeyOn = false;
