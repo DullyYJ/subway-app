@@ -40,9 +40,9 @@ const PUB = [
         if (x.delay) await new Promise(res => setTimeout(res, x.delay));
         if (x.serve === 'down') return r.abort();
         const items = { c: (body.c || []).map(a => a), p: (body.p || []).map(a => a) };
-        let out = JSON.stringify(E.foodScreen({ cap: Number(body.cap) || 0 }, body.f, items));
+        let out = JSON.stringify(E.foodScreens({ cap: Number(body.cap) || 0 }, body.f, items, body.alts));
         if (x.serve === 'shape') out = JSON.stringify({ ok: true, v: 2, screen: 'food' });
-        x.lastBody = out;
+        { let o2 = null; try { o2 = JSON.parse(out); } catch (e) { } if (o2 && o2.alts) { x.lastAlts = o2.alts; delete o2.alts; x.lastBody = JSON.stringify(o2); } else x.lastBody = out; }      // 앱은 alts 를 플러그인에 넘기지 않고 칩별 기억에 넣는다
         return r.fulfill({ status: 200, contentType: 'application/json', body: out });
       }
       return r.abort();
@@ -145,12 +145,27 @@ const PUB = [
   });
 
   console.log('[③ 행동: 칩·새로고침·데이터 변화]');
-  await t('칩(cat 카페) → 고른 칩이 바뀌고(웹 칩도) 새 요청 → update(keepScroll 거짓: 목록이 바뀌었다)', async () => {
+  await t('s67: 첫 요청에 alts:"chips" 를 실었고, 받은 다른 칩 화면은 플러그인에 넘기지 않고 칩별 기억에만 넣는다', async () => {
+    assert.strictEqual(A.reqs[0].alts, 'chips', '첫 요청에 alts 가 없다');
+    const s0 = (await calls(A, 'show'))[0] || { a: { json: '{}' } };
+    assert.ok(!/"alts"/.test(s0.a.json || ''), '플러그인에 alts 가 넘어갔다');
+    assert.strictEqual(await A.page.evaluate(() => Object.keys(window._scrFood.S.memo).length), 6, '칩 6개 화면이 기억에 있어야 한다');
+  });
+  await t('s67: 칩 6개를 차례로 눌러도 요청 0회 · 화면은 그 칩 것(엔진이 따로 계산한 것과 같다)', async () => {
+    const n0 = A.reqs.length;
+    for (const c of ['밥집', '육식', '회집', '주점', '전체', '카페', '전체']) {
+      await clear(A); await act(A, { a: 'cat', v: c });
+      assert.ok(await waitFor(A, has(A, 'update')), c + ' update 없음');
+      assert.strictEqual(JSON.parse((await last(A, 'update')).a.json).info.flt, c);
+    }
+    assert.strictEqual(A.reqs.length, n0, '칩만 눌렀는데 요청이 나갔다');
+  });
+  await t('칩(cat 카페) → 고른 칩이 바뀌고(웹 칩도) 요청 없이(받아 둔 화면) → update(keepScroll 거짓: 목록이 바뀌었다)', async () => {
     await clear(A); const n0 = A.reqs.length;
     await act(A, { a: 'cat', v: '카페' });
     assert.ok(await waitFor(A, has(A, 'update')), 'update 없음');
     assert.strictEqual(await A.page.evaluate(() => _foodCurFilter), '카페');
-    assert.ok(A.reqs.length === n0 + 1 && A.lastReq.f.flt === '카페');
+    assert.strictEqual(A.reqs.length, n0, '칩을 눌렀는데 엔진에 다시 요청했다');
     const u = (await last(A, 'update')).a; assert.strictEqual(u.keepScroll, false);
     assert.deepStrictEqual(places(u.json).map(p => p.name), ['스타벅스 강남점', '공공 카페']);
     assert.strictEqual(await A.page.evaluate(() => Array.from(document.querySelectorAll('#foodFilter .food-chip.on')).map(c => c.textContent).join()), '☕ 카페');

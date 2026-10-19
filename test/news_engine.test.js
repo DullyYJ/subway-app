@@ -165,13 +165,36 @@ ok(S.ok && S.v === 1 && S.screen === 'news' && S.cover === 'tab' && /^n1:/.test(
   const has = t => html.indexOf(t) >= 0;
   ok(has('window._scrNews = {') && has("var BASE = ((typeof _ROUTE_V2_BASE === 'string' && _ROUTE_V2_BASE) ? _ROUTE_V2_BASE : 'https://route-v2.phg0643.workers.dev') + '/screen/news';"), '웹: 뉴스 연결부 + 엔진 주소');
   ok(has("headers: { 'Content-Type': 'text/plain;charset=UTF-8' }"), '웹: 사전 요청이 필요 없게 text/plain 으로 보낸다');
-  ok(has('cap: 5, f: { cat: cat() }, n: rows') && has('cap: 5, d: row'), '웹: 규격 수준 5를 알린다(목록·상세)');
+  ok(has('"cap":5,"f":{"cat":') && has('cap: 5, d: row'), '웹: 규격 수준 5를 알린다(목록·상세)');
   ok(has("addListener('action', onAction)") && has("/^nw\\.(\\d+)$/"), '웹: cat · 기사 번호 행동만 처리');
   ok(has('id="scrnSetCard"') && has('onchange="_scrnSetUse(this.checked)"') && has("key === 'f.scrn'") && has('f.feat.scrn'), '웹: 설정 스위치(기본 꺼짐) + 설정 화면 연결');
   ok(has('window._scrNews.closeDetail()') && has('window._scrNews.kick()') && has('window._scrNews.changed()') && has('window._scrNews.owns()'), '웹: 뒤로가기 · 탭/칩 전환 · 기사 갱신 · 웹 목록 쉼');
   const g = html.slice(html.indexOf('서버 구동 네이티브 화면 4호: 커뮤니티 > 뉴스'));
   const glue = g.slice(0, g.indexOf('window._scrNews = {'));
   ok(!/_newsClassify|_newsRuleCat|_newsAgo|_htmlDecode|_newsCleanDesc|_newsSourceLabel|_NEWS_RULES/.test(glue.replace(/\/\/.*$/gm, '')), '웹: 연결부 안에서 분류·시간·요약·언론사 계산을 하지 않는다(엔진 몫)');
+}
+
+// ── ⑩ s67: 한 요청으로 모든 칩 화면(alts) ──
+{
+  const rows = []; for (let i = 0; i < 80; i++) rows.push([['코스피 급등 기사 ', '삼성 실적 발표 ', '정부 경제 대책 ', '손흥민 골 소식 ', '국회 정치 공방 ', '아이돌 신곡 공개 ', '네이버 AI 신기능 ', '시청 사회 사건 '][i % 8] + i, 'https://n.example/' + i, '언론' + (i % 3), NOW - i * 7 * MIN, '', i % 5 === 0 ? '요약 글 ' + i : '']);
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const out = E.newsScreens({ cap: 5, now: NOW }, { cat: '증시' }, rows, 'chips');
+  ok(out.ok && out.alts && Object.keys(out.alts).join() === E.NW_CATS.join(), 'alts: 칩 전부(엔진이 가진 칩 이름이 키)');
+  E.NW_CATS.forEach(c => ok(same(out.alts[c], E.newsScreen({ cap: 5, now: NOW }, { cat: c }, rows)), 'alts[' + c + '] = 그 칩으로 따로 요청한 화면과 글자 하나까지 같다'));
+  const plain = Object.assign({}, out); delete plain.alts;
+  ok(same(plain, E.newsScreen({ cap: 5, now: NOW }, { cat: '증시' }, rows)), 'alts 를 빼면 예전 응답과 같다(현재 칩 화면)');
+  ok(E.newsScreens({ cap: 5, now: NOW }, { cat: '증시' }, rows).alts === undefined, 'alts 를 달라고 하지 않으면 없다');
+  const ex = E.newsScreens({ cap: 5, now: NOW }, { cat: '전체' }, rows, { a: { cat: '경제' }, b: { cat: '이상한칩' }, c: 5, d: null });
+  ok(Object.keys(ex.alts).join() === 'a,b' && same(ex.alts.a, E.newsScreen({ cap: 5, now: NOW }, { cat: '경제' }, rows)) && ex.alts.b.info.cat === '전체', 'alts 직접 지정: 키는 앱이 정한다 · 모르는 칩은 전체 · 이상한 값은 건너뜀');
+  const many = {}; for (let i = 0; i < 40; i++) many['k' + i] = { cat: '증시' };
+  ok(Object.keys(E.newsScreens({ cap: 5, now: NOW }, {}, rows, many).alts).length === 12, 'alts 개수 상한 12');
+  ok(E.newsScreens({ cap: 4, now: NOW }, {}, rows, 'chips').ok === false, 'cap 부족이면 alts 도 만들지 않는다');
+  ok(E.newsScreens({ cap: 5, now: NOW }, {}, rows, [1, 2]).alts === undefined, '배열 alts 는 무시');
+  const t0 = Date.now(); const bigRows = []; for (let i = 0; i < 1200; i++) bigRows.push(['코스피 주가 기사 제목 ' + i + ' 가나다라마바사아자차카타파하', 'https://news.example.com/a/' + i, '언론' + (i % 9), NOW - i * MIN, ['', '사회', '증시'][i % 3], '']);
+  E.newsScreens({ cap: 5, now: NOW }, { cat: '전체' }, bigRows, 'chips');
+  ok(Date.now() - t0 < 1500, '큰 목록(1200건)에서 8칩을 한 번에: ' + (Date.now() - t0) + 'ms');
+  // 앱 검증기가 alts 의 모든 화면을 통과시키는가 — 위 ⑥ 구간의 검증 도구를 쓰지 않고 구조만 본다(각 화면은 따로 요청한 것과 같으므로 이미 검증된 것)
+  ok(E.NW_CATS.every(c => out.alts[c].head[0].items.filter(x => x.on).length === 1 && out.alts[c].head[0].items.find(x => x.on).label === c), 'alts 화면마다 켜진 칩이 자기 칩');
 }
 
 // ── ⑧ 워커 끝에서 끝까지 ──
@@ -185,6 +208,10 @@ ok(S.ok && S.v === 1 && S.screen === 'news' && S.cover === 'tab' && /^n1:/.test(
     const r = await post(JSON.stringify({ cap: 5, f: { cat: '전체' }, n: nowRows })), j = await r.json();
     ok(r.status === 200 && j.ok && j.screen === 'news' && newsN(j).length === 2, '워커 응답 200');
     ok(/route-v2-2026-10-\d\ds\d\d/.test(j.ver), '엔진 버전 표시 ' + j.ver);
+    const ra = await (await post(JSON.stringify({ cap: 5, f: { cat: '전체' }, alts: 'chips', n: nowRows }))).json();
+    ok(ra.ok && Object.keys(ra.alts).join() === '전체,증시,경제,사회,정치,연예,스포츠,IT' && ra.alts['증시'].info.n === 1, '워커: alts 응답(칩 8개 화면이 함께 온다)');
+    const rn = await (await post(JSON.stringify({ cap: 5, f: { cat: '전체' }, n: nowRows }))).json();
+    ok(rn.alts === undefined, '워커: alts 를 안 달면 예전 응답 그대로');
     const d = await (await post(JSON.stringify({ cap: 5, d: nowRows[0] }))).json();
     ok(d.ok && d.detail.cat === '증시' && d.detail.src === '연합뉴스', '워커: 상세 응답');
     ok((await (await post(JSON.stringify({ cap: 4, f: {}, n: [] }))).json()).ok === false, '워커: cap 부족이면 거절');

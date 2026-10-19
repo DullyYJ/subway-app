@@ -39805,10 +39805,27 @@ window.refreshShop=refreshShop;
     var u = (typeof _foodUiState !== 'undefined' && _foodUiState) || {};
     return { stn: u.stn || '', st: u.st || 'idle', flt: (typeof _foodCurFilter !== 'undefined' && _foodCurFilter) || '전체', fail: (typeof _foodSrvFail !== 'undefined' && _foodSrvFail) ? 1 : 0 };
   }
+  // ★ s67 (YJ: 도착역 맛집 로딩이 오래 걸려): 같은 요청에 alts:'chips' 를 실어 엔진이 모든 칩 화면을 한 번에 계산해 주게 한다.
+  //   받은 화면은 칩별 기억(memo)에 넣어 두므로 칩을 누르면 요청 없이 곧바로 올라간다. 이 접착 코드는 계산하지 않는다 — 어떤 칩이 있고 어떤 화면인지는 엔진이 정한다.
   function request(){
-    var sn = snapshot();
-    var txt = JSON.stringify({ cap: 4, f: facts(), c: sn.c.map(row), p: sn.p.map(row) });
-    return { sn: sn, txt: txt, fk: hashOf(txt), idle: !sn.c.length && !sn.p.length && facts().st === 'idle' };
+    var sn = snapshot(), cj = JSON.stringify(sn.c.map(row)), pj = JSON.stringify(sn.p.map(row)), f0 = facts(), rk = hashOf(cj + '|' + pj);
+    function fkOf(f){ return rk + '|' + hashOf(JSON.stringify(f)); }
+    function fkChip(c){ return fkOf({ stn: f0.stn, st: f0.st, flt: c, fail: f0.fail }); }       // 같은 가게 목록·상태에서 칩만 바뀐 요청의 기억 이름
+    var ak = rk + '|' + hashOf(JSON.stringify([f0.stn, f0.st, f0.fail])), want = (sn.c.length + sn.p.length > 0) && S.altDone !== ak;
+    var fj = JSON.stringify(f0), txt = '{"cap":4,"f":' + fj + ',"c":' + cj + ',"p":' + pj + '}';
+    var post = want ? '{"cap":4,"f":' + fj + ',"alts":"chips","c":' + cj + ',"p":' + pj + '}' : txt;
+    return { sn: sn, txt: txt, post: post, fkChip: fkChip, ak: want ? ak : '', fk: fkOf(f0), idle: !sn.c.length && !sn.p.length && f0.st === 'idle' };
+  }
+  // 엔진이 함께 준 다른 칩 화면(out.alts, 키 = 칩 이름)을 칩별 기억에 넣고, 플러그인에 올릴 본문에서는 뺀다
+  function splitAlts(txt, req){
+    try{
+      var j = JSON.parse(txt);
+      if(!j || typeof j.alts !== 'object' || !j.alts) return txt;
+      var a = j.alts; delete j.alts;
+      Object.keys(a).forEach(function(c){ if(a[c] && a[c].ok === true && a[c].screen === 'food') memoPut(req.fkChip(c), JSON.stringify(a[c])); });
+      if(req.ak) S.altDone = req.ak;
+      return JSON.stringify(j);
+    }catch(e){ return txt; }
   }
 
   // ── 캐시(저장본: 마지막 정상 화면 하나) + 이번 실행 동안의 짧은 기억(칩을 오갈 때 바로 그리려고) ──
@@ -39818,7 +39835,7 @@ window.refreshShop=refreshShop;
   function memoPut(fk, txt){
     if(!S.memo[fk]) S.memoK.push(fk);
     S.memo[fk] = txt;
-    while(S.memoK.length > 8){ delete S.memo[S.memoK.shift()]; }
+    while(S.memoK.length > 24){ delete S.memo[S.memoK.shift()]; }
   }
 
   // ── 테마(앱 색 → 플러그인) ──
@@ -39858,9 +39875,9 @@ window.refreshShop=refreshShop;
     var my = ++S.busy, ctl = (typeof AbortController === 'function') ? new AbortController() : null;
     var to = setTimeout(function(){ try{ if(ctl) ctl.abort(); }catch(e){} }, 8000);
     S.fetchAt = now();
-    return fetch(BASE, { method: 'POST', body: req.txt, headers: { 'Content-Type': 'text/plain;charset=UTF-8' }, signal: ctl ? ctl.signal : undefined, cache: 'no-store' })
+    return fetch(BASE, { method: 'POST', body: req.post || req.txt, headers: { 'Content-Type': 'text/plain;charset=UTF-8' }, signal: ctl ? ctl.signal : undefined, cache: 'no-store' })
       .then(function(r){ clearTimeout(to); if(!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
-      .then(function(txt){ return my === S.busy ? txt : null; })               // 더 새 요청이 있으면 이 답은 버린다
+      .then(function(txt){ return my === S.busy ? splitAlts(txt, req) : null; })               // 더 새 요청이 있으면 이 답은 버린다
       .catch(function(){ clearTimeout(to); return null; });
   }
   function sane(txt){                                                         // 겉모양만 본다(진짜 검증은 플러그인)
@@ -40013,7 +40030,7 @@ window.refreshShop=refreshShop;
     if(S.chT){ clearTimeout(S.chT); S.chT = 0; }
     var P = plug();
     if(P && (S.shown || destroy)){ try{ P.hide({ id: ID }); if(destroy) P.destroy({ id: ID }); }catch(e){} }
-    S.shown = false; S.ready = false; S.good = false; S.cur = ''; S.rect = null; S.rk = ''; S.fk = ''; S.snap = null; S.stash = null; S.memo = {}; S.memoK = [];
+    S.shown = false; S.ready = false; S.good = false; S.cur = ''; S.rect = null; S.rk = ''; S.fk = ''; S.snap = null; S.stash = null; S.memo = {}; S.memoK = []; S.altDone = '';
     closeSheet();
   }
   function listen(){
@@ -40148,10 +40165,26 @@ window.refreshShop=refreshShop;
     }
     return out;
   }
+  // ★ s67 (YJ: 뉴스 칩을 누를 때마다 로딩이 길다): 같은 요청에 alts:'chips' 를 실어 엔진이 모든 칩 화면을 한 번에 계산해 주게 한다.
+  //   받은 화면은 칩별 기억(memo)에 넣어 두므로 칩을 누르면 요청 없이 곧바로 올라간다. 이 접착 코드는 계산하지 않는다 — 어떤 칩이 있고 어떤 화면인지는 엔진이 정한다.
   function request(){
-    var rows = snapshot();
-    var txt = JSON.stringify({ cap: 5, f: { cat: cat() }, n: rows });
-    return { rows: rows, txt: txt, fk: hashOf(txt) + ':' + Math.floor(Date.now() / BUCKET), idle: !rows.length };      // 5분이 지나면 같은 목록이라도 새로 받는다('N분 전' 글이 낡지 않게)
+    var rows = snapshot(), rj = JSON.stringify(rows), rk = hashOf(rj), bk = Math.floor(Date.now() / BUCKET), c0 = cat(), cj = JSON.stringify(c0);
+    function fkOf(c){ return rk + '|' + c + ':' + bk; }                       // 5분이 지나면 같은 목록이라도 새로 받는다('N분 전' 글이 낡지 않게)
+    var ak = rk + ':' + bk, want = !!rows.length && S.altDone !== ak;         // 이 기사 목록으로 다른 칩 화면을 아직 못 받았을 때만 같이 달라고 한다
+    var txt = '{"cap":5,"f":{"cat":' + cj + '},"n":' + rj + '}';
+    var post = want ? '{"cap":5,"f":{"cat":' + cj + '},"alts":"chips","n":' + rj + '}' : txt;
+    return { rows: rows, txt: txt, post: post, fkOf: fkOf, ak: want ? ak : '', fk: fkOf(c0), idle: !rows.length };
+  }
+  // 엔진이 함께 준 다른 칩 화면(out.alts, 키 = 칩 이름)을 칩별 기억에 넣고, 플러그인에 올릴 본문에서는 뺀다
+  function splitAlts(txt, req){
+    try{
+      var j = JSON.parse(txt);
+      if(!j || typeof j.alts !== 'object' || !j.alts) return txt;
+      var a = j.alts; delete j.alts;
+      Object.keys(a).forEach(function(c){ if(a[c] && a[c].ok === true && a[c].screen === 'news') memoPut(req.fkOf(c), JSON.stringify(a[c])); });
+      if(req.ak) S.altDone = req.ak;
+      return JSON.stringify(j);
+    }catch(e){ return txt; }
   }
 
   // ── 캐시(저장본: 마지막 정상 화면 하나) + 이번 실행 동안의 짧은 기억(칩을 오갈 때 바로 그리려고) ──
@@ -40161,7 +40194,7 @@ window.refreshShop=refreshShop;
   function memoPut(fk, txt){
     if(!S.memo[fk]) S.memoK.push(fk);
     S.memo[fk] = txt;
-    while(S.memoK.length > 8){ delete S.memo[S.memoK.shift()]; }
+    while(S.memoK.length > 24){ delete S.memo[S.memoK.shift()]; }
   }
 
   // ── 테마(앱 색 → 플러그인) ──
@@ -40208,7 +40241,7 @@ window.refreshShop=refreshShop;
   }
   function fetchScreen(req){
     S.fetchAt = now();
-    return post(req.txt, 10000, true).then(function(o){ return (o && o.my === S.busy) ? o.txt : null; });      // 더 새 요청이 있으면 이 답은 버린다
+    return post(req.post || req.txt, 10000, true).then(function(o){ return (o && o.my === S.busy) ? splitAlts(o.txt, req) : null; });      // 더 새 요청이 있으면 이 답은 버린다
   }
   function sane(txt){                                                         // 겉모양만 본다(진짜 검증은 플러그인)
     try{ var j = JSON.parse(txt); return (j && j.ok === true && j.v === 1 && j.screen === 'news' && Array.isArray(j.head) && Array.isArray(j.body)) ? j : null; }catch(e){ return null; }
@@ -40367,7 +40400,7 @@ window.refreshShop=refreshShop;
     if(S.chT){ clearTimeout(S.chT); S.chT = 0; }
     var P = plug();
     if(P && (S.shown || destroy)){ try{ P.hide({ id: ID }); if(destroy) P.destroy({ id: ID }); }catch(e){} }
-    S.shown = false; S.ready = false; S.good = false; S.cur = ''; S.rect = null; S.rk = ''; S.fk = ''; S.snap = null; S.stash = null; S.memo = {}; S.memoK = [];
+    S.shown = false; S.ready = false; S.good = false; S.cur = ''; S.rect = null; S.rk = ''; S.fk = ''; S.snap = null; S.stash = null; S.memo = {}; S.memoK = []; S.altDone = '';
     closeDetail();
   }
   function listen(){
@@ -40490,7 +40523,7 @@ window.refreshShop=refreshShop;
     function memoPut(fk, txt){
       if(!S.memo[fk]) S.memoK.push(fk);
       S.memo[fk] = txt;
-      while(S.memoK.length > 8){ delete S.memo[S.memoK.shift()]; }
+      while(S.memoK.length > 24){ delete S.memo[S.memoK.shift()]; }
     }
 
     // ── 테마(앱 색 → 플러그인) ──
@@ -40529,9 +40562,25 @@ window.refreshShop=refreshShop;
         .then(function(txt){ return { txt: txt, my: my }; })
         .catch(function(){ clearTimeout(to); return null; });
     }
+    // ★ s67 (YJ: 칩·탭을 누를 때 로딩이 길다): 요청이 alts(다른 칩 요청 · req.post 에 실림)를 달라고 했으면 엔진이 함께 계산해 준 화면(out.alts, 키 = 칩/방/탭)을
+    //   칩별 기억(memo)에 넣어 두고 플러그인에 올릴 본문에서는 뺀다 — 칩을 누르면 같은 요청의 기억이 있어 네트워크 없이 곧바로 올라간다(계산은 엔진, 앱은 그리기).
+    function splitAlts(txt, req){
+      if(!req.altFkOf && !req.altFk) return txt;
+      try{
+        var j = JSON.parse(txt);
+        if(!j || typeof j.alts !== 'object' || !j.alts) return txt;
+        var a = j.alts; delete j.alts;
+        Object.keys(a).forEach(function(k){
+          var fk = req.altFkOf ? req.altFkOf(k) : req.altFk[k];
+          if(fk && a[k] && a[k].ok === true && a[k].screen === cfg.screen) memoPut(fk, JSON.stringify(a[k]));
+        });
+        if(req.ak) S.altDone = req.ak;
+        return JSON.stringify(j);
+      }catch(e){ return txt; }
+    }
     function fetchScreen(req){
       S.fetchAt = now();
-      return post(req.txt, 10000).then(function(o){ return (o && o.my === S.busy) ? o.txt : null; });      // 더 새 요청이 있으면 이 답은 버린다
+      return post(req.post || req.txt, 10000).then(function(o){ return (o && o.my === S.busy) ? splitAlts(o.txt, req) : null; });      // 더 새 요청이 있으면 이 답은 버린다
     }
     function sane(txt){                                                         // 겉모양만 본다(진짜 검증은 플러그인)
       try{ var j = JSON.parse(txt); return (j && j.ok === true && j.v === 1 && j.screen === cfg.screen && Array.isArray(j.head) && Array.isArray(j.body)) ? j : null; }catch(e){ return null; }
@@ -40620,7 +40669,7 @@ window.refreshShop=refreshShop;
       if(S.chT){ clearTimeout(S.chT); S.chT = 0; }
       var P = plug();
       if(P && (S.shown || destroy)){ try{ P.hide({ id: ID }); if(destroy) P.destroy({ id: ID }); }catch(e){} }
-      S.shown = false; S.ready = false; S.good = false; S.cur = ''; S.rect = null; S.rk = ''; S.fk = ''; S.snap = null; S.info = null; S.stash = null; S.memo = {}; S.memoK = []; S.typing = false; S.sig = ''; S.inflight = '';
+      S.shown = false; S.ready = false; S.good = false; S.cur = ''; S.rect = null; S.rk = ''; S.fk = ''; S.snap = null; S.info = null; S.stash = null; S.memo = {}; S.memoK = []; S.altDone = ''; S.typing = false; S.sig = ''; S.inflight = '';
       try{ if(cfg.onEnd) cfg.onEnd(); }catch(e3){}
     }
     function listen(){
@@ -40877,21 +40926,36 @@ window.refreshShop=refreshShop;
       var r = room(l);
       return 'r|' + l + '|' + r.list.length + '|' + (r.first ? 1 : 0) + (r.fail ? 1 : 0) + '|' + (r.alert ? r.alert.reporters : 0) + '|' + hid().length + '|' + r.offOk + ':' + (r.off ? r.off.ts : 0);
     }
-    function request(){
-      var l = sel(), f = { sel: l, mine: [], lc: lc(), st: 'ready', tzo: new Date().getTimezoneOffset(), me: '', hid: hid() }, d = {};
+    // 한 방(l)을 그리려고 엔진에 보낼 사실·자료. quiet 면 부수 효과(공지 새로 받기) 없이 값만 만든다(다른 방 화면을 미리 받아 둘 때)
+    function build(l, quiet){
+      var f = { sel: l, mine: [], lc: lc(), st: 'ready', tzo: new Date().getTimezoneOffset(), me: '', hid: hid() }, d = {};
       try{ f.mine = _myLinesList() || []; }catch(e){}
       try{ f.me = _getCommId() || ''; }catch(e){}
       var snap = null;
       if(l === 'all'){
         d.g = live().slice(-300).map(function(m){ return [String(m.nick || ''), String(m.text || ''), m.time || 0, m.mine ? 1 : 0, String(m.line || '')]; });
       } else {
-        var r = room(l); offAsk(l);
+        var r = room(l); if(!quiet) offAsk(l);
         d.r = r.list.slice(-400); d.off = r.off; d.offOk = r.offOk; d.offAt = r.offAt; d.al = r.alert;
         f.st = (r.fail && !r.list.length) ? 'fail' : ((!r.first && !r.list.length) ? 'loading' : 'ready');
         snap = d;
       }
       var txt = JSON.stringify({ cap: 6, f: f, d: d });
-      return { txt: txt, fk: kit.hash(txt) + ':' + Math.floor(Date.now() / 300000), idle: false, key: l, snap: snap, sig: sigNow() };
+      return { f: f, d: d, txt: txt, fk: kit.hash(txt) + ':' + Math.floor(Date.now() / 300000), key: l, snap: snap };
+    }
+    // ★ s67 (YJ: 실시간소통에서 각 호선을 누를 때 로딩이 너무 오래 걸려): 이미 받아 둔 방(자료가 있는 방)들의 사실·자료를 alts 로 함께 보내
+    //   엔진이 그 방들의 화면도 한 번에 계산해 주게 한다. 받은 화면은 방별 기억에 들어가 칩을 누르면 요청 없이 곧바로 올라간다. 아직 못 받은 방은 예전처럼 누를 때 받는다.
+    function request(){
+      var l = sel(), m = build(l, false), alts = null, altFk = {}, bytes = 0, n = 0, lines = ['all'];
+      try{ (_LR_KNOWN || []).forEach(function(x){ lines.push(x); }); }catch(e){}
+      lines.forEach(function(x){
+        if(x === l || n >= 8 || bytes > 400000) return;
+        if(x !== 'all'){ var rr = C.rm[x]; if(!rr || !(rr.first || rr.list.length)) return; }
+        var a = build(x, true);
+        altFk[x] = a.fk;
+        if(!kit.S.memo[a.fk]){ (alts = alts || {})[x] = { f: a.f, d: a.d }; bytes += a.txt.length; n++; }
+      });
+      return { txt: m.txt, post: alts ? JSON.stringify({ cap: 6, f: m.f, d: m.d, alts: alts }) : m.txt, altFk: altFk, fk: m.fk, idle: false, key: l, snap: m.snap, sig: sigNow() };
     }
     function act(e){
       var a = e.a, v = String(e.v || '');
@@ -40955,9 +41019,11 @@ window.refreshShop=refreshShop;
     function open(){ try{ var n = nav(); return !!(n && n.getClientRects().length > 0 && getComputedStyle(n).visibility !== 'hidden' && !document.hidden && n.getBoundingClientRect().height > 30); }catch(e){ return false; } }      // 막대는 position:fixed 라 offsetParent 가 늘 null — 크기와 보임 여부로 본다
     function rect(){ var n = nav(); if(!n) return null; var r = n.getBoundingClientRect(); if(!(r.width > 40 && r.height > 30)) return null; return { L: r.left, T: r.top, W: r.width, H: r.height }; }
     function cur(){ try{ var on = document.querySelector('.bnav .ni.on'); var m = on && /^ni-(\w+)$/.exec(on.id || ''); return m ? m[1] : 'home'; }catch(e){ return 'home'; } }
+    // ★ s67: 같은 요청에 alts:'tabs' 를 실어 엔진이 탭 다섯 화면을 한 번에 계산해 주게 한다(탭을 누르면 받아 둔 화면을 바로 올림)
+    function txtOf(t){ return JSON.stringify({ cap: 6, f: { tab: t } }); }
     function request(){
-      var t = cur(), txt = JSON.stringify({ cap: 6, f: { tab: t } });
-      return { txt: txt, fk: kit.hash(txt), idle: false, key: '', snap: null, sig: t };
+      var t = cur(), txt = txtOf(t), want = !kit.S.altDone;
+      return { txt: txt, post: want ? JSON.stringify({ cap: 6, f: { tab: t }, alts: 'tabs' }) : txt, altFkOf: function(k){ return /^(community|map|home|shop|food)$/.test(k) ? kit.hash(txtOf(k)) : ''; }, ak: want ? 'x' : '', fk: kit.hash(txt), idle: false, key: '', snap: null, sig: t };
     }
     function act(e){
       if(e.a !== 'call') return;

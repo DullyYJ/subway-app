@@ -11,7 +11,7 @@ async function handleScreenTabs(request) {
   try { body = JSON.parse(raw); } catch (e) { return new Response(JSON.stringify({ ok: false, error: "bad-json" }), { status: 400, headers: H }); }
   if (!body || typeof body !== "object") return new Response(JSON.stringify({ ok: false, error: "bad-body" }), { status: 400, headers: H });
   var out;
-  try { out = tabsScreen({ cap: Number(body.cap) || 0 }, body.f); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2) }), { status: 500, headers: H }); }
+  try { out = tabsScreens({ cap: Number(body.cap) || 0 }, body.f, body.alts); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2) }), { status: 500, headers: H }); }
   if (!out || !out.ok) return new Response(JSON.stringify(out || { ok: false, error: "fail" }), { status: 400, headers: H });
   out.ver = ENGINE_VERSION;
   return new Response(JSON.stringify(out), { headers: H });

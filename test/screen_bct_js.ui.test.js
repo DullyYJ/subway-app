@@ -35,8 +35,8 @@ const POSTS = [
         assert.strictEqual(req.method(), 'POST'); assert.ok(/text\/plain/.test(req.headers()['content-type'] || ''), '사전 요청이 필요한 형식으로 보냈다');
         const body = JSON.parse(req.postData() || '{}'); x.reqs[m[1]].push(body);
         if (x.serve === 'down') return r.abort();
-        const out = JSON.stringify(m[1] === 'board' ? EB.boardScreen({ cap: Number(body.cap) || 0 }, body.f, body.p) : m[1] === 'chat' ? EC.chatScreen({ cap: Number(body.cap) || 0 }, body.f, body.d) : ET.tabsScreen({ cap: Number(body.cap) || 0 }, body.f));
-        x.lastBody[m[1]] = out;
+        const out = JSON.stringify(m[1] === 'board' ? EB.boardScreen({ cap: Number(body.cap) || 0 }, body.f, body.p) : m[1] === 'chat' ? EC.chatScreens({ cap: Number(body.cap) || 0 }, body.f, body.d, body.alts) : ET.tabsScreens({ cap: Number(body.cap) || 0 }, body.f, body.alts));
+        { let o2 = null; try { o2 = JSON.parse(out); } catch (e) { } if (o2 && o2.alts) { delete o2.alts; x.lastBody[m[1]] = JSON.stringify(o2); } else x.lastBody[m[1]] = out; }      // 앱은 alts 를 플러그인에 넘기지 않고 칩/탭별 기억에 넣는다
         return r.fulfill({ status: 200, contentType: 'application/json', body: out });
       }
       if (u.pathname === '/lroom') return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(x.lroom) });
@@ -228,6 +228,17 @@ const POSTS = [
     assert.ok(await waitFor(C, async () => C.reports.length > 0), '/lreport 가 안 갔다');
     assert.ok(await waitFor(C, async () => C.reqs.chat[C.reqs.chat.length - 1].f.hid.length > 0), '숨김 목록이 안 갔다');
   });
+  await t('s67: 받아 둔 방(전체 · 2호선)으로 칩을 오가면 엔진 요청이 없다 · 화면은 그 방 것', async () => {
+    await C.page.waitForTimeout(500);
+    const before = C.reqs.chat.length;
+    await act(C, 'chat', { a: 'cat', v: 'all' });
+    assert.ok(await waitFor(C, async () => { const c = await lastPut(C, 'chat'); return !!c && JSON.parse(c.a.json).info.sel === 'all'; }), '전체 방 화면이 안 올라갔다');
+    await act(C, 'chat', { a: 'cat', v: '2호선' });
+    assert.ok(await waitFor(C, async () => { const c = await lastPut(C, 'chat'); return !!c && JSON.parse(c.a.json).info.sel === '2호선'; }), '2호선 방 화면이 안 올라갔다');
+    assert.strictEqual(C.reqs.chat.length, before, '받아 둔 방인데 엔진에 다시 요청했다');
+    assert.ok(JSON.parse((await lastPut(C, 'chat')).a.json).body.some(n => n.t === 'msg' && /저도요/.test(n.s)), '2호선 방 글이 안 보인다');
+    assert.ok(C.reqs.chat.some(q => q.alts && q.alts.all && q.alts.all.f.sel === 'all' && q.alts.all.d.g), '방을 열 때 전체 방(받아 둔 방)의 사실·자료를 alts 로 함께 보내야 한다');
+  });
   await t('방에서 글 보내기(ch.send): /react 로 올라가고(서버 응답 stored) 성공하면 입력칸을 비운다', async () => {
     await C.page.route('**/react', r => r.fulfill({ status: 200, contentType: 'application/json', body: '{"stored":true}' }));
     await act(C, 'chat', { a: 'call', v: 'ch.send', fields: { 'chat.room': '지금 타고 있어요' } });
@@ -249,10 +260,22 @@ const POSTS = [
     assert.ok(Math.abs(c.a.y - g.y) < 1.5 && Math.abs(c.a.h - g.h) < 1.5 && Math.abs(c.a.w - g.w) < 1.5, '사각형 ' + JSON.stringify([c.a.x, c.a.y, c.a.w, c.a.h, g]));
     assert.deepStrictEqual(T.errs, []);
   });
-  await t('칸을 누르면(tab.shop) 웹이 탭을 바꾸고 새 화면(켜진 칸 shop)을 받는다 · 모르는 탭 이름은 무시', async () => {
+  await t('s67: 첫 요청에 alts:"tabs" 를 실었고, 받은 다섯 탭 화면은 플러그인에 넘기지 않고 탭별 기억에 넣는다', async () => {
+    assert.strictEqual(T.reqs.tabs[0].alts, 'tabs', '첫 요청에 alts 가 없다');
+    assert.ok(!/"alts"/.test((await lastPut(T, 'tabs')).a.json), '플러그인에 alts 가 넘어갔다');
+    assert.strictEqual(await T.page.evaluate(() => Object.keys(window._scrTabs.S.memo).length), 5, '탭 다섯 화면이 기억에 있어야 한다');
+  });
+  await t('칸을 누르면(tab.shop) 웹이 탭을 바꾸고 요청 없이 받아 둔 화면(켜진 칸 shop)을 올린다 · 모르는 탭 이름은 무시', async () => {
     const before = T.reqs.tabs.length;
     await act(T, 'tabs', { a: 'call', v: 'tab.shop' });
-    assert.ok(await waitFor(T, async () => T.reqs.tabs.length > before && T.reqs.tabs[T.reqs.tabs.length - 1].f.tab === 'shop'), '새 요청이 없다');
+    assert.ok(await waitFor(T, async () => { const c = await lastPut(T, 'tabs'); return !!c && JSON.parse(c.a.json).info.tab === 'shop'; }), 'shop 화면이 안 올라갔다');
+    assert.strictEqual(T.reqs.tabs.length, before, '탭을 눌렀는데 엔진에 다시 요청했다');
+    for (const tb of ['food', 'community', 'map', 'home']) {
+      await act(T, 'tabs', { a: 'call', v: 'tab.' + tb });
+      assert.ok(await waitFor(T, async () => { const c = await lastPut(T, 'tabs'); return !!c && JSON.parse(c.a.json).info.tab === tb; }), tb + ' 화면이 안 올라갔다');
+    }
+    assert.strictEqual(T.reqs.tabs.length, before, '탭만 눌렀는데 요청이 나갔다');
+    await act(T, 'tabs', { a: 'call', v: 'tab.shop' }); await T.page.waitForTimeout(150);
     assert.strictEqual(await T.page.evaluate(() => document.getElementById('ni-shop').classList.contains('on')), true);
     await act(T, 'tabs', { a: 'call', v: 'tab.evil' });
     assert.strictEqual(await T.page.evaluate(() => document.querySelectorAll('.bnav .ni.on').length), 1);

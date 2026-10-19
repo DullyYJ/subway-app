@@ -49,12 +49,26 @@ const html = fs.readFileSync(R('www/index.html'), 'utf8');
   ok(['tabsScreen', 'tabsFacts', 'tabsHash', 'TABS_LIST', 'TABS_SCREEN_V', 'handleScreenTabs'].every(n => !new RegExp('^(async\\s+)?(function|var)\\s+' + n + '\\b', 'm').test(other)), '다른 엔진과 이름이 겹치지 않는다');
 }
 // ── ⑥ 워커 끝에서 끝까지 ──
+// ── ⑦ s67: 한 요청으로 모든 탭 화면(alts) ──
+{
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const f0 = { tab: 'home', badge: { community: 3, food: 12 } };
+  const out = E.tabsScreens({ cap: 6 }, f0, 'tabs');
+  ok(out.ok && Object.keys(out.alts).join() === 'community,map,home,shop,food', 'alts: 탭 다섯 개(엔진이 가진 탭 이름이 키)');
+  Object.keys(out.alts).forEach(k => ok(same(out.alts[k], E.tabsScreen({ cap: 6 }, Object.assign({}, f0, { tab: k }))), 'alts[' + k + '] = 그 탭으로 따로 요청한 화면과 글자 하나까지 같다'));
+  ok(E.tabsScreens({ cap: 6 }, f0).alts === undefined, 'alts 를 달라고 하지 않으면 없다');
+  ok(E.tabsScreens({ cap: 5 }, f0, 'tabs').ok === false, 'cap 부족이면 alts 도 만들지 않는다');
+  const ex = E.tabsScreens({ cap: 6 }, f0, { x: { tab: 'shop' }, y: 4 });
+  ok(Object.keys(ex.alts).join() === 'x' && ex.alts.x.info.tab === 'shop', 'alts 직접 지정 · 이상한 항목은 건너뜀');
+}
 (async () => {
   const tmp = path.join(os.tmpdir(), 'rv2_tabs_' + process.pid + '.mjs');
   fs.copyFileSync(R('engine/route-v2-worker.ascii.js'), tmp);
   try {
     const w = (await import(tmp)).default, call = (u, init) => w.fetch(new Request(u, init), {}, { waitUntil() { } });
     const post = b => call('https://x/screen/tabs', { method: 'POST', body: b, headers: { 'Content-Type': 'text/plain;charset=UTF-8' } });
+    const ra = await (await post(JSON.stringify({ cap: 6, f: { tab: 'map' }, alts: 'tabs' }))).json();
+    ok(ra.ok && Object.keys(ra.alts).length === 5, '워커: alts 응답(탭 다섯 화면이 함께 온다)');
     const r = await post(JSON.stringify({ cap: 6, f: { tab: 'map' } })), j = await r.json();
     ok(r.status === 200 && j.ok && j.screen === 'tabs' && j.body[0].items[1].on && /route-v2-2026-10-\d\ds\d\d/.test(j.ver), '워커 응답 200 ' + j.ver);
     ok((await (await post(JSON.stringify({ cap: 5, f: {} }))).json()).ok === false, '워커: cap 부족이면 거절');

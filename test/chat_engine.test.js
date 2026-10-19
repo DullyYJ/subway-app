@@ -142,6 +142,23 @@ ok(E.chatScreen({ cap: 5, now: NOW }, base, {}).ok === false && E.chatScreen({},
   ok(names.every(n => !new RegExp('^(async\\s+)?(function|var)\\s+' + n + '\\b', 'm').test(other)), '다른 엔진과 이름이 겹치지 않는다 (' + names.length + '개)');
 }
 // ── ⑩ 워커 끝에서 끝까지 ──
+// ── ⑪ s67: 한 요청으로 여러 방 화면(alts) ──
+{
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const R2 = [['m1', NOW - 5 * MIN, '남', '안녕', ''], ['m2', NOW - 4 * MIN, '나', '내 글', ''], ['m3', NOW - 3 * MIN, '철수', '지연돼요', 'delay']];
+  const rooms = { '2호선': { f: Object.assign({}, base, { sel: '2호선', st: 'ready' }), d: { r: R2, off: null, offOk: 1, offAt: 0, al: null } },
+                  '9호선': { f: Object.assign({}, base, { sel: '9호선', st: 'loading' }), d: { r: [], off: null, offOk: 0, offAt: 0, al: null } },
+                  all: { f: Object.assign({}, base, { sel: 'all' }), d: { g: G } } };
+  const out = E.chatScreens({ cap: 6, now: NOW }, Object.assign({}, base, { sel: '1호선', st: 'ready' }), { r: [] }, rooms);
+  ok(out.ok && Object.keys(out.alts).join() === '2호선,9호선,all', 'alts: 앱이 보낸 방 키 그대로');
+  Object.keys(rooms).forEach(k => ok(same(out.alts[k], E.chatScreen({ cap: 6, now: NOW }, rooms[k].f, rooms[k].d)), 'alts[' + k + '] = 그 방으로 따로 요청한 화면과 글자 하나까지 같다'));
+  ok(out.alts['2호선'].info.sel === '2호선' && out.alts['9호선'].body.some(x => /불러오는 중/.test(x.s || '')), '방마다 자기 방 화면(자료가 없는 방은 불러오는 중)');
+  ok(E.chatScreens({ cap: 6, now: NOW }, base, { g: G }).alts === undefined, 'alts 를 달라고 하지 않으면 없다');
+  const many = {}; for (let i = 0; i < 60; i++) many['k' + i] = { f: base, d: { g: G } };
+  ok(Object.keys(E.chatScreens({ cap: 6, now: NOW }, base, { g: G }, many).alts).length === 24, 'alts 개수 상한 24');
+  const ex = E.chatScreens({ cap: 6, now: NOW }, base, { g: G }, { a: 3, b: { f: base, d: { g: G } } });
+  ok(Object.keys(ex.alts).join() === 'b', '이상한 alts 항목은 건너뜀');
+}
 (async () => {
   const tmp = path.join(os.tmpdir(), 'rv2_chat_' + process.pid + '.mjs');
   fs.copyFileSync(R('engine/route-v2-worker.ascii.js'), tmp);
@@ -150,6 +167,8 @@ ok(E.chatScreen({ cap: 5, now: NOW }, base, {}).ok === false && E.chatScreen({},
     const post = b => call('https://x/screen/chat', { method: 'POST', body: b, headers: { 'Content-Type': 'text/plain;charset=UTF-8' } });
     const r = await post(JSON.stringify({ cap: 6, f: base, d: { g: G } })), j = await r.json();
     ok(r.status === 200 && j.ok && j.screen === 'chat' && j.anchor === 'bottom' && /route-v2-2026-10-\d\ds\d\d/.test(j.ver), '워커 응답 200 ' + j.ver);
+    const ra = await (await post(JSON.stringify({ cap: 6, f: base, d: { g: G }, alts: { '2호선': { f: Object.assign({}, base, { sel: '2호선' }), d: { r: [] } } } }))).json();
+    ok(ra.ok && ra.alts && ra.alts['2호선'].info.sel === '2호선', '워커: alts 응답(방 화면이 함께 온다)');
     ok((await (await post(JSON.stringify({ cap: 5, f: {}, d: {} }))).json()).ok === false, '워커: cap 부족이면 거절');
     ok((await post('{oops')).status === 400 && (await post('x'.repeat(1500001))).status === 413 && (await call('https://x/screen/chat')).status === 405, '워커: 깨진 본문 400 · 큰 본문 413 · GET 405');
     const ro = await call('https://x/screen/chat', { method: 'OPTIONS' });

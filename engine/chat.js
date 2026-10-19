@@ -18,6 +18,7 @@
 // 맨 아래 module.exports 는 시험(Node)용이고 Worker 에서는 함수 선언만 쓰인다.
 'use strict';
 var CHAT_SCREEN_V = 1;
+var CHT_ALTS_MAX = 24;                // 한 요청에 실을 수 있는 '다른 방' 수 상한(전체 + 호선 18개)
 var CHT_COMMON = ['1호선', '2호선', '3호선', '4호선', '5호선', '6호선', '7호선', '8호선', '9호선', '신분당선', '수인분당선', '경의중앙선', '공항철도', '경춘선', 'GTX-A'];   // 웹 _LR_COMMON
 var CHT_KNOWN = CHT_COMMON.concat(['인천1호선', '인천2호선', '김포골드라인']);                                                                                          // 웹 _LR_KNOWN
 var CHT_MAX_G = 120, CHT_MAX_R = 150, CHT_IN_G = 300, CHT_IN_R = 400;
@@ -160,4 +161,23 @@ function chatScreen(inp, factsIn, dataIn) {
   return out;
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { chatScreen: chatScreen, chtFacts: chtFacts, chtItems: chtItems, chtTime: chtTime, chtOfficial: chtOfficial, chtAlert: chtAlert, CHT_KNOWN: CHT_KNOWN };
+// ★ 2026-10-19 s67 (YJ: 실시간소통에서 각 호선을 누를 때 로딩이 너무 오래 걸려): 같은 요청에 '다른 방들의 사실·자료(altsIn = { 키:{ f, d } })'를 실어 보내면
+//   엔진이 한 번에 모든 방 화면을 계산해 out.alts[키] 로 돌려준다. 앱은 받은 화면을 방별로 기억해 두었다가 칩을 누르면 요청 없이 그대로 올린다(계산은 엔진, 앱은 그리기).
+//   각 alts[키] 는 그 방으로 따로 요청했을 때와 글자 하나까지 같은 화면이다(시험이 대조한다).
+function chatScreens(inp, factsIn, dataIn, altsIn) {
+  var out = chatScreen(inp, factsIn, dataIn);
+  if (!out || !out.ok) return out;
+  if (altsIn && typeof altsIn === 'object' && !Array.isArray(altsIn)) {
+    var ks = Object.keys(altsIn).slice(0, CHT_ALTS_MAX), alts = {};
+    for (var i = 0; i < ks.length; i++) {
+      var a = altsIn[ks[i]];
+      if (!a || typeof a !== 'object') continue;
+      var o2 = chatScreen(inp, a.f, a.d);
+      if (o2 && o2.ok) alts[ks[i]] = o2;
+    }
+    out.alts = alts;
+  }
+  return out;
+}
+
+if (typeof module !== 'undefined' && module.exports) module.exports = { chatScreen: chatScreen, chatScreens: chatScreens, chtFacts: chtFacts, chtItems: chtItems, chtTime: chtTime, chtOfficial: chtOfficial, chtAlert: chtAlert, CHT_KNOWN: CHT_KNOWN };

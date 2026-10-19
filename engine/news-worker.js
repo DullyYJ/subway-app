@@ -1,6 +1,7 @@
 // 뉴스 화면 엔진 Worker 연결부 — POST /screen/news (engine/news.js 의 newsScreen·newsDetail 을 부른다). route-v2 의 handleFetch 에 `if (url.pathname === "/screen/news") return handleScreenNews(request);` 를 넣는다.
 //   본문(JSON 글, Content-Type: text/plain 으로 보내 사전 요청을 피한다):
-//     목록  { cap(5 이상), f:{cat}, n:[기사…] }   기사 = [제목, 링크, 언론사, 시각(ms), 서버 분류, 요약]
+//     목록  { cap(5 이상), f:{cat}, n:[기사…], alts?:{ 키:{cat} } }   기사 = [제목, 링크, 언론사, 시각(ms), 서버 분류, 요약]
+//           alts 가 있으면 응답 out.alts[키] 에 그 칩의 화면도 함께 담는다(같은 기사 목록 · 분류는 한 번만 · s67)
 //     상세  { cap(5 이상), d:기사 }                → { ok, v:1, detail:{…} }  (상세 팝업에 쓸 문구)
 //   엔진은 아무것도 저장하지 않는다(이 기기가 보낸 기사 목록으로 화면을 계산해 돌려줄 뿐). 개인 식별 정보는 오가지 않는다.
 async function handleScreenNews(request) {
@@ -15,7 +16,7 @@ async function handleScreenNews(request) {
   var out;
   try {
     var inp = { cap: Number(body.cap) || 0, now: Date.now() };
-    out = body.d !== undefined ? newsDetail(inp, body.d) : newsScreen(inp, body.f, body.n);
+    out = body.d !== undefined ? newsDetail(inp, body.d) : newsScreens(inp, body.f, body.n, body.alts);
   } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2) }), { status: 500, headers: H }); }
   if (!out || !out.ok) return new Response(JSON.stringify(out || { ok: false, error: "fail" }), { status: 400, headers: H });
   out.ver = ENGINE_VERSION;

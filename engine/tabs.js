@@ -55,4 +55,27 @@ function tabsScreen(inp, factsIn) {
   return out;
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { tabsScreen: tabsScreen, tabsFacts: tabsFacts, TABS_LIST: TABS_LIST };
+// ★ 2026-10-19 s67 (YJ: 하단 탭을 누를 때 막대가 늦게 바뀐다): 같은 요청에 '다른 탭들의 사실(altsIn = { 키:{ tab, badge } })'을 실어 보내면
+//   엔진이 한 번에 모든 탭 화면을 계산해 out.alts[키] 로 돌려준다(앱은 받은 화면을 탭별로 기억해 두었다가 요청 없이 올린다).
+function tabsScreens(inp, factsIn, altsIn) {
+  var out = tabsScreen(inp, factsIn);
+  if (!out || !out.ok) return out;
+  if (altsIn === 'tabs') {                        // 엔진이 가진 탭 전부(키 = 탭 이름). 배지는 지금 값 그대로
+    var bf = tabsFacts(factsIn);
+    altsIn = {};
+    TABS_LIST.forEach(function (t) { altsIn[t.id] = { tab: t.id, badge: factsIn && factsIn.badge }; });
+  }
+  if (altsIn && typeof altsIn === 'object' && !Array.isArray(altsIn)) {
+    var ks = Object.keys(altsIn).slice(0, 10), alts = {};
+    for (var i = 0; i < ks.length; i++) {
+      var a = altsIn[ks[i]];
+      if (!a || typeof a !== 'object') continue;
+      var o2 = tabsScreen(inp, a);
+      if (o2 && o2.ok) alts[ks[i]] = o2;
+    }
+    out.alts = alts;
+  }
+  return out;
+}
+
+if (typeof module !== 'undefined' && module.exports) module.exports = { tabsScreen: tabsScreen, tabsScreens: tabsScreens, tabsFacts: tabsFacts, TABS_LIST: TABS_LIST };

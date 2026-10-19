@@ -43,9 +43,9 @@ const ITEMS = [
         x.reqs.push(body); x.lastReq = body;
         if (x.delay) await new Promise(res => setTimeout(res, x.delay));
         if (x.serve === 'down') return r.abort();
-        let out = JSON.stringify(E.newsScreen({ cap: Number(body.cap) || 0 }, body.f, body.n));
+        let out = JSON.stringify(x.serve === 'noalts' ? E.newsScreen({ cap: Number(body.cap) || 0 }, body.f, body.n) : E.newsScreens({ cap: Number(body.cap) || 0 }, body.f, body.n, body.alts));
         if (x.serve === 'shape') out = JSON.stringify({ ok: true, v: 2, screen: 'news' });
-        x.lastBody = out;
+        { let o2 = null; try { o2 = JSON.parse(out); } catch (e) { } if (o2 && o2.alts) { x.lastAlts = o2.alts; delete o2.alts; x.lastBody = JSON.stringify(o2); } else x.lastBody = out; }      // 앱은 alts 를 플러그인에 넘기지 않고 칩별 기억에 넣는다
         return r.fulfill({ status: 200, contentType: 'application/json', body: out });
       }
       return r.abort();
@@ -150,14 +150,44 @@ const ITEMS = [
   });
 
   console.log('[③ 행동: 칩·기사·데이터 변화]');
-  await t('칩(cat 증시) → 고른 칩이 바뀌고 새 요청 → update(keepScroll 거짓: 목록이 바뀌었다)', async () => {
+  await t('s67: 첫 요청에 alts:"chips" 를 실었고, 받은 다른 칩 화면은 플러그인에 넘기지 않고 칩별 기억에만 넣는다', async () => {
+    assert.strictEqual(A.reqs[0].alts, 'chips', '첫 요청에 alts 가 없다');
+    const s0 = (await calls(A, 'show'))[0] || { a: { json: '{}' } };
+    assert.ok(!/"alts"/.test(s0.a.json || ''), '플러그인에 alts 가 넘어갔다');
+    assert.strictEqual(await A.page.evaluate(() => Object.keys(window._scrNews.S.memo).length), 8, '칩 8개 화면이 기억에 있어야 한다(현재 칩 + 7)');
+  });
+  await t('칩(cat 증시) → 고른 칩이 바뀌고 요청 없이(받아 둔 화면) → update(keepScroll 거짓: 목록이 바뀌었다)', async () => {
     await clear(A); const n0 = A.reqs.length;
     await act(A, { a: 'cat', v: '증시' });
     assert.ok(await waitFor(A, has(A, 'update')), 'update 없음');
     assert.strictEqual(await A.page.evaluate(() => _newsCatSel), '증시');
-    assert.ok(A.reqs.length === n0 + 1 && A.lastReq.f.cat === '증시');
+    assert.strictEqual(A.reqs.length, n0, '칩을 눌렀는데 엔진에 다시 요청했다');
     const u = (await last(A, 'update')).a; assert.strictEqual(u.keepScroll, false);
     assert.deepStrictEqual(rows(u.json).map(r => r.title), ['코스피 2,700 돌파']);
+    assert.strictEqual(JSON.parse(u.json).info.cat, '증시');
+  });
+  await t('s67: 칩 8개를 차례로 눌러도 요청 0회 · 화면은 그 칩 것(엔진이 따로 계산한 것과 같다)', async () => {
+    const n0 = A.reqs.length;
+    for (const c of ['경제', '사회', '정치', '연예', '스포츠', 'IT', '전체', '증시']) {
+      await clear(A); await act(A, { a: 'cat', v: c });
+      assert.ok(await waitFor(A, has(A, 'update')), c + ' update 없음');
+      const j = JSON.parse((await last(A, 'update')).a.json);
+      assert.strictEqual(j.info.cat, c);
+      const mine = await A.page.evaluate(() => _NEWSFEED.items.map(i => [String(i.title), String(i.link || ''), String(i.source || ''), i.ts || 0, String(i._srcCat || i.cat || ''), i.desc ? String(i.desc).slice(0, 400) : '']));
+      assert.deepStrictEqual(j.body.filter(n => n.t === 'news').map(n => n.title), E.newsScreen({ cap: 5, now: Date.now() }, { cat: c }, mine).body.filter(n => n.t === 'news').map(n => n.title), c + ' 목록이 엔진 계산과 다르다');
+    }
+    assert.strictEqual(A.reqs.length, n0, '칩만 눌렀는데 요청이 나갔다');
+  });
+  await t('s67: 기사가 바뀌면(새 목록) 다음 요청에 다시 alts 를 달라고 하고, 그 뒤 칩은 다시 요청 없이 바뀐다', async () => {
+    const x = await fresh({ plugin: true, on: true }); await openNews(x); await putNews(x); await waitFor(x, has(x, 'show')); await emit(x, 'ready', { id: 'news' }); await x.page.waitForTimeout(300);
+    const n0 = x.reqs.length;
+    await putNews(x, [{ title: '환율 급등 소식', link: 'https://a.example/9', source: '', ts: Date.now() - MIN, desc: '' }]);
+    assert.ok(await waitFor(x, async () => x.reqs.length > n0), '새 기사인데 요청이 없다');
+    assert.strictEqual(x.reqs[x.reqs.length - 1].alts, 'chips', '새 목록 요청에 alts 가 없다');
+    await x.page.waitForTimeout(400); await clear(x); const n1 = x.reqs.length;
+    await act(x, { a: 'cat', v: '증시' }); assert.ok(await waitFor(x, has(x, 'update')), 'update 없음');
+    assert.strictEqual(x.reqs.length, n1, '새 목록 뒤 칩을 눌렀는데 요청했다');
+    assert.deepStrictEqual(x.errs, []); await x.ctx.close();
   });
   await t('전체로 돌아오면 같은 요청이라 네트워크 없이 기억에서 바로 그린다', async () => {
     await clear(A); const n0 = A.reqs.length;
@@ -234,6 +264,16 @@ const ITEMS = [
   });
 
   console.log('[⑤ 처음 열 때 · 저장본 · 폴백]');
+  await t('s67 폴백: 옛 엔진(alts 를 안 주는 응답)이면 칩을 누를 때 예전처럼 요청해 받는다', async () => {
+    const x = await fresh({ plugin: true, on: true, serve: 'noalts' }); await openNews(x); await putNews(x); await waitFor(x, has(x, 'show')); await emit(x, 'ready', { id: 'news' }); await x.page.waitForTimeout(300);
+    assert.strictEqual(await x.page.evaluate(() => Object.keys(window._scrNews.S.memo).length), 1, '옛 엔진인데 다른 칩 기억이 있다');
+    await clear(x); const n0 = x.reqs.length;
+    await act(x, { a: 'cat', v: '증시' }); assert.ok(await waitFor(x, has(x, 'update')), 'update 없음');
+    assert.strictEqual(x.reqs.length, n0 + 1); assert.strictEqual(x.lastReq.f.cat, '증시');
+    assert.deepStrictEqual(rows((await last(x, 'update')).a.json).map(r => r.title), ['코스피 2,700 돌파']);
+    assert.deepStrictEqual(x.errs, []); await x.ctx.close();
+  });
+
   await t('탭을 열고 450ms 안에 기사가 놓이면 첫 화면이 곧바로 그 목록이다(불러오는 중 안내를 먼저 그리지 않는다)', async () => {
     const x = await fresh({ plugin: true, on: true }); await openNews(x); await x.page.waitForTimeout(150); await putNews(x);
     assert.ok(await waitFor(x, has(x, 'show')), 'show 없음'); await x.page.waitForTimeout(700);

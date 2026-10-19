@@ -19,6 +19,7 @@ var FOOD_SCREEN_V = 1;
 var FOOD_CHIPS = ['전체', '카페', '밥집', '육식', '회집', '주점'];
 var FOOD_MAX_SHOW = 150;          // 위·아래 목록 각각 최대 개수(웹과 같다)
 var FOOD_MAX_IN_C = 400, FOOD_MAX_IN_P = 1500;
+var FOOD_ALTS_MAX = 12;           // 한 요청에 실을 수 있는 '다른 칩' 수 상한(칩 6개)
 var FOOD_STATES = ['idle', 'locating', 'noperm', 'loading', 'none', 'ready'];
 
 // 업종 → 칩 분류. 순서가 중요하다(회집을 육식보다 먼저 — '참치회 전문'에 '참치'가 육류로 오인되지 않게)
@@ -81,11 +82,8 @@ function foodPlaceN(p, rank, pub, idxPrefix) {
   return n;
 }
 
-function foodScreen(inp, factsIn, itemsIn) {
-  inp = inp || {};
-  if (!(Number(inp.cap) >= 4)) return { ok: false, error: 'cap' };
-  var f = foodFacts(factsIn), it = (itemsIn && typeof itemsIn === 'object') ? itemsIn : {};
-  var all = foodList(it.c, FOOD_MAX_IN_C), allP = foodList(it.p, FOOD_MAX_IN_P);
+// 한 칩(f.flt) 분의 화면. all·allP = foodList 로 이미 정리한 위·아래 목록(같은 목록의 다른 칩을 만들 때 다시 정리하지 않으려고 따로 뺐다)
+function foodScreenOf(f, all, allP) {
   var match = function (p) { return f.flt === '전체' || foodKind(p.c) === f.flt; };
   var cur = all.filter(match), pub = allP.filter(match);
   var seen = {};                                    // 위쪽 목록에 이미 있는 상호는 공공데이터에서 뺀다(중복 방지)
@@ -123,4 +121,38 @@ function foodScreen(inp, factsIn, itemsIn) {
   return out;
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { foodScreen: foodScreen, foodFacts: foodFacts, foodKind: foodKind, foodCatSimple: foodCatSimple, foodDist: foodDist, foodStars: foodStars, foodList: foodList, FOOD_CHIPS: FOOD_CHIPS };
+function foodScreen(inp, factsIn, itemsIn) {
+  inp = inp || {};
+  if (!(Number(inp.cap) >= 4)) return { ok: false, error: 'cap' };
+  var f = foodFacts(factsIn), it = (itemsIn && typeof itemsIn === 'object') ? itemsIn : {};
+  return foodScreenOf(f, foodList(it.c, FOOD_MAX_IN_C), foodList(it.p, FOOD_MAX_IN_P));
+}
+
+// ★ 2026-10-19 s67 (YJ: 도착역 맛집 로딩이 오래 걸려 — 칩을 누를 때마다 가게 목록을 다시 보내고 새 화면을 받았다):
+//   같은 요청에 '다른 칩들의 사실(altsIn = { 키: { stn, st, flt, fail } } 또는 'chips' = 엔진이 가진 칩 전부)'을 실어 보내면 엔진이 한 번에 모든 칩 화면을 계산해 out.alts[키] 로 돌려준다.
+//   가게 목록 정리(foodList)는 한 번만 한다. 앱은 받은 화면을 칩별로 기억해 두었다가 칩을 누르면 요청 없이 그대로 올린다(계산은 엔진, 앱은 그리기).
+//   각 alts[키] 는 그 칩으로 따로 요청했을 때와 글자 하나까지 같은 화면이다(시험이 대조한다).
+function foodScreens(inp, factsIn, itemsIn, altsIn) {
+  inp = inp || {};
+  if (!(Number(inp.cap) >= 4)) return { ok: false, error: 'cap' };
+  var it = (itemsIn && typeof itemsIn === 'object') ? itemsIn : {};
+  var all = foodList(it.c, FOOD_MAX_IN_C), allP = foodList(it.p, FOOD_MAX_IN_P);
+  var out = foodScreenOf(foodFacts(factsIn), all, allP);
+  if (altsIn === 'chips') {                       // 앱은 어떤 칩이 있는지 모른다 — 엔진이 가진 칩 전부로 지금 사실만 칩을 바꿔 만든다. 키 = 칩 이름
+    var bf = foodFacts(factsIn);
+    altsIn = {};
+    FOOD_CHIPS.forEach(function (c) { altsIn[c] = { stn: bf.stn, st: bf.st, flt: c, fail: bf.fail ? 1 : 0 }; });
+  }
+  if (altsIn && typeof altsIn === 'object' && !Array.isArray(altsIn)) {
+    var ks = Object.keys(altsIn).slice(0, FOOD_ALTS_MAX), alts = {};
+    for (var i = 0; i < ks.length; i++) {
+      var a = altsIn[ks[i]];
+      if (!a || typeof a !== 'object') continue;
+      alts[ks[i]] = foodScreenOf(foodFacts(a), all, allP);
+    }
+    out.alts = alts;
+  }
+  return out;
+}
+
+if (typeof module !== 'undefined' && module.exports) module.exports = { foodScreen: foodScreen, foodScreens: foodScreens, foodFacts: foodFacts, foodKind: foodKind, foodCatSimple: foodCatSimple, foodDist: foodDist, foodStars: foodStars, foodList: foodList, FOOD_CHIPS: FOOD_CHIPS };

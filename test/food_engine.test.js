@@ -122,14 +122,35 @@ ok(S.ok && S.v === 1 && S.screen === 'food' && S.cover === 'tab' && /^f1:/.test(
 {
   const has = t => html.indexOf(t) >= 0;
   ok(has('window._scrFood = {') && has("var BASE = ((typeof _ROUTE_V2_BASE === 'string' && _ROUTE_V2_BASE) ? _ROUTE_V2_BASE : 'https://route-v2.phg0643.workers.dev') + '/screen/food';"), '웹: 맛집 연결부 + 엔진 주소');
-  ok(has("body: req.txt, headers: { 'Content-Type': 'text/plain;charset=UTF-8' }"), '웹: 사전 요청이 필요 없게 text/plain 으로 보낸다');
-  ok(has('cap: 4'), '웹: 규격 수준 4를 알린다');
+  ok(has("body: req.post || req.txt, headers: { 'Content-Type': 'text/plain;charset=UTF-8' }"), '웹: 사전 요청이 필요 없게 text/plain 으로 보낸다');
+  ok(has('"cap":4'), '웹: 규격 수준 4를 알린다');
   ok(has("addListener('action', onAction)") && has("a === 'cat'") && has("/^fm\\.(c|p)\\.(\\d+)$/"), '웹: cat · 가게 번호 행동만 처리');
   ok(has('function fdOwned()') && (html.match(/if\(fdOwned\(\)\) return null;|return fdOwned\(\) \? null/g) || []).length >= 4, '웹: 맛집 탭을 네이티브가 맡으면 예전 fd:* 영역은 쉰다');
   ok(has('id="scrfSetCard"') && has('onchange="_scrfSetUse(this.checked)"') && has("key === 'f.scrf'") && has('f.feat.scrf'), '웹: 설정 스위치(기본 꺼짐) + 설정 화면 연결');
   ok(has('window._scrFood.closeSheet()') && has('window._scrFood.kick()') && has('window._scrFood.openNamed('), '웹: 뒤로가기 · 탭 전환 · 하차추천 연동');
   ok(has("_foodUi(destStn, 'ready')") && has("_foodUi(destStn, 'loading')") && has("_foodUi(destStn, 'none')") && has("_foodUi('', 'locating')") && has("_foodUi('', 'noperm')"), '웹: 지금 상태를 사실로 알린다');
   ok(!/_foodKind\(/.test(html.slice(html.indexOf('서버 구동 네이티브 화면 3호: 맛집 탭'), html.indexOf('서버 구동 네이티브 화면 3호: 맛집 탭') + 20000)), '웹: 연결부 안에서 업종을 분류하지 않는다(엔진 몫)');
+}
+
+// ⑨ s67: 한 요청으로 모든 칩 화면(alts)
+{
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const f0 = { stn: '강남', st: 'ready', flt: '카페', fail: 0 };
+  const out = E.foodScreens({ cap: 4 }, f0, { c: C, p: P }, 'chips');
+  ok(out.ok && out.alts && Object.keys(out.alts).join() === E.FOOD_CHIPS.join(), 'alts: 칩 전부(엔진이 가진 칩 이름이 키)');
+  E.FOOD_CHIPS.forEach(c => ok(same(out.alts[c], E.foodScreen({ cap: 4 }, Object.assign({}, f0, { flt: c }), { c: C, p: P })), 'alts[' + c + '] = 그 칩으로 따로 요청한 화면과 글자 하나까지 같다'));
+  const plain = Object.assign({}, out); delete plain.alts;
+  ok(same(plain, E.foodScreen({ cap: 4 }, f0, { c: C, p: P })), 'alts 를 빼면 예전 응답과 같다(현재 칩 화면)');
+  ok(E.foodScreens({ cap: 4 }, f0, { c: C, p: P }).alts === undefined, 'alts 를 달라고 하지 않으면 없다');
+  ['idle', 'locating', 'noperm', 'loading', 'none', 'ready'].forEach(st => {
+    const o = E.foodScreens({ cap: 4 }, { stn: '강남', st, flt: '전체', fail: 1 }, { c: [], p: [] }, 'chips');
+    ok(E.FOOD_CHIPS.every(c => same(o.alts[c], E.foodScreen({ cap: 4 }, { stn: '강남', st, flt: c, fail: 1 }, { c: [], p: [] }))), '상태 ' + st + ' 에서도 칩마다 같은 화면');
+  });
+  const ex = E.foodScreens({ cap: 4 }, f0, { c: C, p: P }, { a: { stn: '강남', st: 'ready', flt: '밥집', fail: 0 }, b: 7 });
+  ok(Object.keys(ex.alts).join() === 'a' && same(ex.alts.a, E.foodScreen({ cap: 4 }, { stn: '강남', st: 'ready', flt: '밥집', fail: 0 }, { c: C, p: P })), 'alts 직접 지정');
+  const many = {}; for (let i = 0; i < 40; i++) many['k' + i] = { flt: '카페' };
+  ok(Object.keys(E.foodScreens({ cap: 4 }, f0, { c: C, p: P }, many).alts).length === 12, 'alts 개수 상한 12');
+  ok(E.foodScreens({ cap: 3 }, f0, { c: C, p: P }, 'chips').ok === false, 'cap 부족이면 alts 도 만들지 않는다');
 }
 
 // ⑦ 워커 끝에서 끝까지
@@ -144,6 +165,10 @@ ok(S.ok && S.v === 1 && S.screen === 'food' && S.cover === 'tab' && /^f1:/.test(
     ok(r.status === 200 && j.ok && j.screen === 'food', '워커 응답 200');
     ok(/route-v2-2026-10-\d\ds\d\d/.test(j.ver), '엔진 버전 표시 ' + j.ver);
     ok(JSON.stringify(j.body) === JSON.stringify(S.body) && j.rev === S.rev, '워커와 직접 계산이 같은 결과');
+    const ra = await (await post(JSON.stringify({ cap: 4, f: { stn: '강남', st: 'ready', flt: '전체' }, alts: 'chips', c: C, p: P }))).json();
+    ok(ra.ok && Object.keys(ra.alts).join() === '전체,카페,밥집,육식,회집,주점', '워커: alts 응답(칩 6개 화면이 함께 온다)');
+    const rn = await (await post(JSON.stringify({ cap: 4, f: { stn: '강남', st: 'ready', flt: '전체' }, c: C, p: P }))).json();
+    ok(rn.alts === undefined, '워커: alts 를 안 달면 예전 응답 그대로');
     ok((await (await post(JSON.stringify({ cap: 3, f: {}, c: [], p: [] }))).json()).ok === false, '워커: cap 부족이면 거절');
     ok((await post('{oops')).status === 400, '워커: 깨진 본문은 400');
     ok((await post('[1,2]')).status === 400 || true, '워커: 배열 본문');

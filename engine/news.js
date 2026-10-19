@@ -20,6 +20,7 @@ var NEWS_SCREEN_V = 1;
 var NW_CATS = ['전체','증시','경제','사회','정치','연예','스포츠','IT'];
 var NW_QUOTE_MAX = 200;                 // 요약 노출 상한(웹 _NEWS_POLICY.quoteMaxChars)
 var NW_MAX_IN = 1200;                   // 받는 기사 수 상한(웹 저장소 상한과 같다)
+var NW_ALTS_MAX = 12;                  // 한 요청에 실을 수 있는 '다른 칩' 수 상한(칩 8개)
 var NW_MAX_SHOW = 300;                  // 한 번에 보내는 기사 줄 수 상한
 var NW_ALL_MAX = 200;                   // '전체' 칩에서 뽑는 수(웹과 같다)
 var NW_FRESH_MS = 3 * 24 * 3600 * 1000; // '전체' 칩은 3일 안 기사만(웹과 같다)
@@ -203,12 +204,9 @@ function nwPick(all, cat, now) {
   return items;
 }
 
-function newsScreen(inp, factsIn, rowsIn) {
-  inp = inp || {};
-  if (!(Number(inp.cap) >= 5)) return { ok: false, error: 'cap' };
-  var now = Number(inp.now) > 0 ? Number(inp.now) : Date.now();
-  var f = nwFacts(factsIn);
-  var all = nwList(rowsIn, now), items = nwPick(all, f.cat, now);
+// 한 칩(f.cat) 분의 화면. all = nwList 로 이미 분류·정리한 기사(같은 목록의 다른 칩을 만들 때 다시 분류하지 않으려고 따로 뺐다)
+function nwScreenOf(now, f, all) {
+  var items = nwPick(all, f.cat, now);
   var head = [
     { t: 'chips', pad: [14, 4, 14, 6], gap: 6, h: 30, onc: 'gold', onfg: '#121214',
       items: NW_CATS.map(function (c) { return { label: c, on: c === f.cat, act: { a: 'cat', v: c } }; }) }
@@ -229,6 +227,40 @@ function newsScreen(inp, factsIn, rowsIn) {
   return out;
 }
 
+function newsScreen(inp, factsIn, rowsIn) {
+  inp = inp || {};
+  if (!(Number(inp.cap) >= 5)) return { ok: false, error: 'cap' };
+  var now = Number(inp.now) > 0 ? Number(inp.now) : Date.now();
+  var f = nwFacts(factsIn);
+  return nwScreenOf(now, f, nwList(rowsIn, now));
+}
+
+// ★ 2026-10-19 s67 (YJ: 뉴스 칩을 누를 때마다 로딩이 길다): 칩을 누를 때마다 기사 목록 전체를 보내고 새 화면을 받던 것을,
+//   같은 요청에 '다른 칩들의 사실(altsIn = { 키: { cat } } 또는 'chips' = 엔진이 가진 칩 전부)'을 실어 보내면 엔진이 한 번에 모든 칩 화면을 계산해 out.alts[키] 로 돌려준다.
+//   기사 분류·정리(nwList)는 한 번만 한다. 앱은 받은 화면을 칩별로 기억해 두었다가 칩을 누르면 요청 없이 그대로 올린다(계산은 엔진, 앱은 그리기).
+//   각 alts[키] 는 그 칩으로 따로 요청했을 때와 글자 하나까지 같은 화면이다(시험이 대조한다).
+function newsScreens(inp, factsIn, rowsIn, altsIn) {
+  inp = inp || {};
+  if (!(Number(inp.cap) >= 5)) return { ok: false, error: 'cap' };
+  var now = Number(inp.now) > 0 ? Number(inp.now) : Date.now();
+  var all = nwList(rowsIn, now);
+  var out = nwScreenOf(now, nwFacts(factsIn), all);
+  if (altsIn === 'chips') {                       // 앱은 어떤 칩이 있는지 모른다 — 엔진이 가진 칩 전부(지금 칩 빼고)를 만든다. 키 = 칩 이름
+    altsIn = {};
+    NW_CATS.forEach(function (c) { altsIn[c] = { cat: c }; });
+  }
+  if (altsIn && typeof altsIn === 'object' && !Array.isArray(altsIn)) {
+    var ks = Object.keys(altsIn).slice(0, NW_ALTS_MAX), alts = {};
+    for (var i = 0; i < ks.length; i++) {
+      var a = altsIn[ks[i]];
+      if (!a || typeof a !== 'object') continue;
+      alts[ks[i]] = nwScreenOf(now, nwFacts(a), all);
+    }
+    out.alts = alts;
+  }
+  return out;
+}
+
 // 상세 팝업 문구(웹 _openNewsDetail 이 직접 만들던 것)
 function newsDetail(inp, row) {
   inp = inp || {};
@@ -244,4 +276,4 @@ function newsDetail(inp, row) {
     btn: src + ' 원문 보기 ›', close: '닫기', open: /^https?:\/\//i.test(it.link) ? 1 : 0 } };
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { newsScreen: newsScreen, newsDetail: newsDetail, nwClassify: nwClassify, nwRuleCat: nwRuleCat, nwDecode: nwDecode, nwCleanDesc: nwCleanDesc, nwSourceLabel: nwSourceLabel, nwNoise: nwNoise, nwAgo: nwAgo, nwList: nwList, nwPick: nwPick, NW_CATS: NW_CATS };
+if (typeof module !== 'undefined' && module.exports) module.exports = { newsScreen: newsScreen, newsScreens: newsScreens, newsDetail: newsDetail, nwClassify: nwClassify, nwRuleCat: nwRuleCat, nwDecode: nwDecode, nwCleanDesc: nwCleanDesc, nwSourceLabel: nwSourceLabel, nwNoise: nwNoise, nwAgo: nwAgo, nwList: nwList, nwPick: nwPick, NW_CATS: NW_CATS };

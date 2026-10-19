@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-19s66";
+var ENGINE_VERSION = "route-v2-2026-10-19s67";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -289,6 +289,7 @@ var WPEN = { minTime: 1.6, minTransfer: 5, minWalk: 2.5 };
 //   \uc608\uc804 900\ucd08(15\ubd84)\ub294 "\ud658\uc2b9 3\ubc88\uc774\uc9c0\ub9cc 30\ubd84 \ube60\ub978 \uacbd\ub85c"\uac00 "\ud658\uc2b9 1\ubc88"\uc744 \uc774\uacbc\ub2e4(\uc778\ucc9c \uc1a1\ub3c4\u2192\uc555\uad6c\uc815\ub85c\ub370\uc624 \uc2dc\ud5d8 \uc8fc\ud589: \ucd5c\uc18c\ud658\uc2b9 \ud0ed\uc774 \ud658\uc2b9 3\ubc88).
 //   \ud658\uc2b9 \ud55c \ubc88\uc5d0 2\uc2dc\uac04(7200\ucd08)\uc744 \ub9e4\uaca8, \uc2dc\uac04\uc774 2\uc2dc\uac04 \ub118\uac8c \ucc28\uc774 \ub098\uc9c0 \uc54a\ub294 \ud55c \ud658\uc2b9\uc774 \uc801\uc740 \ucabd\uc774 \uc774\uae30\uac8c \ud55c\ub2e4.
 var XPEN = { minTime: 480, minTransfer: 7200, minWalk: 150 };
+var XP_XSWAP_SEC = 300;
 var BUS_WAIT = 180;
 var BUS_STOP_SEC = 30;
 var BUS_CRUISE_MPS = 5.6;
@@ -1468,6 +1469,15 @@ function dijkstraRaw(G, busCoord, busNm, sLat, sLng, eLat, eLng, mode, opt) {
       //   \uac19\uc740 \ub178\uc120 \uc548\uc5d0\uc11c \uc77c\ubc18(ride)\u2194\uae09\ud589(xpress)\uc744 \ubc14\uafd4 \ud0c0\ub294 \uac83\ub3c4 \ud658\uc2b9\uc774\ub2e4. \uc608\uc804\uc5d4 \ub178\uc120 \uac08\uc544\ud0c0\uae30(sub-xfer)\ub9cc \ud658\uc2b9 \ube44\uc6a9\uc744 \ubb3c\uc5b4\uc11c
       //   \uc77c\ubc18\u00b7\uae09\ud589\uc744 \ubc88\uac08\uc544 \ud0c0\ub294 \uacbd\ub85c\uac00 \uacf5\uc9dc\ub85c \uac00\uc7a5 \ube60\ub974\uac8c \ubcf4\uc600\ub2e4.
       const trainSwap = (ek === "ride" || ek === "xpress") && (pkA[u] === "ride" || pkA[u] === "xpress") && pkA[u] !== ek && plA[u] === e.line;
+      // \ub418\ub3cc\ub9bc \uae08\uc9c0: \uac19\uc740 \ub178\uc120\uc5d0\uc11c \uc9c1\uc804\uc5d0 \uc9c0\ub098\uc628 \uc774\uc6c3 \uc5ed \ucabd\uc73c\ub85c \ub2e4\uc2dc \ub098\uac00\ub294 \uae38(\uae09\ud589\uc73c\ub85c \uc9c0\ub098\ucce4\ub2e4\uac00 \uc77c\ubc18\uc73c\ub85c \ub0b4\ub824\uc624\uae30 \ub4f1)
+      if ((ek === "ride" || ek === "xpress") && (pkA[u] === "ride" || pkA[u] === "xpress") && plA[u] === e.line && prevA[u] !== -1 && prevA[u] !== void 0) {
+        const _pb = DJ_NAMES[prevA[u] >> 1];
+        if (_pb !== void 0 && _pb.charCodeAt(0) === 83 && ub.charCodeAt(0) === 83 && e.to.charCodeAt(0) === 83) {
+          const _ln = pkA[u] === "ride" ? _pb.slice(2) : trackEnds(G, _pb.slice(2), ub.slice(2), e.line).l;
+          const _fn = ek === "ride" ? e.to.slice(2) : trackEnds(G, ub.slice(2), e.to.slice(2), e.line).f;
+          if (_ln && _fn && _ln === _fn) continue;
+        }
+      }
       const busXfer = ek === "bus" && pkA[u] === "bus" && plA[u] !== e.line;
       const board = ek === "bus" && (pkA[u] !== "bus" || busXfer);
       let bw = 0;
@@ -1503,14 +1513,17 @@ function dijkstraRaw(G, busCoord, busNm, sLat, sLng, eLat, eLng, mode, opt) {
           bw = busWaitAt(G, e.line, _sid);
         }
       }
-      let xw = 0, ew = e.w;
+      let xw = 0, ew = e.w, xxSwap = false;
       if (ek === "xpress") {
         const _xw = xpWait(G, e, d);
         if (_xw == null) continue;
         ew = XP_LAST_HOP;
         xw = Math.max(0, _xw - (e.bw || XP_BASE_WAIT));
+        // \uae09\ud589\uc5d0\uc11c \ub0b4\ub824 \ub2e4\ub978 \uae09\ud589\uc744 \uae30\ub2e4\ub824 \ud0c0\ub294 \uac83(\uad6c\ub85c\uc5d0\uc11c \uc6a9\uc0b0\uae09\ud589\u2192\ucc9c\uc548\uae09\ud589)\ub3c4 \uc5f4\ucc28 \uac08\uc544\ud0c0\uae30\ub2e4.
+        //   \uac19\uc740 \uc5f4\ucc28\uc5d0 \uacc4\uc18d \ud0c0\uace0 \uc788\uc73c\uba74 \ub2e4\uc74c \uac04\uc120\uc758 \ub300\uae30\ub294 \uc2dc\uac01\ud45c \uce78(3\ubd84) \uc548\ucabd\uc774\ub77c 5\ubd84\uc744 \ub118\uc9c0 \uc54a\ub294\ub2e4.
+        xxSwap = pkA[u] === "xpress" && plA[u] === e.line && _xw > XP_XSWAP_SEC;
       }
-      const nd = d + (isW ? ew * wpen : ek === "bus" && busW > 1 ? ew * busW : ew) + (isX || busXfer || trainSwap ? xpen : 0) + (busW > 1 ? bw * busW : bw) + xw;
+      const nd = d + (isW ? ew * wpen : ek === "bus" && busW > 1 ? ew * busW : ew) + (isX || busXfer || trainSwap || xxSwap ? xpen : 0) + (busW > 1 ? bw * busW : bw) + xw;
       let ti = e.ti;
       if (ti === void 0) { ti = djId(e.to); e.ti = ti; }
       const to = ti * 2 + (mustS ? ride ? 1 : ust : 0);
@@ -1637,6 +1650,16 @@ function dijkstraRaw(G, busCoord, busNm, sLat, sLng, eLat, eLng, mode, opt) {
         (cur.swaps = cur.swaps || []).push({ at: cur.stopList[cur.stopList.length - 1], idx: cur.stopList.length - 1, to: k === "xpress" ? "express" : "local" });
       }
       cur._lastK = k;
+      let _xxChg = false;
+      if (k === "xpress" && prev2 !== void 0 && pk[path[i - 1]] === "xpress" && pl[path[i - 1]] === l && cur.stopList.length) {
+        const _ee0 = pickEdge(adj[prev2], n, "xpress", l);
+        const _xw0 = _ee0 ? xpWait(G, _ee0, dist[path[i - 1]]) : null;
+        if (_xw0 != null && _xw0 > XP_XSWAP_SEC) _xxChg = true;
+      }
+      if (_xxChg) {
+        xf++;
+        (cur.swaps = cur.swaps || []).push({ at: cur.stopList[cur.stopList.length - 1], idx: cur.stopList.length - 1, to: "express" });
+      }
       let _mids = null;
       if (k === "xpress" && prev2 !== void 0 && prev2.charCodeAt(0) === 83 && cur.stopList.length) {
         _mids = expressVia(G, prev2.slice(2), id, l);
@@ -2003,6 +2026,47 @@ function xpBitsRaw(h) {
 }
 __name(xpBits, "xpBits");
 var XP_LAST_HOP = 0;
+// \u2605 2026-10-17 (YJ: \ubd80\ud3c9\u2192\ub450\uc815\uc774 \uce74\uce74\uc624\uc640 \ub2e4\ub974\ub2e4 \u2014 \uc601\ub4f1\ud3ec\u00b7\uc2e0\uae38\uc744 \uc9c0\ub098\ucce4\ub2e4\uac00 \ub418\ub3cc\uc544\uc628\ub2e4):
+//   \uae09\ud589 \uac04\uc120\uc740 '\uac74\ub108\ub6f0\ub294' \uac04\uc120\uc774\ub77c \ud0d0\uc0c9\uc774 "\uae09\ud589\uc73c\ub85c \uc2e0\uae38\uae4c\uc9c0 \uac14\ub2e4\uac00 \uac19\uc740 \uc120\ub85c\ub85c \ub3c4\ub85c \ub0b4\ub824\uc624\ub294" \uacbd\ub85c\ub97c \uc2dc\uac04 \ub3d9\ub960\ub85c \uace0\ub97c \uc218 \uc788\ub2e4
+//   (\uc2e0\uae38\uc5d0\uc11c \ud0c0\ub294 \ucc9c\uc548\uae09\ud589\uc774 \uad6c\ub85c\ub97c \uc9c0\ub098\uac00\ubbc0\ub85c, \uad6c\ub85c\uc5d0\uc11c \uae30\ub2e4\ub9ac\ub098 \uc2e0\uae38\uae4c\uc9c0 \uac14\ub2e4 \ub418\ub3cc\uc544\uc640 \ud0c0\ub098 \ub3c4\ucc29\uc740 \uac19\ub2e4).
+//   \uc120\ub85c \uc704\uc5d0\uc11c \uc9c1\uc804\uc5d0 \uc628 \ucabd(\ub9c8\uc9c0\ub9c9 \uc774\uc6c3 \uc5ed)\uc73c\ub85c \ub2e4\uc2dc \ub098\uac00\ub294 \uac74 \ub418\ub3cc\ub9bc\uc774\ub2e4 \u2014 \uc774 \ub450 \uc774\uc6c3 \uc5ed\uc744 \uad6c\ud574 \ud0d0\uc0c9\uc5d0\uc11c \ub9c9\ub294\ub2e4.
+//   trackEnds(a\u2192b) = \uac19\uc740 \ub178\uc120 \uc77c\ubc18 \uac04\uc120\uc744 \ub530\ub77c a\uc5d0\uc11c b\ub85c \uac00\ub294 \uc120\ub85c\uc758 {f: a \ub2e4\uc74c \uc5ed, l: b \ubc14\ub85c \uc55e \uc5ed}. \ubabb \ucc3e\uc73c\uba74 \ub458 \ub2e4 null.
+function trackEnds(G, a, b, line) {
+  const cache = G.__te || (G.__te = {});
+  const ck = a + ">" + b + ":" + line;
+  const hit = cache[ck];
+  if (hit !== void 0) return hit;
+  let out = { f: null, l: null };
+  try {
+    const adj = G.adj;
+    const prev = { [a]: null }, q = [a];
+    let found = false;
+    for (let qi = 0; qi < q.length && qi < 160 && !found; qi++) {
+      const u = q[qi], L = adj["S|" + u] || [];
+      for (let i = 0; i < L.length; i++) {
+        const x = L[i];
+        if (x.kind !== "ride" || x.line !== line) continue;
+        const v = x.to.slice(2);
+        if (prev[v] !== void 0) continue;
+        prev[v] = u;
+        if (v === b) { found = true; break; }
+        q.push(v);
+      }
+    }
+    if (found) {
+      const chain = [];
+      for (let c = b; c !== null && c !== void 0; c = prev[c]) chain.push(c);
+      chain.reverse();
+      if (chain.length >= 2) out = { f: chain[1], l: chain[chain.length - 2] };
+    }
+  } catch (e) {
+    out = { f: null, l: null };
+  }
+  cache[ck] = out;
+  return out;
+}
+__name(trackEnds, "trackEnds");
+__name2(trackEnds, "trackEnds");
 // \u2605 2026-10-17 (YJ: \uae09\ud589 \uad6c\uac04\uc5d0 \uc911\uac04\uc5ed\uc774 \uc5c6\ub2e4): \uae09\ud589 \uac04\uc120(xpress)\uc740 \ud55c \uc5f4\ucc28\uac00 \uc11c\ub294 \uc5ed\ub4e4\uc758 '\ubaa8\ub4e0 \uc30d'(A\u2192B, \uc0ac\uc774 \uc5ed \uac74\ub108\ub700)\uc73c\ub85c \ub9cc\ub4e4\uc5b4\uc838
 //   \uae38\ucc3e\uae30 \uacb0\uacfc\uc5d0 A\u2192B \ud55c \uce78\ub9cc \ub0a8\uace0 \uadf8 \uc5f4\ucc28\uac00 \uc0ac\uc774\uc5d0 \uc11c\ub294 \uc5ed\uc774 \uc0ac\ub77c\uc84c\ub2e4. \uac19\uc740 \ub178\uc120\uc758 \uc77c\ubc18 \uac04\uc120 \uc904(chain)\uc5d0\uc11c A\u2192B \uc0ac\uc774 \uc5ed \uc911
 //   '\uae09\ud589 \uac04\uc120\uc774 A\u2192C, C\u2192B \ub85c \ubaa8\ub450 \uc788\uace0 \uc2dc\uac04\uc774 \ub9de\uc544\ub5a8\uc5b4\uc9c0\ub294'(A\u2192C + C\u2192B \uac00 A\u2192B \ubcf4\ub2e4 \uc815\ucc28 \uc2dc\uac04\ub9cc\ud07c\ub9cc \uc9e7\ub2e4) \uc5ed\uc744 \uc0ac\uc774\uc5d0 \uc11c\ub294 \uc5ed\uc73c\ub85c \ub418\uc0b4\ub9b0\ub2e4.
@@ -11899,6 +11963,7 @@ var FOOD_SCREEN_V = 1;
 var FOOD_CHIPS = ['\uc804\uccb4', '\uce74\ud398', '\ubc25\uc9d1', '\uc721\uc2dd', '\ud68c\uc9d1', '\uc8fc\uc810'];
 var FOOD_MAX_SHOW = 150;          // \uc704\u00b7\uc544\ub798 \ubaa9\ub85d \uac01\uac01 \ucd5c\ub300 \uac1c\uc218(\uc6f9\uacfc \uac19\ub2e4)
 var FOOD_MAX_IN_C = 400, FOOD_MAX_IN_P = 1500;
+var FOOD_ALTS_MAX = 12;           // \ud55c \uc694\uccad\uc5d0 \uc2e4\uc744 \uc218 \uc788\ub294 '\ub2e4\ub978 \uce69' \uc218 \uc0c1\ud55c(\uce69 6\uac1c)
 var FOOD_STATES = ['idle', 'locating', 'noperm', 'loading', 'none', 'ready'];
 
 // \uc5c5\uc885 \u2192 \uce69 \ubd84\ub958. \uc21c\uc11c\uac00 \uc911\uc694\ud558\ub2e4(\ud68c\uc9d1\uc744 \uc721\uc2dd\ubcf4\ub2e4 \uba3c\uc800 \u2014 '\ucc38\uce58\ud68c \uc804\ubb38'\uc5d0 '\ucc38\uce58'\uac00 \uc721\ub958\ub85c \uc624\uc778\ub418\uc9c0 \uc54a\uac8c)
@@ -11961,11 +12026,8 @@ function foodPlaceN(p, rank, pub, idxPrefix) {
   return n;
 }
 
-function foodScreen(inp, factsIn, itemsIn) {
-  inp = inp || {};
-  if (!(Number(inp.cap) >= 4)) return { ok: false, error: 'cap' };
-  var f = foodFacts(factsIn), it = (itemsIn && typeof itemsIn === 'object') ? itemsIn : {};
-  var all = foodList(it.c, FOOD_MAX_IN_C), allP = foodList(it.p, FOOD_MAX_IN_P);
+// \ud55c \uce69(f.flt) \ubd84\uc758 \ud654\uba74. all\u00b7allP = foodList \ub85c \uc774\ubbf8 \uc815\ub9ac\ud55c \uc704\u00b7\uc544\ub798 \ubaa9\ub85d(\uac19\uc740 \ubaa9\ub85d\uc758 \ub2e4\ub978 \uce69\uc744 \ub9cc\ub4e4 \ub54c \ub2e4\uc2dc \uc815\ub9ac\ud558\uc9c0 \uc54a\uc73c\ub824\uace0 \ub530\ub85c \ube90\ub2e4)
+function foodScreenOf(f, all, allP) {
   var match = function (p) { return f.flt === '\uc804\uccb4' || foodKind(p.c) === f.flt; };
   var cur = all.filter(match), pub = allP.filter(match);
   var seen = {};                                    // \uc704\ucabd \ubaa9\ub85d\uc5d0 \uc774\ubbf8 \uc788\ub294 \uc0c1\ud638\ub294 \uacf5\uacf5\ub370\uc774\ud130\uc5d0\uc11c \ube80\ub2e4(\uc911\ubcf5 \ubc29\uc9c0)
@@ -12002,8 +12064,43 @@ function foodScreen(inp, factsIn, itemsIn) {
   out.rev = 'f' + FOOD_SCREEN_V + ':' + foodHash(JSON.stringify([head, body]));
   return out;
 }
+
+function foodScreen(inp, factsIn, itemsIn) {
+  inp = inp || {};
+  if (!(Number(inp.cap) >= 4)) return { ok: false, error: 'cap' };
+  var f = foodFacts(factsIn), it = (itemsIn && typeof itemsIn === 'object') ? itemsIn : {};
+  return foodScreenOf(f, foodList(it.c, FOOD_MAX_IN_C), foodList(it.p, FOOD_MAX_IN_P));
+}
+
+// \u2605 2026-10-19 s67 (YJ: \ub3c4\ucc29\uc5ed \ub9db\uc9d1 \ub85c\ub529\uc774 \uc624\ub798 \uac78\ub824 \u2014 \uce69\uc744 \ub204\ub97c \ub54c\ub9c8\ub2e4 \uac00\uac8c \ubaa9\ub85d\uc744 \ub2e4\uc2dc \ubcf4\ub0b4\uace0 \uc0c8 \ud654\uba74\uc744 \ubc1b\uc558\ub2e4):
+//   \uac19\uc740 \uc694\uccad\uc5d0 '\ub2e4\ub978 \uce69\ub4e4\uc758 \uc0ac\uc2e4(altsIn = { \ud0a4: { stn, st, flt, fail } } \ub610\ub294 'chips' = \uc5d4\uc9c4\uc774 \uac00\uc9c4 \uce69 \uc804\ubd80)'\uc744 \uc2e4\uc5b4 \ubcf4\ub0b4\uba74 \uc5d4\uc9c4\uc774 \ud55c \ubc88\uc5d0 \ubaa8\ub4e0 \uce69 \ud654\uba74\uc744 \uacc4\uc0b0\ud574 out.alts[\ud0a4] \ub85c \ub3cc\ub824\uc900\ub2e4.
+//   \uac00\uac8c \ubaa9\ub85d \uc815\ub9ac(foodList)\ub294 \ud55c \ubc88\ub9cc \ud55c\ub2e4. \uc571\uc740 \ubc1b\uc740 \ud654\uba74\uc744 \uce69\ubcc4\ub85c \uae30\uc5b5\ud574 \ub450\uc5c8\ub2e4\uac00 \uce69\uc744 \ub204\ub974\uba74 \uc694\uccad \uc5c6\uc774 \uadf8\ub300\ub85c \uc62c\ub9b0\ub2e4(\uacc4\uc0b0\uc740 \uc5d4\uc9c4, \uc571\uc740 \uadf8\ub9ac\uae30).
+//   \uac01 alts[\ud0a4] \ub294 \uadf8 \uce69\uc73c\ub85c \ub530\ub85c \uc694\uccad\ud588\uc744 \ub54c\uc640 \uae00\uc790 \ud558\ub098\uae4c\uc9c0 \uac19\uc740 \ud654\uba74\uc774\ub2e4(\uc2dc\ud5d8\uc774 \ub300\uc870\ud55c\ub2e4).
+function foodScreens(inp, factsIn, itemsIn, altsIn) {
+  inp = inp || {};
+  if (!(Number(inp.cap) >= 4)) return { ok: false, error: 'cap' };
+  var it = (itemsIn && typeof itemsIn === 'object') ? itemsIn : {};
+  var all = foodList(it.c, FOOD_MAX_IN_C), allP = foodList(it.p, FOOD_MAX_IN_P);
+  var out = foodScreenOf(foodFacts(factsIn), all, allP);
+  if (altsIn === 'chips') {                       // \uc571\uc740 \uc5b4\ub5a4 \uce69\uc774 \uc788\ub294\uc9c0 \ubaa8\ub978\ub2e4 \u2014 \uc5d4\uc9c4\uc774 \uac00\uc9c4 \uce69 \uc804\ubd80\ub85c \uc9c0\uae08 \uc0ac\uc2e4\ub9cc \uce69\uc744 \ubc14\uafd4 \ub9cc\ub4e0\ub2e4. \ud0a4 = \uce69 \uc774\ub984
+    var bf = foodFacts(factsIn);
+    altsIn = {};
+    FOOD_CHIPS.forEach(function (c) { altsIn[c] = { stn: bf.stn, st: bf.st, flt: c, fail: bf.fail ? 1 : 0 }; });
+  }
+  if (altsIn && typeof altsIn === 'object' && !Array.isArray(altsIn)) {
+    var ks = Object.keys(altsIn).slice(0, FOOD_ALTS_MAX), alts = {};
+    for (var i = 0; i < ks.length; i++) {
+      var a = altsIn[ks[i]];
+      if (!a || typeof a !== 'object') continue;
+      alts[ks[i]] = foodScreenOf(foodFacts(a), all, allP);
+    }
+    out.alts = alts;
+  }
+  return out;
+}
 // \ub9db\uc9d1 \ud654\uba74 \uc5d4\uc9c4 Worker \uc5f0\uacb0\ubd80 \u2014 POST /screen/food (engine/food.js \uc758 foodScreen \uc744 \ubd80\ub978\ub2e4). route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/screen/food") return handleScreenFood(request);` \ub97c \ub123\ub294\ub2e4.
-//   \ubcf8\ubb38(JSON \uae00, Content-Type: text/plain \uc73c\ub85c \ubcf4\ub0b4 \uc0ac\uc804 \uc694\uccad\uc744 \ud53c\ud55c\ub2e4): { cap(4 \uc774\uc0c1), f:{stn,st,flt,fail}, c:[\uac00\uac8c\u2026], p:[\uac00\uac8c\u2026] }  \uac00\uac8c = [\uc774\ub984, \uc5c5\uc885, \uc8fc\uc18c, \uac70\ub9ac]
+//   \ubcf8\ubb38(JSON \uae00, Content-Type: text/plain \uc73c\ub85c \ubcf4\ub0b4 \uc0ac\uc804 \uc694\uccad\uc744 \ud53c\ud55c\ub2e4): { cap(4 \uc774\uc0c1), f:{stn,st,flt,fail}, c:[\uac00\uac8c\u2026], p:[\uac00\uac8c\u2026], alts?:{ \ud0a4:{stn,st,flt,fail} } }  \uac00\uac8c = [\uc774\ub984, \uc5c5\uc885, \uc8fc\uc18c, \uac70\ub9ac]
+//   alts \uac00 \uc788\uc73c\uba74 \uc751\ub2f5 out.alts[\ud0a4] \uc5d0 \uadf8 \uce69\uc758 \ud654\uba74\ub3c4 \ud568\uaed8 \ub2f4\ub294\ub2e4(\uac19\uc740 \uac00\uac8c \ubaa9\ub85d \u00b7 \uc815\ub9ac\ub294 \ud55c \ubc88\ub9cc \u00b7 s67)
 //   \uc5d4\uc9c4\uc740 \uc544\ubb34\uac83\ub3c4 \uc800\uc7a5\ud558\uc9c0 \uc54a\ub294\ub2e4(\uc774 \uae30\uae30\uac00 \ubcf4\ub0b8 \uac00\uac8c \ubaa9\ub85d\uc73c\ub85c \ud654\uba74\uc744 \uacc4\uc0b0\ud574 \ub3cc\ub824\uc904 \ubfd0). \uac1c\uc778 \uc2dd\ubcc4 \uc815\ubcf4\ub294 \uc624\uac00\uc9c0 \uc54a\ub294\ub2e4.
 async function handleScreenFood(request) {
   var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Cache-Control": "no-store" };
@@ -12015,7 +12112,7 @@ async function handleScreenFood(request) {
   try { body = JSON.parse(raw); } catch (e) { return new Response(JSON.stringify({ ok: false, error: "bad-json" }), { status: 400, headers: H }); }
   if (!body || typeof body !== "object") return new Response(JSON.stringify({ ok: false, error: "bad-body" }), { status: 400, headers: H });
   var out;
-  try { out = foodScreen({ cap: Number(body.cap) || 0 }, body.f, { c: body.c, p: body.p }); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2) }), { status: 500, headers: H }); }
+  try { out = foodScreens({ cap: Number(body.cap) || 0 }, body.f, { c: body.c, p: body.p }, body.alts); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2) }), { status: 500, headers: H }); }
   if (!out || !out.ok) return new Response(JSON.stringify(out || { ok: false, error: "fail" }), { status: 400, headers: H });
   out.ver = ENGINE_VERSION;
   return new Response(JSON.stringify(out), { headers: H });
@@ -12045,6 +12142,7 @@ var NEWS_SCREEN_V = 1;
 var NW_CATS = ['\uc804\uccb4','\uc99d\uc2dc','\uacbd\uc81c','\uc0ac\ud68c','\uc815\uce58','\uc5f0\uc608','\uc2a4\ud3ec\uce20','IT'];
 var NW_QUOTE_MAX = 200;                 // \uc694\uc57d \ub178\ucd9c \uc0c1\ud55c(\uc6f9 _NEWS_POLICY.quoteMaxChars)
 var NW_MAX_IN = 1200;                   // \ubc1b\ub294 \uae30\uc0ac \uc218 \uc0c1\ud55c(\uc6f9 \uc800\uc7a5\uc18c \uc0c1\ud55c\uacfc \uac19\ub2e4)
+var NW_ALTS_MAX = 12;                  // \ud55c \uc694\uccad\uc5d0 \uc2e4\uc744 \uc218 \uc788\ub294 '\ub2e4\ub978 \uce69' \uc218 \uc0c1\ud55c(\uce69 8\uac1c)
 var NW_MAX_SHOW = 300;                  // \ud55c \ubc88\uc5d0 \ubcf4\ub0b4\ub294 \uae30\uc0ac \uc904 \uc218 \uc0c1\ud55c
 var NW_ALL_MAX = 200;                   // '\uc804\uccb4' \uce69\uc5d0\uc11c \ubf51\ub294 \uc218(\uc6f9\uacfc \uac19\ub2e4)
 var NW_FRESH_MS = 3 * 24 * 3600 * 1000; // '\uc804\uccb4' \uce69\uc740 3\uc77c \uc548 \uae30\uc0ac\ub9cc(\uc6f9\uacfc \uac19\ub2e4)
@@ -12228,12 +12326,9 @@ function nwPick(all, cat, now) {
   return items;
 }
 
-function newsScreen(inp, factsIn, rowsIn) {
-  inp = inp || {};
-  if (!(Number(inp.cap) >= 5)) return { ok: false, error: 'cap' };
-  var now = Number(inp.now) > 0 ? Number(inp.now) : Date.now();
-  var f = nwFacts(factsIn);
-  var all = nwList(rowsIn, now), items = nwPick(all, f.cat, now);
+// \ud55c \uce69(f.cat) \ubd84\uc758 \ud654\uba74. all = nwList \ub85c \uc774\ubbf8 \ubd84\ub958\u00b7\uc815\ub9ac\ud55c \uae30\uc0ac(\uac19\uc740 \ubaa9\ub85d\uc758 \ub2e4\ub978 \uce69\uc744 \ub9cc\ub4e4 \ub54c \ub2e4\uc2dc \ubd84\ub958\ud558\uc9c0 \uc54a\uc73c\ub824\uace0 \ub530\ub85c \ube90\ub2e4)
+function nwScreenOf(now, f, all) {
+  var items = nwPick(all, f.cat, now);
   var head = [
     { t: 'chips', pad: [14, 4, 14, 6], gap: 6, h: 30, onc: 'gold', onfg: '#121214',
       items: NW_CATS.map(function (c) { return { label: c, on: c === f.cat, act: { a: 'cat', v: c } }; }) }
@@ -12254,6 +12349,40 @@ function newsScreen(inp, factsIn, rowsIn) {
   return out;
 }
 
+function newsScreen(inp, factsIn, rowsIn) {
+  inp = inp || {};
+  if (!(Number(inp.cap) >= 5)) return { ok: false, error: 'cap' };
+  var now = Number(inp.now) > 0 ? Number(inp.now) : Date.now();
+  var f = nwFacts(factsIn);
+  return nwScreenOf(now, f, nwList(rowsIn, now));
+}
+
+// \u2605 2026-10-19 s67 (YJ: \ub274\uc2a4 \uce69\uc744 \ub204\ub97c \ub54c\ub9c8\ub2e4 \ub85c\ub529\uc774 \uae38\ub2e4): \uce69\uc744 \ub204\ub97c \ub54c\ub9c8\ub2e4 \uae30\uc0ac \ubaa9\ub85d \uc804\uccb4\ub97c \ubcf4\ub0b4\uace0 \uc0c8 \ud654\uba74\uc744 \ubc1b\ub358 \uac83\uc744,
+//   \uac19\uc740 \uc694\uccad\uc5d0 '\ub2e4\ub978 \uce69\ub4e4\uc758 \uc0ac\uc2e4(altsIn = { \ud0a4: { cat } } \ub610\ub294 'chips' = \uc5d4\uc9c4\uc774 \uac00\uc9c4 \uce69 \uc804\ubd80)'\uc744 \uc2e4\uc5b4 \ubcf4\ub0b4\uba74 \uc5d4\uc9c4\uc774 \ud55c \ubc88\uc5d0 \ubaa8\ub4e0 \uce69 \ud654\uba74\uc744 \uacc4\uc0b0\ud574 out.alts[\ud0a4] \ub85c \ub3cc\ub824\uc900\ub2e4.
+//   \uae30\uc0ac \ubd84\ub958\u00b7\uc815\ub9ac(nwList)\ub294 \ud55c \ubc88\ub9cc \ud55c\ub2e4. \uc571\uc740 \ubc1b\uc740 \ud654\uba74\uc744 \uce69\ubcc4\ub85c \uae30\uc5b5\ud574 \ub450\uc5c8\ub2e4\uac00 \uce69\uc744 \ub204\ub974\uba74 \uc694\uccad \uc5c6\uc774 \uadf8\ub300\ub85c \uc62c\ub9b0\ub2e4(\uacc4\uc0b0\uc740 \uc5d4\uc9c4, \uc571\uc740 \uadf8\ub9ac\uae30).
+//   \uac01 alts[\ud0a4] \ub294 \uadf8 \uce69\uc73c\ub85c \ub530\ub85c \uc694\uccad\ud588\uc744 \ub54c\uc640 \uae00\uc790 \ud558\ub098\uae4c\uc9c0 \uac19\uc740 \ud654\uba74\uc774\ub2e4(\uc2dc\ud5d8\uc774 \ub300\uc870\ud55c\ub2e4).
+function newsScreens(inp, factsIn, rowsIn, altsIn) {
+  inp = inp || {};
+  if (!(Number(inp.cap) >= 5)) return { ok: false, error: 'cap' };
+  var now = Number(inp.now) > 0 ? Number(inp.now) : Date.now();
+  var all = nwList(rowsIn, now);
+  var out = nwScreenOf(now, nwFacts(factsIn), all);
+  if (altsIn === 'chips') {                       // \uc571\uc740 \uc5b4\ub5a4 \uce69\uc774 \uc788\ub294\uc9c0 \ubaa8\ub978\ub2e4 \u2014 \uc5d4\uc9c4\uc774 \uac00\uc9c4 \uce69 \uc804\ubd80(\uc9c0\uae08 \uce69 \ube7c\uace0)\ub97c \ub9cc\ub4e0\ub2e4. \ud0a4 = \uce69 \uc774\ub984
+    altsIn = {};
+    NW_CATS.forEach(function (c) { altsIn[c] = { cat: c }; });
+  }
+  if (altsIn && typeof altsIn === 'object' && !Array.isArray(altsIn)) {
+    var ks = Object.keys(altsIn).slice(0, NW_ALTS_MAX), alts = {};
+    for (var i = 0; i < ks.length; i++) {
+      var a = altsIn[ks[i]];
+      if (!a || typeof a !== 'object') continue;
+      alts[ks[i]] = nwScreenOf(now, nwFacts(a), all);
+    }
+    out.alts = alts;
+  }
+  return out;
+}
+
 // \uc0c1\uc138 \ud31d\uc5c5 \ubb38\uad6c(\uc6f9 _openNewsDetail \uc774 \uc9c1\uc811 \ub9cc\ub4e4\ub358 \uac83)
 function newsDetail(inp, row) {
   inp = inp || {};
@@ -12270,7 +12399,8 @@ function newsDetail(inp, row) {
 }
 // \ub274\uc2a4 \ud654\uba74 \uc5d4\uc9c4 Worker \uc5f0\uacb0\ubd80 \u2014 POST /screen/news (engine/news.js \uc758 newsScreen\u00b7newsDetail \uc744 \ubd80\ub978\ub2e4). route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/screen/news") return handleScreenNews(request);` \ub97c \ub123\ub294\ub2e4.
 //   \ubcf8\ubb38(JSON \uae00, Content-Type: text/plain \uc73c\ub85c \ubcf4\ub0b4 \uc0ac\uc804 \uc694\uccad\uc744 \ud53c\ud55c\ub2e4):
-//     \ubaa9\ub85d  { cap(5 \uc774\uc0c1), f:{cat}, n:[\uae30\uc0ac\u2026] }   \uae30\uc0ac = [\uc81c\ubaa9, \ub9c1\ud06c, \uc5b8\ub860\uc0ac, \uc2dc\uac01(ms), \uc11c\ubc84 \ubd84\ub958, \uc694\uc57d]
+//     \ubaa9\ub85d  { cap(5 \uc774\uc0c1), f:{cat}, n:[\uae30\uc0ac\u2026], alts?:{ \ud0a4:{cat} } }   \uae30\uc0ac = [\uc81c\ubaa9, \ub9c1\ud06c, \uc5b8\ub860\uc0ac, \uc2dc\uac01(ms), \uc11c\ubc84 \ubd84\ub958, \uc694\uc57d]
+//           alts \uac00 \uc788\uc73c\uba74 \uc751\ub2f5 out.alts[\ud0a4] \uc5d0 \uadf8 \uce69\uc758 \ud654\uba74\ub3c4 \ud568\uaed8 \ub2f4\ub294\ub2e4(\uac19\uc740 \uae30\uc0ac \ubaa9\ub85d \u00b7 \ubd84\ub958\ub294 \ud55c \ubc88\ub9cc \u00b7 s67)
 //     \uc0c1\uc138  { cap(5 \uc774\uc0c1), d:\uae30\uc0ac }                \u2192 { ok, v:1, detail:{\u2026} }  (\uc0c1\uc138 \ud31d\uc5c5\uc5d0 \uc4f8 \ubb38\uad6c)
 //   \uc5d4\uc9c4\uc740 \uc544\ubb34\uac83\ub3c4 \uc800\uc7a5\ud558\uc9c0 \uc54a\ub294\ub2e4(\uc774 \uae30\uae30\uac00 \ubcf4\ub0b8 \uae30\uc0ac \ubaa9\ub85d\uc73c\ub85c \ud654\uba74\uc744 \uacc4\uc0b0\ud574 \ub3cc\ub824\uc904 \ubfd0). \uac1c\uc778 \uc2dd\ubcc4 \uc815\ubcf4\ub294 \uc624\uac00\uc9c0 \uc54a\ub294\ub2e4.
 async function handleScreenNews(request) {
@@ -12285,7 +12415,7 @@ async function handleScreenNews(request) {
   var out;
   try {
     var inp = { cap: Number(body.cap) || 0, now: Date.now() };
-    out = body.d !== undefined ? newsDetail(inp, body.d) : newsScreen(inp, body.f, body.n);
+    out = body.d !== undefined ? newsDetail(inp, body.d) : newsScreens(inp, body.f, body.n, body.alts);
   } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2) }), { status: 500, headers: H }); }
   if (!out || !out.ok) return new Response(JSON.stringify(out || { ok: false, error: "fail" }), { status: 400, headers: H });
   out.ver = ENGINE_VERSION;
@@ -12506,6 +12636,7 @@ async function handleScreenBoard(request) {
 // \ub9e8 \uc544\ub798 module.exports \ub294 \uc2dc\ud5d8(Node)\uc6a9\uc774\uace0 Worker \uc5d0\uc11c\ub294 \ud568\uc218 \uc120\uc5b8\ub9cc \uc4f0\uc778\ub2e4.
 'use strict';
 var CHAT_SCREEN_V = 1;
+var CHT_ALTS_MAX = 24;                // \ud55c \uc694\uccad\uc5d0 \uc2e4\uc744 \uc218 \uc788\ub294 '\ub2e4\ub978 \ubc29' \uc218 \uc0c1\ud55c(\uc804\uccb4 + \ud638\uc120 18\uac1c)
 var CHT_COMMON = ['1\ud638\uc120', '2\ud638\uc120', '3\ud638\uc120', '4\ud638\uc120', '5\ud638\uc120', '6\ud638\uc120', '7\ud638\uc120', '8\ud638\uc120', '9\ud638\uc120', '\uc2e0\ubd84\ub2f9\uc120', '\uc218\uc778\ubd84\ub2f9\uc120', '\uacbd\uc758\uc911\uc559\uc120', '\uacf5\ud56d\ucca0\ub3c4', '\uacbd\ucd98\uc120', 'GTX-A'];   // \uc6f9 _LR_COMMON
 var CHT_KNOWN = CHT_COMMON.concat(['\uc778\ucc9c1\ud638\uc120', '\uc778\ucc9c2\ud638\uc120', '\uae40\ud3ec\uace8\ub4dc\ub77c\uc778']);                                                                                          // \uc6f9 _LR_KNOWN
 var CHT_MAX_G = 120, CHT_MAX_R = 150, CHT_IN_G = 300, CHT_IN_R = 400;
@@ -12647,6 +12778,25 @@ function chatScreen(inp, factsIn, dataIn) {
   out.rev = 'c' + CHAT_SCREEN_V + ':' + chtHash(JSON.stringify([head, body, foot]));
   return out;
 }
+
+// \u2605 2026-10-19 s67 (YJ: \uc2e4\uc2dc\uac04\uc18c\ud1b5\uc5d0\uc11c \uac01 \ud638\uc120\uc744 \ub204\ub97c \ub54c \ub85c\ub529\uc774 \ub108\ubb34 \uc624\ub798 \uac78\ub824): \uac19\uc740 \uc694\uccad\uc5d0 '\ub2e4\ub978 \ubc29\ub4e4\uc758 \uc0ac\uc2e4\u00b7\uc790\ub8cc(altsIn = { \ud0a4:{ f, d } })'\ub97c \uc2e4\uc5b4 \ubcf4\ub0b4\uba74
+//   \uc5d4\uc9c4\uc774 \ud55c \ubc88\uc5d0 \ubaa8\ub4e0 \ubc29 \ud654\uba74\uc744 \uacc4\uc0b0\ud574 out.alts[\ud0a4] \ub85c \ub3cc\ub824\uc900\ub2e4. \uc571\uc740 \ubc1b\uc740 \ud654\uba74\uc744 \ubc29\ubcc4\ub85c \uae30\uc5b5\ud574 \ub450\uc5c8\ub2e4\uac00 \uce69\uc744 \ub204\ub974\uba74 \uc694\uccad \uc5c6\uc774 \uadf8\ub300\ub85c \uc62c\ub9b0\ub2e4(\uacc4\uc0b0\uc740 \uc5d4\uc9c4, \uc571\uc740 \uadf8\ub9ac\uae30).
+//   \uac01 alts[\ud0a4] \ub294 \uadf8 \ubc29\uc73c\ub85c \ub530\ub85c \uc694\uccad\ud588\uc744 \ub54c\uc640 \uae00\uc790 \ud558\ub098\uae4c\uc9c0 \uac19\uc740 \ud654\uba74\uc774\ub2e4(\uc2dc\ud5d8\uc774 \ub300\uc870\ud55c\ub2e4).
+function chatScreens(inp, factsIn, dataIn, altsIn) {
+  var out = chatScreen(inp, factsIn, dataIn);
+  if (!out || !out.ok) return out;
+  if (altsIn && typeof altsIn === 'object' && !Array.isArray(altsIn)) {
+    var ks = Object.keys(altsIn).slice(0, CHT_ALTS_MAX), alts = {};
+    for (var i = 0; i < ks.length; i++) {
+      var a = altsIn[ks[i]];
+      if (!a || typeof a !== 'object') continue;
+      var o2 = chatScreen(inp, a.f, a.d);
+      if (o2 && o2.ok) alts[ks[i]] = o2;
+    }
+    out.alts = alts;
+  }
+  return out;
+}
 // \uc2e4\uc2dc\uac04\uc18c\ud1b5 \ud654\uba74 \uc5d4\uc9c4 Worker \uc5f0\uacb0\ubd80 \u2014 POST /screen/chat (engine/chat.js \uc758 chatScreen \uc744 \ubd80\ub978\ub2e4). route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/screen/chat") return handleScreenChat(request);` \ub97c \ub123\ub294\ub2e4.
 //   \ubcf8\ubb38(JSON \uae00, Content-Type: text/plain \uc73c\ub85c \ubcf4\ub0b4 \uc0ac\uc804 \uc694\uccad\uc744 \ud53c\ud55c\ub2e4): { cap(6 \uc774\uc0c1), f:{sel,mine,lc,st,tzo,me,hid}, d:{g,r,off,offOk,offAt,al} }
 //   \uc5d4\uc9c4\uc740 \uc544\ubb34\uac83\ub3c4 \uc800\uc7a5\ud558\uc9c0 \uc54a\ub294\ub2e4(\uc774 \uae30\uae30\uac00 \ubcf4\ub0b8 \ub300\ud654\ub85c \ud654\uba74\uc744 \uacc4\uc0b0\ud574 \ub3cc\ub824\uc904 \ubfd0). \ub300\ud654\uc5d0 \uc774\ubbf8 \uacf5\uac1c\ub41c \uae00\uc4f4\uc774 \uc544\uc774\ub514\u00b7\uae00\ub9cc \uc624\uac00\uace0, \uc704\uce58\u00b7\uae30\uae30 \uc2dd\ubcc4 \uac12\uc740 \uc624\uac00\uc9c0 \uc54a\ub294\ub2e4.
@@ -12660,7 +12810,7 @@ async function handleScreenChat(request) {
   try { body = JSON.parse(raw); } catch (e) { return new Response(JSON.stringify({ ok: false, error: "bad-json" }), { status: 400, headers: H }); }
   if (!body || typeof body !== "object") return new Response(JSON.stringify({ ok: false, error: "bad-body" }), { status: 400, headers: H });
   var out;
-  try { out = chatScreen({ cap: Number(body.cap) || 0, now: Date.now() }, body.f, body.d); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2) }), { status: 500, headers: H }); }
+  try { out = chatScreens({ cap: Number(body.cap) || 0, now: Date.now() }, body.f, body.d, body.alts); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2) }), { status: 500, headers: H }); }
   if (!out || !out.ok) return new Response(JSON.stringify(out || { ok: false, error: "fail" }), { status: 400, headers: H });
   out.ver = ENGINE_VERSION;
   return new Response(JSON.stringify(out), { headers: H });
@@ -12724,6 +12874,29 @@ function tabsScreen(inp, factsIn) {
   out.rev = 't' + TABS_SCREEN_V + ':' + tabsHash(JSON.stringify(body));
   return out;
 }
+
+// \u2605 2026-10-19 s67 (YJ: \ud558\ub2e8 \ud0ed\uc744 \ub204\ub97c \ub54c \ub9c9\ub300\uac00 \ub2a6\uac8c \ubc14\ub010\ub2e4): \uac19\uc740 \uc694\uccad\uc5d0 '\ub2e4\ub978 \ud0ed\ub4e4\uc758 \uc0ac\uc2e4(altsIn = { \ud0a4:{ tab, badge } })'\uc744 \uc2e4\uc5b4 \ubcf4\ub0b4\uba74
+//   \uc5d4\uc9c4\uc774 \ud55c \ubc88\uc5d0 \ubaa8\ub4e0 \ud0ed \ud654\uba74\uc744 \uacc4\uc0b0\ud574 out.alts[\ud0a4] \ub85c \ub3cc\ub824\uc900\ub2e4(\uc571\uc740 \ubc1b\uc740 \ud654\uba74\uc744 \ud0ed\ubcc4\ub85c \uae30\uc5b5\ud574 \ub450\uc5c8\ub2e4\uac00 \uc694\uccad \uc5c6\uc774 \uc62c\ub9b0\ub2e4).
+function tabsScreens(inp, factsIn, altsIn) {
+  var out = tabsScreen(inp, factsIn);
+  if (!out || !out.ok) return out;
+  if (altsIn === 'tabs') {                        // \uc5d4\uc9c4\uc774 \uac00\uc9c4 \ud0ed \uc804\ubd80(\ud0a4 = \ud0ed \uc774\ub984). \ubc30\uc9c0\ub294 \uc9c0\uae08 \uac12 \uadf8\ub300\ub85c
+    var bf = tabsFacts(factsIn);
+    altsIn = {};
+    TABS_LIST.forEach(function (t) { altsIn[t.id] = { tab: t.id, badge: factsIn && factsIn.badge }; });
+  }
+  if (altsIn && typeof altsIn === 'object' && !Array.isArray(altsIn)) {
+    var ks = Object.keys(altsIn).slice(0, 10), alts = {};
+    for (var i = 0; i < ks.length; i++) {
+      var a = altsIn[ks[i]];
+      if (!a || typeof a !== 'object') continue;
+      var o2 = tabsScreen(inp, a);
+      if (o2 && o2.ok) alts[ks[i]] = o2;
+    }
+    out.alts = alts;
+  }
+  return out;
+}
 // \ud558\ub2e8 \ud0ed \ub9c9\ub300 \uc5d4\uc9c4 Worker \uc5f0\uacb0\ubd80 \u2014 POST /screen/tabs (engine/tabs.js \uc758 tabsScreen \uc744 \ubd80\ub978\ub2e4). route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/screen/tabs") return handleScreenTabs(request);` \ub97c \ub123\ub294\ub2e4.
 //   \ubcf8\ubb38(JSON \uae00, Content-Type: text/plain \uc73c\ub85c \ubcf4\ub0b4 \uc0ac\uc804 \uc694\uccad\uc744 \ud53c\ud55c\ub2e4): { cap(6 \uc774\uc0c1), f:{tab, badge} }
 //   \uc5d4\uc9c4\uc740 \uc544\ubb34\uac83\ub3c4 \uc800\uc7a5\ud558\uc9c0 \uc54a\ub294\ub2e4. \uac1c\uc778 \uc2dd\ubcc4 \uc815\ubcf4\ub294 \uc624\uac00\uc9c0 \uc54a\ub294\ub2e4.
@@ -12737,7 +12910,7 @@ async function handleScreenTabs(request) {
   try { body = JSON.parse(raw); } catch (e) { return new Response(JSON.stringify({ ok: false, error: "bad-json" }), { status: 400, headers: H }); }
   if (!body || typeof body !== "object") return new Response(JSON.stringify({ ok: false, error: "bad-body" }), { status: 400, headers: H });
   var out;
-  try { out = tabsScreen({ cap: Number(body.cap) || 0 }, body.f); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2) }), { status: 500, headers: H }); }
+  try { out = tabsScreens({ cap: Number(body.cap) || 0 }, body.f, body.alts); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2) }), { status: 500, headers: H }); }
   if (!out || !out.ok) return new Response(JSON.stringify(out || { ok: false, error: "fail" }), { status: 400, headers: H });
   out.ver = ENGINE_VERSION;
   return new Response(JSON.stringify(out), { headers: H });
