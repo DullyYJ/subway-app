@@ -1,0 +1,122 @@
+// 하차 전 추천 문구 엔진(engine/reco-text.js) 시험 — 2026-10-19 (5번 5단계 넷째 조각: 추천 문구 1단계)
+//   · 같은 입력(씨앗 포함)이면 같은 결과 · 시간대별 모양(아침 카페·점심·저녁·야식·쇼핑·심야 없음)
+//   · 고르는 규칙: 반경 · 최근 추천한 곳 피하기 · 파는 메뉴만 · 조사 · 상황 문구(비·추위·금요일·월급날…)
+//   · Worker 내장본이 모듈과 같은 판단 · /reco-text 길 · 이상한 입력에도 죽지 않음
+//   (예전 웹 코드와 글자 하나까지 같은지는 reco_rtx.ui.test.js 가 진짜 index.html 로 대조한다)
+'use strict';
+process.env.TZ = 'Asia/Seoul';
+const assert = require('assert');
+const fs = require('fs'), path = require('path');
+const root = path.join(__dirname, '..');
+const R = require(path.join(root, 'engine/reco-text.js'));
+let pass = 0, fail = 0;
+function t(name, fn) { try { fn(); pass++; console.log('  ok  ' + name); } catch (e) { fail++; console.log('  FAIL ' + name + '\n     ' + (e && e.message)); } }
+
+const kst = (h, mi, day) => Date.UTC(2026, 9, day || 19, h - 9, mi || 0);   // 2026-10-19(월) h:mi KST
+const FOOD = [
+  { n: '국밥집A', c: '음식점 > 한식 > 국밥', d: 120 }, { n: '치킨B', c: '음식점 > 치킨', d: 300 }, { n: '카페C', c: '카페 > 커피전문점', d: 80 },
+  { n: '피자D', c: '음식점 > 양식 > 피자', d: 700 }, { n: '먼카페E', c: '카페 > 커피', d: 800 }, { n: '돈가스F', c: '음식점 > 일식 > 돈가스', d: 450 },
+  { n: '멀리국밥G', c: '음식점 > 한식 > 국밥', d: 1500 }
+];
+const WX = { temp: 5, feel: 2, tmin: 1, tmax: 12, rain: 20, txt: '맑음' };
+function ask(h, o) { return R.recoAlert(Object.assign({ arrMs: kst(h, 5), nowMs: kst(h, 0), dest: '강남', weather: WX, food: FOOD, recent: [], shop: { n: '우산', _t: '우천대비', _cat: '생활' }, seed: 7 }, o || {})); }
+
+t('같은 입력이면 같은 결과, 씨앗이 다르면 (메뉴·가게가) 달라질 수 있다', () => {
+  assert.deepStrictEqual(ask(20), ask(20));
+  const set = new Set(); for (let s = 1; s < 40; s++) set.add(ask(20, { seed: s }).menu + '|' + ask(20, { seed: s }).spots.join(','));
+  assert.ok(set.size > 1, '씨앗을 바꿔도 같다');
+});
+t('시간대별 모양: 아침 카페 · 점심 · 저녁 · 야식 · 쇼핑', () => {
+  const m = ask(8); assert.strictEqual(m.slot, 'morning'); assert.strictEqual(m.kind, 'cafe'); assert.ok(/^☕ 오늘의 아침 · /m.test(m.body)); assert.ok(m.brunch); assert.ok(m.title.endsWith(' ☕'));
+  const l = ask(12); assert.strictEqual(l.kind, 'lunch'); assert.ok(/🍚 이 근처 한 끼/.test(l.body)); assert.ok(l.title.endsWith(' 🍚'));
+  const d = ask(18); assert.strictEqual(d.kind, 'dinner'); assert.strictEqual(d.dinner, true); assert.ok(/🍽 오늘의 저녁 · /.test(d.body));
+  const n = ask(20); assert.strictEqual(n.kind, 'night'); assert.strictEqual(n.dinner, false); assert.ok(/🍗 오늘의 야식 · /.test(n.body));
+  const s = ask(22); assert.strictEqual(s.kind, 'shop'); assert.ok(/🛍 우산/.test(s.body)); assert.strictEqual(s.shop, true); assert.ok(/생활 · /.test(s.body));
+  const z = ask(3); assert.deepStrictEqual(z, { v: 1, slot: 'none' });
+});
+t('본문 첫 줄·둘째 줄: 하차 N분 전 · 목적지 도착 예정 HH:MM (한국시간)', () => {
+  const a = ask(12); const L = a.body.split('\n'); assert.strictEqual(L[0], '하차 5분 전이에요.'); assert.strictEqual(L[1], '강남 도착 예정 12:05'); assert.strictEqual(L[2], '');
+  const b = R.recoAlert({ arrMs: kst(12, 5), nowMs: kst(11, 0), dest: '', weather: null, food: null, recent: [], seed: 1 });
+  assert.strictEqual(b.remMin, 7); assert.strictEqual(b.body.split('\n')[1], '도착 예정 12:05'); assert.ok(b.title.startsWith('🚉 하차 7분 전'));
+});
+t('가게 목록이 없으면 안내 줄로 · 메뉴는 풀에서 · 쇼핑 상품이 없으면 안내 줄', () => {
+  const a = R.recoAlert({ arrMs: kst(12, 5), nowMs: kst(12, 0), dest: '강남', weather: null, food: null, recent: [], seed: 3 });
+  assert.strictEqual(a.placeIdx, -1); assert.ok(/내리는 길에 한 끼 챙기세요/.test(a.body)); assert.ok(a.menu);
+  const m = R.recoAlert({ arrMs: kst(8, 5), nowMs: kst(8, 0), dest: '강남', weather: null, food: [], recent: [], seed: 3 }); assert.ok(/내리자마자 근처 카페에 들러보세요/.test(m.body));
+  const s = R.recoAlert({ arrMs: kst(22, 5), nowMs: kst(22, 0), dest: '강남', weather: null, food: null, recent: [], shop: null, seed: 3 }); assert.ok(/오늘 밤 둘러볼 만한 것들을 골라뒀어요/.test(s.body)); assert.strictEqual(s.shop, false);
+});
+t('가게 반경: 카페 500m · 식당 1000m 밖은 고르지 않는다', () => {
+  for (let s = 1; s < 60; s++) {
+    const c = ask(8, { seed: s }); if (c.placeIdx >= 0) assert.ok(FOOD[c.placeIdx].d <= 500, '카페 반경 ' + FOOD[c.placeIdx].n);
+    const n = ask(20, { seed: s }); if (n.placeIdx >= 0) assert.ok(FOOD[n.placeIdx].d <= 1000);
+    n.spots.forEach(x => { const f = FOOD.find(y => y.n === x); assert.ok(f && f.d <= 1000 && f.n !== '멀리국밥G'); });
+  }
+});
+t('파는 메뉴만 권한다: 목록에 국밥·치킨·피자(양식)·돈가스만 있으면 야식 메뉴가 그 안에서 나온다', () => {
+  const ok = new Set(['국밥', '치킨', '피자', '돈가스', '파스타']);   // 파스타는 '양식' 분류의 피자집이 받는다
+  for (let s = 1; s < 80; s++) { const n = ask(20, { seed: s }); assert.ok(ok.has(n.menu), n.menu); assert.ok(n.spots.length >= 1); }
+});
+t('최근 추천한 곳은 피한다(다른 곳이 있을 때) · 전부 최근이면 그래도 고른다', () => {
+  for (let s = 1; s < 40; s++) {
+    const a = ask(8, { seed: s, recent: ['카페C'], food: FOOD.concat([{ n: '카페H', c: '카페 > 커피', d: 200 }]) }); assert.strictEqual(a.placeIdx >= 0 && a.placeIdx < FOOD.length ? 'C' : 'H', 'H', '최근 가게가 또 나옴');
+  }
+  const b = ask(8, { seed: 5, recent: ['카페C', '먼카페E'] }); assert.ok(b.placeIdx >= 0);   // 500m 안에 카페C 하나뿐이면 최근이어도 고른다
+});
+t('상황 문구: 비 오는 날 · 추운 날 · 금요일 · 월급날 · 더운 날', () => {
+  const rain = ask(12, { weather: { temp: 18, feel: 18, tmin: 12, tmax: 20, rain: 80, txt: '비' } }); assert.ok(rain.cx.rainy); assert.strictEqual(rain.hookStrong, true); assert.ok(/비/.test(rain.hook), rain.hook);
+  const hot = ask(12, { weather: { temp: 31, feel: 33, tmin: 24, tmax: 33, rain: 0, txt: '맑음' } }); assert.ok(hot.cx.hot); assert.ok(/31도/.test(hot.hook), hot.hook);
+  const fri = ask(18, { arrMs: kst(18, 5, 23), nowMs: kst(18, 0, 23), weather: { temp: 15, feel: 15, tmin: 10, tmax: 18, rain: 0, txt: '맑음' } }); assert.ok(fri.cx.fri); assert.ok(/금요일|한 주/.test(fri.hook), fri.hook);
+  const pay = ask(12, { arrMs: kst(12, 5, 26), nowMs: kst(12, 0, 26), weather: { temp: 15, feel: 15, tmin: 10, tmax: 18, rain: 0, txt: '맑음' } }); assert.ok(pay.cx.payday); assert.ok(/월급/.test(pay.hook), pay.hook);
+  const none = ask(12, { weather: null }); assert.strictEqual(none.cx.temp, null); assert.strictEqual(none.cx.rain, -1);
+});
+t('조사: {menu} 뒤 이/가 · 을/를 · 으로/로 가 받침에 맞게', () => {
+  assert.strictEqual(R.rtxFixJosa('국밥이 좋고 피자가 좋고', '국밥'), '국밥이 좋고 피자가 좋고');
+  assert.strictEqual(R.rtxFixJosa('피자이 좋아요', '피자'), '피자가 좋아요');
+  assert.strictEqual(R.rtxFixJosa('회으로 갈까', '회'), '회로 갈까');
+  assert.strictEqual(R.rtxFixJosa('국밥가 좋아요', '국밥'), '국밥이 좋아요');
+});
+t('날짜가 바뀌면 같은 상황이라도 문구가 바뀐다(날짜 시드)', () => {
+  const set = new Set(); for (let d = 1; d <= 20; d++) set.add(ask(8, { arrMs: kst(8, 5, d), nowMs: kst(8, 0, d), weather: { temp: 5, feel: 3, tmin: 2, tmax: 9, rain: 0, txt: '맑음' } }).hook.replace(/\d+/g, '#'));
+  assert.ok(set.size >= 1);
+});
+t('이상한 입력에도 죽지 않는다', () => {
+  for (const bad of [undefined, null, {}, { arrMs: 'x' }, { arrMs: kst(12, 5), nowMs: 'x' }, { arrMs: kst(12, 5), nowMs: kst(12, 0), food: 'x', recent: 5, weather: 'x', shop: 5, seed: 'q' },
+    { arrMs: kst(12, 5), nowMs: kst(12, 0), food: [null, 1, { n: 5 }, { n: '가', c: 5, d: 'x' }] }]) {
+    const r = R.recoAlert(bad); assert.strictEqual(r.v, 1);
+  }
+  const big = R.recoAlert({ arrMs: kst(12, 5), nowMs: kst(12, 0), food: new Array(1000).fill({ n: '가'.repeat(500), c: '국밥', d: 10 }), recent: new Array(500).fill('x'), seed: 1 }); assert.strictEqual(big.v, 1);
+});
+t('엔진은 웹 상태·저장소·전역 무작위를 건드리지 않는다', () => {
+  const src = fs.readFileSync(path.join(root, 'engine/reco-text.js'), 'utf8').replace(/\/\/.*$/gm, '');
+  assert.ok(!/localStorage|window\.|document\./.test(src)); assert.ok(!/Math\.random\(\)/.test(src.replace('var RTX_RND = Math.random;', '')), 'Math.random() 직접 호출');
+});
+
+const worker = fs.readFileSync(path.join(root, 'engine/route-v2-worker.ascii.js'), 'utf8');
+t('Worker 에 내장되고 /reco-text 길이 있다', () => {
+  assert.ok(/\/\/ ===== reco-text \(/.test(worker)); assert.ok(/reco-text \\ub05d =====/.test(worker));
+  assert.ok(/url\.pathname === "\/reco-text"\) return handleRecoText\(request\)/.test(worker));
+});
+t('Worker 내장본 결과가 모듈과 같다', () => {
+  const m = worker.match(/\/\/ ===== reco-text \([^\n]*\n([\s\S]*?)\/\/ ===== reco-text \\ub05d =====/); assert.ok(m);
+  const arr = require(path.join(root, 'engine/arrive-reco.js')), shop = require(path.join(root, 'engine/shop.js'));
+  const body = m[1].replace(/^\s*if \(typeof module[^\n]*\n/m, '');
+  const mod = new Function('Response', 'arrSlot', 'arrIsDinner', 'arrRemainMin', 'SHOP_SEASON_KW', 'SHOP_NOWX', body + '; return { recoAlert: recoAlert };')(Response, arr.arrSlot, arr.arrIsDinner, arr.arrRemainMin, shop.SHOP_SEASON_KW, shop.SHOP_NOWX);
+  for (const h of [3, 8, 12, 18, 20, 22]) for (let s = 1; s < 25; s++) {
+    const a = { arrMs: kst(h, 5), nowMs: kst(h, 0), dest: '강남', weather: WX, food: FOOD, recent: ['카페C'], shop: { n: '우산', _t: '우천대비' }, seed: s };
+    assert.deepStrictEqual(mod.recoAlert(a), R.recoAlert(a));
+  }
+});
+async function call(method, body) {
+  const req = new Request('https://x/reco-text', { method, body: body == null ? undefined : (typeof body === 'string' ? body : JSON.stringify(body)) });
+  const res = await R.handleRecoText(req); return { status: res.status, json: await res.json().catch(() => null) };
+}
+(async () => {
+  let r = await call('POST', { arrMs: kst(20, 5), nowMs: kst(20, 0), dest: '강남', weather: WX, food: FOOD, recent: [], seed: 7 });
+  t('POST: ok · 야식 본문', () => { assert.strictEqual(r.status, 200); assert.strictEqual(r.json.ok, true); assert.strictEqual(r.json.kind, 'night'); assert.ok(r.json.body.length > 20); });
+  r = await call('GET'); t('GET → 405', () => assert.strictEqual(r.status, 405));
+  r = await call('OPTIONS'); t('OPTIONS → 204', () => assert.strictEqual(r.status, 204));
+  r = await call('POST', '{no'); t('이상한 JSON → 400', () => assert.strictEqual(r.status, 400));
+  r = await call('POST', 'x'.repeat(60001)); t('너무 긴 본문 → 413', () => assert.strictEqual(r.status, 413));
+  console.log('reco_text: ' + pass + ' pass ' + fail + ' fail');
+  process.exit(fail ? 1 : 0);
+})();
