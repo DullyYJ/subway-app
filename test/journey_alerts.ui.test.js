@@ -146,7 +146,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   await t('환승 뒤 목적지 2정거장 전에 2단계 — 경고 시각이 새로 찍힌다', async () => { assert.strictEqual(o8.alert, 2, JSON.stringify(o8)); assert.ok(o8.at > o5.at, JSON.stringify([o5, o8])); });
   await t('목적지 2정거장 전에는 pre 가 꺼지고 경고 단계가 대신 켜진다', async () => assert.strictEqual(o8.pre, false, JSON.stringify(o8)));
   const o9 = await ovlAt(9);
-  await t('목적지 1정거장 전에 1단계 — 다시 새 경고 시각', async () => { assert.strictEqual(o9.alert, 1, JSON.stringify(o9)); assert.ok(o9.at >= o8.at); });
+  await t('목적지 1정거장 전에 1단계 — 다시 새 경고 시각', async () => { assert.strictEqual(o9.alert, 1, JSON.stringify(o9)); assert.ok(o9.at >= o8.at, JSON.stringify([o8, o9])); });
   await page.evaluate(() => { _notifPrefSet('arrive', 0); });
   const o9b = await ovlAt(9);
   await t('도착 알림 스위치를 끄면 테두리는 그대로, 진동 정보만 꺼진다', async () => { assert.strictEqual(o9b.alert, 1); assert.strictEqual(o9b.vibe, false, JSON.stringify(o9b)); await page.evaluate(() => { _notifPrefSet('arrive', 1); }); });
