@@ -104,6 +104,11 @@ jobs:
           - route_follow.test.js
           - route_fetch_native.test.js
           - route_rtf.ui.test.js
+          - store_sync.test.js
+          - store_native.test.js
+          - store_sto.ui.test.js
+          - ride_alert.test.js
+          - ride_ra.ui.test.js
           - standby_card.ui.test.js
           - rt_arrival_cands.ui.test.js
           - shop_version.ui.test.js
@@ -235,7 +240,9 @@ jobs:
                       # 2026-10-19: 홈 후보 검색(버스정류장·장소)을 앱 본체가 직접 — 순수 자바 코어 + 플러그인(5번 2단계)
                       "native/HomeSearchCore.java", "native/HomeSearchPlugin.java",
                       # 2026-10-19: 경로 요청·최근 결과 보관을 앱 본체가 — 순수 자바 코어 + 플러그인(5번 3단계)
-                      "native/RouteFetchCore.java", "native/RouteFetchPlugin.java"]:
+                      "native/RouteFetchCore.java", "native/RouteFetchPlugin.java",
+                      # 2026-10-19: 설정·저장값을 앱 본체에도 보관 — 순수 자바 코어 + 플러그인(5번 4단계)
+                      "native/StoreCore.java", "native/StorePlugin.java"]:
               if not os.path.exists(src):
                   raise SystemExit(src + " 가 없습니다 — 저장소에 올렸는지 확인하세요")
               shutil.copy(src, os.path.join(PKGDIR, os.path.basename(src)))
@@ -276,6 +283,7 @@ jobs:
               "        registerPlugin(ScreenNativePlugin.class);",
               "        registerPlugin(HomeSearchPlugin.class);",
               "        registerPlugin(RouteFetchPlugin.class);",
+              "        registerPlugin(StorePlugin.class);",
               "        registerPlugin(GdmWidgetPlugin.class);",
               "        registerPlugin(GdmSharePlugin.class);",
               "        super.onCreate(savedInstanceState);",
