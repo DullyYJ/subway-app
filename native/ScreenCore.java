@@ -57,6 +57,7 @@ public final class ScreenCore {
 
     // ═════════════ ① JSON 읽기 ═════════════
     public static final int MAX_JSON = 3_000_000, MAX_DEPTH = 24, MAX_NODES = 6000, MAX_STR = 2000;
+    public static final int MAX_ROW = 8;
 
     private static final class P {
         final String s; int i = 0, depth = 0;
@@ -365,6 +366,17 @@ public final class ScreenCore {
                 Map<String, Object> km = asObj(ko, "panel 안 노드");
                 String kt = optStr(km, "t", "", 20);
                 if ("panel".equals(kt) || "grid".equals(kt) || "chips".equals(kt) || "search".equals(kt)) throw new ParseError("panel 안에 " + kt + " 를 둘 수 없다");
+                Node kn = node(ko, sc);
+                if (kn != null) n.kids.add(kn);
+            }
+        } else if ("row".equals(t)) {                                                                       // 한 줄에 같은 폭으로 나란히(요일·시각 칸·시험 단추) — 안에는 button·box·text 만
+            pad(m, n); n.gap = optNum(m, "gap", 8f, 0f, 40f);
+            List<Object> rk = asArr(m.get("kids"), "row.kids");
+            if (rk.size() < 1 || rk.size() > MAX_ROW) throw new ParseError("row: 칸은 1~" + MAX_ROW + "개");
+            for (Object ko : rk) {
+                Map<String, Object> km = asObj(ko, "row 안 노드");
+                String kt = optStr(km, "t", "", 20);
+                if (!"button".equals(kt) && !"box".equals(kt) && !"text".equals(kt)) throw new ParseError("row 안에 " + kt + " 를 둘 수 없다");
                 Node kn = node(ko, sc);
                 if (kn != null) n.kids.add(kn);
             }
@@ -863,6 +875,12 @@ public final class ScreenCore {
             it.fill = col(n.fill, new Col("card", 0)); it.line = col(n.line, new Col("border", 0)); it.tc = col(n.tc, new Col("sub", 0));
             out.add(it);
             return y + n.h + n.padB;
+        }
+        if ("row".equals(n.t)) {                                                     // 같은 폭 칸으로 나란히: 칸마다 stack 으로 쌓고 가장 아래까지가 이 줄의 높이
+            int c = Math.max(1, n.kids.size());
+            float colW = Math.max(1f, (innerW - n.gap * (c - 1)) / c), maxY = y;
+            for (int i = 0; i < n.kids.size(); i++) maxY = Math.max(maxY, stack(n.kids.get(i), ox + i * (colW + n.gap), colW, y, out, m, ok));
+            return maxY + n.padB;
         }
         if ("panel".equals(n.t)) {
             Item pn = new Item(); pn.kind = K_PANEL; pn.x = ox; pn.y = y; pn.w = innerW; pn.radius = n.r;

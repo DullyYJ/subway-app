@@ -28,7 +28,7 @@ import java.util.Map;
  *   · 이 플러그인: JSON 을 검증(ScreenCore.load)한다. 모양이 틀리면 그리지 않고 reject + error 이벤트 → 웹이 저장본/예전 웹 화면으로 폴백한다.
  *   · ScreenView: 검증된 화면을 그린다 — 자체 세로/가로 스크롤(관성), 눌림 처리.
  *
- *   show({id,x,y,w,h,dpr,clip,json,palette,keepScroll}) · update({id,json,palette,keepScroll}) · setRect({id,x,y,w,h,dpr,clip}) · setField({id,key,value}) · hide({id}) · destroy({id}) · status({id}) → {visible,items,age,scroll}
+ *   show({id,x,y,w,h,dpr,clip,json,palette,keepScroll}) · update({id,json,palette,keepScroll}) · setRect({id,x,y,w,h,dpr,clip}) · setField({id,key,value}) · hide({id}) · destroy({id}) · status({id}) → {visible,items,age,scroll,cap}
  *   이벤트: ready({id}) 첫 그림 · error({id,message,kind}) · action({id,a,v,url[,empty]}) · input({id,on}) 검색 입력칸 포커스
  *          text({id,key,value,kind}) watch 입력줄의 글자 바뀜(edit)·포커스(focus)·잃음(blur) · size({id,h}) 그려진 내용 높이(dp)
  *   검색줄(search 노드): 기기의 진짜 입력칸(EditText)을 검색줄 자리에 올린다. 검색 실행 → action {a:'search', v:검색어, url:엔진의 tpl, empty:엔진의 empty}.
@@ -197,6 +197,7 @@ public class ScreenNativePlugin extends Plugin {
                 o.put("items", view == null ? 0 : view.itemCount());
                 o.put("age", view == null ? -1 : (int) Math.min(Integer.MAX_VALUE, view.drawAgeMs()));
                 o.put("scroll", view == null ? 0 : Math.round(view.scrollPos()));
+                o.put("cap", 8);      // 이 앱이 아는 화면 규격 단계(8 = row 노드) — 웹이 이 값을 보고 하위 화면 요청 여부를 정한다
                 call.resolve(o);
             }
         });

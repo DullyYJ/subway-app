@@ -260,6 +260,36 @@ public class ScreenJvmTest {
         ok(bad(wrapBody("{\"t\":\"select\",\"title\":\"x\",\"act\":{\"a\":\"sel\",\"v\":\"q\"},\"prev\":[\"#111\",\"#222\"]}")), "미리보기 색이 5개가 아니면 거절");
         ok(bad(wrapBody("{\"t\":\"select\",\"title\":\"x\",\"act\":{\"a\":\"sel\",\"v\":\"q\"},\"prev\":[\"#111\",\"#222\",\"#333\",\"#444\",\"nope\"]}")), "미리보기 색을 못 읽으면 거절");
         ok(bad(wrapBody("{\"t\":\"field\",\"hint\":\"x\"}")), "입력칸 key 없으면 거절");
+
+        // ── row(한 줄에 같은 폭으로 나란히 — 요일 칸·시각 칸·시험 단추) ──
+        String rwJ = "{\"ok\":true,\"v\":1,\"screen\":\"settings\",\"rev\":\"r\",\"cover\":\"tab\",\"head\":[],\"body\":[{\"t\":\"panel\",\"pad\":[10,0,10,0],\"ip\":[10,10,10,10],\"kids\":["
+            + "{\"t\":\"row\",\"gap\":6,\"pad\":[0,0,0,6],\"kids\":["
+            + "{\"t\":\"button\",\"s\":\"일\",\"h\":36,\"act\":{\"a\":\"call\",\"v\":\"cm.day.0\"}},"
+            + "{\"t\":\"button\",\"s\":\"월\",\"h\":36,\"fill\":\"gold\",\"act\":{\"a\":\"call\",\"v\":\"cm.day.1\"}},"
+            + "{\"t\":\"button\",\"s\":\"화\",\"h\":36,\"act\":{\"a\":\"call\",\"v\":\"cm.day.2\"}}]},"
+            + "{\"t\":\"button\",\"s\":\"아래\",\"h\":40,\"act\":{\"a\":\"refresh\"}}]}]}";
+        ScreenCore.Screen rwS = ScreenCore.load(rwJ);
+        ScreenCore.Layout rwL = ScreenCore.layout(rwS, 360f, M);
+        java.util.List<ScreenCore.Item> rwB = new java.util.ArrayList<ScreenCore.Item>();
+        ScreenCore.Item rwPn = null;
+        for (ScreenCore.Item it : rwL.body) { if (it.kind == ScreenCore.K_BUTTON) rwB.add(it); else if (it.kind == ScreenCore.K_PANEL) rwPn = it; }
+        ok(rwB.size() == 4 && rwPn != null, "row: 안의 단추 3개 + 아래 단추가 배치된다");
+        float rwIn = rwPn.w - 2f - 20f, rwCol = (rwIn - 12f) / 3f;
+        ok(near(rwB.get(0).y, rwB.get(1).y) && near(rwB.get(1).y, rwB.get(2).y), "row: 같은 높이(y)에 놓인다");
+        ok(near(rwB.get(0).w, rwCol) && near(rwB.get(1).w, rwCol) && near(rwB.get(2).w, rwCol), "row: 칸 폭이 모두 같다 (" + rwB.get(0).w + " vs " + rwCol + ")");
+        ok(near(rwB.get(1).x - (rwB.get(0).x + rwB.get(0).w), 6f) && near(rwB.get(2).x - (rwB.get(1).x + rwB.get(1).w), 6f), "row: 칸 사이 간격 6");
+        ok(near(rwB.get(2).x + rwB.get(2).w, rwPn.x + 1f + 10f + rwIn), "row: 마지막 칸이 안쪽 오른쪽 끝에 닿는다");
+        ok(near(rwB.get(3).y, rwB.get(0).y + 36f + 6f), "row: 다음 노드는 줄 높이 36 + 아래 여백 6 뒤에 온다");
+        ScreenCore.Act rwA1 = rwL.hitBody(rwB.get(1).x + 5f, rwB.get(1).y + 5f), rwA2 = rwL.hitBody(rwB.get(2).x + 5f, rwB.get(2).y + 5f);
+        ok(rwA1 != null && rwA1.v.equals("cm.day.1") && rwA2 != null && rwA2.v.equals("cm.day.2"), "row: 칸마다 자기 행동으로 눌린다");
+        ok(rwL.hitBody(rwB.get(0).x + rwB.get(0).w + 2f, rwB.get(0).y + 5f) == null, "row: 칸 사이 틈은 눌려도 아무 일 없다");
+        ok(bad(wrapBody("{\"t\":\"row\",\"kids\":[]}")), "row: 칸이 없으면 거절");
+        ok(bad(wrapBody("{\"t\":\"row\",\"kids\":[{\"t\":\"toggle\",\"key\":\"k\",\"title\":\"x\"}]}")), "row 안에 스위치를 둘 수 없다");
+        ok(bad(wrapBody("{\"t\":\"row\",\"kids\":[{\"t\":\"row\",\"kids\":[{\"t\":\"button\",\"s\":\"a\",\"act\":{\"a\":\"refresh\"}}]}]}")), "row 안에 row 를 둘 수 없다");
+        StringBuilder rwNine = new StringBuilder("{\"t\":\"row\",\"kids\":[");
+        for (int i = 0; i < 9; i++) { if (i > 0) rwNine.append(','); rwNine.append("{\"t\":\"button\",\"s\":\"a\",\"act\":{\"a\":\"refresh\"}}"); }
+        ok(bad(wrapBody(rwNine + "]}")), "row: 9칸은 거절(최대 " + ScreenCore.MAX_ROW + ")");
+        ok(bad(wrapBody("{\"t\":\"row\",\"kids\":[{\"t\":\"button\",\"s\":\"a\",\"act\":{\"a\":\"nope\"}}]}")), "row 안 단추의 모르는 행동은 거절");
         ok(bad(wrapBody("{\"t\":\"field\",\"key\":\"k\",\"h\":500}")), "입력칸 높이 범위 밖은 거절");
         ok(bad(wrapBody("{\"t\":\"panel\",\"kids\":[{\"t\":\"panel\",\"kids\":[]}]}")), "패널 안에 패널은 거절(중첩 금지)");
         ok(bad(wrapBody("{\"t\":\"panel\",\"kids\":[{\"t\":\"grid\",\"items\":[]}]}")), "패널 안에 격자는 거절");

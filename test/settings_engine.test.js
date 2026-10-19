@@ -108,6 +108,143 @@ ok(E.settingsStat(E.SETTINGS_FEATS[3], { on: 0 }) === '꺼짐 — 예전 방식(
   ok(has('id="samSetCard"') && has('id="gwCard"') && has('id="ovlTestCard"') && has('id="cmAlarmOn"'), '웹: 웹 카드로 열 수 있는 요소가 있다');
 }
 
+// ⑦ 하위 화면(cap 8) — 예전에 웹 카드 시트로 열던 6개 + 시각 고르기 + 장소 고르기
+{
+  const PG = (p, pf, cap) => E.settingsScreen({ cap: cap == null ? 8 : cap, p }, { pf: pf || {} });
+  const texts = sc => flat(sc.body).map(n => [n.s, n.title, n.sub, n.hint, n.name, n.label].filter(Boolean)).reduce((a, b) => a.concat(b), []);
+  const acts = sc => { const o = []; (function w(ns) { ns.forEach(n => { if (n.act) o.push(n.act); if (n.bact) o.push(n.bact); if (n.kids) w(n.kids); }); })(sc.body); return o; };
+  // 입구
+  ok(PG('cm', {}, 3).ok === false && PG('cm', {}, 7).ok === false, '하위 화면은 cap 8 미만이면 만들지 않는다');
+  ok(PG('nope').ok === false && E.settingsScreen({ cap: 8, p: '' }, {}).screen === 'settings', '모르는 화면은 거절 · p 가 없으면 설정 첫 화면');
+  const s8 = E.settingsScreen({ cap: 8 }, full), navs8 = flat(s8.body).filter(n => n.t === 'navrow' && n.act.v && /^pg\./.test(n.act.v));
+  ok(navs8.map(n => n.act.v).join() === 'pg.sam,pg.cm,pg.gw,pg.arr,pg.ovl,pg.dev', 'cap 8: 웹 카드 행이 하위 화면(pg.*)으로 이어진다 ' + navs8.map(n => n.act.v).join());
+  ok(!flat(s8.body).some(n => n.act && n.act.a === 'web'), 'cap 8 에는 웹 카드 시트 행동이 남지 않는다');
+  ok(flat(E.settingsScreen({ cap: 3 }, full).body).filter(n => n.act && n.act.a === 'web').length === 6, 'cap 3 은 예전 그대로(web 6개)');
+  // 모든 하위 화면: 맨 위 '‹ 설정' 단추 · 이모지 없음 · 같은 입력 같은 출력 · 정보
+  const names = Object.keys(E.SETTINGS_PAGES);
+  names.forEach(p => {
+    const sc = PG(p, {});
+    ok(sc.ok && sc.screen === 'settings' && sc.cover === 'tab' && sc.info.page === p && /^s1p:/.test(sc.rev), p + ': 기본 모양/정보/rev');
+    ok(sc.body[0].t === 'button' && sc.body[0].s === '\u2039 \uc124\uc815' && sc.body[0].act.v === 'pg.back', p + ': 맨 위가 ‹ 설정(pg.back)');
+    ok(!texts(sc).some(x => EMOJI.test(x)), p + ': 이모지 없음');
+    ok(JSON.stringify(PG(p, {})) === JSON.stringify(sc) && PG(p, { x: 1 }).rev === sc.rev, p + ': 같은 입력 → 같은 출력, 모르는 사실은 무시');
+  });
+  ok(PG('cm', { sub: 'tp', tp: { t: 'morn', ap: 'am', h: 7, m: 30 } }).body[0].s === '\u2039 \ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551 \uc54c\ub9bc' && PG('cm', { sub: 'pick', pick: { k: 'to', q: '' } }).body[0].s === '\u2039 \ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551 \uc54c\ub9bc', '시각/장소 고르기의 뒤로 단추는 출퇴근 브리핑 알림으로 돌아간다');
+  // 행동 이름은 허용 목록 모양만
+  const ALLOW = /^(pg\.back|sam\.open|bat\.req|ovl\.diag|pf\.(live|rec)|dev\.(start\.(all|plain|reco|alert2|alert1|quit)|stop)|arr\.(t\.(morning|lunch|night|shop)|demo|stat)|gw\.(add\.(hb|hw|vb|vw)|roam\.(dn|up))|cm\.(day\.[0-6]|preset\.(weekday|weekend|all)|tp\.(morn|eve)|test|pick\.(from|to|eFrom|eTo))|tp\.(ap\.(am|pm)|h\.([1-9]|1[0-2])|m\.([0-9]|[1-5][05])|ok|cancel)|pk\.(save|clear|cancel|u\.\d{1,2}|b\.\d{1,2}))$/;
+  names.concat(['tp', 'pick']).forEach(p => {
+    const sc = p === 'tp' ? PG('cm', { sub: 'tp', tp: { t: 'eve', ap: 'pm', h: 6, m: 30 } }) : p === 'pick' ? PG('cm', { sub: 'pick', pick: { k: 'to', q: '강' }, bus: ['강남역', '강남역', '강동'] }) : PG(p, {});
+    const bad = acts(sc).filter(a => !(a.a === 'call' && ALLOW.test(a.v)));
+    ok(bad.length === 0, p + ': 모든 행동이 허용 목록 안 ' + JSON.stringify(bad.slice(0, 2)));
+  });
+  // 갤럭시 절전
+  let sc = PG('sam', { w: 1, ig: 1, bk: 5, sok: 1 }), tx = texts(sc);
+  ok(tx.some(x => x === '현재 상태 · 배터리 최적화 제외: 예 · 앱 배터리 제한: 제한됨 · 기기가 보는 앱 등급: 제한'), '갤럭시: 읽은 상태를 문장으로');
+  ok(tx.some(x => /^이 앱의 배터리 사용이 제한됨으로/.test(x)) && tx.some(x => /^앱 배터리가 제한 없음이면 삼성 목록/.test(x)), '갤럭시: 제한됨 경고 · 제한 없음 안내(제외됨일 때)');
+  sc = PG('sam', {}); tx = texts(sc);
+  ok(tx.includes('현재 상태: 확인 중…') && !tx.some(x => /^이 앱의 배터리 사용이/.test(x)), '갤럭시: 아직 못 읽었으면 확인 중, 경고 없음');
+  ok(texts(PG('sam', { er: 1 })).includes('현재 상태: 읽지 못했어요'), '갤럭시: 읽기 실패 문구');
+  ok(texts(PG('sam', { w: 0, ig: 0, bk: 3, sok: 1 })).includes('현재 상태 · 배터리 최적화 제외: 아니요 · 앱 배터리 제한: 제한 없음/최적화 · 기기가 보는 앱 등급: 자주 사용'), '갤럭시: 제한 없음/등급 이름');
+  // 다른 앱 위에 표시
+  const OV = (o) => texts(PG('ovl', o)).find(x => /지원|사용 중|권한|꺼져/.test(x) && !/^다른 앱을 쓰는 동안/.test(x));
+  ok(OV({ nat: 0 }) === '이 앱 버전에서는 지원하지 않아요.' && OV({ sup: 0 }) === '이 기기(안드로이드 8 미만)에서는 지원하지 않아요.', '오버레이: 지원 안 함 문구 2종');
+  ok(OV({ gr: 1, on: 1 }) === '사용 중 · 다른 앱을 쓰는 동안 위쪽에 표시돼요.' && OV({ gr: 1, on: 0 }) === '권한은 허용됨 · 지금은 꺼져 있어요.', '오버레이: 허용됨 켜짐/꺼짐');
+  ok(OV({ gr: 0, on: 1 }) === "권한이 필요해요 · 설정에서 '다른 앱 위에 표시'를 허용해 주세요." && OV({ gr: 0, on: 0 }) === '꺼져 있어요.' && OV({ on: 0 }) === '꺼져 있어요.', '오버레이: 권한 없음/모름');
+  sc = PG('ovl', { on: 1, pfl: 1, pfr: 0 });
+  ok(flat(sc.body).find(n => n.t === 'toggle').key === 'ovl' && flat(sc.body).find(n => n.t === 'toggle').on === true, '오버레이: 스위치 키 ovl');
+  tx = texts(sc);
+  ok(tx.includes('새 위치 판단기 보정: 켜짐 (누르면 끔)') && tx.includes('정답 기록 버튼: 꺼짐 (테스트 탑승용)'), '오버레이: 보정/기록 버튼 글이 상태에 따라');
+  const pb = flat(sc.body).filter(n => n.t === 'button');
+  ok(pb.find(n => /^새 위치/.test(n.s)).fill === 'gold' && pb.find(n => /^정답/.test(n.s)).fill === 'none', '오버레이: 켜진 버튼은 금색');
+  // 개발자 도구
+  tx = texts(PG('dev', { ph: 'alert1', left: 42 }));
+  ok(tx.includes('진행 중 · 지금 단계: 1정거장 전(내릴 준비) · 42초 남음'), '개발자: 진행 중 문구');
+  ok(texts(PG('dev', { stopped: 1 })).includes('중지했어요.') && !texts(PG('dev', {})).some(x => /진행 중|중지했어요/.test(x)), '개발자: 중지/아무 것도 안 함');
+  ok(flat(PG('dev', {}).body).filter(n => n.t === 'row')[0].kids.map(k => k.act.v).join() === 'dev.start.plain,dev.start.reco,dev.start.alert2,dev.start.alert1', '개발자: 단계 단추 4개가 한 줄');
+  // 하차 5분 전 추천 시험
+  ok(texts(PG('arr', {})).includes("'상태 확인'을 누르면 감시 상태와 남은 시간이 표시됩니다."), '추천 시험: 처음 안내');
+  const ST = { timer: 1, route: 1, dest: '강남', rem: 725, pre: 10, slot: 'night', dinner: 0, alertAt: Date.UTC(2026, 9, 19, 6, 7, 12), tickAt: Date.UTC(2026, 9, 19, 6, 8, 0), tzo: -540, policy: 1, dg: { stage: '문구 생성', at: Date.UTC(2026, 9, 19, 6, 7, 11), err: '' } };
+  const lines = E.settingsArrLines(E.settingsPageFacts({ st: ST }).st);
+  ok(lines.join('|') === ['감시 타이머: 동작 중 (20초마다)', '현재 경로: 강남 도착 예정', '남은 시간: 12분 5초  (10분 되면 발사)', '지금 시간대: 야식 (19:00~21:00)', '마지막 발송: 오후 3:07:12  (30분간 재발송 안 함)', '알림 정책: 허용됨', '마지막 감시: 오후 3:08:00', '발사 경과: 문구 생성  (오후 3:07:11)'].join('|'), '추천 시험: 상태 줄 ' + lines.join(' | '));
+  const L2 = E.settingsArrLines(E.settingsPageFacts({ st: { slot: 'morning', rem: 300, pre: 10 } }).st);
+  ok(L2[0] === '감시 타이머: 없음' && L2[1] === '현재 경로: 없음 (탑승 상태 아님)' && L2[2] === '남은 시간: 5분 0초  (발사 구간)' && L2[3] === '지금 시간대: 커피 (07:01~10:00)' && L2[4] === '마지막 발송: 없음' && L2[5] === '알림 정책: 차단됨' && L2[6] === '마지막 감시: 없음' && L2[7] === '발사 경과: 없음', '추천 시험: 비어 있는 상태 줄들');
+  ok(E.settingsArrLines(E.settingsPageFacts({ st: { slot: 'night', dinner: 1, rem: null } }).st)[2] === '남은 시간: 아직 측정 전' && E.settingsArrLines(E.settingsPageFacts({ st: { slot: 'night', dinner: 1 } }).st)[3] === '지금 시간대: 저녁 식사 (17:00~18:59)', '추천 시험: 측정 전 · 저녁 식사');
+  ok(E.settingsArrLines(E.settingsPageFacts({ st: { err: 'x' } }).st)[0] === '상태 확인 오류: x', '추천 시험: 읽다 실패');
+  ok(flat(PG('arr', { st: ST }).body).filter(n => n.t === 'box').some(n => n.s.split('\n').length === 8), '추천 시험: 상태 상자에 줄이 8개');
+  // 시계 위젯
+  sc = PG('gw', { roam: 6, mOn: 1, eOn: 0, morn: '07:30' }); tx = texts(sc);
+  ok(tx.includes('6분 (추천)') && tx.includes('출근 07:30 에 위젯이 응원해요') && tx.some(x => /^6분 추천이에요\. 그보다 길면/.test(x)), '시계 위젯: 6분 추천 · 응원 시각 글');
+  ok(texts(PG('gw', { roam: 9, mOn: 1, eOn: 1, morn: '07:30', eve: '18:30' })).some(x => x === '출근 07:30 · 퇴근 18:30 에 위젯이 응원해요') && texts(PG('gw', { roam: 9 })).some(x => /^6분 추천이에요\. 그보다 길게 두면/.test(x)) && texts(PG('gw', { roam: 9 })).includes('9분'), '시계 위젯: 출퇴근 둘 다 · 6분보다 길면 다른 안내 · 9분');
+  ok(texts(PG('gw', {})).includes('출·퇴근 장소를 설정하면 그 쪽 버튼이 나와요.'), '시계 위젯: 장소 없을 때');
+  ok(flat(PG('gw', {}).body).filter(n => n.t === 'row').slice(0, 2).map(r => r.kids.map(k => k.act.v).join()).join('|') === 'gw.add.hb,gw.add.hw|gw.add.vb,gw.add.vw', '시계 위젯: 추가 단추 2줄');
+  ok(PG('gw', { roam: 99 }).body.length === PG('gw', { roam: 6 }).body.length && texts(PG('gw', { roam: 99 })).includes('6분 (추천)'), '시계 위젯: 이상한 값(99)은 6분');
+  // 출퇴근 브리핑
+  sc = PG('cm', { on: 1, from: '아라', to: '강남', morn: '07:30', eve: '18:05', days: [1, 2, 3, 4, 5] }); tx = texts(sc);
+  ok(flat(sc.body).find(n => n.t === 'toggle').key === 'cm' && flat(sc.body).find(n => n.t === 'toggle').on === true, '출퇴근: 스위치 키 cm');
+  ok(tx.includes('오전 7:30') && tx.includes('오후 6:05') && tx.includes('선택한 5일에만 보내요.') && tx.includes('비워 두면 출근의 반대 — 강남 → 아라 로 보내요.'), '출퇴근: 시각 글 · 요일 안내 · 퇴근 힌트');
+  const dk = flat(sc.body).filter(n => n.t === 'row'); const dayRow = dk.find(r => r.kids.length === 7), preRow = dk.find(r => r.kids.length === 3 && r.kids[0].s === '평일');
+  ok(dayRow.kids.map(k => k.s).join('') === '일월화수목금토' && dayRow.kids.map(k => k.fill === 'gold' ? 1 : 0).join('') === '0111110', '출퇴근: 요일 칸(평일만 선택)');
+  ok(dayRow.kids[0].tc === '#e5484d' && dayRow.kids[6].tc === '#2f6fed', '출퇴근: 일요일 빨강 · 토요일 파랑 글자(선택 안 됐을 때)');
+  ok(preRow.kids.map(k => k.fill === 'gold' ? 1 : 0).join('') === '100', '출퇴근: 평일 묶음이 선택됨');
+  ok(E.settingsPageFacts({ days: [0, 6] }).days.join() === '0,6' && flat(PG('cm', { days: [0, 6] }).body).find(r => r.t === 'row' && r.kids[0].s === '평일').kids.map(k => k.fill === 'gold' ? 1 : 0).join('') === '010', '출퇴근: 주말 묶음');
+  ok(texts(PG('cm', { days: [] })).includes('요일을 하나도 고르지 않아 매일 보내요.') && flat(PG('cm', {}).body).find(r => r.t === 'row' && r.kids[0].s === '평일').kids.every(k => k.fill !== 'gold'), '출퇴근: 요일이 없으면 매일 안내 · 묶음 선택 없음');
+  ok(E.settingsEveHint({ eFrom: '', eTo: '', from: '', to: '' }) === '비워 두면 출근의 반대 방향으로 보내요.' && E.settingsEveHint({ eFrom: '회사', eTo: '', from: '', to: '' }) === '퇴근은 따로 설정한 곳으로 보내요. (한쪽만 채우면 나머지는 출근의 반대편을 써요)' && E.settingsEveHint({ eFrom: '회사', eTo: '집', from: '', to: '' }) === '퇴근은 따로 설정한 곳으로 보내요.', '출퇴근: 퇴근 힌트 3가지');
+  const pn = flat(sc.body).filter(n => n.t === 'navrow');
+  ok(pn.map(n => n.act.v).join() === 'cm.pick.from,cm.pick.to,cm.pick.eFrom,cm.pick.eTo' && pn[0].sub === '아라' && pn[2].sub === '비어 있음', '출퇴근: 장소 4칸(값 또는 비어 있음)');
+  ok(E.settingsFmtTime('00:05') === '오전 12:05' && E.settingsFmtTime('12:00') === '오후 12:00' && E.settingsFmtTime('23:59') === '오후 11:59', '출퇴근: 시각 글 경계(자정·정오)');
+  ok(E.settingsPageFacts({ morn: '25:00', eve: 'x' }).morn === '07:30' && E.settingsPageFacts({ eve: '9:05' }).eve === '09:05', '출퇴근: 이상한 시각은 기본값 · 한 자리 시는 두 자리로');
+  // 시각 고르기
+  sc = PG('cm', { sub: 'tp', tp: { t: 'eve', ap: 'pm', h: 6, m: 35 } }); tx = texts(sc);
+  ok(sc.info.sub === 'tp' && tx.includes('퇴근 브리핑 시간') && tx.includes('오후 6:35'), '시각 고르기: 제목 · 지금 고른 시각');
+  const rows = flat(sc.body).filter(n => n.t === 'row');
+  ok(rows.length === 6 && rows[0].kids.map(k => k.s).join() === '오전,오후' && rows[0].kids[1].fill === 'gold' && rows[0].kids[0].fill === 'none', '시각 고르기: 오전/오후 중 오후 선택');
+  ok(rows[1].kids.map(k => k.s).join('') === '123456' && rows[2].kids.map(k => k.s).join('') === '789101112' && rows[1].kids.map(k => k.fill === 'gold' ? 1 : 0).join('') === '000001' && rows[2].kids.every(k => k.fill === 'none'), '시각 고르기: 시 12칸(6이 선택)');
+  ok(rows[3].kids.map(k => k.s).join() === '00,05,10,15,20,25' && rows[4].kids.map(k => k.s).join() === '30,35,40,45,50,55' && rows[4].kids.map(k => k.fill === 'gold' ? 1 : 0).join('') === '010000', '시각 고르기: 분 12칸(35가 선택)');
+  ok(rows[5].kids.map(k => k.act.v).join() === 'tp.cancel,tp.ok' && rows[5].kids[1].fill === 'gold', '시각 고르기: 취소/확인');
+  ok(E.settingsPageFacts({ sub: 'tp', tp: { m: 37 } }).tp.m === 35 && E.settingsPageFacts({ sub: 'tp', tp: { h: 40, m: 99 } }).tp.h === 7, '시각 고르기: 분은 5분 단위로 내림 · 이상한 값은 기본');
+  ok(texts(PG('cm', { sub: 'tp' })).includes('출근 브리핑 시간') && texts(PG('cm', { sub: 'tp' })).includes('오전 7:30'), '시각 고르기: 사실이 없어도 그려진다(기본 오전 7:30)');
+  // 장소 고르기
+  sc = PG('cm', { sub: 'pick', pick: { k: 'to', q: '강남' }, bus: ['강남역', '강남역', '강남구청', '', '강남대로'] });
+  const sugs = flat(sc.body).filter(n => n.t === 'sug'), ib = flat(sc.body).find(n => n.t === 'inbar');
+  ok(sc.info.sub === 'pick' && ib && ib.key === 'cmq' && ib.value === '강남' && ib.watch === true && ib.hint === '지하철·버스 (예: 강남)' && ib.act.v === 'pk.save', '장소 고르기: 입력줄(감시) · 힌트 · 저장');
+  ok(texts(sc).includes('출근 도착지 (회사 근처)'), '장소 고르기: 제목');
+  const su = sugs.filter(n => n.badge === '지하철'), sb = sugs.filter(n => n.badge === '버스');
+  ok(su.length >= 1 && su[0].name.indexOf('강남') === 0 && su.every(n => /^pk\.u\.\d+$/.test(n.act.v)), '장소 고르기: 지하철 후보 = 엔진 역 표(이름이 먼저 시작하는 순) ' + su.map(n => n.name).join());
+  ok(sb.map(n => n.name).join() === '강남역,강남구청,강남대로' && sb.map(n => n.act.v).join() === 'pk.b.0,pk.b.2,pk.b.4' && JSON.stringify(sc.info.pk.b) === '[0,2,4]', '장소 고르기: 버스 후보는 같은 이름 하나로, 원래 번호를 돌려준다');
+  ok(PG('cm', { sub: 'pick', pick: { k: 'to', q: '강남' }, bus: ['a', 'b', 'c', 'd', 'e', 'f', 'g'] }).info.pk.b.length === 5, '장소 고르기: 버스 후보는 5개까지');
+  ok(sugs[sugs.length - 1].last === true && sugs.slice(0, -1).every(n => !n.last), '장소 고르기: 마지막 줄만 last');
+  ok(sc.info.pk.u.length === su.length && sc.info.pk.u[0].name === su[0].name, '장소 고르기: 고른 번호 → 이름은 info.pk.u');
+  const st1 = E.settingsStnFind('아라역'), st2 = E.settingsStnFind('아 라');
+  ok(st1.u.length > 0 && JSON.stringify(st1) === JSON.stringify(st2), '장소 고르기: 끝 "역" 과 공백을 떼고 찾는다(예전 _cmSug 와 같다)');
+  ok(E.settingsStnFind('').u.length === 0 && E.settingsStnFind('가').u.length <= 12, '장소 고르기: 빈 글은 없음 · 최대 12');
+  ok(texts(PG('cm', { sub: 'pick', pick: { k: 'eFrom', q: '' } })).some(x => /비우면 회사 근처 역/.test(x)) && flat(PG('cm', { sub: 'pick', pick: { k: 'eFrom', q: '' } }).body).filter(n => n.t === 'sug').length === 0, '장소 고르기: 빈 글이면 후보 없음 · 퇴근 출발지 힌트');
+  ok(texts(PG('cm', { sub: 'pick', pick: { k: 'to', q: 'zzzzqq' } })).some(x => /^맞는 역이나 정류장을 찾지 못했어요/.test(x)), '장소 고르기: 못 찾았을 때 안내');
+  // 모든 하위 화면이 앱 검증기를 통과한다
+  const cases = [];
+  names.forEach(p => { cases.push(PG(p, {})); });
+  cases.push(PG('sam', { w: 1, ig: 1, bk: 4, sok: 1 }), PG('ovl', { nat: 1, sup: 1, gr: 1, on: 1, pfl: 1, pfr: 1 }), PG('dev', { ph: 'reco', left: 20 }), PG('dev', { stopped: 1 }), PG('arr', { st: ST }), PG('arr', { st: { err: '오류' } }),
+    PG('gw', { roam: 3, mOn: 1, eOn: 1 }), PG('cm', { on: 1, from: '아라', to: '강남', eFrom: '서울', eTo: '', days: [0, 1, 2, 3, 4, 5, 6] }), PG('cm', { days: [3] }),
+    PG('cm', { sub: 'tp', tp: { t: 'morn', ap: 'am', h: 12, m: 0 } }), PG('cm', { sub: 'tp', tp: { t: 'eve', ap: 'pm', h: 1, m: 55 } }),
+    PG('cm', { sub: 'pick', pick: { k: 'from', q: '아라' }, bus: ['아라동주민센터'] }), PG('cm', { sub: 'pick', pick: { k: 'eTo', q: '' } }), PG('cm', { sub: 'pick', pick: { k: 'to', q: 'qqqq' } }));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'setpg_'));
+  try {
+    const f = path.join(dir, 'in.jsonl'), cls = path.join(dir, 'c');
+    fs.writeFileSync(f, cases.map(c => JSON.stringify(c)).join('\n') + '\n'); fs.mkdirSync(cls);
+    const ENV = Object.assign({}, process.env, { JAVA_TOOL_OPTIONS: '' });
+    let r = spawnSync('javac', ['-encoding', 'UTF-8', '-d', cls, R('native/ScreenCore.java'), R('test/java/ScreenCheck.java')], { env: ENV, encoding: 'utf8' });
+    ok(r.status === 0, '하위 화면: ScreenCheck 컴파일 ' + (r.stderr || '').slice(0, 300));
+    r = spawnSync('java', ['-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-cp', cls, 'com.dullyyj.subway.ScreenCheck', f], { env: ENV, encoding: 'utf8' });
+    const out = (r.stdout || '').split('\n').filter(Boolean);
+    ok(out.length === cases.length && out.every(l => l.startsWith('OK ')), '하위 화면 ' + cases.length + '가지가 앱 검증기를 모두 통과 ' + out.filter(l => !l.startsWith('OK ')).slice(0, 3).join(' | '));
+    ok(out.every(l => Number(l.split(' ')[2]) === 0), '하위 화면: 건너뛴 노드 없음');
+  } finally { try { fs.rmSync(dir, { recursive: true, force: true }); } catch (e) { } }
+  // 웹 카드(폴백)와 같은 글을 쓰는가
+  const has = t => html.indexOf(t) >= 0;
+  ok(has('갤럭시는 며칠 안 쓴 앱을 자동 절전시켜 화면이 꺼진 동안의 하차 알림이 멈출 수 있어요.') && has('권한은 허용됨 · 지금은 꺼져 있어요.') && has("사용 중 · 다른 앱을 쓰는 동안 위쪽에 표시돼요."), '웹: 갤럭시/오버레이 문구 = 엔진');
+  ok(has('설정한 시각에 <b style="color:var(--text);">날씨 + AI 역무원 요약</b>을 알림으로 보내드려요.') && has("도착 5분 전에 시간대별로 보내는 추천이에요. 실제 알림과 같은 내용으로 바로 확인해 볼 수 있어요.") && has('캐릭터 하나가 오른쪽에서 추천 줄(실제 가게·쿠팡 상품 이름)을 끌고 들어오는 모습을 14초간 보여 줘요'), '웹: 출퇴근/추천 시험 문구 = 엔진');
+  ok(has('비워 두면 출근의 반대 — ') && has("'선택한 ' + on.length + '일에만 보내요.'") && has("'요일을 하나도 고르지 않아 매일 보내요.'") && has('커피 (07:01~10:00)') && has('추천 없는 시간대 (00:00~07:00)'), '웹: 힌트·요일·시간대 글 = 엔진');
+}
+
 // ⑤ 워커 내장 사본
 {
   const w = fs.readFileSync(R('engine/route-v2-worker.ascii.js'), 'utf8');
@@ -136,9 +273,16 @@ ok(E.settingsStat(E.SETTINGS_FEATS[3], { on: 0 }) === '꺼짐 — 예전 방식(
     ok(JSON.stringify(j.body) === JSON.stringify(s.body) && j.rev === s.rev, '워커와 직접 계산이 같은 결과');
     ok((await (await call('https://x/screen/settings?cap=2&f=' + f)).json()).ok === false, '워커: cap 부족이면 거절');
     ok((await call('https://x/screen/settings?cap=3&f=' + encodeURIComponent('{oops'))).status === 400, '워커: 깨진 사실은 400');
-    ok((await call('https://x/screen/settings?cap=3&f=' + 'a'.repeat(3001))).status === 400, '워커: 너무 긴 사실은 400');
+    ok((await call('https://x/screen/settings?cap=3&f=' + 'a'.repeat(6001))).status === 400, '워커: 너무 긴 사실은 400');
     const r0 = await call('https://x/screen/settings?cap=3'), j0 = await r0.json();
     ok(r0.status === 200 && j0.ok, '워커: 사실 없이도 기본 화면');
+    // 하위 화면(cap 8 · p=)
+    const pf = encodeURIComponent(JSON.stringify({ pf: { sub: 'pick', pick: { k: 'to', q: '강남' }, bus: ['강남역'] } }));
+    const rp = await call('https://x/screen/settings?cap=8&p=cm&f=' + pf), jp = await rp.json();
+    ok(rp.status === 200 && jp.ok && jp.info.page === 'cm' && jp.info.sub === 'pick' && jp.info.pk.u.length > 0 && jp.info.pk.b.length === 1, '워커: 하위 화면(장소 고르기) — 워커 안에서도 역 표로 후보를 거른다');
+    ok(JSON.stringify(jp.body) === JSON.stringify(E.settingsScreen({ cap: 8, p: 'cm' }, JSON.parse(decodeURIComponent(pf))).body), '워커와 직접 계산이 같은 하위 화면');
+    ok((await call('https://x/screen/settings?cap=3&p=cm')).status === 400 && (await call('https://x/screen/settings?cap=8&p=zz')).status === 400, '워커: cap 부족 · 모르는 화면은 400');
+    ok((await (await call('https://x/screen/settings?cap=8&p=sam')).json()).ok === true, '워커: 사실 없이도 하위 화면');
     const ro = await w.fetch(new Request('https://x/screen/settings', { method: 'OPTIONS' }), {}, { waitUntil() { } });
     ok(ro.status === 204, '워커: OPTIONS 204');
   } catch (e) { fail++; console.log('  FAIL 워커 시험 예외', e && e.stack || e); }

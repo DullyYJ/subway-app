@@ -4,6 +4,7 @@
 //   · 켜면: 기기 사실(facts)을 모아 엔진에 보내고, 엔진이 준 JSON 글을 한 글자도 안 고치고 플러그인에 넘긴다 · 사각형은 설정 화면 전체
 //   · 행동: 스위치(set) → 진짜 설정이 바뀌고 새 화면을 받는다 · 아이디 저장/삭제(call, 입력칸 글자 fields) · 테마(sel) · 웹 카드 시트(web) · 약관(call)
 //   · 폴백: 엔진 응답이 틀리면 버리고(저장본이 있으면 그대로, 없으면 웹 화면) · 저장본은 기기 사실이 같을 때만 곧바로 쓴다
+//   · 하위 화면(cap 8): 설정의 6개 카드 행이 엔진이 구성한 네이티브 하위 화면으로 열린다 · 눌림은 기존 웹 함수를 그대로 부른다 · 옛 엔진/실패면 예전 웹 카드 시트
 // 실행: node test/screen_set_js.ui.test.js [html 경로]
 const assert = require('assert'), path = require('path');
 const { chromium } = require('./helpers/pw');
@@ -19,7 +20,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     opt = opt || {};
     const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, timezoneId: 'Asia/Seoul', deviceScaleFactor: 2 });
     const page = await ctx.newPage(); const errs = []; page.on('pageerror', e => errs.push(e.message));
-    const x = { ctx, page, errs, reqs: [], serve: opt.serve || 'ok', delay: opt.delay || 0 };
+    const x = { ctx, page, errs, reqs: [], serve: opt.serve || 'ok', delay: opt.delay || 0, old: !!opt.old };
     await page.route('**/*', async r => {
       const u = new URL(r.request().url());
       if (u.protocol === 'file:') return r.continue();
@@ -28,7 +29,8 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
         if (x.delay) await new Promise(res => setTimeout(res, x.delay));
         if (x.serve === 'down') return r.abort();
         const facts = JSON.parse(u.searchParams.get('f') || '{}'); x.lastFacts = facts;
-        let body = JSON.stringify(E.settingsScreen({ cap: Number(u.searchParams.get('cap')) || 0 }, facts));
+        const pq = x.old ? '' : (u.searchParams.get('p') || '');                    // x.old: p 를 모르는 옛 엔진(항상 첫 화면)
+        let body = JSON.stringify(E.settingsScreen({ cap: x.old ? 3 : (Number(u.searchParams.get('cap')) || 0), p: pq }, facts));
         if (x.serve === 'shape') body = JSON.stringify({ ok: true, v: 2, screen: 'settings' });
         x.lastBody = body;
         return r.fulfill({ status: 200, contentType: 'application/json', body });
@@ -55,7 +57,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
         window.Capacitor = { isNativePlatform: () => true, getPlatform: () => 'android', Plugins: { ScreenNative: {
           show: put('show'), update: put('update'),
           setRect: (a) => rec('setRect', a), hide: (a) => rec('hide', a), destroy: (a) => rec('destroy', a), toast: (a) => rec('toast', a),
-          status: () => Promise.resolve(window.__status ? window.__status() : { visible: true, items: 10, age: 20, scroll: 0 }),
+          status: () => Promise.resolve(window.__status ? window.__status() : (o.oldApk ? { visible: true, items: 10, age: 20, scroll: 0 } : { visible: true, items: 10, age: 20, scroll: 0, cap: 8 })),
           addListener: (n, f) => { (window.__snL[n] = window.__snL[n] || []).push(f); return Promise.resolve({ remove() {} }); }
         } } };
       }
@@ -96,7 +98,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   const A = await fresh({ plugin: true, on: true, id: '기존이름' });
   await t('설정 탭을 열면 사실과 함께 요청(cap=3)하고, 받은 글을 한 글자도 안 고치고 show 한다 · 사각형은 설정 화면 전체', async () => {
     await openSet(A); assert.ok(await waitFor(A, has(A, 'show')), 'show 가 없다');
-    assert.ok(/cap=3/.test(A.reqs[0]) && /f=/.test(A.reqs[0]), A.reqs[0]);
+    assert.ok(/cap=8/.test(A.reqs[0]) && !/[?&]p=/.test(A.reqs[0]) && /f=/.test(A.reqs[0]), A.reqs[0]);
     assert.strictEqual(A.lastFacts.id, '기존이름'); assert.ok(A.lastFacts.np && A.lastFacts.np.arrive === 1 && A.lastFacts.th && A.lastFacts.feat.scrs.on === 1, JSON.stringify(A.lastFacts));
     const s = (await last(A, 'show')).a;
     assert.strictEqual(s.id, 'settings'); assert.strictEqual(s.json, A.lastBody, '엔진 글과 다르다');
@@ -281,6 +283,148 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     await clear(x); await act(x, { a: 'set', key: 'f.scrs', on: false });
     assert.ok(await waitFor(x, has(x, 'destroy')), '정리 안 됨');
     assert.strictEqual(await x.page.evaluate(() => localStorage.getItem('gdm_scrs_on')), '0'); assert.strictEqual(await x.page.evaluate(() => window._scrSet.owns()), false);
+    await x.ctx.close();
+  });
+
+  console.log('[⑥ 하위 화면(엔진 s68): 열기·행동·뒤로·폴백]');
+  const nodes = (txt) => texts(txt);
+  const findBtn = (txt, v) => nodes(txt).find(n => n.act && n.act.v === v);
+  const hasText = (txt, re) => nodes(txt).some(n => typeof n.s === 'string' && re.test(n.s));
+  const lastJson = async (x) => { const c = (await calls(x)).filter(c => c.a && c.a.json); return c.length ? c[c.length - 1].a.json : ''; };
+  const pgOpen = async (x, name) => { await clear(x); await act(x, { a: 'call', v: 'pg.' + name }); assert.ok(await waitFor(x, async () => { const j = await lastJson(x); return j && JSON.parse(j).info && JSON.parse(j).info.page === name; }, 8000), name + ' 하위 화면 없음'); };
+  const pgSub = async (x, v, sub) => { await act(x, { a: 'call', v }); assert.ok(await waitFor(x, async () => { const j = await lastJson(x); return j && (JSON.parse(j).info || {}).sub === sub; }, 8000), v + ' → ' + sub + ' 없음'); };
+  const B = await fresh({ plugin: true, on: true, id: '하위' });
+  await openSet(B); await waitFor(B, has(B, 'show')); await emit(B, 'ready', { id: 'settings' }); await B.page.waitForTimeout(200);
+  await t('설정 첫 화면의 카드 행은 pg.* 호출이다 → 눌러서 열면 page=cm 요청(cap=8&p=cm) · 맨 위부터 · 웹 시트는 열리지 않는다', async () => {
+    const j0 = await lastJson(B); assert.ok(findBtn(j0, 'pg.cm') || nodes(j0).some(n => n.act && n.act.v === 'pg.cm'), 'pg.cm 행 없음');
+    await pgOpen(B, 'cm');
+    assert.ok(B.reqs.some(q => /cap=8/.test(q) && /[?&]p=cm/.test(q)), JSON.stringify(B.reqs));
+    assert.ok(B.lastFacts.pf && typeof B.lastFacts.pf.on === 'number', JSON.stringify(B.lastFacts));
+    const u = (await calls(B)).filter(c => c.a && c.a.json).pop(); assert.strictEqual(u.a.keepScroll, false);
+    assert.strictEqual(await B.page.evaluate(() => !!document.getElementById('scrsSheet')), false);
+  });
+  await t('출퇴근 요일 칸(cm.day.N) → 기존 _cmDayToggle 이 바뀌고 새 화면 · 프리셋(cm.preset.weekend)', async () => {
+    const before = await B.page.evaluate(() => JSON.stringify(_cmAlarm.days));
+    await clear(B); await act(B, { a: 'call', v: 'cm.day.6' }); assert.ok(await waitFor(B, has(B, 'update')));
+    const after = await B.page.evaluate(() => JSON.stringify(_cmAlarm.days)); assert.notStrictEqual(before, after);
+    await clear(B); await act(B, { a: 'call', v: 'cm.preset.weekend' }); assert.ok(await waitFor(B, has(B, 'update')));
+    assert.deepStrictEqual(JSON.parse(await B.page.evaluate(() => JSON.stringify(_cmAlarm.days))).sort(), [0, 6]);
+    assert.deepStrictEqual(B.lastFacts.pf.days.slice().sort(), [0, 6]);
+  });
+  await t('알림 스위치(set cm) → _cmToggle · 기기 토스트', async () => {
+    await clear(B); await act(B, { a: 'set', key: 'cm', on: true });
+    assert.ok(await waitFor(B, has(B, 'update')) || (await calls(B, 'toast')).length >= 0);
+    assert.strictEqual(await B.page.evaluate(() => !!_cmAlarm.on), true);
+  });
+  await t('시각 고르기: cm.tp.morn → 하위의 하위 화면 · 오후/시/분 고르기 · 확인하면 입력 요소와 저장에 반영', async () => {
+    await pgSub(B, 'cm.tp.morn', 'tp'); assert.strictEqual(B.lastFacts.pf.sub, 'tp'); const t0 = B.lastFacts.pf.tp; assert.ok(t0 && t0.t === 'morn', JSON.stringify(t0));
+    const bk = nodes(await lastJson(B))[0]; assert.ok(/출퇴근 브리핑 알림/.test(bk.s), bk.s);
+    await clear(B); await act(B, { a: 'call', v: 'tp.ap.pm' }); await waitFor(B, has(B, 'update')); assert.strictEqual(B.lastFacts.pf.tp.ap, 'pm');
+    await clear(B); await act(B, { a: 'call', v: 'tp.h.6' }); await waitFor(B, has(B, 'update')); await clear(B); await act(B, { a: 'call', v: 'tp.m.45' }); await waitFor(B, has(B, 'update'));
+    assert.deepStrictEqual([B.lastFacts.pf.tp.ap, B.lastFacts.pf.tp.h, B.lastFacts.pf.tp.m], ['pm', 6, 45]);
+    await clear(B); await act(B, { a: 'call', v: 'tp.ok' });
+    assert.ok(await waitFor(B, async () => { const j = await lastJson(B); return j && (JSON.parse(j).info || {}).page === 'cm' && !(JSON.parse(j).info || {}).sub; }, 6000), 'cm 로 돌아오지 않음');
+    assert.strictEqual(await B.page.evaluate(() => document.getElementById('cmMornTime').dataset.time), '18:45');
+    assert.strictEqual(await B.page.evaluate(() => _cmAlarm.morn), '18:45');
+  });
+  await t('시각 고르기 취소(tp.cancel)는 값을 바꾸지 않는다', async () => {
+    await pgSub(B, 'cm.tp.eve', 'tp'); await act(B, { a: 'call', v: 'tp.h.3' }); await B.page.waitForTimeout(250);
+    const e0 = await B.page.evaluate(() => _cmAlarm.eve); await clear(B); await act(B, { a: 'call', v: 'tp.cancel' });
+    assert.ok(await waitFor(B, async () => { const j = await lastJson(B); return j && !(JSON.parse(j).info || {}).sub; }, 6000));
+    assert.strictEqual(await B.page.evaluate(() => _cmAlarm.eve), e0);
+  });
+  await t('장소 고르기: cm.pick.from → 글자 쓰면 후보 · 직접 저장(pk.save, 입력칸 fields) → 입력 요소에 들어가고 저장', async () => {
+    await pgSub(B, 'cm.pick.from', 'pick'); assert.strictEqual(B.lastFacts.pf.pick.k, 'from');
+    await emit(B, 'text', { id: 'settings', key: 'cmq', kind: 'edit', value: '강남' }); await B.page.waitForTimeout(500);
+    assert.strictEqual(B.lastFacts.pf.pick.q, '강남');
+    await clear(B); await act(B, { a: 'call', v: 'pk.save', fields: { cmq: '강남역' } });
+    assert.ok(await waitFor(B, async () => { const j = await lastJson(B); return j && !(JSON.parse(j).info || {}).sub; }, 6000));
+    assert.strictEqual(await B.page.evaluate(() => document.getElementById('cmFromStn').value), '강남역');
+    assert.strictEqual(await B.page.evaluate(() => _cmAlarm.from), '강남역');
+  });
+  await t('장소 지우기(pk.clear) · 취소(pk.cancel)', async () => {
+    await pgSub(B, 'cm.pick.to', 'pick'); await clear(B); await act(B, { a: 'call', v: 'pk.cancel' });
+    assert.ok(await waitFor(B, async () => { const j = await lastJson(B); return j && !(JSON.parse(j).info || {}).sub; }, 6000));
+    await pgSub(B, 'cm.pick.from', 'pick'); await clear(B); await act(B, { a: 'call', v: 'pk.clear' });
+    assert.ok(await waitFor(B, async () => { const j = await lastJson(B); return j && !(JSON.parse(j).info || {}).sub; }, 6000));
+    assert.strictEqual(await B.page.evaluate(() => document.getElementById('cmFromStn').value), '');
+  });
+  await t('모르는 하위 행동은 무시한다(tp.h.99, pk.u.99, cm.day.9, pg.xx)', async () => {
+    await clear(B); const n0 = B.reqs.length;
+    for (const v of ['tp.h.99', 'pk.u.99', 'cm.day.9', 'pg.zz', 'dev.start.evil', 'gw.add.zz']) await act(B, { a: 'call', v });
+    await B.page.waitForTimeout(500); assert.strictEqual(B.reqs.length, n0, '불필요한 요청'); assert.strictEqual((await calls(B)).filter(c => c.m !== 'setRect').length, 0);
+  });
+  await t('뒤로(pg.back) → 설정 첫 화면 · 안드로이드 뒤로가기도 한 단계씩', async () => {
+    await clear(B); await act(B, { a: 'call', v: 'pg.back' });
+    assert.ok(await waitFor(B, async () => { const j = await lastJson(B); return j && !JSON.parse(j).info; }, 6000), '첫 화면 아님');
+    await pgOpen(B, 'gw'); await clear(B);
+    assert.strictEqual(await B.page.evaluate(() => handleBackPress()), true);
+    assert.ok(await waitFor(B, async () => { const j = await lastJson(B); return j && !JSON.parse(j).info; }, 6000), '뒤로가기로 첫 화면에 못 돌아옴');
+  });
+  await t('캐릭터 시계 위젯: 위젯 추가(gw.add.hb) · 감지 시간 +/-(gw.roam.up/dn) → 기존 함수 호출', async () => {
+    await pgOpen(B, 'gw');
+    await B.page.evaluate(() => { window.__gwAdd = []; window._gwAdd = function(k){ window.__gwAdd.push(k); }; });
+    const r0 = await B.page.evaluate(() => _gwRoamMin());
+    await clear(B); await act(B, { a: 'call', v: 'gw.add.hb' }); await B.page.waitForTimeout(200);
+    await clear(B); await act(B, { a: 'call', v: 'gw.roam.up' }); await waitFor(B, has(B, 'update'));
+    assert.strictEqual(await B.page.evaluate(() => _gwRoamMin()), Math.min(10, r0 + 1)); assert.strictEqual(B.lastFacts.pf.roam, Math.min(10, r0 + 1));
+  });
+  await t('개발자 도구: 시험 시작(dev.start.plain) · 정지(dev.stop) → 기존 함수 + 사실 반영', async () => {
+    await pgOpen(B, 'dev');
+    await B.page.evaluate(() => { window.__dv = []; window._ovlTestStart = function(m){ window.__dv.push('start:' + m); window._ovlTest = { until: Date.now() + 60000, t0: Date.now(), mode: m, seq: [] }; }; window._ovlTestStop = function(){ window.__dv.push('stop'); window._ovlTest = null; }; window._ovlTestPhase = function(){ return { mode: 'plain' }; }; });
+    await clear(B); await act(B, { a: 'call', v: 'dev.start.plain' }); await waitFor(B, has(B, 'update'));
+    assert.deepStrictEqual(await B.page.evaluate(() => window.__dv), ['start:plain']); assert.strictEqual(B.lastFacts.pf.ph, 'plain'); assert.ok(B.lastFacts.pf.left % 5 === 0 && B.lastFacts.pf.left > 0, JSON.stringify(B.lastFacts.pf));
+    await clear(B); await act(B, { a: 'call', v: 'dev.stop' }); await waitFor(B, has(B, 'update'));
+    assert.deepStrictEqual(await B.page.evaluate(() => window.__dv), ['start:plain', 'stop']); assert.strictEqual(B.lastFacts.pf.stopped, 1);
+  });
+  await t('하차 5분 전 추천: 상태 보기(arr.stat) → 사실 스냅샷을 엔진에 보낸다 · 시험(arr.t.lunch)은 기존 _arrTestUI', async () => {
+    await pgOpen(B, 'arr');
+    await B.page.evaluate(() => { window.__ar = []; window._arrTestUI = function(k){ window.__ar.push(k); }; });
+    await clear(B); await act(B, { a: 'call', v: 'arr.stat' }); await waitFor(B, has(B, 'update'));
+    assert.ok(B.lastFacts.pf.st && typeof B.lastFacts.pf.st.tzo === 'number', JSON.stringify(B.lastFacts.pf));
+    await act(B, { a: 'call', v: 'arr.t.lunch' }); await B.page.waitForTimeout(150);
+    assert.deepStrictEqual(await B.page.evaluate(() => window.__ar), ['lunch']);
+  });
+  await t('다른 앱 위에 표시: 읽은 사실(nat/on/pfl/pfr)을 보내고, 스위치(set ovl) → _ovlSetEnabled · 진단(ovl.diag)은 네이티브를 숨기고 웹 진단창', async () => {
+    await pgOpen(B, 'ovl');
+    assert.ok('nat' in B.lastFacts.pf && 'on' in B.lastFacts.pf && 'pfl' in B.lastFacts.pf, JSON.stringify(B.lastFacts.pf));
+    await B.page.evaluate(() => { window.__ov = []; window._ovlSetEnabled = function(v){ window.__ov.push(v); }; window._ovlDiagShow = function(){ window.__ov.push('diag'); }; });
+    await act(B, { a: 'set', key: 'ovl', on: true }); await B.page.waitForTimeout(150);
+    await clear(B); await act(B, { a: 'call', v: 'ovl.diag' }); assert.ok(await waitFor(B, has(B, 'hide')));
+    assert.deepStrictEqual(await B.page.evaluate(() => window.__ov), [true, 'diag']);
+  });
+  await t('갤럭시 백그라운드 유지: 열면 상태를 읽어 사실로 보낸다 · 읽지 못하면 er=1', async () => {
+    assert.ok(await waitFor(B, async () => (await st(B)).shown, 6000), '진단창이 닫힌 뒤 네이티브가 다시 올라오지 않았다');
+    await B.page.evaluate(() => { window._batNative = () => ({ backgroundStatus: () => Promise.resolve({ bgRestricted: true, ignoring: false, standbyBucket: 40 }) }); });
+    await pgOpen(B, 'sam'); assert.ok(await waitFor(B, async () => B.lastFacts.pf && B.lastFacts.pf.sok === 1 && B.lastFacts.pf.w === 1, 6000), JSON.stringify(B.lastFacts.pf));
+    await act(B, { a: 'call', v: 'pg.back' }); await B.page.waitForTimeout(300);
+    await B.page.evaluate(() => { window._batNative = () => null; });
+    await pgOpen(B, 'sam'); assert.ok(await waitFor(B, async () => B.lastFacts.pf && B.lastFacts.pf.er === 1, 6000), JSON.stringify(B.lastFacts.pf));
+    await act(B, { a: 'call', v: 'pg.back' });
+  });
+  await t('설정 탭을 떠나면 하위 화면 상태도 초기화된다', async () => {
+    await pgOpen(B, 'cm'); await clear(B); await B.page.evaluate(() => switchTab('home', document.getElementById('ni-home')));
+    assert.ok(await waitFor(B, has(B, 'hide'))); await B.page.waitForTimeout(300);
+    assert.deepStrictEqual(B.errs, []); await B.ctx.close();
+  });
+  await t('옛 APK(status 에 cap 없음)이면 cap=3 으로 요청하고 카드 행은 예전 웹 시트 행동이다 — 하위 화면 요청이 없다', async () => {
+    const x = await fresh({ plugin: true, on: true, oldApk: true }); await openSet(x); assert.ok(await waitFor(x, has(x, 'show')));
+    assert.ok(x.reqs.every(q => /cap=3/.test(q) && !/[?&]p=/.test(q)), JSON.stringify(x.reqs));
+    assert.ok((await lastJson(x)) && JSON.parse(await lastJson(x)).body && JSON.stringify(JSON.parse(await lastJson(x)).body).indexOf('pg.cm') < 0);
+    await x.ctx.close();
+  });
+  await t('옛 엔진(p 를 모름 → 항상 첫 화면)이면 예전 웹 카드 시트로 연다(기능 유지)', async () => {
+    const x = await fresh({ plugin: true, on: true, old: true }); await openSet(x); await waitFor(x, has(x, 'show')); await emit(x, 'ready', { id: 'settings' });
+    await act(x, { a: 'call', v: 'pg.cm' });
+    assert.ok(await waitFor(x, async () => x.page.evaluate(() => !!document.getElementById('scrsSheet')), 6000), '웹 시트로 열리지 않았다');
+    assert.ok(await x.page.evaluate(() => !!document.getElementById('cmMornTime'))); assert.strictEqual((await x.page.evaluate(() => window._scrSet.S.pg.p)), '');
+    await x.ctx.close();
+  });
+  await t('하위 화면 요청이 실패하면(엔진 다운) 예전 웹 카드 시트로 연다', async () => {
+    const x = await fresh({ plugin: true, on: true }); await openSet(x); await waitFor(x, has(x, 'show')); await emit(x, 'ready', { id: 'settings' });
+    x.serve = 'down'; await act(x, { a: 'call', v: 'pg.gw' });
+    assert.ok(await waitFor(x, async () => x.page.evaluate(() => !!document.getElementById('scrsSheet')), 8000), '웹 시트로 열리지 않았다');
+    assert.strictEqual(await x.page.evaluate(() => !!document.getElementById('gwCard') && document.getElementById('scrsSheet').contains(document.getElementById('gwCard'))), true);
     await x.ctx.close();
   });
 

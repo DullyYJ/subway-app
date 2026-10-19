@@ -19522,7 +19522,7 @@ window._exitCancel  = _exitCancel;
 function handleBackPress(){
   try{ if(window._scrNews && window._scrNews.closeDetail()){ _backPressCount = 0; return true; } }catch(eSn4){}      // 서버 구동 뉴스 화면에서 연 기사 팝업이 열려 있으면 그것부터 닫는다
   try{ if(window._scrFood && window._scrFood.closeSheet()){ _backPressCount = 0; return true; } }catch(eSf){}      // 서버 구동 맛집 화면에서 연 지도 시트가 열려 있으면 그것부터 닫는다
-  try{ if(window._scrSet && window._scrSet.closeSheet()){ _backPressCount = 0; return true; } }catch(eSh){}      // 서버 구동 설정 화면에서 연 웹 카드 시트가 열려 있으면 그것부터 닫는다
+  try{ if(window._scrSet && (window._scrSet.back ? window._scrSet.back() : window._scrSet.closeSheet())){ _backPressCount = 0; return true; } }catch(eSh){}      // 서버 구동 설정 화면에서 연 웹 카드 시트·네이티브 하위 화면이 열려 있으면 그것부터 닫는다
   // ① 종료 팝업이 열려있으면 팝업 닫기
   var pop = document.getElementById('exitConfirmPopup');
   if(pop && pop.style.display === 'flex'){
@@ -39416,7 +39416,8 @@ window.refreshShop=refreshShop;
   var BASE = ((typeof _ROUTE_V2_BASE === 'string' && _ROUTE_V2_BASE) ? _ROUTE_V2_BASE : 'https://route-v2.phg0643.workers.dev') + '/screen/settings';
   var ID = 'settings';
   var S = { on: false, fails: 0, failed: false, why: '', listening: false, shown: false, ready: false, good: false, cur: '', curRev: '', src: '', fk: '', rect: null, rk: '',
-            chg: 0, chgAt: 0, still: 0, timer: 0, showAt: 0, pending: false, busy: 0, fetchAt: 0, badFresh: 0, stBad: 0, stAt: 0, typing: false, pollAt: 0, slowAt: 0 };
+            chg: 0, chgAt: 0, still: 0, timer: 0, showAt: 0, pending: false, busy: 0, fetchAt: 0, badFresh: 0, stBad: 0, stAt: 0, typing: false, pollAt: 0, slowAt: 0,
+            pg: { p: '', sub: '' }, pgNav: false, curPage: '', info: null, apkCap: 0 };
   try{ S.on = localStorage.getItem(K_ON) === '1'; S.fails = parseInt(localStorage.getItem(K_F) || '0', 10) || 0; S.why = localStorage.getItem(K_W) || ''; }catch(eS){}
   function plug(){ try{ var C = window.Capacitor; return (C && C.Plugins && C.Plugins.ScreenNative) || null; }catch(e){ return null; } }
   function active(){ return S.on && !S.failed && S.fails < 2 && !!plug(); }
@@ -39505,7 +39506,7 @@ window.refreshShop=refreshShop;
   function fetchScreen(fk, force){
     var my = ++S.busy, ctl = (typeof AbortController === 'function') ? new AbortController() : null;
     var to = setTimeout(function(){ try{ if(ctl) ctl.abort(); }catch(e){} }, 8000);
-    var u = BASE + '?cap=3&f=' + encodeURIComponent(fk) + (force ? '&t=' + Date.now() : '');
+    var u = BASE + '?cap=' + (S.apkCap >= 8 ? 8 : 3) + (S.pg.p && S.apkCap >= 8 ? '&p=' + S.pg.p : '') + '&f=' + encodeURIComponent(fk) + (force ? '&t=' + Date.now() : '');      // cap 8 = 하위 화면(row 노드·pg.* 행동)까지 아는 앱. 옛 엔진은 p 를 몰라 첫 화면을 주므로 아래에서 알아본다
     S.fetchAt = now();
     return fetch(u, { signal: ctl ? ctl.signal : undefined, cache: 'no-cache' })
       .then(function(r){ clearTimeout(to); if(!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
@@ -39533,7 +39534,8 @@ window.refreshShop=refreshShop;
     return Promise.resolve(p).then(function(){
       if(!S.shown){ S.shown = true; if(r){ S.rect = r; S.rk = rkey(r); } }
       S.good = true; S.cur = txt; S.curRev = j.rev || ''; S.src = src; S.still = 0; if(fk) S.fk = fk;
-      if(src === 'fresh'){ S.badFresh = 0; cachePut(fk || S.fk, txt, S.curRev); }
+      S.info = j.info || null; S.curPage = (j.info && j.info.page) || '';
+      if(src === 'fresh'){ S.badFresh = 0; if(!S.curPage) cachePut(fk || S.fk, txt, S.curRev); }      // 저장본은 첫 화면만(하위 화면은 값이 계속 바뀐다)
       syncCard();
       return true;
     }).catch(function(e){
@@ -39546,21 +39548,35 @@ window.refreshShop=refreshShop;
   function onInvalid(src, why){
     try{ console.warn('[네이티브 설정] 화면 JSON 이 올바르지 않아 버립니다(' + src + '):', why); }catch(e){}
     if(src === 'cache'){ cacheDrop(); refresh(true); return false; }
+    if(S.pg.p && S.curPage !== S.pg.p){ pgFallback(); return false; }                       // 하위 화면이 틀린 모양이면 예전 웹 카드로
     S.badFresh++; S.why = String(why || '').slice(0, 120);
     try{ localStorage.setItem(K_W, S.why); }catch(e){}
     if(!S.good && !S.shown) fail('엔진 화면 오류: ' + S.why); else syncCard();
     return false;
   }
   // 기기 사실이 바뀌었을 때만(force 면 늘) 엔진에서 새 화면을 받는다
+  // 앱(APK)이 하위 화면용 노드(row)를 아는지 — 플러그인 status 의 cap(새 APK=8). 모르는 옛 APK 는 cap 3 → 예전 웹 카드 시트 행 그대로
+  function capReady(){
+    if(S.apkCap) return Promise.resolve();
+    var P = plug(); if(!P || typeof P.status !== 'function'){ S.apkCap = 3; return Promise.resolve(); }
+    return Promise.resolve(P.status({ id: ID })).then(function(st){ S.apkCap = (st && st.cap >= 8) ? 8 : 3; }).catch(function(){ S.apkCap = 3; });
+  }
+  function curFk(){ return S.pg.p ? JSON.stringify({ pf: pgFacts() }) : JSON.stringify(facts()); }
   function refresh(force){
     if(!active()) return Promise.resolve(false);
-    var fk = JSON.stringify(facts());
-    if(!force && S.good && fk === S.fk) return Promise.resolve(false);
+    var fk = curFk(), nav = S.pgNav;
+    if(!force && S.good && fk === S.fk && !nav) return Promise.resolve(false);
     S.fk = fk;
-    return fetchScreen(fk, !!force).then(function(txt){
-      if(!txt || !active()) return false;
+    return capReady().then(function(){ return fetchScreen(fk, !!force); }).then(function(txt){
+      if(!active()) return false;
+      if(!txt){ if(fk === S.fk && S.pg.p && S.curPage !== S.pg.p) pgFallback(); return false; }      // 하위 화면을 못 받았으면(더 새 요청에 밀려 버려진 경우는 제외) 예전 웹 카드로
       if(fk !== S.fk) return false;                                           // 그새 사실이 또 바뀌었다 — 다음 확인이 다시 받는다
-      return present(txt, 'fresh', fk, S.good);
+      if(S.pg.p){                                                             // 옛 엔진은 p 를 몰라 첫 화면을 돌려준다 → 하위 화면이 아니면 예전 웹 카드로
+        var jj = sane(txt);
+        if(jj && (!jj.info || jj.info.page !== S.pg.p)){ pgFallback(); return false; }
+      }
+      S.pgNav = false;
+      return present(txt, 'fresh', fk, S.good && !nav);
     });
   }
   function refreshSoon(force){ setTimeout(function(){ refresh(force); }, 60); }
@@ -39601,6 +39617,8 @@ window.refreshShop=refreshShop;
       else if(key === 'f.rtx') window._rtxSetUse(on);
       else if(key === 'f.e2') window._e2SetUse(on);
       else if(key === 'f.scrs'){ setUse(on); return; }
+      else if(key === 'cm' && S.pg.p === 'cm'){ withToast(function(){ _cmToggle(on); }); }                       // 출퇴근 브리핑 하위 화면의 스위치
+      else if(key === 'ovl' && S.pg.p === 'ovl'){ withToast(function(){ _ovlSetEnabled(on); }); }                 // 다른 앱 위에 표시 하위 화면의 스위치
       else return;                                                             // 모르는 키는 무시
     }catch(e){}
     refreshSoon(true);                                                         // 진짜 상태로 화면을 다시 받는다(바꾸지 못했으면 스위치가 제자리로 돌아온다)
@@ -39615,6 +39633,7 @@ window.refreshShop=refreshShop;
   }
   function onAction(e){
     if(!e || e.id !== ID) return;
+    if(e.a === 'call' && pgCall(String(e.v || ''), e.fields || {})) return;
     if(e.a === 'set') doSet(e.key, !!e.on);
     else if(e.a === 'sel'){ if(e.v === 'dark' || e.v === 'pastel'){ try{ applyTheme(e.v); }catch(x){} refreshSoon(true); } }
     else if(e.a === 'web') openSheet(e.v);
@@ -39664,6 +39683,187 @@ window.refreshShop=refreshShop;
     return true;
   }
 
+  // ══ 하위 화면: 예전에 웹 카드 시트로 열던 6개를 엔진이 구성한 네이티브 화면으로 (엔진 s68, cap 8) ══
+  //   앱은 '기기 사실(pf)'만 읽어 보내고(켜짐·값·고른 칸·읽은 숫자), 글·요일·시각·안내는 엔진이 정한다. 눌림은 기존 웹 함수를 그대로 부른다(기능 100% 유지).
+  //   엔진이 옛 버전이거나(info.page 가 다르다) 응답이 없거나 틀리면 → 예전 웹 카드 시트로 연다(pgFallback).
+  var PG_OK = { sam: 1, cm: 1, gw: 1, arr: 1, ovl: 1, dev: 1 };
+  var CM_IDS = { from: 'cmFromStn', to: 'cmToStn', eFrom: 'cmEveFromStn', eTo: 'cmEveToStn' };
+  function gEl(id){ return document.getElementById(id); }
+  function pgSamLoad(){
+    try{
+      var P = (typeof _batNative === 'function') ? _batNative() : null;
+      if(!P || typeof P.backgroundStatus !== 'function'){ S.pg.sam = { sok: 0, er: 1 }; return; }
+      var mine = S.pg;
+      P.backgroundStatus().then(function(st){
+        if(S.pg !== mine) return;
+        mine.sam = { w: (st && st.bgRestricted) ? 1 : 0, ig: (st && st.ignoring) ? 1 : 0, bk: st ? st.standbyBucket : 0, sok: 1 };
+        refresh(false);
+      }).catch(function(){ if(S.pg !== mine) return; mine.sam = { sok: 0, er: 1 }; refresh(false); });
+    }catch(e){ S.pg.sam = { sok: 0, er: 1 }; }
+  }
+  function pgStat(){                                                           // 예전 _arrStatusShow 가 읽던 값들(글로 만들지 않고 값 그대로 — 글은 엔진)
+    var st = {};
+    try{
+      st.timer = window._arrWatchTimer ? 1 : 0;
+      st.route = ((typeof S_ !== 'undefined' && S_ && S_.route && S_.boardedAt) || !!(typeof _arrHomeEta === 'function' && _arrHomeEta())) ? 1 : 0;
+      st.dest = (typeof _arrDestName === 'function' ? _arrDestName() : '') || '';
+      st.rem = (window._arrLastRemSec != null) ? window._arrLastRemSec : null;
+      st.pre = (typeof _ARR_PRE_MIN === 'number') ? _ARR_PRE_MIN : 7;
+      var nowMs = Date.now();
+      st.slot = (typeof _arrSlot === 'function') ? _arrSlot(nowMs) : 'none';
+      st.dinner = (typeof _arrIsDinner === 'function' && _arrIsDinner(nowMs)) ? 1 : 0;
+      st.alertAt = window._arrAlertAt || null; st.tickAt = window._arrLastTickAt || null; st.tzo = new Date().getTimezoneOffset();
+      st.policy = (typeof _featureAllowed === 'function' && _featureAllowed('arrive_reco')) ? 1 : 0;
+      var dg = window._arrDiag || {}; st.dg = { stage: dg.stage || '', at: dg.at || null, err: dg.err || '' };
+    }catch(e){ st = { err: String((e && e.message) || e).slice(0, 100) }; }
+    return st;
+  }
+  function pgFacts(){
+    var p = S.pg.p, o = {};
+    try{
+      if(p === 'sam'){ o = S.pg.sam || {}; }
+      else if(p === 'ovl'){
+        o = { nat: (typeof _ovlNative === 'function' && _ovlNative()) ? 1 : 0, sup: (_ovlSupported == null) ? null : (_ovlSupported ? 1 : 0), gr: (_ovlGranted == null) ? null : (_ovlGranted ? 1 : 0),
+              on: _ovlEnabled() ? 1 : 0, pfl: (typeof _pfLive === 'function' && _pfLive()) ? 1 : 0, pfr: (typeof _pfRecOn === 'function' && _pfRecOn()) ? 1 : 0 };
+      }
+      else if(p === 'dev'){
+        var T = window._ovlTest, nowMs = Date.now();
+        if(T && nowMs < T.until){ var ph = _ovlTestPhase(T, nowMs); o = { ph: ph && ph.mode, left: Math.ceil(Math.max(0, (T.until - nowMs) / 1000) / 5) * 5 }; }      // 5초 단위(1초마다 엔진을 부르지 않게)
+        else o = { stopped: S.pg.devStopped ? 1 : 0 };
+      }
+      else if(p === 'arr'){ if(S.pg.st) o = { st: S.pg.st }; }
+      else if(p === 'gw'){ var c = _gwConfig(); o = { roam: _gwRoamMin(), mOn: c.mOn ? 1 : 0, eOn: c.eOn ? 1 : 0, morn: c.morn, eve: c.eve }; }
+      else if(p === 'cm'){
+        var A = _cmAlarm;
+        o = { on: A.on ? 1 : 0, from: A.from || '', to: A.to || '', eFrom: A.eFrom || '', eTo: A.eTo || '', days: Array.isArray(A.days) ? A.days : [], morn: A.morn, eve: A.eve, sub: S.pg.sub || '' };
+        if(S.pg.sub === 'tp') o.tp = S.pg.tp; else if(S.pg.sub === 'pick'){ o.pick = S.pg.pick; o.bus = S.pg.bus || []; }
+      }
+    }catch(e){}
+    return o;
+  }
+  function pgGo(name){
+    if(!PG_OK[name]) return;
+    S.pg = { p: name, sub: '' }; S.pgNav = true;
+    if(name === 'sam'){ try{ if(typeof _samSyncCard === 'function') _samSyncCard(); }catch(e){} pgSamLoad(); }
+    refresh(true);
+  }
+  function pgBack(){
+    if(S.pg.sub){ S.pg.sub = ''; S.pg.tp = null; S.pg.pick = null; S.pg.bus = []; S.pg.busRaw = []; if(S.pg.bt){ clearTimeout(S.pg.bt); S.pg.bt = 0; } }
+    else S.pg = { p: '', sub: '' };
+    S.pgNav = true; refresh(true);
+  }
+  function pgFallback(){                                                       // 엔진이 하위 화면을 못 주면 예전 웹 카드 시트로(기능은 그대로)
+    var nm = S.pg.p; S.pg = { p: '', sub: '' }; S.pgNav = false; S.fk = '';
+    if(nm) openSheet(nm);
+  }
+  function pgCmField(k){ return gEl(CM_IDS[k]); }
+  function pgCmSet(k, name, lat, lng, bus){                                    // 예전 _cmSugPick/_cmSugPickBus 와 같다: 입력칸에 쓰고 _cmSaveTimes
+    var el = pgCmField(k); if(!el) return;
+    el.value = name;
+    el.dataset.lat = (lat == null) ? '' : lat; el.dataset.lng = (lng == null) ? '' : lng; el.dataset.bus = bus ? '1' : '';
+    try{ _cmSaveTimes(); }catch(e){}
+  }
+  function pgBusQuery(){
+    var pk = S.pg.pick; if(!pk) return;
+    if(S.pg.bt){ clearTimeout(S.pg.bt); S.pg.bt = 0; }
+    var raw = String(pk.q || '').trim(), q = raw.replace(/\s+/g, '').replace(/역$/, '');
+    if(q.length < 2 || typeof _busStopSearchByName !== 'function'){ S.pg.bus = []; S.pg.busRaw = []; return; }
+    S.pg.bt = setTimeout(function(){
+      S.pg.bt = 0;
+      try{
+        _busStopSearchByName(raw, function(items){
+          var cur = S.pg.pick; if(!cur || String(cur.q || '').trim() !== raw) return;      // 그새 글자가 바뀜
+          var seen = {}, names = [], list = [];
+          (items || []).forEach(function(it){
+            var nm = it.nodenm || it.nodeNm || '', la = parseFloat(it.gpslati), lo = parseFloat(it.gpslong);
+            if(!nm || seen[nm] || isNaN(la) || isNaN(lo)) return;
+            seen[nm] = 1; names.push(String(nm)); list.push({ n: String(nm), la: la, lo: lo });
+          });
+          S.pg.bus = names.slice(0, 12); S.pg.busRaw = list.slice(0, 12);
+          refresh(false);
+        });
+      }catch(e){}
+    }, 350);
+  }
+  function onText(e){
+    if(!e || e.id !== ID || e.key !== 'cmq' || !S.pg.pick || S.pg.sub !== 'pick') return;
+    if(e.kind !== 'edit') return;
+    S.pg.pick.q = String(e.value || '').slice(0, 60);
+    pgBusQuery();
+    if(S.pg.rt) clearTimeout(S.pg.rt);
+    S.pg.rt = setTimeout(function(){ S.pg.rt = 0; refresh(false); }, 120);
+  }
+  function pgCall(v, fields){
+    var m;
+    try{
+      if(v === 'pg.back'){ pgBack(); return true; }
+      if((m = /^pg\.([a-z]{2,3})$/.exec(v))){ pgGo(m[1]); return true; }
+      if(!S.pg.p) return false;                                                // 아래 행동은 하위 화면이 열려 있을 때만
+      var p = S.pg.p;
+      if(v === 'sam.open'){ _samOpen(); return true; }
+      if(v === 'bat.req'){ _batRequest(); return true; }
+      if(v === 'ovl.diag'){ hideNative(); _ovlDiagShow(); return true; }
+      if(v === 'pf.live'){ _pfSetLive(!_pfLive()); refreshSoon(true); return true; }
+      if(v === 'pf.rec'){ _pfRecSet(!_pfRecOn()); refreshSoon(true); return true; }
+      if((m = /^dev\.start\.(all|plain|reco|alert2|alert1|quit)$/.exec(v))){ S.pg.devStopped = false; withToast(function(){ _ovlTestStart(m[1]); }); refreshSoon(true); return true; }
+      if(v === 'dev.stop'){ S.pg.devStopped = true; _ovlTestStop(); refreshSoon(true); return true; }
+      if((m = /^arr\.t\.(morning|lunch|night|shop)$/.exec(v))){ withToast(function(){ _arrTestUI(m[1]); }); setTimeout(function(){ S.pg.st = pgStat(); refresh(true); }, 450); return true; }
+      if(v === 'arr.demo'){ withToast(function(){ _ovlRecoDemo(); }); return true; }
+      if(v === 'arr.stat'){ S.pg.st = pgStat(); refresh(true); return true; }
+      if((m = /^gw\.add\.(hb|hw|vb|vw)$/.exec(v))){ _gwAdd(m[1]); return true; }
+      if((m = /^gw\.roam\.(dn|up)$/.exec(v))){ var r = _gwRoamMin() + (m[1] === 'up' ? 1 : -1); _gwRoamSet(Math.max(2, Math.min(10, r))); refreshSoon(true); return true; }
+      if((m = /^cm\.day\.([0-6])$/.exec(v))){ _cmDayToggle(+m[1]); refreshSoon(true); return true; }
+      if((m = /^cm\.preset\.(weekday|weekend|all)$/.exec(v))){ _cmDayPreset(m[1]); refreshSoon(true); return true; }
+      if(v === 'cm.test'){ withToast(function(){ _cmTestFire(); }); return true; }
+      if((m = /^cm\.tp\.(morn|eve)$/.exec(v)) && p === 'cm'){
+        var hm = String((m[1] === 'eve' ? _cmAlarm.eve : _cmAlarm.morn) || '07:30').split(':'), H = parseInt(hm[0], 10) || 0, M = parseInt(hm[1], 10) || 0;
+        S.pg.sub = 'tp'; S.pg.tp = { t: m[1], ap: H >= 12 ? 'pm' : 'am', h: (H % 12 === 0 ? 12 : H % 12), m: (Math.round(M / 5) * 5) % 60 };
+        S.pgNav = true; refresh(true); return true;
+      }
+      if((m = /^cm\.pick\.(from|to|eFrom|eTo)$/.exec(v)) && p === 'cm'){
+        var el = pgCmField(m[1]);
+        S.pg.sub = 'pick'; S.pg.pick = { k: m[1], q: el ? String(el.value || '') : '' }; S.pg.bus = []; S.pg.busRaw = [];
+        pgBusQuery(); S.pgNav = true; refresh(true); return true;
+      }
+      if(p === 'cm' && S.pg.sub === 'tp' && S.pg.tp){
+        var tp = S.pg.tp;
+        if((m = /^tp\.ap\.(am|pm)$/.exec(v))){ tp.ap = m[1]; refresh(true); return true; }
+        if((m = /^tp\.h\.(\d{1,2})$/.exec(v)) && +m[1] >= 1 && +m[1] <= 12){ tp.h = +m[1]; refresh(true); return true; }
+        if((m = /^tp\.m\.(\d{1,2})$/.exec(v)) && +m[1] >= 0 && +m[1] <= 55 && +m[1] % 5 === 0){ tp.m = +m[1]; refresh(true); return true; }
+        if(v === 'tp.cancel'){ pgBack(); return true; }
+        if(v === 'tp.ok'){
+          var h24 = tp.h % 12 + (tp.ap === 'pm' ? 12 : 0), hm2 = ('0' + h24).slice(-2) + ':' + ('0' + tp.m).slice(-2);
+          var te = gEl(tp.t === 'eve' ? 'cmEveTime' : 'cmMornTime');
+          if(te){ te.dataset.time = hm2; te.textContent = _cmFmtTime(hm2); }
+          try{ _cmSaveTimes(); }catch(e0){}
+          pgBack(); return true;
+        }
+      }
+      if(p === 'cm' && S.pg.sub === 'pick' && S.pg.pick){
+        var k = S.pg.pick.k;
+        if(v === 'pk.cancel'){ pgBack(); return true; }
+        if(v === 'pk.clear'){ pgCmSet(k, ''); pgBack(); return true; }
+        if(v === 'pk.save'){ var typed = (fields && typeof fields.cmq === 'string') ? fields.cmq : S.pg.pick.q; pgCmSet(k, String(typed || '').trim()); pgBack(); return true; }
+        if((m = /^pk\.u\.(\d{1,2})$/.exec(v))){
+          var pu = S.info && S.info.pk && S.info.pk.u && S.info.pk.u[+m[1]];
+          if(pu && pu.name){ pgCmSet(k, String(pu.name)); pgBack(); }
+          return true;
+        }
+        if((m = /^pk\.b\.(\d{1,2})$/.exec(v))){
+          var bs = S.pg.busRaw && S.pg.busRaw[+m[1]];
+          if(bs && bs.n){ pgCmSet(k, bs.n, bs.la, bs.lo, true); pgBack(); }
+          return true;
+        }
+      }
+    }catch(eP){ try{ console.warn('[설정 하위 화면] 행동 실패:', v, eP); }catch(eW){} }
+    return false;
+  }
+  function back(){                                                              // 안드로이드 뒤로가기: 웹 카드 시트 → 네이티브 하위 화면(시각/장소 고르기 → 그 화면 → 설정) 순서로 닫는다
+    if(closeSheet()) return true;
+    if(S.pg.p && S.shown && S.curPage === S.pg.p){ pgBack(); return true; }
+    return false;
+  }
+
   // ── 켜고 끄기 ──
   function fail(why){
     if(S.failed || !S.on) return;
@@ -39677,7 +39877,7 @@ window.refreshShop=refreshShop;
     if(S.timer){ clearTimeout(S.timer); S.timer = 0; }
     var P = plug();
     if(P && (S.shown || destroy)){ try{ P.hide({ id: ID }); if(destroy) P.destroy({ id: ID }); }catch(e){} }
-    S.shown = false; S.ready = false; S.good = false; S.cur = ''; S.rect = null; S.rk = ''; S.fk = '';
+    S.shown = false; S.ready = false; S.good = false; S.cur = ''; S.rect = null; S.rk = ''; S.fk = ''; S.pg = { p: '', sub: '' }; S.pgNav = false; S.curPage = ''; S.info = null;
   }
   function listen(){
     var P = plug(); if(!P || S.listening) return; S.listening = true;
@@ -39685,6 +39885,7 @@ window.refreshShop=refreshShop;
       P.addListener('ready', function(e){ if(e && e.id && e.id !== ID) return; S.ready = true; S.fails = 0; try{ localStorage.setItem(K_F, '0'); }catch(e2){} syncCard(); });
       P.addListener('error', function(e){ if(e && e.id && e.id !== ID) return; if(e && e.kind === 'invalid') return; fail('native: ' + ((e && e.message) || '')); });
       P.addListener('action', onAction);
+      P.addListener('text', onText);
       P.addListener('input', function(e){ if(e && e.id && e.id !== ID) return; S.typing = !!(e && e.on); S.still = 0; });      // 글자 입력 중 = 키보드로 웹뷰 크기가 바뀌어도 숨기지 않고 따라간다
     }catch(e){ fail('listen: ' + e); return; }
     try{
@@ -39737,7 +39938,7 @@ window.refreshShop=refreshShop;
     if(!S.good && !S.pending){                                                 // 처음 열림: 같은 기기 사실의 저장본이 있으면 곧바로, 아니면 엔진에서
       S.pending = true;
       try{ _notifPermBannerCheck(); }catch(e){}
-      var fk = JSON.stringify(facts()), c = cacheGet(), p = Promise.resolve(false);
+      var fk = curFk(), c = S.pg.p ? null : cacheGet(), p = Promise.resolve(false);
       if(c && c.fk === fk){ S.fk = fk; p = present(c.txt, 'cache', fk, false); }
       p.then(function(){ return refresh(true); }).then(function(){ S.pending = false; }, function(){ S.pending = false; });      // 저장본으로 먼저 그렸더라도 엔진의 최신 화면을 한 번 받아 제자리 갱신한다
     } else if(S.good && t - S.fetchAt > 20000 && !S.pending){                  // 다시 열림: 20초 넘었으면 조용히 새로 확인
@@ -39765,7 +39966,7 @@ window.refreshShop=refreshShop;
       if(st && st.textContent !== s) st.textContent = s;
     }catch(e){}
   }
-  window._scrSet = { S: S, kick: kick, setUse: setUse, syncCard: syncCard, active: active, owns: function(){ return active() && S.good; }, facts: facts, closeSheet: closeSheet, openSheet: openSheet, present: present, refresh: refresh, tick: tick };
+  window._scrSet = { S: S, kick: kick, setUse: setUse, syncCard: syncCard, active: active, owns: function(){ return active() && S.good; }, facts: facts, closeSheet: closeSheet, back: back, openSheet: openSheet, present: present, refresh: refresh, tick: tick };
   window._scrsSetUse = function(on){ try{ setUse(on); }catch(e){} };
   try{ if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(function(){ try{ syncCard(); kick(); }catch(e){} }, 700); }); else setTimeout(function(){ try{ syncCard(); kick(); }catch(e){} }, 700); }catch(eH){}
   try{ document.addEventListener('visibilitychange', function(){ if(!document.hidden) kick(); else if(S.shown) hideNative(); }); }catch(eV){}

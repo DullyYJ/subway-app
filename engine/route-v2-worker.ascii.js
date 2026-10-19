@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-19s67";
+var ENGINE_VERSION = "route-v2-2026-10-19s68";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -11737,9 +11737,14 @@ async function handleScreenShop(request) {
 // \ucd9c\ub825  { ok, v:1, screen:'settings', rev, cover:'tab', head:[], body:[\ub178\ub4dc\u2026] }  \u2190 \ub178\ub4dc \uc885\ub958\ub294 native/ScreenCore.java \uc640 \uac19\ub2e4
 //        panel{kids} \u00b7 text \u00b7 box \u00b7 toggle{key} \u00b7 navrow{act} \u00b7 select{act:{a:'sel'}} \u00b7 field{key} \u00b7 button \u00b7 spacer
 //        act = {a:'set',key} (\uc2a4\uc704\uce58 \u2014 \uc571\uc774 \uba3c\uc800 \ub4a4\uc9d1\uace0 \uc54c\ub9b0\ub2e4) | {a:'call',v} (\uc571 \uc548 \ud568\uc218 \ud638\ucd9c: saveId\u00b7clearId\u00b7pol.*\u00b7errlog) | {a:'web',v} (\uc6f9 \uce74\ub4dc \uc5f4\uae30) | {a:'sel',v} (\uace0\ub974\uae30)
+//        \u2605 2026-10-20 \ud558\uc704 \ud654\uba74(cap 8): settingsScreen({cap:8, p:'cm'|'gw'|'arr'|'ovl'|'dev'|'sam'}, facts{pf:\u2026}) \u2014 \uc608\uc804\uc5d0 \uc6f9 \uce74\ub4dc \uc2dc\ud2b8\ub85c \uc5f4\ub358 6\uac1c\ub97c \uac19\uc740 \ubc29\uc2dd(\uc5d4\uc9c4\uc774 \uad6c\uc131, \uc571\uc740 \uadf8\ub9ac\uae30)\uc73c\ub85c.
+//          pf = \uadf8 \ud654\uba74\uc758 \uae30\uae30 \uc0ac\uc2e4(\ucf1c\uc9d0\u00b7\uac12\u00b7\uace0\ub978 \uc0c1\ud0dc\ub9cc; \ubb38\uad6c\u00b7\uc694\uc77c \uacc4\uc0b0\u00b7\uc2dc\uac01 \uae00\u00b7\ud1f4\uadfc \uc548\ub0b4\ub294 \uc5d4\uc9c4). \ud589\ub3d9\uc740 call(v: pg.back \u00b7 sam.open \u00b7 cm.day.N \u2026) \ud5c8\uc6a9 \ubaa9\ub85d\ub9cc.
 // \ub9e8 \uc544\ub798 module.exports \ub294 \uc2dc\ud5d8(Node)\uc6a9\uc774\uace0 Worker \uc5d0\uc11c\ub294 \ud568\uc218 \uc120\uc5b8\ub9cc \uc4f0\uc778\ub2e4.
 'use strict';
 var SETTINGS_SCREEN_V = 1;
+var SETTINGS_PAGE_CAP = 8;
+var HOME_STNS;                                                       // Worker \uc5d0\uc11c\ub294 \uc55e\uc5d0 \ubd99\uc740 engine/home-stations.js \uac00 \ucc44\uc6b4\ub2e4. Node(\uc2dc\ud5d8)\uc5d0\uc11c\ub294 \uc544\ub798\uc5d0\uc11c \ubd88\ub7ec\uc628\ub2e4.
+if (typeof HOME_STNS === 'undefined' || !HOME_STNS) { try { if (typeof require === 'function') HOME_STNS = require('./home-stations').HOME_STNS; } catch (eHs) {} }
 
 // \uc2a4\uc704\uce58 \ud0a4 \u2192 \uc54c\ub9bc \uc885\ub958 \uc774\ub984
 var SETTINGS_NOTIF = [
@@ -11837,7 +11842,10 @@ function settingsNavN(title, sub, act, top) { var n = { t: 'navrow', title: titl
 function settingsScreen(inp, factsIn) {
   inp = inp || {};
   if (!(Number(inp.cap) >= 3)) return { ok: false, error: 'cap' };
+  if (inp.p) return settingsPageScreen(inp, factsIn);
   var f = settingsFacts(factsIn), body = [];
+  var pg = Number(inp.cap) >= SETTINGS_PAGE_CAP;                       // \uc0c8 \uc571\uc774\uba74 \ub20c\ub800\uc744 \ub54c \ub124\uc774\ud2f0\ube0c \ud558\uc704 \ud654\uba74\uc73c\ub85c(act call pg.<\uc774\ub984>), \uc61b \uc571\uc774\uba74 \uc608\uc804 \uc6f9 \uce74\ub4dc \uc2dc\ud2b8\ub85c(act web)
+  var pgAct = function (k) { return pg ? { a: 'call', v: 'pg.' + k } : { a: 'web', v: k }; };
 
   // 1) \ucee4\ubba4\ub2c8\ud2f0 \uc544\uc774\ub514
   var idKids = [settingsTitleN('\ucee4\ubba4\ub2c8\ud2f0 \uc544\uc774\ub514', 6)];
@@ -11867,7 +11875,7 @@ function settingsScreen(inp, factsIn) {
     var sd = settingsBoldN([['\uac24\ub7ed\uc2dc\ub294 \uba70\uce60 \uc548 \uc4f4 \uc571\uc744 \uc790\ub3d9 \uc808\uc804\uc2dc\ucf1c \ud654\uba74\uc774 \uaebc\uc9c4 \ub3d9\uc548\uc758 \ud558\ucc28 \uc54c\ub9bc\uc774 \uba48\ucd9c \uc218 \uc788\uc5b4\uc694. \uae38\ub3d9\ubb34\ub97c ', 0], ['\uc790\ub3d9\uc73c\ub85c \uc808\uc804\ud558\uc9c0 \uc54a\ub294 \uc571', 1], ['\uc5d0 \ub123\uc5b4 \ub450\uba74 \uc548\uc804\ud574\uc694.', 0]]);
     sk.push(settingsDescN(sd.s, 8, sd.hl));
     if (f.samw) sk.push({ t: 'box', s: '\uc774 \uc571\uc758 \ubc30\ud130\ub9ac \uc0ac\uc6a9\uc774 \uc81c\ud55c\ub428\uc73c\ub85c \ub418\uc5b4 \uc788\uc5b4\uc694. \uc571 \uc815\ubcf4 > \ubc30\ud130\ub9ac\uc5d0\uc11c \uc81c\ud55c \uc5c6\uc74c\uc73c\ub85c \ubc14\uafd4 \uc8fc\uc138\uc694.', size: 12, lh: 1.5, tc: '#ff9f0a', color: 'text', fill: 'rgba(255,159,10,0.12)', line: 'rgba(255,159,10,0.35)', r: 10, ip: [12, 10, 12, 10], pad: [0, 0, 0, 4] });
-    sk.push(settingsNavN('\uc790\ub3d9 \uc808\uc804 \uc81c\uc678 \uc124\uc815 \uc5f4\uae30', f.samw ? '\uc81c\ud55c\ub428' : '', { a: 'web', v: 'sam' }, true));
+    sk.push(settingsNavN('\uc790\ub3d9 \uc808\uc804 \uc81c\uc678 \uc124\uc815 \uc5f4\uae30', f.samw ? '\uc81c\ud55c\ub428' : '', pgAct('sam'), true));
     body.push(settingsPanelN(sk));
   }
 
@@ -11891,11 +11899,11 @@ function settingsScreen(inp, factsIn) {
 
   // 6) \uc6f9 \uce74\ub4dc\ub85c \uc774\uc5b4\uc9c0\ub294 \uae30\ub2a5\ub4e4(\ubcf5\uc7a1\ud55c \uc785\ub825\u00b7\uc2dc\ud5d8 \ub3c4\uad6c\ub294 \uae30\uc874 \uc6f9 \uce74\ub4dc\ub97c \uadf8\ub300\ub85c \uc5f0\ub2e4)
   var wk = [settingsTitleN('\uae30\ub2a5 \uc124\uc815', 2), settingsDescN('\uc2dc\uac04\u00b7\uc7a5\uc18c\u00b7\uc2dc\ud5d8\ucc98\ub7fc \uc785\ub825\uc774 \ub9ce\uc740 \uc124\uc815\uc740 \ub20c\ub7ec\uc11c \uc5f4\uc5b4\uc694.', 4)];
-  wk.push(settingsNavN('\ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551 \uc54c\ub9bc', f.cm == null ? '' : (f.cm ? '\ucf1c\uc9d0' : '\uaebc\uc9d0'), { a: 'web', v: 'cm' }, true));
-  wk.push(settingsNavN('\uce90\ub9ad\ud130 \uc2dc\uacc4 \uc704\uc82f', '', { a: 'web', v: 'gw' }, true));
-  wk.push(settingsNavN('\ud558\ucc28 5\ubd84 \uc804 \ucd94\ucc9c \uc2dc\ud5d8', '', { a: 'web', v: 'arr' }, true));
-  wk.push(settingsNavN('\ub2e4\ub978 \uc571 \uc704\uc5d0 \ud45c\uc2dc', f.ovl == null ? '' : (f.ovl ? '\ucf1c\uc9d0' : '\uaebc\uc9d0'), { a: 'web', v: 'ovl' }, true));
-  wk.push(settingsNavN('\uac1c\ubc1c\uc790 \ub3c4\uad6c', '', { a: 'web', v: 'dev' }, true));
+  wk.push(settingsNavN('\ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551 \uc54c\ub9bc', f.cm == null ? '' : (f.cm ? '\ucf1c\uc9d0' : '\uaebc\uc9d0'), pgAct('cm'), true));
+  wk.push(settingsNavN('\uce90\ub9ad\ud130 \uc2dc\uacc4 \uc704\uc82f', '', pgAct('gw'), true));
+  wk.push(settingsNavN('\ud558\ucc28 5\ubd84 \uc804 \ucd94\ucc9c \uc2dc\ud5d8', '', pgAct('arr'), true));
+  wk.push(settingsNavN('\ub2e4\ub978 \uc571 \uc704\uc5d0 \ud45c\uc2dc', f.ovl == null ? '' : (f.ovl ? '\ucf1c\uc9d0' : '\uaebc\uc9d0'), pgAct('ovl'), true));
+  wk.push(settingsNavN('\uac1c\ubc1c\uc790 \ub3c4\uad6c', '', pgAct('dev'), true));
   body.push(settingsPanelN(wk));
 
   // 7) \ud14c\ub9c8
@@ -11922,19 +11930,313 @@ function settingsScreen(inp, factsIn) {
   out.rev = 's' + SETTINGS_SCREEN_V + ':' + settingsHash(JSON.stringify(body));
   return out;
 }
+
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+// \u2605 \ud558\uc704 \ud654\uba74(cap 8) \u2014 \uc608\uc804\uc5d0 '\uc6f9 \uce74\ub4dc \uc2dc\ud2b8'\ub85c \uc5f4\ub358 6\uac1c: \uac24\ub7ed\uc2dc \uc808\uc804 \u00b7 \ub2e4\ub978 \uc571 \uc704\uc5d0 \ud45c\uc2dc \u00b7 \uac1c\ubc1c\uc790 \ub3c4\uad6c \u00b7 \ud558\ucc28 \ucd94\ucc9c \uc2dc\ud5d8 \u00b7 \uce90\ub9ad\ud130 \uc2dc\uacc4 \uc704\uc82f \u00b7 \ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551.
+//   \uc571\uc740 pf(\uae30\uae30 \uc0ac\uc2e4)\ub9cc \ubcf4\ub0b8\ub2e4 \u2014 \ucf1c\uc9d0\u00b7\uac12\u00b7\uace0\ub978 \uce78\u00b7\uc77d\uc740 \uc22b\uc790. \uae00(\uc0c1\ud0dc \ubb38\uad6c\u00b7\uc2dc\uac01 \uae00\u00b7\uc694\uc77c \uc548\ub0b4\u00b7\ud1f4\uadfc \ud78c\ud2b8\u00b7\uc2dc\uac04\ub300 \uc774\ub984)\uacfc \uc5b4\ub5a4 \uce78\uc744 \uc5b4\ub5bb\uac8c \ubcf4\uc77c\uc9c0\ub294 \uc5ec\uae30\uc11c \uc815\ud55c\ub2e4.
+//   \ud589\ub3d9(act call v): pg.back(\uc124\uc815\uc73c\ub85c) \u00b7 sam.open \u00b7 bat.req \u00b7 ovl.diag \u00b7 pf.live \u00b7 pf.rec \u00b7 dev.start.<\ubaa8\ub4dc> \u00b7 dev.stop \u00b7 arr.t.<\uc885\ub958> \u00b7 arr.demo \u00b7 arr.stat \u00b7
+//   gw.add.<hb|hw|vb|vw> \u00b7 gw.roam.<dn|up> \u00b7 cm.day.<0-6> \u00b7 cm.preset.<weekday|weekend|all> \u00b7 cm.tp.<morn|eve> \u00b7 cm.test \u00b7 cm.pick.<from|to|eFrom|eTo> \u00b7
+//   tp.ap.<am|pm> \u00b7 tp.h.<1-12> \u00b7 tp.m.<0-55> \u00b7 tp.ok \u00b7 tp.cancel \u00b7 pk.save \u00b7 pk.clear \u00b7 pk.u.<\ubc88\ud638> \u00b7 pk.b.<\ubc88\ud638> \u00b7 pk.cancel.   \uc2a4\uc704\uce58(toggle) \ud0a4: cm \u00b7 ovl.
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+var SETTINGS_PAGES = { sam: '\uac24\ub7ed\uc2dc \ubc31\uadf8\ub77c\uc6b4\ub4dc \uc720\uc9c0', ovl: '\ub2e4\ub978 \uc571 \uc704\uc5d0 \ud45c\uc2dc', dev: '\uac1c\ubc1c\uc790 \ub3c4\uad6c', arr: '\ud558\ucc28 5\ubd84 \uc804 \ucd94\ucc9c', gw: '\uce90\ub9ad\ud130 \uc2dc\uacc4 \uc704\uc82f', cm: '\ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551 \uc54c\ub9bc' };
+var SETTINGS_DAY_NM = ['\uc77c', '\uc6d4', '\ud654', '\uc218', '\ubaa9', '\uae08', '\ud1a0'];
+var SETTINGS_BK = ['\uc54c \uc218 \uc5c6\uc74c', '\ud65c\uc131', '\uc791\uc5c5 \uc9d1\ud569', '\uc790\uc8fc \uc0ac\uc6a9', '\ub4dc\ubb3c\uac8c \uc0ac\uc6a9', '\uc81c\ud55c'];
+var SETTINGS_PICK = { from: ['\ucd9c\uadfc \ucd9c\ubc1c\uc9c0 (\uc9d1 \uadfc\ucc98)', '\uc9c0\ud558\ucca0\u00b7\ubc84\uc2a4 (\uc608: \uc544\ub77c)', '\ud604\uc7ac \uc704\uce58 \uae30\uc900'], to: ['\ucd9c\uadfc \ub3c4\ucc29\uc9c0 (\ud68c\uc0ac \uadfc\ucc98)', '\uc9c0\ud558\ucca0\u00b7\ubc84\uc2a4 (\uc608: \uac15\ub0a8)', '\ud604\uc7ac \uc704\uce58 \uae30\uc900'],
+                      eFrom: ['\ud1f4\uadfc \ucd9c\ubc1c\uc9c0', '\ube44\uc6b0\uba74 \ud68c\uc0ac \uadfc\ucc98 \uc5ed', '\ucd9c\uadfc \ub3c4\ucc29\uc9c0\uc640 \uac19\uc74c'], eTo: ['\ud1f4\uadfc \ub3c4\ucc29\uc9c0', '\ube44\uc6b0\uba74 \uc9d1 \uadfc\ucc98 \uc5ed', '\ucd9c\uadfc \ucd9c\ubc1c\uc9c0\uc640 \uac19\uc74c'] };
+var SETTINGS_PICK_MAX = 12, SETTINGS_BUS_MAX = 5;
+
+function settingsHm(v, def) { return (typeof v === 'string' && /^([01]?\d|2[0-3]):[0-5]\d$/.test(v)) ? ('0' + v.split(':')[0]).slice(-2) + ':' + v.split(':')[1] : def; }
+function settingsFmtTime(hm) {                                      // \uc608\uc804 _cmFmtTime \uacfc \uac19\ub2e4: '07:30' \u2192 '\uc624\uc804 7:30'
+  var p = String(hm || '07:30').split(':'), h = parseInt(p[0], 10) || 0, mi = p[1] || '00';
+  return (h < 12 ? '\uc624\uc804' : '\uc624\ud6c4') + ' ' + ((h % 12) || 12) + ':' + mi;
+}
+function settingsInt(v, lo, hi, def) { v = Math.floor(Number(v)); return (isFinite(v) && v >= lo && v <= hi) ? v : def; }
+function settingsPageFacts(pf) {
+  pf = (pf && typeof pf === 'object') ? pf : {};
+  var tri = function (v) { return v == null ? null : settingsFlag(v, false); };
+  var days = [];
+  (Array.isArray(pf.days) ? pf.days : []).forEach(function (d) { d = Math.floor(Number(d)); if (d >= 0 && d <= 6 && days.indexOf(d) < 0) days.push(d); });
+  days.sort();
+  var tp = (pf.tp && typeof pf.tp === 'object') ? pf.tp : null, pk = (pf.pick && typeof pf.pick === 'object') ? pf.pick : null, st = (pf.st && typeof pf.st === 'object') ? pf.st : null;
+  var dg = (st && st.dg && typeof st.dg === 'object') ? st.dg : {};
+  return {
+    w: settingsFlag(pf.w, false), ig: tri(pf.ig), bk: pf.bk == null ? null : settingsInt(pf.bk, 0, 5, 0), er: settingsFlag(pf.er, false), sok: tri(pf.sok),
+    nat: settingsFlag(pf.nat, true), sup: tri(pf.sup), gr: tri(pf.gr), on: settingsFlag(pf.on, false), pfl: settingsFlag(pf.pfl, false), pfr: settingsFlag(pf.pfr, false),
+    ph: ['plain', 'reco', 'alert2', 'alert1', 'quit'].indexOf(pf.ph) >= 0 ? pf.ph : '', left: settingsInt(pf.left, 0, 600, 0), stopped: settingsFlag(pf.stopped, false),
+    roam: settingsInt(pf.roam, 2, 10, 6), mOn: settingsFlag(pf.mOn, false), eOn: settingsFlag(pf.eOn, false),
+    morn: settingsHm(pf.morn, '07:30'), eve: settingsHm(pf.eve, '18:30'), days: days,
+    from: settingsStr(pf.from, 60), to: settingsStr(pf.to, 60), eFrom: settingsStr(pf.eFrom, 60), eTo: settingsStr(pf.eTo, 60),
+    sub: pf.sub === 'tp' ? 'tp' : (pf.sub === 'pick' ? 'pick' : ''),
+    tp: tp ? { t: tp.t === 'eve' ? 'eve' : 'morn', ap: tp.ap === 'pm' ? 'pm' : 'am', h: settingsInt(tp.h, 1, 12, 7), m: settingsInt(tp.m, 0, 55, 0) - (settingsInt(tp.m, 0, 55, 0) % 5) } : null,
+    pick: pk ? { k: SETTINGS_PICK[pk.k] ? pk.k : 'from', q: settingsStr(pk.q, 60) } : null,
+    st: st ? { timer: settingsFlag(st.timer, false), route: settingsFlag(st.route, false), dest: settingsStr(st.dest, 40), rem: st.rem == null ? null : settingsInt(st.rem, 0, 86400, 0),
+               pre: settingsInt(st.pre, 1, 60, 10), slot: ['morning', 'lunch', 'night', 'shop', 'none'].indexOf(st.slot) >= 0 ? st.slot : 'none', dinner: settingsFlag(st.dinner, false),
+               alertAt: (typeof st.alertAt === 'number' && isFinite(st.alertAt)) ? st.alertAt : null, tickAt: (typeof st.tickAt === 'number' && isFinite(st.tickAt)) ? st.tickAt : null,
+               tzo: (typeof st.tzo === 'number' && isFinite(st.tzo) && Math.abs(st.tzo) <= 1000) ? st.tzo : -540, policy: settingsFlag(st.policy, false),
+               dg: { stage: settingsStr(dg.stage, 60), at: (typeof dg.at === 'number' && isFinite(dg.at)) ? dg.at : null, err: settingsStr(dg.err, 100) },
+               err: settingsStr(st.err, 100) } : null
+  };
+}
+// 'HH:MM:SS' \uc2dc\uacc4 \uae00(\uc608\uc804 toLocaleTimeString ko-KR \uacfc \uac19\uc740 '\uc624\ud6c4 3:07:12')
+function settingsClock(ms, tzo) {
+  var d = new Date(ms - tzo * 60000), h = d.getUTCHours();
+  return (h < 12 ? '\uc624\uc804' : '\uc624\ud6c4') + ' ' + ((h % 12) || 12) + ':' + ('0' + d.getUTCMinutes()).slice(-2) + ':' + ('0' + d.getUTCSeconds()).slice(-2);
+}
+// \uc9c0\ud558\ucca0 \ud6c4\ubcf4: \uc608\uc804 _cmSug \uc640 \uac19\ub2e4 \u2014 \uacf5\ubc31\u00b7\ub05d '\uc5ed' \uc744 \ub5bc\uace0, \uc774\ub984\uc774 \uae00\uc790\ub85c \uc2dc\uc791\ud558\ub294 \uc5ed\uc744 \uba3c\uc800(12\uac1c\uae4c\uc9c0), \uae00\uc790\uac00 \ub4e4\uc5b4 \uc788\ub294 \uc5ed\uc744 \uadf8\ub2e4\uc74c\uc5d0 \ubaa8\uc544 12\uac1c\uae4c\uc9c0. \uac19\uc740 \uc774\ub984\uc740 \ud558\ub098.
+function settingsStnFind(q) {
+  q = String(q || '').replace(/\s+/g, '').replace(/\uc5ed$/, '');
+  var out = { u: [], pk: [] };
+  if (!q || !Array.isArray(HOME_STNS)) return out;
+  var map = {}, order = [], i, s, it;
+  for (i = 0; i < HOME_STNS.length; i++) {
+    s = HOME_STNS[i];
+    if (!s || typeof s[0] !== 'string') continue;
+    if (!Object.prototype.hasOwnProperty.call(map, s[0])) { map[s[0]] = { name: s[0], plain: s[0].replace(/\s+/g, ''), lines: [] }; order.push(map[s[0]]); }
+    if (map[s[0]].lines.indexOf(s[1]) < 0) map[s[0]].lines.push(s[1]);
+  }
+  var pre = [], mid = [];
+  for (i = 0; i < order.length; i++) {
+    it = order[i];
+    var p = it.plain.indexOf(q);
+    if (p === 0) { pre.push(it); if (pre.length >= SETTINGS_PICK_MAX) break; }
+    else if (p > 0 && mid.length < SETTINGS_PICK_MAX) mid.push(it);
+  }
+  pre.concat(mid).slice(0, SETTINGS_PICK_MAX).forEach(function (x) {
+    out.u.push({ n: x.name, l: '\uc9c0\ud558\ucca0 \u00b7 ' + x.lines.slice(0, 2).join('\u00b7') + (x.lines.length > 2 ? ' \uc678' : '') });
+    out.pk.push({ name: x.name });
+  });
+  return out;
+}
+
+// \u2500\u2500 \ub178\ub4dc \ub9cc\ub4e4\uae30 \u2500\u2500
+function settingsCall(v) { return { a: 'call', v: v }; }
+function settingsBtnN(s, v, o) {                                    // o: { gold, on, h, size, mb, tc }
+  o = o || {};
+  var n = { t: 'button', s: s, size: o.size || 13, h: o.h || 42, r: 10, bold: true, act: settingsCall(v) };
+  if (o.gold) { n.fill = 'gold'; n.line = 'none'; n.tc = '#121214'; }
+  else if (o.on) { n.fill = 'gold'; n.line = 'gold'; n.tc = '#121214'; }
+  else { n.fill = o.fill || 'none'; n.line = 'border2'; n.tc = o.tc || 'text'; }
+  if (o.mb != null) n.pad = [0, 0, 0, o.mb];
+  return n;
+}
+function settingsRowN(kids, mb) { return { t: 'row', gap: 8, pad: [0, 0, 0, mb == null ? 8 : mb], kids: kids }; }
+function settingsBackN(label) { return { t: 'button', s: '\u2039 ' + (label || '\uc124\uc815'), size: 14, h: 42, r: 12, bold: true, fill: 'card', line: 'border', tc: 'text', pad: [14, 12, 14, 0], act: settingsCall('pg.back') }; }
+function settingsWarnN(parts, mb) { var b = settingsBoldN(parts); return { t: 'box', s: b.s, hl: b.hl, size: 12, lh: 1.5, tc: '#ff9f0a', color: 'text', fill: 'rgba(255,159,10,0.12)', line: 'rgba(255,159,10,0.35)', r: 10, ip: [12, 10, 12, 10], pad: [0, 0, 0, mb == null ? 12 : mb] }; }
+function settingsTipN(parts) { var b = settingsBoldN(parts); return { t: 'box', s: b.s, hl: b.hl, size: 11.5, lh: 1.6, color: 'text', fill: 'rgba(10,132,255,0.10)', line: 'rgba(10,132,255,0.3)', r: 8, ip: [10, 8, 10, 8], pad: [0, 10, 0, 0] }; }
+function settingsSmallN(s, mt, mb, hl) { var n = { t: 'text', s: s, size: 11, color: 'sub', lh: 1.55, pad: [0, mt == null ? 0 : mt, 0, mb == null ? 0 : mb] }; if (hl) n.hl = hl; return n; }
+function settingsLabelN(s, mb) { return { t: 'text', s: s, size: 11, bold: true, color: 'sub', lh: 1.3, pad: [0, 0, 0, mb == null ? 5 : mb] }; }
+
+// \u2500\u2500 \uac24\ub7ed\uc2dc \ubc31\uadf8\ub77c\uc6b4\ub4dc \uc720\uc9c0 \u2500\u2500
+function settingsPageSam(f) {
+  var k = [settingsTitleN('\uac24\ub7ed\uc2dc \ubc31\uadf8\ub77c\uc6b4\ub4dc \uc720\uc9c0', 4)];
+  var d = settingsBoldN([['\uac24\ub7ed\uc2dc\ub294 \uba70\uce60 \uc548 \uc4f4 \uc571\uc744 \uc790\ub3d9 \uc808\uc804\uc2dc\ucf1c \ud654\uba74\uc774 \uaebc\uc9c4 \ub3d9\uc548\uc758 \ud558\ucc28 \uc54c\ub9bc\uc774 \uba48\ucd9c \uc218 \uc788\uc5b4\uc694. \uae38\ub3d9\ubb34\ub97c ', 0], ['\uc790\ub3d9\uc73c\ub85c \uc808\uc804\ud558\uc9c0 \uc54a\ub294 \uc571', 1], ['\uc5d0 \ub123\uc5b4 \ub450\uba74 \uc548\uc804\ud574\uc694.', 0]]);
+  k.push(settingsDescN(d.s, 12, d.hl));
+  if (f.w) k.push(settingsWarnN([['\uc774 \uc571\uc758 \ubc30\ud130\ub9ac \uc0ac\uc6a9\uc774 ', 0], ['\uc81c\ud55c\ub428', 1], ['\uc73c\ub85c \ub418\uc5b4 \uc788\uc5b4\uc694. \uc571 \uc815\ubcf4 > \ubc30\ud130\ub9ac\uc5d0\uc11c ', 0], ['\uc81c\ud55c \uc5c6\uc74c', 1], ['\uc73c\ub85c \ubc14\uafd4 \uc8fc\uc138\uc694.', 0]]));
+  k.push(settingsBtnN('\uc790\ub3d9 \uc808\uc804 \uc81c\uc678 \uc124\uc815 \uc5f4\uae30', 'sam.open', { gold: true, mb: 10 }));
+  var st;
+  if (f.sok === true) {
+    var parts = [['\ud604\uc7ac \uc0c1\ud0dc \u00b7 \ubc30\ud130\ub9ac \ucd5c\uc801\ud654 \uc81c\uc678: ', 0], [f.ig ? '\uc608' : '\uc544\ub2c8\uc694', 1], [' \u00b7 \uc571 \ubc30\ud130\ub9ac \uc81c\ud55c: ', 0], [f.w ? '\uc81c\ud55c\ub428' : '\uc81c\ud55c \uc5c6\uc74c/\ucd5c\uc801\ud654', 1], [' \u00b7 \uae30\uae30\uac00 \ubcf4\ub294 \uc571 \ub4f1\uae09: ', 0], [SETTINGS_BK[f.bk == null ? 0 : f.bk], 1]];
+    st = settingsBoldN(parts);
+    k.push({ t: 'box', s: st.s, hl: st.hl, size: 11.5, lh: 1.6, color: 'text', fill: 'bg', line: 'border', r: 8, ip: [10, 8, 10, 8] });
+  } else k.push(settingsStatN(f.sok === false || f.er ? '\ud604\uc7ac \uc0c1\ud0dc: \uc77d\uc9c0 \ubabb\ud588\uc5b4\uc694' : '\ud604\uc7ac \uc0c1\ud0dc: \ud655\uc778 \uc911\u2026'));
+  if (f.sok === true && f.ig) k.push(settingsTipN([['\uc571 \ubc30\ud130\ub9ac\uac00 ', 0], ['\uc81c\ud55c \uc5c6\uc74c', 1], ['\uc774\uba74 \uc0bc\uc131 \ubaa9\ub85d \uc120\ud0dd \ucc3d\uc5d0 \uae38\ub3d9\ubb34\uac00 ', 0], ['\ub098\uc624\uc9c0 \uc54a\uc544\uc694', 1], ['(\uc774\ubbf8 \uac00\uc7a5 \ub192\uc740 \uc124\uc815\uc774\uc5d0\uc694). \ubaa9\ub85d\uc5d0\ub3c4 \ub123\uace0 \uc2f6\uc73c\uba74 \uc571 \uc815\ubcf4 > \ubc30\ud130\ub9ac\ub97c \uc7a0\uc2dc ', 0], ['\ucd5c\uc801\ud654', 1], ['\ub85c \ubc14\uafd4 \ucd94\uac00\ud55c \ub4a4 \ub2e4\uc2dc ', 0], ['\uc81c\ud55c \uc5c6\uc74c', 1], ['\uc73c\ub85c \ub3cc\ub824 \uc8fc\uc138\uc694.', 0]]));
+  var n = settingsBoldN([['\ubaa9\ub85d \uc624\ub978\ucabd \uc704 + \ub97c \ub204\ub974\uace0 \uae38\ub3d9\ubb34\ub97c \uccb4\ud06c(\uc548 \ubcf4\uc774\uba74 \uc544\ub798 \uac80\uc0c9\ucc3d\uc5d0 \uc785\ub825)\ud55c \ub4a4 \ucd94\uac00\ud558\uc138\uc694. \ucd94\uac00\ub410\ub294\uc9c0\ub294 \uae30\uae30\uc5d0\uc11c \ud655\uc778\ud574 \uc8fc\uc138\uc694. \uc774\ub3d9 \uc911 \ucd5c\uadfc \uc571 \ud654\uba74\uc5d0\uc11c ', 0], ['\ubaa8\ub450 \ub2eb\uae30', 1], ['\ub97c \ub204\ub974\uba74 \uc548\ub0b4\uac00 \uba48\ucdb0\uc694.', 0]]);
+  k.push(settingsSmallN(n.s, 10, 0, n.hl));
+  return [settingsPanelN(k, 8)];
+}
+// \u2500\u2500 \ub2e4\ub978 \uc571 \uc704\uc5d0 \ud45c\uc2dc \u2500\u2500
+function settingsOvlStat(f) {                                       // \uc608\uc804 _ovlSyncToggle \uc758 \uc0c1\ud0dc \ubb38\uad6c\uc640 \uac19\ub2e4
+  if (!f.nat) return '\uc774 \uc571 \ubc84\uc804\uc5d0\uc11c\ub294 \uc9c0\uc6d0\ud558\uc9c0 \uc54a\uc544\uc694.';
+  if (f.sup === false) return '\uc774 \uae30\uae30(\uc548\ub4dc\ub85c\uc774\ub4dc 8 \ubbf8\ub9cc)\uc5d0\uc11c\ub294 \uc9c0\uc6d0\ud558\uc9c0 \uc54a\uc544\uc694.';
+  if (f.gr === true) return f.on ? '\uc0ac\uc6a9 \uc911 \u00b7 \ub2e4\ub978 \uc571\uc744 \uc4f0\ub294 \ub3d9\uc548 \uc704\ucabd\uc5d0 \ud45c\uc2dc\ub3fc\uc694.' : '\uad8c\ud55c\uc740 \ud5c8\uc6a9\ub428 \u00b7 \uc9c0\uae08\uc740 \uaebc\uc838 \uc788\uc5b4\uc694.';
+  return f.on ? '\uad8c\ud55c\uc774 \ud544\uc694\ud574\uc694 \u00b7 \uc124\uc815\uc5d0\uc11c \'\ub2e4\ub978 \uc571 \uc704\uc5d0 \ud45c\uc2dc\'\ub97c \ud5c8\uc6a9\ud574 \uc8fc\uc138\uc694.' : '\uaebc\uc838 \uc788\uc5b4\uc694.';
+}
+function settingsPageOvl(f) {
+  var k = [{ t: 'toggle', key: 'ovl', title: '\ub2e4\ub978 \uc571 \uc704\uc5d0 \ud45c\uc2dc', on: f.on, big: true, size: 15, vp: 0, onc: 'gold', pad: [0, 0, 0, 6] },
+    settingsDescN('\ub2e4\ub978 \uc571\uc744 \uc4f0\ub294 \ub3d9\uc548 \ud604\uc7ac\uc5ed \u00b7 \ub0a8\uc740\uc2dc\uac04\uc744 \ud654\uba74 \uc704\ucabd\uc5d0 \uc791\uc740 \ub9c9\ub300\ub85c \ub744\uc6cc\uc694. \ub9c9\ub300\ub97c \ub204\ub974\uba74 \uc571\uc73c\ub85c \ub3cc\uc544\uc624\uace0, \ub04c\uc5b4\uc11c \uc704\uce58\ub97c \uc62e\uae38 \uc218 \uc788\uc5b4\uc694. \uc548\ub0b4 \uc815\ubcf4\ub9cc \ubcf4\uc5ec\uc8fc\uace0 \uad11\uace0\ub294 \ub123\uc9c0 \uc54a\uc544\uc694. \ucc98\uc74c \ucf1c\uba74 \uc124\uc815\uc5d0\uc11c \'\ub2e4\ub978 \uc571 \uc704\uc5d0 \ud45c\uc2dc\' \uad8c\ud55c\uc744 \ud5c8\uc6a9\ud574 \uc8fc\uc138\uc694.', 8),
+    { t: 'text', s: settingsOvlStat(f), size: 11.5, color: 'sub', lh: 1.6, pad: [0, 0, 0, 10] },
+    settingsBtnN('\uc624\ubc84\ub808\uc774 \uc9c4\ub2e8 \uae30\ub85d \ubcf4\uae30', 'ovl.diag', { size: 12, h: 38, tc: 'sub', mb: 6 }),
+    settingsBtnN(f.pfl ? '\uc0c8 \uc704\uce58 \ud310\ub2e8\uae30 \ubcf4\uc815: \ucf1c\uc9d0 (\ub204\ub974\uba74 \ub054)' : '\uc0c8 \uc704\uce58 \ud310\ub2e8\uae30 \ubcf4\uc815: \uaebc\uc9d0 (\ub204\ub974\uba74 \ucf2c \u00b7 \uc2e4\ud5d8)', 'pf.live', { size: 12, h: 38, on: f.pfl, mb: 6 }),
+    settingsBtnN(f.pfr ? '\uc815\ub2f5 \uae30\ub85d \ubc84\ud2bc: \ucf1c\uc9d0 (\ub204\ub974\uba74 \ub054)' : '\uc815\ub2f5 \uae30\ub85d \ubc84\ud2bc: \uaebc\uc9d0 (\ud14c\uc2a4\ud2b8 \ud0d1\uc2b9\uc6a9)', 'pf.rec', { size: 12, h: 38, on: f.pfr })];
+  return [settingsPanelN(k, 8)];
+}
+// \u2500\u2500 \uac1c\ubc1c\uc790 \ub3c4\uad6c(\uc624\ubc84\ub808\uc774 \ud14c\uc2a4\ud2b8) \u2500\u2500
+var SETTINGS_DEV_PH = { plain: '\ud3c9\uc0c1\uc2dc', reco: '\ucd94\ucc9c', alert2: '2\uc815\uac70\uc7a5 \uc804', alert1: '1\uc815\uac70\uc7a5 \uc804(\ub0b4\ub9b4 \uc900\ube44)', quit: '\uc571 \uc790\ub3d9\uc885\ub8cc \uc608\uc57d(15\ucd08 \ub4a4)' };
+function settingsPageDev(f) {
+  var b = settingsBoldN([['\uac00\uc9dc \uc5ec\uc815(\uc784\ud559\u2192\uc544\ub77c)\uc744 \uc624\ubc84\ub808\uc774\uc5d0 \ubcf4\ub0b4 \uc811\ud798\u00b7\ud3bc\uce68\u00b7\ubb34\uc9c0\uac1c\u00b7\ubc84\ud2bc\uc744 \uc2e4\uae30\uae30\ub85c \ud655\uc778\ud574\uc694. \'\ub2e4\ub978 \uc571 \uc704\uc5d0 \ud45c\uc2dc\'\ub97c \ucf1c \ub450\uace0, \ubc84\ud2bc\uc744 \ub204\ub978 \ub4a4 ', 0], ['\ud648 \ud654\uba74\uc73c\ub85c \ub098\uac00\uc138\uc694', 1], ['. \uc54c\uc57d\uc73c\ub85c \uc811\uc5b4 \ub450\ub824\uba74 \uc624\ubc84\ub808\uc774\ub97c \uc704\ub85c \uc4f8\uc5b4 \uc62c\ub9ac\uc138\uc694(\uc811\ud78c \uc0c1\ud0dc\ub294 \uae30\uc5b5\ub3fc\uc694).', 0]]);
+  var stat = f.ph ? ('\uc9c4\ud589 \uc911 \u00b7 \uc9c0\uae08 \ub2e8\uacc4: ' + SETTINGS_DEV_PH[f.ph] + ' \u00b7 ' + f.left + '\ucd08 \ub0a8\uc74c') : (f.stopped ? '\uc911\uc9c0\ud588\uc5b4\uc694.' : '');
+  var k = [settingsTitleN('\uac1c\ubc1c\uc790 \ub3c4\uad6c', 4), settingsDescN('\uc624\ubc84\ub808\uc774 \ud14c\uc2a4\ud2b8 \u00b7 \ucd9c\uc2dc \uc804 \uc0ad\uc81c', 4), settingsDescN(b.s, 12, b.hl),
+    settingsBtnN('\u25b6 \uc804\uccb4 \uc2dc\ub098\ub9ac\uc624 (75\ucd08)', 'dev.start.all', { gold: true, mb: 8 }),
+    settingsSmallN('0~15\ucd08 \ud3c9\uc0c1\uc2dc(\uc774\ub54c \uc54c\uc57d\uc73c\ub85c \uc811\uae30) \u2192 15~30\ucd08 \ucd94\ucc9c(\uc811\ud600 \uc788\uc5b4\ub3c4 \ud3bc\uccd0\uc9d0) \u2192 30~45\ucd08 2\uc815\uac70\uc7a5 \uc804(\uc54c\uc57d \ub458\ub808 \ubb34\uc9c0\uac1c, \ud3bc\uce58\uc9c0 \uc54a\uc74c) \u2192 45~60\ucd08 1\uc815\uac70\uc7a5 \uc804(\ud3bc\uce68+\ube60\ub978 \ubb34\uc9c0\uac1c+\uc9c4\ub3d9+\uce90\ub9ad\ud130+\'\ub0b4\ub9b4 \uc900\ube44\ub97c \ud574\uc8fc\uc138\uc694\'+\uc751\uc6d0 \ubb38\uad6c+[\uc571 \uc885\ub8cc]) \u2192 \ub9c8\ubb34\ub9ac', 0, 10),
+    settingsRowN([settingsBtnN('\ud3c9\uc0c1\uc2dc', 'dev.start.plain', { size: 12 }), settingsBtnN('\ucd94\ucc9c', 'dev.start.reco', { size: 12 }), settingsBtnN('2\uc815\uac70\uc7a5 \uc804', 'dev.start.alert2', { size: 12 }), settingsBtnN('1\uc815\uac70\uc7a5 \uc804', 'dev.start.alert1', { size: 12 })]),
+    settingsBtnN('\uc571 \uc790\ub3d9\uc885\ub8cc (15\ucd08 \ub4a4 \uc9c4\uc9dc \uc885\ub8cc)', 'dev.start.quit', { mb: 8 }),
+    settingsBtnN('\u25a0 \ud14c\uc2a4\ud2b8 \uc911\uc9c0', 'dev.stop')];
+  if (stat) k.push(settingsSmallN(stat, 8, 0));
+  k.push(settingsSmallN('\u203b [\uc571 \uc885\ub8cc]\u00b7\uc790\ub3d9\uc885\ub8cc\ub294 \uc9c4\uc9dc \uc571 \uc885\ub8cc\uc608\uc694(\uc774\ub54c \uc2dc\uacc4 \uc704\uc82f \ub3d9\ubb3c\uc774 \uacc4\uc18d \uc6c0\uc9c1\uc774\ub294\uc9c0 \ud655\uc778). \ucd94\ucc9c\uc758 [\ub9db\uc9d1 \ubcf4\uae30]\ub294 \uc571\uc744 \uc55e\uc73c\ub85c \uac00\uc838\uc640 \uac00\uac8c \ud654\uba74\uc744, [\ud655\uc778]\uc740 \ucd94\ucc9c\ub9cc \ub2eb\uc544\uc694(\ud14c\uc2a4\ud2b8 \uac00\uc9dc \ucd94\ucc9c\uc774\ub77c \uac00\uac8c\ub294 \uc2e4\uc81c\ub85c \uc5c6\uc5b4\uc694).', 6, 0));
+  return [settingsPanelN(k, 8)];
+}
+// \u2500\u2500 \ud558\ucc28 5\ubd84 \uc804 \ucd94\ucc9c \uc2dc\ud5d8 \u2500\u2500
+function settingsArrSlot(st) {                                      // \uc608\uc804 _arrStatusShow \uc758 \uc2dc\uac04\ub300 \uc774\ub984
+  if (st.slot === 'morning') return '\ucee4\ud53c (07:01~10:00)';
+  if (st.slot === 'lunch') return '\uc810\uc2ec (10:01~16:59)';
+  if (st.slot === 'night') return st.dinner ? '\uc800\ub141 \uc2dd\uc0ac (17:00~18:59)' : '\uc57c\uc2dd (19:00~21:00)';
+  if (st.slot === 'shop') return '\uc1fc\ud551 (21:01~)';
+  return '\ucd94\ucc9c \uc5c6\ub294 \uc2dc\uac04\ub300 (00:00~07:00)';
+}
+function settingsArrLines(st) {                                     // \uc608\uc804 _arrStatusShow \uc640 \uac19\uc740 \uc904\ub4e4
+  var L = [];
+  if (st.err) { L.push('\uc0c1\ud0dc \ud655\uc778 \uc624\ub958: ' + st.err); return L; }
+  L.push('\uac10\uc2dc \ud0c0\uc774\uba38: ' + (st.timer ? '\ub3d9\uc791 \uc911 (20\ucd08\ub9c8\ub2e4)' : '\uc5c6\uc74c'));
+  L.push('\ud604\uc7ac \uacbd\ub85c: ' + (st.route ? ((st.dest || '-') + ' \ub3c4\ucc29 \uc608\uc815') : '\uc5c6\uc74c (\ud0d1\uc2b9 \uc0c1\ud0dc \uc544\ub2d8)'));
+  if (st.rem != null) L.push('\ub0a8\uc740 \uc2dc\uac04: ' + Math.floor(st.rem / 60) + '\ubd84 ' + (st.rem % 60) + '\ucd08' + (st.rem > st.pre * 60 ? '  (10\ubd84 \ub418\uba74 \ubc1c\uc0ac)' : '  (\ubc1c\uc0ac \uad6c\uac04)'));
+  else L.push('\ub0a8\uc740 \uc2dc\uac04: \uc544\uc9c1 \uce21\uc815 \uc804');
+  L.push('\uc9c0\uae08 \uc2dc\uac04\ub300: ' + settingsArrSlot(st));
+  L.push('\ub9c8\uc9c0\ub9c9 \ubc1c\uc1a1: ' + (st.alertAt != null ? settingsClock(st.alertAt, st.tzo) + '  (30\ubd84\uac04 \uc7ac\ubc1c\uc1a1 \uc548 \ud568)' : '\uc5c6\uc74c'));
+  L.push('\uc54c\ub9bc \uc815\ucc45: ' + (st.policy ? '\ud5c8\uc6a9\ub428' : '\ucc28\ub2e8\ub428'));
+  L.push('\ub9c8\uc9c0\ub9c9 \uac10\uc2dc: ' + (st.tickAt != null ? settingsClock(st.tickAt, st.tzo) : '\uc5c6\uc74c'));
+  L.push('\ubc1c\uc0ac \uacbd\uacfc: ' + (st.dg.stage || '\uc5c6\uc74c') + (st.dg.at != null ? '  (' + settingsClock(st.dg.at, st.tzo) + ')' : ''));
+  if (st.dg.err) L.push('\ubb38\uad6c \uc0dd\uc131 \uc624\ub958: ' + st.dg.err);
+  return L;
+}
+function settingsPageArr(f) {
+  var k = [settingsTitleN('\ud558\ucc28 5\ubd84 \uc804 \ucd94\ucc9c', 4),
+    settingsDescN('\ub3c4\ucc29 5\ubd84 \uc804\uc5d0 \uc2dc\uac04\ub300\ubcc4\ub85c \ubcf4\ub0b4\ub294 \ucd94\ucc9c\uc774\uc5d0\uc694. \uc2e4\uc81c \uc54c\ub9bc\uacfc \uac19\uc740 \ub0b4\uc6a9\uc73c\ub85c \ubc14\ub85c \ud655\uc778\ud574 \ubcfc \uc218 \uc788\uc5b4\uc694. \ubc84\ud2bc\uc744 \ub204\ub974\uba74 \uc624\ubc84\ub808\uc774 \uc544\ub798\uc5d0\ub3c4 90\ucd08\uac04 \ub739\ub2c8\ub2e4(\uc624\ubc84\ub808\uc774\ub97c \ucf1c \ub454 \uc0c1\ud0dc \u2014 \uc811\ud600 \uc788\uc5b4\ub3c4 \uc800\uc808\ub85c \ud3bc\uccd0\uc838\uc694).', 12),
+    settingsRowN([settingsBtnN('\ucee4\ud53c', 'arr.t.morning', { size: 12 }), settingsBtnN('\uc810\uc2ec', 'arr.t.lunch', { size: 12 }), settingsBtnN('\uc57c\uc2dd', 'arr.t.night', { size: 12 }), settingsBtnN('\uc1fc\ud551', 'arr.t.shop', { size: 12 })]),
+    settingsBtnN('\ucd94\ucc9c \uce90\ub9ad\ud130 \ubbf8\ub9ac\ubcf4\uae30', 'arr.demo', { mb: 6 }),
+    settingsSmallN('\uce90\ub9ad\ud130 \ud558\ub098\uac00 \uc624\ub978\ucabd\uc5d0\uc11c \ucd94\ucc9c \uc904(\uc2e4\uc81c \uac00\uac8c\u00b7\ucfe0\ud321 \uc0c1\ud488 \uc774\ub984)\uc744 \ub04c\uace0 \ub4e4\uc5b4\uc624\ub294 \ubaa8\uc2b5\uc744 14\ucd08\uac04 \ubcf4\uc5ec \uc918\uc694(\uc571 \uc704\uc5d0 \ubc14\ub85c \ub5a0\uc694). \ub204\ub97c \ub54c\ub9c8\ub2e4 \ub2e4\ub978 \uce90\ub9ad\ud130\uc640 \ub2e4\ub978 \uc885\ub958(\uc2dd\ub2f9\u00b7\uce74\ud398\u00b7\ucfe0\ud321)\uac00 \ub098\uc624\uace0, \ud654\uba74\uc744 \ub204\ub974\uba74 \ub2eb\ud600\uc694. \'\ub2e4\ub978 \uc571 \uc704\uc5d0 \ud45c\uc2dc\' \uad8c\ud55c\uc774 \ud544\uc694\ud574\uc694.', 0, 10),
+    settingsBtnN('\uc0c1\ud0dc \ud655\uc778', 'arr.stat', { gold: true, mb: 10 }),
+    settingsStatN(f.st ? settingsArrLines(f.st).join('\n') : '\'\uc0c1\ud0dc \ud655\uc778\'\uc744 \ub204\ub974\uba74 \uac10\uc2dc \uc0c1\ud0dc\uc640 \ub0a8\uc740 \uc2dc\uac04\uc774 \ud45c\uc2dc\ub429\ub2c8\ub2e4.')];
+  return [settingsPanelN(k, 8)];
+}
+// \u2500\u2500 \uce90\ub9ad\ud130 \uc2dc\uacc4 \uc704\uc82f \u2500\u2500
+function settingsPageGw(f) {
+  var roamTxt = f.roam + '\ubd84' + (f.roam === 6 ? ' (\ucd94\ucc9c)' : '');
+  var note = f.roam > 6 ? '6\ubd84 \ucd94\ucc9c\uc774\uc5d0\uc694. \uadf8\ubcf4\ub2e4 \uae38\uac8c \ub450\uba74 \ubc30\ud130\ub9ac \uc18c\ubaa8\ub7c9\uc774 \uc870\uae08 \ub298 \uc218 \uc788\uc5b4\uc694.' : '6\ubd84 \ucd94\ucc9c\uc774\uc5d0\uc694. \uadf8\ubcf4\ub2e4 \uae38\uba74 \ubc30\ud130\ub9ac \uc18c\ubaa8\ub7c9\uc774 \uc870\uae08 \ub298 \uc218 \uc788\uc5b4\uc694.';
+  var on = f.mOn || f.eOn;
+  var gwNote = on ? ((f.mOn ? '\ucd9c\uadfc ' + f.morn : '') + (f.mOn && f.eOn ? ' \u00b7 ' : '') + (f.eOn ? '\ud1f4\uadfc ' + f.eve : '') + ' \uc5d0 \uc704\uc82f\uc774 \uc751\uc6d0\ud574\uc694') : '\ucd9c\u00b7\ud1f4\uadfc \uc7a5\uc18c\ub97c \uc124\uc815\ud558\uba74 \uadf8 \ucabd \ubc84\ud2bc\uc774 \ub098\uc640\uc694.';
+  var k = [settingsTitleN('\uce90\ub9ad\ud130 \uc2dc\uacc4 \uc704\uc82f', 4),
+    settingsDescN('\ud3c9\uc18c\uc5d4 \uce90\ub9ad\ud130\ub4e4\uc774 \uac01\uc790 \uc9d1(\uac1c\uc9d1\u00b7\ubc14\uad6c\ub2c8\u00b7\uad74\u00b7\ub465\uc9c0\u00b7\uc5f0\ubabb)\uc5d0\uc11c \uc790\uace0 \uc788\ub2e4\uac00, \ud654\uba74\uc744 \ucf1c\uba74 \uc77c\uc5b4\ub098 \uc815\ud574 \ub454 \uc2dc\uac04 \ub3d9\uc548 \uc2dc\uacc4 \uc8fc\ubcc0\uc744 \ub3cc\uc544\ub2e4\ub2c8\uba70 \uc2dc\uacc4\uc5d0 \ub9e4\ub2ec\ub9ac\uace0 \uc751\uac00\ub3c4 \ud574\uc694. \uc704\uc82f\uc744 \ub204\ub974\uba74 \uc571\uc774 \uc5f4\ub9ac\uba70 \ucee4\ubba4\ub2c8\ud2f0 \ud0ed\uc73c\ub85c \uac00\uc694. \ubc30\uacbd\uc740 \ud22c\uba85\uc774\uace0, \uc2dc\uacc4\uac00 \uce78\uc744 \uaf49 \ucc44\uc6cc\uc694. \uc704\uc5d0\uc11c \uc815\ud55c \ucd9c\u00b7\ud1f4\uadfc \uc2dc\uac01\uc774 \ub418\uba74 \uce90\ub9ad\ud130\uac00 \ubaa8\uc5ec \uc751\uc6d0\ud558\uace0, \uc2dc\uacc4\uac00 \uc791\uc544\uc9c0\uba74\uc11c [\ucd9c\uadfc\ud558\uae30]\u00b7[\ud1f4\uadfc\ud558\uae30] \ubc84\ud2bc\uc774 \ub098\uc640\uc694. \ubc84\ud2bc\uc740 3\ubd84 \ub3d9\uc548\ub9cc \ub5a0 \uc788\uace0, \ub204\ub974\uba74 \uc571\uc774 \uc5f4\ub9ac\uba70 \ubc14\ub85c \uae38\ucc3e\uae30\ub97c \ud574\uc694. (\ube14\ub799=\uac80\uc815 \uae00\uc790, \ud654\uc774\ud2b8=\ud770 \uae00\uc790)', 12),
+    settingsRowN([settingsBtnN('\uac00\ub85c \ube14\ub799', 'gw.add.hb'), settingsBtnN('\uac00\ub85c \ud654\uc774\ud2b8', 'gw.add.hw')]),
+    settingsRowN([settingsBtnN('\uc138\ub85c \ube14\ub799', 'gw.add.vb'), settingsBtnN('\uc138\ub85c \ud654\uc774\ud2b8', 'gw.add.vw')], 6)
+  ];
+  k.push({ t: 'text', s: '\ub3cc\uc544\ub2e4\ub2c8\ub294 \uc2dc\uac04', size: 13, bold: true, color: 'text', lh: 1.3, pad: [0, 14, 0, 6] });
+  k.push(settingsRowN([settingsBtnN('\u2212 1\ubd84', 'gw.roam.dn', { size: 13, h: 40 }), { t: 'box', s: roamTxt, size: 14, bold: false, lh: 1.3, color: 'gold', fill: 'bg', line: 'border', r: 10, ip: [8, 9, 8, 9] }, settingsBtnN('+ 1\ubd84', 'gw.roam.up', { size: 13, h: 40 })], 4));
+  k.push(settingsSmallN('2\ubd84 \u00b7 6\ubd84 \ucd94\ucc9c \u00b7 10\ubd84 \uc0ac\uc774\uc5d0\uc11c \uace8\ub77c\uc694', 0, 4));
+  k.push(settingsSmallN(note + '\n\uc790\uace0 \uc788\ub294 \ub3d9\ubb3c\ub4e4\uc740 \uc2dc\uacc4 \uc704\uc82f\uc744 \ub20c\ub7ec \uc571\uc5d0 \ub4e4\uc5b4\uac14\ub2e4 \ub098\uc624\uba74 \uae68\uc5b4\ub098\uc694.', 0, 8));
+  k.push(settingsSmallN(gwNote, 4, 8));
+  k.push(settingsSmallN('\uc571\uc774 \ubc31\uadf8\ub77c\uc6b4\ub4dc\uc5d0\uc11c \uaebc\uc9c0\uba74 \uce90\ub9ad\ud130\uac00 \ud654\uba74\uc744 \ucf1c\ub3c4 \uc790\uace0 \uc788\uc744 \uc218 \uc788\uc5b4\uc694(3\ubd84 \uc548\uc5d0 \ub2e4\uc2dc \uae68\uc6cc\uc694). \ub35c \uaebc\uc9c0\uac8c \ud558\ub824\uba74 \uc544\ub798\ub97c \ub20c\ub7ec \ubcf4\uc138\uc694.', 0, 2));
+  k.push(settingsNavN('\ubc30\ud130\ub9ac \ucd5c\uc801\ud654 \uc81c\uc678', '', settingsCall('bat.req'), true));
+  k.push(settingsNavN('\uac24\ub7ed\uc2dc \uc808\uc804 \uc124\uc815 \uc5f4\uae30', '', settingsCall('sam.open'), true));
+  return [settingsPanelN(k, 8)];
+}
+
+// \u2500\u2500 \ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551 \u2500\u2500
+function settingsEveHint(f) {                                       // \uc608\uc804 _cmRenderEveHint
+  var ef = f.eFrom.trim(), et = f.eTo.trim();
+  if (!ef && !et) {
+    var a = f.to.trim(), b = f.from.trim();
+    return (a && b) ? ('\ube44\uc6cc \ub450\uba74 \ucd9c\uadfc\uc758 \ubc18\ub300 \u2014 ' + a + ' \u2192 ' + b + ' \ub85c \ubcf4\ub0b4\uc694.') : '\ube44\uc6cc \ub450\uba74 \ucd9c\uadfc\uc758 \ubc18\ub300 \ubc29\ud5a5\uc73c\ub85c \ubcf4\ub0b4\uc694.';
+  }
+  return '\ud1f4\uadfc\uc740 \ub530\ub85c \uc124\uc815\ud55c \uacf3\uc73c\ub85c \ubcf4\ub0b4\uc694.' + (ef && et ? '' : ' (\ud55c\ucabd\ub9cc \ucc44\uc6b0\uba74 \ub098\uba38\uc9c0\ub294 \ucd9c\uadfc\uc758 \ubc18\ub300\ud3b8\uc744 \uc368\uc694)');
+}
+function settingsPageCm(f) {
+  var d = settingsBoldN([['\uc124\uc815\ud55c \uc2dc\uac01\uc5d0 ', 0], ['\ub0a0\uc528 + AI \uc5ed\ubb34\uc6d0 \uc694\uc57d', 1], ['\uc744 \uc54c\ub9bc\uc73c\ub85c \ubcf4\ub0b4\ub4dc\ub824\uc694.', 0]]);
+  var k = [{ t: 'toggle', key: 'cm', title: '\ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551 \uc54c\ub9bc', on: f.on, big: true, size: 15, vp: 0, onc: '#30d158', pad: [0, 0, 0, 4] }, settingsDescN(d.s, 10, d.hl)];
+  ['from', 'to'].forEach(function (x, i) { k.push(settingsNavN(SETTINGS_PICK[x][0], f[x] || '\ube44\uc5b4 \uc788\uc74c', settingsCall('cm.pick.' + x), true)); });
+  k.push(settingsSmallN('\uc9c0\ud558\ucca0\uc5ed\uacfc \ubc84\uc2a4\uc815\ub958\uc7a5 \ubaa8\ub450 \uc785\ub825\ud560 \uc218 \uc788\uc5b4\uc694. \uac80\uc0c9 \ubaa9\ub85d\uc758 \uc9c0\ud558\ucca0/\ubc84\uc2a4 \ud45c\uc2dc\ub85c \uad6c\ubd84\ub3fc\uc694. \ube44\uc6cc\ub450\uba74 \ud604\uc7ac \uc704\uce58 \uae30\uc900\uc774\uc5d0\uc694.', 8, 10));
+  ['eFrom', 'eTo'].forEach(function (x) { k.push(settingsNavN(SETTINGS_PICK[x][0], f[x] || '\ube44\uc5b4 \uc788\uc74c', settingsCall('cm.pick.' + x), true)); });
+  k.push(settingsSmallN(settingsEveHint(f), 8, 12));
+  k.push(settingsLabelN('\ubcf4\ub0bc \uc694\uc77c', 6));
+  var dayKids = SETTINGS_DAY_NM.map(function (nm, di) {
+    var sel = f.days.indexOf(di) >= 0;
+    var o = { size: 13, h: 38, on: sel };
+    var n = settingsBtnN(nm, 'cm.day.' + di, o);
+    if (!sel && di === 0) n.tc = '#e5484d'; else if (!sel && di === 6) n.tc = '#2f6fed';
+    return n;
+  });
+  k.push({ t: 'row', gap: 5, pad: [0, 0, 0, 6], kids: dayKids });
+  var key = f.days.slice().sort().join(',');
+  var presets = [['weekday', '\ud3c9\uc77c', '1,2,3,4,5'], ['weekend', '\uc8fc\ub9d0', '0,6'], ['all', '\ub9e4\uc77c', '0,1,2,3,4,5,6']];
+  k.push({ t: 'row', gap: 6, pad: [0, 0, 0, 6], kids: presets.map(function (q) { return settingsBtnN(q[1], 'cm.preset.' + q[0], { size: 13, h: 38, on: key === q[2] }); }) });
+  k.push(settingsSmallN(f.days.length ? ('\uc120\ud0dd\ud55c ' + f.days.length + '\uc77c\uc5d0\ub9cc \ubcf4\ub0b4\uc694.') : '\uc694\uc77c\uc744 \ud558\ub098\ub3c4 \uace0\ub974\uc9c0 \uc54a\uc544 \ub9e4\uc77c \ubcf4\ub0b4\uc694.', 0, 12));
+  k.push({ t: 'row', gap: 10, pad: [0, 0, 0, 5], kids: [settingsLabelN('\ucd9c\uadfc \ube0c\ub9ac\ud551', 0), settingsLabelN('\ud1f4\uadfc \ube0c\ub9ac\ud551', 0)] });
+  k.push({ t: 'row', gap: 10, pad: [0, 0, 0, 12], kids: [settingsBtnN(settingsFmtTime(f.morn), 'cm.tp.morn', { size: 15, h: 44 }), settingsBtnN(settingsFmtTime(f.eve), 'cm.tp.eve', { size: 15, h: 44 })] });
+  k.push(settingsBtnN('\uc9c0\uae08 \ubbf8\ub9ac\ubcf4\uae30', 'cm.test', { size: 13, h: 42 }));
+  return [settingsPanelN(k, 8)];
+}
+// \uc2dc\uac01 \uace0\ub974\uae30(\uc608\uc804 \ubc14\ud140\uc2dc\ud2b8 _cmTimePick \uacfc \uac19\uc740 \uce78: \uc624\uc804/\uc624\ud6c4 \u00b7 \uc2dc 12\uce78 \u00b7 \ubd84 12\uce78 \u00b7 \ucde8\uc18c/\ud655\uc778)
+function settingsPageTp(f) {
+  var tp = f.tp || { t: 'morn', ap: 'am', h: 7, m: 30 };
+  var now = (tp.ap === 'pm' ? '\uc624\ud6c4' : '\uc624\uc804') + ' ' + tp.h + ':' + ('0' + tp.m).slice(-2);
+  var k = [{ t: 'text', s: tp.t === 'eve' ? '\ud1f4\uadfc \ube0c\ub9ac\ud551 \uc2dc\uac04' : '\ucd9c\uadfc \ube0c\ub9ac\ud551 \uc2dc\uac04', size: 14, bold: true, color: 'sub', lh: 1.3, pad: [0, 0, 0, 4] },
+    { t: 'text', s: now, size: 28, bold: true, color: 'gold', lh: 1.25, pad: [0, 0, 0, 14] },
+    settingsRowN([settingsBtnN('\uc624\uc804', 'tp.ap.am', { size: 13, on: tp.ap === 'am' }), settingsBtnN('\uc624\ud6c4', 'tp.ap.pm', { size: 13, on: tp.ap === 'pm' })], 14),
+    settingsLabelN('\uc2dc', 6)];
+  [[1, 6], [7, 12]].forEach(function (r, i) {
+    var ks = []; for (var h = r[0]; h <= r[1]; h++) ks.push(settingsBtnN(String(h), 'tp.h.' + h, { size: 14, h: 40, on: tp.h === h }));
+    k.push({ t: 'row', gap: 7, pad: [0, 0, 0, i ? 14 : 7], kids: ks });
+  });
+  k.push(settingsLabelN('\ubd84', 6));
+  [[0, 25], [30, 55]].forEach(function (r, i) {
+    var ks = []; for (var m = r[0]; m <= r[1]; m += 5) ks.push(settingsBtnN(('0' + m).slice(-2), 'tp.m.' + m, { size: 14, h: 40, on: tp.m === m }));
+    k.push({ t: 'row', gap: 7, pad: [0, 0, 0, i ? 18 : 7], kids: ks });
+  });
+  k.push(settingsRowN([settingsBtnN('\ucde8\uc18c', 'tp.cancel', { size: 14, h: 46, tc: 'sub' }), settingsBtnN('\ud655\uc778', 'tp.ok', { size: 14, h: 46, gold: true })], 0));
+  return [settingsPanelN(k, 8)];
+}
+// \uc7a5\uc18c \uace0\ub974\uae30(\uc9c0\ud558\ucca0\uc5ed\uc740 \uc5d4\uc9c4 \uc5ed \ud45c\uc5d0\uc11c, \ubc84\uc2a4\uc815\ub958\uc7a5\uc740 \uc571\uc774 \ucc3e\uc544 \uc628 \uc774\ub984\uc744 \ubc1b\uc544\uc11c)
+function settingsPagePick(f, info) {
+  var pk = f.pick || { k: 'from', q: '' }, P = SETTINGS_PICK[pk.k], q = pk.q.trim();
+  var k = [{ t: 'text', s: P[0], size: 14, bold: true, color: 'text', lh: 1.3, pad: [0, 0, 0, 8] },
+    { t: 'inbar', key: 'cmq', hint: P[1], value: pk.q, maxlen: 60, h: 44, size: 14, r: 9, fill: 'bg', line: 'border2', btn: '\uc800\uc7a5', bh: 32, bsize: 12, onc: 'gold', ckf: '#121214', watch: true, pad: [0, 0, 0, 6], act: settingsCall('pk.save'), eact: settingsCall('pk.save') }];
+  var rows = [];
+  if (q) {
+    var st = settingsStnFind(q);
+    info.pk = { u: st.pk, b: [] };
+    st.u.forEach(function (c, i) { rows.push({ t: 'sug', badge: '\uc9c0\ud558\ucca0', bc: '#0a84ff', name: c.n, sub: c.l.replace(/^\uc9c0\ud558\ucca0 \u00b7 /, ''), act: settingsCall('pk.u.' + i) }); });
+    var seen = {};
+    f.bus.forEach(function (nm, i) {
+      if (info.pk.b.length >= SETTINGS_BUS_MAX || !nm || seen[nm]) return;
+      seen[nm] = 1; info.pk.b.push(i);
+      rows.push({ t: 'sug', badge: '\ubc84\uc2a4', bc: '#00b341', name: nm, sub: '', act: settingsCall('pk.b.' + i) });
+    });
+  }
+  if (rows.length) rows[rows.length - 1].last = true;
+  rows.forEach(function (r) { k.push(r); });
+  if (!rows.length) k.push(settingsSmallN(q ? '\ub9de\ub294 \uc5ed\uc774\ub098 \uc815\ub958\uc7a5\uc744 \ucc3e\uc9c0 \ubabb\ud588\uc5b4\uc694. \uadf8\ub300\ub85c \uc800\uc7a5\ud574\ub3c4 \ub3fc\uc694.' : '\uc9c0\ud558\ucca0\uc5ed\uacfc \ubc84\uc2a4\uc815\ub958\uc7a5 \ubaa8\ub450 \uc785\ub825\ud560 \uc218 \uc788\uc5b4\uc694. \uac80\uc0c9 \ubaa9\ub85d\uc758 \uc9c0\ud558\ucca0/\ubc84\uc2a4 \ud45c\uc2dc\ub85c \uad6c\ubd84\ub3fc\uc694. ' + P[2] + '(\ube44\uc6cc \ub450\uace0 \uc800\uc7a5).', 8, 6));
+  k.push(settingsBtnN('\ube44\uc6b0\uae30', 'pk.clear', { size: 12, h: 38, tc: 'sub', mb: 8 }));
+  k.push(settingsBtnN('\ucde8\uc18c', 'pk.cancel', { size: 12, h: 38, tc: 'sub' }));
+  return [settingsPanelN(k, 8)];
+}
+
+function settingsPageScreen(inp, factsIn) {
+  var p = String(inp.p || '');
+  if (!(Number(inp.cap) >= SETTINGS_PAGE_CAP)) return { ok: false, error: 'cap' };
+  if (!Object.prototype.hasOwnProperty.call(SETTINGS_PAGES, p)) return { ok: false, error: 'page' };
+  var pf = settingsPageFacts(factsIn && typeof factsIn === 'object' ? factsIn.pf : null);
+  pf.bus = (factsIn && factsIn.pf && Array.isArray(factsIn.pf.bus)) ? factsIn.pf.bus.slice(0, 12).map(function (x) { return settingsStr(x, 60).trim(); }) : [];
+  var info = { page: p, sub: '' }, kids;
+  if (p === 'cm' && pf.sub === 'tp') { info.sub = 'tp'; kids = settingsPageTp(pf); }
+  else if (p === 'cm' && pf.sub === 'pick') { info.sub = 'pick'; kids = settingsPagePick(pf, info); }
+  else kids = ({ sam: settingsPageSam, ovl: settingsPageOvl, dev: settingsPageDev, arr: settingsPageArr, gw: settingsPageGw, cm: settingsPageCm })[p](pf);
+  var body = [settingsBackN(info.sub ? SETTINGS_PAGES.cm : '')].concat(kids, [{ t: 'spacer', h: 28 }]);
+  var out = { ok: true, v: 1, screen: 'settings', cover: 'tab', head: [], body: body, info: info };
+  out.rev = 's' + SETTINGS_SCREEN_V + 'p:' + settingsHash(JSON.stringify(body));
+  return out;
+}
 // \uc124\uc815 \ud654\uba74 \uc5d4\uc9c4 Worker \uc5f0\uacb0\ubd80 \u2014 GET /screen/settings (engine/settings.js \uc758 settingsScreen \uc744 \ubd80\ub978\ub2e4). route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/screen/settings") return handleScreenSettings(request);` \ub97c \ub123\ub294\ub2e4.
-//   \ucffc\ub9ac: cap(\uc571\uc774 \uadf8\ub9b4 \uc218 \uc788\ub294 \ud654\uba74 \uaddc\uaca9 \uc218\uc900, 3 \uc774\uc0c1) \u00b7 f(\uc571\uc774 \ubaa8\uc740 \uae30\uae30 \uc0ac\uc2e4 JSON \u2014 \uae38\uc774 3000 \uc790 \uc774\ud558)
+//   \ucffc\ub9ac: cap(\uc571\uc774 \uadf8\ub9b4 \uc218 \uc788\ub294 \ud654\uba74 \uaddc\uaca9 \uc218\uc900, 3 \uc774\uc0c1) \u00b7 p(\ud558\uc704 \ud654\uba74 \uc774\ub984 \u2014 cap 8 \uc774\uc0c1: cm|gw|arr|ovl|dev|sam, \uc5c6\uc73c\uba74 \uc124\uc815 \uccab \ud654\uba74) \u00b7 f(\uc571\uc774 \ubaa8\uc740 \uae30\uae30 \uc0ac\uc2e4 JSON \u2014 \uae38\uc774 6000 \uc790 \uc774\ud558)
 //   \uc5d4\uc9c4\uc740 \uc544\ubb34\uac83\ub3c4 \uc800\uc7a5\ud558\uc9c0 \uc54a\ub294\ub2e4(\uc774 \uae30\uae30\uc758 \uc0ac\uc2e4\ub9cc \ubc1b\uc544 \ud654\uba74\uc744 \uacc4\uc0b0\ud574 \ub3cc\ub824\uc900\ub2e4). \uac1c\uc778 \uc2dd\ubcc4 \uc815\ubcf4\ub294 \uc544\uc774\ub514(\uc774 \uae30\uae30 \ud654\uba74\uc5d0 \ub418\ub3cc\ub824 \uc904 \ubfd0)\ub9cc \uc624\uac04\ub2e4.
 async function handleScreenSettings(request) {
   var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Cache-Control": "no-store" };
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: H });
   var q = new URL(request.url).searchParams, facts = null, raw = q.get("f");
   if (raw) {
-    if (raw.length > 3000) return new Response(JSON.stringify({ ok: false, error: "facts-too-long" }), { status: 400, headers: H });
+    if (raw.length > 6000) return new Response(JSON.stringify({ ok: false, error: "facts-too-long" }), { status: 400, headers: H });
     try { facts = JSON.parse(raw); } catch (e) { return new Response(JSON.stringify({ ok: false, error: "facts-bad-json" }), { status: 400, headers: H }); }
   }
   var out;
-  try { out = settingsScreen({ cap: Number(q.get("cap")) || 0 }, facts); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2) }), { status: 500, headers: H }); }
+  try { out = settingsScreen({ cap: Number(q.get("cap")) || 0, p: String(q.get("p") || "").slice(0, 12) }, facts); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2) }), { status: 500, headers: H }); }
   if (!out || !out.ok) return new Response(JSON.stringify(out || { ok: false, error: "fail" }), { status: 400, headers: H });
   out.ver = ENGINE_VERSION;
   return new Response(JSON.stringify(out), { headers: H });
