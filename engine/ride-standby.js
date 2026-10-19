@@ -35,6 +35,9 @@ var RIDE_STANDBY_DEFAULTS = {
   offGiveUpSec: 900,       // 경로를 벗어난 채 이만큼 지나면 안내를 끝낸다(내리고도 서비스가 계속 도는 것을 막는다)
   doneAfterSec: 180,       // 목적지 도착 알림 뒤 이 시간이 지나면 done
   maxStaleSec: 3 * 3600,   // 상태가 이보다 오래 갱신되지 않았으면 done(안전 장치)
+  // ★ 2026-10-19 (YJ: "영점은 역·정류장 도착 후 5초 안에"): 다음 호출까지의 간격도 엔진이 정한다(네이티브는 nextMs 를 그대로 따른다).
+  //   표시 도착 시각 앞 nearBeforeSec ~ 뒤 nearAfterSec 안에는 nearStepMs, 그 밖에는 stepMs. (웹 _trkGapMs 와 같은 창)
+  stepMs: 5000, nearStepMs: 2500, nearBeforeSec: 30, nearAfterSec: 40,
   ongoingTitle: '길동무 경로 안내 중'
 };
 
@@ -164,6 +167,19 @@ function rsResync(st, now, notes) {
   return true;
 }
 
+// 다음 호출까지 몇 ms 기다릴지 — 표시 도착 시각(정류장·역) 앞 nearBeforeSec ~ 뒤 nearAfterSec 안이면 짧게(영점이 도착 5초 안에 잡히게), 아니면 기본.
+function rsNextMs(st, r, now, O) {
+  var stops = st.stops || [], i;
+  if (!st.eta || st.eta.boarded === false || st.eta.notDeparted === true) return O.stepMs;
+  for (i = 0; i < stops.length; i++) {
+    var s = stops[i], am = (r && r.etaMs && r.etaMs[s.i] != null) ? r.etaMs[s.i] : s.arrMs;
+    if (am == null || !isFinite(am)) continue;
+    var dt = now - am;
+    if (dt >= -O.nearBeforeSec * 1000 && dt <= O.nearAfterSec * 1000) return O.nearStepMs;
+  }
+  return O.stepMs;
+}
+
 function rideStandby(req) {
   req = req || {};
   var O = RIDE_STANDBY_DEFAULTS, st = req.state, now = +req.nowMs, notes = [], i;
@@ -179,10 +195,14 @@ function rideStandby(req) {
   if (tr.length > O.trailMax) tr.splice(0, tr.length - O.trailMax);
   // 2) 영점: 정류장 도착 시각을 최신 etaMs 로 맞춰 ride-track 에 묻는다 → 통과 시각(passMs)은 gps 증거로, 아직 안 닿음은 notYet 으로
   var eta = st.eta, passes = (eta.passes = eta.passes || []), notYet = (st.notYet = st.notYet || {});
-  var zero = null, newPass = false;
+  var zero = null, newPass = false, tk = null;
+  // ★ 2026-10-19: 지금 진행 노드(가장 뒤 통과)가 버스 정류장이면 엔진이 버스 위치(busPos)·움직임(motion)까지 본다 — 앱이 가려져도 웹과 같은 판정.
+  var enodes = eta.nodes || [], progMax = -1, progBus = false;
+  for (i = 0; i < passes.length; i++) if (passes[i] && passes[i].idx > progMax) progMax = passes[i].idx;
+  if (progMax >= 0 && enodes[progMax] && enodes[progMax].isBus && !enodes[progMax].isWalk) progBus = true;
   if (st.stops && st.stops.length && tr.length) {
     var stops = st.stops.map(function (s) { var o = rsClone(s); if (st.etaMs && st.etaMs[s.i] != null) o.arrMs = st.etaMs[s.i]; return o; });
-    var tk = rsTrackFn()({ nowMs: now, trail: tr, plan: { pts: [], boarded: eta.boarded !== false && eta.notDeparted !== true, notDeparted: false, stops: stops, subConfirmed: true, suppress: ['standby'] }, want: { zero: true } });
+    tk = rsTrackFn()({ nowMs: now, trail: tr, plan: { pts: [], boarded: eta.boarded !== false && eta.notDeparted !== true, notDeparted: false, stops: stops, subConfirmed: !progBus, progIsBus: progBus, suppress: ['standby'] }, want: { zero: true, bus: progBus } });
     zero = tk && tk.zero ? tk.zero : null;
     if (zero && zero.stops) {
       zero.stops.forEach(function (z) {
@@ -196,6 +216,19 @@ function rideStandby(req) {
         } else if (z.notYet) { notYet[z.i] = now; }
       });
     }
+  }
+  // ★ 2026-10-19: 버스 위치 — 정류장을 이은 선 위에서 이미 지난 정류장(시각을 알면 통과 시각)을 통과 증거로 적는다. 이미 GPS 로 확인한 통과는 건드리지 않는다.
+  if (tk && tk.busPos && tk.busPos.passed) {
+    tk.busPos.passed.forEach(function (p) {
+      if (!p || p.i == null || !isFinite(p.ms)) return;
+      var nd0 = enodes[p.i]; if (!nd0 || !nd0.isBus) return;
+      var hit = -1; for (var k = 0; k < passes.length; k++) if (passes[k].idx === p.i) { hit = k; break; }
+      if (hit >= 0 && (passes[hit].src === 'gps' || passes[hit].src === 'move')) return;
+      var np = { idx: p.i, ms: p.ms, src: 'gps' };
+      if (hit >= 0) passes[hit] = np; else passes.push(np);
+      newPass = true; delete notYet[p.i];
+      notes.push('버스위치 ' + p.i + '번 통과 반영');
+    });
   }
   if (rsResync(st, now, notes)) newPass = true;   // 2.5) 버스: 오래 끊겼던 GPS 가 돌아오면 앞쪽 정류장 통과로 다시 맞춘다(시각표 기준 여정은 시각표가 이어가므로 해당 없음)
   // 3) 도착 시각 계산
@@ -211,7 +244,7 @@ function rideStandby(req) {
   var ein = rsClone(eta); ein.nowMs = now; if (st.dr) ein.timetableFirst = true; ein.passes = passes; if (nyList.length && eta.timetableFirst) ein.notYet = nyList; else delete ein.notYet;
   var fired = (st.fired = st.fired || {});
   var r = rsEtaFn()(ein);
-  if (!r || !r.etaMs) return { v: 1, state: st, ongoing: { title: O.ongoingTitle, text: '' }, alert: null, done: false, notes: ['도착 시각 계산 실패'] };
+  if (!r || !r.etaMs) return { v: 1, state: st, ongoing: { title: O.ongoingTitle, text: '' }, alert: null, done: false, nextMs: O.stepMs, notes: ['도착 시각 계산 실패'] };
   st.etaMs = r.etaMs;
   if (r.delayMin != null) { eta.prevLevelMin = r.delayMin; eta.prevAnchorIdx = r.anchorIdx; }
   // 4) 지금 어느 역까지 왔나 → 알림 판정 · 상주 알림 문구
@@ -262,10 +295,13 @@ function rideStandby(req) {
   var lastAt = st.lastAt || now; if (now - lastAt > O.maxStaleSec * 1000) done = true;
   st.lastAt = now;
   var moving = !!(r.pos && r.pos.moving), overlay = null;
+  // 버스는 네비게이션식 — 엔진이 본 '지금 달리는 중인가'(motion)를 따른다(null 이면 모른다 → 계산 값 유지)
+  if (progBus && tk && tk.motion && tk.motion.moving != null) moving = tk.motion.moving === true;
+  var nextMs = rsNextMs(st, r, now, O);
   try { overlay = rsOverlay(st, r, curIdx, al.curPos, now, dest, cfg.destName || (dest && dest.name) || '', moving, done); } catch (eOv) { notes.push('오버레이 계산 실패: ' + (eOv && eOv.message)); }
   if (offActive && overlay && overlay.active) { overlay.alert = 0; overlay.pre = false; overlay.banner = '경로를 벗어났어요 — 앱을 열면 다시 찾아 드려요'; }
   var view = { text: text, line1: overlay && overlay.line1 || '', line2: overlay && overlay.line2 || '', curIdx: curIdx, at: now };
-  return { v: 1, state: st, ongoing: { title: O.ongoingTitle, text: text }, alert: al.alert, done: done, curIdx: curIdx, overlay: overlay, view: view, zero: zero, notes: notes };
+  return { v: 1, state: st, ongoing: { title: O.ongoingTitle, text: text }, alert: al.alert, done: done, curIdx: curIdx, overlay: overlay, view: view, zero: zero, nextMs: done ? O.stepMs : nextMs, motion: tk && tk.motion ? tk.motion : null, notes: notes };
 }
 
 function handleRideStandby(request) {
@@ -285,4 +321,4 @@ function handleRideStandby(request) {
   }, function () { return new Response(JSON.stringify({ error: '요청을 읽지 못함' }), { status: 400, headers: H }); });
 }
 
-if (typeof module !== 'undefined') module.exports = { rideStandby: rideStandby, rsResync: rsResync, handleRideStandby: handleRideStandby, rsAlerts: rsAlerts, RIDE_STANDBY_DEFAULTS: RIDE_STANDBY_DEFAULTS };
+if (typeof module !== 'undefined') module.exports = { rideStandby: rideStandby, rsNextMs: rsNextMs, rsResync: rsResync, handleRideStandby: handleRideStandby, rsAlerts: rsAlerts, RIDE_STANDBY_DEFAULTS: RIDE_STANDBY_DEFAULTS };
