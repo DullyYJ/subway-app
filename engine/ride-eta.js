@@ -77,9 +77,11 @@ var RIDE_ETA_DEFAULTS = {
   // 정차 시간(초) — 실측 25초(표본 25,997). 시각표 기준 위치(pos)에서 도착 뒤 이만큼은 역 위에 머문다.
   // ★ 2026-10-16 (YJ: "역에 도착하면 마커가 바로 다음역으로 넘어간다 — GPS 영점을 고려해서 10초 동안 정차(노란색) 후 이동"): 25 → 10초.
   // ★ 2026-10-19 (YJ: "각 역에 도착하면 12초 동안 문이 열린다고 생각해줘 — 시간표상 역에 도착하면 12초 정지(정지 중엔 GPS 영점) 하고 다음 역으로. 버스는 네비게이션처럼 GPS 기준이니 적용 X"): 10 → 12초, 지하철 역에만(버스 정류장은 0).
-  stopDwellSec: 12,
+  // ★ 2026-10-19 (YJ: "도착 후 역에 머무르는 시간을 20초로"): 12 → 20초.
+  stopDwellSec: 20,
   // 영점(GPS 통과)을 받은 역에서 마커가 멈춰 있어야 하는 시간(초). 통과 시각(영점이면 실제 통과 시각) + 이만큼까지 hold 로 알린다 — 시각표 기준 위치(pos)를 못 쓰는 경우에도 앱이 그린다.
-  markerDwellSec: 12,
+  // ★ 2026-10-19 (YJ: 같은 요청): 12 → 20초 — 정차(pos)와 같은 값.
+  markerDwellSec: 20,
   // ★ 2026-10-14 (YJ: 인천1호선(실시간 위치 없음) 시험 — 도착 표시가 약 15초 늦다 → 현재보다 10초 일찍 도착으로 판정): 시각표 기준 위치(pos)에서 '중간 경로역'(승차역·최종 목적지 제외)에 닿았다고 보는 시각을
   //   표시 도착 시각보다 이만큼(초) 앞당긴다. 0 이면 끔. 표시하는 도착 시각(etaMs·arr)은 그대로이고 마커·오버레이가 읽는 pos(from/to/t0/t1/segs)만 당겨진다. (영점 창은 ride-track zeroLeadSec 가 같이 일찍 열린다)
   // ★ 2026-10-15 (YJ: 마커가 다음 역에 너무 일찍 올라간다 → 10초를 5초로): 값만 10 → 5.
@@ -103,7 +105,8 @@ var RIDE_ETA_DEFAULTS = {
   rounding: 'floor',
   // ★ 2026-10-19 (YJ: "역 도착 시간이 06시38분이면 우리는 06시38분30초에 도착했다고 확정한다 — 거기서부터는 이전 규칙을 따른다"): 시각표의 분 단위 시각(06:38)은 그 분 안(38:00~38:59)의 어느 때든 될 수 있어 가운데(:30)를 도착으로 본다.
   //   예정 시각(planMs)을 이만큼(초) 뒤로 놓고, 화면 시각(HH:MM)은 분의 몫(floor)으로 쓴다 — 06:38:30 은 '06:38' 로 보인다.
-  planSecOffset: 30
+  // ★ 2026-10-19 (YJ: "지하철 도착을 확정하는 마커도 20초쯤 빠른 것 같다"): :30 → :50 — 06:38 이면 06:38:50 에 도착으로 확정한다(그 뒤 20초 정차 → 06:39:10 에 출발). 화면 시각은 여전히 분의 몫이라 06:38.
+  planSecOffset: 50
 };
 
 function _reFold(d) { return d - Math.round(d / 1440) * 1440; }          // 자정 접힘: 차이를 ±12시간 안으로
@@ -172,10 +175,11 @@ function rideRow(input) {
 //   입력 { op:'arrive', nowMs, nodes:[{isWalk,isOrigin,isSub,isBus,lineName,name,lat,lng,ms(도착 시각 ms|null)}…], idx(현재 진행 노드 번호, 모르면 -1), riding:bool(지금 차량 안), hold:bool(환승 승차 대기),
 //          alighted:bool(앱이 가진 하차·도착 확인 증거), alightedAt:ms|null(앞서 엔진이 준 하차 판정 시각), preMin?:7, quitAfterSec?:180, wx?:{rainy,snowy,temp}, tzMin?:540 }
 //   출력 { v, ok, alight:{idx,name,lat,lng,ms}, legStart(마지막 구간을 탄 노드 번호), left(내릴 역까지 남은 정거장 수, 마지막 구간을 타는 중일 때만 아니면 null),
-//          level(0|2|1 — 2=두 정거장 전 · 1=한 정거장 전), pre(0|1 — 세 정거장 전), reco:{fromMs,untilMs}(추천 문구를 보이는 시각 창),
+//          level(0|2|1 — 2=두 정거장 전 · 1=한 정거장 전), pre(0|1 — 세 정거장 전), reco:{fromMs,untilMs,ttlMs}(추천 문구를 보이는 시각 창 + 추천이 만들어진 지 이만큼(ms)이 지나면 묵은 것으로 보고 숨긴다),
 //          getoff:{title,cheer}(내릴 준비 문구 — 날짜·시간·날씨에 맞춘 응원), alighted:bool, alightedAt, quitAtMs(하차 판정 + quitAfterSec | null), nextAtMs(다음에 다시 물을 시각) }
 //   앱은 now 가 reco 창 안인지만 비교하고, 받은 level·문구·quitAtMs 를 그대로 그린다. 값이 모자라면(ok:false) 그리지 않는다.
-var ARRIVE_DEFAULTS = { preMin: 7, quitAfterSec: 180, recoEndSec: 30, tzMin: 540 };
+//   ★ 2026-10-19 (s61): 오버레이 추천 줄 '보임 시점'(도착 7분 전~30초 뒤 · 묵은 추천 25분)의 숫자도 이 창(fromMs·untilMs·ttlMs)이 정한다 — 앱은 지금 시각과 비교만 한다.
+var ARRIVE_DEFAULTS = { preMin: 7, quitAfterSec: 180, recoEndSec: 30, recoTtlSec: 1500, tzMin: 540 };
 var ARR_CHEER = {
   rain:    ['빗길 미끄러우니 천천히 내려요', '비 오는 날, 우산 챙기고 조심히 가요'],
   snow:    ['눈길 미끄러우니 천천히 내려요', '눈 오는 날, 발밑 조심해요'],
@@ -230,13 +234,13 @@ function rideArrive(input) {
   var prevAt = +(input && input.alightedAt);
   var alightedAt = alighted ? (isFinite(prevAt) && prevAt > 0 ? prevAt : now) : null;
   var quitAtMs = alighted ? alightedAt + quitSec * 1000 : null;
-  var fromMs = ams - preMin * 60000, untilMs = ams + O.recoEndSec * 1000;
+  var fromMs = ams - preMin * 60000, untilMs = ams + O.recoEndSec * 1000, ttlMs = O.recoTtlSec * 1000;
   var nxt = null, ts = [fromMs, untilMs, quitAtMs];
   for (i = 0; i < ts.length; i++) if (ts[i] != null && ts[i] > now && (nxt == null || ts[i] < nxt)) nxt = ts[i];
   return {
     v: 1, ok: true, alight: { idx: ai, name: an.name || '', lat: an.lat != null ? an.lat : null, lng: an.lng != null ? an.lng : null, ms: ams },
     legStart: ls, idx: idx, left: left, level: level, pre: (onFinal && left === 3) ? 1 : 0,
-    reco: { fromMs: fromMs, untilMs: untilMs },
+    reco: { fromMs: fromMs, untilMs: untilMs, ttlMs: ttlMs },
     getoff: { title: '내릴 준비를 해주세요', cheer: reArrCheer(now, tz, input && input.wx) },
     alighted: alighted, alightedAt: alightedAt, quitAtMs: quitAtMs, nextAtMs: nxt
   };
