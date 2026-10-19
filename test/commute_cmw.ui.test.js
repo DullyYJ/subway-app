@@ -30,8 +30,8 @@ const at = (hm, s) => MON0 + (parseInt(hm.slice(0, 2)) * 60 + parseInt(hm.slice(
       const body = r.request().postData() || ''; ENG.hits.push(body);
       if (ENG.mode === '404') return r.fulfill({ status: 404, headers: H, body: '{"error":"not found"}' });
       if (ENG.mode === 'hang') return;
-      if (ENG.mode === 'bad') return r.fulfill({ status: 200, headers: H, body: '{"ok":true,"v":1,"fire":"yes"}' });
-      const j = JSON.parse(body); const out = j.op === 'occ' ? CM.cmOccurrences(j) : CM.cmDue(j); out.ok = true;
+      if (ENG.mode === 'bad') return r.fulfill({ status: 200, headers: H, body: '{"ok":true,"v":1,"fire":"yes","due":["x"]}' });
+      const j = JSON.parse(body); const out = j.op === 'occ' ? CM.cmOccurrences(j) : j.op === 'pre' ? CM.cmPreDue(j) : CM.cmDue(j); out.ok = true;
       return r.fulfill({ status: 200, headers: H, body: JSON.stringify(out) });
     }
     return r.fulfill({ status: 200, headers: H, body: '{}' });
@@ -161,6 +161,64 @@ const at = (hm, s) => MON0 + (parseInt(hm.slice(0, 2)) * 60 + parseInt(hm.slice(
   await page.evaluate(() => { _cmTick(); });
   await sleep(150); await page.clock.runFor(2600); await sleep(100);
   await t('엔진이 응답 없으면(2.5초) 예전 규칙으로 보낸다 · 쉬기', async () => { assert.deepStrictEqual(await briefs(), ['morn']); assert.strictEqual(await page.evaluate(() => _cmwDown()), true); });
+
+  console.log('[s64 — 출퇴근 경로 미리 받기 때]');
+  const preSetup = async (on, mode, cfg, coords) => {
+    await setup(on, mode, cfg);
+    await page.evaluate((co) => {
+      Object.assign(_cmAlarm, co === false ? { from: '', fromLat: null, fromLng: null, to: '', toLat: null, toLng: null, eFrom: '', eTo: '' } : { from: '집', fromLat: 37.5, fromLng: 127.0, to: '회사', toLat: 37.4, toLng: 127.1, eFrom: '', eTo: '' });
+      window._cmPf.at = {}; window._cmPf.busy = false; window._cmPf.age = {}; window._cmPf.seq++;
+      window.__pre = [];
+      window._routeGetJson = function (u) { window.__pre.push(u); return Promise.resolve({ result: { path: [1] } }); };
+    }, coords === false ? false : true);
+  };
+  const preRun = async () => {
+    await page.evaluate(() => { _commutePrefetch('test'); });
+    for (let i = 0; i < 80; i++) { if (!(await page.evaluate(() => window._cmPf.busy))) break; await sleep(40); await page.clock.runFor(40); }
+    return page.evaluate(() => window.__pre.slice());
+  };
+  await t('스위치 꺼짐: 엔진에 묻지 않고 예전 규칙으로 미리 받는다', async () => {
+    await preSetup(false); await fixAt(at('07:00')); const r = await preRun();
+    assert.strictEqual(ENG.hits.length, 0); assert.strictEqual(r.length, 1); assert.ok(/SX=127&SY=37\.5&EX=127\.1&EY=37\.4/.test(r[0]), r[0]);
+  });
+  const ptimes = []; for (const hm of ['00:00', '06:44', '06:45', '07:30', '07:50', '07:51', '12:00', '17:44', '17:45', '18:30', '18:50', '18:51', '23:59']) for (const dd of [0, 5, 6]) ptimes.push(at(hm, 20) + dd * 86400000);
+  await t('시각 39 × 설정 4종: 미리 받는 구간이 예전 규칙과 같다(요일 · 자정 · 중복)', async () => {
+    let n = 0, hits = 0;
+    for (const cfg of [{}, { days: [] }, { days: [0, 6] }, { morn: '18:30', eve: '07:30' }]) for (const ms of ptimes) {
+      await preSetup(false, 'ok', cfg); await fixAt(ms); const a = await preRun();
+      await preSetup(true, 'ok', cfg); await fixAt(ms); const e = await preRun();
+      assert.deepStrictEqual(e, a, JSON.stringify({ cfg, ms: new Date(ms).toISOString() })); n++; hits += a.length;
+    }
+    assert.strictEqual(n, 156); assert.ok(hits > 10 && hits < n, '받음 ' + hits);
+  });
+  await t('엔진에는 시각·요일·경과 시간만 간다 — 장소 이름·좌표는 가지 않는다(op=pre)', async () => {
+    await preSetup(true); await fixAt(at('07:00')); await preRun();
+    const j = JSON.parse(ENG.hits[0]); assert.deepStrictEqual(Object.keys(j).sort(), ['ageEve', 'ageMorn', 'days', 'eve', 'morn', 'nowMs', 'op']); assert.strictEqual(j.op, 'pre');
+    assert.ok(!/37\.|127|집|회사/.test(ENG.hits[0]), ENG.hits[0]);
+  });
+  await t('같은 구간은 20분 안에 두 번 받지 않는다 · 20분이 지나면 다시 받는다(경과 시간을 엔진에 알린다)', async () => {
+    await preSetup(true); await fixAt(at('07:00')); const a = await preRun(); assert.strictEqual(a.length, 1);
+    await fixAt(at('07:10')); const b = await preRun(); assert.strictEqual(b.length, 1, '10분 뒤에 또 받음');
+    assert.strictEqual(JSON.parse(ENG.hits[1]).ageMorn, 600000);
+    await fixAt(at('07:21')); const c = await preRun(); assert.strictEqual(c.length, 2);
+  });
+  await t('저장된 장소(좌표)가 없으면 미리 받지 않는다', async () => {
+    await preSetup(true, 'ok', {}, false); await fixAt(at('07:00')); assert.deepStrictEqual(await preRun(), []);
+  });
+  for (const mode of ['404', 'bad']) {
+    await t('미리 받기: 엔진 ' + mode + ' → 바로 예전 규칙으로 받는다 · 문제로 표시 · 60초는 엔진에 묻지 않는다', async () => {
+      await preSetup(true, mode); await fixAt(at('07:00')); const e = await preRun();
+      assert.strictEqual(e.length, 1); assert.strictEqual(await page.evaluate(() => _cmwDown()), true);
+      const before = ENG.hits.length; await page.evaluate(() => { window._cmPf.at = {}; window.__pre = []; }); await fixAt(at('07:00', 20)); const e2 = await preRun();
+      assert.strictEqual(ENG.hits.length, before); assert.strictEqual(e2.length, 1);
+    });
+  }
+  await t('미리 받기: 엔진이 응답 없으면(2.5초) 예전 규칙으로 받는다', async () => {
+    await preSetup(true, 'hang'); await fixAt(at('07:00'));
+    await page.evaluate(() => { _commutePrefetch('test'); }); await sleep(150); await page.clock.runFor(2600); await sleep(150);
+    for (let i = 0; i < 20; i++) { if (!(await page.evaluate(() => window._cmPf.busy))) break; await sleep(40); await page.clock.runFor(40); }
+    assert.strictEqual((await page.evaluate(() => window.__pre.length)), 1); assert.strictEqual(await page.evaluate(() => _cmwDown()), true);
+  });
 
   console.log('[설정 카드]');
   await setup(false);

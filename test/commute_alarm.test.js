@@ -7,7 +7,7 @@ process.env.TZ = 'Asia/Seoul';
 const assert = require('assert');
 const fs = require('fs'), path = require('path');
 const root = path.join(__dirname, '..');
-const { cmDue, cmOccurrences, handleCommuteAlarm } = require(path.join(root, 'engine/commute-alarm.js'));
+const { cmDue, cmOccurrences, cmPreDue, handleCommuteAlarm } = require(path.join(root, 'engine/commute-alarm.js'));
 let pass = 0, fail = 0;
 function t(name, fn) { try { fn(); pass++; console.log('  ok  ' + name); } catch (e) { fail++; console.log('  FAIL ' + name + '\n     ' + (e && e.message)); } }
 
@@ -150,11 +150,49 @@ t('Worker 내장본 판단이 모듈과 같다', () => {
   const m = worker.match(/\/\/ ===== commute-alarm \([^\n]*\n([\s\S]*?)\/\/ ===== commute-alarm \\ub05d =====/);
   assert.ok(m);
   const body = m[1].replace(/^\s*if \(typeof module[^\n]*\n/m, '');
-  const mod = new Function('Response', body + '; return { cmDue: cmDue, cmOccurrences: cmOccurrences };')(Response);
+  const mod = new Function('Response', body + '; return { cmDue: cmDue, cmOccurrences: cmOccurrences, cmPreDue: cmPreDue };')(Response);
   for (const c of configs) for (let k = 0; k < 600; k++) {
     const a = Object.assign({ nowMs: D0 + k * 61000 + 7 * 3600000, on: true, osOk: false, lastKey: '' }, c);
     assert.deepStrictEqual(mod.cmDue(a), cmDue(a)); assert.deepStrictEqual(mod.cmOccurrences(a), cmOccurrences(a));
+    const b = Object.assign({ ageMorn: k % 3 ? null : 600000, ageEve: k % 5 ? null : 2000000 }, a);
+    assert.deepStrictEqual(mod.cmPreDue(b), cmPreDue(b));
   }
+});
+
+// ── 2026-10-19(s64): 출퇴근 경로 미리 받기 '때' — 예전 웹 _commutePrefetch 의 시각 판단(얼린 사본; 기기 시간대 = 한국시간) ──
+function refHm(str) { const m = /^(\d{1,2}):(\d{2})$/.exec(String(str || '')); return m ? (+m[1]) * 60 + (+m[2]) : null; }
+function refPre(a) {   // → ['morn','eve'] 중 때가 된 것(순서대로). 예전엔 첫 번째 쓸 수 있는 것에서 멈췄다
+  if (!refDayOn(a.days, new Date(a.nowMs).getDay())) return [];
+  const d = new Date(a.nowMs), nowM = d.getHours() * 60 + d.getMinutes(), out = [];
+  [['morn', refHm(a.morn), a.ageMorn], ['eve', refHm(a.eve), a.ageEve]].forEach(c => {
+    const tm = c[1]; if (tm == null) return;
+    let diff = nowM - tm; if (diff > 720) diff -= 1440; if (diff < -720) diff += 1440;
+    if (diff < -45 || diff > 20) return;
+    if (c[2] != null && c[2] < 20 * 60 * 1000) return;
+    out.push(c[0]);
+  });
+  return out;
+}
+t('미리 받기 때: 예전 웹 규칙과 같다(시각 · 요일 · 자정 넘김 · 20분 중복 · 이상한 시각)', () => {
+  const times = ['07:30', '7:05', '00:10', '23:50', '18:30', '', 'x', '25:99', null, '12:00'], dayss = [[1, 2, 3, 4, 5], [], [0, 6], null, [1]];
+  let n = 0;
+  for (const morn of times) for (const eve of times) for (const days of dayss) for (let k = 0; k < 24; k++) for (const ages of [[null, null], [0, null], [1199999, 5000000], [1200000, 1200000], [null, 60000]]) {
+    const nowMs = D0 + k * 3600000 + (k * 7919 % 60) * 60000 + (n % 5) * 11000;
+    const a = { nowMs, morn, eve, days, ageMorn: ages[0], ageEve: ages[1] };
+    assert.deepStrictEqual(cmPreDue(a).due, refPre(a), JSON.stringify(a)); n++;
+  }
+  assert.ok(n > 5000);
+});
+t('미리 받기 때: 구체 사례', () => {
+  const at = (h, mi, o) => cmPreDue(Object.assign({ nowMs: D0 + (h * 60 + mi) * 60000, morn: '07:30', eve: '18:30', days: [1, 2, 3, 4, 5] }, o)).due;
+  assert.deepStrictEqual(at(6, 45), ['morn']); assert.deepStrictEqual(at(6, 44), []); assert.deepStrictEqual(at(7, 50), ['morn']); assert.deepStrictEqual(at(7, 51), []);
+  assert.deepStrictEqual(at(17, 50), ['eve']); assert.deepStrictEqual(at(12, 0), []);
+  assert.deepStrictEqual(at(7, 0, { ageMorn: 1199999 }), []); assert.deepStrictEqual(at(7, 0, { ageMorn: 1200000 }), ['morn']);
+  assert.deepStrictEqual(at(7, 0, { days: [0, 6] }), []);        // 2026-10-19 는 월요일
+  assert.deepStrictEqual(at(7, 0, { days: [] }), ['morn']);       // 비면 매일
+  assert.deepStrictEqual(cmPreDue({ nowMs: D0 + 30 * 60000, morn: '00:20', eve: '23:50' }).due, ['morn']);   // 자정 넘김: 00:30 은 출근 00:20 의 +10분, 퇴근 23:50 의 +40분은 아님
+  assert.deepStrictEqual(cmPreDue({ nowMs: D0 + 10 * 60000, morn: '00:20', eve: '23:50' }).due, ['morn', 'eve']);   // 00:10 = 출근 00:20 의 -10분 · 퇴근 23:50 의 +20분(경계 포함)
+  assert.deepStrictEqual(cmPreDue({}).due, []); assert.deepStrictEqual(cmPreDue(null).due, []); assert.deepStrictEqual(cmPreDue({ nowMs: 'x', morn: '07:30' }).due, []);
 });
 async function call(method, body) {
   const req = new Request('https://x/commute-alarm', { method, body: body == null ? undefined : (typeof body === 'string' ? body : JSON.stringify(body)) });
@@ -166,6 +204,8 @@ async function call(method, body) {
   t('POST: 보낼 분이면 fire · ok · 키', () => { assert.strictEqual(r.status, 200); assert.strictEqual(r.json.ok, true); assert.strictEqual(r.json.fire, 'morn'); assert.strictEqual(r.json.key, 'Mon Oct 19 2026|07:30'); });
   r = await call('POST', Object.assign({ op: 'occ', nowMs }, c0));
   t('POST op=occ: 4주치 시각', () => { assert.strictEqual(r.status, 200); assert.ok(r.json.morn.length >= 25 && r.json.eve.length >= 25); assert.strictEqual(r.json.ok, true); });
+  r = await call('POST', { op: 'pre', nowMs: D0 + 7 * 3600000, morn: '07:30', eve: '18:30', days: [1, 2, 3, 4, 5], ageMorn: null, ageEve: 5 });
+  t('POST op=pre: 때가 된 구간 이름만 돌려준다', () => { assert.strictEqual(r.status, 200); assert.strictEqual(r.json.ok, true); assert.deepStrictEqual(r.json.due, ['morn']); assert.strictEqual(r.json.v, 1); });
   r = await call('GET'); t('GET → 405', () => assert.strictEqual(r.status, 405));
   r = await call('OPTIONS'); t('OPTIONS → 204', () => assert.strictEqual(r.status, 204));
   r = await call('POST', '{not json'); t('이상한 JSON → 400', () => assert.strictEqual(r.status, 400));
