@@ -2316,6 +2316,126 @@ var _ROUTE_V2_PATH = '/route-v2-app';   // 워커 라우트명(워커와 함께�
 function _routeV2Url(qs){
   return _ROUTE_V2_BASE + _ROUTE_V2_PATH + '?' + qs;
 }
+// ── 경로 요청을 앱 본체가 하기 (★ 2026-10-19 · 5번 3단계) ──────────────────────────────────────────
+//   설정 스위치 '경로 요청을 앱 본체가 하기'(gdm_rtf, 기본 꺼짐). 켜면 경로 서버(/route-v2-app) 요청과 가장 최근 결과 보관을 앱 본체(RouteFetch 플러그인)가 한다.
+//   웹은 받은 응답을 예전과 똑같이 그린다. 어떤 응답을 그릴지 · 전체를 뒤따라 받을지 · 언제 다시 조회할지 · 나아졌는지는 엔진이 응답 맨 앞에 실은 follow 가 정한다(앱은 그림만).
+//   폴백(전부 자동, 예전 방식 코드는 그대로 남아 있다): 플러그인이 없음 · request 거절 · 시간초과가 아닌 통신 실패 · 옛 엔진(follow 없음) → 예전 방식. 스위치를 껐다 켜면 다시 시도.
+var _RJ = { bad: false, wait: {}, fullEv: null, hooked: false, last: null };
+function _rtfOn(){ try{ return localStorage.getItem('gdm_rtf') === '1'; }catch(e){ return false; } }
+function _rjPlug(){
+  try{ var C = window.Capacitor, P = C && C.Plugins && C.Plugins.RouteFetch; return (P && typeof P.request === 'function' && typeof P.once === 'function' && typeof P.addListener === 'function') ? P : null; }catch(e){ return null; }
+}
+function _rjUse(){ return _rtfOn() && !_RJ.bad && !!_rjPlug(); }
+function _rjSync(){ try{ if(typeof window._rtfSyncCard === 'function') window._rtfSyncCard(); }catch(e){} }
+function _rjFail(why){
+  if(_RJ.bad) return;
+  _RJ.bad = true;
+  try{ localStorage.setItem('gdm_rtf_why', String(why || '').slice(0, 100)); }catch(e){}
+  try{ console.warn('[경로 요청] 예전 방식으로 돌아갑니다:', why); }catch(e0){}
+  _rjSync();
+}
+function _rjLogAdd(l){
+  try{
+    if(!l || !l.length) return;
+    var a = window._routeFetchLog = window._routeFetchLog || [];
+    for(var i = 0; i < l.length; i++){ var e = l[i] || {}; a.push({ ms: e.ms, how: e.how, n: (e.n != null ? e.n : null), ver: e.ver || null, err: e.err || null }); }
+  }catch(e){}
+}
+function _rjParse(r){ try{ return JSON.parse(r.raw); }catch(e){ return null; } }
+function _rjHook(P){
+  if(_RJ.hooked) return;
+  _RJ.hooked = true;
+  try{
+    P.addListener('route', function(ev){
+      try{
+        if(!ev || ev.stage !== 'full') return;
+        _rjLogAdd(ev.log);
+        var id = String(ev.id), w = _RJ.wait[id];
+        if(w){ delete _RJ.wait[id]; clearTimeout(w.t); w.res((ev.ok && ev.raw) ? _rjParse(ev) : null); }
+        else _RJ.fullEv = ev;                                   // 아직 기다리는 쪽이 없으면(이벤트가 먼저 왔다) 하나만 맡아 둔다
+      }catch(e){}
+    });
+  }catch(e){ _RJ.hooked = false; }
+}
+// 뒤따라 오는 전체 응답을 기다린다(앱 본체가 route 이벤트로 보낸다). 없으면 ms 뒤 null.
+function _rjWaitFull(id, ms){
+  return new Promise(function(res){
+    var b = _RJ.fullEv;
+    if(b && String(b.id) === id){ _RJ.fullEv = null; res((b.ok && b.raw) ? _rjParse(b) : null); return; }
+    var w = { res: res, t: setTimeout(function(){ if(_RJ.wait[id] === w){ delete _RJ.wait[id]; res(null); } }, ms) };
+    _RJ.wait[id] = w;
+  });
+}
+// 첫 요청. → {results:[json|null], forced} | {fallback:true} | {skip:true}
+function _rjStart(url, ms, id){
+  var P = _rjPlug();
+  if(!P) return Promise.resolve({ fallback: true });
+  _rjHook(P);
+  _RJ.fullEv = null;
+  var t0 = Date.now();
+  return P.request({ id: id, url: url, timeoutMs: ms }).then(function(r){
+    if(!r){ _rjFail('응답 없음'); return { fallback: true }; }
+    _rjLogAdd(r.log);
+    if(r.stale) return { skip: true };
+    if(r.legacy){ _rjFail('엔진이 아직 경로 후속 지시를 못 줘요'); return { fallback: true }; }
+    if(!r.ok){
+      if(/^timeout/.test(String(r.why || ''))) return { results: [null] };      // 시간초과는 예전 방식도 똑같이 실패로 쳤다
+      _rjFail('통신 실패(' + String(r.why || '').slice(0, 40) + ')');
+      return { fallback: true };
+    }
+    var j = _rjParse(r);
+    if(!j){ _rjFail('응답을 읽지 못함'); return { fallback: true }; }
+    _RJ.last = { ms: Date.now() - t0, bytes: r.bytes || 0, at: Date.now() };
+    return { results: [j], forced: !!r.forced };
+  }, function(e){
+    _rjFail('요청 거절: ' + String((e && e.message) || e).slice(0, 40));
+    return { fallback: true };
+  });
+}
+// 한 건 받기(재조회·보조 요청). → json | null.  allowLegacy: 엔진 지시(follow)가 없는 응답도 받는다(보조 요청은 지시를 안 쓴다)
+function _rjOnce(url, ms, id, allowLegacy){
+  var P = _rjPlug();
+  if(!P) return Promise.resolve(null);
+  return P.once({ id: id, url: url, timeoutMs: ms }).then(function(r){
+    if(!r) return null;
+    _rjLogAdd(r.log);
+    if(!r.ok || (r.legacy && !allowLegacy)) return null;
+    return _rjParse(r);
+  }, function(){ return null; });
+}
+// 보조 경로 요청(다른 편 고르기 · 출발 시각 비교 · 출퇴근 미리 받기): 스위치가 켜져 있으면 앱 본체가 받고, 못 받으면 예전 fetch 로. 실패하면 거절(HTTP n) — 예전 fetch 체인과 같다.
+function _routeGetJson(url, fo, soft){
+  var web = function(){ return fetch(url, fo).then(function(r){ if(!r.ok){ if(soft) return null; throw new Error('HTTP ' + r.status); } return r.json(); }); };   // soft: 예전처럼 HTTP 오류를 null 로
+  if(!_rjUse()) return web();
+  return _rjOnce(url, 15000, 'g' + Date.now(), true).then(function(j){ return j || web(); });
+}
+window._rtfOn = _rtfOn;
+window._rtfAvail = function(){ return !!_rjPlug(); };
+window._rtfBad = function(){ return !!_RJ.bad; };
+window._rtfSetUse = function(on){
+  try{ localStorage.setItem('gdm_rtf', on ? '1' : '0'); if(on) localStorage.setItem('gdm_rtf_why', ''); }catch(e){}
+  if(on) _RJ.bad = false;
+  _rjSync();
+};
+window._rtfSyncCard = function(){
+  try{
+    var card = document.getElementById('rtfSetCard'); if(!card) return;
+    if(!_rjPlug()){ if(card.style.display !== 'none') card.style.display = 'none'; return; }
+    if(card.style.display !== 'block') card.style.display = 'block';
+    var on = _rtfOn(), cb = document.getElementById('rtfSetOn'), st = document.getElementById('rtfSetStat'), why = '';
+    try{ why = localStorage.getItem('gdm_rtf_why') || ''; }catch(e){}
+    if(cb) cb.checked = on && !_RJ.bad;
+    var t;
+    if(!on) t = '꺼짐 — 예전 방식(웹이 경로 서버에 직접 요청해요)으로 이어가요.';
+    else if(_RJ.bad) t = '앱 본체 요청에 문제가 있어 예전 방식으로 대신 이어가고 있어요' + (why ? ' (' + why + ')' : '') + '. 스위치를 껐다 켜면 다시 시도해요.';
+    else {
+      t = '켜짐 — 경로 서버 요청과 가장 최근 결과 보관을 앱 본체가 해요(실험 중).';
+      if(_RJ.last) t += ' 마지막 응답 ' + Math.round((_RJ.last.bytes || 0) / 1024) + 'KB · ' + _RJ.last.ms + 'ms.';
+    }
+    if(st && st.textContent !== t) st.textContent = t;
+  }catch(e3){}
+};
+try{ if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(_rjSync, 1400); }); else setTimeout(_rjSync, 1400); }catch(eR){}
 // ── 지하철 '다음 열차' — 시각표 계산은 전부 엔진(GET/POST /next-train)이 한다. 앱은 묻고, 받은 값을 그리기만 한다. ──
 //   (2026-10-09: 앱에 있던 시각표 데이터·방향 판정·다음 열차 계산을 엔진으로 옮겼다. 경로 응답에는 구간마다
 //    ttWaitMs(타임라인 대기)·nextTrain(안내용)이 이미 붙어 오고, 여기서는 '승차 시각에 맞춰 다시 묻는' 경우만 다룬다.)
@@ -8816,7 +8936,7 @@ window._hideRouteLoading = _hideRouteLoading;
     //   ③ 같은 요청을 live 없이 한 번 더 보내 도착하면 그 결과로 다시 그린다(내용이 같으면 다시 그리지 않는다).
     //   무엇이 더 정확한지·바뀌었는지는 엔진 응답 그대로이고, 앱은 도착한 순서대로 그리기만 한다.
     //   ①이 실패하면(구버전 엔진·네트워크) 예전처럼 한 번에 받는다.
-    var _routeStaged = function(){
+    var _routeStagedWeb = function(){
       return _fetchJson(urls[0] + '&live=0', _ROUTE_MAIN_TIMEOUT).then(function(main0){
         // 엔진이 'ldWait'(80km+ 인데 빠른 응답엔 장거리 후보가 아직 없음)라고 하면 빠른 응답은 그리지 않고 전체 응답을 기다린다
         if(main0 && !(main0.liveStat && main0.liveStat.ldWait)) return main0;
@@ -8826,6 +8946,20 @@ window._hideRouteLoading = _hideRouteLoading;
         try{ got = ((main && main.result && main.result.path) || []).length; }catch(e){}
         try{ window._routeStagePlan = '엔진 1건 · 경로 ' + got + '건'; }catch(e){}
         return [main || null];
+      });
+    };
+    // ★ 2026-10-19 (5번 3단계) '경로 요청을 앱 본체가 하기'(설정 스위치 gdm_rtf, 기본 꺼짐)를 켜면 첫 요청·전체 뒤따르기를 앱 본체(RouteFetch 플러그인)가 한다.
+    //   · 무엇을 그릴지·전체를 뒤따라 받을지·언제 다시 조회할지는 엔진이 응답 맨 앞에 실은 follow 지시가 정한다(앱은 그대로 따를 뿐, 웹도 liveStat 로 판단하지 않는다).
+    //   · 폴백(전부 자동): 플러그인이 없음 · request 거절/예외 · 시간초과가 아닌 통신 실패 · 옛 엔진(follow 없음) → 이 스위치를 쓰지 않은 것처럼 예전 방식(_routeStagedWeb · _fetchJson).
+    var _rjMode = false, _rjForced = false;
+    var _routeStaged = function(){
+      if(!_rjUse()) return _routeStagedWeb();
+      return _rjStart(urls[0], _ROUTE_MAIN_TIMEOUT, String(_reqToken)).then(function(r){
+        if(r && r.skip) return { __skip: true };                     // 그새 새 탐색이 시작됐다 — 이 응답은 버린다(덮개는 새 탐색이 맡는다)
+        if(!r || r.fallback) return _routeStagedWeb();
+        _rjMode = true; _rjForced = !!r.forced;
+        try{ window._routeStagePlan = '앱 본체 1건 · 경로 ' + ((r.results[0] && r.results[0].result && r.results[0].result.path || []).length) + '건'; }catch(e){}
+        return r.results;
       });
     };
     var _handleRouteResults = function(results) {
@@ -9030,6 +9164,7 @@ window._hideRouteLoading = _hideRouteLoading;
     //   · 다시 그릴 때 결과 카드로 스크롤하지 않는다(보던 자리 유지)
     var _EST_RETRY_MS = [12000, 16000, 20000];
     var _estMissOf = function(r){
+      if(r && r.follow && typeof r.follow.miss === 'number') return r.follow.miss;       // 엔진이 센 값
       var ls = r && r.liveStat;
       if(!ls) return 0;
       if(typeof ls.liveMissing === 'number') return ls.liveMissing;
@@ -9062,10 +9197,13 @@ window._hideRouteLoading = _hideRouteLoading;
         if(typeof _baseTimeMs !== 'undefined' && _baseTimeMs != null) return;   // 기준시각을 직접 고른 탐색은 실시간 도착을 못 쓴다
         var best = _estMissOf(shown);
         if(!best) return;
-        var bestApplied = (shown && shown.liveStat && shown.liveStat.liveApplied) || 0;
+        var bestApplied = (shown && shown.follow && typeof shown.follow.applied === 'number') ? shown.follow.applied : ((shown && shown.liveStat && shown.liveStat.liveApplied) || 0);
+        var _fw0 = shown && shown.follow;
+        if(_fw0 && !_fw0.retry) return;                                     // 엔진이 '다시 조회하지 말라'고 했다
+        var _delays = (_fw0 && _fw0.retry && _fw0.retry.length) ? _fw0.retry : _EST_RETRY_MS;
         var endAt = Date.now() + 100000;
         var step = function(n){
-          if(n >= _EST_RETRY_MS.length) return;
+          if(n >= _delays.length) return;
           setTimeout(function wait(){
             try{
               if(window._routeReqToken !== _reqToken || _routeStale()) return;     // 새 탐색이 시작됐거나 더 새 결과가 그려졌다
@@ -9073,13 +9211,15 @@ window._hideRouteLoading = _hideRouteLoading;
               if(!_estOkToRedraw()) return;
               var nb = (typeof getBaseTimeMs === 'function') ? getBaseTimeMs() : Date.now();
               var u = urls[0].replace(/([?&])baseMs=\d+/, function(m, pre){ return pre + 'baseMs=' + Math.round(nb); });
-              _fetchJson(u, _ROUTE_MAIN_TIMEOUT).then(function(full){
+              if(_fw0) u += '&pm=' + best + '&pa=' + bestApplied;           // 직전에 그린 값을 알려 주면 나아졌는지는 엔진이 가려 준다(follow.better)
+              (_rjMode ? _rjOnce(u, _ROUTE_MAIN_TIMEOUT, String(_reqToken)) : _fetchJson(u, _ROUTE_MAIN_TIMEOUT)).then(function(full){
                 try{
                   var fp = (full && full.result && full.result.path) || [];
                   if(!fp.length || !_estOkToRedraw() || _estBusy()){ step(n + 1); return; }
-                  var m = _estMissOf(full), ap = (full.liveStat && full.liveStat.liveApplied) || 0;
+                  var m = _estMissOf(full), ap = (full.follow && typeof full.follow.applied === 'number') ? full.follow.applied : ((full.liveStat && full.liveStat.liveApplied) || 0);
                   window._liveStat = full.liveStat || window._liveStat;
-                  if(!(m < best || (m === best && ap > bestApplied))){ step(n + 1); return; }   // 나아진 게 없으면 그대로 둔다(깜빡임 방지)
+                  var _better = (full.follow && typeof full.follow.better === 'boolean') ? full.follow.better : (m < best || (m === best && ap > bestApplied));
+                  if(!_better){ step(n + 1); return; }   // 나아진 게 없으면 그대로 둔다(깜빡임 방지) — 나아졌는지는 엔진(follow.better)이 가린다
                   best = m; bestApplied = ap;
                   window._routeBaseMs = Math.round(nb);
                   if(window._routeLocked) window._relockAfterReroute = window._lockedRouteType || 'fast';
@@ -9092,19 +9232,22 @@ window._hideRouteLoading = _hideRouteLoading;
                 }catch(e2){}
               });
             }catch(e1){}
-          }, _EST_RETRY_MS[n]);
+          }, _delays[n]);
         };
         step(0);
       }catch(e){}
     };
     _routeStaged()
     .then(function(results){
+      if(results && results.__skip) return;
       _handleRouteResults(results);
       // 실시간 반영본이 있다고 엔진이 알려 준 경우만 뒤따라 받는다(커스텀 기준시각이면 애초에 안 옴)
+      //   ★ 앱 본체 모드: 엔진이 follow.next('full')로 알려 준다 — 앱 본체가 이미 받아 이벤트로 보낸다. 예전 모드: liveStat.livePending 을 읽는다(옛 엔진·폴백).
       var _m0 = results && results[0];
-      if(!(_m0 && _m0.liveStat && _m0.liveStat.livePending)){ _estRetry(_m0); return; }   // 한 번에 받은 응답이면 바로 '예상' 재조회 여부를 본다
+      var _wantFull = (_rjMode && _m0 && _m0.follow) ? (_m0.follow.next === 'full' && !_rjForced) : !!(_m0 && _m0.liveStat && _m0.liveStat.livePending);
+      if(!_wantFull){ _estRetry(_m0); return; }   // 한 번에 받은 응답이면 바로 '예상' 재조회 여부를 본다
       if(_routeStale()) return;
-      _fetchJson(urls[0], _ROUTE_MAIN_TIMEOUT).then(function(full){
+      (_rjMode ? _rjWaitFull(String(_reqToken), _ROUTE_MAIN_TIMEOUT + 3000) : _fetchJson(urls[0], _ROUTE_MAIN_TIMEOUT)).then(function(full){
         if(!full || _routeStale() || window._routeLocked){ _estRetry(_m0); return; }   // 못 받았으면 빠른 응답(전부 예상) 기준으로 재조회
         var _fp = (full.result && full.result.path) || [];
         if(!_fp.length){ _estRetry(_m0); return; }
@@ -9873,10 +10016,7 @@ function _ldReselect(mode, grade, depTs){
     + (depTs ? ('&ldDepTs=' + encodeURIComponent(depTs)) : '');
   var _ldLoadEl = document.getElementById('transitLoading');
   if(_ldLoadEl) _ldLoadEl.style.display = 'flex';
-  fetch(_routeV2Url(qs)).then(function(r){
-    if(!r.ok) throw new Error('HTTP ' + r.status);
-    return r.json();
-  }).then(function(j){
+  _routeGetJson(_routeV2Url(qs)).then(function(j){
     var paths = ((j || {}).result || {}).path || [];
     var ldp = paths.filter(function(p){ return (p.info || {}).longDist === true; })[0] || null;
     if(!ldp){ console.warn('[다른 편] 선택한 편을 찾을 수 없음'); return; }
@@ -10790,7 +10930,7 @@ function _depCompareStart(route){
       if(i>=offs.length) return finish();
       if(_depCmp.key!==myKey) return;
       var q=qs.replace(/baseMs=\d+/,'baseMs='+Math.round(t0+offs[i]*60000))+'&live=0';
-      fetch(_routeV2Url(q.replace(/^\?/,'')), { priority:'low' }).then(function(r){ return r.ok?r.json():null; }).then(function(j){
+      _routeGetJson(_routeV2Url(q.replace(/^\?/,'')), { priority:'low' }, true).then(function(j){
         var paths=(j&&j.result&&j.result.path)||[];
         var f=null; for(var k=0;k<paths.length;k++){ if((paths[k].info||{}).tab==='fast'){ f=paths[k]; break; } }
         if(!f) f=paths[0];
@@ -20446,6 +20586,21 @@ window.addEventListener('unhandledrejection', function(e) {
         <style>#cndSetOn:checked ~ #cndSetKnob{background:var(--gold) !important;} #cndSetOn:checked ~ #cndSetDot{left:23px !important;}</style>
       </div>
 
+      <!-- ★ 2026-10-19: 경로 요청을 앱 본체가 하기 — 경로 서버 요청·최근 결과 보관을 앱 본체(RouteFetch 플러그인)가. 안드로이드 앱에서만 보임, 기본 꺼짐(실험) -->
+      <div id="rtfSetCard" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <div style="font-size:15px;font-weight:800;color:var(--text);">경로 요청을 앱 본체가 하기</div>
+          <label style="position:relative;display:inline-block;width:46px;height:26px;">
+            <input type="checkbox" id="rtfSetOn" onchange="_rtfSetUse(this.checked)" style="opacity:0;width:0;height:0;">
+            <span id="rtfSetKnob" style="position:absolute;inset:0;border-radius:13px;background:var(--border2);transition:.2s;cursor:pointer;"></span>
+            <span id="rtfSetDot" style="position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.3);"></span>
+          </label>
+        </div>
+        <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">경로를 찾을 때 경로 서버에 묻는 일과 받은 결과 보관을 웹이 아니라 앱 본체가 해요. 어떤 응답을 그릴지, 언제 다시 물을지는 엔진이 정해 주고 앱은 따라요. 문제가 생기면 예전 방식으로 돌아가요.</p>
+        <div id="rtfSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
+        <style>#rtfSetOn:checked ~ #rtfSetKnob{background:var(--gold) !important;} #rtfSetOn:checked ~ #rtfSetDot{left:23px !important;}</style>
+      </div>
+
       <!-- ★ 2026-10-03: 도착 오차 익명 기록 (끌 수 있음) -->
       <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
         <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:8px;">📊 안내 정확도 향상</div>
@@ -24986,7 +25141,7 @@ function _commutePrefetch(why){
       var qs='SX='+F.lng+'&SY='+F.lat+'&EX='+T.lng+'&EY='+T.lat+'&baseMs='+Date.now()+'&live=0'
         +'&SN='+encodeURIComponent(String(F.nm||'').slice(0,60))+'&EN='+encodeURIComponent(String(T.nm||'').slice(0,60));
       var t0=Date.now();
-      fetch(_routeV2Url(qs), { priority:'low' }).then(function(r){ return r.ok ? r.json() : null; }).then(function(j){
+      _routeGetJson(_routeV2Url(qs), { priority:'low' }, true).then(function(j){
         _cmPf.busy=false;
         try{ _cmPf.last={ at:Date.now(), ms:Date.now()-t0, n:((j&&j.result&&j.result.path)||[]).length, why:why||'' }; }catch(e){}
       }).catch(function(){ _cmPf.busy=false; });
@@ -38058,6 +38213,7 @@ window.refreshShop=refreshShop;
     try{ var Xscrh = window._scrHome && _scrHome.S, cscrh = document.getElementById('scrhSetCard'); if(Xscrh && cscrh && cscrh.style.display === 'block') f.feat.scrh = { h: 1, on: Xscrh.on ? 1 : 0, f: (Xscrh.failed || Xscrh.fails >= 2) ? 1 : 0, w: Xscrh.why || '', b: Xscrh.badFresh > 0 ? 1 : 0 }; }catch(e){}
     try{ if(typeof _sbhSyncCard === 'function') _sbhSyncCard(); var csbh = document.getElementById('sbhSetCard'); if(csbh && csbh.style.display === 'block') f.feat.sbh = { h: 1, on: _sbhOn() ? 1 : 0, f: 0, w: '' }; }catch(e){}
     try{ if(typeof _cndSyncCard === 'function') _cndSyncCard(); var ccnd = document.getElementById('cndSetCard'); if(ccnd && ccnd.style.display === 'block') f.feat.cnd = { h: 1, on: (_cndOn() && !_cndBad()) ? 1 : 0, f: _cndBad() ? 1 : 0, w: '' }; }catch(e){}
+    try{ if(typeof _rtfSyncCard === 'function') _rtfSyncCard(); var crtf = document.getElementById('rtfSetCard'); if(crtf && crtf.style.display === 'block') f.feat.rtf = { h: 1, on: (_rtfOn() && !_rtfBad()) ? 1 : 0, f: _rtfBad() ? 1 : 0, w: '' }; }catch(e){}
     f.feat.scrs = { h: 1, on: S.on ? 1 : 0, f: (S.failed || S.fails >= 2) ? 1 : 0, w: S.why || '', b: S.badFresh > 0 ? 1 : 0 };
     return f;
   }
@@ -38190,6 +38346,7 @@ window.refreshShop=refreshShop;
       else if(key === 'f.scrh') window._scrhSetUse(on);
       else if(key === 'f.sbh') window._sbhSetUse(on);
       else if(key === 'f.cnd') window._cndSetUse(on);
+      else if(key === 'f.rtf') window._rtfSetUse(on);
       else if(key === 'f.scrs'){ setUse(on); return; }
       else return;                                                             // 모르는 키는 무시
     }catch(e){}
