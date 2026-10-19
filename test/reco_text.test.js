@@ -140,6 +140,120 @@ async function call(method, body) {
   r = await call('OPTIONS'); t('OPTIONS → 204', () => assert.strictEqual(r.status, 204));
   r = await call('POST', '{no'); t('이상한 JSON → 400', () => assert.strictEqual(r.status, 400));
   r = await call('POST', 'x'.repeat(60001)); t('너무 긴 본문 → 413', () => assert.strictEqual(r.status, 413));
+
+  // ── 3단계: 쿠팡 상품 고르기 · 도착지 가게 목록 받기를 엔진이 ──
+  const SHOPMOD = require(path.join(root, 'engine/shop.js'));
+  const mkCat = (c, n) => ({ c, items: Array.from({ length: n }, (_, i) => ({ n: c + ' 상품' + i, u: 'https://shop.test/' + c + i, i: 'https://img.test/' + c + i + '.png' })) });
+  const SD = { CATS: [mkCat('식사', 18), mkCat('생활', 18), mkCat('뷰티', 18)], WEEKDAY: [{ h1: 0, h2: 12, items: [{ t: '우천대비', u: 'https://shop.test/생활0' }] }, { h1: 12, h2: 24, items: [{ t: '야식', u: 'https://shop.test/식사0' }, { t: '셀프케어', u: 'https://shop.test/뷰티0' }] }], WEEKEND: [{ h1: 0, h2: 24, items: [] }] };
+  const top30 = (nowMs, wx) => SHOPMOD.shopPick(SD, SHOPMOD.shopClock(nowMs, 540), wx, null).rec.slice(0, 30);
+  const SEXT = { shop: { data: SD, cfg: null } };
+  const askShop = (o, ext) => R.recoAlert(Object.assign({ arrMs: kst(22, 5), nowMs: kst(22, 0), dest: '강남', weather: WX, food: null, recent: [], shop: null, pickShop: 1, shopRecent: [], seed: 7 }, o || {}), ext === undefined ? SEXT : ext);
+
+  t('상품 고르기: 추천 100선 위 30개 중 하나 · 링크와 그림 주소를 함께 돌려준다', () => {
+    const r = askShop(); const pool = top30(kst(22, 0), WX).map(x => x.n);
+    assert.strictEqual(r.kind, 'shop'); assert.strictEqual(r.shop, true); assert.ok(r.shopItem && pool.includes(r.shopItem.n), JSON.stringify(r.shopItem));
+    assert.ok(/^https:\/\/shop\.test\//.test(r.shopItem.u) && /^https:\/\/img\.test\//.test(r.shopItem.i)); assert.ok(r.shopItem._cat);
+    assert.ok(r.body.includes('🛍 ' + r.shopItem.n)); assert.ok(!('shopMiss' in JSON.parse(JSON.stringify(r))));
+    assert.ok(r.ad && r.ad.k === 'shop' && r.ad.a === r.shopItem.n.replace(/\s+/g, ' '), JSON.stringify(r.ad));
+    assert.ok(r.pip && r.pip.lines.some(l => l.includes(r.shopItem.n)));
+  });
+  t('상품 고르기: 같은 씨앗이면 같은 상품 · 씨앗이 다르면 여러 상품', () => {
+    assert.deepStrictEqual(askShop({ seed: 5 }), askShop({ seed: 5 }));
+    const set = new Set(); for (let sd = 1; sd < 60; sd++) set.add(askShop({ seed: sd }).shopItem.n); assert.ok(set.size > 8, set.size);
+  });
+  t('상품 고르기: 최근 추천한 상품은 피한다(전부 최근이면 다시 허용)', () => {
+    const pool = top30(kst(22, 0), WX).map(x => x.n);
+    for (let sd = 1; sd < 40; sd++) { const r = askShop({ seed: sd, shopRecent: pool.slice(0, 25) }); assert.ok(pool.slice(25).includes(r.shopItem.n), r.shopItem.n); }
+    const all = askShop({ seed: 3, shopRecent: pool }); assert.ok(pool.includes(all.shopItem.n));
+  });
+  t('상품 고르기: 앱이 이미 상품을 보냈으면 엔진은 고르지 않는다(상품 목록도 안 쓴다)', () => {
+    const r = askShop({ shop: { n: '우산', _t: '우천대비', _cat: '생활' } }); assert.ok(!r.shopItem && r.shop === true); assert.ok(/🛍 우산/.test(r.body)); assert.ok(!r.shopMiss);
+  });
+  t('상품 고르기: 상품 목록이 없으면 shopMiss(앱이 예전 규칙으로 고르게) · 본문은 상품 없는 문구', () => {
+    for (const ext of [undefined, {}, { shop: null }, { shop: { data: { CATS: [], WEEKDAY: [], WEEKEND: [] } } }]) {
+      const r = askShop({}, ext === undefined ? null : ext); assert.strictEqual(r.shopMiss, true); assert.strictEqual(r.shop, false); assert.ok(!r.shopItem); assert.ok(/오늘 밤 둘러볼 만한 것들을/.test(r.body));
+    }
+  });
+  t('상품 고르기: pickShop 이 없으면 예전 모양(shopItem·shopMiss 없음)', () => {
+    const r = askShop({ pickShop: 0 }); assert.ok(!('shopItem' in r) && !('shopMiss' in r)); assert.strictEqual(r.shop, false);
+  });
+  t('상품 고르기: 링크가 이상한 상품(javascript: 등)은 쓰지 않는다', () => {
+    const bad = JSON.parse(JSON.stringify(SD)); bad.CATS.forEach(c => c.items.forEach(x => { x.u = 'javascript:alert(1)'; }));
+    const r = askShop({}, { shop: { data: bad, cfg: null } }); assert.strictEqual(r.shopMiss, true); assert.ok(!r.shopItem);
+    const bi = JSON.parse(JSON.stringify(SD)); bi.CATS.forEach(c => c.items.forEach(x => { x.i = 'file:///x'; }));
+    const r2 = askShop({}, { shop: { data: bi, cfg: null } }); assert.ok(r2.shopItem && r2.shopItem.i === '');
+  });
+  t('상품 고르기: 날씨(비)에 따라 쇼핑 엔진의 점수 순서를 따른다(앱이 보낸 날씨로 계산)', () => {
+    const rain = { temp: 18, feel: 17, tmin: 14, tmax: 21, rain: 90, txt: '비' };
+    const pool = top30(kst(22, 0), rain).map(x => x.n); for (let sd = 1; sd < 25; sd++) assert.ok(pool.includes(askShop({ seed: sd, weather: rain }).shopItem.n));
+  });
+  t('상품 고르기: 쇼핑 시간대가 아니면 pickShop 이 있어도 고르지 않는다', () => {
+    const r = R.recoAlert({ arrMs: kst(12, 5), nowMs: kst(12, 0), dest: '강남', weather: WX, food: FOOD, recent: [], pickShop: 1, seed: 7 }, SEXT); assert.ok(!('shopItem' in r) && r.kind === 'lunch');
+  });
+
+  const SRV = [{ n: '서버국밥', c: '음식점 > 한식 > 국밥', a: '서울 1', d: 90 }, { n: '서버카페', c: '카페 > 커피전문점', a: '서울 2', d: 60 }, { n: '서버치킨', c: '음식점 > 치킨', a: '서울 3', d: 200 }];
+  t('가게 목록: foodPref=server 이고 엔진이 받아 온 목록이 있으면 그걸 쓴다 · foods 로 돌려준다(주소 포함)', () => {
+    const r = R.recoAlert({ arrMs: kst(12, 5), nowMs: kst(12, 0), dest: '강남', weather: WX, food: FOOD, recent: [], foodPref: 'server', loc: { lat: 37.5, lng: 127 }, seed: 7 }, { foods: SRV });
+    assert.deepStrictEqual(r.foods, SRV); assert.ok(r.placeIdx >= 0 && r.placeIdx < SRV.length); assert.ok(SRV.some(x => r.body.includes(x.n)), r.body); assert.ok(!FOOD.some(x => r.body.includes(x.n)));
+  });
+  t('가게 목록: 엔진이 못 받았으면(ext 없음·빈 목록) 앱이 보낸 목록을 쓴다 · foods 없음', () => {
+    for (const ext of [undefined, {}, { foods: null }, { foods: [] }]) {
+      const r = R.recoAlert({ arrMs: kst(12, 5), nowMs: kst(12, 0), dest: '강남', weather: WX, food: FOOD, recent: [], foodPref: 'server', seed: 7 }, ext);
+      assert.ok(!('foods' in r)); assert.ok(FOOD.some(x => r.body.includes(x.n)), r.body);
+    }
+  });
+  t('가게 목록: foodPref 가 없으면 받아 온 목록이 있어도 쓰지 않는다(예전 모양)', () => {
+    const r = R.recoAlert({ arrMs: kst(12, 5), nowMs: kst(12, 0), dest: '강남', weather: WX, food: FOOD, recent: [], seed: 7 }, { foods: SRV }); assert.ok(!('foods' in r)); assert.ok(!SRV.some(x => r.body.includes(x.n)));
+  });
+  t('가게 목록: 오버레이 줄·작은 화면 문구도 받아 온 목록의 이름을 쓴다(piIdx 가 foods 순서)', () => {
+    const r = R.recoAlert({ arrMs: kst(12, 5), nowMs: kst(12, 0), dest: '강남', weather: WX, food: null, recent: [], foodPref: 'server', seed: 3 }, { foods: SRV });
+    assert.ok(r.ad && SRV.some(x => r.ad.a.startsWith(x.n)), JSON.stringify(r.ad)); if (r.ad.piIdx >= 0) assert.strictEqual(SRV[r.ad.piIdx].n, r.ad.pn);
+  });
+  t('가게 목록: 앱이 보낸 목록이 없어도(null) 엔진이 받아 오면 된다', () => {
+    const r = R.recoAlert({ arrMs: kst(8, 5), nowMs: kst(8, 0), dest: '강남', weather: WX, food: null, recent: [], foodPref: 'server', seed: 7 }, { foods: SRV });
+    assert.ok(/서버카페/.test(r.body), r.body);
+  });
+
+  // 연결부(handleRecoText): 필요한 때만 바깥 자원을 부른다
+  const L = { shop: 0, food: [] };
+  let SHOPRET = { data: SD, cfg: null }, FOODRET = SRV;
+  R.rtxSetLoaders({ shop: () => { L.shop++; if (SHOPRET === 'throw') throw new Error('x'); return SHOPRET; }, food: loc => { L.food.push(loc); if (FOODRET === 'throw') throw new Error('y'); return FOODRET; } });
+  const rst = () => { L.shop = 0; L.food = []; };
+  const base = { arrMs: kst(22, 5), nowMs: kst(22, 0), dest: '강남', weather: WX, food: null, recent: [], seed: 7 };
+  rst(); r = await call('POST', Object.assign({}, base, { pickShop: 1, shopRecent: [] }));
+  t('POST: 쇼핑 시간대 pickShop → 상품 목록을 한 번 불러와 shopItem 을 돌려준다 · 맛집 서버는 안 부른다', () => { assert.strictEqual(r.json.ok, true); assert.ok(r.json.shopItem && r.json.shopItem.u); assert.strictEqual(L.shop, 1); assert.strictEqual(L.food.length, 0); });
+  rst(); r = await call('POST', Object.assign({}, base, { shop: { n: '우산' }, pickShop: 1 }));
+  t('POST: 앱이 상품을 보냈으면 상품 목록을 부르지 않는다', () => { assert.strictEqual(L.shop, 0); assert.ok(!r.json.shopItem); });
+  rst(); r = await call('POST', Object.assign({}, base, { arrMs: kst(12, 5), nowMs: kst(12, 0), loc: { lat: 37.4979, lng: 127.0276 }, foodPref: 'server', food: FOOD }));
+  t('POST: 점심 foodPref=server + 좌표 → 맛집 서버 목록을 쓰고 foods 로 돌려준다 · 좌표는 5자리로 다듬는다', () => { assert.deepStrictEqual(r.json.foods, SRV); assert.strictEqual(L.food.length, 1); assert.deepStrictEqual(L.food[0], { lat: 37.4979, lng: 127.0276 }); assert.strictEqual(L.shop, 0); });
+  rst(); r = await call('POST', Object.assign({}, base, { arrMs: kst(12, 5), nowMs: kst(12, 0), loc: { lat: 37.123456789, lng: 127.987654321 }, foodPref: 'server', food: FOOD }));
+  t('POST: 좌표는 소수 5자리로 다듬어 쓴다', () => { assert.deepStrictEqual(L.food[0], { lat: 37.12346, lng: 127.98765 }); });
+  for (const badLoc of [null, {}, { lat: 'a', lng: 1 }, { lat: 10, lng: 127 }, { lat: 37, lng: 10 }, { lat: 91, lng: 127 }, [1, 2]]) {
+    rst(); r = await call('POST', Object.assign({}, base, { arrMs: kst(12, 5), nowMs: kst(12, 0), loc: badLoc, foodPref: 'server', food: FOOD }));
+    t('POST: 이상한 좌표(' + JSON.stringify(badLoc) + ')면 맛집 서버를 부르지 않고 앱 목록을 쓴다', () => { assert.strictEqual(L.food.length, 0); assert.ok(!('foods' in r.json)); assert.ok(FOOD.some(x => r.json.body.includes(x.n))); });
+  }
+  rst(); r = await call('POST', Object.assign({}, base, { arrMs: kst(12, 5), nowMs: kst(12, 0), loc: { lat: 37.5, lng: 127 }, food: FOOD }));
+  t('POST: foodPref 가 없으면 좌표가 있어도 맛집 서버를 부르지 않는다', () => { assert.strictEqual(L.food.length, 0); assert.ok(!('foods' in r.json)); });
+  rst(); r = await call('POST', Object.assign({}, base, { arrMs: kst(22, 5), loc: { lat: 37.5, lng: 127 }, foodPref: 'server', pickShop: 1 }));
+  t('POST: 쇼핑 시간대에는 가게 목록을 받지 않는다 · 심야(추천 없음)에도 아무것도 부르지 않는다', async () => {
+    assert.strictEqual(L.food.length, 0);
+    rst(); const z = await call('POST', Object.assign({}, base, { arrMs: kst(3, 5), nowMs: kst(3, 0), loc: { lat: 37.5, lng: 127 }, foodPref: 'server', pickShop: 1 }));
+    assert.strictEqual(L.food.length + L.shop, 0); assert.strictEqual(z.json.slot, 'none');
+  });
+  rst(); SHOPRET = null; r = await call('POST', Object.assign({}, base, { pickShop: 1 }));
+  t('POST: 상품 목록을 못 불러오면 200 + shopMiss', () => { assert.strictEqual(r.status, 200); assert.strictEqual(r.json.ok, true); assert.strictEqual(r.json.shopMiss, true); });
+  SHOPRET = 'throw'; FOODRET = 'throw';
+  r = await call('POST', Object.assign({}, base, { pickShop: 1 })); const r2x = await call('POST', Object.assign({}, base, { arrMs: kst(12, 5), nowMs: kst(12, 0), loc: { lat: 37.5, lng: 127 }, foodPref: 'server', food: FOOD }));
+  t('POST: 불러오기가 예외를 던져도 죽지 않는다(상품은 shopMiss · 가게는 앱 목록)', () => { assert.strictEqual(r.status, 200); assert.strictEqual(r.json.shopMiss, true); assert.strictEqual(r2x.status, 200); assert.ok(!('foods' in r2x.json)); assert.ok(FOOD.some(x => r2x.json.body.includes(x.n))); });
+  SHOPRET = { data: SD, cfg: null }; FOODRET = SRV;
+  rst(); r = await call('POST', { op: 'pip', slot: 'night', dest: '강남', body: 'a\nb\nc\nd', nowMs: kst(20, 0), seed: 1, pickShop: 1, foodPref: 'server', loc: { lat: 37.5, lng: 127 }, a: { remMin: 5, menu: '피자', hook: '훅', cx: { h: 20 }, spots: ['A'], dinner: false } });
+  t('POST op=pip: 바깥 자원을 부르지 않는다', () => { assert.strictEqual(L.shop + L.food.length, 0); assert.ok(r.json.pip); });
+  t('이전 앱(3단계 값 없음)이 보낸 요청은 예전과 똑같이 처리된다', () => {
+    const a = R.recoAlert({ arrMs: kst(22, 5), nowMs: kst(22, 0), dest: '강남', weather: WX, food: FOOD, recent: [], shop: { n: '우산', _t: '우천대비', _cat: '생활' }, seed: 7 });
+    assert.ok(!('shopItem' in a) && !('shopMiss' in a) && !('foods' in a)); assert.strictEqual(a.shop, true);
+  });
+  R.rtxSetLoaders(null);
+
   console.log('reco_text: ' + pass + ' pass ' + fail + ' fail');
   process.exit(fail ? 1 : 0);
 })();
