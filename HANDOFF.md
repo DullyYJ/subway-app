@@ -1238,3 +1238,15 @@
 - **알려진 한계(아직 웹인 것)**: 표를 *읽어 답하는* 일은 아직 웹 함수(겉옷)다 — 규칙(어느 종류가 허용인가)만 엔진으로 갔다. `showNotification` 안의 발송(LocalNotifications 호출·알림 버튼 종류)·진동 호출은 입출력이라 웹에 남는다. 이어서 남은 판단: 근접 알림(`_checkRouteProximityAlert`) · 하차 직전 추천(arrive_reco) · 출퇴근 브리핑 · 알림 대상 만들기(`_buildTransitAlertTargets`) · 추적 흐름 조율 · 저장값을 읽는 쪽.
 - **YJ가 할 일**: Cloudflare route-v2 워커에 `engine/route-v2-worker.ascii.js`(s54) 전체를 붙여 넣고 Deploy → 루트 `version` = `route-v2-2026-10-19s54` (s53 내용 포함 — s53 파일은 안 올려도 된다). 새 APK 설정 탭에서 '알림 종류 허용 여부를 엔진이 정하기'를 켜고 알림 종류 스위치를 바꿔 가며 알림·진동이 예전과 같은지 확인.
 - **다음 조각 후보**: ① 근접 알림 + 하차 직전 추천의 '언제·무슨 문구' ② 출퇴근 브리핑 ③ 알림 대상 만들기·추적 흐름.
+
+## 2026-10-19 엔진 s55 — 5번 5단계 둘째 조각(데이터·판단): 하차 전 추천 '언제 보낼까'를 엔진이 정한다
+- **YJ 지시**: "진행해줘" (데이터·판단 영역 이어서). 이번 조각은 추천 *문구·가게 고르기*가 아니라 *시점 판단*만이다 — 문구 엔진(날씨·위트 문구 풀·가게 고르기·쿠팡 아이템)은 1500줄 규모라 따로 뒤 조각으로 남겼다.
+- **왜**: `_arrCheckPreAlert`(내리기 7분~1분 전 구간에서만 · 여정당 1회 · 30분 안 재발송 없음) · `_arrSlot`(도착 시각 → 아침/점심/저녁·야식/쇼핑/없음) · `_arrIsDinner` · `_arrRemainMin` 은 순수한 시간 규칙인데 웹이 정했다.
+- **엔진 `engine/arrive-reco.js`**(워커 사본 `// ===== arrive-reco (…)`; 버전 `route-v2-2026-10-19s55`): `arrRecoWhen({arrMs, remSec, dest, lastKey, lastAt, nowMs})` → `{v:1, fire, why:'ok'|'input'|'window'|'dup'|'recent', key, slot, dinner, remMin, pre, askMs}`. 시간대는 **한국시간 기준**(웹은 기기 시간대; 한국 앱이라 같다 — 시험은 Asia/Seoul). `askMs` = 다시 물을 때까지 기다릴 시간(5~60초: 구간보다 많이 남았으면 길게) — 20초마다 도는 감시(`_arrWatchTick`)가 여정 내내 엔진을 부르지 않게. `POST /arrive-reco`(본문 ≤4000자).
+- **웹 `www/index.html`**: 설정 스위치 `arw`(키 `gdm_arw`, 카드 `arwSetCard`, 엔진 설정 화면 `f.arw`, 기본 꺼짐). `_arrCheckPreAlert` 는 겉옷 → 켜져 있으면 `_arwCheck`(엔진에 도착 시각·남은 초·목적지·지난 기록만 보냄, 답을 받으면 `fire` 일 때 기록 키를 남기고 `_arrFireAlert`), 아니면 예전 본체 `_arrCheckPreAlertLocal`. 기다리는 사이 이미 보냈거나 예상 모드가 되면 보내지 않는다. 엔진이 알려 준 시간대·저녁 여부(`_arwDec`)는 같은 도착 시각에 한해 `_arrSlot`/`_arrIsDinner` 가 쓴다(그 밖은 예전 `…Local`). 추천 본문(`_arrFireAlert` 이후)은 건드리지 않았다.
+- **폴백(자동)**: 스위치 꺼짐 · 404 · 오류 · 이상한 응답 · 2.5초 무응답 → 그 호출에서 바로 예전 규칙, 60초 쉬기, 카드에 사유, 껐다 켜면 즉시 재시도.
+- **시험**: `arrive_reco` 9(하루 1440분×이틀 시간대·저녁이 얼린 예전 규칙과 같음 · 구간 경계 · 1회/30분 규칙 조합 · 이상한 입력 · 워커 내장본 · /arrive-reco 길) · `arrive_arw.ui` 17(진짜 index.html: 꺼짐=엔진 안 부름 · 켜짐=남은 초10×기록3×시각3×목적지2 = 180조합이 예전 `…Local` 과 같은 판정·기록 · 시간대 사용 · 길게 기다리기/다시 묻기 · 중복 방지 · 예상 모드 · 404/bad/무응답 폴백 · 60초 뒤 재시도 · 카드) · `settings_engine` 75 · 회귀 `journey_alerts` `loading_chars` `overlay_reco` `notif_npol` `ride_ra`. CI 매트릭스 90 → 92.
+- **기기 미검증(정직)**: 실제 폰에서 하차 7분 전쯤 추천이 예전과 같은 때·한 번만 뜨는지, 오버레이 하단 줄이 같은 때 나오는지. workers.dev 가 샌드박스에서 막혀 실제 서버로는 못 봤다.
+- **알려진 한계(아직 웹인 것)**: 추천 본문 만들기(`_arrBuildAlert`·`_arrCx` 날씨 문구·위트 풀·가게 고르기) · 오버레이 하단 줄을 *언제 보일지*(도착 3분 전~30초 뒤·TTL 25분·닫음 기록 — 매 틱 동기 판단이라 별도 설계 필요) · 근접 알림(`_checkRouteProximityAlert` 는 코드가 없는 죽은 기능 — 정책 표에만 남음) · 출퇴근 브리핑 · 알림 대상 만들기 · 추적 흐름 조율.
+- **YJ가 할 일**: Cloudflare route-v2 워커에 `engine/route-v2-worker.ascii.js`(s55) 전체를 붙여 넣고 Deploy → 루트 `version` = `route-v2-2026-10-19s55` (s53·s54 내용 포함). 새 APK 설정 탭에서 '하차 전 추천 시점을 엔진이 정하기'를 켜고 하차 7분 전 추천이 한 번 뜨는지 확인.
+- **다음 조각 후보**: ① 추천 문구 엔진 이전(큰 덩어리 — 여러 단계) ② 출퇴근 브리핑 ③ 알림 대상 만들기·추적 흐름.
