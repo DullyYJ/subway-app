@@ -290,7 +290,7 @@ try {
       fs.writeFileSync(path.join(stubDir, 'MainActivity.java'), o);
       const sub = path.join(out, 'ma2'); fs.mkdirSync(sub);
       // MainActivity 는 위젯·다른 플러그인 클래스도 부른다 → 같은 이름의 빈 스텁
-      const names = ['CellInfoPlugin', 'PowerPlugin', 'OverlayPlugin', 'MotionPlugin', 'NativeMapPlugin', 'GdmWidgetPlugin', 'GdmSharePlugin', 'RowNativePlugin', 'HtlNativePlugin', 'ScreenNativePlugin'];
+      const names = ['CellInfoPlugin', 'PowerPlugin', 'OverlayPlugin', 'MotionPlugin', 'NativeMapPlugin', 'GdmWidgetPlugin', 'GdmSharePlugin', 'RowNativePlugin', 'HtlNativePlugin', 'ScreenNativePlugin', 'HomeSearchPlugin'];
       names.forEach(n => fs.writeFileSync(path.join(sub, n + '.java'), 'package com.dullyyj.subway; public class ' + n + ' {}'));
       fs.writeFileSync(path.join(sub, 'WidgetCore.java'), 'package com.dullyyj.subway; public class WidgetCore { public static void captureLaunch(android.content.Intent i) {} public static void onAppLeft(android.content.Context c) {} }');
       const r = spawnSync('javac', ['-encoding', 'UTF-8', '-cp', [jar, capOut, jOut].join(path.delimiter), '-d', path.join(out, 'ma3')].concat([path.join(stubDir, 'com', 'getcapacitor', 'BridgeActivity.java'), path.join(stubDir, 'MainActivity.java')], walk(sub, '.java')), { env: ENV, encoding: 'utf8' });
