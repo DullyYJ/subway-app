@@ -11,6 +11,9 @@
 //   recoPip({ a:{remMin,menu,brunch,hook,spots,shopN,cx,dinner}, slot, dest, body, nowMs, seed }) → { v:1, pip } — 본문 한 줄이 AI 문구로 바뀐 경우 작은 화면 문구만 다시 만든다.
 // 3단계(2026-10-19): ⑤ 쿠팡 상품 고르기(pickShop:1 + shopRecent:[이름…] → 엔진이 쇼핑 서버 목록에서 골라 shopItem:{n,u,i,_cat,_t} 로 돌려준다; 못 고르면 shopMiss:true)
 //   ⑥ 도착지 가게 목록 받기(foodPref:'server' + loc:{lat,lng}=역·정류장 좌표 → 엔진이 맛집 서버에서 받아 foods:[{n,c,a,d}] 로 돌려준다; 못 받으면 앱이 보낸 food 를 쓴다)
+// 4단계(2026-10-19 · s63): ⑦ 저녁·야식·쇼핑 시간대의 'AI 위로 문구' — 앱이 aiCopy:1 을 보내면(상황 문구가 약할 때만: hookStrong=false) 엔진이 AI 서버(/ai-talk · nightsnack)에서 문구를 받아
+//   길이(60자 이하)·정치/분쟁 금지어를 검사하고 본문 네 번째 줄에 조사를 맞춰 끼운 뒤, 작은 화면 문구·오버레이 줄까지 그 본문으로 다시 만들어 돌려준다(aiTried:true · 끼웠으면 ai:true).
+//   못 받으면(시간 초과·오류·검사 탈락) 본문은 그대로이고 aiTried:true 만 돌아간다 — 앱은 aiTried 가 오면 옛 웹 길(_arrAiCopy)을 타지 않는다(같은 결과: AI 줄 없음). aiTried 가 없으면(옛 엔진) 옛 웹 길.
 // recoAlert({ arrMs, nowMs, dest, weather:{temp,feel,tmin,tmax,rain,txt}|null, food:[{n,c,d}]|null, recent:[이름…], shop:{n,_t,_cat}|null, seed, pickShop?, shopRecent?, foodPref?, loc? }, ext?)
 //   → { v:1, slot, kind, title, body, remMin, dinner, menu, brunch, spots, placeIdx(-1=없음), hook, hookStrong, cx, shop(true|false) }   (슬롯이 'none' 이면 { v:1, slot:'none' })
 'use strict';
@@ -727,7 +730,7 @@ function rtxClean(b) {
   var sh = (b.shop && typeof b.shop === 'object' && typeof b.shop.n === 'string' && b.shop.n) ? { n: rtxStr(b.shop.n, 120), _t: rtxStr(b.shop._t, 30), _cat: rtxStr(b.shop._cat, 40) } : null;
   var shopRecent = Array.isArray(b.shopRecent) ? b.shopRecent.slice(0, 40).map(function (x) { return rtxStr(x, 120); }) : [];
   return { arrMs: Number(b.arrMs), nowMs: Number(b.nowMs), dest: rtxStr(b.dest, 60), weather: wx, food: food, recent: recent, shop: sh, seed: Number(b.seed),
-           pickShop: b.pickShop === 1 || b.pickShop === true, shopRecent: shopRecent, foodPref: b.foodPref === 'server' ? 'server' : '', loc: rtxLoc(b.loc), ext: null };
+           aiCopy: b.aiCopy === 1 || b.aiCopy === true, pickShop: b.pickShop === 1 || b.pickShop === true, shopRecent: shopRecent, foodPref: b.foodPref === 'server' ? 'server' : '', loc: rtxLoc(b.loc), ext: null };
 }
 // 도착지 좌표(역·정류장 좌표 — 집·직장 좌표가 아니다). 한국 범위 밖이거나 숫자가 아니면 없는 것으로 본다
 function rtxLoc(v) {
@@ -766,6 +769,11 @@ function recoAlert(b, ext) {
   var r = rtxBuild(inp);
   if (r.slot === 'none') return r;
   if (foodsOut && r.slot !== 'shop') r.foods = foodsOut;
+  // ⑦ AI 위로 문구가 왔으면 본문 네 번째 줄을 바꾼다(작은 화면 문구·오버레이 줄은 아래에서 이 본문으로 만든다)
+  var aiSub = rtxAiSubject(r, inp);
+  if (aiSub && inp.ext.ai && typeof inp.ext.ai.text === 'string' && inp.ext.ai.text) {
+    var ls = r.body.split('\n'); ls[3] = rtxFixJosa(inp.ext.ai.text, aiSub); r.body = ls.join('\n'); r.ai = true;
+  }
   // 작은 화면 문구 · 오버레이 추천 줄 — 예전엔 알림을 보낸 뒤 웹이 알림 정보(a)로 따로 만들었다. 같은 정보로 엔진이 이어서 만든다(무작위 흐름도 이어진다).
   RTX_FOOD = inp.food;
   var a = { title: r.title, body: r.body, kind: r.kind, slot: r.slot, remMin: r.remMin, dinner: r.dinner, menu: r.menu, brunch: r.brunch, spots: r.spots,
@@ -792,8 +800,40 @@ function recoPip(b) {
 // ── 바깥 자원(쇼핑 상품 목록 · 맛집 서버) — Worker 안에서만 부른다. 시험은 rtxSetLoaders 로 가짜를 끼운다 ──
 var RTX_FOOD_URL = 'https://gildongmu-food.phg0643.workers.dev';
 var RTX_FOOD_MEM = {};
-var RTX_LOADERS = { shop: null, food: null };
-function rtxSetLoaders(o) { RTX_LOADERS = { shop: (o && o.shop) || null, food: (o && o.food) || null }; RTX_FOOD_MEM = {}; }
+var RTX_LOADERS = { shop: null, food: null, ai: null };
+function rtxSetLoaders(o) { RTX_LOADERS = { shop: (o && o.shop) || null, food: (o && o.food) || null, ai: (o && o.ai) || null }; RTX_FOOD_MEM = {}; }
+// ── ⑦ AI 위로 문구(저녁·야식·쇼핑) — 예전 웹 _arrAiCopy 와 같은 요청·같은 검사(서버가 '저녁/야식 × 메뉴'별로 미리 만들어 둔 문구를 하나 골라 준다) ──
+var RTX_AI_URL = 'https://gentle-lab-7e47subway-api.phg0643.workers.dev';
+var RTX_BAN_RE = /(정치|대통령|대선|총선|보궐|선거|후보\s*등록|국회|국정|의원|여당|야당|정당|민주당|국민의힘|개혁신당|진보당|장관|내각|청와대|탄핵|특검|검찰\s*수사|공수처|국정감사|시국|집회|시위|규탄|파업\s*투쟁|좌파|우파|보수\s*진영|진보\s*진영|친일|반일|반중|혐오|젠더\s*갈등|성별\s*갈등|페미|한남|한녀|종북|극우|극좌|이념)/;
+// 서버 답 → 쓸 수 있는 한 줄(없으면 null): 문구 하나 꺼내기 · 공백 정리 · 따옴표 벗기기 · 60자 초과·금지어는 버린다
+function rtxAiClean(d) {
+  var msgs = d && (d.messages || d.msgs || d), txt = '';
+  if (typeof d === 'string') txt = d;
+  else if (Array.isArray(msgs) && msgs.length) { var m = msgs[0]; txt = (m && (m.text || m.msg)) || (typeof m === 'string' ? m : ''); }
+  else if (d && typeof d.text === 'string') txt = d.text;
+  if (typeof txt !== 'string') return null;
+  txt = txt.replace(/\s+/g, ' ').trim().replace(/^["'“”]|["'“”]$/g, '');
+  if (!txt || txt.length > 60) return null;
+  if (RTX_BAN_RE.test(txt)) return null;
+  return txt;
+}
+function rtxLoadAi(q) {
+  if (RTX_LOADERS.ai) return Promise.resolve().then(function () { return RTX_LOADERS.ai(q); }).then(rtxAiClean, function () { return null; });
+  if (typeof fetch !== 'function') return Promise.resolve(null);
+  var ac = (typeof AbortController === 'function') ? new AbortController() : null;
+  var tm = ac ? setTimeout(function () { ac.abort(); }, 2500) : null;
+  return fetch(RTX_AI_URL + '/ai-talk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: ac ? ac.signal : undefined,
+      body: JSON.stringify({ mode: 'nightsnack', menu: q.menu, dinner: !!q.dinner, min: q.min, station: q.station || '' }) })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (d) { if (tm) clearTimeout(tm); return rtxAiClean(d); })
+    .catch(function () { if (tm) clearTimeout(tm); return null; });
+}
+// AI 문구를 받을 만한 결과인가(저녁·야식·쇼핑 + 상황 문구가 약함 + 본문이 네 줄 이상)와 그때의 '주제'(쇼핑이면 상품 이름 · 아니면 메뉴)
+function rtxAiSubject(r, inp) {
+  if (!r || (r.slot !== 'night' && r.slot !== 'shop') || r.hookStrong || typeof r.body !== 'string' || r.body.split('\n').length <= 3) return null;
+  if (r.slot === 'shop') { var it = r.shopItem || (inp && inp.shop) || null; return (it && it.n) ? it.n : '작은 선물'; }
+  return r.menu || null;
+}
 function rtxLoadShop() {
   if (RTX_LOADERS.shop) return Promise.resolve().then(RTX_LOADERS.shop).catch(function () { return null; });
   if (typeof shopLoad !== 'function') return Promise.resolve(null);
@@ -838,12 +878,21 @@ function handleRecoText(request) {
       } catch (e1) { /* 시간대를 못 읽으면 아무것도 안 받는다 */ }
     }
     return Promise.all([needShop ? rtxLoadShop() : null, loc ? rtxLoadFood(loc) : null]).then(function (res) {
-      var out;
-      try { out = isPip ? recoPip(body) : recoAlert(body, { shop: res[0], foods: res[1] }); } catch (e) { return new Response(JSON.stringify({ ok: false, error: String(e && e.message || e) }), { status: 500, headers: H }); }
-      out.ok = true;
-      return new Response(JSON.stringify(out), { headers: H });
+      var out, ext = { shop: res[0], foods: res[1] };
+      try { out = isPip ? recoPip(body) : recoAlert(body, ext); } catch (e) { return new Response(JSON.stringify({ ok: false, error: String(e && e.message || e) }), { status: 500, headers: H }); }
+      // ⑦ AI 위로 문구: 앱이 aiCopy:1 을 보냈고 받을 만한 결과면 AI 서버에서 한 줄 받아 같은 입력으로 다시 만든다(씨앗이 같아 나머지는 그대로)
+      var aiQ = null;
+      try { if (!isPip && body && (body.aiCopy === 1 || body.aiCopy === true)) { var sub = rtxAiSubject(out, rtxClean(body)); if (sub) aiQ = { menu: sub, dinner: !!out.dinner, min: out.remMin, station: rtxStr(body.dest, 60) }; } } catch (eQ) { aiQ = null; }
+      var fin = function (o) { o.ok = true; return new Response(JSON.stringify(o), { headers: H }); };
+      if (!aiQ) return fin(out);
+      return rtxLoadAi(aiQ).then(function (txt) {
+        var o2 = out;
+        if (txt) { try { ext.ai = { text: txt }; o2 = recoAlert(body, ext); } catch (e3) { o2 = out; } }
+        o2.aiTried = true;
+        return fin(o2);
+      });
     });
   }, function () { return new Response(JSON.stringify({ ok: false, error: 'read-fail' }), { status: 400, headers: H }); });
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { recoAlert: recoAlert, recoPip: recoPip, rtxCx: rtxCx, rtxHook: rtxHook, rtxShopLine: rtxShopLine, rtxFixJosa: rtxFixJosa, rtxMulberry: rtxMulberry, handleRecoText: handleRecoText, rtxSetLoaders: rtxSetLoaders, RTX_V: RTX_V };
+if (typeof module !== 'undefined' && module.exports) module.exports = { recoAlert: recoAlert, recoPip: recoPip, rtxCx: rtxCx, rtxHook: rtxHook, rtxShopLine: rtxShopLine, rtxFixJosa: rtxFixJosa, rtxAiClean: rtxAiClean, rtxAiSubject: rtxAiSubject, rtxMulberry: rtxMulberry, handleRecoText: handleRecoText, rtxSetLoaders: rtxSetLoaders, RTX_V: RTX_V };

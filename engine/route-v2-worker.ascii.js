@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-19s62";
+var ENGINE_VERSION = "route-v2-2026-10-19s63";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -14075,6 +14075,9 @@ function handleCommuteAlarm(request) {
 //   recoPip({ a:{remMin,menu,brunch,hook,spots,shopN,cx,dinner}, slot, dest, body, nowMs, seed }) \u2192 { v:1, pip } \u2014 \ubcf8\ubb38 \ud55c \uc904\uc774 AI \ubb38\uad6c\ub85c \ubc14\ub010 \uacbd\uc6b0 \uc791\uc740 \ud654\uba74 \ubb38\uad6c\ub9cc \ub2e4\uc2dc \ub9cc\ub4e0\ub2e4.
 // 3\ub2e8\uacc4(2026-10-19): \u2464 \ucfe0\ud321 \uc0c1\ud488 \uace0\ub974\uae30(pickShop:1 + shopRecent:[\uc774\ub984\u2026] \u2192 \uc5d4\uc9c4\uc774 \uc1fc\ud551 \uc11c\ubc84 \ubaa9\ub85d\uc5d0\uc11c \uace8\ub77c shopItem:{n,u,i,_cat,_t} \ub85c \ub3cc\ub824\uc900\ub2e4; \ubabb \uace0\ub974\uba74 shopMiss:true)
 //   \u2465 \ub3c4\ucc29\uc9c0 \uac00\uac8c \ubaa9\ub85d \ubc1b\uae30(foodPref:'server' + loc:{lat,lng}=\uc5ed\u00b7\uc815\ub958\uc7a5 \uc88c\ud45c \u2192 \uc5d4\uc9c4\uc774 \ub9db\uc9d1 \uc11c\ubc84\uc5d0\uc11c \ubc1b\uc544 foods:[{n,c,a,d}] \ub85c \ub3cc\ub824\uc900\ub2e4; \ubabb \ubc1b\uc73c\uba74 \uc571\uc774 \ubcf4\ub0b8 food \ub97c \uc4f4\ub2e4)
+// 4\ub2e8\uacc4(2026-10-19 \u00b7 s63): \u2466 \uc800\ub141\u00b7\uc57c\uc2dd\u00b7\uc1fc\ud551 \uc2dc\uac04\ub300\uc758 'AI \uc704\ub85c \ubb38\uad6c' \u2014 \uc571\uc774 aiCopy:1 \uc744 \ubcf4\ub0b4\uba74(\uc0c1\ud669 \ubb38\uad6c\uac00 \uc57d\ud560 \ub54c\ub9cc: hookStrong=false) \uc5d4\uc9c4\uc774 AI \uc11c\ubc84(/ai-talk \u00b7 nightsnack)\uc5d0\uc11c \ubb38\uad6c\ub97c \ubc1b\uc544
+//   \uae38\uc774(60\uc790 \uc774\ud558)\u00b7\uc815\uce58/\ubd84\uc7c1 \uae08\uc9c0\uc5b4\ub97c \uac80\uc0ac\ud558\uace0 \ubcf8\ubb38 \ub124 \ubc88\uc9f8 \uc904\uc5d0 \uc870\uc0ac\ub97c \ub9de\ucdb0 \ub07c\uc6b4 \ub4a4, \uc791\uc740 \ud654\uba74 \ubb38\uad6c\u00b7\uc624\ubc84\ub808\uc774 \uc904\uae4c\uc9c0 \uadf8 \ubcf8\ubb38\uc73c\ub85c \ub2e4\uc2dc \ub9cc\ub4e4\uc5b4 \ub3cc\ub824\uc900\ub2e4(aiTried:true \u00b7 \ub07c\uc6e0\uc73c\uba74 ai:true).
+//   \ubabb \ubc1b\uc73c\uba74(\uc2dc\uac04 \ucd08\uacfc\u00b7\uc624\ub958\u00b7\uac80\uc0ac \ud0c8\ub77d) \ubcf8\ubb38\uc740 \uadf8\ub300\ub85c\uc774\uace0 aiTried:true \ub9cc \ub3cc\uc544\uac04\ub2e4 \u2014 \uc571\uc740 aiTried \uac00 \uc624\uba74 \uc61b \uc6f9 \uae38(_arrAiCopy)\uc744 \ud0c0\uc9c0 \uc54a\ub294\ub2e4(\uac19\uc740 \uacb0\uacfc: AI \uc904 \uc5c6\uc74c). aiTried \uac00 \uc5c6\uc73c\uba74(\uc61b \uc5d4\uc9c4) \uc61b \uc6f9 \uae38.
 // recoAlert({ arrMs, nowMs, dest, weather:{temp,feel,tmin,tmax,rain,txt}|null, food:[{n,c,d}]|null, recent:[\uc774\ub984\u2026], shop:{n,_t,_cat}|null, seed, pickShop?, shopRecent?, foodPref?, loc? }, ext?)
 //   \u2192 { v:1, slot, kind, title, body, remMin, dinner, menu, brunch, spots, placeIdx(-1=\uc5c6\uc74c), hook, hookStrong, cx, shop(true|false) }   (\uc2ac\ub86f\uc774 'none' \uc774\uba74 { v:1, slot:'none' })
 
@@ -14790,7 +14793,7 @@ function rtxClean(b) {
   var sh = (b.shop && typeof b.shop === 'object' && typeof b.shop.n === 'string' && b.shop.n) ? { n: rtxStr(b.shop.n, 120), _t: rtxStr(b.shop._t, 30), _cat: rtxStr(b.shop._cat, 40) } : null;
   var shopRecent = Array.isArray(b.shopRecent) ? b.shopRecent.slice(0, 40).map(function (x) { return rtxStr(x, 120); }) : [];
   return { arrMs: Number(b.arrMs), nowMs: Number(b.nowMs), dest: rtxStr(b.dest, 60), weather: wx, food: food, recent: recent, shop: sh, seed: Number(b.seed),
-           pickShop: b.pickShop === 1 || b.pickShop === true, shopRecent: shopRecent, foodPref: b.foodPref === 'server' ? 'server' : '', loc: rtxLoc(b.loc), ext: null };
+           aiCopy: b.aiCopy === 1 || b.aiCopy === true, pickShop: b.pickShop === 1 || b.pickShop === true, shopRecent: shopRecent, foodPref: b.foodPref === 'server' ? 'server' : '', loc: rtxLoc(b.loc), ext: null };
 }
 // \ub3c4\ucc29\uc9c0 \uc88c\ud45c(\uc5ed\u00b7\uc815\ub958\uc7a5 \uc88c\ud45c \u2014 \uc9d1\u00b7\uc9c1\uc7a5 \uc88c\ud45c\uac00 \uc544\ub2c8\ub2e4). \ud55c\uad6d \ubc94\uc704 \ubc16\uc774\uac70\ub098 \uc22b\uc790\uac00 \uc544\ub2c8\uba74 \uc5c6\ub294 \uac83\uc73c\ub85c \ubcf8\ub2e4
 function rtxLoc(v) {
@@ -14829,6 +14832,11 @@ function recoAlert(b, ext) {
   var r = rtxBuild(inp);
   if (r.slot === 'none') return r;
   if (foodsOut && r.slot !== 'shop') r.foods = foodsOut;
+  // \u2466 AI \uc704\ub85c \ubb38\uad6c\uac00 \uc654\uc73c\uba74 \ubcf8\ubb38 \ub124 \ubc88\uc9f8 \uc904\uc744 \ubc14\uafbc\ub2e4(\uc791\uc740 \ud654\uba74 \ubb38\uad6c\u00b7\uc624\ubc84\ub808\uc774 \uc904\uc740 \uc544\ub798\uc5d0\uc11c \uc774 \ubcf8\ubb38\uc73c\ub85c \ub9cc\ub4e0\ub2e4)
+  var aiSub = rtxAiSubject(r, inp);
+  if (aiSub && inp.ext.ai && typeof inp.ext.ai.text === 'string' && inp.ext.ai.text) {
+    var ls = r.body.split('\n'); ls[3] = rtxFixJosa(inp.ext.ai.text, aiSub); r.body = ls.join('\n'); r.ai = true;
+  }
   // \uc791\uc740 \ud654\uba74 \ubb38\uad6c \u00b7 \uc624\ubc84\ub808\uc774 \ucd94\ucc9c \uc904 \u2014 \uc608\uc804\uc5d4 \uc54c\ub9bc\uc744 \ubcf4\ub0b8 \ub4a4 \uc6f9\uc774 \uc54c\ub9bc \uc815\ubcf4(a)\ub85c \ub530\ub85c \ub9cc\ub4e4\uc5c8\ub2e4. \uac19\uc740 \uc815\ubcf4\ub85c \uc5d4\uc9c4\uc774 \uc774\uc5b4\uc11c \ub9cc\ub4e0\ub2e4(\ubb34\uc791\uc704 \ud750\ub984\ub3c4 \uc774\uc5b4\uc9c4\ub2e4).
   RTX_FOOD = inp.food;
   var a = { title: r.title, body: r.body, kind: r.kind, slot: r.slot, remMin: r.remMin, dinner: r.dinner, menu: r.menu, brunch: r.brunch, spots: r.spots,
@@ -14855,8 +14863,40 @@ function recoPip(b) {
 // \u2500\u2500 \ubc14\uae65 \uc790\uc6d0(\uc1fc\ud551 \uc0c1\ud488 \ubaa9\ub85d \u00b7 \ub9db\uc9d1 \uc11c\ubc84) \u2014 Worker \uc548\uc5d0\uc11c\ub9cc \ubd80\ub978\ub2e4. \uc2dc\ud5d8\uc740 rtxSetLoaders \ub85c \uac00\uc9dc\ub97c \ub07c\uc6b4\ub2e4 \u2500\u2500
 var RTX_FOOD_URL = 'https://gildongmu-food.phg0643.workers.dev';
 var RTX_FOOD_MEM = {};
-var RTX_LOADERS = { shop: null, food: null };
-function rtxSetLoaders(o) { RTX_LOADERS = { shop: (o && o.shop) || null, food: (o && o.food) || null }; RTX_FOOD_MEM = {}; }
+var RTX_LOADERS = { shop: null, food: null, ai: null };
+function rtxSetLoaders(o) { RTX_LOADERS = { shop: (o && o.shop) || null, food: (o && o.food) || null, ai: (o && o.ai) || null }; RTX_FOOD_MEM = {}; }
+// \u2500\u2500 \u2466 AI \uc704\ub85c \ubb38\uad6c(\uc800\ub141\u00b7\uc57c\uc2dd\u00b7\uc1fc\ud551) \u2014 \uc608\uc804 \uc6f9 _arrAiCopy \uc640 \uac19\uc740 \uc694\uccad\u00b7\uac19\uc740 \uac80\uc0ac(\uc11c\ubc84\uac00 '\uc800\ub141/\uc57c\uc2dd \u00d7 \uba54\ub274'\ubcc4\ub85c \ubbf8\ub9ac \ub9cc\ub4e4\uc5b4 \ub454 \ubb38\uad6c\ub97c \ud558\ub098 \uace8\ub77c \uc900\ub2e4) \u2500\u2500
+var RTX_AI_URL = 'https://gentle-lab-7e47subway-api.phg0643.workers.dev';
+var RTX_BAN_RE = /(\uc815\uce58|\ub300\ud1b5\ub839|\ub300\uc120|\ucd1d\uc120|\ubcf4\uad90|\uc120\uac70|\ud6c4\ubcf4\s*\ub4f1\ub85d|\uad6d\ud68c|\uad6d\uc815|\uc758\uc6d0|\uc5ec\ub2f9|\uc57c\ub2f9|\uc815\ub2f9|\ubbfc\uc8fc\ub2f9|\uad6d\ubbfc\uc758\ud798|\uac1c\ud601\uc2e0\ub2f9|\uc9c4\ubcf4\ub2f9|\uc7a5\uad00|\ub0b4\uac01|\uccad\uc640\ub300|\ud0c4\ud575|\ud2b9\uac80|\uac80\ucc30\s*\uc218\uc0ac|\uacf5\uc218\ucc98|\uad6d\uc815\uac10\uc0ac|\uc2dc\uad6d|\uc9d1\ud68c|\uc2dc\uc704|\uaddc\ud0c4|\ud30c\uc5c5\s*\ud22c\uc7c1|\uc88c\ud30c|\uc6b0\ud30c|\ubcf4\uc218\s*\uc9c4\uc601|\uc9c4\ubcf4\s*\uc9c4\uc601|\uce5c\uc77c|\ubc18\uc77c|\ubc18\uc911|\ud610\uc624|\uc820\ub354\s*\uac08\ub4f1|\uc131\ubcc4\s*\uac08\ub4f1|\ud398\ubbf8|\ud55c\ub0a8|\ud55c\ub140|\uc885\ubd81|\uadf9\uc6b0|\uadf9\uc88c|\uc774\ub150)/;
+// \uc11c\ubc84 \ub2f5 \u2192 \uc4f8 \uc218 \uc788\ub294 \ud55c \uc904(\uc5c6\uc73c\uba74 null): \ubb38\uad6c \ud558\ub098 \uaebc\ub0b4\uae30 \u00b7 \uacf5\ubc31 \uc815\ub9ac \u00b7 \ub530\uc634\ud45c \ubc97\uae30\uae30 \u00b7 60\uc790 \ucd08\uacfc\u00b7\uae08\uc9c0\uc5b4\ub294 \ubc84\ub9b0\ub2e4
+function rtxAiClean(d) {
+  var msgs = d && (d.messages || d.msgs || d), txt = '';
+  if (typeof d === 'string') txt = d;
+  else if (Array.isArray(msgs) && msgs.length) { var m = msgs[0]; txt = (m && (m.text || m.msg)) || (typeof m === 'string' ? m : ''); }
+  else if (d && typeof d.text === 'string') txt = d.text;
+  if (typeof txt !== 'string') return null;
+  txt = txt.replace(/\s+/g, ' ').trim().replace(/^["'\u201c\u201d]|["'\u201c\u201d]$/g, '');
+  if (!txt || txt.length > 60) return null;
+  if (RTX_BAN_RE.test(txt)) return null;
+  return txt;
+}
+function rtxLoadAi(q) {
+  if (RTX_LOADERS.ai) return Promise.resolve().then(function () { return RTX_LOADERS.ai(q); }).then(rtxAiClean, function () { return null; });
+  if (typeof fetch !== 'function') return Promise.resolve(null);
+  var ac = (typeof AbortController === 'function') ? new AbortController() : null;
+  var tm = ac ? setTimeout(function () { ac.abort(); }, 2500) : null;
+  return fetch(RTX_AI_URL + '/ai-talk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: ac ? ac.signal : undefined,
+      body: JSON.stringify({ mode: 'nightsnack', menu: q.menu, dinner: !!q.dinner, min: q.min, station: q.station || '' }) })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (d) { if (tm) clearTimeout(tm); return rtxAiClean(d); })
+    .catch(function () { if (tm) clearTimeout(tm); return null; });
+}
+// AI \ubb38\uad6c\ub97c \ubc1b\uc744 \ub9cc\ud55c \uacb0\uacfc\uc778\uac00(\uc800\ub141\u00b7\uc57c\uc2dd\u00b7\uc1fc\ud551 + \uc0c1\ud669 \ubb38\uad6c\uac00 \uc57d\ud568 + \ubcf8\ubb38\uc774 \ub124 \uc904 \uc774\uc0c1)\uc640 \uadf8\ub54c\uc758 '\uc8fc\uc81c'(\uc1fc\ud551\uc774\uba74 \uc0c1\ud488 \uc774\ub984 \u00b7 \uc544\ub2c8\uba74 \uba54\ub274)
+function rtxAiSubject(r, inp) {
+  if (!r || (r.slot !== 'night' && r.slot !== 'shop') || r.hookStrong || typeof r.body !== 'string' || r.body.split('\n').length <= 3) return null;
+  if (r.slot === 'shop') { var it = r.shopItem || (inp && inp.shop) || null; return (it && it.n) ? it.n : '\uc791\uc740 \uc120\ubb3c'; }
+  return r.menu || null;
+}
 function rtxLoadShop() {
   if (RTX_LOADERS.shop) return Promise.resolve().then(RTX_LOADERS.shop).catch(function () { return null; });
   if (typeof shopLoad !== 'function') return Promise.resolve(null);
@@ -14901,10 +14941,19 @@ function handleRecoText(request) {
       } catch (e1) { /* \uc2dc\uac04\ub300\ub97c \ubabb \uc77d\uc73c\uba74 \uc544\ubb34\uac83\ub3c4 \uc548 \ubc1b\ub294\ub2e4 */ }
     }
     return Promise.all([needShop ? rtxLoadShop() : null, loc ? rtxLoadFood(loc) : null]).then(function (res) {
-      var out;
-      try { out = isPip ? recoPip(body) : recoAlert(body, { shop: res[0], foods: res[1] }); } catch (e) { return new Response(JSON.stringify({ ok: false, error: String(e && e.message || e) }), { status: 500, headers: H }); }
-      out.ok = true;
-      return new Response(JSON.stringify(out), { headers: H });
+      var out, ext = { shop: res[0], foods: res[1] };
+      try { out = isPip ? recoPip(body) : recoAlert(body, ext); } catch (e) { return new Response(JSON.stringify({ ok: false, error: String(e && e.message || e) }), { status: 500, headers: H }); }
+      // \u2466 AI \uc704\ub85c \ubb38\uad6c: \uc571\uc774 aiCopy:1 \uc744 \ubcf4\ub0c8\uace0 \ubc1b\uc744 \ub9cc\ud55c \uacb0\uacfc\uba74 AI \uc11c\ubc84\uc5d0\uc11c \ud55c \uc904 \ubc1b\uc544 \uac19\uc740 \uc785\ub825\uc73c\ub85c \ub2e4\uc2dc \ub9cc\ub4e0\ub2e4(\uc528\uc557\uc774 \uac19\uc544 \ub098\uba38\uc9c0\ub294 \uadf8\ub300\ub85c)
+      var aiQ = null;
+      try { if (!isPip && body && (body.aiCopy === 1 || body.aiCopy === true)) { var sub = rtxAiSubject(out, rtxClean(body)); if (sub) aiQ = { menu: sub, dinner: !!out.dinner, min: out.remMin, station: rtxStr(body.dest, 60) }; } } catch (eQ) { aiQ = null; }
+      var fin = function (o) { o.ok = true; return new Response(JSON.stringify(o), { headers: H }); };
+      if (!aiQ) return fin(out);
+      return rtxLoadAi(aiQ).then(function (txt) {
+        var o2 = out;
+        if (txt) { try { ext.ai = { text: txt }; o2 = recoAlert(body, ext); } catch (e3) { o2 = out; } }
+        o2.aiTried = true;
+        return fin(o2);
+      });
     });
   }, function () { return new Response(JSON.stringify({ ok: false, error: 'read-fail' }), { status: 400, headers: H }); });
 }
