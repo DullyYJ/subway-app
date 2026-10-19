@@ -24,6 +24,7 @@ var RIDE_ALERT_V = 1;
 
 function raAlertsFn() { return (typeof rsAlerts === 'function') ? rsAlerts : require('./ride-standby').rsAlerts; }
 
+// 3단계(2026-10-19 s60): { op:'targets', nodes } → { v:1, op:'targets', targets, seq, nt } — 앱이 알림 대상(환승 하차역 · 최종 하차)을 직접 만들지 않고 엔진에게 받는다.
 // 경로 노드 → 알림 대상. 교통(지하철·버스) 노드만 순서(seq)에 넣고, 노선이 바뀌는 곳의 앞 노드 = 환승 하차역, 마지막 교통 노드 = 최종 하차.
 function raTargets(nodes) {
   var nd = Array.isArray(nodes) ? nodes : [], seq = [], i;
@@ -61,6 +62,8 @@ function raMinTxtFn(o) {
 
 function rideAlert(o) {
   o = o || {};
+  // 알림 대상 만들기만(앱이 경로를 만든 직후 한 번): 노드 → 환승 하차역 · 최종 하차 대상. 알림 판단은 하지 않는다.
+  if (o.op === 'targets') { var tt = raTargets(Array.isArray(o.nodes) ? o.nodes.slice(0, 400) : []); return { v: RIDE_ALERT_V, op: 'targets', targets: tt.targets, seq: tt.seq, nt: tt.targets.length }; }
   var t, cfg = o.cfg && typeof o.cfg === 'object' ? o.cfg : {};
   if (Array.isArray(o.nodes)) t = raTargets(o.nodes);
   else t = { targets: Array.isArray(cfg.targets) ? cfg.targets : [], seq: Array.isArray(cfg.seq) ? cfg.seq : [] };
