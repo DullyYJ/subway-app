@@ -1393,3 +1393,15 @@
 - **시험**: `cchips_engine` 29(웹 칩 글자 대조·cap·검증기·워커 내장·워커 끝에서 끝까지·alts) · `screen_cchips_js.ui` 12(꺼짐/없음 무호출·show+사각형·칩 4종·무시·웹 쪽 변경 따라감·탭 이동·폴백·스위치) · `settings_engine` 181(`scrq` 설명 웹=엔진) · CI 매트릭스에 2개 추가.
 - **YJ가 할 일**: `engine/route-v2-worker.ascii.js`(s69) Deploy → `version` = `route-v2-2026-10-19s69`(s68 포함). APK 는 s68 때 새로 빌드했다면 그대로 쓰면 된다(새 노드 없음, 기존 `chips`). 설정 > '네이티브 커뮤니티 칩 줄'을 켠다.
 - **기기 미검증**: 네이티브 칩 줄이 웹 칩 줄 높이(≈29)와 같은지 · 글자 크기(웹 11 → 네이티브 12) · 가로 스크롤 필요 여부(칩 4개라 폭은 충분).
+
+## 2026-10-19 엔진 s70 — 네이티브화: 커뮤니티 '제보 글쓰기' 시트를 엔진이 구성 + CI 실패(HOME_STNS 이름 충돌) 수리
+- **CI 수리**: s68/s69 빌드가 `home_engine` 의 '다른 엔진과 이름이 겹치지 않는다' 에서 실패했다. 원인 = `engine/settings.js` 의 `var HOME_STNS;` 가 `home-stations.js` 와 워커 안에서 겹침. `settingsStns()`(전역이 있으면 그걸, 노드에서는 require)로 바꿔 해결. 같은 때 `screen_native_js.ui`(테마 팔레트 update) 가 #1197 에서만 한 번 실패 — #1198 에서는 통과, 로컬 29/29 → CI 부하로 인한 일시 실패로 본다(다시 나오면 조사).
+- **YJ 지시**: "계속 진행해줘" — 남은 웹 조각 중 글쓰기 시트. 새 설정 스위치 `네이티브 글쓰기 시트`(`scrw`, 기본 꺼짐).
+- **엔진**(`engine/write.js` + `write-worker.js`, `POST /screen/write`, 내장 블록 `WRITE`): `{cap:9, f:{rc, err, busy, t, b}}` → 제목 줄('제보 글쓰기' + 닫기) · 카테고리 · 현장제보 횟수 안내 · 안내 빨간 상자(이모지 제거) · 제목 입력칸 · 여러 줄 내용 입력칸(`multi`) · 등록 단추('등록 중...' 포함). 계산(횟수 문구·단추 글)은 전부 엔진.
+- **화면 규격 변경(새 APK 필요)**: `field` 노드에 `multi`(여러 줄), `maxlen` ≤ 1000, `value` ≤ 1000자, `h` ≤ 160. `ScreenCore.java`(검증) · `ScreenView.java`(`drawFieldLines`, 편집기 여러 줄) · 플러그인 `status` 가 `cap` 9 를 돌려준다. 웹은 `cap>=9` 일 때만 요청한다(옛 APK 는 웹 시트 그대로). `ScreenJvmTest` 282 통과.
+- **앱**(`www/index.html` `_scrWrite`): `#wsheet` 위를 덮되 하단 탭바 위까지만(탭바가 시트 아래쪽을 덮고 있어 그대로 두면 '가려짐'으로 보류됨 — 시험으로 잡은 버그). 네이티브가 맡는 동안 웹 시트 속은 숨김(`scrw-own`, 자리는 그대로). `wr.submit` → 입력칸 글을 웹 입력칸에 옮겨 `submitPost`(욕설 거르기·서버 등록·포인트는 웹 그대로), 결과 토스트는 등록이 끝날 때까지 기기 토스트로, 성공이면 네이티브 입력칸도 `setField` 로 비운다. `wr.close` → `closeWrite`.
+- **버린 것**: 웹의 '호선 선택(wLine)' 은 아무 데서도 읽지 않아 옮기지 않았다. 카테고리는 '잡담' 하나.
+- **시험**: `write_engine` 35 · `screen_write_js.ui` 13 · `ScreenJvmTest` 282 · `screen_native` 13 · `screen_cchips_js.ui` 12 · `screen_bct_js.ui` 21 · `home_engine` 70 통과. CI 행렬에 `write_engine`, `screen_write_js.ui` 추가.
+- **YJ가 할 일**: ① `engine/route-v2-worker.ascii.js`(s70) 붙여 넣고 Deploy → `version` = `route-v2-2026-10-19s70`. ② **새 APK 빌드**(Java 변경: 여러 줄 field · cap 9). ③ 설정 > '네이티브 글쓰기 시트' 켜고 확인.
+- **기기 미검증(전부, Java 는 CI 컴파일로만 확인됨)**: 여러 줄 입력칸 그리기·타이핑·줄바꿈 · 키보드가 올라올 때 시트 사각형 · 웹 시트 속 숨김 · 토스트 라우팅 · 등록 뒤 입력칸 비우기.
+- **아직 100% 네이티브가 아닌 것**: 홈 경로 결과 카드 · 글쓰기 뒤 팝업 · `_ovlDiagShow`/`_pickPop` 팝업 · 데이터 계층 · 지도 탭(SVG).

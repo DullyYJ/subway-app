@@ -291,6 +291,20 @@ public class ScreenJvmTest {
         ok(bad(wrapBody(rwNine + "]}")), "row: 9칸은 거절(최대 " + ScreenCore.MAX_ROW + ")");
         ok(bad(wrapBody("{\"t\":\"row\",\"kids\":[{\"t\":\"button\",\"s\":\"a\",\"act\":{\"a\":\"nope\"}}]}")), "row 안 단추의 모르는 행동은 거절");
         ok(bad(wrapBody("{\"t\":\"field\",\"key\":\"k\",\"h\":500}")), "입력칸 높이 범위 밖은 거절");
+        // ── 여러 줄 입력칸(글쓰기 내용) ──
+        {
+            StringBuilder mvLong = new StringBuilder(); for (int i = 0; i < 900; i++) mvLong.append('가');
+            ScreenCore.Screen mvS = ScreenCore.load(wrapBody("{\"t\":\"field\",\"key\":\"wb\",\"hint\":\"내용\",\"h\":96,\"maxlen\":1000,\"multi\":true,\"value\":\"" + mvLong + "\"}"));
+            ScreenCore.Layout mvL = ScreenCore.layout(mvS, 360f, M);
+            ScreenCore.Item mvF = null; for (ScreenCore.Item it : mvL.body) if (it.kind == ScreenCore.K_FIELD) mvF = it;
+            ok(mvF != null && mvF.multi && mvF.maxlen == 1000 && mvF.h == 96f && mvF.value.length() == 900, "여러 줄 입력칸: multi/maxlen 1000/높이 96/긴 처음 글");
+            ScreenCore.Screen mvS1 = ScreenCore.load(wrapBody("{\"t\":\"field\",\"key\":\"wt\",\"hint\":\"제목\"}"));
+            ScreenCore.Item mvF1 = null; for (ScreenCore.Item it : ScreenCore.layout(mvS1, 360f, M).body) if (it.kind == ScreenCore.K_FIELD) mvF1 = it;
+            ok(mvF1 != null && !mvF1.multi && mvF1.maxlen == 60, "한 줄 입력칸은 그대로(multi 꺼짐 · maxlen 60)");
+            ok(bad(wrapBody("{\"t\":\"field\",\"key\":\"k\",\"maxlen\":1001}")), "입력칸 maxlen 1000 초과는 거절");
+            ok(bad(wrapBody("{\"t\":\"field\",\"key\":\"k\",\"h\":161}")), "입력칸 높이 160 초과는 거절");
+            ok(bad(wrapBody("{\"t\":\"field\",\"key\":\"k\",\"multi\":\"yes\"}")), "multi 가 참/거짓이 아니면 거절");
+        }
         ok(bad(wrapBody("{\"t\":\"panel\",\"kids\":[{\"t\":\"panel\",\"kids\":[]}]}")), "패널 안에 패널은 거절(중첩 금지)");
         ok(bad(wrapBody("{\"t\":\"panel\",\"kids\":[{\"t\":\"grid\",\"items\":[]}]}")), "패널 안에 격자는 거절");
         ok(bad(wrapBody("{\"t\":\"panel\",\"kids\":[{\"t\":\"search\",\"act\":{\"a\":\"search\",\"tpl\":\"https://a/{q}\",\"empty\":\"https://a\"}}]}")), "패널 안에 검색줄은 거절");

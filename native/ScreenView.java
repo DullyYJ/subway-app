@@ -686,8 +686,28 @@ public class ScreenView extends View {
         boolean empty = v == null || v.length() == 0;
         setText(it.size, false, empty ? alpha(cc(it.sc, pal[R_SUB]), 0.8f) : cc(it.tc, pal[R_TEXT]));
         cv.save(); rf.set(it.x + 6f, it.y, it.x + it.w - 6f, it.y + it.h); cv.clipRect(rf);
-        cv.drawText(empty ? it.label : v, it.textX, base(it.y, it.h, 0), tp);
+        if (it.multi) drawFieldLines(cv, it, empty ? it.label : v);
+        else cv.drawText(empty ? it.label : v, it.textX, base(it.y, it.h, 0), tp);
         cv.restore();
+    }
+    /** 여러 줄 입력칸(글쓰기 내용)의 글자: 줄바꿈 문자와 칸 너비에서 줄을 나눠 위쪽부터 그린다(칸 밖은 잘림). */
+    private void drawFieldLines(Canvas cv, ScreenCore.Item it, String src) {
+        float lh = it.size * 1.45f, maxW = Math.max(10f, it.w - 26f), top = it.y + 10f;
+        int line = 0;
+        String[] paras = src.split("\n", -1);
+        for (int pi = 0; pi < paras.length; pi++) {
+            String rest = paras[pi];
+            while (true) {
+                float by = top + line * lh + it.size;
+                if (by - it.size > it.y + it.h) return;
+                int c = rest.length() == 0 ? 0 : tp.breakText(rest, true, maxW, null);
+                if (c <= 0 && rest.length() > 0) c = 1;
+                if (c > 0) cv.drawText(rest.substring(0, c), it.textX, by, tp);
+                line++;
+                rest = rest.substring(c);
+                if (rest.length() == 0) break;
+            }
+        }
     }
 
     /** 굵은 구간이 섞인 글: 줄마다 조각을 차례로 그린다(새 글자·객체를 만들지 않는다 — 조각은 배치 때 미리 나눠 뒀다). */
@@ -1090,6 +1110,13 @@ public class ScreenView extends View {
         editor.setHintTextColor(alpha(cc(it.sc, pal[R_SUB]), 0.8f));
         editor.setHint(it.label);
         editor.setImeOptions(it.kind == ScreenCore.K_INBAR ? (it.watch ? EditorInfo.IME_ACTION_SEARCH : EditorInfo.IME_ACTION_SEND) : EditorInfo.IME_ACTION_DONE);
+        boolean multi = it.kind == ScreenCore.K_FIELD && it.multi;                                                   // 여러 줄 입력칸: 줄바꿈 키를 받고 위쪽부터 쓴다
+        editor.setInputType(multi ? (InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE) : InputType.TYPE_CLASS_TEXT);
+        editor.setSingleLine(!multi);
+        editor.setMaxLines(multi ? 12 : 1);
+        editor.setGravity(multi ? (Gravity.TOP | Gravity.START) : Gravity.CENTER_VERTICAL);
+        editor.setPadding(0, multi ? Math.round(10f * dpr) : 0, 0, 0);
+        if (multi) editor.setImeOptions(EditorInfo.IME_FLAG_NO_ENTER_ACTION);
         editor.setTypeface(face(it.bold)); editor.setTextSize(TypedValue.COMPLEX_UNIT_DIP, it.size);
         editor.setFilters(new InputFilter[] { new InputFilter.LengthFilter(Math.max(1, it.maxlen)) });
         eL = eT = eW = eH = -1;

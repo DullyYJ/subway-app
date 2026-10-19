@@ -21086,6 +21086,22 @@ window.addEventListener('unhandledrejection', function(e) {
         <style>#scrqSetOn:checked ~ #scrqSetKnob{background:var(--gold) !important;} #scrqSetOn:checked ~ #scrqSetDot{left:23px !important;}</style>
       </div>
 
+
+      <!-- ★ 2026-10-19: 서버 구동 네이티브 글쓰기 시트 — 안드로이드 앱에서만 보임, 기본 꺼짐(실험) -->
+      <div id="scrwSetCard" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <div style="font-size:15px;font-weight:800;color:var(--text);">네이티브 글쓰기 시트</div>
+          <label style="position:relative;display:inline-block;width:46px;height:26px;">
+            <input type="checkbox" id="scrwSetOn" onchange="_scrwSetUse(this.checked)" style="opacity:0;width:0;height:0;">
+            <span id="scrwSetKnob" style="position:absolute;inset:0;border-radius:13px;background:var(--border2);transition:.2s;cursor:pointer;"></span>
+            <span id="scrwSetDot" style="position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.3);"></span>
+          </label>
+        </div>
+        <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">커뮤니티 '제보 글쓰기' 시트의 글·입력칸·단추를 엔진이 정해 내려주고, 기기가 직접 그려요. 문제가 생기면 예전 웹 시트로 돌아가요.</p>
+        <div id="scrwSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
+        <style>#scrwSetOn:checked ~ #scrwSetKnob{background:var(--gold) !important;} #scrwSetOn:checked ~ #scrwSetDot{left:23px !important;}</style>
+      </div>
+
       <!-- ★ 2026-10-18: 서버 구동 네이티브 홈 경로 입력 — 안드로이드 앱에서만 보임, 기본 꺼짐(실험) -->
       <div id="scrhSetCard" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
@@ -35412,6 +35428,7 @@ function closeWrite(){
     setTimeout(function(){ wbd.style.display=''; wbd.style.pointerEvents=''; }, 350);
   }
   if(wsh) wsh.classList.remove('on');
+  try{ if(window._scrWrite) setTimeout(function(){ window._scrWrite.kick(); }, 0); }catch(eSw2){}      // 서버 구동 네이티브 글쓰기 시트를 숨긴다
 }
 function openWriteSheet(){
   try{ var _we = document.getElementById('wErr'); if(_we){ _we.textContent = ''; _we.style.display = 'none'; } }catch(e){}
@@ -35425,6 +35442,7 @@ function openWriteSheet(){
   var rc = (typeof _getReportCount==='function') ? _getReportCount() : 0;
   var hint = document.getElementById('reportLimitHint');
   if(hint) hint.textContent = '🚨 현장제보 오늘 ' + rc + '/3회 사용 (제보 시 3~8P 랜덤 적립)';
+  try{ if(window._scrWrite) setTimeout(function(){ window._scrWrite.kick(); }, 0); }catch(eSw){}      // 서버 구동 네이티브 글쓰기 시트(켜져 있을 때만)
 }
 window.openWriteSheet = openWriteSheet;
 
@@ -39467,6 +39485,7 @@ window.refreshShop=refreshShop;
     try{ var Xscrc = window._scrChat && _scrChat.S, cscrc = document.getElementById('scrcSetCard'); if(Xscrc && cscrc && cscrc.style.display === 'block') f.feat.scrc = { h: 1, on: Xscrc.on ? 1 : 0, f: (Xscrc.failed || Xscrc.fails >= 2) ? 1 : 0, w: Xscrc.why || '', b: Xscrc.badFresh > 0 ? 1 : 0 }; }catch(e){}
     try{ var Xscrt = window._scrTabs && _scrTabs.S, cscrt = document.getElementById('scrtSetCard'); if(Xscrt && cscrt && cscrt.style.display === 'block') f.feat.scrt = { h: 1, on: Xscrt.on ? 1 : 0, f: (Xscrt.failed || Xscrt.fails >= 2) ? 1 : 0, w: Xscrt.why || '', b: Xscrt.badFresh > 0 ? 1 : 0 }; }catch(e){}
     try{ var Xscrq = window._scrCchips && _scrCchips.S, cscrq = document.getElementById('scrqSetCard'); if(Xscrq && cscrq && cscrq.style.display === 'block') f.feat.scrq = { h: 1, on: Xscrq.on ? 1 : 0, f: (Xscrq.failed || Xscrq.fails >= 2) ? 1 : 0, w: Xscrq.why || '', b: Xscrq.badFresh > 0 ? 1 : 0 }; }catch(e){}
+    try{ var Xscrw = window._scrWrite && _scrWrite.S, cscrw = document.getElementById('scrwSetCard'); if(Xscrw && cscrw && cscrw.style.display === 'block') f.feat.scrw = { h: 1, on: Xscrw.on ? 1 : 0, f: (Xscrw.failed || Xscrw.fails >= 2) ? 1 : 0, w: Xscrw.why || '', b: Xscrw.badFresh > 0 ? 1 : 0 }; }catch(e){}
     try{ var Xscrh = window._scrHome && _scrHome.S, cscrh = document.getElementById('scrhSetCard'); if(Xscrh && cscrh && cscrh.style.display === 'block') f.feat.scrh = { h: 1, on: Xscrh.on ? 1 : 0, f: (Xscrh.failed || Xscrh.fails >= 2) ? 1 : 0, w: Xscrh.why || '', b: Xscrh.badFresh > 0 ? 1 : 0 }; }catch(e){}
     try{ if(typeof _sbhSyncCard === 'function') _sbhSyncCard(); var csbh = document.getElementById('sbhSetCard'); if(csbh && csbh.style.display === 'block') f.feat.sbh = { h: 1, on: _sbhOn() ? 1 : 0, f: 0, w: '' }; }catch(e){}
     try{ if(typeof _cndSyncCard === 'function') _cndSyncCard(); var ccnd = document.getElementById('cndSetCard'); if(ccnd && ccnd.style.display === 'block') f.feat.cnd = { h: 1, on: (_cndOn() && !_cndBad()) ? 1 : 0, f: _cndBad() ? 1 : 0, w: '' }; }catch(e){}
@@ -39623,6 +39642,7 @@ window.refreshShop=refreshShop;
       else if(key === 'f.scrc') window._scrcSetUse(on);
       else if(key === 'f.scrt') window._scrtSetUse(on);
       else if(key === 'f.scrq') window._scrqSetUse(on);
+      else if(key === 'f.scrw') window._scrwSetUse(on);
       else if(key === 'f.scrh') window._scrhSetUse(on);
       else if(key === 'f.sbh') window._sbhSetUse(on);
       else if(key === 'f.cnd') window._cndSetUse(on);
@@ -41294,6 +41314,88 @@ window.refreshShop=refreshShop;
     });
     window._scrCchips = kit;
     window._scrqSetUse = function(on){ try{ kit.setUse(on); }catch(e){} };
+  })();
+
+  // ═════════════ 커뮤니티 '제보 글쓰기' 시트 ═════════════
+  //   시트의 제목·안내·입력칸·단추 글을 엔진(POST /screen/write, cap 9)이 정하고 기기가 그린다. 앱은 기기 사실(오늘 제보 횟수 · 지금 보이는 안내 글 · 등록 중 · 입력칸 글)만 보낸다.
+  //   누르면 예전 웹 함수가 그대로 일한다: wr.close → closeWrite · wr.submit → (입력칸 글을 웹 입력칸에 옮겨 적고) submitPost — 욕설 거르기·서버 등록·포인트·토스트는 웹 그대로.
+  //   웹 시트(#wsheet)는 아래에 그대로 두고(폴백) 네이티브가 그 위를 덮는다. 네이티브가 맡는 동안 웹 시트의 속(글자·입력칸)만 감춘다(자리는 그대로).
+  (function(){
+    var kit, W = { toast: null, cap: 0 };
+    function gEl(id){ return document.getElementById(id); }
+    function sheet(){ return gEl('wsheet'); }
+    function val(id){ var e = gEl(id); return e ? String(e.value || '') : ''; }
+    function own(on){ try{ var s = sheet(); if(s) s.classList.toggle('scrw-own', !!on); }catch(e){} }
+    try{ var st = document.createElement('style'); st.textContent = '#wsheet.scrw-own > *{visibility:hidden !important;}'; document.head.appendChild(st); }catch(eSt){}
+    // 여러 줄 입력칸(cap 9)을 아는 새 APK 일 때만 쓴다 — 옛 APK 는 status 에 cap 이 없거나 작아서 예전 웹 시트 그대로
+    function probe(){
+      if(W.cap) return;
+      var P = kit.plug(); if(!P || typeof P.status !== 'function'){ W.cap = 3; return; }
+      W.cap = -1;
+      Promise.resolve(P.status({ id: 'write' })).then(function(st){ W.cap = (st && st.cap >= 9) ? 9 : 3; kit.kick(); }, function(){ W.cap = 3; });
+    }
+    function open(){
+      var o = false; try{ var s = sheet(); o = !!(s && s.classList.contains('on') && !document.hidden); }catch(e){}
+      if(o && W.cap !== 9){ if(!W.cap) probe(); o = false; }
+      if(!o) own(false);
+      return o;
+    }
+    function rect(){
+      var s = sheet(); if(!s) return null; var b = s.getBoundingClientRect();
+      var bottom = b.bottom;
+      try{ var nv = document.querySelector('nav.bnav'); if(nv){ var nb = nv.getBoundingClientRect(); if(nb.height > 10 && nb.top > b.top && nb.top < bottom) bottom = nb.top; } }catch(eNv){}   // 하단 탭바가 시트 아래쪽을 덮고 있다 — 기기 화면도 탭바 위까지만
+      if(!(b.width > 100 && bottom - b.top > 100 && b.top < window.innerHeight - 60)) return null;
+      return { L: b.left, T: b.top, W: b.width, H: bottom - b.top };
+    }
+    function facts(){
+      var err = '';
+      try{ var e = gEl('wErr'); if(e && e.style.display !== 'none') err = String(e.textContent || ''); }catch(e1){}
+      var rc = 0; try{ rc = (typeof _getReportCount === 'function') ? _getReportCount() : 0; }catch(e2){}
+      return { rc: rc, err: err, busy: window._postSending ? 1 : 0, t: val('wTitle'), b: val('wBody') };
+    }
+    function request(){
+      var f = facts(), txt = JSON.stringify({ cap: 9, f: f });
+      return { txt: txt, fk: kit.hash(txt), idle: false, key: '', snap: null, sig: f.rc + '|' + f.busy + '|' + f.err };
+    }
+    function nativeToast(t){ var P = kit.plug(); if(!P || typeof P.toast !== 'function') return; try{ var m = String(t || '').replace(/^[^\w가-힣]+/, ''); if(m) P.toast({ text: m }); }catch(e){} }
+    function toastOn(){                                                        // 등록 결과 토스트는 네이티브 시트 밑에 가려지므로 등록이 끝날 때까지 기기 토스트로 돌린다
+      if(W.toast) return; W.toast = window.toast;
+      window.toast = function(m){ try{ if(W.toast) W.toast(m); }catch(e){} nativeToast(m); };
+    }
+    function toastOff(){ if(W.toast){ window.toast = W.toast; W.toast = null; } }
+    function copyFields(f){                                                    // 네이티브 입력칸 글 → 웹 입력칸(예전 웹 함수가 같은 값을 읽는다)
+      f = f || {};
+      var t = gEl('wTitle'), b = gEl('wBody');
+      if(t && typeof f.wt === 'string') t.value = f.wt;
+      if(b && typeof f.wb === 'string') b.value = f.wb;
+    }
+    function afterSend(){                                                      // 등록이 끝나면(성공이면 웹이 입력칸을 비운다) 네이티브 입력칸도 비운다
+      var n = 0;
+      (function chk(){
+        if(window._postSending && n++ < 100){ setTimeout(chk, 150); return; }
+        toastOff();
+        try{ if(!val('wTitle') && !val('wBody')){ var P = kit.plug(); if(P && typeof P.setField === 'function'){ P.setField({ id: 'write', key: 'wt', value: '' }); P.setField({ id: 'write', key: 'wb', value: '' }); } } }catch(e){}
+        kit.changed();
+      })();
+    }
+    function act(e){
+      if(e.a !== 'call') return;
+      var m = /^wr\.(close|submit)$/.exec(String(e.v || '')); if(!m) return;
+      copyFields(e.fields);
+      if(m[1] === 'close'){ try{ closeWrite(); }catch(x){} setTimeout(function(){ kit.changed(); }, 30); return; }
+      toastOn();
+      try{ submitPost(); }catch(x2){ toastOff(); }
+      afterSend();
+      setTimeout(function(){ kit.changed(); }, 30);
+    }
+    kit = window._scrKit({
+      id: 'write', kp: 'gdm_scrw', ep: '/screen/write', screen: 'write', label: '글쓰기', card: 'scrw', cache: false, waitIdle: false, bucket: 0, idleMs: 200,
+      onText: '커뮤니티 \'제보 글쓰기\' 시트의 글·입력칸·단추를 엔진이 정한 대로 기기가 직접 그려요(실험 중).',
+      root: sheet, open: open, rect: rect, request: request, act: act, sig: function(){ var f = facts(); return f.rc + '|' + f.busy + '|' + f.err; }, sigMs: 300,
+      webClear: function(){ own(true); }, webBack: function(){ own(false); }, onEnd: function(){ own(false); toastOff(); }
+    });
+    window._scrWrite = kit;
+    window._scrwSetUse = function(on){ try{ kit.setUse(on); }catch(e){} };
   })();
 
   // ═════════════ 홈 탭 경로 입력 ═════════════

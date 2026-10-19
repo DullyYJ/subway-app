@@ -173,6 +173,7 @@ public final class ScreenCore {
         public float bh = 0f, bsize = 0f;                  // inbar: 단추 높이·글자 크기(0 이면 줄 높이·입력칸 글자 크기)
         public String dot = "";                            // inbar: 왼쪽 동그라미 색(출발/도착 점)
         public boolean watch;                              // inbar: 글자가 바뀔 때마다 앱이 웹에 알린다(자동완성)
+        public boolean multi;                              // field: 여러 줄 입력칸(글쓰기 내용) — 줄바꿈을 받고 글자를 줄바꿔 그린다
         public Act bact;                                   // sug: 오른쪽 작은 단추의 행동
         public boolean bold, on;
         public String color = "text", bg = "", align = "left";
@@ -408,8 +409,8 @@ public final class ScreenCore {
         } else if ("field".equals(t)) {
             pad(m, n);
             n.key = optStr(m, "key", "", 40); if (!ident(n.key)) throw new ParseError("field: key 가 올바르지 않다");
-            n.hint = optStr(m, "hint", "", 60); n.value = optStr(m, "value", "", 120); n.maxlen = (int) optNum(m, "maxlen", 60f, 1f, 200f);
-            n.h = optNum(m, "h", 44f, 28f, 120f); n.size = optNum(m, "size", 14f, 8f, 30f); n.r = optNum(m, "r", 9f, 0f, 30f);
+            n.hint = optStr(m, "hint", "", 60); n.value = optStr(m, "value", "", 1000); n.maxlen = (int) optNum(m, "maxlen", 60f, 1f, 1000f); n.multi = optBool(m, "multi", false);
+            n.h = optNum(m, "h", 44f, 28f, 160f); n.size = optNum(m, "size", 14f, 8f, 30f); n.r = optNum(m, "r", 9f, 0f, 30f);
             n.fill = roleOrCss(m, "fill", "bg"); n.line = roleOrCss(m, "line", "border2"); n.tc = roleOrCss(m, "tc", "text"); n.sc = roleOrCss(m, "sc", "sub");
         } else if ("box".equals(t)) {
             pad(m, n); ip(m, n);
@@ -606,6 +607,7 @@ public final class ScreenCore {
         public Col fill2;                            // 말풍선 글자색 따로 필요할 때
         public Col dotC;                             // 입력줄 왼쪽 동그라미 색(없으면 null)
         public boolean watch;                        // 입력줄: 글자 바뀜을 알린다
+        public boolean multi;                        // 글자 입력칸: 여러 줄
         public Act act2;                             // 자동완성 줄 오른쪽 작은 단추
         public float starX, badgeX, badgePw, distX, distPw, goX, metaY, metaH, subY, subLH2;   // 장소 카드 한 줄(별점·딱지·거리·길찾기) 자리 / 머리줄 작은 글 자리
         public Act act;
@@ -943,7 +945,7 @@ public final class ScreenCore {
         }
         if ("field".equals(n.t)) {
             Item it = new Item(); it.kind = K_FIELD; it.x = ox; it.y = y; it.w = innerW; it.h = n.h; it.radius = n.r;
-            it.key = n.key; it.label = n.hint; it.value = n.value; it.maxlen = n.maxlen; it.size = n.size;
+            it.key = n.key; it.label = n.hint; it.value = n.value; it.maxlen = n.maxlen; it.size = n.size; it.multi = n.multi;
             it.fill = col(n.fill, null); it.line = col(n.line, null); it.tc = col(n.tc, new Col("text", 0)); it.sc = col(n.sc, new Col("sub", 0));
             it.textX = ox + 13f;
             out.add(it);

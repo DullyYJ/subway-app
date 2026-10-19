@@ -197,7 +197,7 @@ public class ScreenNativePlugin extends Plugin {
                 o.put("items", view == null ? 0 : view.itemCount());
                 o.put("age", view == null ? -1 : (int) Math.min(Integer.MAX_VALUE, view.drawAgeMs()));
                 o.put("scroll", view == null ? 0 : Math.round(view.scrollPos()));
-                o.put("cap", 8);      // 이 앱이 아는 화면 규격 단계(8 = row 노드) — 웹이 이 값을 보고 하위 화면 요청 여부를 정한다
+                o.put("cap", 9);      // 이 앱이 아는 화면 규격 단계(8 = row 노드 · 9 = 여러 줄 field) — 웹이 이 값을 보고 하위 화면 요청 여부를 정한다
                 call.resolve(o);
             }
         });
