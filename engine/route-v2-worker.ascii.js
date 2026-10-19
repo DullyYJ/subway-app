@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-19s55";
+var ENGINE_VERSION = "route-v2-2026-10-19s56";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -11658,7 +11658,7 @@ async function handleScreenShop(request) {
 //        facts = \uc571\uc774 \ubaa8\uc740 \uae30\uae30 \uc0ac\uc2e4(\uc804\ubd80 \uc120\ud0dd \u2014 \uc5c6\uc73c\uba74 \uae30\ubcf8\uac12):
 //          id: \ud604\uc7ac \ucee4\ubba4\ub2c8\ud2f0 \uc544\uc774\ub514('' \uc774\uba74 \uc5c6\uc74c) \u00b7 np:{arrive,transfer,arrive_reco: 1|0} \u00b7 npd: \uc54c\ub9bc \uad8c\ud55c \uac70\ubd80(1|0) \u00b7 rl: \ub3c4\ucc29 \uc624\ucc28 \uae30\ub85d(1|0)
 //          th: 'dark'|'pastel' \u00b7 sam: \uac24\ub7ed\uc2dc(1|0) \u00b7 samw: \uc571 \ubc30\ud130\ub9ac '\uc81c\ud55c\ub428'(1|0) \u00b7 errn: \uc624\ub958 \ub85c\uadf8 \uac1c\uc218 \u00b7 cm: \ucd9c\ud1f4\uadfc \uc54c\ub9bc(1|0|\uc5c6\uc74c) \u00b7 ovl: \uc624\ubc84\ub808\uc774(1|0|\uc5c6\uc74c)
-//          feat: { nm|sn|htl|scr|scrs|scrf|scrn|scrb|scrc|scrt|scrh|sbh|cnd|rtf|sto|ra|npol|arw : { h: \uc774 \uae30\ub2a5\uc774 \uc788\ub098(1|0), on: \uc2a4\uc704\uce58(1|0), f: \ubb38\uc81c\ub85c \uc6f9\uc73c\ub85c \ub3cc\uc544\uac14\ub098(1|0), w: \ubb38\uc81c \uc0ac\uc720, b: \uc800\uc7a5\ubcf8 \uc0ac\uc6a9 \uc911(1|0) } }
+//          feat: { nm|sn|htl|scr|scrs|scrf|scrn|scrb|scrc|scrt|scrh|sbh|cnd|rtf|sto|ra|npol|arw|cmw : { h: \uc774 \uae30\ub2a5\uc774 \uc788\ub098(1|0), on: \uc2a4\uc704\uce58(1|0), f: \ubb38\uc81c\ub85c \uc6f9\uc73c\ub85c \ub3cc\uc544\uac14\ub098(1|0), w: \ubb38\uc81c \uc0ac\uc720, b: \uc800\uc7a5\ubcf8 \uc0ac\uc6a9 \uc911(1|0) } }
 // \ucd9c\ub825  { ok, v:1, screen:'settings', rev, cover:'tab', head:[], body:[\ub178\ub4dc\u2026] }  \u2190 \ub178\ub4dc \uc885\ub958\ub294 native/ScreenCore.java \uc640 \uac19\ub2e4
 //        panel{kids} \u00b7 text \u00b7 box \u00b7 toggle{key} \u00b7 navrow{act} \u00b7 select{act:{a:'sel'}} \u00b7 field{key} \u00b7 button \u00b7 spacer
 //        act = {a:'set',key} (\uc2a4\uc704\uce58 \u2014 \uc571\uc774 \uba3c\uc800 \ub4a4\uc9d1\uace0 \uc54c\ub9b0\ub2e4) | {a:'call',v} (\uc571 \uc548 \ud568\uc218 \ud638\ucd9c: saveId\u00b7clearId\u00b7pol.*\u00b7errlog) | {a:'web',v} (\uc6f9 \uce74\ub4dc \uc5f4\uae30) | {a:'sel',v} (\uace0\ub974\uae30)
@@ -11709,7 +11709,9 @@ var SETTINGS_FEATS = [
   { k: 'npol', title: '\uc54c\ub9bc \uc885\ub958 \ud5c8\uc6a9 \uc5ec\ubd80\ub97c \uc5d4\uc9c4\uc774 \uc815\ud558\uae30', desc: '\ud558\ucc28\u00b7\ud658\uc2b9 \uc54c\ub9bc\uc744 \uc0c1\ub2e8 \uc54c\ub9bc\uc73c\ub85c \ubcf4\ub0bc\uc9c0, \uc9c4\ub3d9\uc744 \uc904\uc9c0, \uc624\ubc84\ub808\uc774 \ud558\ub2e8 \ucd94\ucc9c \uac19\uc740 \uae30\ub2a5\uc744 \ucf24\uc9c0\ub97c \uc6f9\uc774 \uc544\ub2c8\ub77c \uc5d4\uc9c4\uc774 \uc815\ud574\uc694. \uc124\uc815\uc5d0\uc11c \ub048 \uc54c\ub9bc \uc885\ub958\uc640 \ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551 \uc124\uc815\uc740 \uadf8\ub300\ub85c \ub530\ub77c\uc694. \uc5d4\uc9c4\uc5d0 \ubb3c\uc744 \uc218 \uc5c6\uc73c\uba74 \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \ubc14\ub85c \uc815\ud574\uc694.',
     off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9\uc774 \uc54c\ub9bc \ud5c8\uc6a9 \uc5ec\ubd80\ub97c \uc815\ud574\uc694)\uc73c\ub85c \uc774\uc5b4\uac00\uc694.', bad: '\uc5d4\uc9c4\uc5d0 \ubb3c\uc744 \uc218 \uc5c6\uc5b4 \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \ub300\uc2e0 \uc774\uc5b4\uac00\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \uc54c\ub9bc\u00b7\uc9c4\ub3d9 \ud5c8\uc6a9 \uc5ec\ubd80\ub97c \uc5d4\uc9c4\uc774 \uc815\ud574\uc694(\uc2e4\ud5d8 \uc911).' },
   { k: 'arw', title: '\ud558\ucc28 \uc804 \ucd94\ucc9c \uc2dc\uc810\uc744 \uc5d4\uc9c4\uc774 \uc815\ud558\uae30', desc: '\ub0b4\ub9ac\uae30 7\ubd84 \uc804\ubd80\ud130 1\ubd84 \uc804 \uc0ac\uc774\uc5d0, \uce74\ud398\u00b7\uc2dd\uc0ac\u00b7\uc1fc\ud551 \ucd94\ucc9c\uc744 \uc9c0\uae08 \ubcf4\ub0bc\uc9c0\uc640 \ub3c4\ucc29 \uc2dc\uac04\ub300(\uc544\uce68\u00b7\uc810\uc2ec\u00b7\uc800\ub141\u00b7\uc57c\uc2dd\u00b7\uc1fc\ud551)\ub97c \uc6f9\uc774 \uc544\ub2c8\ub77c \uc5d4\uc9c4\uc774 \uc815\ud574\uc694. \uac19\uc740 \uc5ec\uc815\uc5d0 \ud55c \ubc88\ub9cc \ubcf4\ub0b4\ub294 \uaddc\uce59\ub3c4 \uc5d4\uc9c4\uc774 \uc9c0\ucf1c\uc694. \uc5d4\uc9c4\uc5d0 \ubb3c\uc744 \uc218 \uc5c6\uc73c\uba74 \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \ubc14\ub85c \uc815\ud574\uc694.',
-    off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9\uc774 \ucd94\ucc9c \uc2dc\uc810\uc744 \uc815\ud574\uc694)\uc73c\ub85c \uc774\uc5b4\uac00\uc694.', bad: '\uc5d4\uc9c4\uc5d0 \ubb3c\uc744 \uc218 \uc5c6\uc5b4 \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \ub300\uc2e0 \uc774\uc5b4\uac00\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \ud558\ucc28 \uc804 \ucd94\ucc9c\uc744 \uc5b8\uc81c \ubcf4\ub0bc\uc9c0 \uc5d4\uc9c4\uc774 \uc815\ud574\uc694(\uc2e4\ud5d8 \uc911).' }
+    off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9\uc774 \ucd94\ucc9c \uc2dc\uc810\uc744 \uc815\ud574\uc694)\uc73c\ub85c \uc774\uc5b4\uac00\uc694.', bad: '\uc5d4\uc9c4\uc5d0 \ubb3c\uc744 \uc218 \uc5c6\uc5b4 \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \ub300\uc2e0 \uc774\uc5b4\uac00\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \ud558\ucc28 \uc804 \ucd94\ucc9c\uc744 \uc5b8\uc81c \ubcf4\ub0bc\uc9c0 \uc5d4\uc9c4\uc774 \uc815\ud574\uc694(\uc2e4\ud5d8 \uc911).' },
+  { k: 'cmw', title: '\ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551 \uc2dc\uac01\uc744 \uc5d4\uc9c4\uc774 \uc815\ud558\uae30', desc: '\ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551 \uc54c\ub9bc\uc744 \uc9c0\uae08 \ubcf4\ub0bc\uc9c0(\uc124\uc815\ud55c \uc2dc\uac01\u00b7\uc694\uc77c\u00b7\uac19\uc740 \ubd84\uc5d0 \ud55c \ubc88\ub9cc)\uc640, \uc55e\uc73c\ub85c 4\uc8fc\uce58 \uc608\uc57d \uc54c\ub9bc\uc744 \uba87 \uc6d4 \uba87 \uc77c \uba87 \uc2dc\uc5d0 \uac78\uc9c0\ub97c \uc6f9\uc774 \uc544\ub2c8\ub77c \uc5d4\uc9c4\uc774 \uc815\ud574\uc694. \uc54c\ub9bc \ub0b4\uc6a9(\ub0a0\uc528\u00b7\ud63c\uc7a1\ub3c4)\uacfc \uc7a5\uc18c\ub294 \uadf8\ub300\ub85c \uc571\uc5d0\uc11c \ub9cc\ub4e4\uace0 \uc5d4\uc9c4\uc5d0 \ubcf4\ub0b4\uc9c0 \uc54a\uc544\uc694. \uc5d4\uc9c4\uc5d0 \ubb3c\uc744 \uc218 \uc5c6\uc73c\uba74 \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \ubc14\ub85c \uc815\ud574\uc694.',
+    off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9\uc774 \ube0c\ub9ac\ud551 \uc2dc\uac01\uc744 \uc815\ud574\uc694)\uc73c\ub85c \uc774\uc5b4\uac00\uc694.', bad: '\uc5d4\uc9c4\uc5d0 \ubb3c\uc744 \uc218 \uc5c6\uc5b4 \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \ub300\uc2e0 \uc774\uc5b4\uac00\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551\uc744 \uc5b8\uc81c \uc6b8\ub9b4\uc9c0 \uc5d4\uc9c4\uc774 \uc815\ud574\uc694(\uc2e4\ud5d8 \uc911).' }
 ];
 
 function settingsFlag(v, def) { return v == null ? def : (v === 1 || v === true || v === '1'); }
@@ -13953,6 +13955,105 @@ async function handleScreenHome(request) {
 }
 // ===== HOME ENGINE END =====
 
+// ===== commute-alarm (\ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551 \uc2dc\uac01 \uc5d4\uc9c4) \uc2dc\uc791 =====
+// \uae38\ub3d9\ubb34 \u2014 \ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551 '\uc5b8\uc81c \uc6b8\ub9b4\uae4c' \uc5d4\uc9c4 \ubaa8\ub4c8 (route-v2 Worker \uc5d0 \ubd99\uc5ec \ub123\ub294 \uc21c\uc218 \ud568\uc218) \u2014 2026-10-19 (5\ubc88 5\ub2e8\uacc4 \uc14b\uc9f8 \uc870\uac01: \ud310\ub2e8)
+//
+// \u2605 \uc6d0\uce59(YJ): "\ubaa8\ub4e0 \uacc4\uc0b0\uc740 \uc5d4\uc9c4\uc774 \ud55c\ub2e4. \uc571\uc740 \uadf8\ub9bc\ub9cc \uadf8\ub9b0\ub2e4."
+//   \ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551 \uc54c\ub9bc\uc758 '\uc2dc\uac01 \ud310\ub2e8' \u2014 \u2460 \uc571\uc774 \ucf1c\uc838 \uc788\uc744 \ub54c \uc9c0\uae08\uc774 \ubcf4\ub0bc \ubd84\uc778\uac00(_cmTick: \uc124\uc815\ud55c \uc694\uc77c \u00b7 \ucd9c\uadfc/\ud1f4\uadfc \uc2dc\uac01\uacfc \uac19\uc740 \ubd84 \u00b7 \uac19\uc740 \ubd84\uc5d0 \ud55c \ubc88\ub9cc)
+//   \u2461 \uc55e\uc73c\ub85c 4\uc8fc\uce58 \uc608\uc57d \uc54c\ub9bc\uc744 \uba87 \uc6d4 \uba70\uce60 \uba87 \uc2dc\uc5d0 \uac78\uae4c(_cmOccurrences) \u2014 \ub294 \uc608\uc804\uc5d4 \uc6f9\uc774 \uc815\ud588\ub2e4. \uc774 \ud568\uc218\ub294 \uac19\uc740 \uaddc\uce59\uc744 \uc5d4\uc9c4\uc774 \uc815\ud558\uac8c \ud55c\ub2e4.
+//   \uc571(\uc6f9)\uc740 '\uc9c0\uae08 \uc2dc\uac01 \u00b7 \ucf1c\uc9d0 \u00b7 \ucd9c\uadfc/\ud1f4\uadfc \uc2dc\uac01 \u00b7 \uc694\uc77c \u00b7 \uc9c0\ub09c\ubc88 \ubcf4\ub0b8 \uae30\ub85d'\ub9cc \uc54c\ub9ac\uace0, \ub3cc\uc544\uc628 \ud310\uc815\uc744 \uadf8\ub300\ub85c \ub530\ub978\ub2e4.
+//   \u2605 \uc7a5\uc18c(\uc9d1\u00b7\ud68c\uc0ac \uc774\ub984\u00b7\uc88c\ud45c)\u00b7\uc54c\ub9bc \ub0b4\uc6a9(\ub0a0\uc528\u00b7\ud63c\uc7a1\ub3c4)\uc740 \uc5d4\uc9c4\uc5d0 \ubcf4\ub0b4\uc9c0 \uc54a\ub294\ub2e4 \u2014 \uc2dc\uac01\ub9cc \ub2e4\ub8ec\ub2e4. (\uacbd\ub85c \ubbf8\ub9ac \ubc1b\uae30\u00b7\ube0c\ub9ac\ud551 \ubb38\uad6c\ub294 \uc774 \uc870\uac01 \ubc16)
+//   \uc2dc\uac01\uc740 \ud55c\uad6d\uc2dc\uac04 \uae30\uc900(\uc608\uc804 \uc6f9\uc740 \uae30\uae30 \uc2dc\uac04\ub300; \ud55c\uad6d \uc571\uc774\ub77c \uac19\ub2e4).
+//
+// cmDue({ nowMs, on, osOk, morn, eve, days, lastKey })
+//   \u2192 { v:1, fire:null|'morn'|'eve', key, askMs }
+//   fire : \uc9c0\uae08 \ube0c\ub9ac\ud551\uc744 \ubcf4\ub0bc\uae4c(\uc571\uc774 \uc9c1\uc811) \u00b7 key : \ubcf4\ub0b8 \uae30\ub85d\uc73c\ub85c \ub0a8\uae38 \ud0a4('Mon Oct 19 2026|07:30' \u2014 \uc608\uc804 toDateString()|HH:MM \uacfc \uac19\uc740 \uae00\uc790) \u00b7 askMs : \ub2e4\uc74c\uc5d0 \ubb3c\uc744 \ub54c\uae4c\uc9c0 \uae30\ub2e4\ub9b4 ms(0~600000)
+//   osOk : OS \uc608\uc57d \uc54c\ub9bc\uc774 \uac78\ub824 \uc788\uc73c\uba74 \uc571\uc774 \ub610 \ubcf4\ub0b4\uc9c0 \uc54a\ub294\ub2e4(\ub450 \ubc88 \uc6b8\ub9bc \ubc29\uc9c0)
+// cmOccurrences({ nowMs, morn, eve, days })
+//   \u2192 { v:1, morn:[ms\u2026], eve:[ms\u2026] }   \uc55e\uc73c\ub85c 28\uc77c\uce58(\uc120\ud0dd\ud55c \uc694\uc77c\ub9cc, \uc9c0\uae08\ubcf4\ub2e4 2\ucd08 \ub118\uac8c \ub4a4\uc778 \uc2dc\uac01\ub9cc)
+
+var CM_ALARM_V = 1;
+var CM_OS_DAYS = 28;
+var CM_KST = 9 * 3600000;
+var CM_DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+var CM_MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function cmParts(ms) {            // \ud55c\uad6d\uc2dc\uac04\uc758 \ub2ec\ub825 \uac12
+  var d = new Date(Number(ms) + CM_KST);
+  return { y: d.getUTCFullYear(), mo: d.getUTCMonth(), d: d.getUTCDate(), dow: d.getUTCDay(), h: d.getUTCHours(), mi: d.getUTCMinutes(), s: d.getUTCSeconds(), ms: d.getUTCMilliseconds() };
+}
+function cm2(n) { return (n < 10 ? '0' : '') + n; }
+function cmDateStr(p) { return CM_DOW[p.dow] + ' ' + CM_MON[p.mo] + ' ' + cm2(p.d) + ' ' + p.y; }   // toDateString() \uacfc \uac19\uc740 \uae00\uc790
+function cmDaysOf(days) { return (Array.isArray(days) && days.length) ? days : [0, 1, 2, 3, 4, 5, 6]; }
+function cmDayOn(days, dow) { if (!Array.isArray(days) || !days.length) return true; return days.indexOf(dow) >= 0; }
+
+function cmDue(o) {
+  o = o || {};
+  var r = { v: CM_ALARM_V, fire: null, key: '', askMs: 60000 };
+  var now = Number(o.nowMs);
+  if (!isFinite(now)) return r;
+  if (o.on !== true) { r.askMs = 600000; return r; }
+  if (o.osOk === true) { r.askMs = 600000; return r; }
+  var morn = String(o.morn == null ? '' : o.morn), eve = String(o.eve == null ? '' : o.eve);
+  var p = cmParts(now), cur = cm2(p.h) + ':' + cm2(p.mi);
+  r.key = cmDateStr(p) + '|' + cur;
+  // \ub2e4\uc74c \ub300\uc0c1 \ubd84\uae4c\uc9c0(HH:MM \ub450 \uc790\ub9ac\ub85c \uc4f4 \uc2dc\uac01\ub9cc \uac19\uc740 \ubd84\uc73c\ub85c \ub9de\uc744 \uc218 \uc788\ub2e4)
+  var best = 600000;
+  [morn, eve].forEach(function (s) {
+    var m = /^(\d{2}):(\d{2})$/.exec(s); if (!m) return;
+    var t = (+m[1]) * 60 + (+m[2]), nowMin = p.h * 60 + p.mi, dm = t - nowMin; if (dm < 0) dm += 1440;
+    var ms = dm * 60000 - (p.s * 1000 + p.ms);
+    if (ms < 0) ms = 0;
+    if (ms < best) best = ms;
+  });
+  r.askMs = best > 90000 ? Math.min(600000, best - 60000) : 0;          // \ub300\uc0c1 \ubd84\uc774 1\ubd84 \ubc18 \uc548\uc73c\ub85c \ub2e4\uac00\uc624\uba74 \ub9e4\ubc88 \ubb3b\ub294\ub2e4
+  if (String(o.lastKey == null ? '' : o.lastKey) === r.key) return r;   // \uac19\uc740 \ubd84\uc5d0 \ud55c \ubc88\ub9cc
+  if (!cmDayOn(o.days, p.dow)) return r;                                // \uc124\uc815\ud55c \uc694\uc77c\uc5d0\ub9cc
+  if (cur === morn) r.fire = 'morn';
+  else if (cur === eve) r.fire = 'eve';
+  return r;
+}
+
+function cmOne(nowMs, str, days) {
+  var parts = String(str == null ? '' : str).split(':');
+  var hh = parseInt(parts[0]), mi = parseInt(parts[1]);
+  var out = [];
+  if (!isFinite(hh) || !isFinite(mi)) return out;
+  var p = cmParts(nowMs);
+  for (var i = 0; i <= CM_OS_DAYS + 7 && out.length < CM_OS_DAYS; i++) {
+    var t = Date.UTC(p.y, p.mo, p.d + i, hh, mi, 0, 0) - CM_KST;        // \ud55c\uad6d\uc2dc\uac04 \uadf8\ub0a0 hh:mi
+    var dow = new Date(Date.UTC(p.y, p.mo, p.d + i, 12, 0, 0, 0)).getUTCDay();
+    if (t > nowMs + 2000 && days.indexOf(dow) >= 0) out.push(t);
+  }
+  return out;
+}
+function cmOccurrences(o) {
+  o = o || {};
+  var now = Number(o.nowMs);
+  if (!isFinite(now)) return { v: CM_ALARM_V, morn: [], eve: [] };
+  var days = cmDaysOf(o.days);
+  return { v: CM_ALARM_V, morn: cmOne(now, o.morn, days), eve: cmOne(now, o.eve, days) };
+}
+
+// \u2500\u2500 Worker \uc5f0\uacb0\ubd80 \u2014 POST /commute-alarm {op:'due'|'occ', \u2026} (handleFetch \uc5d0 \uae38\uc744 \ub454\ub2e4) \u2500\u2500
+function handleCommuteAlarm(request) {
+  var H = { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'access-control-allow-methods': 'POST, OPTIONS', 'access-control-allow-headers': 'content-type', 'cache-control': 'no-store' };
+  if (request.method === 'OPTIONS') return Promise.resolve(new Response(null, { status: 204, headers: H }));
+  if (request.method !== 'POST') return Promise.resolve(new Response(JSON.stringify({ ok: false, error: 'POST only' }), { status: 405, headers: H }));
+  return request.text().then(function (raw) {
+    if (raw.length > 4000) return new Response(JSON.stringify({ ok: false, error: 'body-too-long' }), { status: 413, headers: H });
+    var body;
+    try { body = JSON.parse(raw); } catch (e0) { return new Response(JSON.stringify({ ok: false, error: 'bad-json' }), { status: 400, headers: H }); }
+    var out;
+    try { out = (body && body.op === 'occ') ? cmOccurrences(body) : cmDue(body); } catch (e) { return new Response(JSON.stringify({ ok: false, error: String(e && e.message || e) }), { status: 500, headers: H }); }
+    out.ok = true;
+    return new Response(JSON.stringify(out), { headers: H });
+  }, function () { return new Response(JSON.stringify({ ok: false, error: 'read-fail' }), { status: 400, headers: H }); });
+}
+
+
+// ===== commute-alarm \ub05d =====
+
 // ===== arrive-reco (\ud558\ucc28 \uc804 \ucd94\ucc9c \uc2dc\uc810 \uc5d4\uc9c4) \uc2dc\uc791 =====
 // \uae38\ub3d9\ubb34 \u2014 \ud558\ucc28 \uc804 \ucd94\ucc9c '\uc5b8\uc81c \ubcf4\ub0bc\uae4c' \uc5d4\uc9c4 \ubaa8\ub4c8 (route-v2 Worker \uc5d0 \ubd99\uc5ec \ub123\ub294 \uc21c\uc218 \ud568\uc218) \u2014 2026-10-19 (5\ubc88 5\ub2e8\uacc4 \ub458\uc9f8 \uc870\uac01: \ud310\ub2e8)
 //
@@ -14367,6 +14468,7 @@ async function handleFetch(request, env, ctx) {
   if (url.pathname === "/ride-alert") return handleRideAlert(request);
   if (url.pathname === "/notif-policy") return handleNotifPolicy(request);
   if (url.pathname === "/arrive-reco") return handleArriveReco(request);
+  if (url.pathname === "/commute-alarm") return handleCommuteAlarm(request);
   if (url.pathname === "/next-train") return handleNextTrain(request, env);
   if (url.pathname === "/holidays") return handleHolidays(request, env);
   if (url.pathname === "/widget-say") return handleWidgetSay(request, env, ctx);
