@@ -26,11 +26,15 @@ function resetEng() { ENG = { mode: 'ok', hits: [] }; }
     window.Capacitor = { isNativePlatform: () => false, getPlatform: () => 'web', Plugins: {} };
   });
   const page = await ctx.newPage(); const errs = []; page.on('pageerror', e => errs.push(e.message));
-  await page.route('**/*', r => {
+  await page.route('**/*', async r => {
     const u = new URL(r.request().url()); if (u.protocol === 'file:' || u.protocol === 'data:') return r.continue();
     const H = { 'content-type': 'application/json', 'access-control-allow-origin': '*' };
     if (/route-v2/.test(u.host) && u.pathname === '/ride-alert') {
       const body = r.request().postData() || ''; ENG.hits.push(body);
+      const isT = /"op":"targets"/.test(body);
+      if (isT && ENG.mode === 'slowt') await sleep(400);
+      if (isT && ENG.mode === 'badt') return r.fulfill({ status: 200, headers: H, body: '{"ok":true,"v":1,"op":"targets","targets":[{"kind":"x","nodeIdx":1,"seqPos":0,"name":"a"}],"seq":[0]}' });
+      if (isT && ENG.mode === 'badseq') return r.fulfill({ status: 200, headers: H, body: '{"ok":true,"v":1,"op":"targets","targets":[],"seq":[999]}' });
       if (ENG.mode === '404') return r.fulfill({ status: 404, headers: H, body: '{"error":"not found"}' });
       if (ENG.mode === 'hang') return;
       if (ENG.mode === 'bad') return r.fulfill({ status: 200, headers: H, body: '{"ok":true,"v":1}' });
@@ -68,6 +72,8 @@ function resetEng() { ENG = { mode: 'ok', hits: [] }; }
       if (!window.__snWrapped) { window.__snWrapped = true; window.showNotification = function (title, body, opt) { window.__sn.push({ title: title, body: body, vib: opt && opt.vibrate, type: opt && opt.type }); }; }
       window._raState.asks = 0; window._raState.ok = 0; window._raState.sig = ''; window._raState.busy = false;
     }, [ra, prefs || null]);
+    for (let i = 0; i < 80; i++) { if (!(await page.evaluate(() => window._raState.tbusy))) break; await sleep(40); await page.clock.runFor(50); }
+    await page.evaluate(() => { window._raState.asks = 0; window._raState.ok = 0; window._raState.sig = ''; window._raState.busy = false; });
     resetEng();
   };
   const sn = () => page.evaluate(() => window.__sn.slice());
@@ -152,6 +158,71 @@ function resetEng() { ENG = { mode: 'ok', hits: [] }; }
   await page.evaluate(() => { window._gpsMaxIdx = 5; window._checkTransitAlerts(5); });
   await sleep(150); await page.clock.runFor(2600); await sleep(100);
   await t('엔진이 응답 없으면(2.5초) 예전 규칙으로 울린다', async () => { assert.ok((await sn()).some(x => x.title === '환승 준비'), JSON.stringify(await sn())); assert.strictEqual(await page.evaluate(() => _raDown()), true); });
+
+  console.log('[알림 대상 만들기 — 엔진이]');
+  const build = async (mode, after) => {
+    await page.evaluate(() => { window._raSetUse(true); });
+    resetEng(); ENG.mode = mode;
+    await page.evaluate(() => { window._transitAlertFired = { x: 1 }; window._buildTransitAlertTargets(); });
+    if (after) await after();
+    for (let i = 0; i < 80; i++) { if (!(await page.evaluate(() => window._raState.tbusy))) break; await sleep(40); await page.clock.runFor(50); }
+    return page.evaluate(() => ({ t: JSON.parse(JSON.stringify(window._transitAlertTargets)), s: window._transitSeqIdx.slice(), f: Object.keys(window._transitAlertFired), local: JSON.parse(JSON.stringify(_transitTargetsCompute())), down: _raDown(), why: _RA.why }));
+  };
+  await setup(true);
+  await t('켜면 대상을 엔진이 만든다 — 노드(이름·노선)만 보내고 예전 규칙과 같은 대상을 받는다', async () => {
+    const r = await build('ok'); const j = JSON.parse(ENG.hits[0]);
+    assert.strictEqual(ENG.hits.length, 1); assert.deepStrictEqual(Object.keys(j).sort(), ['nodes', 'op']); assert.strictEqual(j.op, 'targets'); assert.strictEqual(j.nodes.length, 11); assert.ok(!/lat|lng|latitude|longitude/i.test(ENG.hits[0]));
+    assert.deepStrictEqual(r.t, r.local.targets); assert.deepStrictEqual(r.s, r.local.seq); assert.strictEqual(r.t.length, 2); assert.strictEqual(r.t[0].kind, 'transfer'); assert.strictEqual(r.t[1].kind, 'dest');
+    assert.deepStrictEqual(r.f, []); assert.strictEqual(r.down, false);
+  });
+  await t('대상이 오기 전에는 비어 있고(알림 판단은 대상이 온 뒤부터) 온 뒤에 알림이 예전처럼 울린다', async () => {
+    await page.evaluate(() => { window._raSetUse(true); window.__sn = []; });
+    resetEng(); ENG.mode = 'slowt';
+    await page.evaluate(() => { window._transitAlertFired = {}; window._buildTransitAlertTargets(); });
+    const early = await page.evaluate(() => { window._gpsMaxIdx = 5; window._checkTransitAlerts(5); return { n: window._transitAlertTargets.length, sn: window.__sn.length, busy: _RA.tbusy }; });
+    assert.strictEqual(early.n, 0); assert.strictEqual(early.sn, 0); assert.strictEqual(early.busy, true);
+    assert.ok(ENG.hits.every(h => /"op":"targets"/.test(h)), '대상 전에 알림 판단을 물었다');
+    for (let i = 0; i < 80; i++) { if (!(await page.evaluate(() => _RA.tbusy))) break; await sleep(40); await page.clock.runFor(50); }
+    ENG.mode = 'ok'; await at(5);
+    assert.ok((await sn()).some(x => x.title === '환승 준비'), JSON.stringify(await sn()));
+  });
+  for (const mode of ['404', 'bad', 'badt', 'badseq']) {
+    await setup(true);
+    await t('엔진 ' + mode + ' → 예전 규칙으로 대상을 바로 만든다 · 카드는 문제로 표시 · 보낸 기록은 유지', async () => {
+      const r = await build(mode); assert.deepStrictEqual(r.t, r.local.targets); assert.deepStrictEqual(r.s, r.local.seq); assert.ok(r.t.length === 2);
+      assert.strictEqual(r.down, true); assert.ok(/대신 이어가고/.test(await page.evaluate(() => document.getElementById('raSetStat').textContent))); assert.deepStrictEqual(r.f, []);
+    });
+  }
+  await setup(true);
+  await t('엔진이 응답 없으면(2.5초) 예전 규칙으로 대상을 만든다', async () => {
+    await page.evaluate(() => { window._raSetUse(true); }); resetEng(); ENG.mode = 'hang';
+    await page.evaluate(() => { window._buildTransitAlertTargets(); });
+    await sleep(150); await page.clock.runFor(2600); await sleep(100);
+    const r = await page.evaluate(() => ({ n: window._transitAlertTargets.length, down: _raDown(), busy: _RA.tbusy })); assert.strictEqual(r.n, 2); assert.strictEqual(r.down, true); assert.strictEqual(r.busy, false);
+  });
+  await setup(true);
+  await t('기다리는 동안 경로가 바뀌면 낡은 대상은 쓰지 않는다', async () => {
+    await page.evaluate(() => { window._raSetUse(true); }); resetEng(); ENG.mode = 'slowt';
+    await page.evaluate(() => { window.__nd0 = _transitNodeData; window._buildTransitAlertTargets(); _transitNodeData = [{ name: '다른', isSub: true, lineName: 'Z' }]; });
+    for (let i = 0; i < 40; i++) { await sleep(40); await page.clock.runFor(50); if (!(await page.evaluate(() => _RA.tbusy))) break; }
+    const n = await page.evaluate(() => { const n = window._transitAlertTargets.length; _transitNodeData = window.__nd0; return n; }); assert.strictEqual(n, 0);
+  });
+  await t('꺼져 있으면 엔진에 묻지 않고 바로(동기) 예전 규칙으로 만든다', async () => {
+    await page.evaluate(() => { window._raSetUse(false); }); resetEng();
+    const r = await page.evaluate(() => { window._buildTransitAlertTargets(); return { n: window._transitAlertTargets.length, sync: true }; });
+    assert.strictEqual(r.n, 2); assert.strictEqual(ENG.hits.length, 0);
+  });
+  await t('쉬는 60초 동안에도 예전 규칙으로 바로 만든다', async () => {
+    await page.evaluate(() => { window._raSetUse(true); _raFail('시험'); }); resetEng();
+    const r = await page.evaluate(() => { window._buildTransitAlertTargets(); return window._transitAlertTargets.length; });
+    assert.strictEqual(r, 2); assert.strictEqual(ENG.hits.length, 0); await page.evaluate(() => { window._raSetUse(false); });
+  });
+  await t('끄는 순간 대상이 비어 있으면(엔진 답을 기다리던 중) 예전 규칙으로 채운다', async () => {
+    await page.evaluate(() => { window._raSetUse(true); }); resetEng(); ENG.mode = 'slowt';
+    await page.evaluate(() => { window._buildTransitAlertTargets(); });
+    const e = await page.evaluate(() => { const before = window._transitAlertTargets.length; window._raSetUse(false); return { before, after: window._transitAlertTargets.length }; });
+    assert.strictEqual(e.before, 0); assert.strictEqual(e.after, 2);
+  });
 
   console.log('[설정 카드]');
   await setup(false);

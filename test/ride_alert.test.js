@@ -136,6 +136,7 @@ t('Worker 내장 본문이 모듈과 같은 판단을 한다(끝에서 끝까지
   ];
   inputs.forEach(i => assert.deepStrictEqual(f.rideAlert(i), rideAlert(i), JSON.stringify(i).slice(0, 80)));
   assert.deepStrictEqual(f.raTargets(N), raTargets(N)); assert.strictEqual(f.raHm('8:05'), 485);
+  assert.deepStrictEqual(f.rideAlert({ op: 'targets', nodes: N }), rideAlert({ op: 'targets', nodes: N }));
 });
 t('Worker 길: /ride-alert(POST · 크기 제한 · 잘못된 JSON 400)', () => {
   assert.ok(/url\.pathname === "\/ride-alert"\) return handleRideAlert\(request\)/.test(W), '/ride-alert 길');
@@ -144,6 +145,37 @@ t('Worker 길: /ride-alert(POST · 크기 제한 · 잘못된 JSON 400)', () => 
   const seg = W.slice(i, i + 2200);
   assert.ok(/rideAlert\(body\)/.test(seg) && /status: 413/.test(seg) && /bad-json/.test(seg) && /POST only/.test(seg), '크기·JSON·메서드 검사');
 });
+
+// ── 알림 대상 만들기(op:'targets') — 앱이 더 이상 직접 만들지 않는다 ──
+t("op:'targets': 노드만 받아 대상·순서만 돌려준다(알림 판단은 하지 않는다)", () => {
+  const r = rideAlert({ op: 'targets', nodes: N, curIdx: 3, fired: {}, allowed: {} });
+  assert.deepStrictEqual(Object.keys(r).sort(), ['nt', 'op', 'seq', 'targets', 'v']);
+  assert.deepStrictEqual({ targets: r.targets, seq: r.seq }, raTargets(N)); assert.strictEqual(r.nt, 3); assert.strictEqual(r.op, 'targets'); assert.ok(!('alert' in r));
+});
+t("op:'targets': 이상한 입력(노드 없음·null·문자열·아주 많음)에도 죽지 않는다", () => {
+  for (const nodes of [undefined, null, 'x', 5, {}, [], [null, 5, {}], new Array(1000).fill({ k: 's', l: 'A', n: 'x' })]) { const r = rideAlert({ op: 'targets', nodes }); assert.ok(Array.isArray(r.targets) && Array.isArray(r.seq)); assert.ok(r.seq.length <= 400); }
+  assert.deepStrictEqual(rideAlert({ op: 'targets' }).targets, []);
+});
+t("op:'targets': 앱의 예전 계산식(_buildTransitAlertTargets 의 규칙)과 같은 결과 — 무작위 경로 3000개", () => {
+  // 예전 웹 규칙을 그대로 옮긴 참고 구현(노드: isSub/isBus/lineName/name)
+  const local = (nd) => {
+    const seq = []; for (let i = 0; i < nd.length; i++) if (nd[i] && (nd[i].isSub || nd[i].isBus)) seq.push(i);
+    const targets = [];
+    for (let s = 1; s < seq.length; s++) { const prev = nd[seq[s - 1]], cur = nd[seq[s]]; if ((prev.lineName || '') !== (cur.lineName || '')) targets.push({ seqPos: s - 1, nodeIdx: seq[s - 1], name: prev.name, kind: 'transfer', nextLine: cur.lineName || '' }); }
+    if (seq.length) targets.push({ seqPos: seq.length - 1, nodeIdx: seq[seq.length - 1], name: nd[seq[seq.length - 1]].name, kind: 'dest' });
+    return { targets, seq };
+  };
+  let a = 12345; const rnd = () => { a = (a * 1664525 + 1013904223) >>> 0; return a / 4294967296; };
+  const LINES = ['1호선', '2호선', '7016', '', '9호선'];
+  for (let n = 0; n < 3000; n++) {
+    const len = Math.floor(rnd() * 14), nd = [];
+    for (let i = 0; i < len; i++) { const kind = rnd(); nd.push({ isSub: kind < 0.45, isBus: kind >= 0.45 && kind < 0.7, lineName: LINES[Math.floor(rnd() * LINES.length)], name: '역' + i + String.fromCharCode(44032 + Math.floor(rnd() * 50)) }); }
+    const nodes = nd.map(x => ({ k: x.isSub ? 's' : (x.isBus ? 'b' : null), l: x.lineName || '', n: x.name || '' }));
+    assert.deepStrictEqual(rideAlert({ op: 'targets', nodes }).targets, local(nd).targets, JSON.stringify(nd).slice(0, 120));
+    assert.deepStrictEqual(rideAlert({ op: 'targets', nodes }).seq, local(nd).seq);
+  }
+});
+t("op 가 없으면 예전처럼 알림 판단(alert 가 있다)", () => { const r = rideAlert({ nodes: N, curIdx: 0, fired: {}, allowed: {} }); assert.ok('alert' in r && !('targets' in r)); });
 
 console.log(pass + ' 통과 / ' + fail + ' 실패');
 process.exit(fail ? 1 : 0);
