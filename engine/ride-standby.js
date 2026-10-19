@@ -56,7 +56,8 @@ function rsAlertType(tg, remain) {
     : (remain === 2 ? 'near_arrive2' : (remain === 1 ? 'near_arrive' : 'arrive'));
 }
 // 앱 _checkTransitAlerts / _fireTransitAlert 의 규칙을 그대로 옮겼다: 환승·하차 2·1정거장 전, 목적지 도착. 한 번의 판정에는 가장 급한(남은 정거장이 적은) 하나만 울린다.
-function rsAlerts(cfg, fired, curIdx, etaMs, now) {
+// mtFn(tg, remain) → '(약 N분 후)' 같은 덧말 — 안 주면 대기 모드 규칙(rsMinTxt: 0~4분 안일 때만). 앞 화면 알림(ride-alert)은 자기 규칙을 넘긴다.
+function rsAlerts(cfg, fired, curIdx, etaMs, now, mtFn) {
   var targets = cfg.targets || [], seq = cfg.seq || [], allowed = cfg.allowed || {}, curPos = -1, i;
   for (i = 0; i < seq.length; i++) { if (seq[i] <= curIdx) curPos = i; else break; }
   if (curPos < 0) return { alert: null, extra: [], curPos: curPos };
@@ -70,7 +71,7 @@ function rsAlerts(cfg, fired, curIdx, etaMs, now) {
   });
   if (!due.length) return { alert: null, extra: [], curPos: curPos };
   due.sort(function (a, b) { return a.remain - b.remain; });
-  var d = due[0], tg = d.tg, mt = rsMinTxt(etaMs, tg.nodeIdx, now, d.remain), title, body, vib;
+  var d = due[0], tg = d.tg, mt = mtFn ? mtFn(tg, d.remain) : rsMinTxt(etaMs, tg.nodeIdx, now, d.remain), title, body, vib;
   if (tg.kind === 'transfer') {
     if (d.remain === 2) { title = '환승 2정거장 전'; body = tg.name + '에서 ' + (tg.nextLine || '다음 노선') + ' 환승이에요. 곧 준비하세요' + mt; vib = [400, 150, 400]; }
     else { title = '환승 준비'; body = '다음 정거장 ' + tg.name + '에서 ' + (tg.nextLine || '다음 노선') + ' 환승 — 내릴 준비하세요' + mt; vib = [300, 100, 300, 100, 300]; }
