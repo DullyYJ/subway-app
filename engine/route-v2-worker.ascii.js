@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-19s54";
+var ENGINE_VERSION = "route-v2-2026-10-19s55";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -11658,7 +11658,7 @@ async function handleScreenShop(request) {
 //        facts = \uc571\uc774 \ubaa8\uc740 \uae30\uae30 \uc0ac\uc2e4(\uc804\ubd80 \uc120\ud0dd \u2014 \uc5c6\uc73c\uba74 \uae30\ubcf8\uac12):
 //          id: \ud604\uc7ac \ucee4\ubba4\ub2c8\ud2f0 \uc544\uc774\ub514('' \uc774\uba74 \uc5c6\uc74c) \u00b7 np:{arrive,transfer,arrive_reco: 1|0} \u00b7 npd: \uc54c\ub9bc \uad8c\ud55c \uac70\ubd80(1|0) \u00b7 rl: \ub3c4\ucc29 \uc624\ucc28 \uae30\ub85d(1|0)
 //          th: 'dark'|'pastel' \u00b7 sam: \uac24\ub7ed\uc2dc(1|0) \u00b7 samw: \uc571 \ubc30\ud130\ub9ac '\uc81c\ud55c\ub428'(1|0) \u00b7 errn: \uc624\ub958 \ub85c\uadf8 \uac1c\uc218 \u00b7 cm: \ucd9c\ud1f4\uadfc \uc54c\ub9bc(1|0|\uc5c6\uc74c) \u00b7 ovl: \uc624\ubc84\ub808\uc774(1|0|\uc5c6\uc74c)
-//          feat: { nm|sn|htl|scr|scrs|scrf|scrn|scrb|scrc|scrt|scrh|sbh|cnd|rtf|sto|ra|npol : { h: \uc774 \uae30\ub2a5\uc774 \uc788\ub098(1|0), on: \uc2a4\uc704\uce58(1|0), f: \ubb38\uc81c\ub85c \uc6f9\uc73c\ub85c \ub3cc\uc544\uac14\ub098(1|0), w: \ubb38\uc81c \uc0ac\uc720, b: \uc800\uc7a5\ubcf8 \uc0ac\uc6a9 \uc911(1|0) } }
+//          feat: { nm|sn|htl|scr|scrs|scrf|scrn|scrb|scrc|scrt|scrh|sbh|cnd|rtf|sto|ra|npol|arw : { h: \uc774 \uae30\ub2a5\uc774 \uc788\ub098(1|0), on: \uc2a4\uc704\uce58(1|0), f: \ubb38\uc81c\ub85c \uc6f9\uc73c\ub85c \ub3cc\uc544\uac14\ub098(1|0), w: \ubb38\uc81c \uc0ac\uc720, b: \uc800\uc7a5\ubcf8 \uc0ac\uc6a9 \uc911(1|0) } }
 // \ucd9c\ub825  { ok, v:1, screen:'settings', rev, cover:'tab', head:[], body:[\ub178\ub4dc\u2026] }  \u2190 \ub178\ub4dc \uc885\ub958\ub294 native/ScreenCore.java \uc640 \uac19\ub2e4
 //        panel{kids} \u00b7 text \u00b7 box \u00b7 toggle{key} \u00b7 navrow{act} \u00b7 select{act:{a:'sel'}} \u00b7 field{key} \u00b7 button \u00b7 spacer
 //        act = {a:'set',key} (\uc2a4\uc704\uce58 \u2014 \uc571\uc774 \uba3c\uc800 \ub4a4\uc9d1\uace0 \uc54c\ub9b0\ub2e4) | {a:'call',v} (\uc571 \uc548 \ud568\uc218 \ud638\ucd9c: saveId\u00b7clearId\u00b7pol.*\u00b7errlog) | {a:'web',v} (\uc6f9 \uce74\ub4dc \uc5f4\uae30) | {a:'sel',v} (\uace0\ub974\uae30)
@@ -11707,7 +11707,9 @@ var SETTINGS_FEATS = [
   { k: 'ra', title: '\ud558\ucc28\u00b7\ud658\uc2b9 \uc54c\ub9bc \uc2dc\uc810\uc744 \uc5d4\uc9c4\uc774 \uc815\ud558\uae30', desc: '\uc571\uc744 \ubcf4\uace0 \uc788\ub294 \ub3d9\uc548\uc758 \ud558\ucc28\u00b7\ud658\uc2b9 \uc54c\ub9bc(\ud658\uc2b9 2\uc815\uac70\uc7a5 \uc804\u00b7\ud658\uc2b9 \uc900\ube44\u00b7\ubaa9\uc801\uc9c0 2\uc815\uac70\uc7a5 \uc804\u00b7\uace7 \ud558\ucc28\u00b7\ubaa9\uc801\uc9c0 \ub3c4\ucc29)\uc774 \uc5b8\uc81c \uc6b8\ub9b4\uc9c0, \ubb34\uc2a8 \ubb38\uad6c\uc640 \uc9c4\ub3d9\uc73c\ub85c \uc6b8\ub9b4\uc9c0\ub97c \uc6f9\uc774 \uc544\ub2c8\ub77c \uc5d4\uc9c4\uc774 \uc815\ud574\uc694. \uc571\uc744 \uac00\ub838\uc744 \ub54c \uc4f0\ub294 \uaddc\uce59\uacfc \uac19\uc544\uc694. \uc5d4\uc9c4\uc5d0 \ubb3c\uc744 \uc218 \uc5c6\uc73c\uba74 \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \ubc14\ub85c \uc815\ud574\uc694.',
     off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9\uc774 \uc54c\ub9bc \uc2dc\uc810\uc744 \uc815\ud574\uc694)\uc73c\ub85c \uc774\uc5b4\uac00\uc694.', bad: '\uc5d4\uc9c4\uc5d0 \ubb3c\uc744 \uc218 \uc5c6\uc5b4 \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \ub300\uc2e0 \uc774\uc5b4\uac00\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \ud558\ucc28\u00b7\ud658\uc2b9 \uc54c\ub9bc\uc774 \uc6b8\ub9b4 \ub54c\ub97c \uc5d4\uc9c4\uc774 \uc815\ud574\uc694(\uc2e4\ud5d8 \uc911).' },
   { k: 'npol', title: '\uc54c\ub9bc \uc885\ub958 \ud5c8\uc6a9 \uc5ec\ubd80\ub97c \uc5d4\uc9c4\uc774 \uc815\ud558\uae30', desc: '\ud558\ucc28\u00b7\ud658\uc2b9 \uc54c\ub9bc\uc744 \uc0c1\ub2e8 \uc54c\ub9bc\uc73c\ub85c \ubcf4\ub0bc\uc9c0, \uc9c4\ub3d9\uc744 \uc904\uc9c0, \uc624\ubc84\ub808\uc774 \ud558\ub2e8 \ucd94\ucc9c \uac19\uc740 \uae30\ub2a5\uc744 \ucf24\uc9c0\ub97c \uc6f9\uc774 \uc544\ub2c8\ub77c \uc5d4\uc9c4\uc774 \uc815\ud574\uc694. \uc124\uc815\uc5d0\uc11c \ub048 \uc54c\ub9bc \uc885\ub958\uc640 \ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551 \uc124\uc815\uc740 \uadf8\ub300\ub85c \ub530\ub77c\uc694. \uc5d4\uc9c4\uc5d0 \ubb3c\uc744 \uc218 \uc5c6\uc73c\uba74 \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \ubc14\ub85c \uc815\ud574\uc694.',
-    off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9\uc774 \uc54c\ub9bc \ud5c8\uc6a9 \uc5ec\ubd80\ub97c \uc815\ud574\uc694)\uc73c\ub85c \uc774\uc5b4\uac00\uc694.', bad: '\uc5d4\uc9c4\uc5d0 \ubb3c\uc744 \uc218 \uc5c6\uc5b4 \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \ub300\uc2e0 \uc774\uc5b4\uac00\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \uc54c\ub9bc\u00b7\uc9c4\ub3d9 \ud5c8\uc6a9 \uc5ec\ubd80\ub97c \uc5d4\uc9c4\uc774 \uc815\ud574\uc694(\uc2e4\ud5d8 \uc911).' }
+    off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9\uc774 \uc54c\ub9bc \ud5c8\uc6a9 \uc5ec\ubd80\ub97c \uc815\ud574\uc694)\uc73c\ub85c \uc774\uc5b4\uac00\uc694.', bad: '\uc5d4\uc9c4\uc5d0 \ubb3c\uc744 \uc218 \uc5c6\uc5b4 \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \ub300\uc2e0 \uc774\uc5b4\uac00\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \uc54c\ub9bc\u00b7\uc9c4\ub3d9 \ud5c8\uc6a9 \uc5ec\ubd80\ub97c \uc5d4\uc9c4\uc774 \uc815\ud574\uc694(\uc2e4\ud5d8 \uc911).' },
+  { k: 'arw', title: '\ud558\ucc28 \uc804 \ucd94\ucc9c \uc2dc\uc810\uc744 \uc5d4\uc9c4\uc774 \uc815\ud558\uae30', desc: '\ub0b4\ub9ac\uae30 7\ubd84 \uc804\ubd80\ud130 1\ubd84 \uc804 \uc0ac\uc774\uc5d0, \uce74\ud398\u00b7\uc2dd\uc0ac\u00b7\uc1fc\ud551 \ucd94\ucc9c\uc744 \uc9c0\uae08 \ubcf4\ub0bc\uc9c0\uc640 \ub3c4\ucc29 \uc2dc\uac04\ub300(\uc544\uce68\u00b7\uc810\uc2ec\u00b7\uc800\ub141\u00b7\uc57c\uc2dd\u00b7\uc1fc\ud551)\ub97c \uc6f9\uc774 \uc544\ub2c8\ub77c \uc5d4\uc9c4\uc774 \uc815\ud574\uc694. \uac19\uc740 \uc5ec\uc815\uc5d0 \ud55c \ubc88\ub9cc \ubcf4\ub0b4\ub294 \uaddc\uce59\ub3c4 \uc5d4\uc9c4\uc774 \uc9c0\ucf1c\uc694. \uc5d4\uc9c4\uc5d0 \ubb3c\uc744 \uc218 \uc5c6\uc73c\uba74 \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \ubc14\ub85c \uc815\ud574\uc694.',
+    off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9\uc774 \ucd94\ucc9c \uc2dc\uc810\uc744 \uc815\ud574\uc694)\uc73c\ub85c \uc774\uc5b4\uac00\uc694.', bad: '\uc5d4\uc9c4\uc5d0 \ubb3c\uc744 \uc218 \uc5c6\uc5b4 \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \ub300\uc2e0 \uc774\uc5b4\uac00\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \ud558\ucc28 \uc804 \ucd94\ucc9c\uc744 \uc5b8\uc81c \ubcf4\ub0bc\uc9c0 \uc5d4\uc9c4\uc774 \uc815\ud574\uc694(\uc2e4\ud5d8 \uc911).' }
 ];
 
 function settingsFlag(v, def) { return v == null ? def : (v === 1 || v === true || v === '1'); }
@@ -13951,6 +13953,87 @@ async function handleScreenHome(request) {
 }
 // ===== HOME ENGINE END =====
 
+// ===== arrive-reco (\ud558\ucc28 \uc804 \ucd94\ucc9c \uc2dc\uc810 \uc5d4\uc9c4) \uc2dc\uc791 =====
+// \uae38\ub3d9\ubb34 \u2014 \ud558\ucc28 \uc804 \ucd94\ucc9c '\uc5b8\uc81c \ubcf4\ub0bc\uae4c' \uc5d4\uc9c4 \ubaa8\ub4c8 (route-v2 Worker \uc5d0 \ubd99\uc5ec \ub123\ub294 \uc21c\uc218 \ud568\uc218) \u2014 2026-10-19 (5\ubc88 5\ub2e8\uacc4 \ub458\uc9f8 \uc870\uac01: \ud310\ub2e8)
+//
+// \u2605 \uc6d0\uce59(YJ): "\ubaa8\ub4e0 \uacc4\uc0b0\uc740 \uc5d4\uc9c4\uc774 \ud55c\ub2e4. \uc571\uc740 \uadf8\ub9bc\ub9cc \uadf8\ub9b0\ub2e4."
+//   '\ud558\ucc28 \uc804 \ucd94\ucc9c(\uce74\ud398\u00b7\uc810\uc2ec\u00b7\uc800\ub141\u00b7\uc57c\uc2dd\u00b7\uc1fc\ud551)\uc744 \uc9c0\uae08 \ubcf4\ub0bc\uae4c'\ub294 \uc608\uc804\uc5d4 \uc6f9(www/index.html)\uc758 _arrCheckPreAlert \u00b7 _arrSlot \u00b7 _arrIsDinner \u00b7 _arrRemainMin \uc774 \uc815\ud588\ub2e4.
+//   \uc774 \ud568\uc218\ub294 \uac19\uc740 \uaddc\uce59\uc744 \uc5d4\uc9c4\uc774 \uc815\ud558\uac8c \ud55c\ub2e4. \uc571(\uc6f9)\uc740 '\ub9c8\uc9c0\ub9c9 \ub300\uc911\uad50\ud1b5 \ud558\ucc28\uae4c\uc9c0 \ub0a8\uc740 \ucd08 \u00b7 \ub3c4\ucc29 \uc2dc\uac01 \u00b7 \ubaa9\uc801\uc9c0 \uc774\ub984 \u00b7 \uc9c0\ub09c\ubc88 \ubcf4\ub0b8 \uae30\ub85d'\ub9cc \uc54c\ub9ac\uace0,
+//   \ub3cc\uc544\uc628 \ud310\uc815(\ubcf4\ub0bc\uae4c \u00b7 \uc2dc\uac04\ub300 \u00b7 \uc800\ub141 \uc5ec\ubd80 \u00b7 \ub0a8\uc740 \ubd84 \u00b7 \ub2e4\uc74c\uc5d0 \uc5b8\uc81c \ub2e4\uc2dc \ubb3c\uc744\uae4c)\uc744 \uadf8\ub300\ub85c \ub530\ub978\ub2e4.
+//   (\ucd94\ucc9c \ubb38\uad6c\u00b7\uac00\uac8c \uace0\ub974\uae30\u00b7\ub0a0\uc528 \ubb38\uad6c\ub294 \uc774 \uc870\uac01 \ubc16 \u2014 \uc6f9/\uc11c\ubc84\uc5d0 \ub0a8\ub294\ub2e4.)
+//
+// \uc785\ub825  arrRecoWhen({ arrMs, remSec, dest, lastKey, lastAt, nowMs })
+//   arrMs   : \ub9c8\uc9c0\ub9c9 \ub300\uc911\uad50\ud1b5 \ud558\ucc28 \uc608\uc815 \uc2dc\uac01(ms) \u00b7 remSec : \uac70\uae30\uae4c\uc9c0 \ub0a8\uc740 \ucd08 \u00b7 dest : \ucd94\ucc9c \uac00\uac8c\ub97c \uace0\ub97c \uacf3 \uc774\ub984('' \uac00\ub2a5)
+//   lastKey : \uc774\ubc88 \uc5ec\uc815\uc5d0\uc11c \uc774\ubbf8 \ubcf4\ub0b8 \ucd94\ucc9c\uc758 \ud0a4(\uc5c6\uc73c\uba74 '') \u00b7 lastAt : \uadf8\ub54c \uc2dc\uac01(ms, \uc5c6\uc73c\uba74 0) \u00b7 nowMs : \uc9c0\uae08(ms)
+// \ucd9c\ub825  { v:1, fire:true|false, why:'ok'|'input'|'window'|'dup'|'recent', key, slot, dinner, remMin, pre, askMs }
+//   fire    : \uc9c0\uae08 \ubcf4\ub0bc\uae4c(\ucd94\ucc9c \ubcf8\ubb38\uc744 \ub9cc\ub4e4\uc5b4 \uc54c\ub9bc\u00b7\uc791\uc740 \ud654\uba74\uc73c\ub85c) \u00b7 key : \ubcf4\ub0b8 \uae30\ub85d\uc73c\ub85c \ub0a8\uae38 \ud0a4 \u00b7 slot : 'morning'|'lunch'|'night'|'shop'|'none'(\ub3c4\ucc29 \uc2dc\uac01\uc758 \ud55c\uad6d\uc2dc\uac04 \uae30\uc900)
+//   dinner  : 17~19\uc2dc \ub3c4\ucc29\uc774\uba74 true('\uc57c\uc2dd'\uc774 \uc544\ub2c8\ub77c '\uc800\ub141 \uc2dd\uc0ac') \u00b7 remMin : \ubb38\uad6c\uc5d0 \uc4f8 '\ub0a8\uc740 \ubd84'(1~pre) \u00b7 pre : \ucd94\ucc9c \uc2dc\uc791 \ubd84(\ud558\ucc28 \uba87 \ubd84 \uc804\ubd80\ud130)
+//   askMs   : \ub2e4\uc2dc \ubb3c\uc744 \ub54c\uae4c\uc9c0 \uae30\ub2e4\ub9b4 ms(5\ucd08~60\ucd08) \u2014 \uc571\uc774 20\ucd08\ub9c8\ub2e4 \ubb3c\uc5b4\ub3c4 \ub300\ubd80\ubd84 \uac74\ub108\ub6f0\uac8c \ud55c\ub2e4(\ub0a8\uc740 \uc2dc\uac04\uc774 \ub9ce\uc73c\uba74 \uae38\uac8c)
+
+var ARR_RECO_V = 1;
+var ARR_PRE_MIN = 7;                       // \ub9c8\uc9c0\ub9c9 \ub300\uc911\uad50\ud1b5\uc744 \ub0b4\ub9ac\uae30 \uba87 \ubd84 \uc804\ubd80\ud130 \ucd94\ucc9c\uc744 \ubcf4\uc77c\uc9c0(2026-10-17 YJ: 5\u21927)
+var ARR_RECENT_MS = 30 * 60 * 1000;        // 30\ubd84 \uc548\uc5d0 \uc774\ubbf8 \ubcf4\ub0c8\uc73c\uba74 \uac19\uc740 \uc5ec\uc815\uc73c\ub85c \ubcf8\ub2e4(\uc7ac\ub3d9\uae30\ud654\ub85c \ub3c4\ucc29 \uc2dc\uac01\uc774 \ubc14\ub00c\uc5b4\ub3c4 \ub450 \ubc88 \uc548 \ub728\uac8c)
+
+function arKstMin(ms) { var m = Math.floor(Number(ms) / 60000) + 540; return ((m % 1440) + 1440) % 1440; }   // \ub3c4\ucc29 \uc2dc\uac01\uc758 \ud55c\uad6d\uc2dc\uac04(\ubd84, 0~1439)
+
+// \ub3c4\ucc29 \uc2dc\uac01 \u2192 \uc2dc\uac04\ub300. 17~21\uc2dc \uc57c\uc2dd\u00b7\uc800\ub141, 21\uc2dc \ub118\uc73c\uba74 \uc1fc\ud551, 7~10\uc2dc \uc544\uce68, 10~17\uc2dc \uc810\uc2ec, \uc2ec\uc57c(0~7\uc2dc)\ub294 \uc5c6\uc74c \u2014 \uc608\uc804 \uc6f9 _arrSlot \uacfc \uac19\ub2e4.
+function arrSlot(arrMs) {
+  var m = arKstMin(arrMs);
+  if (m >= 17 * 60 && m <= 21 * 60) return 'night';
+  if (m >= 21 * 60 + 1) return 'shop';
+  if (m >= 7 * 60 + 1 && m <= 10 * 60) return 'morning';
+  if (m >= 10 * 60 + 1 && m <= 16 * 60 + 59) return 'lunch';
+  return 'none';
+}
+// 17~19\uc2dc \ub3c4\ucc29\uc740 '\uc57c\uc2dd'\uc774 \uc544\ub2c8\ub77c '\uc800\ub141 \uc2dd\uc0ac'
+function arrIsDinner(arrMs) { var m = arKstMin(arrMs); return m >= 17 * 60 && m < 19 * 60; }
+// \ubb38\uad6c\uc5d0 \uc4f8 \ub0a8\uc740 \ubd84 \u2014 \uc608\uc804 \uc6f9 _arrRemainMin \uacfc \uac19\ub2e4
+function arrRemainMin(arrMs, nowMs) {
+  var m = Math.round((Number(arrMs) - Number(nowMs)) / 60000);
+  if (!isFinite(m) || m < 1 || m > ARR_PRE_MIN + 2) return ARR_PRE_MIN;
+  return Math.min(ARR_PRE_MIN, m);
+}
+
+function arrRecoWhen(o) {
+  o = o || {};
+  var arrMs = Number(o.arrMs), rem = (o.remSec === null || o.remSec === undefined || o.remSec === '') ? null : Number(o.remSec);
+  var nowMs = Number(o.nowMs); if (!isFinite(nowMs)) nowMs = 0;
+  var dest = (o.dest === null || o.dest === undefined) ? '' : String(o.dest);
+  var lastKey = (o.lastKey === null || o.lastKey === undefined) ? '' : String(o.lastKey), lastAt = Number(o.lastAt); if (!isFinite(lastAt)) lastAt = 0;
+  var r = { v: ARR_RECO_V, fire: false, why: 'input', key: '', slot: 'none', dinner: false, remMin: ARR_PRE_MIN, pre: ARR_PRE_MIN, askMs: 60000 };
+  if (!arrMs || !isFinite(arrMs) || rem === null || !isFinite(rem)) return r;
+  r.slot = arrSlot(arrMs); r.dinner = arrIsDinner(arrMs); r.remMin = arrRemainMin(arrMs, nowMs);
+  if (rem > ARR_PRE_MIN * 60 || rem < 60) {                              // 7\ubd84~1\ubd84 \uad6c\uac04\uc5d0\uc11c\ub9cc
+    r.why = 'window';
+    r.askMs = rem > ARR_PRE_MIN * 60 ? Math.max(5000, Math.min(60000, Math.round((rem - ARR_PRE_MIN * 60 - 5) * 1000))) : 60000;
+    return r;
+  }
+  r.key = String(o.arrMs) + '|' + dest;
+  if (lastKey === r.key) { r.why = 'dup'; return r; }                    // \uc774\ubc88 \uc5ec\uc815 1\ud68c
+  if (lastAt && (nowMs - lastAt) < ARR_RECENT_MS) { r.why = 'recent'; return r; }
+  r.fire = true; r.why = 'ok'; r.askMs = 60000;
+  return r;
+}
+
+// \u2500\u2500 Worker \uc5f0\uacb0\ubd80 \u2014 POST /arrive-reco (handleFetch \uc5d0 \uae38\uc744 \ub454\ub2e4) \u2500\u2500
+function handleArriveReco(request) {
+  var H = { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'access-control-allow-methods': 'POST, OPTIONS', 'access-control-allow-headers': 'content-type', 'cache-control': 'no-store' };
+  if (request.method === 'OPTIONS') return Promise.resolve(new Response(null, { status: 204, headers: H }));
+  if (request.method !== 'POST') return Promise.resolve(new Response(JSON.stringify({ ok: false, error: 'POST only' }), { status: 405, headers: H }));
+  return request.text().then(function (raw) {
+    if (raw.length > 4000) return new Response(JSON.stringify({ ok: false, error: 'body-too-long' }), { status: 413, headers: H });
+    var body;
+    try { body = JSON.parse(raw); } catch (e0) { return new Response(JSON.stringify({ ok: false, error: 'bad-json' }), { status: 400, headers: H }); }
+    var out;
+    try { out = arrRecoWhen(body); } catch (e) { return new Response(JSON.stringify({ ok: false, error: String(e && e.message || e) }), { status: 500, headers: H }); }
+    out.ok = true;
+    return new Response(JSON.stringify(out), { headers: H });
+  }, function () { return new Response(JSON.stringify({ ok: false, error: 'read-fail' }), { status: 400, headers: H }); });
+}
+
+
+// ===== arrive-reco \ub05d =====
+
 // ===== notif-policy (\uc54c\ub9bc \uc815\ucc45 \uc5d4\uc9c4) \uc2dc\uc791 =====
 // \uae38\ub3d9\ubb34 \u2014 \uc54c\ub9bc \uc815\ucc45 \uc5d4\uc9c4 \ubaa8\ub4c8 (route-v2 Worker \uc5d0 \ubd99\uc5ec \ub123\ub294 \uc21c\uc218 \ud568\uc218) \u2014 2026-10-19 (5\ubc88 5\ub2e8\uacc4 \uccab \uc870\uac01: \ud310\ub2e8)
 //
@@ -14283,6 +14366,7 @@ async function handleFetch(request, env, ctx) {
   if (url.pathname === "/store-merge") return handleStoreMerge(request);
   if (url.pathname === "/ride-alert") return handleRideAlert(request);
   if (url.pathname === "/notif-policy") return handleNotifPolicy(request);
+  if (url.pathname === "/arrive-reco") return handleArriveReco(request);
   if (url.pathname === "/next-train") return handleNextTrain(request, env);
   if (url.pathname === "/holidays") return handleHolidays(request, env);
   if (url.pathname === "/widget-say") return handleWidgetSay(request, env, ctx);
