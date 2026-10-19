@@ -21071,6 +21071,21 @@ window.addEventListener('unhandledrejection', function(e) {
         <style>#scrtSetOn:checked ~ #scrtSetKnob{background:var(--gold) !important;} #scrtSetOn:checked ~ #scrtSetDot{left:23px !important;}</style>
       </div>
 
+      <!-- ★ 2026-10-18: 서버 구동 네이티브 커뮤니티 칩 줄 — 안드로이드 앱에서만 보임, 기본 꺼짐(실험) -->
+      <div id="scrqSetCard" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <div style="font-size:15px;font-weight:800;color:var(--text);">네이티브 커뮤니티 칩 줄</div>
+          <label style="position:relative;display:inline-block;width:46px;height:26px;">
+            <input type="checkbox" id="scrqSetOn" onchange="_scrqSetUse(this.checked)" style="opacity:0;width:0;height:0;">
+            <span id="scrqSetKnob" style="position:absolute;inset:0;border-radius:13px;background:var(--border2);transition:.2s;cursor:pointer;"></span>
+            <span id="scrqSetDot" style="position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.3);"></span>
+          </label>
+        </div>
+        <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">커뮤니티 맨 위 칩 줄(실시간소통·게시판·뉴스·설정)을 엔진이 정해 내려주고, 기기가 직접 그려요. 문제가 생기면 예전 웹 칩 줄로 돌아가요.</p>
+        <div id="scrqSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
+        <style>#scrqSetOn:checked ~ #scrqSetKnob{background:var(--gold) !important;} #scrqSetOn:checked ~ #scrqSetDot{left:23px !important;}</style>
+      </div>
+
       <!-- ★ 2026-10-18: 서버 구동 네이티브 홈 경로 입력 — 안드로이드 앱에서만 보임, 기본 꺼짐(실험) -->
       <div id="scrhSetCard" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
@@ -27324,6 +27339,7 @@ function switchTab(tab,el){
   try{ if(window._scrBoard) setTimeout(function(){ window._scrBoard.kick(); }, 0); }catch(eSb3){}      // 서버 구동 네이티브 게시판(켜져 있을 때만)
   try{ if(window._scrChat) setTimeout(function(){ window._scrChat.kick(); }, 0); }catch(eSc3){}      // 서버 구동 네이티브 실시간소통(켜져 있을 때만)
   try{ if(window._scrHome) setTimeout(function(){ window._scrHome.kick(); }, 0); }catch(eSh3){}      // 서버 구동 네이티브 홈 경로 입력(켜져 있을 때만)
+  try{ if(window._scrCchips) setTimeout(function(){ window._scrCchips.kick(); }, 0); }catch(eSq3){}      // 서버 구동 네이티브 커뮤니티 칩 줄(켜져 있을 때만): 커뮤니티 탭이 열리면 올리고, 떠나면 숨긴다
   try{ if(window._scrTabs) setTimeout(function(){ window._scrTabs.changed(); }, 60); }catch(eSt3){}      // 서버 구동 네이티브 탭 막대: 켜진 칸이 바뀐다
   try{ if(window._scrFood) setTimeout(function(){ window._scrFood.kick(); }, 0); }catch(eSf2){}      // 서버 구동 네이티브 맛집 화면(켜져 있을 때만)
   try{ if(window._scrSet) setTimeout(function(){ window._scrSet.kick(); }, 0); }catch(eSs){}      // 서버 구동 네이티브 설정 화면(켜져 있을 때만)      // 서버 구동 네이티브 쇼핑 화면(켜져 있을 때만) — 탭 전환이 끝난 뒤 보이면 올린다
@@ -39450,6 +39466,7 @@ window.refreshShop=refreshShop;
     try{ var Xscrb = window._scrBoard && _scrBoard.S, cscrb = document.getElementById('scrbSetCard'); if(Xscrb && cscrb && cscrb.style.display === 'block') f.feat.scrb = { h: 1, on: Xscrb.on ? 1 : 0, f: (Xscrb.failed || Xscrb.fails >= 2) ? 1 : 0, w: Xscrb.why || '', b: Xscrb.badFresh > 0 ? 1 : 0 }; }catch(e){}
     try{ var Xscrc = window._scrChat && _scrChat.S, cscrc = document.getElementById('scrcSetCard'); if(Xscrc && cscrc && cscrc.style.display === 'block') f.feat.scrc = { h: 1, on: Xscrc.on ? 1 : 0, f: (Xscrc.failed || Xscrc.fails >= 2) ? 1 : 0, w: Xscrc.why || '', b: Xscrc.badFresh > 0 ? 1 : 0 }; }catch(e){}
     try{ var Xscrt = window._scrTabs && _scrTabs.S, cscrt = document.getElementById('scrtSetCard'); if(Xscrt && cscrt && cscrt.style.display === 'block') f.feat.scrt = { h: 1, on: Xscrt.on ? 1 : 0, f: (Xscrt.failed || Xscrt.fails >= 2) ? 1 : 0, w: Xscrt.why || '', b: Xscrt.badFresh > 0 ? 1 : 0 }; }catch(e){}
+    try{ var Xscrq = window._scrCchips && _scrCchips.S, cscrq = document.getElementById('scrqSetCard'); if(Xscrq && cscrq && cscrq.style.display === 'block') f.feat.scrq = { h: 1, on: Xscrq.on ? 1 : 0, f: (Xscrq.failed || Xscrq.fails >= 2) ? 1 : 0, w: Xscrq.why || '', b: Xscrq.badFresh > 0 ? 1 : 0 }; }catch(e){}
     try{ var Xscrh = window._scrHome && _scrHome.S, cscrh = document.getElementById('scrhSetCard'); if(Xscrh && cscrh && cscrh.style.display === 'block') f.feat.scrh = { h: 1, on: Xscrh.on ? 1 : 0, f: (Xscrh.failed || Xscrh.fails >= 2) ? 1 : 0, w: Xscrh.why || '', b: Xscrh.badFresh > 0 ? 1 : 0 }; }catch(e){}
     try{ if(typeof _sbhSyncCard === 'function') _sbhSyncCard(); var csbh = document.getElementById('sbhSetCard'); if(csbh && csbh.style.display === 'block') f.feat.sbh = { h: 1, on: _sbhOn() ? 1 : 0, f: 0, w: '' }; }catch(e){}
     try{ if(typeof _cndSyncCard === 'function') _cndSyncCard(); var ccnd = document.getElementById('cndSetCard'); if(ccnd && ccnd.style.display === 'block') f.feat.cnd = { h: 1, on: (_cndOn() && !_cndBad()) ? 1 : 0, f: _cndBad() ? 1 : 0, w: '' }; }catch(e){}
@@ -39605,6 +39622,7 @@ window.refreshShop=refreshShop;
       else if(key === 'f.scrb') window._scrbSetUse(on);
       else if(key === 'f.scrc') window._scrcSetUse(on);
       else if(key === 'f.scrt') window._scrtSetUse(on);
+      else if(key === 'f.scrq') window._scrqSetUse(on);
       else if(key === 'f.scrh') window._scrhSetUse(on);
       else if(key === 'f.sbh') window._sbhSetUse(on);
       else if(key === 'f.cnd') window._cndSetUse(on);
@@ -41240,6 +41258,42 @@ window.refreshShop=refreshShop;
     });
     window._scrTabs = kit;
     window._scrtSetUse = function(on){ try{ kit.setUse(on); }catch(e){} };
+  })();
+
+  // ═════════════ 커뮤니티 칩 줄 (실시간소통 · 게시판 · 뉴스 · 설정) ═════════════
+  //   칩의 순서·글자·색·켜진 칸을 엔진(POST /screen/cchips)이 정하고 기기가 그린다. 앱은 '지금 켜진 칸' 만 보낸다.
+  //   눌림은 예전 웹 함수(showChatTab · filterCat · showSettingsTab)를 그대로 부른다(허용 목록: cc.chat|board|news|set). 웹 칩 줄은 아래에 그대로 두고(폴백) 네이티브가 그 위를 덮는다.
+  (function(){
+    var kit, MODES = ['chat', 'board', 'news', 'set'];
+    function row(){ return document.getElementById('filterRow'); }
+    function chips(){ var r = row(); return r ? r.querySelectorAll('.chip') : []; }
+    function open(){ try{ var r = row(); return !!(commVisible() && r && r.offsetParent && r.getBoundingClientRect().height > 14); }catch(e){ return false; } }
+    function rect(){ var r = row(); if(!r) return null; var b = r.getBoundingClientRect(); if(!(b.width > 80 && b.height > 14)) return null; return { L: b.left, T: b.top, W: b.width, H: b.height }; }
+    function cur(){ try{ var cs = chips(); for(var i = 0; i < cs.length && i < MODES.length; i++) if(cs[i].classList.contains('on')) return MODES[i]; }catch(e){} return 'board'; }
+    function txtOf(m){ return JSON.stringify({ cap: 6, f: { mode: m } }); }
+    function request(){
+      var m = cur(), txt = txtOf(m), want = !kit.S.altDone;
+      return { txt: txt, post: want ? JSON.stringify({ cap: 6, f: { mode: m }, alts: 'chips' }) : txt, altFkOf: function(k){ return /^(chat|board|news|set)$/.test(k) ? kit.hash(txtOf(k)) : ''; }, ak: want ? 'x' : '', fk: kit.hash(txt), idle: false, key: '', snap: null, sig: m };
+    }
+    function act(e){
+      if(e.a !== 'call') return;
+      var m = /^cc\.(chat|board|news|set)$/.exec(String(e.v || '')); if(!m) return;
+      var cs = chips(), el = cs[MODES.indexOf(m[1])];
+      try{
+        if(m[1] === 'chat') showChatTab(el);
+        else if(m[1] === 'board') filterCat(el, 'all');
+        else if(m[1] === 'news') filterCat(el, '뉴스');
+        else showSettingsTab(el);
+      }catch(x){}
+      setTimeout(function(){ kit.changed(); }, 30);
+    }
+    kit = window._scrKit({
+      id: 'cchips', kp: 'gdm_scrq', ep: '/screen/cchips', screen: 'cchips', label: '커뮤니티 칩 줄', card: 'scrq', cache: true, waitIdle: false, bucket: 0, idleMs: 250,
+      onText: '커뮤니티 맨 위 칩 줄(실시간소통·게시판·뉴스·설정)을 엔진이 정한 대로 기기가 직접 그려요(실험 중).',
+      root: row, open: open, rect: rect, request: request, act: act, sig: cur, sigMs: 400
+    });
+    window._scrCchips = kit;
+    window._scrqSetUse = function(on){ try{ kit.setUse(on); }catch(e){} };
   })();
 
   // ═════════════ 홈 탭 경로 입력 ═════════════

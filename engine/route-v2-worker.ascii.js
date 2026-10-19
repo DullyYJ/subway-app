@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-19s68";
+var ENGINE_VERSION = "route-v2-2026-10-19s69";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -11733,7 +11733,7 @@ async function handleScreenShop(request) {
 //        facts = \uc571\uc774 \ubaa8\uc740 \uae30\uae30 \uc0ac\uc2e4(\uc804\ubd80 \uc120\ud0dd \u2014 \uc5c6\uc73c\uba74 \uae30\ubcf8\uac12):
 //          id: \ud604\uc7ac \ucee4\ubba4\ub2c8\ud2f0 \uc544\uc774\ub514('' \uc774\uba74 \uc5c6\uc74c) \u00b7 np:{arrive,transfer,arrive_reco: 1|0} \u00b7 npd: \uc54c\ub9bc \uad8c\ud55c \uac70\ubd80(1|0) \u00b7 rl: \ub3c4\ucc29 \uc624\ucc28 \uae30\ub85d(1|0)
 //          th: 'dark'|'pastel' \u00b7 sam: \uac24\ub7ed\uc2dc(1|0) \u00b7 samw: \uc571 \ubc30\ud130\ub9ac '\uc81c\ud55c\ub428'(1|0) \u00b7 errn: \uc624\ub958 \ub85c\uadf8 \uac1c\uc218 \u00b7 cm: \ucd9c\ud1f4\uadfc \uc54c\ub9bc(1|0|\uc5c6\uc74c) \u00b7 ovl: \uc624\ubc84\ub808\uc774(1|0|\uc5c6\uc74c)
-//          feat: { nm|sn|htl|scr|scrs|scrf|scrn|scrb|scrc|scrt|scrh|sbh|cnd|rtf|sto|ra|npol|arw|cmw|rtx|e2 : { h: \uc774 \uae30\ub2a5\uc774 \uc788\ub098(1|0), on: \uc2a4\uc704\uce58(1|0), f: \ubb38\uc81c\ub85c \uc6f9\uc73c\ub85c \ub3cc\uc544\uac14\ub098(1|0), w: \ubb38\uc81c \uc0ac\uc720, b: \uc800\uc7a5\ubcf8 \uc0ac\uc6a9 \uc911(1|0) } }
+//          feat: { nm|sn|htl|scr|scrs|scrf|scrn|scrb|scrc|scrt|scrq|scrh|sbh|cnd|rtf|sto|ra|npol|arw|cmw|rtx|e2 : { h: \uc774 \uae30\ub2a5\uc774 \uc788\ub098(1|0), on: \uc2a4\uc704\uce58(1|0), f: \ubb38\uc81c\ub85c \uc6f9\uc73c\ub85c \ub3cc\uc544\uac14\ub098(1|0), w: \ubb38\uc81c \uc0ac\uc720, b: \uc800\uc7a5\ubcf8 \uc0ac\uc6a9 \uc911(1|0) } }
 // \ucd9c\ub825  { ok, v:1, screen:'settings', rev, cover:'tab', head:[], body:[\ub178\ub4dc\u2026] }  \u2190 \ub178\ub4dc \uc885\ub958\ub294 native/ScreenCore.java \uc640 \uac19\ub2e4
 //        panel{kids} \u00b7 text \u00b7 box \u00b7 toggle{key} \u00b7 navrow{act} \u00b7 select{act:{a:'sel'}} \u00b7 field{key} \u00b7 button \u00b7 spacer
 //        act = {a:'set',key} (\uc2a4\uc704\uce58 \u2014 \uc571\uc774 \uba3c\uc800 \ub4a4\uc9d1\uace0 \uc54c\ub9b0\ub2e4) | {a:'call',v} (\uc571 \uc548 \ud568\uc218 \ud638\ucd9c: saveId\u00b7clearId\u00b7pol.*\u00b7errlog) | {a:'web',v} (\uc6f9 \uce74\ub4dc \uc5f4\uae30) | {a:'sel',v} (\uace0\ub974\uae30)
@@ -11774,6 +11774,8 @@ var SETTINGS_FEATS = [
     off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9 \uc2e4\uc2dc\uac04\uc18c\ud1b5 \ud654\uba74)\uc73c\ub85c \uadf8\ub824\uc694.', bad: '\ub124\uc774\ud2f0\ube0c \uc2e4\uc2dc\uac04\uc18c\ud1b5 \ud654\uba74\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc6f9 \ud654\uba74\uc73c\ub85c \ub300\uc2e0 \ubcf4\uc5ec\uc8fc\uace0 \uc788\uc5b4\uc694', stale: '\uc5d4\uc9c4\uc774 \uc900 \ud654\uba74\uc774 \uc62c\ubc14\ub974\uc9c0 \uc54a\uc544 \uc800\uc7a5\ud574 \ub454 \ud654\uba74\uc744 \uc4f0\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \uc2e4\uc2dc\uac04\uc18c\ud1b5\uc758 \ub178\uc120 \uce69\u00b7\uacf5\uc9c0 \ubc30\ub108\u00b7\ub300\ud654 \ub9d0\ud48d\uc120\u00b7\uc785\ub825\uc904\uc744 \uc5d4\uc9c4\uc774 \uc815\ud55c \ub300\ub85c \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694(\uc2e4\ud5d8 \uc911).' },
   { k: 'scrt', title: '\ub124\uc774\ud2f0\ube0c \ud0ed \ub9c9\ub300', desc: '\ud654\uba74 \ub9e8 \uc544\ub798 \ud0ed \ub9c9\ub300(\ucee4\ubba4\ub2c8\ud2f0\u00b7\ub178\uc120\ub3c4\u00b7\ud648\u00b7\uc1fc\ud551\uc13c\ud130\u00b7\ub9db\uc9d1)\ub97c \uc5d4\uc9c4\uc774 \uc815\ud574 \ub0b4\ub824\uc8fc\uace0, \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694. \ubb38\uc81c\uac00 \uc0dd\uae30\uba74 \uc608\uc804 \uc6f9 \ud0ed \ub9c9\ub300\ub85c \ub3cc\uc544\uac00\uc694.',
     off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9 \ud0ed \ub9c9\ub300)\uc73c\ub85c \uadf8\ub824\uc694.', bad: '\ub124\uc774\ud2f0\ube0c \ud0ed \ub9c9\ub300\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc6f9 \ud654\uba74\uc73c\ub85c \ub300\uc2e0 \ubcf4\uc5ec\uc8fc\uace0 \uc788\uc5b4\uc694', stale: '\uc5d4\uc9c4\uc774 \uc900 \ud654\uba74\uc774 \uc62c\ubc14\ub974\uc9c0 \uc54a\uc544 \uc800\uc7a5\ud574 \ub454 \ud654\uba74\uc744 \uc4f0\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \ud654\uba74 \ub9e8 \uc544\ub798 \ud0ed \ub9c9\ub300(\ucee4\ubba4\ub2c8\ud2f0\u00b7\ub178\uc120\ub3c4\u00b7\ud648\u00b7\uc1fc\ud551\uc13c\ud130\u00b7\ub9db\uc9d1)\ub97c \uc5d4\uc9c4\uc774 \uc815\ud55c \ub300\ub85c \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694(\uc2e4\ud5d8 \uc911).' },
+  { k: 'scrq', title: '\ub124\uc774\ud2f0\ube0c \ucee4\ubba4\ub2c8\ud2f0 \uce69 \uc904', desc: '\ucee4\ubba4\ub2c8\ud2f0 \ub9e8 \uc704 \uce69 \uc904(\uc2e4\uc2dc\uac04\uc18c\ud1b5\u00b7\uac8c\uc2dc\ud310\u00b7\ub274\uc2a4\u00b7\uc124\uc815)\uc744 \uc5d4\uc9c4\uc774 \uc815\ud574 \ub0b4\ub824\uc8fc\uace0, \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694. \ubb38\uc81c\uac00 \uc0dd\uae30\uba74 \uc608\uc804 \uc6f9 \uce69 \uc904\ub85c \ub3cc\uc544\uac00\uc694.',
+    off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9 \uce69 \uc904)\uc73c\ub85c \uadf8\ub824\uc694.', bad: '\ub124\uc774\ud2f0\ube0c \uce69 \uc904\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc6f9 \uce69 \uc904\ub85c \ub300\uc2e0 \ubcf4\uc5ec\uc8fc\uace0 \uc788\uc5b4\uc694', stale: '\uc5d4\uc9c4\uc774 \uc900 \ud654\uba74\uc774 \uc62c\ubc14\ub974\uc9c0 \uc54a\uc544 \uc800\uc7a5\ud574 \ub454 \ud654\uba74\uc744 \uc4f0\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \ucee4\ubba4\ub2c8\ud2f0 \ub9e8 \uc704 \uce69 \uc904(\uc2e4\uc2dc\uac04\uc18c\ud1b5\u00b7\uac8c\uc2dc\ud310\u00b7\ub274\uc2a4\u00b7\uc124\uc815)\uc744 \uc5d4\uc9c4\uc774 \uc815\ud55c \ub300\ub85c \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694(\uc2e4\ud5d8 \uc911).' },
   { k: 'scrh', title: '\ub124\uc774\ud2f0\ube0c \uacbd\ub85c \uc785\ub825', desc: '\ud648 \ud0ed\uc758 \ucd9c\ubc1c\u00b7\ub3c4\ucc29 \uc785\ub825\uce78, \uc790\ub3d9\uc644\uc131 \ubaa9\ub85d, \uc704\uce58 \uac10\uc9c0\u00b7\ubc14\uafb8\uae30\u00b7\uacbd\ub85c \ud0d0\uc0c9 \ub2e8\ucd94, \uae30\uc900\uc2dc\uac01 \uc904\uc744 \uc5d4\uc9c4\uc774 \uc815\ud574 \ub0b4\ub824\uc8fc\uace0, \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694. \uae00\uc790\ub97c \uc4f0\ub294 \ub3d9\uc548 \uc790\ub3d9\uc644\uc131\uc774 \ubc14\ub85c \ub530\ub77c\uc640\uc694. \ubb38\uc81c\uac00 \uc0dd\uae30\uba74 \uc608\uc804 \uc6f9 \uce74\ub4dc\ub85c \ub3cc\uc544\uac00\uc694.',
     off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9 \uacbd\ub85c \uc785\ub825 \uce74\ub4dc)\uc73c\ub85c \uadf8\ub824\uc694.', bad: '\ub124\uc774\ud2f0\ube0c \uacbd\ub85c \uc785\ub825\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc6f9 \uce74\ub4dc\ub85c \ub300\uc2e0 \ubcf4\uc5ec\uc8fc\uace0 \uc788\uc5b4\uc694', stale: '\uc5d4\uc9c4\uc774 \uc900 \ud654\uba74\uc774 \uc62c\ubc14\ub974\uc9c0 \uc54a\uc544 \uc800\uc7a5\ud574 \ub454 \ud654\uba74\uc744 \uc4f0\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \ud648 \ud0ed\uc758 \uacbd\ub85c \uc785\ub825 \uce74\ub4dc\ub97c \uc5d4\uc9c4\uc774 \uc815\ud55c \ub300\ub85c \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694(\uc2e4\ud5d8 \uc911).' },
   { k: 'sbh', title: '\uac00\ub824\uc9c4 \ub3d9\uc548 \uc5d4\uc9c4\uc774 \uc774\uc5b4\ubc1b\uae30', desc: '\uc571\uc744 \ud648 \ud654\uba74\uc774\ub098 \ub2e4\ub978 \uc571\uc73c\ub85c \ubcf4\ub0b8 \ub3d9\uc548\uc5d0\ub3c4 \uc5d4\uc9c4\uc774 \uc548\ub0b4\ub97c \ubc14\ub85c \uc774\uc5b4\ubc1b\uc544 \uc601\uc810\u00b7\ub3c4\ucc29 \uc2dc\uac01\u00b7\ud558\ucc28 \uc54c\ub9bc\uc744 \uacc4\uc18d \ub9de\ucdb0\uc694. \uc571\uc744 \ub2e4\uc2dc \uc5f4\uba74 \uadf8 \uacb0\uacfc\ub97c \uc774\uc5b4\uc11c \uc368\uc694. \ubb38\uc81c\uac00 \uc0dd\uae30\uba74 \uc608\uc804 \ubc29\uc2dd(\uac00\ub824\uc9c4 \ub3d9\uc548 \uc6f9\uc744 \uae68\uc6cc \uacc4\uc0b0)\uc73c\ub85c \ub3cc\uc544\uac00\uc694.',
@@ -16251,6 +16253,96 @@ async function handleStoreMerge(request) {
 
 // ===== store-sync \ub05d =====
 
+// ===== CCHIPS ENGINE BEGIN =====
+// \uae38\ub3d9\ubb34 \u2014 \ucee4\ubba4\ub2c8\ud2f0 \ub9e8 \uc704 \uce69 \uc904(\uc2e4\uc2dc\uac04\uc18c\ud1b5 \u00b7 \uac8c\uc2dc\ud310 \u00b7 \ub274\uc2a4 \u00b7 \uc124\uc815) \uc5d4\uc9c4 (route-v2 Worker \uc5d0 \ubd99\uc5ec \ub123\ub294 \uc21c\uc218 \ud568\uc218; \ub2e8\uc77c \ucd9c\ucc98)
+//
+// \u2605 \uc6d0\uce59(YJ): "\ubaa8\ub4e0 \uc5f0\uc0b0\uc740 \uc5d4\uc9c4\uc774 \ud55c\ub2e4. \uc571\uc740 \uc5d4\uc9c4\uc774 \uacc4\uc0b0\ud55c \uadf8\ub9bc\ub9cc \uadf8\ub9b0\ub2e4."  (2026-10-19 s69 \u2014 \ucee4\ubba4\ub2c8\ud2f0 \uce69 \uc904)
+//   \uc608\uc804\uc5d4 www/index.html \uc758 #filterRow \uc548\uc5d0 \uce69 \ub124 \uac1c\uc758 \uc21c\uc11c\u00b7\uae00\uc790\u00b7\uc774\ubaa8\uc9c0\u00b7\ucf1c\uc9c4 \uce78\uc774 \ubc15\ud600 \uc788\uc5c8\ub2e4.
+//   \uc774\uc81c \uc571\uc740 '\uc9c0\uae08 \ucf1c\uc9c4 \uce78(mode)' \ub9cc \ubcf4\ub0b4\uace0, \uc5d4\uc9c4\uc774 \uc5b4\ub5a4 \uce69\uc744 \uc5b4\ub5a4 \uc21c\uc11c\u00b7\uae00\uc790\u00b7\uc0c9\uc73c\ub85c \uadf8\ub9b4\uc9c0 \uc815\ud574 \ud654\uba74 JSON \uc73c\ub85c \ub0b4\ub824 \uc900\ub2e4.
+//   \uc571(\ub124\uc774\ud2f0\ube0c ScreenCore/ScreenView)\uc740 JSON \uc744 \uac80\uc99d\ud574 \uadf8\ub9ac\uae30\ub9cc \ud558\uace0, \uce69\uc744 \ub204\ub974\uba74 {a:'call', v:'cc.<\uce78>'} \ub9cc \uc54c\ub9b0\ub2e4(\uc6f9\uc774 showChatTab/filterCat/showSettingsTab \uc744 \ubd80\ub978\ub2e4).
+//   \uc6f9 \uce69 \uc904\uc740 \ud3f4\ubc31(\uc5d4\uc9c4\u00b7\ub124\uc774\ud2f0\ube0c\uac00 \uc548 \ub420 \ub54c)\uc73c\ub85c\ub9cc \ub0a8\ub294\ub2e4.
+//
+// \uc785\ub825  cchipsScreen({ cap }, facts)
+//        cap   = \uc571\uc774 \uadf8\ub9b4 \uc218 \uc788\ub294 \ud654\uba74 \uaddc\uaca9 \uc218\uc900(6 \uc774\uc0c1\uc774\uc5b4\uc57c \ub9cc\ub4e0\ub2e4)
+//        facts = { mode: 'chat'|'board'|'news'|'set' }  (\ubaa8\ub974\ub294 \uac12\uc740 \uac8c\uc2dc\ud310)
+// \ucd9c\ub825  { ok, v:1, screen:'cchips', cover:'tab', head:[chips], body:[], info:{mode} }
+//        chips.items = [{label, on, c?, act:{a:'call', v:'cc.<\uce78>'}}] \u2014 \uce78 \uc21c\uc11c = \uc544\ub798 CCHIPS_LIST
+// \ub9e8 \uc544\ub798 module.exports \ub294 \uc2dc\ud5d8(Node)\uc6a9\uc774\uace0 Worker \uc5d0\uc11c\ub294 \ud568\uc218 \uc120\uc5b8\ub9cc \uc4f0\uc778\ub2e4.
+'use strict';
+var CCHIPS_SCREEN_V = 1;
+// \uae00\uc790\ub294 \uc6f9 #filterRow \uc640 \uac19\ub2e4(\uc774\ubaa8\uc9c0\ub9cc \ube80\ub2e4 \u2014 \uc0c8 \ub124\uc774\ud2f0\ube0c \ud654\uba74\uc740 \uc774\ubaa8\uc9c0\ub97c \uc4f0\uc9c0 \uc54a\ub294\ub2e4). \uc2dc\ud5d8\uc774 \uc6f9\uacfc \ub300\uc870\ud55c\ub2e4.
+var CCHIPS_LIST = [
+  { id: 'chat', label: '\uc2e4\uc2dc\uac04\uc18c\ud1b5', c: '#ff453a' },
+  { id: 'board', label: '\uac8c\uc2dc\ud310' },
+  { id: 'news', label: '\ub274\uc2a4' },
+  { id: 'set', label: '\uc124\uc815' }
+];
+function cchipsHash(s) {                              // djb2 \u2014 \uac19\uc740 \ud654\uba74\uc774\uba74 \uac19\uc740 rev
+  var h = 5381;
+  for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+function cchipsFacts(f) {
+  f = (f && typeof f === 'object') ? f : {};
+  var mode = 'board';
+  for (var i = 0; i < CCHIPS_LIST.length; i++) if (CCHIPS_LIST[i].id === f.mode) mode = f.mode;
+  return { mode: mode };
+}
+function cchipsScreen(inp, factsIn) {
+  inp = inp || {};
+  if (!(Number(inp.cap) >= 6)) return { ok: false, error: 'cap' };
+  var f = cchipsFacts(factsIn);
+  var items = CCHIPS_LIST.map(function (c) {
+    var it = { label: c.label, on: c.id === f.mode, act: { a: 'call', v: 'cc.' + c.id } };
+    if (c.c) it.c = c.c;
+    return it;
+  });
+  var head = [{ t: 'chips', pad: [0, 0, 0, 0], gap: 6, h: 26, onc: 'gold', onfg: '#121214', items: items }];
+  var out = { ok: true, v: 1, screen: 'cchips', cover: 'tab', head: head, body: [], info: { mode: f.mode } };
+  out.rev = 'q' + CCHIPS_SCREEN_V + ':' + cchipsHash(JSON.stringify(head));
+  return out;
+}
+
+// \uac19\uc740 \uc694\uccad\uc5d0 '\ub2e4\ub978 \uce78\ub4e4\uc758 \uc0ac\uc2e4(altsIn = { \ud0a4:{ mode } } \ub610\ub294 'chips' = \uc5d4\uc9c4\uc774 \uac00\uc9c4 \uce78 \uc804\ubd80)'\uc744 \uc2e4\uc5b4 \ubcf4\ub0b4\uba74 \ud55c \ubc88\uc5d0 \ubaa8\ub4e0 \uce78 \ud654\uba74\uc744 \uacc4\uc0b0\ud574 out.alts[\ud0a4] \ub85c \ub3cc\ub824\uc900\ub2e4(\uce69\uc744 \ub20c\ub7ec\ub3c4 \uae30\ub2e4\ub9ac\uc9c0 \uc54a\uac8c).
+function cchipsScreens(inp, factsIn, altsIn) {
+  var out = cchipsScreen(inp, factsIn);
+  if (!out || !out.ok) return out;
+  if (altsIn === 'chips') {
+    altsIn = {};
+    CCHIPS_LIST.forEach(function (c) { altsIn[c.id] = { mode: c.id }; });
+  }
+  if (altsIn && typeof altsIn === 'object' && !Array.isArray(altsIn)) {
+    var ks = Object.keys(altsIn).slice(0, 10), alts = {};
+    for (var i = 0; i < ks.length; i++) {
+      var a = altsIn[ks[i]];
+      if (!a || typeof a !== 'object') continue;
+      var o2 = cchipsScreen(inp, a);
+      if (o2 && o2.ok) alts[ks[i]] = o2;
+    }
+    out.alts = alts;
+  }
+  return out;
+}
+// \ucee4\ubba4\ub2c8\ud2f0 \uce69 \uc904 \uc5d4\uc9c4 Worker \uc5f0\uacb0\ubd80 \u2014 POST /screen/cchips (engine/cchips.js \uc758 cchipsScreens \uc744 \ubd80\ub978\ub2e4). route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/screen/cchips") return handleScreenCchips(request);` \ub97c \ub123\ub294\ub2e4.
+//   \ubcf8\ubb38(JSON \uae00, Content-Type: text/plain \uc73c\ub85c \ubcf4\ub0b4 \uc0ac\uc804 \uc694\uccad\uc744 \ud53c\ud55c\ub2e4): { cap(6 \uc774\uc0c1), f:{mode} }
+//   \uc5d4\uc9c4\uc740 \uc544\ubb34\uac83\ub3c4 \uc800\uc7a5\ud558\uc9c0 \uc54a\ub294\ub2e4. \uac1c\uc778 \uc2dd\ubcc4 \uc815\ubcf4\ub294 \uc624\uac00\uc9c0 \uc54a\ub294\ub2e4.
+async function handleScreenCchips(request) {
+  var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Cache-Control": "no-store" };
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: H });
+  if (request.method !== "POST") return new Response(JSON.stringify({ ok: false, error: "post-only" }), { status: 405, headers: H });
+  var raw = await request.text();
+  if (raw.length > 20000) return new Response(JSON.stringify({ ok: false, error: "body-too-long" }), { status: 413, headers: H });
+  var body;
+  try { body = JSON.parse(raw); } catch (e) { return new Response(JSON.stringify({ ok: false, error: "bad-json" }), { status: 400, headers: H }); }
+  if (!body || typeof body !== "object") return new Response(JSON.stringify({ ok: false, error: "bad-body" }), { status: 400, headers: H });
+  var out;
+  try { out = cchipsScreens({ cap: Number(body.cap) || 0 }, body.f, body.alts); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2) }), { status: 500, headers: H }); }
+  if (!out || !out.ok) return new Response(JSON.stringify(out || { ok: false, error: "fail" }), { status: 400, headers: H });
+  out.ver = ENGINE_VERSION;
+  return new Response(JSON.stringify(out), { headers: H });
+}
+// ===== CCHIPS ENGINE END =====
+
 async function handleFetch(request, env, ctx) {
   try { await holEnsure(env); } catch (e) {}
   const url = new URL(request.url);
@@ -16277,6 +16369,7 @@ async function handleFetch(request, env, ctx) {
   if (url.pathname === "/screen/chat") return handleScreenChat(request);
   if (url.pathname === "/screen/tabs") return handleScreenTabs(request);
   if (url.pathname === "/screen/home") return handleScreenHome(request);
+  if (url.pathname === "/screen/cchips") return handleScreenCchips(request);
   if (url.pathname === "/stops-near") {
     const lat = parseFloat(url.searchParams.get("lat"));
     const lng = parseFloat(url.searchParams.get("lng"));

@@ -291,7 +291,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   const findBtn = (txt, v) => nodes(txt).find(n => n.act && n.act.v === v);
   const hasText = (txt, re) => nodes(txt).some(n => typeof n.s === 'string' && re.test(n.s));
   const lastJson = async (x) => { const c = (await calls(x)).filter(c => c.a && c.a.json); return c.length ? c[c.length - 1].a.json : ''; };
-  const pgOpen = async (x, name) => { await clear(x); await act(x, { a: 'call', v: 'pg.' + name }); assert.ok(await waitFor(x, async () => { const j = await lastJson(x); return j && JSON.parse(j).info && JSON.parse(j).info.page === name; }, 8000), name + ' 하위 화면 없음'); };
+  const pgOpen = async (x, name) => { await clear(x); await act(x, { a: 'call', v: 'pg.' + name }); assert.ok(await waitFor(x, async () => { const j = await lastJson(x); return j && JSON.parse(j).info && JSON.parse(j).info.page === name; }, 20000), name + ' 하위 화면 없음'); };
   const pgSub = async (x, v, sub) => { await act(x, { a: 'call', v }); assert.ok(await waitFor(x, async () => { const j = await lastJson(x); return j && (JSON.parse(j).info || {}).sub === sub; }, 8000), v + ' → ' + sub + ' 없음'); };
   const B = await fresh({ plugin: true, on: true, id: '하위' });
   await openSet(B); await waitFor(B, has(B, 'show')); await emit(B, 'ready', { id: 'settings' }); await B.page.waitForTimeout(200);

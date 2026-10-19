@@ -57,6 +57,8 @@ jobs:
           - board_engine.test.js
           - chat_engine.test.js
           - screen_bct_js.ui.test.js
+          - cchips_engine.test.js
+          - screen_cchips_js.ui.test.js
           - screen_home_js.ui.test.js
           - locate_research.ui.test.js
           - route_row.ui.test.js

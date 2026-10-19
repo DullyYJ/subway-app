@@ -13,7 +13,8 @@ const SETS = [
   { name: 'BOARD', src: 'engine/board.js', glue: 'engine/board-worker.js', path: '/screen/board', fn: 'handleScreenBoard', anchor: '  if (url.pathname === "/screen/news") return handleScreenNews(request);\n' },
   { name: 'CHAT', src: 'engine/chat.js', glue: 'engine/chat-worker.js', path: '/screen/chat', fn: 'handleScreenChat', anchor: '  if (url.pathname === "/screen/board") return handleScreenBoard(request);\n' },
   { name: 'TABS', src: 'engine/tabs.js', glue: 'engine/tabs-worker.js', path: '/screen/tabs', fn: 'handleScreenTabs', anchor: '  if (url.pathname === "/screen/chat") return handleScreenChat(request);\n' },
-  { name: 'HOME', pre: ['engine/home-stations.js'], src: 'engine/home.js', glue: 'engine/home-worker.js', path: '/screen/home', fn: 'handleScreenHome', anchor: '  if (url.pathname === "/screen/tabs") return handleScreenTabs(request);\n' }
+  { name: 'HOME', pre: ['engine/home-stations.js'], src: 'engine/home.js', glue: 'engine/home-worker.js', path: '/screen/home', fn: 'handleScreenHome', anchor: '  if (url.pathname === "/screen/tabs") return handleScreenTabs(request);\n' },
+  { name: 'CCHIPS', src: 'engine/cchips.js', glue: 'engine/cchips-worker.js', path: '/screen/cchips', fn: 'handleScreenCchips', anchor: '  if (url.pathname === "/screen/home") return handleScreenHome(request);\n' },
 ];
 let all = '';
 for (const S of SETS) {
