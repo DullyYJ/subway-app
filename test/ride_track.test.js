@@ -2,6 +2,7 @@
 const { rideTrack } = require('../engine/ride-track.js');
 let pass = 0, fail = 0;
 function ok(c, m) { if (c) pass++; else { fail++; console.log('FAIL', m); } }
+let __jit = 0;   // 제자리 흔들림 시험용 고정 흔들림(난수 대신 — 시험이 가끔 깨지지 않게)
 const NOW = 1.8e12, KY = 111000, KX = 88000;
 // 동쪽으로 뻗은 직선 경로 (0,0)→(0,7km)
 const line = (lat0) => [0, 1000, 2000, 4000, 7000].map(m => ({ lat: lat0, lng: m / KX }));
@@ -379,7 +380,7 @@ r = rideTrack({ nowMs: NOW }); ok(r.off.confirmed === false && r.fix.n === 0, '�
   ok(r.motion && r.motion.moving === null, '정확도 나쁜 좌표뿐이면 모른다(null) ' + JSON.stringify(r.motion));
   r = BP(trail(120, 60, 2, run, 10));
   ok(r.motion && r.motion.moving === null, '마지막 좌표가 60초 전이면 모른다');
-  r = BP(trail(60, 0, 2, () => ({ lat: LAT0, lng: 127 + 1000 / BX + 2e-5 * Math.sin(Math.random() * 6) }), 12));
+  r = BP(trail(60, 0, 2, () => ({ lat: LAT0, lng: 127 + 1000 / BX + 2e-5 * Math.sin((++__jit) * 2.399) }), 12));
   ok(r.motion && r.motion.moving === false, '제자리 흔들림(몇 m)은 정지 ' + JSON.stringify(r.motion));
   // 선 위 위치 · 통과 시각
   r = BP(trail(60, 0, 2, run, 10));
