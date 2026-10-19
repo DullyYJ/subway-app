@@ -15,7 +15,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   const __em = require('./helpers/eta_mock'); await __em.installEtaMock(page); __em.autoWait(page);
   await page.clock.install({ time: new Date('2026-10-11T12:30:00+09:00') });
   await page.goto('file://' + html); await page.addStyleTag({ content: '#locDiscOv{display:none !important}' }); await page.clock.runFor(2500);
-  await page.evaluate(() => { window.__keep = { shop: window._arrShopOpen, food: window._arrGoFoodTab, modal: window._showBriefingModal, auto: window._arrOrderAuto }; });   // 앞 테스트들이 바꿔 둔 함수를 ②부터 원래대로
+  await page.evaluate(() => { window.__homeEta0 = window._arrHomeEta; window.__keep = { shop: window._arrShopOpen, food: window._arrGoFoodTab, modal: window._showBriefingModal, auto: window._arrOrderAuto }; });   // 앞 테스트들이 바꿔 둔 함수를 ②부터 원래대로
   const lines = (opts) => page.evaluate((o) => {
     window._ovlRecoOff = !!o.off;
     window._pipReco = o.reco === null ? null : { title: '하차 10분 전 · 아라', body: '점심시간이에요. 제육볶음 어떠세요?\n근처엔 한솥, 맘스터치 있어요.\n오늘도 수고했어요.', at: Date.now() - (o.ageMin || 0) * 60000, ovlAt: Date.now() - 60000 };
@@ -304,6 +304,52 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
       window._arrShopItem = { n: '가습기', u: 'https://link.coupang.com/a/abc' }; window._arrLast = { at: Date.now(), action: { kind: 'shop', item: window._arrShopItem } }; window._ovlRecoGo(); return got; });
     await page.clock.runFor(1000);
     assert.deepStrictEqual(r, ['https://link.coupang.com/a/abc']);
+  });
+
+  console.log('[⑤ 보임 시점은 엔진이 준 절대 시각 창(reco.fromMs~untilMs · ttlMs)으로 정한다 — s61]');
+  const RE = require('../engine/ride-eta.js');
+  const nodesAt = (ams) => [{ isOrigin: true, name: '출발', ms: null }, { isSub: true, lineName: '2호선', name: 'A', ms: ams - 600000 }, { isSub: true, lineName: '2호선', name: 'D', ms: ams }, { isWalk: true, name: '도보', ms: ams + 600000 }];
+  // 진짜 엔진 답으로 창을 만들어 앱에 넣고, 같은 남은 시간에서 예전 규칙(7분 이하 · -30초 초과)과 같은 결과인지 본다
+  const winOf = async (rem, extra) => {
+    const now = await page.evaluate(() => Date.now());
+    const ams = now + rem * 1000;
+    const res = RE.rideEta({ op: 'arrive', nowMs: now, nodes: nodesAt(ams), idx: 1, riding: true });
+    return page.evaluate(([res, rem, extra]) => {
+      window._ovlRecoOff = false; window._ovlRecoDismissAt = undefined;
+      window._pipReco = { title: 't', body: '가\n나', at: Date.now() - ((extra && extra.ageMin) || 0) * 60000, ovlAt: Date.now() - 60000 };
+      window._arrLast = null; window._ovlRecoForceUntil = 0;
+      window._arrive = Object.assign(window._arrive || {}, { res: res, jsig: 'x' });
+      window._routeLocked = true; window._pipHasRoute = () => true; window._journeyEta = () => ({ preview: false });
+      window._arrHomeEta = window.__homeEta0;
+      const he = window._arrHomeEta();
+      const r = _ovlLines().reco;
+      return { on: !!(r && r.on), hasWin: !!(he && he.reco && he.reco.fromMs), ttl: he && he.reco && he.reco.ttlMs };
+    }, [res, rem, extra]);
+  };
+  await t('엔진 창이 앱까지 온다(_arrHomeEta.reco) · ttlMs 25분', async () => { const x = await winOf(300); assert.strictEqual(x.hasWin, true); assert.strictEqual(x.ttl, 1500000); });
+  for (const [rem, want] of [[900, false], [481, false], [419, true], [300, true], [60, true], [5, true], [-20, true], [-31, false], [-120, false]]) {
+    await t('남은 ' + rem + '초 → ' + (want ? '보임' : '숨김') + ' (예전 규칙과 같다)', async () => {
+      const x = await winOf(rem); assert.strictEqual(x.on, want);
+      const old = rem <= 420 && rem > -30; assert.strictEqual(x.on, old, '예전 규칙과 달라짐');
+    });
+  }
+  await t('엔진 창 안이어도 25분(ttlMs) 넘은 묵은 추천은 숨긴다', async () => { const x = await winOf(300, { ageMin: 26 }); assert.strictEqual(x.on, false); });
+  await t('엔진 창이 있으면 앱 쪽 옛 남은 초(rem)는 보지 않는다 — 창 밖이면 rem 이 작아도 숨김', async () => {
+    const r = await page.evaluate(() => { const now = Date.now(); window._ovlRecoOff = false; window._ovlRecoDismissAt = undefined; window._ovlRecoForceUntil = 0; window._arrLast = null;
+      window._pipReco = { title: 't', body: '가\n나', at: now, ovlAt: now - 60000 };
+      window._arrHomeEta = () => ({ arrMs: now + 100000, rem: 100, reco: { fromMs: now + 200000, untilMs: now + 700000, ttlMs: 1500000 } });
+      const a = _ovlLines().reco;
+      window._arrHomeEta = () => ({ arrMs: now + 100000, rem: 900, reco: { fromMs: now - 1000, untilMs: now + 700000, ttlMs: 1500000 } });
+      const b = _ovlLines().reco; return [!!(a && a.on), !!(b && b.on)]; });
+    assert.deepStrictEqual(r, [false, true]);
+  });
+  await t('창 값이 이상하면(없음 · NaN) 예전 규칙으로 판단한다', async () => {
+    const r = await page.evaluate(() => { const now = Date.now(); window._ovlRecoOff = false; window._ovlRecoDismissAt = undefined; window._ovlRecoForceUntil = 0; window._arrLast = null;
+      window._pipReco = { title: 't', body: '가\n나', at: now, ovlAt: now - 60000 };
+      window._arrHomeEta = () => ({ arrMs: now + 100000, rem: 100, reco: null }); const a = _ovlLines().reco;
+      window._arrHomeEta = () => ({ arrMs: now + 900000, rem: 900, reco: null }); const b = _ovlLines().reco;
+      return [!!(a && a.on), !!(b && b.on)]; });
+    assert.deepStrictEqual(r, [true, false]);
   });
   await t('페이지 오류 없음', async () => assert.deepStrictEqual([...new Set(errs)], []));
   await ctx.close(); await b.close();

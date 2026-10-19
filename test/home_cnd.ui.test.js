@@ -36,7 +36,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     });
     const __em = require('./helpers/eta_mock'); await __em.installEtaMock(page); __em.autoWait(page);
     await page.addInitScript((o) => {
-      try { localStorage.setItem('locDisc', '1'); localStorage.setItem('gdm_scrh_on', '1'); if (o.cnd) localStorage.setItem('gdm_cnd', '1'); } catch (e) {}
+      try { localStorage.setItem('locDisc', '1'); localStorage.setItem('gdm_scrh_mig1', '1'); localStorage.setItem('gdm_scrh_on', '1'); if (o.cnd) localStorage.setItem('gdm_cnd', '1'); } catch (e) {}
       window.__sn = []; window.__snL = {}; window.__hs = []; window.__hsL = {}; window.__hsC = [];
       window.__snEmit = (n, d) => { (window.__snL[n] || []).forEach(f => f(d)); };
       window.__hsEmit = (d) => { (window.__hsL.cands || []).forEach(f => f(d)); };

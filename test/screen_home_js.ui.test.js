@@ -33,7 +33,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     });
     const __em = require('./helpers/eta_mock'); await __em.installEtaMock(page); __em.autoWait(page);
     await page.addInitScript((o) => {
-      try { localStorage.setItem('locDisc', '1'); if (o.on) localStorage.setItem('gdm_scrh_on', '1'); } catch (e) {}
+      try { localStorage.setItem('locDisc', '1'); if (o.mig !== false) localStorage.setItem('gdm_scrh_mig1', '1'); if (o.on) localStorage.setItem('gdm_scrh_on', '1'); } catch (e) {}
       window.__sn = []; window.__snL = {};
       window.__snEmit = (n, d) => { (window.__snL[n] || []).forEach(f => f(d)); };
       if (o.plugin) {
@@ -185,6 +185,16 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     assert.ok(await waitFor(x, async () => (await calls(x, 'destroy', 'home')).length > 0), 'destroy 가 없다');
     assert.strictEqual(await x.page.evaluate(() => document.getElementById('homeRouteWrap').style.height), '');
     assert.strictEqual(await x.page.evaluate(() => localStorage.getItem('gdm_scrh_on')), '0');
+    await x.ctx.close();
+  });
+  await t('[2026-10-19] 이전에 켜 둔 네이티브 경로 입력은 한 번만 꺼서 웹 카드로 돌려놓는다(표시가 있으면 다시 켠 것을 존중)', async () => {
+    const x = await fresh({ plugin: true, on: true, mig: false });
+    await x.page.waitForTimeout(600);
+    assert.strictEqual(await x.page.evaluate(() => localStorage.getItem('gdm_scrh_on')), '0');
+    assert.strictEqual(await x.page.evaluate(() => localStorage.getItem('gdm_scrh_mig1')), '1');
+    assert.strictEqual((await puts(x)()), 0, '꺼졌는데 화면을 올렸다');
+    await x.page.evaluate(() => _scrhSetUse(true));
+    assert.ok(await waitFor(x, async () => (await puts(x)()) >= 1), '다시 켰는데 show 가 없다');
     await x.ctx.close();
   });
   await t('플러그인 오류(error 이벤트) → 웹 카드로 돌아가고 카드에 사유가 보인다', async () => {
