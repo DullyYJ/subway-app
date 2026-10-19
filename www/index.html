@@ -11518,14 +11518,11 @@ function _startTransitGpsTracking(nodes) {
 window._startTransitGpsTracking = _startTransitGpsTracking;
 
 // ── 환승 · 최종 하차 알림: 2정거장 전 / 1정거장 전 진동+알림 ──
-function _buildTransitAlertTargets(){
-  window._transitAlertTargets = [];
-  window._transitSeqIdx = [];
-  window._transitAlertFired = {};
+// 알림 대상 계산 — 예전 웹 규칙(엔진을 못 쓸 때의 대신). 순서(seq)와 대상 목록을 돌려준다.
+function _transitTargetsCompute(){
   var nd = _transitNodeData || [];
   var seq = [];                                   // 교통(지하철·버스) 노드 인덱스 순서
   for(var i=0;i<nd.length;i++){ if(nd[i] && (nd[i].isSub||nd[i].isBus)) seq.push(i); }
-  window._transitSeqIdx = seq;
   var targets = [];
   for(var s=1;s<seq.length;s++){
     var prev = nd[seq[s-1]], cur = nd[seq[s]];
@@ -11536,14 +11533,72 @@ function _buildTransitAlertTargets(){
   if(seq.length){                                  // 마지막 교통 노드 = 최종 하차
     targets.push({ seqPos:seq.length-1, nodeIdx:seq[seq.length-1], name:nd[seq[seq.length-1]].name, kind:'dest' });
   }
-  window._transitAlertTargets = targets;
+  return { targets: targets, seq: seq };
+}
+function _buildTransitAlertTargetsLocal(){
+  window._transitAlertTargets = [];
+  window._transitSeqIdx = [];
+  window._transitAlertFired = {};
+  var r = _transitTargetsCompute();
+  window._transitSeqIdx = r.seq;
+  window._transitAlertTargets = r.targets;
+}
+// 알림 대상 만들기 — 스위치(gdm_ra)가 켜져 있으면 엔진이 만든다(/ride-alert op:'targets'). 앱은 노선·역 이름만 보내고 돌아온 대상을 그대로 둔다.
+//   답이 오기 전·실패하면(2.5초·오류·이상한 응답) 예전 웹 규칙으로 바로 만들고 60초 쉰다.
+function _buildTransitAlertTargets(){
+  try{ if(_raUse()){ _raBuildTargets(); return; } }catch(e){}
+  _buildTransitAlertTargetsLocal();
+}
+function _raGoodTargets(j, n){
+  if(!j || j.ok !== true || j.v !== 1 || j.op !== 'targets' || !Array.isArray(j.targets) || !Array.isArray(j.seq)) return false;
+  for(var i = 0; i < j.seq.length; i++){ if(typeof j.seq[i] !== 'number' || j.seq[i] < 0 || j.seq[i] >= n) return false; }
+  for(var k = 0; k < j.targets.length; k++){
+    var t = j.targets[k];
+    if(!t || typeof t.nodeIdx !== 'number' || typeof t.seqPos !== 'number' || typeof t.name !== 'string' || (t.kind !== 'transfer' && t.kind !== 'dest')) return false;
+    if(t.kind === 'transfer' && typeof t.nextLine !== 'string') return false;
+  }
+  return true;
+}
+function _raBuildTargets(){
+  window._transitAlertTargets = [];
+  window._transitSeqIdx = [];
+  window._transitAlertFired = {};
+  var nd = _transitNodeData || [], my = ++_RA.tseq, done = false, tm = null;
+  _RA.tbusy = true;
+  var fallback = function(why){
+    if(done) return; done = true; clearTimeout(tm);
+    if(my !== _RA.tseq) return;
+    _RA.tbusy = false; _raFail(why);
+    try{ var r = _transitTargetsCompute(); window._transitSeqIdx = r.seq; window._transitAlertTargets = r.targets; }catch(e1){}
+  };
+  tm = setTimeout(function(){ fallback('시간 초과'); }, 2500);
+  try{
+    _RA.asks++;
+    fetch(_ROUTE_V2_BASE + '/ride-alert', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ op: 'targets', nodes: _raNodes(nd) }) })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(j){
+        if(done) return;
+        if(!_raGoodTargets(j, nd.length)){ fallback('응답 이상'); return; }
+        done = true; clearTimeout(tm); _RA.ok++;
+        if(my !== _RA.tseq) return;
+        _RA.tbusy = false;
+        if(_transitNodeData !== nd) return;                          // 기다리는 동안 경로가 바뀌었다
+        window._transitSeqIdx = j.seq.slice();
+        window._transitAlertTargets = j.targets.map(function(t){ var o = { seqPos: t.seqPos, nodeIdx: t.nodeIdx, name: t.name, kind: t.kind }; if(t.kind === 'transfer') o.nextLine = t.nextLine; return o; });
+        _RA.sig = '';
+        try{ if(typeof _ovlStandbyPush === 'function') setTimeout(function(){ _ovlStandbyPush(true); }, 0); }catch(eSb){}
+        try{ if(typeof window._raSyncCard === 'function') window._raSyncCard(); }catch(e2){}
+      })
+      .catch(function(){ fallback('통신 실패'); });
+  }catch(e3){ fallback('요청 실패'); }
 }
 // ── 하차·환승 알림 시점 — 엔진이 정한다(2026-10-19, 5번 4단계) ──
 //   설정 스위치 '하차·환승 알림 시점을 엔진이 정하기'(gdm_ra, 기본 꺼짐). 켜면 앱을 보고 있는 동안의 하차·환승 알림이 '언제·무슨 문구·무슨 진동으로' 울릴지를 엔진(/ride-alert)이 정한다.
 //   앱(웹)은 '지금 몇 번째 노드인가 · 이미 보낸 알림 · 사용자가 끈 종류'를 알리고, 돌아온 알림을 그대로 울리기만 한다. (앱을 가렸을 때의 규칙 rsAlerts 와 같은 규칙)
 //   엔진에는 노선·역 이름과 몇 번째 노드인지만 보낸다(위치 좌표·개인 값은 보내지 않는다).
+//   알림 대상(환승 하차역·최종 하차) 만들기도 같은 스위치로 엔진이 한다(op:'targets', 2026-10-19 s60) — _buildTransitAlertTargets 는 겉옷, 예전 규칙은 _buildTransitAlertTargetsLocal.
 //   폴백(전부 자동): 스위치 꺼짐 · 엔진 응답 없음(2.5초)·오류·이상한 응답 → 예전 웹 규칙(_checkTransitAlertsLocal)으로 바로 정하고, 60초 동안은 엔진에 묻지 않는다.
-var _RA = { bad: false, until: 0, why: '', busy: false, sig: '', ndRef: null, ndSig: '', asks: 0, ok: 0, last: null, seq: 0 };
+var _RA = { bad: false, until: 0, why: '', busy: false, sig: '', ndRef: null, ndSig: '', asks: 0, ok: 0, last: null, seq: 0, tseq: 0, tbusy: false };
 function _raOn(){ try{ return localStorage.getItem('gdm_ra') === '1'; }catch(e){ return false; } }
 function _raDown(){ return _RA.until > Date.now(); }
 function _raUse(){ return _raOn() && !_raDown(); }
@@ -11623,7 +11678,8 @@ window._raOn = _raOn;
 window._raState = _RA;
 window._raSetUse = function(on){
   try{ localStorage.setItem('gdm_ra', on ? '1' : '0'); }catch(e){}
-  _RA.bad = false; _RA.until = 0; _RA.why = ''; _RA.sig = ''; _RA.busy = false;
+  _RA.bad = false; _RA.until = 0; _RA.why = ''; _RA.sig = ''; _RA.busy = false; _RA.tseq++; _RA.tbusy = false;
+  try{ if(!on && !(window._transitAlertTargets || []).length){ var _tr = _transitTargetsCompute(); window._transitSeqIdx = _tr.seq; window._transitAlertTargets = _tr.targets; } }catch(eT){}   // 끄는 순간 대상이 비어 있으면 예전 규칙으로 채운다
   try{ if(typeof window._raSyncCard === 'function') window._raSyncCard(); }catch(e2){}
 };
 window._raSyncCard = function(){
@@ -20905,7 +20961,7 @@ window.addEventListener('unhandledrejection', function(e) {
             <span id="raSetDot" style="position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.3);"></span>
           </label>
         </div>
-        <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">앱을 보고 있는 동안의 하차·환승 알림(환승 2정거장 전·환승 준비·목적지 2정거장 전·곧 하차·목적지 도착)이 언제 울릴지, 무슨 문구와 진동으로 울릴지를 웹이 아니라 엔진이 정해요. 앱을 가렸을 때 쓰는 규칙과 같아요. 엔진에 물을 수 없으면 예전 방식으로 바로 정해요.</p>
+        <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">앱을 보고 있는 동안의 하차·환승 알림(환승 2정거장 전·환승 준비·목적지 2정거장 전·곧 하차·목적지 도착)이 언제 울릴지, 무슨 문구와 진동으로 울릴지, 어느 역(환승 하차역·최종 하차)에서 울릴지를 웹이 아니라 엔진이 정해요. 앱을 가렸을 때 쓰는 규칙과 같아요. 엔진에 물을 수 없으면 예전 방식으로 바로 정해요.</p>
         <div id="raSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
         <style>#raSetOn:checked ~ #raSetKnob{background:var(--gold) !important;} #raSetOn:checked ~ #raSetDot{left:23px !important;}</style>
       </div>
