@@ -252,6 +252,68 @@ t('버스: GPS 가 3분 넘게 없으면 계획 시각표대로 이어가 알림
   assert.deepStrictEqual(types, ['near_arrive2', 'near_arrive', 'arrive']);
 });
 
+
+// ── 2026-10-19: 버스 위치(busPos)·움직임(motion)·다음 호출 간격(nextMs) ──
+function busState2(n) {
+  const nodesB = [{ name: '출발', isOrigin: true }], stopsB = [], seqB = [];
+  for (let i = 1; i <= n; i++) {
+    nodesB.push({ name: 'B' + i, isBus: true, lineName: '931', planMin: PLAN[1] + 2 * (i - 1) });
+    stopsB.push({ i: i, lat: LAT, lng: LNG0 + DL * (i - 1), arrMs: DAY + (PLAN[1] + 2 * (i - 1)) * 60000, lg: 1, bus: true, pass: i > 1, fin: i === n });
+    seqB.push(i);
+  }
+  return { v: 1, eta: { nodes: nodesB, passes: [{ idx: 1, ms: at(12, 52, 0), src: 'gps' }], boarded: true, tzOffsetMin: 540 }, stops: stopsB, trail: [],
+    cfg: { targets: [{ seqPos: n - 1, nodeIdx: n, name: 'B' + n, kind: 'dest' }], seq: seqB, allowed: {}, destName: 'B' + n }, fired: {} };
+}
+// 버스 위치(경도): 정류장 사이를 달리다 정류장마다 dwellSec 멈춘다. earlySec 만큼 계획보다 이르다.
+function busLng(ms, earlySec, dwellSec) {
+  const m = (ms + earlySec * 1000 - DAY) / 60000;
+  if (m <= PLAN[1]) return { lng: LNG0, moving: false };
+  const k = Math.min(10, Math.floor((m - PLAN[1]) / 2)), segStart = PLAN[1] + 2 * k, f = (m - segStart) / 2;
+  const sec = (m - segStart) * 60;
+  if (sec < (dwellSec || 0)) return { lng: LNG0 + DL * k, moving: false };
+  const g = Math.min(1, (sec - (dwellSec || 0)) / (120 - (dwellSec || 0)));
+  return { lng: LNG0 + DL * (k + g), moving: true };
+}
+t('버스: 정류장을 이은 선 위 위치(busPos)로 이르게 지난 정류장의 통과 시각이 증거로 적히고 남은 시각이 당겨진다', () => {
+  let st = busState2(10), first = null, last = null, stamped = [];
+  for (let ms = at(12, 52, 10); ms <= at(12, 64, 0); ms += 5000) {
+    const b = busLng(ms, 90, 0);   // 계획보다 90초 이르다
+    const r = rideStandby({ nowMs: ms, fixes: [[ms, LAT, b.lng, 15]], state: JSON.parse(JSON.stringify(st)) });
+    assert.ok(!r.error, r.error); st = r.state; last = r;
+    if (!first && r.state.etaMs) first = r.state.etaMs.slice();
+    r.notes.forEach(x => { if (/버스위치|영점/.test(x)) stamped.push(x); });
+  }
+  const gps = st.eta.passes.filter(p => p.src === 'gps' && p.idx >= 3);
+  assert.ok(gps.length >= 3, '통과 증거 ' + gps.length + ': ' + JSON.stringify(st.eta.passes.map(p => p.idx)));
+  // 이른 통과는 계획 시각보다 앞선 시각으로 적혀야 한다(90초 안팎)
+  const p4 = st.eta.passes.find(p => p.idx === 4);
+  assert.ok(p4 && Math.abs((p4.ms - (DAY + (PLAN[1] + 6) * 60000)) + 90000) < 40000, '4번 통과 ' + (p4 && (p4.ms - (DAY + (PLAN[1] + 6) * 60000)) / 1000));
+  assert.ok(last.state.etaMs[10] < first[10] - 40000, '목적지 도착 시각이 당겨져야 한다: ' + (first[10] - last.state.etaMs[10]) / 1000 + '초');
+});
+t('버스: 달리는 중(motion)은 오버레이의 이동중 표시를, 서 있으면 정지를 따른다', () => {
+  let st = busState2(10), moves = [], stops = [];
+  for (let ms = at(12, 52, 10); ms <= at(12, 60, 0); ms += 5000) {
+    const b = busLng(ms, 0, 40);
+    const q = withOvl(st);
+    const r = rideStandby({ nowMs: ms, fixes: [[ms, LAT, b.lng, 15]], state: JSON.parse(JSON.stringify(q)) }); st = r.state;
+    if (r.motion && r.motion.moving === true) moves.push(r.overlay && r.overlay.pill);
+    if (r.motion && r.motion.moving === false) stops.push(r.overlay && r.overlay.pill);
+  }
+  assert.ok(moves.length > 10 && stops.length > 3, '달림 ' + moves.length + ' 정지 ' + stops.length);
+  assert.ok(moves.some(x => /\(이동중\)$/.test(x || '')), '달리는 중엔 이동중 표시 ' + JSON.stringify(moves.slice(0, 4)));
+  assert.ok(stops.every(x => !/\(이동중\)$/.test(x || '')), '서 있는데 이동중 표시: ' + JSON.stringify(stops.filter(x => /\(이동중\)$/.test(x || ''))));
+});
+t('다음 호출 간격: 표시 도착 시각 앞 30초~뒤 40초 안에는 2.5초, 그 밖에는 5초, 승차 전에는 5초', () => {
+  const st = mkState();
+  // 3번 역 도착 12:56:00 (etaMs 가 없으면 stops.arrMs)
+  const near = [at(12, 55, 31), at(12, 56, 0), at(12, 56, 39)], far = [at(12, 55, 0), at(12, 56, 45)];
+  near.forEach(ms => { const r = rideStandby({ nowMs: ms, fixes: [], state: JSON.parse(JSON.stringify(st)) }); assert.strictEqual(r.nextMs, 2500, 'near '+new Date(ms).toISOString() + ' ' + r.nextMs); });
+  far.forEach(ms => { const r = rideStandby({ nowMs: ms, fixes: [], state: JSON.parse(JSON.stringify(st)) }); assert.strictEqual(r.nextMs, 5000, 'far '+new Date(ms).toISOString() + ' ' + r.nextMs); });
+  const s2 = mkState(); s2.eta.notDeparted = true;
+  assert.strictEqual(rideStandby({ nowMs: at(12, 56, 0), fixes: [], state: s2 }).nextMs, 5000, '승차 전');
+  { const q = rideStandby({ nowMs: at(12, 53, 0), fixes: [], state: Object.assign(mkState(), { arrivedAt: at(12, 49, 0) }) }); assert.ok(q.done && q.nextMs === 5000, '끝나면 기본 간격 ' + q.nextMs); }
+});
+
 const httpTest = async () => {
   const zlib = require('zlib');
   const body = JSON.stringify({ nowMs: at(12, 55, 0), fixes: [], state: withOvl(mkState()) });
