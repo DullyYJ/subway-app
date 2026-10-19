@@ -10,7 +10,7 @@
 //        facts = 앱이 모은 기기 사실(전부 선택 — 없으면 기본값):
 //          id: 현재 커뮤니티 아이디('' 이면 없음) · np:{arrive,transfer,arrive_reco: 1|0} · npd: 알림 권한 거부(1|0) · rl: 도착 오차 기록(1|0)
 //          th: 'dark'|'pastel' · sam: 갤럭시(1|0) · samw: 앱 배터리 '제한됨'(1|0) · errn: 오류 로그 개수 · cm: 출퇴근 알림(1|0|없음) · ovl: 오버레이(1|0|없음)
-//          feat: { nm|sn|htl|scr|scrs|scrf|scrn|scrb|scrc|scrt|scrq|scrh|sbh|cnd|rtf|sto|ra|npol|arw|cmw|rtx|e2 : { h: 이 기능이 있나(1|0), on: 스위치(1|0), f: 문제로 웹으로 돌아갔나(1|0), w: 문제 사유, b: 저장본 사용 중(1|0) } }
+//          feat: { nm|sn|htl|scr|scrs|scrf|scrn|scrb|scrc|scrt|scrq|scrw|scrh|sbh|cnd|rtf|sto|ra|npol|arw|cmw|rtx|e2 : { h: 이 기능이 있나(1|0), on: 스위치(1|0), f: 문제로 웹으로 돌아갔나(1|0), w: 문제 사유, b: 저장본 사용 중(1|0) } }
 // 출력  { ok, v:1, screen:'settings', rev, cover:'tab', head:[], body:[노드…] }  ← 노드 종류는 native/ScreenCore.java 와 같다
 //        panel{kids} · text · box · toggle{key} · navrow{act} · select{act:{a:'sel'}} · field{key} · button · spacer
 //        act = {a:'set',key} (스위치 — 앱이 먼저 뒤집고 알린다) | {a:'call',v} (앱 안 함수 호출: saveId·clearId·pol.*·errlog) | {a:'web',v} (웹 카드 열기) | {a:'sel',v} (고르기)
@@ -20,8 +20,12 @@
 'use strict';
 var SETTINGS_SCREEN_V = 1;
 var SETTINGS_PAGE_CAP = 8;
-var HOME_STNS;                                                       // Worker 에서는 앞에 붙은 engine/home-stations.js 가 채운다. Node(시험)에서는 아래에서 불러온다.
-if (typeof HOME_STNS === 'undefined' || !HOME_STNS) { try { if (typeof require === 'function') HOME_STNS = require('./home-stations').HOME_STNS; } catch (eHs) {} }
+// 지하철 역 표(HOME_STNS)는 Worker 에서는 앞/뒤에 붙은 engine/home-stations.js 가 채우는 공용 전역이고(여기서 다시 선언하지 않는다), Node(시험)에서는 파일을 불러온다. 요청 때 읽는다(Worker 에서 이 블록이 먼저 평가되므로).
+function settingsStns() {
+  if (typeof HOME_STNS !== 'undefined' && HOME_STNS) return HOME_STNS;
+  try { if (typeof require === 'function') return require('./home-stations').HOME_STNS; } catch (eHs) {}
+  return null;
+}
 
 // 스위치 키 → 알림 종류 이름
 var SETTINGS_NOTIF = [
@@ -53,6 +57,8 @@ var SETTINGS_FEATS = [
     off: '꺼짐 — 예전 방식(웹 탭 막대)으로 그려요.', bad: '네이티브 탭 막대에 문제가 있어 웹 화면으로 대신 보여주고 있어요', stale: '엔진이 준 화면이 올바르지 않아 저장해 둔 화면을 쓰고 있어요', ok: '켜짐 — 화면 맨 아래 탭 막대(커뮤니티·노선도·홈·쇼핑센터·맛집)를 엔진이 정한 대로 기기가 직접 그려요(실험 중).' },
   { k: 'scrq', title: '네이티브 커뮤니티 칩 줄', desc: '커뮤니티 맨 위 칩 줄(실시간소통·게시판·뉴스·설정)을 엔진이 정해 내려주고, 기기가 직접 그려요. 문제가 생기면 예전 웹 칩 줄로 돌아가요.',
     off: '꺼짐 — 예전 방식(웹 칩 줄)으로 그려요.', bad: '네이티브 칩 줄에 문제가 있어 웹 칩 줄로 대신 보여주고 있어요', stale: '엔진이 준 화면이 올바르지 않아 저장해 둔 화면을 쓰고 있어요', ok: '켜짐 — 커뮤니티 맨 위 칩 줄(실시간소통·게시판·뉴스·설정)을 엔진이 정한 대로 기기가 직접 그려요(실험 중).' },
+  { k: 'scrw', title: '네이티브 글쓰기 시트', desc: '커뮤니티 \'제보 글쓰기\' 시트의 글·입력칸·단추를 엔진이 정해 내려주고, 기기가 직접 그려요. 문제가 생기면 예전 웹 시트로 돌아가요.',
+    off: '꺼짐 — 예전 방식(웹 글쓰기 시트)으로 그려요.', bad: '네이티브 글쓰기 시트에 문제가 있어 웹 시트로 대신 보여주고 있어요', stale: '엔진이 준 화면이 올바르지 않아 저장해 둔 화면을 쓰고 있어요', ok: '켜짐 — 커뮤니티 \'제보 글쓰기\' 시트를 엔진이 정한 대로 기기가 직접 그려요(실험 중).' },
   { k: 'scrh', title: '네이티브 경로 입력', desc: '홈 탭의 출발·도착 입력칸, 자동완성 목록, 위치 감지·바꾸기·경로 탐색 단추, 기준시각 줄을 엔진이 정해 내려주고, 기기가 직접 그려요. 글자를 쓰는 동안 자동완성이 바로 따라와요. 문제가 생기면 예전 웹 카드로 돌아가요.',
     off: '꺼짐 — 예전 방식(웹 경로 입력 카드)으로 그려요.', bad: '네이티브 경로 입력에 문제가 있어 웹 카드로 대신 보여주고 있어요', stale: '엔진이 준 화면이 올바르지 않아 저장해 둔 화면을 쓰고 있어요', ok: '켜짐 — 홈 탭의 경로 입력 카드를 엔진이 정한 대로 기기가 직접 그려요(실험 중).' },
   { k: 'sbh', title: '가려진 동안 엔진이 이어받기', desc: '앱을 홈 화면이나 다른 앱으로 보낸 동안에도 엔진이 안내를 바로 이어받아 영점·도착 시각·하차 알림을 계속 맞춰요. 앱을 다시 열면 그 결과를 이어서 써요. 문제가 생기면 예전 방식(가려진 동안 웹을 깨워 계산)으로 돌아가요.',
@@ -265,10 +271,11 @@ function settingsClock(ms, tzo) {
 function settingsStnFind(q) {
   q = String(q || '').replace(/\s+/g, '').replace(/역$/, '');
   var out = { u: [], pk: [] };
-  if (!q || !Array.isArray(HOME_STNS)) return out;
+  var STNS = settingsStns();
+  if (!q || !Array.isArray(STNS)) return out;
   var map = {}, order = [], i, s, it;
-  for (i = 0; i < HOME_STNS.length; i++) {
-    s = HOME_STNS[i];
+  for (i = 0; i < STNS.length; i++) {
+    s = STNS[i];
     if (!s || typeof s[0] !== 'string') continue;
     if (!Object.prototype.hasOwnProperty.call(map, s[0])) { map[s[0]] = { name: s[0], plain: s[0].replace(/\s+/g, ''), lines: [] }; order.push(map[s[0]]); }
     if (map[s[0]].lines.indexOf(s[1]) < 0) map[s[0]].lines.push(s[1]);
