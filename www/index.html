@@ -20965,7 +20965,7 @@ window.addEventListener('unhandledrejection', function(e) {
             <span id="rtxSetDot" style="position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.3);"></span>
           </label>
         </div>
-        <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">내리기 7분 전 추천 알림의 본문(날씨·요일에 맞춘 한 줄, 메뉴와 가게 고르기, 줄 맞춤)과 작은 화면·오버레이 추천 줄의 문구를 웹이 아니라 엔진이 만들어요. 앱은 지금 날씨와 도착지 근처 가게 목록, 최근 추천한 곳만 엔진에 보내요. 엔진에 물을 수 없으면 예전 방식으로 바로 만들어요.</p>
+        <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">내리기 7분 전 추천 알림의 본문(날씨·요일에 맞춘 한 줄, 메뉴와 가게 고르기, 줄 맞춤)과 작은 화면·오버레이 추천 줄의 문구를 웹이 아니라 엔진이 만들어요. 앱은 지금 날씨와 도착지(역·정류장) 좌표, 최근 추천한 곳만 엔진에 보내요. 쿠팡 상품 고르기와 도착지 근처 가게 목록 받기도 엔진이 해요. 엔진에 물을 수 없으면 예전 방식으로 바로 만들어요.</p>
         <div id="rtxSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
         <style>#rtxSetOn:checked ~ #rtxSetKnob{background:var(--gold) !important;} #rtxSetOn:checked ~ #rtxSetDot{left:23px !important;}</style>
       </div>
@@ -24166,6 +24166,18 @@ function _arrFoodList(destStn){
   return null;
 }
 
+// 도착지(내리는 역·정류장)의 좌표 — 집·직장 좌표가 아니라 역·정류장 좌표다
+function _arrFoodCoord(destStn){
+  var c = null;
+  try{ c = (typeof _homeBriefCoord==='function') ? _homeBriefCoord('dest', destStn) : null; }catch(e){}
+  var _ac = window._arrAlightCoord;                          // ★ 2026-10-17: 마지막 하차 정류장·역의 좌표가 있으면 그 근처 가게를 받는다
+  if(_ac && _ac.name === destStn && _ac.lat != null && _ac.lng != null) c = { lat: _ac.lat, lng: _ac.lng };
+  if(!c || c.lat == null || c.lng == null) return null;
+  return { lat: c.lat, lng: c.lng };
+}
+function _arrFoodFresh(destStn){
+  try{ return !!(_arrFoodCache.stn === destStn && _arrFoodCache.items.length && Date.now() - _arrFoodCache.at < _ARR_FOOD_TTL); }catch(e){ return false; }
+}
 // 목적지 주변 맛집을 미리 받아 둔다(알림 직전에 부르면 늦는다)
 function _arrEnsureFood(destStn, cb){
   var done = false;
@@ -24173,10 +24185,8 @@ function _arrEnsureFood(destStn, cb){
   try{
     if(_arrFoodCache.stn === destStn && _arrFoodCache.items.length
        && Date.now() - _arrFoodCache.at < _ARR_FOOD_TTL) return fin();
-    var c = (typeof _homeBriefCoord==='function') ? _homeBriefCoord('dest', destStn) : null;
-    var _ac = window._arrAlightCoord;                          // ★ 2026-10-17: 마지막 하차 정류장·역의 좌표가 있으면 그 근처 가게를 받는다
-    if(_ac && _ac.name === destStn && _ac.lat != null && _ac.lng != null) c = { lat: _ac.lat, lng: _ac.lng };
-    if(!c || c.lat == null || c.lng == null) return fin();
+    var c = _arrFoodCoord(destStn);
+    if(!c) return fin();
     var base = (typeof _foodServerBase==='function') ? _foodServerBase() : '';
     if(!base) return fin();
     setTimeout(fin, 3500);                       // 늦으면 그냥 진행한다
@@ -24528,7 +24538,8 @@ var _ARR_WIT_DINNER = [
 // ── 하차 전 추천 '문구 만들기' — 엔진이 만든다(2026-10-19, 5번 5단계 넷째 조각 · 추천 문구 1단계) ──
 //   설정 스위치 '하차 전 추천 문구를 엔진이 만들기'(gdm_rtx, 기본 꺼짐). 켜면 추천 알림 본문(날씨·요일 한 줄 · 메뉴·가게 고르기 · 줄 맞춤)을 웹(_arrBuildAlertLocal)이 아니라 엔진(/reco-text)이 만든다.
 //   웹은 '도착 시각 · 목적지 · 지금 날씨 · 도착지 근처 가게 목록 · 최근 추천한 곳 · (쇼핑 시간대) 고른 쿠팡 상품 · 무작위 씨앗' 만 알리고, 돌아온 제목·본문·메뉴·가게를 그대로 쓴다.
-//   작은 화면(PiP) 문구 · 오버레이 추천 줄도 같은 답에 실려 온다(2단계) — 본문 한 줄이 AI 문구로 바뀐 경우만 작은 화면 문구를 다시 묻는다. (쿠팡 상품 고르기 · 가게 목록 받기는 아직 웹.)
+//   작은 화면(PiP) 문구 · 오버레이 추천 줄도 같은 답에 실려 온다(2단계) — 본문 한 줄이 AI 문구로 바뀐 경우만 작은 화면 문구를 다시 묻는다.
+//   쿠팡 상품 고르기 · 도착지 가게 목록 받기도 엔진이 한다(3단계) — 앱은 도착지 좌표와 최근 추천 기록만 알리고, 엔진이 고른 상품·받은 목록을 돌려받는다. 오버레이 시연 버튼의 줄도 엔진에게 받는다(엔진이 못 하면 예전 웹 규칙).
 //   알림을 보내는 순간(_arrFireAlert)에만 한 번 묻고, 그 답을 _arrBuildAlert 가 한 번 가져다 쓴다.
 //   폴백(전부 자동): 스위치 꺼짐 · 엔진 응답 없음(2.5초)·오류·이상한 응답 → 예전 웹 규칙(_arrBuildAlertLocal)으로 바로 만들고 60초 동안은 엔진에 묻지 않는다.
 var _RTX = { bad: false, until: 0, why: '', asks: 0, ok: 0, used: 0, pack: null, pad: null };
@@ -24546,43 +24557,68 @@ function _rtxGood(j, slot){
 // 쇼핑 시간대: 엔진이 실패해 예전 본문으로 갈 때 같은 상품을 쓰도록(두 번 고르지 않게) 미리 고른 것을 한 번 건네 준다
 function _rtxTakeShop(){ var p = window._rtxShopPre; window._rtxShopPre = null; return p || null; }
 function _rtxPrefetch(destStn, arrMs, cb){
-  var done = false, fin = function(){ if(!done){ done = true; clearTimeout(tm); try{ cb(); }catch(e){} } };
-  var tm = setTimeout(function(){ if(!done){ _rtxFail('시간 초과'); fin(); } }, 2500);
+  var done = false, tm = null, fin = function(){ if(!done){ done = true; clearTimeout(tm); try{ cb(); }catch(e){} } };
   try{
     var slot = _arrSlot(arrMs);
     if(slot === 'none'){ fin(); return; }
-    var foodSrc = null, wx = null, shopItem = null, shop = null;
+    var foodSrc = null, wx = null, loc = null, localShop = null;
     try{ foodSrc = _arrFoodList(destStn); }catch(e1){}
     try{ wx = _shopWeather(); }catch(e2){}
-    if(slot === 'shop'){
-      var sp = _arrPickShopItem();
-      if(sp && sp.item){ shopItem = sp.item; shop = { n: sp.item.n, _t: sp.item._t || '', _cat: sp.item._cat || '' }; }
-      window._rtxShopPre = sp || null;
-    }
+    // 서버 가게 목록이 아직 없으면 도착지 좌표를 알려 엔진이 맛집 서버에서 직접 받게 한다(앱이 보낸 목록은 엔진이 못 받았을 때의 대신 쓸 것)
+    if(slot !== 'shop' && !_arrFoodFresh(destStn)){ try{ loc = _arrFoodCoord(destStn); }catch(eL){} }
     var body = {
       arrMs: arrMs, nowMs: Date.now(), dest: destStn || '',
       weather: wx ? { temp: wx.temp, feel: wx.feel, tmin: wx.tmin, tmax: wx.tmax, rain: wx.rain, txt: wx.txt } : null,
       food: foodSrc ? foodSrc.map(function(x){ return { n: x && x.n, c: x && x.c, d: x && x.d }; }) : null,
-      recent: _arrRecoLog(), shop: shop, seed: Math.floor(Math.random() * 4294967296)
+      recent: _arrRecoLog(), shop: null, seed: Math.floor(Math.random() * 4294967296)
     };
-    _RTX.asks++;
-    fetch(_ROUTE_V2_BASE + '/reco-text', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
-      .then(function(r){ return r.ok ? r.json() : null; })
-      .then(function(j){
-        if(done) return;
-        if(!_rtxGood(j, slot)){ _rtxFail('응답 이상'); fin(); return; }
-        _RTX.ok++;
-        _RTX.pack = { dest: destStn, arrMs: arrMs, at: Date.now(), r: j, food: foodSrc, shop: shopItem };
-        try{ if(typeof window._rtxSyncCard === 'function') window._rtxSyncCard(); }catch(e3){}
-        fin();
-      })
-      .catch(function(){ if(!done){ _rtxFail('통신 실패'); fin(); } });
+    if(slot === 'shop'){ body.pickShop = 1; body.shopRecent = _arrShopLog(); }     // 쿠팡 상품은 엔진이 고른다
+    if(loc){ body.loc = loc; body.foodPref = 'server'; }
+    tm = setTimeout(function(){ if(!done){ _rtxFail('시간 초과'); fin(); } }, (loc || slot === 'shop') ? 4000 : 2500);
+    var ask = function(again){
+      _RTX.asks++;
+      fetch(_ROUTE_V2_BASE + '/reco-text', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+        .then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(j){
+          if(done) return;
+          if(!_rtxGood(j, slot)){ _rtxFail('응답 이상'); fin(); return; }
+          // 엔진이 쿠팡 상품 목록을 못 불러왔으면: 앱이 예전 규칙으로 하나 골라 그걸로 한 번 더 묻는다
+          if(slot === 'shop' && j.shopMiss === true && !again){
+            localShop = _arrPickShopItem();
+            window._rtxShopPre = localShop || null;
+            delete body.pickShop; delete body.shopRecent;
+            body.shop = (localShop && localShop.item) ? { n: localShop.item.n, _t: localShop.item._t || '', _cat: localShop.item._cat || '' } : null;
+            ask(true); return;
+          }
+          var shopItem = null, food = foodSrc;
+          if(slot === 'shop'){
+            var si = j.shopItem;
+            if(si && typeof si.n === 'string' && si.n && typeof si.u === 'string'){
+              shopItem = { n: si.n, u: si.u, i: (typeof si.i === 'string' ? si.i : ''), _cat: (typeof si._cat === 'string' ? si._cat : ''), _t: (typeof si._t === 'string' ? si._t : '') };
+              try{ _arrShopMark(shopItem.n); }catch(eM){}                      // 예전 _arrPickShopItem 이 하던 '최근 추천' 기록
+              window._rtxShopPre = { item: shopItem, ctx: null };                // 엔진 답을 못 쓰게 되면 예전 본문도 같은 상품으로
+            } else if(localShop && localShop.item){ shopItem = localShop.item; }
+          } else if(Array.isArray(j.foods) && j.foods.length){
+            // 엔진이 맛집 서버에서 받아 쓴 목록 — 같은 순서로 받아 두면 placeIdx 가 맞고, 앱의 다른 곳(오버레이 줄·[맛집 보기])도 이 목록을 쓴다
+            var fl = [];
+            j.foods.forEach(function(x){ if(x && typeof x.n === 'string' && x.n) fl.push({ n: x.n, c: (typeof x.c === 'string' ? x.c : ''), a: (typeof x.a === 'string' ? x.a : ''), d: (typeof x.d === 'number' ? x.d : null) }); });
+            if(fl.length !== j.foods.length){ _rtxFail('응답 이상'); fin(); return; }     // 번호(placeIdx)가 어긋날 수 있어 통째로 쓰지 않는다
+            food = fl; _arrFoodCache = { stn: destStn, at: Date.now(), items: fl };
+          }
+          _RTX.ok++;
+          _RTX.pack = { dest: destStn, arrMs: arrMs, at: Date.now(), r: j, food: food, shop: shopItem };
+          try{ if(typeof window._rtxSyncCard === 'function') window._rtxSyncCard(); }catch(e3){}
+          fin();
+        })
+        .catch(function(){ if(!done){ _rtxFail('통신 실패'); fin(); } });
+    };
+    ask(false);
   }catch(e4){ if(!done){ _rtxFail('요청 실패'); fin(); } }
 }
 // 엔진이 만든 본문 → 예전 _arrBuildAlert 와 같은 모양
 function _rtxUnpack(p){
   var r = p.r, a = {};
-  Object.keys(r).forEach(function(k){ if(k !== 'v' && k !== 'ok' && k !== 'placeIdx' && k !== 'shop' && k !== 'pip' && k !== 'ad') a[k] = r[k]; });
+  Object.keys(r).forEach(function(k){ if(k !== 'v' && k !== 'ok' && k !== 'placeIdx' && k !== 'shop' && k !== 'pip' && k !== 'ad' && k !== 'shopItem' && k !== 'shopMiss' && k !== 'foods') a[k] = r[k]; });
   if(r.kind === 'shop'){ a.shop = (r.shop && p.shop) ? p.shop : null; }
   else {
     var pl = (r.placeIdx >= 0 && p.food && p.food[r.placeIdx]) ? p.food[r.placeIdx] : null;
@@ -24774,6 +24810,9 @@ function _arrBuildAlertLocal(destStn, arrHour, arrMs){
 
 // 실제 발사 (알림 + 앱 열려 있으면 팝업)
 function _arrFireAlert(destStn, arrMs){
+  // ★ 2026-10-19(추천 문구 3단계): 엔진 스위치가 켜져 있으면 맛집 목록은 엔진이 직접 받아 온다 — 앱이 먼저 받아 기다리지 않는다.
+  //   엔진이 안 되면 _arrFireAlertGo 가 예전 길(맛집을 받은 뒤 이어가기)로 돌아간다.
+  try{ if(_rtxUse()){ _arrFireAlertGo(destStn, arrMs); return; } }catch(eU){}
   // ★ 2026-09-15: 맛집을 서버에서 받아 온 뒤에 문구를 만든다
   if(typeof _arrEnsureFood === 'function' && !window._arrFiring){
     window._arrFiring = true;
@@ -24787,7 +24826,15 @@ function _arrFireAlert(destStn, arrMs){
 }
 // 엔진 스위치가 켜져 있으면 본문을 먼저 엔진에게 만들어 오게 한 뒤(_arrBuildAlert 가 그 답을 쓴다) 보낸다. 아니면 바로.
 function _arrFireAlertGo(destStn, arrMs){
-  try{ if(_rtxUse()){ _rtxPrefetch(destStn, arrMs, function(){ _arrFireAlertNow(destStn, arrMs); }); return; } }catch(e){}
+  try{ if(_rtxUse()){ _rtxPrefetch(destStn, arrMs, function(){
+    // 엔진이 답을 못 줬으면(시간 초과·오류) 예전 길: 맛집을 앱이 받은 뒤 예전 규칙으로 만든다
+    if(!_RTX.pack && _arrSlot(arrMs) !== 'none' && typeof _arrEnsureFood === 'function' && !window._arrFiring){
+      window._arrFiring = true;
+      _arrEnsureFood(destStn, function(){ window._arrFiring = false; _arrFireAlertNow(destStn, arrMs); });
+      return;
+    }
+    _arrFireAlertNow(destStn, arrMs);
+  }); return; } }catch(e){}
   _arrFireAlertNow(destStn, arrMs);
 }
 
@@ -25580,6 +25627,42 @@ function _ovlAdSample(kind){
   }catch(e){ return null; }
 }
 window._ovlAdSample = _ovlAdSample;
+// 오버레이 시연 줄을 엔진에게 받는다(알림과 같은 길 /reco-text 의 ad). 실패하면 cb(null) → 예전 웹 규칙(_ovlAdSample)
+function _rtxDemoAd(kind, cb){
+  var done = false, fin = function(v){ if(!done){ done = true; clearTimeout(tm); try{ cb(v); }catch(e){} } };
+  var tm = setTimeout(function(){ if(!done){ _rtxFail('시간 초과'); fin(null); } }, 3000);
+  try{
+    var arr, slot;
+    if(kind === 'shop'){ var d1 = new Date(); d1.setHours(22, 0, 0, 0); arr = d1.getTime(); slot = 'shop'; }
+    else {
+      arr = Date.now() + 10 * 60000; slot = _arrSlot(arr);
+      if(slot === 'shop' || slot === 'none'){ var d0 = new Date(); d0.setHours(18, 30, 0, 0); arr = d0.getTime(); }
+    }
+    var wx = null, foodSrc = null;
+    try{ wx = _shopWeather(); }catch(e1){}
+    try{ foodSrc = _arrFoodList(''); }catch(e2){}
+    var body = {
+      arrMs: arr, nowMs: Date.now(), dest: '',
+      weather: wx ? { temp: wx.temp, feel: wx.feel, tmin: wx.tmin, tmax: wx.tmax, rain: wx.rain, txt: wx.txt } : null,
+      food: foodSrc ? foodSrc.map(function(x){ return { n: x && x.n, c: x && x.c, d: x && x.d }; }) : null,
+      recent: [], shop: null, seed: Math.floor(Math.random() * 4294967296)
+    };
+    if(kind === 'shop'){ body.pickShop = 1; body.shopRecent = []; }
+    _RTX.asks++;
+    fetch(_ROUTE_V2_BASE + '/reco-text', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(j){
+        if(done) return;
+        if(!(j && j.ok === true && j.v === 1)){ _rtxFail('응답 이상'); fin(null); return; }
+        _RTX.ok++;
+        var ad = j.ad;
+        if(ad && typeof ad.a === 'string' && typeof ad.b === 'string' && (kind === 'shop' ? ad.k === 'shop' : ad.k !== 'shop')){
+          fin({ a: ad.a, b: ad.b, m: (typeof ad.m === 'string' ? ad.m : ''), go: kind === 'shop' ? '쿠팡 보기' : '맛집 보기' });
+        } else fin(null);
+      })
+      .catch(function(){ if(!done){ _rtxFail('통신 실패'); fin(null); } });
+  }catch(e3){ if(!done){ _rtxFail('요청 실패'); fin(null); } }
+}
 function _ovlRecoDemo(){
   var say = function(m){ try{ if(typeof toast === 'function') toast(m); }catch(e){} };
   try{
@@ -25588,14 +25671,34 @@ function _ovlRecoDemo(){
     var CH = ['dolsom','lovel','ppopu','chaeng','sul','dudung'], KINDS = ['food','shop'];
     var k0 = _rcDemoN % 2, ch = CH[_rcDemoN % CH.length];
     _rcDemoN++;
+    var show = function(s){
+      try{
+        if(!s) s = { a: '가게 이름이 여기에 나와요', b: '맛집 탭을 한 번 열면 근처 실제 가게 이름과 날씨에 맞춘 추천 설명이 보여요', m: '', go: '맛집 보기' };
+        var r = n.recoDemo({ ch: ch, a: s.a, b: s.b, m: s.m || '', go: s.go, secs: 14 });
+        if(r && typeof r.then === 'function'){
+          r.then(function(v){ if(v && v.ok === false) say("'다른 앱 위에 표시' 권한이 필요해요 — 아래 스위치를 켜 주세요"); })
+           .catch(function(){ say('미리보기를 띄우지 못했어요'); });
+        }
+      }catch(e){ say('미리보기를 띄우지 못했어요'); }
+    };
+    var useEngine = false;
+    try{ useEngine = _rtxUse(); }catch(eU){}
+    if(useEngine){
+      // 엔진이 줄을 만든다. 안 되면 그 종류는 예전 웹 규칙으로, 그래도 없으면 다음 종류로
+      var tryKind = function(j){
+        if(j >= KINDS.length){ show(null); return; }
+        var kind = KINDS[(k0 + j) % KINDS.length];
+        _rtxDemoAd(kind, function(s){
+          if(!s){ try{ s = _ovlAdSample(kind); }catch(eS){ s = null; } }
+          if(s) show(s); else tryKind(j + 1);
+        });
+      };
+      tryKind(0);
+      return true;
+    }
     var s = null;
     for(var j = 0; j < KINDS.length && !s; j++) s = _ovlAdSample(KINDS[(k0 + j) % KINDS.length]);
-    if(!s) s = { a: '가게 이름이 여기에 나와요', b: '맛집 탭을 한 번 열면 근처 실제 가게 이름과 날씨에 맞춘 추천 설명이 보여요', m: '', go: '맛집 보기' };
-    var r = n.recoDemo({ ch: ch, a: s.a, b: s.b, m: s.m || '', go: s.go, secs: 14 });
-    if(r && typeof r.then === 'function'){
-      r.then(function(v){ if(v && v.ok === false) say("'다른 앱 위에 표시' 권한이 필요해요 — 아래 스위치를 켜 주세요"); })
-       .catch(function(){ say('미리보기를 띄우지 못했어요'); });
-    }
+    show(s);
     return true;
   }catch(e){ say('미리보기를 띄우지 못했어요'); return false; }
 }
