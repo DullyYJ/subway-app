@@ -24664,7 +24664,10 @@ function _rtxPrefetch(destStn, arrMs, cb){
     };
     if(slot === 'shop'){ body.pickShop = 1; body.shopRecent = _arrShopLog(); }     // 쿠팡 상품은 엔진이 고른다
     if(loc){ body.loc = loc; body.foodPref = 'server'; }
-    tm = setTimeout(function(){ if(!done){ _rtxFail('시간 초과'); fin(); } }, (loc || slot === 'shop') ? 4000 : 2500);
+    // ⑦ 저녁·야식·쇼핑의 AI 위로 문구도 엔진이 받아 끼운다(상황 문구가 강하면 엔진이 알아서 안 받는다). 엔진 몫 2.5초만큼 더 기다린다. 끄기: window._rtxAiOff = true
+    var aiAsk = (slot === 'night' || slot === 'shop') && window._rtxAiOff !== true;
+    if(aiAsk) body.aiCopy = 1;
+    tm = setTimeout(function(){ if(!done){ _rtxFail('시간 초과'); fin(); } }, ((loc || slot === 'shop') ? 4000 : 2500) + (aiAsk ? 3000 : 0));
     var ask = function(again){
       _RTX.asks++;
       fetch(_ROUTE_V2_BASE + '/reco-text', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
@@ -24708,7 +24711,7 @@ function _rtxPrefetch(destStn, arrMs, cb){
 // 엔진이 만든 본문 → 예전 _arrBuildAlert 와 같은 모양
 function _rtxUnpack(p){
   var r = p.r, a = {};
-  Object.keys(r).forEach(function(k){ if(k !== 'v' && k !== 'ok' && k !== 'placeIdx' && k !== 'shop' && k !== 'pip' && k !== 'ad' && k !== 'shopItem' && k !== 'shopMiss' && k !== 'foods') a[k] = r[k]; });
+  Object.keys(r).forEach(function(k){ if(k !== 'v' && k !== 'ok' && k !== 'placeIdx' && k !== 'shop' && k !== 'pip' && k !== 'ad' && k !== 'shopItem' && k !== 'shopMiss' && k !== 'foods' && k !== 'ai') a[k] = r[k]; });     // aiTried(엔진이 AI 위로 문구를 받아 보았다)는 a 에 남겨 _arrFireAlertNow 가 웹 쪽 AI 호출을 건너뛴다
   if(r.kind === 'shop'){ a.shop = (r.shop && p.shop) ? p.shop : null; }
   else {
     var pl = (r.placeIdx >= 0 && p.food && p.food[r.placeIdx]) ? p.food[r.placeIdx] : null;
@@ -25406,7 +25409,8 @@ function _arrFireAlertNow(destStn, arrMs){
 
     // ★ 저녁(야식·쇼핑)엔 Gemini로 하루를 위로하는 문구를 받아 감성 줄 교체
     // ★ 2026-10-11: 상황 규칙(비·추위·금요일 밤…)에 맞은 문구가 이미 있으면 AI 문구로 덮어쓰지 않는다
-    if((slot === 'night' || slot === 'shop') && !a.hookStrong && typeof _arrAiCopy === 'function'){
+    //   ⑦ 엔진이 이미 AI 문구를 받아 보았으면(a.aiTried — 끼웠든 못 받았든) 본문은 엔진 것 그대로 쓴다. 엔진 답이 없거나 옛 엔진이면 아래 옛 웹 길.
+    if((slot === 'night' || slot === 'shop') && !a.hookStrong && a.aiTried !== true && typeof _arrAiCopy === 'function'){
       var subject = (slot === 'shop') ? (a.shop ? a.shop.n : '작은 선물') : a.menu;
       var fired = false;
       _arrAiCopy(subject, destStn, function(ai){
