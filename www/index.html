@@ -25987,8 +25987,30 @@ window._cmPair = _cmPair;
 //   · 결과를 화면에 쓰지 않는다(표시·순위·알림에 영향 없음). 실패해도 조용히 무시한다.
 //   · 출근/퇴근 시각 -45분 ~ +20분 안에서만, 같은 구간은 20분에 한 번만, 설정한 요일에만.
 //   · 좌표(fromLat/toLat 등)가 저장돼 있을 때만 한다. 데이터 절약 모드·오프라인이면 하지 않는다.
-var _cmPf = { at:{}, busy:false };
+var _cmPf = { at:{}, busy:false, seq:0, age:{} };
 function _cmHm(str){ var m=/^(\d{1,2}):(\d{2})$/.exec(String(str||'')); return m ? (+m[1])*60+(+m[2]) : null; }
+// ★ 2026-10-19 (s64): '지금이 미리 받을 때인가'(출근/퇴근 시각 -45분 ~ +20분 · 설정한 요일 · 같은 구간 20분 1회)를 설정 스위치 gdm_cmw 가 켜져 있으면 엔진(/commute-alarm op:'pre')이 정한다.
+//   앱은 '지금 시각 · 출근/퇴근 시각 · 요일 · 그 구간을 마지막으로 받은 지 몇 ms'만 알리고(집·회사 이름·좌표는 보내지 않는다), 돌아온 순서대로 저장된 장소가 있는 첫 구간만 받는다.
+//   폴백(자동): 스위치 꺼짐 · 엔진 응답 없음(2.5초)·오류·이상한 응답 → 예전 웹 규칙(_cmPreDueLocal)으로 바로 정하고 60초 동안은 엔진에 묻지 않는다.
+function _cmPreDueLocal(){
+  var out=[];
+  try{
+    if(typeof _cmDayOn==='function' && !_cmDayOn()) return out;
+    var d=new Date(), nowM=d.getHours()*60+d.getMinutes();
+    [['morn',_cmHm(_cmAlarm.morn)],['eve',_cmHm(_cmAlarm.eve)]].forEach(function(c){
+      var tm=c[1]; if(tm==null) return;
+      var diff=nowM-tm; if(diff>720) diff-=1440; if(diff<-720) diff+=1440;
+      if(diff<-45 || diff>20) return;
+      var ag=_cmPf.age && _cmPf.age[c[0]];
+      if(ag!=null && ag<20*60*1000) return;
+      out.push(c[0]);
+    });
+  }catch(e){}
+  return out;
+}
+function _cmwGoodPre(j){
+  return !!(j && j.ok === true && j.v === 1 && Array.isArray(j.due) && j.due.length <= 2 && j.due.every(function(x){ return x === 'morn' || x === 'eve'; }));
+}
 function _commutePrefetch(why){
   try{
     if(_cmPf.busy) return;
@@ -25997,27 +26019,54 @@ function _commutePrefetch(why){
       if(navigator.connection && navigator.connection.saveData) return;
     }
     if(typeof document!=='undefined' && document.visibilityState==='hidden') return;
-    if(typeof _cmDayOn==='function' && !_cmDayOn()) return;
-    var d=new Date(), nowM=d.getHours()*60+d.getMinutes();
-    var cand=[['morn',_cmHm(_cmAlarm.morn),true],['eve',_cmHm(_cmAlarm.eve),false]];
-    for(var i=0;i<cand.length;i++){
-      var tm=cand[i][1]; if(tm==null) continue;
-      var diff=nowM-tm; if(diff>720) diff-=1440; if(diff<-720) diff+=1440;
-      if(diff<-45 || diff>20) continue;
-      var pr=_cmPair(cand[i][2]), F=pr[0], T=pr[1];
-      if(!F || !T || F.lat==null || F.lng==null || T.lat==null || T.lng==null) continue;
-      var key=cand[i][0]+':'+Number(F.lat).toFixed(3)+','+Number(F.lng).toFixed(3)+'>'+Number(T.lat).toFixed(3)+','+Number(T.lng).toFixed(3);
-      if(_cmPf.at[key] && Date.now()-_cmPf.at[key] < 20*60*1000) continue;
-      _cmPf.at[key]=Date.now(); _cmPf.busy=true;
-      var qs='SX='+F.lng+'&SY='+F.lat+'&EX='+T.lng+'&EY='+T.lat+'&baseMs='+Date.now()+'&live=0'
-        +'&SN='+encodeURIComponent(String(F.nm||'').slice(0,60))+'&EN='+encodeURIComponent(String(T.nm||'').slice(0,60));
-      var t0=Date.now();
-      _routeGetJson(_routeV2Url(qs), { priority:'low' }, true).then(function(j){
-        _cmPf.busy=false;
-        try{ _cmPf.last={ at:Date.now(), ms:Date.now()-t0, n:((j&&j.result&&j.result.path)||[]).length, why:why||'' }; }catch(e){}
-      }).catch(function(){ _cmPf.busy=false; });
-      return;   // 한 번에 한 구간만
+    // 구간(집↔회사)마다 저장된 장소와 '마지막으로 받은 지' — 장소·좌표는 이 기기 안에서만 쓴다
+    var now0=Date.now(), pairs={}, ages={};
+    [['morn',true],['eve',false]].forEach(function(c){
+      var pr=_cmPair(c[1]), F=pr[0], T=pr[1];
+      if(!F || !T || F.lat==null || F.lng==null || T.lat==null || T.lng==null){ pairs[c[0]]=null; ages[c[0]]=null; return; }
+      var key=c[0]+':'+Number(F.lat).toFixed(3)+','+Number(F.lng).toFixed(3)+'>'+Number(T.lat).toFixed(3)+','+Number(T.lng).toFixed(3);
+      pairs[c[0]]={ F:F, T:T, key:key };
+      ages[c[0]]=_cmPf.at[key] ? (now0-_cmPf.at[key]) : null;
+    });
+    _cmPf.age=ages;
+    var run=function(due){
+      for(var i=0;i<due.length;i++){
+        var pr=pairs[due[i]]; if(!pr) continue;                       // 저장된 장소가 없는 구간은 건너뛴다
+        var F=pr.F, T=pr.T, key=pr.key;
+        if(_cmPf.at[key] && Date.now()-_cmPf.at[key] < 20*60*1000) continue;
+        _cmPf.at[key]=Date.now(); _cmPf.busy=true;
+        var qs='SX='+F.lng+'&SY='+F.lat+'&EX='+T.lng+'&EY='+T.lat+'&baseMs='+Date.now()+'&live=0'
+          +'&SN='+encodeURIComponent(String(F.nm||'').slice(0,60))+'&EN='+encodeURIComponent(String(T.nm||'').slice(0,60));
+        var t0=Date.now();
+        _routeGetJson(_routeV2Url(qs), { priority:'low' }, true).then(function(j){
+          _cmPf.busy=false;
+          try{ _cmPf.last={ at:Date.now(), ms:Date.now()-t0, n:((j&&j.result&&j.result.path)||[]).length, why:why||'' }; }catch(e){}
+        }).catch(function(){ _cmPf.busy=false; });
+        return;   // 한 번에 한 구간만
+      }
+    };
+    if(typeof _cmwUse==='function' && _cmwUse()){
+      _cmPf.busy=true; var my=++_cmPf.seq, done=false;
+      var fail=function(w2){
+        if(done) return; done=true; clearTimeout(tm); _cmPf.busy=false;
+        if(my===_cmPf.seq){ try{ _cmwFail(w2); }catch(e1){} run(_cmPreDueLocal()); }
+      };
+      var tm=setTimeout(function(){ fail('시간 초과'); }, 2500);
+      fetch(_ROUTE_V2_BASE + '/commute-alarm', { method:'POST', headers:{ 'content-type':'application/json' },
+          body: JSON.stringify({ op:'pre', nowMs:now0, morn:_cmAlarm.morn, eve:_cmAlarm.eve, days:_cmAlarm.days, ageMorn:ages.morn, ageEve:ages.eve }) })
+        .then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(j){
+          if(done) return;
+          if(!_cmwGoodPre(j)){ fail('응답 이상'); return; }
+          done=true; clearTimeout(tm); _cmPf.busy=false; _CMW.preOk=(_CMW.preOk||0)+1;
+          if(my!==_cmPf.seq) return;
+          run(j.due);
+          try{ if(typeof window._cmwSyncCard === 'function') window._cmwSyncCard(); }catch(e2){}
+        })
+        .catch(function(){ fail('통신 실패'); });
+      return;
     }
+    run(_cmPreDueLocal());
   }catch(e){ try{ _cmPf.busy=false; }catch(e2){} }
 }
 window._commutePrefetch = _commutePrefetch;
@@ -26565,7 +26614,7 @@ window._cmwSyncCard = function(){
     var t;
     if(!on) t = '꺼짐 — 예전 방식(웹이 브리핑 시각을 정해요)으로 이어가요.';
     else if(bad) t = '엔진에 물을 수 없어 예전 방식으로 대신 이어가고 있어요' + (_CMW.why ? ' (' + _CMW.why + ')' : '') + '. 잠시 뒤 다시 엔진에 물어요.';
-    else t = '켜짐 — 출퇴근 브리핑을 언제 울릴지 엔진이 정해요(실험 중).' + ((_CMW.ok + _CMW.occOk) ? ' 엔진 응답 ' + (_CMW.ok + _CMW.occOk) + '번.' : '');
+    else t = '켜짐 — 출퇴근 브리핑을 언제 울릴지 엔진이 정해요(실험 중).' + ((_CMW.ok + _CMW.occOk + (_CMW.preOk || 0)) ? ' 엔진 응답 ' + (_CMW.ok + _CMW.occOk + (_CMW.preOk || 0)) + '번.' : '');
     if(st && st.textContent !== t) st.textContent = t;
   }catch(e3){}
 };
