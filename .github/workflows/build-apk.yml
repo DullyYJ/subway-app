@@ -109,6 +109,8 @@ jobs:
           - store_sto.ui.test.js
           - ride_alert.test.js
           - ride_ra.ui.test.js
+          - notif_policy.test.js
+          - notif_npol.ui.test.js
           - standby_card.ui.test.js
           - rt_arrival_cands.ui.test.js
           - shop_version.ui.test.js
