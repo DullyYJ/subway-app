@@ -14957,19 +14957,31 @@ window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
       if(on === H.webOff && cfg.webIs() === on) return;
       H.webOff = on; cfg.webSet(on);
     }
-    function webSync(t){ webHide(H.shown && !H.busy && !H.hideBusy && (H.ready || t - H.showAt > 400) && t - H.showAt > 120); }
+    function webSync(t){
+      if(window._htlHideOrderOff !== true && H.shown && H.webOff && (H.busy || H.hideBusy)) return;      // ★ 네이티브를 갱신·숨기는 중엔 웹 글자를 되돌리지 않는다(되돌리면 두 글자가 겹쳐 보인다). 끝나면 done/다음 tick 이 맞춘다
+      webHide(H.shown && !H.busy && !H.hideBusy && (H.ready || t - H.showAt > 400) && t - H.showAt > 120);
+    }
     function end(destroy){
       cancel(); webHide(false);
       H.shown = false; H.busy = false; H.again = false; H.hideBusy = false; H.sent = ''; H.prevArg = null; H.prev = null; H.still = 0; H.cover = null; H.mkOn = false; H.mkSeen = null; H.wbKey = ''; H.sx = -1; H.wait = 0; if(destroy) H.ready = false;
       var P = plug(); try{ if(P && (H.started || destroy)) (destroy ? P.destroy({ id: id }) : P.hide({ id: id })); }catch(e){}
     }
+    // ★ 2026-10-19 (YJ: "스크롤하면 잔상" — 네이티브 경로 화면을 켜면 글자가 겹쳐 보이고 화면이 깨짐): 예전엔 웹 글자를 먼저 되돌리고 네이티브는 비동기로 숨겨서,
+    //   그 사이(1~3프레임)에 '옛 자리의 네이티브 글자 + 스크롤된 웹 글자'가 겹쳐 보였다. 이제 네이티브를 먼저 숨기고(P.hide 가 끝난 뒤) 웹 글자를 되돌린다 —
+    //   겹치는 순간 대신 글자가 한두 프레임 비는 쪽을 고른다. 숨기기 실패·무응답이어도 done 이 부르거나 tick 의 webSync 가 되돌린다. 끄기: window._htlHideOrderOff = true (예전 순서)
     function hideNative(){
-      webHide(false);
+      if(window._htlHideOrderOff === true) webHide(false);
       if(H.hideBusy) return;
-      var P = plug(); if(!P) return;
+      var P = plug(); if(!P){ webHide(false); return; }
       H.hideBusy = true; H.hideAt = now();
-      function done(){ H.shown = false; H.hideBusy = false; H.prevArg = null; H.mkOn = false; H.sent = ''; }
+      function done(){ H.shown = false; H.hideBusy = false; H.prevArg = null; H.mkOn = false; H.sent = ''; try{ webHide(false); }catch(eW){} }
       try{ P.hide({ id: id }).then(done, done); }catch(e){ done(); }
+    }
+    // 스크롤 이벤트가 오는 그 자리에서 곧바로 숨긴다(다음 프레임의 tick 이 위치를 비교하기를 기다리지 않는다). 네이티브가 떠 있는 영역에만 쓴다.
+    function hideNow(){
+      if(window._htlHideNowOff === true || !H.shown || H.hideBusy) return;
+      H.still = 0; H.fast = Math.max(H.fast || 0, now() + 300);
+      hideNative();
     }
     function payload(){ var c = H.cur; if(!c) return null; var o = JSON.parse(H.curKey); o.id = id; var w = cfg.scrollEl && cfg.scrollEl(); o.sx = w ? w.scrollLeft : 0; return o; }
     function busyDone(){ H.busy = false; if(H.again){ H.again = false; H.fast = now() + 400; sched(); } }
@@ -15075,7 +15087,7 @@ window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
       }catch(e){ H.obs = null; }
     }
     function kick(){ if(!active()) return; H.kicked = true; H.dirty = true; H.cover = null; watch(); if(cfg.scrollEl){ try{ var w = cfg.scrollEl(); if(w && !H.scrollBound){ H.scrollBound = true; w.addEventListener('scroll', onScroll, { passive: true }); } }catch(e){} } H.fast = now() + 800; sched(true); }
-    var R = { H: H, id: id, cfg: cfg, kick: kick, end: end, wake: wake, webHide: webHide, mk: function(x, y, snap, ms){
+    var R = { H: H, id: id, cfg: cfg, kick: kick, end: end, wake: wake, hideNow: hideNow, webHide: webHide, mk: function(x, y, snap, ms){
       H.mkT = { x: x, y: y, ms: ms || 0, snap: !!snap, at: now() };
       if(H.shown && !H.busy && !H.hideBusy){ var P = plug(); if(P){ try{ sendMk(P, false); }catch(e){ G_fail('marker: ' + (e && e.message || e)); } } }
     } };
@@ -15271,8 +15283,9 @@ window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
     ['resize', 'orientationchange', 'touchstart', 'transitionstart', 'transitionend', 'animationstart'].forEach(function(n){ window.addEventListener(n, wakeAll, true); });
     window.addEventListener('scroll', function(e){ scrollAt = now();
                                            // 스크롤한 요소 '안'의 영역만 깨운다(그 밖은 움직이지 않는다) · 프레임당 한 번만 모은다
-      var tg = e && e.target; if(!tg || tg === document || tg === document.documentElement || tg === document.body){ wakeAll(); return; }
+      var tg = e && e.target; if(!tg || tg === document || tg === document.documentElement || tg === document.body){ each(function(r){ if(r.H.shown) r.hideNow(); }); wakeAll(); return; }   // 페이지 스크롤: 떠 있는 네이티브는 즉시 숨긴다(잔상)
       scrollTg[scrollTg.length] = tg;
+      each(function(r){ if(!r.H.shown || r.H.hideBusy) return; var h = null; try{ h = r.cfg.host(); }catch(e0){} var se = null; try{ se = r.cfg.scrollEl && r.cfg.scrollEl(); }catch(e1){} if(se === tg) return; if(h && tg.contains && tg.contains(h)) r.hideNow(); });   // ★ 네이티브가 떠 있는 영역은 스크롤 이벤트 즉시 숨긴다(잔상)
       if(scrollRaf) return; scrollRaf = true;
       var run = function(){ scrollRaf = false; var ts = scrollTg; scrollTg = []; each(function(r){ var h = null; try{ h = r.cfg.host(); }catch(e0){} if(!h) return; for(var i = 0; i < ts.length; i++) if(ts[i].contains && ts[i].contains(h)){ r.wake(); return; } }); };
       if(typeof requestAnimationFrame === 'function') requestAnimationFrame(run); else setTimeout(run, 16);
@@ -16703,7 +16716,7 @@ function _busDragInit(){
 window._busDragInit = _busDragInit;
 
 // ── 주변 정류장 프리페치: GPS 확보 시 미리 로드해 캐시(정류장+도착정보) ──
-function _busCoordClose(a,b,c,d){ try { return haversineM(a,b,c,d) < 200; } catch(e){ return false; } }
+function _busCoordClose(a,b,c,d){ try { return haversineM(a,b,c,d) < 100; } catch(e){ return false; } }   // ★ 2026-10-19 (YJ: "현재 위치가 이전 조회 대비 100m 미만이면 재조회하지 마"): 200→100
 // ★ 정류장 1곳 미리 데우기 — 캐시된 보정 ID 적용 → 조회 → 비면 대체 ID까지 확정
 //   (탭을 열기 전에 ID 보정을 끝내두면 첫 렌더부터 도착정보가 바로 뜬다)
 function _prewarmStop(st){
@@ -16835,6 +16848,7 @@ function _prefetchNearStops(lat, lng){
     var le=document.getElementById('mapBusStopList');
     if(le && (typeof _busViewMode==='undefined' || _busViewMode==='near') && !(window._nearOrderedStops && window._nearOrderedStops.length)){
       _renderNearStops(_applyBusNearOrder(top));
+      window._busNearShownPos = { lat: lat, lng: lng };
     }
   });
 }
@@ -17053,7 +17067,7 @@ window._renderNearStops = _renderNearStops;
 
 // ── 현재 위치 재확보: 버스 탭에 들어올 때마다 최신 좌표로 갱신 ──
 //    추적 중이면 GPS 픽스 우선, 아니면 geolocation 새로 요청(캐시 최대 15초)
-var _BUS_MOVE_M = 150;   // 이 거리 이상 움직였으면 주변 정류장 재조회
+var _BUS_MOVE_M = 100;   // 이 거리 이상 움직였으면 주변 정류장 재조회 (★ 2026-10-19 YJ: 100m 미만이면 재조회하지 않는다 — 150→100)
 function _busFreshFix(){
   var f=(typeof S!=='undefined' && S.lastGPSFix) ? S.lastGPSFix : null;
   if(f && f.lat && f.lng){
@@ -17095,6 +17109,7 @@ function loadMapNearStops(force) {
 
   function paint(stops, la, ln, fresh){
     window._nearStopsCache = { ts: Date.now(), lat: la, lng: ln, stops: stops };
+    window._busNearShownPos = { lat: la, lng: ln };
     if(typeof _busViewMode!=='undefined' && _busViewMode!=='near') return;  // 그새 즐겨찾기로 전환됨
     _renderNearStops(_applyBusNearOrder(stops));
     shown = true;
@@ -17174,8 +17189,13 @@ function loadMapNearStops(force) {
   }
 
   // ① 캐시 즉시 표시 (강제 새로고침이 아니고, 캐시가 5분 이내일 때)
-  if(!force && c && c.stops && c.stops.length && (Date.now()-c.ts < 300000)){
+  // ★ 2026-10-19: 이미 주변 목록이 화면에 있으면(탭을 다녀오거나 주기 갱신) 목록을 다시 그리지 않는다 — 도착 시간만 조용히 바뀐다. 🔄 단추(force)는 그대로 다시 그린다.
+  var _nearOnScreen = !!(listEl.querySelector('[id^="mapBusCard_near_"]')) && window._busQuietOff !== true;
+  if(!force && _nearOnScreen && c && c.stops && c.stops.length){
+    shown = true;
+  } else if(!force && c && c.stops && c.stops.length && (Date.now()-c.ts < 300000)){
     _renderNearStops(_applyBusNearOrder(c.stops));
+    window._busNearShownPos = { lat: c.lat, lng: c.lng };
     shown = true;
   } else if(!navigator.geolocation && !c){
     listEl.innerHTML = '<div class="map-bus-empty">📍<br>위치 정보를 사용할 수 없습니다</div>';
@@ -17190,10 +17210,13 @@ function loadMapNearStops(force) {
       }
       return;
     }
-    var cc = window._nearStopsCache;
-    var moved = !cc || !cc.lat || (typeof haversineM==='function' && haversineM(cc.lat, cc.lng, la, ln) > _BUS_MOVE_M);
-    var stale = !cc || (Date.now()-cc.ts > 60000);
-    if(force || moved || stale || !shown) fetchAt(la, ln, shown);
+    var cc = window._busNearShownPos || window._nearStopsCache;      // 화면에 그려진 목록의 기준 위치(없으면 캐시)
+    var moved = !cc || !cc.lat || (typeof haversineM==='function' && haversineM(cc.lat, cc.lng, la, ln) >= _BUS_MOVE_M);
+    var stale = !window._nearStopsCache || (Date.now()-window._nearStopsCache.ts > 60000);
+    // ★ 2026-10-19: 100m 미만이면 시간이 지났어도(stale) 목록을 다시 조회·재그림하지 않는다 — 화면에 있으면 도착 시간만 조용히 갱신한다.
+    if(window._busQuietOff === true){ if(force || moved || stale || !shown) fetchAt(la, ln, shown); }
+    else if(force || moved || !shown) fetchAt(la, ln, shown);
+    else { try{ if(typeof _refreshMapBusArrivals === 'function') _refreshMapBusArrivals(); }catch(eQa){} }
   }, !!force);
 }
 window.loadMapNearStops = loadMapNearStops;
@@ -19159,15 +19182,24 @@ function _loadMapBusArrival(stop, cardIdx, _try) {
       var sig = routes.map(ridOf).slice().sort().join(',');
       var sameSet = (card._busSig === sig) && (card.querySelectorAll('.kbus-row').length === routes.length);
 
-      if(sameSet){
+      // ★ 2026-10-19 (YJ: "버스정류장이 계속 새로고침돼서 볼 수가 없어 · 시간이 바뀌는 건 시간만 조용히"): 내 정류장 응답(partial)은 이웃 병합 응답(최종)보다 노선이 적다 —
+      //   그걸 구성이 바뀐 것으로 보고 줄을 허물고 다시 만들어서, 갱신 때마다 줄이 사라졌다 나타났다. 이제 이미 줄이 그려진 카드는 partial 에서 구조를 건드리지 않고
+      //   있는 줄의 시간만 제자리에서 바꾼다. 최종 응답에서 노선 구성이 정말 바뀐 때만 다시 만들되, 펼쳐지는 애니메이션·'방향 확인 중…' 없이 조용히 바꾼다.
+      var _hadRows = card.querySelectorAll('.kbus-row').length > 0;
+      if(sameSet || (partial && _hadRows && window._busQuietOff !== true)){
         // 같은 노선 구성 → 도착시간만 제자리 갱신 (깜박임 없음)
+        var _have = {};
+        card.querySelectorAll('.kbus-row').forEach(function(r0){ _have[r0.getAttribute('data-rid') || ''] = 1; });
         routes.forEach(function(g){
           var rid=ridOf(g);
+          if(!sameSet && !_have[rid]) return;       // partial: 이미 있는 줄만(없는 노선은 최종 응답이 얹는다)
           _busArrUpd(cardIdx, rid, 0, g.arrs[0]);
           _busArrUpd(cardIdx, rid, 1, g.arrs[1]);
         });
       } else {
         // 노선 구성이 바뀜 → 재구성
+        var _firstBuild = !_hadRows || window._busQuietOff === true;     // 처음 그릴 때만 펼쳐지는 애니메이션
+        card._dirTxt = card._dirTxt || {};
         card.querySelectorAll('.kbus-row').forEach(function(r){ r.remove(); });
         card._busSig = sig;
         routes.forEach(function(g, i) {
@@ -19181,8 +19213,8 @@ function _loadMapBusArrival(stop, cardIdx, _try) {
           _busArrReg(cardIdx, rid, 1, g.arrs[1]);
 
           var row = document.createElement('div');
-          row.className = 'map-bus-row kbus-row kbus-in';
-          row.style.animationDelay = (i * 55) + 'ms';   // 위에서부터 차례로 펼쳐짐
+          row.className = 'map-bus-row kbus-row' + (_firstBuild ? ' kbus-in' : '');
+          if(_firstBuild) row.style.animationDelay = (i * 55) + 'ms';   // 위에서부터 차례로 펼쳐짐(처음 그릴 때만)
           row.addEventListener('animationend', function(){
             row.classList.remove('kbus-in');
             row.style.animationDelay = '';
@@ -19205,6 +19237,7 @@ function _loadMapBusArrival(stop, cardIdx, _try) {
             });
           }
           card.appendChild(row);
+          try{ var _dc = card._dirTxt[rid]; if(_dc){ var _de = row.querySelector('.kbus-dir'); if(_de) _de.textContent = _dc; } }catch(eDc){}   // 이미 알던 방면은 바로 보여준다('방향 확인 중…' 깜박임 없음)
 
           // ★ 방향 라벨 — 도착정보 응답에 이미 방면이 있으면 그대로 쓴다(추가 호출 0).
           //   서울(TOPIS)은 adirection/nxtStn, 경기(GBIS)는 routeDestName을 준다.
@@ -19213,7 +19246,7 @@ function _loadMapBusArrival(stop, cardIdx, _try) {
           //   TAGO만 이 정보를 주지 않으므로 그때만 기존 조회로 폴백한다.
           (function(_cc, _rid, _nid, _did, _dir){
             var el0 = document.getElementById(_did);
-            if(_dir){ if(el0) el0.textContent = '→ ' + _dir + '방향'; return; }
+            if(_dir){ if(el0) el0.textContent = '→ ' + _dir + '방향'; try{ card._dirTxt[_rid] = '→ ' + _dir + '방향'; }catch(eD1){} return; }
             if(!_rid){ if(el0) el0.textContent = ''; return; }
             // ★ 조회가 끝내 안 돌아오면 '방향 확인 중…'이 영영 남는다.
             //   7초 안에 답이 없으면 라벨을 비워 문구가 굳지 않게 한다.
@@ -19221,7 +19254,8 @@ function _loadMapBusArrival(stop, cardIdx, _try) {
             var clear = function(txt){
               if(settled) return; settled = true;
               var el = document.getElementById(_did);
-              if(el) el.textContent = txt || '';
+              if(txt){ try{ card._dirTxt[_rid] = txt; }catch(eD2){} }
+              if(el) el.textContent = txt || (card._dirTxt && card._dirTxt[_rid]) || '';
             };
             var t = setTimeout(function(){ clear(''); }, 7000);
             _fetchBusNextStop(_cc, _rid, _nid, function(next){
@@ -27211,7 +27245,8 @@ function switchTab(tab,el){
           var c = window._nearStopsCache;
           var la = window._lastGPSLat, ln = window._lastGPSLng;
           if(c && la != null && ln != null && typeof haversineM === 'function'){
-            moved = haversineM(c.lat, c.lng, la, ln) > 250;
+            var _bp = window._busNearShownPos || c;
+            moved = haversineM(_bp.lat, _bp.lng, la, ln) >= 100;   // ★ 2026-10-19: 250→100m (YJ)
           }
         }catch(e){}
         if(moved){
@@ -31487,7 +31522,7 @@ window._arriveEnsure = _arriveEnsure;
 function _arrAlightEta(){
   try{
     var r = _arrive.res; if(!r || !r.ok || !r.alight || r.alight.ms == null) return null;
-    var rc = (r.reco && isFinite(r.reco.fromMs) && isFinite(r.reco.untilMs)) ? { fromMs: +r.reco.fromMs, untilMs: +r.reco.untilMs, ttlMs: (isFinite(r.reco.ttlMs) && r.reco.ttlMs > 0) ? +r.reco.ttlMs : 0 } : null;   // ★ s61: 엔진이 정한 추천 보임 창
+    var rc = (r.reco && isFinite(r.reco.fromMs) && isFinite(r.reco.untilMs)) ? { fromMs: +r.reco.fromMs, untilMs: +r.reco.untilMs, ttlMs: (isFinite(r.reco.ttlMs) && r.reco.ttlMs > 0) ? +r.reco.ttlMs : 0, holdMs: (isFinite(r.reco.holdMs) && r.reco.holdMs > 0) ? +r.reco.holdMs : 0 } : null;   // ★ s61: 엔진이 정한 추천 보임 창
     return { arrMs: r.alight.ms, rem: Math.round((r.alight.ms - Date.now()) / 1000), name: r.alight.name || '', lat: r.alight.lat, lng: r.alight.lng, idx: r.alight.idx, reco: rc };
   }catch(e){ return null; }
 }
@@ -31727,6 +31762,31 @@ function _ovlLines(){
         out.reco = null;
       }
     }catch(eGo){}
+    // ★ 2026-10-19 (YJ: "하단문구가 계속 사라졌다 나왔다 해" · "추천은 앱에는 나오는데 오버레이는 안 나오거나 빨리 사라져"): 맨 아래 줄(추천 · 내릴 준비)이 입력이 잠깐 흔들릴 때마다(진행 칸·승차 판정·엔진 답 지연)
+    //   켜졌다 꺼졌다 하지 않게, 한 번 보인 줄은 엔진이 정한 시간(reco.holdMs, 기본 30초) 동안 마지막으로 보인 내용 그대로 둔다. 우선순위: 내릴 준비 > 추천 > 없음 — 낮은 줄로 내려가는 것만 붙잡는다(올라가는 건 즉시).
+    //   [확인]으로 닫은 추천·꺼 둔 기능·하차 판정 뒤 앱 종료 예약이 지나면 붙잡지 않는다. 엔진 답이 없거나 holdMs 가 없으면 예전과 같다. 끄기: window._ovlRowHoldOff = true
+    try{
+      var _hr = (_arrive && _arrive.res && _arrive.res.reco) ? (+_arrive.res.reco.holdMs || 0) : 0, _hnw = Date.now(), _hk = out.getoff ? 2 : (out.reco ? 1 : 0), _hs = window._ovlRowHold;
+      if(!_hs || _hs.sig !== _arrive.jsig){ _hs = window._ovlRowHold = { sig: _arrive.jsig, k: 0, at: 0, reco: null, getoff: null }; }
+      var _hin = _hr > 0 && window._ovlRowHoldOff !== true && _hnw - _hs.at < _hr;       // 마지막으로 보인 뒤 아직 붙잡을 시간 안인가
+      if(_hk >= _hs.k || !_hin){
+        if(_hk > 0){ _hs.k = _hk; _hs.at = _hnw; _hs.reco = out.reco; _hs.getoff = out.getoff; }
+        else _hs.k = 0;
+      } else {                                                                            // 더 낮은 줄로 내려가려 한다(붙잡는 중)
+        var _hDead = (_hs.k === 1 && (window._ovlRecoOff === true || (_hs.reco && window._ovlRecoDismissAt === _hs.reco.at)))
+                  || (_hs.k === 2 && window._ovlGetoffOff === true)
+                  || (window._arrQuitAt > 0 && _hnw >= window._arrQuitAt);
+        if(_hDead) _hs.k = 0;
+        else { out.reco = _hs.reco; out.getoff = _hs.getoff; _hk = _hs.k; }
+      }
+      if(_hk !== window._ovlRowKind){   // 바뀐 때마다 '무엇을 보고 정했나'를 남긴다(설정 > 진단) — 실기기에서 또 깜박이면 원인을 가리는 용도
+        var _hkPrev = window._ovlRowKind; window._ovlRowKind = _hk;
+        if(_hkPrev !== undefined){
+          var _rd = null; try{ _rd = _arrHomeEta(); }catch(eRd){}
+          _ovlDiag('하단줄', ['없음', '추천', '내릴 준비'][_hkPrev] + ' → ' + ['없음', '추천', '내릴 준비'][_hk] + ' · 진행칸 ' + (typeof _pipHereIdx === 'function' ? _pipHereIdx() : '?') + ' · 한정거장전=' + (window._ovlFinLv === 1 ? 1 : 0) + ' · 남은초=' + (_rd ? _rd.rem : '-') + ' · 창=' + ((_rd && _rd.reco) ? (_hnw >= _rd.reco.fromMs && _hnw < _rd.reco.untilMs ? '안' : '밖') : '-'));
+        }
+      }
+    }catch(eHd){}
   }catch(e){}
   return out;
 }
