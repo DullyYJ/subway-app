@@ -92,7 +92,7 @@ t('/route-v2-app 응답: follow 가 맨 앞 · pm/pa 를 요청에서 읽는다 
   assert.ok(/catch \(e\)/.test(seg) && /JSON\.stringify\(_outBody\)/.test(seg), '실패해도 원본 응답');
 });
 t('엔진 버전이 s52 이상이다', () => {
-  const m = W.match(/var ENGINE_VERSION = "route-v2-2026-10-19s(\d+)"/);
+  const m = W.match(/var ENGINE_VERSION = "route-v2-\d{4}-\d{2}-\d{2}s(\d+)"/);
   assert.ok(m && parseInt(m[1], 10) >= 52, m && m[0]);
 });
 

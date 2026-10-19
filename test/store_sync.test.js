@@ -145,7 +145,7 @@ t('Worker 길: /store-policy(GET) · /store-merge(POST, 크기 제한 · 잘못�
   assert.ok(j > 0 && /storePolicy\(\)/.test(W.slice(j, j + 900)), 'handleStorePolicy');
 });
 t('엔진 버전이 s53 이상이다', () => {
-  const m = W.match(/var ENGINE_VERSION = "route-v2-2026-10-19s(\d+)"/);
+  const m = W.match(/var ENGINE_VERSION = "route-v2-\d{4}-\d{2}-\d{2}s(\d+)"/);
   assert.ok(m && parseInt(m[1], 10) >= 53, m && m[0]);
 });
 

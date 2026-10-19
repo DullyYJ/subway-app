@@ -15228,9 +15228,9 @@ window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
         H.prev = m ? { x: m.x, y: m.y, w: m.w, h: m.h } : null;
         H.still = moved ? 0 : H.still + 1;
         if(d.mode === 'off'){ if(H.shown) hideNative(); H.still = 0; }
-        else if(d.mode === 'cover' || moved || H.still < 4 || t - (H.scAt || -1e9) < 250){ if(H.shown) hideNative(); H.fast = Math.max(H.fast, t + 300); }      // 움직이는 중·덮여 있음 → 웹
+        else if(d.mode === 'cover' || moved || H.still < 4 || (!H.shown && t - (H.scAt || -1e9) < 250)){ if(H.shown) hideNative(); H.fast = Math.max(H.fast, t + 300); }      // 움직이는 중·덮여 있음 → 웹
         // ★ 2026-10-20 (YJ: "네이티브 경로 화면을 키면 설정 글씨가 자글자글" — 손가락을 떼고 스크롤이 서서히 멈추는 꼬리에서 한 프레임 0.5px 미만으로 움직이면 '가만히'로 읽혀
-        //   네이티브가 켜지고, 곧 스크롤 이벤트가 와서 다시 꺼지기를 4프레임마다 되풀이해 웹 글자와 네이티브 글자가 번갈아 보였다): 이 영역을 지나는 스크롤 이벤트가 마지막으로 온 뒤 0.25초는 켜지 않는다.
+        //   네이티브가 켜지고, 곧 스크롤 이벤트가 와서 다시 꺼지기를 4프레임마다 되풀이해 웹 글자와 네이티브 글자가 번갈아 보였다): 이 영역을 지나는 스크롤 이벤트가 마지막으로 온 뒤 0.25초는 (꺼져 있던 영역을) 켜지 않는다 — 떠 있는 영역은 예전처럼 스크롤 이벤트가 곧바로 끈다.
         else { live(d); health(t); webSync(t); }                                                                                   // 4프레임(≈0.07초) 가만히 있으면 네이티브를 켠다
       }catch(e){ try{ console.warn('[네이티브 경로 화면 tick:' + id + ']', e); }catch(e1){} }
       try{ webSync(now()); }catch(e2){}
@@ -15454,7 +15454,7 @@ window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
       scrollTg[scrollTg.length] = tg;
       each(function(r){ if(!r.H.shown || r.H.hideBusy) return; var h = null; try{ h = r.cfg.host(); }catch(e0){} var se = null; try{ se = r.cfg.scrollEl && r.cfg.scrollEl(); }catch(e1){} if(se === tg) return; if(h && tg.contains && tg.contains(h)) r.hideNow(); });   // ★ 네이티브가 떠 있는 영역은 스크롤 이벤트 즉시 숨긴다(잔상)
       if(scrollRaf) return; scrollRaf = true;
-      var run = function(){ scrollRaf = false; var ts = scrollTg; scrollTg = []; var tn = now(); each(function(r){ var h = null; try{ h = r.cfg.host(); }catch(e0){} if(!h) return; for(var i = 0; i < ts.length; i++) if(ts[i].contains && ts[i].contains(h)){ r.H.scAt = tn; r.wake(); return; } }); };
+      var run = function(){ scrollRaf = false; var ts = scrollTg; scrollTg = []; var tn = now(); each(function(r){ var h = null; try{ h = r.cfg.host(); }catch(e0){} if(!h) return; var se = null; try{ se = r.cfg.scrollEl && r.cfg.scrollEl(); }catch(e1){} for(var i = 0; i < ts.length; i++) if(ts[i].contains && ts[i].contains(h)){ if(ts[i] !== se) r.H.scAt = tn; r.wake(); return; } }); };      // 자기 가로 스크롤 요소가 움직이는 건 세지 않는다(그건 scroll({sx})로 따라간다)
       if(typeof requestAnimationFrame === 'function') requestAnimationFrame(run); else setTimeout(run, 16);
     }, true);
     try{ document.addEventListener('visibilitychange', wakeAll); }catch(e3){}
