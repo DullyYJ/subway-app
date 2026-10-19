@@ -96,6 +96,8 @@ jobs:
           - ride_standby.test.js
           - sim/standby_sim.js
           - ovl_standby.ui.test.js
+          - sbh_native.test.js
+          - sbh_handback.ui.test.js
           - standby_card.ui.test.js
           - rt_arrival_cands.ui.test.js
           - shop_version.ui.test.js
