@@ -254,6 +254,107 @@ async function call(method, body) {
   });
   R.rtxSetLoaders(null);
 
+  // ── 4단계(s63): ⑦ AI 위로 문구를 엔진이 받아 본문 네 번째 줄에 끼운다 ──
+  const WXM = { temp: 20, feel: 20, tmin: 15, tmax: 24, rain: 0, txt: '맑음' };   // 상황 문구가 약한 날씨(추위 WX 는 항상 hookStrong)
+  const NIGHT = { arrMs: kst(20, 5), nowMs: kst(20, 0), dest: '강남', weather: WXM, food: FOOD, recent: [], seed: 7 };
+  const NIGHTC = Object.assign({}, NIGHT, { weather: WX });   // 추운 날: 상황 문구가 강하다
+  const SHOPQ = { arrMs: kst(22, 5), nowMs: kst(22, 0), dest: '강남', weather: WXM, food: null, recent: [], shop: { n: '우산', _t: '우천대비', _cat: '생활' }, seed: 7 };
+  const findSeed = (base, strong) => { for (let sd = 1; sd < 400; sd++) { const x = R.recoAlert(Object.assign({}, base, { seed: sd })); if (x.slot !== 'none' && !!x.hookStrong === strong && x.body.split('\n').length > 3) return sd; } return -1; };
+  const sdWeak = findSeed(NIGHT, false), sdStrong = findSeed(NIGHTC, true);
+  t('AI 문구: 시험 씨앗을 찾았다(상황 문구 약함)', () => assert.ok(sdWeak > 0, 'weak seed'));
+  const wk = Object.assign({}, NIGHT, { seed: sdWeak });
+  t('rtxAiClean: 문구 꺼내기 · 공백/따옴표 정리 · 60자 초과/금지어/빈 값은 null', () => {
+    assert.strictEqual(R.rtxAiClean({ messages: [{ text: '  "오늘도  수고했어요"  ' }] }), '오늘도 수고했어요');
+    assert.strictEqual(R.rtxAiClean({ msgs: [{ msg: '야식 한 입이면 충분해요' }] }), '야식 한 입이면 충분해요');
+    assert.strictEqual(R.rtxAiClean({ messages: ['문자열 문구'] }), '문자열 문구');
+    assert.strictEqual(R.rtxAiClean({ text: '단일 문구' }), '단일 문구');
+    assert.strictEqual(R.rtxAiClean({ messages: [{ text: '가'.repeat(61) }] }), null);
+    assert.strictEqual(R.rtxAiClean({ messages: [{ text: '가'.repeat(60) }] }), '가'.repeat(60));
+    assert.strictEqual(R.rtxAiClean({ messages: [{ text: '오늘 국회 소식 보셨어요' }] }), null);
+    for (const bad of [null, undefined, {}, [], { messages: [] }, { messages: [{}] }, { text: 5 }, '']) assert.strictEqual(R.rtxAiClean(bad), null);
+  });
+  t('rtxAiSubject: 야식·쇼핑만 · 상황 문구가 강하면 없음 · 쇼핑은 상품 이름(없으면 작은 선물)', () => {
+    const n = R.recoAlert(wk); assert.strictEqual(R.rtxAiSubject(n, null), n.menu);
+    const sh = R.recoAlert(Object.assign({}, SHOPQ)); assert.strictEqual(R.rtxAiSubject(sh, { shop: { n: '우산' } }), '우산'); assert.strictEqual(R.rtxAiSubject(sh, null), '작은 선물');
+    const lunch = R.recoAlert({ arrMs: kst(12, 5), nowMs: kst(12, 0), dest: '강남', weather: WX, food: FOOD, recent: [], seed: 7 }); assert.strictEqual(R.rtxAiSubject(lunch, null), null);
+    assert.strictEqual(R.rtxAiSubject(Object.assign({}, n, { hookStrong: true }), null), null);
+    assert.strictEqual(R.rtxAiSubject(Object.assign({}, n, { body: 'a\nb\nc' }), null), null);
+    assert.strictEqual(R.rtxAiSubject(Object.assign({}, n, { slot: 'shop', kind: 'shop', shopItem: null }), { shop: null }), '작은 선물');
+    assert.strictEqual(R.rtxAiSubject(null, null), null);
+  });
+  t('recoAlert: ext.ai 가 있으면 네 번째 줄만 AI 문구로 바뀌고 ai:true · 나머지 줄은 그대로', () => {
+    const a = R.recoAlert(wk), b = R.recoAlert(wk, { ai: { text: '오늘 하루도 정말 수고 많았어요' } });
+    const la = a.body.split('\n'), lb = b.body.split('\n');
+    assert.strictEqual(b.ai, true); assert.ok(!('ai' in a)); assert.strictEqual(lb.length, la.length);
+    assert.ok(lb[3].includes('오늘 하루도 정말 수고 많았어요'), lb[3]); assert.notStrictEqual(lb[3], la[3]);
+    la.forEach((l, i) => { if (i !== 3) assert.strictEqual(lb[i], l); });
+    assert.strictEqual(b.title, a.title); assert.strictEqual(b.menu, a.menu);
+  });
+  t('recoAlert: 같은 씨앗·같은 문구면 결과가 똑같다(작은 화면 문구·오버레이 줄 포함)', () => {
+    const x = R.recoAlert(wk, { ai: { text: '오늘도 고생했어요' } }), y = R.recoAlert(wk, { ai: { text: '오늘도 고생했어요' } });
+    assert.deepStrictEqual(x, y); assert.ok(x.pip && x.pip.lines.length >= 2);
+  });
+  t('recoAlert: 작은 화면 문구·오버레이 줄은 AI 가 끼워진 본문을 기준으로 다시 만든다(형태는 그대로)', () => {
+    const a = R.recoAlert(wk), b = R.recoAlert(wk, { ai: { text: '오늘도 고생했어요' } });
+    assert.ok(b.pip && typeof b.pip.title === 'string'); assert.ok(b.ad === null || (typeof b.ad.k === 'string' && typeof b.ad.a === 'string'));
+    assert.strictEqual(!!a.ad, !!b.ad);
+  });
+  t('recoAlert: 상황 문구가 강하면(hookStrong) ext.ai 가 있어도 끼우지 않는다', () => {
+    if (sdStrong < 0) return;       // 이 날씨·시각에 강한 문구가 안 나오면 건너뜀
+    const s = Object.assign({}, NIGHTC, { seed: sdStrong }), a = R.recoAlert(s), b = R.recoAlert(s, { ai: { text: '끼우면 안 되는 문구' } });
+    assert.deepStrictEqual(b, a); assert.ok(!('ai' in b));
+  });
+  t('recoAlert: 야식·쇼핑이 아닌 시간대는 ext.ai 를 무시한다', () => {
+    const l = { arrMs: kst(12, 5), nowMs: kst(12, 0), dest: '강남', weather: WX, food: FOOD, recent: [], seed: 7 };
+    assert.deepStrictEqual(R.recoAlert(l, { ai: { text: 'x 문구' } }), R.recoAlert(l));
+  });
+  t('recoAlert: 쇼핑 시간대는 상품 이름을 주제로 조사를 맞춘다', () => {
+    let hit = false;
+    for (let sd = 1; sd < 200 && !hit; sd++) {
+      const q = Object.assign({}, SHOPQ, { seed: sd }), a = R.recoAlert(q);
+      if (a.slot === 'shop' && !a.hookStrong && a.body.split('\n').length > 3) { const b = R.recoAlert(q, { ai: { text: '오늘은 하나쯤은 괜찮아요' } }); assert.strictEqual(b.ai, true); assert.ok(b.body.split('\n')[3].includes('하나쯤은')); hit = true; }
+    }
+    assert.ok(hit);
+  });
+  t('이전 앱(aiCopy 없음)·ext.ai 없음이면 예전과 똑같다', () => {
+    const a = R.recoAlert(wk); assert.ok(!('ai' in a) && !('aiTried' in a));
+  });
+
+  // 연결부: aiCopy 가 있을 때만 AI 서버를 부르고 aiTried 를 돌려준다
+  const AIQ = [];
+  let AIRET = '오늘 하루도 수고했어요';
+  R.rtxSetLoaders({ ai: q => { AIQ.push(q); if (AIRET === 'throw') throw new Error('z'); return AIRET; } });
+  const wbody = Object.assign({}, wk, { aiCopy: 1 });
+  AIQ.length = 0; r = await call('POST', wbody);
+  t('POST aiCopy:1 → AI 한 줄을 받아 끼운다 · aiTried·ai · 요청에 메뉴·남은 분·역 이름이 실린다', () => {
+    assert.strictEqual(r.json.ok, true); assert.strictEqual(r.json.aiTried, true); assert.strictEqual(r.json.ai, true); assert.strictEqual(AIQ.length, 1);
+    assert.strictEqual(AIQ[0].menu, r.json.menu); assert.strictEqual(AIQ[0].station, '강남'); assert.strictEqual(AIQ[0].min, r.json.remMin); assert.strictEqual(typeof AIQ[0].dinner, 'boolean');
+    assert.ok(r.json.body.split('\n')[3].includes('오늘 하루도 수고했어요'));
+    assert.ok(r.json.pip && r.json.pip.title.length > 0);
+  });
+  t('POST aiCopy:1 → 본문은 직접 recoAlert(ext.ai)한 것과 같다(같은 씨앗)', () => {
+    const direct = R.recoAlert(wk, { ai: { text: '오늘 하루도 수고했어요' } });
+    const got = Object.assign({}, r.json); delete got.ok; delete got.aiTried;
+    assert.deepStrictEqual(got, JSON.parse(JSON.stringify(direct)));
+  });
+  AIQ.length = 0; r = await call('POST', wk);
+  t('POST aiCopy 없음 → AI 서버를 부르지 않고 aiTried 도 없다', () => { assert.strictEqual(AIQ.length, 0); assert.ok(!('aiTried' in r.json) && !('ai' in r.json)); });
+  for (const [label, ret] of [['빈 값', ''], ['60자 초과', '가'.repeat(61)], ['금지어', '정치 이야기는 잠시 내려놓고'], ['예외', 'throw'], ['null', null]]) {
+    AIRET = ret; AIQ.length = 0; r = await call('POST', wbody);
+    t('POST aiCopy:1 · AI ' + label + ' → 본문 그대로 + aiTried:true(ai 없음)', () => {
+      assert.strictEqual(r.status, 200); assert.strictEqual(r.json.aiTried, true); assert.ok(!('ai' in r.json));
+      const plain = R.recoAlert(wk); assert.strictEqual(r.json.body, plain.body);
+    });
+  }
+  AIRET = '오늘 하루도 수고했어요';
+  AIQ.length = 0; r = await call('POST', Object.assign({}, NIGHTC, { seed: sdStrong > 0 ? sdStrong : sdWeak, aiCopy: 1 }));
+  t('POST aiCopy:1 · 상황 문구가 강하면 AI 서버를 부르지 않고 aiTried 도 없다', () => { if (sdStrong < 0) return; assert.strictEqual(AIQ.length, 0); assert.ok(!('aiTried' in r.json)); });
+  AIQ.length = 0; r = await call('POST', { arrMs: kst(12, 5), nowMs: kst(12, 0), dest: '강남', weather: WX, food: FOOD, recent: [], seed: 7, aiCopy: 1 });
+  t('POST aiCopy:1 · 점심이면 AI 서버를 부르지 않는다', () => { assert.strictEqual(AIQ.length, 0); assert.ok(!('aiTried' in r.json)); });
+  AIQ.length = 0; r = await call('POST', { op: 'pip', slot: 'night', dest: '강남', body: 'a\nb\nc\nd', nowMs: kst(20, 0), seed: 1, aiCopy: 1, a: { remMin: 5, menu: '피자', hook: '훅', cx: { h: 20 }, spots: ['A'], dinner: false } });
+  t('POST op=pip: aiCopy 가 있어도 AI 서버를 부르지 않는다', () => { assert.strictEqual(AIQ.length, 0); assert.ok(!('aiTried' in r.json)); });
+  R.rtxSetLoaders(null);
+
   console.log('reco_text: ' + pass + ' pass ' + fail + ' fail');
   process.exit(fail ? 1 : 0);
 })();

@@ -13,8 +13,8 @@ let pass = 0, fail = 0;
 const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', name); } catch (e) { fail++; console.log('  FAIL', name, '\n      ', String(e.message || e).slice(0, 1200)); } };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 let ENG;
-function resetEng() { ENG = { mode: 'ok', hits: [], shopData: null, foodSrv: null, foodPhone: null, phoneFood: 0, loads: { shop: 0, food: [] } }; }
-RX.rtxSetLoaders({ shop: () => { ENG.loads.shop++; return ENG.shopData ? { data: ENG.shopData, cfg: null } : null; }, food: loc => { ENG.loads.food.push(loc); return ENG.foodSrv; } });
+function resetEng() { ENG = { mode: 'ok', hits: [], shopData: null, foodSrv: null, foodPhone: null, phoneFood: 0, aiRet: null, oldEngine: false, loads: { shop: 0, food: [], ai: [] } }; }
+RX.rtxSetLoaders({ shop: () => { ENG.loads.shop++; return ENG.shopData ? { data: ENG.shopData, cfg: null } : null; }, food: loc => { ENG.loads.food.push(loc); return ENG.foodSrv; }, ai: q => { ENG.loads.ai.push(q); return ENG.aiRet; } });
 const kst = (h, mi, day) => Date.UTC(2026, 9, day || 19, h - 9, mi || 0);
 
 const FOODS = {
@@ -45,7 +45,8 @@ const SHOPS = [null, { n: '접이식 우산', _t: '우천대비', _cat: '생활'
     const u = new URL(r.request().url()); if (u.protocol === 'file:' || u.protocol === 'data:') return r.continue();
     const H = { 'content-type': 'application/json', 'access-control-allow-origin': '*' };
     if (/route-v2/.test(u.host) && u.pathname === '/reco-text') {
-      const body = r.request().postData() || ''; ENG.hits.push(body);
+      let body = r.request().postData() || ''; ENG.hits.push(body);
+      if (ENG.oldEngine) { try { const o = JSON.parse(body); delete o.aiCopy; body = JSON.stringify(o); } catch (e) {} }     // s63 이전 엔진 흉내: aiCopy 를 모른다
       if (ENG.mode === '404') return r.fulfill({ status: 404, headers: H, body: '{"error":"not found"}' });
       if (ENG.mode === 'hang') return;
       if (ENG.mode === 'bad') return r.fulfill({ status: 200, headers: H, body: '{"ok":true,"v":1,"slot":"night"}' });
@@ -125,6 +126,7 @@ const SHOPS = [null, { n: '접이식 우산', _t: '우천대비', _cat: '생활'
         await scene({ on: true, nowMs, food: FOODS[fk], wx: WXS[wk], shop: sh, recent });
         const E = await engineA('강남', arrMs, seed);
         const id = JSON.stringify({ h, wk, fk, rc, seed, day, sh: sh && sh.n });
+        if (E.a) delete E.a.aiTried;      // s63: 야식·쇼핑은 엔진이 AI 문구를 받아 보았다는 표시(예전 길엔 없는 값) — 나머지 글자는 같아야 한다
         assert.deepStrictEqual(E, L, id);
         kinds.add(L.a.kind); compared++;
       }
@@ -180,8 +182,8 @@ const SHOPS = [null, { n: '접이식 우산', _t: '우천대비', _cat: '생활'
   await t('60초가 지나면 다시 엔진에 묻고 엔진이 만든 본문을 쓴다', async () => { assert.ok(ENG.hits.length > hb); assert.strictEqual(await page.evaluate(() => _rtxDown()), false); assert.ok(await page.evaluate(() => window.__got && window.__got.body)); assert.ok(await page.evaluate(() => window._RTX.used) >= 1); });
   await scene({ on: true, mode: 'hang', nowMs: kst(19, 55), food: FOODS.rich, wx: WXS.cold, shop: null });
   await page.evaluate(([a]) => { window.__got = null; _arrFireAlertGo('강남', a); }, [kst(20, 5)]);
-  await sleep(150); await page.clock.runFor(4100); await sleep(150); await page.clock.runFor(100); await sleep(100);
-  await t('엔진이 응답 없으면(2.5초·목록을 받을 땐 4초) 예전 규칙으로 만든다 · 쉬기', async () => { assert.ok(await page.evaluate(() => window.__got && window.__got.body)); assert.strictEqual(await page.evaluate(() => _rtxDown()), true); });
+  await sleep(150); await page.clock.runFor(7100); await sleep(150); await page.clock.runFor(100); await sleep(100);
+  await t('엔진이 응답 없으면(2.5초·목록을 받을 땐 4초 · 야식/쇼핑은 AI 몫 3초 더) 예전 규칙으로 만든다 · 쉬기', async () => { assert.ok(await page.evaluate(() => window.__got && window.__got.body)); assert.strictEqual(await page.evaluate(() => _rtxDown()), true); });
   await scene({ on: true, mode: '404', nowMs: kst(22, 0), food: FOODS.rich, wx: WXS.cold, shop: SHOPS[1] });
   await page.evaluate(([a]) => { window.__got = null; _arrFireAlertGo('강남', a); }, [kst(22, 5)]); await settle(); await settle();
   await t('쇼핑 시간대: 엔진이 실패해도 상품을 두 번 고르지 않고 같은 상품으로 만든다', async () => {
@@ -192,6 +194,7 @@ const SHOPS = [null, { n: '접이식 우산', _t: '우천대비', _cat: '생활'
   console.log('[알림을 실제로 보내는 길 — 작은 화면 문구 · 오버레이 추천 줄까지 같다]');
   const e2e = async (on, o, seed, ai) => {
     await scene({ on, nowMs: o.arrMs - 5 * 60000, food: o.food, wx: o.wx, shop: o.shop, recent: [] });
+    ENG.aiRet = (ai && !o.engAiNone) ? 'AI가 쓴 한 줄' : null; ENG.oldEngine = !!o.oldEngine;     // 엔진이 AI 서버에서 받는 문구(시험용 가짜)
     await page.evaluate(([dest, arrMs, seed, mb, on, ai]) => {
       window.__pip = null; window.__shown = null; window.__aiHit = 0;
       _notifOnceReset(); window._pipReco = { at: 1 };
@@ -228,13 +231,32 @@ const SHOPS = [null, { n: '접이식 우산', _t: '우천대비', _cat: '생활'
     });
   }
   const aiScn = { arrMs: kst(20, 5), food: FOODS.rich, wx: null, shop: null };
-  await t('본문 한 줄이 AI 문구로 바뀌면 작은 화면 문구만 엔진에 다시 묻는다(알림 본문엔 AI 줄이 들어간다)', async () => {
+  await t('s63: AI 위로 문구도 엔진이 받아 끼운다 — 앱은 AI 서버를 부르지 않고 작은 화면 문구도 다시 묻지 않는다(알림 본문엔 AI 줄이 들어간다)', async () => {
     const L = await e2e(false, aiScn, 5, true); const E = await e2e(true, aiScn, 5, true);
-    assert.strictEqual(E.ai, 1); assert.ok(ENG.hits.some(h => JSON.parse(h).op === 'pip'), 'pip 요청 없음'); assert.strictEqual(await page.evaluate(() => _rtxDown()), false, '엔진 pip 응답을 못 받아 예전 규칙으로 갔다');
+    assert.strictEqual(L.ai, 1, '스위치 끄면 예전 웹 길로 AI 호출'); assert.strictEqual(E.ai, 0, '앱이 AI 서버를 또 불렀다');
+    assert.ok(JSON.parse(ENG.hits[0]).aiCopy === 1, '요청에 aiCopy 없음'); assert.strictEqual(ENG.loads.ai.length, 1); assert.strictEqual(ENG.loads.ai[0].station, '강남');
+    assert.ok(!ENG.hits.some(h => JSON.parse(h).op === 'pip'), 'pip 요청이 또 갔다'); assert.strictEqual(await page.evaluate(() => _rtxDown()), false);
     assert.ok(/AI가 쓴 한 줄/.test(E.shown.b) && /AI가 쓴 한 줄/.test(L.shown.b));
     assert.strictEqual(E.shown.b, L.shown.b); assert.strictEqual(E.shown.t, L.shown.t);
     assert.deepStrictEqual(E.last.ad, L.last.ad);
     const lp = L.pip.b.split('\n'), ep = E.pip.b.split('\n'); assert.strictEqual(ep[0], lp[0]); assert.ok(ep.some(x => /AI가 쓴 한 줄/.test(x)) === lp.some(x => /AI가 쓴 한 줄/.test(x)));
+  });
+  await t('s63: 엔진이 AI 문구를 못 받으면(aiTried) 앱도 다시 부르지 않는다 — 본문은 AI 줄 없이 그대로', async () => {
+    const E = await e2e(true, Object.assign({ engAiNone: true }, aiScn), 5, true);
+    assert.strictEqual(E.ai, 0); assert.strictEqual(ENG.loads.ai.length, 1); assert.ok(E.shown && !/AI가 쓴 한 줄/.test(E.shown.b));
+  });
+  await t('s63: 점심 같은 시간대는 aiCopy 를 보내지 않는다', async () => {
+    await e2e(true, E2[1][1], 5, true);
+    assert.ok(!('aiCopy' in JSON.parse(ENG.hits[0]))); assert.strictEqual(ENG.loads.ai.length, 0);
+  });
+  await t('s63: 옛 엔진(aiCopy 를 모름 · aiTried 없음)이면 옛 웹 길로 AI 문구를 받는다', async () => {
+    const E = await e2e(true, Object.assign({ oldEngine: true }, aiScn), 5, true);
+    assert.strictEqual(E.ai, 1); assert.strictEqual(ENG.loads.ai.length, 0); assert.ok(/AI가 쓴 한 줄/.test(E.shown.b));
+  });
+  await t('s63: window._rtxAiOff = true 이면 aiCopy 를 보내지 않고 옛 웹 길', async () => {
+    await page.evaluate(() => { window._rtxAiOff = true; });
+    try { const E = await e2e(true, aiScn, 5, true); assert.ok(!('aiCopy' in JSON.parse(ENG.hits[0]))); assert.strictEqual(E.ai, 1); assert.strictEqual(ENG.loads.ai.length, 0); }
+    finally { await page.evaluate(() => { window._rtxAiOff = false; }); }
   });
   await t('작은 화면 문구만 다시 받을 때(op=pip) 같은 씨앗이면 예전 _arrPipText 와 같다', async () => {
     for (const seed of [1, 42, 777]) {
