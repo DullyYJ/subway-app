@@ -20955,6 +20955,21 @@ window.addEventListener('unhandledrejection', function(e) {
         <style>#cmwSetOn:checked ~ #cmwSetKnob{background:var(--gold) !important;} #cmwSetOn:checked ~ #cmwSetDot{left:23px !important;}</style>
       </div>
 
+      <!-- ★ 2026-10-19: 하차 전 추천 문구를 엔진이 만들기 — 추천 알림 본문(상황 한 줄·메뉴·가게 고르기)을 엔진이 만든다. 기본 꺼짐 -->
+      <div id="rtxSetCard" style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <div style="font-size:15px;font-weight:800;color:var(--text);">하차 전 추천 문구를 엔진이 만들기</div>
+          <label style="position:relative;display:inline-block;width:46px;height:26px;">
+            <input type="checkbox" id="rtxSetOn" onchange="_rtxSetUse(this.checked)" style="opacity:0;width:0;height:0;">
+            <span id="rtxSetKnob" style="position:absolute;inset:0;border-radius:13px;background:var(--border2);transition:.2s;cursor:pointer;"></span>
+            <span id="rtxSetDot" style="position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.3);"></span>
+          </label>
+        </div>
+        <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">내리기 7분 전 추천 알림의 본문(날씨·요일에 맞춘 한 줄, 메뉴와 가게 고르기, 줄 맞춤)을 웹이 아니라 엔진이 만들어요. 앱은 지금 날씨와 도착지 근처 가게 목록, 최근 추천한 곳만 엔진에 보내요. 엔진에 물을 수 없으면 예전 방식으로 바로 만들어요.</p>
+        <div id="rtxSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
+        <style>#rtxSetOn:checked ~ #rtxSetKnob{background:var(--gold) !important;} #rtxSetOn:checked ~ #rtxSetDot{left:23px !important;}</style>
+      </div>
+
       <!-- ★ 2026-10-03: 도착 오차 익명 기록 (끌 수 있음) -->
       <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
         <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:8px;">📊 안내 정확도 향상</div>
@@ -24510,7 +24525,102 @@ var _ARR_WIT_DINNER = [
 ];
 
 // 도착 N분 전 알림 본문 구성
+// ── 하차 전 추천 '문구 만들기' — 엔진이 만든다(2026-10-19, 5번 5단계 넷째 조각 · 추천 문구 1단계) ──
+//   설정 스위치 '하차 전 추천 문구를 엔진이 만들기'(gdm_rtx, 기본 꺼짐). 켜면 추천 알림 본문(날씨·요일 한 줄 · 메뉴·가게 고르기 · 줄 맞춤)을 웹(_arrBuildAlertLocal)이 아니라 엔진(/reco-text)이 만든다.
+//   웹은 '도착 시각 · 목적지 · 지금 날씨 · 도착지 근처 가게 목록 · 최근 추천한 곳 · (쇼핑 시간대) 고른 쿠팡 상품 · 무작위 씨앗' 만 알리고, 돌아온 제목·본문·메뉴·가게를 그대로 쓴다.
+//   (쿠팡 상품 고르기 · 작은 화면(PiP) 문구 · 오버레이 광고 줄은 아직 웹.) 알림을 보내는 순간(_arrFireAlert)에만 한 번 묻고, 그 답을 _arrBuildAlert 가 한 번 가져다 쓴다.
+//   폴백(전부 자동): 스위치 꺼짐 · 엔진 응답 없음(2.5초)·오류·이상한 응답 → 예전 웹 규칙(_arrBuildAlertLocal)으로 바로 만들고 60초 동안은 엔진에 묻지 않는다.
+var _RTX = { bad: false, until: 0, why: '', asks: 0, ok: 0, used: 0, pack: null };
+function _rtxOn(){ try{ return localStorage.getItem('gdm_rtx') === '1'; }catch(e){ return false; } }
+function _rtxDown(){ return _RTX.until > Date.now(); }
+function _rtxUse(){ return _rtxOn() && !_rtxDown(); }
+function _rtxFail(why){
+  _RTX.bad = true; _RTX.until = Date.now() + 60000; _RTX.why = String(why || '').slice(0, 40); _RTX.pack = null;
+  try{ if(typeof window._rtxSyncCard === 'function') window._rtxSyncCard(); }catch(e){}
+}
+function _rtxGood(j, slot){
+  return !!(j && j.ok === true && j.v === 1 && j.slot === slot && typeof j.title === 'string' && typeof j.body === 'string' && typeof j.kind === 'string'
+    && typeof j.hook === 'string' && j.cx && typeof j.cx === 'object' && typeof j.remMin === 'number');
+}
+// 쇼핑 시간대: 엔진이 실패해 예전 본문으로 갈 때 같은 상품을 쓰도록(두 번 고르지 않게) 미리 고른 것을 한 번 건네 준다
+function _rtxTakeShop(){ var p = window._rtxShopPre; window._rtxShopPre = null; return p || null; }
+function _rtxPrefetch(destStn, arrMs, cb){
+  var done = false, fin = function(){ if(!done){ done = true; clearTimeout(tm); try{ cb(); }catch(e){} } };
+  var tm = setTimeout(function(){ if(!done){ _rtxFail('시간 초과'); fin(); } }, 2500);
+  try{
+    var slot = _arrSlot(arrMs);
+    if(slot === 'none'){ fin(); return; }
+    var foodSrc = null, wx = null, shopItem = null, shop = null;
+    try{ foodSrc = _arrFoodList(destStn); }catch(e1){}
+    try{ wx = _shopWeather(); }catch(e2){}
+    if(slot === 'shop'){
+      var sp = _arrPickShopItem();
+      if(sp && sp.item){ shopItem = sp.item; shop = { n: sp.item.n, _t: sp.item._t || '', _cat: sp.item._cat || '' }; }
+      window._rtxShopPre = sp || null;
+    }
+    var body = {
+      arrMs: arrMs, nowMs: Date.now(), dest: destStn || '',
+      weather: wx ? { temp: wx.temp, feel: wx.feel, tmin: wx.tmin, tmax: wx.tmax, rain: wx.rain, txt: wx.txt } : null,
+      food: foodSrc ? foodSrc.map(function(x){ return { n: x && x.n, c: x && x.c, d: x && x.d }; }) : null,
+      recent: _arrRecoLog(), shop: shop, seed: Math.floor(Math.random() * 4294967296)
+    };
+    _RTX.asks++;
+    fetch(_ROUTE_V2_BASE + '/reco-text', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(j){
+        if(done) return;
+        if(!_rtxGood(j, slot)){ _rtxFail('응답 이상'); fin(); return; }
+        _RTX.ok++;
+        _RTX.pack = { dest: destStn, arrMs: arrMs, at: Date.now(), r: j, food: foodSrc, shop: shopItem };
+        try{ if(typeof window._rtxSyncCard === 'function') window._rtxSyncCard(); }catch(e3){}
+        fin();
+      })
+      .catch(function(){ if(!done){ _rtxFail('통신 실패'); fin(); } });
+  }catch(e4){ if(!done){ _rtxFail('요청 실패'); fin(); } }
+}
+// 엔진이 만든 본문 → 예전 _arrBuildAlert 와 같은 모양
+function _rtxUnpack(p){
+  var r = p.r, a = {};
+  Object.keys(r).forEach(function(k){ if(k !== 'v' && k !== 'ok' && k !== 'placeIdx' && k !== 'shop') a[k] = r[k]; });
+  if(r.kind === 'shop'){ a.shop = (r.shop && p.shop) ? p.shop : null; }
+  else {
+    var pl = (r.placeIdx >= 0 && p.food && p.food[r.placeIdx]) ? p.food[r.placeIdx] : null;
+    a.place = pl;
+    if(pl){ try{ _arrRecoMark(pl.n); }catch(e){} }                 // 예전 _arrPickPlace 가 하던 '최근 추천' 기록
+  }
+  return a;
+}
 function _arrBuildAlert(destStn, arrHour, arrMs){
+  try{
+    var p = _RTX.pack;
+    if(p && _rtxOn() && p.dest === destStn && p.arrMs === arrMs && Date.now() - p.at < 60000){
+      _RTX.pack = null; _RTX.used++;
+      return _rtxUnpack(p);
+    }
+  }catch(e){}
+  return _arrBuildAlertLocal(destStn, arrHour, arrMs);
+}
+window._rtxOn = _rtxOn;
+window._RTX = _RTX;
+window._rtxSetUse = function(on){
+  try{ localStorage.setItem('gdm_rtx', on ? '1' : '0'); }catch(e){}
+  _RTX.bad = false; _RTX.until = 0; _RTX.why = ''; _RTX.pack = null;
+  try{ if(typeof window._rtxSyncCard === 'function') window._rtxSyncCard(); }catch(e2){}
+};
+window._rtxSyncCard = function(){
+  try{
+    var card = document.getElementById('rtxSetCard'); if(!card) return;
+    var on = _rtxOn(), bad = on && _rtxDown(), cb = document.getElementById('rtxSetOn'), st = document.getElementById('rtxSetStat');
+    if(cb) cb.checked = on && !bad;
+    var t;
+    if(!on) t = '꺼짐 — 예전 방식(웹이 추천 문구를 만들어요)으로 이어가요.';
+    else if(bad) t = '엔진에 물을 수 없어 예전 방식으로 대신 이어가고 있어요' + (_RTX.why ? ' (' + _RTX.why + ')' : '') + '. 잠시 뒤 다시 엔진에 물어요.';
+    else t = '켜짐 — 하차 전 추천 문구를 엔진이 만들어요(실험 중).' + (_RTX.ok ? ' 엔진 응답 ' + _RTX.ok + '번.' : '');
+    if(st && st.textContent !== t) st.textContent = t;
+  }catch(e3){}
+};
+try{ if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(function(){ if(window._rtxSyncCard) window._rtxSyncCard(); }, 1500); }); else setTimeout(function(){ if(window._rtxSyncCard) window._rtxSyncCard(); }, 1500); }catch(eRtx){}
+function _arrBuildAlertLocal(destStn, arrHour, arrMs){
   var slot = _arrSlot(arrMs);
   var remMin = _arrRemainMin(arrMs);
   var isDinner = (slot === 'night') && _arrIsDinner(arrMs);
@@ -24525,7 +24635,7 @@ function _arrBuildAlert(destStn, arrHour, arrMs){
 
   // ── 19:31~24:00 · 쿠팡 아이템 추천 ──
   if(slot === 'shop'){
-    var sp = _arrPickShopItem();
+    var sp = _rtxTakeShop() || _arrPickShopItem();     // 엔진 쪽에서 이미 고른 상품이 있으면 그걸 쓴다(두 번 고르지 않게)
     var shHook = _arrHook('shop', cx);
     lines.push(shHook.t);
     if(sp && sp.item){
@@ -24636,10 +24746,15 @@ function _arrFireAlert(destStn, arrMs){
     window._arrFiring = true;
     _arrEnsureFood(destStn, function(){
       window._arrFiring = false;
-      _arrFireAlertNow(destStn, arrMs);
+      _arrFireAlertGo(destStn, arrMs);
     });
     return;
   }
+  _arrFireAlertGo(destStn, arrMs);
+}
+// 엔진 스위치가 켜져 있으면 본문을 먼저 엔진에게 만들어 오게 한 뒤(_arrBuildAlert 가 그 답을 쓴다) 보낸다. 아니면 바로.
+function _arrFireAlertGo(destStn, arrMs){
+  try{ if(_rtxUse()){ _rtxPrefetch(destStn, arrMs, function(){ _arrFireAlertNow(destStn, arrMs); }); return; } }catch(e){}
   _arrFireAlertNow(destStn, arrMs);
 }
 
@@ -38843,6 +38958,7 @@ window.refreshShop=refreshShop;
     try{ if(typeof _sbhSyncCard === 'function') _sbhSyncCard(); var csbh = document.getElementById('sbhSetCard'); if(csbh && csbh.style.display === 'block') f.feat.sbh = { h: 1, on: _sbhOn() ? 1 : 0, f: 0, w: '' }; }catch(e){}
     try{ if(typeof _cndSyncCard === 'function') _cndSyncCard(); var ccnd = document.getElementById('cndSetCard'); if(ccnd && ccnd.style.display === 'block') f.feat.cnd = { h: 1, on: (_cndOn() && !_cndBad()) ? 1 : 0, f: _cndBad() ? 1 : 0, w: '' }; }catch(e){}
     try{ if(typeof _rtfSyncCard === 'function') _rtfSyncCard(); var crtf = document.getElementById('rtfSetCard'); if(crtf && crtf.style.display === 'block') f.feat.rtf = { h: 1, on: (_rtfOn() && !_rtfBad()) ? 1 : 0, f: _rtfBad() ? 1 : 0, w: '' }; }catch(e){}
+    try{ if(typeof _rtxSyncCard === 'function') _rtxSyncCard(); var crtx = document.getElementById('rtxSetCard'); if(crtx && crtx.style.display !== 'none') f.feat.rtx = { h: 1, on: (_rtxOn() && !_rtxDown()) ? 1 : 0, f: (_rtxOn() && _rtxDown()) ? 1 : 0, w: '' }; }catch(e){}
     try{ if(typeof _cmwSyncCard === 'function') _cmwSyncCard(); var ccmw = document.getElementById('cmwSetCard'); if(ccmw && ccmw.style.display !== 'none') f.feat.cmw = { h: 1, on: (_cmwOn() && !_cmwDown()) ? 1 : 0, f: (_cmwOn() && _cmwDown()) ? 1 : 0, w: '' }; }catch(e){}
     try{ if(typeof _arwSyncCard === 'function') _arwSyncCard(); var carw = document.getElementById('arwSetCard'); if(carw && carw.style.display !== 'none') f.feat.arw = { h: 1, on: (_arwOn() && !_arwDown()) ? 1 : 0, f: (_arwOn() && _arwDown()) ? 1 : 0, w: '' }; }catch(e){}
     try{ if(typeof _npSyncCard === 'function') _npSyncCard(); var cnp = document.getElementById('npolSetCard'); if(cnp && cnp.style.display !== 'none') f.feat.npol = { h: 1, on: (_npOn() && !_npDown()) ? 1 : 0, f: (_npOn() && _npDown()) ? 1 : 0, w: '' }; }catch(e){}
@@ -38986,6 +39102,7 @@ window.refreshShop=refreshShop;
       else if(key === 'f.npol') window._npSetUse(on);
       else if(key === 'f.arw') window._arwSetUse(on);
       else if(key === 'f.cmw') window._cmwSetUse(on);
+      else if(key === 'f.rtx') window._rtxSetUse(on);
       else if(key === 'f.scrs'){ setUse(on); return; }
       else return;                                                             // 모르는 키는 무시
     }catch(e){}
