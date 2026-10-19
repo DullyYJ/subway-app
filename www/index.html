@@ -20965,7 +20965,7 @@ window.addEventListener('unhandledrejection', function(e) {
             <span id="rtxSetDot" style="position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.3);"></span>
           </label>
         </div>
-        <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">내리기 7분 전 추천 알림의 본문(날씨·요일에 맞춘 한 줄, 메뉴와 가게 고르기, 줄 맞춤)을 웹이 아니라 엔진이 만들어요. 앱은 지금 날씨와 도착지 근처 가게 목록, 최근 추천한 곳만 엔진에 보내요. 엔진에 물을 수 없으면 예전 방식으로 바로 만들어요.</p>
+        <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">내리기 7분 전 추천 알림의 본문(날씨·요일에 맞춘 한 줄, 메뉴와 가게 고르기, 줄 맞춤)과 작은 화면·오버레이 추천 줄의 문구를 웹이 아니라 엔진이 만들어요. 앱은 지금 날씨와 도착지 근처 가게 목록, 최근 추천한 곳만 엔진에 보내요. 엔진에 물을 수 없으면 예전 방식으로 바로 만들어요.</p>
         <div id="rtxSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
         <style>#rtxSetOn:checked ~ #rtxSetKnob{background:var(--gold) !important;} #rtxSetOn:checked ~ #rtxSetDot{left:23px !important;}</style>
       </div>
@@ -24528,9 +24528,10 @@ var _ARR_WIT_DINNER = [
 // ── 하차 전 추천 '문구 만들기' — 엔진이 만든다(2026-10-19, 5번 5단계 넷째 조각 · 추천 문구 1단계) ──
 //   설정 스위치 '하차 전 추천 문구를 엔진이 만들기'(gdm_rtx, 기본 꺼짐). 켜면 추천 알림 본문(날씨·요일 한 줄 · 메뉴·가게 고르기 · 줄 맞춤)을 웹(_arrBuildAlertLocal)이 아니라 엔진(/reco-text)이 만든다.
 //   웹은 '도착 시각 · 목적지 · 지금 날씨 · 도착지 근처 가게 목록 · 최근 추천한 곳 · (쇼핑 시간대) 고른 쿠팡 상품 · 무작위 씨앗' 만 알리고, 돌아온 제목·본문·메뉴·가게를 그대로 쓴다.
-//   (쿠팡 상품 고르기 · 작은 화면(PiP) 문구 · 오버레이 광고 줄은 아직 웹.) 알림을 보내는 순간(_arrFireAlert)에만 한 번 묻고, 그 답을 _arrBuildAlert 가 한 번 가져다 쓴다.
+//   작은 화면(PiP) 문구 · 오버레이 추천 줄도 같은 답에 실려 온다(2단계) — 본문 한 줄이 AI 문구로 바뀐 경우만 작은 화면 문구를 다시 묻는다. (쿠팡 상품 고르기 · 가게 목록 받기는 아직 웹.)
+//   알림을 보내는 순간(_arrFireAlert)에만 한 번 묻고, 그 답을 _arrBuildAlert 가 한 번 가져다 쓴다.
 //   폴백(전부 자동): 스위치 꺼짐 · 엔진 응답 없음(2.5초)·오류·이상한 응답 → 예전 웹 규칙(_arrBuildAlertLocal)으로 바로 만들고 60초 동안은 엔진에 묻지 않는다.
-var _RTX = { bad: false, until: 0, why: '', asks: 0, ok: 0, used: 0, pack: null };
+var _RTX = { bad: false, until: 0, why: '', asks: 0, ok: 0, used: 0, pack: null, pad: null };
 function _rtxOn(){ try{ return localStorage.getItem('gdm_rtx') === '1'; }catch(e){ return false; } }
 function _rtxDown(){ return _RTX.until > Date.now(); }
 function _rtxUse(){ return _rtxOn() && !_rtxDown(); }
@@ -24581,14 +24582,46 @@ function _rtxPrefetch(destStn, arrMs, cb){
 // 엔진이 만든 본문 → 예전 _arrBuildAlert 와 같은 모양
 function _rtxUnpack(p){
   var r = p.r, a = {};
-  Object.keys(r).forEach(function(k){ if(k !== 'v' && k !== 'ok' && k !== 'placeIdx' && k !== 'shop') a[k] = r[k]; });
+  Object.keys(r).forEach(function(k){ if(k !== 'v' && k !== 'ok' && k !== 'placeIdx' && k !== 'shop' && k !== 'pip' && k !== 'ad') a[k] = r[k]; });
   if(r.kind === 'shop'){ a.shop = (r.shop && p.shop) ? p.shop : null; }
   else {
     var pl = (r.placeIdx >= 0 && p.food && p.food[r.placeIdx]) ? p.food[r.placeIdx] : null;
     a.place = pl;
     if(pl){ try{ _arrRecoMark(pl.n); }catch(e){} }                 // 예전 _arrPickPlace 가 하던 '최근 추천' 기록
   }
+  // 작은 화면 문구 · 오버레이 추천 줄(엔진이 같은 호출에서 함께 만든 것) — 모양이 맞을 때만 쓴다
+  _RTX.pad = null;
+  try{
+    var pip = r.pip, ad = r.ad;
+    if(pip && typeof pip.title === 'string' && Array.isArray(pip.lines) && (ad === null || (ad && typeof ad.a === 'string' && typeof ad.b === 'string' && typeof ad.k === 'string'))){
+      var ad2 = null;
+      if(ad){
+        ad2 = {}; Object.keys(ad).forEach(function(k){ if(k !== 'piIdx') ad2[k] = ad[k]; });
+        if(ad.pn !== undefined) ad2.pi = (ad.piIdx >= 0 && p.food && p.food[ad.piIdx]) ? p.food[ad.piIdx] : null;   // [맛집 보기]가 그 가게를 열 때 쓰는 원래 목록 항목
+      }
+      _RTX.pad = { a: a, pip: pip, ad: ad2 };
+    }
+  }catch(eP){}
   return a;
+}
+function _rtxPadFor(a){ var d = _RTX.pad; return (d && d.a === a && _rtxOn()) ? d : null; }
+// 본문 한 줄이 AI 문구로 바뀌었을 때만: 작은 화면 문구를 엔진에게 다시 받는다(실패하면 cb(null) → 예전 규칙)
+function _rtxPipFetch(a, slot, destStn, body, cb){
+  var done = false, fin = function(pt){ if(!done){ done = true; clearTimeout(tm); try{ cb(pt); }catch(e){} } };
+  var tm = setTimeout(function(){ if(!done){ _rtxFail('시간 초과'); fin(null); } }, 2500);
+  try{
+    var sh = a.shop || null;
+    fetch(_ROUTE_V2_BASE + '/reco-text', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({
+        op: 'pip', slot: slot, dest: destStn || '', body: body, nowMs: Date.now(), seed: Math.floor(Math.random() * 4294967296),
+        a: { remMin: a.remMin, menu: a.menu, brunch: a.brunch, hook: a.hook, spots: a.spots, shopN: sh && sh.n, shopT: sh && sh._t, cx: a.cx, dinner: a.dinner } }) })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(j){
+        if(done) return;
+        if(!(j && j.ok === true && j.v === 1 && j.pip && typeof j.pip.title === 'string' && Array.isArray(j.pip.lines))){ _rtxFail('응답 이상'); fin(null); return; }
+        _RTX.ok++; fin(j.pip);
+      })
+      .catch(function(){ if(!done){ _rtxFail('통신 실패'); fin(null); } });
+  }catch(e2){ if(!done){ _rtxFail('요청 실패'); fin(null); } }
 }
 function _arrBuildAlert(destStn, arrHour, arrMs){
   try{
@@ -24604,7 +24637,7 @@ window._rtxOn = _rtxOn;
 window._RTX = _RTX;
 window._rtxSetUse = function(on){
   try{ localStorage.setItem('gdm_rtx', on ? '1' : '0'); }catch(e){}
-  _RTX.bad = false; _RTX.until = 0; _RTX.why = ''; _RTX.pack = null;
+  _RTX.bad = false; _RTX.until = 0; _RTX.why = ''; _RTX.pack = null; _RTX.pad = null;
   try{ if(typeof window._rtxSyncCard === 'function') window._rtxSyncCard(); }catch(e2){}
 };
 window._rtxSyncCard = function(){
@@ -25202,12 +25235,13 @@ function _arrFireAlertNow(destStn, arrMs){
 
     var icon = (slot === 'shop') ? '🛍' : (slot === 'morning' ? '☕' : '🍗');
 
-    var send = function(body){
+    var sendNow = function(body, ePt, ePad){
       // ★ 작은 화면(PiP)에도 같은 추천을 싣는다 — 버튼 없이 문구만, 10초 표시 (2026-09-21)
+      //   ePt·ePad: 엔진이 만든 작은 화면 문구·오버레이 추천 줄(스위치 켬). 없으면 예전 규칙(_arrPipText · _arrAd).
       try{
-        var _pt = _arrPipText(a, slot, destStn, body);
+        var _pt = ePt || _arrPipText(a, slot, destStn, body);
         if(typeof _pipRecoSet === 'function') _pipRecoSet(_pt.title, _pt.lines.join('\n'), []);
-        try{ if(window._pipReco) window._pipReco.ad = _arrAd(a, slot, destStn); }catch(eAd){}   // ★ 오버레이 추천 줄에 실을 실제 가게·상품 이름
+        try{ if(window._pipReco) window._pipReco.ad = ePad ? ePad.ad : _arrAd(a, slot, destStn); }catch(eAd){}   // ★ 오버레이 추천 줄에 실을 실제 가게·상품 이름
         window._arrLast = { at: (window._pipReco && window._pipReco.at) || 0, slot: slot, action: action, title: a.title, body: body, ad: (window._pipReco && window._pipReco.ad) || null, stn: destStn || '' };   // ★ 오버레이 [보기] 가 같은 곳으로 보낸다
       }catch(e){}
 
@@ -25224,6 +25258,13 @@ function _arrFireAlertNow(destStn, arrMs){
       } else if(typeof showNotification==='function'){
         showNotification(a.title, body, { vibrate:vib, type:'arrive_reco' });
       }
+    };
+
+    var send = function(body){
+      var pad = _rtxPadFor(a);
+      if(!pad){ sendNow(body, null, null); return; }
+      if(body === a.body){ sendNow(body, pad.pip, pad); return; }          // 엔진이 만든 본문 그대로 → 엔진이 함께 만든 작은 화면 문구
+      _rtxPipFetch(a, slot, destStn, body, function(pt){ sendNow(body, pt, pad); });   // AI 문구로 바뀌었으면 작은 화면 문구만 다시
     };
 
     // ★ 저녁(야식·쇼핑)엔 Gemini로 하루를 위로하는 문구를 받아 감성 줄 교체
