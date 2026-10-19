@@ -118,7 +118,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     assert.ok(r[1].b.length > 0 && r[1].b.length <= 64, r[1].b);
   });
   await t('실제 발사 경로(_arrFireAlertNow)가 만든 추천에 ad 가 실린다(도착지도 넘긴다)', async () => {
-    const r = await page.evaluate(() => /_pipReco\.ad\s*=\s*_arrAd\(a, slot, destStn\)/.test(String(_arrFireAlertNow)));
+    const r = await page.evaluate(() => /_pipReco\.ad\s*=\s*(?:ePad \? ePad\.ad : )?_arrAd\(a, slot, destStn\)/.test(String(_arrFireAlertNow)));
     assert.strictEqual(r, true);
   });
   console.log('[④ 3D 렌더링 동작 프레임 (2026-10-13)]');

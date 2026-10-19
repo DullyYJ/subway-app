@@ -91,6 +91,27 @@ t('엔진은 웹 상태·저장소·전역 무작위를 건드리지 않는다',
   assert.ok(!/localStorage|window\.|document\./.test(src)); assert.ok(!/Math\.random\(\)/.test(src.replace('var RTX_RND = Math.random;', '')), 'Math.random() 직접 호출');
 });
 
+t('작은 화면 문구(pip)와 오버레이 추천 줄(ad)이 함께 온다: 첫 줄은 상황 문구 · 가게 이름 · 거리 없음', () => {
+  for (const h of [8, 12, 18, 20]) {
+    const a = ask(h); assert.ok(a.pip && a.pip.title === '하차 5분 전 · 강남', JSON.stringify(a.pip)); assert.strictEqual(a.pip.lines[0], a.hook);
+    assert.ok(a.pip.lines.length >= 3 && a.pip.lines.length <= 5);
+    assert.ok(a.ad && (a.ad.k === 'cafe' || a.ad.k === 'food') && a.ad.m === '' && a.ad.pn, JSON.stringify(a.ad));
+    assert.ok(a.ad.piIdx >= 0 && FOOD[a.ad.piIdx].n === a.ad.pn, '가게 목록 항목과 이름이 맞아야 한다');
+    assert.ok(a.ad.a.indexOf(a.ad.pn) === 0 && a.ad.b.length > 3);
+  }
+  const s = ask(22); assert.strictEqual(s.ad.k, 'shop'); assert.strictEqual(s.ad.a, '우산'); assert.strictEqual(s.ad.m, ''); assert.ok(!('pn' in s.ad));
+  assert.strictEqual(s.pip.lines[1], '우산');
+  const none = R.recoAlert({ arrMs: kst(12, 5), nowMs: kst(12, 0), dest: '강남', weather: null, food: null, recent: [], seed: 3 }); assert.strictEqual(none.ad, null);
+});
+t('작은 화면 문구 줄 길이: 한 줄 46자 안, 길면 …로 자르고 전체 7줄 안쪽', () => {
+  const a = R.recoPip({ slot: 'night', dest: '강남', nowMs: kst(20, 0), seed: 3, body: 'a\nb\nc\n' + '가'.repeat(120), a: { remMin: 5, menu: '피자', hook: '훅', cx: { h: 20 }, spots: ['가게1', '가게2'], dinner: false } });
+  a.pip.lines.forEach(l => assert.ok(l.length <= 47, l.length));
+  assert.ok(a.pip.lines.some(l => /…$/.test(l)));
+});
+t('recoPip: 이상한 입력에도 죽지 않는다', () => {
+  for (const bad of [undefined, {}, { a: {} }, { a: { cx: 5 }, nowMs: 1 }, { a: { cx: {} }, nowMs: kst(12, 0), slot: 5, body: 5, seed: 'x' }]) assert.strictEqual(R.recoPip(bad).v, 1);
+});
+
 const worker = fs.readFileSync(path.join(root, 'engine/route-v2-worker.ascii.js'), 'utf8');
 t('Worker 에 내장되고 /reco-text 길이 있다', () => {
   assert.ok(/\/\/ ===== reco-text \(/.test(worker)); assert.ok(/reco-text \\ub05d =====/.test(worker));
@@ -113,6 +134,8 @@ async function call(method, body) {
 (async () => {
   let r = await call('POST', { arrMs: kst(20, 5), nowMs: kst(20, 0), dest: '강남', weather: WX, food: FOOD, recent: [], seed: 7 });
   t('POST: ok · 야식 본문', () => { assert.strictEqual(r.status, 200); assert.strictEqual(r.json.ok, true); assert.strictEqual(r.json.kind, 'night'); assert.ok(r.json.body.length > 20); });
+  r = await call('POST', { op: 'pip', slot: 'night', dest: '강남', body: 'a\nb\nc\nd', nowMs: kst(20, 0), seed: 1, a: { remMin: 5, menu: '피자', hook: '훅', cx: { h: 20 }, spots: ['A'], dinner: false } });
+  t('POST op=pip: 작은 화면 문구만', () => { assert.strictEqual(r.status, 200); assert.strictEqual(r.json.ok, true); assert.ok(r.json.pip && r.json.pip.lines.length >= 2); assert.ok(!('body' in r.json)); });
   r = await call('GET'); t('GET → 405', () => assert.strictEqual(r.status, 405));
   r = await call('OPTIONS'); t('OPTIONS → 204', () => assert.strictEqual(r.status, 204));
   r = await call('POST', '{no'); t('이상한 JSON → 400', () => assert.strictEqual(r.status, 400));

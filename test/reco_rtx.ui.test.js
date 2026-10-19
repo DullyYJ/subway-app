@@ -48,7 +48,7 @@ const SHOPS = [null, { n: '접이식 우산', _t: '우천대비', _cat: '생활'
       if (ENG.mode === '404') return r.fulfill({ status: 404, headers: H, body: '{"error":"not found"}' });
       if (ENG.mode === 'hang') return;
       if (ENG.mode === 'bad') return r.fulfill({ status: 200, headers: H, body: '{"ok":true,"v":1,"slot":"night"}' });
-      const out = RX.recoAlert(JSON.parse(body)); out.ok = true;
+      const jb = JSON.parse(body); const out = jb.op === 'pip' ? RX.recoPip(jb) : RX.recoAlert(jb); out.ok = true;
       return r.fulfill({ status: 200, headers: H, body: JSON.stringify(out) });
     }
     return r.fulfill({ status: 200, headers: H, body: '{}' });
@@ -58,6 +58,7 @@ const SHOPS = [null, { n: '접이식 우산', _t: '우천대비', _cat: '생활'
   await page.clock.runFor(3000);
   const fixAt = ms => page.clock.setFixedTime(new Date(ms));
   await fixAt(kst(12, 0));
+  await page.evaluate(() => { window.__origNow = window._arrFireAlertNow; });   // 진짜 발송 함수(아래 시험에서 일부는 바꿔 끼운다)
 
   // 장면 만들기: 가게 목록 · 날씨 · 최근 기록 · 쇼핑 상품을 고정(웹 쪽 전역을 바꿔 끼운다)
   const scene = async (o) => {
@@ -78,16 +79,19 @@ const SHOPS = [null, { n: '접이식 우산', _t: '우천대비', _cat: '생활'
   // 예전 규칙으로 만든 본문(씨앗을 Math.random 으로 흉내) / 엔진 경로로 만든 본문(prefetch → _arrBuildAlert)
   const localA = (dest, arrMs, seed) => page.evaluate(([dest, arrMs, seed, mb]) => {
     var old = Math.random; Math.random = eval(mb)(seed);
-    try { return JSON.parse(JSON.stringify(window._arrBuildAlertLocal(dest, null, arrMs))); } finally { Math.random = old; }
+    try {
+      var a = window._arrBuildAlertLocal(dest, null, arrMs), slot = _arrSlot(arrMs);
+      var pip = _arrPipText(a, slot, dest, a.body), ad = _arrAd(a, slot, dest);      // 알림을 보낸 뒤 웹이 따로 만들던 것(같은 무작위 흐름)
+      return JSON.parse(JSON.stringify({ a: a, pip: pip, ad: ad }));
+    } finally { Math.random = old; }
   }, [dest, arrMs, seed, mulberry]);
   const engineA = async (dest, arrMs, seed) => {
     const r = await page.evaluate(([dest, arrMs, seed]) => new Promise(res => {
       var old = Math.random; Math.random = function () { return seed / 4294967296; };
       var before = window._RTX.ok;
-      window._rtxPrefetchTest = function () { return true; };
-      _rtxPrefetch(dest, arrMs, function () {
+            _rtxPrefetch(dest, arrMs, function () {
         Math.random = old;
-        try { res(JSON.parse(JSON.stringify(_arrBuildAlert(dest, null, arrMs)))); } catch (e) { res({ err: String(e) }); }
+        try { var a = _arrBuildAlert(dest, null, arrMs), pad = window._rtxPadFor ? null : null, d = window._RTX.pad; res(JSON.parse(JSON.stringify({ a: a, pip: d && d.a === a ? d.pip : null, ad: d && d.a === a ? d.ad : 'none' }))); } catch (e) { res({ err: String(e) }); }
       });
       Math.random = old === Math.random ? old : Math.random;
     }), [dest, arrMs, seed]);
@@ -115,19 +119,19 @@ const SHOPS = [null, { n: '접이식 우산', _t: '우천대비', _cat: '생활'
         const arrMs = kst(h, mi, day), nowMs = arrMs - 5 * 60000;
         const recent = rc ? ['카페C', '국밥집A', '치킨B'] : [];
         await scene({ on: true, nowMs, food: FOODS[fk], wx: WXS[wk], shop: sh, recent });
-        const L = await localA('강남', arrMs, seed);
+        const L = await localA('강남', arrMs, seed);   // { a, pip, ad }
         await scene({ on: true, nowMs, food: FOODS[fk], wx: WXS[wk], shop: sh, recent });
         const E = await engineA('강남', arrMs, seed);
         const id = JSON.stringify({ h, wk, fk, rc, seed, day, sh: sh && sh.n });
         assert.deepStrictEqual(E, L, id);
-        kinds.add(L.kind); compared++;
+        kinds.add(L.a.kind); compared++;
       }
     }
     assert.ok(kinds.size >= 5, [...kinds].join()); assert.ok(compared > 300, 'compared ' + compared);
   });
   await t('엔진이 고른 가게의 기록(최근 추천)을 앱이 남긴다', async () => {
     await scene({ on: true, nowMs: kst(11, 55), food: FOODS.rich, wx: WXS.cold, shop: null });
-    const E = await engineA('강남', kst(12, 5), 9);
+    const E0 = await engineA('강남', kst(12, 5), 9), E = E0.a;
     const marks = await page.evaluate(() => window.__marks.slice());
     assert.ok(E.place && marks.length === 1 && marks[0] === E.place.n, JSON.stringify({ p: E.place && E.place.n, marks }));
   });
@@ -138,7 +142,7 @@ const SHOPS = [null, { n: '접이식 우산', _t: '우천대비', _cat: '생활'
 
   console.log('[한 번만 쓴다 · 낡은 답은 안 쓴다]');
   await scene({ on: true, nowMs: kst(11, 55), food: FOODS.rich, wx: WXS.cold, shop: null });
-  const first = await engineA('강남', kst(12, 5), 11);
+  const first = (await engineA('강남', kst(12, 5), 11)).a;
   const second = await page.evaluate(([a]) => JSON.parse(JSON.stringify(_arrBuildAlert('강남', null, a))), [kst(12, 5)]);
   await t('엔진 답은 한 번만 쓰고 두 번째 호출은 예전 규칙', async () => { assert.ok(first.body); assert.ok(second.body); assert.strictEqual(await page.evaluate(() => window._RTX.pack), null); assert.strictEqual(await page.evaluate(() => window._RTX.used), await page.evaluate(() => window._RTX.used)); });
   await scene({ on: true, nowMs: kst(11, 55), food: FOODS.rich, wx: WXS.cold, shop: null });
@@ -181,6 +185,79 @@ const SHOPS = [null, { n: '접이식 우산', _t: '우천대비', _cat: '생활'
   await t('쇼핑 시간대: 엔진이 실패해도 상품을 두 번 고르지 않고 같은 상품으로 만든다', async () => {
     assert.strictEqual(await page.evaluate(() => window.__shopPicks), 1);
     const g = await page.evaluate(() => window.__got); assert.ok(g && g.shop && g.shop.n === '접이식 우산' && /접이식 우산/.test(g.body));
+  });
+
+  console.log('[알림을 실제로 보내는 길 — 작은 화면 문구 · 오버레이 추천 줄까지 같다]');
+  const e2e = async (on, o, seed, ai) => {
+    await scene({ on, nowMs: o.arrMs - 5 * 60000, food: o.food, wx: o.wx, shop: o.shop, recent: [] });
+    await page.evaluate(([dest, arrMs, seed, mb, on, ai]) => {
+      window.__pip = null; window.__shown = null; window.__aiHit = 0;
+      _notifOnceReset(); window._pipReco = { at: 1 };
+      window._pipRecoSet = function (t, b) { window.__pip = { t: t, b: b }; };
+      window.showNotification = function (t, b) { window.__shown = { t: t, b: b, via: 'notif' }; };
+      window._showBriefingModal = function (t, b) { window.__shown = { t: t, b: b, via: 'modal' }; };
+      window._featureAllowed = function () { return true; };
+      window._arrAiCopy = ai ? function (subject, d, cb) { window.__aiHit++; cb('AI가 쓴 한 줄'); } : null;
+      window._arrFireAlertNow = window.__origNow;
+      Math.random = on ? function () { return seed / 4294967296; } : eval(mb)(seed);
+      _arrFireAlertGo(dest, arrMs);
+    }, ['강남', o.arrMs, seed, mulberry, on, ai]);
+    for (let i = 0; i < 80; i++) { if (await page.evaluate(() => !!window.__pip)) break; await sleep(30); await page.clock.runFor(40); }
+    return page.evaluate(() => { Math.random = window.__origRandom || Math.random; return JSON.parse(JSON.stringify({ pip: window.__pip, shown: window.__shown, last: window._arrLast, ai: window.__aiHit })); });
+  };
+  await page.evaluate(() => { window.__origRandom = Math.random; });
+  const E2 = [
+    ['아침 카페', { arrMs: kst(8, 5), food: FOODS.rich, wx: WXS.cold, shop: null }, false],
+    ['점심', { arrMs: kst(12, 5), food: FOODS.rich, wx: WXS.rain, shop: null }, false],
+    ['저녁', { arrMs: kst(18, 5), food: FOODS.rich, wx: WXS.swing, shop: null }, false],
+    ['야식', { arrMs: kst(20, 5), food: FOODS.rich, wx: WXS.hot, shop: null }, false],
+    ['쇼핑', { arrMs: kst(22, 5), food: FOODS.rich, wx: WXS.cold, shop: SHOPS[1] }, false],
+    ['가게 목록 없음', { arrMs: kst(12, 5), food: FOODS.none, wx: null, shop: null }, false]
+  ];
+  for (const [nm, o, ai] of E2) {
+    await t('실제 발송: ' + nm + ' — 알림·작은 화면·오버레이 줄이 스위치 껐을 때와 같다', async () => {
+      for (const seed of [3, 99, 123456]) {
+        const L = await e2e(false, o, seed, ai); const hitsBefore = ENG.hits.length;
+        const E = await e2e(true, o, seed, ai);
+        assert.ok(ENG.hits.length > 0, '엔진을 부르지 않음');
+        assert.ok(L.pip && L.shown && L.last, '예전 길이 안 나감 ' + JSON.stringify(L));
+        assert.deepStrictEqual(E, L, nm + ' seed=' + seed);
+      }
+    });
+  }
+  const aiScn = { arrMs: kst(20, 5), food: FOODS.rich, wx: null, shop: null };
+  await t('본문 한 줄이 AI 문구로 바뀌면 작은 화면 문구만 엔진에 다시 묻는다(알림 본문엔 AI 줄이 들어간다)', async () => {
+    const L = await e2e(false, aiScn, 5, true); const E = await e2e(true, aiScn, 5, true);
+    assert.strictEqual(E.ai, 1); assert.ok(ENG.hits.some(h => JSON.parse(h).op === 'pip'), 'pip 요청 없음'); assert.strictEqual(await page.evaluate(() => _rtxDown()), false, '엔진 pip 응답을 못 받아 예전 규칙으로 갔다');
+    assert.ok(/AI가 쓴 한 줄/.test(E.shown.b) && /AI가 쓴 한 줄/.test(L.shown.b));
+    assert.strictEqual(E.shown.b, L.shown.b); assert.strictEqual(E.shown.t, L.shown.t);
+    assert.deepStrictEqual(E.last.ad, L.last.ad);
+    const lp = L.pip.b.split('\n'), ep = E.pip.b.split('\n'); assert.strictEqual(ep[0], lp[0]); assert.ok(ep.some(x => /AI가 쓴 한 줄/.test(x)) === lp.some(x => /AI가 쓴 한 줄/.test(x)));
+  });
+  await t('작은 화면 문구만 다시 받을 때(op=pip) 같은 씨앗이면 예전 _arrPipText 와 같다', async () => {
+    for (const seed of [1, 42, 777]) {
+      await scene({ on: true, nowMs: kst(19, 55), food: FOODS.rich, wx: WXS.cold, shop: null });
+      const r = await page.evaluate(([seed, mb, arrMs]) => new Promise(res => {
+        var old = Math.random; Math.random = eval(mb)(11);
+        var a = window._arrBuildAlertLocal('강남', null, arrMs); Math.random = old;
+        var body = a.body.split('\n'); body[3] = 'AI 한 줄'; body = body.join('\n');
+        Math.random = eval(mb)(seed); var local = _arrPipText(a, 'night', '강남', body); Math.random = function () { return seed / 4294967296; };
+        _rtxPipFetch(a, 'night', '강남', body, function (pt) { Math.random = old; res({ local: local, pt: pt }); });
+      }), [seed, mulberry, kst(20, 5)]);
+      assert.ok(r.pt, 'pip 응답 없음 ' + JSON.stringify(await page.evaluate(() => ({ down: _rtxDown(), why: _RTX.why }))) + ENG.hits.length); assert.deepStrictEqual(r.pt, JSON.parse(JSON.stringify(r.local)));
+    }
+  });
+  await t('엔진 pip 요청에는 알림 정보 일부만 간다(가게 목록·최근 기록은 가지 않는다)', async () => {
+    const j = JSON.parse(ENG.hits.filter(h => JSON.parse(h).op === 'pip')[0]);
+    assert.deepStrictEqual(Object.keys(j).sort(), ['a', 'body', 'dest', 'nowMs', 'op', 'seed', 'slot']);
+    assert.ok(!('food' in j) && !('recent' in j));
+  });
+  await t('엔진이 만든 pip/ad 모양이 이상하면 쓰지 않고 예전 규칙으로 간다', async () => {
+    await scene({ on: true, nowMs: E2[3][1].arrMs - 300000, food: FOODS.rich, wx: WXS.hot, shop: null });
+    const bad = await page.evaluate(([dest, arrMs]) => new Promise(res => {
+      window._rtxPrefetch(dest, arrMs, function () { var pk = window._RTX.pack; if (pk) { pk.r.pip = { title: 5 }; } var a = _arrBuildAlert(dest, null, arrMs); res({ pad: window._RTX.pad, body: a.body }); });
+    }), ['강남', E2[3][1].arrMs]);
+    assert.strictEqual(bad.pad, null); assert.ok(/야식/.test(bad.body));
   });
 
   console.log('[설정 카드]');
