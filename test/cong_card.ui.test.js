@@ -67,7 +67,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   for (const th of ['dark', 'pastel']) {
     await t('현재 시각 막대가 그래프 가운데 · 테두리 ' + (th === 'dark' ? '흰색' : '검정') + '(' + th + ')', async () => {
       const { ctx, page, errs } = await fresh(th);
-      await page.evaluate(() => { const c = document.querySelector('.tab-content, #tab-home, body'); updateCong({ name: '부평', line: '1호선' }, true); });
+      await page.evaluate(() => { window.getBaseTimeMs = () => new Date(2026, 9, 15, 14, 10).getTime(); updateCong({ name: '부평', line: '1호선' }, true); });   // 기준 시각 고정(실행 시각이 운행 시간 밖이면 현재 막대가 없다)
       await page.waitForTimeout(1200);
       const r = await page.evaluate(() => {
         const sc = document.getElementById('chart24Scroll'), cur = document.querySelector('#bars24 .bar24-col.cur');

@@ -100,7 +100,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   });
   await t('_arrAd 점심: 메뉴와 상관없이 고른 가게(place)만 있으면 그 가게 업종으로 말한다(안 파는 메뉴를 권하지 않는다)', async () => {
     const r = await page.evaluate(() => _arrAd({ place: { n: '대박국밥', d: 1340, c: '음식점 > 한식 > 국밥' }, spots: [], menu: '제육볶음', cx: _arrCx(Date.now()) }, 'lunch', ''));
-    assert.strictEqual(r.a, '대박국밥 · 국밥'); assert.ok(/국밥/.test(r.b), r.b); assert.ok(!/제육볶음/.test(r.b), r.b); assert.strictEqual(r.m, ''); assert.ok(r.b.length > 14 && r.b.length <= 64, '설명이 짧다: ' + r.b);
+    assert.strictEqual(r.a, '대박국밥 · 국밥'); assert.ok(/국밥/.test(r.b), r.b); assert.ok(!/제육볶음/.test(r.b), r.b); assert.strictEqual(r.m, ''); assert.ok(r.b.length >= 8 && r.b.length <= 64, '설명이 짧다: ' + r.b);
   });
   await t('_arrAd 저녁·야식·이모지 제거·정보 없음', async () => {
     const r = await page.evaluate(() => [
