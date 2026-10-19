@@ -20925,6 +20925,21 @@ window.addEventListener('unhandledrejection', function(e) {
         <style>#npolSetOn:checked ~ #npolSetKnob{background:var(--gold) !important;} #npolSetOn:checked ~ #npolSetDot{left:23px !important;}</style>
       </div>
 
+      <!-- ★ 2026-10-19: 하차 전 추천 시점을 엔진이 정하기 — 추천을 언제 보낼지·도착 시간대를 엔진이 정한다. 기본 꺼짐 -->
+      <div id="arwSetCard" style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <div style="font-size:15px;font-weight:800;color:var(--text);">하차 전 추천 시점을 엔진이 정하기</div>
+          <label style="position:relative;display:inline-block;width:46px;height:26px;">
+            <input type="checkbox" id="arwSetOn" onchange="_arwSetUse(this.checked)" style="opacity:0;width:0;height:0;">
+            <span id="arwSetKnob" style="position:absolute;inset:0;border-radius:13px;background:var(--border2);transition:.2s;cursor:pointer;"></span>
+            <span id="arwSetDot" style="position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.3);"></span>
+          </label>
+        </div>
+        <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">내리기 7분 전부터 1분 전 사이에, 카페·식사·쇼핑 추천을 지금 보낼지와 도착 시간대(아침·점심·저녁·야식·쇼핑)를 웹이 아니라 엔진이 정해요. 같은 여정에 한 번만 보내는 규칙도 엔진이 지켜요. 엔진에 물을 수 없으면 예전 방식으로 바로 정해요.</p>
+        <div id="arwSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
+        <style>#arwSetOn:checked ~ #arwSetKnob{background:var(--gold) !important;} #arwSetOn:checked ~ #arwSetDot{left:23px !important;}</style>
+      </div>
+
       <!-- ★ 2026-10-03: 도착 오차 익명 기록 (끌 수 있음) -->
       <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
         <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:8px;">📊 안내 정확도 향상</div>
@@ -24370,6 +24385,10 @@ window._arrAiCopy = _arrAiCopy;
 //   19:00~21:00  night   : 야식 추천 + 배달앱
 //   21:01~23:59  shop    : 쿠팡 아이템 추천 + 쿠팡 구경
 function _arrSlot(arrMs){
+  try{ var _dc = window._arwDec; if(_dc && _dc.arrMs === arrMs && _arwUse()) return _dc.slot; }catch(eD){}   // 엔진이 이 도착 시각에 정해 준 시간대(스위치 켬)
+  return _arrSlotLocal(arrMs);
+}
+function _arrSlotLocal(arrMs){
   var d = new Date(arrMs);
   var m = d.getHours()*60 + d.getMinutes();
   // ★ 2026-09-03: 야식은 21:00 까지, 그 뒤부터 쇼핑
@@ -24383,6 +24402,7 @@ function _arrSlot(arrMs){
   return 'none';
 }
 window._arrSlot = _arrSlot;
+window._arrSlotLocal = _arrSlotLocal; window._arrIsDinnerLocal = _arrIsDinnerLocal; window._arrCheckPreAlertLocal = _arrCheckPreAlertLocal;
 
 // 아침 브런치 메뉴
 var _ARR_BRUNCH = ['크로플','에그 샌드위치','베이글','프렌치토스트','아보카도 토스트',
@@ -24455,6 +24475,10 @@ window._arrRemainMin = _arrRemainMin;
 // ★ 2026-10-01 (YJ 제안 2번): 17~19시 도착은 '야식'이 아니라 '저녁 식사'다(19시부터 야식).
 //   슬롯 이름('night')과 배달 연결·감시 로직은 그대로 두고, 문구·메뉴·동작만 갈라 쓴다.
 function _arrIsDinner(arrMs){
+  try{ var _dc = window._arwDec; if(_dc && _dc.arrMs === arrMs && _arwUse()) return _dc.dinner === true; }catch(eD){}
+  return _arrIsDinnerLocal(arrMs);
+}
+function _arrIsDinnerLocal(arrMs){
   try{
     var d = new Date(arrMs), m = d.getHours()*60 + d.getMinutes();
     return m >= 17*60 && m < 19*60;
@@ -25182,7 +25206,86 @@ function _arrGoFoodTab(){
 window._arrGoFoodTab = _arrGoFoodTab;
 
 // calcETA에서 매 갱신마다 호출 — 남은 시간이 10분 이하가 되는 순간 1회만 발사
+// ── 하차 전 추천 '언제 보낼까' — 엔진이 정한다(2026-10-19, 5번 5단계 둘째 조각) ──
+//   설정 스위치 '하차 전 추천 시점을 엔진이 정하기'(gdm_arw, 기본 꺼짐). 켜면 '지금 추천을 보낼까(내리기 7분~1분 전 · 여정당 1회 · 30분 안 재발송 없음)'와 도착 시간대(아침·점심·저녁·야식·쇼핑)를
+//   웹 규칙(_arrCheckPreAlert 본체 · _arrSlot)이 아니라 엔진(/arrive-reco)이 정한다. 웹은 '마지막 대중교통 하차까지 남은 초 · 도착 시각 · 목적지 · 지난번 보낸 기록'만 알리고, 돌아온 판정을 그대로 따른다.
+//   (추천 본문·가게 고르기·날씨 문구는 그대로 웹/서버 — _arrFireAlert 이후는 건드리지 않는다.)
+//   엔진이 '다시 물을 때까지 기다릴 시간'(5~60초)도 알려 줘서, 20초마다 도는 감시가 여정 내내 엔진을 부르지 않는다.
+//   폴백(전부 자동): 스위치 꺼짐 · 엔진 응답 없음(2.5초)·오류·이상한 응답 → 예전 웹 규칙(_arrCheckPreAlertLocal)으로 바로 정하고 60초 동안은 엔진에 묻지 않는다.
+var _ARW = { bad: false, until: 0, why: '', busy: false, nextAt: 0, asks: 0, ok: 0, fires: 0, seq: 0 };
+function _arwOn(){ try{ return localStorage.getItem('gdm_arw') === '1'; }catch(e){ return false; } }
+function _arwDown(){ return _ARW.until > Date.now(); }
+function _arwUse(){ return _arwOn() && !_arwDown(); }
+function _arwFail(why){
+  _ARW.bad = true; _ARW.until = Date.now() + 60000; _ARW.why = String(why || '').slice(0, 40); _ARW.busy = false; _ARW.nextAt = 0;
+  try{ if(typeof window._arwSyncCard === 'function') window._arwSyncCard(); }catch(e){}
+}
+function _arwGood(j){
+  return !!(j && j.ok === true && j.v === 1 && typeof j.fire === 'boolean' && typeof j.key === 'string' && typeof j.askMs === 'number' && isFinite(j.askMs)
+    && ['morning', 'lunch', 'night', 'shop', 'none'].indexOf(j.slot) >= 0 && typeof j.dinner === 'boolean');
+}
+function _arwCheck(arrMs, remSecs){
+  var now = Date.now();
+  if(_ARW.busy || now < _ARW.nextAt) return;                  // 엔진이 '아직 이르다'고 한 동안은 묻지 않는다
+  var dest = (window._arrAlightCoord && window._arrAlightCoord.name) || _arrDestName();
+  var body = { arrMs: arrMs, remSec: remSecs, dest: dest || '', lastKey: window._arrAlertKey || '', lastAt: window._arrAlertAt || 0, nowMs: now };
+  _ARW.busy = true; _ARW.asks++; var my = ++_ARW.seq, done = false;
+  var fail = function(why){
+    if(done) return; done = true; clearTimeout(tm);
+    if(my === _ARW.seq){ _arwFail(why); try{ _arrCheckPreAlertLocal(arrMs, remSecs); }catch(e1){} }
+  };
+  var tm = setTimeout(function(){ fail('시간 초과'); }, 2500);
+  try{
+    fetch(_ROUTE_V2_BASE + '/arrive-reco', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(j){
+        if(done) return;
+        if(!_arwGood(j)){ fail('응답 이상'); return; }
+        done = true; clearTimeout(tm); _ARW.busy = false; _ARW.ok++;
+        _ARW.nextAt = Date.now() + Math.max(5000, Math.min(60000, j.askMs));
+        window._arwDec = { arrMs: arrMs, slot: j.slot, dinner: j.dinner };
+        if(my !== _ARW.seq) return;
+        if(typeof _baseTimeMs !== 'undefined' && _baseTimeMs != null) return;   // 기다리는 동안 예상(미래) 모드가 됐다
+        if(j.fire){
+          if(window._arrAlertKey === j.key) return;                // 기다리는 동안 이미 보냈다(두 번 뜨지 않게)
+          _ARW.fires++;
+          window._arrAlertKey = j.key; window._arrAlertAt = Date.now();
+          _arrFireAlert(dest, arrMs);
+        }
+        try{ if(typeof window._arwSyncCard === 'function') window._arwSyncCard(); }catch(e2){}
+      })
+      .catch(function(){ fail('통신 실패'); });
+  }catch(e3){ fail('요청 실패'); }
+}
 function _arrCheckPreAlert(arrMs, remSecs){
+  try{
+    if(typeof _baseTimeMs!=='undefined' && _baseTimeMs != null) return;   // 예상(미래) 모드 제외
+    if(!arrMs || remSecs == null) return;
+    if(_arwUse()){ _arwCheck(arrMs, remSecs); return; }
+  }catch(e){}
+  _arrCheckPreAlertLocal(arrMs, remSecs);
+}
+window._arwOn = _arwOn;
+window._arwStat = _ARW;
+window._arwSetUse = function(on){
+  try{ localStorage.setItem('gdm_arw', on ? '1' : '0'); }catch(e){}
+  _ARW.bad = false; _ARW.until = 0; _ARW.why = ''; _ARW.busy = false; _ARW.nextAt = 0; _ARW.seq++; window._arwDec = null;
+  try{ if(typeof window._arwSyncCard === 'function') window._arwSyncCard(); }catch(e2){}
+};
+window._arwSyncCard = function(){
+  try{
+    var card = document.getElementById('arwSetCard'); if(!card) return;
+    var on = _arwOn(), bad = on && _arwDown(), cb = document.getElementById('arwSetOn'), st = document.getElementById('arwSetStat');
+    if(cb) cb.checked = on && !bad;
+    var t;
+    if(!on) t = '꺼짐 — 예전 방식(웹이 추천 시점을 정해요)으로 이어가요.';
+    else if(bad) t = '엔진에 물을 수 없어 예전 방식으로 대신 이어가고 있어요' + (_ARW.why ? ' (' + _ARW.why + ')' : '') + '. 잠시 뒤 다시 엔진에 물어요.';
+    else t = '켜짐 — 하차 전 추천을 언제 보낼지 엔진이 정해요(실험 중).' + (_ARW.ok ? ' 엔진 응답 ' + _ARW.ok + '번.' : '');
+    if(st && st.textContent !== t) st.textContent = t;
+  }catch(e3){}
+};
+try{ if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(function(){ if(window._arwSyncCard) window._arwSyncCard(); }, 1500); }); else setTimeout(function(){ if(window._arwSyncCard) window._arwSyncCard(); }, 1500); }catch(eArw){}
+function _arrCheckPreAlertLocal(arrMs, remSecs){
   try{
     if(typeof _baseTimeMs!=='undefined' && _baseTimeMs != null) return;   // 예상(미래) 모드 제외
     if(!arrMs || remSecs == null) return;
@@ -38614,6 +38717,7 @@ window.refreshShop=refreshShop;
     try{ if(typeof _sbhSyncCard === 'function') _sbhSyncCard(); var csbh = document.getElementById('sbhSetCard'); if(csbh && csbh.style.display === 'block') f.feat.sbh = { h: 1, on: _sbhOn() ? 1 : 0, f: 0, w: '' }; }catch(e){}
     try{ if(typeof _cndSyncCard === 'function') _cndSyncCard(); var ccnd = document.getElementById('cndSetCard'); if(ccnd && ccnd.style.display === 'block') f.feat.cnd = { h: 1, on: (_cndOn() && !_cndBad()) ? 1 : 0, f: _cndBad() ? 1 : 0, w: '' }; }catch(e){}
     try{ if(typeof _rtfSyncCard === 'function') _rtfSyncCard(); var crtf = document.getElementById('rtfSetCard'); if(crtf && crtf.style.display === 'block') f.feat.rtf = { h: 1, on: (_rtfOn() && !_rtfBad()) ? 1 : 0, f: _rtfBad() ? 1 : 0, w: '' }; }catch(e){}
+    try{ if(typeof _arwSyncCard === 'function') _arwSyncCard(); var carw = document.getElementById('arwSetCard'); if(carw && carw.style.display !== 'none') f.feat.arw = { h: 1, on: (_arwOn() && !_arwDown()) ? 1 : 0, f: (_arwOn() && _arwDown()) ? 1 : 0, w: '' }; }catch(e){}
     try{ if(typeof _npSyncCard === 'function') _npSyncCard(); var cnp = document.getElementById('npolSetCard'); if(cnp && cnp.style.display !== 'none') f.feat.npol = { h: 1, on: (_npOn() && !_npDown()) ? 1 : 0, f: (_npOn() && _npDown()) ? 1 : 0, w: '' }; }catch(e){}
     try{ if(typeof _raSyncCard === 'function') _raSyncCard(); var cra = document.getElementById('raSetCard'); if(cra && cra.style.display !== 'none') f.feat.ra = { h: 1, on: (_raOn() && !_raDown()) ? 1 : 0, f: (_raOn() && _raDown()) ? 1 : 0, w: '' }; }catch(e){}
     try{ if(typeof _stoSyncCard === 'function') _stoSyncCard(); var csto = document.getElementById('stoSetCard'); if(csto && csto.style.display === 'block') f.feat.sto = { h: 1, on: (_stoOn() && !_stoBad()) ? 1 : 0, f: _stoBad() ? 1 : 0, w: '' }; }catch(e){}
@@ -38753,6 +38857,7 @@ window.refreshShop=refreshShop;
       else if(key === 'f.sto') window._stoSetUse(on);
       else if(key === 'f.ra') window._raSetUse(on);
       else if(key === 'f.npol') window._npSetUse(on);
+      else if(key === 'f.arw') window._arwSetUse(on);
       else if(key === 'f.scrs'){ setUse(on); return; }
       else return;                                                             // 모르는 키는 무시
     }catch(e){}
