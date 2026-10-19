@@ -98,6 +98,9 @@ jobs:
           - ovl_standby.ui.test.js
           - sbh_native.test.js
           - sbh_handback.ui.test.js
+          - home_search_native.test.js
+          - home_cnd.ui.test.js
+          - home_stations.ui.test.js
           - standby_card.ui.test.js
           - rt_arrival_cands.ui.test.js
           - shop_version.ui.test.js
@@ -225,7 +228,9 @@ jobs:
                       # 2026-10-17: 홈 경로 화면 가로 타임라인 네이티브(점진 이전 P1)
                       "native/HtlCore.java", "native/HtlView.java", "native/HtlNativePlugin.java",
                       # 2026-10-18: 서버 구동 네이티브 화면(엔진이 화면 구성까지 내려줌) 1호 — 쇼핑
-                      "native/ScreenCore.java", "native/ScreenView.java", "native/ScreenNativePlugin.java"]:
+                      "native/ScreenCore.java", "native/ScreenView.java", "native/ScreenNativePlugin.java",
+                      # 2026-10-19: 홈 후보 검색(버스정류장·장소)을 앱 본체가 직접 — 순수 자바 코어 + 플러그인(5번 2단계)
+                      "native/HomeSearchCore.java", "native/HomeSearchPlugin.java"]:
               if not os.path.exists(src):
                   raise SystemExit(src + " 가 없습니다 — 저장소에 올렸는지 확인하세요")
               shutil.copy(src, os.path.join(PKGDIR, os.path.basename(src)))
@@ -264,6 +269,7 @@ jobs:
               "        registerPlugin(RowNativePlugin.class);",
               "        registerPlugin(HtlNativePlugin.class);",
               "        registerPlugin(ScreenNativePlugin.class);",
+              "        registerPlugin(HomeSearchPlugin.class);",
               "        registerPlugin(GdmWidgetPlugin.class);",
               "        registerPlugin(GdmSharePlugin.class);",
               "        super.onCreate(savedInstanceState);",
