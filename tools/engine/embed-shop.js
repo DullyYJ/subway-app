@@ -13,12 +13,14 @@ const SETS = [
   { name: 'BOARD', src: 'engine/board.js', glue: 'engine/board-worker.js', path: '/screen/board', fn: 'handleScreenBoard', anchor: '  if (url.pathname === "/screen/news") return handleScreenNews(request);\n' },
   { name: 'CHAT', src: 'engine/chat.js', glue: 'engine/chat-worker.js', path: '/screen/chat', fn: 'handleScreenChat', anchor: '  if (url.pathname === "/screen/board") return handleScreenBoard(request);\n' },
   { name: 'TABS', src: 'engine/tabs.js', glue: 'engine/tabs-worker.js', path: '/screen/tabs', fn: 'handleScreenTabs', anchor: '  if (url.pathname === "/screen/chat") return handleScreenChat(request);\n' },
-  { name: 'HOME', src: 'engine/home.js', glue: 'engine/home-worker.js', path: '/screen/home', fn: 'handleScreenHome', anchor: '  if (url.pathname === "/screen/tabs") return handleScreenTabs(request);\n' }
+  { name: 'HOME', pre: ['engine/home-stations.js'], src: 'engine/home.js', glue: 'engine/home-worker.js', path: '/screen/home', fn: 'handleScreenHome', anchor: '  if (url.pathname === "/screen/tabs") return handleScreenTabs(request);\n' }
 ];
 let all = '';
 for (const S of SETS) {
-  let src = fs.readFileSync(path.join(root, S.src), 'utf8');
-  src = src.slice(0, src.indexOf('if (typeof module')).trimEnd();
+  const cut = t => t.slice(0, t.indexOf('if (typeof module')).trimEnd();
+  let src = cut(fs.readFileSync(path.join(root, S.src), 'utf8'));
+  // pre: 이 모듈보다 먼저 붙는 데이터 파일(예: 홈 화면의 지하철역 표). 본문 앞에 그대로 놓는다.
+  if (S.pre) src = S.pre.map(f => cut(fs.readFileSync(path.join(root, f), 'utf8')).replace(/^'use strict';\n/m, '')).join('\n') + '\n' + src;
   const glue = fs.readFileSync(path.join(root, S.glue), 'utf8').trimEnd();
   const BEGIN = '// ===== ' + S.name + ' ENGINE BEGIN =====', END = '// ===== ' + S.name + ' ENGINE END =====';
   const block = BEGIN + '\n' + esc(src) + '\n' + esc(glue) + '\n' + END + '\n';
