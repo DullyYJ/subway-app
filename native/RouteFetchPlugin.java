@@ -106,7 +106,7 @@ public class RouteFetchPlugin extends Plugin {
     public void last(PluginCall call) {
         JSObject r = new JSObject();
         if (!state.has()) { call.resolve(r.put("ok", false)); return; }
-        r.put("ok", true).put("id", state.id()).put("url", state.url()).put("stage", state.stage()).put("at", state.at()).put("n", state.n()).put("raw", state.raw());
+        r.put("ok", true).put("id", state.id()).put("url", state.url()).put("stage", state.stage()).put("at", (double) state.at()).put("n", state.n()).put("raw", state.raw());
         call.resolve(r);
     }
 
