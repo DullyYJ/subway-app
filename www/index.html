@@ -11782,9 +11782,9 @@ function _arrTimeToMin(s){
 // ── 실시간 위치 미커버 노선 정차(dwell) 모델 ─────────────────────
 //   실시간 열차위치 API가 없는 지하철 노선(인천1·2호선, 지방선 등)은 시각표+GPS로만
 //   위치를 그려서, 열차가 아직 역에 서 있는데 마커가 먼저 출발해 앞서가는 일이 있었음.
-//   → 역 도착 후 12초간은 출발역에 고정(정차)했다가 이후 다음 역으로 이동시킨다.
+//   → 역 도착 후 20초간은 출발역에 고정(정차)했다가 이후 다음 역으로 이동시킨다.
 //   실시간 커버 노선(서울1~9호선 등)은 API가 위치를 직접 보정하므로 정차 미적용.
-var _RT_NOCOVER_DWELL_MIN = 0.2;   // 12초 — 2026-10-19 YJ: 각 역 문 열림 12초(엔진 stopDwellSec 과 같은 값; 30초였다)
+var _RT_NOCOVER_DWELL_MIN = 20 / 60;   // 20초 — 2026-10-19 YJ: 각 역 도착 후 머무는 시간 20초(엔진 stopDwellSec 과 같은 값; 12초였다)
 function _rtNoCover(nd){
   if(!nd || !nd.isSub) return false;
   if(typeof _rtCovered==='function' && _rtCovered(nd.lineName||'')) return false;  // 커버 노선=API 보정
@@ -25603,7 +25603,7 @@ function _arrHomeEta(){
     var ae = _arrAlightEta();
     if(!ae) return null;
     window._arrAlightCoord = { name: ae.name, lat: ae.lat, lng: ae.lng };
-    return { arrMs: ae.arrMs, rem: ae.rem, name: ae.name };
+    return { arrMs: ae.arrMs, rem: ae.rem, name: ae.name, reco: ae.reco || null };
   }catch(e){ return null; }
 }
 window._arrHomeEta = _arrHomeEta;
@@ -31487,7 +31487,8 @@ window._arriveEnsure = _arriveEnsure;
 function _arrAlightEta(){
   try{
     var r = _arrive.res; if(!r || !r.ok || !r.alight || r.alight.ms == null) return null;
-    return { arrMs: r.alight.ms, rem: Math.round((r.alight.ms - Date.now()) / 1000), name: r.alight.name || '', lat: r.alight.lat, lng: r.alight.lng, idx: r.alight.idx };
+    var rc = (r.reco && isFinite(r.reco.fromMs) && isFinite(r.reco.untilMs)) ? { fromMs: +r.reco.fromMs, untilMs: +r.reco.untilMs, ttlMs: (isFinite(r.reco.ttlMs) && r.reco.ttlMs > 0) ? +r.reco.ttlMs : 0 } : null;   // ★ s61: 엔진이 정한 추천 보임 창
+    return { arrMs: r.alight.ms, rem: Math.round((r.alight.ms - Date.now()) / 1000), name: r.alight.name || '', lat: r.alight.lat, lng: r.alight.lng, idx: r.alight.idx, reco: rc };
   }catch(e){ return null; }
 }
 window._arrAlightEta = _arrAlightEta;
@@ -31693,7 +31694,12 @@ function _ovlLines(){
         var _re = (typeof _arrHomeEta === 'function') ? _arrHomeEta() : null;
         var _remS = _re ? _re.rem : ((d.min != null && isFinite(d.min)) ? d.min * 60 : null);
         var _rcForce = (window._ovlRecoForceUntil || 0) > Date.now();   // 설정>하차 추천 테스트 버튼: 도착 시각과 상관없이 90초간 미리보기
-        if(_rcForce || (_remS != null && _remS <= _ARR_PRE_MIN * 60 && _remS > -30 && window._ovlFinLv !== 1)){
+        // ★ 2026-10-19 (s61, '계산은 엔진이'): 언제 보일지는 엔진(/ride-eta op:'arrive')이 준 절대 시각 창(reco.fromMs~untilMs · 묵은 추천 ttlMs)이 정한다 — 앱은 지금 시각이 그 안인지만 비교한다.
+        //   엔진 창이 없으면(엔진 답 전 · 옛 응답) 예전 규칙(남은 초 7분 이하 · -30초 초과 · 25분 안)으로 그대로 판단한다.
+        var _rcWin = (_re && _re.reco) ? _re.reco : null, _rcNow = Date.now(), _rcIn, _rcStale = false;
+        if(_rcWin){ _rcIn = _rcNow >= _rcWin.fromMs && _rcNow < _rcWin.untilMs; _rcStale = _rcWin.ttlMs > 0 && _rcNow - r.at >= _rcWin.ttlMs; }
+        else _rcIn = (_remS != null && _remS <= _ARR_PRE_MIN * 60 && _remS > -30);
+        if(_rcForce || (_rcIn && !_rcStale && window._ovlFinLv !== 1)){
           // ★ 2026-10-14: 실제 가게·상품 이름(r.ad)이 있으면 이름(첫 줄 굵게)·추천 설명(두 줄까지)·거리/분류(작게). 없으면 예전 문구 두 줄.
           var _ad = (r.ad && r.ad.a) ? r.ad : null;
           var _rl = _ad ? [_pipClampText(_ad.a, 40), _pipClampText(_ad.b || '', 64)].filter(function(x){ return x; })
@@ -40913,6 +40919,9 @@ window.refreshShop=refreshShop;
       if(v === 'bt.pick'){ try{ openDtPicker(); }catch(x4){} return; }
       if(v === 'bt.now'){ try{ clearBaseTime(); }catch(x5){} setTimeout(function(){ kit.changed(); }, 60); return; }
     }
+    // ★ 2026-10-19 (YJ: "홈화면 키보드가 안 열려 · 위치감지/경로탐색 단추가 네모로 바뀜 · 스크롤하면 잔상"): 실기기에서 실험 카드가 문제를 보여 한 번만 꺼 둔다(웹 카드 = 예전 모습).
+    //   설정 > '네이티브 경로 입력'은 그대로 있어 다시 켜 볼 수 있다. 표시(gdm_scrh_mig1)가 있으면 건드리지 않는다.
+    try{ if(localStorage.getItem('gdm_scrh_mig1') !== '1'){ localStorage.setItem('gdm_scrh_mig1', '1'); localStorage.setItem('gdm_scrh_on', '0'); } }catch(eMig){}
     kit = window._scrKit({
       id: 'home', kp: 'gdm_scrh', ep: '/screen/home', screen: 'home', label: '경로 입력', card: 'scrh', cache: false, waitIdle: false, bucket: 0, idleMs: 200,
       onText: '홈 탭의 출발·도착 입력칸과 자동완성, 단추, 기준시각 줄을 엔진이 정한 대로 기기가 직접 그려요(실험 중).',
