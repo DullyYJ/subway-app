@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-19s53";
+var ENGINE_VERSION = "route-v2-2026-10-19s54";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -11658,7 +11658,7 @@ async function handleScreenShop(request) {
 //        facts = \uc571\uc774 \ubaa8\uc740 \uae30\uae30 \uc0ac\uc2e4(\uc804\ubd80 \uc120\ud0dd \u2014 \uc5c6\uc73c\uba74 \uae30\ubcf8\uac12):
 //          id: \ud604\uc7ac \ucee4\ubba4\ub2c8\ud2f0 \uc544\uc774\ub514('' \uc774\uba74 \uc5c6\uc74c) \u00b7 np:{arrive,transfer,arrive_reco: 1|0} \u00b7 npd: \uc54c\ub9bc \uad8c\ud55c \uac70\ubd80(1|0) \u00b7 rl: \ub3c4\ucc29 \uc624\ucc28 \uae30\ub85d(1|0)
 //          th: 'dark'|'pastel' \u00b7 sam: \uac24\ub7ed\uc2dc(1|0) \u00b7 samw: \uc571 \ubc30\ud130\ub9ac '\uc81c\ud55c\ub428'(1|0) \u00b7 errn: \uc624\ub958 \ub85c\uadf8 \uac1c\uc218 \u00b7 cm: \ucd9c\ud1f4\uadfc \uc54c\ub9bc(1|0|\uc5c6\uc74c) \u00b7 ovl: \uc624\ubc84\ub808\uc774(1|0|\uc5c6\uc74c)
-//          feat: { nm|sn|htl|scr|scrs|scrf|scrn|scrb|scrc|scrt|scrh|sbh|cnd|rtf|sto|ra : { h: \uc774 \uae30\ub2a5\uc774 \uc788\ub098(1|0), on: \uc2a4\uc704\uce58(1|0), f: \ubb38\uc81c\ub85c \uc6f9\uc73c\ub85c \ub3cc\uc544\uac14\ub098(1|0), w: \ubb38\uc81c \uc0ac\uc720, b: \uc800\uc7a5\ubcf8 \uc0ac\uc6a9 \uc911(1|0) } }
+//          feat: { nm|sn|htl|scr|scrs|scrf|scrn|scrb|scrc|scrt|scrh|sbh|cnd|rtf|sto|ra|npol : { h: \uc774 \uae30\ub2a5\uc774 \uc788\ub098(1|0), on: \uc2a4\uc704\uce58(1|0), f: \ubb38\uc81c\ub85c \uc6f9\uc73c\ub85c \ub3cc\uc544\uac14\ub098(1|0), w: \ubb38\uc81c \uc0ac\uc720, b: \uc800\uc7a5\ubcf8 \uc0ac\uc6a9 \uc911(1|0) } }
 // \ucd9c\ub825  { ok, v:1, screen:'settings', rev, cover:'tab', head:[], body:[\ub178\ub4dc\u2026] }  \u2190 \ub178\ub4dc \uc885\ub958\ub294 native/ScreenCore.java \uc640 \uac19\ub2e4
 //        panel{kids} \u00b7 text \u00b7 box \u00b7 toggle{key} \u00b7 navrow{act} \u00b7 select{act:{a:'sel'}} \u00b7 field{key} \u00b7 button \u00b7 spacer
 //        act = {a:'set',key} (\uc2a4\uc704\uce58 \u2014 \uc571\uc774 \uba3c\uc800 \ub4a4\uc9d1\uace0 \uc54c\ub9b0\ub2e4) | {a:'call',v} (\uc571 \uc548 \ud568\uc218 \ud638\ucd9c: saveId\u00b7clearId\u00b7pol.*\u00b7errlog) | {a:'web',v} (\uc6f9 \uce74\ub4dc \uc5f4\uae30) | {a:'sel',v} (\uace0\ub974\uae30)
@@ -11705,7 +11705,9 @@ var SETTINGS_FEATS = [
   { k: 'sto', title: '\uc124\uc815\u00b7\uc800\uc7a5\uac12\uc744 \uc571 \ubcf8\uccb4\uc5d0\ub3c4 \ubcf4\uad00\ud558\uae30', desc: '\uc124\uc815 \uc2a4\uc704\uce58\uc640 \uc990\uaca8\ucc3e\uae30 \uac19\uc740 \uc800\uc7a5\uac12\uc744 \uc6f9 \ud654\uba74 \uc800\uc7a5\uc18c\uc5d0\ub9cc \ub450\uc9c0 \uc54a\uace0 \uc571 \ubcf8\uccb4\uc5d0\ub3c4 \ud55c \ubc8c \ubcf4\uad00\ud574\uc694. \uc6f9 \ud654\uba74 \uc800\uc7a5\uc18c\uac00 \uc9c0\uc6cc\uc838\ub3c4 \uc124\uc815\uc774 \ub3cc\uc544\uc624\uace0, \uc571 \ubcf8\uccb4\uc758 \ub2e4\ub978 \uae30\ub2a5\ub3c4 \uc774 \uac12\uc744 \uc77d\uc744 \uc218 \uc788\uc5b4\uc694. \uc5b4\ub5a4 \uac12\uc744 \ubcf4\uad00\ud560\uc9c0\ub294 \uc5d4\uc9c4\uc774 \uc815\ud574\uc694. \ubb38\uc81c\uac00 \uc0dd\uae30\uba74 \uc608\uc804 \ubc29\uc2dd(\uc6f9 \uc800\uc7a5\uc18c\ub9cc)\uc73c\ub85c \ub3cc\uc544\uac00\uc694.',
     off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9 \ud654\uba74 \uc800\uc7a5\uc18c\uc5d0\ub9cc)\uc73c\ub85c \ubcf4\uad00\ud574\uc694.', bad: '\uc571 \ubcf8\uccb4 \ubcf4\uad00\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \ub300\uc2e0 \uc774\uc5b4\uac00\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \uc124\uc815\uacfc \uc800\uc7a5\uac12\uc744 \uc571 \ubcf8\uccb4\uc5d0\ub3c4 \ubcf4\uad00\ud574\uc694(\uc2e4\ud5d8 \uc911).' },
   { k: 'ra', title: '\ud558\ucc28\u00b7\ud658\uc2b9 \uc54c\ub9bc \uc2dc\uc810\uc744 \uc5d4\uc9c4\uc774 \uc815\ud558\uae30', desc: '\uc571\uc744 \ubcf4\uace0 \uc788\ub294 \ub3d9\uc548\uc758 \ud558\ucc28\u00b7\ud658\uc2b9 \uc54c\ub9bc(\ud658\uc2b9 2\uc815\uac70\uc7a5 \uc804\u00b7\ud658\uc2b9 \uc900\ube44\u00b7\ubaa9\uc801\uc9c0 2\uc815\uac70\uc7a5 \uc804\u00b7\uace7 \ud558\ucc28\u00b7\ubaa9\uc801\uc9c0 \ub3c4\ucc29)\uc774 \uc5b8\uc81c \uc6b8\ub9b4\uc9c0, \ubb34\uc2a8 \ubb38\uad6c\uc640 \uc9c4\ub3d9\uc73c\ub85c \uc6b8\ub9b4\uc9c0\ub97c \uc6f9\uc774 \uc544\ub2c8\ub77c \uc5d4\uc9c4\uc774 \uc815\ud574\uc694. \uc571\uc744 \uac00\ub838\uc744 \ub54c \uc4f0\ub294 \uaddc\uce59\uacfc \uac19\uc544\uc694. \uc5d4\uc9c4\uc5d0 \ubb3c\uc744 \uc218 \uc5c6\uc73c\uba74 \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \ubc14\ub85c \uc815\ud574\uc694.',
-    off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9\uc774 \uc54c\ub9bc \uc2dc\uc810\uc744 \uc815\ud574\uc694)\uc73c\ub85c \uc774\uc5b4\uac00\uc694.', bad: '\uc5d4\uc9c4\uc5d0 \ubb3c\uc744 \uc218 \uc5c6\uc5b4 \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \ub300\uc2e0 \uc774\uc5b4\uac00\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \ud558\ucc28\u00b7\ud658\uc2b9 \uc54c\ub9bc\uc774 \uc6b8\ub9b4 \ub54c\ub97c \uc5d4\uc9c4\uc774 \uc815\ud574\uc694(\uc2e4\ud5d8 \uc911).' }
+    off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9\uc774 \uc54c\ub9bc \uc2dc\uc810\uc744 \uc815\ud574\uc694)\uc73c\ub85c \uc774\uc5b4\uac00\uc694.', bad: '\uc5d4\uc9c4\uc5d0 \ubb3c\uc744 \uc218 \uc5c6\uc5b4 \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \ub300\uc2e0 \uc774\uc5b4\uac00\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \ud558\ucc28\u00b7\ud658\uc2b9 \uc54c\ub9bc\uc774 \uc6b8\ub9b4 \ub54c\ub97c \uc5d4\uc9c4\uc774 \uc815\ud574\uc694(\uc2e4\ud5d8 \uc911).' },
+  { k: 'npol', title: '\uc54c\ub9bc \uc885\ub958 \ud5c8\uc6a9 \uc5ec\ubd80\ub97c \uc5d4\uc9c4\uc774 \uc815\ud558\uae30', desc: '\ud558\ucc28\u00b7\ud658\uc2b9 \uc54c\ub9bc\uc744 \uc0c1\ub2e8 \uc54c\ub9bc\uc73c\ub85c \ubcf4\ub0bc\uc9c0, \uc9c4\ub3d9\uc744 \uc904\uc9c0, \uc624\ubc84\ub808\uc774 \ud558\ub2e8 \ucd94\ucc9c \uac19\uc740 \uae30\ub2a5\uc744 \ucf24\uc9c0\ub97c \uc6f9\uc774 \uc544\ub2c8\ub77c \uc5d4\uc9c4\uc774 \uc815\ud574\uc694. \uc124\uc815\uc5d0\uc11c \ub048 \uc54c\ub9bc \uc885\ub958\uc640 \ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551 \uc124\uc815\uc740 \uadf8\ub300\ub85c \ub530\ub77c\uc694. \uc5d4\uc9c4\uc5d0 \ubb3c\uc744 \uc218 \uc5c6\uc73c\uba74 \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \ubc14\ub85c \uc815\ud574\uc694.',
+    off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9\uc774 \uc54c\ub9bc \ud5c8\uc6a9 \uc5ec\ubd80\ub97c \uc815\ud574\uc694)\uc73c\ub85c \uc774\uc5b4\uac00\uc694.', bad: '\uc5d4\uc9c4\uc5d0 \ubb3c\uc744 \uc218 \uc5c6\uc5b4 \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \ub300\uc2e0 \uc774\uc5b4\uac00\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \uc54c\ub9bc\u00b7\uc9c4\ub3d9 \ud5c8\uc6a9 \uc5ec\ubd80\ub97c \uc5d4\uc9c4\uc774 \uc815\ud574\uc694(\uc2e4\ud5d8 \uc911).' }
 ];
 
 function settingsFlag(v, def) { return v == null ? def : (v === 1 || v === true || v === '1'); }
@@ -13949,6 +13951,91 @@ async function handleScreenHome(request) {
 }
 // ===== HOME ENGINE END =====
 
+// ===== notif-policy (\uc54c\ub9bc \uc815\ucc45 \uc5d4\uc9c4) \uc2dc\uc791 =====
+// \uae38\ub3d9\ubb34 \u2014 \uc54c\ub9bc \uc815\ucc45 \uc5d4\uc9c4 \ubaa8\ub4c8 (route-v2 Worker \uc5d0 \ubd99\uc5ec \ub123\ub294 \uc21c\uc218 \ud568\uc218) \u2014 2026-10-19 (5\ubc88 5\ub2e8\uacc4 \uccab \uc870\uac01: \ud310\ub2e8)
+//
+// \u2605 \uc6d0\uce59(YJ): "\ubaa8\ub4e0 \uacc4\uc0b0\uc740 \uc5d4\uc9c4\uc774 \ud55c\ub2e4. \uc571\uc740 \uadf8\ub9bc\ub9cc \uadf8\ub9b0\ub2e4."
+//   '\uc5b4\ub5a4 \uc54c\ub9bc\uc744 \uc0c1\ub2e8(\uc2dc\uc2a4\ud15c) \uc54c\ub9bc\uc73c\ub85c \ubcf4\ub0bc\uae4c \u00b7 \uc5b4\ub5a4 \uc54c\ub9bc\uc5d0 \uc9c4\ub3d9\uc744 \uc904\uae4c \u00b7 \uc5b4\ub5a4 \uae30\ub2a5(\uc624\ubc84\ub808\uc774 \ud558\ub2e8 \ucd94\ucc9c\u00b7\uc571 \uc548 \ud31d\uc5c5)\uc744 \ucf24\uae4c'\ub294 \uc608\uc804\uc5d4 \uc6f9(www/index.html)\uc758
+//   _NOTIF_ALLOW \u00b7 _VIBE_ALLOW \u00b7 _NOTIF_TOP \u00b7 _notifPrefGroup \u00b7 _notifAllowed \u00b7 _vibeAllowed \u00b7 _featureAllowed \uac00 \uc815\ud588\ub2e4.
+//   \uc774 \ud568\uc218\ub294 \uac19\uc740 \uaddc\uce59\uc744 \uc5d4\uc9c4\uc774 \uc815\ud558\uac8c \ud55c\ub2e4. \uc571(\uc6f9)\uc740 '\uc0ac\uc6a9\uc790\uac00 \ucf1c \ub454 \uc0c1\ud0dc(\uc885\ub958\ubcc4 \uc2a4\uc704\uce58\u00b7\ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551 \ucf2c\u00b7\uc608\uc804 \ubaa8\ub4dc \uc5ec\ubd80)'\ub9cc \uc54c\ub9ac\uace0,
+//   \ub3cc\uc544\uc628 \ud45c(\uc885\ub958\ub9c8\ub2e4 \uc0c1\ub2e8 \uc54c\ub9bc n \u00b7 \uc9c4\ub3d9 v \u00b7 \uae30\ub2a5 f \uac00 \ud5c8\uc6a9\uc778\uc9c0)\ub97c \uadf8\ub300\ub85c \ub530\ub978\ub2e4.
+//
+// \uc785\ub825  notifPolicy({ prefs, legacy, cm })
+//   prefs  : { arrive, transfer, proximity, arrive_reco } \uc0ac\uc6a9\uc790\uac00 \uc124\uc815\uc5d0\uc11c \ub048 \ud070 \ubd84\ub958(0 \uc774\uba74 \ub054, \uadf8 \ubc16\uc740 \ucf2c \u2014 \uac12\uc774 \uc5c6\uc73c\uba74 \ucf2c)
+//   legacy : \uc608\uc804 \ub3d9\uc791 \ubaa8\ub4dc(window._notifLegacy) \u2014 \uc0c1\ub2e8 \uc54c\ub9bc\u00b7\uc9c4\ub3d9\uc744 \uc138 \uac00\uc9c0\ub85c \uc881\ud788\ub294 2026-10-12 \uaddc\uce59\uc744 \ud480\uace0 \uc608\uc804 \uc815\ucc45 \ud45c \uc804\uccb4\ub97c \uc4f4\ub2e4
+//   cm     : \ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551\uc744 \uc0ac\uc6a9\uc790\uac00 \ucf30\ub098(\uadf8 \uc885\ub958\ub9cc \uc815\ucc45 \ud45c\uac00 \uc544\ub2c8\ub77c \uc774 \ud1a0\uae00\uc744 \ub530\ub978\ub2e4)
+// \ucd9c\ub825  { v:1, types:{ \uc885\ub958: { n:\uc0c1\ub2e8 \uc54c\ub9bc 0|1, v:\uc9c4\ub3d9 0|1, f:\uae30\ub2a5 0|1 } }, groups:{ \uc885\ub958: \ud070 \ubd84\ub958 }, top:[\u2026] }
+//   \ud45c\uc5d0 \uc5c6\ub294 \uc885\ub958\ub294 \uc14b \ub2e4 \ud5c8\uc6a9 \uc548 \ud568(\uc608\uc804\uacfc \uac19\ub2e4).
+
+var NOTIF_POLICY_V = 1;
+
+// \uc54c\ub9bc \uc885\ub958\ubcc4 \uc815\ucc45 \ud45c \u2014 \uc608\uc804 \uc6f9 \uc0c1\uc218\uc640 \ub611\uac19\ub2e4.
+var NP_ALLOW = { arrive_reco: 1, commute_brief: 0, fg_service: 1, arrive: 1, near_arrive: 1, near_arrive2: 1, transfer: 1, transfer2: 1, arrival: 1, proximity: 1 };
+var NP_VIBE = { transfer: 1, transfer2: 1, arrive: 1, arrival: 1, near_arrive: 1, near_arrive2: 1, arrive_reco: 0, commute_brief: 0, fg_service: 0, proximity: 1 };
+// 2026-10-12(YJ): \uc0c1\ub2e8 \uc54c\ub9bc\uacfc \uc9c4\ub3d9\uc740 \uc774 \uc138 \uac00\uc9c0\ub9cc \ub098\uac04\ub2e4(\uc608\uc804 \ubaa8\ub4dc\uac00 \uc544\ub2d0 \ub54c).
+var NP_TOP = { transfer: 1, near_arrive2: 1, near_arrive: 1 };
+
+function npGroup(type) {
+  var t = String(type || '');
+  if (t === 'near_arrive' || t === 'near_arrive2' || t === 'arrive' || t === 'arrival') return 'arrive';
+  if (t === 'transfer' || t === 'transfer2') return 'transfer';
+  if (t === 'proximity') return 'proximity';
+  if (t === 'arrive_reco') return 'arrive_reco';
+  return null;
+}
+
+function npOff(prefs, g) { return !!g && prefs[g] === 0; }
+
+function npFeature(t, prefs, cm) {
+  if (t === 'commute_brief') return !!cm;
+  if (!NP_ALLOW[t]) return false;
+  return !npOff(prefs, npGroup(t));
+}
+function npNotif(t, prefs, legacy, cm) {
+  if (!legacy && !NP_TOP[t]) return false;
+  return npFeature(t, prefs, cm);
+}
+function npVibe(t, prefs, legacy, cm) {
+  if (!legacy && !NP_TOP[t]) return false;
+  if (t === 'commute_brief') return !!cm;
+  if (!NP_VIBE[t]) return false;
+  return !npOff(prefs, npGroup(t));
+}
+
+function notifPolicy(o) {
+  o = o || {};
+  var prefs = (o.prefs && typeof o.prefs === 'object') ? o.prefs : {};
+  var legacy = o.legacy === true, cm = o.cm === true;
+  var seen = {}, k;
+  for (k in NP_ALLOW) seen[k] = 1;
+  for (k in NP_VIBE) seen[k] = 1;
+  var types = {}, groups = {};
+  Object.keys(seen).sort().forEach(function (t) {
+    types[t] = { n: npNotif(t, prefs, legacy, cm) ? 1 : 0, v: npVibe(t, prefs, legacy, cm) ? 1 : 0, f: npFeature(t, prefs, cm) ? 1 : 0 };
+    var g = npGroup(t); if (g) groups[t] = g;
+  });
+  return { v: NOTIF_POLICY_V, types: types, groups: groups, top: Object.keys(NP_TOP).sort() };
+}
+
+// \u2500\u2500 Worker \uc5f0\uacb0\ubd80 \u2014 POST /notif-policy (handleFetch \uc5d0 \uae38\uc744 \ub454\ub2e4) \u2500\u2500
+function handleNotifPolicy(request) {
+  var H = { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'access-control-allow-methods': 'POST, OPTIONS', 'access-control-allow-headers': 'content-type', 'cache-control': 'no-store' };
+  if (request.method === 'OPTIONS') return Promise.resolve(new Response(null, { status: 204, headers: H }));
+  if (request.method !== 'POST') return Promise.resolve(new Response(JSON.stringify({ ok: false, error: 'POST only' }), { status: 405, headers: H }));
+  return request.text().then(function (raw) {
+    if (raw.length > 4000) return new Response(JSON.stringify({ ok: false, error: 'body-too-long' }), { status: 413, headers: H });
+    var body;
+    try { body = JSON.parse(raw); } catch (e0) { return new Response(JSON.stringify({ ok: false, error: 'bad-json' }), { status: 400, headers: H }); }
+    var out;
+    try { out = notifPolicy(body); } catch (e) { return new Response(JSON.stringify({ ok: false, error: String(e && e.message || e) }), { status: 500, headers: H }); }
+    out.ok = true;
+    return new Response(JSON.stringify(out), { headers: H });
+  }, function () { return new Response(JSON.stringify({ ok: false, error: 'read-fail' }), { status: 400, headers: H }); });
+}
+
+
+// ===== notif-policy \ub05d =====
+
 // ===== ride-alert (\uc55e \ud654\uba74 \ud558\ucc28\u00b7\ud658\uc2b9 \uc54c\ub9bc \uc2dc\uc810 \uc5d4\uc9c4) \uc2dc\uc791 =====
 // \uae38\ub3d9\ubb34 \u2014 \uc55e \ud654\uba74 \ud558\ucc28\u00b7\ud658\uc2b9 \uc54c\ub9bc \uc2dc\uc810 \uc5d4\uc9c4 \ubaa8\ub4c8 (route-v2 Worker \uc5d0 \ubd99\uc5ec \ub123\ub294 \uc21c\uc218 \ud568\uc218) \u2014 2026-10-19 (5\ubc88 4\ub2e8\uacc4: \uc54c\ub9bc)
 //
@@ -14195,6 +14282,7 @@ async function handleFetch(request, env, ctx) {
   if (url.pathname === "/store-policy") return handleStorePolicy(request);
   if (url.pathname === "/store-merge") return handleStoreMerge(request);
   if (url.pathname === "/ride-alert") return handleRideAlert(request);
+  if (url.pathname === "/notif-policy") return handleNotifPolicy(request);
   if (url.pathname === "/next-train") return handleNextTrain(request, env);
   if (url.pathname === "/holidays") return handleHolidays(request, env);
   if (url.pathname === "/widget-say") return handleWidgetSay(request, env, ctx);
