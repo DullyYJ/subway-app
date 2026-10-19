@@ -7,12 +7,16 @@
 //   돌아온 제목·본문·메뉴·가게를 그대로 보여준다. (쿠팡 상품 *고르기* · 작은 화면(PiP) 문구 · 오버레이 광고 줄은 이 조각 밖 — 웹에 남는다.)
 //   시간은 한국시간 기준(예전 웹은 기기 시간대; 한국 앱이라 같다). 무작위는 씨앗(seed)으로 정해 같은 입력이면 같은 결과(시험이 가능하다).
 //
+// 출력에는 더해서 pip:{title,lines}(작은 화면 문구) · ad:{k,a,b,m,pn,piIdx}|null(오버레이 추천 줄) 도 들어 있다(알림 본문 그대로 쓸 때).
+//   recoPip({ a:{remMin,menu,brunch,hook,spots,shopN,cx,dinner}, slot, dest, body, nowMs, seed }) → { v:1, pip } — 본문 한 줄이 AI 문구로 바뀐 경우 작은 화면 문구만 다시 만든다.
 // recoAlert({ arrMs, nowMs, dest, weather:{temp,feel,tmin,tmax,rain,txt}|null, food:[{n,c,d}]|null, recent:[이름…], shop:{n,_t,_cat}|null, seed })
 //   → { v:1, slot, kind, title, body, remMin, dinner, menu, brunch, spots, placeIdx(-1=없음), hook, hookStrong, cx, shop(true|false) }   (슬롯이 'none' 이면 { v:1, slot:'none' })
 'use strict';
 
 var RTX_V = 1;
 var RTX_KST = 9 * 3600000;
+var RTX_PRE_MIN = 7;            // 마지막 대중교통을 내리기 몇 분 전에 추천을 보일지(arrive-reco.js 의 ARR_PRE_MIN 과 같다)
+var RTX_FOOD = null;            // 호출 때마다 그때의 가게 목록으로 바뀐다(오버레이 광고 줄이 이름으로 찾는다)
 var RTX_RND = Math.random;      // 호출 때마다 씨앗으로 바뀐다
 var RTX_TODAY = { y: 2026, mo: 0, d: 1 };   // 호출 때마다 '오늘'(한국시간)로 바뀐다
 
@@ -257,6 +261,226 @@ function rtxShopLine(it, cx){
   return r;
 }
 
+var RTX_PIP_MORN_TAIL = [
+  '오늘도 든든하게 시작하세요. 응원할게요',
+  '오늘 일정도 잘 해내실 거예요',
+  '천천히 하세요. 오늘도 화이팅이에요',
+  '좋은 일이 생기는 하루가 되길 바라요',
+  '오늘 하루도 제가 챙길게요. 화이팅이에요'
+];
+var RTX_PIP_LUNCH_TAIL = [
+  '오후 일정도 제가 챙길게요. 든든히 드세요',
+  '오후도 잘 해내실 거예요. 응원할게요',
+  '잠깐이라도 여유 갖고 드세요'
+];
+var RTX_PIP_NIGHT_TAIL = [
+  '내일 일정은 제가 챙길게요. 푹 쉬세요',
+  '남은 건 제가 챙길게요. 편히 쉬세요',
+  '오늘도 수고하셨어요. 내일도 함께해요',
+  '나머지는 제게 맡기고 푹 쉬세요'
+];
+
+var RTX_PIP_DINNER_TAIL = [
+  '남은 하루도 제가 챙길게요. 맛있게 드세요',
+  '오늘도 수고했어요. 든든히 드세요',
+  '저녁 맛있게 드시고 편히 쉬세요'
+];
+
+
+var RTX_PIP_LINE_MAX  = 46;   // 한 문장 최대 글자 수(작은 창에서 3줄 안쪽)
+var RTX_PIP_LINE_CPL  = 18;   // 작은 창 한 줄에 들어가는 글자 수(여유 있게)
+var RTX_PIP_TOTAL_VIS = 7;    // 본문 최대 표시 줄 수
+function rtxPipClampText(t, max){
+  t = String(t == null ? '' : t).replace(/\s+/g, ' ').trim();
+  if(t.length <= max) return t;
+  var cut = t.slice(0, max);
+  // 문장·쉼표·띄어쓰기 경계에서 자르되, 너무 앞에서 자르지는 않는다
+  var i = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf(', '), cut.lastIndexOf(' '));
+  if(i >= max * 0.6) cut = cut.slice(0, i);
+  return cut.replace(/[\s,.·]+$/, '') + '…';
+}
+function rtxPipClampLines(lines){
+  var out = (lines || []).map(function(x){ return rtxPipClampText(x, RTX_PIP_LINE_MAX); })
+                         .filter(function(x){ return x; });
+  var vis = function(){ return out.reduce(function(n, x){ return n + Math.max(1, Math.ceil(x.length / RTX_PIP_LINE_CPL)); }, 0); };
+  while(out.length > 2 && vis() > RTX_PIP_TOTAL_VIS) out.pop();
+  return out;
+}
+
+function rtxShopSay(it, ctx){
+  var nm = String((it && it.n) || ''), t = String((it && it._t) || '');
+  var K = rtxSeasonKw();
+  var rainRe = /우산|장화|레인|우비|방수|제습|빗물/;
+  var isRain = (t === '우천대비') || rainRe.test(nm);
+  var _nw = rtxNoWx(nm);
+  var isCold = !_nw && ((K.winter && K.winter.test(nm)) || (K.fall && K.fall.test(nm)) || /조끼|바람막이|가디건|후드|맨투맨|니트(?!릴)/.test(nm));
+  var isHot  = !_nw && ((K.summer && K.summer.test(nm)) || /쿨|냉감|선풍기|서큘레이터|선크림|반팔|반바지|샌들/.test(nm));
+  var temp = (ctx && ctx.temp != null) ? Math.round(ctx.temp) : null;
+  var rain = (ctx && ctx.rain != null) ? Math.round(ctx.rain) : -1;
+  try{
+    if(isRain){
+      if(rain >= 30) return '비 올 확률이 ' + rain + '%예요. 젖지 않게 미리 챙겨 두세요.';
+      return '비 오는 날 요긴해서 미리 챙겨 두면 마음이 놓여요.';
+    }
+    if(isCold && !isHot){
+      if(temp != null){
+        if(temp <= 5)  return '오늘 기온이 ' + temp + '도로 꽤 추워요. 하나 챙겨 두시면 든든해요.';
+        if(temp <= 17) return '오늘 기온이 ' + temp + '도로 쌀쌀해요. 슬슬 챙겨 입을 때예요.';
+        return '아직 ' + temp + '도지만 곧 쌀쌀해질 거예요. 미리 준비해 두세요.';
+      }
+      return '요즘 아침저녁으로 쌀쌀해서 하나쯤 있으면 든든해요.';
+    }
+    if(isHot){
+      if(temp != null){
+        if(temp >= 28) return '오늘 ' + temp + '도로 무더워요. 시원하게 보내시라고 골랐어요.';
+        if(temp >= 22) return '오늘 ' + temp + '도로 따뜻해서 슬슬 필요해질 거예요.';
+      }
+      return '더운 날 요긴해서 미리 챙겨 두면 좋아요.';
+    }
+  }catch(e){}
+  // 날씨와 무관한 상품 — 상품 성격과 지금 시간대로만 말한다
+  var byTheme = {
+    '야식':'출출한 밤에 하나쯤 두면 마음이 놓여요.',
+    '셀프케어':'하루 끝에 나를 챙기는 데 쓰기 좋아요.',
+    '생필품':'떨어지기 전에 채워 두면 편해요.',
+    '커피음료':'내일 아침이 조금 수월해질 거예요.',
+    '사무용품':'책상에 하나 두면 손이 자주 가요.'
+  };
+  if(byTheme[t]) return byTheme[t];
+  if(ctx && ctx.weekend) return '쉬는 날 여유 있을 때 써보기 좋아요.';
+  return '오늘 같은 날 하나쯤 눈여겨볼 만해서 골랐어요.';
+}
+
+
+function rtxPipText(a, slot, destStn, body){
+  var out = { title: '하차 ' + ((a && a.remMin) || RTX_PRE_MIN) + '분 전' + (destStn ? ' · ' + destStn : ''), lines: [] };
+  try{
+    var strip = function(t){ t = String(t || ''); try{ if(typeof rtxStripEmoji === 'function') t = rtxStripEmoji(t); }catch(e){} return t.trim(); };
+    var pick = function(arr){ return arr[Math.floor(RTX_RND() * arr.length)]; };
+    // 알림 본문의 4번째 줄 = 그날의 위트/위로(저녁엔 AI 문구로 교체됨)
+    var wit = strip(String(body || '').split('\n')[3]);
+    var spots = (a.spots && a.spots.length) ? a.spots : [];
+    var near = spots.length ? ('근처엔 ' + spots.join(', ') + ' 있어요.') : '';
+    if(slot === 'morning'){
+      var m = a.menu || '커피', b = a.brunch || '';
+      // ★ 2026-10-01: 문장이 길면 '…'로 잘려 '어떠세요?'가 사라지므로, 길 땐 브런치 메뉴를 빼고 문장을 온전히 둔다
+      var _mq = m + (b ? rtxJosa(m, '과', '와') + ' ' + b : '') + ' 어때요?';
+      if(_mq.length > 26) _mq = m + ' 어때요?';
+      if(a.hook) out.lines.push(a.hook);
+      out.lines.push(_mq);
+      out.lines.push(near || '내리시면 근처 카페에 잠깐 들러 보세요.');
+      out.lines.push(pick(RTX_PIP_MORN_TAIL));
+    } else if(slot === 'lunch'){
+      var lm = a.menu || '든든한 한 끼';
+      out.lines.push(a.hook || ('점심시간이에요. ' + (a.menu ? lm + ' 어떠세요?' : '내리시면 든든하게 챙겨 드세요.')));
+      out.lines.push(near || '내리는 길에 한 번 들러 봐요');
+      out.lines.push(pick(RTX_PIP_LUNCH_TAIL));
+    } else if(slot === 'shop'){
+      var it = a.shop || null, ctx = null;
+      
+      if(it){
+        // ★ 2026-10-11: 첫 줄 = 지금 상황에 맞춘 이유, 둘째 줄 = 상품 이름 ('오늘의 추천' 라벨 없음)
+        out.lines.push(typeof rtxShopLine === 'function' && a.cx ? rtxShopLine(it, a.cx) : rtxShopSay(it, ctx));
+        out.lines.push(it.n);
+      } else if(wit){
+        out.lines.push(wit);
+      }
+      out.lines.push(pick(RTX_PIP_NIGHT_TAIL));
+    } else if(a.dinner){   // 17~19시 — 야식이 아니라 저녁 식사
+      var dn = a.menu || '든든한 한 끼';
+      out.lines.push(a.hook || ('오늘 저녁은 ' + dn + rtxJosaRo(dn) + ' 골라봤어요.'));
+      out.lines.push(near || '내리는 길에 한 번 들러 봐요');
+      if(wit && wit !== a.hook) out.lines.push(wit);
+      out.lines.push(pick(RTX_PIP_DINNER_TAIL));
+    } else {   // night
+      var mn = a.menu || '야식';
+      out.lines.push(a.hook || ('오늘 야식은 ' + mn + rtxJosaRo(mn) + ' 골라봤어요.'));
+      out.lines.push(near || '도착할 때쯤 받도록 시켜 둘 수 있어요');
+      if(wit && wit !== a.hook) out.lines.push(wit);
+      out.lines.push(pick(RTX_PIP_NIGHT_TAIL));
+    }
+  }catch(e){}
+  out.lines = rtxPipClampLines(out.lines.filter(function(x){ return x && String(x).trim(); }));
+  return out;
+}
+
+var RTX_FOOD_PITCH = [
+  [/국밥|해장|설렁탕|곰탕|순대국|탕|찌개|전골/, ['뜨끈한 국물로 속부터 든든하게', '한 그릇이면 하루가 든든해져요']],
+  [/치킨|통닭/, ['바삭하게 한 입, 고민 끝이에요', '야식은 역시 치킨이죠']],
+  [/햄버거|버거|패스트푸드/, ['빠르게 먹고 여유를 챙겨요', '든든하게 한 손에 쏙']],
+  [/피자|파스타|양식|스테이크/, ['오늘은 기분 내도 괜찮아요', '여유로운 한 끼가 되어 줘요']],
+  [/족발|보쌈|고기|구이|삼겹|곱창|막창/, ['고기 한 점이면 피로가 풀려요', '고생한 나에게 주는 보상이에요']],
+  [/분식|떡볶이|김밥|튀김/, ['간단하지만 든든한 한 끼예요', '가볍게 먹기 좋아요']],
+  [/중식|짜장|짬뽕|마라|탕수/, ['얼큰하고 든든한 한 그릇이에요', '고민될 땐 중식이 답이에요']],
+  [/일식|초밥|회|라멘|돈가스|덮밥/, ['깔끔하게 한 끼 챙겨요', '정갈한 한 끼가 필요한 날이에요']],
+  [/한식|백반|비빔|반찬|도시락/, ['집밥처럼 든든하게 챙겨요', '밥심으로 하루를 버텨요']],
+  [/카페|커피|디저트|베이커리|빵|케이크|티/, ['내리는 길에 잠깐 쉬어 가요', '한 모금이면 기분이 달라져요']]
+];
+var RTX_FOOD_PITCH_DEFAULT = ['내리는 길에 가볍게 들러 봐요', '근처에서 해결하면 편해요'];
+
+function rtxAd(a, slot, destStn){
+  try{
+    if(!a) return null;
+    var clean = function(t){ t = String(t == null ? '' : t); try{ if(typeof rtxStripEmoji === 'function') t = rtxStripEmoji(t); }catch(e){} return t.replace(/\s+/g, ' ').trim(); };
+    if(slot === 'shop'){
+      var it = a.shop;
+      if(!it || !it.n) return null;
+      // ★ 2026-10-16 (YJ: "쿠팡도 식당·카페처럼 — 제품명 + 감성 한 줄, 분류·쿠팡 표기는 지워줘"): 첫 줄 = 상품 이름, 둘째 줄 = 지금 날씨·요일·시간에 맞춘 감성 한마디(rtxShopLine). m(분류·쿠팡)은 비운다.
+      var line = '', say = '';
+      try{ if(typeof rtxShopLine === 'function' && a.cx) line = rtxShopLine(it, a.cx) || ''; }catch(e){}
+      try{
+        var cxs = a.cx || {};
+        if(typeof rtxShopSay === 'function') say = rtxShopSay(it, { temp: cxs.temp, rain: cxs.rain, weekend: !!cxs.weekend });
+      }catch(e){}
+      var shopB = line || say;
+      return { k: 'shop', a: clean(it.n), b: clean(shopB), m: '' };
+    }
+    var sl = (slot === 'morning') ? 'morning' : (slot === 'lunch' ? 'lunch' : (a.dinner ? 'dinner' : 'night'));
+    var list = null;
+    list = RTX_FOOD;
+    var find = function(n){ if(list) for(var i = 0; i < list.length; i++) if(list[i] && list[i].n === n) return list[i]; return null; };
+    var pl = a.place, nm = '', info = null, byMenu = false;
+    if(sl !== 'morning' && a.spots && a.spots.length){ nm = a.spots[0]; info = find(nm); byMenu = true; }
+    else if(pl && pl.n){ nm = pl.n; info = pl; }
+    else if(a.spots && a.spots[0]){ nm = a.spots[0]; info = find(nm); byMenu = (sl !== 'morning'); }
+    if(!nm) return null;
+    var catTail = info ? String(info.c || '').split('>').pop().trim() : '';
+    var word = (sl === 'morning' || byMenu) ? (a.menu || catTail) : (catTail || a.menu || '');
+    var hk = '';
+    try{ if(typeof rtxHook === 'function') hk = rtxHook(sl, a.cx, word).t || ''; }catch(e){}
+    // ★ 2026-10-16 (YJ: "식당명·추천메뉴 / 감성적으로 메뉴 추천, 카페도 날씨·일자 문구로 메뉴 추천, 거리·종류는 지워줘")
+    //   첫 줄 = "가게 이름 · 추천 메뉴" · 둘째 줄 = 날씨·요일·월급날에 맞춘 감성 문구 + 그 메뉴 권유 한 문장. m(거리·종류·걸어서 N분)은 비운다.
+    var d = String(hk || '').replace(/\s*어때요\??$/, '').trim();
+    if(!word){
+      if(!d) d = rtxVar(RTX_FOOD_PITCH_DEFAULT, a.cx, nm.length);
+    } else if(!d){
+      var pitch = '', ptxt = (catTail || '') + ' ' + word + ' ' + (info ? String(info.c || '') : '');
+      for(var pi = 0; pi < RTX_FOOD_PITCH.length && !pitch; pi++){
+        if(RTX_FOOD_PITCH[pi][0].test(ptxt)) pitch = rtxVar(RTX_FOOD_PITCH[pi][1], a.cx, nm.length);
+      }
+      d = pitch ? (pitch + '. ' + word + ' 어때요?') : (word + ' 어때요?');
+    } else if(d.slice(-word.length) === word){
+      d += ' 어때요?';                                   // "…점심은 국밥" → "…점심은 국밥 어때요?"
+    } else if(d.indexOf(word) >= 0){
+      // 문구 안에 이미 메뉴가 있다(…로 데워요 등) — 그대로 둔다
+    } else {
+      d += (/[요죠다]$/.test(d) ? '. ' : ', ') + word + ' 어때요?';
+    }
+    return { k: (sl === 'morning' ? 'cafe' : 'food'), a: clean(word ? nm + ' · ' + word : nm), b: clean(d), m: '', pn: nm, piIdx: (list && info) ? list.indexOf(info) : -1 };   // pn·pi: [맛집 보기]가 앱에서 그 가게를 열 때 쓴다
+  }catch(e){ return null; }
+}
+
+function rtxStripEmoji(t){
+  if(t==null) return '';
+  // 이모지/기호(그림문자) 제거 후 중복 공백 정리
+  return String(t)
+    .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2190}-\u{21FF}\u{2B00}-\u{2BFF}\u{FE00}-\u{FE0F}\u{200D}\u{20E3}\u{E0020}-\u{E007F}\u{1F1E6}-\u{1F1FF}]/gu, '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/(^|>)\s+/g, '$1')
+    .trim();
+}
+
+
 
 // ══════ 여기부터는 엔진 쪽에서 새로 쓴 부분 — 예전 웹 코드와 같은 순서·같은 규칙(무작위만 씨앗으로) ══════
 
@@ -499,7 +723,29 @@ function rtxClean(b) {
 function recoAlert(b) {
   var inp = rtxClean(b);
   if (!isFinite(inp.arrMs) || !isFinite(inp.nowMs)) return { v: RTX_V, slot: 'none', bad: true };
-  return rtxBuild(inp);
+  var r = rtxBuild(inp);
+  if (r.slot === 'none') return r;
+  // 작은 화면 문구 · 오버레이 추천 줄 — 예전엔 알림을 보낸 뒤 웹이 알림 정보(a)로 따로 만들었다. 같은 정보로 엔진이 이어서 만든다(무작위 흐름도 이어진다).
+  RTX_FOOD = inp.food;
+  var a = { title: r.title, body: r.body, kind: r.kind, slot: r.slot, remMin: r.remMin, dinner: r.dinner, menu: r.menu, brunch: r.brunch, spots: r.spots,
+            place: (r.placeIdx >= 0 && inp.food) ? inp.food[r.placeIdx] : null, hook: r.hook, hookStrong: r.hookStrong, cx: r.cx };
+  if (r.kind === 'shop') { a.shop = inp.shop || null; delete a.place; delete a.dinner; delete a.menu; delete a.brunch; delete a.spots; }
+  try { r.pip = rtxPipText(a, r.slot, inp.dest, r.body); } catch (e) { r.pip = null; }
+  try { r.ad = rtxAd(a, r.slot, inp.dest); } catch (e2) { r.ad = null; }
+  return r;
+}
+// 본문의 한 줄이 AI 문구로 바뀐 경우: 작은 화면 문구만 다시
+function recoPip(b) {
+  b = (b && typeof b === 'object') ? b : {};
+  var x = (b.a && typeof b.a === 'object') ? b.a : {};
+  var nowMs = Number(b.nowMs);
+  if (!isFinite(nowMs) || !x.cx || typeof x.cx !== 'object') return { v: RTX_V, pip: null, bad: true };
+  RTX_RND = rtxMulberry(b.seed); var nk = rtxKst(nowMs); RTX_TODAY = { y: nk.y, mo: nk.mo, d: nk.d }; RTX_FOOD = null;
+  var cx = {}; Object.keys(x.cx).forEach(function (k) { var v = x.cx[k]; if (typeof v === 'number' || typeof v === 'boolean' || v === null) cx[k] = v; else if (typeof v === 'string') cx[k] = v.slice(0, 40); });
+  var a = { remMin: rtxNum(x.remMin), menu: rtxStr(x.menu, 40), brunch: rtxStr(x.brunch, 40), hook: rtxStr(x.hook, 80), dinner: x.dinner === true, cx: cx,
+            spots: Array.isArray(x.spots) ? x.spots.slice(0, 5).map(function (s) { return rtxStr(s, 60); }) : [], shop: x.shopN ? { n: rtxStr(x.shopN, 120), _t: rtxStr(x.shopT, 30) } : null };
+  var slot = rtxStr(b.slot, 10);
+  return { v: RTX_V, pip: rtxPipText(a, slot, rtxStr(b.dest, 60), rtxStr(b.body, 2000)) };
 }
 
 // ── Worker 연결부 — POST /reco-text {…} (handleFetch 에 길을 둔다) ──
@@ -512,10 +758,10 @@ function handleRecoText(request) {
     var body;
     try { body = JSON.parse(raw); } catch (e0) { return new Response(JSON.stringify({ ok: false, error: 'bad-json' }), { status: 400, headers: H }); }
     var out;
-    try { out = recoAlert(body); } catch (e) { return new Response(JSON.stringify({ ok: false, error: String(e && e.message || e) }), { status: 500, headers: H }); }
+    try { out = (body && body.op === 'pip') ? recoPip(body) : recoAlert(body); } catch (e) { return new Response(JSON.stringify({ ok: false, error: String(e && e.message || e) }), { status: 500, headers: H }); }
     out.ok = true;
     return new Response(JSON.stringify(out), { headers: H });
   }, function () { return new Response(JSON.stringify({ ok: false, error: 'read-fail' }), { status: 400, headers: H }); });
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { recoAlert: recoAlert, rtxCx: rtxCx, rtxHook: rtxHook, rtxShopLine: rtxShopLine, rtxFixJosa: rtxFixJosa, rtxMulberry: rtxMulberry, handleRecoText: handleRecoText, RTX_V: RTX_V };
+if (typeof module !== 'undefined' && module.exports) module.exports = { recoAlert: recoAlert, recoPip: recoPip, rtxCx: rtxCx, rtxHook: rtxHook, rtxShopLine: rtxShopLine, rtxFixJosa: rtxFixJosa, rtxMulberry: rtxMulberry, handleRecoText: handleRecoText, RTX_V: RTX_V };
