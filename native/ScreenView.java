@@ -780,6 +780,7 @@ public class ScreenView extends View {
         cv.drawText(it.label, it.x + it.w / 2f, base(it.y, it.h, 0), tp);
         tp.setTextAlign(Paint.Align.LEFT);
     }
+    private static final float INBAR_BTN_R = 9f;
     private void drawInbar(Canvas cv, ScreenCore.Item it) {
         boolean editing = it.key.equals(editKey);
         rf.set(it.ix, it.iy, it.ix + it.iw, it.iy + it.ih);
@@ -799,8 +800,9 @@ public class ScreenView extends View {
             cv.restore();
         }
         rf.set(it.btx, it.bty, it.btx + it.sw, it.bty + it.sh);
-        p.setStyle(Paint.Style.FILL); p.setColor(it.on ? alpha(cc(it.ac, pal[R_GOLD]), 0.5f) : cc(it.ac, pal[R_GOLD])); cv.drawRoundRect(rf, it.radius, it.radius, p);
-        if (it == pressed && !it.on) { p.setColor(0x33000000); cv.drawRoundRect(rf, it.radius, it.radius, p); }
+        float br = it.radius > 0f ? it.radius : INBAR_BTN_R;      // 입력칸을 네모(r:0)로 두는 홈 줄도 단추는 웹처럼 둥글게
+        p.setStyle(Paint.Style.FILL); p.setColor(it.on ? alpha(cc(it.ac, pal[R_GOLD]), 0.5f) : cc(it.ac, pal[R_GOLD])); cv.drawRoundRect(rf, br, br, p);
+        if (it == pressed && !it.on) { p.setColor(0x33000000); cv.drawRoundRect(rf, br, br, p); }
         setText(it.size2 > 0f ? it.size2 : it.size, true, it.on ? alpha(cc(it.ac2, 0xFF121214), 0.6f) : cc(it.ac2, 0xFF121214)); tp.setTextAlign(Paint.Align.CENTER);
         cv.drawText(it.badge, it.btx + it.sw / 2f, base(it.bty, it.sh, 0), tp);
         tp.setTextAlign(Paint.Align.LEFT);
@@ -1022,7 +1024,8 @@ public class ScreenView extends View {
         if (input != null) { blurInput(); if (input.getParent() instanceof ViewGroup) ((ViewGroup) input.getParent()).removeView(input); inShown = false; inL = inT = inW = inH = -1; }
     }
     // ───────────── 글자 입력칸(field) 편집 ─────────────
-    private boolean editInFoot, editSilent;
+    private boolean editInFoot, editSilent, editEnding;
+    private long editBeganAt;
     private String watchKey;
     private ScreenCore.Item fieldByKey(String k) {
         if (lay == null || k == null) return null;
@@ -1060,7 +1063,11 @@ public class ScreenView extends View {
         });
         e.setOnFocusChangeListener(new View.OnFocusChangeListener() {
             @Override public void onFocusChange(View v, boolean has) {
-                if (!has) commitEdit();
+                if (!has) {
+                    // 편집을 막 시작한 직후(배치·크기가 바뀌는 사이)에 포커스가 잠깐 빠지면 키보드가 안 열린 채 끝나 버린다 — 직접 끝낸 게 아니면 되찾는다
+                    if (!editEnding && editKey != null && SystemClock.uptimeMillis() - editBeganAt < 500L) { kbSoon(); return; }
+                    commitEdit();
+                }
                 if (listener != null) listener.onInputFocus(has);
             }
         });
@@ -1090,11 +1097,26 @@ public class ScreenView extends View {
         editor.setVisibility(View.VISIBLE);
         syncEditor();
         editor.bringToFront();
+        editBeganAt = SystemClock.uptimeMillis();
         editor.requestFocus();
         editor.setSelection(editor.getText().length());
         try { ((InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE)).showSoftInput(editor, 0); } catch (Throwable ignored) { }
+        kbSoon();
         if (it.watch && listener != null) { watchKey = it.key; listener.onText(it.key, String.valueOf(editor.getText()), "focus"); }
         invalidate();
+    }
+    /** 키보드 올리기를 배치가 끝난 뒤에도 두 번 더 시도한다(막 얹은 입력칸에는 첫 시도가 무시되는 기기가 있다). 이미 올라와 있으면 아무 일도 없다. */
+    private void kbSoon() {
+        Runnable r = new Runnable() {
+            @Override public void run() {
+                if (editor == null || editKey == null) return;
+                try {
+                    if (!editor.hasFocus()) editor.requestFocus();
+                    ((InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE)).showSoftInput(editor, 0);
+                } catch (Throwable ignored) { }
+            }
+        };
+        post(r); postDelayed(r, 120L); postDelayed(r, 350L);
     }
     /** 편집 중인 칸이 본문 보이는 영역 안에 오도록 스크롤한다(키보드가 올라와 영역이 줄어든 뒤에도). */
     private void ensureEditVisible(ScreenCore.Item f) {
@@ -1112,7 +1134,7 @@ public class ScreenView extends View {
         ViewGroup par = getParent() instanceof ViewGroup ? (ViewGroup) getParent() : null;
         if (f == null || par == null || getVisibility() != View.VISIBLE) { endEdit(); return; }
         float topDp = editInFoot ? footTop() + f.y : lay.headH + f.y - scrollY;
-        if (!editInFoot && (topDp < lay.headH - 1f || topDp + f.h > footTop() + 1f)) { endEdit(); return; }     // 화면 밖으로 밀렸다(아래 고정 줄에 가려져도)
+        if (!editInFoot && (topDp < lay.headH - 1f || topDp + f.h > footTop() + 1f)) { if (SystemClock.uptimeMillis() - editBeganAt < 600L) return; endEdit(); return; }      // 막 시작한 때엔 크기가 따라오는 중이라 닫지 않는다     // 화면 밖으로 밀렸다(아래 고정 줄에 가려져도)
         boolean ib = f.kind == ScreenCore.K_INBAR;
         float exDp = ib ? (f.dotC != null ? f.textX : f.ix + 14f) : f.x + 13f, ewDp = ib ? (f.dotC != null ? f.ix + f.iw - 8f - f.textX : f.iw - 28f) : f.w - 26f;
         int l = getLeft() + Math.round(exDp * dpr), t = getTop() + Math.round(topDp * dpr);
@@ -1136,7 +1158,8 @@ public class ScreenView extends View {
     private void endEdit() {
         if (editor == null || editKey == null) return;
         try { ((InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(editor.getWindowToken(), 0); } catch (Throwable ignored) { }
-        editor.clearFocus();
+        editEnding = true;
+        try { editor.clearFocus(); } finally { editEnding = false; }
         commitEdit();
     }
 
