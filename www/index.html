@@ -4283,6 +4283,107 @@ function _metroNextTrainInfo(mins){
 }
 window._metroNextTrainInfo = _metroNextTrainInfo;
 
+// ── ★ 2026-10-19 (s65) 남은 계산을 엔진이 하기 — 공통 바탕 ──────────────────────────────────────────
+//   설정 스위치 '남은 계산을 엔진이 하기'(gdm_e2, 기본 꺼짐). 켜면 아래 조각들의 계산을 웹이 아니라 엔진이 한다(앱은 그리기만):
+//   · 홈 AI 승무원 브리핑 문장(/home-brief)
+//   · 경로 결과 정리(요청에 &rv=1 → 응답 result.rv: 겹침 정리 · 탭 대표 · 왜 이 경로 · 승차/대기/도보 나눔)
+//   엔진에 물을 수 없으면(스위치 꺼짐 · 응답 없음 2.5초 · 오류 · 이상한 응답) 예전 웹 방식으로 바로 이어가고, 60초는 엔진에 묻지 않는다.
+var _E2 = { bad: false, until: 0, why: '', ok: 0, asks: 0 };
+function _e2On(){ try{ return localStorage.getItem('gdm_e2') === '1'; }catch(e){ return false; } }
+function _e2Down(){ return _E2.until > Date.now(); }
+function _e2Use(){ return _e2On() && !_e2Down(); }
+function _e2Fail(why){
+  _E2.bad = true; _E2.until = Date.now() + 60000; _E2.why = String(why || '').slice(0, 40);
+  try{ if(typeof window._e2SyncCard === 'function') window._e2SyncCard(); }catch(e){}
+}
+// 엔진에 한 번 묻는다: 맞는 답이면 cb(답), 아니면(시간 초과·오류·이상한 응답) 문제로 표시하고 cb(null)
+function _e2Ask(path, body, good, cb){
+  var done = false, tm = null;
+  var fin = function(j, why){
+    if(done) return; done = true; clearTimeout(tm);
+    if(j) _E2.ok++; else _e2Fail(why);
+    try{ if(typeof window._e2SyncCard === 'function') window._e2SyncCard(); }catch(e){}
+    try{ cb(j || null); }catch(e2){}
+  };
+  tm = setTimeout(function(){ fin(null, '시간 초과'); }, 2500);
+  _E2.asks++;
+  try{
+    fetch(_ROUTE_V2_BASE + path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(j){ if(done) return; if(good(j)) fin(j); else fin(null, '응답 이상'); })
+      .catch(function(){ fin(null, '통신 실패'); });
+  }catch(e3){ fin(null, '요청 실패'); }
+}
+window._e2On = _e2On; window._E2 = _E2;
+window._e2SetUse = function(on){
+  try{ localStorage.setItem('gdm_e2', on ? '1' : '0'); }catch(e){}
+  _E2.bad = false; _E2.until = 0; _E2.why = '';
+  try{ if(typeof window._e2SyncCard === 'function') window._e2SyncCard(); }catch(e2){}
+};
+window._e2SyncCard = function(){
+  try{
+    var card = document.getElementById('e2SetCard'); if(!card) return;
+    var on = _e2On(), bad = on && _e2Down(), cb = document.getElementById('e2SetOn'), st = document.getElementById('e2SetStat');
+    if(cb) cb.checked = on && !bad;
+    var t;
+    if(!on) t = '꺼짐 — 예전 방식(웹이 계산해요)으로 이어가요.';
+    else if(bad) t = '엔진에 물을 수 없어 예전 방식으로 대신 이어가고 있어요' + (_E2.why ? ' (' + _E2.why + ')' : '') + '. 잠시 뒤 다시 엔진에 물어요.';
+    else t = '켜짐 — 남은 계산을 엔진이 해요(실험 중).' + (_E2.ok ? ' 엔진 응답 ' + _E2.ok + '번.' : '');
+    if(st && st.textContent !== t) st.textContent = t;
+  }catch(e3){}
+};
+try{ if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(function(){ if(window._e2SyncCard) window._e2SyncCard(); }, 1500); }); else setTimeout(function(){ if(window._e2SyncCard) window._e2SyncCard(); }, 1500); }catch(eE2){}
+
+// 홈 브리핑: 엔진에 보낼 '지금 상태' / 돌아온 조각을 그리기
+function _hbInput(fromName, toName, hour, congPct, mins, wF, wT, rb, hasRoute){
+  var hol = (typeof _isHolidayOrWeekend==='function' && _isHolidayOrWeekend());
+  var o = { from: String(fromName == null ? '' : fromName), to: String(toName == null ? '' : toName), hour: hour, cong: congPct, hol: !!hol, mins: mins || 0,
+            wF: wF ? { temp: wF.temp, txt: wF.txt, rain: wF.rain } : null, wT: wT ? { temp: wT.temp, txt: wT.txt, rain: wT.rain } : null,
+            segs: null, metro: window._metroRouteMode === true, nt: null, tl: null, nowMin: 0, nowMs: Date.now(), arrMs: 0, dm: '', rnd: Math.random() };
+  o.nowMin = (typeof kstMinutesAdj==='function') ? kstMinutesAdj() : (new Date().getHours()*60 + new Date().getMinutes());
+  if(rb && rb.segments) o.segs = rb.segments.map(function(sg){
+    return { type: sg.type, line: String(sg.line == null ? '' : sg.line), from: String(sg.from == null ? '' : sg.from), to: String(sg.to == null ? '' : sg.to), min: sg.min,
+             depClock: sg.depClock || '', arrClock: sg.arrClock || '', rideMin: sg.rideMin || 0 };
+  });
+  if(hasRoute){
+    if(o.metro){
+      var info = _metroNextTrainInfo(mins > 0 ? mins : 0);
+      if(info) o.nt = { found: info.found, depMin: info.depMin, arrMin: info.arrMin, firstMin: info.firstMin };
+      var tlT = (typeof _htlDepArrTimes === 'function') ? _htlDepArrTimes() : null;
+      if(tlT) o.tl = { dep: tlT.dep, arr: tlT.arr };
+    } else if(mins > 0){
+      var ep = null;
+      try{ ep = (typeof _journeyEta==='function') ? _journeyEta() : ((typeof _etaPair==='function') ? _etaPair() : null); }catch(e){}
+      o.arrMs = (ep && ep.arrMs) || 0;
+      o.dm = (window._depCmpMsg && window._depCmpMsg.key===window._lastCoordQs && !(typeof S!=='undefined' && S.boardedAt)) ? String(window._depCmpMsg.msg || '') : '';
+    }
+  }
+  return o;
+}
+function _hbGood(j){
+  if(!(j && j.ok === true && j.v === 1 && Array.isArray(j.paras) && j.paras.length > 0 && j.paras.length <= 12)) return false;
+  return j.paras.every(function(p){ return p && typeof p === 'object' && (Array.isArray(p.t) || Array.isArray(p.sub)); });
+}
+function _hbToks(a){
+  var out = '';
+  for(var i = 0; i < a.length; i++){
+    var x = a[i];
+    if(typeof x === 'string') out += x;
+    else if(x && typeof x === 'object'){
+      if(x.b != null) out += '<b>' + x.b + '</b>';
+      else if(x.stn) out += _stnBadge(x.stn[0], x.stn[1]);
+      else if(x.ln != null) out += _lineBadge(x.ln);
+      else if(x.id === 'homeAiArr' || x.id === 'homeAiDep') out += '<span id="' + x.id + '">' + (x.raw != null ? String(x.raw) : _hbToks(x.t || [])) + '</span>';
+    }
+  }
+  return out;
+}
+function _hbRender(paras){
+  return paras.map(function(p){
+    return Array.isArray(p.sub) ? '<span style="color:var(--sub);font-size:12px;">' + _hbToks(p.sub) + '</span>' : _hbToks(p.t);
+  });
+}
+
 // ★ AI 승무원: 손님 응대 말투 브리핑 (날씨+교통+환승+소요시간, 이모지 없음, 비동기)
 var _homeWxSeq = 0;
 function _renderHomeConductorBrief(fromName, toName, hour, congPct, serverMsg){
@@ -4301,8 +4402,7 @@ function _renderHomeConductorBrief(fromName, toName, hour, congPct, serverMsg){
   var seq = ++_homeWxSeq;
   var esc = function(s){ return String(s==null?'':s); };
 
-  function compose(wF, wT){
-    if(seq !== _homeWxSeq) return;   // 더 최신 브리핑이 왔으면 무시
+  function buildLocal(wF, wT){      // 예전 방식: 웹이 문장을 만든다(엔진 스위치가 꺼졌거나 엔진에 물을 수 없을 때)
     var peak = (hour>=7&&hour<=9)||(hour>=17&&hour<=19);
     var hol  = (typeof _isHolidayOrWeekend==='function' && _isHolidayOrWeekend());
     var congTxt = congPct>=70?'매우 혼잡':congPct>=45?'다소 혼잡':'원활';
@@ -4483,6 +4583,9 @@ function _renderHomeConductorBrief(fromName, toName, hour, congPct, serverMsg){
       ps.push('<span style="color:var(--sub);font-size:12px;">' + _closings[Math.floor(Math.random()*_closings.length)] + '</span>');
     }
 
+    return ps;
+  }
+  function paint(ps){
     var _html = '<div class="home-ai-msg">' + ps.map(function(p){ return '<p>' + p + '</p>'; }).join('') + '</div>';
     // ★ 2026-08-31: 내용이 같으면 DOM 을 건드리지 않는다(깜빡임 없음).
     //   다르면 짧은 페이드로 바꿔서 갑자기 툭 바뀌지 않게 한다.
@@ -4505,6 +4608,23 @@ function _renderHomeConductorBrief(fromName, toName, hour, congPct, serverMsg){
         body.style.opacity = '1';
       }
     }catch(e){ body.innerHTML = _html; }
+  }
+  // ★ 2026-10-19 (s65): 문장을 엔진(/home-brief)이 만든다 — 설정 스위치 '남은 계산을 엔진이 하기'(gdm_e2). 앱은 지금 상태만 알리고, 돌아온 조각을 색 배지·굵은 글씨로 그리기만 한다.
+  //   엔진에 물을 수 없으면(꺼짐·응답 없음·이상한 응답) 예전 방식(buildLocal)으로 바로 만든다.
+  function compose(wF, wT){
+    if(seq !== _homeWxSeq) return;   // 더 최신 브리핑이 왔으면 무시
+    if(_e2Use() && window._hbeOff !== true){
+      var inp = null;
+      try{ inp = _hbInput(fromName, toName, hour, congPct, mins, wF, wT, rb, hasRoute); }catch(eI){ inp = null; }
+      if(inp){
+        _e2Ask('/home-brief', inp, _hbGood, function(j){
+          if(seq !== _homeWxSeq) return;                 // 기다리는 동안 더 최신 브리핑이 왔으면 버린다
+          if(j) paint(_hbRender(j.paras)); else paint(buildLocal(wF, wT));
+        });
+        return;
+      }
+    }
+    paint(buildLocal(wF, wT));
   }
 
   var wF=null, wT=null, need=(fc?1:0)+(tc?1:0), done=0;
@@ -9033,6 +9153,8 @@ window._hideRouteLoading = _hideRouteLoading;
     var _sp = window._spForThisSearch || '';
     var urls = [ _routeV2Url(_coordQs
                   + (_sp ? ('&stops=' + encodeURIComponent(_sp)) : '')) ];
+    // ★ 2026-10-19 (s66): '남은 계산을 엔진이 하기'(gdm_e2)를 켜면 경로 정리(겹침 제거 · 탭 대표 · 왜 이 경로 · 승차/대기/도보 나누기)도 엔진이 해서 응답(result.rv)에 싣는다. 안 오면 아래에서 예전 방식.
+    try{ if(typeof _e2On==='function' && _e2On()) urls[0] += '&rv=1'; }catch(eRv){}
 
     // ★ 2026-09-15 · YJ 절대규칙: 경로 판단은 엔진만 한다. 앱은 그리기만 한다.
     //   여기서 앱이 하던 일 — 주변 정류장을 골라 출발지로 삼고 요청을 8개까지 늘린 뒤,
@@ -9162,16 +9284,22 @@ window._hideRouteLoading = _hideRouteLoading;
       var allPaths = (results[0] && results[0].result && results[0].result.path) || [];
       allPaths = allPaths.slice();
 
-      // ★ 같은 경로가 여러 번 들어오므로 중복을 개다 (노선·승하차 조합이 같으면 한 개)
-      allPaths = _dedupPaths(allPaths);
+      // ★ 2026-10-19 (s66): 엔진이 정리해 준(result.rv) 것이 맞으면 그대로 쓴다 — 앱은 번호대로 고르기만. 없거나 이상하면(옛 엔진 · 스위치 꺼짐) 아래 예전 방식.
+      var _rvPaths = (typeof _rvApply==='function') ? _rvApply(results[0], allPaths) : null;
+      if(_rvPaths){
+        allPaths = _rvPaths;
+      } else {
+        // ★ 같은 경로가 여러 번 들어오므로 중복을 개다 (노선·승하차 조합이 같으면 한 개)
+        allPaths = _dedupPaths(allPaths);
 
-      // 중복 제거 (totalTime 기준)
-      var seen = {};
-      allPaths = allPaths.filter(function(p) {
-        var key = (p.info||{}).totalTime+'_'+(p.info||{}).transferCount+'_'+(p.info||{}).pathType;
-        if(seen[key]) return false;
-        seen[key] = true; return true;
-      });
+        // 중복 제거 (totalTime 기준)
+        var seen = {};
+        allPaths = allPaths.filter(function(p) {
+          var key = (p.info||{}).totalTime+'_'+(p.info||{}).transferCount+'_'+(p.info||{}).pathType;
+          if(seen[key]) return false;
+          seen[key] = true; return true;
+        });
+      }
 
       if(!allPaths.length) {
         // ★ 2026-09-09: liveStat 추출이 이 아래에 있어서, 경로가 0건이면
@@ -9656,6 +9784,32 @@ function _dedupPaths(paths){
   }catch(e){ return paths || []; }
 }
 window._dedupPaths = _dedupPaths;
+
+// ★ 2026-10-19 (s66): 엔진이 정리해 준 경로 목록(result.rv)을 쓴다. 맞는 모양이 아니면 null(→ 예전 방식).
+//   rv = { v:1, n:경로 수, keep:[번호…], tabs:{번호:[탭…]}, why:{번호:'문장'}, split:{번호:{ride,wait,walk,tot,text}|null} }
+function _rvApply(res, paths){
+  try{
+    if(!(typeof _e2On==='function' && _e2On())) return null;
+    var rv = res && res.result && res.result.rv;
+    if(!(rv && rv.v === 1 && rv.n === paths.length && Array.isArray(rv.keep) && rv.keep.length && rv.tabs && rv.why && rv.split)) return null;
+    var seenI = {};
+    for(var i = 0; i < rv.keep.length; i++){
+      var k = rv.keep[i];
+      if(!(typeof k === 'number' && k >= 0 && k < paths.length && Math.floor(k) === k) || seenI[k] || !paths[k] || !paths[k].info) return null;
+      seenI[k] = true;
+      if(!Array.isArray(rv.tabs[k]) || typeof rv.why[k] !== 'string') return null;
+    }
+    return rv.keep.map(function(k){
+      var p = paths[k], inf = p.info;
+      inf._tabs = rv.tabs[k].slice();
+      inf._rvWhy = rv.why[k];
+      var sp = rv.split[k];
+      inf._rvSplit = (sp && typeof sp === 'object' && isFinite(sp.ride) && isFinite(sp.wait) && isFinite(sp.walk) && isFinite(sp.tot) && typeof sp.text === 'string') ? sp : null;
+      return p;
+    });
+  }catch(e){ return null; }
+}
+window._rvApply = _rvApply;
 
 function _parseRouteOptions(engineData) {
   var paths = (engineData.result || {}).path || [];
@@ -11042,12 +11196,17 @@ function _renderSplitRow(route){
   if(!el) return;
   var _tot=Math.round(((route&&route.summary&&route.summary.duration)||0)/60);
   try{ var _tl=window._htlTlTotalMin; if(_tl!=null && isFinite(_tl) && _tl>0 && Math.abs(_tl-_tot)<=15) _tot=Math.round(_tl); }catch(eT){}
-  var sp=(route && route.why!==undefined) ? _routeTimeSplit((route&&route.sections)||[], _tot) : null;   // 엔진 경로만(노선도·BFS 미리보기는 대기 정보가 없음)
+  var sp=null, spText='';
+  if(route && route.why!==undefined){
+    var _re=route.rvSplit;   // ★ s66: 엔진이 나눠 준 값(총 소요가 지금 보이는 값과 같을 때만) — 아니면 예전 방식(웹 계산)
+    if(_re && _re.tot===_tot){ sp={ride:_re.ride, wait:_re.wait, walk:_re.walk}; spText=_re.text; }
+    else { sp=_routeTimeSplit((route&&route.sections)||[], _tot); spText=sp?_routeSplitText(sp):''; }   // 엔진 경로만(노선도·BFS 미리보기는 대기 정보가 없음)
+  }
   window._routeSplitNow=sp;
   var why=(route&&route.why)||'';
   var h='';
   // 2026-10-04: '전체 N분'을 앞에 붙여, 이동 중 헤더의 '남은 시간'과 이 줄(처음 계획 전체의 분리)이 다른 숫자임을 분명히 한다.
-  if(sp) h+='<div><b style="color:var(--text);">'+_ltEsc('전체 '+(sp.ride+sp.wait+sp.walk)+'분 · '+_routeSplitText(sp))+'</b></div>';
+  if(sp) h+='<div><b style="color:var(--text);">'+_ltEsc('전체 '+(sp.ride+sp.wait+sp.walk)+'분 · '+spText)+'</b></div>';
   if(why) h+='<div>'+_ltEsc(why)+'</div>';
   _doorTipLines((route&&route.sections)||[]).forEach(function(t){ h+='<div>'+_ltEsc(t)+'</div>'; });
   _registerDoorTips((route&&route.sections)||[]);
@@ -11233,7 +11392,8 @@ function _convertSinglePathToRoute(path) {
       transfers: info.transferCount||0
     },
     sections: sections,
-    why: _routeWhyText(path),   // ★ 2026-10-03: 왜 이 경로인지(엔진 탭·소요·환승 근거)
+    why: (typeof info._rvWhy === 'string') ? info._rvWhy : _routeWhyText(path),   // ★ 2026-10-03: 왜 이 경로인지(엔진 탭·소요·환승 근거) · s66: 엔진이 준 문장이 있으면 그대로
+    rvSplit: info._rvSplit || null,   // ★ s66: 엔진이 나눈 승차/대기/도보·환승(없으면 아래 그리기에서 예전 방식)
     // ★ 2026-10-17 (YJ: "환승이 필요한 부분은 알려줘야해"): 어디서 갈아타는지는 엔진이 정해 info.transfers 로 준다(s36).
     //   앱은 그 목록을 그대로 옮겨 그리기만 한다 — 옛 엔진 응답이면 null(지어내지 않는다).
     transfers: (Array.isArray(info.transfers) ? info.transfers : null),
@@ -11300,7 +11460,8 @@ function _convertEngineRoutes(engineData) {
         transfers: info.transferCount || 0
       },
       sections: sections,
-      why: _routeWhyText(path)
+      why: (typeof info._rvWhy === 'string') ? info._rvWhy : _routeWhyText(path),
+      rvSplit: info._rvSplit || null
     };
   });
   return { routes: routes };
@@ -21043,6 +21204,21 @@ window.addEventListener('unhandledrejection', function(e) {
         <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">출퇴근 브리핑 알림을 지금 보낼지(설정한 시각·요일·같은 분에 한 번만)와, 앞으로 4주치 예약 알림을 몇 월 몇 일 몇 시에 걸지를 웹이 아니라 엔진이 정해요. 알림 내용(날씨·혼잡도)과 장소는 그대로 앱에서 만들고 엔진에 보내지 않아요. 엔진에 물을 수 없으면 예전 방식으로 바로 정해요.</p>
         <div id="cmwSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
         <style>#cmwSetOn:checked ~ #cmwSetKnob{background:var(--gold) !important;} #cmwSetOn:checked ~ #cmwSetDot{left:23px !important;}</style>
+      </div>
+
+      <!-- ★ 2026-10-19 (s65): 남은 계산을 엔진이 하기 — 홈 AI 승무원 브리핑 문장 등 앱에 남은 계산을 엔진이 한다. 기본 꺼짐 -->
+      <div id="e2SetCard" style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <div style="font-size:15px;font-weight:800;color:var(--text);">남은 계산을 엔진이 하기</div>
+          <label style="position:relative;display:inline-block;width:46px;height:26px;">
+            <input type="checkbox" id="e2SetOn" onchange="_e2SetUse(this.checked)" style="opacity:0;width:0;height:0;">
+            <span id="e2SetKnob" style="position:absolute;inset:0;border-radius:13px;background:var(--border2);transition:.2s;cursor:pointer;"></span>
+            <span id="e2SetDot" style="position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.3);"></span>
+          </label>
+        </div>
+        <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">홈 AI 승무원 브리핑 문장(소요시간·환승 안내·시각·혼잡·날씨 준비물)과 경로 결과 정리(겹친 경로 합치기·왜 이 경로인지·승차/대기/도보 나눔)처럼 앱에 남아 있던 계산을 웹이 아니라 엔진이 해요. 노선 색 배지와 굵은 글씨는 앱이 그려요. 엔진에 물을 수 없으면 예전 방식으로 바로 만들어요.</p>
+        <div id="e2SetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
+        <style>#e2SetOn:checked ~ #e2SetKnob{background:var(--gold) !important;} #e2SetOn:checked ~ #e2SetDot{left:23px !important;}</style>
       </div>
 
       <!-- ★ 2026-10-19: 하차 전 추천 문구를 엔진이 만들기 — 추천 알림 본문(상황 한 줄·메뉴·가게 고르기)을 엔진이 만든다. 기본 꺼짐 -->
@@ -39278,6 +39454,7 @@ window.refreshShop=refreshShop;
     try{ if(typeof _cndSyncCard === 'function') _cndSyncCard(); var ccnd = document.getElementById('cndSetCard'); if(ccnd && ccnd.style.display === 'block') f.feat.cnd = { h: 1, on: (_cndOn() && !_cndBad()) ? 1 : 0, f: _cndBad() ? 1 : 0, w: '' }; }catch(e){}
     try{ if(typeof _rtfSyncCard === 'function') _rtfSyncCard(); var crtf = document.getElementById('rtfSetCard'); if(crtf && crtf.style.display === 'block') f.feat.rtf = { h: 1, on: (_rtfOn() && !_rtfBad()) ? 1 : 0, f: _rtfBad() ? 1 : 0, w: '' }; }catch(e){}
     try{ if(typeof _rtxSyncCard === 'function') _rtxSyncCard(); var crtx = document.getElementById('rtxSetCard'); if(crtx && crtx.style.display !== 'none') f.feat.rtx = { h: 1, on: (_rtxOn() && !_rtxDown()) ? 1 : 0, f: (_rtxOn() && _rtxDown()) ? 1 : 0, w: '' }; }catch(e){}
+    try{ if(typeof _e2SyncCard === 'function') _e2SyncCard(); var ce2 = document.getElementById('e2SetCard'); if(ce2 && ce2.style.display !== 'none') f.feat.e2 = { h: 1, on: (_e2On() && !_e2Down()) ? 1 : 0, f: (_e2On() && _e2Down()) ? 1 : 0, w: '' }; }catch(e){}
     try{ if(typeof _cmwSyncCard === 'function') _cmwSyncCard(); var ccmw = document.getElementById('cmwSetCard'); if(ccmw && ccmw.style.display !== 'none') f.feat.cmw = { h: 1, on: (_cmwOn() && !_cmwDown()) ? 1 : 0, f: (_cmwOn() && _cmwDown()) ? 1 : 0, w: '' }; }catch(e){}
     try{ if(typeof _arwSyncCard === 'function') _arwSyncCard(); var carw = document.getElementById('arwSetCard'); if(carw && carw.style.display !== 'none') f.feat.arw = { h: 1, on: (_arwOn() && !_arwDown()) ? 1 : 0, f: (_arwOn() && _arwDown()) ? 1 : 0, w: '' }; }catch(e){}
     try{ if(typeof _npSyncCard === 'function') _npSyncCard(); var cnp = document.getElementById('npolSetCard'); if(cnp && cnp.style.display !== 'none') f.feat.npol = { h: 1, on: (_npOn() && !_npDown()) ? 1 : 0, f: (_npOn() && _npDown()) ? 1 : 0, w: '' }; }catch(e){}
@@ -39422,6 +39599,7 @@ window.refreshShop=refreshShop;
       else if(key === 'f.arw') window._arwSetUse(on);
       else if(key === 'f.cmw') window._cmwSetUse(on);
       else if(key === 'f.rtx') window._rtxSetUse(on);
+      else if(key === 'f.e2') window._e2SetUse(on);
       else if(key === 'f.scrs'){ setUse(on); return; }
       else return;                                                             // 모르는 키는 무시
     }catch(e){}
