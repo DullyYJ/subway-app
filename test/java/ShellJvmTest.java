@@ -397,11 +397,22 @@ public class ShellJvmTest {
             ShellCore.MemStore fs = new ShellCore.MemStore();
             FavCore fv = new FavCore(fs);
             ok("[]".equals(fv.listJson()) && fv.request(18, "dark", "부평", "강남").contains("\"cur\":{\"s\":\"부평\""), "즐겨찾기 요청: 빈 목록 + 지금 경로");
-            ok(fv.act("fv.add") == FavCore.R_RENDER && fv.request(18, "dark", "부평", "강남").contains("\"op\":{\"k\":\"quick\"}") && !fv.request(18, "dark", "", "").contains("\"op\""), "빠른 등록은 한 번만 실린다");
+            ok(fv.act("fv.add", null) == FavCore.R_RENDER && fv.request(18, "dark", "부평", "강남").contains("\"op\":{\"k\":\"quick\"}") && !fv.request(18, "dark", "", "").contains("\"op\""), "빠른 등록은 한 번만 실린다");
             fv.onScreen("{\"info\":{\"list\":[{\"s\":\"부평\",\"d\":\"강남\",\"name\":\"출근\"}],\"msg\":\"출근 등록 완료\",\"go\":[{\"s\":[\"부평\",\"수도권 1호선\",37.489,126.724],\"d\":[\"강남\",\"2호선\",37.497,127.027]},null]}}");
             ok(fs.get(FavCore.K_FAV, "").contains("출근") && "출근 등록 완료".equals(fv.msg) && fv.go.size() == 2, "엔진이 돌려준 새 목록을 그대로 저장");
-            ok(fv.act("fv.go.0") == FavCore.R_GO && fv.go.get(0).dName.equals("강남") && Math.abs(fv.go.get(0).dLa - 37.497) < 1e-9 && fv.act("fv.go.1") == FavCore.R_NONE, "즐겨찾기로 경로 찾기(풀리지 않은 것은 무시)");
-            ok(fv.act("fv.del.0") == FavCore.R_RENDER && fv.request(18, "dark", "", "").contains("\"op\":{\"k\":\"del\",\"i\":0}") && fv.act("fv.close") == FavCore.R_CLOSE, "삭제 · 닫기");
+            ok(fv.act("fv.go.0", null) == FavCore.R_GO && fv.go.get(0).dName.equals("강남") && Math.abs(fv.go.get(0).dLa - 37.497) < 1e-9 && fv.act("fv.go.1", null) == FavCore.R_NONE, "즐겨찾기로 경로 찾기(풀리지 않은 것은 무시)");
+            ok(fv.act("fv.del.0", null) == FavCore.R_RENDER && fv.request(18, "dark", "", "").contains("\"op\":{\"k\":\"del\",\"i\":0}") && fv.act("fv.close", null) == FavCore.R_CLOSE, "삭제 · 닫기");
+            // 새로 등록 폼
+            ShellCore.MemStore fsx = new ShellCore.MemStore(); FavCore fx = new FavCore(fsx);
+            ok(fx.request(18, "dark", "", "").contains("\"form\":{\"n\":\"\",\"s\":\"\",\"d\":\"\",\"act\":\"\"}"), "폼은 처음엔 비어 있다");
+            ok(fx.onText("fvs", "강", "focus") && fx.fact.equals("s") && fx.fs.equals("강") && fx.onText("fvd", "시청", "edit") && fx.fact.equals("d") && fx.fd.equals("시청") && !fx.onText("fvn", "x", "edit") && !fx.onText("fvs", "강", "blur"), "출발/도착 칸을 쓰면 그 칸이 '쓰는 중'(이름 칸·blur 는 다시 그리지 않음)");
+            java.util.Map<String, String> fform = new java.util.HashMap<String, String>(); fform.put("fvn", "출근길"); fform.put("fvs", "부평"); fform.put("fvd", "강남");
+            ok(fx.act("fv.new", fform) == FavCore.R_RENDER && fx.request(18, "dark", "", "").contains("\"n\":\"출근길\",\"s\":\"부평\",\"d\":\"강남\"") , "등록 누름: 입력칸 글을 폼에 옮긴다");
+            fx.act("fv.new", fform);
+            ok(fx.request(18, "dark", "", "").contains("\"op\":{\"k\":\"new\"}") && !fx.request(18, "dark", "", "").contains("\"op\""), "등록 요청은 한 번만 실린다");
+            ok(fx.act("fv.pick.d.2", fform) == FavCore.R_RENDER && fx.request(18, "dark", "", "").contains("\"op\":{\"k\":\"pick\",\"w\":\"d\",\"j\":2}") && fx.act("fv.pick.x.1", fform) == FavCore.R_NONE && fx.act("fv.pick.s.12", fform) == FavCore.R_NONE, "후보 줄 고르기(칸 · 번호)");
+            fx.onScreen("{\"info\":{\"list\":[],\"msg\":\"\",\"go\":[],\"form\":{\"n\":\"\",\"s\":\"강남\",\"d\":\"\",\"act\":\"d\"}}}");
+            ok(fx.fs.equals("강남") && fx.fd.equals("") && fx.fact.equals("d") && fx.endActive() && fx.fact.equals("") && !fx.endActive(), "엔진이 돌려준 폼을 그대로 들고 있고, 칸이 풀리면 한 번만 알린다");
         }
         // 홈 카드 묶음
         {

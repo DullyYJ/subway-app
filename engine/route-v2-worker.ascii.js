@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-20s97";
+var ENGINE_VERSION = "route-v2-2026-10-20s98";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -19000,7 +19000,9 @@ async function handleScreenMap(request) {
 // \uc571\uc740 \uc800\uc7a5\ub41c \ubaa9\ub85d(list)\uacfc \uc9c0\uae08 \uacbd\ub85c\uc758 \ucd9c\ubc1c\u00b7\ub3c4\ucc29 \uc774\ub984(cur), \ubc29\uae08 \ub204\ub978 \uac83(op)\ub9cc \ubcf4\ub0b4\uace0, \uc5d4\uc9c4\uc774 \uc0c8 \ubaa9\ub85d(info.list)\uacfc \ud654\uba74\u00b7\uc548\ub0b4 \uae00(info.msg)\uc744 \ub3cc\ub824\uc900\ub2e4. \uc571\uc740 \uc0c8 \ubaa9\ub85d\uc744 \uadf8\ub300\ub85c \uc800\uc7a5\ud55c\ub2e4.
 //   \uc785\ub825 { cap(18 \uc774\uc0c1), f:{ list:[{s,d,name}], cur:{s,d}|null, op:{k:'quick'}|{k:'del',i}|null, th } }
 //   \ucd9c\ub825 { ok, v:1, screen:'fav', cover:'tab', head:[], body:[\u2026], info:{ list:[{s,d,name}], msg, go:[null|{s:[\uc774\ub984,\ub178\uc120,\uc704\ub3c4,\uacbd\ub3c4], d:[\u2026]}] } }
-// \ub20c\ub9bc: fv.add(\ud604\uc7ac \uacbd\ub85c \ub4f1\ub85d) \u00b7 fv.go.<i>(\uc774 \uc990\uaca8\ucc3e\uae30\ub85c \uacbd\ub85c \ucc3e\uae30) \u00b7 fv.del.<i> \u00b7 fv.close
+//   \uc0c8\ub85c \ub4f1\ub85d(\uc6f9 _favSearch/_favSelectStn/_favAddNew): f.form = { n(\uc774\ub984), s(\ucd9c\ubc1c\uc5ed \uae00), d(\ub3c4\ucc29\uc5ed \uae00), act:'s'|'d'|''(\uc5b4\ub290 \uce78\uc744 \uc4f0\ub294 \uc911) } \uc744 \uc571\uc774 \ub4e4\uace0 \uc788\ub2e4\uac00 \uadf8\ub300\ub85c \ubcf4\ub0b8\ub2e4.
+//     op:{k:'pick',w:'s'|'d',j} \ud6c4\ubcf4 \uc904 \uc120\ud0dd \u00b7 op:{k:'new'} \ub4f1\ub85d(\uc5ed \uc774\ub984\uc740 \uc815\ud655\ud788 \ub9de\uc544\uc57c \ud558\uace0, \ud558\ub098\ub9cc \uac78\ub9ac\uba74 \uadf8 \uc5ed) \u00b7 \ub3cc\ub824\uc8fc\ub294 info.form \uc744 \uc571\uc774 \ub2e4\uc2dc \ub4e4\uace0 \uc788\ub294\ub2e4.
+// \ub20c\ub9bc: fv.add(\ud604\uc7ac \uacbd\ub85c \ub4f1\ub85d) \u00b7 fv.go.<i>(\uc774 \uc990\uaca8\ucc3e\uae30\ub85c \uacbd\ub85c \ucc3e\uae30) \u00b7 fv.del.<i> \u00b7 fv.pick.<s|d>.<j> \u00b7 fv.new \u00b7 fv.close
 'use strict';
 var FAV_V = 1, FAV_MAX = 8;
 function favStr(v, n) { return typeof v === 'string' ? v.slice(0, n) : ''; }
@@ -19015,6 +19017,18 @@ function favFind(name) {                          // \uc5ed \uc774\ub984(\ub05d\
   if (!n) return null;
   for (var i = 0; i < t.length; i++) if (t[i][0] === n) return [t[i][0], t[i][1], t[i][2], t[i][3]];
   return null;
+}
+function favCands(q) {                            // \uae00\uc774 \ub4e4\uc5b4 \uc788\ub294 \uc5ed \uc774\ub984 \ud6c4\ubcf4(\uc774\ub984 \uc911\ubcf5\uc740 \ub178\uc120\uc744 \ubaa8\uc544\uc11c, \ucd5c\ub300 6\uac1c) \u2014 \uc6f9 _favSearch \uc640 \uac19\ub2e4
+  q = favStr(q, 30).replace(/\s+/g, '').replace(/\uc5ed$/, '');
+  if (!q) return [];
+  var t = favStnTable(), seen = {}, order = [];
+  for (var i = 0; i < t.length; i++) if (t[i][0].indexOf(q) >= 0) { if (!seen[t[i][0]]) { seen[t[i][0]] = []; order.push(t[i][0]); } if (seen[t[i][0]].indexOf(t[i][1]) < 0) seen[t[i][0]].push(t[i][1]); }
+  order.sort(function (a, b) { return (a === q ? 0 : a.indexOf(q) === 0 ? 1 : 2) - (b === q ? 0 : b.indexOf(q) === 0 ? 1 : 2); });   // \uc774\ub984\uc774 \uac19\uc740 \uac83 > \uc55e\ubd80\ubd84\uc774 \uac19\uc740 \uac83 > \ub098\uba38\uc9c0
+  return order.slice(0, 6).map(function (n) { return { name: n, lines: seen[n] }; });
+}
+function favResolve(txt) {                        // \uc785\ub825 \uae00 \u2192 \uc5ed \uc774\ub984: \uc815\ud655\ud788 \uac19\uc73c\uba74 \uadf8 \uc5ed, \uc544\ub2c8\uba74 \ud6c4\ubcf4\uac00 \ud558\ub098\ubfd0\uc77c \ub54c\ub9cc \uadf8 \uc5ed, \uc544\ub2c8\uba74 ''
+  var e = favFind(txt); if (e) return e[0];
+  var c = favCands(txt); return c.length === 1 ? c[0].name : '';
 }
 function favClean(list) {
   var out = [];
@@ -19033,12 +19047,25 @@ function favScreen(opt, f) {
   var cur = null;
   if (f.cur && typeof f.cur === 'object') { var cs = favFind(f.cur.s), cd = favFind(f.cur.d); if (cs && cd) cur = { s: cs[0], d: cd[0] }; }
   var op = (f.op && typeof f.op === 'object') ? f.op : null;
+  var fm = (f.form && typeof f.form === 'object') ? f.form : {};
+  var form = { n: favStr(fm.n, 20), s: favStr(fm.s, 30), d: favStr(fm.d, 30), act: fm.act === 's' || fm.act === 'd' ? fm.act : '' };
   if (op && op.k === 'quick') {
     if (!cur) msg = '\uc9c0\ud558\ucca0\uc5ed\uc73c\ub85c \uc815\ud55c \uacbd\ub85c\ub9cc \ub4f1\ub85d\ud560 \uc218 \uc788\uc5b4\uc694';
     else if (cur.s === cur.d) msg = '\ucd9c\ubc1c\uc5ed\uacfc \ub3c4\ucc29\uc5ed\uc774 \uac19\uc544\uc694';
     else if (list.length >= FAV_MAX) msg = '\uc990\uaca8\ucc3e\uae30\ub294 \ucd5c\ub300 ' + FAV_MAX + '\uac1c';
     else if (list.some(function (y) { return y.s === cur.s && y.d === cur.d; })) msg = '\uc774\ubbf8 \ub4f1\ub85d\ub41c \uacbd\ub85c\uc608\uc694';
     else { list.push({ s: cur.s, d: cur.d, name: cur.s + '\u2192' + cur.d }); msg = cur.s + '\u2192' + cur.d + ' \ub4f1\ub85d \uc644\ub8cc'; }
+  } else if (op && op.k === 'pick') {
+    var pw = op.w === 'd' ? 'd' : 's', pj = Math.floor(Number(op.j)), pc = favCands(form[pw]);
+    if (pj >= 0 && pj < pc.length) form[pw] = pc[pj].name;
+    form.act = '';
+  } else if (op && op.k === 'new') {
+    var sn = favResolve(form.s), dn = favResolve(form.d);
+    if (!sn || !dn) msg = '\ucd9c\ubc1c\uc5ed\uacfc \ub3c4\ucc29\uc5ed\uc744 \uc815\ud655\ud788 \uc120\ud0dd\ud558\uc138\uc694';
+    else if (sn === dn) msg = '\ucd9c\ubc1c\uc5ed\uacfc \ub3c4\ucc29\uc5ed\uc774 \uac19\uc544\uc694';
+    else if (list.length >= FAV_MAX) msg = '\uc990\uaca8\ucc3e\uae30\ub294 \ucd5c\ub300 ' + FAV_MAX + '\uac1c';
+    else if (list.some(function (y) { return y.s === sn && y.d === dn; })) msg = '\uc774\ubbf8 \ub4f1\ub85d\ub41c \uacbd\ub85c\uc608\uc694';
+    else { var nm = form.n.trim() || (sn + '\u2192' + dn); list.push({ s: sn, d: dn, name: nm }); msg = '\u2b50 ' + nm + ' \ub4f1\ub85d \uc644\ub8cc'; form = { n: '', s: '', d: '', act: '' }; }
   } else if (op && op.k === 'del') {
     var i = Math.floor(Number(op.i));
     if (i >= 0 && i < list.length) { list.splice(i, 1); msg = '\uc990\uaca8\ucc3e\uae30 \uc0ad\uc81c'; }
@@ -19049,7 +19076,17 @@ function favScreen(opt, f) {
     if (reg) kids.push({ t: 'text', s: '\ud604\uc7ac \uacbd\ub85c(' + cur.s + '\u2192' + cur.d + ')\ub294 \ub4f1\ub85d\ub428', size: 12, color: '#30d158', pad: [0, 4, 0, 10] });
     else if (cur.s !== cur.d) kids.push({ t: 'button', s: '+ \ud604\uc7ac \uacbd\ub85c(' + cur.s + '\u2192' + cur.d + ') \ube60\ub978 \ub4f1\ub85d', size: 13, h: 44, r: 12, bold: true, fill: 'card2', line: 'gold', tc: 'gold', pad: [0, 4, 0, 10], act: { a: 'call', v: 'fv.add' } });
   }
-  if (!list.length) kids.push({ t: 'text', s: '\uc800\uc7a5\ub41c \uc990\uaca8\ucc3e\uae30\uac00 \uc5c6\uc2b5\ub2c8\ub2e4.\n\uacbd\ub85c\ub97c \ucc3e\uc740 \ub4a4 \uc704 \ub2e8\ucd94\ub85c \ub4f1\ub85d\ud574 \ubcf4\uc138\uc694.', size: 12, color: 'sub', lh: 1.7, align: 'center', pad: [18, 4, 18, 4] });
+  var fk = [{ t: 'text', s: '\uff0b \uc0c8 \uc990\uaca8\ucc3e\uae30 \ub4f1\ub85d', size: 12, bold: true, color: 'gold', pad: [0, 0, 0, 8] },
+    { t: 'field', key: 'fvn', hint: '\uc774\ub984 (\uc608: \ucd9c\uadfc\uae38, \uc9d1\u2192\ud68c\uc0ac)', value: form.n, maxlen: 20, h: 42, size: 13, fill: 'card2', line: 'border', r: 10, pad: [0, 0, 0, 8] }];
+  [['s', '\ucd9c\ubc1c\uc5ed', '#0a84ff'], ['d', '\ub3c4\ucc29\uc5ed', '#ff3b30']].forEach(function (w) {
+    var key = 'fv' + w[0], cands = form.act === w[0] ? favCands(form[w[0]]) : [], exact = !!favFind(form[w[0]]);
+    fk.push({ t: 'inbar', key: key, hint: w[1], value: form[w[0]], maxlen: 30, h: 42, size: 13, r: 10, fill: 'card2', line: exact ? '#30d158' : 'border', dot: w[2], btn: '\uc120\ud0dd', bh: 28, bsize: 12, watch: true,
+      act: { a: 'call', v: 'fv.pick.' + w[0] + '.0' }, eact: { a: 'call', v: 'fv.pick.' + w[0] + '.0' }, pad: [0, 0, 0, 6] });
+    cands.forEach(function (c, j) { fk.push({ t: 'sug', badge: c.lines.join('\u00b7').slice(0, 14), bc: 'sub', name: c.name, sub: '', last: j === cands.length - 1, act: { a: 'call', v: 'fv.pick.' + w[0] + '.' + j } }); });
+  });
+  fk.push({ t: 'button', s: '\u2b50 \uc990\uaca8\ucc3e\uae30 \ub4f1\ub85d', size: 13, h: 44, r: 12, bold: true, fill: 'gold', line: 'gold', tc: '#121214', pad: [4, 0, 0, 0], act: { a: 'call', v: 'fv.new' } });
+  kids.push({ t: 'panel', pad: [0, 8, 0, 10], ip: [12, 12, 12, 12], r: 14, kids: fk });
+  if (!list.length) kids.push({ t: 'text', s: '\uc800\uc7a5\ub41c \uc990\uaca8\ucc3e\uae30\uac00 \uc5c6\uc2b5\ub2c8\ub2e4.\n\uc704\uc5d0\uc11c \uc0c8\ub85c \ub4f1\ub85d\ud558\uac70\ub098, \uacbd\ub85c\ub97c \ucc3e\uc740 \ub4a4 \ube60\ub978 \ub4f1\ub85d\uc744 \ub20c\ub7ec \ubcf4\uc138\uc694.', size: 12, color: 'sub', lh: 1.7, align: 'center', pad: [18, 4, 18, 4] });
   var go = [];
   list.forEach(function (x, i) {
     var a = favFind(x.s), b = favFind(x.d);
@@ -19060,8 +19097,8 @@ function favScreen(opt, f) {
     if (x.name !== x.s + '\u2192' + x.d) kids.push({ t: 'text', s: x.s + ' \u2192 ' + x.d, size: 11, color: 'sub', pad: [0, 4, 0, 8] });
   });
   kids.push({ t: 'spacer', h: 16 });
-  var out = { ok: true, v: FAV_V, screen: 'fav', cover: 'tab', head: [], body: kids, info: { list: list, msg: msg, go: go } };
-  out.rev = 'f' + FAV_V + ':' + favHash(JSON.stringify([kids, msg]));
+  var out = { ok: true, v: FAV_V, screen: 'fav', cover: 'tab', head: [], body: kids, info: { list: list, msg: msg, go: go, form: form } };
+  out.rev = 'f' + FAV_V + ':' + favHash(JSON.stringify([kids, msg, form]));
   return out;
 }
 // \uc9c0\ub3c4 \ud0ed \ud654\uba74 \uc5d4\uc9c4 Worker \uc5f0\uacb0\ubd80 \u2014 POST /screen/fav (engine/fav.js \uc758 favScreen \uc744 \ubd80\ub978\ub2e4). route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/screen/fav") return handleScreenFav(request);` \ub97c \ub123\ub294\ub2e4.

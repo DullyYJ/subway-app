@@ -22,7 +22,9 @@ public final class FavCore {
     public String msg = "";
     public final List<Go> go = new ArrayList<Go>();
     public int goIdx = -1;
-    private String op = "";                                   // 다음 요청에 실을 눌림: '' · quick · del:<번호>
+    private String op = "";                                   // 다음 요청에 실을 눌림: '' · quick · del:<번호> · pick:<s|d>:<번호> · new
+    /** 새로 등록 폼: 쓰는 글과 어느 칸을 쓰는 중인지. 엔진이 돌려준 값을 그대로 다시 보낸다(후보 줄·칸 채우기는 엔진이 정한다). */
+    public String fn = "", fs = "", fd = "", fact = "";
 
     /** 저장된 목록 글. 모양이 이상하면 빈 목록. */
     public String listJson() {
@@ -34,7 +36,10 @@ public final class FavCore {
         StringBuilder b = new StringBuilder("{\"cap\":").append(cap).append(",\"f\":{\"list\":").append(listJson());
         b.append(",\"th\":").append(ShellCore.q("dark".equals(theme) ? "dark" : "pastel"));
         if (curS != null && curD != null && curS.length() > 0 && curD.length() > 0) b.append(",\"cur\":{\"s\":").append(ShellCore.q(curS)).append(",\"d\":").append(ShellCore.q(curD)).append('}');
+        b.append(",\"form\":{\"n\":").append(ShellCore.q(fn)).append(",\"s\":").append(ShellCore.q(fs)).append(",\"d\":").append(ShellCore.q(fd)).append(",\"act\":").append(ShellCore.q(fact)).append('}');
         if ("quick".equals(op)) b.append(",\"op\":{\"k\":\"quick\"}");
+        else if ("new".equals(op)) b.append(",\"op\":{\"k\":\"new\"}");
+        else if (op.startsWith("pick:")) b.append(",\"op\":{\"k\":\"pick\",\"w\":").append(ShellCore.q(op.substring(5, 6))).append(",\"j\":").append(op.substring(7)).append('}');
         else if (op.startsWith("del:")) b.append(",\"op\":{\"k\":\"del\",\"i\":").append(op.substring(4)).append('}');
         op = "";
         return b.append("}}").toString();
@@ -50,6 +55,11 @@ public final class FavCore {
             Map<String, Object> im = (Map<String, Object>) info;
             if (im.get("list") instanceof List) st.put(K_FAV, HomeSearchCore.toJson(im.get("list")));
             msg = BoardCore.s(im.get("msg"), 60);
+            if (im.get("form") instanceof Map) {
+                Map<String, Object> fm = (Map<String, Object>) im.get("form");
+                fn = BoardCore.s(fm.get("n"), 20); fs = BoardCore.s(fm.get("s"), 30); fd = BoardCore.s(fm.get("d"), 30);
+                String a = BoardCore.s(fm.get("act"), 2); fact = "s".equals(a) || "d".equals(a) ? a : "";
+            }
             if (im.get("go") instanceof List) for (Object x : (List<Object>) im.get("go")) {
                 Go g = new Go();
                 if (x instanceof Map) {
@@ -65,9 +75,31 @@ public final class FavCore {
             }
         } catch (Exception e) { /* 이전 값 유지 */ }
     }
-    /** 눌림. fv.add · fv.del.<i> 는 다시 그리기, fv.go.<i> 는 그 즐겨찾기로 경로 찾기. */
-    public int act(String v) {
+    /** 입력칸에 지금 적혀 있는 글(이름 · 출발역 · 도착역)을 폼에 옮긴다. 없는 키는 건드리지 않는다. */
+    public void sync(Map<String, String> fields) {
+        if (fields == null) return;
+        if (fields.get("fvn") != null) fn = fields.get("fvn");
+        if (fields.get("fvs") != null) fs = fields.get("fvs");
+        if (fields.get("fvd") != null) fd = fields.get("fvd");
+    }
+    /** 입력칸 이벤트(kind: focus · edit · blur). 출발·도착 칸이면 그 칸을 '쓰는 중'으로 하고 다시 그려야 하면 true. */
+    public boolean onText(String key, String value, String kind) {
+        boolean s = "fvs".equals(key), d = "fvd".equals(key);
+        if (!s && !d) return false;
+        if ("blur".equals(kind)) return false;
+        String v = value == null ? "" : (value.length() > 30 ? value.substring(0, 30) : value);
+        if (s) fs = v; else fd = v;
+        fact = s ? "s" : "d";
+        return true;
+    }
+    /** 후보 줄 누르기 직전에 닫히지 않도록, 포커스가 빠진 뒤 잠깐 있다가 '쓰는 중'을 푼다. 바뀌었으면 true. */
+    public boolean endActive() { if (fact.length() == 0) return false; fact = ""; return true; }
+
+    /** 눌림. fv.add · fv.del.<i> · fv.pick.* · fv.new 는 다시 그리기, fv.go.<i> 는 그 즐겨찾기로 경로 찾기. fields 는 시트 입력칸의 지금 글. */
+    public int act(String v, Map<String, String> fields) {
         if (v == null) return R_NONE;
+        if ("fv.new".equals(v)) { sync(fields); op = "new"; return R_RENDER; }
+        if (v.matches("fv\\.pick\\.[sd]\\.[0-9]")) { sync(fields); op = "pick:" + v.substring(8, 9) + ":" + v.substring(10); return R_RENDER; }
         if ("fv.close".equals(v)) return R_CLOSE;
         if ("fv.add".equals(v)) { op = "quick"; return R_RENDER; }
         try {

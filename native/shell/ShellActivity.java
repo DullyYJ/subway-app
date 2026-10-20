@@ -905,7 +905,7 @@ public class ShellActivity extends Activity {
         @Override public void onAction(ScreenCore.Act a) {
             if (ShellCore.S_MAPSTN.equals(sheetName) || ShellCore.S_MAPTT.equals(sheetName)) { if ("call".equals(a.a)) mapSheetAct(a.v); return; }
             if (!"call".equals(a.a)) return;
-            if (ShellCore.S_FAV.equals(sheetName)) { favAct(a.v); return; }
+            if (ShellCore.S_FAV.equals(sheetName)) { favAct(a.v, sheetView == null ? null : sheetView.fields()); return; }
             if (ShellCore.S_DETAIL.equals(sheetName)) { detailAct(a.v); return; }
             if ("wr.close".equals(a.v) || "fm.close".equals(a.v)) { closeSheet(); return; }
             if ("wr.submit".equals(a.v)) { submitWrite(); return; }
@@ -916,7 +916,14 @@ public class ShellActivity extends Activity {
         @Override public void onSearch(ScreenCore.Act a, String q) { }
         @Override public void onInputFocus(boolean on) { }
         @Override public void onFirstDraw() { }
-        @Override public void onText(String key, String value, String kind) { }
+        @Override public void onText(String key, String value, String kind) {
+            if (!ShellCore.S_FAV.equals(sheetName)) return;
+            if ("blur".equals(kind)) {                                   // 후보 줄을 누르는 동안 잠깐 기다렸다 닫는다
+                main.postDelayed(new Runnable() { @Override public void run() { if (ShellCore.S_FAV.equals(sheetName) && fav.endActive()) { fav.sync(sheetView == null ? null : sheetView.fields()); loadFav(); } } }, 250);
+                return;
+            }
+            if (fav.onText(key, value, kind)) { fav.sync(sheetView == null ? null : sheetView.fields()); fav.fs = "fvs".equals(key) ? value : fav.fs; fav.fd = "fvd".equals(key) ? value : fav.fd; loadFav(); }
+        }
         @Override public void onContentH(float dp) { }
     }
     private void submitWrite() {
@@ -1462,8 +1469,8 @@ public class ShellActivity extends Activity {
             }
         }, "shell-fav").start();
     }
-    private void favAct(String v) {
-        switch (fav.act(v)) {
+    private void favAct(String v, Map<String, String> fields) {
+        switch (fav.act(v, fields)) {
             case FavCore.R_CLOSE: closeSheet(); break;
             case FavCore.R_RENDER: loadFav(); break;
             case FavCore.R_GO: {

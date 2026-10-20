@@ -23,14 +23,36 @@ o = call({ list: L8, op: { k: 'del', i: 1 } });
 ok(o.info.list.length === 7 && o.info.list[1].d === '선릉' && o.info.msg === '즐겨찾기 삭제', '삭제');
 o = call({ list: L8.slice(0, 2) });
 const btn = flat(o.body).filter(n => n.t === 'button').map(n => n.act.v);
-ok(btn.join() === 'fv.close'.replace('fv.close', '') + 'fv.go.0,fv.del.0,fv.go.1,fv.del.1' || btn.join() === 'fv.go.0,fv.del.0,fv.go.1,fv.del.1', '단추: 누르면 찾기 / 삭제 ' + btn.join());
+ok(btn.join() === 'fv.new,fv.go.0,fv.del.0,fv.go.1,fv.del.1', '단추: 새로 등록 / 누르면 찾기 / 삭제 ' + btn.join());
 ok(o.info.go[0] && o.info.go[0].s[0] === '부평' && o.info.go[0].d[0] === '강남' && typeof o.info.go[0].s[2] === 'number', '경로 찾기용 역 정보(이름·노선·좌표)는 엔진이 준다');
 ok(call({ list: [{ s: '없는역', d: '강남', name: 'q' }] }).info.go[0] === null, '표에 없는 역은 go null');
-const r = screenCheck([call({ list: [], cur: { s: '부평', d: '강남' } }), call({ list: L8, cur: { s: '부평', d: '신도림' } }), o]);
+// 새로 등록 폼
+{
+  const C = E.favCands;
+  ok(C('강남').length >= 1 && C('강남')[0].name === '강남' && C('강남').length <= 6 && C('강남').every(c => c.name.indexOf('강남') >= 0 && c.lines.length >= 1), '후보: 이름이 같은 역이 맨 앞, 최대 6개, 노선 모음: ' + JSON.stringify(C('강남').slice(0, 3)));
+  ok(C('').length === 0 && C('강남역')[0].name === '강남' && C('  부 평 ')[0].name === '부평', '후보: 빈 글 없음 · 끝의 역 · 공백 무시');
+  ok(E.favResolve('강남역') === '강남' && E.favResolve('zzzz') === '' && E.favResolve('') === '', '이름이 정확하면 그 역');
+  const one = E.favCands('수원시청') ; ok(one.length === 1 ? E.favResolve('수원시') === '수원시청' : true, '후보가 하나뿐이면 그 역으로 본다');
+  o = call({ list: [], form: { n: '', s: '강', d: '', act: 's' } });
+  const sugs = flat(o.body).filter(n => n.t === 'sug');
+  ok(sugs.length >= 2 && sugs.every(n => /^fv\.pick\.s\.\d$/.test(n.act.v)) && flat(o.body).some(n => n.t === 'inbar' && n.key === 'fvs' && n.value === '강' && n.watch === true) && flat(o.body).some(n => n.t === 'field' && n.key === 'fvn'), '쓰는 칸에만 후보 줄이 뜨고 글자는 그대로 보인다');
+  ok(!flat(call({ list: [], form: { s: '강', act: '' } }).body).some(n => n.t === 'sug'), '쓰는 칸이 없으면 후보 없음');
+  o = call({ list: [], form: { n: '출근길', s: '강', d: '', act: 's' }, op: { k: 'pick', w: 's', j: 0 } });
+  ok(o.info.form.s === C('강')[0].name && o.info.form.act === '' && o.info.form.n === '출근길', '후보 줄을 고르면 칸이 채워지고 후보가 닫힌다');
+  o = call({ list: [], form: { n: '출근길', s: '부평', d: '강남역', act: '' }, op: { k: 'new' } });
+  ok(o.info.list.length === 1 && o.info.list[0].s === '부평' && o.info.list[0].d === '강남' && o.info.list[0].name === '출근길' && /출근길 등록 완료/.test(o.info.msg) && o.info.form.s === '' && o.info.form.n === '', '등록: 이름 · 역 이름 정리 · 폼 비움');
+  o = call({ list: [], form: { n: '', s: '부평', d: '강남', act: '' }, op: { k: 'new' } });
+  ok(o.info.list[0].name === '부평→강남', '이름을 안 쓰면 A→B');
+  const bad = (form, list) => call({ list: list || [], form: form, op: { k: 'new' } });
+  ok(bad({ s: '부평', d: '' }).info.msg === '출발역과 도착역을 정확히 선택하세요' && bad({ s: '부평', d: '부평' }).info.msg === '출발역과 도착역이 같아요' && bad({ s: '부평', d: '강남' }, [{ s: '부평', d: '강남', name: 'x' }]).info.msg === '이미 등록된 경로예요' && bad({ s: '부평', d: '강남' }, L8).info.msg === '즐겨찾기는 최대 8개', '등록 실패: 비었음 · 같은 역 · 중복 · 8개');
+  ok(bad({ s: '부평', d: '' }).info.form.s === '부평', '실패하면 쓰던 글은 남긴다');
+  ok(call({ list: [], form: { n: 'x'.repeat(50), s: '부평', d: '강남' }, op: { k: 'new' } }).info.list[0].name.length === 20, '이름은 20자까지');
+}
+const r = screenCheck([call({ list: [], form: { s: '강', d: '시', act: 'd' } }), call({ list: [], cur: { s: '부평', d: '강남' } }), call({ list: L8, cur: { s: '부평', d: '신도림' } }), o]);
 ok(!r.err && r.out.every(l => /^OK/.test(l)), '앱 검증기 통과: ' + (r.err || r.out.join(' | ')));
 {
   const w = fs.readFileSync(R('engine/route-v2-worker.ascii.js'), 'utf8');
-  ok(/\/\/ ===== FAV ENGINE BEGIN =====/.test(w) && w.indexOf('if (url.pathname === "/screen/fav") return handleScreenFav(request);') > 0 && /ENGINE_VERSION = "route-v2-2026-10-20s9\d"/.test(w), '워커에 내장됨');
+  ok(/\/\/ ===== FAV ENGINE BEGIN =====/.test(w) && w.indexOf('if (url.pathname === "/screen/fav") return handleScreenFav(request);') > 0 && /ENGINE_VERSION = "route-v2-2026-10-20s\d+"/.test(w), '워커에 내장됨');
 }
 console.log(pass + ' 통과 / ' + fail + ' 실패');
 if (fail) process.exit(1);
