@@ -332,6 +332,17 @@ public class ShellJvmTest {
         ok(mc.addTt("{\"items\":[{\"id\":0,\"dirs\":[],\"dayCode\":\"SAT\"}]}", mc.ttSeq) && mc.ttRequest(18, "dark").contains("\"2호선|SAT\":{"), "요일 응답 보관");
         ok(mc.sheetAct("mt.d.SAT") == MapCore.R_TT_RENDER && mc.sheetAct("mt.retry") == MapCore.R_TT_LOAD, "받아 둔 요일은 요청 없이 · 다시 시도");
         ok(!mc.addTt("zzz", mc.ttSeq) && "fail".equals(mc.ttState), "깨진 응답은 실패");
+        // 버스: 위치 → 엔진이 받아 오라는 주소 → 본문을 그대로 res 로
+        mc.cat("m:bus");
+        ok(mc.act("mp.loc", null) == MapCore.R_BUS_LOC && !mc.bodyRequest(18, "dark").contains("\"bus\":{"), "버스 모드의 내 위치는 정류장 찾기 · 위치 전엔 bus 없음");
+        mc.setBusLoc(37.5, 127.0);
+        mc.onScreen("{\"info\":{\"view\":\"bus\",\"bus\":{\"st\":\"need\",\"need\":[{\"k\":\"tp\",\"url\":\"http://ws.bus.go.kr/api/rest/stationinfo/getStationByPos?tmX=127\"},{\"k\":\"tn\",\"url\":\"https://evil.example/x\"}]}}}");
+        ok(mc.busNeed.size() == 2 && "tp".equals(mc.busNeed.get(0)[0]), "엔진이 준 주소 목록 읽기");
+        ok(MapCore.busFetchUrl(mc.busNeed.get(0)[1]).startsWith(ShellCore.BASE + "/tago?url=http%3A%2F%2Fws.bus.go.kr") && MapCore.busFetchUrl(mc.busNeed.get(1)[1]).isEmpty(), "허용된 공공 API 주소만 프록시로 받는다");
+        mc.addBusRes("tp", "<a/>"); mc.addBusRes("BAD KEY", "x");
+        String bq2 = mc.bodyRequest(18, "dark");
+        ok(bq2.contains("\"bus\":{\"lat\":37.5,\"lng\":127.0,\"res\":{\"tp\":\"<a/>\"}}") && !bq2.contains("BAD"), "받은 본문을 res 로 다시 보낸다");
+        mc.setBusLoc(37.4, 127.1); ok(!mc.bodyRequest(18, "dark").contains("\"tp\""), "위치를 다시 잡으면 이전 본문은 비운다");
         HomeCore hm = new HomeCore();
         hm.setStation(HomeCore.START, "강남", "2호선", 37.4979, 127.0276);
         ok(!hm.bothSet() && "강남".equals(hm.text[HomeCore.START]) && "subway".equals(hm.loc[HomeCore.START].type), "노선도에서 출발역 정하기");

@@ -18744,10 +18744,157 @@ function mapScreen(inp, factsIn, dataIn) {
   var body;
   if (f.mode === 'subway' && f.reg === 'seoul') { body = [{ t: 'spacer', h: 1 }]; info.view = 'metro'; }
   else if (f.mode === 'subway') { body = mapRegionBody(f, ctx); info.view = 'list'; info.rs = ctx.regionStns || []; }
-  else { body = mapBusBody ? mapBusBody(f) : [{ t: 'spacer', h: 1 }]; info.view = 'bus'; }
+  else { body = mapBusBody(f, info); info.view = 'bus'; }
   return mapFinish({ ok: true, v: 1, screen: 'map', cover: 'tab', head: [], body: body, info: info }, 'b' + f.mode + f.reg);
 }
-var mapBusBody = null;
+// \u2500\u2500 \ubc84\uc2a4: \uadfc\ucc98 \uc815\ub958\uc7a5 + \ub3c4\ucc29\uc815\ubcf4(\uc6f9 loadMapNearStops / _fetchNearStops / _renderBusStop \uc758 \uaddc\uce59) \u2500\u2500
+// \uc5d4\uc9c4\uc740 "\uc5b4\ub290 \uc8fc\uc18c\ub97c \ubc1b\uc544 \uc640\ub77c(need)" \ub9cc \ub9d0\ud558\uace0, \uc571\uc740 \uadf8 \uc8fc\uc18c\uc758 \ubcf8\ubb38\uc744 \uadf8\ub300\ub85c res \uc5d0 \ub123\uc5b4 \ub2e4\uc2dc \ubcf4\ub0b8\ub2e4. \ud574\uc11d\uc740 \ubaa8\ub450 \uc5ec\uae30\uc11c \ud55c\ub2e4.
+var MAP_TAGO_BASE = 'https://apis.data.go.kr/1613000/';
+var MAP_SEOUL_BOX = [37.41, 37.72, 126.76, 127.19];
+var MAP_EXIT_RE = /\uc5ed\s*\d*\s*\ubc88?\s*\ucd9c\uad6c|\uc5ed\s*\ucd9c\uad6c/;
+var MAP_STOP_DUP_M = 25, MAP_EXIT_NEAR_M = 350, MAP_NEAR_BASE = 6, MAP_NEAR_MAX = 16;
+function mapInSeoul(la, lo) { return la >= MAP_SEOUL_BOX[0] && la <= MAP_SEOUL_BOX[1] && lo >= MAP_SEOUL_BOX[2] && lo <= MAP_SEOUL_BOX[3]; }
+function mapXmlItems(text, tag) {
+  var out = [], re = new RegExp('<' + tag + '[^>]*>([\\s\\S]*?)<\\/' + tag + '>', 'g'), m;
+  text = String(text || '');
+  while ((m = re.exec(text)) !== null) { out.push(m[1]); if (out.length > 400) break; }
+  return out;
+}
+function mapXmlVal(chunk, tag) {
+  var m = new RegExp('<' + tag + '[^>]*>([\\s\\S]*?)<\\/' + tag + '>').exec(chunk);
+  return m ? String(m[1]).replace(/<!\[CDATA\[|\]\]>/g, '').trim() : '';
+}
+function mapJsonItems(text) {
+  try { var o = JSON.parse(String(text || '')), it = o.response.body.items.item || []; return Array.isArray(it) ? it : [it]; } catch (e) { return []; }
+}
+function mapSeoulStops(text, la, lo) {
+  var stops = [];
+  mapXmlItems(text, 'itemList').forEach(function (ch) {
+    var ars = mapXmlVal(ch, 'arsId'), nm = mapXmlVal(ch, 'stationNm');
+    if (!ars || !nm || String(ars).replace(/^0+/, '') === '') return;       // arsId 0 = \ubbf8\uc815\ucc28
+    var gx = parseFloat(mapXmlVal(ch, 'gpsX')), gy = parseFloat(mapXmlVal(ch, 'gpsY')), d = parseFloat(mapXmlVal(ch, 'dist'));
+    if (isNaN(gx) || isNaN(gy)) { gx = lo; gy = la; }
+    stops.push({ nm: nm, id: 'SEOUL:' + ars, ars: ars, la: gy, lo: gx, dist: isFinite(d) ? d : mapHav(la, lo, gy, gx), src: 'topis' });
+  });
+  return stops;
+}
+function mapTagoStops(text, la, lo) {
+  var stops = [];
+  mapJsonItems(text).forEach(function (it) {
+    var a = parseFloat(it.gpslati), b = parseFloat(it.gpslong);
+    if (isNaN(a) || isNaN(b) || !it.nodeid) return;
+    stops.push({ nm: String(it.nodenm || ''), id: String(it.nodeid), no: it.nodeno ? String(it.nodeno) : '', city: it.citycode ? String(it.citycode) : '', la: a, lo: b, dist: mapHav(la, lo, a, b), src: 'tago' });
+  });
+  return stops;
+}
+function mapStopExit(s) { return MAP_EXIT_RE.test(s.nm || ''); }
+function mapDedupStops(stops) {
+  var key = function (v) { return String(v || '').replace(/\s/g, ''); }, out = [];
+  stops.forEach(function (st) {
+    var dup = null;
+    for (var i = 0; i < out.length; i++) if (key(out[i].nm) === key(st.nm) && mapHav(out[i].la, out[i].lo, st.la, st.lo) <= MAP_STOP_DUP_M) { dup = out[i]; break; }
+    if (!dup) out.push(st); else if (st.dist < dup.dist) out[out.indexOf(dup)] = st;
+  });
+  return out;
+}
+function mapStopOrder(stops) {                       // \uac00\uae4c\uc6b4 \uc21c + \uc5ed \ucd9c\uad6c(350m \uc548)\ub294 \uc804\ubd80 \uc55e\uc73c\ub85c, \uae38\uc774\ub294 \ucd9c\uad6c \uc218\ub9cc\ud07c \ub298\ub9bc
+  var byD = function (a, b) { return a.dist - b.dist; }, ex = [], rest = [];
+  stops.forEach(function (s) { if (mapStopExit(s) && s.dist <= MAP_EXIT_NEAR_M) ex.push(s); else rest.push(s); });
+  ex.sort(byD); rest.sort(byD);
+  var lim = ex.length ? Math.min(MAP_NEAR_MAX, Math.max(MAP_NEAR_BASE, ex.length + 3)) : MAP_NEAR_BASE;
+  return ex.concat(rest).slice(0, lim);
+}
+function mapBusStops(f) {
+  var b = f.bus, res = b.res || {}, la = Number(b.lat), lo = Number(b.lng);
+  var s = res.tp ? mapSeoulStops(res.tp, la, lo) : [];
+  if (!s.length && res.tn) s = mapTagoStops(res.tn, la, lo);
+  return mapStopOrder(mapDedupStops(s));
+}
+function mapBusNeedStops(la, lo) {
+  var need = [];
+  if (mapInSeoul(la, lo)) need.push({ k: 'tp', url: 'http://ws.bus.go.kr/api/rest/stationinfo/getStationByPos?tmX=' + lo + '&tmY=' + la + '&radius=800' });
+  need.push({ k: 'tn', url: MAP_TAGO_BASE + 'BusSttnInfoInqireService/getCrdntPrxmtSttnList?serviceKey=&gpsLati=' + la + '&gpsLong=' + lo + '&numOfRows=50&pageNo=1&_type=json' });
+  return need;
+}
+function mapBusArrUrl(s) {
+  if (s.src === 'topis') return 'http://ws.bus.go.kr/api/rest/stationinfo/getStationByUid?arsId=' + encodeURIComponent(s.ars);
+  return MAP_TAGO_BASE + 'ArvlInfoInqireService/getSttnAcctoArvlPrearngeInfoList?serviceKey=&cityCode=' + encodeURIComponent(s.city) + '&nodeId=' + encodeURIComponent(s.id) + '&_type=json';
+}
+function mapSecOfMsg(msg) {
+  var t = String(msg || '');
+  if (/\uace7 \ub3c4\ucc29|\ucd9c\ubc1c\ub300\uae30|\uc6b4\ud589\uc885\ub8cc/.test(t)) return /\uace7 \ub3c4\ucc29/.test(t) ? 1 : 0;
+  var mm = /(\d+)\s*\ubd84/.exec(t), ss = /(\d+)\s*\ucd08/.exec(t);
+  return (mm ? parseInt(mm[1], 10) * 60 : 0) + (ss ? parseInt(ss[1], 10) : 0);
+}
+function mapSeoulArr(text) {
+  var rows = [];
+  if (/Key\uc778\uc99d\uc2e4\ud328|SERVICE\s*KEY\s*IS\s*NOT\s*REGISTERED/i.test(text) || /<headerCd>\s*[1-9]/.test(text)) return rows;
+  mapXmlItems(text, 'itemList').forEach(function (ch) {
+    var rt = mapXmlVal(ch, 'rtNm') || mapXmlVal(ch, 'busRouteAbrv');
+    if (!rt) return;
+    var dir = mapXmlVal(ch, 'adirection') || mapXmlVal(ch, 'nxtStn');
+    [1, 2].forEach(function (n) {
+      var msg = mapXmlVal(ch, 'arrmsg' + n), t = parseInt(mapXmlVal(ch, 'traTime' + n), 10);
+      var sec = (isFinite(t) && t > 0) ? t : mapSecOfMsg(msg);
+      var pm = /(\d+)\s*\ubc88\uc9f8/.exec(msg), cg = parseInt(mapXmlVal(ch, 'congestion' + n), 10);
+      if (sec > 0) rows.push({ no: rt, sec: sec, prev: pm ? parseInt(pm[1], 10) : 0, cong: isFinite(cg) ? cg : 0, low: parseInt(mapXmlVal(ch, 'busType' + n), 10) === 1, dir: dir });
+    });
+  });
+  return rows;
+}
+function mapTagoArr(text) {
+  return mapJsonItems(text).map(function (a) {
+    return { no: String(a.routeno || a.routeNo || ''), sec: parseInt(a.arrtime || a.arrTime || 0, 10) || 0, prev: parseInt(a.arrprevstationcnt || a.arrPrevStationCnt || 0, 10) || 0,
+             cong: parseInt(a.congestion || a.congestionCase || 0, 10) || 0, low: /\uc800\uc0c1/.test(String(a.vehicletp || '')), dir: '' };
+  }).filter(function (r) { return r.no && r.sec > 0; });
+}
+function mapArrFmt(sec) { if (!sec || sec <= 1) return '\uace7 \ub3c4\ucc29'; if (sec < 60) return sec + '\ucd08'; var m = Math.round(sec / 60); return m <= 1 ? '\uace7 \ub3c4\ucc29' : m + '\ubd84'; }
+function mapRouteColor(no) {
+  var n = String(no || '');
+  if (/^[0-9]+$/.test(n)) { var v = parseInt(n, 10); if (v < 100) return '#d9433a'; if (v < 200) return '#2f6fdb'; if (v < 500) return '#2e9e5b'; if (v < 1000) return '#e0a020'; }
+  return '#7a7f8c';
+}
+function mapDistFmt(m) { m = Math.round(m || 0); return m >= 1000 ? (m / 1000).toFixed(1) + 'km' : m + 'm'; }
+function mapBusStopView(s, rows) {
+  var kids = [{ t: 'text', s: s.nm + '  ' + mapDistFmt(s.dist) + (s.no || s.ars ? '  \u00b7  ' + (s.no || s.ars) : ''), size: 14, bold: true, color: 'text', pad: [12, 14, 6, 2] }];
+  var by = {}, order = [];
+  rows.forEach(function (r) { var k = r.no + '|' + r.dir; if (!by[k]) { by[k] = []; order.push(k); } by[k].push(r); });
+  order.forEach(function (k) { by[k].sort(function (a, b) { return a.sec - b.sec; }); });
+  order.sort(function (a, b) { return by[a][0].sec - by[b][0].sec; });
+  if (!order.length) kids.push({ t: 'text', s: '\ub3c4\ucc29 \uc815\ubcf4 \uc5c6\uc74c', size: 12, color: 'sub', pad: [2, 14, 6, 6] });
+  order.slice(0, 8).forEach(function (k) {
+    var g = by[k], r = g[0], cg = ['', '\uc5ec\uc720', '\ubcf4\ud1b5', '\ud63c\uc7a1', '\ub9e4\uc6b0\ud63c\uc7a1'][r.cong] || '';
+    var s1 = r.no, hl = [[0, s1.length, mapRouteColor(r.no)]];
+    var txt = s1 + '  ' + mapArrFmt(r.sec) + (r.prev > 0 ? ' \u00b7 ' + r.prev + '\ubc88\uc9f8 \uc804' : '') + (cg ? ' \u00b7 ' + cg : '') + (r.low ? ' \u00b7 \uc800\uc0c1' : '');
+    if (g[1]) txt += '\n' + ' '.repeat(s1.length + 2) + mapArrFmt(g[1].sec) + (g[1].prev > 0 ? ' \u00b7 ' + g[1].prev + '\ubc88\uc9f8 \uc804' : '');
+    if (r.dir) txt += '\n' + r.dir + ' \ubc29\uba74';
+    kids.push({ t: 'box', s: txt, hl: hl, size: 13, lh: 1.5, color: 'text', fill: 'card2', line: 'border', r: 9, ip: [10, 7, 10, 7], pad: [0, 14, 4, 14] });
+  });
+  return kids;
+}
+function mapBusBody(f, info) {
+  var b = f.bus;
+  if (!b || !isFinite(Number(b.lat)) || !isFinite(Number(b.lng))) {
+    info.bus = { st: 'noloc' };
+    return [{ t: 'text', s: '\ub0b4 \uc8fc\ubcc0 \uc815\ub958\uc7a5 \ub3c4\ucc29\uc815\ubcf4', size: 16, bold: true, color: 'gold', align: 'center', pad: [28, 24, 6, 24] },
+            { t: 'text', s: '\uc704 \u2018\ub0b4 \uc704\uce58\u2019 \ub97c \ub204\ub974\uba74\n\uac00\uae4c\uc6b4 \uc815\ub958\uc7a5\uacfc \ubc84\uc2a4 \ub3c4\ucc29 \uc2dc\uac04\uc744 \ubcf4\uc5ec\ub4dc\ub824\uc694.', size: 13, color: 'sub', lh: 1.8, align: 'center', pad: [4, 30, 10, 30] },
+            { t: 'button', s: '\ub0b4 \uc704\uce58\ub85c \ucc3e\uae30', size: 14, h: 46, r: 12, bold: true, fill: 'gold', line: 'none', tc: '#121214', pad: [8, 60, 8, 60], act: { a: 'call', v: 'mp.loc' } }];
+  }
+  var la = Number(b.lat), lo = Number(b.lng), res = (b.res && typeof b.res === 'object') ? b.res : {};
+  if (res.tp === undefined && res.tn === undefined) { info.bus = { st: 'need', need: mapBusNeedStops(la, lo) }; return [{ t: 'text', s: '\uc8fc\ubcc0 \uc815\ub958\uc7a5 \ucc3e\ub294 \uc911...', size: 13, color: 'sub', align: 'center', pad: [40, 20, 40, 20] }]; }
+  var stops = mapBusStops(f);
+  if (!stops.length) { info.bus = { st: 'empty' }; return [{ t: 'text', s: '\uc8fc\ubcc0 800m \uc548\uc5d0 \uc815\ub958\uc7a5\uc744 \ucc3e\uc9c0 \ubabb\ud588\uc5b4\uc694.', size: 13, color: 'sub', align: 'center', lh: 1.7, pad: [40, 20, 20, 20] }]; }
+  if (res.a0 === undefined) { info.bus = { st: 'need', need: stops.map(function (s, i) { return { k: 'a' + i, url: mapBusArrUrl(s) }; }) }; return [{ t: 'text', s: '\ub3c4\ucc29\uc815\ubcf4 \uac00\uc838\uc624\ub294 \uc911...', size: 13, color: 'sub', align: 'center', pad: [40, 20, 40, 20] }]; }
+  var body = [{ t: 'text', s: '\ub0b4 \uc8fc\ubcc0 \uc815\ub958\uc7a5 ' + stops.length + '\uacf3', size: 12, color: 'sub', pad: [10, 14, 0, 4] }];
+  stops.forEach(function (s, i) {
+    var txt = String(res['a' + i] || ''), rows = s.src === 'topis' ? mapSeoulArr(txt) : mapTagoArr(txt);
+    mapBusStopView(s, rows).forEach(function (n) { body.push(n); });
+  });
+  body.push({ t: 'button', s: '\ub0b4 \uc704\uce58\ub85c \ub2e4\uc2dc \ucc3e\uae30', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: '', pad: [10, 60, 4, 60], act: { a: 'call', v: 'mp.loc' } });
+  body.push({ t: 'text', s: '\ub3c4\ucc29 \uc2dc\uac04\uc740 \uc2e4\uc2dc\uac04 \uc815\ubcf4\ub77c \uc870\uae08\uc529 \ub2ec\ub77c\uc9c8 \uc218 \uc788\uc5b4\uc694.', size: 11, color: 'sub', align: 'center', pad: [6, 16, 16, 16] });
+  info.bus = { st: 'ok', n: stops.length };
+  return body;
+}
 // \uc9c0\ub3c4 \ud0ed \ud654\uba74 \uc5d4\uc9c4 Worker \uc5f0\uacb0\ubd80 \u2014 POST /screen/map (engine/map.js \uc758 mapScreen \uc744 \ubd80\ub978\ub2e4). route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/screen/map") return handleScreenMap(request);` \ub97c \ub123\ub294\ub2e4.
 //   \ubcf8\ubb38(JSON \uae00, Content-Type: text/plain): { cap(18 \uc774\uc0c1), f:{ part:'h'|'b'|'stn'|'tt', mode, reg, flt, th, stn, sl, q, gps, tt, bus } }
 //   \uc5d4\uc9c4\uc740 \uc544\ubb34\uac83\ub3c4 \uc800\uc7a5\ud558\uc9c0 \uc54a\ub294\ub2e4(\uc774 \uae30\uae30\uac00 \ubcf4\ub0b8 \uc0ac\uc2e4\ub85c \ud654\uba74\uc744 \uacc4\uc0b0\ud574 \ub3cc\ub824\uc904 \ubfd0).

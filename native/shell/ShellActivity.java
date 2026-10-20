@@ -618,7 +618,9 @@ public class ShellActivity extends Activity {
             }
         }, "shell-maph").start();
     }
-    private void loadMapBody(final ScreenView v, final boolean keep) {
+    private void loadMapBody(final ScreenView v, final boolean keep) { loadMapBodyRound(v, keep, 0); }
+    /** 버스는 엔진이 "이 주소들을 받아 와라" 하면 받아서 다시 묻는다(위치 → 정류장 → 도착정보, 최대 3번). */
+    private void loadMapBodyRound(final ScreenView v, final boolean keep, final int round) {
         final int my = ++seqMapB;
         final String json = map.bodyRequest(ShellCore.CAP, ShellCore.theme(store));
         new Thread(new Runnable() {
@@ -630,9 +632,35 @@ public class ShellActivity extends Activity {
                     if (txt.length() > 0) map.onScreen(txt);
                     present(v, txt, keep);
                     syncMapView();
+                    if (txt.length() > 0 && !map.busNeed.isEmpty() && round < 3) fetchBusNeed(v, keep, round, my);
                 } });
             }
         }, "shell-mapb").start();
+    }
+    private void fetchBusNeed(final ScreenView v, final boolean keep, final int round, final int my) {
+        final List<String[]> need = new ArrayList<String[]>(map.busNeed);
+        new Thread(new Runnable() {
+            @Override public void run() {
+                final String[] got = new String[need.size()];
+                Thread[] ts = new Thread[need.size()];
+                for (int i = 0; i < need.size(); i++) {
+                    final int k = i;
+                    ts[i] = new Thread(new Runnable() { @Override public void run() {
+                        String u = MapCore.busFetchUrl(need.get(k)[1]);
+                        NetPost.Res r = u.length() == 0 ? null : NetPost.get(u, 9000);
+                        got[k] = r != null && r.status == 200 ? r.body : "";
+                    } });
+                    ts[i].start();
+                }
+                for (Thread t : ts) { try { t.join(12000); } catch (InterruptedException e) { /* 무시 */ } }
+                main.post(new Runnable() { @Override public void run() {
+                    if (my != seqMapB) return;
+                    for (int i = 0; i < need.size(); i++) map.addBusRes(need.get(i)[0], got[i] == null ? "" : got[i]);
+                    map.busNeed.clear();
+                    loadMapBodyRound(v, true, round + 1);
+                } });
+            }
+        }, "shell-mapbus").start();
     }
     private void reloadMap(boolean headToo) {
         if (headToo) loadMapHead(head, true, null, null);
@@ -667,6 +695,13 @@ public class ShellActivity extends Activity {
                             else toast("가까운 역을 지도에서 찾지 못했어요");
                         } });
                     }
+                    @Override public void fail(boolean noperm) { toast(noperm ? "위치 권한이 필요해요" : "현재 위치를 찾지 못했어요"); }
+                });
+                break;
+            case MapCore.R_BUS_LOC:
+                toast("내 위치 확인 중...");
+                locateOnce(REQ_MAP_LOC, new LocCb() {
+                    @Override public void fix(Location l) { map.setBusLoc(l.getLatitude(), l.getLongitude()); loadMapBody(body, true); }
                     @Override public void fail(boolean noperm) { toast(noperm ? "위치 권한이 필요해요" : "현재 위치를 찾지 못했어요"); }
                 });
                 break;

@@ -13,7 +13,7 @@ import java.util.Map;
  */
 public final class MapCore {
     public static final String K_MODE = "map_mode", K_REG = "map_reg", K_FLT = "map_flt";
-    public static final int R_NONE = 0, R_RENDER = 1, R_FIND = 2, R_LOC = 3, R_STN = 4, R_START = 5, R_DEST = 6, R_TT = 7, R_CLOSE = 8, R_TT_LOAD = 9, R_TT_RENDER = 10;
+    public static final int R_NONE = 0, R_RENDER = 1, R_FIND = 2, R_LOC = 3, R_STN = 4, R_START = 5, R_DEST = 6, R_TT = 7, R_CLOSE = 8, R_TT_LOAD = 9, R_TT_RENDER = 10, R_BUS_LOC = 11;
 
     private final ShellCore.Store st;
     public MapCore(ShellCore.Store st) { this.st = st; }
@@ -22,6 +22,20 @@ public final class MapCore {
     public String reg() { String r = st.get(K_REG, "seoul"); return r.matches("seoul|busan|daegu|gwangju|daejeon") ? r : "seoul"; }
     public String flt() { String f = st.get(K_FLT, "ALL"); return f.length() > 0 && f.length() < 12 ? f : "ALL"; }
     public double[] gps = null;
+
+    // ── 버스: 이 기기의 위치 사실 + 엔진이 받아 오라고 한 주소의 본문(해석은 엔진) ──
+    public double[] busLL = null;
+    final Map<String, String> busRes = new LinkedHashMap<String, String>();
+    public final List<String[]> busNeed = new ArrayList<String[]>();           // [k, 주소]
+    public void setBusLoc(double la, double lo) { busLL = new double[] { la, lo }; busRes.clear(); busNeed.clear(); }
+    public void addBusRes(String k, String body) { if (k != null && k.matches("[a-z][a-z0-9]{0,3}")) busRes.put(k, body == null ? "" : (body.length() > 120000 ? body.substring(0, 120000) : body)); }
+    /** 엔진이 준 주소를 worker 프록시 주소로 바꾼다. 허용 호스트가 아니면 빈 문자열. */
+    public static String busFetchUrl(String u) {
+        if (u == null) return "";
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("^https?://(apis\\.data\\.go\\.kr|ws\\.bus\\.go\\.kr)/").matcher(u);
+        if (!m.find()) return "";
+        try { return ShellCore.BASE + "/tago?url=" + java.net.URLEncoder.encode(u, "UTF-8"); } catch (java.io.UnsupportedEncodingException e) { return ""; }
+    }
 
     // ── 화면에서 읽은 것 ──
     public String view = "";                                   // 'metro' | 'list' | 'bus'
@@ -42,7 +56,14 @@ public final class MapCore {
         return "{\"cap\":" + cap + ",\"f\":" + facts("h", theme, q) + "}";
     }
     public String bodyRequest(int cap, String theme) {
-        return "{\"cap\":" + cap + ",\"f\":" + facts("b", theme, "") + "}";
+        String f = facts("b", theme, "");
+        if ("bus".equals(mode()) && busLL != null) {
+            StringBuilder b = new StringBuilder(f.substring(0, f.length() - 1)).append(",\"bus\":{\"lat\":").append(busLL[0]).append(",\"lng\":").append(busLL[1]).append(",\"res\":{");
+            boolean first = true;
+            for (Map.Entry<String, String> e : busRes.entrySet()) { if (!first) b.append(','); first = false; b.append(ShellCore.q(e.getKey())).append(':').append(ShellCore.q(e.getValue())); }
+            f = b.append("}}}").toString();
+        }
+        return "{\"cap\":" + cap + ",\"f\":" + f + "}";
     }
     public String stnRequest(int cap, String theme) {
         return "{\"cap\":" + cap + ",\"f\":{\"part\":\"stn\",\"stn\":" + ShellCore.q(stn) + ",\"sl\":" + ShellCore.q(stnLine) + ",\"th\":" + ShellCore.q(theme(theme)) + "}}";
@@ -111,6 +132,9 @@ public final class MapCore {
             regionStns.clear();
             if (im.get("rs") instanceof List) for (Object r : (List<Object>) im.get("rs")) if (r instanceof List && ((List<Object>) r).size() == 2) regionStns.add(new String[] { BoardCore.s(((List<Object>) r).get(0), 40), BoardCore.s(((List<Object>) r).get(1), 30) });
             findName = im.get("find") instanceof Map ? BoardCore.s(((Map<String, Object>) im.get("find")).get("name"), 40) : "";
+            busNeed.clear();
+            if (im.get("bus") instanceof Map && ((Map<String, Object>) im.get("bus")).get("need") instanceof List)
+                for (Object x : (List<Object>) ((Map<String, Object>) im.get("bus")).get("need")) if (x instanceof Map && busNeed.size() < 12) busNeed.add(new String[] { BoardCore.s(((Map<String, Object>) x).get("k"), 4), BoardCore.s(((Map<String, Object>) x).get("url"), 600) });
             nearName = im.get("near") instanceof Map ? BoardCore.s(((Map<String, Object>) im.get("near")).get("name"), 40) : "";
         } catch (Exception e) { /* 이전 값 유지 */ }
     }
@@ -154,7 +178,7 @@ public final class MapCore {
     /** 칩: m:bus · m:subway · r:<지역> · f:<호선>. */
     public int cat(String v) {
         if (v == null) return R_NONE;
-        if (v.startsWith("m:")) { st.put(K_MODE, "subway".equals(v.substring(2)) ? "subway" : "bus"); return R_RENDER; }
+        if (v.startsWith("m:")) { st.put(K_MODE, "subway".equals(v.substring(2)) ? "subway" : "bus"); busRes.clear(); return R_RENDER; }
         if (v.startsWith("r:")) { st.put(K_REG, v.substring(2)); st.put(K_FLT, "ALL"); return R_RENDER; }
         if (v.startsWith("f:")) { st.put(K_FLT, v.substring(2)); return R_RENDER; }
         return R_NONE;
@@ -163,7 +187,7 @@ public final class MapCore {
     public int act(String v, Map<String, String> fields) {
         if (v == null) return R_NONE;
         if ("mp.find".equals(v)) { String q = fields == null ? null : fields.get("mq"); return q == null || q.replaceAll("\\s+", "").length() < 2 ? R_NONE : R_FIND; }
-        if ("mp.loc".equals(v)) return R_LOC;
+        if ("mp.loc".equals(v)) return "bus".equals(mode()) ? R_BUS_LOC : R_LOC;
         if (v.startsWith("mr.")) {
             try { int i = Integer.parseInt(v.substring(3)); if (i >= 0 && i < regionStns.size()) { stn = regionStns.get(i)[0]; stnLine = regionStns.get(i)[1]; return R_STN; } } catch (NumberFormatException e) { /* 무시 */ }
         }

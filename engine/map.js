@@ -249,9 +249,156 @@ function mapScreen(inp, factsIn, dataIn) {
   var body;
   if (f.mode === 'subway' && f.reg === 'seoul') { body = [{ t: 'spacer', h: 1 }]; info.view = 'metro'; }
   else if (f.mode === 'subway') { body = mapRegionBody(f, ctx); info.view = 'list'; info.rs = ctx.regionStns || []; }
-  else { body = mapBusBody ? mapBusBody(f) : [{ t: 'spacer', h: 1 }]; info.view = 'bus'; }
+  else { body = mapBusBody(f, info); info.view = 'bus'; }
   return mapFinish({ ok: true, v: 1, screen: 'map', cover: 'tab', head: [], body: body, info: info }, 'b' + f.mode + f.reg);
 }
-var mapBusBody = null;
+// ── 버스: 근처 정류장 + 도착정보(웹 loadMapNearStops / _fetchNearStops / _renderBusStop 의 규칙) ──
+// 엔진은 "어느 주소를 받아 와라(need)" 만 말하고, 앱은 그 주소의 본문을 그대로 res 에 넣어 다시 보낸다. 해석은 모두 여기서 한다.
+var MAP_TAGO_BASE = 'https://apis.data.go.kr/1613000/';
+var MAP_SEOUL_BOX = [37.41, 37.72, 126.76, 127.19];
+var MAP_EXIT_RE = /역\s*\d*\s*번?\s*출구|역\s*출구/;
+var MAP_STOP_DUP_M = 25, MAP_EXIT_NEAR_M = 350, MAP_NEAR_BASE = 6, MAP_NEAR_MAX = 16;
+function mapInSeoul(la, lo) { return la >= MAP_SEOUL_BOX[0] && la <= MAP_SEOUL_BOX[1] && lo >= MAP_SEOUL_BOX[2] && lo <= MAP_SEOUL_BOX[3]; }
+function mapXmlItems(text, tag) {
+  var out = [], re = new RegExp('<' + tag + '[^>]*>([\\s\\S]*?)<\\/' + tag + '>', 'g'), m;
+  text = String(text || '');
+  while ((m = re.exec(text)) !== null) { out.push(m[1]); if (out.length > 400) break; }
+  return out;
+}
+function mapXmlVal(chunk, tag) {
+  var m = new RegExp('<' + tag + '[^>]*>([\\s\\S]*?)<\\/' + tag + '>').exec(chunk);
+  return m ? String(m[1]).replace(/<!\[CDATA\[|\]\]>/g, '').trim() : '';
+}
+function mapJsonItems(text) {
+  try { var o = JSON.parse(String(text || '')), it = o.response.body.items.item || []; return Array.isArray(it) ? it : [it]; } catch (e) { return []; }
+}
+function mapSeoulStops(text, la, lo) {
+  var stops = [];
+  mapXmlItems(text, 'itemList').forEach(function (ch) {
+    var ars = mapXmlVal(ch, 'arsId'), nm = mapXmlVal(ch, 'stationNm');
+    if (!ars || !nm || String(ars).replace(/^0+/, '') === '') return;       // arsId 0 = 미정차
+    var gx = parseFloat(mapXmlVal(ch, 'gpsX')), gy = parseFloat(mapXmlVal(ch, 'gpsY')), d = parseFloat(mapXmlVal(ch, 'dist'));
+    if (isNaN(gx) || isNaN(gy)) { gx = lo; gy = la; }
+    stops.push({ nm: nm, id: 'SEOUL:' + ars, ars: ars, la: gy, lo: gx, dist: isFinite(d) ? d : mapHav(la, lo, gy, gx), src: 'topis' });
+  });
+  return stops;
+}
+function mapTagoStops(text, la, lo) {
+  var stops = [];
+  mapJsonItems(text).forEach(function (it) {
+    var a = parseFloat(it.gpslati), b = parseFloat(it.gpslong);
+    if (isNaN(a) || isNaN(b) || !it.nodeid) return;
+    stops.push({ nm: String(it.nodenm || ''), id: String(it.nodeid), no: it.nodeno ? String(it.nodeno) : '', city: it.citycode ? String(it.citycode) : '', la: a, lo: b, dist: mapHav(la, lo, a, b), src: 'tago' });
+  });
+  return stops;
+}
+function mapStopExit(s) { return MAP_EXIT_RE.test(s.nm || ''); }
+function mapDedupStops(stops) {
+  var key = function (v) { return String(v || '').replace(/\s/g, ''); }, out = [];
+  stops.forEach(function (st) {
+    var dup = null;
+    for (var i = 0; i < out.length; i++) if (key(out[i].nm) === key(st.nm) && mapHav(out[i].la, out[i].lo, st.la, st.lo) <= MAP_STOP_DUP_M) { dup = out[i]; break; }
+    if (!dup) out.push(st); else if (st.dist < dup.dist) out[out.indexOf(dup)] = st;
+  });
+  return out;
+}
+function mapStopOrder(stops) {                       // 가까운 순 + 역 출구(350m 안)는 전부 앞으로, 길이는 출구 수만큼 늘림
+  var byD = function (a, b) { return a.dist - b.dist; }, ex = [], rest = [];
+  stops.forEach(function (s) { if (mapStopExit(s) && s.dist <= MAP_EXIT_NEAR_M) ex.push(s); else rest.push(s); });
+  ex.sort(byD); rest.sort(byD);
+  var lim = ex.length ? Math.min(MAP_NEAR_MAX, Math.max(MAP_NEAR_BASE, ex.length + 3)) : MAP_NEAR_BASE;
+  return ex.concat(rest).slice(0, lim);
+}
+function mapBusStops(f) {
+  var b = f.bus, res = b.res || {}, la = Number(b.lat), lo = Number(b.lng);
+  var s = res.tp ? mapSeoulStops(res.tp, la, lo) : [];
+  if (!s.length && res.tn) s = mapTagoStops(res.tn, la, lo);
+  return mapStopOrder(mapDedupStops(s));
+}
+function mapBusNeedStops(la, lo) {
+  var need = [];
+  if (mapInSeoul(la, lo)) need.push({ k: 'tp', url: 'http://ws.bus.go.kr/api/rest/stationinfo/getStationByPos?tmX=' + lo + '&tmY=' + la + '&radius=800' });
+  need.push({ k: 'tn', url: MAP_TAGO_BASE + 'BusSttnInfoInqireService/getCrdntPrxmtSttnList?serviceKey=&gpsLati=' + la + '&gpsLong=' + lo + '&numOfRows=50&pageNo=1&_type=json' });
+  return need;
+}
+function mapBusArrUrl(s) {
+  if (s.src === 'topis') return 'http://ws.bus.go.kr/api/rest/stationinfo/getStationByUid?arsId=' + encodeURIComponent(s.ars);
+  return MAP_TAGO_BASE + 'ArvlInfoInqireService/getSttnAcctoArvlPrearngeInfoList?serviceKey=&cityCode=' + encodeURIComponent(s.city) + '&nodeId=' + encodeURIComponent(s.id) + '&_type=json';
+}
+function mapSecOfMsg(msg) {
+  var t = String(msg || '');
+  if (/곧 도착|출발대기|운행종료/.test(t)) return /곧 도착/.test(t) ? 1 : 0;
+  var mm = /(\d+)\s*분/.exec(t), ss = /(\d+)\s*초/.exec(t);
+  return (mm ? parseInt(mm[1], 10) * 60 : 0) + (ss ? parseInt(ss[1], 10) : 0);
+}
+function mapSeoulArr(text) {
+  var rows = [];
+  if (/Key인증실패|SERVICE\s*KEY\s*IS\s*NOT\s*REGISTERED/i.test(text) || /<headerCd>\s*[1-9]/.test(text)) return rows;
+  mapXmlItems(text, 'itemList').forEach(function (ch) {
+    var rt = mapXmlVal(ch, 'rtNm') || mapXmlVal(ch, 'busRouteAbrv');
+    if (!rt) return;
+    var dir = mapXmlVal(ch, 'adirection') || mapXmlVal(ch, 'nxtStn');
+    [1, 2].forEach(function (n) {
+      var msg = mapXmlVal(ch, 'arrmsg' + n), t = parseInt(mapXmlVal(ch, 'traTime' + n), 10);
+      var sec = (isFinite(t) && t > 0) ? t : mapSecOfMsg(msg);
+      var pm = /(\d+)\s*번째/.exec(msg), cg = parseInt(mapXmlVal(ch, 'congestion' + n), 10);
+      if (sec > 0) rows.push({ no: rt, sec: sec, prev: pm ? parseInt(pm[1], 10) : 0, cong: isFinite(cg) ? cg : 0, low: parseInt(mapXmlVal(ch, 'busType' + n), 10) === 1, dir: dir });
+    });
+  });
+  return rows;
+}
+function mapTagoArr(text) {
+  return mapJsonItems(text).map(function (a) {
+    return { no: String(a.routeno || a.routeNo || ''), sec: parseInt(a.arrtime || a.arrTime || 0, 10) || 0, prev: parseInt(a.arrprevstationcnt || a.arrPrevStationCnt || 0, 10) || 0,
+             cong: parseInt(a.congestion || a.congestionCase || 0, 10) || 0, low: /저상/.test(String(a.vehicletp || '')), dir: '' };
+  }).filter(function (r) { return r.no && r.sec > 0; });
+}
+function mapArrFmt(sec) { if (!sec || sec <= 1) return '곧 도착'; if (sec < 60) return sec + '초'; var m = Math.round(sec / 60); return m <= 1 ? '곧 도착' : m + '분'; }
+function mapRouteColor(no) {
+  var n = String(no || '');
+  if (/^[0-9]+$/.test(n)) { var v = parseInt(n, 10); if (v < 100) return '#d9433a'; if (v < 200) return '#2f6fdb'; if (v < 500) return '#2e9e5b'; if (v < 1000) return '#e0a020'; }
+  return '#7a7f8c';
+}
+function mapDistFmt(m) { m = Math.round(m || 0); return m >= 1000 ? (m / 1000).toFixed(1) + 'km' : m + 'm'; }
+function mapBusStopView(s, rows) {
+  var kids = [{ t: 'text', s: s.nm + '  ' + mapDistFmt(s.dist) + (s.no || s.ars ? '  ·  ' + (s.no || s.ars) : ''), size: 14, bold: true, color: 'text', pad: [12, 14, 6, 2] }];
+  var by = {}, order = [];
+  rows.forEach(function (r) { var k = r.no + '|' + r.dir; if (!by[k]) { by[k] = []; order.push(k); } by[k].push(r); });
+  order.forEach(function (k) { by[k].sort(function (a, b) { return a.sec - b.sec; }); });
+  order.sort(function (a, b) { return by[a][0].sec - by[b][0].sec; });
+  if (!order.length) kids.push({ t: 'text', s: '도착 정보 없음', size: 12, color: 'sub', pad: [2, 14, 6, 6] });
+  order.slice(0, 8).forEach(function (k) {
+    var g = by[k], r = g[0], cg = ['', '여유', '보통', '혼잡', '매우혼잡'][r.cong] || '';
+    var s1 = r.no, hl = [[0, s1.length, mapRouteColor(r.no)]];
+    var txt = s1 + '  ' + mapArrFmt(r.sec) + (r.prev > 0 ? ' · ' + r.prev + '번째 전' : '') + (cg ? ' · ' + cg : '') + (r.low ? ' · 저상' : '');
+    if (g[1]) txt += '\n' + ' '.repeat(s1.length + 2) + mapArrFmt(g[1].sec) + (g[1].prev > 0 ? ' · ' + g[1].prev + '번째 전' : '');
+    if (r.dir) txt += '\n' + r.dir + ' 방면';
+    kids.push({ t: 'box', s: txt, hl: hl, size: 13, lh: 1.5, color: 'text', fill: 'card2', line: 'border', r: 9, ip: [10, 7, 10, 7], pad: [0, 14, 4, 14] });
+  });
+  return kids;
+}
+function mapBusBody(f, info) {
+  var b = f.bus;
+  if (!b || !isFinite(Number(b.lat)) || !isFinite(Number(b.lng))) {
+    info.bus = { st: 'noloc' };
+    return [{ t: 'text', s: '내 주변 정류장 도착정보', size: 16, bold: true, color: 'gold', align: 'center', pad: [28, 24, 6, 24] },
+            { t: 'text', s: '위 ‘내 위치’ 를 누르면\n가까운 정류장과 버스 도착 시간을 보여드려요.', size: 13, color: 'sub', lh: 1.8, align: 'center', pad: [4, 30, 10, 30] },
+            { t: 'button', s: '내 위치로 찾기', size: 14, h: 46, r: 12, bold: true, fill: 'gold', line: 'none', tc: '#121214', pad: [8, 60, 8, 60], act: { a: 'call', v: 'mp.loc' } }];
+  }
+  var la = Number(b.lat), lo = Number(b.lng), res = (b.res && typeof b.res === 'object') ? b.res : {};
+  if (res.tp === undefined && res.tn === undefined) { info.bus = { st: 'need', need: mapBusNeedStops(la, lo) }; return [{ t: 'text', s: '주변 정류장 찾는 중...', size: 13, color: 'sub', align: 'center', pad: [40, 20, 40, 20] }]; }
+  var stops = mapBusStops(f);
+  if (!stops.length) { info.bus = { st: 'empty' }; return [{ t: 'text', s: '주변 800m 안에 정류장을 찾지 못했어요.', size: 13, color: 'sub', align: 'center', lh: 1.7, pad: [40, 20, 20, 20] }]; }
+  if (res.a0 === undefined) { info.bus = { st: 'need', need: stops.map(function (s, i) { return { k: 'a' + i, url: mapBusArrUrl(s) }; }) }; return [{ t: 'text', s: '도착정보 가져오는 중...', size: 13, color: 'sub', align: 'center', pad: [40, 20, 40, 20] }]; }
+  var body = [{ t: 'text', s: '내 주변 정류장 ' + stops.length + '곳', size: 12, color: 'sub', pad: [10, 14, 0, 4] }];
+  stops.forEach(function (s, i) {
+    var txt = String(res['a' + i] || ''), rows = s.src === 'topis' ? mapSeoulArr(txt) : mapTagoArr(txt);
+    mapBusStopView(s, rows).forEach(function (n) { body.push(n); });
+  });
+  body.push({ t: 'button', s: '내 위치로 다시 찾기', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: '', pad: [10, 60, 4, 60], act: { a: 'call', v: 'mp.loc' } });
+  body.push({ t: 'text', s: '도착 시간은 실시간 정보라 조금씩 달라질 수 있어요.', size: 11, color: 'sub', align: 'center', pad: [6, 16, 16, 16] });
+  info.bus = { st: 'ok', n: stops.length };
+  return body;
+}
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { mapScreen: mapScreen, mapFacts: mapFacts, mapLinesOf: mapLinesOf, mapFind: mapFind, mapNearest: mapNearest, mapIsStationLabel: mapIsStationLabel, mapPickRow: mapPickRow, mapRegionLines: mapRegionLines, MAP_FILTERS: MAP_FILTERS };
+if (typeof module !== 'undefined' && module.exports) module.exports = { mapScreen: mapScreen, mapFacts: mapFacts, mapLinesOf: mapLinesOf, mapFind: mapFind, mapNearest: mapNearest, mapIsStationLabel: mapIsStationLabel, mapPickRow: mapPickRow, mapRegionLines: mapRegionLines, mapDedupStops: mapDedupStops, mapStopOrder: mapStopOrder, MAP_FILTERS: MAP_FILTERS };
