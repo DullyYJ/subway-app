@@ -43,6 +43,8 @@ public final class RideCore {
     public int ovAlert;
     /** 내 위치 공유 재료(엔진 overlay.share) — 없으면 null. */
     public ShareCore.Share ovShare;
+    /** 엔진 overlay 전체(칸 줄 · 색 · 경고 · 도착 줄) — 서비스가 창에 그린다. 없으면 null. */
+    public OvCore.Ov ov;
     /** 하차 추천 상태(엔진 reco 그대로) — 설정 '상태 확인'이 보여 준다. 판단은 엔진이 했고 여기는 받은 값을 들고만 있는다. */
     private String recoDest = "", recoSlot = "";
     private long recoRem = Long.MIN_VALUE, recoAlertAt = 0L, recoTick = 0L;
@@ -160,8 +162,8 @@ public final class RideCore {
                 ovActive = Boolean.TRUE.equals(om.get("active")) && om.get("line1") instanceof String;
                 ovLine1 = BoardCore.s(om.get("line1"), 60); ovLine2 = BoardCore.s(om.get("line2"), 60); ovBanner = BoardCore.s(om.get("banner"), 60);
                 Object al2 = om.get("alert"); ovAlert = al2 instanceof Number ? Math.max(0, Math.min(2, ((Number) al2).intValue())) : 0;
-                ovShare = ShareCore.fromMap(om.get("share"));
-            } else { ovActive = false; ovLine1 = ovLine2 = ovBanner = ""; ovAlert = 0; ovShare = null; }
+                ovShare = ShareCore.fromMap(om.get("share")); ov = OvCore.fromMap(om);
+            } else { ovActive = false; ovLine1 = ovLine2 = ovBanner = ""; ovAlert = 0; ovShare = null; ov = null; }
             Object nm = m.get("nextMs");
             double nx = nm instanceof Number ? ((Number) nm).doubleValue() : STEP_DEFAULT_MS;
             nextMs = (long) Math.max(STEP_MIN_MS, Math.min(STEP_MAX_MS, nx));
