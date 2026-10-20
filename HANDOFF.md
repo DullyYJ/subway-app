@@ -1703,3 +1703,10 @@
 - 설정 첫 화면 `pgs:['sam','ovl','arr']` 사실로 아직 안 옮긴 줄(출퇴근 브리핑·캐릭터 시계 위젯·개발자 도구)은 엔진이 감춘다.
 - 시험: ride_standby 26(추천 한 번 · 끔/대기) · settings_engine 164(arr nv · pgs) · JVM(PowerInfo 제외 — routePage sam/arr · arrTestBody · pageUrlArr · recoBody/recoText · recoStatJson · offKinds). 워커 `route-v2-2026-10-20s103`. 기기 확인 못 함.
 - **안 옮긴 것과 이유**: 출퇴근 브리핑(`cm`) — 화면만이 아니라 "날씨 + AI 역무원 요약" 알림 본문을 만드는 엔진 엔드포인트가 아직 없고(`/commute-alarm` 은 시각 판단만), 시간 예약(AlarmManager) · 장소 입력의 버스 정류장 검색이 새로 필요. 캐릭터 시계 위젯(`gw`) — 안드로이드 위젯 + 동물 애니메이션. 개발자 도구(`dev`) — 출시 전 삭제 예정 시험 도구. 옛 최근경로·포인트 가져오기도 아직.
+
+## 2026-10-21 엔진 s104 + native-shell — 출퇴근 브리핑 · 옛 데이터 가져오기 확장
+
+- **출퇴근 브리핑(`cm`)**: 엔진 `commute-brief.js`(`cbPlan`·`cbCompose`·`cbBrief`) + `commute-brief-worker.js`(`/commute-brief`, 날씨는 `cbWeather`). 제목 "출근길 브리핑 · A→B", 본문은 경로·날씨·오늘 최저~최고·도착지 날씨(다를 때)·혼잡도(버스 정류장 출발이면 생략)·추천 최대 3줄·주마다 도는 끝말. 시각은 기존 `/commute-alarm` op `occ`(28일치).
+- 앱: `CmCore`(설정 화면 상태 · 순수) · `CommuteAlarm`(AlarmManager 한 번짜리 알람, 정확 알람 권한 있으면 exact 아니면 setAndAllowWhileIdle) · `CommuteReceiver`(울린 뒤 다음 알람 다시 걸기 · 부팅 · 앱 교체 후 재등록). 매니페스트에 SCHEDULE_EXACT_ALARM · RECEIVE_BOOT_COMPLETED 추가. 설정 `cm` 화면(정류장·버스 고르기, 시험 알림)은 `ShellActivity.cmAct` 등.
+- **옛 데이터 가져오기**: `LegacyCore` 를 즐겨찾기 외에 mk_comm_id · 포인트(mk_pt/mk_pts) · commuteAlarm 까지 읽도록 넓혔다. 먼저 옛 앱의 SharedPreferences `gdm_store`/`kv` 미러를 보고, 없으면 leveldb 스캔. 옛 "최근 경로"는 네이티브에 원래 없는 기능이라 옮길 대상이 없다.
+- 시험: commute_brief 15 · settings_engine 167 · JVM(CmCore · LegacyCore). 워커 `route-v2-2026-10-20s104`. **기기 미확인**: 알람 실제 발화, 권한 흐름, 가져오기(실제 옛 앱 데이터).

@@ -28,7 +28,8 @@ const SETS = [
   { name: 'FAV', src: 'engine/fav.js', glue: 'engine/fav-worker.js', path: '/screen/fav', fn: 'handleScreenFav', anchor: '  if (url.pathname === "/screen/map") return handleScreenMap(request);\n' },
   { name: 'HCARDS', src: 'engine/hcards.js', glue: 'engine/hcards-worker.js', path: '/screen/hcards', fn: 'handleScreenHcards', anchor: '  if (url.pathname === "/screen/fav") return handleScreenFav(request);\n' },
   { name: 'RIDESTART', src: 'engine/ride-start.js', glue: 'engine/ride-start-worker.js', path: '/ride/start', fn: 'handleRideStart', anchor: '  if (url.pathname === "/screen/hcards") return handleScreenHcards(request);\n' },
-  { name: 'RULES', src: 'engine/rules.js', glue: 'engine/rules-worker.js', path: '/rules', fn: 'handleRules', anchor: '  if (url.pathname === "/ride/start") return handleRideStart(request);\n' }
+  { name: 'RULES', src: 'engine/rules.js', glue: 'engine/rules-worker.js', path: '/rules', fn: 'handleRules', anchor: '  if (url.pathname === "/ride/start") return handleRideStart(request);\n' },
+  { name: 'CBRIEF', src: 'engine/commute-brief.js', glue: 'engine/commute-brief-worker.js', path: '/commute-brief', fn: 'handleCommuteBrief', anchor: '  if (url.pathname === "/rules") return handleRules(request);\n' }
 ];
 let all = '';
 for (const S of SETS) {

@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-20s103";
+var ENGINE_VERSION = "route-v2-2026-10-20s104";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -12092,7 +12092,7 @@ function settingsEveHint(f) {                                       // \uc608\uc
   return '\ud1f4\uadfc\uc740 \ub530\ub85c \uc124\uc815\ud55c \uacf3\uc73c\ub85c \ubcf4\ub0b4\uc694.' + (ef && et ? '' : ' (\ud55c\ucabd\ub9cc \ucc44\uc6b0\uba74 \ub098\uba38\uc9c0\ub294 \ucd9c\uadfc\uc758 \ubc18\ub300\ud3b8\uc744 \uc368\uc694)');
 }
 function settingsPageCm(f) {
-  var d = settingsBoldN([['\uc124\uc815\ud55c \uc2dc\uac01\uc5d0 ', 0], ['\ub0a0\uc528 + AI \uc5ed\ubb34\uc6d0 \uc694\uc57d', 1], ['\uc744 \uc54c\ub9bc\uc73c\ub85c \ubcf4\ub0b4\ub4dc\ub824\uc694.', 0]]);
+  var d = f.nv ? settingsBoldN([['\uc124\uc815\ud55c \uc2dc\uac01\uc5d0 ', 0], ['\ub0a0\uc528 + \ud63c\uc7a1\ub3c4 + \uc900\ube44\ubb3c \ud55c\ub9c8\ub514', 1], ['\ub97c \uc54c\ub9bc\uc73c\ub85c \ubcf4\ub0b4\ub4dc\ub824\uc694.', 0]]) : settingsBoldN([['\uc124\uc815\ud55c \uc2dc\uac01\uc5d0 ', 0], ['\ub0a0\uc528 + AI \uc5ed\ubb34\uc6d0 \uc694\uc57d', 1], ['\uc744 \uc54c\ub9bc\uc73c\ub85c \ubcf4\ub0b4\ub4dc\ub824\uc694.', 0]]);
   var k = [{ t: 'toggle', key: 'cm', title: '\ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551 \uc54c\ub9bc', on: f.on, big: true, size: 15, vp: 0, onc: '#30d158', pad: [0, 0, 0, 4] }, settingsDescN(d.s, 10, d.hl)];
   ['from', 'to'].forEach(function (x, i) { k.push(settingsNavN(SETTINGS_PICK[x][0], f[x] || '\ube44\uc5b4 \uc788\uc74c', settingsCall('cm.pick.' + x), true)); });
   k.push(settingsSmallN('\uc9c0\ud558\ucca0\uc5ed\uacfc \ubc84\uc2a4\uc815\ub958\uc7a5 \ubaa8\ub450 \uc785\ub825\ud560 \uc218 \uc788\uc5b4\uc694. \uac80\uc0c9 \ubaa9\ub85d\uc758 \uc9c0\ud558\ucca0/\ubc84\uc2a4 \ud45c\uc2dc\ub85c \uad6c\ubd84\ub3fc\uc694. \ube44\uc6cc\ub450\uba74 \ud604\uc7ac \uc704\uce58 \uae30\uc900\uc774\uc5d0\uc694.', 8, 10));
@@ -12114,6 +12114,7 @@ function settingsPageCm(f) {
   k.push({ t: 'row', gap: 10, pad: [0, 0, 0, 5], kids: [settingsLabelN('\ucd9c\uadfc \ube0c\ub9ac\ud551', 0), settingsLabelN('\ud1f4\uadfc \ube0c\ub9ac\ud551', 0)] });
   k.push({ t: 'row', gap: 10, pad: [0, 0, 0, 12], kids: [settingsBtnN(settingsFmtTime(f.morn), 'cm.tp.morn', { size: 15, h: 44 }), settingsBtnN(settingsFmtTime(f.eve), 'cm.tp.eve', { size: 15, h: 44 })] });
   k.push(settingsBtnN('\uc9c0\uae08 \ubbf8\ub9ac\ubcf4\uae30', 'cm.test', { size: 13, h: 42 }));
+  if (f.nv) k.push(settingsSmallN('\uae30\uae30 \uc808\uc804 \uc124\uc815\uc5d0 \ub530\ub77c \uc54c\ub9bc\uc774 \uba87 \ubd84 \ub2a6\uac8c \uc62c \uc218 \uc788\uc5b4\uc694. \ub2a6\uc5b4\uc9c0\uba74 \'\uc790\ub3d9 \uc808\uc804 \uc81c\uc678 \uc124\uc815\'\uc744 \ud655\uc778\ud574 \uc8fc\uc138\uc694.', 8, 0));
   return [settingsPanelN(k, 8)];
 }
 // \uc2dc\uac01 \uace0\ub974\uae30(\uc608\uc804 \ubc14\ud140\uc2dc\ud2b8 _cmTimePick \uacfc \uac19\uc740 \uce78: \uc624\uc804/\uc624\ud6c4 \u00b7 \uc2dc 12\uce78 \u00b7 \ubd84 12\uce78 \u00b7 \ucde8\uc18c/\ud655\uc778)
@@ -19658,6 +19659,215 @@ async function handleRules(request) {
 }
 // ===== RULES ENGINE END =====
 
+// ===== CBRIEF ENGINE BEGIN =====
+// \uae38\ub3d9\ubb34 \u2014 \ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551 \uc54c\ub9bc \ubb38\uad6c \uc5d4\uc9c4 \ubaa8\ub4c8 (route-v2 Worker \uc5d0 \ubd99\uc5ec \ub123\ub294 \uc21c\uc218 \ud568\uc218) \u2014 2026-10-21 (s104)
+//
+// \u2605 \uc6d0\uce59(YJ): "\ubaa8\ub4e0 \uacc4\uc0b0\uc740 \uc5d4\uc9c4\uc774 \ud55c\ub2e4. \uc571\uc740 \uadf8\ub9bc\ub9cc \uadf8\ub9b0\ub2e4."
+//   \uc608\uc804\uc5d4 \uc6f9(_fireCommuteBriefing \u00b7 _cmPair \u00b7 _cmResolvePlace \u00b7 _cmClosing)\uc774 \ucd9c\ubc1c\u00b7\ub3c4\ucc29\uc744 \uc815\ud558\uace0(\ud1f4\uadfc\uc740 \ucd9c\uadfc\uc758 \ubc18\ub300 \ub610\ub294 \ub530\ub85c \uc815\ud55c \uacf3), \ub0a0\uc528\ub97c \ubc1b\uace0,
+//   \ud63c\uc7a1\ub3c4\ub97c \uacc4\uc0b0\ud574 \uc54c\ub9bc \uc81c\ubaa9\u00b7\ubcf8\ubb38\uc744 \ub9cc\ub4e4\uc5c8\ub2e4. \uc774 \ubaa8\ub4c8\uc740 \uac19\uc740 \uaddc\uce59\uc73c\ub85c \uc81c\ubaa9\u00b7\ubcf8\ubb38\uc744 \uc5d4\uc9c4\uc774 \ub9cc\ub4e0\ub2e4(\ub0a0\uc528\ub294 Worker \uac00 \ubc1b\uc544\uc11c \ub123\uc5b4 \uc900\ub2e4 \u2014 \uc21c\uc218 \ud568\uc218\ub294 \ub124\ud2b8\uc6cc\ud06c\ub97c \ubaa8\ub978\ub2e4).
+//   \uc571\uc740 '\uc124\uc815\ud55c \uc7a5\uc18c(\uc774\ub984\u00b7\uc88c\ud45c\u00b7\ubc84\uc2a4 \uc5ec\ubd80)'\uc640 '\uc9c0\uae08 \uc2dc\uac01'\ub9cc \uc54c\ub9ac\uace0, \ub3cc\uc544\uc628 \uae00\uc744 \uc54c\ub9bc\uc5d0 \ub744\uc6b0\uae30\ub9cc \ud55c\ub2e4. \uc0c8 \uae00\uc5d0\ub294 \uc774\ubaa8\uc9c0\ub97c \uc4f0\uc9c0 \uc54a\ub294\ub2e4.
+//
+// cbPlan({ kind:'morn'|'eve', from, to, eFrom, eTo, gps })
+//   place = { nm, lat?, lng?, bus? } (\uc774\ub984\uc774 \ube44\uba74 \uc5c6\ub294 \uc7a5\uc18c)
+//   \u2192 { kind, from:place|null, to:place|null, fromStn, toStn, la, ln }  \u2014 fromStn/toStn = \uc9c0\ud558\ucca0\uc5ed \ud45c\uc5d0\uc11c \ucc3e\uc558\uac70\ub098 \ubc84\uc2a4\u00b7\uc88c\ud45c\ub85c \ub9cc\ub4e0 { name, lat, lng, line, bus }
+//     la/ln = \ub0a0\uc528\ub97c \ubb3c\uc744 \uc88c\ud45c(\ucd9c\ubc1c\uc9c0 \u2192 \uc5c6\uc73c\uba74 gps \u2192 \uc778\ucc9c \uae30\ubcf8\uac12)
+// cbCompose(plan, ctx, wF, wT)  ctx = { nowMs, tz }  wF/wT = \ub0a0\uc528 { temp, feel, hum, tmin, tmax, rain, uv, wind, txt }|null
+//   \u2192 { v:1, title, body, route:{ from:{name,lat,lng,bus}, to:{\u2026} }|null }
+// cbBrief(inp, wF, wT) = cbPlan + cbCompose \ud55c \ubc88\uc5d0.
+'use strict';
+
+var CB_V = 1;
+var CB_DEF_LAT = 37.45, CB_DEF_LNG = 126.70;
+var CB_CLOSING = {
+  morn: [
+    ['\uc77c\uc694\uc77c \uc774\ub3d9, \uc5ec\uc720\ub86d\uac8c \ub2e4\ub140\uc624\uc138\uc694', '\uc77c\uc694\uc77c\uc5d4 \uc11c\ub450\ub974\uc9c0 \uc54a\uc544\ub3c4 \uad1c\ucc2e\uc544\uc694', '\ud55c \uc8fc \uc7ac\ucda9\uc804\ud558\uba70 \ubb34\uc0ac\ud788 \ub2e4\ub140\uc624\uc138\uc694'],
+    ['\ud55c \uc8fc\uc758 \uc2dc\uc791, \uac00\ubccd\uac8c \ucd9c\ubc1c\ud574\uc694', '\uc6d4\uc694\uc77c \uc544\uce68, \ucee4\ud53c \ud55c \uc794\uc758 \uc5ec\uc720 \ucc59\uae30\uc138\uc694', '\uc0c8\ub85c\uc6b4 \ud55c \uc8fc, \ubb34\ub9ac\ud558\uc9c0 \ub9d0\uace0 \ucc28\uadfc\ucc28\uadfc'],
+    ['\ud654\uc694\uc77c, \ub9ac\ub4ec \ud0c0\uae30 \uc88b\uc740 \ub0a0\uc774\uc5d0\uc694', '\uc5b4\uc81c\ubcf4\ub2e4 \ud55c\uacb0 \uc218\uc6d4\ud560 \uac70\uc608\uc694', '\ud654\uc694\uc77c \uc544\uce68, \uc624\ub298 \ud560 \uc77c \ud558\ub098\ub9cc \ud655\uc2e4\ud788'],
+    ['\ubc8c\uc368 \uc218\uc694\uc77c, \ubc18\ud658\uc810\uc774\uc5d0\uc694', '\ud55c \uc8fc\uc758 \ud55c\uac00\uc6b4\ub370, \ud398\uc774\uc2a4 \uc720\uc9c0\ud558\uc138\uc694', '\uc218\uc694\uc77c, \uc810\uc2ec \uba54\ub274 \ubbf8\ub9ac \uc815\ud574\ub450\uba74 \uae30\ubd84 \uc88b\uc544\uc694'],
+    ['\ubaa9\uc694\uc77c, \ub0b4\uc77c\uc774\uba74 \uae08\uc694\uc77c\uc774\uc5d0\uc694', '\uace0\ube44\ub9cc \ub118\uae30\uba74 \uc8fc\ub9d0\uc774 \ubcf4\uc5ec\uc694', '\ubaa9\uc694\uc77c \uc544\uce68, \uc870\uae08\ub9cc \ub354 \ud798\ub0b4\uc694'],
+    ['\uae08\uc694\uc77c\uc774\uc5d0\uc694, \ub9c8\ubb34\ub9ac \uc798\ud558\uace0 \uc990\uaca8\uc694', '\uae08\uc694\uc77c \uc544\uce68\uc740 \ubc1c\uac78\uc74c\ub3c4 \uac00\ubccd\uc8e0', '\uc624\ub298\ub9cc \uc9c0\ub098\uba74 \uc8fc\ub9d0, \ud654\uc774\ud305'],
+    ['\ud1a0\uc694\uc77c\uc5d0\ub3c4 \ub098\uc11c\ub294 \ub2f9\uc2e0, \uba4b\uc838\uc694', '\uc8fc\ub9d0 \uc774\ub3d9, \uc624\ub298\uc740 \uc77c\ucc0d \ub9c8\uce58\uae38', '\ud1a0\uc694\uc77c, \uac08 \uae38\uc740 \uc9e7\uac8c \ub9c8\uc74c\uc740 \uac00\ubccd\uac8c']
+  ],
+  eve: [
+    ['\uc77c\uc694\uc77c\uae4c\uc9c0 \uc218\uace0\ud588\uc5b4\uc694, \ub0b4\uc77c\uc744 \uc704\ud574 \uc77c\ucc0d \uc26c\uc5b4\uc694', '\ud55c \uc8fc \uc798 \ub9c8\ucce4\uc5b4\uc694', '\uc77c\uc694\uc77c \uc800\ub141, \ub530\ub73b\ud558\uac8c \ub9c8\ubb34\ub9ac\ud558\uc138\uc694'],
+    ['\uc6d4\uc694\uc77c \ubb34\uc0ac\ud788 \ub05d, \ud479 \uc26c\uc138\uc694', '\ud55c \uc8fc\uc758 \uccab \uace0\ube44 \ud1b5\uacfc, \uc218\uace0\ud588\uc5b4\uc694', '\uc6d4\uc694\uc77c \ud1f4\uadfc, \uc800\ub141\uc740 \ub9db\uc788\ub294 \uac78\ub85c'],
+    ['\ud654\uc694\uc77c\ub3c4 \ud074\ub9ac\uc5b4, \uc798\ud558\uace0 \uc788\uc5b4\uc694', '\uc624\ub298 \ud558\ub8e8\ub3c4 \uc218\uace0 \ub9ce\uc558\uc5b4\uc694', '\ud654\uc694\uc77c \uc800\ub141, \uc77c\ucc0d \uc26c\uc5b4\ub450\uba74 \ub0b4\uc77c\uc774 \ud3b8\ud574\uc694'],
+    ['\uc808\ubc18 \uc654\uc5b4\uc694, \ub0a8\uc740 \uc774\ud2c0\ub3c4 \uac00\ubccd\uac8c', '\uc218\uc694\uc77c \ud1f4\uadfc, \uace0\uc0dd \ub9ce\uc558\uc5b4\uc694', '\ubc18\ud658\uc810 \ud1b5\uacfc, \uc624\ub298\uc740 \uc880 \uc26c\uc138\uc694'],
+    ['\ub0b4\uc77c\ub9cc \ubc84\ud2f0\uba74 \uae08\uc694\uc77c\uc774\uc5d0\uc694', '\ubaa9\uc694\uc77c\uae4c\uc9c0 \ub2ec\ub824\uc628 \ub2f9\uc2e0, \ub300\ub2e8\ud574\uc694', '\uc624\ub298 \uc800\ub141\uc740 \uc88b\uc544\ud558\ub294 \uac83 \ud558\ub098 \ud558\uc138\uc694'],
+    ['\ud55c \uc8fc \ub9c8\ubb34\ub9ac, \uc990\uac70\uc6b4 \uc8fc\ub9d0 \ubcf4\ub0b4\uc138\uc694', '\uae08\uc694\uc77c \ud1f4\uadfc, \uc548\uc804\ud558\uac8c \ub4e4\uc5b4\uac00\uc138\uc694', '\uae08\uc694\uc77c \ud1f4\uadfc\uae38\uc774 \uc81c\uc77c \uac00\ubccd\uc8e0'],
+    ['\uc8fc\ub9d0 \uadfc\ubb34\uae4c\uc9c0 \uc815\ub9d0 \uc218\uace0\ud588\uc5b4\uc694', '\ud1a0\uc694\uc77c\uae4c\uc9c0 \uc77c\ud55c \ub2f9\uc2e0, \ub0b4\uc77c\uc740 \ud479 \uc26c\uc5b4\uc694', '\uc624\ub298\uc740 \uc815\ub9d0 \uace0\uc0dd \ub9ce\uc558\uc5b4\uc694']
+  ]
+};
+
+function cbStns() {
+  if (typeof HOME_STNS !== 'undefined' && HOME_STNS) return HOME_STNS;
+  try { if (typeof require === 'function') return require('./home-stations').HOME_STNS; } catch (e) {}
+  return null;
+}
+function cbStr(v, n) { return typeof v === 'string' ? v.slice(0, n) : ''; }
+function cbNum(v) { return (typeof v === 'number' && isFinite(v)) ? v : null; }
+function cbPlace(p) {                                              // \uc785\ub825 \ub2e4\ub4ec\uae30
+  if (!p || typeof p !== 'object') return null;
+  var nm = cbStr(p.nm, 40).trim();
+  if (!nm) return null;
+  var la = cbNum(p.lat), ln = cbNum(p.lng);
+  return { nm: nm, lat: la, lng: ln, bus: p.bus === true || p.bus === 1 };
+}
+// \uc608\uc804 _cmFindStn: \uc774\ub984(\uacf5\ubc31\u00b7'\uc5ed' \ube80 \uac83)\uc774 \uac19\uc740 \uc5ed \u2192 \uc55e\uc774 \uac19\uc740 \uc5ed \u2192 \ub4e4\uc5b4 \uc788\ub294 \uc5ed
+function cbFindStn(nm) {
+  var S = cbStns();
+  if (!nm || !Array.isArray(S)) return null;
+  var q = String(nm).replace(/\s+/g, '').replace(/\uc5ed$/, ''), i, k;
+  if (!q) return null;
+  var plain = function (s) { return String(s[0]).replace(/\s+/g, ''); };
+  for (i = 0; i < S.length; i++) if (S[i] && typeof S[i][0] === 'string' && plain(S[i]) === q) return { name: S[i][0], line: S[i][1] || '', lat: S[i][2], lng: S[i][3], bus: false };
+  for (i = 0; i < S.length; i++) if (S[i] && typeof S[i][0] === 'string' && plain(S[i]).indexOf(q) === 0) return { name: S[i][0], line: S[i][1] || '', lat: S[i][2], lng: S[i][3], bus: false };
+  for (i = 0; i < S.length; i++) if (S[i] && typeof S[i][0] === 'string' && plain(S[i]).indexOf(q) >= 0) return { name: S[i][0], line: S[i][1] || '', lat: S[i][2], lng: S[i][3], bus: false };
+  return null;
+}
+// \uc608\uc804 _cmResolvePlace: \uc9c0\ud558\ucca0\uc5ed\uc774\uba74 \uc5ed \ud45c\uc5d0\uc11c, \ubc84\uc2a4\u00b7\ud45c\uc5d0 \uc5c6\uc73c\uba74 \uc800\uc7a5 \uc88c\ud45c\ub85c
+function cbResolve(p) {
+  if (!p || !p.nm) return null;
+  if (!p.bus) { var s = cbFindStn(p.nm); if (s) return s; }
+  if (p.lat != null && p.lng != null) return { name: p.nm, lat: p.lat, lng: p.lng, line: '', bus: !!p.bus };
+  return cbFindStn(p.nm);
+}
+// \uc608\uc804 _cmPair: \ucd9c\uadfc = \ucd9c\ubc1c\u2192\ub3c4\ucc29, \ud1f4\uadfc = \ub530\ub85c \uc815\ud55c \uacf3(\ud55c\ucabd\ub9cc \ucc44\uc6b0\uba74 \ub098\uba38\uc9c0\ub294 \ucd9c\uadfc\uc758 \ubc18\ub300\ud3b8) \uc5c6\uc73c\uba74 \ucd9c\uadfc\uc758 \ubc18\ub300
+function cbPair(kind, F, T, eF, eT) {
+  if (kind === 'morn') return [F, T];
+  if (eF || eT) return [eF || T, eT || F];
+  return [T, F];
+}
+function cbHav(a1, o1, a2, o2) {
+  var R = 6371000, dLa = (a2 - a1) * Math.PI / 180, dLo = (o2 - o1) * Math.PI / 180;
+  var h = Math.sin(dLa / 2) * Math.sin(dLa / 2) + Math.cos(a1 * Math.PI / 180) * Math.cos(a2 * Math.PI / 180) * Math.sin(dLo / 2) * Math.sin(dLo / 2);
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+function cbNearStn(la, ln) {                                       // \ucd9c\ubc1c\uc9c0\uac00 \uc5c6\uc744 \ub54c '\ub0b4 \uc8fc\ubcc0' \uc5ed(3km \uc548)
+  var S = cbStns(), best = null, bd = 3000, i, d;
+  if (!Array.isArray(S)) return null;
+  for (i = 0; i < S.length; i++) { if (!S[i] || typeof S[i][2] !== 'number') continue; d = cbHav(la, ln, S[i][2], S[i][3]); if (d < bd) { bd = d; best = { name: S[i][0], line: S[i][1] || '', lat: S[i][2], lng: S[i][3], bus: false }; } }
+  return best;
+}
+
+function cbPlan(inp) {
+  inp = (inp && typeof inp === 'object') ? inp : {};
+  var kind = inp.kind === 'eve' ? 'eve' : 'morn';
+  var pr = cbPair(kind, cbPlace(inp.from), cbPlace(inp.to), cbPlace(inp.eFrom), cbPlace(inp.eTo));
+  var fromStn = cbResolve(pr[0]), toStn = cbResolve(pr[1]);
+  var g = (inp.gps && typeof inp.gps === 'object') ? inp.gps : null;
+  var gla = g ? cbNum(g.lat) : null, gln = g ? cbNum(g.lng) : null;
+  var la = fromStn ? fromStn.lat : (gla != null ? gla : CB_DEF_LAT), ln = fromStn ? fromStn.lng : (gln != null ? gln : CB_DEF_LNG);
+  return { kind: kind, from: pr[0], to: pr[1], fromStn: fromStn, toStn: toStn, la: la, ln: ln };
+}
+
+function cbKst(ms) { var d = new Date(Number(ms) + 9 * 3600000); return { y: d.getUTCFullYear(), dow: d.getUTCDay(), h: d.getUTCHours(), yday: Math.floor((Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) - Date.UTC(d.getUTCFullYear(), 0, 1)) / 86400000) }; }
+function cbClosing(kind, nowMs) {
+  var k = cbKst(nowMs), pool = CB_CLOSING[kind][k.dow] || [];
+  if (!pool.length) return kind === 'morn' ? '\uc88b\uc740 \ud558\ub8e8 \ub418\uc138\uc694' : '\ud3b8\uc548\ud55c \uc800\ub141 \ub418\uc138\uc694';
+  return pool[Math.floor(k.yday / 7) % pool.length];             // \uc5f0\uc911 \uc8fc\ucc28 \ubc88\ud638 \u2192 \ub9e4\uc8fc \ub2e4\ub978 \uba58\ud2b8
+}
+function cbFx(v) { return (typeof v === 'number' && isFinite(v)) ? v : null; }
+function cbWx(w) {
+  if (!w || typeof w !== 'object' || typeof w.temp !== 'number') return null;
+  return { temp: w.temp, feel: cbFx(w.feel), hum: cbFx(w.hum), tmin: cbFx(w.tmin), tmax: cbFx(w.tmax), rain: cbFx(w.rain) || 0, uv: cbFx(w.uv), wind: cbFx(w.wind), txt: cbStr(w.txt, 12) };
+}
+function cbCongFn() { return (typeof congPctSub === 'function') ? congPctSub : (function () { try { return require('./cong').congPctSub; } catch (e) { return null; } })(); }
+function cbCongPct(stn, line, h, wk) {
+  var f = cbCongFn();
+  if (!f) return 50;
+  try { return f({ stn: stn, line: line, ld: 0, live: null, wk: wk }, h); } catch (e) { return 50; }
+}
+
+function cbCompose(plan, ctx, wF0, wT0) {
+  ctx = (ctx && typeof ctx === 'object') ? ctx : {};
+  var nowMs = Number(ctx.nowMs) || 0, isMorn = plan.kind === 'morn', fromStn = plan.fromStn, toStn = plan.toStn;
+  var wF = cbWx(wF0), wT = cbWx(wT0), k = cbKst(nowMs), h = k.h;
+  var peak = (h >= 7 && h <= 9) || (h >= 17 && h <= 19);
+  var near = fromStn ? null : cbNearStn(plan.la, plan.ln);
+  var stnObj = fromStn || near;
+  var stnNm = stnObj ? stnObj.name : '\ub0b4 \uc8fc\ubcc0';
+  var wk = k.dow === 0 || k.dow === 6;
+  var pct = cbCongPct(stnNm, stnObj ? stnObj.line : '', h, wk);
+  var congTxt = pct < 40 ? '\uc5ec\uc720' : pct < 65 ? '\ubcf4\ud1b5' : '\ud63c\uc7a1';
+  var lines = [];
+  if (fromStn && toStn) lines.push(fromStn.name + ' \u2192 ' + toStn.name);
+  if (wF) {
+    var wl = (fromStn ? fromStn.name + ' ' : '') + wF.temp + '\u00b0 ' + wF.txt;
+    if (wF.feel != null && Math.abs(wF.feel - wF.temp) >= 2) wl += ' \u00b7 \uccb4\uac10 ' + wF.feel + '\u00b0';
+    if (wF.hum != null) wl += ' \u00b7 \uc2b5\ub3c4 ' + wF.hum + '%';
+    lines.push(wl.replace(/\s+$/, ''));
+    if (wF.tmax != null && wF.tmin != null) lines.push('\uc624\ub298 ' + wF.tmin + '\u00b0~' + wF.tmax + '\u00b0' + (wF.rain > 0 ? ' \u00b7 \uac15\uc218 ' + wF.rain + '%' : ''));
+    else if (wF.rain >= 20) lines.push('\uac15\uc218\ud655\ub960 ' + wF.rain + '%');
+  }
+  if (wT && wF && toStn && (Math.abs(wT.temp - wF.temp) >= 2 || Math.abs((wT.rain || 0) - (wF.rain || 0)) >= 20 || wT.txt !== wF.txt)) {
+    lines.push((toStn.name + ' ' + wT.temp + '\u00b0 ' + wT.txt + (wT.rain >= 40 ? ' \u00b7 \uac15\uc218 ' + wT.rain + '%' : '')).replace(/\s+$/, ''));
+  }
+  if (!(fromStn && fromStn.bus)) lines.push(stnNm + ' \ud63c\uc7a1\ub3c4 ' + pct + '% (' + congTxt + ')');
+  var recs = [];
+  if (wF) {
+    if (wF.rain >= 40) recs.push('\uc6b0\uc0b0 \uaf2d \ucc59\uae30\uc138\uc694');
+    else if (wF.rain >= 20) recs.push('\uc811\uc774\uc2dd \uc6b0\uc0b0 \uc788\uc73c\uba74 \uc548\uc2ec\uc774\uc5d0\uc694');
+    var ft = wF.feel != null ? wF.feel : wF.temp;
+    if (ft >= 33) recs.push('\ubb34\ub354\uc704\uc608\uc694, \uc2dc\uc6d0\ud55c \uc637\ucc28\ub9bc\uc5d0 \uc218\ubd84 \ucc59\uae30\uc138\uc694');
+    else if (ft >= 28) recs.push('\ub354\uc6cc\uc694, \uc2dc\uc6d0\ud55c \uc637\ucc28\ub9bc \ucd94\ucc9c');
+    else if (ft <= 0) recs.push('\uac15\ucd94\uc704\uc608\uc694, \ubaa9\ub3c4\ub9ac\u00b7\uc7a5\uac11 \ud544\uc218');
+    else if (ft <= 5) recs.push('\ucd94\uc6cc\uc694, \ub450\uaebc\uc6b4 \uc678\ud22c \uc785\uc73c\uc138\uc694');
+    else if (ft <= 11) recs.push('\uc300\uc300\ud574\uc694, \uac89\uc637 \ucc59\uae30\uc138\uc694');
+    if (isMorn && wF.tmax != null && wF.tmin != null && (wF.tmax - wF.tmin) >= 10) recs.push('\uc77c\uad50\ucc28 ' + (wF.tmax - wF.tmin) + '\u00b0, \uac89\uc637 \ud558\ub098 \ucc59\uae30\uba74 \uc88b\uc544\uc694');
+    if (wF.hum != null && wF.hum >= 80 && wF.temp >= 24) recs.push('\uc2b5\ub3c4 \ub192\uc544 \ud6c4\ud141\uc9c0\uadfc\ud574\uc694');
+    if (isMorn && wF.uv != null && wF.uv >= 8) recs.push('\uc790\uc678\uc120 \uac15\ud574\uc694, \uc120\ud06c\ub9bc \uc78a\uc9c0 \ub9c8\uc138\uc694');
+    if (wF.wind != null && wF.wind >= 30) recs.push('\ubc14\ub78c \uac15\ud574\uc694, \uc6b0\uc0b0\u00b7\ubaa8\uc790 \uc8fc\uc758');
+  }
+  if (peak) recs.push(isMorn ? '\ud53c\ud06c \uc2dc\uac04\uc774\uc5d0\uc694, 5\ubd84\ub9cc \uc77c\ucc0d \ub098\uc11c\uba74 \uc5ec\uc720\ub85c\uc6cc\uc694' : '\ud1f4\uadfc \ud53c\ud06c\uc608\uc694, \ud55c \uc815\uac70\uc7a5 \ub2a6\uc740 \uc5f4\ucc28\uac00 \ud55c\uc0b0\ud560 \uc218 \uc788\uc5b4\uc694');
+  recs.slice(0, 3).forEach(function (r) { lines.push('\u00b7 ' + r); });
+  lines.push(cbClosing(plan.kind, nowMs));
+  var title = (isMorn ? '\ucd9c\uadfc\uae38 \ube0c\ub9ac\ud551' : '\ud1f4\uadfc\uae38 \ube0c\ub9ac\ud551') + (fromStn && toStn ? ' \u00b7 ' + fromStn.name + '\u2192' + toStn.name : '');
+  var route = (fromStn && toStn) ? { from: { name: fromStn.name, lat: fromStn.lat, lng: fromStn.lng, bus: !!fromStn.bus }, to: { name: toStn.name, lat: toStn.lat, lng: toStn.lng, bus: !!toStn.bus } } : null;
+  return { v: CB_V, title: title, body: lines.join('\n'), route: route };
+}
+function cbBrief(inp, wF, wT) {
+  var plan = cbPlan(inp);
+  return cbCompose(plan, { nowMs: inp && inp.nowMs }, wF, wT);
+}
+// \ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551 Worker \uc5f0\uacb0\ubd80 \u2014 POST /commute-brief (engine/commute-brief.js \uc758 cbPlan \u00b7 cbCompose \ub97c \ubd80\ub978\ub2e4). route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/commute-brief") return handleCommuteBrief(request);` \ub97c \ub123\ub294\ub2e4.
+//   \ubcf8\ubb38: { kind:'morn'|'eve', nowMs, from, to, eFrom, eTo (\uac01 {nm,lat?,lng?,bus?}), gps?:{lat,lng} }  \u2192 { ok, v, title, body, route }
+//   \ub0a0\uc528(\uc628\ub3c4\u00b7\uccb4\uac10\u00b7\uc2b5\ub3c4\u00b7\ucd5c\uc800\ucd5c\uace0\u00b7\uac15\uc218\u00b7\uc790\uc678\uc120\u00b7\ubc14\ub78c)\ub294 subway-api /weather(WSAY_WX_URL)\uc5d0\uc11c \ucd9c\ubc1c\uc9c0\u00b7\ub3c4\ucc29\uc9c0 \uc88c\ud45c\ub85c \ubc1b\ub294\ub2e4(2.5\ucd08 \u00b7 10\ubd84 \uce90\uc2dc). \ubabb \ubc1b\uc73c\uba74 \ub0a0\uc528 \uc904\ub9cc \ube60\uc9c4\ub2e4.
+var CB_WX_CACHE = {};
+async function cbWeather(lat, lng) {
+  if (!(isFinite(lat) && isFinite(lng) && lat > 33 && lat < 39 && lng > 124 && lng < 132)) return null;
+  var key = Math.round(lat * 20) + "," + Math.round(lng * 20), c = CB_WX_CACHE[key], now = Date.now();
+  if (c && now - c.ts < 6e5) return c.wx;
+  try {
+    var ac = new AbortController(), t = setTimeout(function () { ac.abort(); }, 2500);
+    var r = await fetch(WSAY_WX_URL + "?lat=" + lat + "&lng=" + lng, { signal: ac.signal });
+    clearTimeout(t);
+    var j = r.ok ? await r.json() : null;
+    if (j && j.ok !== false && typeof j.temp === "number") { if (Object.keys(CB_WX_CACHE).length > 60) CB_WX_CACHE = {}; CB_WX_CACHE[key] = { ts: now, wx: j }; return j; }
+  } catch (e) {}
+  return c ? c.wx : null;
+}
+async function handleCommuteBrief(request) {
+  var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Cache-Control": "no-store" };
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: H });
+  if (request.method !== "POST") return new Response(JSON.stringify({ ok: false, error: "POST only" }), { status: 405, headers: H });
+  var raw = await request.text();
+  if (raw.length > 6000) return new Response(JSON.stringify({ ok: false, error: "body-too-long" }), { status: 413, headers: H });
+  var body;
+  try { body = JSON.parse(raw); } catch (e0) { return new Response(JSON.stringify({ ok: false, error: "bad-json" }), { status: 400, headers: H }); }
+  if (!body || typeof body !== "object") return new Response(JSON.stringify({ ok: false, error: "bad-body" }), { status: 400, headers: H });
+  var out;
+  try {
+    var plan = cbPlan(body);
+    var wF = await cbWeather(plan.la, plan.ln);
+    var wT = (plan.toStn && plan.toStn.lat != null) ? await cbWeather(plan.toStn.lat, plan.toStn.lng) : null;
+    out = cbCompose(plan, { nowMs: Number(body.nowMs) || Date.now() }, wF, wT);
+  } catch (e) { return new Response(JSON.stringify({ ok: false, error: String(e && e.message || e) }), { status: 500, headers: H }); }
+  out.ok = true;
+  return new Response(JSON.stringify(out), { headers: H });
+}
+// ===== CBRIEF ENGINE END =====
+
 async function handleFetch(request, env, ctx) {
   try { await holEnsure(env); } catch (e) {}
   const url = new URL(request.url);
@@ -19699,6 +19909,7 @@ async function handleFetch(request, env, ctx) {
   if (url.pathname === "/screen/hcards") return handleScreenHcards(request);
   if (url.pathname === "/ride/start") return handleRideStart(request);
   if (url.pathname === "/rules") return handleRules(request);
+  if (url.pathname === "/commute-brief") return handleCommuteBrief(request);
   if (url.pathname === "/stops-near") {
     const lat = parseFloat(url.searchParams.get("lat"));
     const lng = parseFloat(url.searchParams.get("lng"));

@@ -18,6 +18,7 @@ jobs:
           - screen_native.test.js
           - tabs_engine.test.js
           - settings_engine.test.js
+          - commute_brief.test.js
           - dialog_engine.test.js
           - pvlabel_engine.test.js
           - posfusion_engine.test.js

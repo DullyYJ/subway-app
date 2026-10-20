@@ -8,6 +8,18 @@ public class ShellJvmTest {
     static int fails = 0, oks = 0;
     static void ok(boolean c, String name) { System.out.println((c ? "ok   " : "FAIL ") + name); if (c) oks++; else fails++; }
 
+    /** 시험용 쓰기 기록 한 줄: 종류 · 열쇠 길이 · 열쇠 · 값 길이(varint) · 값(UTF-16LE, 첫 바이트 0). */
+    static byte[] logRec(String name, String val) {
+        try {
+            byte[] key = ("_https://localhost\u0000\u0001" + name).getBytes(java.nio.charset.Charset.forName("ISO-8859-1"));
+            byte[] v16 = val.getBytes(java.nio.charset.Charset.forName("UTF-16LE"));
+            java.io.ByteArrayOutputStream w = new java.io.ByteArrayOutputStream();
+            w.write(0xAA); w.write(1); w.write(key.length); w.write(key, 0, key.length);
+            int vl = v16.length + 1; w.write((vl & 127) | 128); w.write(vl >> 7); w.write(0); w.write(v16, 0, v16.length);
+            return w.toByteArray();
+        } catch (Exception e) { return new byte[0]; }
+    }
+
     public static void main(String[] a) throws Exception {
         ShellCore.MemStore st = new ShellCore.MemStore();
 
@@ -52,6 +64,57 @@ public class ShellJvmTest {
                 String dec = java.net.URLDecoder.decode(au2, "UTF-8");
                 ok(dec.contains("\"st\":{\"timer\":true,\"route\":true,\"pre\":7,\"tzo\":-540,\"policy\":false,\"dest\":\"강남\",\"rem\":300,\"dg\":{\"stage\":\"시험\",\"at\":5}}"), "상태 확인 사실: " + dec);
             }
+            {
+                ShellCore.MemStore cs = new ShellCore.MemStore();
+                CmCore cmc = new CmCore();
+                ok(!CmCore.on(cs) && "07:30".equals(CmCore.morn(cs)) && "18:30".equals(CmCore.eve(cs)) && CmCore.days(cs).toString().equals("[1, 2, 3, 4, 5]"), "출퇴근 기본값: 꺼짐 · 07:30 · 18:30 · 평일");
+                ok(cmc.act(cs, "set", null, "cm", true, null) == (CmCore.R_RENDER | CmCore.R_RESCHED) && CmCore.on(cs), "스위치 켜면 저장 + 알람 다시 걸기");
+                cmc.act(cs, "call", "cm.day.1", null, false, null); cmc.act(cs, "call", "cm.day.0", null, false, null);
+                ok(CmCore.days(cs).toString().equals("[0, 2, 3, 4, 5]"), "요일 토글: " + CmCore.days(cs));
+                cmc.act(cs, "call", "cm.preset.weekend", null, false, null);
+                ok(CmCore.days(cs).toString().equals("[0, 6]") && cmc.act(cs, "call", "cm.day.9", null, false, null) == CmCore.R_NONE, "주말 묶음 · 이상한 요일은 무시");
+                // 시각 고르기
+                ok(cmc.act(cs, "call", "cm.tp.eve", null, false, null) == CmCore.R_RENDER && "tp".equals(cmc.sub) && "pm".equals(cmc.tpAp) && cmc.tpH == 6 && cmc.tpM == 30, "퇴근 시각 고르기 열기: 오후 6:30");
+                String pf = cmc.pageFacts(cs);
+                ok(pf.contains("\"sub\":\"tp\"") && pf.contains("\"tp\":{\"t\":\"eve\",\"ap\":\"pm\",\"h\":6,\"m\":30}") && pf.contains("\"days\":[0,6]") && pf.contains("\"on\":true"), "시각 고르기 사실: " + pf);
+                cmc.act(cs, "call", "tp.h.12", null, false, null); cmc.act(cs, "call", "tp.m.5", null, false, null); cmc.act(cs, "call", "tp.ap.am", null, false, null);
+                ok(cmc.act(cs, "call", "tp.ok", null, false, null) == (CmCore.R_RENDER | CmCore.R_RESCHED) && "00:05".equals(CmCore.eve(cs)) && cmc.sub.length() == 0, "오전 12:05 = 00:05 로 저장");
+                cmc.act(cs, "call", "cm.tp.morn", null, false, null); cmc.act(cs, "call", "tp.ap.pm", null, false, null); cmc.act(cs, "call", "tp.h.12", null, false, null); cmc.act(cs, "call", "tp.m.0", null, false, null);
+                cmc.act(cs, "call", "tp.ok", null, false, null);
+                ok("12:00".equals(CmCore.morn(cs)) && cmc.act(cs, "call", "tp.h.13", null, false, null) == CmCore.R_NONE && cmc.act(cs, "call", "tp.m.7", null, false, null) == CmCore.R_NONE, "오후 12:00 = 12:00 · 범위 밖은 무시");
+                cmc.act(cs, "call", "cm.tp.morn", null, false, null);
+                ok(cmc.act(cs, "call", "tp.cancel", null, false, null) == CmCore.R_RENDER && "12:00".equals(CmCore.morn(cs)) && cmc.sub.length() == 0, "취소하면 그대로");
+                // 장소 고르기
+                ok(cmc.act(cs, "call", "cm.pick.from", null, false, null) == CmCore.R_RENDER && cmc.picking() && "from".equals(cmc.pkK), "장소 고르기 열기(빈 칸이면 찾기 없음)");
+                ok(cmc.onQuery("강") == CmCore.R_RENDER && cmc.onQuery("강남") == CmCore.R_BUS && "강남".equals(cmc.pkQ), "두 글자부터 버스정류장을 찾는다");
+                cmc.setStations(java.util.Arrays.asList("강남", "강남구청"));
+                cmc.setBus(java.util.Arrays.asList("강남역.강남역사거리", "강남구청"), java.util.Arrays.asList(new double[] { 37.5, 127.0 }, new double[] { 37.51, 127.04 }));
+                String pf2 = cmc.pageFacts(cs);
+                ok(pf2.contains("\"sub\":\"pick\"") && pf2.contains("\"pick\":{\"k\":\"from\",\"q\":\"강남\"}") && pf2.contains("\"bus\":[\"강남역.강남역사거리\",\"강남구청\"]"), "장소 고르기 사실: " + pf2);
+                ok(cmc.act(cs, "call", "pk.u.1", null, false, null) == (CmCore.R_RENDER | CmCore.R_RESCHED) && "강남구청".equals(CmCore.place(cs, "from")) && CmCore.placeJson(cs, "from").equals("{\"nm\":\"강남구청\"}") && cmc.sub.length() == 0, "역 후보 고르기 → 이름만 저장");
+                cmc.act(cs, "call", "cm.pick.to", null, false, null); cmc.setBus(java.util.Arrays.asList("정류장A"), java.util.Arrays.<double[]>asList(new double[] { 37.25, 127.5 }));
+                cmc.act(cs, "call", "pk.b.0", null, false, null);
+                ok("정류장A".equals(CmCore.place(cs, "to")) && CmCore.placeJson(cs, "to").equals("{\"nm\":\"정류장A\",\"lat\":37.25,\"lng\":127.5,\"bus\":true}"), "버스 후보 고르기 → 좌표와 함께: " + CmCore.placeJson(cs, "to"));
+                cmc.act(cs, "call", "cm.pick.eFrom", null, false, null);
+                ok(cmc.act(cs, "call", "pk.u.5", null, false, null) == CmCore.R_NONE && cmc.act(cs, "call", "pk.save", null, false, "  사당  ") == (CmCore.R_RENDER | CmCore.R_RESCHED) && "사당".equals(CmCore.place(cs, "eFrom")), "직접 입력 저장(공백 정리) · 없는 후보 번호 무시");
+                cmc.act(cs, "call", "cm.pick.to", null, false, null);
+                cmc.act(cs, "call", "pk.save", null, false, "정류장A");
+                ok(CmCore.placeJson(cs, "to").equals("{\"nm\":\"정류장A\"}"), "직접 입력하면 버스 좌표는 지운다");
+                cmc.act(cs, "call", "cm.pick.to", null, false, null);
+                ok(cmc.act(cs, "call", "pk.clear", null, false, null) == (CmCore.R_RENDER | CmCore.R_RESCHED) && CmCore.placeJson(cs, "to") == null, "비우기");
+                cmc.act(cs, "call", "cm.pick.to", null, false, null);
+                ok(cmc.act(cs, "call", "pg.back", null, false, null) == CmCore.R_RENDER && cmc.sub.length() == 0 && cmc.act(cs, "call", "pg.back", null, false, null) == CmCore.R_CLOSE, "뒤로: 하위 화면이면 한 칸, 아니면 닫기");
+                ok(cmc.act(cs, "call", "cm.test", null, false, null) == CmCore.R_TEST, "지금 미리보기");
+                // 엔진 요청 본문
+                String bb = CmCore.briefBody(cs, "eve", 1760000000000L, new double[] { 37.5, 127.0 });
+                ok(bb.equals("{\"kind\":\"eve\",\"nowMs\":1760000000000,\"from\":{\"nm\":\"강남구청\"},\"eFrom\":{\"nm\":\"사당\"},\"gps\":{\"lat\":37.5,\"lng\":127.0}}"), "브리핑 요청 본문: " + bb);
+                ok(CmCore.occBody(cs, 5L).equals("{\"op\":\"occ\",\"nowMs\":5,\"morn\":\"12:00\",\"eve\":\"00:05\",\"days\":[0,6]}"), "알람 시각 요청 본문: " + CmCore.occBody(cs, 5L));
+                long[] oc = CmCore.parseOcc("{\"ok\":true,\"v\":1,\"morn\":[1,2,3],\"eve\":[9]}", "morn", 2);
+                ok(oc.length == 2 && oc[1] == 2 && CmCore.parseOcc("{\"ok\":true,\"eve\":[9]}", "eve", 14)[0] == 9 && CmCore.parseOcc("{\"ok\":false}", "morn", 5).length == 0 && CmCore.parseOcc("망가짐", "morn", 5).length == 0, "알람 시각 읽기");
+                String[] br = CmCore.parseBrief("{\"ok\":true,\"title\":\"출근길 브리핑\",\"body\":\"줄1\\n줄2\"}");
+                ok(br != null && br[0].equals("출근길 브리핑") && br[1].equals("줄1\n줄2") && CmCore.parseBrief("{\"ok\":true,\"title\":\"\",\"body\":\"x\"}") == null && CmCore.parseBrief("{\"ok\":false}") == null, "브리핑 글 읽기");
+                ok(CmCore.hm("7:30", "09:00").equals("09:00") && CmCore.hm("24:00", "09:00").equals("09:00") && CmCore.hm("23:59", "09:00").equals("23:59"), "시각 모양 검사");
+            }
             String pu = ShellCore.pageUrl(ps, "ovl", true, false);
             ok(pu.startsWith("https://route-v2.phg0643.workers.dev/screen/settings?cap=8&p=ovl&f=") && pu.indexOf(' ') < 0 && pu.indexOf('"') < 0 && ShellCore.netOk(pu), "하위 화면 주소: 인코딩 · 허용 목록");
         }
@@ -80,6 +143,28 @@ public class ShellJvmTest {
             ok(LegacyCore.count(String.valueOf(LegacyCore.shape(many.toString()))) == 8, "예전 즐겨찾기: 최대 8개");
         }
 
+        // ── 예전 값들: 아이디 · 포인트 · 출퇴근 브리핑(앱 본체 저장소 kv · localStorage 파일) ──
+        {
+            String kv = "{\"mk_favorites\":\"[{\\\"s\\\":\\\"A\\\",\\\"d\\\":\\\"B\\\"}]\",\"mk_comm_id\":\"\\\"홍길동_1\\\"\",\"mk_pt\":\"{\\\"total\\\":120,\\\"today\\\":5,\\\"today_str\\\":\\\"Wed Oct 21 2026\\\"}\",\"mk_pts\":\"{\\\"total\\\":150,\\\"date\\\":\\\"x\\\"}\","
+                + "\"commuteAlarm\":\"{\\\"on\\\":true,\\\"morn\\\":\\\"08:10\\\",\\\"eve\\\":\\\"19:00\\\",\\\"from\\\":\\\"인하대\\\",\\\"to\\\":\\\"강남\\\",\\\"days\\\":[1,3,9],\\\"eFrom\\\":\\\"정류장Z\\\",\\\"eFromLat\\\":37.1,\\\"eFromLng\\\":127.2,\\\"eFromBus\\\":true,\\\"lastKey\\\":\\\"k\\\"}\"}";
+            LegacyCore.Found fd = LegacyCore.find(null, kv);
+            ok(fd.any() && LegacyCore.count(fd.fav) == 1 && "홍길동_1".equals(fd.id) && fd.pt.startsWith("{\"total\":150,") && fd.commute != null, "예전 값(앱 본체 저장소): 즐겨찾기 · 아이디 · 포인트(큰 쪽) · 출퇴근");
+            ShellCore.MemStore ls = new ShellCore.MemStore();
+            ok(LegacyCore.applyCommute(ls, fd.commute) && CmCore.on(ls) && "08:10".equals(CmCore.morn(ls)) && "19:00".equals(CmCore.eve(ls)) && CmCore.days(ls).toString().equals("[1, 3]")
+               && "인하대".equals(CmCore.place(ls, "from")) && CmCore.placeJson(ls, "to").equals("{\"nm\":\"강남\"}") && CmCore.placeJson(ls, "eFrom").equals("{\"nm\":\"정류장Z\",\"lat\":37.1,\"lng\":127.2,\"bus\":true}"), "예전 출퇴근 설정 옮기기: " + ls.m);
+            ok(!LegacyCore.applyCommute(new ShellCore.MemStore(), "{\"x\":1}") && !LegacyCore.applyCommute(new ShellCore.MemStore(), "망가짐") && LegacyCore.find(null, "{}").pt == null && LegacyCore.find(null, null).any() == false, "엉뚱한 값은 옮기지 않는다");
+            ok(LegacyCore.idOf("\"a\"") == null && LegacyCore.idOf("\"새 이름!\"") == null && "abc".equals(LegacyCore.idOf("abc")) && LegacyCore.idOf("{\"a\":1}") == null, "아이디 규칙 검사");
+            // localStorage 파일에서: 쓰기 기록 모양(UTF-16) 으로 아이디·포인트·출퇴근
+            java.util.List<byte[]> files = new java.util.ArrayList<byte[]>();
+            files.add(logRec("mk_comm_id", "\"길동무_7\""));
+            files.add(logRec("mk_pt", "{\"total\":77,\"today\":1,\"today_str\":\"x\"}"));
+            files.add(logRec("commuteAlarm", "{\"on\":false,\"morn\":\"07:00\",\"eve\":\"18:00\",\"from\":\"사당\"}"));
+            LegacyCore.Found fg = LegacyCore.find(files, null);
+            ok("길동무_7".equals(fg.id) && fg.pt != null && fg.pt.startsWith("{\"total\":77,") && fg.commute != null && fg.fav == null, "예전 값(localStorage 파일): 아이디 · 포인트 · 출퇴근");
+            files.add(logRec("mk_pts", "{\"total\":90}"));
+            ok(LegacyCore.find(files, null).pt.startsWith("{\"total\":90,"), "mk_pt 와 mk_pts 중 큰 포인트");
+        }
+
         // ── 앱 규칙(엔진 /rules 쪽 껍데기) ──
         ShellCore.MemStore rs = new ShellCore.MemStore();
         long t0 = 1792454400000L;
@@ -102,7 +187,7 @@ public class ShellJvmTest {
         // ── 설정 사실 ──
         ShellCore.MemStore s2 = new ShellCore.MemStore();
         String f = ShellCore.settingsFacts(s2);
-        ok(f.equals("{\"id\":\"\",\"np\":{\"arrive\":1,\"transfer\":1,\"arrive_reco\":1},\"ovl\":0,\"sam\":0,\"samw\":0,\"pgs\":[\"sam\",\"ovl\",\"arr\"],\"rl\":1,\"th\":\"pastel\",\"pt\":{},\"day\":\"\"}"), "기본 기기 사실: " + f);
+        ok(f.equals("{\"id\":\"\",\"np\":{\"arrive\":1,\"transfer\":1,\"arrive_reco\":1},\"ovl\":0,\"sam\":0,\"samw\":0,\"cm\":0,\"pgs\":[\"sam\",\"ovl\",\"arr\",\"cm\"],\"rl\":1,\"th\":\"pastel\",\"pt\":{},\"day\":\"\"}"), "기본 기기 사실: " + f);
         s2.put("comm_id", "길동무7"); s2.put("np_transfer", "0"); s2.put("ride_log_off", "1"); s2.put("theme", "dark");
         f = ShellCore.settingsFacts(s2);
         ok(f.contains("\"id\":\"길동무7\"") && f.contains("\"transfer\":0") && f.contains("\"rl\":0") && f.contains("\"th\":\"dark\""), "바뀐 기기 사실");

@@ -80,6 +80,7 @@ public class ShellActivity extends Activity {
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
         store = new PrefStore(getSharedPreferences(PREFS, Context.MODE_PRIVATE));
+        if (CmCore.on(store)) CommuteAlarm.rescheduleAsync(this);                 // 출퇴근 브리핑: 앞으로 4주 창을 다시 민다
         board = new BoardCore(store);
         chat = new ChatCore(store);
         fav = new FavCore(store);
@@ -149,10 +150,10 @@ public class ShellActivity extends Activity {
 
     // ───────────── 예전(웹뷰) 앱 즐겨찾기 가져오기: 한 번만, 새 앱 즐겨찾기가 비어 있을 때만 ─────────────
     private void importLegacy() {
-        if ("1".equals(store.get(LegacyCore.K_DONE, ""))) return;
+        if ("1".equals(store.get(LegacyCore.K_DONE2, ""))) return;
         new Thread(new Runnable() {
             @Override public void run() {
-                String got = null;
+                LegacyCore.Found got = new LegacyCore.Found();
                 try {
                     java.util.List<byte[]> files = new java.util.ArrayList<byte[]>();
                     for (String d : LegacyCore.DIRS) {
@@ -167,12 +168,24 @@ public class ShellActivity extends Activity {
                             files.add(buf);
                         }
                     }
-                    got = LegacyCore.findFavorites(files);
+                    String kv = null;                                   // 예전 앱 본체 저장소(설정을 한 번 더 보관해 둔 것) — 있으면 파일을 뒤지는 것보다 확실하다
+                    try { kv = getSharedPreferences(LegacyCore.OLD_PREFS, Context.MODE_PRIVATE).getString(LegacyCore.OLD_KV, null); } catch (Throwable ignored) { }
+                    got = LegacyCore.find(files, kv);
                 } catch (Throwable ignored) { /* 못 읽으면 그냥 넘어간다 */ }
+                store.put(LegacyCore.K_DONE2, "1");
                 store.put(LegacyCore.K_DONE, "1");
-                if (got != null && "[]".equals(fav.listJson())) {
-                    store.put(FavCore.K_FAV, got);
-                    toastMain("예전 즐겨찾기 " + LegacyCore.count(got) + "개를 가져왔어요");
+                java.util.List<String> said = new java.util.ArrayList<String>();
+                if (got.fav != null && "[]".equals(fav.listJson())) { store.put(FavCore.K_FAV, got.fav); said.add("즐겨찾기 " + LegacyCore.count(got.fav) + "개"); }
+                if (got.id != null && store.get(ShellCore.K_ID, "").length() == 0) { store.put(ShellCore.K_ID, got.id); said.add("커뮤니티 아이디"); }
+                if (got.pt != null && LegacyCore.totalOf(store.get(RulesCore.K_PT, "{}")) == 0) { store.put(RulesCore.K_PT, got.pt); said.add("포인트"); }
+                if (got.commute != null && store.get(CmCore.K_ON, "").length() == 0 && store.get(CmCore.K_MORN, "").length() == 0 && LegacyCore.applyCommute(store, got.commute)) {
+                    said.add("출퇴근 브리핑 설정");
+                    if (CmCore.on(store)) CommuteAlarm.reschedule(getApplicationContext());
+                }
+                if (!said.isEmpty()) {
+                    StringBuilder b = new StringBuilder("예전 ");
+                    for (int i = 0; i < said.size(); i++) { if (i > 0) b.append(' ').append('·').append(' '); b.append(said.get(i)); }
+                    toastMain(b.append("를 가져왔어요").toString());
                 }
             }
         }, "shell-legacy").start();
@@ -337,7 +350,7 @@ public class ShellActivity extends Activity {
             case ShellCore.E_TOAST: toast(e.arg); loadSlot(slots.length - 1, true); break;
             case ShellCore.E_LINK: openLink(e.arg); break;
             case ShellCore.E_NEWS: openNews(e.arg); break;
-            case ShellCore.E_PAGE: if ("ovl".equals(e.arg) || "sam".equals(e.arg) || "arr".equals(e.arg)) openSetPage(e.arg); else toast("아직 옮기는 중이에요"); break;
+            case ShellCore.E_PAGE: if ("ovl".equals(e.arg) || "sam".equals(e.arg) || "arr".equals(e.arg) || "cm".equals(e.arg)) openSetPage(e.arg); else toast("아직 옮기는 중이에요"); break;
             default: break;
         }
     }
@@ -956,10 +969,11 @@ public class ShellActivity extends Activity {
             if (ln != null) openExternal(ln[0], ln[1]);
         }
         @Override public void onSet(ScreenCore.Act a, boolean on) { if (ShellCore.S_SETPG.equals(sheetName)) setPageAct(a.a, a.v, a.key, on); }
-        @Override public void onSearch(ScreenCore.Act a, String q) { }
+        @Override public void onSearch(ScreenCore.Act a, String q) { if (ShellCore.S_SETPG.equals(sheetName) && "cm".equals(setPage) && "call".equals(a.a)) cmAct("call", a.v, null, false, q); }
         @Override public void onInputFocus(boolean on) { }
         @Override public void onFirstDraw() { }
         @Override public void onText(String key, String value, String kind) {
+            if (ShellCore.S_SETPG.equals(sheetName) && "cm".equals(setPage)) { if ("cmq".equals(key) && "edit".equals(kind)) cmQuery(value); return; }
             if (!ShellCore.S_FAV.equals(sheetName)) return;
             if ("blur".equals(kind)) {                                   // 후보 줄을 누르는 동안 잠깐 기다렸다 닫는다
                 main.postDelayed(new Runnable() { @Override public void run() { if (ShellCore.S_FAV.equals(sheetName) && fav.endActive()) { fav.sync(sheetView == null ? null : sheetView.fields()); loadFav(); } } }, 250);
@@ -1487,9 +1501,12 @@ public class ShellActivity extends Activity {
     // ───────────── 설정 하위 화면 시트(다른 앱 위에 표시) ─────────────
     private String setPage = "ovl";
     private boolean arrStat;
+    private final CmCore cm = new CmCore();
+    private int cmBusSeq;
     private void openSetPage(String page) {
         closeSheet();
         setPage = page; arrStat = false;
+        if ("cm".equals(page)) { cm.sub = ""; cm.clearBus(); }
         sheetName = ShellCore.S_SETPG;
         sheetView = new ScreenView(this);
         sheetView.setDpr(dpr);
@@ -1502,7 +1519,8 @@ public class ShellActivity extends Activity {
     }
     private void loadSetPage() {
         final String url = "sam".equals(setPage) ? ShellCore.pageUrlSam(PowerInfo.read(this).pageFacts())
-            : ("arr".equals(setPage) ? ShellCore.pageUrlArr(arrStat, RideService.running, notifOk(), RideService.liveReco, RideService.recoStage, RideService.recoStageAt)
+            : ("cm".equals(setPage) ? ShellCore.pageUrlCm(cm.pageFacts(store))
+            : "arr".equals(setPage) ? ShellCore.pageUrlArr(arrStat, RideService.running, notifOk(), RideService.liveReco, RideService.recoStage, RideService.recoStageAt)
             : ShellCore.pageUrl(store, "ovl", RideOverlay.supported(), RideOverlay.allowed(this)));
         new Thread(new Runnable() {
             @Override public void run() {
@@ -1511,12 +1529,68 @@ public class ShellActivity extends Activity {
                 main.post(new Runnable() { @Override public void run() {
                     if (sheet == null || !sheet.isShowing() || !ShellCore.S_SETPG.equals(sheetName)) return;
                     if (txt.length() == 0) { toast("설정을 받지 못했어요"); return; }
+                    if ("cm".equals(setPage)) cm.setStations(cmStations(txt));
                     present(sheetView, txt, true);
                 } });
             }
         }, "shell-setpg").start();
     }
+    /** 엔진 장소 고르기 화면의 info.pk.u(지하철역 후보 이름들). */
+    @SuppressWarnings("unchecked")
+    private static List<String> cmStations(String json) {
+        List<String> out = new java.util.ArrayList<String>();
+        try {
+            Object o = ScreenCore.parse(json);
+            Object info = o instanceof Map ? ((Map<String, Object>) o).get("info") : null;
+            Object pk = info instanceof Map ? ((Map<String, Object>) info).get("pk") : null;
+            Object u = pk instanceof Map ? ((Map<String, Object>) pk).get("u") : null;
+            if (u instanceof List) for (Object x : (List<Object>) u) { Object nm = x instanceof Map ? ((Map<String, Object>) x).get("name") : null; out.add(nm instanceof String ? (String) nm : ""); }
+        } catch (ScreenCore.ParseError e) { out.clear(); }
+        return out;
+    }
+    /** 출퇴근 브리핑 화면 눌림 — 저장은 CmCore, 알림 문구·시각은 엔진. */
+    private void cmAct(String a, String v, String key, boolean on, String q) {
+        int r = cm.act(store, a, v, key, on, q);
+        if ((r & CmCore.R_CLOSE) != 0) { closeSheet(); loadSlot(slots.length - 1, true); return; }
+        if ((r & CmCore.R_RESCHED) != 0) CommuteAlarm.rescheduleAsync(this);
+        if ((r & CmCore.R_TEST) != 0) { testBrief(); return; }
+        if ((r & CmCore.R_BUS) != 0) { cmBusSearch(cm.pkQ); return; }
+        if ((r & CmCore.R_RENDER) != 0) loadSetPage();
+    }
+    /** 글자가 바뀔 때마다: 검색어를 기억하고 버스정류장을 다시 찾는다(역 후보는 화면을 다시 받을 때 엔진이 정한다). */
+    private void cmQuery(String q) {
+        int r = cm.onQuery(q);
+        if ((r & CmCore.R_BUS) != 0) cmBusSearch(cm.pkQ); else if ((r & CmCore.R_RENDER) != 0) loadSetPage();
+    }
+    private void cmBusSearch(final String q) {
+        final int my = ++cmBusSeq;
+        new Thread(new Runnable() {
+            @Override public void run() {
+                NetPost.Res rb = NetPost.get(HomeSearchCore.busUrl(HomeSearchCore.DEFAULT_BASE, q.trim()), 6000);
+                final List<Map<String, Object>> raw = rb.status == 200 ? HomeSearchCore.parseBus(rb.body) : new java.util.ArrayList<Map<String, Object>>();
+                main.post(new Runnable() { @Override public void run() {
+                    if (my != cmBusSeq || !"cm".equals(setPage) || !cm.picking() || sheet == null || !sheet.isShowing()) return;
+                    List<String> names = new java.util.ArrayList<String>(); List<double[]> geo = new java.util.ArrayList<double[]>();
+                    for (Map<String, Object> m : raw) {
+                        Object nm = m.get("nodenm") != null ? m.get("nodenm") : m.get("nodeNm");
+                        double la = HomeSearchCore.pf(m.get("gpslati")), lo = HomeSearchCore.pf(m.get("gpslong"));
+                        if (nm instanceof String && ((String) nm).length() > 0 && la != 0 && lo != 0) { names.add((String) nm); geo.add(new double[] { la, lo }); }
+                    }
+                    cm.setBus(names, geo);
+                    loadSetPage();
+                } });
+            }
+        }, "shell-cmbus").start();
+    }
+    /** '지금 미리보기': 지금이 오후 3시 전이면 출근, 아니면 퇴근 브리핑을 알림으로 한 번 띄운다(글은 엔진). */
+    private void testBrief() {
+        toast("브리핑을 만드는 중이에요");
+        final android.content.Context app = getApplicationContext();
+        final String kind = Calendar.getInstance().get(Calendar.HOUR_OF_DAY) < 15 ? "morn" : "eve";
+        new Thread(new Runnable() { @Override public void run() { CommuteAlarm.send(app, kind); } }, "shell-cmtest").start();
+    }
     private void setPageAct(String a, String v, String key, boolean on) {
+        if ("cm".equals(setPage)) { cmAct(a, v, key, on, null); return; }
         int r = ShellCore.routePage(store, setPage, a, v, key, on, RideOverlay.allowed(this));
         if (r == ShellCore.PG_CLOSE) { closeSheet(); loadSlot(slots.length - 1, true); return; }
         if (r == ShellCore.PG_SAMOPEN) { PowerInfo.openSamsung(this); return; }          // 돌아오면 onResume 이 다시 읽어 그린다

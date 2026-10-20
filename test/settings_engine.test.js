@@ -185,6 +185,11 @@ ok(odd.ok && all(odd).find(n => n.t === 'field').value.length === 12, '이상한
     ok(navV(some8).sort().join() === 'pg.arr,pg.ovl,pg.sam', 'pgs 에 든 화면 줄만 보인다: ' + navV(some8).join());
     ok(flat(some8.body).some(n => n.t === 'navrow' && n.title === '하차 7분 전 추천 시험'), 'pgs 가 있으면 시험 줄 이름이 7분');
   }
+  {
+    const cmT = pf => flat(PG('cm', pf).body).map(n => n.s || n.title || '').join('\n');
+    ok(/날씨 \+ 혼잡도 \+ 준비물 한마디/.test(cmT({ nv: 1, on: 1 })) && /절전 설정에 따라/.test(cmT({ nv: 1 })) && !/AI 역무원/.test(cmT({ nv: 1 })), '출퇴근(앱): 실제 내용에 맞는 안내 · 절전 안내');
+    ok(/AI 역무원 요약/.test(cmT({})) && !/절전 설정에 따라/.test(cmT({})), '출퇴근(웹 방식)은 그대로');
+  }
   // 시계 위젯
   sc = PG('gw', { roam: 6, mOn: 1, eOn: 0, morn: '07:30' }); tx = texts(sc);
   ok(tx.includes('6분 (추천)') && tx.includes('출근 07:30 에 위젯이 응원해요') && tx.some(x => /^6분 추천이에요\. 그보다 길면/.test(x)), '시계 위젯: 6분 추천 · 응원 시각 글');

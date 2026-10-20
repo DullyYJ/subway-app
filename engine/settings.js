@@ -368,7 +368,7 @@ function settingsEveHint(f) {                                       // 예전 _c
   return '퇴근은 따로 설정한 곳으로 보내요.' + (ef && et ? '' : ' (한쪽만 채우면 나머지는 출근의 반대편을 써요)');
 }
 function settingsPageCm(f) {
-  var d = settingsBoldN([['설정한 시각에 ', 0], ['날씨 + AI 역무원 요약', 1], ['을 알림으로 보내드려요.', 0]]);
+  var d = f.nv ? settingsBoldN([['설정한 시각에 ', 0], ['날씨 + 혼잡도 + 준비물 한마디', 1], ['를 알림으로 보내드려요.', 0]]) : settingsBoldN([['설정한 시각에 ', 0], ['날씨 + AI 역무원 요약', 1], ['을 알림으로 보내드려요.', 0]]);
   var k = [{ t: 'toggle', key: 'cm', title: '출퇴근 브리핑 알림', on: f.on, big: true, size: 15, vp: 0, onc: '#30d158', pad: [0, 0, 0, 4] }, settingsDescN(d.s, 10, d.hl)];
   ['from', 'to'].forEach(function (x, i) { k.push(settingsNavN(SETTINGS_PICK[x][0], f[x] || '비어 있음', settingsCall('cm.pick.' + x), true)); });
   k.push(settingsSmallN('지하철역과 버스정류장 모두 입력할 수 있어요. 검색 목록의 지하철/버스 표시로 구분돼요. 비워두면 현재 위치 기준이에요.', 8, 10));
@@ -390,6 +390,7 @@ function settingsPageCm(f) {
   k.push({ t: 'row', gap: 10, pad: [0, 0, 0, 5], kids: [settingsLabelN('출근 브리핑', 0), settingsLabelN('퇴근 브리핑', 0)] });
   k.push({ t: 'row', gap: 10, pad: [0, 0, 0, 12], kids: [settingsBtnN(settingsFmtTime(f.morn), 'cm.tp.morn', { size: 15, h: 44 }), settingsBtnN(settingsFmtTime(f.eve), 'cm.tp.eve', { size: 15, h: 44 })] });
   k.push(settingsBtnN('지금 미리보기', 'cm.test', { size: 13, h: 42 }));
+  if (f.nv) k.push(settingsSmallN('기기 절전 설정에 따라 알림이 몇 분 늦게 올 수 있어요. 늦어지면 \'자동 절전 제외 설정\'을 확인해 주세요.', 8, 0));
   return [settingsPanelN(k, 8)];
 }
 // 시각 고르기(예전 바텀시트 _cmTimePick 과 같은 칸: 오전/오후 · 시 12칸 · 분 12칸 · 취소/확인)
