@@ -679,6 +679,29 @@ public class ScreenJvmTest {
         ok(cgBx.ac2 != null && cgBx.segs != null && bad(bxJson.replace("#ff6b35", "nope")), "box: 굵은 구간 색(hc)을 읽고 나쁜 색은 거절");
         ok(ScreenCore.layout(ScreenCore.load(bxJson.replace("\"hc\":\"#ff6b35\",", "")), 300f, M).head[0].ac2 == null, "box: hc 가 없으면 글 색 그대로");
 
+        // ── AI 승무원 카드(aih · text hl 색) ──
+        String aiIcon = "M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z";
+        String aiJson = "{\"ok\":true,\"v\":1,\"screen\":\"ai\",\"cover\":\"tab\",\"bg\":\"card\",\"head\":["
+            + "{\"t\":\"aih\",\"pad\":[0,0,0,10],\"s\":\"부평 → 두정 · 남은시간: 50분\",\"icon\":\"" + aiIcon + "\",\"done\":\"갱신 중...\",\"to\":1792464000000,\"act\":{\"a\":\"call\",\"v\":\"ai.refresh\"}},"
+            + "{\"t\":\"text\",\"pad\":[0,0,0,7],\"s\":\"부평에서 신도림까지 갈아타요\",\"size\":14,\"lh\":1.5,\"color\":\"text\",\"hl\":[[0,2,\"#2f7cf6\"],[5,8,\"#1a7a2e\"]]}"
+            + "],\"body\":[{\"t\":\"spacer\",\"h\":0}]}";
+        ScreenCore.Layout AIL = ScreenCore.layout(ScreenCore.load(aiJson), 320f, M);
+        ScreenCore.Item aih = AIL.head[0], aitx = AIL.head[1];
+        ok(aih.kind == ScreenCore.K_AIH && near(aih.h, ScreenCore.AIH_H) && aih.ln == 1792464000000L && aih.lines.length == 1 && aih.lines[0].startsWith("부평") && aih.act != null && !aih.on, "AI: 머리줄 — 제목 한 줄 · 마감 시각(ms 그대로) · 새로고침 행동");
+        ok(near(aih.sx, 320f - ScreenCore.AIH_BTN_W) && near(aih.sw, ScreenCore.AIH_BTN_W) && aih.f1 > 0f && near(aih.f2, 320f - ScreenCore.AIH_BTN_W - ScreenCore.AIH_GAP) && aih.pathOps.length > 0 && aih.fixed, "AI: 단추 · 알약 자리 · 아이콘 경로 · 고정");
+        ok(AIL.hitHead(320f - 10f, 10f) != null && AIL.hitHead(20f, 10f) == null && AIL.hitHead(320f - 60f, 10f) == null, "AI: 새로고침 단추 자리만 눌린다(제목·알약은 안 눌린다)");
+        ok(near(aitx.y, aih.y + aih.h + 10f) && aitx.segs != null && aitx.segCol != null && aitx.segCol[0].length == aitx.segs[0].length, "AI: 문단은 머리줄 아래 10 · 조각마다 색 칸");
+        int coloredSegs = 0; for (ScreenCore.Col cq : aitx.segCol[0]) if (cq != null) coloredSegs++;
+        ok(coloredSegs == 2 && aitx.segBold[0][0] && aitx.segCol[0][0] != null && aitx.segCol[0][0].argb == 0xFF2F7CF6, "AI: 굵은 구간 둘에 엔진이 준 색");
+        String aiOff = aiJson.replace(",\"act\":{\"a\":\"call\",\"v\":\"ai.refresh\"}", ",\"bd\":true");
+        ScreenCore.Item aiD = ScreenCore.layout(ScreenCore.load(aiOff), 320f, M).head[0];
+        ok(aiD.on && aiD.act == null && ScreenCore.layout(ScreenCore.load(aiOff), 320f, M).hitHead(310f, 10f) == null, "AI: 생성 중(bd)이면 단추가 안 눌린다");
+        ScreenCore.Item aiN = ScreenCore.layout(ScreenCore.load(aiJson.replace("\"to\":1792464000000,", "")), 320f, M).head[0];
+        ok(aiN.ln == 0L && aiN.f1 == 0f, "AI: 마감 시각이 없으면 알약 자리도 없다");
+        ok(bad(aiJson.replace("\"to\":1792464000000", "\"to\":\"x\"")) && bad(aiJson.replace("\"to\":1792464000000", "\"to\":-5")) && bad(aiJson.replace("\"s\":\"부평 → 두정 · 남은시간: 50분\"", "\"s\":\"\"")) && bad(aiJson.replace("\"#2f7cf6\"", "\"nope\"")) && bad(aiJson.replace("[0,2,\"#2f7cf6\"]", "[0,2,5]")), "AI: 나쁜 마감 시각·빈 제목·읽을 수 없는 색·글 아닌 색은 거절");
+        ScreenCore.Layout AIP = ScreenCore.layout(ScreenCore.load(aiJson.replace("[[0,2,\"#2f7cf6\"],[5,8,\"#1a7a2e\"]]", "[[0,2],[5,8]]")), 320f, M);
+        ok(AIP.head[1].segCol == null && AIP.head[1].segs != null, "AI: 색이 없는 hl 은 예전처럼(굵게만)");
+
         // ── 화면 바탕 색(bg) ──
         String bgBase = "{\"ok\":true,\"v\":1,\"screen\":\"x\",\"head\":[],\"body\":[{\"t\":\"spacer\",\"h\":4}]";
         ok("bg".equals(ScreenCore.layout(ScreenCore.load(bgBase + "}"), 300f, M).bg) && "card".equals(ScreenCore.layout(ScreenCore.load(bgBase + ",\"bg\":\"card\"}"), 300f, M).bg) && "card2".equals(ScreenCore.layout(ScreenCore.load(bgBase + ",\"bg\":\"card2\"}"), 300f, M).bg), "화면 바탕: 기본 bg · card · card2");

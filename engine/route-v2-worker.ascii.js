@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-20s76";
+var ENGINE_VERSION = "route-v2-2026-10-20s77";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -11733,7 +11733,7 @@ async function handleScreenShop(request) {
 //        facts = \uc571\uc774 \ubaa8\uc740 \uae30\uae30 \uc0ac\uc2e4(\uc804\ubd80 \uc120\ud0dd \u2014 \uc5c6\uc73c\uba74 \uae30\ubcf8\uac12):
 //          id: \ud604\uc7ac \ucee4\ubba4\ub2c8\ud2f0 \uc544\uc774\ub514('' \uc774\uba74 \uc5c6\uc74c) \u00b7 np:{arrive,transfer,arrive_reco: 1|0} \u00b7 npd: \uc54c\ub9bc \uad8c\ud55c \uac70\ubd80(1|0) \u00b7 rl: \ub3c4\ucc29 \uc624\ucc28 \uae30\ub85d(1|0)
 //          th: 'dark'|'pastel' \u00b7 sam: \uac24\ub7ed\uc2dc(1|0) \u00b7 samw: \uc571 \ubc30\ud130\ub9ac '\uc81c\ud55c\ub428'(1|0) \u00b7 errn: \uc624\ub958 \ub85c\uadf8 \uac1c\uc218 \u00b7 cm: \ucd9c\ud1f4\uadfc \uc54c\ub9bc(1|0|\uc5c6\uc74c) \u00b7 ovl: \uc624\ubc84\ub808\uc774(1|0|\uc5c6\uc74c)
-//          feat: { nm|sn|htl|scr|scrs|scrf|scrn|scrb|scrc|scrt|scrq|scrw|scrh|scrr|scrg|sbh|cnd|rtf|sto|ra|npol|arw|cmw|rtx|e2 : { h: \uc774 \uae30\ub2a5\uc774 \uc788\ub098(1|0), on: \uc2a4\uc704\uce58(1|0), f: \ubb38\uc81c\ub85c \uc6f9\uc73c\ub85c \ub3cc\uc544\uac14\ub098(1|0), w: \ubb38\uc81c \uc0ac\uc720, b: \uc800\uc7a5\ubcf8 \uc0ac\uc6a9 \uc911(1|0) } }
+//          feat: { nm|sn|htl|scr|scrs|scrf|scrn|scrb|scrc|scrt|scrq|scrw|scrh|scrr|scrg|scra|sbh|cnd|rtf|sto|ra|npol|arw|cmw|rtx|e2 : { h: \uc774 \uae30\ub2a5\uc774 \uc788\ub098(1|0), on: \uc2a4\uc704\uce58(1|0), f: \ubb38\uc81c\ub85c \uc6f9\uc73c\ub85c \ub3cc\uc544\uac14\ub098(1|0), w: \ubb38\uc81c \uc0ac\uc720, b: \uc800\uc7a5\ubcf8 \uc0ac\uc6a9 \uc911(1|0) } }
 // \ucd9c\ub825  { ok, v:1, screen:'settings', rev, cover:'tab', head:[], body:[\ub178\ub4dc\u2026] }  \u2190 \ub178\ub4dc \uc885\ub958\ub294 native/ScreenCore.java \uc640 \uac19\ub2e4
 //        panel{kids} \u00b7 text \u00b7 box \u00b7 toggle{key} \u00b7 navrow{act} \u00b7 select{act:{a:'sel'}} \u00b7 field{key} \u00b7 button \u00b7 spacer
 //        act = {a:'set',key} (\uc2a4\uc704\uce58 \u2014 \uc571\uc774 \uba3c\uc800 \ub4a4\uc9d1\uace0 \uc54c\ub9b0\ub2e4) | {a:'call',v} (\uc571 \uc548 \ud568\uc218 \ud638\ucd9c: saveId\u00b7clearId\u00b7pol.*\u00b7errlog) | {a:'web',v} (\uc6f9 \uce74\ub4dc \uc5f4\uae30) | {a:'sel',v} (\uace0\ub974\uae30)
@@ -11788,6 +11788,8 @@ var SETTINGS_FEATS = [
     off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9 \uacb0\uacfc \uce74\ub4dc)\uc73c\ub85c \uadf8\ub824\uc694.', bad: '\ub124\uc774\ud2f0\ube0c \uacb0\uacfc \uce74\ub4dc \uc717\ubd80\ubd84\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc6f9 \uce74\ub4dc\ub85c \ub300\uc2e0 \ubcf4\uc5ec\uc8fc\uace0 \uc788\uc5b4\uc694', stale: '\uc5d4\uc9c4\uc774 \uc900 \ud654\uba74\uc774 \uc62c\ubc14\ub974\uc9c0 \uc54a\uc544 \uc800\uc7a5\ud574 \ub454 \ud654\uba74\uc744 \uc4f0\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \uacb0\uacfc \uce74\ub4dc\uc758 \uba38\ub9ac\uc904\u00b7\uc694\uc57d\u00b7\ud658\uc2b9 \uc548\ub0b4\u00b7\uacbd\ub85c \ud0ed\u00b7\uacf5\uc9c0 \uc904\u00b7\uc7a5\uac70\ub9ac \uace0\ub974\uae30\ub97c \uc5d4\uc9c4\uc774 \uc815\ud55c \ub300\ub85c \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694(\uc2e4\ud5d8 \uc911).' },
   { k: 'scrg', title: '\ub124\uc774\ud2f0\ube0c \ud63c\uc7a1\ub3c4 \uce74\ub4dc', desc: '\ud648 \ud63c\uc7a1\ub3c4 \uce74\ub4dc\uc758 \uba38\ub9ac\uc904(\uc5ed\u00b7\ubc84\uc2a4 \uc774\ub984, \uae30\uc900 \uc2dc\uac01, \ud63c\uc7a1 \ub2e8\uacc4), \ud63c\uc7a1\ub3c4 \uac8c\uc774\uc9c0, 24\uc2dc\uac04 \ub9c9\ub300 \ucc28\ud2b8, \uce78\ubcc4 \ud63c\uc7a1(\ubc84\uc2a4\ub294 \ud3c9\uade0\u00b7\ucd5c\ub300 \uc2b9\uac1d \uc218)\uc744 \uc5d4\uc9c4\uc774 \uacc4\uc0b0\ud574 \ub0b4\ub824\uc8fc\uace0, \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694. \ubb38\uc81c\uac00 \uc0dd\uae30\uba74 \uc608\uc804 \uc6f9 \uce74\ub4dc\ub85c \ub3cc\uc544\uac00\uc694.',
     off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9 \ud63c\uc7a1\ub3c4 \uce74\ub4dc)\uc73c\ub85c \uadf8\ub824\uc694.', bad: '\ub124\uc774\ud2f0\ube0c \ud63c\uc7a1\ub3c4 \uce74\ub4dc\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc6f9 \uce74\ub4dc\ub85c \ub300\uc2e0 \ubcf4\uc5ec\uc8fc\uace0 \uc788\uc5b4\uc694', stale: '\uc5d4\uc9c4\uc774 \uc900 \ud654\uba74\uc774 \uc62c\ubc14\ub974\uc9c0 \uc54a\uc544 \uc800\uc7a5\ud574 \ub454 \ud654\uba74\uc744 \uc4f0\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \ud63c\uc7a1\ub3c4 \uce74\ub4dc\uc758 \uba38\ub9ac\uc904\u00b7\uac8c\uc774\uc9c0\u00b724\uc2dc\uac04 \ub9c9\ub300\u00b7\uce78\ubcc4 \ud63c\uc7a1\uc744 \uc5d4\uc9c4\uc774 \uacc4\uc0b0\ud55c \ub300\ub85c \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694(\uc2e4\ud5d8 \uc911).' },
+  { k: 'scra', title: '\ub124\uc774\ud2f0\ube0c AI \uc2b9\ubb34\uc6d0 \uce74\ub4dc', desc: '\ud648 AI \uc2b9\ubb34\uc6d0 \uce74\ub4dc\uc758 \uc81c\ubaa9(\ucd9c\ubc1c \u2192 \ub3c4\ucc29 \u00b7 \ub0a8\uc740\uc2dc\uac04), \ube0c\ub9ac\ud551 \ubb38\uc7a5\uacfc \ub178\uc120 \uc0c9 \uae00\uc528, \ub2e4\uc74c \uac31\uc2e0 \uce74\uc6b4\ud2b8\ub2e4\uc6b4, \uc0c8\ub85c\uace0\uce68 \ub2e8\ucd94\ub97c \uc5d4\uc9c4\uc774 \uc815\ud574 \ub0b4\ub824\uc8fc\uace0, \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694. \ubb38\uc81c\uac00 \uc0dd\uae30\uba74 \uc608\uc804 \uc6f9 \uce74\ub4dc\ub85c \ub3cc\uc544\uac00\uc694.',
+    off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9 AI \uc2b9\ubb34\uc6d0 \uce74\ub4dc)\uc73c\ub85c \uadf8\ub824\uc694.', bad: '\ub124\uc774\ud2f0\ube0c AI \uc2b9\ubb34\uc6d0 \uce74\ub4dc\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc6f9 \uce74\ub4dc\ub85c \ub300\uc2e0 \ubcf4\uc5ec\uc8fc\uace0 \uc788\uc5b4\uc694', stale: '\uc5d4\uc9c4\uc774 \uc900 \ud654\uba74\uc774 \uc62c\ubc14\ub974\uc9c0 \uc54a\uc544 \uc800\uc7a5\ud574 \ub454 \ud654\uba74\uc744 \uc4f0\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 AI \uc2b9\ubb34\uc6d0 \uce74\ub4dc\uc758 \uc81c\ubaa9\u00b7\ube0c\ub9ac\ud551\u00b7\uce74\uc6b4\ud2b8\ub2e4\uc6b4\uc744 \uc5d4\uc9c4\uc774 \uc815\ud55c \ub300\ub85c \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694(\uc2e4\ud5d8 \uc911).' },
   { k: 'sbh', title: '\uac00\ub824\uc9c4 \ub3d9\uc548 \uc5d4\uc9c4\uc774 \uc774\uc5b4\ubc1b\uae30', desc: '\uc571\uc744 \ud648 \ud654\uba74\uc774\ub098 \ub2e4\ub978 \uc571\uc73c\ub85c \ubcf4\ub0b8 \ub3d9\uc548\uc5d0\ub3c4 \uc5d4\uc9c4\uc774 \uc548\ub0b4\ub97c \ubc14\ub85c \uc774\uc5b4\ubc1b\uc544 \uc601\uc810\u00b7\ub3c4\ucc29 \uc2dc\uac01\u00b7\ud558\ucc28 \uc54c\ub9bc\uc744 \uacc4\uc18d \ub9de\ucdb0\uc694. \uc571\uc744 \ub2e4\uc2dc \uc5f4\uba74 \uadf8 \uacb0\uacfc\ub97c \uc774\uc5b4\uc11c \uc368\uc694. \ubb38\uc81c\uac00 \uc0dd\uae30\uba74 \uc608\uc804 \ubc29\uc2dd(\uac00\ub824\uc9c4 \ub3d9\uc548 \uc6f9\uc744 \uae68\uc6cc \uacc4\uc0b0)\uc73c\ub85c \ub3cc\uc544\uac00\uc694.',
     off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uac00\ub824\uc9c4 \ub3d9\uc548 \uc6f9\uc744 \uae68\uc6cc \uacc4\uc0b0)\uc73c\ub85c \uc774\uc5b4\uac00\uc694.', bad: '\uc5d4\uc9c4 \uc774\uc5b4\ubc1b\uae30\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \ub300\uc2e0 \uc774\uc5b4\uac00\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \uc571\uc774 \uac00\ub824\uc9c0\uba74 \uc5d4\uc9c4\uc774 \uc548\ub0b4\ub97c \ubc14\ub85c \uc774\uc5b4\ubc1b\uace0, \ub2e4\uc2dc \uc5f4\uba74 \uadf8 \uacb0\uacfc\ub97c \uc774\uc5b4\uc11c \uc368\uc694(\uc2e4\ud5d8 \uc911).' },
   { k: 'cnd', title: '\ud6c4\ubcf4 \uac80\uc0c9\uc744 \uc571\uacfc \uc5d4\uc9c4\uc774 \ud558\uae30', desc: '\ud648 \ud0ed\uc5d0\uc11c \ucd9c\ubc1c\u00b7\ub3c4\ucc29\uc744 \uc785\ub825\ud560 \ub54c \ub098\uc624\ub294 \ud6c4\ubcf4 \uc911 \uc9c0\ud558\ucca0\uc5ed\uc740 \uc5d4\uc9c4\uc774 \uc9c1\uc811 \ucc3e\uace0, \ubc84\uc2a4\uc815\ub958\uc7a5\uacfc \uc7a5\uc18c\ub294 \uc571 \ubcf8\uccb4\uac00 \uc9c1\uc811 \ucc3e\uc544\uc694. \uc6f9\uc774 \ub9e1\ub358 \uac80\uc0c9\uc744 \uc904\uc5ec \uc785\ub825\uc774 \ub354 \ubd80\ub4dc\ub7ec\uc6cc\uc838\uc694. \ubb38\uc81c\uac00 \uc0dd\uae30\uba74 \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \ub3cc\uc544\uac00\uc694.',
@@ -17253,6 +17255,230 @@ async function handleScreenCong(request) {
 }
 // ===== CONG ENGINE END =====
 
+// ===== AICARD ENGINE BEGIN =====
+// \uae38\ub3d9\ubb34 \u2014 \ud648 'AI \uc2b9\ubb34\uc6d0' \uce74\ub4dc \uc5d4\uc9c4 \ubaa8\ub4c8 (route-v2 Worker \uc5d0 \ubd99\uc5ec \ub123\ub294 \uc21c\uc218 \ud568\uc218) \u2014 2026-10-20 (s77)
+//
+// \u2605 \uc6d0\uce59(YJ): "\ubaa8\ub4e0 \uacc4\uc0b0\uc740 \uc5d4\uc9c4\uc774 \ud55c\ub2e4. \uc571\uc740 \uadf8\ub9bc\ub9cc \uadf8\ub9b0\ub2e4."
+//   \uce74\ub4dc \uc81c\ubaa9(\ucd9c\ubc1c \u2192 \ub3c4\ucc29 \u00b7 \ub0a8\uc740\uc2dc\uac04 / \uc608\uc0c1 \u00b7 \uc2dc\uac01) \u00b7 \ubbf8\ub9ac\ubcf4\uae30 \ubb38\uc7a5(\ub0a0\uc9dc\u00b7\uc18c\uc694\u00b7\ud63c\uc7a1 \uc804\ub9dd) \u00b7 \ube0c\ub9ac\ud551 \ubb38\uc7a5(engine/home-brief.js) \u00b7
+//   \uad75\uc740 \uae00 \uc0c9 \u00b7 \ub178\uc120 \uc0c9 \ubc30\uc9c0(\ub178\uc120 \uc774\ub984 \u2192 \uae00\uc790\uc0c9 \ud45c) \u00b7 \ube48/\uc0dd\uc131 \uc911/\uc900\ube44 \uc911 \uc548\ub0b4 \u00b7 \uc0c8\ub85c\uace0\uce68 \ub2e8\ucd94 \uc0c1\ud0dc \u00b7 \ub2e4\uc74c \uac31\uc2e0 \ub9c8\uac10 \uc2dc\uac01\uc744 \uc804\ubd80 \uc5d4\uc9c4\uc774 \uc815\ud55c\ub2e4.
+//   \uc571(\uc6f9)\uc740 \uc0ac\uc2e4\ub9cc \ubcf4\ub0b8\ub2e4: \ucd9c\ubc1c/\ub3c4\ucc29 \uc774\ub984 \u00b7 \uae30\uc900 \uc2dc\uac01(ms) \u00b7 \ud63c\uc7a1\ub3c4 \u00b7 \ub0a0\uc528 \u00b7 \uacbd\ub85c \uad6c\uac04 \u00b7 \ub2e4\uc74c \uc5f4\ucc28 \u00b7 \ub0a8\uc740 \ubd84 \u00b7 \ub3c4\ucc29 \uc608\uc815(ms) \uac19\uc740 \uc6d0\uc790\ub8cc.
+//   \uc571(\uae30\uae30)\uc740 \ubc1b\uc740 \ud654\uba74\uc744 \uadf8\ub9b0\ub2e4. \uce74\uc6b4\ud2b8\ub2e4\uc6b4\uc740 \uc5d4\uc9c4\uc774 \uc900 \ub9c8\uac10 \uc2dc\uac01(to, \uae30\uae30 \uc2dc\uacc4 ms)\uae4c\uc9c0 \ub0a8\uc740 \uc2dc\uac04\uc744 \uae30\uae30\uac00 \ub9e4\ucd08 m:ss \ub85c \uadf8\ub9b0\ub2e4.
+//
+// \uc785\ub825  aiScreen({ cap }, f)   cap 14 \uc774\uc0c1
+//   f = { mode:'empty'|'loading'|'prep'|'route'|'brief'|'preview', now, tz(\ubd84), busy, nextAt(ms, 0 \uc774\uba74 \uc5c6\uc74c),
+//         tk:'brief'|'preview'|''  (\uc81c\ubaa9\uc744 \uc5b4\ub5a4 \ud2c0\ub85c \ub9cc\ub4e4\uc9c0; \ube44\uba74 \uae30\ubcf8 \uc81c\ubaa9),
+//         from, to, base(\uae30\uc900 \uc2dc\uac01 ms), hour, cong, hol, mins, dist(\ubbf8\ud130, \ubaa8\ub974\uba74 0), rem(\ub0a8\uc740 \ubd84, 0 \uc774\uba74 \uc5c6\uc74c), metro,
+//         wF, wT, segs, nt, tl, nowMin, arrMs, dm, rnd }          (\ub4a4\ucabd\uc740 engine/home-brief.js \uc758 \uc785\ub825\uacfc \uac19\ub2e4)
+// \ucd9c\ub825  { ok, v:1, screen:'ai', cover:'tab', bg:'card', head:[aih, \uae00\u2026], body:[{t:'spacer',h:0}], info:{}, rev }
+
+var AI_CAP = 14;
+var AI_BLUE = '#2f7cf6';
+var AI_ICON = 'M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z';
+var AI_MODES = { empty: 1, loading: 1, prep: 1, route: 1, brief: 1, preview: 1 };
+var AI_DAYS = ['\uc77c', '\uc6d4', '\ud654', '\uc218', '\ubaa9', '\uae08', '\ud1a0'];
+var AI_PASTELS = [
+  { bg: '#d9e8ff', fg: '#1b4b8a' }, { bg: '#d7f2e3', fg: '#1c7a4d' }, { bg: '#ffe1e6', fg: '#b23a4d' },
+  { bg: '#fff0d1', fg: '#9a6b12' }, { bg: '#e7ddff', fg: '#5a3aa8' }, { bg: '#d5f2f5', fg: '#137580' },
+  { bg: '#ffe6cf', fg: '#a85d1e' }, { bg: '#e3f0cf', fg: '#5a7a1e' }, { bg: '#ffd9f0', fg: '#a83a86' },
+  { bg: '#f0e6d0', fg: '#8a6a2e' }, { bg: '#e0e4ea', fg: '#455066' }
+];
+
+function aiNum(v, d) { v = Number(v); return isFinite(v) ? v : d; }
+function aiStr(v, max) { return String(v == null ? '' : v).slice(0, max || 200); }
+function aiPad(n) { return (n < 10 ? '0' : '') + n; }
+
+// \ub178\uc120 \uc774\ub984 \u2192 \uae00\uc790\uc0c9 (\uc6f9 _lineColorKey / _lineColor \uc640 \uac19\uc740 \ud45c)
+function aiLineKey(line) {
+  var s = String(line || '');
+  if (/\uc2e0\ubd84\ub2f9/.test(s)) return '#b23025';
+  if (/\uc218\uc778|\ubd84\ub2f9/.test(s)) return '#a5731a';
+  if (/\uacbd\uc758|\uc911\uc559/.test(s)) return '#1a7a63';
+  if (/\uacbd\ucd98/.test(s)) return '#1c8a5a';
+  if (/\uacf5\ud56d/.test(s)) return '#1a6a95';
+  if (/\uc778\ucc9c\s*1/.test(s)) return '#137a95';
+  if (/\uc778\ucc9c\s*2/.test(s)) return '#c07a1a';
+  if (/1\ud638\uc120/.test(s)) return '#0d3b7a';
+  if (/2\ud638\uc120/.test(s)) return '#1a7a2e';
+  if (/3\ud638\uc120/.test(s)) return '#b5551a';
+  if (/4\ud638\uc120/.test(s)) return '#1560c4';
+  if (/5\ud638\uc120/.test(s)) return '#5b2e9e';
+  if (/6\ud638\uc120/.test(s)) return '#8a4b1e';
+  if (/7\ud638\uc120/.test(s)) return '#5a6a12';
+  if (/8\ud638\uc120/.test(s)) return '#b03378';
+  if (/9\ud638\uc120/.test(s)) return '#8a6a2e';
+  return null;
+}
+function aiLineColor(line) {
+  var nm = String(line || '\ub178\uc120'), k = aiLineKey(nm);
+  if (k) return k;
+  var h = 0;
+  for (var i = 0; i < nm.length; i++) h = ((h * 31) + nm.charCodeAt(i)) >>> 0;
+  return AI_PASTELS[h % AI_PASTELS.length].fg;
+}
+
+// \uae30\uae30 \uc2dc\uac01(tz \ubd84) \uae30\uc900 \ub0a0\uc9dc \uc870\uac01
+function aiLocal(ms, tz) {
+  var d = new Date(Number(ms) + Number(tz) * 60000);
+  return { y: d.getUTCFullYear(), mo: d.getUTCMonth() + 1, d: d.getUTCDate(), dow: d.getUTCDay(), h: d.getUTCHours(), mi: d.getUTCMinutes() };
+}
+// \uc6f9 toLocaleTimeString('ko-KR', { hour:'2-digit', minute:'2-digit' }) \uc640 \uac19\uc740 \uae00: '\uc624\ud6c4 02:35'
+function aiClock(ms, tz) {
+  var t = aiLocal(ms, tz);
+  return (t.h < 12 ? '\uc624\uc804 ' : '\uc624\ud6c4 ') + aiPad(t.h % 12 === 0 ? 12 : t.h % 12) + ':' + aiPad(t.mi);
+}
+
+// \uc870\uac01 \u2192 { s, hl:[[\uc2dc\uc791,\ub05d,\uc0c9]] }  (\uc870\uac01 = \uae00\uc790 | {b} | {stn:[\uc774\ub984,\ub178\uc120]} | {ln:\ub178\uc120} | {id, t|raw})
+function aiRuns(toks) {
+  var s = '', hl = [];
+  function add(txt, col) {
+    txt = String(txt == null ? '' : txt);
+    if (!txt) return;
+    var a = s.length; s += txt;
+    if (col) hl.push([a, s.length, col]);
+  }
+  (function walk(arr) {
+    for (var i = 0; i < arr.length; i++) {
+      var x = arr[i];
+      if (typeof x === 'string') add(x, '');
+      else if (x && typeof x === 'object') {
+        if (x.b != null) add(x.b, AI_BLUE);
+        else if (x.stn) add(x.stn[0], aiLineColor(x.stn[1]));
+        else if (x.ln != null) add(x.ln === '' ? '\ub178\uc120' : x.ln, aiLineColor(x.ln));
+        else if (x.id === 'homeAiArr' || x.id === 'homeAiDep') { if (x.raw != null) add(x.raw, ''); else walk(Array.isArray(x.t) ? x.t : []); }
+      }
+    }
+  })(toks);
+  if (s.length > 1900) { s = s.slice(0, 1899) + '\u2026'; hl = hl.filter(function (h) { return h[1] <= s.length; }); }
+  if (hl.length > 48) hl = hl.slice(0, 48);
+  return { s: s, hl: hl };
+}
+
+function aiPara(toks, last, sub) {
+  var r = aiRuns(toks);
+  var n = { t: 'text', pad: [0, 0, 0, last ? 0 : 7], s: r.s, size: sub ? 12 : 14, lh: sub ? 1.75 : 1.5, color: sub ? 'sub' : 'text' };
+  if (r.hl.length) n.hl = r.hl;
+  return n;
+}
+
+function aiTitle(f, tz) {
+  var from = aiStr(f.from), to = aiStr(f.to), hasRoute = !!to && to !== from;
+  var base = aiNum(f.base, aiNum(f.now, 0)), timeStr = aiClock(base, tz);
+  if (f.tk === 'preview') return (hasRoute ? from + ' \u2192 ' + to : from) + ' \u00b7 \uc608\uc0c1 \u00b7 ' + timeStr;
+  if (f.tk === 'brief') {
+    var rem = aiNum(f.rem, 0);
+    var remT = (hasRoute && rem > 0) ? ((f.metro === true ? '\uc18c\uc694\uc2dc\uac04: ' : '\ub0a8\uc740\uc2dc\uac04: ') + rem + '\ubd84') : timeStr;
+    return hasRoute ? from + ' \u2192 ' + to + ' \u00b7 ' + remT : from + ' \u00b7 ' + timeStr + ' \uae30\uc900';
+  }
+  return 'AI \uc2b9\ubb34\uc6d0 \ube0c\ub9ac\ud551';
+}
+
+// \uc18c\uc694 \ubd84: \uacbd\ub85c\uc5d0\uc11c \ubc1b\uc740 \uac12 > \uc88c\ud45c \uac70\ub9ac\ub85c \uc5b4\ub9bc(\uc6f9\uacfc \uac19\uc740 \uc2dd)
+function aiMins(f, hasRoute) {
+  var mins = aiNum(f.mins, 0);
+  if (mins <= 0 && hasRoute) {
+    var dist = aiNum(f.dist, 0);
+    if (dist > 0) mins = Math.max(5, Math.round(dist / 1000 * 2.5) + 5);
+  }
+  return mins > 0 ? mins : 0;
+}
+
+function aiPreviewParas(f, tz) {
+  var from = aiStr(f.from), to = aiStr(f.to), hasRoute = !!to && to !== from;
+  var base = aiNum(f.base, aiNum(f.now, 0)), t = aiLocal(base, tz);
+  var hour = isFinite(Number(f.hour)) && f.hour !== null && f.hour !== '' ? Number(f.hour) : t.h;
+  var cong = aiNum(f.cong, 0), hol = f.hol === true;
+  var peak = (hour >= 7 && hour <= 9) || (hour >= 17 && hour <= 19);
+  var congTxt = cong >= 70 ? '\ub9e4\uc6b0 \ud63c\uc7a1' : cong >= 45 ? '\ub2e4\uc18c \ud63c\uc7a1' : '\uc5ec\uc720\ub85c\uc6b4 \ud3b8';
+  var dateTxt = t.mo + '\uc6d4 ' + t.d + '\uc77c(' + AI_DAYS[t.dow] + ') ' + (t.h < 12 ? '\uc624\uc804 ' : '\uc624\ud6c4 ') + ((t.h % 12) || 12) + '\uc2dc' + (t.mi ? ' ' + t.mi + '\ubd84' : '');
+  var tmin = aiMins(f, hasRoute);
+  var p1 = hasRoute
+    ? [{ b: dateTxt }, ' \uae30\uc900, ', { b: from }, '\uc5d0\uc11c ', { b: to }, '\uae4c\uc9c0\ub294 \uc57d ', { b: (tmin || '?') + '\ubd84' }, ' \uac78\ub9b4 \uac83\uc73c\ub85c \ubcf4\uc785\ub2c8\ub2e4.']
+    : [{ b: dateTxt }, ' \uae30\uc900\uc73c\ub85c ', { b: from }, ' \uc77c\ub300\ub97c \uc548\ub0b4\ud574 \ub4dc\ub9ac\uaca0\uc2b5\ub2c8\ub2e4.'];
+  var p2;
+  if (peak && cong >= 45) p2 = ['\uadf8 \uc2dc\uac04\ub300\ub294 ' + (hol ? '\uc8fc\ub9d0\uc774\uc9c0\ub9cc ' : '') + '\ucd9c\ud1f4\uadfc \ud53c\ud06c\ub77c ', { b: congTxt }, ' \uc218\uc900\uc758 \ud63c\uc7a1\uc774 \uc608\uc0c1\ub429\ub2c8\ub2e4. \uc5ec\uc720 \uc788\uac8c \ucd9c\ubc1c\ud558\uc2dc\uae38 \uad8c\ud569\ub2c8\ub2e4.'];
+  else if (peak) p2 = ['\ucd9c\ud1f4\uadfc \uc2dc\uac04\ub300\uc774\uc9c0\ub9cc ', { b: congTxt }, ' \uc218\uc900\uc73c\ub85c \ube44\uad50\uc801 \uc5ec\uc720\ub85c\uc6b8 \uc804\ub9dd\uc785\ub2c8\ub2e4.'];
+  else if (hour >= 22 || hour < 6) p2 = ['\uc2ec\uc57c \uc2dc\uac04\ub300\ub77c \ud55c\uc0b0\ud558\uaca0\uc9c0\ub9cc, ', { b: '\ub9c9\ucc28 \uc2dc\uac04' }, '\uc744 \uaf2d \ud655\uc778\ud558\uc138\uc694.'];
+  else if (hol) p2 = ['\uc8fc\ub9d0\u00b7\uacf5\ud734\uc77c\uc774\ub77c \ud3c9\uc77c\ubcf4\ub2e4 \uc5ec\uc720\ub85c\uc6b8 \uc804\ub9dd\uc785\ub2c8\ub2e4. \ud63c\uc7a1\ub3c4\ub294 ', { b: congTxt }, ' \uc218\uc900\uc73c\ub85c \uc608\uc0c1\ub429\ub2c8\ub2e4.'];
+  else p2 = ['\ud574\ub2f9 \uc2dc\uac04\ub300 \ud63c\uc7a1\ub3c4\ub294 ', { b: congTxt }, ' \uc218\uc900\uc73c\ub85c \uc608\uc0c1\ub429\ub2c8\ub2e4. \ubb34\ub09c\ud558\uac8c \uc774\ub3d9\ud558\uc2e4 \uc218 \uc788\uc2b5\ub2c8\ub2e4.'];
+  return [{ t: p1 }, { t: p2 }, { sub: ['\uc124\uc815\ud558\uc2e0 \uc2dc\uac01 \uae30\uc900 \uc608\uce21\uc774\uc5d0\uc694. \uc2e4\uc81c \uc0c1\ud669\uacfc \ub2e4\ub97c \uc218 \uc788\uc2b5\ub2c8\ub2e4.'] }];
+}
+
+function aiBriefParas(f, tz) {
+  var HB = (typeof homeBrief === 'function') ? homeBrief : null;
+  if (!HB) { try { if (typeof require === 'function') HB = require('./home-brief').homeBrief; } catch (e) {} }
+  if (!HB) return null;
+  var from = aiStr(f.from), to = aiStr(f.to), hasRoute = !!to && to !== from;
+  var now = aiNum(f.now, 0), base = aiNum(f.base, now);
+  var hour = (f.hour === null || f.hour === undefined || f.hour === '' || !isFinite(Number(f.hour))) ? aiLocal(base, tz).h : Number(f.hour);
+  var o = {
+    from: from, to: to, hour: hour, cong: aiNum(f.cong, 0), hol: f.hol === true, mins: aiMins(f, hasRoute),
+    wF: f.wF || null, wT: f.wT || null, segs: Array.isArray(f.segs) ? f.segs.slice(0, 20) : null, metro: f.metro === true,
+    nt: f.nt || null, tl: f.tl || null, nowMin: aiNum(f.nowMin, 0), nowMs: now, arrMs: aiNum(f.arrMs, 0), dm: aiStr(f.dm, 200), rnd: aiNum(f.rnd, 0)
+  };
+  var r = HB(o);
+  return r && r.paras ? r.paras : null;
+}
+
+function aiEmptyNodes(mode) {
+  if (mode === 'empty') {
+    return [
+      { t: 'text', pad: [8, 18, 8, 0], s: '\ud604\uc7ac \uc704\uce58\uc640 \uc2dc\uac04\uc744 \uae30\uc900\uc73c\ub85c', size: 13, lh: 1.7, color: 'sub', align: 'center' },
+      { t: 'text', pad: [8, 0, 8, 18], s: '\uc608\uc0c1 \uc0c1\ud669\uc744 \ubd84\uc11d\ud574\ub4dc\ub9b4\uac8c\uc694.', size: 13, lh: 1.7, color: 'sub', align: 'center' }
+    ];
+  }
+  if (mode === 'loading') return [{ t: 'text', pad: [8, 18, 8, 18], s: '\ube0c\ub9ac\ud551 \uc0dd\uc131 \uc911...', size: 13, lh: 1.7, color: 'sub', align: 'center' }];
+  if (mode === 'route') return [{ t: 'text', pad: [0, 0, 0, 0], s: '\uacbd\ub85c\ub97c \ud655\uc778\ud558\uace0 \uc788\uc2b5\ub2c8\ub2e4...', size: 14, lh: 1.5, color: 'sub' }];
+  return [{ t: 'text', pad: [0, 0, 0, 0], s: '\ube0c\ub9ac\ud551 \uc900\ube44 \uc911...', size: 14, lh: 1.5, color: 'sub' }];       // prep
+}
+
+function aiScreen(cfg, f) {
+  var cap = aiNum(cfg && cfg.cap, 0);
+  if (cap < AI_CAP) return { ok: false, error: 'cap' };
+  if (!f || typeof f !== 'object' || !isFinite(Number(f.now)) || !(Number(f.now) > 0)) return { ok: false, error: 'now' };
+  if (!AI_MODES[f.mode]) return { ok: false, error: 'mode' };
+  var tz = aiNum(f.tz, 540);
+  var head = [];
+  var title = aiTitle(f, tz), busy = f.busy === true, nextAt = aiNum(f.nextAt, 0);
+  var h = { t: 'aih', pad: [0, 0, 0, 10], s: title, icon: AI_ICON, done: '\uac31\uc2e0 \uc911...' };
+  if (nextAt > 0) h.to = Math.round(nextAt);
+  if (busy) h.bd = true; else h.act = { a: 'call', v: 'ai.refresh' };
+  head.push(h);
+  var mode = f.mode;
+  if (mode === 'brief' || mode === 'preview') {
+    var paras = mode === 'preview' ? aiPreviewParas(f, tz) : aiBriefParas(f, tz);
+    if (!paras || !paras.length) { head = head.concat(aiEmptyNodes('prep')); mode = 'prep'; }
+    else {
+      for (var i = 0; i < paras.length; i++) {
+        var p = paras[i], last = i === paras.length - 1;
+        head.push(Array.isArray(p.sub) ? aiPara(p.sub, last, true) : aiPara(p.t || [], last, false));
+      }
+    }
+  } else head = head.concat(aiEmptyNodes(mode));
+  var rev = 'a1:' + aiHash(JSON.stringify(head));
+  return { ok: true, v: 1, screen: 'ai', cover: 'tab', bg: 'card', head: head, body: [{ t: 'spacer', h: 0 }], info: { mode: mode }, rev: rev };
+}
+
+function aiHash(s) { var h = 5381; for (var i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0; return h.toString(36); }
+// AI \uc2b9\ubb34\uc6d0 \uce74\ub4dc \uc5d4\uc9c4 Worker \uc5f0\uacb0\ubd80 \u2014 POST /screen/ai (engine/aicard.js \uc758 aiScreen \uc744 \ubd80\ub978\ub2e4). route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/screen/ai") return handleScreenAi(request);` \ub97c \ub123\ub294\ub2e4.
+//   \ubcf8\ubb38(JSON \uae00, Content-Type: text/plain \uc73c\ub85c \ubcf4\ub0b4 \uc0ac\uc804 \uc694\uccad\uc744 \ud53c\ud55c\ub2e4): { cap(14 \uc774\uc0c1), f:{mode,tk,now,tz,busy,nextAt,from,to,base,hour,cong,hol,mins,dist,rem,metro,wF,wT,segs,nt,tl,nowMin,arrMs,dm,rnd} }
+//   \uc5d4\uc9c4\uc740 \uc544\ubb34\uac83\ub3c4 \uc800\uc7a5\ud558\uc9c0 \uc54a\ub294\ub2e4. \uac1c\uc778 \uc2dd\ubcc4 \uc815\ubcf4\ub294 \uc624\uac00\uc9c0 \uc54a\ub294\ub2e4.
+async function handleScreenAi(request) {
+  var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Cache-Control": "no-store" };
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: H });
+  if (request.method !== "POST") return new Response(JSON.stringify({ ok: false, error: "post-only" }), { status: 405, headers: H });
+  var raw = await request.text();
+  if (raw.length > 40000) return new Response(JSON.stringify({ ok: false, error: "body-too-long" }), { status: 413, headers: H });
+  var body;
+  try { body = JSON.parse(raw); } catch (e) { return new Response(JSON.stringify({ ok: false, error: "bad-json" }), { status: 400, headers: H }); }
+  if (!body || typeof body !== "object") return new Response(JSON.stringify({ ok: false, error: "bad-body" }), { status: 400, headers: H });
+  var out;
+  try { out = aiScreen({ cap: Number(body.cap) || 0 }, body.f); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2) }), { status: 500, headers: H }); }
+  if (!out || !out.ok) return new Response(JSON.stringify(out || { ok: false, error: "fail" }), { status: 400, headers: H });
+  out.ver = ENGINE_VERSION;
+  return new Response(JSON.stringify(out), { headers: H });
+}
+// ===== AICARD ENGINE END =====
+
 async function handleFetch(request, env, ctx) {
   try { await holEnsure(env); } catch (e) {}
   const url = new URL(request.url);
@@ -17283,6 +17509,7 @@ async function handleFetch(request, env, ctx) {
   if (url.pathname === "/screen/write") return handleScreenWrite(request);
   if (url.pathname === "/screen/rhead") return handleScreenRhead(request);
   if (url.pathname === "/screen/cong") return handleScreenCong(request);
+  if (url.pathname === "/screen/ai") return handleScreenAi(request);
   if (url.pathname === "/stops-near") {
     const lat = parseFloat(url.searchParams.get("lat"));
     const lng = parseFloat(url.searchParams.get("lng"));

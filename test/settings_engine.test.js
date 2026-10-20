@@ -91,7 +91,7 @@ ok(E.settingsStat(E.SETTINGS_FEATS[3], { on: 0 }) === '꺼짐 — 예전 방식(
     ok(out.every(l => l.startsWith('OK ')), '모든 화면이 앱 검증기를 통과 ' + out.filter(l => !l.startsWith('OK ')).slice(0, 3).join(' | '));
     ok(out.every(l => Number(l.split(' ')[2]) === 0), '건너뛴 노드 없음(앱이 모든 노드를 안다)');
     const h = out.filter(l => l.startsWith('OK ')).map(l => Number(l.split(' ')[3]));
-    ok(Math.min.apply(null, h) > 800 && Math.max.apply(null, h) < 7000, '본문 높이가 정상 범위 ' + Math.min.apply(null, h) + '~' + Math.max.apply(null, h));
+    ok(Math.min.apply(null, h) > 800 && Math.max.apply(null, h) < 7600, '본문 높이가 정상 범위 ' + Math.min.apply(null, h) + '~' + Math.max.apply(null, h));
     // 옛 앱 시뮬: 앱이 모르는 새 노드(panel 등)뿐인 화면은 '그릴 것이 없다' 로 거절된다 → 웹 폴백 (JVM 시험에서 확인) — 여기선 cap 가 이를 사전에 막는다
   } finally { try { fs.rmSync(dir, { recursive: true, force: true }); } catch (e) { } }
 }

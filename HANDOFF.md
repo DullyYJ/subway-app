@@ -1491,3 +1491,16 @@
 - **YJ가 할 일**: 워커 s76(`route-v2-2026-10-20s76`) Deploy + **새 APK 빌드·설치**(cap 13). 설정에서 '네이티브 혼잡도 카드'를 켠다.
 - **기기 미검증(전부)**: 머리줄·게이지·막대(가로 밀기·현재 칸 가운데)·칸별·버스 안내 그리기 · 감싸개 높이 따라가기 · 카드 띠 색/배지 · 장면 전환 시 겹침.
 - **남은 비네이티브**: AI 브리핑 카드 · 실시간 소통방 · 글쓰기 뒤 팝업 · `_ovlDiagShow`/`_pickPop` 팝업 · 데이터 계층(fetch · GPS→인덱스 추적 · 마커 가드 · eta 요청 · 버스 혼잡 fetch/카카오 지역) · 지도 탭(SVG).
+
+## 2026-10-20 엔진 s77 + APK 변경 — 네이티브화: 홈 'AI 승무원' 카드(제목 · 브리핑 문장 · 노선 색 글씨 · 카운트다운 · 새로고침)
+- **YJ 지시**: "남은 내이티브도 해줘". 남은 목록 중 AI 브리핑 카드를 먼저.
+- **엔진**: 새 `POST /screen/ai`(cap 14, `engine/aicard.js` + `ai-worker.js`; 문장은 기존 `home-brief.js` 의 `homeBrief` 를 그대로 부른다). 웹은 사실만 보낸다: `mode`(empty/loading/prep/route/brief/preview), 제목 틀 `tk`, 출발/도착 이름, 기준 시각 `base`(ms), 혼잡도, 날씨, 경로 구간, 다음 열차, `mins`·`dist`(소요 모르면 엔진이 거리로 어림: `max(5, round(km*2.5)+5)`), 남은 분 `rem`, 도착 예정 `arrMs`, 출발 비교 문구 `dm`, 다음 갱신 `nextAt`, 단추 눌림 `busy`.
+  엔진이 정한다: 제목(실시간 `출발 → 도착 · 남은시간/소요시간: N분` · 미리보기 `… · 예상 · 오후 02:35` · 기본 `AI 승무원 브리핑`) · 한국어 시각 글 · 날짜 문장(요일·오전/오후) · 미리보기 혼잡 전망 · 브리핑 문단 · 굵은 글 색(#2f7cf6)과 노선 이름→글자색 표(웹 `_lineColor` 와 같음) · 빈/생성 중/준비 중/경로 확인 안내(이모지 없음) · 단추 상태.
+- **APK(규격 14)**: `ScreenCore` — 새 노드 `aih`(제목 한 줄 · 카운트다운 알약 · 새로고침 단추; 단추 자리만 눌림) · `text`/`box` 의 `hl` 구간에 선택 색 `[시작,끝,색]`(조각마다 글자색, `Item.segCol`) · hl 상한 20→48. `ScreenView.drawAih`(새 객체 없이; 마감 시각(`to`, 기기 시계 ms)까지 남은 시간을 매초 m:ss 로 그림) · `ScreenNativePlugin` cap 14.
+- **앱(웹)**: `#homeAiInner` 감싸개 · `_haiSet()`(사실 알림: `requestHomeBrief` 생성 중 · `_renderHomeBriefLocal` 미리보기 · `_renderHomeConductorBrief` compose · 준비 중 · 경로 확인 중) · 틀 `ai`(저장값 `gdm_scra_on`, 설정 > '네이티브 AI 승무원 카드' 기본 꺼짐) · 남은 분/도착 예정/출발 비교/마감 시각은 요청 때 현재 값을 읽는다(0.5초마다 확인 — 바뀔 때만 요청) · 허용 행동은 `ai.refresh` 하나(→ 예전 `requestHomeBrief(true)`).
+- **폴백**: 스위치 꺼짐·플러그인 없음·옛 APK(cap<14)·엔진 실패 → 웹 카드 그대로. 웹의 `buildLocal`/`_hbRender` 경로와 날씨·경로 구간 수집·5분 주기·`/ai-brief` 호출은 데이터 계층이라 웹에 남는다.
+- **알려진 한계**: 새 글이 올 때 웹의 0.2초 페이드 없음 · 카운트다운 숫자 형식(m:ss)은 기기가 그린다(엔진은 마감 시각만 줌) · 미리보기 라벨 `#aiPreviewLabel`(이모지 포함)은 아직 웹 · 브리핑 안의 줄바꿈은 기기 글자 폭 기준(웹과 줄 끊김 위치가 다를 수 있음).
+- **시험**: `aicard_engine` 110 · `screen_ai_js.ui` 14(웹이 DOM 으로 그린 제목·미리보기·브리핑 문단과 엔진 글이 같은지 대조) · `ScreenJvmTest` 344 · `settings_engine` 185. 혼잡도 UI 시험(`screen_cong_js.ui`)의 시작 타이밍 불안정(앱이 먼저 올리는 빈 상태와 시험이 정한 사실이 섞임)을 고침. CI 행렬에 `aicard_engine`, `screen_ai_js.ui` 추가.
+- **YJ가 할 일**: 워커 s77(`route-v2-2026-10-20s77`) Deploy + **새 APK 빌드·설치**(cap 14). 설정에서 '네이티브 AI 승무원 카드'를 켠다.
+- **기기 미검증(전부)**: 머리줄 그리기(제목 말줄임 · 알약 폭 · 단추) · 색 글씨 줄바꿈 · 카운트다운 매초 갱신 · 감싸개 높이 따라가기.
+- **남은 비네이티브**: 실시간 소통방(`livetalk`) · 글쓰기 뒤 팝업 · `_ovlDiagShow`/`_pickPop` 팝업 · `#aiPreviewLabel`/`#congPreviewLabel` 미리보기 라벨 · 데이터 계층(fetch · GPS→인덱스 추적 · 마커 가드 · eta 요청 · 버스 혼잡 fetch) · 지도 탭(SVG).

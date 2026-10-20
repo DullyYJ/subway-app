@@ -196,6 +196,8 @@ public final class ScreenCore {
         public Mark mk;                                    // trk: 내 위치 마커(엔진이 정한 것)
         public float val;                                  // gauge: 채움 비율(0~100)
         public int ci = -1;                                // chart: 지금 시각 막대 번호(가운데로 맞출 곳)
+        public String[] hlc = new String[0];               // text·box: hl 구간마다 글자색(빈 글이면 기본)
+        public long until;                                 // aih: 다음 갱신 마감 시각(기기 시계 ms, 0 이면 카운트다운 없음)
     }
     public static final class Screen {
         public String id = "", rev = "", cover = "chips";
@@ -306,15 +308,33 @@ public final class ScreenCore {
         Object v = m.get("hl");
         if (v == null) return new int[0][];
         List<Object> l = asArr(v, "hl");
-        if (l.size() > 20) throw new ParseError("hl: 너무 많다");
+        if (l.size() > 48) throw new ParseError("hl: 너무 많다");
         int[][] r = new int[l.size()][];
         int prevEnd = 0;
         for (int i = 0; i < r.length; i++) {
             List<Object> p = asArr(l.get(i), "hl 구간");
-            if (p.size() != 2 || !(p.get(0) instanceof Double) || !(p.get(1) instanceof Double)) throw new ParseError("hl: [시작,끝] 이어야 한다");
+            if ((p.size() != 2 && p.size() != 3) || !(p.get(0) instanceof Double) || !(p.get(1) instanceof Double)) throw new ParseError("hl: [시작,끝(,색)] 이어야 한다");
             int a = ((Double) p.get(0)).intValue(), b = ((Double) p.get(1)).intValue();
             if (a < prevEnd || b <= a || b > len) throw new ParseError("hl: 범위 밖 " + a + "-" + b);
             r[i] = new int[] { a, b }; prevEnd = b;
+        }
+        return r;
+    }
+    /** hl 구간마다 선택 글자색(세 번째 칸). 없으면 빈 글. */
+    private static String[] hlc(Map<String, Object> m, int cnt) throws ParseError {
+        String[] r = new String[cnt];
+        for (int i = 0; i < cnt; i++) r[i] = "";
+        Object v = m.get("hl");
+        if (v == null) return r;
+        List<Object> l = asArr(v, "hl");
+        for (int i = 0; i < cnt && i < l.size(); i++) {
+            List<Object> p = asArr(l.get(i), "hl 구간");
+            if (p.size() == 3) {
+                if (!(p.get(2) instanceof String)) throw new ParseError("hl: 색은 글자여야 한다");
+                String c = (String) p.get(2);
+                if (c.length() > 60 || (c.length() > 0 && !role(c) && color(c, BAD_COLOR) == BAD_COLOR)) throw new ParseError("hl: 읽을 수 없는 색 " + c);
+                r[i] = c;
+            }
         }
         return r;
     }
@@ -371,7 +391,7 @@ public final class ScreenCore {
             n.alpha = optNum(m, "alpha", 1f, 0f, 1f); n.lh = optNum(m, "lh", 1.35f, 1f, 3f);
             n.align = optStr(m, "align", "left", 8); if (!"left".equals(n.align) && !"center".equals(n.align) && !"right".equals(n.align)) throw new ParseError("align");
             n.maxLines = (int) optNum(m, "lines", 0f, 0f, 50f);
-            n.hl = hl(m, n.s.length());
+            n.hl = hl(m, n.s.length()); n.hlc = hlc(m, n.hl.length);
         } else if ("button".equals(t)) {
             pad(m, n); n.s = optStr(m, "s", "", 80); if (n.s.length() == 0) throw new ParseError("button: s 없음");
             n.size = optNum(m, "size", 12f, 6f, 40f); n.h = optNum(m, "h", 40f, 20f, 120f); n.act = act(m.get("act"), true);
@@ -432,7 +452,7 @@ public final class ScreenCore {
         } else if ("box".equals(t)) {
             pad(m, n); ip(m, n);
             n.s = optStr(m, "s", "", MAX_STR); if (n.s.length() == 0) throw new ParseError("box: s 없음");
-            n.hl = hl(m, n.s.length());
+            n.hl = hl(m, n.s.length()); n.hlc = hlc(m, n.hl.length);
             n.size = optNum(m, "size", 12f, 6f, 40f); n.lh = optNum(m, "lh", 1.35f, 1f, 3f);
             n.color = optStr(m, "color", "text", 12); if (!role(n.color)) throw new ParseError("color: 모르는 색 " + n.color);
             n.fill = roleOrCss(m, "fill", ""); n.line = roleOrCss(m, "line", ""); n.tc = roleOrCss(m, "tc", "");
@@ -557,6 +577,17 @@ public final class ScreenCore {
             }
             if (n.items.isEmpty()) throw new ParseError("trk: 칸이 없다");
             if (m.get("mk") != null) n.mk = mark(asObj(m.get("mk"), "trk.mk"), n.items.size());
+        } else if ("aih".equals(t)) {                                                                      // AI 승무원 카드 머리줄: 제목 한 줄 + 다음 갱신 카운트다운 알약 + 새로고침 단추. 글·색·마감 시각은 엔진이 정한다
+            pad(m, n);
+            n.s = optStr(m, "s", "", 200); if (n.s.length() == 0) throw new ParseError("aih: s 없음");
+            n.value = optStr(m, "icon", "", 900); n.pathOps = pathOps(n.value);
+            n.label = optStr(m, "done", "", 16);
+            Object tv = m.get("to");
+            if (tv != null) { if (!(tv instanceof Double)) throw new ParseError("aih: to 는 수여야 한다"); double dv = (Double) tv; if (dv < 0 || dv > 4.0e12) throw new ParseError("aih: to 범위 밖"); n.until = (long) dv; }
+            n.on = optBool(m, "bd", false);
+            n.act = n.on ? null : act(m.get("act"), false);
+            n.fill = roleOrCss(m, "pf", "rgba(47,124,246,0.12)"); n.tc = roleOrCss(m, "pc", "#2f7cf6");
+            if (n.fill.length() == 0) n.fill = "rgba(47,124,246,0.12)"; if (n.tc.length() == 0) n.tc = "#2f7cf6";
         } else if ("cgh".equals(t)) {                                                                      // 혼잡도 카드 머리줄: 왼쪽 '지하철 강남' + 작은 글, 오른쪽 혼잡 단계 글자. 글·색은 엔진이 정한다
             pad(m, n);
             n.label = optStr(m, "lab", "", 12); n.name = optStr(m, "nm", "", 40); n.sub = optStr(m, "meta", "", 80); n.s = optStr(m, "st", "", 24);
@@ -642,12 +673,13 @@ public final class ScreenCore {
     public static Screen load(String json) throws ParseError { return validate(parse(json)); }
 
     // ═════════════ ③ 배치 ═════════════
-    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14, K_NEWS = 15, K_POSTH = 16, K_CMT = 17, K_RBTN = 18, K_INBAR = 19, K_MSG = 20, K_TAB = 21, K_SUG = 22, K_SWAP = 23, K_RHD = 24, K_TRK = 25, K_CGH = 26, K_GAUGE = 27, K_CHART = 28, K_HBAR = 29, K_CARS = 30;
+    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14, K_NEWS = 15, K_POSTH = 16, K_CMT = 17, K_RBTN = 18, K_INBAR = 19, K_MSG = 20, K_TAB = 21, K_SUG = 22, K_SWAP = 23, K_RHD = 24, K_TRK = 25, K_CGH = 26, K_GAUGE = 27, K_CHART = 28, K_HBAR = 29, K_CARS = 30, K_AIH = 31;
     /** 경로 결과 머리줄 치수(웹 #transitResultHeader 와 같다: 분 숫자 28 · 단위 14 · 구간명 12 · 즐겨찾기 알약 11 · 닫기 ×) */
     /** 구간 타임라인 칸 치수(웹 #transitHtlTrack 과 같다): 이름 30 · 배지 18 · 축 26 · 시각 3+16 */
     public static final float TRK_NAME_H = 30f, TRK_BADGE_H = 18f, TRK_AXIS_H = 26f, TRK_TIME_GAP = 3f, TRK_TIME_H = 16f, TRK_H = 93f, TRK_LINE_Y = 12f, TRK_LINE_H = 3f, TRK_DOT_Y = 13f, TRK_E_R = 7f, TRK_R_R = 6f, TRK_M_R = 3f;
     public static final float RHD_H = 34f, RHD_NUM = 28f, RHD_UNIT = 14f, RHD_ROUTE = 12f, RHD_BTN = 11f, RHD_BTN_PX = 8f, RHD_BTN_H = 22f, RHD_X = 28f, RHD_MSG = 14f;
     /** 혼잡도 카드 치수(웹 .cong-top / .cong-gauge / .chart-wrap / .car-grid 와 같다) */
+    public static final float AIH_H = 28f, AIH_BTN_W = 30f, AIH_TITLE = 13.5f, AIH_PILL = 11f, AIH_PILL_H = 19f, AIH_PILL_PX = 8f, AIH_GAP = 8f, AIH_ICON = 16f;
     public static final float CGH_L1 = 18f, CGH_L2 = 15f, CGH_NAME = 13f, CGH_META = 11f, CGH_ST = 17f, CGH_GAP = 10f, CGH_H = 33f,
             GAUGE_LBL = 10f, GAUGE_LBL_H = 14f, GAUGE_GAP = 5f, GAUGE_BAR_H = 8f, GAUGE_H = 27f,
             CHART_PADL = 11f, CHART_PADT = 11f, CHART_PADB = 11f, CHART_HDR = 11f, CHART_SRC = 9f, CHART_HDR_H = 15f, CHART_HDR_GAP = 9f, CHART_SCROLL_PB = 4f, CHART_COL_W = 28f, CHART_FILL_W = 16f, CHART_LBL = 8f, CHART_LBL_H = 13f, CHART_R = 11f,
@@ -711,6 +743,8 @@ public final class ScreenCore {
         public float f1, f2, f3;                     // 혼잡도 카드: 수 조각들(글 폭 · 비율 · 높이 · 잘림 왼쪽)
         public String[] sa = new String[0];          // 칸별 혼잡: 칸마다 글 세 줄(칸·단계·%)
         public Col[] ca = new Col[0];                // 칸별 혼잡: 칸마다 색
+        public Col[][] segCol;                       // hl 조각마다 글자색(null 이면 기본 색)
+        public long ln;                              // aih: 카운트다운 마감 시각(기기 시계 ms)
     }
 
     /** 배치 결과. */
@@ -773,6 +807,7 @@ public final class ScreenCore {
         public static boolean hits(Item m, float x, float y) {
             if (m.kind == K_TOGGLE) return x >= m.sx - 8f && x < m.sx + m.sw + 8f && y >= m.sy - 8f && y < m.sy + m.sh + 8f;
             if (m.kind == K_RHD) return (m.sw > 0f && x >= m.sx - 6f && x < m.sx + m.sw + 6f && y >= m.sy - 6f && y < m.sy + m.sh + 6f) || (m.on && x >= m.btx - 6f && x < m.btx + RHD_X + 6f && y >= m.bty - 6f && y < m.bty + RHD_X + 6f);      // 머리줄은 두 단추 자리만
+            if (m.kind == K_AIH) return m.act != null && x >= m.sx - 6f && x < m.sx + m.sw + 6f && y >= m.sy - 6f && y < m.sy + m.sh + 6f;      // 머리줄은 새로고침 단추만
             if (m.kind == K_BAR) return x >= m.sx - 6f && x < m.sx + m.sw + 6f && y >= m.sy - 6f && y < m.sy + m.sh + 6f;      // 머리줄은 오른쪽 단추만
             if (m.kind == K_MSG) return m.act != null && x >= m.zoneX - 6f && x < m.zoneX + m.zoneW + 6f && y >= m.zoneY - 6f && y < m.zoneY + m.zoneH + 6f;      // 말풍선은 '신고' 글자 자리만
             return x >= m.x && x < m.x + m.w && y >= m.y && y < m.y + m.h;
@@ -956,26 +991,32 @@ public final class ScreenCore {
     }
 
     /** 줄마다 굵은 구간/아닌 구간 조각으로 나눈다(그릴 때 새 글자를 안 만들도록 미리). 줄은 원문 안에서 차례로 찾는다. 못 찾는 줄(… 으로 줄인 줄)은 굵기 없이. */
-    private static void richSegs(Item it, String s, int[][] hl) {
+    private static void richSegs(Item it, String s, int[][] hl, String[] hlc) {
         int nl = it.lines.length;
         it.segs = new String[nl][]; it.segBold = new boolean[nl][];
+        boolean anyCol = false;
+        if (hlc != null) for (String c : hlc) if (c != null && c.length() > 0) anyCol = true;
+        if (anyCol) it.segCol = new Col[nl][];
         int cur = 0;
         for (int k = 0; k < nl; k++) {
             String ln = it.lines[k];
             int st = ln.length() == 0 ? cur : s.indexOf(ln, cur);
-            if (st < 0) { it.segs[k] = new String[] { ln }; it.segBold[k] = new boolean[] { false }; continue; }
+            if (st < 0) { it.segs[k] = new String[] { ln }; it.segBold[k] = new boolean[] { false }; if (anyCol) it.segCol[k] = new Col[] { null }; continue; }
             int en = st + ln.length();
             cur = en;
-            List<String> ps = new ArrayList<String>(); List<Boolean> bs = new ArrayList<Boolean>();
+            List<String> ps = new ArrayList<String>(); List<Boolean> bs = new ArrayList<Boolean>(); List<Col> cs = new ArrayList<Col>();
             int pos = st;
-            for (int[] h : hl) {
+            for (int hi = 0; hi < hl.length; hi++) {
+                int[] h = hl[hi];
                 int a = Math.max(st, h[0]), b = Math.min(en, h[1]);
                 if (b <= a) continue;
-                if (a > pos) { ps.add(s.substring(pos, a)); bs.add(Boolean.FALSE); }
+                if (a > pos) { ps.add(s.substring(pos, a)); bs.add(Boolean.FALSE); cs.add(null); }
                 ps.add(s.substring(a, b)); bs.add(Boolean.TRUE); pos = b;
+                cs.add(anyCol && hlc[hi] != null && hlc[hi].length() > 0 ? col(hlc[hi], null) : null);
             }
-            if (pos < en) { ps.add(s.substring(pos, en)); bs.add(Boolean.FALSE); }
-            if (ps.isEmpty()) { ps.add(ln); bs.add(Boolean.FALSE); }
+            if (pos < en) { ps.add(s.substring(pos, en)); bs.add(Boolean.FALSE); cs.add(null); }
+            if (ps.isEmpty()) { ps.add(ln); bs.add(Boolean.FALSE); cs.add(null); }
+            if (anyCol) it.segCol[k] = cs.toArray(new Col[0]);
             it.segs[k] = ps.toArray(new String[0]);
             it.segBold[k] = new boolean[bs.size()];
             for (int q = 0; q < bs.size(); q++) it.segBold[k][q] = bs.get(q);
@@ -1014,6 +1055,18 @@ public final class ScreenCore {
             it.act = n.act != null ? n.act : n.bact; it.act2 = n.act != null ? n.bact : null;
             out.add(it);
             return y + RHD_H + n.padB;
+        }
+        if ("aih".equals(n.t)) {                                                     // AI 승무원 머리줄: 제목(굵게, 한 줄) · 카운트다운 알약 · 새로고침 단추
+            float pw = n.until > 0L ? m.width("00:00", AIH_PILL, true) + AIH_PILL_PX * 2f : 0f;
+            float titleW = Math.max(40f, innerW - AIH_BTN_W - AIH_GAP - (pw > 0f ? pw + AIH_GAP : 0f));
+            Item it = new Item(); it.kind = K_AIH; it.x = ox; it.y = y; it.w = innerW; it.h = AIH_H;
+            it.lines = new String[] { ellipsize(n.s, titleW, AIH_TITLE, true, m) }; it.size = AIH_TITLE; it.bold = true; it.textX = ox;
+            it.label = n.label; it.ln = n.until; it.f1 = pw; it.f2 = ox + innerW - AIH_BTN_W - AIH_GAP;
+            it.fill = col(n.fill, new Col(null, 0x1F2F7CF6)); it.tc = col(n.tc, new Col(null, 0xFF2F7CF6));
+            it.on = n.on; it.pathOps = n.pathOps; it.act = n.act;
+            it.sx = ox + innerW - AIH_BTN_W; it.sy = y; it.sw = AIH_BTN_W; it.sh = AIH_H;
+            out.add(it);
+            return y + AIH_H + n.padB;
         }
         if ("cgh".equals(n.t)) {                                                     // 혼잡도 머리줄: 왼쪽 '지하철 강남'(이름은 굵은 금색) + 작은 글 · 오른쪽 혼잡 단계 글자
             float stW = n.s.length() > 0 ? m.width(n.s, CGH_ST, true) : 0f;
@@ -1077,7 +1130,7 @@ public final class ScreenCore {
             Item it = new Item(); it.kind = K_TEXT; it.x = ox; it.y = y; it.w = innerW;
             it.lines = ls.toArray(new String[0]); it.size = n.size; it.bold = n.bold; it.color = n.color; it.alpha = n.alpha; it.align = n.align;
             it.lineH = n.size * n.lh; it.h = it.lineH * ls.size(); it.textX = ox; it.textY = y;
-            if (rich) richSegs(it, n.s, n.hl);
+            if (rich) richSegs(it, n.s, n.hl, n.hlc);
             out.add(it);
             return y + it.h + n.padB;
         }
@@ -1090,7 +1143,7 @@ public final class ScreenCore {
             it.h = 2f + n.ipT + it.lineH * ls.size() + n.ipB;
             it.textX = ox + 1f + n.ipL; it.textY = y + 1f + n.ipT; it.radius = n.r;
             it.fill = col(n.fill, null); it.line = col(n.line, null); it.tc = col(n.tc, null); it.ac2 = col(n.onc, null);
-            if (rich) richSegs(it, n.s, n.hl);
+            if (rich) richSegs(it, n.s, n.hl, n.hlc);
             out.add(it);
             return y + it.h + n.padB;
         }

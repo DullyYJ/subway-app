@@ -197,7 +197,7 @@ public class ScreenNativePlugin extends Plugin {
                 o.put("items", view == null ? 0 : view.itemCount());
                 o.put("age", view == null ? -1 : (int) Math.min(Integer.MAX_VALUE, view.drawAgeMs()));
                 o.put("scroll", view == null ? 0 : Math.round(view.scrollPos()));
-                o.put("cap", 13);      // 이 앱이 아는 화면 규격 단계(8 = row 노드 · 9 = 여러 줄 field · 10 = rhd 경로 결과 머리줄 · 11 = trk 구간 타임라인 · 12 = trk 위의 내 위치 마커 mk · 13 = 혼잡도 카드 cgh · gauge · chart · cars + box hc) — 웹이 이 값을 보고 하위 화면 요청 여부를 정한다
+                o.put("cap", 14);      // 이 앱이 아는 화면 규격 단계(8 = row 노드 · 9 = 여러 줄 field · 10 = rhd 경로 결과 머리줄 · 11 = trk 구간 타임라인 · 12 = trk 위의 내 위치 마커 mk · 13 = 혼잡도 카드 cgh · gauge · chart · cars + box hc · 14 = AI 승무원 카드 aih + 글 구간별 색 hl[a,b,색]) — 웹이 이 값을 보고 하위 화면 요청 여부를 정한다
                 call.resolve(o);
             }
         });

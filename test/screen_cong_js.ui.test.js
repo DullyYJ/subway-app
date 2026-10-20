@@ -55,6 +55,8 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   const puts = async (x) => (await calls(x)).filter(c => (c.m === 'show' || c.m === 'update') && c.a.id === 'cong');
   const own = (x) => x.page.evaluate(() => document.getElementById('congBody').classList.contains('cg-own'));
   const sub = (x, stn, line) => x.page.evaluate(([s, l]) => { _cgSet({ mode: 'sub', stn: s, line: l }); }, [stn, line]);
+  // 앱이 스스로 도는 첫 계산(출발역 없음)이 먼저 올라갈 수 있다 — 시험이 정한 사실의 요청이 나가고 답이 그려져 잠잠해질 때까지 기다린다
+  const settle = async (x, mode) => { await waitFor(x, async () => x.reqs.some(r => r.f.mode === mode), 9000); let n = ''; for (let k = 0; k < 60; k++) { await x.page.waitForTimeout(150); const c = x.reqs.length + '/' + (await puts(x)).length; if (c === n) break; n = c; } };
   const nodesOf = (j) => JSON.parse(j).head;
 
   console.log('[① 플러그인이 없거나 꺼져 있거나 옛 APK 면 예전 그대로]');
@@ -75,7 +77,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   console.log('[② 켜면 덮고 엔진이 정한 그대로 그린다]');
   await t('지하철: 요청은 사실뿐(색·글 없음) · cap 13 · 엔진 화면을 그대로 show', async () => {
     const x = await fresh({ plugin: true, on: true }); await sub(x, '강남', '2호선');
-    assert.ok(await waitFor(x, async () => (await puts(x)).length >= 1, 9000), 'show 가 없다');
+    assert.ok(await waitFor(x, async () => (await puts(x)).length >= 1, 9000), 'show 가 없다'); await settle(x, 'sub');
     const q = x.reqs[x.reqs.length - 1]; assert.strictEqual(q.cap, 13); assert.strictEqual(q.f.mode, 'sub'); assert.strictEqual(q.f.stn, '강남'); assert.strictEqual(q.f.line, '2호선');
     assert.ok(Number.isFinite(q.f.now) && q.f.now % 300000 === 0, '지금은 5분 단위 ms');
     assert.ok(!/#[0-9a-f]{3,6}|rgb|혼잡|보통|원활/i.test(JSON.stringify(q.f).replace(/강남/g, '')), '요청에 색·상태 글이 없다 ' + JSON.stringify(q.f).slice(0, 200));
@@ -88,7 +90,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   });
   await t("'size' 이벤트로 감싸개 높이를 따른다 · 끄면 걷고 설정이 0 으로 저장된다", async () => {
     const x = await fresh({ plugin: true, on: true }); await sub(x, '강남', '2호선');
-    assert.ok(await waitFor(x, async () => (await puts(x)).length >= 1, 9000));
+    assert.ok(await waitFor(x, async () => (await puts(x)).length >= 1, 9000)); await settle(x, 'sub');
     await emit(x, 'size', { id: 'cong', h: 321 }); await x.page.waitForTimeout(150);
     assert.strictEqual(await x.page.evaluate(() => document.getElementById('congBody').offsetHeight), 321);
     const rc = (await calls(x, 'setRect')).concat(await calls(x, 'show')).filter(c => c.a && c.a.id === 'cong'); assert.ok(rc.length >= 1);
@@ -99,7 +101,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   });
   await t('엔진이 준 info 를 그대로 적용한다: 카드 왼쪽 띠 색 · 배지 글/색', async () => {
     const x = await fresh({ plugin: true, on: true }); await sub(x, '강남', '2호선');
-    assert.ok(await waitFor(x, async () => (await puts(x)).length >= 1, 9000));
+    assert.ok(await waitFor(x, async () => (await puts(x)).length >= 1, 9000)); await settle(x, 'sub');
     const q = x.reqs[x.reqs.length - 1], eng = EC.congScreen({ cap: 13 }, q.f);
     await x.page.waitForTimeout(400);
     const got = await x.page.evaluate(() => ({ bd: document.getElementById('congBadge').textContent, bc: document.getElementById('congCard').style.borderLeftColor }));
@@ -107,27 +109,27 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   });
   await t('역이 바뀌면 다시 요청하고 다시 그린다', async () => {
     const x = await fresh({ plugin: true, on: true }); await sub(x, '강남', '2호선');
-    assert.ok(await waitFor(x, async () => (await puts(x)).length >= 1, 9000)); const n0 = x.reqs.length, p0 = (await puts(x)).length;
+    assert.ok(await waitFor(x, async () => (await puts(x)).length >= 1, 9000)); const n0 = x.reqs.length, p0 = (await puts(x)).length; await settle(x, 'sub');
     await sub(x, '서울역', '1호선');
-    assert.ok(await waitFor(x, async () => x.reqs.length > n0 && (await puts(x)).length > p0, 9000), '새 역을 다시 안 그렸다');
-    assert.strictEqual(x.reqs[x.reqs.length - 1].f.stn, '서울역'); await x.ctx.close();
+    assert.ok(await waitFor(x, async () => x.reqs.some(r => r.f.stn === '서울역') && (await puts(x)).length > p0, 9000), '새 역을 다시 안 그렸다');
+    assert.ok(x.reqs.filter(r => r.f.stn === '서울역').length >= 1); await x.ctx.close();
   });
   await t('같은 사실이면 요청이 늘지 않는다', async () => {
     const x = await fresh({ plugin: true, on: true }); await sub(x, '강남', '2호선');
-    assert.ok(await waitFor(x, async () => (await puts(x)).length >= 1, 9000)); await x.page.waitForTimeout(800); const n0 = x.reqs.length;
+    assert.ok(await waitFor(x, async () => (await puts(x)).length >= 1, 9000)); await x.page.waitForTimeout(800); const n0 = x.reqs.length; await settle(x, 'sub');
     await x.page.waitForTimeout(2500); assert.strictEqual(x.reqs.length, n0); await x.ctx.close();
   });
   await t('버스: 원자료만 보내고(노선·정류장·[시간대, 승객 수]) 엔진이 정한 화면을 그린다', async () => {
     const x = await fresh({ plugin: true, on: true });
     await x.page.evaluate(() => { _cgSet({ mode: 'bus', bus: { no: '9714', stop: '강남역', pr: [[8, 12], [9, 30], [18, 38]] } }); });
-    assert.ok(await waitFor(x, async () => (await puts(x)).length >= 1, 9000));
+    assert.ok(await waitFor(x, async () => (await puts(x)).length >= 1, 9000)); await settle(x, 'bus');
     const q = x.reqs[x.reqs.length - 1]; assert.strictEqual(q.f.mode, 'bus'); assert.strictEqual(q.f.bus.no, '9714'); assert.deepStrictEqual(q.f.bus.pr, [[8, 12], [9, 30], [18, 38]]);
     const p = await puts(x); assert.deepStrictEqual(JSON.parse(p[p.length - 1].a.json).head, EC.congScreen({ cap: 13 }, q.f).head); await x.ctx.close();
   });
   await t('출발역이 없으면(none) 엔진이 정한 빈 화면을 그린다', async () => {
     const x = await fresh({ plugin: true, on: true });
     await x.page.evaluate(() => { _cgSet({ mode: 'none' }); });
-    assert.ok(await waitFor(x, async () => (await puts(x)).length >= 1, 9000));
+    assert.ok(await waitFor(x, async () => (await puts(x)).length >= 1, 9000)); await settle(x, 'none');
     const p = await puts(x); assert.ok(JSON.parse(p[p.length - 1].a.json).head.some(n => n.t === 'cars' && n.msg)); await x.ctx.close();
   });
 
@@ -139,7 +141,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
   });
   await t('장면(.cs-on)이 보이는 동안은 네이티브가 쉰다 · 장면이 사라지면 다시 그린다', async () => {
     const x = await fresh({ plugin: true, on: true }); await sub(x, '강남', '2호선');
-    assert.ok(await waitFor(x, async () => (await puts(x)).length >= 1, 9000));
+    assert.ok(await waitFor(x, async () => (await puts(x)).length >= 1, 9000)); await settle(x, 'sub');
     await x.page.evaluate(() => document.getElementById('congCard').classList.add('cs-on'));
     assert.ok(await waitFor(x, async () => (await calls(x, 'hide')).some(c => c.a && c.a.id === 'cong'), 6000), '장면 중에도 안 숨겼다');
     assert.strictEqual(await own(x), false);

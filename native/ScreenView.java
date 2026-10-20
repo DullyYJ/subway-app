@@ -471,6 +471,7 @@ public class ScreenView extends View {
             case ScreenCore.K_SWAP: drawSwap(cv, it); break;
             case ScreenCore.K_RHD: drawRhd(cv, it); break;
             case ScreenCore.K_TRK: drawTrk(cv, it); break;
+            case ScreenCore.K_AIH: drawAih(cv, it); break;
             case ScreenCore.K_CGH: drawCgh(cv, it); break;
             case ScreenCore.K_GAUGE: drawGauge(cv, it); break;
             case ScreenCore.K_CHART: drawChart(cv, it); break;
@@ -783,7 +784,9 @@ public class ScreenView extends View {
         for (int k = 0; k < it.segs.length; k++) {
             float x = x0, b = -1f;
             for (int q = 0; q < it.segs[k].length; q++) {
-                setText(it.size, it.segBold[k][q], (it.segBold[k][q] && it.ac2 != null) ? cc(it.ac2, color) : color);
+                int sc0 = (it.segBold[k][q] && it.ac2 != null) ? cc(it.ac2, color) : color;
+                if (it.segCol != null && it.segCol[k][q] != null) sc0 = cc(it.segCol[k][q], sc0);
+                setText(it.size, it.segBold[k][q], sc0);
                 if (b < 0f) b = base(y0 + k * it.lineH, it.lineH, k);
                 cv.drawText(it.segs[k][q], x, b, tp);
                 x += tp.measureText(it.segs[k][q]);
@@ -947,6 +950,45 @@ public class ScreenView extends View {
     }
     // ───────────── 혼잡도 카드(머리줄 · 게이지 · 24시간 막대 · 칸별 혼잡) ─────────────
     /** 머리줄: 왼쪽 '지하철 강남'(이름은 굵은 금색) + 작은 글 · 오른쪽 혼잡 단계 글자. 글·색은 엔진이 정했다. */
+    private final char[] cdBuf = new char[8];
+    private long cdTick = 0L;
+    /** AI 승무원 머리줄: 제목(한 줄) · 다음 갱신 카운트다운 알약(마감 시각까지 남은 시간을 m:ss 로) · 새로고침 단추. 글·색·마감 시각은 엔진이 정했다. */
+    private void drawAih(Canvas cv, ScreenCore.Item it) {
+        setText(it.size, true, pal[R_TEXT]);
+        cv.drawText(it.lines[0], it.textX, base(it.y, it.h, 0), tp);
+        if (it.ln > 0L) {
+            long now = System.currentTimeMillis();
+            int rem = (int) Math.max(0L, Math.round((it.ln - now) / 1000.0));
+            float pw = it.f1, right = it.f2, py = it.y + (it.h - ScreenCore.AIH_PILL_H) / 2f;
+            setText(ScreenCore.AIH_PILL, true, cc(it.tc, 0xFF2F7CF6));
+            int n = 0;
+            if (rem > 0) {
+                int mn = rem / 60, sc = rem % 60;
+                if (mn >= 100) cdBuf[n++] = (char) ('0' + (mn / 100) % 10);
+                if (mn >= 10) cdBuf[n++] = (char) ('0' + (mn / 10) % 10);
+                cdBuf[n++] = (char) ('0' + mn % 10); cdBuf[n++] = ':'; cdBuf[n++] = (char) ('0' + sc / 10); cdBuf[n++] = (char) ('0' + sc % 10);
+            }
+            float tw = n > 0 ? tp.measureText(cdBuf, 0, n) : tp.measureText(it.label);
+            float w = tw + ScreenCore.AIH_PILL_PX * 2f;
+            p.setStyle(Paint.Style.FILL); p.setColor(cc(it.fill, 0x1F2F7CF6));
+            rf.set(right - w, py, right, py + ScreenCore.AIH_PILL_H); cv.drawRoundRect(rf, 8f, 8f, p);
+            if (n > 0) cv.drawText(cdBuf, 0, n, right - w + ScreenCore.AIH_PILL_PX, base(py, ScreenCore.AIH_PILL_H, 0), tp);
+            else cv.drawText(it.label, right - w + ScreenCore.AIH_PILL_PX, base(py, ScreenCore.AIH_PILL_H, 0), tp);
+            if (rem > 0 && now >= cdTick) { cdTick = now + 900L; postInvalidateDelayed(1000L); }
+        }
+        rf.set(it.sx, it.sy, it.sx + it.sw, it.sy + it.sh);
+        p.setStyle(Paint.Style.FILL); p.setColor(pal[R_CARD2]); cv.drawRoundRect(rf, 9f, 9f, p);
+        p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(pal[R_BORDER]);
+        rf2.set(it.sx + 0.5f, it.sy + 0.5f, it.sx + it.sw - 0.5f, it.sy + it.sh - 0.5f); cv.drawRoundRect(rf2, 8.5f, 8.5f, p);
+        p.setStyle(Paint.Style.FILL);
+        android.graphics.Path ph = it.pathOps.length > 0 ? pathFor(it) : null;
+        if (ph != null) {
+            float ic = ScreenCore.AIH_ICON, sc = ic / 24f;
+            cv.save(); cv.translate(it.sx + (it.sw - ic) / 2f, it.sy + (it.sh - ic) / 2f); cv.scale(sc, sc);
+            p.setColor(it.on ? alpha(pal[R_TEXT], 0.4f) : (it == pressed ? alpha(pal[R_TEXT], 0.6f) : pal[R_TEXT])); cv.drawPath(ph, p);
+            cv.restore();
+        }
+    }
     private void drawCgh(Canvas cv, ScreenCore.Item it) {
         float b1 = 0f;
         setText(ScreenCore.CGH_NAME, false, pal[R_SUB]);

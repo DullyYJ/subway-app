@@ -3837,6 +3837,16 @@ window.updateMarquee = updateMarquee;
 // ══════════════════════════════════════════════════════════════
 // 🏠 홈 AI 역무원 — 현재 위치·시간 기준 10분마다 브리핑
 // ══════════════════════════════════════════════════════════════
+// ★ 2026-10-20 (s77): 서버 구동 네이티브 AI 승무원 카드(_scrAi)가 읽는 '사실'. 글·색·제목은 엔진(/screen/ai)이 정한다 — 여기엔 원자료만 둔다.
+window._haiF = { mode: 'empty' }; window._haiV = 0;
+function _haiSet(o){
+  try{
+    var F = window._haiF; for(var k in o) if(Object.prototype.hasOwnProperty.call(o, k)) F[k] = o[k];
+    window._haiV++;
+    if(window._scrAi && window._scrAi.changed) window._scrAi.changed();
+  }catch(e){}
+}
+window._haiSet = _haiSet;
 var _homeAiPollInt   = null;
 var _homeAiCountdown = null;
 var _homeAiNextAt    = 0;
@@ -3920,6 +3930,7 @@ function requestHomeBrief(force){
     body.innerHTML = '<div class="home-ai-empty">🤖 브리핑 생성 중...</div>';
     var b = document.getElementById('homeAiRefreshBtn');
     if(b){ b.disabled = true; b.textContent = '⏳'; }
+    _haiSet({ mode: 'loading' });
   }
 
   var fromName = (window._journeyFromFixed) ? window._journeyFromFixed
@@ -4123,6 +4134,11 @@ function _renderHomeBriefLocal(fromName, toName, hour, congPct){
     html += '<p>' + _fc + '</p>';
     html += '<p style="color:var(--sub);font-size:12px;">설정하신 시각 기준 예측이에요. 실제 상황과 다를 수 있습니다.</p>';
     body.innerHTML = '<div class="home-ai-msg">' + html + '</div>';
+    try{       // 네이티브 카드에는 원자료만 알린다(제목·문장·날짜 글은 엔진이 만든다)
+      var _fcN = _homeBriefCoord('from', fromName), _tcN = hasRoute ? _homeBriefCoord('to', toName) : null, _dN = 0;
+      if(_fcN && _tcN && typeof haversineM === 'function') _dN = haversineM(_fcN.lat, _fcN.lng, _tcN.lat, _tcN.lng);
+      _haiSet({ mode: 'preview', tk: 'preview', from: fromName, to: toName, base: _bMs, hour: hour, cong: congPct, hol: !!_hol, mins: window._homeRouteBaseMin || 0, dist: _dN || 0 });
+    }catch(eN){}
     return;
   }
 
@@ -4396,6 +4412,8 @@ function _renderHomeConductorBrief(fromName, toName, hour, congPct, serverMsg){
   var tc = hasRoute ? _homeBriefCoord('to', toName) : null;
   // 소요시간: 실제 경로 > 기준값 > 좌표 기반 추정 (?분 방지)
   var mins = (rb && rb.totalMin) ? rb.totalMin : (window._homeRouteBaseMin || 0);
+  var _mins0 = mins, _dist0 = 0;      // 네이티브 카드용 원자료(어림 소요시간은 엔진이 계산한다)
+  try{ if(hasRoute && fc && tc && typeof haversineM==='function') _dist0 = haversineM(fc.lat, fc.lng, tc.lat, tc.lng) || 0; }catch(eD){}
   if((!mins || mins<=0) && hasRoute && fc && tc && typeof haversineM==='function'){
     try { var dkm = haversineM(fc.lat, fc.lng, tc.lat, tc.lng)/1000; mins = Math.max(5, Math.round(dkm*2.5)+5); } catch(e){}
   }
@@ -4613,6 +4631,11 @@ function _renderHomeConductorBrief(fromName, toName, hour, congPct, serverMsg){
   //   엔진에 물을 수 없으면(꺼짐·응답 없음·이상한 응답) 예전 방식(buildLocal)으로 바로 만든다.
   function compose(wF, wT){
     if(seq !== _homeWxSeq) return;   // 더 최신 브리핑이 왔으면 무시
+    try{       // 네이티브 카드에 알리는 지금 상태(원자료) — 문장·제목·색은 엔진(/screen/ai)이 만든다
+      var _ni = _hbInput(fromName, toName, hour, congPct, _mins0, wF, wT, rb, hasRoute);
+      _haiSet({ mode: 'brief', tk: 'brief', from: fromName, to: toName, base: (typeof getBaseTimeMs === 'function') ? getBaseTimeMs() : Date.now(), hour: hour, cong: congPct, hol: !!_ni.hol, mins: _mins0, dist: _dist0,
+                metro: _ni.metro === true, wF: wF || null, wT: wT || null, segs: _ni.segs, nt: _ni.nt, tl: _ni.tl, nowMin: _ni.nowMin, rnd: _ni.rnd });
+    }catch(eN){}
     if(_e2Use() && window._hbeOff !== true){
       var inp = null;
       try{ inp = _hbInput(fromName, toName, hour, congPct, mins, wF, wT, rb, hasRoute); }catch(eI){ inp = null; }
@@ -4637,6 +4660,7 @@ function _renderHomeConductorBrief(fromName, toName, hour, congPct, serverMsg){
                && body.innerHTML.indexOf('브리핑 준비 중') < 0;
     if(!_hasNow){
       body.innerHTML = '<div class="home-ai-msg"><p style="color:var(--sub);">브리핑 준비 중...</p></div>';
+      _haiSet({ mode: 'prep' });
     }
   }catch(e){}
   function step(){ if(++done>=need) compose(wF, wT); }
@@ -4644,6 +4668,7 @@ function _renderHomeConductorBrief(fromName, toName, hour, congPct, serverMsg){
   if(tc) _fetchWeather(tc.lat, tc.lng, function(w){ wT=w; step(); });
 }
 
+window._homeAiCountdownOn = function(){ return !!_homeAiCountdown; };
 function _startHomeCountdown(){
   if(_homeAiCountdown) clearInterval(_homeAiCountdown);
   _homeAiCountdown = setInterval(function(){
@@ -8961,6 +8986,7 @@ window._hideRouteLoading = _hideRouteLoading;
   try{
     var _aiBody = document.getElementById('homeAiBody');
     if(_aiBody) _aiBody.innerHTML = '<div class="home-ai-msg"><p style="color:var(--sub);">경로를 확인하고 있습니다...</p></div>';
+    if(typeof _haiSet === 'function') _haiSet({ mode: 'route' });
   }catch(e){}
 
   // 탐색 후에도 결과가 안 뜨면 1회만 자동 재시도 (앱 시작 직후 첫 탐색 실패 대비)
@@ -20587,6 +20613,8 @@ window.addEventListener('unhandledrejection', function(e) {
   <div>
     <div class="sec">AI 승무원</div>
     <div class="home-ai-card" id="homeAiCard">
+      <!-- ★ 2026-10-20 (s77): 카드 속(머리줄 + 본문)을 한 감싸개(#homeAiInner)에 둔다 — 서버 구동 네이티브 AI 승무원 카드(_scrAi)가 켜지면 이 속만 감추고 기기가 같은 자리에 직접 그린다(높이는 기기가 그린 내용을 따른다). -->
+      <div id="homeAiInner">
       <div class="home-ai-head">
         <span class="home-ai-title" id="homeAiTitle">AI 승무원 브리핑</span>
         <span class="home-ai-next" id="homeAiNext"></span>
@@ -20594,6 +20622,7 @@ window.addEventListener('unhandledrejection', function(e) {
       </div>
       <div class="home-ai-body" id="homeAiBody">
         <div class="home-ai-empty">현재 위치와 시간을 기준으로<br>예상 상황을 분석해드릴게요.</div>
+      </div>
       </div>
     </div>
   </div>
@@ -21180,6 +21209,21 @@ window.addEventListener('unhandledrejection', function(e) {
         <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">홈 혼잡도 카드의 머리줄(역·버스 이름, 기준 시각, 혼잡 단계), 혼잡도 게이지, 24시간 막대 차트, 칸별 혼잡(버스는 평균·최대 승객 수)을 엔진이 계산해 내려주고, 기기가 직접 그려요. 문제가 생기면 예전 웹 카드로 돌아가요.</p>
         <div id="scrgSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
         <style>#scrgSetOn:checked ~ #scrgSetKnob{background:var(--gold) !important;} #scrgSetOn:checked ~ #scrgSetDot{left:23px !important;}</style>
+      </div>
+
+      <!-- ★ 2026-10-20 (s77): 서버 구동 네이티브 AI 승무원 카드 — 안드로이드 앱에서만 보임, 기본 꺼짐(실험) -->
+      <div id="scraSetCard" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <div style="font-size:15px;font-weight:800;color:var(--text);">네이티브 AI 승무원 카드</div>
+          <label style="position:relative;display:inline-block;width:46px;height:26px;">
+            <input type="checkbox" id="scraSetOn" onchange="_scraSetUse(this.checked)" style="opacity:0;width:0;height:0;">
+            <span id="scraSetKnob" style="position:absolute;inset:0;border-radius:13px;background:var(--border2);transition:.2s;cursor:pointer;"></span>
+            <span id="scraSetDot" style="position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.3);"></span>
+          </label>
+        </div>
+        <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">홈 AI 승무원 카드의 제목(출발 → 도착 · 남은시간), 브리핑 문장과 노선 색 글씨, 다음 갱신 카운트다운, 새로고침 단추를 엔진이 정해 내려주고, 기기가 직접 그려요. 문제가 생기면 예전 웹 카드로 돌아가요. 새 앱(규격 14)이 필요해요.</p>
+        <div id="scraSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
+        <style>#scraSetOn:checked ~ #scraSetKnob{background:var(--gold) !important;} #scraSetOn:checked ~ #scraSetDot{left:23px !important;}</style>
       </div>
 
       <!-- ★ 2026-10-19: 숨김 인계 — 앱이 가려지면 엔진(/ride-standby)이 안내를 이어받는다. 안드로이드 앱에서만 보임, 기본 꺼짐(실험) -->
@@ -39567,6 +39611,7 @@ window.refreshShop=refreshShop;
     try{ var Xscrw = window._scrWrite && _scrWrite.S, cscrw = document.getElementById('scrwSetCard'); if(Xscrw && cscrw && cscrw.style.display === 'block') f.feat.scrw = { h: 1, on: Xscrw.on ? 1 : 0, f: (Xscrw.failed || Xscrw.fails >= 2) ? 1 : 0, w: Xscrw.why || '', b: Xscrw.badFresh > 0 ? 1 : 0 }; }catch(e){}
     try{ var Xscrh = window._scrHome && _scrHome.S, cscrh = document.getElementById('scrhSetCard'); if(Xscrh && cscrh && cscrh.style.display === 'block') f.feat.scrh = { h: 1, on: Xscrh.on ? 1 : 0, f: (Xscrh.failed || Xscrh.fails >= 2) ? 1 : 0, w: Xscrh.why || '', b: Xscrh.badFresh > 0 ? 1 : 0 }; }catch(e){}
     try{ var Xscrr = window._scrRhead && _scrRhead.S, cscrr = document.getElementById('scrrSetCard'); if(Xscrr && cscrr && cscrr.style.display === 'block') f.feat.scrr = { h: 1, on: Xscrr.on ? 1 : 0, f: (Xscrr.failed || Xscrr.fails >= 2 || _scrRhead.S2.failed || _scrRhead.S2.fails >= 2 || _scrRhead.S3.failed || _scrRhead.S3.fails >= 2 || _scrRhead.S4.failed || _scrRhead.S4.fails >= 2) ? 1 : 0, w: Xscrr.why || _scrRhead.S2.why || _scrRhead.S3.why || _scrRhead.S4.why || '', b: Xscrr.badFresh > 0 ? 1 : 0 }; }catch(e){}
+    try{ var Xscra = window._scrAi && _scrAi.S, cscra = document.getElementById('scraSetCard'); if(Xscra && cscra && cscra.style.display === 'block') f.feat.scra = { h: 1, on: Xscra.on ? 1 : 0, f: (Xscra.failed || Xscra.fails >= 2) ? 1 : 0, w: Xscra.why || '', b: Xscra.badFresh > 0 ? 1 : 0 }; }catch(e){}
     try{ var Xscrg = window._scrCong && _scrCong.S, cscrg = document.getElementById('scrgSetCard'); if(Xscrg && cscrg && cscrg.style.display === 'block') f.feat.scrg = { h: 1, on: Xscrg.on ? 1 : 0, f: (Xscrg.failed || Xscrg.fails >= 2) ? 1 : 0, w: Xscrg.why || '', b: Xscrg.badFresh > 0 ? 1 : 0 }; }catch(e){}
     try{ if(typeof _sbhSyncCard === 'function') _sbhSyncCard(); var csbh = document.getElementById('sbhSetCard'); if(csbh && csbh.style.display === 'block') f.feat.sbh = { h: 1, on: _sbhOn() ? 1 : 0, f: 0, w: '' }; }catch(e){}
     try{ if(typeof _cndSyncCard === 'function') _cndSyncCard(); var ccnd = document.getElementById('cndSetCard'); if(ccnd && ccnd.style.display === 'block') f.feat.cnd = { h: 1, on: (_cndOn() && !_cndBad()) ? 1 : 0, f: _cndBad() ? 1 : 0, w: '' }; }catch(e){}
@@ -39723,6 +39768,7 @@ window.refreshShop=refreshShop;
       else if(key === 'f.scrc') window._scrcSetUse(on);
       else if(key === 'f.scrr') window._scrrSetUse(on);
       else if(key === 'f.scrg') window._scrgSetUse(on);
+      else if(key === 'f.scra') window._scraSetUse(on);
       else if(key === 'f.scrt') window._scrtSetUse(on);
       else if(key === 'f.scrq') window._scrqSetUse(on);
       else if(key === 'f.scrw') window._scrwSetUse(on);
@@ -41757,6 +41803,87 @@ window.refreshShop=refreshShop;
     });
     window._scrCong = kit;
     window._scrgSetUse = function(on){ try{ kit.setUse(on); }catch(e){} };
+  })();
+
+  // ═════════════ 홈 'AI 승무원' 카드(제목 · 브리핑 문장 · 노선 색 글씨 · 다음 갱신 카운트다운 · 새로고침 단추) ═════════════
+  //   제목('출발 → 도착 · 남은시간: N분' / '예상 · 시각') · 브리핑 문장(engine/home-brief.js) · 미리보기 문장 · 노선 색·굵은 글 색 · 빈/생성 중/준비 중 안내 · 단추 상태 · 카운트다운 마감 시각을
+//   엔진(POST /screen/ai, cap 14)이 정하고 기기가 그린다. 앱은 사실만 보낸다: 출발/도착 이름 · 기준 시각(ms) · 혼잡도 · 날씨 · 경로 구간 · 다음 열차 · 남은 분 · 도착 예정(ms) · 다음 갱신 시각.
+  //   누르는 동작은 새로고침 단추 하나(허용 목록: ai.refresh → 예전 requestHomeBrief(true)). 데이터 계층(날씨·경로 구간 모으기·5분 주기·서버 호출)은 웹에 그대로 있다.
+  //   웹 카드 속(#homeAiInner)은 아래에 그대로 두고(폴백) 네이티브가 그 위를 덮는다. 네이티브가 맡는 동안 웹 속만 감춘다(자리는 그대로). 높이는 네이티브가 그린 내용 높이를 감싸개가 따른다.
+  (function(){
+    var kit, C = { cap: 0, h: 0 };
+    function gEl(id){ return document.getElementById(id); }
+    function innerEl(){ return gEl('homeAiInner'); }
+    try{ var st = document.createElement('style'); st.textContent = '#homeAiInner.ai-own > *{visibility:hidden !important;}'; document.head.appendChild(st); }catch(eSt){}
+    function own(on){ try{ var e = innerEl(); if(e) e.classList.toggle('ai-own', !!on); }catch(e){} }
+    function applyH(h){ try{ var e = innerEl(); if(!e || !(h > 8 && h < 3000)) return; e.style.boxSizing = 'border-box'; e.style.overflow = 'hidden'; e.style.flexShrink = '0'; e.style.height = h + 'px'; }catch(e){} }
+    function unH(){ try{ var e = innerEl(); if(e){ e.style.height = ''; e.style.overflow = ''; e.style.boxSizing = ''; e.style.flexShrink = ''; } }catch(e){} }
+    function probe(){
+      if(C.cap) return;
+      var P = kit && kit.plug(); if(!P || typeof P.status !== 'function'){ C.cap = 3; return; }
+      C.cap = -1;
+      Promise.resolve(P.status({ id: 'ai' })).then(function(s0){ C.cap = (s0 && s0.cap >= 14) ? 14 : 3; try{ kit.kick(); }catch(e){} }, function(){ C.cap = 3; });
+    }
+    function gate(){ if(C.cap >= 14) return true; if(!C.cap) probe(); return false; }
+    function cardOpen(){
+      try{
+        var t = gEl('tab-home'), c = gEl('homeAiCard');
+        return !!(t && c && t.classList.contains('active') && c.offsetParent && !document.hidden);
+      }catch(e){ return false; }
+    }
+    function open(){ var e = innerEl(), o = cardOpen() && !!e && !!e.offsetParent && gate(); if(!o){ own(false); unH(); } return o; }
+    function rect(){
+      try{
+        var w = innerEl(), sc = gEl('tabContentWrap'); if(!w) return null;
+        var r = w.getBoundingClientRect(), v = sc ? sc.getBoundingClientRect() : { top: 0, bottom: window.innerHeight };
+        var t = Math.max(r.top, v.top), b = Math.min(r.bottom, v.bottom);
+        if(!(r.width > 40 && r.height > 14 && b - t > 10)) return null;
+        return { L: r.left, T: r.top, W: r.width, H: r.height, clip: { l: 0, t: t - r.top, r: r.width, b: b - r.top } };
+      }catch(e){ return null; }
+    }
+    function busy(){ try{ var b = gEl('homeAiRefreshBtn'); return !!(b && b.disabled); }catch(e){ return false; } }
+    function boarded(){ try{ return !!(typeof S !== 'undefined' && S && S.boardedAt); }catch(e){ return false; } }
+    function eta(){ try{ return (typeof _journeyEta === 'function') ? _journeyEta() : ((typeof _etaPair === 'function') ? _etaPair() : null); }catch(e){ return null; } }
+    function liveRem(){                                                          // 제목의 남은 분(웹이 정한 원자료: 도착 시각에서 역산한 값 > 기준 소요시간)
+      var ep = eta(), rem = null;
+      if(ep && ep.rem != null && ep.rem >= 0) rem = ep.rem;
+      else { try{ rem = (typeof _etaRemainMin === 'function') ? _etaRemainMin(window._homeRouteBaseMin) : window._homeRouteBaseMin; }catch(e){ rem = window._homeRouteBaseMin; } }
+      return (rem != null && rem > 0) ? rem : 0;
+    }
+    function liveDm(){ try{ return (window._depCmpMsg && window._depCmpMsg.key === window._lastCoordQs && !boarded()) ? String(window._depCmpMsg.msg || '') : ''; }catch(e){ return ''; } }
+    function nextAt(){ return window._homeAiCountdownOn() ? Math.floor((window._homeAiNextAt || 0) / 1000) * 1000 : 0; }
+    function facts(){
+      var F = window._haiF || { mode: 'empty' };
+      var o = { mode: F.mode, tk: F.tk || '', now: Math.floor(Date.now() / 60000) * 60000, tz: -new Date().getTimezoneOffset(), busy: busy(), nextAt: nextAt() };
+      if(F.tk){
+        o.from = F.from; o.to = F.to; o.base = F.base; o.hour = F.hour; o.cong = F.cong; o.hol = F.hol; o.mins = F.mins; o.dist = F.dist || 0;
+        if(F.tk === 'brief'){
+          o.metro = F.metro; o.rem = liveRem();
+          if(F.mode === 'brief'){
+            o.wF = F.wF; o.wT = F.wT; o.segs = F.segs; o.nt = F.nt; o.tl = F.tl; o.nowMin = F.nowMin; o.rnd = F.rnd; o.dm = liveDm();
+            var ep = eta(), am = (ep && ep.arrMs) || (o.rem > 0 ? Date.now() + o.rem * 60000 : 0);
+            o.arrMs = am ? Math.floor(am / 60000) * 60000 : 0;
+          }
+        }
+      }
+      return o;
+    }
+    function sig(){ var f = facts(); return [window._haiV || 0, f.mode, f.busy ? 1 : 0, f.nextAt, f.rem || 0, f.arrMs || 0, f.dm || ''].join('|'); }
+    function request(){ var txt = JSON.stringify({ cap: 14, f: facts() }), fk = kit.hash(txt); return { txt: txt, fk: fk, idle: false, key: '', snap: null, sig: sig() }; }
+    function act(e){
+      if(!e || e.a !== 'call' || e.v !== 'ai.refresh') return;
+      try{ requestHomeBrief(true); }catch(x){}
+      setTimeout(function(){ try{ kit.changed(); }catch(e2){} }, 30);
+    }
+    kit = window._scrKit({
+      id: 'ai', kp: 'gdm_scra', ep: '/screen/ai', screen: 'ai', label: 'AI 승무원 카드', card: 'scra', cache: false, waitIdle: false, bucket: 0, idleMs: 250,
+      onText: '홈 AI 승무원 카드의 제목·브리핑 문장·노선 색 글씨·카운트다운·새로고침 단추를 엔진이 정해 기기가 직접 그려요(실험 중).',
+      root: innerEl, open: open, rect: rect, request: request, act: act, sig: sig, sigMs: 500,
+      listen: function(P){ P.addListener('size', function(e){ if(!e || e.id !== 'ai') return; var h = Number(e.h); if(!(h > 8 && h < 3000)) return; C.h = h; applyH(h); }); },
+      webClear: function(){ own(true); applyH(C.h); }, webBack: function(){ own(false); unH(); }, onEnd: function(){ own(false); unH(); }
+    });
+    window._scrAi = kit;
+    window._scraSetUse = function(on){ try{ kit.setUse(on); }catch(e){} };
   })();
 
   // ═════════════ 홈 탭 경로 입력 ═════════════
