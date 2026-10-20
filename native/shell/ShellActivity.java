@@ -6,6 +6,10 @@ import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
@@ -17,6 +21,8 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.Toast;
 
+import java.util.Calendar;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -37,6 +43,9 @@ public class ShellActivity extends Activity {
     private final int[] seq = new int[2];              // 칸마다 가장 새 요청 번호(늦게 온 옛 답은 버린다)
     private int seqTabs = 0;
     private volatile ShellCore.NewsRows lastNews = new ShellCore.NewsRows();
+    private final HomeCore home = new HomeCore();       // 홈 탭 입력 상태(고른 출발/도착·후보·기준시각)
+    private int seqHome = 0, seqCand = 0;
+    private volatile String lastRouteRaw = "";            // 가장 최근에 받은 경로 응답(결과 화면은 엔진 이식 뒤에 올린다)
 
     /** SharedPreferences 를 ShellCore.Store 로 감싼다. */
     private static final class PrefStore implements ShellCore.Store {
@@ -129,6 +138,7 @@ public class ShellActivity extends Activity {
         final int my = ++seq[si];
         final ScreenView v = viewOfSlot(i);
         if (ShellCore.S_PENDING.equals(screen)) { present(v, ShellCore.pendingScreen(ShellCore.currentTab(store)), false); return; }
+        if (ShellCore.S_HOME.equals(screen)) { loadHome(v, keep); return; }
         new Thread(new Runnable() {
             @Override public void run() {
                 String[] urls = ShellCore.feedUrls(screen), feeds = new String[urls.length];
@@ -173,7 +183,10 @@ public class ShellActivity extends Activity {
         @Override public void onSearch(ScreenCore.Act a, String q) { apply(ShellCore.routeSearch(a.tpl, a.empty, q)); }
         @Override public void onInputFocus(boolean on) { }
         @Override public void onFirstDraw() { }
-        @Override public void onText(String key, String value, String kind) { }
+        @Override public void onText(String key, String value, String kind) {
+            if (!ShellCore.S_HOME.equals(screenName())) return;
+            homeText(key, value, kind);
+        }
         @Override public void onContentH(float dp) {
             if (which != 0 || slots.length < 2) return;           // 머리 칸만 그린 내용 높이에 맞춘다
             final int h = Math.max(1, Math.round(dp * dpr));
@@ -184,7 +197,11 @@ public class ShellActivity extends Activity {
         private void handle(ScreenCore.Act a, boolean on) {
             ShellCore.Effect e;
             if (which == 2) e = ShellCore.routeTabs(store, a.a, a.v);
-            else {
+            else if (ShellCore.S_HOME.equals(screenName())) {
+                if ("call".equals(a.a)) homeAct(a.v, body.fields());
+                else if ("open".equals(a.a)) apply(ShellCore.linkEffect(a.url));
+                return;
+            } else {
                 Map<String, String> f = (which == 0 ? head : body).fields();
                 e = ShellCore.route(screenName(), store, a.a, a.v, a.key, on, a.url, f);
             }
@@ -201,6 +218,167 @@ public class ShellActivity extends Activity {
             case ShellCore.E_NEWS: openNews(e.arg); break;
             default: break;
         }
+    }
+
+
+    // ───────────── 홈 탭 ─────────────
+    private HomeCore.Env homeEnv() {
+        HomeCore.Env e = new HomeCore.Env();
+        Calendar c = Calendar.getInstance();
+        e.nowMs = System.currentTimeMillis();
+        e.tzoMin = -(c.getTimeZone().getOffset(e.nowMs) / 60000);
+        e.y = c.get(Calendar.YEAR); e.m = c.get(Calendar.MONTH); e.d = c.get(Calendar.DAY_OF_MONTH);
+        int w = c.get(Calendar.DAY_OF_WEEK);
+        e.hol = w == Calendar.SATURDAY || w == Calendar.SUNDAY;
+        return e;
+    }
+
+    /** 홈 화면: 입력 상태를 엔진에 보내고 받은 화면을 올린다. */
+    private void loadHome(final ScreenView v, final boolean keep) {
+        final int my = ++seqHome;
+        final String json = home.request(homeEnv(), ShellCore.CAP);
+        new Thread(new Runnable() {
+            @Override public void run() {
+                NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/home", json, 8000);
+                final String txt = r.status == 200 ? r.body : "";
+                main.post(new Runnable() { @Override public void run() {
+                    if (my != seqHome) return;
+                    present(v, txt, keep);
+                    if (txt.length() > 0) home.onScreen(txt);
+                } });
+            }
+        }, "shell-home").start();
+    }
+    private void reloadHome() { if (ShellCore.S_HOME.equals(slots.length > 0 ? slots[slots.length - 1] : "")) loadHome(body, true); }
+
+    private void homeText(final String key, String value, String kind) {
+        final int f = "dest".equals(key) ? HomeCore.DEST : HomeCore.START;
+        if ("blur".equals(kind)) {                       // 후보 줄을 누르는 동안 잠깐 기다렸다 닫는다
+            main.postDelayed(new Runnable() { @Override public void run() { home.endActive(f); reloadHome(); } }, 250);
+            return;
+        }
+        if (!home.onText(key, value, kind)) return;
+        fetchCands();
+        reloadHome();
+    }
+
+    /** 눌려 있는 칸의 글자에 대한 버스정류장·장소 후보를 받아 온다(글이 같으면 다시 받지 않는다). */
+    private void fetchCands() {
+        final String q = home.wantQuery();
+        if (q.length() == 0) return;
+        new Thread(new Runnable() {
+            @Override public void run() {
+                NetPost.Res rb = NetPost.get(HomeSearchCore.busUrl(HomeSearchCore.DEFAULT_BASE, q), 6000);
+                final List<Map<String, Object>> bus = rb.status == 200 ? HomeSearchCore.parseBus(rb.body) : new java.util.ArrayList<Map<String, Object>>();
+                NetPost.Res rp = NetPost.get(HomeSearchCore.placeUrl(HomeSearchCore.DEFAULT_BASE, q), 6000);
+                final List<Map<String, Object>> pl = rp.status == 200 ? HomeSearchCore.parsePlaces(rp.body) : new java.util.ArrayList<Map<String, Object>>();
+                main.post(new Runnable() { @Override public void run() {
+                    boolean a = home.setCands(q, true, bus), b = home.setCands(q, false, pl);
+                    if (a || b) reloadHome();
+                } });
+            }
+        }, "shell-cand").start();
+    }
+
+    private void homeAct(String v, Map<String, String> fields) {
+        int r = home.act(v, fields);
+        switch (r) {
+            case HomeCore.R_RENDER: case HomeCore.R_FIELDS:
+                if (r == HomeCore.R_FIELDS) setHomeFields();
+                reloadHome(); break;
+            case HomeCore.R_GPS: startGps(); break;
+            case HomeCore.R_PICK_TIME: pickBase(); break;
+            case HomeCore.R_GO: goRoute(); break;
+            case HomeCore.R_NEED_BOTH: toast("출발지와 도착지를 입력해 주세요"); break;
+            default: break;
+        }
+    }
+
+    /** 고른 장소·바꾸기 뒤 입력칸 글자를 화면에 다시 쓴다. */
+    private void setHomeFields() {
+        body.setField(HomeCore.KEYS[HomeCore.START], home.text[HomeCore.START]);
+        body.setField(HomeCore.KEYS[HomeCore.DEST], home.text[HomeCore.DEST]);
+    }
+
+    // 위치 감지: 권한 → 마지막 위치 → 한 번 갱신
+    private static final int REQ_LOC = 71;
+    private void startGps() {
+        if (checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[] { android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION }, REQ_LOC);
+            return;
+        }
+        home.gps = true; reloadHome();
+        final LocationManager lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+        try {
+            Location best = null;
+            for (String p : lm.getProviders(true)) {
+                Location l = lm.getLastKnownLocation(p);
+                if (l != null && (best == null || l.getTime() > best.getTime())) best = l;
+            }
+            if (best != null && System.currentTimeMillis() - best.getTime() < 120000) { gotGps(best); return; }
+            String prov = lm.isProviderEnabled(LocationManager.GPS_PROVIDER) ? LocationManager.GPS_PROVIDER : LocationManager.NETWORK_PROVIDER;
+            final Location fallback = best;
+            final LocationListener ll = new LocationListener() {
+                @Override public void onLocationChanged(Location l) { try { lm.removeUpdates(this); } catch (Throwable ignored) { } gotGps(l); }
+                @Override public void onProviderEnabled(String p) { }
+                @Override public void onProviderDisabled(String p) { }
+                @Override @SuppressWarnings("deprecation") public void onStatusChanged(String p, int s, Bundle b) { }
+            };
+            lm.requestSingleUpdate(prov, ll, Looper.getMainLooper());
+            main.postDelayed(new Runnable() { @Override public void run() {
+                if (!home.gps) return;
+                try { lm.removeUpdates(ll); } catch (Throwable ignored) { }
+                if (fallback != null) gotGps(fallback); else { home.gps = false; toast("현재 위치를 찾지 못했어요"); reloadHome(); }
+            } }, 12000);
+        } catch (Throwable t) { home.gps = false; toast("위치를 쓸 수 없어요"); reloadHome(); }
+    }
+    private void gotGps(Location l) {
+        if (!home.gps) return;
+        home.setGpsStart(l.getLatitude(), l.getLongitude());
+        setHomeFields(); reloadHome();
+    }
+    @Override public void onRequestPermissionsResult(int code, String[] perms, int[] res) {
+        if (code != REQ_LOC) return;
+        boolean ok = res.length > 0 && res[0] == PackageManager.PERMISSION_GRANTED;
+        if (ok) startGps(); else toast("위치 권한이 필요해요");
+    }
+
+    // 기준시각: 날짜 → 시각 고르기(네이티브 대화상자)
+    private void pickBase() {
+        final Calendar c = Calendar.getInstance();
+        if (home.baseMs >= 0) c.setTimeInMillis(home.baseMs);
+        new android.app.DatePickerDialog(this, new android.app.DatePickerDialog.OnDateSetListener() {
+            @Override public void onDateSet(android.widget.DatePicker dp, final int y, final int m, final int d) {
+                new android.app.TimePickerDialog(ShellActivity.this, new android.app.TimePickerDialog.OnTimeSetListener() {
+                    @Override public void onTimeSet(android.widget.TimePicker tp, int h, int mi) {
+                        Calendar x = Calendar.getInstance();
+                        x.set(y, m, d, h, mi, 0); x.set(Calendar.MILLISECOND, 0);
+                        home.baseMs = x.getTimeInMillis();
+                        reloadHome();
+                    }
+                }, c.get(Calendar.HOUR_OF_DAY), c.get(Calendar.MINUTE), false).show();
+            }
+        }, c.get(Calendar.YEAR), c.get(Calendar.MONTH), c.get(Calendar.DAY_OF_MONTH)).show();
+    }
+
+    /** 경로 탐색: 좌표가 있는 두 장소로 경로 서버에 묻는다. 결과 화면은 엔진 이식(result) 뒤에 올린다. */
+    private void goRoute() {
+        final String qs = HomeCore.routeQuery(home.loc[HomeCore.START], home.loc[HomeCore.DEST],
+            home.baseMs >= 0 ? home.baseMs : System.currentTimeMillis(), home.baseMs >= 0);
+        if (qs == null) { toast("출발지와 도착지를 목록에서 골라 주세요"); return; }
+        toast("경로를 찾는 중이에요");
+        final String url = HomeCore.routeUrl(qs);
+        new Thread(new Runnable() {
+            @Override public void run() {
+                NetPost.Res r = NetPost.get(RouteFetchCore.liveZero(url), 15000);
+                final boolean ok = r.status == 200 && r.body != null && r.body.length() > 2;
+                final String raw = ok ? r.body : "";
+                main.post(new Runnable() { @Override public void run() {
+                    lastRouteRaw = raw;
+                    toast(ok ? "경로를 받았어요" : "경로를 받지 못했어요");
+                } });
+            }
+        }, "shell-route").start();
     }
 
     private void openLink(String url) {

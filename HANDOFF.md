@@ -1574,3 +1574,9 @@
 - **엔진 쪽 남은 정리**: settings.js 의 웹 기능 스위치 행(scr* 등)·`/screen/*` 의 웹 전용 분기는 웹이 사라졌으니 걷어낼 대상(아직 안 건드림, 껍데기는 feat 를 비워 보냄).
 - **다음 조각**: 홈/쇼핑/맛집/뉴스/게시판 탭을 엔진 화면에 잇기 → GPS 수집(KeepAliveService) → /pos-fuse · /ride-standby → 지도 탭 → 위젯·오버레이·알림.
 - **남겨 둔 것(재사용 예정)**: native/ 의 Htl·Row·Scene·Metro·Widget 코어/뷰(빌드에는 아직 안 들어감). 옛 Capacitor 플러그인의 안드로이드 로직은 `git show main:native/XxxPlugin.java` 로 꺼내 쓴다.
+
+## 2026-10-20 s85~s86 (브랜치 `native-shell`) — 탭 연결(커뮤니티·쇼핑) + 홈 탭 입력
+- **s85**: 커뮤니티 탭 = 칩 줄(cchips) + 뉴스(원자료 받아 엔진 /screen/news, 기사 상세 대화상자) / 설정. 쇼핑 탭 = /screen/shop. `ShellCore` 에 슬롯 모델·Req·NewsRows 추가.
+- **s86 홈 탭 입력(기기 미검증)**: `HomeCore`(순수 자바: 입력칸 글·활성 칸·고른 장소·후보·기준시각·경로 질의) + `HomeSearchCore`/`RouteFetchCore`(native/shell 로 이동). `ShellActivity` 가 입력 이벤트→엔진 /screen/home 재요청, 버스·장소 후보 받기, 위치 감지(LocationManager, 권한 요청), 기준시각 고르기(네이티브 대화상자), 경로 탐색 첫 응답(live=0)까지. 매니페스트에 위치 권한.
+- **아직 없음**: 경로 결과 화면(엔진 `result.js` 이식 필요 — rhead 사실을 route 응답에서 만든다), 탑승 추적, 맛집/게시판/채팅/지도 탭, GPS 상시 수집(KeepAliveService), 위젯·오버레이·알림.
+- **시험**: `node test/shell_native.test.js`(ANDROID_JAR 지정) 5 통과 · JVM 89점검.
