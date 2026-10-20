@@ -134,7 +134,7 @@ const web = new Function(
   ok(w.indexOf('if (url.pathname === "/screen/rhead") return handleScreenRhead(request);') > 0, '경로 등록');
   ok(!/[^\x00-\x7f]/.test(body), '내장 블록은 ASCII 만');
   const other = w.slice(0, i) + w.slice(j);
-  const names = ['rheadScreen', 'rheadFacts', 'rheadHash', 'rheadStr', 'rheadInt', 'rheadJosa', 'rheadDoor', 'rheadList', 'rheadXferLine', 'rheadDoorLines', 'rheadHeadNodes', 'rheadTabNodes', 'rheadAgo', 'rheadJoin', 'rheadOffParts', 'rheadNoteNodes', 'RHEAD_SCREEN_V', 'RHEAD_TABS', 'RHEAD_EMOJI', 'handleScreenRhead'];
+  const names = ['rheadScreen', 'rheadFacts', 'rheadHash', 'rheadStr', 'rheadInt', 'rheadJosa', 'rheadDoor', 'rheadList', 'rheadXferLine', 'rheadDoorLines', 'rheadHeadNodes', 'rheadTabNodes', 'rheadAgo', 'rheadJoin', 'rheadOffParts', 'rheadNoteNodes', 'RHEAD_LD_MODE', 'rheadWon', 'rheadNum', 'rheadLdNodes', 'RHEAD_SCREEN_V', 'RHEAD_TABS', 'RHEAD_EMOJI', 'handleScreenRhead'];
   ok(names.every(n => !new RegExp('^(async\\s+)?(function|var)\\s+' + n + '\\b', 'm').test(other)), '다른 엔진과 이름이 겹치지 않는다');
 }
 // ── ⑨ 공식 공지 · 지연 제보 줄(part n): 옛 웹 _offText 와 문구가 같다 ──
@@ -172,6 +172,32 @@ const web = new Function(
   const bad = N({ ln: ['2호선', 5, null, 'x'.repeat(99)], off: 'zz', al: [1, 2], now: 'abc' }); ok(bad.ok && bad.body.length >= 1, '이상한 값에도 죽지 않는다');
   ok(E.rheadScreen({ cap: 10, part: 'n' }, { ln: ['2호선'], off: { '2호선': { text: 'a', ts: NOW } }, now: NOW }).rev !== E.rheadScreen({ cap: 10, part: 'h' }, { m: 5 }).rev, 'rev 가 부분마다 다르다');
 }
+// ── ⑩ 장거리 고르기(part l): 웹 _renderLdGradeChips 와 같은 판단(선택 표시·후보 수 조건)·문구 ──
+{
+  const L = lg => E.rheadScreen({ cap: 10, part: 'l' }, { lg });
+  const labels = o => flat(o.body).filter(n => n.t === 'btnrow').flatMap(n => n.items);
+  const base = { mode: 'train', grade: 'KTX', depTs: 5, noWaitMin: 80, fastRide: { depLabel: '13:47', rideMin: 70, noWaitMin: 75 },
+    candidates: [{ mode: 'train', depTs: 5, depLabel: '13:47', totalMin: 89 }, { mode: 'expbus', depTs: 6, depLabel: '13:50', totalMin: 120 }, { mode: 'train', depTs: 7, depLabel: '14:20', totalMin: 95 }],
+    options: [{ grade: 'KTX', depTs: 5, depLabel: '13:47', fare: 12300 }, { grade: '무궁화', depTs: 9, depLabel: '14:00', fare: 8500 }] };
+  const o = L(base), it = labels(o);
+  ok(it.map(x => x.label).join('|') === '열차 13:47 · 89분|고속버스 13:50 · 120분|열차 14:20 · 95분|KTX 13:47 · 12,300원|무궁화 14:00 · 8,500원', '후보 라벨(수단·시각·소요) · 등급 라벨(요금 쉼표): ' + it.map(x => x.label).join('|'));
+  ok(it.filter(x => x.on).map(x => x.label).join('|') === '열차 13:47 · 89분|KTX 13:47 · 12,300원', '선택 표시: 모드+정확한 시각이 같은 것 / 등급+시각이 같은 것');
+  ok(it[0].act.v === 'rh.ld.m.0' && it[2].act.v === 'rh.ld.m.2' && it[3].act.v === 'rh.ld.g.0' && it[4].act.v === 'rh.ld.g.1', '누르면 원자료 번호(rh.ld.m|g.<번호>)');
+  const note = flat(o.body).find(n => n.t === 'text'); ok(note && note.s === '대기 시간을 빼면 약 80분 (다른 지도앱은 대기를 빼고 표시해요)\n이동만 가장 빠른 편: 13:47 출발, 열차 70분 (대기 제외 총 75분)', '대기 제외 안내 두 줄');
+  ok(labels(L(Object.assign({}, base, { depTs: null }))).filter(x => x.on).length === 3, 'depTs 가 없으면 모드·등급만 맞아도 선택(예전 응답 호환: 열차 둘 + KTX)');
+  const one = L({ mode: 'train', grade: 'KTX', candidates: [base.candidates[0]], options: [base.options[0]] });
+  ok(one.body.length === 1 && one.body[0].t === 'spacer', '후보·등급이 하나뿐이고 안내도 없으면 높이 0');
+  ok(L(null).body[0].t === 'spacer' && L({}).body[0].t === 'spacer', '원자료가 없으면 높이 0');
+  const skip = L({ mode: 'train', candidates: [null, { mode: 'train', depLabel: 'a' }, { mode: 'expbus', depLabel: 'b' }], options: [] }); const si = labels(skip);
+  ok(si.length === 2 && si[0].act.v === 'rh.ld.m.1' && si[1].act.v === 'rh.ld.m.2', '이상한 항목은 건너뛰어도 번호는 원자료 그대로');
+  const long = L({ mode: 'train', candidates: [{ mode: 'train', depLabel: '가'.repeat(30) }, { mode: 'train', depLabel: 'b' }] }); ok(labels(long).every(x => x.label.length <= 24), '라벨은 24자 안');
+  {
+    const sc = [o, L({ mode: 'train', noWaitMin: 5 }), L(null), L(Object.assign({}, base, { candidates: Array.from({ length: 8 }, (_, i) => ({ mode: 'train', depTs: i, depLabel: '1' + i + ':00', totalMin: 90 + i })) }))];
+    const r = screenCheck(sc); ok(!r.err && r.out.length === sc.length && r.out.every(l => l.startsWith('OK ') && Number(l.split(' ')[2]) === 0), '앱 검증기 통과(part l) ' + (r.err || r.out.join('|')));
+  }
+  ok(!flat(o.body).some(n => EMOJI.test(JSON.stringify(n))), 'part l 에 이모지 없음');
+  ok(E.rheadScreen({ cap: 10, part: 'l' }, { lg: base }).rev !== E.rheadScreen({ cap: 10, part: 'n' }, { lg: base }).rev, 'rev 가 부분마다 다르다');
+}
 // ── ⑧ 워커 끝에서 끝까지 ──
 (async () => {
   const tmp = path.join(os.tmpdir(), 'rv2_rhead_' + process.pid + '.mjs');
@@ -180,7 +206,7 @@ const web = new Function(
     const w = (await import(tmp)).default, call = (u, init) => w.fetch(new Request(u, init), {}, { waitUntil() { } });
     const post = b => call('https://x/screen/rhead', { method: 'POST', body: b, headers: { 'Content-Type': 'text/plain;charset=UTF-8' } });
     const f = { m: 31, a: '신도림역', b: '수원역', fav: 1, sp: { ride: 25, wait: 2, walk: 4 }, why: '가장 빨리 도착하는 경로예요.', xs: [{ at: '신도림', fromType: 1, fromLine: '1호선', toType: 1, toLine: '2호선', walkMin: 3 }], tab: 'sub', ld: 0 };
-    for (const part of ['h', 't', 'n']) {
+    for (const part of ['h', 't', 'n', 'l']) {
       const r = await post(JSON.stringify({ cap: 10, part, f })), j = await r.json();
       ok(r.status === 200 && j.ok && j.screen === 'rhead' && j.info.part === part && /route-v2-2026-10-\d\ds\d\d/.test(j.ver), '워커 응답 200(' + part + ') ' + j.ver);
       const direct = E.rheadScreen({ cap: 10, part }, f); ok(JSON.stringify(Object.assign({}, j, { ver: undefined })) === JSON.stringify(Object.assign({}, direct, { ver: undefined })), '워커 응답 = 직접 계산(' + part + ')');
@@ -193,7 +219,7 @@ const web = new Function(
   try { fs.unlinkSync(tmp); } catch (e) { }
   if (html.indexOf('window._scrRhead = ') >= 0) {
     const has = t => html.indexOf(t) >= 0;
-    ok(has("'/screen/rhead'") && has("/^rh\\.(fav|close|room\\.(\\d)|tab\\.(fast|less|sub|bus|longdist))$/"), '웹: 결과 카드 연결부 + 엔진 주소 + rh.<행동> 만 처리');
+    ok(has("'/screen/rhead'") && has("/^rh\\.(fav|close|room\\.(\\d)|ld\\.([mg])\\.(\\d)|tab\\.(fast|less|sub|bus|longdist))$/"), '웹: 결과 카드 연결부 + 엔진 주소 + rh.<행동> 만 처리');
   }
   console.log(`rhead_engine: ${pass} pass, ${fail} fail`);
   process.exit(fail ? 1 : 0);

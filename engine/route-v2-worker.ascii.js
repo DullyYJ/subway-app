@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-20s72";
+var ENGINE_VERSION = "route-v2-2026-10-20s73";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -11784,8 +11784,8 @@ var SETTINGS_FEATS = [
     off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9 \uae00\uc4f0\uae30 \uc2dc\ud2b8)\uc73c\ub85c \uadf8\ub824\uc694.', bad: '\ub124\uc774\ud2f0\ube0c \uae00\uc4f0\uae30 \uc2dc\ud2b8\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc6f9 \uc2dc\ud2b8\ub85c \ub300\uc2e0 \ubcf4\uc5ec\uc8fc\uace0 \uc788\uc5b4\uc694', stale: '\uc5d4\uc9c4\uc774 \uc900 \ud654\uba74\uc774 \uc62c\ubc14\ub974\uc9c0 \uc54a\uc544 \uc800\uc7a5\ud574 \ub454 \ud654\uba74\uc744 \uc4f0\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \ucee4\ubba4\ub2c8\ud2f0 \'\uc81c\ubcf4 \uae00\uc4f0\uae30\' \uc2dc\ud2b8\ub97c \uc5d4\uc9c4\uc774 \uc815\ud55c \ub300\ub85c \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694(\uc2e4\ud5d8 \uc911).' },
   { k: 'scrh', title: '\ub124\uc774\ud2f0\ube0c \uacbd\ub85c \uc785\ub825', desc: '\ud648 \ud0ed\uc758 \ucd9c\ubc1c\u00b7\ub3c4\ucc29 \uc785\ub825\uce78, \uc790\ub3d9\uc644\uc131 \ubaa9\ub85d, \uc704\uce58 \uac10\uc9c0\u00b7\ubc14\uafb8\uae30\u00b7\uacbd\ub85c \ud0d0\uc0c9 \ub2e8\ucd94, \uae30\uc900\uc2dc\uac01 \uc904\uc744 \uc5d4\uc9c4\uc774 \uc815\ud574 \ub0b4\ub824\uc8fc\uace0, \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694. \uae00\uc790\ub97c \uc4f0\ub294 \ub3d9\uc548 \uc790\ub3d9\uc644\uc131\uc774 \ubc14\ub85c \ub530\ub77c\uc640\uc694. \ubb38\uc81c\uac00 \uc0dd\uae30\uba74 \uc608\uc804 \uc6f9 \uce74\ub4dc\ub85c \ub3cc\uc544\uac00\uc694.',
     off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9 \uacbd\ub85c \uc785\ub825 \uce74\ub4dc)\uc73c\ub85c \uadf8\ub824\uc694.', bad: '\ub124\uc774\ud2f0\ube0c \uacbd\ub85c \uc785\ub825\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc6f9 \uce74\ub4dc\ub85c \ub300\uc2e0 \ubcf4\uc5ec\uc8fc\uace0 \uc788\uc5b4\uc694', stale: '\uc5d4\uc9c4\uc774 \uc900 \ud654\uba74\uc774 \uc62c\ubc14\ub974\uc9c0 \uc54a\uc544 \uc800\uc7a5\ud574 \ub454 \ud654\uba74\uc744 \uc4f0\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \ud648 \ud0ed\uc758 \uacbd\ub85c \uc785\ub825 \uce74\ub4dc\ub97c \uc5d4\uc9c4\uc774 \uc815\ud55c \ub300\ub85c \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694(\uc2e4\ud5d8 \uc911).' },
-  { k: 'scrr', title: '\ub124\uc774\ud2f0\ube0c \uacbd\ub85c \uacb0\uacfc \uc717\ubd80\ubd84', desc: '\ud648 \uacbd\ub85c \uacb0\uacfc \uce74\ub4dc\uc758 \uba38\ub9ac\uc904(\uc18c\uc694 \uc2dc\uac04\u00b7\uad6c\uac04\u00b7\uc990\uaca8\ucc3e\uae30\u00b7\ub2eb\uae30), \uc2b9\ucc28\u00b7\ub300\uae30\u00b7\ub3c4\ubcf4 \uc694\uc57d, \ud658\uc2b9 \uc548\ub0b4, \uacbd\ub85c \ud0ed(\ucd5c\ub2e8\uc2dc\uac04\u00b7\ucd5c\uc18c\ud658\uc2b9\u00b7\uc9c0\ud558\ucca0\u00b7\ubc84\uc2a4), \uacf5\uc2dd \uacf5\uc9c0\u00b7\uc9c0\uc5f0 \uc81c\ubcf4 \uc904\uc744 \uc5d4\uc9c4\uc774 \uc815\ud574 \ub0b4\ub824\uc8fc\uace0, \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694. \ubb38\uc81c\uac00 \uc0dd\uae30\uba74 \uc608\uc804 \uc6f9 \uce74\ub4dc\ub85c \ub3cc\uc544\uac00\uc694.',
-    off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9 \uacb0\uacfc \uce74\ub4dc)\uc73c\ub85c \uadf8\ub824\uc694.', bad: '\ub124\uc774\ud2f0\ube0c \uacb0\uacfc \uce74\ub4dc \uc717\ubd80\ubd84\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc6f9 \uce74\ub4dc\ub85c \ub300\uc2e0 \ubcf4\uc5ec\uc8fc\uace0 \uc788\uc5b4\uc694', stale: '\uc5d4\uc9c4\uc774 \uc900 \ud654\uba74\uc774 \uc62c\ubc14\ub974\uc9c0 \uc54a\uc544 \uc800\uc7a5\ud574 \ub454 \ud654\uba74\uc744 \uc4f0\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \uacb0\uacfc \uce74\ub4dc\uc758 \uba38\ub9ac\uc904\u00b7\uc694\uc57d\u00b7\ud658\uc2b9 \uc548\ub0b4\u00b7\uacbd\ub85c \ud0ed\u00b7\uacf5\uc9c0 \uc904\uc744 \uc5d4\uc9c4\uc774 \uc815\ud55c \ub300\ub85c \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694(\uc2e4\ud5d8 \uc911).' },
+  { k: 'scrr', title: '\ub124\uc774\ud2f0\ube0c \uacbd\ub85c \uacb0\uacfc \uc717\ubd80\ubd84', desc: '\ud648 \uacbd\ub85c \uacb0\uacfc \uce74\ub4dc\uc758 \uba38\ub9ac\uc904(\uc18c\uc694 \uc2dc\uac04\u00b7\uad6c\uac04\u00b7\uc990\uaca8\ucc3e\uae30\u00b7\ub2eb\uae30), \uc2b9\ucc28\u00b7\ub300\uae30\u00b7\ub3c4\ubcf4 \uc694\uc57d, \ud658\uc2b9 \uc548\ub0b4, \uacbd\ub85c \ud0ed(\ucd5c\ub2e8\uc2dc\uac04\u00b7\ucd5c\uc18c\ud658\uc2b9\u00b7\uc9c0\ud558\ucca0\u00b7\ubc84\uc2a4), \uacf5\uc2dd \uacf5\uc9c0\u00b7\uc9c0\uc5f0 \uc81c\ubcf4 \uc904, \uc7a5\uac70\ub9ac \uc5f4\ucc28\u00b7\ubc84\uc2a4 \uace0\ub974\uae30\ub97c \uc5d4\uc9c4\uc774 \uc815\ud574 \ub0b4\ub824\uc8fc\uace0, \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694. \ubb38\uc81c\uac00 \uc0dd\uae30\uba74 \uc608\uc804 \uc6f9 \uce74\ub4dc\ub85c \ub3cc\uc544\uac00\uc694.',
+    off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9 \uacb0\uacfc \uce74\ub4dc)\uc73c\ub85c \uadf8\ub824\uc694.', bad: '\ub124\uc774\ud2f0\ube0c \uacb0\uacfc \uce74\ub4dc \uc717\ubd80\ubd84\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc6f9 \uce74\ub4dc\ub85c \ub300\uc2e0 \ubcf4\uc5ec\uc8fc\uace0 \uc788\uc5b4\uc694', stale: '\uc5d4\uc9c4\uc774 \uc900 \ud654\uba74\uc774 \uc62c\ubc14\ub974\uc9c0 \uc54a\uc544 \uc800\uc7a5\ud574 \ub454 \ud654\uba74\uc744 \uc4f0\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \uacb0\uacfc \uce74\ub4dc\uc758 \uba38\ub9ac\uc904\u00b7\uc694\uc57d\u00b7\ud658\uc2b9 \uc548\ub0b4\u00b7\uacbd\ub85c \ud0ed\u00b7\uacf5\uc9c0 \uc904\u00b7\uc7a5\uac70\ub9ac \uace0\ub974\uae30\ub97c \uc5d4\uc9c4\uc774 \uc815\ud55c \ub300\ub85c \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694(\uc2e4\ud5d8 \uc911).' },
   { k: 'sbh', title: '\uac00\ub824\uc9c4 \ub3d9\uc548 \uc5d4\uc9c4\uc774 \uc774\uc5b4\ubc1b\uae30', desc: '\uc571\uc744 \ud648 \ud654\uba74\uc774\ub098 \ub2e4\ub978 \uc571\uc73c\ub85c \ubcf4\ub0b8 \ub3d9\uc548\uc5d0\ub3c4 \uc5d4\uc9c4\uc774 \uc548\ub0b4\ub97c \ubc14\ub85c \uc774\uc5b4\ubc1b\uc544 \uc601\uc810\u00b7\ub3c4\ucc29 \uc2dc\uac01\u00b7\ud558\ucc28 \uc54c\ub9bc\uc744 \uacc4\uc18d \ub9de\ucdb0\uc694. \uc571\uc744 \ub2e4\uc2dc \uc5f4\uba74 \uadf8 \uacb0\uacfc\ub97c \uc774\uc5b4\uc11c \uc368\uc694. \ubb38\uc81c\uac00 \uc0dd\uae30\uba74 \uc608\uc804 \ubc29\uc2dd(\uac00\ub824\uc9c4 \ub3d9\uc548 \uc6f9\uc744 \uae68\uc6cc \uacc4\uc0b0)\uc73c\ub85c \ub3cc\uc544\uac00\uc694.',
     off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uac00\ub824\uc9c4 \ub3d9\uc548 \uc6f9\uc744 \uae68\uc6cc \uacc4\uc0b0)\uc73c\ub85c \uc774\uc5b4\uac00\uc694.', bad: '\uc5d4\uc9c4 \uc774\uc5b4\ubc1b\uae30\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \ub300\uc2e0 \uc774\uc5b4\uac00\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \uc571\uc774 \uac00\ub824\uc9c0\uba74 \uc5d4\uc9c4\uc774 \uc548\ub0b4\ub97c \ubc14\ub85c \uc774\uc5b4\ubc1b\uace0, \ub2e4\uc2dc \uc5f4\uba74 \uadf8 \uacb0\uacfc\ub97c \uc774\uc5b4\uc11c \uc368\uc694(\uc2e4\ud5d8 \uc911).' },
   { k: 'cnd', title: '\ud6c4\ubcf4 \uac80\uc0c9\uc744 \uc571\uacfc \uc5d4\uc9c4\uc774 \ud558\uae30', desc: '\ud648 \ud0ed\uc5d0\uc11c \ucd9c\ubc1c\u00b7\ub3c4\ucc29\uc744 \uc785\ub825\ud560 \ub54c \ub098\uc624\ub294 \ud6c4\ubcf4 \uc911 \uc9c0\ud558\ucca0\uc5ed\uc740 \uc5d4\uc9c4\uc774 \uc9c1\uc811 \ucc3e\uace0, \ubc84\uc2a4\uc815\ub958\uc7a5\uacfc \uc7a5\uc18c\ub294 \uc571 \ubcf8\uccb4\uac00 \uc9c1\uc811 \ucc3e\uc544\uc694. \uc6f9\uc774 \ub9e1\ub358 \uac80\uc0c9\uc744 \uc904\uc5ec \uc785\ub825\uc774 \ub354 \ubd80\ub4dc\ub7ec\uc6cc\uc838\uc694. \ubb38\uc81c\uac00 \uc0dd\uae30\uba74 \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \ub3cc\uc544\uac00\uc694.',
@@ -16446,14 +16446,15 @@ async function handleScreenWrite(request) {
 //
 // \uc785\ub825  rheadScreen({ cap, part }, facts)
 //        cap   = \uc571\uc774 \uadf8\ub9b4 \uc218 \uc788\ub294 \ud654\uba74 \uaddc\uaca9 \uc218\uc900(10 \uc774\uc0c1\uc774\uc5b4\uc57c \ub9cc\ub4e0\ub2e4 \u2014 \uba38\ub9ac\uc904 \ub178\ub4dc rhd \uac00 10)
-//        part  = 'h'(\uba38\ub9ac\uc904 + \uc694\uc57d \uc904 + \ud658\uc2b9 \uc548\ub0b4) | 't'(\uacbd\ub85c \uc635\uc158 \ud0ed \uc904) | 'n'(\uacf5\uc2dd \uacf5\uc9c0 \u00b7 \uc9c0\uc5f0 \uc81c\ubcf4 \uc904)
+//        part  = 'h'(\uba38\ub9ac\uc904 + \uc694\uc57d \uc904 + \ud658\uc2b9 \uc548\ub0b4) | 't'(\uacbd\ub85c \uc635\uc158 \ud0ed \uc904) | 'n'(\uacf5\uc2dd \uacf5\uc9c0 \u00b7 \uc9c0\uc5f0 \uc81c\ubcf4 \uc904) | 'l'(\uc7a5\uac70\ub9ac \uc5f4\ucc28\u00b7\ubc84\uc2a4 \uace0\ub974\uae30 + \ub300\uae30 \uc81c\uc678 \uc548\ub0b4)
 //        facts = { m: \ucd1d \uc18c\uc694 \ubd84, a: \ucd9c\ubc1c \uc774\ub984, b: \ub3c4\ucc29 \uc774\ub984, fav: \uc990\uaca8\ucc3e\uae30 \ub2e8\ucd94\ub97c \ubcf4\uc77c\uc9c0(0|1),
 //                  sp: {ride,wait,walk}(\ubd84) | null, why: \uc5d4\uc9c4\uc774 \uc900 \uc774\uc720 \uae00,
 //                  dx: [{s,dc,dd,bc,bd,to,secs}](\ud658\uc2b9 \ud638\ucc28\u00b7\ubb38 \uc6d0\uc790\ub8cc), ex: {s, l:[{fac,door}]} | null(\ud558\ucc28 \ube60\ub978 \ubb38),
 //                  xs: [{kind,at,walkMin,boardAt,toType,toLine,fromType,fromLine,service}](\ud658\uc2b9 \uc6d0\uc790\ub8cc),
 //                  tab: \uc9c0\uae08 \uace0\ub978 \ud0ed('fast'|'less'|'sub'|'bus'|'longdist'), ld: \uc7a5\uac70\ub9ac \ud0ed\uc744 \ubcf4\uc77c\uc9c0(0|1),
 //                  u: \uc774\ub3d9 \uc911\uc774\ub77c \uc22b\uc790\uac00 '\ub0a8\uc740 \uc2dc\uac04'\uc778\uc9c0(0|1), nr: \uacbd\ub85c\uac00 \uc5c6\ub294 \ud0ed \uc774\ub984('sub'|'bus'|\u2026; \ube44\uba74 \uc815\uc0c1),
-//                  ln: \ub0b4 \uacbd\ub85c\uc758 \uc9c0\ud558\ucca0 \ub178\uc120 \uc774\ub984\ub4e4, off: { \ub178\uc120: {text,title,ts,estimated,suspect} }(\uc11c\ubc84\uac00 \uc900 \uacf5\uc9c0 \uc6d0\uc790\ub8cc), al: { \ub178\uc120: {reporters, stations} }, now: \uc9c0\uae08 \uc2dc\uac01(ms) }
+//                  ln: \ub0b4 \uacbd\ub85c\uc758 \uc9c0\ud558\ucca0 \ub178\uc120 \uc774\ub984\ub4e4, off: { \ub178\uc120: {text,title,ts,estimated,suspect} }(\uc11c\ubc84\uac00 \uc900 \uacf5\uc9c0 \uc6d0\uc790\ub8cc), al: { \ub178\uc120: {reporters, stations} }, now: \uc9c0\uae08 \uc2dc\uac01(ms),
+//                  lg: \uc7a5\uac70\ub9ac \uc6d0\uc790\ub8cc { mode, grade, depTs, candidates:[{mode,depTs,depLabel,totalMin}], options:[{grade,depTs,depLabel,fare}], noWaitMin, fastRide:{depLabel,rideMin,noWaitMin} } | null }
 // \ucd9c\ub825  { ok, v:1, screen:'rhead', cover:'tab', bg:'card', head:[], body:[\ub178\ub4dc\u2026], info:{part} }
 // \ub9e8 \uc544\ub798 module.exports \ub294 \uc2dc\ud5d8(Node)\uc6a9\uc774\uace0 Worker \uc5d0\uc11c\ub294 \ud568\uc218 \uc120\uc5b8\ub9cc \uc4f0\uc778\ub2e4.
 'use strict';
@@ -16553,7 +16554,8 @@ function rheadFacts(f) {
     u: (f.u === 1 || f.u === true) ? 1 : 0, nr: rheadStr(f.nr, 12).replace(/[^a-z]/g, ''),
     ln: rheadList(f.ln, 6).map(function (l) { return rheadStr(l, 24).trim(); }).filter(Boolean),
     off: (f.off && typeof f.off === 'object') ? f.off : {}, offAt: Number(f.offAt) > 0 ? Number(f.offAt) : 0,
-    al: (f.al && typeof f.al === 'object') ? f.al : {}, now: Number(f.now) > 0 ? Number(f.now) : 0
+    al: (f.al && typeof f.al === 'object') ? f.al : {}, now: Number(f.now) > 0 ? Number(f.now) : 0,
+    lg: (f.lg && typeof f.lg === 'object') ? f.lg : null
   };
 }
 
@@ -16575,6 +16577,57 @@ function rheadOffParts(l, n, now) {
   if (txt.length > 110) txt = txt.slice(0, 108).replace(/\s+\S*$/, '') + '\u2026';
   var pre = (txt.indexOf(l) === 0) ? '' : l + ' \u2014 ';
   return [['\uc11c\uc6b8\uad50\ud1b5\uacf5\uc0ac \uacf5\uc9c0', 1], [' \u00b7 ' + pre + txt + ' (' + rheadAgo(n.ts, now) + ')', 0]];
+}
+// \u2500\u2500 \uc7a5\uac70\ub9ac \uc5f4\ucc28\u00b7\ubc84\uc2a4 \uace0\ub974\uae30(\uc608\uc804 \uc6f9 _renderLdGradeChips \uc640 \uac19\uc740 \ud310\ub2e8\u00b7\ubb38\uad6c; \ub4dc\ub86d\ubc15\uc2a4 \ub300\uc2e0 \ub2e8\ucd94 \uc904, \uadf8\ub9bc\ub9d0 \uc81c\uc678) \u2500\u2500
+var RHEAD_LD_MODE = { train: '\uc5f4\ucc28', expbus: '\uace0\uc18d\ubc84\uc2a4', subbus: '\uc2dc\uc678\ubc84\uc2a4' };
+function rheadWon(n) { return String(Math.round(Number(n))).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }      // 12300 \u2192 '12,300'
+function rheadNum(v) { return (v == null || v === '' || !isFinite(Number(v))) ? null : Number(v); }
+function rheadLdNodes(f) {
+  var lg = f.lg, out = [];
+  if (!lg || !lg.mode) return [{ t: 'spacer', h: 0 }];
+  var cands = rheadList(lg.candidates, 8), opts = rheadList(lg.options, 8), cur = rheadNum(lg.depTs), mode = rheadStr(lg.mode, 12), grade = rheadStr(lg.grade, 20);
+  var cut = function (t) { t = String(t).replace(/\s+/g, ' ').trim(); return t.length > 24 ? t.slice(0, 23) + '\u2026' : t; };
+  var wid = function (t) { var w = 0; for (var i = 0; i < t.length; i++) w += t.charCodeAt(i) >= 0x1100 ? 1 : 0.62; return w; };      // \uae00\uc790 \ud3ed \uc5b4\ub9bc(\ud55c\uae00 1, \uadf8 \ubc16 0.62)
+  var rows = function (items) {                         // \ub2e8\ucd94 \uc904 \u2014 \ud3ed\uc774 \ud5c8\ub77d\ud558\ub294 \ub9cc\ud07c(\uc5b4\ub9bc 25\uce78 \uc774\ub0b4) \ud55c \uc904\uc5d0 \ub2f4\ub294\ub2e4
+    var line = [], w = 0;
+    items.forEach(function (it) {
+      var iw = wid(it.label) + 2.4;
+      if (line.length && w + iw > 25) { out.push({ t: 'btnrow', pad: [0, 0, 0, 6], gap: 6, h: 32, items: line }); line = []; w = 0; }
+      line.push(it); w += iw;
+    });
+    if (line.length) out.push({ t: 'btnrow', pad: [0, 0, 0, 6], gap: 6, h: 32, items: line });
+  };
+  if (cands.length > 1) {
+    var mi = [];
+    cands.forEach(function (c, i) {
+      if (!c || typeof c !== 'object' || !c.mode) return;
+      var cm = rheadStr(c.mode, 12), cd = rheadNum(c.depTs);
+      var on = (cm === mode) && (cur == null || cd === cur);
+      var label = (RHEAD_LD_MODE[cm] || cm) + (c.depLabel ? ' ' + rheadStr(c.depLabel, 12) : '') + (rheadNum(c.totalMin) != null ? ' \u00b7 ' + rheadInt(c.totalMin, 0, 9999) + '\ubd84' : '');
+      mi.push({ label: cut(label), on: on, act: { a: 'call', v: 'rh.ld.m.' + i } });
+    });
+    rows(mi);
+  }
+  if (opts.length > 1) {
+    var gi = [];
+    opts.forEach(function (o, i) {
+      if (!o || typeof o !== 'object' || !o.grade) return;
+      var og = rheadStr(o.grade, 20), od = rheadNum(o.depTs);
+      var on = (og === grade) && (cur == null || od == null || od === cur);
+      var label = og + (o.depLabel ? ' ' + rheadStr(o.depLabel, 12) : '') + (rheadNum(o.fare) != null ? ' \u00b7 ' + rheadWon(o.fare) + '\uc6d0' : '');
+      gi.push({ label: cut(label), on: on, act: { a: 'call', v: 'rh.ld.g.' + i } });
+    });
+    rows(gi);
+  }
+  var note = '', nw = rheadNum(lg.noWaitMin);
+  if (nw != null) note += '\ub300\uae30 \uc2dc\uac04\uc744 \ube7c\uba74 \uc57d ' + rheadInt(nw, 0, 9999) + '\ubd84 (\ub2e4\ub978 \uc9c0\ub3c4\uc571\uc740 \ub300\uae30\ub97c \ube7c\uace0 \ud45c\uc2dc\ud574\uc694)';
+  var fr = (lg.fastRide && typeof lg.fastRide === 'object') ? lg.fastRide : null;
+  if (fr && rheadNum(fr.rideMin) != null) {
+    note += (note ? '\n' : '') + '\uc774\ub3d9\ub9cc \uac00\uc7a5 \ube60\ub978 \ud3b8: ' + rheadStr(fr.depLabel, 12) + ' \ucd9c\ubc1c, \uc5f4\ucc28 ' + rheadInt(fr.rideMin, 0, 9999) + '\ubd84' + (rheadNum(fr.noWaitMin) != null ? ' (\ub300\uae30 \uc81c\uc678 \ucd1d ' + rheadInt(fr.noWaitMin, 0, 9999) + '\ubd84)' : '');
+  }
+  if (note) out.push({ t: 'text', s: note, size: 12, color: 'sub', lh: 1.5, pad: [0, 2, 0, 8] });
+  if (!out.length) out.push({ t: 'spacer', h: 0 });
+  return out;
 }
 function rheadNoteNodes(f) {
   var now = f.now || 0, out = [], i;
@@ -16657,15 +16710,15 @@ function rheadTabNodes(f) {
 function rheadScreen(inp, factsIn) {
   inp = inp || {};
   if (!(Number(inp.cap) >= 10)) return { ok: false, error: 'cap' };
-  var part = inp.part === 't' ? 't' : (inp.part === 'n' ? 'n' : 'h');
+  var part = (inp.part === 't' || inp.part === 'n' || inp.part === 'l') ? inp.part : 'h';
   var f = rheadFacts(factsIn);
-  var body = part === 't' ? rheadTabNodes(f) : (part === 'n' ? rheadNoteNodes(f) : rheadHeadNodes(f));
+  var body = part === 't' ? rheadTabNodes(f) : (part === 'n' ? rheadNoteNodes(f) : (part === 'l' ? rheadLdNodes(f) : rheadHeadNodes(f)));
   var out = { ok: true, v: 1, screen: 'rhead', cover: 'tab', bg: 'card', head: [], body: body, info: { part: part } };      // \uce74\ub4dc \uc548\uc5d0 \ub193\uc774\ub294 \ud654\uba74 \u2014 \ubc14\ud0d5\uc740 \uce74\ub4dc\uc0c9
   out.rev = 'r' + RHEAD_SCREEN_V + part + ':' + rheadHash(JSON.stringify(body));
   return out;
 }
 // \uacbd\ub85c \uacb0\uacfc \uce74\ub4dc \uc717\ubd80\ubd84 \uc5d4\uc9c4 Worker \uc5f0\uacb0\ubd80 \u2014 POST /screen/rhead (engine/rhead.js \uc758 rheadScreen \uc744 \ubd80\ub978\ub2e4). route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/screen/rhead") return handleScreenRhead(request);` \ub97c \ub123\ub294\ub2e4.
-//   \ubcf8\ubb38(JSON \uae00, Content-Type: text/plain \uc73c\ub85c \ubcf4\ub0b4 \uc0ac\uc804 \uc694\uccad\uc744 \ud53c\ud55c\ub2e4): { cap(10 \uc774\uc0c1), part:"h"|"t"|"n", f:{m,a,b,fav,sp,why,dx,ex,xs,tab,ld} }
+//   \ubcf8\ubb38(JSON \uae00, Content-Type: text/plain \uc73c\ub85c \ubcf4\ub0b4 \uc0ac\uc804 \uc694\uccad\uc744 \ud53c\ud55c\ub2e4): { cap(10 \uc774\uc0c1), part:"h"|"t"|"n"|"l", f:{m,a,b,fav,sp,why,dx,ex,xs,tab,ld} }
 //   \uc5d4\uc9c4\uc740 \uc544\ubb34\uac83\ub3c4 \uc800\uc7a5\ud558\uc9c0 \uc54a\ub294\ub2e4. \uac1c\uc778 \uc2dd\ubcc4 \uc815\ubcf4\ub294 \uc624\uac00\uc9c0 \uc54a\ub294\ub2e4.
 async function handleScreenRhead(request) {
   var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Cache-Control": "no-store" };

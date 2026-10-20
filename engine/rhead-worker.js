@@ -1,5 +1,5 @@
 // 경로 결과 카드 윗부분 엔진 Worker 연결부 — POST /screen/rhead (engine/rhead.js 의 rheadScreen 을 부른다). route-v2 의 handleFetch 에 `if (url.pathname === "/screen/rhead") return handleScreenRhead(request);` 를 넣는다.
-//   본문(JSON 글, Content-Type: text/plain 으로 보내 사전 요청을 피한다): { cap(10 이상), part:"h"|"t"|"n", f:{m,a,b,fav,sp,why,dx,ex,xs,tab,ld} }
+//   본문(JSON 글, Content-Type: text/plain 으로 보내 사전 요청을 피한다): { cap(10 이상), part:"h"|"t"|"n"|"l", f:{m,a,b,fav,sp,why,dx,ex,xs,tab,ld} }
 //   엔진은 아무것도 저장하지 않는다. 개인 식별 정보는 오가지 않는다.
 async function handleScreenRhead(request) {
   var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Cache-Control": "no-store" };

@@ -176,6 +176,37 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     });
   }
 
+  console.log('[③-3 장거리 열차·버스 고르기(part l)]');
+  {
+    const D = await fresh({ plugin: true, on: true }); await drawCard(D);
+    await D.page.evaluate(() => { window.__re = []; window._ldReselect = (m, g, d) => window.__re.push([m, g, d]); });
+    const LD = { mode: 'train', grade: 'KTX', depTs: 5, noWaitMin: 80,
+      candidates: [{ mode: 'train', depTs: 5, depLabel: '13:47', totalMin: 89 }, { mode: 'expbus', depTs: 6, depLabel: '13:50', totalMin: 120 }],
+      options: [{ grade: 'KTX', depTs: 5, depLabel: '13:47', fare: 12300 }, { grade: '무궁화', depTs: 9, depLabel: '14:00', fare: 8500 }] };
+    await t('웹이 장거리 상자를 보여 줄 때 원자료(후보·등급·대기 제외)만 보내고 엔진 글을 그대로 show', async () => {
+      await D.page.waitForTimeout(600); assert.ok(!D.reqs.some(q => q.part === 'l'), '장거리가 아닌데 요청했다');
+      await D.page.evaluate((ld) => { _renderLdGradeChips(ld); document.getElementById('ldGradeChips').scrollIntoView({ block: 'center' }); }, LD);
+      assert.ok(await waitFor(D, async () => (await puts(D, 'rld')).length >= 1), 'rld show 가 없다: ' + JSON.stringify(D.reqs.filter(q => q.part === 'l')).slice(0, 300));
+      const q = D.reqs.filter(q => q.part === 'l').pop(); assert.strictEqual(q.cap, 10); assert.strictEqual(q.f.lg.mode, 'train'); assert.strictEqual(q.f.lg.candidates.length, 2); assert.strictEqual(q.f.lg.options[0].fare, 12300);
+      const ns = nodes(await lastJ(D, 'rld')); const its = ns.filter(n => n.t === 'btnrow').flatMap(n => n.items);
+      assert.deepStrictEqual(its.map(i => i.label), ['열차 13:47 · 89분', '고속버스 13:50 · 120분', 'KTX 13:47 · 12,300원', '무궁화 14:00 · 8,500원']);
+      assert.deepStrictEqual(its.filter(i => i.on).map(i => i.label), ['열차 13:47 · 89분', 'KTX 13:47 · 12,300원']);
+      assert.ok(ns.some(n => n.t === 'text' && /대기 시간을 빼면 약 80분/.test(n.s)));
+      assert.ok(await waitFor(D, async () => await own(D, 'ldGradeChips'), 6000), '웹 상자 속을 안 가렸다');
+    });
+    await t('고르면 예전 _ldReselect(수단 · 등급 · 시각)가 그 번호의 원자료로 불린다 · 번호 밖/허용 밖은 무시', async () => {
+      await act(D, 'rld', { a: 'call', v: 'rh.ld.m.1' }); await act(D, 'rld', { a: 'call', v: 'rh.ld.g.1' }); await act(D, 'rld', { a: 'call', v: 'rh.ld.g.9' }); await act(D, 'rld', { a: 'call', v: 'rh.ld.x.0' }); await D.page.waitForTimeout(150);
+      assert.deepStrictEqual(await D.page.evaluate(() => window.__re), [['expbus', null, 6], ['train', '무궁화', 9]]);
+    });
+    await t("'size' 이벤트로 높이를 따르고 · 장거리가 아니게 되면 걷는다", async () => {
+      await emit(D, 'size', { id: 'rld', h: 150 }); await D.page.waitForTimeout(150);
+      assert.strictEqual(await D.page.evaluate(() => document.getElementById('ldGradeChips').offsetHeight), 150);
+      await D.page.evaluate(() => _renderLdGradeChips(null));
+      assert.ok(await waitFor(D, async () => !(await own(D, 'ldGradeChips')), 6000), '장거리가 아닌데 가린 채다');
+      assert.deepStrictEqual(D.errs, []); await D.ctx.close();
+    });
+  }
+
   console.log('[④ 폴백·스위치]');
   await t('엔진이 죽으면 웹 카드 · 실패 표시', async () => {
     const x = await fresh({ plugin: true, on: true, serve: 'down' }); await drawCard(x);
