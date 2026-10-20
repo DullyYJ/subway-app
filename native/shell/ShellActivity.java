@@ -417,7 +417,7 @@ public class ShellActivity extends Activity {
             case ShellCore.E_TOAST: toast(e.arg); loadSlot(slots.length - 1, true); break;
             case ShellCore.E_LINK: openLink(e.arg); break;
             case ShellCore.E_NEWS: openNews(e.arg); break;
-            case ShellCore.E_PAGE: if ("ovl".equals(e.arg) || "sam".equals(e.arg) || "arr".equals(e.arg) || "cm".equals(e.arg) || "gw".equals(e.arg)) openSetPage(e.arg); else toast("아직 옮기는 중이에요"); break;
+            case ShellCore.E_PAGE: if ("ovl".equals(e.arg) || "sam".equals(e.arg) || "arr".equals(e.arg) || "cm".equals(e.arg) || "gw".equals(e.arg) || "dev".equals(e.arg)) openSetPage(e.arg); else toast("아직 옮기는 중이에요"); break;
             default: break;
         }
     }
@@ -1588,6 +1588,7 @@ public class ShellActivity extends Activity {
         final String url = "sam".equals(setPage) ? ShellCore.pageUrlSam(PowerInfo.read(this).pageFacts())
             : ("cm".equals(setPage) ? ShellCore.pageUrlCm(cm.pageFacts(store))
             : "gw".equals(setPage) ? ShellCore.pageUrlGw(GwCore.pageFacts(store))
+            : "dev".equals(setPage) ? ShellCore.pageUrlDev(DevCore.pageFacts(devPh, devLeft(), devStopped))
             : "arr".equals(setPage) ? ShellCore.pageUrlArr(arrStat, RideService.running, notifOk(), RideService.liveReco, RideService.recoStage, RideService.recoStageAt)
             : ShellCore.pageUrl(store, "ovl", RideOverlay.supported(), RideOverlay.allowed(this)));
         new Thread(new Runnable() {
@@ -1664,6 +1665,8 @@ public class ShellActivity extends Activity {
         if (r == ShellCore.PG_SAMOPEN) { PowerInfo.openSamsung(this); return; }          // 돌아오면 onResume 이 다시 읽어 그린다
         if (r == ShellCore.PG_BATREQ) { PowerInfo.requestIgnore(this); return; }
         if (r == ShellCore.PG_ARRTEST) { testReco(ShellCore.arrKind(v)); return; }
+        if (r == ShellCore.PG_DEVSTART) { devStart(DevCore.mode(v)); return; }
+        if (r == ShellCore.PG_DEVSTOP) { devStop(true); return; }
         if (r == ShellCore.PG_GWADD) {
             gwSync(true);
             if (WidgetCore.pin(this, GwCore.addType(v))) toast("홈 화면에 추가할지 물어보면 [추가]를 눌러 주세요");
@@ -1677,6 +1680,44 @@ public class ShellActivity extends Activity {
             try { startActivity(new Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName()))); } catch (Throwable t) { /* 기기가 못 열면 안내 글만 남는다 */ }
         }
         if (r != ShellCore.PG_NONE) loadSetPage();
+    }
+
+    // ───────────── 개발자 도구(출시 전 삭제): 가짜 여정을 떠 있는 안내 막대에 보낸다 ─────────────
+    private String devMode = "", devPh;
+    private long devT0;
+    private boolean devStopped, devRecoSent;
+    private RideOverlay devOv;
+    private final Runnable devTick = new Runnable() { @Override public void run() { devStep(); } };
+    private int devSec() { return (int) ((System.currentTimeMillis() - devT0) / 1000L); }
+    private int devLeft() { return devMode.length() == 0 ? 0 : Math.max(0, DevCore.total(devMode) - devSec()); }
+    private void devStart(String mode) {
+        if (mode == null) return;
+        if (!RideOverlay.allowed(this) && !"reco".equals(mode) && !"quit".equals(mode)) { toast("설정에서 '다른 앱 위에 표시'를 먼저 허용해 주세요"); return; }
+        devStop(false);
+        devMode = mode; devT0 = System.currentTimeMillis(); devStopped = false; devRecoSent = false; devPh = null;
+        if (devOv == null) devOv = new RideOverlay(this);
+        devStep();
+    }
+    private void devStop(boolean render) {
+        main.removeCallbacks(devTick);
+        if (devOv != null) devOv.hide();
+        boolean was = devMode.length() > 0;
+        devMode = ""; devPh = null; devStopped = was && render;
+        if (render && ShellCore.S_SETPG.equals(sheetName) && "dev".equals(setPage) && sheet != null && sheet.isShowing()) loadSetPage();
+    }
+    private void devStep() {
+        if (devMode.length() == 0) return;
+        int sec = devSec();
+        String ph = DevCore.phaseAt(devMode, sec);
+        if (ph == null) { devStop(false); devStopped = false; if (ShellCore.S_SETPG.equals(sheetName) && "dev".equals(setPage) && sheet != null && sheet.isShowing()) loadSetPage(); return; }
+        boolean changed = !ph.equals(devPh);
+        devPh = ph;
+        if ("reco".equals(ph) && !devRecoSent) { devRecoSent = true; testReco("lunch"); }
+        String[] bar = DevCore.bar(ph);
+        if (devOv != null) { if (bar == null) devOv.hide(); else devOv.update(true, bar[0], bar[1], bar[2], Integer.parseInt(bar[3])); }
+        if ("quit".equals(devMode) && sec >= DevCore.QUIT_AT - 1) { main.postDelayed(new Runnable() { @Override public void run() { finishAndRemoveTask(); android.os.Process.killProcess(android.os.Process.myPid()); } }, 1000L); return; }
+        if ((changed || sec % 5 == 0) && ShellCore.S_SETPG.equals(sheetName) && "dev".equals(setPage) && sheet != null && sheet.isShowing()) loadSetPage();
+        main.postDelayed(devTick, 1000L);
     }
 
     private boolean notifOk() {

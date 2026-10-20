@@ -161,6 +161,9 @@ ok(odd.ok && all(odd).find(n => n.t === 'field').value.length === 12, '이상한
   ok(tx.includes('진행 중 · 지금 단계: 1정거장 전(내릴 준비) · 42초 남음'), '개발자: 진행 중 문구');
   ok(texts(PG('dev', { stopped: 1 })).includes('중지했어요.') && !texts(PG('dev', {})).some(x => /진행 중|중지했어요/.test(x)), '개발자: 중지/아무 것도 안 함');
   ok(flat(PG('dev', {}).body).filter(n => n.t === 'row')[0].kids.map(k => k.act.v).join() === 'dev.start.plain,dev.start.reco,dev.start.alert2,dev.start.alert1', '개발자: 단계 단추 4개가 한 줄');
+  { const tn = texts(PG('dev', { nv: 1 })).join('\n'), tw = texts(PG('dev', {})).join('\n');
+    ok(/주황 막대/.test(tn) && /빨간 막대/.test(tn) && /끌어 옮길 수 있고/.test(tn) && !/알약|무지개|캐릭터|맛집/.test(tn), '개발자(nv): 떠 있는 안내 막대 기준 설명(알약·무지개·캐릭터 없음)');
+    ok(/알약/.test(tw) && /무지개/.test(tw) && !/주황 막대/.test(tw), '개발자(웹 기준): 알약·무지개 설명 그대로'); }
   // 하차 5분 전 추천 시험
   ok(texts(PG('arr', {})).includes("'상태 확인'을 누르면 감시 상태와 남은 시간이 표시됩니다."), '추천 시험: 처음 안내');
   const ST = { timer: 1, route: 1, dest: '강남', rem: 725, pre: 10, slot: 'night', dinner: 0, alertAt: Date.UTC(2026, 9, 19, 6, 7, 12), tickAt: Date.UTC(2026, 9, 19, 6, 8, 0), tzo: -540, policy: 1, dg: { stage: '문구 생성', at: Date.UTC(2026, 9, 19, 6, 7, 11), err: '' } };

@@ -65,6 +65,17 @@ public class ShellJvmTest {
                 ok(dec.contains("\"st\":{\"timer\":true,\"route\":true,\"pre\":7,\"tzo\":-540,\"policy\":false,\"dest\":\"강남\",\"rem\":300,\"dg\":{\"stage\":\"시험\",\"at\":5}}"), "상태 확인 사실: " + dec);
             }
             {
+                ShellCore.MemStore ds = new ShellCore.MemStore();
+                ok("all".equals(DevCore.mode("dev.start.all")) && "quit".equals(DevCore.mode("dev.start.quit")) && DevCore.mode("dev.start.x") == null && DevCore.mode("dev.stop") == null && DevCore.mode(null) == null, "개발자 도구: 모드 이름");
+                ok(DevCore.total("all") == 75 && DevCore.total("plain") == 15 && DevCore.total("quit") == 15, "전체 75초 · 한 단계 15초");
+                ok("plain".equals(DevCore.phaseAt("all", 0)) && "plain".equals(DevCore.phaseAt("all", 14)) && "reco".equals(DevCore.phaseAt("all", 15)) && "alert2".equals(DevCore.phaseAt("all", 30)) && "alert1".equals(DevCore.phaseAt("all", 45)) && "plain".equals(DevCore.phaseAt("all", 60)) && DevCore.phaseAt("all", 75) == null && DevCore.phaseAt("all", -1) == null, "전체 시나리오 단계: 0~15 평상시 → 추천 → 2정거장 → 1정거장 → 마무리");
+                ok("alert1".equals(DevCore.phaseAt("alert1", 3)) && DevCore.phaseAt("alert1", 15) == null, "한 단계만 고르면 15초");
+                ok(DevCore.bar("reco") == null && DevCore.bar("quit") == null && "0".equals(DevCore.bar("plain")[3]) && "2".equals(DevCore.bar("alert2")[3]) && "1".equals(DevCore.bar("alert1")[3]) && DevCore.bar("alert1")[2].length() > 0, "막대 단계(추천·종료는 막대 없음)");
+                ok(DevCore.pageFacts(null, 0, false).equals("{\"pf\":{\"nat\":true,\"nv\":true}}") && DevCore.pageFacts("alert2", 31, false).equals("{\"pf\":{\"nat\":true,\"nv\":true,\"ph\":\"alert2\",\"left\":31}}") && DevCore.pageFacts(null, 0, true).contains("\"stopped\":true"), "개발자 도구 화면 기기 사실");
+                ok(ShellCore.routePage(ds, "dev", "call", "dev.start.all", null, false, true) == ShellCore.PG_DEVSTART && ShellCore.routePage(ds, "dev", "call", "dev.stop", null, false, true) == ShellCore.PG_DEVSTOP && ShellCore.routePage(ds, "dev", "call", "pg.back", null, false, true) == ShellCore.PG_CLOSE && ShellCore.routePage(ds, "dev", "call", "dev.start.zz", null, false, true) == ShellCore.PG_NONE, "dev 화면 행동 라우팅");
+                ok(ShellCore.pageUrlDev(DevCore.pageFacts(null, 0, false)).contains("p=dev&f="), "dev 화면 주소");
+            }
+            {
                 ShellCore.MemStore gs = new ShellCore.MemStore();
                 ok(GwCore.roam(gs) == 6, "위젯 돌아다니는 시간 기본 6분");
                 ok(GwCore.stepRoam(gs, "gw.roam.dn") && GwCore.roam(gs) == 5 && GwCore.stepRoam(gs, "gw.roam.up") && GwCore.roam(gs) == 6, "−1분 / +1분");
@@ -216,7 +227,7 @@ public class ShellJvmTest {
         // ── 설정 사실 ──
         ShellCore.MemStore s2 = new ShellCore.MemStore();
         String f = ShellCore.settingsFacts(s2);
-        ok(f.equals("{\"id\":\"\",\"np\":{\"arrive\":1,\"transfer\":1,\"arrive_reco\":1},\"ovl\":0,\"sam\":0,\"samw\":0,\"cm\":0,\"pgs\":[\"sam\",\"ovl\",\"arr\",\"cm\",\"gw\"],\"rl\":1,\"th\":\"pastel\",\"pt\":{},\"day\":\"\"}"), "기본 기기 사실: " + f);
+        ok(f.equals("{\"id\":\"\",\"np\":{\"arrive\":1,\"transfer\":1,\"arrive_reco\":1},\"ovl\":0,\"sam\":0,\"samw\":0,\"cm\":0,\"pgs\":[\"sam\",\"ovl\",\"arr\",\"cm\",\"gw\",\"dev\"],\"rl\":1,\"th\":\"pastel\",\"pt\":{},\"day\":\"\"}"), "기본 기기 사실: " + f);
         s2.put("comm_id", "길동무7"); s2.put("np_transfer", "0"); s2.put("ride_log_off", "1"); s2.put("theme", "dark");
         f = ShellCore.settingsFacts(s2);
         ok(f.contains("\"id\":\"길동무7\"") && f.contains("\"transfer\":0") && f.contains("\"rl\":0") && f.contains("\"th\":\"dark\""), "바뀐 기기 사실");

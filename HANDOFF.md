@@ -1704,9 +1704,17 @@
 - 시험: ride_standby 26(추천 한 번 · 끔/대기) · settings_engine 164(arr nv · pgs) · JVM(PowerInfo 제외 — routePage sam/arr · arrTestBody · pageUrlArr · recoBody/recoText · recoStatJson · offKinds). 워커 `route-v2-2026-10-20s103`. 기기 확인 못 함.
 - **안 옮긴 것과 이유**: 출퇴근 브리핑(`cm`) — 화면만이 아니라 "날씨 + AI 역무원 요약" 알림 본문을 만드는 엔진 엔드포인트가 아직 없고(`/commute-alarm` 은 시각 판단만), 시간 예약(AlarmManager) · 장소 입력의 버스 정류장 검색이 새로 필요. 캐릭터 시계 위젯(`gw`) — 안드로이드 위젯 + 동물 애니메이션. 개발자 도구(`dev`) — 출시 전 삭제 예정 시험 도구. 옛 최근경로·포인트 가져오기도 아직.
 
-## 2026-10-21 엔진 s104 + native-shell — 출퇴근 브리핑 · 옛 데이터 가져오기 확장
+## 2026-10-21 엔진 s104·s105 + native-shell — 출퇴근 브리핑 · 옛 데이터 가져오기 · 캐릭터 시계 위젯 · 개발자 도구 (설정 하위 화면 6개 모두 이식 끝)
 
 - **출퇴근 브리핑(`cm`)**: 엔진 `commute-brief.js`(`cbPlan`·`cbCompose`·`cbBrief`) + `commute-brief-worker.js`(`/commute-brief`, 날씨는 `cbWeather`). 제목 "출근길 브리핑 · A→B", 본문은 경로·날씨·오늘 최저~최고·도착지 날씨(다를 때)·혼잡도(버스 정류장 출발이면 생략)·추천 최대 3줄·주마다 도는 끝말. 시각은 기존 `/commute-alarm` op `occ`(28일치).
 - 앱: `CmCore`(설정 화면 상태 · 순수) · `CommuteAlarm`(AlarmManager 한 번짜리 알람, 정확 알람 권한 있으면 exact 아니면 setAndAllowWhileIdle) · `CommuteReceiver`(울린 뒤 다음 알람 다시 걸기 · 부팅 · 앱 교체 후 재등록). 매니페스트에 SCHEDULE_EXACT_ALARM · RECEIVE_BOOT_COMPLETED 추가. 설정 `cm` 화면(정류장·버스 고르기, 시험 알림)은 `ShellActivity.cmAct` 등.
 - **옛 데이터 가져오기**: `LegacyCore` 를 즐겨찾기 외에 mk_comm_id · 포인트(mk_pt/mk_pts) · commuteAlarm 까지 읽도록 넓혔다. 먼저 옛 앱의 SharedPreferences `gdm_store`/`kv` 미러를 보고, 없으면 leveldb 스캔. 옛 "최근 경로"는 네이티브에 원래 없는 기능이라 옮길 대상이 없다.
-- 시험: commute_brief 15 · settings_engine 167 · JVM(CmCore · LegacyCore). 워커 `route-v2-2026-10-20s104`. **기기 미확인**: 알람 실제 발화, 권한 흐름, 가져오기(실제 옛 앱 데이터).
+- 시험: commute_brief 15 · settings_engine 167 · JVM(CmCore · LegacyCore). 
+- **캐릭터 시계 위젯(`gw`)**: 옛 웹 시절 자바(WidgetCore · Geo · Sim · Art · GdmWidgetHB/HW/VB/VW · Receiver, 커밋 `eb94ab5^`)를 `native/shell` 로 되살렸다. 바뀐 것: 엔진 주소는 `ShellCore.BASE`, 시트는 `assets/chars3d/`(앱 장면과 같은 파일), Capacitor 플러그인(`GdmWidgetPlugin`)은 버리고 `WidgetCore.pin()`(핀 추가) · `sameConfig()` 로 대체. 리소스(레이아웃 4 · xml 4 · 말풍선/버튼 모양 · 미리보기 png · 문구)는 `shell-android/.../res`, 매니페스트에 위젯 4종 + `GdmWidgetReceiver`(알람 · 재부팅 · 시간 바뀜 · 앱 교체).
+  - 설정 `gw` 화면: `GwCore`(순수) 가 돌아다니는 시간(2~10분, 기본 6) · 위젯 종류 · 위젯 설정 JSON 을 만들고, 화면 글은 엔진(`settingsPageGw`). 출·퇴근 장소 좌표는 엔진이 이름으로 찾아 주므로 `/commute-brief` 의 `route` 를 받아 적는다(`gwSync`; 위젯이 없으면 건너뜀, 같은 설정이면 다시 안 그림, 연달아 바꾸면 마지막만).
+  - 위젯 본체 누름 → 커뮤니티 탭 · [출근하기]/[퇴근하기] → `/commute-brief` 의 route 로 출발·도착을 채워 길찾기(`ShellActivity.widgetLaunch`). 앱 화면이 닫히면 `WidgetCore.onAppLeft` 가 동물을 깨운다.
+  - 옛 설계 그대로 남은 것: 출퇴근 장면을 언제 띄울지(`evalScene`)는 위젯 자바가 정한다(응원 문구와 말은 엔진 `/widget-say`). 좌표를 모르는 역 출발은 날씨 좌표 없이 문구만 받는다(버스정류장 출발이나 엔진이 찾은 역만 좌표가 간다).
+  - 시험: `widget_native.test.js`(옛 `WidgetJvmTest check` 265개 + 매니페스트 · 리소스 · 시트 · /widget-say) · JVM(`GwCore`) · android.jar 컴파일. CI 매트릭스에 추가.
+- **개발자 도구(`dev`)**: 옛 웹 오버레이의 알약 · 무지개 · 캐릭터 · 버튼은 네이티브 막대에 없다. 그래서 같은 화면을 `nv` 사실로 막대 기준으로 바꿨다(엔진 `settingsPageDev`). `DevCore`(순수)가 전체 75초(평상시 0~15 → 추천 15~30 → 2정거장 전 30~45 → 1정거장 전 45~60 → 마무리) / 한 단계 15초의 단계표와 막대 시험 글(가짜 여정 임학→아라, 제품 문구 아님 — 출시 전 이 화면과 함께 삭제)을 갖고, `ShellActivity.devStart/devStep` 이 1초마다 `RideOverlay` 를 갱신한다. 추천 단계는 실제 하차 추천 알림(`testReco("lunch")`)을 한 번 보낸다. `quit` 은 15초 뒤 진짜 앱 종료(위젯 동물이 계속 움직이는지 확인용).
+- 설정 첫 화면 `pgs` 가 `[sam, ovl, arr, cm, gw, dev]` 로 늘어 설정의 모든 하위 화면 줄이 보인다.
+- 시험: commute_brief 15 · settings_engine 170 · widget_native 7 · JVM(CmCore · LegacyCore · GwCore · DevCore · pgs). 워커 `route-v2-2026-10-20s105`. **기기 미확인**: 알람 실제 발화 · 권한 흐름 · 가져오기(실제 옛 앱 데이터) · 위젯 그림과 움직임(홈 화면 추가 포함) · 위젯 누름 → 앱 이동 · 개발자 막대. 새 권한: SCHEDULE_EXACT_ALARM · RECEIVE_BOOT_COMPLETED.
