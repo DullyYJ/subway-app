@@ -4,7 +4,7 @@
 //   네이티브에는 웹이 없으니, 앱은 '기기 사실'(보던 경로 응답 · 위치 · 지금 시각 · 받아 둔 대화 · 다음 갱신 시각)만 보내고 이 엔진이 사실을 모아 세 카드를 한 번에 만든다.
 //   각 카드의 글·색·막대는 기존 엔진(aicard.js · home-brief.js · cong.js · talkcard.js)이 그대로 정한다.
 // 입력  hcardsScreen({ cap(18 이상) }, f)
-//   f = { now(ms), tz(동쪽 분), th, hol(주말·공휴일), gps:[위도,경도]|null,
+//   f = { now(ms), tz(동쪽 분), th, hol(주말·공휴일), gps:[위도,경도]|null, rd:{here,boarded,key,nodes[{name,isOrigin,isSub,isBus,lineName}]}|없음(탑승 중일 때만 — 장면이 대기/탑승/하차로 바뀐다),
 //         r: { data(경로 응답 그대로), tab, a, b, bt(기준시각 ms|null), rb(탐색한 시각) } | null,
 //         ai: { nextAt(ms, 0 이면 없음), busy, rnd(0~1) }, tk: { m:[[닉네임,글,시각ms,내 글0|1]…], fold, tzo } }
 // 출력  { ok, v:1, screen:'hcards', cover:'chips', head:[], body:[panel…], info:{ ai:모드, cong:모드, stn } }
@@ -99,10 +99,23 @@ function hcKids(sc) {                                  // 카드 화면 하나�
 }
 // 캐릭터 장면: 어떤 장면(시간대·날씨·계절·대표 캐릭터·동작 대본)인지는 장면 엔진(sceneDecide)이 정하고, 앱은 그 값(JSON 글)대로 그리기만 한다.
 // 탑승 중 장면(대기·탑승·하차)은 탑승 안내 쪽 사실이 필요해 여기서는 보내지 않는다 — 홈에서는 늘 '대기실(idle)' 장면이다.
-function hcSceneNode(now, tz, routeShown, wx, stn) {
+function hcRideNodes(rd) {                                  // 앱이 보낸 탑승 중 재료 → sceneDecide 입력(이름·종류만, 80개까지)
+  if (!rd || typeof rd !== 'object' || !Array.isArray(rd.nodes) || rd.nodes.length < 2) return null;
+  var nodes = rd.nodes.slice(0, 80).map(function (n) {
+    n = (n && typeof n === 'object') ? n : {};
+    return { name: hcStr(n.name, 24), isOrigin: n.isOrigin === true, isSub: n.isSub === true, isBus: n.isBus === true, lineName: hcStr(n.lineName, 16) };
+  });
+  return { nodes: nodes, here: Math.max(0, Math.min(nodes.length - 1, Math.floor(hcNum(rd.here, 0)))), boarded: rd.boarded === true, key: hcStr(rd.key, 40) };
+}
+// 캐릭터 장면: 어떤 장면(시간대·날씨·계절·대표 캐릭터·동작 대본)인지는 장면 엔진(sceneDecide)이 정하고, 앱은 그 값(JSON 글)대로 그리기만 한다.
+// 탑승 중(rd 가 있을 때)이면 기다리는 중(wait) · 타고 가는 중(ride · 버스) · 내렸어요(alight) 장면을 보낸다. 지하철을 타고 가는 동안은 장면 대신 혼잡도 카드를 보이므로 장면 노드가 없다(sceneDecide 의 mode 가 null).
+function hcSceneNode(now, tz, routeShown, wx, stn, rd) {
   if (!hcScene) return null;
-  var sc;
-  try { sc = hcScene({ nowMs: now, tzOffsetMin: tz, locked: false, routeShown: routeShown === true, key: stn || '' }, wx || null); } catch (e) { return null; }
+  var sc, rn = hcRideNodes(rd);
+  try {
+    sc = rn ? hcScene({ nowMs: now, tzOffsetMin: tz, locked: true, here: rn.here, boarded: rn.boarded, key: rn.key, nodes: rn.nodes, routeShown: true }, wx || null)
+            : hcScene({ nowMs: now, tzOffsetMin: tz, locked: false, routeShown: routeShown === true, key: stn || '' }, wx || null);
+  } catch (e) { return null; }
   if (!sc || sc.ok !== true || !sc.mode) return null;
   var js = JSON.stringify(sc);
   if (js.length >= 6000) return null;
@@ -154,7 +167,7 @@ function hcardsScreen(inp, f) {
   var body = [];
   if (aiS && aiS.ok) body.push(hcPanel(hcKids(aiS)));
   if (congS && congS.ok) {
-    var ck = hcKids(congS), scn = hcSceneNode(now, tz, !!rt, hcWx(f.wx && typeof f.wx === 'object' ? f.wx.wF : null), stn);
+    var ck = hcKids(congS), scn = hcSceneNode(now, tz, !!rt, hcWx(f.wx && typeof f.wx === 'object' ? f.wx.wF : null), stn, f.rd);
     if (scn) ck.unshift(scn);                                           // 혼잡도 카드 맨 위: 캐릭터 장면(웹과 같은 자리)
     body.push(hcPanel(ck, congS.info && congS.info.bc && /^#/.test(congS.info.bc) ? congS.info.bc : ''));
   }

@@ -1019,6 +1019,7 @@ public class ShellActivity extends Activity {
         final String resKey = home.resRev + ":" + home.resTab;
         final long nowH = System.currentTimeMillis();
         hc.ensureNext(nowH);
+        hc.rideScene = RideService.running ? RideService.liveScene : "";
         final String hKey = hc.key(home.resRev, home.resTab, nowH, chat.talkCount(), chat.talkMark());
         final String hBody = hKey.equals(hcKey) ? "" : hc.request(ShellCore.CAP, ShellCore.theme(store), homeEnv(), home.resultFacts(homeEnv(), ShellCore.theme(store)), chat.recentTalksJson(8));
         new Thread(new Runnable() {

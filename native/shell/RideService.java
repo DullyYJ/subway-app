@@ -37,7 +37,7 @@ public class RideService extends Service {
     /** 서비스가 돌고 있나, 그리고 앱 화면이 읽는 가장 새 값(같은 프로세스). */
     static volatile boolean running = false;
     static volatile int liveRev = 0;
-    static volatile String liveRide = "", liveLv = "";
+    static volatile String liveRide = "", liveLv = "", liveScene = "";
 
     private HandlerThread ht;
     private Handler h;
@@ -65,7 +65,7 @@ public class RideService extends Service {
     }
     static void stop(Context c) {
         clearSaved(c);
-        running = false; liveRide = ""; liveLv = ""; liveRev++;
+        running = false; liveRide = ""; liveLv = ""; liveScene = ""; liveRev++;
         c.stopService(new Intent(c, RideService.class));
     }
 
@@ -152,7 +152,7 @@ public class RideService extends Service {
     }
 
     private void publish() {
-        liveRide = core.rideJson(); liveLv = core.lvJson(); liveRev++;
+        liveRide = core.rideJson(); liveLv = core.lvJson(); liveScene = core.sceneJson(); liveRev++;
         try { RideWidget.update(this, core.title, core.text); } catch (Throwable ignored) { }
     }
 
@@ -160,7 +160,7 @@ public class RideService extends Service {
         stopped = true; running = false;
         if (ov != null) ov.hide();
         clearSaved(this);
-        liveRide = ""; liveLv = ""; liveRev++;
+        liveRide = ""; liveLv = ""; liveScene = ""; liveRev++;
         try { RideWidget.update(this, "길동무", arrived ? "안내가 끝났어요" : ""); } catch (Throwable ignored) { }
         try { if (Build.VERSION.SDK_INT >= 24) stopForeground(STOP_FOREGROUND_REMOVE); else stopForeground(true); } catch (Throwable ignored) { }
         stopSelf();

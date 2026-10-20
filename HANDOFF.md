@@ -1687,3 +1687,10 @@
 - **새 위치 판단기 보정(실험, 기본 꺼짐)**: 같은 하위 화면의 "새 위치 판단기 보정" 버튼(`pf.live`)으로 켠다. 켜면 `/ride/start` 요청에 `pf:true` → 상태 `cfg.pfLive`. `ride-standby` 가 받은 위치들을 PosFusion(`posFuseRun`)에 먹여(상태 `st.pf` 가 요청에 실려 오감 — 10역 7KB · 40역 32KB) 확신 0.9 이상이면 그 역(dwell=서 있음 · seg=막 떠남)을 통과 증거로 보탠다(최대 3역 앞까지). 영점이 못 잡는 낮은 정확도 위치에서 역을 메운다. 승차 대기 중에는 안 쓴다. 한계: 터널처럼 위치가 아예 끊긴 구간을 메우는 힘은 약하다(판단기도 증거가 있어야 확신한다). 실제 지하철 탑승으로 검증 안 됨 — 그래서 실험 스위치.
 - 시험: ride_start_engine 39(ovl 틀 · 오버레이 값 · 판단기 켬/끔) · settings_engine 159(nv) · JVM(LegacyCore · routePage · RideCore 오버레이/pf 본문). 워커 `route-v2-2026-10-20s101` + 새 APK. **기기 미확인**: 오버레이 창 모양·끌기·권한 화면 이동, 옛 leveldb 파일 모양, 판단기 켠 상태의 실제 정확도.
 - 남은 것: 설정 하위 화면 4개(출퇴근 브리핑·캐릭터 위젯·하차 추천 시험·개발자 도구), 탑승 중 장면(wait/ride/alight), 옛 최근경로·포인트 등 가져오기.
+
+## 2026-10-21 엔진 s102 + native-shell — 탑승 중 캐릭터 장면(기다림·탑승·하차)
+
+- 혼잡도 카드 맨 위 장면(`scene` 노드)이 탑승 중에도 바뀐다. 엔진 `hcards` 요청 `f.rd`(탑승 장면 재료: 현재 위치·탄 곳·남은 정류장·키)를 받아 `hcRideNodes(rd)` → `sceneDecide` 가 wait/ride/alight 를 고르고 `hcSceneNode(...,rd)` 가 `{t:'scene',sc}` 를 만든다. 지하철 탑승 중은 장면 대신 기존 혼잡도 카드를 그대로 보여 준다(mode null + cong).
+- 앱: `RideCore.sceneJson()` 이 저장된 탑승 상태에서 재료를 뽑고, `RideService.liveScene` 이 5초 주기 결과로 갱신, `HcardsCore.rideScene` 이 `rd` 로 실어 보낸다. 앱은 그림만 그리고 판단은 엔진.
+- 시험: hcards_engine 31 · JVM(RideCore.sceneJson · HcardsCore rd 키). 워커 `route-v2-2026-10-20s102`. 기기에서는 확인 못 함.
+- 남은 것: 설정 하위 화면(출퇴근 브리핑·하차 추천 시험·절전 제외·캐릭터 위젯·개발자 도구), 옛 최근경로·포인트 가져오기.

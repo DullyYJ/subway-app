@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-20s101";
+var ENGINE_VERSION = "route-v2-2026-10-20s102";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -19221,7 +19221,7 @@ async function handleScreenFav(request) {
 //   \ub124\uc774\ud2f0\ube0c\uc5d0\ub294 \uc6f9\uc774 \uc5c6\uc73c\ub2c8, \uc571\uc740 '\uae30\uae30 \uc0ac\uc2e4'(\ubcf4\ub358 \uacbd\ub85c \uc751\ub2f5 \u00b7 \uc704\uce58 \u00b7 \uc9c0\uae08 \uc2dc\uac01 \u00b7 \ubc1b\uc544 \ub454 \ub300\ud654 \u00b7 \ub2e4\uc74c \uac31\uc2e0 \uc2dc\uac01)\ub9cc \ubcf4\ub0b4\uace0 \uc774 \uc5d4\uc9c4\uc774 \uc0ac\uc2e4\uc744 \ubaa8\uc544 \uc138 \uce74\ub4dc\ub97c \ud55c \ubc88\uc5d0 \ub9cc\ub4e0\ub2e4.
 //   \uac01 \uce74\ub4dc\uc758 \uae00\u00b7\uc0c9\u00b7\ub9c9\ub300\ub294 \uae30\uc874 \uc5d4\uc9c4(aicard.js \u00b7 home-brief.js \u00b7 cong.js \u00b7 talkcard.js)\uc774 \uadf8\ub300\ub85c \uc815\ud55c\ub2e4.
 // \uc785\ub825  hcardsScreen({ cap(18 \uc774\uc0c1) }, f)
-//   f = { now(ms), tz(\ub3d9\ucabd \ubd84), th, hol(\uc8fc\ub9d0\u00b7\uacf5\ud734\uc77c), gps:[\uc704\ub3c4,\uacbd\ub3c4]|null,
+//   f = { now(ms), tz(\ub3d9\ucabd \ubd84), th, hol(\uc8fc\ub9d0\u00b7\uacf5\ud734\uc77c), gps:[\uc704\ub3c4,\uacbd\ub3c4]|null, rd:{here,boarded,key,nodes[{name,isOrigin,isSub,isBus,lineName}]}|\uc5c6\uc74c(\ud0d1\uc2b9 \uc911\uc77c \ub54c\ub9cc \u2014 \uc7a5\uba74\uc774 \ub300\uae30/\ud0d1\uc2b9/\ud558\ucc28\ub85c \ubc14\ub010\ub2e4),
 //         r: { data(\uacbd\ub85c \uc751\ub2f5 \uadf8\ub300\ub85c), tab, a, b, bt(\uae30\uc900\uc2dc\uac01 ms|null), rb(\ud0d0\uc0c9\ud55c \uc2dc\uac01) } | null,
 //         ai: { nextAt(ms, 0 \uc774\uba74 \uc5c6\uc74c), busy, rnd(0~1) }, tk: { m:[[\ub2c9\ub124\uc784,\uae00,\uc2dc\uac01ms,\ub0b4 \uae000|1]\u2026], fold, tzo } }
 // \ucd9c\ub825  { ok, v:1, screen:'hcards', cover:'chips', head:[], body:[panel\u2026], info:{ ai:\ubaa8\ub4dc, cong:\ubaa8\ub4dc, stn } }
@@ -19316,10 +19316,23 @@ function hcKids(sc) {                                  // \uce74\ub4dc \ud654\ub
 }
 // \uce90\ub9ad\ud130 \uc7a5\uba74: \uc5b4\ub5a4 \uc7a5\uba74(\uc2dc\uac04\ub300\u00b7\ub0a0\uc528\u00b7\uacc4\uc808\u00b7\ub300\ud45c \uce90\ub9ad\ud130\u00b7\ub3d9\uc791 \ub300\ubcf8)\uc778\uc9c0\ub294 \uc7a5\uba74 \uc5d4\uc9c4(sceneDecide)\uc774 \uc815\ud558\uace0, \uc571\uc740 \uadf8 \uac12(JSON \uae00)\ub300\ub85c \uadf8\ub9ac\uae30\ub9cc \ud55c\ub2e4.
 // \ud0d1\uc2b9 \uc911 \uc7a5\uba74(\ub300\uae30\u00b7\ud0d1\uc2b9\u00b7\ud558\ucc28)\uc740 \ud0d1\uc2b9 \uc548\ub0b4 \ucabd \uc0ac\uc2e4\uc774 \ud544\uc694\ud574 \uc5ec\uae30\uc11c\ub294 \ubcf4\ub0b4\uc9c0 \uc54a\ub294\ub2e4 \u2014 \ud648\uc5d0\uc11c\ub294 \ub298 '\ub300\uae30\uc2e4(idle)' \uc7a5\uba74\uc774\ub2e4.
-function hcSceneNode(now, tz, routeShown, wx, stn) {
+function hcRideNodes(rd) {                                  // \uc571\uc774 \ubcf4\ub0b8 \ud0d1\uc2b9 \uc911 \uc7ac\ub8cc \u2192 sceneDecide \uc785\ub825(\uc774\ub984\u00b7\uc885\ub958\ub9cc, 80\uac1c\uae4c\uc9c0)
+  if (!rd || typeof rd !== 'object' || !Array.isArray(rd.nodes) || rd.nodes.length < 2) return null;
+  var nodes = rd.nodes.slice(0, 80).map(function (n) {
+    n = (n && typeof n === 'object') ? n : {};
+    return { name: hcStr(n.name, 24), isOrigin: n.isOrigin === true, isSub: n.isSub === true, isBus: n.isBus === true, lineName: hcStr(n.lineName, 16) };
+  });
+  return { nodes: nodes, here: Math.max(0, Math.min(nodes.length - 1, Math.floor(hcNum(rd.here, 0)))), boarded: rd.boarded === true, key: hcStr(rd.key, 40) };
+}
+// \uce90\ub9ad\ud130 \uc7a5\uba74: \uc5b4\ub5a4 \uc7a5\uba74(\uc2dc\uac04\ub300\u00b7\ub0a0\uc528\u00b7\uacc4\uc808\u00b7\ub300\ud45c \uce90\ub9ad\ud130\u00b7\ub3d9\uc791 \ub300\ubcf8)\uc778\uc9c0\ub294 \uc7a5\uba74 \uc5d4\uc9c4(sceneDecide)\uc774 \uc815\ud558\uace0, \uc571\uc740 \uadf8 \uac12(JSON \uae00)\ub300\ub85c \uadf8\ub9ac\uae30\ub9cc \ud55c\ub2e4.
+// \ud0d1\uc2b9 \uc911(rd \uac00 \uc788\uc744 \ub54c)\uc774\uba74 \uae30\ub2e4\ub9ac\ub294 \uc911(wait) \u00b7 \ud0c0\uace0 \uac00\ub294 \uc911(ride \u00b7 \ubc84\uc2a4) \u00b7 \ub0b4\ub838\uc5b4\uc694(alight) \uc7a5\uba74\uc744 \ubcf4\ub0b8\ub2e4. \uc9c0\ud558\ucca0\uc744 \ud0c0\uace0 \uac00\ub294 \ub3d9\uc548\uc740 \uc7a5\uba74 \ub300\uc2e0 \ud63c\uc7a1\ub3c4 \uce74\ub4dc\ub97c \ubcf4\uc774\ubbc0\ub85c \uc7a5\uba74 \ub178\ub4dc\uac00 \uc5c6\ub2e4(sceneDecide \uc758 mode \uac00 null).
+function hcSceneNode(now, tz, routeShown, wx, stn, rd) {
   if (!hcScene) return null;
-  var sc;
-  try { sc = hcScene({ nowMs: now, tzOffsetMin: tz, locked: false, routeShown: routeShown === true, key: stn || '' }, wx || null); } catch (e) { return null; }
+  var sc, rn = hcRideNodes(rd);
+  try {
+    sc = rn ? hcScene({ nowMs: now, tzOffsetMin: tz, locked: true, here: rn.here, boarded: rn.boarded, key: rn.key, nodes: rn.nodes, routeShown: true }, wx || null)
+            : hcScene({ nowMs: now, tzOffsetMin: tz, locked: false, routeShown: routeShown === true, key: stn || '' }, wx || null);
+  } catch (e) { return null; }
   if (!sc || sc.ok !== true || !sc.mode) return null;
   var js = JSON.stringify(sc);
   if (js.length >= 6000) return null;
@@ -19371,7 +19384,7 @@ function hcardsScreen(inp, f) {
   var body = [];
   if (aiS && aiS.ok) body.push(hcPanel(hcKids(aiS)));
   if (congS && congS.ok) {
-    var ck = hcKids(congS), scn = hcSceneNode(now, tz, !!rt, hcWx(f.wx && typeof f.wx === 'object' ? f.wx.wF : null), stn);
+    var ck = hcKids(congS), scn = hcSceneNode(now, tz, !!rt, hcWx(f.wx && typeof f.wx === 'object' ? f.wx.wF : null), stn, f.rd);
     if (scn) ck.unshift(scn);                                           // \ud63c\uc7a1\ub3c4 \uce74\ub4dc \ub9e8 \uc704: \uce90\ub9ad\ud130 \uc7a5\uba74(\uc6f9\uacfc \uac19\uc740 \uc790\ub9ac)
     body.push(hcPanel(ck, congS.info && congS.info.bc && /^#/.test(congS.info.bc) ? congS.info.bc : ''));
   }

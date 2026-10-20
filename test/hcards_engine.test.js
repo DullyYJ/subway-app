@@ -46,6 +46,20 @@ ok(E.hcNearest(0, 0) === null && E.hcNearest(37.4979, 127.0276)[0] === '강남',
   ok(a === b, '같은 사실이면 같은 장면(안 흔들린다)');
   ok(E.hcSceneNode(now, 540, false, null, '').sc.indexOf('"wxKnown":false') > 0, '날씨를 모르면 모른다고 보낸다(지어내지 않는다)');
 }
+// 탑승 중 장면: 앱이 보낸 탑승 재료(rd)로 기다림 · 버스 타고 가는 중 · 내림, 지하철 타고 가는 동안은 장면 없음(혼잡도 카드)
+{
+  const nodes = [{ name: '출발', isOrigin: true }, { name: 'A정류장', isBus: true, lineName: '6001' }, { name: 'B정류장', isBus: true, lineName: '6001' }, { name: 'C정류장', isBus: true, lineName: '6001' }];
+  const sn = rd => { const k = call(base({ rd })).body[1].kids[0]; return k && k.t === 'scene' ? JSON.parse(k.sc) : null; };
+  const w = sn({ here: 1, boarded: false, key: 'k', nodes }), r = sn({ here: 2, boarded: true, key: 'k', nodes }), a = sn({ here: 3, boarded: true, key: 'k', nodes });
+  ok(w && w.mode === 'wait' && w.venue === 'bus' && /기다리는/.test(w.tag), '탑승 재료(승차 전) → 기다리는 중 장면: ' + (w && w.tag));
+  ok(r && r.mode === 'ride' && r.venue === 'bus', '버스 타고 가는 중 장면');
+  ok(a && a.mode === 'alight', '내릴 정류장에 닿으면 내림 장면');
+  const sub = [{ name: '출발', isOrigin: true }, { name: '강남', isSub: true, lineName: '2호선' }, { name: '역삼', isSub: true, lineName: '2호선' }];
+  const sk = call(base({ rd: { here: 1, boarded: true, key: 's', nodes: sub } })).body[1].kids[0];
+  ok(sk && sk.t !== 'scene', '지하철 타고 가는 동안은 장면 대신 혼잡도 카드가 맨 위');
+  const bad = sn({ here: 1, nodes: [1] });
+  ok(bad && bad.mode === 'idle', '탑승 재료가 이상하면 평소 대기실 장면');
+}
 // 날씨: 두 지점(지금 있는 곳 · 도착역)을 엔진이 정하고, Worker 가 받아 준 값(f.wx)을 AI 글에 쓴다
 {
   const wp = E.hcWxPoints(base({ gps: [37.5, 127.0] }));

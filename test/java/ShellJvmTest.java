@@ -487,6 +487,15 @@ public class ShellJvmTest {
             rc.onStep("{\"state\":{\"v\":1,\"eta\":{}},\"overlay\":{\"active\":true,\"line1\":\"x\",\"alert\":9}}"); ok(rc.ovAlert == 2, "단계는 0~2 안으로");
             rc.onStep("{\"state\":{\"v\":1,\"eta\":{}},\"overlay\":{\"active\":false}}"); ok(!rc.ovActive && rc.ovLine1.length() == 0, "active 가 아니면 치운다");
             rc.onStep("{\"state\":{\"v\":1,\"eta\":{}}}"); ok(!rc.ovActive, "overlay 가 없으면 치운다");
+            RideCore rsc = new RideCore();
+            rsc.onStep("{\"state\":{\"v\":1,\"tripSig\":\"abc\",\"eta\":{\"boarded\":true,\"nodes\":[{\"name\":\"출발\",\"isOrigin\":true},{\"name\":\"A\",\"isBus\":true,\"lineName\":\"6001\"},{\"name\":\"B\",\"isBus\":true,\"lineName\":\"6001\"}]}},\"curIdx\":1}");
+            String sj = rsc.sceneJson();
+            ok(sj.contains("\"here\":1") && sj.contains("\"boarded\":true") && sj.contains("\"key\":\"abc\"") && sj.contains("\"isOrigin\":true") && sj.contains("\"lineName\":\"6001\""), "탑승 장면 재료: 이름·종류·지금 위치 " + sj);
+            rsc.onStep("{\"state\":{\"v\":1,\"wait\":{\"i\":1},\"eta\":{\"boarded\":false,\"nodes\":[{\"name\":\"출발\",\"isOrigin\":true},{\"name\":\"A\",\"isSub\":true,\"lineName\":\"2호선\"}]}}}");
+            ok(rsc.sceneJson().contains("\"boarded\":false") && new RideCore().sceneJson().length() == 0, "승차 대기 중이면 boarded:false · 상태가 없으면 빈 글");
+            HcardsCore hs = new HcardsCore(); HomeCore.Env en2 = new HomeCore.Env(); en2.nowMs = 1000000L; en2.tzoMin = -540;
+            String k0 = hs.key(1, "fast", 60000L, 0, ""); hs.rideScene = sj;
+            ok(hs.request(18, "dark", en2, "null", "[]").contains("\"rd\":{\"here\":1") && !k0.equals(hs.key(1, "fast", 60000L, 0, "")), "홈 카드 요청에 탑승 재료(rd)가 실리고 열쇠가 바뀐다");
             String sv = rc.save(10000L);
             RideCore back = RideCore.restore(sv, 10000L + 60000L);
             ok(back != null && back.hasState() && back.text.equals(rc.text) && RideCore.restore(sv, 10000L + RideCore.MAX_AGE_MS + 1) == null && RideCore.restore("", 1L) == null && RideCore.restore("{\"at\":1}", 5L) == null, "저장 · 복원(30분 지나면 버린다)");

@@ -191,6 +191,38 @@ public final class RideCore {
     // ═════════════ 앱 화면용 ═════════════
     /** 결과 카드의 탑승 상태 { on:1, text } (HomeCore → 엔진 r.ride). */
     public String rideJson() { return "{\"on\":1,\"text\":" + ShellCore.q(text) + "}"; }
+    /**
+     * 탑승 중 캐릭터 장면 재료 { here, boarded, key, nodes[{name,isOrigin,isSub,isBus,lineName}] } — 상태에서 이름·종류만 옮겨 담는다(어떤 장면을 보일지는 엔진 sceneDecide 가 정한다).
+     * 상태가 없거나 이상하면 빈 글.
+     */
+    @SuppressWarnings("unchecked")
+    public String sceneJson() {
+        try {
+            Object o = ScreenCore.parse(stateJson);
+            if (!(o instanceof Map)) return "";
+            Map<String, Object> m = (Map<String, Object>) o;
+            Object eo = m.get("eta");
+            if (!(eo instanceof Map) || !(((Map<String, Object>) eo).get("nodes") instanceof List)) return "";
+            Map<String, Object> eta = (Map<String, Object>) eo;
+            List<Object> out = new ArrayList<Object>();
+            for (Object x : (List<Object>) eta.get("nodes")) {
+                if (!(x instanceof Map)) continue;
+                Map<String, Object> n = (Map<String, Object>) x, r = new LinkedHashMap<String, Object>();
+                r.put("name", BoardCore.s(n.get("name"), 24));
+                if (Boolean.TRUE.equals(n.get("isOrigin"))) r.put("isOrigin", Boolean.TRUE);
+                if (Boolean.TRUE.equals(n.get("isSub"))) r.put("isSub", Boolean.TRUE);
+                if (Boolean.TRUE.equals(n.get("isBus"))) r.put("isBus", Boolean.TRUE);
+                r.put("lineName", BoardCore.s(n.get("lineName"), 16));
+                out.add(r);
+                if (out.size() >= 80) break;
+            }
+            if (out.size() < 2) return "";
+            boolean boarded = m.get("wait") == null && !Boolean.FALSE.equals(eta.get("boarded"));
+            Map<String, Object> res = new LinkedHashMap<String, Object>();
+            res.put("here", Integer.valueOf(Math.max(0, cur))); res.put("boarded", Boolean.valueOf(boarded)); res.put("key", BoardCore.s(m.get("tripSig"), 40)); res.put("nodes", out);
+            return HomeSearchCore.toJson(res);
+        } catch (ScreenCore.ParseError e) { return ""; }
+    }
     /** 결과 카드의 내 위치 { cur, pos, arr } (엔진 r.lv). */
     public String lvJson() { return "{\"cur\":" + cur + ",\"pos\":" + posJson + ",\"arr\":" + arrJson + "}"; }
 
