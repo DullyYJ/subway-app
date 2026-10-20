@@ -41,7 +41,7 @@ function findAndroidJar() {
     const cap = path.join(out, 'cap'), j = path.join(out, 'j'); fs.mkdirSync(cap); fs.mkdirSync(j);
     let r = spawnSync('javac', ['-encoding', 'UTF-8', '-cp', jar, '-d', cap].concat(walk(path.join(__dirname, 'android-stubs', 'com'), '.java')), { env: ENV, encoding: 'utf8' });
     assert.strictEqual(r.status, 0, '캐퍼시터 스텁: ' + (r.stderr || '').slice(0, 800));
-    r = spawnSync('javac', ['-encoding', 'UTF-8', '-Xlint:all', '-Xlint:-deprecation', '-Xlint:-serial', '-Xlint:-this-escape', '-cp', [jar, cap].join(path.delimiter), '-d', j, N('ScreenCore.java'), N('NetPost.java'), N('ScreenView.java'), N('ShellCore.java'), N('ShellActivity.java')], { env: ENV, encoding: 'utf8' });
+    r = spawnSync('javac', ['-encoding', 'UTF-8', '-Xlint:all', '-Xlint:-deprecation', '-cp', [jar, cap].join(path.delimiter), '-d', j, N('ScreenCore.java'), N('NetPost.java'), N('ScreenView.java'), N('ShellCore.java'), N('ShellActivity.java')], { env: ENV, encoding: 'utf8' });
     assert.strictEqual(r.status, 0, (r.stderr || '').split('\n').filter(l => !/^Picked up/.test(l)).join(' / ').slice(0, 1500));
     assert(fs.existsSync(path.join(j, 'com', 'dullyyj', 'subway', 'ShellActivity.class')));
   });
