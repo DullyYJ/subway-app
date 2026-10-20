@@ -5,6 +5,7 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.os.Handler;
@@ -223,11 +224,21 @@ public class ScreenView extends View {
                 pressed = findItem(x, y);
                 if (pressed != null && pressed.act == null && pressed.kind != ScreenCore.K_FIELD) pressed = null;
                 pressInFoot = inFoot;
+                sceneTouch = false;
+                { ScreenCore.Item si = sceneAt(x, y); if (si != null && scene.touchDown(sceneX(x, si), sceneY(y, si))) { sceneTouch = true; pressed = null; } }
                 invalidate();
                 return true;
             }
             case MotionEvent.ACTION_MOVE: {
                 float dx = x - lastX, dy = y - lastY;
+                if (sceneTouch && scene != null) {
+                    ScreenCore.Item si = sceneAt(x, y);
+                    float sx = si != null ? sceneX(x, si) : x - sceneL * dpr, sy = si != null ? sceneY(y, si) : y - sceneT * dpr;
+                    scene.touchMove(sx, sy);
+                    if (scene.isHeld()) { mode = 4; lastX = x; lastY = y; invalidate(); return true; }      // 캐릭터를 잡았다 — 목록은 밀지 않는다
+                    if (mode == 4) return true;
+                }
+                if (mode == 4) return true;
                 if (mode == 3) {
                     if (Math.abs(x - downX) > slop || Math.abs(y - downY) > slop) {
                         pressed = null;
@@ -241,6 +252,8 @@ public class ScreenView extends View {
                 return true;
             }
             case MotionEvent.ACTION_UP: {
+                if (sceneTouch && scene != null) { scene.touchUp(); sceneTouch = false; }
+                if (mode == 4) { finishTouch(); invalidate(); return true; }
                 if (mode == 3) {
                     if (SystemClock.uptimeMillis() - downT < 600 && pressed != null && listener != null) {
                         ScreenCore.Item pi = pressed; ScreenCore.Act a = pi.act; pressed = null; invalidate();
@@ -267,11 +280,60 @@ public class ScreenView extends View {
                 invalidate();
                 return true;
             }
-            case MotionEvent.ACTION_CANCEL: finishTouch(); invalidate(); return true;
+            case MotionEvent.ACTION_CANCEL: if (sceneTouch && scene != null) { scene.touchUp(); sceneTouch = false; } finishTouch(); invalidate(); return true;
             default: return true;
         }
     }
     private boolean pressInFoot;
+
+    // ───────────── 캐릭터 장면(혼잡도 카드) — 엔진이 정한 값을 SceneCore 가 그린다. 여기는 크기·시계·손가락만 이어 준다 ─────────────
+    private SceneDriver scene;
+    private String sceneJson = "";
+    private boolean sceneFailed, sceneDrawn, sceneTouch;
+    private float sceneL, sceneT, sceneW, sceneH;          // 마지막으로 그린 장면 자리(화면 dp)
+    private final Path sceneClip = new Path();
+    private final RectF sceneRect = new RectF();
+
+    private boolean darkNow() {
+        int c = pal[R_BG];
+        return (0.299f * ((c >> 16) & 255) + 0.587f * ((c >> 8) & 255) + 0.114f * (c & 255)) < 128f;
+    }
+    private void drawScene(Canvas cv, ScreenCore.Item it) {
+        if (sceneFailed || it.value.length() == 0) return;
+        if (scene == null) {
+            scene = new SceneDriver(getContext(), new SceneDriver.Listener() {
+                @Override public void onReady() { invalidate(); }
+                @Override public void onError(String message) { sceneFailed = true; invalidate(); }
+                @Override public void onHeld() { }
+                @Override public void onHot(boolean hot) { }
+            });
+            scene.load();
+        }
+        scene.layout(it.w, it.h, dpr, darkNow());
+        if (!it.value.equals(sceneJson)) { sceneJson = it.value; scene.apply(sceneJson); }
+        sceneDrawn = true; sceneL = it.x; sceneW = it.w; sceneH = it.h;
+        sceneT = it.y + lay.headH - scrollY;
+        if (!scene.isLoaded()) return;
+        scene.frame(System.nanoTime());
+        cv.save();
+        sceneRect.set(it.x, it.y, it.x + it.w, it.y + it.h);
+        sceneClip.rewind(); sceneClip.addRoundRect(sceneRect, it.radius, it.radius, Path.Direction.CW);
+        cv.clipPath(sceneClip);
+        cv.translate(it.x, it.y);
+        cv.scale(1f / dpr, 1f / dpr);                      // 장면은 화면 픽셀 좌표로 그린다(밀도는 SceneCore 가 안다)
+        scene.draw(cv);
+        cv.restore();
+    }
+    private ScreenCore.Item sceneAt(float px, float py) {
+        if (lay == null || !sceneDrawn || scene == null || !scene.isLoaded()) return null;
+        float x = px / dpr, y = py / dpr;
+        if (y < lay.headH || (lay.footH > 0f && y >= footTop())) return null;
+        float by = y - lay.headH + scrollY;
+        for (ScreenCore.Item it : lay.body) if (it.kind == ScreenCore.K_SCENE && x >= it.x && x < it.x + it.w && by >= it.y && by < it.y + it.h) return it;
+        return null;
+    }
+    private float sceneX(float px, ScreenCore.Item it) { return px - it.x * dpr; }
+    private float sceneY(float py, ScreenCore.Item it) { return py - (lay.headH - scrollY + it.y) * dpr; }
     private float lastCH = -1f;
     /** 게시글 머리를 눌렀다 — 앱이 바로 펼치고(한 번에 한 글) 눌린 머리가 화면에서 움직이지 않게 스크롤을 맞춘다. 알림은 on(펼침) 으로. */
     private void toggleOpen(ScreenCore.Item hd) {
@@ -359,6 +421,7 @@ public class ScreenView extends View {
         cv.drawRect(0, 0, getWidth(), getHeight(), p);
         if (lay == null) return;
         boolean moving = false;
+        sceneDrawn = false;
         if (flingY.computeScrollOffset()) { scrollY = ScreenCore.clamp(flingY.getCurrY() / dpr, lay.bodyMaxScroll(bodyViewH())); moving = true; }
         if (flingX.computeScrollOffset()) { scrollX = ScreenCore.clamp(flingX.getCurrX() / dpr, lay.headMaxScroll()); moving = true; }
 
@@ -404,6 +467,7 @@ public class ScreenView extends View {
         }
 
         if (!drewOnce) { drewOnce = true; post(firstDrawCb); }
+        if (sceneDrawn && scene != null && scene.isRunning() && !scene.isPaused()) postInvalidateOnAnimation();        // 장면이 보이는 동안만 화면 박자로 계속 그린다(안 보이면 저절로 멈춘다)
         if (moving || mode == 1 || mode == 2) postInvalidateOnAnimation();
         else if (pulsing) postInvalidateDelayed(mkMs > 0f && now - mkT0 < mkMs ? 16L : 66L);      // 마커 맥박·고리(마커가 있을 때만; 가만히 있으면 초당 15번)
     }
@@ -494,6 +558,7 @@ public class ScreenView extends View {
             case ScreenCore.K_CHART: drawChart(cv, it); break;
             case ScreenCore.K_HBAR: drawHbar(cv, it); break;
             case ScreenCore.K_CARS: drawCars(cv, it); break;
+            case ScreenCore.K_SCENE: drawScene(cv, it); break;
             default: break;
         }
     }
@@ -1369,6 +1434,7 @@ public class ScreenView extends View {
     }
     @Override protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
+        if (scene != null) { scene.destroy(); scene = null; sceneJson = ""; sceneFailed = false; }      // 스프라이트 비트맵을 돌려준다(다시 붙으면 새로 읽는다)
         endEdit();
         if (editor != null && editor.getParent() instanceof ViewGroup) ((ViewGroup) editor.getParent()).removeView(editor);
         if (input != null) { blurInput(); if (input.getParent() instanceof ViewGroup) ((ViewGroup) input.getParent()).removeView(input); inShown = false; inL = inT = inW = inH = -1; }

@@ -14,6 +14,7 @@ var HC_V = 1;
 var hcRes = (typeof resConvertPath === 'function') ? { conv: resConvertPath, rv: resApplyRv, pick: resPickTabs } : (function () { try { var m = require('./result'); return { conv: m.resConvertPath, rv: m.resApplyRv, pick: m.resPickTabs }; } catch (e) { return null; } })();
 var hcAi = (typeof aiScreen === 'function') ? aiScreen : (function () { try { return require('./aicard').aiScreen; } catch (e) { return null; } })();
 var hcCong = (typeof congScreen === 'function') ? { screen: congScreen, facts: congFacts, pct: congPctSub } : (function () { try { var m = require('./cong'); return { screen: m.congScreen, facts: m.congFacts, pct: m.congPctSub }; } catch (e) { return null; } })();
+var hcScene = (typeof sceneDecide === 'function') ? sceneDecide : (function () { try { return require('./scene').sceneDecide; } catch (e) { return null; } })();
 var hcTalk = (typeof talkScreen === 'function') ? talkScreen : (function () { try { return require('./talkcard').talkScreen; } catch (e) { return null; } })();
 function hcNum(v, d) { v = Number(v); return isFinite(v) ? v : d; }
 function hcArr(v) { return Array.isArray(v) ? v : []; }
@@ -96,6 +97,17 @@ function hcKids(sc) {                                  // 카드 화면 하나�
   hcArr(sc.head).concat(hcArr(sc.body)).concat(hcArr(sc.foot)).forEach(function (n) { if (n && !(n.t === 'spacer' && !(n.h > 0))) out.push(n); });
   return out;
 }
+// 캐릭터 장면: 어떤 장면(시간대·날씨·계절·대표 캐릭터·동작 대본)인지는 장면 엔진(sceneDecide)이 정하고, 앱은 그 값(JSON 글)대로 그리기만 한다.
+// 탑승 중 장면(대기·탑승·하차)은 탑승 안내 쪽 사실이 필요해 여기서는 보내지 않는다 — 홈에서는 늘 '대기실(idle)' 장면이다.
+function hcSceneNode(now, tz, routeShown, wx, stn) {
+  if (!hcScene) return null;
+  var sc;
+  try { sc = hcScene({ nowMs: now, tzOffsetMin: tz, locked: false, routeShown: routeShown === true, key: stn || '' }, wx || null); } catch (e) { return null; }
+  if (!sc || sc.ok !== true || !sc.mode) return null;
+  var js = JSON.stringify(sc);
+  if (js.length >= 6000) return null;
+  return { t: 'scene', h: 170, r: 12, pad: [0, 0, 0, 8], sc: js };
+}
 function hcardsScreen(inp, f) {
   if (!(Number(inp && inp.cap) >= 18)) return { ok: false, error: 'cap' };
   if (!hcAi || !hcCong || !hcTalk) return { ok: false, error: 'engine' };
@@ -141,10 +153,14 @@ function hcardsScreen(inp, f) {
   var talkS = hcTalk({ cap: 15 }, { m: hcArr(tkf.m).slice(-8), fold: hcNum(tkf.fold, 0), tzo: hcNum(tkf.tzo, -tz) });
   var body = [];
   if (aiS && aiS.ok) body.push(hcPanel(hcKids(aiS)));
-  if (congS && congS.ok) body.push(hcPanel(hcKids(congS), congS.info && congS.info.bc && /^#/.test(congS.info.bc) ? congS.info.bc : ''));
+  if (congS && congS.ok) {
+    var ck = hcKids(congS), scn = hcSceneNode(now, tz, !!rt, hcWx(f.wx && typeof f.wx === 'object' ? f.wx.wF : null), stn);
+    if (scn) ck.unshift(scn);                                           // 혼잡도 카드 맨 위: 캐릭터 장면(웹과 같은 자리)
+    body.push(hcPanel(ck, congS.info && congS.info.bc && /^#/.test(congS.info.bc) ? congS.info.bc : ''));
+  }
   if (talkS && talkS.ok) body.push(hcPanel(hcKids(talkS)));
   var out = { ok: true, v: HC_V, screen: 'hcards', cover: 'chips', head: [], body: body, info: { ai: aiS && aiS.ok ? aiS.info.mode : '', cong: cs.mode, stn: stn, near: near ? near[0] : '' } };
   out.rev = 'h' + HC_V + ':' + hcHash(JSON.stringify(body));
   return out;
 }
-if (typeof module !== 'undefined' && module.exports) module.exports = { hcardsScreen: hcardsScreen, hcWxPoints: hcWxPoints, hcNearest: hcNearest, hcRoute: hcRoute };
+if (typeof module !== 'undefined' && module.exports) module.exports = { hcardsScreen: hcardsScreen, hcSceneNode: hcSceneNode, hcWxPoints: hcWxPoints, hcNearest: hcNearest, hcRoute: hcRoute };

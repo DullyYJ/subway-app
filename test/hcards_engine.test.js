@@ -37,6 +37,15 @@ ok(o.info.near === '강남' && o.info.cong === 'sub' && o.info.stn === '강남' 
 o = call(base({ r: null, gps: null }));
 ok(o.ok && o.info.ai === 'empty' && o.info.cong === 'none' && o.body.length === 3, '아무것도 없으면 안내 문구');
 ok(E.hcNearest(0, 0) === null && E.hcNearest(37.4979, 127.0276)[0] === '강남', '가까운 역 3km 안');
+// 캐릭터 장면: 혼잡도 카드 맨 위에 엔진이 정한 장면(JSON 글)이 실린다
+{
+  const sc = call(base({ wx: { wF: { temp: -3, txt: '눈', rain: 80 } } })).body[1].kids[0];
+  const v = sc && sc.t === 'scene' ? JSON.parse(sc.sc) : null;
+  ok(sc && sc.t === 'scene' && sc.h >= 80 && sc.sc.length < 6000 && v && v.mode === 'idle' && v.cast.length === 6 && v.hero && v.look.wk === 'snow', '혼잡도 카드 맨 위에 장면(idle · 눈) 노드가 있다');
+  const a = JSON.stringify(call(base()).body[1].kids[0]), b = JSON.stringify(call(base()).body[1].kids[0]);
+  ok(a === b, '같은 사실이면 같은 장면(안 흔들린다)');
+  ok(E.hcSceneNode(now, 540, false, null, '').sc.indexOf('"wxKnown":false') > 0, '날씨를 모르면 모른다고 보낸다(지어내지 않는다)');
+}
 // 날씨: 두 지점(지금 있는 곳 · 도착역)을 엔진이 정하고, Worker 가 받아 준 값(f.wx)을 AI 글에 쓴다
 {
   const wp = E.hcWxPoints(base({ gps: [37.5, 127.0] }));

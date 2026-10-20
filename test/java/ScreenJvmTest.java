@@ -764,6 +764,15 @@ public class ScreenJvmTest {
         ok("bg".equals(ScreenCore.layout(ScreenCore.load(bgBase + "}"), 300f, M).bg) && "card".equals(ScreenCore.layout(ScreenCore.load(bgBase + ",\"bg\":\"card\"}"), 300f, M).bg) && "card2".equals(ScreenCore.layout(ScreenCore.load(bgBase + ",\"bg\":\"card2\"}"), 300f, M).bg), "화면 바탕: 기본 bg · card · card2");
         ok(bad(bgBase + ",\"bg\":\"gold\"}") && bad(bgBase + ",\"bg\":\"#fff\"}"), "화면 바탕은 bg/card/card2 만");
 
+        // ── 캐릭터 장면(scene) ──
+        String scBase = "{\"ok\":true,\"v\":1,\"screen\":\"x\",\"head\":[],\"body\":[";
+        String scJ = "{\\\"ok\\\":true,\\\"mode\\\":\\\"idle\\\"}";
+        ScreenCore.Layout SCL = ScreenCore.layout(ScreenCore.load(scBase + "{\"t\":\"scene\",\"h\":170,\"r\":12,\"pad\":[0,0,0,8],\"sc\":\"" + scJ + "\"}]}"), 300f, M);
+        ScreenCore.Item sci = null; for (ScreenCore.Item q : SCL.body) if (q.kind == ScreenCore.K_SCENE) sci = q;
+        ok(sci != null && sci.h == 170f && sci.radius == 12f && sci.value.startsWith("{\"ok\":true") && Math.abs(SCL.bodyH - 178f) < 0.5f, "scene: 높이 · 모서리 · 엔진 글(JSON)을 그대로 쥔다 " + (sci == null ? "" : sci.h) + "/" + SCL.bodyH);
+        ok(bad(scBase + "{\"t\":\"scene\",\"h\":170}]}") && bad(scBase + "{\"t\":\"scene\",\"sc\":\"\"}]}") && bad(scBase + "{\"t\":\"scene\",\"h\":20,\"sc\":\"x\"}]}"), "scene: sc 없음 · 너무 낮음은 거절");
+        ok(bad(scBase + "{\"t\":\"scene\",\"sc\":\"" + new String(new char[ScreenCore.SCENE_MAX]).replace('\0', 'a') + "\"}]}"), "scene: 너무 긴 글은 거절");
+
         System.out.println(fails == 0 ? "ALL OK (" + oks + ")" : fails + " FAIL");
         System.exit(fails == 0 ? 0 : 1);
     }

@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-20s99";
+var ENGINE_VERSION = "route-v2-2026-10-20s100";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -19231,6 +19231,7 @@ var HC_V = 1;
 var hcRes = (typeof resConvertPath === 'function') ? { conv: resConvertPath, rv: resApplyRv, pick: resPickTabs } : (function () { try { var m = require('./result'); return { conv: m.resConvertPath, rv: m.resApplyRv, pick: m.resPickTabs }; } catch (e) { return null; } })();
 var hcAi = (typeof aiScreen === 'function') ? aiScreen : (function () { try { return require('./aicard').aiScreen; } catch (e) { return null; } })();
 var hcCong = (typeof congScreen === 'function') ? { screen: congScreen, facts: congFacts, pct: congPctSub } : (function () { try { var m = require('./cong'); return { screen: m.congScreen, facts: m.congFacts, pct: m.congPctSub }; } catch (e) { return null; } })();
+var hcScene = (typeof sceneDecide === 'function') ? sceneDecide : (function () { try { return require('./scene').sceneDecide; } catch (e) { return null; } })();
 var hcTalk = (typeof talkScreen === 'function') ? talkScreen : (function () { try { return require('./talkcard').talkScreen; } catch (e) { return null; } })();
 function hcNum(v, d) { v = Number(v); return isFinite(v) ? v : d; }
 function hcArr(v) { return Array.isArray(v) ? v : []; }
@@ -19313,6 +19314,17 @@ function hcKids(sc) {                                  // \uce74\ub4dc \ud654\ub
   hcArr(sc.head).concat(hcArr(sc.body)).concat(hcArr(sc.foot)).forEach(function (n) { if (n && !(n.t === 'spacer' && !(n.h > 0))) out.push(n); });
   return out;
 }
+// \uce90\ub9ad\ud130 \uc7a5\uba74: \uc5b4\ub5a4 \uc7a5\uba74(\uc2dc\uac04\ub300\u00b7\ub0a0\uc528\u00b7\uacc4\uc808\u00b7\ub300\ud45c \uce90\ub9ad\ud130\u00b7\ub3d9\uc791 \ub300\ubcf8)\uc778\uc9c0\ub294 \uc7a5\uba74 \uc5d4\uc9c4(sceneDecide)\uc774 \uc815\ud558\uace0, \uc571\uc740 \uadf8 \uac12(JSON \uae00)\ub300\ub85c \uadf8\ub9ac\uae30\ub9cc \ud55c\ub2e4.
+// \ud0d1\uc2b9 \uc911 \uc7a5\uba74(\ub300\uae30\u00b7\ud0d1\uc2b9\u00b7\ud558\ucc28)\uc740 \ud0d1\uc2b9 \uc548\ub0b4 \ucabd \uc0ac\uc2e4\uc774 \ud544\uc694\ud574 \uc5ec\uae30\uc11c\ub294 \ubcf4\ub0b4\uc9c0 \uc54a\ub294\ub2e4 \u2014 \ud648\uc5d0\uc11c\ub294 \ub298 '\ub300\uae30\uc2e4(idle)' \uc7a5\uba74\uc774\ub2e4.
+function hcSceneNode(now, tz, routeShown, wx, stn) {
+  if (!hcScene) return null;
+  var sc;
+  try { sc = hcScene({ nowMs: now, tzOffsetMin: tz, locked: false, routeShown: routeShown === true, key: stn || '' }, wx || null); } catch (e) { return null; }
+  if (!sc || sc.ok !== true || !sc.mode) return null;
+  var js = JSON.stringify(sc);
+  if (js.length >= 6000) return null;
+  return { t: 'scene', h: 170, r: 12, pad: [0, 0, 0, 8], sc: js };
+}
 function hcardsScreen(inp, f) {
   if (!(Number(inp && inp.cap) >= 18)) return { ok: false, error: 'cap' };
   if (!hcAi || !hcCong || !hcTalk) return { ok: false, error: 'engine' };
@@ -19358,7 +19370,11 @@ function hcardsScreen(inp, f) {
   var talkS = hcTalk({ cap: 15 }, { m: hcArr(tkf.m).slice(-8), fold: hcNum(tkf.fold, 0), tzo: hcNum(tkf.tzo, -tz) });
   var body = [];
   if (aiS && aiS.ok) body.push(hcPanel(hcKids(aiS)));
-  if (congS && congS.ok) body.push(hcPanel(hcKids(congS), congS.info && congS.info.bc && /^#/.test(congS.info.bc) ? congS.info.bc : ''));
+  if (congS && congS.ok) {
+    var ck = hcKids(congS), scn = hcSceneNode(now, tz, !!rt, hcWx(f.wx && typeof f.wx === 'object' ? f.wx.wF : null), stn);
+    if (scn) ck.unshift(scn);                                           // \ud63c\uc7a1\ub3c4 \uce74\ub4dc \ub9e8 \uc704: \uce90\ub9ad\ud130 \uc7a5\uba74(\uc6f9\uacfc \uac19\uc740 \uc790\ub9ac)
+    body.push(hcPanel(ck, congS.info && congS.info.bc && /^#/.test(congS.info.bc) ? congS.info.bc : ''));
+  }
   if (talkS && talkS.ok) body.push(hcPanel(hcKids(talkS)));
   var out = { ok: true, v: HC_V, screen: 'hcards', cover: 'chips', head: [], body: body, info: { ai: aiS && aiS.ok ? aiS.info.mode : '', cong: cs.mode, stn: stn, near: near ? near[0] : '' } };
   out.rev = 'h' + HC_V + ':' + hcHash(JSON.stringify(body));

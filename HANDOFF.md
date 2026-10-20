@@ -1671,5 +1671,12 @@
 - **버그 수정(중요)**: 지도 탭 버스 도착정보(`MapCore.busFetchUrl`)와 맛집 공공데이터(`FoodCore.publicUrl`)가 `/tago?url=` 을 **route-v2 가 아니라** 서버 주소(`ShellCore.BASE`)로 불러 왔다. `/tago` 프록시는 subway-api(gentle-lab) 워커에만 있다(`deploy-worker.yml` 가 확인하는 라우트) → 둘 다 `ShellCore.NEWS_BASE` 로. 이 수정 전에는 버스 도착정보·맛집 공공데이터가 404 였을 것(기기 미확인).
 - 엔진 `map.js` 버스: 경기 상자(남36.9 북38.3 서126.3 동127.9) 안이면 GBIS `getBusStationAroundListv2` 를 TAGO 와 같이 요청(서울이면 TOPIS 도). 정류장 고르기는 웹 `_fetchNearStops` 와 같은 우선순위 — 서울 TOPIS > (인천 상자 밖 경기: GBIS > TAGO | 인천 상자 안: TAGO > GBIS) > 모두 비면 서버 정류장 표 `GET /bus-stops?lat&lng&radius=800`(D1, 시 코드 0 이면 좌표 상자로 추정). GBIS 도착정보(`getBusArrivalListv2?stationId=…`)는 웹 `_ggArrivals` 규칙 그대로: 초 우선(없으면 분×60), 1시간 넘는 예측과 운행종료(STOP) 제외, 첫 차만 잘렸으면 둘째를 앞으로, 노선 유형(일반 · 마을 · 직행좌석…) 글, 행선지가 곧 방면. `resultCode` 0·4 만 정상(JSON 이 아니면 인증 실패로 보고 TAGO 로).
 - 정류장마다 "위치 보기 · 길찾기" 단추(카카오맵 링크, 앱은 `open` 행동으로 외부 열기) — 웹의 Leaflet 정류장 위치 패널 대신.
-- 웹의 버스 즐겨찾기는 `_selectBusFavRoute(){return false}` 로 이미 꺼진 자리였고 실제 기능이 없어서 옮길 것이 없다. 버스 노선 지도(차량 위치 · 경유 정류장 선)는 아직 옮기지 않았다.
+- 웹의 버스 즐겨찾기는 `_selectBusFavRoute(){return false}` 로 이미 꺼진 자리였고 실제 기능이 없어서 옮길 것이 없다. 웹에 있던 정류장 위치 패널(Leaflet 지도)은 외부 지도 단추로 대신했고, 앱 안 차량 위치 지도는 없다.
 - 시험: map_engine 76(GBIS 정류장/도착/우선순위/D1/위치 단추) · JVM(`busFetchUrl` GBIS 프록시 · D1 직접 · 막힘). 워커 `route-v2-2026-10-20s99` + 새 APK.
+
+## 2026-10-21 엔진 s100 + native-shell — 혼잡도 카드 3D 캐릭터 장면
+- 엔진 `hcards.js`: 혼잡도 카드 맨 위에 `scene` 노드(`h:170`, `sc`=sceneDecide 결과를 JSON 글로 담음). 시간대·날씨(f.wx.wF)·계절·대표 캐릭터·등장 순서·동작 대본은 모두 `sceneDecide` 가 정한다. 홈에서는 늘 idle(대기실) 장면 — 탑승 중 wait/ride/alight 장면은 탑승 안내 쪽 사실(here/boarded)이 필요해 아직 안 보낸다.
+- 앱: 예전 장면 코드(SceneCore · SceneActs · SceneArt · SceneModel · SceneUtil · SceneHaptics · SceneCv · AndroidCv · SceneDriver)를 `native/shell` 로 다시 가져왔다(순수 자바 + 안드로이드 도화지). `ScreenCore` 가 `scene` 노드를 읽고(K_SCENE), `ScreenView.drawScene` 이 화면 픽셀 좌표로 그린다: 보이는 동안만 화면 박자로 이어 그리고(안 보이면 저절로 멈춤), 창에서 떨어지면 비트맵을 돌려준다. 캐릭터를 꾹 누르면 잡혀서(진동) 끌 수 있고 — 잡고 있는 동안은 목록이 밀리지 않으며 — 놓으면 캐릭터별 착지 연출(land)이 나온다.
+- 스프라이트 시트 7장(`assets/chars3d/*.webp`, 약 830KB)은 `ios-reference/chars3d` 와 같은 파일을 복사.
+- 시험: `scene_native.test.js`(엔진 장면 7개를 SceneCore 에 먹여 JVM 점검 + 시트 동일 + 순수성 + 연결) · hcards_engine 26 · ScreenJvmTest(scene 노드). SceneJvmTest 의 솜사탕 크기 점검은 "착지 연출이 끝난 순간" 기준으로 고쳤다(그 뒤 평소 동작이 마음대로 키워서 장면마다 달랐음). 워커 `route-v2-2026-10-20s100` + 새 APK.
+- **기기 미확인**: 실제 그림(웹 그림과 눈으로 비교 안 함), 스크롤과 잡기 충돌, 진동, 프레임 속도.
