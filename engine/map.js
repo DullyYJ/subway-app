@@ -292,6 +292,82 @@ function mapTagoStops(text, la, lo) {
   });
   return stops;
 }
+var MAP_GG_BOX = [36.9, 38.3, 126.3, 127.9];                    // 경기 전역(남,북,서,동) — 웹 _GG_BOX
+var MAP_INCHEON_BOX = [37.29, 37.66, 126.34, 126.81];            // 인천: 이 안에서는 TAGO 가 정상이라 먼저 본다(웹 _isGGPreferred)
+var MAP_D1_BASE = 'https://gentle-lab-7e47subway-api.phg0643.workers.dev';
+var MAP_GBIS_BASE = 'https://apis.data.go.kr/6410000/';
+var MAP_GG_MAX_ARR_SEC = 3600;
+var MAP_CITY_BOX = [['23', 37.29, 37.66, 126.34, 126.81], ['11', 37.41, 37.72, 126.76, 127.19], ['21', 34.99, 35.40, 128.75, 129.32], ['22', 35.61, 36.02, 128.35, 128.77],
+                    ['24', 35.03, 35.26, 126.64, 126.96], ['25', 36.18, 36.50, 127.25, 127.56], ['26', 35.44, 35.72, 129.06, 129.47], ['12', 36.42, 36.72, 127.15, 127.40]];
+function mapInBox(b, la, lo) { return la >= b[0] && la <= b[1] && lo >= b[2] && lo <= b[3]; }
+function mapInGG(la, lo) { return mapInBox(MAP_GG_BOX, la, lo); }
+function mapGGPreferred(la, lo) { return mapInGG(la, lo) && !mapInBox(MAP_INCHEON_BOX, la, lo); }
+function mapCityOf(la, lo) {                                      // D1 보조 정류장에 시 코드가 없을 때 좌표 상자로 추정(웹 _tagoCityCode)
+  for (var i = 0; i < MAP_CITY_BOX.length; i++) { var b = MAP_CITY_BOX[i]; if (la >= b[1] && la <= b[2] && lo >= b[3] && lo <= b[4]) return b[0]; }
+  return '';
+}
+function mapGgJson(text) { var t = String(text || '').trim(); if (!t || t.charAt(0) !== '{') return null; try { return JSON.parse(t); } catch (e) { return null; } }
+function mapGgOk(j) {                                             // resultCode 0(정상)·4(결과 없음)만 정상
+  var hd = j && ((j.response && j.response.msgHeader) || j.msgHeader);
+  if (!hd) return false;
+  var cd = String(hd.resultCode);
+  return cd === '0' || cd === '4';
+}
+function mapGgList(j, keys) {
+  var body = j && ((j.response && j.response.msgBody) || j.msgBody), v = null, i;
+  if (!body) return [];
+  for (i = 0; i < keys.length; i++) if (body[keys[i]] !== undefined && body[keys[i]] !== null) { v = body[keys[i]]; break; }
+  if (v === null) { var ks = Object.keys(body); for (i = 0; i < ks.length; i++) if (Array.isArray(body[ks[i]])) { v = body[ks[i]]; break; } }
+  if (v === null || v === undefined) return [];
+  return Array.isArray(v) ? v : [v];
+}
+function mapGbisStops(text, la, lo) {
+  var j = mapGgJson(text), stops = [];
+  if (!j || !mapGgOk(j)) return stops;
+  mapGgList(j, ['busStationAroundList', 'busStationList']).forEach(function (it) {
+    var id = it.stationId, a = parseFloat(it.y), b = parseFloat(it.x);
+    if (!id || isNaN(a) || isNaN(b)) return;
+    var d = parseFloat(it.distance);
+    stops.push({ nm: String(it.stationName || ''), id: 'GG:' + id, sid: String(id), no: it.mobileNo ? String(it.mobileNo) : '', la: a, lo: b, dist: isFinite(d) ? d : mapHav(la, lo, a, b), src: 'gbis' });
+  });
+  return stops;
+}
+function mapD1Stops(text, la, lo) {                               // 서버 정류장 표(D1) — 공공 API 가 모두 비었을 때의 보조
+  var j = null, stops = [];
+  try { j = JSON.parse(String(text || '')); } catch (e) { return stops; }
+  (j && Array.isArray(j.stops) ? j.stops : []).forEach(function (s) {
+    var a = Number(s.lat), b = Number(s.lng);
+    if (!s.node_id || !isFinite(a) || !isFinite(b)) return;
+    var cc = (s.city_code && String(s.city_code) !== '0') ? String(s.city_code) : '';
+    stops.push({ nm: String(s.node_nm || ''), id: String(s.node_id), no: '', city: cc || mapCityOf(a, b), la: a, lo: b, dist: mapHav(la, lo, a, b), src: 'd1' });
+  });
+  stops.sort(function (x, y) { return x.dist - y.dist; });
+  return stops;
+}
+function mapGbisRouteType(cd) {
+  var m = { 11: '직행좌석', 12: '좌석', 13: '일반', 14: '광역급행', 15: '따복', 16: '순환', 21: '직행좌석', 22: '좌석', 23: '일반', 30: '마을', 41: '고속시외', 42: '좌석시외', 43: '시외', 51: '리무진공항', 52: '좌석공항', 53: '공항' };
+  return m[parseInt(cd, 10)] || '';
+}
+function mapGbisArr(text) {
+  var j = mapGgJson(text), rows = [];
+  if (!j || !mapGgOk(j)) return rows;
+  mapGgList(j, ['busArrivalList']).forEach(function (it) {
+    var rt = it.routeName;
+    if (rt === undefined || rt === null || rt === '') return;
+    if (String(it.flag || '') === 'STOP') return;                   // 운행종료
+    var sec = function (s, m) { var v = parseInt(s, 10); if (isFinite(v) && v > 0) return v; var mm = parseInt(m, 10); return (isFinite(mm) && mm > 0) ? mm * 60 : 0; };
+    var s1 = sec(it.predictTimeSec1, it.predictTime1), s2 = sec(it.predictTimeSec2, it.predictTime2);
+    if (s1 > MAP_GG_MAX_ARR_SEC) s1 = 0;
+    if (s2 > MAP_GG_MAX_ARR_SEC) s2 = 0;
+    if (s1 <= 0 && s2 <= 0) return;
+    var n1 = parseInt(it.locationNo1, 10), n2 = parseInt(it.locationNo2, 10);
+    if (s1 <= 0) { s1 = s2; s2 = 0; n1 = n2; }
+    var dir = String(it.routeDestName || '').trim(), tp = mapGbisRouteType(it.routeTypeCd), low = parseInt(it.lowPlate1, 10) === 1, cg = parseInt(it.crowded1, 10);
+    rows.push({ no: String(rt), sec: s1, prev: isFinite(n1) ? n1 : 0, cong: isFinite(cg) && cg > 0 ? cg : 0, low: low, dir: dir, tp: tp });
+    if (s2 > 0) rows.push({ no: String(rt), sec: s2, prev: isFinite(n2) ? n2 : 0, cong: 0, low: false, dir: dir, tp: tp });
+  });
+  return rows;
+}
 function mapStopExit(s) { return MAP_EXIT_RE.test(s.nm || ''); }
 function mapDedupStops(stops) {
   var key = function (v) { return String(v || '').replace(/\s/g, ''); }, out = [];
@@ -311,18 +387,24 @@ function mapStopOrder(stops) {                       // 가까운 순 + 역 출�
 }
 function mapBusStops(f) {
   var b = f.bus, res = b.res || {}, la = Number(b.lat), lo = Number(b.lng);
-  var s = res.tp ? mapSeoulStops(res.tp, la, lo) : [];
-  if (!s.length && res.tn) s = mapTagoStops(res.tn, la, lo);
+  var s = res.tp ? mapSeoulStops(res.tp, la, lo) : [];                                   // 서울: TOPIS 먼저
+  if (!s.length) {
+    var gg = res.gg ? mapGbisStops(res.gg, la, lo) : [], tn = res.tn ? mapTagoStops(res.tn, la, lo) : [];
+    s = mapGGPreferred(la, lo) ? (gg.length ? gg : tn) : (tn.length ? tn : gg);          // 경기(인천 상자 밖)는 GBIS 먼저, 인천 상자 안은 TAGO 먼저
+  }
+  if (!s.length && res.d1) s = mapD1Stops(res.d1, la, lo);
   return mapStopOrder(mapDedupStops(s));
 }
 function mapBusNeedStops(la, lo) {
   var need = [];
   if (mapInSeoul(la, lo)) need.push({ k: 'tp', url: 'http://ws.bus.go.kr/api/rest/stationinfo/getStationByPos?tmX=' + lo + '&tmY=' + la + '&radius=800' });
+  if (mapInGG(la, lo)) need.push({ k: 'gg', url: MAP_GBIS_BASE + 'busstationservice/v2/getBusStationAroundListv2?x=' + lo + '&y=' + la + '&format=json' });
   need.push({ k: 'tn', url: MAP_TAGO_BASE + 'BusSttnInfoInqireService/getCrdntPrxmtSttnList?serviceKey=&gpsLati=' + la + '&gpsLong=' + lo + '&numOfRows=50&pageNo=1&_type=json' });
   return need;
 }
 function mapBusArrUrl(s) {
   if (s.src === 'topis') return 'http://ws.bus.go.kr/api/rest/stationinfo/getStationByUid?arsId=' + encodeURIComponent(s.ars);
+  if (s.src === 'gbis') return MAP_GBIS_BASE + 'busarrivalservice/v2/getBusArrivalListv2?stationId=' + encodeURIComponent(s.sid) + '&format=json';
   return MAP_TAGO_BASE + 'ArvlInfoInqireService/getSttnAcctoArvlPrearngeInfoList?serviceKey=&cityCode=' + encodeURIComponent(s.city) + '&nodeId=' + encodeURIComponent(s.id) + '&_type=json';
 }
 function mapSecOfMsg(msg) {
@@ -362,6 +444,12 @@ function mapRouteColor(no) {
 function mapDistFmt(m) { m = Math.round(m || 0); return m >= 1000 ? (m / 1000).toFixed(1) + 'km' : m + 'm'; }
 function mapBusStopView(s, rows) {
   var kids = [{ t: 'text', s: s.nm + '  ' + mapDistFmt(s.dist) + (s.no || s.ars ? '  ·  ' + (s.no || s.ars) : ''), size: 14, bold: true, color: 'text', pad: [12, 14, 6, 2] }];
+  if (isFinite(s.la) && isFinite(s.lo)) {                          // 웹 _busShowMap(정류장 위치 지도) 대신 외부 지도 앱으로 — 위치 보기 · 길찾기
+    var en = encodeURIComponent(s.nm || '정류장');
+    kids.push({ t: 'row', pad: [0, 14, 4, 14], gap: 8, kids: [
+      { t: 'button', s: '위치 보기', size: 12, h: 34, r: 9, bold: true, fill: 'card2', line: 'border', tc: 'sub', act: { a: 'open', url: 'https://map.kakao.com/link/map/' + en + ',' + s.la + ',' + s.lo } },
+      { t: 'button', s: '길찾기', size: 12, h: 34, r: 9, bold: true, fill: 'card2', line: 'border', tc: 'sub', act: { a: 'open', url: 'https://map.kakao.com/link/to/' + en + ',' + s.la + ',' + s.lo } }] });
+  }
   var by = {}, order = [];
   rows.forEach(function (r) { var k = r.no + '|' + r.dir; if (!by[k]) { by[k] = []; order.push(k); } by[k].push(r); });
   order.forEach(function (k) { by[k].sort(function (a, b) { return a.sec - b.sec; }); });
@@ -370,8 +458,8 @@ function mapBusStopView(s, rows) {
   order.slice(0, 8).forEach(function (k) {
     var g = by[k], r = g[0], cg = ['', '여유', '보통', '혼잡', '매우혼잡'][r.cong] || '';
     var s1 = r.no, hl = [[0, s1.length, mapRouteColor(r.no)]];
-    var txt = s1 + '  ' + mapArrFmt(r.sec) + (r.prev > 0 ? ' · ' + r.prev + '번째 전' : '') + (cg ? ' · ' + cg : '') + (r.low ? ' · 저상' : '');
-    if (g[1]) txt += '\n' + ' '.repeat(s1.length + 2) + mapArrFmt(g[1].sec) + (g[1].prev > 0 ? ' · ' + g[1].prev + '번째 전' : '');
+    var txt = s1 + (r.tp ? ' ' + r.tp : '') + '  ' + mapArrFmt(r.sec) + (r.prev > 0 ? ' · ' + r.prev + '번째 전' : '') + (cg ? ' · ' + cg : '') + (r.low ? ' · 저상' : '');
+    if (g[1]) txt += '\n' + ' '.repeat(s1.length + (r.tp ? r.tp.length + 1 : 0) + 2) + mapArrFmt(g[1].sec) + (g[1].prev > 0 ? ' · ' + g[1].prev + '번째 전' : '');
     if (r.dir) txt += '\n' + r.dir + ' 방면';
     kids.push({ t: 'box', s: txt, hl: hl, size: 13, lh: 1.5, color: 'text', fill: 'card2', line: 'border', r: 9, ip: [10, 7, 10, 7], pad: [0, 14, 4, 14] });
   });
@@ -386,13 +474,18 @@ function mapBusBody(f, info) {
             { t: 'button', s: '내 위치로 찾기', size: 14, h: 46, r: 12, bold: true, fill: 'gold', line: 'none', tc: '#121214', pad: [8, 60, 8, 60], act: { a: 'call', v: 'mp.loc' } }];
   }
   var la = Number(b.lat), lo = Number(b.lng), res = (b.res && typeof b.res === 'object') ? b.res : {};
-  if (res.tp === undefined && res.tn === undefined) { info.bus = { st: 'need', need: mapBusNeedStops(la, lo) }; return [{ t: 'text', s: '주변 정류장 찾는 중...', size: 13, color: 'sub', align: 'center', pad: [40, 20, 40, 20] }]; }
+  var need0 = mapBusNeedStops(la, lo);
+  if (need0.some(function (n) { return res[n.k] === undefined; })) { info.bus = { st: 'need', need: need0 }; return [{ t: 'text', s: '주변 정류장 찾는 중...', size: 13, color: 'sub', align: 'center', pad: [40, 20, 40, 20] }]; }
   var stops = mapBusStops(f);
+  if (!stops.length && res.d1 === undefined) {                                           // 공공 API 가 모두 비었으면 서버 정류장 표(D1)로
+    info.bus = { st: 'need', need: [{ k: 'd1', url: MAP_D1_BASE + '/bus-stops?lat=' + la + '&lng=' + lo + '&radius=800' }] };
+    return [{ t: 'text', s: '주변 정류장 찾는 중...', size: 13, color: 'sub', align: 'center', pad: [40, 20, 40, 20] }];
+  }
   if (!stops.length) { info.bus = { st: 'empty' }; return [{ t: 'text', s: '주변 800m 안에 정류장을 찾지 못했어요.', size: 13, color: 'sub', align: 'center', lh: 1.7, pad: [40, 20, 20, 20] }]; }
   if (res.a0 === undefined) { info.bus = { st: 'need', need: stops.map(function (s, i) { return { k: 'a' + i, url: mapBusArrUrl(s) }; }) }; return [{ t: 'text', s: '도착정보 가져오는 중...', size: 13, color: 'sub', align: 'center', pad: [40, 20, 40, 20] }]; }
   var body = [{ t: 'text', s: '내 주변 정류장 ' + stops.length + '곳', size: 12, color: 'sub', pad: [10, 14, 0, 4] }];
   stops.forEach(function (s, i) {
-    var txt = String(res['a' + i] || ''), rows = s.src === 'topis' ? mapSeoulArr(txt) : mapTagoArr(txt);
+    var txt = String(res['a' + i] || ''), rows = s.src === 'topis' ? mapSeoulArr(txt) : s.src === 'gbis' ? mapGbisArr(txt) : mapTagoArr(txt);
     mapBusStopView(s, rows).forEach(function (n) { body.push(n); });
   });
   body.push({ t: 'button', s: '내 위치로 다시 찾기', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: '', pad: [10, 60, 4, 60], act: { a: 'call', v: 'mp.loc' } });
@@ -401,4 +494,4 @@ function mapBusBody(f, info) {
   return body;
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { mapScreen: mapScreen, mapFacts: mapFacts, mapLinesOf: mapLinesOf, mapFind: mapFind, mapNearest: mapNearest, mapIsStationLabel: mapIsStationLabel, mapPickRow: mapPickRow, mapRegionLines: mapRegionLines, mapDedupStops: mapDedupStops, mapStopOrder: mapStopOrder, MAP_FILTERS: MAP_FILTERS };
+if (typeof module !== 'undefined' && module.exports) module.exports = { mapCityOf: mapCityOf, mapGGPreferred: mapGGPreferred, mapGbisArr: mapGbisArr, mapScreen: mapScreen, mapFacts: mapFacts, mapLinesOf: mapLinesOf, mapFind: mapFind, mapNearest: mapNearest, mapIsStationLabel: mapIsStationLabel, mapPickRow: mapPickRow, mapRegionLines: mapRegionLines, mapDedupStops: mapDedupStops, mapStopOrder: mapStopOrder, MAP_FILTERS: MAP_FILTERS };

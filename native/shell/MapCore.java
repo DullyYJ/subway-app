@@ -29,12 +29,13 @@ public final class MapCore {
     public final List<String[]> busNeed = new ArrayList<String[]>();           // [k, 주소]
     public void setBusLoc(double la, double lo) { busLL = new double[] { la, lo }; busRes.clear(); busNeed.clear(); }
     public void addBusRes(String k, String body) { if (k != null && k.matches("[a-z][a-z0-9]{0,3}")) busRes.put(k, body == null ? "" : (body.length() > 120000 ? body.substring(0, 120000) : body)); }
-    /** 엔진이 준 주소를 worker 프록시 주소로 바꾼다. 허용 호스트가 아니면 빈 문자열. */
+    /** 엔진이 준 주소를 공공 API 프록시 주소로 바꾼다 — /tago 는 route-v2 가 아니라 subway-api(gentle-lab) 워커에 있다. 허용 호스트가 아니면 빈 문자열. */
     public static String busFetchUrl(String u) {
         if (u == null) return "";
+        if (u.startsWith(ShellCore.NEWS_BASE + "/bus-stops?") && u.length() < 200 && u.matches("[A-Za-z0-9:/._?=&%-]+")) return u;      // 서버 정류장 표(D1): 프록시 없이 직접
         java.util.regex.Matcher m = java.util.regex.Pattern.compile("^https?://(apis\\.data\\.go\\.kr|ws\\.bus\\.go\\.kr)/").matcher(u);
         if (!m.find()) return "";
-        try { return ShellCore.BASE + "/tago?url=" + java.net.URLEncoder.encode(u, "UTF-8"); } catch (java.io.UnsupportedEncodingException e) { return ""; }
+        try { return ShellCore.NEWS_BASE + "/tago?url=" + java.net.URLEncoder.encode(u, "UTF-8"); } catch (java.io.UnsupportedEncodingException e) { return ""; }
     }
 
     // ── 화면에서 읽은 것 ──

@@ -726,6 +726,7 @@ public class ShellActivity extends Activity {
             }
             return;
         }
+        if ("open".equals(a.a)) { apply(ShellCore.linkEffect(a.url)); return; }       // 정류장 위치 보기 · 길찾기(외부 지도)
         if (!"call".equals(a.a)) return;
         switch (map.act(a.v, head.fields())) {
             case MapCore.R_FIND: {

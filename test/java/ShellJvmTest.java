@@ -285,7 +285,7 @@ public class ShellJvmTest {
         ok(fd.ctr != null && fd.ctr[0] == 37.5 && fd.needData(), "엔진이 정한 중심을 받으면 원자료를 받아야 한다");
         ok(fd.serverUrl().equals("https://gildongmu-food.phg0643.workers.dev/food?lat=37.5&lng=127.0&r=1500&limit=400") && ScreenCore.netAllowed(fd.serverUrl()), "서버 주소 · 통신 허용");
         String pu = fd.publicUrl(2);
-        ok(pu.startsWith(ShellCore.BASE + "/tago?url=") && pu.contains("indsLclsCd%3DI2") && pu.contains("pageNo%3D2") && pu.contains("cx%3D127.0%26cy%3D37.5") && ScreenCore.netAllowed(pu), "공공데이터 주소(서버 대리)");
+        ok(pu.startsWith(ShellCore.NEWS_BASE + "/tago?url=") && pu.contains("indsLclsCd%3DI2") && pu.contains("pageNo%3D2") && pu.contains("cx%3D127.0%26cy%3D37.5") && ScreenCore.netAllowed(pu), "공공데이터 주소(서버 대리)");
         ok(FoodCore.pageCount("{\"body\":{\"items\":[{\"bizesNm\":\"A\"},{\"bizesNm\":\"B\"}]}}") == 2 && FoodCore.pageCount("{\"response\":{\"body\":{\"items\":{\"bizesNm\":\"A\"}}}}") == 1 && FoodCore.pageCount("zzz") == -1 && FoodCore.pageCount("") == -1, "공공데이터 쪽 항목 수(두 가지 모양)");
         java.util.List<String> pgs = new java.util.ArrayList<String>();
         pgs.add("{\"body\":{\"items\":[{\"bizesNm\":\"공공A\",\"indsMclsNm\":\"한식\",\"indsSclsNm\":\"국밥\",\"rdnmAdr\":\"도로1\",\"lnoAdr\":\"지번1\",\"lat\":\"37.501\",\"lon\":\"127.002\",\"extra\":1}]}}");
@@ -357,7 +357,10 @@ public class ShellJvmTest {
         mc.setBusLoc(37.5, 127.0);
         mc.onScreen("{\"info\":{\"view\":\"bus\",\"bus\":{\"st\":\"need\",\"need\":[{\"k\":\"tp\",\"url\":\"http://ws.bus.go.kr/api/rest/stationinfo/getStationByPos?tmX=127\"},{\"k\":\"tn\",\"url\":\"https://evil.example/x\"}]}}}");
         ok(mc.busNeed.size() == 2 && "tp".equals(mc.busNeed.get(0)[0]), "엔진이 준 주소 목록 읽기");
-        ok(MapCore.busFetchUrl(mc.busNeed.get(0)[1]).startsWith(ShellCore.BASE + "/tago?url=http%3A%2F%2Fws.bus.go.kr") && MapCore.busFetchUrl(mc.busNeed.get(1)[1]).isEmpty(), "허용된 공공 API 주소만 프록시로 받는다");
+        ok(MapCore.busFetchUrl(mc.busNeed.get(0)[1]).startsWith(ShellCore.NEWS_BASE + "/tago?url=http%3A%2F%2Fws.bus.go.kr") && MapCore.busFetchUrl(mc.busNeed.get(1)[1]).isEmpty(), "허용된 공공 API 주소만 프록시로 받는다");
+        ok(MapCore.busFetchUrl("https://apis.data.go.kr/6410000/busarrivalservice/v2/getBusArrivalListv2?stationId=1&format=json").startsWith(ShellCore.NEWS_BASE + "/tago?url=https%3A%2F%2Fapis.data.go.kr%2F6410000%2F")
+            && MapCore.busFetchUrl(ShellCore.NEWS_BASE + "/bus-stops?lat=37.5&lng=127&radius=800").equals(ShellCore.NEWS_BASE + "/bus-stops?lat=37.5&lng=127&radius=800")
+            && MapCore.busFetchUrl(ShellCore.NEWS_BASE + "/bus-stops?lat=1&x=<script>").isEmpty() && MapCore.busFetchUrl(ShellCore.NEWS_BASE + "/other?x=1").isEmpty() && MapCore.busFetchUrl("https://evil.example/bus-stops?lat=1").isEmpty(), "경기 GBIS 주소는 프록시로, 서버 정류장 표(D1)는 직접, 그 밖은 막는다");
         mc.addBusRes("tp", "<a/>"); mc.addBusRes("BAD KEY", "x");
         String bq2 = mc.bodyRequest(18, "dark");
         ok(bq2.contains("\"bus\":{\"lat\":37.5,\"lng\":127.0,\"res\":{\"tp\":\"<a/>\"}}") && !bq2.contains("BAD"), "받은 본문을 res 로 다시 보낸다");

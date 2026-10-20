@@ -1666,3 +1666,10 @@
 - 앱 `FavCore`(폼 상태 · `onText` · `sync` · `endActive` · pick/new 요청), `ShellActivity.SheetHost.onText` 로 칸을 쓰는 동안 시트를 다시 받는다(포커스가 빠지면 250ms 뒤 후보 닫음, 후보 줄 누르기 허용).
 - 시험: fav_engine 26 · JVM FavCore 폼. 워커 `route-v2-2026-10-20s98` + 새 APK. 기기 미확인(실제 키보드 · 포커스 이동 중 다시 그리기).
 - 예전 웹 localStorage 즐겨찾기 이전은 여전히 없다.
+
+## 2026-10-21 엔진 s99 + native-shell — 경기 버스(GBIS) · 서버 정류장 표(D1) · 정류장 위치 보기, 그리고 `/tago` 주소 바로잡기
+- **버그 수정(중요)**: 지도 탭 버스 도착정보(`MapCore.busFetchUrl`)와 맛집 공공데이터(`FoodCore.publicUrl`)가 `/tago?url=` 을 **route-v2 가 아니라** 서버 주소(`ShellCore.BASE`)로 불러 왔다. `/tago` 프록시는 subway-api(gentle-lab) 워커에만 있다(`deploy-worker.yml` 가 확인하는 라우트) → 둘 다 `ShellCore.NEWS_BASE` 로. 이 수정 전에는 버스 도착정보·맛집 공공데이터가 404 였을 것(기기 미확인).
+- 엔진 `map.js` 버스: 경기 상자(남36.9 북38.3 서126.3 동127.9) 안이면 GBIS `getBusStationAroundListv2` 를 TAGO 와 같이 요청(서울이면 TOPIS 도). 정류장 고르기는 웹 `_fetchNearStops` 와 같은 우선순위 — 서울 TOPIS > (인천 상자 밖 경기: GBIS > TAGO | 인천 상자 안: TAGO > GBIS) > 모두 비면 서버 정류장 표 `GET /bus-stops?lat&lng&radius=800`(D1, 시 코드 0 이면 좌표 상자로 추정). GBIS 도착정보(`getBusArrivalListv2?stationId=…`)는 웹 `_ggArrivals` 규칙 그대로: 초 우선(없으면 분×60), 1시간 넘는 예측과 운행종료(STOP) 제외, 첫 차만 잘렸으면 둘째를 앞으로, 노선 유형(일반 · 마을 · 직행좌석…) 글, 행선지가 곧 방면. `resultCode` 0·4 만 정상(JSON 이 아니면 인증 실패로 보고 TAGO 로).
+- 정류장마다 "위치 보기 · 길찾기" 단추(카카오맵 링크, 앱은 `open` 행동으로 외부 열기) — 웹의 Leaflet 정류장 위치 패널 대신.
+- 웹의 버스 즐겨찾기는 `_selectBusFavRoute(){return false}` 로 이미 꺼진 자리였고 실제 기능이 없어서 옮길 것이 없다. 버스 노선 지도(차량 위치 · 경유 정류장 선)는 아직 옮기지 않았다.
+- 시험: map_engine 76(GBIS 정류장/도착/우선순위/D1/위치 단추) · JVM(`busFetchUrl` GBIS 프록시 · D1 직접 · 막힘). 워커 `route-v2-2026-10-20s99` + 새 APK.

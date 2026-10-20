@@ -121,7 +121,7 @@ public final class FoodCore {
     public String serverUrl() { return FOOD_BASE + "/food?lat=" + ctr[0] + "&lng=" + ctr[1] + "&r=" + RADIUS + "&limit=" + LIMIT; }
     public String publicUrl(int page) {
         String inner = PUB_URL + "?serviceKey=" + "&radius=" + RADIUS + "&cx=" + ctr[1] + "&cy=" + ctr[0] + "&indsLclsCd=I2&type=json&numOfRows=" + PUB_PAGE_SIZE + "&pageNo=" + page;
-        return ShellCore.BASE + "/tago?url=" + ShellCore.enc(inner);
+        return ShellCore.NEWS_BASE + "/tago?url=" + ShellCore.enc(inner);
     }
 
     // ── 엔진 요청 ──
