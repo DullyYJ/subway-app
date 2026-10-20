@@ -50,7 +50,7 @@ function findAndroidJar() {
     assert.ok(/setVisibility\(GONE\)/.test(v) && /postInvalidateOnAnimation/.test(v), 'vsync 마다 그리고 끝나면 숨김');
   });
   await t('CI 워크플로가 파일을 복사하고 MainActivity 에 RowNativePlugin 을 등록한다', async () => {
-    const y = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'build-apk.yml'), 'utf8');
+    const y = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'build-shell.yml'), 'utf8');
     for (const f of ['RowCore.java', 'RowOverlayView.java', 'RowNativePlugin.java']) assert.ok(y.includes('native/' + f), f + ' 복사');
     assert.ok(/registerPlugin\(RowNativePlugin\.class\)/.test(y));
     assert.ok(/row_native\.test\.js/.test(y) && /route_row\.ui\.test\.js/.test(y), '시험 목록');

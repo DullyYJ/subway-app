@@ -5,7 +5,7 @@ const E = require('../engine/cchips'), screenCheck = require('./helpers/screen_c
 let pass = 0, fail = 0;
 function ok(c, m) { if (c) pass++; else { fail++; console.log('  FAIL', m); } }
 const R = p => path.join(__dirname, '..', p);
-const html = fs.readFileSync(R('www/index.html'), 'utf8');
+const html = fs.readFileSync(R('ios-reference/index.html'), 'utf8');
 const EMOJI = /[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE0F}]/u;
 
 // ── ② 웹 #filterRow 대조 ──

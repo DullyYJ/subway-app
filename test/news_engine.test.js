@@ -7,7 +7,7 @@ const E = require('../engine/news');
 let pass = 0, fail = 0;
 function ok(c, m) { if (c) { pass++; } else { fail++; console.log('  FAIL', m); } }
 const R = p => path.join(__dirname, '..', p);
-const html = fs.readFileSync(R('www/index.html'), 'utf8');
+const html = fs.readFileSync(R('ios-reference/index.html'), 'utf8');
 const NOW = Date.UTC(2026, 9, 18, 3, 0, 0);
 const MIN = 60000, HR = 3600000, DAY = 24 * HR;
 
@@ -131,7 +131,7 @@ ok(S.ok && S.v === 1 && S.screen === 'news' && S.cover === 'tab' && /^n1:/.test(
     const f = path.join(dir, 'in.jsonl'), cls = path.join(dir, 'c');
     fs.writeFileSync(f, lines.join('\n') + '\n'); fs.mkdirSync(cls);
     const ENV = Object.assign({}, process.env, { JAVA_TOOL_OPTIONS: '' });
-    let r = spawnSync('javac', ['-encoding', 'UTF-8', '-d', cls, R('native/ScreenCore.java'), R('test/java/ScreenCheck.java')], { env: ENV, encoding: 'utf8' });
+    let r = spawnSync('javac', ['-encoding', 'UTF-8', '-d', cls, R('native/shell/ScreenCore.java'), R('test/java/ScreenCheck.java')], { env: ENV, encoding: 'utf8' });
     ok(r.status === 0, 'ScreenCheck 컴파일 ' + (r.stderr || '').slice(0, 300));
     r = spawnSync('java', ['-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-cp', cls, 'com.dullyyj.subway.ScreenCheck', f], { env: ENV, encoding: 'utf8' });
     const out = (r.stdout || '').split('\n').filter(Boolean);

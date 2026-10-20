@@ -5,7 +5,7 @@ const E = require('../engine/write'), screenCheck = require('./helpers/screen_ch
 let pass = 0, fail = 0;
 function ok(c, m) { if (c) pass++; else { fail++; console.log('  FAIL', m); } }
 const R = p => path.join(__dirname, '..', p);
-const html = fs.readFileSync(R('www/index.html'), 'utf8');
+const html = fs.readFileSync(R('ios-reference/index.html'), 'utf8');
 const EMOJI = /[\u{1F000}-\u{1FFFF}\u{2190}-\u{2BFF}\u{FE0F}]/u;
 const flat = ns => { const o = []; (function f(a) { a.forEach(n => { o.push(n); if (n.kids) f(n.kids); }); })(ns); return o; };
 const S = (f, cap) => E.writeScreen({ cap: cap == null ? 9 : cap }, f);

@@ -3,14 +3,14 @@
 //   ② 코어는 안드로이드·네트워크·시계를 쓰지 않는다
 //   ③ 안드로이드 계층(ShellActivity)을 진짜 android.jar 로 컴파일 — jar 가 없으면 건너뜀(CI 러너엔 SDK 가 있다)
 //   ④ 껍데기는 웹뷰·글 만들기를 쓰지 않는다(엔진이 준 화면만 올린다)
-//   ⑤ CI 워크플로가 파일을 복사하고 매니페스트에 ShellActivity 를 올린다
+//   ⑤ 순수 네이티브 프로젝트(shell-android)에 웹뷰·Capacitor·www 흔적이 없다
 // 실행: node test/shell_native.test.js   (javac · java 필요)
 const assert = require('assert'), fs = require('fs'), os = require('os'), path = require('path'), { spawnSync } = require('child_process');
 const ROOT = path.join(__dirname, '..');
 let pass = 0, fail = 0, skipped = 0;
 const t = async (name, fn) => { try { const r = await fn(); if (r === 'skip') { skipped++; console.log('  skip ', name); } else { pass++; console.log('  ok  ', name); } } catch (e) { fail++; console.log('  FAIL', name, '\n       ', String(e.message || e).split('\n').slice(0, 6).join('\n        ')); } };
 const ENV = Object.assign({}, process.env, { JAVA_TOOL_OPTIONS: '', LC_ALL: 'C.UTF-8', LANG: 'C.UTF-8' });
-const N = n => path.join(ROOT, 'native', n);
+const N = n => path.join(ROOT, 'native', 'shell', n);
 const walk = (d, ext, acc = []) => { for (const f of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, f.name); if (f.isDirectory()) walk(p, ext, acc); else if (p.endsWith(ext)) acc.push(p); } return acc; };
 function findAndroidJar() {
   if (process.env.ANDROID_JAR && fs.existsSync(process.env.ANDROID_JAR)) return process.env.ANDROID_JAR;
@@ -52,11 +52,15 @@ function findAndroidJar() {
     assert.ok(/NetPost\.(post|get)\(/.test(v), '통신은 허용 목록을 지키는 NetPost 로');
     assert.ok(!/HttpURLConnection|new URL\(/.test(v), '직접 통신 없음');
   });
-  await t('CI: 파일 복사 · 매니페스트에 ShellActivity(두 번째 아이콘) · 시험 목록', async () => {
-    const y = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'build-apk.yml'), 'utf8');
-    assert.ok(/native\/ShellCore\.java/.test(y) && /native\/ShellActivity\.java/.test(y), '복사 목록');
-    assert.ok(/\.ShellActivity/.test(y), '매니페스트');
-    assert.ok(/shell_native\.test\.js/.test(y), '시험 목록');
+  await t('순수 네이티브 프로젝트: 소스는 native/shell 뿐 · 매니페스트에 ShellActivity 가 런처 · 웹뷰/Capacitor 흔적 없음', async () => {
+    const g = fs.readFileSync(path.join(ROOT, 'shell-android', 'app', 'build.gradle'), 'utf8');
+    assert.ok(/srcDirs = \['\.\.\/\.\.\/native\/shell'\]/.test(g), '소스 경로');
+    const m = fs.readFileSync(path.join(ROOT, 'shell-android', 'app', 'src', 'main', 'AndroidManifest.xml'), 'utf8');
+    assert.ok(/\.ShellActivity/.test(m) && /android\.intent\.category\.LAUNCHER/.test(m), '런처');
+    const y = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'build-shell.yml'), 'utf8');
+    assert.ok(/shell_native\.test\.js/.test(y) && /assembleDebug/.test(y) && /Bundle Noto Sans KR/.test(y), '워크플로');
+    for (const f of [g, m, y].concat(walk(path.join(ROOT, 'native', 'shell'), '.java').map(x => fs.readFileSync(x, 'utf8')))) assert.ok(!/capacitor|WebView|BridgeActivity|webDir/i.test(f), '웹 흔적');
+    assert.ok(!fs.existsSync(path.join(ROOT, 'www')), 'www 폴더가 없어야 한다(웹 기준본은 ios-reference/)');
   });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
   process.exit(fail ? 1 : 0);

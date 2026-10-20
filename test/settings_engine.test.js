@@ -7,7 +7,7 @@ const E = require('../engine/settings');
 let pass = 0, fail = 0;
 function ok(c, m) { if (c) { pass++; } else { fail++; console.log('  FAIL', m); } }
 const R = p => path.join(__dirname, '..', p);
-const html = fs.readFileSync(R('www/index.html'), 'utf8');
+const html = fs.readFileSync(R('ios-reference/index.html'), 'utf8');
 
 // 평탄화: 패널 안까지 모든 노드
 function flat(nodes, out) { out = out || []; nodes.forEach(n => { out.push(n); if (n.kids) flat(n.kids, out); }); return out; }
@@ -83,7 +83,7 @@ ok(E.settingsStat(E.SETTINGS_FEATS[3], { on: 0 }) === '꺼짐 — 예전 방식(
     const f = path.join(dir, 'in.jsonl'), cls = path.join(dir, 'c');
     fs.writeFileSync(f, lines.join('\n') + '\n'); fs.mkdirSync(cls);
     const ENV = Object.assign({}, process.env, { JAVA_TOOL_OPTIONS: '' });
-    let r = spawnSync('javac', ['-encoding', 'UTF-8', '-d', cls, R('native/ScreenCore.java'), R('test/java/ScreenCheck.java')], { env: ENV, encoding: 'utf8' });
+    let r = spawnSync('javac', ['-encoding', 'UTF-8', '-d', cls, R('native/shell/ScreenCore.java'), R('test/java/ScreenCheck.java')], { env: ENV, encoding: 'utf8' });
     ok(r.status === 0, 'ScreenCheck 컴파일 ' + (r.stderr || '').slice(0, 300));
     r = spawnSync('java', ['-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-cp', cls, 'com.dullyyj.subway.ScreenCheck', f], { env: ENV, encoding: 'utf8' });
     const out = (r.stdout || '').split('\n').filter(Boolean);
@@ -231,7 +231,7 @@ ok(E.settingsStat(E.SETTINGS_FEATS[3], { on: 0 }) === '꺼짐 — 예전 방식(
     const f = path.join(dir, 'in.jsonl'), cls = path.join(dir, 'c');
     fs.writeFileSync(f, cases.map(c => JSON.stringify(c)).join('\n') + '\n'); fs.mkdirSync(cls);
     const ENV = Object.assign({}, process.env, { JAVA_TOOL_OPTIONS: '' });
-    let r = spawnSync('javac', ['-encoding', 'UTF-8', '-d', cls, R('native/ScreenCore.java'), R('test/java/ScreenCheck.java')], { env: ENV, encoding: 'utf8' });
+    let r = spawnSync('javac', ['-encoding', 'UTF-8', '-d', cls, R('native/shell/ScreenCore.java'), R('test/java/ScreenCheck.java')], { env: ENV, encoding: 'utf8' });
     ok(r.status === 0, '하위 화면: ScreenCheck 컴파일 ' + (r.stderr || '').slice(0, 300));
     r = spawnSync('java', ['-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-cp', cls, 'com.dullyyj.subway.ScreenCheck', f], { env: ENV, encoding: 'utf8' });
     const out = (r.stdout || '').split('\n').filter(Boolean);

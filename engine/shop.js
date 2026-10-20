@@ -9,7 +9,7 @@
 //        data = 쇼핑 서버(gildongmu-shop) /shop 의 data  { WEEKDAY:[{h1,h2,time,label,items:[{n,t,u,i}]}], WEEKEND:[…], CATS:[{c,items:[{n,u,i}]}] }
 //        cfg  = 운영 설정(/app-config?k=shop) { kw:{winter,spring,summer,fall}, w:{cur,next,opp,rain,temp} } | null
 //        wx   = { temp, rain } | null  (Worker 가 subway-api /weather 에서 받는다. 못 받으면 null — 날씨를 지어내지 않는다)
-// 출력  { ok, v:1, screen:'shop', rev, cat, seed, head:[노드…], body:[노드…] }  ← 노드 종류는 native/ScreenCore.java 와 같다
+// 출력  { ok, v:1, screen:'shop', rev, cat, seed, head:[노드…], body:[노드…] }  ← 노드 종류는 native/shell/ScreenCore.java 와 같다
 //        chips{items:[{label,badge,on,act}]} · grid{cols,gap,items:[card{img,fb,name,tag,act}]} · text · button · spacer
 //        box{s,hl,fill,line…}(대가성 안내 상자) · search{hint,act:{a:'search',tpl,empty}}(쿠팡 검색줄) — 입력 inp.cap>=2 (새 앱)일 때만 head 에 실리고 cover:'tab'
 //        act = {a:'cat',v} | {a:'open',url} | {a:'refresh'} | {a:'search',tpl,empty}

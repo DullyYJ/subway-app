@@ -6,7 +6,7 @@ const E = require('../engine/cong'), D = require('../engine/cong-data'), screenC
 let pass = 0, fail = 0;
 function ok(c, m) { if (c) pass++; else { fail++; console.log('  FAIL', m); } }
 const R = p => path.join(__dirname, '..', p);
-const html = fs.readFileSync(R('www/index.html'), 'utf8');
+const html = fs.readFileSync(R('ios-reference/index.html'), 'utf8');
 const EMOJI = /[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}]/u;
 const cut = (a, b) => { const i = html.indexOf(a), j = html.indexOf(b, i); if (i < 0 || j < 0) throw new Error('웹 함수를 못 찾음: ' + a); return html.slice(i, j); };
 const TZ = -new Date().getTimezoneOffset();

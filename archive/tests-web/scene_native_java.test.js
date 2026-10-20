@@ -257,7 +257,7 @@ try {
 
   // ── CI 워크플로 ──
   await t('CI 워크플로: 파일 복사·플러그인 등록·터치 전달(MainActivity)·Gradle 주입·시험 목록·수동 실행 시험 건너뛰기', async () => {
-    const y = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'build-apk.yml'), 'utf8');
+    const y = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'build-shell.yml'), 'utf8');
     for (const f of ['SceneCv', 'SceneUtil', 'SceneModel', 'SceneArt', 'SceneCore', 'SceneActs', 'SceneHaptics', 'AndroidCv', 'SceneDriver', 'SceneHost', 'SceneNativePlugin']) {
       assert(y.includes('native/' + f + '.java'), f + ' 복사 누락'); assert(fs.existsSync(N(f + '.java')), f + ' 파일 없음');
     }
@@ -274,7 +274,7 @@ try {
     if (!/No module named/.test(yaml.stderr || '')) assert.strictEqual(yaml.status, 0, '워크플로 YAML 오류: ' + yaml.stderr);
   });
   await t('CI 의 MainActivity 파이썬 템플릿을 실제로 돌리면 올바른 자바가 나온다(터치 전달·플러그인 등록)', async () => {
-    const y = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'build-apk.yml'), 'utf8');
+    const y = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'build-shell.yml'), 'utf8');
     const i = y.indexOf('MAIN = "\\n".join(['), j = y.indexOf('main = os.path.join(PKGDIR', i);
     assert(i > 0 && j > i);
     const body = y.slice(i, j).split('\n').map(l => l.replace(/^ {10}/, '')).join('\n');

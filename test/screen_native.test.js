@@ -10,7 +10,7 @@ const ROOT = path.join(__dirname, '..');
 let pass = 0, fail = 0, skipped = 0;
 const t = async (name, fn) => { try { const r = await fn(); if (r === 'skip') { skipped++; console.log('  skip ', name); } else { pass++; console.log('  ok  ', name); } } catch (e) { fail++; console.log('  FAIL', name, '\n      ', String(e.message).split('\n')[0]); } };
 const ENV = Object.assign({}, process.env, { JAVA_TOOL_OPTIONS: '', LC_ALL: 'C.UTF-8', LANG: 'C.UTF-8' });
-const N = n => path.join(ROOT, 'native', n);
+const N = n => path.join(ROOT, 'native', 'shell', n);
 const walk = (d, ext, acc = []) => { for (const f of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, f.name); if (f.isDirectory()) walk(p, ext, acc); else if (p.endsWith(ext)) acc.push(p); } return acc; };
 function findAndroidJar() {
   if (process.env.ANDROID_JAR && fs.existsSync(process.env.ANDROID_JAR)) return process.env.ANDROID_JAR;
@@ -41,9 +41,9 @@ function findAndroidJar() {
     const cap = path.join(out, 'cap'), j = path.join(out, 'j'); fs.mkdirSync(cap); fs.mkdirSync(j);
     let r = spawnSync('javac', ['-encoding', 'UTF-8', '-cp', jar, '-d', cap].concat(walk(path.join(__dirname, 'android-stubs', 'com'), '.java')), { env: ENV, encoding: 'utf8' });
     assert.strictEqual(r.status, 0, '캐퍼시터 스텁: ' + (r.stderr || '').slice(0, 800));
-    r = spawnSync('javac', ['-encoding', 'UTF-8', '-Xlint:all', '-Xlint:-deprecation', '-cp', [jar, cap].join(path.delimiter), '-d', j, N('ScreenCore.java'), N('NetPost.java'), N('ScreenView.java'), N('ScreenNativePlugin.java')], { env: ENV, encoding: 'utf8' });
+    r = spawnSync('javac', ['-encoding', 'UTF-8', '-Xlint:all', '-Xlint:-deprecation', '-cp', [jar, cap].join(path.delimiter), '-d', j, N('ScreenCore.java'), N('NetPost.java'), N('ScreenView.java')], { env: ENV, encoding: 'utf8' });
     assert.strictEqual(r.status, 0, (r.stderr || '').split('\n').filter(l => !/^Picked up/.test(l)).join(' / ').slice(0, 1500));
-    assert(fs.existsSync(path.join(j, 'com', 'dullyyj', 'subway', 'ScreenNativePlugin.class')));
+    assert(fs.existsSync(path.join(j, 'com', 'dullyyj', 'subway', 'ScreenView.class')));
   });
   await t('뷰: 그릴 때 새 객체를 만들지 않는다 · 화면 박자로 이어 그린다 · 보이는 조각만 그린다', async () => {
     const v = fs.readFileSync(N('ScreenView.java'), 'utf8');
@@ -55,7 +55,7 @@ function findAndroidJar() {
     assert.ok(/requestDisallowInterceptTouchEvent\(true\)/.test(v), '손가락을 이 뷰가 받는다');
   });
   await t('검색줄: 진짜 입력칸(EditText) · 검색 키 · 길이 제한 · 포커스 알림 · 잘리면 숨김 · 키보드 내리기', async () => {
-    const v = fs.readFileSync(N('ScreenView.java'), 'utf8'), p = fs.readFileSync(N('ScreenNativePlugin.java'), 'utf8');
+    const v = fs.readFileSync(N('ScreenView.java'), 'utf8'), p = '';
     assert.ok(/new EditText\(/.test(v) && /IME_ACTION_SEARCH/.test(v) && /LengthFilter/.test(v), '입력칸·검색 키·길이');
     assert.ok(/onInputFocus\(/.test(v) && /onSearch\(/.test(v), '포커스·검색 알림');
     assert.ok(/getClipBounds\(\)/.test(v) && /hideInput\(\)/.test(v), '잘리면 입력칸을 내린다');
@@ -63,19 +63,14 @@ function findAndroidJar() {
     assert.ok(/bringToFront\(\)/.test(v), '입력칸이 그림 뷰 위에 놓인다');
     assert.ok(/syncLater\(\)/.test(v) && !/protected void onLayout[^{]*\{[^}]*syncInput\(\)/.test(v), '배치 도중 자식 뷰를 건드리지 않고 한 박자 뒤로 미룬다');
     assert.ok(/drawBox\(/.test(v) && /drawSearch\(/.test(v) && /drawRich\(/.test(v), '상자·검색줄·굵은 글자 그리기');
-    assert.ok(/notifyListeners\("input"/.test(p) && /put\("empty", a\.empty\)/.test(p) && /put\("url", a\.tpl\)/.test(p), '플러그인: input 이벤트 · 검색 행동에 tpl/empty 를 실어 보냄');
-    assert.ok(/resyncInput\(\)/.test(p), '자리/잘림이 바뀌면 입력칸도 맞춘다');
-  });
+          });
   await t('설정 노드: 스위치는 바로 뒤집고 set 이벤트 · 입력칸은 눌렀을 때만 만든다 · 글자 모음(fields) · 앱 토스트', async () => {
-    const v = fs.readFileSync(N('ScreenView.java'), 'utf8'), p = fs.readFileSync(N('ScreenNativePlugin.java'), 'utf8');
+    const v = fs.readFileSync(N('ScreenView.java'), 'utf8'), p = '';
     assert.ok(/drawPanel\(/.test(v) && /drawToggle\(/.test(v) && /drawNav\(/.test(v) && /drawSelect\(/.test(v) && /drawField\(/.test(v), '패널·스위치·이동줄·고르기·입력칸 그리기');
     assert.ok(/pi\.on = !pi\.on/.test(v) && /listener\.onSet\(/.test(v), '스위치: 화면을 먼저 뒤집고 set 알림');
     assert.ok(/ensureEditor\(|beginEdit\(/.test(v) && /commitEdit\(/.test(v) && /endEdit\(/.test(v), '입력칸 편집: 눌렀을 때 만들고 끝나면 글자를 모으고 뗀다');
     assert.ok(/public Map<String, String> fields\(\)/.test(v), 'fields() 로 글자 모음');
-    assert.ok(/R_BORDER2/.test(v) && /new int\[12\]/.test(p) && /"border2"/.test(p), '두 번째 테두리색 팔레트');
-    assert.ok(/onSet\(ScreenCore\.Act a, boolean on\)/.test(p) && /put\("on", on\)/.test(p) && /put\("fields", fo\)/.test(p), '플러그인: set 이벤트에 on · 모든 행동에 fields');
-    assert.ok(/public void toast\(/.test(p) && /Toast\.makeText/.test(p), '앱이 직접 띄우는 토스트');
-  });
+              });
   await t('그림 받기: 백그라운드 스레드 + 메모리/파일 캐시 + 실패 재시도 간격 + 크기 한도', async () => {
     const v = fs.readFileSync(N('ScreenView.java'), 'utf8');
     assert.ok(/newFixedThreadPool/.test(v) && /LruCache/.test(v) && /scr_img/.test(v), '풀·캐시');
@@ -83,23 +78,13 @@ function findAndroidJar() {
     assert.ok(/4_000_000L/.test(v) && /inSampleSize/.test(v), '크기 한도·축소 디코드');
     assert.ok(/getResponseCode\(\) != 200/.test(v), '정상 응답만');
   });
-  await t('플러그인: JSON 을 검증(ScreenCore.load)한 뒤에만 그린다 · 틀리면 invalid 오류 이벤트 · 통신·계산 없음', async () => {
-    const p = fs.readFileSync(N('ScreenNativePlugin.java'), 'utf8');
-    assert.ok(/ScreenCore\.load\(/.test(p) && /"invalid"/.test(p), '검증·invalid');
-    assert.ok(/notifyListeners\("error"/.test(p) && /notifyListeners\("ready"/.test(p) && /notifyListeners\("action"/.test(p), 'ready·error·action 이벤트');
-    assert.ok(!/URL\(|HttpURLConnection|Random/.test(p), '순수 전달');
-    for (const m of ['show', 'update', 'setRect', 'hide', 'destroy', 'status']) assert.ok(new RegExp('public void ' + m + '\\(').test(p), m + ' 메서드');
-    assert.ok(/@CapacitorPlugin\(name = "ScreenNative"\)/.test(p));
-  });
   await t('글꼴: 웹과 같은 Noto Sans KR 를 쓴다(assets/fonts) · 없으면 기기 기본으로 · CI 가 글꼴을 만들어 넣는다', async () => {
-    const v = fs.readFileSync(N('ScreenView.java'), 'utf8'), p = fs.readFileSync(N('ScreenNativePlugin.java'), 'utf8'), y = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'build-apk.yml'), 'utf8');
+    const v = fs.readFileSync(N('ScreenView.java'), 'utf8'), p = '', y = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'build-shell.yml'), 'utf8');
     assert.ok(/fonts\/NotoSansKR-Regular\.ttf/.test(v) && /fonts\/NotoSansKR-Bold\.ttf/.test(v), '보통·굵게 글꼴 파일');
     assert.ok(/Typeface\.DEFAULT_BOLD : Typeface\.DEFAULT/.test(v), '글꼴 없으면 기기 기본으로');
     assert.ok(!/setTypeface\(bold \? Typeface\.DEFAULT_BOLD/.test(v), '직접 기본 글꼴을 쓰지 않고 face() 를 거친다');
     assert.ok((v.match(/face\(/g) || []).length >= 5, '재기·그리기·입력칸이 같은 글꼴');
-    assert.ok(/preloadFaces/.test(p) && /public void load\(\)/.test(p), '앱이 뜰 때 뒤에서 미리 읽는다');
-    assert.ok(/Bundle Noto Sans KR/.test(y) && /assets\/fonts\/NotoSansKR-/.test(y) && /instantiateVariableFont/.test(y), 'CI 글꼴 만들기');
-    assert.ok(y.indexOf('Bundle Noto Sans KR') < y.indexOf('Generate launcher icons'), '안드로이드 폴더가 만들어진 뒤');
+        assert.ok(/Bundle Noto Sans KR/.test(y) && /assets\/fonts\/NotoSansKR-/.test(y) && /instantiateVariableFont/.test(y), 'CI 글꼴 만들기');
   });
   await t('맛집 노드: 머리줄(bar)·장소 카드(place)·구분선(divider)을 그리고 눌린 칩 색을 엔진 글대로 칠한다 · 그릴 때 새 객체 없음', async () => {
     const v = fs.readFileSync(N('ScreenView.java'), 'utf8');
@@ -120,7 +105,7 @@ function findAndroidJar() {
     assert.ok(/K_NEWS = 15/.test(c) && /"news"\.equals\(t\)/.test(c) && /"news"\.equals\(n\.t\)/.test(c), '코어가 뉴스 줄을 안다(읽기 + 배치)');
   });
   await t('게시판·채팅·탭 노드: 펼침 카드(post)·댓글·단추 줄·입력줄·말풍선·탭 막대·아래 고정 줄을 그리고 코어가 안다 · 그릴 때 새 객체 없음', async () => {
-    const v = fs.readFileSync(N('ScreenView.java'), 'utf8'), c = fs.readFileSync(N('ScreenCore.java'), 'utf8'), p = fs.readFileSync(N('ScreenNativePlugin.java'), 'utf8');
+    const v = fs.readFileSync(N('ScreenView.java'), 'utf8'), c = fs.readFileSync(N('ScreenCore.java'), 'utf8'), p = '';
     for (const k of ['POSTH:drawPostHead', 'CMT:drawCmt', 'RBTN:drawRbtn', 'INBAR:drawInbar', 'MSG:drawMsg', 'TAB:drawTab']) {
       const [kind, fn] = k.split(':');
       assert.ok(new RegExp('case ScreenCore\\.K_' + kind + ': ' + fn + '\\(').test(v), 'drawItem 연결 ' + k);
@@ -133,13 +118,12 @@ function findAndroidJar() {
     assert.ok(/private void toggleOpen\(/.test(v) && /openKey = wasOn \? "" : key/.test(v) && /topOnScreen/.test(v) && /listener\.onSet\(a, !wasOn\)/.test(v), '게시글 펼침: 앱이 바로 토글 · 눌린 머리 위치 유지 · on 알림');
     assert.ok(/private void tapInbar\(/.test(v) && /private void fireInbar\(/.test(v) && /IME_ACTION_SEND/.test(v) && /public void setField\(/.test(v), '입력줄: 단추·키보드 보내기 · 웹이 글자를 비울 수 있다');
     assert.ok(/editInFoot/.test(v) && /K_INBAR/.test(v.slice(v.indexOf('private ScreenCore.Item fieldByKey'))), '입력칸 찾기는 본문과 아래 고정 줄 모두');
-    assert.ok(/public void setField\(final PluginCall call\)/.test(p) && /"card2"/.test(p) && /"nav"/.test(p), '플러그인: setField · card2/nav 팔레트');
-    for (const k of ['K_POSTH = 16', 'K_CMT = 17', 'K_RBTN = 18', 'K_INBAR = 19', 'K_MSG = 20', 'K_TAB = 21']) assert.ok(c.includes(k), k);
+        for (const k of ['K_POSTH = 16', 'K_CMT = 17', 'K_RBTN = 18', 'K_INBAR = 19', 'K_MSG = 20', 'K_TAB = 21']) assert.ok(c.includes(k), k);
     for (const n of ['post', 'cmt', 'btnrow', 'inbar', 'msg', 'tabbar']) assert.ok(new RegExp('"' + n + '"\\.equals\\(t\\)').test(c) && new RegExp('"' + n + '"\\.equals\\((t0\\()?n(\\))?\\.?t?\\)').test(c) || c.includes('"' + n + '".equals'), n + ' 읽기·배치');
     assert.ok(/public static float\[\] pathOps\(/.test(c) && /sc\.foot\.add\(/.test(c), '코어: 경로 읽기 · foot');
   });
   await t('홈 경로 입력 노드: 동그라미·굵은 글·작은 단추·확인 키(eact)·흐린 단추(dim) · 목록줄(sug) · 바꾸기 단추(swap) · 글자 바뀜/높이 이벤트 · 위에 그려진 것이 먼저 눌린다', async () => {
-    const v = fs.readFileSync(path.join(ROOT, 'native', 'ScreenView.java'), 'utf8'), p = fs.readFileSync(path.join(ROOT, 'native', 'ScreenNativePlugin.java'), 'utf8'), c = fs.readFileSync(path.join(ROOT, 'native', 'ScreenCore.java'), 'utf8');
+    const v = fs.readFileSync(path.join(ROOT, 'native', 'shell', 'ScreenView.java'), 'utf8'), p = '', c = fs.readFileSync(path.join(ROOT, 'native', 'shell', 'ScreenCore.java'), 'utf8');
     for (const k of ['SUG:drawSug', 'SWAP:drawSwap']) {
       const [kind, fn] = k.split(':');
       assert.ok(new RegExp('case ScreenCore\\.K_' + kind + ': ' + fn + '\\(').test(v), 'drawItem 연결 ' + k);
@@ -150,18 +134,11 @@ function findAndroidJar() {
     assert.ok(/it\.dotC != null/.test(v) && /cv\.drawCircle\(it\.bx, it\.by, 5f/.test(v), '입력줄 왼쪽 동그라미');
     assert.ok(/setText\(it\.size, it\.bold,/.test(v) && /it\.size2 > 0f \? it\.size2 : it\.size/.test(v), '입력줄 굵은 글 · 단추 글 크기 따로');
     assert.ok(/void onText\(String key, String value, String kind\)/.test(v) && /void onContentH\(float dp\)/.test(v) && /TextWatcher/.test(v) && /editSilent/.test(v), '글자 바뀜·내용 높이 알림 (웹이 비운 글은 알리지 않음)');
-    assert.ok(/"text"/.test(p) && /"size"/.test(p) && /@Override public void onText\(/.test(p) && /@Override public void onContentH\(/.test(p), '플러그인: text · size 이벤트');
-    assert.ok(/for \(int i = r\[1\] - 1; i >= r\[0\]; i--\)/.test(v), '눌림은 위에 그려진 것(바꾸기 단추)부터 찾는다');
+        assert.ok(/for \(int i = r\[1\] - 1; i >= r\[0\]; i--\)/.test(v), '눌림은 위에 그려진 것(바꾸기 단추)부터 찾는다');
     assert.ok(/pi\.act2 != null && x \/ dpr >= pi\.btx/.test(v) && /cur\.act2 != null \? cur\.act2 : cur\.act/.test(v), '목록줄 오른쪽 단추 · 확인 키 행동');
     assert.ok(/if \(!it\.on\) fireInbar\(/.test(v), '흐린 단추는 눌려도 무시');
     const draw = v.slice(v.indexOf('protected void onDraw'), v.indexOf('// ───────────── 검색 입력칸'));
     assert.ok(!/\bnew\s+[A-Z]/.test(draw), '그리기 구간에 new: ' + (draw.match(/\bnew\s+[A-Z]\w*/) || [''])[0]);
-  });
-  await t('CI 워크플로가 파일을 복사하고 MainActivity 에 ScreenNativePlugin 을 등록한다', async () => {
-    const y = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'build-apk.yml'), 'utf8');
-    for (const f of ['ScreenCore.java', 'ScreenView.java', 'ScreenNativePlugin.java']) assert.ok(y.includes('native/' + f), f + ' 복사');
-    assert.ok(/registerPlugin\(ScreenNativePlugin\.class\)/.test(y));
-    assert.ok(/screen_native\.test\.js/.test(y) && /screen_native_js\.ui\.test\.js/.test(y) && /shop_engine\.test\.js/.test(y), '시험 목록');
   });
   console.log(`\n${pass} 통과, ${fail} 실패, ${skipped} 건너뜀`); process.exit(fail ? 1 : 0);
 })();

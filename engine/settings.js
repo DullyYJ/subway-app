@@ -11,7 +11,7 @@
 //          id: 현재 커뮤니티 아이디('' 이면 없음) · np:{arrive,transfer,arrive_reco: 1|0} · npd: 알림 권한 거부(1|0) · rl: 도착 오차 기록(1|0)
 //          th: 'dark'|'pastel' · sam: 갤럭시(1|0) · samw: 앱 배터리 '제한됨'(1|0) · errn: 오류 로그 개수 · cm: 출퇴근 알림(1|0|없음) · ovl: 오버레이(1|0|없음)
 //          feat: { nm|sn|htl|scr|scrs|scrf|scrn|scrb|scrc|scrt|scrq|scrw|scrh|scrr|scrg|scra|sclt|scrd|scrp|nnet|sbh|cnd|rtf|sto|ra|npol|arw|cmw|rtx|e2 : { h: 이 기능이 있나(1|0), on: 스위치(1|0), f: 문제로 웹으로 돌아갔나(1|0), w: 문제 사유, b: 저장본 사용 중(1|0) } }
-// 출력  { ok, v:1, screen:'settings', rev, cover:'tab', head:[], body:[노드…] }  ← 노드 종류는 native/ScreenCore.java 와 같다
+// 출력  { ok, v:1, screen:'settings', rev, cover:'tab', head:[], body:[노드…] }  ← 노드 종류는 native/shell/ScreenCore.java 와 같다
 //        panel{kids} · text · box · toggle{key} · navrow{act} · select{act:{a:'sel'}} · field{key} · button · spacer
 //        act = {a:'set',key} (스위치 — 앱이 먼저 뒤집고 알린다) | {a:'call',v} (앱 안 함수 호출: saveId·clearId·pol.*·errlog) | {a:'web',v} (웹 카드 열기) | {a:'sel',v} (고르기)
 //        ★ 2026-10-20 하위 화면(cap 8): settingsScreen({cap:8, p:'cm'|'gw'|'arr'|'ovl'|'dev'|'sam'}, facts{pf:…}) — 예전에 웹 카드 시트로 열던 6개를 같은 방식(엔진이 구성, 앱은 그리기)으로.

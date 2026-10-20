@@ -65,7 +65,7 @@ function findAndroidJar() {
     assert.ok(!/StaticLayout|breakText|measureText[\s\S]{0,40}split/.test(v.split('runs != null')[1].split('cv.save();')[0] + ''), '줄바꿈 금지');
   });
   await t('CI 워크플로가 파일을 복사하고 MainActivity 에 HtlNativePlugin 을 등록한다', async () => {
-    const y = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'build-apk.yml'), 'utf8');
+    const y = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'build-shell.yml'), 'utf8');
     for (const f of ['HtlCore.java', 'HtlView.java', 'HtlNativePlugin.java']) assert.ok(y.includes('native/' + f), f + ' 복사');
     assert.ok(/registerPlugin\(HtlNativePlugin\.class\)/.test(y));
     assert.ok(/htl_native\.test\.js/.test(y), '시험 목록');

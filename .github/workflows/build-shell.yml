@@ -1,0 +1,111 @@
+name: Build native shell APK
+
+# 웹이 전혀 없는 순수 네이티브 앱(native-shell 브랜치). 옛 웹 앱 빌드는 archive/ci 에 보관되어 있다.
+on:
+  push:
+    branches: [ native-shell ]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        file:
+          - shell_native.test.js
+          - screen_native.test.js
+          - tabs_engine.test.js
+          - settings_engine.test.js
+          - dialog_engine.test.js
+          - pvlabel_engine.test.js
+          - posfusion_engine.test.js
+          - shop_engine.test.js
+          - food_engine.test.js
+          - news_engine.test.js
+          - board_engine.test.js
+          - chat_engine.test.js
+          - cchips_engine.test.js
+          - cong_engine.test.js
+          - aicard_engine.test.js
+          - home_engine.test.js
+          - rhead_engine.test.js
+          - talkcard_engine.test.js
+          - write_engine.test.js
+          - ride_alert.test.js
+          - ride_eta.test.js
+          - ride_standby.test.js
+          - ride_track.test.js
+          - route_follow.test.js
+          - route_view.test.js
+          - store_sync.test.js
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - name: Run ${{ matrix.file }}
+        run: node test/${{ matrix.file }}
+
+  build:
+    needs: test
+    if: ${{ !cancelled() && needs.test.result == 'success' }}
+    runs-on: ubuntu-latest
+    env:
+      ANDROID_VERSION_CODE: ${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: 'cmdline-tools;latest'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.5'
+
+      - name: Bundle Noto Sans KR for native screens
+        run: |
+          pip install --quiet fonttools
+          mkdir -p /tmp/fnt shell-android/app/src/main/assets/fonts
+          curl -sS -L --retry 4 --retry-delay 5 -m 300 -o /tmp/fnt/v.ttf "https://raw.githubusercontent.com/google/fonts/main/ofl/notosanskr/NotoSansKR%5Bwght%5D.ttf"
+          python3 - <<'PYEOF'
+          from fontTools.ttLib import TTFont
+          from fontTools.varLib import instancer
+          from fontTools import subset
+          uni = (list(range(0x20, 0x7f)) + list(range(0xa0, 0x100)) + list(range(0x2000, 0x2070)) + [0x20a9, 0x20ac] + list(range(0x2190, 0x2200))
+                 + list(range(0x2460, 0x2500)) + list(range(0x25a0, 0x2600)) + list(range(0x3000, 0x3040)) + list(range(0x3130, 0x3190))
+                 + list(range(0xac00, 0xd7a4)) + list(range(0xff00, 0xfff0)))
+          for name, w in (("Regular", 400), ("Bold", 700)):
+              f = instancer.instantiateVariableFont(TTFont("/tmp/fnt/v.ttf"), {"wght": w}, inplace=False)
+              f.save("/tmp/fnt/i.ttf")
+              o = subset.Options(); o.layout_features = ["*"]; o.notdef_outline = True; o.hinting = False; o.name_IDs = [1, 2, 3, 4, 6]
+              ss = subset.Subsetter(o); ss.populate(unicodes=uni)
+              g = TTFont("/tmp/fnt/i.ttf"); ss.subset(g)
+              out = "shell-android/app/src/main/assets/fonts/NotoSansKR-" + name + ".ttf"
+              g.save(out)
+              c = g.getBestCmap()
+              assert 0xac00 in c and ord("›") in c and "fvar" not in g, "글꼴 만들기 실패: " + name
+              import os
+              print(name, os.path.getsize(out), "bytes", len(c), "glyph-codes")
+          PYEOF
+          ls -la shell-android/app/src/main/assets/fonts
+
+      - name: Build Debug APK
+        run: gradle -p shell-android assembleDebug --no-daemon --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: gildongmu-native-debug
+          path: shell-android/app/build/outputs/apk/debug/*.apk

@@ -1,7 +1,7 @@
 // 버스 도착 자동 갱신 간격 조절 시험 — 임박(30초)·먼 도착(60초)·화면 밖(90초)
 // 실행: node test/bus_poll_gap.test.js [html 경로]
 const assert = require('assert'), fs = require('fs'), path = require('path'), vm = require('vm');
-const html = fs.readFileSync(process.argv[2] || path.join(__dirname, '..', 'www', 'index.html'), 'utf8');
+const html = fs.readFileSync(process.argv[2] || path.join(__dirname, '..', 'ios-reference', 'index.html'), 'utf8');
 const a = html.indexOf('var _BUS_FAR_SEC'), bMark = 'window._refreshMapBusArrivals = _refreshMapBusArrivals;';
 const b = html.indexOf(bMark, a);
 assert(a > 0 && b > a, '대상 코드를 찾지 못함');

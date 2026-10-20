@@ -6,7 +6,7 @@ const E = require('../engine/dialog'), screenCheck = require('./helpers/screen_c
 let pass = 0, fail = 0;
 function ok(c, m) { if (c) pass++; else { fail++; console.log('  FAIL', m); } }
 const R = p => path.join(__dirname, '..', p);
-const html = fs.readFileSync(R('www/index.html'), 'utf8');
+const html = fs.readFileSync(R('ios-reference/index.html'), 'utf8');
 const EMOJI = /[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}]/u;
 const G = (f, cap) => E.dialogScreen({ cap: cap == null ? 16 : cap }, f);
 const btns = o => [].concat(o.head, o.foot || []).filter(n => n.t === 'btnrow').reduce((a, n) => a.concat(n.items), []);

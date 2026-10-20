@@ -8,7 +8,7 @@ const E = require('../engine/shop');
 let pass = 0, fail = 0;
 function ok(c, m) { if (c) { pass++; } else { fail++; console.log('  FAIL', m); } }
 
-const html = fs.readFileSync(path.join(__dirname, '../www/index.html'), 'utf8');
+const html = fs.readFileSync(path.join(__dirname, '../ios-reference/index.html'), 'utf8');
 const a = html.indexOf('var SHOP_DATA={');
 const bMark = 'var _shopSlotIdx=_curShopSlot();';
 const b = html.indexOf(bMark, a);

@@ -1,0 +1,32 @@
+plugins {
+    id 'com.android.application'
+}
+
+// 웹이 전혀 없는 순수 네이티브 앱. 소스는 저장소의 native/shell 하나뿐이다.
+android {
+    namespace 'com.dullyyj.subway'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.dullyyj.subway'
+        minSdk 26
+        targetSdk 34
+        versionCode (System.getenv('ANDROID_VERSION_CODE') ?: '1').toInteger()
+        versionName '2.0-native'
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    sourceSets {
+        main {
+            java.srcDirs = ['../../native/shell']
+        }
+    }
+
+    buildTypes {
+        release { minifyEnabled false }
+    }
+}

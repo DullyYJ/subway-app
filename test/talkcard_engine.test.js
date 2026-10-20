@@ -6,7 +6,7 @@ const E = require('../engine/talkcard'), screenCheck = require('./helpers/screen
 let pass = 0, fail = 0;
 function ok(c, m) { if (c) pass++; else { fail++; console.log('  FAIL', m); } }
 const R = p => path.join(__dirname, '..', p);
-const html = fs.readFileSync(R('www/index.html'), 'utf8');
+const html = fs.readFileSync(R('ios-reference/index.html'), 'utf8');
 const EMOJI = /[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}]/u;
 const T0 = Date.UTC(2026, 9, 20, 5, 41);
 const ROWS = ['가', '나', '다', '라', '마', '바', '사'].map((n, i) => [n + '닉', '글 ' + (i + 1), T0 + i * 60000, i === 2 ? 1 : 0]);

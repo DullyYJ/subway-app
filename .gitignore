@@ -12,3 +12,9 @@ tools/route-sweep/eng.mjs
 tools/route-sweep/bundle.json
 tools/route-sweep/kric_all.json
 tools/route-sweep/*.jsonl
+
+# 순수 네이티브 앱 빌드 산출물
+shell-android/.gradle/
+shell-android/build/
+shell-android/app/build/
+shell-android/app/src/main/assets/fonts/

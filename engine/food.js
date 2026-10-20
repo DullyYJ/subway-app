@@ -10,7 +10,7 @@
 //        facts = { stn: 도착역(또는 가장 가까운 역) 이름('역' 없이) · st: 'idle'|'locating'|'noperm'|'loading'|'none'|'ready' · flt: 고른 칩 · fail: 맛집 서버 요청 실패(1|0) }
 //        items = { c: [가게…], p: [가게…] }   가게 = [이름, 업종, 도로명주소, 거리(m)]
 //                c = 내장·추천 목록(위쪽에 순위와 별점으로), p = 공공데이터·서버 목록(아래쪽에 '공공데이터' 딱지로)
-// 출력  { ok, v:1, screen:'food', rev, cover:'tab', head:[bar, chips], body:[노드…], info:{cur,pub,flt} }  ← 노드 종류는 native/ScreenCore.java 와 같다
+// 출력  { ok, v:1, screen:'food', rev, cover:'tab', head:[bar, chips], body:[노드…], info:{cur,pub,flt} }  ← 노드 종류는 native/shell/ScreenCore.java 와 같다
 //        bar{title,sub,btn,act} · chips{items[{label,on,act:{a:'cat',v}}], onc, onfg} · place{rank,pub,name,sub,stars,badge,dist,go,act:{a:'call',v:'fm.c.<번호>'|'fm.p.<번호>'}} · divider · text · spacer
 //        가게를 누르면 앱이 보냈던 목록의 그 번호 가게를 지도 시트로 연다(번호 = 앱이 보낸 배열의 원래 위치).
 // 맨 아래 module.exports 는 시험(Node)용이고 Worker 에서는 함수 선언만 쓰인다.

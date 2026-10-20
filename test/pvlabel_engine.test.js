@@ -5,7 +5,7 @@ const E = require('../engine/pvlabel'), screenCheck = require('./helpers/screen_
 let pass = 0, fail = 0;
 function ok(c, m) { if (c) pass++; else { fail++; console.log('  FAIL', m); } }
 const R = p => path.join(__dirname, '..', p);
-const html = fs.readFileSync(R('www/index.html'), 'utf8');
+const html = fs.readFileSync(R('ios-reference/index.html'), 'utf8');
 const EMOJI = /[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}]/u;
 const G = (f, cap) => E.pvlScreen({ cap: cap == null ? 17 : cap }, f);
 

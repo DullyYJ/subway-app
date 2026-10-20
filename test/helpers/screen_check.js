@@ -7,7 +7,7 @@ module.exports = function screenCheck(screens) {
     const f = path.join(dir, 'in.jsonl'), cls = path.join(dir, 'c');
     fs.writeFileSync(f, screens.map(s => JSON.stringify(s)).join('\n') + '\n'); fs.mkdirSync(cls);
     const ENV = Object.assign({}, process.env, { JAVA_TOOL_OPTIONS: '' });
-    let r = spawnSync('javac', ['-encoding', 'UTF-8', '-d', cls, R('native/ScreenCore.java'), R('test/java/ScreenCheck.java')], { env: ENV, encoding: 'utf8' });
+    let r = spawnSync('javac', ['-encoding', 'UTF-8', '-d', cls, R('native/shell/ScreenCore.java'), R('test/java/ScreenCheck.java')], { env: ENV, encoding: 'utf8' });
     if (r.status !== 0) return { err: 'javac: ' + (r.stderr || '').slice(0, 300), out: [] };
     r = spawnSync('java', ['-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-cp', cls, 'com.dullyyj.subway.ScreenCheck', f], { env: ENV, encoding: 'utf8' });
     return { err: '', out: (r.stdout || '').split('\n').filter(Boolean) };

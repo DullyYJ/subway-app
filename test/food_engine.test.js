@@ -7,7 +7,7 @@ const E = require('../engine/food');
 let pass = 0, fail = 0;
 function ok(c, m) { if (c) { pass++; } else { fail++; console.log('  FAIL', m); } }
 const R = p => path.join(__dirname, '..', p);
-const html = fs.readFileSync(R('www/index.html'), 'utf8');
+const html = fs.readFileSync(R('ios-reference/index.html'), 'utf8');
 
 const C = [['맛있는 국밥집', '음식 > 한식 > 국밥', '서울 강남구 역삼로 12 1층', 120], ['스타벅스 강남점', '음식 > 카페 > 커피전문점', '서울 강남구 테헤란로 1', 250], ['참치회 전문 바다', '음식 > 일식 > 참치회 전문', '서울 강남구 논현로 3', 300],
   ['한우마을', '음식 > 한식 > 소고기 구이', '서울 강남구 학동로 4', 410], ['호프집 달빛', '음식 > 술집 > 호프', '서울 강남구 도곡로 5', 520], ['<b>태그 식당</b>', '음식 > 분식', '', 600], ['   ', '음식', '', 1], ['']];
@@ -92,7 +92,7 @@ ok(S.ok && S.v === 1 && S.screen === 'food' && S.cover === 'tab' && /^f1:/.test(
     const f = path.join(dir, 'in.jsonl'), cls = path.join(dir, 'c');
     fs.writeFileSync(f, lines.join('\n') + '\n'); fs.mkdirSync(cls);
     const ENV = Object.assign({}, process.env, { JAVA_TOOL_OPTIONS: '' });
-    let r = spawnSync('javac', ['-encoding', 'UTF-8', '-d', cls, R('native/ScreenCore.java'), R('test/java/ScreenCheck.java')], { env: ENV, encoding: 'utf8' });
+    let r = spawnSync('javac', ['-encoding', 'UTF-8', '-d', cls, R('native/shell/ScreenCore.java'), R('test/java/ScreenCheck.java')], { env: ENV, encoding: 'utf8' });
     ok(r.status === 0, 'ScreenCheck 컴파일 ' + (r.stderr || '').slice(0, 300));
     r = spawnSync('java', ['-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-cp', cls, 'com.dullyyj.subway.ScreenCheck', f], { env: ENV, encoding: 'utf8' });
     const out = (r.stdout || '').split('\n').filter(Boolean);

@@ -6,7 +6,7 @@ const assert = require('assert'), fs = require('fs'), path = require('path');
 const R = path.join(__dirname, '..');
 const OV = fs.readFileSync(path.join(R, 'native', 'OverlayPlugin.java'), 'utf8');
 const KA = fs.readFileSync(path.join(R, 'native', 'KeepAliveService.java'), 'utf8');
-const WEB = fs.readFileSync(path.join(R, 'www', 'index.html'), 'utf8');
+const WEB = fs.readFileSync(path.join(R, 'ios-reference', 'index.html'), 'utf8');
 let pass = 0, fail = 0;
 const t = (name, fn) => { try { fn(); pass++; console.log('  ok  ', name); } catch (e) { fail++; console.log('  FAIL', name, '\n      ', String(e.message).split('\n')[0]); } };
 const has = (s, re, msg) => assert.ok(re.test(s), msg || String(re));

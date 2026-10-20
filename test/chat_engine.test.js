@@ -6,7 +6,7 @@ const E = require('../engine/chat'), screenCheck = require('./helpers/screen_che
 let pass = 0, fail = 0;
 function ok(c, m) { if (c) pass++; else { fail++; console.log('  FAIL', m); } }
 const R = p => path.join(__dirname, '..', p);
-const html = fs.readFileSync(R('www/index.html'), 'utf8');
+const html = fs.readFileSync(R('ios-reference/index.html'), 'utf8');
 const NOW = Date.UTC(2026, 9, 18, 3, 0, 0), MIN = 60000, HR = 3600000;
 
 // ── ② 웹 대조 ──

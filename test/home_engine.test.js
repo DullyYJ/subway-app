@@ -6,7 +6,7 @@ const E = require('../engine/home'), screenCheck = require('./helpers/screen_che
 let pass = 0, fail = 0;
 function ok(c, m) { if (c) pass++; else { fail++; console.log('  FAIL', m); } }
 const R = p => path.join(__dirname, '..', p);
-const html = fs.readFileSync(R('www/index.html'), 'utf8');
+const html = fs.readFileSync(R('ios-reference/index.html'), 'utf8');
 const kids = s => s.body[0].kids;
 const U = n => Array.from({ length: n }, (_, i) => ({ n: '강남' + i, l: '2호선' })), B = n => Array.from({ length: n }, (_, i) => ({ n: '정류장' + i, d: 120 + i * 400 })), P = n => Array.from({ length: n }, (_, i) => ({ n: '장소' + i, a: '서울 주소' + i }));
 
