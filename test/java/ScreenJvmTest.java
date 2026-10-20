@@ -723,6 +723,24 @@ public class ScreenJvmTest {
         ScreenCore.Item ltNo = ScreenCore.layout(ScreenCore.load(ltJson.replace(",\"act\":{\"a\":\"call\",\"v\":\"tk.open\"}},{\"t\":\"ltr\",\"pad\":[0,0,0,5]", "},{\"t\":\"ltr\",\"pad\":[0,0,0,5]")), 300f, M).head[0];
         ok(ltNo.act == null, "대화: 행동이 없으면 머리줄도 안 눌린다");
 
+        // ── 안내창(dlg) · 같은 폭 단추(btnrow eq) ──
+        String dlJson = "{\"ok\":true,\"v\":1,\"screen\":\"dlg\",\"bg\":\"card\",\"dlg\":{\"w\":340,\"maxh\":0.85,\"dim\":0.5,\"top\":0.42,\"r\":18,\"fit\":true,\"fill\":\"rgba(20,22,28,0.92)\",\"line\":\"border\",\"tap\":{\"a\":\"call\",\"v\":\"dl.no\"}},"
+            + "\"head\":[{\"t\":\"text\",\"pad\":[26,18,26,5],\"s\":\"안내창 제목\",\"size\":16,\"bold\":true,\"align\":\"center\",\"color\":\"white\"},"
+            + "{\"t\":\"text\",\"pad\":[26,0,26,18],\"s\":\"조금 더 긴 둘째 줄 글입니다\",\"size\":13,\"align\":\"center\",\"color\":\"white\"},"
+            + "{\"t\":\"btnrow\",\"pad\":[22,0,22,22],\"gap\":10,\"h\":46,\"eq\":true,\"bsize\":15,\"r\":11,\"items\":[{\"label\":\"취소\",\"act\":{\"a\":\"call\",\"v\":\"dl.no\"}},{\"label\":\"설정 열기\",\"fill\":\"#2f7cf6\",\"line\":\"#2f7cf6\",\"tc\":\"#ffffff\",\"act\":{\"a\":\"call\",\"v\":\"dl.ok\"}}]}],"
+            + "\"body\":[{\"t\":\"spacer\",\"h\":0}]}";
+        ScreenCore.Screen dlS = ScreenCore.load(dlJson);
+        ok(dlS.dlg != null && near(dlS.dlg.w, 340f) && near(dlS.dlg.top, 0.42f) && near(dlS.dlg.r, 18f) && dlS.dlg.fit && dlS.dlg.tap != null && "dl.no".equals(dlS.dlg.tap.v), "안내창: dlg 값(너비·위치·모서리·fit·바깥 누름)을 읽는다");
+        ScreenCore.Layout DLL = ScreenCore.layout(dlS, 340f, M);
+        ok(DLL.bgCol != null && DLL.bgCol.argb != 0 && DLL.lineCol != null && near(DLL.dlgR, 18f), "안내창: 카드 바탕·테두리·모서리가 배치 결과에 실린다");
+        float dfit = 340f - (340f - 52f) + M.width("조금 더 긴 둘째 줄 글입니다", 13f, false);
+        ok(DLL.fitW > 0f && near(DLL.fitW, dfit) && DLL.fitW < 340f, "안내창 fit: 가장 긴 글 줄에 맞춘 너비 " + DLL.fitW + " vs " + dfit);
+        ok(ScreenCore.layout(ScreenCore.load(dlJson.replace("\"fit\":true", "\"fit\":false")), 340f, M).fitW == 0f && ScreenCore.layout(ScreenCore.load(aiJson), 320f, M).fitW == 0f && ScreenCore.load(aiJson).dlg == null, "안내창: fit 이 아니거나 안내창이 아니면 fitW 0 · dlg 없음");
+        ScreenCore.Item db1 = null, db2 = null; for (ScreenCore.Item q : DLL.head) if (q.kind == ScreenCore.K_RBTN) { if (db1 == null) db1 = q; else db2 = q; }
+        ok(db1 != null && db2 != null && near(db1.w, db2.w) && near(db1.w, (340f - 44f - 10f) / 2f) && near(db2.x, db1.x + db1.w + 10f) && near(db1.h, 46f) && near(db1.size, 15f) && near(db1.radius, 11f) && db2.fill.argb == 0xFF2F7CF6, "단추 줄(eq): 폭을 똑같이 나누고 글자·모서리·색은 엔진이 정한 대로");
+        ok(DLL.hitHead(60f, DLL.head[2].y + 20f) != null && "dl.no".equals(DLL.hitHead(60f, DLL.head[2].y + 20f).v) && "dl.ok".equals(DLL.hitHead(300f, DLL.head[2].y + 20f).v) && DLL.hitHead(60f, 10f) == null, "단추 줄: 왼쪽은 취소 · 오른쪽은 설정 열기 · 글 줄은 안 눌린다");
+        ok(bad(dlJson.replace("\"w\":340", "\"w\":50")) && bad(dlJson.replace("\"maxh\":0.85", "\"maxh\":0.1")) && bad(dlJson.replace("\"dim\":0.5", "\"dim\":0.99")) && bad(dlJson.replace("\"fill\":\"rgba(20,22,28,0.92)\"", "\"fill\":\"nope\"")) && bad(dlJson.replace("\"dlg\":{", "\"dlg\":[1],\"x\":{")) && bad(dlJson.replace("\"v\":\"dl.no\"}},", "\"v\":\"\"}},")), "안내창: 범위 밖 값 · 읽을 수 없는 색 · 객체가 아닌 dlg · 이름 없는 행동은 거절");
+
         // ── 화면 바탕 색(bg) ──
         String bgBase = "{\"ok\":true,\"v\":1,\"screen\":\"x\",\"head\":[],\"body\":[{\"t\":\"spacer\",\"h\":4}]";
         ok("bg".equals(ScreenCore.layout(ScreenCore.load(bgBase + "}"), 300f, M).bg) && "card".equals(ScreenCore.layout(ScreenCore.load(bgBase + ",\"bg\":\"card\"}"), 300f, M).bg) && "card2".equals(ScreenCore.layout(ScreenCore.load(bgBase + ",\"bg\":\"card2\"}"), 300f, M).bg), "화면 바탕: 기본 bg · card · card2");

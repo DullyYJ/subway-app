@@ -1517,3 +1517,14 @@
 - **YJ가 할 일**: 워커 s78(`route-v2-2026-10-20s78`) Deploy + **새 APK 빌드·설치**(cap 15). 설정에서 '네이티브 실시간 대화 게시판'을 켠다.
 - **기기 미검증(전부)**: 머리줄·줄 그리기(말줄임 폭) · 둥근 보내기 단추 · 키보드가 올라올 때 입력줄 위치 · 감싸개 높이 따라가기.
 - **남은 비네이티브**: 글쓰기 뒤 팝업 · `_ovlDiagShow`/`_pickPop` 팝업 · `#aiPreviewLabel`/`#congPreviewLabel` 미리보기 라벨 · 데이터 계층(fetch · GPS→인덱스 추적 · 마커 가드 · eta 요청 · 버스 혼잡 fetch) · 지도 탭(SVG).
+
+## 2026-10-20 엔진 s79 + APK 변경 — 네이티브화: 안내창(대화상자) 공통 틀 — 권한 안내 · 오버레이 진단 기록 · 잠깐 뜨는 알림
+- **YJ 지시**: "계속해줘"(남은 팝업).
+- **엔진**: 새 `POST /screen/dlg`(cap 16, `engine/dialog.js` + `dlg-worker.js`). 웹은 사실만 보낸다: `kind`(perm · diag · pop) · (diag) 기록 줄 목록(최대 600)과 복사 결과 `cp` · (pop) 글 두 줄 `msg`/`sub` 와 모양 `cls`. 엔진이 정한다: 모든 문구 · 글자 크기 · 색 · 단추 이름 · 카드 폭/최대 높이/뒤 흐림/위치/모서리 · 진단 기록의 최신이 위 정렬과 덩어리 나누기 · 알림의 이모지 제거와 길이 제한 · 행동 이름(dl.ok · dl.no · dl.copy · dl.clear · dl.close).
+- **APK(규격 16)**: `ScreenCore` — 화면 JSON 에 `dlg:{w,maxh,dim,top,r,mx,fit,fill,line,tap}`(안내창 모드), 단추줄 `eq`/`bsize`/`r`. `ScreenNativePlugin` — 안내창 모드는 웹 칸 위가 아니라 화면 가운데 둥근 카드로 띄우고(내용 높이에 맞춤) 뒤 흐림 View 를 깔며, 흐린 곳 누르면 `dlg.tap` 행동. `ScreenView` — 테두리 · 내용 폭에 맞춘 카드.
+- **앱(웹)**: 틀 `dlg`(저장값 `gdm_scrd_on`, 설정 > '네이티브 안내창' 기본 꺼짐). `_pickPop` · `_showOvlPermDialog` · `_ovlDiagShow` 가 먼저 `window._ndlg.*` 를 시도하고, 꺼짐·옛 APK·처음 능력 확인 중·2.5초 안에 못 띄움이면 예전 웹 함수(`_pickPopWeb` · `_showOvlPermDialogWeb` · `_ovlDiagShowWeb`)로 돌아간다. 뒤로가기는 안내창부터 닫는다(권한 안내는 '취소'와 같다). 알림은 1.5초 뒤 저절로 닫힌다.
+- **알려진 한계**: 처음 한 번은 능력 확인(약 1.8초 뒤 자동) 전이라 웹 안내창이 뜬다 · 페이드 없음 · 알림 카드 안은 터치가 막힌다 · 진단 복사 단추의 웹 '✓' 표시는 글자('복사됨')로 바뀜 · `exitConfirmPopup` · 글쓰기 뒤 팝업은 아직 웹.
+- **시험**: `dialog_engine` 39 · `screen_dlg_js.ui` 12 · `ScreenJvmTest` 360 · `settings_engine` 187 · `screen_native` · 기존 `screen_set_js.ui` 45 · `screen_talk_js.ui` 13 · `screen_ai_js.ui` 14 회귀 통과.
+- **YJ가 할 일**: 워커 s79(`route-v2-2026-10-20s79`) Deploy + **새 APK 빌드·설치**(cap 16). 설정에서 '네이티브 안내창'을 켠다.
+- **기기 미검증(전부)**: 카드 가운데 배치 · 내용 높이 맞춤 · 뒤 흐림 · 진단 기록 스크롤 · 알림 카드 크기 · 뒤로가기.
+- **남은 비네이티브**: `exitConfirmPopup` · 글쓰기 뒤 팝업 · `#aiPreviewLabel`/`#congPreviewLabel` 미리보기 라벨 · 데이터 계층(fetch · GPS→인덱스 추적 · 마커 가드 · eta 요청 · 버스 혼잡 fetch) · 지도 탭(SVG).

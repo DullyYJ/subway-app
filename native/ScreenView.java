@@ -162,6 +162,11 @@ public class ScreenView extends View {
         return lay.bodyMaxScroll(bodyViewH()) - scrollY <= 80f;
     }
 
+    /** 안내창(fit)이 가장 긴 글 줄에 맞춘 카드 너비(dp; 없으면 0). */
+    /** 지금 그린 내용 전체 높이(dp). */
+    public float contentHdp() { return lay == null ? 0f : lay.headH + lay.bodyH + lay.footH; }
+    public float fitWidthDp() { return lay == null ? 0f : lay.fitW; }
+
     private void relayout() {
         if (screen == null || getWidth() <= 0) { lay = null; invalidate(); syncLater(); return; }
         lay = ScreenCore.layout(screen, getWidth() / dpr, measurer, openKey);
@@ -341,13 +346,16 @@ public class ScreenView extends View {
         return 0;
     }
 
+    /** 화면 바탕 색: 안내창이 색을 정했으면 그것, 아니면 bg 역할. */
+    private int bgNow() { return lay.bgCol != null ? cc(lay.bgCol, 0) : roleColor(lay.bg); }
+
     /** 색(역할 이름 또는 ARGB). null 이면 def. */
     private int cc(ScreenCore.Col c, int def) { if (c == null) return def; return c.role != null ? roleColor(c.role) : c.argb; }
 
     @Override protected void onDraw(Canvas cv) {
         long now = SystemClock.uptimeMillis();
         lastDraw = now;
-        p.setStyle(Paint.Style.FILL); p.setColor(lay == null ? pal[R_BG] : roleColor(lay.bg));      // 바탕: 화면이 정한 색 역할(카드 안 화면은 card)
+        p.setStyle(Paint.Style.FILL); p.setColor(lay == null ? pal[R_BG] : bgNow());      // 바탕: 화면이 정한 색 역할(카드 안 화면은 card · 안내창은 엔진이 준 색)
         cv.drawRect(0, 0, getWidth(), getHeight(), p);
         if (lay == null) return;
         boolean moving = false;
@@ -365,7 +373,7 @@ public class ScreenView extends View {
         for (int i = r[0]; i < r[1]; i++) drawItem(cv, lay.body[i]);
         cv.restore();
         // 머리(위에 고정, 본문 위에 덮음)
-        p.setStyle(Paint.Style.FILL); p.setColor(roleColor(lay.bg));
+        p.setStyle(Paint.Style.FILL); p.setColor(bgNow());
         cv.drawRect(0f, 0f, w, lay.headH, p);
         cv.save();
         cv.clipRect(0f, 0f, w, lay.headH);
@@ -379,7 +387,7 @@ public class ScreenView extends View {
             cv.save();
             cv.clipRect(0f, h - lay.footH, w, h);
             cv.translate(0f, h - lay.footH);
-            p.setStyle(Paint.Style.FILL); p.setColor(roleColor(lay.bg));
+            p.setStyle(Paint.Style.FILL); p.setColor(bgNow());
             cv.drawRect(0f, 0f, w, lay.footH, p);
             p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(pal[R_BORDER]);
             cv.drawLine(0f, 0.5f, w, 0.5f, p);
@@ -388,6 +396,12 @@ public class ScreenView extends View {
             cv.restore();
         }
         cv.restore();
+        if (lay.lineCol != null) {                                                               // 안내창 카드 테두리(1dp)
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(dpr); p.setColor(cc(lay.lineCol, 0));
+            rf2.set(dpr / 2f, dpr / 2f, getWidth() - dpr / 2f, getHeight() - dpr / 2f);
+            cv.drawRoundRect(rf2, lay.dlgR * dpr, lay.dlgR * dpr, p);
+            p.setStrokeWidth(1f);
+        }
 
         if (!drewOnce) { drewOnce = true; post(firstDrawCb); }
         if (moving || mode == 1 || mode == 2) postInvalidateOnAnimation();

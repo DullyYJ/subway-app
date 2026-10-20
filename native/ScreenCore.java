@@ -200,7 +200,15 @@ public final class ScreenCore {
         public long until;                                 // aih: 다음 갱신 마감 시각(기기 시계 ms, 0 이면 카운트다운 없음)
         public float[] bops = new float[0];                // inbar: 둥근 아이콘 단추의 그림(SVG path d 를 풀어 둔 것 — 있으면 글자 단추 대신 지름 bh 의 동그란 단추)
     }
+    /** 안내창(대화상자) 모양 — 이 값이 있으면 화면은 웹 칸 위가 아니라 앱 화면 가운데 떠 있는 카드로 그린다. 크기·배경 흐림·위치·모서리·테두리 전부 엔진이 정한다. */
+    public static final class Dlg {
+        public float w = 320f, maxh = 0.85f, dim = 0.5f, top = 0.5f, r = 16f, mx = 16f;   // 카드 너비 최대(dp) · 높이 최대(화면 비율) · 뒤 흐림(0~0.85) · 카드 가운데 높이(화면 비율) · 모서리 · 화면 가장자리 여백
+        public boolean fit;                                // 가장 긴 줄에 맞춰 너비를 줄인다(작은 알림)
+        public String fill = "", line = "";                // 카드 바탕·테두리(색 역할 또는 CSS 색; 비면 화면 bg 와 border)
+        public Act tap;                                    // 카드 밖(흐린 곳)을 눌렀을 때 행동(없으면 아무 일 없음)
+    }
     public static final class Screen {
+        public Dlg dlg;                                    // 안내창이면 값이 있다
         public String id = "", rev = "", cover = "chips";
         public List<Node> head = new ArrayList<Node>(), body = new ArrayList<Node>(), foot = new ArrayList<Node>();
         public String anchor = "", bg = "bg";                  // bg: 화면 바탕 색 역할(기본 bg = 페이지 바탕 · card = 카드 안에 놓이는 화면)
@@ -521,6 +529,7 @@ public final class ScreenCore {
             n.tc = roleOrCss(m, "nc", "#5e5ce6"); if (n.tc.length() == 0) n.tc = "#5e5ce6";
         } else if ("btnrow".equals(t)) {
             pad(m, n); n.gap = optNum(m, "gap", 8f, 0f, 60f); n.h = optNum(m, "h", 30f, 20f, 60f);
+            n.big = optBool(m, "eq", false); n.bsize = optNum(m, "bsize", 0f, 0f, 30f); n.r = optNum(m, "r", 8f, 0f, 30f);        // eq = 단추들이 폭을 똑같이 나눠 가진다(안내창 아래 단추) · bsize = 단추 글자 크기 · r = 모서리
             for (Object io : asArr(m.get("items"), "btnrow.items")) {
                 Map<String, Object> im = asObj(io, "btn");
                 Node c = new Node(); c.t = "rbtn";
@@ -676,6 +685,13 @@ public final class ScreenCore {
         sc.rev = optStr(m, "rev", "", 120);
         sc.cover = optStr(m, "cover", "chips", 8); if (!"tab".equals(sc.cover) && !"chips".equals(sc.cover)) throw new ParseError("cover: 모르는 값 " + sc.cover);
         sc.bg = optStr(m, "bg", "bg", 8); if (!"bg".equals(sc.bg) && !"card".equals(sc.bg) && !"card2".equals(sc.bg)) throw new ParseError("bg: 모르는 값 " + sc.bg);
+        if (m.get("dlg") != null) {
+            Map<String, Object> dm = asObj(m.get("dlg"), "dlg"); Dlg d = new Dlg();
+            d.w = optNum(dm, "w", 320f, 120f, 480f); d.maxh = optNum(dm, "maxh", 0.85f, 0.3f, 0.95f); d.dim = optNum(dm, "dim", 0.5f, 0f, 0.85f);
+            d.top = optNum(dm, "top", 0.5f, 0.1f, 0.9f); d.r = optNum(dm, "r", 16f, 0f, 40f); d.mx = optNum(dm, "mx", 16f, 0f, 80f); d.fit = optBool(dm, "fit", false);
+            d.fill = roleOrCss(dm, "fill", ""); d.line = roleOrCss(dm, "line", ""); d.tap = act(dm.get("tap"), false);
+            sc.dlg = d;
+        }
         sc.anchor = optStr(m, "anchor", "", 8); if (!"".equals(sc.anchor) && !"bottom".equals(sc.anchor)) throw new ParseError("anchor: 모르는 값 " + sc.anchor);
         for (Object o : asArr(m.get("head"), "head")) { Node n = node(o, sc); if (n != null) sc.head.add(n); }
         for (Object o : asArr(m.get("body"), "body")) { Node n = node(o, sc); if (n != null) sc.body.add(n); }
@@ -779,6 +795,9 @@ public final class ScreenCore {
         public Item[] head = new Item[0], body = new Item[0], foot = new Item[0];
         public float headH, headContentW, bodyH, footH, width, chipsTop = -1f, chipsBot = -1f;
         public String bg = "bg";                                          // 화면 바탕 색 역할
+        public Col bgCol, lineCol;                                        // 안내창: 카드 바탕·테두리 색(없으면 null = bg 역할 · 테두리 없음)
+        public float dlgR;                                                // 안내창 모서리(dp)
+        public float fitW;                                                // 안내창(fit): 가장 긴 글 줄에 맞춘 카드 너비(dp; 0 이면 못 구함)
         public Mark mk;                                                   // 구간 타임라인의 내 위치 마커(없으면 null)
         public float initScrollX;                                         // 24시간 차트: 지금 시각 막대를 가운데로 맞추는 가로 위치
         public String ctrSig = "";                                        // 그 막대 내용이 바뀌면 이 값이 바뀐다 — 바뀔 때만 앱이 다시 가운데로 맞춘다
@@ -898,6 +917,7 @@ public final class ScreenCore {
         Layout L = new Layout();
         L.width = width;
         L.bg = sc.bg;
+        if (sc.dlg != null) { L.dlgR = sc.dlg.r; L.bgCol = sc.dlg.fill.length() > 0 ? col(sc.dlg.fill, null) : null; L.lineCol = sc.dlg.line.length() > 0 ? col(sc.dlg.line, null) : null; }
         // 머리: 칩 줄은 한 줄이라 가로로 놓는다. 머리 노드는 위에서 아래로 쌓는다.
         List<Item> hi = new ArrayList<Item>();
         float y = 0f, contentW = width;
@@ -989,6 +1009,18 @@ public final class ScreenCore {
         for (Node n : sc.foot) y = stack(n, 0f, width, y, fi, m, openKey);
         L.foot = fi.toArray(new Item[0]); L.footH = y;
         L.headMaxB = maxB(L.head); L.bodyMaxB = maxB(L.body);
+        if (sc.dlg != null && sc.dlg.fit) {                                          // 안내창 너비 맞춤: 글 줄마다 (카드 너비 - 줄 칸 너비 + 줄 글 너비) 중 가장 큰 값
+            float fw = 0f;
+            for (int part = 0; part < 3; part++) {
+                Item[] arr = part == 0 ? L.head : (part == 1 ? L.body : L.foot);
+                for (Item it : arr) {
+                    if (it.kind != K_TEXT || it.lines == null) continue;
+                    float lw = 0f; for (String ln : it.lines) lw = Math.max(lw, m.width(ln, it.size, it.bold));
+                    fw = Math.max(fw, width - it.w + lw);
+                }
+            }
+            L.fitW = fw;
+        }
         return L;
     }
     private static float[] maxB(Item[] it) {
@@ -1396,6 +1428,16 @@ public final class ScreenCore {
         }
         if ("btnrow".equals(t0(n))) {
             float lx = ox, rx = ox + innerW, rowH = n.h, need = 0f;
+            float bsz2 = n.bsize > 0f ? n.bsize : RBTN_SIZE;
+            if (n.big && !n.items.isEmpty()) {                                       // 폭을 똑같이 나눠 가진 단추 줄
+                int cn = n.items.size(); float cw = (innerW - n.gap * (cn - 1)) / cn, cx = ox;
+                for (Node c : n.items) {
+                    Item it = new Item(); it.kind = K_RBTN; it.x = cx; it.y = y; it.w = cw; it.h = rowH; it.label = ellipsize(c.label, Math.max(20f, cw - 8f), bsz2, true, m); it.on = c.on; it.act = c.act; it.size = bsz2; it.radius = n.r;
+                    it.fill = col(c.fill, new Col("card2", 0)); it.line = col(c.line, new Col("border2", 0)); it.tc = col(c.tc, new Col("sub", 0));
+                    out.add(it); cx += cw + n.gap;
+                }
+                return y + rowH + n.padB;
+            }
             int nl = 0, nr = 0;
             for (Node c : n.items) { float bw = m.width(c.label, RBTN_SIZE, true) + RBTN_PADX * 2f + 2f; need += bw; if (c.right) nr++; else nl++; }
             need += n.gap * Math.max(0, nl + nr - 1);

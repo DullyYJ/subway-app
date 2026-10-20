@@ -4,7 +4,11 @@ import android.app.Activity;
 import android.graphics.Rect;
 import android.os.Handler;
 import android.os.Looper;
+import android.graphics.Color;
+import android.graphics.Outline;
+import android.view.Gravity;
 import android.view.View;
+import android.view.ViewOutlineProvider;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
@@ -40,6 +44,8 @@ public class ScreenNativePlugin extends Plugin {
     private final Map<String, ScreenView> views = new HashMap<String, ScreenView>();
     private final Map<String, Boolean> shownMap = new HashMap<String, Boolean>();
     private final Map<String, Float> dprMap = new HashMap<String, Float>();
+    private final Map<String, ScreenCore.Dlg> dlgs = new HashMap<String, ScreenCore.Dlg>();       // 안내창(대화상자) 모양을 가진 화면
+    private final Map<String, View> dims = new HashMap<String, View>();                           // 안내창 뒤 흐린 막
     private ViewGroup root;
 
     // 글꼴(Noto Sans KR)은 앱이 뜰 때 뒤에서 미리 읽어 둔다 — 첫 화면에서 글꼴 읽느라 멈추지 않게.
@@ -74,9 +80,11 @@ public class ScreenNativePlugin extends Plugin {
             @Override public void run() throws Exception {
                 final String id = idOf(call);
                 float w = f(call, "w"), h = f(call, "h");
+                ScreenCore.Screen sc0 = parse(call, id);
+                if (sc0 == null) return;
+                if (sc0.dlg != null) { showDlg(call, id, sc0); return; }               // 안내창: 웹 칸이 아니라 앱 화면 가운데에 카드로
                 if (!(w > 8f && h > 8f)) { call.reject("사각형 크기가 없다"); return; }
-                ScreenCore.Screen sc = parse(call, id);
-                if (sc == null) return;
+                ScreenCore.Screen sc = sc0;
                 Activity act = getActivity();
                 root = (ViewGroup) act.findViewById(android.R.id.content);
                 if (root == null) { call.reject("루트 뷰가 없다"); return; }
@@ -112,7 +120,9 @@ public class ScreenNativePlugin extends Plugin {
                 if (has(call, "json")) {
                     ScreenCore.Screen sc = parse(call, id);
                     if (sc == null) return;
+                    if (sc.dlg != null) dlgs.put(id, sc.dlg); else dlgs.remove(id);
                     view.setScreen(sc, call.getBoolean("keepScroll", false));
+                    if (sc.dlg != null) applyDlgSize(id, view.contentHdp());
                 }
                 call.resolve(new JSObject().put("items", view.itemCount()));
             }
@@ -124,7 +134,7 @@ public class ScreenNativePlugin extends Plugin {
         runUi(call, new Job() {
             @Override public void run() throws Exception {
                 String id = idOf(call); ScreenView view = views.get(id);
-                if (view == null) { call.resolve(); return; }
+                if (view == null || dlgs.containsKey(id)) { call.resolve(); return; }     // 안내창은 웹 칸을 따라가지 않는다
                 if (!(f(call, "w") > 8f && f(call, "h") > 8f)) { call.resolve(); return; }
                 if (call.getFloat("dpr", 0f) > 0f) { float d = call.getFloat("dpr", 1f); dprMap.put(id, d); view.setDpr(d); }
                 place(view, id, call);
@@ -156,6 +166,8 @@ public class ScreenNativePlugin extends Plugin {
     private void hideOne(String id) {
         ScreenView v = views.get(id);
         if (v != null) v.setVisibility(View.GONE);
+        View dm = dims.get(id);
+        if (dm != null) dm.setVisibility(View.GONE);
         shownMap.put(id, false);
     }
 
@@ -168,7 +180,8 @@ public class ScreenNativePlugin extends Plugin {
                 for (String k : ids) {
                     hideOne(k);
                     try { ScreenView v = views.get(k); if (root != null && v != null) root.removeView(v); } catch (Throwable ignored) { }
-                    views.remove(k);
+                    try { View dm = dims.get(k); if (root != null && dm != null) root.removeView(dm); } catch (Throwable ignored) { }
+                    views.remove(k); dims.remove(k); dlgs.remove(k);
                 }
                 call.resolve();
             }
@@ -195,9 +208,9 @@ public class ScreenNativePlugin extends Plugin {
                 JSObject o = new JSObject();
                 o.put("visible", view != null && view.getVisibility() == View.VISIBLE && isShown(id));
                 o.put("items", view == null ? 0 : view.itemCount());
-                o.put("age", view == null ? -1 : (int) Math.min(Integer.MAX_VALUE, view.drawAgeMs()));
+                o.put("age", view == null ? -1 : (dlgs.containsKey(id) ? 0 : (int) Math.min(Integer.MAX_VALUE, view.drawAgeMs())));      // 안내창은 가만히 떠 있어도 정상(다시 그릴 일이 없다)
                 o.put("scroll", view == null ? 0 : Math.round(view.scrollPos()));
-                o.put("cap", 15);      // 이 앱이 아는 화면 규격 단계(8 = row 노드 · 9 = 여러 줄 field · 10 = rhd 경로 결과 머리줄 · 11 = trk 구간 타임라인 · 12 = trk 위의 내 위치 마커 mk · 13 = 혼잡도 카드 cgh · gauge · chart · cars + box hc · 14 = AI 승무원 카드 aih + 글 구간별 색 hl[a,b,색] · 15 = 홈 실시간 대화 lth · ltr + 둥근 아이콘 입력줄 단추 bicon) — 웹이 이 값을 보고 하위 화면 요청 여부를 정한다
+                o.put("cap", 16);      // 이 앱이 아는 화면 규격 단계(8 = row 노드 · 9 = 여러 줄 field · 10 = rhd 경로 결과 머리줄 · 11 = trk 구간 타임라인 · 12 = trk 위의 내 위치 마커 mk · 13 = 혼잡도 카드 cgh · gauge · chart · cars + box hc · 14 = AI 승무원 카드 aih + 글 구간별 색 hl[a,b,색] · 15 = 홈 실시간 대화 lth · ltr + 둥근 아이콘 입력줄 단추 bicon · 16 = 안내창 dlg(앱 화면 가운데 카드 · 뒤 흐림) + btnrow eq) — 웹이 이 값을 보고 하위 화면 요청 여부를 정한다
                 call.resolve(o);
             }
         });
@@ -243,12 +256,82 @@ public class ScreenNativePlugin extends Plugin {
                 try { notifyListeners("text", new JSObject().put("id", id).put("key", key).put("value", value == null ? "" : value).put("kind", kind)); } catch (Throwable ignored) { }
             }
             @Override public void onContentH(float dp) {
+                if (dlgs.containsKey(id)) { try { applyDlgSize(id, dp); } catch (Throwable ignored) { } }          // 안내창은 내용 높이에 맞춰 카드 크기를 정한다
                 try { notifyListeners("size", new JSObject().put("id", id).put("h", Math.round(dp * 10f) / 10f)); } catch (Throwable ignored) { }
             }
             @Override public void onFirstDraw() {
                 try { notifyListeners("ready", new JSObject().put("id", id)); } catch (Throwable ignored) { }
             }
         };
+    }
+
+    // ───────────── 안내창(대화상자) ─────────────
+    /** 안내창을 앱 화면 가운데 카드로 띄운다. 크기·흐림·위치·모서리는 엔진이 준 dlg 값이고, 내용 높이는 그려 본 뒤(onContentH) 정한다. */
+    private void showDlg(final PluginCall call, final String id, ScreenCore.Screen sc) throws Exception {
+        Activity act = getActivity();
+        root = (ViewGroup) act.findViewById(android.R.id.content);
+        if (root == null) { call.reject("루트 뷰가 없다"); return; }
+        float d = call.getFloat("dpr", 0f) > 0f ? call.getFloat("dpr", 1f) : getContext().getResources().getDisplayMetrics().density;
+        dprMap.put(id, d);
+        final ScreenCore.Dlg dg = sc.dlg;
+        dlgs.put(id, dg);
+        ScreenView view = views.get(id);
+        if (view == null) { view = new ScreenView(getContext()); view.setListener(listenerFor(id)); views.put(id, view); }
+        View dim = dims.get(id);
+        if (dim == null) {
+            dim = new View(getContext());
+            dim.setClickable(true);
+            dim.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View v) {
+                    ScreenCore.Dlg g = dlgs.get(id);
+                    if (g == null || g.tap == null) return;
+                    try { notifyListeners("action", new JSObject().put("id", id).put("a", g.tap.a).put("v", g.tap.v).put("url", g.tap.url).put("key", g.tap.key).put("fields", new JSObject())); } catch (Throwable ignored) { }
+                }
+            });
+            dims.put(id, dim);
+        }
+        try { if (dim.getParent() != null) ((ViewGroup) dim.getParent()).removeView(dim); } catch (Throwable ignored) { }
+        try { if (view.getParent() != null) ((ViewGroup) view.getParent()).removeView(view); } catch (Throwable ignored) { }
+        boolean useDim = dg.dim > 0.01f;
+        dim.setBackgroundColor(Color.argb(Math.round(Math.min(0.85f, dg.dim) * 255f), 0, 0, 0));
+        dim.setVisibility(useDim ? View.VISIBLE : View.GONE);
+        if (useDim) root.addView(dim, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        root.addView(view, new FrameLayout.LayoutParams(1, 1));
+        view.setDpr(d);
+        applyPalette(view, call);
+        final float rr = dg.r * d;
+        view.setOutlineProvider(new ViewOutlineProvider() {
+            @Override public void getOutline(View v, Outline o) { o.setRoundRect(0, 0, v.getWidth(), v.getHeight(), rr); }
+        });
+        view.setClipToOutline(true);
+        view.setVisibility(View.INVISIBLE);                                      // 내용 높이를 알기 전에는 안 보인다(깜빡임 방지)
+        applyDlgSize(id, 0f);
+        view.setScreen(sc, false);
+        view.bringToFront();
+        shownMap.put(id, true);
+        float ch = view.contentHdp();
+        if (ch > 0f) applyDlgSize(id, ch);
+        call.resolve(new JSObject().put("items", view.itemCount()));
+    }
+
+    /** 안내창 카드 크기·자리: 너비 = min(dlg.w, 화면 - 양쪽 여백)(fit 이면 가장 긴 글 줄에 맞춤) · 높이 = min(내용, maxh x 화면) · 가운데 높이 = top x 화면. contentDp 0 이면 아직 모름(숨긴 채 최대로). */
+    private void applyDlgSize(String id, float contentDp) {
+        ScreenView v = views.get(id); ScreenCore.Dlg dg = dlgs.get(id);
+        if (v == null || dg == null || root == null) return;
+        float dpr = dprOf(id);
+        int rw = root.getWidth(), rh = root.getHeight();
+        if (rw <= 0 || rh <= 0) return;
+        float maxW = Math.min(dg.w * dpr, rw - 2f * dg.mx * dpr);
+        float wpx = maxW;
+        if (dg.fit) { float fw = v.fitWidthDp(); if (fw > 0f) wpx = Math.min(maxW, (float) Math.ceil((fw + 2f) * dpr)); }
+        float maxH = dg.maxh * rh;
+        float hpx = contentDp > 0f ? Math.min(contentDp * dpr, maxH) : maxH;
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(Math.max(1, Math.round(wpx)), Math.max(1, Math.round(hpx)));
+        lp.gravity = Gravity.TOP | Gravity.START;
+        lp.leftMargin = Math.round((rw - wpx) / 2f);
+        lp.topMargin = Math.max(Math.round(8f * dpr), Math.round(dg.top * rh - hpx / 2f));
+        v.setLayoutParams(lp);
+        if (contentDp > 0f && v.getVisibility() != View.VISIBLE && isShown(id)) v.setVisibility(View.VISIBLE);
     }
 
     private void applyPalette(ScreenView view, PluginCall call) {

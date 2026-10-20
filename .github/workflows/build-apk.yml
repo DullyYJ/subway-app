@@ -65,11 +65,13 @@ jobs:
           - cong_engine.test.js
           - aicard_engine.test.js
           - talkcard_engine.test.js
+          - dialog_engine.test.js
           - screen_rhead_js.ui.test.js
           - screen_rtrk_js.ui.test.js
           - screen_cong_js.ui.test.js
           - screen_ai_js.ui.test.js
           - screen_talk_js.ui.test.js
+          - screen_dlg_js.ui.test.js
           - screen_home_js.ui.test.js
           - locate_research.ui.test.js
           - route_row.ui.test.js
