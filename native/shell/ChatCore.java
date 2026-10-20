@@ -29,6 +29,14 @@ public final class ChatCore {
 
     public ChatCore(ShellCore.Store st) { this.st = st; }
 
+    /** 홈 대화 카드용: 전체 방의 최근 n줄을 [[닉네임, 글, 시각, 내 글]…] 글로(오래된 것부터). 엔진이 줄 수·시각 글을 정한다. */
+    public String recentTalksJson(int n) {
+        List<Object> all = new ArrayList<Object>(talk.values());
+        List<Object> out = all.size() > n ? all.subList(all.size() - n, all.size()) : all;
+        return HomeSearchCore.toJson(new ArrayList<Object>(out));
+    }
+    public int talkCount() { return talk.size(); }
+    public String talkMark() { return talk.size() + ":" + sinceG; }
     public String sel() { String s = st.get(K_SEL, "all"); return s.length() > 0 && s.length() < 30 ? s : "all"; }
     public void select(String line) { st.put(K_SEL, line == null || line.length() == 0 || line.length() > 29 ? "all" : line); loaded = false; failed = false; }
 

@@ -1620,3 +1620,10 @@
 - **아직**: 내 위치 마커/대기(`lv`)는 탑승 추적과 함께(#261).
 - **시험**: result_engine 30, fav_engine 14, JVM(HomeCore·FavCore) 통과.
 - **YJ가 할 일**: 워커 s92(`route-v2-2026-10-20s92`) Deploy + 새 APK. 기기 미확인(실제 재조회 응답·노선 방 이동).
+
+## 2026-10-20 엔진 s93 + native-shell — 홈 카드 4종(AI 크루 · 혼잡도 · 대화 · 세부경로 시트)
+- 엔진 `engine/hcards.js` + `hcards-worker.js`(POST `/screen/hcards`): 기기 사실(위치·시각·경로 사실·최근 대화)만 받아 기존 AI(cap14)·혼잡도(cap13)·대화(cap15) 엔진을 한 번에 묶어 패널 3장을 만든다. 시험 `test/hcards_engine.test.js` 15개(CI 표에 추가).
+- 앱 `HcardsCore`(5분 AI 갱신 시각·열쇠·눌림 ai.refresh/tk.open/tk.send), `ChatCore.recentTalksJson/talkCount/talkMark`, `HomeCore.resultFacts`(결과·카드 묶음 공용, 경로 없으면 "null"), `ShellActivity`(홈 5초 틱, 카드 병합 `ShellCore.mergeBodies`).
+- 세부경로 시트: `result.js` `view:'detail'`(`resDetailScreen`) — 구간마다 노선·소요·시각 범위, 누르면 정거장별 시각 펼침(rd.tg.N), 카카오맵/네이버 길안내 주소는 엔진이 만든다(`info.nav`, 앱 주소 + 웹 대체). 결과 카드에 `rh.detail` 단추. 앱은 `HomeCore.actDetail/detailRequest/onDetail` + `ShellActivity.openDetailSheet`(Dialog+ScreenView, 앱 주소는 kakaomap:// · nmap:// 만 허용).
+- 한계: 혼잡도 3D 캐릭터 장면 미이식, AI 브리프의 날씨·다음 열차 null, 기기 미확인. 안드로이드 계층 컴파일은 CI에서만 한다.
+- **YJ가 할 일**: 워커 s93(`route-v2-2026-10-20s93`) Deploy + 새 APK.

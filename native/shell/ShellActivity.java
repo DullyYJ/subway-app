@@ -53,6 +53,8 @@ public class ShellActivity extends Activity {
     private MetroMapView mapView;
     private MetroMapData mapData;
     private boolean mapDataLoading;
+    private final HcardsCore hc = new HcardsCore();         // 홈 카드 묶음(AI 승무원 · 혼잡도 · 실시간 대화)
+    private volatile String hcKey = "", hcJson = "";
     private FavCore fav;                                   // 즐겨찾기 시트(저장 목록·엔진이 돌려준 새 목록)
     private final FoodCore food = new FoodCore();         // 맛집 탭(도착지·기기 위치·받은 원자료)
     private int seqFood = 0;
@@ -243,7 +245,8 @@ public class ShellActivity extends Activity {
                 mapAct(a, which == 0 ? head : body);
                 return;
             } else if (ShellCore.S_HOME.equals(screenName())) {
-                if ("call".equals(a.a)) homeAct(a.v, body.fields());
+                if ("call".equals(a.a) && (a.v.startsWith("ai.") || a.v.startsWith("tk."))) hcAct(a.v);
+                else if ("call".equals(a.a)) homeAct(a.v, body.fields());
                 else if ("open".equals(a.a)) apply(ShellCore.linkEffect(a.url));
                 return;
             } else {
@@ -857,6 +860,7 @@ public class ShellActivity extends Activity {
             if (ShellCore.S_MAPSTN.equals(sheetName) || ShellCore.S_MAPTT.equals(sheetName)) { if ("call".equals(a.a)) mapSheetAct(a.v); return; }
             if (!"call".equals(a.a)) return;
             if (ShellCore.S_FAV.equals(sheetName)) { favAct(a.v); return; }
+            if (ShellCore.S_DETAIL.equals(sheetName)) { detailAct(a.v); return; }
             if ("wr.close".equals(a.v) || "fm.close".equals(a.v)) { closeSheet(); return; }
             if ("wr.submit".equals(a.v)) { submitWrite(); return; }
             String[] ln = food.sheetLink(a.v);
@@ -914,10 +918,15 @@ public class ShellActivity extends Activity {
     /** 홈 화면: 입력 상태를 엔진에 보내고, 경로 결과가 있으면 결과 화면도 받아 이어 붙여 올린다. */
     private void loadHome(final ScreenView v, final boolean keep) {
         final int my = ++seqHome;
+        startHomeTick();
         final String json = home.request(homeEnv(), ShellCore.CAP);
         final boolean hasRes = home.hasRoute();
         final String resBody = hasRes ? home.resultRequest(homeEnv(), ShellCore.CAP, ShellCore.theme(store), 0) : "";
         final String resKey = home.resRev + ":" + home.resTab;
+        final long nowH = System.currentTimeMillis();
+        hc.ensureNext(nowH);
+        final String hKey = hc.key(home.resRev, home.resTab, nowH, chat.talkCount(), chat.talkMark());
+        final String hBody = hKey.equals(hcKey) ? "" : hc.request(ShellCore.CAP, ShellCore.theme(store), homeEnv(), home.resultFacts(homeEnv(), ShellCore.theme(store)), chat.recentTalksJson(8));
         new Thread(new Runnable() {
             @Override public void run() {
                 NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/home", json, 8000);
@@ -933,6 +942,16 @@ public class ShellActivity extends Activity {
                     if (rs.length() > 0) { final String rsf = rs; txt = ShellCore.mergeBodies(txt, rs); main.post(new Runnable() { @Override public void run() { home.onResult(rsf); chat.routeSec = home.resSec; maybeFetchNotes(); } }); }
                     else main.post(new Runnable() { @Override public void run() { toast("경로 결과를 그리지 못했어요"); } });
                 }
+                if (txt.length() > 0) {                                                    // 홈 카드 3장(AI 승무원 · 혼잡도 · 실시간 대화)
+                    String cj;
+                    if (hBody.length() == 0) cj = hcJson;
+                    else {
+                        NetPost.Res cr = NetPost.post(ShellCore.BASE + "/screen/hcards", hBody, 15000);
+                        cj = cr.status == 200 && cr.body != null ? cr.body : "";
+                        if (cj.length() > 0) { hcKey = hKey; hcJson = cj; }
+                    }
+                    if (cj.length() > 0) txt = ShellCore.mergeBodies(txt, cj);
+                }
                 final String fin = txt;
                 main.post(new Runnable() { @Override public void run() {
                     if (my != seqHome) return;
@@ -941,6 +960,84 @@ public class ShellActivity extends Activity {
                 } });
             }
         }, "shell-home").start();
+    }
+
+    // ───────────── 홈 카드 묶음: 눌림 · 대화 갱신 · 위치 ─────────────
+    private boolean homeTickOn;
+    private void hcAct(String v) {
+        String input = body.fields().get("talk.in");
+        switch (hc.act(v, input)) {
+            case HcardsCore.R_AI: hc.refreshAi(System.currentTimeMillis()); reloadHome(); break;
+            case HcardsCore.R_TALK_OPEN:
+                chat.select("all");
+                store.put(ShellCore.K_MODE, "chat");
+                store.put(ShellCore.K_TAB, "community");
+                showTab("community");
+                break;
+            case HcardsCore.R_TALK_SEND: sendHomeTalk(hc.sendText); break;
+            default: break;
+        }
+    }
+    private void sendHomeTalk(final String text) {
+        final String me = ShellCore.commId(store);
+        if (me.length() == 0) { toast("설정에서 커뮤니티 아이디를 등록하면 글과 제보를 남길 수 있어요"); return; }
+        final String json = "{\"nick\":" + ShellCore.q(me) + ",\"text\":" + ShellCore.q(text) + "}";
+        body.setField("talk.in", "");
+        new Thread(new Runnable() {
+            @Override public void run() {
+                NetPost.Res rr = NetPost.post(ShellCore.BOARD_BASE + "/react", json, 9000);
+                final String why = rr.status == 200 && rr.body != null && rr.body.contains("\"stored\"") ? "" : (rr.status == 0 ? "네트워크가 불안정해요" : rr.body != null && rr.body.contains("filtered") ? "부적절한 표현이 있어 올리지 못했어요" : "잠시 후 다시 시도해 주세요(시간당 한도)");
+                main.post(new Runnable() { @Override public void run() {
+                    if (why.length() > 0) toast(why);
+                    pollHomeTalks();
+                    main.postDelayed(new Runnable() { @Override public void run() { pollHomeTalks(); } }, 1500);
+                } });
+            }
+        }, "shell-home-send").start();
+    }
+    private boolean homeVisible() { return slots.length > 0 && ShellCore.S_HOME.equals(slots[slots.length - 1]); }
+    private void pollHomeTalks() {
+        if (!homeVisible()) return;
+        final String me = ShellCore.commId(store);
+        new Thread(new Runnable() {
+            @Override public void run() {
+                NetPost.Res r = NetPost.get(chat.talksUrlNow(), 6000);
+                if (r.status != 200 || r.body == null) return;
+                final String b = r.body;
+                main.post(new Runnable() { @Override public void run() {
+                    String before = chat.talkMark();
+                    if (chat.addTalks(b, me) && !before.equals(chat.talkMark()) && homeVisible()) reloadHome();
+                } });
+            }
+        }, "shell-home-talks").start();
+    }
+    /** 홈이 보이는 동안 5초마다: 새 대화를 받고, AI 승무원 갱신 시각이 지났으면 새로고침한다. */
+    private void startHomeTick() {
+        if (homeTickOn) return;
+        homeTickOn = true;
+        quietFix();
+        pollHomeTalks();
+        main.postDelayed(new Runnable() {
+            @Override public void run() {
+                if (!homeVisible()) { homeTickOn = false; return; }
+                pollHomeTalks();
+                long now = System.currentTimeMillis();
+                if (hc.aiNextAt > 0 && now >= hc.aiNextAt) { hc.refreshAi(now); reloadHome(); }
+                main.postDelayed(this, 5000);
+            }
+        }, 5000);
+    }
+    /** 권한이 이미 있으면 물어보지 않고 마지막 위치를 한 번 읽어 둔다(혼잡도·브리핑의 '가까운 역'). */
+    private void quietFix() {
+        long now = System.currentTimeMillis();
+        if (now - hc.fixAt < 10 * 60000L) return;
+        if (checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return;
+        try {
+            LocationManager lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+            Location best = null;
+            for (String p : lm.getProviders(true)) { Location l = lm.getLastKnownLocation(p); if (l != null && (best == null || l.getTime() > best.getTime())) best = l; }
+            if (best != null) { hc.setFix(best.getLatitude(), best.getLongitude(), now); reloadHome(); }
+        } catch (Throwable t) { /* 위치 없이 그린다 */ }
     }
     private void reloadHome() { if (ShellCore.S_HOME.equals(slots.length > 0 ? slots[slots.length - 1] : "")) loadHome(body, true); }
 
@@ -980,6 +1077,7 @@ public class ShellActivity extends Activity {
             case HomeCore.R_FAV: openFavSheet(); break;
             case HomeCore.R_LD: ldReselect(); break;
             case HomeCore.R_ROOM: goRoom(); break;
+            case HomeCore.R_DETAIL: openDetailSheet(); break;
             case HomeCore.R_RENDER: case HomeCore.R_FIELDS:
                 if (r == HomeCore.R_FIELDS) setHomeFields();
                 reloadHome(); break;
@@ -1165,6 +1263,53 @@ public class ShellActivity extends Activity {
         store.put(ShellCore.K_MODE, "chat");
         store.put(ShellCore.K_TAB, "community");
         showTab("community");
+    }
+
+    // ───────────── 세부경로 시트 ─────────────
+    private void openDetailSheet() {
+        closeSheet();
+        sheetName = ShellCore.S_DETAIL;
+        sheetView = new ScreenView(this);
+        sheetView.setDpr(dpr);
+        sheetView.setPalette(ShellCore.palette(ShellCore.theme(store)));
+        sheetView.setListener(new SheetHost());
+        sheet = new android.app.Dialog(this, android.R.style.Theme_Material_Light_NoActionBar);
+        sheet.setContentView(sheetView);
+        try { sheet.show(); } catch (Throwable t) { toast("세부경로를 열지 못했어요"); return; }
+        loadDetail();
+    }
+    private void loadDetail() {
+        final String json = home.detailRequest(homeEnv(), ShellCore.CAP, ShellCore.theme(store));
+        if (json.length() == 0) { closeSheet(); return; }
+        new Thread(new Runnable() {
+            @Override public void run() {
+                NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/result", json, 8000);
+                final String txt = r.status == 200 ? r.body : "";
+                main.post(new Runnable() { @Override public void run() {
+                    if (sheet == null || !sheet.isShowing() || !ShellCore.S_DETAIL.equals(sheetName)) return;
+                    if (txt.length() == 0) { toast("세부경로를 받지 못했어요"); return; }
+                    home.onDetail(txt);
+                    present(sheetView, txt, true);
+                } });
+            }
+        }, "shell-detail").start();
+    }
+    private void detailAct(String v) {
+        switch (home.actDetail(v)) {
+            case HomeCore.D_CLOSE: closeSheet(); break;
+            case HomeCore.D_RENDER: loadDetail(); break;
+            case HomeCore.D_KAKAO: openNav(home.navKakao); break;
+            case HomeCore.D_NAVER: openNav(home.navNaver); break;
+            default: break;
+        }
+    }
+    /** 길안내: 앱 주소를 먼저 열고, 앱이 없으면 웹 주소로. */
+    private void openNav(String[] u) {
+        if (u == null) return;
+        if (HomeCore.navAppOk(u[0])) {
+            try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(u[0]))); return; } catch (ActivityNotFoundException e) { /* 앱 없음 → 웹 */ }
+        }
+        openLink(u[1]);
     }
 
     // ───────────── 즐겨찾기 시트 ─────────────

@@ -17,6 +17,9 @@ var RESULT_V = 1;
 var RESULT_TABS = ['fast', 'less', 'sub', 'bus', 'longdist'];
 var rheadScreen_; if (typeof rheadScreen === 'undefined') { try { if (typeof require === 'function') rheadScreen_ = require('./rhead').rheadScreen; } catch (eRq) {} } else rheadScreen_ = rheadScreen;
 
+var resTrkColor = (typeof rheadTrkColor === 'function') ? rheadTrkColor : null;
+if (!resTrkColor) { try { if (typeof require === 'function') resTrkColor = require('./rhead').rheadTrkColor; } catch (eRq2) {} }
+
 function resNum(v, d) { v = Number(v); return isFinite(v) ? v : d; }
 function resArr(v) { return Array.isArray(v) ? v : []; }
 
@@ -176,6 +179,74 @@ function resNoteFacts(route, r) {
   });
   return f;
 }
+// ── 세부경로 시트(웹 _buildTransitDetailNow): 구간마다 한 줄(노선 · 소요 · 시각 범위), 누르면 경유 정류장을 시각과 함께 펼친다. ──
+function resClock(ms, tz) { var d = new Date(Number(ms) + Number(tz) * 60000), p = function (n) { return (n < 10 ? '0' : '') + n; }; return p(d.getUTCHours()) + ':' + p(d.getUTCMinutes()); }
+function resNavUrls(r) {
+  var dl = r.dl && typeof r.dl === 'object' ? r.dl : null;
+  if (!dl || !isFinite(Number(dl.la)) || !isFinite(Number(dl.lo))) return null;
+  var la = Number(dl.la), lo = Number(dl.lo), nm = String(dl.n || '').slice(0, 60), me = (Array.isArray(r.me) && isFinite(Number(r.me[0])) && isFinite(Number(r.me[1]))) ? [Number(r.me[0]), Number(r.me[1])] : null;
+  var e = encodeURIComponent;
+  return {
+    kakao: ['kakaomap://route?' + (me ? 'sp=' + me[0] + ',' + me[1] + '&' : '') + 'ep=' + la + ',' + lo + '&by=PUBLICTRANSIT', 'https://map.kakao.com/link/to/' + e(nm) + ',' + la + ',' + lo],
+    naver: ['nmap://route/public?' + (me ? 'slat=' + me[0] + '&slng=' + me[1] + '&sname=' + e('내 위치') + '&' : '') + 'dlat=' + la + '&dlng=' + lo + '&dname=' + e(nm) + '&appname=com.dullyyj.subway',
+            'https://map.naver.com/p/directions/' + (me ? me[1] + ',' + me[0] + ',' + e('내 위치') + ',,-1/' : '-/') + lo + ',' + la + ',' + e(nm) + ',,-1/transit']
+  };
+}
+function resDetailScreen(route, r, tab) {
+  var tz = resNum(r.tz, 540), now = resNum(r.now, 0), base = r.bt != null ? resNum(r.bt, now) : (resNum(r.rb, 0) || now), th = r.th === 'pastel' ? 'pastel' : 'dark';
+  var total = Math.round(resNum(route.summary.duration, 0) / 60), open = {};
+  resArr(r.open).forEach(function (i) { i = Math.floor(Number(i)); if (i >= 0 && i < 40) open[i] = 1; });
+  var kids = [{ t: 'bar', pad: [16, 0, 0, 8], title: total + '분 · ' + String(r.a || '') + ' → ' + String(r.b || ''), btn: '닫기', act: { a: 'call', v: 'rd.close' } }];
+  var cum = base, busN = 0, busIdx = {}, exp = [];
+  route.sections.forEach(function (s, i) { if (s && s.transportation && s.transportation.type === 2) busIdx[i] = busN++; });
+  var BUSCOL = ['#30d158', '#0a84ff', '#ff9f0a', '#bf5af2'];
+  route.sections.forEach(function (sec, si) {
+    sec = sec || {};
+    var tr = sec.transportation || {}, ty = tr.type, secSec = resNum(sec.duration, 0), secMin = Math.round(secSec / 60), dep = cum, arr = cum + secSec * 1000;
+    cum = arr;
+    var mt = secMin < 1 ? '1분 미만' : secMin + '분';
+    if (ty === 3) {
+      var dist = Math.round(resNum(sec.distance, 0));
+      var lab = (typeof sec.distance === 'number' && dist <= 0) ? '환승 이동' : '도보 ' + (dist >= 1000 ? (dist / 1000).toFixed(1) + 'km' : dist + 'm');
+      kids.push({ t: 'text', s: lab + '  ' + mt, size: 12, color: 'sub', pad: [4, 6, 6, 6] });
+      return;
+    }
+    var col = ty === 1 ? (resTrkColor ? resTrkColor(1, tr.name, th) : '#2f7cf6') : ty === 2 ? (busN >= 2 ? BUSCOL[busIdx[si] % BUSCOL.length] : '#30d158') : '#ff9500';
+    var stops = ((sec.passStopList || {}).stationList) || [], from = stops.length ? stops[0].stationName : '', to = stops.length > 1 ? stops[stops.length - 1].stationName : '';
+    var cnt = stops.length > 2 ? (stops.length - 2) + '정거장 경유' : '';
+    var rng = resClock(dep, tz) + '~' + resClock(arr, tz);
+    var path = (from ? from + (to ? ' \u2192 ' + to : '') : '') + (cnt ? ' \u00b7 ' + cnt : '');
+    var title = (tr.name || '이동') + '  ' + mt;
+    if (stops.length >= 2) {
+      exp.push(si);
+      kids.push({ t: 'navrow', title: title, sub: rng, tc: col, act: { a: 'call', v: 'rd.tg.' + si }, size: 13 });
+      if (path) kids.push({ t: 'text', s: path.slice(0, 80), size: 11, color: 'sub', pad: [0, 6, 4, 6] });
+      if (open[si]) {
+        var ss = (ty === 1 && Array.isArray(sec.stopSec) && sec.stopSec.length === stops.length) ? sec.stopSec : null, even = secSec * 1000 / (stops.length - 1), cm = 0, lines = [], hl = [], pos = 0;
+        stops.forEach(function (st, k) {
+          var off;
+          if (k === 0) off = 0;
+          else if (ss && isFinite(ss[k]) && isFinite(ss[0])) { cm = Math.max(cm, (ss[k] - ss[0]) * 1000); off = cm; }
+          else { cm += even; off = cm; }
+          var end = (k === 0 || k === stops.length - 1), nm = String(st.stationName || ''), line = (end ? '● ' : '○ ') + nm + '  ' + resClock(dep + off, tz);
+          if (end) hl.push([pos, pos + line.length, col]);
+          lines.push(line); pos += line.length + 1;
+        });
+        var bx = { t: 'box', s: lines.join('\n'), size: 12, lh: 1.6, color: 'text', fill: 'card2', line: 'border', r: 9, ip: [12, 8, 12, 8], pad: [0, 0, 0, 6] };
+        if (hl.length) bx.hl = hl;
+        kids.push(bx);
+      }
+    } else kids.push({ t: 'box', s: title + '\n' + path + '  ' + rng, size: 12, lh: 1.5, color: 'text', fill: 'card2', line: 'border', r: 9, ip: [12, 8, 12, 8], pad: [0, 0, 0, 6], hl: [[0, title.length, col]] });
+  });
+  var nav = resNavUrls(r);
+  if (nav) kids.push({ t: 'row', pad: [10, 0, 0, 14], gap: 8, kids: [
+    { t: 'button', s: '카카오맵 길안내', size: 13, h: 46, r: 12, bold: true, fill: '#fee500', line: 'none', tc: '#3a1d1d', act: { a: 'call', v: 'rd.kakao' } },
+    { t: 'button', s: '네이버지도', size: 13, h: 46, r: 12, bold: true, fill: '#03c75a', line: 'none', tc: '#ffffff', act: { a: 'call', v: 'rd.naver' } }] });
+  var out = { ok: true, v: RESULT_V, screen: 'rdetail', cover: 'tab', head: [], body: kids, info: { exp: exp, nav: nav, m: total, tab: tab } };
+  out.rev = 'd' + RESULT_V + ':' + resHash(JSON.stringify(kids));
+  return out;
+}
+
 function resHash(s) { var h = 5381; for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
 function resPart(cap, part, facts) {
   var o = rheadScreen_({ cap: cap, part: part }, facts);
@@ -198,6 +269,7 @@ function resultScreen(opt, r) {
   var has = {};
   RESULT_TABS.forEach(function (t) { has[t] = !!(pick[t] && resConvertPath(pick[t])); });
   var route = has[tab] ? resConvertPath(pick[tab]) : null;
+  if (r.view === 'detail') return route ? resDetailScreen(route, r, tab) : { ok: false, error: 'route' };
   var nodes = [], total = 0;
   var anyRoute = RESULT_TABS.some(function (t) { return has[t]; });
   var h = anyRoute ? resPart(cap, 'h', resHeadFacts(route, r, tab)) : null;
@@ -215,6 +287,7 @@ function resultScreen(opt, r) {
     var k = resPart(cap, 'k', resTrkFacts(route, r, false));
     if (!k) k = resPart(cap, 'k', resTrkFacts(route, r, true));
     if (k) nodes = nodes.concat(k.head).concat(k.body);
+    nodes.push({ t: 'button', s: '세부경로 보기', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'gold', pad: [8, 0, 0, 4], act: { a: 'call', v: 'rh.detail' } });
   }
   var body = nodes.length ? [{ t: 'panel', pad: [0, 4, 0, 8], ip: [12, 12, 12, 8], r: 16, kids: nodes }] : [];
   var sec = [];                                                  // 지금 보이는 경로의 지하철 구간 이름(실시간소통이 '내 노선'을 앞에 둘 때 쓴다)

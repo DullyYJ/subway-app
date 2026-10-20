@@ -54,6 +54,9 @@ public final class HomeCore {
     public long noteAt = 0;
     public List<String> ldM = new ArrayList<String>(), ldG = new ArrayList<String>();      // 엔진이 만든 '다시 물을 질의' (info.ld)
     public String ldPending = "", roomLine = "";
+    // 세부경로 시트: 펼친 구간 번호 · 엔진이 만든 길안내 주소 [앱 주소, 웹 주소] (info.nav)
+    public final java.util.TreeSet<Integer> detOpen = new java.util.TreeSet<Integer>();
+    public String[] navKakao = null, navNaver = null;
     /** 엔진 결과 화면의 info.sec(지금 보이는 경로의 지하철 구간 이름). */
     public List<String> resSec = new ArrayList<String>();
     @SuppressWarnings("unchecked")
@@ -75,7 +78,7 @@ public final class HomeCore {
     public boolean setRoute(String raw, String a, String b, long bt, long rb) {
         String t = raw == null ? "" : raw.trim();
         if (t.length() < 2 || t.charAt(0) != '{' || t.charAt(t.length() - 1) != '}') return false;
-        routeRaw = t; resA = a == null ? "" : a; resB = b == null ? "" : b; resBt = bt; resRb = rb; resTab = "fast"; resRev++; ld2Raw = "";
+        routeRaw = t; resA = a == null ? "" : a; resB = b == null ? "" : b; resBt = bt; resRb = rb; resTab = "fast"; resRev++; ld2Raw = ""; detOpen.clear();
         return true;
     }
     public void clearRoute() { routeRaw = ""; ld2Raw = ""; lastQs = ""; resRev++; }
@@ -90,19 +93,66 @@ public final class HomeCore {
     public void setNotes(String key, String off, String al, long now) { noteKey = key; offRaw = off == null ? "" : off; alRaw = al == null ? "" : al; noteAt = now; resRev++; }
     public String secKey() { StringBuilder b = new StringBuilder(); for (String x : resSec) b.append(x).append(','); return b.toString(); }
     public boolean needNotes(long now) { return hasRoute() && !resSec.isEmpty() && (!secKey().equals(noteKey) || now - noteAt > 60000); }
-    /** 엔진 POST /screen/result 본문. */
-    public String resultRequest(Env env, int cap, String theme, int tzMin) {
-        return "{\"cap\":" + cap + ",\"r\":{\"data\":" + routeRaw + ",\"tab\":" + ShellCore.q(resTab)
+    /** 결과 화면 사실 { data, tab, a, b, bt, rb, now, tz, th, fav, … } (경로가 없으면 null 글). 결과 화면과 홈 카드 묶음이 같은 것을 쓴다. */
+    public String resultFacts(Env env, String theme) {
+        if (!hasRoute()) return "null";
+        return "{\"data\":" + routeRaw + ",\"tab\":" + ShellCore.q(resTab)
             + ",\"a\":" + ShellCore.q(resA) + ",\"b\":" + ShellCore.q(resB)
             + ",\"bt\":" + (resBt >= 0 ? String.valueOf(resBt) : "null") + ",\"rb\":" + resRb
             + (ld2Raw.length() > 2 ? ",\"ld2\":" + ld2Raw : "") + (offRaw.length() > 2 ? ",\"off\":" + offRaw : "") + (alRaw.length() > 2 ? ",\"al\":" + alRaw : "")
-            + ",\"now\":" + env.nowMs + ",\"tz\":" + (-env.tzoMin) + ",\"th\":" + ShellCore.q("dark".equals(theme) ? "dark" : "pastel") + ",\"fav\":1}}";
+            + (loc[DEST] != null && loc[DEST].ok() ? ",\"dl\":{\"la\":" + loc[DEST].lat + ",\"lo\":" + loc[DEST].lng + ",\"n\":" + ShellCore.q(loc[DEST].name) + "}" : "")
+            + (loc[START] != null && loc[START].ok() ? ",\"me\":[" + loc[START].lat + "," + loc[START].lng + "]" : "")
+            + ",\"now\":" + env.nowMs + ",\"tz\":" + (-env.tzoMin) + ",\"th\":" + ShellCore.q("dark".equals(theme) ? "dark" : "pastel") + ",\"fav\":1}";
+    }
+    /** 엔진 POST /screen/result 본문 — 세부경로 시트(view:detail, 펼친 구간 번호). */
+    public String detailRequest(Env env, int cap, String theme) {
+        String f = resultFacts(env, theme);
+        if ("null".equals(f)) return "";
+        StringBuilder o = new StringBuilder();
+        for (Integer i : detOpen) { if (o.length() > 0) o.append(','); o.append(i); }
+        return "{\"cap\":" + cap + ",\"r\":" + f.substring(0, f.length() - 1) + ",\"view\":\"detail\",\"open\":[" + o + "]}}";
+    }
+    /** 세부경로 화면을 받았을 때: 길안내 주소를 꺼내 둔다. */
+    @SuppressWarnings("unchecked")
+    public void onDetail(String json) {
+        navKakao = null; navNaver = null;
+        try {
+            Object o = ScreenCore.parse(json);
+            Object info = o instanceof Map ? ((Map<String, Object>) o).get("info") : null;
+            Object nav = info instanceof Map ? ((Map<String, Object>) info).get("nav") : null;
+            if (nav instanceof Map) { navKakao = navPair(((Map<String, Object>) nav).get("kakao")); navNaver = navPair(((Map<String, Object>) nav).get("naver")); }
+        } catch (Exception e) { navKakao = null; navNaver = null; }
+    }
+    private static String[] navPair(Object o) {
+        if (!(o instanceof List) || ((List<Object>) o).size() != 2) return null;
+        Object a = ((List<Object>) o).get(0), b = ((List<Object>) o).get(1);
+        return (a instanceof String && b instanceof String) ? new String[] { (String) a, (String) b } : null;
+    }
+    /** 앱 주소가 허용된 모양인지(카카오맵·네이버지도 길찾기만). */
+    public static boolean navAppOk(String u) {
+        return u != null && u.length() < 1024 && u.indexOf(' ') < 0 && (u.startsWith("kakaomap://route?") || u.startsWith("nmap://route/public?"));
+    }
+    /** 세부경로 시트의 눌림(rd.*). */
+    public int actDetail(String v) {
+        if (v == null || !v.startsWith("rd.")) return D_NONE;
+        if ("rd.close".equals(v)) return D_CLOSE;
+        if ("rd.kakao".equals(v)) return navKakao != null ? D_KAKAO : D_NONE;
+        if ("rd.naver".equals(v)) return navNaver != null ? D_NAVER : D_NONE;
+        if (v.startsWith("rd.tg.")) {
+            try { int i = Integer.parseInt(v.substring(6)); if (i >= 0 && i < 40) { if (!detOpen.remove(i)) detOpen.add(i); return D_RENDER; } } catch (NumberFormatException e) { /* 무시 */ }
+        }
+        return D_NONE;
+    }
+    /** 엔진 POST /screen/result 본문. */
+    public String resultRequest(Env env, int cap, String theme, int tzMin) {
+        return "{\"cap\":" + cap + ",\"r\":" + resultFacts(env, theme) + "}";
     }
     /** 결과 화면의 눌림(rh.*). */
     public int actResult(String v) {
         if (v == null || !v.startsWith("rh.")) return R_NONE;
         if ("rh.close".equals(v)) { clearRoute(); return R_RENDER; }
         if ("rh.fav".equals(v)) return R_FAV;
+        if ("rh.detail".equals(v)) { if (!hasRoute()) return R_NONE; detOpen.clear(); return R_DETAIL; }
         if (v.startsWith("rh.ld.")) {                                          // rh.ld.m.<번호> · rh.ld.g.<번호> — 엔진이 만든 질의를 그대로 쓴다
             try {
                 boolean m = v.startsWith("rh.ld.m."); int i = Integer.parseInt(v.substring(8));
@@ -209,7 +259,8 @@ public final class HomeCore {
     }
 
     // ═════════════ 눌림 ═════════════
-    public static final int R_NONE = 0, R_RENDER = 1, R_GPS = 2, R_GO = 3, R_PICK_TIME = 4, R_FIELDS = 5, R_NEED_BOTH = 6, R_RESULT = 7, R_FAV = 8, R_LD = 9, R_ROOM = 10;
+    public static final int R_NONE = 0, R_RENDER = 1, R_GPS = 2, R_GO = 3, R_PICK_TIME = 4, R_FIELDS = 5, R_NEED_BOTH = 6, R_RESULT = 7, R_FAV = 8, R_LD = 9, R_ROOM = 10, R_DETAIL = 11;
+    public static final int D_NONE = 0, D_CLOSE = 1, D_RENDER = 2, D_KAKAO = 3, D_NAVER = 4;
 
     /** 홈 화면의 눌림(a:'call' 의 v). R_FIELDS 는 입력칸 글자를 화면에 다시 써야 한다는 뜻. */
     public int act(String v, java.util.Map<String, String> fields) {

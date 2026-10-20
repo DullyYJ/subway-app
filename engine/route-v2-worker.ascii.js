@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-20s92";
+var ENGINE_VERSION = "route-v2-2026-10-20s93";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -18296,6 +18296,9 @@ var RESULT_V = 1;
 var RESULT_TABS = ['fast', 'less', 'sub', 'bus', 'longdist'];
 var rheadScreen_; if (typeof rheadScreen === 'undefined') { try { if (typeof require === 'function') rheadScreen_ = require('./rhead').rheadScreen; } catch (eRq) {} } else rheadScreen_ = rheadScreen;
 
+var resTrkColor = (typeof rheadTrkColor === 'function') ? rheadTrkColor : null;
+if (!resTrkColor) { try { if (typeof require === 'function') resTrkColor = require('./rhead').rheadTrkColor; } catch (eRq2) {} }
+
 function resNum(v, d) { v = Number(v); return isFinite(v) ? v : d; }
 function resArr(v) { return Array.isArray(v) ? v : []; }
 
@@ -18455,6 +18458,74 @@ function resNoteFacts(route, r) {
   });
   return f;
 }
+// \u2500\u2500 \uc138\ubd80\uacbd\ub85c \uc2dc\ud2b8(\uc6f9 _buildTransitDetailNow): \uad6c\uac04\ub9c8\ub2e4 \ud55c \uc904(\ub178\uc120 \u00b7 \uc18c\uc694 \u00b7 \uc2dc\uac01 \ubc94\uc704), \ub204\ub974\uba74 \uacbd\uc720 \uc815\ub958\uc7a5\uc744 \uc2dc\uac01\uacfc \ud568\uaed8 \ud3bc\uce5c\ub2e4. \u2500\u2500
+function resClock(ms, tz) { var d = new Date(Number(ms) + Number(tz) * 60000), p = function (n) { return (n < 10 ? '0' : '') + n; }; return p(d.getUTCHours()) + ':' + p(d.getUTCMinutes()); }
+function resNavUrls(r) {
+  var dl = r.dl && typeof r.dl === 'object' ? r.dl : null;
+  if (!dl || !isFinite(Number(dl.la)) || !isFinite(Number(dl.lo))) return null;
+  var la = Number(dl.la), lo = Number(dl.lo), nm = String(dl.n || '').slice(0, 60), me = (Array.isArray(r.me) && isFinite(Number(r.me[0])) && isFinite(Number(r.me[1]))) ? [Number(r.me[0]), Number(r.me[1])] : null;
+  var e = encodeURIComponent;
+  return {
+    kakao: ['kakaomap://route?' + (me ? 'sp=' + me[0] + ',' + me[1] + '&' : '') + 'ep=' + la + ',' + lo + '&by=PUBLICTRANSIT', 'https://map.kakao.com/link/to/' + e(nm) + ',' + la + ',' + lo],
+    naver: ['nmap://route/public?' + (me ? 'slat=' + me[0] + '&slng=' + me[1] + '&sname=' + e('\ub0b4 \uc704\uce58') + '&' : '') + 'dlat=' + la + '&dlng=' + lo + '&dname=' + e(nm) + '&appname=com.dullyyj.subway',
+            'https://map.naver.com/p/directions/' + (me ? me[1] + ',' + me[0] + ',' + e('\ub0b4 \uc704\uce58') + ',,-1/' : '-/') + lo + ',' + la + ',' + e(nm) + ',,-1/transit']
+  };
+}
+function resDetailScreen(route, r, tab) {
+  var tz = resNum(r.tz, 540), now = resNum(r.now, 0), base = r.bt != null ? resNum(r.bt, now) : (resNum(r.rb, 0) || now), th = r.th === 'pastel' ? 'pastel' : 'dark';
+  var total = Math.round(resNum(route.summary.duration, 0) / 60), open = {};
+  resArr(r.open).forEach(function (i) { i = Math.floor(Number(i)); if (i >= 0 && i < 40) open[i] = 1; });
+  var kids = [{ t: 'bar', pad: [16, 0, 0, 8], title: total + '\ubd84 \u00b7 ' + String(r.a || '') + ' \u2192 ' + String(r.b || ''), btn: '\ub2eb\uae30', act: { a: 'call', v: 'rd.close' } }];
+  var cum = base, busN = 0, busIdx = {}, exp = [];
+  route.sections.forEach(function (s, i) { if (s && s.transportation && s.transportation.type === 2) busIdx[i] = busN++; });
+  var BUSCOL = ['#30d158', '#0a84ff', '#ff9f0a', '#bf5af2'];
+  route.sections.forEach(function (sec, si) {
+    sec = sec || {};
+    var tr = sec.transportation || {}, ty = tr.type, secSec = resNum(sec.duration, 0), secMin = Math.round(secSec / 60), dep = cum, arr = cum + secSec * 1000;
+    cum = arr;
+    var mt = secMin < 1 ? '1\ubd84 \ubbf8\ub9cc' : secMin + '\ubd84';
+    if (ty === 3) {
+      var dist = Math.round(resNum(sec.distance, 0));
+      var lab = (typeof sec.distance === 'number' && dist <= 0) ? '\ud658\uc2b9 \uc774\ub3d9' : '\ub3c4\ubcf4 ' + (dist >= 1000 ? (dist / 1000).toFixed(1) + 'km' : dist + 'm');
+      kids.push({ t: 'text', s: lab + '  ' + mt, size: 12, color: 'sub', pad: [4, 6, 6, 6] });
+      return;
+    }
+    var col = ty === 1 ? (resTrkColor ? resTrkColor(1, tr.name, th) : '#2f7cf6') : ty === 2 ? (busN >= 2 ? BUSCOL[busIdx[si] % BUSCOL.length] : '#30d158') : '#ff9500';
+    var stops = ((sec.passStopList || {}).stationList) || [], from = stops.length ? stops[0].stationName : '', to = stops.length > 1 ? stops[stops.length - 1].stationName : '';
+    var cnt = stops.length > 2 ? (stops.length - 2) + '\uc815\uac70\uc7a5 \uacbd\uc720' : '';
+    var rng = resClock(dep, tz) + '~' + resClock(arr, tz);
+    var path = (from ? from + (to ? ' \u2192 ' + to : '') : '') + (cnt ? ' \u00b7 ' + cnt : '');
+    var title = (tr.name || '\uc774\ub3d9') + '  ' + mt;
+    if (stops.length >= 2) {
+      exp.push(si);
+      kids.push({ t: 'navrow', title: title, sub: rng, tc: col, act: { a: 'call', v: 'rd.tg.' + si }, size: 13 });
+      if (path) kids.push({ t: 'text', s: path.slice(0, 80), size: 11, color: 'sub', pad: [0, 6, 4, 6] });
+      if (open[si]) {
+        var ss = (ty === 1 && Array.isArray(sec.stopSec) && sec.stopSec.length === stops.length) ? sec.stopSec : null, even = secSec * 1000 / (stops.length - 1), cm = 0, lines = [], hl = [], pos = 0;
+        stops.forEach(function (st, k) {
+          var off;
+          if (k === 0) off = 0;
+          else if (ss && isFinite(ss[k]) && isFinite(ss[0])) { cm = Math.max(cm, (ss[k] - ss[0]) * 1000); off = cm; }
+          else { cm += even; off = cm; }
+          var end = (k === 0 || k === stops.length - 1), nm = String(st.stationName || ''), line = (end ? '\u25cf ' : '\u25cb ') + nm + '  ' + resClock(dep + off, tz);
+          if (end) hl.push([pos, pos + line.length, col]);
+          lines.push(line); pos += line.length + 1;
+        });
+        var bx = { t: 'box', s: lines.join('\n'), size: 12, lh: 1.6, color: 'text', fill: 'card2', line: 'border', r: 9, ip: [12, 8, 12, 8], pad: [0, 0, 0, 6] };
+        if (hl.length) bx.hl = hl;
+        kids.push(bx);
+      }
+    } else kids.push({ t: 'box', s: title + '\n' + path + '  ' + rng, size: 12, lh: 1.5, color: 'text', fill: 'card2', line: 'border', r: 9, ip: [12, 8, 12, 8], pad: [0, 0, 0, 6], hl: [[0, title.length, col]] });
+  });
+  var nav = resNavUrls(r);
+  if (nav) kids.push({ t: 'row', pad: [10, 0, 0, 14], gap: 8, kids: [
+    { t: 'button', s: '\uce74\uce74\uc624\ub9f5 \uae38\uc548\ub0b4', size: 13, h: 46, r: 12, bold: true, fill: '#fee500', line: 'none', tc: '#3a1d1d', act: { a: 'call', v: 'rd.kakao' } },
+    { t: 'button', s: '\ub124\uc774\ubc84\uc9c0\ub3c4', size: 13, h: 46, r: 12, bold: true, fill: '#03c75a', line: 'none', tc: '#ffffff', act: { a: 'call', v: 'rd.naver' } }] });
+  var out = { ok: true, v: RESULT_V, screen: 'rdetail', cover: 'tab', head: [], body: kids, info: { exp: exp, nav: nav, m: total, tab: tab } };
+  out.rev = 'd' + RESULT_V + ':' + resHash(JSON.stringify(kids));
+  return out;
+}
+
 function resHash(s) { var h = 5381; for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
 function resPart(cap, part, facts) {
   var o = rheadScreen_({ cap: cap, part: part }, facts);
@@ -18477,6 +18548,7 @@ function resultScreen(opt, r) {
   var has = {};
   RESULT_TABS.forEach(function (t) { has[t] = !!(pick[t] && resConvertPath(pick[t])); });
   var route = has[tab] ? resConvertPath(pick[tab]) : null;
+  if (r.view === 'detail') return route ? resDetailScreen(route, r, tab) : { ok: false, error: 'route' };
   var nodes = [], total = 0;
   var anyRoute = RESULT_TABS.some(function (t) { return has[t]; });
   var h = anyRoute ? resPart(cap, 'h', resHeadFacts(route, r, tab)) : null;
@@ -18494,6 +18566,7 @@ function resultScreen(opt, r) {
     var k = resPart(cap, 'k', resTrkFacts(route, r, false));
     if (!k) k = resPart(cap, 'k', resTrkFacts(route, r, true));
     if (k) nodes = nodes.concat(k.head).concat(k.body);
+    nodes.push({ t: 'button', s: '\uc138\ubd80\uacbd\ub85c \ubcf4\uae30', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'gold', pad: [8, 0, 0, 4], act: { a: 'call', v: 'rh.detail' } });
   }
   var body = nodes.length ? [{ t: 'panel', pad: [0, 4, 0, 8], ip: [12, 12, 12, 8], r: 16, kids: nodes }] : [];
   var sec = [];                                                  // \uc9c0\uae08 \ubcf4\uc774\ub294 \uacbd\ub85c\uc758 \uc9c0\ud558\ucca0 \uad6c\uac04 \uc774\ub984(\uc2e4\uc2dc\uac04\uc18c\ud1b5\uc774 '\ub0b4 \ub178\uc120'\uc744 \uc55e\uc5d0 \ub458 \ub54c \uc4f4\ub2e4)
@@ -19035,6 +19108,150 @@ async function handleScreenFav(request) {
 }
 // ===== FAV ENGINE END =====
 
+// ===== HCARDS ENGINE BEGIN =====
+// \uae38\ub3d9\ubb34 \u2014 \ud648 \uce74\ub4dc \ubb36\uc74c(AI \uc2b9\ubb34\uc6d0 \u00b7 \ud63c\uc7a1\ub3c4 \u00b7 \uc2e4\uc2dc\uac04 \ub300\ud654) \ud654\uba74 \uc5d4\uc9c4 \u2014 2026-10-20 (s93). POST /screen/hcards.
+// \u2605 \uc6d0\uce59(YJ): "\ubaa8\ub4e0 \uacc4\uc0b0\uc740 \uc5d4\uc9c4\uc774 \ud55c\ub2e4. \uc571\uc740 \uadf8\ub9bc\ub9cc \uadf8\ub9b0\ub2e4."
+//   \uc6f9\uc5d0\uc11c\ub294 \uce74\ub4dc\ub9c8\ub2e4 \ub370\uc774\ud130 \uacc4\uce35(\ub0b4 \uacbd\ub85c \uad6c\uac04 \ubaa8\uc73c\uae30 \u00b7 \uac00\uae4c\uc6b4 \uc5ed \u00b7 \ud63c\uc7a1 % \u00b7 \uc9c0\uae08 \uc2dc\uac01 \ud310\ub2e8)\uc774 \uc0ac\uc2e4\uc744 \ubaa8\uc544 /screen/ai \u00b7 /screen/cong \u00b7 /screen/talk \ub85c \ubcf4\ub0c8\ub2e4.
+//   \ub124\uc774\ud2f0\ube0c\uc5d0\ub294 \uc6f9\uc774 \uc5c6\uc73c\ub2c8, \uc571\uc740 '\uae30\uae30 \uc0ac\uc2e4'(\ubcf4\ub358 \uacbd\ub85c \uc751\ub2f5 \u00b7 \uc704\uce58 \u00b7 \uc9c0\uae08 \uc2dc\uac01 \u00b7 \ubc1b\uc544 \ub454 \ub300\ud654 \u00b7 \ub2e4\uc74c \uac31\uc2e0 \uc2dc\uac01)\ub9cc \ubcf4\ub0b4\uace0 \uc774 \uc5d4\uc9c4\uc774 \uc0ac\uc2e4\uc744 \ubaa8\uc544 \uc138 \uce74\ub4dc\ub97c \ud55c \ubc88\uc5d0 \ub9cc\ub4e0\ub2e4.
+//   \uac01 \uce74\ub4dc\uc758 \uae00\u00b7\uc0c9\u00b7\ub9c9\ub300\ub294 \uae30\uc874 \uc5d4\uc9c4(aicard.js \u00b7 home-brief.js \u00b7 cong.js \u00b7 talkcard.js)\uc774 \uadf8\ub300\ub85c \uc815\ud55c\ub2e4.
+// \uc785\ub825  hcardsScreen({ cap(18 \uc774\uc0c1) }, f)
+//   f = { now(ms), tz(\ub3d9\ucabd \ubd84), th, hol(\uc8fc\ub9d0\u00b7\uacf5\ud734\uc77c), gps:[\uc704\ub3c4,\uacbd\ub3c4]|null,
+//         r: { data(\uacbd\ub85c \uc751\ub2f5 \uadf8\ub300\ub85c), tab, a, b, bt(\uae30\uc900\uc2dc\uac01 ms|null), rb(\ud0d0\uc0c9\ud55c \uc2dc\uac01) } | null,
+//         ai: { nextAt(ms, 0 \uc774\uba74 \uc5c6\uc74c), busy, rnd(0~1) }, tk: { m:[[\ub2c9\ub124\uc784,\uae00,\uc2dc\uac01ms,\ub0b4 \uae000|1]\u2026], fold, tzo } }
+// \ucd9c\ub825  { ok, v:1, screen:'hcards', cover:'chips', head:[], body:[panel\u2026], info:{ ai:\ubaa8\ub4dc, cong:\ubaa8\ub4dc, stn } }
+//   \ub20c\ub9bc: ai.refresh \u00b7 tk.open \u00b7 tk.send(\uc785\ub825\uc740 fields['talk.in'])
+'use strict';
+var HC_V = 1;
+var hcRes = (typeof resConvertPath === 'function') ? { conv: resConvertPath, rv: resApplyRv, pick: resPickTabs } : (function () { try { var m = require('./result'); return { conv: m.resConvertPath, rv: m.resApplyRv, pick: m.resPickTabs }; } catch (e) { return null; } })();
+var hcAi = (typeof aiScreen === 'function') ? aiScreen : (function () { try { return require('./aicard').aiScreen; } catch (e) { return null; } })();
+var hcCong = (typeof congScreen === 'function') ? { screen: congScreen, facts: congFacts, pct: congPctSub } : (function () { try { var m = require('./cong'); return { screen: m.congScreen, facts: m.congFacts, pct: m.congPctSub }; } catch (e) { return null; } })();
+var hcTalk = (typeof talkScreen === 'function') ? talkScreen : (function () { try { return require('./talkcard').talkScreen; } catch (e) { return null; } })();
+function hcNum(v, d) { v = Number(v); return isFinite(v) ? v : d; }
+function hcArr(v) { return Array.isArray(v) ? v : []; }
+function hcStr(v, n) { return typeof v === 'string' ? v.slice(0, n) : ''; }
+function hcHash(s) { var h = 5381; for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
+function hcStnTable() {
+  if (typeof HOME_STNS !== 'undefined' && HOME_STNS) return HOME_STNS;
+  try { if (typeof require === 'function') return require('./home-stations').HOME_STNS; } catch (e) { /* \uc5c6\uc74c */ }
+  return [];
+}
+function hcHav(la1, lo1, la2, lo2) {
+  var t = Math.PI / 180, dLa = (la2 - la1) * t, dLo = (lo2 - lo1) * t;
+  var x = Math.sin(dLa / 2) * Math.sin(dLa / 2) + Math.cos(la1 * t) * Math.cos(la2 * t) * Math.sin(dLo / 2) * Math.sin(dLo / 2);
+  return 2 * 6371000 * Math.asin(Math.sqrt(Math.max(0, Math.min(1, x))));
+}
+function hcNearest(la, lo) {                          // \uac00\uc7a5 \uac00\uae4c\uc6b4 \uc9c0\ud558\ucca0\uc5ed [\uc774\ub984, \ub178\uc120, \uc704\ub3c4, \uacbd\ub3c4, \uac70\ub9acm] (3km \uc548), \uc5c6\uc73c\uba74 null
+  var t = hcStnTable(), best = null, bd = 3000;
+  for (var i = 0; i < t.length; i++) { var d = hcHav(la, lo, t[i][2], t[i][3]); if (d < bd) { bd = d; best = [t[i][0], t[i][1], t[i][2], t[i][3], Math.round(d)]; } }
+  return best;
+}
+function hcClock(ms, tz) { var d = new Date(Number(ms) + Number(tz) * 60000), p = function (n) { return (n < 10 ? '0' : '') + n; }; return p(d.getUTCHours()) + ':' + p(d.getUTCMinutes()); }
+// \ubcf4\ub358 \uacbd\ub85c \u2192 \ube0c\ub9ac\ud551 \uc0ac\uc2e4. \uc6f9 _briefFromTransitData \uc640 \uac19\uc740 \uad6c\uac04 \ubf51\uae30.
+function hcRoute(r, now, tz) {
+  if (!r || typeof r !== 'object' || !hcRes) return null;
+  var data = (r.data && typeof r.data === 'object') ? r.data : null;
+  if (!data) return null;
+  var paths = hcRes.rv(data, hcArr((data.result || {}).path)), pick = hcRes.pick(paths);
+  var tab = ['fast', 'less', 'sub', 'bus', 'longdist'].indexOf(r.tab) >= 0 ? r.tab : 'fast';
+  var p = pick[tab] || pick.fast, route = p ? hcRes.conv(p) : null;
+  if (!route) return null;
+  var base = r.bt != null ? hcNum(r.bt, null) : (hcNum(r.rb, 0) || now);
+  var segs = [];
+  route.sections.forEach(function (sec) {
+    var tt = (sec.transportation || {}).type;
+    if (tt !== 1 && tt !== 2 && tt !== 4) return;
+    var sl = ((sec.passStopList || {}).stationList) || [];
+    var s = { type: tt, line: (sec.transportation || {}).name || (tt === 2 ? '\ubc84\uc2a4' : tt === 4 ? '\uc7a5\uac70\ub9ac' : '\uc9c0\ud558\ucca0'),
+      from: sl.length ? (sl[0].stationName || '') : '', to: sl.length ? (sl[sl.length - 1].stationName || '') : '', stops: Math.max(0, sl.length - 1),
+      min: Math.max(1, Math.round((sec.duration || 0) / 60)), nextTrain: tt === 1 ? (sec.nextTrain || null) : null };
+    if (tt === 4 && base != null && sec.startSec != null && sec.endSec != null && isFinite(sec.startSec) && isFinite(sec.endSec)) {
+      s.depClock = hcClock(base + sec.startSec * 1000, tz); s.arrClock = hcClock(base + sec.endSec * 1000, tz); s.rideMin = Math.round(Math.max(0, sec.endSec - sec.startSec) / 60);
+    }
+    segs.push(s);
+  });
+  if (!segs.length) return null;
+  var mins = Math.round(hcNum(route.summary.duration, 0) / 60);
+  if (!mins) segs.forEach(function (s) { mins += s.min; });
+  return { segs: segs, mins: mins, dist: hcNum(route.summary.distance, 0), base: base };
+}
+function hcPanel(kids, line) {
+  var o = { t: 'panel', pad: [0, 4, 0, 8], ip: [14, 14, 14, 12], r: 16, kids: kids };
+  if (line) o.line = line;
+  return o;
+}
+function hcKids(sc) {                                  // \uce74\ub4dc \ud654\uba74 \ud558\ub098\uc758 \uba38\ub9ac\u00b7\ubcf8\ubb38\u00b7\uc544\ub798 \uc904\uc744 \ud55c \uc904\ub85c \uc774\uc5b4 \ubd99\uc778\ub2e4(\ub192\uc774 0 \ube48\uce78\uc740 \ube80\ub2e4)
+  var out = [];
+  hcArr(sc.head).concat(hcArr(sc.body)).concat(hcArr(sc.foot)).forEach(function (n) { if (n && !(n.t === 'spacer' && !(n.h > 0))) out.push(n); });
+  return out;
+}
+function hcardsScreen(inp, f) {
+  if (!(Number(inp && inp.cap) >= 18)) return { ok: false, error: 'cap' };
+  if (!hcAi || !hcCong || !hcTalk) return { ok: false, error: 'engine' };
+  f = (f && typeof f === 'object') ? f : {};
+  var now = Math.floor(hcNum(f.now, 0) / 60000) * 60000, tz = hcNum(f.tz, 540);
+  if (!(now > 0)) return { ok: false, error: 'now' };
+  var th = f.th === 'pastel' ? 'pastel' : 'dark', hol = f.hol === true;
+  var gps = (Array.isArray(f.gps) && isFinite(Number(f.gps[0])) && isFinite(Number(f.gps[1]))) ? [Number(f.gps[0]), Number(f.gps[1])] : null;
+  var rt = hcRoute(f.r, now, tz), near = gps ? hcNearest(gps[0], gps[1]) : null;
+  var a = f.r && typeof f.r === 'object' ? hcStr(f.r.a, 40) : '', b = f.r && typeof f.r === 'object' ? hcStr(f.r.b, 40) : '';
+  var hour = new Date(now + tz * 60000).getUTCHours(), nowMin = hour * 60 + new Date(now + tz * 60000).getUTCMinutes();
+  // \uc5b4\ub290 \uc5ed/\uc815\ub958\uc7a5\uc758 \ud63c\uc7a1\ub3c4\ub97c \ubcf4\uc77c\uc9c0: \ubcf4\ub358 \uacbd\ub85c\uc758 \ucc98\uc74c \ub300\uc911\uad50\ud1b5 > \uac00\uae4c\uc6b4 \uc5ed
+  var cs = { mode: 'none', now: now, tz: tz, th: th, stn: '', line: '', ld: 0, live: null, bus: {} }, stn = '';
+  if (rt) {
+    var first = rt.segs[0];
+    if (first.type === 1 && first.from) { cs.mode = 'sub'; cs.stn = first.from; cs.line = first.line; }
+    else if (first.type === 2) { cs.mode = 'bus'; cs.bus = { no: first.line, stop: first.from, none: 1 }; }
+  }
+  if (cs.mode === 'none' && near) { cs.mode = 'sub'; cs.stn = near[0]; cs.line = near[1]; }
+  stn = cs.stn || (cs.bus && cs.bus.stop) || '';
+  var CF = hcCong.facts(cs), cong = cs.mode === 'sub' ? hcCong.pct(CF, CF.h) : 40;
+  // AI \uc2b9\ubb34\uc6d0
+  var ai = f.ai && typeof f.ai === 'object' ? f.ai : {};
+  var af = { now: now, tz: tz, busy: ai.busy === true, nextAt: hcNum(ai.nextAt, 0), hol: hol, cong: cong, hour: hour, nowMin: nowMin, rnd: Math.max(0, Math.min(1, hcNum(ai.rnd, 0))), metro: false, mode: 'empty', tk: '' };
+  if (rt) {
+    var rem = rt.mins > 0 ? rt.mins : 0, fromN = a || rt.segs[0].from, toN = b || rt.segs[rt.segs.length - 1].to;
+    var preview = f.r.bt != null;
+    af.tk = preview ? 'preview' : 'brief'; af.mode = preview ? 'preview' : 'brief';
+    af.from = fromN; af.to = toN; af.base = rt.base; af.mins = rt.mins; af.dist = rt.dist; af.segs = rt.segs; af.rem = rem;
+    if (preview) af.hour = new Date(rt.base + tz * 60000).getUTCHours();
+    af.arrMs = rem > 0 ? Math.floor((now + rem * 60000) / 60000) * 60000 : 0;
+    var sub1 = rt.segs.filter(function (s) { return s.type === 1 && s.nextTrain && typeof s.nextTrain === 'object'; })[0];
+    if (sub1 && sub1.nextTrain.found !== undefined) af.nt = sub1.nextTrain;
+  } else if (near) {
+    af.tk = 'brief'; af.mode = 'brief'; af.from = near[0]; af.to = ''; af.base = now; af.mins = 0; af.dist = 0; af.segs = null; af.rem = 0;
+  }
+  var aiS = hcAi({ cap: 14 }, af);
+  var congS = hcCong.screen({ cap: 13 }, cs);
+  var tkf = f.tk && typeof f.tk === 'object' ? f.tk : {};
+  var talkS = hcTalk({ cap: 15 }, { m: hcArr(tkf.m).slice(-8), fold: hcNum(tkf.fold, 0), tzo: hcNum(tkf.tzo, -tz) });
+  var body = [];
+  if (aiS && aiS.ok) body.push(hcPanel(hcKids(aiS)));
+  if (congS && congS.ok) body.push(hcPanel(hcKids(congS), congS.info && congS.info.bc && /^#/.test(congS.info.bc) ? congS.info.bc : ''));
+  if (talkS && talkS.ok) body.push(hcPanel(hcKids(talkS)));
+  var out = { ok: true, v: HC_V, screen: 'hcards', cover: 'chips', head: [], body: body, info: { ai: aiS && aiS.ok ? aiS.info.mode : '', cong: cs.mode, stn: stn, near: near ? near[0] : '' } };
+  out.rev = 'h' + HC_V + ':' + hcHash(JSON.stringify(body));
+  return out;
+}
+// \ud648 \uce74\ub4dc \ubb36\uc74c \ud654\uba74 \uc5d4\uc9c4 Worker \uc5f0\uacb0\ubd80 \u2014 POST /screen/hcards (engine/hcards.js \uc758 hcardsScreen \uc744 \ubd80\ub978\ub2e4). route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/screen/hcards") return handleScreenHcards(request);` \ub97c \ub123\ub294\ub2e4.
+//   \ubcf8\ubb38(JSON \uae00, Content-Type: text/plain): { cap(18 \uc774\uc0c1), f:{ now, tz, th, hol, gps, r, ai, tk } }
+//   \uc5d4\uc9c4\uc740 \uc544\ubb34\uac83\ub3c4 \uc800\uc7a5\ud558\uc9c0 \uc54a\ub294\ub2e4(\uc774 \uae30\uae30\uac00 \ubcf4\ub0b8 \uc0ac\uc2e4\ub85c \ud654\uba74\uc744 \uacc4\uc0b0\ud574 \ub3cc\ub824\uc904 \ubfd0).
+async function handleScreenHcards(request) {
+  var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Cache-Control": "no-store" };
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: H });
+  if (request.method !== "POST") return new Response(JSON.stringify({ ok: false, error: "post-only" }), { status: 405, headers: H });
+  var raw = await request.text();
+  if (raw.length > 12000000) return new Response(JSON.stringify({ ok: false, error: "body-too-long" }), { status: 413, headers: H });
+  var body;
+  try { body = JSON.parse(raw); } catch (e) { return new Response(JSON.stringify({ ok: false, error: "bad-json" }), { status: 400, headers: H }); }
+  if (!body || typeof body !== "object") return new Response(JSON.stringify({ ok: false, error: "bad-body" }), { status: 400, headers: H });
+  var out;
+  try { out = hcardsScreen({ cap: Number(body.cap) || 0 }, body.f, body.d); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2).slice(0, 120) }), { status: 500, headers: H }); }
+  if (!out || !out.ok) return new Response(JSON.stringify(out || { ok: false, error: "fail" }), { status: 400, headers: H });
+  out.ver = ENGINE_VERSION;
+  return new Response(JSON.stringify(out), { headers: H });
+}
+// ===== HCARDS ENGINE END =====
+
 async function handleFetch(request, env, ctx) {
   try { await holEnsure(env); } catch (e) {}
   const url = new URL(request.url);
@@ -19073,6 +19290,7 @@ async function handleFetch(request, env, ctx) {
   if (url.pathname === "/pos-fuse") return handlePosFuse(request);
   if (url.pathname === "/screen/map") return handleScreenMap(request);
   if (url.pathname === "/screen/fav") return handleScreenFav(request);
+  if (url.pathname === "/screen/hcards") return handleScreenHcards(request);
   if (url.pathname === "/stops-near") {
     const lat = parseFloat(url.searchParams.get("lat"));
     const lng = parseFloat(url.searchParams.get("lng"));

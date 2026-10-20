@@ -104,6 +104,27 @@ const flat = ns => { const o = []; (function f(a) { a.forEach(n => { o.push(n); 
   const r = screenCheck([o, o2, n1]);
   ok(!r.err && r.out.every(l => /^OK/.test(l)), '앱 검증기 통과(장거리·공지): ' + (r.err || r.out.join(' | ')));
 }
+// ⑤-b 세부경로 시트
+{
+  const dl = { la: 36.5, lo: 127.1, n: '두정역' };
+  const d0 = call('fast', { view: 'detail', dl, me: [37.49, 126.72] });
+  const f0 = flat(d0.body);
+  ok(d0.ok && d0.screen === 'rdetail' && f0[0].t === 'bar' && f0[0].act.v === 'rd.close' && /^24분/.test(f0[0].title), '세부경로: 머리줄(분·닫기)');
+  ok(f0.some(n => n.t === 'navrow' && /수도권 1호선/.test(n.title) && n.act.v === 'rd.tg.1') && d0.info.exp.join() === '1', '세부경로: 지하철 구간은 펼침 줄, info.exp = 구간 번호');
+  ok(f0.some(n => n.t === 'text' && /도보/.test(n.s)), '세부경로: 도보 줄');
+  ok(!f0.some(n => /^\u25cb|^\u25cf/.test(n.s || '')), '세부경로: 접힌 상태에는 정거장 목록이 없다');
+  const d1 = call('fast', { view: 'detail', open: [1], dl, me: [37.49, 126.72], bt: now });
+  const bx = flat(d1.body).find(n => n.t === 'box' && /\u25cf/.test(n.s || ''));
+  ok(bx && bx.s.split('\n').length === 3 && /\d\d:\d\d$/.test(bx.s.split('\n')[0]) && bx.hl.length === 2, '세부경로: 펼치면 정거장마다 시각, 처음·끝 강조');
+  ok(d1.info.nav && /^kakaomap:\/\/route\?sp=37.49,126.72&ep=36.5,127.1/.test(d1.info.nav.kakao[0]) && /^nmap:\/\/route\/public\?slat=37.49/.test(d1.info.nav.naver[0]) && /^https:/.test(d1.info.nav.kakao[1]) && /^https:/.test(d1.info.nav.naver[1]), '세부경로: 길안내 주소(앱·웹 대체)');
+  ok(flat(d1.body).filter(n => n.t === 'button').length === 2, '세부경로: 길안내 단추 2개');
+  const d2 = call('bus', { view: 'detail' });
+  ok(d2.ok && d2.info.nav === null && !flat(d2.body).some(n => n.t === 'button'), '세부경로: 도착지 좌표가 없으면 길안내 단추 없음');
+  ok(call('fast').body.some(n => n.t === 'button' && n.act && n.act.v === 'rh.detail') || flat(call('fast').body).some(n => n.t === 'button' && n.act && n.act.v === 'rh.detail'), '결과 카드: 세부경로 보기 단추');
+  const r = screenCheck([d0, d1, d2, call('fast')]);
+  ok(!r.err && r.out.every(l => /^OK/.test(l)), '앱 검증기 통과(세부경로): ' + (r.err || r.out.join(' | ')));
+  ok(call('longdist', { view: 'detail' }).ok === false || true, '없는 탭이어도 죽지 않는다');
+}
 // ⑤ 이상한 입력
 ok(E.resultScreen({ cap: 11 }, { data: DATA }).ok === false, 'cap 12 미만이면 만들지 않는다');
 {

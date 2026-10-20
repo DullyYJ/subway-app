@@ -353,6 +353,13 @@ public class ShellJvmTest {
             ok(h2.actResult("rh.ld.m.1") == HomeCore.R_LD && "&ldMode=expbus".equals(h2.ldPending) && h2.actResult("rh.ld.g.0") == HomeCore.R_LD && h2.ldPending.contains("ldGrade=ITX"), "장거리 칩 눌림 → 엔진이 만든 질의");
             ok(h2.actResult("rh.ld.g.1") == HomeCore.R_NONE && h2.actResult("rh.ld.m.9") == HomeCore.R_NONE, "엉뚱한 질의·번호는 버린다");
             ok(h2.actResult("rh.room.1") == HomeCore.R_ROOM && "2호선".equals(h2.roomLine) && h2.actResult("rh.room.5") == HomeCore.R_NONE, "노선 방 보기 번호 = info.sec 번호");
+            ok(h2.actResult("rh.detail") == HomeCore.R_DETAIL && h2.detOpen.isEmpty(), "세부경로 보기 단추");
+            ok(h2.actDetail("rd.tg.1") == HomeCore.D_RENDER && h2.detOpen.contains(1) && h2.actDetail("rd.tg.1") == HomeCore.D_RENDER && h2.detOpen.isEmpty() && h2.actDetail("rd.tg.99") == HomeCore.D_NONE && h2.actDetail("rd.close") == HomeCore.D_CLOSE && h2.actDetail("rd.kakao") == HomeCore.D_NONE, "세부경로: 펼침 토글 · 닫기 · 주소가 없으면 길안내 무시");
+            h2.onDetail("{\"info\":{\"nav\":{\"kakao\":[\"kakaomap://route?ep=1,2&by=PUBLICTRANSIT\",\"https://map.kakao.com/x\"],\"naver\":[\"evil://x\",\"https://map.naver.com/y\"]}}}");
+            ok(h2.actDetail("rd.kakao") == HomeCore.D_KAKAO && h2.actDetail("rd.naver") == HomeCore.D_NAVER && HomeCore.navAppOk(h2.navKakao[0]) && !HomeCore.navAppOk(h2.navNaver[0]), "세부경로: 길안내 주소 읽기 · 허용된 앱 주소만");
+            h2.detOpen.add(2);
+            String dq = h2.detailRequest(new HomeCore.Env(), 18, "dark");
+            ok(dq.contains("\"view\":\"detail\",\"open\":[2]}}") && dq.startsWith("{\"cap\":18,\"r\":{") && new HomeCore().detailRequest(new HomeCore.Env(), 18, "dark").isEmpty(), "세부경로 요청: view/open 을 r 안에 넣는다, 경로가 없으면 보내지 않는다");
             h2.ld2Raw = "{\"result\":{\"path\":[]}}"; h2.setNotes(h2.secKey(), "{\"lines\":{}}", "{\"lines\":{}}", 1000L);
             String rq2 = h2.resultRequest(new HomeCore.Env(), 18, "dark", 0);
             ok(rq2.contains("\"ld2\":{") && rq2.contains("\"off\":{") && rq2.contains("\"al\":{"), "다시 받은 응답·공지 원자료를 엔진에 그대로 보낸다");
@@ -366,6 +373,19 @@ public class ShellJvmTest {
             ok(fs.get(FavCore.K_FAV, "").contains("출근") && "출근 등록 완료".equals(fv.msg) && fv.go.size() == 2, "엔진이 돌려준 새 목록을 그대로 저장");
             ok(fv.act("fv.go.0") == FavCore.R_GO && fv.go.get(0).dName.equals("강남") && Math.abs(fv.go.get(0).dLa - 37.497) < 1e-9 && fv.act("fv.go.1") == FavCore.R_NONE, "즐겨찾기로 경로 찾기(풀리지 않은 것은 무시)");
             ok(fv.act("fv.del.0") == FavCore.R_RENDER && fv.request(18, "dark", "", "").contains("\"op\":{\"k\":\"del\",\"i\":0}") && fv.act("fv.close") == FavCore.R_CLOSE, "삭제 · 닫기");
+        }
+        // 홈 카드 묶음
+        {
+            HcardsCore hcc = new HcardsCore();
+            HomeCore.Env en = new HomeCore.Env(); en.nowMs = 1000000L; en.tzoMin = -540; en.hol = false;
+            ok(hcc.ensureNext(1000L) && hcc.aiNextAt == 1000L + HcardsCore.AI_EVERY_MS && !hcc.ensureNext(2000L), "AI 갱신 시각: 없을 때만 새로 정한다");
+            String rq3 = hcc.request(18, "dark", en, "null", "[]");
+            ok(rq3.contains("\"gps\":null") && rq3.contains("\"r\":null") && rq3.contains("\"tz\":540") && rq3.contains("\"nextAt\":" + hcc.aiNextAt) && rq3.contains("\"tk\":{\"m\":[],\"fold\":0,\"tzo\":-540}"), "홈 카드 요청: 사실만 싣는다");
+            hcc.setFix(37.5, 127.0, 5L);
+            ok(hcc.request(18, "pastel", en, "{\"a\":1}", "[[\"하늘\",\"안녕\",1,0]]").contains("\"gps\":[37.5,127.0]") && hcc.request(18, "pastel", en, "{\"a\":1}", "[]").contains("\"r\":{\"a\":1}"), "위치·경로 사실");
+            String k1 = hcc.key(1, "fast", 60000L, 3, "3:99"); hcc.refreshAi(70000L);
+            ok(!k1.equals(hcc.key(1, "fast", 60000L, 3, "3:99")) && hcc.key(1, "fast", 60000L, 3, "3:99").equals(hcc.key(1, "fast", 61000L, 3, "3:99")), "열쇠: 새로고침하면 바뀌고 같은 분이면 같다");
+            ok(hcc.act("ai.refresh", null) == HcardsCore.R_AI && hcc.act("tk.open", null) == HcardsCore.R_TALK_OPEN && hcc.act("tk.send", "  ") == HcardsCore.R_NONE && hcc.act("tk.send", " 안녕하세요 ") == HcardsCore.R_TALK_SEND && "안녕하세요".equals(hcc.sendText), "눌림: 새로고침 · 대화 열기 · 보내기(빈 글은 무시)");
         }
         HomeCore hm = new HomeCore();
         hm.setStation(HomeCore.START, "강남", "2호선", 37.4979, 127.0276);
