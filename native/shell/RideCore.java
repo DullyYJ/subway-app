@@ -39,8 +39,28 @@ public final class RideCore {
 
     // ═════════════ 시작 ═════════════
     /** 엔진 POST /ride/start 본문. facts = HomeCore.resultFacts() (경로 응답 그대로 + 탭·이름·시각). */
-    public static String startBody(int cap, String facts) {
-        return "{\"cap\":" + cap + ",\"r\":" + (facts == null || facts.length() < 2 ? "null" : facts) + "}";
+    public static String startBody(int cap, String facts) { return startBody(cap, facts, null); }
+
+    /**
+     * allowedOff: 사용자가 끈 알림 종류 이름들(엔진 ride-alert 의 종류: near_arrive2 · near_arrive · arrive · transfer2 · transfer). 끈 것만 false 로 실어 보낸다.
+     * 어떤 알림이 어떤 종류인지는 엔진이 정한 이름을 그대로 쓰고, 여기서는 설정 스위치 두 개를 그 이름들로 펼칠 뿐이다(arrive 스위치 → 도착 3종, transfer 스위치 → 환승 2종).
+     */
+    public static String startBody(int cap, String facts, java.util.List<String> allowedOff) {
+        String f = facts == null || facts.length() < 2 ? "null" : facts;
+        if (!"null".equals(f) && allowedOff != null && !allowedOff.isEmpty() && f.endsWith("}")) {
+            StringBuilder a = new StringBuilder(",\"allowed\":{");
+            for (int i = 0; i < allowedOff.size(); i++) { if (i > 0) a.append(','); a.append(ShellCore.q(allowedOff.get(i))).append(":false"); }
+            f = f.substring(0, f.length() - 1) + a.append("}}");
+        }
+        return "{\"cap\":" + cap + ",\"r\":" + f + "}";
+    }
+
+    /** 설정의 알림 스위치(np_arrive · np_transfer, "0" 이 끔)를 끈 알림 종류 목록으로. */
+    public static java.util.List<String> offKinds(ShellCore.Store st) {
+        java.util.List<String> o = new java.util.ArrayList<String>();
+        if ("0".equals(st.get("np_arrive", "1"))) { o.add("near_arrive2"); o.add("near_arrive"); o.add("arrive"); }
+        if ("0".equals(st.get("np_transfer", "1"))) { o.add("transfer2"); o.add("transfer"); }
+        return o;
     }
 
     /** /ride/start 응답을 읽는다. 성공이면 "" · 실패면 사용자에게 보일 글(엔진 msg 또는 기본 글). */

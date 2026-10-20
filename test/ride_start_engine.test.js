@@ -26,6 +26,10 @@ ok(st.cfg.targets.length === 2 && st.cfg.targets[0].kind === 'transfer' && st.cf
 ok(st.eta.nodes.slice(1).every(n => n.planMin > 0) && st.eta.nodes[1].planMin === 12 * 60 + 2 && st.eta.nodes[6].planMin === 12 * 60 + 12, '계획 시각(하루 안의 분)');
 ok(/^다음 S0 12:02/.test(o.text) && o.info.first.name === 'S0' && o.info.dest === '도착지' && o.info.legs === 2, '처음 글 · 요약');
 const late = RS.rideStart({ cap: 18 }, facts({ now: T0 + 200000, rb: T0 }));
+const off = RS.rideStart({ cap: 18 }, Object.assign(facts(), { allowed: { transfer2: false, transfer: false } }));
+ok(off.ok && off.state.cfg.allowed.transfer === false && off.state.cfg.allowed.transfer2 === false && Object.keys(o.state.cfg.allowed).length === 0, '끈 알림 종류는 allowed 로 상태에 실린다(안 끄면 비어 있다)');
+const offBad = RS.rideStart({ cap: 18 }, Object.assign(facts(), { allowed: 'x' }));
+ok(offBad.ok && Object.keys(offBad.state.cfg.allowed).length === 0, '이상한 allowed 는 무시');
 ok(late.ok && late.state.eta.passes.length === 1 && late.state.eta.passes[0].idx === 1 && late.state.eta.passes[0].src === 'gps', '첫 역 시각이 지난 뒤 누르면 첫 역은 지난 것으로');
 const busFirst = RS.rideStart({ cap: 18 }, facts({ data: { result: { path: [{ info: P.info, subPath: [walk(2, 0, 120), JSON.parse(JSON.stringify(busLeg)), walk(2, 900, 1020)] }] } } }));
 ok(busFirst.ok && busFirst.state.eta.timetableFirst === undefined && busFirst.state.eta.boardInfo === undefined && busFirst.state.cfg.targets.length === 1 && busFirst.state.eta.nodes[1].isBus, '버스로 시작하면 시각표 기준 아님');

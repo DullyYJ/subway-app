@@ -1340,7 +1340,7 @@ public class ShellActivity extends Activity {
             return;
         }
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) requestPermissions(new String[] { android.Manifest.permission.POST_NOTIFICATIONS }, REQ_RIDE + 1);
-        final String body = RideCore.startBody(ShellCore.CAP, home.resultFacts(homeEnv(), ShellCore.theme(store)));
+        final String body = RideCore.startBody(ShellCore.CAP, home.resultFacts(homeEnv(), ShellCore.theme(store)), RideCore.offKinds(store));
         final int rid = home.routeId;
         toast("탑승 안내를 준비하고 있어요");
         new Thread(new Runnable() {

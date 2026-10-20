@@ -406,6 +406,12 @@ public class ShellJvmTest {
         // 홈 카드 묶음
         {
             RideCore rc = new RideCore();
+            ShellCore.MemStore ns = new ShellCore.MemStore();
+            ok(RideCore.offKinds(ns).isEmpty() && RideCore.startBody(18, "{\"data\":{}}", RideCore.offKinds(ns)).equals("{\"cap\":18,\"r\":{\"data\":{}}}"), "알림을 안 껐으면 allowed 를 싣지 않는다");
+            ns.put("np_arrive", "0"); ns.put("np_transfer", "0");
+            ok(RideCore.offKinds(ns).size() == 5 && RideCore.startBody(18, "{\"data\":{}}", RideCore.offKinds(ns)).equals("{\"cap\":18,\"r\":{\"data\":{},\"allowed\":{\"near_arrive2\":false,\"near_arrive\":false,\"arrive\":false,\"transfer2\":false,\"transfer\":false}}}"), "끈 알림 종류가 allowed 로 실린다");
+            ns.put("np_arrive", "1");
+            ok(RideCore.offKinds(ns).toString().equals("[transfer2, transfer]") && RideCore.startBody(18, "", RideCore.offKinds(ns)).contains("\"r\":null"), "환승만 끄면 환승 2종만");
             ok(RideCore.startBody(18, "{\"data\":{}}").equals("{\"cap\":18,\"r\":{\"data\":{}}}") && RideCore.startBody(18, "").contains("\"r\":null"), "탑승 시작 요청 본문");
             ok(rc.onStart("{\"ok\":false,\"error\":\"longdist\",\"msg\":\"장거리 경로는 탑승 안내를 지원하지 않아요\"}").startsWith("장거리") && !rc.hasState(), "엔진이 거절하면 그 글을 그대로 돌려준다");
             ok(rc.onStart("zz").length() > 0 && rc.onStart("{\"ok\":true}").length() > 0 && !rc.hasState(), "이상한 응답은 시작하지 않는다");

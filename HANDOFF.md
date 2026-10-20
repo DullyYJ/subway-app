@@ -1643,3 +1643,8 @@
 - **걷어냄**: 이 브랜치에서 쓰지 않는 옛 캐패시터 시절 자바(`native/*.java · *.kt · res/`)와 그 JVM 시험(Htl · Row · Scene · Store · Widget · AwtCv). `main` 에는 그대로 있다. 워크플로(`.github/workflows/*`)는 데이터 수집용이라 그대로 둠(공휴일 갱신은 `main` 의 `www/` 를 고치는 것이라 이 브랜치와 무관). `ios-reference/` 는 iOS 기준본이자 동등성 시험 입력이라 유지.
 - **한계(정직하게)**: 전부 기기 미확인. 혼잡도 3D 캐릭터 장면 · 웹 역 맛집 목록 · 카카오 장소 ID 조회 · Leaflet 지도 · 버스(경기 GBIS · D1 · 즐겨찾기 · 지도) 미이식. 즐겨찾기 '새로 등록' 입력 폼 · 옛 웹 localStorage 즐겨찾기 이전 없음. AI 브리프에 날씨 · 다음 열차 없음. 탑승 추적: 승차 전 대기 판정 · `/pos-fuse` · 떠 있는 오버레이 · 알림 종류별 켜기/끄기 연결(`np_arrive`/`np_transfer` → `allowed`) 없음, 앱이 죽으면 결과 카드는 안 돌아옴(알림 · 위젯은 계속).
 - **YJ가 할 일**: 워커 s95(`route-v2-2026-10-20s95`) Deploy + 새 APK. 첫 탑승 안내 때 위치 · 알림 권한 허용.
+
+## 2026-10-21 s95b — 탑승 알림 종류별 켜기/끄기 연결 (엔진 변경 없음, 워커 그대로 s95)
+- 설정의 "도착 알림"(np_arrive) · "환승 알림"(np_transfer)을 끄면 탑승 시작 때 `RideCore.offKinds` 가 끈 종류(near_arrive2 · near_arrive · arrive / transfer2 · transfer)를 `allowed:{종류:false}` 로 실어 보내고, 엔진 `ride-start` 가 state.cfg.allowed 에 넣어 `ride-standby` 가 그 종류를 막는다. 시험: ride_start_engine 21, JVM RideCore.
+- 앱이 죽은 뒤 결과 카드 복원은 하지 않기로 함: 경로(홈 결과)가 저장되지 않아 붙일 카드가 없다. 알림(종료 버튼)·위젯은 계속 동작.
+- 남은 큰 것: 승차 전 대기 판정(boarded:false 일 때 승차 감지), `/pos-fuse`, 떠 있는 오버레이.
