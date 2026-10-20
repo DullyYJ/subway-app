@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-20s82";
+var ENGINE_VERSION = "route-v2-2026-10-20s83";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -17754,6 +17754,367 @@ async function handleScreenPvl(request) {
 }
 // ===== PVLABEL ENGINE END =====
 
+// ===== POSFUSE ENGINE BEGIN =====
+// \uae38\ub3d9\ubb34 \u2014 \uc704\uce58 \ud310\ub2e8\uae30(PosFusion) \uc5d4\uc9c4 \ubaa8\ub4c8 (route-v2 Worker \uc5d0 \ubd99\uc5ec \ub123\ub294 \uc21c\uc218 \ud568\uc218) \u2014 2026-10-20 (s83)
+//
+// \u2605 \uc6d0\uce59(YJ): "\ubaa8\ub4e0 \uacc4\uc0b0\uc740 \uc5d4\uc9c4\uc774 \ud55c\ub2e4. \uc571\uc740 \uadf8\ub9bc\ub9cc \uadf8\ub9b0\ub2e4."
+//   \ub178\uc120 \uc704 \uc704\uce58\ub97c '\ud655\ub960'\ub85c \ucd94\uc815\ud558\ub294 \uc740\ub2c9 \ub9c8\ub974\ucf54\ud504 \ud310\ub2e8\uae30(\uc608\uc804\uc5d4 \uc6f9 www/index.html \uc548\uc758 PosFusion)\ub97c \uc5d4\uc9c4\uc73c\ub85c \uc62e\uacbc\ub2e4. \uc54c\uace0\ub9ac\uc998\uc740 \ud55c \uae00\uc790\ub3c4 \ubc14\uafb8\uc9c0 \uc54a\uc558\ub2e4(\uc6f9 \uc6d0\ubcf8\uacfc \uac19\uc740 \uacb0\uacfc\ub97c
+//   \ub0b4\ub294\uc9c0 \uc2dc\ud5d8\uc774 \ub300\uc870\ud55c\ub2e4). \uc5d4\uc9c4\uc740 \uae30\uc5b5\ud558\uc9c0 \uc54a\uc73c\ubbc0\ub85c(stateless) \uc0c1\ud0dc(\uc9c0\uc5f0 \uac00\uc815 31\uac1c \u00d7 \uc0c1\ud0dc \ud655\ub960)\uac00 \uc694\uccad\uc5d0 \uc2e4\ub824 \uac00\uc11c \uac31\uc2e0\ub41c \ucc44\ub85c \ub3cc\uc544\uc628\ub2e4.
+//   \uc571(\ub124\uc774\ud2f0\ube0c)\uc740 GPS \u00b7 \uae30\uc9c0\uad6d \u00b7 (\uc120\ud0dd) \uc6c0\uc9c1\uc784 \uc99d\uac70\ub97c '\ubc1b\uc740 \uc21c\uc11c \uadf8\ub300\ub85c' \ubaa8\uc544 \ubcf4\ub0b4\uace0, \ub3cc\ub824\ubc1b\uc740 \ucc44\ud0dd \uc5ed(best.idx)\uacfc \ud655\uc2e0\ub3c4\ub97c \uadf8\ub300\ub85c \ub530\ub978\ub2e4.
+//
+// \uc785\ub825  posFuseRun({ nowMs, stations:[{lat,lng,schedMs|null,xferFromPrev,name?}], state?, seed?:{idx,conf}, ev:[{t:'gps',at,fix:{lat,lng,ts,acc}} | {t:'motion',at,state,conf} |
+//                                                                                          {t:'cell',at,idx,conf} | {t:'arrived',at,idx,strength}] })
+//   state \uc5c6\uc74c(\ucc98\uc74c) \u2192 \ud310\ub2e8\uae30\ub97c \ub9cc\ub4e4\uace0 seed(\uae30\ubcf8 0\uc5ed 0.9, idx>0 \uc774\uba74 0.8)\ub85c \uc2dc\uc791. ev \ub294 \uc2dc\uac01(at) \uc624\ub984\ucc28\uc21c\uc73c\ub85c \ucc98\ub9ac\ud558\uace0, \ub9c8\uc9c0\ub9c9\uc5d0 nowMs \uae4c\uc9c0 \uc2dc\uac04\uc744 \uc9c4\ud589\ud55c\ub2e4.
+// \ucd9c\ub825  { ok, state, best:{idx,conf,kind,nextConf,delayS,delayW}, median:{idx,delayS,delayW}, fed:{gps,motion,cell,arrived,skipped} }
+//   best.idx/median.idx = stations \ubc30\uc5f4 \ubc88\ud638(=\uc6f9\uc758 _pf.st \ubc88\ud638)
+var pfuLib = (function(){
+'use strict';
+
+  var C = {
+    DWELL_S: 30,          // \uc77c\ubc18 \uc815\ucc28 \ud3c9\uade0(\ucd08)
+    DWELL_XFER_S: 150,    // \ud658\uc2b9 \uad6c\uac04 \ud3c9\uade0(\ucd08)
+    DEP_AFTER_ARR_S: 20,  // \ub3c4\ucc29 \ud6c4 \ucd9c\ubc1c\uae4c\uc9c0(\ucd08)
+    SEG_DEFAULT_S: 120,   // \uc2dc\uac01\ud45c\uac00 \uc5c6\uc744 \ub54c \uad6c\uac04 \ud3c9\uade0(\ucd08)
+    OVERDUE_FLOOR_S: 75,  // \uc608\uc815 \ub3c4\ucc29\uc774 \uc9c0\ub09c \ub4a4\uc5d0\ub3c4 '\uace7 \ub3c4\ucc29'\uc73c\ub85c \ubcf4\ub294 \ucd5c\uc18c \ub0a8\uc740 \uc2dc\uac04(\ucd08)
+    EARLY_BRAKE: 0.12,    // \uc608\uc815 \ucd9c\ubc1c 45\ucd08 \uc804\ubcf4\ub2e4 \uc774\ub974\uba74 \ucd9c\ubc1c \ud655\ub960\uc744 \uc774\ub9cc\ud07c\uc73c\ub85c \uc904\uc778\ub2e4
+    BACK_LEAK: 5e-4,      // \ud55c \uac78\uc74c \ub418\ub3cc\uc544\uac08 \uc218 \uc788\ub294 \uc544\uc8fc \uc791\uc740 \ub204\uc218
+    FLOOR: 1e-4,          // \uc5b4\ub514\ub4e0 \uac08 \uc218 \uc788\ub294 \ubc14\ub2e5 \ud655\ub960(\uc99d\uac70\uac00 \ud2c0\ub824\ub3c4 \ubcf5\uad6c\ub418\uac8c)
+    GPS_MAX_ACC: 80,      // \uc774\ubcf4\ub2e4 \ubd80\uc815\ud655\ud55c fix \ub294 \uc4f0\uc9c0 \uc54a\ub294\ub2e4(m) \u2014 2026-10-12: 150 \u2192 80 (\uc9c0\ud558\uc5d0\uc11c \uc0b4\uc544\ub09c \uae30\uc9c0\uad6d\uc2dd \uc88c\ud45c 100m \uc548\ud30e\uc774 \uc704\uce58\ub97c \ud754\ub4e4\uc5c8\ub2e4)
+    GPS_MAX_AGE_S: 10,    // \uc774\ubcf4\ub2e4 \uc624\ub798\ub41c fix \ub294 \uc4f0\uc9c0 \uc54a\ub294\ub2e4
+    GPS_EPS: 0.02,        // GPS \uc774\uc0c1\uac12 \ud5c8\uc6a9
+    MOTION_CONF: 0.82,    // \uc815\ucc28/\uc8fc\ud589 \ud310\uc815\uc774 \ub9de\uc744 \ud655\ub960
+    CELL_EPS: 0.15,       // \uc140 \uc99d\uac70\uac00 \ud2c0\ub838\uc744 \ub54c\uc758 \ucd5c\uc18c \uac00\ub2a5\ub3c4
+    CELL_SIGMA: 0.9,      // \uc140 \uc99d\uac70\uac00 \uac00\ub9ac\ud0a4\ub294 \uc5ed \uc8fc\ubcc0 \ud3ed(\uc5ed \ub2e8\uc704)
+    SIG_DWELL_S: 18,      // \ucd9c\ubc1c \uc2dc\uac01 \ud754\ub4e4\ub9bc(\ucd08) \u2014 \uc2dc\uac01\ud45c\uac00 \ubd84 \ub2e8\uc704\ub77c \uc624\ucc28 \ud3ec\ud568
+    SIG_SEG_S: 25,        // \ub3c4\ucc29 \uc2dc\uac01 \ud754\ub4e4\ub9bc(\ucd08)
+    STEP_S: 5             // \uc2dc\uac04 \uc9c4\ud589 \ud55c \uac78\uc74c(\ucd08)
+  };
+
+  function rad(d){ return d * Math.PI / 180; }
+  function hav(la1, ln1, la2, ln2){
+    var R = 6371000, dLa = rad(la2-la1), dLn = rad(ln2-ln1);
+    var a = Math.sin(dLa/2)*Math.sin(dLa/2) + Math.cos(rad(la1))*Math.cos(rad(la2))*Math.sin(dLn/2)*Math.sin(dLn/2);
+    return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+  }
+  // \uac00\uc6b0\uc2a4 \uc9c0\uc18d\uc2dc\uac04\uc758 '\uc704\ud5d8\ub960'(hazard): \uc608\uc815 \uc2dc\uac01 T \uadfc\ucc98\uc5d0\uc11c \uc9d1\uc911\uc801\uc73c\ub85c \ub5a0\ub09c\ub2e4.
+  //  z = (\uc9c0\uae08 - T)/sigma.  \uc608\uc815 \ud55c\ucc38 \uc804\uc774\uba74 \u22480, \uc608\uc815 \uc2dc\uac01\uc774\uba74 1/sigma \uc815\ub3c4, \uc9c0\ub098\uac00\uba74 \ucee4\uc9c4\ub2e4.
+  function erfc(x){
+    // Abramowitz-Stegun 7.1.26
+    var z = Math.abs(x), t = 1/(1 + 0.5*z);
+    var r = t*Math.exp(-z*z - 1.26551223 + t*(1.00002368 + t*(0.37409196 + t*(0.09678418 + t*(-0.18628806 + t*(0.27886807 + t*(-1.13520398 + t*(1.48851587 + t*(-0.82215223 + t*0.17087277)))))))));
+    return x >= 0 ? r : 2 - r;
+  }
+  function gaussHaz(z, sigma, h){
+    var phi = Math.exp(-0.5*z*z) / 2.5066282746;
+    var tail = 0.5*erfc(z/1.4142135624);
+    var lam = phi / (sigma * Math.max(tail, 1e-6));
+    var v = lam * h;
+    return v > 0.6 ? 0.6 : v;
+  }
+  // \uc810 \u2192 \uc120\ubd84 \uac70\ub9ac(m), \ub4f1\uc7a5\ubc29\ud615 \uadfc\uc0ac(\uc5ed\uac04 \uc218 km \uc774\ub0b4\ub77c \ucda9\ubd84)
+  function distSeg(lat, lng, a, b){
+    var kx = 111320 * Math.cos(rad(lat)), ky = 110540;
+    var px = (lng - a.lng) * kx, py = (lat - a.lat) * ky;
+    var bx = (b.lng - a.lng) * kx, by = (b.lat - a.lat) * ky;
+    var L2 = bx*bx + by*by;
+    var t = L2 > 0 ? Math.max(0, Math.min(1, (px*bx + py*by) / L2)) : 0;
+    var dx = px - t*bx, dy = py - t*by;
+    return { d: Math.sqrt(dx*dx + dy*dy), f: t };
+  }
+
+  // stations: [{ lat, lng, schedMs|null, xferFromPrev:boolean, name }]
+  //
+  // \u2605 \uc9c0\uc5f0\uc744 '\ubaa8\ub974\ub294 \uac12'\uc73c\ub85c \ub454\ub2e4. \uc5f4\ucc28\uac00 \uba87 \ubd84 \ub2a6\ub294\uc9c0 \ubaa8\ub974\ub294 \ucc44\ub85c \uc2dc\uac01\ud45c\ub97c \ubbff\uc73c\uba74
+  //   \uc2dc\uac01\ud45c\ub9cc\ud07c \uc55e\uc11c\uac00 \ubc84\ub9b0\ub2e4. \uadf8\ub798\uc11c \uc9c0\uc5f0 \uac00\uc815(-2\ubd84 ~ +10\ubd84)\uc744 K\uac1c \ub450\uace0 \uac01\uac01 \ub3c5\ub9bd\ub41c
+  //   HMM \uc744 \ub3cc\ub9b0 \ub4a4, \uc99d\uac70\ub97c \uc798 \uc124\uba85\ud55c \uac00\uc815\uc5d0 \uac00\uc911\uce58\ub97c \ubab0\uc544\uc900\ub2e4(\ub2e4\uc911 \ubaa8\ub378 \ud544\ud130).
+  //   \uc815\ucc28/\uc8fc\ud589 \ud328\ud134\uc774 \uc2dc\uac01\ud45c\uc758 \uc5b4\ub290 \uc9c0\uc5f0\uacfc \ub9de\ub294\uc9c0\uac00 \uace7 '\uc9c0\uae08 \uba87 \ubd84 \ub2a6\uc5c8\ub098'\uc758 \ub2f5\uc774\ub2e4.
+  function create(stations, opts){
+    var cfg = {}; for(var k in C) cfg[k] = C[k];
+    if(opts) for(var k2 in opts) cfg[k2] = opts[k2];
+    var N = stations.length, M = Math.max(1, 2*N - 1);
+    var DELAYS = [];
+    for(var dd = -300; dd <= 600; dd += 30) DELAYS.push(dd);   // 2026-10-12: -120 \u2192 -300 (\uc778\ucc9c1\ud638\uc120 \uc2e4\uce21: \uc5f4\ucc28\uac00 \uc2dc\uac01\ud45c\ubcf4\ub2e4 2\ubd84 \ub118\uac8c \ube60\ub974\ub2e4. \ud558\ud55c\uc774 -2\ubd84\uc774\uba74 \ube68\ub9ac \ub2ec\ub9ac\ub294 \uc5f4\ucc28\ub97c '\uc815\ucc28 \uc911'\uc73c\ub85c \uc624\ud574)
+    var K = DELAYS.length, i;
+    var subs = DELAYS.map(function(d){
+      return { delay: d, w: Math.exp(-Math.abs(d) / (d < 0 ? 60 : 200)), P: new Array(M) };
+    });
+    var self = { N: N, M: M, cfg: cfg, lastMs: null };
+    var lastGpsTs = 0, lastCellAt = 0;
+
+    function normW(){
+      var s = 0, j; for(j=0;j<K;j++) s += subs[j].w;
+      if(!(s > 0)){ for(j=0;j<K;j++) subs[j].w = 1/K; return; }
+      for(j=0;j<K;j++){ subs[j].w = Math.max(subs[j].w / s, 2e-3); }
+      s = 0; for(j=0;j<K;j++) s += subs[j].w;
+      for(j=0;j<K;j++) subs[j].w /= s;
+    }
+    function normP(P){
+      var s = 0, j; for(j=0;j<M;j++) s += P[j];
+      if(!(s > 0)){ for(j=0;j<M;j++) P[j] = 1/M; return; }
+      for(j=0;j<M;j++) P[j] /= s;
+    }
+    function seed(idx, conf, nowMs){
+      idx = Math.max(0, Math.min(N-1, idx|0));
+      conf = conf == null ? 0.9 : conf;
+      for(var k3=0;k3<K;k3++){
+        var P = subs[k3].P;
+        for(i=0;i<M;i++) P[i] = (1-conf)/Math.max(1, M-1);
+        P[2*idx] = conf; normP(P);
+      }
+      if(nowMs != null) self.lastMs = nowMs;
+    }
+    function isXferDwell(j){ return j > 0 && !!stations[j].xferFromPrev; }
+
+    function stepOne(sub, nowMs, h){
+      var P = sub.P, nx = new Array(M), a, delayMs = sub.delay*1000;
+      for(a=0;a<M;a++) nx[a] = 0;
+      for(var j=0;j<N;j++){
+        var p = P[2*j];
+        if(p > 0){
+          if(j >= N-1){ nx[2*j] += p; }
+          else{
+            var hd, sj = stations[j].schedMs;
+            if(sj != null){
+              var Td = sj + delayMs + (j === 0 ? 0 : cfg.DEP_AFTER_ARR_S*1000);
+              hd = gaussHaz((nowMs - Td)/1000 / cfg.SIG_DWELL_S, cfg.SIG_DWELL_S, h);
+              if(isXferDwell(j)) hd = gaussHaz((nowMs - (sj + delayMs))/1000 / (cfg.SIG_DWELL_S*2), cfg.SIG_DWELL_S*2, h);
+            }else hd = h / cfg.DWELL_S;
+            if(hd > 0.6) hd = 0.6;
+            nx[2*j] += p*(1-hd); nx[2*j+1] += p*hd;
+          }
+        }
+        if(j < N-1){
+          var q = P[2*j+1];
+          if(q > 0){
+            var sn = stations[j+1].schedMs, hs;
+            if(sn != null){
+              var sg = cfg.SIG_SEG_S;
+              if(stations[j+1].xferFromPrev) sg *= 2;
+              hs = gaussHaz((nowMs - (sn + delayMs))/1000 / sg, sg, h);
+            }else hs = h / cfg.SEG_DEFAULT_S;
+            if(hs > 0.6) hs = 0.6;
+            nx[2*j+1] += q*(1-hs); nx[2*(j+1)] += q*hs;
+          }
+        }
+      }
+      var out = new Array(M);
+      for(var b=0;b<M;b++) out[b] = nx[b]*(1 - cfg.BACK_LEAK) + (b+1<M ? nx[b+1]*cfg.BACK_LEAK : 0) + cfg.FLOOR/M;
+      sub.P = out; normP(sub.P);
+    }
+    function stepAll(nowMs, h){
+      for(var k4=0;k4<K;k4++) stepOne(subs[k4], nowMs, h);
+      // \uc9c0\uc5f0 \uac00\uc815\ub07c\ub9ac \uc544\uc8fc \uc870\uae08 \uc11e\ub294\ub2e4(\uc5f4\ucc28\uac00 \ub354 \ub2a6\uc5b4\uc9c0\ub294 \uc77c \u00b7 \uac00\uc815 \uace0\ucc29 \ubc29\uc9c0)
+      var mix = 0.012 * h / cfg.STEP_S, nw = new Array(K), k5;
+      for(k5=0;k5<K;k5++){
+        var l = k5 > 0 ? subs[k5-1].w : subs[k5].w, r = k5 < K-1 ? subs[k5+1].w : subs[k5].w;
+        nw[k5] = subs[k5].w*(1-2*mix) + (l + r)*mix;
+      }
+      for(k5=0;k5<K;k5++) subs[k5].w = nw[k5];
+      normW();
+    }
+
+    self.seed = seed;
+    self.predict = function(nowMs){
+      if(self.lastMs == null){ self.lastMs = nowMs; return; }
+      var dt = (nowMs - self.lastMs)/1000;
+      if(dt <= 0) return;
+      if(dt > 600) dt = 600;
+      var t = self.lastMs;
+      while(dt > 1e-6){
+        var h = Math.min(cfg.STEP_S, dt);
+        t += h*1000; stepAll(t, h); dt -= h;
+      }
+      self.lastMs = nowMs;
+    };
+
+    // L(j): \uc0c1\ud0dc j \uc758 \uac00\ub2a5\ub3c4. \ubaa8\ub4e0 \uac00\uc815\uc5d0 \uc801\uc6a9\ud558\uace0, \uc99d\uac70\ub97c \uc124\uba85\ud55c \uc815\ub3c4\ub9cc\ud07c \uac00\uc815 \uac00\uc911\uce58\ub97c \uac31\uc2e0\ud55c\ub2e4.
+    function applyEvidence(Lfn, w){
+      for(var k6=0;k6<K;k6++){
+        var P = subs[k6].P, Z = 0;
+        for(var j=0;j<M;j++){
+          var v = Lfn(j); if(!(v > 1e-9)) v = 1e-9;
+          if(w != null && w !== 1) v = Math.pow(v, w);
+          P[j] *= v; Z += P[j];
+        }
+        subs[k6].w *= Math.max(Z, 1e-12);
+        normP(P);
+      }
+      normW();
+    }
+
+    self.motion = function(state, nowMs, conf){
+      if(state !== 'moving' && state !== 'stopped') return;
+      var c = conf == null ? cfg.MOTION_CONF : conf, moving = state === 'moving';
+      applyEvidence(function(j){
+        var isDwell = (j % 2 === 0), idx = j >> 1;
+        var neutral = isDwell ? isXferDwell(idx) : !!stations[idx+1].xferFromPrev;
+        if(neutral) return 0.5;
+        if(isDwell) return moving ? (1 - c) : c;
+        return moving ? c : (1 - c) * 0.8 + 0.02;
+      }, 0.6);
+    };
+
+    self.gps = function(fix, nowMs){
+      if(!fix || fix.lat == null) return false;
+      if(fix.ts && fix.ts === lastGpsTs) return false;
+      var age = fix.ts ? (nowMs - fix.ts)/1000 : 0;
+      if(age > cfg.GPS_MAX_AGE_S) return false;
+      var acc = fix.acc == null ? 60 : fix.acc;
+      if(acc > cfg.GPS_MAX_ACC) return false;
+      lastGpsTs = fix.ts || nowMs;
+      var Lc = new Array(M);
+      for(var j=0;j<M;j++){
+        var idx = j >> 1, d, sg;
+        if(j % 2 === 0){
+          var s = stations[idx];
+          if(s.lat == null){ Lc[j] = 1; continue; }
+          d = hav(fix.lat, fix.lng, s.lat, s.lng); sg = Math.max(acc, 70) + 60;
+        }else{
+          var a = stations[idx], b = stations[idx+1];
+          if(a.lat == null || b.lat == null){ Lc[j] = 1; continue; }
+          d = distSeg(fix.lat, fix.lng, a, b).d; sg = Math.max(acc, 70) + 120;
+        }
+        Lc[j] = cfg.GPS_EPS + Math.exp(-(d*d)/(2*sg*sg));
+      }
+      applyEvidence(function(j){ return Lc[j]; }, acc <= 50 ? 1 : 0.7);
+      return true;
+    };
+
+    self.cell = function(stnIdx, conf, nowMs){
+      if(stnIdx == null || stnIdx < 0 || stnIdx >= N) return;
+      if(nowMs - lastCellAt < 15000) return;
+      lastCellAt = nowMs;
+      applyEvidence(function(j){
+        var pos = (j % 2 === 0) ? (j >> 1) : ((j >> 1) + 0.5), d = pos - stnIdx;
+        return cfg.CELL_EPS + (1 - cfg.CELL_EPS) * Math.exp(-(d*d)/(2*cfg.CELL_SIGMA*cfg.CELL_SIGMA));
+      }, Math.max(0.3, Math.min(1, conf == null ? 0.7 : conf)));
+    };
+
+    self.arrived = function(stnIdx, nowMs, strength){
+      if(stnIdx == null || stnIdx < 0 || stnIdx >= N) return;
+      var s = strength == null ? 0.9 : strength;
+      applyEvidence(function(j){ return ((j >> 1) === stnIdx) ? 1 : (1 - s) + 0.02; }, 1);
+    };
+
+    function combined(){
+      var Pm = new Array(M), j, k7;
+      for(j=0;j<M;j++) Pm[j] = 0;
+      for(k7=0;k7<K;k7++){ var P = subs[k7].P, w = subs[k7].w; for(j=0;j<M;j++) Pm[j] += w*P[j]; }
+      return Pm;
+    }
+    self.best = function(){
+      var Pm = combined(), A = new Array(N), j, bi = 0, bv = -1;
+      for(j=0;j<N;j++){ A[j] = Pm[2*j] + (j < N-1 ? Pm[2*j+1] : 0); if(A[j] > bv){ bv = A[j]; bi = j; } }
+      var pd = Pm[2*bi], ps = bi < N-1 ? Pm[2*bi+1] : 0;
+      var mapK = 0; for(j=1;j<K;j++) if(subs[j].w > subs[mapK].w) mapK = j;
+      return {
+        idx: bi, conf: bv,
+        kind: (pd >= ps || bi >= N-1) ? 'dwell' : 'seg',
+        nextConf: bi < N-1 ? A[bi+1] : 0,
+        delayS: subs[mapK].delay, delayW: subs[mapK].w
+      };
+    };
+    // '\ub9c8\uc9c0\ub9c9\uc73c\ub85c \ub3c4\ucc29\ud55c \uc5ed'\uc758 \uc911\uc559\uac12: \ub3c4\ucc29 \ubd84\ud3ec P(\ub9c8\uc9c0\ub9c9 \ub3c4\ucc29 = j) \uc758 \ub204\uc801\uc774 \ucc98\uc74c 1/2 \ub97c \ub118\ub294 \uc5ed.
+    //   \ucd5c\ube48\uac12(best)\uc740 \ubd84\ud3ec\uac00 \ud37c\uc9c0\uba74 \ud655\ub960\uc774 \ub0ae\uc740 \ud55c \uc5ed\uc73c\ub85c \ud280\uc9c0\ub9cc, \uc911\uc559\uac12\uc740 '\uc774 \uc5ed\uc740 \uc774\ubbf8 \uc9c0\ub0ac\uc744 \ud655\ub960\uc774 \uc808\ubc18 \uc774\uc0c1'\uc778 \uac00\uc7a5 \uc55e \uc5ed\uc774\ub77c
+    //   \uae30\ub300 \uc624\ucc28(\uc5ed \ub2e8\uc704 \uc808\ub300\uac12)\ub97c \uac00\uc7a5 \uc791\uac8c \ud55c\ub2e4. \uadfc\uac70\uac00 \ub04a\uaca8 \ubd84\ud3ec\uac00 \uc2dc\uac01\ud45c\u00b7\uc9c0\uc5f0 \uac00\uc815\ub9cc\uc73c\ub85c \ud37c\uc9c8 \ub54c\uc758 \ub300\ud45c\uac12\uc73c\ub85c \uc4f4\ub2e4.
+    self.median = function(){
+      var Pm = combined(), c = 0, j, bi = N - 1;
+      for(j=0;j<N;j++){
+        c += Pm[2*j] + (j < N-1 ? Pm[2*j+1] : 0);
+        if(c >= 0.5){ bi = j; break; }
+      }
+      var mapK = 0; for(j=1;j<K;j++) if(subs[j].w > subs[mapK].w) mapK = j;
+      return { idx: bi, delayS: subs[mapK].delay, delayW: subs[mapK].w };
+    };
+    self.dist = combined;
+    self.cfgGet = function(){ return cfg; };
+
+    // \u2500\u2500 (\uc5d4\uc9c4 \ucd94\uac00) \uc0c1\ud0dc \ub0b4\ubcf4\ub0b4\uae30/\ubd88\ub7ec\uc624\uae30: \uc5d4\uc9c4\uc740 \uae30\uc5b5\ud558\uc9c0 \uc54a\uc73c\ubbc0\ub85c \uc0c1\ud0dc\uac00 \uc694\uccad\uc5d0 \uc2e4\ub824 \uc624\uac04\ub2e4 \u2500\u2500
+    self.exportState = function(){
+      var r = function(v){ return Number(v.toPrecision(6)); };
+      return { lastMs: self.lastMs, g: lastGpsTs, c: lastCellAt, w: subs.map(function(s){ return r(s.w); }), P: subs.map(function(s){ return s.P.map(r); }) };
+    };
+    self.importState = function(st){
+      if(!st || !Array.isArray(st.w) || !Array.isArray(st.P) || st.w.length !== K || st.P.length !== K) return false;
+      for(var q = 0; q < K; q++){ if(!Array.isArray(st.P[q]) || st.P[q].length !== M) return false; }
+      for(var q2 = 0; q2 < K; q2++){
+        subs[q2].w = Number(st.w[q2]) || 0; var P = subs[q2].P;
+        for(i = 0; i < M; i++) P[i] = Math.max(0, Number(st.P[q2][i]) || 0);
+        normP(P);
+      }
+      normW();
+      self.lastMs = (typeof st.lastMs === 'number') ? st.lastMs : null; lastGpsTs = Number(st.g) || 0; lastCellAt = Number(st.c) || 0;
+      return true;
+    };
+
+    seed(0, 0.9, null);
+    normW();
+    return self;
+  }
+
+
+return { create: create, hav: hav, distSeg: distSeg, defaults: C };
+})();
+
+function pfuStr(v, n) { return typeof v === 'string' ? v.slice(0, n) : ''; }
+
+function posFuseRun(inp) {
+  inp = (inp && typeof inp === 'object') ? inp : {};
+  var nowMs = Number(inp.nowMs);
+  if (!(nowMs > 0)) return { ok: false, error: 'nowMs' };
+  var src = Array.isArray(inp.stations) ? inp.stations : [];
+  if (src.length < 2 || src.length > 300) return { ok: false, error: 'stations' };
+  var st = [];
+  for (var i = 0; i < src.length; i++) {
+    var s = src[i] || {};
+    var lat = (typeof s.lat === 'number' && isFinite(s.lat)) ? s.lat : null, lng = (typeof s.lng === 'number' && isFinite(s.lng)) ? s.lng : null;
+    st.push({ lat: lat, lng: lng, schedMs: (typeof s.schedMs === 'number' && isFinite(s.schedMs)) ? s.schedMs : null, xferFromPrev: !!s.xferFromPrev, name: pfuStr(s.name, 40) });
+  }
+  var f = pfuLib.create(st), fed = { gps: 0, motion: 0, cell: 0, arrived: 0, skipped: 0 };
+  var restored = inp.state ? f.importState(inp.state) : false;
+  if (!restored) {
+    var sd = (inp.seed && typeof inp.seed === 'object') ? inp.seed : {};
+    var idx = Math.max(0, Math.min(st.length - 1, Math.floor(Number(sd.idx) || 0)));
+    var conf = (typeof sd.conf === 'number' && sd.conf > 0 && sd.conf < 1) ? sd.conf : (idx > 0 ? 0.8 : 0.9);
+    var evs0 = Array.isArray(inp.ev) ? inp.ev : [];
+    f.seed(idx, conf, Number(inp.startMs) > 0 ? Number(inp.startMs) : (evs0.length && Number(evs0[0] && evs0[0].at) > 0 ? Number(evs0[0].at) : nowMs));
+  }
+  var ev = (Array.isArray(inp.ev) ? inp.ev : []).slice(0, 2000).filter(function (e) { return e && typeof e === 'object' && Number(e.at) > 0; });
+  ev.sort(function (a, b) { return a.at - b.at; });
+  for (var k = 0; k < ev.length; k++) {
+    var e = ev[k], at = Number(e.at);
+    if (at > nowMs) { fed.skipped++; continue; }
+    f.predict(at);
+    if (e.t === 'gps') { var fx = e.fix || {}; if (f.gps({ lat: fx.lat, lng: fx.lng, ts: fx.ts, acc: fx.acc }, at)) fed.gps++; else fed.skipped++; }
+    else if (e.t === 'motion') { f.motion(pfuStr(e.state, 8), at, typeof e.conf === 'number' ? e.conf : null); fed.motion++; }
+    else if (e.t === 'cell') { f.cell(Number(e.idx), typeof e.conf === 'number' ? e.conf : null, at); fed.cell++; }
+    else if (e.t === 'arrived') { f.arrived(Number(e.idx), at, typeof e.strength === 'number' ? e.strength : null); fed.arrived++; }
+    else fed.skipped++;
+  }
+  f.predict(nowMs);
+  var b = f.best(), m = f.median();
+  return { ok: true, state: f.exportState(), best: b, median: m, fed: fed };
+}
+// \uc704\uce58 \ud310\ub2e8\uae30(PosFusion) \uc5d4\uc9c4 Worker \uc5f0\uacb0\ubd80 \u2014 POST /pos-fuse (engine/posfusion.js \uc758 posFuseRun \uc744 \ubd80\ub978\ub2e4). route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/pos-fuse") return handlePosFuse(request);` \ub97c \ub123\ub294\ub2e4.
+//   \ubcf8\ubb38(JSON \uae00, Content-Type: text/plain \uc73c\ub85c \ubcf4\ub0b4 \uc0ac\uc804 \uc694\uccad\uc744 \ud53c\ud55c\ub2e4): { nowMs, stations, state?, seed?, ev }  (engine/posfusion.js \uba38\ub9ac\ub9d0 \ucc38\uace0)
+//   \uc5d4\uc9c4\uc740 \uc544\ubb34\uac83\ub3c4 \uc800\uc7a5\ud558\uc9c0 \uc54a\ub294\ub2e4. \uac1c\uc778 \uc2dd\ubcc4 \uc815\ubcf4\ub294 \uc624\uac00\uc9c0 \uc54a\ub294\ub2e4.
+async function handlePosFuse(request) {
+  var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Cache-Control": "no-store" };
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: H });
+  if (request.method !== "POST") return new Response(JSON.stringify({ ok: false, error: "post-only" }), { status: 405, headers: H });
+  var raw = await request.text();
+  if (raw.length > 400000) return new Response(JSON.stringify({ ok: false, error: "body-too-long" }), { status: 413, headers: H });
+  var body;
+  try { body = JSON.parse(raw); } catch (e) { return new Response(JSON.stringify({ ok: false, error: "bad-json" }), { status: 400, headers: H }); }
+  if (!body || typeof body !== "object") return new Response(JSON.stringify({ ok: false, error: "bad-body" }), { status: 400, headers: H });
+  var out;
+  try { out = posFuseRun(body); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2) }), { status: 500, headers: H }); }
+  if (!out || !out.ok) return new Response(JSON.stringify(out || { ok: false, error: "fail" }), { status: 400, headers: H });
+  out.ver = ENGINE_VERSION;
+  return new Response(JSON.stringify(out), { headers: H });
+}
+// ===== POSFUSE ENGINE END =====
+
 async function handleFetch(request, env, ctx) {
   try { await holEnsure(env); } catch (e) {}
   const url = new URL(request.url);
@@ -17788,6 +18149,7 @@ async function handleFetch(request, env, ctx) {
   if (url.pathname === "/screen/talk") return handleScreenTalk(request);
   if (url.pathname === "/screen/dlg") return handleScreenDlg(request);
   if (url.pathname === "/screen/pvl") return handleScreenPvl(request);
+  if (url.pathname === "/pos-fuse") return handlePosFuse(request);
   if (url.pathname === "/stops-near") {
     const lat = parseFloat(url.searchParams.get("lat"));
     const lng = parseFloat(url.searchParams.get("lng"));

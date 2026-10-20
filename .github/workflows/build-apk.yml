@@ -67,6 +67,7 @@ jobs:
           - talkcard_engine.test.js
           - dialog_engine.test.js
           - pvlabel_engine.test.js
+          - posfusion_engine.test.js
           - screen_rhead_js.ui.test.js
           - screen_rtrk_js.ui.test.js
           - screen_cong_js.ui.test.js
