@@ -7145,6 +7145,7 @@ function _renderHtlTrack(sections, start, dest, totalMin, transfers) {
     }
     window._rhTrk = { sections: sections, transfers: transfers, now: Date.now(), bt: (typeof _baseTimeMs !== 'undefined' && _baseTimeMs != null) ? _baseTimeMs : null, rb: (window._routeBaseMs && isFinite(window._routeBaseMs)) ? window._routeBaseMs : null, sw: _swl };
   }catch(eRt){ window._rhTrk = null; }
+  window._rhLive = null; window._rhWait = null;      // 새로 그리면 마커·대기 표시도 새로(웹 점도 다음 위치 확인에서 다시 놓인다)
   var track = document.getElementById('transitHtlTrack');
   if(!track) return;
 
@@ -8276,6 +8277,7 @@ window._htlWaitStop = _htlWaitStop;
 function _htlWaitBadge(show, txt){
   try{
     try{ if(show && window._rideEv && window._rideEv().riding) show = false; }catch(eRw){}   // 2026-10-04: 탑승 중에는 '승차 대기' 주황 표시를 켜지 않는다
+    try{ window._rhWait = show ? { d: (_htlWait.dist != null && isFinite(_htlWait.dist)) ? Math.round(_htlWait.dist) : null } : null; }catch(eRh){}   // 서버 구동 타임라인에 줄 원자료(글은 엔진이 짓는다)
     var dot = window._htlGpsDot || document.getElementById('htl-gps-marker-dot');
     if(!dot) return;
     var b = document.getElementById('htlWaitBadge');
@@ -11590,6 +11592,7 @@ function _startTransitGpsTracking(nodes) {
     });
   });
 
+  try{ if(window._rhTrk) window._rhTrk.nd = _transitNodeData; }catch(eNd){}      // 서버 구동 타임라인: 지금 보이는 시각을 읽을 노드 목록이 이 그림의 것임을 표시
   // 스케줄 도착(분) 저장 + 실측 통과시각 초기화 (도착시간 보정용)
   var _prevSched = null;
   _transitNodeData.forEach(function(nd){
@@ -14886,6 +14889,10 @@ function _placeGpsMarkerSmooth(fromNd, toNd, ratio){
     ring.style.left = cx + 'px'; ring.style.top = yTop + 'px';
     ring.style.transform = 'translateX(-50%)'; ring.style.display = 'block';
   }
+  try{      // 서버 구동 타임라인에 줄 원자료: 마커가 가는 곳을 '칸 번호 → 칸 번호 · 구간 비율'로(가드를 거친 뒤의 값; 비율은 0.1 단위로 — 요청이 쏟아지지 않게)
+    var _lo = (_transitNodeData[0] && _transitNodeData[0].isOrigin) ? 1 : 0, _la = _transitNodeData.indexOf(fromNd), _lb = (toNd && toNd !== fromNd) ? _transitNodeData.indexOf(toNd) : _la;
+    if(_la >= 0) window._rhLive = { f: Math.max(0, _la - _lo), t: Math.max(0, (_lb >= 0 ? _lb : _la) - _lo), r: (_lb > _la) ? Math.round(r * 10) / 10 : 0, sn: !!snap };
+  }catch(eRl){}
   try{ if(window._htlNatMk) window._htlNatMk(cx, yTop + 7, snap, snap ? 0 : _transMs); }catch(eHn){}   // 네이티브 타임라인(켜져 있을 때만)에게 마커가 갈 곳을 알린다
   window._gpsMarkerNeedsSnap = false;   // 스냅 완료
   window._markerTransMsOverride = null;  // 1회성 오버라이드 해제
@@ -41475,7 +41482,7 @@ window.refreshShop=refreshShop;
       if(R.cap) return;
       var P = K1 && K1.plug(); if(!P || typeof P.status !== 'function'){ R.cap = 3; return; }
       R.cap = -1;
-      Promise.resolve(P.status({ id: 'rhead' })).then(function(st){ R.cap = (st && st.cap >= 11) ? 11 : ((st && st.cap >= 10) ? 10 : 3); try{ K1.kick(); K2.kick(); K3.kick(); K4.kick(); K5.kick(); }catch(e){} }, function(){ R.cap = 3; });
+      Promise.resolve(P.status({ id: 'rhead' })).then(function(st){ R.cap = (st && st.cap >= 12) ? 12 : ((st && st.cap >= 11) ? 11 : ((st && st.cap >= 10) ? 10 : 3)); try{ K1.kick(); K2.kick(); K3.kick(); K4.kick(); K5.kick(); }catch(e){} }, function(){ R.cap = 3; });
     }
     function cardOpen(){
       try{
@@ -41484,7 +41491,7 @@ window.refreshShop=refreshShop;
       }catch(e){ return false; }
     }
     function gate(){ if(R.cap >= 10) return true; if(!R.cap) probe(); return false; }
-    function gateTrk(){ if(R.cap >= 11) return true; if(!R.cap) probe(); return false; }      // 구간 타임라인 노드 trk 는 규격 11 부터(s71 APK 는 10 이라 웹 그대로)
+    function gateTrk(){ if(R.cap >= 12) return true; if(!R.cap) probe(); return false; }      // 구간 타임라인 노드 trk + 내 위치 마커 mk 는 규격 12 부터(s71 APK 는 10 · s74 APK 는 11 — 마커가 없어 웹 그대로)
     function rectOf(w){
       try{
         var sc = gEl('tabContentWrap'); if(!w) return null;
@@ -41569,12 +41576,18 @@ window.refreshShop=refreshShop;
           tc: Array.isArray(sec.trainChanges) ? sec.trainChanges.slice(0, 8).map(function(c){ return c ? { at: c.at, to: c.to } : null; }).filter(Boolean) : null,
           st: stops.slice(0, 150).map(function(q){ q = q || {}; return noGeo ? [q.stationName || ''] : [q.stationName || '', r5(q.lat != null ? q.lat : q.y), r5(q.lon != null ? q.lon : (q.lng != null ? q.lng : q.x))]; }) };
       });
-      return { secs: secs, xf: Array.isArray(t.transfers) ? t.transfers.slice(0, 12).map(function(x){ return x ? { k: x.kind, xi: x.xferSecIdx, si: x.secIdx } : null; }).filter(Boolean) : null,
+      var lv = null;      // 내 위치 마커·대기·지금 보이는 시각(웹이 정한 것을 원자료로만)
+      try{
+        var nd = (t.nd && t.nd === _transitNodeData && window._metroRouteMode !== true) ? _transitNodeData : null, off = (nd && nd[0] && nd[0].isOrigin) ? 1 : 0, L0 = window._rhLive;
+        lv = { p: L0 ? { f: L0.f, t: L0.t, r: L0.r, sn: L0.sn ? 1 : 0 } : null, w: (L0 && window._rhWait) ? { d: window._rhWait.d } : null,
+               ea: nd ? nd.slice(off, off + 60).map(function(n){ return (n && typeof n.arrTime === 'string') ? n.arrTime : ''; }) : null };
+      }catch(eLv){ lv = null; }
+      return { lv: lv, secs: secs, xf: Array.isArray(t.transfers) ? t.transfers.slice(0, 12).map(function(x){ return x ? { k: x.kind, xi: x.xferSecIdx, si: x.secIdx } : null; }).filter(Boolean) : null,
         bt: t.bt, rb: t.rb, now: t.now, sw: t.sw || [], tz: -new Date().getTimezoneOffset(), th: document.documentElement.getAttribute('data-theme') === 'pastel' ? 'pastel' : 'dark' };
     }
     function reqTrk(){
-      var txt = JSON.stringify({ cap: 11, part: 'k', f: trkFacts(false) });
-      if(txt.length > 38000) txt = JSON.stringify({ cap: 11, part: 'k', f: trkFacts(true) });
+      var txt = JSON.stringify({ cap: 12, part: 'k', f: trkFacts(false) });
+      if(txt.length > 38000) txt = JSON.stringify({ cap: 12, part: 'k', f: trkFacts(true) });
       var fk = K5.hash(txt); return { txt: txt, fk: fk, idle: false, key: '', snap: null, sig: fk };
     }
     function reqLd(){ var txt = JSON.stringify({ cap: 10, part: 'l', f: { lg: ldFacts() } }), fk = K4.hash(txt); return { txt: txt, fk: fk, idle: false, key: '', snap: null, sig: fk }; }

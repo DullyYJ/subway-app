@@ -9,10 +9,11 @@
 //   웹 카드는 폴백(엔진·네이티브가 안 될 때)으로만 남는다.
 //
 // 입력  rheadScreen({ cap, part }, facts)
-//        cap   = 앱이 그릴 수 있는 화면 규격 수준(10 이상이어야 만든다 — 머리줄 노드 rhd 가 10; part 'k' 는 타임라인 노드 trk 가 있는 11 이상)
+//        cap   = 앱이 그릴 수 있는 화면 규격 수준(10 이상이어야 만든다 — 머리줄 노드 rhd 가 10; part 'k' 는 타임라인 노드 trk + 마커 mk 가 있는 12 이상)
 //        part  = 'h'(머리줄 + 요약 줄 + 환승 안내) | 't'(경로 옵션 탭 줄) | 'n'(공식 공지 · 지연 제보 줄) | 'l'(장거리 열차·버스 고르기 + 대기 제외 안내) | 'k'(구간 타임라인: 머리 노드 trk — facts 는 아래 별도)
 //        part 'k' facts = { secs:[{ty,nm,du,di,ws,ar,ss,es,sts,tw,we,tc:[{at,to}],st:[[이름,위도,경도]…]}], xf:[{k,xi,si}]|null(환승 원자료), bt: 사용자가 정한 예상 시각 ms|null, rb: 이번 탐색이 나간 시각 ms|null,
-//                          now: 그릴 때 기기 시계 ms, sw:[막차 뒤 첫차까지 분…], tz: 기기 시간대(동쪽 분), th:'dark'|'pastel' }  → head:[{t:'trk', cells:[…]}] (칸 = 이름·배지·선·점·시각 한 줄; 시각/색/글 전부 엔진이 정한다)
+//                          now: 그릴 때 기기 시계 ms, sw:[막차 뒤 첫차까지 분…], tz: 기기 시간대(동쪽 분), th:'dark'|'pastel' }
+//                          lv(2단계, 선택): { p:{f,t,r,sn}|null(웹이 정한 마커 위치: 칸 번호 f → t, 구간 비율 r, sn=점프), w:{d}|null(승차 대기 중이면 승차역까지 거리 m), ea:[HH:MM…](웹이 지금 보여 주는 칸별 시각) } → 마커 mk 와 시각 덮어쓰기  → head:[{t:'trk', cells:[…]}] (칸 = 이름·배지·선·점·시각 한 줄; 시각/색/글 전부 엔진이 정한다)
 //        facts = { m: 총 소요 분, a: 출발 이름, b: 도착 이름, fav: 즐겨찾기 단추를 보일지(0|1),
 //                  sp: {ride,wait,walk}(분) | null, why: 엔진이 준 이유 글,
 //                  dx: [{s,dc,dd,bc,bd,to,secs}](환승 호차·문 원자료), ex: {s, l:[{fac,door}]} | null(하차 빠른 문),
@@ -467,10 +468,13 @@ function rheadTrkPoints(f) {
   return pts;
 }
 // 점 하나 → 그릴 칸 하나
-function rheadTrkCells(pts, th) {
-  var cells = [], last = pts.length - 1, ti = 0, dots = RTRK_DOT[th] || RTRK_DOT.dark;
+function rheadTrkCells(pts, th, ea) {
+  var cells = [], last = pts.length - 1, ti = 0, dots = RTRK_DOT[th] || RTRK_DOT.dark, tiN = 0;
+  pts.forEach(function (pt, pi) { if (pt.type !== 'walk' || pi === 0 || pi === last) tiN++; });
+  if (ea && ea.length !== tiN) ea = null;                   // 웹이 보여 주는 칸 수와 다르면(다른 경로의 낡은 목록) 시각을 덮지 않는다
   pts.forEach(function (pt, pi) {
     var walk = pt.type === 'walk', c = { w: pt.ld ? RTRK_WLD : RTRK_W };
+    var endpoint = pi === 0 || pi === last, myTi = (!walk || endpoint) ? ti++ : -1;      // 위치 추적이 쓰는 칸 번호(도보 중간 칸은 -1)
     if (walk) { if (pt.xf) { c.n = '환승'; c.nc = 'gold'; c.ns = 11; c.nb = true; c.np = 2; } else { c.n = '도보'; c.nc = 'sub'; c.ns = 9; c.nb = false; c.np = 2; } }
     else { c.n = pt.nm; c.nc = pt.ld ? pt.col : 'text'; c.ns = pt.ld ? 11 : 10; c.nb = true; }
     var g = null, nm = pt.lineLabel || pt.lineNm;
@@ -495,17 +499,38 @@ function rheadTrkCells(pts, th) {
     if (g && g.s.length) { c.g = g.s; c.gk = g.k; c.gc = g.c; c.gs = g.z; c.gx = pt.ld ? 5 : 4; }
     var lColor = pi > 0 ? pts[pi - 1]._r : RTRK_GREY, rColor = walk ? RTRK_GREY : pt.col;
     pt._r = rColor;
-    var endpoint = pi === 0 || pi === last;
     c.lc = pi !== 0 ? lColor : ''; c.rc = pi !== last ? rColor : '';
     if (endpoint) { c.dk = 'e'; c.dc = pi === 0 ? dots.s : dots.e; }
     else if (!walk) { c.dk = 'r'; c.dc = pt.col; }
     else { c.dk = 'm'; c.dc = lColor; c.dc2 = rColor; }
     if (walk) { c.t = pt.lbl; c.tc = 'gold'; c.ts = 9; c.tb = true; }
-    else { c.t = (pt.ld && pt.ldRole === 'arr' && pt.ldDur) ? pt.arrT + ' · 총 ' + pt.ldDur : pt.arrT; c.tc = pt.ld ? 'gold' : 'sub'; c.ts = pt.ld ? 10 : 9; c.tb = true; }
-    c.ti = (!walk || endpoint) ? ti++ : -1;              // 위치 추적이 쓰는 칸 번호(도보 중간 칸은 -1)
+    else {
+      var at = pt.arrT, live = (ea && myTi >= 0) ? ea[myTi] : null;                    // 웹이 지금 보여 주는 시각(엔진이 5초마다 고쳐 준 값)이 HH:MM 이면 그것으로
+      if (typeof live === 'string' && /^\d{1,2}:\d{2}$/.test(live)) at = live;
+      c.t = (pt.ld && pt.ldRole === 'arr' && pt.ldDur) ? at + ' · 총 ' + pt.ldDur : at; c.tc = pt.ld ? 'gold' : 'sub'; c.ts = pt.ld ? 10 : 9; c.tb = true; }
+    c.ti = myTi;
     cells.push(c);
   });
   return cells;
+}
+// 내 위치 마커: 웹이 알려 준 '몇 번째 칸 → 몇 번째 칸, 구간 비율' 과 대기 거리 원자료로 어디에·무슨 색으로·어떤 글로 그릴지 정한다(앱은 그리기만)
+var RTRK_MK = { ms: 3000, d: 14, c: '#0a84ff', bc: '#ffffff', bw: 2, hc: 'rgba(10,132,255,.85)', hw: 6, bms: 1300, ring: 'rgba(10,132,255,.7)', rms: 1400, wc: '#ff9f0a', whc: 'rgba(255,159,10,.28)', whw: 4, wms: 1600, bz: 9 };
+function rheadTrkMark(lv, cells) {
+  var p = lv && lv.p;
+  if (!p || typeof p !== 'object') return null;
+  var f = rheadTrkNum(p.f), t = rheadTrkNum(p.t), r = rheadTrkNum(p.r), fi = -1, tj = -1, i;
+  if (f == null) return null;
+  for (i = 0; i < cells.length; i++) { if (cells[i].ti === f && fi < 0) fi = i; if (t != null && cells[i].ti === t && tj < 0) tj = i; }
+  if (fi < 0) return null;
+  if (tj < 0 || tj === fi) { tj = fi; r = 0; }
+  r = Math.round(Math.max(0, Math.min(1, r == null ? 0 : r)) * 100) / 100;
+  var w = lv.w && typeof lv.w === 'object' ? lv.w : null, d = w ? rheadTrkNum(w.d) : null;
+  var K = RTRK_MK, mk = { f: fi, t: tj, r: r, ms: p.sn ? 0 : K.ms, d: K.d, c: w ? K.wc : K.c, bc: K.bc, bw: K.bw, pu: w ? 'w' : 'b', pms: w ? K.wms : K.bms, hc: w ? K.whc : K.hc, hw: w ? K.whw : K.hw, ring: K.ring, rms: K.rms };
+  if (w) {
+    mk.bt = d == null ? '대기 중' : (d >= 1000 ? '대기 중 · ' + (d / 1000).toFixed(1) + 'km' : '대기 중 · ' + Math.round(d) + 'm');
+    mk.bg = K.wc; mk.btc = '#ffffff'; mk.bz = K.bz;
+  }
+  return mk;
 }
 function rheadTrackScreen(inp) {
   var f = (inp && typeof inp === 'object') ? inp : {};
@@ -521,18 +546,22 @@ function rheadTrackScreen(inp) {
   };
   var pts = rheadTrkPoints(facts);
   if (!pts.length) return { ok: false, error: 'nopoints' };
-  var cells = rheadTrkCells(pts, th), w = 0;
+  var lv = (f.lv && typeof f.lv === 'object') ? f.lv : null;
+  var ea = (lv && Array.isArray(lv.ea)) ? lv.ea.slice(0, 60).map(function (v) { return typeof v === 'string' ? v.slice(0, 8) : ''; }) : null;
+  var cells = rheadTrkCells(pts, th, ea), w = 0;
   cells.forEach(function (c) { w += c.w; });
   var node = { t: 'trk', pad: [14, 6, 14, 6], cells: cells };
+  var mk = rheadTrkMark(lv, cells);
+  if (mk) node.mk = mk;
   var out = { ok: true, v: 1, screen: 'rhead', cover: 'tab', bg: 'card', head: [node], body: [{ t: 'spacer', h: 0 }], info: { part: 'k', n: cells.length, w: w } };
-  out.rev = 'r' + RHEAD_SCREEN_V + 'k:' + rheadHash(JSON.stringify(cells));
+  out.rev = 'r' + RHEAD_SCREEN_V + 'k:' + rheadHash(JSON.stringify(cells) + (mk ? JSON.stringify(mk) : ''));
   return out;
 }
 
 function rheadScreen(inp, factsIn) {
   inp = inp || {};
   if (!(Number(inp.cap) >= 10)) return { ok: false, error: 'cap' };
-  if (inp.part === 'k') return Number(inp.cap) >= 11 ? rheadTrackScreen(factsIn) : { ok: false, error: 'cap' };      // 타임라인 노드 trk 는 규격 11
+  if (inp.part === 'k') return Number(inp.cap) >= 12 ? rheadTrackScreen(factsIn) : { ok: false, error: 'cap' };      // 타임라인 노드 trk(+내 위치 마커 mk)는 규격 12
   var part = (inp.part === 't' || inp.part === 'n' || inp.part === 'l') ? inp.part : 'h';
   var f = rheadFacts(factsIn);
   var body = part === 't' ? rheadTabNodes(f) : (part === 'n' ? rheadNoteNodes(f) : (part === 'l' ? rheadLdNodes(f) : rheadHeadNodes(f)));

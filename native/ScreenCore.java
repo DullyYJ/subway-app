@@ -193,6 +193,7 @@ public final class ScreenCore {
         public int[][] hl = new int[0][];
         public Act act;
         public List<Node> items = new ArrayList<Node>();
+        public Mark mk;                                    // trk: 내 위치 마커(엔진이 정한 것)
     }
     public static final class Screen {
         public String id = "", rev = "", cover = "chips";
@@ -279,6 +280,18 @@ public final class ScreenCore {
         return a;
     }
 
+    private static Mark mark(Map<String, Object> m, int cells) throws ParseError {
+        Mark k = new Mark();
+        k.f = (int) optNum(m, "f", 0f, 0f, 9999f); k.t = (int) optNum(m, "t", (float) k.f, 0f, 9999f);
+        if (k.f >= cells || k.t >= cells) throw new ParseError("mk: 칸 번호가 범위를 벗어났다");
+        k.r = optNum(m, "r", 0f, 0f, 1f); k.ms = optNum(m, "ms", 0f, 0f, 10000f);
+        k.d = optNum(m, "d", 14f, 6f, 30f); k.bw = optNum(m, "bw", 2f, 0f, 6f); k.hw = optNum(m, "hw", 6f, 0f, 16f);
+        k.pms = optNum(m, "pms", 1300f, 300f, 6000f); k.rms = optNum(m, "rms", 1400f, 300f, 6000f); k.bz = optNum(m, "bz", 9f, 6f, 14f);
+        k.pu = optStr(m, "pu", "b", 2); if (!"b".equals(k.pu) && !"w".equals(k.pu)) throw new ParseError("mk: pu 는 b 또는 w");
+        k.c = roleOrCss(m, "c", "#0a84ff"); k.bc = roleOrCss(m, "bc", "#ffffff"); k.hc = roleOrCss(m, "hc", ""); k.ring = roleOrCss(m, "ring", "");
+        k.bt = optStr(m, "bt", "", 24); k.bg = roleOrCss(m, "bg", "#ff9f0a"); k.btc = roleOrCss(m, "btc", "#ffffff");
+        return k;
+    }
     private static final int BAD_COLOR = 0x01234567;
     /** 색 역할 이름이거나 CSS 색(#rgb·#rrggbb·rgb()·rgba())이어야 한다. */
     private static String roleOrCss(Map<String, Object> m, String k, String def) throws ParseError {
@@ -540,6 +553,7 @@ public final class ScreenCore {
                 if (sc.nodes > MAX_NODES) throw new ParseError("노드가 너무 많다");
             }
             if (n.items.isEmpty()) throw new ParseError("trk: 칸이 없다");
+            if (m.get("mk") != null) n.mk = mark(asObj(m.get("mk"), "trk.mk"), n.items.size());
         } else if ("sug".equals(t)) {
             pad(m, n);
             n.badge = optStr(m, "badge", "", 12);
@@ -652,10 +666,22 @@ public final class ScreenCore {
     }
 
     /** 배치 결과. */
+    /** 구간 타임라인 위의 내 위치 마커. 어느 칸에서 어느 칸으로 얼마나 갔는지·색·크기·맥박·대기 배지 글은 전부 엔진이 정했다 — 앱은 칸 가운데 사이를 이어 그리기만 한다. */
+    public static final class Mark {
+        public int f, t;                                   // 칸 번호(trk.cells 안)
+        public float r, ms, d, bw, hw, pms, rms, bz;       // 구간 비율 · 옮겨 가는 ms(0 이면 곧바로) · 점 지름 · 흰 테두리 · 번쩍임 두께 · 번쩍임·퍼지는 고리 주기 ms · 배지 글자
+        public String pu = "b", c = "", bc = "", hc = "", ring = "", bt = "", bg = "", btc = "";      // pu b=깜박임 w=승차 대기 맥박 · 점·테두리·번쩍임·고리·배지 글·배지 바탕·배지 글자 색
+        // 배치 뒤(dp)
+        public float x0, x1, y, btw, bty, bth;             // 시작·끝 칸 가운데 x · 점 가운데 y · 배지 글 폭 · 배지 위 y · 배지 높이
+        public Col ccol, bcol, hcol, rcol, gcol, tcol;     // 점 · 테두리 · 번쩍임 · 고리 · 배지 바탕 · 배지 글자 (읽은 색)
+        public float x(float ratio) { return x0 + (x1 - x0) * ratio; }
+    }
+
     public static final class Layout {
         public Item[] head = new Item[0], body = new Item[0], foot = new Item[0];
         public float headH, headContentW, bodyH, footH, width, chipsTop = -1f, chipsBot = -1f;
         public String bg = "bg";                                          // 화면 바탕 색 역할
+        public Mark mk;                                                   // 구간 타임라인의 내 위치 마커(없으면 null)
         float[] headMaxB = new float[0], bodyMaxB = new float[0];     // 앞에서부터 가장 아래쪽(이진 탐색용)
         float headMaxH, bodyMaxH;
 
@@ -794,6 +820,7 @@ public final class ScreenCore {
                 float x = n.padL;
                 y += n.padT;
                 L.chipsTop = y - n.padT; L.chipsBot = y + TRK_H + n.padB;      // 이 줄이 가로로 밀린다
+                int rowFrom = hi.size(); float rowY = y;
                 for (Node c : n.items) {
                     Item it = new Item(); it.kind = K_TRK; it.x = x; it.y = y; it.w = c.max; it.h = TRK_H;
                     List<String> nl = wrap(c.name, Math.max(10f, c.max - 4f), c.size, c.bold, 2, m);
@@ -810,6 +837,13 @@ public final class ScreenCore {
                     hi.add(it); x += c.max;
                 }
                 contentW = Math.max(contentW, x + n.padR);
+                if (n.mk != null && L.mk == null) {                                                  // 내 위치 마커: 칸 가운데 사이 · 점 높이 · (대기면) 배지 자리
+                    Mark k = n.mk; Item a = hi.get(rowFrom + k.f), b = hi.get(rowFrom + k.t);
+                    k.ccol = col(k.c, null); k.bcol = col(k.bc, null); k.hcol = col(k.hc, null); k.rcol = col(k.ring, null); k.gcol = col(k.bg, null); k.tcol = col(k.btc, null);
+                    k.x0 = a.x + a.w / 2f; k.x1 = b.x + b.w / 2f; k.y = rowY + TRK_NAME_H + TRK_BADGE_H + TRK_DOT_Y;
+                    if (k.bt.length() > 0) { k.btw = m.width(k.bt, k.bz, true); k.bth = k.bz * 1.25f + 2f; k.bty = rowY + TRK_NAME_H + (TRK_BADGE_H - k.bth) / 2f; }
+                    L.mk = k;
+                }
                 y += TRK_H + n.padB;
             } else {
                 int from = hi.size();

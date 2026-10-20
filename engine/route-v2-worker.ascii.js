@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-20s74";
+var ENGINE_VERSION = "route-v2-2026-10-20s75";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -16445,10 +16445,11 @@ async function handleScreenWrite(request) {
 //   \uc6f9 \uce74\ub4dc\ub294 \ud3f4\ubc31(\uc5d4\uc9c4\u00b7\ub124\uc774\ud2f0\ube0c\uac00 \uc548 \ub420 \ub54c)\uc73c\ub85c\ub9cc \ub0a8\ub294\ub2e4.
 //
 // \uc785\ub825  rheadScreen({ cap, part }, facts)
-//        cap   = \uc571\uc774 \uadf8\ub9b4 \uc218 \uc788\ub294 \ud654\uba74 \uaddc\uaca9 \uc218\uc900(10 \uc774\uc0c1\uc774\uc5b4\uc57c \ub9cc\ub4e0\ub2e4 \u2014 \uba38\ub9ac\uc904 \ub178\ub4dc rhd \uac00 10; part 'k' \ub294 \ud0c0\uc784\ub77c\uc778 \ub178\ub4dc trk \uac00 \uc788\ub294 11 \uc774\uc0c1)
+//        cap   = \uc571\uc774 \uadf8\ub9b4 \uc218 \uc788\ub294 \ud654\uba74 \uaddc\uaca9 \uc218\uc900(10 \uc774\uc0c1\uc774\uc5b4\uc57c \ub9cc\ub4e0\ub2e4 \u2014 \uba38\ub9ac\uc904 \ub178\ub4dc rhd \uac00 10; part 'k' \ub294 \ud0c0\uc784\ub77c\uc778 \ub178\ub4dc trk + \ub9c8\ucee4 mk \uac00 \uc788\ub294 12 \uc774\uc0c1)
 //        part  = 'h'(\uba38\ub9ac\uc904 + \uc694\uc57d \uc904 + \ud658\uc2b9 \uc548\ub0b4) | 't'(\uacbd\ub85c \uc635\uc158 \ud0ed \uc904) | 'n'(\uacf5\uc2dd \uacf5\uc9c0 \u00b7 \uc9c0\uc5f0 \uc81c\ubcf4 \uc904) | 'l'(\uc7a5\uac70\ub9ac \uc5f4\ucc28\u00b7\ubc84\uc2a4 \uace0\ub974\uae30 + \ub300\uae30 \uc81c\uc678 \uc548\ub0b4) | 'k'(\uad6c\uac04 \ud0c0\uc784\ub77c\uc778: \uba38\ub9ac \ub178\ub4dc trk \u2014 facts \ub294 \uc544\ub798 \ubcc4\ub3c4)
 //        part 'k' facts = { secs:[{ty,nm,du,di,ws,ar,ss,es,sts,tw,we,tc:[{at,to}],st:[[\uc774\ub984,\uc704\ub3c4,\uacbd\ub3c4]\u2026]}], xf:[{k,xi,si}]|null(\ud658\uc2b9 \uc6d0\uc790\ub8cc), bt: \uc0ac\uc6a9\uc790\uac00 \uc815\ud55c \uc608\uc0c1 \uc2dc\uac01 ms|null, rb: \uc774\ubc88 \ud0d0\uc0c9\uc774 \ub098\uac04 \uc2dc\uac01 ms|null,
-//                          now: \uadf8\ub9b4 \ub54c \uae30\uae30 \uc2dc\uacc4 ms, sw:[\ub9c9\ucc28 \ub4a4 \uccab\ucc28\uae4c\uc9c0 \ubd84\u2026], tz: \uae30\uae30 \uc2dc\uac04\ub300(\ub3d9\ucabd \ubd84), th:'dark'|'pastel' }  \u2192 head:[{t:'trk', cells:[\u2026]}] (\uce78 = \uc774\ub984\u00b7\ubc30\uc9c0\u00b7\uc120\u00b7\uc810\u00b7\uc2dc\uac01 \ud55c \uc904; \uc2dc\uac01/\uc0c9/\uae00 \uc804\ubd80 \uc5d4\uc9c4\uc774 \uc815\ud55c\ub2e4)
+//                          now: \uadf8\ub9b4 \ub54c \uae30\uae30 \uc2dc\uacc4 ms, sw:[\ub9c9\ucc28 \ub4a4 \uccab\ucc28\uae4c\uc9c0 \ubd84\u2026], tz: \uae30\uae30 \uc2dc\uac04\ub300(\ub3d9\ucabd \ubd84), th:'dark'|'pastel' }
+//                          lv(2\ub2e8\uacc4, \uc120\ud0dd): { p:{f,t,r,sn}|null(\uc6f9\uc774 \uc815\ud55c \ub9c8\ucee4 \uc704\uce58: \uce78 \ubc88\ud638 f \u2192 t, \uad6c\uac04 \ube44\uc728 r, sn=\uc810\ud504), w:{d}|null(\uc2b9\ucc28 \ub300\uae30 \uc911\uc774\uba74 \uc2b9\ucc28\uc5ed\uae4c\uc9c0 \uac70\ub9ac m), ea:[HH:MM\u2026](\uc6f9\uc774 \uc9c0\uae08 \ubcf4\uc5ec \uc8fc\ub294 \uce78\ubcc4 \uc2dc\uac01) } \u2192 \ub9c8\ucee4 mk \uc640 \uc2dc\uac01 \ub36e\uc5b4\uc4f0\uae30  \u2192 head:[{t:'trk', cells:[\u2026]}] (\uce78 = \uc774\ub984\u00b7\ubc30\uc9c0\u00b7\uc120\u00b7\uc810\u00b7\uc2dc\uac01 \ud55c \uc904; \uc2dc\uac01/\uc0c9/\uae00 \uc804\ubd80 \uc5d4\uc9c4\uc774 \uc815\ud55c\ub2e4)
 //        facts = { m: \ucd1d \uc18c\uc694 \ubd84, a: \ucd9c\ubc1c \uc774\ub984, b: \ub3c4\ucc29 \uc774\ub984, fav: \uc990\uaca8\ucc3e\uae30 \ub2e8\ucd94\ub97c \ubcf4\uc77c\uc9c0(0|1),
 //                  sp: {ride,wait,walk}(\ubd84) | null, why: \uc5d4\uc9c4\uc774 \uc900 \uc774\uc720 \uae00,
 //                  dx: [{s,dc,dd,bc,bd,to,secs}](\ud658\uc2b9 \ud638\ucc28\u00b7\ubb38 \uc6d0\uc790\ub8cc), ex: {s, l:[{fac,door}]} | null(\ud558\ucc28 \ube60\ub978 \ubb38),
@@ -16903,10 +16904,13 @@ function rheadTrkPoints(f) {
   return pts;
 }
 // \uc810 \ud558\ub098 \u2192 \uadf8\ub9b4 \uce78 \ud558\ub098
-function rheadTrkCells(pts, th) {
-  var cells = [], last = pts.length - 1, ti = 0, dots = RTRK_DOT[th] || RTRK_DOT.dark;
+function rheadTrkCells(pts, th, ea) {
+  var cells = [], last = pts.length - 1, ti = 0, dots = RTRK_DOT[th] || RTRK_DOT.dark, tiN = 0;
+  pts.forEach(function (pt, pi) { if (pt.type !== 'walk' || pi === 0 || pi === last) tiN++; });
+  if (ea && ea.length !== tiN) ea = null;                   // \uc6f9\uc774 \ubcf4\uc5ec \uc8fc\ub294 \uce78 \uc218\uc640 \ub2e4\ub974\uba74(\ub2e4\ub978 \uacbd\ub85c\uc758 \ub0a1\uc740 \ubaa9\ub85d) \uc2dc\uac01\uc744 \ub36e\uc9c0 \uc54a\ub294\ub2e4
   pts.forEach(function (pt, pi) {
     var walk = pt.type === 'walk', c = { w: pt.ld ? RTRK_WLD : RTRK_W };
+    var endpoint = pi === 0 || pi === last, myTi = (!walk || endpoint) ? ti++ : -1;      // \uc704\uce58 \ucd94\uc801\uc774 \uc4f0\ub294 \uce78 \ubc88\ud638(\ub3c4\ubcf4 \uc911\uac04 \uce78\uc740 -1)
     if (walk) { if (pt.xf) { c.n = '\ud658\uc2b9'; c.nc = 'gold'; c.ns = 11; c.nb = true; c.np = 2; } else { c.n = '\ub3c4\ubcf4'; c.nc = 'sub'; c.ns = 9; c.nb = false; c.np = 2; } }
     else { c.n = pt.nm; c.nc = pt.ld ? pt.col : 'text'; c.ns = pt.ld ? 11 : 10; c.nb = true; }
     var g = null, nm = pt.lineLabel || pt.lineNm;
@@ -16931,17 +16935,38 @@ function rheadTrkCells(pts, th) {
     if (g && g.s.length) { c.g = g.s; c.gk = g.k; c.gc = g.c; c.gs = g.z; c.gx = pt.ld ? 5 : 4; }
     var lColor = pi > 0 ? pts[pi - 1]._r : RTRK_GREY, rColor = walk ? RTRK_GREY : pt.col;
     pt._r = rColor;
-    var endpoint = pi === 0 || pi === last;
     c.lc = pi !== 0 ? lColor : ''; c.rc = pi !== last ? rColor : '';
     if (endpoint) { c.dk = 'e'; c.dc = pi === 0 ? dots.s : dots.e; }
     else if (!walk) { c.dk = 'r'; c.dc = pt.col; }
     else { c.dk = 'm'; c.dc = lColor; c.dc2 = rColor; }
     if (walk) { c.t = pt.lbl; c.tc = 'gold'; c.ts = 9; c.tb = true; }
-    else { c.t = (pt.ld && pt.ldRole === 'arr' && pt.ldDur) ? pt.arrT + ' \u00b7 \ucd1d ' + pt.ldDur : pt.arrT; c.tc = pt.ld ? 'gold' : 'sub'; c.ts = pt.ld ? 10 : 9; c.tb = true; }
-    c.ti = (!walk || endpoint) ? ti++ : -1;              // \uc704\uce58 \ucd94\uc801\uc774 \uc4f0\ub294 \uce78 \ubc88\ud638(\ub3c4\ubcf4 \uc911\uac04 \uce78\uc740 -1)
+    else {
+      var at = pt.arrT, live = (ea && myTi >= 0) ? ea[myTi] : null;                    // \uc6f9\uc774 \uc9c0\uae08 \ubcf4\uc5ec \uc8fc\ub294 \uc2dc\uac01(\uc5d4\uc9c4\uc774 5\ucd08\ub9c8\ub2e4 \uace0\uccd0 \uc900 \uac12)\uc774 HH:MM \uc774\uba74 \uadf8\uac83\uc73c\ub85c
+      if (typeof live === 'string' && /^\d{1,2}:\d{2}$/.test(live)) at = live;
+      c.t = (pt.ld && pt.ldRole === 'arr' && pt.ldDur) ? at + ' \u00b7 \ucd1d ' + pt.ldDur : at; c.tc = pt.ld ? 'gold' : 'sub'; c.ts = pt.ld ? 10 : 9; c.tb = true; }
+    c.ti = myTi;
     cells.push(c);
   });
   return cells;
+}
+// \ub0b4 \uc704\uce58 \ub9c8\ucee4: \uc6f9\uc774 \uc54c\ub824 \uc900 '\uba87 \ubc88\uc9f8 \uce78 \u2192 \uba87 \ubc88\uc9f8 \uce78, \uad6c\uac04 \ube44\uc728' \uacfc \ub300\uae30 \uac70\ub9ac \uc6d0\uc790\ub8cc\ub85c \uc5b4\ub514\uc5d0\u00b7\ubb34\uc2a8 \uc0c9\uc73c\ub85c\u00b7\uc5b4\ub5a4 \uae00\ub85c \uadf8\ub9b4\uc9c0 \uc815\ud55c\ub2e4(\uc571\uc740 \uadf8\ub9ac\uae30\ub9cc)
+var RTRK_MK = { ms: 3000, d: 14, c: '#0a84ff', bc: '#ffffff', bw: 2, hc: 'rgba(10,132,255,.85)', hw: 6, bms: 1300, ring: 'rgba(10,132,255,.7)', rms: 1400, wc: '#ff9f0a', whc: 'rgba(255,159,10,.28)', whw: 4, wms: 1600, bz: 9 };
+function rheadTrkMark(lv, cells) {
+  var p = lv && lv.p;
+  if (!p || typeof p !== 'object') return null;
+  var f = rheadTrkNum(p.f), t = rheadTrkNum(p.t), r = rheadTrkNum(p.r), fi = -1, tj = -1, i;
+  if (f == null) return null;
+  for (i = 0; i < cells.length; i++) { if (cells[i].ti === f && fi < 0) fi = i; if (t != null && cells[i].ti === t && tj < 0) tj = i; }
+  if (fi < 0) return null;
+  if (tj < 0 || tj === fi) { tj = fi; r = 0; }
+  r = Math.round(Math.max(0, Math.min(1, r == null ? 0 : r)) * 100) / 100;
+  var w = lv.w && typeof lv.w === 'object' ? lv.w : null, d = w ? rheadTrkNum(w.d) : null;
+  var K = RTRK_MK, mk = { f: fi, t: tj, r: r, ms: p.sn ? 0 : K.ms, d: K.d, c: w ? K.wc : K.c, bc: K.bc, bw: K.bw, pu: w ? 'w' : 'b', pms: w ? K.wms : K.bms, hc: w ? K.whc : K.hc, hw: w ? K.whw : K.hw, ring: K.ring, rms: K.rms };
+  if (w) {
+    mk.bt = d == null ? '\ub300\uae30 \uc911' : (d >= 1000 ? '\ub300\uae30 \uc911 \u00b7 ' + (d / 1000).toFixed(1) + 'km' : '\ub300\uae30 \uc911 \u00b7 ' + Math.round(d) + 'm');
+    mk.bg = K.wc; mk.btc = '#ffffff'; mk.bz = K.bz;
+  }
+  return mk;
 }
 function rheadTrackScreen(inp) {
   var f = (inp && typeof inp === 'object') ? inp : {};
@@ -16957,18 +16982,22 @@ function rheadTrackScreen(inp) {
   };
   var pts = rheadTrkPoints(facts);
   if (!pts.length) return { ok: false, error: 'nopoints' };
-  var cells = rheadTrkCells(pts, th), w = 0;
+  var lv = (f.lv && typeof f.lv === 'object') ? f.lv : null;
+  var ea = (lv && Array.isArray(lv.ea)) ? lv.ea.slice(0, 60).map(function (v) { return typeof v === 'string' ? v.slice(0, 8) : ''; }) : null;
+  var cells = rheadTrkCells(pts, th, ea), w = 0;
   cells.forEach(function (c) { w += c.w; });
   var node = { t: 'trk', pad: [14, 6, 14, 6], cells: cells };
+  var mk = rheadTrkMark(lv, cells);
+  if (mk) node.mk = mk;
   var out = { ok: true, v: 1, screen: 'rhead', cover: 'tab', bg: 'card', head: [node], body: [{ t: 'spacer', h: 0 }], info: { part: 'k', n: cells.length, w: w } };
-  out.rev = 'r' + RHEAD_SCREEN_V + 'k:' + rheadHash(JSON.stringify(cells));
+  out.rev = 'r' + RHEAD_SCREEN_V + 'k:' + rheadHash(JSON.stringify(cells) + (mk ? JSON.stringify(mk) : ''));
   return out;
 }
 
 function rheadScreen(inp, factsIn) {
   inp = inp || {};
   if (!(Number(inp.cap) >= 10)) return { ok: false, error: 'cap' };
-  if (inp.part === 'k') return Number(inp.cap) >= 11 ? rheadTrackScreen(factsIn) : { ok: false, error: 'cap' };      // \ud0c0\uc784\ub77c\uc778 \ub178\ub4dc trk \ub294 \uaddc\uaca9 11
+  if (inp.part === 'k') return Number(inp.cap) >= 12 ? rheadTrackScreen(factsIn) : { ok: false, error: 'cap' };      // \ud0c0\uc784\ub77c\uc778 \ub178\ub4dc trk(+\ub0b4 \uc704\uce58 \ub9c8\ucee4 mk)\ub294 \uaddc\uaca9 12
   var part = (inp.part === 't' || inp.part === 'n' || inp.part === 'l') ? inp.part : 'h';
   var f = rheadFacts(factsIn);
   var body = part === 't' ? rheadTabNodes(f) : (part === 'n' ? rheadNoteNodes(f) : (part === 'l' ? rheadLdNodes(f) : rheadHeadNodes(f)));

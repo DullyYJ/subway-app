@@ -620,6 +620,18 @@ public class ScreenJvmTest {
         ok(bad(trkJson.replace("\"gk\":\"t\"", "\"gk\":\"z\"")) && bad(trkJson.replace("\"dk\":\"e\"", "\"dk\":\"q\"")) && bad(trkJson.replace("\"w\":64,\"n\":\"도보\"", "\"w\":9999,\"n\":\"도보\"")), "타임라인: 모르는 배지·점 종류·칸 폭은 거절");
         ok(bad("{\"ok\":true,\"v\":1,\"screen\":\"t\",\"head\":[{\"t\":\"trk\",\"cells\":[]}],\"body\":[]}"), "타임라인: 칸이 없으면 거절");
         ok(bad(trkJson.replace("\"nc\":\"sub\"", "\"nc\":\"nope\"")), "타임라인: 읽을 수 없는 색은 거절");
+        // 내 위치 마커(mk): 칸 가운데 사이 · 대기 배지 · 검증
+        String mkBase = "\"mk\":{\"f\":0,\"t\":1,\"r\":0.5,\"ms\":3000,\"d\":14,\"c\":\"#0a84ff\",\"bc\":\"#ffffff\",\"bw\":2,\"pu\":\"b\",\"pms\":1300,\"hc\":\"rgba(10,132,255,.85)\",\"hw\":6,\"ring\":\"rgba(10,132,255,.7)\",\"rms\":1400}";
+        String mkJson = trkJson.replace("\"cells\":" + trkCells, "\"cells\":" + trkCells + "," + mkBase);
+        ScreenCore.Layout MKL = ScreenCore.layout(ScreenCore.load(mkJson), 200f, M);
+        ok(MKL.mk != null && near(MKL.mk.x0, 14f + 32f) && near(MKL.mk.x1, 14f + 64f + 32f) && near(MKL.mk.x(0.5f), 14f + 64f), "마커: 시작·끝 칸 가운데와 그 사이 비율 위치");
+        ok(near(MKL.mk.y, 6f + ScreenCore.TRK_NAME_H + ScreenCore.TRK_BADGE_H + ScreenCore.TRK_DOT_Y) && MKL.mk.btw == 0f && MKL.mk.ccol != null && MKL.mk.hcol != null && MKL.mk.rcol != null, "마커: 점 높이는 칸의 점 자리 · 배지 없음 · 색을 읽는다");
+        ok(near(MKL.mk.ms, 3000f) && near(MKL.mk.pms, 1300f) && "b".equals(MKL.mk.pu), "마커: 이동 시간·맥박 주기·종류는 엔진 값 그대로");
+        ok(ScreenCore.layout(ScreenCore.load(trkJson), 200f, M).mk == null, "마커: 없으면 없음");
+        String mkWait = mkJson.replace("\"pu\":\"b\"", "\"pu\":\"w\",\"bt\":\"대기 중 · 350m\",\"bg\":\"#ff9f0a\",\"btc\":\"#ffffff\",\"bz\":9");
+        ScreenCore.Layout MWL = ScreenCore.layout(ScreenCore.load(mkWait), 200f, M);
+        ok(MWL.mk.btw > 0f && near(MWL.mk.bth, 9f * 1.25f + 2f) && MWL.mk.bty >= 6f + ScreenCore.TRK_NAME_H && MWL.mk.bty + MWL.mk.bth <= 6f + ScreenCore.TRK_NAME_H + ScreenCore.TRK_BADGE_H && "w".equals(MWL.mk.pu) && MWL.mk.gcol != null, "마커: 대기 배지는 노선 줄 안에 가운데 놓인다");
+        ok(bad(mkJson.replace("\"f\":0,\"t\":1", "\"f\":0,\"t\":7")) && bad(mkJson.replace("\"pu\":\"b\"", "\"pu\":\"x\"")) && bad(mkJson.replace("\"c\":\"#0a84ff\"", "\"c\":\"nope\"")) && bad(mkJson.replace("\"r\":0.5", "\"r\":1.5")) && bad(mkJson.replace("\"d\":14", "\"d\":99")), "마커: 칸 번호·종류·색·비율·크기가 틀리면 거절");
 
         // ── 화면 바탕 색(bg) ──
         String bgBase = "{\"ok\":true,\"v\":1,\"screen\":\"x\",\"head\":[],\"body\":[{\"t\":\"spacer\",\"h\":4}]";

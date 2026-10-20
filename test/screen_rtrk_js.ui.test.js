@@ -39,7 +39,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
         const rec = (m) => (a) => { window.__sn.push({ m, a: a === undefined ? null : JSON.parse(JSON.stringify(a)) }); return Promise.resolve(); };
         window.Capacitor = { isNativePlatform: () => true, getPlatform: () => 'android', Plugins: { ScreenNative: {
           show: put('show'), update: put('update'), setRect: rec('setRect'), hide: rec('hide'), destroy: rec('destroy'), toast: rec('toast'), setField: rec('setField'),
-          status: () => Promise.resolve(o.oldApk ? { visible: true, items: 4, age: 20, scroll: 0, cap: 9 } : { visible: true, items: 11, age: 20, scroll: 0, cap: o.cap10 ? 10 : 11 }),
+          status: () => Promise.resolve(o.oldApk ? { visible: true, items: 4, age: 20, scroll: 0, cap: 9 } : { visible: true, items: 11, age: 20, scroll: 0, cap: o.cap10 ? 10 : (o.cap11 ? 11 : 12) }),
           addListener: (n, f) => { (window.__snL[n] = window.__snL[n] || []).push(f); return Promise.resolve({ remove() {} }); }
         } } };
       }
@@ -120,7 +120,7 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
       }, [FX[fxName], true]);
       assert.ok(await waitFor(x, async () => x.reqs.filter(q => q.part === 'k').length > nReq, 9000), 'part k 요청이 없다');
       const req = x.reqs.filter(q => q.part === 'k').pop();
-      assert.strictEqual(req.cap, 11);
+      assert.strictEqual(req.cap, 12);
       const eng = ER.rheadTrackScreen(req.f); assert.ok(eng.ok, JSON.stringify(eng));
       const cells = eng.head[0].cells, web = await webCells(x);
       assert.strictEqual(cells.length, web.length, '칸 수 ' + cells.length + ' vs ' + web.length + ' ' + JSON.stringify(web.map(w => w.n)));
@@ -156,6 +156,12 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     const x = await fresh({ plugin: true, on: true, cap10: true }); await cardOpenFx(x);
     await x.page.evaluate((fx) => { window._routeBaseMs = Date.now() - 1000; _renderHtlTrack(fx.secs, { name: 'a' }, { name: 'b' }, 0, fx.xf); document.getElementById('transitHtlWrap').scrollIntoView({ block: 'center' }); }, FX.mixed);
     assert.ok(await waitFor(x, async () => x.reqs.filter(q => q.part === 'h').length >= 1, 9000), '머리줄은 요청해야 한다'); await x.page.waitForTimeout(1200);
+    assert.strictEqual(x.reqs.filter(q => q.part === 'k').length, 0); assert.strictEqual(await own(x, 'transitHtlWrap'), false); assert.deepStrictEqual(x.errs, []); await x.ctx.close();
+  });
+  await t('s74 APK(규격 11 — trk 는 알지만 마커 mk 는 모름)면 타임라인 요청이 없고 웹 그대로(마커가 사라지지 않게)', async () => {
+    const x = await fresh({ plugin: true, on: true, cap11: true }); await cardOpenFx(x);
+    await x.page.evaluate((fx) => { window._routeBaseMs = Date.now() - 1000; _renderHtlTrack(fx.secs, { name: 'a' }, { name: 'b' }, 0, fx.xf); document.getElementById('transitHtlWrap').scrollIntoView({ block: 'center' }); }, FX.mixed);
+    assert.ok(await waitFor(x, async () => x.reqs.filter(q => q.part === 'h').length >= 1, 9000)); await x.page.waitForTimeout(1200);
     assert.strictEqual(x.reqs.filter(q => q.part === 'k').length, 0); assert.strictEqual(await own(x, 'transitHtlWrap'), false); assert.deepStrictEqual(x.errs, []); await x.ctx.close();
   });
   await t('옛 APK(cap 10 미만)면 켜져 있어도 요청 없음', async () => {
@@ -206,14 +212,87 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     assert.ok(await waitFor(x, async () => x.reqs.filter(q => q.part === 'k').length >= 1, 8000)); await x.page.waitForTimeout(1200);
     assert.strictEqual(await own(x, 'transitHtlWrap'), false); await x.ctx.close();
   });
-  await t('요청은 원자료뿐: 노선 색·시각 글·배지 글이 없다 (cap 11 · part k · 시각은 ms)', async () => {
+  await t('요청은 원자료뿐: 노선 색·시각 글·배지 글이 없다 (cap 12 · part k · 시각은 ms · 웹이 지금 보여 주는 시각만 lv.ea 로)', async () => {
     const x = await fresh({ plugin: true, on: true }); await cardOpenFx(x);
     await x.page.evaluate((fx) => { window._routeBaseMs = Date.now() - 1000; _renderHtlTrack(fx.secs, { name: 'a' }, { name: 'b' }, 0, fx.xf); document.getElementById('transitHtlWrap').scrollIntoView({ block: 'center' }); }, FX.mixed);
     assert.ok(await waitFor(x, async () => x.reqs.some(q => q.part === 'k' && q.f.secs.length === 5), 8000));
-    const q = x.reqs.filter(q => q.part === 'k' && q.f.secs.length === 5).pop(), txt = JSON.stringify(q);
-    assert.strictEqual(q.cap, 11); assert.ok(Array.isArray(q.f.secs) && q.f.secs.length === 5 && typeof q.f.now === 'number' && q.f.tz === 540 && (q.f.th === 'dark' || q.f.th === 'pastel'), txt.slice(-260));
+    const q = x.reqs.filter(q => q.part === 'k' && q.f.secs.length === 5).pop(), lvv = q.f.lv, txt = JSON.stringify(Object.assign({}, q, { f: Object.assign({}, q.f, { lv: undefined }) }));
+    assert.ok(lvv && Array.isArray(lvv.ea) && lvv.ea.every(v => v === '' || /^\d\d:\d\d$/.test(v)) && lvv.p === null && lvv.w === null, 'lv: ' + JSON.stringify(lvv));
+    assert.strictEqual(q.cap, 12); assert.ok(Array.isArray(q.f.secs) && q.f.secs.length === 5 && typeof q.f.now === 'number' && q.f.tz === 540 && (q.f.th === 'dark' || q.f.th === 'pastel'), txt.slice(-260));
     assert.ok(!/#[0-9a-fA-F]{6}/.test(txt), '색이 요청에 들어 있다'); assert.ok(!/\d\d:\d\d/.test(txt), '시각 글이 요청에 들어 있다');
     assert.ok(txt.length < 38000); await x.ctx.close();
+  });
+
+  console.log('[④ 내 위치 마커 · 대기 배지 · 지금 보이는 시각]');
+  // 웹이 정한 위치를 원자료로 보내면 엔진이 그 칸에 마커를 놓는다(칸 이름이 웹 노드 이름과 같아야 한다)
+  const liveOpen = async () => {
+    const x = await fresh({ plugin: true, on: true }); await cardOpenFx(x);
+    await x.page.evaluate((fx) => { window._routeBaseMs = Date.now() - 1000; _renderHtlTrack(fx.secs, { name: '출발' }, { name: '도착' }, 0, fx.xf); document.getElementById('transitHtlWrap').scrollIntoView({ block: 'center' }); }, FX.mixed);
+    assert.ok(await waitFor(x, async () => (await puts(x, 'rtrk')).length >= 1, 9000), 'rtrk show 가 없다');
+    await x.page.waitForTimeout(400);
+    return x;
+  };
+  const kreqs = (x) => x.reqs.filter(q => q.part === 'k' && q.f.secs.length === 5);
+  const place = (x, a, b, r) => x.page.evaluate(([a, b, r]) => {
+    window._metroRouteMode = true;      // 시각 정합성 교정을 건너뛴다(시험은 위치만 본다)
+    const nd = _transitNodeData; window._markerMaxProg = null;
+    _placeGpsMarkerSmooth(nd[a], nd[b], r);
+    return { off: nd[0] && nd[0].isOrigin ? 1 : 0, names: [nd[a].el.children[0].textContent.trim(), nd[b].el.children[0].textContent.trim()] };
+  }, [a, b, r]);
+  await t('마커: 웹이 정한 칸 번호·비율을 보내면 엔진이 그 칸 사이에 마커를 놓는다(0.1 단위)', async () => {
+    const x = await liveOpen(), n0 = kreqs(x).length, pu0 = (await puts(x, 'rtrk')).length;
+    const w = await place(x, 3, 4, 0.47);
+    assert.ok(await waitFor(x, async () => kreqs(x).length > n0, 8000), '마커 요청이 없다');
+    const q = kreqs(x).pop(); assert.ok(q.f.lv.p, JSON.stringify(q.f.lv)); assert.strictEqual(q.f.lv.p.f, 3 - w.off); assert.strictEqual(q.f.lv.p.t, 4 - w.off); assert.strictEqual(q.f.lv.p.r, 0.5);
+    assert.ok(await waitFor(x, async () => (await puts(x, 'rtrk')).length > pu0, 6000), '마커가 든 새 화면이 안 내려갔다');
+    const j = JSON.parse(await lastJ(x, 'rtrk')), mk = j.head[0].mk; assert.ok(mk, '마커 없음');
+    assert.strictEqual(j.head[0].cells[mk.f].n, w.names[0].replace(/\s+/g, ' ')); assert.strictEqual(j.head[0].cells[mk.t].n, w.names[1].replace(/\s+/g, ' '));
+    assert.strictEqual(mk.r, 0.5); assert.strictEqual(mk.pu, 'b'); assert.ok(!mk.bt, '배지가 있다');
+    assert.deepStrictEqual(x.errs, []); await x.ctx.close();
+  });
+  await t('마커: 같은 자리를 다시 알려도 요청이 늘지 않는다 · 0.1 안쪽 움직임은 새 요청이 아니다', async () => {
+    const x = await liveOpen(); await place(x, 3, 4, 0.5);
+    assert.ok(await waitFor(x, async () => kreqs(x).some(q => q.f.lv.p), 8000)); await place(x, 3, 4, 0.5); await x.page.waitForTimeout(1500); const n1 = kreqs(x).length;      // 첫 놓기(점프 sn)가 두 번째부터 이어 가기로 바뀌는 요청 하나는 센 뒤부터
+    await place(x, 3, 4, 0.5); await place(x, 3, 4, 0.52); await place(x, 3, 4, 0.48); await x.page.waitForTimeout(1500);
+    assert.strictEqual(kreqs(x).length, n1, '요청이 쏟아진다'); await x.ctx.close();
+  });
+  await t('대기 배지: 웹이 대기를 켜면 거리 원자료가 가고, 엔진이 주황 맥박 + "대기 중 · 350m" 를 정한다 · 끄면 사라진다', async () => {
+    const x = await liveOpen(); await place(x, 1, 1, 0);
+    assert.ok(await waitFor(x, async () => kreqs(x).some(q => q.f.lv.p), 8000));
+    const n0 = kreqs(x).length, pu0 = (await puts(x, 'rtrk')).length;
+    await x.page.evaluate(() => { _htlWait.dist = 350; _htlWaitBadge(true, '대기 중 · 350m'); });
+    assert.ok(await waitFor(x, async () => kreqs(x).length > n0, 8000)); assert.deepStrictEqual(kreqs(x).pop().f.lv.w, { d: 350 });
+    assert.ok(await waitFor(x, async () => (await puts(x, 'rtrk')).length > pu0, 6000));
+    const mk = JSON.parse(await lastJ(x, 'rtrk')).head[0].mk; assert.strictEqual(mk.pu, 'w'); assert.strictEqual(mk.bt, '대기 중 · 350m'); assert.strictEqual(mk.c, '#ff9f0a');
+    // 웹 배지 글과 같다
+    assert.strictEqual(await x.page.evaluate(() => document.getElementById('htlWaitBadge').textContent), mk.bt);
+    const pu1 = (await puts(x, 'rtrk')).length; await x.page.evaluate(() => _htlWaitBadge(false));
+    assert.ok(await waitFor(x, async () => (await puts(x, 'rtrk')).length > pu1, 8000)); const mk2 = JSON.parse(await lastJ(x, 'rtrk')).head[0].mk; assert.strictEqual(mk2.pu, 'b'); assert.ok(!mk2.bt);
+    assert.deepStrictEqual(x.errs, []); await x.ctx.close();
+  });
+  await t('대기 배지: 탑승 중이면 웹처럼 켜지 않는다', async () => {
+    const x = await liveOpen(); await place(x, 1, 1, 0);
+    assert.ok(await waitFor(x, async () => kreqs(x).some(q => q.f.lv.p), 8000));
+    await x.page.evaluate(() => { window._rideEv = () => ({ riding: true, now: true }); _htlWait.dist = 100; _htlWaitBadge(true, '대기 중'); });
+    await x.page.waitForTimeout(1500); assert.strictEqual(kreqs(x).filter(q => q.f.lv.w).length, 0); await x.ctx.close();
+  });
+  await t('지금 보이는 시각: 웹 노드 시각(엔진이 5초마다 고쳐 준 값)이 바뀌면 엔진 칸 시각도 같은 값으로 바뀐다', async () => {
+    const x = await liveOpen(); const n0 = kreqs(x).length, pu0 = (await puts(x, 'rtrk')).length;
+    const info = await x.page.evaluate(() => { const nd = _transitNodeData, k = nd.findIndex(n => !n.isOrigin && !n.isWalk && n.isSub); nd[k].arrTime = '23:41'; _etaPaintLabel(nd[k]); return { off: nd[0] && nd[0].isOrigin ? 1 : 0, k, name: nd[k].el.children[0].textContent.trim(), lbl: nd[k].el.children[3].textContent.trim() }; });
+    assert.strictEqual(info.lbl, '23:41');
+    assert.ok(await waitFor(x, async () => kreqs(x).length > n0, 8000)); const q = kreqs(x).pop(); assert.strictEqual(q.f.lv.ea[info.k - info.off], '23:41');
+    assert.ok(await waitFor(x, async () => (await puts(x, 'rtrk')).length > pu0, 6000));
+    const cells = JSON.parse(await lastJ(x, 'rtrk')).head[0].cells, c = cells.find(c => c.ti === info.k - info.off);
+    assert.strictEqual(c.t, '23:41'); assert.strictEqual(c.n.replace(/\s+/g, ' '), info.name.replace(/\s+/g, ' '));
+    assert.deepStrictEqual(x.errs, []); await x.ctx.close();
+  });
+  await t('새 경로를 그리면 마커·대기 표시를 지운다(낡은 위치가 새 경로에 남지 않는다)', async () => {
+    const x = await liveOpen(); await place(x, 3, 4, 0.5);
+    assert.ok(await waitFor(x, async () => kreqs(x).some(q => q.f.lv.p), 8000));
+    const n0 = x.reqs.filter(q => q.part === 'k').length;
+    await x.page.evaluate((fx) => { window._metroRouteMode = false; window._routeBaseMs = Date.now() - 500; _renderHtlTrack(fx.secs, { name: '출발' }, { name: '도착' }, 0, fx.xf); }, FX.chg);
+    assert.ok(await waitFor(x, async () => x.reqs.filter(q => q.part === 'k').length > n0, 8000));
+    const q = x.reqs.filter(q => q.part === 'k').pop(); assert.strictEqual(q.f.lv.p, null); assert.strictEqual(q.f.lv.w, null); await x.ctx.close();
   });
 
   await b.close();

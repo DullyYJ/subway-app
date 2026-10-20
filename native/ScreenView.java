@@ -4,10 +4,8 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
-import android.graphics.LinearGradient;
 import android.graphics.Paint;
 import android.graphics.RectF;
-import android.graphics.Shader;
 import android.graphics.Typeface;
 import android.os.Handler;
 import android.os.Looper;
@@ -90,6 +88,9 @@ public class ScreenView extends View {
     private ScreenCore.Item pressed;
     private Listener listener;
     private boolean drewOnce;
+    private boolean mkHas;                                 // 내 위치 마커가 한 번이라도 놓였나
+    private float mkFromX, mkToX, mkMs;                    // 마커가 가는 중인 구간(dp)과 걸리는 ms
+    private long mkT0;
 
     // ── 글꼴: 웹은 'Noto Sans KR'(구글 웹폰트)로 그린다. 기기 기본 글꼴은 한글이 작고 가늘어 보이므로 같은 글꼴을 앱에 넣어(CI 가 내려받아 assets/fonts 에) 쓴다.
     //    파일이 없거나 읽기 실패면 기기 기본 글꼴로 되돌아간다(화면은 그대로 뜬다).
@@ -151,6 +152,7 @@ public class ScreenView extends View {
         flingY.forceFinished(true); flingX.forceFinished(true);
         pressed = null; mode = 0;
         relayout();
+        syncMk(keepScroll);
         if (stick && lay != null) { scrollY = lay.bodyMaxScroll(bodyViewH()); invalidate(); }
     }
     /** 맨 아래에서 80dp 안에 있으면 참(채팅 자동 따라가기 판단). 아직 배치 전이면 참. */
@@ -167,6 +169,7 @@ public class ScreenView extends View {
         float ch = lay.headH + lay.bodyH + lay.footH;
         if (Math.abs(ch - lastCH) > 0.5f) { lastCH = ch; final float chf = ch; post(new Runnable() { @Override public void run() { if (listener != null) listener.onContentH(chf); } }); }
         if (editKey != null) { ScreenCore.Item f = fieldByKey(editKey); if (f != null) ensureEditVisible(f); }
+        if (lay != null && lay.mk != null && !mkHas) syncMk(false);      // 폭이 정해지기 전에 올라온 화면의 마커도 첫 배치 때 놓는다
         invalidate();
         syncLater();
     }
@@ -367,6 +370,7 @@ public class ScreenView extends View {
         cv.translate(-scrollX, 0f);
         float x0 = scrollX - 4f, x1 = scrollX + w + 4f;
         for (int i = 0; i < lay.head.length; i++) { ScreenCore.Item it = lay.head[i]; if (!it.fixed && it.x + it.w >= x0 && it.x <= x1) drawItem(cv, it); }   // 칩 줄(가로로 밀림)
+        boolean pulsing = drawMk(cv, now);                                                      // 내 위치 마커(구간 타임라인 위)
         cv.restore();
         if (lay.footH > 0f) {                                                                    // 아래 고정 줄(채팅 입력줄): 배경 + 위 선 + 조각
             cv.save();
@@ -384,6 +388,57 @@ public class ScreenView extends View {
 
         if (!drewOnce) { drewOnce = true; post(firstDrawCb); }
         if (moving || mode == 1 || mode == 2) postInvalidateOnAnimation();
+        else if (pulsing) postInvalidateDelayed(mkMs > 0f && now - mkT0 < mkMs ? 16L : 66L);      // 마커 맥박·고리(마커가 있을 때만; 가만히 있으면 초당 15번)
+    }
+
+    /** 새 화면의 마커 자리를 받는다. 이어서 오는 화면이면 지금 보이는 자리에서 새 자리까지 엔진이 정한 ms 동안 이어 가고, 처음이거나 ms 가 0 이면 곧바로 놓는다. */
+    private void syncMk(boolean keep) {
+        ScreenCore.Mark k = lay == null ? null : lay.mk;
+        if (k == null) { mkHas = false; return; }
+        long now = SystemClock.uptimeMillis();
+        float to = k.x(k.r);
+        if (!mkHas || !keep || k.ms <= 0f) { mkHas = true; mkFromX = mkToX = to; mkMs = 0f; mkT0 = now; }
+        else if (Math.abs(to - mkToX) > 0.01f) { mkFromX = mkCurX(now); mkToX = to; mkMs = k.ms; mkT0 = now; }
+    }
+    private float mkCurX(long now) {
+        if (mkMs <= 0f) return mkToX;
+        float t = (now - mkT0) / mkMs;
+        return t >= 1f ? mkToX : mkFromX + (mkToX - mkFromX) * t;
+    }
+    /** 내 위치 마커: 점 + 흰 테두리 + 번쩍임(승차 대기면 맥박) + 퍼지는 고리 + (대기면) 알약 배지. 모양·색·주기·글은 엔진이 정했다. */
+    private boolean drawMk(Canvas cv, long now) {
+        ScreenCore.Mark k = lay.mk;
+        if (k == null || !mkHas) return false;
+        float x = mkCurX(now), y = k.y, rad = k.d / 2f, ph;
+        boolean wait = "w".equals(k.pu);
+        // 퍼지는 고리(0.5배 → 2.4배, 흐려지며 사라짐)
+        if (k.rcol != null && k.rms > 0f) {
+            float f = (now % (long) k.rms) / k.rms, e = 1f - (1f - f) * (1f - f);
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(2f); p.setColor(alpha(cc(k.rcol, 0xFF0A84FF), 0.85f * (1f - f)));
+            cv.drawCircle(x, y, (rad + 2f) * (0.5f + 1.9f * e), p);
+        }
+        p.setStyle(Paint.Style.FILL);
+        ph = (now % (long) k.pms) / k.pms;
+        float tri = ph < 0.5f ? ph * 2f : (1f - ph) * 2f;                       // 0 → 1 → 0
+        float scale = 1f, op = 1f;
+        if (wait) {                                                              // 맥박: 1 → 1.25배 · 투명도 1 → .75
+            scale = 1f + 0.25f * tri; op = 1f - 0.25f * tri;
+            if (k.hcol != null) { p.setColor(cc(k.hcol, 0)); cv.drawCircle(x, y, (rad + k.hw) * scale, p); }
+        } else if (k.hcol != null) {                                             // 번쩍임: 바깥 둘레가 커지며 옅어짐
+            p.setColor(alpha(cc(k.hcol, 0), 1f - tri)); cv.drawCircle(x, y, rad + k.hw * tri, p);
+        }
+        float rr = rad * scale;
+        if (k.bw > 0f && k.bcol != null) { p.setColor(alpha(cc(k.bcol, 0xFFFFFFFF), op)); cv.drawCircle(x, y, rr, p); }
+        p.setColor(alpha(cc(k.ccol, 0xFF0A84FF), op)); cv.drawCircle(x, y, Math.max(0f, rr - k.bw * scale), p);
+        if (k.bt.length() > 0) {                                                 // 대기 배지(알약)
+            float pw = k.btw + 14f;
+            rf.set(x - pw / 2f, k.bty, x + pw / 2f, k.bty + k.bth);
+            p.setColor(cc(k.gcol, 0xFFFF9F0A)); cv.drawRoundRect(rf, k.bth / 2f, k.bth / 2f, p);
+            setText(k.bz, true, cc(k.tcol, pal[R_WHITE])); tp.setTextAlign(Paint.Align.CENTER);
+            cv.drawText(k.bt, x, base(k.bty, k.bth, 0), tp);
+            tp.setTextAlign(Paint.Align.LEFT);
+        }
+        return true;
     }
 
     private void drawItem(Canvas cv, ScreenCore.Item it) {
@@ -871,9 +926,9 @@ public class ScreenView extends View {
         else if ("r".equals(it.dk)) { p.setColor(cc(it.dc, 0)); cv.drawCircle(cx, cy, ScreenCore.TRK_R_R, p); p.setColor(pal[R_CARD]); cv.drawCircle(cx, cy, ScreenCore.TRK_R_R - 3f, p); }
         else if ("m".equals(it.dk)) {
             int c1 = cc(it.dc, 0), c2 = it.dc2 != null ? cc(it.dc2, c1) : c1;
-            p.setShader(new LinearGradient(cx - ScreenCore.TRK_M_R, 0f, cx + ScreenCore.TRK_M_R, 0f, c1, c2, Shader.TileMode.CLAMP));
-            cv.drawCircle(cx, cy, ScreenCore.TRK_M_R, p);
-            p.setShader(null);
+            float mr = ScreenCore.TRK_M_R;                                       // 반지름 3dp 의 작은 점 — 왼쪽 반은 앞 색, 오른쪽 반은 뒤 색(그릴 때 새 객체를 만들지 않으려고 그라데이션 대신 반으로 나눠 칠한다)
+            cv.save(); cv.clipRect(cx - mr, cy - mr, cx, cy + mr); p.setColor(c1); cv.drawCircle(cx, cy, mr, p); cv.restore();
+            cv.save(); cv.clipRect(cx, cy - mr, cx + mr, cy + mr); p.setColor(c2); cv.drawCircle(cx, cy, mr, p); cv.restore();
         }
         // 시각(또는 도보 분)
         if (it.time.length() > 0) {

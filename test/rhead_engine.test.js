@@ -134,7 +134,7 @@ const web = new Function(
   ok(w.indexOf('if (url.pathname === "/screen/rhead") return handleScreenRhead(request);') > 0, '경로 등록');
   ok(!/[^\x00-\x7f]/.test(body), '내장 블록은 ASCII 만');
   const other = w.slice(0, i) + w.slice(j);
-  const names = ['rheadScreen', 'rheadFacts', 'rheadHash', 'rheadStr', 'rheadInt', 'rheadJosa', 'rheadDoor', 'rheadList', 'rheadXferLine', 'rheadDoorLines', 'rheadHeadNodes', 'rheadTabNodes', 'rheadAgo', 'rheadJoin', 'rheadOffParts', 'rheadNoteNodes', 'RHEAD_LD_MODE', 'rheadWon', 'rheadNum', 'rheadLdNodes', 'RHEAD_SCREEN_V', 'RHEAD_TABS', 'RHEAD_EMOJI', 'handleScreenRhead', 'RTRK_LC', 'RTRK_ALIAS', 'RTRK_BUS_COLS', 'RTRK_W', 'RTRK_WLD', 'RTRK_DWELL', 'RTRK_MINGAP', 'RTRK_GREY', 'RTRK_DOT', 'rheadTrkNm', 'rheadTrkNum', 'rheadTrkHex2', 'rheadTrkBright', 'rheadTrkColor', 'rheadTrkHM', 'rheadTrkHav', 'rheadTrkSec', 'rheadTrkHasEng', 'rheadTrkOffsets', 'rheadTrkLabel', 'rheadTrkPoints', 'rheadTrkCells', 'rheadTrackScreen'];
+  const names = ['rheadScreen', 'rheadFacts', 'rheadHash', 'rheadStr', 'rheadInt', 'rheadJosa', 'rheadDoor', 'rheadList', 'rheadXferLine', 'rheadDoorLines', 'rheadHeadNodes', 'rheadTabNodes', 'rheadAgo', 'rheadJoin', 'rheadOffParts', 'rheadNoteNodes', 'RHEAD_LD_MODE', 'rheadWon', 'rheadNum', 'rheadLdNodes', 'RHEAD_SCREEN_V', 'RHEAD_TABS', 'RHEAD_EMOJI', 'handleScreenRhead', 'RTRK_LC', 'RTRK_ALIAS', 'RTRK_BUS_COLS', 'RTRK_W', 'RTRK_WLD', 'RTRK_DWELL', 'RTRK_MINGAP', 'RTRK_GREY', 'RTRK_DOT', 'rheadTrkNm', 'rheadTrkNum', 'rheadTrkHex2', 'rheadTrkBright', 'rheadTrkColor', 'rheadTrkHM', 'rheadTrkHav', 'rheadTrkSec', 'rheadTrkHasEng', 'rheadTrkOffsets', 'rheadTrkLabel', 'rheadTrkPoints', 'rheadTrkCells', 'rheadTrackScreen', 'RTRK_MK', 'rheadTrkMark'];
   ok(names.every(n => !new RegExp('^(async\\s+)?(function|var)\\s+' + n + '\\b', 'm').test(other)), '다른 엔진과 이름이 겹치지 않는다');
 }
 // ── ⑨ 공식 공지 · 지연 제보 줄(part n): 옛 웹 _offText 와 문구가 같다 ──
@@ -209,7 +209,7 @@ const web = new Function(
     { ty: 1, nm: '수도권 1호선', du: 1200, di: 9000, ss: 1080, es: 2280, tw: 120000, sts: [1080, 1200, 1500, 2280], st: st(['부평', '부개', '송내', '두정']) },
     { ty: 3, nm: '', du: 120, di: 150, ss: 2280, es: 2400, st: [] }];
   const F = (o) => Object.assign({ secs: JSON.parse(JSON.stringify(secs)), xf: [{ k: 'x', xi: 2 }], bt: null, rb: null, now, sw: [], tz: 540, th: 'dark' }, o || {});
-  const o = E.rheadScreen({ cap: 11, part: 'k' }, F());
+  const o = E.rheadScreen({ cap: 12, part: 'k' }, F());
   ok(o.ok && o.screen === 'rhead' && o.cover === 'tab' && o.bg === 'card' && o.head.length === 1 && o.head[0].t === 'trk' && o.body.length === 1 && o.body[0].t === 'spacer' && o.body[0].h === 0 && o.info.part === 'k', 'part k 모양');
   const cells = o.head[0].cells;
   ok(cells.length === 10 && o.info.n === 10 && o.info.w === 640 && /^r1k:/.test(o.rev), '칸 10개 · 폭 합 640 · rev');
@@ -220,17 +220,17 @@ const web = new Function(
   ok(cells[4].g === '↔ 수도권 1호선' && cells[4].gk === 'p' && cells[4].gc === '#00c4ff' && cells[5].lc === '#8e8e93', '환승 칸 배지는 다음 노선 알약 · 밝힌 1호선 색(어두운 테마)');
   ok(cells.every(c => c.w === 64) && cells.every(c => /^#[0-9a-f]{6}$/.test(c.lc || '#000000') && /^#[0-9a-f]{6}$/.test(c.rc || '#000000')), '칸 폭 64 · 색은 모두 #rrggbb');
   // 파스텔: 원색 · 다른 점 색
-  const pa = E.rheadScreen({ cap: 11, part: 'k' }, F({ th: 'pastel' })).head[0].cells;
+  const pa = E.rheadScreen({ cap: 12, part: 'k' }, F({ th: 'pastel' })).head[0].cells;
   ok(pa[0].dc === '#1d9bf0' && pa[9].dc === '#e0455a' && pa[5].dc === '#0052a4' && pa[4].g === '↔ 수도권 1호선' && pa[4].gc === '#0052a4', '파스텔 테마: 원색 노선 · 시작/끝 점 색');
   // 시간축: 예상 시각 모드 · 막차 뒤 첫차 이동 · 오래된 탐색 · 기기 시간대
-  const T = (f) => E.rheadScreen({ cap: 11, part: 'k' }, F(f)).head[0].cells.map(c => c.t)[1];
+  const T = (f) => E.rheadScreen({ cap: 12, part: 'k' }, F(f)).head[0].cells.map(c => c.t)[1];
   ok(T({ bt: Date.UTC(2026, 9, 20, 6, 0, 0) }) === '15:04', '사용자가 정한 예상 시각이 기준');
   ok(T({ rb: now - 60000 }) === '11:59' || T({ rb: now - 60000 }) === '12:03', '이번 탐색 시각(5분 안)이 기준');
   ok(T({ rb: now - 600000, sw: [30] }) === '12:34', '탐색 시각이 오래되면 기기 시계 + 첫차까지 이동 30분');
   ok(T({ bt: Date.UTC(2026, 9, 20, 6, 0, 0), sw: [30] }) === '15:04', '예상 시각 모드에서는 첫차 이동을 더하지 않는다');
   ok(T({ tz: 0 }) === '03:04', '기기 시간대(분)를 따른다');
   // 장거리: 출발/도착 알약 · 총 소요 · 폭 108 · 앞뒤 같은 이름 역을 지우지 않는다
-  const ld = E.rheadScreen({ cap: 11, part: 'k' }, F({ xf: [], secs: [
+  const ld = E.rheadScreen({ cap: 12, part: 'k' }, F({ xf: [], secs: [
     { ty: 3, nm: '', du: 120, di: 100, ss: 0, es: 120, st: [] },
     { ty: 1, nm: '1호선', du: 600, di: 6000, ss: 120, es: 720, sts: [120, 400, 720], st: st(['가산디지털단지', '독산', '광명']) },
     { ty: 4, nm: 'KTX', du: 11100, di: 400000, ss: 900, es: 12000, st: [['광명'], ['부산']] },
@@ -240,7 +240,7 @@ const web = new Function(
   ok(/^\d\d:\d\d · 총 3시간5분$/.test(arr.t) && dep.t === '12:15' && arr.tc === 'gold' && arr.t.startsWith('15:20'), '장거리: 도착 시각 + 총 소요(3시간5분) · 금색');
   ok(ld.filter(c => c.n === '광명').length === 2, '장거리 앞 지하철의 마지막 역과 같은 이름이어도 승차역을 지우지 않는다');
   // 같은 이름 역 중복 제거(바로 이어 탐) · 급행 환승 · 버스끼리 환승
-  const ch = E.rheadScreen({ cap: 11, part: 'k' }, F({ xf: [{ k: 'train' }, { k: 'x', si: 2 }], secs: [
+  const ch = E.rheadScreen({ cap: 12, part: 'k' }, F({ xf: [{ k: 'train' }, { k: 'x', si: 2 }], secs: [
     { ty: 2, nm: '8', du: 300, di: 1500, ss: 60, es: 360, ar: 30, st: st(['정류장A', '부평역']) },
     { ty: 1, nm: '수도권 1호선', du: 1500, di: 14000, ss: 400, es: 1900, sts: [400, 700, 1000, 1200], st: st(['부평', '신도림', '가산디지털단지', '구로']), tc: [{ at: '가산디지털단지역', to: 'express' }] },
     { ty: 2, nm: '9', du: 400, di: 1600, ss: 1950, es: 2350, st: st(['용산역앞', '삼각지']) },
@@ -251,18 +251,42 @@ const web = new Function(
   const bc = ch.filter(c => c.dk === 'r' && c.dc !== '#00c4ff').map(c => c.dc);
   ok(bc[0] === '#30d158' && bc.includes('#bf5af2') && bc.includes('#ff6482'), '버스 구간이 여럿이면 구간마다 다른 색(' + bc + ' · ' + ch[ch.length - 1].lc + ')');
   // 좌표 거리 비례 · 역별 시각 없음
-  const g = E.rheadScreen({ cap: 11, part: 'k' }, F({ xf: [], secs: [{ ty: 2, nm: '88', du: 1200, di: 7000, ss: 120, es: 1320, ws: 90, st: st(['가', '나', '다', '라', '마']) }] })).head[0].cells;
+  const g = E.rheadScreen({ cap: 12, part: 'k' }, F({ xf: [], secs: [{ ty: 2, nm: '88', du: 1200, di: 7000, ss: 120, es: 1320, ws: 90, st: st(['가', '나', '다', '라', '마']) }] })).head[0].cells;
   ok(g.length === 5 && g[0].t === '12:02' && g[4].t === '12:22' && g.every((c, i) => i === 0 || c.t >= g[i - 1].t), '좌표 비례 시각: 첫 12:02 · 끝 12:22 · 단조 증가');
   // 입력 거르기·거절
-  ok(E.rheadScreen({ cap: 10, part: 'k' }, F()).ok === false, 'cap 10 이면 만들지 않는다(trk 노드는 규격 11)');
-  ok(E.rheadScreen({ cap: 11, part: 'k' }, F({ secs: [] })).error === 'empty' && E.rheadScreen({ cap: 11, part: 'k' }, F({ now: 0 })).error === 'now', '구간이 없거나 시계가 없으면 거절');
-  ok(E.rheadScreen({ cap: 11, part: 'k' }, F({ secs: secs.map(s => Object.assign({}, s, { ss: null, es: null })) })).error === 'notimes', '구간 시각을 하나도 못 받으면 거절(웹이 그린다)');
-  const evil = E.rheadScreen({ cap: 11, part: 'k' }, F({ secs: [{ ty: 1, nm: '<b>1호선</b>\uD83D\uDE80', du: 'x', di: -5, ss: 0, es: 60, st: [['\uD83D\uDE80역', 'a', null], ['정상', 1, 2]] }, 7, null] }));
+  ok(E.rheadScreen({ cap: 10, part: 'k' }, F()).ok === false && E.rheadScreen({ cap: 11, part: 'k' }, F()).error === 'cap', 'cap 10·11 이면 만들지 않는다(trk 노드 + 마커 mk 는 규격 12)');
+  ok(E.rheadScreen({ cap: 12, part: 'k' }, F({ secs: [] })).error === 'empty' && E.rheadScreen({ cap: 12, part: 'k' }, F({ now: 0 })).error === 'now', '구간이 없거나 시계가 없으면 거절');
+  ok(E.rheadScreen({ cap: 12, part: 'k' }, F({ secs: secs.map(s => Object.assign({}, s, { ss: null, es: null })) })).error === 'notimes', '구간 시각을 하나도 못 받으면 거절(웹이 그린다)');
+  const evil = E.rheadScreen({ cap: 12, part: 'k' }, F({ secs: [{ ty: 1, nm: '<b>1호선</b>\uD83D\uDE80', du: 'x', di: -5, ss: 0, es: 60, st: [['\uD83D\uDE80역', 'a', null], ['정상', 1, 2]] }, 7, null] }));
   ok(evil.ok === true && !EMOJI.test(JSON.stringify(evil.head[0].cells)), '이상한 값이 들어와도 죽지 않고 그림말은 거른다');
-  const wide = E.rheadScreen({ cap: 11, part: 'k' }, F({ secs: Array.from({ length: 30 }, (_, i) => ({ ty: 1, nm: '2호선', du: 60, di: 1, ss: i * 60, es: i * 60 + 60, st: Array.from({ length: 300 }, (_, q) => ['역' + q, 0, 0]) })) }));
+  const wide = E.rheadScreen({ cap: 12, part: 'k' }, F({ secs: Array.from({ length: 30 }, (_, i) => ({ ty: 1, nm: '2호선', du: 60, di: 1, ss: i * 60, es: i * 60 + 60, st: Array.from({ length: 300 }, (_, q) => ['역' + q, 0, 0]) })) }));
   ok(wide.ok && wide.head[0].cells.length <= 12 * 150, '구간·역 수는 상한을 넘지 않는다');
   ok(!/[#]|\d\d:\d\d/.test(JSON.stringify(F())) , '요청 원자료에는 색·시각 글이 없다');
-  const vr = screenCheck([o, E.rheadScreen({ cap: 11, part: 'k' }, F({ th: 'pastel' }))]);
+  // 2단계: 내 위치 마커 · 대기 배지 · 지금 보이는 시각 덮어쓰기
+  const K = (lv, o2) => E.rheadScreen({ cap: 12, part: 'k' }, F(Object.assign({ lv }, o2 || {}))).head[0];
+  ok(K(null).mk === undefined && K({ p: null, w: null, ea: null }).mk === undefined, 'lv 가 없거나 위치가 없으면 마커 없음');
+  const m1 = K({ p: { f: 1, t: 2, r: 0.5, sn: 0 }, w: null, ea: null }).mk;
+  ok(m1 && m1.f === 1 && m1.t === 2 && m1.r === 0.5 && m1.ms === 3000 && m1.pu === 'b' && m1.c === '#0a84ff' && m1.bc === '#ffffff' && m1.d === 14 && m1.pms === 1300 && m1.bt === undefined, '마커: 파랑 · 깜박임 · 3초 이동 · 배지 없음');
+  const cl = K({ p: { f: 1, t: 2, r: 0.5, sn: 0 } }).cells;
+  ok(cl[m1.f].ti === 1 && cl[m1.t].ti === 2, '마커 칸 번호는 추적 번호(ti)를 칸 위치로 바꾼 값');
+  const mw = K({ p: { f: 3, t: 3, r: 0.9, sn: 1 }, w: { d: 350 } }).mk;
+  ok(mw.f === mw.t && mw.r === 0 && mw.ms === 0 && mw.pu === 'w' && mw.c === '#ff9f0a' && mw.bt === '대기 중 · 350m' && mw.bg === '#ff9f0a' && mw.btc === '#ffffff' && mw.bz === 9 && mw.pms === 1600, '대기: 주황 맥박 · 배지 글(미터) · 같은 칸이면 비율 0 · 점프(sn)면 즉시');
+  ok(K({ p: { f: 0, t: 0, r: 0 }, w: { d: 1520 } }).mk.bt === '대기 중 · 1.5km' && K({ p: { f: 0, t: 0, r: 0 }, w: { d: null } }).mk.bt === '대기 중' && K({ p: { f: 0, t: 0, r: 0 }, w: { d: 999.6 } }).mk.bt === '대기 중 · 1000m', '대기 배지: 1km 이상은 km · 거리 모르면 글만');
+  ok(K({ p: { f: 99, t: 0, r: 0 } }).mk === undefined && K({ p: { f: 'x' } }).mk === undefined && K({ p: { f: 1, t: 77, r: 0.4 } }).mk.t === K({ p: { f: 1, t: 77, r: 0.4 } }).mk.f, '없는 칸 번호는 마커를 그리지 않거나 제자리');
+  ok(K({ p: { f: 1, t: 2, r: -3 } }).mk.r === 0 && K({ p: { f: 1, t: 2, r: 9 } }).mk.r === 1, '비율은 0~1 로 자른다');
+  // 시각 덮어쓰기: 웹이 지금 보여 주는 시각(칸 수가 맞을 때만)
+  const e1 = K({ ea: ['', '12:09', '12:12', '12:21', '12:23', '12:24', '12:30', '12:41', ''] }).cells;
+  ok(e1[1].t === '12:09' && e1[3].t === '12:21' && e1[5].t === '12:23' && e1[8].t === '12:41' && e1[0].t === '3분' && e1[4].t === '4분' && e1[9].t === '2분', '시각 덮어쓰기: 역 칸만 웹 값으로 · 도보 분은 그대로');
+  ok(K({ ea: ['x', 'ab:cd'] }).cells.map(c => c.t).join('|') === cells.map(c => c.t).join('|') && K({ ea: ['12:09'] }).cells[1].t === cells[1].t, '칸 수가 다르거나 시각 모양이 아니면 덮지 않는다');
+  ok(E.rheadScreen({ cap: 12, part: 'k' }, F({ lv: { p: { f: 1, t: 2, r: 0.5 } } })).rev !== o.rev && E.rheadScreen({ cap: 12, part: 'k' }, F({ lv: { p: { f: 1, t: 2, r: 0.5 } } })).rev === E.rheadScreen({ cap: 12, part: 'k' }, F({ lv: { p: { f: 1, t: 2, r: 0.5 } } })).rev, 'rev 는 마커·시각이 바뀌면 바뀌고 같으면 같다');
+  const ldE = E.rheadScreen({ cap: 12, part: 'k' }, F({ xf: [], secs: [
+    { ty: 3, nm: '', du: 120, di: 100, ss: 0, es: 120, st: [] },
+    { ty: 4, nm: 'KTX', du: 11100, di: 400000, ss: 900, es: 12000, st: [['광명'], ['부산']] },
+    { ty: 3, nm: '', du: 300, di: 400, ss: 12000, es: 12300, st: [] }], lv: { ea: ['', '12:16', '15:21', ''] } })).head[0].cells;
+  ok(ldE.find(c => c.g === 'KTX 출발').t === '12:16' && ldE.find(c => c.g === 'KTX 도착').t === '15:21 · 총 3시간5분', '장거리: 시각만 바뀌고 총 소요는 그대로 붙는다');
+  const vm = screenCheck([E.rheadScreen({ cap: 12, part: 'k' }, F({ lv: { p: { f: 1, t: 2, r: 0.5, sn: 0 }, w: null, ea: null } })), E.rheadScreen({ cap: 12, part: 'k' }, F({ lv: { p: { f: 0, t: 0, r: 0, sn: 1 }, w: { d: 350 }, ea: null } }))]);
+  ok(!vm.err && vm.out.length === 2 && vm.out.every(l => l.startsWith('OK ') && Number(l.split(' ')[2]) === 0), '앱 검증기 통과(마커·대기 배지) ' + (vm.err || vm.out.join('|')));
+  const vr = screenCheck([o, E.rheadScreen({ cap: 12, part: 'k' }, F({ th: 'pastel' }))]);
   ok(!vr.err && vr.out.length === 2 && vr.out.every(l => l.startsWith('OK ') && Number(l.split(' ')[2]) === 0), '앱 검증기 통과(part k) ' + (vr.err || vr.out.join('|')));
 }
 // ── ⑧ 워커 끝에서 끝까지 ──
