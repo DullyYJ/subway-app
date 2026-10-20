@@ -46,6 +46,9 @@ public class ShellActivity extends Activity {
     private final HomeCore home = new HomeCore();       // 홈 탭 입력 상태(고른 출발/도착·후보·기준시각)
     private int seqHome = 0, seqCand = 0, seqBoard = 0;
     private BoardCore board;
+    private ChatCore chat;
+    private int seqChat = 0;
+    private boolean chatPolling;
     private ScreenView sheetView;                       // 글쓰기 같은 아래에서 올라오는 시트
     private android.app.Dialog sheet;
     private String sheetName = "", writeErr = "", writeT = "", writeB = "";
@@ -65,6 +68,7 @@ public class ShellActivity extends Activity {
         super.onCreate(b);
         store = new PrefStore(getSharedPreferences(PREFS, Context.MODE_PRIVATE));
         board = new BoardCore(store);
+        chat = new ChatCore(store);
         dpr = getResources().getDisplayMetrics().density;
         ScreenView.preloadFaces(this);
 
@@ -96,6 +100,10 @@ public class ShellActivity extends Activity {
         applyTheme();
         showTab(ShellCore.currentTab(store));
     }
+
+    private boolean resumed;
+    @Override protected void onResume() { super.onResume(); resumed = true; if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) startChatPoll(); }
+    @Override protected void onPause() { resumed = false; super.onPause(); }
 
     @Override public void onBackPressed() {
         String t = ShellCore.currentTab(store);
@@ -147,6 +155,7 @@ public class ShellActivity extends Activity {
         if (ShellCore.S_PENDING.equals(screen)) { present(v, ShellCore.pendingScreen(ShellCore.currentTab(store)), false); return; }
         if (ShellCore.S_HOME.equals(screen)) { loadHome(v, keep); return; }
         if (ShellCore.S_BOARD.equals(screen)) { loadBoard(v, keep, true); return; }
+        if (ShellCore.S_CHAT.equals(screen)) { loadChat(v, keep, true); return; }
         new Thread(new Runnable() {
             @Override public void run() {
                 String[] urls = ShellCore.feedUrls(screen), feeds = new String[urls.length];
@@ -205,7 +214,10 @@ public class ShellActivity extends Activity {
         private void handle(ScreenCore.Act a, boolean on) {
             ShellCore.Effect e;
             if (which == 2) e = ShellCore.routeTabs(store, a.a, a.v);
-            else if (ShellCore.S_BOARD.equals(screenName())) {
+            else if (ShellCore.S_CHAT.equals(screenName())) {
+                chatAct(a, body);
+                return;
+            } else if (ShellCore.S_BOARD.equals(screenName())) {
                 boardAct(a, which == 0 ? head : body);
                 return;
             } else if (ShellCore.S_HOME.equals(screenName())) {
@@ -232,6 +244,94 @@ public class ShellActivity extends Activity {
     }
 
 
+
+
+    // ───────────── 실시간소통 ─────────────
+    private static final long CHAT_POLL_MS = 6000L;
+    private final Runnable chatTick = new Runnable() {
+        @Override public void run() {
+            chatPolling = false;
+            if (!ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "") || !resumed) return;
+            loadChat(body, true, true);
+            chatPolling = true; main.postDelayed(this, CHAT_POLL_MS);
+        }
+    };
+    private void startChatPoll() { if (!chatPolling) { chatPolling = true; main.postDelayed(chatTick, CHAT_POLL_MS); } }
+
+    /** 실시간소통: 이 방의 대화(전체 /talks · 노선 /lroom)와 공식 공지를 받고 엔진에 그릴 화면을 묻는다. */
+    private void loadChat(final ScreenView v, final boolean keep, final boolean fetch) {
+        final int my = ++seqChat;
+        final String sel = chat.sel(), me = ShellCore.commId(store);
+        startChatPoll();
+        new Thread(new Runnable() {
+            @Override public void run() {
+                if (fetch) {
+                    if (System.currentTimeMillis() - chat.noticesAt > 60000) {
+                        NetPost.Res nr = NetPost.get(ChatCore.noticesUrl(), 8000);
+                        if (nr.status == 200) chat.setNotices(nr.body, System.currentTimeMillis());
+                    }
+                    if ("all".equals(sel)) {
+                        NetPost.Res tr = NetPost.get(chat.talksUrlNow(), 7000);
+                        if (tr.status == 200) chat.addTalks(tr.body, me); else chat.failed = !chat.loaded;
+                    } else {
+                        NetPost.Res rr = NetPost.get(chat.roomUrl(sel), 12000);
+                        if (rr.status == 200) chat.addRoom(sel, rr.body); else chat.failed = !chat.loaded;
+                    }
+                }
+                final String body = chat.request(ShellCore.CAP, ShellCore.theme(store), -java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 60000, me, System.currentTimeMillis());
+                NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/chat", body, 10000);
+                final String txt = r.status == 200 ? r.body : "";
+                main.post(new Runnable() { @Override public void run() {
+                    if (my != seqChat) return;
+                    present(v, txt, keep);
+                    if (txt.length() > 0) chat.onScreen(txt);
+                } });
+            }
+        }, "shell-chat").start();
+    }
+    private void reloadChat() { if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) loadChat(body, true, false); }
+
+    private void chatAct(ScreenCore.Act a, ScreenView src) {
+        if ("cat".equals(a.a)) { chat.select(a.v); loadChat(body, false, true); return; }
+        if (!"call".equals(a.a)) return;
+        final String me = ShellCore.commId(store);
+        int r = chat.act(a.v, src.fields(), me);
+        switch (r) {
+            case ChatCore.R_NEED_ID: toast("설정에서 커뮤니티 아이디를 등록하면 글과 제보를 남길 수 있어요"); break;
+            case ChatCore.R_SEND: {
+                final String line = "all".equals(chat.pendingLine) ? chat.postLine : chat.pendingLine, text = chat.pendingText;
+                final String json = ChatCore.sendBody(me, text, line);
+                src.setField("all".equals(chat.pendingLine) ? "chat.all" : "chat.room", "");
+                new Thread(new Runnable() {
+                    @Override public void run() {
+                        NetPost.Res rr = NetPost.post(ShellCore.BOARD_BASE + "/react", json, 9000);
+                        final String why = rr.status == 200 && rr.body != null && rr.body.contains("\"stored\"") ? "" : (rr.status == 0 ? "네트워크가 불안정해요" : rr.body != null && rr.body.contains("filtered") ? "부적절한 표현이 있어 올리지 못했어요" : "잠시 후 다시 시도해 주세요");
+                        main.post(new Runnable() { @Override public void run() {
+                            if (why.length() > 0) toast(why);
+                            loadChat(body, true, true);
+                            main.postDelayed(new Runnable() { @Override public void run() { loadChat(body, true, true); } }, 1500);
+                        } });
+                    }
+                }, "shell-chat-send").start();
+                break;
+            }
+            case ChatCore.R_REPORT: {
+                final String id = chat.pendingId;
+                try {
+                    new AlertDialog.Builder(this, android.R.style.Theme_Material_Light_Dialog_Alert).setTitle("이 글을 신고할까요?").setMessage("신고가 여러 명 모이면 자동으로 숨겨져요.")
+                        .setNegativeButton("취소", null).setPositiveButton("신고", new android.content.DialogInterface.OnClickListener() {
+                            @Override public void onClick(android.content.DialogInterface di, int w) {
+                                chat.hide(id); toast("신고했어요. 이 글은 더 이상 보이지 않아요"); reloadChat();
+                                final String json = ChatCore.reportBody(id);
+                                new Thread(new Runnable() { @Override public void run() { NetPost.post(ShellCore.BOARD_BASE + "/lreport", json, 9000); } }, "shell-lrep").start();
+                            }
+                        }).show();
+                } catch (Throwable t) { toast("신고창을 열지 못했어요"); }
+                break;
+            }
+            default: break;
+        }
+    }
 
     // ───────────── 게시판 ─────────────
     private String owner() {
@@ -412,7 +512,7 @@ public class ShellActivity extends Activity {
                         rs = rr.status == 200 ? rr.body : "";
                         if (rs.length() > 0) { resCacheKey = resKey; resCacheJson = rs; }
                     }
-                    if (rs.length() > 0) txt = ShellCore.mergeBodies(txt, rs);
+                    if (rs.length() > 0) { final String rsf = rs; txt = ShellCore.mergeBodies(txt, rs); main.post(new Runnable() { @Override public void run() { home.onResult(rsf); chat.routeSec = home.resSec; } }); }
                     else main.post(new Runnable() { @Override public void run() { toast("경로 결과를 그리지 못했어요"); } });
                 }
                 final String fin = txt;

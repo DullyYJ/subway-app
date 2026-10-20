@@ -570,4 +570,4 @@ function rheadScreen(inp, factsIn) {
   return out;
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { rheadScreen: rheadScreen, rheadTrackScreen: rheadTrackScreen, rheadFacts: rheadFacts, rheadXferLine: rheadXferLine, rheadDoorLines: rheadDoorLines };
+if (typeof module !== 'undefined' && module.exports) module.exports = { rheadTrkColor: rheadTrkColor, rheadScreen: rheadScreen, rheadTrackScreen: rheadTrackScreen, rheadFacts: rheadFacts, rheadXferLine: rheadXferLine, rheadDoorLines: rheadDoorLines };

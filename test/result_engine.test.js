@@ -67,6 +67,7 @@ const flat = ns => { const o = []; (function f(a) { a.forEach(n => { o.push(n); 
   ok(ns.some(n => n.t === 'trk') && ns.some(n => n.s === '최단시간') && o.info.has.sub && o.info.has.bus && !o.info.has.longdist, '타임라인 · 탭 줄 · 있는 탭');
   ok(ns.some(n => /호차/.test(n.s || '')), '환승 호차·문 안내가 실린다');
   ok(o.info.m === 24 && o.info.n === 3 && o.info.tab === 'fast', 'info');
+  ok(JSON.stringify(o.info.sec) === JSON.stringify(['수도권 1호선']) && JSON.stringify(call('bus').info.sec) === '[]', 'info.sec: 보이는 경로의 지하철 구간 이름');
 }
 {
   const o = call('bus'), ns = flat(o.body);

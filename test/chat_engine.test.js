@@ -48,7 +48,7 @@ ok(E.chatScreen({ cap: 5, now: NOW }, base, {}).ok === false && E.chatScreen({},
   const chips = s.head[0].items;
   ok(chips.map(c => c.label).slice(0, 4).join() === '전체,내 2호선,내 9호선,1호선' && chips.length === 1 + E.CHT_KNOWN.length, '칩 순서: 전체 → 내 노선 → 나머지(웹 _chatItems)');
   ok(chips[0].on && chips.filter(c => c.on).length === 1 && chips[0].act.a === 'cat' && chips[0].act.v === 'all' && chips[1].act.v === '2호선', '고른 칩 · 행동 cat');
-  ok(chips[1].c === '#00a84d' && chips[0].c === undefined && chips[3].c === undefined, '노선 색은 올바른 #rrggbb 만');
+  ok(chips[1].c === '#00a84d' && chips[0].c === undefined && /^#[0-9a-f]{6}$/i.test(chips[3].c), '노선 색은 올바른 #rrggbb 만(앱이 안 준 노선은 엔진 기본 색)');
   ok(s.head.length === 1, '내 노선이 있으면 안내 글 없음');
   ok(chat({ mine: [] }, { g: G }).head[1].s === '내가 탄 노선은 앞에 표시돼요', '내 노선이 없으면 안내 글');
   ok(chat({ mine: ['2호선', '2호선', '없는선', '9호선'] }, {}).head[0].items.length === chips.length, '중복·모르는 노선은 무시');
@@ -158,6 +158,22 @@ ok(E.chatScreen({ cap: 5, now: NOW }, base, {}).ok === false && E.chatScreen({},
   ok(Object.keys(E.chatScreens({ cap: 6, now: NOW }, base, { g: G }, many).alts).length === 24, 'alts 개수 상한 24');
   const ex = E.chatScreens({ cap: 6, now: NOW }, base, { g: G }, { a: 3, b: { f: base, d: { g: G } } });
   ok(Object.keys(ex.alts).join() === 'b', '이상한 alts 항목은 건너뜀');
+}
+
+// ── 내 노선(웹 _routeSubLines + _myLinesList) · 기본 노선 색 · 글 붙일 노선 ──
+{
+  const ml = E.chtMineLines;
+  ok(JSON.stringify(ml(['수도권1호선', '수도권 2호선', '신분당선', '수도권1호선'], [])) === JSON.stringify(['1호선', '2호선', '신분당선']), '경로 노선: 이름 속 노선을 찾고 순서대로 · 중복 한 번');
+  ok(JSON.stringify(ml(['2호선'], [{ l: '1호선', n: 5, t: 1 }, { l: '9호선', n: 5, t: 9 }, { l: '2호선', n: 9, t: 1 }, { l: '없는선', n: 99, t: 1 }])) === JSON.stringify(['2호선', '9호선', '1호선']), '경로 노선이 앞 · 그다음 많이 탄 순(동률은 최근) · 모르는 노선 제외');
+  ok(ml(null, null).length === 0 && ml(['x'], 'zz').length === 0, '엉터리 입력은 빈 목록');
+  ok(JSON.stringify(ml([], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(i => ({ l: i + '호선', n: i, t: 0 }))).length) === '8', '최대 8개');
+  const o = E.chatScreen({ cap: 6, now: 1 }, { sel: 'all', sec: ['수도권 4호선'], my: [{ l: '2호선', n: 3, t: 1 }], th: 'pastel' }, {});
+  const chips = o.head.find(n => n.t === 'chips').items;
+  ok(chips[1].label === '내 4호선' && chips[2].label === '내 2호선' && /^#/.test(chips[1].c), '칩: 지금 경로 노선이 앞 · 노선 색 기본값 ' + chips[1].c);
+  ok(o.info.pl === '2호선', '글을 붙일 노선은 많이 탄 노선(경로와 무관)');
+  const dk = E.chatScreen({ cap: 6, now: 1 }, { sel: 'all', th: 'dark' }, {}).head.find(n => n.t === 'chips').items.find(x => x.label === '2호선').c;
+  const pa = E.chatScreen({ cap: 6, now: 1 }, { sel: 'all', th: 'pastel' }, {}).head.find(n => n.t === 'chips').items.find(x => x.label === '2호선').c;
+  ok(typeof dk === 'string' && typeof pa === 'string', '테마별 색');
 }
 (async () => {
   const tmp = path.join(os.tmpdir(), 'rv2_chat_' + process.pid + '.mjs');

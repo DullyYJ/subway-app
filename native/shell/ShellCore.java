@@ -180,13 +180,13 @@ public final class ShellCore {
     public static boolean isMode(String m) { for (String x : MODES) if (x.equals(m)) return true; return false; }
     public static String mode(Store st) { String m = st.get(K_MODE, MODE_DEFAULT); return isMode(m) ? m : MODE_DEFAULT; }
 
-    public static final String S_SETTINGS = "settings", S_SHOP = "shop", S_NEWS = "news", S_CCHIPS = "cchips", S_PENDING = "pending", S_HOME = "home", S_BOARD = "board", S_WRITE = "write";
+    public static final String S_SETTINGS = "settings", S_SHOP = "shop", S_NEWS = "news", S_CCHIPS = "cchips", S_PENDING = "pending", S_HOME = "home", S_BOARD = "board", S_WRITE = "write", S_CHAT = "chat";
 
     /** 탭이 보여 줄 화면 칸들(위에서 아래로). 첫 칸이 머리(높이는 그린 내용만큼), 마지막 칸이 본문(남은 높이). 한 칸이면 본문만. */
     public static String[] slotsOf(Store st, String tab) {
         if ("community".equals(tab)) {
             String m = mode(st);
-            return new String[] { S_CCHIPS, "news".equals(m) ? S_NEWS : "set".equals(m) ? S_SETTINGS : "board".equals(m) ? S_BOARD : S_PENDING };
+            return new String[] { S_CCHIPS, "news".equals(m) ? S_NEWS : "set".equals(m) ? S_SETTINGS : "board".equals(m) ? S_BOARD : "chat".equals(m) ? S_CHAT : S_PENDING };
         }
         if ("shop".equals(tab)) return new String[] { S_SHOP };
         if ("home".equals(tab)) return new String[] { S_HOME };

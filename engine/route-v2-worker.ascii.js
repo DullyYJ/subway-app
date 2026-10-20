@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-20s87";
+var ENGINE_VERSION = "route-v2-2026-10-20s88";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -12976,6 +12976,8 @@ async function handleScreenBoard(request) {
 // \ub9e8 \uc544\ub798 module.exports \ub294 \uc2dc\ud5d8(Node)\uc6a9\uc774\uace0 Worker \uc5d0\uc11c\ub294 \ud568\uc218 \uc120\uc5b8\ub9cc \uc4f0\uc778\ub2e4.
 'use strict';
 var CHAT_SCREEN_V = 1;
+var chtTrkColor = (typeof rheadTrkColor === 'function') ? rheadTrkColor : null;      // \ub178\uc120 \uc0c9\uc740 \ud0c0\uc784\ub77c\uc778(rhead)\uacfc \uac19\uc740 \ud45c\ub97c \uc4f4\ub2e4. Node \uc2dc\ud5d8\uc5d0\uc11c\ub294 \uc544\ub798\uc5d0\uc11c \ubd88\ub7ec\uc628\ub2e4.
+if (!chtTrkColor) { try { if (typeof require === 'function') chtTrkColor = require('./rhead').rheadTrkColor; } catch (eRq) {} }
 var CHT_ALTS_MAX = 24;                // \ud55c \uc694\uccad\uc5d0 \uc2e4\uc744 \uc218 \uc788\ub294 '\ub2e4\ub978 \ubc29' \uc218 \uc0c1\ud55c(\uc804\uccb4 + \ud638\uc120 18\uac1c)
 var CHT_COMMON = ['1\ud638\uc120', '2\ud638\uc120', '3\ud638\uc120', '4\ud638\uc120', '5\ud638\uc120', '6\ud638\uc120', '7\ud638\uc120', '8\ud638\uc120', '9\ud638\uc120', '\uc2e0\ubd84\ub2f9\uc120', '\uc218\uc778\ubd84\ub2f9\uc120', '\uacbd\uc758\uc911\uc559\uc120', '\uacf5\ud56d\ucca0\ub3c4', '\uacbd\ucd98\uc120', 'GTX-A'];   // \uc6f9 _LR_COMMON
 var CHT_KNOWN = CHT_COMMON.concat(['\uc778\ucc9c1\ud638\uc120', '\uc778\ucc9c2\ud638\uc120', '\uae40\ud3ec\uace8\ub4dc\ub77c\uc778']);                                                                                          // \uc6f9 _LR_KNOWN
@@ -13002,11 +13004,30 @@ function chtFacts(f) {
   if (sel !== 'all' && CHT_KNOWN.indexOf(sel) < 0) sel = 'all';
   var mine = [];
   if (Array.isArray(f.mine)) f.mine.forEach(function (l) { if (CHT_KNOWN.indexOf(l) >= 0 && mine.indexOf(l) < 0 && mine.length < 8) mine.push(l); });
+  else mine = chtMineLines(f.sec, f.my);                      // \uc571\uc740 \uc9c0\uae08 \uacbd\ub85c\uc758 \uc9c0\ud558\ucca0 \uad6c\uac04 \uc774\ub984(sec)\uacfc \ud0c4 \uae30\ub85d(my)\ub9cc \uc900\ub2e4 \u2014 \uc55e\uc5d0 \ub458 \ub178\uc120\uc740 \uc5d4\uc9c4\uc774 \uc815\ud55c\ub2e4
   var lc = {};
   if (f.lc && typeof f.lc === 'object') CHT_KNOWN.forEach(function (l) { var c = chtCssColor(f.lc[l]); if (c) lc[l] = c; });
+  var th = f.th === 'pastel' ? 'pastel' : 'dark';
+  if (chtTrkColor) CHT_KNOWN.forEach(function (l) { if (!lc[l]) lc[l] = chtTrkColor(1, l, th); });   // \ub178\uc120 \uc0c9\uc740 \ud0c0\uc784\ub77c\uc778\uacfc \uac19\uc740 \ud45c(rhead)\uc5d0\uc11c
   var hid = {};
   if (Array.isArray(f.hid)) f.hid.forEach(function (i, q) { if (q < 400) hid[chtStr(i, 40)] = 1; });
-  return { sel: sel, mine: mine, lc: lc, st: (f.st === 'loading' || f.st === 'fail') ? f.st : 'ready', tzo: isFinite(Number(f.tzo)) ? Number(f.tzo) : 0, me: chtStr(f.me, 40), hid: hid };
+  return { my: Array.isArray(f.my) ? f.my : [], sel: sel, mine: mine, lc: lc, st: (f.st === 'loading' || f.st === 'fail') ? f.st : 'ready', tzo: isFinite(Number(f.tzo)) ? Number(f.tzo) : 0, me: chtStr(f.me, 40), hid: hid };
+}
+// \uc9c0\uae08 \uacbd\ub85c\uc758 \uc9c0\ud558\ucca0 \ub178\uc120(\uc6f9 _routeSubLines)\uacfc \ud0c4 \uae30\ub85d(\uc6f9 _myLinesList): \uacbd\ub85c \uc21c\uc11c \ub178\uc120\uc744 \uba3c\uc800, \uadf8\ub2e4\uc74c \uc790\uc8fc \ud0c4 \uc21c. \ucd5c\ub300 8\uac1c.
+//   sec = \uacbd\ub85c\uc758 \uc9c0\ud558\ucca0 \uad6c\uac04 \uc774\ub984\ub4e4, my = [{l, n(\ud0c4 \ud69f\uc218), t(\ub9c8\uc9c0\ub9c9 \uc2dc\uac01)}\u2026]
+function chtMineLines(sec, my) {
+  var cur = [];
+  if (Array.isArray(sec)) sec.forEach(function (raw) {
+    var nm = String(raw == null ? '' : raw).replace(/\s+/g, '');
+    if (!nm) return;
+    var hit = CHT_KNOWN.indexOf(nm) >= 0 ? nm : '';
+    if (!hit) CHT_KNOWN.forEach(function (k) { if (nm.indexOf(k) >= 0 && k.length > hit.length) hit = k; });
+    if (hit && cur.indexOf(hit) < 0) cur.push(hit);
+  });
+  var st = [];
+  if (Array.isArray(my)) st = my.filter(function (x) { return x && CHT_KNOWN.indexOf(x.l) >= 0; })
+    .sort(function (x, y) { return ((y.n || 0) - (x.n || 0)) || ((y.t || 0) - (x.t || 0)); }).map(function (x) { return x.l; });
+  return cur.concat(st.filter(function (l) { return cur.indexOf(l) < 0; })).slice(0, 8);
 }
 // \uce69 \uc21c\uc11c(\uc6f9 _chatItems): \uc804\uccb4 \u2192 \ub0b4\uac00 \ud0c4 \ub178\uc120 \u2192 \ub098\uba38\uc9c0 \ud638\uc120. \ubaa9\ub85d \ubc16 \ub178\uc120(\uc54c\ub9bc \ub4f1\uc73c\ub85c \uc5f0 \ubc29)\uc774\uba74 \ub9e8 \ub4a4\uc5d0 \ubd99\uc778\ub2e4.
 function chtItems(f) {
@@ -13114,7 +13135,7 @@ function chatScreen(inp, factsIn, dataIn) {
     } else body = [{ t: 'spacer', h: 4 }].concat(rs.map(function (x) { return x.node; }), [{ t: 'spacer', h: 4 }]);
   }
   var foot = [{ t: 'inbar', pad: [12, 10, 12, 10], key: f.sel === 'all' ? 'chat.all' : 'chat.room', hint: f.sel === 'all' ? '\uba54\uc2dc\uc9c0\ub97c \uc785\ub825\ud558\uc138\uc694...' : '\uc774 \ub178\uc120 \uc774\uc6a9\uc790\uc5d0\uac8c \ud55c\ub9c8\ub514\u2026', btn: '\uc804\uc1a1', h: 38, r: 19, maxlen: f.sel === 'all' ? 200 : 120, fill: 'card', line: 'border2', act: { a: 'call', v: 'ch.send' } }];
-  var out = { ok: true, v: 1, screen: 'chat', cover: 'tab', anchor: 'bottom', head: head, body: body, foot: foot, info: { sel: f.sel, n: n } };
+  var out = { ok: true, v: 1, screen: 'chat', cover: 'tab', anchor: 'bottom', head: head, body: body, foot: foot, info: { sel: f.sel, n: n, pl: chtMineLines(null, f.my)[0] || '' } };
   out.rev = 'c' + CHAT_SCREEN_V + ':' + chtHash(JSON.stringify([head, body, foot]));
   return out;
 }
@@ -18320,7 +18341,9 @@ function resultScreen(opt, r) {
     if (k) nodes = nodes.concat(k.head).concat(k.body);
   }
   var body = nodes.length ? [{ t: 'panel', pad: [0, 4, 0, 8], ip: [12, 12, 12, 8], r: 16, kids: nodes }] : [];
-  var out = { ok: true, v: RESULT_V, screen: 'result', cover: 'chips', head: [], body: body, info: { has: has, tab: tab, m: total, n: paths.length } };
+  var sec = [];                                                  // \uc9c0\uae08 \ubcf4\uc774\ub294 \uacbd\ub85c\uc758 \uc9c0\ud558\ucca0 \uad6c\uac04 \uc774\ub984(\uc2e4\uc2dc\uac04\uc18c\ud1b5\uc774 '\ub0b4 \ub178\uc120'\uc744 \uc55e\uc5d0 \ub458 \ub54c \uc4f4\ub2e4)
+  if (route) route.sections.forEach(function (sc) { var tr = (sc && sc.transportation) || {}; if (tr.type === 1 && tr.name && sec.length < 8) sec.push(String(tr.name)); });
+  var out = { ok: true, v: RESULT_V, screen: 'result', cover: 'chips', head: [], body: body, info: { has: has, tab: tab, m: total, n: paths.length, sec: sec } };
   out.rev = 'e' + RESULT_V + ':' + resHash(JSON.stringify(body));
   return out;
 }

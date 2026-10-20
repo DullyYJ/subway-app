@@ -49,6 +49,18 @@ public final class HomeCore {
     public long resRb = 0, resBt = -1;
     public int resRev = 0;                                       // 결과가 바뀔 때마다 오른다(화면 캐시 열쇠)
     public boolean hasRoute() { return routeRaw.length() > 2; }
+    /** 엔진 결과 화면의 info.sec(지금 보이는 경로의 지하철 구간 이름). */
+    public List<String> resSec = new ArrayList<String>();
+    @SuppressWarnings("unchecked")
+    public void onResult(String json) {
+        resSec = new ArrayList<String>();
+        try {
+            Object o = ScreenCore.parse(json);
+            Object info = o instanceof Map ? ((Map<String, Object>) o).get("info") : null;
+            Object sec = info instanceof Map ? ((Map<String, Object>) info).get("sec") : null;
+            if (sec instanceof List) for (Object x : (List<Object>) sec) if (x instanceof String) resSec.add((String) x);
+        } catch (Exception e) { resSec = new ArrayList<String>(); }
+    }
     /** 받은 경로 응답을 결과로 둔다. 모양이 JSON 객체가 아니면 버린다. */
     public boolean setRoute(String raw, String a, String b, long bt, long rb) {
         String t = raw == null ? "" : raw.trim();

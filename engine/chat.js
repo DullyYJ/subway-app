@@ -18,6 +18,8 @@
 // 맨 아래 module.exports 는 시험(Node)용이고 Worker 에서는 함수 선언만 쓰인다.
 'use strict';
 var CHAT_SCREEN_V = 1;
+var chtTrkColor = (typeof rheadTrkColor === 'function') ? rheadTrkColor : null;      // 노선 색은 타임라인(rhead)과 같은 표를 쓴다. Node 시험에서는 아래에서 불러온다.
+if (!chtTrkColor) { try { if (typeof require === 'function') chtTrkColor = require('./rhead').rheadTrkColor; } catch (eRq) {} }
 var CHT_ALTS_MAX = 24;                // 한 요청에 실을 수 있는 '다른 방' 수 상한(전체 + 호선 18개)
 var CHT_COMMON = ['1호선', '2호선', '3호선', '4호선', '5호선', '6호선', '7호선', '8호선', '9호선', '신분당선', '수인분당선', '경의중앙선', '공항철도', '경춘선', 'GTX-A'];   // 웹 _LR_COMMON
 var CHT_KNOWN = CHT_COMMON.concat(['인천1호선', '인천2호선', '김포골드라인']);                                                                                          // 웹 _LR_KNOWN
@@ -44,11 +46,30 @@ function chtFacts(f) {
   if (sel !== 'all' && CHT_KNOWN.indexOf(sel) < 0) sel = 'all';
   var mine = [];
   if (Array.isArray(f.mine)) f.mine.forEach(function (l) { if (CHT_KNOWN.indexOf(l) >= 0 && mine.indexOf(l) < 0 && mine.length < 8) mine.push(l); });
+  else mine = chtMineLines(f.sec, f.my);                      // 앱은 지금 경로의 지하철 구간 이름(sec)과 탄 기록(my)만 준다 — 앞에 둘 노선은 엔진이 정한다
   var lc = {};
   if (f.lc && typeof f.lc === 'object') CHT_KNOWN.forEach(function (l) { var c = chtCssColor(f.lc[l]); if (c) lc[l] = c; });
+  var th = f.th === 'pastel' ? 'pastel' : 'dark';
+  if (chtTrkColor) CHT_KNOWN.forEach(function (l) { if (!lc[l]) lc[l] = chtTrkColor(1, l, th); });   // 노선 색은 타임라인과 같은 표(rhead)에서
   var hid = {};
   if (Array.isArray(f.hid)) f.hid.forEach(function (i, q) { if (q < 400) hid[chtStr(i, 40)] = 1; });
-  return { sel: sel, mine: mine, lc: lc, st: (f.st === 'loading' || f.st === 'fail') ? f.st : 'ready', tzo: isFinite(Number(f.tzo)) ? Number(f.tzo) : 0, me: chtStr(f.me, 40), hid: hid };
+  return { my: Array.isArray(f.my) ? f.my : [], sel: sel, mine: mine, lc: lc, st: (f.st === 'loading' || f.st === 'fail') ? f.st : 'ready', tzo: isFinite(Number(f.tzo)) ? Number(f.tzo) : 0, me: chtStr(f.me, 40), hid: hid };
+}
+// 지금 경로의 지하철 노선(웹 _routeSubLines)과 탄 기록(웹 _myLinesList): 경로 순서 노선을 먼저, 그다음 자주 탄 순. 최대 8개.
+//   sec = 경로의 지하철 구간 이름들, my = [{l, n(탄 횟수), t(마지막 시각)}…]
+function chtMineLines(sec, my) {
+  var cur = [];
+  if (Array.isArray(sec)) sec.forEach(function (raw) {
+    var nm = String(raw == null ? '' : raw).replace(/\s+/g, '');
+    if (!nm) return;
+    var hit = CHT_KNOWN.indexOf(nm) >= 0 ? nm : '';
+    if (!hit) CHT_KNOWN.forEach(function (k) { if (nm.indexOf(k) >= 0 && k.length > hit.length) hit = k; });
+    if (hit && cur.indexOf(hit) < 0) cur.push(hit);
+  });
+  var st = [];
+  if (Array.isArray(my)) st = my.filter(function (x) { return x && CHT_KNOWN.indexOf(x.l) >= 0; })
+    .sort(function (x, y) { return ((y.n || 0) - (x.n || 0)) || ((y.t || 0) - (x.t || 0)); }).map(function (x) { return x.l; });
+  return cur.concat(st.filter(function (l) { return cur.indexOf(l) < 0; })).slice(0, 8);
 }
 // 칩 순서(웹 _chatItems): 전체 → 내가 탄 노선 → 나머지 호선. 목록 밖 노선(알림 등으로 연 방)이면 맨 뒤에 붙인다.
 function chtItems(f) {
@@ -156,7 +177,7 @@ function chatScreen(inp, factsIn, dataIn) {
     } else body = [{ t: 'spacer', h: 4 }].concat(rs.map(function (x) { return x.node; }), [{ t: 'spacer', h: 4 }]);
   }
   var foot = [{ t: 'inbar', pad: [12, 10, 12, 10], key: f.sel === 'all' ? 'chat.all' : 'chat.room', hint: f.sel === 'all' ? '메시지를 입력하세요...' : '이 노선 이용자에게 한마디…', btn: '전송', h: 38, r: 19, maxlen: f.sel === 'all' ? 200 : 120, fill: 'card', line: 'border2', act: { a: 'call', v: 'ch.send' } }];
-  var out = { ok: true, v: 1, screen: 'chat', cover: 'tab', anchor: 'bottom', head: head, body: body, foot: foot, info: { sel: f.sel, n: n } };
+  var out = { ok: true, v: 1, screen: 'chat', cover: 'tab', anchor: 'bottom', head: head, body: body, foot: foot, info: { sel: f.sel, n: n, pl: chtMineLines(null, f.my)[0] || '' } };
   out.rev = 'c' + CHAT_SCREEN_V + ':' + chtHash(JSON.stringify([head, body, foot]));
   return out;
 }
@@ -180,4 +201,4 @@ function chatScreens(inp, factsIn, dataIn, altsIn) {
   return out;
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { chatScreen: chatScreen, chatScreens: chatScreens, chtFacts: chtFacts, chtItems: chtItems, chtTime: chtTime, chtOfficial: chtOfficial, chtAlert: chtAlert, CHT_KNOWN: CHT_KNOWN };
+if (typeof module !== 'undefined' && module.exports) module.exports = { chtMineLines: chtMineLines, chatScreen: chatScreen, chatScreens: chatScreens, chtFacts: chtFacts, chtItems: chtItems, chtTime: chtTime, chtOfficial: chtOfficial, chtAlert: chtAlert, CHT_KNOWN: CHT_KNOWN };
