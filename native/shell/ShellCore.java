@@ -20,7 +20,7 @@ public final class ShellCore {
     /** 껍데기가 아는 화면 규격(ScreenNativePlugin 의 status cap 과 같은 단계). */
     public static final int CAP = 18;
     /** 설정 화면 요청의 cap — 3 이면 하위 화면 행동이 'web' 이라 껍데기가 안 열 수 있는 것은 '아직 안 옮겼어요'로 알린다. */
-    public static final int SETTINGS_CAP = 3;
+    public static final int SETTINGS_CAP = 8;
 
     /** 앱 시계의 오늘 날짜 글자(예: 2026-10-20). 화면을 요청하기 직전에 껍데기가 넣는다 — 코어는 시계를 읽지 않는다. */
     public static final String K_DAY = "mk_today";
@@ -67,6 +67,7 @@ public final class ShellCore {
             b.append(q(NOTIF[i])).append(':').append("0".equals(st.get("np_" + NOTIF[i], "1")) ? 0 : 1);
         }
         b.append('}');
+        b.append(",\"ovl\":").append("1".equals(st.get(K_OVL, "0")) ? 1 : 0);
         b.append(",\"rl\":").append("1".equals(st.get(K_RIDELOG_OFF, "0")) ? 0 : 1);
         b.append(",\"th\":").append(q(theme(st)));
         b.append(",\"pt\":").append(RulesCore.ptOf(st)).append(",\"day\":").append(q(st.get(K_DAY, ""))).append('}');
@@ -75,6 +76,23 @@ public final class ShellCore {
     public static String settingsUrl(Store st) {
         try { return BASE + "/screen/settings?cap=" + SETTINGS_CAP + "&f=" + URLEncoder.encode(settingsFacts(st), "UTF-8"); }
         catch (java.io.UnsupportedEncodingException e) { return BASE + "/screen/settings?cap=" + SETTINGS_CAP; }
+    }
+
+    // ═════════════ 설정 하위 화면: 다른 앱 위에 표시(ovl) ═════════════
+    public static final int PG_NONE = 0, PG_RENDER = 1, PG_CLOSE = 2, PG_NEEDPERM = 3;
+    /** 하위 화면 주소. 지원 여부·허용 여부는 기기 사실이라 껍데기가 알려 준다(글은 엔진이 만든다). */
+    public static String pageUrl(Store st, String page, boolean supported, boolean granted) {
+        String pf = "{\"pf\":{\"nat\":true,\"nv\":true,\"sup\":" + supported + ",\"gr\":" + granted + ",\"on\":" + "1".equals(st.get(K_OVL, "0")) + ",\"pfl\":" + "1".equals(st.get(K_PFL, "0")) + "}}";
+        try { return BASE + "/screen/settings?cap=" + SETTINGS_CAP + "&p=" + URLEncoder.encode(page, "UTF-8") + "&f=" + URLEncoder.encode(pf, "UTF-8"); }
+        catch (java.io.UnsupportedEncodingException e) { return BASE + "/screen/settings?cap=" + SETTINGS_CAP + "&p=" + page; }
+    }
+    /** 하위 화면 눌림(스위치는 a=set · key=ovl). 스위치를 켰는데 권한이 없으면 PG_NEEDPERM — 껍데기가 기기 설정 화면을 연다. */
+    public static int routePage(Store st, String page, String a, String v, String key, boolean on, boolean granted) {
+        if (!"ovl".equals(page)) return PG_NONE;
+        if ("set".equals(a) && "ovl".equals(key)) { st.put(K_OVL, on ? "1" : "0"); return on && !granted ? PG_NEEDPERM : PG_RENDER; }
+        if ("call".equals(a) && "pg.back".equals(v)) return PG_CLOSE;
+        if ("call".equals(a) && "pf.live".equals(v)) { st.put(K_PFL, "1".equals(st.get(K_PFL, "0")) ? "0" : "1"); return PG_RENDER; }
+        return PG_NONE;
     }
 
     /** 아이디 규칙(웹 _saveCommId 와 같다): 2~12자 · 한글/영문/숫자/밑줄. 나쁜 말 검사는 엔진이 맡는 일이라 껍데기는 모양만 본다. */
@@ -91,7 +109,7 @@ public final class ShellCore {
     }
 
     // ═════════════ 눌림 → 효과 ═════════════
-    public static final int E_NONE = 0, E_TAB = 1, E_REFRESH = 2, E_TOAST = 3, E_LINK = 4, E_NEWS = 5;
+    public static final int E_NONE = 0, E_TAB = 1, E_REFRESH = 2, E_TOAST = 3, E_LINK = 4, E_NEWS = 5, E_PAGE = 6;
     /** 눌림 결과: 껍데기가 할 일 하나. arg 는 탭 이름 · 알림 글 · 주소. 저장값은 route 가 이미 바꿔 놓았다. */
     public static final class Effect {
         public final int kind; public final String arg;
@@ -127,6 +145,7 @@ public final class ShellCore {
             }
             if ("clearId".equals(v)) { st.put(K_ID, ""); return new Effect(E_TOAST, "아이디가 삭제되었어요"); }
             if (v != null && v.startsWith("tab.") && isTab(v.substring(4))) return tabEffect(st, v.substring(4));
+            if (v != null && v.startsWith("pg.") && v.length() > 3 && v.length() < 10) return new Effect(E_PAGE, v.substring(3));      // 설정 하위 화면(다른 앱 위에 표시 …)
             return new Effect(E_TOAST, "아직 옮기는 중이에요");
         }
         if ("web".equals(a)) return new Effect(E_TOAST, "아직 옮기는 중이에요");
@@ -182,7 +201,8 @@ public final class ShellCore {
     public static boolean isMode(String m) { for (String x : MODES) if (x.equals(m)) return true; return false; }
     public static String mode(Store st) { String m = st.get(K_MODE, MODE_DEFAULT); return isMode(m) ? m : MODE_DEFAULT; }
 
-    public static final String S_SETTINGS = "settings", S_SHOP = "shop", S_NEWS = "news", S_CCHIPS = "cchips", S_PENDING = "pending", S_HOME = "home", S_BOARD = "board", S_WRITE = "write", S_CHAT = "chat", S_FOOD = "food", S_FOODSHEET = "foodsheet", S_MAPH = "maph", S_MAPB = "mapb", S_MAPSTN = "mapstn", S_MAPTT = "maptt", S_FAV = "fav", S_DETAIL = "detail";
+    public static final String S_SETTINGS = "settings", S_SHOP = "shop", S_NEWS = "news", S_CCHIPS = "cchips", S_PENDING = "pending", S_HOME = "home", S_BOARD = "board", S_WRITE = "write", S_CHAT = "chat", S_FOOD = "food", S_FOODSHEET = "foodsheet", S_MAPH = "maph", S_MAPB = "mapb", S_MAPSTN = "mapstn", S_MAPTT = "maptt", S_FAV = "fav", S_DETAIL = "detail", S_SETPG = "setpg";
+    public static final String K_OVL = "ovl_on", K_PFL = "pf_live";
 
     /** 탭이 보여 줄 화면 칸들(위에서 아래로). 첫 칸이 머리(높이는 그린 내용만큼), 마지막 칸이 본문(남은 높이). 한 칸이면 본문만. */
     public static String[] slotsOf(Store st, String tab) {

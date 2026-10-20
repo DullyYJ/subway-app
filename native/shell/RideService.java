@@ -43,6 +43,7 @@ public class RideService extends Service {
     private Handler h;
     private RideCore core;
     private LocationManager lm;
+    private RideOverlay ov;
     private boolean listening = false, stepping = false;
     private volatile boolean stopped = false;
 
@@ -94,6 +95,7 @@ public class RideService extends Service {
 
     @Override public void onDestroy() {
         stopped = true; running = false;
+        if (ov != null) ov.hide();
         try { if (lm != null && listening) lm.removeUpdates(ll); } catch (Throwable ignored) { }
         listening = false;
         if (h != null) h.removeCallbacksAndMessages(null);
@@ -129,6 +131,7 @@ public class RideService extends Service {
                         if (s.alert) fireAlert(s);
                         publish();
                         updateOngoing();
+                        updateOverlay();
                         if (s.done) { stepping = false; finishRide(true); return; }
                         delay = core.nextMs;
                     }
@@ -139,6 +142,15 @@ public class RideService extends Service {
         }
     };
 
+    /** 설정에서 '다른 앱 위에 표시'를 켰으면 엔진이 정한 안내 값을 창에 그린다(끄면 치운다). */
+    private void updateOverlay() {
+        try {
+            if (ov == null) ov = new RideOverlay(this);
+            boolean on = "1".equals(getSharedPreferences(ShellActivity.PREFS, MODE_PRIVATE).getString(ShellCore.K_OVL, "0"));
+            ov.update(on && core.ovActive, core.ovLine1, core.ovLine2, core.ovBanner, core.ovAlert);
+        } catch (Throwable ignored) { }
+    }
+
     private void publish() {
         liveRide = core.rideJson(); liveLv = core.lvJson(); liveRev++;
         try { RideWidget.update(this, core.title, core.text); } catch (Throwable ignored) { }
@@ -146,6 +158,7 @@ public class RideService extends Service {
 
     private void finishRide(boolean arrived) {
         stopped = true; running = false;
+        if (ov != null) ov.hide();
         clearSaved(this);
         liveRide = ""; liveLv = ""; liveRev++;
         try { RideWidget.update(this, "길동무", arrived ? "안내가 끝났어요" : ""); } catch (Throwable ignored) { }

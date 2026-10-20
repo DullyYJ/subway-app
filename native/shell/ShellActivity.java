@@ -34,7 +34,7 @@ import java.util.Map;
  * 글·순서·보임/숨김은 엔진이, 눌림의 뜻과 요청 모양은 ShellCore 가 정한다. 못 받거나 틀린 화면은 알림으로 알리고 지금 화면을 둔다.
  */
 public class ShellActivity extends Activity {
-    private static final String PREFS = "gdm_shell";
+    static final String PREFS = "gdm_shell";
 
     private final Handler main = new Handler(Looper.getMainLooper());
     private ShellCore.Store store;
@@ -86,6 +86,7 @@ public class ShellActivity extends Activity {
         map = new MapCore(store);
         dpr = getResources().getDisplayMetrics().density;
         ScreenView.preloadFaces(this);
+        importLegacy();
 
         root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -117,7 +118,7 @@ public class ShellActivity extends Activity {
     }
 
     private boolean resumed;
-    @Override protected void onResume() { super.onResume(); resumed = true; if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) startChatPoll(); }
+    @Override protected void onResume() { super.onResume(); resumed = true; if (ShellCore.S_SETPG.equals(sheetName) && sheet != null && sheet.isShowing()) loadSetPage(); if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) startChatPoll(); }
     @Override protected void onPause() { resumed = false; super.onPause(); }
 
     @Override public void onBackPressed() {
@@ -136,6 +137,37 @@ public class ShellActivity extends Activity {
         tabs.setPalette(pal);
         root.setBackgroundColor(pal[ScreenView.R_BG]);
         getWindow().getDecorView().setBackgroundColor(pal[ScreenView.R_BG]);
+    }
+
+    // ───────────── 예전(웹뷰) 앱 즐겨찾기 가져오기: 한 번만, 새 앱 즐겨찾기가 비어 있을 때만 ─────────────
+    private void importLegacy() {
+        if ("1".equals(store.get(LegacyCore.K_DONE, ""))) return;
+        new Thread(new Runnable() {
+            @Override public void run() {
+                String got = null;
+                try {
+                    java.util.List<byte[]> files = new java.util.ArrayList<byte[]>();
+                    for (String d : LegacyCore.DIRS) {
+                        java.io.File[] fs = new java.io.File(getApplicationInfo().dataDir, d).listFiles();
+                        if (fs == null) continue;
+                        java.util.Arrays.sort(fs, new java.util.Comparator<java.io.File>() { @Override public int compare(java.io.File a, java.io.File b) { return a.getName().compareTo(b.getName()); } });
+                        for (java.io.File f : fs) {
+                            if (!(f.getName().endsWith(".log") || f.getName().endsWith(".ldb")) || f.length() > 16L * 1024 * 1024) continue;
+                            byte[] buf = new byte[(int) f.length()];
+                            java.io.FileInputStream in = new java.io.FileInputStream(f);
+                            try { int n = 0; while (n < buf.length) { int r = in.read(buf, n, buf.length - n); if (r < 0) break; n += r; } } finally { in.close(); }
+                            files.add(buf);
+                        }
+                    }
+                    got = LegacyCore.findFavorites(files);
+                } catch (Throwable ignored) { /* 못 읽으면 그냥 넘어간다 */ }
+                store.put(LegacyCore.K_DONE, "1");
+                if (got != null && "[]".equals(fav.listJson())) {
+                    store.put(FavCore.K_FAV, got);
+                    toastMain("예전 즐겨찾기 " + LegacyCore.count(got) + "개를 가져왔어요");
+                }
+            }
+        }, "shell-legacy").start();
     }
 
     // ───────────── 화면 받기 ─────────────
@@ -297,6 +329,7 @@ public class ShellActivity extends Activity {
             case ShellCore.E_TOAST: toast(e.arg); loadSlot(slots.length - 1, true); break;
             case ShellCore.E_LINK: openLink(e.arg); break;
             case ShellCore.E_NEWS: openNews(e.arg); break;
+            case ShellCore.E_PAGE: if ("ovl".equals(e.arg)) openSetPage(); else toast("아직 옮기는 중이에요"); break;
             default: break;
         }
     }
@@ -905,6 +938,7 @@ public class ShellActivity extends Activity {
     private final class SheetHost implements ScreenView.Listener {
         @Override public void onAction(ScreenCore.Act a) {
             if (ShellCore.S_MAPSTN.equals(sheetName) || ShellCore.S_MAPTT.equals(sheetName)) { if ("call".equals(a.a)) mapSheetAct(a.v); return; }
+            if (ShellCore.S_SETPG.equals(sheetName)) { setPageAct(a.a, a.v, a.key, false); return; }
             if (!"call".equals(a.a)) return;
             if (ShellCore.S_FAV.equals(sheetName)) { favAct(a.v, sheetView == null ? null : sheetView.fields()); return; }
             if (ShellCore.S_DETAIL.equals(sheetName)) { detailAct(a.v); return; }
@@ -913,7 +947,7 @@ public class ShellActivity extends Activity {
             String[] ln = food.sheetLink(a.v);
             if (ln != null) openExternal(ln[0], ln[1]);
         }
-        @Override public void onSet(ScreenCore.Act a, boolean on) { }
+        @Override public void onSet(ScreenCore.Act a, boolean on) { if (ShellCore.S_SETPG.equals(sheetName)) setPageAct(a.a, a.v, a.key, on); }
         @Override public void onSearch(ScreenCore.Act a, String q) { }
         @Override public void onInputFocus(boolean on) { }
         @Override public void onFirstDraw() { }
@@ -1348,7 +1382,7 @@ public class ShellActivity extends Activity {
             return;
         }
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) requestPermissions(new String[] { android.Manifest.permission.POST_NOTIFICATIONS }, REQ_RIDE + 1);
-        final String body = RideCore.startBody(ShellCore.CAP, home.resultFacts(homeEnv(), ShellCore.theme(store)), RideCore.offKinds(store));
+        final String body = RideCore.startBody(ShellCore.CAP, home.resultFacts(homeEnv(), ShellCore.theme(store)), RideCore.offKinds(store), "1".equals(store.get(ShellCore.K_PFL, "0")));
         final int rid = home.routeId;
         toast("탑승 안내를 준비하고 있어요");
         new Thread(new Runnable() {
@@ -1439,6 +1473,43 @@ public class ShellActivity extends Activity {
             try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(u[0]))); return; } catch (ActivityNotFoundException e) { /* 앱 없음 → 웹 */ }
         }
         openLink(u[1]);
+    }
+
+    // ───────────── 설정 하위 화면 시트(다른 앱 위에 표시) ─────────────
+    private void openSetPage() {
+        closeSheet();
+        sheetName = ShellCore.S_SETPG;
+        sheetView = new ScreenView(this);
+        sheetView.setDpr(dpr);
+        sheetView.setPalette(ShellCore.palette(ShellCore.theme(store)));
+        sheetView.setListener(new SheetHost());
+        sheet = new android.app.Dialog(this, android.R.style.Theme_Material_Light_NoActionBar);
+        sheet.setContentView(sheetView);
+        try { sheet.show(); slideIn(sheetView); } catch (Throwable t) { toast("설정을 열지 못했어요"); return; }
+        loadSetPage();
+    }
+    private void loadSetPage() {
+        final String url = ShellCore.pageUrl(store, "ovl", RideOverlay.supported(), RideOverlay.allowed(this));
+        new Thread(new Runnable() {
+            @Override public void run() {
+                NetPost.Res r = NetPost.get(url, 8000);
+                final String txt = r.status == 200 ? r.body : "";
+                main.post(new Runnable() { @Override public void run() {
+                    if (sheet == null || !sheet.isShowing() || !ShellCore.S_SETPG.equals(sheetName)) return;
+                    if (txt.length() == 0) { toast("설정을 받지 못했어요"); return; }
+                    present(sheetView, txt, true);
+                } });
+            }
+        }, "shell-setpg").start();
+    }
+    private void setPageAct(String a, String v, String key, boolean on) {
+        int r = ShellCore.routePage(store, "ovl", a, v, key, on, RideOverlay.allowed(this));
+        if (r == ShellCore.PG_CLOSE) { closeSheet(); loadSlot(slots.length - 1, true); return; }
+        if (r == ShellCore.PG_NEEDPERM) {                              // '다른 앱 위에 표시' 허용 화면(기기 설정)으로 보낸다. 돌아오면 onResume 이 다시 그린다.
+            toast("설정에서 '다른 앱 위에 표시'를 허용해 주세요");
+            try { startActivity(new Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName()))); } catch (Throwable t) { /* 기기가 못 열면 안내 글만 남는다 */ }
+        }
+        if (r != ShellCore.PG_NONE) loadSetPage();
     }
 
     // ───────────── 즐겨찾기 시트 ─────────────

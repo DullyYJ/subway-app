@@ -240,6 +240,38 @@ function rsWait(st, tr, now, O, notes) {
   notes.push('승차 확정(' + why + ')');
 }
 
+// ★ 2026-10-21 (s101): 새 위치 판단기 보정(실험, cfg.pfLive) — 위치 판단기(PosFusion, 은닉 마르코프)가 받은 위치들로 '지금 어느 역에 서 있나'를 확률로 낸다.
+//   확신이 높고(0.9 이상) 그 역에 서 있거나 막 떠났다고 판단하며(dwell·seg) 아직 통과로 안 적힌 앞쪽 역(최대 3개 앞)이면 통과 증거로 보탠다. GPS 끊김(터널·지하)에서 영점이 놓친 역을 메운다.
+//   판단기 상태(st.pf)는 요청에 실려 오가며(역 10개 7KB · 40개 32KB) 엔진은 기억하지 않는다. 꺼져 있으면(기본) 아무것도 하지 않는다.
+function rsFuseFn() { return (typeof posFuseRun === 'function') ? posFuseRun : (function () { try { return require('./posfusion').posFuseRun; } catch (e) { return null; } })(); }
+function rsFuse(st, fx, now, notes) {
+  var stops = st.stops || [], fn = rsFuseFn(), eta = st.eta || {}, passes = eta.passes = eta.passes || [], enodes = eta.nodes || [], q, k;
+  if (!fn || stops.length < 2 || st.wait || eta.boarded === false) return false;
+  var maxIdx = 0, maxK = 0;
+  for (k = 0; k < passes.length; k++) if (passes[k] && passes[k].idx > maxIdx) maxIdx = passes[k].idx;
+  for (q = 0; q < stops.length; q++) if (stops[q].i <= maxIdx) maxK = q;
+  var stations = stops.map(function (s, j) {
+    var prev = j > 0 ? enodes[stops[j - 1].i] : null, cur = enodes[s.i], ms = (st.etaMs && st.etaMs[s.i] != null) ? st.etaMs[s.i] : s.arrMs;
+    return { lat: s.lat, lng: s.lng, schedMs: (ms != null && isFinite(ms)) ? ms : null, xferFromPrev: !!(prev && cur && String(prev.lineName || '') !== String(cur.lineName || '')) };
+  });
+  var ev = [];
+  (fx || []).forEach(function (f) { if (f && isFinite(f[0]) && isFinite(f[1]) && isFinite(f[2])) ev.push({ t: 'gps', at: f[0], fix: { lat: f[1], lng: f[2], ts: f[0], acc: f[3] == null ? 30 : f[3] } }); });
+  var out;
+  try { out = fn({ nowMs: now, stations: stations, state: st.pf || undefined, seed: { idx: maxK, conf: 0.8 }, ev: ev }); } catch (e) { notes.push('위치 판단기 실패: ' + (e && e.message)); return false; }
+  if (!out || !out.ok || !out.state) return false;
+  st.pf = out.state;
+  var b = out.best;
+  if (!b || !(b.conf >= 0.9)) return false;                      // dwell = 그 역에 서 있다 · seg = 그 역을 떠나 다음 역으로 가는 중 — 둘 다 그 역은 지났다
+  var s = stops[b.idx];
+  if (!s || s.i <= maxIdx || b.idx > maxK + 3) return false;
+  var hit = -1; for (k = 0; k < passes.length; k++) if (passes[k].idx === s.i) { hit = k; break; }
+  if (hit >= 0) return false;
+  passes.push({ idx: s.i, ms: now, src: 'gps' });
+  if (st.notYet) delete st.notYet[s.i];
+  notes.push('위치 판단기 ' + s.i + '번 역 도착 반영(확신 ' + Math.round(b.conf * 100) + '%)');
+  return true;
+}
+
 function rideStandby(req) {
   req = req || {};
   var O = RIDE_STANDBY_DEFAULTS, st = req.state, now = +req.nowMs, notes = [], i;
@@ -291,7 +323,8 @@ function rideStandby(req) {
       notes.push('버스위치 ' + p.i + '번 통과 반영');
     });
   }
-  if (rsResync(st, now, notes)) newPass = true;   // 2.5) 버스: 오래 끊겼던 GPS 가 돌아오면 앞쪽 정류장 통과로 다시 맞춘다(시각표 기준 여정은 시각표가 이어가므로 해당 없음)
+  if (rsResync(st, now, notes)) newPass = true;
+  if (st.cfg && st.cfg.pfLive === true && rsFuse(st, fx, now, notes)) newPass = true;   // 2.6) 새 위치 판단기 보정(실험 · 설정에서 켠 때만)   // 2.5) 버스: 오래 끊겼던 GPS 가 돌아오면 앞쪽 정류장 통과로 다시 맞춘다(시각표 기준 여정은 시각표가 이어가므로 해당 없음)
   // 3) 도착 시각 계산
   var nyList = [], nk;
   for (nk in notYet) { if (now - notYet[nk] <= O.notYetKeepSec * 1000) nyList.push(+nk); else delete notYet[nk]; }
@@ -384,4 +417,4 @@ function handleRideStandby(request) {
   }, function () { return new Response(JSON.stringify({ error: '요청을 읽지 못함' }), { status: 400, headers: H }); });
 }
 
-if (typeof module !== 'undefined') module.exports = { rideStandby: rideStandby, rsWait: rsWait, rsNextMs: rsNextMs, rsResync: rsResync, handleRideStandby: handleRideStandby, rsAlerts: rsAlerts, RIDE_STANDBY_DEFAULTS: RIDE_STANDBY_DEFAULTS };
+if (typeof module !== 'undefined') module.exports = { rideStandby: rideStandby, rsWait: rsWait, rsNextMs: rsNextMs, rsResync: rsResync, rsFuse: rsFuse, handleRideStandby: handleRideStandby, rsAlerts: rsAlerts, RIDE_STANDBY_DEFAULTS: RIDE_STANDBY_DEFAULTS };

@@ -23,6 +23,44 @@ public class ShellJvmTest {
         ok(ShellCore.routeTabs(st, "call", "tab.nope").kind == ShellCore.E_NONE, "모르는 탭은 무시");
         ok(ShellCore.routeTabs(st, "set", "tab.shop").kind == ShellCore.E_NONE, "call 이 아니면 무시");
 
+        // ── 설정 하위 화면(다른 앱 위에 표시) ──
+        {
+            ShellCore.MemStore ps = new ShellCore.MemStore();
+            ok(ShellCore.routeSettings(ps, "call", "pg.ovl", null, false, null).kind == ShellCore.E_PAGE && "ovl".equals(ShellCore.routeSettings(ps, "call", "pg.ovl", null, false, null).arg), "설정: 하위 화면 누름 → E_PAGE(ovl)");
+            ok(ShellCore.settingsFacts(ps).contains("\"ovl\":0"), "설정 사실: 오버레이 꺼짐");
+            ok(ShellCore.routePage(ps, "ovl", "set", null, "ovl", true, false) == ShellCore.PG_NEEDPERM && "1".equals(ps.get(ShellCore.K_OVL, "0")) && ShellCore.settingsFacts(ps).contains("\"ovl\":1"), "오버레이 스위치 켬 + 권한 없음 → 권한 화면을 열어야 한다(저장은 켬)");
+            ok(ShellCore.routePage(ps, "ovl", "set", null, "ovl", true, true) == ShellCore.PG_RENDER, "권한이 있으면 그냥 다시 그린다");
+            ok(ShellCore.routePage(ps, "ovl", "set", null, "ovl", false, true) == ShellCore.PG_RENDER && "0".equals(ps.get(ShellCore.K_OVL, "1")), "끄면 저장 꺼짐");
+            ok(ShellCore.routePage(ps, "ovl", "call", "pf.live", null, false, true) == ShellCore.PG_RENDER && "1".equals(ps.get(ShellCore.K_PFL, "0")) && ShellCore.routePage(ps, "ovl", "call", "pf.live", null, false, true) == ShellCore.PG_RENDER && "0".equals(ps.get(ShellCore.K_PFL, "1")), "위치 판단기 보정 버튼은 눌릴 때마다 켜고 끈다");
+            ok(ShellCore.routePage(ps, "ovl", "call", "pg.back", null, false, true) == ShellCore.PG_CLOSE && ShellCore.routePage(ps, "ovl", "call", "ovl.diag", null, false, true) == ShellCore.PG_NONE && ShellCore.routePage(ps, "zz", "set", null, "ovl", true, true) == ShellCore.PG_NONE, "뒤로 = 닫기 · 모르는 눌림/화면은 무시");
+            String pu = ShellCore.pageUrl(ps, "ovl", true, false);
+            ok(pu.startsWith("https://route-v2.phg0643.workers.dev/screen/settings?cap=8&p=ovl&f=") && pu.indexOf(' ') < 0 && pu.indexOf('"') < 0 && ShellCore.netOk(pu), "하위 화면 주소: 인코딩 · 허용 목록");
+        }
+
+        // ── 예전 웹뷰 즐겨찾기 가져오기(LegacyCore) ──
+        {
+            String fj = "[{\"s\":\"강남\",\"d\":\"역삼\",\"name\":\"출근\"},{\"s\":\"강남\",\"d\":\"역삼\",\"name\":\"중복\"},{\"s\":\"서울\",\"d\":\"서울\",\"name\":\"같음\"},{\"s\":\"홍대입구\",\"d\":\"잠실\"},{\"x\":1}]";
+            byte[] key = ("_https://localhost\u0000\u0001mk_favorites").getBytes(java.nio.charset.Charset.forName("ISO-8859-1"));
+            java.io.ByteArrayOutputStream w = new java.io.ByteArrayOutputStream();
+            byte[] v16 = fj.getBytes(java.nio.charset.Charset.forName("UTF-16LE"));
+            w.write(0xAA); w.write(1); w.write(key.length); w.write(key, 0, key.length);                   // 쓰기 기록: 종류 · 열쇠 길이 · 열쇠 · 값 길이(varint) · 값
+            int vl = v16.length + 1; w.write((vl & 127) | 128); w.write(vl >> 7); w.write(0); w.write(v16, 0, v16.length);
+            java.util.List<byte[]> fl = new java.util.ArrayList<byte[]>(); fl.add(w.toByteArray());
+            String got = LegacyCore.findFavorites(fl);
+            ok(got != null && LegacyCore.count(got) == 2 && got.contains("\"name\":\"출근\"") && got.contains("홍대입구→잠실") && !got.contains("중복") && !got.contains("같음"), "예전 즐겨찾기: 쓰기 기록(UTF-16)에서 찾고 중복·출발=도착은 거른다 " + got);
+            String lat = "[{\"s\":\"A\",\"d\":\"B\",\"name\":\"n\"}]";
+            java.io.ByteArrayOutputStream t = new java.io.ByteArrayOutputStream();
+            t.write(0); t.write(key.length); t.write(lat.length() + 1); t.write(key, 0, key.length); t.write(1); byte[] lb = lat.getBytes(java.nio.charset.Charset.forName("ISO-8859-1")); t.write(lb, 0, lb.length);   // 표: 값이 열쇠 바로 뒤
+            java.util.List<byte[]> tl = new java.util.ArrayList<byte[]>(); tl.add(t.toByteArray());
+            ok(LegacyCore.count(String.valueOf(LegacyCore.findFavorites(tl))) == 1, "예전 즐겨찾기: 표 모양(Latin1, 값이 바로 뒤)도 찾는다");
+            java.util.List<byte[]> two = new java.util.ArrayList<byte[]>(); two.add(w.toByteArray()); two.add(t.toByteArray());
+            ok(LegacyCore.count(LegacyCore.findFavorites(two)) == 1, "예전 즐겨찾기: 여러 파일이면 나중 것이 이긴다");
+            java.util.List<byte[]> bad = new java.util.ArrayList<byte[]>(); bad.add("mk_favorites\u0000\u0001garbage".getBytes()); bad.add(new byte[0]); bad.add(null);
+            ok(LegacyCore.findFavorites(bad) == null && LegacyCore.findFavorites(new java.util.ArrayList<byte[]>()) == null, "예전 즐겨찾기: 엉뚱한 바이트·빈 입력은 못 찾은 것으로(지어내지 않는다)");
+            StringBuilder many = new StringBuilder("["); for (int i = 0; i < 12; i++) many.append(i > 0 ? "," : "").append("{\"s\":\"가").append(i).append("\",\"d\":\"나\",\"name\":\"x\"}"); many.append(']');
+            ok(LegacyCore.count(String.valueOf(LegacyCore.shape(many.toString()))) == 8, "예전 즐겨찾기: 최대 8개");
+        }
+
         // ── 앱 규칙(엔진 /rules 쪽 껍데기) ──
         ShellCore.MemStore rs = new ShellCore.MemStore();
         long t0 = 1792454400000L;
@@ -45,14 +83,14 @@ public class ShellJvmTest {
         // ── 설정 사실 ──
         ShellCore.MemStore s2 = new ShellCore.MemStore();
         String f = ShellCore.settingsFacts(s2);
-        ok(f.equals("{\"id\":\"\",\"np\":{\"arrive\":1,\"transfer\":1,\"arrive_reco\":1},\"rl\":1,\"th\":\"pastel\",\"pt\":{},\"day\":\"\"}"), "기본 기기 사실: " + f);
+        ok(f.equals("{\"id\":\"\",\"np\":{\"arrive\":1,\"transfer\":1,\"arrive_reco\":1},\"ovl\":0,\"rl\":1,\"th\":\"pastel\",\"pt\":{},\"day\":\"\"}"), "기본 기기 사실: " + f);
         s2.put("comm_id", "길동무7"); s2.put("np_transfer", "0"); s2.put("ride_log_off", "1"); s2.put("theme", "dark");
         f = ShellCore.settingsFacts(s2);
         ok(f.contains("\"id\":\"길동무7\"") && f.contains("\"transfer\":0") && f.contains("\"rl\":0") && f.contains("\"th\":\"dark\""), "바뀐 기기 사실");
         s2.put("comm_id", "a\"b\\c\nd");
         ok(ShellCore.settingsFacts(s2).contains("a\\\"b\\\\c\\nd"), "아이디의 따옴표·역슬래시·줄바꿈은 이스케이프");
         String u = ShellCore.settingsUrl(s2);
-        ok(u.startsWith("https://route-v2.phg0643.workers.dev/screen/settings?cap=3&f=") && u.indexOf(' ') < 0 && u.indexOf('"') < 0 && ShellCore.netOk(u), "설정 주소: 인코딩 · 허용 목록");
+        ok(u.startsWith("https://route-v2.phg0643.workers.dev/screen/settings?cap=8&f=") && u.indexOf(' ') < 0 && u.indexOf('"') < 0 && ShellCore.netOk(u), "설정 주소: 인코딩 · 허용 목록");
 
         // ── 설정 눌림 ──
         ShellCore.MemStore s3 = new ShellCore.MemStore();
@@ -426,6 +464,7 @@ public class ShellJvmTest {
             ok(RideCore.offKinds(ns).size() == 5 && RideCore.startBody(18, "{\"data\":{}}", RideCore.offKinds(ns)).equals("{\"cap\":18,\"r\":{\"data\":{},\"allowed\":{\"near_arrive2\":false,\"near_arrive\":false,\"arrive\":false,\"transfer2\":false,\"transfer\":false}}}"), "끈 알림 종류가 allowed 로 실린다");
             ns.put("np_arrive", "1");
             ok(RideCore.offKinds(ns).toString().equals("[transfer2, transfer]") && RideCore.startBody(18, "", RideCore.offKinds(ns)).contains("\"r\":null"), "환승만 끄면 환승 2종만");
+            ok(RideCore.startBody(18, "{\"data\":{}}", null, true).equals("{\"cap\":18,\"r\":{\"data\":{},\"pf\":true}}") && RideCore.startBody(18, "{\"data\":{}}", RideCore.offKinds(ns), true).endsWith(",\"pf\":true}}") && RideCore.startBody(18, "{\"data\":{}}", null, false).equals("{\"cap\":18,\"r\":{\"data\":{}}}"), "탑승 시작 요청: 위치 판단기 보정 스위치(pf)");
             ok(RideCore.startBody(18, "{\"data\":{}}").equals("{\"cap\":18,\"r\":{\"data\":{}}}") && RideCore.startBody(18, "").contains("\"r\":null"), "탑승 시작 요청 본문");
             ok(rc.onStart("{\"ok\":false,\"error\":\"longdist\",\"msg\":\"장거리 경로는 탑승 안내를 지원하지 않아요\"}").startsWith("장거리") && !rc.hasState(), "엔진이 거절하면 그 글을 그대로 돌려준다");
             ok(rc.onStart("zz").length() > 0 && rc.onStart("{\"ok\":true}").length() > 0 && !rc.hasState(), "이상한 응답은 시작하지 않는다");
@@ -443,6 +482,11 @@ public class ShellJvmTest {
             rc.onStep("{\"state\":{\"v\":1,\"eta\":{}},\"nextMs\":99999}"); ok(rc.nextMs == RideCore.STEP_MAX_MS, "간격은 안전 범위 안으로");
             rc.onStep("{\"state\":{\"v\":1,\"eta\":{}},\"nextMs\":1}"); ok(rc.nextMs == RideCore.STEP_MIN_MS, "간격 하한");
             ok(rc.onStep("{\"state\":{\"v\":1,\"eta\":{}},\"done\":true}").done, "done 을 알린다");
+            rc.onStep("{\"state\":{\"v\":1,\"eta\":{}},\"overlay\":{\"active\":true,\"line1\":\"강남 ▸ 역삼\",\"line2\":\"남은시간: 00시간 12분\",\"banner\":\"역삼까지 2정거장 남았어요\",\"alert\":2}}");
+            ok(rc.ovActive && rc.ovLine1.equals("강남 ▸ 역삼") && rc.ovLine2.startsWith("남은시간") && rc.ovBanner.contains("2정거장") && rc.ovAlert == 2, "오버레이 값을 읽는다(글·단계는 엔진이 정한 그대로)");
+            rc.onStep("{\"state\":{\"v\":1,\"eta\":{}},\"overlay\":{\"active\":true,\"line1\":\"x\",\"alert\":9}}"); ok(rc.ovAlert == 2, "단계는 0~2 안으로");
+            rc.onStep("{\"state\":{\"v\":1,\"eta\":{}},\"overlay\":{\"active\":false}}"); ok(!rc.ovActive && rc.ovLine1.length() == 0, "active 가 아니면 치운다");
+            rc.onStep("{\"state\":{\"v\":1,\"eta\":{}}}"); ok(!rc.ovActive, "overlay 가 없으면 치운다");
             String sv = rc.save(10000L);
             RideCore back = RideCore.restore(sv, 10000L + 60000L);
             ok(back != null && back.hasState() && back.text.equals(rc.text) && RideCore.restore(sv, 10000L + RideCore.MAX_AGE_MS + 1) == null && RideCore.restore("", 1L) == null && RideCore.restore("{\"at\":1}", 5L) == null, "저장 · 복원(30분 지나면 버린다)");

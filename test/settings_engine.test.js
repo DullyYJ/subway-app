@@ -261,6 +261,12 @@ ok(odd.ok && all(odd).find(n => n.t === 'field').value.length === 12, '이상한
 }
 
 // ⑥ 워커 끝에서 끝까지
+{
+  const txtOf = o => JSON.stringify(o.body);
+  const web = E.settingsScreen({ cap: 8, p: 'ovl' }, { pf: { nat: true, sup: true, gr: true, on: true } }), nat = E.settingsScreen({ cap: 8, p: 'ovl' }, { pf: { nat: true, sup: true, gr: true, on: true, nv: true } });
+  ok(/ovl\.diag/.test(txtOf(web)) && /pf\.rec/.test(txtOf(web)), '웹: 오버레이 진단·정답 기록 버튼이 있다');
+  ok(!/ovl\.diag/.test(txtOf(nat)) && !/pf\.rec/.test(txtOf(nat)) && /pf\.live/.test(txtOf(nat)) && /"key":"ovl"/.test(txtOf(nat)), '네이티브(nv): 웹 진단 도구는 빼고 스위치와 위치 판단기 버튼만');
+}
 (async () => {
   const tmp = path.join(os.tmpdir(), 'rv2_set_' + process.pid + '.mjs');
   fs.copyFileSync(R('engine/route-v2-worker.ascii.js'), tmp);

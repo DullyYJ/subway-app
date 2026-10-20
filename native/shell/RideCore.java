@@ -35,6 +35,11 @@ public final class RideCore {
         public long[] vib = new long[0];
     }
 
+    /** 엔진이 정한 떠 있는 안내 값(overlay) — 서비스가 창에 그리기만 한다. active 가 아니면 창을 치운다. */
+    public boolean ovActive;
+    public String ovLine1 = "", ovLine2 = "", ovBanner = "";
+    public int ovAlert;
+
     public boolean hasState() { return stateJson.length() > 2; }
 
     // ═════════════ 시작 ═════════════
@@ -45,13 +50,17 @@ public final class RideCore {
      * allowedOff: 사용자가 끈 알림 종류 이름들(엔진 ride-alert 의 종류: near_arrive2 · near_arrive · arrive · transfer2 · transfer). 끈 것만 false 로 실어 보낸다.
      * 어떤 알림이 어떤 종류인지는 엔진이 정한 이름을 그대로 쓰고, 여기서는 설정 스위치 두 개를 그 이름들로 펼칠 뿐이다(arrive 스위치 → 도착 3종, transfer 스위치 → 환승 2종).
      */
-    public static String startBody(int cap, String facts, java.util.List<String> allowedOff) {
+    public static String startBody(int cap, String facts, java.util.List<String> allowedOff) { return startBody(cap, facts, allowedOff, false); }
+
+    /** pfLive: 설정에서 '새 위치 판단기 보정'(실험)을 켰으면 true — 엔진이 위치 판단기(PosFusion)를 안내에 함께 쓴다. */
+    public static String startBody(int cap, String facts, java.util.List<String> allowedOff, boolean pfLive) {
         String f = facts == null || facts.length() < 2 ? "null" : facts;
         if (!"null".equals(f) && allowedOff != null && !allowedOff.isEmpty() && f.endsWith("}")) {
             StringBuilder a = new StringBuilder(",\"allowed\":{");
             for (int i = 0; i < allowedOff.size(); i++) { if (i > 0) a.append(','); a.append(ShellCore.q(allowedOff.get(i))).append(":false"); }
             f = f.substring(0, f.length() - 1) + a.append("}}");
         }
+        if (!"null".equals(f) && pfLive && f.endsWith("}")) f = f.substring(0, f.length() - 1) + ",\"pf\":true}";
         return "{\"cap\":" + cap + ",\"r\":" + f + "}";
     }
 
@@ -136,6 +145,13 @@ public final class RideCore {
                 if (t instanceof String) text = (String) t;
                 if (ti instanceof String && ((String) ti).length() > 0) title = (String) ti;
             }
+            Object ov = m.get("overlay");
+            if (ov instanceof Map) {
+                Map<String, Object> om = (Map<String, Object>) ov;
+                ovActive = Boolean.TRUE.equals(om.get("active")) && om.get("line1") instanceof String;
+                ovLine1 = BoardCore.s(om.get("line1"), 60); ovLine2 = BoardCore.s(om.get("line2"), 60); ovBanner = BoardCore.s(om.get("banner"), 60);
+                Object al2 = om.get("alert"); ovAlert = al2 instanceof Number ? Math.max(0, Math.min(2, ((Number) al2).intValue())) : 0;
+            } else { ovActive = false; ovLine1 = ovLine2 = ovBanner = ""; ovAlert = 0; }
             Object nm = m.get("nextMs");
             double nx = nm instanceof Number ? ((Number) nm).doubleValue() : STEP_DEFAULT_MS;
             nextMs = (long) Math.max(STEP_MIN_MS, Math.min(STEP_MAX_MS, nx));

@@ -69,7 +69,8 @@ function rideStart(opt, r) {
   if (firstSub) { eta.timetableFirst = true; eta.boardInfo = { boardIdx: 1, line: String(pts[0].lineNm || ''), from: pts[0].nm, to: pts[1] ? pts[1].nm : '' }; }
   var allowed = (r.allowed && typeof r.allowed === 'object') ? r.allowed : {};
   var sig = rstHash(nodes.map(function (n) { return n.name + '|' + (n.lineName || ''); }).join('>') + '@' + Math.floor(now / 3600000));
-  var state = { v: 1, tripSig: sig, eta: eta, stops: stops, trail: [], cfg: { targets: tg.targets, seq: tg.seq, allowed: allowed, destName: dest, waitBoard: r.wait !== false }, fired: {}, notYet: {}, etaMs: etaMs, steps: 0, startedAt: now };
+  var state = { v: 1, tripSig: sig, eta: eta, stops: stops, trail: [], cfg: { targets: tg.targets, seq: tg.seq, allowed: allowed, destName: dest, waitBoard: r.wait !== false, pfLive: r.pf === true }, fired: {}, notYet: {}, etaMs: etaMs, steps: 0, startedAt: now,
+    ovl: { cells: pts.map(function (p) { return { n: String(p.nm || '').slice(0, 24), t: String(p.arrT || ''), m: '' }; }), map: pts.map(function (p, q) { return q + 1; }), base: 0 } };   // 떠 있는 안내(오버레이)가 그릴 칸 틀: 정류장 이름 · 도착 시각
   var legs = 0; for (i = 1; i < tnodes.length; i++) if (i === 1 || tnodes[i].l !== tnodes[i - 1].l) legs++;
   return { ok: true, v: RST_V, state: state, text: '다음 ' + pts[0].nm + (pts[0].arrT ? ' ' + pts[0].arrT : '') + ' · ' + dest + '까지 ' + (tg.seq.length ? tg.seq.length - 1 : 0) + '정거장',
     info: { n: nodes.length, first: { name: pts[0].nm, hm: pts[0].arrT || '' }, dest: dest, tab: tab, legs: legs, sig: sig } };

@@ -25,6 +25,11 @@ ok(st.eta.timetableFirst === true && st.eta.boarded === true && st.eta.notDepart
 ok(st.cfg.targets.length === 2 && st.cfg.targets[0].kind === 'transfer' && st.cfg.targets[0].name === 'S5' && st.cfg.targets[0].nextLine === '931' && st.cfg.targets[1].kind === 'dest' && st.cfg.destName === '도착지' && st.cfg.seq.length === 10, '알림 대상: 환승 하차역(S5)과 최종 하차');
 ok(st.eta.nodes.slice(1).every(n => n.planMin > 0) && st.eta.nodes[1].planMin === 12 * 60 + 2 && st.eta.nodes[6].planMin === 12 * 60 + 12, '계획 시각(하루 안의 분)');
 ok(/^다음 S0 12:02/.test(o.text) && o.info.first.name === 'S0' && o.info.dest === '도착지' && o.info.legs === 2, '처음 글 · 요약');
+ok(st.ovl && st.ovl.cells.length === 10 && st.ovl.cells[0].n === 'S0' && st.ovl.map.length === 10 && st.ovl.map[0] === 1 && st.ovl.map[9] === 10, '떠 있는 안내 그림 틀(ovl): 정류장마다 칸 + 노드 번호');
+{
+  const ov = SB.rideStandby({ nowMs: T0 + 130000, fixes: [[T0 + 130000, LAT, LNG0, 12]], state: JSON.parse(JSON.stringify(st)) }).overlay;
+  ok(ov && ov.active && /S\d/.test(ov.line1) && typeof ov.line2 === 'string', '탑승 중 /ride-standby 가 오버레이 값(line1·line2)을 돌려준다: ' + (ov && ov.line1));
+}
 const late = RS.rideStart({ cap: 18 }, facts({ now: T0 + 200000, rb: T0 }));
 const off = RS.rideStart({ cap: 18 }, Object.assign(facts(), { allowed: { transfer2: false, transfer: false } }));
 ok(off.ok && off.state.cfg.allowed.transfer === false && off.state.cfg.allowed.transfer2 === false && Object.keys(o.state.cfg.allowed).length === 0, '끈 알림 종류는 allowed 로 상태에 실린다(안 끄면 비어 있다)');
@@ -118,5 +123,26 @@ function posAt(ms, stops) {                 // 열차·버스가 계획대로 �
   const w6 = run(waitOnly, T0 + 300000);
   ok(w6.log.every(x => x.out.alert === null || x.out.alert.type === 'offroute'), '대기 중엔 하차·환승 알림이 없다');
 }
+// ⑤ 새 위치 판단기 보정(실험): 꺼져 있으면 영향 없음, 켜면 정확도가 낮아 영점이 못 잡는 구간을 판단기가 메운다
+{
+  const subOnly = { info: { totalTime: 14, transferCount: 0, pathType: 1, tab: 'fast' }, subPath: [walk(2, 0, 120), subLeg, walk(3, 720, 900)] };
+  const fz = (pf) => Object.assign(facts({ now: T0 + 100000, pf }), { data: { result: { path: [JSON.parse(JSON.stringify(subOnly))] } } });
+  const run = (pf) => {
+    const o2 = RS.rideStart({ cap: 18 }, fz(pf)); let s2 = o2.state; const notes = [];
+    for (let t = T0 + 100000; t <= T0 + 600000; t += 5000) {
+      const k = (t - T0) / 1000, x = LNG0 + DL * Math.max(0, Math.min(5, (k - 120) / 120));
+      const r = SB.rideStandby({ nowMs: t, fixes: [[t, LAT, x, 70]], state: s2 }); s2 = r.state; (r.notes || []).forEach(n => notes.push(n));
+    }
+    return { st: s2, notes };
+  };
+  const off2 = run(false), on2 = run(true);
+  ok(RS.rideStart({ cap: 18 }, fz(true)).state.cfg.pfLive === true && RS.rideStart({ cap: 18 }, fz(false)).state.cfg.pfLive === false, '보정 스위치가 cfg.pfLive 로 실린다');
+  ok(!off2.st.pf && off2.st.eta.passes.length <= 1 && !off2.notes.some(n => /위치 판단기/.test(n)), '꺼져 있으면 판단기를 안 쓴다(상태에 pf 없음)');
+  ok(on2.st.pf && on2.st.eta.passes.length >= 4 && on2.notes.some(n => /위치 판단기 \d번 역 도착 반영/.test(n)), '켜면 정확도 낮은 위치로도 지나온 역을 통과로 적는다: ' + JSON.stringify(on2.st.eta.passes.map(p => p.idx)));
+  ok(JSON.stringify(on2.st.pf).length < 20000, '판단기 상태 크기가 작다: ' + JSON.stringify(on2.st.pf).length);
+  const w = RS.rideStart({ cap: 18 }, Object.assign(fz(true), { now: T0 - 600000, rb: T0 })).state, wr = SB.rideStandby({ nowMs: T0 - 600000 + 5000, fixes: [[T0 - 600000 + 5000, LAT, LNG0, 20]], state: w });
+  ok(!wr.state.pf, '승차 대기 중에는 판단기를 안 쓴다');
+}
+
 console.log(pass + ' 통과 / ' + fail + ' 실패');
 if (fail) process.exit(1);

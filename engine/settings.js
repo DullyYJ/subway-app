@@ -186,7 +186,7 @@ function settingsPageFacts(pf) {
   var dg = (st && st.dg && typeof st.dg === 'object') ? st.dg : {};
   return {
     w: settingsFlag(pf.w, false), ig: tri(pf.ig), bk: pf.bk == null ? null : settingsInt(pf.bk, 0, 5, 0), er: settingsFlag(pf.er, false), sok: tri(pf.sok),
-    nat: settingsFlag(pf.nat, true), sup: tri(pf.sup), gr: tri(pf.gr), on: settingsFlag(pf.on, false), pfl: settingsFlag(pf.pfl, false), pfr: settingsFlag(pf.pfr, false),
+    nat: settingsFlag(pf.nat, true), sup: tri(pf.sup), gr: tri(pf.gr), on: settingsFlag(pf.on, false), pfl: settingsFlag(pf.pfl, false), pfr: settingsFlag(pf.pfr, false), nv: settingsFlag(pf.nv, false),
     ph: ['plain', 'reco', 'alert2', 'alert1', 'quit'].indexOf(pf.ph) >= 0 ? pf.ph : '', left: settingsInt(pf.left, 0, 600, 0), stopped: settingsFlag(pf.stopped, false),
     roam: settingsInt(pf.roam, 2, 10, 6), mOn: settingsFlag(pf.mOn, false), eOn: settingsFlag(pf.eOn, false),
     morn: settingsHm(pf.morn, '07:30'), eve: settingsHm(pf.eve, '18:30'), days: days,
@@ -281,9 +281,9 @@ function settingsPageOvl(f) {
   var k = [{ t: 'toggle', key: 'ovl', title: '다른 앱 위에 표시', on: f.on, big: true, size: 15, vp: 0, onc: 'gold', pad: [0, 0, 0, 6] },
     settingsDescN('다른 앱을 쓰는 동안 현재역 · 남은시간을 화면 위쪽에 작은 막대로 띄워요. 막대를 누르면 앱으로 돌아오고, 끌어서 위치를 옮길 수 있어요. 안내 정보만 보여주고 광고는 넣지 않아요. 처음 켜면 설정에서 \'다른 앱 위에 표시\' 권한을 허용해 주세요.', 8),
     { t: 'text', s: settingsOvlStat(f), size: 11.5, color: 'sub', lh: 1.6, pad: [0, 0, 0, 10] },
-    settingsBtnN('오버레이 진단 기록 보기', 'ovl.diag', { size: 12, h: 38, tc: 'sub', mb: 6 }),
+    f.nv ? null : settingsBtnN('오버레이 진단 기록 보기', 'ovl.diag', { size: 12, h: 38, tc: 'sub', mb: 6 }),
     settingsBtnN(f.pfl ? '새 위치 판단기 보정: 켜짐 (누르면 끔)' : '새 위치 판단기 보정: 꺼짐 (누르면 켬 · 실험)', 'pf.live', { size: 12, h: 38, on: f.pfl, mb: 6 }),
-    settingsBtnN(f.pfr ? '정답 기록 버튼: 켜짐 (누르면 끔)' : '정답 기록 버튼: 꺼짐 (테스트 탑승용)', 'pf.rec', { size: 12, h: 38, on: f.pfr })];
+    f.nv ? null : settingsBtnN(f.pfr ? '정답 기록 버튼: 켜짐 (누르면 끔)' : '정답 기록 버튼: 꺼짐 (테스트 탑승용)', 'pf.rec', { size: 12, h: 38, on: f.pfr })].filter(function (x) { return !!x; });   // nv(네이티브 앱)에는 웹 진단 도구가 없다
   return [settingsPanelN(k, 8)];
 }
 // ── 개발자 도구(오버레이 테스트) ──

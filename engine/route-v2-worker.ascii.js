@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-20s100";
+var ENGINE_VERSION = "route-v2-2026-10-20s101";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -11910,7 +11910,7 @@ function settingsPageFacts(pf) {
   var dg = (st && st.dg && typeof st.dg === 'object') ? st.dg : {};
   return {
     w: settingsFlag(pf.w, false), ig: tri(pf.ig), bk: pf.bk == null ? null : settingsInt(pf.bk, 0, 5, 0), er: settingsFlag(pf.er, false), sok: tri(pf.sok),
-    nat: settingsFlag(pf.nat, true), sup: tri(pf.sup), gr: tri(pf.gr), on: settingsFlag(pf.on, false), pfl: settingsFlag(pf.pfl, false), pfr: settingsFlag(pf.pfr, false),
+    nat: settingsFlag(pf.nat, true), sup: tri(pf.sup), gr: tri(pf.gr), on: settingsFlag(pf.on, false), pfl: settingsFlag(pf.pfl, false), pfr: settingsFlag(pf.pfr, false), nv: settingsFlag(pf.nv, false),
     ph: ['plain', 'reco', 'alert2', 'alert1', 'quit'].indexOf(pf.ph) >= 0 ? pf.ph : '', left: settingsInt(pf.left, 0, 600, 0), stopped: settingsFlag(pf.stopped, false),
     roam: settingsInt(pf.roam, 2, 10, 6), mOn: settingsFlag(pf.mOn, false), eOn: settingsFlag(pf.eOn, false),
     morn: settingsHm(pf.morn, '07:30'), eve: settingsHm(pf.eve, '18:30'), days: days,
@@ -12005,9 +12005,9 @@ function settingsPageOvl(f) {
   var k = [{ t: 'toggle', key: 'ovl', title: '\ub2e4\ub978 \uc571 \uc704\uc5d0 \ud45c\uc2dc', on: f.on, big: true, size: 15, vp: 0, onc: 'gold', pad: [0, 0, 0, 6] },
     settingsDescN('\ub2e4\ub978 \uc571\uc744 \uc4f0\ub294 \ub3d9\uc548 \ud604\uc7ac\uc5ed \u00b7 \ub0a8\uc740\uc2dc\uac04\uc744 \ud654\uba74 \uc704\ucabd\uc5d0 \uc791\uc740 \ub9c9\ub300\ub85c \ub744\uc6cc\uc694. \ub9c9\ub300\ub97c \ub204\ub974\uba74 \uc571\uc73c\ub85c \ub3cc\uc544\uc624\uace0, \ub04c\uc5b4\uc11c \uc704\uce58\ub97c \uc62e\uae38 \uc218 \uc788\uc5b4\uc694. \uc548\ub0b4 \uc815\ubcf4\ub9cc \ubcf4\uc5ec\uc8fc\uace0 \uad11\uace0\ub294 \ub123\uc9c0 \uc54a\uc544\uc694. \ucc98\uc74c \ucf1c\uba74 \uc124\uc815\uc5d0\uc11c \'\ub2e4\ub978 \uc571 \uc704\uc5d0 \ud45c\uc2dc\' \uad8c\ud55c\uc744 \ud5c8\uc6a9\ud574 \uc8fc\uc138\uc694.', 8),
     { t: 'text', s: settingsOvlStat(f), size: 11.5, color: 'sub', lh: 1.6, pad: [0, 0, 0, 10] },
-    settingsBtnN('\uc624\ubc84\ub808\uc774 \uc9c4\ub2e8 \uae30\ub85d \ubcf4\uae30', 'ovl.diag', { size: 12, h: 38, tc: 'sub', mb: 6 }),
+    f.nv ? null : settingsBtnN('\uc624\ubc84\ub808\uc774 \uc9c4\ub2e8 \uae30\ub85d \ubcf4\uae30', 'ovl.diag', { size: 12, h: 38, tc: 'sub', mb: 6 }),
     settingsBtnN(f.pfl ? '\uc0c8 \uc704\uce58 \ud310\ub2e8\uae30 \ubcf4\uc815: \ucf1c\uc9d0 (\ub204\ub974\uba74 \ub054)' : '\uc0c8 \uc704\uce58 \ud310\ub2e8\uae30 \ubcf4\uc815: \uaebc\uc9d0 (\ub204\ub974\uba74 \ucf2c \u00b7 \uc2e4\ud5d8)', 'pf.live', { size: 12, h: 38, on: f.pfl, mb: 6 }),
-    settingsBtnN(f.pfr ? '\uc815\ub2f5 \uae30\ub85d \ubc84\ud2bc: \ucf1c\uc9d0 (\ub204\ub974\uba74 \ub054)' : '\uc815\ub2f5 \uae30\ub85d \ubc84\ud2bc: \uaebc\uc9d0 (\ud14c\uc2a4\ud2b8 \ud0d1\uc2b9\uc6a9)', 'pf.rec', { size: 12, h: 38, on: f.pfr })];
+    f.nv ? null : settingsBtnN(f.pfr ? '\uc815\ub2f5 \uae30\ub85d \ubc84\ud2bc: \ucf1c\uc9d0 (\ub204\ub974\uba74 \ub054)' : '\uc815\ub2f5 \uae30\ub85d \ubc84\ud2bc: \uaebc\uc9d0 (\ud14c\uc2a4\ud2b8 \ud0d1\uc2b9\uc6a9)', 'pf.rec', { size: 12, h: 38, on: f.pfr })].filter(function (x) { return !!x; });   // nv(\ub124\uc774\ud2f0\ube0c \uc571)\uc5d0\ub294 \uc6f9 \uc9c4\ub2e8 \ub3c4\uad6c\uac00 \uc5c6\ub2e4
   return [settingsPanelN(k, 8)];
 }
 // \u2500\u2500 \uac1c\ubc1c\uc790 \ub3c4\uad6c(\uc624\ubc84\ub808\uc774 \ud14c\uc2a4\ud2b8) \u2500\u2500
@@ -19479,7 +19479,8 @@ function rideStart(opt, r) {
   if (firstSub) { eta.timetableFirst = true; eta.boardInfo = { boardIdx: 1, line: String(pts[0].lineNm || ''), from: pts[0].nm, to: pts[1] ? pts[1].nm : '' }; }
   var allowed = (r.allowed && typeof r.allowed === 'object') ? r.allowed : {};
   var sig = rstHash(nodes.map(function (n) { return n.name + '|' + (n.lineName || ''); }).join('>') + '@' + Math.floor(now / 3600000));
-  var state = { v: 1, tripSig: sig, eta: eta, stops: stops, trail: [], cfg: { targets: tg.targets, seq: tg.seq, allowed: allowed, destName: dest, waitBoard: r.wait !== false }, fired: {}, notYet: {}, etaMs: etaMs, steps: 0, startedAt: now };
+  var state = { v: 1, tripSig: sig, eta: eta, stops: stops, trail: [], cfg: { targets: tg.targets, seq: tg.seq, allowed: allowed, destName: dest, waitBoard: r.wait !== false, pfLive: r.pf === true }, fired: {}, notYet: {}, etaMs: etaMs, steps: 0, startedAt: now,
+    ovl: { cells: pts.map(function (p) { return { n: String(p.nm || '').slice(0, 24), t: String(p.arrT || ''), m: '' }; }), map: pts.map(function (p, q) { return q + 1; }), base: 0 } };   // \ub5a0 \uc788\ub294 \uc548\ub0b4(\uc624\ubc84\ub808\uc774)\uac00 \uadf8\ub9b4 \uce78 \ud2c0: \uc815\ub958\uc7a5 \uc774\ub984 \u00b7 \ub3c4\ucc29 \uc2dc\uac01
   var legs = 0; for (i = 1; i < tnodes.length; i++) if (i === 1 || tnodes[i].l !== tnodes[i - 1].l) legs++;
   return { ok: true, v: RST_V, state: state, text: '\ub2e4\uc74c ' + pts[0].nm + (pts[0].arrT ? ' ' + pts[0].arrT : '') + ' \u00b7 ' + dest + '\uae4c\uc9c0 ' + (tg.seq.length ? tg.seq.length - 1 : 0) + '\uc815\uac70\uc7a5',
     info: { n: nodes.length, first: { name: pts[0].nm, hm: pts[0].arrT || '' }, dest: dest, tab: tab, legs: legs, sig: sig } };
