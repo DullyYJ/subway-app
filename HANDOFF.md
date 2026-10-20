@@ -1634,3 +1634,12 @@
 - 앱: `RideCore`(요청 본문·응답 읽기·위치 모으기·저장/복원, 순수 자바) · `RideService`(포그라운드 서비스, foregroundServiceType=location, GPS+네트워크 위치 → 5초(엔진 nextMs, 2~8초)마다 `/ride-standby`, 상주 알림 + 알림 채널 + 엔진이 준 진동 무늬, START_STICKY 복원 30분) · `RideWidget`(홈 위젯: 엔진 글 그대로) · `HomeCore`(routeId·rideJson/lvJson·rh.stop/rd.confirm/rd.stop) · `ShellActivity`(권한 요청, startRide/stopRide, 5초 틱에서 서비스 상태를 카드에 반영). 매니페스트: FOREGROUND_SERVICE(+LOCATION)·POST_NOTIFICATIONS·VIBRATE, service, widget receiver, res/layout·xml·drawable 추가.
 - 한계(정직하게): 기기 미확인. 승차 전 대기/승차 확정 판정은 옮기지 않았다(누른 시점에 이미 탔다고 본다). `/pos-fuse` 위치 융합·기지국 선행·버스 경로 확정 UI·플로팅 오버레이(SYSTEM_ALERT_WINDOW)·알림 종류별 끄기(allowed)는 미이식 — 알림은 상주 알림 + 헤드업 알림으로 대신한다. 앱 프로세스가 죽었다 서비스만 되살아나면 결과 카드는 다시 안 뜬다(알림·위젯은 이어짐).
 - **YJ가 할 일**: 워커 s94(`route-v2-2026-10-20s94`) Deploy + 새 APK. 첫 사용 시 위치·알림 권한 허용.
+
+## 2026-10-20 엔진 s95 + native-shell — 마무리(앱 규칙 엔진 · 화면 움직임 · 설정 정리 · 옛 웹 시절 자바 걷어냄)
+- **규칙 엔진** `engine/rules.js` + `rules-worker.js`(POST `/rules`, 상태 없음, 시험 `test/rules_engine.test.js` 26개·CI 표에 추가): `check`(비었나 · 욕설 — 웹 `_BAD_WORDS` 와 같은 목록, 공백 끼워 넣기 우회 막음 · 현장제보 하루 3회) · `award`(글쓰기 +10P · 탑승 안내 시작 +10P · 현장제보 3~8P 확률 35/25/18/12/7/3 추첨 — 무작위 수는 기기가 보냄) · `view`(총점 · 등급 · 다음 등급까지) · `mylines`(탄 노선 기록 정리). 저장값 `pt` 는 엔진이 만든 그대로 앱이 보관(`mk_pt`).
+- 앱: `RulesCore`(요청 본문 · 답 읽기 · 저장, 순수 자바) + `ShellActivity` 연결 — 글쓰기(엔진 검사 → 서버 등록 → 포인트 문구), 댓글 · 채팅 · 홈 한마디(검사 통과해야 올림, 거절되면 입력칸 유지), 탑승 안내 시작(+10P, 탄 노선 `my_lines` 기록). 엔진이 안 닿으면 막지 않는다(서버 필터가 한 번 더 거른다). `ShellCore.settingsFacts` 에 `pt`·`day`(`mk_today`, 화면 요청 직전에 껍데기가 넣음) 추가.
+- **설정** `settings.js`: 웹 기능 스위치(feat) 줄 · settingsStat 제거, "포인트" 칸 추가(등급 · 다음 등급까지). 시험 157.
+- **움직임**: 시트는 아래에서 올라오며 나타나고(220ms) 탭 화면은 살짝 페이드(140ms). 지도 마커 맥박/이동은 기존 `ScreenView` 것.
+- **걷어냄**: 이 브랜치에서 쓰지 않는 옛 캐패시터 시절 자바(`native/*.java · *.kt · res/`)와 그 JVM 시험(Htl · Row · Scene · Store · Widget · AwtCv). `main` 에는 그대로 있다. 워크플로(`.github/workflows/*`)는 데이터 수집용이라 그대로 둠(공휴일 갱신은 `main` 의 `www/` 를 고치는 것이라 이 브랜치와 무관). `ios-reference/` 는 iOS 기준본이자 동등성 시험 입력이라 유지.
+- **한계(정직하게)**: 전부 기기 미확인. 혼잡도 3D 캐릭터 장면 · 웹 역 맛집 목록 · 카카오 장소 ID 조회 · Leaflet 지도 · 버스(경기 GBIS · D1 · 즐겨찾기 · 지도) 미이식. 즐겨찾기 '새로 등록' 입력 폼 · 옛 웹 localStorage 즐겨찾기 이전 없음. AI 브리프에 날씨 · 다음 열차 없음. 탑승 추적: 승차 전 대기 판정 · `/pos-fuse` · 떠 있는 오버레이 · 알림 종류별 켜기/끄기 연결(`np_arrive`/`np_transfer` → `allowed`) 없음, 앱이 죽으면 결과 카드는 안 돌아옴(알림 · 위젯은 계속).
+- **YJ가 할 일**: 워커 s95(`route-v2-2026-10-20s95`) Deploy + 새 APK. 첫 탑승 안내 때 위치 · 알림 권한 허용.

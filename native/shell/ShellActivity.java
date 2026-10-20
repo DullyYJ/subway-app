@@ -183,6 +183,7 @@ public class ShellActivity extends Activity {
                     feeds[k] = fr.status == 200 ? fr.body : "";
                 }
                 if (ShellCore.S_NEWS.equals(screen)) lastNews = ShellCore.NewsRows.from(feeds);
+                store.put(ShellCore.K_DAY, RulesCore.day(System.currentTimeMillis()));
                 ShellCore.Req rq = ShellCore.request(screen, store, feeds);
                 NetPost.Res r = rq == null ? null : ("GET".equals(rq.method) ? NetPost.get(rq.url, 10000) : NetPost.post(rq.url, rq.body, 10000));
                 final String txt = (r != null && r.status == 200) ? r.body : "";
@@ -197,12 +198,43 @@ public class ShellActivity extends Activity {
         try {
             ScreenCore.Screen sc = ScreenCore.load(json);
             v.setScreen(sc, keep);
+            if (!keep && v != sheetView) fadeIn(v);
         } catch (Exception e) {
             toast("화면이 올바르지 않아요: " + String.valueOf(e.getMessage()));
         }
     }
 
+    /** 웹 slideUp 과 같은 움직임: 시트가 아래에서 올라온다(220ms, 감속). 뷰 속성만 쓴다. */
+    private void slideIn(View v) {
+        if (v == null) return;
+        try {
+            v.setAlpha(0f); v.setTranslationY(56f * dpr);
+            v.animate().alpha(1f).translationY(0f).setDuration(220L).setInterpolator(new android.view.animation.DecelerateInterpolator()).start();
+        } catch (Throwable ignored) { v.setAlpha(1f); v.setTranslationY(0f); }
+    }
+    /** 새 화면(탭 이동 등)이 올라올 때 살짝 떠오른다(웹 busCardIn 류, 140ms). 갱신(keep)에는 쓰지 않는다. */
+    private void fadeIn(View v) {
+        try { v.setAlpha(0.35f); v.animate().alpha(1f).setDuration(140L).start(); } catch (Throwable ignored) { v.setAlpha(1f); }
+    }
+
     private void toast(String m) { try { Toast.makeText(this, m, Toast.LENGTH_SHORT).show(); } catch (Throwable ignored) { } }
+
+    // ───────────── 앱 규칙(엔진 /rules) ─────────────
+    private final java.util.Random rng = new java.util.Random();
+    /** 엔진에 규칙을 묻는다(스레드 안에서 부른다). 답이 없으면 "". */
+    private String rulesCall(String json) {
+        NetPost.Res r = NetPost.post(ShellCore.BASE + "/rules", json, 6000);
+        return r.status == 200 && r.body != null ? r.body : "";
+    }
+    /** 올려도 되는지(스레드 안): 안 되면 문구, 되면 "". 엔진이 안 닿으면 막지 않는다(서버가 한 번 더 거른다). */
+    private String rulesCheck(String kind, String cat, String... texts) {
+        return RulesCore.checkError(rulesCall(RulesCore.checkBody(store, kind, cat, System.currentTimeMillis(), texts)));
+    }
+    /** 포인트 적립(스레드 안): 저장값을 갱신하고 보여 줄 문구를 돌려준다. */
+    private String rulesAward(String ev, boolean sent) {
+        return RulesCore.applyAward(store, rulesCall(RulesCore.awardBody(store, ev, System.currentTimeMillis(), rng.nextDouble(), sent)));
+    }
+    private void toastMain(final String m) { if (m != null && m.length() > 0) main.post(new Runnable() { @Override public void run() { toast(m); } }); }
 
     // ───────────── 눌림 ─────────────
     private final class Host implements ScreenView.Listener {
@@ -317,7 +349,7 @@ public class ShellActivity extends Activity {
     }
     private void reloadChat() { if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) loadChat(body, true, false); }
 
-    private void chatAct(ScreenCore.Act a, ScreenView src) {
+    private void chatAct(ScreenCore.Act a, final ScreenView src) {
         if ("cat".equals(a.a)) { chat.select(a.v); loadChat(body, false, true); return; }
         if (!"call".equals(a.a)) return;
         final String me = ShellCore.commId(store);
@@ -327,9 +359,12 @@ public class ShellActivity extends Activity {
             case ChatCore.R_SEND: {
                 final String line = "all".equals(chat.pendingLine) ? chat.postLine : chat.pendingLine, text = chat.pendingText;
                 final String json = ChatCore.sendBody(me, text, line);
-                src.setField("all".equals(chat.pendingLine) ? "chat.all" : "chat.room", "");
+                final String fk = "all".equals(chat.pendingLine) ? "chat.all" : "chat.room";
                 new Thread(new Runnable() {
                     @Override public void run() {
+                        final String bad = rulesCheck("chat", "", text);
+                        if (bad.length() > 0) { toastMain(bad); return; }                       // 입력칸은 그대로 둔다
+                        main.post(new Runnable() { @Override public void run() { src.setField(fk, ""); } });
                         NetPost.Res rr = NetPost.post(ShellCore.BOARD_BASE + "/react", json, 9000);
                         final String why = rr.status == 200 && rr.body != null && rr.body.contains("\"stored\"") ? "" : (rr.status == 0 ? "네트워크가 불안정해요" : rr.body != null && rr.body.contains("filtered") ? "부적절한 표현이 있어 올리지 못했어요" : "잠시 후 다시 시도해 주세요");
                         main.post(new Runnable() { @Override public void run() {
@@ -422,11 +457,21 @@ public class ShellActivity extends Activity {
             case BoardCore.R_COMMENT: {
                 String nick = ShellCore.commId(store);
                 if (nick.length() == 0) { toast("설정에서 커뮤니티 아이디를 먼저 정해 주세요"); break; }
-                String text = board.pendingText;
-                board.addLocalComment(id, nick, text, now);
-                postBg(BoardCore.commentBody(id, nick, text), "/comment");
-                src.setField(board.commentKey(id), "");
-                reloadBoard(); break;
+                final String text = board.pendingText, fnick = nick, ckey = board.commentKey(id);
+                final ScreenView csrc = src;
+                new Thread(new Runnable() {
+                    @Override public void run() {
+                        final String bad = rulesCheck("chat", "", text);
+                        main.post(new Runnable() { @Override public void run() {
+                            if (bad.length() > 0) { toast(bad); return; }
+                            board.addLocalComment(id, fnick, text, now);
+                            postBg(BoardCore.commentBody(id, fnick, text), "/comment");
+                            csrc.setField(ckey, "");
+                            reloadBoard();
+                        } });
+                    }
+                }, "shell-cmt-chk").start();
+                break;
             }
             default: break;
         }
@@ -448,7 +493,7 @@ public class ShellActivity extends Activity {
         sheet = new android.app.Dialog(this, android.R.style.Theme_Material_Light_NoActionBar);
         sheet.setContentView(sheetView);
         try { sheet.getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE); } catch (Throwable ignored) { }
-        try { sheet.show(); } catch (Throwable t) { toast("글쓰기를 열지 못했어요"); return; }
+        try { sheet.show(); slideIn(sheetView); } catch (Throwable t) { toast("글쓰기를 열지 못했어요"); return; }
         loadWrite(false);
     }
     private void loadWrite(final boolean keep) {
@@ -543,7 +588,7 @@ public class ShellActivity extends Activity {
         sheetView.setListener(new SheetHost());
         sheet = new android.app.Dialog(this, android.R.style.Theme_Material_Light_NoActionBar);
         sheet.setContentView(sheetView);
-        try { sheet.show(); } catch (Throwable t) { toast("가게 정보를 열지 못했어요"); return; }
+        try { sheet.show(); slideIn(sheetView); } catch (Throwable t) { toast("가게 정보를 열지 못했어요"); return; }
         final double[] me = food.gps;
         final String json = food.sheetRequest(ShellCore.CAP, me);
         new Thread(new Runnable() {
@@ -776,7 +821,7 @@ public class ShellActivity extends Activity {
             w.clearFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
             w.setWindowAnimations(android.R.style.Animation_InputMethod);
             sheet.setOnDismissListener(new android.content.DialogInterface.OnDismissListener() { @Override public void onDismiss(android.content.DialogInterface d) { map.ttSeq++; } });
-            sheet.show();
+            sheet.show(); slideIn(sheetView);
         } catch (Throwable t) { toast("역 정보를 열지 못했어요"); return; }
         final String json = map.stnRequest(ShellCore.CAP, ShellCore.theme(store));
         new Thread(new Runnable() {
@@ -886,17 +931,23 @@ public class ShellActivity extends Activity {
         final String json = BoardCore.postBody(nick, t, b, "잡담", owner());
         new Thread(new Runnable() {
             @Override public void run() {
+                final String bad = rulesCheck("post", "잡담", t, b);
+                if (bad.length() > 0) {
+                    main.post(new Runnable() { @Override public void run() { writeBusy = false; writeErr = bad; loadWrite(true); } });
+                    return;
+                }
                 NetPost.Res r = NetPost.post(ShellCore.BOARD_BASE + "/post", json, 9000);
                 final String id = r.status == 200 ? ShellCore.jsonId(r.body) : "";
                 final boolean rejected = r.status >= 400 && r.status < 500;
                 final String why = rejected ? ShellCore.jsonError(r.body) : "";
+                final String award = rejected ? "" : rulesAward("write", id.length() > 0);
                 main.post(new Runnable() { @Override public void run() {
                     writeBusy = false;
                     if (rejected) { writeErr = why.length() > 0 ? why : "등록할 수 없어요"; loadWrite(true); return; }
                     long now = System.currentTimeMillis();
                     boolean ok = id.length() > 0;
                     board.addMine(ok ? id : "L" + now, "잡담", t, b, nick, now, !ok);
-                    toast(ok ? "글이 등록되었어요" : "글을 저장했어요. 연결되면 모두에게 보여요");
+                    toast(award.length() > 0 ? award : ok ? "글이 등록되었어요" : "글을 저장했어요. 연결되면 모두에게 보여요");
                     closeSheet();
                     reloadBoard();
                 } });
@@ -983,9 +1034,11 @@ public class ShellActivity extends Activity {
         final String me = ShellCore.commId(store);
         if (me.length() == 0) { toast("설정에서 커뮤니티 아이디를 등록하면 글과 제보를 남길 수 있어요"); return; }
         final String json = "{\"nick\":" + ShellCore.q(me) + ",\"text\":" + ShellCore.q(text) + "}";
-        body.setField("talk.in", "");
         new Thread(new Runnable() {
             @Override public void run() {
+                final String bad = rulesCheck("chat", "", text);
+                if (bad.length() > 0) { toastMain(bad); return; }
+                main.post(new Runnable() { @Override public void run() { body.setField("talk.in", ""); } });
                 NetPost.Res rr = NetPost.post(ShellCore.BOARD_BASE + "/react", json, 9000);
                 final String why = rr.status == 200 && rr.body != null && rr.body.contains("\"stored\"") ? "" : (rr.status == 0 ? "네트워크가 불안정해요" : rr.body != null && rr.body.contains("filtered") ? "부적절한 표현이 있어 올리지 못했어요" : "잠시 후 다시 시도해 주세요(시간당 한도)");
                 main.post(new Runnable() { @Override public void run() {
@@ -1306,6 +1359,13 @@ public class ShellActivity extends Activity {
                     closeSheet();
                     toast("탑승 안내를 시작했어요");
                     reloadHome();
+                    final List<String> secs = new ArrayList<String>(home.resSec);
+                    new Thread(new Runnable() {
+                        @Override public void run() {
+                            RulesCore.applyMyLines(store, rulesCall(RulesCore.mylinesBody(store.get(ChatCore.K_MY, "[]"), secs, System.currentTimeMillis())));
+                            toastMain(rulesAward("ride", true));
+                        }
+                    }, "shell-rules-ride").start();
                 } });
             }
         }, "shell-ride").start();
@@ -1334,7 +1394,7 @@ public class ShellActivity extends Activity {
         sheetView.setListener(new SheetHost());
         sheet = new android.app.Dialog(this, android.R.style.Theme_Material_Light_NoActionBar);
         sheet.setContentView(sheetView);
-        try { sheet.show(); } catch (Throwable t) { toast("세부경로를 열지 못했어요"); return; }
+        try { sheet.show(); slideIn(sheetView); } catch (Throwable t) { toast("세부경로를 열지 못했어요"); return; }
         loadDetail();
     }
     private void loadDetail() {
@@ -1383,7 +1443,7 @@ public class ShellActivity extends Activity {
         sheetView.setListener(new SheetHost());
         sheet = new android.app.Dialog(this, android.R.style.Theme_Material_Light_NoActionBar);
         sheet.setContentView(sheetView);
-        try { sheet.show(); } catch (Throwable t) { toast("즐겨찾기를 열지 못했어요"); return; }
+        try { sheet.show(); slideIn(sheetView); } catch (Throwable t) { toast("즐겨찾기를 열지 못했어요"); return; }
         loadFav();
     }
     private void loadFav() {

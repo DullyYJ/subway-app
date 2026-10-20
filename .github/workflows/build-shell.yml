@@ -27,6 +27,7 @@ jobs:
           - fav_engine.test.js
           - hcards_engine.test.js
           - ride_start_engine.test.js
+          - rules_engine.test.js
           - result_engine.test.js
           - news_engine.test.js
           - board_engine.test.js

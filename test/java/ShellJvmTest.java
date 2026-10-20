@@ -23,10 +23,29 @@ public class ShellJvmTest {
         ok(ShellCore.routeTabs(st, "call", "tab.nope").kind == ShellCore.E_NONE, "모르는 탭은 무시");
         ok(ShellCore.routeTabs(st, "set", "tab.shop").kind == ShellCore.E_NONE, "call 이 아니면 무시");
 
+        // ── 앱 규칙(엔진 /rules 쪽 껍데기) ──
+        ShellCore.MemStore rs = new ShellCore.MemStore();
+        long t0 = 1792454400000L;
+        ok(RulesCore.day(t0).matches("20\\d\\d-\\d\\d-\\d\\d"), "오늘 날짜 글자: " + RulesCore.day(t0));
+        String cb = RulesCore.checkBody(rs, "post", "잡담", t0, "제목", "내\"용");
+        ok(cb.startsWith("{\"op\":\"check\",\"kind\":\"post\",\"cat\":\"잡담\"") && cb.contains("\"pt\":{}") && cb.endsWith("\"texts\":[\"제목\",\"내\\\"용\"]}"), "검사 요청: " + cb);
+        ok("".equals(RulesCore.checkError("{\"ok\":true}")) && "".equals(RulesCore.checkError("")) && "".equals(RulesCore.checkError("<html>")), "통과 · 엔진 못 닿음 · 깨진 답은 막지 않는다");
+        ok("욕설 안 돼요".equals(RulesCore.checkError("{\"ok\":false,\"msg\":\"욕설 안 돼요\"}")) && "등록할 수 없어요".equals(RulesCore.checkError("{\"ok\":false}")), "거절 문구");
+        String rab = RulesCore.awardBody(rs, "report", t0, 0.25, false);
+        ok(rab.contains("\"ev\":\"report\"") && rab.contains("\"rnd\":0.25") && rab.contains("\"sent\":false") && rab.contains("\"pt\":{}"), "적립 요청: " + rab);
+        String msg = RulesCore.applyAward(rs, "{\"ok\":true,\"add\":10,\"msg\":\"글이 등록되었어요! +10P\",\"pt\":{\"total\":15,\"today\":15,\"todayStr\":\"2026-10-20\",\"rc\":0,\"rcStr\":\"\"}}");
+        ok("글이 등록되었어요! +10P".equals(msg) && rs.get(RulesCore.K_PT, "").contains("\"total\":15") && rs.get(RulesCore.K_PT, "").contains("\"todayStr\":\"2026-10-20\""), "적립 → 문구 + 저장값: " + rs.get(RulesCore.K_PT, ""));
+        ok(RulesCore.awardBody(rs, "write", t0, 0.5, true).contains("\"total\":15"), "저장값을 다음 요청에 그대로 실어 보낸다");
+        ok("".equals(RulesCore.applyAward(rs, "{\"ok\":false}")) && rs.get(RulesCore.K_PT, "").contains("\"total\":15") && "".equals(RulesCore.applyAward(rs, "")), "실패하면 저장값을 건드리지 않는다");
+        java.util.List<String> sec = new java.util.ArrayList<String>(); sec.add("2호선"); sec.add("수도권 1호선");
+        String mb = RulesCore.mylinesBody("[{\"l\":\"2호선\",\"n\":3,\"t\":5}]", sec, t0);
+        ok(mb.equals("{\"op\":\"mylines\",\"now\":1792454400000,\"my\":[{\"l\":\"2호선\",\"n\":3,\"t\":5}],\"sec\":[\"2호선\",\"수도권 1호선\"]}") && RulesCore.mylinesBody(null, null, 1L).contains("\"my\":[],\"sec\":[]"), "탄 노선 요청: " + mb);
+        ok(RulesCore.applyMyLines(rs, "{\"ok\":true,\"my\":[{\"l\":\"1호선\",\"n\":1,\"t\":99}],\"lines\":[\"1호선\"]}") && rs.get(ChatCore.K_MY, "").startsWith("[{") && rs.get(ChatCore.K_MY, "").contains("\"l\":\"1호선\"") && rs.get(ChatCore.K_MY, "").contains("\"n\":1") && rs.get(ChatCore.K_MY, "").contains("\"t\":99") && !RulesCore.applyMyLines(rs, "{\"ok\":false}"), "탄 노선 기록 저장");
+
         // ── 설정 사실 ──
         ShellCore.MemStore s2 = new ShellCore.MemStore();
         String f = ShellCore.settingsFacts(s2);
-        ok(f.equals("{\"id\":\"\",\"np\":{\"arrive\":1,\"transfer\":1,\"arrive_reco\":1},\"rl\":1,\"th\":\"pastel\",\"feat\":{}}"), "기본 기기 사실: " + f);
+        ok(f.equals("{\"id\":\"\",\"np\":{\"arrive\":1,\"transfer\":1,\"arrive_reco\":1},\"rl\":1,\"th\":\"pastel\",\"pt\":{},\"day\":\"\"}"), "기본 기기 사실: " + f);
         s2.put("comm_id", "길동무7"); s2.put("np_transfer", "0"); s2.put("ride_log_off", "1"); s2.put("theme", "dark");
         f = ShellCore.settingsFacts(s2);
         ok(f.contains("\"id\":\"길동무7\"") && f.contains("\"transfer\":0") && f.contains("\"rl\":0") && f.contains("\"th\":\"dark\""), "바뀐 기기 사실");

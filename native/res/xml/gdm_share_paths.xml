@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- 위치 공유 그림(앱 캐시 cache/gdmshare)만 다른 앱(카카오톡 등)에 읽기로 열어 준다. -->
-<paths xmlns:android="http://schemas.android.com/apk/res/android">
-    <cache-path name="gdmshare" path="gdmshare/" />
-</paths>

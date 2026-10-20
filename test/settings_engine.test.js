@@ -13,7 +13,7 @@ const html = fs.readFileSync(R('ios-reference/index.html'), 'utf8');
 function flat(nodes, out) { out = out || []; nodes.forEach(n => { out.push(n); if (n.kids) flat(n.kids, out); }); return out; }
 const all = s => flat(s.body);
 const full = { id: '길동', np: { arrive: 1, transfer: 0, arrive_reco: 1 }, npd: 1, rl: 1, th: 'dark', sam: 1, samw: 1, errn: 3, cm: 1, ovl: 0,
-  feat: { nm: { h: 1, on: 1 }, sn: { h: 1, on: 0 }, htl: { h: 1, on: 1, f: 1, w: 'x 오류' }, scr: { h: 1, on: 1, b: 1, w: '모양' }, scrs: { h: 1, on: 1 } } };
+  pt: { total: 120, today: 15, todayStr: '2026-10-20', rc: 2, rcStr: '2026-10-20' }, day: '2026-10-20' };
 
 // ① cap
 ok(E.settingsScreen({}, full).ok === false && E.settingsScreen({ cap: 2 }, full).ok === false, 'cap 3 미만이면 만들지 않는다');
@@ -24,15 +24,19 @@ ok(/^s1:[0-9a-z]+$/.test(s.rev), 'rev 형식 ' + s.rev);
 // ② 내용
 const nodes = all(s), toggles = nodes.filter(n => n.t === 'toggle');
 const keys = toggles.map(n => n.key).join();
-ok(keys === 'n.arrive,n.transfer,n.arrive_reco,f.nm,f.sn,f.htl,f.scr,f.scrs,rl', '스위치 순서: ' + keys);
+ok(keys === 'n.arrive,n.transfer,n.arrive_reco,rl', '스위치 순서(옛 웹 기능 스위치 행은 없다): ' + keys);
+ok(!toggles.some(n => /^f\./.test(n.key)), '웹 기능 스위치(f.*)가 없다');
 const tg = k => toggles.find(n => n.key === k);
 ok(tg('n.arrive').on === true && tg('n.transfer').on === false && tg('n.arrive_reco').on === true, '알림 스위치 상태 = 저장값');
-ok(tg('f.nm').on === true && tg('f.sn').on === false && tg('f.htl').on === false && tg('f.scr').on === true, '기능 스위치: 문제로 돌아간 것(htl)은 꺼진 모양');
+{
+  const pn = nodes.find(n => n.t === 'box' && /^내 포인트/.test(n.s));
+  ok(pn && pn.s === '내 포인트  120 P  \u00b7 오늘 15 P\n등급  탑승객  (지하철러까지 30 P)' && pn.hl.length === 2, '포인트 칸: 규칙 엔진이 계산한 합계·오늘·등급 ' + (pn && pn.s));
+  ok(nodes.some(n => n.t === 'text' && /현장제보 3~8 P \(하루 3회, 오늘 2\/3\)/.test(n.s)), '포인트 안내: 하루 제한과 오늘 횟수');
+  const nt = all(E.settingsScreen({ cap: 3 }, Object.assign({}, full, { day: '2026-10-21' })));
+  ok(nt.some(n => n.t === 'box' && /오늘 0 P/.test(n.s)) && nt.some(n => n.t === 'text' && /오늘 0\/3/.test(n.s)), '날짜가 바뀌면 오늘 값과 현장제보 횟수는 0');
+  ok(!all(E.settingsScreen({ cap: 3 }, Object.assign({}, full, { pt: null }))).some(n => n.t === 'box' && /^내 포인트/.test(n.s)), '저장값이 없으면 포인트 칸 없음');
+}
 const boxes = nodes.filter(n => n.t === 'box').map(n => n.s);
-ok(boxes.some(t => t === '켜짐 — 노선도를 기기가 직접 그려 확대·축소가 부드러워요.'), '노선도 켜짐 문구');
-ok(boxes.some(t => t === '꺼짐 — 예전 방식(웹 화면)으로 그려요.'), '장면 꺼짐 문구');
-ok(boxes.some(t => /^네이티브 경로 화면에 문제가 있어 웹 화면으로 대신 보여주고 있어요 \(x 오류\)\. 스위치를 껐다 켜면 다시 시도해요\.$/.test(t)), '경로 화면 문제 문구 + 사유');
-ok(boxes.some(t => /^엔진이 준 화면이 올바르지 않아 저장해 둔 화면을 쓰고 있어요 \(모양\)\.$/.test(t)), '쇼핑 저장본 사용 문구');
 ok(boxes.some(t => /^알림 권한이 꺼져 있어요/.test(t)) && boxes.some(t => /^이 앱의 배터리 사용이 제한됨으로/.test(t)), '권한 거부·배터리 제한 경고 상자');
 const cur = nodes.find(n => n.t === 'box' && /^현재 아이디/.test(n.s));
 ok(cur && cur.s === '현재 아이디  길동' && JSON.stringify(cur.hl) === '[[8,10]]', '현재 아이디 상자(굵은 구간 = 아이디)');
@@ -63,19 +67,16 @@ ok(bn.filter(n => n.t === 'button').length === 1, '아이디가 없으면 삭제
 ok(bn.filter(n => n.t === 'select').find(n => n.on).act.v === 'pastel', '테마 기본 = 파스텔');
 ok(!bn.some(n => n.t === 'navrow' && n.act.v === 'sam'), '갤럭시가 아니면 갤럭시 행 없음');
 ok(bn.filter(n => n.t === 'navrow' && (n.act.v === 'cm' || n.act.v === 'ovl')).every(n => !n.sub), '모르는 상태는 오른쪽 글 없음');
-const odd = E.settingsScreen({ cap: 3 }, { id: 'x'.repeat(50), errn: -5, th: 'zzz', np: 'bad', feat: { nm: 7, sn: { h: 1, on: 1, w: 'y'.repeat(500) } } });
+const odd = E.settingsScreen({ cap: 3 }, { id: 'x'.repeat(50), errn: -5, th: 'zzz', np: 'bad', pt: 'zz', day: 5 });
 ok(odd.ok && all(odd).find(n => n.t === 'field').value.length === 12, '이상한 사실은 걸러진다(아이디 12자로 자름)');
-ok(all(odd).filter(n => n.t === 'box').every(n => n.s.length < 400), '사유는 140자까지만');
-ok(E.settingsStat(E.SETTINGS_FEATS[3], { on: 0 }) === '꺼짐 — 예전 방식(웹 쇼핑 화면)으로 그려요.', '쇼핑 꺼짐 문구');
 
 // ③ 앱 검증기 통과 — 사실을 여러 가지로 바꿔 가며 만든 화면을 모두 ScreenCore.load + layout 에 넣어 본다
 {
   const lines = [], bools = [0, 1];
   let k = 0;
   for (const sam of bools) for (const npd of bools) for (const th of ['dark', 'pastel']) for (const id of ['', '길동무']) for (const on of bools) for (const fl of bools) {
-    const feat = {}; E.SETTINGS_FEATS.forEach((d, i) => { feat[d.k] = { h: (i + k) % 5 !== 4 ? 1 : 0, on: on, f: (i + fl + k) % 3 === 0 ? 1 : 0, w: fl ? '이유 ' + i : '', b: (i + k) % 2 };  });
     k++;
-    lines.push(JSON.stringify(E.settingsScreen({ cap: 3 }, { id, npd, th, sam, samw: sam & fl, errn: k % 4, cm: k % 3 === 0 ? null : k % 2, ovl: k % 3 === 1 ? null : 1 - (k % 2), rl: on, np: { arrive: on, transfer: fl, arrive_reco: 1 - on }, feat })));
+    lines.push(JSON.stringify(E.settingsScreen({ cap: 3 }, { id, npd, th, sam, samw: sam & fl, errn: k % 4, cm: k % 3 === 0 ? null : k % 2, ovl: k % 3 === 1 ? null : 1 - (k % 2), rl: on, np: { arrive: on, transfer: fl, arrive_reco: 1 - on }, pt: on ? { total: k * 7, today: k, todayStr: 'd', rc: k % 5, rcStr: 'd' } : null, day: 'd' })));
   }
   lines.push(JSON.stringify(s), JSON.stringify(bare));
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'setchk_'));
@@ -101,7 +102,6 @@ ok(E.settingsStat(E.SETTINGS_FEATS[3], { on: 0 }) === '꺼짐 — 예전 방식(
   const has = t => html.indexOf(t) >= 0;
   ok(has('받고 싶은 알림만 골라서 켜고 끌 수 있어요. 끄면 진동도 함께 꺼져요.') && has('아이디는 이 기기에만 저장되며,<br>작성한 글·채팅에 표시됩니다.'), '웹: 알림·아이디 안내 문구 = 엔진 문구');
   E.SETTINGS_NOTIF.forEach(n => ok(has("title:'" + n.title + "'") && has("desc:'" + n.desc + "'"), '웹 알림 항목 문구 = 엔진: ' + n.title));
-  E.SETTINGS_FEATS.forEach(d => ok(has(d.desc.replace(/&/g, '&amp;')) || has(d.desc), '웹 기능 설명 = 엔진: ' + d.title));
   ok(has('목적지에 도착하면 예상 시간과 실제 시간의 차이만 익명으로 보내요. 역 이름·위치·기기 정보는 보내지 않아요.'), '웹: 정확도 설명 = 엔진');
   ok(has("개인정보처리방침") && has("위치기반서비스 이용약관") && has("데이터 출처 및 고지"), '웹: 약관 항목 이름 = 엔진');
   ok(has('깊고 선명한 다크 테마') && has('맑고 시원한 하늘색 테마'), '웹: 테마 설명 = 엔진');

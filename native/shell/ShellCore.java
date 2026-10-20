@@ -22,6 +22,8 @@ public final class ShellCore {
     /** 설정 화면 요청의 cap — 3 이면 하위 화면 행동이 'web' 이라 껍데기가 안 열 수 있는 것은 '아직 안 옮겼어요'로 알린다. */
     public static final int SETTINGS_CAP = 3;
 
+    /** 앱 시계의 오늘 날짜 글자(예: 2026-10-20). 화면을 요청하기 직전에 껍데기가 넣는다 — 코어는 시계를 읽지 않는다. */
+    public static final String K_DAY = "mk_today";
     public interface Store { String get(String key, String def); void put(String key, String value); }
 
     /** 시험·임시용 메모리 저장소. */
@@ -55,7 +57,7 @@ public final class ShellCore {
 
     public static String theme(Store st) { String t = st.get(K_THEME, THEME_DEFAULT); return "dark".equals(t) ? "dark" : "pastel"; }
 
-    /** 엔진 GET /screen/settings 의 f= 에 실리는 기기 사실. 웹 쪽 설정 기능 스위치(feat)는 껍데기에 없으므로 비운다. */
+    /** 엔진 GET /screen/settings 의 f= 에 실리는 기기 사실. pt(포인트 저장값 · 엔진이 만든 그대로)와 day(오늘 날짜)는 엔진 규칙(/rules)이 등급을 계산하는 데 쓴다. */
     public static String settingsFacts(Store st) {
         StringBuilder b = new StringBuilder("{");
         b.append("\"id\":").append(q(st.get(K_ID, "")));
@@ -67,7 +69,7 @@ public final class ShellCore {
         b.append('}');
         b.append(",\"rl\":").append("1".equals(st.get(K_RIDELOG_OFF, "0")) ? 0 : 1);
         b.append(",\"th\":").append(q(theme(st)));
-        b.append(",\"feat\":{}}");
+        b.append(",\"pt\":").append(RulesCore.ptOf(st)).append(",\"day\":").append(q(st.get(K_DAY, ""))).append('}');
         return b.toString();
     }
     public static String settingsUrl(Store st) {

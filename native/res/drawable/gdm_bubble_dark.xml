@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- 블랙(검정 글자) 위젯의 말풍선: 옅은 흰 판 -->
-<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <solid android:color="#E8FFFFFF"/>
-    <corners android:radius="14dp"/>
-</shape>
