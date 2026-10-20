@@ -92,8 +92,17 @@ function brdOne(a, i) {
   return {
     i: i, id: brdStr(a[0], 60), cat: brdStr(a[1], 12), title: title, body: brdStr(a[3], 3000), nick: brdStr(a[4], 40).trim() || '익명',
     time: Number(a[5]) || 0, views: brdInt(a[6], 0, 99999999), like: brdInt(a[7], 0, 99999999), lol: brdInt(a[8], 0, 99999999), sad: brdInt(a[9], 0, 99999999),
-    srv: brdInt(a[10], 0, 99999), mine: !!(fl & 1), user: !!(fl & 2), pending: !!(fl & 4), news: !!(fl & 16), link: brdStr(a[12], 400), cmts: brdCmts(a[13])
+    srv: brdInt(a[10], 0, 99999), mine: !!(fl & 1), user: !!(fl & 2), pending: !!(fl & 4), srvPost: !!(fl & 8), news: !!(fl & 16), link: brdStr(a[12], 400), cmts: brdCmts(a[13])
   };
+}
+// 웹 _ltIsBanned / _postSlug / _pseudoViews 와 같다(정치·분쟁 소재 글 빼기 · 역 이름만 다른 같은 글 하나만 · 서버가 조회수를 안 주면 글 번호와 경과 시간으로 정해 보이기)
+var BRD_BAN_RE = /(정치|대통령|대선|총선|보궐|선거|후보\s*등록|국회|국정|의원|여당|야당|정당|민주당|국민의힘|개혁신당|진보당|장관|내각|청와대|탄핵|특검|검찰\s*수사|공수처|국정감사|시국|집회|시위|규탄|파업\s*투쟁|좌파|우파|보수\s*진영|진보\s*진영|친일|반일|반중|혐오|젠더\s*갈등|성별\s*갈등|페미|한남|한녀|종북|극우|극좌|이념)/;
+function brdBanned(t) { try { return BRD_BAN_RE.test(String(t || '')); } catch (e) { return false; } }
+function brdSlug(t) { return String(t || '').replace(/\{[a-z0-9]+\}/gi, '').replace(/[0-9]+/g, '').replace(/[^가-힣a-zA-Z]/g, '').slice(0, 20).toLowerCase(); }
+function brdPseudoViews(id, ts, now) {
+  var ageMin = Math.max(0, (now - (ts || now)) / 60000);
+  var seed = ((id || 1) * 2654435761) % 233;
+  return Math.floor((seed % 55) + 5 + Math.min(ageMin * 1.6, 420));
 }
 function brdPid(p, used) {
   var s = String(p.id).replace(/[^A-Za-z0-9_.:-]/g, '').slice(0, 30);
@@ -115,7 +124,7 @@ function brdPostNode(p, pid, f, now) {
   var mineRx = f.rx[p.id] || {};
   function rb(label, n, type, verb) {
     var on = !!mineRx[type];
-    var b = { label: label + ' ' + n, act: { a: 'call', v: 'bd.' + verb + '.' + p.i } };
+    var b = { label: label + ' ' + (n + (on ? 1 : 0)), act: { a: 'call', v: 'bd.' + verb + '.' + p.i } };
     if (on) { b.on = true; b.fill = 'rgba(10,132,255,0.13)'; b.line = BRD_BLUE; b.tc = BRD_BLUE; }
     return b;
   }
@@ -146,10 +155,16 @@ function boardScreen(inp, factsIn, rowsIn) {
   if (!(Number(inp.cap) >= 6)) return { ok: false, error: 'cap' };
   var now = Number(inp.now) > 0 ? Number(inp.now) : Date.now();
   var f = brdFacts(factsIn);
-  var all = [], i;
+  var all = [], i, seenSlug = {};
   if (Array.isArray(rowsIn)) for (i = 0; i < rowsIn.length && i < BRD_MAX_IN; i++) {
     var p = brdOne(rowsIn[i], i);
     if (!p || brdIsNews(p) || f.rep[p.id]) continue;
+    if (p.srvPost) {                                              // 서버 글만: 정치·분쟁 소재 빼기 · 역 이름만 다른 같은 글 하나만 · 조회수 보정
+      if (brdBanned(p.title) || brdBanned(p.body)) continue;
+      var sg = brdSlug(p.title);
+      if (sg) { if (seenSlug[sg]) continue; seenSlug[sg] = 1; }
+      if (!p.views) p.views = brdPseudoViews(Number(p.id), p.time, now);
+    }
     all.push(p);
   }
   all.sort(function (a, b) { return (b.time - a.time) || (a.i - b.i); });
@@ -169,4 +184,4 @@ function boardScreen(inp, factsIn, rowsIn) {
   return out;
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { boardScreen: boardScreen, brdAgo: brdAgo, brdIsNews: brdIsNews, brdTitle: brdTitle, brdFacts: brdFacts, brdOne: brdOne, BRD_CAT_COLOR: BRD_CAT_COLOR };
+if (typeof module !== 'undefined' && module.exports) module.exports = { boardScreen: boardScreen, brdBanned: brdBanned, brdSlug: brdSlug, brdPseudoViews: brdPseudoViews, brdAgo: brdAgo, brdIsNews: brdIsNews, brdTitle: brdTitle, brdFacts: brdFacts, brdOne: brdOne, BRD_CAT_COLOR: BRD_CAT_COLOR };

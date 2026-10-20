@@ -125,6 +125,29 @@ ok(S.ok && S.v === 1 && S.screen === 'board' && S.cover === 'tab' && /^b1:/.test
   ok(names.every(n => !new RegExp('^(async\\s+)?(function|var)\\s+' + n + '\\b', 'm').test(other)), '다른 엔진과 이름이 겹치지 않는다 (' + names.length + '개)');
 }
 // ── ⑨ 워커 끝에서 끝까지 ──
+
+// ── 서버 글 규칙(웹 _ltIsBanned · _postSlug · _pseudoViews 와 같다) ──
+{
+  const web = new Function(
+    "function _ltIsBanned(t){ try { return /" + html.slice(html.indexOf('var _LT_BAN_RE = /') + 18, html.indexOf('/;', html.indexOf('var _LT_BAN_RE = /'))) + "/.test(String(t||'')); } catch(e){ return false; } }\n" +
+    html.slice(html.indexOf('function _postSlug(t){'), html.indexOf('function _postUsed(key)')) + '\n' +
+    "var Date_now = " + NOW + ";\n" +
+    "function _pseudoViews(id, ts){ var ageMin = Math.max(0, (Date_now - (ts || Date_now)) / 60000); var seed = ((id || 1) * 2654435761) % 233; return Math.floor((seed % 55) + 5 + Math.min(ageMin * 1.6, 420)); }\n" +
+    'return { banned: _ltIsBanned, slug: _postSlug, pv: _pseudoViews };')();
+  ['부평역 지연 안내', '대통령 선거 이야기', '1호선 3번 출구', '', '국회 앞 시위로 우회', '혼잡하네요 {st}', '일상 잡담'].forEach(t => {
+    ok(E.brdSlug(t) === web.slug(t) && E.brdBanned(t) === web.banned(t), '웹과 같다: ' + t);
+  });
+  [[1, NOW - 5 * MIN], [7, NOW - 3 * HR], [123456, NOW - 3 * DAY], [987654321, 0]].forEach(a => ok(E.brdPseudoViews(a[0], a[1], NOW) === web.pv(a[0], a[1]), '조회수 보정 웹과 같다 ' + a[0]));
+  const srv = (id, title, o) => Object.assign([id, '혼잡', title, '본문', '철수', NOW - MIN, 0, 0, 0, 0, 0, 8, '', []], o || {});
+  const S2 = E.boardScreen({ cap: 6, now: NOW }, {}, [srv(11, '1호선 또 지연이네요'), srv(12, '2호선 또 지연이네요'), srv(13, '대통령 얘기 금지'), srv(14, '정상 글', { 6: 55 }), row('m1', { 11: 1 })]);
+  const ts2 = post(S2).map(n => n.title);
+  ok(ts2.indexOf('1호선 또 지연이네요') >= 0 && ts2.indexOf('2호선 또 지연이네요') < 0, '서버 글: 숫자만 다른 같은 글은 하나만');
+  ok(ts2.indexOf('대통령 얘기 금지') < 0 && ts2.indexOf('정상 글') >= 0, '서버 글: 정치 소재는 뺀다');
+  ok(/조회 \d+/.test(post(S2).find(n => n.title === '1호선 또 지연이네요').meta) && !/조회 0\b/.test(post(S2).find(n => n.title === '1호선 또 지연이네요').meta), '서버 글: 조회수 0 이면 보정값');
+  ok(/조회 55/.test(post(S2).find(n => n.title === '정상 글').meta), '서버가 준 조회수는 그대로');
+  const S3 = E.boardScreen({ cap: 6, now: NOW }, {}, [row('x1', { 2: '대통령 관련 내 글' })]);
+  ok(post(S3).length === 1, '내 글·로컬 글에는 서버 글 규칙을 적용하지 않는다');
+}
 (async () => {
   const tmp = path.join(os.tmpdir(), 'rv2_board_' + process.pid + '.mjs');
   fs.copyFileSync(R('engine/route-v2-worker.ascii.js'), tmp);

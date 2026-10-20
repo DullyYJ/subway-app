@@ -12843,8 +12843,17 @@ function brdOne(a, i) {
   return {
     i: i, id: brdStr(a[0], 60), cat: brdStr(a[1], 12), title: title, body: brdStr(a[3], 3000), nick: brdStr(a[4], 40).trim() || '\uc775\uba85',
     time: Number(a[5]) || 0, views: brdInt(a[6], 0, 99999999), like: brdInt(a[7], 0, 99999999), lol: brdInt(a[8], 0, 99999999), sad: brdInt(a[9], 0, 99999999),
-    srv: brdInt(a[10], 0, 99999), mine: !!(fl & 1), user: !!(fl & 2), pending: !!(fl & 4), news: !!(fl & 16), link: brdStr(a[12], 400), cmts: brdCmts(a[13])
+    srv: brdInt(a[10], 0, 99999), mine: !!(fl & 1), user: !!(fl & 2), pending: !!(fl & 4), srvPost: !!(fl & 8), news: !!(fl & 16), link: brdStr(a[12], 400), cmts: brdCmts(a[13])
   };
+}
+// \uc6f9 _ltIsBanned / _postSlug / _pseudoViews \uc640 \uac19\ub2e4(\uc815\uce58\u00b7\ubd84\uc7c1 \uc18c\uc7ac \uae00 \ube7c\uae30 \u00b7 \uc5ed \uc774\ub984\ub9cc \ub2e4\ub978 \uac19\uc740 \uae00 \ud558\ub098\ub9cc \u00b7 \uc11c\ubc84\uac00 \uc870\ud68c\uc218\ub97c \uc548 \uc8fc\uba74 \uae00 \ubc88\ud638\uc640 \uacbd\uacfc \uc2dc\uac04\uc73c\ub85c \uc815\ud574 \ubcf4\uc774\uae30)
+var BRD_BAN_RE = /(\uc815\uce58|\ub300\ud1b5\ub839|\ub300\uc120|\ucd1d\uc120|\ubcf4\uad90|\uc120\uac70|\ud6c4\ubcf4\s*\ub4f1\ub85d|\uad6d\ud68c|\uad6d\uc815|\uc758\uc6d0|\uc5ec\ub2f9|\uc57c\ub2f9|\uc815\ub2f9|\ubbfc\uc8fc\ub2f9|\uad6d\ubbfc\uc758\ud798|\uac1c\ud601\uc2e0\ub2f9|\uc9c4\ubcf4\ub2f9|\uc7a5\uad00|\ub0b4\uac01|\uccad\uc640\ub300|\ud0c4\ud575|\ud2b9\uac80|\uac80\ucc30\s*\uc218\uc0ac|\uacf5\uc218\ucc98|\uad6d\uc815\uac10\uc0ac|\uc2dc\uad6d|\uc9d1\ud68c|\uc2dc\uc704|\uaddc\ud0c4|\ud30c\uc5c5\s*\ud22c\uc7c1|\uc88c\ud30c|\uc6b0\ud30c|\ubcf4\uc218\s*\uc9c4\uc601|\uc9c4\ubcf4\s*\uc9c4\uc601|\uce5c\uc77c|\ubc18\uc77c|\ubc18\uc911|\ud610\uc624|\uc820\ub354\s*\uac08\ub4f1|\uc131\ubcc4\s*\uac08\ub4f1|\ud398\ubbf8|\ud55c\ub0a8|\ud55c\ub140|\uc885\ubd81|\uadf9\uc6b0|\uadf9\uc88c|\uc774\ub150)/;
+function brdBanned(t) { try { return BRD_BAN_RE.test(String(t || '')); } catch (e) { return false; } }
+function brdSlug(t) { return String(t || '').replace(/\{[a-z0-9]+\}/gi, '').replace(/[0-9]+/g, '').replace(/[^\uac00-\ud7a3a-zA-Z]/g, '').slice(0, 20).toLowerCase(); }
+function brdPseudoViews(id, ts, now) {
+  var ageMin = Math.max(0, (now - (ts || now)) / 60000);
+  var seed = ((id || 1) * 2654435761) % 233;
+  return Math.floor((seed % 55) + 5 + Math.min(ageMin * 1.6, 420));
 }
 function brdPid(p, used) {
   var s = String(p.id).replace(/[^A-Za-z0-9_.:-]/g, '').slice(0, 30);
@@ -12866,7 +12875,7 @@ function brdPostNode(p, pid, f, now) {
   var mineRx = f.rx[p.id] || {};
   function rb(label, n, type, verb) {
     var on = !!mineRx[type];
-    var b = { label: label + ' ' + n, act: { a: 'call', v: 'bd.' + verb + '.' + p.i } };
+    var b = { label: label + ' ' + (n + (on ? 1 : 0)), act: { a: 'call', v: 'bd.' + verb + '.' + p.i } };
     if (on) { b.on = true; b.fill = 'rgba(10,132,255,0.13)'; b.line = BRD_BLUE; b.tc = BRD_BLUE; }
     return b;
   }
@@ -12897,10 +12906,16 @@ function boardScreen(inp, factsIn, rowsIn) {
   if (!(Number(inp.cap) >= 6)) return { ok: false, error: 'cap' };
   var now = Number(inp.now) > 0 ? Number(inp.now) : Date.now();
   var f = brdFacts(factsIn);
-  var all = [], i;
+  var all = [], i, seenSlug = {};
   if (Array.isArray(rowsIn)) for (i = 0; i < rowsIn.length && i < BRD_MAX_IN; i++) {
     var p = brdOne(rowsIn[i], i);
     if (!p || brdIsNews(p) || f.rep[p.id]) continue;
+    if (p.srvPost) {                                              // \uc11c\ubc84 \uae00\ub9cc: \uc815\uce58\u00b7\ubd84\uc7c1 \uc18c\uc7ac \ube7c\uae30 \u00b7 \uc5ed \uc774\ub984\ub9cc \ub2e4\ub978 \uac19\uc740 \uae00 \ud558\ub098\ub9cc \u00b7 \uc870\ud68c\uc218 \ubcf4\uc815
+      if (brdBanned(p.title) || brdBanned(p.body)) continue;
+      var sg = brdSlug(p.title);
+      if (sg) { if (seenSlug[sg]) continue; seenSlug[sg] = 1; }
+      if (!p.views) p.views = brdPseudoViews(Number(p.id), p.time, now);
+    }
     all.push(p);
   }
   all.sort(function (a, b) { return (b.time - a.time) || (a.i - b.i); });

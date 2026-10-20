@@ -44,7 +44,13 @@ public class ShellActivity extends Activity {
     private int seqTabs = 0;
     private volatile ShellCore.NewsRows lastNews = new ShellCore.NewsRows();
     private final HomeCore home = new HomeCore();       // 홈 탭 입력 상태(고른 출발/도착·후보·기준시각)
-    private int seqHome = 0, seqCand = 0;
+    private int seqHome = 0, seqCand = 0, seqBoard = 0;
+    private BoardCore board;
+    private ScreenView sheetView;                       // 글쓰기 같은 아래에서 올라오는 시트
+    private android.app.Dialog sheet;
+    private String sheetName = "", writeErr = "", writeT = "", writeB = "";
+    private boolean writeBusy;
+    private final java.util.Map<String, Long> cmtAt = new java.util.HashMap<String, Long>();
     private volatile String resCacheKey = "", resCacheJson = "";   // 결과 화면 캐시(같은 경로·같은 탭이면 엔진에 다시 묻지 않는다)
 
     /** SharedPreferences 를 ShellCore.Store 로 감싼다. */
@@ -58,6 +64,7 @@ public class ShellActivity extends Activity {
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
         store = new PrefStore(getSharedPreferences(PREFS, Context.MODE_PRIVATE));
+        board = new BoardCore(store);
         dpr = getResources().getDisplayMetrics().density;
         ScreenView.preloadFaces(this);
 
@@ -139,6 +146,7 @@ public class ShellActivity extends Activity {
         final ScreenView v = viewOfSlot(i);
         if (ShellCore.S_PENDING.equals(screen)) { present(v, ShellCore.pendingScreen(ShellCore.currentTab(store)), false); return; }
         if (ShellCore.S_HOME.equals(screen)) { loadHome(v, keep); return; }
+        if (ShellCore.S_BOARD.equals(screen)) { loadBoard(v, keep, true); return; }
         new Thread(new Runnable() {
             @Override public void run() {
                 String[] urls = ShellCore.feedUrls(screen), feeds = new String[urls.length];
@@ -197,7 +205,10 @@ public class ShellActivity extends Activity {
         private void handle(ScreenCore.Act a, boolean on) {
             ShellCore.Effect e;
             if (which == 2) e = ShellCore.routeTabs(store, a.a, a.v);
-            else if (ShellCore.S_HOME.equals(screenName())) {
+            else if (ShellCore.S_BOARD.equals(screenName())) {
+                boardAct(a, which == 0 ? head : body);
+                return;
+            } else if (ShellCore.S_HOME.equals(screenName())) {
                 if ("call".equals(a.a)) homeAct(a.v, body.fields());
                 else if ("open".equals(a.a)) apply(ShellCore.linkEffect(a.url));
                 return;
@@ -220,6 +231,155 @@ public class ShellActivity extends Activity {
         }
     }
 
+
+
+    // ───────────── 게시판 ─────────────
+    private String owner() {
+        String k = store.get(BoardCore.K_OWNER, "");
+        if (k.length() < 16) {
+            byte[] b = new byte[16]; new java.security.SecureRandom().nextBytes(b);
+            StringBuilder sb = new StringBuilder(); for (byte x : b) sb.append(String.format("%02x", x & 0xff));
+            k = sb.toString(); store.put(BoardCore.K_OWNER, k);
+        }
+        return k;
+    }
+    /** 게시판: 서버 글을 받고(fetch=true) 엔진에 그릴 화면을 묻는다. */
+    private void loadBoard(final ScreenView v, final boolean keep, final boolean fetch) {
+        final int my = ++seqBoard;
+        new Thread(new Runnable() {
+            @Override public void run() {
+                if (fetch) {
+                    NetPost.Res pr = NetPost.get(BoardCore.postsUrl(), 8000);
+                    final boolean got = pr.status == 200 && board.setPosts(pr.body);
+                    if (!got && board.loading) board.loading = false;
+                }
+                final String body = board.request(ShellCore.CAP, System.currentTimeMillis());
+                NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/board", body, 10000);
+                final String txt = r.status == 200 ? r.body : "";
+                main.post(new Runnable() { @Override public void run() {
+                    if (my != seqBoard) return;
+                    present(v, txt, keep);
+                    if (txt.length() > 0) board.onScreen(txt);
+                } });
+            }
+        }, "shell-board").start();
+    }
+    private void reloadBoard() { if (ShellCore.S_BOARD.equals(slots.length > 0 ? slots[slots.length - 1] : "")) loadBoard(body, true, false); }
+
+    private void boardAct(ScreenCore.Act a, ScreenView src) {
+        if ("tog".equals(a.a)) {                                  // 글을 펼침: 서버 댓글을 받아 온다(15초 안에는 다시 받지 않는다)
+            final String id = board.idOfPid(a.v);
+            if (id.length() == 0 || !board.isServerPost(id)) return;
+            Long last = cmtAt.get(id);
+            if (last != null && System.currentTimeMillis() - last < 15000) return;
+            cmtAt.put(id, System.currentTimeMillis());
+            new Thread(new Runnable() {
+                @Override public void run() {
+                    NetPost.Res r = NetPost.get(BoardCore.commentsUrl(id), 8000);
+                    final boolean ok = r.status == 200 && board.setComments(id, r.body);
+                    if (ok) main.post(new Runnable() { @Override public void run() { reloadBoard(); } });
+                }
+            }, "shell-cmts").start();
+            return;
+        }
+        if (!"call".equals(a.a)) return;
+        final long now = System.currentTimeMillis();
+        int r = board.act(a.v, src.fields(), now);
+        final String id = board.pendingId;
+        switch (r) {
+            case BoardCore.R_RENDER: reloadBoard(); break;
+            case BoardCore.R_WRITE: openWrite(); break;
+            case BoardCore.R_REPORT:
+                postBg(BoardCore.reportBody(id), "/report"); toast("신고가 접수됐어요. 이 글은 더 이상 보이지 않아요"); reloadBoard(); break;
+            case BoardCore.R_DELETE:
+                postBg(BoardCore.deleteBody(id, owner()), "/post/mine-delete"); toast("글을 삭제했어요"); reloadBoard(); break;
+            case BoardCore.R_COMMENT: {
+                String nick = ShellCore.commId(store);
+                if (nick.length() == 0) { toast("설정에서 커뮤니티 아이디를 먼저 정해 주세요"); break; }
+                String text = board.pendingText;
+                board.addLocalComment(id, nick, text, now);
+                postBg(BoardCore.commentBody(id, nick, text), "/comment");
+                src.setField(board.commentKey(id), "");
+                reloadBoard(); break;
+            }
+            default: break;
+        }
+    }
+    /** 결과를 기다리지 않는 서버 쓰기(신고·삭제·댓글). 실패해도 화면은 이미 바뀌어 있다. */
+    private void postBg(final String json, final String path) {
+        new Thread(new Runnable() { @Override public void run() { NetPost.post(ShellCore.BOARD_BASE + path, json, 9000); } }, "shell-bw").start();
+    }
+
+    // 글쓰기 시트(엔진 /screen/write 가 그린다)
+    private void openWrite() {
+        if (ShellCore.commId(store).length() == 0) { toast("설정에서 커뮤니티 아이디를 먼저 정해 주세요"); return; }
+        writeErr = ""; writeT = ""; writeB = ""; writeBusy = false;
+        sheetName = ShellCore.S_WRITE;
+        sheetView = new ScreenView(this);
+        sheetView.setDpr(dpr);
+        sheetView.setPalette(ShellCore.palette(ShellCore.theme(store)));
+        sheetView.setListener(new SheetHost());
+        sheet = new android.app.Dialog(this, android.R.style.Theme_Material_Light_NoActionBar);
+        sheet.setContentView(sheetView);
+        try { sheet.getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE); } catch (Throwable ignored) { }
+        try { sheet.show(); } catch (Throwable t) { toast("글쓰기를 열지 못했어요"); return; }
+        loadWrite(false);
+    }
+    private void loadWrite(final boolean keep) {
+        final String json = "{\"cap\":" + ShellCore.CAP + ",\"f\":{\"rc\":0,\"err\":" + ShellCore.q(writeErr) + ",\"busy\":" + (writeBusy ? 1 : 0)
+            + ",\"t\":" + ShellCore.q(writeT) + ",\"b\":" + ShellCore.q(writeB) + "}}";
+        new Thread(new Runnable() {
+            @Override public void run() {
+                NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/write", json, 8000);
+                final String txt = r.status == 200 ? r.body : "";
+                main.post(new Runnable() { @Override public void run() { if (sheet != null && sheet.isShowing()) present(sheetView, txt, keep); } });
+            }
+        }, "shell-write").start();
+    }
+    private void closeSheet() { try { if (sheet != null) sheet.dismiss(); } catch (Throwable ignored) { } sheet = null; sheetView = null; sheetName = ""; }
+
+    private final class SheetHost implements ScreenView.Listener {
+        @Override public void onAction(ScreenCore.Act a) {
+            if (!"call".equals(a.a)) return;
+            if ("wr.close".equals(a.v)) { closeSheet(); return; }
+            if ("wr.submit".equals(a.v)) submitWrite();
+        }
+        @Override public void onSet(ScreenCore.Act a, boolean on) { }
+        @Override public void onSearch(ScreenCore.Act a, String q) { }
+        @Override public void onInputFocus(boolean on) { }
+        @Override public void onFirstDraw() { }
+        @Override public void onText(String key, String value, String kind) { }
+        @Override public void onContentH(float dp) { }
+    }
+    private void submitWrite() {
+        if (writeBusy || sheetView == null) return;
+        Map<String, String> f = sheetView.fields();
+        final String t = f.get("wt") == null ? "" : f.get("wt").trim(), b = f.get("wb") == null ? "" : f.get("wb").trim();
+        writeT = t; writeB = b;
+        if (t.length() == 0) { writeErr = "제목을 입력해주세요"; loadWrite(true); return; }
+        if (b.length() == 0) { writeErr = "내용을 입력해주세요"; loadWrite(true); return; }
+        final String nick = ShellCore.commId(store);
+        writeBusy = true; writeErr = ""; loadWrite(true);
+        final String json = BoardCore.postBody(nick, t, b, "잡담", owner());
+        new Thread(new Runnable() {
+            @Override public void run() {
+                NetPost.Res r = NetPost.post(ShellCore.BOARD_BASE + "/post", json, 9000);
+                final String id = r.status == 200 ? ShellCore.jsonId(r.body) : "";
+                final boolean rejected = r.status >= 400 && r.status < 500;
+                final String why = rejected ? ShellCore.jsonError(r.body) : "";
+                main.post(new Runnable() { @Override public void run() {
+                    writeBusy = false;
+                    if (rejected) { writeErr = why.length() > 0 ? why : "등록할 수 없어요"; loadWrite(true); return; }
+                    long now = System.currentTimeMillis();
+                    boolean ok = id.length() > 0;
+                    board.addMine(ok ? id : "L" + now, "잡담", t, b, nick, now, !ok);
+                    toast(ok ? "글이 등록되었어요" : "글을 저장했어요. 연결되면 모두에게 보여요");
+                    closeSheet();
+                    reloadBoard();
+                } });
+            }
+        }, "shell-post").start();
+    }
 
     // ───────────── 홈 탭 ─────────────
     private HomeCore.Env homeEnv() {
