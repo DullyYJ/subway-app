@@ -11,17 +11,26 @@ public final class NetPost {
     public static final class Res { public final int status; public final String body, err; Res(int s, String b, String e) { status = s; body = b; err = e; } }
     /** 허용된 주소에 글을 POST 한다(다른 곳은 blocked). 응답은 ScreenCore.NET_MAX_RES 까지. 리다이렉트는 따르지 않는다. */
     public static Res post(String url, String body, double timeoutMs) {
-        if (!ScreenCore.netAllowed(url)) return new Res(-1, "", "blocked");
         if (body == null || body.length() > ScreenCore.NET_MAX_REQ) return new Res(-1, "", "too-long");
+        return send("POST", url, body, timeoutMs);
+    }
+    /** 허용된 주소에서 GET 으로 받는다(설정 같은 GET 전용 엔진 화면). 규칙은 post 와 같다. */
+    public static Res get(String url, double timeoutMs) { return send("GET", url, null, timeoutMs); }
+
+    private static Res send(String method, String url, String body, double timeoutMs) {
+        if (!ScreenCore.netAllowed(url)) return new Res(-1, "", "blocked");
         int to = ScreenCore.netTimeout(timeoutMs);
         java.net.HttpURLConnection c = null;
         try {
             c = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
             c.setConnectTimeout(Math.min(to, 6000)); c.setReadTimeout(to);
             c.setInstanceFollowRedirects(false);
-            c.setRequestMethod("POST"); c.setDoOutput(true);
-            c.setRequestProperty("Content-Type", "text/plain;charset=UTF-8");
-            java.io.OutputStream os = c.getOutputStream(); os.write(body.getBytes("UTF-8")); os.close();
+            c.setRequestMethod(method);
+            if (body != null) {
+                c.setDoOutput(true);
+                c.setRequestProperty("Content-Type", "text/plain;charset=UTF-8");
+                java.io.OutputStream os = c.getOutputStream(); os.write(body.getBytes("UTF-8")); os.close();
+            }
             int code = c.getResponseCode();
             java.io.InputStream is = code >= 400 ? c.getErrorStream() : c.getInputStream();
             java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();

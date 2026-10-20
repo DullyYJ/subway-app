@@ -44,6 +44,7 @@ jobs:
           - row_native.test.js
           - htl_native.test.js
           - screen_native.test.js
+          - shell_native.test.js
           - screen_native_js.ui.test.js
           - shop_engine.test.js
           - settings_engine.test.js
@@ -274,7 +275,9 @@ jobs:
                       # 2026-10-19: 경로 요청·최근 결과 보관을 앱 본체가 — 순수 자바 코어 + 플러그인(5번 3단계)
                       "native/RouteFetchCore.java", "native/RouteFetchPlugin.java",
                       # 2026-10-19: 설정·저장값을 앱 본체에도 보관 — 순수 자바 코어 + 플러그인(5번 4단계)
-                      "native/StoreCore.java", "native/StorePlugin.java"]:
+                      "native/StoreCore.java", "native/StorePlugin.java",
+                      # 2026-10-20: 웹뷰 없는 네이티브 껍데기(두 번째 아이콘) — 순수 자바 코어 + Activity
+                      "native/ShellCore.java", "native/ShellActivity.java"]:
               if not os.path.exists(src):
                   raise SystemExit(src + " 가 없습니다 — 저장소에 올렸는지 확인하세요")
               shutil.copy(src, os.path.join(PKGDIR, os.path.basename(src)))
@@ -545,6 +548,16 @@ jobs:
               s = re.sub(r'android:windowSoftInputMode="[^"]*"', 'android:windowSoftInputMode="adjustPan"', s, count=1)
           else:
               s = s.replace('android:name=".MainActivity"', 'android:name=".MainActivity" android:windowSoftInputMode="adjustPan"', 1)
+
+          # 2026-10-20: 웹뷰 없는 네이티브 껍데기 — 기존 앱 옆에 두 번째 아이콘('길동무 네이티브')으로 설치된다
+          if ".ShellActivity" not in s:
+              s = s.replace("</application>",
+                  '    <activity android:name=".ShellActivity" android:exported="true" android:label="길동무 네이티브" android:windowSoftInputMode="adjustResize" android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|screenLayout|uiMode" android:launchMode="singleTask">\n'
+                  '        <intent-filter>\n'
+                  '            <action android:name="android.intent.action.MAIN" />\n'
+                  '            <category android:name="android.intent.category.LAUNCHER" />\n'
+                  '        </intent-filter>\n'
+                  '    </activity>\n    </application>', 1)
 
           # 2026-10-13: 경로 이동 중 프로세스를 살려 두는 우리 포그라운드 서비스(위치 유형)
           if "KeepAliveService" not in s:
