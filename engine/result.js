@@ -152,6 +152,30 @@ function resTrkFacts(route, r, noGeo) {
     bt: r.bt == null ? null : r.bt, rb: r.rb == null ? null : r.rb, now: resNum(r.now, 0), sw: [], tz: resNum(r.tz, 540), th: r.th === 'pastel' ? 'pastel' : 'dark' };
 }
 
+// 장거리 고르기 눌림 → 다시 물을 때 덧붙일 질의(웹 _ldReselect). m = 수단/시각 칩, g = 등급/시각 칩. 번호는 엔진이 칩을 만든 순서와 같다.
+function resLdQuery(ld) {
+  var enc = function (v) { return encodeURIComponent(String(v == null ? '' : v)); };
+  var cands = resArr(ld.candidates).slice(0, 8), opts = resArr(ld.options).slice(0, 8);
+  return {
+    m: cands.map(function (c) { return (c && c.mode) ? '&ldMode=' + enc(c.mode) + (c.depTs ? '&ldDepTs=' + enc(c.depTs) : '') : ''; }),
+    g: opts.map(function (o) { return (o && o.grade && ld.mode) ? '&ldMode=' + enc(ld.mode) + '&ldGrade=' + enc(o.grade) + (o.depTs ? '&ldDepTs=' + enc(o.depTs) : '') : ''; })
+  };
+}
+// 공지·지연 제보 줄(rhead part n)의 사실. 내 경로의 지하철 노선(앞 6개)에 대해서만, 서버가 준 원자료(r.off · r.al)를 그대로 넘긴다.
+function resNoteFacts(route, r) {
+  var ln = [];
+  route.sections.forEach(function (sc) { var tr = (sc && sc.transportation) || {}; if (tr.type === 1 && tr.name && ln.indexOf(String(tr.name)) < 0 && ln.length < 6) ln.push(String(tr.name)); });
+  if (!ln.length || route.why === undefined) return null;
+  var f = { ln: ln, off: {}, offAt: 0, al: {}, now: Math.floor(resNum(r.now, 0) / 60000) * 60000 };
+  var o = r.off && r.off.lines, a = r.al && r.al.lines;
+  ln.forEach(function (l) {
+    var n = o && o[l];
+    if (n && typeof n === 'object') f.off[l] = { text: n.text, title: n.title, ts: n.ts, estimated: n.estimated ? 1 : 0, suspect: n.suspect ? 1 : 0 };
+    var x = a && a[l];
+    if (x && typeof x === 'object') f.al[l] = { reporters: x.reporters, stations: resArr(x.stations).slice(0, 1) };
+  });
+  return f;
+}
 function resHash(s) { var h = 5381; for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
 function resPart(cap, part, facts) {
   var o = rheadScreen_({ cap: cap, part: part }, facts);
@@ -166,6 +190,10 @@ function resultScreen(opt, r) {
   var raw = resArr((data.result || {}).path);
   var paths = resApplyRv(data, raw);
   var pick = resPickTabs(paths);
+  if (r.ld2 && typeof r.ld2 === 'object') {                      // 장거리 '다른 편' 을 골라 다시 받은 응답: 그 안의 장거리 경로만 바꿔 끼운다(웹 _ldReselect)
+    var p2 = resArr((r.ld2.result || {}).path).filter(function (q) { return q && q.info && q.info.longDist === true; })[0];
+    if (p2) pick.longdist = p2;
+  }
   var tab = RESULT_TABS.indexOf(r.tab) >= 0 ? r.tab : 'fast';
   var has = {};
   RESULT_TABS.forEach(function (t) { has[t] = !!(pick[t] && resConvertPath(pick[t])); });
@@ -182,14 +210,16 @@ function resultScreen(opt, r) {
     if (route.ld && tab === 'longdist') {
       var l = resPart(cap, 'l', { lg: route.ld }); if (l) nodes = nodes.concat(l.body);
     }
+    var nf = resNoteFacts(route, r);
+    if (nf) { var nn = resPart(cap, 'n', nf); if (nn && nn.body.length && nn.body[0].t !== 'spacer') nodes = nodes.concat(nn.body); }
     var k = resPart(cap, 'k', resTrkFacts(route, r, false));
     if (!k) k = resPart(cap, 'k', resTrkFacts(route, r, true));
     if (k) nodes = nodes.concat(k.head).concat(k.body);
   }
   var body = nodes.length ? [{ t: 'panel', pad: [0, 4, 0, 8], ip: [12, 12, 12, 8], r: 16, kids: nodes }] : [];
   var sec = [];                                                  // 지금 보이는 경로의 지하철 구간 이름(실시간소통이 '내 노선'을 앞에 둘 때 쓴다)
-  if (route) route.sections.forEach(function (sc) { var tr = (sc && sc.transportation) || {}; if (tr.type === 1 && tr.name && sec.length < 8) sec.push(String(tr.name)); });
-  var out = { ok: true, v: RESULT_V, screen: 'result', cover: 'chips', head: [], body: body, info: { has: has, tab: tab, m: total, n: paths.length, sec: sec } };
+  if (route) route.sections.forEach(function (sc) { var tr = (sc && sc.transportation) || {}; if (tr.type === 1 && tr.name && sec.length < 6 && sec.indexOf(String(tr.name)) < 0) sec.push(String(tr.name)); });
+  var out = { ok: true, v: RESULT_V, screen: 'result', cover: 'chips', head: [], body: body, info: { has: has, tab: tab, m: total, n: paths.length, sec: sec, ld: (route && route.ld && tab === 'longdist') ? resLdQuery(route.ld) : null } };
   out.rev = 'e' + RESULT_V + ':' + resHash(JSON.stringify(body));
   return out;
 }

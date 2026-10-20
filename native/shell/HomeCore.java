@@ -49,31 +49,53 @@ public final class HomeCore {
     public long resRb = 0, resBt = -1;
     public int resRev = 0;                                       // 결과가 바뀔 때마다 오른다(화면 캐시 열쇠)
     public boolean hasRoute() { return routeRaw.length() > 2; }
+    // 결과 카드의 보조 사실: 지난 탐색 질의(장거리 다시 고르기에 쓴다) · 다시 받은 장거리 응답 · 공지/제보 원자료(서버가 준 글 그대로)
+    public String lastQs = "", ld2Raw = "", offRaw = "", alRaw = "", noteKey = "";
+    public long noteAt = 0;
+    public List<String> ldM = new ArrayList<String>(), ldG = new ArrayList<String>();      // 엔진이 만든 '다시 물을 질의' (info.ld)
+    public String ldPending = "", roomLine = "";
     /** 엔진 결과 화면의 info.sec(지금 보이는 경로의 지하철 구간 이름). */
     public List<String> resSec = new ArrayList<String>();
     @SuppressWarnings("unchecked")
     public void onResult(String json) {
-        resSec = new ArrayList<String>();
+        resSec = new ArrayList<String>(); ldM = new ArrayList<String>(); ldG = new ArrayList<String>();
         try {
             Object o = ScreenCore.parse(json);
             Object info = o instanceof Map ? ((Map<String, Object>) o).get("info") : null;
             Object sec = info instanceof Map ? ((Map<String, Object>) info).get("sec") : null;
             if (sec instanceof List) for (Object x : (List<Object>) sec) if (x instanceof String) resSec.add((String) x);
+            Object ld = info instanceof Map ? ((Map<String, Object>) info).get("ld") : null;
+            if (ld instanceof Map) for (String k : new String[] { "m", "g" }) {
+                Object q = ((Map<String, Object>) ld).get(k);
+                if (q instanceof List) for (Object x : (List<Object>) q) (k.equals("m") ? ldM : ldG).add(x instanceof String ? (String) x : "");
+            }
         } catch (Exception e) { resSec = new ArrayList<String>(); }
     }
     /** 받은 경로 응답을 결과로 둔다. 모양이 JSON 객체가 아니면 버린다. */
     public boolean setRoute(String raw, String a, String b, long bt, long rb) {
         String t = raw == null ? "" : raw.trim();
         if (t.length() < 2 || t.charAt(0) != '{' || t.charAt(t.length() - 1) != '}') return false;
-        routeRaw = t; resA = a == null ? "" : a; resB = b == null ? "" : b; resBt = bt; resRb = rb; resTab = "fast"; resRev++;
+        routeRaw = t; resA = a == null ? "" : a; resB = b == null ? "" : b; resBt = bt; resRb = rb; resTab = "fast"; resRev++; ld2Raw = "";
         return true;
     }
-    public void clearRoute() { routeRaw = ""; resRev++; }
+    public void clearRoute() { routeRaw = ""; ld2Raw = ""; lastQs = ""; resRev++; }
+    /** 같은 경로를 다시 받은 응답으로 바꾼다(보던 탭은 그대로). */
+    public boolean replaceRoute(String raw) {
+        String t = raw == null ? "" : raw.trim();
+        if (t.length() < 2 || t.charAt(0) != '{' || t.charAt(t.length() - 1) != '}') return false;
+        routeRaw = t; ld2Raw = ""; resRev++;
+        return true;
+    }
+    /** 공지·제보 원자료를 넣는다(60초 안에 같은 노선이면 다시 받지 않는다). */
+    public void setNotes(String key, String off, String al, long now) { noteKey = key; offRaw = off == null ? "" : off; alRaw = al == null ? "" : al; noteAt = now; resRev++; }
+    public String secKey() { StringBuilder b = new StringBuilder(); for (String x : resSec) b.append(x).append(','); return b.toString(); }
+    public boolean needNotes(long now) { return hasRoute() && !resSec.isEmpty() && (!secKey().equals(noteKey) || now - noteAt > 60000); }
     /** 엔진 POST /screen/result 본문. */
     public String resultRequest(Env env, int cap, String theme, int tzMin) {
         return "{\"cap\":" + cap + ",\"r\":{\"data\":" + routeRaw + ",\"tab\":" + ShellCore.q(resTab)
             + ",\"a\":" + ShellCore.q(resA) + ",\"b\":" + ShellCore.q(resB)
             + ",\"bt\":" + (resBt >= 0 ? String.valueOf(resBt) : "null") + ",\"rb\":" + resRb
+            + (ld2Raw.length() > 2 ? ",\"ld2\":" + ld2Raw : "") + (offRaw.length() > 2 ? ",\"off\":" + offRaw : "") + (alRaw.length() > 2 ? ",\"al\":" + alRaw : "")
             + ",\"now\":" + env.nowMs + ",\"tz\":" + (-env.tzoMin) + ",\"th\":" + ShellCore.q("dark".equals(theme) ? "dark" : "pastel") + ",\"fav\":1}}";
     }
     /** 결과 화면의 눌림(rh.*). */
@@ -81,6 +103,18 @@ public final class HomeCore {
         if (v == null || !v.startsWith("rh.")) return R_NONE;
         if ("rh.close".equals(v)) { clearRoute(); return R_RENDER; }
         if ("rh.fav".equals(v)) return R_FAV;
+        if (v.startsWith("rh.ld.")) {                                          // rh.ld.m.<번호> · rh.ld.g.<번호> — 엔진이 만든 질의를 그대로 쓴다
+            try {
+                boolean m = v.startsWith("rh.ld.m."); int i = Integer.parseInt(v.substring(8));
+                List<String> q = m ? ldM : ldG;
+                if (i >= 0 && i < q.size() && q.get(i).matches("(&ld(Mode|Grade|DepTs)=[A-Za-z0-9%._~-]*){1,3}") && lastQs.length() > 0) { ldPending = q.get(i); return R_LD; }
+            } catch (NumberFormatException e) { /* 무시 */ }
+            return R_NONE;
+        }
+        if (v.startsWith("rh.room.")) {
+            try { int i = Integer.parseInt(v.substring(8)); if (i >= 0 && i < resSec.size()) { roomLine = resSec.get(i); return R_ROOM; } } catch (NumberFormatException e) { /* 무시 */ }
+            return R_NONE;
+        }
         if (v.startsWith("rh.tab.")) {
             String t = v.substring(7);
             for (String x : RTABS) if (x.equals(t)) { if (!x.equals(resTab)) { resTab = x; resRev++; } return R_RESULT; }
@@ -175,7 +209,7 @@ public final class HomeCore {
     }
 
     // ═════════════ 눌림 ═════════════
-    public static final int R_NONE = 0, R_RENDER = 1, R_GPS = 2, R_GO = 3, R_PICK_TIME = 4, R_FIELDS = 5, R_NEED_BOTH = 6, R_RESULT = 7, R_FAV = 8;
+    public static final int R_NONE = 0, R_RENDER = 1, R_GPS = 2, R_GO = 3, R_PICK_TIME = 4, R_FIELDS = 5, R_NEED_BOTH = 6, R_RESULT = 7, R_FAV = 8, R_LD = 9, R_ROOM = 10;
 
     /** 홈 화면의 눌림(a:'call' 의 v). R_FIELDS 는 입력칸 글자를 화면에 다시 써야 한다는 뜻. */
     public int act(String v, java.util.Map<String, String> fields) {

@@ -6,7 +6,7 @@ async function handleScreenMap(request) {
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: H });
   if (request.method !== "POST") return new Response(JSON.stringify({ ok: false, error: "post-only" }), { status: 405, headers: H });
   var raw = await request.text();
-  if (raw.length > 600000) return new Response(JSON.stringify({ ok: false, error: "body-too-long" }), { status: 413, headers: H });
+  if (raw.length > 3000000) return new Response(JSON.stringify({ ok: false, error: "body-too-long" }), { status: 413, headers: H });
   var body;
   try { body = JSON.parse(raw); } catch (e) { return new Response(JSON.stringify({ ok: false, error: "bad-json" }), { status: 400, headers: H }); }
   if (!body || typeof body !== "object") return new Response(JSON.stringify({ ok: false, error: "bad-body" }), { status: 400, headers: H });

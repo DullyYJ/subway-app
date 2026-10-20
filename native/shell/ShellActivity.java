@@ -53,6 +53,7 @@ public class ShellActivity extends Activity {
     private MetroMapView mapView;
     private MetroMapData mapData;
     private boolean mapDataLoading;
+    private FavCore fav;                                   // 즐겨찾기 시트(저장 목록·엔진이 돌려준 새 목록)
     private final FoodCore food = new FoodCore();         // 맛집 탭(도착지·기기 위치·받은 원자료)
     private int seqFood = 0;
     private ChatCore chat;
@@ -78,6 +79,7 @@ public class ShellActivity extends Activity {
         store = new PrefStore(getSharedPreferences(PREFS, Context.MODE_PRIVATE));
         board = new BoardCore(store);
         chat = new ChatCore(store);
+        fav = new FavCore(store);
         map = new MapCore(store);
         dpr = getResources().getDisplayMetrics().density;
         ScreenView.preloadFaces(this);
@@ -854,6 +856,7 @@ public class ShellActivity extends Activity {
         @Override public void onAction(ScreenCore.Act a) {
             if (ShellCore.S_MAPSTN.equals(sheetName) || ShellCore.S_MAPTT.equals(sheetName)) { if ("call".equals(a.a)) mapSheetAct(a.v); return; }
             if (!"call".equals(a.a)) return;
+            if (ShellCore.S_FAV.equals(sheetName)) { favAct(a.v); return; }
             if ("wr.close".equals(a.v) || "fm.close".equals(a.v)) { closeSheet(); return; }
             if ("wr.submit".equals(a.v)) { submitWrite(); return; }
             String[] ln = food.sheetLink(a.v);
@@ -927,7 +930,7 @@ public class ShellActivity extends Activity {
                         rs = rr.status == 200 ? rr.body : "";
                         if (rs.length() > 0) { resCacheKey = resKey; resCacheJson = rs; }
                     }
-                    if (rs.length() > 0) { final String rsf = rs; txt = ShellCore.mergeBodies(txt, rs); main.post(new Runnable() { @Override public void run() { home.onResult(rsf); chat.routeSec = home.resSec; } }); }
+                    if (rs.length() > 0) { final String rsf = rs; txt = ShellCore.mergeBodies(txt, rs); main.post(new Runnable() { @Override public void run() { home.onResult(rsf); chat.routeSec = home.resSec; maybeFetchNotes(); } }); }
                     else main.post(new Runnable() { @Override public void run() { toast("경로 결과를 그리지 못했어요"); } });
                 }
                 final String fin = txt;
@@ -974,7 +977,9 @@ public class ShellActivity extends Activity {
         int r = home.act(v, fields);
         switch (r) {
             case HomeCore.R_RESULT: reloadHome(); break;
-            case HomeCore.R_FAV: toast("즐겨찾기는 준비 중이에요"); break;
+            case HomeCore.R_FAV: openFavSheet(); break;
+            case HomeCore.R_LD: ldReselect(); break;
+            case HomeCore.R_ROOM: goRoom(); break;
             case HomeCore.R_RENDER: case HomeCore.R_FIELDS:
                 if (r == HomeCore.R_FIELDS) setHomeFields();
                 reloadHome(); break;
@@ -1053,7 +1058,8 @@ public class ShellActivity extends Activity {
                         Calendar x = Calendar.getInstance();
                         x.set(y, m, d, h, mi, 0); x.set(Calendar.MILLISECOND, 0);
                         home.baseMs = x.getTimeInMillis();
-                        reloadHome();
+                        if (home.hasRoute() && home.bothSet()) goRoute();          // 결과를 보는 중에 기준시각을 바꾸면 그 시각으로 다시 찾는다
+                        else reloadHome();
                     }
                 }, c.get(Calendar.HOUR_OF_DAY), c.get(Calendar.MINUTE), false).show();
             }
@@ -1069,6 +1075,7 @@ public class ShellActivity extends Activity {
         final String url = HomeCore.routeUrl(qs), a = home.text[HomeCore.START], b = home.text[HomeCore.DEST];
         final long bt = picked ? base : -1, rb = System.currentTimeMillis();
         final int my = ++seqRoute;
+        home.lastQs = qs;
         toast("경로를 찾는 중이에요");
         new Thread(new Runnable() {
             @Override public void run() {
@@ -1080,11 +1087,132 @@ public class ShellActivity extends Activity {
                 if (!draw || RouteFetchCore.wantsFull(fo)) {
                     NetPost.Res r2 = NetPost.get(url, 30000);
                     String b2 = (r2.status == 200 && r2.body != null) ? r2.body : "";
-                    if (b2.length() > 2) postRoute(my, b2, a, b, bt, rb);
-                    else if (!draw) postFail(my);
+                    if (b2.length() > 2) { postRoute(my, b2, a, b, bt, rb); fo = RouteFetchCore.extractFollow(b2); }
+                    else if (!draw) { postFail(my); return; }
                 }
+                if (bt < 0) retryEstimated(my, url, fo);                       // 기준시각을 직접 고르지 않았을 때만(고르면 실시간 도착을 못 쓴다)
             }
         }, "shell-route").start();
+    }
+    /** '예상'으로 남은 버스 구간이 있으면 엔진이 준 간격(follow.retry)마다 다시 받아, 엔진이 '나아졌다(follow.better)'고 할 때만 결과를 바꾼다. */
+    @SuppressWarnings("unchecked")
+    private void retryEstimated(final int my, String url, Map<String, Object> fo) {
+        if (fo == null || !(fo.get("retry") instanceof List)) return;
+        List<Object> delays = (List<Object>) fo.get("retry");
+        int miss = RouteFetchCore.num(fo, "miss"), applied = RouteFetchCore.num(fo, "applied");
+        for (Object dobj : delays) {
+            if (miss <= 0 || !(dobj instanceof Number)) return;
+            try { Thread.sleep(Math.max(1000, Math.min(60000, ((Number) dobj).longValue()))); } catch (InterruptedException e) { return; }
+            if (my != seqRoute || !home.hasRoute()) return;
+            String u = url.replaceFirst("baseMs=\\d+", "baseMs=" + System.currentTimeMillis()) + "&pm=" + miss + "&pa=" + applied;
+            NetPost.Res r = NetPost.get(u, 30000);
+            String body = r.status == 200 && r.body != null ? r.body.trim() : "";
+            Map<String, Object> f2 = RouteFetchCore.extractFollow(body);
+            if (body.length() < 3 || f2 == null || my != seqRoute) continue;
+            if (Boolean.TRUE.equals(f2.get("better"))) {
+                miss = RouteFetchCore.num(f2, "miss"); applied = RouteFetchCore.num(f2, "applied");
+                final String nb = body;
+                main.post(new Runnable() { @Override public void run() { if (my == seqRoute && home.replaceRoute(nb)) reloadHome(); } });
+            }
+        }
+    }
+    private boolean notesBusy;
+    /** 결과 카드의 공지·지연 제보 줄: 엔진이 알려 준 내 지하철 노선에 대해 서버 원자료를 받아 엔진에 다시 묻는다(60초 안에는 다시 받지 않는다). */
+    private void maybeFetchNotes() {
+        final long now0 = System.currentTimeMillis();
+        if (notesBusy || !home.needNotes(now0)) return;
+        notesBusy = true;
+        final String key = home.secKey();
+        final StringBuilder qs = new StringBuilder();
+        for (String l : home.resSec) { if (qs.length() > 0) qs.append(','); qs.append(l); }
+        final int my = seqRoute;
+        new Thread(new Runnable() {
+            @Override public void run() {
+                NetPost.Res o = NetPost.get(ShellCore.BASE + "/line-notices", 6000);
+                NetPost.Res a = NetPost.get(ShellCore.BOARD_BASE + "/lalerts?lines=" + HomeSearchCore.enc(qs.toString()), 6000);
+                final String off = o.status == 200 && o.body != null && o.body.startsWith("{") && o.body.length() < 200000 ? o.body : "";
+                final String al = a.status == 200 && a.body != null && a.body.startsWith("{") && a.body.length() < 200000 ? a.body : "";
+                main.post(new Runnable() { @Override public void run() {
+                    notesBusy = false;
+                    if (my != seqRoute || !home.hasRoute()) return;
+                    home.setNotes(key, off, al, System.currentTimeMillis());
+                    if (off.length() > 0 || al.length() > 0) reloadHome();
+                } });
+            }
+        }, "shell-notes").start();
+    }
+    /** 장거리 '다른 편' 고르기: 엔진이 만든 질의를 덧붙여 다시 받고, 엔진이 장거리 경로만 바꿔 끼운다. */
+    private void ldReselect() {
+        if (home.lastQs.length() == 0) return;
+        final String url = HomeCore.routeUrl(home.lastQs + home.ldPending);
+        final int my = ++seqRoute;
+        toast("다른 편을 찾는 중이에요");
+        new Thread(new Runnable() {
+            @Override public void run() {
+                NetPost.Res r = NetPost.get(url, 30000);
+                final String b = r.status == 200 && r.body != null ? r.body.trim() : "";
+                main.post(new Runnable() { @Override public void run() {
+                    if (my != seqRoute) return;
+                    if (b.length() > 2 && b.charAt(0) == '{' && b.charAt(b.length() - 1) == '}') { home.ld2Raw = b; home.resRev++; reloadHome(); }
+                    else toast("다른 편을 받지 못했어요");
+                } });
+            }
+        }, "shell-ld").start();
+    }
+    /** 노선 방 보기: 실시간소통 탭에서 그 노선 방을 연다. */
+    private void goRoom() {
+        chat.select(home.roomLine);
+        store.put(ShellCore.K_MODE, "chat");
+        store.put(ShellCore.K_TAB, "community");
+        showTab("community");
+    }
+
+    // ───────────── 즐겨찾기 시트 ─────────────
+    private void openFavSheet() {
+        closeSheet();
+        sheetName = ShellCore.S_FAV;
+        sheetView = new ScreenView(this);
+        sheetView.setDpr(dpr);
+        sheetView.setPalette(ShellCore.palette(ShellCore.theme(store)));
+        sheetView.setListener(new SheetHost());
+        sheet = new android.app.Dialog(this, android.R.style.Theme_Material_Light_NoActionBar);
+        sheet.setContentView(sheetView);
+        try { sheet.show(); } catch (Throwable t) { toast("즐겨찾기를 열지 못했어요"); return; }
+        loadFav();
+    }
+    private void loadFav() {
+        final String json = fav.request(ShellCore.CAP, ShellCore.theme(store), home.hasRoute() ? home.resA : home.text[HomeCore.START], home.hasRoute() ? home.resB : home.text[HomeCore.DEST]);
+        new Thread(new Runnable() {
+            @Override public void run() {
+                NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/fav", json, 8000);
+                final String txt = r.status == 200 ? r.body : "";
+                main.post(new Runnable() { @Override public void run() {
+                    if (sheet == null || !sheet.isShowing() || !ShellCore.S_FAV.equals(sheetName)) return;
+                    if (txt.length() == 0) { toast("즐겨찾기를 받지 못했어요"); return; }
+                    fav.onScreen(txt);
+                    if (fav.msg.length() > 0) toast(fav.msg);
+                    present(sheetView, txt, true);
+                } });
+            }
+        }, "shell-fav").start();
+    }
+    private void favAct(String v) {
+        switch (fav.act(v)) {
+            case FavCore.R_CLOSE: closeSheet(); break;
+            case FavCore.R_RENDER: loadFav(); break;
+            case FavCore.R_GO: {
+                FavCore.Go g = fav.go.get(fav.goIdx);
+                closeSheet();
+                home.setStation(HomeCore.START, g.sName, g.sLine, g.sLa, g.sLo);
+                home.setStation(HomeCore.DEST, g.dName, g.dLine, g.dLa, g.dLo);
+                home.clearRoute();
+                store.put(ShellCore.K_TAB, "home"); showTab("home");
+                setHomeFields();
+                goRoute();
+                break;
+            }
+            default: break;
+        }
     }
     private int seqRoute = 0;
     private void postRoute(final int my, final String raw, final String a, final String b, final long bt, final long rb) {

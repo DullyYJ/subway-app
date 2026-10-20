@@ -82,6 +82,28 @@ const flat = ns => { const o = []; (function f(a) { a.forEach(n => { o.push(n); 
   const r = screenCheck(screens);
   ok(!r.err && r.out.length === 4 && r.out.every(l => /^OK/.test(l)), '앱 검증기 통과: ' + (r.err || r.out.join(' | ')));
 }
+// ④-b 장거리 다시 고르기 · 공지·제보 줄
+{
+  const mkLd = (grade, dep) => ({ info: { totalTime: 130, longDist: true, ldMode: 'train', ldGrade: grade, ldDepTs: dep, ldOptions: [{ grade: 'KTX', depTs: 100, depLabel: '10:00', fare: 59800 }, { grade: 'ITX', depTs: 200, depLabel: '11:00', fare: 40000 }], candidates: [{ mode: 'train', depTs: 100, depLabel: '10:00', totalMin: 130 }, { mode: 'expbus', depTs: 300, depLabel: '10:30', totalMin: 200 }], distKm: 300 },
+    subPath: [{ trafficType: 4, lane: [{ name: grade }], sectionTime: 130, distance: 300000, startName: '서울', endName: '부산' }] });
+  const D1 = { result: { path: [mkLd('KTX', 100)] } };
+  const c = (extra) => E.resultScreen({ cap: 18 }, Object.assign({ data: D1, tab: 'longdist', a: '서울', b: '부산', now, tz: 540, th: 'dark', fav: 1 }, extra || {}));
+  const o = c();
+  ok(o.info.ld && o.info.ld.m.join() === '&ldMode=train&ldDepTs=100,&ldMode=expbus&ldDepTs=300' && o.info.ld.g[1] === '&ldMode=train&ldGrade=ITX&ldDepTs=200', '장거리 칩 눌림 번호 → 다시 물을 질의(엔진이 만든다)');
+  ok(call('fast').info.ld === null, '장거리 탭이 아니면 ld 없음');
+  const o2 = c({ ld2: { result: { path: [mkLd('ITX', 200)] } } });
+  ok(JSON.stringify(flat(o2.body)).includes('ITX') && o2.info.ld.g.length === 2, '다시 받은 응답의 장거리 경로로 바꿔 끼운다');
+  const o3 = c({ ld2: { result: { path: [] } } });
+  ok(o3.ok && JSON.stringify(flat(o3.body)).includes('KTX'), '다시 받은 응답에 장거리가 없으면 그대로');
+  const off = { ok: true, lines: { '수도권 1호선': { text: '수도권 1호선 열차 지연 안내', title: '지연', ts: now - 300000, estimated: 0 } } };
+  const al = { ok: true, lines: { '수도권 1호선': { reporters: 4, stations: [{ stn: '부평', n: 3 }] } } };
+  const n0 = call('fast'), n1 = call('fast', { off, al });
+  ok(!flat(n0.body).some(n => /지연 제보/.test(n.s || '')) && flat(n1.body).some(n => /서울교통공사 공지/.test(n.s || '')) && flat(n1.body).some(n => /지연 제보 4명 \(부평 부근\)/.test(n.s || '')), '공지·제보 줄: 없으면 안 보이고, 있으면 엔진이 문장을 만든다');
+  const rm = flat(n1.body).find(n => n.t === 'button' && n.s === '노선 방 보기');
+  ok(rm && rm.act.v === 'rh.room.0' && n1.info.sec[0] === '수도권 1호선', '노선 방 보기 번호 = info.sec 번호');
+  const r = screenCheck([o, o2, n1]);
+  ok(!r.err && r.out.every(l => /^OK/.test(l)), '앱 검증기 통과(장거리·공지): ' + (r.err || r.out.join(' | ')));
+}
 // ⑤ 이상한 입력
 ok(E.resultScreen({ cap: 11 }, { data: DATA }).ok === false, 'cap 12 미만이면 만들지 않는다');
 {

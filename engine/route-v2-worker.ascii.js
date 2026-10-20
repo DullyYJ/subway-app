@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-20s91";
+var ENGINE_VERSION = "route-v2-2026-10-20s92";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -18431,6 +18431,30 @@ function resTrkFacts(route, r, noGeo) {
     bt: r.bt == null ? null : r.bt, rb: r.rb == null ? null : r.rb, now: resNum(r.now, 0), sw: [], tz: resNum(r.tz, 540), th: r.th === 'pastel' ? 'pastel' : 'dark' };
 }
 
+// \uc7a5\uac70\ub9ac \uace0\ub974\uae30 \ub20c\ub9bc \u2192 \ub2e4\uc2dc \ubb3c\uc744 \ub54c \ub367\ubd99\uc77c \uc9c8\uc758(\uc6f9 _ldReselect). m = \uc218\ub2e8/\uc2dc\uac01 \uce69, g = \ub4f1\uae09/\uc2dc\uac01 \uce69. \ubc88\ud638\ub294 \uc5d4\uc9c4\uc774 \uce69\uc744 \ub9cc\ub4e0 \uc21c\uc11c\uc640 \uac19\ub2e4.
+function resLdQuery(ld) {
+  var enc = function (v) { return encodeURIComponent(String(v == null ? '' : v)); };
+  var cands = resArr(ld.candidates).slice(0, 8), opts = resArr(ld.options).slice(0, 8);
+  return {
+    m: cands.map(function (c) { return (c && c.mode) ? '&ldMode=' + enc(c.mode) + (c.depTs ? '&ldDepTs=' + enc(c.depTs) : '') : ''; }),
+    g: opts.map(function (o) { return (o && o.grade && ld.mode) ? '&ldMode=' + enc(ld.mode) + '&ldGrade=' + enc(o.grade) + (o.depTs ? '&ldDepTs=' + enc(o.depTs) : '') : ''; })
+  };
+}
+// \uacf5\uc9c0\u00b7\uc9c0\uc5f0 \uc81c\ubcf4 \uc904(rhead part n)\uc758 \uc0ac\uc2e4. \ub0b4 \uacbd\ub85c\uc758 \uc9c0\ud558\ucca0 \ub178\uc120(\uc55e 6\uac1c)\uc5d0 \ub300\ud574\uc11c\ub9cc, \uc11c\ubc84\uac00 \uc900 \uc6d0\uc790\ub8cc(r.off \u00b7 r.al)\ub97c \uadf8\ub300\ub85c \ub118\uae34\ub2e4.
+function resNoteFacts(route, r) {
+  var ln = [];
+  route.sections.forEach(function (sc) { var tr = (sc && sc.transportation) || {}; if (tr.type === 1 && tr.name && ln.indexOf(String(tr.name)) < 0 && ln.length < 6) ln.push(String(tr.name)); });
+  if (!ln.length || route.why === undefined) return null;
+  var f = { ln: ln, off: {}, offAt: 0, al: {}, now: Math.floor(resNum(r.now, 0) / 60000) * 60000 };
+  var o = r.off && r.off.lines, a = r.al && r.al.lines;
+  ln.forEach(function (l) {
+    var n = o && o[l];
+    if (n && typeof n === 'object') f.off[l] = { text: n.text, title: n.title, ts: n.ts, estimated: n.estimated ? 1 : 0, suspect: n.suspect ? 1 : 0 };
+    var x = a && a[l];
+    if (x && typeof x === 'object') f.al[l] = { reporters: x.reporters, stations: resArr(x.stations).slice(0, 1) };
+  });
+  return f;
+}
 function resHash(s) { var h = 5381; for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
 function resPart(cap, part, facts) {
   var o = rheadScreen_({ cap: cap, part: part }, facts);
@@ -18445,6 +18469,10 @@ function resultScreen(opt, r) {
   var raw = resArr((data.result || {}).path);
   var paths = resApplyRv(data, raw);
   var pick = resPickTabs(paths);
+  if (r.ld2 && typeof r.ld2 === 'object') {                      // \uc7a5\uac70\ub9ac '\ub2e4\ub978 \ud3b8' \uc744 \uace8\ub77c \ub2e4\uc2dc \ubc1b\uc740 \uc751\ub2f5: \uadf8 \uc548\uc758 \uc7a5\uac70\ub9ac \uacbd\ub85c\ub9cc \ubc14\uafd4 \ub07c\uc6b4\ub2e4(\uc6f9 _ldReselect)
+    var p2 = resArr((r.ld2.result || {}).path).filter(function (q) { return q && q.info && q.info.longDist === true; })[0];
+    if (p2) pick.longdist = p2;
+  }
   var tab = RESULT_TABS.indexOf(r.tab) >= 0 ? r.tab : 'fast';
   var has = {};
   RESULT_TABS.forEach(function (t) { has[t] = !!(pick[t] && resConvertPath(pick[t])); });
@@ -18461,14 +18489,16 @@ function resultScreen(opt, r) {
     if (route.ld && tab === 'longdist') {
       var l = resPart(cap, 'l', { lg: route.ld }); if (l) nodes = nodes.concat(l.body);
     }
+    var nf = resNoteFacts(route, r);
+    if (nf) { var nn = resPart(cap, 'n', nf); if (nn && nn.body.length && nn.body[0].t !== 'spacer') nodes = nodes.concat(nn.body); }
     var k = resPart(cap, 'k', resTrkFacts(route, r, false));
     if (!k) k = resPart(cap, 'k', resTrkFacts(route, r, true));
     if (k) nodes = nodes.concat(k.head).concat(k.body);
   }
   var body = nodes.length ? [{ t: 'panel', pad: [0, 4, 0, 8], ip: [12, 12, 12, 8], r: 16, kids: nodes }] : [];
   var sec = [];                                                  // \uc9c0\uae08 \ubcf4\uc774\ub294 \uacbd\ub85c\uc758 \uc9c0\ud558\ucca0 \uad6c\uac04 \uc774\ub984(\uc2e4\uc2dc\uac04\uc18c\ud1b5\uc774 '\ub0b4 \ub178\uc120'\uc744 \uc55e\uc5d0 \ub458 \ub54c \uc4f4\ub2e4)
-  if (route) route.sections.forEach(function (sc) { var tr = (sc && sc.transportation) || {}; if (tr.type === 1 && tr.name && sec.length < 8) sec.push(String(tr.name)); });
-  var out = { ok: true, v: RESULT_V, screen: 'result', cover: 'chips', head: [], body: body, info: { has: has, tab: tab, m: total, n: paths.length, sec: sec } };
+  if (route) route.sections.forEach(function (sc) { var tr = (sc && sc.transportation) || {}; if (tr.type === 1 && tr.name && sec.length < 6 && sec.indexOf(String(tr.name)) < 0) sec.push(String(tr.name)); });
+  var out = { ok: true, v: RESULT_V, screen: 'result', cover: 'chips', head: [], body: body, info: { has: has, tab: tab, m: total, n: paths.length, sec: sec, ld: (route && route.ld && tab === 'longdist') ? resLdQuery(route.ld) : null } };
   out.rev = 'e' + RESULT_V + ':' + resHash(JSON.stringify(body));
   return out;
 }
@@ -18903,7 +18933,7 @@ async function handleScreenMap(request) {
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: H });
   if (request.method !== "POST") return new Response(JSON.stringify({ ok: false, error: "post-only" }), { status: 405, headers: H });
   var raw = await request.text();
-  if (raw.length > 600000) return new Response(JSON.stringify({ ok: false, error: "body-too-long" }), { status: 413, headers: H });
+  if (raw.length > 3000000) return new Response(JSON.stringify({ ok: false, error: "body-too-long" }), { status: 413, headers: H });
   var body;
   try { body = JSON.parse(raw); } catch (e) { return new Response(JSON.stringify({ ok: false, error: "bad-json" }), { status: 400, headers: H }); }
   if (!body || typeof body !== "object") return new Response(JSON.stringify({ ok: false, error: "bad-body" }), { status: 400, headers: H });
@@ -18914,6 +18944,96 @@ async function handleScreenMap(request) {
   return new Response(JSON.stringify(out), { headers: H });
 }
 // ===== MAP ENGINE END =====
+
+// ===== FAV ENGINE BEGIN =====
+// \uae38\ub3d9\ubb34 \u2014 \uc990\uaca8\ucc3e\uae30(\uacbd\ub85c) \ud654\uba74 \uc5d4\uc9c4 \u2014 2026-10-20 (s92). POST /screen/fav \ub85c \uc4f0\uc778\ub2e4.
+// \uc6f9 _favQuickAdd/_removeFav/_renderFavPopup/_applyFavRoute \uc758 \uaddc\uce59(\ucd5c\ub300 8\uac1c \u00b7 \uac19\uc740 \ucd9c\ubc1c-\ub3c4\ucc29 \uc911\ubcf5 \ubd88\uac00 \u00b7 \ucd9c\ubc1c=\ub3c4\ucc29 \ubd88\uac00 \u00b7 \uc774\ub984 \uae30\ubcf8 'A\u2192B')\uc744 \uc5d4\uc9c4\uc73c\ub85c \uc62e\uacbc\ub2e4.
+// \uc571\uc740 \uc800\uc7a5\ub41c \ubaa9\ub85d(list)\uacfc \uc9c0\uae08 \uacbd\ub85c\uc758 \ucd9c\ubc1c\u00b7\ub3c4\ucc29 \uc774\ub984(cur), \ubc29\uae08 \ub204\ub978 \uac83(op)\ub9cc \ubcf4\ub0b4\uace0, \uc5d4\uc9c4\uc774 \uc0c8 \ubaa9\ub85d(info.list)\uacfc \ud654\uba74\u00b7\uc548\ub0b4 \uae00(info.msg)\uc744 \ub3cc\ub824\uc900\ub2e4. \uc571\uc740 \uc0c8 \ubaa9\ub85d\uc744 \uadf8\ub300\ub85c \uc800\uc7a5\ud55c\ub2e4.
+//   \uc785\ub825 { cap(18 \uc774\uc0c1), f:{ list:[{s,d,name}], cur:{s,d}|null, op:{k:'quick'}|{k:'del',i}|null, th } }
+//   \ucd9c\ub825 { ok, v:1, screen:'fav', cover:'tab', head:[], body:[\u2026], info:{ list:[{s,d,name}], msg, go:[null|{s:[\uc774\ub984,\ub178\uc120,\uc704\ub3c4,\uacbd\ub3c4], d:[\u2026]}] } }
+// \ub20c\ub9bc: fv.add(\ud604\uc7ac \uacbd\ub85c \ub4f1\ub85d) \u00b7 fv.go.<i>(\uc774 \uc990\uaca8\ucc3e\uae30\ub85c \uacbd\ub85c \ucc3e\uae30) \u00b7 fv.del.<i> \u00b7 fv.close
+'use strict';
+var FAV_V = 1, FAV_MAX = 8;
+function favStr(v, n) { return typeof v === 'string' ? v.slice(0, n) : ''; }
+function favStnTable() {
+  if (typeof HOME_STNS !== 'undefined' && HOME_STNS) return HOME_STNS;
+  try { if (typeof require === 'function') return require('./home-stations').HOME_STNS; } catch (e) { /* \uc5c6\uc74c */ }
+  return [];
+}
+function favHash(s) { var h = 5381; for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
+function favFind(name) {                          // \uc5ed \uc774\ub984(\ub05d\uc758 '\uc5ed' \uc740 \ub5c0\ub2e4) \u2192 [\uc774\ub984, \ub178\uc120, \uc704\ub3c4, \uacbd\ub3c4] \ub610\ub294 null
+  var n = favStr(name, 30).replace(/\s+/g, '').replace(/\uc5ed$/, ''), t = favStnTable();
+  if (!n) return null;
+  for (var i = 0; i < t.length; i++) if (t[i][0] === n) return [t[i][0], t[i][1], t[i][2], t[i][3]];
+  return null;
+}
+function favClean(list) {
+  var out = [];
+  (Array.isArray(list) ? list : []).forEach(function (x) {
+    if (!x || typeof x !== 'object' || out.length >= FAV_MAX) return;
+    var s = favStr(x.s, 30), d = favStr(x.d, 30);
+    if (!s || !d || out.some(function (y) { return y.s === s && y.d === d; })) return;
+    out.push({ s: s, d: d, name: favStr(x.name, 40) || (s + '\u2192' + d) });
+  });
+  return out;
+}
+function favScreen(opt, f) {
+  if (!(Number(opt && opt.cap) >= 18)) return { ok: false, error: 'cap' };
+  f = (f && typeof f === 'object') ? f : {};
+  var list = favClean(f.list), msg = '';
+  var cur = null;
+  if (f.cur && typeof f.cur === 'object') { var cs = favFind(f.cur.s), cd = favFind(f.cur.d); if (cs && cd) cur = { s: cs[0], d: cd[0] }; }
+  var op = (f.op && typeof f.op === 'object') ? f.op : null;
+  if (op && op.k === 'quick') {
+    if (!cur) msg = '\uc9c0\ud558\ucca0\uc5ed\uc73c\ub85c \uc815\ud55c \uacbd\ub85c\ub9cc \ub4f1\ub85d\ud560 \uc218 \uc788\uc5b4\uc694';
+    else if (cur.s === cur.d) msg = '\ucd9c\ubc1c\uc5ed\uacfc \ub3c4\ucc29\uc5ed\uc774 \uac19\uc544\uc694';
+    else if (list.length >= FAV_MAX) msg = '\uc990\uaca8\ucc3e\uae30\ub294 \ucd5c\ub300 ' + FAV_MAX + '\uac1c';
+    else if (list.some(function (y) { return y.s === cur.s && y.d === cur.d; })) msg = '\uc774\ubbf8 \ub4f1\ub85d\ub41c \uacbd\ub85c\uc608\uc694';
+    else { list.push({ s: cur.s, d: cur.d, name: cur.s + '\u2192' + cur.d }); msg = cur.s + '\u2192' + cur.d + ' \ub4f1\ub85d \uc644\ub8cc'; }
+  } else if (op && op.k === 'del') {
+    var i = Math.floor(Number(op.i));
+    if (i >= 0 && i < list.length) { list.splice(i, 1); msg = '\uc990\uaca8\ucc3e\uae30 \uc0ad\uc81c'; }
+  }
+  var kids = [{ t: 'bar', pad: [16, 0, 0, 6], title: '\uc990\uaca8\ucc3e\uae30', btn: '\ub2eb\uae30', act: { a: 'call', v: 'fv.close' } }];
+  if (cur) {
+    var reg = list.some(function (y) { return y.s === cur.s && y.d === cur.d; });
+    if (reg) kids.push({ t: 'text', s: '\ud604\uc7ac \uacbd\ub85c(' + cur.s + '\u2192' + cur.d + ')\ub294 \ub4f1\ub85d\ub428', size: 12, color: '#30d158', pad: [0, 4, 0, 10] });
+    else if (cur.s !== cur.d) kids.push({ t: 'button', s: '+ \ud604\uc7ac \uacbd\ub85c(' + cur.s + '\u2192' + cur.d + ') \ube60\ub978 \ub4f1\ub85d', size: 13, h: 44, r: 12, bold: true, fill: 'card2', line: 'gold', tc: 'gold', pad: [0, 4, 0, 10], act: { a: 'call', v: 'fv.add' } });
+  }
+  if (!list.length) kids.push({ t: 'text', s: '\uc800\uc7a5\ub41c \uc990\uaca8\ucc3e\uae30\uac00 \uc5c6\uc2b5\ub2c8\ub2e4.\n\uacbd\ub85c\ub97c \ucc3e\uc740 \ub4a4 \uc704 \ub2e8\ucd94\ub85c \ub4f1\ub85d\ud574 \ubcf4\uc138\uc694.', size: 12, color: 'sub', lh: 1.7, align: 'center', pad: [18, 4, 18, 4] });
+  var go = [];
+  list.forEach(function (x, i) {
+    var a = favFind(x.s), b = favFind(x.d);
+    go.push(a && b ? { s: a, d: b } : null);
+    kids.push({ t: 'row', pad: [0, 4, 0, 4], gap: 8, kids: [
+      { t: 'button', s: x.name, size: 14, h: 46, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'gold', act: { a: 'call', v: 'fv.go.' + i } },
+      { t: 'button', s: '\uc0ad\uc81c', size: 13, h: 46, r: 12, bold: true, fill: 'card2', line: 'border', tc: '#ff453a', act: { a: 'call', v: 'fv.del.' + i } }] });
+    if (x.name !== x.s + '\u2192' + x.d) kids.push({ t: 'text', s: x.s + ' \u2192 ' + x.d, size: 11, color: 'sub', pad: [0, 4, 0, 8] });
+  });
+  kids.push({ t: 'spacer', h: 16 });
+  var out = { ok: true, v: FAV_V, screen: 'fav', cover: 'tab', head: [], body: kids, info: { list: list, msg: msg, go: go } };
+  out.rev = 'f' + FAV_V + ':' + favHash(JSON.stringify([kids, msg]));
+  return out;
+}
+// \uc9c0\ub3c4 \ud0ed \ud654\uba74 \uc5d4\uc9c4 Worker \uc5f0\uacb0\ubd80 \u2014 POST /screen/fav (engine/fav.js \uc758 favScreen \uc744 \ubd80\ub978\ub2e4). route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/screen/fav") return handleScreenFav(request);` \ub97c \ub123\ub294\ub2e4.
+//   \ubcf8\ubb38(JSON \uae00, Content-Type: text/plain): { cap(18 \uc774\uc0c1), f:{ list, cur, op, th } }
+//   \uc5d4\uc9c4\uc740 \uc544\ubb34\uac83\ub3c4 \uc800\uc7a5\ud558\uc9c0 \uc54a\ub294\ub2e4(\uc774 \uae30\uae30\uac00 \ubcf4\ub0b8 \uc0ac\uc2e4\ub85c \ud654\uba74\uc744 \uacc4\uc0b0\ud574 \ub3cc\ub824\uc904 \ubfd0).
+async function handleScreenFav(request) {
+  var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Cache-Control": "no-store" };
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: H });
+  if (request.method !== "POST") return new Response(JSON.stringify({ ok: false, error: "post-only" }), { status: 405, headers: H });
+  var raw = await request.text();
+  if (raw.length > 3000000) return new Response(JSON.stringify({ ok: false, error: "body-too-long" }), { status: 413, headers: H });
+  var body;
+  try { body = JSON.parse(raw); } catch (e) { return new Response(JSON.stringify({ ok: false, error: "bad-json" }), { status: 400, headers: H }); }
+  if (!body || typeof body !== "object") return new Response(JSON.stringify({ ok: false, error: "bad-body" }), { status: 400, headers: H });
+  var out;
+  try { out = favScreen({ cap: Number(body.cap) || 0 }, body.f, body.d); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2).slice(0, 120) }), { status: 500, headers: H }); }
+  if (!out || !out.ok) return new Response(JSON.stringify(out || { ok: false, error: "fail" }), { status: 400, headers: H });
+  out.ver = ENGINE_VERSION;
+  return new Response(JSON.stringify(out), { headers: H });
+}
+// ===== FAV ENGINE END =====
 
 async function handleFetch(request, env, ctx) {
   try { await holEnsure(env); } catch (e) {}
@@ -18952,6 +19072,7 @@ async function handleFetch(request, env, ctx) {
   if (url.pathname === "/screen/pvl") return handleScreenPvl(request);
   if (url.pathname === "/pos-fuse") return handlePosFuse(request);
   if (url.pathname === "/screen/map") return handleScreenMap(request);
+  if (url.pathname === "/screen/fav") return handleScreenFav(request);
   if (url.pathname === "/stops-near") {
     const lat = parseFloat(url.searchParams.get("lat"));
     const lng = parseFloat(url.searchParams.get("lng"));

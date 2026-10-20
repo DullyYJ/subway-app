@@ -24,7 +24,8 @@ const SETS = [
   { name: 'DIALOG', src: 'engine/dialog.js', glue: 'engine/dlg-worker.js', path: '/screen/dlg', fn: 'handleScreenDlg', anchor: '  if (url.pathname === "/screen/talk") return handleScreenTalk(request);\n' },
   { name: 'PVLABEL', src: 'engine/pvlabel.js', glue: 'engine/pvl-worker.js', path: '/screen/pvl', fn: 'handleScreenPvl', anchor: '  if (url.pathname === "/screen/dlg") return handleScreenDlg(request);\n' },
   { name: 'POSFUSE', src: 'engine/posfusion.js', glue: 'engine/pf-worker.js', path: '/pos-fuse', fn: 'handlePosFuse', anchor: '  if (url.pathname === "/screen/pvl") return handleScreenPvl(request);\n' },
-  { name: 'MAP', src: 'engine/map.js', glue: 'engine/map-worker.js', path: '/screen/map', fn: 'handleScreenMap', anchor: '  if (url.pathname === "/pos-fuse") return handlePosFuse(request);\n' }
+  { name: 'MAP', src: 'engine/map.js', glue: 'engine/map-worker.js', path: '/screen/map', fn: 'handleScreenMap', anchor: '  if (url.pathname === "/pos-fuse") return handlePosFuse(request);\n' },
+  { name: 'FAV', src: 'engine/fav.js', glue: 'engine/fav-worker.js', path: '/screen/fav', fn: 'handleScreenFav', anchor: '  if (url.pathname === "/screen/map") return handleScreenMap(request);\n' }
 ];
 let all = '';
 for (const S of SETS) {

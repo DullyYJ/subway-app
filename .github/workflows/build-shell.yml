@@ -24,6 +24,7 @@ jobs:
           - shop_engine.test.js
           - food_engine.test.js
           - map_engine.test.js
+          - fav_engine.test.js
           - result_engine.test.js
           - news_engine.test.js
           - board_engine.test.js

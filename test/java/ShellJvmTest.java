@@ -343,6 +343,30 @@ public class ShellJvmTest {
         String bq2 = mc.bodyRequest(18, "dark");
         ok(bq2.contains("\"bus\":{\"lat\":37.5,\"lng\":127.0,\"res\":{\"tp\":\"<a/>\"}}") && !bq2.contains("BAD"), "받은 본문을 res 로 다시 보낸다");
         mc.setBusLoc(37.4, 127.1); ok(!mc.bodyRequest(18, "dark").contains("\"tp\""), "위치를 다시 잡으면 이전 본문은 비운다");
+        // 결과 카드 보조: 장거리 다시 고르기 · 공지 원자료 · 즐겨찾기
+        {
+            HomeCore h2 = new HomeCore();
+            h2.setRoute("{\"result\":{}}", "부평", "강남", -1, 1L);
+            h2.onResult("{\"info\":{\"sec\":[\"수도권 1호선\",\"2호선\"],\"ld\":{\"m\":[\"&ldMode=train&ldDepTs=100\",\"&ldMode=expbus\"],\"g\":[\"&ldMode=train&ldGrade=ITX&ldDepTs=200\",\"zz\"]}}}");
+            ok(h2.actResult("rh.ld.m.0") == HomeCore.R_NONE, "지난 탐색 질의가 없으면 다시 고르기는 무시");
+            h2.lastQs = "SX=1&SY=2";
+            ok(h2.actResult("rh.ld.m.1") == HomeCore.R_LD && "&ldMode=expbus".equals(h2.ldPending) && h2.actResult("rh.ld.g.0") == HomeCore.R_LD && h2.ldPending.contains("ldGrade=ITX"), "장거리 칩 눌림 → 엔진이 만든 질의");
+            ok(h2.actResult("rh.ld.g.1") == HomeCore.R_NONE && h2.actResult("rh.ld.m.9") == HomeCore.R_NONE, "엉뚱한 질의·번호는 버린다");
+            ok(h2.actResult("rh.room.1") == HomeCore.R_ROOM && "2호선".equals(h2.roomLine) && h2.actResult("rh.room.5") == HomeCore.R_NONE, "노선 방 보기 번호 = info.sec 번호");
+            h2.ld2Raw = "{\"result\":{\"path\":[]}}"; h2.setNotes(h2.secKey(), "{\"lines\":{}}", "{\"lines\":{}}", 1000L);
+            String rq2 = h2.resultRequest(new HomeCore.Env(), 18, "dark", 0);
+            ok(rq2.contains("\"ld2\":{") && rq2.contains("\"off\":{") && rq2.contains("\"al\":{"), "다시 받은 응답·공지 원자료를 엔진에 그대로 보낸다");
+            ok(!h2.needNotes(1500L) && h2.needNotes(62000L), "공지는 60초 안에는 다시 받지 않는다");
+            ok(h2.replaceRoute("{\"a\":1}") && h2.ld2Raw.isEmpty() && !h2.replaceRoute("zz"), "예상 재조회 결과로 바꾸기");
+            ShellCore.MemStore fs = new ShellCore.MemStore();
+            FavCore fv = new FavCore(fs);
+            ok("[]".equals(fv.listJson()) && fv.request(18, "dark", "부평", "강남").contains("\"cur\":{\"s\":\"부평\""), "즐겨찾기 요청: 빈 목록 + 지금 경로");
+            ok(fv.act("fv.add") == FavCore.R_RENDER && fv.request(18, "dark", "부평", "강남").contains("\"op\":{\"k\":\"quick\"}") && !fv.request(18, "dark", "", "").contains("\"op\""), "빠른 등록은 한 번만 실린다");
+            fv.onScreen("{\"info\":{\"list\":[{\"s\":\"부평\",\"d\":\"강남\",\"name\":\"출근\"}],\"msg\":\"출근 등록 완료\",\"go\":[{\"s\":[\"부평\",\"수도권 1호선\",37.489,126.724],\"d\":[\"강남\",\"2호선\",37.497,127.027]},null]}}");
+            ok(fs.get(FavCore.K_FAV, "").contains("출근") && "출근 등록 완료".equals(fv.msg) && fv.go.size() == 2, "엔진이 돌려준 새 목록을 그대로 저장");
+            ok(fv.act("fv.go.0") == FavCore.R_GO && fv.go.get(0).dName.equals("강남") && Math.abs(fv.go.get(0).dLa - 37.497) < 1e-9 && fv.act("fv.go.1") == FavCore.R_NONE, "즐겨찾기로 경로 찾기(풀리지 않은 것은 무시)");
+            ok(fv.act("fv.del.0") == FavCore.R_RENDER && fv.request(18, "dark", "", "").contains("\"op\":{\"k\":\"del\",\"i\":0}") && fv.act("fv.close") == FavCore.R_CLOSE, "삭제 · 닫기");
+        }
         HomeCore hm = new HomeCore();
         hm.setStation(HomeCore.START, "강남", "2호선", 37.4979, 127.0276);
         ok(!hm.bothSet() && "강남".equals(hm.text[HomeCore.START]) && "subway".equals(hm.loc[HomeCore.START].type), "노선도에서 출발역 정하기");
