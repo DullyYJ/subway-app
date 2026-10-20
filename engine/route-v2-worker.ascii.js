@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-20s73";
+var ENGINE_VERSION = "route-v2-2026-10-20s74";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -11784,7 +11784,7 @@ var SETTINGS_FEATS = [
     off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9 \uae00\uc4f0\uae30 \uc2dc\ud2b8)\uc73c\ub85c \uadf8\ub824\uc694.', bad: '\ub124\uc774\ud2f0\ube0c \uae00\uc4f0\uae30 \uc2dc\ud2b8\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc6f9 \uc2dc\ud2b8\ub85c \ub300\uc2e0 \ubcf4\uc5ec\uc8fc\uace0 \uc788\uc5b4\uc694', stale: '\uc5d4\uc9c4\uc774 \uc900 \ud654\uba74\uc774 \uc62c\ubc14\ub974\uc9c0 \uc54a\uc544 \uc800\uc7a5\ud574 \ub454 \ud654\uba74\uc744 \uc4f0\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \ucee4\ubba4\ub2c8\ud2f0 \'\uc81c\ubcf4 \uae00\uc4f0\uae30\' \uc2dc\ud2b8\ub97c \uc5d4\uc9c4\uc774 \uc815\ud55c \ub300\ub85c \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694(\uc2e4\ud5d8 \uc911).' },
   { k: 'scrh', title: '\ub124\uc774\ud2f0\ube0c \uacbd\ub85c \uc785\ub825', desc: '\ud648 \ud0ed\uc758 \ucd9c\ubc1c\u00b7\ub3c4\ucc29 \uc785\ub825\uce78, \uc790\ub3d9\uc644\uc131 \ubaa9\ub85d, \uc704\uce58 \uac10\uc9c0\u00b7\ubc14\uafb8\uae30\u00b7\uacbd\ub85c \ud0d0\uc0c9 \ub2e8\ucd94, \uae30\uc900\uc2dc\uac01 \uc904\uc744 \uc5d4\uc9c4\uc774 \uc815\ud574 \ub0b4\ub824\uc8fc\uace0, \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694. \uae00\uc790\ub97c \uc4f0\ub294 \ub3d9\uc548 \uc790\ub3d9\uc644\uc131\uc774 \ubc14\ub85c \ub530\ub77c\uc640\uc694. \ubb38\uc81c\uac00 \uc0dd\uae30\uba74 \uc608\uc804 \uc6f9 \uce74\ub4dc\ub85c \ub3cc\uc544\uac00\uc694.',
     off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9 \uacbd\ub85c \uc785\ub825 \uce74\ub4dc)\uc73c\ub85c \uadf8\ub824\uc694.', bad: '\ub124\uc774\ud2f0\ube0c \uacbd\ub85c \uc785\ub825\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc6f9 \uce74\ub4dc\ub85c \ub300\uc2e0 \ubcf4\uc5ec\uc8fc\uace0 \uc788\uc5b4\uc694', stale: '\uc5d4\uc9c4\uc774 \uc900 \ud654\uba74\uc774 \uc62c\ubc14\ub974\uc9c0 \uc54a\uc544 \uc800\uc7a5\ud574 \ub454 \ud654\uba74\uc744 \uc4f0\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \ud648 \ud0ed\uc758 \uacbd\ub85c \uc785\ub825 \uce74\ub4dc\ub97c \uc5d4\uc9c4\uc774 \uc815\ud55c \ub300\ub85c \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694(\uc2e4\ud5d8 \uc911).' },
-  { k: 'scrr', title: '\ub124\uc774\ud2f0\ube0c \uacbd\ub85c \uacb0\uacfc \uc717\ubd80\ubd84', desc: '\ud648 \uacbd\ub85c \uacb0\uacfc \uce74\ub4dc\uc758 \uba38\ub9ac\uc904(\uc18c\uc694 \uc2dc\uac04\u00b7\uad6c\uac04\u00b7\uc990\uaca8\ucc3e\uae30\u00b7\ub2eb\uae30), \uc2b9\ucc28\u00b7\ub300\uae30\u00b7\ub3c4\ubcf4 \uc694\uc57d, \ud658\uc2b9 \uc548\ub0b4, \uacbd\ub85c \ud0ed(\ucd5c\ub2e8\uc2dc\uac04\u00b7\ucd5c\uc18c\ud658\uc2b9\u00b7\uc9c0\ud558\ucca0\u00b7\ubc84\uc2a4), \uacf5\uc2dd \uacf5\uc9c0\u00b7\uc9c0\uc5f0 \uc81c\ubcf4 \uc904, \uc7a5\uac70\ub9ac \uc5f4\ucc28\u00b7\ubc84\uc2a4 \uace0\ub974\uae30\ub97c \uc5d4\uc9c4\uc774 \uc815\ud574 \ub0b4\ub824\uc8fc\uace0, \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694. \ubb38\uc81c\uac00 \uc0dd\uae30\uba74 \uc608\uc804 \uc6f9 \uce74\ub4dc\ub85c \ub3cc\uc544\uac00\uc694.',
+  { k: 'scrr', title: '\ub124\uc774\ud2f0\ube0c \uacbd\ub85c \uacb0\uacfc \uc717\ubd80\ubd84', desc: '\ud648 \uacbd\ub85c \uacb0\uacfc \uce74\ub4dc\uc758 \uba38\ub9ac\uc904(\uc18c\uc694 \uc2dc\uac04\u00b7\uad6c\uac04\u00b7\uc990\uaca8\ucc3e\uae30\u00b7\ub2eb\uae30), \uc2b9\ucc28\u00b7\ub300\uae30\u00b7\ub3c4\ubcf4 \uc694\uc57d, \ud658\uc2b9 \uc548\ub0b4, \uacbd\ub85c \ud0ed(\ucd5c\ub2e8\uc2dc\uac04\u00b7\ucd5c\uc18c\ud658\uc2b9\u00b7\uc9c0\ud558\ucca0\u00b7\ubc84\uc2a4), \uacf5\uc2dd \uacf5\uc9c0\u00b7\uc9c0\uc5f0 \uc81c\ubcf4 \uc904, \uc7a5\uac70\ub9ac \uc5f4\ucc28\u00b7\ubc84\uc2a4 \uace0\ub974\uae30, \uad6c\uac04 \ud0c0\uc784\ub77c\uc778(\uc5ed\ubcc4 \uc2dc\uac01\u00b7\ub178\uc120 \uc0c9\u00b7\ud658\uc2b9 \ud45c\uc2dc)\uc744 \uc5d4\uc9c4\uc774 \uc815\ud574 \ub0b4\ub824\uc8fc\uace0, \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694. \ubb38\uc81c\uac00 \uc0dd\uae30\uba74 \uc608\uc804 \uc6f9 \uce74\ub4dc\ub85c \ub3cc\uc544\uac00\uc694.',
     off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9 \uacb0\uacfc \uce74\ub4dc)\uc73c\ub85c \uadf8\ub824\uc694.', bad: '\ub124\uc774\ud2f0\ube0c \uacb0\uacfc \uce74\ub4dc \uc717\ubd80\ubd84\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc6f9 \uce74\ub4dc\ub85c \ub300\uc2e0 \ubcf4\uc5ec\uc8fc\uace0 \uc788\uc5b4\uc694', stale: '\uc5d4\uc9c4\uc774 \uc900 \ud654\uba74\uc774 \uc62c\ubc14\ub974\uc9c0 \uc54a\uc544 \uc800\uc7a5\ud574 \ub454 \ud654\uba74\uc744 \uc4f0\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \uacb0\uacfc \uce74\ub4dc\uc758 \uba38\ub9ac\uc904\u00b7\uc694\uc57d\u00b7\ud658\uc2b9 \uc548\ub0b4\u00b7\uacbd\ub85c \ud0ed\u00b7\uacf5\uc9c0 \uc904\u00b7\uc7a5\uac70\ub9ac \uace0\ub974\uae30\ub97c \uc5d4\uc9c4\uc774 \uc815\ud55c \ub300\ub85c \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694(\uc2e4\ud5d8 \uc911).' },
   { k: 'sbh', title: '\uac00\ub824\uc9c4 \ub3d9\uc548 \uc5d4\uc9c4\uc774 \uc774\uc5b4\ubc1b\uae30', desc: '\uc571\uc744 \ud648 \ud654\uba74\uc774\ub098 \ub2e4\ub978 \uc571\uc73c\ub85c \ubcf4\ub0b8 \ub3d9\uc548\uc5d0\ub3c4 \uc5d4\uc9c4\uc774 \uc548\ub0b4\ub97c \ubc14\ub85c \uc774\uc5b4\ubc1b\uc544 \uc601\uc810\u00b7\ub3c4\ucc29 \uc2dc\uac01\u00b7\ud558\ucc28 \uc54c\ub9bc\uc744 \uacc4\uc18d \ub9de\ucdb0\uc694. \uc571\uc744 \ub2e4\uc2dc \uc5f4\uba74 \uadf8 \uacb0\uacfc\ub97c \uc774\uc5b4\uc11c \uc368\uc694. \ubb38\uc81c\uac00 \uc0dd\uae30\uba74 \uc608\uc804 \ubc29\uc2dd(\uac00\ub824\uc9c4 \ub3d9\uc548 \uc6f9\uc744 \uae68\uc6cc \uacc4\uc0b0)\uc73c\ub85c \ub3cc\uc544\uac00\uc694.',
     off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uac00\ub824\uc9c4 \ub3d9\uc548 \uc6f9\uc744 \uae68\uc6cc \uacc4\uc0b0)\uc73c\ub85c \uc774\uc5b4\uac00\uc694.', bad: '\uc5d4\uc9c4 \uc774\uc5b4\ubc1b\uae30\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \ub300\uc2e0 \uc774\uc5b4\uac00\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \uc571\uc774 \uac00\ub824\uc9c0\uba74 \uc5d4\uc9c4\uc774 \uc548\ub0b4\ub97c \ubc14\ub85c \uc774\uc5b4\ubc1b\uace0, \ub2e4\uc2dc \uc5f4\uba74 \uadf8 \uacb0\uacfc\ub97c \uc774\uc5b4\uc11c \uc368\uc694(\uc2e4\ud5d8 \uc911).' },
@@ -16445,8 +16445,10 @@ async function handleScreenWrite(request) {
 //   \uc6f9 \uce74\ub4dc\ub294 \ud3f4\ubc31(\uc5d4\uc9c4\u00b7\ub124\uc774\ud2f0\ube0c\uac00 \uc548 \ub420 \ub54c)\uc73c\ub85c\ub9cc \ub0a8\ub294\ub2e4.
 //
 // \uc785\ub825  rheadScreen({ cap, part }, facts)
-//        cap   = \uc571\uc774 \uadf8\ub9b4 \uc218 \uc788\ub294 \ud654\uba74 \uaddc\uaca9 \uc218\uc900(10 \uc774\uc0c1\uc774\uc5b4\uc57c \ub9cc\ub4e0\ub2e4 \u2014 \uba38\ub9ac\uc904 \ub178\ub4dc rhd \uac00 10)
-//        part  = 'h'(\uba38\ub9ac\uc904 + \uc694\uc57d \uc904 + \ud658\uc2b9 \uc548\ub0b4) | 't'(\uacbd\ub85c \uc635\uc158 \ud0ed \uc904) | 'n'(\uacf5\uc2dd \uacf5\uc9c0 \u00b7 \uc9c0\uc5f0 \uc81c\ubcf4 \uc904) | 'l'(\uc7a5\uac70\ub9ac \uc5f4\ucc28\u00b7\ubc84\uc2a4 \uace0\ub974\uae30 + \ub300\uae30 \uc81c\uc678 \uc548\ub0b4)
+//        cap   = \uc571\uc774 \uadf8\ub9b4 \uc218 \uc788\ub294 \ud654\uba74 \uaddc\uaca9 \uc218\uc900(10 \uc774\uc0c1\uc774\uc5b4\uc57c \ub9cc\ub4e0\ub2e4 \u2014 \uba38\ub9ac\uc904 \ub178\ub4dc rhd \uac00 10; part 'k' \ub294 \ud0c0\uc784\ub77c\uc778 \ub178\ub4dc trk \uac00 \uc788\ub294 11 \uc774\uc0c1)
+//        part  = 'h'(\uba38\ub9ac\uc904 + \uc694\uc57d \uc904 + \ud658\uc2b9 \uc548\ub0b4) | 't'(\uacbd\ub85c \uc635\uc158 \ud0ed \uc904) | 'n'(\uacf5\uc2dd \uacf5\uc9c0 \u00b7 \uc9c0\uc5f0 \uc81c\ubcf4 \uc904) | 'l'(\uc7a5\uac70\ub9ac \uc5f4\ucc28\u00b7\ubc84\uc2a4 \uace0\ub974\uae30 + \ub300\uae30 \uc81c\uc678 \uc548\ub0b4) | 'k'(\uad6c\uac04 \ud0c0\uc784\ub77c\uc778: \uba38\ub9ac \ub178\ub4dc trk \u2014 facts \ub294 \uc544\ub798 \ubcc4\ub3c4)
+//        part 'k' facts = { secs:[{ty,nm,du,di,ws,ar,ss,es,sts,tw,we,tc:[{at,to}],st:[[\uc774\ub984,\uc704\ub3c4,\uacbd\ub3c4]\u2026]}], xf:[{k,xi,si}]|null(\ud658\uc2b9 \uc6d0\uc790\ub8cc), bt: \uc0ac\uc6a9\uc790\uac00 \uc815\ud55c \uc608\uc0c1 \uc2dc\uac01 ms|null, rb: \uc774\ubc88 \ud0d0\uc0c9\uc774 \ub098\uac04 \uc2dc\uac01 ms|null,
+//                          now: \uadf8\ub9b4 \ub54c \uae30\uae30 \uc2dc\uacc4 ms, sw:[\ub9c9\ucc28 \ub4a4 \uccab\ucc28\uae4c\uc9c0 \ubd84\u2026], tz: \uae30\uae30 \uc2dc\uac04\ub300(\ub3d9\ucabd \ubd84), th:'dark'|'pastel' }  \u2192 head:[{t:'trk', cells:[\u2026]}] (\uce78 = \uc774\ub984\u00b7\ubc30\uc9c0\u00b7\uc120\u00b7\uc810\u00b7\uc2dc\uac01 \ud55c \uc904; \uc2dc\uac01/\uc0c9/\uae00 \uc804\ubd80 \uc5d4\uc9c4\uc774 \uc815\ud55c\ub2e4)
 //        facts = { m: \ucd1d \uc18c\uc694 \ubd84, a: \ucd9c\ubc1c \uc774\ub984, b: \ub3c4\ucc29 \uc774\ub984, fav: \uc990\uaca8\ucc3e\uae30 \ub2e8\ucd94\ub97c \ubcf4\uc77c\uc9c0(0|1),
 //                  sp: {ride,wait,walk}(\ubd84) | null, why: \uc5d4\uc9c4\uc774 \uc900 \uc774\uc720 \uae00,
 //                  dx: [{s,dc,dd,bc,bd,to,secs}](\ud658\uc2b9 \ud638\ucc28\u00b7\ubb38 \uc6d0\uc790\ub8cc), ex: {s, l:[{fac,door}]} | null(\ud558\ucc28 \ube60\ub978 \ubb38),
@@ -16707,9 +16709,266 @@ function rheadTabNodes(f) {
   return [{ t: 'row', gap: 6, pad: [0, 0, 0, 0], kids: kids }];
 }
 
+// \u2500\u2500 part 'k': \uad6c\uac04 \ud0c0\uc784\ub77c\uc778(\uc608\uc804 \uc6f9 _renderHtlTrack \u00b7 _segStopOffsets \u00b7 _transitColor \u00b7 _htlBaseMs \uc758 \uacc4\uc0b0 \uc804\ubd80) \u2500\u2500
+//   \uc571\uc774 \ubcf4\ub0b4\ub294 \uc6d0\uc790\ub8cc: secs[{ty,nm,du,di,ws,ar,ss,es,sts,tw,we,tc,st:[[\uc774\ub984,\uc704\ub3c4,\uacbd\ub3c4]\u2026]}] \u00b7 xf(\ud658\uc2b9 \uc6d0\uc790\ub8cc; \uc5c6\uc73c\uba74 null) \u00b7
+//   bt(\uc0ac\uc6a9\uc790\uac00 \uc815\ud55c \uc608\uc0c1 \uc2dc\uac01 ms|null) \u00b7 rb(\uc774\ubc88 \ud0d0\uc0c9\uc774 \ub098\uac04 \uc2dc\uac01 ms|null) \u00b7 now(\uae30\uae30 \uc2dc\uacc4 ms) \u00b7 sw(\ub9c9\ucc28 \ub4a4 \uccab\ucc28\uae4c\uc9c0 \ubd84 \ubaa9\ub85d) \u00b7 tz(\uae30\uae30 \uc2dc\uac04\ub300, \ub3d9\ucabd \ubd84) \u00b7 th('dark'|'pastel')
+//   \uc5d4\uc9c4\uc774 \uc2dc\uac01\u00b7\uc0c9\u00b7\uae00\u00b7\ubc30\uc9c0\u00b7\uc120\u00b7\uc810\uc744 \uce78(cell)\ub9c8\ub2e4 \uc815\ud574 \ub0b4\ub824\uc8fc\uace0, \uc571\uc740 \uce78\uc744 \uadf8\ub9ac\uae30\ub9cc \ud55c\ub2e4.
+var RTRK_LC = {
+  '1\ud638\uc120': '#0052a4', '2\ud638\uc120': '#00a84d', '3\ud638\uc120': '#ef7c1c', '4\ud638\uc120': '#00a5de', '5\ud638\uc120': '#996cac', '6\ud638\uc120': '#cd7c2f', '7\ud638\uc120': '#747f00', '8\ud638\uc120': '#e6186c', '9\ud638\uc120': '#bdb092',
+  '\uacf5\ud56d\ucca0\ub3c4': '#0090d2', '\uacbd\uc758\uc911\uc559\uc120': '#73c7a6', '\uacbd\ucd98\uc120': '#0c8e72', '\uc218\uc778\ubd84\ub2f9\uc120': '#f5a200', '\uacbd\uac15\uc120': '#003da5', '\uc11c\ud574\uc120': '#8cc63f', '\uc6b0\uc774\uc2e0\uc124\uc120': '#b0b0b0', '\uc2e0\ub9bc\uc120': '#6789ca',
+  '\uc2e0\ubd84\ub2f9\uc120': '#d31145', 'GTX-A': '#9069b5', '\uc778\ucc9c1\ud638\uc120': '#7ca8d5', '\uc778\ucc9c2\ud638\uc120': '#f4a62c', '\uc778\ucc9c\uacf5\ud56d\ucca0\ub3c4': '#0090d2', '\uae40\ud3ec\uace8\ub4dc\ub77c\uc778': '#ad8605', '\uc758\uc815\ubd80\uacbd\uc804\ucca0': '#fb8f36', '\uc6a9\uc778\uacbd\uc804\ucca0': '#51a834'
+};
+var RTRK_ALIAS = {
+  '\uacbd\uc778\uc120': '#0052a4', '\uacbd\ubd80\uc120': '#0052a4', '\uacbd\uc6d0\uc120': '#0052a4', '\uc77c\uc0b0\uc120': '#0052a4', '\uacfc\ucc9c\uc120': '#0052a4', '\uc548\uc0b0\uc120': '#0052a4', '\ubd84\ub2f9\uc120': '#f5a200', '\uc218\uc778\uc120': '#f5a200',
+  '\uacf5\ud56d\ucca0\ub3c41\ud638\uc120': '#0090d2', '\ubcc4\ub0b4\uc120': '#e6186c', '\uc9c4\uc811\uc120': '#00a5de', '\uc2e0\ubd84\ub2f9\uc120(\uc5f0\uc7a5)': '#d31145'
+};
+var RTRK_BUS_COLS = ['#30d158', '#bf5af2', '#ff6482', '#40c8e0', '#ffd60a'];
+var RTRK_W = 64, RTRK_WLD = 108, RTRK_DWELL = 20, RTRK_MINGAP = 20, RTRK_GREY = '#8e8e93';
+var RTRK_DOT = { dark: { s: '#d4af37', e: '#ff2d55' }, pastel: { s: '#1d9bf0', e: '#e0455a' } };
+
+function rheadTrkNm(s) { return String(s == null ? '' : s).replace(/\uc5ed$/, '').trim(); }
+function rheadTrkNum(v) { return (v == null || v === '' || !isFinite(Number(v))) ? null : Number(v); }
+function rheadTrkHex2(n) { return (n < 16 ? '0' : '') + n.toString(16); }
+function rheadTrkBright(hex, th) {                      // \uc5b4\ub450\uc6b4 \ud14c\ub9c8\uc5d0\uc11c\ub9cc \uc5b4\ub450\uc6b4 \uc120 \uc0c9\uc744 \ubc1d\ud78c\ub2e4
+  if (th === 'pastel') return hex;
+  if (!hex || hex.length < 7) return hex;
+  var r = parseInt(hex.slice(1, 3), 16) || 0, g = parseInt(hex.slice(3, 5), 16) || 0, b = parseInt(hex.slice(5, 7), 16) || 0;
+  var br = (r * 299 + g * 587 + b * 114) / 1000;
+  if (br < 100) {
+    var k = Math.max(1.5, 160 / Math.max(br, 1));
+    r = Math.min(255, Math.round(r * k)); g = Math.min(255, Math.round(g * k)); b = Math.min(255, Math.round(b * k));
+    return '#' + rheadTrkHex2(r) + rheadTrkHex2(g) + rheadTrkHex2(b);
+  }
+  return hex;
+}
+function rheadTrkColor(ty, nm, th) {
+  if (ty === 3) return RTRK_GREY;
+  if (ty === 2) return '#30d158';
+  if (ty === 4) return '#ff9500';
+  if (nm) {
+    var bare = nm.replace(/^(\uc218\ub3c4\uad8c|\uad11\uc5ed|\uc11c\uc6b8|\uc778\ucc9c|\uacbd\uae30)\s+/, '');
+    var raw = RTRK_LC[nm] || RTRK_LC[bare] || RTRK_ALIAS[nm] || RTRK_ALIAS[bare];
+    if (raw) return rheadTrkBright(raw, th);
+  }
+  return '#4dabff';
+}
+function rheadTrkHM(ms, tz) {                           // \uae30\uae30 \uc2dc\uac04\ub300 \uae30\uc900 HH:MM
+  if (!ms) return '';
+  var d = new Date(ms + tz * 60000), h = d.getUTCHours(), m = d.getUTCMinutes();
+  return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
+}
+function rheadTrkHav(la1, lo1, la2, lo2) {
+  var R = 6371000, dLa = (la2 - la1) * Math.PI / 180, dLo = (lo2 - lo1) * Math.PI / 180;
+  var a = Math.sin(dLa / 2) * Math.sin(dLa / 2) + Math.cos(la1 * Math.PI / 180) * Math.cos(la2 * Math.PI / 180) * Math.sin(dLo / 2) * Math.sin(dLo / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+function rheadTrkSec(s) {
+  s = (s && typeof s === 'object') ? s : {};
+  var ty = rheadInt(s.ty, 0, 9);
+  var sts = Array.isArray(s.sts) ? s.sts.slice(0, 150).map(rheadTrkNum) : null;
+  if (sts && sts.some(function (v) { return v == null; })) sts = null;
+  var tc = Array.isArray(s.tc) ? s.tc.slice(0, 8).filter(function (t) { return t && typeof t === 'object'; }).map(function (t) { return { at: rheadStr(t.at, 30), to: t.to === 'express' ? 'express' : 'local' }; }) : null;
+  return {
+    ty: ty, nm: rheadStr(s.nm, 40).trim(), du: Math.max(0, rheadTrkNum(s.du) || 0), di: Math.max(0, rheadTrkNum(s.di) || 0),
+    ws: rheadTrkNum(s.ws), ar: rheadTrkNum(s.ar), ss: rheadTrkNum(s.ss), es: rheadTrkNum(s.es), sts: sts, tw: rheadTrkNum(s.tw), we: s.we ? 1 : 0, tc: tc,
+    st: rheadList(s.st, 150).map(function (r) { r = Array.isArray(r) ? r : []; return { n: rheadStr(r[0], 40), la: rheadTrkNum(r[1]), lo: rheadTrkNum(r[2]) }; })
+  };
+}
+function rheadTrkHasEng(sg) { return sg.ss != null && sg.es != null; }
+// \uc815\ub958\uc7a5\u00b7\uc5ed\ub9c8\ub2e4 \uad6c\uac04 \uc2dc\uc791\uc5d0\uc11c \uba87 \ucd08 \ub4a4\uc778\uac00: \uc5d4\uc9c4\uc774 \uc900 \uc5ed\ubcc4 \uc2dc\uac01 \u2192 \uc88c\ud45c \uac70\ub9ac \ube44\ub840(\ubc84\uc2a4\ub294 \uc815\ucc28 \ud3ec\ud568) \u2192 \uade0\ub4f1
+function rheadTrkOffsets(sg) {
+  var st = sg.st, n = st.length, i;
+  if (sg.sts && sg.sts.length && sg.ss != null) {
+    var ss = sg.sts;
+    if (ss.length > n) ss = ss.slice(ss.length - n);
+    if (ss.length === n || n === 0) return ss.map(function (v) { return Math.max(0, v - sg.ss); });
+  }
+  if (n < 2) return [0];
+  var dur = sg.du, wait = 0;
+  if (sg.ty === 2 && sg.ws != null) wait = Math.max(0, Math.min(sg.ws, dur * 0.6));
+  var move = Math.max(dur - wait, 0);
+  var d = [], tot = 0, geo = true;
+  for (i = 1; i < n; i++) {
+    var a = st[i - 1], b = st[i];
+    if (a.la == null || a.lo == null || b.la == null || b.lo == null) { geo = false; break; }
+    var m = rheadTrkHav(a.la, a.lo, b.la, b.lo);
+    if (!isFinite(m) || m < 0) m = 0;
+    d.push(m); tot += m;
+  }
+  var off;
+  if (geo && tot > 0) {
+    var mid = n - 2 > 0 ? n - 2 : 0;
+    var dwellAll = sg.ty === 2 ? Math.min(RTRK_DWELL * mid, move * 0.35) : 0;
+    var moveAll = Math.max(move - dwellAll, move * 0.5);
+    var perDwell = mid > 0 ? dwellAll / mid : 0;
+    off = [0]; var c = 0;
+    for (i = 0; i < d.length; i++) {
+      c += moveAll * (d[i] / tot);
+      if (i < d.length - 1) c += perDwell;
+      off.push(c);
+    }
+    var last = off[off.length - 1];
+    if (last > 0 && move > 0) { var k = move / last; for (i = 0; i < off.length; i++) off[i] *= k; }
+    if (wait > 0) for (i = 1; i < off.length; i++) off[i] += wait;
+    for (i = 1; i < off.length; i++) if (off[i] - off[i - 1] < RTRK_MINGAP) off[i] = off[i - 1] + RTRK_MINGAP;
+    return off;
+  }
+  var even = move / (n - 1);
+  off = [0];
+  for (i = 1; i < n; i++) off.push(even * i + wait);
+  return off;
+}
+function rheadTrkLabel(ty, name) {                      // \ub178\uc120/\ubc88\ud638 \ub77c\ubca8: \uc9c0\ud558\ucca0=\ub178\uc120\uba85, \ubc84\uc2a4=\uc22b\uc790\uba74 "N\ubc88"
+  var nm = String(name || '').trim();
+  if (!nm) return ty === 1 ? '\uc9c0\ud558\ucca0' : (ty === 2 ? '\ubc84\uc2a4' : '');
+  if (ty === 2) return /^[0-9-]+$/.test(nm) ? nm + '\ubc88' : nm;
+  return nm;
+}
+// \uc9c0\ub098\uac00\ub294 \uc810\ub4e4(pts) \u2014 \uc608\uc804 \uc6f9\uc774 \ud654\uba74\uc744 \uc9d3\uae30 \uc804\uc5d0 \ubaa8\uc73c\ub358 \ubaa9\ub85d
+function rheadTrkPoints(f) {
+  var th = f.th, tz = f.tz, i, a, b;
+  var segs = f.secs;
+  segs.forEach(function (sg) { if (sg.ty === 2 && sg.we && sg.nm && sg.nm.indexOf('\uc608\uc0c1') < 0) sg.nm = sg.nm + ' \u00b7 \uc608\uc0c1'; });
+  if (f.xf) f.xf.forEach(function (t) {                  // \uc5d4\uc9c4\uc774 \uc54c\ub824 \uc900 \ud658\uc2b9\uc744 \uadf8\ub9b4 \uc790\ub9ac\uc5d0 \ubd99\uc778\ub2e4
+    if (!t || t.k === 'train') return;
+    if (t.xi != null && segs[t.xi] && segs[t.xi].ty === 3) segs[t.xi].xfo = t;
+    else if (t.si != null && segs[t.si + 1]) segs[t.si + 1].xfIn = t;
+  });
+  for (i = 1; i < segs.length; i++) {                    // \uac19\uc740 \uc790\ub9ac\uc5d0\uc11c \uac19\uc740 \uc774\ub984 \uc5ed\uc774 \ub450 \ubc88 \ucc0d\ud788\ub294 \uac83 \ubc29\uc9c0(\uc7a5\uac70\ub9ac \uc55e\ub4a4\ub294 \uc9c0\uc6b0\uc9c0 \uc54a\ub294\ub2e4)
+    var c = segs[i], p = segs[i - 1];
+    if (c.ty === 3 || p.ty === 3) continue;
+    if (c.ty === 4 || p.ty === 4) continue;
+    if (p.st.length && c.st.length && rheadTrkNm(p.st[p.st.length - 1].n) === rheadTrkNm(c.st[0].n)) c.st = c.st.slice(1);
+  }
+  for (var wi = 0; wi < segs.length; wi++) {
+    if (segs[wi].ty !== 3) continue;
+    var ps = null, ns = null;
+    for (a = wi - 1; a >= 0; a--) if (segs[a].ty !== 3) { ps = segs[a]; break; }
+    for (b = wi + 1; b < segs.length; b++) if (segs[b].ty !== 3) { ns = segs[b]; break; }
+    var same = segs[wi].du <= 60 && segs[wi].di <= 80;
+    if (same && ps && ns && ps.ty !== 4 && ns.ty !== 4 && ps.st.length && ns.st.length && rheadTrkNm(ps.st[ps.st.length - 1].n) === rheadTrkNm(ns.st[0].n)) ns.st = ns.st.slice(1);
+  }
+  var total = 0;
+  segs.forEach(function (sg) { if (sg.ty !== 3) total += sg.st.length; });
+  // \ub2e8\uc77c \uc2dc\uac04\ucd95
+  var sh = 0;
+  if (f.bt == null) for (i = 0; i < f.sw.length; i++) { var v = f.sw[i]; if (typeof v === 'number' && isFinite(v) && v > 0 && v < 1440) { sh = v * 60000; break; } }
+  var base = f.bt != null ? f.bt : ((f.rb != null && f.now - f.rb <= 300000) ? f.rb + sh : f.now + sh);
+  var cum = base, shift = 0;
+  var segMs = segs.map(function (sg) {
+    var t = cum;
+    if (rheadTrkHasEng(sg)) { t = base + sg.ss * 1000 + shift; cum = base + sg.es * 1000 + shift; }
+    else cum = t + sg.du * 1000;
+    if (sg.ty === 1 && sg.tw != null && sg.tw > 0) { var w = Math.round(sg.tw); t += w; cum += w; shift += w; }
+    return t;
+  });
+  var busN = 0;
+  segs.forEach(function (s0) { if (s0.ty === 2) s0.bn = busN++; });
+  var segCol = function (s0) { return (s0.ty === 2 && busN >= 2) ? RTRK_BUS_COLS[((s0.bn % 5) + 5) % 5] : rheadTrkColor(s0.ty, s0.nm, th); };
+  var pts = [], gIdx = 0;
+  segs.forEach(function (sg, si) {
+    var col = segCol(sg), secMin = Math.round(sg.du / 60);
+    if (sg.ty === 3) {
+      var pC = RTRK_GREY, nC = RTRK_GREY, nt = 0, nn = '';
+      for (a = si - 1; a >= 0; a--) if (segs[a].ty !== 3) { pC = segCol(segs[a]); break; }
+      for (b = si + 1; b < segs.length; b++) if (segs[b].ty !== 3) { nC = segCol(segs[b]); nt = segs[b].ty; nn = segs[b].nm; break; }
+      pts.push({ type: 'walk', pC: pC, nC: nC, xf: sg.xfo || null, nextLabel: rheadTrkLabel(nt, nn), nextCol: nC, lbl: secMin > 0 ? secMin + '\ubd84' : (Math.round(sg.di) + 'm') });
+      return;
+    }
+    if (!sg.st.length) return;
+    var off = sg.ty === 4 ? null : rheadTrkOffsets(sg);
+    var ldLbl = null;
+    if (sg.ty === 4 && sg.es != null && sg.ss != null) {
+      var lm = Math.round(Math.max(0, sg.es - sg.ss) / 60);
+      ldLbl = lm >= 60 ? (Math.floor(lm / 60) + '\uc2dc\uac04' + (lm % 60 ? (lm % 60) + '\ubd84' : '')) : (lm + '\ubd84');
+    }
+    var used = {};
+    sg.st.forEach(function (st, ni) {
+      var isF = gIdx === 0, isL = gIdx === total - 1, arr = '';
+      if (sg.ty === 4) arr = ni === 0 ? rheadTrkHM(segMs[si], tz) : rheadTrkHM(segMs[si] + Math.max(0, (sg.es == null || sg.ss == null) ? 0 : sg.es - sg.ss) * 1000, tz);
+      else if (isF) arr = rheadTrkHM(segMs[si], tz);
+      else arr = rheadTrkHM(segMs[si] + (off[ni] || 0) * 1000, tz);
+      var lC = col;
+      if (ni === 0 && si > 0) for (a = si - 1; a >= 0; a--) if (segs[a].ty !== 3) { lC = segCol(segs[a]); break; }
+      var tcg = null;                                    // \uc774 \uc5ed\uc5d0\uc11c \uc77c\ubc18\u2194\uae09\ud589\uc744 \uac08\uc544\ud0c0\ub098(\uc774\ub984\uc774 \uac19\uc740 \uccab \uc5ed\uc5d0\ub9cc)
+      if (sg.ty === 1 && f.xf && sg.tc) {
+        var nm0 = rheadTrkNm(st.n);
+        for (var q = 0; q < sg.tc.length; q++) { if (used[q]) continue; if (rheadTrkNm(sg.tc[q].at) === nm0) { used[q] = 1; tcg = sg.tc[q]; break; } }
+      }
+      pts.push({ type: 'stn', nm: rheadTrkNm(st.n), col: col, lC: lC, lineNm: sg.nm, lineLabel: rheadTrkLabel(sg.ty, sg.nm), xfIn: (ni === 0 && sg.xfIn) ? sg.xfIn : null, trainChg: tcg,
+        arrT: arr, isF: isF, isL: isL, ni: ni, ld: sg.ty === 4, ldRole: sg.ty === 4 ? (ni === 0 ? 'dep' : 'arr') : null, ldDur: ldLbl });
+      gIdx++;
+    });
+  });
+  return pts;
+}
+// \uc810 \ud558\ub098 \u2192 \uadf8\ub9b4 \uce78 \ud558\ub098
+function rheadTrkCells(pts, th) {
+  var cells = [], last = pts.length - 1, ti = 0, dots = RTRK_DOT[th] || RTRK_DOT.dark;
+  pts.forEach(function (pt, pi) {
+    var walk = pt.type === 'walk', c = { w: pt.ld ? RTRK_WLD : RTRK_W };
+    if (walk) { if (pt.xf) { c.n = '\ud658\uc2b9'; c.nc = 'gold'; c.ns = 11; c.nb = true; c.np = 2; } else { c.n = '\ub3c4\ubcf4'; c.nc = 'sub'; c.ns = 9; c.nb = false; c.np = 2; } }
+    else { c.n = pt.nm; c.nc = pt.ld ? pt.col : 'text'; c.ns = pt.ld ? 11 : 10; c.nb = true; }
+    var g = null, nm = pt.lineLabel || pt.lineNm;
+    if (pt.ld) g = { s: nm + ' ' + (pt.ldRole === 'dep' ? '\ucd9c\ubc1c' : '\ub3c4\ucc29'), k: 'p', c: pt.col, z: 7.5 };
+    else if (walk) {
+      var hadBefore = false;
+      for (var h = 0; h < pi; h++) if (pts[h].type === 'stn') { hadBefore = true; break; }
+      if (hadBefore && pt.nextLabel) g = { s: '\u2194 ' + pt.nextLabel, k: 'p', c: pt.nextCol || '#0a84ff', z: pt.xf ? 8 : 6.5 };
+    } else if (pt.isF) g = { s: nm, k: 't', c: pt.col, z: 7 };
+    else if (pt.trainChg) g = { s: '\u2194 ' + (pt.trainChg.to === 'express' ? '\uae09\ud589' : '\uc77c\ubc18') + ' \ud658\uc2b9', k: 'p', c: pt.col, z: 8 };
+    else if (pt.xfIn) g = { s: '\u2194 ' + nm, k: 'p', c: pt.col, z: 8 };
+    else if (pt.ni === 0) {
+      var prev = pi > 0 ? pts[pi - 1] : null, prevWalk = prev && prev.type === 'walk', prevLn = '';
+      for (var q = pi - 1; q >= 0; q--) if (pts[q].type === 'stn') { prevLn = pts[q].lineNm || ''; break; }
+      if (!prevWalk && prevLn && prevLn !== pt.lineNm) g = { s: '\u2194 ' + nm, k: 'p', c: pt.col, z: 6.5 };
+      else if (prevWalk) {
+        var had2 = false;
+        for (var r = 0; r < pi - 1; r++) if (pts[r].type === 'stn') { had2 = true; break; }
+        if (!had2) g = { s: nm, k: 't', c: pt.col, z: 7 };
+      }
+    }
+    if (g && g.s.length) { c.g = g.s; c.gk = g.k; c.gc = g.c; c.gs = g.z; c.gx = pt.ld ? 5 : 4; }
+    var lColor = pi > 0 ? pts[pi - 1]._r : RTRK_GREY, rColor = walk ? RTRK_GREY : pt.col;
+    pt._r = rColor;
+    var endpoint = pi === 0 || pi === last;
+    c.lc = pi !== 0 ? lColor : ''; c.rc = pi !== last ? rColor : '';
+    if (endpoint) { c.dk = 'e'; c.dc = pi === 0 ? dots.s : dots.e; }
+    else if (!walk) { c.dk = 'r'; c.dc = pt.col; }
+    else { c.dk = 'm'; c.dc = lColor; c.dc2 = rColor; }
+    if (walk) { c.t = pt.lbl; c.tc = 'gold'; c.ts = 9; c.tb = true; }
+    else { c.t = (pt.ld && pt.ldRole === 'arr' && pt.ldDur) ? pt.arrT + ' \u00b7 \ucd1d ' + pt.ldDur : pt.arrT; c.tc = pt.ld ? 'gold' : 'sub'; c.ts = pt.ld ? 10 : 9; c.tb = true; }
+    c.ti = (!walk || endpoint) ? ti++ : -1;              // \uc704\uce58 \ucd94\uc801\uc774 \uc4f0\ub294 \uce78 \ubc88\ud638(\ub3c4\ubcf4 \uc911\uac04 \uce78\uc740 -1)
+    cells.push(c);
+  });
+  return cells;
+}
+function rheadTrackScreen(inp) {
+  var f = (inp && typeof inp === 'object') ? inp : {};
+  var secs = rheadList(f.secs, 12).map(rheadTrkSec);
+  if (!secs.length) return { ok: false, error: 'empty' };
+  if (!secs.some(rheadTrkHasEng)) return { ok: false, error: 'notimes' };      // \uc5d4\uc9c4\uc774 \uad6c\uac04 \uc2dc\uac01\uc744 \uc548 \uc900 \uc61b \uc751\ub2f5\uc740 \uadf8\ub9ac\uc9c0 \uc54a\ub294\ub2e4(\uc6f9\uc774 \uadf8\ub9b0\ub2e4)
+  var now = rheadTrkNum(f.now);
+  if (now == null || now <= 0) return { ok: false, error: 'now' };
+  var th = f.th === 'pastel' ? 'pastel' : 'dark';
+  var facts = {
+    secs: secs, th: th, tz: rheadInt(f.tz, -840, 840), now: now, bt: rheadTrkNum(f.bt), rb: rheadTrkNum(f.rb),
+    sw: rheadList(f.sw, 6), xf: Array.isArray(f.xf) ? f.xf.slice(0, 12).filter(function (t) { return t && typeof t === 'object'; }).map(function (t) { return { k: t.k === 'train' ? 'train' : 'x', xi: rheadTrkNum(t.xi), si: rheadTrkNum(t.si) }; }) : null
+  };
+  var pts = rheadTrkPoints(facts);
+  if (!pts.length) return { ok: false, error: 'nopoints' };
+  var cells = rheadTrkCells(pts, th), w = 0;
+  cells.forEach(function (c) { w += c.w; });
+  var node = { t: 'trk', pad: [14, 6, 14, 6], cells: cells };
+  var out = { ok: true, v: 1, screen: 'rhead', cover: 'tab', bg: 'card', head: [node], body: [{ t: 'spacer', h: 0 }], info: { part: 'k', n: cells.length, w: w } };
+  out.rev = 'r' + RHEAD_SCREEN_V + 'k:' + rheadHash(JSON.stringify(cells));
+  return out;
+}
+
 function rheadScreen(inp, factsIn) {
   inp = inp || {};
   if (!(Number(inp.cap) >= 10)) return { ok: false, error: 'cap' };
+  if (inp.part === 'k') return Number(inp.cap) >= 11 ? rheadTrackScreen(factsIn) : { ok: false, error: 'cap' };      // \ud0c0\uc784\ub77c\uc778 \ub178\ub4dc trk \ub294 \uaddc\uaca9 11
   var part = (inp.part === 't' || inp.part === 'n' || inp.part === 'l') ? inp.part : 'h';
   var f = rheadFacts(factsIn);
   var body = part === 't' ? rheadTabNodes(f) : (part === 'n' ? rheadNoteNodes(f) : (part === 'l' ? rheadLdNodes(f) : rheadHeadNodes(f)));
@@ -16718,7 +16977,7 @@ function rheadScreen(inp, factsIn) {
   return out;
 }
 // \uacbd\ub85c \uacb0\uacfc \uce74\ub4dc \uc717\ubd80\ubd84 \uc5d4\uc9c4 Worker \uc5f0\uacb0\ubd80 \u2014 POST /screen/rhead (engine/rhead.js \uc758 rheadScreen \uc744 \ubd80\ub978\ub2e4). route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/screen/rhead") return handleScreenRhead(request);` \ub97c \ub123\ub294\ub2e4.
-//   \ubcf8\ubb38(JSON \uae00, Content-Type: text/plain \uc73c\ub85c \ubcf4\ub0b4 \uc0ac\uc804 \uc694\uccad\uc744 \ud53c\ud55c\ub2e4): { cap(10 \uc774\uc0c1), part:"h"|"t"|"n"|"l", f:{m,a,b,fav,sp,why,dx,ex,xs,tab,ld} }
+//   \ubcf8\ubb38(JSON \uae00, Content-Type: text/plain \uc73c\ub85c \ubcf4\ub0b4 \uc0ac\uc804 \uc694\uccad\uc744 \ud53c\ud55c\ub2e4): { cap(10 \uc774\uc0c1), part:"h"|"t"|"n"|"l"|"k", f:{m,a,b,fav,sp,why,dx,ex,xs,tab,ld} }
 //   \uc5d4\uc9c4\uc740 \uc544\ubb34\uac83\ub3c4 \uc800\uc7a5\ud558\uc9c0 \uc54a\ub294\ub2e4. \uac1c\uc778 \uc2dd\ubcc4 \uc815\ubcf4\ub294 \uc624\uac00\uc9c0 \uc54a\ub294\ub2e4.
 async function handleScreenRhead(request) {
   var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Cache-Control": "no-store" };

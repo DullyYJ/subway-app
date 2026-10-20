@@ -134,7 +134,7 @@ const web = new Function(
   ok(w.indexOf('if (url.pathname === "/screen/rhead") return handleScreenRhead(request);') > 0, '경로 등록');
   ok(!/[^\x00-\x7f]/.test(body), '내장 블록은 ASCII 만');
   const other = w.slice(0, i) + w.slice(j);
-  const names = ['rheadScreen', 'rheadFacts', 'rheadHash', 'rheadStr', 'rheadInt', 'rheadJosa', 'rheadDoor', 'rheadList', 'rheadXferLine', 'rheadDoorLines', 'rheadHeadNodes', 'rheadTabNodes', 'rheadAgo', 'rheadJoin', 'rheadOffParts', 'rheadNoteNodes', 'RHEAD_LD_MODE', 'rheadWon', 'rheadNum', 'rheadLdNodes', 'RHEAD_SCREEN_V', 'RHEAD_TABS', 'RHEAD_EMOJI', 'handleScreenRhead'];
+  const names = ['rheadScreen', 'rheadFacts', 'rheadHash', 'rheadStr', 'rheadInt', 'rheadJosa', 'rheadDoor', 'rheadList', 'rheadXferLine', 'rheadDoorLines', 'rheadHeadNodes', 'rheadTabNodes', 'rheadAgo', 'rheadJoin', 'rheadOffParts', 'rheadNoteNodes', 'RHEAD_LD_MODE', 'rheadWon', 'rheadNum', 'rheadLdNodes', 'RHEAD_SCREEN_V', 'RHEAD_TABS', 'RHEAD_EMOJI', 'handleScreenRhead', 'RTRK_LC', 'RTRK_ALIAS', 'RTRK_BUS_COLS', 'RTRK_W', 'RTRK_WLD', 'RTRK_DWELL', 'RTRK_MINGAP', 'RTRK_GREY', 'RTRK_DOT', 'rheadTrkNm', 'rheadTrkNum', 'rheadTrkHex2', 'rheadTrkBright', 'rheadTrkColor', 'rheadTrkHM', 'rheadTrkHav', 'rheadTrkSec', 'rheadTrkHasEng', 'rheadTrkOffsets', 'rheadTrkLabel', 'rheadTrkPoints', 'rheadTrkCells', 'rheadTrackScreen'];
   ok(names.every(n => !new RegExp('^(async\\s+)?(function|var)\\s+' + n + '\\b', 'm').test(other)), '다른 엔진과 이름이 겹치지 않는다');
 }
 // ── ⑨ 공식 공지 · 지연 제보 줄(part n): 옛 웹 _offText 와 문구가 같다 ──
@@ -197,6 +197,73 @@ const web = new Function(
   }
   ok(!flat(o.body).some(n => EMOJI.test(JSON.stringify(n))), 'part l 에 이모지 없음');
   ok(E.rheadScreen({ cap: 10, part: 'l' }, { lg: base }).rev !== E.rheadScreen({ cap: 10, part: 'n' }, { lg: base }).rev, 'rev 가 부분마다 다르다');
+}
+// ── ⑦-2 구간 타임라인(part k) ──
+{
+  const now = Date.UTC(2026, 9, 20, 3, 0, 0);               // 12:00 KST
+  const st = (a) => a.map((n, i) => [n, 37.4 + i * 0.01, 126.7 + i * 0.012]);
+  const secs = [
+    { ty: 3, nm: '', du: 180, di: 200, ss: 0, es: 180, st: [] },
+    { ty: 2, nm: '6', du: 900, di: 5000, ss: 240, es: 840, ar: 180, we: 1, st: st(['아라역4번출구', '중간', '부평역']) },
+    { ty: 3, nm: '', du: 240, di: 300, ss: 840, es: 1080, st: [] },
+    { ty: 1, nm: '수도권 1호선', du: 1200, di: 9000, ss: 1080, es: 2280, tw: 120000, sts: [1080, 1200, 1500, 2280], st: st(['부평', '부개', '송내', '두정']) },
+    { ty: 3, nm: '', du: 120, di: 150, ss: 2280, es: 2400, st: [] }];
+  const F = (o) => Object.assign({ secs: JSON.parse(JSON.stringify(secs)), xf: [{ k: 'x', xi: 2 }], bt: null, rb: null, now, sw: [], tz: 540, th: 'dark' }, o || {});
+  const o = E.rheadScreen({ cap: 11, part: 'k' }, F());
+  ok(o.ok && o.screen === 'rhead' && o.cover === 'tab' && o.bg === 'card' && o.head.length === 1 && o.head[0].t === 'trk' && o.body.length === 1 && o.body[0].t === 'spacer' && o.body[0].h === 0 && o.info.part === 'k', 'part k 모양');
+  const cells = o.head[0].cells;
+  ok(cells.length === 10 && o.info.n === 10 && o.info.w === 640 && /^r1k:/.test(o.rev), '칸 10개 · 폭 합 640 · rev');
+  ok(cells.map(c => c.t).join('|') === '3분|12:04|12:11|12:19|4분|12:20|12:22|12:27|12:40|2분', '시각: 탐색 12:00 기준 · 버스 대기 뒤 승차 · 지하철 시각표 대기 +2분 · 도보는 분');
+  ok(cells[0].dk === 'e' && cells[0].dc === '#d4af37' && cells[0].lc === '' && cells[9].dk === 'e' && cells[9].dc === '#ff2d55' && cells[9].rc === '', '시작/끝 점은 끝점 색(어두운 테마) · 바깥 선 없음');
+  ok(cells[1].g === '6 · 예상' && cells[1].gk === 't' && cells[1].gc === '#30d158' && cells[1].ti === 1, '추정 대기 버스는 예상 표시 · 노선 글자 배지');
+  ok(cells[4].n === '환승' && cells[4].nc === 'gold' && cells[4].dk === 'm' && cells[4].dc === '#30d158' && cells[4].dc2 === '#8e8e93' && cells[4].ti === -1, '엔진이 알린 환승 도보는 환승 · 가운데 점은 앞뒤 색 그라데이션');
+  ok(cells[4].g === '↔ 수도권 1호선' && cells[4].gk === 'p' && cells[4].gc === '#00c4ff' && cells[5].lc === '#8e8e93', '환승 칸 배지는 다음 노선 알약 · 밝힌 1호선 색(어두운 테마)');
+  ok(cells.every(c => c.w === 64) && cells.every(c => /^#[0-9a-f]{6}$/.test(c.lc || '#000000') && /^#[0-9a-f]{6}$/.test(c.rc || '#000000')), '칸 폭 64 · 색은 모두 #rrggbb');
+  // 파스텔: 원색 · 다른 점 색
+  const pa = E.rheadScreen({ cap: 11, part: 'k' }, F({ th: 'pastel' })).head[0].cells;
+  ok(pa[0].dc === '#1d9bf0' && pa[9].dc === '#e0455a' && pa[5].dc === '#0052a4' && pa[4].g === '↔ 수도권 1호선' && pa[4].gc === '#0052a4', '파스텔 테마: 원색 노선 · 시작/끝 점 색');
+  // 시간축: 예상 시각 모드 · 막차 뒤 첫차 이동 · 오래된 탐색 · 기기 시간대
+  const T = (f) => E.rheadScreen({ cap: 11, part: 'k' }, F(f)).head[0].cells.map(c => c.t)[1];
+  ok(T({ bt: Date.UTC(2026, 9, 20, 6, 0, 0) }) === '15:04', '사용자가 정한 예상 시각이 기준');
+  ok(T({ rb: now - 60000 }) === '11:59' || T({ rb: now - 60000 }) === '12:03', '이번 탐색 시각(5분 안)이 기준');
+  ok(T({ rb: now - 600000, sw: [30] }) === '12:34', '탐색 시각이 오래되면 기기 시계 + 첫차까지 이동 30분');
+  ok(T({ bt: Date.UTC(2026, 9, 20, 6, 0, 0), sw: [30] }) === '15:04', '예상 시각 모드에서는 첫차 이동을 더하지 않는다');
+  ok(T({ tz: 0 }) === '03:04', '기기 시간대(분)를 따른다');
+  // 장거리: 출발/도착 알약 · 총 소요 · 폭 108 · 앞뒤 같은 이름 역을 지우지 않는다
+  const ld = E.rheadScreen({ cap: 11, part: 'k' }, F({ xf: [], secs: [
+    { ty: 3, nm: '', du: 120, di: 100, ss: 0, es: 120, st: [] },
+    { ty: 1, nm: '1호선', du: 600, di: 6000, ss: 120, es: 720, sts: [120, 400, 720], st: st(['가산디지털단지', '독산', '광명']) },
+    { ty: 4, nm: 'KTX', du: 11100, di: 400000, ss: 900, es: 12000, st: [['광명'], ['부산']] },
+    { ty: 3, nm: '', du: 300, di: 400, ss: 12000, es: 12300, st: [] }] })).head[0].cells;
+  const dep = ld.find(c => c.g === 'KTX 출발'), arr = ld.find(c => c.g === 'KTX 도착');
+  ok(dep && arr && dep.w === 108 && arr.w === 108 && dep.n === '광명' && arr.n === '부산' && dep.nc === '#ff9500' && dep.gk === 'p' && dep.gx === 5, '장거리: 출발/도착 알약 · 넓은 칸 · 주황');
+  ok(/^\d\d:\d\d · 총 3시간5분$/.test(arr.t) && dep.t === '12:15' && arr.tc === 'gold' && arr.t.startsWith('15:20'), '장거리: 도착 시각 + 총 소요(3시간5분) · 금색');
+  ok(ld.filter(c => c.n === '광명').length === 2, '장거리 앞 지하철의 마지막 역과 같은 이름이어도 승차역을 지우지 않는다');
+  // 같은 이름 역 중복 제거(바로 이어 탐) · 급행 환승 · 버스끼리 환승
+  const ch = E.rheadScreen({ cap: 11, part: 'k' }, F({ xf: [{ k: 'train' }, { k: 'x', si: 2 }], secs: [
+    { ty: 2, nm: '8', du: 300, di: 1500, ss: 60, es: 360, ar: 30, st: st(['정류장A', '부평역']) },
+    { ty: 1, nm: '수도권 1호선', du: 1500, di: 14000, ss: 400, es: 1900, sts: [400, 700, 1000, 1200], st: st(['부평', '신도림', '가산디지털단지', '구로']), tc: [{ at: '가산디지털단지역', to: 'express' }] },
+    { ty: 2, nm: '9', du: 400, di: 1600, ss: 1950, es: 2350, st: st(['용산역앞', '삼각지']) },
+    { ty: 2, nm: '110', du: 300, di: 1200, ss: 2400, es: 2700, st: st(['삼각지', '한남', '옥수']) }] })).head[0].cells;
+  ok(ch.map(c => c.n).join(',') === '정류장A,부평,신도림,가산디지털단지,구로,용산역앞,삼각지,한남,옥수', '같은 이름 역은 바로 이어 탈 때 한 번만(' + ch.map(c => c.n).join(',') + ')');
+  ok(ch.some(c => c.g === '↔ 급행 환승' && c.n === '가산디지털단지'), '같은 노선 일반→급행 환승 역에 배지');
+  ok(ch.filter(c => c.g && /^↔ 110/.test(c.g)).length === 1 || ch.filter(c => c.g && /110/.test(c.g)).length >= 1, '버스끼리 환승: 다음 버스 알약');
+  const bc = ch.filter(c => c.dk === 'r' && c.dc !== '#00c4ff').map(c => c.dc);
+  ok(bc[0] === '#30d158' && bc.includes('#bf5af2') && bc.includes('#ff6482'), '버스 구간이 여럿이면 구간마다 다른 색(' + bc + ' · ' + ch[ch.length - 1].lc + ')');
+  // 좌표 거리 비례 · 역별 시각 없음
+  const g = E.rheadScreen({ cap: 11, part: 'k' }, F({ xf: [], secs: [{ ty: 2, nm: '88', du: 1200, di: 7000, ss: 120, es: 1320, ws: 90, st: st(['가', '나', '다', '라', '마']) }] })).head[0].cells;
+  ok(g.length === 5 && g[0].t === '12:02' && g[4].t === '12:22' && g.every((c, i) => i === 0 || c.t >= g[i - 1].t), '좌표 비례 시각: 첫 12:02 · 끝 12:22 · 단조 증가');
+  // 입력 거르기·거절
+  ok(E.rheadScreen({ cap: 10, part: 'k' }, F()).ok === false, 'cap 10 이면 만들지 않는다(trk 노드는 규격 11)');
+  ok(E.rheadScreen({ cap: 11, part: 'k' }, F({ secs: [] })).error === 'empty' && E.rheadScreen({ cap: 11, part: 'k' }, F({ now: 0 })).error === 'now', '구간이 없거나 시계가 없으면 거절');
+  ok(E.rheadScreen({ cap: 11, part: 'k' }, F({ secs: secs.map(s => Object.assign({}, s, { ss: null, es: null })) })).error === 'notimes', '구간 시각을 하나도 못 받으면 거절(웹이 그린다)');
+  const evil = E.rheadScreen({ cap: 11, part: 'k' }, F({ secs: [{ ty: 1, nm: '<b>1호선</b>\uD83D\uDE80', du: 'x', di: -5, ss: 0, es: 60, st: [['\uD83D\uDE80역', 'a', null], ['정상', 1, 2]] }, 7, null] }));
+  ok(evil.ok === true && !EMOJI.test(JSON.stringify(evil.head[0].cells)), '이상한 값이 들어와도 죽지 않고 그림말은 거른다');
+  const wide = E.rheadScreen({ cap: 11, part: 'k' }, F({ secs: Array.from({ length: 30 }, (_, i) => ({ ty: 1, nm: '2호선', du: 60, di: 1, ss: i * 60, es: i * 60 + 60, st: Array.from({ length: 300 }, (_, q) => ['역' + q, 0, 0]) })) }));
+  ok(wide.ok && wide.head[0].cells.length <= 12 * 150, '구간·역 수는 상한을 넘지 않는다');
+  ok(!/[#]|\d\d:\d\d/.test(JSON.stringify(F())) , '요청 원자료에는 색·시각 글이 없다');
+  const vr = screenCheck([o, E.rheadScreen({ cap: 11, part: 'k' }, F({ th: 'pastel' }))]);
+  ok(!vr.err && vr.out.length === 2 && vr.out.every(l => l.startsWith('OK ') && Number(l.split(' ')[2]) === 0), '앱 검증기 통과(part k) ' + (vr.err || vr.out.join('|')));
 }
 // ── ⑧ 워커 끝에서 끝까지 ──
 (async () => {

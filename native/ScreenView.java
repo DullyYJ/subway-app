@@ -4,8 +4,10 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
+import android.graphics.LinearGradient;
 import android.graphics.Paint;
 import android.graphics.RectF;
+import android.graphics.Shader;
 import android.graphics.Typeface;
 import android.os.Handler;
 import android.os.Looper;
@@ -410,6 +412,7 @@ public class ScreenView extends View {
             case ScreenCore.K_SUG: drawSug(cv, it); break;
             case ScreenCore.K_SWAP: drawSwap(cv, it); break;
             case ScreenCore.K_RHD: drawRhd(cv, it); break;
+            case ScreenCore.K_TRK: drawTrk(cv, it); break;
             default: break;
         }
     }
@@ -830,6 +833,55 @@ public class ScreenView extends View {
         tp.setTextAlign(Paint.Align.LEFT);
     }
     /** 경로 결과 머리줄: 큰 분 숫자 + 단위 + 구간명(같은 글자 밑선) + 오른쪽 즐겨찾기 알약 + 닫기 ×. */
+    /** 구간 타임라인 칸: 이름(아래 맞춤, 두 줄까지) · 배지 · 선+점 · 시각. 무엇을 어떤 색·크기로 쓸지는 전부 엔진이 정했다. */
+    private void drawTrk(Canvas cv, ScreenCore.Item it) {
+        float cx = it.x + it.w / 2f, axisTop = it.y + ScreenCore.TRK_NAME_H + ScreenCore.TRK_BADGE_H;
+        float ly = axisTop + ScreenCore.TRK_LINE_Y, cy = axisTop + ScreenCore.TRK_DOT_Y;
+        // 이름: 마지막 줄의 아래가 nameBot
+        if (it.lines.length > 0) {
+            setText(it.size, it.bold, cc(it.nc, pal[R_TEXT])); tp.setTextAlign(Paint.Align.CENTER);
+            for (int i = 0; i < it.lines.length; i++) {
+                float top = it.y + it.nameBot - (it.lines.length - i) * it.lineH;
+                cv.drawText(it.lines[i], cx, base(top, it.lineH, 0), tp);
+            }
+            tp.setTextAlign(Paint.Align.LEFT);
+        }
+        // 배지: 알약(바탕색 + 흰 글) 또는 색 글자
+        if (it.label.length() > 0) {
+            float rowTop = it.y + ScreenCore.TRK_NAME_H;
+            int gcol = cc(it.gc, pal[R_SUB]);
+            if ("p".equals(it.gk)) {
+                float ph = it.gsz * 1.25f + 2f, pw = it.badgeTw + 2f * it.gx, pt = rowTop + (ScreenCore.TRK_BADGE_H - ph) / 2f;
+                rf.set(cx - pw / 2f, pt, cx + pw / 2f, pt + ph);
+                p.setStyle(Paint.Style.FILL); p.setColor(gcol); cv.drawRoundRect(rf, 4f, 4f, p);
+                setText(it.gsz, true, pal[R_WHITE]); tp.setTextAlign(Paint.Align.CENTER);
+                cv.drawText(it.label, cx, base(pt, ph, 0), tp);
+            } else {
+                setText(it.gsz, true, gcol); tp.setTextAlign(Paint.Align.CENTER);
+                cv.drawText(it.label, cx, base(rowTop, ScreenCore.TRK_BADGE_H, 0), tp);
+            }
+            tp.setTextAlign(Paint.Align.LEFT);
+        }
+        // 선(앞뒤 칸과 이어지게 겹쳐 그린다)
+        p.setStyle(Paint.Style.FILL);
+        if (it.lc != null) { p.setColor(cc(it.lc, 0)); cv.drawRect(it.x - 0.5f, ly, cx, ly + ScreenCore.TRK_LINE_H, p); }
+        if (it.rc != null) { p.setColor(cc(it.rc, 0)); cv.drawRect(cx, ly, it.x + it.w + 0.5f, ly + ScreenCore.TRK_LINE_H, p); }
+        // 점
+        if ("e".equals(it.dk)) { p.setColor(cc(it.dc, 0)); cv.drawCircle(cx, cy, ScreenCore.TRK_E_R, p); }
+        else if ("r".equals(it.dk)) { p.setColor(cc(it.dc, 0)); cv.drawCircle(cx, cy, ScreenCore.TRK_R_R, p); p.setColor(pal[R_CARD]); cv.drawCircle(cx, cy, ScreenCore.TRK_R_R - 3f, p); }
+        else if ("m".equals(it.dk)) {
+            int c1 = cc(it.dc, 0), c2 = it.dc2 != null ? cc(it.dc2, c1) : c1;
+            p.setShader(new LinearGradient(cx - ScreenCore.TRK_M_R, 0f, cx + ScreenCore.TRK_M_R, 0f, c1, c2, Shader.TileMode.CLAMP));
+            cv.drawCircle(cx, cy, ScreenCore.TRK_M_R, p);
+            p.setShader(null);
+        }
+        // 시각(또는 도보 분)
+        if (it.time.length() > 0) {
+            setText(it.tsz, it.tb, cc(it.timec, pal[R_SUB])); tp.setTextAlign(Paint.Align.CENTER);
+            cv.drawText(it.time, cx, base(axisTop + ScreenCore.TRK_AXIS_H + ScreenCore.TRK_TIME_GAP, ScreenCore.TRK_TIME_H, 0), tp);
+            tp.setTextAlign(Paint.Align.LEFT);
+        }
+    }
     private void drawRhd(Canvas cv, ScreenCore.Item it) {
         boolean isMsg = "m".equals(it.tag);                                              // 안내 한 줄(고른 탭에 경로가 없을 때): 숫자·단위 없이 굵은 글
         if (isMsg) { setText(ScreenCore.RHD_MSG, true, pal[R_TEXT]); cv.drawText(it.go, it.zoneX, base(it.y, it.h, 0), tp); }

@@ -600,6 +600,27 @@ public class ScreenJvmTest {
         ok(RL4.body[0].zoneX + M.width(RL4.body[0].go, ScreenCore.RHD_MSG, true) <= RL4.body[0].sx + 0.5f, "안내 한 줄은 즐겨찾기 알약을 안 덮는다");
         ok(bad(wrapBody("{\"t\":\"rhd\",\"unit\":\"분\",\"xact\":" + cls + "}")) && bad(wrapBody("{\"t\":\"rhd\",\"num\":\"1\"}")) && bad(wrapBody("{\"t\":\"rhd\",\"num\":\"1\",\"btn\":\"x\"}")), "머리줄 모양이 틀리면 거절(num 없음 · 누를 곳 없음 · btn 인데 act 없음)");
 
+        // ── 구간 타임라인(trk) ──
+        String trkCells = "[{\"w\":64,\"n\":\"도보\",\"nc\":\"sub\",\"ns\":9,\"np\":2,\"rc\":\"#8e8e93\",\"dk\":\"e\",\"dc\":\"#d4af37\",\"t\":\"3분\",\"tc\":\"gold\",\"ts\":9,\"tb\":true,\"ti\":0},"
+                + "{\"w\":64,\"n\":\"아라역4번출구가아주길다\",\"nc\":\"text\",\"ns\":10,\"nb\":true,\"g\":\"6번\",\"gk\":\"t\",\"gc\":\"#30d158\",\"gs\":7,\"lc\":\"#8e8e93\",\"rc\":\"#30d158\",\"dk\":\"r\",\"dc\":\"#30d158\",\"t\":\"12:04\",\"tc\":\"sub\",\"ts\":9,\"ti\":1},"
+                + "{\"w\":108,\"n\":\"부산\",\"nc\":\"#ff9500\",\"ns\":11,\"nb\":true,\"g\":\"KTX 도착\",\"gk\":\"p\",\"gc\":\"#ff9500\",\"gs\":7.5,\"gx\":5,\"lc\":\"#ff9500\",\"dk\":\"m\",\"dc\":\"#ff9500\",\"dc2\":\"#8e8e93\",\"rc\":\"#8e8e93\",\"t\":\"15:27 \u00b7 총 3시간 5분\",\"tc\":\"gold\",\"ts\":10,\"tb\":true,\"ti\":-1}]";
+        String trkJson = "{\"ok\":true,\"v\":1,\"screen\":\"t\",\"cover\":\"tab\",\"head\":[{\"t\":\"trk\",\"pad\":[14,6,14,6],\"cells\":" + trkCells + "}],\"body\":[{\"t\":\"spacer\",\"h\":0}]}";
+        ScreenCore.Layout TKL = ScreenCore.layout(ScreenCore.load(trkJson), 200f, M);
+        ok(TKL.head.length == 3 && TKL.head[0].kind == ScreenCore.K_TRK && near(TKL.head[0].x, 14f) && near(TKL.head[1].x, 14f + 64f) && near(TKL.head[2].x, 14f + 128f) && near(TKL.head[2].w, 108f), "타임라인: 칸이 가로로 이어 놓인다(폭은 엔진이 정한 값)");
+        ok(near(TKL.headH, 6f + ScreenCore.TRK_H + 6f), "타임라인: 높이 = 여백 + 93");
+        ok(near(TKL.headContentW, 14f + 64f + 64f + 108f + 14f), "타임라인: 내용 폭 = 여백 + 칸 폭의 합");
+        ok(TKL.chipsTop >= 0f && TKL.chipsBot > TKL.chipsTop, "타임라인: 가로로 미는 줄 범위가 잡힌다");
+        ok(TKL.head[0].lines.length == 1 && TKL.head[0].lines[0].equals("도보") && near(TKL.head[0].nameBot, ScreenCore.TRK_NAME_H - 2f), "타임라인: 도보 이름은 아래 여백 2");
+        ok(TKL.head[1].lines.length == 2 && TKL.head[1].lines[1].endsWith("\u2026"), "타임라인: 긴 이름은 두 줄까지, 넘으면 …");
+        ok(TKL.head[1].label.equals("6번") && "t".equals(TKL.head[1].gk) && TKL.head[1].lc != null && TKL.head[1].rc != null && "r".equals(TKL.head[1].dk) && TKL.head[1].ti == 1, "타임라인: 배지 · 선 · 점 종류 · 추적 번호를 엔진 값 그대로");
+        ok(TKL.head[0].lc == null && TKL.head[0].rc != null && "e".equals(TKL.head[0].dk), "타임라인: 맨앞 칸은 왼쪽 선 없음");
+        ok(TKL.head[2].dc2 != null && TKL.head[2].badgeTw > 0f && TKL.head[2].badgeTw + 2f * TKL.head[2].gx <= TKL.head[2].w && TKL.head[2].time.contains("3시간"), "타임라인: 도보 가운데 점의 둘째 색 · 알약은 칸 안 · 시각 글");
+        ok(TKL.head[2].tb && near(TKL.head[2].tsz, 10f) && TKL.head[1].ti == 1 && TKL.head[2].ti == -1, "타임라인: 시각 글 크기·굵기 · 추적 안 하는 칸은 -1");
+        ok(TKL.body.length == 0 && near(TKL.bodyH, 0f) && near(TKL.headMaxScroll(), 264f - 200f), "타임라인: 본문은 높이 0 · 넘친 폭만큼 가로로 밀린다");
+        ok(bad(trkJson.replace("\"gk\":\"t\"", "\"gk\":\"z\"")) && bad(trkJson.replace("\"dk\":\"e\"", "\"dk\":\"q\"")) && bad(trkJson.replace("\"w\":64,\"n\":\"도보\"", "\"w\":9999,\"n\":\"도보\"")), "타임라인: 모르는 배지·점 종류·칸 폭은 거절");
+        ok(bad("{\"ok\":true,\"v\":1,\"screen\":\"t\",\"head\":[{\"t\":\"trk\",\"cells\":[]}],\"body\":[]}"), "타임라인: 칸이 없으면 거절");
+        ok(bad(trkJson.replace("\"nc\":\"sub\"", "\"nc\":\"nope\"")), "타임라인: 읽을 수 없는 색은 거절");
+
         // ── 화면 바탕 색(bg) ──
         String bgBase = "{\"ok\":true,\"v\":1,\"screen\":\"x\",\"head\":[],\"body\":[{\"t\":\"spacer\",\"h\":4}]";
         ok("bg".equals(ScreenCore.layout(ScreenCore.load(bgBase + "}"), 300f, M).bg) && "card".equals(ScreenCore.layout(ScreenCore.load(bgBase + ",\"bg\":\"card\"}"), 300f, M).bg) && "card2".equals(ScreenCore.layout(ScreenCore.load(bgBase + ",\"bg\":\"card2\"}"), 300f, M).bg), "화면 바탕: 기본 bg · card · card2");

@@ -522,6 +522,24 @@ public final class ScreenCore {
             n.act = n.label.length() > 0 ? act(m.get("act"), true) : null;
             n.bact = act(m.get("xact"), false);
             if (n.act == null && n.bact == null) throw new ParseError("rhd: 누를 곳(act/xact)이 없다");
+        } else if ("trk".equals(t)) {                                                                      // 구간 타임라인: 칸(역·도보) 가로 줄. 시각·색·글·배지·선·점은 전부 엔진이 정한다
+            pad(m, n);
+            for (Object io : asArr(m.get("cells"), "trk.cells")) {
+                Map<String, Object> im = asObj(io, "cell");
+                Node c = new Node(); c.t = "cell";
+                c.max = optNum(im, "w", 64f, 24f, 200f);
+                c.name = optStr(im, "n", "", 60); c.tc = roleOrCss(im, "nc", "text"); c.size = optNum(im, "ns", 10f, 6f, 20f); c.bold = optBool(im, "nb", false); c.ipB = optNum(im, "np", 0f, 0f, 10f);
+                c.badge = optStr(im, "g", "", 40); c.tag = optStr(im, "gk", "p", 2); c.fill = roleOrCss(im, "gc", ""); c.ssize = optNum(im, "gs", 7f, 5f, 14f); c.vp = optNum(im, "gx", 4f, 0f, 12f);
+                if (!"p".equals(c.tag) && !"t".equals(c.tag)) throw new ParseError("cell: gk 는 p 또는 t");
+                c.line = roleOrCss(im, "lc", ""); c.accent = roleOrCss(im, "rc", "");
+                c.dot = optStr(im, "dk", "", 2); if (c.dot.length() > 0 && !"e".equals(c.dot) && !"r".equals(c.dot) && !"m".equals(c.dot)) throw new ParseError("cell: dk 는 e r m");
+                c.onc = roleOrCss(im, "dc", ""); c.onl = roleOrCss(im, "dc2", "");
+                c.time = optStr(im, "t", "", 40); c.sc = roleOrCss(im, "tc", "sub"); c.lh = optNum(im, "ts", 9f, 6f, 20f); c.big = optBool(im, "tb", false);
+                c.cols = (int) optNum(im, "ti", -1f, -1f, 9999f);
+                n.items.add(c); sc.nodes++;
+                if (sc.nodes > MAX_NODES) throw new ParseError("노드가 너무 많다");
+            }
+            if (n.items.isEmpty()) throw new ParseError("trk: 칸이 없다");
         } else if ("sug".equals(t)) {
             pad(m, n);
             n.badge = optStr(m, "badge", "", 12);
@@ -571,8 +589,10 @@ public final class ScreenCore {
     public static Screen load(String json) throws ParseError { return validate(parse(json)); }
 
     // ═════════════ ③ 배치 ═════════════
-    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14, K_NEWS = 15, K_POSTH = 16, K_CMT = 17, K_RBTN = 18, K_INBAR = 19, K_MSG = 20, K_TAB = 21, K_SUG = 22, K_SWAP = 23, K_RHD = 24;
+    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14, K_NEWS = 15, K_POSTH = 16, K_CMT = 17, K_RBTN = 18, K_INBAR = 19, K_MSG = 20, K_TAB = 21, K_SUG = 22, K_SWAP = 23, K_RHD = 24, K_TRK = 25;
     /** 경로 결과 머리줄 치수(웹 #transitResultHeader 와 같다: 분 숫자 28 · 단위 14 · 구간명 12 · 즐겨찾기 알약 11 · 닫기 ×) */
+    /** 구간 타임라인 칸 치수(웹 #transitHtlTrack 과 같다): 이름 30 · 배지 18 · 축 26 · 시각 3+16 */
+    public static final float TRK_NAME_H = 30f, TRK_BADGE_H = 18f, TRK_AXIS_H = 26f, TRK_TIME_GAP = 3f, TRK_TIME_H = 16f, TRK_H = 93f, TRK_LINE_Y = 12f, TRK_LINE_H = 3f, TRK_DOT_Y = 13f, TRK_E_R = 7f, TRK_R_R = 6f, TRK_M_R = 3f;
     public static final float RHD_H = 34f, RHD_NUM = 28f, RHD_UNIT = 14f, RHD_ROUTE = 12f, RHD_BTN = 11f, RHD_BTN_PX = 8f, RHD_BTN_H = 22f, RHD_X = 28f, RHD_MSG = 14f;
     /** 홈 경로 입력 치수(웹 홈 탭 출발/도착 카드·자동완성과 같다) */
     public static final float SUG_H = 44f, SUG_PADX = 14f, SUG_BADGE = 11f, SUG_NAME = 14f, SUG_SUB = 11f, SUG_PILL_PX = 6f, SUG_GAP = 6f, SUG_BTN = 11f, SUG_BTN_PADX = 9f, SUG_BTN_H = 26f;
@@ -623,6 +643,11 @@ public final class ScreenCore {
         public boolean multi;                        // 글자 입력칸: 여러 줄
         public Act act2;                             // 자동완성 줄 오른쪽 작은 단추
         public float starX, badgeX, badgePw, distX, distPw, goX, metaY, metaH, subY, subLH2;   // 장소 카드 한 줄(별점·딱지·거리·길찾기) 자리 / 머리줄 작은 글 자리
+        public String dk = "", time = "", gk = "";   // 타임라인 칸: 점 종류(e 끝점 · r 고리 · m 도보 가운데) · 시각 글 · 배지 종류(p 알약 · t 글)
+        public Col lc, rc, dc, dc2, gc, nc, timec;   // 칸: 왼/오른 선 · 점 · 점 둘째 색 · 배지 · 이름 · 시각 글자 색
+        public float tsz, gsz, gx, badgeTw, nameBot; // 칸: 시각 글 크기 · 배지 글 크기 · 알약 좌우 여백 · 배지 글 폭 · 이름 마지막 줄 아래쪽
+        public boolean tb;
+        public int ti = -1;                          // 칸: 위치 추적 번호(-1 은 추적 안 함)
         public Act act;
     }
 
@@ -765,6 +790,27 @@ public final class ScreenCore {
                 contentW = Math.max(contentW, x - n.gap + n.padR);
                 L.chipsTop = y - n.padT; L.chipsBot = y + n.h + n.padB;
                 y += n.h + n.padB;
+            } else if ("trk".equals(n.t)) {
+                float x = n.padL;
+                y += n.padT;
+                L.chipsTop = y - n.padT; L.chipsBot = y + TRK_H + n.padB;      // 이 줄이 가로로 밀린다
+                for (Node c : n.items) {
+                    Item it = new Item(); it.kind = K_TRK; it.x = x; it.y = y; it.w = c.max; it.h = TRK_H;
+                    List<String> nl = wrap(c.name, Math.max(10f, c.max - 4f), c.size, c.bold, 2, m);
+                    it.lines = nl.toArray(new String[0]); it.size = c.size; it.bold = c.bold; it.nc = col(c.tc, new Col("text", 0));
+                    it.lineH = c.size * 1.25f; it.nameBot = TRK_NAME_H - c.ipB;
+                    it.gk = c.tag; it.gsz = c.ssize; it.gx = c.vp; it.gc = col(c.fill, null);
+                    if (c.badge.length() > 0) {
+                        float avail = c.max - 2f - ("p".equals(c.tag) ? 2f * c.vp : 0f);
+                        it.label = ellipsize(c.badge, Math.max(10f, avail), c.ssize, true, m);
+                        it.badgeTw = m.width(it.label, c.ssize, true);
+                    }
+                    it.lc = col(c.line, null); it.rc = col(c.accent, null); it.dk = c.dot; it.dc = col(c.onc, null); it.dc2 = col(c.onl, null);
+                    it.time = ellipsize(c.time, c.max - 2f, c.lh, c.big, m); it.timec = col(c.sc, new Col("sub", 0)); it.tsz = c.lh; it.tb = c.big; it.ti = c.cols;
+                    hi.add(it); x += c.max;
+                }
+                contentW = Math.max(contentW, x + n.padR);
+                y += TRK_H + n.padB;
             } else {
                 int from = hi.size();
                 y = stack(n, 0f, width, y, hi, m, openKey);

@@ -7135,6 +7135,16 @@ function _trainChgAt(sg, st, transfers){
 function _renderHtlTrack(sections, start, dest, totalMin, transfers) {
   // 마지막으로 그린 시각과 인자 (진단용)
   try{ window._lastHtlArgs = { start: start, dest: dest, totalMin: totalMin }; window._htlDrawnAt = Date.now(); }catch(e){}
+  // 서버 구동 네이티브 타임라인에 줄 원자료: 이 그림을 그릴 때의 구간·환승·기준 시각 자료(글·시각·색은 엔진이 정한다)
+  try{
+    var _swl = [];
+    if(typeof _baseTimeMs === 'undefined' || _baseTimeMs == null){
+      var _sel = (typeof _allRouteResults !== 'undefined' && _allRouteResults) ? (_allRouteResults[window._pendingRouteType || window._lockedRouteType || 'fast'] || null) : null;
+      var _sw0 = _sel && _sel.info && _sel.info.svcWarn;
+      if(_sw0 && _sw0.length) for(var _swi = 0; _swi < _sw0.length && _swl.length < 6; _swi++) _swl.push(_sw0[_swi] ? _sw0[_swi].shift : null);
+    }
+    window._rhTrk = { sections: sections, transfers: transfers, now: Date.now(), bt: (typeof _baseTimeMs !== 'undefined' && _baseTimeMs != null) ? _baseTimeMs : null, rb: (window._routeBaseMs && isFinite(window._routeBaseMs)) ? window._routeBaseMs : null, sw: _swl };
+  }catch(eRt){ window._rhTrk = null; }
   var track = document.getElementById('transitHtlTrack');
   if(!track) return;
 
@@ -7582,6 +7592,7 @@ function _renderHtlTrack(sections, start, dest, totalMin, transfers) {
 
   var wrap=document.getElementById('transitHtlWrap');
   if(wrap) wrap.style.display='block';
+  try{ if(window._scrRhead) setTimeout(function(){ window._scrRhead.kick(); window._scrRhead.changed(); }, 0); }catch(eRk){}      // 서버 구동 네이티브 구간 타임라인(켜져 있을 때만)이 새 구간을 읽는다
 
   // ★ 노선도에서 설정한 경로는 미리보기 → GPS 추적/마커 없음 (경로만 표시)
   if(window._metroRouteMode === true){
@@ -15264,7 +15275,7 @@ window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
 
   var TL = makeRegion('tl', {
     marker: true,
-    host: function(){ return document.getElementById('transitHtlWrap'); },
+    host: function(){ try{ if(window._scrRhead && window._scrRhead.owns5()) return null; }catch(e){} return document.getElementById('transitHtlWrap'); },      // 서버 구동 네이티브 구간 타임라인이 맡는 동안은 이 영역이 비킨다
     scrollEl: function(){ return document.getElementById('transitHtlWrap'); },
     observeEl: function(){ return document.getElementById('transitHtlTrack'); },
     extract: tlExtract,
@@ -21140,7 +21151,7 @@ window.addEventListener('unhandledrejection', function(e) {
             <span id="scrrSetDot" style="position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.3);"></span>
           </label>
         </div>
-        <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">홈 경로 결과 카드의 머리줄(소요 시간·구간·즐겨찾기·닫기), 승차·대기·도보 요약, 환승 안내, 경로 탭(최단시간·최소환승·지하철·버스), 공식 공지·지연 제보 줄, 장거리 열차·버스 고르기를 엔진이 정해 내려주고, 기기가 직접 그려요. 문제가 생기면 예전 웹 카드로 돌아가요.</p>
+        <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">홈 경로 결과 카드의 머리줄(소요 시간·구간·즐겨찾기·닫기), 승차·대기·도보 요약, 환승 안내, 경로 탭(최단시간·최소환승·지하철·버스), 공식 공지·지연 제보 줄, 장거리 열차·버스 고르기, 구간 타임라인(역별 시각·노선 색·환승 표시)을 엔진이 정해 내려주고, 기기가 직접 그려요. 문제가 생기면 예전 웹 카드로 돌아가요.</p>
         <div id="scrrSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
         <style>#scrrSetOn:checked ~ #scrrSetKnob{background:var(--gold) !important;} #scrrSetOn:checked ~ #scrrSetDot{left:23px !important;}</style>
       </div>
@@ -40907,12 +40918,19 @@ window.refreshShop=refreshShop;
       if(!active()) return Promise.resolve(false);
       var req = cfg.request();
       if(!force && S.good && req.fk === S.fk){ S.stash = null; if(req.sig != null) S.sig = req.sig; return Promise.resolve(false); }
+      if(!force && cfg.staleBack && S.badFk === req.fk && now() - S.badAt < 30000) return Promise.resolve(false);   // 방금 같은 요청이 안 됐다(30초 동안 다시 안 묻는다 — 웹이 그리는 중)
       if(!force && S.inflight === req.fk) return Promise.resolve(false);                              // 같은 요청이 이미 가는 중
       if(!force && S.memo[req.fk]) return present({ txt: S.memo[req.fk], src: 'memo', fk: req.fk, snap: req.snap, key: req.key, sig: req.sig }, S.good && S.curKey === req.key);
       S.fk = req.fk; S.inflight = req.fk;
       return fetchScreen(req).then(function(txt){
         if(S.inflight === req.fk) S.inflight = '';
-        if(!txt || !active()){ if(!txt && S.fk === req.fk) S.fk = ''; return false; }          // 못 받았으면 다음 확인이 다시 시도한다
+        if(!txt || !active()){
+          if(!txt && S.fk === req.fk){
+            S.fk = '';                                                       // 못 받았으면 다음 확인이 다시 시도한다
+            if(cfg.staleBack){ S.badFk = req.fk; S.badAt = now(); if(S.good){ S.good = false; hideNative(); try{ if(cfg.webBack) cfg.webBack(); }catch(eSb){} } }      // 내용이 바뀌었는데 새 화면을 못 받았다 — 낡은 화면을 두지 않고 웹이 그린다
+          }
+          return false;
+        }
         if(req.fk !== S.fk) return false;                                       // 그새 요청이 또 바뀌었다 — 다음 확인이 다시 받는다
         return present({ txt: txt, src: 'fresh', fk: req.fk, snap: req.snap, key: req.key, sig: req.sig }, S.good && S.curKey === req.key);
       });
@@ -41441,14 +41459,15 @@ window.refreshShop=refreshShop;
 //   누르면 예전 웹 함수가 그대로 일한다: rh.fav → _openFavPopup · rh.close → closeTransitResult · rh.tab.<종류> → selectRouteOption — 허용 목록 밖은 무시.
 //   웹 줄들은 아래에 그대로 두고(폴백) 네이티브가 그 위를 덮는다. 네이티브가 맡는 동안 웹 줄의 속만 감춘다(자리는 그대로). 높이는 네이티브가 그린 내용 높이를 감싸개가 따른다(줄이 늘면 아래 웹 내용이 밀린다).
   (function(){
-    var K1, K2, K3, K4, R = { cap: 0 }, HH = { rhead: 0, rtabs: 0, rnote: 0, rld: 0 };
+    var K1, K2, K3, K4, K5, R = { cap: 0 }, HH = { rhead: 0, rtabs: 0, rnote: 0, rld: 0, rtrk: 0 };
     var TABS = ['fast', 'less', 'sub', 'bus', 'longdist'];
     function gEl(id){ return document.getElementById(id); }
     function headEl(){ return gEl('trHeadWrap'); }
     function tabsEl(){ return gEl('routeOptionTabs'); }
     function noteEl(){ return gEl('trNoteWrap'); }
     function ldEl(){ return gEl('ldGradeChips'); }
-    try{ var st = document.createElement('style'); st.textContent = '#trHeadWrap.rh-own > *{visibility:hidden !important;} #routeOptionTabs.rh-own > *{visibility:hidden !important;} #trNoteWrap.rh-own > *{visibility:hidden !important;} #ldGradeChips.rh-own > *{visibility:hidden !important;}'; document.head.appendChild(st); }catch(eSt){}
+    function trkEl(){ return gEl('transitHtlWrap'); }
+    try{ var st = document.createElement('style'); st.textContent = '#trHeadWrap.rh-own > *{visibility:hidden !important;} #routeOptionTabs.rh-own > *{visibility:hidden !important;} #trNoteWrap.rh-own > *{visibility:hidden !important;} #ldGradeChips.rh-own > *{visibility:hidden !important;} #transitHtlWrap.rh-own > *{visibility:hidden !important;}'; document.head.appendChild(st); }catch(eSt){}
     function own(el, on){ try{ if(el) el.classList.toggle('rh-own', !!on); }catch(e){} }
     function applyH(el, h){ try{ if(!el || !(h > 8 && h < 2000)) return; el.style.boxSizing = 'border-box'; el.style.overflow = 'hidden'; el.style.flexShrink = '0'; el.style.height = h + 'px'; }catch(e){} }
     function unH(el){ try{ if(el){ el.style.height = ''; el.style.overflow = ''; el.style.boxSizing = ''; el.style.flexShrink = ''; } }catch(e){} }
@@ -41456,7 +41475,7 @@ window.refreshShop=refreshShop;
       if(R.cap) return;
       var P = K1 && K1.plug(); if(!P || typeof P.status !== 'function'){ R.cap = 3; return; }
       R.cap = -1;
-      Promise.resolve(P.status({ id: 'rhead' })).then(function(st){ R.cap = (st && st.cap >= 10) ? 10 : 3; try{ K1.kick(); K2.kick(); K3.kick(); K4.kick(); }catch(e){} }, function(){ R.cap = 3; });
+      Promise.resolve(P.status({ id: 'rhead' })).then(function(st){ R.cap = (st && st.cap >= 11) ? 11 : ((st && st.cap >= 10) ? 10 : 3); try{ K1.kick(); K2.kick(); K3.kick(); K4.kick(); K5.kick(); }catch(e){} }, function(){ R.cap = 3; });
     }
     function cardOpen(){
       try{
@@ -41464,7 +41483,8 @@ window.refreshShop=refreshShop;
         return !!(t && c && t.classList.contains('active') && c.style.display !== 'none' && c.offsetParent && !document.hidden);
       }catch(e){ return false; }
     }
-    function gate(){ if(R.cap === 10) return true; if(!R.cap) probe(); return false; }
+    function gate(){ if(R.cap >= 10) return true; if(!R.cap) probe(); return false; }
+    function gateTrk(){ if(R.cap >= 11) return true; if(!R.cap) probe(); return false; }      // 구간 타임라인 노드 trk 는 규격 11 부터(s71 APK 는 10 이라 웹 그대로)
     function rectOf(w){
       try{
         var sc = gEl('tabContentWrap'); if(!w) return null;
@@ -41481,6 +41501,7 @@ window.refreshShop=refreshShop;
       try{ return ['transitOfficialRow', 'transitAlertRow'].some(function(id){ var e = gEl(id); return !!(e && e.style.display !== 'none' && e.offsetHeight > 4); }); }catch(e){ return false; }
     }
     function openLd(){ var e = ldEl(), o = cardOpen() && !!e && e.style.display !== 'none' && e.offsetHeight > 10 && !!window._rhLd && gate(); if(!o){ own(e, false); unH(e); } return o; }
+    function openTrk(){ var e = trkEl(), o = cardOpen() && !!e && e.style.display !== 'none' && e.offsetHeight > 10 && !!window._rhTrk && gateTrk(); if(!o){ own(e, false); unH(e); } return o; }
     function openNote(){ var o = cardOpen() && !!noteEl() && noteShown() && gate(); if(!o){ own(noteEl(), false); unH(noteEl()); } return o; }
     // ── 사실: 지금 DOM 에 있는 값을 그대로 읽는다(글을 짓지 않는다) ──
     function nameOf(v){ try{ return (v && v.name) ? String(v.name) : ''; }catch(e){ return ''; } }
@@ -41537,6 +41558,25 @@ window.refreshShop=refreshShop;
       }catch(e){}
       return f;
     }
+    function trkFacts(noGeo){                                                    // 구간 원자료를 그대로(역별 시각·색·배지·환승 표시는 엔진이 정한다)
+      var t = window._rhTrk; if(!t || !Array.isArray(t.sections)) return null;
+      var r5 = function(v){ return (v == null || !isFinite(v)) ? null : Math.round(Number(v) * 1e5) / 1e5; };
+      var secs = t.sections.slice(0, 12).map(function(sec){
+        sec = sec || {};
+        var tr = sec.transportation || {}, ps = sec.passStopList || {}, stops = ps.stationList || ps.stations || [];
+        return { ty: tr.type || 3, nm: tr.name || '', du: sec.duration || 0, di: sec.distance || 0, ws: sec.waitSec, ar: sec.arriveSec, ss: sec.startSec, es: sec.endSec,
+          sts: Array.isArray(sec.stopSec) ? sec.stopSec : null, tw: sec.ttWaitMs, we: sec.waitEstimated ? 1 : 0,
+          tc: Array.isArray(sec.trainChanges) ? sec.trainChanges.slice(0, 8).map(function(c){ return c ? { at: c.at, to: c.to } : null; }).filter(Boolean) : null,
+          st: stops.slice(0, 150).map(function(q){ q = q || {}; return noGeo ? [q.stationName || ''] : [q.stationName || '', r5(q.lat != null ? q.lat : q.y), r5(q.lon != null ? q.lon : (q.lng != null ? q.lng : q.x))]; }) };
+      });
+      return { secs: secs, xf: Array.isArray(t.transfers) ? t.transfers.slice(0, 12).map(function(x){ return x ? { k: x.kind, xi: x.xferSecIdx, si: x.secIdx } : null; }).filter(Boolean) : null,
+        bt: t.bt, rb: t.rb, now: t.now, sw: t.sw || [], tz: -new Date().getTimezoneOffset(), th: document.documentElement.getAttribute('data-theme') === 'pastel' ? 'pastel' : 'dark' };
+    }
+    function reqTrk(){
+      var txt = JSON.stringify({ cap: 11, part: 'k', f: trkFacts(false) });
+      if(txt.length > 38000) txt = JSON.stringify({ cap: 11, part: 'k', f: trkFacts(true) });
+      var fk = K5.hash(txt); return { txt: txt, fk: fk, idle: false, key: '', snap: null, sig: fk };
+    }
     function reqLd(){ var txt = JSON.stringify({ cap: 10, part: 'l', f: { lg: ldFacts() } }), fk = K4.hash(txt); return { txt: txt, fk: fk, idle: false, key: '', snap: null, sig: fk }; }
     function reqNote(){ var txt = JSON.stringify({ cap: 10, part: 'n', f: noteFacts() }), fk = K3.hash(txt); return { txt: txt, fk: fk, idle: false, key: '', snap: null, sig: fk }; }
     function reqTabs(){ var txt = JSON.stringify({ cap: 10, part: 't', f: tabFacts() }), fk = K2.hash(txt); return { txt: txt, fk: fk, idle: false, key: '', snap: null, sig: fk }; }
@@ -41552,7 +41592,7 @@ window.refreshShop=refreshShop;
         else if(m[2] != null){ var ln = (window._rnLn || [])[Number(m[2])]; if(ln) _lrOpenRoom(ln); }
         else selectRouteOption(m[5]);
       }catch(x){}
-      setTimeout(function(){ try{ K1.changed(); K2.changed(); K3.changed(); K4.changed(); }catch(e){} }, 30);
+      setTimeout(function(){ try{ K1.changed(); K2.changed(); K3.changed(); K4.changed(); K5.changed(); }catch(e){} }, 30);
     }
     function listen(id, el){
       return function(P){
@@ -41563,9 +41603,9 @@ window.refreshShop=refreshShop;
         });
       };
     }
-    var TXT = '결과 카드 윗부분(머리줄·요약·환승 안내·경로 탭·공지 줄)을 엔진이 정한 대로 기기가 직접 그려요(실험 중).';
+    var TXT = '결과 카드 윗부분(머리줄·요약·환승 안내·경로 탭·공지 줄·구간 타임라인)을 엔진이 정한 대로 기기가 직접 그려요(실험 중).';
     // 세 틀의 켜짐 저장값을 머리줄 쪽에 맞춘다(틀을 만들기 '전에' — 만들 때 읽는다)
-    try{ var on1 = localStorage.getItem('gdm_scrr_on') === '1' ? '1' : '0'; if(localStorage.getItem('gdm_scrr2_on') !== on1) localStorage.setItem('gdm_scrr2_on', on1); if(localStorage.getItem('gdm_scrr3_on') !== on1) localStorage.setItem('gdm_scrr3_on', on1); if(localStorage.getItem('gdm_scrr4_on') !== on1) localStorage.setItem('gdm_scrr4_on', on1); }catch(eSync){}
+    try{ var on1 = localStorage.getItem('gdm_scrr_on') === '1' ? '1' : '0'; if(localStorage.getItem('gdm_scrr2_on') !== on1) localStorage.setItem('gdm_scrr2_on', on1); if(localStorage.getItem('gdm_scrr3_on') !== on1) localStorage.setItem('gdm_scrr3_on', on1); if(localStorage.getItem('gdm_scrr4_on') !== on1) localStorage.setItem('gdm_scrr4_on', on1); if(localStorage.getItem('gdm_scrr5_on') !== on1) localStorage.setItem('gdm_scrr5_on', on1); }catch(eSync){}
     K1 = window._scrKit({
       id: 'rhead', kp: 'gdm_scrr', ep: '/screen/rhead', screen: 'rhead', label: '결과 카드', card: 'scrr', cache: false, waitIdle: false, bucket: 0, idleMs: 250, onText: TXT,
       root: headEl, open: openHead, rect: function(){ return rectOf(headEl()); }, request: reqHead, act: act, sig: function(){ return reqHead().sig; }, sigMs: 400,
@@ -41590,9 +41630,15 @@ window.refreshShop=refreshShop;
       listen: listen('rld', ldEl),
       webClear: function(){ own(ldEl(), true); applyH(ldEl(), HH.rld); }, webBack: function(){ own(ldEl(), false); unH(ldEl()); }, onEnd: function(){ own(ldEl(), false); unH(ldEl()); }
     });
-    // 네 틀은 한 스위치로 함께 켜고 끈다(같은 설정). 켜짐 여부·문제 표시는 머리줄 쪽(K1)을 따른다.
-    window._scrRhead = { S: K1.S, S2: K2.S, S3: K3.S, S4: K4.S, kick: function(){ try{ K1.kick(); K2.kick(); K3.kick(); K4.kick(); }catch(e){} }, changed: function(){ try{ K1.changed(); K2.changed(); K3.changed(); K4.changed(); }catch(e){} }, owns: function(){ try{ return K1.owns() || K2.owns() || K3.owns() || K4.owns(); }catch(e){ return false; } }, k1: K1, k2: K2, k3: K3, k4: K4 };
-    window._scrrSetUse = function(on){ try{ K1.setUse(on); K2.setUse(on); K3.setUse(on); K4.setUse(on); }catch(e){} };
+    K5 = window._scrKit({
+      id: 'rtrk', kp: 'gdm_scrr5', ep: '/screen/rhead', screen: 'rhead', label: '구간 타임라인', card: 'scrrk', staleBack: true, cache: false, waitIdle: false, bucket: 0, idleMs: 250, onText: TXT,
+      root: trkEl, open: openTrk, rect: function(){ return rectOf(trkEl()); }, request: reqTrk, act: act, sig: function(){ return reqTrk().sig; }, sigMs: 500,
+      listen: listen('rtrk', trkEl),
+      webClear: function(){ own(trkEl(), true); applyH(trkEl(), HH.rtrk); }, webBack: function(){ own(trkEl(), false); unH(trkEl()); }, onEnd: function(){ own(trkEl(), false); unH(trkEl()); }
+    });
+    // 다섯 틀은 한 스위치로 함께 켜고 끈다(같은 설정). 켜짐 여부·문제 표시는 머리줄 쪽(K1)을 따른다.
+    window._scrRhead = { S: K1.S, S2: K2.S, S3: K3.S, S4: K4.S, S5: K5.S, kick: function(){ try{ K1.kick(); K2.kick(); K3.kick(); K4.kick(); K5.kick(); }catch(e){} }, changed: function(){ try{ K1.changed(); K2.changed(); K3.changed(); K4.changed(); K5.changed(); }catch(e){} }, owns5: function(){ try{ return K5.owns(); }catch(e){ return false; } }, owns: function(){ try{ return K1.owns() || K2.owns() || K3.owns() || K4.owns(); }catch(e){ return false; } }, k1: K1, k2: K2, k3: K3, k4: K4, k5: K5 };
+    window._scrrSetUse = function(on){ try{ K1.setUse(on); K2.setUse(on); K3.setUse(on); K4.setUse(on); K5.setUse(on); }catch(e){} };
   })();
 
   // ═════════════ 홈 탭 경로 입력 ═════════════

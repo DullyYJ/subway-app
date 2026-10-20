@@ -9,8 +9,10 @@
 //   웹 카드는 폴백(엔진·네이티브가 안 될 때)으로만 남는다.
 //
 // 입력  rheadScreen({ cap, part }, facts)
-//        cap   = 앱이 그릴 수 있는 화면 규격 수준(10 이상이어야 만든다 — 머리줄 노드 rhd 가 10)
-//        part  = 'h'(머리줄 + 요약 줄 + 환승 안내) | 't'(경로 옵션 탭 줄) | 'n'(공식 공지 · 지연 제보 줄) | 'l'(장거리 열차·버스 고르기 + 대기 제외 안내)
+//        cap   = 앱이 그릴 수 있는 화면 규격 수준(10 이상이어야 만든다 — 머리줄 노드 rhd 가 10; part 'k' 는 타임라인 노드 trk 가 있는 11 이상)
+//        part  = 'h'(머리줄 + 요약 줄 + 환승 안내) | 't'(경로 옵션 탭 줄) | 'n'(공식 공지 · 지연 제보 줄) | 'l'(장거리 열차·버스 고르기 + 대기 제외 안내) | 'k'(구간 타임라인: 머리 노드 trk — facts 는 아래 별도)
+//        part 'k' facts = { secs:[{ty,nm,du,di,ws,ar,ss,es,sts,tw,we,tc:[{at,to}],st:[[이름,위도,경도]…]}], xf:[{k,xi,si}]|null(환승 원자료), bt: 사용자가 정한 예상 시각 ms|null, rb: 이번 탐색이 나간 시각 ms|null,
+//                          now: 그릴 때 기기 시계 ms, sw:[막차 뒤 첫차까지 분…], tz: 기기 시간대(동쪽 분), th:'dark'|'pastel' }  → head:[{t:'trk', cells:[…]}] (칸 = 이름·배지·선·점·시각 한 줄; 시각/색/글 전부 엔진이 정한다)
 //        facts = { m: 총 소요 분, a: 출발 이름, b: 도착 이름, fav: 즐겨찾기 단추를 보일지(0|1),
 //                  sp: {ride,wait,walk}(분) | null, why: 엔진이 준 이유 글,
 //                  dx: [{s,dc,dd,bc,bd,to,secs}](환승 호차·문 원자료), ex: {s, l:[{fac,door}]} | null(하차 빠른 문),
@@ -271,9 +273,266 @@ function rheadTabNodes(f) {
   return [{ t: 'row', gap: 6, pad: [0, 0, 0, 0], kids: kids }];
 }
 
+// ── part 'k': 구간 타임라인(예전 웹 _renderHtlTrack · _segStopOffsets · _transitColor · _htlBaseMs 의 계산 전부) ──
+//   앱이 보내는 원자료: secs[{ty,nm,du,di,ws,ar,ss,es,sts,tw,we,tc,st:[[이름,위도,경도]…]}] · xf(환승 원자료; 없으면 null) ·
+//   bt(사용자가 정한 예상 시각 ms|null) · rb(이번 탐색이 나간 시각 ms|null) · now(기기 시계 ms) · sw(막차 뒤 첫차까지 분 목록) · tz(기기 시간대, 동쪽 분) · th('dark'|'pastel')
+//   엔진이 시각·색·글·배지·선·점을 칸(cell)마다 정해 내려주고, 앱은 칸을 그리기만 한다.
+var RTRK_LC = {
+  '1호선': '#0052a4', '2호선': '#00a84d', '3호선': '#ef7c1c', '4호선': '#00a5de', '5호선': '#996cac', '6호선': '#cd7c2f', '7호선': '#747f00', '8호선': '#e6186c', '9호선': '#bdb092',
+  '공항철도': '#0090d2', '경의중앙선': '#73c7a6', '경춘선': '#0c8e72', '수인분당선': '#f5a200', '경강선': '#003da5', '서해선': '#8cc63f', '우이신설선': '#b0b0b0', '신림선': '#6789ca',
+  '신분당선': '#d31145', 'GTX-A': '#9069b5', '인천1호선': '#7ca8d5', '인천2호선': '#f4a62c', '인천공항철도': '#0090d2', '김포골드라인': '#ad8605', '의정부경전철': '#fb8f36', '용인경전철': '#51a834'
+};
+var RTRK_ALIAS = {
+  '경인선': '#0052a4', '경부선': '#0052a4', '경원선': '#0052a4', '일산선': '#0052a4', '과천선': '#0052a4', '안산선': '#0052a4', '분당선': '#f5a200', '수인선': '#f5a200',
+  '공항철도1호선': '#0090d2', '별내선': '#e6186c', '진접선': '#00a5de', '신분당선(연장)': '#d31145'
+};
+var RTRK_BUS_COLS = ['#30d158', '#bf5af2', '#ff6482', '#40c8e0', '#ffd60a'];
+var RTRK_W = 64, RTRK_WLD = 108, RTRK_DWELL = 20, RTRK_MINGAP = 20, RTRK_GREY = '#8e8e93';
+var RTRK_DOT = { dark: { s: '#d4af37', e: '#ff2d55' }, pastel: { s: '#1d9bf0', e: '#e0455a' } };
+
+function rheadTrkNm(s) { return String(s == null ? '' : s).replace(/역$/, '').trim(); }
+function rheadTrkNum(v) { return (v == null || v === '' || !isFinite(Number(v))) ? null : Number(v); }
+function rheadTrkHex2(n) { return (n < 16 ? '0' : '') + n.toString(16); }
+function rheadTrkBright(hex, th) {                      // 어두운 테마에서만 어두운 선 색을 밝힌다
+  if (th === 'pastel') return hex;
+  if (!hex || hex.length < 7) return hex;
+  var r = parseInt(hex.slice(1, 3), 16) || 0, g = parseInt(hex.slice(3, 5), 16) || 0, b = parseInt(hex.slice(5, 7), 16) || 0;
+  var br = (r * 299 + g * 587 + b * 114) / 1000;
+  if (br < 100) {
+    var k = Math.max(1.5, 160 / Math.max(br, 1));
+    r = Math.min(255, Math.round(r * k)); g = Math.min(255, Math.round(g * k)); b = Math.min(255, Math.round(b * k));
+    return '#' + rheadTrkHex2(r) + rheadTrkHex2(g) + rheadTrkHex2(b);
+  }
+  return hex;
+}
+function rheadTrkColor(ty, nm, th) {
+  if (ty === 3) return RTRK_GREY;
+  if (ty === 2) return '#30d158';
+  if (ty === 4) return '#ff9500';
+  if (nm) {
+    var bare = nm.replace(/^(수도권|광역|서울|인천|경기)\s+/, '');
+    var raw = RTRK_LC[nm] || RTRK_LC[bare] || RTRK_ALIAS[nm] || RTRK_ALIAS[bare];
+    if (raw) return rheadTrkBright(raw, th);
+  }
+  return '#4dabff';
+}
+function rheadTrkHM(ms, tz) {                           // 기기 시간대 기준 HH:MM
+  if (!ms) return '';
+  var d = new Date(ms + tz * 60000), h = d.getUTCHours(), m = d.getUTCMinutes();
+  return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
+}
+function rheadTrkHav(la1, lo1, la2, lo2) {
+  var R = 6371000, dLa = (la2 - la1) * Math.PI / 180, dLo = (lo2 - lo1) * Math.PI / 180;
+  var a = Math.sin(dLa / 2) * Math.sin(dLa / 2) + Math.cos(la1 * Math.PI / 180) * Math.cos(la2 * Math.PI / 180) * Math.sin(dLo / 2) * Math.sin(dLo / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+function rheadTrkSec(s) {
+  s = (s && typeof s === 'object') ? s : {};
+  var ty = rheadInt(s.ty, 0, 9);
+  var sts = Array.isArray(s.sts) ? s.sts.slice(0, 150).map(rheadTrkNum) : null;
+  if (sts && sts.some(function (v) { return v == null; })) sts = null;
+  var tc = Array.isArray(s.tc) ? s.tc.slice(0, 8).filter(function (t) { return t && typeof t === 'object'; }).map(function (t) { return { at: rheadStr(t.at, 30), to: t.to === 'express' ? 'express' : 'local' }; }) : null;
+  return {
+    ty: ty, nm: rheadStr(s.nm, 40).trim(), du: Math.max(0, rheadTrkNum(s.du) || 0), di: Math.max(0, rheadTrkNum(s.di) || 0),
+    ws: rheadTrkNum(s.ws), ar: rheadTrkNum(s.ar), ss: rheadTrkNum(s.ss), es: rheadTrkNum(s.es), sts: sts, tw: rheadTrkNum(s.tw), we: s.we ? 1 : 0, tc: tc,
+    st: rheadList(s.st, 150).map(function (r) { r = Array.isArray(r) ? r : []; return { n: rheadStr(r[0], 40), la: rheadTrkNum(r[1]), lo: rheadTrkNum(r[2]) }; })
+  };
+}
+function rheadTrkHasEng(sg) { return sg.ss != null && sg.es != null; }
+// 정류장·역마다 구간 시작에서 몇 초 뒤인가: 엔진이 준 역별 시각 → 좌표 거리 비례(버스는 정차 포함) → 균등
+function rheadTrkOffsets(sg) {
+  var st = sg.st, n = st.length, i;
+  if (sg.sts && sg.sts.length && sg.ss != null) {
+    var ss = sg.sts;
+    if (ss.length > n) ss = ss.slice(ss.length - n);
+    if (ss.length === n || n === 0) return ss.map(function (v) { return Math.max(0, v - sg.ss); });
+  }
+  if (n < 2) return [0];
+  var dur = sg.du, wait = 0;
+  if (sg.ty === 2 && sg.ws != null) wait = Math.max(0, Math.min(sg.ws, dur * 0.6));
+  var move = Math.max(dur - wait, 0);
+  var d = [], tot = 0, geo = true;
+  for (i = 1; i < n; i++) {
+    var a = st[i - 1], b = st[i];
+    if (a.la == null || a.lo == null || b.la == null || b.lo == null) { geo = false; break; }
+    var m = rheadTrkHav(a.la, a.lo, b.la, b.lo);
+    if (!isFinite(m) || m < 0) m = 0;
+    d.push(m); tot += m;
+  }
+  var off;
+  if (geo && tot > 0) {
+    var mid = n - 2 > 0 ? n - 2 : 0;
+    var dwellAll = sg.ty === 2 ? Math.min(RTRK_DWELL * mid, move * 0.35) : 0;
+    var moveAll = Math.max(move - dwellAll, move * 0.5);
+    var perDwell = mid > 0 ? dwellAll / mid : 0;
+    off = [0]; var c = 0;
+    for (i = 0; i < d.length; i++) {
+      c += moveAll * (d[i] / tot);
+      if (i < d.length - 1) c += perDwell;
+      off.push(c);
+    }
+    var last = off[off.length - 1];
+    if (last > 0 && move > 0) { var k = move / last; for (i = 0; i < off.length; i++) off[i] *= k; }
+    if (wait > 0) for (i = 1; i < off.length; i++) off[i] += wait;
+    for (i = 1; i < off.length; i++) if (off[i] - off[i - 1] < RTRK_MINGAP) off[i] = off[i - 1] + RTRK_MINGAP;
+    return off;
+  }
+  var even = move / (n - 1);
+  off = [0];
+  for (i = 1; i < n; i++) off.push(even * i + wait);
+  return off;
+}
+function rheadTrkLabel(ty, name) {                      // 노선/번호 라벨: 지하철=노선명, 버스=숫자면 "N번"
+  var nm = String(name || '').trim();
+  if (!nm) return ty === 1 ? '지하철' : (ty === 2 ? '버스' : '');
+  if (ty === 2) return /^[0-9-]+$/.test(nm) ? nm + '번' : nm;
+  return nm;
+}
+// 지나가는 점들(pts) — 예전 웹이 화면을 짓기 전에 모으던 목록
+function rheadTrkPoints(f) {
+  var th = f.th, tz = f.tz, i, a, b;
+  var segs = f.secs;
+  segs.forEach(function (sg) { if (sg.ty === 2 && sg.we && sg.nm && sg.nm.indexOf('예상') < 0) sg.nm = sg.nm + ' · 예상'; });
+  if (f.xf) f.xf.forEach(function (t) {                  // 엔진이 알려 준 환승을 그릴 자리에 붙인다
+    if (!t || t.k === 'train') return;
+    if (t.xi != null && segs[t.xi] && segs[t.xi].ty === 3) segs[t.xi].xfo = t;
+    else if (t.si != null && segs[t.si + 1]) segs[t.si + 1].xfIn = t;
+  });
+  for (i = 1; i < segs.length; i++) {                    // 같은 자리에서 같은 이름 역이 두 번 찍히는 것 방지(장거리 앞뒤는 지우지 않는다)
+    var c = segs[i], p = segs[i - 1];
+    if (c.ty === 3 || p.ty === 3) continue;
+    if (c.ty === 4 || p.ty === 4) continue;
+    if (p.st.length && c.st.length && rheadTrkNm(p.st[p.st.length - 1].n) === rheadTrkNm(c.st[0].n)) c.st = c.st.slice(1);
+  }
+  for (var wi = 0; wi < segs.length; wi++) {
+    if (segs[wi].ty !== 3) continue;
+    var ps = null, ns = null;
+    for (a = wi - 1; a >= 0; a--) if (segs[a].ty !== 3) { ps = segs[a]; break; }
+    for (b = wi + 1; b < segs.length; b++) if (segs[b].ty !== 3) { ns = segs[b]; break; }
+    var same = segs[wi].du <= 60 && segs[wi].di <= 80;
+    if (same && ps && ns && ps.ty !== 4 && ns.ty !== 4 && ps.st.length && ns.st.length && rheadTrkNm(ps.st[ps.st.length - 1].n) === rheadTrkNm(ns.st[0].n)) ns.st = ns.st.slice(1);
+  }
+  var total = 0;
+  segs.forEach(function (sg) { if (sg.ty !== 3) total += sg.st.length; });
+  // 단일 시간축
+  var sh = 0;
+  if (f.bt == null) for (i = 0; i < f.sw.length; i++) { var v = f.sw[i]; if (typeof v === 'number' && isFinite(v) && v > 0 && v < 1440) { sh = v * 60000; break; } }
+  var base = f.bt != null ? f.bt : ((f.rb != null && f.now - f.rb <= 300000) ? f.rb + sh : f.now + sh);
+  var cum = base, shift = 0;
+  var segMs = segs.map(function (sg) {
+    var t = cum;
+    if (rheadTrkHasEng(sg)) { t = base + sg.ss * 1000 + shift; cum = base + sg.es * 1000 + shift; }
+    else cum = t + sg.du * 1000;
+    if (sg.ty === 1 && sg.tw != null && sg.tw > 0) { var w = Math.round(sg.tw); t += w; cum += w; shift += w; }
+    return t;
+  });
+  var busN = 0;
+  segs.forEach(function (s0) { if (s0.ty === 2) s0.bn = busN++; });
+  var segCol = function (s0) { return (s0.ty === 2 && busN >= 2) ? RTRK_BUS_COLS[((s0.bn % 5) + 5) % 5] : rheadTrkColor(s0.ty, s0.nm, th); };
+  var pts = [], gIdx = 0;
+  segs.forEach(function (sg, si) {
+    var col = segCol(sg), secMin = Math.round(sg.du / 60);
+    if (sg.ty === 3) {
+      var pC = RTRK_GREY, nC = RTRK_GREY, nt = 0, nn = '';
+      for (a = si - 1; a >= 0; a--) if (segs[a].ty !== 3) { pC = segCol(segs[a]); break; }
+      for (b = si + 1; b < segs.length; b++) if (segs[b].ty !== 3) { nC = segCol(segs[b]); nt = segs[b].ty; nn = segs[b].nm; break; }
+      pts.push({ type: 'walk', pC: pC, nC: nC, xf: sg.xfo || null, nextLabel: rheadTrkLabel(nt, nn), nextCol: nC, lbl: secMin > 0 ? secMin + '분' : (Math.round(sg.di) + 'm') });
+      return;
+    }
+    if (!sg.st.length) return;
+    var off = sg.ty === 4 ? null : rheadTrkOffsets(sg);
+    var ldLbl = null;
+    if (sg.ty === 4 && sg.es != null && sg.ss != null) {
+      var lm = Math.round(Math.max(0, sg.es - sg.ss) / 60);
+      ldLbl = lm >= 60 ? (Math.floor(lm / 60) + '시간' + (lm % 60 ? (lm % 60) + '분' : '')) : (lm + '분');
+    }
+    var used = {};
+    sg.st.forEach(function (st, ni) {
+      var isF = gIdx === 0, isL = gIdx === total - 1, arr = '';
+      if (sg.ty === 4) arr = ni === 0 ? rheadTrkHM(segMs[si], tz) : rheadTrkHM(segMs[si] + Math.max(0, (sg.es == null || sg.ss == null) ? 0 : sg.es - sg.ss) * 1000, tz);
+      else if (isF) arr = rheadTrkHM(segMs[si], tz);
+      else arr = rheadTrkHM(segMs[si] + (off[ni] || 0) * 1000, tz);
+      var lC = col;
+      if (ni === 0 && si > 0) for (a = si - 1; a >= 0; a--) if (segs[a].ty !== 3) { lC = segCol(segs[a]); break; }
+      var tcg = null;                                    // 이 역에서 일반↔급행을 갈아타나(이름이 같은 첫 역에만)
+      if (sg.ty === 1 && f.xf && sg.tc) {
+        var nm0 = rheadTrkNm(st.n);
+        for (var q = 0; q < sg.tc.length; q++) { if (used[q]) continue; if (rheadTrkNm(sg.tc[q].at) === nm0) { used[q] = 1; tcg = sg.tc[q]; break; } }
+      }
+      pts.push({ type: 'stn', nm: rheadTrkNm(st.n), col: col, lC: lC, lineNm: sg.nm, lineLabel: rheadTrkLabel(sg.ty, sg.nm), xfIn: (ni === 0 && sg.xfIn) ? sg.xfIn : null, trainChg: tcg,
+        arrT: arr, isF: isF, isL: isL, ni: ni, ld: sg.ty === 4, ldRole: sg.ty === 4 ? (ni === 0 ? 'dep' : 'arr') : null, ldDur: ldLbl });
+      gIdx++;
+    });
+  });
+  return pts;
+}
+// 점 하나 → 그릴 칸 하나
+function rheadTrkCells(pts, th) {
+  var cells = [], last = pts.length - 1, ti = 0, dots = RTRK_DOT[th] || RTRK_DOT.dark;
+  pts.forEach(function (pt, pi) {
+    var walk = pt.type === 'walk', c = { w: pt.ld ? RTRK_WLD : RTRK_W };
+    if (walk) { if (pt.xf) { c.n = '환승'; c.nc = 'gold'; c.ns = 11; c.nb = true; c.np = 2; } else { c.n = '도보'; c.nc = 'sub'; c.ns = 9; c.nb = false; c.np = 2; } }
+    else { c.n = pt.nm; c.nc = pt.ld ? pt.col : 'text'; c.ns = pt.ld ? 11 : 10; c.nb = true; }
+    var g = null, nm = pt.lineLabel || pt.lineNm;
+    if (pt.ld) g = { s: nm + ' ' + (pt.ldRole === 'dep' ? '출발' : '도착'), k: 'p', c: pt.col, z: 7.5 };
+    else if (walk) {
+      var hadBefore = false;
+      for (var h = 0; h < pi; h++) if (pts[h].type === 'stn') { hadBefore = true; break; }
+      if (hadBefore && pt.nextLabel) g = { s: '↔ ' + pt.nextLabel, k: 'p', c: pt.nextCol || '#0a84ff', z: pt.xf ? 8 : 6.5 };
+    } else if (pt.isF) g = { s: nm, k: 't', c: pt.col, z: 7 };
+    else if (pt.trainChg) g = { s: '↔ ' + (pt.trainChg.to === 'express' ? '급행' : '일반') + ' 환승', k: 'p', c: pt.col, z: 8 };
+    else if (pt.xfIn) g = { s: '↔ ' + nm, k: 'p', c: pt.col, z: 8 };
+    else if (pt.ni === 0) {
+      var prev = pi > 0 ? pts[pi - 1] : null, prevWalk = prev && prev.type === 'walk', prevLn = '';
+      for (var q = pi - 1; q >= 0; q--) if (pts[q].type === 'stn') { prevLn = pts[q].lineNm || ''; break; }
+      if (!prevWalk && prevLn && prevLn !== pt.lineNm) g = { s: '↔ ' + nm, k: 'p', c: pt.col, z: 6.5 };
+      else if (prevWalk) {
+        var had2 = false;
+        for (var r = 0; r < pi - 1; r++) if (pts[r].type === 'stn') { had2 = true; break; }
+        if (!had2) g = { s: nm, k: 't', c: pt.col, z: 7 };
+      }
+    }
+    if (g && g.s.length) { c.g = g.s; c.gk = g.k; c.gc = g.c; c.gs = g.z; c.gx = pt.ld ? 5 : 4; }
+    var lColor = pi > 0 ? pts[pi - 1]._r : RTRK_GREY, rColor = walk ? RTRK_GREY : pt.col;
+    pt._r = rColor;
+    var endpoint = pi === 0 || pi === last;
+    c.lc = pi !== 0 ? lColor : ''; c.rc = pi !== last ? rColor : '';
+    if (endpoint) { c.dk = 'e'; c.dc = pi === 0 ? dots.s : dots.e; }
+    else if (!walk) { c.dk = 'r'; c.dc = pt.col; }
+    else { c.dk = 'm'; c.dc = lColor; c.dc2 = rColor; }
+    if (walk) { c.t = pt.lbl; c.tc = 'gold'; c.ts = 9; c.tb = true; }
+    else { c.t = (pt.ld && pt.ldRole === 'arr' && pt.ldDur) ? pt.arrT + ' · 총 ' + pt.ldDur : pt.arrT; c.tc = pt.ld ? 'gold' : 'sub'; c.ts = pt.ld ? 10 : 9; c.tb = true; }
+    c.ti = (!walk || endpoint) ? ti++ : -1;              // 위치 추적이 쓰는 칸 번호(도보 중간 칸은 -1)
+    cells.push(c);
+  });
+  return cells;
+}
+function rheadTrackScreen(inp) {
+  var f = (inp && typeof inp === 'object') ? inp : {};
+  var secs = rheadList(f.secs, 12).map(rheadTrkSec);
+  if (!secs.length) return { ok: false, error: 'empty' };
+  if (!secs.some(rheadTrkHasEng)) return { ok: false, error: 'notimes' };      // 엔진이 구간 시각을 안 준 옛 응답은 그리지 않는다(웹이 그린다)
+  var now = rheadTrkNum(f.now);
+  if (now == null || now <= 0) return { ok: false, error: 'now' };
+  var th = f.th === 'pastel' ? 'pastel' : 'dark';
+  var facts = {
+    secs: secs, th: th, tz: rheadInt(f.tz, -840, 840), now: now, bt: rheadTrkNum(f.bt), rb: rheadTrkNum(f.rb),
+    sw: rheadList(f.sw, 6), xf: Array.isArray(f.xf) ? f.xf.slice(0, 12).filter(function (t) { return t && typeof t === 'object'; }).map(function (t) { return { k: t.k === 'train' ? 'train' : 'x', xi: rheadTrkNum(t.xi), si: rheadTrkNum(t.si) }; }) : null
+  };
+  var pts = rheadTrkPoints(facts);
+  if (!pts.length) return { ok: false, error: 'nopoints' };
+  var cells = rheadTrkCells(pts, th), w = 0;
+  cells.forEach(function (c) { w += c.w; });
+  var node = { t: 'trk', pad: [14, 6, 14, 6], cells: cells };
+  var out = { ok: true, v: 1, screen: 'rhead', cover: 'tab', bg: 'card', head: [node], body: [{ t: 'spacer', h: 0 }], info: { part: 'k', n: cells.length, w: w } };
+  out.rev = 'r' + RHEAD_SCREEN_V + 'k:' + rheadHash(JSON.stringify(cells));
+  return out;
+}
+
 function rheadScreen(inp, factsIn) {
   inp = inp || {};
   if (!(Number(inp.cap) >= 10)) return { ok: false, error: 'cap' };
+  if (inp.part === 'k') return Number(inp.cap) >= 11 ? rheadTrackScreen(factsIn) : { ok: false, error: 'cap' };      // 타임라인 노드 trk 는 규격 11
   var part = (inp.part === 't' || inp.part === 'n' || inp.part === 'l') ? inp.part : 'h';
   var f = rheadFacts(factsIn);
   var body = part === 't' ? rheadTabNodes(f) : (part === 'n' ? rheadNoteNodes(f) : (part === 'l' ? rheadLdNodes(f) : rheadHeadNodes(f)));
@@ -282,4 +541,4 @@ function rheadScreen(inp, factsIn) {
   return out;
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { rheadScreen: rheadScreen, rheadFacts: rheadFacts, rheadXferLine: rheadXferLine, rheadDoorLines: rheadDoorLines };
+if (typeof module !== 'undefined' && module.exports) module.exports = { rheadScreen: rheadScreen, rheadTrackScreen: rheadTrackScreen, rheadFacts: rheadFacts, rheadXferLine: rheadXferLine, rheadDoorLines: rheadDoorLines };
