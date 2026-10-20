@@ -158,6 +158,16 @@ console.log('동등성 대조 ' + cases.length + '건');
     // 상품 서버가 죽어도 마지막으로 받은 것이 60초 안에는 그대로 쓰인다
     const r3 = await w.fetch(new Request('https://x/screen/shop?now=' + t), {}, { waitUntil() {} });
     ok(r3.status === 200, '서버 장애여도 직전 자료로 응답');
+    // 처음 켜질 때 쇼핑 서버가 한 번 실패해도 한 번 더 받아 화면을 준다(새 인스턴스 = 메모리 비어 있음)
+    const mod2 = await import(tmp + '?fresh=1');
+    let shopCalls = 0;
+    globalThis.fetch = async (u) => {
+      u = String(u);
+      if (u.includes('gildongmu-shop')) { shopCalls++; return shopCalls === 1 ? new Response('x', { status: 503 }) : new Response(JSON.stringify({ ok: true, version: 't2', data })); }
+      return new Response(JSON.stringify({ ok: false }));
+    };
+    const r4 = await mod2.default.fetch(new Request('https://x/screen/shop?now=' + t), {}, { waitUntil() {} });
+    ok(r4.status === 200 && shopCalls === 2, '첫 실패 뒤 한 번 더 시도해 화면을 준다(호출 ' + shopCalls + ')');
   } catch (e) { fail++; console.log('  FAIL 워커 시험 예외', e && e.stack || e); }
   try { fs.unlinkSync(tmp); } catch (e) { }
   console.log(`shop_engine: ${pass} pass, ${fail} fail`);

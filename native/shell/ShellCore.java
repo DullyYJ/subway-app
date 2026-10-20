@@ -318,7 +318,7 @@ public final class ShellCore {
     public static String mode(Store st) { String m = st.get(K_MODE, MODE_DEFAULT); return isMode(m) ? m : MODE_DEFAULT; }
 
     public static final String S_SETTINGS = "settings", S_SHOP = "shop", S_NEWS = "news", S_CCHIPS = "cchips", S_PENDING = "pending", S_HOME = "home", S_BOARD = "board", S_WRITE = "write", S_CHAT = "chat", S_FOOD = "food", S_FOODSHEET = "foodsheet", S_MAPH = "maph", S_MAPB = "mapb", S_MAPSTN = "mapstn", S_MAPTT = "maptt", S_FAV = "fav", S_DETAIL = "detail", S_SETPG = "setpg";
-    public static final String K_OVL = "ovl_on", K_RIDESNAP = "ride_snap", K_PFL = "pf_live", K_SAM = "dev_sam", K_SAMW = "dev_samw";
+    public static final String K_OVL = "ovl_on", K_RIDESNAP = "ride_snap", K_GPSASK = "gps_asked", K_PFL = "pf_live", K_SAM = "dev_sam", K_SAMW = "dev_samw";
 
     /** 탭이 보여 줄 화면 칸들(위에서 아래로). 첫 칸이 머리(높이는 그린 내용만큼), 마지막 칸이 본문(남은 높이). 한 칸이면 본문만. */
     public static String[] slotsOf(Store st, String tab) {
@@ -504,6 +504,28 @@ public final class ShellCore {
     public static String pendingScreen(String tab) {
         return "{\"ok\":true,\"v\":1,\"screen\":\"pending\",\"cover\":\"tab\",\"head\":[],\"body\":[{\"t\":\"text\",\"s\":\"이 화면은 아직 네이티브로 옮기는 중이에요.\\n(" + esc(tab) + ")\","
             + "\"size\":14,\"color\":\"sub\",\"lh\":1.5,\"align\":\"center\",\"pad\":[24,80,24,0]}]}";
+    }
+
+    /** 화면을 못 받았을 때(서버 응답 없음) 빈 화면 대신 보이는 안내와 [다시 시도] — 행동 이름은 RETRY_ACT. */
+    public static final String RETRY_ACT = "gdm_retry";
+    public static String errorScreen() {
+        return "{\"ok\":true,\"v\":1,\"screen\":\"error\",\"head\":[],\"body\":["
+            + "{\"t\":\"text\",\"s\":\"화면을 받지 못했어요.\\n잠시 뒤 다시 시도해 주세요.\",\"size\":15,\"color\":\"sub\",\"lh\":1.5,\"align\":\"center\",\"pad\":[24,96,24,12]},"
+            + "{\"t\":\"button\",\"s\":\"다시 시도\",\"size\":14,\"h\":44,\"r\":12,\"bold\":true,\"fill\":\"gold\",\"tc\":\"white\",\"act\":{\"a\":\"call\",\"v\":\"" + RETRY_ACT + "\"}}]}";
+    }
+    /** 캐시 열쇠가 가리키는 칸에 올라와야 하는 엔진 화면 이름(다른 탭의 늦은 답이 이 칸을 덮지 못하게 가린다). */
+    public static String expectId(String key) {
+        String s = key.indexOf('|') > 0 ? key.substring(0, key.indexOf('|')) : key;
+        return S_MAPH.equals(s) || S_MAPB.equals(s) ? "map" : s;
+    }
+    /** 이 화면은 마지막으로 받은 글을 디스크에도 둔다(상태 없이 글만으로 그려지는 화면 — 소식은 눌림이 목록 상태에 묶여 있어 메모리에만 둔다). */
+    public static boolean diskCacheable(String screen) { return S_SHOP.equals(screen) || S_CCHIPS.equals(screen); }
+    /** 화면 하나를 가리키는 캐시 열쇠(같은 화면이라도 고른 분류·방식이 다르면 다른 글이다). */
+    public static String cacheKey(String screen, Store st) {
+        if (S_SHOP.equals(screen)) return screen + "|" + st.get(K_SHOP_CAT, "");
+        if (S_NEWS.equals(screen)) return screen + "|" + st.get(K_NEWS_CAT, "전체");
+        if (S_CCHIPS.equals(screen)) return screen + "|" + mode(st);
+        return screen;
     }
 
     // ═════════════ 색 ═════════════

@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-20s109";
+var ENGINE_VERSION = "route-v2-2026-10-20s110";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -11693,15 +11693,19 @@ async function shopFetchJson(u, ms) {
 }
 async function shopLoad() {
   var now = Date.now();
-  if (!SHOP_MEM.data || now - SHOP_MEM.ts > 60000) {
-    var j = await shopFetchJson(SHOP_API_URL + "/shop", 4000);
-    if (j && j.ok && j.data && j.data.CATS && j.data.CATS.length && j.data.WEEKDAY && j.data.WEEKDAY.length) { SHOP_MEM.data = j.data; SHOP_MEM.ver = String(j.version || ""); SHOP_MEM.ts = now; }
-  }
-  if (now - SHOP_MEM.cfgTs > 600000) {
-    SHOP_MEM.cfgTs = now;                                   // \uc2e4\ud328\ud574\ub3c4 10\ubd84\uc740 \ub2e4\uc2dc \ubb3b\uc9c0 \uc54a\ub294\ub2e4
-    var c = await shopFetchJson(SHOP_CFG_URL, 2500);
-    if (c && c.ok && c.v && typeof c.v === "object") SHOP_MEM.cfg = c.v;
-  }
+  var needShop = !SHOP_MEM.data || now - SHOP_MEM.ts > 60000, needCfg = now - SHOP_MEM.cfgTs > 600000;
+  if (needCfg) SHOP_MEM.cfgTs = now;                        // \uc2e4\ud328\ud574\ub3c4 10\ubd84\uc740 \ub2e4\uc2dc \ubb3b\uc9c0 \uc54a\ub294\ub2e4
+  // \uc0c1\ud488\uacfc \uc6b4\uc601 \uc124\uc815\uc744 \ud568\uaed8 \ubc1b\ub294\ub2e4(\ucc28\ub840\ub85c \ubc1b\ub358 \uc2dc\uac04 \uc808\uc57d). \uc0c1\ud488\uc740 \ucc98\uc74c \ud55c \ubc88 \uc2e4\ud328\ud558\uba74 \ud55c \ubc88 \ub354 \uc2dc\ub3c4\ud55c\ub2e4(\uc1fc\ud551 \uc11c\ubc84\uac00 \uae68\uc5b4\ub098\ub294 \ub370 \uac78\ub9ac\ub294 \uc2dc\uac04).
+  var pj = needShop ? (async function () {
+    var ok = function (j) { return j && j.ok && j.data && j.data.CATS && j.data.CATS.length && j.data.WEEKDAY && j.data.WEEKDAY.length; };
+    var j = await shopFetchJson(SHOP_API_URL + "/shop", SHOP_MEM.data ? 4000 : 7000);
+    if (!ok(j) && !SHOP_MEM.data) j = await shopFetchJson(SHOP_API_URL + "/shop", 6000);
+    return ok(j) ? j : null;
+  })() : Promise.resolve(null);
+  var pc = needCfg ? shopFetchJson(SHOP_CFG_URL, 2500) : Promise.resolve(null);
+  var got = await Promise.all([pj, pc]), j2 = got[0], c = got[1];
+  if (j2) { SHOP_MEM.data = j2.data; SHOP_MEM.ver = String(j2.version || ""); SHOP_MEM.ts = now; }
+  if (c && c.ok && c.v && typeof c.v === "object") SHOP_MEM.cfg = c.v;
   return SHOP_MEM;
 }
 async function handleScreenShop(request) {

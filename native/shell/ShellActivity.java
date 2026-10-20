@@ -46,6 +46,9 @@ public class ShellActivity extends Activity {
     private String[] slots = new String[0];            // 지금 탭의 화면 칸들(위 → 아래)
     private final int[] seq = new int[2];              // 칸마다 가장 새 요청 번호(늦게 온 옛 답은 버린다)
     private int seqTabs = 0;
+    // 화면 글 캐시: 탭을 오갈 때 마지막으로 받은 화면을 바로 올리고, 새 글은 뒤에서 받아 바꾼다(스크롤은 그대로)
+    private final java.util.HashMap<String, String> scrCache = new java.util.HashMap<String, String>();
+    private final java.util.HashMap<ScreenView, String> viewKey = new java.util.HashMap<ScreenView, String>();
     private volatile ShellCore.NewsRows lastNews = new ShellCore.NewsRows();
     private final HomeCore home = new HomeCore();       // 홈 탭 입력 상태(고른 출발/도착·후보·기준시각)
     private int seqHome = 0, seqCand = 0, seqBoard = 0;
@@ -132,6 +135,18 @@ public class ShellActivity extends Activity {
         WidgetCore.captureLaunch(getIntent());
         widgetLaunch();
         gwSync(false);
+        main.postDelayed(new Runnable() { @Override public void run() { prefetchTabs(); } }, 2500L);
+    }
+
+    /** 앱을 켜면 출발지를 내 위치로 자동으로 잡는다(이미 경로를 보고 있거나 출발지를 골랐으면 건드리지 않는다). 권한 안내는 처음 한 번만 묻는다. */
+    private void autoGps() {
+        if (home.hasRoute() || home.loc[HomeCore.START] != null || home.gps || home.text[HomeCore.START].length() > 0) return;
+        boolean perm = checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+        if (!perm) {
+            if ("1".equals(store.get(ShellCore.K_GPSASK, "0"))) return;          // 한 번 물었다 — 다시 조르지 않는다(위치 감지 단추로 직접)
+            store.put(ShellCore.K_GPSASK, "1");
+        }
+        startGps();
     }
 
     /** 위젯을 눌러 앱이 (다시) 열렸다. */
@@ -279,13 +294,17 @@ public class ShellActivity extends Activity {
         head.setVisibility(slots.length > 1 ? View.VISIBLE : View.GONE);
         loadTabs(tab);
         for (int i = 0; i < slots.length; i++) loadSlot(i, false);
+        if ("home".equals(tab)) main.post(new Runnable() { @Override public void run() { autoGps(); } });
     }
 
     private ScreenView viewOfSlot(int i) { return slots.length > 1 && i == 0 ? head : body; }
 
     private void loadTabs(final String tab) {
         final int my = ++seqTabs;
-        final String url = ShellCore.tabsUrl(), json = ShellCore.tabsBody(tab);
+        final String url = ShellCore.tabsUrl(), json = ShellCore.tabsBody(tab), ck = "tabs|" + tab;
+        viewKey.put(tabs, ck);
+        String c = cacheGet(ck, true);
+        if (c != null) showCached(tabs, c);
         new Thread(new Runnable() {
             @Override public void run() {
                 NetPost.Res r = NetPost.post(url, json, 8000);
@@ -295,14 +314,63 @@ public class ShellActivity extends Activity {
         }, "shell-tabs").start();
     }
 
+    // ── 화면 글 캐시 ──
+    private String cacheGet(String key, boolean disk) {
+        String c = scrCache.get(key);
+        if (c == null && disk) { c = diskGet(key); if (c != null) scrCache.put(key, c); }
+        return c;
+    }
+    private void cachePut(String key, String json) {
+        scrCache.put(key, json);
+        if (key.startsWith("tabs|") || ShellCore.diskCacheable(key.indexOf('|') > 0 ? key.substring(0, key.indexOf('|')) : key)) diskPut(key, json);
+    }
+    private File diskFile(String key) { return new File(new File(getCacheDir(), "scr"), Integer.toHexString(key.hashCode()) + ".json"); }
+    private String diskGet(String key) {
+        try {
+            File f = diskFile(key);
+            if (!f.isFile() || f.length() > 400000L || System.currentTimeMillis() - f.lastModified() > 6L * 3600000L) return null;
+            java.io.FileInputStream in = new java.io.FileInputStream(f);
+            try {
+                java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+                byte[] b = new byte[8192]; int n;
+                while ((n = in.read(b)) > 0) bo.write(b, 0, n);
+                String t = new String(bo.toByteArray(), "UTF-8");
+                return t.length() > 2 ? t : null;
+            } finally { in.close(); }
+        } catch (Throwable t) { return null; }
+    }
+    private void diskPut(final String key, final String json) {
+        new Thread(new Runnable() { @Override public void run() {
+            try {
+                File d = new File(getCacheDir(), "scr");
+                if (!d.isDirectory()) d.mkdirs();
+                FileOutputStream os = new FileOutputStream(diskFile(key));
+                try { os.write(json.getBytes("UTF-8")); } finally { os.close(); }
+            } catch (Throwable ignored) { }
+        } }, "shell-scrput").start();
+    }
+    /** 캐시 글을 조용히 올린다(검증 통과한 것만; 못 읽으면 버린다). */
+    private boolean showCached(ScreenView v, String json) {
+        try { v.setScreen(ScreenCore.load(json), false); return true; } catch (Exception e) { return false; }
+    }
+
     /** 칸 i 의 화면을 받아 올린다. 원자료가 있는 화면은 먼저 원자료를 받는다. */
-    private void loadSlot(final int i, final boolean keep) {
+    private void loadSlot(final int i, final boolean keep0) {
         if (i < 0 || i >= slots.length) return;
         final String screen = slots[i];
         final int si = slots.length > 1 ? i : 1;                // seq 번호: 머리 0 · 본문 1
         final int my = ++seq[si];
         final ScreenView v = viewOfSlot(i);
-        if (ShellCore.S_PENDING.equals(screen)) { present(v, ShellCore.pendingScreen(ShellCore.currentTab(store)), false); return; }
+        boolean keepX = keep0;
+        if (ShellCore.S_PENDING.equals(screen)) { viewKey.remove(v); present(v, ShellCore.pendingScreen(ShellCore.currentTab(store)), false); return; }
+        final String ck = ShellCore.cacheKey(screen, store);
+        viewKey.put(v, ck);
+        if (!keep0) {
+            String c = cacheGet(ck, ShellCore.diskCacheable(screen));
+            if (c != null && showCached(v, c)) { keepX = true; if (ShellCore.S_MAPB.equals(screen)) syncMapView(); }
+            else v.clearScreen();                                 // 옛 탭 화면이 남아 보이지 않게
+        }
+        final boolean keep = keepX;
         if (ShellCore.S_HOME.equals(screen)) { loadHome(v, keep); return; }
         if (ShellCore.S_BOARD.equals(screen)) { loadBoard(v, keep, true); return; }
         if (ShellCore.S_CHAT.equals(screen)) { loadChat(v, keep, true); return; }
@@ -311,27 +379,66 @@ public class ShellActivity extends Activity {
         if (ShellCore.S_MAPB.equals(screen)) { loadMapBody(v, keep); return; }
         new Thread(new Runnable() {
             @Override public void run() {
-                String[] urls = ShellCore.feedUrls(screen), feeds = new String[urls.length];
-                for (int k = 0; k < urls.length; k++) {
-                    NetPost.Res fr = NetPost.get(urls[k], 8000);
-                    feeds[k] = fr.status == 200 ? fr.body : "";
-                }
-                if (ShellCore.S_NEWS.equals(screen)) lastNews = ShellCore.NewsRows.from(feeds);
-                store.put(ShellCore.K_DAY, RulesCore.day(System.currentTimeMillis()));
-                ShellCore.Req rq = ShellCore.request(screen, store, feeds);
-                NetPost.Res r = rq == null ? null : ("GET".equals(rq.method) ? NetPost.get(rq.url, 10000) : NetPost.post(rq.url, rq.body, 10000));
-                final String txt = (r != null && r.status == 200) ? r.body : "";
+                final String txt = fetchGeneric(screen);
                 main.post(new Runnable() { @Override public void run() { if (my == seq[si]) present(v, txt, keep); } });
             }
         }, "shell-slot").start();
     }
 
+    /** 상태 없이 엔진에서 한 번에 받는 화면(쇼핑·소식·칩 줄·설정)의 글. 못 받으면 "". */
+    private String fetchGeneric(String screen) {
+        String[] urls = ShellCore.feedUrls(screen), feeds = new String[urls.length];
+        for (int k = 0; k < urls.length; k++) {
+            NetPost.Res fr = NetPost.get(urls[k], 8000);
+            feeds[k] = fr.status == 200 ? fr.body : "";
+        }
+        if (ShellCore.S_NEWS.equals(screen)) lastNews = ShellCore.NewsRows.from(feeds);
+        store.put(ShellCore.K_DAY, RulesCore.day(System.currentTimeMillis()));
+        ShellCore.Req rq = ShellCore.request(screen, store, feeds);
+        int ms = ShellCore.S_SHOP.equals(screen) ? 16000 : 10000;       // 쇼핑 서버가 처음엔 느리다(엔진이 한 번 더 시도한다)
+        NetPost.Res r = rq == null ? null : ("GET".equals(rq.method) ? NetPost.get(rq.url, ms) : NetPost.post(rq.url, rq.body, ms));
+        return (r != null && r.status == 200 && r.body != null) ? r.body : "";
+    }
+
+    /** 앱을 켠 뒤 다른 탭의 화면(칩 줄·쇼핑·소식)과 탭 막대를 미리 받아 둔다(탭을 처음 열 때 기다리지 않게). */
+    private void prefetchTabs() {
+        final String cur = ShellCore.currentTab(store);
+        new Thread(new Runnable() {
+            @Override public void run() {
+                for (final String t : ShellCore.TABS) {
+                    if (t.equals(cur)) continue;
+                    try {
+                        NetPost.Res r = NetPost.post(ShellCore.tabsUrl(), ShellCore.tabsBody(t), 8000);
+                        if (r.status == 200 && r.body != null && r.body.length() > 2) cachePutAsync("tabs|" + t, r.body);
+                        for (String sc : ShellCore.slotsOf(store, t)) {
+                            if (!ShellCore.diskCacheable(sc)) continue;
+                            String txt = fetchGeneric(sc);
+                            if (txt.length() > 2) cachePutAsync(ShellCore.cacheKey(sc, store), txt);
+                        }
+                    } catch (Throwable ignored) { }
+                }
+            }
+        }, "shell-prefetch").start();
+    }
+    private void cachePutAsync(final String key, final String json) {
+        main.post(new Runnable() { @Override public void run() { cachePut(key, json); } });
+    }
+
     /** 받은 글을 검증해 올린다. 못 읽으면 지금 화면을 그대로 두고 알린다. */
     private void present(ScreenView v, String json, boolean keep) {
-        if (json == null || json.length() == 0) { toast("화면을 받지 못했어요"); return; }
+        if (json == null || json.length() == 0) {
+            String ck = viewKey.get(v);
+            if (ck != null && v != sheetView && v.itemCount() == 0) {          // 빈 칸이면 안내와 [다시 시도]
+                try { v.setScreen(ScreenCore.load(ShellCore.errorScreen()), false); fadeIn(v); return; } catch (Exception ignored) { }
+            }
+            toast("화면을 받지 못했어요"); return;
+        }
         try {
             ScreenCore.Screen sc = ScreenCore.load(json);
+            String ck = viewKey.get(v);
+            if (ck != null && v != sheetView && !ShellCore.expectId(ck).equals(sc.id)) return;     // 다른 탭 화면의 늦은 답
             v.setScreen(sc, keep);
+            if (ck != null && v != sheetView) cachePut(ck, json);
             if (!keep && v != sheetView) fadeIn(v);
         } catch (Exception e) {
             toast("화면이 올바르지 않아요: " + String.valueOf(e.getMessage()));
@@ -397,6 +504,7 @@ public class ShellActivity extends Activity {
         }
 
         private void handle(ScreenCore.Act a, boolean on) {
+            if ("call".equals(a.a) && ShellCore.RETRY_ACT.equals(a.v)) { showTab(ShellCore.currentTab(store)); return; }
             ShellCore.Effect e;
             if (which == 2) e = ShellCore.routeTabs(store, a.a, a.v);
             else if (ShellCore.S_CHAT.equals(screenName())) {
@@ -1143,29 +1251,34 @@ public class ShellActivity extends Activity {
         final String hBody = hKey.equals(hcKey) ? "" : hc.request(ShellCore.CAP, ShellCore.theme(store), homeEnv(), home.resultFacts(homeEnv(), ShellCore.theme(store)), chat.recentTalksJson(8));
         new Thread(new Runnable() {
             @Override public void run() {
+                // 경로 결과 · 홈 카드는 홈 화면 응답을 기다리지 않고 함께 받는다(셋이 차례로 걸리던 시간을 가장 느린 하나로)
+                final String[] rsBox = { resKey.equals(resCacheKey) ? resCacheJson : "" }, cjBox = { hBody.length() == 0 ? hcJson : "" };
+                Thread tr = null, tc = null;
+                if (hasRes && rsBox[0].length() == 0) {
+                    tr = new Thread(new Runnable() { @Override public void run() {
+                        NetPost.Res rr = NetPost.post(ShellCore.BASE + "/screen/result", resBody, 15000);
+                        rsBox[0] = rr.status == 200 && rr.body != null ? rr.body : "";
+                        if (rsBox[0].length() > 0) { resCacheKey = resKey; resCacheJson = rsBox[0]; }
+                    } }, "shell-home-res");
+                    tr.start();
+                }
+                if (hBody.length() > 0) {
+                    tc = new Thread(new Runnable() { @Override public void run() {
+                        NetPost.Res cr = NetPost.post(ShellCore.BASE + "/screen/hcards", hBody, 15000);
+                        cjBox[0] = cr.status == 200 && cr.body != null ? cr.body : "";
+                        if (cjBox[0].length() > 0) { hcKey = hKey; hcJson = cjBox[0]; }
+                    } }, "shell-home-cards");
+                    tc.start();
+                }
                 NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/home", json, 8000);
                 String txt = r.status == 200 ? r.body : "";
+                try { if (tr != null) tr.join(16000); if (tc != null) tc.join(16000); } catch (InterruptedException ignored) { }
                 if (hasRes && txt.length() > 0) {
-                    String rs;
-                    if (resKey.equals(resCacheKey)) rs = resCacheJson;
-                    else {
-                        NetPost.Res rr = NetPost.post(ShellCore.BASE + "/screen/result", resBody, 15000);
-                        rs = rr.status == 200 ? rr.body : "";
-                        if (rs.length() > 0) { resCacheKey = resKey; resCacheJson = rs; }
-                    }
+                    String rs = rsBox[0];
                     if (rs.length() > 0) { final String rsf = rs; txt = ShellCore.mergeBodies(txt, rs); main.post(new Runnable() { @Override public void run() { home.onResult(rsf); chat.routeSec = home.resSec; maybeFetchNotes(); } }); }
                     else main.post(new Runnable() { @Override public void run() { toast("경로 결과를 그리지 못했어요"); } });
                 }
-                if (txt.length() > 0) {                                                    // 홈 카드 3장(AI 승무원 · 혼잡도 · 실시간 대화)
-                    String cj;
-                    if (hBody.length() == 0) cj = hcJson;
-                    else {
-                        NetPost.Res cr = NetPost.post(ShellCore.BASE + "/screen/hcards", hBody, 15000);
-                        cj = cr.status == 200 && cr.body != null ? cr.body : "";
-                        if (cj.length() > 0) { hcKey = hKey; hcJson = cj; }
-                    }
-                    if (cj.length() > 0) txt = ShellCore.mergeBodies(txt, cj);
-                }
+                if (txt.length() > 0 && cjBox[0].length() > 0) txt = ShellCore.mergeBodies(txt, cjBox[0]);        // 홈 카드 3장(AI 승무원 · 혼잡도 · 실시간 대화)
                 final String fin = txt;
                 main.post(new Runnable() { @Override public void run() {
                     if (my != seqHome) return;

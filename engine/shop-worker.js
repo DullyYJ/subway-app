@@ -13,15 +13,19 @@ async function shopFetchJson(u, ms) {
 }
 async function shopLoad() {
   var now = Date.now();
-  if (!SHOP_MEM.data || now - SHOP_MEM.ts > 60000) {
-    var j = await shopFetchJson(SHOP_API_URL + "/shop", 4000);
-    if (j && j.ok && j.data && j.data.CATS && j.data.CATS.length && j.data.WEEKDAY && j.data.WEEKDAY.length) { SHOP_MEM.data = j.data; SHOP_MEM.ver = String(j.version || ""); SHOP_MEM.ts = now; }
-  }
-  if (now - SHOP_MEM.cfgTs > 600000) {
-    SHOP_MEM.cfgTs = now;                                   // 실패해도 10분은 다시 묻지 않는다
-    var c = await shopFetchJson(SHOP_CFG_URL, 2500);
-    if (c && c.ok && c.v && typeof c.v === "object") SHOP_MEM.cfg = c.v;
-  }
+  var needShop = !SHOP_MEM.data || now - SHOP_MEM.ts > 60000, needCfg = now - SHOP_MEM.cfgTs > 600000;
+  if (needCfg) SHOP_MEM.cfgTs = now;                        // 실패해도 10분은 다시 묻지 않는다
+  // 상품과 운영 설정을 함께 받는다(차례로 받던 시간 절약). 상품은 처음 한 번 실패하면 한 번 더 시도한다(쇼핑 서버가 깨어나는 데 걸리는 시간).
+  var pj = needShop ? (async function () {
+    var ok = function (j) { return j && j.ok && j.data && j.data.CATS && j.data.CATS.length && j.data.WEEKDAY && j.data.WEEKDAY.length; };
+    var j = await shopFetchJson(SHOP_API_URL + "/shop", SHOP_MEM.data ? 4000 : 7000);
+    if (!ok(j) && !SHOP_MEM.data) j = await shopFetchJson(SHOP_API_URL + "/shop", 6000);
+    return ok(j) ? j : null;
+  })() : Promise.resolve(null);
+  var pc = needCfg ? shopFetchJson(SHOP_CFG_URL, 2500) : Promise.resolve(null);
+  var got = await Promise.all([pj, pc]), j2 = got[0], c = got[1];
+  if (j2) { SHOP_MEM.data = j2.data; SHOP_MEM.ver = String(j2.version || ""); SHOP_MEM.ts = now; }
+  if (c && c.ok && c.v && typeof c.v === "object") SHOP_MEM.cfg = c.v;
   return SHOP_MEM;
 }
 async function handleScreenShop(request) {

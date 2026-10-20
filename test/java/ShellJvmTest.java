@@ -414,6 +414,13 @@ public class ShellJvmTest {
         env.nowMs = 99L;
         String rreq = r2.resultRequest(env, 18, "dark", 0);
         ok(rreq.equals("{\"cap\":18,\"r\":{\"data\":{\"result\":{\"path\":[]}},\"tab\":\"fast\",\"a\":\"부평\",\"b\":\"두정\",\"bt\":null,\"rb\":1234,\"now\":99,\"tz\":540,\"th\":\"dark\",\"fav\":1}}"), "결과 요청 본문: " + rreq);
+        // 화면 못 받음 안내 · 캐시 열쇠
+        try {
+            ScreenCore.Screen es0 = ScreenCore.load(ShellCore.errorScreen());
+            ok("error".equals(es0.id) && es0.body.size() == 2, "오류 안내 화면은 검증을 통과한다");
+        } catch (Exception ex0) { ok(false, "오류 안내 화면: " + ex0); }
+        ok("map".equals(ShellCore.expectId("maph")) && "map".equals(ShellCore.expectId("mapb")) && "shop".equals(ShellCore.expectId("shop|추천")) && "tabs".equals(ShellCore.expectId("tabs|home")) && "home".equals(ShellCore.expectId("home")), "칸이 기대하는 화면 이름");
+        ok(ShellCore.diskCacheable("shop") && ShellCore.diskCacheable("cchips") && !ShellCore.diskCacheable("home") && !ShellCore.diskCacheable("news") && !ShellCore.diskCacheable("mapb"), "디스크에 두는 화면은 상태 없는 것만");
         // 앱이 죽었다 살아난 뒤 결과 카드 복원
         HomeCore snapSrc = new HomeCore();
         snapSrc.setRoute("{\"result\":{\"path\":[],\"q\":\"a\\\"b\"}}", "부평", "두정", 777L, 55L);

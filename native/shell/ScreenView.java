@@ -157,6 +157,8 @@ public class ScreenView extends View {
         syncMk(keepScroll);
         if (stick && lay != null) { scrollY = lay.bodyMaxScroll(bodyViewH()); invalidate(); }
     }
+    /** 그린 화면을 비운다(다른 탭의 옛 화면이 새 탭 자리에 남아 보이지 않게). */
+    public void clearScreen() { screen = null; lay = null; scrollY = 0f; scrollX = 0f; openKey = null; ctrDone = null; pressed = null; mode = 0; mkHas = false; invalidate(); syncLater(); }
     /** 맨 아래에서 80dp 안에 있으면 참(채팅 자동 따라가기 판단). 아직 배치 전이면 참. */
     private boolean nearBottom() {
         if (lay == null) return true;
