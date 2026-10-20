@@ -460,8 +460,10 @@ function rheadTrkPoints(f) {
         var nm0 = rheadTrkNm(st.n);
         for (var q = 0; q < sg.tc.length; q++) { if (used[q]) continue; if (rheadTrkNm(sg.tc[q].at) === nm0) { used[q] = 1; tcg = sg.tc[q]; break; } }
       }
+      var absMs = sg.ty === 4 ? null : (isF ? segMs[si] : segMs[si] + (off[ni] || 0) * 1000);
       pts.push({ type: 'stn', nm: rheadTrkNm(st.n), col: col, lC: lC, lineNm: sg.nm, lineLabel: rheadTrkLabel(sg.ty, sg.nm), xfIn: (ni === 0 && sg.xfIn) ? sg.xfIn : null, trainChg: tcg,
-        arrT: arr, isF: isF, isL: isL, ni: ni, ld: sg.ty === 4, ldRole: sg.ty === 4 ? (ni === 0 ? 'dep' : 'arr') : null, ldDur: ldLbl });
+        arrT: arr, isF: isF, isL: isL, ni: ni, ld: sg.ty === 4, ldRole: sg.ty === 4 ? (ni === 0 ? 'dep' : 'arr') : null, ldDur: ldLbl,
+        sty: sg.ty, la: st.la, lo: st.lo, ms: absMs });
       gIdx++;
     });
   });
@@ -532,22 +534,49 @@ function rheadTrkMark(lv, cells) {
   }
   return mk;
 }
-function rheadTrackScreen(inp) {
+// 타임라인 사실 정리(화면과 탑승 시작이 같은 것을 쓴다). 못 쓰면 { error }.
+function rheadTrkPrep(inp) {
   var f = (inp && typeof inp === 'object') ? inp : {};
   var secs = rheadList(f.secs, 12).map(rheadTrkSec);
-  if (!secs.length) return { ok: false, error: 'empty' };
-  if (!secs.some(rheadTrkHasEng)) return { ok: false, error: 'notimes' };      // 엔진이 구간 시각을 안 준 옛 응답은 그리지 않는다(웹이 그린다)
+  if (!secs.length) return { error: 'empty' };
+  if (!secs.some(rheadTrkHasEng)) return { error: 'notimes' };      // 엔진이 구간 시각을 안 준 옛 응답은 그리지 않는다(웹이 그린다)
   var now = rheadTrkNum(f.now);
-  if (now == null || now <= 0) return { ok: false, error: 'now' };
+  if (now == null || now <= 0) return { error: 'now' };
   var th = f.th === 'pastel' ? 'pastel' : 'dark';
   var facts = {
     secs: secs, th: th, tz: rheadInt(f.tz, -840, 840), now: now, bt: rheadTrkNum(f.bt), rb: rheadTrkNum(f.rb),
     sw: rheadList(f.sw, 6), xf: Array.isArray(f.xf) ? f.xf.slice(0, 12).filter(function (t) { return t && typeof t === 'object'; }).map(function (t) { return { k: t.k === 'train' ? 'train' : 'x', xi: rheadTrkNum(t.xi), si: rheadTrkNum(t.si) }; }) : null
   };
+  return { facts: facts, f: f };
+}
+function rheadTrackScreen(inp) {
+  var f = (inp && typeof inp === 'object') ? inp : {};
+  var pp = rheadTrkPrep(inp);
+  if (pp.error) return { ok: false, error: pp.error };
+  var facts = pp.facts, th = facts.th;
   var pts = rheadTrkPoints(facts);
   if (!pts.length) return { ok: false, error: 'nopoints' };
   var lv = (f.lv && typeof f.lv === 'object') ? f.lv : null;
   var ea = (lv && Array.isArray(lv.ea)) ? lv.ea.slice(0, 60).map(function (v) { return typeof v === 'string' ? v.slice(0, 8) : ''; }) : null;
+  if (lv && (lv.pn || lv.na)) {          // 탑승 추적(대기 모드 엔진)은 노드 번호(0=출발지, 1.. = 지나는 역·정류장)로 말한다 → 칸 번호로 바꾼다
+    var nodeTi = [-1], tcount = 0;
+    pts.forEach(function (pt, pi) {
+      var endp = pt.type !== 'walk' || pi === 0 || pi === pts.length - 1;
+      if (pt.type === 'stn') nodeTi.push(tcount);
+      if (endp) tcount++;
+    });
+    var toTi = function (n) { n = rheadTrkNum(n); return (n != null && n >= 1 && n < nodeTi.length) ? nodeTi[Math.floor(n)] : null; };
+    lv = { p: lv.p || null, w: lv.w || null, ea: ea };
+    if (f.lv.pn && typeof f.lv.pn === 'object') {
+      var pf = toTi(f.lv.pn.f), pt2 = toTi(f.lv.pn.t);
+      lv.p = pf == null ? null : { f: pf, t: pt2 == null ? pf : pt2, r: rheadTrkNum(f.lv.pn.r) || 0 };
+    }
+    if (Array.isArray(f.lv.na)) {
+      ea = new Array(tcount);
+      for (var q = 0; q < tcount; q++) ea[q] = '';
+      for (var nq = 1; nq < nodeTi.length; nq++) { var v = f.lv.na[nq]; if (typeof v === 'string') ea[nodeTi[nq]] = v.slice(0, 8); }
+    }
+  }
   var cells = rheadTrkCells(pts, th, ea), w = 0;
   cells.forEach(function (c) { w += c.w; });
   var node = { t: 'trk', pad: [14, 6, 14, 6], cells: cells };
@@ -570,4 +599,4 @@ function rheadScreen(inp, factsIn) {
   return out;
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { rheadTrkColor: rheadTrkColor, rheadScreen: rheadScreen, rheadTrackScreen: rheadTrackScreen, rheadFacts: rheadFacts, rheadXferLine: rheadXferLine, rheadDoorLines: rheadDoorLines };
+if (typeof module !== 'undefined' && module.exports) module.exports = { rheadTrkPrep: rheadTrkPrep, rheadTrkPoints: rheadTrkPoints, rheadTrkColor: rheadTrkColor, rheadScreen: rheadScreen, rheadTrackScreen: rheadTrackScreen, rheadFacts: rheadFacts, rheadXferLine: rheadXferLine, rheadDoorLines: rheadDoorLines };

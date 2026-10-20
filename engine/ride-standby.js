@@ -24,6 +24,7 @@
 //         done:bool                 안내를 끝내도 된다(목적지 도착 알림 뒤 3분),
 //         overlay:null|{…}          네이티브 오버레이에 그릴 값(OverlayPlugin.update 와 같은 모양 — state.ovl 그림 틀이 있을 때만),
 //         view:{text,line1,line2,curIdx,at}   앱을 다시 열었을 때 보여 줄 마지막 상태,
+//         pos:null|{from,to,ratio,moving}  지금 위치(노드 번호 from→to, 구간 비율) — 결과 카드의 내 위치 마커용, arr:[HH:MM…] 노드별 도착 시각,
 //         zero:{…}                  ride-track 영점 결과(진단용), notes:[…] }
 //
 // 이 파일은 ride-track.js · ride-eta.js 의 rideTrack · rideEta 를 쓴다(Worker 에서는 같은 범위의 함수, Node 시험에서는 require).
@@ -302,7 +303,7 @@ function rideStandby(req) {
   try { overlay = rsOverlay(st, r, curIdx, al.curPos, now, dest, cfg.destName || (dest && dest.name) || '', moving, done); } catch (eOv) { notes.push('오버레이 계산 실패: ' + (eOv && eOv.message)); }
   if (offActive && overlay && overlay.active) { overlay.alert = 0; overlay.pre = false; overlay.banner = '경로를 벗어났어요 — 앱을 열면 다시 찾아 드려요'; }
   var view = { text: text, line1: overlay && overlay.line1 || '', line2: overlay && overlay.line2 || '', curIdx: curIdx, at: now };
-  return { v: 1, state: st, ongoing: { title: O.ongoingTitle, text: text }, alert: al.alert, done: done, curIdx: curIdx, overlay: overlay, view: view, zero: zero, nextMs: done ? O.stepMs : nextMs, motion: tk && tk.motion ? tk.motion : null, notes: notes };
+  return { v: 1, state: st, ongoing: { title: O.ongoingTitle, text: text }, alert: al.alert, done: done, curIdx: curIdx, overlay: overlay, view: view, pos: r.pos ? { from: r.pos.from, to: r.pos.to, ratio: r.pos.ratio, moving: !!r.pos.moving } : null, arr: r.arr || null, zero: zero, nextMs: done ? O.stepMs : nextMs, motion: tk && tk.motion ? tk.motion : null, notes: notes };
 }
 
 function handleRideStandby(request) {

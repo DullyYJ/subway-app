@@ -1,0 +1,209 @@
+package com.dullyyj.subway;
+
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.app.Service;
+import android.content.Context;
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.content.pm.ServiceInfo;
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
+import android.os.Build;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.HandlerThread;
+import android.os.IBinder;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
+
+/**
+ * 탑승 추적 포그라운드 서비스 (2026-10-20 s94) — 앱 화면이 가려지거나 닫혀도 안내가 이어진다.
+ *
+ * ★ 원칙(YJ): "모든 계산은 엔진이 한다. 앱은 그림만 그린다." 이 서비스는 위치를 모아 5초마다 엔진(/ride-standby)에 보내고,
+ *   돌려받은 상주 알림 글 · 울릴 알림 · 끝내기를 그리기만 한다. state 는 해석하지 않는다(RideCore 가 그대로 들고 있는다).
+ * 시작은 ShellActivity 가 RideCore 를 만들어 SharedPreferences 에 저장한 뒤 start() 로 부른다. START_STICKY 로 되살아나면 저장본(30분 안)으로 이어간다.
+ * foregroundServiceType=location (Android 14). 위치 권한은 앱이 화면에 있을 때 이미 받아 둔다.
+ */
+public class RideService extends Service {
+    static final String CH_RIDE = "gdm_ride", CH_ALERT = "gdm_ride_alert";
+    static final int NOTI_ID = 7101, ALERT_ID = 7102;
+    static final String ACT_START = "gdm.ride.START", ACT_STOP = "gdm.ride.STOP";
+    static final String PREFS = "gdm_ride", KEY_SAVED = "saved";
+
+    /** 서비스가 돌고 있나, 그리고 앱 화면이 읽는 가장 새 값(같은 프로세스). */
+    static volatile boolean running = false;
+    static volatile int liveRev = 0;
+    static volatile String liveRide = "", liveLv = "";
+
+    private HandlerThread ht;
+    private Handler h;
+    private RideCore core;
+    private LocationManager lm;
+    private boolean listening = false, stepping = false;
+    private volatile boolean stopped = false;
+
+    private final LocationListener ll = new LocationListener() {
+        @Override public void onLocationChanged(Location l) { if (core != null && l != null) core.addFix(l.getTime() > 0 ? l.getTime() : System.currentTimeMillis(), l.getLatitude(), l.getLongitude(), l.hasAccuracy() ? l.getAccuracy() : 0f); }
+        @Override public void onStatusChanged(String p, int s, Bundle e) { }
+        @Override public void onProviderEnabled(String p) { }
+        @Override public void onProviderDisabled(String p) { }
+    };
+
+    // ── 밖에서 부르는 곳 ──
+    static void save(Context c, RideCore core) {
+        try { c.getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(KEY_SAVED, core.save(System.currentTimeMillis())).apply(); } catch (Throwable ignored) { }
+    }
+    static void clearSaved(Context c) { try { c.getSharedPreferences(PREFS, MODE_PRIVATE).edit().remove(KEY_SAVED).apply(); } catch (Throwable ignored) { } }
+    static void start(Context c) {
+        Intent i = new Intent(c, RideService.class).setAction(ACT_START);
+        if (Build.VERSION.SDK_INT >= 26) c.startForegroundService(i); else c.startService(i);
+    }
+    static void stop(Context c) {
+        clearSaved(c);
+        running = false; liveRide = ""; liveLv = ""; liveRev++;
+        c.stopService(new Intent(c, RideService.class));
+    }
+
+    @Override public IBinder onBind(Intent intent) { return null; }
+
+    @Override public int onStartCommand(Intent intent, int flags, int startId) {
+        String act = intent == null ? null : intent.getAction();
+        if (ACT_STOP.equals(act)) { finishRide(false); return START_NOT_STICKY; }
+        RideCore restored = RideCore.restore(getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_SAVED, ""), System.currentTimeMillis());
+        if (restored == null) {                                   // 저장본이 없거나 너무 낡았다 — 더 이어갈 안내가 없다
+            if (Build.VERSION.SDK_INT >= 26) { ensureChannels(); startFg(baseNotification("길동무", "")); }
+            stopSelf(); return START_NOT_STICKY;
+        }
+        if (core == null) core = restored;
+        ensureChannels();
+        startFg(ongoing());
+        if (!running) {
+            running = true; stopped = false;
+            ht = new HandlerThread("gdm-ride"); ht.start();
+            h = new Handler(ht.getLooper());
+            listen();
+            publish();
+            h.postDelayed(stepRunnable, 1500);
+        }
+        return START_STICKY;
+    }
+
+    @Override public void onDestroy() {
+        stopped = true; running = false;
+        try { if (lm != null && listening) lm.removeUpdates(ll); } catch (Throwable ignored) { }
+        listening = false;
+        if (h != null) h.removeCallbacksAndMessages(null);
+        if (ht != null) ht.quitSafely();
+        super.onDestroy();
+    }
+
+    // ── 위치 ──
+    private void listen() {
+        try {
+            lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+            if (checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) != android.content.pm.PackageManager.PERMISSION_GRANTED) return;
+            android.os.Looper lp = ht.getLooper();
+            if (lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, ll, lp);
+            if (lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 3000L, 0f, ll, lp);
+            listening = true;
+        } catch (Throwable ignored) { }
+    }
+
+    // ── 5초마다 엔진 ──
+    private final Runnable stepRunnable = new Runnable() {
+        @Override public void run() {
+            if (stopped || core == null) return;
+            if (stepping) { h.postDelayed(this, 1000); return; }
+            stepping = true;
+            long delay = RideCore.STEP_DEFAULT_MS;
+            try {
+                NetPost.Res r = NetPost.post(ShellCore.BASE + "/ride-standby", core.stepBody(System.currentTimeMillis()), 8000);
+                if (r.status == 200) {
+                    RideCore.Step s = core.onStep(r.body);
+                    if (s.ok) {
+                        save(RideService.this, core);
+                        if (s.alert) fireAlert(s);
+                        publish();
+                        updateOngoing();
+                        if (s.done) { stepping = false; finishRide(true); return; }
+                        delay = core.nextMs;
+                    }
+                }
+            } catch (Throwable ignored) { }
+            stepping = false;
+            if (!stopped) h.postDelayed(this, delay);
+        }
+    };
+
+    private void publish() {
+        liveRide = core.rideJson(); liveLv = core.lvJson(); liveRev++;
+        try { RideWidget.update(this, core.title, core.text); } catch (Throwable ignored) { }
+    }
+
+    private void finishRide(boolean arrived) {
+        stopped = true; running = false;
+        clearSaved(this);
+        liveRide = ""; liveLv = ""; liveRev++;
+        try { RideWidget.update(this, "길동무", arrived ? "안내가 끝났어요" : ""); } catch (Throwable ignored) { }
+        try { if (Build.VERSION.SDK_INT >= 24) stopForeground(STOP_FOREGROUND_REMOVE); else stopForeground(true); } catch (Throwable ignored) { }
+        stopSelf();
+    }
+
+    // ── 알림 ──
+    private void ensureChannels() {
+        if (Build.VERSION.SDK_INT < 26) return;
+        NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        NotificationChannel a = new NotificationChannel(CH_RIDE, "경로 안내", NotificationManager.IMPORTANCE_LOW);
+        a.setShowBadge(false);
+        nm.createNotificationChannel(a);
+        NotificationChannel b = new NotificationChannel(CH_ALERT, "하차 · 환승 알림", NotificationManager.IMPORTANCE_HIGH);
+        b.enableVibration(false);                                // 진동 무늬는 엔진이 정한 대로 직접 울린다
+        nm.createNotificationChannel(b);
+    }
+    private PendingIntent openIntent() {
+        Intent i = new Intent(this, ShellActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        return PendingIntent.getActivity(this, 0, i, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+    }
+    private Notification.Builder builder(String channel) {
+        return Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(this, channel) : new Notification.Builder(this);
+    }
+    private Notification baseNotification(String title, String text) {
+        Notification.Builder b = builder(CH_RIDE).setSmallIcon(android.R.drawable.ic_dialog_map).setContentTitle(title).setContentText(text).setOngoing(true).setContentIntent(openIntent());
+        return b.build();
+    }
+    private Notification ongoing() {
+        Intent stop = new Intent(this, RideService.class).setAction(ACT_STOP);
+        PendingIntent sp = PendingIntent.getService(this, 1, stop, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        Notification.Builder b = builder(CH_RIDE).setSmallIcon(android.R.drawable.ic_dialog_map).setContentTitle(core.title).setContentText(core.text.length() > 0 ? core.text : "위치를 확인하고 있어요")
+            .setOngoing(true).setOnlyAlertOnce(true).setContentIntent(openIntent());
+        if (Build.VERSION.SDK_INT >= 20) b.addAction(new Notification.Action.Builder(null, "안내 종료", sp).build());
+        if (Build.VERSION.SDK_INT < 26) b.setPriority(Notification.PRIORITY_LOW);
+        return b.build();
+    }
+    private void startFg(Notification n) {
+        try {
+            if (Build.VERSION.SDK_INT >= 29) startForeground(NOTI_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION);
+            else startForeground(NOTI_ID, n);
+        } catch (Throwable t) { /* 시작이 막히면 알림 없이도 이어간다 */ }
+    }
+    private void updateOngoing() {
+        try { ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE)).notify(NOTI_ID, ongoing()); } catch (Throwable ignored) { }
+    }
+    private void fireAlert(RideCore.Step s) {
+        try {
+            Notification.Builder b = builder(CH_ALERT).setSmallIcon(android.R.drawable.ic_dialog_map).setContentTitle(s.title).setContentText(s.body).setAutoCancel(true).setContentIntent(openIntent());
+            if (Build.VERSION.SDK_INT < 26) b.setPriority(Notification.PRIORITY_HIGH);
+            ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE)).notify(ALERT_ID, b.build());
+        } catch (Throwable ignored) { }
+        try {
+            Vibrator v = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+            if (v != null && v.hasVibrator()) {
+                if (Build.VERSION.SDK_INT >= 26) v.vibrate(VibrationEffect.createWaveform(s.vib, -1)); else v.vibrate(s.vib, -1);
+            }
+        } catch (Throwable ignored) { }
+    }
+}

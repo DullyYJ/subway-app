@@ -11,6 +11,7 @@ import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -1021,6 +1022,7 @@ public class ShellActivity extends Activity {
             @Override public void run() {
                 if (!homeVisible()) { homeTickOn = false; return; }
                 pollHomeTalks();
+                pollRide();
                 long now = System.currentTimeMillis();
                 if (hc.aiNextAt > 0 && now >= hc.aiNextAt) { hc.refreshAi(now); reloadHome(); }
                 main.postDelayed(this, 5000);
@@ -1078,6 +1080,7 @@ public class ShellActivity extends Activity {
             case HomeCore.R_LD: ldReselect(); break;
             case HomeCore.R_ROOM: goRoom(); break;
             case HomeCore.R_DETAIL: openDetailSheet(); break;
+            case HomeCore.R_STOP: stopRide(); break;
             case HomeCore.R_RENDER: case HomeCore.R_FIELDS:
                 if (r == HomeCore.R_FIELDS) setHomeFields();
                 reloadHome(); break;
@@ -1138,6 +1141,12 @@ public class ShellActivity extends Activity {
             LocCb cb = pendingLoc; pendingLoc = null;
             if (cb == null) return;
             if (g) locateOnce(code, cb); else cb.fail(true);
+            return;
+        }
+        if (code == REQ_RIDE) {
+            boolean g = false;
+            for (int i = 0; i < perms.length && i < res.length; i++) if (android.Manifest.permission.ACCESS_FINE_LOCATION.equals(perms[i]) && res[i] == PackageManager.PERMISSION_GRANTED) g = true;
+            if (g) startRide(); else toast("위치 권한이 있어야 탑승 안내를 할 수 있어요");
             return;
         }
         if (code != REQ_LOC) return;
@@ -1265,6 +1274,56 @@ public class ShellActivity extends Activity {
         showTab("community");
     }
 
+    // ───────────── 탑승 추적 ─────────────
+    private static final int REQ_RIDE = 74;
+    private final RideCore ride = new RideCore();
+    private long rideGraceUntil = 0L;
+    /** 경로 확정: 엔진이 대기 모드 state 를 만들면 포그라운드 서비스가 이어받는다. */
+    private void startRide() {
+        if (!home.hasRoute() || home.riding()) return;
+        if (checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            if (Build.VERSION.SDK_INT >= 33) requestPermissions(new String[] { android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION, android.Manifest.permission.POST_NOTIFICATIONS }, REQ_RIDE);
+            else requestPermissions(new String[] { android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION }, REQ_RIDE);
+            return;
+        }
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) requestPermissions(new String[] { android.Manifest.permission.POST_NOTIFICATIONS }, REQ_RIDE + 1);
+        final String body = RideCore.startBody(ShellCore.CAP, home.resultFacts(homeEnv(), ShellCore.theme(store)));
+        final int rid = home.routeId;
+        toast("탑승 안내를 준비하고 있어요");
+        new Thread(new Runnable() {
+            @Override public void run() {
+                NetPost.Res r = NetPost.post(ShellCore.BASE + "/ride/start", body, 12000);
+                final String txt = r.body == null ? "" : r.body;
+                main.post(new Runnable() { @Override public void run() {
+                    if (rid != home.routeId || !home.hasRoute()) return;                  // 그 사이 다른 경로를 찾았다
+                    String err = txt.length() == 0 ? "탑승 안내를 시작하지 못했어요" : ride.onStart(txt);
+                    if (err.length() > 0) { toast(err); return; }
+                    RideService.save(ShellActivity.this, ride);
+                    try { RideService.start(ShellActivity.this); } catch (Throwable t) { toast("탑승 안내를 켜지 못했어요"); return; }
+                    home.rideRouteId = rid;
+                    rideGraceUntil = System.currentTimeMillis() + 8000L;
+                    home.setRide(ride.rideJson(), ride.lvJson());
+                    closeSheet();
+                    toast("탑승 안내를 시작했어요");
+                    reloadHome();
+                } });
+            }
+        }, "shell-ride").start();
+    }
+    private void stopRide() {
+        RideService.stop(this);
+        rideGraceUntil = 0L;
+        home.setRide("", "");
+        reloadHome();
+        toast("탑승 안내를 끝냈어요");
+    }
+    /** 서비스가 엔진에게서 받은 상태(상주 글 · 내 위치)를 결과 카드에 옮긴다. */
+    private void pollRide() {
+        if (!home.riding()) return;
+        if (!RideService.running && System.currentTimeMillis() < rideGraceUntil) return;       // 서비스가 막 켜지는 중
+        if (home.setRide(RideService.liveRide, RideService.liveLv)) reloadHome();
+    }
+
     // ───────────── 세부경로 시트 ─────────────
     private void openDetailSheet() {
         closeSheet();
@@ -1298,6 +1357,8 @@ public class ShellActivity extends Activity {
         switch (home.actDetail(v)) {
             case HomeCore.D_CLOSE: closeSheet(); break;
             case HomeCore.D_RENDER: loadDetail(); break;
+            case HomeCore.D_CONFIRM: startRide(); break;
+            case HomeCore.D_STOP: stopRide(); closeSheet(); break;
             case HomeCore.D_KAKAO: openNav(home.navKakao); break;
             case HomeCore.D_NAVER: openNav(home.navNaver); break;
             default: break;

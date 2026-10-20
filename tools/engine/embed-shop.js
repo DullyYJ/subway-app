@@ -26,7 +26,8 @@ const SETS = [
   { name: 'POSFUSE', src: 'engine/posfusion.js', glue: 'engine/pf-worker.js', path: '/pos-fuse', fn: 'handlePosFuse', anchor: '  if (url.pathname === "/screen/pvl") return handleScreenPvl(request);\n' },
   { name: 'MAP', src: 'engine/map.js', glue: 'engine/map-worker.js', path: '/screen/map', fn: 'handleScreenMap', anchor: '  if (url.pathname === "/pos-fuse") return handlePosFuse(request);\n' },
   { name: 'FAV', src: 'engine/fav.js', glue: 'engine/fav-worker.js', path: '/screen/fav', fn: 'handleScreenFav', anchor: '  if (url.pathname === "/screen/map") return handleScreenMap(request);\n' },
-  { name: 'HCARDS', src: 'engine/hcards.js', glue: 'engine/hcards-worker.js', path: '/screen/hcards', fn: 'handleScreenHcards', anchor: '  if (url.pathname === "/screen/fav") return handleScreenFav(request);\n' }
+  { name: 'HCARDS', src: 'engine/hcards.js', glue: 'engine/hcards-worker.js', path: '/screen/hcards', fn: 'handleScreenHcards', anchor: '  if (url.pathname === "/screen/fav") return handleScreenFav(request);\n' },
+  { name: 'RIDESTART', src: 'engine/ride-start.js', glue: 'engine/ride-start-worker.js', path: '/ride/start', fn: 'handleRideStart', anchor: '  if (url.pathname === "/screen/hcards") return handleScreenHcards(request);\n' }
 ];
 let all = '';
 for (const S of SETS) {

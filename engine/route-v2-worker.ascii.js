@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-20s93";
+var ENGINE_VERSION = "route-v2-2026-10-20s94";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -9636,6 +9636,7 @@ function handleRideTrack(request) {
 //         done:bool                 \uc548\ub0b4\ub97c \ub05d\ub0b4\ub3c4 \ub41c\ub2e4(\ubaa9\uc801\uc9c0 \ub3c4\ucc29 \uc54c\ub9bc \ub4a4 3\ubd84),
 //         overlay:null|{\u2026}          \ub124\uc774\ud2f0\ube0c \uc624\ubc84\ub808\uc774\uc5d0 \uadf8\ub9b4 \uac12(OverlayPlugin.update \uc640 \uac19\uc740 \ubaa8\uc591 \u2014 state.ovl \uadf8\ub9bc \ud2c0\uc774 \uc788\uc744 \ub54c\ub9cc),
 //         view:{text,line1,line2,curIdx,at}   \uc571\uc744 \ub2e4\uc2dc \uc5f4\uc5c8\uc744 \ub54c \ubcf4\uc5ec \uc904 \ub9c8\uc9c0\ub9c9 \uc0c1\ud0dc,
+//         pos:null|{from,to,ratio,moving}  \uc9c0\uae08 \uc704\uce58(\ub178\ub4dc \ubc88\ud638 from\u2192to, \uad6c\uac04 \ube44\uc728) \u2014 \uacb0\uacfc \uce74\ub4dc\uc758 \ub0b4 \uc704\uce58 \ub9c8\ucee4\uc6a9, arr:[HH:MM\u2026] \ub178\ub4dc\ubcc4 \ub3c4\ucc29 \uc2dc\uac01,
 //         zero:{\u2026}                  ride-track \uc601\uc810 \uacb0\uacfc(\uc9c4\ub2e8\uc6a9), notes:[\u2026] }
 //
 // \uc774 \ud30c\uc77c\uc740 ride-track.js \u00b7 ride-eta.js \uc758 rideTrack \u00b7 rideEta \ub97c \uc4f4\ub2e4(Worker \uc5d0\uc11c\ub294 \uac19\uc740 \ubc94\uc704\uc758 \ud568\uc218, Node \uc2dc\ud5d8\uc5d0\uc11c\ub294 require).
@@ -9914,7 +9915,7 @@ function rideStandby(req) {
   try { overlay = rsOverlay(st, r, curIdx, al.curPos, now, dest, cfg.destName || (dest && dest.name) || '', moving, done); } catch (eOv) { notes.push('\uc624\ubc84\ub808\uc774 \uacc4\uc0b0 \uc2e4\ud328: ' + (eOv && eOv.message)); }
   if (offActive && overlay && overlay.active) { overlay.alert = 0; overlay.pre = false; overlay.banner = '\uacbd\ub85c\ub97c \ubc97\uc5b4\ub0ac\uc5b4\uc694 \u2014 \uc571\uc744 \uc5f4\uba74 \ub2e4\uc2dc \ucc3e\uc544 \ub4dc\ub824\uc694'; }
   var view = { text: text, line1: overlay && overlay.line1 || '', line2: overlay && overlay.line2 || '', curIdx: curIdx, at: now };
-  return { v: 1, state: st, ongoing: { title: O.ongoingTitle, text: text }, alert: al.alert, done: done, curIdx: curIdx, overlay: overlay, view: view, zero: zero, nextMs: done ? O.stepMs : nextMs, motion: tk && tk.motion ? tk.motion : null, notes: notes };
+  return { v: 1, state: st, ongoing: { title: O.ongoingTitle, text: text }, alert: al.alert, done: done, curIdx: curIdx, overlay: overlay, view: view, pos: r.pos ? { from: r.pos.from, to: r.pos.to, ratio: r.pos.ratio, moving: !!r.pos.moving } : null, arr: r.arr || null, zero: zero, nextMs: done ? O.stepMs : nextMs, motion: tk && tk.motion ? tk.motion : null, notes: notes };
 }
 
 function handleRideStandby(request) {
@@ -17069,8 +17070,10 @@ function rheadTrkPoints(f) {
         var nm0 = rheadTrkNm(st.n);
         for (var q = 0; q < sg.tc.length; q++) { if (used[q]) continue; if (rheadTrkNm(sg.tc[q].at) === nm0) { used[q] = 1; tcg = sg.tc[q]; break; } }
       }
+      var absMs = sg.ty === 4 ? null : (isF ? segMs[si] : segMs[si] + (off[ni] || 0) * 1000);
       pts.push({ type: 'stn', nm: rheadTrkNm(st.n), col: col, lC: lC, lineNm: sg.nm, lineLabel: rheadTrkLabel(sg.ty, sg.nm), xfIn: (ni === 0 && sg.xfIn) ? sg.xfIn : null, trainChg: tcg,
-        arrT: arr, isF: isF, isL: isL, ni: ni, ld: sg.ty === 4, ldRole: sg.ty === 4 ? (ni === 0 ? 'dep' : 'arr') : null, ldDur: ldLbl });
+        arrT: arr, isF: isF, isL: isL, ni: ni, ld: sg.ty === 4, ldRole: sg.ty === 4 ? (ni === 0 ? 'dep' : 'arr') : null, ldDur: ldLbl,
+        sty: sg.ty, la: st.la, lo: st.lo, ms: absMs });
       gIdx++;
     });
   });
@@ -17141,22 +17144,49 @@ function rheadTrkMark(lv, cells) {
   }
   return mk;
 }
-function rheadTrackScreen(inp) {
+// \ud0c0\uc784\ub77c\uc778 \uc0ac\uc2e4 \uc815\ub9ac(\ud654\uba74\uacfc \ud0d1\uc2b9 \uc2dc\uc791\uc774 \uac19\uc740 \uac83\uc744 \uc4f4\ub2e4). \ubabb \uc4f0\uba74 { error }.
+function rheadTrkPrep(inp) {
   var f = (inp && typeof inp === 'object') ? inp : {};
   var secs = rheadList(f.secs, 12).map(rheadTrkSec);
-  if (!secs.length) return { ok: false, error: 'empty' };
-  if (!secs.some(rheadTrkHasEng)) return { ok: false, error: 'notimes' };      // \uc5d4\uc9c4\uc774 \uad6c\uac04 \uc2dc\uac01\uc744 \uc548 \uc900 \uc61b \uc751\ub2f5\uc740 \uadf8\ub9ac\uc9c0 \uc54a\ub294\ub2e4(\uc6f9\uc774 \uadf8\ub9b0\ub2e4)
+  if (!secs.length) return { error: 'empty' };
+  if (!secs.some(rheadTrkHasEng)) return { error: 'notimes' };      // \uc5d4\uc9c4\uc774 \uad6c\uac04 \uc2dc\uac01\uc744 \uc548 \uc900 \uc61b \uc751\ub2f5\uc740 \uadf8\ub9ac\uc9c0 \uc54a\ub294\ub2e4(\uc6f9\uc774 \uadf8\ub9b0\ub2e4)
   var now = rheadTrkNum(f.now);
-  if (now == null || now <= 0) return { ok: false, error: 'now' };
+  if (now == null || now <= 0) return { error: 'now' };
   var th = f.th === 'pastel' ? 'pastel' : 'dark';
   var facts = {
     secs: secs, th: th, tz: rheadInt(f.tz, -840, 840), now: now, bt: rheadTrkNum(f.bt), rb: rheadTrkNum(f.rb),
     sw: rheadList(f.sw, 6), xf: Array.isArray(f.xf) ? f.xf.slice(0, 12).filter(function (t) { return t && typeof t === 'object'; }).map(function (t) { return { k: t.k === 'train' ? 'train' : 'x', xi: rheadTrkNum(t.xi), si: rheadTrkNum(t.si) }; }) : null
   };
+  return { facts: facts, f: f };
+}
+function rheadTrackScreen(inp) {
+  var f = (inp && typeof inp === 'object') ? inp : {};
+  var pp = rheadTrkPrep(inp);
+  if (pp.error) return { ok: false, error: pp.error };
+  var facts = pp.facts, th = facts.th;
   var pts = rheadTrkPoints(facts);
   if (!pts.length) return { ok: false, error: 'nopoints' };
   var lv = (f.lv && typeof f.lv === 'object') ? f.lv : null;
   var ea = (lv && Array.isArray(lv.ea)) ? lv.ea.slice(0, 60).map(function (v) { return typeof v === 'string' ? v.slice(0, 8) : ''; }) : null;
+  if (lv && (lv.pn || lv.na)) {          // \ud0d1\uc2b9 \ucd94\uc801(\ub300\uae30 \ubaa8\ub4dc \uc5d4\uc9c4)\uc740 \ub178\ub4dc \ubc88\ud638(0=\ucd9c\ubc1c\uc9c0, 1.. = \uc9c0\ub098\ub294 \uc5ed\u00b7\uc815\ub958\uc7a5)\ub85c \ub9d0\ud55c\ub2e4 \u2192 \uce78 \ubc88\ud638\ub85c \ubc14\uafbc\ub2e4
+    var nodeTi = [-1], tcount = 0;
+    pts.forEach(function (pt, pi) {
+      var endp = pt.type !== 'walk' || pi === 0 || pi === pts.length - 1;
+      if (pt.type === 'stn') nodeTi.push(tcount);
+      if (endp) tcount++;
+    });
+    var toTi = function (n) { n = rheadTrkNum(n); return (n != null && n >= 1 && n < nodeTi.length) ? nodeTi[Math.floor(n)] : null; };
+    lv = { p: lv.p || null, w: lv.w || null, ea: ea };
+    if (f.lv.pn && typeof f.lv.pn === 'object') {
+      var pf = toTi(f.lv.pn.f), pt2 = toTi(f.lv.pn.t);
+      lv.p = pf == null ? null : { f: pf, t: pt2 == null ? pf : pt2, r: rheadTrkNum(f.lv.pn.r) || 0 };
+    }
+    if (Array.isArray(f.lv.na)) {
+      ea = new Array(tcount);
+      for (var q = 0; q < tcount; q++) ea[q] = '';
+      for (var nq = 1; nq < nodeTi.length; nq++) { var v = f.lv.na[nq]; if (typeof v === 'string') ea[nodeTi[nq]] = v.slice(0, 8); }
+    }
+  }
   var cells = rheadTrkCells(pts, th, ea), w = 0;
   cells.forEach(function (c) { w += c.w; });
   var node = { t: 'trk', pad: [14, 6, 14, 6], cells: cells };
@@ -18421,6 +18451,17 @@ function resHeadFacts(route, r, tab) {
 }
 
 // \uad6c\uac04 \ud0c0\uc784\ub77c\uc778 \uc0ac\uc2e4 (rhead part 'k')
+// \ud0d1\uc2b9 \uc911 \ub0b4 \uc704\uce58 \ub9c8\ucee4\u00b7\uce78\ubcc4 \ub3c4\ucc29 \uc2dc\uac01: \uc571\uc774 \ub300\uae30 \ubaa8\ub4dc \uc5d4\uc9c4 \ub2f5\uc5d0\uc11c \ubc1b\uc544 \ub454 pos(\ub178\ub4dc \ubc88\ud638 from\u2192to, \uad6c\uac04 \ube44\uc728)\u00b7arr(\ub178\ub4dc\ubcc4 HH:MM)\u00b7curIdx \ub97c \uadf8\ub300\ub85c \ub118\uaca8 \uc900 \uac83(r.lv).
+//   \ub178\ub4dc 0 \uc740 \ucd9c\ubc1c\uc9c0\ub77c \uce78 \ubc88\ud638\ub294 \ud558\ub098\uc529 \ub2f9\uae34\ub2e4. \uc704\uce58\ub97c \ubaa8\ub974\uba74 \ub9c8\ucee4 \uc5c6\uc774 \uc2dc\uac01\ub9cc \uace0\uce5c\ub2e4.
+function resLiveFacts(r) {
+  var L = r && r.lv;
+  if (!L || typeof L !== 'object') return null;
+  var na = resArr(L.arr).slice(0, 62).map(function (v) { return typeof v === 'string' ? v.slice(0, 8) : ''; });
+  var f = null, t = null, ratio = 0, pos = (L.pos && typeof L.pos === 'object') ? L.pos : null;
+  if (pos && isFinite(Number(pos.from))) { f = Math.floor(Number(pos.from)); t = isFinite(Number(pos.to)) ? Math.floor(Number(pos.to)) : f; ratio = resNum(pos.ratio, 0); }
+  else { var cur = Math.floor(resNum(L.cur, -1)); if (cur >= 1) { f = cur; t = f; } }
+  return { pn: (f != null && f >= 1) ? { f: f, t: t, r: ratio } : null, w: null, na: na.length ? na : null };
+}
 function resTrkFacts(route, r, noGeo) {
   var secs = route.sections.slice(0, 12).map(function (sec) {
     sec = sec || {};
@@ -18430,7 +18471,7 @@ function resTrkFacts(route, r, noGeo) {
       tc: Array.isArray(sec.trainChanges) ? sec.trainChanges.slice(0, 8).map(function (c) { return c ? { at: c.at, to: c.to } : null; }).filter(Boolean) : null,
       st: stops.slice(0, 150).map(function (q) { q = q || {}; return noGeo ? [q.stationName || ''] : [q.stationName || '', resR5(q.lat != null ? q.lat : q.y), resR5(q.lon != null ? q.lon : (q.lng != null ? q.lng : q.x))]; }) };
   });
-  return { lv: null, secs: secs, xf: Array.isArray(route.transfers) ? route.transfers.slice(0, 12).map(function (x) { return x ? { k: x.kind, xi: x.xferSecIdx, si: x.secIdx } : null; }).filter(Boolean) : null,
+  return { lv: resLiveFacts(r), secs: secs, xf: Array.isArray(route.transfers) ? route.transfers.slice(0, 12).map(function (x) { return x ? { k: x.kind, xi: x.xferSecIdx, si: x.secIdx } : null; }).filter(Boolean) : null,
     bt: r.bt == null ? null : r.bt, rb: r.rb == null ? null : r.rb, now: resNum(r.now, 0), sw: [], tz: resNum(r.tz, 540), th: r.th === 'pastel' ? 'pastel' : 'dark' };
 }
 
@@ -18521,6 +18562,9 @@ function resDetailScreen(route, r, tab) {
   if (nav) kids.push({ t: 'row', pad: [10, 0, 0, 14], gap: 8, kids: [
     { t: 'button', s: '\uce74\uce74\uc624\ub9f5 \uae38\uc548\ub0b4', size: 13, h: 46, r: 12, bold: true, fill: '#fee500', line: 'none', tc: '#3a1d1d', act: { a: 'call', v: 'rd.kakao' } },
     { t: 'button', s: '\ub124\uc774\ubc84\uc9c0\ub3c4', size: 13, h: 46, r: 12, bold: true, fill: '#03c75a', line: 'none', tc: '#ffffff', act: { a: 'call', v: 'rd.naver' } }] });
+  var onRide = !!(r.ride && r.ride.on);
+  kids.push(onRide ? { t: 'button', s: '\ud0d1\uc2b9 \uc548\ub0b4 \uc885\ub8cc', size: 14, h: 48, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'orange', pad: [10, 0, 0, 14], act: { a: 'call', v: 'rd.stop' } }
+    : { t: 'button', s: '\uc774 \uacbd\ub85c\ub85c \ud0d1\uc2b9 \uc2dc\uc791', size: 14, h: 48, r: 12, bold: true, fill: 'gold', line: 'none', tc: '#121214', pad: [10, 0, 0, 14], act: { a: 'call', v: 'rd.confirm' } });
   var out = { ok: true, v: RESULT_V, screen: 'rdetail', cover: 'tab', head: [], body: kids, info: { exp: exp, nav: nav, m: total, tab: tab } };
   out.rev = 'd' + RESULT_V + ':' + resHash(JSON.stringify(kids));
   return out;
@@ -18566,7 +18610,13 @@ function resultScreen(opt, r) {
     var k = resPart(cap, 'k', resTrkFacts(route, r, false));
     if (!k) k = resPart(cap, 'k', resTrkFacts(route, r, true));
     if (k) nodes = nodes.concat(k.head).concat(k.body);
-    nodes.push({ t: 'button', s: '\uc138\ubd80\uacbd\ub85c \ubcf4\uae30', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'gold', pad: [8, 0, 0, 4], act: { a: 'call', v: 'rh.detail' } });
+    if (r.ride && r.ride.on) {
+      var rt = String(r.ride.text || '').slice(0, 120);
+      nodes.push({ t: 'box', s: '\ud0d1\uc2b9 \uc548\ub0b4 \uc911' + (rt ? '\n' + rt : ''), hl: [[0, 6]], size: 12, lh: 1.5, color: 'text', fill: 'card2', line: 'gold', r: 10, ip: [12, 8, 12, 8], pad: [8, 0, 0, 4] });
+      nodes.push({ t: 'row', pad: [8, 0, 0, 4], gap: 8, kids: [
+        { t: 'button', s: '\uc138\ubd80\uacbd\ub85c \ubcf4\uae30', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'gold', act: { a: 'call', v: 'rh.detail' } },
+        { t: 'button', s: '\uc548\ub0b4 \uc885\ub8cc', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'orange', act: { a: 'call', v: 'rh.stop' } }] });
+    } else nodes.push({ t: 'button', s: '\uc138\ubd80\uacbd\ub85c \ubcf4\uae30', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'gold', pad: [8, 0, 0, 4], act: { a: 'call', v: 'rh.detail' } });
   }
   var body = nodes.length ? [{ t: 'panel', pad: [0, 4, 0, 8], ip: [12, 12, 12, 8], r: 16, kids: nodes }] : [];
   var sec = [];                                                  // \uc9c0\uae08 \ubcf4\uc774\ub294 \uacbd\ub85c\uc758 \uc9c0\ud558\ucca0 \uad6c\uac04 \uc774\ub984(\uc2e4\uc2dc\uac04\uc18c\ud1b5\uc774 '\ub0b4 \ub178\uc120'\uc744 \uc55e\uc5d0 \ub458 \ub54c \uc4f4\ub2e4)
@@ -19252,6 +19302,102 @@ async function handleScreenHcards(request) {
 }
 // ===== HCARDS ENGINE END =====
 
+// ===== RIDESTART ENGINE BEGIN =====
+// \uae38\ub3d9\ubb34 \u2014 \ud0d1\uc2b9 \uc2dc\uc791(\uacbd\ub85c \ud655\uc815) \uc5d4\uc9c4 (route-v2 Worker \uc5d0 \ubd99\uc5ec \ub123\ub294 \uc21c\uc218 \ud568\uc218)
+//
+// \u2605 \uc6d0\uce59(YJ): "\ubaa8\ub4e0 \uacc4\uc0b0\uc740 \uc5d4\uc9c4\uc774 \ud55c\ub2e4. \uc571\uc740 \uadf8\ub9bc\ub9cc \uadf8\ub9b0\ub2e4."  (2026-10-20 s94 \u2014 4\ubc88 \ud0d1\uc2b9 \ucd94\uc801)
+//   \uc608\uc804\uc5d4 \uc6f9\uc774 \uacbd\ub85c \ud654\uba74\uc744 \uc9d3\ub294 \uc911\uc5d0 \ub9cc\ub4e0 \ub178\ub4dc \ubaa9\ub85d(_transitNodeData)\u00b7\ub3c4\ucc29\uc2dc\uac01 \uc99d\uac70(_etaPayload)\u00b7\uc601\uc810\uc6a9 \uc815\ub958\uc7a5(_arrEndStops)\u00b7\uc54c\ub9bc \ub300\uc0c1(_buildTransitAlertTargets)\uc744
+//   \ub124\uc774\ud2f0\ube0c \ub300\uae30 \ubaa8\ub4dc(KeepAliveService)\uc5d0 '\uc5ec\uc815 \uc0c1\ud0dc'\ub85c \ub9e1\uacbc\ub2e4. \uc6f9\uc774 \uc5c6\ub294 \uc571\uc5d0\uc11c\ub294 \uadf8 \uc0c1\ud0dc\ub97c \uc5d4\uc9c4\uc774 \uc9c1\uc811 \ub9cc\ub4e0\ub2e4.
+//   \uc571\uc740 \uc9c0\uae08 \ubcf4\uace0 \uc788\ub294 \uacbd\ub85c \uc751\ub2f5(\ubc1b\uc740 \uadf8\ub300\ub85c)\uacfc \ub20c\ub9b0 \ud0ed\uc744 \ubcf4\ub0b4\uace0, \ub3cc\uc544\uc628 state \ub97c \uadf8\ub300\ub85c \ub4e4\uace0 \uc788\ub2e4\uac00 5\ucd08\ub9c8\ub2e4 /ride-standby \uc5d0 \uc2e4\uc5b4 \ubcf4\ub0b8\ub2e4(\ud574\uc11d\ud558\uc9c0 \uc54a\ub294\ub2e4).
+//
+// \uc785\ub825  rideStart({ cap(12 \uc774\uc0c1) }, r)    r = \uacb0\uacfc \ud654\uba74 \uc0ac\uc2e4\uacfc \uac19\ub2e4: { data(\uacbd\ub85c \uc751\ub2f5 \uadf8\ub300\ub85c), tab, a, b, bt, rb, now, tz, th, allowed? }
+// \ucd9c\ub825  { ok:true, v:1, state(/ride-standby \uc758 state), info:{ n(\ub178\ub4dc \uc218), first:{name,hm}, dest, tab, legs }, text(\ucc98\uc74c \ubcf4\uc77c \uc0c1\uc8fc \uc54c\ub9bc \uae00) }
+//       | { ok:false, error:'route'|'longdist'|'notimes'|\u2026, msg(\uc0ac\uc6a9\uc790\uc5d0\uac8c \ubcf4\uc77c \uae00) }
+// 1\ub2e8\uacc4 \ubc94\uc704: \uc9c0\ud558\ucca0\u00b7\ubc84\uc2a4 \uad6c\uac04(\uc7a5\uac70\ub9ac \uc5f4\ucc28\u00b7\ubc84\uc2a4\ub294 \uc548\ub0b4\ud558\uc9c0 \uc54a\ub294\ub2e4). \ud0d1\uc2b9 \ud655\uc815\uc740 \uc0ac\uc6a9\uc790\uac00 \ub204\ub974\ub294 \uc2dc\uc810\uc5d0 \uc774\ubbf8 \ud0d4\ub2e4\uace0 \ubcf8\ub2e4(\uc2b9\ucc28 \uc804 \ub300\uae30 \ud310\uc815\uc740 \ud558\uc9c0 \uc54a\ub294\ub2e4).
+// \ub9e8 \uc544\ub798 module.exports \ub294 \uc2dc\ud5d8(Node)\uc6a9\uc774\uace0 Worker \uc5d0\uc11c\ub294 \ud568\uc218 \uc120\uc5b8\ub9cc \uc4f0\uc778\ub2e4.
+'use strict';
+var RST_V = 1;
+
+function rstDeps() {
+  var d = {};
+  d.apply = (typeof resApplyRv === 'function') ? resApplyRv : require('./result').resApplyRv;
+  d.pick = (typeof resPickTabs === 'function') ? resPickTabs : require('./result').resPickTabs;
+  d.conv = (typeof resConvertPath === 'function') ? resConvertPath : require('./result').resConvertPath;
+  d.facts = (typeof resTrkFacts === 'function') ? resTrkFacts : require('./result').resTrkFacts;
+  d.prep = (typeof rheadTrkPrep === 'function') ? rheadTrkPrep : require('./rhead').rheadTrkPrep;
+  d.points = (typeof rheadTrkPoints === 'function') ? rheadTrkPoints : require('./rhead').rheadTrkPoints;
+  d.targets = (typeof raTargets === 'function') ? raTargets : require('./ride-alert').raTargets;
+  return d;
+}
+function rstHash(s) { var h = 5381; for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
+function rstHmMin(hm) { var m = String(hm || '').match(/(\d{1,2}):(\d{2})/); return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : null; }
+function rstFail(error, msg) { return { ok: false, error: error, msg: msg }; }
+
+function rideStart(opt, r) {
+  var cap = Math.floor(Number(opt && opt.cap) || 0);
+  if (cap < 12) return rstFail('cap', '\uc571\uc744 \uc5c5\ub370\uc774\ud2b8\ud574 \uc8fc\uc138\uc694');
+  r = (r && typeof r === 'object') ? r : {};
+  var D = rstDeps();
+  var data = (r.data && typeof r.data === 'object') ? r.data : {};
+  var raw = ((data.result || {}).path);
+  raw = Array.isArray(raw) ? raw : [];
+  var pick = D.pick(D.apply(data, raw));
+  var tab = ['fast', 'less', 'sub', 'bus', 'longdist'].indexOf(r.tab) >= 0 ? r.tab : 'fast';
+  var route = pick[tab] ? D.conv(pick[tab]) : null;
+  if (!route) return rstFail('route', '\uacbd\ub85c \uc815\ubcf4\uac00 \uc5c6\uc5b4\uc694');
+  if (tab === 'longdist' || route.ld) return rstFail('longdist', '\uc7a5\uac70\ub9ac \uacbd\ub85c\ub294 \ud0d1\uc2b9 \uc548\ub0b4\ub97c \uc9c0\uc6d0\ud558\uc9c0 \uc54a\uc544\uc694');
+  var tz = isFinite(Number(r.tz)) ? Number(r.tz) : 540, now = Number(r.now);
+  if (!isFinite(now) || now <= 0) return rstFail('now', '\uc2dc\uac01\uc744 \uc54c \uc218 \uc5c6\uc5b4\uc694');
+  var tf = D.facts(route, r, false);
+  var pp = D.prep(tf);
+  if (pp.error) return rstFail(pp.error, '\uc774 \uacbd\ub85c\ub294 \uc2dc\uac01 \uc815\ubcf4\uac00 \uc5c6\uc5b4 \uc548\ub0b4\ud560 \uc218 \uc5c6\uc5b4\uc694');
+  var pts = D.points(pp.facts).filter(function (p) { return p.type === 'stn' && !p.ld; });
+  if (pts.length < 2) return rstFail('nopoints', '\uc548\ub0b4\ud560 \uc815\ub958\uc7a5\uc774 \ubd80\uc871\ud574\uc694');
+
+  var aName = String(r.a || '').slice(0, 40), bName = String(r.b || '').slice(0, 40);
+  var nodes = [{ name: aName || '\ucd9c\ubc1c', isOrigin: true }], tnodes = [{ k: null }], stops = [], etaMs = [null], prevMin = null, last = pts.length - 1, i, k;
+  for (k = 0; k < pts.length; k++) {
+    var p = pts[k], idx = k + 1, pm = rstHmMin(p.arrT);
+    if (pm != null) { if (prevMin != null && pm < prevMin) pm += 1440; prevMin = pm; }      // \uc790\uc815\uc744 \ub118\uae30\ub294 \uacbd\ub85c
+    nodes.push({ name: p.nm, isSub: p.sty === 1, isBus: p.sty === 2, lineName: String(p.lineNm || ''), planMin: pm });
+    tnodes.push({ k: p.sty === 1 ? 's' : 'b', l: String(p.lineNm || ''), n: p.nm });
+    var ms = (p.ms != null && isFinite(p.ms)) ? Math.round(p.ms) : null;
+    etaMs.push(ms);
+    if (p.la != null && p.lo != null && ms != null) stops.push({ i: idx, lat: p.la, lng: p.lo, arrMs: ms, pass: k > 0, fin: k === last, bus: p.sty === 2 });
+  }
+  if (stops.length < 2) return rstFail('nocoords', '\uc815\ub958\uc7a5 \uc704\uce58\ub97c \uc54c \uc218 \uc5c6\uc5b4\uc694');
+  var tg = D.targets(tnodes);
+  var dest = bName || pts[last].nm;
+  var firstSub = pts[0].sty === 1, passes = [];
+  if (etaMs[1] != null && now >= etaMs[1]) passes.push({ idx: 1, ms: etaMs[1], src: 'gps' });      // \uccab \uc815\ub958\uc7a5 \uc2dc\uac01\uc774 \uc774\ubbf8 \uc9c0\ub0ac\ub2e4\uba74 \uc9c0\ub09c \uac83\uc73c\ub85c
+  var eta = { nodes: nodes, passes: passes, boarded: true, notDeparted: false, tzOffsetMin: tz };
+  if (firstSub) { eta.timetableFirst = true; eta.boardInfo = { boardIdx: 1, line: String(pts[0].lineNm || ''), from: pts[0].nm, to: pts[1] ? pts[1].nm : '' }; }
+  var allowed = (r.allowed && typeof r.allowed === 'object') ? r.allowed : {};
+  var sig = rstHash(nodes.map(function (n) { return n.name + '|' + (n.lineName || ''); }).join('>') + '@' + Math.floor(now / 3600000));
+  var state = { v: 1, tripSig: sig, eta: eta, stops: stops, trail: [], cfg: { targets: tg.targets, seq: tg.seq, allowed: allowed, destName: dest }, fired: {}, notYet: {}, etaMs: etaMs, steps: 0, startedAt: now };
+  var legs = 0; for (i = 1; i < tnodes.length; i++) if (i === 1 || tnodes[i].l !== tnodes[i - 1].l) legs++;
+  return { ok: true, v: RST_V, state: state, text: '\ub2e4\uc74c ' + pts[0].nm + (pts[0].arrT ? ' ' + pts[0].arrT : '') + ' \u00b7 ' + dest + '\uae4c\uc9c0 ' + (tg.seq.length ? tg.seq.length - 1 : 0) + '\uc815\uac70\uc7a5',
+    info: { n: nodes.length, first: { name: pts[0].nm, hm: pts[0].arrT || '' }, dest: dest, tab: tab, legs: legs, sig: sig } };
+}
+// \ud0d1\uc2b9 \uc2dc\uc791 \uc5d4\uc9c4 Worker \uc5f0\uacb0\ubd80 \u2014 POST /ride/start (engine/ride-start.js \uc758 rideStart). route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/ride/start") return handleRideStart(request);` \ub97c \ub123\ub294\ub2e4.
+//   \ubcf8\ubb38(JSON \uae00, Content-Type: text/plain): { cap(12 \uc774\uc0c1), r:{ data(\uacbd\ub85c \uc751\ub2f5 \uadf8\ub300\ub85c), tab, a, b, bt, rb, now, tz, th, allowed? } }
+//   \uc5d4\uc9c4\uc740 \uc544\ubb34\uac83\ub3c4 \uc800\uc7a5\ud558\uc9c0 \uc54a\ub294\ub2e4. \ub3cc\ub824\uc8fc\ub294 state \ub294 \uc571\uc774 \uadf8\ub300\ub85c \ub4e4\uace0 \uc788\ub2e4\uac00 5\ucd08\ub9c8\ub2e4 /ride-standby \uc5d0 \uc2e4\uc5b4 \ubcf4\ub0b8\ub2e4.
+async function handleRideStart(request) {
+  var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Cache-Control": "no-store" };
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: H });
+  if (request.method !== "POST") return new Response(JSON.stringify({ ok: false, error: "post-only" }), { status: 405, headers: H });
+  var raw = await request.text();
+  if (raw.length > 3000000) return new Response(JSON.stringify({ ok: false, error: "body-too-long" }), { status: 413, headers: H });
+  var body;
+  try { body = JSON.parse(raw); } catch (e) { return new Response(JSON.stringify({ ok: false, error: "bad-json" }), { status: 400, headers: H }); }
+  if (!body || typeof body !== "object") return new Response(JSON.stringify({ ok: false, error: "bad-body" }), { status: 400, headers: H });
+  var out;
+  try { out = rideStart({ cap: Number(body.cap) || 0 }, body.r); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2) }), { status: 500, headers: H }); }
+  out.ver = ENGINE_VERSION;
+  return new Response(JSON.stringify(out), { status: out.ok ? 200 : 400, headers: H });
+}
+// ===== RIDESTART ENGINE END =====
+
 async function handleFetch(request, env, ctx) {
   try { await holEnsure(env); } catch (e) {}
   const url = new URL(request.url);
@@ -19291,6 +19437,7 @@ async function handleFetch(request, env, ctx) {
   if (url.pathname === "/screen/map") return handleScreenMap(request);
   if (url.pathname === "/screen/fav") return handleScreenFav(request);
   if (url.pathname === "/screen/hcards") return handleScreenHcards(request);
+  if (url.pathname === "/ride/start") return handleRideStart(request);
   if (url.pathname === "/stops-near") {
     const lat = parseFloat(url.searchParams.get("lat"));
     const lng = parseFloat(url.searchParams.get("lng"));

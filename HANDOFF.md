@@ -1627,3 +1627,10 @@
 - 세부경로 시트: `result.js` `view:'detail'`(`resDetailScreen`) — 구간마다 노선·소요·시각 범위, 누르면 정거장별 시각 펼침(rd.tg.N), 카카오맵/네이버 길안내 주소는 엔진이 만든다(`info.nav`, 앱 주소 + 웹 대체). 결과 카드에 `rh.detail` 단추. 앱은 `HomeCore.actDetail/detailRequest/onDetail` + `ShellActivity.openDetailSheet`(Dialog+ScreenView, 앱 주소는 kakaomap:// · nmap:// 만 허용).
 - 한계: 혼잡도 3D 캐릭터 장면 미이식, AI 브리프의 날씨·다음 열차 null, 기기 미확인. 안드로이드 계층 컴파일은 CI에서만 한다.
 - **YJ가 할 일**: 워커 s93(`route-v2-2026-10-20s93`) Deploy + 새 APK.
+
+## 2026-10-20 엔진 s94 + native-shell — 탑승 추적(경로 확정 → 포그라운드 서비스 → 하차/환승 알림 · 결과 카드 내 위치)
+- 엔진 `engine/ride-start.js` + `ride-start-worker.js`(POST `/ride/start`, 시험 `test/ride_start_engine.test.js` 19개·CI 표에 추가): 결과 화면 사실(r)로 `/ride-standby` 의 초기 state 를 만든다 — 노드(출발+역·정류장, 노선·계획 분), 영점용 정류장(좌표·도착 ms·버스 여부·마지막), 알림 대상(`raTargets`: 환승 하차역 · 최종 하차), 시각표 기준(첫 구간이 지하철이면). 장거리·시각/좌표 없는 옛 응답은 `{ok:false,msg}`.
+- `rhead.js`: `rheadTrkPrep`(화면과 시작이 같은 사실 정리) · `rheadTrkPoints` 내보냄, 점마다 `la/lo/ms/sty` 추가. 타임라인 마커·칸별 시각은 노드 번호 `lv.pn/lv.na` → 칸 번호로 엔진이 바꾼다. `result.js`: `r.lv`(대기 모드 pos·arr·curIdx) → 마커/시각, `r.ride` → 상태 박스 + [안내 종료], 세부경로 시트에 [이 경로로 탑승 시작]/[탑승 안내 종료]. `ride-standby.js` 출력에 `pos`·`arr` 추가(워커 사본 sync).
+- 앱: `RideCore`(요청 본문·응답 읽기·위치 모으기·저장/복원, 순수 자바) · `RideService`(포그라운드 서비스, foregroundServiceType=location, GPS+네트워크 위치 → 5초(엔진 nextMs, 2~8초)마다 `/ride-standby`, 상주 알림 + 알림 채널 + 엔진이 준 진동 무늬, START_STICKY 복원 30분) · `RideWidget`(홈 위젯: 엔진 글 그대로) · `HomeCore`(routeId·rideJson/lvJson·rh.stop/rd.confirm/rd.stop) · `ShellActivity`(권한 요청, startRide/stopRide, 5초 틱에서 서비스 상태를 카드에 반영). 매니페스트: FOREGROUND_SERVICE(+LOCATION)·POST_NOTIFICATIONS·VIBRATE, service, widget receiver, res/layout·xml·drawable 추가.
+- 한계(정직하게): 기기 미확인. 승차 전 대기/승차 확정 판정은 옮기지 않았다(누른 시점에 이미 탔다고 본다). `/pos-fuse` 위치 융합·기지국 선행·버스 경로 확정 UI·플로팅 오버레이(SYSTEM_ALERT_WINDOW)·알림 종류별 끄기(allowed)는 미이식 — 알림은 상주 알림 + 헤드업 알림으로 대신한다. 앱 프로세스가 죽었다 서비스만 되살아나면 결과 카드는 다시 안 뜬다(알림·위젯은 이어짐).
+- **YJ가 할 일**: 워커 s94(`route-v2-2026-10-20s94`) Deploy + 새 APK. 첫 사용 시 위치·알림 권한 허용.

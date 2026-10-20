@@ -360,6 +360,16 @@ public class ShellJvmTest {
             h2.detOpen.add(2);
             String dq = h2.detailRequest(new HomeCore.Env(), 18, "dark");
             ok(dq.contains("\"view\":\"detail\",\"open\":[2]}}") && dq.startsWith("{\"cap\":18,\"r\":{") && new HomeCore().detailRequest(new HomeCore.Env(), 18, "dark").isEmpty(), "세부경로 요청: view/open 을 r 안에 넣는다, 경로가 없으면 보내지 않는다");
+            // 탑승 추적: 상태 전달 · 새 탐색이면 탑승 표시가 사라진다
+            ok(h2.actResult("rh.stop") == HomeCore.R_NONE && h2.actDetail("rd.confirm") == HomeCore.D_CONFIRM && h2.actDetail("rd.stop") == HomeCore.D_NONE, "탑승 전: 시작만 가능");
+            h2.rideRouteId = h2.routeId;
+            ok(h2.setRide("{\"on\":1,\"text\":\"다음 부평\"}", "{\"cur\":2,\"pos\":null,\"arr\":null}") && !h2.setRide("{\"on\":1,\"text\":\"다음 부평\"}", "{\"cur\":2,\"pos\":null,\"arr\":null}") && h2.riding(), "서비스 상태를 받으면 바뀐 때만 true");
+            ok(h2.actResult("rh.stop") == HomeCore.R_STOP && h2.actDetail("rd.stop") == HomeCore.D_STOP && h2.actDetail("rd.confirm") == HomeCore.D_NONE, "탑승 중: 종료만 가능");
+            String rf = h2.resultFacts(new HomeCore.Env(), "dark");
+            ok(rf.contains("\"ride\":{\"on\":1,\"text\":\"다음 부평\"}") && rf.contains("\"lv\":{\"cur\":2"), "결과 사실에 탑승 상태(r.ride)와 내 위치(r.lv)가 실린다");
+            h2.setRoute("{\"result\":{}}", "부평", "강남", -1, 1L);
+            ok(!h2.riding() && !h2.resultFacts(new HomeCore.Env(), "dark").contains("\"ride\""), "새 탐색이면 이전 탑승 표시는 붙지 않는다");
+            h2.setRide("", "");
             h2.ld2Raw = "{\"result\":{\"path\":[]}}"; h2.setNotes(h2.secKey(), "{\"lines\":{}}", "{\"lines\":{}}", 1000L);
             String rq2 = h2.resultRequest(new HomeCore.Env(), 18, "dark", 0);
             ok(rq2.contains("\"ld2\":{") && rq2.contains("\"off\":{") && rq2.contains("\"al\":{"), "다시 받은 응답·공지 원자료를 엔진에 그대로 보낸다");
@@ -376,6 +386,28 @@ public class ShellJvmTest {
         }
         // 홈 카드 묶음
         {
+            RideCore rc = new RideCore();
+            ok(RideCore.startBody(18, "{\"data\":{}}").equals("{\"cap\":18,\"r\":{\"data\":{}}}") && RideCore.startBody(18, "").contains("\"r\":null"), "탑승 시작 요청 본문");
+            ok(rc.onStart("{\"ok\":false,\"error\":\"longdist\",\"msg\":\"장거리 경로는 탑승 안내를 지원하지 않아요\"}").startsWith("장거리") && !rc.hasState(), "엔진이 거절하면 그 글을 그대로 돌려준다");
+            ok(rc.onStart("zz").length() > 0 && rc.onStart("{\"ok\":true}").length() > 0 && !rc.hasState(), "이상한 응답은 시작하지 않는다");
+            ok(rc.onStart("{\"ok\":true,\"v\":1,\"state\":{\"v\":1,\"eta\":{\"nodes\":[1]},\"etaMs\":[null,1792465720000,0.5]},\"text\":\"다음 S0 12:02\"}").isEmpty() && rc.hasState() && "다음 S0 12:02".equals(rc.text), "시작 응답에서 state 와 글을 받는다");
+            rc.addFix(1000L, 37.5, 126.9, 15.0); rc.addFix(900L, 37.5, 126.9, 15.0); rc.addFix(2000L, 0, 0, 5.0); rc.addFix(3000L, 37.51, 126.91, 0.0);
+            ok(rc.pendingFixes() == 2, "위치: 거꾸로 온 시각 · 0,0 은 버린다");
+            String sb = rc.stepBody(5000L);
+            ok(sb.startsWith("{\"nowMs\":5000,\"fixes\":[[1000,37.5,126.9,15],[3000,37.51,126.91,null]],\"state\":{") && sb.contains("\"eta\":{\"nodes\":[1]}") && sb.contains("\"etaMs\":[null,1792465720000,0.5]") && sb.contains("\"v\":1"), "5초 요청: 위치 + state 를 그대로: " + sb);
+            RideCore.Step bad = rc.onStep("{\"error\":\"x\"}");
+            ok(!bad.ok && rc.pendingFixes() == 2, "엔진 오류면 위치를 지우지 않고 다음에 다시 보낸다");
+            RideCore.Step okS = rc.onStep("{\"v\":1,\"state\":{\"v\":1,\"eta\":{\"nodes\":[2]},\"steps\":1},\"ongoing\":{\"title\":\"길동무 경로 안내 중\",\"text\":\"다음 S1 12:04\"},\"alert\":{\"key\":\"6_2\",\"type\":\"near_arrive2\",\"title\":\"목적지 2정거장 전\",\"body\":\"S5까지 2정거장 남았어요\",\"vib\":[400,150,400]},\"done\":false,\"curIdx\":3,\"nextMs\":2500,\"pos\":{\"from\":3,\"to\":4,\"ratio\":0.5,\"moving\":true},\"arr\":[\"\",\"12:02\",\"12:04\"]}");
+            ok(okS.ok && okS.alert && "near_arrive2".equals(okS.type) && "6_2".equals(okS.key) && okS.vib.length == 4 && okS.vib[0] == 0 && okS.vib[1] == 400 && !okS.done, "응답: 알림 · 진동 무늬(앞에 대기 0)");
+            ok(rc.nextMs == 2500L && "다음 S1 12:04".equals(rc.text) && rc.cur == 3 && rc.pendingFixes() == 0 && rc.stepBody(9000L).contains("\"nodes\":[2]"), "응답: 간격 · 글 · 위치 · 보낸 위치 삭제 · 새 state");
+            ok(rc.lvJson().startsWith("{\"cur\":3,\"pos\":{") && rc.lvJson().contains("\"ratio\":0.5") && rc.lvJson().endsWith(",\"arr\":[\"\",\"12:02\",\"12:04\"]}") && rc.rideJson().equals("{\"on\":1,\"text\":\"다음 S1 12:04\"}"), "결과 카드용 값(r.lv · r.ride)");
+            rc.onStep("{\"state\":{\"v\":1,\"eta\":{}},\"nextMs\":99999}"); ok(rc.nextMs == RideCore.STEP_MAX_MS, "간격은 안전 범위 안으로");
+            rc.onStep("{\"state\":{\"v\":1,\"eta\":{}},\"nextMs\":1}"); ok(rc.nextMs == RideCore.STEP_MIN_MS, "간격 하한");
+            ok(rc.onStep("{\"state\":{\"v\":1,\"eta\":{}},\"done\":true}").done, "done 을 알린다");
+            String sv = rc.save(10000L);
+            RideCore back = RideCore.restore(sv, 10000L + 60000L);
+            ok(back != null && back.hasState() && back.text.equals(rc.text) && RideCore.restore(sv, 10000L + RideCore.MAX_AGE_MS + 1) == null && RideCore.restore("", 1L) == null && RideCore.restore("{\"at\":1}", 5L) == null, "저장 · 복원(30분 지나면 버린다)");
+            ok(RideCore.vibPattern(null).length == 2 && RideCore.vibPattern(java.util.Arrays.asList(Double.valueOf(5000.0), Double.valueOf(-5.0)))[1] == 1000L && RideCore.vibPattern(java.util.Arrays.asList(Double.valueOf(5000.0), Double.valueOf(-5.0)))[2] == 0L, "진동 무늬 안전 범위");
             HcardsCore hcc = new HcardsCore();
             HomeCore.Env en = new HomeCore.Env(); en.nowMs = 1000000L; en.tzoMin = -540; en.hol = false;
             ok(hcc.ensureNext(1000L) && hcc.aiNextAt == 1000L + HcardsCore.AI_EVERY_MS && !hcc.ensureNext(2000L), "AI 갱신 시각: 없을 때만 새로 정한다");

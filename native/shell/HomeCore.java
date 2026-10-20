@@ -57,6 +57,9 @@ public final class HomeCore {
     // 세부경로 시트: 펼친 구간 번호 · 엔진이 만든 길안내 주소 [앱 주소, 웹 주소] (info.nav)
     public final java.util.TreeSet<Integer> detOpen = new java.util.TreeSet<Integer>();
     public String[] navKakao = null, navNaver = null;
+    // 탑승 추적: 지금 보는 경로가 몇 번째 탐색인지(새 탐색이면 오른다) · 탑승을 시작한 탐색 · 서비스가 알려 준 상태(엔진 r.ride / r.lv 에 그대로 실린다)
+    public int routeId = 0, rideRouteId = -1;
+    public String rideJson = "", lvJson = "";
     /** 엔진 결과 화면의 info.sec(지금 보이는 경로의 지하철 구간 이름). */
     public List<String> resSec = new ArrayList<String>();
     @SuppressWarnings("unchecked")
@@ -78,7 +81,7 @@ public final class HomeCore {
     public boolean setRoute(String raw, String a, String b, long bt, long rb) {
         String t = raw == null ? "" : raw.trim();
         if (t.length() < 2 || t.charAt(0) != '{' || t.charAt(t.length() - 1) != '}') return false;
-        routeRaw = t; resA = a == null ? "" : a; resB = b == null ? "" : b; resBt = bt; resRb = rb; resTab = "fast"; resRev++; ld2Raw = ""; detOpen.clear();
+        routeRaw = t; resA = a == null ? "" : a; resB = b == null ? "" : b; resBt = bt; resRb = rb; resTab = "fast"; resRev++; ld2Raw = ""; detOpen.clear(); routeId++;
         return true;
     }
     public void clearRoute() { routeRaw = ""; ld2Raw = ""; lastQs = ""; resRev++; }
@@ -100,10 +103,20 @@ public final class HomeCore {
             + ",\"a\":" + ShellCore.q(resA) + ",\"b\":" + ShellCore.q(resB)
             + ",\"bt\":" + (resBt >= 0 ? String.valueOf(resBt) : "null") + ",\"rb\":" + resRb
             + (ld2Raw.length() > 2 ? ",\"ld2\":" + ld2Raw : "") + (offRaw.length() > 2 ? ",\"off\":" + offRaw : "") + (alRaw.length() > 2 ? ",\"al\":" + alRaw : "")
+            + (rideJson.length() > 2 && rideRouteId == routeId ? ",\"ride\":" + rideJson + (lvJson.length() > 2 ? ",\"lv\":" + lvJson : "") : "")
             + (loc[DEST] != null && loc[DEST].ok() ? ",\"dl\":{\"la\":" + loc[DEST].lat + ",\"lo\":" + loc[DEST].lng + ",\"n\":" + ShellCore.q(loc[DEST].name) + "}" : "")
             + (loc[START] != null && loc[START].ok() ? ",\"me\":[" + loc[START].lat + "," + loc[START].lng + "]" : "")
             + ",\"now\":" + env.nowMs + ",\"tz\":" + (-env.tzoMin) + ",\"th\":" + ShellCore.q("dark".equals(theme) ? "dark" : "pastel") + ",\"fav\":1}";
     }
+    /** 탑승 서비스가 알려 준 상태를 받는다(바뀐 게 있으면 true — 결과 화면을 다시 그린다). */
+    public boolean setRide(String ride, String lv) {
+        String r = ride == null ? "" : ride, l = lv == null ? "" : lv;
+        if (r.equals(rideJson) && l.equals(lvJson)) return false;
+        rideJson = r; lvJson = l; resRev++;
+        return true;
+    }
+    /** 지금 보는 경로로 탑승 안내 중인가. */
+    public boolean riding() { return rideJson.length() > 2 && rideRouteId == routeId; }
     /** 엔진 POST /screen/result 본문 — 세부경로 시트(view:detail, 펼친 구간 번호). */
     public String detailRequest(Env env, int cap, String theme) {
         String f = resultFacts(env, theme);
@@ -136,6 +149,8 @@ public final class HomeCore {
     public int actDetail(String v) {
         if (v == null || !v.startsWith("rd.")) return D_NONE;
         if ("rd.close".equals(v)) return D_CLOSE;
+        if ("rd.confirm".equals(v)) return hasRoute() && !riding() ? D_CONFIRM : D_NONE;
+        if ("rd.stop".equals(v)) return riding() ? D_STOP : D_NONE;
         if ("rd.kakao".equals(v)) return navKakao != null ? D_KAKAO : D_NONE;
         if ("rd.naver".equals(v)) return navNaver != null ? D_NAVER : D_NONE;
         if (v.startsWith("rd.tg.")) {
@@ -152,6 +167,7 @@ public final class HomeCore {
         if (v == null || !v.startsWith("rh.")) return R_NONE;
         if ("rh.close".equals(v)) { clearRoute(); return R_RENDER; }
         if ("rh.fav".equals(v)) return R_FAV;
+        if ("rh.stop".equals(v)) return riding() ? R_STOP : R_NONE;
         if ("rh.detail".equals(v)) { if (!hasRoute()) return R_NONE; detOpen.clear(); return R_DETAIL; }
         if (v.startsWith("rh.ld.")) {                                          // rh.ld.m.<번호> · rh.ld.g.<번호> — 엔진이 만든 질의를 그대로 쓴다
             try {
@@ -259,8 +275,8 @@ public final class HomeCore {
     }
 
     // ═════════════ 눌림 ═════════════
-    public static final int R_NONE = 0, R_RENDER = 1, R_GPS = 2, R_GO = 3, R_PICK_TIME = 4, R_FIELDS = 5, R_NEED_BOTH = 6, R_RESULT = 7, R_FAV = 8, R_LD = 9, R_ROOM = 10, R_DETAIL = 11;
-    public static final int D_NONE = 0, D_CLOSE = 1, D_RENDER = 2, D_KAKAO = 3, D_NAVER = 4;
+    public static final int R_NONE = 0, R_RENDER = 1, R_GPS = 2, R_GO = 3, R_PICK_TIME = 4, R_FIELDS = 5, R_NEED_BOTH = 6, R_RESULT = 7, R_FAV = 8, R_LD = 9, R_ROOM = 10, R_DETAIL = 11, R_STOP = 12;
+    public static final int D_NONE = 0, D_CLOSE = 1, D_RENDER = 2, D_KAKAO = 3, D_NAVER = 4, D_CONFIRM = 5, D_STOP = 6;
 
     /** 홈 화면의 눌림(a:'call' 의 v). R_FIELDS 는 입력칸 글자를 화면에 다시 써야 한다는 뜻. */
     public int act(String v, java.util.Map<String, String> fields) {
