@@ -11,6 +11,17 @@ async function handleScreenFood(request) {
   var body;
   try { body = JSON.parse(raw); } catch (e) { return new Response(JSON.stringify({ ok: false, error: "bad-json" }), { status: 400, headers: H }); }
   if (!body || typeof body !== "object") return new Response(JSON.stringify({ ok: false, error: "bad-body" }), { status: 400, headers: H });
+  if (body.op === "kakaoId") {                                  // 가게 이름+좌표 → 카카오 장소 주소(앱이 가게 정보 단추를 누를 때). 못 찾으면 id:null — 앱이 이름 검색 주소로 연다.
+    var kq = foodKakaoQuery(body.name, body.la, body.lo), kid = null;
+    try {
+      var kc = new AbortController(), kt = setTimeout(function () { kc.abort(); }, 4000);
+      var kr = await fetch("https://gentle-lab-7e47subway-api.phg0643.workers.dev/kakao-local?path=" + encodeURIComponent("search/keyword.json") + "&qs=" + encodeURIComponent(kq), { signal: kc.signal });
+      clearTimeout(kt);
+      if (kr.ok) { var kj = await kr.json(); kid = foodKakaoPick(kj && kj.documents, body.name); }
+    } catch (ek) { kid = null; }
+    var kl = kid ? foodKakaoLinks(kid) : null;
+    return new Response(JSON.stringify({ ok: true, id: kid, app: kl ? kl.app : "", web: kl ? kl.web : "", ver: ENGINE_VERSION }), { headers: H });
+  }
   var out;
   try { out = foodScreens({ cap: Number(body.cap) || 0 }, body.f, { c: body.c, p: body.p, s: body.s, u: body.u }, body.alts); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2) }), { status: 500, headers: H }); }
   if (!out || !out.ok) return new Response(JSON.stringify(out || { ok: false, error: "fail" }), { status: 400, headers: H });

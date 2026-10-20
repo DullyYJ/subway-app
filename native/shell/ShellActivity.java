@@ -79,8 +79,17 @@ public class ShellActivity extends Activity {
         @Override public void put(String k, String v) { try { sp.edit().putString(k, v).apply(); } catch (Throwable ignored) { } }
     }
 
+    private static volatile ShellActivity live;
+    /** 탑승 안내가 끝나면서 앱 화면까지 닫는다(내릴 준비 줄의 [앱 종료] · 도착 3분 뒤 자동 종료). 프로세스는 남겨 둔다(시계 위젯). */
+    static void quitAll() {
+        final ShellActivity a = live;
+        if (a == null) return;
+        a.runOnUiThread(new Runnable() { @Override public void run() { try { a.finishAndRemoveTask(); } catch (Throwable ignored) { } } });
+    }
+
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
+        live = this;
         store = new PrefStore(getSharedPreferences(PREFS, Context.MODE_PRIVATE));
         ErrLog.install(this);
         if (CmCore.on(store)) CommuteAlarm.rescheduleAsync(this);                 // 출퇴근 브리핑: 앞으로 4주 창을 다시 민다
@@ -118,6 +127,7 @@ public class ShellActivity extends Activity {
             }
         });
         applyTheme();
+        restoreRideCard();
         showTab(ShellCore.currentTab(store));
         WidgetCore.captureLaunch(getIntent());
         widgetLaunch();
@@ -197,6 +207,7 @@ public class ShellActivity extends Activity {
             store.put(ShellCore.K_SAMW, pi.sam && pi.w ? "1" : "0");
         } catch (Throwable t) { /* 못 읽으면 이전 값 */ }
     }
+    @Override protected void onDestroy() { if (live == this) live = null; super.onDestroy(); }
     @Override protected void onResume() { super.onResume(); resumed = true; refreshPower(); if (ShellCore.S_SETPG.equals(sheetName) && sheet != null && sheet.isShowing()) loadSetPage(); if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) startChatPoll(); }
     @Override protected void onPause() { resumed = false; super.onPause(); }
 
@@ -725,6 +736,19 @@ public class ShellActivity extends Activity {
             }
         }, "shell-foodsheet").start();
     }
+    /** 카카오맵 가게 정보: 엔진이 이름+좌표로 장소 ID 를 찾으면 그 가게 페이지를, 못 찾으면(또는 4초 안에 답이 없으면) 이름 검색 주소를 연다. */
+    private void openKakaoPlace(final String[] fallback) {
+        final String body = food.kakaoIdBody();
+        if (body.length() == 0) { openExternal(fallback[0], fallback[1]); return; }
+        toast("카카오맵에서 가게 정보를 여는 중...");
+        new Thread(new Runnable() {
+            @Override public void run() {
+                NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/food", body, 6000);
+                final String[] ln = r.status == 200 ? FoodCore.kakaoIdLink(r.body) : null;
+                main.post(new Runnable() { @Override public void run() { if (ln != null) openExternal(ln[0], ln[1]); else openExternal(fallback[0], fallback[1]); } });
+            }
+        }, "shell-kakaoid").start();
+    }
     /** 외부 지도 앱을 열어 보고, 없으면 웹 주소로 연다. */
     private void openExternal(String app, String web) {
         try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(app))); return; }
@@ -1037,6 +1061,7 @@ public class ShellActivity extends Activity {
             if ("wr.close".equals(a.v) || "fm.close".equals(a.v)) { closeSheet(); return; }
             if ("wr.submit".equals(a.v)) { submitWrite(); return; }
             String[] ln = food.sheetLink(a.v);
+            if (ln != null && "fm.ki".equals(a.v)) { openKakaoPlace(ln); return; }
             if (ln != null) openExternal(ln[0], ln[1]);
         }
         @Override public void onSet(ScreenCore.Act a, boolean on) { if (ShellCore.S_SETPG.equals(sheetName)) setPageAct(a.a, a.v, a.key, on); }
@@ -1533,6 +1558,7 @@ public class ShellActivity extends Activity {
                     String err = txt.length() == 0 ? "탑승 안내를 시작하지 못했어요" : ride.onStart(txt);
                     if (err.length() > 0) { toast(err); return; }
                     RideService.save(ShellActivity.this, ride);
+                    store.put(ShellCore.K_RIDESNAP, home.rideSnapshot());
                     try { RideService.start(ShellActivity.this); } catch (Throwable t) { toast("탑승 안내를 켜지 못했어요"); return; }
                     home.rideRouteId = rid;
                     rideGraceUntil = System.currentTimeMillis() + 8000L;
@@ -1551,7 +1577,20 @@ public class ShellActivity extends Activity {
             }
         }, "shell-ride").start();
     }
+    /** 앱이 죽었다(또는 화면만 다시 만들어졌다) 다시 열렸을 때, 탑승 안내가 아직 살아 있으면 그 경로의 결과 카드를 되살린다. */
+    private void restoreRideCard() {
+        try {
+            String snap = store.get(ShellCore.K_RIDESNAP, "");
+            if (snap.length() < 3 || home.hasRoute()) return;
+            RideCore live = RideCore.restore(getSharedPreferences(RideService.PREFS, MODE_PRIVATE).getString(RideService.KEY_SAVED, ""), System.currentTimeMillis());
+            if (live == null || !home.restoreRide(snap)) return;
+            home.rideRouteId = home.routeId;
+            home.setRide(RideService.running ? RideService.liveRide : live.rideJson(), RideService.running ? RideService.liveLv : live.lvJson());
+            rideGraceUntil = System.currentTimeMillis() + 8000L;
+        } catch (Throwable ignored) { }
+    }
     private void stopRide() {
+        store.put(ShellCore.K_RIDESNAP, "");
         RideService.stop(this);
         rideGraceUntil = 0L;
         home.setRide("", "");

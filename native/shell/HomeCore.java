@@ -108,6 +108,51 @@ public final class HomeCore {
             + (loc[START] != null && loc[START].ok() ? ",\"me\":[" + loc[START].lat + "," + loc[START].lng + "]" : "")
             + ",\"now\":" + env.nowMs + ",\"tz\":" + (-env.tzoMin) + ",\"th\":" + ShellCore.q("dark".equals(theme) ? "dark" : "pastel") + ",\"fav\":1}";
     }
+    /**
+     * 탑승을 시작할 때 저장해 두는 결과 카드 재료(받은 경로 응답 그대로 + 고른 탭 · 출발/도착 이름 · 기준시각 · 도착 좌표). 앱이 죽었다 다시 열려도 같은 카드를 되살리려는 것이다.
+     * 응답은 해석하지 않고 그대로 담는다. 경로가 없으면 "".
+     */
+    public String rideSnapshot() {
+        if (!hasRoute()) return "";
+        StringBuilder b = new StringBuilder("{\"raw\":").append(ShellCore.q(routeRaw)).append(",\"tab\":").append(ShellCore.q(resTab)).append(",\"a\":").append(ShellCore.q(resA)).append(",\"b\":").append(ShellCore.q(resB));
+        b.append(",\"bt\":").append(resBt).append(",\"rb\":").append(resRb);
+        if (loc[DEST] != null && loc[DEST].ok()) b.append(",\"dl\":{\"la\":").append(loc[DEST].lat).append(",\"lo\":").append(loc[DEST].lng).append(",\"n\":").append(ShellCore.q(loc[DEST].name)).append('}');
+        if (loc[START] != null && loc[START].ok()) b.append(",\"me\":[").append(loc[START].lat).append(',').append(loc[START].lng).append(']');
+        return b.append('}').toString();
+    }
+    /** rideSnapshot 로 저장한 글을 결과로 되돌린다. 모양이 이상하면 false(아무것도 바꾸지 않는다). */
+    @SuppressWarnings("unchecked")
+    public boolean restoreRide(String snap) {
+        try {
+            Object o = ScreenCore.parse(snap == null ? "" : snap);
+            if (!(o instanceof Map)) return false;
+            Map<String, Object> m = (Map<String, Object>) o;
+            if (!(m.get("raw") instanceof String) || !(m.get("tab") instanceof String)) return false;
+            String tab = (String) m.get("tab");
+            boolean tabOk = false;
+            for (String t : RTABS) if (t.equals(tab)) tabOk = true;
+            if (!tabOk) return false;
+            long bt = m.get("bt") instanceof Number ? ((Number) m.get("bt")).longValue() : -1L, rb = m.get("rb") instanceof Number ? ((Number) m.get("rb")).longValue() : 0L;
+            String a = m.get("a") instanceof String ? (String) m.get("a") : "", b = m.get("b") instanceof String ? (String) m.get("b") : "";
+            if (!setRoute((String) m.get("raw"), a, b, bt, rb)) return false;
+            resTab = tab;
+            if (m.get("dl") instanceof Map) {
+                Map<String, Object> d = (Map<String, Object>) m.get("dl");
+                if (d.get("la") instanceof Number && d.get("lo") instanceof Number && d.get("n") instanceof String) {
+                    Loc l = new Loc(); l.lat = ((Number) d.get("la")).doubleValue(); l.lng = ((Number) d.get("lo")).doubleValue(); l.name = (String) d.get("n"); l.type = "restored";
+                    loc[DEST] = l; text[DEST] = l.name;
+                }
+            }
+            if (m.get("me") instanceof List && ((List<Object>) m.get("me")).size() == 2) {
+                List<Object> me = (List<Object>) m.get("me");
+                if (me.get(0) instanceof Number && me.get(1) instanceof Number) {
+                    Loc l = new Loc(); l.lat = ((Number) me.get(0)).doubleValue(); l.lng = ((Number) me.get(1)).doubleValue(); l.name = a.length() > 0 ? a : "출발"; l.type = "restored";
+                    loc[START] = l; text[START] = l.name;
+                }
+            }
+            return true;
+        } catch (ScreenCore.ParseError e) { return false; }
+    }
     /** 탑승 서비스가 알려 준 상태를 받는다(바뀐 게 있으면 true — 결과 화면을 다시 그린다). */
     public boolean setRide(String ride, String lv) {
         String r = ride == null ? "" : ride, l = lv == null ? "" : lv;

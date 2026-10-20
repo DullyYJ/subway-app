@@ -136,7 +136,7 @@ public class RideService extends Service {
                         publish();
                         updateOngoing();
                         updateOverlay();
-                        if (s.done) { stepping = false; finishRide(true); return; }
+                        if (s.done) { stepping = false; boolean q = core.quit; finishRide(true); if (q) ShellActivity.quitAll(); return; }
                         delay = core.nextMs;
                     }
                 }
@@ -146,10 +146,26 @@ public class RideService extends Service {
         }
     };
 
+    /** 오버레이 손짓 → 엔진에 다음 걸음으로 알리거나(탑승 줄 · 추천 닫기) 곧바로 처리(보기 · 종료). 오버레이 클릭은 메인 스레드, 엔진 호출은 서비스 스레드. */
+    private final RideOverlay.Host ovHost = new RideOverlay.Host() {
+        @Override public void act(String a) {
+            if (core == null) return;
+            core.queueAct(a);
+            if (h != null) { h.removeCallbacks(stepRunnable); h.post(stepRunnable); }             // 5초를 기다리지 않고 바로 한 걸음
+        }
+        @Override public void recoGo(OvCore.Row r) {
+            if (core != null) core.dismissReco(r.at);
+            RecoGo.open(RideService.this, core == null ? null : core.lastRecoAd(), core == null ? null : core.recoLoc, r);
+        }
+        @Override public void recoOk(long at) { if (core != null) core.dismissReco(at); if (h != null) h.post(new Runnable() { @Override public void run() { updateOverlay(); } }); }
+        @Override public void quitApp() { finishRide(false); ShellActivity.quitAll(); }
+        @Override public void endRide() { finishRide(false); }
+    };
+
     /** 설정에서 '다른 앱 위에 표시'를 켰으면 엔진이 정한 안내 값을 창에 그린다(끄면 치운다). */
     private void updateOverlay() {
         try {
-            if (ov == null) ov = new RideOverlay(this);
+            if (ov == null) { ov = new RideOverlay(this); ov.setHost(ovHost); }
             boolean on = "1".equals(getSharedPreferences(ShellActivity.PREFS, MODE_PRIVATE).getString(ShellCore.K_OVL, "0"));
             if (core.ov != null && core.ov.cells.length > 0) ov.show(on && core.ovActive, core.ov);
             else ov.update(on && core.ovActive, core.ovLine1, core.ovLine2, core.ovBanner, core.ovAlert);
@@ -216,7 +232,7 @@ public class RideService extends Service {
         final Context app = getApplicationContext();
         new Thread(new Runnable() {
             @Override public void run() {
-                boolean ok = RecoNotify.send(app, body);
+                boolean ok = RecoNotify.send(app, body, core);
                 recoStage = ok ? "문구 받아 알림 보냄" : "문구 못 받음/시간대 아님"; recoStageAt = System.currentTimeMillis();
             }
         }, "ride-reco").start();

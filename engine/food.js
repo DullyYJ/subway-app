@@ -260,6 +260,24 @@ function foodNavUrls(sel, me) {
   nv.kinfo = { app: 'kakaomap://search?q=' + nm + (hasPos ? '&p=' + la + ',' + lo : ''), web: 'https://map.kakao.com/link/search/' + nm };
   return nv;
 }
+// ── 카카오 장소 ID (예전 웹 _placeKakaoId): 가게 이름 + 좌표로 카카오 장소 검색(반경 500m, 거리순) 결과 중 이름이 같거나 서로 포함되는 것을 고른다.
+//   이름이 정확히 같은 것 우선, 같은 급이면 가까운 것. 못 찾으면 null — 앱은 이때 이름 검색 주소로 연다. 결과 주소: 카카오맵 앱 place?id= / 웹 place.map.kakao.com/<id>.
+function foodPlaceNorm(x) { return String(x || '').replace(/<[^>]*>/g, '').replace(/[\s·.,()\-_/]/g, '').toLowerCase(); }
+function foodKakaoPick(docs, name) {
+  var want = foodPlaceNorm(name), best = null, i;
+  if (!want || !Array.isArray(docs)) return null;
+  for (i = 0; i < docs.length; i++) {
+    var d = docs[i], got = foodPlaceNorm(d && d.place_name);
+    if (!got || !d.id) continue;
+    if (got !== want && got.indexOf(want) < 0 && want.indexOf(got) < 0) continue;      // 이름이 다르면 다른 가게
+    var dist = parseFloat(d.distance); if (isNaN(dist)) dist = 0;
+    var exact = got === want ? 0 : 1;
+    if (!best || exact < best.exact || (exact === best.exact && dist < best.dist)) best = { id: String(d.id), dist: dist, exact: exact };
+  }
+  return best ? best.id : null;
+}
+function foodKakaoLinks(id) { return /^\d{1,20}$/.test(String(id)) ? { app: 'kakaomap://place?id=' + id, web: 'https://place.map.kakao.com/' + id } : null; }
+function foodKakaoQuery(name, la, lo) { return 'query=' + encodeURIComponent(String(name || '').slice(0, 60)) + '&x=' + Number(lo) + '&y=' + Number(la) + '&radius=500&sort=distance&size=10'; }
 function foodSheet(f) {
   var sel = f.sel, name = foodNameOf(sel.n);
   if (!name) return { ok: false, error: 'sel' };
@@ -280,4 +298,4 @@ function foodSheet(f) {
   return out;
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { foodScreen: foodScreen, foodScreens: foodScreens, foodFacts: foodFacts, foodKind: foodKind, foodCatSimple: foodCatSimple, foodDist: foodDist, foodStars: foodStars, foodList: foodList, foodResolve: foodResolve, foodHav: foodHav, foodRowsServer: foodRowsServer, foodRowsPublic: foodRowsPublic, foodNavUrls: foodNavUrls, FOOD_CHIPS: FOOD_CHIPS };
+if (typeof module !== 'undefined' && module.exports) module.exports = { foodKakaoPick: foodKakaoPick, foodKakaoLinks: foodKakaoLinks, foodKakaoQuery: foodKakaoQuery, foodScreen: foodScreen, foodScreens: foodScreens, foodFacts: foodFacts, foodKind: foodKind, foodCatSimple: foodCatSimple, foodDist: foodDist, foodStars: foodStars, foodList: foodList, foodResolve: foodResolve, foodHav: foodHav, foodRowsServer: foodRowsServer, foodRowsPublic: foodRowsPublic, foodNavUrls: foodNavUrls, FOOD_CHIPS: FOOD_CHIPS };

@@ -250,6 +250,21 @@ ok(S.ok && S.v === 1 && S.screen === 'food' && S.cover === 'tab' && /^f1:/.test(
     const big = []; for (let i = 0; i < 1500; i++) big.push(['가게' + i, '음식 > 한식 > 국밥', '서울 강남구 역삼로 ' + i, i]);
     const t0 = Date.now(); const rb = await post(JSON.stringify({ cap: 4, f: { stn: '강남', flt: '전체' }, c: big.slice(0, 300), p: big })); const jb = await rb.json();
     ok(rb.status === 200 && jb.ok && Date.now() - t0 < 1500, '워커: 큰 목록(1800곳)도 빠르게 ' + (Date.now() - t0) + 'ms');
+    // 카카오 장소 ID: 이름이 같거나 서로 포함되는 가장 가까운 곳(정확히 같은 이름 우선), 없으면 null
+    const docs = [{ id: '11', place_name: '맛있는 국밥집 2호점', distance: '30' }, { id: '22', place_name: '<b>맛있는</b> 국밥집', distance: '120' }, { id: '33', place_name: '다른 가게', distance: '10' }, { id: '44', place_name: '맛있는국밥집', distance: '80' }];
+    ok(E.foodKakaoPick(docs, '맛있는 국밥집') === '44' && E.foodKakaoPick(docs.slice(0, 1), '맛있는 국밥집') === '11' && E.foodKakaoPick(docs.slice(2, 3), '맛있는 국밥집') === null && E.foodKakaoPick([], 'x') === null && E.foodKakaoPick(null, 'x') === null && E.foodKakaoPick(docs, '') === null, '카카오 장소 ID 고르기');
+    ok(E.foodKakaoLinks('44').app === 'kakaomap://place?id=44' && E.foodKakaoLinks('44').web === 'https://place.map.kakao.com/44' && E.foodKakaoLinks('4;4') === null, '카카오 장소 주소');
+    ok(/^query=%EB%A7%9B.*&x=127&y=37\.5&radius=500&sort=distance&size=10$/.test(E.foodKakaoQuery('맛있는', 37.5, 127)), '카카오 질의');
+    {
+      const real = globalThis.fetch; let asked = '';
+      globalThis.fetch = async u => { asked = String(u); return { ok: true, json: async () => ({ documents: docs }) }; };
+      const k = await (await post(JSON.stringify({ op: 'kakaoId', name: '맛있는 국밥집', la: 37.5, lo: 127 }))).json();
+      ok(k.ok && k.id === '44' && k.app === 'kakaomap://place?id=44' && k.web === 'https://place.map.kakao.com/44' && /kakao-local\?path=search%2Fkeyword\.json/.test(asked), '워커: 카카오 장소 주소 조회');
+      globalThis.fetch = async () => { throw new Error('net'); };
+      const k2 = await (await post(JSON.stringify({ op: 'kakaoId', name: '맛있는 국밥집', la: 37.5, lo: 127 }))).json();
+      ok(k2.ok && k2.id === null && k2.app === '', '워커: 조회가 실패하면 id 없음(앱이 이름 검색으로 연다)');
+      globalThis.fetch = real;
+    }
   } catch (e) { fail++; console.log('  FAIL 워커 시험 예외', e && e.stack || e); }
   try { fs.unlinkSync(tmp); } catch (e) { }
   console.log(`food_engine: ${pass} pass, ${fail} fail`);

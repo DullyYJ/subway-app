@@ -1725,6 +1725,19 @@
 - **약관 3종 + 오류 로그 + 위치 수집 고지**: 엔진 `settings.js` 에 `SETTINGS_POL`(개인정보 · 위치기반 · 이용약관 `polp/poll/polo`), `erl`(오류 로그: 복사 · 지우기), `locd`(위치 수집 동의 고지 — 맨 위 ‹ 설정 없음, 동의/거절 `locd.ok/no`). 앱: `ErrCore`(순수 · 오류 목록 문자열) · `ErrLog`(미처리 예외를 기록하고 원래 핸들러에 넘김 · ShellActivity/RideService 시작에서 설치). `ShellCore.routePage` 에 locd/pol/erl 분기, PG_ERLCOPY~PG_POLOPEN. 위치 권한을 처음 요구하기 전에 `locGate` 가 고지를 먼저 띄운다(동의 전엔 닫을 수 없음).
 - **카카오톡 위치 공유**: 엔진 `ride-standby.js` 가 `overlay.share`(글 · 압축 타임라인 재료 `rsShare`)를 주고, `hcards.js` 가 `f.sh` 일 때 [내 위치 공유] 버튼(`share.loc`)을 홈 카드에 넣는다. 앱: `ShareCore`(순수 · 재료 읽기 · 그림에 넣을 칸 고르기) · `ShareArt`(비트맵 그리기) · `ShareProvider`(앱 캐시 `gdmshare` 의 `gildongmu_<숫자>.png` 만 읽게 하는 ContentProvider, 매니페스트 등록) · `ShellActivity.shareLoc`(글+그림을 ACTION_SEND, 카카오톡이 깔려 있으면 선택창 맨 앞에 올림). `HcardsCore.share` 는 탑승 중이고 재료가 있을 때만 `sh:1`.
 - **떠 있는 안내(오버레이) 풍부화**: 엔진 `ride-start.js` 의 `rstOvl` 이 칸 틀에 점 모양(`dk`) · 선 색(`lc/rc`) · 점 색 · 노선 라벨(첫 칸 · 환승 칸 배지) · 이동 중 문구(`m`) · 테마 색을 채운다(전엔 이름과 시각뿐이라 선이 없었다). 앱: `OvCore`(순수 · overlay JSON → 모델 · 다섯 칸 창 위치) · `RideOverlay` 를 칸 줄(`StripView`) · 접힌 알약(위로 쓸면 접기, 아래로 쓸거나 누르면 펼침, 목적지 3정거장 전부터 깜박) · 무지개 테두리(2정거장 전 느리게, 1정거장 전 빠르게) · 하차 임박 큰 글 · 도착 줄 [안내 종료] 로 다시 그렸다. 칸이 없으면(개발자 도구 · 엔진이 틀을 못 받았을 때) 예전 3줄 막대로 그린다. 칸 줄은 좌우로 밀어 넘겨 볼 수 있고 10초 뒤 현위치로 돌아온다. 꾹 누르면 위아래로 옮긴다.
-- **의도적으로 안 옮긴 것 (옛 웹 시절 기능)**: 오버레이의 추천 줄 · 내릴 준비 줄(캐릭터와 [보기]/[확인]/[앱 종료]) — 엔진이 오버레이에 `reco/getoff` 를 채우지 않고 같은 추천은 알림(RecoNotify)으로 나간다. 오버레이 안의 탑승/되돌리기 버튼(`rs`) — 네이티브 탑승은 사용자가 누른 시점부터라 도착 줄의 [안내 종료]만 둔다. 오버레이 진동(알림이 이미 울림). 앱 종료 예약(`quit`) — 엔진 `done` 으로 서비스가 스스로 끝난다. 웹 오프라인 맛집 목록 · 카카오 장소 ID 조회 · Leaflet 지도 · 앱이 죽은 뒤 결과 카드 복원.
+- (정정) 오버레이의 추천 줄 · 내릴 준비 줄 · 탑승/되돌리기 줄 · 앱 종료는 처음엔 안 옮긴다고 적었으나 s109 에서 모두 이식했다(아래 항목).
 - **기지국(CellInfo) · 움직임 센서(Motion) 플러그인**: YJ 확인 — 옛 웹에서도 이미 죽은 기능이라 이식하지 않는다(엔진에도 소비자 없음). 지하 정확도 우려는 해당 없음.
 - 시험: settings_engine 206 · ride_standby 27 · hcards_engine 33 · ride_start_engine 40 · JVM(ErrCore · ShareCore · OvCore · 홈 카드 공유 열쇠) · android.jar 컴파일(ShellActivity · RideOverlay · ShareArt · ShareProvider 포함). 워커 `route-v2-2026-10-20s108`. **기기 미확인**: 약관 · 고지 화면 흐름 · 오류 로그가 실제 크래시를 담는지 · 공유 그림과 카톡 선택창 · 파일 제공자 권한 · 오버레이 칸 줄 그림 · 알약 접기/펼치기 · 무지개 테두리 · 쓸기와 꾹 눌러 옮기기 · [안내 종료] 누름.
+
+## 2026-10-21 엔진 s109 + native-shell — 남은 코드 이식 (오버레이 추천·내릴 준비·탑승 줄 · 앱 종료 · 카카오 장소 ID · 결과 카드 복원)
+
+YJ 요청("코드로 남은거 일단 다 이식")으로 점검에서 남았던 코드 항목을 옮겼다. 계산은 엔진, 앱은 그림만.
+- **오버레이 줄 3종 (엔진 `ride-standby.js`)**: `overlay.reco {on,ch,a,b,m,go,ok,at}`(추천), `overlay.getoff {on,ch,a,b,end,at}`(내릴 준비 — 최종 목적지 알림 1단계에서만, 우선순위 getoff > reco, 30초 붙잡기), `overlay.rs {st:hidden|wait|board|undo,...}`(탑승 줄; 도착하면 `end:true` · 안내 종료). 최상위 `quit:true` 는 도착으로 끝날 때만(+180초).
+- **오버레이 탑승/되돌리기**: 요청 `act:'press'|'undo'|'open'|'pill'`. 대기 중 press → `src:'gps'` 승차 추가 + 20초 되돌리기. 출발 2분 전 탑승 줄 자동 열림.
+- **추천 광고 줄**: 앱이 `/reco-text` 응답을 `RideCore.recoAd` 로 읽어 `rc {a,b,m,go}` 로 한 번 보내고, [확인]/[보기]는 `rcDis=at` 로 알린다. [보기]는 쿠팡(https 만) 또는 목적지 근처 카카오맵 검색(`RecoGo`).
+- **앱 종료 예약**: 도착 후 `quit` → `RideService` 가 `ShellActivity.quitAll()`. 오버레이의 [앱 종료]도 같은 길.
+- **카카오 장소 ID**: 엔진 `POST /screen/food {op:'kakaoId',name,la,lo}` → `{ok,id,app,web}`; 앱 `FoodCore.kakaoIdLink` 가 `kakaomap://place?id=` / `https://place.map.kakao.com/` 만 받고, 실패하면 이름 검색으로 대체.
+- **앱이 죽은 뒤 결과 카드 복원**: 탑승 시작 때 `HomeCore.rideSnapshot()`(경로 원문 · 탭 · 출발/도착 · 좌표)을 `ride_snap` 에 저장, `ShellActivity.onCreate` 의 `restoreRideCard()` 가 탑승 저장 상태(`RideCore.restore`, 30분 안)가 살아 있을 때만 되살린다. `stopRide` 에서 지운다.
+- **안 옮긴 것(이유)**: 오프라인 맛집 CSV(2026-09-14 부터 비어 있음) · Leaflet 지도(외부 지도 앱으로 대체) · 오버레이 진동(알림이 이미 울림, 엔진이 `alertVibe:false`).
+- **알려진 한계**: 장소 [보기]는 옛 앱 안 맛집 탭이 아니라 카카오맵 검색을 연다. 워커 `route-v2-2026-10-20s109`.
+- **기기 미확인(전부)**: 오버레이 추천/내릴 준비/탑승 줄 그림과 쓸기 · [보기]/[확인] 누름 · 앱 종료 · 카카오 장소 ID 열기 · 앱 강제 종료 후 결과 카드 복원.

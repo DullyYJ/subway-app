@@ -17,13 +17,16 @@ final class RecoNotify {
     private static final String CH = RideService.CH_ALERT;
 
     /** @return 알림을 띄웠으면 true · 보낼 글이 없는 시간대면 false · 서버/네트워크 오류면 false(두 번까지 다시 받아 본다) */
-    static boolean send(Context c, String body) {
+    static boolean send(Context c, String body) { return send(c, body, null); }
+    /** core 가 있으면 받은 추천 줄(ad)을 건네 둔다 — 엔진이 오버레이 하단 줄로 보여 준다. */
+    static boolean send(Context c, String body, RideCore core) {
         for (int i = 0; i < 2; i++) {
             try {
                 NetPost.Res r = NetPost.post(ShellCore.BASE + "/reco-text", body, 9000);
                 if (r.status != 200) continue;
                 String[] t = RideCore.recoText(r.body);
                 if (t == null) return false;
+                if (core != null) core.setRecoAd(RideCore.recoAd(r.body));
                 show(c, t[0], t[1]);
                 return true;
             } catch (Throwable ignored) { }

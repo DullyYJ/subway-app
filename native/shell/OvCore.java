@@ -18,6 +18,12 @@ public final class OvCore {
         public boolean pill, hasL, hasR;
         public int gc = 0xFF8E8E93, lc = 0xFF8E8E93, rc = 0xFF8E8E93, dc = 0xFF0A84FF, dk = 1;
     }
+    /** 하단 줄: 0 없음 · 1 하차 추천([보기][확인]) · 2 내릴 준비([앱 종료]). 글·버튼 이름·캐릭터는 엔진이 정한다. */
+    public static final class Row {
+        public int kind;
+        public String ch = "", a = "", b = "", m = "", go = "", ok = "", end = "";
+        public long at;
+    }
     public static final class Ov {
         public boolean active, moving, pre;
         public String line1 = "", line2 = "", line3 = "", pill = "", banner = "", destName = "";
@@ -26,7 +32,9 @@ public final class OvCore {
         public Cell[] cells = new Cell[0];
         public boolean hasTheme;
         public int bg = 0xFF1C1C1E, fg = 0xFFF2F2F7, sub = 0xFF8E8E93;
-        public String rsSt = "hidden", rsBt = "", rsK = "";
+        public String rsSt = "hidden", rsBt = "", rsK = "", rsNm = "";
+        public boolean rsEnd;
+        public Row row = new Row();
     }
 
     /** "#rgb" · "#rrggbb" · "#aarrggbb" → 0xAARRGGBB, 못 읽으면 def. */
@@ -81,10 +89,28 @@ public final class OvCore {
         }
         if (m.get("rs") instanceof Map) {
             Map<String, Object> r = (Map<String, Object>) m.get("rs");
-            v.rsSt = BoardCore.s(r.get("st"), 10); v.rsBt = BoardCore.s(r.get("bt"), 12); v.rsK = BoardCore.s(r.get("k"), 40);
+            v.rsSt = BoardCore.s(r.get("st"), 10); v.rsBt = BoardCore.s(r.get("bt"), 12); v.rsK = BoardCore.s(r.get("k"), 40); v.rsNm = BoardCore.s(r.get("nm"), 24); v.rsEnd = Boolean.TRUE.equals(r.get("end"));
             if (v.rsSt.length() == 0) v.rsSt = "hidden";
         }
+        Object go = m.get("getoff"), rc = m.get("reco");
+        if (go instanceof Map && Boolean.TRUE.equals(((Map<String, Object>) go).get("on")) && BoardCore.s(((Map<String, Object>) go).get("a"), 30).length() > 0) {
+            Map<String, Object> g = (Map<String, Object>) go;
+            v.row.kind = 2; v.row.ch = chId(g.get("ch")); v.row.a = BoardCore.s(g.get("a"), 30); v.row.b = BoardCore.s(g.get("b"), 60);
+            v.row.end = BoardCore.s(g.get("end"), 10); if (v.row.end.length() == 0) v.row.end = "앱 종료";
+            v.row.at = g.get("at") instanceof Number ? ((Number) g.get("at")).longValue() : 0L;
+        } else if (rc instanceof Map && Boolean.TRUE.equals(((Map<String, Object>) rc).get("on")) && BoardCore.s(((Map<String, Object>) rc).get("a"), 40).length() > 0) {
+            Map<String, Object> g = (Map<String, Object>) rc;
+            v.row.kind = 1; v.row.ch = chId(g.get("ch")); v.row.a = BoardCore.s(g.get("a"), 40); v.row.b = BoardCore.s(g.get("b"), 64); v.row.m = BoardCore.s(g.get("m"), 32);
+            v.row.go = BoardCore.s(g.get("go"), 10); if (v.row.go.length() == 0) v.row.go = "맛집 보기";
+            v.row.ok = BoardCore.s(g.get("ok"), 10); if (v.row.ok.length() == 0) v.row.ok = "확인";
+            v.row.at = g.get("at") instanceof Number ? ((Number) g.get("at")).longValue() : 0L;
+        }
         return v;
+    }
+    /** 캐릭터 이름은 자산에 있는 여섯 가지만(아니면 빈 글 → 그림 없이 글만). */
+    static String chId(Object o) {
+        String s = BoardCore.s(o, 12);
+        return ("dolsom".equals(s) || "lovel".equals(s) || "dudung".equals(s) || "sul".equals(s) || "ppopu".equals(s) || "chaeng".equals(s)) ? s : "";
     }
 
     /** 평소 막대(칸 줄이 없을 때): 줄 글만 가진 모델(개발자 도구 · 엔진이 칸을 안 준 경우). */
@@ -112,7 +138,7 @@ public final class OvCore {
     /** 칸 줄을 그릴 수 있나. */
     public static boolean hasStrip(Ov v) { return v.cells.length > 0; }
     /** 도착 줄([안내 종료] 버튼)이 보이는 상태인가. */
-    public static boolean arrived(Ov v) { return "board".equals(v.rsSt) && v.rsBt.length() > 0; }
+    public static boolean arrived(Ov v) { return "board".equals(v.rsSt) && v.rsEnd && v.rsBt.length() > 0; }
     /** 경고 테두리 한 바퀴 시간(ms): 2정거장 전 느리게, 1정거장 전 빠르게, 없으면 0. */
     public static long spinMs(int alert) { return alert == 1 ? 1400L : (alert == 2 ? 4200L : 0L); }
 }

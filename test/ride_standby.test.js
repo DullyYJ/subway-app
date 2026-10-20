@@ -350,6 +350,79 @@ t('다음 호출 간격: 표시 도착 시각 앞 30초~뒤 40초 안에는 2.5�
   { const q = rideStandby({ nowMs: at(12, 53, 0), fixes: [], state: Object.assign(mkState(), { arrivedAt: at(12, 49, 0) }) }); assert.ok(q.done && q.nextMs === 5000, '끝나면 기본 간격 ' + q.nextMs); }
 });
 
+
+// ── 오버레이 하단 줄 · 탑승 줄 · 앱 종료 (s109) ─────────────────────────────────────
+const stepO = (st, ms, extra, fix) => rideStandby(Object.assign({ nowMs: ms, fixes: fix === false ? [] : [[ms, LAT, trainLng(ms, 0), 20]], state: JSON.parse(JSON.stringify(st)) }, extra || {}));
+t('내릴 준비 줄: 목적지 한 정거장 전에만 나오고(앱 종료 버튼 · 응원 문구), 추천 줄은 그때 내려간다', () => {
+  let st = withOvl(mkState()), seen = [], rcSent = false;
+  for (let ms = at(12, 53, 0); ms <= at(13, 1, 0); ms += 5000) {
+    const r = stepO(st, ms, rcSent ? null : { rc: { a: '맛있는집', b: '점심 한 끼', m: '120m · 한식', go: '맛집 보기' } }); rcSent = true; st = r.state;
+    if (r.done) break;
+    const o = r.overlay; if (o && o.getoff && o.getoff.on) seen.push({ ms: ms, g: o.getoff, alert: o.alert, reco: o.reco.on });
+  }
+  assert.ok(seen.length > 3, '내릴 준비 줄이 나온다 ' + seen.length);
+  assert.ok(seen.every(x => x.g.a === '내릴 준비를 해주세요' && x.g.end === '앱 종료' && x.g.b.length > 0 && x.g.b.length <= 40 && /^(dolsom|lovel|dudung|sul|ppopu|chaeng)$/.test(x.g.ch)));
+  assert.ok(seen.slice(0, 5).every(x => x.alert === 1 && x.reco === false), '한 정거장 전에는 추천 대신 내릴 준비');
+  assert.ok(new Set(seen.map(x => x.g.ch)).size === 1, '같은 경고 동안 캐릭터는 그대로');
+});
+t('추천 줄: /reco-text 의 ad 를 req.rc 로 알려 주면 도착 7분 안에 [보기][확인] 줄로 나오고, rcDis 로 닫으면 사라진다', () => {
+  let st = withOvl(mkState());
+  let r = stepO(st, at(12, 50, 0), { rc: { a: '맛있는집', b: '점심 한 끼', m: '120m · 한식', go: '맛집 보기' } }); st = r.state;
+  assert.strictEqual(r.overlay.reco.on, false, '도착 10분 전엔 아직');
+  r = stepO(st, at(12, 54, 0)); st = r.state;
+  const rc = r.overlay.reco;
+  assert.ok(rc.on && rc.a === '맛있는집' && rc.b === '점심 한 끼' && rc.m === '120m · 한식' && rc.go === '맛집 보기' && rc.ok === '확인' && rc.at === at(12, 50, 0), JSON.stringify(rc));
+  r = stepO(st, at(12, 54, 5), { rcDis: rc.at }); st = r.state;
+  assert.strictEqual(r.overlay.reco.on, false, '확인을 누르면 닫힌다');
+  r = stepO(st, at(12, 55, 0), { rc: { a: '맛있는집', b: '점심 한 끼', m: '120m · 한식', go: '맛집 보기' } });
+  assert.strictEqual(r.overlay.reco.on, false, '같은 추천을 다시 알려도 다시 안 뜬다');
+  const k = stepO(withOvl(mkState({ allowed: { arrive_reco: false } })), at(12, 54, 0), { rc: { a: 'x', b: 'y' } });
+  assert.strictEqual(k.overlay.reco.on, false, '알림 끔이면 줄도 없다');
+  const sh = stepO(withOvl(mkState()), at(12, 54, 0), { rc: { a: '쿠팡템', b: '', go: '쿠팡 보기' } });
+  assert.strictEqual(sh.overlay.reco.go, '쿠팡 보기');
+});
+t('하단 줄은 한 번 보이면 30초 붙잡는다(입력이 흔들려도 깜박이지 않는다)', () => {
+  let st = withOvl(mkState()), r = stepO(st, at(12, 50, 0), { rc: { a: '가게', b: '설명' } }); st = r.state;
+  r = stepO(st, at(12, 54, 0)); st = r.state; assert.ok(r.overlay.reco.on);
+  const w = JSON.parse(JSON.stringify(st)); w.wait = { i: 1, lat: LAT, lng: LNG0, arrMs: at(13, 30, 0), since: at(12, 0, 0), seen: false, nearTs: 0 }; w.waitChk = 1;
+  r = stepO(w, at(12, 54, 10), null, false);
+  assert.ok(r.overlay.reco.on, '10초 뒤엔 붙잡는다');
+  r = stepO(r.state, at(12, 54, 40), null, false);
+  assert.strictEqual(r.overlay.reco.on, false, '30초가 지나면 내려간다');
+});
+function waitState() {
+  const st = mkState(); st.wait = { i: 1, lat: LAT, lng: LNG0, arrMs: at(12, 52, 0), since: at(12, 40, 0), seen: false, nearTs: 0 }; st.waitChk = 1;
+  st.eta.boarded = false; st.eta.notDeparted = true; st.eta.passes = []; return withOvl(st);
+}
+t('오버레이 탑승 줄: 대기 알약 → (알약 누름 · 출발 2분 전) 탑승 줄 → [탑승] → [되돌리기]', () => {
+  let r = stepO(waitState(), at(12, 47, 0), null, false);
+  assert.strictEqual(r.overlay.rs.st, 'wait');
+  r = stepO(r.state, at(12, 47, 5), { act: 'pill' }, false); assert.strictEqual(r.overlay.rs.st, 'board');
+  r = stepO(r.state, at(12, 47, 10), { act: 'close' }, false); assert.strictEqual(r.overlay.rs.st, 'wait');
+  r = stepO(r.state, at(12, 50, 30), null, false);
+  assert.ok(r.overlay.rs.st === 'board' && r.overlay.rs.bt === '탑승' && /S0/.test(r.overlay.rs.k) && /승차 대기/.test(r.ongoing.text), JSON.stringify(r.overlay.rs));
+  r = stepO(r.state, at(12, 50, 35), { act: 'press' }, false);
+  assert.ok(r.overlay.rs.st === 'undo' && r.overlay.rs.bt === '되돌리기' && !r.state.wait && r.state.eta.boarded === true && r.state.eta.passes.some(p => p.idx === 1 && p.ms === at(12, 50, 35)));
+  r = stepO(r.state, at(12, 50, 40), { act: 'undo' }, false);
+  assert.ok(r.overlay.rs.st === 'board' && r.state.wait && r.state.wait.i === 1 && r.state.eta.boarded === false && r.state.eta.notDeparted === true && !r.state.eta.passes.some(p => p.idx === 1));
+  r = stepO(r.state, at(12, 50, 45), { act: 'press' }, false);
+  r = stepO(r.state, at(12, 51, 10), null, false);
+  assert.strictEqual(r.overlay.rs.st, 'hidden', '20초가 지나면 되돌리기도 사라진다');
+  const n = stepO(r.state, at(12, 51, 15), { act: 'undo' }, false);
+  assert.ok(!n.state.wait, '시간이 지난 뒤 되돌리기는 무시');
+});
+t('도착 3분 뒤 done 과 함께 quit:true(앱도 끝낸다), 경로 이탈 포기는 quit 아님', () => {
+  let st = withOvl(mkState()), q = null, done = null;
+  for (let ms = at(12, 53, 0); ms <= at(13, 10, 0); ms += 5000) {
+    const r = stepO(st, ms); st = r.state;
+    if (r.done) { q = r.quit; done = ms; break; }
+  }
+  assert.ok(done && q === true);
+  const s2 = mkState(); s2.lastAt = at(12, 0, 0);
+  const r2 = rideStandby({ nowMs: at(12, 55, 0) + 4 * 3600000, fixes: [], state: s2 });
+  assert.ok(r2.done === true && r2.quit === false, '오래 갱신 안 된 상태는 quit 아님');
+});
+
 const httpTest = async () => {
   const zlib = require('zlib');
   const body = JSON.stringify({ nowMs: at(12, 55, 0), fixes: [], state: withOvl(mkState()) });

@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-20s108";
+var ENGINE_VERSION = "route-v2-2026-10-20s109";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -12527,6 +12527,24 @@ function foodNavUrls(sel, me) {
   nv.kinfo = { app: 'kakaomap://search?q=' + nm + (hasPos ? '&p=' + la + ',' + lo : ''), web: 'https://map.kakao.com/link/search/' + nm };
   return nv;
 }
+// \u2500\u2500 \uce74\uce74\uc624 \uc7a5\uc18c ID (\uc608\uc804 \uc6f9 _placeKakaoId): \uac00\uac8c \uc774\ub984 + \uc88c\ud45c\ub85c \uce74\uce74\uc624 \uc7a5\uc18c \uac80\uc0c9(\ubc18\uacbd 500m, \uac70\ub9ac\uc21c) \uacb0\uacfc \uc911 \uc774\ub984\uc774 \uac19\uac70\ub098 \uc11c\ub85c \ud3ec\ud568\ub418\ub294 \uac83\uc744 \uace0\ub978\ub2e4.
+//   \uc774\ub984\uc774 \uc815\ud655\ud788 \uac19\uc740 \uac83 \uc6b0\uc120, \uac19\uc740 \uae09\uc774\uba74 \uac00\uae4c\uc6b4 \uac83. \ubabb \ucc3e\uc73c\uba74 null \u2014 \uc571\uc740 \uc774\ub54c \uc774\ub984 \uac80\uc0c9 \uc8fc\uc18c\ub85c \uc5f0\ub2e4. \uacb0\uacfc \uc8fc\uc18c: \uce74\uce74\uc624\ub9f5 \uc571 place?id= / \uc6f9 place.map.kakao.com/<id>.
+function foodPlaceNorm(x) { return String(x || '').replace(/<[^>]*>/g, '').replace(/[\s\u00b7.,()\-_/]/g, '').toLowerCase(); }
+function foodKakaoPick(docs, name) {
+  var want = foodPlaceNorm(name), best = null, i;
+  if (!want || !Array.isArray(docs)) return null;
+  for (i = 0; i < docs.length; i++) {
+    var d = docs[i], got = foodPlaceNorm(d && d.place_name);
+    if (!got || !d.id) continue;
+    if (got !== want && got.indexOf(want) < 0 && want.indexOf(got) < 0) continue;      // \uc774\ub984\uc774 \ub2e4\ub974\uba74 \ub2e4\ub978 \uac00\uac8c
+    var dist = parseFloat(d.distance); if (isNaN(dist)) dist = 0;
+    var exact = got === want ? 0 : 1;
+    if (!best || exact < best.exact || (exact === best.exact && dist < best.dist)) best = { id: String(d.id), dist: dist, exact: exact };
+  }
+  return best ? best.id : null;
+}
+function foodKakaoLinks(id) { return /^\d{1,20}$/.test(String(id)) ? { app: 'kakaomap://place?id=' + id, web: 'https://place.map.kakao.com/' + id } : null; }
+function foodKakaoQuery(name, la, lo) { return 'query=' + encodeURIComponent(String(name || '').slice(0, 60)) + '&x=' + Number(lo) + '&y=' + Number(la) + '&radius=500&sort=distance&size=10'; }
 function foodSheet(f) {
   var sel = f.sel, name = foodNameOf(sel.n);
   if (!name) return { ok: false, error: 'sel' };
@@ -12559,6 +12577,17 @@ async function handleScreenFood(request) {
   var body;
   try { body = JSON.parse(raw); } catch (e) { return new Response(JSON.stringify({ ok: false, error: "bad-json" }), { status: 400, headers: H }); }
   if (!body || typeof body !== "object") return new Response(JSON.stringify({ ok: false, error: "bad-body" }), { status: 400, headers: H });
+  if (body.op === "kakaoId") {                                  // \uac00\uac8c \uc774\ub984+\uc88c\ud45c \u2192 \uce74\uce74\uc624 \uc7a5\uc18c \uc8fc\uc18c(\uc571\uc774 \uac00\uac8c \uc815\ubcf4 \ub2e8\ucd94\ub97c \ub204\ub97c \ub54c). \ubabb \ucc3e\uc73c\uba74 id:null \u2014 \uc571\uc774 \uc774\ub984 \uac80\uc0c9 \uc8fc\uc18c\ub85c \uc5f0\ub2e4.
+    var kq = foodKakaoQuery(body.name, body.la, body.lo), kid = null;
+    try {
+      var kc = new AbortController(), kt = setTimeout(function () { kc.abort(); }, 4000);
+      var kr = await fetch("https://gentle-lab-7e47subway-api.phg0643.workers.dev/kakao-local?path=" + encodeURIComponent("search/keyword.json") + "&qs=" + encodeURIComponent(kq), { signal: kc.signal });
+      clearTimeout(kt);
+      if (kr.ok) { var kj = await kr.json(); kid = foodKakaoPick(kj && kj.documents, body.name); }
+    } catch (ek) { kid = null; }
+    var kl = kid ? foodKakaoLinks(kid) : null;
+    return new Response(JSON.stringify({ ok: true, id: kid, app: kl ? kl.app : "", web: kl ? kl.web : "", ver: ENGINE_VERSION }), { headers: H });
+  }
   var out;
   try { out = foodScreens({ cap: Number(body.cap) || 0 }, body.f, { c: body.c, p: body.p, s: body.s, u: body.u }, body.alts); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2) }), { status: 500, headers: H }); }
   if (!out || !out.ok) return new Response(JSON.stringify(out || { ok: false, error: "fail" }), { status: 400, headers: H });

@@ -834,4 +834,4 @@ function handleRideEta(request) {
   }, function () { return new Response(JSON.stringify({ error: 'JSON 아님' }), { status: 400, headers: H }); });
 }
 
-if (typeof module !== 'undefined') module.exports = { rideEta: rideEta, rideRow: rideRow, rideArrive: rideArrive, _reHold: _reHold, rideLabels: rideLabels, _rePos: _rePos, handleRideEta: handleRideEta, RIDE_ETA_DEFAULTS: RIDE_ETA_DEFAULTS };
+if (typeof module !== 'undefined') module.exports = { reArrCheer: reArrCheer, rideEta: rideEta, rideRow: rideRow, rideArrive: rideArrive, _reHold: _reHold, rideLabels: rideLabels, _rePos: _rePos, handleRideEta: handleRideEta, RIDE_ETA_DEFAULTS: RIDE_ETA_DEFAULTS };

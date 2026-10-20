@@ -35,6 +35,7 @@ public final class FoodCore {
     public double[] ctr = null;                  // 엔진이 정한 중심 좌표
     final Map<String, Object> go = new LinkedHashMap<String, Object>();
     final Map<String, String> alts = new LinkedHashMap<String, String>();   // 칩 → 그 칩의 화면 글
+    public String selName = ""; public double selLa, selLo;   // 가게 시트의 가게(카카오 장소 ID 조회용)
     public String pendingSel = "";               // 눌린 가게(시트 요청용 JSON)
     final Map<String, String> nvApp = new LinkedHashMap<String, String>(), nvWeb = new LinkedHashMap<String, String>();
 
@@ -195,6 +196,7 @@ public final class FoodCore {
         Map<String, Object> sel = new LinkedHashMap<String, Object>();
         sel.put("n", l.get(0)); sel.put("c", l.get(1)); sel.put("a", l.get(2)); sel.put("la", l.get(3)); sel.put("lo", l.get(4));
         pendingSel = HomeSearchCore.toJson(sel);
+        selName = l.get(0) instanceof String ? (String) l.get(0) : ""; selLa = l.get(3) instanceof Number ? ((Number) l.get(3)).doubleValue() : 0; selLo = l.get(4) instanceof Number ? ((Number) l.get(4)).doubleValue() : 0;
         return R_SHEET;
     }
     /** 시트 단추: fm.nr · fm.kr · fm.ni · fm.ki → [앱 주소, 웹 주소]. */
@@ -203,5 +205,23 @@ public final class FoodCore {
         String k = "nr".equals(v.substring(3)) ? "nroute" : "kr".equals(v.substring(3)) ? "kroute" : "ni".equals(v.substring(3)) ? "ninfo" : "ki".equals(v.substring(3)) ? "kinfo" : "";
         if (k.length() == 0 || !nvApp.containsKey(k)) return null;
         return new String[] { nvApp.get(k), nvWeb.get(k) };
+    }
+
+    /** 시트의 [카카오맵에서 가게 정보]: 엔진에 가게 이름+좌표로 카카오 장소 주소를 묻는 본문. 좌표를 모르면 "" (이름 검색 주소로 바로 연다). */
+    public String kakaoIdBody() {
+        if (selName.length() == 0 || (selLa == 0 && selLo == 0)) return "";
+        return "{\"op\":\"kakaoId\",\"name\":" + ShellCore.q(selName) + ",\"la\":" + selLa + ",\"lo\":" + selLo + "}";
+    }
+    /** 엔진 응답 → [앱 주소, 웹 주소]. 장소를 못 찾았거나 응답이 이상하면 null (이름 검색 주소로 연다). */
+    @SuppressWarnings("unchecked")
+    public static String[] kakaoIdLink(String resp) {
+        try {
+            Object o = ScreenCore.parse(resp);
+            if (!(o instanceof Map)) return null;
+            Map<String, Object> m = (Map<String, Object>) o;
+            String app = BoardCore.s(m.get("app"), 80), web = BoardCore.s(m.get("web"), 80);
+            if (!Boolean.TRUE.equals(m.get("ok")) || !app.startsWith("kakaomap://place?id=") || !web.startsWith("https://place.map.kakao.com/")) return null;
+            return new String[] { app, web };
+        } catch (ScreenCore.ParseError e) { return null; }
     }
 }

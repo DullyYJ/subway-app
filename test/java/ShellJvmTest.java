@@ -414,6 +414,17 @@ public class ShellJvmTest {
         env.nowMs = 99L;
         String rreq = r2.resultRequest(env, 18, "dark", 0);
         ok(rreq.equals("{\"cap\":18,\"r\":{\"data\":{\"result\":{\"path\":[]}},\"tab\":\"fast\",\"a\":\"부평\",\"b\":\"두정\",\"bt\":null,\"rb\":1234,\"now\":99,\"tz\":540,\"th\":\"dark\",\"fav\":1}}"), "결과 요청 본문: " + rreq);
+        // 앱이 죽었다 살아난 뒤 결과 카드 복원
+        HomeCore snapSrc = new HomeCore();
+        snapSrc.setRoute("{\"result\":{\"path\":[],\"q\":\"a\\\"b\"}}", "부평", "두정", 777L, 55L);
+        snapSrc.act("rh.tab.bus", null);
+        snapSrc.loc[1] = new HomeCore.Loc(); snapSrc.loc[1].name = "두정"; snapSrc.loc[1].lat = 36.83; snapSrc.loc[1].lng = 127.15;
+        snapSrc.loc[0] = new HomeCore.Loc(); snapSrc.loc[0].name = "부평"; snapSrc.loc[0].lat = 37.49; snapSrc.loc[0].lng = 126.72;
+        String snap = snapSrc.rideSnapshot();
+        HomeCore snapDst = new HomeCore();
+        ok(snapDst.restoreRide(snap) && snapDst.hasRoute() && snapDst.routeRaw.equals(snapSrc.routeRaw) && "bus".equals(snapDst.resTab) && "부평".equals(snapDst.resA) && snapDst.resBt == 777L && snapDst.resRb == 55L
+            && snapDst.loc[1] != null && "두정".equals(snapDst.loc[1].name) && Math.abs(snapDst.loc[1].lat - 36.83) < 1e-9 && snapDst.loc[0] != null && "부평".equals(snapDst.loc[0].name), "결과 스냅샷 되살리기: " + snap);
+        ok(new HomeCore().rideSnapshot().equals("") && !new HomeCore().restoreRide("") && !new HomeCore().restoreRide("{\"raw\":1}") && !new HomeCore().restoreRide("{\"raw\":\"{}\",\"tab\":\"zzz\"}"), "스냅샷: 빈 것·엉터리는 거부");
         int rev0 = r2.resRev;
         ok(r2.act("rh.tab.bus", null) == HomeCore.R_RESULT && "bus".equals(r2.resTab) && r2.resRev == rev0 + 1, "결과 탭 누름");
         ok(r2.act("rh.tab.bus", null) == HomeCore.R_RESULT && r2.resRev == rev0 + 1, "같은 탭을 또 눌러도 캐시 열쇠는 그대로");
@@ -708,12 +719,30 @@ public class ShellJvmTest {
             ShareCore.Share shr = ShareCore.parse("{\"text\":\"임학 - 계양 - 아라 (도착예정시간: 07시10분)\\n[남은시간: 00시14분]\",\"from\":\"임학\",\"cur\":\"계양\",\"to\":\"아라\",\"arr\":\"07:10\",\"rem\":\"14분\",\"stations\":[{\"n\":\"임학\",\"t\":\"06:50\"},{\"n\":\"박촌\",\"t\":\"06:53\"},{\"n\":\"계양\",\"t\":\"06:56\"},{\"n\":\"경인교대\",\"t\":\"06:59\"},{\"n\":\"작전\",\"t\":\"07:02\"},{\"n\":\"갈산\",\"t\":\"07:05\"},{\"n\":\"아라\",\"t\":\"07:10\"}],\"hit\":2,\"moving\":true,\"left\":4,\"next\":\"경인교대\"}");
             ok(shr != null && shr.names.size() == 7 && shr.hit == 2 && shr.left == 4 && shr.text.startsWith("임학 - 계양") && "다음 역 경인교대 이동 중 · 4개 역 남음".equals(ShareCore.footer(shr)), "위치 공유 재료를 읽는다");
             ok(java.util.Arrays.equals(ShareCore.slots(7, 2), new int[] { 0, 1, 2, 3, -2, 6 }) && java.util.Arrays.equals(ShareCore.slots(3, 1), new int[] { 0, 1, 2 }) && ShareCore.slots(0, 0).length == 0, "그림 칸: 출발·앞뒤·도착만 남기고 사이는 건너뛴 역 수");
-            OvCore.Ov ovv = OvCore.fromMap(ScreenCore.parse("{\"active\":true,\"line1\":\"계양 ▸ 경인교대\",\"pill\":\"경인교대 (이동중)\",\"cur\":2,\"base\":0,\"alert\":2,\"alertAt\":5,\"moving\":true,\"pre\":true,\"banner\":\"아라까지 2정거장\",\"line2\":\"남은시간: 00시간 14분\",\"theme\":{\"bg\":\"#ffffff\",\"fg\":\"#1a2533\",\"sub\":\"#6b8299\"},\"rs\":{\"st\":\"board\",\"bt\":\"안내 종료\",\"k\":\"도착\"},\"cells\":[{\"n\":\"임학\",\"t\":\"06:50\",\"dk\":2,\"rc\":\"#0052a4\",\"dc\":\"#0052a4\",\"g\":\"1호선\"},{\"n\":\"박촌\",\"t\":\"06:53\",\"lc\":\"#0052a4\",\"rc\":\"#0052a4\"},{\"n\":\"계양\",\"t\":\"06:56\",\"lc\":\"#0052a4\",\"gp\":true,\"g\":\"↔ 공항\",\"gc\":\"#0090d2\"}]}"));
+            OvCore.Ov ovv = OvCore.fromMap(ScreenCore.parse("{\"active\":true,\"line1\":\"계양 ▸ 경인교대\",\"pill\":\"경인교대 (이동중)\",\"cur\":2,\"base\":0,\"alert\":2,\"alertAt\":5,\"moving\":true,\"pre\":true,\"banner\":\"아라까지 2정거장\",\"line2\":\"남은시간: 00시간 14분\",\"theme\":{\"bg\":\"#ffffff\",\"fg\":\"#1a2533\",\"sub\":\"#6b8299\"},\"rs\":{\"st\":\"board\",\"end\":true,\"bt\":\"안내 종료\",\"k\":\"도착\"},\"cells\":[{\"n\":\"임학\",\"t\":\"06:50\",\"dk\":2,\"rc\":\"#0052a4\",\"dc\":\"#0052a4\",\"g\":\"1호선\"},{\"n\":\"박촌\",\"t\":\"06:53\",\"lc\":\"#0052a4\",\"rc\":\"#0052a4\"},{\"n\":\"계양\",\"t\":\"06:56\",\"lc\":\"#0052a4\",\"gp\":true,\"g\":\"↔ 공항\",\"gc\":\"#0090d2\"}]}"));
             ok(ovv.active && ovv.alert == 2 && ovv.cur == 2 && ovv.cells.length == 3 && ovv.moving && ovv.pre && ovv.hasTheme && ovv.bg == 0xFFFFFFFF && ovv.fg == 0xFF1A2533 && OvCore.arrived(ovv), "오버레이 값을 읽는다(칸 · 색 · 경고 · 도착 줄)");
             ok(!ovv.cells[0].hasL && ovv.cells[0].hasR && ovv.cells[0].dk == 2 && ovv.cells[0].dc == 0xFF0052A4 && ovv.cells[1].hasL && ovv.cells[1].hasR && ovv.cells[2].pill && ovv.cells[2].gc == 0xFF0090D2 && ovv.cells[1].dk == 1, "칸: 선 · 점 모양 · 배지 색");
             ok(OvCore.color("#fff", 7) == 0xFFFFFFFF && OvCore.color("#80ff0000", 7) == 0x80FF0000 && OvCore.color("red", 7) == 7 && OvCore.color(null, 7) == 7 && OvCore.color("#zzz", 7) == 7, "색 읽기: #rgb · #rrggbb · #aarrggbb, 못 읽으면 기본");
             ok(OvCore.centerPos(10, 0, 30) == 8f && OvCore.centerPos(0, 0, 30) == 0f && OvCore.centerPos(29, 0, 30) == 25f && OvCore.centerPos(1, 0, 3) == 0f && OvCore.centerPos(3, 100, 20) == 101f && OvCore.clampPos(-4f, 0, 30) == 0f, "다섯 칸 창: 현위치가 가운데 · 가장자리에서 멈춘다");
             ok("경인교대 (이동중)".equals(OvCore.pillText(ovv)) && OvCore.spinMs(1) < OvCore.spinMs(2) && OvCore.spinMs(0) == 0L && !OvCore.fromMap(null).active && !OvCore.fromMap(ScreenCore.parse("{\"active\":true}")).active, "알약 글 · 경고 테두리 속도 · 빈 값");
+            ok(!OvCore.arrived(OvCore.fromMap(ScreenCore.parse("{\"active\":true,\"line1\":\"a\",\"rs\":{\"st\":\"board\",\"bt\":\"탑승\",\"k\":\"S0 12:52 출발\",\"nm\":\"S0\"}}"))) && OvCore.fromMap(ScreenCore.parse("{\"active\":true,\"line1\":\"a\",\"rs\":{\"st\":\"undo\",\"bt\":\"되돌리기\"}}")).rsSt.equals("undo"), "탑승 줄은 도착 줄이 아니다(탑승 단추 ≠ 안내 종료)");
+            OvCore.Ov rr = OvCore.fromMap(ScreenCore.parse("{\"active\":true,\"line1\":\"a\",\"reco\":{\"on\":true,\"ch\":\"dudung\",\"a\":\"맛있는집\",\"b\":\"점심 한 끼\",\"m\":\"120m\",\"go\":\"쿠팡 보기\",\"ok\":\"확인\",\"at\":77},\"getoff\":{\"on\":false}}"));
+            ok(rr.row.kind == 1 && rr.row.ch.equals("dudung") && rr.row.a.equals("맛있는집") && rr.row.go.equals("쿠팡 보기") && rr.row.ok.equals("확인") && rr.row.at == 77L && rr.row.m.equals("120m"), "추천 줄을 읽는다");
+            OvCore.Ov gg = OvCore.fromMap(ScreenCore.parse("{\"active\":true,\"line1\":\"a\",\"reco\":{\"on\":true,\"a\":\"x\"},\"getoff\":{\"on\":true,\"ch\":\"hack/../x\",\"a\":\"내릴 준비를 해주세요\",\"b\":\"수고했어요\",\"end\":\"앱 종료\",\"at\":9}}"));
+            ok(gg.row.kind == 2 && gg.row.ch.isEmpty() && gg.row.end.equals("앱 종료") && gg.row.at == 9L && gg.row.b.equals("수고했어요"), "내릴 준비 줄이 추천보다 먼저 · 캐릭터 이름은 정해진 여섯 가지만");
+            ok(OvCore.fromMap(ScreenCore.parse("{\"active\":true,\"line1\":\"a\",\"reco\":{\"on\":false,\"a\":\"x\"},\"getoff\":{\"on\":false}}")).row.kind == 0, "꺼진 줄은 없다");
+            RideCore.RecoAd ad1 = RideCore.recoAd("{\"ok\":true,\"ad\":{\"k\":\"shop\",\"a\":\"휴대용 선풍기\",\"b\":\"여름 필수\",\"m\":\"\"},\"shopItem\":{\"n\":\"x\",\"u\":\"https://link.coupang.com/a/abc\"}}");
+            RideCore.RecoAd ad2 = RideCore.recoAd("{\"ok\":true,\"ad\":{\"k\":\"place\",\"a\":\"맛있는집\",\"b\":\"한식\",\"m\":\"120m\"},\"shopItem\":{\"u\":\"http://evil\"}}");
+            ok(ad1 != null && ad1.go.equals("쿠팡 보기") && ad1.url.equals("https://link.coupang.com/a/abc") && ad2 != null && ad2.go.equals("맛집 보기") && ad2.url.isEmpty() && RideCore.recoAd("{\"ok\":true}") == null && RideCore.recoAd("x") == null, "추천 줄(ad) 읽기: 쿠팡은 https 주소만");
+            {
+                RideCore rcx = new RideCore();
+                ok(!rcx.stepBody(1L).contains("\"rc\"") && !rcx.stepBody(1L).contains("\"act\"") && !rcx.stepBody(1L).contains("rcDis"), "평소 요청엔 새 입력이 없다");
+                rcx.setRecoAd(ad2); rcx.queueAct("press"); rcx.dismissReco(5L); rcx.queueAct("hack");
+                String sbx = rcx.stepBody(2L);
+                ok(sbx.contains("\"rc\":{\"a\":\"맛있는집\",\"b\":\"한식\",\"m\":\"120m\",\"go\":\"맛집 보기\"}") && sbx.contains("\"rcDis\":5") && sbx.contains("\"act\":\"press\"") && rcx.lastRecoAd() == ad2, "추천 줄 · 닫기 · 탑승 손짓을 다음 요청에 싣는다(모르는 손짓은 버린다)");
+                ok(sbx.contains("\"act\":\"press\"") && rcx.stepBody(3L).contains("\"act\":\"press\""), "응답을 받기 전엔 계속 싣는다");
+            }
+            ok(FoodCore.kakaoIdLink("{\"ok\":true,\"id\":\"44\",\"app\":\"kakaomap://place?id=44\",\"web\":\"https://place.map.kakao.com/44\"}")[0].equals("kakaomap://place?id=44") && FoodCore.kakaoIdLink("{\"ok\":true,\"id\":null,\"app\":\"\",\"web\":\"\"}") == null && FoodCore.kakaoIdLink("{\"ok\":true,\"app\":\"intent://x\",\"web\":\"https://place.map.kakao.com/1\"}") == null && FoodCore.kakaoIdLink("x") == null, "카카오 장소 주소 응답 읽기(카카오맵 주소만 연다)");
             OvCore.Ov pl = OvCore.plain(true, "A ▸ B", "14분", "곧 내려요", 1);
             ok(pl.active && pl.alert == 1 && !OvCore.hasStrip(pl) && !OvCore.plain(false, "x", "", "", 0).active, "줄 글만 있는 막대(개발자 도구)");
             ok(ShareCore.parse("{\"text\":\"x\"}") == null && ShareCore.parse("garbage") == null && ShareCore.fromMap(null) == null, "모양이 안 맞는 공유 재료는 버린다");

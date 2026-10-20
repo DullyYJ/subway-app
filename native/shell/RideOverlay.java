@@ -43,7 +43,10 @@ final class RideOverlay {
     private FrameLayout box;
     private LinearLayout col;
     private StripView strip;
-    private TextView t1, t2, t3, btn, pillT;
+    private TextView t1, t2, t3, btn, pillT, rsT;
+    private LinearLayout rsRow;
+    private RowView rowView;
+    private Host host;
     private Border border;
     private GradientDrawable bg;
     private WindowManager.LayoutParams lp;
@@ -53,6 +56,17 @@ final class RideOverlay {
     private ValueAnimator pulseAnim, pillAnim;
     private static int lastY = -1;
     private static final long BLINK_MS = 550L;
+
+    /** 오버레이의 손짓을 받는 쪽(탑승 서비스). 없으면 안내 종료만 스스로 한다. */
+    interface Host {
+        void act(String a);                   // 탑승 줄: press · undo · open · close · pill
+        void recoGo(OvCore.Row r);            // 추천 줄 [보기]
+        void recoOk(long at);                 // 추천 줄 [확인]
+        void quitApp();                       // 내릴 준비 줄 [앱 종료]
+        void endRide();                       // 도착 줄 [안내 종료]
+    }
+    void setHost(Host h) { host = h; }
+    private void dAct(String a) { if (host != null) host.act(a); }
 
     RideOverlay(Context c) { ctx = c.getApplicationContext() != null ? c.getApplicationContext() : c; dn = ctx.getResources().getDisplayMetrics().density; }
 
@@ -98,7 +112,15 @@ final class RideOverlay {
         t3.setText(ban ? v.banner : ""); t3.setVisibility(ban ? View.VISIBLE : View.GONE);
         t3.setTextColor(v.alert == 1 ? 0xFFFF453A : (v.alert == 2 ? 0xFFFF9F0A : fg));
         boolean ar = OvCore.arrived(v);
-        btn.setVisibility(ar ? View.VISIBLE : View.GONE); btn.setText(v.rsBt);
+        String rst = v.rsSt;
+        boolean showRs = !pill && (ar || "board".equals(rst) || "undo".equals(rst) || "wait".equals(rst));
+        boolean hasBtn = showRs && v.rsBt.length() > 0 && ("board".equals(rst) || "undo".equals(rst));
+        rsRow.setVisibility(showRs ? View.VISIBLE : View.GONE);
+        rsT.setText("wait".equals(rst) && !ar ? "승차 대기 · " + v.rsK : v.rsK); rsT.setTextColor(fg);
+        btn.setVisibility(hasBtn ? View.VISIBLE : View.GONE); btn.setText(v.rsBt);
+        boolean showRow = !pill && v.row.kind > 0;
+        rowView.setVisibility(showRow ? View.VISIBLE : View.GONE);
+        if (showRow) rowView.set(v.row, fg, sub);
         if (!userScrolling) scrollPos = OvCore.centerPos(v.cur, v.base, v.cells.length);
         strip.invalidate();
         border.setMode(pill ? 0 : v.alert);
@@ -109,7 +131,7 @@ final class RideOverlay {
     private void startAnims() {
         if (pulseAnim == null) {
             pulseAnim = ValueAnimator.ofFloat(0f, 1f); pulseAnim.setDuration(1100L); pulseAnim.setRepeatMode(ValueAnimator.REVERSE); pulseAnim.setRepeatCount(ValueAnimator.INFINITE);
-            pulseAnim.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() { @Override public void onAnimationUpdate(ValueAnimator a) { strip.pulse = (Float) a.getAnimatedValue(); if (strip.getVisibility() == View.VISIBLE) strip.invalidate(); } });
+            pulseAnim.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() { @Override public void onAnimationUpdate(ValueAnimator a) { strip.pulse = (Float) a.getAnimatedValue(); if (strip.getVisibility() == View.VISIBLE) strip.invalidate(); if (rowView != null && rowView.getVisibility() == View.VISIBLE) rowView.invalidate(); } });
             pulseAnim.start();
         }
         // 접힌 알약: 목적지 3정거장 전(pre)부터 깜박인다
@@ -163,10 +185,16 @@ final class RideOverlay {
         col.addView(t2, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
         t3 = text(13f, true); t3.setGravity(Gravity.CENTER); t3.setPadding(0, dp(3), 0, 0);
         col.addView(t3, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        rsRow = new LinearLayout(ctx); rsRow.setOrientation(LinearLayout.HORIZONTAL); rsRow.setGravity(Gravity.CENTER_VERTICAL); rsRow.setPadding(dp(8), dp(4), dp(8), dp(2));
+        rsT = text(12.5f, true);
+        rsRow.addView(rsT, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         btn = text(13f, true); btn.setGravity(Gravity.CENTER); btn.setTextColor(0xFFFFFFFF);
         GradientDrawable bd = new GradientDrawable(); bd.setColor(0xFF0A84FF); bd.setCornerRadius(dp(10)); btn.setBackground(bd);
-        LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(36)); bl.topMargin = dp(6); bl.leftMargin = dp(8); bl.rightMargin = dp(8);
-        col.addView(btn, bl);
+        LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(dp(92), dp(34)); bl.leftMargin = dp(8);
+        rsRow.addView(btn, bl);
+        col.addView(rsRow, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        rowView = new RowView(ctx);
+        col.addView(rowView, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(64)));
         pillT = text(13f, true); pillT.setPadding(dp(14), dp(7), dp(14), dp(7));
         card.addView(pillT, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT));
         border = new Border(ctx);
@@ -184,7 +212,7 @@ final class RideOverlay {
     private View.OnTouchListener touch() {
         final int slop = ViewConfiguration.get(ctx).getScaledTouchSlop();
         return new View.OnTouchListener() {
-            float x0, y0, lastX, lastY0, startPos; int startY; boolean armed, dragged, scrolling, swiping, inStrip, onBtn;
+            float x0, y0, lastX, lastY0, startPos; int startY; boolean armed, dragged, scrolling, swiping, inStrip, onBtn, onRs; int rowHit;
             final Runnable arm = new Runnable() { @Override public void run() {
                 if (dragged || scrolling || swiping) return;
                 armed = true; y0 = lastY0; startY = lp.y;
@@ -195,9 +223,11 @@ final class RideOverlay {
                     case MotionEvent.ACTION_DOWN: {
                         x0 = e.getRawX(); y0 = e.getRawY(); lastX = x0; lastY0 = y0; startY = lp.y; startPos = scrollPos;
                         armed = dragged = scrolling = swiping = false;
-                        float ey = e.getY() - dp(5) - col.getTop();
-                        inStrip = !pillMode() && strip.getVisibility() == View.VISIBLE && ey >= strip.getTop() && ey <= strip.getBottom();
-                        onBtn = !pillMode() && btn.getVisibility() == View.VISIBLE && ey >= btn.getTop() && ey <= btn.getBottom();
+                        float rx = e.getRawX(), ry = e.getRawY();
+                        inStrip = !pillMode() && hit(strip, rx, ry);
+                        onBtn = !pillMode() && hit(btn, rx, ry);
+                        onRs = !pillMode() && hit(rsRow, rx, ry);
+                        rowHit = (!pillMode() && rowView.getVisibility() == View.VISIBLE) ? rowView.hitBtn(rx, ry) : -1;
                         ui.removeCallbacks(arm); ui.postDelayed(arm, 450L);
                         return true;
                     }
@@ -223,11 +253,22 @@ final class RideOverlay {
                         if (scrolling) ui.postDelayed(recenter, 10000L);
                         else if (swiping) {
                             float my = lastY0 - y0;
-                            if (up && my > dp(22) && userPill) { userPill = false; apply(); }
-                            else if (up && my < -dp(22) && !userPill && cur.alert == 0) { userPill = true; apply(); }
+                            if (up && my > dp(22)) {
+                                if (userPill) { userPill = false; apply(); }
+                                else if (!"board".equals(cur.rsSt) && !"undo".equals(cur.rsSt)) dAct("open");            // 아래로 쓸면 탑승 줄이 열린다
+                            } else if (up && my < -dp(22)) {
+                                if ("board".equals(cur.rsSt) && !OvCore.arrived(cur)) dAct("close");                  // 위로 쓸면 열린 탑승 줄부터 닫고
+                                else if (!userPill && cur.alert == 0) { userPill = true; apply(); }                    // 그다음엔 알약으로 접는다
+                            }
                         } else if (!dragged && !armed && up) {
                             if (pillMode()) { userPill = false; apply(); }
-                            else if (onBtn) RideService.stop(ctx);                       // 도착 줄의 [안내 종료]
+                            else if (rowHit > 0 && cur.row.kind == 1) { if (rowHit == 1) { if (host != null) host.recoGo(cur.row); else openApp(); } else if (host != null) host.recoOk(cur.row.at); }
+                            else if (rowHit > 0 && cur.row.kind == 2) { if (host != null) host.quitApp(); else RideService.stop(ctx); }
+                            else if (onBtn) {
+                                if (OvCore.arrived(cur)) { if (host != null) host.endRide(); else RideService.stop(ctx); }   // 도착 줄의 [안내 종료]
+                                else dAct("undo".equals(cur.rsSt) ? "undo" : "press");                                           // [탑승] / [되돌리기]
+                            }
+                            else if (onRs && "wait".equals(cur.rsSt)) dAct("pill");
                             else openApp();
                         }
                         armed = false;
@@ -331,6 +372,88 @@ final class RideOverlay {
             cv.save(); cv.rotate(angle, getWidth() / 2f, getHeight() / 2f);
             cv.drawRoundRect(rf, dp(14), dp(14), p);
             cv.restore();
+        }
+    }
+
+    private static boolean hit(View v, float rx, float ry) {
+        if (v == null || v.getVisibility() != View.VISIBLE) return false;
+        int[] l = new int[2]; v.getLocationOnScreen(l);
+        return rx >= l[0] && rx <= l[0] + v.getWidth() && ry >= l[1] && ry <= l[1] + v.getHeight();
+    }
+
+    private static final java.util.HashMap<String, android.graphics.Bitmap> SHEETS = new java.util.HashMap<String, android.graphics.Bitmap>();
+    /** 캐릭터 시트(assets/chars3d/<id>.webp, 4x4 프레임). 읽기에 실패하면 null → 그림 없이 글만 그린다. */
+    private android.graphics.Bitmap sheet(String id) {
+        android.graphics.Bitmap b = SHEETS.get(id);
+        if (b != null) return b;
+        try {
+            android.graphics.BitmapFactory.Options o = new android.graphics.BitmapFactory.Options();
+            o.inSampleSize = 2; o.inPreferredConfig = android.graphics.Bitmap.Config.ARGB_8888;
+            java.io.InputStream in = ctx.getAssets().open("chars3d/" + id + ".webp");
+            try { b = android.graphics.BitmapFactory.decodeStream(in, null, o); } finally { in.close(); }
+            if (b != null) SHEETS.put(id, b);
+        } catch (Throwable ignored) { b = null; }
+        return b;
+    }
+
+    /** 하단 줄: 캐릭터 + 글(이름 · 설명 · 거리/분류) + 버튼([보기][확인] 또는 [앱 종료]). 글과 버튼 이름은 엔진 값. */
+    private final class RowView extends View {
+        private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final TextPaint tp = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+        private final RectF b1 = new RectF(), b2 = new RectF(), cr = new RectF();
+        private OvCore.Row row = new OvCore.Row();
+        private int fg = 0xFFFFFFFF, sub = 0xFF8E8E93;
+        RowView(Context c) { super(c); setVisibility(View.GONE); }
+        void set(OvCore.Row r, int fgc, int subc) { row = r; fg = fgc; sub = subc; invalidate(); }
+        @Override protected void onMeasure(int w, int h) { setMeasuredDimension(MeasureSpec.getSize(w), dp(64)); }
+        private void layoutBtns() {
+            float w = getWidth(), top = dp(17), bot = dp(47);
+            if (row.kind == 1) { b2.set(w - dp(8) - dp(46), top, w - dp(8), bot); b1.set(b2.left - dp(6) - dp(78), top, b2.left - dp(6), bot); }
+            else { b1.set(w - dp(8) - dp(84), top, w - dp(8), bot); b2.setEmpty(); }
+        }
+        /** 화면 좌표(rx, ry)가 어느 버튼인가: 1 첫 버튼 · 2 둘째 버튼 · 0 글 부분 · -1 줄 밖. */
+        int hitBtn(float rx, float ry) {
+            int[] l = new int[2]; getLocationOnScreen(l);
+            float x = rx - l[0], y = ry - l[1];
+            if (x < 0 || y < 0 || x > getWidth() || y > getHeight()) return -1;
+            layoutBtns();
+            if (b1.contains(x, y)) return 1;
+            if (!b2.isEmpty() && b2.contains(x, y)) return 2;
+            return 0;
+        }
+        private void draw(Canvas cv, String s, float x, float y, float px, boolean bold, int color, float maxW) {
+            tp.setTextAlign(Paint.Align.LEFT); tp.setTextSize(px * getResources().getDisplayMetrics().scaledDensity); tp.setColor(color);
+            tp.setTypeface(bold ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
+            CharSequence e = TextUtils.ellipsize(s, tp, Math.max(1f, maxW), TextUtils.TruncateAt.END);
+            cv.drawText(e, 0, e.length(), x, y, tp);
+        }
+        private void btn(Canvas cv, RectF r, String label, boolean solid) {
+            p.setStyle(Paint.Style.FILL); p.setColor(0xFF0A84FF);
+            if (solid) cv.drawRoundRect(r, dp(9), dp(9), p);
+            else { p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(Math.max(1, dp(1))); p.setColor(sub); cv.drawRoundRect(r, dp(9), dp(9), p); }
+            tp.setTextAlign(Paint.Align.CENTER); tp.setTypeface(Typeface.DEFAULT_BOLD); tp.setTextSize(11.5f * getResources().getDisplayMetrics().scaledDensity); tp.setColor(solid ? 0xFFFFFFFF : fg);
+            CharSequence e = TextUtils.ellipsize(label, tp, r.width() - dp(6), TextUtils.TruncateAt.END);
+            cv.drawText(e, 0, e.length(), r.centerX(), r.centerY() + tp.getTextSize() * 0.35f, tp);
+        }
+        @Override protected void onDraw(Canvas cv) {
+            if (row.kind == 0) return;
+            layoutBtns();
+            float x0 = dp(8);
+            android.graphics.Bitmap sh = row.ch.length() > 0 ? sheet(row.ch) : null;
+            if (sh != null) {
+                int f = (int) ((System.currentTimeMillis() / 110L) % 16L), cell = sh.getWidth() / 4;
+                android.graphics.Rect src = new android.graphics.Rect((f % 4) * cell, (f / 4) * cell, (f % 4) * cell + cell, (f / 4) * cell + cell);
+                cr.set(x0, dp(6), x0 + dp(52), dp(58));
+                p.setFilterBitmap(true); p.setAlpha(255); p.setStyle(Paint.Style.FILL);
+                cv.drawBitmap(sh, src, cr, p);
+                x0 += dp(58);
+            }
+            float right = b1.left - dp(6), w = Math.max(dp(40), right - x0);
+            draw(cv, row.a, x0, dp(24), 13f, true, fg, w);
+            draw(cv, row.b, x0, dp(41), 11f, false, sub, w);
+            if (row.kind == 1 && row.m.length() > 0) draw(cv, row.m, x0, dp(56), 10f, false, sub, w);
+            if (row.kind == 1) { btn(cv, b1, row.go, true); btn(cv, b2, row.ok, false); }
+            else btn(cv, b1, row.end, true);
         }
     }
 }

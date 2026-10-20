@@ -18,6 +18,8 @@
 //           fired: {"노드_남은정거장":1}                    이미 보낸 알림
 //           notYet:{노드번호:ms}, etaMs:[…], arrivedAt?, steps }
 //       }
+//   ★ s109 추가 입력(최상위): rc:{a,b,m,go}   앱이 /reco-text 의 ad 줄(가게·상품)을 한 번 알려 준다(엔진이 받은 시각을 at 으로 찍는다) · rcDis:at   [확인]/[보기]로 닫은 추천 ·
+//        act:'press'|'undo'|'open'|'close'|'pill'   오버레이 탑승 줄 손짓(수동 탑승 · 되돌리기 20초 · 줄 열고 닫기).   추가 출력: overlay.reco · overlay.getoff(하단 줄) · overlay.rs(탑승 줄) · quit(도착 3분 뒤 done 이면 true — 앱 화면까지 끝낸다).
 // 출력  { v:1, state(갱신본 — 네이티브는 그대로 다음 호출에 보낸다),
 //         ongoing:{title,text}      알림창의 상주 알림에 그릴 문구,
 //         alert:null|{key,type,title,body,vib:[ms…]}   지금 울릴 알림 하나(같은 순간에 걸린 나머지는 보낸 것으로 처리),
@@ -92,6 +94,81 @@ function rsAlerts(cfg, fired, curIdx, etaMs, now, mtFn) {
   return { alert: { key: d.key, type: d.type, title: title, body: body, vib: vib }, extra: due.slice(1).map(function (x) { return x.key; }), curPos: curPos };
 }
 
+
+// ── 오버레이 하단 줄(추천 · 내릴 준비) · 탑승 줄(rs) · 수동 탑승 ─────────────────────────────────
+// ★ 2026-10-21 (s109): 옛 웹이 만들던 값을 엔진이 만든다. 앱은 /reco-text 의 'ad'(가게·상품 줄)를 req.rc 로 한 번 알려 주고(엔진이 받은 시각을 at 으로 찍는다),
+//   [확인]을 누르면 req.rcDis(=at)를, 오버레이 탑승 줄 손짓은 req.act('press'|'undo'|'open'|'close'|'pill')를 보낸다. 무엇을 언제 보일지는 모두 여기서 정한다.
+function rsCheerFn() { return (typeof reArrCheer === 'function') ? reArrCheer : (function () { try { return require('./ride-eta').reArrCheer; } catch (e) { return null; } })(); }
+var RS_CHARS = ['dolsom', 'lovel', 'dudung', 'sul', 'ppopu', 'chaeng'];
+function rsChar(at) { return RS_CHARS[Math.abs(Math.floor((+at || 0) / 1000)) % RS_CHARS.length]; }
+function rsClampTxt(s, n) { s = String(s == null ? '' : s); return s.length > n ? s.slice(0, n - 1) + '…' : s; }
+
+// 앱이 알려 준 추천 줄 · 닫기 · 탑승 줄 손짓을 상태에 반영한다(승차 대기 판정 직후).
+function rsActs(st, req, now, notes) {
+  var rc = req.rc, eta = st.eta, k, w, passes;
+  if (st.rsUndo && now >= st.rsUndo.until) delete st.rsUndo;
+  if (rc && typeof rc === 'object' && String(rc.a || '').length) {
+    var sig = String(rc.a) + '|' + String(rc.b || '');
+    if (!st.rcAd || st.rcAd.sig !== sig) st.rcAd = { sig: sig, at: now, a: rsClampTxt(rc.a, 40), b: rsClampTxt(rc.b, 64), m: rsClampTxt(rc.m, 32), go: rc.go === '쿠팡 보기' ? '쿠팡 보기' : '맛집 보기' };
+  }
+  if (isFinite(req.rcDis) && +req.rcDis > 0) st.rcDis = +req.rcDis;
+  var a = req.act;
+  if (a === 'open' || a === 'pill') st.rsOpen = now + 20000;
+  else if (a === 'close') st.rsOpen = 0;
+  else if (a === 'press' && st.wait) {
+    w = st.wait; passes = eta.passes = eta.passes || [];
+    var hit = -1;
+    for (k = 0; k < passes.length; k++) if (passes[k].idx === w.i) { hit = k; break; }
+    st.rsUndo = { w: w, prev: hit >= 0 ? passes[hit] : null, until: now + 20000 };
+    var np = { idx: w.i, ms: now, src: 'gps' };
+    if (hit >= 0) passes[hit] = np; else passes.push(np);
+    eta.boarded = true; eta.notDeparted = false; delete st.wait; st.rsOpen = 0;
+    notes.push('승차 수동 확정(오버레이 탑승 버튼)');
+  } else if (a === 'undo' && st.rsUndo && now < st.rsUndo.until) {
+    var u = st.rsUndo, ps = eta.passes || [];
+    for (k = ps.length - 1; k >= 0; k--) if (ps[k].idx === u.w.i) { if (u.prev) ps[k] = u.prev; else ps.splice(k, 1); }
+    eta.boarded = false; eta.notDeparted = true; st.wait = u.w; delete st.rsUndo; st.rsOpen = 0;
+    notes.push('승차 확정 되돌림(오버레이)');
+  }
+}
+// 오버레이 탑승 줄: 대기 중이면 출발 2분 전부터(또는 손잡이·알약을 눌러 20초) 'board', 아니면 'wait'(알약). 탑승을 누른 직후 20초는 'undo'. 아니면 'hidden'.
+function rsRsState(st, r, now) {
+  var base = { bar: -1, cbg: '', cfg: '#0a84ff', ch: '', um: '' };
+  var mk = function (stt, k, nm, bt) { var o = {}, q; for (q in base) o[q] = base[q]; o.st = stt; o.k = k; o.nm = nm; o.bt = bt; return o; };
+  var nodes = (st.eta && st.eta.nodes) || [];
+  if (st.rsUndo && now < st.rsUndo.until) {
+    var uw = st.rsUndo.w, un = (nodes[uw.i] && nodes[uw.i].name) || '';
+    return mk('undo', '탑승으로 기록했어요', un, '되돌리기');
+  }
+  if (st.wait) {
+    var w = st.wait, nm = (nodes[w.i] && nodes[w.i].name) || '', hm = r.arr && r.arr[w.i] ? r.arr[w.i] : '';
+    var open = now >= w.arrMs - 120000 || (st.rsOpen || 0) > now;
+    return mk(open ? 'board' : 'wait', nm + (hm ? ' ' + hm : '') + ' 출발', nm, '탑승');
+  }
+  return { st: 'hidden' };
+}
+// 하단 줄: 우선순위 내릴 준비(2) > 추천(1) > 없음, 한 번 보인 줄은 30초 붙잡는다(입력이 흔들려도 깜박이지 않게).
+function rsRows(st, r, now, dest, lv, bTg, arrived) {
+  var cfg = st.cfg || {}, ad = st.rcAd, dn = dest ? dest.nodeIdx : -1, k = 0, reco = null, getoff = null;
+  var rem = (dn >= 0 && r.etaMs && r.etaMs[dn] != null && isFinite(r.etaMs[dn])) ? Math.round((r.etaMs[dn] - now) / 1000) : null;
+  if (!arrived && lv === 1 && bTg && bTg.kind === 'dest' && !st.wait) {
+    var cf = rsCheerFn(), cheer = '오늘도 수고 많았어요';
+    try { if (cf) cheer = cf(now, (st.eta && st.eta.tzOffsetMin) != null ? st.eta.tzOffsetMin : 540, null) || cheer; } catch (e) { }
+    var gat = (st.ovlAlert && st.ovlAlert.at) || 0;
+    getoff = { on: true, ch: rsChar(gat), a: '내릴 준비를 해주세요', b: rsClampTxt(cheer, 40), end: '앱 종료', at: gat }; k = 2;
+  } else if (ad && (cfg.allowed || {}).arrive_reco !== false && st.rcDis !== ad.at && now - ad.at < 25 * 60000 && rem != null && rem <= 7 * 60 && rem > -30 && !st.wait) {
+    reco = { on: true, ch: rsChar(ad.at), a: ad.a, b: ad.b, m: ad.m, go: ad.go, ok: '확인', at: ad.at }; k = 1;
+  }
+  var rh = st.rowHold || (st.rowHold = { k: 0, at: 0, reco: null, getoff: null });
+  if (k >= rh.k || now - rh.at >= 30000) {
+    if (k > 0) { rh.k = k; rh.at = now; rh.reco = reco; rh.getoff = getoff; } else rh.k = 0;
+  } else {
+    var dead = (rh.k === 1 && rh.reco && st.rcDis === rh.reco.at) || (st.arrivedAt && now - st.arrivedAt >= 150000);
+    if (dead) rh.k = 0; else { reco = rh.reco; getoff = rh.getoff; }
+  }
+  return { reco: reco || { on: false }, getoff: getoff || { on: false } };
+}
+
 // ── 오버레이(앱 경로 화면과 같은 칸 줄) ─────────────────────────────────────────────
 // ★ 2026-10-13 (YJ: "카카오 방식 — 앱이 사라져도 네이티브가 안내를 그린다"): 웹이 사라진 동안 네이티브 오버레이가 그릴 값을 엔진이 만든다.
 //   state.ovl = { cells:[앱 타임라인 칸(n·t·g·gp·gc·lc·rc·dc·dk + m(이동 중 문구))], map:[칸→노드 번호 또는 -1], theme:{bg,fg,sub} } 는 웹이 맡겨 둔 '그림 틀'(색·이름·노선 라벨)이고,
@@ -136,8 +213,9 @@ function rsOverlay(st, r, curIdx, curPos, now, dest, destName, moving, done) {
   var oa = st.ovlAlert || (st.ovlAlert = { lv: 0, at: 0 });
   if (oa.lv !== lv) { oa.lv = lv; if (lv > 0) oa.at = now; }
   var arrived = !!(dest && curPos >= dest.seqPos);
-  var rs = arrived ? { st: 'board', bt: '안내 종료', k: '목적지에 도착했어요', ch: '도착', nm: destName || '', bar: -1, cbg: '', cfg: '#0a84ff' } : { st: 'hidden' };
-  var out = { active: true, line1: line1, pill: pill, track: [], cur: cur, base: ov.base || 0, line2: line2, line3: '', alert: arrived ? 0 : lv, alertAt: oa.at || 0, alertVibe: false, banner: banner, destName: destName || '', pre: !arrived && pre === 1, moving: !!moving, rs: rs, reco: { on: false }, cells: cells };
+  var rs = arrived ? { st: 'board', end: true, bt: '안내 종료', k: '목적지에 도착했어요', ch: '도착', nm: destName || '', bar: -1, cbg: '', cfg: '#0a84ff' } : rsRsState(st, r, now);
+  var rows = rsRows(st, r, now, dest, lv, bTg, arrived);
+  var out = { active: true, line1: line1, pill: pill, track: [], cur: cur, base: ov.base || 0, line2: line2, line3: '', alert: arrived ? 0 : lv, alertAt: oa.at || 0, alertVibe: false, banner: banner, destName: destName || '', pre: !arrived && pre === 1, moving: !!moving, rs: rs, reco: rows.reco, getoff: rows.getoff, cells: cells };
   if (ov.theme) out.theme = ov.theme;
   var sh = rsShare(st, r, cells, map, cur, moving, dest, destName, now);
   if (sh) out.share = sh;
@@ -334,6 +412,7 @@ function rideStandby(req) {
   while (tr.length && now - tr[0][0] > O.trailMaxAgeSec * 1000) tr.shift();
   if (tr.length > O.trailMax) tr.splice(0, tr.length - O.trailMax);
   rsWait(st, tr, now, O, notes);                  // 1.5) 승차 대기 · 승차 감지
+  rsActs(st, req, now, notes);                    // 1.6) 앱이 알려 준 추천 줄 · 닫기 · 오버레이 탑승 손짓
   // 2) 영점: 정류장 도착 시각을 최신 etaMs 로 맞춰 ride-track 에 묻는다 → 통과 시각(passMs)은 gps 증거로, 아직 안 닿음은 notYet 으로
   var eta = st.eta, passes = (eta.passes = eta.passes || []), notYet = (st.notYet = st.notYet || {});
   var zero = null, newPass = false, tk = null;
@@ -433,8 +512,8 @@ function rideStandby(req) {
   } else text = '';
   if (st.wait) text = '승차 대기 · ' + ((nodes[st.wait.i] && nodes[st.wait.i].name) || '') + (r.arr && r.arr[st.wait.i] ? ' ' + r.arr[st.wait.i] : '') + ' · ' + (cfg.destName || (dest && dest.name) || '목적지') + '까지';
   if (offActive) text = '경로를 벗어났어요 · 앱을 열면 다시 찾아 드려요';
-  var done = false;
-  if (st.arrivedAt && now - st.arrivedAt >= O.doneAfterSec * 1000) { done = true; notes.push('목적지 도착 ' + O.doneAfterSec + '초 뒤 종료'); }
+  var done = false, quit = false;
+  if (st.arrivedAt && now - st.arrivedAt >= O.doneAfterSec * 1000) { done = true; quit = true; notes.push('목적지 도착 ' + O.doneAfterSec + '초 뒤 종료'); }
   if (offActive && st.offOn && now - st.offOn >= O.offGiveUpSec * 1000) { done = true; notes.push('경로를 벗어난 채 ' + O.offGiveUpSec + '초 — 안내 종료'); }
   var lastAt = st.lastAt || now; if (now - lastAt > O.maxStaleSec * 1000) done = true;
   st.lastAt = now;
@@ -447,7 +526,7 @@ function rideStandby(req) {
   var reco = { fire: false };
   try { if (!done) reco = rsReco(st, r, dest, cfg.destName || (dest && dest.name) || '', now, offActive); } catch (eRc) { notes.push('추천 판단 실패: ' + (eRc && eRc.message)); }
   var view = { text: text, line1: overlay && overlay.line1 || '', line2: overlay && overlay.line2 || '', curIdx: curIdx, at: now };
-  return { v: 1, state: st, ongoing: { title: O.ongoingTitle, text: text }, alert: al.alert, done: done, curIdx: curIdx, overlay: overlay, reco: reco, view: view, pos: r.pos ? { from: r.pos.from, to: r.pos.to, ratio: r.pos.ratio, moving: !!r.pos.moving } : null, arr: r.arr || null, zero: zero, nextMs: done ? O.stepMs : nextMs, motion: tk && tk.motion ? tk.motion : null, notes: notes };
+  return { v: 1, state: st, ongoing: { title: O.ongoingTitle, text: text }, alert: al.alert, done: done, quit: quit, curIdx: curIdx, overlay: overlay, reco: reco, view: view, pos: r.pos ? { from: r.pos.from, to: r.pos.to, ratio: r.pos.ratio, moving: !!r.pos.moving } : null, arr: r.arr || null, zero: zero, nextMs: done ? O.stepMs : nextMs, motion: tk && tk.motion ? tk.motion : null, notes: notes };
 }
 
 function handleRideStandby(request) {

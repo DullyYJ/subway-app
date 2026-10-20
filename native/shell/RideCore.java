@@ -45,6 +45,43 @@ public final class RideCore {
     public ShareCore.Share ovShare;
     /** 엔진 overlay 전체(칸 줄 · 색 · 경고 · 도착 줄) — 서비스가 창에 그린다. 없으면 null. */
     public OvCore.Ov ov;
+    /** 도착 3분 뒤 종료(done)라면 true — 앱 화면까지 끝낸다. */
+    public boolean quit;
+
+    /** 하차 추천 줄(/reco-text 의 ad) — 오버레이 [보기]가 열 곳. url 이 있으면 그 주소(쿠팡 상품), 없으면 가게 이름으로 찾는다. */
+    public static final class RecoAd { public String a = "", b = "", m = "", go = "맛집 보기", url = ""; }
+    private volatile RecoAd pendingAd;                 // 엔진에 아직 못 알린 추천 줄
+    private volatile RecoAd lastAd;                    // 마지막으로 받은 추천 줄([보기]가 쓴다)
+    private volatile String pendingAct = "";           // 오버레이 탑승 줄 손짓(press · undo · open · close · pill) — 한 번만 보낸다
+    private volatile long rcDis;                       // [확인]/[보기]로 닫은 추천의 at
+    public volatile double[] recoLoc;                  // 도착지 좌표(엔진 reco.loc)
+    private RecoAd adInFlight; private String actInFlight = "";
+    public void setRecoAd(RecoAd ad) { if (ad != null) { pendingAd = ad; lastAd = ad; } }
+    public RecoAd lastRecoAd() { return lastAd; }
+    public void queueAct(String a) { if ("press".equals(a) || "undo".equals(a) || "open".equals(a) || "close".equals(a) || "pill".equals(a)) pendingAct = a; }
+    public void dismissReco(long at) { if (at > 0) rcDis = at; }
+
+    /** /reco-text 응답의 ad 줄 → RecoAd. 줄이 없으면 null. */
+    @SuppressWarnings("unchecked")
+    public static RecoAd recoAd(String resp) {
+        try {
+            Object o = ScreenCore.parse(resp);
+            if (!(o instanceof Map)) return null;
+            Map<String, Object> m = (Map<String, Object>) o;
+            if (!(m.get("ad") instanceof Map)) return null;
+            Map<String, Object> ad = (Map<String, Object>) m.get("ad");
+            RecoAd r = new RecoAd();
+            r.a = BoardCore.s(ad.get("a"), 40); r.b = BoardCore.s(ad.get("b"), 64); r.m = BoardCore.s(ad.get("m"), 32);
+            if (r.a.length() == 0) return null;
+            boolean shop = "shop".equals(ad.get("k"));
+            r.go = shop ? "쿠팡 보기" : "맛집 보기";
+            if (shop && m.get("shopItem") instanceof Map) {
+                String u = BoardCore.s(((Map<String, Object>) m.get("shopItem")).get("u"), 600);
+                if (u.startsWith("https://")) r.url = u;
+            }
+            return r;
+        } catch (ScreenCore.ParseError e) { return null; }
+    }
     /** 하차 추천 상태(엔진 reco 그대로) — 설정 '상태 확인'이 보여 준다. 판단은 엔진이 했고 여기는 받은 값을 들고만 있는다. */
     private String recoDest = "", recoSlot = "";
     private long recoRem = Long.MIN_VALUE, recoAlertAt = 0L, recoTick = 0L;
@@ -134,7 +171,13 @@ public final class RideCore {
                 lastSentTs = (long) f[0];
             }
         }
-        return b.append("],\"state\":").append(stateJson.length() > 0 ? stateJson : "null").append('}').toString();
+        b.append("],\"state\":").append(stateJson.length() > 0 ? stateJson : "null");
+        RecoAd ad = pendingAd; adInFlight = ad;
+        if (ad != null) b.append(",\"rc\":{\"a\":").append(ShellCore.q(ad.a)).append(",\"b\":").append(ShellCore.q(ad.b)).append(",\"m\":").append(ShellCore.q(ad.m)).append(",\"go\":").append(ShellCore.q(ad.go)).append('}');
+        if (rcDis > 0) b.append(",\"rcDis\":").append(rcDis);
+        String act = pendingAct; actInFlight = act;
+        if (act.length() > 0) b.append(",\"act\":").append(ShellCore.q(act));
+        return b.append('}').toString();
     }
 
     /** /ride-standby 응답을 읽는다. 읽지 못하면 ok=false (state 는 그대로 — 다음 호출에 다시 보낸다). */
@@ -156,9 +199,9 @@ public final class RideCore {
                 if (t instanceof String) text = (String) t;
                 if (ti instanceof String && ((String) ti).length() > 0) title = (String) ti;
             }
-            Object ov = m.get("overlay");
-            if (ov instanceof Map) {
-                Map<String, Object> om = (Map<String, Object>) ov;
+            Object ovObj = m.get("overlay");
+            if (ovObj instanceof Map) {
+                Map<String, Object> om = (Map<String, Object>) ovObj;
                 ovActive = Boolean.TRUE.equals(om.get("active")) && om.get("line1") instanceof String;
                 ovLine1 = BoardCore.s(om.get("line1"), 60); ovLine2 = BoardCore.s(om.get("line2"), 60); ovBanner = BoardCore.s(om.get("banner"), 60);
                 Object al2 = om.get("alert"); ovAlert = al2 instanceof Number ? Math.max(0, Math.min(2, ((Number) al2).intValue())) : 0;
@@ -172,6 +215,7 @@ public final class RideCore {
             posJson = m.get("pos") instanceof Map ? HomeSearchCore.toJson(m.get("pos")) : "null";
             arrJson = m.get("arr") instanceof List ? HomeSearchCore.toJson(m.get("arr")) : "null";
             done = Boolean.TRUE.equals(m.get("done"));
+            quit = done && Boolean.TRUE.equals(m.get("quit"));
             Object al = m.get("alert");
             if (al instanceof Map) {
                 Map<String, Object> a = (Map<String, Object>) al;
@@ -186,7 +230,11 @@ public final class RideCore {
                 recoRem = rc.get("remSec") instanceof Number ? ((Number) rc.get("remSec")).longValue() : Long.MIN_VALUE;
                 recoAlertAt = rc.get("alertAt") instanceof Number ? ((Number) rc.get("alertAt")).longValue() : 0L;
                 recoTick = System.currentTimeMillis();
+                Object rl = rc.get("loc");
+                if (rl instanceof Map && ((Map<String, Object>) rl).get("lat") instanceof Number && ((Map<String, Object>) rl).get("lng") instanceof Number) recoLoc = new double[] { ((Number) ((Map<String, Object>) rl).get("lat")).doubleValue(), ((Number) ((Map<String, Object>) rl).get("lng")).doubleValue() };
             }
+            if (pendingAd == adInFlight) pendingAd = null;
+            if (pendingAct.equals(actInFlight)) pendingAct = "";
             s.done = done; s.ok = true; rev++;
         } catch (ScreenCore.ParseError e) {
             return new Step();
