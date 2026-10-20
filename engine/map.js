@@ -442,12 +442,12 @@ function mapRouteColor(no) {
   return '#7a7f8c';
 }
 function mapDistFmt(m) { m = Math.round(m || 0); return m >= 1000 ? (m / 1000).toFixed(1) + 'km' : m + 'm'; }
-function mapBusStopView(s, rows) {
-  var kids = [{ t: 'text', s: s.nm + '  ' + mapDistFmt(s.dist) + (s.no || s.ars ? '  ·  ' + (s.no || s.ars) : ''), size: 14, bold: true, color: 'text', pad: [12, 14, 6, 2] }];
+function mapBusStopView(s, rows, num, pi) {
+  var kids = [{ t: 'text', s: (num ? num + '. ' : '') + s.nm + '  ' + mapDistFmt(s.dist) + (s.no || s.ars ? '  ·  ' + (s.no || s.ars) : ''), size: 14, bold: true, color: 'text', pad: [12, 14, 6, 2] }];
   if (isFinite(s.la) && isFinite(s.lo)) {                          // 웹 _busShowMap(정류장 위치 지도) 대신 외부 지도 앱으로 — 위치 보기 · 길찾기
     var en = encodeURIComponent(s.nm || '정류장');
     kids.push({ t: 'row', pad: [0, 14, 4, 14], gap: 8, kids: [
-      { t: 'button', s: '위치 보기', size: 12, h: 34, r: 9, bold: true, fill: 'card2', line: 'border', tc: 'sub', act: { a: 'open', url: 'https://map.kakao.com/link/map/' + en + ',' + s.la + ',' + s.lo } },
+      { t: 'button', s: '위치 보기', size: 12, h: 34, r: 9, bold: true, fill: 'card2', line: 'border', tc: 'sub', act: pi >= 0 ? { a: 'call', v: 'mp.f' + pi } : { a: 'open', url: 'https://map.kakao.com/link/map/' + en + ',' + s.la + ',' + s.lo } },
       { t: 'button', s: '길찾기', size: 12, h: 34, r: 9, bold: true, fill: 'card2', line: 'border', tc: 'sub', act: { a: 'open', url: 'https://map.kakao.com/link/to/' + en + ',' + s.la + ',' + s.lo } }] });
   }
   var by = {}, order = [];
@@ -483,10 +483,18 @@ function mapBusBody(f, info) {
   }
   if (!stops.length) { info.bus = { st: 'empty' }; return [{ t: 'text', s: '주변 800m 안에 정류장을 찾지 못했어요.', size: 13, color: 'sub', align: 'center', lh: 1.7, pad: [40, 20, 20, 20] }]; }
   if (res.a0 === undefined) { info.bus = { st: 'need', need: stops.map(function (s, i) { return { k: 'a' + i, url: mapBusArrUrl(s) }; }) }; return [{ t: 'text', s: '도착정보 가져오는 중...', size: 13, color: 'sub', align: 'center', pad: [40, 20, 40, 20] }]; }
-  var body = [{ t: 'text', s: '내 주변 정류장 ' + stops.length + '곳', size: 12, color: 'sub', pad: [10, 14, 0, 4] }];
+  // 정류장 지도: 정류장마다 번호 핀(좌표가 있는 것만) + 내 위치. 핀 순서 = pts 순서, '위치 보기' 는 그 핀을 가운데 두고 크게 연다.
+  var pts = [], pidx = [];
+  stops.forEach(function (s, i) {
+    var sla = Number(s.la), slo = Number(s.lo);
+    if (isFinite(sla) && isFinite(slo) && (sla !== 0 || slo !== 0)) { pidx[i] = pts.length; pts.push({ la: sla, lo: slo, k: 's', n: String(i + 1), l: s.nm || '정류장' }); } else pidx[i] = -1;
+  });
+  pts.push({ la: la, lo: lo, k: 'm', n: '', l: '내 위치' });
+  var body = [{ t: 'tmap', h: 210, r: 12, pad: [8, 12, 2, 12], pts: pts, act: { a: 'call', v: 'mp.all' } },
+              { t: 'text', s: '내 주변 정류장 ' + stops.length + '곳', size: 12, color: 'sub', pad: [10, 14, 0, 4] }];
   stops.forEach(function (s, i) {
     var txt = String(res['a' + i] || ''), rows = s.src === 'topis' ? mapSeoulArr(txt) : s.src === 'gbis' ? mapGbisArr(txt) : mapTagoArr(txt);
-    mapBusStopView(s, rows).forEach(function (n) { body.push(n); });
+    mapBusStopView(s, rows, i + 1, pidx[i]).forEach(function (n) { body.push(n); });
   });
   body.push({ t: 'button', s: '내 위치로 다시 찾기', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: '', pad: [10, 60, 4, 60], act: { a: 'call', v: 'mp.loc' } });
   body.push({ t: 'text', s: '도착 시간은 실시간 정보라 조금씩 달라질 수 있어요.', size: 11, color: 'sub', align: 'center', pad: [6, 16, 16, 16] });

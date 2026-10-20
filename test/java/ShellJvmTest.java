@@ -414,6 +414,36 @@ public class ShellJvmTest {
         env.nowMs = 99L;
         String rreq = r2.resultRequest(env, 18, "dark", 0);
         ok(rreq.equals("{\"cap\":18,\"r\":{\"data\":{\"result\":{\"path\":[]}},\"tab\":\"fast\",\"a\":\"부평\",\"b\":\"두정\",\"bt\":null,\"rb\":1234,\"now\":99,\"tz\":540,\"th\":\"dark\",\"fav\":1}}"), "결과 요청 본문: " + rreq);
+        // 타일 지도 계산
+        {
+            java.util.List<TileMapCore.Pin> tp = TileMapCore.parsePins(TileMapCore.encodePin(37.5, 127.0, "s", "1", "한진, 정류장|x") + "|" + TileMapCore.encodePin(37.51, 127.01, "m", "", "내 위치") + "|엉터리|0,0,s,,|99,200,s,,");
+            ok(tp.size() == 2 && "한진 정류장x".equals(tp.get(0).name) && "m".equals(tp.get(1).k) && "1".equals(tp.get(0).n), "핀 글 읽기: 쉼표·막대 제거, 엉터리·0,0·범위 밖 줄 건너뜀");
+            TileMapCore.View tv = new TileMapCore.View(600, 400);
+            tv.fit(tp, 40, 3, 17);
+            double[] c = tv.toScreen(tv.cla, tv.clo);
+            ok(Math.abs(c[0] - 300) < 0.01 && Math.abs(c[1] - 200) < 0.01, "가운데 좌표는 화면 가운데");
+            double[] p0 = tv.toScreen(37.5, 127.0), p1 = tv.toScreen(37.51, 127.01);
+            ok(p0[0] >= 40 - 1 && p0[0] <= 560 + 1 && p1[0] >= 39 && p1[0] <= 561 && p0[1] >= 39 && p0[1] <= 361 && p1[1] >= 39 && p1[1] <= 361, "맞춤: 두 핀이 여백 안에 들어온다 " + p0[0] + "," + p0[1] + " / " + p1[0] + "," + p1[1]);
+            double[] bk = tv.toLatLng(p0[0], p0[1]);
+            ok(Math.abs(bk[0] - 37.5) < 1e-7 && Math.abs(bk[1] - 127.0) < 1e-7, "화면↔좌표 왕복");
+            java.util.List<int[]> tl = tv.tiles();
+            boolean cover = !tl.isEmpty() && tl.size() <= 60;
+            int minX = 99999, minY = 99999, maxX = -99999, maxY = -99999;
+            for (int[] t : tl) { cover &= TileMapCore.tileUrl(t[0], t[1], t[2]) != null; minX = Math.min(minX, t[3]); minY = Math.min(minY, t[4]); maxX = Math.max(maxX, t[3] + t[5]); maxY = Math.max(maxY, t[4] + t[5]); }
+            ok(cover && minX <= 0 && minY <= 0 && maxX >= 600 && maxY >= 400, "타일이 화면을 빈틈없이 덮는다(" + tl.size() + "장)");
+            double zb = tv.zoom; double[] fp = tv.toLatLng(100, 90);
+            tv.zoomBy(1.0, 100, 90);
+            double[] fq = tv.toScreen(fp[0], fp[1]);
+            ok(Math.abs(tv.zoom - Math.min(19, zb + 1)) < 1e-9 && Math.abs(fq[0] - 100) < 0.01 && Math.abs(fq[1] - 90) < 0.01, "확대해도 손가락 아래 점은 제자리");
+            double[] before = tv.toScreen(37.5, 127.0);
+            tv.pan(30, -20);
+            double[] after = tv.toScreen(37.5, 127.0);
+            ok(Math.abs(after[0] - before[0] - 30) < 0.01 && Math.abs(after[1] - before[1] + 20) < 0.01, "끌면 그만큼 따라온다");
+            TileMapCore.View one = new TileMapCore.View(300, 200);
+            one.fit(TileMapCore.parsePins(TileMapCore.encodePin(36.8, 127.1, "s", "1", "")), 30, 3, 17);
+            ok(Math.abs(one.zoom - 16.0) < 1e-9 && Math.abs(one.cla - 36.8) < 1e-9, "핀 하나면 16배율로 그 자리");
+            ok(TileMapCore.tileUrl(15, 27956, 12696).equals("https://tile.openstreetmap.org/15/27956/12696.png") && TileMapCore.tileUrl(2, 4, 0) == null && TileMapCore.tileUrl(20, 0, 0) == null, "타일 주소");
+        }
         // 화면 못 받음 안내 · 캐시 열쇠
         try {
             ScreenCore.Screen es0 = ScreenCore.load(ShellCore.errorScreen());

@@ -36,8 +36,10 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
@@ -326,6 +328,40 @@ public class ScreenView extends View {
         scene.draw(cv);
         cv.restore();
     }
+    // ───────────── 타일 지도(핀은 엔진이 정한 값 · 앱은 받은 타일에 그리기만) ─────────────
+    private TileLoader tiles;
+    private final Runnable tileTick = new Runnable() { @Override public void run() { invalidate(); } };
+    private final Path tmClip = new Path();
+    private final RectF tmRect = new RectF();
+    private String tmValue = ""; private int tmW = -1, tmH = -1;
+    private List<TileMapCore.Pin> tmPins = new ArrayList<TileMapCore.Pin>();
+    private TileMapCore.View tmView;
+    private void drawTmap(Canvas cv, ScreenCore.Item it) {
+        int pw = Math.round(it.w * dpr), ph = Math.round(it.h * dpr);
+        if (pw <= 0 || ph <= 0) return;
+        if (tiles == null) { tiles = TileLoader.get(getContext()); tiles.watch(tileTick); }
+        if (!it.value.equals(tmValue) || pw != tmW || ph != tmH) {
+            tmValue = it.value; tmW = pw; tmH = ph;
+            tmPins = TileMapCore.parsePins(it.value);
+            tmView = new TileMapCore.View(pw, ph);
+            tmView.fit(tmPins, Math.round(34f * dpr), 3, 17);
+        }
+        if (tmView == null || tmPins.isEmpty()) return;
+        cv.save();
+        tmRect.set(it.x, it.y, it.x + it.w, it.y + it.h);
+        tmClip.rewind(); tmClip.addRoundRect(tmRect, it.radius, it.radius, Path.Direction.CW);
+        cv.clipPath(tmClip);
+        cv.translate(it.x, it.y);
+        cv.scale(1f / dpr, 1f / dpr);
+        TileMapArt.draw(cv, tiles, tmView, tmPins, dpr, -1);
+        cv.restore();
+    }
+    /** 지금 화면에 올라온 첫 타일 지도의 핀 글(없으면 ""). 앱이 크게 보기를 열 때 쓴다. */
+    public String tmapPins() {
+        if (screen == null || lay == null) return "";
+        for (ScreenCore.Item it : lay.body) if (it.kind == ScreenCore.K_TMAP) return it.value;
+        return "";
+    }
     private ScreenCore.Item sceneAt(float px, float py) {
         if (lay == null || !sceneDrawn || scene == null || !scene.isLoaded()) return null;
         float x = px / dpr, y = py / dpr;
@@ -561,6 +597,7 @@ public class ScreenView extends View {
             case ScreenCore.K_HBAR: drawHbar(cv, it); break;
             case ScreenCore.K_CARS: drawCars(cv, it); break;
             case ScreenCore.K_SCENE: drawScene(cv, it); break;
+            case ScreenCore.K_TMAP: drawTmap(cv, it); break;
             default: break;
         }
     }
@@ -1436,6 +1473,7 @@ public class ScreenView extends View {
     }
     @Override protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
+        if (tiles != null) { tiles.unwatch(tileTick); tiles = null; tmValue = ""; }
         if (scene != null) { scene.destroy(); scene = null; sceneJson = ""; sceneFailed = false; }      // 스프라이트 비트맵을 돌려준다(다시 붙으면 새로 읽는다)
         endEdit();
         if (editor != null && editor.getParent() instanceof ViewGroup) ((ViewGroup) editor.getParent()).removeView(editor);

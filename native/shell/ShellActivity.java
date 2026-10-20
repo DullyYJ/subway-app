@@ -985,6 +985,12 @@ public class ShellActivity extends Activity {
         }
         if ("open".equals(a.a)) { apply(ShellCore.linkEffect(a.url)); return; }       // 정류장 위치 보기 · 길찾기(외부 지도)
         if (!"call".equals(a.a)) return;
+        if (a.v != null && (a.v.equals("mp.all") || a.v.startsWith("mp.f"))) {          // 정류장 지도 크게 보기(핀은 엔진이 정한 값)
+            int fi = -1;
+            if (a.v.startsWith("mp.f")) { try { fi = Integer.parseInt(a.v.substring(4)); } catch (NumberFormatException e) { fi = -1; } }
+            openTileMap(src.tmapPins(), fi);
+            return;
+        }
         switch (map.act(a.v, head.fields())) {
             case MapCore.R_FIND: {
                 final String q = head.fields().get("mq");
@@ -1019,6 +1025,27 @@ public class ShellActivity extends Activity {
         }
     }
     private static final int S_STN_H = 330, S_TT_H = -58;
+
+    /** 타일 지도를 화면 가득 크게 연다(끌기 · 두 손가락 확대 · 핀 누르면 이름). pinsEnc 는 엔진이 준 핀 글, focus 는 처음 가운데 둘 핀(없으면 -1 = 전체). */
+    private void openTileMap(String pinsEnc, int focus) {
+        final List<TileMapCore.Pin> pins = TileMapCore.parsePins(pinsEnc);
+        if (pins.isEmpty()) { toast("지도에 찍을 곳이 없어요"); return; }
+        closeSheet();
+        sheetName = "tmap";
+        final android.app.Dialog dlg = new android.app.Dialog(this, android.R.style.Theme_Material_Light_NoActionBar);
+        TileMapView mv = new TileMapView(this, pins, focus >= 0 && focus < pins.size() ? focus : -1, dpr);
+        mv.setListener(new TileMapView.Listener() {
+            @Override public void onClose() { closeSheet(); }
+            @Override public void onPin(int index) { }
+        });
+        dlg.setContentView(mv);
+        sheet = dlg;
+        try {
+            android.view.Window w = dlg.getWindow();
+            w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+            dlg.show();
+        } catch (Throwable t) { toast("지도를 열지 못했어요"); sheet = null; sheetName = ""; }
+    }
 
     // 노선도 View: 수도권 지하철일 때만 본문 위에 얹는다
     private void syncMapView() {

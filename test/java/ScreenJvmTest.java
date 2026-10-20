@@ -773,6 +773,20 @@ public class ScreenJvmTest {
         ok(bad(scBase + "{\"t\":\"scene\",\"h\":170}]}") && bad(scBase + "{\"t\":\"scene\",\"sc\":\"\"}]}") && bad(scBase + "{\"t\":\"scene\",\"h\":20,\"sc\":\"x\"}]}"), "scene: sc 없음 · 너무 낮음은 거절");
         ok(bad(scBase + "{\"t\":\"scene\",\"sc\":\"" + new String(new char[ScreenCore.SCENE_MAX]).replace('\0', 'a') + "\"}]}"), "scene: 너무 긴 글은 거절");
 
+        // ── 타일 지도 노드(tmap) ──
+        try {
+            ScreenCore.Screen tms = ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"map\",\"head\":[],\"body\":[{\"t\":\"tmap\",\"h\":210,\"r\":12,\"pad\":[8,12,2,12],\"pts\":[{\"la\":37.2661,\"lo\":127.0011,\"k\":\"s\",\"n\":\"1\",\"l\":\"수원역, 환승|센터\"},{\"la\":37.267,\"lo\":127.002,\"k\":\"m\"},{\"la\":0,\"lo\":0}],\"act\":{\"a\":\"call\",\"v\":\"mp.all\"}}]}");
+            ScreenCore.Layout tl = ScreenCore.layout(tms, 360f, M);
+            ok(tl.body.length == 1 && tl.body[0].kind == ScreenCore.K_TMAP && near(tl.body[0].h, 210f) && tl.body[0].act != null && "mp.all".equals(tl.body[0].act.v), "tmap: 자리 · 높이 · 누름");
+            java.util.List<TileMapCore.Pin> tps = TileMapCore.parsePins(tl.body[0].value);
+            ok(tps.size() == 2 && "수원역 환승센터".equals(tps.get(0).name) && "1".equals(tps.get(0).n) && "m".equals(tps.get(1).k), "tmap: 핀 값(0,0 건너뜀 · 쉼표/막대 제거)");
+        } catch (Exception ex) { ok(false, "tmap 읽기: " + ex); }
+        for (String bad : new String[] { "{\"t\":\"tmap\",\"pts\":[]}", "{\"t\":\"tmap\",\"pts\":[{\"la\":95,\"lo\":1}]}", "{\"t\":\"tmap\",\"h\":10,\"pts\":[{\"la\":37,\"lo\":127}]}", "{\"t\":\"tmap\",\"pts\":[{\"la\":37,\"lo\":127}],\"act\":{\"a\":\"zzz\"}}" }) {
+            boolean threw = false;
+            try { ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"map\",\"head\":[],\"body\":[" + bad + "]}"); } catch (Exception ex) { threw = true; }
+            ok(threw, "tmap 엉터리는 거부: " + bad);
+        }
+
         System.out.println(fails == 0 ? "ALL OK (" + oks + ")" : fails + " FAIL");
         System.exit(fails == 0 ? 0 : 1);
     }

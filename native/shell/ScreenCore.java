@@ -293,6 +293,16 @@ public final class ScreenCore {
         return a;
     }
 
+    /** 타일 지도 핀 하나를 글로 — TileMapCore.encodePin 과 같은 모양(la,lo,k,n,name; 쉼표·막대 제거). ScreenCore 는 다른 파일 없이 혼자 컴파일되어야 해서 여기에 따로 둔다. */
+    private static String tmapPin(double la, double lo, String k, String n, String name) {
+        return la + "," + lo + "," + ("m".equals(k) || "f".equals(k) ? k : "s") + "," + tmapClean(n, 4) + "," + tmapClean(name, 24);
+    }
+    private static String tmapClean(String s, int max) {
+        StringBuilder b = new StringBuilder();
+        for (int i = 0; i < s.length() && b.length() < max; i++) { char c = s.charAt(i); if (c != '|' && c != ',' && c >= 0x20) b.append(c); }
+        return b.toString().trim();
+    }
+
     private static Mark mark(Map<String, Object> m, int cells) throws ParseError {
         Mark k = new Mark();
         k.f = (int) optNum(m, "f", 0f, 0f, 9999f); k.t = (int) optNum(m, "t", (float) k.f, 0f, 9999f);
@@ -648,6 +658,24 @@ public final class ScreenCore {
             n.h = optNum(m, "h", 150f, 80f, 360f); n.r = optNum(m, "r", 12f, 0f, 40f);
             n.value = optStr(m, "sc", "", SCENE_MAX);
             if (n.value.length() == 0 || n.value.length() >= SCENE_MAX) throw new ParseError("scene: sc 가 없거나 너무 길다");
+        } else if ("tmap".equals(t)) {                                                                     // 타일 지도: 핀(좌표·번호·이름)은 엔진이 정하고, 앱은 타일을 받아 그리기만 한다
+            pad(m, n);
+            n.h = optNum(m, "h", 200f, 100f, 420f); n.r = optNum(m, "r", 12f, 0f, 40f);
+            StringBuilder pv = new StringBuilder();
+            int pc = 0;
+            for (Object po : asArr(m.get("pts"), "tmap.pts")) {
+                Map<String, Object> pm = asObj(po, "pt");
+                float la = optNum(pm, "la", 0f, -85f, 85f), lo = optNum(pm, "lo", 0f, -180f, 180f);
+                if (la == 0f && lo == 0f) continue;
+                if (pc >= 40) throw new ParseError("tmap: 핀이 너무 많다");
+                double dla = pm.get("la") instanceof Number ? ((Number) pm.get("la")).doubleValue() : la, dlo = pm.get("lo") instanceof Number ? ((Number) pm.get("lo")).doubleValue() : lo;
+                if (pc > 0) pv.append('|');
+                pv.append(tmapPin(dla, dlo, optStr(pm, "k", "s", 2), optStr(pm, "n", "", 8), optStr(pm, "l", "", 40)));
+                pc++;
+            }
+            if (pc == 0) throw new ParseError("tmap: 핀이 없다");
+            n.value = pv.toString();
+            n.act = act(m.get("act"), false);
         } else if ("cars".equals(t)) {                                                                     // 칸별 혼잡: 제목 + 칸 가로줄(테두리 색 · 글 세 줄), 칸이 없으면 안내 글
             pad(m, n);
             n.title = optStr(m, "ttl", "", 24); n.value = optStr(m, "msg", "", 60);
@@ -731,7 +759,7 @@ public final class ScreenCore {
 
     // ═════════════ ③ 배치 ═════════════
     public static final int SCENE_MAX = 6000;
-    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14, K_NEWS = 15, K_POSTH = 16, K_CMT = 17, K_RBTN = 18, K_INBAR = 19, K_MSG = 20, K_TAB = 21, K_SUG = 22, K_SWAP = 23, K_RHD = 24, K_TRK = 25, K_CGH = 26, K_GAUGE = 27, K_CHART = 28, K_HBAR = 29, K_CARS = 30, K_AIH = 31, K_LTH = 32, K_LTR = 33, K_PILL = 34, K_SCENE = 35;
+    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14, K_NEWS = 15, K_POSTH = 16, K_CMT = 17, K_RBTN = 18, K_INBAR = 19, K_MSG = 20, K_TAB = 21, K_SUG = 22, K_SWAP = 23, K_RHD = 24, K_TRK = 25, K_CGH = 26, K_GAUGE = 27, K_CHART = 28, K_HBAR = 29, K_CARS = 30, K_AIH = 31, K_LTH = 32, K_LTR = 33, K_PILL = 34, K_SCENE = 35, K_TMAP = 36;
     /** 경로 결과 머리줄 치수(웹 #transitResultHeader 와 같다: 분 숫자 28 · 단위 14 · 구간명 12 · 즐겨찾기 알약 11 · 닫기 ×) */
     /** 구간 타임라인 칸 치수(웹 #transitHtlTrack 과 같다): 이름 30 · 배지 18 · 축 26 · 시각 3+16 */
     public static final float TRK_NAME_H = 30f, TRK_BADGE_H = 18f, TRK_AXIS_H = 26f, TRK_TIME_GAP = 3f, TRK_TIME_H = 16f, TRK_H = 93f, TRK_LINE_Y = 12f, TRK_LINE_H = 3f, TRK_DOT_Y = 13f, TRK_E_R = 7f, TRK_R_R = 6f, TRK_M_R = 3f;
@@ -1195,6 +1223,11 @@ public final class ScreenCore {
         }
         if ("scene".equals(n.t)) {                                                   // 캐릭터 장면 자리(그림은 ScreenView 의 장면 그리개가 그린다)
             Item it = new Item(); it.kind = K_SCENE; it.x = ox; it.y = y; it.w = innerW; it.h = n.h; it.radius = n.r; it.value = n.value;
+            out.add(it);
+            return y + n.h + n.padB;
+        }
+        if ("tmap".equals(n.t)) {                                                    // 타일 지도 자리(그림은 ScreenView 가 그린다 · 누르면 act)
+            Item it = new Item(); it.kind = K_TMAP; it.x = ox; it.y = y; it.w = innerW; it.h = n.h; it.radius = n.r; it.value = n.value; it.act = n.act;
             out.add(it);
             return y + n.h + n.padB;
         }

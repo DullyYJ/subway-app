@@ -166,7 +166,12 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
   b = mk({ lat: 36.333, lng: 127.434, res: { tn: '', d1: D1 } });
   ok(b.info.bus.st === 'need' && b.info.bus.need.length === 2 && /cityCode=25&nodeId=DJB1/.test(b.info.bus.need[0].url) && /cityCode=25&nodeId=XX9/.test(b.info.bus.need[1].url), 'D1 보조 정류장: 시 코드가 0 이면 좌표 상자로 추정(대전 25)');
   ok(E.mapCityOf(35.1, 129.0) === '21' && E.mapCityOf(10, 10) === '' && E.mapGGPreferred(37.2661, 127.0011) === true && E.mapGGPreferred(37.489, 126.724) === false && E.mapGGPreferred(35.1, 129.0) === false, '시 코드 상자 · 경기 우선 판정');
-  ok(/map\.kakao\.com\/link\/map\/%EC%88%98%EC%9B%90%EC%97%AD,37\.2661,127\.0011/.test(JSON.stringify(mk({ lat: 37.2661, lng: 127.0011, res: { gg: GGS, tn: TAGO, a0: GGA, a1: '' } }).body)) && JSON.stringify(mk({ lat: 37.2661, lng: 127.0011, res: { gg: GGS, tn: TAGO, a0: GGA, a1: '' } }).body).includes('link/to/'), '정류장마다 위치 보기 · 길찾기(외부 지도) 단추');
+  ok(JSON.stringify(mk({ lat: 37.2661, lng: 127.0011, res: { gg: GGS, tn: TAGO, a0: GGA, a1: '' } }).body).includes('map.kakao.com/link/to/%EC%88%98%EC%9B%90%EC%97%AD'), '정류장마다 길찾기(외부 지도) 단추');
+  {
+    const bb = mk({ lat: 37.2661, lng: 127.0011, res: { gg: GGS, tn: TAGO, a0: GGA, a1: '' } }).body, tm = bb[0];
+    ok(tm.t === 'tmap' && tm.pts.length >= 2 && tm.pts[tm.pts.length - 1].k === 'm' && tm.pts[0].k === 's' && tm.pts[0].n === '1' && tm.act.v === 'mp.all', '정류장 지도: 번호 핀 + 내 위치 핀, 누르면 크게 보기');
+    ok(JSON.stringify(bb).includes('"v":"mp.f0"'), '위치 보기 단추는 그 핀을 가운데 둔 크게 보기(mp.f0)');
+  }
   // 웹과 같은 규칙: 같은 이름 25m 안은 한 곳으로, 출구가 많으면 목록이 늘어난다
   const many = []; for (let i = 0; i < 9; i++) many.push({ nm: '아라역' + (i + 1) + '번 출구', la: 37.5 + i * 1e-3, lo: 127, dist: 100 + i * 10, src: 'tago' });
   for (let i = 0; i < 6; i++) many.push({ nm: '일반' + i, la: 37.4 + i * 1e-2, lo: 127, dist: 50 + i, src: 'tago' });
