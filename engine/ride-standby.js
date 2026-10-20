@@ -39,6 +39,13 @@ var RIDE_STANDBY_DEFAULTS = {
   // ★ 2026-10-19 (YJ: "영점은 역·정류장 도착 후 5초 안에"): 다음 호출까지의 간격도 엔진이 정한다(네이티브는 nextMs 를 그대로 따른다).
   //   표시 도착 시각 앞 nearBeforeSec ~ 뒤 nearAfterSec 안에는 nearStepMs, 그 밖에는 stepMs. (웹 _trkGapMs 와 같은 창)
   stepMs: 5000, nearStepMs: 2500, nearBeforeSec: 30, nearAfterSec: 40,
+  // ★ 2026-10-21 승차 대기: 시작 때 첫 승차역 출발 시각 전이면 '아직 안 탔다'로 두고, 위치로 열차를 탄 것(역 근처 → 빠르게 멀어짐)을 감지하면 승차 확정으로 바꾼다.
+  waitNearM: 150,          // 승차역에서 이 거리 안(정확도 뺀 값)에 한 번이라도 있었으면 '역에 왔다'
+  waitAwayM: 400,          // 그 뒤 이 거리 밖으로 벗어나고
+  waitMoveMps: 4.0,        // 최근 속도가 이 이상(걷는 속도 3.0 보다 빠름)이면 열차를 탄 것
+  waitSpanSec: 15, waitWinSec: 60, waitFreshSec: 25,
+  waitStartLateSec: 90,    // 시작이 첫 승차역 시각보다 이만큼 이상 늦었으면 이미 탄 것으로 본다(대기 없음)
+  waitGraceSec: 480,       // 시각 뒤 이만큼 지나도 감지 못 하면 탔다고 보고 시각표대로 이어간다(알림이 영영 안 울리는 것을 막는다)
   ongoingTitle: '길동무 경로 안내 중'
 };
 
@@ -182,6 +189,57 @@ function rsNextMs(st, r, now, O) {
   return O.stepMs;
 }
 
+function rsHav(a, b, c, d) {
+  var R = 6371000, p = Math.PI / 180, dLa = (c - a) * p, dLo = (d - b) * p;
+  var x = Math.sin(dLa / 2) * Math.sin(dLa / 2) + Math.cos(a * p) * Math.cos(c * p) * Math.sin(dLo / 2) * Math.sin(dLo / 2);
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(x)));
+}
+
+// 승차 대기: 처음 위치를 받은 틱에 대기를 걸지 정하고(첫 승차역 출발 시각 전이면 대기), 대기 중에는 승차(역 근처 → 빠르게 멀어짐)를 감지한다.
+// 대기 중 eta.boarded=false · notDeparted=true 라 ride-eta 가 승차역 이후를 예정 시각 그대로 둔다. 승차가 확정되면 첫 승차역 통과 증거(gps)를 넣고 평소 흐름으로 간다.
+function rsWait(st, tr, now, O, notes) {
+  var eta = st.eta, stops = st.stops || [], b = null, i;
+  for (i = 0; i < stops.length; i++) if (stops[i] && stops[i].pass === false && isFinite(stops[i].lat) && isFinite(stops[i].lng)) { b = stops[i]; break; }
+  if (st.waitChk === undefined) {
+    if (!tr.length) return;                                   // 위치를 처음 받는 틱까지 미룬다
+    st.waitChk = 1;
+    if (!st.cfg || st.cfg.waitBoard !== true) return;           // 대기는 시작 엔진(ride-start)이 켠 여정에서만
+    var am = (st.etaMs && st.etaMs[b ? b.i : 0] != null) ? st.etaMs[b.i] : (b ? b.arrMs : null);
+    if (!b || am == null || !isFinite(am) || now > am + O.waitStartLateSec * 1000 || eta.boarded === false) return;
+    st.wait = { i: b.i, lat: b.lat, lng: b.lng, arrMs: am, since: now, seen: false, nearTs: 0 };
+    eta.boarded = false; eta.notDeparted = true;
+    notes.push('승차 대기 시작(' + b.i + '번 정류장 출발 ' + Math.round((am - now) / 1000) + '초 뒤)');
+  }
+  var w = st.wait; if (!w) return;
+  var k, q, d, last = null;
+  for (k = 0; k < tr.length; k++) {
+    q = tr[k]; if (q[0] < w.since - 60000) continue;
+    if (q[3] != null && q[3] > 150) continue;
+    d = rsHav(q[1], q[2], w.lat, w.lng) - (q[3] == null ? 30 : q[3]);
+    if (d <= O.waitNearM) { w.seen = true; if (q[0] > w.nearTs) w.nearTs = q[0]; }
+    last = q;
+  }
+  var boarded = false, why = '';
+  if (w.seen && last && now - last[0] <= O.waitFreshSec * 1000) {
+    var dl = rsHav(last[1], last[2], w.lat, w.lng);
+    if (dl >= O.waitAwayM) {
+      var win = tr.filter(function (z) { return now - z[0] <= O.waitWinSec * 1000 && (z[3] == null || z[3] <= 150); });
+      if (win.length >= 3) {
+        var f0 = win[0], f1 = win[win.length - 1], dt = (f1[0] - f0[0]) / 1000;
+        if (dt >= O.waitSpanSec) { var sp = rsHav(f0[1], f0[2], f1[1], f1[2]) / dt; if (sp >= O.waitMoveMps) { boarded = true; why = '역에서 ' + Math.round(dl) + 'm · ' + sp.toFixed(1) + 'm/s'; } }
+      }
+    }
+  }
+  if (!boarded && now > w.arrMs + O.waitGraceSec * 1000) { boarded = true; why = '출발 시각 ' + Math.round((now - w.arrMs) / 60000) + '분 뒤까지 감지 못 해 시각표대로'; }
+  if (!boarded) return;
+  var passes = eta.passes = eta.passes || [], ms = w.nearTs > 0 ? w.nearTs : now, hit = -1;
+  for (k = 0; k < passes.length; k++) if (passes[k].idx === w.i) { hit = k; break; }
+  var np = { idx: w.i, ms: ms, src: 'gps' };
+  if (hit >= 0) passes[hit] = np; else passes.push(np);
+  eta.boarded = true; eta.notDeparted = false; delete st.wait;
+  notes.push('승차 확정(' + why + ')');
+}
+
 function rideStandby(req) {
   req = req || {};
   var O = RIDE_STANDBY_DEFAULTS, st = req.state, now = +req.nowMs, notes = [], i;
@@ -195,6 +253,7 @@ function rideStandby(req) {
   if (!st.firstAt) st.firstAt = now;
   while (tr.length && now - tr[0][0] > O.trailMaxAgeSec * 1000) tr.shift();
   if (tr.length > O.trailMax) tr.splice(0, tr.length - O.trailMax);
+  rsWait(st, tr, now, O, notes);                  // 1.5) 승차 대기 · 승차 감지
   // 2) 영점: 정류장 도착 시각을 최신 etaMs 로 맞춰 ride-track 에 묻는다 → 통과 시각(passMs)은 gps 증거로, 아직 안 닿음은 notYet 으로
   var eta = st.eta, passes = (eta.passes = eta.passes || []), notYet = (st.notYet = st.notYet || {});
   var zero = null, newPass = false, tk = null;
@@ -277,6 +336,7 @@ function rideStandby(req) {
       notes.push('이탈 알림(' + (offRes ? offRes.why + ' ' + offRes.distM + 'm' : '유지') + ')');
     }
   }
+  if (st.wait) { al.alert = null; al.extra = []; }     // 아직 안 탔으면 하차·환승 알림을 울리지 않는다(보낸 것으로도 처리하지 않는다)
   if (al.alert && al.alert.type !== 'offroute') {
     fired[al.alert.key] = 1; al.extra.forEach(function (k) { fired[k] = 1; });
     if (/_0$/.test(al.alert.key) && !st.arrivedAt) st.arrivedAt = now;
@@ -290,6 +350,7 @@ function rideStandby(req) {
     var nm = (nodes[nextIdx] && nodes[nextIdx].name) || '', ar = r.arr && r.arr[nextIdx] ? r.arr[nextIdx] : '';
     text = '다음 ' + nm + (ar ? ' ' + ar : '') + (dest && al.curPos >= 0 ? ' · ' + (cfg.destName || dest.name || '목적지') + '까지 ' + Math.max(0, dest.seqPos - al.curPos) + '정거장' : '');
   } else text = '';
+  if (st.wait) text = '승차 대기 · ' + ((nodes[st.wait.i] && nodes[st.wait.i].name) || '') + (r.arr && r.arr[st.wait.i] ? ' ' + r.arr[st.wait.i] : '') + ' · ' + (cfg.destName || (dest && dest.name) || '목적지') + '까지';
   if (offActive) text = '경로를 벗어났어요 · 앱을 열면 다시 찾아 드려요';
   var done = false;
   if (st.arrivedAt && now - st.arrivedAt >= O.doneAfterSec * 1000) { done = true; notes.push('목적지 도착 ' + O.doneAfterSec + '초 뒤 종료'); }
@@ -323,4 +384,4 @@ function handleRideStandby(request) {
   }, function () { return new Response(JSON.stringify({ error: '요청을 읽지 못함' }), { status: 400, headers: H }); });
 }
 
-if (typeof module !== 'undefined') module.exports = { rideStandby: rideStandby, rsNextMs: rsNextMs, rsResync: rsResync, handleRideStandby: handleRideStandby, rsAlerts: rsAlerts, RIDE_STANDBY_DEFAULTS: RIDE_STANDBY_DEFAULTS };
+if (typeof module !== 'undefined') module.exports = { rideStandby: rideStandby, rsWait: rsWait, rsNextMs: rsNextMs, rsResync: rsResync, handleRideStandby: handleRideStandby, rsAlerts: rsAlerts, RIDE_STANDBY_DEFAULTS: RIDE_STANDBY_DEFAULTS };

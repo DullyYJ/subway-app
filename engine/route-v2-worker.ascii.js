@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-20s95";
+var ENGINE_VERSION = "route-v2-2026-10-20s96";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -19300,7 +19300,7 @@ function rideStart(opt, r) {
   if (firstSub) { eta.timetableFirst = true; eta.boardInfo = { boardIdx: 1, line: String(pts[0].lineNm || ''), from: pts[0].nm, to: pts[1] ? pts[1].nm : '' }; }
   var allowed = (r.allowed && typeof r.allowed === 'object') ? r.allowed : {};
   var sig = rstHash(nodes.map(function (n) { return n.name + '|' + (n.lineName || ''); }).join('>') + '@' + Math.floor(now / 3600000));
-  var state = { v: 1, tripSig: sig, eta: eta, stops: stops, trail: [], cfg: { targets: tg.targets, seq: tg.seq, allowed: allowed, destName: dest }, fired: {}, notYet: {}, etaMs: etaMs, steps: 0, startedAt: now };
+  var state = { v: 1, tripSig: sig, eta: eta, stops: stops, trail: [], cfg: { targets: tg.targets, seq: tg.seq, allowed: allowed, destName: dest, waitBoard: r.wait !== false }, fired: {}, notYet: {}, etaMs: etaMs, steps: 0, startedAt: now };
   var legs = 0; for (i = 1; i < tnodes.length; i++) if (i === 1 || tnodes[i].l !== tnodes[i - 1].l) legs++;
   return { ok: true, v: RST_V, state: state, text: '\ub2e4\uc74c ' + pts[0].nm + (pts[0].arrT ? ' ' + pts[0].arrT : '') + ' \u00b7 ' + dest + '\uae4c\uc9c0 ' + (tg.seq.length ? tg.seq.length - 1 : 0) + '\uc815\uac70\uc7a5',
     info: { n: nodes.length, first: { name: pts[0].nm, hm: pts[0].arrT || '' }, dest: dest, tab: tab, legs: legs, sig: sig } };

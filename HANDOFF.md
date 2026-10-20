@@ -1648,3 +1648,9 @@
 - 설정의 "도착 알림"(np_arrive) · "환승 알림"(np_transfer)을 끄면 탑승 시작 때 `RideCore.offKinds` 가 끈 종류(near_arrive2 · near_arrive · arrive / transfer2 · transfer)를 `allowed:{종류:false}` 로 실어 보내고, 엔진 `ride-start` 가 state.cfg.allowed 에 넣어 `ride-standby` 가 그 종류를 막는다. 시험: ride_start_engine 21, JVM RideCore.
 - 앱이 죽은 뒤 결과 카드 복원은 하지 않기로 함: 경로(홈 결과)가 저장되지 않아 붙일 카드가 없다. 알림(종료 버튼)·위젯은 계속 동작.
 - 남은 큰 것: 승차 전 대기 판정(boarded:false 일 때 승차 감지), `/pos-fuse`, 떠 있는 오버레이.
+
+## 2026-10-21 엔진 s96 — 승차 대기 → 승차 감지 (`ride-standby.rsWait`, `ride-start` cfg.waitBoard)
+- `/ride/start` 가 만든 state 는 `cfg.waitBoard:true`(요청 `r.wait:false` 로 끌 수 있음). `/ride-standby` 첫 위치 틱에서 첫 승차역(pass:false 정류장) 출발 시각이 아직 안 지났거나 90초 안쪽이면 **승차 대기**를 건다 — `eta.boarded=false · notDeparted=true` (ride-eta 가 승차역 이후를 예정 시각 그대로 둠), 상주 글 `승차 대기 · 역 시각 · 도착지까지`, 하차·환승 알림 보류.
+- 감지: 승차역 150m 안에 한 번이라도 있었고(`seen`) → 400m 이상 벗어나며 최근 15초 이상 구간 속도가 4m/s(걷는 속도 3.0 보다 빠름) 이상이면 승차 확정 — 첫 승차역 통과 증거(gps, 역 근처 마지막 시각)를 넣고 평소 흐름. 걷는 속도로 멀어지면 승차가 아니다. 출발 시각 8분 뒤까지 감지 못 하면 시각표대로 이어간다(알림이 영영 안 울리는 것 방지). 출발 시각보다 90초 넘게 늦게 시작했으면 이미 탄 것으로 본다.
+- 시험: ride_start_engine 32(대기 시작·역 도착·승차 확정·걸어서 멀어짐·8분 뒤 시각표·늦은 시작·끄기·알림 보류). 워커 `route-v2-2026-10-20s96`. 기기 미확인(실제 GPS 정확도 · 지하 신호 끊김).
+- 남은 것: `/pos-fuse` 위치 융합, 떠 있는 오버레이. 대기 중엔 결과 카드 내 위치 마커(pos)가 비어 있다.

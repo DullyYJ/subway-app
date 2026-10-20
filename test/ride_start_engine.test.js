@@ -75,5 +75,48 @@ function posAt(ms, stops) {                 // 열차·버스가 계획대로 �
   const i = w.indexOf('// ===== RIDESTART ENGINE BEGIN ====='), j = w.indexOf('// ===== RIDESTART ENGINE END =====');
   ok(i > 0 && j > i && !/[^\x00-\x7f]/.test(w.slice(i, j)), '내장 블록은 ASCII');
 }
+// ⑤ 승차 대기 → 승차 감지(첫 승차역 S0 출발 = T0+120초)
+{
+  const mPerLng = 111320 * Math.cos(LAT * Math.PI / 180);
+  const run = (posAt, endMs) => {
+    let st = RS.rideStart({ cap: 18 }, facts()).state, out = null, log = [], t = T0, trail = [];
+    for (; t <= endMs; t += 5000) {
+      const p = posAt(t);
+      out = SB.rideStandby({ nowMs: t, fixes: [[t, p[0], p[1], 12]], state: st });
+      st = out.state; log.push({ t: t, out: out });
+    }
+    return { st: st, out: out, log: log };
+  };
+  // 역에서 약 620m 떨어진 곳에서 시작해 걸어 와(1.3m/s → 약 8분 걸리지만 여기서는 빨리 와서) 역에서 기다리다 열차를 타고 동쪽으로 달린다.
+  const toStation = t => { const f = Math.min(1, (t - T0) / 60000); return [LAT, LNG0 - 0.007 * (1 - f)]; };          // 60초 동안 역으로 걸어 도착
+  const train = t => { const dt = (t - (T0 + 140000)) / 1000; return [LAT, LNG0 + Math.max(0, dt) * 12 / mPerLng]; };      // 140초에 출발 12m/s
+  const aboard = t => t < T0 + 140000 ? toStation(t) : train(t);
+  const w1 = run(aboard, T0 + 100000);
+  ok(w1.st.wait && w1.st.eta.boarded === false && /^승차 대기 · S0/.test(w1.out.ongoing.text) && w1.out.alert === null, '시작 직후엔 승차 대기: 상주 글 · 알림 없음 · 아직 안 탐: ' + w1.out.ongoing.text);
+  ok(w1.log.some(x => (x.out.state.steps === 1)) && w1.log[0].out.state.wait && w1.log[0].out.state.wait.seen === false, '첫 틱에 대기가 걸리고, 역과 떨어진 위치라 아직 역에 오지 않음');
+  const w2 = run(aboard, T0 + 130000);
+  ok(w2.st.wait && w2.st.wait.seen === true, '역에 오면(150m 안) 역에 왔다고 기록');
+  const w3 = run(aboard, T0 + 200000);
+  ok(!w3.st.wait && w3.st.eta.boarded === true && w3.st.eta.notDeparted === false, '역에서 빠르게 멀어지면 승차 확정: 대기 해제');
+  const ps = w3.st.eta.passes.find(p => p.idx === 1);
+  ok(ps && ps.src === 'gps' && ps.ms >= T0 + 60000 && ps.ms <= T0 + 150000, '첫 승차역 통과 증거(gps)가 역을 떠나기 직전 시각으로 들어간다');
+  ok(!/승차 대기/.test(w3.out.ongoing.text) && /^다음 /.test(w3.out.ongoing.text), '승차 뒤엔 평소 안내 글: ' + w3.out.ongoing.text);
+  // 역에 와서 기다리기만(열차 안 탐) — 시각이 한참 지나도 걸어서 멀어지면 탄 걸로 보지 않지만, 8분 뒤엔 시각표대로 이어간다
+  const waitOnly = t => t < T0 + 60000 ? toStation(t) : [LAT, LNG0 - 0.0005 + (t - T0 - 60000) / 1000 * 1.3 / mPerLng];   // 역에서 1.3m/s 로 걸어 멀어짐
+  const w4 = run(waitOnly, T0 + 400000);
+  ok(w4.st.wait && w4.st.eta.boarded === false, '걸어서 멀어지는 건 승차가 아니다(출발 시각 뒤 4분이 지나도 대기)');
+  const w5 = run(waitOnly, T0 + 120000 + 500000);
+  ok(!w5.st.wait && w5.st.eta.boarded === true && w5.log.some(x => x.out.state.eta && /시각표대로/.test(JSON.stringify(x.out.notes || []))), '출발 시각 8분 뒤까지 감지 못 하면 시각표대로 이어간다');
+  // 이미 출발 시각보다 한참 늦게 시작(=이미 탐): 대기를 걸지 않는다
+  let stLate = RS.rideStart({ cap: 18 }, facts({ now: T0 + 250000, rb: T0 })).state;
+  const oL = SB.rideStandby({ nowMs: T0 + 250000, fixes: [[T0 + 250000, LAT, LNG0 + 0.003, 12]], state: stLate });
+  ok(!oL.state.wait && oL.state.eta.boarded === true, '출발 시각보다 90초 넘게 늦게 시작하면 이미 탄 것으로 본다');
+  // 대기를 끈 상태(r.wait:false)
+  const oN = SB.rideStandby({ nowMs: T0 + 5000, fixes: [[T0 + 5000, LAT, LNG0 - 0.007, 12]], state: RS.rideStart({ cap: 18 }, facts({ wait: false })).state });
+  ok(!oN.state.wait && oN.state.eta.boarded === true, 'r.wait:false 면 대기 없이 바로 탄 것으로 시작');
+  // 대기 중 하차 알림은 울리지 않는다(예정 시각이 지났어도)
+  const w6 = run(waitOnly, T0 + 300000);
+  ok(w6.log.every(x => x.out.alert === null || x.out.alert.type === 'offroute'), '대기 중엔 하차·환승 알림이 없다');
+}
 console.log(pass + ' 통과 / ' + fail + ' 실패');
 if (fail) process.exit(1);
