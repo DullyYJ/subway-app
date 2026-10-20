@@ -116,9 +116,76 @@ public class ShellActivity extends Activity {
         });
         applyTheme();
         showTab(ShellCore.currentTab(store));
+        WidgetCore.captureLaunch(getIntent());
+        widgetLaunch();
+        gwSync(false);
     }
 
+    /** 위젯을 눌러 앱이 (다시) 열렸다. */
+    @Override protected void onNewIntent(Intent it) {
+        super.onNewIntent(it);
+        setIntent(it);
+        WidgetCore.captureLaunch(it);
+        widgetLaunch();
+    }
+    @Override protected void onStop() { super.onStop(); WidgetCore.onAppLeft(this); }
+
     private boolean resumed;
+    /** 위젯 본체 → 커뮤니티 탭 · 위젯 [출근하기]/[퇴근하기] → 설정한 출발·도착으로 길찾기(경로는 엔진이 장소 이름으로 찾아 준 좌표). */
+    private void widgetLaunch() {
+        String tab = WidgetCore.takeTab();
+        if ("community".equals(tab)) { closeSheet(); store.put(ShellCore.K_TAB, "community"); showTab("community"); }
+        final String go = WidgetCore.takeLaunch(this);
+        if (!"morn".equals(go) && !"eve".equals(go)) return;
+        toast("출퇴근 경로를 찾는 중이에요");
+        final String body = CmCore.briefBody(store, go, System.currentTimeMillis(), null);
+        new Thread(new Runnable() {
+            @Override public void run() {
+                NetPost.Res r = NetPost.post(ShellCore.BASE + "/commute-brief", body, 12000);
+                final GwCore.Route rt = r.status == 200 ? GwCore.parseRoute(r.body) : null;
+                main.post(new Runnable() { @Override public void run() {
+                    if (rt == null) { toast("출퇴근 장소를 먼저 설정해 주세요 (설정 > 출퇴근 브리핑)"); return; }
+                    closeSheet();
+                    home.setStation(HomeCore.START, rt.from.name, "", rt.from.lat, rt.from.lng);
+                    home.setStation(HomeCore.DEST, rt.to.name, "", rt.to.lat, rt.to.lng);
+                    home.clearRoute();
+                    store.put(ShellCore.K_TAB, "home"); showTab("home");
+                    setHomeFields();
+                    goRoute();
+                } });
+            }
+        }, "shell-gwgo").start();
+    }
+    private int gwSeq;
+    /**
+     * 위젯에 출퇴근 설정을 넘긴다. 출·퇴근 장소의 좌표는 엔진이 이름으로 찾아 주므로(/commute-brief 의 route) 그걸 받아 적은 뒤 JSON 을 만든다.
+     * 위젯이 하나도 없으면 하지 않는다(force 는 위젯을 추가하는 순간). 같은 설정이면 위젯을 다시 그리지 않는다. 연달아 바꾸면 마지막 것만.
+     */
+    private void gwSync(final boolean force) {
+        final int my = ++gwSeq;
+        final android.content.Context app = getApplicationContext();
+        new Thread(new Runnable() {
+            @Override public void run() {
+                try { Thread.sleep(force ? 0 : 1500); } catch (InterruptedException e) { return; }
+                if (my != gwSeq) return;
+                try { if (!force && WidgetCore.ids(app).length == 0) return; } catch (Throwable t) { return; }
+                long now = System.currentTimeMillis();
+                String[] kinds = { "morn", "eve" };
+                for (String k : kinds) {
+                    NetPost.Res r = NetPost.post(ShellCore.BASE + "/commute-brief", CmCore.briefBody(store, k, now, null), 12000);
+                    if (r.status == 200) GwCore.putOrigin(store, k, GwCore.parseRoute(r.body));          // 못 받았으면 지난 값 그대로
+                    if (my != gwSeq) return;
+                }
+                final String json = GwCore.configJson(store);
+                main.post(new Runnable() { @Override public void run() {
+                    if (!force && WidgetCore.sameConfig(app, json)) return;
+                    try { WidgetCore.setConfigJson(app, json); } catch (Throwable ignored) { }
+                    if (ShellCore.S_SETPG.equals(sheetName) && "gw".equals(setPage) && sheet != null && sheet.isShowing()) loadSetPage();
+                } });
+            }
+        }, "shell-gwsync").start();
+    }
+
     /** 갤럭시 여부·앱 배터리 제한 여부를 저장소에 적어 둔다 — 설정 첫 화면 요청의 기기 사실(f.sam · f.samw)이 된다. */
     private void refreshPower() {
         try {
@@ -350,7 +417,7 @@ public class ShellActivity extends Activity {
             case ShellCore.E_TOAST: toast(e.arg); loadSlot(slots.length - 1, true); break;
             case ShellCore.E_LINK: openLink(e.arg); break;
             case ShellCore.E_NEWS: openNews(e.arg); break;
-            case ShellCore.E_PAGE: if ("ovl".equals(e.arg) || "sam".equals(e.arg) || "arr".equals(e.arg) || "cm".equals(e.arg)) openSetPage(e.arg); else toast("아직 옮기는 중이에요"); break;
+            case ShellCore.E_PAGE: if ("ovl".equals(e.arg) || "sam".equals(e.arg) || "arr".equals(e.arg) || "cm".equals(e.arg) || "gw".equals(e.arg)) openSetPage(e.arg); else toast("아직 옮기는 중이에요"); break;
             default: break;
         }
     }
@@ -1520,6 +1587,7 @@ public class ShellActivity extends Activity {
     private void loadSetPage() {
         final String url = "sam".equals(setPage) ? ShellCore.pageUrlSam(PowerInfo.read(this).pageFacts())
             : ("cm".equals(setPage) ? ShellCore.pageUrlCm(cm.pageFacts(store))
+            : "gw".equals(setPage) ? ShellCore.pageUrlGw(GwCore.pageFacts(store))
             : "arr".equals(setPage) ? ShellCore.pageUrlArr(arrStat, RideService.running, notifOk(), RideService.liveReco, RideService.recoStage, RideService.recoStageAt)
             : ShellCore.pageUrl(store, "ovl", RideOverlay.supported(), RideOverlay.allowed(this)));
         new Thread(new Runnable() {
@@ -1552,7 +1620,7 @@ public class ShellActivity extends Activity {
     private void cmAct(String a, String v, String key, boolean on, String q) {
         int r = cm.act(store, a, v, key, on, q);
         if ((r & CmCore.R_CLOSE) != 0) { closeSheet(); loadSlot(slots.length - 1, true); return; }
-        if ((r & CmCore.R_RESCHED) != 0) CommuteAlarm.rescheduleAsync(this);
+        if ((r & CmCore.R_RESCHED) != 0) { CommuteAlarm.rescheduleAsync(this); gwSync(false); }
         if ((r & CmCore.R_TEST) != 0) { testBrief(); return; }
         if ((r & CmCore.R_BUS) != 0) { cmBusSearch(cm.pkQ); return; }
         if ((r & CmCore.R_RENDER) != 0) loadSetPage();
@@ -1596,6 +1664,13 @@ public class ShellActivity extends Activity {
         if (r == ShellCore.PG_SAMOPEN) { PowerInfo.openSamsung(this); return; }          // 돌아오면 onResume 이 다시 읽어 그린다
         if (r == ShellCore.PG_BATREQ) { PowerInfo.requestIgnore(this); return; }
         if (r == ShellCore.PG_ARRTEST) { testReco(ShellCore.arrKind(v)); return; }
+        if (r == ShellCore.PG_GWADD) {
+            gwSync(true);
+            if (WidgetCore.pin(this, GwCore.addType(v))) toast("홈 화면에 추가할지 물어보면 [추가]를 눌러 주세요");
+            else toast("이 런처는 바로 추가를 지원하지 않아요. 홈 화면을 길게 눌러 위젯에서 길동무 캐릭터 시계를 골라 주세요");
+            return;
+        }
+        if (r == ShellCore.PG_GWCFG) { try { WidgetCore.setConfigJson(getApplicationContext(), GwCore.configJson(store)); } catch (Throwable ignored) { } }       // 장소 좌표는 이미 적혀 있다 — 돌아다니는 시간만 바뀐 것
         if (r == ShellCore.PG_RENDER && "arr".equals(setPage)) arrStat = true;
         if (r == ShellCore.PG_NEEDPERM) {                              // '다른 앱 위에 표시' 허용 화면(기기 설정)으로 보낸다. 돌아오면 onResume 이 다시 그린다.
             toast("설정에서 '다른 앱 위에 표시'를 허용해 주세요");

@@ -70,7 +70,7 @@ public final class ShellCore {
         b.append(",\"ovl\":").append("1".equals(st.get(K_OVL, "0")) ? 1 : 0);
         b.append(",\"sam\":").append("1".equals(st.get(K_SAM, "0")) ? 1 : 0).append(",\"samw\":").append("1".equals(st.get(K_SAMW, "0")) ? 1 : 0);
         b.append(",\"cm\":").append(CmCore.on(st) ? 1 : 0);
-        b.append(",\"pgs\":[\"sam\",\"ovl\",\"arr\",\"cm\"]");                           // 이 앱이 열 수 있는 하위 화면(나머지 줄은 엔진이 감춘다)
+        b.append(",\"pgs\":[\"sam\",\"ovl\",\"arr\",\"cm\",\"gw\"]");                           // 이 앱이 열 수 있는 하위 화면(나머지 줄은 엔진이 감춘다)
         b.append(",\"rl\":").append("1".equals(st.get(K_RIDELOG_OFF, "0")) ? 0 : 1);
         b.append(",\"th\":").append(q(theme(st)));
         b.append(",\"pt\":").append(RulesCore.ptOf(st)).append(",\"day\":").append(q(st.get(K_DAY, ""))).append('}');
@@ -82,12 +82,17 @@ public final class ShellCore {
     }
 
     // ═════════════ 설정 하위 화면: 다른 앱 위에 표시(ovl) ═════════════
-    public static final int PG_NONE = 0, PG_RENDER = 1, PG_CLOSE = 2, PG_NEEDPERM = 3, PG_SAMOPEN = 4, PG_BATREQ = 5, PG_ARRTEST = 6;
+    public static final int PG_NONE = 0, PG_RENDER = 1, PG_CLOSE = 2, PG_NEEDPERM = 3, PG_SAMOPEN = 4, PG_BATREQ = 5, PG_ARRTEST = 6, PG_GWADD = 7, PG_GWCFG = 8;
     /** 하위 화면 주소. 지원 여부·허용 여부는 기기 사실이라 껍데기가 알려 준다(글은 엔진이 만든다). */
     /** 출퇴근 브리핑 화면(cm · 시각 고르기 · 장소 고르기) 주소 — pfJson 은 CmCore.pageFacts(). */
     public static String pageUrlCm(String pfJson) {
         try { return BASE + "/screen/settings?cap=" + SETTINGS_CAP + "&p=cm&f=" + URLEncoder.encode(pfJson, "UTF-8"); }
         catch (java.io.UnsupportedEncodingException e) { return BASE + "/screen/settings?cap=" + SETTINGS_CAP + "&p=cm"; }
+    }
+    /** 캐릭터 시계 위젯 화면(gw) 주소 — pfJson 은 GwCore.pageFacts(). */
+    public static String pageUrlGw(String pfJson) {
+        try { return BASE + "/screen/settings?cap=" + SETTINGS_CAP + "&p=gw&f=" + URLEncoder.encode(pfJson, "UTF-8"); }
+        catch (java.io.UnsupportedEncodingException e) { return BASE + "/screen/settings?cap=" + SETTINGS_CAP + "&p=gw"; }
     }
     /** 절전 화면(sam) 주소 — pfJson 은 기기가 읽은 사실({"pf":{w,ig,bk,sok}}). */
     public static String pageUrlSam(String pfJson) {
@@ -131,6 +136,15 @@ public final class ShellCore {
     }
     /** 하위 화면 눌림(스위치는 a=set · key=ovl). 스위치를 켰는데 권한이 없으면 PG_NEEDPERM — 껍데기가 기기 설정 화면을 연다. */
     public static int routePage(Store st, String page, String a, String v, String key, boolean on, boolean granted) {
+        if ("gw".equals(page)) {
+            if (!"call".equals(a)) return PG_NONE;
+            if ("pg.back".equals(v)) return PG_CLOSE;
+            if ("sam.open".equals(v)) return PG_SAMOPEN;
+            if ("bat.req".equals(v)) return PG_BATREQ;
+            if (GwCore.addType(v) != null) return PG_GWADD;
+            if (GwCore.stepRoam(st, v)) return PG_GWCFG;
+            return PG_NONE;
+        }
         if ("sam".equals(page)) {
             if (!"call".equals(a)) return PG_NONE;
             if ("pg.back".equals(v)) return PG_CLOSE;

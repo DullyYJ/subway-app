@@ -62,5 +62,62 @@
                 android:resource="@xml/ride_widget_info" />
         </receiver>
 
+        <!-- 캐릭터 시계 위젯 4종(가로/세로 x 블랙/화이트) + 알람·재부팅 수신 -->
+        <receiver
+            android:name=".GdmWidgetHB"
+            android:label="길동무 캐릭터 시계"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/gdm_widget_hb" />
+        </receiver>
+        <receiver
+            android:name=".GdmWidgetHW"
+            android:label="길동무 캐릭터 시계"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/gdm_widget_hw" />
+        </receiver>
+        <receiver
+            android:name=".GdmWidgetVB"
+            android:label="길동무 캐릭터 시계"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/gdm_widget_vb" />
+        </receiver>
+        <receiver
+            android:name=".GdmWidgetVW"
+            android:label="길동무 캐릭터 시계"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/gdm_widget_vw" />
+        </receiver>
+        <receiver
+            android:name=".GdmWidgetReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="com.dullyyj.subway.WIDGET_TICK" />
+            </intent-filter>
+        </receiver>
+
     </application>
 </manifest>

@@ -65,6 +65,35 @@ public class ShellJvmTest {
                 ok(dec.contains("\"st\":{\"timer\":true,\"route\":true,\"pre\":7,\"tzo\":-540,\"policy\":false,\"dest\":\"강남\",\"rem\":300,\"dg\":{\"stage\":\"시험\",\"at\":5}}"), "상태 확인 사실: " + dec);
             }
             {
+                ShellCore.MemStore gs = new ShellCore.MemStore();
+                ok(GwCore.roam(gs) == 6, "위젯 돌아다니는 시간 기본 6분");
+                ok(GwCore.stepRoam(gs, "gw.roam.dn") && GwCore.roam(gs) == 5 && GwCore.stepRoam(gs, "gw.roam.up") && GwCore.roam(gs) == 6, "−1분 / +1분");
+                for (int i = 0; i < 12; i++) GwCore.stepRoam(gs, "gw.roam.dn");
+                ok(GwCore.roam(gs) == 2, "최소 2분에서 멈춘다");
+                for (int i = 0; i < 12; i++) GwCore.stepRoam(gs, "gw.roam.up");
+                ok(GwCore.roam(gs) == 10, "최대 10분에서 멈춘다");
+                gs.put(GwCore.K_ROAM, "abc"); ok(GwCore.roam(gs) == 6, "깨진 값은 기본 6분");
+                ok(!GwCore.stepRoam(gs, "gw.roam.x") && !GwCore.stepRoam(gs, null), "모르는 행동은 무시");
+                ok("hb".equals(GwCore.addType("gw.add.hb")) && "vw".equals(GwCore.addType("gw.add.vw")) && GwCore.addType("gw.add.zz") == null && GwCore.addType("gw.add.") == null && GwCore.addType(null) == null, "위젯 종류 4개만");
+                ok(ShellCore.routePage(gs, "gw", "call", "gw.add.hw", null, false, true) == ShellCore.PG_GWADD, "gw.add → 핀 추가");
+                ok(ShellCore.routePage(gs, "gw", "call", "gw.roam.dn", null, false, true) == ShellCore.PG_GWCFG, "gw.roam → 설정 다시 전달");
+                ok(ShellCore.routePage(gs, "gw", "call", "bat.req", null, false, true) == ShellCore.PG_BATREQ && ShellCore.routePage(gs, "gw", "call", "sam.open", null, false, true) == ShellCore.PG_SAMOPEN && ShellCore.routePage(gs, "gw", "call", "pg.back", null, false, true) == ShellCore.PG_CLOSE, "gw 화면의 배터리/절전/뒤로");
+                ok(ShellCore.pageUrlGw(GwCore.pageFacts(gs)).contains("p=gw&f="), "gw 화면 주소");
+                ok(!GwCore.mOn(gs) && !GwCore.eOn(gs) && GwCore.configJson(gs).startsWith("{\"on\":false,\"mOn\":false,\"eOn\":false,"), "장소가 없으면 꺼짐");
+                String br = "{\"v\":1,\"title\":\"t\",\"body\":\"b\",\"route\":{\"from\":{\"name\":\"임학\",\"lat\":37.5,\"lng\":126.7,\"bus\":false},\"to\":{\"name\":\"아라\",\"lat\":37.6,\"lng\":126.8,\"bus\":true}}}";
+                gs.put(GwCore.K_ROAM, "6");
+                GwCore.Route rt = GwCore.parseRoute(br);
+                ok(rt != null && "임학".equals(rt.from.name) && rt.from.lat == 37.5 && rt.to.bus && !rt.from.bus, "브리핑 응답의 경로를 읽는다");
+                ok(GwCore.parseRoute("{\"v\":1,\"route\":null}") == null && GwCore.parseRoute("{\"route\":{\"from\":{\"name\":\"\",\"lat\":1,\"lng\":1},\"to\":{\"name\":\"a\",\"lat\":1,\"lng\":1}}}") == null && GwCore.parseRoute("x") == null, "경로 없음/깨진 값은 null");
+                GwCore.putOrigin(gs, "morn", rt);
+                ok(GwCore.mOn(gs) && !GwCore.eOn(gs), "출근 쪽만 켜진다");
+                String cj = GwCore.configJson(gs);
+                ok(cj.contains("\"on\":true") && cj.contains("\"mOn\":true") && cj.contains("\"eOn\":false") && cj.contains("\"mLat\":37.5") && cj.contains("\"mLng\":126.7") && !cj.contains("eLat") && cj.contains("\"roam\":6") && cj.contains("\"days\":[1,2,3,4,5]") && cj.contains("\"morn\":\"07:30\""), "위젯 설정 JSON: " + cj);
+                gs.put(CmCore.K_DAYS, ""); ok(GwCore.configJson(gs).contains("\"days\":[0,1,2,3,4,5,6]"), "요일이 비면 매일");
+                GwCore.putOrigin(gs, "morn", null); ok(!GwCore.mOn(gs), "장소를 지우면 다시 꺼진다");
+                ok(GwCore.pageFacts(gs).equals("{\"pf\":{\"nat\":true,\"nv\":true,\"roam\":6,\"mOn\":false,\"eOn\":false,\"morn\":\"07:30\",\"eve\":\"18:30\"}}"), "gw 화면 기기 사실");
+            }
+            {
                 ShellCore.MemStore cs = new ShellCore.MemStore();
                 CmCore cmc = new CmCore();
                 ok(!CmCore.on(cs) && "07:30".equals(CmCore.morn(cs)) && "18:30".equals(CmCore.eve(cs)) && CmCore.days(cs).toString().equals("[1, 2, 3, 4, 5]"), "출퇴근 기본값: 꺼짐 · 07:30 · 18:30 · 평일");
@@ -187,7 +216,7 @@ public class ShellJvmTest {
         // ── 설정 사실 ──
         ShellCore.MemStore s2 = new ShellCore.MemStore();
         String f = ShellCore.settingsFacts(s2);
-        ok(f.equals("{\"id\":\"\",\"np\":{\"arrive\":1,\"transfer\":1,\"arrive_reco\":1},\"ovl\":0,\"sam\":0,\"samw\":0,\"cm\":0,\"pgs\":[\"sam\",\"ovl\",\"arr\",\"cm\"],\"rl\":1,\"th\":\"pastel\",\"pt\":{},\"day\":\"\"}"), "기본 기기 사실: " + f);
+        ok(f.equals("{\"id\":\"\",\"np\":{\"arrive\":1,\"transfer\":1,\"arrive_reco\":1},\"ovl\":0,\"sam\":0,\"samw\":0,\"cm\":0,\"pgs\":[\"sam\",\"ovl\",\"arr\",\"cm\",\"gw\"],\"rl\":1,\"th\":\"pastel\",\"pt\":{},\"day\":\"\"}"), "기본 기기 사실: " + f);
         s2.put("comm_id", "길동무7"); s2.put("np_transfer", "0"); s2.put("ride_log_off", "1"); s2.put("theme", "dark");
         f = ShellCore.settingsFacts(s2);
         ok(f.contains("\"id\":\"길동무7\"") && f.contains("\"transfer\":0") && f.contains("\"rl\":0") && f.contains("\"th\":\"dark\""), "바뀐 기기 사실");
