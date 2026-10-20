@@ -125,13 +125,14 @@ ok(odd.ok && all(odd).find(n => n.t === 'field').value.length === 12, '이상한
   names.forEach(p => {
     const sc = PG(p, {});
     ok(sc.ok && sc.screen === 'settings' && sc.cover === 'tab' && sc.info.page === p && /^s1p:/.test(sc.rev), p + ': 기본 모양/정보/rev');
-    ok(sc.body[0].t === 'button' && sc.body[0].s === '\u2039 \uc124\uc815' && sc.body[0].act.v === 'pg.back', p + ': 맨 위가 ‹ 설정(pg.back)');
+    if (p === 'locd') ok(sc.body[0].t === 'panel' && !JSON.stringify(sc).includes('pg.back'), 'locd: 동의 안내는 뒤로 가기 단추가 없다(동의/거부만)');
+    else ok(sc.body[0].t === 'button' && sc.body[0].s === '\u2039 \uc124\uc815' && sc.body[0].act.v === 'pg.back', p + ': 맨 위가 ‹ 설정(pg.back)');
     ok(!texts(sc).some(x => EMOJI.test(x)), p + ': 이모지 없음');
     ok(JSON.stringify(PG(p, {})) === JSON.stringify(sc) && PG(p, { x: 1 }).rev === sc.rev, p + ': 같은 입력 → 같은 출력, 모르는 사실은 무시');
   });
   ok(PG('cm', { sub: 'tp', tp: { t: 'morn', ap: 'am', h: 7, m: 30 } }).body[0].s === '\u2039 \ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551 \uc54c\ub9bc' && PG('cm', { sub: 'pick', pick: { k: 'to', q: '' } }).body[0].s === '\u2039 \ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551 \uc54c\ub9bc', '시각/장소 고르기의 뒤로 단추는 출퇴근 브리핑 알림으로 돌아간다');
   // 행동 이름은 허용 목록 모양만
-  const ALLOW = /^(pg\.back|sam\.open|bat\.req|ovl\.diag|pf\.(live|rec)|dev\.(start\.(all|plain|reco|alert2|alert1|quit)|stop)|arr\.(t\.(morning|lunch|night|shop)|demo|stat)|gw\.(add\.(hb|hw|vb|vw)|roam\.(dn|up))|cm\.(day\.[0-6]|preset\.(weekday|weekend|all)|tp\.(morn|eve)|test|pick\.(from|to|eFrom|eTo))|tp\.(ap\.(am|pm)|h\.([1-9]|1[0-2])|m\.([0-9]|[1-5][05])|ok|cancel)|pk\.(save|clear|cancel|u\.\d{1,2}|b\.\d{1,2}))$/;
+  const ALLOW = /^(pg\.back|pol\.(privacy|location|opensource)|erl\.(copy|clear)|locd\.(ok|no)|sam\.open|bat\.req|ovl\.diag|pf\.(live|rec)|dev\.(start\.(all|plain|reco|alert2|alert1|quit)|stop)|arr\.(t\.(morning|lunch|night|shop)|demo|stat)|gw\.(add\.(hb|hw|vb|vw)|roam\.(dn|up))|cm\.(day\.[0-6]|preset\.(weekday|weekend|all)|tp\.(morn|eve)|test|pick\.(from|to|eFrom|eTo))|tp\.(ap\.(am|pm)|h\.([1-9]|1[0-2])|m\.([0-9]|[1-5][05])|ok|cancel)|pk\.(save|clear|cancel|u\.\d{1,2}|b\.\d{1,2}))$/;
   names.concat(['tp', 'pick']).forEach(p => {
     const sc = p === 'tp' ? PG('cm', { sub: 'tp', tp: { t: 'eve', ap: 'pm', h: 6, m: 30 } }) : p === 'pick' ? PG('cm', { sub: 'pick', pick: { k: 'to', q: '강' }, bus: ['강남역', '강남역', '강동'] }) : PG(p, {});
     const bad = acts(sc).filter(a => !(a.a === 'call' && ALLOW.test(a.v)));
@@ -164,6 +165,24 @@ ok(odd.ok && all(odd).find(n => n.t === 'field').value.length === 12, '이상한
   { const tn = texts(PG('dev', { nv: 1 })).join('\n'), tw = texts(PG('dev', {})).join('\n');
     ok(/주황 막대/.test(tn) && /빨간 막대/.test(tn) && /끌어 옮길 수 있고/.test(tn) && !/알약|무지개|캐릭터|맛집/.test(tn), '개발자(nv): 떠 있는 안내 막대 기준 설명(알약·무지개·캐릭터 없음)');
     ok(/알약/.test(tw) && /무지개/.test(tw) && !/주황 막대/.test(tw), '개발자(웹 기준): 알약·무지개 설명 그대로'); }
+  // 약관 · 오류 로그 · 위치 안내
+  { const pol = ['polp', 'poll', 'polo'].map(p => texts(PG(p, {})).join('\n'));
+    ok(/개인정보처리방침/.test(pol[0]) && /1\. 수집하는 항목/.test(pol[0]) && /7\. 문의\nphg0643@gmail\.com/.test(pol[0]) && /시행일 · 최종 개정일: 2026-10-03/.test(pol[0]), '약관: 개인정보처리방침 본문');
+    ok(/제1조 \(목적\)/.test(pol[1]) && /제7조 \(문의\)/.test(pol[1]) && /서버에 저장하거나 제3자에게 제공하지 않습니다/.test(pol[1]), '약관: 위치기반서비스 이용약관 본문');
+    ok(/쿠팡 파트너스 활동/.test(pol[2]) && /공공누리 제1유형/.test(pol[2]) && /추정치/.test(pol[2]), '약관: 데이터 출처 및 고지(제휴 고지 · 출처 표시)');
+    ok(!pol.some(x => /<\/?[a-z]+>|&gt;|&amp;/.test(x)), '약관: 태그 찌꺼기 없음');
+    const hl = flat(PG('polp', {}).body).filter(n => n.t === 'text' && n.hl);
+    ok(hl.length >= 5 && hl.every(n => n.hl.every(r => r[0] >= 0 && r[1] <= n.s.length && r[0] < r[1])), '약관: 굵은 글씨 구간이 글 안에 있다'); }
+  { const E1 = [{ t: '10-21 06:00', m: 'NullPointerException: x', f: 'A.java:3', s: 'A.f:3\nB.g:9', n: 2 }, { t: '10-21 06:10', m: 'IllegalStateException', f: 'B.java:7', s: '', n: 1 }];
+    const t0 = texts(PG('erl', {})), t1 = texts(PG('erl', { errs: E1 }));
+    ok(t0.includes('기록된 오류가 없습니다.') && t0.includes('오류 로그') && !acts(PG('erl', {})).some(a => /^erl\./.test(a.v)), '오류 로그: 없으면 안내만(복사/지우기 없음)');
+    ok(t1.includes('오류 로그 2건') && t1.indexOf('IllegalStateException') < t1.indexOf('NullPointerException: x'), '오류 로그: 최신이 위');
+    ok(t1.includes('10-21 06:00 · 2회') && t1.includes('A.java:3') && t1.includes('A.f:3\nB.g:9'), '오류 로그: 횟수 · 위치 · 흔적');
+    ok(acts(PG('erl', { errs: E1 })).map(a => a.v).filter(v => /^erl\./.test(v)).join() === 'erl.copy,erl.clear', '오류 로그: 복사 · 지우기');
+    ok(texts(PG('erl', { errs: new Array(80).fill(E1[0]) })).filter(x => x === 'NullPointerException: x').length === 40, '오류 로그: 최대 40건만'); }
+  { const t = texts(PG('locd', {})).join('\n'), a = acts(PG('locd', {})).map(x => x.v).join();
+    ok(/백그라운드 위치 데이터를 수집/.test(t) && /하차역·환승역 도착 알림/.test(t) && /저장하지 않습니다/.test(t), '위치 안내: 고지 글');
+    ok(a === 'locd.no,locd.ok,pol.privacy', '위치 안내: 거부 · 동의 · 방침 보기'); }
   // 하차 5분 전 추천 시험
   ok(texts(PG('arr', {})).includes("'상태 확인'을 누르면 감시 상태와 남은 시간이 표시됩니다."), '추천 시험: 처음 안내');
   const ST = { timer: 1, route: 1, dest: '강남', rem: 725, pre: 10, slot: 'night', dinner: 0, alertAt: Date.UTC(2026, 9, 19, 6, 7, 12), tickAt: Date.UTC(2026, 9, 19, 6, 8, 0), tzo: -540, policy: 1, dg: { stage: '문구 생성', at: Date.UTC(2026, 9, 19, 6, 7, 11), err: '' } };

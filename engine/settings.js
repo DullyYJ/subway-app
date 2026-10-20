@@ -162,10 +162,10 @@ function settingsScreen(inp, factsIn) {
 // ★ 하위 화면(cap 8) — 예전에 '웹 카드 시트'로 열던 6개: 갤럭시 절전 · 다른 앱 위에 표시 · 개발자 도구 · 하차 추천 시험 · 캐릭터 시계 위젯 · 출퇴근 브리핑.
 //   앱은 pf(기기 사실)만 보낸다 — 켜짐·값·고른 칸·읽은 숫자. 글(상태 문구·시각 글·요일 안내·퇴근 힌트·시간대 이름)과 어떤 칸을 어떻게 보일지는 여기서 정한다.
 //   행동(act call v): pg.back(설정으로) · sam.open · bat.req · ovl.diag · pf.live · pf.rec · dev.start.<모드> · dev.stop · arr.t.<종류> · arr.demo · arr.stat ·
-//   gw.add.<hb|hw|vb|vw> · gw.roam.<dn|up> · cm.day.<0-6> · cm.preset.<weekday|weekend|all> · cm.tp.<morn|eve> · cm.test · cm.pick.<from|to|eFrom|eTo> ·
+//   gw.add.<hb|hw|vb|vw> · gw.roam.<dn|up> · erl.copy · erl.clear · locd.ok · locd.no · cm.day.<0-6> · cm.preset.<weekday|weekend|all> · cm.tp.<morn|eve> · cm.test · cm.pick.<from|to|eFrom|eTo> ·
 //   tp.ap.<am|pm> · tp.h.<1-12> · tp.m.<0-55> · tp.ok · tp.cancel · pk.save · pk.clear · pk.u.<번호> · pk.b.<번호> · pk.cancel.   스위치(toggle) 키: cm · ovl.
 // ══════════════════════════════════════════════════════════════════════════
-var SETTINGS_PAGES = { sam: '갤럭시 백그라운드 유지', ovl: '다른 앱 위에 표시', dev: '개발자 도구', arr: '하차 5분 전 추천', gw: '캐릭터 시계 위젯', cm: '출퇴근 브리핑 알림' };
+var SETTINGS_PAGES = { sam: '갤럭시 백그라운드 유지', ovl: '다른 앱 위에 표시', dev: '개발자 도구', arr: '하차 5분 전 추천', gw: '캐릭터 시계 위젯', cm: '출퇴근 브리핑 알림', polp: '개인정보처리방침', poll: '위치기반서비스 이용약관', polo: '데이터 출처 및 고지', erl: '오류 로그', locd: '위치 정보 이용 안내' };
 var SETTINGS_DAY_NM = ['일', '월', '화', '수', '목', '금', '토'];
 var SETTINGS_BK = ['알 수 없음', '활성', '작업 집합', '자주 사용', '드물게 사용', '제한'];
 var SETTINGS_PICK = { from: ['출근 출발지 (집 근처)', '지하철·버스 (예: 아라)', '현재 위치 기준'], to: ['출근 도착지 (회사 근처)', '지하철·버스 (예: 강남)', '현재 위치 기준'],
@@ -190,6 +190,7 @@ function settingsPageFacts(pf) {
     w: settingsFlag(pf.w, false), ig: tri(pf.ig), bk: pf.bk == null ? null : settingsInt(pf.bk, 0, 5, 0), er: settingsFlag(pf.er, false), sok: tri(pf.sok),
     nat: settingsFlag(pf.nat, true), sup: tri(pf.sup), gr: tri(pf.gr), on: settingsFlag(pf.on, false), pfl: settingsFlag(pf.pfl, false), pfr: settingsFlag(pf.pfr, false), nv: settingsFlag(pf.nv, false),
     ph: ['plain', 'reco', 'alert2', 'alert1', 'quit'].indexOf(pf.ph) >= 0 ? pf.ph : '', left: settingsInt(pf.left, 0, 600, 0), stopped: settingsFlag(pf.stopped, false),
+    errs: (Array.isArray(pf.errs) ? pf.errs : []).slice(-40).map(function (e) { e = e && typeof e === 'object' ? e : {}; return { t: settingsStr(e.t, 24), m: settingsStr(e.m, 300), f: settingsStr(e.f, 200), s: settingsStr(e.s, 600), n: settingsInt(e.n, 1, 9999, 1) }; }),
     roam: settingsInt(pf.roam, 2, 10, 6), mOn: settingsFlag(pf.mOn, false), eOn: settingsFlag(pf.eOn, false),
     morn: settingsHm(pf.morn, '07:30'), eve: settingsHm(pf.eve, '18:30'), days: days,
     from: settingsStr(pf.from, 60), to: settingsStr(pf.to, 60), eFrom: settingsStr(pf.eFrom, 60), eTo: settingsStr(pf.eTo, 60),
@@ -440,6 +441,70 @@ function settingsPagePick(f, info) {
   return [settingsPanelN(k, 8)];
 }
 
+// ── 약관 및 정책 · 오류 로그 (예전 웹 openPolicy / openErrLog 의 글 그대로) ──
+var SETTINGS_POL_UPDATED = '2026-10-03';
+var SETTINGS_POL = {
+  polp: { title: "개인정보처리방침", paras: [
+    { small: 0, parts: [["1. 수집하는 항목",1],["\n· 위치정보(GPS 좌표): 실시간 경로 안내·주변 정류장 검색\n· 이용자가 입력한 닉네임·게시글·댓글·채팅 내용\n· 노선별 실시간소통(노선 방) 이용 시: 노선명, 대화·지연·혼잡 제보 내용, 선택 입력한 역 이름, 그리고 도배·중복 제보를 막기 위한 ",0],["기기 식별 코드",1],["(IP 주소를 복원할 수 없게 일방향 암호화한 값의 앞 12자리. IP 주소 원본은 저장하지 않습니다)\n· 도착 오차 익명 기록(설정에서 끌 수 있음): 목적지 도착 시 예상 소요 분, 실제 소요 분, 환승 횟수, 노선명, 시간대(시), 평일 여부. ",0],["역 이름·좌표·기기 식별 코드는 포함하지 않으며",1],[" 개인을 식별할 수 없습니다\n· 출발지/도착지 등 이용자가 직접 설정한 값\n별도의 회원가입 절차가 없으며, 이름·연락처·주민등록번호 등은 수집하지 않습니다.",0]] },
+    { small: 0, parts: [["2. 이용 목적",1],["\n대중교통 경로 안내, 실시간 도착정보 제공, 커뮤니티 서비스 운영, 경로 소요시간 예측 정확도 개선(익명 통계)에만 사용합니다.",0]] },
+    { small: 0, parts: [["3. 보관 및 파기",1],["\n· 위치정보: 경로 안내 목적으로만 일시 사용하며 ",0],["서버에 저장하지 않습니다.",1],["\n· 닉네임·설정값: 이용자 기기(단말)에 저장되며 앱 삭제 시 함께 삭제됩니다.\n· 게시글·댓글·채팅: 작성일로부터 보관하며, 최신 글 기준 일정 수량 초과 시 오래된 순으로 자동 삭제됩니다.\n· 게시글은 등록 즉시 다른 모든 이용자에게 닉네임과 함께 공개됩니다. 부적절한 글은 신고할 수 있고(3명 이상 신고 시 자동 숨김), 내 글은 앱에서 직접 삭제할 수 있습니다. 본인 확인용 비밀키는 해시값으로, 도배 방지용 IP 는 원문 없이 해시값으로만 일시 기록합니다.\n· 노선 방 대화·제보와 기기 식별 코드(글 신고 시 신고한 기기의 코드 포함): 작성·신고 후 ",0],["14일이 지나면 자동 삭제",1],["됩니다. 화면에는 최근 12시간 글만 보입니다. 그 전에 삭제를 원하시면 문의처로 요청해 주세요.\n· 도착 오차 익명 기록: ",0],["1년이 지나면 자동 삭제",1],["됩니다. 이용자를 식별할 수 있는 값이 없어 개별 삭제 요청은 처리할 수 없으며, 설정 > 안내 정확도 향상에서 언제든 전송을 끌 수 있습니다.\n· 출퇴근 경로 미리 조회: 설정해 둔 출발·도착 좌표로 경로를 미리 불러올 뿐이며, 그 좌표를 따로 저장하거나 계정과 연결하지 않습니다.",0]] },
+    { small: 0, parts: [["4. 제3자 제공 및 처리위탁",1],["\n이용자의 개인정보를 제3자에게 판매·제공하지 않습니다. 다만 서비스 제공을 위해 아래 외부 API를 호출하며, 이 과정에서 좌표·검색어 등 필요한 최소한의 정보가 전달됩니다.\n· 국토교통부 TAGO(버스 정보) · 서울특별시 열린데이터광장(지하철 실시간)\n· 카카오(장소·길찾기) · 네이버(장소 검색)\n· Google Gemini(안내 문구 생성) · Cloudflare(서버 인프라)",0]] },
+    { small: 0, parts: [["5. 이용자의 권리",1],["\n기기 설정에서 위치 권한을 언제든지 철회할 수 있습니다. 권한을 끄면 실시간 안내 기능은 제한되지만 나머지 기능은 그대로 이용할 수 있습니다. 작성한 글·댓글은 직접 삭제할 수 있습니다.",0]] },
+    { small: 0, parts: [["6. 아동의 개인정보",1],["\n만 14세 미만 아동을 대상으로 하지 않으며, 해당 정보를 고의로 수집하지 않습니다.",0]] },
+    { small: 0, parts: [["7. 문의",1],["\nphg0643@gmail.com",0]] }
+  ] },
+  poll: { title: "위치기반서비스 이용약관", paras: [
+    { small: 0, parts: [["제1조 (목적)",1],["\n본 약관은 이용자가 본 앱의 위치기반서비스를 이용함에 있어 권리·의무 및 책임사항을 규정합니다.",0]] },
+    { small: 0, parts: [["제2조 (서비스 내용)",1],["\n· 현재 위치 기준 경로 탐색 및 실시간 이동 안내\n· 주변 지하철역·버스정류장 검색 및 도착정보 제공\n· 도착역 주변 장소 추천",0]] },
+    { small: 0, parts: [["제3조 (위치정보의 이용 및 보유)",1],["\n위치정보는 서비스 제공 목적으로만 이용하며 ",0],["서버에 저장하거나 제3자에게 제공하지 않습니다.",1],[" 경로 안내 종료 시 해당 정보는 이용되지 않습니다.",0]] },
+    { small: 0, parts: [["제4조 (백그라운드 위치 이용)",1],["\n이용자가 경로 안내를 시작한 경우에 한해, 앱이 화면에 없을 때도 하차역 알림 등을 위해 위치를 확인할 수 있습니다. 경로 안내를 종료하면 즉시 중단됩니다.",0]] },
+    { small: 0, parts: [["제5조 (동의 철회)",1],["\n기기 설정 > 앱 권한에서 언제든지 위치 권한을 철회할 수 있습니다.",0]] },
+    { small: 0, parts: [["제6조 (면책)",1],["\n실시간 정보는 공공기관 및 외부 API가 제공하는 데이터에 기반하며, 통신 상태·운행 사정 등에 따라 실제와 다를 수 있습니다. 이로 인한 손해에 대해 책임을 지지 않습니다.",0]] },
+    { small: 0, parts: [["제7조 (문의)",1],["\nphg0643@gmail.com",0]] }
+  ] },
+  polo: { title: "데이터 출처 및 고지", paras: [
+    { small: 0, parts: [["제휴 및 광고 고지",1],["\n쇼핑 탭의 상품 링크는 ",0],["쿠팡 파트너스 활동",1],["의 일환으로, 이에 따른 ",0],["일정액의 수수료를 제공받습니다.",1],[" 구매자에게 추가 비용은 발생하지 않습니다.",0]] },
+    { small: 0, parts: [["공공데이터 출처 표시",1],["\n본 서비스는 아래 공공데이터를 이용합니다. 해당 저작물은 ",0],["공공누리 제1유형(출처표시)",1],[" 조건에 따라 이용할 수 있습니다.",0]] },
+    { small: 0, parts: [["· ",0],["국토교통부",1],[" — 「국가대중교통정보센터(TAGO) 버스정류소정보·버스도착정보」\n· ",0],["서울특별시",1],[" — 「서울특별시 버스도착정보조회 서비스」, 「서울특별시 정류소정보조회 서비스」\n· ",0],["서울특별시",1],[" — 「지하철 실시간 도착정보·열차위치정보」(서울 열린데이터광장)\n· ",0],["서울교통공사",1],[" — 「서울 도시철도 환승정보」, 「빠른하차정보」(환승·하차 호차/문 위치), 「지하철 알림정보」(운행 공지)\n· ",0],["소상공인시장진흥공단",1],[" — 「상가(상권)정보」\n· ",0],["기상청",1],[" 단기예보 · Open-Meteo (날씨)\n· 카카오 (장소 검색·길찾기) · 네이버 (지역 검색)",0]] },
+    { small: 1, parts: [["위 공공저작물은 공공데이터포털(data.go.kr)에서 제공받았으며, 출처 표시 외의 별도 이용 제한은 없습니다. 자세한 조건은 공공누리 제1유형 안내(kogl.or.kr)를 참고하세요.",0]] },
+    { small: 0, parts: [["안내",1],["\n시각표·혼잡도 등 일부 정보는 공개 데이터를 가공한 ",0],["추정치",1],["이며 실제 운행과 다를 수 있습니다. 커뮤니티 및 실시간 대화의 일부 내용은 AI가 생성한 것입니다.",0]] },
+    { small: 0, parts: [["문의",1],["\nphg0643@gmail.com",0]] }
+  ] }
+};
+function settingsPagePol(p) {
+  var d = SETTINGS_POL[p], k = [settingsTitleN(d.title, 10)];
+  d.paras.forEach(function (q) {
+    var b = settingsBoldN(q.parts), n = { t: 'text', s: b.s, size: q.small ? 11.5 : 12.5, color: q.small ? 'sub' : 'text', lh: 1.75, pad: [0, 0, 0, 10] };
+    if (b.hl.length) n.hl = b.hl;
+    k.push(n);
+  });
+  k.push(settingsSmallN('시행일 · 최종 개정일: ' + SETTINGS_POL_UPDATED, 8, 0));
+  return [settingsPanelN(k, 8)];
+}
+// 오류 로그: 앱이 모아 둔 기록(pf.errs 오래된 것부터)을 최신이 위로. 복사/지우기는 앱이 한다(erl.copy · erl.clear).
+function settingsPageErl(f) {
+  var n = f.errs.length, k = [settingsTitleN('오류 로그' + (n ? ' ' + n + '건' : ''), 4), settingsDescN('앱이 멈추거나 문제가 생겼을 때의 기록이에요. 캡처하거나 복사해서 보내 주세요.', 8)];
+  if (n) k.push(settingsRowN([settingsBtnN('복사', 'erl.copy', { size: 12, h: 38 }), settingsBtnN('지우기', 'erl.clear', { size: 12, h: 38, tc: '#ff453a' })], 6));
+  if (!n) k.push({ t: 'text', s: '기록된 오류가 없습니다.', size: 13, color: 'sub', lh: 1.6, pad: [0, 18, 0, 18], align: 'center' });
+  f.errs.slice().reverse().forEach(function (e) {
+    k.push({ t: 'text', s: e.t + (e.n > 1 ? ' · ' + e.n + '회' : ''), size: 11, color: 'sub', lh: 1.4, pad: [0, 10, 0, 1] });
+    k.push({ t: 'text', s: e.m, size: 12.5, bold: true, color: 'orange', lh: 1.45, pad: [0, 0, 0, 1] });
+    if (e.f) k.push({ t: 'text', s: e.f, size: 11, color: 'sub', lh: 1.4, pad: [0, 0, 0, 1] });
+    if (e.s) k.push({ t: 'text', s: e.s, size: 10.5, color: 'sub', lh: 1.4, pad: [0, 2, 0, 0] });
+  });
+  return [settingsPanelN(k, 8)];
+}
+
+// 위치 정보 이용 안내(백그라운드 위치 수집 동의 고지 — 예전 웹 _showLocDisclosure 의 글 그대로). 처음 위치를 쓰기 전에 앱이 띄운다.
+function settingsPageLocd() {
+  var a = settingsBoldN([['길동무', 1], ['는 화면이 꺼져 있거나 다른 앱을 사용하는 중에도, 앱이 ', 0], ['종료되었거나 사용 중이 아닐 때도', 1], [' 내릴 정거장을 정확히 안내하기 위해 ', 0], ['백그라운드 위치 데이터를 수집', 1], ['합니다. 수집한 위치는 ', 0], ['하차역·환승역 도착 알림', 1], ['과 ', 0], ['실시간 경로 안내', 1], ['에 사용됩니다.', 0]]);
+  var b = settingsBoldN([['· 위치 정보는 경로 안내 목적으로만 이용하며, 경로 계산에 필요한 출발 위치가 경로 서버로 전송되지만 ', 0], ['저장하지 않습니다.', 1], ['\n· 백그라운드 위치 이용은 ', 0], ['경로 안내를 시작한 경우에만', 1], [' 작동하고, 안내를 종료하면 즉시 중단됩니다.\n· 기기 설정에서 언제든지 위치 권한을 철회할 수 있습니다.', 0]]);
+  var ta = { t: 'text', s: a.s, size: 14, color: 'text', lh: 1.75, pad: [0, 0, 0, 14] }; if (a.hl.length) ta.hl = a.hl;
+  var tb = { t: 'text', s: b.s, size: 12.5, color: 'sub', lh: 1.7, pad: [0, 0, 0, 18] }; if (b.hl.length) tb.hl = b.hl;
+  return [settingsPanelN([settingsTitleN('위치 정보 이용 안내', 14), ta, tb,
+    settingsRowN([settingsBtnN('거부', 'locd.no', { h: 46 }), settingsBtnN('동의', 'locd.ok', { gold: true, h: 46 })], 10),
+    settingsNavN('개인정보처리방침 보기', '', { a: 'call', v: 'pol.privacy' }, true)], 24)];
+}
 function settingsPageScreen(inp, factsIn) {
   var p = String(inp.p || '');
   if (!(Number(inp.cap) >= SETTINGS_PAGE_CAP)) return { ok: false, error: 'cap' };
@@ -449,8 +514,9 @@ function settingsPageScreen(inp, factsIn) {
   var info = { page: p, sub: '' }, kids;
   if (p === 'cm' && pf.sub === 'tp') { info.sub = 'tp'; kids = settingsPageTp(pf); }
   else if (p === 'cm' && pf.sub === 'pick') { info.sub = 'pick'; kids = settingsPagePick(pf, info); }
-  else kids = ({ sam: settingsPageSam, ovl: settingsPageOvl, dev: settingsPageDev, arr: settingsPageArr, gw: settingsPageGw, cm: settingsPageCm })[p](pf);
-  var body = [settingsBackN(info.sub ? SETTINGS_PAGES.cm : '')].concat(kids, [{ t: 'spacer', h: 28 }]);
+  else if (p.indexOf('pol') === 0) kids = settingsPagePol(p);
+  else kids = ({ sam: settingsPageSam, ovl: settingsPageOvl, dev: settingsPageDev, arr: settingsPageArr, gw: settingsPageGw, cm: settingsPageCm, erl: settingsPageErl, locd: settingsPageLocd })[p](pf);
+  var body = (p === 'locd' ? [] : [settingsBackN(info.sub ? SETTINGS_PAGES.cm : '')]).concat(kids, [{ t: 'spacer', h: 28 }]);
   var out = { ok: true, v: 1, screen: 'settings', cover: 'tab', head: [], body: body, info: info };
   out.rev = 's' + SETTINGS_SCREEN_V + 'p:' + settingsHash(JSON.stringify(body));
   return out;

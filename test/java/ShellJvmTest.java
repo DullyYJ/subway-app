@@ -65,6 +65,34 @@ public class ShellJvmTest {
                 ok(dec.contains("\"st\":{\"timer\":true,\"route\":true,\"pre\":7,\"tzo\":-540,\"policy\":false,\"dest\":\"강남\",\"rem\":300,\"dg\":{\"stage\":\"시험\",\"at\":5}}"), "상태 확인 사실: " + dec);
             }
             {
+                ShellCore.MemStore es = new ShellCore.MemStore();
+                ok(ErrCore.count(es) == 0 && ErrCore.copyText(es).equals("(오류 없음)") && ErrCore.pageFacts(es).equals("{\"pf\":{\"nat\":true,\"nv\":true,\"errs\":[]}}"), "오류 로그: 처음엔 비어 있다");
+                ErrCore.add(es, "10-21 06:00", "NullPointerException: x", "A.java:3", "A.f:3\nB.g:9");
+                ErrCore.add(es, "10-21 06:01", "IllegalStateException", "B.java:7", "");
+                ok(ErrCore.count(es) == 2, "두 건");
+                ErrCore.add(es, "10-21 06:05", "NullPointerException: x", "A.java:3", "A.f:3");
+                java.util.List<ErrCore.Entry> el = ErrCore.list(es);
+                ok(el.size() == 2 && el.get(1).m.startsWith("NullPointer") && el.get(1).n == 2 && "10-21 06:05".equals(el.get(1).t), "같은 오류는 횟수만 올리고 맨 뒤로");
+                ok(ErrCore.copyText(es).contains("(2회) NullPointerException: x\n  A.java:3\n  A.f:3") && ErrCore.copyText(es).contains("\n\n["), "복사 글 모양");
+                for (int i = 0; i < 60; i++) ErrCore.add(es, "t", "e" + i, "f", "");
+                ok(ErrCore.count(es) == 40 && ErrCore.list(es).get(39).m.equals("e59") && ErrCore.list(es).get(0).m.equals("e20"), "최대 40건, 오래된 것부터 버린다");
+                ErrCore.add(es, "t", "따옴표 \" 와 줄바꿈 \n 와 역슬래시 \\", "f", "s");
+                ok(ErrCore.list(es).get(39).m.equals("따옴표 \" 와 줄바꿈 \n 와 역슬래시 \\"), "특수문자가 저장·읽기에서 그대로");
+                ErrCore.add(es, "t", "   ", "f", ""); ok(ErrCore.count(es) == 40, "빈 메시지는 안 적는다");
+                es.put(ErrCore.K_LOG, "깨진 값"); ok(ErrCore.count(es) == 0, "깨진 저장값은 빈 목록");
+                ErrCore.add(es, "t", "x", "f", ""); ErrCore.clear(es); ok(ErrCore.count(es) == 0, "지우기");
+                ok("polp".equals(ShellCore.polPage("pol.privacy")) && "poll".equals(ShellCore.polPage("pol.location")) && "polo".equals(ShellCore.polPage("pol.opensource")) && "erl".equals(ShellCore.polPage("errlog")) && ShellCore.polPage("pol.x") == null && ShellCore.polPage(null) == null, "설정 첫 화면 줄 → 하위 화면 이름");
+                ShellCore.Effect pe = ShellCore.routeSettings(es, "call", "pol.location", null, false, null);
+                ok(pe.kind == ShellCore.E_PAGE && "poll".equals(pe.arg), "약관 줄을 누르면 하위 화면이 열린다");
+                ShellCore.Effect ee = ShellCore.routeSettings(es, "call", "errlog", null, false, null);
+                ok(ee.kind == ShellCore.E_PAGE && "erl".equals(ee.arg), "오류 로그 줄을 누르면 하위 화면이 열린다");
+                ok(ShellCore.routePage(es, "polp", "call", "pg.back", null, false, true) == ShellCore.PG_CLOSE && ShellCore.routePage(es, "erl", "call", "erl.copy", null, false, true) == ShellCore.PG_ERLCOPY && ShellCore.routePage(es, "erl", "call", "erl.clear", null, false, true) == ShellCore.PG_ERLCLEAR && ShellCore.routePage(es, "polo", "call", "erl.clear", null, false, true) == ShellCore.PG_NONE, "약관/오류 로그 행동 라우팅");
+                ok(!"1".equals(es.get(ShellCore.K_LOCDISC, "0")) && ShellCore.routePage(es, "locd", "call", "locd.no", null, false, true) == ShellCore.PG_LOCNO && !"1".equals(es.get(ShellCore.K_LOCDISC, "0")), "위치 안내: 거부는 동의로 기록하지 않는다");
+                ok(ShellCore.routePage(es, "locd", "call", "pol.privacy", null, false, true) == ShellCore.PG_POLOPEN && !"1".equals(es.get(ShellCore.K_LOCDISC, "0")), "위치 안내: 방침 보기");
+                ok(ShellCore.routePage(es, "locd", "call", "locd.ok", null, false, true) == ShellCore.PG_LOCOK && "1".equals(es.get(ShellCore.K_LOCDISC, "0")), "위치 안내: 동의하면 기록");
+                ok(ShellCore.pageUrlPlain("polp", null).endsWith("p=polp") && ShellCore.pageUrlPlain("erl", ErrCore.pageFacts(es)).contains("p=erl&f="), "약관/오류 로그 주소");
+            }
+            {
                 ShellCore.MemStore ds = new ShellCore.MemStore();
                 ok("all".equals(DevCore.mode("dev.start.all")) && "quit".equals(DevCore.mode("dev.start.quit")) && DevCore.mode("dev.start.x") == null && DevCore.mode("dev.stop") == null && DevCore.mode(null) == null, "개발자 도구: 모드 이름");
                 ok(DevCore.total("all") == 75 && DevCore.total("plain") == 15 && DevCore.total("quit") == 15, "전체 75초 · 한 단계 15초");
@@ -227,7 +255,7 @@ public class ShellJvmTest {
         // ── 설정 사실 ──
         ShellCore.MemStore s2 = new ShellCore.MemStore();
         String f = ShellCore.settingsFacts(s2);
-        ok(f.equals("{\"id\":\"\",\"np\":{\"arrive\":1,\"transfer\":1,\"arrive_reco\":1},\"ovl\":0,\"sam\":0,\"samw\":0,\"cm\":0,\"pgs\":[\"sam\",\"ovl\",\"arr\",\"cm\",\"gw\",\"dev\"],\"rl\":1,\"th\":\"pastel\",\"pt\":{},\"day\":\"\"}"), "기본 기기 사실: " + f);
+        ok(f.equals("{\"id\":\"\",\"np\":{\"arrive\":1,\"transfer\":1,\"arrive_reco\":1},\"ovl\":0,\"sam\":0,\"samw\":0,\"cm\":0,\"errn\":0,\"pgs\":[\"sam\",\"ovl\",\"arr\",\"cm\",\"gw\",\"dev\"],\"rl\":1,\"th\":\"pastel\",\"pt\":{},\"day\":\"\"}"), "기본 기기 사실: " + f);
         s2.put("comm_id", "길동무7"); s2.put("np_transfer", "0"); s2.put("ride_log_off", "1"); s2.put("theme", "dark");
         f = ShellCore.settingsFacts(s2);
         ok(f.contains("\"id\":\"길동무7\"") && f.contains("\"transfer\":0") && f.contains("\"rl\":0") && f.contains("\"th\":\"dark\""), "바뀐 기기 사실");
@@ -264,7 +292,7 @@ public class ShellJvmTest {
         ok(ShellCore.routeSettings(s3, "call", "saveId", "", false, null).arg.contains("2~12자"), "입력칸 값이 없으면 거절");
         e = ShellCore.routeSettings(s3, "call", "clearId", "", false, null);
         ok(e.kind == ShellCore.E_TOAST && "".equals(s3.get("comm_id", "x")), "아이디 삭제");
-        ok(ShellCore.routeSettings(s3, "call", "errlog", "", false, null).kind == ShellCore.E_TOAST, "아직 없는 기능은 알림");
+        ok(ShellCore.routeSettings(s3, "call", "pol.nothing", "", false, null).kind == ShellCore.E_TOAST, "아직 없는 기능은 알림");
         ok(ShellCore.routeSettings(s3, "web", "cm", "", false, null).kind == ShellCore.E_TOAST, "web 행동은 '옮기는 중' 알림");
         ok(ShellCore.routeSettings(s3, "call", "tab.map", "", false, null).kind == ShellCore.E_TAB, "설정 화면에서 온 탭 이동");
         ok(ShellCore.routeSettings(s3, null, null, null, false, null).kind == ShellCore.E_NONE, "빈 눌림은 무시");
@@ -673,6 +701,14 @@ public class ShellJvmTest {
             ok(hcc.request(18, "pastel", en, "{\"a\":1}", "[[\"하늘\",\"안녕\",1,0]]").contains("\"gps\":[37.5,127.0]") && hcc.request(18, "pastel", en, "{\"a\":1}", "[]").contains("\"r\":{\"a\":1}"), "위치·경로 사실");
             String k1 = hcc.key(1, "fast", 60000L, 3, "3:99"); hcc.refreshAi(70000L);
             ok(!k1.equals(hcc.key(1, "fast", 60000L, 3, "3:99")) && hcc.key(1, "fast", 60000L, 3, "3:99").equals(hcc.key(1, "fast", 61000L, 3, "3:99")), "열쇠: 새로고침하면 바뀌고 같은 분이면 같다");
+            ok(hcc.act("share.loc", null) == HcardsCore.R_SHARE, "눌림: 내 위치 공유");
+            String ks0 = hcc.key(1, "fast", 60000L, 0, ""); hcc.share = true;
+            ok(hcc.request(18, "dark", en, "null", "[]").contains(",\"sh\":1") && !ks0.equals(hcc.key(1, "fast", 60000L, 0, "")), "공유 재료가 있으면 요청에 sh=1 이 실리고 열쇠가 바뀐다");
+            hcc.share = false;
+            ShareCore.Share shr = ShareCore.parse("{\"text\":\"임학 - 계양 - 아라 (도착예정시간: 07시10분)\\n[남은시간: 00시14분]\",\"from\":\"임학\",\"cur\":\"계양\",\"to\":\"아라\",\"arr\":\"07:10\",\"rem\":\"14분\",\"stations\":[{\"n\":\"임학\",\"t\":\"06:50\"},{\"n\":\"박촌\",\"t\":\"06:53\"},{\"n\":\"계양\",\"t\":\"06:56\"},{\"n\":\"경인교대\",\"t\":\"06:59\"},{\"n\":\"작전\",\"t\":\"07:02\"},{\"n\":\"갈산\",\"t\":\"07:05\"},{\"n\":\"아라\",\"t\":\"07:10\"}],\"hit\":2,\"moving\":true,\"left\":4,\"next\":\"경인교대\"}");
+            ok(shr != null && shr.names.size() == 7 && shr.hit == 2 && shr.left == 4 && shr.text.startsWith("임학 - 계양") && "다음 역 경인교대 이동 중 · 4개 역 남음".equals(ShareCore.footer(shr)), "위치 공유 재료를 읽는다");
+            ok(java.util.Arrays.equals(ShareCore.slots(7, 2), new int[] { 0, 1, 2, 3, -2, 6 }) && java.util.Arrays.equals(ShareCore.slots(3, 1), new int[] { 0, 1, 2 }) && ShareCore.slots(0, 0).length == 0, "그림 칸: 출발·앞뒤·도착만 남기고 사이는 건너뛴 역 수");
+            ok(ShareCore.parse("{\"text\":\"x\"}") == null && ShareCore.parse("garbage") == null && ShareCore.fromMap(null) == null, "모양이 안 맞는 공유 재료는 버린다");
             ok(hcc.act("ai.refresh", null) == HcardsCore.R_AI && hcc.act("tk.open", null) == HcardsCore.R_TALK_OPEN && hcc.act("tk.send", "  ") == HcardsCore.R_NONE && hcc.act("tk.send", " 안녕하세요 ") == HcardsCore.R_TALK_SEND && "안녕하세요".equals(hcc.sendText), "눌림: 새로고침 · 대화 열기 · 보내기(빈 글은 무시)");
         }
         HomeCore hm = new HomeCore();

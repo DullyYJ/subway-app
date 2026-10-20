@@ -161,6 +161,24 @@ t('오버레이: 그림 틀이 없으면 overlay 는 null, 있으면 칸·현위
   assert.strictEqual(o.cells[5].t.length, 5);
   assert.strictEqual(o.base, 0); assert.deepStrictEqual(o.theme, { bg: '#ffffff', fg: '#111114', sub: '#8e8e93' });
 });
+t('내 위치 공유: 출발 - 현재 - 도착 (도착예정시간) [남은시간] 글과 압축 타임라인 재료(도보 칸은 뺀다)', () => {
+  let st = withOvl(mkState()), shs = [];
+  for (let ms = at(12, 53, 0); ms <= at(13, 1, 0); ms += 5000) {
+    const r = rideStandby({ nowMs: ms, fixes: [[ms, LAT, trainLng(ms, 0), 20]], state: JSON.parse(JSON.stringify(st)) }); st = r.state;
+    if (r.overlay && r.overlay.share) shs.push(r.overlay.share);
+  }
+  assert.ok(shs.length > 20, '공유 재료가 계속 나온다 ' + shs.length);
+  const a = shs[0], z = shs[shs.length - 1];
+  assert.ok(a.stations.length === 5 && a.stations.every(x => x.n && !/^도보$/.test(x.n)), '도보 칸 제외 ' + JSON.stringify(a.stations.map(x => x.n)));
+  assert.ok(/^\S+ - .+ - \S+ \(도착예정시간: \d\d시\d\d분\)\n\[남은시간: \d\d시\d\d분\]$/.test(a.text), a.text);
+  assert.strictEqual(a.from, a.stations[0].n); assert.strictEqual(a.to, a.stations[4].n);
+  assert.ok(shs.some(x => x.moving && / 이동 중$/.test(x.cur) && /→/.test(x.cur)), '가는 중엔 A→B 이동 중');
+  for (let i = 1; i < shs.length; i++) assert.ok(shs[i].hit >= shs[i - 1].hit, '뒤로 감');
+  assert.strictEqual(z.hit, 4); assert.strictEqual(z.left, 0);
+  assert.ok(shs.every(x => x.hit >= 0 && x.hit < x.stations.length && x.left === x.stations.length - 1 - x.hit));
+  assert.ok(/^\d\d시\d\d분$/.test(a.arr) && /^\d\d시\d\d분$/.test(a.rem));
+  const kst = new Date(at(13, 0, 0) + 9 * 3600000); assert.ok(typeof kst.getUTCHours() === 'number');
+});
 t('오버레이: 열차가 가는 대로 현위치 칸이 움직이고(도보 칸은 건너뜀) 이동 중이면 알약에 다음역(이동중)', () => {
   let st = withOvl(mkState()), curs = [], pills = new Set(), l1 = [];
   for (let ms = at(12, 53, 0); ms <= at(13, 1, 0); ms += 5000) {

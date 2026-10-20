@@ -22,6 +22,8 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.Toast;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.List;
@@ -80,6 +82,7 @@ public class ShellActivity extends Activity {
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
         store = new PrefStore(getSharedPreferences(PREFS, Context.MODE_PRIVATE));
+        ErrLog.install(this);
         if (CmCore.on(store)) CommuteAlarm.rescheduleAsync(this);                 // 출퇴근 브리핑: 앞으로 4주 창을 다시 민다
         board = new BoardCore(store);
         chat = new ChatCore(store);
@@ -398,7 +401,7 @@ public class ShellActivity extends Activity {
                 mapAct(a, which == 0 ? head : body);
                 return;
             } else if (ShellCore.S_HOME.equals(screenName())) {
-                if ("call".equals(a.a) && (a.v.startsWith("ai.") || a.v.startsWith("tk."))) hcAct(a.v);
+                if ("call".equals(a.a) && (a.v.startsWith("ai.") || a.v.startsWith("tk.") || a.v.startsWith("share."))) hcAct(a.v);
                 else if ("call".equals(a.a)) homeAct(a.v, body.fields());
                 else if ("open".equals(a.a)) apply(ShellCore.linkEffect(a.url));
                 return;
@@ -417,7 +420,7 @@ public class ShellActivity extends Activity {
             case ShellCore.E_TOAST: toast(e.arg); loadSlot(slots.length - 1, true); break;
             case ShellCore.E_LINK: openLink(e.arg); break;
             case ShellCore.E_NEWS: openNews(e.arg); break;
-            case ShellCore.E_PAGE: if ("ovl".equals(e.arg) || "sam".equals(e.arg) || "arr".equals(e.arg) || "cm".equals(e.arg) || "gw".equals(e.arg) || "dev".equals(e.arg)) openSetPage(e.arg); else toast("아직 옮기는 중이에요"); break;
+            case ShellCore.E_PAGE: if ("ovl".equals(e.arg) || "sam".equals(e.arg) || "arr".equals(e.arg) || "cm".equals(e.arg) || "gw".equals(e.arg) || "dev".equals(e.arg) || ShellCore.isPolPage(e.arg) || "locd".equals(e.arg)) openSetPage(e.arg); else toast("아직 옮기는 중이에요"); break;
             default: break;
         }
     }
@@ -735,7 +738,8 @@ public class ShellActivity extends Activity {
     private void locateOnce(final int reqCode, final LocCb cb) {
         if (checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             pendingLoc = cb;
-            requestPermissions(new String[] { android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION }, reqCode);
+            locGate(new Runnable() { @Override public void run() { requestPermissions(new String[] { android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION }, reqCode); } },
+                new Runnable() { @Override public void run() { LocCb c = pendingLoc; pendingLoc = null; if (c != null) c.fail(true); } });
             return;
         }
         final LocationManager lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
@@ -1109,6 +1113,7 @@ public class ShellActivity extends Activity {
         final long nowH = System.currentTimeMillis();
         hc.ensureNext(nowH);
         hc.rideScene = RideService.running ? RideService.liveScene : "";
+        hc.share = RideService.running && RideService.liveShare != null;
         final String hKey = hc.key(home.resRev, home.resTab, nowH, chat.talkCount(), chat.talkMark());
         final String hBody = hKey.equals(hcKey) ? "" : hc.request(ShellCore.CAP, ShellCore.theme(store), homeEnv(), home.resultFacts(homeEnv(), ShellCore.theme(store)), chat.recentTalksJson(8));
         new Thread(new Runnable() {
@@ -1159,8 +1164,48 @@ public class ShellActivity extends Activity {
                 showTab("community");
                 break;
             case HcardsCore.R_TALK_SEND: sendHomeTalk(hc.sendText); break;
+            case HcardsCore.R_SHARE: shareLoc(); break;
             default: break;
         }
+    }
+    /** 내 위치 공유: 엔진이 준 글+그림을 다른 앱(카카오톡 우선)으로 보낸다. 그림은 앱 캐시의 파일 제공자로 읽게 한다. */
+    private void shareLoc() {
+        final ShareCore.Share sh = RideService.liveShare;
+        if (sh == null) { toast("탑승 안내 중일 때만 공유할 수 있어요"); return; }
+        final int[] pal = ShellCore.palette(ShellCore.theme(store));
+        new Thread(new Runnable() {
+            @Override public void run() {
+                Uri uri = null;
+                try {
+                    android.graphics.Bitmap bmp = ShareArt.draw(sh, pal);
+                    File dir = new File(getCacheDir(), ShareProvider.DIR);
+                    if (!dir.isDirectory()) dir.mkdirs();
+                    File[] old = dir.listFiles();
+                    if (old != null) for (File o : old) o.delete();
+                    File f = new File(dir, "gildongmu_" + System.currentTimeMillis() + ".png");
+                    FileOutputStream os = new FileOutputStream(f);
+                    try { bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, os); } finally { os.close(); }
+                    uri = ShareProvider.uriFor(ShellActivity.this, f);
+                } catch (Throwable t) { ErrLog.record(ShellActivity.this, t, false); }
+                final Uri fu = uri;
+                main.post(new Runnable() { @Override public void run() { startShare(sh.text, fu); } });
+            }
+        }).start();
+    }
+    private void startShare(String text, Uri img) {
+        try {
+            Intent send = new Intent(Intent.ACTION_SEND);
+            send.putExtra(Intent.EXTRA_TEXT, text);
+            if (img != null) { send.setType("image/png"); send.putExtra(Intent.EXTRA_STREAM, img); send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION); }
+            else send.setType("text/plain");
+            Intent chooser = Intent.createChooser(send, "내 위치 공유");
+            try {
+                getPackageManager().getPackageInfo("com.kakao.talk", 0);
+                Intent kk = new Intent(send).setPackage("com.kakao.talk");
+                chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[] { kk });
+            } catch (PackageManager.NameNotFoundException ignored) { }
+            startActivity(chooser);
+        } catch (Throwable t) { toast("공유할 수 있는 앱을 열지 못했어요"); }
     }
     private void sendHomeTalk(final String text) {
         final String me = ShellCore.commId(store);
@@ -1287,7 +1332,8 @@ public class ShellActivity extends Activity {
     private static final int REQ_LOC = 71;
     private void startGps() {
         if (checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(new String[] { android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION }, REQ_LOC);
+            locGate(new Runnable() { @Override public void run() { requestPermissions(new String[] { android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION }, REQ_LOC); } },
+                new Runnable() { @Override public void run() { toast("위치 정보 이용에 동의하지 않아 내 위치를 쓸 수 없어요"); } });
             return;
         }
         home.gps = true; reloadHome();
@@ -1467,8 +1513,11 @@ public class ShellActivity extends Activity {
     private void startRide() {
         if (!home.hasRoute() || home.riding()) return;
         if (checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            if (Build.VERSION.SDK_INT >= 33) requestPermissions(new String[] { android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION, android.Manifest.permission.POST_NOTIFICATIONS }, REQ_RIDE);
-            else requestPermissions(new String[] { android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION }, REQ_RIDE);
+            locGate(new Runnable() { @Override public void run() {
+                    if (Build.VERSION.SDK_INT >= 33) requestPermissions(new String[] { android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION, android.Manifest.permission.POST_NOTIFICATIONS }, REQ_RIDE);
+                    else requestPermissions(new String[] { android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION }, REQ_RIDE);
+                } },
+                new Runnable() { @Override public void run() { toast("위치 정보 이용에 동의하지 않아 탑승 안내를 할 수 없어요"); } });
             return;
         }
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) requestPermissions(new String[] { android.Manifest.permission.POST_NOTIFICATIONS }, REQ_RIDE + 1);
@@ -1581,6 +1630,7 @@ public class ShellActivity extends Activity {
         sheetView.setListener(new SheetHost());
         sheet = new android.app.Dialog(this, android.R.style.Theme_Material_Light_NoActionBar);
         sheet.setContentView(sheetView);
+        if ("locd".equals(page)) sheet.setCancelable(false);                 // 바깥을 눌러도 닫히지 않는다 — 직접 [동의] 또는 [거부]
         try { sheet.show(); slideIn(sheetView); } catch (Throwable t) { toast("설정을 열지 못했어요"); return; }
         loadSetPage();
     }
@@ -1588,6 +1638,9 @@ public class ShellActivity extends Activity {
         final String url = "sam".equals(setPage) ? ShellCore.pageUrlSam(PowerInfo.read(this).pageFacts())
             : ("cm".equals(setPage) ? ShellCore.pageUrlCm(cm.pageFacts(store))
             : "gw".equals(setPage) ? ShellCore.pageUrlGw(GwCore.pageFacts(store))
+            : "locd".equals(setPage) ? ShellCore.pageUrlPlain("locd", null)
+            : "erl".equals(setPage) ? ShellCore.pageUrlPlain("erl", ErrCore.pageFacts(store))
+            : ShellCore.isPolPage(setPage) ? ShellCore.pageUrlPlain(setPage, null)
             : "dev".equals(setPage) ? ShellCore.pageUrlDev(DevCore.pageFacts(devPh, devLeft(), devStopped))
             : "arr".equals(setPage) ? ShellCore.pageUrlArr(arrStat, RideService.running, notifOk(), RideService.liveReco, RideService.recoStage, RideService.recoStageAt)
             : ShellCore.pageUrl(store, "ovl", RideOverlay.supported(), RideOverlay.allowed(this)));
@@ -1661,10 +1714,22 @@ public class ShellActivity extends Activity {
     private void setPageAct(String a, String v, String key, boolean on) {
         if ("cm".equals(setPage)) { cmAct(a, v, key, on, null); return; }
         int r = ShellCore.routePage(store, setPage, a, v, key, on, RideOverlay.allowed(this));
-        if (r == ShellCore.PG_CLOSE) { closeSheet(); loadSlot(slots.length - 1, true); return; }
+        if (r == ShellCore.PG_CLOSE) {
+            if (locOk != null && ShellCore.isPolPage(setPage)) { openSetPage("locd"); return; }          // 안내에서 방침을 보러 갔다 오면 안내로 돌아온다
+            closeSheet(); loadSlot(slots.length - 1, true); return;
+        }
+        if (r == ShellCore.PG_LOCOK) { closeSheet(); Runnable ok = locOk; locOk = null; locNo = null; if (ok != null) ok.run(); return; }
+        if (r == ShellCore.PG_LOCNO) { closeSheet(); Runnable no = locNo; locOk = null; locNo = null; if (no != null) no.run(); return; }
+        if (r == ShellCore.PG_POLOPEN) { openSetPage("polp"); return; }
         if (r == ShellCore.PG_SAMOPEN) { PowerInfo.openSamsung(this); return; }          // 돌아오면 onResume 이 다시 읽어 그린다
         if (r == ShellCore.PG_BATREQ) { PowerInfo.requestIgnore(this); return; }
         if (r == ShellCore.PG_ARRTEST) { testReco(ShellCore.arrKind(v)); return; }
+        if (r == ShellCore.PG_ERLCOPY) {
+            try { ((android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(android.content.ClipData.newPlainText("오류 로그", ErrCore.copyText(store))); toast("복사했어요"); }
+            catch (Throwable t) { toast("복사하지 못했어요"); }
+            return;
+        }
+        if (r == ShellCore.PG_ERLCLEAR) { ErrCore.clear(store); toast("오류 로그를 지웠어요"); loadSetPage(); return; }
         if (r == ShellCore.PG_DEVSTART) { devStart(DevCore.mode(v)); return; }
         if (r == ShellCore.PG_DEVSTOP) { devStop(true); return; }
         if (r == ShellCore.PG_GWADD) {
@@ -1718,6 +1783,14 @@ public class ShellActivity extends Activity {
         if ("quit".equals(devMode) && sec >= DevCore.QUIT_AT - 1) { main.postDelayed(new Runnable() { @Override public void run() { finishAndRemoveTask(); android.os.Process.killProcess(android.os.Process.myPid()); } }, 1000L); return; }
         if ((changed || sec % 5 == 0) && ShellCore.S_SETPG.equals(sheetName) && "dev".equals(setPage) && sheet != null && sheet.isShowing()) loadSetPage();
         main.postDelayed(devTick, 1000L);
+    }
+
+    // ───────────── 위치 정보 이용 안내(처음 위치 권한을 요청하기 전에 한 번) ─────────────
+    private Runnable locOk, locNo;
+    private void locGate(Runnable ok, Runnable no) {
+        if ("1".equals(store.get(ShellCore.K_LOCDISC, "0"))) { ok.run(); return; }
+        locOk = ok; locNo = no;
+        openSetPage("locd");
     }
 
     private boolean notifOk() {

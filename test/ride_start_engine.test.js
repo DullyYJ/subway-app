@@ -26,6 +26,7 @@ ok(st.cfg.targets.length === 2 && st.cfg.targets[0].kind === 'transfer' && st.cf
 ok(st.eta.nodes.slice(1).every(n => n.planMin > 0) && st.eta.nodes[1].planMin === 12 * 60 + 2 && st.eta.nodes[6].planMin === 12 * 60 + 12, '계획 시각(하루 안의 분)');
 ok(/^다음 S0 12:02/.test(o.text) && o.info.first.name === 'S0' && o.info.dest === '도착지' && o.info.legs === 2, '처음 글 · 요약');
 ok(st.ovl && st.ovl.cells.length === 10 && st.ovl.cells[0].n === 'S0' && st.ovl.map.length === 10 && st.ovl.map[0] === 1 && st.ovl.map[9] === 10, '떠 있는 안내 그림 틀(ovl): 정류장마다 칸 + 노드 번호');
+ok(st.ovl.cells[0].dk === 2 && st.ovl.cells[9].dk === 2 && st.ovl.cells[4].dk === 1 && st.ovl.cells[0].lc === undefined && st.ovl.cells[0].rc && st.ovl.cells[9].rc === undefined && st.ovl.cells[5].lc && st.ovl.cells[4].m === 'S4 (이동중)' && st.ovl.theme && /^#/.test(st.ovl.theme.bg), '그림 틀: 점 모양 · 선 색 · 이동 중 문구 · 테마 색을 엔진이 정한다');
 {
   const ov = SB.rideStandby({ nowMs: T0 + 130000, fixes: [[T0 + 130000, LAT, LNG0, 12]], state: JSON.parse(JSON.stringify(st)) }).overlay;
   ok(ov && ov.active && /S\d/.test(ov.line1) && typeof ov.line2 === 'string', '탑승 중 /ride-standby 가 오버레이 값(line1·line2)을 돌려준다: ' + (ov && ov.line1));

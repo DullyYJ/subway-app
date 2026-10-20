@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-20s105";
+var ENGINE_VERSION = "route-v2-2026-10-20s108";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -11886,10 +11886,10 @@ function settingsScreen(inp, factsIn) {
 // \u2605 \ud558\uc704 \ud654\uba74(cap 8) \u2014 \uc608\uc804\uc5d0 '\uc6f9 \uce74\ub4dc \uc2dc\ud2b8'\ub85c \uc5f4\ub358 6\uac1c: \uac24\ub7ed\uc2dc \uc808\uc804 \u00b7 \ub2e4\ub978 \uc571 \uc704\uc5d0 \ud45c\uc2dc \u00b7 \uac1c\ubc1c\uc790 \ub3c4\uad6c \u00b7 \ud558\ucc28 \ucd94\ucc9c \uc2dc\ud5d8 \u00b7 \uce90\ub9ad\ud130 \uc2dc\uacc4 \uc704\uc82f \u00b7 \ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551.
 //   \uc571\uc740 pf(\uae30\uae30 \uc0ac\uc2e4)\ub9cc \ubcf4\ub0b8\ub2e4 \u2014 \ucf1c\uc9d0\u00b7\uac12\u00b7\uace0\ub978 \uce78\u00b7\uc77d\uc740 \uc22b\uc790. \uae00(\uc0c1\ud0dc \ubb38\uad6c\u00b7\uc2dc\uac01 \uae00\u00b7\uc694\uc77c \uc548\ub0b4\u00b7\ud1f4\uadfc \ud78c\ud2b8\u00b7\uc2dc\uac04\ub300 \uc774\ub984)\uacfc \uc5b4\ub5a4 \uce78\uc744 \uc5b4\ub5bb\uac8c \ubcf4\uc77c\uc9c0\ub294 \uc5ec\uae30\uc11c \uc815\ud55c\ub2e4.
 //   \ud589\ub3d9(act call v): pg.back(\uc124\uc815\uc73c\ub85c) \u00b7 sam.open \u00b7 bat.req \u00b7 ovl.diag \u00b7 pf.live \u00b7 pf.rec \u00b7 dev.start.<\ubaa8\ub4dc> \u00b7 dev.stop \u00b7 arr.t.<\uc885\ub958> \u00b7 arr.demo \u00b7 arr.stat \u00b7
-//   gw.add.<hb|hw|vb|vw> \u00b7 gw.roam.<dn|up> \u00b7 cm.day.<0-6> \u00b7 cm.preset.<weekday|weekend|all> \u00b7 cm.tp.<morn|eve> \u00b7 cm.test \u00b7 cm.pick.<from|to|eFrom|eTo> \u00b7
+//   gw.add.<hb|hw|vb|vw> \u00b7 gw.roam.<dn|up> \u00b7 erl.copy \u00b7 erl.clear \u00b7 locd.ok \u00b7 locd.no \u00b7 cm.day.<0-6> \u00b7 cm.preset.<weekday|weekend|all> \u00b7 cm.tp.<morn|eve> \u00b7 cm.test \u00b7 cm.pick.<from|to|eFrom|eTo> \u00b7
 //   tp.ap.<am|pm> \u00b7 tp.h.<1-12> \u00b7 tp.m.<0-55> \u00b7 tp.ok \u00b7 tp.cancel \u00b7 pk.save \u00b7 pk.clear \u00b7 pk.u.<\ubc88\ud638> \u00b7 pk.b.<\ubc88\ud638> \u00b7 pk.cancel.   \uc2a4\uc704\uce58(toggle) \ud0a4: cm \u00b7 ovl.
 // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
-var SETTINGS_PAGES = { sam: '\uac24\ub7ed\uc2dc \ubc31\uadf8\ub77c\uc6b4\ub4dc \uc720\uc9c0', ovl: '\ub2e4\ub978 \uc571 \uc704\uc5d0 \ud45c\uc2dc', dev: '\uac1c\ubc1c\uc790 \ub3c4\uad6c', arr: '\ud558\ucc28 5\ubd84 \uc804 \ucd94\ucc9c', gw: '\uce90\ub9ad\ud130 \uc2dc\uacc4 \uc704\uc82f', cm: '\ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551 \uc54c\ub9bc' };
+var SETTINGS_PAGES = { sam: '\uac24\ub7ed\uc2dc \ubc31\uadf8\ub77c\uc6b4\ub4dc \uc720\uc9c0', ovl: '\ub2e4\ub978 \uc571 \uc704\uc5d0 \ud45c\uc2dc', dev: '\uac1c\ubc1c\uc790 \ub3c4\uad6c', arr: '\ud558\ucc28 5\ubd84 \uc804 \ucd94\ucc9c', gw: '\uce90\ub9ad\ud130 \uc2dc\uacc4 \uc704\uc82f', cm: '\ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551 \uc54c\ub9bc', polp: '\uac1c\uc778\uc815\ubcf4\ucc98\ub9ac\ubc29\uce68', poll: '\uc704\uce58\uae30\ubc18\uc11c\ube44\uc2a4 \uc774\uc6a9\uc57d\uad00', polo: '\ub370\uc774\ud130 \ucd9c\ucc98 \ubc0f \uace0\uc9c0', erl: '\uc624\ub958 \ub85c\uadf8', locd: '\uc704\uce58 \uc815\ubcf4 \uc774\uc6a9 \uc548\ub0b4' };
 var SETTINGS_DAY_NM = ['\uc77c', '\uc6d4', '\ud654', '\uc218', '\ubaa9', '\uae08', '\ud1a0'];
 var SETTINGS_BK = ['\uc54c \uc218 \uc5c6\uc74c', '\ud65c\uc131', '\uc791\uc5c5 \uc9d1\ud569', '\uc790\uc8fc \uc0ac\uc6a9', '\ub4dc\ubb3c\uac8c \uc0ac\uc6a9', '\uc81c\ud55c'];
 var SETTINGS_PICK = { from: ['\ucd9c\uadfc \ucd9c\ubc1c\uc9c0 (\uc9d1 \uadfc\ucc98)', '\uc9c0\ud558\ucca0\u00b7\ubc84\uc2a4 (\uc608: \uc544\ub77c)', '\ud604\uc7ac \uc704\uce58 \uae30\uc900'], to: ['\ucd9c\uadfc \ub3c4\ucc29\uc9c0 (\ud68c\uc0ac \uadfc\ucc98)', '\uc9c0\ud558\ucca0\u00b7\ubc84\uc2a4 (\uc608: \uac15\ub0a8)', '\ud604\uc7ac \uc704\uce58 \uae30\uc900'],
@@ -11914,6 +11914,7 @@ function settingsPageFacts(pf) {
     w: settingsFlag(pf.w, false), ig: tri(pf.ig), bk: pf.bk == null ? null : settingsInt(pf.bk, 0, 5, 0), er: settingsFlag(pf.er, false), sok: tri(pf.sok),
     nat: settingsFlag(pf.nat, true), sup: tri(pf.sup), gr: tri(pf.gr), on: settingsFlag(pf.on, false), pfl: settingsFlag(pf.pfl, false), pfr: settingsFlag(pf.pfr, false), nv: settingsFlag(pf.nv, false),
     ph: ['plain', 'reco', 'alert2', 'alert1', 'quit'].indexOf(pf.ph) >= 0 ? pf.ph : '', left: settingsInt(pf.left, 0, 600, 0), stopped: settingsFlag(pf.stopped, false),
+    errs: (Array.isArray(pf.errs) ? pf.errs : []).slice(-40).map(function (e) { e = e && typeof e === 'object' ? e : {}; return { t: settingsStr(e.t, 24), m: settingsStr(e.m, 300), f: settingsStr(e.f, 200), s: settingsStr(e.s, 600), n: settingsInt(e.n, 1, 9999, 1) }; }),
     roam: settingsInt(pf.roam, 2, 10, 6), mOn: settingsFlag(pf.mOn, false), eOn: settingsFlag(pf.eOn, false),
     morn: settingsHm(pf.morn, '07:30'), eve: settingsHm(pf.eve, '18:30'), days: days,
     from: settingsStr(pf.from, 60), to: settingsStr(pf.to, 60), eFrom: settingsStr(pf.eFrom, 60), eTo: settingsStr(pf.eTo, 60),
@@ -12164,6 +12165,70 @@ function settingsPagePick(f, info) {
   return [settingsPanelN(k, 8)];
 }
 
+// \u2500\u2500 \uc57d\uad00 \ubc0f \uc815\ucc45 \u00b7 \uc624\ub958 \ub85c\uadf8 (\uc608\uc804 \uc6f9 openPolicy / openErrLog \uc758 \uae00 \uadf8\ub300\ub85c) \u2500\u2500
+var SETTINGS_POL_UPDATED = '2026-10-03';
+var SETTINGS_POL = {
+  polp: { title: "\uac1c\uc778\uc815\ubcf4\ucc98\ub9ac\ubc29\uce68", paras: [
+    { small: 0, parts: [["1. \uc218\uc9d1\ud558\ub294 \ud56d\ubaa9",1],["\n\u00b7 \uc704\uce58\uc815\ubcf4(GPS \uc88c\ud45c): \uc2e4\uc2dc\uac04 \uacbd\ub85c \uc548\ub0b4\u00b7\uc8fc\ubcc0 \uc815\ub958\uc7a5 \uac80\uc0c9\n\u00b7 \uc774\uc6a9\uc790\uac00 \uc785\ub825\ud55c \ub2c9\ub124\uc784\u00b7\uac8c\uc2dc\uae00\u00b7\ub313\uae00\u00b7\ucc44\ud305 \ub0b4\uc6a9\n\u00b7 \ub178\uc120\ubcc4 \uc2e4\uc2dc\uac04\uc18c\ud1b5(\ub178\uc120 \ubc29) \uc774\uc6a9 \uc2dc: \ub178\uc120\uba85, \ub300\ud654\u00b7\uc9c0\uc5f0\u00b7\ud63c\uc7a1 \uc81c\ubcf4 \ub0b4\uc6a9, \uc120\ud0dd \uc785\ub825\ud55c \uc5ed \uc774\ub984, \uadf8\ub9ac\uace0 \ub3c4\ubc30\u00b7\uc911\ubcf5 \uc81c\ubcf4\ub97c \ub9c9\uae30 \uc704\ud55c ",0],["\uae30\uae30 \uc2dd\ubcc4 \ucf54\ub4dc",1],["(IP \uc8fc\uc18c\ub97c \ubcf5\uc6d0\ud560 \uc218 \uc5c6\uac8c \uc77c\ubc29\ud5a5 \uc554\ud638\ud654\ud55c \uac12\uc758 \uc55e 12\uc790\ub9ac. IP \uc8fc\uc18c \uc6d0\ubcf8\uc740 \uc800\uc7a5\ud558\uc9c0 \uc54a\uc2b5\ub2c8\ub2e4)\n\u00b7 \ub3c4\ucc29 \uc624\ucc28 \uc775\uba85 \uae30\ub85d(\uc124\uc815\uc5d0\uc11c \ub04c \uc218 \uc788\uc74c): \ubaa9\uc801\uc9c0 \ub3c4\ucc29 \uc2dc \uc608\uc0c1 \uc18c\uc694 \ubd84, \uc2e4\uc81c \uc18c\uc694 \ubd84, \ud658\uc2b9 \ud69f\uc218, \ub178\uc120\uba85, \uc2dc\uac04\ub300(\uc2dc), \ud3c9\uc77c \uc5ec\ubd80. ",0],["\uc5ed \uc774\ub984\u00b7\uc88c\ud45c\u00b7\uae30\uae30 \uc2dd\ubcc4 \ucf54\ub4dc\ub294 \ud3ec\ud568\ud558\uc9c0 \uc54a\uc73c\uba70",1],[" \uac1c\uc778\uc744 \uc2dd\ubcc4\ud560 \uc218 \uc5c6\uc2b5\ub2c8\ub2e4\n\u00b7 \ucd9c\ubc1c\uc9c0/\ub3c4\ucc29\uc9c0 \ub4f1 \uc774\uc6a9\uc790\uac00 \uc9c1\uc811 \uc124\uc815\ud55c \uac12\n\ubcc4\ub3c4\uc758 \ud68c\uc6d0\uac00\uc785 \uc808\ucc28\uac00 \uc5c6\uc73c\uba70, \uc774\ub984\u00b7\uc5f0\ub77d\ucc98\u00b7\uc8fc\ubbfc\ub4f1\ub85d\ubc88\ud638 \ub4f1\uc740 \uc218\uc9d1\ud558\uc9c0 \uc54a\uc2b5\ub2c8\ub2e4.",0]] },
+    { small: 0, parts: [["2. \uc774\uc6a9 \ubaa9\uc801",1],["\n\ub300\uc911\uad50\ud1b5 \uacbd\ub85c \uc548\ub0b4, \uc2e4\uc2dc\uac04 \ub3c4\ucc29\uc815\ubcf4 \uc81c\uacf5, \ucee4\ubba4\ub2c8\ud2f0 \uc11c\ube44\uc2a4 \uc6b4\uc601, \uacbd\ub85c \uc18c\uc694\uc2dc\uac04 \uc608\uce21 \uc815\ud655\ub3c4 \uac1c\uc120(\uc775\uba85 \ud1b5\uacc4)\uc5d0\ub9cc \uc0ac\uc6a9\ud569\ub2c8\ub2e4.",0]] },
+    { small: 0, parts: [["3. \ubcf4\uad00 \ubc0f \ud30c\uae30",1],["\n\u00b7 \uc704\uce58\uc815\ubcf4: \uacbd\ub85c \uc548\ub0b4 \ubaa9\uc801\uc73c\ub85c\ub9cc \uc77c\uc2dc \uc0ac\uc6a9\ud558\uba70 ",0],["\uc11c\ubc84\uc5d0 \uc800\uc7a5\ud558\uc9c0 \uc54a\uc2b5\ub2c8\ub2e4.",1],["\n\u00b7 \ub2c9\ub124\uc784\u00b7\uc124\uc815\uac12: \uc774\uc6a9\uc790 \uae30\uae30(\ub2e8\ub9d0)\uc5d0 \uc800\uc7a5\ub418\uba70 \uc571 \uc0ad\uc81c \uc2dc \ud568\uaed8 \uc0ad\uc81c\ub429\ub2c8\ub2e4.\n\u00b7 \uac8c\uc2dc\uae00\u00b7\ub313\uae00\u00b7\ucc44\ud305: \uc791\uc131\uc77c\ub85c\ubd80\ud130 \ubcf4\uad00\ud558\uba70, \ucd5c\uc2e0 \uae00 \uae30\uc900 \uc77c\uc815 \uc218\ub7c9 \ucd08\uacfc \uc2dc \uc624\ub798\ub41c \uc21c\uc73c\ub85c \uc790\ub3d9 \uc0ad\uc81c\ub429\ub2c8\ub2e4.\n\u00b7 \uac8c\uc2dc\uae00\uc740 \ub4f1\ub85d \uc989\uc2dc \ub2e4\ub978 \ubaa8\ub4e0 \uc774\uc6a9\uc790\uc5d0\uac8c \ub2c9\ub124\uc784\uacfc \ud568\uaed8 \uacf5\uac1c\ub429\ub2c8\ub2e4. \ubd80\uc801\uc808\ud55c \uae00\uc740 \uc2e0\uace0\ud560 \uc218 \uc788\uace0(3\uba85 \uc774\uc0c1 \uc2e0\uace0 \uc2dc \uc790\ub3d9 \uc228\uae40), \ub0b4 \uae00\uc740 \uc571\uc5d0\uc11c \uc9c1\uc811 \uc0ad\uc81c\ud560 \uc218 \uc788\uc2b5\ub2c8\ub2e4. \ubcf8\uc778 \ud655\uc778\uc6a9 \ube44\ubc00\ud0a4\ub294 \ud574\uc2dc\uac12\uc73c\ub85c, \ub3c4\ubc30 \ubc29\uc9c0\uc6a9 IP \ub294 \uc6d0\ubb38 \uc5c6\uc774 \ud574\uc2dc\uac12\uc73c\ub85c\ub9cc \uc77c\uc2dc \uae30\ub85d\ud569\ub2c8\ub2e4.\n\u00b7 \ub178\uc120 \ubc29 \ub300\ud654\u00b7\uc81c\ubcf4\uc640 \uae30\uae30 \uc2dd\ubcc4 \ucf54\ub4dc(\uae00 \uc2e0\uace0 \uc2dc \uc2e0\uace0\ud55c \uae30\uae30\uc758 \ucf54\ub4dc \ud3ec\ud568): \uc791\uc131\u00b7\uc2e0\uace0 \ud6c4 ",0],["14\uc77c\uc774 \uc9c0\ub098\uba74 \uc790\ub3d9 \uc0ad\uc81c",1],["\ub429\ub2c8\ub2e4. \ud654\uba74\uc5d0\ub294 \ucd5c\uadfc 12\uc2dc\uac04 \uae00\ub9cc \ubcf4\uc785\ub2c8\ub2e4. \uadf8 \uc804\uc5d0 \uc0ad\uc81c\ub97c \uc6d0\ud558\uc2dc\uba74 \ubb38\uc758\ucc98\ub85c \uc694\uccad\ud574 \uc8fc\uc138\uc694.\n\u00b7 \ub3c4\ucc29 \uc624\ucc28 \uc775\uba85 \uae30\ub85d: ",0],["1\ub144\uc774 \uc9c0\ub098\uba74 \uc790\ub3d9 \uc0ad\uc81c",1],["\ub429\ub2c8\ub2e4. \uc774\uc6a9\uc790\ub97c \uc2dd\ubcc4\ud560 \uc218 \uc788\ub294 \uac12\uc774 \uc5c6\uc5b4 \uac1c\ubcc4 \uc0ad\uc81c \uc694\uccad\uc740 \ucc98\ub9ac\ud560 \uc218 \uc5c6\uc73c\uba70, \uc124\uc815 > \uc548\ub0b4 \uc815\ud655\ub3c4 \ud5a5\uc0c1\uc5d0\uc11c \uc5b8\uc81c\ub4e0 \uc804\uc1a1\uc744 \ub04c \uc218 \uc788\uc2b5\ub2c8\ub2e4.\n\u00b7 \ucd9c\ud1f4\uadfc \uacbd\ub85c \ubbf8\ub9ac \uc870\ud68c: \uc124\uc815\ud574 \ub454 \ucd9c\ubc1c\u00b7\ub3c4\ucc29 \uc88c\ud45c\ub85c \uacbd\ub85c\ub97c \ubbf8\ub9ac \ubd88\ub7ec\uc62c \ubfd0\uc774\uba70, \uadf8 \uc88c\ud45c\ub97c \ub530\ub85c \uc800\uc7a5\ud558\uac70\ub098 \uacc4\uc815\uacfc \uc5f0\uacb0\ud558\uc9c0 \uc54a\uc2b5\ub2c8\ub2e4.",0]] },
+    { small: 0, parts: [["4. \uc81c3\uc790 \uc81c\uacf5 \ubc0f \ucc98\ub9ac\uc704\ud0c1",1],["\n\uc774\uc6a9\uc790\uc758 \uac1c\uc778\uc815\ubcf4\ub97c \uc81c3\uc790\uc5d0\uac8c \ud310\ub9e4\u00b7\uc81c\uacf5\ud558\uc9c0 \uc54a\uc2b5\ub2c8\ub2e4. \ub2e4\ub9cc \uc11c\ube44\uc2a4 \uc81c\uacf5\uc744 \uc704\ud574 \uc544\ub798 \uc678\ubd80 API\ub97c \ud638\ucd9c\ud558\uba70, \uc774 \uacfc\uc815\uc5d0\uc11c \uc88c\ud45c\u00b7\uac80\uc0c9\uc5b4 \ub4f1 \ud544\uc694\ud55c \ucd5c\uc18c\ud55c\uc758 \uc815\ubcf4\uac00 \uc804\ub2ec\ub429\ub2c8\ub2e4.\n\u00b7 \uad6d\ud1a0\uad50\ud1b5\ubd80 TAGO(\ubc84\uc2a4 \uc815\ubcf4) \u00b7 \uc11c\uc6b8\ud2b9\ubcc4\uc2dc \uc5f4\ub9b0\ub370\uc774\ud130\uad11\uc7a5(\uc9c0\ud558\ucca0 \uc2e4\uc2dc\uac04)\n\u00b7 \uce74\uce74\uc624(\uc7a5\uc18c\u00b7\uae38\ucc3e\uae30) \u00b7 \ub124\uc774\ubc84(\uc7a5\uc18c \uac80\uc0c9)\n\u00b7 Google Gemini(\uc548\ub0b4 \ubb38\uad6c \uc0dd\uc131) \u00b7 Cloudflare(\uc11c\ubc84 \uc778\ud504\ub77c)",0]] },
+    { small: 0, parts: [["5. \uc774\uc6a9\uc790\uc758 \uad8c\ub9ac",1],["\n\uae30\uae30 \uc124\uc815\uc5d0\uc11c \uc704\uce58 \uad8c\ud55c\uc744 \uc5b8\uc81c\ub4e0\uc9c0 \ucca0\ud68c\ud560 \uc218 \uc788\uc2b5\ub2c8\ub2e4. \uad8c\ud55c\uc744 \ub044\uba74 \uc2e4\uc2dc\uac04 \uc548\ub0b4 \uae30\ub2a5\uc740 \uc81c\ud55c\ub418\uc9c0\ub9cc \ub098\uba38\uc9c0 \uae30\ub2a5\uc740 \uadf8\ub300\ub85c \uc774\uc6a9\ud560 \uc218 \uc788\uc2b5\ub2c8\ub2e4. \uc791\uc131\ud55c \uae00\u00b7\ub313\uae00\uc740 \uc9c1\uc811 \uc0ad\uc81c\ud560 \uc218 \uc788\uc2b5\ub2c8\ub2e4.",0]] },
+    { small: 0, parts: [["6. \uc544\ub3d9\uc758 \uac1c\uc778\uc815\ubcf4",1],["\n\ub9cc 14\uc138 \ubbf8\ub9cc \uc544\ub3d9\uc744 \ub300\uc0c1\uc73c\ub85c \ud558\uc9c0 \uc54a\uc73c\uba70, \ud574\ub2f9 \uc815\ubcf4\ub97c \uace0\uc758\ub85c \uc218\uc9d1\ud558\uc9c0 \uc54a\uc2b5\ub2c8\ub2e4.",0]] },
+    { small: 0, parts: [["7. \ubb38\uc758",1],["\nphg0643@gmail.com",0]] }
+  ] },
+  poll: { title: "\uc704\uce58\uae30\ubc18\uc11c\ube44\uc2a4 \uc774\uc6a9\uc57d\uad00", paras: [
+    { small: 0, parts: [["\uc81c1\uc870 (\ubaa9\uc801)",1],["\n\ubcf8 \uc57d\uad00\uc740 \uc774\uc6a9\uc790\uac00 \ubcf8 \uc571\uc758 \uc704\uce58\uae30\ubc18\uc11c\ube44\uc2a4\ub97c \uc774\uc6a9\ud568\uc5d0 \uc788\uc5b4 \uad8c\ub9ac\u00b7\uc758\ubb34 \ubc0f \ucc45\uc784\uc0ac\ud56d\uc744 \uaddc\uc815\ud569\ub2c8\ub2e4.",0]] },
+    { small: 0, parts: [["\uc81c2\uc870 (\uc11c\ube44\uc2a4 \ub0b4\uc6a9)",1],["\n\u00b7 \ud604\uc7ac \uc704\uce58 \uae30\uc900 \uacbd\ub85c \ud0d0\uc0c9 \ubc0f \uc2e4\uc2dc\uac04 \uc774\ub3d9 \uc548\ub0b4\n\u00b7 \uc8fc\ubcc0 \uc9c0\ud558\ucca0\uc5ed\u00b7\ubc84\uc2a4\uc815\ub958\uc7a5 \uac80\uc0c9 \ubc0f \ub3c4\ucc29\uc815\ubcf4 \uc81c\uacf5\n\u00b7 \ub3c4\ucc29\uc5ed \uc8fc\ubcc0 \uc7a5\uc18c \ucd94\ucc9c",0]] },
+    { small: 0, parts: [["\uc81c3\uc870 (\uc704\uce58\uc815\ubcf4\uc758 \uc774\uc6a9 \ubc0f \ubcf4\uc720)",1],["\n\uc704\uce58\uc815\ubcf4\ub294 \uc11c\ube44\uc2a4 \uc81c\uacf5 \ubaa9\uc801\uc73c\ub85c\ub9cc \uc774\uc6a9\ud558\uba70 ",0],["\uc11c\ubc84\uc5d0 \uc800\uc7a5\ud558\uac70\ub098 \uc81c3\uc790\uc5d0\uac8c \uc81c\uacf5\ud558\uc9c0 \uc54a\uc2b5\ub2c8\ub2e4.",1],[" \uacbd\ub85c \uc548\ub0b4 \uc885\ub8cc \uc2dc \ud574\ub2f9 \uc815\ubcf4\ub294 \uc774\uc6a9\ub418\uc9c0 \uc54a\uc2b5\ub2c8\ub2e4.",0]] },
+    { small: 0, parts: [["\uc81c4\uc870 (\ubc31\uadf8\ub77c\uc6b4\ub4dc \uc704\uce58 \uc774\uc6a9)",1],["\n\uc774\uc6a9\uc790\uac00 \uacbd\ub85c \uc548\ub0b4\ub97c \uc2dc\uc791\ud55c \uacbd\uc6b0\uc5d0 \ud55c\ud574, \uc571\uc774 \ud654\uba74\uc5d0 \uc5c6\uc744 \ub54c\ub3c4 \ud558\ucc28\uc5ed \uc54c\ub9bc \ub4f1\uc744 \uc704\ud574 \uc704\uce58\ub97c \ud655\uc778\ud560 \uc218 \uc788\uc2b5\ub2c8\ub2e4. \uacbd\ub85c \uc548\ub0b4\ub97c \uc885\ub8cc\ud558\uba74 \uc989\uc2dc \uc911\ub2e8\ub429\ub2c8\ub2e4.",0]] },
+    { small: 0, parts: [["\uc81c5\uc870 (\ub3d9\uc758 \ucca0\ud68c)",1],["\n\uae30\uae30 \uc124\uc815 > \uc571 \uad8c\ud55c\uc5d0\uc11c \uc5b8\uc81c\ub4e0\uc9c0 \uc704\uce58 \uad8c\ud55c\uc744 \ucca0\ud68c\ud560 \uc218 \uc788\uc2b5\ub2c8\ub2e4.",0]] },
+    { small: 0, parts: [["\uc81c6\uc870 (\uba74\ucc45)",1],["\n\uc2e4\uc2dc\uac04 \uc815\ubcf4\ub294 \uacf5\uacf5\uae30\uad00 \ubc0f \uc678\ubd80 API\uac00 \uc81c\uacf5\ud558\ub294 \ub370\uc774\ud130\uc5d0 \uae30\ubc18\ud558\uba70, \ud1b5\uc2e0 \uc0c1\ud0dc\u00b7\uc6b4\ud589 \uc0ac\uc815 \ub4f1\uc5d0 \ub530\ub77c \uc2e4\uc81c\uc640 \ub2e4\ub97c \uc218 \uc788\uc2b5\ub2c8\ub2e4. \uc774\ub85c \uc778\ud55c \uc190\ud574\uc5d0 \ub300\ud574 \ucc45\uc784\uc744 \uc9c0\uc9c0 \uc54a\uc2b5\ub2c8\ub2e4.",0]] },
+    { small: 0, parts: [["\uc81c7\uc870 (\ubb38\uc758)",1],["\nphg0643@gmail.com",0]] }
+  ] },
+  polo: { title: "\ub370\uc774\ud130 \ucd9c\ucc98 \ubc0f \uace0\uc9c0", paras: [
+    { small: 0, parts: [["\uc81c\ud734 \ubc0f \uad11\uace0 \uace0\uc9c0",1],["\n\uc1fc\ud551 \ud0ed\uc758 \uc0c1\ud488 \ub9c1\ud06c\ub294 ",0],["\ucfe0\ud321 \ud30c\ud2b8\ub108\uc2a4 \ud65c\ub3d9",1],["\uc758 \uc77c\ud658\uc73c\ub85c, \uc774\uc5d0 \ub530\ub978 ",0],["\uc77c\uc815\uc561\uc758 \uc218\uc218\ub8cc\ub97c \uc81c\uacf5\ubc1b\uc2b5\ub2c8\ub2e4.",1],[" \uad6c\ub9e4\uc790\uc5d0\uac8c \ucd94\uac00 \ube44\uc6a9\uc740 \ubc1c\uc0dd\ud558\uc9c0 \uc54a\uc2b5\ub2c8\ub2e4.",0]] },
+    { small: 0, parts: [["\uacf5\uacf5\ub370\uc774\ud130 \ucd9c\ucc98 \ud45c\uc2dc",1],["\n\ubcf8 \uc11c\ube44\uc2a4\ub294 \uc544\ub798 \uacf5\uacf5\ub370\uc774\ud130\ub97c \uc774\uc6a9\ud569\ub2c8\ub2e4. \ud574\ub2f9 \uc800\uc791\ubb3c\uc740 ",0],["\uacf5\uacf5\ub204\ub9ac \uc81c1\uc720\ud615(\ucd9c\ucc98\ud45c\uc2dc)",1],[" \uc870\uac74\uc5d0 \ub530\ub77c \uc774\uc6a9\ud560 \uc218 \uc788\uc2b5\ub2c8\ub2e4.",0]] },
+    { small: 0, parts: [["\u00b7 ",0],["\uad6d\ud1a0\uad50\ud1b5\ubd80",1],[" \u2014 \u300c\uad6d\uac00\ub300\uc911\uad50\ud1b5\uc815\ubcf4\uc13c\ud130(TAGO) \ubc84\uc2a4\uc815\ub958\uc18c\uc815\ubcf4\u00b7\ubc84\uc2a4\ub3c4\ucc29\uc815\ubcf4\u300d\n\u00b7 ",0],["\uc11c\uc6b8\ud2b9\ubcc4\uc2dc",1],[" \u2014 \u300c\uc11c\uc6b8\ud2b9\ubcc4\uc2dc \ubc84\uc2a4\ub3c4\ucc29\uc815\ubcf4\uc870\ud68c \uc11c\ube44\uc2a4\u300d, \u300c\uc11c\uc6b8\ud2b9\ubcc4\uc2dc \uc815\ub958\uc18c\uc815\ubcf4\uc870\ud68c \uc11c\ube44\uc2a4\u300d\n\u00b7 ",0],["\uc11c\uc6b8\ud2b9\ubcc4\uc2dc",1],[" \u2014 \u300c\uc9c0\ud558\ucca0 \uc2e4\uc2dc\uac04 \ub3c4\ucc29\uc815\ubcf4\u00b7\uc5f4\ucc28\uc704\uce58\uc815\ubcf4\u300d(\uc11c\uc6b8 \uc5f4\ub9b0\ub370\uc774\ud130\uad11\uc7a5)\n\u00b7 ",0],["\uc11c\uc6b8\uad50\ud1b5\uacf5\uc0ac",1],[" \u2014 \u300c\uc11c\uc6b8 \ub3c4\uc2dc\ucca0\ub3c4 \ud658\uc2b9\uc815\ubcf4\u300d, \u300c\ube60\ub978\ud558\ucc28\uc815\ubcf4\u300d(\ud658\uc2b9\u00b7\ud558\ucc28 \ud638\ucc28/\ubb38 \uc704\uce58), \u300c\uc9c0\ud558\ucca0 \uc54c\ub9bc\uc815\ubcf4\u300d(\uc6b4\ud589 \uacf5\uc9c0)\n\u00b7 ",0],["\uc18c\uc0c1\uacf5\uc778\uc2dc\uc7a5\uc9c4\ud765\uacf5\ub2e8",1],[" \u2014 \u300c\uc0c1\uac00(\uc0c1\uad8c)\uc815\ubcf4\u300d\n\u00b7 ",0],["\uae30\uc0c1\uccad",1],[" \ub2e8\uae30\uc608\ubcf4 \u00b7 Open-Meteo (\ub0a0\uc528)\n\u00b7 \uce74\uce74\uc624 (\uc7a5\uc18c \uac80\uc0c9\u00b7\uae38\ucc3e\uae30) \u00b7 \ub124\uc774\ubc84 (\uc9c0\uc5ed \uac80\uc0c9)",0]] },
+    { small: 1, parts: [["\uc704 \uacf5\uacf5\uc800\uc791\ubb3c\uc740 \uacf5\uacf5\ub370\uc774\ud130\ud3ec\ud138(data.go.kr)\uc5d0\uc11c \uc81c\uacf5\ubc1b\uc558\uc73c\uba70, \ucd9c\ucc98 \ud45c\uc2dc \uc678\uc758 \ubcc4\ub3c4 \uc774\uc6a9 \uc81c\ud55c\uc740 \uc5c6\uc2b5\ub2c8\ub2e4. \uc790\uc138\ud55c \uc870\uac74\uc740 \uacf5\uacf5\ub204\ub9ac \uc81c1\uc720\ud615 \uc548\ub0b4(kogl.or.kr)\ub97c \ucc38\uace0\ud558\uc138\uc694.",0]] },
+    { small: 0, parts: [["\uc548\ub0b4",1],["\n\uc2dc\uac01\ud45c\u00b7\ud63c\uc7a1\ub3c4 \ub4f1 \uc77c\ubd80 \uc815\ubcf4\ub294 \uacf5\uac1c \ub370\uc774\ud130\ub97c \uac00\uacf5\ud55c ",0],["\ucd94\uc815\uce58",1],["\uc774\uba70 \uc2e4\uc81c \uc6b4\ud589\uacfc \ub2e4\ub97c \uc218 \uc788\uc2b5\ub2c8\ub2e4. \ucee4\ubba4\ub2c8\ud2f0 \ubc0f \uc2e4\uc2dc\uac04 \ub300\ud654\uc758 \uc77c\ubd80 \ub0b4\uc6a9\uc740 AI\uac00 \uc0dd\uc131\ud55c \uac83\uc785\ub2c8\ub2e4.",0]] },
+    { small: 0, parts: [["\ubb38\uc758",1],["\nphg0643@gmail.com",0]] }
+  ] }
+};
+function settingsPagePol(p) {
+  var d = SETTINGS_POL[p], k = [settingsTitleN(d.title, 10)];
+  d.paras.forEach(function (q) {
+    var b = settingsBoldN(q.parts), n = { t: 'text', s: b.s, size: q.small ? 11.5 : 12.5, color: q.small ? 'sub' : 'text', lh: 1.75, pad: [0, 0, 0, 10] };
+    if (b.hl.length) n.hl = b.hl;
+    k.push(n);
+  });
+  k.push(settingsSmallN('\uc2dc\ud589\uc77c \u00b7 \ucd5c\uc885 \uac1c\uc815\uc77c: ' + SETTINGS_POL_UPDATED, 8, 0));
+  return [settingsPanelN(k, 8)];
+}
+// \uc624\ub958 \ub85c\uadf8: \uc571\uc774 \ubaa8\uc544 \ub454 \uae30\ub85d(pf.errs \uc624\ub798\ub41c \uac83\ubd80\ud130)\uc744 \ucd5c\uc2e0\uc774 \uc704\ub85c. \ubcf5\uc0ac/\uc9c0\uc6b0\uae30\ub294 \uc571\uc774 \ud55c\ub2e4(erl.copy \u00b7 erl.clear).
+function settingsPageErl(f) {
+  var n = f.errs.length, k = [settingsTitleN('\uc624\ub958 \ub85c\uadf8' + (n ? ' ' + n + '\uac74' : ''), 4), settingsDescN('\uc571\uc774 \uba48\ucd94\uac70\ub098 \ubb38\uc81c\uac00 \uc0dd\uacbc\uc744 \ub54c\uc758 \uae30\ub85d\uc774\uc5d0\uc694. \ucea1\ucc98\ud558\uac70\ub098 \ubcf5\uc0ac\ud574\uc11c \ubcf4\ub0b4 \uc8fc\uc138\uc694.', 8)];
+  if (n) k.push(settingsRowN([settingsBtnN('\ubcf5\uc0ac', 'erl.copy', { size: 12, h: 38 }), settingsBtnN('\uc9c0\uc6b0\uae30', 'erl.clear', { size: 12, h: 38, tc: '#ff453a' })], 6));
+  if (!n) k.push({ t: 'text', s: '\uae30\ub85d\ub41c \uc624\ub958\uac00 \uc5c6\uc2b5\ub2c8\ub2e4.', size: 13, color: 'sub', lh: 1.6, pad: [0, 18, 0, 18], align: 'center' });
+  f.errs.slice().reverse().forEach(function (e) {
+    k.push({ t: 'text', s: e.t + (e.n > 1 ? ' \u00b7 ' + e.n + '\ud68c' : ''), size: 11, color: 'sub', lh: 1.4, pad: [0, 10, 0, 1] });
+    k.push({ t: 'text', s: e.m, size: 12.5, bold: true, color: 'orange', lh: 1.45, pad: [0, 0, 0, 1] });
+    if (e.f) k.push({ t: 'text', s: e.f, size: 11, color: 'sub', lh: 1.4, pad: [0, 0, 0, 1] });
+    if (e.s) k.push({ t: 'text', s: e.s, size: 10.5, color: 'sub', lh: 1.4, pad: [0, 2, 0, 0] });
+  });
+  return [settingsPanelN(k, 8)];
+}
+
+// \uc704\uce58 \uc815\ubcf4 \uc774\uc6a9 \uc548\ub0b4(\ubc31\uadf8\ub77c\uc6b4\ub4dc \uc704\uce58 \uc218\uc9d1 \ub3d9\uc758 \uace0\uc9c0 \u2014 \uc608\uc804 \uc6f9 _showLocDisclosure \uc758 \uae00 \uadf8\ub300\ub85c). \ucc98\uc74c \uc704\uce58\ub97c \uc4f0\uae30 \uc804\uc5d0 \uc571\uc774 \ub744\uc6b4\ub2e4.
+function settingsPageLocd() {
+  var a = settingsBoldN([['\uae38\ub3d9\ubb34', 1], ['\ub294 \ud654\uba74\uc774 \uaebc\uc838 \uc788\uac70\ub098 \ub2e4\ub978 \uc571\uc744 \uc0ac\uc6a9\ud558\ub294 \uc911\uc5d0\ub3c4, \uc571\uc774 ', 0], ['\uc885\ub8cc\ub418\uc5c8\uac70\ub098 \uc0ac\uc6a9 \uc911\uc774 \uc544\ub2d0 \ub54c\ub3c4', 1], [' \ub0b4\ub9b4 \uc815\uac70\uc7a5\uc744 \uc815\ud655\ud788 \uc548\ub0b4\ud558\uae30 \uc704\ud574 ', 0], ['\ubc31\uadf8\ub77c\uc6b4\ub4dc \uc704\uce58 \ub370\uc774\ud130\ub97c \uc218\uc9d1', 1], ['\ud569\ub2c8\ub2e4. \uc218\uc9d1\ud55c \uc704\uce58\ub294 ', 0], ['\ud558\ucc28\uc5ed\u00b7\ud658\uc2b9\uc5ed \ub3c4\ucc29 \uc54c\ub9bc', 1], ['\uacfc ', 0], ['\uc2e4\uc2dc\uac04 \uacbd\ub85c \uc548\ub0b4', 1], ['\uc5d0 \uc0ac\uc6a9\ub429\ub2c8\ub2e4.', 0]]);
+  var b = settingsBoldN([['\u00b7 \uc704\uce58 \uc815\ubcf4\ub294 \uacbd\ub85c \uc548\ub0b4 \ubaa9\uc801\uc73c\ub85c\ub9cc \uc774\uc6a9\ud558\uba70, \uacbd\ub85c \uacc4\uc0b0\uc5d0 \ud544\uc694\ud55c \ucd9c\ubc1c \uc704\uce58\uac00 \uacbd\ub85c \uc11c\ubc84\ub85c \uc804\uc1a1\ub418\uc9c0\ub9cc ', 0], ['\uc800\uc7a5\ud558\uc9c0 \uc54a\uc2b5\ub2c8\ub2e4.', 1], ['\n\u00b7 \ubc31\uadf8\ub77c\uc6b4\ub4dc \uc704\uce58 \uc774\uc6a9\uc740 ', 0], ['\uacbd\ub85c \uc548\ub0b4\ub97c \uc2dc\uc791\ud55c \uacbd\uc6b0\uc5d0\ub9cc', 1], [' \uc791\ub3d9\ud558\uace0, \uc548\ub0b4\ub97c \uc885\ub8cc\ud558\uba74 \uc989\uc2dc \uc911\ub2e8\ub429\ub2c8\ub2e4.\n\u00b7 \uae30\uae30 \uc124\uc815\uc5d0\uc11c \uc5b8\uc81c\ub4e0\uc9c0 \uc704\uce58 \uad8c\ud55c\uc744 \ucca0\ud68c\ud560 \uc218 \uc788\uc2b5\ub2c8\ub2e4.', 0]]);
+  var ta = { t: 'text', s: a.s, size: 14, color: 'text', lh: 1.75, pad: [0, 0, 0, 14] }; if (a.hl.length) ta.hl = a.hl;
+  var tb = { t: 'text', s: b.s, size: 12.5, color: 'sub', lh: 1.7, pad: [0, 0, 0, 18] }; if (b.hl.length) tb.hl = b.hl;
+  return [settingsPanelN([settingsTitleN('\uc704\uce58 \uc815\ubcf4 \uc774\uc6a9 \uc548\ub0b4', 14), ta, tb,
+    settingsRowN([settingsBtnN('\uac70\ubd80', 'locd.no', { h: 46 }), settingsBtnN('\ub3d9\uc758', 'locd.ok', { gold: true, h: 46 })], 10),
+    settingsNavN('\uac1c\uc778\uc815\ubcf4\ucc98\ub9ac\ubc29\uce68 \ubcf4\uae30', '', { a: 'call', v: 'pol.privacy' }, true)], 24)];
+}
 function settingsPageScreen(inp, factsIn) {
   var p = String(inp.p || '');
   if (!(Number(inp.cap) >= SETTINGS_PAGE_CAP)) return { ok: false, error: 'cap' };
@@ -12173,8 +12238,9 @@ function settingsPageScreen(inp, factsIn) {
   var info = { page: p, sub: '' }, kids;
   if (p === 'cm' && pf.sub === 'tp') { info.sub = 'tp'; kids = settingsPageTp(pf); }
   else if (p === 'cm' && pf.sub === 'pick') { info.sub = 'pick'; kids = settingsPagePick(pf, info); }
-  else kids = ({ sam: settingsPageSam, ovl: settingsPageOvl, dev: settingsPageDev, arr: settingsPageArr, gw: settingsPageGw, cm: settingsPageCm })[p](pf);
-  var body = [settingsBackN(info.sub ? SETTINGS_PAGES.cm : '')].concat(kids, [{ t: 'spacer', h: 28 }]);
+  else if (p.indexOf('pol') === 0) kids = settingsPagePol(p);
+  else kids = ({ sam: settingsPageSam, ovl: settingsPageOvl, dev: settingsPageDev, arr: settingsPageArr, gw: settingsPageGw, cm: settingsPageCm, erl: settingsPageErl, locd: settingsPageLocd })[p](pf);
+  var body = (p === 'locd' ? [] : [settingsBackN(info.sub ? SETTINGS_PAGES.cm : '')]).concat(kids, [{ t: 'spacer', h: 28 }]);
   var out = { ok: true, v: 1, screen: 'settings', cover: 'tab', head: [], body: body, info: info };
   out.rev = 's' + SETTINGS_SCREEN_V + 'p:' + settingsHash(JSON.stringify(body));
   return out;
@@ -19343,6 +19409,7 @@ function hcSceneNode(now, tz, routeShown, wx, stn, rd) {
   if (js.length >= 6000) return null;
   return { t: 'scene', h: 170, r: 12, pad: [0, 0, 0, 8], sc: js };
 }
+function hcShareBtn() { return { t: 'button', s: '\ub0b4 \uc704\uce58 \uacf5\uc720', size: 12, h: 34, r: 10, bold: true, fill: 'card', line: 'gold', tc: 'gold', pad: [0, 0, 0, 8], act: { a: 'call', v: 'share.loc' } }; }
 function hcardsScreen(inp, f) {
   if (!(Number(inp && inp.cap) >= 18)) return { ok: false, error: 'cap' };
   if (!hcAi || !hcCong || !hcTalk) return { ok: false, error: 'engine' };
@@ -19391,6 +19458,7 @@ function hcardsScreen(inp, f) {
   if (congS && congS.ok) {
     var ck = hcKids(congS), scn = hcSceneNode(now, tz, !!rt, hcWx(f.wx && typeof f.wx === 'object' ? f.wx.wF : null), stn, f.rd);
     if (scn) ck.unshift(scn);                                           // \ud63c\uc7a1\ub3c4 \uce74\ub4dc \ub9e8 \uc704: \uce90\ub9ad\ud130 \uc7a5\uba74(\uc6f9\uacfc \uac19\uc740 \uc790\ub9ac)
+    if (f.sh) ck.splice(scn ? 1 : 0, 0, hcShareBtn());                    // \ud0d1\uc2b9 \uc548\ub0b4 \uc911\uc774\uba74 '\ub0b4 \uc704\uce58 \uacf5\uc720'(\uc571\uc740 f.sh=1 \ub9cc \ubcf4\ub0b8\ub2e4)
     body.push(hcPanel(ck, congS.info && congS.info.bc && /^#/.test(congS.info.bc) ? congS.info.bc : ''));
   }
   if (talkS && talkS.ok) body.push(hcPanel(hcKids(talkS)));
@@ -19456,6 +19524,22 @@ function rstHash(s) { var h = 5381; for (var i = 0; i < s.length; i++) h = ((h <
 function rstHmMin(hm) { var m = String(hm || '').match(/(\d{1,2}):(\d{2})/); return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : null; }
 function rstFail(error, msg) { return { ok: false, error: error, msg: msg }; }
 
+// \ub5a0 \uc788\ub294 \uc548\ub0b4(\uc624\ubc84\ub808\uc774)\uac00 \uadf8\ub9b4 \uce78 \ud2c0: \uc815\ub958\uc7a5 \uc774\ub984 \u00b7 \ub3c4\ucc29 \uc2dc\uac01 \u00b7 \ub178\uc120 \ub77c\ubca8(\uccab \uce78\u00b7\ud658\uc2b9 \uce78) \u00b7 \uc810\uacfc \uc120 \uc0c9 \u00b7 \uc774\ub3d9 \uc911 \ubb38\uad6c \u00b7 \ud14c\ub9c8 \uc0c9.
+//   \uc0c9\u00b7\uc810 \ubaa8\uc591\u00b7\ub77c\ubca8\uc740 \uc5d4\uc9c4\uc774 \uc815\ud55c\ub2e4(\uc571 \uacbd\ub85c \ud654\uba74\uc758 \ud0c0\uc784\ub77c\uc778\uacfc \uac19\uc740 \uaddc\uce59: \uc9c0\ub098\ub294 \uce78 \uc18d \ube48 \uc810, \ucd9c\ubc1c\u00b7\ub3c4\ucc29 \uaf49 \ucc2c \uc810, \ud658\uc2b9 \uce78\uc740 \ub178\uc120 \ubc30\uc9c0).
+function rstOvl(pts, th) {
+  var last = pts.length - 1;
+  var cells = pts.map(function (p, q) {
+    var nm = String(p.nm || '').slice(0, 24), lbl = String(p.lineLabel || p.lineNm || '').slice(0, 12), col = String(p.col || '#8e8e93');
+    var c = { n: nm, t: String(p.arrT || ''), m: nm ? nm + ' (\uc774\ub3d9\uc911)' : '', dk: (q === 0 || q === last) ? 2 : 1, dc: col };
+    if (q > 0) c.lc = String(p.lC || col);
+    if (q < last) c.rc = col;
+    if (lbl && (q === 0 || p.xfIn)) { c.g = (q === 0 ? '' : '\u2194 ') + lbl; c.gp = q !== 0; c.gc = col; }
+    return c;
+  });
+  return { cells: cells, map: pts.map(function (p, q) { return q + 1; }), base: 0,
+    theme: th === 'pastel' ? { bg: '#ffffff', fg: '#1a2533', sub: '#6b8299' } : { bg: '#1c1c1e', fg: '#f2f2f7', sub: '#8e8e93' } };
+}
+
 function rideStart(opt, r) {
   var cap = Math.floor(Number(opt && opt.cap) || 0);
   if (cap < 12) return rstFail('cap', '\uc571\uc744 \uc5c5\ub370\uc774\ud2b8\ud574 \uc8fc\uc138\uc694');
@@ -19498,7 +19582,7 @@ function rideStart(opt, r) {
   var allowed = (r.allowed && typeof r.allowed === 'object') ? r.allowed : {};
   var sig = rstHash(nodes.map(function (n) { return n.name + '|' + (n.lineName || ''); }).join('>') + '@' + Math.floor(now / 3600000));
   var state = { v: 1, tripSig: sig, eta: eta, stops: stops, trail: [], cfg: { targets: tg.targets, seq: tg.seq, allowed: allowed, destName: dest, waitBoard: r.wait !== false, pfLive: r.pf === true }, fired: {}, notYet: {}, etaMs: etaMs, steps: 0, startedAt: now,
-    ovl: { cells: pts.map(function (p) { return { n: String(p.nm || '').slice(0, 24), t: String(p.arrT || ''), m: '' }; }), map: pts.map(function (p, q) { return q + 1; }), base: 0 } };   // \ub5a0 \uc788\ub294 \uc548\ub0b4(\uc624\ubc84\ub808\uc774)\uac00 \uadf8\ub9b4 \uce78 \ud2c0: \uc815\ub958\uc7a5 \uc774\ub984 \u00b7 \ub3c4\ucc29 \uc2dc\uac01
+    ovl: rstOvl(pts, r.th) };   // \ub5a0 \uc788\ub294 \uc548\ub0b4(\uc624\ubc84\ub808\uc774)\uac00 \uadf8\ub9b4 \uce78 \ud2c0: \uc815\ub958\uc7a5 \uc774\ub984 \u00b7 \ub3c4\ucc29 \uc2dc\uac01
   var legs = 0; for (i = 1; i < tnodes.length; i++) if (i === 1 || tnodes[i].l !== tnodes[i - 1].l) legs++;
   return { ok: true, v: RST_V, state: state, text: '\ub2e4\uc74c ' + pts[0].nm + (pts[0].arrT ? ' ' + pts[0].arrT : '') + ' \u00b7 ' + dest + '\uae4c\uc9c0 ' + (tg.seq.length ? tg.seq.length - 1 : 0) + '\uc815\uac70\uc7a5',
     info: { n: nodes.length, first: { name: pts[0].nm, hm: pts[0].arrT || '' }, dest: dest, tab: tab, legs: legs, sig: sig } };

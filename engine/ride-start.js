@@ -28,6 +28,22 @@ function rstHash(s) { var h = 5381; for (var i = 0; i < s.length; i++) h = ((h <
 function rstHmMin(hm) { var m = String(hm || '').match(/(\d{1,2}):(\d{2})/); return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : null; }
 function rstFail(error, msg) { return { ok: false, error: error, msg: msg }; }
 
+// 떠 있는 안내(오버레이)가 그릴 칸 틀: 정류장 이름 · 도착 시각 · 노선 라벨(첫 칸·환승 칸) · 점과 선 색 · 이동 중 문구 · 테마 색.
+//   색·점 모양·라벨은 엔진이 정한다(앱 경로 화면의 타임라인과 같은 규칙: 지나는 칸 속 빈 점, 출발·도착 꽉 찬 점, 환승 칸은 노선 배지).
+function rstOvl(pts, th) {
+  var last = pts.length - 1;
+  var cells = pts.map(function (p, q) {
+    var nm = String(p.nm || '').slice(0, 24), lbl = String(p.lineLabel || p.lineNm || '').slice(0, 12), col = String(p.col || '#8e8e93');
+    var c = { n: nm, t: String(p.arrT || ''), m: nm ? nm + ' (이동중)' : '', dk: (q === 0 || q === last) ? 2 : 1, dc: col };
+    if (q > 0) c.lc = String(p.lC || col);
+    if (q < last) c.rc = col;
+    if (lbl && (q === 0 || p.xfIn)) { c.g = (q === 0 ? '' : '↔ ') + lbl; c.gp = q !== 0; c.gc = col; }
+    return c;
+  });
+  return { cells: cells, map: pts.map(function (p, q) { return q + 1; }), base: 0,
+    theme: th === 'pastel' ? { bg: '#ffffff', fg: '#1a2533', sub: '#6b8299' } : { bg: '#1c1c1e', fg: '#f2f2f7', sub: '#8e8e93' } };
+}
+
 function rideStart(opt, r) {
   var cap = Math.floor(Number(opt && opt.cap) || 0);
   if (cap < 12) return rstFail('cap', '앱을 업데이트해 주세요');
@@ -70,7 +86,7 @@ function rideStart(opt, r) {
   var allowed = (r.allowed && typeof r.allowed === 'object') ? r.allowed : {};
   var sig = rstHash(nodes.map(function (n) { return n.name + '|' + (n.lineName || ''); }).join('>') + '@' + Math.floor(now / 3600000));
   var state = { v: 1, tripSig: sig, eta: eta, stops: stops, trail: [], cfg: { targets: tg.targets, seq: tg.seq, allowed: allowed, destName: dest, waitBoard: r.wait !== false, pfLive: r.pf === true }, fired: {}, notYet: {}, etaMs: etaMs, steps: 0, startedAt: now,
-    ovl: { cells: pts.map(function (p) { return { n: String(p.nm || '').slice(0, 24), t: String(p.arrT || ''), m: '' }; }), map: pts.map(function (p, q) { return q + 1; }), base: 0 } };   // 떠 있는 안내(오버레이)가 그릴 칸 틀: 정류장 이름 · 도착 시각
+    ovl: rstOvl(pts, r.th) };   // 떠 있는 안내(오버레이)가 그릴 칸 틀: 정류장 이름 · 도착 시각
   var legs = 0; for (i = 1; i < tnodes.length; i++) if (i === 1 || tnodes[i].l !== tnodes[i - 1].l) legs++;
   return { ok: true, v: RST_V, state: state, text: '다음 ' + pts[0].nm + (pts[0].arrT ? ' ' + pts[0].arrT : '') + ' · ' + dest + '까지 ' + (tg.seq.length ? tg.seq.length - 1 : 0) + '정거장',
     info: { n: nodes.length, first: { name: pts[0].nm, hm: pts[0].arrT || '' }, dest: dest, tab: tab, legs: legs, sig: sig } };

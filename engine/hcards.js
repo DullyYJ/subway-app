@@ -121,6 +121,7 @@ function hcSceneNode(now, tz, routeShown, wx, stn, rd) {
   if (js.length >= 6000) return null;
   return { t: 'scene', h: 170, r: 12, pad: [0, 0, 0, 8], sc: js };
 }
+function hcShareBtn() { return { t: 'button', s: '내 위치 공유', size: 12, h: 34, r: 10, bold: true, fill: 'card', line: 'gold', tc: 'gold', pad: [0, 0, 0, 8], act: { a: 'call', v: 'share.loc' } }; }
 function hcardsScreen(inp, f) {
   if (!(Number(inp && inp.cap) >= 18)) return { ok: false, error: 'cap' };
   if (!hcAi || !hcCong || !hcTalk) return { ok: false, error: 'engine' };
@@ -169,6 +170,7 @@ function hcardsScreen(inp, f) {
   if (congS && congS.ok) {
     var ck = hcKids(congS), scn = hcSceneNode(now, tz, !!rt, hcWx(f.wx && typeof f.wx === 'object' ? f.wx.wF : null), stn, f.rd);
     if (scn) ck.unshift(scn);                                           // 혼잡도 카드 맨 위: 캐릭터 장면(웹과 같은 자리)
+    if (f.sh) ck.splice(scn ? 1 : 0, 0, hcShareBtn());                    // 탑승 안내 중이면 '내 위치 공유'(앱은 f.sh=1 만 보낸다)
     body.push(hcPanel(ck, congS.info && congS.info.bc && /^#/.test(congS.info.bc) ? congS.info.bc : ''));
   }
   if (talkS && talkS.ok) body.push(hcPanel(hcKids(talkS)));

@@ -33,6 +33,11 @@ ok(o.info.cong === 'bus' && o.info.stn === '정류장A' && flat(o.body).some(n =
 // 경로 없음 + 위치 → 가까운 역 기준
 o = call(base({ r: null, gps: [37.4979, 127.0276] }));
 ok(o.info.near === '강남' && o.info.cong === 'sub' && o.info.stn === '강남' && o.info.ai === 'brief' && flat(o.body).some(n => n.t === 'aih' && /강남/.test(n.s)), '경로 없이 위치만: 가까운 역(강남) 기준 브리핑·혼잡도');
+// 내 위치 공유 단추: 앱이 f.sh=1 을 보낼 때만, 혼잡도 카드 안(장면 아래)에
+o = call(base({ r: { data: mk([sub('부평', '강남', '수도권 1호선', 18)]), tab: 'fast', a: '부평', b: '강남', bt: null, rb: now } }));
+ok(!flat(o.body).some(n => n.act && n.act.v === 'share.loc'), '공유 단추: 탑승 안내가 아니면 없다');
+o = call(base({ sh: 1, r: { data: mk([sub('부평', '강남', '수도권 1호선', 18)]), tab: 'fast', a: '부평', b: '강남', bt: null, rb: now } }));
+{ const sb = flat(o.body).filter(n => n.act && n.act.v === 'share.loc'); ok(sb.length === 1 && sb[0].t === 'button' && sb[0].s === '내 위치 공유' && sb[0].act.a === 'call', '공유 단추: f.sh 가 있으면 하나'); }
 // 아무 사실도 없음
 o = call(base({ r: null, gps: null }));
 ok(o.ok && o.info.ai === 'empty' && o.info.cong === 'none' && o.body.length === 3, '아무것도 없으면 안내 문구');

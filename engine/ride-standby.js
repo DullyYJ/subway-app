@@ -139,7 +139,34 @@ function rsOverlay(st, r, curIdx, curPos, now, dest, destName, moving, done) {
   var rs = arrived ? { st: 'board', bt: '안내 종료', k: '목적지에 도착했어요', ch: '도착', nm: destName || '', bar: -1, cbg: '', cfg: '#0a84ff' } : { st: 'hidden' };
   var out = { active: true, line1: line1, pill: pill, track: [], cur: cur, base: ov.base || 0, line2: line2, line3: '', alert: arrived ? 0 : lv, alertAt: oa.at || 0, alertVibe: false, banner: banner, destName: destName || '', pre: !arrived && pre === 1, moving: !!moving, rs: rs, reco: { on: false }, cells: cells };
   if (ov.theme) out.theme = ov.theme;
+  var sh = rsShare(st, r, cells, map, cur, moving, dest, destName, now);
+  if (sh) out.share = sh;
   return out;
+}
+
+// 내 위치 공유(예전 웹 _shLoc · _shText): 출발 - 현재 - 도착 (도착예정시간) [남은시간] 글과, 그림용 압축 타임라인 재료. 한국 시각 기준.
+//   stations = 칸 중 실제 역·정류장(같은 자리 연속은 한 번만) { n, t }, hit = 지금 위치의 stations 번호, left = 남은 역 수.
+function rsShare(st, r, cells, map, cur, moving, dest, destName, now) {
+  var stn = [], at = [], j, nm;
+  for (j = 0; j < cells.length; j++) {
+    nm = cells[j] && cells[j].n ? String(cells[j].n) : '';
+    if (!(map[j] != null && map[j] >= 0) || !nm) { at.push(stn.length - 1); continue; }
+    if (stn.length && stn[stn.length - 1].n === nm) { at.push(stn.length - 1); continue; }
+    stn.push({ n: nm, t: String(cells[j].t || '') });
+    at.push(stn.length - 1);
+  }
+  var dn = dest ? dest.nodeIdx : -1;
+  if (!stn.length || dn < 0 || !r.etaMs || r.etaMs[dn] == null || !isFinite(r.etaMs[dn])) return null;
+  var hit = Math.max(0, Math.min(stn.length - 1, at[cur] != null ? at[cur] : 0));
+  var arrMs = r.etaMs[dn], rem = Math.max(0, Math.round((arrMs - now) / 60000));
+  var p2 = function (n) { return (n < 10 ? '0' : '') + n; };
+  var kst = new Date(arrMs + 9 * 3600000), hm = p2(kst.getUTCHours()) + '시' + p2(kst.getUTCMinutes()) + '분', dur = p2(Math.floor(rem / 60)) + '시' + p2(rem % 60) + '분';
+  var nextName = hit < stn.length - 1 ? stn[hit + 1].n : '';
+  var mv = !!(moving && nextName);
+  var curTxt = mv ? stn[hit].n + '→' + nextName + ' 이동 중' : (st.wait ? stn[hit].n + ' 승차 대기' : stn[hit].n);
+  var from = stn[0].n, to = destName || (dest && dest.name) || stn[stn.length - 1].n;
+  return { text: from + ' - ' + curTxt + ' - ' + to + ' (도착예정시간: ' + hm + ')\n[남은시간: ' + dur + ']', from: from, cur: curTxt, to: to, arr: hm, rem: dur,
+    stations: stn, hit: hit, moving: mv, left: Math.max(0, stn.length - 1 - hit), next: nextName };
 }
 
 function rsRecoFn() { return (typeof arrRecoWhen === 'function') ? arrRecoWhen : (function () { try { return require('./arrive-reco').arrRecoWhen; } catch (e) { return null; } })(); }

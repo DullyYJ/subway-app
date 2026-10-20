@@ -38,6 +38,7 @@ public class RideService extends Service {
     static volatile boolean running = false;
     static volatile int liveRev = 0;
     static volatile String liveRide = "", liveLv = "", liveScene = "", liveReco = "", recoStage = "";
+    static volatile ShareCore.Share liveShare;
     static volatile long recoStageAt = 0L;
 
     private HandlerThread ht;
@@ -66,13 +67,14 @@ public class RideService extends Service {
     }
     static void stop(Context c) {
         clearSaved(c);
-        running = false; liveRide = ""; liveLv = ""; liveScene = ""; liveReco = ""; liveRev++;
+        running = false; liveRide = ""; liveLv = ""; liveScene = ""; liveReco = ""; liveShare = null; liveRev++;
         c.stopService(new Intent(c, RideService.class));
     }
 
     @Override public IBinder onBind(Intent intent) { return null; }
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
+        ErrLog.install(this);
         String act = intent == null ? null : intent.getAction();
         if (ACT_STOP.equals(act)) { finishRide(false); return START_NOT_STICKY; }
         RideCore restored = RideCore.restore(getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_SAVED, ""), System.currentTimeMillis());
@@ -154,7 +156,7 @@ public class RideService extends Service {
     }
 
     private void publish() {
-        liveRide = core.rideJson(); liveLv = core.lvJson(); liveScene = core.sceneJson(); liveReco = core.recoStatJson(); liveRev++;
+        liveRide = core.rideJson(); liveLv = core.lvJson(); liveScene = core.sceneJson(); liveReco = core.recoStatJson(); liveShare = core.ovShare; liveRev++;
         try { RideWidget.update(this, core.title, core.text); } catch (Throwable ignored) { }
     }
 
@@ -162,7 +164,7 @@ public class RideService extends Service {
         stopped = true; running = false;
         if (ov != null) ov.hide();
         clearSaved(this);
-        liveRide = ""; liveLv = ""; liveScene = ""; liveReco = ""; liveRev++;
+        liveRide = ""; liveLv = ""; liveScene = ""; liveReco = ""; liveShare = null; liveRev++;
         try { RideWidget.update(this, "길동무", arrived ? "안내가 끝났어요" : ""); } catch (Throwable ignored) { }
         try { if (Build.VERSION.SDK_INT >= 24) stopForeground(STOP_FOREGROUND_REMOVE); else stopForeground(true); } catch (Throwable ignored) { }
         stopSelf();

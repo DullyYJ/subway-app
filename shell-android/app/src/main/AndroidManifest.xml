@@ -45,6 +45,12 @@
             </intent-filter>
         </receiver>
 
+        <provider
+            android:name=".ShareProvider"
+            android:authorities="${applicationId}.gdmshare"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+
         <service
             android:name=".RideService"
             android:exported="false"

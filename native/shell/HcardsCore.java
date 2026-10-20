@@ -7,7 +7,7 @@ import java.util.Random;
  * 카드 글·색·막대·줄 수는 모두 엔진(/screen/hcards)이 정한다. 여기는 이 기기가 쥔 사실(위치·다음 갱신 시각·새로고침 눌림·받아 둔 대화)을 요청으로 옮기고 눌림의 뜻만 정한다.
  */
 public final class HcardsCore {
-    public static final int R_NONE = 0, R_AI = 1, R_TALK_OPEN = 2, R_TALK_SEND = 3;
+    public static final int R_NONE = 0, R_AI = 1, R_TALK_OPEN = 2, R_TALK_SEND = 3, R_SHARE = 4;
     public static final long AI_EVERY_MS = 5 * 60 * 1000L;
 
     public double[] fix = null;                       // 마지막으로 안 기기 위치(위도, 경도)
@@ -15,6 +15,7 @@ public final class HcardsCore {
     public long aiNextAt = 0;                         // 다음 자동 갱신 시각(기기 시계 ms). 0 이면 아직 정하지 않음
     public double aiRnd = 0.5;                        // 마무리 문구를 고를 난수(새로고침마다 바뀐다)
     public boolean aiBusy = false;
+    public boolean share;                              // 탑승 중이고 공유할 재료가 있으면 — 엔진이 [내 위치 공유] 버튼을 낸다
     public String rideScene = "";                     // 탑승 중이면 장면 재료(RideCore.sceneJson) — 엔진이 대기/탑승/하차 장면을 정한다
     public int rev = 0;                               // 요청에 실리는 값이 바뀔 때마다 오른다
     public String sendText = "";
@@ -34,6 +35,7 @@ public final class HcardsCore {
         StringBuilder b = new StringBuilder("{\"cap\":").append(cap).append(",\"f\":{\"now\":").append(env.nowMs).append(",\"tz\":").append(-env.tzoMin);
         b.append(",\"th\":").append(ShellCore.q("dark".equals(theme) ? "dark" : "pastel")).append(",\"hol\":").append(env.hol);
         if (rideScene != null && rideScene.length() > 2) b.append(",\"rd\":").append(rideScene);
+        if (share) b.append(",\"sh\":1");
         b.append(",\"gps\":").append(fix == null ? "null" : "[" + fix[0] + "," + fix[1] + "]");
         b.append(",\"r\":").append(resultFacts == null || resultFacts.length() == 0 ? "null" : resultFacts);
         b.append(",\"ai\":{\"nextAt\":").append(aiNextAt).append(",\"busy\":").append(aiBusy).append(",\"rnd\":").append(aiRnd).append('}');
@@ -42,10 +44,11 @@ public final class HcardsCore {
     }
     /** 같은 카드면 엔진에 다시 묻지 않으려고 쓰는 열쇠(분 단위 시각 포함). */
     public String key(int resRev, String tab, long now, int talkN, String lastTalk) {
-        return resRev + ":" + tab + ":" + (now / 60000) + ":" + rev + ":" + talkN + ":" + (lastTalk == null ? "" : lastTalk) + ":" + aiNextAt + ":" + (rideScene == null ? 0 : rideScene.hashCode());
+        return resRev + ":" + tab + ":" + (now / 60000) + ":" + rev + ":" + talkN + ":" + (lastTalk == null ? "" : lastTalk) + ":" + aiNextAt + ":" + (rideScene == null ? 0 : rideScene.hashCode()) + ":" + (share ? 1 : 0);
     }
     /** 눌림. tk.send 는 입력된 글(fields['talk.in'])을 받는다. */
     public int act(String v, String input) {
+        if ("share.loc".equals(v)) return R_SHARE;
         if ("ai.refresh".equals(v)) return R_AI;
         if ("tk.open".equals(v)) return R_TALK_OPEN;
         if ("tk.send".equals(v)) {
