@@ -109,7 +109,7 @@ jobs:
           tail -40 /tmp/gradle.log
           if [ $rc -ne 0 ]; then
             # 로그를 직접 내려받기 어려우므로 실패 원인 줄을 주석(annotation)으로도 남긴다
-            grep -a -m12 -E "error:|What went wrong|FAILED|Could not|not found|licen" /tmp/gradle.log | while IFS= read -r l; do echo "::error::${l:0:400}"; done
+            grep -a -A8 -m3 -E "What went wrong|error:" /tmp/gradle.log | tr '\n' ' ' | cut -c1-1500 | while IFS= read -r l; do echo "::error::$l"; done
             exit $rc
           fi
 
