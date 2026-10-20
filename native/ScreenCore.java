@@ -194,6 +194,8 @@ public final class ScreenCore {
         public Act act;
         public List<Node> items = new ArrayList<Node>();
         public Mark mk;                                    // trk: 내 위치 마커(엔진이 정한 것)
+        public float val;                                  // gauge: 채움 비율(0~100)
+        public int ci = -1;                                // chart: 지금 시각 막대 번호(가운데로 맞출 곳)
     }
     public static final class Screen {
         public String id = "", rev = "", cover = "chips";
@@ -434,6 +436,7 @@ public final class ScreenCore {
             n.size = optNum(m, "size", 12f, 6f, 40f); n.lh = optNum(m, "lh", 1.35f, 1f, 3f);
             n.color = optStr(m, "color", "text", 12); if (!role(n.color)) throw new ParseError("color: 모르는 색 " + n.color);
             n.fill = roleOrCss(m, "fill", ""); n.line = roleOrCss(m, "line", ""); n.tc = roleOrCss(m, "tc", "");
+            n.onc = roleOrCss(m, "hc", "");                                                                      // 굵은 구간(hl)의 색(없으면 글 색 그대로)
             n.r = optNum(m, "r", 10f, 0f, 40f);
         } else if ("search".equals(t)) {
             pad(m, n);
@@ -554,6 +557,42 @@ public final class ScreenCore {
             }
             if (n.items.isEmpty()) throw new ParseError("trk: 칸이 없다");
             if (m.get("mk") != null) n.mk = mark(asObj(m.get("mk"), "trk.mk"), n.items.size());
+        } else if ("cgh".equals(t)) {                                                                      // 혼잡도 카드 머리줄: 왼쪽 '지하철 강남' + 작은 글, 오른쪽 혼잡 단계 글자. 글·색은 엔진이 정한다
+            pad(m, n);
+            n.label = optStr(m, "lab", "", 12); n.name = optStr(m, "nm", "", 40); n.sub = optStr(m, "meta", "", 80); n.s = optStr(m, "st", "", 24);
+            n.tc = roleOrCss(m, "sc", "sub"); if (n.tc.length() == 0) n.tc = "sub";
+        } else if ("gauge".equals(t)) {                                                                    // 혼잡도 게이지: 글자 두 개(왼쪽 이름 · 오른쪽 %) + 채움 막대
+            pad(m, n);
+            n.label = optStr(m, "s", "", 12); n.value = optStr(m, "txt", "", 8); n.val = optNum(m, "v", 0f, 0f, 100f);
+            n.fill = roleOrCss(m, "c", "#34c759"); if (n.fill.length() == 0) n.fill = "#34c759";
+        } else if ("chart".equals(t)) {                                                                    // 24시간 막대 차트: 머리(제목·출처·피크) + 가로로 밀리는 막대줄. 막대 높이·색·투명도는 엔진이 정한다
+            pad(m, n);
+            n.title = optStr(m, "ttl", "", 24); n.sub = optStr(m, "src", "", 24); n.name = optStr(m, "pk", "", 16);
+            n.bh = optNum(m, "bh", 112f, 40f, 400f); n.ci = (int) optNum(m, "ci", -1f, -1f, 47f); n.key = optStr(m, "cs", "", 40);
+            n.tc = roleOrCss(m, "co", "#ffffff"); if (n.tc.length() == 0) n.tc = "#ffffff";
+            n.onc = roleOrCss(m, "pc", "gold"); if (n.onc.length() == 0) n.onc = "gold";
+            List<Object> bl = asArr(m.get("bars"), "chart.bars");
+            if (bl.size() > 48) throw new ParseError("chart: 막대가 너무 많다");
+            for (Object io : bl) {
+                Map<String, Object> im = asObj(io, "bar");
+                Node c = new Node(); c.t = "bar24";
+                c.label = optStr(im, "h", "", 4); c.max = optNum(im, "v", 0f, 0f, 400f); c.fill = roleOrCss(im, "c", "");
+                c.alpha = optNum(im, "a", 1f, 0f, 1f); c.on = optBool(im, "u", false); c.top = optBool(im, "o", false);
+                n.items.add(c); sc.nodes++;
+                if (sc.nodes > MAX_NODES) throw new ParseError("노드가 너무 많다");
+            }
+            if (n.ci >= n.items.size()) throw new ParseError("chart: ci 가 막대 수를 넘었다");
+        } else if ("cars".equals(t)) {                                                                     // 칸별 혼잡: 제목 + 칸 가로줄(테두리 색 · 글 세 줄), 칸이 없으면 안내 글
+            pad(m, n);
+            n.title = optStr(m, "ttl", "", 24); n.value = optStr(m, "msg", "", 60);
+            for (Object io : asArr(m.get("cells"), "cars.cells")) {
+                Map<String, Object> im = asObj(io, "cell");
+                Node c = new Node(); c.t = "car";
+                c.name = optStr(im, "n", "", 6); c.label = optStr(im, "l", "", 6); c.badge = optStr(im, "p", "", 6); c.fill = roleOrCss(im, "c", "#34c759"); if (c.fill.length() == 0) c.fill = "#34c759";
+                n.items.add(c); sc.nodes++;
+                if (n.items.size() > 12) throw new ParseError("cars: 칸이 너무 많다");
+            }
+            if (n.items.isEmpty() && n.value.length() == 0) throw new ParseError("cars: 칸도 안내 글도 없다");
         } else if ("sug".equals(t)) {
             pad(m, n);
             n.badge = optStr(m, "badge", "", 12);
@@ -603,11 +642,16 @@ public final class ScreenCore {
     public static Screen load(String json) throws ParseError { return validate(parse(json)); }
 
     // ═════════════ ③ 배치 ═════════════
-    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14, K_NEWS = 15, K_POSTH = 16, K_CMT = 17, K_RBTN = 18, K_INBAR = 19, K_MSG = 20, K_TAB = 21, K_SUG = 22, K_SWAP = 23, K_RHD = 24, K_TRK = 25;
+    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14, K_NEWS = 15, K_POSTH = 16, K_CMT = 17, K_RBTN = 18, K_INBAR = 19, K_MSG = 20, K_TAB = 21, K_SUG = 22, K_SWAP = 23, K_RHD = 24, K_TRK = 25, K_CGH = 26, K_GAUGE = 27, K_CHART = 28, K_HBAR = 29, K_CARS = 30;
     /** 경로 결과 머리줄 치수(웹 #transitResultHeader 와 같다: 분 숫자 28 · 단위 14 · 구간명 12 · 즐겨찾기 알약 11 · 닫기 ×) */
     /** 구간 타임라인 칸 치수(웹 #transitHtlTrack 과 같다): 이름 30 · 배지 18 · 축 26 · 시각 3+16 */
     public static final float TRK_NAME_H = 30f, TRK_BADGE_H = 18f, TRK_AXIS_H = 26f, TRK_TIME_GAP = 3f, TRK_TIME_H = 16f, TRK_H = 93f, TRK_LINE_Y = 12f, TRK_LINE_H = 3f, TRK_DOT_Y = 13f, TRK_E_R = 7f, TRK_R_R = 6f, TRK_M_R = 3f;
     public static final float RHD_H = 34f, RHD_NUM = 28f, RHD_UNIT = 14f, RHD_ROUTE = 12f, RHD_BTN = 11f, RHD_BTN_PX = 8f, RHD_BTN_H = 22f, RHD_X = 28f, RHD_MSG = 14f;
+    /** 혼잡도 카드 치수(웹 .cong-top / .cong-gauge / .chart-wrap / .car-grid 와 같다) */
+    public static final float CGH_L1 = 18f, CGH_L2 = 15f, CGH_NAME = 13f, CGH_META = 11f, CGH_ST = 17f, CGH_GAP = 10f, CGH_H = 33f,
+            GAUGE_LBL = 10f, GAUGE_LBL_H = 14f, GAUGE_GAP = 5f, GAUGE_BAR_H = 8f, GAUGE_H = 27f,
+            CHART_PADL = 11f, CHART_PADT = 11f, CHART_PADB = 11f, CHART_HDR = 11f, CHART_SRC = 9f, CHART_HDR_H = 15f, CHART_HDR_GAP = 9f, CHART_SCROLL_PB = 4f, CHART_COL_W = 28f, CHART_FILL_W = 16f, CHART_LBL = 8f, CHART_LBL_H = 13f, CHART_R = 11f,
+            CARS_TTL = 11f, CARS_TTL_H = 15f, CARS_TTL_GAP = 6f, CARS_GAP = 4f, CARS_CELL_H = 58f, CARS_MSG_H = 26f;
     /** 홈 경로 입력 치수(웹 홈 탭 출발/도착 카드·자동완성과 같다) */
     public static final float SUG_H = 44f, SUG_PADX = 14f, SUG_BADGE = 11f, SUG_NAME = 14f, SUG_SUB = 11f, SUG_PILL_PX = 6f, SUG_GAP = 6f, SUG_BTN = 11f, SUG_BTN_PADX = 9f, SUG_BTN_H = 26f;
     /** 게시글 카드·댓글·말풍선 치수(웹 .dc-* / .chat-bub-* 와 같다) */
@@ -663,6 +707,10 @@ public final class ScreenCore {
         public boolean tb;
         public int ti = -1;                          // 칸: 위치 추적 번호(-1 은 추적 안 함)
         public Act act;
+        public String t1 = "", t2 = "", t3 = "";    // 혼잡도 카드: 글 조각들(머리줄 '지하철 '·이름·작은 글 / 차트 제목·출처·피크)
+        public float f1, f2, f3;                     // 혼잡도 카드: 수 조각들(글 폭 · 비율 · 높이 · 잘림 왼쪽)
+        public String[] sa = new String[0];          // 칸별 혼잡: 칸마다 글 세 줄(칸·단계·%)
+        public Col[] ca = new Col[0];                // 칸별 혼잡: 칸마다 색
     }
 
     /** 배치 결과. */
@@ -682,6 +730,8 @@ public final class ScreenCore {
         public float headH, headContentW, bodyH, footH, width, chipsTop = -1f, chipsBot = -1f;
         public String bg = "bg";                                          // 화면 바탕 색 역할
         public Mark mk;                                                   // 구간 타임라인의 내 위치 마커(없으면 null)
+        public float initScrollX;                                         // 24시간 차트: 지금 시각 막대를 가운데로 맞추는 가로 위치
+        public String ctrSig = "";                                        // 그 막대 내용이 바뀌면 이 값이 바뀐다 — 바뀔 때만 앱이 다시 가운데로 맞춘다
         float[] headMaxB = new float[0], bodyMaxB = new float[0];     // 앞에서부터 가장 아래쪽(이진 탐색용)
         float headMaxH, bodyMaxH;
 
@@ -845,6 +895,31 @@ public final class ScreenCore {
                     L.mk = k;
                 }
                 y += TRK_H + n.padB;
+            } else if ("chart".equals(n.t)) {                                                      // 24시간 막대 차트: 틀(제목·출처·피크)은 고정, 막대줄만 가로로 밀린다
+                y += n.padT;
+                float px = n.padL, pw = Math.max(1f, width - n.padL - n.padR), panelY = y;
+                float bandY = panelY + CHART_PADT + CHART_HDR_H + CHART_HDR_GAP, innerL = px + CHART_PADL, innerW = px + pw - innerL;
+                Item pn = new Item(); pn.kind = K_CHART; pn.x = px; pn.y = panelY; pn.w = pw; pn.fixed = true;
+                pn.h = CHART_PADT + CHART_HDR_H + CHART_HDR_GAP + n.bh + CHART_SCROLL_PB + CHART_PADB; pn.radius = 11f;
+                pn.t3 = n.name.length() > 0 ? n.name : ""; pn.f2 = n.name.length() > 0 ? m.width(n.name, CHART_HDR, true) : 0f;
+                float titleW = m.width(n.title, CHART_HDR, false), srcRoom = pw - CHART_PADL - CHART_R - titleW - pn.f2 - 12f;
+                pn.t1 = n.title; pn.f1 = titleW; pn.t2 = (n.sub.length() > 0 && srcRoom >= 20f) ? ellipsize(n.sub, srcRoom, CHART_SRC, false, m) : "";
+                pn.ac = col(n.onc, new Col("gold", 0));
+                hi.add(pn);
+                float spacer = Math.max(0f, innerW / 2f - CHART_COL_W / 2f), bx = innerL + spacer;
+                float centerX = Float.NaN;
+                for (int bi = 0; bi < n.items.size(); bi++) {
+                    Node c = n.items.get(bi);
+                    Item it = new Item(); it.kind = K_HBAR; it.x = bx; it.y = bandY; it.w = CHART_COL_W; it.h = n.bh;
+                    it.label = c.label; it.f1 = c.max; it.fill = col(c.fill, null); it.alpha = c.alpha; it.on = c.on; it.top = c.top; it.ac = col(n.tc, new Col(null, 0xFFFFFFFF)); it.f3 = innerL;
+                    it.f2 = n.bh;
+                    if (bi == n.ci) centerX = bx + CHART_COL_W / 2f;
+                    hi.add(it); bx += CHART_COL_W;
+                }
+                contentW = Math.max(contentW, bx + spacer);
+                if (!n.items.isEmpty()) { L.chipsTop = bandY; L.chipsBot = bandY + n.bh + CHART_SCROLL_PB; }
+                L.ctrSig = n.key; L.initScrollX = Float.isNaN(centerX) ? 0f : Math.max(0f, centerX - (innerL + innerW / 2f));
+                y += pn.h + n.padB;
             } else {
                 int from = hi.size();
                 y = stack(n, 0f, width, y, hi, m, openKey);
@@ -940,6 +1015,46 @@ public final class ScreenCore {
             out.add(it);
             return y + RHD_H + n.padB;
         }
+        if ("cgh".equals(n.t)) {                                                     // 혼잡도 머리줄: 왼쪽 '지하철 강남'(이름은 굵은 금색) + 작은 글 · 오른쪽 혼잡 단계 글자
+            float stW = n.s.length() > 0 ? m.width(n.s, CGH_ST, true) : 0f;
+            float avail = Math.max(40f, innerW - stW - (stW > 0f ? CGH_GAP : 0f));
+            String lab = n.label.length() > 0 ? n.label + " " : "";
+            float labW = lab.length() > 0 ? m.width(lab, CGH_NAME, false) : 0f;
+            Item it = new Item(); it.kind = K_CGH; it.x = ox; it.y = y; it.w = innerW; it.h = CGH_H;
+            it.t1 = lab; it.f1 = labW; it.t2 = ellipsize(n.name, Math.max(20f, avail - labW), CGH_NAME, true, m);
+            it.t3 = n.sub.length() > 0 ? ellipsize(n.sub, avail, CGH_META, false, m) : "";
+            it.label = n.s; it.f2 = stW; it.sc = col(n.tc, new Col("sub", 0));
+            out.add(it);
+            return y + CGH_H + n.padB;
+        }
+        if ("gauge".equals(n.t)) {                                                   // 혼잡도 게이지
+            Item it = new Item(); it.kind = K_GAUGE; it.x = ox; it.y = y; it.w = innerW; it.h = GAUGE_H;
+            it.label = n.label; it.value = n.value; it.f1 = n.val / 100f; it.f2 = n.value.length() > 0 ? m.width(n.value, GAUGE_LBL, false) : 0f;
+            it.ac = col(n.fill, new Col(null, 0xFF34C759));
+            out.add(it);
+            return y + GAUGE_H + n.padB;
+        }
+        if ("cars".equals(n.t)) {                                                    // 칸별 혼잡: 제목 + 칸 가로줄(칸마다 테두리 색 · 글 세 줄) / 칸이 없으면 안내 글
+            Item it = new Item(); it.kind = K_CARS; it.x = ox; it.y = y; it.w = innerW;
+            boolean hasTtl = n.title.length() > 0;
+            it.t1 = hasTtl ? ellipsize(n.title, innerW, CARS_TTL, false, m) : "";
+            float top = hasTtl ? CARS_TTL_H + CARS_TTL_GAP : 0f;
+            it.f2 = top;
+            int cn = n.items.size();
+            if (cn > 0) {
+                it.f1 = (innerW - CARS_GAP * (cn - 1)) / cn; it.f3 = CARS_CELL_H;
+                it.sa = new String[cn * 3]; it.ca = new Col[cn];
+                for (int i = 0; i < cn; i++) {
+                    Node c = n.items.get(i);
+                    float cw = Math.max(10f, it.f1 - 8f);
+                    it.sa[i * 3] = ellipsize(c.name, cw, 11f, true, m); it.sa[i * 3 + 1] = ellipsize(c.label, cw, 10f, false, m); it.sa[i * 3 + 2] = ellipsize(c.badge, cw, 10f, false, m);
+                    it.ca[i] = col(c.fill, new Col(null, 0xFF34C759));
+                }
+                it.h = top + CARS_CELL_H;
+            } else { it.value = n.value; it.h = top + CARS_MSG_H; }
+            out.add(it);
+            return y + it.h + n.padB;
+        }
         if ("sug".equals(n.t)) {                                                     // 자동완성 한 줄: 종류 딱지 + 이름(굵게) + 작은 글 (+ 오른쪽 작은 단추)
             float pillW = n.badge.length() > 0 ? m.width(n.badge, SUG_BADGE, true) + SUG_PILL_PX * 2f : 0f;
             float sbw = n.label.length() > 0 ? m.width(n.label, SUG_BTN, true) + SUG_BTN_PADX * 2f : 0f;
@@ -974,7 +1089,7 @@ public final class ScreenCore {
             it.lines = ls.toArray(new String[0]); it.size = n.size; it.bold = false; it.color = n.color; it.lineH = n.size * n.lh;
             it.h = 2f + n.ipT + it.lineH * ls.size() + n.ipB;
             it.textX = ox + 1f + n.ipL; it.textY = y + 1f + n.ipT; it.radius = n.r;
-            it.fill = col(n.fill, null); it.line = col(n.line, null); it.tc = col(n.tc, null);
+            it.fill = col(n.fill, null); it.line = col(n.line, null); it.tc = col(n.tc, null); it.ac2 = col(n.onc, null);
             if (rich) richSegs(it, n.s, n.hl);
             out.add(it);
             return y + it.h + n.padB;

@@ -62,8 +62,10 @@ jobs:
           - write_engine.test.js
           - screen_write_js.ui.test.js
           - rhead_engine.test.js
+          - cong_engine.test.js
           - screen_rhead_js.ui.test.js
           - screen_rtrk_js.ui.test.js
+          - screen_cong_js.ui.test.js
           - screen_home_js.ui.test.js
           - locate_research.ui.test.js
           - route_row.ui.test.js

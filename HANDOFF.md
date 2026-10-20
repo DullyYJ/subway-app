@@ -1478,3 +1478,16 @@
 - **시험**: `ScreenJvmTest` 315 · `rhead_engine` 140 · `screen_rtrk_js.ui`(마커 위치가 웹 노드 이름과 같은 칸에 놓이는지 · 요청 폭주 없음 · 대기 배지 글이 웹 배지와 같음 · 탑승 중이면 안 켬 · 시각 덮어쓰기 · 새 경로에서 지움 · cap 11 은 웹 그대로).
 - **YJ가 할 일**: 워커 s75(`route-v2-2026-10-20s75`) Deploy + **새 APK 빌드·설치**(cap 12).
 - **기기 미검증**: 마커 그리기·이동 애니메이션·맥박 · 대기 배지 위치(노선 줄 안) · 가로 밀기 중 마커.
+
+## 2026-10-20 엔진 s76 + APK 변경 — 네이티브화: 홈 '혼잡도 카드' 본문(머리줄 · 게이지 · 24시간 막대 · 칸별 혼잡 / 버스 안내)
+- **YJ 지시**: "다음 네이티브 진행해줘. 네이티브다하면 웹은 다 뺄거야. 모든 계산은 엔진이 그림은 앱이 그리기".
+- **엔진**: 새 `POST /screen/cong`(cap 13). `engine/cong.js`(+`cong-data.js` = 웹 `_REAL_CONG` 245역×24시 표 그대로, `cong-worker.js`). 웹은 사실만 보낸다: `mode`(sub/bus/none), 지하철이면 역·호선·(로드됐다면) 실시간 칸 `live`, 버스면 노선·정류장·국토부 원자료 `[시간대, 승객 수]`, `now`(5분 단위 ms)·`tz`·`th`.
+  엔진이 정한다: 혼잡 비율(역 프로필·평일/주말/공휴일 감쇠·실시간 섞기) · 상태 글/색/배지(원활·보통·혼잡·매우혼잡 / 쾌적해요…지옥이에요; 이모지 없음) · 24시간 막대 높이·색·피크·출처·현재 시각 칸 · 칸별 8칸 혼잡 · 버스 평균/최대 승객·막대 · 카드 띠 색·배지 `info`. 웹 `getCongPct/getCong24/renderChart24/renderCarGrid/_renderBusChart24/_processCongItems` 와 숫자·색 일치를 시험으로 대조.
+- **APK(새 노드 `cgh` `gauge` `chart` `cars`, `box.hc`)**: `ScreenCore`(검증·배치; 막대 줄은 머리의 가로 밀기 줄, 현재 시각이 가운데로 오게 `initScrollX`) · `ScreenView.drawCgh/drawGauge/drawChart/drawHbar/drawCars`(새 객체 없이) · `ScreenNativePlugin` cap 13.
+- **앱(웹)**: `#congBody` 감싸개(장면 `#congScene` 은 밖) · `_cgSet()` 이 사실 변화를 알림(`updateCong`·`_resetCongToWaiting`·`updateBusCong`) · 틀 `cong`(저장값 `gdm_scrg_on`, 설정 > '네이티브 혼잡도 카드' 기본 꺼짐) · 엔진 `info` 로 카드 띠 색·`#congBadge` 글/색 적용 · 장면(`.cs-on`)이면 쉼 · 네이티브가 맡는 동안 옛 그림 영역(`cs:*`) 비킴.
+- **폴백**: 스위치 꺼짐·플러그인 없음·옛 APK(cap<13)·엔진 실패 → 웹 본문 그대로.
+- **알려진 한계(웹 삭제 때 정리)**: 게이지 채움 애니메이션 없음 · 현재 막대는 점프로 가운데(웹의 300ms 두 번째 이동 없음) · 막대 눌러 말풍선 없음(웹도 요소가 없음) · 버스 로딩/없음은 머리줄만(웹은 이전 값 유지) · 빈 버스 차트 생략 · 없음 상태 간격 10(웹 8) · 웹 쪽 중복 계산 코드는 웹 제거 때까지 폴백으로 남음.
+- **시험**: `cong_engine` 50 · `screen_cong_js.ui` 14 · `ScreenJvmTest` 335 · `settings_engine` · `screen_native` · 기존 `cong_card`/`cong_scene`(DOM 감싸개 변경에 맞춰 시험의 '보임' 판정을 offsetParent 로 바꿈) 통과. CI 행렬에 `cong_engine`, `screen_cong_js.ui` 추가.
+- **YJ가 할 일**: 워커 s76(`route-v2-2026-10-20s76`) Deploy + **새 APK 빌드·설치**(cap 13). 설정에서 '네이티브 혼잡도 카드'를 켠다.
+- **기기 미검증(전부)**: 머리줄·게이지·막대(가로 밀기·현재 칸 가운데)·칸별·버스 안내 그리기 · 감싸개 높이 따라가기 · 카드 띠 색/배지 · 장면 전환 시 겹침.
+- **남은 비네이티브**: AI 브리핑 카드 · 실시간 소통방 · 글쓰기 뒤 팝업 · `_ovlDiagShow`/`_pickPop` 팝업 · 데이터 계층(fetch · GPS→인덱스 추적 · 마커 가드 · eta 요청 · 버스 혼잡 fetch/카카오 지역) · 지도 탭(SVG).

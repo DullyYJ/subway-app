@@ -15303,6 +15303,7 @@ window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
       webSet: function(on){ var h = hostFn(); if(h) h.classList.toggle('htl-nat-op', on); }
     };
   }
+  function cgOwned(){ try{ return !!(window._scrCong && window._scrCong.owns()); }catch(e){ return false; } }
   function rhOwned(){ try{ return !!(window._scrRhead && window._scrRhead.owns()); }catch(e){ return false; } }      // 서버 구동 네이티브 결과 윗부분이 머리줄·요약·환승·탭을 맡는 동안은 이 영역들이 쉰다(둘이 겹쳐 그리지 않게)
   var HD = makeRegion('hd', paintCfg(function(){ if(rhOwned()) return null; var h = document.getElementById('transitResultHeader'); return h && h.parentElement; }));      // 머리줄 한 줄(분 숫자·구간명·즐겨찾기·×)
   var TB = makeRegion('tb', paintCfg(function(){ if(rhOwned()) return null; return document.getElementById('routeOptionTabs'); }));                                           // 경로 옵션 탭(최단시간·최소환승·지하철·버스)
@@ -15318,7 +15319,7 @@ window._placeGpsMarkerSmooth = _placeGpsMarkerSmooth;
    ['cs:carttl', function(){ return document.getElementById('carTtl'); }],                                                                // '칸별 혼잡 예상도' 제목
    ['cs:cars', function(){ return document.getElementById('carGrid'); }],                                                                 // 칸별 혼잡 칸들(테두리 상자 + 글자)
    ['cs:busnote', function(){ return document.getElementById('busCongNote'); }]                                                           // 버스 구간 안내 문구
-  ].forEach(function(c){ makeRegion(c[0], paintCfg(c[1])); });
+  ].forEach(function(c){ makeRegion(c[0], paintCfg(function(){ if(cgOwned()) return null; return c[1](); })); });      // 서버 구동 네이티브 혼잡도 카드(_scrCong)가 본문을 맡는 동안은 이 영역들이 쉰다(둘이 겹쳐 그리지 않게)
   // ★ 2026-10-18 (네이티브 이전 5번째 화면: 맛집 탭 — YJ: '네이티브화 계속 진행'): 같은 방식(웹은 레이아웃·내용·눌림을 그대로 맡고 투명하게 제자리, 네이티브가 그림만).
   //   머리(제목·'○○역 인근'·새로고침 단추) · 카테고리 칩 6개(가로로 밀리는 줄이라 칩마다 따로 — 밀리는 동안은 웹) · 안내 문구(빈 상태·불러오기 실패) · 맛집 칸(앞 20개).
   //   스크롤하는 동안은 영역이 '움직임'으로 보아 웹이 그리고, 멈추면(≈0.07초) 네이티브가 그린다. 뒤쪽 칸·공공데이터 구분줄·불러오는 중 빙글이는 계속 웹.
@@ -20540,41 +20541,44 @@ window.addEventListener('unhandledrejection', function(e) {
   <div>
     <div class="sec" style="justify-content:flex-start;gap:8px;">혼잡도<span id="congLiveDot" class="ldot-live" style="display:none;margin-right:0;"></span><span id="congBadge" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;color:#fff;background:var(--arex);">-</span><span class="cong-bus-hint" id="congBusHint"></span><button id="shareLocBtn" onclick="_shareLoc()" style="margin-left:auto;flex-shrink:0;cursor:pointer;font-family:inherit;font-size:11px;font-weight:700;color:var(--gold);background:transparent;border:1px solid var(--gold);border-radius:12px;padding:3px 10px;white-space:nowrap;letter-spacing:0;">📍 위치 공유</button></div>
     <div class="cong-card" id="congCard" style="border-left-color:var(--arex);">
-      <div class="cong-top">
-        <div>
-          <div class="cong-stn">지하철 <b id="congStn">-</b></div>
-          <div class="cong-meta" id="congMeta">시간표 기반</div>
-        </div>
-        <div class="cong-status" id="congStatusTxt" style="color:var(--sub);">출발역을 설정하세요</div>
-      </div>
       <!-- 장면: 경로 없음 · 버스 구간 (엔진 /scene 이 정한 장면을 그린다) -->
       <div class="cong-scene" id="congScene"><div class="cs-tag" id="csTag"></div></div>
-      <!-- 혼잡도 게이지 -->
-      <div class="cong-gauge-wrap" id="congGaugeWrap" style="display:none;">
-        <div class="cong-gauge-label">
-          <span>혼잡도</span>
-          <span id="congGaugePct">-</span>
+      <!-- ★ 2026-10-20 (s76): 혼잡도 카드 본문(머리줄·게이지·24시간 막대·칸별 혼잡/버스 안내)을 한 감싸개(#congBody)에 둔다 — 서버 구동 네이티브 혼잡도 카드(_scrCong)가 켜지면 이 속만 감추고 기기가 같은 자리에 직접 그린다(자리 높이는 기기가 그린 내용을 따른다). 장면(#congScene)은 따로 둔다. -->
+      <div id="congBody">
+        <div class="cong-top">
+          <div>
+            <div class="cong-stn">지하철 <b id="congStn">-</b></div>
+            <div class="cong-meta" id="congMeta">시간표 기반</div>
+          </div>
+          <div class="cong-status" id="congStatusTxt" style="color:var(--sub);">출발역을 설정하세요</div>
         </div>
-        <div class="cong-gauge-bar">
-          <div class="cong-gauge-fill" id="congGaugeFill" style="width:0%;background:var(--green);"></div>
+        <!-- 혼잡도 게이지 -->
+        <div class="cong-gauge-wrap" id="congGaugeWrap" style="display:none;">
+          <div class="cong-gauge-label">
+            <span>혼잡도</span>
+            <span id="congGaugePct">-</span>
+          </div>
+          <div class="cong-gauge-bar">
+            <div class="cong-gauge-fill" id="congGaugeFill" style="width:0%;background:var(--green);"></div>
+          </div>
         </div>
-      </div>
-      <!-- 24시간 스크롤 차트 -->
-      <div class="chart-wrap" id="chart24Wrap">
-        <div class="chart-hdr">
-          <span>24시간 혼잡도 <span id="chartSourceLabel" style="font-size:9px;color:var(--sub);">(통계 기반)</span></span>
-          <span id="peakLbl" style="color:var(--gold);font-weight:700;">-</span>
+        <!-- 24시간 스크롤 차트 -->
+        <div class="chart-wrap" id="chart24Wrap">
+          <div class="chart-hdr">
+            <span>24시간 혼잡도 <span id="chartSourceLabel" style="font-size:9px;color:var(--sub);">(통계 기반)</span></span>
+            <span id="peakLbl" style="color:var(--gold);font-weight:700;">-</span>
+          </div>
+          <div class="chart-scroll-wrap" id="chart24Scroll">
+            <div class="bars-24" id="bars24"></div>
+          </div>
         </div>
-        <div class="chart-scroll-wrap" id="chart24Scroll">
-          <div class="bars-24" id="bars24"></div>
+        <div class="car-ttl" id="carTtl">칸별 혼잡 예상도</div>
+        <div class="car-grid" id="carGrid"><div style="font-size:11px;color:var(--sub);padding:6px 0;">출발역 설정 후 표시됩니다</div></div>
+        <div class="bus-cong-note" id="busCongNote" style="display:none;font-size:12px;color:var(--sub);padding:10px 12px;background:var(--card2,rgba(255,255,255,0.03));border-radius:10px;margin-top:4px;line-height:1.5;"></div>
+        <div class="gps-box" style="display:none;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="var(--blue)"><path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3c-.46-4.17-3.77-7.48-7.94-7.94V1h-2v2.06C6.83 3.52 3.52 6.83 3.06 11H1v2h2.06c.46 4.17 3.77 7.48 7.94 7.94V23h2v-2.06c4.17-.46 7.48-3.77 7.94-7.94H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/></svg>
+          <div class="gps-box-txt">현재 위치 <b id="curStnTxt">-</b> 판정<br>목적지까지 <span class="eta-txt" id="etaTxt">-</span><br><span style="font-size:11px;color:var(--sub);" id="routeDistInfo"></span></div>
         </div>
-      </div>
-      <div class="car-ttl" id="carTtl">칸별 혼잡 예상도</div>
-      <div class="car-grid" id="carGrid"><div style="font-size:11px;color:var(--sub);padding:6px 0;">출발역 설정 후 표시됩니다</div></div>
-      <div class="bus-cong-note" id="busCongNote" style="display:none;font-size:12px;color:var(--sub);padding:10px 12px;background:var(--card2,rgba(255,255,255,0.03));border-radius:10px;margin-top:4px;line-height:1.5;"></div>
-      <div class="gps-box" style="display:none;">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="var(--blue)"><path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3c-.46-4.17-3.77-7.48-7.94-7.94V1h-2v2.06C6.83 3.52 3.52 6.83 3.06 11H1v2h2.06c.46 4.17 3.77 7.48 7.94 7.94V23h2v-2.06c4.17-.46 7.48-3.77 7.94-7.94H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/></svg>
-        <div class="gps-box-txt">현재 위치 <b id="curStnTxt">-</b> 판정<br>목적지까지 <span class="eta-txt" id="etaTxt">-</span><br><span style="font-size:11px;color:var(--sub);" id="routeDistInfo"></span></div>
       </div>
     </div>
   </div>
@@ -21161,6 +21165,21 @@ window.addEventListener('unhandledrejection', function(e) {
         <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">홈 경로 결과 카드의 머리줄(소요 시간·구간·즐겨찾기·닫기), 승차·대기·도보 요약, 환승 안내, 경로 탭(최단시간·최소환승·지하철·버스), 공식 공지·지연 제보 줄, 장거리 열차·버스 고르기, 구간 타임라인(역별 시각·노선 색·환승 표시)을 엔진이 정해 내려주고, 기기가 직접 그려요. 문제가 생기면 예전 웹 카드로 돌아가요.</p>
         <div id="scrrSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
         <style>#scrrSetOn:checked ~ #scrrSetKnob{background:var(--gold) !important;} #scrrSetOn:checked ~ #scrrSetDot{left:23px !important;}</style>
+      </div>
+
+      <!-- ★ 2026-10-20 (s76): 서버 구동 네이티브 혼잡도 카드 — 안드로이드 앱에서만 보임, 기본 꺼짐(실험) -->
+      <div id="scrgSetCard" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <div style="font-size:15px;font-weight:800;color:var(--text);">네이티브 혼잡도 카드</div>
+          <label style="position:relative;display:inline-block;width:46px;height:26px;">
+            <input type="checkbox" id="scrgSetOn" onchange="_scrgSetUse(this.checked)" style="opacity:0;width:0;height:0;">
+            <span id="scrgSetKnob" style="position:absolute;inset:0;border-radius:13px;background:var(--border2);transition:.2s;cursor:pointer;"></span>
+            <span id="scrgSetDot" style="position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.3);"></span>
+          </label>
+        </div>
+        <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">홈 혼잡도 카드의 머리줄(역·버스 이름, 기준 시각, 혼잡 단계), 혼잡도 게이지, 24시간 막대 차트, 칸별 혼잡(버스는 평균·최대 승객 수)을 엔진이 계산해 내려주고, 기기가 직접 그려요. 문제가 생기면 예전 웹 카드로 돌아가요.</p>
+        <div id="scrgSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
+        <style>#scrgSetOn:checked ~ #scrgSetKnob{background:var(--gold) !important;} #scrgSetOn:checked ~ #scrgSetDot{left:23px !important;}</style>
       </div>
 
       <!-- ★ 2026-10-19: 숨김 인계 — 앱이 가려지면 엔진(/ride-standby)이 안내를 이어받는다. 안드로이드 앱에서만 보임, 기본 꺼짐(실험) -->
@@ -37207,6 +37226,12 @@ window.stopTracking = stopTracking;
 // 혼잡도 엔진 — 통계 기반 + 실시간 API 연동
 // ══════════════════════════════════════════════════════════
 
+// ★ 2026-10-20 (s76): 서버 구동 네이티브 혼잡도 카드(_scrCong)에 '지금 무엇을 보이는지'의 원자료를 알린다 — 지하철이면 역 이름·호선, 버스면 노선 번호·정류장·국토부 원자료,
+//   아직 출발역이 없으면 none. 혼잡 %·단계 글·색·24시간 막대·칸별 혼잡·버스 평균/최대는 엔진(/screen/cong)이 계산하고 기기가 그린다. 이 함수는 사실만 쌓는다.
+window._cgF = { mode: 'none' }; window._cgV = 0;
+function _cgSet(o){ window._cgF = o; window._cgV++; try{ if(window._scrCong) window._scrCong.changed(); }catch(e){} }
+window._cgSet = _cgSet;
+
 // 시간대별 기본 혼잡도 프로파일 (0~23시, 0~100)
 var CONG_PROFILE = [
   10, 8, 7, 7, 8, 20,   // 0~5시
@@ -37493,6 +37518,7 @@ function updateCong(stn, force) {
   if(!force) stn = _congFixStation(stn);
   if(!stn || !stn.name) return;
   window._congMode = 'subway';
+  try{ if(window._cgSet) window._cgSet({ mode: 'sub', stn: String(stn.name), line: String(stn.line || '') }); }catch(eCg){}      // 서버 구동 네이티브 혼잡도 카드(_scrCong)에 알린다 — 역 이름·호선만(혼잡 %·글·색·막대는 엔진이 정한다)
   var pct  = getCongPct(stn.name, stn.line);
   var col  = pct<30?'#34c759':pct<60?'#ff9f0a':pct<80?'#ff6b35':'#ff3b30';
   var lvl  = pct<30?'원활 😊':pct<60?'보통 😐':pct<80?'혼잡 😰':'매우혼잡 😱';
@@ -37681,7 +37707,8 @@ function _fetchBusCongestion(busSection){
           region: (items[0] && items[0].sgg_nm) || '',
           tzon: curHour,
           hourly: hourly,                   // 24시간 혼잡도 배열
-          sampleCount: cnt
+          sampleCount: cnt,
+          pr: items.slice(0, 1500).map(function(it){ return [it.tzon, it.cgst]; })      // 국토부 원자료 그대로([시간대, 승객 수]) — 서버 구동 네이티브 혼잡도 카드가 엔진에 보낸다(평균·최대·혼잡 %는 엔진이 계산)
         });
       } // end _processCongItems
 
@@ -37704,11 +37731,13 @@ function updateBusCong(busSection){
   // 🚌 즉시 버스 모드로 잠금 (비동기 fetch 전에 지하철 덮어쓰기 방지)
   window._congMode = 'bus';
   _congApplyMode('bus');
+  try{ if(window._cgSet) window._cgSet({ mode: 'bus', bus: { no: String(busSection.name || ''), ld: 1 } }); }catch(eCg1){}
   // 라벨 즉시 "버스 N번"으로 (데이터 로딩 전에도 지하철 → 버스 전환)
   var _labelEl0 = document.querySelector('.cong-stn');
   if(_labelEl0) _labelEl0.innerHTML = '버스 <b id="congStn">' + _busCongLabel(busSection.name) + '</b>';
 
   _fetchBusCongestion(busSection).then(function(res){
+    try{ if(window._cgSet && window._congMode === 'bus') window._cgSet({ mode: 'bus', bus: res ? { no: String(res.busNo || ''), stop: String(res.stopName || ''), pr: res.pr || [] } : { no: String(busSection.name || ''), none: 1 } }); }catch(eCg2){}
     if(!res){
       // 데이터 없으면 라벨만 버스로 유지 (수치는 비움)
       var labelEl = document.querySelector('.cong-stn');
@@ -37890,6 +37919,7 @@ window._congSyncRoute = _congSyncRoute;
 // ── 혼잡도 카드를 '출발역 설정 전' 대기 상태로 리셋 ──
 function _resetCongToWaiting(){
   window._congMode = null;
+  try{ if(window._cgSet) window._cgSet({ mode: 'none' }); }catch(eCg0){}
   try{ _sceneSt.congSig = ''; _sceneSt.sig = ''; }catch(eCw){}
   var _cld0 = document.getElementById('congLiveDot'); if(_cld0) _cld0.style.display = 'none';
   var labelEl = document.querySelector('.cong-stn');
@@ -39537,6 +39567,7 @@ window.refreshShop=refreshShop;
     try{ var Xscrw = window._scrWrite && _scrWrite.S, cscrw = document.getElementById('scrwSetCard'); if(Xscrw && cscrw && cscrw.style.display === 'block') f.feat.scrw = { h: 1, on: Xscrw.on ? 1 : 0, f: (Xscrw.failed || Xscrw.fails >= 2) ? 1 : 0, w: Xscrw.why || '', b: Xscrw.badFresh > 0 ? 1 : 0 }; }catch(e){}
     try{ var Xscrh = window._scrHome && _scrHome.S, cscrh = document.getElementById('scrhSetCard'); if(Xscrh && cscrh && cscrh.style.display === 'block') f.feat.scrh = { h: 1, on: Xscrh.on ? 1 : 0, f: (Xscrh.failed || Xscrh.fails >= 2) ? 1 : 0, w: Xscrh.why || '', b: Xscrh.badFresh > 0 ? 1 : 0 }; }catch(e){}
     try{ var Xscrr = window._scrRhead && _scrRhead.S, cscrr = document.getElementById('scrrSetCard'); if(Xscrr && cscrr && cscrr.style.display === 'block') f.feat.scrr = { h: 1, on: Xscrr.on ? 1 : 0, f: (Xscrr.failed || Xscrr.fails >= 2 || _scrRhead.S2.failed || _scrRhead.S2.fails >= 2 || _scrRhead.S3.failed || _scrRhead.S3.fails >= 2 || _scrRhead.S4.failed || _scrRhead.S4.fails >= 2) ? 1 : 0, w: Xscrr.why || _scrRhead.S2.why || _scrRhead.S3.why || _scrRhead.S4.why || '', b: Xscrr.badFresh > 0 ? 1 : 0 }; }catch(e){}
+    try{ var Xscrg = window._scrCong && _scrCong.S, cscrg = document.getElementById('scrgSetCard'); if(Xscrg && cscrg && cscrg.style.display === 'block') f.feat.scrg = { h: 1, on: Xscrg.on ? 1 : 0, f: (Xscrg.failed || Xscrg.fails >= 2) ? 1 : 0, w: Xscrg.why || '', b: Xscrg.badFresh > 0 ? 1 : 0 }; }catch(e){}
     try{ if(typeof _sbhSyncCard === 'function') _sbhSyncCard(); var csbh = document.getElementById('sbhSetCard'); if(csbh && csbh.style.display === 'block') f.feat.sbh = { h: 1, on: _sbhOn() ? 1 : 0, f: 0, w: '' }; }catch(e){}
     try{ if(typeof _cndSyncCard === 'function') _cndSyncCard(); var ccnd = document.getElementById('cndSetCard'); if(ccnd && ccnd.style.display === 'block') f.feat.cnd = { h: 1, on: (_cndOn() && !_cndBad()) ? 1 : 0, f: _cndBad() ? 1 : 0, w: '' }; }catch(e){}
     try{ if(typeof _rtfSyncCard === 'function') _rtfSyncCard(); var crtf = document.getElementById('rtfSetCard'); if(crtf && crtf.style.display === 'block') f.feat.rtf = { h: 1, on: (_rtfOn() && !_rtfBad()) ? 1 : 0, f: _rtfBad() ? 1 : 0, w: '' }; }catch(e){}
@@ -39691,6 +39722,7 @@ window.refreshShop=refreshShop;
       else if(key === 'f.scrb') window._scrbSetUse(on);
       else if(key === 'f.scrc') window._scrcSetUse(on);
       else if(key === 'f.scrr') window._scrrSetUse(on);
+      else if(key === 'f.scrg') window._scrgSetUse(on);
       else if(key === 'f.scrt') window._scrtSetUse(on);
       else if(key === 'f.scrq') window._scrqSetUse(on);
       else if(key === 'f.scrw') window._scrwSetUse(on);
@@ -41652,6 +41684,79 @@ window.refreshShop=refreshShop;
     // 다섯 틀은 한 스위치로 함께 켜고 끈다(같은 설정). 켜짐 여부·문제 표시는 머리줄 쪽(K1)을 따른다.
     window._scrRhead = { S: K1.S, S2: K2.S, S3: K3.S, S4: K4.S, S5: K5.S, kick: function(){ try{ K1.kick(); K2.kick(); K3.kick(); K4.kick(); K5.kick(); }catch(e){} }, changed: function(){ try{ K1.changed(); K2.changed(); K3.changed(); K4.changed(); K5.changed(); }catch(e){} }, owns5: function(){ try{ return K5.owns(); }catch(e){ return false; } }, owns: function(){ try{ return K1.owns() || K2.owns() || K3.owns() || K4.owns(); }catch(e){ return false; } }, k1: K1, k2: K2, k3: K3, k4: K4, k5: K5 };
     window._scrrSetUse = function(on){ try{ K1.setUse(on); K2.setUse(on); K3.setUse(on); K4.setUse(on); K5.setUse(on); }catch(e){} };
+  })();
+
+  // ═════════════ 홈 '혼잡도 카드' 본문(머리줄 · 게이지 · 24시간 막대 · 칸별 혼잡 / 버스 승객 안내) ═════════════
+  //   '지하철 강남 · 14시 기준 · 보통' 머리줄, 혼잡도 게이지, 24시간 막대 차트(높이·색·피크·출처), 칸별 혼잡(8칸) 또는 버스 평균/최대 승객 안내의 글·색·막대를
+  //   엔진(POST /screen/cong, cap 13)이 정하고 기기가 그린다. 앱은 사실만 보낸다: 지하철이면 역 이름·호선·(로드됐다면) 실시간 자료 칸 · 버스면 노선 번호·정류장·국토부 원자료 [시간대, 승객 수] 쌍 · 기준 시각(5분 단위).
+  //   카드 왼쪽 띠 색과 섹션 제목 옆 배지(글·색)도 엔진이 준 info 를 그대로 적용한다. 누르는 동작은 없다.
+  //   웹 본문(#congBody)은 아래에 그대로 두고(폴백) 네이티브가 그 위를 덮는다. 네이티브가 맡는 동안 웹 본문의 속만 감춘다(자리는 그대로). 높이는 네이티브가 그린 내용 높이를 감싸개가 따른다.
+  //   장면(#congScene)이 보이는 동안(카드가 .cs-on)은 본문이 접히므로 네이티브도 쉰다.
+  (function(){
+    var kit, C = { cap: 0, h: 0 };
+    function gEl(id){ return document.getElementById(id); }
+    function bodyEl(){ return gEl('congBody'); }
+    try{ var st = document.createElement('style'); st.textContent = '#congBody.cg-own > *{visibility:hidden !important;}'; document.head.appendChild(st); }catch(eSt){}
+    function own(on){ try{ var e = bodyEl(); if(e) e.classList.toggle('cg-own', !!on); }catch(e){} }
+    function applyH(h){ try{ var e = bodyEl(); if(!e || !(h > 8 && h < 2000)) return; e.style.boxSizing = 'border-box'; e.style.overflow = 'hidden'; e.style.flexShrink = '0'; e.style.height = h + 'px'; }catch(e){} }
+    function unH(){ try{ var e = bodyEl(); if(e){ e.style.height = ''; e.style.overflow = ''; e.style.boxSizing = ''; e.style.flexShrink = ''; } }catch(e){} }
+    function probe(){                                                           // 규격 13(혼잡도 카드 노드)을 아는 새 APK 일 때만 — 옛 APK 는 status 에 cap 이 없거나 작아서 웹 그대로
+      if(C.cap) return;
+      var P = kit && kit.plug(); if(!P || typeof P.status !== 'function'){ C.cap = 3; return; }
+      C.cap = -1;
+      Promise.resolve(P.status({ id: 'cong' })).then(function(s0){ C.cap = (s0 && s0.cap >= 13) ? 13 : 3; try{ kit.kick(); }catch(e){} }, function(){ C.cap = 3; });
+    }
+    function gate(){ if(C.cap >= 13) return true; if(!C.cap) probe(); return false; }
+    function cardOpen(){
+      try{
+        var t = gEl('tab-home'), c = gEl('congCard');
+        return !!(t && c && t.classList.contains('active') && c.offsetParent && !c.classList.contains('cs-on') && !document.hidden);
+      }catch(e){ return false; }
+    }
+    function open(){ var e = bodyEl(), o = cardOpen() && !!e && !!e.offsetParent && gate(); if(!o){ own(false); unH(); } return o; }
+    function rect(){
+      try{
+        var w = bodyEl(), sc = gEl('tabContentWrap'); if(!w) return null;
+        var r = w.getBoundingClientRect(), v = sc ? sc.getBoundingClientRect() : { top: 0, bottom: window.innerHeight };
+        var t = Math.max(r.top, v.top), b = Math.min(r.bottom, v.bottom);
+        if(!(r.width > 40 && r.height > 14 && b - t > 10)) return null;
+        return { L: r.left, T: r.top, W: r.width, H: r.height, clip: { l: 0, t: t - r.top, r: r.width, b: b - r.top } };
+      }catch(e){ return null; }
+    }
+    function baseMs(){ try{ return (typeof getBaseTimeMs === 'function') ? getBaseTimeMs() : Date.now(); }catch(e){ return Date.now(); } }
+    function loaded(){ try{ return !!(typeof _CONG !== 'undefined' && _CONG && typeof _CONG_loaded !== 'undefined' && _CONG_loaded); }catch(e){ return false; } }
+    function liveOf(f){                                                         // 그 역의 실시간 자료 칸(원자료 그대로; 어느 시간을 쓸지·반올림은 엔진이 한다)
+      try{
+        var e = _CONG[f.stn] || _CONG[f.line + '_' + f.stn]; if(e == null) return null;
+        if(Array.isArray(e)) return e.slice(0, 24);
+        if(typeof e === 'object'){ var a = []; for(var i = 0; i < 24; i++) a.push(e[i] == null ? null : e[i]); return a; }
+      }catch(x){}
+      return null;
+    }
+    function facts(){
+      var f = window._cgF || { mode: 'none' }, o = { mode: f.mode || 'none', now: Math.floor(baseMs() / 300000) * 300000, tz: -new Date().getTimezoneOffset(), th: document.documentElement.getAttribute('data-theme') === 'pastel' ? 'pastel' : 'dark' };
+      if(o.mode === 'sub'){ o.stn = f.stn; o.line = f.line; o.ld = loaded() ? 1 : 0; o.live = o.ld ? liveOf(f) : null; }
+      else if(o.mode === 'bus') o.bus = f.bus || {};
+      return o;
+    }
+    function sig(){ return (window._cgV || 0) + '|' + Math.floor(baseMs() / 300000) + '|' + (loaded() ? 1 : 0); }
+    function request(){ var txt = JSON.stringify({ cap: 13, f: facts() }), fk = kit.hash(txt); return { txt: txt, fk: fk, idle: false, key: '', snap: null, sig: sig() }; }
+    function color(c){ c = String(c || ''); return /^(#|rgb)/.test(c) ? c : (/^[a-z0-9-]+$/.test(c) ? 'var(--' + c + ')' : ''); }
+    function applyInfo(j){                                                      // 엔진이 정한 카드 왼쪽 띠 색 · 섹션 제목 옆 배지(글·색)
+      var i = j && j.info; if(!i) return;
+      try{ var cd = gEl('congCard'), bc = color(i.bc); if(cd && bc) cd.style.borderLeftColor = bc; }catch(e){}
+      try{ var bd = gEl('congBadge'); if(bd && typeof i.badge === 'string'){ bd.textContent = i.badge; var bb = color(i.bbg); if(bb) bd.style.background = bb; } }catch(e2){}
+    }
+    kit = window._scrKit({
+      id: 'cong', kp: 'gdm_scrg', ep: '/screen/cong', screen: 'cong', label: '혼잡도 카드', card: 'scrg', cache: false, waitIdle: false, bucket: 0, idleMs: 250,
+      onText: '홈 혼잡도 카드의 머리줄·게이지·24시간 막대·칸별 혼잡(버스는 승객 안내)을 엔진이 계산해 기기가 직접 그려요(실험 중).',
+      root: bodyEl, open: open, rect: rect, request: request, act: function(){}, sig: sig, sigMs: 500,
+      listen: function(P){ P.addListener('size', function(e){ if(!e || e.id !== 'cong') return; var h = Number(e.h); if(!(h > 8 && h < 2000)) return; C.h = h; applyH(h); }); },
+      onPresent: applyInfo,
+      webClear: function(){ own(true); applyH(C.h); }, webBack: function(){ own(false); unH(); }, onEnd: function(){ own(false); unH(); }
+    });
+    window._scrCong = kit;
+    window._scrgSetUse = function(on){ try{ kit.setUse(on); }catch(e){} };
   })();
 
   // ═════════════ 홈 탭 경로 입력 ═════════════

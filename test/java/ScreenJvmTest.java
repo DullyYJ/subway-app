@@ -633,6 +633,52 @@ public class ScreenJvmTest {
         ok(MWL.mk.btw > 0f && near(MWL.mk.bth, 9f * 1.25f + 2f) && MWL.mk.bty >= 6f + ScreenCore.TRK_NAME_H && MWL.mk.bty + MWL.mk.bth <= 6f + ScreenCore.TRK_NAME_H + ScreenCore.TRK_BADGE_H && "w".equals(MWL.mk.pu) && MWL.mk.gcol != null, "마커: 대기 배지는 노선 줄 안에 가운데 놓인다");
         ok(bad(mkJson.replace("\"f\":0,\"t\":1", "\"f\":0,\"t\":7")) && bad(mkJson.replace("\"pu\":\"b\"", "\"pu\":\"x\"")) && bad(mkJson.replace("\"c\":\"#0a84ff\"", "\"c\":\"nope\"")) && bad(mkJson.replace("\"r\":0.5", "\"r\":1.5")) && bad(mkJson.replace("\"d\":14", "\"d\":99")), "마커: 칸 번호·종류·색·비율·크기가 틀리면 거절");
 
+        // ── 혼잡도 카드(cgh · gauge · chart · cars · box hc) ──
+        String cgBars = "[{\"h\":\"0\",\"o\":true},{\"h\":\"1\",\"v\":30,\"c\":\"#34c759\",\"a\":0.75},{\"h\":\"2\",\"v\":60,\"c\":\"#ff9f0a\",\"a\":1,\"u\":true},{\"h\":\"3\",\"v\":90,\"c\":\"#ff3b30\",\"a\":0.75},{\"h\":\"4\",\"v\":12,\"c\":\"#34c759\",\"a\":0.75}]";
+        String cgJson = "{\"ok\":true,\"v\":1,\"screen\":\"cong\",\"cover\":\"tab\",\"bg\":\"card\",\"head\":["
+            + "{\"t\":\"cgh\",\"pad\":[0,0,0,0],\"lab\":\"지하철\",\"nm\":\"강남\",\"meta\":\"14시 기준\",\"st\":\"혼잡\",\"sc\":\"#ff6b35\"},"
+            + "{\"t\":\"gauge\",\"pad\":[0,10,0,0],\"s\":\"혼잡도\",\"txt\":\"47%\",\"v\":47,\"c\":\"#ff9f0a\"},"
+            + "{\"t\":\"chart\",\"pad\":[0,10,0,0],\"ttl\":\"24시간 혼잡도\",\"src\":\"(통계 기반)\",\"pk\":\"3시 피크\",\"bh\":112,\"ci\":2,\"co\":\"#ffffff\",\"cs\":\"sig1\",\"bars\":" + cgBars + "},"
+            + "{\"t\":\"cars\",\"pad\":[0,10,0,0],\"ttl\":\"칸별 혼잡 예상도\",\"cells\":[{\"n\":\"1칸\",\"l\":\"여유\",\"p\":\"20%\",\"c\":\"#34c759\"},{\"n\":\"2칸\",\"l\":\"혼잡\",\"p\":\"70%\",\"c\":\"#ff6b35\"}]}"
+            + "],\"body\":[{\"t\":\"spacer\",\"h\":0}]}";
+        ScreenCore.Layout CGL = ScreenCore.layout(ScreenCore.load(cgJson), 300f, M);
+        ScreenCore.Item cgh = null, gau = null, cht = null, car = null; int cgHb = 0;
+        for (ScreenCore.Item q : CGL.head) { if (q.kind == ScreenCore.K_CGH) cgh = q; else if (q.kind == ScreenCore.K_GAUGE) gau = q; else if (q.kind == ScreenCore.K_CHART) cht = q; else if (q.kind == ScreenCore.K_CARS) car = q; else if (q.kind == ScreenCore.K_HBAR) cgHb++; }
+        ok(cgh != null && gau != null && cht != null && car != null && cgHb == 5, "혼잡도: 머리줄·게이지·차트 틀·칸별·막대 5개를 배치한다");
+        ok(cgh.fixed && gau.fixed && cht.fixed && car.fixed, "혼잡도: 막대줄 말고는 가로로 안 밀린다");
+        ok(near(cgh.h, ScreenCore.CGH_H) && cgh.t1.equals("지하철 ") && cgh.t2.equals("강남") && cgh.t3.equals("14시 기준") && cgh.label.equals("혼잡") && cgh.sc != null && cgh.f2 > 0f, "혼잡도: 머리줄 글 조각·단계 글 폭·색");
+        ok(near(gau.y, cgh.y + cgh.h + 10f) && near(gau.h, ScreenCore.GAUGE_H) && near(gau.f1, 0.47f) && gau.value.equals("47%"), "혼잡도: 게이지는 머리줄 아래 10 · 비율 0.47");
+        float panelH = ScreenCore.CHART_PADT + ScreenCore.CHART_HDR_H + ScreenCore.CHART_HDR_GAP + 112f + ScreenCore.CHART_SCROLL_PB + ScreenCore.CHART_PADB;
+        ok(near(cht.h, panelH) && near(cht.y, gau.y + gau.h + 10f) && cht.t1.equals("24시간 혼잡도") && cht.t2.equals("(통계 기반)") && cht.t3.equals("3시 피크"), "혼잡도: 차트 틀 높이 = 머리 + 막대 영역 + 여백");
+        ScreenCore.Item b0 = null, b2 = null; for (ScreenCore.Item q : CGL.head) if (q.kind == ScreenCore.K_HBAR) { if (b0 == null) b0 = q; if (q.on) b2 = q; }
+        ok(b0.top && !b2.top && b2.on && near(b2.f1, 60f) && near(b2.alpha, 1f) && near(b0.w, ScreenCore.CHART_COL_W) && near(b0.y, cht.y + ScreenCore.CHART_PADT + ScreenCore.CHART_HDR_H + ScreenCore.CHART_HDR_GAP), "혼잡도: 막대 — 운행 없음/지금/높이/투명도 · 막대줄 위치");
+        float innerL = ScreenCore.CHART_PADL, innerW = 300f - innerL, spacer = innerW / 2f - ScreenCore.CHART_COL_W / 2f;
+        ok(near(b0.x, innerL + spacer), "혼잡도: 첫 막대 앞에 반 폭 여백(어느 막대든 가운데에 올 수 있다)");
+        float want = b2.x + ScreenCore.CHART_COL_W / 2f - (innerL + innerW / 2f);
+        ok(near(CGL.initScrollX, want) && CGL.ctrSig.equals("sig1") && CGL.initScrollX > 0f && CGL.initScrollX <= CGL.headMaxScroll() + 0.01f, "혼잡도: 지금 막대를 가운데로 맞출 위치 · 내용 표시");
+        ok(CGL.chipsTop >= 0f && near(CGL.chipsTop, b0.y) && near(CGL.chipsBot, b0.y + 112f + ScreenCore.CHART_SCROLL_PB), "혼잡도: 막대줄만 가로로 민다(손가락 영역)");
+        ok(near(car.y, cht.y + cht.h + 10f) && near(car.f2, ScreenCore.CARS_TTL_H + ScreenCore.CARS_TTL_GAP) && near(car.f3, ScreenCore.CARS_CELL_H) && car.ca.length == 2 && car.sa.length == 6 && near(car.f1, (300f - ScreenCore.CARS_GAP) / 2f), "혼잡도: 칸별은 칸 폭을 똑같이 나눈다 · 글 세 줄씩");
+        ok(near(CGL.headH, car.y + car.h) && near(CGL.headMaxScroll(), CGL.headContentW - 300f) && CGL.headMaxScroll() > 0f, "혼잡도: 머리 높이 = 마지막 조각 아래 · 막대가 넘친 폭만큼 밀린다");
+        ok(ScreenCore.layout(ScreenCore.load(cgJson.replace("\"ci\":2", "\"ci\":-1")), 300f, M).initScrollX == 0f, "혼잡도: 지금 막대가 없으면 처음 위치");
+        String cgEmpty = cgJson.replace(cgBars, "[]").replace("\"ci\":2", "\"ci\":-1").replace(",\"pk\":\"3시 피크\"", ",\"pk\":\"-\"");
+        ScreenCore.Layout CGE = ScreenCore.layout(ScreenCore.load(cgEmpty), 300f, M);
+        ok(CGE.chipsTop < 0f && near(CGE.headMaxScroll(), 0f), "혼잡도: 막대가 없는 차트(대기 상태)는 밀리지 않는다");
+        String msgOnly = "{\"ok\":true,\"v\":1,\"screen\":\"cong\",\"head\":[{\"t\":\"cars\",\"ttl\":\"칸별\",\"cells\":[],\"msg\":\"출발역 설정 후 표시됩니다\"}],\"body\":[]}";
+        ScreenCore.Layout CGM = ScreenCore.layout(ScreenCore.load(msgOnly), 300f, M);
+        ok(CGM.head[0].ca.length == 0 && CGM.head[0].value.startsWith("출발역") && near(CGM.head[0].h, ScreenCore.CARS_TTL_H + ScreenCore.CARS_TTL_GAP + ScreenCore.CARS_MSG_H), "혼잡도: 칸이 없으면 안내 글 한 줄");
+        ok(bad(msgOnly.replace("\"msg\":\"출발역 설정 후 표시됩니다\"", "\"msg\":\"\"")), "혼잡도: 칸도 안내 글도 없으면 거절");
+        ok(bad(cgJson.replace("\"v\":47", "\"v\":147")) && bad(cgJson.replace("\"sc\":\"#ff6b35\"", "\"sc\":\"nope\"")) && bad(cgJson.replace("\"ci\":2", "\"ci\":9")) && bad(cgJson.replace("\"bh\":112", "\"bh\":9")) && bad(cgJson.replace("\"c\":\"#ff9f0a\",\"a\":1,\"u\":true", "\"c\":\"#ff9f0a\",\"a\":3,\"u\":true")), "혼잡도: 비율·색·막대 번호·높이·투명도가 틀리면 거절");
+        StringBuilder cgMany = new StringBuilder(); for (int i = 0; i < 49; i++) { if (i > 0) cgMany.append(','); cgMany.append("{\"h\":\"x\",\"v\":5,\"c\":\"#fff\"}"); }
+        ok(bad(cgJson.replace(cgBars, "[" + cgMany + "]").replace("\"ci\":2", "\"ci\":-1")), "혼잡도: 막대가 너무 많으면 거절");
+        // 좁은 폭: 긴 이름은 말줄임, 단계 글자는 남는다 / box 의 굵은 구간 색(hc)
+        String cgNarrow = cgJson.replace("\"nm\":\"강남\"", "\"nm\":\"구로디지털단지구로디지털단지구로디지털단지\"");
+        ScreenCore.Item nh = ScreenCore.layout(ScreenCore.load(cgNarrow), 160f, M).head[0];
+        ok(nh.t2.endsWith("\u2026") && nh.f1 + M.width(nh.t2, ScreenCore.CGH_NAME, true) + nh.f2 + ScreenCore.CGH_GAP <= 160.5f, "혼잡도: 좁으면 이름을 줄이고 단계 글자는 지킨다");
+        String bxJson = "{\"ok\":true,\"v\":1,\"screen\":\"cong\",\"head\":[{\"t\":\"box\",\"s\":\"평균 25명 최대 30명\",\"hl\":[[3,6]],\"hc\":\"#ff6b35\",\"size\":12}],\"body\":[]}";
+        ScreenCore.Item cgBx = ScreenCore.layout(ScreenCore.load(bxJson), 300f, M).head[0];
+        ok(cgBx.ac2 != null && cgBx.segs != null && bad(bxJson.replace("#ff6b35", "nope")), "box: 굵은 구간 색(hc)을 읽고 나쁜 색은 거절");
+        ok(ScreenCore.layout(ScreenCore.load(bxJson.replace("\"hc\":\"#ff6b35\",", "")), 300f, M).head[0].ac2 == null, "box: hc 가 없으면 글 색 그대로");
+
         // ── 화면 바탕 색(bg) ──
         String bgBase = "{\"ok\":true,\"v\":1,\"screen\":\"x\",\"head\":[],\"body\":[{\"t\":\"spacer\",\"h\":4}]";
         ok("bg".equals(ScreenCore.layout(ScreenCore.load(bgBase + "}"), 300f, M).bg) && "card".equals(ScreenCore.layout(ScreenCore.load(bgBase + ",\"bg\":\"card\"}"), 300f, M).bg) && "card2".equals(ScreenCore.layout(ScreenCore.load(bgBase + ",\"bg\":\"card2\"}"), 300f, M).bg), "화면 바탕: 기본 bg · card · card2");

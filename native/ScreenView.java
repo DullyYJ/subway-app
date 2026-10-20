@@ -76,6 +76,7 @@ public class ScreenView extends View {
     private ScreenCore.Screen screen;
     private ScreenCore.Layout lay;
     private float dpr = 1f, scrollY = 0f, scrollX = 0f;
+    private String ctrDone = null;                      // 24시간 차트: 지금 시각 막대를 가운데로 맞춘 막대 내용 표시(내용이 바뀔 때만 다시 맞춘다)
     private final OverScroller flingY, flingX;
     private VelocityTracker vt;
     private final int slop, minFling, maxFling;
@@ -148,7 +149,7 @@ public class ScreenView extends View {
         boolean stick = s != null && "bottom".equals(s.anchor) && (!keepScroll || nearBottom());
         screen = s;
         iconPaths.clear();
-        if (!keepScroll) { scrollY = 0f; scrollX = 0f; openKey = null; }
+        if (!keepScroll) { scrollY = 0f; scrollX = 0f; openKey = null; ctrDone = null; }
         flingY.forceFinished(true); flingX.forceFinished(true);
         pressed = null; mode = 0;
         relayout();
@@ -164,6 +165,8 @@ public class ScreenView extends View {
     private void relayout() {
         if (screen == null || getWidth() <= 0) { lay = null; invalidate(); syncLater(); return; }
         lay = ScreenCore.layout(screen, getWidth() / dpr, measurer, openKey);
+        if (lay.ctrSig.length() == 0) ctrDone = null;
+        else if (!lay.ctrSig.equals(ctrDone)) { ctrDone = lay.ctrSig; scrollX = lay.initScrollX; }      // 24시간 차트 내용이 새로 오면 지금 시각 막대를 가운데로
         clampScroll();
         syncFieldBases(lay.body); syncFieldBases(lay.foot);
         float ch = lay.headH + lay.bodyH + lay.footH;
@@ -468,6 +471,11 @@ public class ScreenView extends View {
             case ScreenCore.K_SWAP: drawSwap(cv, it); break;
             case ScreenCore.K_RHD: drawRhd(cv, it); break;
             case ScreenCore.K_TRK: drawTrk(cv, it); break;
+            case ScreenCore.K_CGH: drawCgh(cv, it); break;
+            case ScreenCore.K_GAUGE: drawGauge(cv, it); break;
+            case ScreenCore.K_CHART: drawChart(cv, it); break;
+            case ScreenCore.K_HBAR: drawHbar(cv, it); break;
+            case ScreenCore.K_CARS: drawCars(cv, it); break;
             default: break;
         }
     }
@@ -775,7 +783,7 @@ public class ScreenView extends View {
         for (int k = 0; k < it.segs.length; k++) {
             float x = x0, b = -1f;
             for (int q = 0; q < it.segs[k].length; q++) {
-                setText(it.size, it.segBold[k][q], color);
+                setText(it.size, it.segBold[k][q], (it.segBold[k][q] && it.ac2 != null) ? cc(it.ac2, color) : color);
                 if (b < 0f) b = base(y0 + k * it.lineH, it.lineH, k);
                 cv.drawText(it.segs[k][q], x, b, tp);
                 x += tp.measureText(it.segs[k][q]);
@@ -936,6 +944,97 @@ public class ScreenView extends View {
             cv.drawText(it.time, cx, base(axisTop + ScreenCore.TRK_AXIS_H + ScreenCore.TRK_TIME_GAP, ScreenCore.TRK_TIME_H, 0), tp);
             tp.setTextAlign(Paint.Align.LEFT);
         }
+    }
+    // ───────────── 혼잡도 카드(머리줄 · 게이지 · 24시간 막대 · 칸별 혼잡) ─────────────
+    /** 머리줄: 왼쪽 '지하철 강남'(이름은 굵은 금색) + 작은 글 · 오른쪽 혼잡 단계 글자. 글·색은 엔진이 정했다. */
+    private void drawCgh(Canvas cv, ScreenCore.Item it) {
+        float b1 = 0f;
+        setText(ScreenCore.CGH_NAME, false, pal[R_SUB]);
+        b1 = base(it.y, ScreenCore.CGH_L1, 0);
+        if (it.t1.length() > 0) cv.drawText(it.t1, it.x, b1, tp);
+        setText(ScreenCore.CGH_NAME, true, pal[R_GOLD]);
+        cv.drawText(it.t2, it.x + it.f1, b1, tp);
+        if (it.t3.length() > 0) { setText(ScreenCore.CGH_META, false, pal[R_SUB]); cv.drawText(it.t3, it.x, base(it.y + ScreenCore.CGH_L1, ScreenCore.CGH_L2, 0), tp); }
+        if (it.label.length() > 0) {
+            setText(ScreenCore.CGH_ST, true, cc(it.sc, pal[R_SUB])); tp.setTextAlign(Paint.Align.RIGHT);
+            cv.drawText(it.label, it.x + it.w, base(it.y, it.h, 0), tp);
+            tp.setTextAlign(Paint.Align.LEFT);
+        }
+    }
+    /** 게이지: 위에 작은 글 두 개(이름 · %) + 아래에 둥근 채움 막대. */
+    private void drawGauge(Canvas cv, ScreenCore.Item it) {
+        setText(ScreenCore.GAUGE_LBL, false, pal[R_SUB]);
+        float bl = base(it.y, ScreenCore.GAUGE_LBL_H, 0);
+        cv.drawText(it.label, it.x, bl, tp);
+        if (it.value.length() > 0) { tp.setTextAlign(Paint.Align.RIGHT); cv.drawText(it.value, it.x + it.w, bl, tp); tp.setTextAlign(Paint.Align.LEFT); }
+        float ty = it.y + ScreenCore.GAUGE_LBL_H + ScreenCore.GAUGE_GAP, r = ScreenCore.GAUGE_BAR_H / 2f;
+        p.setStyle(Paint.Style.FILL); p.setColor(pal[R_BORDER2]);
+        rf.set(it.x, ty, it.x + it.w, ty + ScreenCore.GAUGE_BAR_H); cv.drawRoundRect(rf, r, r, p);
+        if (it.f1 > 0f) { p.setColor(cc(it.ac, 0xFF34C759)); rf.set(it.x, ty, it.x + Math.max(ScreenCore.GAUGE_BAR_H, it.w * it.f1), ty + ScreenCore.GAUGE_BAR_H); cv.drawRoundRect(rf, r, r, p); }
+    }
+    /** 24시간 차트의 틀: 바탕·테두리 + 머리(제목 · 작은 출처 · 오른쪽 피크). 막대는 밀리는 줄(drawHbar)이 그 위에 그린다. */
+    private void drawChart(Canvas cv, ScreenCore.Item it) {
+        rf.set(it.x, it.y, it.x + it.w, it.y + it.h);
+        p.setStyle(Paint.Style.FILL); p.setColor(pal[R_CARD2]); cv.drawRoundRect(rf, it.radius, it.radius, p);
+        p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(pal[R_BORDER]);
+        rf2.set(it.x + 0.5f, it.y + 0.5f, it.x + it.w - 0.5f, it.y + it.h - 0.5f); cv.drawRoundRect(rf2, it.radius - 0.5f, it.radius - 0.5f, p);
+        p.setStyle(Paint.Style.FILL);
+        float top = it.y + ScreenCore.CHART_PADT, hx = it.x + ScreenCore.CHART_PADL;
+        setText(ScreenCore.CHART_HDR, false, pal[R_SUB]);
+        cv.drawText(it.t1, hx, base(top, ScreenCore.CHART_HDR_H, 0), tp);
+        if (it.t2.length() > 0) { setText(ScreenCore.CHART_SRC, false, pal[R_SUB]); cv.drawText(it.t2, hx + it.f1 + 4f, base(top, ScreenCore.CHART_HDR_H, 0), tp); }
+        if (it.t3.length() > 0) { setText(ScreenCore.CHART_HDR, true, cc(it.ac, pal[R_GOLD])); tp.setTextAlign(Paint.Align.RIGHT); cv.drawText(it.t3, it.x + it.w - ScreenCore.CHART_R, base(top, ScreenCore.CHART_HDR_H, 0), tp); tp.setTextAlign(Paint.Align.LEFT); }
+    }
+    /** 막대 한 칸: 아래에 시간 글자, 그 위에 색 막대(위쪽 모서리만 둥글게). 운행 없는 시간은 흐린 낮은 막대, 지금 시각은 바깥 테두리와 굵은 글자. */
+    private void drawHbar(Canvas cv, ScreenCore.Item it) {
+        float vw = getWidth() / dpr;
+        cv.save();
+        cv.clipRect(scrollX + it.f3, it.y, scrollX + vw, it.y + it.h);          // 틀 안쪽으로만 보인다(밀려서 틀 왼쪽 여백으로 넘어가지 않게)
+        float cx = it.x + it.w / 2f, bottom = it.y + it.f2 - ScreenCore.CHART_LBL_H, fw = ScreenCore.CHART_FILL_W / 2f;
+        boolean cur = it.on;
+        int lc = cur ? cc(it.ac, pal[R_TEXT]) : pal[R_SUB];
+        p.setStyle(Paint.Style.FILL);
+        if (it.top) {
+            p.setColor(alpha(pal[R_BORDER2], 0.35f));
+            rf.set(cx - fw, bottom - 4f, cx + fw, bottom); cv.drawRoundRect(rf, 2f, 2f, p);
+            lc = alpha(lc, 0.35f);
+        } else {
+            float h = Math.max(4f, it.f1);
+            int fc = alpha(cc(it.fill, 0xFF34C759), it.alpha);
+            rf.set(cx - fw, bottom - h, cx + fw, bottom + 3f);                    // 아래 3dp 는 글자 위 빈 틈에 걸쳐 모서리를 직각으로 보이게 한다
+            p.setColor(fc); cv.drawRoundRect(rf, 3f, 3f, p);
+            if (cur) {
+                p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(2f); p.setColor(cc(it.ac, 0xFFFFFFFF));
+                rf2.set(cx - fw - 2f, bottom - h - 2f, cx + fw + 2f, bottom + 1f); cv.drawRoundRect(rf2, 4f, 4f, p);
+                p.setStyle(Paint.Style.FILL);
+            }
+        }
+        setText(ScreenCore.CHART_LBL, cur, lc); tp.setTextAlign(Paint.Align.CENTER);
+        cv.drawText(it.label, cx, base(bottom + 3f, ScreenCore.CHART_LBL_H - 3f, 0), tp);
+        tp.setTextAlign(Paint.Align.LEFT);
+        cv.restore();
+    }
+    /** 칸별 혼잡: 제목 + 칸 가로줄(칸마다 테두리 색, 글 세 줄 — 칸 번호 · 단계 · %) / 칸이 없으면 안내 글. */
+    private void drawCars(Canvas cv, ScreenCore.Item it) {
+        if (it.t1.length() > 0) { setText(ScreenCore.CARS_TTL, false, pal[R_SUB]); cv.drawText(it.t1, it.x, base(it.y, ScreenCore.CARS_TTL_H, 0), tp); }
+        float cy = it.y + it.f2;
+        if (it.ca.length == 0) {
+            if (it.value.length() > 0) { setText(11f, false, pal[R_SUB]); cv.drawText(it.value, it.x, base(cy + 6f, 14f, 0), tp); }
+            return;
+        }
+        tp.setTextAlign(Paint.Align.CENTER);
+        for (int i = 0; i < it.ca.length; i++) {
+            float cx = it.x + i * (it.f1 + ScreenCore.CARS_GAP), mid = cx + it.f1 / 2f;
+            int col = cc(it.ca[i], 0xFF34C759);
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1.5f); p.setColor(col);
+            rf2.set(cx + 0.75f, cy + 0.75f, cx + it.f1 - 0.75f, cy + it.f3 - 0.75f); cv.drawRoundRect(rf2, 7.25f, 7.25f, p);
+            p.setStyle(Paint.Style.FILL);
+            float r1 = cy + 7.5f, r2 = r1 + 16f, r3 = r2 + 14.5f;
+            setText(11f, true, col); tp.setTextAlign(Paint.Align.CENTER); cv.drawText(it.sa[i * 3], mid, base(r1, 14f, 0), tp);
+            setText(10f, false, pal[R_SUB]); tp.setTextAlign(Paint.Align.CENTER); cv.drawText(it.sa[i * 3 + 1], mid, base(r2, 12.5f, 0), tp);
+            setText(10f, false, col); tp.setTextAlign(Paint.Align.CENTER); cv.drawText(it.sa[i * 3 + 2], mid, base(r3, 12.5f, 0), tp);
+        }
+        tp.setTextAlign(Paint.Align.LEFT);
     }
     private void drawRhd(Canvas cv, ScreenCore.Item it) {
         boolean isMsg = "m".equals(it.tag);                                              // 안내 한 줄(고른 탭에 경로가 없을 때): 숫자·단위 없이 굵은 글
