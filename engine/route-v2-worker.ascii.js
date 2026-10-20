@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-20s80";
+var ENGINE_VERSION = "route-v2-2026-10-20s81";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -11733,7 +11733,7 @@ async function handleScreenShop(request) {
 //        facts = \uc571\uc774 \ubaa8\uc740 \uae30\uae30 \uc0ac\uc2e4(\uc804\ubd80 \uc120\ud0dd \u2014 \uc5c6\uc73c\uba74 \uae30\ubcf8\uac12):
 //          id: \ud604\uc7ac \ucee4\ubba4\ub2c8\ud2f0 \uc544\uc774\ub514('' \uc774\uba74 \uc5c6\uc74c) \u00b7 np:{arrive,transfer,arrive_reco: 1|0} \u00b7 npd: \uc54c\ub9bc \uad8c\ud55c \uac70\ubd80(1|0) \u00b7 rl: \ub3c4\ucc29 \uc624\ucc28 \uae30\ub85d(1|0)
 //          th: 'dark'|'pastel' \u00b7 sam: \uac24\ub7ed\uc2dc(1|0) \u00b7 samw: \uc571 \ubc30\ud130\ub9ac '\uc81c\ud55c\ub428'(1|0) \u00b7 errn: \uc624\ub958 \ub85c\uadf8 \uac1c\uc218 \u00b7 cm: \ucd9c\ud1f4\uadfc \uc54c\ub9bc(1|0|\uc5c6\uc74c) \u00b7 ovl: \uc624\ubc84\ub808\uc774(1|0|\uc5c6\uc74c)
-//          feat: { nm|sn|htl|scr|scrs|scrf|scrn|scrb|scrc|scrt|scrq|scrw|scrh|scrr|scrg|scra|sclt|scrd|sbh|cnd|rtf|sto|ra|npol|arw|cmw|rtx|e2 : { h: \uc774 \uae30\ub2a5\uc774 \uc788\ub098(1|0), on: \uc2a4\uc704\uce58(1|0), f: \ubb38\uc81c\ub85c \uc6f9\uc73c\ub85c \ub3cc\uc544\uac14\ub098(1|0), w: \ubb38\uc81c \uc0ac\uc720, b: \uc800\uc7a5\ubcf8 \uc0ac\uc6a9 \uc911(1|0) } }
+//          feat: { nm|sn|htl|scr|scrs|scrf|scrn|scrb|scrc|scrt|scrq|scrw|scrh|scrr|scrg|scra|sclt|scrd|scrp|sbh|cnd|rtf|sto|ra|npol|arw|cmw|rtx|e2 : { h: \uc774 \uae30\ub2a5\uc774 \uc788\ub098(1|0), on: \uc2a4\uc704\uce58(1|0), f: \ubb38\uc81c\ub85c \uc6f9\uc73c\ub85c \ub3cc\uc544\uac14\ub098(1|0), w: \ubb38\uc81c \uc0ac\uc720, b: \uc800\uc7a5\ubcf8 \uc0ac\uc6a9 \uc911(1|0) } }
 // \ucd9c\ub825  { ok, v:1, screen:'settings', rev, cover:'tab', head:[], body:[\ub178\ub4dc\u2026] }  \u2190 \ub178\ub4dc \uc885\ub958\ub294 native/ScreenCore.java \uc640 \uac19\ub2e4
 //        panel{kids} \u00b7 text \u00b7 box \u00b7 toggle{key} \u00b7 navrow{act} \u00b7 select{act:{a:'sel'}} \u00b7 field{key} \u00b7 button \u00b7 spacer
 //        act = {a:'set',key} (\uc2a4\uc704\uce58 \u2014 \uc571\uc774 \uba3c\uc800 \ub4a4\uc9d1\uace0 \uc54c\ub9b0\ub2e4) | {a:'call',v} (\uc571 \uc548 \ud568\uc218 \ud638\ucd9c: saveId\u00b7clearId\u00b7pol.*\u00b7errlog) | {a:'web',v} (\uc6f9 \uce74\ub4dc \uc5f4\uae30) | {a:'sel',v} (\uace0\ub974\uae30)
@@ -11792,8 +11792,10 @@ var SETTINGS_FEATS = [
     off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9 AI \uc2b9\ubb34\uc6d0 \uce74\ub4dc)\uc73c\ub85c \uadf8\ub824\uc694.', bad: '\ub124\uc774\ud2f0\ube0c AI \uc2b9\ubb34\uc6d0 \uce74\ub4dc\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc6f9 \uce74\ub4dc\ub85c \ub300\uc2e0 \ubcf4\uc5ec\uc8fc\uace0 \uc788\uc5b4\uc694', stale: '\uc5d4\uc9c4\uc774 \uc900 \ud654\uba74\uc774 \uc62c\ubc14\ub974\uc9c0 \uc54a\uc544 \uc800\uc7a5\ud574 \ub454 \ud654\uba74\uc744 \uc4f0\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 AI \uc2b9\ubb34\uc6d0 \uce74\ub4dc\uc758 \uc81c\ubaa9\u00b7\ube0c\ub9ac\ud551\u00b7\uce74\uc6b4\ud2b8\ub2e4\uc6b4\uc744 \uc5d4\uc9c4\uc774 \uc815\ud55c \ub300\ub85c \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694(\uc2e4\ud5d8 \uc911).' },
   { k: 'sclt', title: '\ub124\uc774\ud2f0\ube0c \uc2e4\uc2dc\uac04 \ub300\ud654 \uac8c\uc2dc\ud310', desc: '\ud648 \uc2e4\uc2dc\uac04 \ub300\ud654 \uac8c\uc2dc\ud310\uc758 \uba38\ub9ac\uc904, \ucd5c\uadfc \ub300\ud654 \uc904(\ub2c9\ub124\uc784\u00b7\uae00\u00b7\uc2dc\uac01), \uc785\ub825\uc904\uc744 \uc5d4\uc9c4\uc774 \uc815\ud574 \ub0b4\ub824\uc8fc\uace0, \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694. \ubb38\uc81c\uac00 \uc0dd\uae30\uba74 \uc608\uc804 \uc6f9 \uac8c\uc2dc\ud310\uc73c\ub85c \ub3cc\uc544\uac00\uc694.',
     off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9 \uc2e4\uc2dc\uac04 \ub300\ud654 \uac8c\uc2dc\ud310)\uc73c\ub85c \uadf8\ub824\uc694.', bad: '\ub124\uc774\ud2f0\ube0c \uc2e4\uc2dc\uac04 \ub300\ud654 \uac8c\uc2dc\ud310\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc6f9 \uac8c\uc2dc\ud310\uc73c\ub85c \ub300\uc2e0 \ubcf4\uc5ec\uc8fc\uace0 \uc788\uc5b4\uc694', stale: '\uc5d4\uc9c4\uc774 \uc900 \ud654\uba74\uc774 \uc62c\ubc14\ub974\uc9c0 \uc54a\uc544 \uc800\uc7a5\ud574 \ub454 \ud654\uba74\uc744 \uc4f0\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \uc2e4\uc2dc\uac04 \ub300\ud654 \uac8c\uc2dc\ud310\uc758 \uba38\ub9ac\uc904\u00b7\ub300\ud654 \uc904\u00b7\uc785\ub825\uc904\uc744 \uc5d4\uc9c4\uc774 \uc815\ud55c \ub300\ub85c \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694(\uc2e4\ud5d8 \uc911).' },
-  { k: 'scrd', title: '\ub124\uc774\ud2f0\ube0c \uc548\ub0b4\ucc3d', desc: '\ub2e4\ub978 \uc571 \uc704\uc5d0 \ud45c\uc2dc \uad8c\ud55c \uc548\ub0b4, \uc624\ubc84\ub808\uc774 \uc9c4\ub2e8 \uae30\ub85d\ucc3d, \uc571 \uc885\ub8cc \ud655\uc778\ucc3d, \uc7a0\uae50 \ub5b4\ub2e4 \uc0ac\ub77c\uc9c0\ub294 \uc54c\ub9bc\uc758 \uae00\u00b7\ub2e8\ucd94\u00b7\ud06c\uae30\ub97c \uc5d4\uc9c4\uc774 \uc815\ud574 \ub0b4\ub824\uc8fc\uace0, \uae30\uae30\uac00 \uc571 \ud654\uba74 \uac00\uc6b4\ub370\uc5d0 \uc9c1\uc811 \uadf8\ub824\uc694. \ubb38\uc81c\uac00 \uc0dd\uae30\uba74 \uc608\uc804 \uc6f9 \uc548\ub0b4\ucc3d\uc73c\ub85c \ub3cc\uc544\uac00\uc694.',
-    off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9 \uc548\ub0b4\ucc3d)\uc73c\ub85c \uadf8\ub824\uc694.', bad: '\ub124\uc774\ud2f0\ube0c \uc548\ub0b4\ucc3d\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc6f9 \uc548\ub0b4\ucc3d\uc73c\ub85c \ub300\uc2e0 \ubcf4\uc5ec\uc8fc\uace0 \uc788\uc5b4\uc694', stale: '\uc5d4\uc9c4\uc774 \uc900 \ud654\uba74\uc774 \uc62c\ubc14\ub974\uc9c0 \uc54a\uc544 \uc800\uc7a5\ud574 \ub454 \ud654\uba74\uc744 \uc4f0\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \uad8c\ud55c \uc548\ub0b4\u00b7\uc9c4\ub2e8 \uae30\ub85d\u00b7\uc885\ub8cc \ud655\uc778\u00b7\uc54c\ub9bc\uc758 \uae00\uacfc \ub2e8\ucd94\ub97c \uc5d4\uc9c4\uc774 \uc815\ud55c \ub300\ub85c \uae30\uae30\uac00 \uc571 \ud654\uba74 \uac00\uc6b4\ub370\uc5d0 \uc9c1\uc811 \uadf8\ub824\uc694(\uc2e4\ud5d8 \uc911).' },
+  { k: 'scrd', title: '\ub124\uc774\ud2f0\ube0c \uc548\ub0b4\ucc3d', desc: '\ub2e4\ub978 \uc571 \uc704\uc5d0 \ud45c\uc2dc \uad8c\ud55c \uc548\ub0b4, \uc624\ubc84\ub808\uc774 \uc9c4\ub2e8 \uae30\ub85d\ucc3d, \uc571 \uc885\ub8cc \ud655\uc778\ucc3d, \uae00 \uc2e0\uace0 \ud655\uc778\ucc3d, \uc7a0\uae50 \ub5b4\ub2e4 \uc0ac\ub77c\uc9c0\ub294 \uc54c\ub9bc\uc758 \uae00\u00b7\ub2e8\ucd94\u00b7\ud06c\uae30\ub97c \uc5d4\uc9c4\uc774 \uc815\ud574 \ub0b4\ub824\uc8fc\uace0, \uae30\uae30\uac00 \uc571 \ud654\uba74 \uac00\uc6b4\ub370\uc5d0 \uc9c1\uc811 \uadf8\ub824\uc694. \ubb38\uc81c\uac00 \uc0dd\uae30\uba74 \uc608\uc804 \uc6f9 \uc548\ub0b4\ucc3d\uc73c\ub85c \ub3cc\uc544\uac00\uc694.',
+    off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9 \uc548\ub0b4\ucc3d)\uc73c\ub85c \uadf8\ub824\uc694.', bad: '\ub124\uc774\ud2f0\ube0c \uc548\ub0b4\ucc3d\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc6f9 \uc548\ub0b4\ucc3d\uc73c\ub85c \ub300\uc2e0 \ubcf4\uc5ec\uc8fc\uace0 \uc788\uc5b4\uc694', stale: '\uc5d4\uc9c4\uc774 \uc900 \ud654\uba74\uc774 \uc62c\ubc14\ub974\uc9c0 \uc54a\uc544 \uc800\uc7a5\ud574 \ub454 \ud654\uba74\uc744 \uc4f0\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \uad8c\ud55c \uc548\ub0b4\u00b7\uc9c4\ub2e8 \uae30\ub85d\u00b7\uc885\ub8cc\u00b7\uc2e0\uace0 \ud655\uc778\u00b7\uc54c\ub9bc\uc758 \uae00\uacfc \ub2e8\ucd94\ub97c \uc5d4\uc9c4\uc774 \uc815\ud55c \ub300\ub85c \uae30\uae30\uac00 \uc571 \ud654\uba74 \uac00\uc6b4\ub370\uc5d0 \uc9c1\uc811 \uadf8\ub824\uc694(\uc2e4\ud5d8 \uc911).' },
+  { k: 'scrp', title: '\ub124\uc774\ud2f0\ube0c \ubbf8\ub9ac\ubcf4\uae30 \ub77c\ubca8', desc: '\uacbd\ub85c\u00b7\ud63c\uc7a1\ub3c4\u00b7AI \uc2b9\ubb34\uc6d0 \uce74\ub4dc \uc704\uc5d0 \ubd99\ub294 \uc608\uc0c1 \uc2dc\uac01\u00b7\ub178\uc120\ub3c4 \uacbd\ub85c \ub77c\ubca8\uc758 \uae00\u00b7\uc0c9\u00b7\ud06c\uae30\ub97c \uc5d4\uc9c4\uc774 \uc815\ud574 \ub0b4\ub824\uc8fc\uace0, \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694. \ubb38\uc81c\uac00 \uc0dd\uae30\uba74 \uc608\uc804 \uc6f9 \ub77c\ubca8\ub85c \ub3cc\uc544\uac00\uc694.',
+    off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uc6f9 \ub77c\ubca8)\uc73c\ub85c \uadf8\ub824\uc694.', bad: '\ub124\uc774\ud2f0\ube0c \ubbf8\ub9ac\ubcf4\uae30 \ub77c\ubca8\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc6f9 \ub77c\ubca8\ub85c \ub300\uc2e0 \ubcf4\uc5ec\uc8fc\uace0 \uc788\uc5b4\uc694', stale: '\uc5d4\uc9c4\uc774 \uc900 \ud654\uba74\uc774 \uc62c\ubc14\ub974\uc9c0 \uc54a\uc544 \uc800\uc7a5\ud574 \ub454 \ud654\uba74\uc744 \uc4f0\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \uc608\uc0c1 \uc2dc\uac01\u00b7\ub178\uc120\ub3c4 \uacbd\ub85c \ub77c\ubca8\uc744 \uc5d4\uc9c4\uc774 \uc815\ud55c \ub300\ub85c \uae30\uae30\uac00 \uc9c1\uc811 \uadf8\ub824\uc694(\uc2e4\ud5d8 \uc911).' },
   { k: 'sbh', title: '\uac00\ub824\uc9c4 \ub3d9\uc548 \uc5d4\uc9c4\uc774 \uc774\uc5b4\ubc1b\uae30', desc: '\uc571\uc744 \ud648 \ud654\uba74\uc774\ub098 \ub2e4\ub978 \uc571\uc73c\ub85c \ubcf4\ub0b8 \ub3d9\uc548\uc5d0\ub3c4 \uc5d4\uc9c4\uc774 \uc548\ub0b4\ub97c \ubc14\ub85c \uc774\uc5b4\ubc1b\uc544 \uc601\uc810\u00b7\ub3c4\ucc29 \uc2dc\uac01\u00b7\ud558\ucc28 \uc54c\ub9bc\uc744 \uacc4\uc18d \ub9de\ucdb0\uc694. \uc571\uc744 \ub2e4\uc2dc \uc5f4\uba74 \uadf8 \uacb0\uacfc\ub97c \uc774\uc5b4\uc11c \uc368\uc694. \ubb38\uc81c\uac00 \uc0dd\uae30\uba74 \uc608\uc804 \ubc29\uc2dd(\uac00\ub824\uc9c4 \ub3d9\uc548 \uc6f9\uc744 \uae68\uc6cc \uacc4\uc0b0)\uc73c\ub85c \ub3cc\uc544\uac00\uc694.',
     off: '\uaebc\uc9d0 \u2014 \uc608\uc804 \ubc29\uc2dd(\uac00\ub824\uc9c4 \ub3d9\uc548 \uc6f9\uc744 \uae68\uc6cc \uacc4\uc0b0)\uc73c\ub85c \uc774\uc5b4\uac00\uc694.', bad: '\uc5d4\uc9c4 \uc774\uc5b4\ubc1b\uae30\uc5d0 \ubb38\uc81c\uac00 \uc788\uc5b4 \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \ub300\uc2e0 \uc774\uc5b4\uac00\uace0 \uc788\uc5b4\uc694', ok: '\ucf1c\uc9d0 \u2014 \uc571\uc774 \uac00\ub824\uc9c0\uba74 \uc5d4\uc9c4\uc774 \uc548\ub0b4\ub97c \ubc14\ub85c \uc774\uc5b4\ubc1b\uace0, \ub2e4\uc2dc \uc5f4\uba74 \uadf8 \uacb0\uacfc\ub97c \uc774\uc5b4\uc11c \uc368\uc694(\uc2e4\ud5d8 \uc911).' },
   { k: 'cnd', title: '\ud6c4\ubcf4 \uac80\uc0c9\uc744 \uc571\uacfc \uc5d4\uc9c4\uc774 \ud558\uae30', desc: '\ud648 \ud0ed\uc5d0\uc11c \ucd9c\ubc1c\u00b7\ub3c4\ucc29\uc744 \uc785\ub825\ud560 \ub54c \ub098\uc624\ub294 \ud6c4\ubcf4 \uc911 \uc9c0\ud558\ucca0\uc5ed\uc740 \uc5d4\uc9c4\uc774 \uc9c1\uc811 \ucc3e\uace0, \ubc84\uc2a4\uc815\ub958\uc7a5\uacfc \uc7a5\uc18c\ub294 \uc571 \ubcf8\uccb4\uac00 \uc9c1\uc811 \ucc3e\uc544\uc694. \uc6f9\uc774 \ub9e1\ub358 \uac80\uc0c9\uc744 \uc904\uc5ec \uc785\ub825\uc774 \ub354 \ubd80\ub4dc\ub7ec\uc6cc\uc838\uc694. \ubb38\uc81c\uac00 \uc0dd\uae30\uba74 \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \ub3cc\uc544\uac00\uc694.',
@@ -17557,6 +17559,7 @@ async function handleScreenTalk(request) {
 //   \uc571 \ud654\uba74 \uac00\uc6b4\ub370 \ub5a0 \uc788\ub294 \uc548\ub0b4\ucc3d \uc138 \uac00\uc9c0\uc758 \uae00\u00b7\uae00\uc790 \ud06c\uae30\u00b7\uc0c9\u00b7\ub2e8\ucd94 \uc774\ub984\u00b7\uce74\ub4dc \ud06c\uae30/\uc704\uce58/\ud750\ub9bc/\ubaa8\uc11c\ub9ac\ub97c \uc5d4\uc9c4\uc774 \uc815\ud55c\ub2e4.
 //     perm  '\ub2e4\ub978 \uc571 \uc704\uc5d0 \ud45c\uc2dc' \uad8c\ud55c \uc548\ub0b4(\ucde8\uc18c / \uc124\uc815 \uc5f4\uae30)
 //     diag  \uc624\ubc84\ub808\uc774 \uc9c4\ub2e8 \uae30\ub85d(\ucd5c\uc2e0\uc774 \uc704 \u00b7 \uc804\uccb4 \ubcf5\uc0ac / \uc9c0\uc6b0\uae30 / \ub2eb\uae30)
+//     report \uae00 \uc2e0\uace0 \ud655\uc778(\ucde8\uc18c / \uc2e0\uace0)
 //     exit  \uc571 \uc885\ub8cc \ud655\uc778(\uc544\ub2c8\uc694 / \uc885\ub8cc)
 //     pop   \uc7a0\uae50 \ub5b4\ub2e4 \uc0ac\ub77c\uc9c0\ub294 \uc791\uc740 \uc54c\ub9bc(_pickPop: \ucd9c\ubc1c\uc9c0/\ub3c4\ucc29\uc9c0 \uc124\uc815 \uc548\ub0b4 \u00b7 \uacf5\uc720 \uc548\ub0b4 \u2026)
 //   \uc571(\uc6f9)\uc740 \uc0ac\uc2e4\ub9cc \ubcf4\ub0b8\ub2e4: kind \u00b7 (diag) \uae30\ub85d \uc904 \ubaa9\ub85d\uacfc \ubcf5\uc0ac \uacb0\uacfc \u00b7 (pop) \uae00 \ub450 \uc904\uacfc \ubaa8\uc591(cls). \uc571(\uae30\uae30)\uc740 \ubc1b\uc740 \ud654\uba74\uc744 \uadf8\ub9b0\ub2e4.
@@ -17564,9 +17567,9 @@ async function handleScreenTalk(request) {
 // \uc785\ub825  dialogScreen({ cap }, f)   cap 16 \uc774\uc0c1
 //   f = { kind:'perm'|'diag'|'pop', lines:[\uae30\ub85d \uc904\u2026](\uc624\ub798\ub41c \uac83\ubd80\ud130, diag), cp:0|1|2(diag \ubcf5\uc0ac \uacb0\uacfc: 0 \uc5c6\uc74c \u00b7 1 \ub428 \u00b7 2 \uc2e4\ud328), msg, sub, cls:''|'sh'(pop) }
 // \ucd9c\ub825  { ok, v:1, screen:'dlg', dlg:{\u2026\uce74\ub4dc \ubaa8\uc591}, bg, head:[\u2026], body:[\u2026], foot?:[\u2026], info:{kind}, rev }
-//        \ud589\ub3d9 \uc774\ub984: dl.ok \u00b7 dl.no(perm \u00b7 exit) \u00b7 dl.copy \u00b7 dl.clear \u00b7 dl.close(diag). \ud750\ub9b0 \uacf3\uc744 \ub204\ub974\uba74 dlg.tap(perm \ub9cc dl.no).
+//        \ud589\ub3d9 \uc774\ub984: dl.ok \u00b7 dl.no(perm \u00b7 exit \u00b7 report) \u00b7 dl.copy \u00b7 dl.clear \u00b7 dl.close(diag). \ud750\ub9b0 \uacf3\uc744 \ub204\ub974\uba74 dlg.tap(perm \ub9cc dl.no).
 var DLG_CAP = 16;
-var DLG_KINDS = { perm: 1, diag: 1, pop: 1, exit: 1 };
+var DLG_KINDS = { perm: 1, diag: 1, pop: 1, exit: 1, report: 1 };
 var DLG_MAXLINES = 600, DLG_CHUNK = 1700;
 var DLG_EMOJI = /[\u2600-\u27bf\u2b00-\u2bff\ufe0f\u200d]|[\uD83C-\uD83E][\uDC00-\uDFFF]/g;
 
@@ -17585,6 +17588,22 @@ function dlgPerm() {
       { t: 'btnrow', pad: [22, 0, 22, 24], gap: 10, h: 46, eq: true, bsize: 15, r: 11, items: [
         { label: '\ucde8\uc18c', fill: 'card2', line: 'border', tc: 'sub', act: no },
         { label: '\uc124\uc815 \uc5f4\uae30', fill: '#2f7cf6', line: '#2f7cf6', tc: '#ffffff', act: { a: 'call', v: 'dl.ok' } }
+      ] }
+    ],
+    body: [{ t: 'spacer', h: 0 }], foot: null, info: {}
+  };
+}
+
+function dlgReport() {
+  var no = { a: 'call', v: 'dl.no' };
+  return {
+    dlg: { w: 320, maxh: 0.85, dim: 0.5, top: 0.5, r: 18, mx: 28, tap: no }, bg: 'card',
+    head: [
+      { t: 'text', pad: [22, 24, 22, 8], s: '\uc774 \uae00\uc744 \uc2e0\uace0\ud560\uae4c\uc694?', size: 17, bold: true, lh: 1.4, color: 'text' },
+      { t: 'text', pad: [22, 0, 22, 20], s: '\uc2e0\uace0\uac00 \uc5ec\ub7ec \uba85 \ubaa8\uc774\uba74 \uc790\ub3d9\uc73c\ub85c \uc228\uaca8\uc838\uc694.', size: 14, lh: 1.6, color: 'sub' },
+      { t: 'btnrow', pad: [22, 0, 22, 22], gap: 10, h: 46, eq: true, bsize: 15, r: 11, items: [
+        { label: '\ucde8\uc18c', fill: 'card2', line: 'border', tc: 'sub', act: no },
+        { label: '\uc2e0\uace0', fill: '#ff3b30', line: '#ff3b30', tc: '#ffffff', act: { a: 'call', v: 'dl.ok' } }
       ] }
     ],
     body: [{ t: 'spacer', h: 0 }], foot: null, info: {}
@@ -17656,7 +17675,7 @@ function dialogScreen(inp, f) {
   f = (f && typeof f === 'object') ? f : {};
   var kind = dlgStr(f.kind, 8);
   if (!DLG_KINDS[kind]) return { ok: false, error: 'kind' };
-  var d = kind === 'perm' ? dlgPerm() : (kind === 'exit' ? dlgExit() : (kind === 'diag' ? dlgDiag(f) : dlgPop(f)));
+  var d = kind === 'perm' ? dlgPerm() : (kind === 'report' ? dlgReport() : kind === 'exit' ? dlgExit() : (kind === 'diag' ? dlgDiag(f) : dlgPop(f)));
   var out = { ok: true, v: 1, screen: 'dlg', dlg: d.dlg, bg: d.bg, head: d.head, body: d.body, info: d.info };
   if (d.foot) out.foot = d.foot;
   out.info.kind = kind;
@@ -17682,6 +17701,56 @@ async function handleScreenDlg(request) {
   return new Response(JSON.stringify(out), { headers: H });
 }
 // ===== DIALOG ENGINE END =====
+
+// ===== PVLABEL ENGINE BEGIN =====
+// \uae38\ub3d9\ubb34 \u2014 \ubbf8\ub9ac\ubcf4\uae30 \ub77c\ubca8(\ud648 \uce74\ub4dc \uc704 \uc791\uc740 \uc8fc\ud669 \uc54c\uc57d) \uc5d4\uc9c4 \ubaa8\ub4c8 (route-v2 Worker \uc5d0 \ubd99\uc5ec \ub123\ub294 \uc21c\uc218 \ud568\uc218) \u2014 2026-10-20 (s81)
+//
+// \u2605 \uc6d0\uce59(YJ): "\ubaa8\ub4e0 \uacc4\uc0b0\uc740 \uc5d4\uc9c4\uc774 \ud55c\ub2e4. \uc571\uc740 \uadf8\ub9bc\ub9cc \uadf8\ub9b0\ub2e4."
+//   \uae30\uc900 \uc2dc\uac01\uc744 \ubbf8\ub798\ub85c \ubc14\uafe8\uac70\ub098(\uc608\uc0c1) \ub178\uc120\ub3c4\uc5d0\uc11c \uacbd\ub85c\ub97c \uc815\ud588\uc744 \ub54c(\ub178\uc120\ub3c4) \uacbd\ub85c \u00b7 \ud63c\uc7a1\ub3c4 \u00b7 AI \uc2b9\ubb34\uc6d0 \uce74\ub4dc \ub9e8 \uc704\uc5d0 \ubd99\ub294 \ub77c\ubca8\uc758 \uae00 \u00b7 \uc0c9 \u00b7 \ud06c\uae30\ub97c \uc5d4\uc9c4\uc774 \uc815\ud55c\ub2e4.
+//   \uc571(\uc6f9)\uc740 \uc0ac\uc2e4\ub9cc \ubcf4\ub0b8\ub2e4: kind('route'|'cong'|'ai') \u00b7 mode('custom'|'metro') \u00b7 lbl(\uc6f9\uc774 \ubcf4\uc5ec \uc8fc\ub358 \uae30\uc900 \uc2dc\uac01 \uae00, \uc608 '\uc624\ud6c4 2:30').
+// \uc785\ub825  pvlScreen({ cap }, f)   cap 17 \uc774\uc0c1
+// \ucd9c\ub825  { ok, v:1, screen:'pvl', cover:'tab', bg:'card', head:[pill], body:[spacer 0], info:{ kind, mode }, rev }
+var PVL_CAP = 17;
+var PVL_WORD = { route: '\uc608\uc0c1 \uacbd\ub85c', cong: '\uc608\uc0c1 \ud63c\uc7a1\ub3c4', ai: '\uc608\uc0c1 \ube0c\ub9ac\ud551' };
+var PVL_EMOJI = /[\u2600-\u27bf\u2b00-\u2bff\ufe0f\u200d]|[\uD83C-\uD83E][\uDC00-\uDFFF]/g;
+
+function pvlStr(v, n) { return typeof v === 'string' ? v.slice(0, n) : ''; }
+function pvlHash(s) { var h = 5381; for (var i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0; return h.toString(36); }
+
+function pvlScreen(inp, f) {
+  inp = inp || {};
+  if (!(Number(inp.cap) >= PVL_CAP)) return { ok: false, error: 'cap' };
+  f = (f && typeof f === 'object') ? f : {};
+  var kind = pvlStr(f.kind, 8), mode = pvlStr(f.mode, 8);
+  if (!PVL_WORD[kind]) return { ok: false, error: 'kind' };
+  if (mode !== 'custom' && mode !== 'metro') return { ok: false, error: 'mode' };
+  var s;
+  if (mode === 'custom') {
+    var lbl = pvlStr(f.lbl, 60).replace(PVL_EMOJI, '').replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '').slice(0, 40);
+    s = PVL_WORD[kind] + (lbl ? ' \u00b7 ' + lbl : '');
+  } else s = '\ub178\uc120\ub3c4\uc5d0\uc11c \uc124\uc815\ud55c \uacbd\ub85c';
+  var pill = { t: 'pill', pad: [0, 0, 0, 10], s: s, size: 11, bold: true, tc: '#ff9500', fill: 'rgba(255,149,0,0.14)', ph: 11, pv: 4, r: 9 };
+  return { ok: true, v: 1, screen: 'pvl', cover: 'tab', bg: 'card', head: [pill], body: [{ t: 'spacer', h: 0 }], info: { kind: kind, mode: mode }, rev: 'v1:' + pvlHash(JSON.stringify(pill)) };
+}
+// \ubbf8\ub9ac\ubcf4\uae30 \ub77c\ubca8 \uc5d4\uc9c4 Worker \uc5f0\uacb0\ubd80 \u2014 POST /screen/pvl (engine/pvlabel.js \uc758 pvlScreen \uc744 \ubd80\ub978\ub2e4). route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/screen/pvl") return handleScreenPvl(request);` \ub97c \ub123\ub294\ub2e4.
+//   \ubcf8\ubb38(JSON \uae00, Content-Type: text/plain \uc73c\ub85c \ubcf4\ub0b4 \uc0ac\uc804 \uc694\uccad\uc744 \ud53c\ud55c\ub2e4): { cap(17 \uc774\uc0c1), f:{kind,mode,lbl} }
+//   \uc5d4\uc9c4\uc740 \uc544\ubb34\uac83\ub3c4 \uc800\uc7a5\ud558\uc9c0 \uc54a\ub294\ub2e4. \uac1c\uc778 \uc2dd\ubcc4 \uc815\ubcf4\ub294 \uc624\uac00\uc9c0 \uc54a\ub294\ub2e4.
+async function handleScreenPvl(request) {
+  var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Cache-Control": "no-store" };
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: H });
+  if (request.method !== "POST") return new Response(JSON.stringify({ ok: false, error: "post-only" }), { status: 405, headers: H });
+  var raw = await request.text();
+  if (raw.length > 40000) return new Response(JSON.stringify({ ok: false, error: "body-too-long" }), { status: 413, headers: H });
+  var body;
+  try { body = JSON.parse(raw); } catch (e) { return new Response(JSON.stringify({ ok: false, error: "bad-json" }), { status: 400, headers: H }); }
+  if (!body || typeof body !== "object") return new Response(JSON.stringify({ ok: false, error: "bad-body" }), { status: 400, headers: H });
+  var out;
+  try { out = pvlScreen({ cap: Number(body.cap) || 0 }, body.f); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2) }), { status: 500, headers: H }); }
+  if (!out || !out.ok) return new Response(JSON.stringify(out || { ok: false, error: "fail" }), { status: 400, headers: H });
+  out.ver = ENGINE_VERSION;
+  return new Response(JSON.stringify(out), { headers: H });
+}
+// ===== PVLABEL ENGINE END =====
 
 async function handleFetch(request, env, ctx) {
   try { await holEnsure(env); } catch (e) {}
@@ -17716,6 +17785,7 @@ async function handleFetch(request, env, ctx) {
   if (url.pathname === "/screen/ai") return handleScreenAi(request);
   if (url.pathname === "/screen/talk") return handleScreenTalk(request);
   if (url.pathname === "/screen/dlg") return handleScreenDlg(request);
+  if (url.pathname === "/screen/pvl") return handleScreenPvl(request);
   if (url.pathname === "/stops-near") {
     const lat = parseFloat(url.searchParams.get("lat"));
     const lng = parseFloat(url.searchParams.get("lng"));

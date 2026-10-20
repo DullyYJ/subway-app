@@ -21260,12 +21260,26 @@ window.addEventListener('unhandledrejection', function(e) {
             <span id="scrdSetDot" style="position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.3);"></span>
           </label>
         </div>
-        <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">다른 앱 위에 표시 권한 안내, 오버레이 진단 기록창, 앱 종료 확인창, 잠깐 떴다 사라지는 알림의 글·단추·크기를 엔진이 정해 내려주고, 기기가 앱 화면 가운데에 직접 그려요. 문제가 생기면 예전 웹 안내창으로 돌아가요.</p>
+        <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">다른 앱 위에 표시 권한 안내, 오버레이 진단 기록창, 앱 종료 확인창, 글 신고 확인창, 잠깐 떴다 사라지는 알림의 글·단추·크기를 엔진이 정해 내려주고, 기기가 앱 화면 가운데에 직접 그려요. 문제가 생기면 예전 웹 안내창으로 돌아가요.</p>
         <div id="scrdSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
         <style>#scrdSetOn:checked ~ #scrdSetKnob{background:var(--gold) !important;} #scrdSetOn:checked ~ #scrdSetDot{left:23px !important;}</style>
       </div>
 
-      <!-- ★ 2026-10-19: 숨김 인계 — 앱이 가려지면 엔진(/ride-standby)이 안내를 이어받는다. 안드로이드 앱에서만 보임, 기본 꺼짐(실험) -->
+            <div id="scrpSetCard" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <div style="font-size:15px;font-weight:800;color:var(--text);">네이티브 미리보기 라벨</div>
+          <label style="position:relative;display:inline-block;width:46px;height:26px;">
+            <input type="checkbox" id="scrpSetOn" onchange="_scrpSetUse(this.checked)" style="opacity:0;width:0;height:0;">
+            <span id="scrpSetKnob" style="position:absolute;inset:0;border-radius:13px;background:var(--border2);transition:.2s;cursor:pointer;"></span>
+            <span id="scrpSetDot" style="position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.3);"></span>
+          </label>
+        </div>
+        <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">경로·혼잡도·AI 승무원 카드 위에 붙는 예상 시각·노선도 경로 라벨의 글·색·크기를 엔진이 정해 내려주고, 기기가 직접 그려요. 문제가 생기면 예전 웹 라벨로 돌아가요.</p>
+        <div id="scrpSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
+        <style>#scrpSetOn:checked ~ #scrpSetKnob{background:var(--gold) !important;} #scrpSetOn:checked ~ #scrpSetDot{left:23px !important;}</style>
+      </div>
+
+            <!-- ★ 2026-10-19: 숨김 인계 — 앱이 가려지면 엔진(/ride-standby)이 안내를 이어받는다. 안드로이드 앱에서만 보임, 기본 꺼짐(실험) -->
       <div id="sbhSetCard" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
           <div style="font-size:15px;font-weight:800;color:var(--text);">가려진 동안 엔진이 이어받기</div>
@@ -39660,6 +39674,7 @@ window.refreshShop=refreshShop;
     try{ var Xscrr = window._scrRhead && _scrRhead.S, cscrr = document.getElementById('scrrSetCard'); if(Xscrr && cscrr && cscrr.style.display === 'block') f.feat.scrr = { h: 1, on: Xscrr.on ? 1 : 0, f: (Xscrr.failed || Xscrr.fails >= 2 || _scrRhead.S2.failed || _scrRhead.S2.fails >= 2 || _scrRhead.S3.failed || _scrRhead.S3.fails >= 2 || _scrRhead.S4.failed || _scrRhead.S4.fails >= 2) ? 1 : 0, w: Xscrr.why || _scrRhead.S2.why || _scrRhead.S3.why || _scrRhead.S4.why || '', b: Xscrr.badFresh > 0 ? 1 : 0 }; }catch(e){}
     try{ var Xscra = window._scrAi && _scrAi.S, cscra = document.getElementById('scraSetCard'); if(Xscra && cscra && cscra.style.display === 'block') f.feat.scra = { h: 1, on: Xscra.on ? 1 : 0, f: (Xscra.failed || Xscra.fails >= 2) ? 1 : 0, w: Xscra.why || '', b: Xscra.badFresh > 0 ? 1 : 0 }; }catch(e){}
     try{ var Xsclt = window._scrTalk && _scrTalk.S, csclt = document.getElementById('scltSetCard'); if(Xsclt && csclt && csclt.style.display === 'block') f.feat.sclt = { h: 1, on: Xsclt.on ? 1 : 0, f: (Xsclt.failed || Xsclt.fails >= 2) ? 1 : 0, w: Xsclt.why || '', b: Xsclt.badFresh > 0 ? 1 : 0 }; }catch(e){}
+    try{ var Xscrp = window._scrp && _scrp.S, cscrp = document.getElementById('scrpSetCard'); if(Xscrp && cscrp && cscrp.style.display === 'block') f.feat.scrp = { h: 1, on: Xscrp.on ? 1 : 0, f: (Xscrp.failed || Xscrp.fails >= 2) ? 1 : 0, w: Xscrp.why || '', b: Xscrp.badFresh > 0 ? 1 : 0 }; }catch(e){}
     try{ var Xscrd = window._ndlgKit && _ndlgKit.S, cscrd = document.getElementById('scrdSetCard'); if(Xscrd && cscrd && cscrd.style.display === 'block') f.feat.scrd = { h: 1, on: Xscrd.on ? 1 : 0, f: (Xscrd.failed || Xscrd.fails >= 2) ? 1 : 0, w: Xscrd.why || '', b: Xscrd.badFresh > 0 ? 1 : 0 }; }catch(e){}
     try{ var Xscrg = window._scrCong && _scrCong.S, cscrg = document.getElementById('scrgSetCard'); if(Xscrg && cscrg && cscrg.style.display === 'block') f.feat.scrg = { h: 1, on: Xscrg.on ? 1 : 0, f: (Xscrg.failed || Xscrg.fails >= 2) ? 1 : 0, w: Xscrg.why || '', b: Xscrg.badFresh > 0 ? 1 : 0 }; }catch(e){}
     try{ if(typeof _sbhSyncCard === 'function') _sbhSyncCard(); var csbh = document.getElementById('sbhSetCard'); if(csbh && csbh.style.display === 'block') f.feat.sbh = { h: 1, on: _sbhOn() ? 1 : 0, f: 0, w: '' }; }catch(e){}
@@ -39820,6 +39835,7 @@ window.refreshShop=refreshShop;
       else if(key === 'f.scra') window._scraSetUse(on);
       else if(key === 'f.sclt') window._scltSetUse(on);
       else if(key === 'f.scrd') window._scrdSetUse(on);
+      else if(key === 'f.scrp') window._scrpSetUse(on);
       else if(key === 'f.scrt') window._scrtSetUse(on);
       else if(key === 'f.scrq') window._scrqSetUse(on);
       else if(key === 'f.scrw') window._scrwSetUse(on);
@@ -42001,6 +42017,67 @@ window.refreshShop=refreshShop;
     window._scltSetUse = function(on){ try{ kit.setUse(on); }catch(e){} };
   })();
 
+  // ═════════════ 미리보기 라벨(경로 · 혼잡도 · AI 승무원 카드 맨 위의 작은 주황 알약) ═════════════
+  //   기준 시각을 미래로 바꾸거나(예상) 노선도에서 경로를 정했을 때 붙는 라벨의 글 · 색 · 크기를 엔진(POST /screen/pvl, cap 17)이 정하고 기기가 그린다.
+  //   앱은 사실만 보낸다: kind(route · cong · ai) · mode(custom=예상 · metro=노선도) · lbl(웹이 보여 주던 기준 시각 글). 누르는 동작은 없다.
+  //   웹 라벨(#routePreviewLabel · #congPreviewLabel · #aiPreviewLabel)은 그대로 두고(폴백) 네이티브가 맡는 동안만 감춘다. 세 라벨이 한 스위치('네이티브 미리보기 라벨')를 같이 쓴다.
+  (function(){
+    var P3 = { route: { id: 'pvr', card: 'transitResultCard', lab: 'routePreviewLabel' }, cong: { id: 'pvc', card: 'congCard', lab: 'congPreviewLabel' }, ai: { id: 'pva', card: 'homeAiCard', lab: 'aiPreviewLabel' } };
+    var kits = {}, cap = 0, first = null;
+    try{ var stl = document.createElement('style'); stl.textContent = '.pv-own > #routePreviewLabel, .pv-own > #congPreviewLabel, .pv-own > #aiPreviewLabel{display:none !important;}'; document.head.appendChild(stl); }catch(eSt){}
+    function state(){ var m = window._metroRouteMode === true, fut = false; try{ fut = (typeof _baseTimeMs !== 'undefined' && _baseTimeMs != null); }catch(e){} return fut ? 'custom' : (m ? 'metro' : ''); }
+    function lblTxt(){ return String(((document.getElementById('baseTimeDisplay') || {}).textContent) || '').trim(); }
+    function probe(){
+      if(cap) return;
+      var P = first && first.plug(); if(!P || typeof P.status !== 'function'){ cap = 3; return; }
+      cap = -1;
+      Promise.resolve(P.status({ id: 'pvr' })).then(function(s0){ cap = (s0 && s0.cap >= 17) ? 17 : 3; Object.keys(kits).forEach(function(k){ try{ kits[k].kick(); }catch(e){} }); }, function(){ cap = 3; });
+    }
+    function make(kind){
+      var D = P3[kind], H = { h: 0 };
+      function card(){ return document.getElementById(D.card); }
+      function host(mk){
+        var c = card(); if(!c) return null;
+        var e = document.getElementById(kind + 'PvlNat');
+        if(!e && mk){ e = document.createElement('div'); e.id = kind + 'PvlNat'; e.style.cssText = 'display:none;width:100%;box-sizing:border-box;flex-shrink:0;overflow:hidden;'; c.insertBefore(e, c.firstChild); }
+        return e;
+      }
+      function own(on){ try{ var c = card(); if(c) c.classList.toggle('pv-own', !!on); }catch(e){} }
+      function applyH(h){ try{ var e = host(false); if(e && h > 8 && h < 200){ e.style.display = 'block'; e.style.height = h + 'px'; } }catch(e){} }
+      function unH(){ try{ var e = host(false); if(e){ e.style.display = 'none'; e.style.height = ''; } own(false); }catch(e){} }
+      function open(){
+        var m = state(), c = card(), o = !!m && !!c && c.offsetParent !== null && !document.hidden && (cap >= 17 || (probe(), false));
+        if(o){ var e = host(true); if(e){ e.style.display = 'block'; if(!H.h) e.style.height = '33px'; } } else unH();
+        return o;
+      }
+      function rect(){
+        try{
+          var w = host(false); if(!w) return null; var r = w.getBoundingClientRect(), sc = document.getElementById('tabContentWrap'), v = sc ? sc.getBoundingClientRect() : { top: 0, bottom: window.innerHeight };
+          var t = Math.max(r.top, v.top), b = Math.min(r.bottom, v.bottom);
+          if(!(r.width > 40 && r.height > 14 && b - t > 10)) return null;
+          return { L: r.left, T: r.top, W: r.width, H: r.height, clip: { l: 0, t: t - r.top, r: r.width, b: b - r.top } };
+        }catch(e){ return null; }
+      }
+      function sig(){ return state() + '|' + lblTxt() + '|' + (open() ? 1 : 0); }
+      function request(){ var txt = JSON.stringify({ cap: 17, f: { kind: kind, mode: state(), lbl: lblTxt() } }); return { txt: txt, fk: kit.hash(txt), idle: false, key: '', snap: null, sig: sig() }; }
+      var kit = window._scrKit({
+        id: D.id, kp: 'gdm_scrp', ep: '/screen/pvl', screen: 'pvl', label: '미리보기 라벨', card: first ? '' : 'scrp', cache: false, waitIdle: false, bucket: 0, idleMs: 200,
+        onText: '예상 경로·혼잡도·브리핑 위의 작은 라벨을 엔진이 정해 기기가 직접 그려요(실험 중).',
+        root: function(){ return host(false); }, open: open, rect: rect, request: request, act: function(){}, sig: sig, sigMs: 400,
+        listen: function(P){ P.addListener('size', function(e){ if(!e || e.id !== D.id) return; var h = Number(e.h); if(!(h > 8 && h < 200)) return; H.h = h; applyH(h); }); },
+        webClear: function(){ own(true); applyH(H.h || 33); }, webBack: function(){ unH(); }, onEnd: function(){ unH(); }
+      });
+      kits[kind] = kit; if(!first) first = kit;
+    }
+    make('route'); make('cong'); make('ai');
+    window._ndpvl = {
+      changed: function(){ Object.keys(kits).forEach(function(k){ try{ kits[k].changed(); }catch(e){} }); },
+      kits: kits
+    };
+    window._scrp = first;
+    window._scrpSetUse = function(on){ Object.keys(kits).forEach(function(k){ try{ kits[k].setUse(on); }catch(e){} }); };
+  })();
+
   // ═════════════ 안내창(대화상자): 권한 안내 · 오버레이 진단 기록 · 잠깐 뜨는 알림 ═════════════
   //   글·글자 크기·색·단추 이름·카드 크기/위치/뒤 흐림/모서리를 엔진(POST /screen/dlg, cap 16)이 정하고 기기가 앱 화면 가운데에 그린다(웹 칸 위가 아니다).
   //   앱은 사실만 보낸다: 종류(perm · diag · pop) · (diag) 기록 줄 목록과 복사 결과 · (pop) 글 두 줄과 모양. 누르는 동작은 종류마다 정해진 이름만(perm: dl.ok · dl.no / diag: dl.copy · dl.clear · dl.close).
@@ -42044,7 +42121,7 @@ window.refreshShop=refreshShop;
     }
     kit = window._scrKit({
       id: 'dlg', kp: 'gdm_scrd', ep: '/screen/dlg', screen: 'dlg', label: '안내창', card: 'scrd', cache: false, waitIdle: false, bucket: 0, idleMs: 200,
-      onText: '권한 안내·오버레이 진단 기록·앱 종료 확인·잠깐 뜨는 알림을 엔진이 정해 기기가 앱 화면 가운데에 직접 그려요(실험 중).',
+      onText: '권한 안내·오버레이 진단 기록·앱 종료 확인·글 신고 확인·잠깐 뜨는 알림을 엔진이 정해 기기가 앱 화면 가운데에 직접 그려요(실험 중).',
       root: function(){ return document.documentElement; }, open: function(){ return !!D.cur; }, rect: rect, request: request, act: act, sig: function(){ return D.cur ? D.cur.sig() : ''; }, sigMs: 300,
       onPresent: function(){ var c = D.cur; if(c && c.ms && !c.t){ c.t = setTimeout(function(){ close(c); }, c.ms); } },
       webClear: function(){}, webBack: function(){ var c = D.cur; if(c) toWeb(c); }, onEnd: function(){}
@@ -42070,6 +42147,13 @@ window.refreshShop=refreshShop;
         var spec = { kind: 'perm', web: function(){ _showOvlPermDialogWeb(onOk, onCancel); }, facts: function(){ return { kind: 'perm' }; }, sig: function(){ return 'm'; },
           act: function(v){ if(v === 'dl.ok'){ close(spec); try{ onOk && onOk(); }catch(e){} } else if(v === 'dl.no'){ close(spec); try{ onCancel && onCancel(); }catch(e2){} } },
           back: function(){ close(spec); try{ onCancel && onCancel(); }catch(e){} } };
+        return open(spec);
+      },
+      // 글 신고 확인: 신고는 닫은 뒤 onOk, 취소(뒤로가기 포함)는 닫기만. 네이티브가 못 띄우면 예전 웹 확인창(window.confirm)
+      report: function(onOk){
+        var spec = { kind: 'report', web: function(){ var ok = true; try{ ok = window.confirm('이 글을 신고할까요?\n신고가 여러 명 모이면 자동으로 숨겨져요.'); }catch(e){} if(ok){ try{ onOk && onOk(); }catch(e2){} } }, facts: function(){ return { kind: 'report' }; }, sig: function(){ return 'r'; },
+          act: function(v){ if(v === 'dl.ok'){ close(spec); try{ onOk && onOk(); }catch(e){} } else if(v === 'dl.no'){ close(spec); } },
+          back: function(){ close(spec); } };
         return open(spec);
       },
       // 앱 종료 확인: 아니요(또는 뒤로가기)는 닫고 횟수를 되돌리고, 종료는 닫은 뒤 앱을 끝낸다. 네이티브가 못 띄우면 예전 웹 확인창
@@ -42955,8 +43039,13 @@ function _lrHiddenList(){ try{ var l=_safeLS.get('lrHidden',[]); return Array.is
 function _lrHiddenHas(id){ return _lrHiddenList().indexOf(id)>=0; }
 function _lrHiddenAdd(id){ try{ var l=_lrHiddenList(); if(l.indexOf(id)<0) l.push(id); while(l.length>300) l.shift(); _safeLS.set('lrHidden', l); }catch(e){} }
 function _lrReportMsg(id, node){
+  // 서버 구동 네이티브 안내창(켜져 있을 때만)이 먼저 묻고, 아니면 예전 웹 확인창
+  try{ if(window._ndlg && window._ndlg.report(function(){ _lrReportGo(id, node); })) return; }catch(eNd){}
   var ok=true; try{ ok=window.confirm('이 글을 신고할까요?\n신고가 여러 명 모이면 자동으로 숨겨져요.'); }catch(e){}
   if(!ok) return;
+  _lrReportGo(id, node);
+}
+function _lrReportGo(id, node){
   _lrHiddenAdd(id);
   try{ if(window._scrChat) window._scrChat.changed(); }catch(eSc){}      // 서버 구동 네이티브 실시간소통: 신고한 글은 바로 가린다
   if(node && node.parentNode) node.parentNode.removeChild(node);
@@ -43718,6 +43807,7 @@ function _updatePreviewHighlight(){
       apl.textContent = custom ? ('🔮 예상 브리핑 · ' + lblTxt) : '🗺️ 노선도에서 설정한 경로'; apl.style.display='inline-block';
     } else if(apl){ apl.style.display='none'; }
   }
+  try{ if(window._ndpvl) window._ndpvl.changed(); }catch(ePv){}      // 서버 구동 네이티브 미리보기 라벨에 바뀐 사실을 알린다
   // 차트 기본 툴팁 라벨
   var ctt = document.getElementById('chartTooltipTime');
   if(ctt){

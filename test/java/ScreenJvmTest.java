@@ -741,6 +741,17 @@ public class ScreenJvmTest {
         ok(DLL.hitHead(60f, DLL.head[2].y + 20f) != null && "dl.no".equals(DLL.hitHead(60f, DLL.head[2].y + 20f).v) && "dl.ok".equals(DLL.hitHead(300f, DLL.head[2].y + 20f).v) && DLL.hitHead(60f, 10f) == null, "단추 줄: 왼쪽은 취소 · 오른쪽은 설정 열기 · 글 줄은 안 눌린다");
         ok(bad(dlJson.replace("\"w\":340", "\"w\":50")) && bad(dlJson.replace("\"maxh\":0.85", "\"maxh\":0.1")) && bad(dlJson.replace("\"dim\":0.5", "\"dim\":0.99")) && bad(dlJson.replace("\"fill\":\"rgba(20,22,28,0.92)\"", "\"fill\":\"nope\"")) && bad(dlJson.replace("\"dlg\":{", "\"dlg\":[1],\"x\":{")) && bad(dlJson.replace("\"v\":\"dl.no\"}},", "\"v\":\"\"}},")), "안내창: 범위 밖 값 · 읽을 수 없는 색 · 객체가 아닌 dlg · 이름 없는 행동은 거절");
 
+        // ── 알약 글자(pill: 미리보기 라벨) ──
+        String pvJson = "{\"ok\":true,\"v\":1,\"screen\":\"pvl\",\"cover\":\"tab\",\"bg\":\"card\",\"head\":[{\"t\":\"pill\",\"pad\":[0,0,0,10],\"s\":\"예상 경로 · 오후 2:30\",\"size\":11,\"bold\":true,\"tc\":\"#ff9500\",\"fill\":\"rgba(255,149,0,0.14)\",\"ph\":11,\"pv\":4,\"r\":9}],\"body\":[{\"t\":\"spacer\",\"h\":0}]}";
+        ScreenCore.Layout PVL = ScreenCore.layout(ScreenCore.load(pvJson), 300f, M);
+        ScreenCore.Item pil = PVL.head[0];
+        float pw = M.width("예상 경로 · 오후 2:30", 11f, true) + 22f;
+        ok(pil.kind == ScreenCore.K_PILL && near(pil.w, pw) && near(pil.h, 11f * 1.35f + 8f) && near(pil.x, 0f) && pil.t1.equals("예상 경로 · 오후 2:30"), "알약: 폭 = 글 폭 + 좌우 여백 " + pil.w + " vs " + pw);
+        ok(near(PVL.head[0].y, 0f) && PVL.bodyH >= 0f, "알약: 위에 붙는다");
+        ScreenCore.Layout PVN = ScreenCore.layout(ScreenCore.load(pvJson.replace("예상 경로 · 오후 2:30", "아주아주아주아주아주아주아주아주아주아주아주아주아주 긴 라벨 글자입니다 정말로 깁니다")), 120f, M);
+        ok(PVN.head[0].w <= 120f + 0.5f && PVN.head[0].t1.endsWith("\u2026"), "알약: 칸보다 길면 말줄임 " + PVN.head[0].w);
+        ok(bad(pvJson.replace("\"s\":\"예상 경로 · 오후 2:30\"", "\"s\":\"\"")) && bad(pvJson.replace("\"tc\":\"#ff9500\"", "\"tc\":\"zzz\"")), "알약: 글이 없거나 색을 못 읽으면 거절");
+
         // ── 화면 바탕 색(bg) ──
         String bgBase = "{\"ok\":true,\"v\":1,\"screen\":\"x\",\"head\":[],\"body\":[{\"t\":\"spacer\",\"h\":4}]";
         ok("bg".equals(ScreenCore.layout(ScreenCore.load(bgBase + "}"), 300f, M).bg) && "card".equals(ScreenCore.layout(ScreenCore.load(bgBase + ",\"bg\":\"card\"}"), 300f, M).bg) && "card2".equals(ScreenCore.layout(ScreenCore.load(bgBase + ",\"bg\":\"card2\"}"), 300f, M).bg), "화면 바탕: 기본 bg · card · card2");

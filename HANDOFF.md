@@ -1537,3 +1537,14 @@
 - **시험**: `dialog_engine` 44 · `screen_dlg_js.ui` 13(종료 확인 포함) · `settings_engine` 187 · `ScreenJvmTest` 360 · `screen_native` · `screen_set_js.ui` 45.
 - **YJ가 할 일**: 워커 s80(`route-v2-2026-10-20s80`) Deploy(APK 재빌드는 s79 것 그대로면 됨).
 - **남은 비네이티브**: 신고 `confirm()` · `#aiPreviewLabel`/`#congPreviewLabel` · 데이터 계층 · 지도 탭(SVG) · 그 뒤 웹 제거 → 애니메이션.
+
+## 2026-10-20 엔진 s81 + APK 변경 — 네이티브화: 미리보기 라벨(알약) · 글 신고 확인창
+- **YJ 지시**: "진행해줘"(남은 것 계속). 웹을 다 걷어낸 뒤 애니메이션을 다시 구현할 예정이므로 무지개 테두리(`preview-glow`, CSS 애니메이션)는 지금 웹 그대로 둔다.
+- **엔진**: 새 `POST /screen/pvl`(cap 17, `engine/pvlabel.js` + `pvl-worker.js`). 웹은 사실만: `kind`(route · cong · ai) · `mode`(custom=예상 · metro=노선도) · `lbl`(웹 `#baseTimeDisplay` 글). 엔진이 글('예상 경로 · 오후 2:30' / '예상 혼잡도 · …' / '예상 브리핑 · …' / '노선도에서 설정한 경로'; 이모지 제거·40자) · 색(#ff9500 · 바탕 rgba(255,149,0,0.14)) · 크기(11 굵게, 여백 4/11, 둥글기 9)를 정한다. `dialog.js` 에 `kind:'report'`(글 신고 확인: 취소 / 신고) 추가.
+- **APK(규격 17)**: `ScreenCore` 새 노드 `pill`(글 폭 + 좌우 여백만큼만 차지, 칸보다 길면 말줄임) · `ScreenView.drawPill`. 플러그인 cap 17.
+- **앱(웹)**: 라벨 3개(경로 `#routePreviewLabel` · 혼잡도 · AI)마다 틀(`pvr` · `pvc` · `pva`, 저장값 `gdm_scrp_on` 공유, 설정 > '네이티브 미리보기 라벨' 기본 꺼짐). 카드 맨 위에 `#<kind>PvlNat` 자리를 만들고 네이티브가 맡는 동안 웹 라벨만 감춘다(`.pv-own`). `_updatePreviewHighlight` 끝에서 `_ndpvl.changed()`. `_lrReportMsg` 가 먼저 `_ndlg.report()` 를 시도(신고는 `_lrReportGo`), 안 되면 예전 `window.confirm`.
+- **알려진 한계**: 라벨 자리 높이는 기기가 알려 주기 전 첫 순간 33dp 로 잡았다가 바로 따라간다 · 무지개 테두리·펄스 애니메이션 없음(웹 그대로) · 경로 결과 카드(`transitResultCard`)는 경로가 있을 때만 보이므로 그때만 route 라벨이 뜬다.
+- **시험**: `pvlabel_engine` 24 · `screen_pvl_js.ui` 8 · `dialog_engine` 49 · `screen_dlg_js.ui` 15 · `ScreenJvmTest` 364 · `settings_engine` 188(본문 높이 상한 8200 으로) · 회귀 `screen_set_js.ui` · `screen_cong_js.ui` · `screen_ai_js.ui` · `screen_talk_js.ui` 통과.
+- **YJ가 할 일**: 워커 s81(`route-v2-2026-10-20s81`) Deploy + **새 APK 빌드·설치**(cap 17). 설정에서 '네이티브 미리보기 라벨'을 켠다('네이티브 안내창'은 s79 것 그대로).
+- **기기 미검증(전부)**: 알약 위치·크기 · 카드 맨 위 자리 높이 · 신고 확인창.
+- **남은 비네이티브**: 데이터 계층(fetch · GPS→인덱스 추적 · 마커 가드 · eta 요청 · 버스 혼잡 fetch) · 지도 탭(SVG) · 무지개 테두리 · 그 뒤 웹 제거 → 애니메이션.

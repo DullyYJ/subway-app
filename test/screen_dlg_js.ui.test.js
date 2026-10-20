@@ -114,6 +114,26 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     assert.deepStrictEqual(await x.page.evaluate(() => window.__r), []); assert.strictEqual(await x.page.evaluate(() => window._ndlg.isOpen()), true); await x.ctx.close();
   });
 
+  console.log('[②-1 글 신고 확인]');
+  await t('웹 확인창(confirm) 대신 엔진 화면 · 신고는 글을 가리고 취소/뒤로가기는 그대로 둔다', async () => {
+    for (const how of ['dl.ok', 'dl.no', 'back']) {
+      const x = await fresh({ plugin: true, on: true }); await x.page.waitForTimeout(500);
+      await x.page.evaluate(() => { window.__cf = 0; window.confirm = function () { window.__cf++; return true; }; var n = document.createElement('div'); n.id = 'rmsg'; document.body.appendChild(n); _lrReportMsg('m1', n); });
+      assert.ok(await waitFor(x, async () => (await puts(x)).length >= 1, 9000), 'show 가 없다');
+      assert.deepStrictEqual(x.reqs[x.reqs.length - 1].f, { kind: 'report' }); assert.strictEqual(await x.page.evaluate(() => window.__cf), 0, '웹 확인창도 떴다');
+      assert.deepStrictEqual(await lastPut(x), JSON.parse(JSON.stringify(ET.dialogScreen({ cap: 16 }, { kind: 'report' }))));
+      if (how === 'back') assert.strictEqual(await x.page.evaluate(() => handleBackPress()), true); else await act(x, how);
+      await x.page.waitForTimeout(250);
+      const gone = await x.page.evaluate(() => !document.getElementById('rmsg')), hid = await x.page.evaluate(() => _lrHiddenHas('m1'));
+      assert.strictEqual(gone, how === 'dl.ok', how + ' 글 가림'); assert.strictEqual(hid, how === 'dl.ok'); assert.ok((await hides(x)).length >= 1, '닫지 않았다'); assert.deepStrictEqual(x.errs, []); await x.ctx.close();
+    }
+  });
+  await t('꺼져 있으면 예전 window.confirm', async () => {
+    const x = await fresh({ plugin: true, on: false });
+    await x.page.evaluate(() => { window.__cf = 0; window.confirm = function () { window.__cf++; return false; }; var n = document.createElement('div'); n.id = 'rmsg'; document.body.appendChild(n); _lrReportMsg('m2', n); });
+    assert.strictEqual(await x.page.evaluate(() => window.__cf), 1); assert.strictEqual(await x.page.evaluate(() => !!document.getElementById('rmsg') && !_lrHiddenHas('m2')), true); assert.strictEqual(x.reqs.length, 0); await x.ctx.close();
+  });
+
   console.log('[②-2 앱 종료 확인]');
   await t('플러그인이 없으면 웹 종료 확인창 · 켜면 엔진 화면(웹 확인창 없음) · 아니요/뒤로가기/종료', async () => {
     const w = await fresh({ plugin: false, on: true }); await w.page.evaluate(() => { _showExitPopup(); });

@@ -611,6 +611,13 @@ public final class ScreenCore {
             n.nick = optStr(m, "nick", "", 40); n.s = optStr(m, "s", "", 200); n.time = optStr(m, "time", "", 8);
             if (n.s.length() == 0) throw new ParseError("ltr: s 없음");
             n.tc = roleOrCss(m, "nc", "gold"); if (n.tc.length() == 0) n.tc = "gold";
+        } else if ("pill".equals(t)) {                                                                     // 작은 알약 글자(예상 경로 라벨 등): 글 폭 + 좌우 여백만큼만 차지하고 왼쪽에 붙는다. 글·색·크기는 엔진이 정한다
+            pad(m, n);
+            n.s = optStr(m, "s", "", 80); if (n.s.length() == 0) throw new ParseError("pill: s 없음");
+            n.size = optNum(m, "size", 11f, 8f, 20f); n.bold = optBool(m, "bold", true);
+            n.ipL = optNum(m, "ph", 11f, 0f, 30f); n.ipT = optNum(m, "pv", 4f, 0f, 20f); n.r = optNum(m, "r", 9f, 0f, 30f);
+            n.tc = roleOrCss(m, "tc", "text"); if (n.tc.length() == 0) n.tc = "text";
+            n.fill = roleOrCss(m, "fill", "card2"); if (n.fill.length() == 0) n.fill = "card2";
         } else if ("cgh".equals(t)) {                                                                      // 혼잡도 카드 머리줄: 왼쪽 '지하철 강남' + 작은 글, 오른쪽 혼잡 단계 글자. 글·색은 엔진이 정한다
             pad(m, n);
             n.label = optStr(m, "lab", "", 12); n.name = optStr(m, "nm", "", 40); n.sub = optStr(m, "meta", "", 80); n.s = optStr(m, "st", "", 24);
@@ -703,7 +710,7 @@ public final class ScreenCore {
     public static Screen load(String json) throws ParseError { return validate(parse(json)); }
 
     // ═════════════ ③ 배치 ═════════════
-    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14, K_NEWS = 15, K_POSTH = 16, K_CMT = 17, K_RBTN = 18, K_INBAR = 19, K_MSG = 20, K_TAB = 21, K_SUG = 22, K_SWAP = 23, K_RHD = 24, K_TRK = 25, K_CGH = 26, K_GAUGE = 27, K_CHART = 28, K_HBAR = 29, K_CARS = 30, K_AIH = 31, K_LTH = 32, K_LTR = 33;
+    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14, K_NEWS = 15, K_POSTH = 16, K_CMT = 17, K_RBTN = 18, K_INBAR = 19, K_MSG = 20, K_TAB = 21, K_SUG = 22, K_SWAP = 23, K_RHD = 24, K_TRK = 25, K_CGH = 26, K_GAUGE = 27, K_CHART = 28, K_HBAR = 29, K_CARS = 30, K_AIH = 31, K_LTH = 32, K_LTR = 33, K_PILL = 34;
     /** 경로 결과 머리줄 치수(웹 #transitResultHeader 와 같다: 분 숫자 28 · 단위 14 · 구간명 12 · 즐겨찾기 알약 11 · 닫기 ×) */
     /** 구간 타임라인 칸 치수(웹 #transitHtlTrack 과 같다): 이름 30 · 배지 18 · 축 26 · 시각 3+16 */
     public static final float TRK_NAME_H = 30f, TRK_BADGE_H = 18f, TRK_AXIS_H = 26f, TRK_TIME_GAP = 3f, TRK_TIME_H = 16f, TRK_H = 93f, TRK_LINE_Y = 12f, TRK_LINE_H = 3f, TRK_DOT_Y = 13f, TRK_E_R = 7f, TRK_R_R = 6f, TRK_M_R = 3f;
@@ -1125,6 +1132,15 @@ public final class ScreenCore {
             it.dotC = col(n.dot, new Col(null, 0xFFFF3B30)); it.act = n.act;
             out.add(it);
             return y + LTH_H + n.padB;
+        }
+        if ("pill".equals(n.t)) {                                                    // 알약 글자: 폭 = 글 폭 + 좌우 여백(칸을 넘으면 말줄임), 높이 = 글 높이 + 위아래 여백
+            float avail = Math.max(20f, innerW - 2f * n.ipL), lhp = n.size * 1.35f;
+            String ps = ellipsize(n.s, avail, n.size, n.bold, m);
+            Item it = new Item(); it.kind = K_PILL; it.x = ox; it.y = y; it.w = m.width(ps, n.size, n.bold) + 2f * n.ipL; it.h = lhp + 2f * n.ipT;
+            it.t1 = ps; it.f1 = n.ipL; it.f2 = n.size; it.on = n.bold; it.f3 = n.r;
+            it.fill = col(n.fill, new Col("card2", 0)); it.tc = col(n.tc, new Col("text", 0));
+            out.add(it);
+            return y + it.h + n.padB;
         }
         if ("ltr".equals(n.t)) {                                                     // '실시간 대화' 한 줄
             Item it = new Item(); it.kind = K_LTR; it.x = ox; it.y = y; it.w = innerW; it.h = LTR_H;

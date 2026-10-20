@@ -488,6 +488,7 @@ public class ScreenView extends View {
             case ScreenCore.K_AIH: drawAih(cv, it); break;
             case ScreenCore.K_LTH: drawLth(cv, it); break;
             case ScreenCore.K_LTR: drawLtr(cv, it); break;
+            case ScreenCore.K_PILL: drawPill(cv, it); break;
             case ScreenCore.K_CGH: drawCgh(cv, it); break;
             case ScreenCore.K_GAUGE: drawGauge(cv, it); break;
             case ScreenCore.K_CHART: drawChart(cv, it); break;
@@ -1024,6 +1025,13 @@ public class ScreenView extends View {
         setText(ScreenCore.LTH_TITLE, true, pal[R_TEXT]);
         cv.drawText(it.t1, it.f1, base(it.y, it.h - 4f, 0), tp);
         if (it.t2.length() > 0) { setText(ScreenCore.LTH_TITLE, false, pal[R_SUB]); cv.drawText(it.t2, it.f2, base(it.y, it.h - 4f, 0), tp); }
+    }
+    /** 알약 글자: 둥근 바탕 + 글(위치·말줄임은 배치가 정했다). */
+    private void drawPill(Canvas cv, ScreenCore.Item it) {
+        p.setStyle(Paint.Style.FILL); p.setColor(cc(it.fill, pal[R_CARD2]));
+        rf.set(it.x, it.y, it.x + it.w, it.y + it.h); cv.drawRoundRect(rf, it.f3, it.f3, p);
+        setText(it.f2, it.on, cc(it.tc, pal[R_TEXT]));
+        cv.drawText(it.t1, it.x + it.f1, base(it.y, it.h, 0), tp);
     }
     /** 홈 '실시간 대화' 한 줄: 닉네임(굵게) · 글(한 줄) · 오른쪽 시각. 말줄임·위치는 배치가 정했다. */
     private void drawLtr(Canvas cv, ScreenCore.Item it) {
