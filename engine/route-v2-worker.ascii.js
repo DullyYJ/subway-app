@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-20s96";
+var ENGINE_VERSION = "route-v2-2026-10-20s97";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -19121,6 +19121,29 @@ function hcNearest(la, lo) {                          // \uac00\uc7a5 \uac00\uae
   for (var i = 0; i < t.length; i++) { var d = hcHav(la, lo, t[i][2], t[i][3]); if (d < bd) { bd = d; best = [t[i][0], t[i][1], t[i][2], t[i][3], Math.round(d)]; } }
   return best;
 }
+function hcStnByName(nm) {                           // \uc5ed \uc774\ub984 \u2192 [\uc704\ub3c4, \uacbd\ub3c4] (\ud45c\uc5d0\uc11c \ucc98\uc74c \ub9cc\ub09c \uac83), \uc5c6\uc73c\uba74 null
+  if (!nm) return null;
+  var t = hcStnTable(), n = String(nm).replace(/\uc5ed$/, '');
+  for (var i = 0; i < t.length; i++) if (t[i][0] === n || t[i][0] === nm) return [t[i][2], t[i][3]];
+  return null;
+}
+// \ub0a0\uc528\ub97c \ubc1b\uc544 \uc62c \ub450 \uc9c0\uc810(\uc6f9 _fetchWeather \uc640 \uac19\uc740 \uc790\ub9ac): wF = \uc9c0\uae08 \uc788\ub294 \uacf3(\uc704\uce58 \uc5c6\uc73c\uba74 \uacbd\ub85c \ucd9c\ubc1c\uc5ed\u00b7\uac00\uae4c\uc6b4 \uc5ed), wT = \uacbd\ub85c \ub3c4\ucc29\uc5ed.
+// \ub0a0\uc528 \uac12 \uc790\uccb4\ub294 Worker \uac00 subway-api /weather \uc5d0\uc11c \ubc1b\uc544 f.wx = {wF,wT}({temp,txt,rain}) \ub85c \ub123\uc5b4 \uc900\ub2e4(\uc5d4\uc9c4\uc740 \uc2dc\uacc4\ub3c4 \ub124\ud2b8\uc6cc\ud06c\ub3c4 \ubaa8\ub978\ub2e4).
+function hcWxPoints(f) {
+  f = (f && typeof f === 'object') ? f : {};
+  var now = Math.floor(hcNum(f.now, 0) / 60000) * 60000, tz = hcNum(f.tz, 540);
+  var gps = (Array.isArray(f.gps) && isFinite(Number(f.gps[0])) && isFinite(Number(f.gps[1]))) ? [Number(f.gps[0]), Number(f.gps[1])] : null;
+  var rt = now > 0 ? hcRoute(f.r, now, tz) : null, out = { wF: null, wT: null };
+  if (gps) out.wF = gps;
+  else if (rt) out.wF = hcStnByName(rt.segs[0].from);
+  if (rt) out.wT = hcStnByName(rt.segs[rt.segs.length - 1].to);
+  return out;
+}
+function hcWx(w) {
+  if (!w || typeof w !== 'object') return null;
+  var t = Number(w.temp); if (!isFinite(t)) return null;
+  return { temp: t, txt: hcStr(w.txt, 12), rain: isFinite(Number(w.rain)) ? Number(w.rain) : 0 };
+}
 function hcClock(ms, tz) { var d = new Date(Number(ms) + Number(tz) * 60000), p = function (n) { return (n < 10 ? '0' : '') + n; }; return p(d.getUTCHours()) + ':' + p(d.getUTCMinutes()); }
 // \ubcf4\ub358 \uacbd\ub85c \u2192 \ube0c\ub9ac\ud551 \uc0ac\uc2e4. \uc6f9 _briefFromTransitData \uc640 \uac19\uc740 \uad6c\uac04 \ubf51\uae30.
 function hcRoute(r, now, tz) {
@@ -19191,9 +19214,12 @@ function hcardsScreen(inp, f) {
     af.from = fromN; af.to = toN; af.base = rt.base; af.mins = rt.mins; af.dist = rt.dist; af.segs = rt.segs; af.rem = rem;
     if (preview) af.hour = new Date(rt.base + tz * 60000).getUTCHours();
     af.arrMs = rem > 0 ? Math.floor((now + rem * 60000) / 60000) * 60000 : 0;
+    var wxs = f.wx && typeof f.wx === 'object' ? f.wx : {};
+    af.wF = hcWx(wxs.wF); af.wT = hcWx(wxs.wT);
     var sub1 = rt.segs.filter(function (s) { return s.type === 1 && s.nextTrain && typeof s.nextTrain === 'object'; })[0];
     if (sub1 && sub1.nextTrain.found !== undefined) af.nt = sub1.nextTrain;
   } else if (near) {
+    af.wF = hcWx(f.wx && typeof f.wx === 'object' ? f.wx.wF : null);
     af.tk = 'brief'; af.mode = 'brief'; af.from = near[0]; af.to = ''; af.base = now; af.mins = 0; af.dist = 0; af.segs = null; af.rem = 0;
   }
   var aiS = hcAi({ cap: 14 }, af);
@@ -19209,7 +19235,7 @@ function hcardsScreen(inp, f) {
   return out;
 }
 // \ud648 \uce74\ub4dc \ubb36\uc74c \ud654\uba74 \uc5d4\uc9c4 Worker \uc5f0\uacb0\ubd80 \u2014 POST /screen/hcards (engine/hcards.js \uc758 hcardsScreen \uc744 \ubd80\ub978\ub2e4). route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/screen/hcards") return handleScreenHcards(request);` \ub97c \ub123\ub294\ub2e4.
-//   \ubcf8\ubb38(JSON \uae00, Content-Type: text/plain): { cap(18 \uc774\uc0c1), f:{ now, tz, th, hol, gps, r, ai, tk } }
+//   \ubcf8\ubb38(JSON \uae00, Content-Type: text/plain): { cap(18 \uc774\uc0c1), f:{ now, tz, th, hol, gps, r, ai, tk } } \u2014 \ub0a0\uc528(f.wx)\ub294 Worker \uac00 \ucc44\uc6b4\ub2e4
 //   \uc5d4\uc9c4\uc740 \uc544\ubb34\uac83\ub3c4 \uc800\uc7a5\ud558\uc9c0 \uc54a\ub294\ub2e4(\uc774 \uae30\uae30\uac00 \ubcf4\ub0b8 \uc0ac\uc2e4\ub85c \ud654\uba74\uc744 \uacc4\uc0b0\ud574 \ub3cc\ub824\uc904 \ubfd0).
 async function handleScreenHcards(request) {
   var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Cache-Control": "no-store" };
@@ -19220,6 +19246,13 @@ async function handleScreenHcards(request) {
   var body;
   try { body = JSON.parse(raw); } catch (e) { return new Response(JSON.stringify({ ok: false, error: "bad-json" }), { status: 400, headers: H }); }
   if (!body || typeof body !== "object") return new Response(JSON.stringify({ ok: false, error: "bad-body" }), { status: 400, headers: H });
+  // \ub0a0\uc528: \ub450 \uc9c0\uc810\uc758 \ub0a0\uc528\ub97c Worker \uac00 subway-api /weather \uc5d0\uc11c \ubc1b\uc544 f.wx \ub85c \ub123\ub294\ub2e4(10\ubd84 \uce90\uc2dc \u00b7 \ubabb \ubc1b\uc73c\uba74 \ube44\uc6cc \ub460 \u2014 \ub0a0\uc528\ub97c \uc9c0\uc5b4\ub0b4\uc9c0 \uc54a\ub294\ub2e4)
+  try {
+    if (body.f && typeof body.f === "object" && typeof sceneWeather === "function") {
+      var wp = hcWxPoints(body.f), wk = ["wF", "wT"], wr = await Promise.all(wk.map(function (k) { return wp[k] ? sceneWeather(wp[k][0], wp[k][1]) : Promise.resolve(null); }));
+      body.f.wx = {}; wk.forEach(function (k, i) { if (wr[i]) body.f.wx[k] = wr[i]; });
+    }
+  } catch (eWx) { /* \ub0a0\uc528 \uc5c6\uc774 \uacc4\uc0b0 */ }
   var out;
   try { out = hcardsScreen({ cap: Number(body.cap) || 0 }, body.f, body.d); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2).slice(0, 120) }), { status: 500, headers: H }); }
   if (!out || !out.ok) return new Response(JSON.stringify(out || { ok: false, error: "fail" }), { status: 400, headers: H });

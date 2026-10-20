@@ -34,6 +34,29 @@ function hcNearest(la, lo) {                          // 가장 가까운 지하
   for (var i = 0; i < t.length; i++) { var d = hcHav(la, lo, t[i][2], t[i][3]); if (d < bd) { bd = d; best = [t[i][0], t[i][1], t[i][2], t[i][3], Math.round(d)]; } }
   return best;
 }
+function hcStnByName(nm) {                           // 역 이름 → [위도, 경도] (표에서 처음 만난 것), 없으면 null
+  if (!nm) return null;
+  var t = hcStnTable(), n = String(nm).replace(/역$/, '');
+  for (var i = 0; i < t.length; i++) if (t[i][0] === n || t[i][0] === nm) return [t[i][2], t[i][3]];
+  return null;
+}
+// 날씨를 받아 올 두 지점(웹 _fetchWeather 와 같은 자리): wF = 지금 있는 곳(위치 없으면 경로 출발역·가까운 역), wT = 경로 도착역.
+// 날씨 값 자체는 Worker 가 subway-api /weather 에서 받아 f.wx = {wF,wT}({temp,txt,rain}) 로 넣어 준다(엔진은 시계도 네트워크도 모른다).
+function hcWxPoints(f) {
+  f = (f && typeof f === 'object') ? f : {};
+  var now = Math.floor(hcNum(f.now, 0) / 60000) * 60000, tz = hcNum(f.tz, 540);
+  var gps = (Array.isArray(f.gps) && isFinite(Number(f.gps[0])) && isFinite(Number(f.gps[1]))) ? [Number(f.gps[0]), Number(f.gps[1])] : null;
+  var rt = now > 0 ? hcRoute(f.r, now, tz) : null, out = { wF: null, wT: null };
+  if (gps) out.wF = gps;
+  else if (rt) out.wF = hcStnByName(rt.segs[0].from);
+  if (rt) out.wT = hcStnByName(rt.segs[rt.segs.length - 1].to);
+  return out;
+}
+function hcWx(w) {
+  if (!w || typeof w !== 'object') return null;
+  var t = Number(w.temp); if (!isFinite(t)) return null;
+  return { temp: t, txt: hcStr(w.txt, 12), rain: isFinite(Number(w.rain)) ? Number(w.rain) : 0 };
+}
 function hcClock(ms, tz) { var d = new Date(Number(ms) + Number(tz) * 60000), p = function (n) { return (n < 10 ? '0' : '') + n; }; return p(d.getUTCHours()) + ':' + p(d.getUTCMinutes()); }
 // 보던 경로 → 브리핑 사실. 웹 _briefFromTransitData 와 같은 구간 뽑기.
 function hcRoute(r, now, tz) {
@@ -104,9 +127,12 @@ function hcardsScreen(inp, f) {
     af.from = fromN; af.to = toN; af.base = rt.base; af.mins = rt.mins; af.dist = rt.dist; af.segs = rt.segs; af.rem = rem;
     if (preview) af.hour = new Date(rt.base + tz * 60000).getUTCHours();
     af.arrMs = rem > 0 ? Math.floor((now + rem * 60000) / 60000) * 60000 : 0;
+    var wxs = f.wx && typeof f.wx === 'object' ? f.wx : {};
+    af.wF = hcWx(wxs.wF); af.wT = hcWx(wxs.wT);
     var sub1 = rt.segs.filter(function (s) { return s.type === 1 && s.nextTrain && typeof s.nextTrain === 'object'; })[0];
     if (sub1 && sub1.nextTrain.found !== undefined) af.nt = sub1.nextTrain;
   } else if (near) {
+    af.wF = hcWx(f.wx && typeof f.wx === 'object' ? f.wx.wF : null);
     af.tk = 'brief'; af.mode = 'brief'; af.from = near[0]; af.to = ''; af.base = now; af.mins = 0; af.dist = 0; af.segs = null; af.rem = 0;
   }
   var aiS = hcAi({ cap: 14 }, af);
@@ -121,4 +147,4 @@ function hcardsScreen(inp, f) {
   out.rev = 'h' + HC_V + ':' + hcHash(JSON.stringify(body));
   return out;
 }
-if (typeof module !== 'undefined' && module.exports) module.exports = { hcardsScreen: hcardsScreen, hcNearest: hcNearest, hcRoute: hcRoute };
+if (typeof module !== 'undefined' && module.exports) module.exports = { hcardsScreen: hcardsScreen, hcWxPoints: hcWxPoints, hcNearest: hcNearest, hcRoute: hcRoute };

@@ -37,6 +37,22 @@ ok(o.info.near === '강남' && o.info.cong === 'sub' && o.info.stn === '강남' 
 o = call(base({ r: null, gps: null }));
 ok(o.ok && o.info.ai === 'empty' && o.info.cong === 'none' && o.body.length === 3, '아무것도 없으면 안내 문구');
 ok(E.hcNearest(0, 0) === null && E.hcNearest(37.4979, 127.0276)[0] === '강남', '가까운 역 3km 안');
+// 날씨: 두 지점(지금 있는 곳 · 도착역)을 엔진이 정하고, Worker 가 받아 준 값(f.wx)을 AI 글에 쓴다
+{
+  const wp = E.hcWxPoints(base({ gps: [37.5, 127.0] }));
+  ok(wp.wF[0] === 37.5 && wp.wT && Math.abs(wp.wT[0] - 37.497958) < 1e-5, '날씨 지점: 위치가 있으면 wF=위치, wT=도착역(강남)');
+  const wq = E.hcWxPoints(base());
+  ok(Math.abs(wq.wF[0] - 37.489457) < 1e-5 && Math.abs(wq.wT[1] - 127.027539) < 1e-5, '위치가 없으면 wF=경로 출발역(부평)');
+  const wn = E.hcWxPoints(base({ r: null, gps: null }));
+  ok(wn.wF === null && wn.wT === null && E.hcWxPoints(null).wF === null, '경로도 위치도 없으면 날씨 지점 없음');
+  const wb = E.hcWxPoints(base({ r: { data: mk([walk(2), bus('6', 20)]), tab: 'fast', a: '집', b: '회사', bt: null, rb: now }, gps: null }));
+  ok(wb.wF === null && wb.wT === null, '정류장 이름은 역 표에 없으니 지점 없음(지어내지 않는다)');
+  const txt = o => JSON.stringify(o.body);
+  const wo = call(base({ gps: [37.5, 127.0], wx: { wF: { temp: -3, txt: '눈', rain: 80 }, wT: { temp: 5, txt: '맑음', rain: 0 } } }));
+  ok(wo.ok && /-3도/.test(txt(wo)) && /눈/.test(txt(wo)), '받아 온 날씨가 AI 글에 들어간다: ' + (txt(wo).match(/[^"]{0,30}-3도[^"]{0,30}/) || [''])[0]);
+  ok(!/-3도/.test(txt(call(base({ gps: [37.5, 127.0] })))), '날씨 값이 없으면 날씨 말을 하지 않는다');
+  ok(call(base({ wx: { wF: { temp: 'x' }, wT: 7 } })).ok, '이상한 날씨 값은 무시');
+}
 // 앱 검증기
 {
   const screens = [call(base()), call(base({ th: 'pastel', r: { data: mk([walk(2), bus('6', 20)]), tab: 'fast', a: '집', b: '회사', bt: null, rb: now } })), call(base({ r: null, gps: [37.4979, 127.0276] })), call(base({ r: null }))];
@@ -57,6 +73,14 @@ ok(E.hcNearest(0, 0) === null && E.hcNearest(37.4979, 127.0276)[0] === '강남',
     ok(res.status === 200 && j.ok && j.body.length === 3 && JSON.stringify(j.body) === JSON.stringify(call(base()).body), '워커 안에서 직접 계산과 같은 카드 세 장');
     const r2 = await wk.fetch(new Request('https://x/screen/hcards', { method: 'POST', body: JSON.stringify({ cap: 3, f: {} }) }), {}, { waitUntil() { } });
     ok(r2.status === 400, '워커: cap 부족은 400');
+    // 날씨: Worker 가 /weather 를 받아 f.wx 로 넣어 준다(받은 주소 · 값 확인)
+    const realFetch = globalThis.fetch, asked = [];
+    globalThis.fetch = async (u) => { asked.push(String(u)); return /\/weather\?/.test(String(u)) ? new Response(JSON.stringify({ ok: true, temp: -3, txt: '눈', rain: 80 }), { headers: { 'content-type': 'application/json' } }) : realFetch(u); };
+    try {
+      const r3 = await wk.fetch(new Request('https://x/screen/hcards', { method: 'POST', body: JSON.stringify({ cap: 18, f: base({ gps: [37.5, 127.0] }) }), headers: { 'Content-Type': 'text/plain;charset=UTF-8' } }), {}, { waitUntil() { } });
+      const j3 = await r3.json();
+      ok(r3.status === 200 && /-3도/.test(JSON.stringify(j3.body)) && asked.filter(u => /\/weather\?/.test(u)).length === 2, '워커: 두 지점 날씨를 받아 AI 글에 넣는다: ' + asked.filter(u => /weather/.test(u)).join(' '));
+    } finally { globalThis.fetch = realFetch; }
   } catch (e) { fail++; console.log('  FAIL 워커 예외', e && e.stack || e); }
   try { fs.unlinkSync(tmp); } catch (e) { }
   console.log(pass + ' 통과 / ' + fail + ' 실패');
