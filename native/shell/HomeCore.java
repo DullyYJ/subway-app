@@ -242,6 +242,18 @@ public final class HomeCore {
     }
 
     /** 위치 감지 결과를 출발지로 둔다. */
+    /** 노선도에서 고른 역을 출발/도착으로 둔다(웹 svgSetRoute). 출발역을 새로 고르면 도착역은 비운다. */
+    public void setStation(int f, String name, String line, double lat, double lng) {
+        Loc l = new Loc();
+        l.type = "subway"; l.name = name; l.line = line; l.lat = lat; l.lng = lng;
+        loc[f] = l; text[f] = name; cand[f].clear(); pkU.clear();
+        if (f == START) { loc[DEST] = null; text[DEST] = ""; cand[DEST].clear(); }
+        if (active == f) active = -1;
+        last = f;
+    }
+    /** 출발·도착이 모두 정해졌는가. */
+    public boolean bothSet() { return loc[START] != null && loc[START].ok() && loc[DEST] != null && loc[DEST].ok(); }
+
     public void setGpsStart(double lat, double lng) {
         Loc l = new Loc();
         l.type = "gps"; l.name = "내 위치"; l.lat = lat; l.lng = lng;

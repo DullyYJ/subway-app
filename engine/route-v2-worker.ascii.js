@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-20s90";
+var ENGINE_VERSION = "route-v2-2026-10-20s91";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -18492,6 +18492,282 @@ async function handleScreenResult(request) {
 }
 // ===== RESULT ENGINE END =====
 
+// ===== MAP ENGINE BEGIN =====
+// \uae38\ub3d9\ubb34 \u2014 \uc9c0\ub3c4 \ud0ed \ud654\uba74 \uc5d4\uc9c4(\uc9c0\ud558\ucca0 \ub178\uc120\ub3c4 \uba38\ub9ac\uc904\u00b7\uc5ed \ud31d\uc5c5\u00b7\uc2dc\uac04\ud45c\u00b7\uc9c0\uc5ed \ub178\uc120, \ubc84\uc2a4) \uc21c\uc218 \uacc4\uc0b0 \ubaa8\ub4c8 (route-v2 Worker \uc5d0 \ubd99\uc5ec \ub123\ub294 \uc21c\uc218 \ud568\uc218; \ub2e8\uc77c \ucd9c\ucc98)
+//
+// \u2605 \uc6d0\uce59(YJ): "\ubaa8\ub4e0 \uc5f0\uc0b0\uc740 \uc5d4\uc9c4\uc774 \ud55c\ub2e4. \uc571\uc740 \uc5d4\uc9c4\uc774 \uacc4\uc0b0\ud55c \uadf8\ub9bc\ub9cc \uadf8\ub9b0\ub2e4."  (2026-10-20 s91 \u2014 \uc9c0\ub3c4 \ud0ed)
+//   \uc6f9\uc758 \uc9c0\ub3c4 \ud0ed \uaddc\uce59(\uc548\ucabd \ud0ed, \uc9c0\uc5ed \ud0ed, \ud638\uc120 \ud544\ud130 \uce69, \uc5ed \uac80\uc0c9 \uaddc\uce59, \uc5ed \u2192 \ub178\uc120 \ud45c(MSM\u00b7\ubcc4\uce6d), \uc5ed \ud31d\uc5c5, \uc2dc\uac04\ud45c \uc694\uc57d\u00b7\uc2dc(\u6642)\ubcc4 \ubb36\uae30, \uc9c0\ubc29 \ub178\uc120 \ubaa9\ub85d)\uc744 \uc5ec\uae30\ub85c \uc62e\uacbc\ub2e4.
+//   \uc571\uc740 \ub178\uc120\ub3c4 \uadf8\ub9bc(MetroMapView \ube44\ud2b8\ub9f5)\uacfc \uc190\uac00\ub77d\u00b7\uc704\uce58\u00b7\ud1b5\uc2e0\ub9cc \ub9e1\ub294\ub2e4.
+//
+// \uc785\ub825  mapScreen({ cap }, f, d)
+//        f.part = 'h' \uba38\ub9ac \u00b7 'b' \ubcf8\ubb38 \u00b7 'stn' \uc5ed \ud31d\uc5c5 \u00b7 'tt' \uc2dc\uac04\ud45c
+//        f.mode = 'bus' | 'subway' (\uc548\ucabd \ud0ed)  f.reg = 'seoul'|'busan'|'daegu'|'gwangju'|'daejeon'  f.flt = \ud638\uc120 \ud544\ud130('ALL'|'1\ud638\uc120'\u2026)  f.th = 'dark'|'pastel'
+//        stn:  f.stn = \uc5ed \uc774\ub984(\uc9c0\ub3c4 \uae00\uc790)  f.sl = \ub204\ub978 \ub178\uc120(\uc9c0\ubc29 \ub178\uc120 \ubaa9\ub85d\uc5d0\uc11c \ub20c\ub800\uc744 \ub54c)
+//        tt:   f.stn \u00b7 f.tt = { sel:{ line, day, dk }, st:'loading'|'ok'|'fail', res:{ '<\ub178\uc120>|<\uc694\uc77c>': \uc2dc\uac04\ud45c \uc751\ub2f5 }, now }   \u2190 \uc751\ub2f5\uc740 GET/POST /next-train?op=timetable \uc758 \uac83 \uadf8\ub300\ub85c
+//        q:    f.q = \uc5ed \uac80\uc0c9\uc5b4 \u2192 \ucd9c\ub825 info.find = { name } (\ub178\uc120\ub3c4\uc5d0\uc11c \ucc3e\uc544\uac08 \uc5ed)  f.gps = [\uc704\ub3c4, \uacbd\ub3c4] \u2192 info.near = \uac00\uc7a5 \uac00\uae4c\uc6b4 \uc5ed
+// \ucd9c\ub825  { ok, v:1, screen:'map'|'mapstn'|'maptt', rev, cover:'tab', head, body, info }
+// \ub9e8 \uc544\ub798 module.exports \ub294 \uc2dc\ud5d8(Node)\uc6a9\uc774\uace0 Worker \uc5d0\uc11c\ub294 \ud568\uc218 \uc120\uc5b8\ub9cc \uc4f0\uc778\ub2e4.
+'use strict';
+var MAP_SCREEN_V = 1;
+var MAP_REGIONS = [['seoul', '\uc218\ub3c4\uad8c'], ['busan', '\ubd80\uc0b0'], ['daegu', '\ub300\uad6c'], ['gwangju', '\uad11\uc8fc'], ['daejeon', '\ub300\uc804']];
+var MAP_REGION_PREFIX = { busan: '\ubd80\uc0b0', daegu: '\ub300\uad6c', gwangju: '\uad11\uc8fc', daejeon: '\ub300\uc804' };
+var MAP_REGION_COLORS = { '\ubd80\uc0b01\ud638\uc120': '#F06A00', '\ubd80\uc0b02\ud638\uc120': '#81BF48', '\ubd80\uc0b03\ud638\uc120': '#BB8C00', '\ubd80\uc0b04\ud638\uc120': '#217DCB', '\ub300\uad6c1\ud638\uc120': '#D93F5C', '\ub300\uad6c2\ud638\uc120': '#00AA80', '\ub300\uad6c3\ud638\uc120': '#FFB100', '\uad11\uc8fc1\ud638\uc120': '#009088', '\ub300\uc8041\ud638\uc120': '#007448' };
+// \ud638\uc120 \ud544\ud130 \uce69(\uc6f9 #lineFilterBar \uc640 \uac19\ub2e4): [\uc774\ub984(\ub178\uc120\ub3c4 \ud544\ud130 \uc774\ub984), \uce69 \uae00\uc790, \uc0c9]
+var MAP_FILTERS = [['ALL', '\uc804\uccb4', '#f5a623'], ['1\ud638\uc120', '1\ud638\uc120', '#0052a4'], ['2\ud638\uc120', '2\ud638\uc120', '#00b140'], ['3\ud638\uc120', '3\ud638\uc120', '#ef7c1c'], ['4\ud638\uc120', '4\ud638\uc120', '#00a5de'], ['5\ud638\uc120', '5\ud638\uc120', '#8b4ea6'],
+  ['6\ud638\uc120', '6\ud638\uc120', '#c55a11'], ['7\ud638\uc120', '7\ud638\uc120', '#b4bf00'], ['8\ud638\uc120', '8\ud638\uc120', '#e6186c'], ['9\ud638\uc120', '9\ud638\uc120', '#c8b87a'], ['\uacf5\ud56d\ucca0\ub3c4', '\uacf5\ud56d', '#0090d2'], ['\uacbd\uc758\uc911\uc559\uc120', '\uacbd\uc758\uc911\uc559', '#77c4a3'],
+  ['\uc218\uc778\ubd84\ub2f9\uc120', '\uc218\uc778\ubd84\ub2f9', '#f5a200'], ['\uc2e0\ubd84\ub2f9\uc120', '\uc2e0\ubd84\ub2f9', '#d31145']];
+var MAP_SKIP = ['\ud638\uc120', '\uacbd\uc804\ucca0', '\uc218\ub3c4\uad8c', '\ub3c4\uc2dc\ucca0\ub3c4', '\ud55c\uac15\ubc84\uc2a4', '\uc9c0\ud558\ucca0\ub9dd', '\ub178\uc120\ub3c4', '\ud658\uc2b9'];     // \uc9c0\ub3c4 \uae00\uc790 \uc911 \uc5ed\uc774 \uc544\ub2cc \uac83(\uc6f9 _NM_SKIP)
+var MAP_ALIAS = { '\uc11c\uc6b8\uc5ed': '\uc11c\uc6b8', '\ucd1d\uc2e0\ub300\uc785\uad6c': '\uc774\uc218' };                                          // \uc6f9 _METRO_ALIAS
+var MAP_DAY_ORDER = ['DAY', 'SAT', 'SUN'];
+
+function mapStr(v, n) { return typeof v === 'string' ? v.slice(0, n) : (typeof v === 'number' ? String(v).slice(0, n) : ''); }
+function mapHash(s) { var h = 5381; for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
+function mapStnTable() {                           // Worker \uc5d0\uc11c\ub294 HOME \ube14\ub85d\uc758 \uc804\uc5ed HOME_STNS, Node(\uc2dc\ud5d8)\uc5d0\uc11c\ub294 \ud30c\uc77c
+  if (typeof HOME_STNS !== 'undefined' && HOME_STNS) return HOME_STNS;
+  try { if (typeof require === 'function') return require('./home-stations').HOME_STNS; } catch (e) { /* \uc5c6\uc74c */ }
+  return [];
+}
+var mapLineColorFn = (typeof rheadTrkColor === 'function') ? rheadTrkColor : null;
+if (!mapLineColorFn) { try { if (typeof require === 'function') mapLineColorFn = require('./rhead').rheadTrkColor; } catch (eRq) { /* \uc5c6\uc74c */ } }
+function mapLineColor(line, th) {
+  if (MAP_REGION_COLORS[line]) return MAP_REGION_COLORS[line];
+  return mapLineColorFn ? mapLineColorFn(1, line, th === 'dark' ? 'dark' : 'pastel') : '#5a5a5f';
+}
+function mapHav(la1, lo1, la2, lo2) {
+  var R = 6371000, dLa = (la2 - la1) * Math.PI / 180, dLo = (lo2 - lo1) * Math.PI / 180;
+  var a = Math.sin(dLa / 2) * Math.sin(dLa / 2) + Math.cos(la1 * Math.PI / 180) * Math.cos(la2 * Math.PI / 180) * Math.sin(dLo / 2) * Math.sin(dLo / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// \u2500\u2500 \uc5ed \u2192 \ub178\uc120 (\uc6f9 MSM \u00b7 _metroLines) \u2500\u2500
+function mapLinesOf(name) {
+  var T = mapStnTable(), out = [], i;
+  var add = function (nm) { for (i = 0; i < T.length; i++) if (T[i][0] === nm && out.indexOf(T[i][1]) < 0) out.push(T[i][1]); };
+  add(name);
+  if (MAP_ALIAS[name]) add(MAP_ALIAS[name]);
+  return out;
+}
+function mapCleanName(s) { return mapStr(s, 40).replace(/\s+/g, '').trim(); }
+function mapIsStationLabel(name) {                 // \uc9c0\ub3c4 \uae00\uc790\uac00 \uc5ed \uc774\ub984\ucc98\ub7fc \ubcf4\uc774\ub294\uac00(\uc6f9 _nmOnStation \uc758 \uc55e\ubd80\ubd84)
+  if (!name || name.length < 2) return false;
+  for (var i = 0; i < MAP_SKIP.length; i++) if (name.indexOf(MAP_SKIP[i]) >= 0) return false;
+  return true;
+}
+// \uc5ed \ud558\ub098(\uc774\ub984 + \uace0\ub978 \ub178\uc120 \ud78c\ud2b8) \u2192 \ucd9c\ubc1c/\ub3c4\ucc29\uc73c\ub85c \uc4f8 \ud589(\uc6f9 svgSetRoute: \ub178\uc120 \ud78c\ud2b8 \u2192 \uac19\uc740 \uc774\ub984 \uccab \ud589)
+function mapPickRow(name, line) {
+  var T = mapStnTable(), i, first = null;
+  for (i = 0; i < T.length; i++) {
+    if (T[i][0] !== name) continue;
+    if (line && T[i][1] === line) return T[i];
+    if (!first) first = T[i];
+  }
+  return first;
+}
+// \uc5ed \uac80\uc0c9(\uc6f9 mapSearchStation): \uacf5\ubc31 \ube80 \uc774\ub984\uc774 \uac19\uc740 \uac83 \u2192 \ud3ec\ud568\ud558\ub294 \uac83 \u2192 \uadf8 \uae00\uc790 \uadf8\ub300\ub85c
+function mapFind(q) {
+  q = mapStr(q, 40).replace(/\s+/g, '').trim();
+  if (q.length < 2) return null;
+  var T = mapStnTable(), i, m = null;
+  for (i = 0; i < T.length && !m; i++) if (String(T[i][0]).replace(/\s+/g, '') === q) m = T[i];
+  for (i = 0; i < T.length && !m; i++) if (String(T[i][0]).replace(/\s+/g, '').indexOf(q) >= 0) m = T[i];
+  return { name: m ? m[0] : q, known: !!m };
+}
+function mapNearest(la, lo) {                       // \uc6f9 mapGoToMyLocation: \uc704\ub3c4\u00b7\uacbd\ub3c4 \ucc28\uc758 \uc81c\uacf1\ud569\uc774 \uac00\uc7a5 \uc791\uc740 \uc5ed
+  var T = mapStnTable(), best = null, bd = 1e18;
+  for (var i = 0; i < T.length; i++) { var dx = T[i][2] - la, dy = T[i][3] - lo, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = T[i]; } }
+  return best ? { name: best[0], line: best[1], la: best[2], lo: best[3] } : null;
+}
+
+function mapFacts(f) {
+  f = (f && typeof f === 'object') ? f : {};
+  var part = ['h', 'b', 'stn', 'tt'].indexOf(f.part) >= 0 ? f.part : 'h';
+  var reg = MAP_REGIONS.some(function (r) { return r[0] === f.reg; }) ? f.reg : 'seoul';
+  var flt = MAP_FILTERS.some(function (r) { return r[0] === f.flt; }) ? f.flt : 'ALL';
+  var gps = (Array.isArray(f.gps) && f.gps.length >= 2 && isFinite(Number(f.gps[0])) && isFinite(Number(f.gps[1]))) ? [Number(f.gps[0]), Number(f.gps[1])] : null;
+  return { part: part, mode: f.mode === 'subway' ? 'subway' : 'bus', reg: reg, flt: flt, th: f.th === 'dark' ? 'dark' : 'pastel',
+           stn: mapCleanName(f.stn), sl: mapStr(f.sl, 30), q: mapStr(f.q, 40), gps: gps, tt: (f.tt && typeof f.tt === 'object') ? f.tt : {}, bus: (f.bus && typeof f.bus === 'object') ? f.bus : null };
+}
+
+function mapSheetPad(n) { var p = Array.isArray(n.pad) ? n.pad.slice() : [0, 0, 0, 0]; p[0] += 16; p[2] += 16; if (n === mapSheetPad.first) p[1] += 10; n.pad = p; return n; }
+function mapFinish(out, key) { out.rev = 'm' + MAP_SCREEN_V + ':' + mapHash(JSON.stringify([out.head, out.body, key || ''])); return out; }
+function mapChip(label, on, v, c) { var o = { label: label, on: !!on, act: { a: 'cat', v: v } }; if (c) o.c = c; return o; }
+
+// \u2500\u2500 \uba38\ub9ac\uc904 \u2500\u2500
+function mapHead(f) {
+  var head = [{ t: 'chips', pad: [14, 8, 14, 6], gap: 8, h: 32, onc: 'gold', onfg: '#121214',
+    items: [mapChip('\ubc84\uc2a4', f.mode === 'bus', 'm:bus'), mapChip('\uc9c0\ud558\ucca0', f.mode === 'subway', 'm:subway')] }];
+  if (f.mode === 'subway') {
+    head.push({ t: 'chips', pad: [14, 0, 14, 6], gap: 6, h: 28, onc: 'gold', onfg: '#121214',
+      items: MAP_REGIONS.map(function (r) { return mapChip(r[1], f.reg === r[0], 'r:' + r[0]); }) });
+    if (f.reg === 'seoul') {
+      head.push({ t: 'inbar', pad: [14, 0, 14, 6], key: 'mq', hint: '\uc5ed \uac80\uc0c9 (\uc608: \ubd80\ud3c9)', value: f.q, maxlen: 20, h: 38, btn: '\ucc3e\uae30', act: { a: 'call', v: 'mp.find' }, eact: { a: 'call', v: 'mp.find' } });
+      var items = [{ label: '\ub0b4 \uc704\uce58', on: false, act: { a: 'call', v: 'mp.loc' } }];
+      MAP_FILTERS.forEach(function (x) { items.push({ label: x[1], on: f.flt === x[0], c: x[2], act: { a: 'cat', v: 'f:' + x[0] } }); });
+      head.push({ t: 'chips', pad: [14, 0, 14, 6], gap: 6, h: 28, onc: 'gold', onfg: '#121214', items: items });
+    }
+  }
+  return head;
+}
+
+// \u2500\u2500 \uc9c0\ubc29 \ub178\uc120 \ubaa9\ub85d(\uc6f9 renderRegionSvg) \u2500\u2500
+function mapRegionLines(reg) {
+  var T = mapStnTable(), pre = MAP_REGION_PREFIX[reg], groups = {}, order = [], i;
+  if (!pre) return [];
+  for (i = 0; i < T.length; i++) {
+    if (String(T[i][1]).indexOf(pre) !== 0) continue;
+    if (!groups[T[i][1]]) { groups[T[i][1]] = []; order.push(T[i][1]); }
+    groups[T[i][1]].push(T[i]);
+  }
+  return order.map(function (l) { return { line: l, stns: groups[l] }; });
+}
+function mapRegionBody(f, ctx) {
+  var lines = mapRegionLines(f.reg), body = [], all = [], name = '';
+  MAP_REGIONS.forEach(function (r) { if (r[0] === f.reg) name = r[1]; });
+  if (!lines.length) {
+    body.push({ t: 'text', s: name + ' \ub178\uc120\ub3c4\n\ud648 \ud0ed \uac80\uc0c9\ucc3d\uc5d0\uc11c \uc5ed\uba85\uc744 \uac80\uc0c9\ud558\uc2dc\uba74\n\uacbd\ub85c \ud0d0\uc0c9\uc774 \uac00\ub2a5\ud569\ub2c8\ub2e4.', size: 13, color: 'sub', lh: 1.8, align: 'center', pad: [28, 40, 28, 40] });
+    return body;
+  }
+  body.push({ t: 'text', s: name + ' \uc9c0\ud558\ucca0 \ub178\uc120\ub3c4', size: 16, bold: true, color: 'gold', align: 'center', pad: [14, 14, 14, 10] });
+  lines.forEach(function (g) {
+    var col = mapLineColor(g.line, f.th), kids = [];
+    var xfer = function (s) { return lines.some(function (o) { return o.line !== g.line && o.stns.some(function (t) { return t[0] === s[0]; }); }); };
+    kids.push({ t: 'pill', s: g.line + ' (' + g.stns.length + '\uac1c \uc5ed)', size: 13, bold: true, fill: col, tc: '#ffffff', ph: 12, pv: 6, r: 10, pad: [14, 8, 14, 8] });
+    kids.push({ t: 'chips', pad: [14, 0, 14, 8], gap: 6, h: 30, onc: 'gold', onfg: '#121214',
+      items: g.stns.map(function (s) {
+        var idx = all.length; all.push([s[0], s[1]]);
+        return { label: (xfer(s) ? '\ud658\uc2b9 ' : '') + s[0], on: false, act: { a: 'call', v: 'mr.' + idx } };
+      }) });
+    kids.forEach(function (k) { body.push(k); });
+  });
+  body.push({ t: 'text', s: '\uc5ed\uba85\uc744 \ub204\ub974\uac70\ub098 \ud648 \ud0ed \uac80\uc0c9\ucc3d\uc5d0\uc11c \uc5ed\uba85\uc744 \uc785\ub825\ud558\uba74 \uc804\uad6d \ucd5c\ub2e8 \uacbd\ub85c\ub97c \ud0d0\uc0c9\ud560 \uc218 \uc788\uc5b4\uc694.', size: 12, color: 'sub', lh: 1.7, align: 'center', pad: [8, 16, 8, 24] });
+  ctx.regionStns = all;
+  return body;
+}
+
+// \u2500\u2500 \uc5ed \ud31d\uc5c5(\uc6f9 svgShowPopup) \u2500\u2500
+function mapStationSheet(f) {
+  var name = f.stn;
+  if (!mapIsStationLabel(name)) return { ok: false, error: 'stn' };
+  var lines = f.sl ? [f.sl].concat(mapLinesOf(name).filter(function (l) { return l !== f.sl; })) : mapLinesOf(name);
+  if (f.sl && mapLinesOf(name).indexOf(f.sl) < 0) lines = mapLinesOf(name);
+  var kids = [
+    { t: 'bar', pad: [0, 0, 0, 4], title: name, btn: '\ub2eb\uae30', act: { a: 'call', v: 'mp.close' } }
+  ];
+  if (lines.length) kids.push({ t: 'chips', pad: [0, 4, 0, 10], gap: 7, h: 30, onc: 'gold', onfg: '#ffffff', items: lines.slice(0, 12).map(function (l) { return { label: l, on: true, c: mapLineColor(l, f.th), act: { a: 'sel', v: 'mp.line' } }; }) });
+  else kids.push({ t: 'text', s: '\ub178\uc120 \uc815\ubcf4 \uc5c6\uc74c', size: 13, color: 'sub', pad: [0, 4, 0, 10] });
+  kids.push({ t: 'row', pad: [0, 0, 0, 10], gap: 10, kids: [
+    { t: 'button', s: '\ucd9c\ubc1c\uc5ed', size: 14, h: 48, r: 12, bold: true, fill: '#0a84ff', line: 'none', tc: '#ffffff', pad: [0, 0, 0, 0], act: { a: 'call', v: 'mp.start' } },
+    { t: 'button', s: '\ub3c4\ucc29\uc5ed', size: 14, h: 48, r: 12, bold: true, fill: '#ff2d55', line: 'none', tc: '#ffffff', pad: [0, 0, 0, 0], act: { a: 'call', v: 'mp.dest' } }] });
+  kids.push({ t: 'button', s: '\uc2dc\uac04\ud45c', size: 14, h: 44, r: 12, bold: true, fill: 'card2', line: 'border', tc: '', pad: [0, 0, 0, 0], act: { a: 'call', v: 'mp.tt' } });
+  var row = mapPickRow(name, f.sl);
+  var out = { ok: true, v: 1, screen: 'mapstn', cover: 'tab', head: [], body: kids.map(mapSheetPad),
+    info: { name: name, lines: lines, pick: row ? { name: row[0], line: row[1], la: row[2], lo: row[3] } : null } };
+  return mapFinish(out);
+}
+
+// \u2500\u2500 \uc2dc\uac04\ud45c(\uc6f9 nmTtRender) \u2500\u2500
+function mapClock(m) { var x = ((m % 1440) + 1440) % 1440; return (Math.floor(x / 60) < 10 ? '0' : '') + Math.floor(x / 60) + ':' + (x % 60 < 10 ? '0' : '') + (x % 60); }
+function mapP2(n) { return (n < 10 ? '0' : '') + n; }
+function mapTimetableSheet(f) {
+  var name = f.stn;
+  if (!mapIsStationLabel(name)) return { ok: false, error: 'stn' };
+  var T = f.tt, lines = mapLinesOf(name).slice(0, 20), sel = (T.sel && typeof T.sel === 'object') ? T.sel : {}, res = (T.res && typeof T.res === 'object') ? T.res : {};
+  var st = ['loading', 'ok', 'fail'].indexOf(T.st) >= 0 ? T.st : 'loading';
+  var line = lines.indexOf(sel.line) >= 0 ? sel.line : '';
+  // \ucc98\uc74c\uc5d4 \uc2dc\uac04\ud45c \uc790\ub8cc\uac00 \uc788\ub294 \uccab \ub178\uc120\uc744 \uace0\ub978\ub2e4(\uc6f9: \uc774 \uc5ed\uc758 \ubaa8\ub4e0 \ub178\uc120\uc744 \ud55c \ubc88\uc5d0 \ubb3b\uace0 \uc790\ub8cc \uc788\ub294 \uccab \ub178\uc120)
+  if (!line) {
+    for (var i = 0; i < lines.length; i++) { var r0 = res[lines[i] + '|-']; if (r0 && !r0.noData && r0.dirs) { line = lines[i]; break; } }
+    if (!line) line = lines[0] || '';
+  }
+  var day = mapStr(sel.day, 6);
+  var d = res[line + '|' + (day || '-')] || null;
+  if (!day && d && d.dayCode) day = d.dayCode;
+  var kids = [{ t: 'bar', pad: [0, 0, 0, 4], title: name + ' \uc2dc\uac04\ud45c', btn: '\ub2eb\uae30', act: { a: 'call', v: 'mp.close' } }];
+  if (lines.length) kids.push({ t: 'chips', pad: [0, 4, 0, 6], gap: 6, h: 30, onc: 'gold', onfg: '#ffffff', items: lines.map(function (l, i) {
+    var kc = res[l + '|-'], nod = !!(kc && kc.noData);
+    var o = { label: l, on: l === line, act: { a: 'call', v: 'mt.l.' + i } };
+    if (l === line) o.c = mapLineColor(l, f.th);
+    else if (nod) o.label = l + ' (\uc790\ub8cc \uc5c6\uc74c)';
+    return o;
+  }) });
+  var dir = null, dirs = d && d.dirs ? d.dirs : [], dirIdx = 0;
+  if (d && d.days && d.days.length) kids.push({ t: 'chips', pad: [0, 0, 0, 6], gap: 6, h: 28, onc: 'gold', onfg: '#121214', items: d.days.map(function (x) {
+    return { label: mapStr(x.label, 10) + (x.code === d.today ? ' \u00b7 \uc624\ub298' : ''), on: x.code === d.dayCode, act: { a: 'call', v: 'mt.d.' + mapStr(x.code, 6) } };
+  }) });
+  if (dirs.length) {
+    for (var k = 0; k < dirs.length; k++) if (dirs[k].dk === mapStr(sel.dk, 4)) { dir = dirs[k]; dirIdx = k; }
+    if (!dir) { dir = dirs[0]; dirIdx = 0; }
+    kids.push({ t: 'chips', pad: [0, 0, 0, 8], gap: 6, h: 30, onc: 'gold', onfg: '#121214', items: dirs.map(function (x, i) {
+      return { label: x.toward ? mapStr(x.toward, 20) + ' \ubc29\uba74' : (x.dk === '\uc0c1' ? '\uc0c1\ud589' : '\ud558\ud589'), on: x === dir, act: { a: 'call', v: 'mt.k.' + i } };
+    }) });
+  }
+  var msg = function (s, sub) { return { t: 'text', s: s, size: 13, color: 'sub', lh: 1.7, align: 'center', pad: [28, 12, 28, 12] }; };
+  if (st === 'loading' && !d) kids.push(msg('\uc2dc\uac04\ud45c\ub97c \ubd88\ub7ec\uc624\ub294 \uc911\u2026'));
+  else if (st === 'fail' && !d) { kids.push(msg('\uc2dc\uac04\ud45c\ub97c \ubd88\ub7ec\uc624\uc9c0 \ubabb\ud588\uc5b4\uc694.')); kids.push({ t: 'button', s: '\ub2e4\uc2dc \uc2dc\ub3c4', size: 13, h: 40, r: 11, bold: true, fill: 'card2', line: 'border', tc: '', pad: [0, 0, 0, 0], act: { a: 'call', v: 'mt.retry' } }); }
+  else if (!d || d.noData || !dir) kids.push(msg((line || '\uc774 \ub178\uc120') + '\uc758 \uc2dc\uac04\ud45c \uc790\ub8cc\ub97c\n\uc544\uc9c1 \ubc1b\uc9c0 \ubabb\ud588\uc5b4\uc694.\n\uc2e4\uc2dc\uac04 \ub3c4\ucc29\uc815\ubcf4\ub294 \uacbd\ub85c \ud0d0\uc0c9 \ud654\uba74\uc5d0\uc11c \ud655\uc778\ud560 \uc218 \uc788\uc5b4\uc694.'));
+  else {
+    var s = '\uccab\ucc28 ' + mapClock(dir.first) + ' \u00b7 \ub9c9\ucc28 ' + mapClock(dir.last);
+    if (dir.nextMin != null) s += ' \u00b7 ' + (dir.tomorrow ? '\ub0b4\uc77c \uccab\ucc28 ' : '\ub2e4\uc74c \uc5f4\ucc28 ') + mapClock(dir.nextMin);
+    kids.push({ t: 'text', s: s, size: 12, color: 'gold', lh: 1.5, pad: [0, 0, 0, 8] });
+    var rows = [], cur = null, nx = dir.nextMin;
+    (dir.times || []).forEach(function (t) { var h = Math.floor(t / 60); if (!cur || cur.h !== h) { cur = { h: h, m: [] }; rows.push(cur); } cur.m.push(t); });
+    rows.forEach(function (r) {
+      var label = mapP2(r.h % 24) + '\uc2dc' + (r.h >= 24 ? ' \uc775\uc77c' : ''), txt = label + '   ', hl = [];
+      r.m.forEach(function (t, i) {
+        var mm = mapP2(t % 60);
+        if (nx != null && t === nx && !dir.tomorrow) hl.push([txt.length, txt.length + 2, '#f5a623']);
+        txt += mm + (i < r.m.length - 1 ? '  ' : '');
+      });
+      var n = { t: 'box', s: txt, size: 13, lh: 1.5, color: 'text', fill: 'card2', line: 'border', r: 9, ip: [10, 7, 10, 7], pad: [0, 0, 0, 4] };
+      if (hl.length) n.hl = hl;
+      kids.push(n);
+    });
+  }
+  var out = { ok: true, v: 1, screen: 'maptt', cover: 'tab', head: [], body: kids.map(mapSheetPad),
+    info: { name: name, lines: lines, line: line, day: day, dk: dir ? dir.dk : '', dks: dirs.map(function (x) { return mapStr(x.dk, 4); }), days: (d && d.days ? d.days : []).map(function (x) { return mapStr(x.code, 6); }), need: (line && st !== 'fail' && !d) ? { line: line, day: day } : null } };
+  return mapFinish(out);
+}
+
+function mapScreen(inp, factsIn, dataIn) {
+  inp = inp || {};
+  if (!(Number(inp.cap) >= 18)) return { ok: false, error: 'cap' };
+  var f = mapFacts(factsIn), ctx = {};
+  if (f.part === 'stn') return mapStationSheet(f);
+  if (f.part === 'tt') return mapTimetableSheet(f);
+  var info = { mode: f.mode, reg: f.reg, flt: f.flt };
+  if (f.q) { var fd = mapFind(f.q); info.find = fd; }
+  if (f.gps) info.near = mapNearest(f.gps[0], f.gps[1]);
+  if (f.part === 'h') {
+    var head = mapHead(f);
+    return mapFinish({ ok: true, v: 1, screen: 'map', cover: 'tab', head: head, body: [], info: info }, 'h');
+  }
+  var body;
+  if (f.mode === 'subway' && f.reg === 'seoul') { body = [{ t: 'spacer', h: 1 }]; info.view = 'metro'; }
+  else if (f.mode === 'subway') { body = mapRegionBody(f, ctx); info.view = 'list'; info.rs = ctx.regionStns || []; }
+  else { body = mapBusBody ? mapBusBody(f) : [{ t: 'spacer', h: 1 }]; info.view = 'bus'; }
+  return mapFinish({ ok: true, v: 1, screen: 'map', cover: 'tab', head: [], body: body, info: info }, 'b' + f.mode + f.reg);
+}
+var mapBusBody = null;
+// \uc9c0\ub3c4 \ud0ed \ud654\uba74 \uc5d4\uc9c4 Worker \uc5f0\uacb0\ubd80 \u2014 POST /screen/map (engine/map.js \uc758 mapScreen \uc744 \ubd80\ub978\ub2e4). route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/screen/map") return handleScreenMap(request);` \ub97c \ub123\ub294\ub2e4.
+//   \ubcf8\ubb38(JSON \uae00, Content-Type: text/plain): { cap(18 \uc774\uc0c1), f:{ part:'h'|'b'|'stn'|'tt', mode, reg, flt, th, stn, sl, q, gps, tt, bus } }
+//   \uc5d4\uc9c4\uc740 \uc544\ubb34\uac83\ub3c4 \uc800\uc7a5\ud558\uc9c0 \uc54a\ub294\ub2e4(\uc774 \uae30\uae30\uac00 \ubcf4\ub0b8 \uc0ac\uc2e4\ub85c \ud654\uba74\uc744 \uacc4\uc0b0\ud574 \ub3cc\ub824\uc904 \ubfd0).
+async function handleScreenMap(request) {
+  var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Cache-Control": "no-store" };
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: H });
+  if (request.method !== "POST") return new Response(JSON.stringify({ ok: false, error: "post-only" }), { status: 405, headers: H });
+  var raw = await request.text();
+  if (raw.length > 600000) return new Response(JSON.stringify({ ok: false, error: "body-too-long" }), { status: 413, headers: H });
+  var body;
+  try { body = JSON.parse(raw); } catch (e) { return new Response(JSON.stringify({ ok: false, error: "bad-json" }), { status: 400, headers: H }); }
+  if (!body || typeof body !== "object") return new Response(JSON.stringify({ ok: false, error: "bad-body" }), { status: 400, headers: H });
+  var out;
+  try { out = mapScreen({ cap: Number(body.cap) || 0 }, body.f, body.d); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2).slice(0, 120) }), { status: 500, headers: H }); }
+  if (!out || !out.ok) return new Response(JSON.stringify(out || { ok: false, error: "fail" }), { status: 400, headers: H });
+  out.ver = ENGINE_VERSION;
+  return new Response(JSON.stringify(out), { headers: H });
+}
+// ===== MAP ENGINE END =====
+
 async function handleFetch(request, env, ctx) {
   try { await holEnsure(env); } catch (e) {}
   const url = new URL(request.url);
@@ -18528,6 +18804,7 @@ async function handleFetch(request, env, ctx) {
   if (url.pathname === "/screen/dlg") return handleScreenDlg(request);
   if (url.pathname === "/screen/pvl") return handleScreenPvl(request);
   if (url.pathname === "/pos-fuse") return handlePosFuse(request);
+  if (url.pathname === "/screen/map") return handleScreenMap(request);
   if (url.pathname === "/stops-near") {
     const lat = parseFloat(url.searchParams.get("lat"));
     const lng = parseFloat(url.searchParams.get("lng"));

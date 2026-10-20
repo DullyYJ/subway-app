@@ -290,6 +290,56 @@ public class ShellJvmTest {
         fd.setDest("홍대입구", 37.557, 126.924); ok(fd.dl != null && fd.request(18, false).contains("\"stn\":\"홍대입구\"") && fd.request(18, false).contains("\"dl\":[37.557,126.924]"), "도착지 이름·좌표를 사실로 보낸다");
         fd.refresh(); ok(!fd.loaded && fd.ctr == null, "새로고침은 원자료를 비운다");
 
+
+        // ── 지도 ──
+        ShellCore.MemStore ms = new ShellCore.MemStore();
+        MapCore mc = new MapCore(ms);
+        ok("bus".equals(mc.mode()) && "seoul".equals(mc.reg()) && "ALL".equals(mc.flt()), "지도 처음엔 버스 · 수도권 · 전체");
+        ok(mc.cat("m:subway") == MapCore.R_RENDER && "subway".equals(mc.mode()) && mc.cat("r:busan") == MapCore.R_RENDER && "busan".equals(mc.reg()) && "ALL".equals(mc.flt()), "안쪽 탭 · 지역 고르기(호선 필터는 초기화)");
+        mc.cat("r:seoul"); ok(mc.cat("f:2호선") == MapCore.R_RENDER && "2호선".equals(mc.flt()) && mc.cat("zz") == MapCore.R_NONE, "호선 필터");
+        String mh = mc.headRequest(18, "dark", "부평");
+        ok(mh.contains("\"part\":\"h\"") && mh.contains("\"mode\":\"subway\"") && mh.contains("\"flt\":\"2호선\"") && mh.contains("\"th\":\"dark\"") && mh.contains("\"q\":\"부평\"") && !mh.contains("\"gps\""), "머리 요청 본문");
+        mc.gps = new double[] { 37.5, 127.0 }; ok(mc.bodyRequest(18, "pastel").contains("\"gps\":[37.5,127.0]"), "위치가 있으면 사실로 보낸다"); mc.gps = null;
+        java.util.Map<String, String> mf = new java.util.HashMap<String, String>();
+        ok(mc.act("mp.find", mf) == MapCore.R_NONE && mc.act("mp.loc", mf) == MapCore.R_LOC, "빈 검색은 무시 · 내 위치");
+        mf.put("mq", " 부 "); ok(mc.act("mp.find", mf) == MapCore.R_NONE, "한 글자 검색은 무시");
+        mf.put("mq", "부평"); ok(mc.act("mp.find", mf) == MapCore.R_FIND, "검색");
+        mc.onScreen("{\"info\":{\"view\":\"list\",\"rs\":[[\"부산\",\"부산1호선\"],[\"서면\",\"부산2호선\"]],\"find\":{\"name\":\"부평\"},\"near\":{\"name\":\"강남\"}}}");
+        ok("list".equals(mc.view) && "부평".equals(mc.findName) && "강남".equals(mc.nearName), "머리·본문 응답 읽기");
+        ok(mc.act("mr.1", null) == MapCore.R_STN && "서면".equals(mc.stn) && "부산2호선".equals(mc.stnLine) && mc.act("mr.9", null) == MapCore.R_NONE, "지방 노선 목록 역 누름(번호 → 역·노선)");
+        mc.tapStation(" 강 남 "); ok("강남".equals(mc.stn) && mc.stnLine.isEmpty(), "노선도 역 글자 누름");
+        String sr = mc.stnRequest(18, "dark"); ok(sr.contains("\"part\":\"stn\"") && sr.contains("\"stn\":\"강남\""), "역 팝업 요청");
+        mc.onStn("{\"info\":{\"lines\":[\"2호선\",\"신분당선\"],\"pick\":{\"name\":\"강남\",\"line\":\"2호선\",\"la\":37.4979,\"lo\":127.0276}}}");
+        mc.setLinesFromStn("{\"info\":{\"lines\":[\"2호선\",\"신분당선\"]}}");
+        ok("강남".equals(mc.pickName) && mc.pickLa > 37 && mc.ttLines.size() == 2, "팝업 응답 읽기");
+        ok(mc.sheetAct("mp.start") == MapCore.R_START && mc.sheetAct("mp.dest") == MapCore.R_DEST && mc.sheetAct("mp.close") == MapCore.R_CLOSE && mc.sheetAct("zz") == MapCore.R_NONE, "팝업 단추");
+        int sq0 = mc.ttSeq;
+        ok(mc.sheetAct("mp.tt") == MapCore.R_TT && mc.ttSeq == sq0 + 1 && "loading".equals(mc.ttState), "시간표 열기");
+        String ab = mc.ttAskBody(1000L);
+        ok(ab.contains("\"line\":\"2호선\"") && ab.contains("\"line\":\"신분당선\"") && ab.contains("\"op\":\"timetable\"") && ab.contains("\"from\":\"강남\"") && ab.contains("\"baseMs\":1000") && !ab.contains("\"day\""), "처음엔 모든 노선을 한 번에 묻는다");
+        ok(!mc.addTt("{\"items\":[]}", mc.ttSeq - 1), "늦게 온 응답은 버린다");
+        ok(mc.addTt("{\"items\":[{\"id\":0,\"dirs\":[],\"dayCode\":\"DAY\"},{\"id\":1,\"noData\":true}]}", mc.ttSeq) && "ok".equals(mc.ttState), "시간표 응답 모으기");
+        String tr = mc.ttRequest(18, "dark");
+        ok(tr.contains("\"2호선|-\":{") && tr.contains("\"신분당선|-\":{") && tr.contains("\"st\":\"ok\""), "엔진에 응답을 그대로 보낸다");
+        mc.onTt("{\"info\":{\"lines\":[\"2호선\",\"신분당선\"],\"line\":\"2호선\",\"day\":\"DAY\",\"dk\":\"상\",\"dks\":[\"상\",\"하\"],\"days\":[\"DAY\",\"SAT\"],\"need\":null}}");
+        ok("2호선".equals(mc.ttLine) && mc.ttDks.size() == 2 && mc.ttDays.size() == 2, "시간표 화면 읽기");
+        ok(mc.sheetAct("mt.k.1") == MapCore.R_TT_RENDER && "하".equals(mc.ttDk), "방향 고르기");
+        ok(mc.sheetAct("mt.l.1") == MapCore.R_TT_RENDER && "신분당선".equals(mc.ttLine), "노선 바꾸기(받아 둔 응답이 있으면 요청 없이)");
+        mc.ttLine = "2호선";
+        int sq1 = mc.ttSeq;
+        ok(mc.sheetAct("mt.d.SAT") == MapCore.R_TT_LOAD && "SAT".equals(mc.ttDay) && mc.ttSeq == sq1 + 1 && mc.needDay.equals("SAT"), "요일 고르기(없으면 그 노선·요일만 묻는다)");
+        String ab2 = mc.ttAskBody(2000L); ok(ab2.contains("\"day\":\"SAT\"") && ab2.contains("\"line\":\"2호선\"") && !ab2.contains("신분당선"), "요일 요청 본문");
+        ok(mc.addTt("{\"items\":[{\"id\":0,\"dirs\":[],\"dayCode\":\"SAT\"}]}", mc.ttSeq) && mc.ttRequest(18, "dark").contains("\"2호선|SAT\":{"), "요일 응답 보관");
+        ok(mc.sheetAct("mt.d.SAT") == MapCore.R_TT_RENDER && mc.sheetAct("mt.retry") == MapCore.R_TT_LOAD, "받아 둔 요일은 요청 없이 · 다시 시도");
+        ok(!mc.addTt("zzz", mc.ttSeq) && "fail".equals(mc.ttState), "깨진 응답은 실패");
+        HomeCore hm = new HomeCore();
+        hm.setStation(HomeCore.START, "강남", "2호선", 37.4979, 127.0276);
+        ok(!hm.bothSet() && "강남".equals(hm.text[HomeCore.START]) && "subway".equals(hm.loc[HomeCore.START].type), "노선도에서 출발역 정하기");
+        hm.setStation(HomeCore.DEST, "홍대입구", "2호선", 37.557, 126.924);
+        ok(hm.bothSet(), "도착역까지 정하면 경로를 찾을 수 있다");
+        hm.setStation(HomeCore.START, "사당", "2호선", 37.476, 126.981);
+        ok(!hm.bothSet() && hm.text[HomeCore.DEST].isEmpty(), "출발역을 다시 고르면 도착역은 비운다(웹과 같다)");
+
         System.out.println(fails == 0 ? "ALL OK " + oks : "FAILED " + fails + " / " + (oks + fails));
         if (fails > 0) System.exit(1);
     }

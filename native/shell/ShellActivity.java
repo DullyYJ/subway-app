@@ -47,6 +47,12 @@ public class ShellActivity extends Activity {
     private final HomeCore home = new HomeCore();       // 홈 탭 입력 상태(고른 출발/도착·후보·기준시각)
     private int seqHome = 0, seqCand = 0, seqBoard = 0;
     private BoardCore board;
+    private MapCore map;                                   // 지도 탭(안쪽 탭·지역·호선 필터·눌린 역)
+    private int seqMapH = 0, seqMapB = 0;
+    private FrameLayout holder;
+    private MetroMapView mapView;
+    private MetroMapData mapData;
+    private boolean mapDataLoading;
     private final FoodCore food = new FoodCore();         // 맛집 탭(도착지·기기 위치·받은 원자료)
     private int seqFood = 0;
     private ChatCore chat;
@@ -72,6 +78,7 @@ public class ShellActivity extends Activity {
         store = new PrefStore(getSharedPreferences(PREFS, Context.MODE_PRIVATE));
         board = new BoardCore(store);
         chat = new ChatCore(store);
+        map = new MapCore(store);
         dpr = getResources().getDisplayMetrics().density;
         ScreenView.preloadFaces(this);
 
@@ -81,7 +88,7 @@ public class ShellActivity extends Activity {
         head.setDpr(dpr);
         head.setListener(new Host(0));
         root.addView(head, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Math.round(44f * dpr)));
-        FrameLayout holder = new FrameLayout(this);                 // 본문 칸의 검색 입력칸이 붙을 부모
+        holder = new FrameLayout(this);                 // 본문 칸의 검색 입력칸이 붙을 부모
         body = new ScreenView(this);
         body.setDpr(dpr);
         body.setListener(new Host(1));
@@ -128,6 +135,7 @@ public class ShellActivity extends Activity {
 
     // ───────────── 화면 받기 ─────────────
     private void showTab(String tab) {
+        hideMapView();
         slots = ShellCore.slotsOf(store, tab);
         head.setVisibility(slots.length > 1 ? View.VISIBLE : View.GONE);
         loadTabs(tab);
@@ -160,6 +168,8 @@ public class ShellActivity extends Activity {
         if (ShellCore.S_BOARD.equals(screen)) { loadBoard(v, keep, true); return; }
         if (ShellCore.S_CHAT.equals(screen)) { loadChat(v, keep, true); return; }
         if (ShellCore.S_FOOD.equals(screen)) { loadFood(v, keep, false); return; }
+        if (ShellCore.S_MAPH.equals(screen)) { loadMapHead(v, keep, null, null); return; }
+        if (ShellCore.S_MAPB.equals(screen)) { loadMapBody(v, keep); return; }
         new Thread(new Runnable() {
             @Override public void run() {
                 String[] urls = ShellCore.feedUrls(screen), feeds = new String[urls.length];
@@ -226,6 +236,9 @@ public class ShellActivity extends Activity {
                 return;
             } else if (ShellCore.S_FOOD.equals(screenName())) {
                 foodAct(a);
+                return;
+            } else if (ShellCore.S_MAPH.equals(screenName()) || ShellCore.S_MAPB.equals(screenName())) {
+                mapAct(a, which == 0 ? head : body);
                 return;
             } else if (ShellCore.S_HOME.equals(screenName())) {
                 if ("call".equals(a.a)) homeAct(a.v, body.fields());
@@ -544,14 +557,15 @@ public class ShellActivity extends Activity {
         openLink(web);
     }
 
-    /** 맛집용 한 번 위치(홈의 위치 감지와 따로 — 홈 입력칸은 건드리지 않는다). */
-    private void locateForFood() {
+    /** 위치 한 번 받기(홈의 위치 감지와 따로 — 홈 입력칸은 건드리지 않는다). 결과는 cb 로. */
+    private interface LocCb { void fix(Location l); void fail(boolean noperm); }
+    private LocCb pendingLoc;
+    private void locateOnce(final int reqCode, final LocCb cb) {
         if (checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            food.locating = true;
-            requestPermissions(new String[] { android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION }, REQ_FOOD_LOC);
+            pendingLoc = cb;
+            requestPermissions(new String[] { android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION }, reqCode);
             return;
         }
-        food.locating = true;
         final LocationManager lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
         try {
             Location best = null;
@@ -559,12 +573,12 @@ public class ShellActivity extends Activity {
                 Location l = lm.getLastKnownLocation(p);
                 if (l != null && (best == null || l.getTime() > best.getTime())) best = l;
             }
-            if (best != null && System.currentTimeMillis() - best.getTime() < 5 * 60 * 1000L) { food.setGps(best.getLatitude(), best.getLongitude()); reloadFood(); return; }
+            if (best != null && System.currentTimeMillis() - best.getTime() < 5 * 60 * 1000L) { cb.fix(best); return; }
             String prov = lm.isProviderEnabled(LocationManager.GPS_PROVIDER) ? LocationManager.GPS_PROVIDER : LocationManager.NETWORK_PROVIDER;
             final Location fallback = best;
             final boolean[] done = { false };
             final LocationListener ll = new LocationListener() {
-                @Override public void onLocationChanged(Location l) { if (done[0]) return; done[0] = true; try { lm.removeUpdates(this); } catch (Throwable ignored) { } food.setGps(l.getLatitude(), l.getLongitude()); reloadFood(); }
+                @Override public void onLocationChanged(Location l) { if (done[0]) return; done[0] = true; try { lm.removeUpdates(this); } catch (Throwable ignored) { } cb.fix(l); }
                 @Override public void onProviderEnabled(String p) { }
                 @Override public void onProviderDisabled(String p) { }
                 @Override @SuppressWarnings("deprecation") public void onStatusChanged(String p, int s, Bundle b) { }
@@ -573,16 +587,237 @@ public class ShellActivity extends Activity {
             main.postDelayed(new Runnable() { @Override public void run() {
                 if (done[0]) return; done[0] = true;
                 try { lm.removeUpdates(ll); } catch (Throwable ignored) { }
-                if (fallback != null) food.setGps(fallback.getLatitude(), fallback.getLongitude()); else { food.noperm = true; food.locating = false; }
-                reloadFood();
+                if (fallback != null) cb.fix(fallback); else cb.fail(false);
             } }, 8000);
-        } catch (Throwable t) { food.noperm = true; food.locating = false; reloadFood(); }
+        } catch (Throwable t) { cb.fail(false); }
+    }
+    private void locateForFood() {
+        food.locating = true;
+        locateOnce(REQ_FOOD_LOC, new LocCb() {
+            @Override public void fix(Location l) { food.setGps(l.getLatitude(), l.getLongitude()); reloadFood(); }
+            @Override public void fail(boolean noperm) { food.noperm = true; food.locating = false; reloadFood(); }
+        });
+    }
+
+    // ───────────── 지도 ─────────────
+    private static final int REQ_MAP_LOC = 73;
+
+    private void loadMapHead(final ScreenView v, final boolean keep, final String q, final Runnable after) {
+        final int my = ++seqMapH;
+        final String typed = q != null ? q : (head.fields().get("mq") == null ? "" : head.fields().get("mq"));
+        final String json = map.headRequest(ShellCore.CAP, ShellCore.theme(store), typed);
+        new Thread(new Runnable() {
+            @Override public void run() {
+                NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/map", json, 8000);
+                final String txt = r.status == 200 ? r.body : "";
+                main.post(new Runnable() { @Override public void run() {
+                    if (my != seqMapH) return;
+                    present(v, txt, keep);
+                    if (txt.length() > 0) { map.onScreen(txt); if (after != null) after.run(); }
+                } });
+            }
+        }, "shell-maph").start();
+    }
+    private void loadMapBody(final ScreenView v, final boolean keep) {
+        final int my = ++seqMapB;
+        final String json = map.bodyRequest(ShellCore.CAP, ShellCore.theme(store));
+        new Thread(new Runnable() {
+            @Override public void run() {
+                NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/map", json, 8000);
+                final String txt = r.status == 200 ? r.body : "";
+                main.post(new Runnable() { @Override public void run() {
+                    if (my != seqMapB) return;
+                    if (txt.length() > 0) map.onScreen(txt);
+                    present(v, txt, keep);
+                    syncMapView();
+                } });
+            }
+        }, "shell-mapb").start();
+    }
+    private void reloadMap(boolean headToo) {
+        if (headToo) loadMapHead(head, true, null, null);
+        loadMapBody(body, false);
+    }
+
+    private void mapAct(ScreenCore.Act a, ScreenView src) {
+        if ("cat".equals(a.a)) {
+            if (map.cat(a.v) == MapCore.R_RENDER) {
+                if (a.v.startsWith("f:") && mapView != null) mapView.setFilter(map.flt());
+                reloadMap(true);
+            }
+            return;
+        }
+        if (!"call".equals(a.a)) return;
+        switch (map.act(a.v, head.fields())) {
+            case MapCore.R_FIND: {
+                final String q = head.fields().get("mq");
+                loadMapHead(head, true, q, new Runnable() { @Override public void run() {
+                    if (mapView == null || map.findName.length() == 0 || !mapView.centerOn(map.findName, 1.6f, true)) toast("'" + q.trim() + "' 역을 찾지 못했어요");
+                } });
+                break;
+            }
+            case MapCore.R_LOC:
+                toast("내 위치 확인 중...");
+                locateOnce(REQ_MAP_LOC, new LocCb() {
+                    @Override public void fix(Location l) {
+                        map.gps = new double[] { l.getLatitude(), l.getLongitude() };
+                        loadMapHead(head, true, null, new Runnable() { @Override public void run() {
+                            map.gps = null;
+                            if (mapView != null && map.nearName.length() > 0 && mapView.centerOn(map.nearName, 1.6f, true)) toast(map.nearName + " (가장 가까운 역)");
+                            else toast("가까운 역을 지도에서 찾지 못했어요");
+                        } });
+                    }
+                    @Override public void fail(boolean noperm) { toast(noperm ? "위치 권한이 필요해요" : "현재 위치를 찾지 못했어요"); }
+                });
+                break;
+            case MapCore.R_STN: openMapSheet(S_STN_H); break;
+            default: break;
+        }
+    }
+    private static final int S_STN_H = 330, S_TT_H = -58;
+
+    // 노선도 View: 수도권 지하철일 때만 본문 위에 얹는다
+    private void syncMapView() {
+        boolean want = "metro".equals(map.view) && ShellCore.S_MAPB.equals(slots.length > 1 ? slots[1] : "");
+        if (!want) { if (mapView != null) mapView.setVisibility(View.GONE); return; }
+        if (mapView != null) { mapView.setVisibility(View.VISIBLE); mapView.setFilter(map.flt()); return; }
+        if (mapDataLoading) return;
+        mapDataLoading = true;
+        new Thread(new Runnable() {
+            @Override public void run() {
+                MetroMapData d = null;
+                try { d = MetroMapData.parse(getAssets().open("metro_native.bin")); } catch (Throwable t) { d = null; }
+                final MetroMapData fd = d;
+                main.post(new Runnable() { @Override public void run() {
+                    mapDataLoading = false;
+                    if (fd == null) { toast("노선도를 열지 못했어요"); return; }
+                    mapData = fd;
+                    mapView = new MetroMapView(ShellActivity.this, fd, dpr);
+                    mapView.setListener(new MetroMapView.Listener() {
+                        @Override public void onStation(int op, float sx, float sy) {
+                            map.tapStation(mapData.labelName(op));
+                            openMapSheet(S_STN_H);
+                        }
+                        @Override public void onGestureStart() { if (ShellCore.S_MAPSTN.equals(sheetName) || ShellCore.S_MAPTT.equals(sheetName)) closeSheet(); }
+                        @Override public void onReady() { }
+                        @Override public void onError(String msg) { toast("노선도를 그리지 못했어요"); }
+                        @Override public void onCentered(int op) { map.tapStation(mapData.labelName(op)); openMapSheet(S_STN_H); }
+                    });
+                    holder.addView(mapView, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+                    mapView.setFilter(map.flt());
+                    syncMapView();
+                } });
+            }
+        }, "shell-mapdata").start();
+    }
+    private void hideMapView() {
+        closeSheet();
+        if (mapView != null) mapView.setVisibility(View.GONE);
+    }
+
+    /** 아래에서 올라오는 팝업(역 정보·시간표). hDp > 0 이면 그 높이(dp), 음수면 화면 높이의 -hDp %. */
+    private void openMapSheet(int hDp) {
+        closeSheet();
+        sheetName = ShellCore.S_MAPSTN;
+        sheetView = new ScreenView(this);
+        sheetView.setDpr(dpr);
+        int[] pal = ShellCore.palette(ShellCore.theme(store));
+        sheetView.setPalette(pal);
+        sheetView.setListener(new SheetHost());
+        sheet = new android.app.Dialog(this, android.R.style.Theme_Material_Light_Dialog_NoActionBar);
+        sheet.setContentView(sheetView);
+        try {
+            android.view.Window w = sheet.getWindow();
+            int hpx = hDp > 0 ? Math.round(hDp * dpr) : Math.round(getResources().getDisplayMetrics().heightPixels * (-hDp) / 100f);
+            w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, hpx);
+            w.setGravity(android.view.Gravity.BOTTOM);
+            w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(pal[ScreenView.R_BG]));
+            w.clearFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            w.setWindowAnimations(android.R.style.Animation_InputMethod);
+            sheet.setOnDismissListener(new android.content.DialogInterface.OnDismissListener() { @Override public void onDismiss(android.content.DialogInterface d) { map.ttSeq++; } });
+            sheet.show();
+        } catch (Throwable t) { toast("역 정보를 열지 못했어요"); return; }
+        final String json = map.stnRequest(ShellCore.CAP, ShellCore.theme(store));
+        new Thread(new Runnable() {
+            @Override public void run() {
+                NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/map", json, 8000);
+                final String txt = r.status == 200 ? r.body : "";
+                main.post(new Runnable() { @Override public void run() {
+                    if (sheet == null || !sheet.isShowing() || !ShellCore.S_MAPSTN.equals(sheetName)) return;
+                    if (txt.length() == 0) { closeSheet(); return; }          // 역이 아닌 글자 — 조용히 닫는다
+                    map.onStn(txt); map.setLinesFromStn(txt);
+                    present(sheetView, txt, false);
+                    if (mapView != null) mapView.ensureVisible(map.stn);
+                } });
+            }
+        }, "shell-mapstn").start();
+    }
+
+    private void mapSheetAct(String v) {
+        switch (map.sheetAct(v)) {
+            case MapCore.R_CLOSE: closeSheet(); break;
+            case MapCore.R_START:
+                home.setStation(HomeCore.START, map.pickName, map.pickLine, map.pickLa, map.pickLo);
+                closeSheet(); toast("출발역: " + map.pickName + " · 이제 도착역을 선택하세요");
+                break;
+            case MapCore.R_DEST:
+                home.setStation(HomeCore.DEST, map.pickName, map.pickLine, map.pickLa, map.pickLo);
+                closeSheet();
+                if (home.bothSet()) {
+                    toast("도착역: " + map.pickName);
+                    store.put(ShellCore.K_TAB, "home"); showTab("home");
+                    main.postDelayed(new Runnable() { @Override public void run() { goRoute(); } }, 400);
+                } else toast("도착역: " + map.pickName + " · 출발역도 골라 주세요");
+                break;
+            case MapCore.R_TT: openTimetable(); break;
+            case MapCore.R_TT_LOAD: ttFetch(); break;
+            case MapCore.R_TT_RENDER: ttRender(); break;
+            default: break;
+        }
+    }
+    private void openTimetable() {
+        if (sheet == null) return;
+        try { android.view.Window w = sheet.getWindow(); w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, Math.round(getResources().getDisplayMetrics().heightPixels * 0.62f)); } catch (Throwable ignored) { }
+        sheetName = ShellCore.S_MAPTT;
+        ttRender();
+        ttFetch();
+    }
+    private void ttRender() {
+        final String json = map.ttRequest(ShellCore.CAP, ShellCore.theme(store));
+        new Thread(new Runnable() {
+            @Override public void run() {
+                NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/map", json, 8000);
+                final String txt = r.status == 200 ? r.body : "";
+                main.post(new Runnable() { @Override public void run() {
+                    if (sheet == null || !sheet.isShowing() || !ShellCore.S_MAPTT.equals(sheetName) || txt.length() == 0) return;
+                    map.onTt(txt);
+                    present(sheetView, txt, true);
+                } });
+            }
+        }, "shell-maptt").start();
+    }
+    /** 시간표 응답이 없으면 묻는다: 처음이면 이 역의 모든 노선을 한 번에, 요일을 골랐으면 그 노선·요일만. */
+    private void ttFetch() {
+        final int sq = map.ttSeq;
+        final String body = map.ttAskBody(System.currentTimeMillis());
+        new Thread(new Runnable() {
+            @Override public void run() {
+                NetPost.Res r = NetPost.post(MapCore.ttUrl(), body, 12000);
+                final boolean got = r.status == 200 && map.addTt(r.body, sq);
+                main.post(new Runnable() { @Override public void run() {
+                    if (sq != map.ttSeq) return;
+                    if (!got) map.ttState = "fail";
+                    ttRender();
+                } });
+            }
+        }, "shell-ttfetch").start();
     }
 
     private void closeSheet() { try { if (sheet != null) sheet.dismiss(); } catch (Throwable ignored) { } sheet = null; sheetView = null; sheetName = ""; }
 
     private final class SheetHost implements ScreenView.Listener {
         @Override public void onAction(ScreenCore.Act a) {
+            if (ShellCore.S_MAPSTN.equals(sheetName) || ShellCore.S_MAPTT.equals(sheetName)) { if ("call".equals(a.a)) mapSheetAct(a.v); return; }
             if (!"call".equals(a.a)) return;
             if ("wr.close".equals(a.v) || "fm.close".equals(a.v)) { closeSheet(); return; }
             if ("wr.submit".equals(a.v)) { submitWrite(); return; }
@@ -760,10 +995,11 @@ public class ShellActivity extends Activity {
         setHomeFields(); reloadHome();
     }
     @Override public void onRequestPermissionsResult(int code, String[] perms, int[] res) {
-        if (code == REQ_FOOD_LOC) {
+        if (code == REQ_FOOD_LOC || code == REQ_MAP_LOC) {
             boolean g = res.length > 0 && res[0] == PackageManager.PERMISSION_GRANTED;
-            food.noperm = !g; food.locating = false;
-            loadFood(body, true, false);
+            LocCb cb = pendingLoc; pendingLoc = null;
+            if (cb == null) return;
+            if (g) locateOnce(code, cb); else cb.fail(true);
             return;
         }
         if (code != REQ_LOC) return;
