@@ -1,7 +1,9 @@
 package com.dullyyj.subway;   // ★ MainActivity.java 첫 줄과 같아야 한다
 
 import java.net.URLEncoder;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -87,7 +89,7 @@ public final class ShellCore {
     }
 
     // ═════════════ 눌림 → 효과 ═════════════
-    public static final int E_NONE = 0, E_TAB = 1, E_REFRESH = 2, E_TOAST = 3, E_LINK = 4;
+    public static final int E_NONE = 0, E_TAB = 1, E_REFRESH = 2, E_TOAST = 3, E_LINK = 4, E_NEWS = 5;
     /** 눌림 결과: 껍데기가 할 일 하나. arg 는 탭 이름 · 알림 글 · 주소. 저장값은 route 가 이미 바꿔 놓았다. */
     public static final class Effect {
         public final int kind; public final String arg;
@@ -136,10 +138,199 @@ public final class ShellCore {
     }
     private static Effect tabEffect(Store st, String tab) { st.put(K_TAB, tab); return new Effect(E_TAB, tab); }
 
+    /** 화면 칸(screen)별 눌림. 새로 받아야 하면 REFRESH(본문) · 탭 전체를 다시 그려야 하면 E_TAB. */
+    public static Effect route(String screen, Store st, String a, String v, String key, boolean on, String url, Map<String, String> fields) {
+        if (S_SETTINGS.equals(screen)) return routeSettings(st, a, v, key, on, fields);
+        if (S_CCHIPS.equals(screen)) {
+            if ("call".equals(a) && v != null && v.startsWith("cc.") && isMode(v.substring(3))) {
+                st.put(K_MODE, v.substring(3));
+                return new Effect(E_TAB, currentTab(st));
+            }
+            return NONE;
+        }
+        if (S_SHOP.equals(screen)) {
+            if ("cat".equals(a) && v != null && v.length() > 0 && v.length() < 20) { st.put(K_SHOP_CAT, v); return REFRESH; }
+            if ("open".equals(a)) return linkEffect(url);
+            if ("refresh".equals(a)) return REFRESH;
+            return NONE;
+        }
+        if (S_NEWS.equals(screen)) {
+            if ("cat".equals(a) && v != null && v.length() > 0 && v.length() < 20) { st.put(K_NEWS_CAT, v); return REFRESH; }
+            if ("call".equals(a) && v != null && v.startsWith("nw.")) {
+                try { int i = Integer.parseInt(v.substring(3)); if (i >= 0 && i < NewsRows.MAX) return new Effect(E_NEWS, String.valueOf(i)); } catch (NumberFormatException e) { /* 무시 */ }
+            }
+            return NONE;
+        }
+        return NONE;
+    }
+
+    /** 검색줄: 글이 있으면 tpl 의 {q} 에 넣고, 비었으면 empty 주소로(주소는 엔진이 정했다). */
+    public static Effect routeSearch(String tpl, String empty, String q) {
+        String t = q == null ? "" : q.trim();
+        if (t.length() > 0 && tpl != null && tpl.indexOf("{q}") >= 0) return linkEffect(tpl.replace("{q}", enc(t)));
+        if (t.length() == 0 && empty != null && empty.length() > 0) return linkEffect(empty);
+        return NONE;
+    }
+    static Effect linkEffect(String url) { return linkOk(url) ? new Effect(E_LINK, url) : NONE; }
+
     // ═════════════ 탭마다 보여 줄 것 ═════════════
-    public static final int SRC_SETTINGS = 1, SRC_PENDING = 2;
-    /** 탭 → 내용 출처. 커뮤니티 탭 안의 설정이 먼저 옮겨졌고, 나머지는 엔진 화면을 하나씩 잇는 중이다. */
-    public static int sourceOf(String tab) { return "community".equals(tab) ? SRC_SETTINGS : SRC_PENDING; }
+    public static final String K_MODE = "cc_mode", K_SHOP_CAT = "shop_cat", K_NEWS_CAT = "news_cat";
+    public static final String MODE_DEFAULT = "news";
+    public static final String[] MODES = { "chat", "board", "news", "set" };
+    public static boolean isMode(String m) { for (String x : MODES) if (x.equals(m)) return true; return false; }
+    public static String mode(Store st) { String m = st.get(K_MODE, MODE_DEFAULT); return isMode(m) ? m : MODE_DEFAULT; }
+
+    public static final String S_SETTINGS = "settings", S_SHOP = "shop", S_NEWS = "news", S_CCHIPS = "cchips", S_PENDING = "pending";
+
+    /** 탭이 보여 줄 화면 칸들(위에서 아래로). 첫 칸이 머리(높이는 그린 내용만큼), 마지막 칸이 본문(남은 높이). 한 칸이면 본문만. */
+    public static String[] slotsOf(Store st, String tab) {
+        if ("community".equals(tab)) {
+            String m = mode(st);
+            return new String[] { S_CCHIPS, "news".equals(m) ? S_NEWS : "set".equals(m) ? S_SETTINGS : S_PENDING };
+        }
+        if ("shop".equals(tab)) return new String[] { S_SHOP };
+        return new String[] { S_PENDING };
+    }
+
+    /** 요청 하나(GET 이면 body 가 null). */
+    public static final class Req {
+        public final String method, url, body;
+        Req(String m, String u, String b) { method = m; url = u; body = b; }
+    }
+
+    public static final String BOARD_BASE = "https://board-writer.phg0643.workers.dev";
+    public static final String NEWS_BASE = "https://gentle-lab-7e47subway-api.phg0643.workers.dev";
+
+    /** 이 화면을 계산하려면 먼저 받아야 하는 원자료 주소들(없으면 바로 엔진에 요청). */
+    public static String[] feedUrls(String screen) {
+        if (S_NEWS.equals(screen)) return new String[] { BOARD_BASE + "/newsfeed", NEWS_BASE + "/news/all?per=100" };
+        return new String[0];
+    }
+
+    /** 화면 하나를 엔진에서 받는 요청. feeds 는 feedUrls 의 응답 글(못 받은 것은 빈 글). */
+    public static Req request(String screen, Store st, String[] feeds) {
+        if (S_SETTINGS.equals(screen)) return new Req("GET", settingsUrl(st), null);
+        if (S_SHOP.equals(screen)) {
+            String c = st.get(K_SHOP_CAT, "");
+            return new Req("GET", BASE + "/screen/shop?cap=" + CAP + (c.length() > 0 ? "&cat=" + enc(c) : ""), null);
+        }
+        if (S_CCHIPS.equals(screen)) return new Req("POST", BASE + "/screen/cchips", "{\"cap\":" + CAP + ",\"f\":{\"mode\":" + q(mode(st)) + "}}");
+        if (S_NEWS.equals(screen)) {
+            NewsRows r = NewsRows.from(feeds);
+            return new Req("POST", BASE + "/screen/news", "{\"cap\":" + CAP + ",\"f\":{\"cat\":" + q(st.get(K_NEWS_CAT, "전체")) + "},\"n\":" + r.json() + "}");
+        }
+        return null;
+    }
+    public static String enc(String s) { try { return URLEncoder.encode(s, "UTF-8"); } catch (java.io.UnsupportedEncodingException e) { return ""; } }
+
+    // ═════════════ 뉴스 원자료 → 엔진 요청 ═════════════
+    /** 엔진 /screen/news 가 받는 기사 줄 [제목, 링크, 언론사, 시각(ms), 서버 분류, 요약]. 분류·거르기·중복 정리는 엔진이 하고, 여기는 모양만 맞춘다. */
+    public static final class NewsRows {
+        public final List<String[]> rows = new ArrayList<String[]>();
+        public static final int MAX = 1200;
+
+        @SuppressWarnings("unchecked")
+        public static NewsRows from(String[] feeds) {
+            NewsRows r = new NewsRows();
+            try {
+                if (feeds != null && feeds.length > 0 && feeds[0] != null && feeds[0].length() > 2) {
+                    Object o = ScreenCore.parse(feeds[0]);
+                    if (o instanceof Map && Boolean.TRUE.equals(((Map<String, Object>) o).get("ok")) && ((Map<String, Object>) o).get("items") instanceof List)
+                        for (Object it : (List<Object>) ((Map<String, Object>) o).get("items")) r.add(it, "");
+                }
+            } catch (Exception e) { /* 못 읽은 원자료는 건너뛴다 */ }
+            try {
+                if (feeds != null && feeds.length > 1 && feeds[1] != null && feeds[1].length() > 2) {
+                    Object o = ScreenCore.parse(feeds[1]);
+                    if (o instanceof Map && Boolean.TRUE.equals(((Map<String, Object>) o).get("ok")) && ((Map<String, Object>) o).get("cats") instanceof Map) {
+                        Map<String, Object> cats = (Map<String, Object>) ((Map<String, Object>) o).get("cats");
+                        for (Map.Entry<String, Object> e : cats.entrySet())
+                            if (e.getValue() instanceof List) for (Object it : (List<Object>) e.getValue()) r.add(it, e.getKey());
+                    }
+                }
+            } catch (Exception e) { /* 건너뛴다 */ }
+            return r;
+        }
+        @SuppressWarnings("unchecked")
+        void add(Object it, String srv) {
+            if (rows.size() >= MAX || !(it instanceof Map)) return;
+            Map<String, Object> m = (Map<String, Object>) it;
+            String title = decode(str(m.get("title"))).replaceAll("\\s+", " ").trim();
+            if (title.length() == 0) return;
+            String desc = decode(str(m.get("desc")));
+            if (desc.length() > 400) desc = desc.substring(0, 400);
+            long ts = m.get("ts") instanceof Double ? (long) ((Double) m.get("ts")).doubleValue() : 0L;
+            String cat = srv.length() > 0 ? srv : str(m.get("cat"));
+            rows.add(new String[] { title, str(m.get("link")), decode(str(m.get("source"))).trim(), String.valueOf(ts), cat, desc });
+        }
+        public String json() {
+            StringBuilder b = new StringBuilder("[");
+            for (int i = 0; i < rows.size(); i++) {
+                if (i > 0) b.append(',');
+                b.append(rowJson(i));
+            }
+            return b.append(']').toString();
+        }
+        public String rowJson(int i) {
+            if (i < 0 || i >= rows.size()) return "[]";
+            String[] r = rows.get(i);
+            return "[" + q(r[0]) + "," + q(r[1]) + "," + q(r[2]) + "," + r[3] + "," + q(r[4]) + "," + q(r[5]) + "]";
+        }
+        static String str(Object o) { return o instanceof String ? (String) o : ""; }
+    }
+
+    /** HTML 글자 이름표 풀기(웹 _htmlDecode 와 같은 범위: 자주 오는 이름표와 숫자 이름표). */
+    public static String decode(String s) {
+        if (s == null || s.indexOf('&') < 0) return s == null ? "" : s;
+        StringBuilder b = new StringBuilder();
+        int n = s.length();
+        for (int i = 0; i < n; i++) {
+            char c = s.charAt(i);
+            if (c != '&') { b.append(c); continue; }
+            int e = s.indexOf(';', i);
+            if (e < 0 || e - i > 9) { b.append(c); continue; }
+            String t = s.substring(i + 1, e), r = null;
+            if ("amp".equals(t)) r = "&"; else if ("lt".equals(t)) r = "<"; else if ("gt".equals(t)) r = ">"; else if ("quot".equals(t)) r = "\""; else if ("apos".equals(t)) r = "'"; else if ("nbsp".equals(t)) r = " ";
+            else if (t.startsWith("#")) {
+                try {
+                    int cp = t.startsWith("#x") || t.startsWith("#X") ? Integer.parseInt(t.substring(2), 16) : Integer.parseInt(t.substring(1));
+                    if (cp > 0 && cp < 0x110000) r = new String(Character.toChars(cp));
+                } catch (NumberFormatException ex) { r = null; }
+            }
+            if (r == null) { b.append(c); continue; }
+            b.append(r); i = e;
+        }
+        return b.toString();
+    }
+
+    /** 원문 주소는 http(s) 만 연다. */
+    public static boolean linkOk(String u) { return u != null && u.length() < 2048 && (u.startsWith("https://") || u.startsWith("http://")) && u.indexOf(' ') < 0; }
+
+    /** 기사 상세(엔진 {detail}) → 안내창에 쓸 값. 못 읽으면 null. */
+    public static final class Detail {
+        public String title = "", meta = "", body = "", notice = "", btn = "", close = "닫기", link = "";
+        public boolean open;
+    }
+    @SuppressWarnings("unchecked")
+    public static Detail parseDetail(String json, String link) {
+        try {
+            Object o = ScreenCore.parse(json);
+            if (!(o instanceof Map)) return null;
+            Object d = ((Map<String, Object>) o).get("detail");
+            if (!(d instanceof Map)) return null;
+            Map<String, Object> m = (Map<String, Object>) d;
+            Detail r = new Detail();
+            r.title = NewsRows.str(m.get("title")); r.meta = NewsRows.str(m.get("meta"));
+            String desc = NewsRows.str(m.get("desc")), empty = NewsRows.str(m.get("empty"));
+            r.body = desc.length() > 0 ? desc : empty;
+            r.notice = NewsRows.str(m.get("notice")); r.btn = NewsRows.str(m.get("btn"));
+            String cl = NewsRows.str(m.get("close")); if (cl.length() > 0) r.close = cl;
+            r.open = Double.valueOf(1d).equals(m.get("open")) && linkOk(link);
+            r.link = link;
+            return r.title.length() > 0 ? r : null;
+        } catch (Exception e) { return null; }
+    }
+    public static String newsDetailBody(String rowJson) { return "{\"cap\":" + CAP + ",\"d\":" + rowJson + "}"; }
 
     /** 아직 엔진 화면을 못 잇는 탭의 임시 화면(앱이 정한 글은 이것 하나뿐 — 이어지는 대로 지운다). */
     public static String pendingScreen(String tab) {
