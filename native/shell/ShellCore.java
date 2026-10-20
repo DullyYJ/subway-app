@@ -222,6 +222,20 @@ public final class ShellCore {
         }
         return null;
     }
+    /** 화면 둘을 위아래로 이어 붙인다(첫 화면의 head·cover·info 를 쓰고 본문만 이어 붙임). 내용은 건드리지 않는다. 못 읽으면 첫 화면 그대로. */
+    @SuppressWarnings("unchecked")
+    public static String mergeBodies(String first, String second) {
+        try {
+            Object a = ScreenCore.parse(first), b = ScreenCore.parse(second);
+            if (!(a instanceof Map) || !(b instanceof Map)) return first;
+            Map<String, Object> ma = (Map<String, Object>) a, mb = (Map<String, Object>) b;
+            if (!(ma.get("body") instanceof List) || !(mb.get("body") instanceof List)) return first;
+            List<Object> body = new ArrayList<Object>((List<Object>) ma.get("body"));
+            body.addAll((List<Object>) mb.get("body"));
+            ma.put("body", body);
+            return HomeSearchCore.toJson(ma);
+        } catch (Exception e) { return first; }
+    }
     public static String enc(String s) { try { return URLEncoder.encode(s, "UTF-8"); } catch (java.io.UnsupportedEncodingException e) { return ""; } }
 
     // ═════════════ 뉴스 원자료 → 엔진 요청 ═════════════

@@ -43,6 +43,39 @@ public final class HomeCore {
     final Cand[] cand = { new Cand(), new Cand() };
     final List<Loc> pkU = new ArrayList<Loc>();      // 엔진이 거른 지하철 후보(응답 info.pk.u 순서)
 
+    // ── 경로 결과(받은 응답을 그대로 들고 있다가 엔진에 다시 보낸다 — 앱은 가공하지 않는다) ──
+    public static final String[] RTABS = { "fast", "less", "sub", "bus", "longdist" };
+    public String routeRaw = "", resTab = "fast", resA = "", resB = "";
+    public long resRb = 0, resBt = -1;
+    public int resRev = 0;                                       // 결과가 바뀔 때마다 오른다(화면 캐시 열쇠)
+    public boolean hasRoute() { return routeRaw.length() > 2; }
+    /** 받은 경로 응답을 결과로 둔다. 모양이 JSON 객체가 아니면 버린다. */
+    public boolean setRoute(String raw, String a, String b, long bt, long rb) {
+        String t = raw == null ? "" : raw.trim();
+        if (t.length() < 2 || t.charAt(0) != '{' || t.charAt(t.length() - 1) != '}') return false;
+        routeRaw = t; resA = a == null ? "" : a; resB = b == null ? "" : b; resBt = bt; resRb = rb; resTab = "fast"; resRev++;
+        return true;
+    }
+    public void clearRoute() { routeRaw = ""; resRev++; }
+    /** 엔진 POST /screen/result 본문. */
+    public String resultRequest(Env env, int cap, String theme, int tzMin) {
+        return "{\"cap\":" + cap + ",\"r\":{\"data\":" + routeRaw + ",\"tab\":" + ShellCore.q(resTab)
+            + ",\"a\":" + ShellCore.q(resA) + ",\"b\":" + ShellCore.q(resB)
+            + ",\"bt\":" + (resBt >= 0 ? String.valueOf(resBt) : "null") + ",\"rb\":" + resRb
+            + ",\"now\":" + env.nowMs + ",\"tz\":" + (-env.tzoMin) + ",\"th\":" + ShellCore.q("dark".equals(theme) ? "dark" : "pastel") + ",\"fav\":1}}";
+    }
+    /** 결과 화면의 눌림(rh.*). */
+    public int actResult(String v) {
+        if (v == null || !v.startsWith("rh.")) return R_NONE;
+        if ("rh.close".equals(v)) { clearRoute(); return R_RENDER; }
+        if ("rh.fav".equals(v)) return R_FAV;
+        if (v.startsWith("rh.tab.")) {
+            String t = v.substring(7);
+            for (String x : RTABS) if (x.equals(t)) { if (!x.equals(resTab)) { resTab = x; resRev++; } return R_RESULT; }
+        }
+        return R_NONE;
+    }
+
     // ═════════════ 요청 ═════════════
     /** 엔진 POST /screen/home 본문 { cap, f, d }. */
     public String request(Env env, int cap) {
@@ -130,11 +163,12 @@ public final class HomeCore {
     }
 
     // ═════════════ 눌림 ═════════════
-    public static final int R_NONE = 0, R_RENDER = 1, R_GPS = 2, R_GO = 3, R_PICK_TIME = 4, R_FIELDS = 5, R_NEED_BOTH = 6;
+    public static final int R_NONE = 0, R_RENDER = 1, R_GPS = 2, R_GO = 3, R_PICK_TIME = 4, R_FIELDS = 5, R_NEED_BOTH = 6, R_RESULT = 7, R_FAV = 8;
 
     /** 홈 화면의 눌림(a:'call' 의 v). R_FIELDS 는 입력칸 글자를 화면에 다시 써야 한다는 뜻. */
     public int act(String v, java.util.Map<String, String> fields) {
         if (v == null) return R_NONE;
+        if (v.startsWith("rh.")) return actResult(v);
         if (fields != null) {                                        // 화면 입력칸의 지금 글자를 먼저 받아 둔다
             for (int f = 0; f < 2; f++) { String t = fields.get(KEYS[f]); if (t != null && !t.equals(text[f])) { text[f] = t; loc[f] = null; } }
         }

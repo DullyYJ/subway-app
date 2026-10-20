@@ -45,7 +45,7 @@ public class ShellActivity extends Activity {
     private volatile ShellCore.NewsRows lastNews = new ShellCore.NewsRows();
     private final HomeCore home = new HomeCore();       // 홈 탭 입력 상태(고른 출발/도착·후보·기준시각)
     private int seqHome = 0, seqCand = 0;
-    private volatile String lastRouteRaw = "";            // 가장 최근에 받은 경로 응답(결과 화면은 엔진 이식 뒤에 올린다)
+    private volatile String resCacheKey = "", resCacheJson = "";   // 결과 화면 캐시(같은 경로·같은 탭이면 엔진에 다시 묻지 않는다)
 
     /** SharedPreferences 를 ShellCore.Store 로 감싼다. */
     private static final class PrefStore implements ShellCore.Store {
@@ -233,18 +233,33 @@ public class ShellActivity extends Activity {
         return e;
     }
 
-    /** 홈 화면: 입력 상태를 엔진에 보내고 받은 화면을 올린다. */
+    /** 홈 화면: 입력 상태를 엔진에 보내고, 경로 결과가 있으면 결과 화면도 받아 이어 붙여 올린다. */
     private void loadHome(final ScreenView v, final boolean keep) {
         final int my = ++seqHome;
         final String json = home.request(homeEnv(), ShellCore.CAP);
+        final boolean hasRes = home.hasRoute();
+        final String resBody = hasRes ? home.resultRequest(homeEnv(), ShellCore.CAP, ShellCore.theme(store), 0) : "";
+        final String resKey = home.resRev + ":" + home.resTab;
         new Thread(new Runnable() {
             @Override public void run() {
                 NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/home", json, 8000);
-                final String txt = r.status == 200 ? r.body : "";
+                String txt = r.status == 200 ? r.body : "";
+                if (hasRes && txt.length() > 0) {
+                    String rs;
+                    if (resKey.equals(resCacheKey)) rs = resCacheJson;
+                    else {
+                        NetPost.Res rr = NetPost.post(ShellCore.BASE + "/screen/result", resBody, 15000);
+                        rs = rr.status == 200 ? rr.body : "";
+                        if (rs.length() > 0) { resCacheKey = resKey; resCacheJson = rs; }
+                    }
+                    if (rs.length() > 0) txt = ShellCore.mergeBodies(txt, rs);
+                    else main.post(new Runnable() { @Override public void run() { toast("경로 결과를 그리지 못했어요"); } });
+                }
+                final String fin = txt;
                 main.post(new Runnable() { @Override public void run() {
                     if (my != seqHome) return;
-                    present(v, txt, keep);
-                    if (txt.length() > 0) home.onScreen(txt);
+                    present(v, fin, keep);
+                    if (fin.length() > 0) home.onScreen(fin);
                 } });
             }
         }, "shell-home").start();
@@ -283,6 +298,8 @@ public class ShellActivity extends Activity {
     private void homeAct(String v, Map<String, String> fields) {
         int r = home.act(v, fields);
         switch (r) {
+            case HomeCore.R_RESULT: reloadHome(); break;
+            case HomeCore.R_FAV: toast("즐겨찾기는 준비 중이에요"); break;
             case HomeCore.R_RENDER: case HomeCore.R_FIELDS:
                 if (r == HomeCore.R_FIELDS) setHomeFields();
                 reloadHome(); break;
@@ -361,24 +378,41 @@ public class ShellActivity extends Activity {
         }, c.get(Calendar.YEAR), c.get(Calendar.MONTH), c.get(Calendar.DAY_OF_MONTH)).show();
     }
 
-    /** 경로 탐색: 좌표가 있는 두 장소로 경로 서버에 묻는다. 결과 화면은 엔진 이식(result) 뒤에 올린다. */
+    /** 경로 탐색: 좌표가 있는 두 장소로 경로 서버에 묻는다. 빠른 응답(live=0)을 먼저 그리고, 엔진의 follow 지시대로 전체를 뒤따라 받는다. */
     private void goRoute() {
-        final String qs = HomeCore.routeQuery(home.loc[HomeCore.START], home.loc[HomeCore.DEST],
-            home.baseMs >= 0 ? home.baseMs : System.currentTimeMillis(), home.baseMs >= 0);
+        final boolean picked = home.baseMs >= 0;
+        final long base = picked ? home.baseMs : System.currentTimeMillis();
+        final String qs = HomeCore.routeQuery(home.loc[HomeCore.START], home.loc[HomeCore.DEST], base, picked);
         if (qs == null) { toast("출발지와 도착지를 목록에서 골라 주세요"); return; }
+        final String url = HomeCore.routeUrl(qs), a = home.text[HomeCore.START], b = home.text[HomeCore.DEST];
+        final long bt = picked ? base : -1, rb = System.currentTimeMillis();
+        final int my = ++seqRoute;
         toast("경로를 찾는 중이에요");
-        final String url = HomeCore.routeUrl(qs);
         new Thread(new Runnable() {
             @Override public void run() {
-                NetPost.Res r = NetPost.get(RouteFetchCore.liveZero(url), 15000);
-                final boolean ok = r.status == 200 && r.body != null && r.body.length() > 2;
-                final String raw = ok ? r.body : "";
-                main.post(new Runnable() { @Override public void run() {
-                    lastRouteRaw = raw;
-                    toast(ok ? "경로를 받았어요" : "경로를 받지 못했어요");
-                } });
+                NetPost.Res r1 = NetPost.get(RouteFetchCore.liveZero(url), 15000);
+                String b1 = (r1.status == 200 && r1.body != null) ? r1.body : "";
+                Map<String, Object> fo = RouteFetchCore.extractFollow(b1);
+                boolean draw = b1.length() > 2 && RouteFetchCore.draws(fo);
+                if (draw) postRoute(my, b1, a, b, bt, rb);
+                if (!draw || RouteFetchCore.wantsFull(fo)) {
+                    NetPost.Res r2 = NetPost.get(url, 30000);
+                    String b2 = (r2.status == 200 && r2.body != null) ? r2.body : "";
+                    if (b2.length() > 2) postRoute(my, b2, a, b, bt, rb);
+                    else if (!draw) postFail(my);
+                }
             }
         }, "shell-route").start();
+    }
+    private int seqRoute = 0;
+    private void postRoute(final int my, final String raw, final String a, final String b, final long bt, final long rb) {
+        main.post(new Runnable() { @Override public void run() {
+            if (my != seqRoute) return;
+            if (home.setRoute(raw, a, b, bt, rb)) reloadHome(); else toast("경로 응답을 읽지 못했어요");
+        } });
+    }
+    private void postFail(final int my) {
+        main.post(new Runnable() { @Override public void run() { if (my == seqRoute) toast("경로를 받지 못했어요"); } });
     }
 
     private void openLink(String url) {

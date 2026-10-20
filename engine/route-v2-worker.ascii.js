@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-20s83";
+var ENGINE_VERSION = "route-v2-2026-10-20s87";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -18115,6 +18115,220 @@ async function handlePosFuse(request) {
 }
 // ===== POSFUSE ENGINE END =====
 
+// ===== RESULT ENGINE BEGIN =====
+// \uae38\ub3d9\ubb34 \u2014 \ud648 '\uacbd\ub85c \uacb0\uacfc' \ud654\uba74 \uc5d4\uc9c4 (route-v2 Worker \uc5d0 \ubd99\uc5ec \ub123\ub294 \uc21c\uc218 \ud568\uc218; \ub2e8\uc77c \ucd9c\ucc98)
+//
+// \u2605 \uc6d0\uce59(YJ): "\ubaa8\ub4e0 \uacc4\uc0b0\uc740 \uc5d4\uc9c4\uc774 \ud55c\ub2e4. \uc571\uc740 \uc5d4\uc9c4\uc774 \uacc4\uc0b0\ud55c \uadf8\ub9bc\ub9cc \uadf8\ub9b0\ub2e4."  (2026-10-20 s87 \u2014 \uc6f9 \uc81c\uac70 \u00b7 \uc21c\uc218 \ub124\uc774\ud2f0\ube0c)
+//   \uc608\uc804\uc5d4 www/index.html \uc758 _convertEngineRoutes \u00b7 _normStop \u00b7 _parseRouteOptions(\ud0ed \uace0\ub974\uae30) \u00b7 _renderTransitResultCard \uc758 \uc0ac\uc2e4 \ubaa8\uc73c\uae30\uac00
+//   \uacbd\ub85c \uc751\ub2f5(/route-v2-app)\uc744 \uacb0\uacfc \uce74\ub4dc\uc6a9 \uad6c\uc870\ub85c \ubc14\uafb8\uace0, \ud0ed\ub9c8\ub2e4 \ub300\ud45c \uacbd\ub85c\ub97c \uace0\ub974\uace0, \uba38\ub9ac\uc904\u00b7\ud0ed \uc904\u00b7\uad6c\uac04 \ud0c0\uc784\ub77c\uc778\uc5d0 \uc904 '\uc0ac\uc2e4'\uc744 \ubaa8\uc558\ub2e4.
+//   \uc774\uc81c \uc571\uc740 \ubc1b\uc740 \uacbd\ub85c \uc751\ub2f5 \uae00\uc744 '\uadf8\ub300\ub85c' \ubcf4\ub0b4\uace0(\uac00\uacf5\ud558\uc9c0 \uc54a\ub294\ub2e4), \uc5d4\uc9c4\uc774 \uc804\ubd80 \ud558\uc5ec \ud654\uba74 \ub178\ub4dc\ub97c \ub0b4\ub824 \uc900\ub2e4. \uae00\u00b7\uc0c9\u00b7\uc21c\uc11c\u00b7\ub2e8\ucd94\ub294 engine/rhead.js \uac00 \uc815\ud55c\ub2e4.
+//
+// \uc785\ub825  resultScreen({ cap }, r)
+//        cap = \uc571\uc774 \uadf8\ub9b4 \uc218 \uc788\ub294 \ud654\uba74 \uaddc\uaca9 \uc218\uc900(12 \uc774\uc0c1: \uba38\ub9ac\uc904 rhd 10 \u00b7 \ud0c0\uc784\ub77c\uc778 trk+\ub9c8\ucee4 12)
+//        r   = { data: \uacbd\ub85c \uc751\ub2f5(/route-v2-app \uc774 \uc900 JSON \uadf8\ub300\ub85c), tab: 'fast'|'less'|'sub'|'bus'|'longdist'(\ub20c\ub9b0 \ud0ed; \uc5c6\uc73c\uba74 'fast'),
+//                a, b: \ucd9c\ubc1c/\ub3c4\ucc29 \uc774\ub984, bt: \uc0ac\uc6a9\uc790\uac00 \uc815\ud55c \uae30\uc900\uc2dc\uac01 ms|null, rb: \uc774\ubc88 \ud0d0\uc0c9\uc774 \ub098\uac04 \uc2dc\uac01 ms|null, now: \uae30\uae30 \uc2dc\uacc4 ms, tz: \uae30\uae30 \uc2dc\uac04\ub300(\ub3d9\ucabd \ubd84), th: 'dark'|'pastel', fav: 0|1 }
+// \ucd9c\ub825  { ok, v:1, screen:'result', cover:'chips', head:[], body:[\uacb0\uacfc \uce74\ub4dc panel], info:{has:{fast,less,sub,bus,longdist}, tab, m(\ucd1d \uc18c\uc694 \ubd84), n(\uacbd\ub85c \uc218)}, rev } \u2014 body \ub294 \ud648 \ud654\uba74 \ubcf8\ubb38 \ub4a4\uc5d0 \uc774\uc5b4 \ubd99\uc778\ub2e4.
+//        \ub204\ub984: rh.fav \u00b7 rh.close \u00b7 rh.tab.<\uc885\ub958> \u00b7 rh.ld.<m|g>.<\ubc88\ud638> (rhead.js \uc640 \uac19\ub2e4)
+// \ub9e8 \uc544\ub798 module.exports \ub294 \uc2dc\ud5d8(Node)\uc6a9\uc774\uace0 Worker \uc5d0\uc11c\ub294 \ud568\uc218 \uc120\uc5b8\ub9cc \uc4f0\uc778\ub2e4.
+'use strict';
+var RESULT_V = 1;
+var RESULT_TABS = ['fast', 'less', 'sub', 'bus', 'longdist'];
+var rheadScreen_; if (typeof rheadScreen === 'undefined') { try { if (typeof require === 'function') rheadScreen_ = require('./rhead').rheadScreen; } catch (eRq) {} } else rheadScreen_ = rheadScreen;
+
+function resNum(v, d) { v = Number(v); return isFinite(v) ? v : d; }
+function resArr(v) { return Array.isArray(v) ? v : []; }
+
+// \uc608\uc804 \uc6f9 _normStop \uacfc \uac19\ub2e4: \uc815\ub958\uc7a5 \ud55c \uacf3\uc758 \uc774\ub984\u00b7\uc88c\ud45c\u00b7\ub204\uc801 \ucd08\u00b7\uc2dc\uac01\uc744 \ud55c \ubaa8\uc591\uc73c\ub85c.
+function resNormStop(sv) {
+  if (!sv) return { stationName: '', lat: null, lon: null };
+  var o = { stationName: (sv.stationName || sv.name || ''),
+            lat: (sv.y != null ? sv.y : (sv.lat != null ? sv.lat : null)),
+            lon: (sv.x != null ? sv.x : (sv.lon != null ? sv.lon : (sv.lng != null ? sv.lng : null))) };
+  var sec = null;
+  if (sv.secFromStart != null) sec = parseFloat(sv.secFromStart);
+  else if (sv.travelSec != null) sec = parseFloat(sv.travelSec);
+  else if (sv.sec != null) sec = parseFloat(sv.sec);
+  if (sec != null && isFinite(sec) && sec >= 0) o.secFromStart = sec;
+  if (sv.pass) o.pass = true;
+  var tv = (sv.arrTime != null ? sv.arrTime : (sv.arrivalTime != null ? sv.arrivalTime : sv.time));
+  if (tv != null && tv !== '') {
+    if (typeof tv === 'string' && /^\d{1,2}:\d{2}$/.test(tv)) o.arrTime = tv;
+    else { var mn = parseFloat(tv); if (isFinite(mn) && mn >= 0) o.arrMin = mn; }
+  }
+  return o;
+}
+
+// \uc608\uc804 \uc6f9 _convertSinglePathToRoute \uc640 \uac19\ub2e4: \uacbd\ub85c \ud558\ub098 \u2192 { summary, sections, why, rvSplit, transfers, ld }.  \uad50\ud1b5 \uad6c\uac04\uc774 \uc5c6\uc73c\uba74 null.
+function resConvertPath(path) {
+  if (!path || typeof path !== 'object') return null;
+  var info = path.info || {};
+  var sections = resArr(path.subPath).map(function (sp) {
+    sp = sp || {};
+    var tt = sp.trafficType, lane = (resArr(sp.lane)[0]) || {};
+    var stops = resArr((sp.passStopList || {}).stations).map(resNormStop);
+    return {
+      transportation: { type: tt, name: tt === 1 ? (lane.name || lane.subwayCode || '') : tt === 2 ? (lane.busNo || lane.busID || '') : tt === 4 ? (lane.name || '') : '\ub3c4\ubcf4' },
+      duration: (sp.sectionTime || 0) * 60, distance: sp.distance || 0,
+      waitSec: (sp.waitSec != null ? sp.waitSec : null), arriveSec: (sp.arriveSec != null ? sp.arriveSec : null),
+      startSec: (sp.startSec != null ? sp.startSec : null), endSec: (sp.endSec != null ? sp.endSec : null),
+      stopSec: (Array.isArray(sp.stopSec) ? sp.stopSec.slice() : null),
+      boardStopId: (sp.boardStopId || null), waitReal: !!sp.waitReal, waitLive: !!sp.waitLive,
+      trainChanges: (Array.isArray(sp.trainChanges) ? sp.trainChanges : null),
+      xpWaitSec: (sp.xpWaitSec != null ? sp.xpWaitSec : null),
+      xfer: (sp.xfer || null), exitFast: (sp.exitFast || null), stnName: (sp.endName || sp.startName || ''),
+      xferWaitSec: (sp.xferWaitSec != null ? sp.xferWaitSec : null), waitEstimated: !!sp.waitEstimated,
+      ttWaitMs: (sp.ttWaitMs != null ? sp.ttWaitMs : null), nextTrain: (sp.nextTrain || null),
+      passStopList: stops.length ? { stationList: stops } : null
+    };
+  });
+  var has = sections.some(function (s) { var t = s.transportation.type; return t === 1 || t === 2 || t === 4; });
+  if (!has) return null;
+  return {
+    summary: { duration: (info.totalTime || 0) * 60, distance: info.totalDistance || 0, transfers: info.transferCount || 0 },
+    sections: sections,
+    why: (typeof info._rvWhy === 'string') ? info._rvWhy : '',
+    rvSplit: info._rvSplit || null,
+    transfers: (Array.isArray(info.transfers) ? info.transfers : null),
+    ld: info.longDist ? { mode: info.ldMode || null, grade: info.ldGrade || null, depTs: info.ldDepTs != null ? info.ldDepTs : null,
+      options: info.ldOptions || [], noWaitMin: info.ldNoWaitMin != null ? info.ldNoWaitMin : null, fastRide: info.ldFastRide || null,
+      candidates: info.candidates || [], distKm: info.distKm != null ? info.distKm : null } : null
+  };
+}
+
+// \uc5d4\uc9c4\uc774 \uc815\ub9ac\ud574 \uc900 result.rv \ub97c \uacbd\ub85c\uc5d0 \ubd99\uc778\ub2e4(\uc608\uc804 \uc6f9 _rvApply). \uc774\uc0c1\ud558\uba74 \uc6d0\ub798 \uc21c\uc11c \uadf8\ub300\ub85c.
+function resApplyRv(data, paths) {
+  var rv = data && data.result && data.result.rv;
+  if (!(rv && rv.v === 1 && rv.n === paths.length && Array.isArray(rv.keep) && rv.keep.length && rv.tabs && rv.why && rv.split)) return paths.slice();
+  var seen = {}, out = [], i;
+  for (i = 0; i < rv.keep.length; i++) {
+    var k = rv.keep[i];
+    if (!(typeof k === 'number' && k >= 0 && k < paths.length && Math.floor(k) === k) || seen[k] || !paths[k] || !paths[k].info) return paths.slice();
+    seen[k] = true;
+    if (!Array.isArray(rv.tabs[k]) || typeof rv.why[k] !== 'string') return paths.slice();
+  }
+  for (i = 0; i < rv.keep.length; i++) {
+    var p = paths[rv.keep[i]], inf = p.info, sp = rv.split[rv.keep[i]];
+    inf._tabs = rv.tabs[rv.keep[i]].slice();
+    inf._rvWhy = rv.why[rv.keep[i]];
+    inf._rvSplit = (sp && typeof sp === 'object' && isFinite(sp.ride) && isFinite(sp.wait) && isFinite(sp.walk) && isFinite(sp.tot) && typeof sp.text === 'string') ? sp : null;
+    out.push(p);
+  }
+  return out;
+}
+
+// \ud0ed\ub9c8\ub2e4 \ub300\ud45c \uacbd\ub85c(\uc608\uc804 \uc6f9 _parseRouteOptions \uc758 '\uc5d4\uc9c4\uc774 \ud0ed\uc744 \uc815\ud574 \uc900' \ucabd). \ud0ed \ud45c\uc2dc\uac00 \uc5c6\ub294 \uc61b \uc751\ub2f5\uc774\uba74 \uccab \uacbd\ub85c\uac00 \ucd5c\ub2e8\uc2dc\uac04.
+function resPickTabs(paths) {
+  var byTab = {}, any = false;
+  paths.forEach(function (p) {
+    var inf = p.info || {}, tabs = (inf._tabs && inf._tabs.length) ? inf._tabs : (inf.tab ? [inf.tab] : []);
+    tabs.forEach(function (tb) { if (!byTab[tb]) byTab[tb] = p; });
+  });
+  var ld = paths.filter(function (p) { var inf = p.info || {}, t = (inf._tabs && inf._tabs.length) ? inf._tabs : (inf.tab ? [inf.tab] : []); return t.indexOf('longdist') >= 0 || inf.longDist === true; })[0] || null;
+  any = !!(byTab.fast || byTab.less || byTab.sub || byTab.bus);
+  var first = paths[0] || null;
+  if (any) return { fast: byTab.fast || byTab.less || first, less: byTab.less || byTab.direct || byTab.fast || first, sub: byTab.sub || null, bus: byTab.bus || byTab.direct || null, longdist: byTab.longdist || ld || null };
+  var local = paths.filter(function (p) { return p !== ld; });
+  return { fast: local[0] || first, less: local[0] || first, sub: null, bus: null, longdist: ld };
+}
+
+function resR5(v) { return (v == null || !isFinite(v)) ? null : Math.round(Number(v) * 1e5) / 1e5; }
+
+// \uba38\ub9ac\uc904 \uc0ac\uc2e4 (rhead part 'h')
+function resHeadFacts(route, r, tab) {
+  var f = { m: 0, a: String(r.a || ''), b: String(r.b || ''), fav: r.fav === 0 ? 0 : 1, sp: null, why: '', dx: [], ex: null, xs: [], u: 0, nr: '' };
+  if (!route) { f.nr = tab; return f; }
+  f.m = Math.round(resNum(route.summary.duration, 0) / 60);
+  var rs = route.rvSplit;
+  if (route.why !== undefined && rs && rs.tot === f.m) f.sp = { ride: rs.ride, wait: rs.wait, walk: rs.walk };
+  f.why = route.why ? String(route.why) : '';
+  resArr(route.transfers).slice(0, 8).forEach(function (t) {
+    if (t) f.xs.push({ kind: t.kind, at: t.at, walkMin: t.walkMin, boardAt: t.boardAt, toType: t.toType, toLine: t.toLine, fromType: t.fromType, fromLine: t.fromLine, service: t.service });
+  });
+  var secs = route.sections || [], i;
+  secs.forEach(function (sc) {
+    var x = sc && sc.xfer;
+    if (x && x.dropCar && x.dropDoor && x.boardCar && x.boardDoor && f.dx.length < 8) f.dx.push({ s: sc.stnName, dc: x.dropCar, dd: x.dropDoor, bc: x.boardCar, bd: x.boardDoor, to: x.to, secs: x.secs });
+  });
+  for (i = secs.length - 1; i >= 0; i--) {
+    var e = secs[i] && secs[i].exitFast;
+    if (e && e.length) { f.ex = { s: secs[i].stnName, l: e.slice(0, 6).map(function (q) { return { fac: q && q.fac, door: q && q.door }; }) }; break; }
+  }
+  return f;
+}
+
+// \uad6c\uac04 \ud0c0\uc784\ub77c\uc778 \uc0ac\uc2e4 (rhead part 'k')
+function resTrkFacts(route, r, noGeo) {
+  var secs = route.sections.slice(0, 12).map(function (sec) {
+    sec = sec || {};
+    var tr = sec.transportation || {}, ps = sec.passStopList || {}, stops = ps.stationList || ps.stations || [];
+    return { ty: tr.type || 3, nm: tr.name || '', du: sec.duration || 0, di: sec.distance || 0, ws: sec.waitSec, ar: sec.arriveSec, ss: sec.startSec, es: sec.endSec,
+      sts: Array.isArray(sec.stopSec) ? sec.stopSec : null, tw: sec.ttWaitMs, we: sec.waitEstimated ? 1 : 0,
+      tc: Array.isArray(sec.trainChanges) ? sec.trainChanges.slice(0, 8).map(function (c) { return c ? { at: c.at, to: c.to } : null; }).filter(Boolean) : null,
+      st: stops.slice(0, 150).map(function (q) { q = q || {}; return noGeo ? [q.stationName || ''] : [q.stationName || '', resR5(q.lat != null ? q.lat : q.y), resR5(q.lon != null ? q.lon : (q.lng != null ? q.lng : q.x))]; }) };
+  });
+  return { lv: null, secs: secs, xf: Array.isArray(route.transfers) ? route.transfers.slice(0, 12).map(function (x) { return x ? { k: x.kind, xi: x.xferSecIdx, si: x.secIdx } : null; }).filter(Boolean) : null,
+    bt: r.bt == null ? null : r.bt, rb: r.rb == null ? null : r.rb, now: resNum(r.now, 0), sw: [], tz: resNum(r.tz, 540), th: r.th === 'pastel' ? 'pastel' : 'dark' };
+}
+
+function resHash(s) { var h = 5381; for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
+function resPart(cap, part, facts) {
+  var o = rheadScreen_({ cap: cap, part: part }, facts);
+  return (o && o.ok) ? o : null;
+}
+
+function resultScreen(opt, r) {
+  var cap = Math.floor(resNum(opt && opt.cap, 0));
+  if (cap < 12) return { ok: false, error: 'cap' };
+  r = (r && typeof r === 'object') ? r : {};
+  var data = (r.data && typeof r.data === 'object') ? r.data : {};
+  var raw = resArr((data.result || {}).path);
+  var paths = resApplyRv(data, raw);
+  var pick = resPickTabs(paths);
+  var tab = RESULT_TABS.indexOf(r.tab) >= 0 ? r.tab : 'fast';
+  var has = {};
+  RESULT_TABS.forEach(function (t) { has[t] = !!(pick[t] && resConvertPath(pick[t])); });
+  var route = has[tab] ? resConvertPath(pick[tab]) : null;
+  var nodes = [], total = 0;
+  var anyRoute = RESULT_TABS.some(function (t) { return has[t]; });
+  var h = anyRoute ? resPart(cap, 'h', resHeadFacts(route, r, tab)) : null;
+  if (anyRoute && !h) return { ok: false, error: 'head' };
+  if (h) nodes = nodes.concat(h.body);
+  else nodes.push({ t: 'text', s: '\uacbd\ub85c \uc815\ubcf4\uac00 \uc5c6\uc5b4\uc694', size: 13, bold: true, color: 'sub', lh: 1.5, pad: [0, 0, 0, 0] });   // \uc751\ub2f5\uc5d0 \uc4f8 \uc218 \uc788\ub294 \uacbd\ub85c\uac00 \ud558\ub098\ub3c4 \uc5c6\uc744 \ub54c
+  if (anyRoute) { var t = resPart(cap, 't', { m: 0, tab: tab, ld: has.longdist ? 1 : 0 }); if (t) nodes = nodes.concat(t.body); }
+  if (route) {
+    total = Math.round(resNum(route.summary.duration, 0) / 60);
+    if (route.ld && tab === 'longdist') {
+      var l = resPart(cap, 'l', { lg: route.ld }); if (l) nodes = nodes.concat(l.body);
+    }
+    var k = resPart(cap, 'k', resTrkFacts(route, r, false));
+    if (!k) k = resPart(cap, 'k', resTrkFacts(route, r, true));
+    if (k) nodes = nodes.concat(k.head).concat(k.body);
+  }
+  var body = nodes.length ? [{ t: 'panel', pad: [0, 4, 0, 8], ip: [12, 12, 12, 8], r: 16, kids: nodes }] : [];
+  var out = { ok: true, v: RESULT_V, screen: 'result', cover: 'chips', head: [], body: body, info: { has: has, tab: tab, m: total, n: paths.length } };
+  out.rev = 'e' + RESULT_V + ':' + resHash(JSON.stringify(body));
+  return out;
+}
+// \uacbd\ub85c \uacb0\uacfc \ud654\uba74 \uc5d4\uc9c4 Worker \uc5f0\uacb0\ubd80 \u2014 POST /screen/result (engine/result.js \uc758 resultScreen \uc744 \ubd80\ub978\ub2e4). route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/screen/result") return handleScreenResult(request);` \ub97c \ub123\ub294\ub2e4.
+//   \ubcf8\ubb38(JSON \uae00, Content-Type: text/plain): { cap(12 \uc774\uc0c1), r:{ data(\uacbd\ub85c \uc751\ub2f5 \uadf8\ub300\ub85c), tab, a, b, bt, rb, now, tz, th, fav } }
+//   \uc5d4\uc9c4\uc740 \uc544\ubb34\uac83\ub3c4 \uc800\uc7a5\ud558\uc9c0 \uc54a\ub294\ub2e4. \uac1c\uc778 \uc2dd\ubcc4 \uc815\ubcf4\ub294 \uc624\uac00\uc9c0 \uc54a\ub294\ub2e4(\uc774\ub984 \ub450 \uac1c\uc640 \uacbd\ub85c \uc751\ub2f5\ubfd0).
+async function handleScreenResult(request) {
+  var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Cache-Control": "no-store" };
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: H });
+  if (request.method !== "POST") return new Response(JSON.stringify({ ok: false, error: "post-only" }), { status: 405, headers: H });
+  var raw = await request.text();
+  if (raw.length > 3000000) return new Response(JSON.stringify({ ok: false, error: "body-too-long" }), { status: 413, headers: H });
+  var body;
+  try { body = JSON.parse(raw); } catch (e) { return new Response(JSON.stringify({ ok: false, error: "bad-json" }), { status: 400, headers: H }); }
+  if (!body || typeof body !== "object") return new Response(JSON.stringify({ ok: false, error: "bad-body" }), { status: 400, headers: H });
+  var out;
+  try { out = resultScreen({ cap: Number(body.cap) || 0 }, body.r); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2) }), { status: 500, headers: H }); }
+  if (!out || !out.ok) return new Response(JSON.stringify(out || { ok: false, error: "fail" }), { status: 400, headers: H });
+  out.ver = ENGINE_VERSION;
+  return new Response(JSON.stringify(out), { headers: H });
+}
+// ===== RESULT ENGINE END =====
+
 async function handleFetch(request, env, ctx) {
   try { await holEnsure(env); } catch (e) {}
   const url = new URL(request.url);
@@ -18144,6 +18358,7 @@ async function handleFetch(request, env, ctx) {
   if (url.pathname === "/screen/cchips") return handleScreenCchips(request);
   if (url.pathname === "/screen/write") return handleScreenWrite(request);
   if (url.pathname === "/screen/rhead") return handleScreenRhead(request);
+  if (url.pathname === "/screen/result") return handleScreenResult(request);
   if (url.pathname === "/screen/cong") return handleScreenCong(request);
   if (url.pathname === "/screen/ai") return handleScreenAi(request);
   if (url.pathname === "/screen/talk") return handleScreenTalk(request);

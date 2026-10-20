@@ -17,6 +17,7 @@ const SETS = [
   { name: 'CCHIPS', src: 'engine/cchips.js', glue: 'engine/cchips-worker.js', path: '/screen/cchips', fn: 'handleScreenCchips', anchor: '  if (url.pathname === "/screen/home") return handleScreenHome(request);\n' },
   { name: 'WRITE', src: 'engine/write.js', glue: 'engine/write-worker.js', path: '/screen/write', fn: 'handleScreenWrite', anchor: '  if (url.pathname === "/screen/cchips") return handleScreenCchips(request);\n' },
   { name: 'RHEAD', src: 'engine/rhead.js', glue: 'engine/rhead-worker.js', path: '/screen/rhead', fn: 'handleScreenRhead', anchor: '  if (url.pathname === "/screen/write") return handleScreenWrite(request);\n' },
+  { name: 'RESULT', src: 'engine/result.js', glue: 'engine/result-worker.js', path: '/screen/result', fn: 'handleScreenResult', anchor: '  if (url.pathname === "/screen/rhead") return handleScreenRhead(request);\n' },
   { name: 'CONG', pre: ['engine/cong-data.js'], src: 'engine/cong.js', glue: 'engine/cong-worker.js', path: '/screen/cong', fn: 'handleScreenCong', anchor: '  if (url.pathname === "/screen/rhead") return handleScreenRhead(request);\n' },
   { name: 'AICARD', src: 'engine/aicard.js', glue: 'engine/ai-worker.js', path: '/screen/ai', fn: 'handleScreenAi', anchor: '  if (url.pathname === "/screen/cong") return handleScreenCong(request);\n' },
   { name: 'TALKCARD', src: 'engine/talkcard.js', glue: 'engine/talk-worker.js', path: '/screen/talk', fn: 'handleScreenTalk', anchor: '  if (url.pathname === "/screen/ai") return handleScreenAi(request);\n' },

@@ -1580,3 +1580,10 @@
 - **s86 홈 탭 입력(기기 미검증)**: `HomeCore`(순수 자바: 입력칸 글·활성 칸·고른 장소·후보·기준시각·경로 질의) + `HomeSearchCore`/`RouteFetchCore`(native/shell 로 이동). `ShellActivity` 가 입력 이벤트→엔진 /screen/home 재요청, 버스·장소 후보 받기, 위치 감지(LocationManager, 권한 요청), 기준시각 고르기(네이티브 대화상자), 경로 탐색 첫 응답(live=0)까지. 매니페스트에 위치 권한.
 - **아직 없음**: 경로 결과 화면(엔진 `result.js` 이식 필요 — rhead 사실을 route 응답에서 만든다), 탑승 추적, 맛집/게시판/채팅/지도 탭, GPS 상시 수집(KeepAliveService), 위젯·오버레이·알림.
 - **시험**: `node test/shell_native.test.js`(ANDROID_JAR 지정) 5 통과 · JVM 89점검.
+
+## 2026-10-20 엔진 s87 + native-shell — 경로 결과 카드(엔진 `/screen/result`)
+- **YJ 지시**: "전부 네이티브로, 웹의 규칙·애니메이션 다 적용, 모든 계산은 엔진" / "웹은 다 지울 거야. 모든 구동이 네이티브와 엔진만으로".
+- **엔진**: `engine/result.js` + `result-worker.js` → `POST /screen/result` `{cap≥12, r:{data(경로 응답 그대로), tab, a, b, bt, rb, now, tz, th, fav}}`. 웹 `_convertEngineRoutes`·`_normStop`·`_rvApply`·탭 대표 고르기·머리줄/탭/타임라인 사실 모으기를 엔진으로 옮겼다(`ios-reference` 와 대조 시험 22). 출력은 rhead 의 h·t·l·k 를 한 panel 로 묶은 화면.
+- **앱**: `HomeCore` 가 받은 경로 응답을 그대로 들고(가공 없음) 탭·닫기·즐겨찾기 누름을 구분, `ShellCore.mergeBodies` 가 홈 입력 화면 뒤에 결과 본문을 이어 붙임, `ShellActivity.goRoute` 가 live=0 → follow 지시대로 전체를 받음.
+- **없음/다음**: 즐겨찾기 저장·목록(현재 안내만), 장거리 고르기(rh.ld.*), 공지·제보 줄(part n), 내 위치 마커/대기(lv, 탑승 추적과 함께), 재조회(follow retry), 기준시각 재탐색.
+- **YJ가 할 일**: 워커 s87(`route-v2-2026-10-20s87`) Deploy + 새 APK.
