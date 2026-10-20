@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-20s88";
+var ENGINE_VERSION = "route-v2-2026-10-20s90";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -12289,7 +12289,7 @@ var FOOD_CHIPS = ['\uc804\uccb4', '\uce74\ud398', '\ubc25\uc9d1', '\uc721\uc2dd'
 var FOOD_MAX_SHOW = 150;          // \uc704\u00b7\uc544\ub798 \ubaa9\ub85d \uac01\uac01 \ucd5c\ub300 \uac1c\uc218(\uc6f9\uacfc \uac19\ub2e4)
 var FOOD_MAX_IN_C = 400, FOOD_MAX_IN_P = 1500;
 var FOOD_ALTS_MAX = 12;           // \ud55c \uc694\uccad\uc5d0 \uc2e4\uc744 \uc218 \uc788\ub294 '\ub2e4\ub978 \uce69' \uc218 \uc0c1\ud55c(\uce69 6\uac1c)
-var FOOD_STATES = ['idle', 'locating', 'noperm', 'loading', 'none', 'ready'];
+var FOOD_STATES = ['idle', 'locating', 'noperm', 'loading', 'none', 'ready', 'done'];   // done = \uc571\uc774 '\ubc1b\uae30\ub97c \ub9c8\ucce4\ub2e4'\uace0\ub9cc \uc54c\ub9b0\ub2e4 \u2014 \ubaa9\ub85d\uc774 \uc788\ub294\uc9c0\uc5d0 \ub530\ub77c ready/none \uc740 \uc5d4\uc9c4\uc774 \uc815\ud55c\ub2e4
 
 // \uc5c5\uc885 \u2192 \uce69 \ubd84\ub958. \uc21c\uc11c\uac00 \uc911\uc694\ud558\ub2e4(\ud68c\uc9d1\uc744 \uc721\uc2dd\ubcf4\ub2e4 \uba3c\uc800 \u2014 '\ucc38\uce58\ud68c \uc804\ubb38'\uc5d0 '\ucc38\uce58'\uac00 \uc721\ub958\ub85c \uc624\uc778\ub418\uc9c0 \uc54a\uac8c)
 function foodKind(cat) {
@@ -12316,12 +12316,45 @@ function foodStr(v, n) { return typeof v === 'string' ? v.slice(0, n) : (typeof 
 function foodNameOf(v) { return foodStr(v, 120).replace(/<[^>]*>/g, '').trim(); }
 function foodKey(name) { return String(name || '').replace(/\s/g, ''); }
 
+function foodLL(v) {                              // [\uc704\ub3c4, \uacbd\ub3c4] \ud55c \uc30d \u2014 \ud55c\uad6d \ubc94\uc704 \ubc16\uc774\uba74 \uc5c6\ub294 \uac83\uc73c\ub85c \ubcf8\ub2e4
+  if (!Array.isArray(v) || v.length < 2) return null;
+  var la = Number(v[0]), lo = Number(v[1]);
+  return (isFinite(la) && isFinite(lo) && la > 30 && la < 40 && lo > 123 && lo < 133) ? [la, lo] : null;
+}
 function foodFacts(f) {
   f = (f && typeof f === 'object') ? f : {};
   var stn = foodStr(f.stn, 30).replace(/\uc5ed$/, '');
   var st = FOOD_STATES.indexOf(f.st) >= 0 ? f.st : (stn ? 'ready' : 'idle');
   var flt = FOOD_CHIPS.indexOf(f.flt) >= 0 ? f.flt : '\uc804\uccb4';
-  return { stn: stn, st: st, flt: flt, fail: f.fail === 1 || f.fail === true || f.fail === '1' };
+  var sel = (f.sel && typeof f.sel === 'object' && !Array.isArray(f.sel)) ? f.sel : null;
+  return { stn: stn, st: st, flt: flt, fail: f.fail === 1 || f.fail === true || f.fail === '1',
+           gps: foodLL(f.gps), dl: foodLL(f.dl), me: foodLL(f.me), sel: sel };
+}
+// \u2500\u2500 \uac70\ub9ac\u00b7\uc5ed \ucc3e\uae30(\uc6f9 haversineM \u00b7 _foodResolveCoord \u00b7 _foodLoadNearby \uc640 \uac19\uc740 \uacc4\uc0b0) \u2500\u2500
+function foodHav(la1, lo1, la2, lo2) {
+  var R = 6371000, dLa = (la2 - la1) * Math.PI / 180, dLo = (lo2 - lo1) * Math.PI / 180;
+  var a = Math.sin(dLa / 2) * Math.sin(dLa / 2) + Math.cos(la1 * Math.PI / 180) * Math.cos(la2 * Math.PI / 180) * Math.sin(dLo / 2) * Math.sin(dLo / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+function foodStnTable() {                          // Worker \uc5d0\uc11c\ub294 HOME \ube14\ub85d\uc774 \ucc44\uc6b4 \uc804\uc5ed HOME_STNS, Node(\uc2dc\ud5d8)\uc5d0\uc11c\ub294 \ud30c\uc77c\uc744 \ubd88\ub7ec\uc628\ub2e4
+  if (typeof HOME_STNS !== 'undefined' && HOME_STNS) return HOME_STNS;
+  try { if (typeof require === 'function') return require('./home-stations').HOME_STNS; } catch (e) { /* \uc5c6\uc74c */ }
+  return [];
+}
+// \ub3c4\ucc29\uc5ed \uc774\ub984(\uc5c6\uc73c\uba74 \uae30\uae30 \uc704\uce58\uc5d0\uc11c \uac00\uc7a5 \uac00\uae4c\uc6b4 \uc5ed)\uacfc \uadf8 \uc911\uc2ec \uc88c\ud45c. \uc88c\ud45c\ub97c \ubabb \uc815\ud558\uba74 ctr=null.
+function foodResolve(f) {
+  var T = foodStnTable(), i, s;
+  if (f.stn) {
+    for (i = 0; i < T.length; i++) { s = T[i]; if (String(s[0]).replace(/\uc5ed$/, '') === f.stn) return { stn: f.stn, ctr: [s[2], s[3]] }; }
+    return { stn: f.stn, ctr: f.dl };                // \ud45c\uc5d0 \uc5c6\ub294 \uc774\ub984\uc774\uba74 \uc571\uc774 \uc54c\ub824 \uc900 \ub3c4\ucc29\uc9c0 \uc88c\ud45c
+  }
+  if (f.gps) {
+    var best = 1e12, near = null;
+    for (i = 0; i < T.length; i++) { s = T[i]; var d = foodHav(f.gps[0], f.gps[1], s[2], s[3]); if (d < best) { best = d; near = s; } }
+    if (near) return { stn: String(near[0]).replace(/\uc5ed$/, ''), ctr: [near[2], near[3]] };
+    return { stn: '', ctr: f.gps };
+  }
+  return { stn: '', ctr: null };
 }
 // \uac00\uac8c \ubc30\uc5f4 [\uc774\ub984, \uc5c5\uc885, \uc8fc\uc18c, \uac70\ub9ac, \uc704\ub3c4, \uacbd\ub3c4] \u2192 { n, c, a, d, i(\uc6d0\ub798 \ubc88\ud638) }. \uc774\ub984 \uc5c6\ub294 \uac74 \ube80\ub2e4(\ube48 \uce74\ub4dc \ubc29\uc9c0)
 function foodList(arr, max) {
@@ -12333,9 +12366,44 @@ function foodList(arr, max) {
     var n = foodNameOf(a[0]);
     if (!n) continue;
     var d = Number(a[3]);
-    out.push({ n: n, c: foodStr(a[1], 120), a: foodStr(a[2], 160), d: isFinite(d) ? d : null, i: i });
+    var la = Number(a[4]), lo = Number(a[5]);
+    out.push({ n: n, c: foodStr(a[1], 120), a: foodStr(a[2], 160), d: isFinite(d) ? d : null, i: i, la: isFinite(la) && a[4] != null && a[4] !== '' ? la : null, lo: isFinite(lo) && a[5] != null && a[5] !== '' ? lo : null });
   }
   return out;
+}
+// \u2500\u2500 \uc6d0\uc790\ub8cc \uc815\ub9ac(\uc6f9 _foodFromServer \u00b7 _fetchPublicFood \u00b7 _foodMergeList \uc640 \uac19\uc740 \uaddc\uce59) \u2500\u2500
+//   \uc11c\ubc84 \uac00\uac8c  s = [{ n, c, a, d, la, lo }\u2026]            \u2192 \uc704\ucabd \ubaa9\ub85d(\uc21c\uc704\u00b7\ubcc4\uc810)
+//   \uacf5\uacf5\ub370\uc774\ud130 u = [[\uc0c1\ud638, \uc911\ubd84\ub958, \uc18c\ubd84\ub958, \ub3c4\ub85c\uba85\uc8fc\uc18c, \uc9c0\ubc88\uc8fc\uc18c, \uc704\ub3c4, \uacbd\ub3c4]\u2026]  \u2192 \uc544\ub798\ucabd \ubaa9\ub85d('\uacf5\uacf5\ub370\uc774\ud130' \ub531\uc9c0). \uac70\ub9ac\ub294 \uc911\uc2ec \uc88c\ud45c\uc5d0\uc11c \uc5d4\uc9c4\uc774 \uc7b0\ub2e4.
+function foodRowKey(r) { return foodKey(r[0]) + '@' + r[2]; }
+function foodMergeRows(rows) {                     // \uac19\uc740 \uc0c1\ud638\u00b7\uac19\uc740 \uc8fc\uc18c \uc911\ubcf5 \uc815\ub9ac \u2192 \uac70\ub9ac\uc21c(\uac70\ub9ac \ubaa8\ub974\uba74 \ub9e8 \ub4a4)
+  var seen = {}, out = [];
+  rows.forEach(function (r) { var k = foodRowKey(r); if (!r[0] || seen[k]) return; seen[k] = 1; out.push(r); });
+  out.sort(function (a, b) { return (a[3] == null ? 99999 : a[3]) - (b[3] == null ? 99999 : b[3]); });
+  return out;
+}
+function foodRowsServer(arr) {
+  var rows = [];
+  if (!Array.isArray(arr)) return rows;
+  for (var i = 0; i < arr.length && i < FOOD_MAX_IN_C; i++) {
+    var it = arr[i];
+    if (!it || typeof it !== 'object' || !foodNameOf(it.n)) continue;
+    var d = it.d == null ? null : parseInt(it.d, 10);
+    rows.push([foodStr(it.n, 120), foodStr(it.c, 120), foodStr(it.a, 160), isFinite(d) ? d : null, it.la == null ? null : Number(it.la), it.lo == null ? null : Number(it.lo)]);
+  }
+  return foodMergeRows(rows);
+}
+function foodRowsPublic(arr, ctr) {
+  var rows = [];
+  if (!Array.isArray(arr)) return rows;
+  for (var i = 0; i < arr.length && i < FOOD_MAX_IN_P; i++) {
+    var it = arr[i];
+    if (!Array.isArray(it) || !foodNameOf(it[0])) continue;
+    var la = parseFloat(it[5]), lo = parseFloat(it[6]);
+    var ok = isFinite(la) && isFinite(lo);
+    var dist = (ok && ctr) ? Math.round(foodHav(ctr[0], ctr[1], la, lo)) : null;
+    rows.push([foodStr(it[0], 120), [foodStr(it[1], 60), foodStr(it[2], 60)].filter(Boolean).join(' '), foodStr(it[3], 160) || foodStr(it[4], 160), dist, ok ? la : null, ok ? lo : null]);
+  }
+  return foodMergeRows(rows);
 }
 function foodHash(s) {                             // djb2 \u2014 \uac19\uc740 \ud654\uba74\uc774\uba74 \uac19\uc740 rev
   var h = 5381;
@@ -12344,9 +12412,10 @@ function foodHash(s) {                             // djb2 \u2014 \uac19\uc740 \
 }
 
 function foodMsgN(s) { return { t: 'text', s: s, size: 14, color: 'sub', lh: 1.8, align: 'center', pad: [20, 60, 20, 60] }; }
-function foodPlaceN(p, rank, pub, idxPrefix) {
+function foodPlaceN(p, rank, pub, idxPrefix, go) {
   var addr = p.a ? ' \u00b7 ' + p.a.split(' ').slice(-2).join(' ') : '';
   var n = { t: 'place', pad: [12, 0, 12, 10], rank: rank, name: p.n, sub: foodCatSimple(p.c) + addr, dist: foodDist(p.d), go: '\uae38\ucc3e\uae30 \u00b7 \uc9c0\ub3c4 \u2192', act: { a: 'call', v: 'fm.' + idxPrefix + '.' + p.i } };
+  if (go && p.la != null && p.lo != null) go[idxPrefix + '.' + p.i] = [p.n, p.c, p.a, p.la, p.lo];
   if (pub) { n.pub = true; n.badge = '\uacf5\uacf5\ub370\uc774\ud130'; } else n.stars = foodStars(Number(rank) - 1);
   return n;
 }
@@ -12366,7 +12435,7 @@ function foodScreenOf(f, all, allP) {
       items: FOOD_CHIPS.map(function (c) { return { label: c, on: c === f.flt, act: { a: 'cat', v: c } }; }) }
   ];
 
-  var body = [];
+  var body = [], go = {};
   if (f.st === 'idle') body.push(foodMsgN('\uacbd\ub85c\ub97c \uc124\uc815\ud558\uba74\n\ub3c4\ucc29\uc5ed \uc8fc\ubcc0 \ub9db\uc9d1\uc744 \ucd94\ucc9c\ud574\ub4dc\ub824\uc694!'));
   else if (f.st === 'locating') body.push(foodMsgN('\ub0b4 \uc704\uce58 \ud655\uc778 \uc911...'));
   else if (f.st === 'noperm') body.push(foodMsgN('\uc704\uce58 \uad8c\ud55c\uc744 \ud5c8\uc6a9\ud558\uac70\ub098\n\uacbd\ub85c\ub97c \uc124\uc815\ud558\uba74 \ub9db\uc9d1\uc744 \ucd94\ucc9c\ud574\ub4dc\ub824\uc694!'));
@@ -12377,54 +12446,110 @@ function foodScreenOf(f, all, allP) {
     else body.push(foodMsgN('\ud574\ub2f9 \uce74\ud14c\uace0\ub9ac \uc74c\uc2dd\uc810\uc774 \uc5c6\uc2b5\ub2c8\ub2e4.'));
   } else {
     var n = 0, k;
-    for (k = 0; k < cur.length && n < FOOD_MAX_SHOW; k++, n++) body.push(foodPlaceN(cur[k], String(n + 1), false, 'c'));
+    for (k = 0; k < cur.length && n < FOOD_MAX_SHOW; k++, n++) body.push(foodPlaceN(cur[k], String(n + 1), false, 'c', go));
     if (pub.length) {
       body.push({ t: 'divider', pad: [12, 8, 12, 0] });
       body.push({ t: 'text', s: '\uacf5\uacf5\ub370\uc774\ud130 \u00b7 \uc8fc\ubcc0 ' + (f.flt === '\uc804\uccb4' ? '\uc74c\uc2dd\uc810' : f.flt) + ' ' + pub.length + '\uacf3', size: 12, bold: true, color: 'sub', pad: [14, 12, 14, 6] });
-      for (k = 0, n = 0; k < pub.length && n < FOOD_MAX_SHOW; k++, n++) body.push(foodPlaceN(pub[k], '', true, 'p'));
+      for (k = 0, n = 0; k < pub.length && n < FOOD_MAX_SHOW; k++, n++) body.push(foodPlaceN(pub[k], '', true, 'p', go));
     }
     body.push({ t: 'spacer', h: 80 });
   }
-  var out = { ok: true, v: 1, screen: 'food', cover: 'tab', head: head, body: body, info: { cur: cur.length, pub: pub.length, flt: f.flt } };
+  var out = { ok: true, v: 1, screen: 'food', cover: 'tab', head: head, body: body, info: { cur: cur.length, pub: pub.length, flt: f.flt, stn: f.stn, ctr: f.ctr || null, go: go } };
   out.rev = 'f' + FOOD_SCREEN_V + ':' + foodHash(JSON.stringify([head, body]));
   return out;
+}
+
+// \uc785\ub825 \ud55c \ubc8c\uc744 \ud654\uba74 \uacc4\uc0b0\uc5d0 \uc4f8 \ubaa8\uc591\uc73c\ub85c \uc815\ub9ac\ud55c\ub2e4: \ub3c4\ucc29\uc5ed\u00b7\uc911\uc2ec \uc88c\ud45c\ub97c \uc815\ud558\uace0(\uc5c6\uc73c\uba74 \uae30\uae30 \uc704\uce58 \u2192 \uac00\uc7a5 \uac00\uae4c\uc6b4 \uc5ed), \uc6d0\uc790\ub8cc(s\u00b7u)\ub97c \uac70\ub9ac\uc21c \ubaa9\ub85d\uc73c\ub85c \ub9cc\ub4e0\ub2e4.
+function foodPrep(factsIn, itemsIn) {
+  var f = foodFacts(factsIn), it = (itemsIn && typeof itemsIn === 'object') ? itemsIn : {};
+  var rs = foodResolve(f);
+  var rawC = Array.isArray(it.s) ? foodRowsServer(it.s) : null, rawP = Array.isArray(it.u) ? foodRowsPublic(it.u, rs.ctr) : null;
+  var c = rawC || (Array.isArray(it.c) ? it.c : []), p = rawP || (Array.isArray(it.p) ? it.p : []);
+  return { f: f, stn: rs.stn, ctr: rs.ctr, all: foodList(c, FOOD_MAX_IN_C), allP: foodList(p, FOOD_MAX_IN_P) };
+}
+function foodFactsFor(f, base) {                   // \ud654\uba74 \ud558\ub098\uc5d0 \uc4f8 \uc0ac\uc2e4: \ub3c4\ucc29\uc5ed \uc774\ub984\u00b7\uc88c\ud45c\ub97c \ucc44\uc6b0\uace0 'done' \uc744 ready/none \uc73c\ub85c \uc815\ud55c\ub2e4
+  var o = { stn: base.stn || f.stn, st: f.st, flt: f.flt, fail: f.fail, ctr: base.ctr };
+  if (o.st === 'loading' && !base.ctr && o.stn) o.st = 'none';             // \uc88c\ud45c\ub97c \ubabb \uc815\ud558\ub294 \ub3c4\ucc29\uc9c0 \u2014 \uc601\uc601 '\ubd88\ub7ec\uc624\ub294 \uc911'\uc5d0 \uba38\ubb3c\uc9c0 \uc54a\uac8c
+  if (o.st === 'done') o.st = (base.all.length || base.allP.length) ? 'ready' : (f.fail ? 'ready' : 'none');
+  return o;
 }
 
 function foodScreen(inp, factsIn, itemsIn) {
   inp = inp || {};
   if (!(Number(inp.cap) >= 4)) return { ok: false, error: 'cap' };
-  var f = foodFacts(factsIn), it = (itemsIn && typeof itemsIn === 'object') ? itemsIn : {};
-  return foodScreenOf(f, foodList(it.c, FOOD_MAX_IN_C), foodList(it.p, FOOD_MAX_IN_P));
+  var P = foodPrep(factsIn, itemsIn);
+  if (P.f.sel) return foodSheet(P.f);
+  return foodScreenOf(foodFactsFor(P.f, P), P.all, P.allP);
 }
 
 // \u2605 2026-10-19 s67 (YJ: \ub3c4\ucc29\uc5ed \ub9db\uc9d1 \ub85c\ub529\uc774 \uc624\ub798 \uac78\ub824 \u2014 \uce69\uc744 \ub204\ub97c \ub54c\ub9c8\ub2e4 \uac00\uac8c \ubaa9\ub85d\uc744 \ub2e4\uc2dc \ubcf4\ub0b4\uace0 \uc0c8 \ud654\uba74\uc744 \ubc1b\uc558\ub2e4):
-//   \uac19\uc740 \uc694\uccad\uc5d0 '\ub2e4\ub978 \uce69\ub4e4\uc758 \uc0ac\uc2e4(altsIn = { \ud0a4: { stn, st, flt, fail } } \ub610\ub294 'chips' = \uc5d4\uc9c4\uc774 \uac00\uc9c4 \uce69 \uc804\ubd80)'\uc744 \uc2e4\uc5b4 \ubcf4\ub0b4\uba74 \uc5d4\uc9c4\uc774 \ud55c \ubc88\uc5d0 \ubaa8\ub4e0 \uce69 \ud654\uba74\uc744 \uacc4\uc0b0\ud574 out.alts[\ud0a4] \ub85c \ub3cc\ub824\uc900\ub2e4.
+//   \uac19\uc740 \uc694\uccad\uc5d0 '\ub2e4\ub978 \uce69\ub4e4\uc758 \uc0ac\uc2e4(altsIn = { \ud0a4: { stn, st, flt, fail } } \ub610\ub294 'chips' = \uc5d4\uc9c4\uc774 \uac00\uc9c4 \uce69 \uc804\ubd80)'\uc744 \uc2e4\uc5b4 \ubcf4\ub0b4\uba74 \uc5d4\uc9c4\uc774 \ud55c \ubc88\uc5d0 \ubaa8\ub4e0 \uce69 \ud654\uba74\uc744 \uacc4\uc0b0\ud574 out.alts[\ud0a4]
 //   \uac00\uac8c \ubaa9\ub85d \uc815\ub9ac(foodList)\ub294 \ud55c \ubc88\ub9cc \ud55c\ub2e4. \uc571\uc740 \ubc1b\uc740 \ud654\uba74\uc744 \uce69\ubcc4\ub85c \uae30\uc5b5\ud574 \ub450\uc5c8\ub2e4\uac00 \uce69\uc744 \ub204\ub974\uba74 \uc694\uccad \uc5c6\uc774 \uadf8\ub300\ub85c \uc62c\ub9b0\ub2e4(\uacc4\uc0b0\uc740 \uc5d4\uc9c4, \uc571\uc740 \uadf8\ub9ac\uae30).
 //   \uac01 alts[\ud0a4] \ub294 \uadf8 \uce69\uc73c\ub85c \ub530\ub85c \uc694\uccad\ud588\uc744 \ub54c\uc640 \uae00\uc790 \ud558\ub098\uae4c\uc9c0 \uac19\uc740 \ud654\uba74\uc774\ub2e4(\uc2dc\ud5d8\uc774 \ub300\uc870\ud55c\ub2e4).
 function foodScreens(inp, factsIn, itemsIn, altsIn) {
   inp = inp || {};
   if (!(Number(inp.cap) >= 4)) return { ok: false, error: 'cap' };
-  var it = (itemsIn && typeof itemsIn === 'object') ? itemsIn : {};
-  var all = foodList(it.c, FOOD_MAX_IN_C), allP = foodList(it.p, FOOD_MAX_IN_P);
-  var out = foodScreenOf(foodFacts(factsIn), all, allP);
+  var P = foodPrep(factsIn, itemsIn);
+  if (P.f.sel) return foodSheet(P.f);
+  var out = foodScreenOf(foodFactsFor(P.f, P), P.all, P.allP);
   if (altsIn === 'chips') {                       // \uc571\uc740 \uc5b4\ub5a4 \uce69\uc774 \uc788\ub294\uc9c0 \ubaa8\ub978\ub2e4 \u2014 \uc5d4\uc9c4\uc774 \uac00\uc9c4 \uce69 \uc804\ubd80\ub85c \uc9c0\uae08 \uc0ac\uc2e4\ub9cc \uce69\uc744 \ubc14\uafd4 \ub9cc\ub4e0\ub2e4. \ud0a4 = \uce69 \uc774\ub984
-    var bf = foodFacts(factsIn);
     altsIn = {};
-    FOOD_CHIPS.forEach(function (c) { altsIn[c] = { stn: bf.stn, st: bf.st, flt: c, fail: bf.fail ? 1 : 0 }; });
+    FOOD_CHIPS.forEach(function (c) { altsIn[c] = { stn: P.f.stn, st: P.f.st, flt: c, fail: P.f.fail ? 1 : 0, gps: P.f.gps, dl: P.f.dl }; });
   }
   if (altsIn && typeof altsIn === 'object' && !Array.isArray(altsIn)) {
     var ks = Object.keys(altsIn).slice(0, FOOD_ALTS_MAX), alts = {};
     for (var i = 0; i < ks.length; i++) {
       var a = altsIn[ks[i]];
       if (!a || typeof a !== 'object') continue;
-      alts[ks[i]] = foodScreenOf(foodFacts(a), all, allP);
+      var fa = foodFacts(a);
+      if (!fa.gps) fa.gps = P.f.gps;
+      if (!fa.dl) fa.dl = P.f.dl;
+      var ra = foodResolve(fa);
+      alts[ks[i]] = foodScreenOf(foodFactsFor(fa, { stn: ra.stn, ctr: ra.ctr, all: P.all, allP: P.allP }), P.all, P.allP);
     }
     out.alts = alts;
   }
   return out;
 }
+
+// \u2500\u2500 \uac00\uac8c \uc2dc\ud2b8: \uac00\uac8c\ub97c \ub204\ub974\uba74 \uc571\uc774 info.go \uc5d0\uc11c \uadf8 \uac00\uac8c\uc758 [\uc774\ub984, \uc5c5\uc885, \uc8fc\uc18c, \uc704\ub3c4, \uacbd\ub3c4] \ub97c f.sel \ub85c \ubcf4\ub0b4\uace0, \uc5d4\uc9c4\uc774 \uc2dc\ud2b8 \ud654\uba74\uacfc \uc5f4 \uc8fc\uc18c(info.nv)\ub97c \uc815\ud55c\ub2e4 \u2500\u2500
+//   \uc8fc\uc18c\ub294 \uc571 \uc2a4\ud0b4(app)\uacfc \uc6f9(web)\uc774 \ud55c \uc30d \u2014 \uc571\uc740 app \uc744 \uc5f4\uc5b4 \ubcf4\uace0 \ubabb \uc5f4\uba74 web \uc744 \uc5f0\ub2e4. \ucd9c\ubc1c\uc9c0(f.me)\uac00 \uc788\uc73c\uba74 '\ub0b4 \uc704\uce58'\uc5d0\uc11c \uac77\ub294 \uae38\ucc3e\uae30.
+function foodNavUrls(sel, me) {
+  var name = foodNameOf(sel.n), la = Number(sel.la), lo = Number(sel.lo), e = encodeURIComponent;
+  var hasPos = isFinite(la) && isFinite(lo), nm = e(name);
+  var nv = {};
+  if (hasPos) {
+    nv.nroute = { app: 'nmap://route/walk?' + (me ? 'slat=' + me[0] + '&slng=' + me[1] + '&sname=' + e('\ub0b4 \uc704\uce58') + '&' : '') + 'dlat=' + la + '&dlng=' + lo + '&dname=' + nm + '&appname=com.dullyyj.subway',
+                  web: 'https://map.naver.com/p/directions/' + (me ? me[1] + ',' + me[0] + ',' + e('\ub0b4 \uc704\uce58') + ',,-1/' : '-/') + lo + ',' + la + ',' + nm + ',,-1/walk' };
+    nv.kroute = { app: 'kakaomap://route?' + (me ? 'sp=' + me[0] + ',' + me[1] + '&' : '') + 'ep=' + la + ',' + lo + '&by=FOOT',
+                  web: 'https://map.kakao.com/link/to/' + nm + ',' + la + ',' + lo };
+  }
+  nv.ninfo = { app: 'nmap://search?query=' + nm + (hasPos ? '&lat=' + la + '&lng=' + lo + '&zoom=17' : '') + '&appname=com.dullyyj.subway',
+               web: 'https://map.naver.com/p/search/' + nm + (hasPos ? '?c=17.00,' + lo + ',' + la + ',0,0,0,dh' : '') };
+  nv.kinfo = { app: 'kakaomap://search?q=' + nm + (hasPos ? '&p=' + la + ',' + lo : ''), web: 'https://map.kakao.com/link/search/' + nm };
+  return nv;
+}
+function foodSheet(f) {
+  var sel = f.sel, name = foodNameOf(sel.n);
+  if (!name) return { ok: false, error: 'sel' };
+  var nv = foodNavUrls(sel, f.me);
+  var btn = function (s, v, gold) { return { t: 'button', s: s, size: 14, h: 46, r: 11, bold: true, fill: gold ? 'gold' : 'card2', line: gold ? 'none' : 'border', tc: gold ? '#121214' : '', pad: [0, 10, 0, 0], act: { a: 'call', v: v } }; };
+  var kids = [
+    { t: 'text', s: name, size: 17, bold: true, color: 'text', lh: 1.35, pad: [0, 0, 0, 0] },
+    { t: 'text', s: foodCatSimple(foodStr(sel.c, 120)) + (sel.a ? ' \u00b7 ' + foodStr(sel.a, 160) : ''), size: 12, color: 'sub', lh: 1.5, pad: [4, 0, 0, 6] }
+  ];
+  if (nv.nroute) { kids.push(btn('\ub124\uc774\ubc84 \uc9c0\ub3c4\ub85c \uac78\uc5b4\uc11c \uae38\ucc3e\uae30', 'fm.nr', true)); kids.push(btn('\uce74\uce74\uc624\ub9f5\uc73c\ub85c \uac78\uc5b4\uc11c \uae38\ucc3e\uae30', 'fm.kr', true)); }
+  kids.push(btn('\ub124\uc774\ubc84 \uc9c0\ub3c4\uc5d0\uc11c \uac00\uac8c \uc815\ubcf4', 'fm.ni', false));
+  kids.push(btn('\uce74\uce74\uc624\ub9f5\uc5d0\uc11c \uac00\uac8c \uc815\ubcf4', 'fm.ki', false));
+  var body = [{ t: 'panel', pad: [0, 0, 0, 0], ip: [16, 14, 16, 18], fill: 'card', line: 'border', r: 22, kids: kids }];
+  var head = [{ t: 'bar', pad: [0, 0, 0, 4], title: '\ub9db\uc9d1', btn: '\ub2eb\uae30', act: { a: 'call', v: 'fm.close' } }];
+  body[0].kids.unshift(head[0]);
+  var out = { ok: true, v: 1, screen: 'foodsheet', cover: 'tab', head: [], body: body, info: { nv: nv, n: name } };
+  out.rev = 'fs' + FOOD_SCREEN_V + ':' + foodHash(JSON.stringify(body));
+  return out;
+}
 // \ub9db\uc9d1 \ud654\uba74 \uc5d4\uc9c4 Worker \uc5f0\uacb0\ubd80 \u2014 POST /screen/food (engine/food.js \uc758 foodScreen \uc744 \ubd80\ub978\ub2e4). route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/screen/food") return handleScreenFood(request);` \ub97c \ub123\ub294\ub2e4.
-//   \ubcf8\ubb38(JSON \uae00, Content-Type: text/plain \uc73c\ub85c \ubcf4\ub0b4 \uc0ac\uc804 \uc694\uccad\uc744 \ud53c\ud55c\ub2e4): { cap(4 \uc774\uc0c1), f:{stn,st,flt,fail}, c:[\uac00\uac8c\u2026], p:[\uac00\uac8c\u2026], alts?:{ \ud0a4:{stn,st,flt,fail} } }  \uac00\uac8c = [\uc774\ub984, \uc5c5\uc885, \uc8fc\uc18c, \uac70\ub9ac]
+//   \ubcf8\ubb38(JSON \uae00, Content-Type: text/plain \uc73c\ub85c \ubcf4\ub0b4 \uc0ac\uc804 \uc694\uccad\uc744 \ud53c\ud55c\ub2e4): { cap(4 \uc774\uc0c1), f:{stn,st,flt,fail}, c:[\uac00\uac8c\u2026], p:[\uac00\uac8c\u2026], s:[\uc11c\ubc84 \uac00\uac8c \uc6d0\uc790\ub8cc\u2026], u:[\uacf5\uacf5\ub370\uc774\ud130 \uc6d0\uc790\ub8cc\u2026], alts?:{ \ud0a4:{stn,st,flt,fail} } }  \uac00\uac8c = [\uc774\ub984, \uc5c5\uc885, \uc8fc\uc18c, \uac70\ub9ac]
 //   alts \uac00 \uc788\uc73c\uba74 \uc751\ub2f5 out.alts[\ud0a4] \uc5d0 \uadf8 \uce69\uc758 \ud654\uba74\ub3c4 \ud568\uaed8 \ub2f4\ub294\ub2e4(\uac19\uc740 \uac00\uac8c \ubaa9\ub85d \u00b7 \uc815\ub9ac\ub294 \ud55c \ubc88\ub9cc \u00b7 s67)
 //   \uc5d4\uc9c4\uc740 \uc544\ubb34\uac83\ub3c4 \uc800\uc7a5\ud558\uc9c0 \uc54a\ub294\ub2e4(\uc774 \uae30\uae30\uac00 \ubcf4\ub0b8 \uac00\uac8c \ubaa9\ub85d\uc73c\ub85c \ud654\uba74\uc744 \uacc4\uc0b0\ud574 \ub3cc\ub824\uc904 \ubfd0). \uac1c\uc778 \uc2dd\ubcc4 \uc815\ubcf4\ub294 \uc624\uac00\uc9c0 \uc54a\ub294\ub2e4.
 async function handleScreenFood(request) {
@@ -12437,7 +12562,7 @@ async function handleScreenFood(request) {
   try { body = JSON.parse(raw); } catch (e) { return new Response(JSON.stringify({ ok: false, error: "bad-json" }), { status: 400, headers: H }); }
   if (!body || typeof body !== "object") return new Response(JSON.stringify({ ok: false, error: "bad-body" }), { status: 400, headers: H });
   var out;
-  try { out = foodScreens({ cap: Number(body.cap) || 0 }, body.f, { c: body.c, p: body.p }, body.alts); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2) }), { status: 500, headers: H }); }
+  try { out = foodScreens({ cap: Number(body.cap) || 0 }, body.f, { c: body.c, p: body.p, s: body.s, u: body.u }, body.alts); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2) }), { status: 500, headers: H }); }
   if (!out || !out.ok) return new Response(JSON.stringify(out || { ok: false, error: "fail" }), { status: 400, headers: H });
   out.ver = ENGINE_VERSION;
   return new Response(JSON.stringify(out), { headers: H });

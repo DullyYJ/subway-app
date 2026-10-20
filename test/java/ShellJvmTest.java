@@ -254,6 +254,42 @@ public class ShellJvmTest {
         HomeCore hr = new HomeCore(); hr.onResult("{\"info\":{\"sec\":[\"수도권 1호선\",\"2호선\"]}}");
         ok(hr.resSec.size() == 2 && "2호선".equals(hr.resSec.get(1)), "결과 화면의 지하철 구간 이름");
 
+
+        // ── 맛집 ──
+        FoodCore fd = new FoodCore();
+        ok(fd.needGps() && "idle".equals(fd.state()) && !fd.needData(), "처음엔 도착지도 위치도 없다");
+        fd.locating = true; ok("locating".equals(fd.state()), "위치 확인 중"); fd.locating = false; fd.noperm = true; ok("noperm".equals(fd.state()), "위치 권한 없음");
+        fd.setGps(37.4979, 127.0276); ok(!fd.needGps() && "loading".equals(fd.state()) && !fd.noperm, "위치가 오면 불러오는 중");
+        String fq = fd.request(18, true);
+        ok(fq.contains("\"stn\":\"\"") && fq.contains("\"st\":\"loading\"") && fq.contains("\"gps\":[37.4979,127.0276]") && fq.contains("\"dl\":null") && fq.contains("\"alts\":\"chips\"") && !fq.contains("\"s\":"), "첫 요청은 사실만");
+        fd.onScreen("{\"info\":{\"ctr\":[37.5,127.0],\"stn\":\"강남\",\"go\":{\"c.0\":[\"맛집\",\"음식 > 한식\",\"서울 1\",37.5,127.0]}},\"alts\":{\"전체\":{\"ok\":true},\"카페\":{\"ok\":true,\"v\":1}}}");
+        ok(fd.ctr != null && fd.ctr[0] == 37.5 && fd.needData(), "엔진이 정한 중심을 받으면 원자료를 받아야 한다");
+        ok(fd.serverUrl().equals("https://gildongmu-food.phg0643.workers.dev/food?lat=37.5&lng=127.0&r=1500&limit=400") && ScreenCore.netAllowed(fd.serverUrl()), "서버 주소 · 통신 허용");
+        String pu = fd.publicUrl(2);
+        ok(pu.startsWith(ShellCore.BASE + "/tago?url=") && pu.contains("indsLclsCd%3DI2") && pu.contains("pageNo%3D2") && pu.contains("cx%3D127.0%26cy%3D37.5") && ScreenCore.netAllowed(pu), "공공데이터 주소(서버 대리)");
+        ok(FoodCore.pageCount("{\"body\":{\"items\":[{\"bizesNm\":\"A\"},{\"bizesNm\":\"B\"}]}}") == 2 && FoodCore.pageCount("{\"response\":{\"body\":{\"items\":{\"bizesNm\":\"A\"}}}}") == 1 && FoodCore.pageCount("zzz") == -1 && FoodCore.pageCount("") == -1, "공공데이터 쪽 항목 수(두 가지 모양)");
+        java.util.List<String> pgs = new java.util.ArrayList<String>();
+        pgs.add("{\"body\":{\"items\":[{\"bizesNm\":\"공공A\",\"indsMclsNm\":\"한식\",\"indsSclsNm\":\"국밥\",\"rdnmAdr\":\"도로1\",\"lnoAdr\":\"지번1\",\"lat\":\"37.501\",\"lon\":\"127.002\",\"extra\":1}]}}");
+        pgs.add("");
+        FoodCore.Data fdat = FoodCore.parseData("{\"items\":[{\"n\":\"가\",\"c\":\"음식 > 한식\",\"a\":\"서울 1\",\"d\":300,\"la\":37.5,\"lo\":127.0}]}", pgs);
+        ok(fdat.srvOk && fdat.srv.size() == 1 && fdat.pub.size() == 1, "원자료 읽기(서버 1 · 공공 1)");
+        ok(!FoodCore.parseData("zzz", new java.util.ArrayList<String>()).srvOk, "서버 응답이 깨지면 실패로 표시");
+        fd.setData(fdat);
+        fq = fd.request(18, true);
+        ok(fd.loaded && !fd.failed && !fd.needData() && fq.contains("\"st\":\"done\"") && fq.contains("\"s\":[{") && fq.contains("\"n\":\"가\"") && fq.contains("\"u\":[[\"공공A\",\"한식\",\"국밥\",\"도로1\",\"지번1\",\"37.501\",\"127.002\"]]"), "받은 원자료를 그대로 엔진에 보낸다(고르는 것은 엔진)");
+        ok(fd.pickChip("카페") && "카페".equals(fd.flt) && !fd.pickChip("주점") && "주점".equals(fd.flt), "칩: 엔진이 미리 계산해 둔 화면이 있으면 요청 없이");
+        ok(fd.altOf("카페") != null && fd.altOf("카페").contains("\"v\":1") && fd.altOf("주점") == null, "칩 화면 보관");
+        ok(fd.act("fm.c.0") == FoodCore.R_SHEET && fd.pendingSel.equals("{\"n\":\"맛집\",\"c\":\"음식 > 한식\",\"a\":\"서울 1\",\"la\":37.5,\"lo\":127}") || fd.pendingSel.contains("\"la\":37.5"), "가게 누름 → 시트 요청 사실");
+        ok(fd.act("fm.c.9") == FoodCore.R_NONE && fd.act("fm.close") == FoodCore.R_CLOSE && fd.act("zz") == FoodCore.R_NONE, "없는 가게 · 닫기 · 엉터리");
+        ok(fd.sheetRequest(18, new double[] { 37.4, 127.1 }).equals("{\"cap\":18,\"f\":{\"sel\":" + fd.pendingSel + ",\"me\":[37.4,127.1]}}") && fd.sheetRequest(18, null).endsWith("\"me\":null}}"), "시트 요청 본문");
+        fd.onSheet("{\"info\":{\"nv\":{\"nroute\":{\"app\":\"nmap://x\",\"web\":\"https://map.naver.com/x\"},\"kinfo\":{\"app\":\"kakaomap://y\",\"web\":\"https://map.kakao.com/y\"}}}}");
+        String[] fsl = fd.sheetLink("fm.nr");
+        ok(fsl != null && "nmap://x".equals(fsl[0]) && "https://map.naver.com/x".equals(fsl[1]) && fd.sheetLink("fm.ki")[0].equals("kakaomap://y") && fd.sheetLink("fm.kr") == null && fd.sheetLink("zz") == null, "시트 단추 → 앱/웹 주소(엔진이 준 것만)");
+        ok(!fd.setDest("강남역", 0, 0) == false && fd.dest.equals("강남역") && !fd.loaded && fd.dl == null, "도착지가 바뀌면 원자료를 비운다");
+        ok(!fd.setDest("강남역", 0, 0), "같은 도착지면 그대로");
+        fd.setDest("홍대입구", 37.557, 126.924); ok(fd.dl != null && fd.request(18, false).contains("\"stn\":\"홍대입구\"") && fd.request(18, false).contains("\"dl\":[37.557,126.924]"), "도착지 이름·좌표를 사실로 보낸다");
+        fd.refresh(); ok(!fd.loaded && fd.ctr == null, "새로고침은 원자료를 비운다");
+
         System.out.println(fails == 0 ? "ALL OK " + oks : "FAILED " + fails + " / " + (oks + fails));
         if (fails > 0) System.exit(1);
     }

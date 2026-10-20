@@ -1,5 +1,5 @@
 // 맛집 화면 엔진 Worker 연결부 — POST /screen/food (engine/food.js 의 foodScreen 을 부른다). route-v2 의 handleFetch 에 `if (url.pathname === "/screen/food") return handleScreenFood(request);` 를 넣는다.
-//   본문(JSON 글, Content-Type: text/plain 으로 보내 사전 요청을 피한다): { cap(4 이상), f:{stn,st,flt,fail}, c:[가게…], p:[가게…], alts?:{ 키:{stn,st,flt,fail} } }  가게 = [이름, 업종, 주소, 거리]
+//   본문(JSON 글, Content-Type: text/plain 으로 보내 사전 요청을 피한다): { cap(4 이상), f:{stn,st,flt,fail}, c:[가게…], p:[가게…], s:[서버 가게 원자료…], u:[공공데이터 원자료…], alts?:{ 키:{stn,st,flt,fail} } }  가게 = [이름, 업종, 주소, 거리]
 //   alts 가 있으면 응답 out.alts[키] 에 그 칩의 화면도 함께 담는다(같은 가게 목록 · 정리는 한 번만 · s67)
 //   엔진은 아무것도 저장하지 않는다(이 기기가 보낸 가게 목록으로 화면을 계산해 돌려줄 뿐). 개인 식별 정보는 오가지 않는다.
 async function handleScreenFood(request) {
@@ -12,7 +12,7 @@ async function handleScreenFood(request) {
   try { body = JSON.parse(raw); } catch (e) { return new Response(JSON.stringify({ ok: false, error: "bad-json" }), { status: 400, headers: H }); }
   if (!body || typeof body !== "object") return new Response(JSON.stringify({ ok: false, error: "bad-body" }), { status: 400, headers: H });
   var out;
-  try { out = foodScreens({ cap: Number(body.cap) || 0 }, body.f, { c: body.c, p: body.p }, body.alts); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2) }), { status: 500, headers: H }); }
+  try { out = foodScreens({ cap: Number(body.cap) || 0 }, body.f, { c: body.c, p: body.p, s: body.s, u: body.u }, body.alts); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2) }), { status: 500, headers: H }); }
   if (!out || !out.ok) return new Response(JSON.stringify(out || { ok: false, error: "fail" }), { status: 400, headers: H });
   out.ver = ENGINE_VERSION;
   return new Response(JSON.stringify(out), { headers: H });

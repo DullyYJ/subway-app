@@ -20,7 +20,7 @@ var FOOD_CHIPS = ['전체', '카페', '밥집', '육식', '회집', '주점'];
 var FOOD_MAX_SHOW = 150;          // 위·아래 목록 각각 최대 개수(웹과 같다)
 var FOOD_MAX_IN_C = 400, FOOD_MAX_IN_P = 1500;
 var FOOD_ALTS_MAX = 12;           // 한 요청에 실을 수 있는 '다른 칩' 수 상한(칩 6개)
-var FOOD_STATES = ['idle', 'locating', 'noperm', 'loading', 'none', 'ready'];
+var FOOD_STATES = ['idle', 'locating', 'noperm', 'loading', 'none', 'ready', 'done'];   // done = 앱이 '받기를 마쳤다'고만 알린다 — 목록이 있는지에 따라 ready/none 은 엔진이 정한다
 
 // 업종 → 칩 분류. 순서가 중요하다(회집을 육식보다 먼저 — '참치회 전문'에 '참치'가 육류로 오인되지 않게)
 function foodKind(cat) {
@@ -47,12 +47,45 @@ function foodStr(v, n) { return typeof v === 'string' ? v.slice(0, n) : (typeof 
 function foodNameOf(v) { return foodStr(v, 120).replace(/<[^>]*>/g, '').trim(); }
 function foodKey(name) { return String(name || '').replace(/\s/g, ''); }
 
+function foodLL(v) {                              // [위도, 경도] 한 쌍 — 한국 범위 밖이면 없는 것으로 본다
+  if (!Array.isArray(v) || v.length < 2) return null;
+  var la = Number(v[0]), lo = Number(v[1]);
+  return (isFinite(la) && isFinite(lo) && la > 30 && la < 40 && lo > 123 && lo < 133) ? [la, lo] : null;
+}
 function foodFacts(f) {
   f = (f && typeof f === 'object') ? f : {};
   var stn = foodStr(f.stn, 30).replace(/역$/, '');
   var st = FOOD_STATES.indexOf(f.st) >= 0 ? f.st : (stn ? 'ready' : 'idle');
   var flt = FOOD_CHIPS.indexOf(f.flt) >= 0 ? f.flt : '전체';
-  return { stn: stn, st: st, flt: flt, fail: f.fail === 1 || f.fail === true || f.fail === '1' };
+  var sel = (f.sel && typeof f.sel === 'object' && !Array.isArray(f.sel)) ? f.sel : null;
+  return { stn: stn, st: st, flt: flt, fail: f.fail === 1 || f.fail === true || f.fail === '1',
+           gps: foodLL(f.gps), dl: foodLL(f.dl), me: foodLL(f.me), sel: sel };
+}
+// ── 거리·역 찾기(웹 haversineM · _foodResolveCoord · _foodLoadNearby 와 같은 계산) ──
+function foodHav(la1, lo1, la2, lo2) {
+  var R = 6371000, dLa = (la2 - la1) * Math.PI / 180, dLo = (lo2 - lo1) * Math.PI / 180;
+  var a = Math.sin(dLa / 2) * Math.sin(dLa / 2) + Math.cos(la1 * Math.PI / 180) * Math.cos(la2 * Math.PI / 180) * Math.sin(dLo / 2) * Math.sin(dLo / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+function foodStnTable() {                          // Worker 에서는 HOME 블록이 채운 전역 HOME_STNS, Node(시험)에서는 파일을 불러온다
+  if (typeof HOME_STNS !== 'undefined' && HOME_STNS) return HOME_STNS;
+  try { if (typeof require === 'function') return require('./home-stations').HOME_STNS; } catch (e) { /* 없음 */ }
+  return [];
+}
+// 도착역 이름(없으면 기기 위치에서 가장 가까운 역)과 그 중심 좌표. 좌표를 못 정하면 ctr=null.
+function foodResolve(f) {
+  var T = foodStnTable(), i, s;
+  if (f.stn) {
+    for (i = 0; i < T.length; i++) { s = T[i]; if (String(s[0]).replace(/역$/, '') === f.stn) return { stn: f.stn, ctr: [s[2], s[3]] }; }
+    return { stn: f.stn, ctr: f.dl };                // 표에 없는 이름이면 앱이 알려 준 도착지 좌표
+  }
+  if (f.gps) {
+    var best = 1e12, near = null;
+    for (i = 0; i < T.length; i++) { s = T[i]; var d = foodHav(f.gps[0], f.gps[1], s[2], s[3]); if (d < best) { best = d; near = s; } }
+    if (near) return { stn: String(near[0]).replace(/역$/, ''), ctr: [near[2], near[3]] };
+    return { stn: '', ctr: f.gps };
+  }
+  return { stn: '', ctr: null };
 }
 // 가게 배열 [이름, 업종, 주소, 거리, 위도, 경도] → { n, c, a, d, i(원래 번호) }. 이름 없는 건 뺀다(빈 카드 방지)
 function foodList(arr, max) {
@@ -64,9 +97,44 @@ function foodList(arr, max) {
     var n = foodNameOf(a[0]);
     if (!n) continue;
     var d = Number(a[3]);
-    out.push({ n: n, c: foodStr(a[1], 120), a: foodStr(a[2], 160), d: isFinite(d) ? d : null, i: i });
+    var la = Number(a[4]), lo = Number(a[5]);
+    out.push({ n: n, c: foodStr(a[1], 120), a: foodStr(a[2], 160), d: isFinite(d) ? d : null, i: i, la: isFinite(la) && a[4] != null && a[4] !== '' ? la : null, lo: isFinite(lo) && a[5] != null && a[5] !== '' ? lo : null });
   }
   return out;
+}
+// ── 원자료 정리(웹 _foodFromServer · _fetchPublicFood · _foodMergeList 와 같은 규칙) ──
+//   서버 가게  s = [{ n, c, a, d, la, lo }…]            → 위쪽 목록(순위·별점)
+//   공공데이터 u = [[상호, 중분류, 소분류, 도로명주소, 지번주소, 위도, 경도]…]  → 아래쪽 목록('공공데이터' 딱지). 거리는 중심 좌표에서 엔진이 잰다.
+function foodRowKey(r) { return foodKey(r[0]) + '@' + r[2]; }
+function foodMergeRows(rows) {                     // 같은 상호·같은 주소 중복 정리 → 거리순(거리 모르면 맨 뒤)
+  var seen = {}, out = [];
+  rows.forEach(function (r) { var k = foodRowKey(r); if (!r[0] || seen[k]) return; seen[k] = 1; out.push(r); });
+  out.sort(function (a, b) { return (a[3] == null ? 99999 : a[3]) - (b[3] == null ? 99999 : b[3]); });
+  return out;
+}
+function foodRowsServer(arr) {
+  var rows = [];
+  if (!Array.isArray(arr)) return rows;
+  for (var i = 0; i < arr.length && i < FOOD_MAX_IN_C; i++) {
+    var it = arr[i];
+    if (!it || typeof it !== 'object' || !foodNameOf(it.n)) continue;
+    var d = it.d == null ? null : parseInt(it.d, 10);
+    rows.push([foodStr(it.n, 120), foodStr(it.c, 120), foodStr(it.a, 160), isFinite(d) ? d : null, it.la == null ? null : Number(it.la), it.lo == null ? null : Number(it.lo)]);
+  }
+  return foodMergeRows(rows);
+}
+function foodRowsPublic(arr, ctr) {
+  var rows = [];
+  if (!Array.isArray(arr)) return rows;
+  for (var i = 0; i < arr.length && i < FOOD_MAX_IN_P; i++) {
+    var it = arr[i];
+    if (!Array.isArray(it) || !foodNameOf(it[0])) continue;
+    var la = parseFloat(it[5]), lo = parseFloat(it[6]);
+    var ok = isFinite(la) && isFinite(lo);
+    var dist = (ok && ctr) ? Math.round(foodHav(ctr[0], ctr[1], la, lo)) : null;
+    rows.push([foodStr(it[0], 120), [foodStr(it[1], 60), foodStr(it[2], 60)].filter(Boolean).join(' '), foodStr(it[3], 160) || foodStr(it[4], 160), dist, ok ? la : null, ok ? lo : null]);
+  }
+  return foodMergeRows(rows);
 }
 function foodHash(s) {                             // djb2 — 같은 화면이면 같은 rev
   var h = 5381;
@@ -75,9 +143,10 @@ function foodHash(s) {                             // djb2 — 같은 화면이�
 }
 
 function foodMsgN(s) { return { t: 'text', s: s, size: 14, color: 'sub', lh: 1.8, align: 'center', pad: [20, 60, 20, 60] }; }
-function foodPlaceN(p, rank, pub, idxPrefix) {
+function foodPlaceN(p, rank, pub, idxPrefix, go) {
   var addr = p.a ? ' · ' + p.a.split(' ').slice(-2).join(' ') : '';
   var n = { t: 'place', pad: [12, 0, 12, 10], rank: rank, name: p.n, sub: foodCatSimple(p.c) + addr, dist: foodDist(p.d), go: '길찾기 · 지도 →', act: { a: 'call', v: 'fm.' + idxPrefix + '.' + p.i } };
+  if (go && p.la != null && p.lo != null) go[idxPrefix + '.' + p.i] = [p.n, p.c, p.a, p.la, p.lo];
   if (pub) { n.pub = true; n.badge = '공공데이터'; } else n.stars = foodStars(Number(rank) - 1);
   return n;
 }
@@ -97,7 +166,7 @@ function foodScreenOf(f, all, allP) {
       items: FOOD_CHIPS.map(function (c) { return { label: c, on: c === f.flt, act: { a: 'cat', v: c } }; }) }
   ];
 
-  var body = [];
+  var body = [], go = {};
   if (f.st === 'idle') body.push(foodMsgN('경로를 설정하면\n도착역 주변 맛집을 추천해드려요!'));
   else if (f.st === 'locating') body.push(foodMsgN('내 위치 확인 중...'));
   else if (f.st === 'noperm') body.push(foodMsgN('위치 권한을 허용하거나\n경로를 설정하면 맛집을 추천해드려요!'));
@@ -108,51 +177,107 @@ function foodScreenOf(f, all, allP) {
     else body.push(foodMsgN('해당 카테고리 음식점이 없습니다.'));
   } else {
     var n = 0, k;
-    for (k = 0; k < cur.length && n < FOOD_MAX_SHOW; k++, n++) body.push(foodPlaceN(cur[k], String(n + 1), false, 'c'));
+    for (k = 0; k < cur.length && n < FOOD_MAX_SHOW; k++, n++) body.push(foodPlaceN(cur[k], String(n + 1), false, 'c', go));
     if (pub.length) {
       body.push({ t: 'divider', pad: [12, 8, 12, 0] });
       body.push({ t: 'text', s: '공공데이터 · 주변 ' + (f.flt === '전체' ? '음식점' : f.flt) + ' ' + pub.length + '곳', size: 12, bold: true, color: 'sub', pad: [14, 12, 14, 6] });
-      for (k = 0, n = 0; k < pub.length && n < FOOD_MAX_SHOW; k++, n++) body.push(foodPlaceN(pub[k], '', true, 'p'));
+      for (k = 0, n = 0; k < pub.length && n < FOOD_MAX_SHOW; k++, n++) body.push(foodPlaceN(pub[k], '', true, 'p', go));
     }
     body.push({ t: 'spacer', h: 80 });
   }
-  var out = { ok: true, v: 1, screen: 'food', cover: 'tab', head: head, body: body, info: { cur: cur.length, pub: pub.length, flt: f.flt } };
+  var out = { ok: true, v: 1, screen: 'food', cover: 'tab', head: head, body: body, info: { cur: cur.length, pub: pub.length, flt: f.flt, stn: f.stn, ctr: f.ctr || null, go: go } };
   out.rev = 'f' + FOOD_SCREEN_V + ':' + foodHash(JSON.stringify([head, body]));
   return out;
+}
+
+// 입력 한 벌을 화면 계산에 쓸 모양으로 정리한다: 도착역·중심 좌표를 정하고(없으면 기기 위치 → 가장 가까운 역), 원자료(s·u)를 거리순 목록으로 만든다.
+function foodPrep(factsIn, itemsIn) {
+  var f = foodFacts(factsIn), it = (itemsIn && typeof itemsIn === 'object') ? itemsIn : {};
+  var rs = foodResolve(f);
+  var rawC = Array.isArray(it.s) ? foodRowsServer(it.s) : null, rawP = Array.isArray(it.u) ? foodRowsPublic(it.u, rs.ctr) : null;
+  var c = rawC || (Array.isArray(it.c) ? it.c : []), p = rawP || (Array.isArray(it.p) ? it.p : []);
+  return { f: f, stn: rs.stn, ctr: rs.ctr, all: foodList(c, FOOD_MAX_IN_C), allP: foodList(p, FOOD_MAX_IN_P) };
+}
+function foodFactsFor(f, base) {                   // 화면 하나에 쓸 사실: 도착역 이름·좌표를 채우고 'done' 을 ready/none 으로 정한다
+  var o = { stn: base.stn || f.stn, st: f.st, flt: f.flt, fail: f.fail, ctr: base.ctr };
+  if (o.st === 'loading' && !base.ctr && o.stn) o.st = 'none';             // 좌표를 못 정하는 도착지 — 영영 '불러오는 중'에 머물지 않게
+  if (o.st === 'done') o.st = (base.all.length || base.allP.length) ? 'ready' : (f.fail ? 'ready' : 'none');
+  return o;
 }
 
 function foodScreen(inp, factsIn, itemsIn) {
   inp = inp || {};
   if (!(Number(inp.cap) >= 4)) return { ok: false, error: 'cap' };
-  var f = foodFacts(factsIn), it = (itemsIn && typeof itemsIn === 'object') ? itemsIn : {};
-  return foodScreenOf(f, foodList(it.c, FOOD_MAX_IN_C), foodList(it.p, FOOD_MAX_IN_P));
+  var P = foodPrep(factsIn, itemsIn);
+  if (P.f.sel) return foodSheet(P.f);
+  return foodScreenOf(foodFactsFor(P.f, P), P.all, P.allP);
 }
 
 // ★ 2026-10-19 s67 (YJ: 도착역 맛집 로딩이 오래 걸려 — 칩을 누를 때마다 가게 목록을 다시 보내고 새 화면을 받았다):
-//   같은 요청에 '다른 칩들의 사실(altsIn = { 키: { stn, st, flt, fail } } 또는 'chips' = 엔진이 가진 칩 전부)'을 실어 보내면 엔진이 한 번에 모든 칩 화면을 계산해 out.alts[키] 로 돌려준다.
+//   같은 요청에 '다른 칩들의 사실(altsIn = { 키: { stn, st, flt, fail } } 또는 'chips' = 엔진이 가진 칩 전부)'을 실어 보내면 엔진이 한 번에 모든 칩 화면을 계산해 out.alts[키]
 //   가게 목록 정리(foodList)는 한 번만 한다. 앱은 받은 화면을 칩별로 기억해 두었다가 칩을 누르면 요청 없이 그대로 올린다(계산은 엔진, 앱은 그리기).
 //   각 alts[키] 는 그 칩으로 따로 요청했을 때와 글자 하나까지 같은 화면이다(시험이 대조한다).
 function foodScreens(inp, factsIn, itemsIn, altsIn) {
   inp = inp || {};
   if (!(Number(inp.cap) >= 4)) return { ok: false, error: 'cap' };
-  var it = (itemsIn && typeof itemsIn === 'object') ? itemsIn : {};
-  var all = foodList(it.c, FOOD_MAX_IN_C), allP = foodList(it.p, FOOD_MAX_IN_P);
-  var out = foodScreenOf(foodFacts(factsIn), all, allP);
+  var P = foodPrep(factsIn, itemsIn);
+  if (P.f.sel) return foodSheet(P.f);
+  var out = foodScreenOf(foodFactsFor(P.f, P), P.all, P.allP);
   if (altsIn === 'chips') {                       // 앱은 어떤 칩이 있는지 모른다 — 엔진이 가진 칩 전부로 지금 사실만 칩을 바꿔 만든다. 키 = 칩 이름
-    var bf = foodFacts(factsIn);
     altsIn = {};
-    FOOD_CHIPS.forEach(function (c) { altsIn[c] = { stn: bf.stn, st: bf.st, flt: c, fail: bf.fail ? 1 : 0 }; });
+    FOOD_CHIPS.forEach(function (c) { altsIn[c] = { stn: P.f.stn, st: P.f.st, flt: c, fail: P.f.fail ? 1 : 0, gps: P.f.gps, dl: P.f.dl }; });
   }
   if (altsIn && typeof altsIn === 'object' && !Array.isArray(altsIn)) {
     var ks = Object.keys(altsIn).slice(0, FOOD_ALTS_MAX), alts = {};
     for (var i = 0; i < ks.length; i++) {
       var a = altsIn[ks[i]];
       if (!a || typeof a !== 'object') continue;
-      alts[ks[i]] = foodScreenOf(foodFacts(a), all, allP);
+      var fa = foodFacts(a);
+      if (!fa.gps) fa.gps = P.f.gps;
+      if (!fa.dl) fa.dl = P.f.dl;
+      var ra = foodResolve(fa);
+      alts[ks[i]] = foodScreenOf(foodFactsFor(fa, { stn: ra.stn, ctr: ra.ctr, all: P.all, allP: P.allP }), P.all, P.allP);
     }
     out.alts = alts;
   }
   return out;
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { foodScreen: foodScreen, foodScreens: foodScreens, foodFacts: foodFacts, foodKind: foodKind, foodCatSimple: foodCatSimple, foodDist: foodDist, foodStars: foodStars, foodList: foodList, FOOD_CHIPS: FOOD_CHIPS };
+// ── 가게 시트: 가게를 누르면 앱이 info.go 에서 그 가게의 [이름, 업종, 주소, 위도, 경도] 를 f.sel 로 보내고, 엔진이 시트 화면과 열 주소(info.nv)를 정한다 ──
+//   주소는 앱 스킴(app)과 웹(web)이 한 쌍 — 앱은 app 을 열어 보고 못 열면 web 을 연다. 출발지(f.me)가 있으면 '내 위치'에서 걷는 길찾기.
+function foodNavUrls(sel, me) {
+  var name = foodNameOf(sel.n), la = Number(sel.la), lo = Number(sel.lo), e = encodeURIComponent;
+  var hasPos = isFinite(la) && isFinite(lo), nm = e(name);
+  var nv = {};
+  if (hasPos) {
+    nv.nroute = { app: 'nmap://route/walk?' + (me ? 'slat=' + me[0] + '&slng=' + me[1] + '&sname=' + e('내 위치') + '&' : '') + 'dlat=' + la + '&dlng=' + lo + '&dname=' + nm + '&appname=com.dullyyj.subway',
+                  web: 'https://map.naver.com/p/directions/' + (me ? me[1] + ',' + me[0] + ',' + e('내 위치') + ',,-1/' : '-/') + lo + ',' + la + ',' + nm + ',,-1/walk' };
+    nv.kroute = { app: 'kakaomap://route?' + (me ? 'sp=' + me[0] + ',' + me[1] + '&' : '') + 'ep=' + la + ',' + lo + '&by=FOOT',
+                  web: 'https://map.kakao.com/link/to/' + nm + ',' + la + ',' + lo };
+  }
+  nv.ninfo = { app: 'nmap://search?query=' + nm + (hasPos ? '&lat=' + la + '&lng=' + lo + '&zoom=17' : '') + '&appname=com.dullyyj.subway',
+               web: 'https://map.naver.com/p/search/' + nm + (hasPos ? '?c=17.00,' + lo + ',' + la + ',0,0,0,dh' : '') };
+  nv.kinfo = { app: 'kakaomap://search?q=' + nm + (hasPos ? '&p=' + la + ',' + lo : ''), web: 'https://map.kakao.com/link/search/' + nm };
+  return nv;
+}
+function foodSheet(f) {
+  var sel = f.sel, name = foodNameOf(sel.n);
+  if (!name) return { ok: false, error: 'sel' };
+  var nv = foodNavUrls(sel, f.me);
+  var btn = function (s, v, gold) { return { t: 'button', s: s, size: 14, h: 46, r: 11, bold: true, fill: gold ? 'gold' : 'card2', line: gold ? 'none' : 'border', tc: gold ? '#121214' : '', pad: [0, 10, 0, 0], act: { a: 'call', v: v } }; };
+  var kids = [
+    { t: 'text', s: name, size: 17, bold: true, color: 'text', lh: 1.35, pad: [0, 0, 0, 0] },
+    { t: 'text', s: foodCatSimple(foodStr(sel.c, 120)) + (sel.a ? ' · ' + foodStr(sel.a, 160) : ''), size: 12, color: 'sub', lh: 1.5, pad: [4, 0, 0, 6] }
+  ];
+  if (nv.nroute) { kids.push(btn('네이버 지도로 걸어서 길찾기', 'fm.nr', true)); kids.push(btn('카카오맵으로 걸어서 길찾기', 'fm.kr', true)); }
+  kids.push(btn('네이버 지도에서 가게 정보', 'fm.ni', false));
+  kids.push(btn('카카오맵에서 가게 정보', 'fm.ki', false));
+  var body = [{ t: 'panel', pad: [0, 0, 0, 0], ip: [16, 14, 16, 18], fill: 'card', line: 'border', r: 22, kids: kids }];
+  var head = [{ t: 'bar', pad: [0, 0, 0, 4], title: '맛집', btn: '닫기', act: { a: 'call', v: 'fm.close' } }];
+  body[0].kids.unshift(head[0]);
+  var out = { ok: true, v: 1, screen: 'foodsheet', cover: 'tab', head: [], body: body, info: { nv: nv, n: name } };
+  out.rev = 'fs' + FOOD_SCREEN_V + ':' + foodHash(JSON.stringify(body));
+  return out;
+}
+
+if (typeof module !== 'undefined' && module.exports) module.exports = { foodScreen: foodScreen, foodScreens: foodScreens, foodFacts: foodFacts, foodKind: foodKind, foodCatSimple: foodCatSimple, foodDist: foodDist, foodStars: foodStars, foodList: foodList, foodResolve: foodResolve, foodHav: foodHav, foodRowsServer: foodRowsServer, foodRowsPublic: foodRowsPublic, foodNavUrls: foodNavUrls, FOOD_CHIPS: FOOD_CHIPS };

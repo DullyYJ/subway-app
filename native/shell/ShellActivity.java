@@ -21,6 +21,7 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.Toast;
 
+import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.List;
 import java.util.Map;
@@ -46,6 +47,8 @@ public class ShellActivity extends Activity {
     private final HomeCore home = new HomeCore();       // 홈 탭 입력 상태(고른 출발/도착·후보·기준시각)
     private int seqHome = 0, seqCand = 0, seqBoard = 0;
     private BoardCore board;
+    private final FoodCore food = new FoodCore();         // 맛집 탭(도착지·기기 위치·받은 원자료)
+    private int seqFood = 0;
     private ChatCore chat;
     private int seqChat = 0;
     private boolean chatPolling;
@@ -156,6 +159,7 @@ public class ShellActivity extends Activity {
         if (ShellCore.S_HOME.equals(screen)) { loadHome(v, keep); return; }
         if (ShellCore.S_BOARD.equals(screen)) { loadBoard(v, keep, true); return; }
         if (ShellCore.S_CHAT.equals(screen)) { loadChat(v, keep, true); return; }
+        if (ShellCore.S_FOOD.equals(screen)) { loadFood(v, keep, false); return; }
         new Thread(new Runnable() {
             @Override public void run() {
                 String[] urls = ShellCore.feedUrls(screen), feeds = new String[urls.length];
@@ -219,6 +223,9 @@ public class ShellActivity extends Activity {
                 return;
             } else if (ShellCore.S_BOARD.equals(screenName())) {
                 boardAct(a, which == 0 ? head : body);
+                return;
+            } else if (ShellCore.S_FOOD.equals(screenName())) {
+                foodAct(a);
                 return;
             } else if (ShellCore.S_HOME.equals(screenName())) {
                 if ("call".equals(a.a)) homeAct(a.v, body.fields());
@@ -436,13 +443,151 @@ public class ShellActivity extends Activity {
             }
         }, "shell-write").start();
     }
+    // ───────────── 맛집 ─────────────
+    private static final int REQ_FOOD_LOC = 72;
+
+    /** 도착지(홈에서 고른 것)·기기 위치를 FoodCore 에 알리고, 엔진에 화면을 묻는다. 중심 좌표를 알면 서버·공공데이터 원자료를 받아 다시 묻는다. */
+    private void loadFood(final ScreenView v, final boolean keep, final boolean force) {
+        final int my = ++seqFood;
+        HomeCore.Loc d = home.loc[HomeCore.DEST];
+        if (d != null && d.ok()) food.setDest(d.name, d.lat, d.lng); else food.setDest("", 0, 0);
+        if (force) food.refresh();
+        if (food.needGps() && !food.noperm && !food.locating) locateForFood();
+        final String json = food.request(ShellCore.CAP, true);
+        new Thread(new Runnable() {
+            @Override public void run() {
+                NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/food", json, 12000);
+                final String txt = r.status == 200 ? r.body : "";
+                main.post(new Runnable() { @Override public void run() {
+                    if (my != seqFood || txt.length() == 0) { if (txt.length() == 0 && my == seqFood) toast("맛집 화면을 받지 못했어요"); return; }
+                    food.onScreen(txt);
+                    present(v, txt, keep);
+                    if (food.needData()) fetchFoodData(my, v);
+                } });
+            }
+        }, "shell-food").start();
+    }
+    /** 서버 맛집 + 공공데이터(최대 3쪽)를 받아 FoodCore 에 넣고 엔진에 다시 묻는다. */
+    private void fetchFoodData(final int my, final ScreenView v) {
+        final String su = food.serverUrl();
+        final String[] pu = new String[FoodCore.PUB_PAGES];
+        for (int i = 0; i < pu.length; i++) pu[i] = food.publicUrl(i + 1);
+        new Thread(new Runnable() {
+            @Override public void run() {
+                NetPost.Res sr = NetPost.get(su, 8000);
+                List<String> pubs = new ArrayList<String>();
+                for (int i = 0; i < pu.length; i++) {
+                    NetPost.Res pr = NetPost.get(pu[i], 10000);
+                    pubs.add(pr.status == 200 ? pr.body : "");
+                    if (FoodCore.pageCount(pr.status == 200 ? pr.body : "") < FoodCore.PUB_PAGE_SIZE) break;
+                }
+                final FoodCore.Data data = FoodCore.parseData(sr.status == 200 ? sr.body : "", pubs);
+                main.post(new Runnable() { @Override public void run() {
+                    if (my != seqFood) return;
+                    food.setData(data);
+                    final String json = food.request(ShellCore.CAP, true);
+                    new Thread(new Runnable() {
+                        @Override public void run() {
+                            NetPost.Res r2 = NetPost.post(ShellCore.BASE + "/screen/food", json, 20000);
+                            final String txt2 = r2.status == 200 ? r2.body : "";
+                            main.post(new Runnable() { @Override public void run() {
+                                if (my != seqFood) return;
+                                if (txt2.length() == 0) { toast("맛집 화면을 받지 못했어요"); return; }
+                                food.onScreen(txt2); present(v, txt2, true);
+                            } });
+                        }
+                    }, "shell-food2").start();
+                } });
+            }
+        }, "shell-fooddata").start();
+    }
+    private void reloadFood() { if (ShellCore.S_FOOD.equals(slots.length > 0 ? slots[slots.length - 1] : "")) loadFood(body, true, false); }
+
+    private void foodAct(ScreenCore.Act a) {
+        if ("refresh".equals(a.a)) { loadFood(body, true, true); return; }
+        if ("cat".equals(a.a)) {
+            if (food.pickChip(a.v)) present(body, food.altOf(food.flt), false); else loadFood(body, false, false);
+            return;
+        }
+        if (!"call".equals(a.a)) return;
+        switch (food.act(a.v)) {
+            case FoodCore.R_SHEET: openFoodSheet(); break;
+            default: break;
+        }
+    }
+    private void openFoodSheet() {
+        closeSheet();
+        sheetName = ShellCore.S_FOODSHEET;
+        sheetView = new ScreenView(this);
+        sheetView.setDpr(dpr);
+        sheetView.setPalette(ShellCore.palette(ShellCore.theme(store)));
+        sheetView.setListener(new SheetHost());
+        sheet = new android.app.Dialog(this, android.R.style.Theme_Material_Light_NoActionBar);
+        sheet.setContentView(sheetView);
+        try { sheet.show(); } catch (Throwable t) { toast("가게 정보를 열지 못했어요"); return; }
+        final double[] me = food.gps;
+        final String json = food.sheetRequest(ShellCore.CAP, me);
+        new Thread(new Runnable() {
+            @Override public void run() {
+                NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/food", json, 8000);
+                final String txt = r.status == 200 ? r.body : "";
+                main.post(new Runnable() { @Override public void run() {
+                    if (sheet != null && sheet.isShowing() && ShellCore.S_FOODSHEET.equals(sheetName)) { food.onSheet(txt); present(sheetView, txt, false); }
+                } });
+            }
+        }, "shell-foodsheet").start();
+    }
+    /** 외부 지도 앱을 열어 보고, 없으면 웹 주소로 연다. */
+    private void openExternal(String app, String web) {
+        try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(app))); return; }
+        catch (Throwable ignored) { /* 앱 없음 */ }
+        openLink(web);
+    }
+
+    /** 맛집용 한 번 위치(홈의 위치 감지와 따로 — 홈 입력칸은 건드리지 않는다). */
+    private void locateForFood() {
+        if (checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            food.locating = true;
+            requestPermissions(new String[] { android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION }, REQ_FOOD_LOC);
+            return;
+        }
+        food.locating = true;
+        final LocationManager lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+        try {
+            Location best = null;
+            for (String p : lm.getProviders(true)) {
+                Location l = lm.getLastKnownLocation(p);
+                if (l != null && (best == null || l.getTime() > best.getTime())) best = l;
+            }
+            if (best != null && System.currentTimeMillis() - best.getTime() < 5 * 60 * 1000L) { food.setGps(best.getLatitude(), best.getLongitude()); reloadFood(); return; }
+            String prov = lm.isProviderEnabled(LocationManager.GPS_PROVIDER) ? LocationManager.GPS_PROVIDER : LocationManager.NETWORK_PROVIDER;
+            final Location fallback = best;
+            final boolean[] done = { false };
+            final LocationListener ll = new LocationListener() {
+                @Override public void onLocationChanged(Location l) { if (done[0]) return; done[0] = true; try { lm.removeUpdates(this); } catch (Throwable ignored) { } food.setGps(l.getLatitude(), l.getLongitude()); reloadFood(); }
+                @Override public void onProviderEnabled(String p) { }
+                @Override public void onProviderDisabled(String p) { }
+                @Override @SuppressWarnings("deprecation") public void onStatusChanged(String p, int s, Bundle b) { }
+            };
+            lm.requestSingleUpdate(prov, ll, Looper.getMainLooper());
+            main.postDelayed(new Runnable() { @Override public void run() {
+                if (done[0]) return; done[0] = true;
+                try { lm.removeUpdates(ll); } catch (Throwable ignored) { }
+                if (fallback != null) food.setGps(fallback.getLatitude(), fallback.getLongitude()); else { food.noperm = true; food.locating = false; }
+                reloadFood();
+            } }, 8000);
+        } catch (Throwable t) { food.noperm = true; food.locating = false; reloadFood(); }
+    }
+
     private void closeSheet() { try { if (sheet != null) sheet.dismiss(); } catch (Throwable ignored) { } sheet = null; sheetView = null; sheetName = ""; }
 
     private final class SheetHost implements ScreenView.Listener {
         @Override public void onAction(ScreenCore.Act a) {
             if (!"call".equals(a.a)) return;
-            if ("wr.close".equals(a.v)) { closeSheet(); return; }
-            if ("wr.submit".equals(a.v)) submitWrite();
+            if ("wr.close".equals(a.v) || "fm.close".equals(a.v)) { closeSheet(); return; }
+            if ("wr.submit".equals(a.v)) { submitWrite(); return; }
+            String[] ln = food.sheetLink(a.v);
+            if (ln != null) openExternal(ln[0], ln[1]);
         }
         @Override public void onSet(ScreenCore.Act a, boolean on) { }
         @Override public void onSearch(ScreenCore.Act a, String q) { }
@@ -615,6 +760,12 @@ public class ShellActivity extends Activity {
         setHomeFields(); reloadHome();
     }
     @Override public void onRequestPermissionsResult(int code, String[] perms, int[] res) {
+        if (code == REQ_FOOD_LOC) {
+            boolean g = res.length > 0 && res[0] == PackageManager.PERMISSION_GRANTED;
+            food.noperm = !g; food.locating = false;
+            loadFood(body, true, false);
+            return;
+        }
         if (code != REQ_LOC) return;
         boolean ok = res.length > 0 && res[0] == PackageManager.PERMISSION_GRANTED;
         if (ok) startGps(); else toast("위치 권한이 필요해요");

@@ -29,6 +29,69 @@ ok(S.ok && S.v === 1 && S.screen === 'food' && S.cover === 'tab' && /^f1:/.test(
   ok(E.FOOD_CHIPS.join() === '전체,카페,밥집,육식,회집,주점', '칩 순서');
 }
 
+// ②-2 원자료 정리·역 찾기·시트 (s90: 서버/공공데이터 원자료를 엔진이 정리한다 — 웹 _foodMergeList · _foodLoadNearby · _navTo 와 같은 규칙)
+{
+  const mm = /function _foodMergeList\(base, add\)\{[\s\S]*?\n\}\n/.exec(html);
+  ok(!!mm, '웹 _foodMergeList 를 찾았다');
+  const webMerge = vm.runInNewContext(mm[0] + ';_foodMergeList');
+  const srv = [{ n: '가', c: '음식 > 한식', a: '서울 1', d: 300, la: 37.5, lo: 127.0 }, { n: '나 나', c: '음식 > 카페', a: '서울 2', d: 100, la: 37.5, lo: 127.0 }, { n: '가', c: '음식 > 한식', a: '서울 1', d: 300, la: 37.5, lo: 127.0 },
+    { n: '다', c: '', a: '서울 3', d: null, la: 37.5, lo: 127.0 }, { n: '', c: '', a: 'x', d: 1 }, { n: '나나', c: '음식 > 카페', a: '서울 2', d: 90, la: 37.5, lo: 127.0 }];
+  const web = webMerge([], srv.filter(x => x.n).map(it => ({ place_name: it.n, category_name: it.c || '', road_address_name: it.a || '', distance: it.d, x: String(it.lo), y: String(it.la) })));
+  const rows = E.foodRowsServer(srv);
+  ok(rows.map(r => r[0]).join('|') === web.map(p => p.place_name).join('|'), '서버 가게 중복 정리·거리순이 웹과 같다: ' + rows.map(r => r[0]).join('|'));
+  ok(rows[0][4] === 37.5 && rows[0][5] === 127.0, '좌표를 들고 간다');
+  const u = [['공공A', '한식', '일반한식', '서울 도로 1', '서울 지번 1', '37.5010', '127.0020'], ['공공A', '한식', '일반한식', '서울 도로 1', '', '37.5010', '127.0020'], ['공공B', '', '카페', '', '서울 지번 2', '37.5100', '127.0000'], ['공공C', '분식', '', '서울 도로 3', '', 'x', 'y'], ['', '', '', '', '', 1, 1]];
+  const pr = E.foodRowsPublic(u, [37.5, 127.0]);
+  ok(pr.length === 3 && pr[0][0] === '공공A' && pr[0][1] === '한식 일반한식' && pr[0][2] === '서울 도로 1', '공공데이터 이름·업종 합침·주소 고름');
+  ok(pr[1][0] === '공공B' && pr[1][2] === '서울 지번 2' && pr[2][0] === '공공C' && pr[2][3] === null, '지번 주소로 대신 · 좌표 모르면 거리 없음(맨 뒤)');
+  const hm = /function haversineM\(lat1, lon1, lat2, lon2\)\{[\s\S]*?\n\}\n/.exec(html);
+  const hv = vm.runInNewContext(hm[0] + ';haversineM');
+  ok(Math.round(hv(37.5, 127.0, 37.501, 127.002)) === pr[0][3], '거리 재기가 웹 haversineM 과 같다 ' + pr[0][3]);
+
+  // 가까운 역 = 웹 STNDB.forEach 최소 거리 (표는 HOME_STNS)
+  const T = require('../engine/home-stations').HOME_STNS;
+  [[37.4979, 127.0276], [37.5547, 126.9707], [37.2661, 127.0], [35.1151, 129.0422]].forEach(g => {
+    let best = 1e12, near = null; T.forEach(s => { const d = hv(g[0], g[1], s[2], s[3]); if (d < best) { best = d; near = s; } });
+    const r = E.foodResolve({ stn: '', gps: g, dl: null });
+    ok(r.stn === String(near[0]).replace(/역$/, '') && r.ctr[0] === near[2] && r.ctr[1] === near[3], '가까운 역: ' + g + ' → ' + r.stn);
+  });
+  let r = E.foodResolve({ stn: '강남', gps: null, dl: null }); ok(r.stn === '강남' && r.ctr && r.ctr.length === 2, '도착역 이름 → 표 좌표');
+  r = E.foodResolve({ stn: '없는역xyz', gps: null, dl: [37.5, 127.0] }); ok(r.stn === '없는역xyz' && r.ctr[0] === 37.5, '표에 없으면 앱이 준 도착지 좌표');
+  r = E.foodResolve({ stn: '없는역xyz', gps: [37.5, 127.0], dl: null }); ok(r.ctr === null, '좌표를 못 정하면 중심 없음(기기 위치는 도착역이 없을 때만 쓴다)');
+  ok(E.foodResolve({ stn: '', gps: null, dl: null }).ctr === null, '도착역도 위치도 없으면 중심 없음');
+
+  // 화면: 원자료 → 위(서버)/아래(공공) · done → ready/none · info.ctr/go
+  const f0 = { stn: '', gps: [37.4979, 127.0276], st: 'done', flt: '전체' };
+  const sc = E.foodScreen({ cap: 4 }, f0, { s: srv, u });
+  ok(sc.ok && sc.info.stn === '강남' && sc.info.ctr.length === 2, '위치만으로 가까운 역 이름·중심을 정한다 ' + sc.info.stn);
+  ok(sc.head[0].sub === '강남역 인근' && places(sc.body).length === 3 + 3, '서버 3곳(중복 뺀) + 공공 3곳');
+  ok(sc.info.go['c.0'] && sc.info.go['c.0'][0] === '나 나' && sc.info.go['p.0'][0] === '공공A', '눌림 번호 → 가게 사실(info.go)');
+  const none = E.foodScreen({ cap: 4 }, { stn: '강남', st: 'done', flt: '전체' }, { s: [], u: [] });
+  ok(/등록 음식점 정보가 없어요/.test(JSON.stringify(none.body)), 'done + 빈 목록 → 정보 없음');
+  const failS = E.foodScreen({ cap: 4 }, { stn: '강남', st: 'done', flt: '전체', fail: 1 }, { s: [], u: [] });
+  ok(/불러오지 못했어요/.test(JSON.stringify(failS.body)), 'done + 빈 목록 + 서버 실패 → 실패 안내');
+  const noctr = E.foodScreen({ cap: 4 }, { stn: '없는역xyz', st: 'loading', flt: '전체' }, {});
+  ok(/등록 음식점 정보가 없어요/.test(JSON.stringify(noctr.body)), '중심을 못 정하는 도착지는 불러오는 중에 머물지 않는다');
+  const ld = E.foodScreen({ cap: 4 }, { stn: '', st: 'loading', flt: '전체', gps: [37.4979, 127.0276] }, {});
+  ok(ld.info.ctr && /불러오는 중/.test(JSON.stringify(ld.body)), '불러오는 중 화면이 중심 좌표를 함께 알려 준다');
+  // alts 도 같다
+  const sa = E.foodScreens({ cap: 4 }, f0, { s: srv, u }, 'chips');
+  ok(Object.keys(sa.alts).length === 6 && JSON.stringify(sa.alts['전체'].body) === JSON.stringify(sc.body), 'alts 전체칩 = 단독 요청과 같다');
+  const solo = E.foodScreen({ cap: 4 }, Object.assign({}, f0, { flt: '카페' }), { s: srv, u });
+  ok(JSON.stringify(sa.alts['카페'].body) === JSON.stringify(solo.body), 'alts 카페칩 = 단독 요청과 같다');
+
+  // 가게 시트
+  const sh = E.foodScreen({ cap: 4 }, { sel: { n: '맛있는 집', c: '음식 > 한식 > 국밥', a: '서울 강남구 1', la: 37.5, lo: 127.0 }, me: [37.49, 127.02] });
+  ok(sh.ok && sh.screen === 'foodsheet' && sh.info.nv.nroute.app.startsWith('nmap://route/walk?slat=37.49&slng=127.02&sname=') && /dlat=37.5&dlng=127&dname=/.test(sh.info.nv.nroute.app) && /&appname=com.dullyyj.subway$/.test(sh.info.nv.nroute.app), '네이버 걷기 길찾기 주소(웹 _navTo 와 같은 모양)');
+  ok(sh.info.nv.kroute.app === 'kakaomap://route?sp=37.49,127.02&ep=37.5,127&by=FOOT' && sh.info.nv.kroute.web.startsWith('https://map.kakao.com/link/to/'), '카카오 길찾기 주소');
+  const sh2 = E.foodScreen({ cap: 4 }, { sel: { n: 'A', la: 37.5, lo: 127.0 } });
+  ok(sh2.info.nv.nroute.app.startsWith('nmap://route/walk?dlat=') && sh2.info.nv.kroute.app.startsWith('kakaomap://route?ep='), '출발지를 모르면 도착지만');
+  const sh3 = E.foodScreen({ cap: 4 }, { sel: { n: 'B' } });
+  ok(!sh3.info.nv.nroute && !!sh3.info.nv.ninfo && !/길찾기/.test(JSON.stringify(sh3.body)), '좌표가 없으면 길찾기 단추 없이 가게 정보만');
+  ok(E.foodScreen({ cap: 4 }, { sel: { n: '' } }).ok === false, '이름 없는 시트는 거절');
+  ok(sh.body[0].kids.filter(k => k.t === 'button').map(k => k.act.v).join() === 'fm.nr,fm.kr,fm.ni,fm.ki', '시트 단추 눌림 이름');
+}
+
 // ③ 상태별 문구 (이모지 없이 엔진이 정한다)
 {
   const txt = (st, extra) => { const o = E.foodScreen({ cap: 4 }, Object.assign({ stn: '강남', st, flt: '전체' }, extra || {}), { c: [], p: [] }); return { o, t: o.body.map(n => n.s || '').join('|'), l: o.head[0].sub }; };
@@ -86,6 +149,13 @@ ok(S.ok && S.v === 1 && S.screen === 'food' && S.cover === 'tab' && /^f1:/.test(
     lines.push(JSON.stringify(E.foodScreen({ cap: 4 }, { stn: data === 2 ? '아주아주긴이름의역이름입니다' : '강남', st, flt, fail }, data ? { c: C, p: P } : { c: [], p: [] })));
   }
   const bigJ = JSON.stringify(E.foodScreen({ cap: 4 }, { stn: 'A', flt: '전체' }, (() => { const b = []; for (let i = 0; i < 300; i++) b.push(['가게' + i + '가나다라마바사아자차카타', '음식 > 한식 > 국밥 > 아주 긴 업종 이름', '서울특별시 강남구 아주아주긴도로명 123-45', i * 7]); return { c: b, p: b }; })()));
+  { // s90: 원자료에서 만든 화면 · 가게 시트도 앱 검증기를 통과해야 한다
+    const sv = [{ n: '가', c: '음식 > 한식', a: '서울 1', d: 300, la: 37.5, lo: 127.0 }, { n: '나', c: '음식 > 카페', a: '서울 2', d: 100, la: 37.5, lo: 127.0 }];
+    const uu = [['공공A', '한식', '일반한식', '서울 도로 1', '', '37.501', '127.002']];
+    for (const st of ['loading', 'done']) lines.push(JSON.stringify(E.foodScreen({ cap: 4 }, { stn: '', gps: [37.4979, 127.0276], st, flt: '전체' }, { s: sv, u: uu })));
+    lines.push(JSON.stringify(E.foodScreen({ cap: 4 }, { sel: { n: '맛있는 집', c: '음식 > 한식 > 국밥', a: '서울 강남구 1', la: 37.5, lo: 127.0 }, me: [37.49, 127.02] })));
+    lines.push(JSON.stringify(E.foodScreen({ cap: 4 }, { sel: { n: '좌표 없는 집' } })));
+  }
   lines.push(bigJ);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'foodchk_'));
   try {
