@@ -198,6 +198,7 @@ public final class ScreenCore {
         public int ci = -1;                                // chart: 지금 시각 막대 번호(가운데로 맞출 곳)
         public String[] hlc = new String[0];               // text·box: hl 구간마다 글자색(빈 글이면 기본)
         public long until;                                 // aih: 다음 갱신 마감 시각(기기 시계 ms, 0 이면 카운트다운 없음)
+        public float[] bops = new float[0];                // inbar: 둥근 아이콘 단추의 그림(SVG path d 를 풀어 둔 것 — 있으면 글자 단추 대신 지름 bh 의 동그란 단추)
     }
     public static final class Screen {
         public String id = "", rev = "", cover = "chips";
@@ -544,6 +545,8 @@ public final class ScreenCore {
             n.bh = optNum(m, "bh", 0f, 0f, 60f); n.bsize = optNum(m, "bsize", 0f, 0f, 30f);
             if (n.bh > 0f && n.bh < 20f) throw new ParseError("inbar: bh 는 0 또는 20 이상");
             if (n.bsize > 0f && n.bsize < 8f) throw new ParseError("inbar: bsize 는 0 또는 8 이상");
+            String bic = optStr(m, "bicon", "", 900); n.bops = pathOps(bic);                                    // bicon = 동그란 아이콘 단추(지름 bh)
+            if (bic.length() > 0 && n.bh < 20f) throw new ParseError("inbar: bicon 에는 bh 가 20 이상이어야 한다");
         } else if ("swap".equals(t)) {
             n.size = optNum(m, "size", 34f, 20f, 60f);                                                           // 지름
             n.fill = roleOrCss(m, "fill", "#0a84ff"); if (n.fill.length() == 0) n.fill = "#0a84ff";
@@ -588,6 +591,17 @@ public final class ScreenCore {
             n.act = n.on ? null : act(m.get("act"), false);
             n.fill = roleOrCss(m, "pf", "rgba(47,124,246,0.12)"); n.tc = roleOrCss(m, "pc", "#2f7cf6");
             if (n.fill.length() == 0) n.fill = "rgba(47,124,246,0.12)"; if (n.tc.length() == 0) n.tc = "#2f7cf6";
+        } else if ("lth".equals(t)) {                                                                      // 홈 '실시간 대화' 머리줄: 색 점 + 굵은 제목 + 작은 꼬리 글(›). 줄 전체가 눌린다
+            pad(m, n);
+            n.s = optStr(m, "s", "", 40); if (n.s.length() == 0) throw new ParseError("lth: s 없음");
+            n.sub = optStr(m, "tail", "", 4);
+            n.dot = roleOrCss(m, "dot", "#ff3b30"); if (n.dot.length() == 0) n.dot = "#ff3b30";
+            n.act = act(m.get("act"), false);
+        } else if ("ltr".equals(t)) {                                                                      // 홈 '실시간 대화' 한 줄: 닉네임(굵게) + 글(한 줄 말줄임) + 오른쪽 시각
+            pad(m, n);
+            n.nick = optStr(m, "nick", "", 40); n.s = optStr(m, "s", "", 200); n.time = optStr(m, "time", "", 8);
+            if (n.s.length() == 0) throw new ParseError("ltr: s 없음");
+            n.tc = roleOrCss(m, "nc", "gold"); if (n.tc.length() == 0) n.tc = "gold";
         } else if ("cgh".equals(t)) {                                                                      // 혼잡도 카드 머리줄: 왼쪽 '지하철 강남' + 작은 글, 오른쪽 혼잡 단계 글자. 글·색은 엔진이 정한다
             pad(m, n);
             n.label = optStr(m, "lab", "", 12); n.name = optStr(m, "nm", "", 40); n.sub = optStr(m, "meta", "", 80); n.s = optStr(m, "st", "", 24);
@@ -673,11 +687,13 @@ public final class ScreenCore {
     public static Screen load(String json) throws ParseError { return validate(parse(json)); }
 
     // ═════════════ ③ 배치 ═════════════
-    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14, K_NEWS = 15, K_POSTH = 16, K_CMT = 17, K_RBTN = 18, K_INBAR = 19, K_MSG = 20, K_TAB = 21, K_SUG = 22, K_SWAP = 23, K_RHD = 24, K_TRK = 25, K_CGH = 26, K_GAUGE = 27, K_CHART = 28, K_HBAR = 29, K_CARS = 30, K_AIH = 31;
+    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14, K_NEWS = 15, K_POSTH = 16, K_CMT = 17, K_RBTN = 18, K_INBAR = 19, K_MSG = 20, K_TAB = 21, K_SUG = 22, K_SWAP = 23, K_RHD = 24, K_TRK = 25, K_CGH = 26, K_GAUGE = 27, K_CHART = 28, K_HBAR = 29, K_CARS = 30, K_AIH = 31, K_LTH = 32, K_LTR = 33;
     /** 경로 결과 머리줄 치수(웹 #transitResultHeader 와 같다: 분 숫자 28 · 단위 14 · 구간명 12 · 즐겨찾기 알약 11 · 닫기 ×) */
     /** 구간 타임라인 칸 치수(웹 #transitHtlTrack 과 같다): 이름 30 · 배지 18 · 축 26 · 시각 3+16 */
     public static final float TRK_NAME_H = 30f, TRK_BADGE_H = 18f, TRK_AXIS_H = 26f, TRK_TIME_GAP = 3f, TRK_TIME_H = 16f, TRK_H = 93f, TRK_LINE_Y = 12f, TRK_LINE_H = 3f, TRK_DOT_Y = 13f, TRK_E_R = 7f, TRK_R_R = 6f, TRK_M_R = 3f;
     public static final float RHD_H = 34f, RHD_NUM = 28f, RHD_UNIT = 14f, RHD_ROUTE = 12f, RHD_BTN = 11f, RHD_BTN_PX = 8f, RHD_BTN_H = 22f, RHD_X = 28f, RHD_MSG = 14f;
+    /** 홈 '실시간 대화' 게시판 치수(웹 .livetalk-hdr / .livetalk-msg 와 같다): 머리줄 21 · 한 줄 20(줄 사이 5) · 닉네임 11 굵게(최대 80) · 글 12 · 시각 9 */
+    public static final float LTH_H = 21f, LTH_TITLE = 12f, LTH_DOT = 7f, LTH_GAP = 6f, LTR_H = 20f, LTR_NICK = 11f, LTR_NICK_MAX = 80f, LTR_TXT = 12f, LTR_TIME = 9f, LTR_GAP = 7f, INBAR_ICON = 17f;
     /** 혼잡도 카드 치수(웹 .cong-top / .cong-gauge / .chart-wrap / .car-grid 와 같다) */
     public static final float AIH_H = 28f, AIH_BTN_W = 30f, AIH_TITLE = 13.5f, AIH_PILL = 11f, AIH_PILL_H = 19f, AIH_PILL_PX = 8f, AIH_GAP = 8f, AIH_ICON = 16f;
     public static final float CGH_L1 = 18f, CGH_L2 = 15f, CGH_NAME = 13f, CGH_META = 11f, CGH_ST = 17f, CGH_GAP = 10f, CGH_H = 33f,
@@ -1068,6 +1084,27 @@ public final class ScreenCore {
             out.add(it);
             return y + AIH_H + n.padB;
         }
+        if ("lth".equals(n.t)) {                                                     // '실시간 대화' 머리줄
+            Item it = new Item(); it.kind = K_LTH; it.x = ox; it.y = y; it.w = innerW; it.h = LTH_H;
+            float tx = ox + LTH_DOT + LTH_GAP, tw = m.width(n.s, LTH_TITLE, true);
+            float cw = n.sub.length() > 0 ? m.width(n.sub, LTH_TITLE, false) + 4f : 0f;
+            it.t1 = ellipsize(n.s, Math.max(30f, innerW - LTH_DOT - LTH_GAP - cw), LTH_TITLE, true, m); it.f1 = tx;
+            it.t2 = n.sub; it.f2 = tx + Math.min(tw, Math.max(30f, innerW - LTH_DOT - LTH_GAP - cw)) + 4f;
+            it.dotC = col(n.dot, new Col(null, 0xFFFF3B30)); it.act = n.act;
+            out.add(it);
+            return y + LTH_H + n.padB;
+        }
+        if ("ltr".equals(n.t)) {                                                     // '실시간 대화' 한 줄
+            Item it = new Item(); it.kind = K_LTR; it.x = ox; it.y = y; it.w = innerW; it.h = LTR_H;
+            float timeW = n.time.length() > 0 ? m.width(n.time, LTR_TIME, false) : 0f;
+            String nk = n.nick.length() > 0 ? ellipsize(n.nick, LTR_NICK_MAX, LTR_NICK, true, m) : "";
+            float nw = nk.length() > 0 ? m.width(nk, LTR_NICK, true) : 0f;
+            float tx = ox + (nw > 0f ? nw + LTR_GAP : 0f), avail = Math.max(20f, innerW - (nw > 0f ? nw + LTR_GAP : 0f) - (timeW > 0f ? timeW + LTR_GAP : 0f));
+            it.t1 = nk; it.t2 = ellipsize(n.s, avail, LTR_TXT, false, m); it.f1 = tx;
+            it.label = n.time; it.f2 = ox + innerW - timeW; it.tc = col(n.tc, new Col("gold", 0));
+            out.add(it);
+            return y + LTR_H + n.padB;
+        }
         if ("cgh".equals(n.t)) {                                                     // 혼잡도 머리줄: 왼쪽 '지하철 강남'(이름은 굵은 금색) + 작은 글 · 오른쪽 혼잡 단계 글자
             float stW = n.s.length() > 0 ? m.width(n.s, CGH_ST, true) : 0f;
             float avail = Math.max(40f, innerW - stW - (stW > 0f ? CGH_GAP : 0f));
@@ -1376,13 +1413,13 @@ public final class ScreenCore {
         }
         if ("inbar".equals(t0(n))) {
             float bsz = n.bsize > 0f ? n.bsize : n.size;
-            float btnW = m.width(n.label, bsz, true) + INBAR_BTN_PADX * 2f;
             float btnH = n.bh > 0f ? Math.min(n.bh, n.h) : n.h;
+            float btnW = n.bops.length > 0 ? btnH : m.width(n.label, bsz, true) + INBAR_BTN_PADX * 2f;        // 아이콘 단추는 동그라미(가로=세로)
             Item it = new Item(); it.kind = K_INBAR; it.x = ox; it.y = y; it.w = innerW; it.h = n.h; it.radius = n.r;
             it.key = n.key; it.label = n.hint; it.value = n.value; it.maxlen = n.maxlen; it.size = n.size; it.act = n.act; it.badge = n.label;
             it.bold = n.bold; it.size2 = n.bsize > 0f ? n.bsize : 0f; it.watch = n.watch; it.on = n.on; it.act2 = n.bact;
             it.ix = ox; it.iy = y; it.iw = Math.max(40f, innerW - btnW - INBAR_GAP); it.ih = n.h;
-            it.btx = ox + innerW - btnW; it.bty = y + (n.h - btnH) / 2f; it.sw = btnW; it.sh = btnH; it.top = n.top;
+            it.btx = ox + innerW - btnW; it.bty = y + (n.h - btnH) / 2f; it.sw = btnW; it.sh = btnH; it.top = n.top; it.pathOps = n.bops;
             it.textX = ox + 14f;
             if (n.dot.length() > 0) { it.dotC = col(n.dot, null); it.bx = ox + 14f + 5f; it.by = y + n.h / 2f; it.textX = ox + 14f + 10f + 10f; }       // 동그라미(지름 10) + 간격 10 → 글자
             it.fill = col(n.fill, null); it.line = col(n.line, null); it.tc = col(n.tc, new Col("text", 0)); it.sc = col(n.sc, new Col("sub", 0));

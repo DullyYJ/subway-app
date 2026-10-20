@@ -472,6 +472,8 @@ public class ScreenView extends View {
             case ScreenCore.K_RHD: drawRhd(cv, it); break;
             case ScreenCore.K_TRK: drawTrk(cv, it); break;
             case ScreenCore.K_AIH: drawAih(cv, it); break;
+            case ScreenCore.K_LTH: drawLth(cv, it); break;
+            case ScreenCore.K_LTR: drawLtr(cv, it); break;
             case ScreenCore.K_CGH: drawCgh(cv, it); break;
             case ScreenCore.K_GAUGE: drawGauge(cv, it); break;
             case ScreenCore.K_CHART: drawChart(cv, it); break;
@@ -891,6 +893,18 @@ public class ScreenView extends View {
             cv.restore();
         }
         rf.set(it.btx, it.bty, it.btx + it.sw, it.bty + it.sh);
+        if (it.pathOps.length > 0) {                                                       // 둥근 아이콘 단추(실시간 대화 보내기): 금색 동그라미 + 흰 아이콘
+            p.setStyle(Paint.Style.FILL); p.setColor(it.on ? alpha(cc(it.ac, pal[R_GOLD]), 0.5f) : cc(it.ac, pal[R_GOLD])); cv.drawCircle(it.btx + it.sw / 2f, it.bty + it.sh / 2f, it.sw / 2f, p);
+            if (it == pressed && !it.on) { p.setColor(0x33000000); cv.drawCircle(it.btx + it.sw / 2f, it.bty + it.sh / 2f, it.sw / 2f, p); }
+            android.graphics.Path ph = pathFor(it);
+            if (ph != null) {
+                float ic = ScreenCore.INBAR_ICON, sc = ic / 24f;
+                cv.save(); cv.translate(it.btx + (it.sw - ic) / 2f, it.bty + (it.sh - ic) / 2f); cv.scale(sc, sc);
+                p.setColor(pal[R_WHITE]); cv.drawPath(ph, p);
+                cv.restore();
+            }
+            return;
+        }
         float br = it.radius > 0f ? it.radius : INBAR_BTN_R;      // 입력칸을 네모(r:0)로 두는 홈 줄도 단추는 웹처럼 둥글게
         p.setStyle(Paint.Style.FILL); p.setColor(it.on ? alpha(cc(it.ac, pal[R_GOLD]), 0.5f) : cc(it.ac, pal[R_GOLD])); cv.drawRoundRect(rf, br, br, p);
         if (it == pressed && !it.on) { p.setColor(0x33000000); cv.drawRoundRect(rf, br, br, p); }
@@ -988,6 +1002,21 @@ public class ScreenView extends View {
             p.setColor(it.on ? alpha(pal[R_TEXT], 0.4f) : (it == pressed ? alpha(pal[R_TEXT], 0.6f) : pal[R_TEXT])); cv.drawPath(ph, p);
             cv.restore();
         }
+    }
+    /** 홈 '실시간 대화' 머리줄: 색 점 + 굵은 제목 + 작은 꼬리 글(›). 글·색은 엔진이 정했다. */
+    private void drawLth(Canvas cv, ScreenCore.Item it) {
+        if (it == pressed) { rf.set(it.x, it.y, it.x + it.w, it.y + it.h); p.setStyle(Paint.Style.FILL); p.setColor(0x14808080); cv.drawRoundRect(rf, 6f, 6f, p); }
+        p.setStyle(Paint.Style.FILL); p.setColor(cc(it.dotC, 0xFFFF3B30)); cv.drawCircle(it.x + ScreenCore.LTH_DOT / 2f, it.y + (it.h - 4f) / 2f, ScreenCore.LTH_DOT / 2f, p);
+        setText(ScreenCore.LTH_TITLE, true, pal[R_TEXT]);
+        cv.drawText(it.t1, it.f1, base(it.y, it.h - 4f, 0), tp);
+        if (it.t2.length() > 0) { setText(ScreenCore.LTH_TITLE, false, pal[R_SUB]); cv.drawText(it.t2, it.f2, base(it.y, it.h - 4f, 0), tp); }
+    }
+    /** 홈 '실시간 대화' 한 줄: 닉네임(굵게) · 글(한 줄) · 오른쪽 시각. 말줄임·위치는 배치가 정했다. */
+    private void drawLtr(Canvas cv, ScreenCore.Item it) {
+        float b = base(it.y, it.h, 0);
+        if (it.t1.length() > 0) { setText(ScreenCore.LTR_NICK, true, cc(it.tc, pal[R_GOLD])); cv.drawText(it.t1, it.x, b, tp); }
+        setText(ScreenCore.LTR_TXT, false, pal[R_TEXT]); cv.drawText(it.t2, it.f1, b, tp);
+        if (it.label.length() > 0) { setText(ScreenCore.LTR_TIME, false, pal[R_SUB]); cv.drawText(it.label, it.f2, b, tp); }
     }
     private void drawCgh(Canvas cv, ScreenCore.Item it) {
         float b1 = 0f;

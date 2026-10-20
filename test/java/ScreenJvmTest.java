@@ -702,6 +702,27 @@ public class ScreenJvmTest {
         ScreenCore.Layout AIP = ScreenCore.layout(ScreenCore.load(aiJson.replace("[[0,2,\"#2f7cf6\"],[5,8,\"#1a7a2e\"]]", "[[0,2],[5,8]]")), 320f, M);
         ok(AIP.head[1].segCol == null && AIP.head[1].segs != null, "AI: 색이 없는 hl 은 예전처럼(굵게만)");
 
+        // ── 홈 '실시간 대화' 게시판(lth · ltr · inbar 둥근 아이콘 단추 bicon) ──
+        String ltIcon = "M2.01 21L23 12 2.01 3 2 10l15 2-15 2z";
+        String ltJson = "{\"ok\":true,\"v\":1,\"screen\":\"talk\",\"cover\":\"tab\",\"bg\":\"card\",\"head\":["
+            + "{\"t\":\"lth\",\"pad\":[0,0,0,4],\"s\":\"실시간 대화\",\"tail\":\"\u203a\",\"dot\":\"#ff3b30\",\"act\":{\"a\":\"call\",\"v\":\"tk.open\"}},"
+            + "{\"t\":\"ltr\",\"pad\":[0,0,0,5],\"nick\":\"지하철러\",\"s\":\"오늘도 출근길 힘내요\",\"time\":\"08:41\"},"
+            + "{\"t\":\"ltr\",\"pad\":[0,0,0,0],\"nick\":\"아주아주긴닉네임을가진사람입니다\",\"s\":\"아주 긴 글이 오른쪽 시각과 겹치지 않고 말줄임으로 끝나야 합니다 정말로요 정말로요\",\"time\":\"08:42\"}"
+            + "],\"body\":[{\"t\":\"spacer\",\"h\":0}],\"foot\":["
+            + "{\"t\":\"inbar\",\"pad\":[0,10,0,0],\"key\":\"talk.in\",\"hint\":\"실시간 대화 남기기...\",\"btn\":\"보내기\",\"bicon\":\"" + ltIcon + "\",\"h\":38,\"bh\":38,\"r\":18,\"maxlen\":100,\"size\":13,\"act\":{\"a\":\"call\",\"v\":\"tk.send\"}}]}";
+        ScreenCore.Layout LTL = ScreenCore.layout(ScreenCore.load(ltJson), 300f, M);
+        ScreenCore.Item lth = LTL.head[0], ltr1 = LTL.head[1], ltr2 = LTL.head[2], ltib = LTL.foot[0];
+        ok(lth.kind == ScreenCore.K_LTH && near(lth.h, ScreenCore.LTH_H) && lth.t1.equals("실시간 대화") && lth.t2.equals("\u203a") && lth.f2 > lth.f1 && lth.dotC != null && lth.act != null, "대화: 머리줄 — 제목 · 꼬리 글 · 색 점 · 행동");
+        ok(ltr1.kind == ScreenCore.K_LTR && near(ltr1.h, ScreenCore.LTR_H) && near(ltr1.y, lth.y + lth.h + 4f) && near(ltr2.y, ltr1.y + ltr1.h + 5f), "대화: 줄 높이 20 · 줄 사이 5 · 머리줄 아래 4");
+        ok(near(ltr1.f2 + M.width("08:41", ScreenCore.LTR_TIME, false), 300f) && ltr1.t1.equals("지하철러") && ltr1.f1 > ltr1.x, "대화: 시각은 오른쪽 끝 · 글은 닉네임 뒤");
+        ok(ltr2.t1.endsWith("\u2026") && M.width(ltr2.t1, ScreenCore.LTR_NICK, true) <= ScreenCore.LTR_NICK_MAX + 0.5f && ltr2.t2.endsWith("\u2026") && ltr2.f1 + M.width(ltr2.t2, ScreenCore.LTR_TXT, false) + ScreenCore.LTR_GAP <= ltr2.f2 + 0.5f, "대화: 긴 닉네임(80)·긴 글은 말줄임 — 시각과 겹치지 않는다");
+        ok(LTL.hitHead(50f, 8f) != null && LTL.hitHead(50f, 30f) == null, "대화: 머리줄 전체가 눌리고 대화 줄은 안 눌린다");
+        ok(ltib.kind == ScreenCore.K_INBAR && near(ltib.sw, 38f) && near(ltib.sh, 38f) && ltib.pathOps.length > 0 && near(ltib.btx, 300f - 38f) && ltib.iw > 150f, "입력줄: 둥근 아이콘 단추(지름 38) · 입력칸 폭");
+        ok(LTL.hitFoot(300f - 19f, 10f + 19f) != null, "입력줄: 둥근 단추 자리가 눌린다");
+        ok(bad(ltJson.replace("\"s\":\"실시간 대화\"", "\"s\":\"\"")) && bad(ltJson.replace("\"s\":\"오늘도 출근길 힘내요\"", "\"s\":\"\"")) && bad(ltJson.replace("\"dot\":\"#ff3b30\"", "\"dot\":\"nope\"")) && bad(ltJson.replace("\"bh\":38", "\"bh\":10")), "대화: 글 없는 줄 · 나쁜 색 · 너무 작은 아이콘 단추는 거절");
+        ScreenCore.Item ltNo = ScreenCore.layout(ScreenCore.load(ltJson.replace(",\"act\":{\"a\":\"call\",\"v\":\"tk.open\"}},{\"t\":\"ltr\",\"pad\":[0,0,0,5]", "},{\"t\":\"ltr\",\"pad\":[0,0,0,5]")), 300f, M).head[0];
+        ok(ltNo.act == null, "대화: 행동이 없으면 머리줄도 안 눌린다");
+
         // ── 화면 바탕 색(bg) ──
         String bgBase = "{\"ok\":true,\"v\":1,\"screen\":\"x\",\"head\":[],\"body\":[{\"t\":\"spacer\",\"h\":4}]";
         ok("bg".equals(ScreenCore.layout(ScreenCore.load(bgBase + "}"), 300f, M).bg) && "card".equals(ScreenCore.layout(ScreenCore.load(bgBase + ",\"bg\":\"card\"}"), 300f, M).bg) && "card2".equals(ScreenCore.layout(ScreenCore.load(bgBase + ",\"bg\":\"card2\"}"), 300f, M).bg), "화면 바탕: 기본 bg · card · card2");

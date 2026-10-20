@@ -20629,6 +20629,8 @@ window.addEventListener('unhandledrejection', function(e) {
 
   <!-- ★ 실시간 지하철 톡 (하단, 입력 가능 — 홈/커뮤니티 데이터 공유) -->
   <div class="livetalk-board">
+    <!-- ★ 2026-10-20 (s78): 게시판 속(머리줄 + 대화 줄 + 입력줄)을 한 감싸개(#homeTalkInner)에 둔다 — 서버 구동 네이티브 실시간 대화 게시판(_scrTalk)이 켜지면 이 속만 감추고 기기가 같은 자리에 직접 그린다(높이는 기기가 그린 내용을 따른다). -->
+    <div id="homeTalkInner">
     <div class="livetalk-hdr" onclick="_goCommunityChat()" style="cursor:pointer;"><span class="ldot-live"></span>실시간 대화 <span style="font-size:12px;color:var(--sub);font-weight:600;margin-left:2px;">›</span></div>
     <div class="livetalk-list" id="liveTalkList"></div>
     <div class="livetalk-input-row">
@@ -20638,6 +20640,7 @@ window.addEventListener('unhandledrejection', function(e) {
       <button onclick="_homeTalkSend()" style="flex-shrink:0;width:38px;height:38px;border-radius:50%;border:none;background:var(--gold);cursor:pointer;display:flex;align-items:center;justify-content:center;">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="#fff"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
       </button>
+    </div>
     </div>
   </div>
 
@@ -21224,6 +21227,21 @@ window.addEventListener('unhandledrejection', function(e) {
         <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">홈 AI 승무원 카드의 제목(출발 → 도착 · 남은시간), 브리핑 문장과 노선 색 글씨, 다음 갱신 카운트다운, 새로고침 단추를 엔진이 정해 내려주고, 기기가 직접 그려요. 문제가 생기면 예전 웹 카드로 돌아가요. 새 앱(규격 14)이 필요해요.</p>
         <div id="scraSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
         <style>#scraSetOn:checked ~ #scraSetKnob{background:var(--gold) !important;} #scraSetOn:checked ~ #scraSetDot{left:23px !important;}</style>
+      </div>
+
+      <!-- ★ 2026-10-20 (s78): 서버 구동 네이티브 실시간 대화 게시판 — 안드로이드 앱에서만 보임, 기본 꺼짐(실험) -->
+      <div id="scltSetCard" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <div style="font-size:15px;font-weight:800;color:var(--text);">네이티브 실시간 대화 게시판</div>
+          <label style="position:relative;display:inline-block;width:46px;height:26px;">
+            <input type="checkbox" id="scltSetOn" onchange="_scltSetUse(this.checked)" style="opacity:0;width:0;height:0;">
+            <span id="scltSetKnob" style="position:absolute;inset:0;border-radius:13px;background:var(--border2);transition:.2s;cursor:pointer;"></span>
+            <span id="scltSetDot" style="position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.3);"></span>
+          </label>
+        </div>
+        <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">홈 실시간 대화 게시판의 머리줄, 최근 대화 줄(닉네임·글·시각), 입력줄을 엔진이 정해 내려주고, 기기가 직접 그려요. 문제가 생기면 예전 웹 게시판으로 돌아가요. 새 앱(규격 15)이 필요해요.</p>
+        <div id="scltSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
+        <style>#scltSetOn:checked ~ #scltSetKnob{background:var(--gold) !important;} #scltSetOn:checked ~ #scltSetDot{left:23px !important;}</style>
       </div>
 
       <!-- ★ 2026-10-19: 숨김 인계 — 앱이 가려지면 엔진(/ride-standby)이 안내를 이어받는다. 안드로이드 앱에서만 보임, 기본 꺼짐(실험) -->
@@ -39612,6 +39630,7 @@ window.refreshShop=refreshShop;
     try{ var Xscrh = window._scrHome && _scrHome.S, cscrh = document.getElementById('scrhSetCard'); if(Xscrh && cscrh && cscrh.style.display === 'block') f.feat.scrh = { h: 1, on: Xscrh.on ? 1 : 0, f: (Xscrh.failed || Xscrh.fails >= 2) ? 1 : 0, w: Xscrh.why || '', b: Xscrh.badFresh > 0 ? 1 : 0 }; }catch(e){}
     try{ var Xscrr = window._scrRhead && _scrRhead.S, cscrr = document.getElementById('scrrSetCard'); if(Xscrr && cscrr && cscrr.style.display === 'block') f.feat.scrr = { h: 1, on: Xscrr.on ? 1 : 0, f: (Xscrr.failed || Xscrr.fails >= 2 || _scrRhead.S2.failed || _scrRhead.S2.fails >= 2 || _scrRhead.S3.failed || _scrRhead.S3.fails >= 2 || _scrRhead.S4.failed || _scrRhead.S4.fails >= 2) ? 1 : 0, w: Xscrr.why || _scrRhead.S2.why || _scrRhead.S3.why || _scrRhead.S4.why || '', b: Xscrr.badFresh > 0 ? 1 : 0 }; }catch(e){}
     try{ var Xscra = window._scrAi && _scrAi.S, cscra = document.getElementById('scraSetCard'); if(Xscra && cscra && cscra.style.display === 'block') f.feat.scra = { h: 1, on: Xscra.on ? 1 : 0, f: (Xscra.failed || Xscra.fails >= 2) ? 1 : 0, w: Xscra.why || '', b: Xscra.badFresh > 0 ? 1 : 0 }; }catch(e){}
+    try{ var Xsclt = window._scrTalk && _scrTalk.S, csclt = document.getElementById('scltSetCard'); if(Xsclt && csclt && csclt.style.display === 'block') f.feat.sclt = { h: 1, on: Xsclt.on ? 1 : 0, f: (Xsclt.failed || Xsclt.fails >= 2) ? 1 : 0, w: Xsclt.why || '', b: Xsclt.badFresh > 0 ? 1 : 0 }; }catch(e){}
     try{ var Xscrg = window._scrCong && _scrCong.S, cscrg = document.getElementById('scrgSetCard'); if(Xscrg && cscrg && cscrg.style.display === 'block') f.feat.scrg = { h: 1, on: Xscrg.on ? 1 : 0, f: (Xscrg.failed || Xscrg.fails >= 2) ? 1 : 0, w: Xscrg.why || '', b: Xscrg.badFresh > 0 ? 1 : 0 }; }catch(e){}
     try{ if(typeof _sbhSyncCard === 'function') _sbhSyncCard(); var csbh = document.getElementById('sbhSetCard'); if(csbh && csbh.style.display === 'block') f.feat.sbh = { h: 1, on: _sbhOn() ? 1 : 0, f: 0, w: '' }; }catch(e){}
     try{ if(typeof _cndSyncCard === 'function') _cndSyncCard(); var ccnd = document.getElementById('cndSetCard'); if(ccnd && ccnd.style.display === 'block') f.feat.cnd = { h: 1, on: (_cndOn() && !_cndBad()) ? 1 : 0, f: _cndBad() ? 1 : 0, w: '' }; }catch(e){}
@@ -39769,6 +39788,7 @@ window.refreshShop=refreshShop;
       else if(key === 'f.scrr') window._scrrSetUse(on);
       else if(key === 'f.scrg') window._scrgSetUse(on);
       else if(key === 'f.scra') window._scraSetUse(on);
+      else if(key === 'f.sclt') window._scltSetUse(on);
       else if(key === 'f.scrt') window._scrtSetUse(on);
       else if(key === 'f.scrq') window._scrqSetUse(on);
       else if(key === 'f.scrw') window._scrwSetUse(on);
@@ -41884,6 +41904,69 @@ window.refreshShop=refreshShop;
     });
     window._scrAi = kit;
     window._scraSetUse = function(on){ try{ kit.setUse(on); }catch(e){} };
+  })();
+
+  // ═════════════ 홈 '실시간 대화' 게시판(머리줄 · 최근 대화 줄 · 입력줄) ═════════════
+  //   머리줄('실시간 대화 ›') · 보여 줄 줄 수와 순서(최근 5줄; 작은 폰이면 오래된 줄부터 접음) · 줄마다 닉네임/글/시각(HH:MM) · 게시판 높이 · 입력줄 글(힌트·최대 글자·보내기 단추)을
+//   엔진(POST /screen/talk, cap 15)이 정하고 기기가 그린다. 앱은 사실만 보낸다: 받아 둔 대화 [닉네임, 글, 시각(ms), 내 글] 뒤쪽 8개 · 접을 줄 수(웹이 화면 높이를 재서 정한 값) · 기기 시간대.
+  //   누르는 동작은 둘뿐이다(허용 목록: tk.open → 예전 _goCommunityChat() · tk.send → 예전 _homeTalkSend(글)). 대화를 받아 오고 만드는 일(서버 폴링 · 가짜 대화 · 욕설 거르기 · 커뮤니티 아이디 확인)은 데이터 계층이라 웹에 그대로 있다.
+  //   웹 게시판 속(#homeTalkInner)은 아래에 그대로 두고(폴백) 네이티브가 그 위를 덮는다. 네이티브가 맡는 동안 웹 속만 감춘다(자리는 그대로). 높이는 네이티브가 그린 내용 높이를 감싸개가 따른다.
+  (function(){
+    var kit, C = { cap: 0, h: 0 };
+    function gEl(id){ return document.getElementById(id); }
+    function innerEl(){ return gEl('homeTalkInner'); }
+    try{ var st = document.createElement('style'); st.textContent = '#homeTalkInner.lt-own > *{visibility:hidden !important;}'; document.head.appendChild(st); }catch(eSt){}
+    function own(on){ try{ var e = innerEl(); if(e) e.classList.toggle('lt-own', !!on); }catch(e){} }
+    function applyH(h){ try{ var e = innerEl(); if(!e || !(h > 8 && h < 3000)) return; e.style.boxSizing = 'border-box'; e.style.overflow = 'hidden'; e.style.flexShrink = '0'; e.style.height = h + 'px'; }catch(e){} }
+    function unH(){ try{ var e = innerEl(); if(e){ e.style.height = ''; e.style.overflow = ''; e.style.boxSizing = ''; e.style.flexShrink = ''; } }catch(e){} }
+    function probe(){
+      if(C.cap) return;
+      var P = kit && kit.plug(); if(!P || typeof P.status !== 'function'){ C.cap = 3; return; }
+      C.cap = -1;
+      Promise.resolve(P.status({ id: 'talk' })).then(function(s0){ C.cap = (s0 && s0.cap >= 15) ? 15 : 3; try{ kit.kick(); }catch(e){} }, function(){ C.cap = 3; });
+    }
+    function gate(){ if(C.cap >= 15) return true; if(!C.cap) probe(); return false; }
+    function cardOpen(){
+      try{
+        var t = gEl('tab-home'), c = innerEl();
+        return !!(t && c && t.classList.contains('active') && c.offsetParent && !document.hidden);
+      }catch(e){ return false; }
+    }
+    function open(){ var e = innerEl(), o = cardOpen() && !!e && gate(); if(!o){ own(false); unH(); } return o; }
+    function rect(){
+      try{
+        var w = innerEl(), sc = gEl('tabContentWrap'); if(!w) return null;
+        var r = w.getBoundingClientRect(), v = sc ? sc.getBoundingClientRect() : { top: 0, bottom: window.innerHeight };
+        var t = Math.max(r.top, v.top), b = Math.min(r.bottom, v.bottom);
+        if(!(r.width > 40 && r.height > 14 && b - t > 10)) return null;
+        return { L: r.left, T: r.top, W: r.width, H: r.height, clip: { l: 0, t: t - r.top, r: r.width, b: b - r.top } };
+      }catch(e){ return null; }
+    }
+    function live(){ try{ return (typeof _LIVE_TALK !== 'undefined' && _LIVE_TALK) ? _LIVE_TALK : []; }catch(e){ return []; } }
+    function fold(){ try{ var h = gEl('tab-home'); return Math.max(0, Math.min(3, parseInt(h && h.getAttribute('data-hf'), 10) || 0)); }catch(e){ return 0; } }
+    function facts(){
+      return { m: live().slice(-8).map(function(m){ return [String(m.nick || ''), String(m.text || ''), m.time || 0, m.mine ? 1 : 0]; }), fold: fold(), tzo: new Date().getTimezoneOffset() };
+    }
+    function sig(){ var g = live(), l = g.length ? g[g.length - 1] : null; return g.length + '|' + (l ? (l.time || 0) + ':' + String(l.text || '').length + ':' + String(l.nick || '').length : '') + '|' + fold(); }
+    function request(){ var txt = JSON.stringify({ cap: 15, f: facts() }), fk = kit.hash(txt); return { txt: txt, fk: fk, idle: false, key: '', snap: null, sig: sig() }; }
+    function act(e){
+      if(!e || e.a !== 'call') return;
+      if(e.v === 'tk.open'){ try{ _goCommunityChat(); }catch(x){} return; }
+      if(e.v === 'tk.send'){
+        var txt = String((e.fields || {})['talk.in'] || '').trim(); if(!txt) return;
+        var ok = false; try{ ok = _homeTalkSend(txt) === true; }catch(x2){}
+        if(ok){ try{ kit.setField('talk.in', ''); }catch(x3){} setTimeout(function(){ try{ kit.changed(); }catch(x4){} }, 30); }
+      }
+    }
+    kit = window._scrKit({
+      id: 'talk', kp: 'gdm_sclt', ep: '/screen/talk', screen: 'talk', label: '실시간 대화 게시판', card: 'sclt', cache: false, waitIdle: false, bucket: 0, idleMs: 250,
+      onText: '홈 실시간 대화 게시판의 머리줄·최근 대화 줄·입력줄을 엔진이 정해 기기가 직접 그려요(실험 중).',
+      root: innerEl, open: open, rect: rect, request: request, act: act, sig: sig, sigMs: 500,
+      listen: function(P){ P.addListener('size', function(e){ if(!e || e.id !== 'talk') return; var h = Number(e.h); if(!(h > 8 && h < 3000)) return; C.h = h; applyH(h); }); },
+      webClear: function(){ own(true); applyH(C.h); }, webBack: function(){ own(false); unH(); }, onEnd: function(){ own(false); unH(); }
+    });
+    window._scrTalk = kit;
+    window._scltSetUse = function(on){ try{ kit.setUse(on); }catch(e){} };
   })();
 
   // ═════════════ 홈 탭 경로 입력 ═════════════
@@ -44526,6 +44609,7 @@ function _ltGenerate(){
   window._ltLastGenAt = Date.now();
 }
 function _renderLiveTalk(){
+  try{ if(window._scrTalk) window._scrTalk.changed(); }catch(eSt){}      // 서버 구동 네이티브 실시간 대화 게시판: 새 줄이 들어왔다(켜져 있을 때만 그린다)
   var box = document.getElementById('liveTalkList');
   if(!box) return;
   box.innerHTML = _LIVE_TALK.slice(-5).map(function(m){
@@ -44584,21 +44668,23 @@ function sendChatMsg(txtIn){        // txtIn: 네이티브 실시간소통이 �
 window.sendChatMsg = sendChatMsg;
 
 // ★ 홈 화면 실시간 톡 전송 (커뮤니티와 데이터 공유 + 욕설 필터)
-function _homeTalkSend(){
+function _homeTalkSend(txtIn){        // txtIn: 네이티브 입력줄이 글자를 직접 넘길 때(웹 입력칸 없이). 올렸으면 true
   var inp = document.getElementById('homeTalkInput');
-  if(!inp || !inp.value.trim()) return;
+  var _raw = (typeof txtIn === 'string') ? txtIn : (inp ? inp.value : '');
+  if(!String(_raw).trim()) return false;
   // ★ 커뮤니티 아이디 필요 (없으면 차단, 구경은 가능)
-  if(typeof _requireCommId==='function' && !_requireCommId()) return;
-  if(typeof _containsBadWord === 'function' && _containsBadWord(inp.value)){
+  if(typeof _requireCommId==='function' && !_requireCommId()) return false;
+  if(typeof _containsBadWord === 'function' && _containsBadWord(_raw)){
     if(typeof toast === 'function') toast('⚠️ 욕설·비방은 등록할 수 없어요. 바른 언어를 사용해주세요');
-    return;
+    return false;
   }
   var myId = (typeof _getCommId==='function' && _getCommId()) || '나';
-  var _htxt = inp.value.trim();
+  var _htxt = String(_raw).trim();
   _ltAdd({ nick:myId, text:_htxt, time:Date.now(), mine:true });
   if(typeof _serverPostTalk==='function') _serverPostTalk(myId, _htxt);  // 서버 공유
   if(!window._serverTalksActive && typeof _ltRespondToUser==='function') _ltRespondToUser(_htxt);   // ★ 내 말에 반응(서버 대화 중엔 서버가 반응을 만든다)
-  inp.value = '';
+  if(inp) inp.value = '';
+  return true;
 }
 window._homeTalkSend = _homeTalkSend;
 var _ltTimer = null;
