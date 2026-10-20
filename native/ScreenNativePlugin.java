@@ -200,6 +200,26 @@ public class ScreenNativePlugin extends Plugin {
         });
     }
 
+    /**
+     * 앱 본체가 엔진에 직접 요청한다(웹 fetch 대신) — post({url, body, timeoutMs}) → {status, body}.
+     * 길동무 서버 세 곳(ScreenCore.netAllowed)만 허용한다. 본문은 글(text/plain). 실패하면 reject → 웹이 예전 fetch 로 다시 보낸다.
+     */
+    @PluginMethod
+    public void post(final PluginCall call) {
+        final String url = call.getString("url", ""), body = call.getString("body", "");
+        final double to = call.getDouble("timeoutMs", 8000d);
+        if (!ScreenCore.netAllowed(url)) { call.reject("blocked"); return; }
+        new Thread(new Runnable() {
+            @Override public void run() {
+                NetPost.Res r = NetPost.post(url, body, to);
+                try {
+                    if (r.status < 0) call.reject(r.err);
+                    else call.resolve(new JSObject().put("status", r.status).put("body", r.body));
+                } catch (Throwable ignored) { }
+            }
+        }, "scr-net").start();
+    }
+
     @PluginMethod
     public void status(final PluginCall call) {
         runUi(call, new Job() {
@@ -210,7 +230,7 @@ public class ScreenNativePlugin extends Plugin {
                 o.put("items", view == null ? 0 : view.itemCount());
                 o.put("age", view == null ? -1 : (dlgs.containsKey(id) ? 0 : (int) Math.min(Integer.MAX_VALUE, view.drawAgeMs())));      // 안내창은 가만히 떠 있어도 정상(다시 그릴 일이 없다)
                 o.put("scroll", view == null ? 0 : Math.round(view.scrollPos()));
-                o.put("cap", 17);      // 이 앱이 아는 화면 규격 단계(8 = row 노드 · 9 = 여러 줄 field · 10 = rhd 경로 결과 머리줄 · 11 = trk 구간 타임라인 · 12 = trk 위의 내 위치 마커 mk · 13 = 혼잡도 카드 cgh · gauge · chart · cars + box hc · 14 = AI 승무원 카드 aih + 글 구간별 색 hl[a,b,색] · 15 = 홈 실시간 대화 lth · ltr + 둥근 아이콘 입력줄 단추 bicon · 16 = 안내창 dlg(앱 화면 가운데 카드 · 뒤 흐림) + btnrow eq · 17 = 알약 글자 pill(미리보기 라벨)) — 웹이 이 값을 보고 하위 화면 요청 여부를 정한다
+                o.put("cap", 18);      // 이 앱이 아는 화면 규격 단계(8 = row 노드 · 9 = 여러 줄 field · 10 = rhd 경로 결과 머리줄 · 11 = trk 구간 타임라인 · 12 = trk 위의 내 위치 마커 mk · 13 = 혼잡도 카드 cgh · gauge · chart · cars + box hc · 14 = AI 승무원 카드 aih + 글 구간별 색 hl[a,b,색] · 15 = 홈 실시간 대화 lth · ltr + 둥근 아이콘 입력줄 단추 bicon · 16 = 안내창 dlg(앱 화면 가운데 카드 · 뒤 흐림) + btnrow eq · 17 = 알약 글자 pill(미리보기 라벨) · 18 = 앱 본체 통신 post) — 웹이 이 값을 보고 하위 화면 요청 여부를 정한다
                 call.resolve(o);
             }
         });

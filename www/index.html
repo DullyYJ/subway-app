@@ -21279,7 +21279,21 @@ window.addEventListener('unhandledrejection', function(e) {
         <style>#scrpSetOn:checked ~ #scrpSetKnob{background:var(--gold) !important;} #scrpSetOn:checked ~ #scrpSetDot{left:23px !important;}</style>
       </div>
 
-            <!-- ★ 2026-10-19: 숨김 인계 — 앱이 가려지면 엔진(/ride-standby)이 안내를 이어받는다. 안드로이드 앱에서만 보임, 기본 꺼짐(실험) -->
+            <div id="nnetSetCard" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <div style="font-size:15px;font-weight:800;color:var(--text);">네이티브 통신</div>
+          <label style="position:relative;display:inline-block;width:46px;height:26px;">
+            <input type="checkbox" id="nnetSetOn" onchange="_nnetSetUse(this.checked)" style="opacity:0;width:0;height:0;">
+            <span id="nnetSetKnob" style="position:absolute;inset:0;border-radius:13px;background:var(--border2);transition:.2s;cursor:pointer;"></span>
+            <span id="nnetSetDot" style="position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.3);"></span>
+          </label>
+        </div>
+        <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">엔진 화면을 받아 오는 요청을 웹 대신 앱 본체가 보내요. 길동무 서버로만 보내고, 문제가 생기면 예전 웹 방식으로 돌아가요.</p>
+        <div id="nnetSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
+        <style>#nnetSetOn:checked ~ #nnetSetKnob{background:var(--gold) !important;} #nnetSetOn:checked ~ #nnetSetDot{left:23px !important;}</style>
+      </div>
+
+                  <!-- ★ 2026-10-19: 숨김 인계 — 앱이 가려지면 엔진(/ride-standby)이 안내를 이어받는다. 안드로이드 앱에서만 보임, 기본 꺼짐(실험) -->
       <div id="sbhSetCard" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
           <div style="font-size:15px;font-weight:800;color:var(--text);">가려진 동안 엔진이 이어받기</div>
@@ -39674,6 +39688,7 @@ window.refreshShop=refreshShop;
     try{ var Xscrr = window._scrRhead && _scrRhead.S, cscrr = document.getElementById('scrrSetCard'); if(Xscrr && cscrr && cscrr.style.display === 'block') f.feat.scrr = { h: 1, on: Xscrr.on ? 1 : 0, f: (Xscrr.failed || Xscrr.fails >= 2 || _scrRhead.S2.failed || _scrRhead.S2.fails >= 2 || _scrRhead.S3.failed || _scrRhead.S3.fails >= 2 || _scrRhead.S4.failed || _scrRhead.S4.fails >= 2) ? 1 : 0, w: Xscrr.why || _scrRhead.S2.why || _scrRhead.S3.why || _scrRhead.S4.why || '', b: Xscrr.badFresh > 0 ? 1 : 0 }; }catch(e){}
     try{ var Xscra = window._scrAi && _scrAi.S, cscra = document.getElementById('scraSetCard'); if(Xscra && cscra && cscra.style.display === 'block') f.feat.scra = { h: 1, on: Xscra.on ? 1 : 0, f: (Xscra.failed || Xscra.fails >= 2) ? 1 : 0, w: Xscra.why || '', b: Xscra.badFresh > 0 ? 1 : 0 }; }catch(e){}
     try{ var Xsclt = window._scrTalk && _scrTalk.S, csclt = document.getElementById('scltSetCard'); if(Xsclt && csclt && csclt.style.display === 'block') f.feat.sclt = { h: 1, on: Xsclt.on ? 1 : 0, f: (Xsclt.failed || Xsclt.fails >= 2) ? 1 : 0, w: Xsclt.why || '', b: Xsclt.badFresh > 0 ? 1 : 0 }; }catch(e){}
+    try{ if(window._nnet){ _nnet.syncCard(); var cnn = document.getElementById('nnetSetCard'); if(cnn && cnn.style.display === 'block') f.feat.nnet = { h: 1, on: (_nnet.on() && !_nnet.S.bad) ? 1 : 0, f: _nnet.S.bad ? 1 : 0, w: '' }; } }catch(e){}
     try{ var Xscrp = window._scrp && _scrp.S, cscrp = document.getElementById('scrpSetCard'); if(Xscrp && cscrp && cscrp.style.display === 'block') f.feat.scrp = { h: 1, on: Xscrp.on ? 1 : 0, f: (Xscrp.failed || Xscrp.fails >= 2) ? 1 : 0, w: Xscrp.why || '', b: Xscrp.badFresh > 0 ? 1 : 0 }; }catch(e){}
     try{ var Xscrd = window._ndlgKit && _ndlgKit.S, cscrd = document.getElementById('scrdSetCard'); if(Xscrd && cscrd && cscrd.style.display === 'block') f.feat.scrd = { h: 1, on: Xscrd.on ? 1 : 0, f: (Xscrd.failed || Xscrd.fails >= 2) ? 1 : 0, w: Xscrd.why || '', b: Xscrd.badFresh > 0 ? 1 : 0 }; }catch(e){}
     try{ var Xscrg = window._scrCong && _scrCong.S, cscrg = document.getElementById('scrgSetCard'); if(Xscrg && cscrg && cscrg.style.display === 'block') f.feat.scrg = { h: 1, on: Xscrg.on ? 1 : 0, f: (Xscrg.failed || Xscrg.fails >= 2) ? 1 : 0, w: Xscrg.why || '', b: Xscrg.badFresh > 0 ? 1 : 0 }; }catch(e){}
@@ -39836,6 +39851,7 @@ window.refreshShop=refreshShop;
       else if(key === 'f.sclt') window._scltSetUse(on);
       else if(key === 'f.scrd') window._scrdSetUse(on);
       else if(key === 'f.scrp') window._scrpSetUse(on);
+      else if(key === 'f.nnet') window._nnetSetUse(on);
       else if(key === 'f.scrt') window._scrtSetUse(on);
       else if(key === 'f.scrq') window._scrqSetUse(on);
       else if(key === 'f.scrw') window._scrwSetUse(on);
@@ -40311,8 +40327,8 @@ window.refreshShop=refreshShop;
     var my = ++S.busy, ctl = (typeof AbortController === 'function') ? new AbortController() : null;
     var to = setTimeout(function(){ try{ if(ctl) ctl.abort(); }catch(e){} }, 8000);
     S.fetchAt = now();
-    return fetch(BASE, { method: 'POST', body: req.post || req.txt, headers: { 'Content-Type': 'text/plain;charset=UTF-8' }, signal: ctl ? ctl.signal : undefined, cache: 'no-store' })
-      .then(function(r){ clearTimeout(to); if(!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+    return window._nnetText(BASE, req.post || req.txt, 8000, ctl)
+      .then(function(t){ clearTimeout(to); return t; })
       .then(function(txt){ return my === S.busy ? splitAlts(txt, req) : null; })               // 더 새 요청이 있으면 이 답은 버린다
       .catch(function(){ clearTimeout(to); return null; });
   }
@@ -40671,8 +40687,8 @@ window.refreshShop=refreshShop;
   function post(body, ms, track){
     var my = track ? ++S.busy : 0, ctl = (typeof AbortController === 'function') ? new AbortController() : null;
     var to = setTimeout(function(){ try{ if(ctl) ctl.abort(); }catch(e){} }, ms || 8000);
-    return fetch(BASE, { method: 'POST', body: body, headers: { 'Content-Type': 'text/plain;charset=UTF-8' }, signal: ctl ? ctl.signal : undefined, cache: 'no-store' })
-      .then(function(r){ clearTimeout(to); if(!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+    return window._nnetText(BASE, body, ms || 8000, ctl)
+      .then(function(t){ clearTimeout(to); return t; })
       .then(function(txt){ return { txt: txt, my: my }; })
       .catch(function(){ clearTimeout(to); return null; });
   }
@@ -40940,6 +40956,58 @@ window.refreshShop=refreshShop;
 // ══════════════════════════════════════════════════════════════════════════
 (function(){
   if(window._scrKit) return;
+  // ═════════════ 네이티브 통신: 엔진 화면 요청을 앱 본체(자바)가 대신 보낸다 ═════════════
+  //   웹이 사라져도(웹 제거) 화면이 엔진에서 계속 오도록 하는 첫 걸음. 서버 구동 네이티브 화면 틀(_scrKit)의 요청(POST 글)만 맡는다. 길동무 서버 세 곳만 허용(앱이 검사),
+  //   응답은 상태 코드와 글 그대로 돌려받아 예전과 같이 쓴다. 꺼짐(기본)·옛 APK(cap<18)·연속 3번 실패면 예전 웹 fetch.
+  (function(){
+    var K = 'gdm_nnet_on', N = { cap: 0, fails: 0, bad: false, n: 0 };
+    function plug(){ try{ var C = window.Capacitor; return (C && C.Plugins && C.Plugins.ScreenNative) || null; }catch(e){ return null; } }
+    function on(){ try{ return localStorage.getItem(K) === '1'; }catch(e){ return false; } }
+    function probe(){
+      if(N.cap) return;
+      var P = plug(); if(!P || typeof P.status !== 'function' || typeof P.post !== 'function'){ N.cap = 3; return; }
+      N.cap = -1;
+      Promise.resolve(P.status({ id: 'net' })).then(function(s0){ N.cap = (s0 && s0.cap >= 18) ? 18 : 3; syncCard(); }, function(){ N.cap = 3; syncCard(); });
+    }
+    function use(){ if(!on() || N.bad) return false; if(!N.cap){ probe(); return false; } return N.cap >= 18 && !!plug(); }
+    function syncCard(){
+      try{
+        var card = document.getElementById('nnetSetCard'); if(!card) return;
+        var P = plug(); if(!P || typeof P.post !== 'function'){ if(card.style.display !== 'none') card.style.display = 'none'; return; }
+        if(card.style.display !== 'block') card.style.display = 'block';
+        var o = on(), cb = document.getElementById('nnetSetOn'), st = document.getElementById('nnetSetStat');
+        if(cb && cb.checked !== o) cb.checked = o;
+        var t = !o ? '꺼짐 — 예전 방식(웹이 엔진 화면을 요청)으로 이어가요.' : (N.bad ? '앱 본체 통신에 문제가 있어 예전 방식으로 대신 이어가고 있어요. 스위치를 껐다 켜면 다시 시도해요.' : (N.cap === 3 ? '이 앱 버전은 아직 지원하지 않아 예전 방식으로 이어가요(새 앱이 필요해요).' : '켜짐 — 엔진 화면 요청을 앱 본체가 대신 보내요(실험 중).'));
+        if(st && st.textContent !== t) st.textContent = t;
+      }catch(e){}
+    }
+    window._nnet = {
+      use: use, on: on, S: N, syncCard: syncCard,
+      // 앱 본체로 보낸다. 상태가 2xx 가 아니거나 막히면 reject(호출한 쪽이 웹 fetch 로 다시 보낸다)
+      post: function(url, body, ms){
+        var P = plug();
+        return Promise.resolve(P.post({ url: url, body: body, timeoutMs: ms || 8000 })).then(function(r){
+          if(!r || typeof r.status !== 'number' || r.status < 200 || r.status >= 300 || typeof r.body !== 'string') throw new Error('HTTP ' + (r && r.status));
+          N.fails = 0; N.n++; return r.body;
+        }, function(e){ throw e; }).catch(function(e){
+          if(!(e && /HTTP [45]/.test(String(e.message || '')))){ N.fails++; if(N.fails >= 3){ N.bad = true; syncCard(); } }      // 서버가 4xx/5xx 로 답한 건 통신 문제가 아니다(웹 fetch 도 같은 답을 받는다)
+          throw e;
+        });
+      }
+    };
+    // 글 요청 하나: 앱 본체가 켜져 있으면 먼저 그쪽으로, 못 보내면(또는 꺼짐) 예전 웹 fetch. ctl = 웹 fetch 를 끊을 AbortController
+    window._nnetText = function(url, body, ms, ctl){
+      var web = function(){
+        return fetch(url, { method: 'POST', body: body, headers: { 'Content-Type': 'text/plain;charset=UTF-8' }, signal: ctl ? ctl.signal : undefined, cache: 'no-store' })
+          .then(function(r){ if(!r.ok) throw new Error('HTTP ' + r.status); return r.text(); });
+      };
+      if(use()) return window._nnet.post(url, body, ms).catch(function(){ return web(); });
+      return web();
+    };
+    window._nnetSetUse = function(v){ try{ localStorage.setItem(K, v ? '1' : '0'); }catch(e){} N.bad = false; N.fails = 0; if(v) probe(); syncCard(); };
+    try{ setTimeout(function(){ syncCard(); if(on()) probe(); }, 1000); }catch(eP){}
+  })();
+
   window._scrKit = function(cfg){
     var ID = cfg.id, KP = cfg.kp, K_ON = KP + '_on', K_F = KP + '_fail', K_W = KP + '_why', K_C = KP + '_c';
     var BASE = ((typeof _ROUTE_V2_BASE === 'string' && _ROUTE_V2_BASE) ? _ROUTE_V2_BASE : 'https://route-v2.phg0643.workers.dev') + cfg.ep;
@@ -40993,6 +41061,14 @@ window.refreshShop=refreshShop;
 
     // ── 엔진에서 받기 ──
     function post(body, ms){
+      var N = window._nnet;
+      if(N && N.use()){      // 앱 본체가 대신 보낸다(켜져 있고 새 앱일 때만). 못 보내면 아래 예전 웹 fetch 로 한 번 더 보낸다
+        var my0 = ++S.busy;
+        return N.post(BASE, body, ms).then(function(txt){ return { txt: txt, my: my0 }; }, function(){ S.busy--; return postWeb(body, ms); });
+      }
+      return postWeb(body, ms);
+    }
+    function postWeb(body, ms){
       var my = ++S.busy, ctl = (typeof AbortController === 'function') ? new AbortController() : null;
       var to = setTimeout(function(){ try{ if(ctl) ctl.abort(); }catch(e){} }, ms || 8000);
       return fetch(BASE, { method: 'POST', body: body, headers: { 'Content-Type': 'text/plain;charset=UTF-8' }, signal: ctl ? ctl.signal : undefined, cache: 'no-store' })

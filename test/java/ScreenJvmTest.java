@@ -752,6 +752,13 @@ public class ScreenJvmTest {
         ok(PVN.head[0].w <= 120f + 0.5f && PVN.head[0].t1.endsWith("\u2026"), "알약: 칸보다 길면 말줄임 " + PVN.head[0].w);
         ok(bad(pvJson.replace("\"s\":\"예상 경로 · 오후 2:30\"", "\"s\":\"\"")) && bad(pvJson.replace("\"tc\":\"#ff9500\"", "\"tc\":\"zzz\"")), "알약: 글이 없거나 색을 못 읽으면 거절");
 
+        // ── 앱 본체 통신 보호(netAllowed · netTimeout) ──
+        ok(ScreenCore.netAllowed("https://route-v2.phg0643.workers.dev/screen/dlg") && ScreenCore.netAllowed("https://board-writer.phg0643.workers.dev/talks?x=1") && ScreenCore.netAllowed("https://gentle-lab-7e47subway-api.phg0643.workers.dev"), "통신: 길동무 서버 세 곳은 허용");
+        ok(!ScreenCore.netAllowed("http://route-v2.phg0643.workers.dev/x") && !ScreenCore.netAllowed("https://evil.example/x") && !ScreenCore.netAllowed("https://route-v2.phg0643.workers.dev.evil.com/x") && !ScreenCore.netAllowed("https://route-v2.phg0643.workers.dev@evil.com/x") && !ScreenCore.netAllowed("https://evil.com\\@route-v2.phg0643.workers.dev/x") && !ScreenCore.netAllowed("https://route-v2.phg0643.workers.dev:8443/x") && !ScreenCore.netAllowed("https://user:pw@route-v2.phg0643.workers.dev/x") && !ScreenCore.netAllowed(null) && !ScreenCore.netAllowed("") && !ScreenCore.netAllowed("file:///etc/passwd") && !ScreenCore.netAllowed("https://route-v2.phg0643.workers.dev /x"), "통신: 다른 곳 · http · 주소 속임수 · 포트 · 사용자 정보는 거절");
+        ok(ScreenCore.netTimeout(0) == 8000 && ScreenCore.netTimeout(-5) == 8000 && ScreenCore.netTimeout(100) == 1000 && ScreenCore.netTimeout(5000) == 5000 && ScreenCore.netTimeout(999999) == 20000 && ScreenCore.netTimeout(Double.NaN) == 8000, "통신: 제한 시간은 1~20초(기본 8초)");
+
+        ok(NetPost.post("https://evil.example/x", "a", 1000).status == -1 && "blocked".equals(NetPost.post("http://localhost:1/x", "a", 1000).err) && "too-long".equals(NetPost.post("https://route-v2.phg0643.workers.dev/x", new String(new char[ScreenCore.NET_MAX_REQ + 1]), 1000).err), "통신: 허용 밖 주소·너무 긴 본문은 보내지 않고 거절");
+
         // ── 화면 바탕 색(bg) ──
         String bgBase = "{\"ok\":true,\"v\":1,\"screen\":\"x\",\"head\":[],\"body\":[{\"t\":\"spacer\",\"h\":4}]";
         ok("bg".equals(ScreenCore.layout(ScreenCore.load(bgBase + "}"), 300f, M).bg) && "card".equals(ScreenCore.layout(ScreenCore.load(bgBase + ",\"bg\":\"card\"}"), 300f, M).bg) && "card2".equals(ScreenCore.layout(ScreenCore.load(bgBase + ",\"bg\":\"card2\"}"), 300f, M).bg), "화면 바탕: 기본 bg · card · card2");

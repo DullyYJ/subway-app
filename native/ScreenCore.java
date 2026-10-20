@@ -709,6 +709,21 @@ public final class ScreenCore {
 
     public static Screen load(String json) throws ParseError { return validate(parse(json)); }
 
+    // ═════════════ 통신 보호(앱 본체가 대신 보내는 요청의 허용 범위) ═════════════
+    /** 앱 본체가 웹 대신 보낼 수 있는 곳: 길동무 서버 세 곳(https, 기본 포트)뿐. 주소에 사용자 정보·포트·역슬래시가 있으면 거절. */
+    private static final String[] NET_HOSTS = { "route-v2.phg0643.workers.dev", "board-writer.phg0643.workers.dev", "gentle-lab-7e47subway-api.phg0643.workers.dev" };
+    public static final int NET_MAX_REQ = 200000, NET_MAX_RES = 2 * 1024 * 1024;
+    public static boolean netAllowed(String u) {
+        if (u == null || u.length() > 2048 || !u.startsWith("https://") || u.indexOf('\\') >= 0 || u.indexOf(' ') >= 0) return false;
+        int a = 8, b = a;
+        while (b < u.length() && "/?#".indexOf(u.charAt(b)) < 0) b++;
+        String host = u.substring(a, b);
+        if (host.indexOf('@') >= 0 || host.indexOf(':') >= 0) return false;
+        for (String h : NET_HOSTS) if (h.equals(host)) return true;
+        return false;
+    }
+    public static int netTimeout(double ms) { return !(ms > 0) ? 8000 : (int) Math.max(1000, Math.min(20000, ms)); }
+
     // ═════════════ ③ 배치 ═════════════
     public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14, K_NEWS = 15, K_POSTH = 16, K_CMT = 17, K_RBTN = 18, K_INBAR = 19, K_MSG = 20, K_TAB = 21, K_SUG = 22, K_SWAP = 23, K_RHD = 24, K_TRK = 25, K_CGH = 26, K_GAUGE = 27, K_CHART = 28, K_HBAR = 29, K_CARS = 30, K_AIH = 31, K_LTH = 32, K_LTR = 33, K_PILL = 34;
     /** 경로 결과 머리줄 치수(웹 #transitResultHeader 와 같다: 분 숫자 28 · 단위 14 · 구간명 12 · 즐겨찾기 알약 11 · 닫기 ×) */

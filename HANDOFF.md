@@ -1548,3 +1548,13 @@
 - **YJ가 할 일**: 워커 s81(`route-v2-2026-10-20s81`) Deploy + **새 APK 빌드·설치**(cap 17). 설정에서 '네이티브 미리보기 라벨'을 켠다('네이티브 안내창'은 s79 것 그대로).
 - **기기 미검증(전부)**: 알약 위치·크기 · 카드 맨 위 자리 높이 · 신고 확인창.
 - **남은 비네이티브**: 데이터 계층(fetch · GPS→인덱스 추적 · 마커 가드 · eta 요청 · 버스 혼잡 fetch) · 지도 탭(SVG) · 무지개 테두리 · 그 뒤 웹 제거 → 애니메이션.
+
+## 2026-10-20 엔진 s82 + APK 변경 — 데이터 계층 첫 조각: '네이티브 통신'(엔진 화면 요청을 앱 본체가 대신 보냄)
+- **YJ 지시**: "진행해줘"(데이터 계층). 데이터 계층은 화면 그리기와 성격이 달라 먼저 웹의 통신을 훑었다: 웹 `fetch` 호출 약 100곳(엔진 `/screen/*` · `/route-v2-app` · `/ride-eta` · `/ride-alert` · `/commute-alarm` · `/reco-text` · board-writer `/talks` `/lroom` `/react` · 중계 `/weather` `/bus-stops` `/tago` · 외부 Valhalla/OSRM 등), 위치 `watchPosition` 계열 56곳, 타이머 `setInterval` 42 · `setTimeout` 414. 웹을 걷어내려면 이 중 '화면에 쓰는 데이터를 가져오는 일'과 '센서(GPS·기지국)를 모아 엔진에 보내는 일'을 앱 본체(자바)가 맡아야 한다. 계산 판정은 이미 대부분 엔진(`ride-track` · `ride-eta` · `ride-standby` · `ride-alert` · `route-follow`)에 있다.
+- **이번 조각**: 서버 구동 네이티브 화면 틀(`_scrKit` 및 옛 틀 2곳)이 엔진에 화면을 요청하는 POST 를 웹 `fetch` 대신 플러그인 `ScreenNative.post({url, body, timeoutMs})`(순수 자바 `NetPost`)가 보낸다. 허용 범위는 길동무 서버 세 곳(https · 기본 포트 · 사용자 정보/역슬래시/공백 없음 — `ScreenCore.netAllowed`), 본문 20만자 · 응답 2MB · 제한 시간 1~20초 · 리다이렉트 안 따름.
+- **APK(규격 18)**: `NetPost.java` 새 파일(CI 복사 목록에 추가) · `ScreenNativePlugin.post` · cap 18.
+- **앱(웹)**: `window._nnet`(설정 > '네이티브 통신' 기본 꺼짐, 저장값 `gdm_nnet_on`). 꺼짐·옛 APK(cap<18)·post 가 막힘이면 같은 요청을 예전 웹 `fetch` 로 다시 보내 화면은 그대로 뜬다. 연속 3번 실패하면 이번 실행 동안 접는다. 서버가 4xx/5xx 로 답한 건 통신 실패로 세지 않는다. 공통 도우미 `window._nnetText(url, body, ms, ctl)`.
+- **아직 웹 fetch 인 것**: 위 목록 중 화면 틀 밖의 모든 호출(경로 요청은 이미 `RouteFetchPlugin` · 후보 검색은 `HomeSearchPlugin` 이 앱 본체). 다음 조각 후보: ① 대화/게시판 서버 폴링(`/lroom` `/talks` 6초) ② 날씨·버스 혼잡 fetch ③ 센서 수집(GPS→`ride-track` 전송)을 `KeepAliveService` 상시화 ④ eta 요청.
+- **시험**: `net_native_js.ui` 7 · `ScreenJvmTest` 368(허용 주소·주소 속임수 거절·제한 시간·보내기 거절) · `settings_engine` 189 · `screen_native` 13 · 회귀 `screen_set/dlg/pvl/talk/cong/ai` 통과.
+- **YJ가 할 일**: 워커 s82(`route-v2-2026-10-20s82`) Deploy(설정 카드 문구 때문) + **새 APK 빌드·설치**(cap 18). 설정에서 '네이티브 통신'을 켠다.
+- **기기 미검증(전부)**: 실제 HTTPS 요청·응답(한글 본문 인코딩) · 응답 시간 · 기기 네트워크 전환 중 실패 시 웹 복귀.
