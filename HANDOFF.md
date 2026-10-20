@@ -1558,3 +1558,10 @@
 - **시험**: `net_native_js.ui` 7 · `ScreenJvmTest` 368(허용 주소·주소 속임수 거절·제한 시간·보내기 거절) · `settings_engine` 189 · `screen_native` 13 · 회귀 `screen_set/dlg/pvl/talk/cong/ai` 통과.
 - **YJ가 할 일**: 워커 s82(`route-v2-2026-10-20s82`) Deploy(설정 카드 문구 때문) + **새 APK 빌드·설치**(cap 18). 설정에서 '네이티브 통신'을 켠다.
 - **기기 미검증(전부)**: 실제 HTTPS 요청·응답(한글 본문 인코딩) · 응답 시간 · 기기 네트워크 전환 중 실패 시 웹 복귀.
+
+## 2026-10-20 엔진 s83 — 위치 판단기(PosFusion)를 엔진으로 옮김 + 방향 확정(웹 제거 · 한 번에 네이티브)
+- **YJ 지시**: "gps부터해줘" / "어짜피 웹은 다 제거할거야. 최종적으로는 웹버전은 데이터 관리용 파일만. 지금부터 네이티브화된 부분은 웹 다 제거 (웹버전은 따로 데이터를 가지고 있어야 함, iOS 개발용)" / "이전에 네이티브된 부분도 웹은 제거" / "우선 모든부분 한번에 네이티브 시켜, 안되는 부분은 수정하는 방향".
+- **엔진**: `engine/posfusion.js` + `pf-worker.js` → `POST /pos-fuse`. 상태 없는 함수 `posFuseRun({nowMs, stations:[{lat,lng,schedMs,xferFromPrev,name}], state?, seed?, startMs?, ev:[gps|motion|cell|arrived]})` → `{ok,state,best,median,fed}`. 웹 원본(지연 가설 31개 × (2N−1) 상태 HMM)과 같은 결과를 `test/posfusion_engine.test.js` 25개로 대조.
+- **iOS 기준본**: `ios-reference/`(웹 전체 동결 사본, 앱 빌드 제외, 수정 금지). 이후 웹을 제거해도 여기에 남는다.
+- **APK 변경 없음**(규격 18 그대로). **YJ가 할 일**: 워커 s83(`route-v2-2026-10-20s83`) Deploy.
+- **다음**: 네이티브 껍데기(Activity·탭·상태·행동 라우터) 설계 후 구현. GPS 수집 → `/pos-fuse` → ride-standby 를 KeepAliveService 에서 돌리는 것부터. 기기 미검증(전부).
