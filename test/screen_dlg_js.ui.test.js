@@ -114,6 +114,25 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', 
     assert.deepStrictEqual(await x.page.evaluate(() => window.__r), []); assert.strictEqual(await x.page.evaluate(() => window._ndlg.isOpen()), true); await x.ctx.close();
   });
 
+  console.log('[②-2 앱 종료 확인]');
+  await t('플러그인이 없으면 웹 종료 확인창 · 켜면 엔진 화면(웹 확인창 없음) · 아니요/뒤로가기/종료', async () => {
+    const w = await fresh({ plugin: false, on: true }); await w.page.evaluate(() => { _showExitPopup(); });
+    assert.strictEqual(await w.page.evaluate(() => document.getElementById('exitConfirmPopup').style.display), 'flex'); await w.ctx.close();
+    for (const how of ['dl.no', 'back', 'dl.ok']) {
+      const x = await fresh({ plugin: true, on: true }); await x.page.waitForTimeout(500);
+      await x.page.evaluate(() => { window.__ex = 0; window._exitConfirm = function () { window.__ex++; }; window._backPressCount = 1; _showExitPopup(); });
+      assert.ok(await waitFor(x, async () => (await puts(x)).length >= 1, 9000), 'show 가 없다');
+      assert.deepStrictEqual(x.reqs[x.reqs.length - 1].f, { kind: 'exit' });
+      assert.deepStrictEqual(await lastPut(x), JSON.parse(JSON.stringify(ET.dialogScreen({ cap: 16 }, { kind: 'exit' }))));
+      assert.notStrictEqual(await x.page.evaluate(() => document.getElementById('exitConfirmPopup').style.display), 'flex');
+      if (how === 'back') assert.strictEqual(await x.page.evaluate(() => handleBackPress()), true); else await act(x, how);
+      await x.page.waitForTimeout(200);
+      assert.strictEqual(await x.page.evaluate(() => window.__ex), how === 'dl.ok' ? 1 : 0, how); assert.ok((await hides(x)).length >= 1, '닫지 않았다');
+      if (how !== 'dl.ok') assert.strictEqual(await x.page.evaluate(() => window._backPressCount), 0);
+      assert.deepStrictEqual(x.errs, []); await x.ctx.close();
+    }
+  });
+
   console.log('[③ 오버레이 진단 기록]');
   await t('기록 줄만 사실로 보낸다 · 엔진 화면 그대로 · 복사 / 지우기 / 닫기', async () => {
     const x = await fresh({ plugin: true, on: true }); await x.page.waitForTimeout(500);

@@ -1528,3 +1528,12 @@
 - **YJ가 할 일**: 워커 s79(`route-v2-2026-10-20s79`) Deploy + **새 APK 빌드·설치**(cap 16). 설정에서 '네이티브 안내창'을 켠다.
 - **기기 미검증(전부)**: 카드 가운데 배치 · 내용 높이 맞춤 · 뒤 흐림 · 진단 기록 스크롤 · 알림 카드 크기 · 뒤로가기.
 - **남은 비네이티브**: `exitConfirmPopup` · 글쓰기 뒤 팝업 · `#aiPreviewLabel`/`#congPreviewLabel` 미리보기 라벨 · 데이터 계층(fetch · GPS→인덱스 추적 · 마커 가드 · eta 요청 · 버스 혼잡 fetch) · 지도 탭(SVG).
+
+## 2026-10-20 엔진 s80 — 안내창에 '앱 종료 확인' 추가(APK 변경 없음, 규격 16 그대로)
+- **YJ 지시**: "남은거 계속진행해줘". 참고: **웹을 다 걷어낸 뒤 애니메이션(페이드·슬라이드·깜박임 등)을 다시 구현할 예정** — 지금 네이티브 화면에 애니메이션이 없는 건 의도된 보류.
+- **엔진**: `engine/dialog.js` 에 `kind:'exit'` 추가(고정 어두운 카드 `#1c1c1e` · 흐림 0.7 · 흐린 곳 눌러도 안 닫힘 · '아니요'(dl.no) / '종료'(dl.ok)). 글 색은 색 역할만 받으므로 흰색 + 투명도 0.56 으로 웹의 `#8e8e93` 을 근사.
+- **앱(웹)**: `_showExitPopup` 이 먼저 `_ndlg.exit()` 를 시도하고 안 되면 웹 `#exitConfirmPopup`. 아니요·뒤로가기 → 닫고 `_backPressCount = 0`, 종료 → 닫고 `_exitConfirm()`. 설정 카드 문구에 '앱 종료 확인창' 추가.
+- **글쓰기 뒤 알림**: 앱 전체에서 토스트가 꺼져 있어(`submitPost` 주석) 그릴 대상이 없다. 삭제 실패 알림은 단추 글자 바꿈이라 별도 팝업 아님. 남은 `confirm()` 은 신고 확인 1곳(`window.confirm`).
+- **시험**: `dialog_engine` 44 · `screen_dlg_js.ui` 13(종료 확인 포함) · `settings_engine` 187 · `ScreenJvmTest` 360 · `screen_native` · `screen_set_js.ui` 45.
+- **YJ가 할 일**: 워커 s80(`route-v2-2026-10-20s80`) Deploy(APK 재빌드는 s79 것 그대로면 됨).
+- **남은 비네이티브**: 신고 `confirm()` · `#aiPreviewLabel`/`#congPreviewLabel` · 데이터 계층 · 지도 탭(SVG) · 그 뒤 웹 제거 → 애니메이션.

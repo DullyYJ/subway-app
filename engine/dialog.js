@@ -4,15 +4,16 @@
 //   앱 화면 가운데 떠 있는 안내창 세 가지의 글·글자 크기·색·단추 이름·카드 크기/위치/흐림/모서리를 엔진이 정한다.
 //     perm  '다른 앱 위에 표시' 권한 안내(취소 / 설정 열기)
 //     diag  오버레이 진단 기록(최신이 위 · 전체 복사 / 지우기 / 닫기)
+//     exit  앱 종료 확인(아니요 / 종료)
 //     pop   잠깐 떴다 사라지는 작은 알림(_pickPop: 출발지/도착지 설정 안내 · 공유 안내 …)
 //   앱(웹)은 사실만 보낸다: kind · (diag) 기록 줄 목록과 복사 결과 · (pop) 글 두 줄과 모양(cls). 앱(기기)은 받은 화면을 그린다.
 //
 // 입력  dialogScreen({ cap }, f)   cap 16 이상
 //   f = { kind:'perm'|'diag'|'pop', lines:[기록 줄…](오래된 것부터, diag), cp:0|1|2(diag 복사 결과: 0 없음 · 1 됨 · 2 실패), msg, sub, cls:''|'sh'(pop) }
 // 출력  { ok, v:1, screen:'dlg', dlg:{…카드 모양}, bg, head:[…], body:[…], foot?:[…], info:{kind}, rev }
-//        행동 이름: dl.ok · dl.no(perm) · dl.copy · dl.clear · dl.close(diag). 흐린 곳을 누르면 dlg.tap(perm 만 dl.no).
+//        행동 이름: dl.ok · dl.no(perm · exit) · dl.copy · dl.clear · dl.close(diag). 흐린 곳을 누르면 dlg.tap(perm 만 dl.no).
 var DLG_CAP = 16;
-var DLG_KINDS = { perm: 1, diag: 1, pop: 1 };
+var DLG_KINDS = { perm: 1, diag: 1, pop: 1, exit: 1 };
 var DLG_MAXLINES = 600, DLG_CHUNK = 1700;
 var DLG_EMOJI = /[☀-➿⬀-⯿️‍]|[\uD83C-\uD83E][\uDC00-\uDFFF]/g;
 
@@ -31,6 +32,22 @@ function dlgPerm() {
       { t: 'btnrow', pad: [22, 0, 22, 24], gap: 10, h: 46, eq: true, bsize: 15, r: 11, items: [
         { label: '취소', fill: 'card2', line: 'border', tc: 'sub', act: no },
         { label: '설정 열기', fill: '#2f7cf6', line: '#2f7cf6', tc: '#ffffff', act: { a: 'call', v: 'dl.ok' } }
+      ] }
+    ],
+    body: [{ t: 'spacer', h: 0 }], foot: null, info: {}
+  };
+}
+
+function dlgExit() {
+  // 웹 종료 확인창과 같은 고정 어두운 카드(테마와 무관): 카드 #1c1c1e · 흐림 0.7 · 흐린 곳을 눌러도 닫히지 않는다
+  return {
+    dlg: { w: 320, maxh: 0.85, dim: 0.7, top: 0.5, r: 18, mx: 20, fill: '#1c1c1e', line: '#1c1c1e' }, bg: 'card',
+    head: [
+      { t: 'text', pad: [24, 28, 24, 8], s: '앱을 종료하시겠습니까?', size: 18, bold: true, lh: 1.4, align: 'center', color: 'white' },
+      { t: 'text', pad: [24, 0, 24, 24], s: '길동무를 종료합니다.', size: 13, lh: 1.5, align: 'center', color: 'white', alpha: 0.56 },
+      { t: 'btnrow', pad: [24, 0, 24, 24], gap: 10, h: 48, eq: true, bsize: 15, r: 12, items: [
+        { label: '아니요', fill: '#1c1c1e', line: '#3a3a3c', tc: '#8e8e93', act: { a: 'call', v: 'dl.no' } },
+        { label: '종료', fill: '#ff3b30', line: '#ff3b30', tc: '#ffffff', act: { a: 'call', v: 'dl.ok' } }
       ] }
     ],
     body: [{ t: 'spacer', h: 0 }], foot: null, info: {}
@@ -86,7 +103,7 @@ function dialogScreen(inp, f) {
   f = (f && typeof f === 'object') ? f : {};
   var kind = dlgStr(f.kind, 8);
   if (!DLG_KINDS[kind]) return { ok: false, error: 'kind' };
-  var d = kind === 'perm' ? dlgPerm() : (kind === 'diag' ? dlgDiag(f) : dlgPop(f));
+  var d = kind === 'perm' ? dlgPerm() : (kind === 'exit' ? dlgExit() : (kind === 'diag' ? dlgDiag(f) : dlgPop(f)));
   var out = { ok: true, v: 1, screen: 'dlg', dlg: d.dlg, bg: d.bg, head: d.head, body: d.body, info: d.info };
   if (d.foot) out.foot = d.foot;
   out.info.kind = kind;

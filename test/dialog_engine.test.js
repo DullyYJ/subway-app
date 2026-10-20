@@ -24,6 +24,15 @@ ok(G({ kind: 'x' }).error === 'kind' && G({}).error === 'kind' && G(null).error 
   ok(/설정 화면을 열까요\?/.test(html) && /다른 앱 위에 표시/.test(html), '권한: 문구가 웹과 같다');
 }
 
+// ②-2 앱 종료 확인
+{
+  const o = G({ kind: 'exit' }), b = btns(o);
+  ok(o.dlg.dim === 0.7 && !o.dlg.tap && o.dlg.fill === '#1c1c1e' && o.dlg.w === 320, '종료: 어두운 카드 · 흐린 곳을 눌러도 안 닫힌다');
+  ok(b.length === 2 && b[0].label === '아니요' && b[0].act.v === 'dl.no' && b[1].label === '종료' && b[1].act.v === 'dl.ok' && b[1].fill === '#ff3b30', '종료: 단추 이름과 행동');
+  ok(JSON.stringify(o).includes('앱을 종료하시겠습니까?') && JSON.stringify(o).includes('길동무를 종료합니다.') && !EMOJI.test(JSON.stringify(o)), '종료: 문구 · 이모지 없음');
+  ok(/앱을 종료하시겠습니까\?/.test(html) && /길동무를 종료합니다\./.test(html), '종료: 문구가 웹과 같다');
+}
+
 // ③ 진단 기록
 {
   const L = []; for (let i = 0; i < 40; i++) L.push('12:' + (10 + i) + ' 줄 ' + i);
@@ -54,7 +63,7 @@ ok(G({ kind: 'x' }).error === 'kind' && G({}).error === 'kind' && G(null).error 
 // ⑤ 앱 검증기
 {
   const L = []; for (let i = 0; i < 60; i++) L.push('줄 ' + i + ' ' + 'k'.repeat(60));
-  const cases = [G({ kind: 'perm' }), G({ kind: 'diag', lines: L }), G({ kind: 'diag', lines: [] }), G({ kind: 'pop', msg: '안내', sub: '둘째 줄' }), G({ kind: 'pop', msg: '공유', cls: 'sh' })];
+  const cases = [G({ kind: 'perm' }), G({ kind: 'exit' }), G({ kind: 'diag', lines: L }), G({ kind: 'diag', lines: [] }), G({ kind: 'pop', msg: '안내', sub: '둘째 줄' }), G({ kind: 'pop', msg: '공유', cls: 'sh' })];
   const r = screenCheck(cases);
   ok(!r.err && r.out.length === cases.length && r.out.every(l => /^OK/.test(l)), '앱 검증기 통과 ' + (r.err || r.out.join(' / ')));
 }
@@ -86,7 +95,7 @@ ok(G({ kind: 'x' }).error === 'kind' && G({}).error === 'kind' && G(null).error 
 function done() {
   // ⑦ 웹 연결 글
   ok(/id: 'dlg', kp: 'gdm_scrd', ep: '\/screen\/dlg'/.test(html) && /id="scrdSetCard"/.test(html) && /key === 'f\.scrd'/.test(html) && /window\._scrdSetUse = /.test(html), '웹: 틀 · 설정 카드 · 스위치 연결');
-  ok(/window\._ndlg\.pop\(msg, sub, cls\)/.test(html) && /window\._ndlg\.perm\(onOk, onCancel\)/.test(html) && /window\._ndlg\.diag\(\)/.test(html) && /function _pickPopWeb/.test(html) && /function _showOvlPermDialogWeb/.test(html) && /function _ovlDiagShowWeb/.test(html), '웹: 팝업 3종이 먼저 네이티브를 시도하고 웹으로 돌아간다');
+  ok(/window\._ndlg\.pop\(msg, sub, cls\)/.test(html) && /window\._ndlg\.perm\(onOk, onCancel\)/.test(html) && /window\._ndlg\.diag\(\)/.test(html) && /function _pickPopWeb/.test(html) && /function _showOvlPermDialogWeb/.test(html) && /function _ovlDiagShowWeb/.test(html) && /window\._ndlg\.exit\(\)/.test(html), '웹: 팝업 4종이 먼저 네이티브를 시도하고 웹으로 돌아간다');
   ok(/window\._ndlg\.back\(\)/.test(html), '웹: 뒤로가기가 안내창부터 닫는다');
   console.log(fail ? ('dialog_engine: ' + pass + ' pass, ' + fail + ' FAIL') : ('dialog_engine: ' + pass + ' pass, 0 fail'));
   process.exit(fail ? 1 : 0);

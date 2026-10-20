@@ -2281,6 +2281,7 @@ window._pushScreen = _pushScreen;
 
 // 종료 확인 팝업 표시
 function _showExitPopup(){
+  try{ if(window._ndlg && window._ndlg.exit()) return; }catch(eNd){}      // 서버 구동 네이티브 안내창(켜져 있을 때만; 아니면 아래 웹 확인창)
   var pop = document.getElementById('exitConfirmPopup');
   if(pop) pop.style.display = 'flex';
 }
@@ -21259,7 +21260,7 @@ window.addEventListener('unhandledrejection', function(e) {
             <span id="scrdSetDot" style="position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.3);"></span>
           </label>
         </div>
-        <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">다른 앱 위에 표시 권한 안내, 오버레이 진단 기록창, 잠깐 떴다 사라지는 알림의 글·단추·크기를 엔진이 정해 내려주고, 기기가 앱 화면 가운데에 직접 그려요. 문제가 생기면 예전 웹 안내창으로 돌아가요.</p>
+        <p style="font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 8px;">다른 앱 위에 표시 권한 안내, 오버레이 진단 기록창, 앱 종료 확인창, 잠깐 떴다 사라지는 알림의 글·단추·크기를 엔진이 정해 내려주고, 기기가 앱 화면 가운데에 직접 그려요. 문제가 생기면 예전 웹 안내창으로 돌아가요.</p>
         <div id="scrdSetStat" style="font-size:11.5px;line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">확인 중…</div>
         <style>#scrdSetOn:checked ~ #scrdSetKnob{background:var(--gold) !important;} #scrdSetOn:checked ~ #scrdSetDot{left:23px !important;}</style>
       </div>
@@ -42043,7 +42044,7 @@ window.refreshShop=refreshShop;
     }
     kit = window._scrKit({
       id: 'dlg', kp: 'gdm_scrd', ep: '/screen/dlg', screen: 'dlg', label: '안내창', card: 'scrd', cache: false, waitIdle: false, bucket: 0, idleMs: 200,
-      onText: '권한 안내·오버레이 진단 기록·잠깐 뜨는 알림을 엔진이 정해 기기가 앱 화면 가운데에 직접 그려요(실험 중).',
+      onText: '권한 안내·오버레이 진단 기록·앱 종료 확인·잠깐 뜨는 알림을 엔진이 정해 기기가 앱 화면 가운데에 직접 그려요(실험 중).',
       root: function(){ return document.documentElement; }, open: function(){ return !!D.cur; }, rect: rect, request: request, act: act, sig: function(){ return D.cur ? D.cur.sig() : ''; }, sigMs: 300,
       onPresent: function(){ var c = D.cur; if(c && c.ms && !c.t){ c.t = setTimeout(function(){ close(c); }, c.ms); } },
       webClear: function(){}, webBack: function(){ var c = D.cur; if(c) toWeb(c); }, onEnd: function(){}
@@ -42069,6 +42070,13 @@ window.refreshShop=refreshShop;
         var spec = { kind: 'perm', web: function(){ _showOvlPermDialogWeb(onOk, onCancel); }, facts: function(){ return { kind: 'perm' }; }, sig: function(){ return 'm'; },
           act: function(v){ if(v === 'dl.ok'){ close(spec); try{ onOk && onOk(); }catch(e){} } else if(v === 'dl.no'){ close(spec); try{ onCancel && onCancel(); }catch(e2){} } },
           back: function(){ close(spec); try{ onCancel && onCancel(); }catch(e){} } };
+        return open(spec);
+      },
+      // 앱 종료 확인: 아니요(또는 뒤로가기)는 닫고 횟수를 되돌리고, 종료는 닫은 뒤 앱을 끝낸다. 네이티브가 못 띄우면 예전 웹 확인창
+      exit: function(){
+        var spec = { kind: 'exit', web: function(){ var pop = document.getElementById('exitConfirmPopup'); if(pop) pop.style.display = 'flex'; }, facts: function(){ return { kind: 'exit' }; }, sig: function(){ return 'x'; },
+          act: function(v){ if(v === 'dl.ok'){ close(spec); try{ _exitConfirm(); }catch(e){} } else if(v === 'dl.no'){ close(spec); try{ _backPressCount = 0; }catch(e2){} } },
+          back: function(){ close(spec); try{ _backPressCount = 0; }catch(e){} } };
         return open(spec);
       },
       diag: function(){
