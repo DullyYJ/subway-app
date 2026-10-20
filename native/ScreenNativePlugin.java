@@ -207,7 +207,7 @@ public class ScreenNativePlugin extends Plugin {
     @PluginMethod
     public void post(final PluginCall call) {
         final String url = call.getString("url", ""), body = call.getString("body", "");
-        final double to = call.getDouble("timeoutMs", 8000d);
+        final double to = call.getFloat("timeoutMs", 8000f);
         if (!ScreenCore.netAllowed(url)) { call.reject("blocked"); return; }
         new Thread(new Runnable() {
             @Override public void run() {

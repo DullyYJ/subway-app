@@ -122,7 +122,7 @@ ok(S.ok && S.v === 1 && S.screen === 'food' && S.cover === 'tab' && /^f1:/.test(
 {
   const has = t => html.indexOf(t) >= 0;
   ok(has('window._scrFood = {') && has("var BASE = ((typeof _ROUTE_V2_BASE === 'string' && _ROUTE_V2_BASE) ? _ROUTE_V2_BASE : 'https://route-v2.phg0643.workers.dev') + '/screen/food';"), '웹: 맛집 연결부 + 엔진 주소');
-  ok(has("body: req.post || req.txt, headers: { 'Content-Type': 'text/plain;charset=UTF-8' }"), '웹: 사전 요청이 필요 없게 text/plain 으로 보낸다');
+  ok(has("_nnetText(BASE, req.post || req.txt, 8000, ctl)") && has("body: body, headers: { 'Content-Type': 'text/plain;charset=UTF-8' }"), '웹: 사전 요청이 필요 없게 text/plain 으로 보낸다(앱 본체 통신 도우미 _nnetText 를 거친다)');
   ok(has('"cap":4'), '웹: 규격 수준 4를 알린다');
   ok(has("addListener('action', onAction)") && has("a === 'cat'") && has("/^fm\\.(c|p)\\.(\\d+)$/"), '웹: cat · 가게 번호 행동만 처리');
   ok(has('function fdOwned()') && (html.match(/if\(fdOwned\(\)\) return null;|return fdOwned\(\) \? null/g) || []).length >= 4, '웹: 맛집 탭을 네이티브가 맡으면 예전 fd:* 영역은 쉰다');
