@@ -1565,3 +1565,12 @@
 - **iOS 기준본**: `ios-reference/`(웹 전체 동결 사본, 앱 빌드 제외, 수정 금지). 이후 웹을 제거해도 여기에 남는다.
 - **APK 변경 없음**(규격 18 그대로). **YJ가 할 일**: 워커 s83(`route-v2-2026-10-20s83`) Deploy.
 - **다음**: 네이티브 껍데기(Activity·탭·상태·행동 라우터) 설계 후 구현. GPS 수집 → `/pos-fuse` → ride-standby 를 KeepAliveService 에서 돌리는 것부터. 기기 미검증(전부).
+
+## 2026-10-20 s84 (브랜치 `native-shell`) — 웹 전부 제거, 순수 네이티브 껍데기 첫 APK
+- **YJ 지시**: "웹 폴백/웹뷰 연동 코드는 1%도 남기지 마. 에러는 네이티브 안에서 처리·수정. www 는 삭제/보관, Activity·하단 탭·상태 관리까지 100% 네이티브로."
+- **구조(이 브랜치에서만; main 은 그대로 옛 웹 앱)**: `www/` 삭제(웹 기준본 = `ios-reference/`), Capacitor·플러그인 12개·옛 CI·웹(Playwright) 시험은 `archive/`(capacitor · native-plugins · ci · tests-web)로. 새 Gradle 프로젝트 `shell-android/`(AGP 8.2.1, minSdk 26, Capacitor 없음, 소스는 `native/shell/` 뿐) + 새 워크플로 `.github/workflows/build-shell.yml`(push to native-shell, 시험 26개 → debug APK 아티팩트 `gildongmu-native-debug`).
+- **`native/shell/`**: `ScreenCore`·`ScreenView`(그리기) · `NetPost`(허용 목록 통신, GET 추가) · `ShellCore`(순수: 탭·설정 사실·눌림→효과·팔레트, JVM 시험 37) · `ShellActivity`(웹뷰 없음: 위 내용 ScreenView + 아래 엔진이 그린 탭 막대 ScreenView, 저장은 SharedPreferences, 뒤로가기는 홈으로).
+- **지금 되는 것(기기 미검증)**: 탭 막대(엔진 /screen/tabs) · 커뮤니티 탭 = 설정 화면(엔진 /screen/settings, 알림 스위치·도착 오차 기록·테마·아이디 저장/삭제). 나머지 탭은 '옮기는 중' 임시 화면. 설정의 하위 화면(web 행동)·약관·오류 로그는 '아직 옮기는 중' 알림.
+- **엔진 쪽 남은 정리**: settings.js 의 웹 기능 스위치 행(scr* 등)·`/screen/*` 의 웹 전용 분기는 웹이 사라졌으니 걷어낼 대상(아직 안 건드림, 껍데기는 feat 를 비워 보냄).
+- **다음 조각**: 홈/쇼핑/맛집/뉴스/게시판 탭을 엔진 화면에 잇기 → GPS 수집(KeepAliveService) → /pos-fuse · /ride-standby → 지도 탭 → 위젯·오버레이·알림.
+- **보관된 것(재사용 예정)**: native/ 의 Htl·Row·Scene·Metro·Widget 코어/뷰, `archive/native-plugins/`(Capacitor 래퍼 — 안의 안드로이드 로직을 꺼내 쓸 때 참고).
