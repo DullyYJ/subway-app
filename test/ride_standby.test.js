@@ -58,6 +58,24 @@ t('계획대로 달리면 목적지 2정거장 전·1정거장 전·도착 알�
   assert.ok(Array.isArray(r.alerts[1].a.vib) && r.alerts[1].a.vib.length === 5);
 });
 
+t('하차 7분 전 추천: 한 여정에 한 번, 목적지 도착 7분~1분 사이에만, 도착 좌표와 시간대를 싣는다', () => {
+  const fires = [];
+  ride(mkState(), at(12, 50, 0), at(13, 1, 0), 0, (ms, l) => { if (l.reco && l.reco.fire) fires.push({ ms: ms, r: l.reco }); });
+  assert.strictEqual(fires.length, 1, '한 번만: ' + fires.length);
+  const f = fires[0];
+  assert.ok(f.ms >= at(12, 53, 0) - 1 && f.ms <= at(12, 59, 0), '7분~1분 창: ' + new Date(f.ms).toISOString());
+  assert.strictEqual(f.r.dest, 'S4'); assert.strictEqual(f.r.slot, 'lunch');                     // 13시 도착 = 점심
+  assert.ok(f.r.loc && Math.abs(f.r.loc.lat - LAT) < 1e-9 && f.r.arrMs > f.ms && /^[^|]*$/.test(String(f.r.key)) === false);
+  assert.ok(f.r.remMin >= 1 && f.r.remMin <= 7);
+});
+t('하차 추천: 알림 끔(arrive_reco:false)이면 안 보낸다 · 승차 대기 중에도 안 보낸다', () => {
+  let n = 0;
+  ride(mkState({ allowed: { arrive_reco: false } }), at(12, 50, 0), at(13, 1, 0), 0, (ms, l) => { if (l.reco && l.reco.fire) n++; });
+  assert.strictEqual(n, 0);
+  const w = mkState(); w.wait = { i: 1 };
+  assert.strictEqual(rideStandby({ nowMs: at(12, 55, 0), fixes: [], state: w }).reco.fire, false);
+});
+
 t('같은 알림은 두 번 나가지 않는다(fired 가 상태에 실려 돈다)', () => {
   const r = ride(mkState(), at(12, 53, 0), at(13, 1, 0), 0);
   assert.strictEqual(r.alerts.length, 3);

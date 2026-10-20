@@ -171,6 +171,20 @@ ok(odd.ok && all(odd).find(n => n.t === 'field').value.length === 12, '이상한
   ok(E.settingsArrLines(E.settingsPageFacts({ st: { slot: 'night', dinner: 1, rem: null } }).st)[2] === '남은 시간: 아직 측정 전' && E.settingsArrLines(E.settingsPageFacts({ st: { slot: 'night', dinner: 1 } }).st)[3] === '지금 시간대: 저녁 식사 (17:00~18:59)', '추천 시험: 측정 전 · 저녁 식사');
   ok(E.settingsArrLines(E.settingsPageFacts({ st: { err: 'x' } }).st)[0] === '상태 확인 오류: x', '추천 시험: 읽다 실패');
   ok(flat(PG('arr', { st: ST }).body).filter(n => n.t === 'box').some(n => n.s.split('\n').length === 8), '추천 시험: 상태 상자에 줄이 8개');
+  {
+    const nvArr = PG('arr', { nv: 1, st: { timer: 1, route: 1, pre: 7, rem: 600, dest: '강남' } });
+    const nvTxt = flat(nvArr.body).map(n => n.s || n.title || '').join('\n');
+    ok(/하차 7분 전 추천/.test(nvTxt) && !/arr\.demo/.test(JSON.stringify(nvArr.body)) && !/오버레이 아래에도 90초/.test(nvTxt), '추천 시험(앱): 제목 7분 · 캐릭터 미리보기 버튼 없음');
+    ok(/탑승 안내: 동작 중 \(5초마다 확인\)/.test(nvTxt) && /7분 되면 발사/.test(nvTxt), '추천 시험(앱): 상태 문구가 앱 방식(5초 · 7분)');
+    ok(/arr\.demo/.test(JSON.stringify(PG('arr', {}).body)), '추천 시험(예전 웹 방식)은 미리보기 버튼이 그대로');
+  }
+  {
+    const navV = sc => flat(sc.body).filter(n => n.t === 'navrow' && n.act && /^pg\./.test(n.act.v)).map(n => n.act.v);
+    const all8 = E.settingsScreen({ cap: 8 }, { sam: 1 }), some8 = E.settingsScreen({ cap: 8 }, { sam: 1, pgs: ['sam', 'ovl', 'arr'] });
+    ok(['pg.cm', 'pg.gw', 'pg.arr', 'pg.ovl', 'pg.dev', 'pg.sam'].every(v => navV(all8).includes(v)), 'pgs 가 없으면 하위 화면 줄이 모두 보인다');
+    ok(navV(some8).sort().join() === 'pg.arr,pg.ovl,pg.sam', 'pgs 에 든 화면 줄만 보인다: ' + navV(some8).join());
+    ok(flat(some8.body).some(n => n.t === 'navrow' && n.title === '하차 7분 전 추천 시험'), 'pgs 가 있으면 시험 줄 이름이 7분');
+  }
   // 시계 위젯
   sc = PG('gw', { roam: 6, mOn: 1, eOn: 0, morn: '07:30' }); tx = texts(sc);
   ok(tx.includes('6분 (추천)') && tx.includes('출근 07:30 에 위젯이 응원해요') && tx.some(x => /^6분 추천이에요\. 그보다 길면/.test(x)), '시계 위젯: 6분 추천 · 응원 시각 글');

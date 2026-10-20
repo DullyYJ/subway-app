@@ -33,12 +33,18 @@ public final class RideCore {
         public boolean ok, done, alert;
         public String key = "", type = "", title = "", body = "";
         public long[] vib = new long[0];
+        /** 하차 7분 전 추천을 지금 보내야 하면 /reco-text 본문(JSON), 아니면 "". */
+        public String recoBody = "";
     }
 
     /** 엔진이 정한 떠 있는 안내 값(overlay) — 서비스가 창에 그리기만 한다. active 가 아니면 창을 치운다. */
     public boolean ovActive;
     public String ovLine1 = "", ovLine2 = "", ovBanner = "";
     public int ovAlert;
+    /** 하차 추천 상태(엔진 reco 그대로) — 설정 '상태 확인'이 보여 준다. 판단은 엔진이 했고 여기는 받은 값을 들고만 있는다. */
+    private String recoDest = "", recoSlot = "";
+    private long recoRem = Long.MIN_VALUE, recoAlertAt = 0L, recoTick = 0L;
+    private boolean recoDinner;
 
     public boolean hasState() { return stateJson.length() > 2; }
 
@@ -69,6 +75,7 @@ public final class RideCore {
         java.util.List<String> o = new java.util.ArrayList<String>();
         if ("0".equals(st.get("np_arrive", "1"))) { o.add("near_arrive2"); o.add("near_arrive"); o.add("arrive"); }
         if ("0".equals(st.get("np_transfer", "1"))) { o.add("transfer2"); o.add("transfer"); }
+        if ("0".equals(st.get("np_arrive_reco", "1"))) o.add("arrive_reco");
         return o;
     }
 
@@ -167,6 +174,14 @@ public final class RideCore {
                 s.key = str(a.get("key")); s.type = str(a.get("type")); s.title = str(a.get("title")); s.body = str(a.get("body"));
                 s.vib = vibPattern(a.get("vib"));
             }
+            if (m.get("reco") instanceof Map) {
+                Map<String, Object> rc = (Map<String, Object>) m.get("reco");
+                s.recoBody = recoBody(rc);
+                recoDest = BoardCore.s(rc.get("dest"), 40); recoSlot = BoardCore.s(rc.get("slot"), 12); recoDinner = Boolean.TRUE.equals(rc.get("dinner"));
+                recoRem = rc.get("remSec") instanceof Number ? ((Number) rc.get("remSec")).longValue() : Long.MIN_VALUE;
+                recoAlertAt = rc.get("alertAt") instanceof Number ? ((Number) rc.get("alertAt")).longValue() : 0L;
+                recoTick = System.currentTimeMillis();
+            }
             s.done = done; s.ok = true; rev++;
         } catch (ScreenCore.ParseError e) {
             return new Step();
@@ -175,6 +190,44 @@ public final class RideCore {
     }
 
     private static String str(Object o) { return o instanceof String ? (String) o : ""; }
+
+    /** 설정 '상태 확인'용 — 엔진 reco 에서 받은 값을 JSON 조각(중괄호 없이)으로. 아직 한 번도 못 받았으면 "". */
+    public String recoStatJson() {
+        if (recoTick == 0L) return "";
+        StringBuilder b = new StringBuilder("\"dest\":").append(ShellCore.q(recoDest)).append(",\"slot\":").append(ShellCore.q(recoSlot)).append(",\"dinner\":").append(recoDinner);
+        if (recoRem != Long.MIN_VALUE) b.append(",\"rem\":").append(Math.max(0L, recoRem));
+        if (recoAlertAt > 0L) b.append(",\"alertAt\":").append(recoAlertAt);
+        return b.append(",\"tickAt\":").append(recoTick).toString();
+    }
+
+    /** 엔진 reco(fire·arrMs·dest·loc) → POST /reco-text 본문. 엔진이 정한 값을 그대로 옮기고, 씨앗(무작위 고정)만 도착 시각에서 얻는다. fire 가 아니면 "". */
+    @SuppressWarnings("unchecked")
+    public static String recoBody(Map<String, Object> reco) {
+        if (reco == null || !Boolean.TRUE.equals(reco.get("fire")) || !(reco.get("arrMs") instanceof Number)) return "";
+        long arr = ((Number) reco.get("arrMs")).longValue();
+        StringBuilder b = new StringBuilder("{\"arrMs\":").append(arr).append(",\"nowMs\":").append(System.currentTimeMillis());
+        b.append(",\"dest\":").append(ShellCore.q(str(reco.get("dest")))).append(",\"seed\":").append(Math.abs(arr / 1000L) % 2147483647L);
+        Object lo = reco.get("loc");
+        if (lo instanceof Map) {
+            Object la = ((Map<String, Object>) lo).get("lat"), ln = ((Map<String, Object>) lo).get("lng");
+            if (la instanceof Number && ln instanceof Number) b.append(",\"loc\":{\"lat\":").append(((Number) la).doubleValue()).append(",\"lng\":").append(((Number) ln).doubleValue()).append("},\"foodPref\":\"server\"");
+        }
+        return b.append(",\"aiCopy\":1,\"pickShop\":1}").toString();
+    }
+
+    /** /reco-text 응답 → { 제목, 본문 }. 보낼 글이 없으면(시간대 아님·오류) null. */
+    @SuppressWarnings("unchecked")
+    public static String[] recoText(String resp) {
+        try {
+            Object o = ScreenCore.parse(resp);
+            if (!(o instanceof Map)) return null;
+            Map<String, Object> m = (Map<String, Object>) o;
+            if (!Boolean.TRUE.equals(m.get("ok")) || "none".equals(m.get("slot"))) return null;
+            String t = str(m.get("title")), b = str(m.get("body"));
+            if (t.length() == 0 || b.length() == 0) return null;
+            return new String[] { t.length() > 80 ? t.substring(0, 80) : t, b.length() > 600 ? b.substring(0, 600) : b };
+        } catch (ScreenCore.ParseError e) { return null; }
+    }
 
     /** 엔진의 진동 무늬 [켜짐, 꺼짐, 켜짐 …](웹 방식) → 안드로이드 무늬 [대기, 켜짐, 꺼짐 …]. 최대 8칸, 한 칸 최대 1초. */
     @SuppressWarnings("unchecked")

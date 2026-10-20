@@ -118,7 +118,15 @@ public class ShellActivity extends Activity {
     }
 
     private boolean resumed;
-    @Override protected void onResume() { super.onResume(); resumed = true; if (ShellCore.S_SETPG.equals(sheetName) && sheet != null && sheet.isShowing()) loadSetPage(); if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) startChatPoll(); }
+    /** 갤럭시 여부·앱 배터리 제한 여부를 저장소에 적어 둔다 — 설정 첫 화면 요청의 기기 사실(f.sam · f.samw)이 된다. */
+    private void refreshPower() {
+        try {
+            PowerInfo pi = PowerInfo.read(this);
+            store.put(ShellCore.K_SAM, pi.sam ? "1" : "0");
+            store.put(ShellCore.K_SAMW, pi.sam && pi.w ? "1" : "0");
+        } catch (Throwable t) { /* 못 읽으면 이전 값 */ }
+    }
+    @Override protected void onResume() { super.onResume(); resumed = true; refreshPower(); if (ShellCore.S_SETPG.equals(sheetName) && sheet != null && sheet.isShowing()) loadSetPage(); if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) startChatPoll(); }
     @Override protected void onPause() { resumed = false; super.onPause(); }
 
     @Override public void onBackPressed() {
@@ -329,7 +337,7 @@ public class ShellActivity extends Activity {
             case ShellCore.E_TOAST: toast(e.arg); loadSlot(slots.length - 1, true); break;
             case ShellCore.E_LINK: openLink(e.arg); break;
             case ShellCore.E_NEWS: openNews(e.arg); break;
-            case ShellCore.E_PAGE: if ("ovl".equals(e.arg)) openSetPage(); else toast("아직 옮기는 중이에요"); break;
+            case ShellCore.E_PAGE: if ("ovl".equals(e.arg) || "sam".equals(e.arg) || "arr".equals(e.arg)) openSetPage(e.arg); else toast("아직 옮기는 중이에요"); break;
             default: break;
         }
     }
@@ -1477,8 +1485,11 @@ public class ShellActivity extends Activity {
     }
 
     // ───────────── 설정 하위 화면 시트(다른 앱 위에 표시) ─────────────
-    private void openSetPage() {
+    private String setPage = "ovl";
+    private boolean arrStat;
+    private void openSetPage(String page) {
         closeSheet();
+        setPage = page; arrStat = false;
         sheetName = ShellCore.S_SETPG;
         sheetView = new ScreenView(this);
         sheetView.setDpr(dpr);
@@ -1490,7 +1501,9 @@ public class ShellActivity extends Activity {
         loadSetPage();
     }
     private void loadSetPage() {
-        final String url = ShellCore.pageUrl(store, "ovl", RideOverlay.supported(), RideOverlay.allowed(this));
+        final String url = "sam".equals(setPage) ? ShellCore.pageUrlSam(PowerInfo.read(this).pageFacts())
+            : ("arr".equals(setPage) ? ShellCore.pageUrlArr(arrStat, RideService.running, notifOk(), RideService.liveReco, RideService.recoStage, RideService.recoStageAt)
+            : ShellCore.pageUrl(store, "ovl", RideOverlay.supported(), RideOverlay.allowed(this)));
         new Thread(new Runnable() {
             @Override public void run() {
                 NetPost.Res r = NetPost.get(url, 8000);
@@ -1504,13 +1517,34 @@ public class ShellActivity extends Activity {
         }, "shell-setpg").start();
     }
     private void setPageAct(String a, String v, String key, boolean on) {
-        int r = ShellCore.routePage(store, "ovl", a, v, key, on, RideOverlay.allowed(this));
+        int r = ShellCore.routePage(store, setPage, a, v, key, on, RideOverlay.allowed(this));
         if (r == ShellCore.PG_CLOSE) { closeSheet(); loadSlot(slots.length - 1, true); return; }
+        if (r == ShellCore.PG_SAMOPEN) { PowerInfo.openSamsung(this); return; }          // 돌아오면 onResume 이 다시 읽어 그린다
+        if (r == ShellCore.PG_BATREQ) { PowerInfo.requestIgnore(this); return; }
+        if (r == ShellCore.PG_ARRTEST) { testReco(ShellCore.arrKind(v)); return; }
+        if (r == ShellCore.PG_RENDER && "arr".equals(setPage)) arrStat = true;
         if (r == ShellCore.PG_NEEDPERM) {                              // '다른 앱 위에 표시' 허용 화면(기기 설정)으로 보낸다. 돌아오면 onResume 이 다시 그린다.
             toast("설정에서 '다른 앱 위에 표시'를 허용해 주세요");
             try { startActivity(new Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName()))); } catch (Throwable t) { /* 기기가 못 열면 안내 글만 남는다 */ }
         }
         if (r != ShellCore.PG_NONE) loadSetPage();
+    }
+
+    private boolean notifOk() {
+        try { return ((android.app.NotificationManager) getSystemService(NOTIFICATION_SERVICE)).areNotificationsEnabled(); } catch (Throwable t) { return true; }
+    }
+    /** 시험 알림: 그 시간대의 실제 추천 알림을 지금 한 번 띄운다(글은 엔진). */
+    private void testReco(final String kind) {
+        if (kind == null) return;
+        toast("추천 알림을 만드는 중이에요");
+        final android.content.Context app = getApplicationContext();
+        new Thread(new Runnable() {
+            @Override public void run() {
+                final boolean ok = RecoNotify.send(app, ShellCore.arrTestBody(kind, System.currentTimeMillis()));
+                RideService.recoStage = ok ? "시험 알림 보냄(" + kind + ")" : "시험 알림 못 보냄(" + kind + ")"; RideService.recoStageAt = System.currentTimeMillis();
+                main.post(new Runnable() { @Override public void run() { if (!ok) toast("추천을 받지 못했어요"); if (sheet != null && sheet.isShowing() && "arr".equals(setPage)) { arrStat = true; loadSetPage(); } } });
+            }
+        }, "shell-recotest").start();
     }
 
     // ───────────── 즐겨찾기 시트 ─────────────

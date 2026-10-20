@@ -33,6 +33,25 @@ public class ShellJvmTest {
             ok(ShellCore.routePage(ps, "ovl", "set", null, "ovl", false, true) == ShellCore.PG_RENDER && "0".equals(ps.get(ShellCore.K_OVL, "1")), "끄면 저장 꺼짐");
             ok(ShellCore.routePage(ps, "ovl", "call", "pf.live", null, false, true) == ShellCore.PG_RENDER && "1".equals(ps.get(ShellCore.K_PFL, "0")) && ShellCore.routePage(ps, "ovl", "call", "pf.live", null, false, true) == ShellCore.PG_RENDER && "0".equals(ps.get(ShellCore.K_PFL, "1")), "위치 판단기 보정 버튼은 눌릴 때마다 켜고 끈다");
             ok(ShellCore.routePage(ps, "ovl", "call", "pg.back", null, false, true) == ShellCore.PG_CLOSE && ShellCore.routePage(ps, "ovl", "call", "ovl.diag", null, false, true) == ShellCore.PG_NONE && ShellCore.routePage(ps, "zz", "set", null, "ovl", true, true) == ShellCore.PG_NONE, "뒤로 = 닫기 · 모르는 눌림/화면은 무시");
+            ok(ShellCore.routePage(ps, "sam", "call", "sam.open", null, false, true) == ShellCore.PG_SAMOPEN && ShellCore.routePage(ps, "sam", "call", "bat.req", null, false, true) == ShellCore.PG_BATREQ
+               && ShellCore.routePage(ps, "sam", "call", "pg.back", null, false, true) == ShellCore.PG_CLOSE && ShellCore.routePage(ps, "sam", "call", "dev.stop", null, false, true) == ShellCore.PG_NONE, "절전 화면 눌림 길");
+            ps.put(ShellCore.K_SAM, "1"); ps.put(ShellCore.K_SAMW, "1");
+            ok(ShellCore.settingsFacts(ps).contains("\"sam\":1,\"samw\":1"), "설정 첫 화면 사실에 갤럭시·제한됨");
+            ok(ShellCore.pageUrlSam("{\"pf\":{\"w\":true}}").contains("p=sam&f=") && ShellCore.pageUrlSam("{}").contains("cap=" + ShellCore.SETTINGS_CAP), "절전 화면 주소");
+            ok("lunch".equals(ShellCore.arrKind("arr.t.lunch")) && ShellCore.arrKind("arr.t.x") == null && ShellCore.arrKind("arr.stat") == null && ShellCore.arrKind(null) == null, "시험 알림 종류 읽기");
+            ok(ShellCore.routePage(ps, "arr", "call", "arr.t.shop", null, false, true) == ShellCore.PG_ARRTEST && ShellCore.routePage(ps, "arr", "call", "arr.stat", null, false, true) == ShellCore.PG_RENDER
+               && ShellCore.routePage(ps, "arr", "call", "pg.back", null, false, true) == ShellCore.PG_CLOSE && ShellCore.routePage(ps, "arr", "call", "arr.demo", null, false, true) == ShellCore.PG_NONE, "하차 추천 화면 눌림 길");
+            {
+                String ab = ShellCore.arrTestBody("lunch", 1760000000000L);
+                long am = Long.parseLong(ab.substring(ab.indexOf("\"arrMs\":") + 8, ab.indexOf(',')));
+                ok(am % 86400000L == 12600000L && am <= 1760000000000L + 86400000L && am > 1760000000000L - 86400000L, "점심 시험 도착 시각 = 한국시간 12:30: " + am);
+                ok(ab.contains("\"nowMs\":" + (am - 300000L)) && ab.contains("\"foodPref\":\"server\"") && ab.endsWith("\"pickShop\":1}"), "시험 본문 모양");
+                String au = ShellCore.pageUrlArr(false, true, true, "", "", 0L);
+                ok(au.contains("p=arr&f=") && !au.contains("%22st%22"), "상태 확인 전에는 st 를 싣지 않는다");
+                String au2 = ShellCore.pageUrlArr(true, true, false, "\"dest\":\"강남\",\"rem\":300", "시험", 5L);
+                String dec = java.net.URLDecoder.decode(au2, "UTF-8");
+                ok(dec.contains("\"st\":{\"timer\":true,\"route\":true,\"pre\":7,\"tzo\":-540,\"policy\":false,\"dest\":\"강남\",\"rem\":300,\"dg\":{\"stage\":\"시험\",\"at\":5}}"), "상태 확인 사실: " + dec);
+            }
             String pu = ShellCore.pageUrl(ps, "ovl", true, false);
             ok(pu.startsWith("https://route-v2.phg0643.workers.dev/screen/settings?cap=8&p=ovl&f=") && pu.indexOf(' ') < 0 && pu.indexOf('"') < 0 && ShellCore.netOk(pu), "하위 화면 주소: 인코딩 · 허용 목록");
         }
@@ -83,7 +102,7 @@ public class ShellJvmTest {
         // ── 설정 사실 ──
         ShellCore.MemStore s2 = new ShellCore.MemStore();
         String f = ShellCore.settingsFacts(s2);
-        ok(f.equals("{\"id\":\"\",\"np\":{\"arrive\":1,\"transfer\":1,\"arrive_reco\":1},\"ovl\":0,\"rl\":1,\"th\":\"pastel\",\"pt\":{},\"day\":\"\"}"), "기본 기기 사실: " + f);
+        ok(f.equals("{\"id\":\"\",\"np\":{\"arrive\":1,\"transfer\":1,\"arrive_reco\":1},\"ovl\":0,\"sam\":0,\"samw\":0,\"pgs\":[\"sam\",\"ovl\",\"arr\"],\"rl\":1,\"th\":\"pastel\",\"pt\":{},\"day\":\"\"}"), "기본 기기 사실: " + f);
         s2.put("comm_id", "길동무7"); s2.put("np_transfer", "0"); s2.put("ride_log_off", "1"); s2.put("theme", "dark");
         f = ShellCore.settingsFacts(s2);
         ok(f.contains("\"id\":\"길동무7\"") && f.contains("\"transfer\":0") && f.contains("\"rl\":0") && f.contains("\"th\":\"dark\""), "바뀐 기기 사실");
@@ -464,6 +483,26 @@ public class ShellJvmTest {
             ok(RideCore.offKinds(ns).size() == 5 && RideCore.startBody(18, "{\"data\":{}}", RideCore.offKinds(ns)).equals("{\"cap\":18,\"r\":{\"data\":{},\"allowed\":{\"near_arrive2\":false,\"near_arrive\":false,\"arrive\":false,\"transfer2\":false,\"transfer\":false}}}"), "끈 알림 종류가 allowed 로 실린다");
             ns.put("np_arrive", "1");
             ok(RideCore.offKinds(ns).toString().equals("[transfer2, transfer]") && RideCore.startBody(18, "", RideCore.offKinds(ns)).contains("\"r\":null"), "환승만 끄면 환승 2종만");
+            ns.put("np_arrive_reco", "0");
+            ok(RideCore.offKinds(ns).toString().equals("[transfer2, transfer, arrive_reco]"), "하차 추천 알림을 끄면 arrive_reco 가 꺼진 목록에 든다");
+            ns.put("np_arrive_reco", "1");
+            {
+                String rqb = RideCore.recoBody((java.util.Map<String, Object>) ScreenCore.parse("{\"fire\":true,\"arrMs\":1760000000000,\"dest\":\"강남\",\"loc\":{\"lat\":37.5,\"lng\":127.02}}"));
+                ok(rqb.startsWith("{\"arrMs\":1760000000000,\"nowMs\":") && rqb.contains("\"dest\":\"강남\"") && rqb.contains("\"loc\":{\"lat\":37.5,\"lng\":127.02},\"foodPref\":\"server\"") && rqb.endsWith(",\"aiCopy\":1,\"pickShop\":1}"), "추천 요청 본문: " + rqb);
+                ok(RideCore.recoBody((java.util.Map<String, Object>) ScreenCore.parse("{\"fire\":false}")).length() == 0 && RideCore.recoBody((java.util.Map<String, Object>) ScreenCore.parse("{\"fire\":true}")).length() == 0, "fire 가 아니거나 도착 시각이 없으면 보내지 않는다");
+                ok(!RideCore.recoBody((java.util.Map<String, Object>) ScreenCore.parse("{\"fire\":true,\"arrMs\":5,\"dest\":\"X\"}")).contains("loc"), "좌표가 없으면 loc 를 싣지 않는다");
+                String[] tx = RideCore.recoText("{\"ok\":true,\"slot\":\"lunch\",\"title\":\"하차 5분 전\",\"body\":\"점심 어때요\"}");
+                ok(tx != null && tx[0].equals("하차 5분 전") && tx[1].equals("점심 어때요"), "추천 글 읽기");
+                ok(RideCore.recoText("{\"ok\":true,\"slot\":\"none\"}") == null && RideCore.recoText("{\"ok\":false}") == null && RideCore.recoText("망가짐") == null, "시간대 아님·오류·깨진 응답은 글 없음");
+            }
+            {
+                RideCore rr = new RideCore();
+                ok(rr.recoStatJson().length() == 0, "한 번도 못 받았으면 상태 조각 없음");
+                RideCore.Step st1 = rr.onStep("{\"state\":{\"v\":1},\"reco\":{\"fire\":false,\"dest\":\"강남\",\"remSec\":300,\"slot\":\"lunch\",\"dinner\":false,\"alertAt\":7}}");
+                ok(st1.ok && st1.recoBody.length() == 0 && rr.recoStatJson().startsWith("\"dest\":\"강남\",\"slot\":\"lunch\",\"dinner\":false,\"rem\":300,\"alertAt\":7,\"tickAt\":"), "추천 상태 조각: " + rr.recoStatJson());
+                RideCore.Step st2 = rr.onStep("{\"state\":{\"v\":1},\"reco\":{\"fire\":true,\"arrMs\":9000,\"dest\":\"강남\"}}");
+                ok(st2.ok && st2.recoBody.startsWith("{\"arrMs\":9000,"), "fire 면 본문을 만든다");
+            }
             ok(RideCore.startBody(18, "{\"data\":{}}", null, true).equals("{\"cap\":18,\"r\":{\"data\":{},\"pf\":true}}") && RideCore.startBody(18, "{\"data\":{}}", RideCore.offKinds(ns), true).endsWith(",\"pf\":true}}") && RideCore.startBody(18, "{\"data\":{}}", null, false).equals("{\"cap\":18,\"r\":{\"data\":{}}}"), "탑승 시작 요청: 위치 판단기 보정 스위치(pf)");
             ok(RideCore.startBody(18, "{\"data\":{}}").equals("{\"cap\":18,\"r\":{\"data\":{}}}") && RideCore.startBody(18, "").contains("\"r\":null"), "탑승 시작 요청 본문");
             ok(rc.onStart("{\"ok\":false,\"error\":\"longdist\",\"msg\":\"장거리 경로는 탑승 안내를 지원하지 않아요\"}").startsWith("장거리") && !rc.hasState(), "엔진이 거절하면 그 글을 그대로 돌려준다");

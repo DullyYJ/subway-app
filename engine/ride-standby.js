@@ -23,6 +23,7 @@
 //         alert:null|{key,type,title,body,vib:[ms…]}   지금 울릴 알림 하나(같은 순간에 걸린 나머지는 보낸 것으로 처리),
 //         done:bool                 안내를 끝내도 된다(목적지 도착 알림 뒤 3분),
 //         overlay:null|{…}          네이티브 오버레이에 그릴 값(OverlayPlugin.update 와 같은 모양 — state.ovl 그림 틀이 있을 때만),
+//         reco:{fire,why,dest,remSec?,slot?,dinner?,alertAt,key?,arrMs?,remMin?,loc?}   하차 7분 전 추천을 지금 보낼 때인가(arrive-reco 규칙 · 한 여정 한 번) — 글은 /reco-text. fire 가 아니어도 남은 초·시간대는 실려 '상태 확인'이 쓴다,
 //         view:{text,line1,line2,curIdx,at}   앱을 다시 열었을 때 보여 줄 마지막 상태,
 //         pos:null|{from,to,ratio,moving}  지금 위치(노드 번호 from→to, 구간 비율) — 결과 카드의 내 위치 마커용, arr:[HH:MM…] 노드별 도착 시각,
 //         zero:{…}                  ride-track 영점 결과(진단용), notes:[…] }
@@ -139,6 +140,26 @@ function rsOverlay(st, r, curIdx, curPos, now, dest, destName, moving, done) {
   var out = { active: true, line1: line1, pill: pill, track: [], cur: cur, base: ov.base || 0, line2: line2, line3: '', alert: arrived ? 0 : lv, alertAt: oa.at || 0, alertVibe: false, banner: banner, destName: destName || '', pre: !arrived && pre === 1, moving: !!moving, rs: rs, reco: { on: false }, cells: cells };
   if (ov.theme) out.theme = ov.theme;
   return out;
+}
+
+function rsRecoFn() { return (typeof arrRecoWhen === 'function') ? arrRecoWhen : (function () { try { return require('./arrive-reco').arrRecoWhen; } catch (e) { return null; } })(); }
+// 하차 7분 전 추천(맛집·커피·쇼핑 문구)을 지금 보낼 때인가. 판단만 하고 글은 /reco-text 가 만든다. 한 여정에 한 번(st.recoKey), 30분 안에 보냈으면 다시 안 한다(st.recoAt).
+//   반환 { fire, key, arrMs, dest, slot, dinner, remMin, loc:{lat,lng}|null } — 앱은 fire 일 때만 /reco-text 에 이 값을 그대로 보낸다.
+function rsReco(st, r, dest, destName, now, off) {
+  var cfg = st.cfg || {}, fn = rsRecoFn();
+  var base = { fire: false, dest: destName || '', alertAt: st.recoAt || 0 };
+  if (!fn || !dest || st.wait || off || (cfg.allowed || {}).arrive_reco === false) { base.why = 'off'; return base; }
+  var dn = dest.nodeIdx, arrMs = (r.etaMs && dn >= 0) ? r.etaMs[dn] : null;
+  if (arrMs == null || !isFinite(arrMs)) { base.why = 'noeta'; return base; }
+  var remSec = Math.round((arrMs - now) / 1000);
+  var w = fn({ arrMs: arrMs, remSec: remSec, nowMs: now, dest: destName || '', lastKey: st.recoKey || '', lastAt: st.recoAt || 0 });
+  base.remSec = remSec; base.slot = w ? w.slot : 'none'; base.dinner = !!(w && w.dinner); base.why = w ? w.why : 'input';
+  if (!w || !w.fire) return base;
+  st.recoKey = w.key; st.recoAt = now; base.alertAt = now;
+  var loc = null, stops = st.stops || [], q;
+  for (q = 0; q < stops.length; q++) if (stops[q].i === dn) { loc = { lat: stops[q].lat, lng: stops[q].lng }; break; }
+  base.fire = true; base.key = w.key; base.arrMs = arrMs; base.remMin = w.remMin; base.loc = loc;
+  return base;
 }
 
 function rsDistM(aLat, aLng, bLat, bLng) {
@@ -396,8 +417,10 @@ function rideStandby(req) {
   var nextMs = rsNextMs(st, r, now, O);
   try { overlay = rsOverlay(st, r, curIdx, al.curPos, now, dest, cfg.destName || (dest && dest.name) || '', moving, done); } catch (eOv) { notes.push('오버레이 계산 실패: ' + (eOv && eOv.message)); }
   if (offActive && overlay && overlay.active) { overlay.alert = 0; overlay.pre = false; overlay.banner = '경로를 벗어났어요 — 앱을 열면 다시 찾아 드려요'; }
+  var reco = { fire: false };
+  try { if (!done) reco = rsReco(st, r, dest, cfg.destName || (dest && dest.name) || '', now, offActive); } catch (eRc) { notes.push('추천 판단 실패: ' + (eRc && eRc.message)); }
   var view = { text: text, line1: overlay && overlay.line1 || '', line2: overlay && overlay.line2 || '', curIdx: curIdx, at: now };
-  return { v: 1, state: st, ongoing: { title: O.ongoingTitle, text: text }, alert: al.alert, done: done, curIdx: curIdx, overlay: overlay, view: view, pos: r.pos ? { from: r.pos.from, to: r.pos.to, ratio: r.pos.ratio, moving: !!r.pos.moving } : null, arr: r.arr || null, zero: zero, nextMs: done ? O.stepMs : nextMs, motion: tk && tk.motion ? tk.motion : null, notes: notes };
+  return { v: 1, state: st, ongoing: { title: O.ongoingTitle, text: text }, alert: al.alert, done: done, curIdx: curIdx, overlay: overlay, reco: reco, view: view, pos: r.pos ? { from: r.pos.from, to: r.pos.to, ratio: r.pos.ratio, moving: !!r.pos.moving } : null, arr: r.arr || null, zero: zero, nextMs: done ? O.stepMs : nextMs, motion: tk && tk.motion ? tk.motion : null, notes: notes };
 }
 
 function handleRideStandby(request) {

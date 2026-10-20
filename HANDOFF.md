@@ -1694,3 +1694,12 @@
 - 앱: `RideCore.sceneJson()` 이 저장된 탑승 상태에서 재료를 뽑고, `RideService.liveScene` 이 5초 주기 결과로 갱신, `HcardsCore.rideScene` 이 `rd` 로 실어 보낸다. 앱은 그림만 그리고 판단은 엔진.
 - 시험: hcards_engine 31 · JVM(RideCore.sceneJson · HcardsCore rd 키). 워커 `route-v2-2026-10-20s102`. 기기에서는 확인 못 함.
 - 남은 것: 설정 하위 화면(출퇴근 브리핑·하차 추천 시험·절전 제외·캐릭터 위젯·개발자 도구), 옛 최근경로·포인트 가져오기.
+
+## 2026-10-21 엔진 s103 + native-shell — 설정 하위 화면 2개(절전 제외 · 하차 추천 시험) + 하차 7분 전 추천 알림
+
+- **절전 제외(`sam`)**: `PowerInfo` 가 기기 사실(배터리 최적화 제외 여부 · 앱 배터리 제한됨 · 앱 대기 등급)을 읽어 엔진 `sam` 화면에 보낸다. `sam.open` = 삼성 자동 절전 목록 → 안 열리면 앱 정보, `bat.req` = 배터리 최적화 제외 요청(매니페스트 `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`) → 목록 → 앱 정보. 설정 첫 화면의 갤럭시 줄은 `onResume` 에서 저장소 `dev_sam/dev_samw` 로 갱신.
+- **하차 7분 전 추천 알림(새 기능 — 네이티브엔 원래 없었다)**: 엔진 `ride-standby` 가 `reco{fire,why,dest,remSec,slot,dinner,alertAt,key,arrMs,remMin,loc}` 를 돌려준다(`arrRecoWhen` 규칙: 도착 7~1분 전 · 한 여정 한 번 · 30분 중복 방지 · `cfg.allowed.arrive_reco===false` 면 끔 · 대기/이탈 중엔 안 함). `RideCore.onStep` 이 fire 면 `/reco-text` 본문(`recoBody`: 도착지 좌표로 맛집 서버, aiCopy, pickShop)을 만들고 `RideService.fireReco` → `RecoNotify.send`(두 번까지 시도, 제목·본문은 엔진 글 그대로). 설정의 "하차 추천" 알림 스위치(`np_arrive_reco`)는 `RideCore.offKinds` 에 `arrive_reco` 로 실린다. **날씨는 아직 안 보낸다**(엔진은 날씨 없이도 문구를 만든다).
+- **하차 추천 시험(`arr`)**: 커피/점심/야식/쇼핑 버튼 = 그 시간대(한국시간 08:30·12:30·19:30·22:00 도착, 5분 전 기준)로 `/reco-text` 를 불러 알림을 지금 띄운다(도착지 강남역 좌표). "상태 확인" = 탑승 서비스가 마지막으로 받은 `reco` 값(남은 시간·시간대·마지막 발송) + 마지막 시험 결과. 웹 시절의 "추천 캐릭터 미리보기"는 오버레이 애니메이션이라 앱에선 감췄다(`f.nv`).
+- 설정 첫 화면 `pgs:['sam','ovl','arr']` 사실로 아직 안 옮긴 줄(출퇴근 브리핑·캐릭터 시계 위젯·개발자 도구)은 엔진이 감춘다.
+- 시험: ride_standby 26(추천 한 번 · 끔/대기) · settings_engine 164(arr nv · pgs) · JVM(PowerInfo 제외 — routePage sam/arr · arrTestBody · pageUrlArr · recoBody/recoText · recoStatJson · offKinds). 워커 `route-v2-2026-10-20s103`. 기기 확인 못 함.
+- **안 옮긴 것과 이유**: 출퇴근 브리핑(`cm`) — 화면만이 아니라 "날씨 + AI 역무원 요약" 알림 본문을 만드는 엔진 엔드포인트가 아직 없고(`/commute-alarm` 은 시각 판단만), 시간 예약(AlarmManager) · 장소 입력의 버스 정류장 검색이 새로 필요. 캐릭터 시계 위젯(`gw`) — 안드로이드 위젯 + 동물 애니메이션. 개발자 도구(`dev`) — 출시 전 삭제 예정 시험 도구. 옛 최근경로·포인트 가져오기도 아직.

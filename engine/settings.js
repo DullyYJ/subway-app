@@ -9,7 +9,7 @@
 //        cap   = 앱이 그릴 수 있는 화면 규격 수준(3 이상이어야 설정 화면을 만든다)
 //        facts = 앱이 모은 기기 사실(전부 선택 — 없으면 기본값):
 //          id: 현재 커뮤니티 아이디('' 이면 없음) · np:{arrive,transfer,arrive_reco: 1|0} · npd: 알림 권한 거부(1|0) · rl: 도착 오차 기록(1|0)
-//          th: 'dark'|'pastel' · sam: 갤럭시(1|0) · samw: 앱 배터리 '제한됨'(1|0) · errn: 오류 로그 개수 · cm: 출퇴근 알림(1|0|없음) · ovl: 오버레이(1|0|없음)
+//          th: 'dark'|'pastel' · sam: 갤럭시(1|0) · samw: 앱 배터리 '제한됨'(1|0) · errn: 오류 로그 개수 · cm: 출퇴근 알림(1|0|없음) · ovl: 오버레이(1|0|없음) · pgs: 앱이 열 수 있는 하위 화면 이름들(['sam','ovl','arr'] — 없으면 모두 보인다)
 //          pt: { total, today, todayStr, rc, rcStr }(규칙 엔진이 만든 포인트 저장값 그대로 — 없으면 포인트 칸 없음) · day: 오늘 날짜 글자('2026-10-20')
 // 출력  { ok, v:1, screen:'settings', rev, cover:'tab', head:[], body:[노드…] }  ← 노드 종류는 native/shell/ScreenCore.java 와 같다
 //        panel{kids} · text · box · toggle{key} · navrow{act} · select{act:{a:'sel'}} · field{key} · button · spacer
@@ -44,7 +44,8 @@ function settingsFacts(f) {
     id: settingsStr(f.id, 12), np: {}, npd: settingsFlag(f.npd, false), rl: settingsFlag(f.rl, true), th: f.th === 'dark' ? 'dark' : 'pastel',
     sam: settingsFlag(f.sam, false), samw: settingsFlag(f.samw, false), errn: Math.max(0, Math.min(999, Math.floor(Number(f.errn) || 0))),
     cm: f.cm == null ? null : settingsFlag(f.cm, false), ovl: f.ovl == null ? null : settingsFlag(f.ovl, false),
-    pt: (f.pt && typeof f.pt === 'object') ? f.pt : null, day: settingsStr(f.day, 20)
+    pt: (f.pt && typeof f.pt === 'object') ? f.pt : null, day: settingsStr(f.day, 20),
+    pgs: Array.isArray(f.pgs) ? f.pgs.filter(function (x) { return typeof x === 'string'; }).slice(0, 8) : null          // 앱이 실제로 열 수 있는 하위 화면 이름들(없으면 모두 보인다)
   };
   SETTINGS_NOTIF.forEach(function (n) { o.np[n.key] = settingsFlag(np[n.key], true); });          // 알림은 기본 켜짐(저장값이 0 일 때만 꺼짐)
   return o;
@@ -72,6 +73,7 @@ function settingsScreen(inp, factsIn) {
   if (inp.p) return settingsPageScreen(inp, factsIn);
   var f = settingsFacts(factsIn), body = [];
   var pg = Number(inp.cap) >= SETTINGS_PAGE_CAP;                       // 새 앱이면 눌렀을 때 네이티브 하위 화면으로(act call pg.<이름>), 옛 앱이면 예전 웹 카드 시트로(act web)
+  var pgHas = function (k) { return !f.pgs || f.pgs.indexOf(k) >= 0; };
   var pgAct = function (k) { return pg ? { a: 'call', v: 'pg.' + k } : { a: 'web', v: k }; };
 
   // 1) 커뮤니티 아이디
@@ -102,7 +104,7 @@ function settingsScreen(inp, factsIn) {
     var sd = settingsBoldN([['갤럭시는 며칠 안 쓴 앱을 자동 절전시켜 화면이 꺼진 동안의 하차 알림이 멈출 수 있어요. 길동무를 ', 0], ['자동으로 절전하지 않는 앱', 1], ['에 넣어 두면 안전해요.', 0]]);
     sk.push(settingsDescN(sd.s, 8, sd.hl));
     if (f.samw) sk.push({ t: 'box', s: '이 앱의 배터리 사용이 제한됨으로 되어 있어요. 앱 정보 > 배터리에서 제한 없음으로 바꿔 주세요.', size: 12, lh: 1.5, tc: '#ff9f0a', color: 'text', fill: 'rgba(255,159,10,0.12)', line: 'rgba(255,159,10,0.35)', r: 10, ip: [12, 10, 12, 10], pad: [0, 0, 0, 4] });
-    sk.push(settingsNavN('자동 절전 제외 설정 열기', f.samw ? '제한됨' : '', pgAct('sam'), true));
+    if (pgHas('sam')) sk.push(settingsNavN('자동 절전 제외 설정 열기', f.samw ? '제한됨' : '', pgAct('sam'), true));
     body.push(settingsPanelN(sk));
   }
 
@@ -124,12 +126,12 @@ function settingsScreen(inp, factsIn) {
 
   // 6) 웹 카드로 이어지는 기능들(복잡한 입력·시험 도구는 기존 웹 카드를 그대로 연다)
   var wk = [settingsTitleN('기능 설정', 2), settingsDescN('시간·장소·시험처럼 입력이 많은 설정은 눌러서 열어요.', 4)];
-  wk.push(settingsNavN('출퇴근 브리핑 알림', f.cm == null ? '' : (f.cm ? '켜짐' : '꺼짐'), pgAct('cm'), true));
-  wk.push(settingsNavN('캐릭터 시계 위젯', '', pgAct('gw'), true));
-  wk.push(settingsNavN('하차 5분 전 추천 시험', '', pgAct('arr'), true));
-  wk.push(settingsNavN('다른 앱 위에 표시', f.ovl == null ? '' : (f.ovl ? '켜짐' : '꺼짐'), pgAct('ovl'), true));
-  wk.push(settingsNavN('개발자 도구', '', pgAct('dev'), true));
-  body.push(settingsPanelN(wk));
+  if (pgHas('cm')) wk.push(settingsNavN('출퇴근 브리핑 알림', f.cm == null ? '' : (f.cm ? '켜짐' : '꺼짐'), pgAct('cm'), true));
+  if (pgHas('gw')) wk.push(settingsNavN('캐릭터 시계 위젯', '', pgAct('gw'), true));
+  if (pgHas('arr')) wk.push(settingsNavN(f.pgs ? '하차 7분 전 추천 시험' : '하차 5분 전 추천 시험', '', pgAct('arr'), true));
+  if (pgHas('ovl')) wk.push(settingsNavN('다른 앱 위에 표시', f.ovl == null ? '' : (f.ovl ? '켜짐' : '꺼짐'), pgAct('ovl'), true));
+  if (pgHas('dev')) wk.push(settingsNavN('개발자 도구', '', pgAct('dev'), true));
+  if (wk.length > 2) body.push(settingsPanelN(wk));
 
   // 7) 테마
   var dk = f.th === 'dark';
@@ -309,12 +311,12 @@ function settingsArrSlot(st) {                                      // 예전 _a
   if (st.slot === 'shop') return '쇼핑 (21:01~)';
   return '추천 없는 시간대 (00:00~07:00)';
 }
-function settingsArrLines(st) {                                     // 예전 _arrStatusShow 와 같은 줄들
+function settingsArrLines(st, nv) {                                     // 예전 _arrStatusShow 와 같은 줄들
   var L = [];
   if (st.err) { L.push('상태 확인 오류: ' + st.err); return L; }
-  L.push('감시 타이머: ' + (st.timer ? '동작 중 (20초마다)' : '없음'));
+  L.push(nv ? '탑승 안내: ' + (st.timer ? '동작 중 (5초마다 확인)' : '꺼져 있음') : '감시 타이머: ' + (st.timer ? '동작 중 (20초마다)' : '없음'));
   L.push('현재 경로: ' + (st.route ? ((st.dest || '-') + ' 도착 예정') : '없음 (탑승 상태 아님)'));
-  if (st.rem != null) L.push('남은 시간: ' + Math.floor(st.rem / 60) + '분 ' + (st.rem % 60) + '초' + (st.rem > st.pre * 60 ? '  (10분 되면 발사)' : '  (발사 구간)'));
+  if (st.rem != null) L.push('남은 시간: ' + Math.floor(st.rem / 60) + '분 ' + (st.rem % 60) + '초' + (st.rem > st.pre * 60 ? '  (' + st.pre + '분 되면 발사)' : '  (발사 구간)'));
   else L.push('남은 시간: 아직 측정 전');
   L.push('지금 시간대: ' + settingsArrSlot(st));
   L.push('마지막 발송: ' + (st.alertAt != null ? settingsClock(st.alertAt, st.tzo) + '  (30분간 재발송 안 함)' : '없음'));
@@ -325,13 +327,13 @@ function settingsArrLines(st) {                                     // 예전 _a
   return L;
 }
 function settingsPageArr(f) {
-  var k = [settingsTitleN('하차 5분 전 추천', 4),
-    settingsDescN('도착 5분 전에 시간대별로 보내는 추천이에요. 실제 알림과 같은 내용으로 바로 확인해 볼 수 있어요. 버튼을 누르면 오버레이 아래에도 90초간 뜹니다(오버레이를 켜 둔 상태 — 접혀 있어도 저절로 펼쳐져요).', 12),
+  var k = [settingsTitleN(f.nv ? '하차 7분 전 추천' : '하차 5분 전 추천', 4),
+    settingsDescN(f.nv ? '도착 7분 전에 시간대별로 보내는 추천이에요. 버튼을 누르면 그 시간대의 실제 알림과 같은 내용이 바로 알림으로 와요(도착지는 강남역으로 가정, 알림 권한이 필요해요).' : '도착 5분 전에 시간대별로 보내는 추천이에요. 실제 알림과 같은 내용으로 바로 확인해 볼 수 있어요. 버튼을 누르면 오버레이 아래에도 90초간 뜹니다(오버레이를 켜 둔 상태 — 접혀 있어도 저절로 펼쳐져요).', 12),
     settingsRowN([settingsBtnN('커피', 'arr.t.morning', { size: 12 }), settingsBtnN('점심', 'arr.t.lunch', { size: 12 }), settingsBtnN('야식', 'arr.t.night', { size: 12 }), settingsBtnN('쇼핑', 'arr.t.shop', { size: 12 })]),
-    settingsBtnN('추천 캐릭터 미리보기', 'arr.demo', { mb: 6 }),
-    settingsSmallN('캐릭터 하나가 오른쪽에서 추천 줄(실제 가게·쿠팡 상품 이름)을 끌고 들어오는 모습을 14초간 보여 줘요(앱 위에 바로 떠요). 누를 때마다 다른 캐릭터와 다른 종류(식당·카페·쿠팡)가 나오고, 화면을 누르면 닫혀요. \'다른 앱 위에 표시\' 권한이 필요해요.', 0, 10),
+    f.nv ? null : settingsBtnN('추천 캐릭터 미리보기', 'arr.demo', { mb: 6 }),
+    f.nv ? null : settingsSmallN('캐릭터 하나가 오른쪽에서 추천 줄(실제 가게·쿠팡 상품 이름)을 끌고 들어오는 모습을 14초간 보여 줘요(앱 위에 바로 떠요). 누를 때마다 다른 캐릭터와 다른 종류(식당·카페·쿠팡)가 나오고, 화면을 누르면 닫혀요. \'다른 앱 위에 표시\' 권한이 필요해요.', 0, 10),
     settingsBtnN('상태 확인', 'arr.stat', { gold: true, mb: 10 }),
-    settingsStatN(f.st ? settingsArrLines(f.st).join('\n') : '\'상태 확인\'을 누르면 감시 상태와 남은 시간이 표시됩니다.')];
+    settingsStatN(f.st ? settingsArrLines(f.st, f.nv).join('\n') : '\'상태 확인\'을 누르면 감시 상태와 남은 시간이 표시됩니다.')].filter(Boolean);
   return [settingsPanelN(k, 8)];
 }
 // ── 캐릭터 시계 위젯 ──

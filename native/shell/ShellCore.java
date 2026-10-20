@@ -68,6 +68,8 @@ public final class ShellCore {
         }
         b.append('}');
         b.append(",\"ovl\":").append("1".equals(st.get(K_OVL, "0")) ? 1 : 0);
+        b.append(",\"sam\":").append("1".equals(st.get(K_SAM, "0")) ? 1 : 0).append(",\"samw\":").append("1".equals(st.get(K_SAMW, "0")) ? 1 : 0);
+        b.append(",\"pgs\":[\"sam\",\"ovl\",\"arr\"]");                           // 이 앱이 열 수 있는 하위 화면(나머지 줄은 엔진이 감춘다)
         b.append(",\"rl\":").append("1".equals(st.get(K_RIDELOG_OFF, "0")) ? 0 : 1);
         b.append(",\"th\":").append(q(theme(st)));
         b.append(",\"pt\":").append(RulesCore.ptOf(st)).append(",\"day\":").append(q(st.get(K_DAY, ""))).append('}');
@@ -79,8 +81,43 @@ public final class ShellCore {
     }
 
     // ═════════════ 설정 하위 화면: 다른 앱 위에 표시(ovl) ═════════════
-    public static final int PG_NONE = 0, PG_RENDER = 1, PG_CLOSE = 2, PG_NEEDPERM = 3;
+    public static final int PG_NONE = 0, PG_RENDER = 1, PG_CLOSE = 2, PG_NEEDPERM = 3, PG_SAMOPEN = 4, PG_BATREQ = 5, PG_ARRTEST = 6;
     /** 하위 화면 주소. 지원 여부·허용 여부는 기기 사실이라 껍데기가 알려 준다(글은 엔진이 만든다). */
+    /** 절전 화면(sam) 주소 — pfJson 은 기기가 읽은 사실({"pf":{w,ig,bk,sok}}). */
+    public static String pageUrlSam(String pfJson) {
+        try { return BASE + "/screen/settings?cap=" + SETTINGS_CAP + "&p=sam&f=" + URLEncoder.encode(pfJson, "UTF-8"); }
+        catch (java.io.UnsupportedEncodingException e) { return BASE + "/screen/settings?cap=" + SETTINGS_CAP + "&p=sam"; }
+    }
+    /** 하차 추천 시험 화면(arr) 주소. stat 이 true 면 '상태 확인' 결과를 싣는다. */
+    public static String pageUrlArr(boolean showStat, boolean timer, boolean policy, String recoInner, String stage, long stageAt) {
+        StringBuilder b = new StringBuilder("{\"pf\":{\"nat\":true,\"nv\":true");
+        if (showStat) {
+            b.append(",\"st\":{\"timer\":").append(timer).append(",\"route\":").append(recoInner.length() > 0).append(",\"pre\":7,\"tzo\":-540,\"policy\":").append(policy);
+            if (recoInner.length() > 0) b.append(',').append(recoInner);
+            if (stage.length() > 0) b.append(",\"dg\":{\"stage\":").append(q(stage)).append(stageAt > 0 ? ",\"at\":" + stageAt : "").append('}');
+            b.append('}');
+        }
+        b.append("}}");
+        try { return BASE + "/screen/settings?cap=" + SETTINGS_CAP + "&p=arr&f=" + URLEncoder.encode(b.toString(), "UTF-8"); }
+        catch (java.io.UnsupportedEncodingException e) { return BASE + "/screen/settings?cap=" + SETTINGS_CAP + "&p=arr"; }
+    }
+    /** 'arr.t.<시간대>' 누름 → 시간대 이름(morning · lunch · night · shop), 아니면 null. */
+    public static String arrKind(String v) {
+        if (v == null || !v.startsWith("arr.t.")) return null;
+        String k = v.substring(6);
+        return ("morning".equals(k) || "lunch".equals(k) || "night".equals(k) || "shop".equals(k)) ? k : null;
+    }
+    /**
+     * 시험 알림 요청 본문. 그 시간대에 드는 한국시간 시각(커피 08:30 · 점심 12:30 · 야식 19:30 · 쇼핑 22:00)을 도착 시각으로, 그 5분 전을 '지금'으로 엔진에 알려 준다.
+     * 도착지는 강남역 좌표(맛집 서버에서 가게를 받아 오게). 글은 엔진이 만든다.
+     */
+    public static String arrTestBody(String kind, long nowMs) {
+        int min = "morning".equals(kind) ? 8 * 60 + 30 : ("lunch".equals(kind) ? 12 * 60 + 30 : ("night".equals(kind) ? 19 * 60 + 30 : 22 * 60));
+        long kstDay = Math.floorDiv(nowMs + 9L * 3600000L, 86400000L) * 86400000L - 9L * 3600000L;
+        long arr = kstDay + min * 60000L;
+        return "{\"arrMs\":" + arr + ",\"nowMs\":" + (arr - 5L * 60000L) + ",\"dest\":\"강남\",\"seed\":" + Math.abs(nowMs / 1000L) % 2147483647L
+            + ",\"loc\":{\"lat\":37.4979,\"lng\":127.0276},\"foodPref\":\"server\",\"aiCopy\":1,\"pickShop\":1}";
+    }
     public static String pageUrl(Store st, String page, boolean supported, boolean granted) {
         String pf = "{\"pf\":{\"nat\":true,\"nv\":true,\"sup\":" + supported + ",\"gr\":" + granted + ",\"on\":" + "1".equals(st.get(K_OVL, "0")) + ",\"pfl\":" + "1".equals(st.get(K_PFL, "0")) + "}}";
         try { return BASE + "/screen/settings?cap=" + SETTINGS_CAP + "&p=" + URLEncoder.encode(page, "UTF-8") + "&f=" + URLEncoder.encode(pf, "UTF-8"); }
@@ -88,6 +125,20 @@ public final class ShellCore {
     }
     /** 하위 화면 눌림(스위치는 a=set · key=ovl). 스위치를 켰는데 권한이 없으면 PG_NEEDPERM — 껍데기가 기기 설정 화면을 연다. */
     public static int routePage(Store st, String page, String a, String v, String key, boolean on, boolean granted) {
+        if ("sam".equals(page)) {
+            if (!"call".equals(a)) return PG_NONE;
+            if ("pg.back".equals(v)) return PG_CLOSE;
+            if ("sam.open".equals(v)) return PG_SAMOPEN;
+            if ("bat.req".equals(v)) return PG_BATREQ;
+            return PG_NONE;
+        }
+        if ("arr".equals(page)) {
+            if (!"call".equals(a)) return PG_NONE;
+            if ("pg.back".equals(v)) return PG_CLOSE;
+            if (arrKind(v) != null) return PG_ARRTEST;
+            if ("arr.stat".equals(v)) return PG_RENDER;
+            return PG_NONE;
+        }
         if (!"ovl".equals(page)) return PG_NONE;
         if ("set".equals(a) && "ovl".equals(key)) { st.put(K_OVL, on ? "1" : "0"); return on && !granted ? PG_NEEDPERM : PG_RENDER; }
         if ("call".equals(a) && "pg.back".equals(v)) return PG_CLOSE;
@@ -202,7 +253,7 @@ public final class ShellCore {
     public static String mode(Store st) { String m = st.get(K_MODE, MODE_DEFAULT); return isMode(m) ? m : MODE_DEFAULT; }
 
     public static final String S_SETTINGS = "settings", S_SHOP = "shop", S_NEWS = "news", S_CCHIPS = "cchips", S_PENDING = "pending", S_HOME = "home", S_BOARD = "board", S_WRITE = "write", S_CHAT = "chat", S_FOOD = "food", S_FOODSHEET = "foodsheet", S_MAPH = "maph", S_MAPB = "mapb", S_MAPSTN = "mapstn", S_MAPTT = "maptt", S_FAV = "fav", S_DETAIL = "detail", S_SETPG = "setpg";
-    public static final String K_OVL = "ovl_on", K_PFL = "pf_live";
+    public static final String K_OVL = "ovl_on", K_PFL = "pf_live", K_SAM = "dev_sam", K_SAMW = "dev_samw";
 
     /** 탭이 보여 줄 화면 칸들(위에서 아래로). 첫 칸이 머리(높이는 그린 내용만큼), 마지막 칸이 본문(남은 높이). 한 칸이면 본문만. */
     public static String[] slotsOf(Store st, String tab) {

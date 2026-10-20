@@ -37,7 +37,8 @@ public class RideService extends Service {
     /** 서비스가 돌고 있나, 그리고 앱 화면이 읽는 가장 새 값(같은 프로세스). */
     static volatile boolean running = false;
     static volatile int liveRev = 0;
-    static volatile String liveRide = "", liveLv = "", liveScene = "";
+    static volatile String liveRide = "", liveLv = "", liveScene = "", liveReco = "", recoStage = "";
+    static volatile long recoStageAt = 0L;
 
     private HandlerThread ht;
     private Handler h;
@@ -65,7 +66,7 @@ public class RideService extends Service {
     }
     static void stop(Context c) {
         clearSaved(c);
-        running = false; liveRide = ""; liveLv = ""; liveScene = ""; liveRev++;
+        running = false; liveRide = ""; liveLv = ""; liveScene = ""; liveReco = ""; liveRev++;
         c.stopService(new Intent(c, RideService.class));
     }
 
@@ -129,6 +130,7 @@ public class RideService extends Service {
                     if (s.ok) {
                         save(RideService.this, core);
                         if (s.alert) fireAlert(s);
+                        if (s.recoBody.length() > 0) fireReco(s.recoBody);
                         publish();
                         updateOngoing();
                         updateOverlay();
@@ -152,7 +154,7 @@ public class RideService extends Service {
     }
 
     private void publish() {
-        liveRide = core.rideJson(); liveLv = core.lvJson(); liveScene = core.sceneJson(); liveRev++;
+        liveRide = core.rideJson(); liveLv = core.lvJson(); liveScene = core.sceneJson(); liveReco = core.recoStatJson(); liveRev++;
         try { RideWidget.update(this, core.title, core.text); } catch (Throwable ignored) { }
     }
 
@@ -160,7 +162,7 @@ public class RideService extends Service {
         stopped = true; running = false;
         if (ov != null) ov.hide();
         clearSaved(this);
-        liveRide = ""; liveLv = ""; liveScene = ""; liveRev++;
+        liveRide = ""; liveLv = ""; liveScene = ""; liveReco = ""; liveRev++;
         try { RideWidget.update(this, "길동무", arrived ? "안내가 끝났어요" : ""); } catch (Throwable ignored) { }
         try { if (Build.VERSION.SDK_INT >= 24) stopForeground(STOP_FOREGROUND_REMOVE); else stopForeground(true); } catch (Throwable ignored) { }
         stopSelf();
@@ -205,6 +207,16 @@ public class RideService extends Service {
     }
     private void updateOngoing() {
         try { ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE)).notify(NOTI_ID, ongoing()); } catch (Throwable ignored) { }
+    }
+    /** 하차 7분 전 추천: 글(맛집·커피·쇼핑 문구)은 엔진 /reco-text 가 만든다(RecoNotify). 받는 동안 5초 걸음을 막지 않게 따로 돈다. */
+    private void fireReco(final String body) {
+        final Context app = getApplicationContext();
+        new Thread(new Runnable() {
+            @Override public void run() {
+                boolean ok = RecoNotify.send(app, body);
+                recoStage = ok ? "문구 받아 알림 보냄" : "문구 못 받음/시간대 아님"; recoStageAt = System.currentTimeMillis();
+            }
+        }, "ride-reco").start();
     }
     private void fireAlert(RideCore.Step s) {
         try {
