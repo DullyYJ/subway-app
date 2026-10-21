@@ -479,6 +479,11 @@ public class ScreenView extends View {
     }
     // ───────────── 경로 탐색 로딩: 뛰어가는 캐릭터(웹 #transitLoading · 순수 장식 — 계산은 RunnerCore, 글은 엔진) ─────────────
     private boolean runDrawn;
+    // 무지개 테두리(웹 preview-glow, 3초에 한 바퀴): 한 번 만든 스윕 그라데이션을 행렬로만 돌린다. 그리는 동안 이 카드 자리만 화면 박자로 다시 그린다.
+    private final android.graphics.SweepGradient glowSh = new android.graphics.SweepGradient(0f, 0f,
+        new int[] { 0xFFFF9500, 0xFFFF3B30, 0xFFFF2D95, 0xFFA24BFF, 0xFF0A84FF, 0xFF30D158, 0xFFFFD60A, 0xFFFF9500 }, null);
+    private final android.graphics.Matrix glowMx = new android.graphics.Matrix();
+    private float glX0, glY0, glX1, glY1; private boolean glowDrawn;
     private boolean tdDrawn, tdAct;                    // 세부경로 줄이 보이는 중 · 그중 지금 가는 구간이 있는 중
     private final Path tdTri = new Path();             // 펼침 동그라미 안 ▾
     private static String runPrev = "";
@@ -1527,7 +1532,7 @@ public class ScreenView extends View {
         cv.drawRect(0, 0, getWidth(), getHeight(), p);
         if (lay == null) return;
         boolean moving = false;
-        sceneDrawn = false; tdDrawn = false; tdAct = false; marqDrawn = false; skelDrawn = false; runDrawn = false; bcAnim = false; msgAnimOn = false; tmDrawn = false; cdDrawn = false; brxPingN = 0; inbarBusy = false;
+        sceneDrawn = false; glowDrawn = false; tdDrawn = false; tdAct = false; marqDrawn = false; skelDrawn = false; runDrawn = false; bcAnim = false; msgAnimOn = false; tmDrawn = false; cdDrawn = false; brxPingN = 0; inbarBusy = false;
         if (ssOn) {                                                                       // 핀을 눌러 카드로 부드럽게 가는 중
             float f = (now - ssT0) / 350f;
             if (f >= 1f) { f = 1f; ssOn = false; }
@@ -1592,6 +1597,7 @@ public class ScreenView extends View {
                 postInvalidateDelayed(66L, Math.round(brxPing[k] * dpr), Math.round((brxPing[k + 1] + oy) * dpr), Math.round(brxPing[k + 2] * dpr), Math.round((brxPing[k + 3] + oy) * dpr));
             }
         }
+        if (glowDrawn && isShown()) { float goy = lay.headH - scrollY; postInvalidateOnAnimation(Math.round(glX0 * dpr), Math.round((glY0 + goy) * dpr), Math.round(glX1 * dpr), Math.round((glY1 + goy) * dpr)); }   // 무지개 카드가 보이는 동안만, 그 카드 자리만
         if (tdAct) postInvalidateOnAnimation(); else if (tdDrawn) postInvalidateDelayed(2000L);                          // 세부경로: 지금 가는 구간이 보이면 현재위치 점이 맥박 치도록 화면 박자로, 아니면 웹처럼 2초마다 진행만 갱신
         if (cdDrawn) postInvalidateDelayed(1000L - (System.currentTimeMillis() % 1000L) + 5L);       // 버스 도착 카운트다운이 보이는 동안 초가 바뀔 때마다 한 번씩
         if (moving || mode == 1 || mode == 2 || mode == 5 || bcAnim || tmAnimOn || msgAnimOn || roAnim) postInvalidateOnAnimation();
@@ -1657,7 +1663,7 @@ public class ScreenView extends View {
             case ScreenCore.K_BUTTON: drawButton(cv, it); break;
             case ScreenCore.K_BOX: drawBox(cv, it); break;
             case ScreenCore.K_SEARCH: drawSearch(cv, it); break;
-            case ScreenCore.K_PANEL: drawPanel(cv, it); break;
+            case ScreenCore.K_PANEL: drawPanel(cv, it); if (it.pub) drawGlow(cv, it); break;
             case ScreenCore.K_TOGGLE: drawToggle(cv, it); break;
             case ScreenCore.K_NAV: drawNav(cv, it); break;
             case ScreenCore.K_SELECT: drawSelect(cv, it); break;
@@ -2048,6 +2054,18 @@ public class ScreenView extends View {
             cv.drawRoundRect(rf2, it.radius - 0.5f, it.radius - 0.5f, p);
             p.setStyle(Paint.Style.FILL);
         }
+    }
+
+    /** 카드 둘레 무지개 띠: 바깥으로 2 · 안쪽으로 0.5 (웹 inset -2px + padding 2.5px), 원뿔 그라데이션이 위(12시)에서 시작해 시계 방향으로 돈다. */
+    private void drawGlow(Canvas cv, ScreenCore.Item it) {
+        final float deg = (SystemClock.uptimeMillis() % 3000L) / 3000f * 360f;
+        glowMx.setRotate(deg - 90f, 0f, 0f); glowMx.postTranslate(it.x + it.w / 2f, it.y + it.h / 2f); glowSh.setLocalMatrix(glowMx);
+        p.setShader(glowSh); p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(2.5f);
+        rf2.set(it.x - 0.75f, it.y - 0.75f, it.x + it.w + 0.75f, it.y + it.h + 0.75f);
+        cv.drawRoundRect(rf2, it.radius + 0.75f, it.radius + 0.75f, p);
+        p.setShader(null); p.setStyle(Paint.Style.FILL);
+        if (!glowDrawn) { glowDrawn = true; glX0 = it.x - 3f; glY0 = it.y - 3f; glX1 = it.x + it.w + 3f; glY1 = it.y + it.h + 3f; }
+        else { glX0 = Math.min(glX0, it.x - 3f); glY0 = Math.min(glY0, it.y - 3f); glX1 = Math.max(glX1, it.x + it.w + 3f); glY1 = Math.max(glY1, it.y + it.h + 3f); }
     }
 
     private void drawTopLine(Canvas cv, ScreenCore.Item it) {
