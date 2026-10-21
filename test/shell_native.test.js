@@ -225,6 +225,14 @@ function findAndroidJar() {
     assert.ok(/case ScreenCore\.K_RUNNER: drawRunner/.test(sv) && /runDrawn/.test(sv) && !/new Paint|new RectF|new Rect\(|new android\.graphics\.DashPathEffect/.test(sv.slice(sv.indexOf('private void drawRunner('), sv.indexOf('private boolean skelDrawn;'))), '캐릭터를 그리고 그리는 동안 새 그림 도구를 만들지 않는다');
     assert.ok(!/import\s+android\./.test(rc) && /sheet|Sheet/.test(ra) && /SoftReference/.test(ra) && /new Thread\(/.test(ra), 'RunnerCore 는 순수 · 시트는 뒤 스레드에서 읽고 메모리가 모자라면 시스템이 버릴 수 있게 쥔다');
   });
+  await t('엔진 안내 카드 호스트(s134): 종료 · 신고 · 권한 · 작은 알림 카드는 엔진이 그리고 앱은 띄우고 단추만 되돌려 준다 · 미리 받아 두고 못 받았으면 이전 방식으로 대신', () => {
+    const v = fs.readFileSync(N('ShellActivity.java'), 'utf8');
+    assert.ok(/private boolean dlgOpen\(/.test(v) && /private boolean dlgKind\(/.test(v) && /private void dlgAct\(/.test(v) && /private void dlgPopSh\(/.test(v), '카드 호스트');
+    assert.ok(/dlgFetch\("exit"\)/.test(v) && /dlgFetch\("report"\)/.test(v) && /dlgFetch\("perm"\)/.test(v), '고정 카드는 켜자마자 미리 받아 둔다');
+    assert.ok(/!dlgKind\("exit", new Runnable\(\) \{ @Override public void run\(\) \{ finish\(\); \} \}, null\)\) super\.onBackPressed\(\)/.test(v), '홈에서 뒤로 가기: 종료 확인 카드(못 받았으면 바로 닫기)');
+    assert.ok(/dlgKind\("report", doReport, null\)/.test(v) && /dlgKind\("perm", openSet, null\)/.test(v) && /dlgPopSh\("경로를 먼저 탐색해 주세요"/.test(v), '신고 · 권한 · 공유 안내가 엔진 카드를 쓴다');
+    assert.ok(/"dl\.ok"\.equals\(v\)/.test(v) && /setOnCancelListener/.test(v) && /dg\.tap != null \|\| autoMs > 0L/.test(v) && /dg\.fit && v\.fitWidthDp\(\)/.test(v), '단추 · 바깥/뒤로 취소 · 카드가 정한 바깥 누름 · 글에 맞춘 너비');
+  });
   await t('순수 네이티브 프로젝트: 소스는 native/shell 뿐 · 매니페스트에 ShellActivity 가 런처 · 웹뷰/Capacitor 흔적 없음', async () => {
     const g = fs.readFileSync(path.join(ROOT, 'shell-android', 'app', 'build.gradle'), 'utf8');
     assert.ok(/srcDirs = \['\.\.\/\.\.\/native\/shell'\]/.test(g), '소스 경로');
