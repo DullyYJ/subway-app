@@ -503,11 +503,33 @@ function mapBusRows(rows, info, si) {                              // 노선+방
   if (info && si >= 0) { if (!info.rts) info.rts = {}; info.rts[si] = meta; }
   return out;
 }
+// ── 주변 정류장 사용자 순서(웹 _applyBusNearOrder · busNearOrder): 앱이 끌어서 바꾼 정류장 열쇠 목록(b.ord)을 받아, 저장된 것은 그 순서로 · 저장 안 된 새 정류장은 뒤에 거리순.
+function mapBusOrd(b) {
+  var o = (b && Array.isArray(b.ord)) ? b.ord : [], out = [], i;
+  for (i = 0; i < o.length && out.length < 60; i++) if (typeof o[i] === 'string' && o[i].length > 0 && o[i].length <= 64) out.push(o[i]);
+  return out;
+}
+function mapApplyNearOrder(stops, ord) {
+  if (!ord.length) return stops;
+  var pos = {}, i, hit = false;
+  for (i = 0; i < ord.length; i++) if (pos[ord[i]] === undefined) pos[ord[i]] = i;
+  for (i = 0; i < stops.length; i++) if (pos[stops[i].id] !== undefined) hit = true;
+  if (!hit) return stops;                                                         // 저장된 열쇠가 하나도 안 맞으면(다른 동네) 원래 순서
+  return stops.map(function (s, k) { return { s: s, k: k }; }).sort(function (a, b) {
+    var ia = pos[a.s.id], ib = pos[b.s.id];
+    if (ia === undefined && ib === undefined) return a.k - b.k;                       // 둘 다 모르면 엔진이 정한 원래 순서(가까운 순 · 역 출구 먼저)
+    if (ia === undefined) return 1;
+    if (ib === undefined) return -1;
+    return ia - ib;
+  }).map(function (x) { return x.s; });
+}
 function mapBusCard(s, o) {
   var c = { t: 'bcard', k: s.id, nm: s.nm, mode: o.mode, on: !!o.on, pad: [12, 12, 0, 12], act: { a: 'call', v: 'mp.pc.' + o.i, id: s.id }, edit: { a: 'call', v: 'mp.al.' + o.i } };
   if (o.n) c.n = String(o.n);
   if (o.alias) c.al = o.alias;
-  if (o.mode === 'near') { c.dist = mapDistFmt(s.dist); c.fv = o.fav ? 1 : 0; c.star = { a: 'call', v: 'mp.fv.' + o.i }; if (o.pi >= 0) c.pi = o.pi; }
+  if (o.mode === 'near') { c.dist = mapDistFmt(s.dist); c.fv = o.fav ? 1 : 0; c.star = { a: 'call', v: 'mp.fv.' + o.i }; if (o.pi >= 0) c.pi = o.pi;
+    if (o.i === 0) { c.rol = '끌어서 순서 변경'; c.rod = '완료'; }                              // 꾹 눌러 순서 바꾸기 줄 글(웹 #busReorderBar) — 첫 카드에만; 줄을 그리는 것은 앱
+  }
   else {
     c.star = { a: 'call', v: 'mp.fv.' + o.i };                      // 즐겨찾기 화면의 × (제거)
     if (isFinite(s.la) && isFinite(s.lo)) c.map = { a: 'open', url: 'https://map.kakao.com/link/map/' + encodeURIComponent(s.nm || '정류장') + ',' + s.la + ',' + s.lo };
@@ -554,7 +576,7 @@ function mapBusBody(f, info) {
   var mine = { la: la, lo: lo, k: 'm', n: '', l: '내 위치' };
   var wait = function (txt) { return { head: head.concat([mapBusTmap([mine], -1)]), body: [note(txt)] }; };
   if (need0.some(function (n) { return res[n.k] === undefined; })) { info.bus = { st: 'need', vw: 'near', need: need0 }; return wait('주변 정류장 찾는 중...'); }
-  var stops = mapBusStops(f);
+  var stops = mapApplyNearOrder(mapBusStops(f), mapBusOrd(b));                          // 사용자가 끌어서 정한 순서(b.ord) 먼저 · 새 정류장은 뒤에 거리순
   if (!stops.length && res.d1 === undefined) {                                           // 공공 API 가 모두 비었으면 서버 정류장 표(D1)로
     info.bus = { st: 'need', vw: 'near', need: [{ k: 'd1', url: MAP_D1_BASE + '/bus-stops?lat=' + la + '&lng=' + lo + '&radius=800' }] };
     return wait('주변 정류장 찾는 중...');
@@ -779,4 +801,4 @@ function mapBusRouteSheet(f0) {
   if (bar) foot = [{ t: 'panel', pad: [0, 0, 0, 0], ip: [0, 0, 0, 0], r: 0, fill: 'card', line: 'border', kids: bar }];
   return mapFinish({ ok: true, v: 1, screen: 'mapbr', cover: 'tab', head: head, body: body, foot: foot, info: info }, 'br' + (pk ? 'p' : '') + sel);
 }
-if (typeof module !== 'undefined' && module.exports) module.exports = { mapCdFmt: mapCdFmt, mapBusRouteSheet: mapBusRouteSheet, mapBrCity: mapBrCity, mapBrStnTago: mapBrStnTago, mapBrStnGbis: mapBrStnGbis, mapBrPos: mapBrPos, mapCityOf: mapCityOf, mapGGPreferred: mapGGPreferred, mapGbisArr: mapGbisArr, mapScreen: mapScreen, mapFacts: mapFacts, mapLinesOf: mapLinesOf, mapFind: mapFind, mapNearest: mapNearest, mapIsStationLabel: mapIsStationLabel, mapPickRow: mapPickRow, mapRegionLines: mapRegionLines, mapDedupStops: mapDedupStops, mapStopOrder: mapStopOrder, MAP_FILTERS: MAP_FILTERS };
+if (typeof module !== 'undefined' && module.exports) module.exports = { mapCdFmt: mapCdFmt, mapBusRouteSheet: mapBusRouteSheet, mapBrCity: mapBrCity, mapBrStnTago: mapBrStnTago, mapBrStnGbis: mapBrStnGbis, mapBrPos: mapBrPos, mapCityOf: mapCityOf, mapGGPreferred: mapGGPreferred, mapGbisArr: mapGbisArr, mapScreen: mapScreen, mapFacts: mapFacts, mapLinesOf: mapLinesOf, mapFind: mapFind, mapNearest: mapNearest, mapIsStationLabel: mapIsStationLabel, mapPickRow: mapPickRow, mapRegionLines: mapRegionLines, mapDedupStops: mapDedupStops, mapStopOrder: mapStopOrder, mapApplyNearOrder: mapApplyNearOrder, mapBusOrd: mapBusOrd, MAP_FILTERS: MAP_FILTERS };
