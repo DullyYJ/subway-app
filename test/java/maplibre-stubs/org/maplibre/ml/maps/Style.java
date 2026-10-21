@@ -1,0 +1,1 @@
+package org.maplibre.android.maps; public class Style { public static class Builder { public Builder fromUri(String u){return this;} } public interface OnStyleLoaded { void onStyleLoaded(Style s); } }

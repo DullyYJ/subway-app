@@ -1,0 +1,1 @@
+package org.maplibre.android.camera; import org.maplibre.android.geometry.LatLng; public class CameraUpdateFactory { public static CameraUpdate newCameraPosition(CameraPosition p){return null;} public static CameraUpdate newLatLngZoom(LatLng l,double z){return null;} }

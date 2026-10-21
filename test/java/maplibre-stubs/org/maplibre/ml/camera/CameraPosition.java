@@ -1,0 +1,1 @@
+package org.maplibre.android.camera; import org.maplibre.android.geometry.LatLng; public class CameraPosition { public final LatLng target=null; public final double zoom=0; public static class Builder { public Builder target(LatLng l){return this;} public Builder zoom(double z){return this;} public CameraPosition build(){return null;} } }

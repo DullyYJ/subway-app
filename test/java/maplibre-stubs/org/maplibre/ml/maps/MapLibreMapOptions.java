@@ -1,0 +1,1 @@
+package org.maplibre.android.maps; public class MapLibreMapOptions { public static MapLibreMapOptions createFromAttributes(android.content.Context c){return null;} public MapLibreMapOptions textureMode(boolean b){return this;} }
