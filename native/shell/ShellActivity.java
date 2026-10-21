@@ -273,7 +273,7 @@ public class ShellActivity extends Activity {
             store.put(ShellCore.K_SAMW, pi.sam && pi.w ? "1" : "0");
         } catch (Throwable t) { /* 못 읽으면 이전 값 */ }
     }
-    @Override protected void onDestroy() { if (live == this) live = null; if (locf != null) locf.cancelAll(); if (vec != null) vec.onDestroy(); super.onDestroy(); }
+    @Override protected void onDestroy() { if (live == this) live = null; rloadHide(); if (locf != null) locf.cancelAll(); if (vec != null) vec.onDestroy(); super.onDestroy(); }
     @Override protected void onResume() { super.onResume(); resumed = true; if (vec != null) vec.onResume(); trackStart(); refreshPower(); if (System.currentTimeMillis() - hdrAt > 300000L) loadHdr(); if (prefetchAt > 0L && System.currentTimeMillis() - prefetchAt > 600000L) prefetchTabs(); busResume(); brResume(); if (ShellCore.S_SETPG.equals(sheetName) && sheet != null && sheet.isShowing()) loadSetPage(); if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) startChatPoll(); }
     @Override protected void onPause() { resumed = false; trackStop(); if (vec != null) vec.onPause(); main.removeCallbacks(brTick); brTicking = false; super.onPause(); }
 
@@ -832,6 +832,7 @@ public class ShellActivity extends Activity {
             return true;
         } });
         pfAdd(1, new PfJob() { @Override public boolean run() throws Exception { return prefetchNews(live.contains(ShellCore.S_NEWS)); } });    // 소식(모든 분류)
+        pfAdd(1, new PfJob() { @Override public boolean run() throws Exception { return rloadFetch(); } });                                    // 경로 탐색 로딩 카드(글 · 모양은 엔진 — 한 번 받아 두면 앱을 끌 때까지 쓴다)
         pfAdd(1, new PfJob() { @Override public boolean run() throws Exception {                // 노선도 버스(위치 → 정류장 → 도착정보 왕복이라 묶지 못한다)
             if (("map".equals(cur) && "bus".equals(mapMode)) || !pfNeeds(ShellCore.mapKey(ShellCore.S_MAPB, "bus", store))) return false;
             return pfBusRun(ll, theme);
@@ -2764,6 +2765,69 @@ public class ShellActivity extends Activity {
     }
 
     /** 경로 탐색: 좌표가 있는 두 장소로 경로 서버에 묻는다. 빠른 응답(live=0)을 먼저 그리고, 엔진의 follow 지시대로 전체를 뒤따라 받는다. */
+    // ───────────── 경로 탐색 로딩 카드(웹 #transitLoading) ─────────────
+    // 카드 모양 · 글은 엔진(/screen/dlg kind:rload)이 정하고 뛰어가는 캐릭터는 ScreenView 의 runner 노드가 그린다. 앱은 보이고 숨기기만 한다.
+    // 새로 받는 통신이 있고 보여 줄 옛 결과가 없을 때만 뜬다(SWR 로 이미 보이면 뜨지 않는다). 못 받았으면 카드 없이 기존 안내(토스트)만.
+    private volatile String rloadJson = "";
+    private android.app.Dialog rloadDlg;
+    private ScreenView rloadView;
+    private int rloadSeq;
+    private boolean rloadFetch() {
+        if (rloadJson.length() > 0) return false;
+        NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/dlg", "{\"cap\":" + ShellCore.CAP + ",\"f\":{\"kind\":\"rload\"}}", 8000);
+        if (r.status == 200 && r.body != null && r.body.length() > 2) rloadJson = r.body;
+        return true;
+    }
+    private final Runnable rloadSafety = new Runnable() { @Override public void run() { rloadHide(); } };
+    private void rloadShow() {
+        String js = rloadJson;
+        if (js.length() == 0) { Thread t = new Thread(new Runnable() { @Override public void run() { rloadFetch(); } }, "shell-rload"); t.setDaemon(true); t.start(); return; }   // 이번엔 카드 없이 — 다음부터
+        if (isFinishing() || (rloadDlg != null && rloadDlg.isShowing())) return;
+        try {
+            final int[] pal = ShellCore.palette(ShellCore.theme(store));
+            final ScreenView v = new ScreenView(this);
+            v.setDpr(dpr); v.setPalette(pal);
+            v.setListener(new ScreenView.Listener() {
+                @Override public void onAction(ScreenCore.Act a) { }
+                @Override public void onSet(ScreenCore.Act a, boolean on) { }
+                @Override public void onSearch(ScreenCore.Act a, String q) { }
+                @Override public void onInputFocus(boolean on) { }
+                @Override public void onFirstDraw() { }
+                @Override public void onText(String key, String value, String kind) { }
+                @Override public void onContentH(final float dp) {
+                    main.post(new Runnable() { @Override public void run() {
+                        try { if (rloadDlg != null && rloadView == v && dp > 0f) rloadDlg.getWindow().setLayout(Math.round(296f * dpr), Math.round(dp * dpr)); } catch (Throwable ignored) { }
+                    } });
+                }
+            });
+            final android.app.Dialog d = new android.app.Dialog(this, android.R.style.Theme_Material_Light_Dialog_NoActionBar);
+            FrameLayout box = new FrameLayout(this);
+            android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
+            g.setColor(pal[ScreenView.R_CARD]); g.setCornerRadius(20f * dpr);
+            box.setBackground(g);
+            if (Build.VERSION.SDK_INT >= 21) box.setClipToOutline(true);
+            box.addView(v, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            d.setContentView(box);
+            d.setCancelable(false); d.setCanceledOnTouchOutside(false);
+            android.view.Window w = d.getWindow();
+            w.setLayout(Math.round(296f * dpr), Math.round(RUN_CARD_H * dpr));                     // 높이는 엔진 화면이 정한 글 높이로 곧 맞춘다(onContentH)
+            w.setGravity(android.view.Gravity.CENTER);
+            w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(0x00000000));
+            w.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            w.setDimAmount(0.7f);                                                                  // 웹 rgba(0,0,0,.7)
+            rloadView = v; rloadDlg = d;
+            v.setScreen(parsedGet(js), false);
+            d.show();
+            main.removeCallbacks(rloadSafety); main.postDelayed(rloadSafety, 50000L);           // 통신이 어떻게 끝나든 50초 뒤에는 반드시 닫는다
+        } catch (Throwable t) { rloadDlg = null; rloadView = null; }
+    }
+    private static final float RUN_CARD_H = 24f + ScreenCore.RUN_H + 22f;
+    private void rloadHide() {
+        main.removeCallbacks(rloadSafety);
+        android.app.Dialog d = rloadDlg; rloadDlg = null; rloadView = null;
+        if (d != null) { try { d.dismiss(); } catch (Throwable ignored) { } RunnerArt.release(); }
+    }
+
     private void goRoute() {
         final boolean picked = home.baseMs >= 0;
         final long base = picked ? home.baseMs : System.currentTimeMillis();
@@ -2785,7 +2849,7 @@ public class ShellActivity extends Activity {
         if (shown && hit.state == Swr.FRESH) { home.lastQs = qs; return; }          // 방금 받은 결과 — 통신 없이 끝
         final int my = ++seqRoute;
         home.lastQs = qs;
-        if (!shown) toast("경로를 찾는 중이에요");
+        if (!shown) { if (rloadJson.length() == 0) toast("경로를 찾는 중이에요"); rloadShow(); }
         new Thread(new Runnable() {
             @Override public void run() {
                 NetPost.Res r1 = NetPost.get(RouteFetchCore.liveZero(url), 15000);
@@ -3324,12 +3388,13 @@ public class ShellActivity extends Activity {
     private void postRoute(final int my, final String raw, final String a, final String b, final long bt, final long rb, final String sk) {
         main.post(new Runnable() { @Override public void run() {
             if (my != seqRoute) return;
+            rloadHide();
             if (home.setRoute(raw, a, b, bt, rb)) { if (sk != null) routeSwr.put(sk, rb + "\n" + raw, System.currentTimeMillis()); reloadHome(); } else toast("경로 응답을 읽지 못했어요");
         } });
     }
     /** quiet: 옛 결과가 이미 떠 있다 — 뒤에서 새로 받다 실패해도 알림 없이 옛 결과를 그대로 둔다. */
     private void postFail(final int my, final boolean quiet) {
-        main.post(new Runnable() { @Override public void run() { if (my == seqRoute && !quiet) toast("경로를 받지 못했어요"); } });
+        main.post(new Runnable() { @Override public void run() { if (my != seqRoute) return; rloadHide(); if (!quiet) toast("경로를 받지 못했어요"); } });
     }
 
     private void openLink(String url) {
