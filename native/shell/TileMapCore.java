@@ -30,8 +30,20 @@ public final class TileMapCore {
     /** 핀 하나를 글로("la,lo,k,n,name") — 화면 노드 값으로 쓴다. */
     public static String encodePin(double la, double lo, String k, String n, String name) { return encodePin(la, lo, k, n, name, "", ""); }
     public static String encodePin(double la, double lo, String k, String n, String name, String v, String g) {
-        String kk = "m".equals(k) || "f".equals(k) ? k : "s";
+        String kk = "m".equals(k) || "f".equals(k) || "a".equals(k) || "b".equals(k) ? k : "s";
         return la + "," + lo + "," + kk + "," + clean(n, 4) + "," + clean(name, 24) + "," + clean(v, 40) + "," + clean(g, 40);
+    }
+    /** 걷는 길 글("la,lo;la,lo…") → [la0,lo0,la1,lo1…]. 모양이 이상하면 빈 배열. */
+    public static double[] parsePath(String enc) {
+        if (enc == null || enc.length() == 0) return new double[0];
+        String[] parts = enc.split(";");
+        double[] out = new double[parts.length * 2]; int n = 0;
+        for (String part : parts) {
+            int c = part.indexOf(',');
+            if (c <= 0) continue;
+            try { double la = Double.parseDouble(part.substring(0, c)), lo = Double.parseDouble(part.substring(c + 1)); out[n++] = la; out[n++] = lo; } catch (NumberFormatException e) { /* 건너뜀 */ }
+        }
+        return java.util.Arrays.copyOf(out, n);
     }
     /** encodePin 들을 '|' 로 이은 글을 핀 목록으로. 모양이 이상한 줄은 건너뛴다. */
     public static List<Pin> parsePins(String enc) {
@@ -44,7 +56,7 @@ public final class TileMapCore {
                 Pin p = new Pin();
                 p.la = Double.parseDouble(f[0]); p.lo = Double.parseDouble(f[1]);
                 if (!(Math.abs(p.la) <= MAX_LAT) || !(Math.abs(p.lo) <= 180.0) || (p.la == 0.0 && p.lo == 0.0)) continue;
-                p.k = "m".equals(f[2]) || "f".equals(f[2]) ? f[2] : "s";
+                p.k = "m".equals(f[2]) || "f".equals(f[2]) || "a".equals(f[2]) || "b".equals(f[2]) ? f[2] : "s";
                 p.n = f.length > 3 ? f[3] : ""; p.name = f.length > 4 ? f[4] : ""; p.v = f.length > 5 ? f[5] : ""; p.g = f.length > 6 ? f[6] : "";
                 out.add(p);
                 if (out.size() >= MAX_PINS) break;

@@ -17,7 +17,7 @@ const places = n => n.filter(x => x.t === 'place');
 
 // ① cap
 ok(E.foodScreen({ cap: 3 }, {}, {}).ok === false && E.foodScreen({}, {}, {}).ok === false && E.foodScreen(null, null, null).ok === false, 'cap 4 미만이면 만들지 않는다');
-ok(S.ok && S.v === 1 && S.screen === 'food' && S.cover === 'tab' && /^f1:/.test(S.rev), '기본 모양');
+ok(S.ok && S.v === 1 && S.screen === 'food' && S.cover === 'tab' && /^f2:/.test(S.rev), '기본 모양');
 
 // ② 분류 = 웹 _foodKind (index.html 에서 함수를 꺼내 같은 표본을 넣어 본다)
 {
@@ -155,6 +155,7 @@ ok(S.ok && S.v === 1 && S.screen === 'food' && S.cover === 'tab' && /^f1:/.test(
     for (const st of ['loading', 'done']) lines.push(JSON.stringify(E.foodScreen({ cap: 4 }, { stn: '', gps: [37.4979, 127.0276], st, flt: '전체' }, { s: sv, u: uu })));
     lines.push(JSON.stringify(E.foodScreen({ cap: 4 }, { sel: { n: '맛있는 집', c: '음식 > 한식 > 국밥', a: '서울 강남구 1', la: 37.5, lo: 127.0 }, me: [37.49, 127.02] })));
     lines.push(JSON.stringify(E.foodScreen({ cap: 4 }, { sel: { n: '좌표 없는 집' } })));
+    for (const res of [undefined, { rt: '' }, { rt: '', ro: '' }]) lines.push(JSON.stringify(E.foodScreens({ cap: 18 }, { stn: '강남역', ctr: [37.4979, 127.0276], pn: 1, sel: { n: '맛있는 집', c: '음식 > 한식', a: '서울 강남구 1', la: 37.499, lo: 127.029 }, res }, {})));   // s126: 가게 지도 펼침
   }
   lines.push(bigJ);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'foodchk_'));
@@ -224,6 +225,38 @@ ok(S.ok && S.v === 1 && S.screen === 'food' && S.cover === 'tab' && /^f1:/.test(
 }
 
 // ⑦ 워커 끝에서 끝까지
+
+// ⑬ 가게 지도 펼침(웹 _foodShowMap): 출발·도착 핀 · 도보 경로(Valhalla → OSRM → 직선) · 거리 · 단추 색
+{
+  const enc = a => { let p = [0, 0], s = ''; for (const [la, lo] of a) { for (const v of [Math.round(la * 1e6) - p[0], Math.round(lo * 1e6) - p[1]]) { let x = v < 0 ? ~(v << 1) : v << 1; while (x >= 32) { s += String.fromCharCode((32 | (x & 31)) + 63); x >>= 5; } s += String.fromCharCode(x + 63); } p = [Math.round(la * 1e6), Math.round(lo * 1e6)]; } return s; };
+  const f0 = { stn: '강남역', ctr: [37.4979, 127.0276], pn: 1, sel: { n: '맛있는 국밥', c: '음식 > 한식', a: '서울 강남구', la: 37.499, lo: 127.029 } };
+  let o = E.foodScreens({ cap: 18 }, f0, {});
+  const pn = o.body[0], mp = pn.kids[1];
+  ok(o.ok && o.screen === 'foodpanel' && pn.t === 'panel' && pn.kids[0].t === 'bar' && pn.kids[0].btn === '✕' && /^📍 /.test(pn.kids[0].sub) && pn.kids[0].act.v === 'fm.close', '펼침: 이름 · 📍 거리 · ✕');
+  ok(mp.t === 'tmap' && mp.h === 260 && mp.fp === 46 && mp.fz === 18 && mp.pts.length === 2 && mp.pts.some(p => p.k === 'b' && p.n === '도착') && mp.pts.some(p => p.k === 'a' && p.n === '출발'), '펼침: 260 높이 지도 · 출발/도착 핀 · 여백 46 · 최대 18');
+  ok(o.info.need.length === 1 && o.info.need[0].k === 'rt' && /^https:\/\/valhalla1\.openstreetmap\.de\/route\?json=/.test(o.info.need[0].url) && mp.line.length === 2, '펼침: 경로를 받기 전에는 직선 + Valhalla 주소를 요청');
+  ok(/도보 경로$/.test(pn.kids[2].s) && pn.kids[2].s.startsWith('🚶 강남역 → 맛있는 국밥'), '펼침: 안내 글(거리는 경로가 오면)');
+  const rt = JSON.stringify({ trip: { legs: [{ shape: enc([[37.4979, 127.0276], [37.4985, 127.0282], [37.499, 127.029]]) }], summary: { length: 0.21 } } });
+  o = E.foodScreens({ cap: 18 }, Object.assign({}, f0, { res: { rt } }), {});
+  ok(o.info.need.length === 0 && o.body[0].kids[1].line.length === 3 && /약 210m$/.test(o.body[0].kids[2].s), '펼침: Valhalla 경로 → 점 3개 · 약 210m');
+  o = E.foodScreens({ cap: 18 }, Object.assign({}, f0, { res: { rt: '' } }), {});
+  ok(o.info.need.length === 1 && o.info.need[0].k === 'ro' && /router\.project-osrm\.org\/route\/v1\/foot\/127\.0276,37\.4979;127\.029,37\.499/.test(o.info.need[0].url), '펼침: Valhalla 가 실패하면 OSRM 을 요청');
+  const ro = JSON.stringify({ routes: [{ distance: 300, geometry: { coordinates: [[127.0276, 37.4979], [127.029, 37.499]] } }] });
+  o = E.foodScreens({ cap: 18 }, Object.assign({}, f0, { res: { rt: '', ro } }), {});
+  ok(o.info.need.length === 0 && /약 300m$/.test(o.body[0].kids[2].s), '펼침: OSRM 경로');
+  o = E.foodScreens({ cap: 18 }, Object.assign({}, f0, { res: { rt: '', ro: '' } }), {});
+  ok(o.info.need.length === 0 && o.body[0].kids[1].line.length === 2 && !/약/.test(o.body[0].kids[2].s), '펼침: 둘 다 실패하면 직선 · 거리 글 없음 · 더 묻지 않는다');
+  const big = []; for (let i = 0; i < 1000; i++) big.push([37.4979 + i * 1e-5, 127.0276 + i * 1e-5]);
+  o = E.foodScreens({ cap: 18 }, Object.assign({}, f0, { res: { rt: JSON.stringify({ trip: { legs: [{ shape: enc(big) }], summary: { length: 1.4 } } }) } }), {});
+  const ln = o.body[0].kids[1].line;
+  ok(ln.length <= 300 && ln[0][0] === 37.4979 && Math.abs(ln[ln.length - 1][0] - big[999][0]) < 1e-6, '펼침: 경로 점은 300개 이하로 줄이되 처음 · 끝을 남긴다');
+  const nb = pn.kids[3];
+  ok(nb.t === 'row' && nb.kids[0].fill === '#03C75A' && nb.kids[0].tc === '#ffffff' && nb.kids[0].act.v === 'fm.ni' && nb.kids[1].fill === '#FEE500' && nb.kids[1].tc === '#3C1E1E' && nb.kids[1].act.v === 'fm.ki', '펼침: 네이버 초록 · 카카오 노랑 단추');
+  ok(o.info.nv && o.info.nv.ninfo && o.info.nv.kinfo, '펼침: 열 주소(info.nv)');
+  o = E.foodScreens({ cap: 18 }, Object.assign({}, f0, { ctr: null, stn: '' }), {});
+  ok(o.ok && o.body[0].kids[1].pts.length === 1 && o.info.need.length === 0 && o.body[0].kids[1].line === undefined, '펼침: 도착역 좌표가 없으면 가게 핀 하나만');
+}
+
 (async () => {
   const tmp = path.join(os.tmpdir(), 'rv2_food_' + process.pid + '.mjs');
   fs.copyFileSync(R('engine/route-v2-worker.ascii.js'), tmp);

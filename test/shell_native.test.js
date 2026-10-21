@@ -170,6 +170,15 @@ function findAndroidJar() {
     assert.ok(/dirtyOnly\(partialFrom\)/.test(sv) && /invalidate\(0, Math\.round/.test(sv) && /postInvalidateDelayed\(66L, Math\.round\(brxPing/.test(sv), '바뀐 줄 자리만 invalidate · 마커 맥박도 그 자리만');
     assert.ok(/K_BRX/.test(sc) && /it\.sig = /.test(sc), '줄 지문');
   });
+  await t('맛집 가게 지도 펼침(웹 _foodShowMap): 가게를 누르면 팝업 대신 카드 바로 아래 펼침 · 경로 주소는 엔진이 정하고 앱은 받아 오기만 · 같은 카드를 또 누르면 접음 · 목록 캐시에는 펼침을 넣지 않음', async () => {
+    const sa = fs.readFileSync(N('ShellActivity.java'), 'utf8'), fc = fs.readFileSync(N('FoodCore.java'), 'utf8'), ta = fs.readFileSync(N('TileMapArt.java'), 'utf8');
+    assert.ok(/case FoodCore\.R_PANEL: foodPanelRound\(\)/.test(sa) && !/case FoodCore\.R_SHEET: openFoodSheet/.test(sa), '가게 누름은 펼침(팝업 아님)');
+    assert.ok(/R_UNPANEL/.test(sa) && /k\.equals\(openKey\)/.test(fc), '같은 카드를 또 누르면 접는다');
+    assert.ok(/food\.panelNeed/.test(sa) && /NetPost\.get\(nd\[1\]/.test(sa) && /u\.startsWith\("https:\/\/"\)/.test(fc), '경로 주소는 엔진이 준 https 만 받아 온다');
+    assert.ok(!/valhalla|osrm/i.test(sa + fc), '앱에는 경로 서버 주소·계산이 없다(엔진이 정한다)');
+    assert.ok(/foodBase = txt/.test(sa) && /shownJson\.put\(v, withP\)/.test(sa) && !/cachePut\([^)]*withP/.test(sa), '펼친 글은 보이기만 하고 캐시에는 펼침 없는 목록만');
+    assert.ok(/static void drawPath/.test(ta) && /DashPathEffect/.test(ta) && /C_ROUTE = 0xFFF07830/.test(ta) && /C_FROM = 0xFF2B7CFF/.test(ta) && /C_TO = 0xFFE8482E/.test(ta), '웹 경로 주황 점선 · 출발 파랑 · 도착 빨강');
+  });
   await t('순수 네이티브 프로젝트: 소스는 native/shell 뿐 · 매니페스트에 ShellActivity 가 런처 · 웹뷰/Capacitor 흔적 없음', async () => {
     const g = fs.readFileSync(path.join(ROOT, 'shell-android', 'app', 'build.gradle'), 'utf8');
     assert.ok(/srcDirs = \['\.\.\/\.\.\/native\/shell'\]/.test(g), '소스 경로');

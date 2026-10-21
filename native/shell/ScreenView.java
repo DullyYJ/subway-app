@@ -887,7 +887,8 @@ public class ScreenView extends View {
     private final Runnable tileTick = new Runnable() { @Override public void run() { invalidate(); } };
     private final Path tmClip = new Path();
     private final RectF tmRect = new RectF();
-    private String tmValue = ""; private int tmW = -1, tmH = -1;
+    private String tmValue = "", tmPathStr = ""; private int tmW = -1, tmH = -1;
+    private double[] tmPath = new double[0];
     private List<TileMapCore.Pin> tmPins = new ArrayList<TileMapCore.Pin>();
     private TileMapCore.View tmView;
     private int tmFocus = -1, tmFocApplied = -2;           // 고른 핀(앱이 눌림에 바로 · 엔진이 준 값이 바뀌면 그 값) · 엔진이 마지막으로 준 값
@@ -905,11 +906,20 @@ public class ScreenView extends View {
         int pw = Math.round(it.w * dpr), ph = Math.round(it.h * dpr);
         if (pw <= 0 || ph <= 0) return;
         if (tiles == null) { tiles = TileLoader.get(getContext()); tiles.watch(tileTick); }
-        if (!it.value.equals(tmValue) || pw != tmW || ph != tmH) {
-            tmValue = it.value; tmW = pw; tmH = ph;
+        if (!it.value.equals(tmValue) || !it.path.equals(tmPathStr) || pw != tmW || ph != tmH) {
+            tmValue = it.value; tmPathStr = it.path; tmW = pw; tmH = ph;
             tmPins = TileMapCore.parsePins(it.value);
+            tmPath = TileMapCore.parsePath(it.path);
             tmView = new TileMapCore.View(pw, ph);
             tmView.fit(tmPins, Math.round(34f * dpr), 3, 17);
+            if (it.fpad > 0f && !it.on) {                                               // 웹 fitBounds(점들, {padding, maxZoom}) — 정수 배율(Leaflet zoomSnap 1), 핀 하나면 setView(17)
+                double kk = Math.log(dpr) / Math.log(2.0), mz = (it.fzmax > 0f ? it.fzmax : 17.0) + kk;
+                List<TileMapCore.Pin> fl = new ArrayList<TileMapCore.Pin>(tmPins);
+                for (int q = 0; q + 1 < tmPath.length; q += 2) { TileMapCore.Pin pp = new TileMapCore.Pin(); pp.la = tmPath[q]; pp.lo = tmPath[q + 1]; fl.add(pp); }
+                tmView.fit(fl, Math.round(it.fpad * dpr), 1.0 + kk, mz);
+                if (fl.size() == 1) tmView.zoom = 17.0 + kk;
+                else tmView.zoom = Math.min(mz, Math.max(1.0 + kk, Math.floor(tmView.zoom - kk + 1e-6) + kk));
+            }
             tmFocApplied = -2; tmAnimOn = false; tmLabel = false;
             vecFresh = true;
             if (vecHost != null && it.on) {                                         // 웹과 같은 맞춤: 핀이 하나면 17배율 · 여럿이면 여백 36px · 최대 17 · 정수 배율(Leaflet zoomSnap 1)
@@ -947,7 +957,7 @@ public class ScreenView extends View {
         cv.clipPath(tmClip);
         cv.translate(it.x, it.y);
         cv.scale(1f / dpr, 1f / dpr);
-        TileMapArt.draw(cv, tiles, tmView, tmPins, dpr, it.on ? tmFocus : -1, tmLabel, it.on ? now : 0L);
+        TileMapArt.draw(cv, tiles, tmView, tmPins, dpr, it.on ? tmFocus : -1, tmLabel, it.on ? now : 0L, tmPath);
         if (it.on) { drawTmapChrome(cv, it.label); tmDrawn = true; }
         cv.restore();
         if (it.top) {                                                        // 아래 구분선(웹 border-bottom)
@@ -1089,6 +1099,16 @@ public class ScreenView extends View {
         if (scroll && target != null) smoothScrollTo(ScreenCore.clamp(target.y - 4f, lay.bodyMaxScroll(bodyViewH())));
     }
     private boolean ssOn; private float ssFrom, ssTo; private long ssT0;
+    /** 행동이 actV 인 카드 아래로 펼친 지도가 다 보이도록, 모자라면 그 카드가 위에 오게 부드럽게 민다(웹 scrollIntoView). */
+    void revealBelow(String actV) {
+        if (lay == null || actV == null) return;
+        for (ScreenCore.Item q : lay.body) {
+            if (q.act == null || !actV.equals(q.act.v)) continue;
+            float viewH = bodyViewH();
+            if (q.y + q.h + 380f > scrollY + viewH || q.y < scrollY) smoothScrollTo(ScreenCore.clamp(q.y - 8f, lay.bodyMaxScroll(viewH)));
+            return;
+        }
+    }
     private void smoothScrollTo(float to) {
         flingY.forceFinished(true);
         ssFrom = scrollY; ssTo = to; ssT0 = SystemClock.uptimeMillis(); ssOn = true; invalidate();

@@ -176,6 +176,7 @@ public final class ScreenCore {
         public int cols = 2, maxLines = 0;
         public float bh = 0f, bsize = 0f;                  // inbar: 단추 높이·글자 크기(0 이면 줄 높이·입력칸 글자 크기)
         public String dot = "";                            // inbar: 왼쪽 동그라미 색(출발/도착 점)
+        public String path = ""; public float fpad = 0f, fzmax = 0f;   // tmap: 걷는 길(위도,경도;…) · 맞춤 여백 · 최대 배율(0 이면 기본)
         public boolean watch;                              // inbar: 글자가 바뀔 때마다 앱이 웹에 알린다(자동완성)
         public boolean multi;                              // field: 여러 줄 입력칸(글쓰기 내용) — 줄바꿈을 받고 글자를 줄바꿔 그린다
         public Act bact;                                   // sug: 오른쪽 작은 단추의 행동
@@ -312,7 +313,7 @@ public final class ScreenCore {
 
     /** 타일 지도 핀 하나를 글로 — TileMapCore.encodePin 과 같은 모양(la,lo,k,n,name; 쉼표·막대 제거). ScreenCore 는 다른 파일 없이 혼자 컴파일되어야 해서 여기에 따로 둔다. */
     private static String tmapPin(double la, double lo, String k, String n, String name, String v, String g) {
-        return la + "," + lo + "," + ("m".equals(k) || "f".equals(k) ? k : "s") + "," + tmapClean(n, 4) + "," + tmapClean(name, 24) + "," + tmapClean(v, 40) + "," + tmapClean(g, 40);
+        return la + "," + lo + "," + ("m".equals(k) || "f".equals(k) || "a".equals(k) || "b".equals(k) ? k : "s") + "," + tmapClean(n, 4) + "," + tmapClean(name, 24) + "," + tmapClean(v, 40) + "," + tmapClean(g, 40);
     }
     private static String tmapClean(String s, int max) {
         StringBuilder b = new StringBuilder();
@@ -706,6 +707,20 @@ public final class ScreenCore {
             n.on = optNum(m, "live", 0f, 0f, 1f) > 0f;                                                          // 끌기 · 두 손가락 확대 · ± 단추 · 핀 누르기를 받는 고정 지도
             n.ci = Math.round(optNum(m, "foc", -1f, -1f, 39f)); n.top = optNum(m, "bl", 0f, 0f, 1f) > 0f;       // 고른 핀 번호 · 아래 구분선
             n.hint = optStr(m, "hint", "", 60);
+            n.fpad = optNum(m, "fp", 0f, 0f, 120f); n.fzmax = optNum(m, "fz", 0f, 0f, 19f);                    // 맞춤: 여백(dp) · 최대 배율(0 이면 기본)
+            if (m.get("line") != null) {                                                                        // 걷는 길(엔진이 정한 점들): [[위도,경도],…] 최대 400개
+                StringBuilder lb = new StringBuilder(); int lc = 0;
+                for (Object lo0 : asArr(m.get("line"), "tmap.line")) {
+                    List<Object> pr = asArr(lo0, "tmap.line 점");
+                    if (pr.size() < 2 || !(pr.get(0) instanceof Number) || !(pr.get(1) instanceof Number)) throw new ParseError("tmap: 길의 점이 올바르지 않다");
+                    if (lc >= 400) throw new ParseError("tmap: 길의 점이 너무 많다");
+                    double lla = ((Number) pr.get(0)).doubleValue(), llo = ((Number) pr.get(1)).doubleValue();
+                    if (Math.abs(lla) > 85 || Math.abs(llo) > 180) throw new ParseError("tmap: 길의 점 범위");
+                    if (lc > 0) lb.append(';');
+                    lb.append(lla).append(',').append(llo); lc++;
+                }
+                n.path = lb.toString();
+            }
             StringBuilder pv = new StringBuilder();
             int pc = 0;
             for (Object po : asArr(m.get("pts"), "tmap.pts")) {
@@ -960,6 +975,7 @@ public final class ScreenCore {
     public static final class Item {
         public int kind;
         public float x, y, w, h;
+        public String path = ""; public float fpad, fzmax;    // tmap: 걷는 길 · 맞춤 여백 · 최대 배율
         public String[] lines = new String[0];      // 글 줄 / 카드 이름 줄
         public float size, lineH, textX, textY;     // 글 크기 · 줄 높이 · 첫 줄 위쪽 시작점(영역 좌표)
         public boolean bold, on;
@@ -1636,7 +1652,7 @@ public final class ScreenCore {
         if ("bcard".equals(n.t)) return bcardLayout(n, ox, innerW, y, out, m);
         if (n.t.startsWith("br") && ("brh".equals(n.t) || "brt".equals(n.t) || "brsec".equals(n.t) || "brturn".equals(n.t) || "brs".equals(n.t))) return brxLayout(n, ox, innerW, y, out, m);
         if ("tmap".equals(n.t)) {                                                    // 타일 지도 자리(그림은 ScreenView 가 그린다 · 누르면 act)
-            Item it = new Item(); it.kind = K_TMAP; it.x = ox; it.y = y; it.w = innerW; it.h = n.h; it.radius = n.r; it.value = n.value; it.act = n.act; it.on = n.on; it.ti = n.ci; it.top = n.top; it.label = n.hint;
+            Item it = new Item(); it.kind = K_TMAP; it.x = ox; it.y = y; it.w = innerW; it.h = n.h; it.radius = n.r; it.value = n.value; it.act = n.act; it.on = n.on; it.ti = n.ci; it.top = n.top; it.label = n.hint; it.path = n.path; it.fpad = n.fpad; it.fzmax = n.fzmax;
             out.add(it);
             return y + n.h + n.padB;
         }

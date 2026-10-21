@@ -16,7 +16,7 @@ public final class FoodCore {
     static final String PUB_URL = "https://apis.data.go.kr/B553077/api/open/sdsc2/storeListInRadius";
     public static final int RADIUS = 1500, LIMIT = 400, PUB_PAGES = 3, PUB_PAGE_SIZE = 200;
     public static final long TTL = 10 * 60 * 1000L;
-    public static final int R_NONE = 0, R_RENDER = 1, R_REFRESH = 2, R_SHEET = 3, R_CLOSE = 4, R_OPEN = 5;
+    public static final int R_NONE = 0, R_RENDER = 1, R_REFRESH = 2, R_SHEET = 3, R_CLOSE = 4, R_OPEN = 5, R_PANEL = 6, R_UNPANEL = 7, R_LINK = 8;
 
     // ── 이 기기의 사실 ──
     public String dest = "";                     // 홈에서 고른 도착지 이름('역' 포함 가능 — 엔진이 다듬는다)
@@ -37,6 +37,13 @@ public final class FoodCore {
     final Map<String, String> alts = new LinkedHashMap<String, String>();   // 칩 → 그 칩의 화면 글
     public String selName = ""; public double selLa, selLo;   // 가게 시트의 가게(카카오 장소 ID 조회용)
     public String pendingSel = "";               // 눌린 가게(시트 요청용 JSON)
+    public String stnName = "";                  // 엔진이 정한 도착역(또는 가까운 역) 이름 — 지도 펼침의 '출발'
+    // ── 가게 지도 펼침(웹 _foodShowMap): 카드 바로 아래에 끼운다. 무엇을 그릴지는 엔진(f.pn)이 정하고, 앱은 그 노드를 목록 화면의 그 카드 뒤에 끼우기만 한다 ──
+    public String openKey = "";                  // 펼친 가게 번호(예: c.12) — 같은 카드를 또 누르면 접는다
+    String panelAfter = "";                      // 끼울 자리 = 그 카드의 act (fm.c.12)
+    List<Object> panelNodes = null;              // 엔진이 만든 펼침 노드
+    final Map<String, String> panelRes = new LinkedHashMap<String, String>();    // 받아 온 경로 글(rt · ro) — 실패는 빈 글
+    public List<String[]> panelNeed = new ArrayList<String[]>();                  // 엔진이 더 받아 오라는 {k, url}
     final Map<String, String> nvApp = new LinkedHashMap<String, String>(), nvWeb = new LinkedHashMap<String, String>();
 
     // ── 도착지/위치 알림 ──
@@ -55,7 +62,7 @@ public final class FoodCore {
         if (far && dest.length() == 0) invalidate();
     }
     public void invalidate() { loaded = false; failed = false; alts.clear(); go.clear(); ctr = null; centerKey = ""; srv = new ArrayList<Object>(); pub = new ArrayList<Object>(); }
-    public void refresh() { invalidate(); loadedAt = 0; if (dest.length() == 0) gps = null; }
+    public void refresh() { closePanel(); invalidate(); loadedAt = 0; if (dest.length() == 0) gps = null; }
 
     /** 위치가 필요한데 아직 없는가(도착지가 없고 기기 위치도 없을 때). */
     public boolean needGps() { return dest.length() == 0 && gps == null; }
@@ -137,6 +144,16 @@ public final class FoodCore {
         b.append(",\"alts\":\"chips\"}");
         return b.toString();
     }
+    /** 가게 지도 펼침 본문(엔진 f.pn=1): 고른 가게 · 내 위치 · 도착역 좌표와 이름 · 이미 받은 경로 글. */
+    public String panelRequest(int cap) {
+        StringBuilder b = new StringBuilder("{\"cap\":").append(cap).append(",\"f\":{\"pn\":1,\"sel\":").append(pendingSel).append(",\"me\":").append(ll(gps)).append(",\"ctr\":").append(ll(ctr)).append(",\"stn\":").append(ShellCore.q(stnName));
+        if (!panelRes.isEmpty()) {
+            b.append(",\"res\":{"); boolean first = true;
+            for (Map.Entry<String, String> e : panelRes.entrySet()) { if (!first) b.append(','); first = false; b.append(ShellCore.q(e.getKey())).append(':').append(ShellCore.q(e.getValue())); }
+            b.append('}');
+        }
+        return b.append("}}").toString();
+    }
     /** 가게 시트 본문. */
     public String sheetRequest(int cap, double[] me) {
         return "{\"cap\":" + cap + ",\"f\":{\"sel\":" + pendingSel + ",\"me\":" + ll(me) + "}}";
@@ -157,6 +174,7 @@ public final class FoodCore {
                 if (c instanceof List && ((List<Object>) c).size() == 2) { List<Object> cl = (List<Object>) c; ctr = new double[] { BoardCore.d(cl.get(0)), BoardCore.d(cl.get(1)) }; }
                 else ctr = null;
                 if (im.get("go") instanceof Map) go.putAll((Map<String, Object>) im.get("go"));
+                if (im.get("stn") instanceof String) stnName = BoardCore.s(im.get("stn"), 30);
             }
             alts.clear();
             if (m.get("alts") instanceof Map) for (Map.Entry<String, Object> e : ((Map<String, Object>) m.get("alts")).entrySet()) alts.put(e.getKey(), HomeSearchCore.toJson(e.getValue()));
@@ -182,7 +200,7 @@ public final class FoodCore {
 
     // ── 눌림 ──
     /** 칩: 고른 칩을 기억한다. 엔진이 이미 계산해 둔 화면이 있으면 true(요청 없이 올릴 수 있다). */
-    public boolean pickChip(String chip) { flt = chip == null || chip.length() == 0 ? "전체" : chip; return alts.containsKey(flt); }
+    public boolean pickChip(String chip) { closePanel(); flt = chip == null || chip.length() == 0 ? "전체" : chip; return alts.containsKey(flt); }
 
     /** v: fm.c.<번호> · fm.p.<번호>. 가게 시트를 열 수 있으면 R_SHEET. */
     @SuppressWarnings("unchecked")
@@ -190,6 +208,7 @@ public final class FoodCore {
         if (v == null || !v.startsWith("fm.")) return R_NONE;
         String k = v.substring(3);
         if ("close".equals(k)) return R_CLOSE;
+        if (("nr".equals(k) || "kr".equals(k) || "ni".equals(k) || "ki".equals(k)) && openKey.length() > 0) return R_LINK;
         Object g = go.get(k);
         if (!(g instanceof List) || ((List<Object>) g).size() < 5) return R_NONE;
         List<Object> l = (List<Object>) g;
@@ -197,7 +216,59 @@ public final class FoodCore {
         sel.put("n", l.get(0)); sel.put("c", l.get(1)); sel.put("a", l.get(2)); sel.put("la", l.get(3)); sel.put("lo", l.get(4));
         pendingSel = HomeSearchCore.toJson(sel);
         selName = l.get(0) instanceof String ? (String) l.get(0) : ""; selLa = l.get(3) instanceof Number ? ((Number) l.get(3)).doubleValue() : 0; selLo = l.get(4) instanceof Number ? ((Number) l.get(4)).doubleValue() : 0;
-        return R_SHEET;
+        if (k.equals(openKey)) { closePanel(); return R_UNPANEL; }                 // 열려 있는 카드를 또 누르면 접는다(웹 토글)
+        openKey = k; panelAfter = "fm." + k; panelNodes = null; panelRes.clear(); panelNeed.clear();
+        return R_PANEL;
+    }
+    public void closePanel() { openKey = ""; panelAfter = ""; panelNodes = null; panelRes.clear(); panelNeed.clear(); nvApp.clear(); nvWeb.clear(); }
+    /** 엔진의 펼침 화면을 읽는다: 끼울 노드 · 열 주소(info.nv) · 더 받아 올 주소(info.need). 읽을 수 없으면 false. */
+    @SuppressWarnings("unchecked")
+    public boolean onPanel(String json) {
+        try {
+            Object o = ScreenCore.parse(json);
+            if (!(o instanceof Map)) return false;
+            Map<String, Object> m = (Map<String, Object>) o;
+            if (!Boolean.TRUE.equals(m.get("ok")) || !(m.get("body") instanceof List) || ((List<Object>) m.get("body")).isEmpty()) return false;
+            panelNodes = new ArrayList<Object>((List<Object>) m.get("body"));
+            panelNeed.clear();
+            Object i = m.get("info");
+            if (i instanceof Map) {
+                Map<String, Object> im = (Map<String, Object>) i;
+                if (im.get("need") instanceof List) for (Object x : (List<Object>) im.get("need")) {
+                    if (!(x instanceof Map)) continue;
+                    String k = BoardCore.s(((Map<String, Object>) x).get("k"), 8), u = BoardCore.s(((Map<String, Object>) x).get("url"), 1500);
+                    if (k.length() > 0 && u.startsWith("https://") && !panelRes.containsKey(k)) panelNeed.add(new String[] { k, u });
+                }
+            }
+            onSheet(json);                                                          // info.nv → 네이버 · 카카오 단추 주소
+            return true;
+        } catch (Exception e) { return false; }
+    }
+    public void panelGot(String k, String body) { panelRes.put(k, body == null ? "" : body); }
+    /** 목록 화면 글에 펼침을 끼운 글. 펼침이 없거나 그 카드가 목록에 없으면 원래 글 그대로. */
+    @SuppressWarnings("unchecked")
+    public String withPanel(String listTxt) {
+        if (openKey.length() == 0 || panelNodes == null || listTxt == null) return listTxt;
+        try {
+            Object o = ScreenCore.parse(listTxt);
+            if (!(o instanceof Map)) return listTxt;
+            Map<String, Object> m = (Map<String, Object>) o;
+            if (!(m.get("body") instanceof List)) return listTxt;
+            List<Object> body = new ArrayList<Object>((List<Object>) m.get("body"));
+            int at = -1;
+            for (int i = 0; i < body.size(); i++) {
+                Object n = body.get(i);
+                if (!(n instanceof Map)) continue;
+                Object a = ((Map<String, Object>) n).get("act");
+                if (a instanceof Map && panelAfter.equals(((Map<String, Object>) a).get("v"))) { at = i; break; }
+            }
+            if (at < 0) return listTxt;
+            body.addAll(at + 1, panelNodes);
+            m.put("body", body);
+            Object rv = m.get("rev");
+            m.put("rev", (rv instanceof String ? (String) rv : "") + "+" + openKey + ":" + (panelNodes.hashCode() & 0x7fffffff));
+            return HomeSearchCore.toJson(m);
+        } catch (Exception e) { return listTxt; }
     }
     /** 시트 단추: fm.nr · fm.kr · fm.ni · fm.ki → [앱 주소, 웹 주소]. */
     public String[] sheetLink(String v) {

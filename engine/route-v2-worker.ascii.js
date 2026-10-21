@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-21s125";
+var ENGINE_VERSION = "route-v2-2026-10-21s126";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -12314,7 +12314,7 @@ async function handleScreenSettings(request) {
 //        \uac00\uac8c\ub97c \ub204\ub974\uba74 \uc571\uc774 \ubcf4\ub0c8\ub358 \ubaa9\ub85d\uc758 \uadf8 \ubc88\ud638 \uac00\uac8c\ub97c \uc9c0\ub3c4 \uc2dc\ud2b8\ub85c \uc5f0\ub2e4(\ubc88\ud638 = \uc571\uc774 \ubcf4\ub0b8 \ubc30\uc5f4\uc758 \uc6d0\ub798 \uc704\uce58).
 // \ub9e8 \uc544\ub798 module.exports \ub294 \uc2dc\ud5d8(Node)\uc6a9\uc774\uace0 Worker \uc5d0\uc11c\ub294 \ud568\uc218 \uc120\uc5b8\ub9cc \uc4f0\uc778\ub2e4.
 'use strict';
-var FOOD_SCREEN_V = 1;
+var FOOD_SCREEN_V = 2;
 var FOOD_CHIPS = ['\uc804\uccb4', '\uce74\ud398', '\ubc25\uc9d1', '\uc721\uc2dd', '\ud68c\uc9d1', '\uc8fc\uc810'];
 var FOOD_CHIP_EMOJI = { '\uce74\ud398': '\u2615', '\ubc25\uc9d1': '\ud83c\udf5a', '\uc721\uc2dd': '\ud83c\udf56', '\ud68c\uc9d1': '\ud83c\udf63', '\uc8fc\uc810': '\ud83c\udf7a' };     // \uc6f9 .food-chip \uc55e \uadf8\ub9bc
 var FOOD_MAX_SHOW = 150;          // \uc704\u00b7\uc544\ub798 \ubaa9\ub85d \uac01\uac01 \ucd5c\ub300 \uac1c\uc218(\uc6f9\uacfc \uac19\ub2e4)
@@ -12359,7 +12359,8 @@ function foodFacts(f) {
   var flt = FOOD_CHIPS.indexOf(f.flt) >= 0 ? f.flt : '\uc804\uccb4';
   var sel = (f.sel && typeof f.sel === 'object' && !Array.isArray(f.sel)) ? f.sel : null;
   return { stn: stn, st: st, flt: flt, fail: f.fail === 1 || f.fail === true || f.fail === '1',
-           gps: foodLL(f.gps), dl: foodLL(f.dl), me: foodLL(f.me), sel: sel };
+           gps: foodLL(f.gps), dl: foodLL(f.dl), me: foodLL(f.me), ctr: foodLL(f.ctr), sel: sel,
+           pn: f.pn === 1 || f.pn === true || f.pn === '1', res: (f.res && typeof f.res === 'object' && !Array.isArray(f.res)) ? f.res : {} };
 }
 // \u2500\u2500 \uac70\ub9ac\u00b7\uc5ed \ucc3e\uae30(\uc6f9 haversineM \u00b7 _foodResolveCoord \u00b7 _foodLoadNearby \uc640 \uac19\uc740 \uacc4\uc0b0) \u2500\u2500
 function foodHav(la1, lo1, la2, lo2) {
@@ -12509,7 +12510,7 @@ function foodScreen(inp, factsIn, itemsIn) {
   inp = inp || {};
   if (!(Number(inp.cap) >= 4)) return { ok: false, error: 'cap' };
   var P = foodPrep(factsIn, itemsIn);
-  if (P.f.sel) return foodSheet(P.f);
+  if (P.f.sel) return P.f.pn ? foodPanel(P.f) : foodSheet(P.f);
   return foodScreenOf(foodFactsFor(P.f, P), P.all, P.allP);
 }
 
@@ -12521,7 +12522,7 @@ function foodScreens(inp, factsIn, itemsIn, altsIn) {
   inp = inp || {};
   if (!(Number(inp.cap) >= 4)) return { ok: false, error: 'cap' };
   var P = foodPrep(factsIn, itemsIn);
-  if (P.f.sel) return foodSheet(P.f);
+  if (P.f.sel) return P.f.pn ? foodPanel(P.f) : foodSheet(P.f);
   var out = foodScreenOf(foodFactsFor(P.f, P), P.all, P.allP);
   if (altsIn === 'chips') {                       // \uc571\uc740 \uc5b4\ub5a4 \uce69\uc774 \uc788\ub294\uc9c0 \ubaa8\ub978\ub2e4 \u2014 \uc5d4\uc9c4\uc774 \uac00\uc9c4 \uce69 \uc804\ubd80\ub85c \uc9c0\uae08 \uc0ac\uc2e4\ub9cc \uce69\uc744 \ubc14\uafd4 \ub9cc\ub4e0\ub2e4. \ud0a4 = \uce69 \uc774\ub984
     altsIn = {};
@@ -12595,6 +12596,93 @@ function foodSheet(f) {
   body[0].kids.unshift(head[0]);
   var out = { ok: true, v: 1, screen: 'foodsheet', cover: 'tab', head: [], body: body, info: { nv: nv, n: name } };
   out.rev = 'fs' + FOOD_SCREEN_V + ':' + foodHash(JSON.stringify(body));
+  return out;
+}
+
+
+// \u2500\u2500 \uac00\uac8c \uc9c0\ub3c4 \ud3bc\uce68(\uc6f9 _foodShowMap): \uac00\uac8c \uce74\ub4dc \ubc14\ub85c \uc544\ub798\uc5d0 \uc774\ub984 \u00b7 \uac70\ub9ac \u00b7 \u2715 / \ucd9c\ubc1c(\ub3c4\ucc29\uc5ed)\u2192\ub3c4\ucc29(\uac00\uac8c) \uc9c0\ub3c4 + \ub3c4\ubcf4 \uacbd\ub85c / \uc548\ub0b4 \uae00 / \ub124\uc774\ubc84 \u00b7 \uce74\uce74\uc624 \ub2e8\ucd94 \u2500\u2500
+//   \uc571\uc740 info.go \uc758 [\uc774\ub984, \uc5c5\uc885, \uc8fc\uc18c, \uc704\ub3c4, \uacbd\ub3c4] \ub97c f.sel \ub85c, \ub3c4\ucc29\uc5ed \uc88c\ud45c\ub97c f.ctr, \uc5ed \uc774\ub984\uc744 f.stn \uc73c\ub85c, \ucf1c \ub2ec\ub77c\ub294 \ub73b\uc73c\ub85c f.pn=1 \uc744 \ubcf4\ub0b8\ub2e4.
+//   \uacbd\ub85c\ub294 \uc6f9 _footRoute \uc640 \uac19\ub2e4: \u2460 Valhalla \ubcf4\ud589\uc790(polyline6) \u2192 \u2461 OSRM \u2192 \u2462 \ub458 \ub2e4 \uc548 \ub418\uba74 \ucd9c\ubc1c~\ub3c4\ucc29 \uc9c1\uc120. \ubc1b\uc544 \uc62c \uc8fc\uc18c\ub294 info.need [{k,url}] \ub85c \uc54c\ub824 \uc8fc\uace0,
+//   \uc571\uc774 \ubc1b\uc740 \uae00(\uc2e4\ud328\ud558\uba74 \ube48 \uae00)\uc744 f.res[k] \ub85c \ub2e4\uc2dc \ubcf4\ub0b4\uba74 \uc5d4\uc9c4\uc774 \ud480\uc5b4 \uacbd\ub85c\uc120(tmap.line)\uacfc '\uc57d N m' \ub97c \uc815\ud55c\ub2e4. \ud654\uba74\uc740 info.after(\ud3bc\uce60 \uce74\ub4dc\uc758 act) \ub4a4\uc5d0 \ub07c\uc6b4\ub2e4.
+var FOOD_VALHALLA = 'https://valhalla1.openstreetmap.de/route?json=';
+var FOOD_OSRM = 'https://router.project-osrm.org/route/v1/foot/';
+var FOOD_LINE_MAX = 300;
+function foodDecode6(str) {                        // Valhalla polyline6(1e6 \ubc30\uc728) \u2192 [[\uc704\ub3c4, \uacbd\ub3c4]\u2026]
+  var idx = 0, la = 0, lo = 0, out = [], b, shift, result;
+  str = String(str || '');
+  while (idx < str.length) {
+    shift = 0; result = 0;
+    do { b = str.charCodeAt(idx++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20 && idx < str.length + 1);
+    la += (result & 1) ? ~(result >> 1) : (result >> 1);
+    shift = 0; result = 0;
+    do { b = str.charCodeAt(idx++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20 && idx < str.length + 1);
+    lo += (result & 1) ? ~(result >> 1) : (result >> 1);
+    out.push([la / 1e6, lo / 1e6]);
+  }
+  return out;
+}
+function foodThin(pts) {                           // \uc810\uc774 \ub108\ubb34 \ub9ce\uc73c\uba74 \uace0\ub974\uac8c \uc904\uc778\ub2e4(\ucc98\uc74c \u00b7 \ub05d\uc740 \ub0a8\uae34\ub2e4) \u00b7 \uc18c\uc218 \uc5ec\uc12f\uc9f8 \uc790\ub9ac
+  var out = [], n = pts.length, step = n > FOOD_LINE_MAX ? (n - 1) / (FOOD_LINE_MAX - 1) : 1, i;
+  for (i = 0; i < n && out.length < FOOD_LINE_MAX; i += step) { var q = pts[Math.round(i)]; out.push([Math.round(q[0] * 1e6) / 1e6, Math.round(q[1] * 1e6) / 1e6]); }
+  var last = pts[n - 1];
+  if (out.length && (out[out.length - 1][0] !== last[0] || out[out.length - 1][1] !== last[1])) { if (out.length >= FOOD_LINE_MAX) out.pop(); out.push([Math.round(last[0] * 1e6) / 1e6, Math.round(last[1] * 1e6) / 1e6]); }
+  return out;
+}
+function foodRouteOf(res, s, d) {                  // \u2192 { pts, m } \uacbd\ub85c\ub97c \uc5bb\uc5c8\ub2e4 \u00b7 { need } \ub354 \ubc1b\uc544 \uc640\uc57c \ud55c\ub2e4 \u00b7 { pts: null } \ub2e4 \uc2e4\ud328(\uc9c1\uc120)
+  var r;
+  if (res.rt === undefined) {
+    var q = { locations: [{ lat: s[0], lon: s[1] }, { lat: d[0], lon: d[1] }], costing: 'pedestrian', units: 'kilometers', directions_options: { language: 'ko-KR' } };
+    return { need: { k: 'rt', url: FOOD_VALHALLA + encodeURIComponent(JSON.stringify(q)) } };
+  }
+  try {
+    r = JSON.parse(res.rt);
+    var leg = r && r.trip && r.trip.legs && r.trip.legs[0];
+    if (leg && leg.shape) {
+      var cs = foodDecode6(leg.shape), len = r.trip.summary && r.trip.summary.length ? r.trip.summary.length * 1000 : 0;
+      if (cs.length >= 2) return { pts: cs, m: len };
+    }
+  } catch (e1) { /* \ub2e4\uc74c \uae38 */ }
+  if (res.ro === undefined) return { need: { k: 'ro', url: FOOD_OSRM + s[1] + ',' + s[0] + ';' + d[1] + ',' + d[0] + '?overview=full&geometries=geojson' } };
+  try {
+    r = JSON.parse(res.ro);
+    var rt = r && r.routes && r.routes[0];
+    if (rt && rt.geometry && Array.isArray(rt.geometry.coordinates) && rt.geometry.coordinates.length >= 2) {
+      return { pts: rt.geometry.coordinates.map(function (c) { return [c[1], c[0]]; }), m: rt.distance || 0 };
+    }
+  } catch (e2) { /* \uc9c1\uc120 */ }
+  return { pts: null };
+}
+function foodPanel(f) {
+  var sel = f.sel, name = foodNameOf(sel.n), la = Number(sel.la), lo = Number(sel.lo);
+  if (!name || !isFinite(la) || !isFinite(lo) || !foodLL([la, lo])) return { ok: false, error: 'sel' };
+  var s = f.ctr, d = [la, lo];
+  var hasStn = !!s && (s[0] !== la || s[1] !== lo);
+  var stn = foodStr(f.stn, 30).replace(/\uc5ed$/, '');
+  var distTxt = s ? foodDist(Math.round(foodHav(s[0], s[1], la, lo))) : '';
+  var pts = [{ la: la, lo: lo, k: 'b', n: '\ub3c4\ucc29', l: name }], need = [], line = null, meters = 0;
+  if (hasStn) {
+    pts.push({ la: s[0], lo: s[1], k: 'a', n: '\ucd9c\ubc1c', l: (stn || '\ucd9c\ubc1c') + '\uc5ed' });
+    var rr = foodRouteOf(f.res || {}, s, d);
+    if (rr.need) { need.push(rr.need); line = [[s[0], s[1]], d]; }
+    else if (rr.pts) { line = foodThin(rr.pts); meters = rr.m || 0; }
+    else line = [[s[0], s[1]], d];
+  }
+  var foot = '\ud83d\udeb6 ' + (stn ? stn + '\uc5ed \u2192 ' : '') + name + ' \ub3c4\ubcf4 \uacbd\ub85c' + (meters ? ' \u00b7 \uc57d ' + Math.round(meters) + 'm' : '');
+  var map = { t: 'tmap', pad: [0, 0, 0, 0], h: 260, r: 0, pts: pts, fp: 46, fz: 18 };
+  if (line) map.line = line;
+  var navs = { t: 'row', pad: [8, 12, 12, 12], gap: 8, kids: [
+    { t: 'button', s: '\ub124\uc774\ubc84 \ub9ac\ubdf0\u00b7\uc815\ubcf4', size: 13, h: 40, r: 10, bold: true, fill: '#03C75A', line: 'none', tc: '#ffffff', act: { a: 'call', v: 'fm.ni' } },
+    { t: 'button', s: '\uce74\uce74\uc624 \ub9ac\ubdf0\u00b7\uc815\ubcf4', size: 13, h: 40, r: 10, bold: true, fill: '#FEE500', line: 'none', tc: '#3C1E1E', act: { a: 'call', v: 'fm.ki' } } ] };
+  var kids = [
+    { t: 'bar', pad: [6, 12, 6, 12], title: name, sub: distTxt ? '\ud83d\udccd ' + distTxt : '', btn: '\u2715', act: { a: 'call', v: 'fm.close' } },
+    map,
+    { t: 'text', s: foot, size: 12, color: 'sub', lh: 1.5, pad: [8, 12, 0, 12] },
+    navs
+  ];
+  var body = [{ t: 'panel', pad: [4, 0, 12, 0], ip: [0, 0, 0, 0], fill: 'card', line: 'border', r: 14, kids: kids }];
+  var nv = foodNavUrls(sel, f.me);
+  var out = { ok: true, v: 1, screen: 'foodpanel', cover: 'tab', head: [], body: body, info: { nv: nv, n: name, need: need, hasRoute: !!(line && !need.length) } };
+  out.rev = 'fp' + FOOD_SCREEN_V + ':' + foodHash(JSON.stringify(body));
   return out;
 }
 // \ub9db\uc9d1 \ud654\uba74 \uc5d4\uc9c4 Worker \uc5f0\uacb0\ubd80 \u2014 POST /screen/food (engine/food.js \uc758 foodScreen \uc744 \ubd80\ub978\ub2e4). route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/screen/food") return handleScreenFood(request);` \ub97c \ub123\ub294\ub2e4.

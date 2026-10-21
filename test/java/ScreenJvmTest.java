@@ -781,6 +781,20 @@ public class ScreenJvmTest {
             java.util.List<TileMapCore.Pin> tps = TileMapCore.parsePins(tl.body[0].value);
             ok(tps.size() == 2 && "수원역 환승센터".equals(tps.get(0).name) && "1".equals(tps.get(0).n) && "m".equals(tps.get(1).k), "tmap: 핀 값(0,0 건너뜀 · 쉼표/막대 제거)");
         } catch (Exception ex) { ok(false, "tmap 읽기: " + ex); }
+        try {
+            ScreenCore.Screen tws = ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"x\",\"head\":[],\"body\":[{\"t\":\"tmap\",\"h\":260,\"r\":0,\"fp\":46,\"fz\":18,\"pts\":[{\"la\":37.499,\"lo\":127.029,\"k\":\"b\",\"n\":\"도착\"},{\"la\":37.4979,\"lo\":127.0276,\"k\":\"a\",\"n\":\"출발\"}],\"line\":[[37.4979,127.0276],[37.4985,127.0282],[37.499,127.029]]}]}");
+            ScreenCore.Layout tl2 = ScreenCore.layout(tws, 360f, M);
+            ScreenCore.Item ti = tl2.body[0];
+            double[] pth = TileMapCore.parsePath(ti.path);
+            java.util.List<TileMapCore.Pin> tp2 = TileMapCore.parsePins(ti.value);
+            ok(ti.kind == ScreenCore.K_TMAP && pth.length == 6 && Math.abs(pth[2] - 37.4985) < 1e-9 && ti.fpad == 46f && ti.fzmax == 18f && !ti.on, "tmap: 걷는 길 · 맞춤 여백/최대 배율 · 끌 수 없는 지도");
+            ok(tp2.size() == 2 && "b".equals(tp2.get(0).k) && "도착".equals(tp2.get(0).n) && "a".equals(tp2.get(1).k), "tmap: 출발/도착 핀 종류");
+        } catch (Exception ex) { ok(false, "tmap 길 읽기: " + ex); }
+        for (String bad2 : new String[] { "{\"t\":\"tmap\",\"pts\":[{\"la\":37,\"lo\":127}],\"line\":[[37]]}", "{\"t\":\"tmap\",\"pts\":[{\"la\":37,\"lo\":127}],\"line\":[[95,1]]}", "{\"t\":\"tmap\",\"pts\":[{\"la\":37,\"lo\":127}],\"line\":\"x\"}" }) {
+            boolean thr = false;
+            try { ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"x\",\"head\":[],\"body\":[" + bad2 + "]}"); } catch (ScreenCore.ParseError e) { thr = true; } catch (Exception e) { thr = true; }
+            ok(thr, "tmap 엉터리 길은 거부: " + bad2);
+        }
         for (String bad : new String[] { "{\"t\":\"tmap\",\"pts\":[]}", "{\"t\":\"tmap\",\"pts\":[{\"la\":95,\"lo\":1}]}", "{\"t\":\"tmap\",\"h\":10,\"pts\":[{\"la\":37,\"lo\":127}]}", "{\"t\":\"tmap\",\"pts\":[{\"la\":37,\"lo\":127}],\"act\":{\"a\":\"zzz\"}}" }) {
             boolean threw = false;
             try { ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"map\",\"head\":[],\"body\":[" + bad + "]}"); } catch (Exception ex) { threw = true; }

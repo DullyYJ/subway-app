@@ -15,7 +15,7 @@
 //        가게를 누르면 앱이 보냈던 목록의 그 번호 가게를 지도 시트로 연다(번호 = 앱이 보낸 배열의 원래 위치).
 // 맨 아래 module.exports 는 시험(Node)용이고 Worker 에서는 함수 선언만 쓰인다.
 'use strict';
-var FOOD_SCREEN_V = 1;
+var FOOD_SCREEN_V = 2;
 var FOOD_CHIPS = ['전체', '카페', '밥집', '육식', '회집', '주점'];
 var FOOD_CHIP_EMOJI = { '카페': '☕', '밥집': '🍚', '육식': '🍖', '회집': '🍣', '주점': '🍺' };     // 웹 .food-chip 앞 그림
 var FOOD_MAX_SHOW = 150;          // 위·아래 목록 각각 최대 개수(웹과 같다)
@@ -60,7 +60,8 @@ function foodFacts(f) {
   var flt = FOOD_CHIPS.indexOf(f.flt) >= 0 ? f.flt : '전체';
   var sel = (f.sel && typeof f.sel === 'object' && !Array.isArray(f.sel)) ? f.sel : null;
   return { stn: stn, st: st, flt: flt, fail: f.fail === 1 || f.fail === true || f.fail === '1',
-           gps: foodLL(f.gps), dl: foodLL(f.dl), me: foodLL(f.me), sel: sel };
+           gps: foodLL(f.gps), dl: foodLL(f.dl), me: foodLL(f.me), ctr: foodLL(f.ctr), sel: sel,
+           pn: f.pn === 1 || f.pn === true || f.pn === '1', res: (f.res && typeof f.res === 'object' && !Array.isArray(f.res)) ? f.res : {} };
 }
 // ── 거리·역 찾기(웹 haversineM · _foodResolveCoord · _foodLoadNearby 와 같은 계산) ──
 function foodHav(la1, lo1, la2, lo2) {
@@ -210,7 +211,7 @@ function foodScreen(inp, factsIn, itemsIn) {
   inp = inp || {};
   if (!(Number(inp.cap) >= 4)) return { ok: false, error: 'cap' };
   var P = foodPrep(factsIn, itemsIn);
-  if (P.f.sel) return foodSheet(P.f);
+  if (P.f.sel) return P.f.pn ? foodPanel(P.f) : foodSheet(P.f);
   return foodScreenOf(foodFactsFor(P.f, P), P.all, P.allP);
 }
 
@@ -222,7 +223,7 @@ function foodScreens(inp, factsIn, itemsIn, altsIn) {
   inp = inp || {};
   if (!(Number(inp.cap) >= 4)) return { ok: false, error: 'cap' };
   var P = foodPrep(factsIn, itemsIn);
-  if (P.f.sel) return foodSheet(P.f);
+  if (P.f.sel) return P.f.pn ? foodPanel(P.f) : foodSheet(P.f);
   var out = foodScreenOf(foodFactsFor(P.f, P), P.all, P.allP);
   if (altsIn === 'chips') {                       // 앱은 어떤 칩이 있는지 모른다 — 엔진이 가진 칩 전부로 지금 사실만 칩을 바꿔 만든다. 키 = 칩 이름
     altsIn = {};
@@ -299,4 +300,91 @@ function foodSheet(f) {
   return out;
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { foodKakaoPick: foodKakaoPick, foodKakaoLinks: foodKakaoLinks, foodKakaoQuery: foodKakaoQuery, foodScreen: foodScreen, foodScreens: foodScreens, foodFacts: foodFacts, foodKind: foodKind, foodCatSimple: foodCatSimple, foodDist: foodDist, foodStars: foodStars, foodList: foodList, foodResolve: foodResolve, foodHav: foodHav, foodRowsServer: foodRowsServer, foodRowsPublic: foodRowsPublic, foodNavUrls: foodNavUrls, FOOD_CHIPS: FOOD_CHIPS };
+
+// ── 가게 지도 펼침(웹 _foodShowMap): 가게 카드 바로 아래에 이름 · 거리 · ✕ / 출발(도착역)→도착(가게) 지도 + 도보 경로 / 안내 글 / 네이버 · 카카오 단추 ──
+//   앱은 info.go 의 [이름, 업종, 주소, 위도, 경도] 를 f.sel 로, 도착역 좌표를 f.ctr, 역 이름을 f.stn 으로, 켜 달라는 뜻으로 f.pn=1 을 보낸다.
+//   경로는 웹 _footRoute 와 같다: ① Valhalla 보행자(polyline6) → ② OSRM → ③ 둘 다 안 되면 출발~도착 직선. 받아 올 주소는 info.need [{k,url}] 로 알려 주고,
+//   앱이 받은 글(실패하면 빈 글)을 f.res[k] 로 다시 보내면 엔진이 풀어 경로선(tmap.line)과 '약 N m' 를 정한다. 화면은 info.after(펼칠 카드의 act) 뒤에 끼운다.
+var FOOD_VALHALLA = 'https://valhalla1.openstreetmap.de/route?json=';
+var FOOD_OSRM = 'https://router.project-osrm.org/route/v1/foot/';
+var FOOD_LINE_MAX = 300;
+function foodDecode6(str) {                        // Valhalla polyline6(1e6 배율) → [[위도, 경도]…]
+  var idx = 0, la = 0, lo = 0, out = [], b, shift, result;
+  str = String(str || '');
+  while (idx < str.length) {
+    shift = 0; result = 0;
+    do { b = str.charCodeAt(idx++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20 && idx < str.length + 1);
+    la += (result & 1) ? ~(result >> 1) : (result >> 1);
+    shift = 0; result = 0;
+    do { b = str.charCodeAt(idx++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20 && idx < str.length + 1);
+    lo += (result & 1) ? ~(result >> 1) : (result >> 1);
+    out.push([la / 1e6, lo / 1e6]);
+  }
+  return out;
+}
+function foodThin(pts) {                           // 점이 너무 많으면 고르게 줄인다(처음 · 끝은 남긴다) · 소수 여섯째 자리
+  var out = [], n = pts.length, step = n > FOOD_LINE_MAX ? (n - 1) / (FOOD_LINE_MAX - 1) : 1, i;
+  for (i = 0; i < n && out.length < FOOD_LINE_MAX; i += step) { var q = pts[Math.round(i)]; out.push([Math.round(q[0] * 1e6) / 1e6, Math.round(q[1] * 1e6) / 1e6]); }
+  var last = pts[n - 1];
+  if (out.length && (out[out.length - 1][0] !== last[0] || out[out.length - 1][1] !== last[1])) { if (out.length >= FOOD_LINE_MAX) out.pop(); out.push([Math.round(last[0] * 1e6) / 1e6, Math.round(last[1] * 1e6) / 1e6]); }
+  return out;
+}
+function foodRouteOf(res, s, d) {                  // → { pts, m } 경로를 얻었다 · { need } 더 받아 와야 한다 · { pts: null } 다 실패(직선)
+  var r;
+  if (res.rt === undefined) {
+    var q = { locations: [{ lat: s[0], lon: s[1] }, { lat: d[0], lon: d[1] }], costing: 'pedestrian', units: 'kilometers', directions_options: { language: 'ko-KR' } };
+    return { need: { k: 'rt', url: FOOD_VALHALLA + encodeURIComponent(JSON.stringify(q)) } };
+  }
+  try {
+    r = JSON.parse(res.rt);
+    var leg = r && r.trip && r.trip.legs && r.trip.legs[0];
+    if (leg && leg.shape) {
+      var cs = foodDecode6(leg.shape), len = r.trip.summary && r.trip.summary.length ? r.trip.summary.length * 1000 : 0;
+      if (cs.length >= 2) return { pts: cs, m: len };
+    }
+  } catch (e1) { /* 다음 길 */ }
+  if (res.ro === undefined) return { need: { k: 'ro', url: FOOD_OSRM + s[1] + ',' + s[0] + ';' + d[1] + ',' + d[0] + '?overview=full&geometries=geojson' } };
+  try {
+    r = JSON.parse(res.ro);
+    var rt = r && r.routes && r.routes[0];
+    if (rt && rt.geometry && Array.isArray(rt.geometry.coordinates) && rt.geometry.coordinates.length >= 2) {
+      return { pts: rt.geometry.coordinates.map(function (c) { return [c[1], c[0]]; }), m: rt.distance || 0 };
+    }
+  } catch (e2) { /* 직선 */ }
+  return { pts: null };
+}
+function foodPanel(f) {
+  var sel = f.sel, name = foodNameOf(sel.n), la = Number(sel.la), lo = Number(sel.lo);
+  if (!name || !isFinite(la) || !isFinite(lo) || !foodLL([la, lo])) return { ok: false, error: 'sel' };
+  var s = f.ctr, d = [la, lo];
+  var hasStn = !!s && (s[0] !== la || s[1] !== lo);
+  var stn = foodStr(f.stn, 30).replace(/역$/, '');
+  var distTxt = s ? foodDist(Math.round(foodHav(s[0], s[1], la, lo))) : '';
+  var pts = [{ la: la, lo: lo, k: 'b', n: '도착', l: name }], need = [], line = null, meters = 0;
+  if (hasStn) {
+    pts.push({ la: s[0], lo: s[1], k: 'a', n: '출발', l: (stn || '출발') + '역' });
+    var rr = foodRouteOf(f.res || {}, s, d);
+    if (rr.need) { need.push(rr.need); line = [[s[0], s[1]], d]; }
+    else if (rr.pts) { line = foodThin(rr.pts); meters = rr.m || 0; }
+    else line = [[s[0], s[1]], d];
+  }
+  var foot = '🚶 ' + (stn ? stn + '역 → ' : '') + name + ' 도보 경로' + (meters ? ' · 약 ' + Math.round(meters) + 'm' : '');
+  var map = { t: 'tmap', pad: [0, 0, 0, 0], h: 260, r: 0, pts: pts, fp: 46, fz: 18 };
+  if (line) map.line = line;
+  var navs = { t: 'row', pad: [8, 12, 12, 12], gap: 8, kids: [
+    { t: 'button', s: '네이버 리뷰·정보', size: 13, h: 40, r: 10, bold: true, fill: '#03C75A', line: 'none', tc: '#ffffff', act: { a: 'call', v: 'fm.ni' } },
+    { t: 'button', s: '카카오 리뷰·정보', size: 13, h: 40, r: 10, bold: true, fill: '#FEE500', line: 'none', tc: '#3C1E1E', act: { a: 'call', v: 'fm.ki' } } ] };
+  var kids = [
+    { t: 'bar', pad: [6, 12, 6, 12], title: name, sub: distTxt ? '📍 ' + distTxt : '', btn: '✕', act: { a: 'call', v: 'fm.close' } },
+    map,
+    { t: 'text', s: foot, size: 12, color: 'sub', lh: 1.5, pad: [8, 12, 0, 12] },
+    navs
+  ];
+  var body = [{ t: 'panel', pad: [4, 0, 12, 0], ip: [0, 0, 0, 0], fill: 'card', line: 'border', r: 14, kids: kids }];
+  var nv = foodNavUrls(sel, f.me);
+  var out = { ok: true, v: 1, screen: 'foodpanel', cover: 'tab', head: [], body: body, info: { nv: nv, n: name, need: need, hasRoute: !!(line && !need.length) } };
+  out.rev = 'fp' + FOOD_SCREEN_V + ':' + foodHash(JSON.stringify(body));
+  return out;
+}
+
+if (typeof module !== 'undefined' && module.exports) module.exports = { foodKakaoPick: foodKakaoPick, foodKakaoLinks: foodKakaoLinks, foodKakaoQuery: foodKakaoQuery, foodScreen: foodScreen, foodScreens: foodScreens, foodFacts: foodFacts, foodKind: foodKind, foodCatSimple: foodCatSimple, foodDist: foodDist, foodStars: foodStars, foodList: foodList, foodResolve: foodResolve, foodHav: foodHav, foodRowsServer: foodRowsServer, foodRowsPublic: foodRowsPublic, foodNavUrls: foodNavUrls, foodPanel: foodPanel, foodDecode6: foodDecode6, FOOD_CHIPS: FOOD_CHIPS };
