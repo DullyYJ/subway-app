@@ -104,6 +104,17 @@ const flat = ns => { const o = []; (function f(a) { a.forEach(n => { o.push(n); 
   const r = screenCheck([o, o2, n1]);
   ok(!r.err && r.out.every(l => /^OK/.test(l)), '앱 검증기 통과(장거리·공지): ' + (r.err || r.out.join(' | ')));
 }
+// ⑤-0 예상 경로 라벨 + 무지개 테두리(웹 preview-glow)
+{
+  const pv = call('fast', { bt: now + 2 * 3600000 }), p0 = pv.body[0];
+  ok(p0.t === 'panel' && p0.glow === true && p0.kids[0].t === 'pill' && /^예상 경로 · /.test(p0.kids[0].s), '기준시각을 정하면 경로 카드 맨 위에 예상 라벨 + glow');
+  const mt = call('fast', { metro: true }), pm = mt.body[0];
+  ok(pm.glow === true && pm.kids[0].s === '노선도에서 설정한 경로', '노선도에서 정한 경로 라벨');
+  const pn = call('fast').body[0];
+  ok(!pn.glow && pn.kids[0].t !== 'pill', '현재 기준이면 라벨도 테두리도 없다');
+  const rs = screenCheck([pv, mt]);
+  ok(!rs.err && rs.out.every(l => /^OK/.test(l)), '앱 검증기 통과(예상 라벨): ' + (rs.err || rs.out.join(' | ')));
+}
 // ⑤-a 세부경로 줄(tdrow) — cap 20 이상 앱
 {
   const c20 = (extra) => E.resultScreen({ cap: 20 }, Object.assign({ data: DATA, tab: 'fast', a: '부평', b: '두정', bt: null, rb: now, now, tz: 540, th: 'pastel', fav: 1, view: 'detail', dl: { la: 36.5, lo: 127.1, n: '두정역' }, me: [37.49, 126.72] }, extra || {}));
