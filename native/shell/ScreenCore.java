@@ -703,6 +703,16 @@ public final class ScreenCore {
             n.ipL = optNum(m, "ph", 11f, 0f, 30f); n.ipT = optNum(m, "pv", 4f, 0f, 20f); n.r = optNum(m, "r", 9f, 0f, 30f);
             n.tc = roleOrCss(m, "tc", "text"); if (n.tc.length() == 0) n.tc = "text";
             n.fill = roleOrCss(m, "fill", "card2"); if (n.fill.length() == 0) n.fill = "card2";
+        } else if ("lpills".equals(t)) {                                                                   // 줄 바꿈 알약들(웹 _linePillHtml): 노선 이름 알약 + (호선 숫자 동그라미). 누르는 알약이 아니라 보여 주기만 한다
+            pad(m, n); n.gap = optNum(m, "gap", 7f, 0f, 40f);
+            for (Object io : asArr(m.get("items"), "lpills.items")) {
+                Map<String, Object> im = asObj(io, "lpill");
+                Node c = new Node(); c.t = "lpill";
+                c.label = optStr(im, "s", "", 24); if (c.label.length() == 0) throw new ParseError("lpill: s 없음");
+                c.badge = optStr(im, "num", "", 3); c.fill = roleOrCss(im, "c", "");
+                n.items.add(c); sc.nodes++;
+                if (sc.nodes > MAX_NODES) throw new ParseError("노드가 너무 많다");
+            }
         } else if ("cgh".equals(t)) {                                                                      // 혼잡도 카드 머리줄: 왼쪽 '지하철 강남' + 작은 글, 오른쪽 혼잡 단계 글자. 글·색은 엔진이 정한다
             pad(m, n);
             n.label = optStr(m, "lab", "", 12); n.name = optStr(m, "nm", "", 40); n.sub = optStr(m, "meta", "", 80); n.s = optStr(m, "st", "", 24);
@@ -971,7 +981,9 @@ public final class ScreenCore {
     public static final int SCENE_MAX = 6000;
     public static final float RUN_TRACK_H = 98f, RUN_TTL_GAP = 8f, RUN_TTL_H = 19f, RUN_SUB_GAP = 4f, RUN_SUB_H = 14f, RUN_H = RUN_TRACK_H + RUN_TTL_GAP + RUN_TTL_H + RUN_SUB_GAP + RUN_SUB_H;      // 경로 탐색 로딩(웹 #transitLoading): 달리는 칸 98 · 제목 14px · 안내 11px
     public static final float SKEL_ROW_H = 68f, SKEL_CARD_H = 132f, SKEL_MAP_H = 200f, SKEL_GAP = 10f;
-    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14, K_NEWS = 15, K_POSTH = 16, K_CMT = 17, K_RBTN = 18, K_INBAR = 19, K_MSG = 20, K_TAB = 21, K_SUG = 22, K_SWAP = 23, K_RHD = 24, K_TRK = 25, K_CGH = 26, K_GAUGE = 27, K_CHART = 28, K_HBAR = 29, K_CARS = 30, K_AIH = 31, K_LTH = 32, K_LTR = 33, K_PILL = 34, K_SCENE = 35, K_TMAP = 36, K_MARQ = 37, K_SKEL = 38, K_BTOG = 39, K_BCARD = 40, K_SEC = 41, K_TROW = 42, K_BRX = 43, K_RUNNER = 44, K_TDROW = 45;
+    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14, K_NEWS = 15, K_POSTH = 16, K_CMT = 17, K_RBTN = 18, K_INBAR = 19, K_MSG = 20, K_TAB = 21, K_SUG = 22, K_SWAP = 23, K_RHD = 24, K_TRK = 25, K_CGH = 26, K_GAUGE = 27, K_CHART = 28, K_HBAR = 29, K_CARS = 30, K_AIH = 31, K_LTH = 32, K_LTR = 33, K_PILL = 34, K_SCENE = 35, K_TMAP = 36, K_MARQ = 37, K_SKEL = 38, K_BTOG = 39, K_BCARD = 40, K_SEC = 41, K_TROW = 42, K_BRX = 43, K_RUNNER = 44, K_TDROW = 45, K_LPILL = 46;
+    /** 노선 알약(웹 _linePillHtml): 글자 13 · 좌우 14(숫자 동그라미가 있으면 왼쪽 6) · 동그라미 22 · 동그라미와 글 사이 6 · 높이 27/34. */
+    public static final float LP_FS = 13f, LP_NUM_FS = 12f, LP_PADL = 14f, LP_PADR = 14f, LP_PADL_N = 6f, LP_NUM = 22f, LP_NUM_GAP = 6f, LP_H = 27f, LP_H_NUM = 34f;
     /** 버스 정류장 카드 치수(웹 .map-bus-stop-card / .kbus-row 와 같다) */
 
     /** 노선 상세(웹 .brs-*): 머리 52 · 제목 · 구간 머리 34 · 회차 28 · 정류장 줄 56+ (레일 폭 5 · 점 9 · 버스 21 · 내 위치 15). */
@@ -1623,6 +1635,19 @@ public final class ScreenCore {
             it.fill = col(n.fill, new Col("card2", 0)); it.tc = col(n.tc, new Col("text", 0));
             out.add(it);
             return y + it.h + n.padB;
+        }
+        if ("lpills".equals(n.t)) {                                                  // 웹 _linePillHtml: 숫자 있으면 높이 34(동그라미 22 + 위아래 6), 없으면 27. 칸이 모자라면 다음 줄로
+            boolean anyNum = false; for (Node c : n.items) if (c.badge.length() > 0) anyNum = true;
+            float lh = anyNum ? LP_H_NUM : LP_H, lx = ox, ly = y;
+            for (Node c : n.items) {
+                boolean hn = c.badge.length() > 0;
+                float lw = m.width(c.label, LP_FS, true), w = hn ? LP_PADL_N + LP_NUM + LP_NUM_GAP + lw + LP_PADR : LP_PADL + lw + LP_PADR;
+                if (lx > ox && lx + w > ox + innerW) { lx = ox; ly += lh + n.gap; }
+                Item it = new Item(); it.kind = K_LPILL; it.x = lx; it.y = ly; it.w = w; it.h = lh; it.label = c.label; it.t1 = c.badge;
+                it.fill = col(c.fill, new Col(null, 0xFF8E8E93));
+                out.add(it); lx += w + n.gap;
+            }
+            return ly + lh + n.padB;
         }
         if ("ltr".equals(n.t)) {                                                     // '실시간 대화' 한 줄
             if (n.hide) return y;
