@@ -196,6 +196,7 @@ public final class ScreenCore {
         public float ipL = 12f, ipT = 8f, ipR = 12f, ipB = 8f, r = 10f, max = 340f, vp = 9f, ssize = 11f;
         public int maxlen = 60;
         public boolean top, big;
+        public long ln, ln2;                               // tdrow: 구간 출발·도착 시각(기기 시계 ms)
         public String key = "", title = "", sub = "", value = "";
         public String fill = "", line = "", hint = "", accent = "#e63329", tc = "", sc = "", onc = "", onl = "", chk = "", ckf = "";
         public String[] prev = new String[0];
@@ -272,6 +273,15 @@ public final class ScreenCore {
         if (f < lo || f > hi) throw new ParseError(k + ": 범위 밖 " + f);
         return f;
     }
+    private static long optLong(Map<String, Object> m, String k) throws ParseError {
+        Object v = m.get(k);
+        if (v == null) return 0L;
+        if (!(v instanceof Double)) throw new ParseError(k + ": 수가 아니다");
+        double d = ((Double) v).doubleValue();
+        if (d < 0d || d > 9.0e15) throw new ParseError(k + ": 범위 밖");
+        return (long) d;
+    }
+    private static String clip(String s, int max) { return s.length() > max ? s.substring(0, max) : s; }
     private static boolean optBool(Map<String, Object> m, String k, boolean def) throws ParseError {
         Object v = m.get(k);
         if (v == null) return def;
@@ -527,6 +537,26 @@ public final class ScreenCore {
             n.badge = optStr(m, "day", "", 10); n.accent = roleOrCss(m, "dc", "#30d158"); if (n.accent.length() == 0) n.accent = "#30d158";
             n.title = optStr(m, "btn", "", 8); n.on = optBool(m, "cur", true); n.h = optNum(m, "h", 34f, 20f, 60f);
             n.act = act(m.get("act"), true); n.bact = n.title.length() > 0 ? act(m.get("bact"), true) : null;
+        } else if ("tdrow".equals(t)) {                                                                    // 세부경로 줄(웹 .tdsec-row): 진행 레일 · 아이콘 · 뱃지 · 경유 · 시간 + 펼침 정거장
+            pad(m, n);
+            n.key = optStr(m, "ic", "w", 1); if (!"w".equals(n.key) && !"s".equals(n.key) && !"b".equals(n.key)) throw new ParseError("tdrow: ic 는 w s b");
+            n.value = optStr(m, "pos", "m", 1); if (!"f".equals(n.value) && !"m".equals(n.value) && !"l".equals(n.value) && !"o".equals(n.value)) throw new ParseError("tdrow: pos 는 f m l o");
+            n.accent = roleOrCss(m, "col", "sub"); if (n.accent.length() == 0) n.accent = "sub";
+            n.bg = roleOrCss(m, "trk", "border"); n.ob = roleOrCss(m, "ibg", "card2"); n.fill = roleOrCss(m, "bbg", "card2"); n.line = roleOrCss(m, "bfg", "sub"); n.tc = roleOrCss(m, "tcol", "sub");
+            n.badge = optStr(m, "lab", "", 24); n.name = optStr(m, "path", "", 60); n.tag = optStr(m, "cnt", "", 20); n.title = optStr(m, "time", "", 12); n.sub = optStr(m, "rng", "", 14);
+            n.ln = optLong(m, "dep"); n.ln2 = optLong(m, "arr");
+            n.big = optBool(m, "ex", false); n.on = optBool(m, "op", false);
+            n.act = n.big ? act(m.get("act"), true) : null;
+            if (m.get("stops") != null) {
+                List<Object> sl = asArr(m.get("stops"), "tdrow.stops");
+                if (sl.size() > TD_MAXSTOPS) throw new ParseError("tdrow: 정거장이 너무 많다");
+                for (Object so : sl) {
+                    List<Object> sa = asArr(so, "tdrow.stop");
+                    if (sa.size() < 3 || !(sa.get(0) instanceof String) || !(sa.get(1) instanceof String) || !(sa.get(2) instanceof Double)) throw new ParseError("tdrow: 정거장은 [이름, 시각, 끝점]");
+                    Node c = new Node(); c.t = "tdstop"; c.name = clip((String) sa.get(0), 30); c.label = clip((String) sa.get(1), 8); c.on = ((Double) sa.get(2)).doubleValue() != 0d;
+                    n.items.add(c); sc.nodes++;
+                }
+            }
         } else if ("place".equals(t)) {
             pad(m, n);
             n.s = optStr(m, "rank", "", 6); n.on = optBool(m, "pub", false);
@@ -938,7 +968,7 @@ public final class ScreenCore {
     public static final int SCENE_MAX = 6000;
     public static final float RUN_TRACK_H = 98f, RUN_TTL_GAP = 8f, RUN_TTL_H = 19f, RUN_SUB_GAP = 4f, RUN_SUB_H = 14f, RUN_H = RUN_TRACK_H + RUN_TTL_GAP + RUN_TTL_H + RUN_SUB_GAP + RUN_SUB_H;      // 경로 탐색 로딩(웹 #transitLoading): 달리는 칸 98 · 제목 14px · 안내 11px
     public static final float SKEL_ROW_H = 68f, SKEL_CARD_H = 132f, SKEL_MAP_H = 200f, SKEL_GAP = 10f;
-    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14, K_NEWS = 15, K_POSTH = 16, K_CMT = 17, K_RBTN = 18, K_INBAR = 19, K_MSG = 20, K_TAB = 21, K_SUG = 22, K_SWAP = 23, K_RHD = 24, K_TRK = 25, K_CGH = 26, K_GAUGE = 27, K_CHART = 28, K_HBAR = 29, K_CARS = 30, K_AIH = 31, K_LTH = 32, K_LTR = 33, K_PILL = 34, K_SCENE = 35, K_TMAP = 36, K_MARQ = 37, K_SKEL = 38, K_BTOG = 39, K_BCARD = 40, K_SEC = 41, K_TROW = 42, K_BRX = 43, K_RUNNER = 44;
+    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14, K_NEWS = 15, K_POSTH = 16, K_CMT = 17, K_RBTN = 18, K_INBAR = 19, K_MSG = 20, K_TAB = 21, K_SUG = 22, K_SWAP = 23, K_RHD = 24, K_TRK = 25, K_CGH = 26, K_GAUGE = 27, K_CHART = 28, K_HBAR = 29, K_CARS = 30, K_AIH = 31, K_LTH = 32, K_LTR = 33, K_PILL = 34, K_SCENE = 35, K_TMAP = 36, K_MARQ = 37, K_SKEL = 38, K_BTOG = 39, K_BCARD = 40, K_SEC = 41, K_TROW = 42, K_BRX = 43, K_RUNNER = 44, K_TDROW = 45;
     /** 버스 정류장 카드 치수(웹 .map-bus-stop-card / .kbus-row 와 같다) */
 
     /** 노선 상세(웹 .brs-*): 머리 52 · 제목 · 구간 머리 34 · 회차 28 · 정류장 줄 56+ (레일 폭 5 · 점 9 · 버스 21 · 내 위치 15). */
@@ -973,6 +1003,9 @@ public final class ScreenCore {
     /** 검색줄 치수(웹 쿠팡 검색줄과 같다): 알약 높이 · 왼쪽 배지 · 오른쪽 단추 · 안쪽 여백 */
     public static final float FAB_PX = 24f, FAB_H = 40f, FAB_B = 16f, FAB_TXT = 13f, FAB_ICON = 14f, FAB_GAP = 6f;
     public static final float SEC_BTN = 11f, SEC_BTN_PX = 14f, SEC_BTN_H = 23f, SEC_HINT = 11.5f, SEC_PILL = 10f, SEC_PILL_PX = 8f, SEC_GAP = 8f;
+    // 세부경로 줄(웹 .tdsec-row): 안쪽 여백 13/16 · 레일 34 · 틈 12 · 뱃지 · 경유 글 · 오른쪽 시간
+    public static final float TD_PADV = 13f, TD_PADH = 16f, TD_RAIL = 34f, TD_GAP = 12f, TD_BADGE_H = 24f, TD_BADGE_PX = 11f, TD_BADGE_TXT = 13f, TD_CHEV = 19f, TD_CHEV_GAP = 8f,
+        TD_PATH = 12f, TD_PATH_LH = 16f, TD_CNT = 11f, TD_CNT_LH = 15f, TD_TIME = 14f, TD_TIME_LH = 18f, TD_RNG = 10f, TD_RNG_LH = 13f, TD_STOP_ROW = 27f, TD_STOP_PAD_L = 60f, TD_STOP_PAD_T = 4f, TD_STOP_PAD_B = 8f, TD_MAXSTOPS = 60;
     public static final float TROW_PX = 14f, TROW_TXT = 12f, TROW_SMALL = 10f, TROW_PILL_PX = 7f, TROW_PILL_H = 18f;
     public static final float SEARCH_H = 44f, SEARCH_BADGE = 20f, SEARCH_BTN = 30f, SEARCH_PADL = 14f, SEARCH_PADR = 8f, SEARCH_GAP = 8f;
     public static final float CARD_PAD = 8f, CARD_IMG_H = 78f, CARD_IMG_GAP = 5f, CARD_NAME_SIZE = 11f, CARD_LH = 1.35f, CARD_TAG_GAP = 6f, CHIP_PADX = 12f;
@@ -1027,7 +1060,8 @@ public final class ScreenCore {
         public String[] sa = new String[0];          // 칸별 혼잡: 칸마다 글 세 줄(칸·단계·%)
         public Col[] ca = new Col[0];                // 칸별 혼잡: 칸마다 색
         public Col[][] segCol;                       // hl 조각마다 글자색(null 이면 기본 색)
-        public long ln;                              // aih: 카운트다운 마감 시각(기기 시계 ms)
+        public long ln;                              // aih: 카운트다운 마감 시각(기기 시계 ms) · tdrow: 구간 출발 시각
+        public long ln2;                             // tdrow: 구간 도착 시각
         public float[] gf = new float[0];            // bcard: 줄마다 [위쪽 y(카드 안), 높이]
         public boolean[] gb = new boolean[0];        // bcard: 줄마다 [첫 도착 임박, 둘째 도착 임박, 벨]
         public long[] rt = new long[0];              // bcard: 줄마다 나타난 시각(ms; 0 이면 애니메이션 없음)
@@ -1873,6 +1907,34 @@ public final class ScreenCore {
             if (btnW > 0f) { it.go = n.label; it.sx = ox + innerW - btnW; it.sw = btnW; it.sh = SEC_BTN_H; it.sy = y + (h - SEC_BTN_H) / 2f; }
             out.add(it);
             return y + h + n.padB;
+        }
+        if ("tdrow".equals(n.t)) {                                                   // 세부경로 줄(그림은 ScreenView 가 그린다)
+            float rx = ox + innerW - TD_PADH;
+            float tw = Math.max(n.title.length() > 0 ? m.width(n.title, TD_TIME, true) : 0f, n.sub.length() > 0 ? m.width(n.sub, TD_RNG, false) : 0f);
+            float bodyX = ox + TD_PADH + TD_RAIL + TD_GAP, bodyW = Math.max(60f, rx - tw - TD_GAP - bodyX);
+            float bw = n.badge.length() > 0 ? m.width(n.badge, TD_BADGE_TXT, true) + TD_BADGE_PX * 2f : 0f;
+            float chevRoom = n.big ? TD_CHEV_GAP + TD_CHEV : 0f;
+            if (bw > bodyW - chevRoom) bw = Math.max(40f, bodyW - chevRoom);
+            List<String> pl = n.name.length() > 0 ? wrap(n.name, bodyW, TD_PATH, false, 2, m) : new ArrayList<String>();
+            float bodyH = (bw > 0f ? TD_BADGE_H : 0f) + (pl.isEmpty() ? 0f : 5f + pl.size() * TD_PATH_LH) + (n.tag.length() > 0 ? 2f + TD_CNT_LH : 0f);
+            float timeH = (n.title.length() > 0 ? TD_TIME_LH : 0f) + (n.sub.length() > 0 ? 2f + TD_RNG_LH : 0f);
+            float ch = Math.max(TD_RAIL, Math.max(bodyH, timeH));
+            float hh = TD_PADV * 2f + ch + 1f;
+            int ns = n.on ? n.items.size() : 0;
+            float eh = ns > 0 ? TD_STOP_PAD_T + ns * TD_STOP_ROW + TD_STOP_PAD_B : 0f;
+            Item it = new Item(); it.kind = K_TDROW; it.x = ox; it.y = y; it.w = innerW; it.h = hh + eh; it.f1 = hh; it.act = n.act; it.on = n.on; it.pub = n.big;
+            it.dk = n.key; it.gk = n.value; it.ln = n.ln; it.ln2 = n.ln2;
+            it.ac = col(n.accent, new Col("sub", 0)); it.lc = col(n.bg, new Col("border", 0)); it.dc = col(n.ob, new Col("card2", 0)); it.fill = col(n.fill, new Col("card2", 0)); it.line = col(n.line, new Col("sub", 0)); it.tc = col(n.tc, new Col("sub", 0));
+            it.sx = ox + TD_PADH + TD_RAIL / 2f;                                     // 레일 가운데 x
+            it.bx = bodyX; it.badge = n.badge; it.badgeW = bw; it.sy = y + TD_PADV + (ch - bodyH) / 2f;        // 뱃지 위 y(몸통 세로 가운데)
+            it.ix = bodyX + bw + TD_CHEV_GAP + TD_CHEV / 2f; it.iy = it.sy + TD_BADGE_H / 2f;               // 펼침 동그라미 가운데
+            it.lines = pl.toArray(new String[0]); it.textY = it.sy + (bw > 0f ? TD_BADGE_H : 0f) + 5f;
+            it.tag = n.tag; it.f3 = it.textY + (pl.isEmpty() ? -5f : pl.size() * TD_PATH_LH) + 2f;
+            it.value = n.sub; it.label = n.title; it.btx = rx; it.by = y + TD_PADV + (ch - timeH) / 2f; it.bty = it.by + (n.title.length() > 0 ? TD_TIME_LH + 2f : 0f);
+            it.sa = new String[ns * 2]; it.gb = new boolean[ns];
+            for (int i = 0; i < ns; i++) { Node c = n.items.get(i); it.sa[i * 2] = ellipsize(c.name, Math.max(40f, innerW - TD_STOP_PAD_L - 16f - 10f - 10f - 48f), 12f, c.on, m); it.sa[i * 2 + 1] = c.label; it.gb[i] = c.on; }
+            out.add(it);
+            return y + it.h + n.padB;
         }
         if ("trow".equals(n.t)) {
             float lx = ox + TROW_PX, rx = ox + innerW - TROW_PX;
