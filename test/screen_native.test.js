@@ -120,6 +120,20 @@ function findAndroidJar() {
     for (const n of ['post', 'cmt', 'btnrow', 'inbar', 'msg', 'tabbar']) assert.ok(new RegExp('"' + n + '"\\.equals\\(t\\)').test(c) && new RegExp('"' + n + '"\\.equals\\((t0\\()?n(\\))?\\.?t?\\)').test(c) || c.includes('"' + n + '".equals'), n + ' 읽기·배치');
     assert.ok(/public static float\[\] pathOps\(/.test(c) && /sc\.foot\.add\(/.test(c), '코어: 경로 읽기 · foot');
   });
+  await t('주변 정류장 끌어서 순서 바꾸기(웹 busJiggle · _bd*): 꾹 누르기 · 흔들림 · 끌기 · 자동 스크롤 · 완료 줄을 그리고 코어가 글을 안다 · 그릴 때 새 객체 없음', async () => {
+    const v = fs.readFileSync(N('ScreenView.java'), 'utf8'), c = fs.readFileSync(N('ScreenCore.java'), 'utf8');
+    assert.ok(/case ScreenCore\.K_BCARD: drawBcardRo\(cv, it\)/.test(v) && /private void drawBcardRo\(/.test(v) && /private void roDrawDragged\(/.test(v) && /private void roDrawBar\(/.test(v), '카드 그리기 연결 + 끌리는 카드 · 완료 줄');
+    assert.ok(/RO_LP_MS = 420L/.test(v) && /ui\.postDelayed\(lpRun, RO_LP_MS\)/.test(v) && /0\.8f \* \(float\) Math\.cos\(2\.0 \* Math\.PI \* \(SystemClock\.uptimeMillis\(\) % 240L\) \/ 240\.0\)/.test(v) && /RO_ZOOM = 1\.03f/.test(v) && /RO_EDGE = 90f, RO_MAXV = 18f/.test(v), '웹 값: 420ms 꾹 · 흔들림 .24초 ±0.8° · 1.03배 · 가장자리 90 · 최대 18');
+    for (const fn of ['roDrawDragged', 'drawBcardRo', 'roDrawBar', 'roStep']) {
+      const i = v.indexOf('private void ' + fn + '('), seg = v.slice(i, v.indexOf('\n    }\n', i));
+      assert.ok(i > 0 && !/\bnew\s+[A-Z]/.test(seg), fn + ' 에 new 가 있다');
+    }
+    assert.ok(/roStep\(now\);/.test(v) && /roAnim\) postInvalidateOnAnimation/.test(v) && /if \(dragOn \|\| settleOn\) roDrawDragged\(cv\)/.test(v) && /roDrawBar\(cv, w\)/.test(v), 'drawAll 이 프레임마다 이어 그린다');
+    assert.ok(/mode == 6 \|\| mode == 7\) && e\.getActionMasked\(\) != MotionEvent\.ACTION_DOWN\) return roTouch\(e\)/.test(v) && /roMode && roDown\(x, y\)/.test(v) && /void onReorder\(String\[\] keys, int\[\] perm\)/.test(v), '손가락 길 · 알림 연결');
+    assert.ok(/public String rol = "", rod = "";/.test(c) && /n\.rol = optStr\(m, "rol"/.test(c) && /it\.rol = n\.rol; it\.rod = n\.rod;/.test(c), '코어가 순서 바꾸기 줄 글(엔진 것)을 읽는다');
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), m = fs.readFileSync(N('MapCore.java'), 'utf8');
+    assert.ok(/body\.setReorderHost\(/.test(a) && /map\.reorderNear\(keys, perm\)/.test(a) && /loadMapBody\(body, true\)/.test(a.slice(a.indexOf('private void reorderBusNear'))) && /K_BUSORD = "bus_ord"/.test(m) && /\\"ord\\":/.test(m), '앱: 저장 → 엔진이 새 순서로 다시 그림(도착정보는 번호만 옮김)');
+  });
   await t('홈 경로 입력 노드: 동그라미·굵은 글·작은 단추·확인 키(eact)·흐린 단추(dim) · 목록줄(sug) · 바꾸기 단추(swap) · 글자 바뀜/높이 이벤트 · 위에 그려진 것이 먼저 눌린다', async () => {
     const v = fs.readFileSync(path.join(ROOT, 'native', 'shell', 'ScreenView.java'), 'utf8'), p = '', c = fs.readFileSync(path.join(ROOT, 'native', 'shell', 'ScreenCore.java'), 'utf8');
     for (const k of ['SUG:drawSug', 'SWAP:drawSwap']) {
