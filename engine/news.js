@@ -158,6 +158,17 @@ function nwFacts(f) {
   return { cat: NW_CATS.indexOf(f.cat) >= 0 ? f.cat : '전체' };
 }
 // 기사 한 건 → { i, title, link, source, ts, cat, desc }  (제목이 없거나 잡음이면 null)
+// 같은 기사(제목 · 요약 · 서버 분류)는 분류를 다시 하지 않는다 — 기사 목록은 요청마다 거의 같고 분류(정규식 수십 개)가 목록 계산의 대부분이라, 데워진 워커에서는 한 번만 한다(결과는 같다).
+var NW_CLS_MEMO = {}, NW_CLS_N = 0;
+function nwClassifyMemo(it) {
+  var k = String(it.title) + '\u0001' + String(it.desc) + '\u0001' + String(it.cat);
+  var v = NW_CLS_MEMO[k];
+  if (v) return v;
+  v = nwClassify(it);
+  if (NW_CLS_N > 4000) { NW_CLS_MEMO = {}; NW_CLS_N = 0; }
+  NW_CLS_MEMO[k] = v; NW_CLS_N++;
+  return v;
+}
 function nwOne(a, i, now) {
   if (!Array.isArray(a)) return null;
   var raw = typeof a[0] === 'string' ? a[0].slice(0, 300) : '';
@@ -171,7 +182,7 @@ function nwOne(a, i, now) {
     cat: nwStr(a[4], 20), desc: nwDecode(nwStr(a[5], 400))
   };
   if (!it.title) return null;
-  it.cat = nwClassify(it);
+  it.cat = nwClassifyMemo(it);
   return it;
 }
 function nwList(rows, now) {

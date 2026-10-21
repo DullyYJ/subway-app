@@ -421,13 +421,13 @@ public final class ShellCore {
         if (S_CCHIPS.equals(screen)) return new Req("POST", BASE + "/screen/cchips", cchipsBody(mode(st)));
         if (S_NEWS.equals(screen)) {
             NewsRows r = NewsRows.from(feeds);
-            return new Req("POST", BASE + "/screen/news", "{\"cap\":" + CAP + ",\"f\":{\"cat\":" + q(st.get(K_NEWS_CAT, "전체")) + "},\"n\":" + r.json() + "}");
+            return new Req("POST", BASE + "/screen/news", "{\"cap\":" + CAP + ",\"f\":{\"cat\":" + q(st.get(K_NEWS_CAT, "전체")) + "},\"n\":" + r.listJson() + "}");
         }
         return null;
     }
     /** 소식 요청 본문. withAlts 면 엔진이 가진 모든 분류 화면을 한 번에 같이 돌려준다(미리 받기용). */
     public static String newsBody(Store st, NewsRows rows, boolean withAlts) {
-        return "{\"cap\":" + CAP + ",\"f\":{\"cat\":" + q(st.get(K_NEWS_CAT, "전체")) + "},\"n\":" + rows.json() + (withAlts ? ",\"alts\":\"chips\"" : "") + "}";
+        return "{\"cap\":" + CAP + ",\"f\":{\"cat\":" + q(st.get(K_NEWS_CAT, "전체")) + "},\"n\":" + rows.listJson() + (withAlts ? ",\"alts\":\"chips\"" : "") + "}";
     }
     /** 화면 둘을 위아래로 이어 붙인다(첫 화면의 head·cover·info 를 쓰고 본문만 이어 붙임). 내용은 건드리지 않는다. 못 읽으면 첫 화면 그대로. */
     @SuppressWarnings("unchecked")
@@ -508,6 +508,21 @@ public final class ShellCore {
             }
             return b.append(']').toString();
         }
+        /**
+         * 목록 계산용 가벼운 줄: 링크 · 언론사는 비우고 요약은 120자까지만. 엔진이 목록을 만들 때 쓰는 것은 제목 · 시각 · 서버 분류 · 요약(분류 보조)뿐이고,
+         * 구글 뉴스 링크는 한 줄에 수백 자라 700줄이면 요청이 수백 KB — 휴대 통신에서 느리고 한도(NET_MAX_REQ)를 넘기던 원인이었다.
+         * 줄 순서는 rows 와 같다(엔진이 돌려주는 ix 가 그대로 rows 의 번호). 눌렀을 때의 상세 요청은 rowJson(전체 줄)을 그대로 보낸다.
+         */
+        public String listJson() {
+            StringBuilder b = new StringBuilder("[");
+            for (int i = 0; i < rows.size(); i++) {
+                if (i > 0) b.append(',');
+                String[] r = rows.get(i);
+                String d = r[5].length() > 120 ? r[5].substring(0, 120) : r[5];
+                b.append('[').append(q(r[0])).append(",\"\",\"\",").append(r[3]).append(',').append(q(r[4])).append(',').append(q(d)).append(']');
+            }
+            return b.append(']').toString();
+        }
         /** 기사 고유 id(링크 또는 제목)로 줄을 찾아 엔진에 보낼 모양으로. 없으면 눌린 줄이 알려 준 제목 · 링크만 담은 줄(엔진이 요약 없는 상세를 만든다). */
         public String rowJsonById(String id, String title) { return rowJsonById(id, title, -1); }
         /** 같은 id 의 줄이 여럿이면 엔진이 알려 준 원래 위치(ix)에 가장 가까운 줄 — 누른 그 기사. */
@@ -515,11 +530,12 @@ public final class ShellCore {
             int best = -1;
             for (int i = 0; i < rows.size(); i++) {
                 String[] r = rows.get(i);
-                if (!(id.equals(r[1]) || (r[1].length() == 0 && id.equals(r[0])))) continue;
+                if (!(id.equals(r[1]) || (r[1].length() == 0 && id.equals(r[0])) || (!id.startsWith("http") && squash(id).equals(squash(r[0]))))) continue;
                 if (ix < 0) return rowJson(i);
                 if (best < 0 || Math.abs(i - ix) < Math.abs(best - ix)) best = i;
             }
             if (best >= 0) return rowJson(best);
+            if (ix >= 0 && ix < rows.size() && squash(rows.get(ix)[0]).equals(squash(id.startsWith("http") ? (title == null ? "" : title) : id))) return rowJson(ix);          // 엔진이 받은 줄에 링크가 없어 id 가 제목이다 — 보낸 순서 그대로의 줄
             boolean url = id.startsWith("http");
             String t = title != null && title.length() > 0 ? title : (url ? "" : id);
             return "[" + q(t) + "," + q(url ? id : "") + ",\"\",0,\"\",\"\"]";
@@ -529,6 +545,7 @@ public final class ShellCore {
             String[] r = rows.get(i);
             return "[" + q(r[0]) + "," + q(r[1]) + "," + q(r[2]) + "," + r[3] + "," + q(r[4]) + "," + q(r[5]) + "]";
         }
+        static String squash(String t) { return t == null ? "" : t.replaceAll("\\s", ""); }
         static String str(Object o) { return o instanceof String ? (String) o : ""; }
     }
 

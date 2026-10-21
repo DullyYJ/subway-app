@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-21s120";
+var ENGINE_VERSION = "route-v2-2026-10-21s121";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -12790,6 +12790,17 @@ function nwFacts(f) {
   return { cat: NW_CATS.indexOf(f.cat) >= 0 ? f.cat : '\uc804\uccb4' };
 }
 // \uae30\uc0ac \ud55c \uac74 \u2192 { i, title, link, source, ts, cat, desc }  (\uc81c\ubaa9\uc774 \uc5c6\uac70\ub098 \uc7a1\uc74c\uc774\uba74 null)
+// \uac19\uc740 \uae30\uc0ac(\uc81c\ubaa9 \u00b7 \uc694\uc57d \u00b7 \uc11c\ubc84 \ubd84\ub958)\ub294 \ubd84\ub958\ub97c \ub2e4\uc2dc \ud558\uc9c0 \uc54a\ub294\ub2e4 \u2014 \uae30\uc0ac \ubaa9\ub85d\uc740 \uc694\uccad\ub9c8\ub2e4 \uac70\uc758 \uac19\uace0 \ubd84\ub958(\uc815\uaddc\uc2dd \uc218\uc2ed \uac1c)\uac00 \ubaa9\ub85d \uacc4\uc0b0\uc758 \ub300\ubd80\ubd84\uc774\ub77c, \ub370\uc6cc\uc9c4 \uc6cc\ucee4\uc5d0\uc11c\ub294 \ud55c \ubc88\ub9cc \ud55c\ub2e4(\uacb0\uacfc\ub294 \uac19\ub2e4).
+var NW_CLS_MEMO = {}, NW_CLS_N = 0;
+function nwClassifyMemo(it) {
+  var k = String(it.title) + '\u0001' + String(it.desc) + '\u0001' + String(it.cat);
+  var v = NW_CLS_MEMO[k];
+  if (v) return v;
+  v = nwClassify(it);
+  if (NW_CLS_N > 4000) { NW_CLS_MEMO = {}; NW_CLS_N = 0; }
+  NW_CLS_MEMO[k] = v; NW_CLS_N++;
+  return v;
+}
 function nwOne(a, i, now) {
   if (!Array.isArray(a)) return null;
   var raw = typeof a[0] === 'string' ? a[0].slice(0, 300) : '';
@@ -12803,7 +12814,7 @@ function nwOne(a, i, now) {
     cat: nwStr(a[4], 20), desc: nwDecode(nwStr(a[5], 400))
   };
   if (!it.title) return null;
-  it.cat = nwClassify(it);
+  it.cat = nwClassifyMemo(it);
   return it;
 }
 function nwList(rows, now) {

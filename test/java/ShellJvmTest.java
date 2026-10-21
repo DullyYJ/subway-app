@@ -345,7 +345,9 @@ public class ShellJvmTest {
             for (int i = 0; i < 1500; i++) { if (i > 0) big.append(','); big.append("{\"title\":\"기사 번호 ").append(i).append(" 제목입니다 아주 길게\",\"link\":\"https://news.example.com/article/2026/10/21/").append(i).append("\",\"source\":\"연합뉴스\",\"ts\":1700000000000,\"desc\":\"").append(dsc).append("\"}"); }
             big.append("]}");
             ShellCore.NewsRows bn = ShellCore.NewsRows.from(new String[] { big.toString() });
-            ok(bn.rows.size() == ShellCore.NewsRows.MAX && bn.json().length() < ScreenCore.NET_MAX_REQ - 2000, "기사가 아주 많아도 엔진 요청 본문은 한도 안: " + bn.json().length());
+            ok(bn.rows.size() == ShellCore.NewsRows.MAX && bn.listJson().length() < ScreenCore.NET_MAX_REQ / 2, "기사가 아주 많아도(링크 · 긴 요약 포함) 엔진 요청 본문은 한도의 절반 안: " + bn.listJson().length());
+            ok(!nr.listJson().contains("a.com") && nr.listJson().contains("코스피 & 환율 급등") && nr.listJson().contains("1700000001000") && nr.rowJson(1).contains("b.com/2"), "목록 요청 줄에는 링크 · 언론사가 없고 상세용 전체 줄에는 있다");
+            ok(nr.rowJsonById("코스피 & 환율 급등", "코스피 & 환율 급등", 0).equals(nr.rowJson(0)) && nr.rowJsonById("나스닥 마감", "나스닥 마감", 1).equals(nr.rowJson(1)), "엔진이 링크 없이 준 id(제목)로도 같은 기사를 찾는다");
             try { ScreenCore.Screen es = ScreenCore.load(ShellCore.errorScreen("HTTP 503")); ok(es.body.size() == 3 && ShellCore.errorScreen("").length() < ShellCore.errorScreen("HTTP 503").length(), "안내 화면에 못 받은 이유가 작게 붙는다"); }
             catch (ScreenCore.ParseError pe2) { ok(false, "안내 화면 JSON 오류: " + pe2.getMessage()); }
         }
