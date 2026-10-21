@@ -69,10 +69,39 @@ ok(G({ kind: 'x' }).error === 'kind' && G({}).error === 'kind' && G(null).error 
   ok(G({ kind: 'pop', msg: 'a'.repeat(300) }).head[0].s.length === 120, '알림: 120자까지');
 }
 
+// ④-1 도보 안내 시트(웹 walkModal)
+{
+  const NOW = Date.UTC(2026, 9, 21, 6, 5), W = (w, th) => G({ kind: 'walk', walk: Object.assign({ mode: 'arrive', nowMs: NOW, tzoMin: -540, theme: th || 'dark' }, w) });
+  const tiles = o => o.head.find(n => n.t === 'row').kids.map(k => k.kids[1].s);
+  const o = W({ my: { lat: 37.5, lng: 127.0 }, dest: { lat: 37.505, lng: 127.004, name: '강남역' } });
+  ok(o.screen === 'walk' && !o.dlg && o.bg === 'card' && o.info.kind === 'walk' && o.info.refresh === 30000, '도보: 안내창이 아니라 시트 화면');
+  ok(o.head[0].t === 'bar' && o.head[0].title === '목적지까지 도보 안내' && o.head[0].sub === '→ 강남역' && o.head[0].act.v === 'wk.close', '도보: 제목 · 목적지 · 닫기');
+  ok(tiles(o).join() === '658m,10분' && o.info.dist === 658 && o.info.min === 10, '도보: 직선거리 658m · 67m/분 → 10분 ' + tiles(o));
+  ok(o.head[o.head.length - 1].s === '오후 03:05 기준', '도보: 기준 시각(한국시간 오후 03:05)');
+  ok(btns(o).map(x => x.label + ':' + x.act.v).join() === '카카오맵:wk.kakao,네이버지도:wk.naver' && btns(o)[0].fill === '#FEE500' && btns(o)[1].fill === '#03C75A', '도보: 지도 앱 단추 색 · 행동');
+  ok(!EMOJI.test(JSON.stringify(o)), '도보: 이모지 없음');
+  ok(W({ my: { lat: 37.5, lng: 127 }, dest: { lat: 37.5, lng: 127.0002, name: 'a' } }).head.find(n => n.t === 'row').kids[1].kids[1].s === '1분 미만', '도보: 1분 안이면 1분 미만');
+  ok(tiles(W({ my: { lat: 37.5, lng: 127 }, dest: { lat: 37.6, lng: 127.1, name: 'b' } }))[0] === '14.2km', '도보: 1km 넘으면 km 한 자리');
+  const nm = W({ dest: { lat: 37.5, lng: 127, name: 'c' } });
+  ok(tiles(nm).join() === '-,-' && nm.head[nm.head.length - 1].s === ' ' && nm.info.nav.kakao[0] === 'kakaomap://route?ep=37.5,127&by=FOOT' && /directions\/-\/127,37.5,/.test(nm.info.nav.naver[1]), '도보: 내 위치가 없으면 - · 출발지 없는 길안내');
+  const nd = W({ my: { lat: 37.5, lng: 127 }, dest: { name: '이름만' } });
+  ok(tiles(nd).join() === '0m,-' && nd.info.nav === null && nd.info.msg === '목적지 좌표를 찾을 수 없습니다', '도보: 목적지 좌표가 없으면 0m · - · 안내 글');
+  ok(o.info.nav.kakao[0] === 'kakaomap://route?sp=37.5,127&ep=37.505,127.004&by=FOOT' && o.info.nav.kakao[1] === 'https://map.kakao.com/link/to/' + encodeURIComponent('강남역') + ',37.505,127.004', '도보: 카카오맵 주소');
+  ok(o.info.nav.naver[0].startsWith('nmap://route/walk?slat=37.5&slng=127&sname=') && o.info.nav.naver[0].endsWith('&dlat=37.505&dlng=127.004&dname=' + encodeURIComponent('강남역') + '&appname=com.dullyyj.subway') && o.info.nav.naver[1] === 'https://map.naver.com/p/directions/127,37.5,%EB%82%B4%EC%9C%84%EC%B9%98,,-1/127.004,37.505,' + encodeURIComponent('강남역') + ',,-1/walk', '도보: 네이버지도 주소');
+  ok(W({ dest: { lat: 1, lng: 2, name: '' } }).info.nav.kakao[1].includes(encodeURIComponent('목적지')), '도보: 이름이 없으면 목적지');
+  ok(W({ mode: 'start', dest: { lat: 1, lng: 2, name: 'x' } }).head[0].title === '출발역까지 도보 안내' && W({ mode: 'zz', dest: { lat: 1, lng: 2, name: 'x' } }).head[0].title === '현재 위치 지도', '도보: 모드별 제목');
+  ok(W({ my: { lat: 37.5, lng: 127 }, dest: { lat: 37.505, lng: 127.004, name: 'x' } }, 'light').head[1].kids[1].kids[1].hl[0][2] === '#29b96a' && o.head[1].kids[1].kids[1].hl[0][2] === '#34c759', '도보: 시간 글자 초록(어두운/밝은 테마)');
+  ok(G({ kind: 'walk' }).ok === true && G({ kind: 'walk' }, 15).error === 'cap' && JSON.stringify(W({})) === JSON.stringify(W({})), '도보: 빈 사실도 그려진다 · cap 16 미만 거절 · 안정');
+  const hh = (h, m) => W({ my: { lat: 37.5, lng: 127 }, dest: { lat: 37.5, lng: 127, name: 'z' }, nowMs: Date.UTC(2026, 9, 21, h - 9, m) });
+  const cl = x => x.head[x.head.length - 1].s;
+  ok(cl(hh(0, 0)) === '오전 12:00 기준' && cl(hh(12, 7)) === '오후 12:07 기준' && cl(hh(9, 30)) === '오전 09:30 기준' && cl(hh(23, 59)) === '오후 11:59 기준', '도보: 오전/오후 12시간제 · 두 자리');
+  ok(/'kakaomap:\/\/route\?'/.test(html) && /by=FOOT/.test(html) && /nmap:\/\/route\/walk\?/.test(html) && /appname=com\.dullyyj\.subway/.test(html) && /Math\.round\(dist \/ 67\)/.test(html) && /setInterval\(_walkRefresh, 30000\)/.test(html) && /1분 미만/.test(html), '도보: 계산식이 웹 walkModal 과 같다(67m/분 · 30초 · FOOT)');
+}
+
 // ⑤ 앱 검증기
 {
   const L = []; for (let i = 0; i < 60; i++) L.push('줄 ' + i + ' ' + 'k'.repeat(60));
-  const cases = [G({ kind: 'perm' }), G({ kind: 'exit' }), G({ kind: 'report' }), G({ kind: 'diag', lines: L }), G({ kind: 'diag', lines: [] }), G({ kind: 'pop', msg: '안내', sub: '둘째 줄' }), G({ kind: 'pop', msg: '공유', cls: 'sh' })];
+  const cases = [G({ kind: 'perm' }), G({ kind: 'exit' }), G({ kind: 'report' }), G({ kind: 'diag', lines: L }), G({ kind: 'diag', lines: [] }), G({ kind: 'pop', msg: '안내', sub: '둘째 줄' }), G({ kind: 'pop', msg: '공유', cls: 'sh' }), G({ kind: 'walk', walk: { my: { lat: 37.5, lng: 127 }, dest: { lat: 37.505, lng: 127.004, name: '강남역' }, nowMs: 1e12, tzoMin: -540 } }), G({ kind: 'walk' })];
   const r = screenCheck(cases);
   ok(!r.err && r.out.length === cases.length && r.out.every(l => /^OK/.test(l)), '앱 검증기 통과 ' + (r.err || r.out.join(' / ')));
 }
