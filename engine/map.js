@@ -13,7 +13,7 @@
 // 출력  { ok, v:1, screen:'map'|'mapstn'|'maptt', rev, cover:'tab', head, body, info }
 // 맨 아래 module.exports 는 시험(Node)용이고 Worker 에서는 함수 선언만 쓰인다.
 'use strict';
-var MAP_SCREEN_V = 5;
+var MAP_SCREEN_V = 6;
 var MAP_STN_TOP = 36;                                                   // 웹 팝업 위 여백 16 + 손잡이 4 + 16 (손잡이는 앱 뷰가 그린다)
 var MAP_REGIONS = [['seoul', '수도권'], ['busan', '부산'], ['daegu', '대구'], ['gwangju', '광주'], ['daejeon', '대전']];
 var MAP_REGION_PREFIX = { busan: '부산', daegu: '대구', gwangju: '광주', daejeon: '대전' };
@@ -197,7 +197,7 @@ function mapTimetableSheet(f) {
   var day = mapStr(sel.day, 6);
   var d = res[line + '|' + (day || '-')] || null;
   if (!day && d && d.dayCode) day = d.dayCode;
-  var kids = [{ t: 'bar', pad: [0, 0, 0, 4], title: name + ' 시간표', btn: '닫기', act: { a: 'call', v: 'mp.close' } }];
+  var kids = [{ t: 'bar', pad: [0, MAP_STN_TOP, 0, 4], title: name + ' 시간표', btn: '닫기', act: { a: 'call', v: 'mp.close' } }];
   if (lines.length) kids.push({ t: 'chips', pad: [0, 4, 0, 6], gap: 6, h: 30, onc: 'gold', onfg: '#ffffff', items: lines.map(function (l, i) {
     var kc = res[l + '|-'], nod = !!(kc && kc.noData);
     var o = { label: l, on: l === line, act: { a: 'call', v: 'mt.l.' + i } };
