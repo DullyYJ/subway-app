@@ -484,6 +484,7 @@ public class ScreenView extends View {
         new int[] { 0xFFFF9500, 0xFFFF3B30, 0xFFFF2D95, 0xFFA24BFF, 0xFF0A84FF, 0xFF30D158, 0xFFFFD60A, 0xFFFF9500 }, null);
     private final android.graphics.Matrix glowMx = new android.graphics.Matrix();
     private float glX0, glY0, glX1, glY1; private boolean glowDrawn;
+    private boolean hrDrawn;                       // 구간 타임라인에 '지금 칸' 점이 보이는 중(고리가 숨 쉰다)
     private boolean tdDrawn, tdAct;                    // 세부경로 줄이 보이는 중 · 그중 지금 가는 구간이 있는 중
     private final Path tdTri = new Path();             // 펼침 동그라미 안 ▾
     private static String runPrev = "";
@@ -1532,7 +1533,7 @@ public class ScreenView extends View {
         cv.drawRect(0, 0, getWidth(), getHeight(), p);
         if (lay == null) return;
         boolean moving = false;
-        sceneDrawn = false; glowDrawn = false; tdDrawn = false; tdAct = false; marqDrawn = false; skelDrawn = false; runDrawn = false; bcAnim = false; msgAnimOn = false; tmDrawn = false; cdDrawn = false; brxPingN = 0; inbarBusy = false;
+        sceneDrawn = false; hrDrawn = false; glowDrawn = false; tdDrawn = false; tdAct = false; marqDrawn = false; skelDrawn = false; runDrawn = false; bcAnim = false; msgAnimOn = false; tmDrawn = false; cdDrawn = false; brxPingN = 0; inbarBusy = false;
         if (ssOn) {                                                                       // 핀을 눌러 카드로 부드럽게 가는 중
             float f = (now - ssT0) / 350f;
             if (f >= 1f) { f = 1f; ssOn = false; }
@@ -1602,7 +1603,7 @@ public class ScreenView extends View {
         if (cdDrawn) postInvalidateDelayed(1000L - (System.currentTimeMillis() % 1000L) + 5L);       // 버스 도착 카운트다운이 보이는 동안 초가 바뀔 때마다 한 번씩
         if (moving || mode == 1 || mode == 2 || mode == 5 || bcAnim || tmAnimOn || msgAnimOn || roAnim) postInvalidateOnAnimation();
         else if (tmDrawn) postInvalidateDelayed(50L);                                             // 내 위치 점 뒤로 퍼지는 고리(웹 1.6초 주기)
-        else if (pulsing) postInvalidateDelayed(mkMs > 0f && now - mkT0 < mkMs ? 16L : 66L);      // 마커 맥박·고리(마커가 있을 때만; 가만히 있으면 초당 15번)
+        else if (pulsing || hrDrawn) postInvalidateDelayed(mkMs > 0f && now - mkT0 < mkMs ? 16L : 66L);      // 마커 맥박·고리(마커가 있을 때만; 가만히 있으면 초당 15번)
     }
 
     /** 새 화면의 마커 자리를 받는다. 이어서 오는 화면이면 지금 보이는 자리에서 새 자리까지 엔진이 정한 ms 동안 이어 가고, 처음이거나 ms 가 0 이면 곧바로 놓는다. */
@@ -2360,7 +2361,7 @@ public class ScreenView extends View {
         float ly = axisTop + ScreenCore.TRK_LINE_Y, cy = axisTop + ScreenCore.TRK_DOT_Y;
         // 이름: 마지막 줄의 아래가 nameBot
         if (it.lines.length > 0) {
-            setText(it.size, it.bold, cc(it.nc, pal[R_TEXT])); tp.setTextAlign(Paint.Align.CENTER);
+            setText(it.size, it.bold || it.hr, it.hr ? 0xFFFFD60A : it.ps ? alpha(cc(it.nc, pal[R_TEXT]), 0.35f) : cc(it.nc, pal[R_TEXT])); tp.setTextAlign(Paint.Align.CENTER);      // 지금 칸: 금색 굵게 · 지나간 칸: 흐리게(웹 htl-gps-here · htl-passed)
             for (int i = 0; i < it.lines.length; i++) {
                 float top = it.y + it.nameBot - (it.lines.length - i) * it.lineH;
                 cv.drawText(it.lines[i], cx, base(top, it.lineH, 0), tp);
@@ -2385,10 +2386,16 @@ public class ScreenView extends View {
         }
         // 선(앞뒤 칸과 이어지게 겹쳐 그린다)
         p.setStyle(Paint.Style.FILL);
-        if (it.lc != null) { p.setColor(cc(it.lc, 0)); cv.drawRect(it.x - 0.5f, ly, cx, ly + ScreenCore.TRK_LINE_H, p); }
-        if (it.rc != null) { p.setColor(cc(it.rc, 0)); cv.drawRect(cx, ly, it.x + it.w + 0.5f, ly + ScreenCore.TRK_LINE_H, p); }
+        if (it.lc != null) { p.setColor(it.ps ? alpha(cc(it.lc, 0), 0.3f) : cc(it.lc, 0)); cv.drawRect(it.x - 0.5f, ly, cx, ly + ScreenCore.TRK_LINE_H, p); }
+        if (it.rc != null) { p.setColor(it.ps ? alpha(cc(it.rc, 0), 0.3f) : cc(it.rc, 0)); cv.drawRect(cx, ly, it.x + it.w + 0.5f, ly + ScreenCore.TRK_LINE_H, p); }
         // 점
-        if ("e".equals(it.dk)) { p.setColor(cc(it.dc, 0)); cv.drawCircle(cx, cy, ScreenCore.TRK_E_R, p); }
+        if (it.hr) {                                                                   // 지금 칸: 금색 점(14) + 파란 고리가 3→8 로 커졌다 작아졌다(웹 gps-pulse 1.5초)
+            final float ph = (SystemClock.uptimeMillis() % 1500L) / 1500f, tri = ph < 0.5f ? ph * 2f : (1f - ph) * 2f, e = tri * tri * (3f - 2f * tri);
+            p.setColor(0xFF0A84FF); p.setAlpha(Math.round(255f * (0.4f - 0.32f * e))); cv.drawCircle(cx, cy, 7f + 3f + 5f * e, p);
+            p.setColor(0xFFFFD60A); cv.drawCircle(cx, cy, 7f, p);
+            hrDrawn = true;
+        } else if (it.ps) { p.setColor(0x4D555555); cv.drawCircle(cx, cy, "e".equals(it.dk) ? ScreenCore.TRK_E_R : "m".equals(it.dk) ? ScreenCore.TRK_M_R : ScreenCore.TRK_R_R, p); if ("r".equals(it.dk)) { p.setColor(pal[R_CARD]); cv.drawCircle(cx, cy, ScreenCore.TRK_R_R - 3f, p); } }
+        else if ("e".equals(it.dk)) { p.setColor(cc(it.dc, 0)); cv.drawCircle(cx, cy, ScreenCore.TRK_E_R, p); }
         else if ("r".equals(it.dk)) { p.setColor(cc(it.dc, 0)); cv.drawCircle(cx, cy, ScreenCore.TRK_R_R, p); p.setColor(pal[R_CARD]); cv.drawCircle(cx, cy, ScreenCore.TRK_R_R - 3f, p); }
         else if ("m".equals(it.dk)) {
             int c1 = cc(it.dc, 0), c2 = it.dc2 != null ? cc(it.dc2, c1) : c1;
@@ -2398,7 +2405,7 @@ public class ScreenView extends View {
         }
         // 시각(또는 도보 분)
         if (it.time.length() > 0) {
-            setText(it.tsz, it.tb, cc(it.timec, pal[R_SUB])); tp.setTextAlign(Paint.Align.CENTER);
+            setText(it.tsz, it.tb, it.ps ? alpha(cc(it.timec, pal[R_SUB]), 0.35f) : cc(it.timec, pal[R_SUB])); tp.setTextAlign(Paint.Align.CENTER);
             cv.drawText(it.time, cx, base(axisTop + ScreenCore.TRK_AXIS_H + ScreenCore.TRK_TIME_GAP, ScreenCore.TRK_TIME_H, 0), tp);
             tp.setTextAlign(Paint.Align.LEFT);
         }
