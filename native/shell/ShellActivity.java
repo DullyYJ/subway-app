@@ -131,6 +131,7 @@ public class ShellActivity extends Activity {
         body = new ScreenView(this);
         body.setDpr(dpr);
         body.setListener(new Host(1));
+        body.setReorderHost(new ScreenView.ReorderHost() { @Override public void onReorder(String[] keys, int[] perm) { reorderBusNear(keys, perm); } });      // 주변 정류장 카드 끌어서 순서 바꾸기
         holder.addView(body, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         vec = new VecMap(this, holder, body, dpr);       // 정류장 지도: 웹과 같은 벡터 지도(MapLibre · OpenFreeMap Liberty) — 못 받으면 아래 타일 그림이 그대로
         body.setVecHost(vec);
@@ -1819,6 +1820,12 @@ public class ShellActivity extends Activity {
     private void busFail() { map.restoreArrivals(); busEnd(); }                               // 받기 실패: 보던 도착정보를 그대로 돌려놓고 다음 박자에
     private void busOk() { map.commitArrivals(); busEnd(); }
     /** 도착정보만 새로 받는다: 성공하면 새 값으로 바로 덮고(카운트다운 시작점도 새로), 실패하면 아무것도 건드리지 않는다. */
+    /** 주변 정류장 카드를 끌어서 순서를 바꿨다 — 새 순서를 저장하고(이미 받은 도착정보는 번호를 옮겨 둔다) 엔진이 그 순서로 곧장 다시 그린다(도착정보를 다시 받지 않는다). */
+    private void reorderBusNear(String[] keys, int[] perm) {
+        if (!"map".equals(ShellCore.currentTab(store)) || !"bus".equals(map.mode()) || !MapCore.VW_NEAR.equals(map.busView())) return;
+        if (!map.reorderNear(keys, perm)) return;
+        loadMapBody(body, true);
+    }
     private void busRefresh() {
         if (busRefreshing && System.currentTimeMillis() - busRefAt < 20000L) return;
         busRefreshing = true; busRefAt = System.currentTimeMillis(); busAt = busRefAt;
