@@ -43,7 +43,20 @@ public final class MapCore {
     /** 30초 자동 새로고침: 정류장 목록(tp·gg·tn·d1)은 두고 도착정보(a0.. · f0..)만 비워 엔진이 다시 받아 오게 한다. */
     private long arrAt;       // 도착정보(a·f)를 마지막으로 받은 시각 — 엔진이 이 값으로 다시 그린 화면의 초는 그만큼 이미 흐른 것
     public long arrAge() { return arrAt > 0L ? Math.max(0L, System.currentTimeMillis() - arrAt) : 0L; }
-    public void dropArrivals() { arrAt = 0L; java.util.Iterator<String> it = busRes.keySet().iterator(); while (it.hasNext()) { if (it.next().matches("[af][0-9]{1,3}")) it.remove(); } busNeed.clear(); }
+    private final java.util.HashMap<String, String> arrStash = new java.util.HashMap<String, String>();
+    private long arrStashAt;
+    /** 8초 갱신을 시작한다: 보던 도착정보는 따로 챙겨 두고 비운다(새로 받기가 실패하면 restoreArrivals 로 되돌린다 — 비어 버린 채 남아 "도착정보 없음"이 되지 않게). */
+    public void dropArrivals() {
+        if (arrStash.isEmpty()) {
+            for (Map.Entry<String, String> e : busRes.entrySet()) if (e.getKey().matches("[af][0-9]{1,3}")) arrStash.put(e.getKey(), e.getValue());
+            arrStashAt = arrAt;
+        }
+        arrAt = 0L;
+        java.util.Iterator<String> it = busRes.keySet().iterator(); while (it.hasNext()) { if (it.next().matches("[af][0-9]{1,3}")) it.remove(); }
+        busNeed.clear();
+    }
+    public void restoreArrivals() { if (!arrStash.isEmpty()) { busRes.putAll(arrStash); arrAt = arrStashAt; arrStash.clear(); } busNeed.clear(); }
+    public void commitArrivals() { arrStash.clear(); }
     public void addBusRes(String k, String body) { if (k != null && k.matches("[af][0-9]{1,3}")) arrAt = System.currentTimeMillis(); if (k != null && k.matches("[a-z][a-z0-9]{0,3}")) busRes.put(k, body == null ? "" : (body.length() > 120000 ? body.substring(0, 120000) : body)); }
     /** 엔진이 준 주소를 공공 API 프록시 주소로 바꾼다 — /tago 는 route-v2 가 아니라 subway-api(gentle-lab) 워커에 있다. 허용 호스트가 아니면 빈 문자열. */
     public static String busFetchUrl(String u) {

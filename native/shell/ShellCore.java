@@ -527,18 +527,24 @@ public final class ShellCore {
         public String rowJsonById(String id, String title) { return rowJsonById(id, title, -1); }
         /** 같은 id 의 줄이 여럿이면 엔진이 알려 준 원래 위치(ix)에 가장 가까운 줄 — 누른 그 기사. */
         public String rowJsonById(String id, String title, int ix) {
+            int i = indexById(id, title, ix);
+            if (i >= 0) return rowJson(i);
+            boolean url = id.startsWith("http");
+            String t = title != null && title.length() > 0 ? title : (url ? "" : id);
+            return "[" + q(t) + "," + q(url ? id : "") + ",\"\",0,\"\",\"\"]";
+        }
+        /** 누른 기사 줄의 번호(없으면 -1). 상세 팝업의 원문 링크를 줄에서 찾는 데도 쓴다 — id 가 제목인 기사는 링크가 id 에 없다. */
+        public int indexById(String id, String title, int ix) {
             int best = -1;
             for (int i = 0; i < rows.size(); i++) {
                 String[] r = rows.get(i);
                 if (!(id.equals(r[1]) || (r[1].length() == 0 && id.equals(r[0])) || (!id.startsWith("http") && squash(id).equals(squash(r[0]))))) continue;
-                if (ix < 0) return rowJson(i);
+                if (ix < 0) return i;
                 if (best < 0 || Math.abs(i - ix) < Math.abs(best - ix)) best = i;
             }
-            if (best >= 0) return rowJson(best);
-            if (ix >= 0 && ix < rows.size() && squash(rows.get(ix)[0]).equals(squash(id.startsWith("http") ? (title == null ? "" : title) : id))) return rowJson(ix);          // 엔진이 받은 줄에 링크가 없어 id 가 제목이다 — 보낸 순서 그대로의 줄
-            boolean url = id.startsWith("http");
-            String t = title != null && title.length() > 0 ? title : (url ? "" : id);
-            return "[" + q(t) + "," + q(url ? id : "") + ",\"\",0,\"\",\"\"]";
+            if (best >= 0) return best;
+            if (ix >= 0 && ix < rows.size() && squash(rows.get(ix)[0]).equals(squash(id.startsWith("http") ? (title == null ? "" : title) : id))) return ix;          // 엔진이 받은 줄에 링크가 없어 id 가 제목이다 — 보낸 순서 그대로의 줄
+            return -1;
         }
         public String rowJson(int i) {
             if (i < 0 || i >= rows.size()) return "[]";
@@ -578,8 +584,8 @@ public final class ShellCore {
 
     /** 기사 상세(엔진 {detail}) → 안내창에 쓸 값. 못 읽으면 null. */
     public static final class Detail {
-        public String title = "", meta = "", body = "", notice = "", btn = "", close = "닫기", link = "";
-        public boolean open;
+        public String title = "", meta = "", body = "", notice = "", btn = "", close = "닫기", link = "", cat = "", src = "";
+        public boolean open, bodyIsEmpty;
     }
     @SuppressWarnings("unchecked")
     public static Detail parseDetail(String json, String link) {
@@ -592,8 +598,8 @@ public final class ShellCore {
             Detail r = new Detail();
             r.title = NewsRows.str(m.get("title")); r.meta = NewsRows.str(m.get("meta"));
             String desc = NewsRows.str(m.get("desc")), empty = NewsRows.str(m.get("empty"));
-            r.body = desc.length() > 0 ? desc : empty;
-            r.notice = NewsRows.str(m.get("notice")); r.btn = NewsRows.str(m.get("btn"));
+            r.body = desc.length() > 0 ? desc : empty; r.bodyIsEmpty = desc.length() == 0;
+            r.notice = NewsRows.str(m.get("notice")); r.btn = NewsRows.str(m.get("btn")); r.cat = NewsRows.str(m.get("cat")); r.src = NewsRows.str(m.get("src"));
             String cl = NewsRows.str(m.get("close")); if (cl.length() > 0) r.close = cl;
             r.open = Double.valueOf(1d).equals(m.get("open")) && linkOk(link);
             r.link = link;

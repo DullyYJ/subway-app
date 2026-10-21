@@ -1565,7 +1565,7 @@ public class ShellActivity extends Activity {
             }
         }, "shell-maph").start();
     }
-    private void loadMapBody(final ScreenView v, final boolean keep) { busRefreshing = false; loadMapBodyRound(v, keep, 0); }
+    private void loadMapBody(final ScreenView v, final boolean keep) { if (busRefreshing) map.restoreArrivals(); busRefreshing = false; loadMapBodyRound(v, keep, 0); }
     /** 버스는 엔진이 "이 주소들을 받아 와라" 하면 받아서 다시 묻는다(위치 → 정류장 → 도착정보, 최대 3번). */
     private void loadMapBodyRound(final ScreenView v, final boolean keep, final int round) {
         final int my = ++seqMapB;
@@ -1576,13 +1576,13 @@ public class ShellActivity extends Activity {
                 final String txt = r.status == 200 ? r.body : ""; warm(txt);
                 main.post(new Runnable() { @Override public void run() {
                     if (my != seqMapB) return;
-                    if (txt.length() == 0 && busRefreshing) { busEnd(); return; }                    // 8초 갱신이 실패 — 화면은 그대로 두고(1초 카운트다운 계속) 다음 박자에 다시
+                    if (txt.length() == 0 && busRefreshing) { busFail(); return; }                    // 8초 갱신이 실패 — 화면은 그대로 두고(1초 카운트다운 계속) 다음 박자에 다시
                     if (txt.length() > 0) map.onScreen(txt);
                     if (!(keep && txt.length() > 0 && !map.busNeed.isEmpty())) { v.setSourceAge(map.arrAge()); present(v, txt, keep); }          // 버스 도착정보를 더 받아야 하면 캐시 화면을 중간 화면으로 덮지 않는다
                     syncMapView();
                     if ("bus".equals(map.view)) { if (round == 0) busAt = System.currentTimeMillis(); startBusTick(); }
                     if (txt.length() > 0 && !map.busNeed.isEmpty() && round < 3) fetchBusNeed(v, keep, round, my);
-                    else if (busRefreshing) busEnd();
+                    else if (busRefreshing) busOk();
                 } });
             }
         }, "shell-mapb").start();
@@ -1608,7 +1608,7 @@ public class ShellActivity extends Activity {
                     if (busRefreshing) {                                                          // 새로 받는 중인 도착정보가 하나라도 비면 이번 갱신은 버린다(옛 값을 섞지 않는다) — 화면은 1초 카운트다운으로 이어진다
                         boolean bad = false;
                         for (int i = 0; i < need.size(); i++) if (got[i] == null || got[i].length() == 0) bad = true;
-                        if (bad) { map.busNeed.clear(); busEnd(); return; }
+                        if (bad) { busFail(); return; }
                     }
                     for (int i = 0; i < need.size(); i++) map.addBusRes(need.get(i)[0], got[i] == null ? "" : got[i]);
                     map.busNeed.clear();
@@ -1647,6 +1647,8 @@ public class ShellActivity extends Activity {
     private static final long BUS_POLL_MS = 8000L;                      // 실시간 도착정보 갱신 박자
     private boolean busRefreshing; private long busRefAt;                // 갱신 한 번이 오가는 중인가(느린 통신이 다음 박자에 끊기지 않게 · 20초가 지나면 포기)
     private void busEnd() { busRefreshing = false; startBusTick(); }
+    private void busFail() { map.restoreArrivals(); busEnd(); }                               // 받기 실패: 보던 도착정보를 그대로 돌려놓고 다음 박자에
+    private void busOk() { map.commitArrivals(); busEnd(); }
     /** 도착정보만 새로 받는다: 성공하면 새 값으로 바로 덮고(카운트다운 시작점도 새로), 실패하면 아무것도 건드리지 않는다. */
     private void busRefresh() {
         if (busRefreshing && System.currentTimeMillis() - busRefAt < 20000L) return;
@@ -1655,7 +1657,7 @@ public class ShellActivity extends Activity {
     }
     private final Runnable busTick = new Runnable() { @Override public void run() {
         busTicking = false;
-        if (!busShowing()) { busRefreshing = false; return; }
+        if (!busShowing()) { if (busRefreshing) map.restoreArrivals(); busRefreshing = false; return; }
         if (busRefreshing && System.currentTimeMillis() - busRefAt < 20000L) { startBusTick(); return; }
         busRefresh(); startBusTick();
     } };
@@ -3008,7 +3010,8 @@ public class ShellActivity extends Activity {
     private void openNewsById(String id, String title, int ix) {
         final ShellCore.NewsRows rows = lastNews;
         final String json = ShellCore.newsDetailBody(rows.rowJsonById(id, title, ix));
-        final String link = id.startsWith("http") ? id : "";
+        int ri = rows.indexById(id, title, ix);
+        final String link = ri >= 0 ? rows.rows.get(ri)[1] : (id.startsWith("http") ? id : "");        // 기사 id 가 제목이면 링크는 그 줄에서 — 이것이 비면 원문 보기 단추가 사라진다
         new Thread(new Runnable() {
             @Override public void run() {
                 NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/news", json, 8000);
@@ -3018,18 +3021,113 @@ public class ShellActivity extends Activity {
         }, "shell-news").start();
     }
 
+    /** 기사 상세(웹 _openNewsDetail): 앱 테마 색으로 아래에서 올라오는 시트 — 분류 칩 · 제목 · 시각 · 요약 · 출처 안내 · [언론사 원문 보기 ›] · 닫기. 문구는 전부 엔진이 준다. */
     private void showDetail(final ShellCore.Detail d) {
-        StringBuilder m = new StringBuilder();
-        if (d.meta.length() > 0) m.append(d.meta).append("\n\n");
-        m.append(d.body);
-        if (d.notice.length() > 0) m.append("\n\n").append(d.notice);
-        AlertDialog.Builder b = new AlertDialog.Builder(this, android.R.style.Theme_Material_Light_Dialog_Alert);
-        b.setTitle(d.title).setMessage(m.toString()).setNegativeButton(d.close, null);
-        if (d.open) {
-            b.setPositiveButton(d.btn.length() > 0 ? d.btn : "원문 보기", new android.content.DialogInterface.OnClickListener() {
-                @Override public void onClick(android.content.DialogInterface di, int w) { openLink(d.link); }
-            });
-        }
-        try { b.show(); } catch (Throwable t) { toast(d.title); }
+        final int[] pal = ShellCore.palette(ShellCore.theme(store));
+        final android.app.Dialog dg = new android.app.Dialog(this, android.R.style.Theme_Material_Light_Dialog_NoActionBar);
+        try {
+            final android.widget.LinearLayout col = new android.widget.LinearLayout(this);
+            col.setOrientation(android.widget.LinearLayout.VERTICAL);
+            int pad = (int) (20 * dpr);
+            col.setPadding(pad, (int) (12 * dpr), pad, (int) (16 * dpr));
+            android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+            bg.setColor(pal[ScreenView.R_CARD]);
+            float rd = 20 * dpr; bg.setCornerRadii(new float[] { rd, rd, rd, rd, 0, 0, 0, 0 });
+            col.setBackground(bg);
+            android.view.View grip = new android.view.View(this);
+            android.graphics.drawable.GradientDrawable gb = new android.graphics.drawable.GradientDrawable();
+            gb.setColor(pal[ScreenView.R_BORDER2]); gb.setCornerRadius(2 * dpr); grip.setBackground(gb);
+            android.widget.LinearLayout.LayoutParams gp = new android.widget.LinearLayout.LayoutParams((int) (36 * dpr), (int) (4 * dpr));
+            gp.gravity = android.view.Gravity.CENTER_HORIZONTAL; gp.bottomMargin = (int) (16 * dpr);
+            col.addView(grip, gp);
+            android.widget.ScrollView sv = new android.widget.ScrollView(this);
+            sv.setVerticalScrollBarEnabled(false);
+            android.widget.LinearLayout in = new android.widget.LinearLayout(this);
+            in.setOrientation(android.widget.LinearLayout.VERTICAL);
+            sv.addView(in, new android.view.ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            if (d.cat.length() > 0) {
+                android.widget.TextView chip = detailText(d.cat, 11, true, pal[ScreenView.R_ONGOLD], 0);
+                chip.setPadding((int) (9 * dpr), (int) (3 * dpr), (int) (9 * dpr), (int) (3 * dpr));
+                android.graphics.drawable.GradientDrawable cb = new android.graphics.drawable.GradientDrawable();
+                cb.setColor(pal[ScreenView.R_GOLD]); cb.setCornerRadius(6 * dpr); chip.setBackground(cb);
+                android.widget.LinearLayout.LayoutParams cp = new android.widget.LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                cp.bottomMargin = (int) (10 * dpr);
+                in.addView(chip, cp);
+            }
+            in.addView(detailText(d.title, 18, true, pal[ScreenView.R_TEXT], 1.45f), detailLp(8));
+            if (d.meta.length() > 0) in.addView(detailText(d.meta, 12, false, pal[ScreenView.R_SUB], 0), detailLp(16));
+            android.widget.TextView body = detailText(d.body, 14, false, d.bodyIsEmpty ? pal[ScreenView.R_SUB] : pal[ScreenView.R_TEXT], d.bodyIsEmpty ? 1.7f : 1.75f);
+            in.addView(body, detailLp(8));
+            if (d.notice.length() > 0) {
+                android.text.SpannableString sp = new android.text.SpannableString(d.notice);
+                int ix = d.src.length() > 0 ? d.notice.indexOf(d.src) : -1;
+                if (ix >= 0) sp.setSpan(new android.text.style.StyleSpan(android.graphics.Typeface.BOLD), ix, ix + d.src.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                android.widget.TextView nt = detailText("", 11, false, pal[ScreenView.R_SUB], 1.6f);
+                nt.setText(sp);
+                int np = (int) (10 * dpr);
+                nt.setPadding(np, np, np, np);
+                android.graphics.drawable.GradientDrawable nb = new android.graphics.drawable.GradientDrawable();
+                nb.setColor(pal[ScreenView.R_CARD2]); nb.setCornerRadius(9 * dpr); nt.setBackground(nb);
+                in.addView(nt, detailLp(18));
+            }
+            col.addView(sv, new android.widget.LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+            if (d.open) {
+                android.widget.TextView ob = detailText(d.btn.length() > 0 ? d.btn : "원문 보기 ›", 15, true, pal[ScreenView.R_ONGOLD], 0);
+                ob.setGravity(android.view.Gravity.CENTER);
+                ob.setPadding(0, (int) (14 * dpr), 0, (int) (14 * dpr));
+                android.graphics.drawable.GradientDrawable ab = new android.graphics.drawable.GradientDrawable();
+                ab.setColor(pal[ScreenView.R_GOLD]); ab.setCornerRadius(12 * dpr); ob.setBackground(ab);
+                ob.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { openInApp(d.link, pal[ScreenView.R_BG]); } });
+                android.widget.LinearLayout.LayoutParams op = new android.widget.LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                op.topMargin = (int) (4 * dpr);
+                col.addView(ob, op);
+            }
+            android.widget.TextView cl = detailText(d.close, 14, true, pal[ScreenView.R_SUB], 0);
+            cl.setGravity(android.view.Gravity.CENTER);
+            cl.setPadding(0, (int) (12 * dpr), 0, (int) (12 * dpr));
+            cl.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { dg.dismiss(); } });
+            android.widget.LinearLayout.LayoutParams clp = new android.widget.LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            clp.topMargin = (int) (8 * dpr);
+            col.addView(cl, clp);
+            dg.setContentView(col);
+            android.view.Window w = dg.getWindow();
+            final int maxH = (int) (getResources().getDisplayMetrics().heightPixels * 0.85f);
+            w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            w.setGravity(android.view.Gravity.BOTTOM);
+            w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(0));
+            w.setDimAmount(0.6f);
+            w.setWindowAnimations(android.R.style.Animation_InputMethod);
+            col.setMinimumHeight(0);
+            sv.setMinimumHeight(0);
+            dg.setCanceledOnTouchOutside(true);
+            dg.show();
+            if (col.getHeight() > maxH) w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, maxH);
+            else col.post(new Runnable() { @Override public void run() { try { if (col.getHeight() > maxH) dg.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, maxH); } catch (Throwable ignored) { } } });
+        } catch (Throwable t) { toast(d.title); }
+    }
+    private android.widget.TextView detailText(String s, float sp, boolean bold, int color, float lineMul) {
+        android.widget.TextView t = new android.widget.TextView(this);
+        t.setText(s); t.setTextSize(sp); t.setTypeface(ScreenView.face(bold)); t.setTextColor(color);
+        t.setIncludeFontPadding(false);
+        if (lineMul > 0f) t.setLineSpacing(0f, lineMul / 1.2f);
+        return t;
+    }
+    private android.widget.LinearLayout.LayoutParams detailLp(int bottomDp) {
+        android.widget.LinearLayout.LayoutParams p = new android.widget.LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        p.bottomMargin = (int) (bottomDp * dpr);
+        return p;
+    }
+    /** 앱을 벗어나지 않고 원문을 연다(웹 _newsOpenInApp): 크롬 맞춤 탭 — 앱 테마색 막대 · 닫으면 바로 앱. 맞춤 탭을 못 쓰는 기기는 기본 브라우저. */
+    private void openInApp(String url, int bar) {
+        if (!ShellCore.linkOk(url)) return;
+        try {
+            Intent it = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+            android.os.Bundle ex = new android.os.Bundle();
+            ex.putBinder("android.support.customtabs.extra.SESSION", null);
+            it.putExtras(ex);
+            it.putExtra("android.support.customtabs.extra.TOOLBAR_COLOR", bar | 0xFF000000);
+            it.putExtra("android.support.customtabs.extra.TITLE_VISIBILITY", 1);
+            startActivity(it);
+        } catch (ActivityNotFoundException e) { toast("열 수 있는 앱이 없어요"); }
     }
 }
