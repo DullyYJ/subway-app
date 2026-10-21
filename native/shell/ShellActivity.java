@@ -282,7 +282,7 @@ public class ShellActivity extends Activity {
         if (!ShellCore.DEFAULT_TAB.equals(t)) {
             store.put(ShellCore.K_TAB, ShellCore.DEFAULT_TAB);
             showTab(ShellCore.DEFAULT_TAB);
-        } else super.onBackPressed();
+        } else if (!dlgKind("exit", new Runnable() { @Override public void run() { finish(); } }, null)) super.onBackPressed();      // 웹처럼 한 번 더 확인(엔진 카드) — 못 받았으면 바로 닫는다
     }
 
     // ───────────── 색 ─────────────
@@ -833,6 +833,7 @@ public class ShellActivity extends Activity {
         } });
         pfAdd(1, new PfJob() { @Override public boolean run() throws Exception { return prefetchNews(live.contains(ShellCore.S_NEWS)); } });    // 소식(모든 분류)
         pfAdd(1, new PfJob() { @Override public boolean run() throws Exception { return rloadFetch(); } });                                    // 경로 탐색 로딩 카드(글 · 모양은 엔진 — 한 번 받아 두면 앱을 끌 때까지 쓴다)
+        pfAdd(1, new PfJob() { @Override public boolean run() throws Exception { boolean n = dlgFetch("exit"); n |= dlgFetch("report"); n |= dlgFetch("perm"); return n; } });      // 종료 · 신고 · 권한 안내 카드(글 · 단추 · 모양은 엔진)
         pfAdd(1, new PfJob() { @Override public boolean run() throws Exception {                // 노선도 버스(위치 → 정류장 → 도착정보 왕복이라 묶지 못한다)
             if (("map".equals(cur) && "bus".equals(mapMode)) || !pfNeeds(ShellCore.mapKey(ShellCore.S_MAPB, "bus", store))) return false;
             return pfBusRun(ll, theme);
@@ -1255,14 +1256,16 @@ public class ShellActivity extends Activity {
             }
             case ChatCore.R_REPORT: {
                 final String id = chat.pendingId;
+                final Runnable doReport = new Runnable() { @Override public void run() {
+                    chat.hide(id); toast("신고했어요. 이 글은 더 이상 보이지 않아요"); reloadChat();
+                    final String json = ChatCore.reportBody(id);
+                    new Thread(new Runnable() { @Override public void run() { NetPost.post(ShellCore.BOARD_BASE + "/lreport", json, 9000); } }, "shell-lrep").start();
+                } };
+                if (dlgKind("report", doReport, null)) break;                               // 엔진 카드(취소 / 신고)
                 try {
                     new AlertDialog.Builder(this, android.R.style.Theme_Material_Light_Dialog_Alert).setTitle("이 글을 신고할까요?").setMessage("신고가 여러 명 모이면 자동으로 숨겨져요.")
                         .setNegativeButton("취소", null).setPositiveButton("신고", new android.content.DialogInterface.OnClickListener() {
-                            @Override public void onClick(android.content.DialogInterface di, int w) {
-                                chat.hide(id); toast("신고했어요. 이 글은 더 이상 보이지 않아요"); reloadChat();
-                                final String json = ChatCore.reportBody(id);
-                                new Thread(new Runnable() { @Override public void run() { NetPost.post(ShellCore.BOARD_BASE + "/lreport", json, 9000); } }, "shell-lrep").start();
-                            }
+                            @Override public void onClick(android.content.DialogInterface di, int w) { doReport.run(); }
                         }).show();
                 } catch (Throwable t) { toast("신고창을 열지 못했어요"); }
                 break;
@@ -2538,7 +2541,7 @@ public class ShellActivity extends Activity {
     /** 내 위치 공유: 엔진이 준 글+그림을 다른 앱(카카오톡 우선)으로 보낸다. 그림은 앱 캐시의 파일 제공자로 읽게 한다. */
     private void shareLoc() {
         final ShareCore.Share sh = RideService.liveShare;
-        if (sh == null) { new AlertDialog.Builder(this, android.R.style.Theme_Material_Light_Dialog_Alert).setTitle("경로를 먼저 탐색해 주세요").setMessage("탐색한 경로의 내 위치와 도착 예정을\n친구에게 보낼 수 있어요").setPositiveButton("확인", null).show(); return; }      // 웹 _shareLoc 과 같은 안내
+        if (sh == null) { dlgPopSh("경로를 먼저 탐색해 주세요", "탐색한 경로의 내 위치와 도착 예정을\n친구에게 보낼 수 있어요"); return; }      // 웹 _shareLoc 과 같은 안내(엔진 카드)
         final int[] pal = ShellCore.palette(ShellCore.theme(store));
         new Thread(new Runnable() {
             @Override public void run() {
@@ -2765,6 +2768,108 @@ public class ShellActivity extends Activity {
     }
 
     /** 경로 탐색: 좌표가 있는 두 장소로 경로 서버에 묻는다. 빠른 응답(live=0)을 먼저 그리고, 엔진의 follow 지시대로 전체를 뒤따라 받는다. */
+    // ───────────── 엔진이 그리는 가운데 안내 카드(웹 _ndlg: 종료 확인 · 신고 확인 · 권한 안내 · 작은 알림) ─────────────
+    // 글 · 단추 이름 · 카드 크기/위치/흐림/모서리는 엔진(/screen/dlg)이 정한다. 앱은 받은 카드를 띄우고 단추(dl.ok · dl.no · dl.close)를 되돌려 줄 뿐이다.
+    // 고정 카드(exit · report · perm)는 켜자마자 미리 받아 두고(prefetch), 없으면 이전 방식(시스템 확인창 · 바로 닫기)으로 대신한다 — 눌렀을 때 기다리지 않는다.
+    private final java.util.concurrent.ConcurrentHashMap<String, String> dlgJson = new java.util.concurrent.ConcurrentHashMap<String, String>();
+    private android.app.Dialog dlgD;
+    private ScreenView dlgV;
+    private Runnable dlgOk, dlgNo, dlgAuto;
+    private boolean dlgFetch(String kind) {
+        if (dlgJson.containsKey(kind)) return false;
+        NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/dlg", "{\"cap\":" + ShellCore.CAP + ",\"f\":{\"kind\":" + ShellCore.q(kind) + "}}", 8000);
+        if (r.status == 200 && r.body != null && r.body.length() > 2) dlgJson.put(kind, r.body);
+        return true;
+    }
+    /** 미리 받아 둔 고정 카드를 띄운다. 못 띄웠으면(아직 못 받음 · 이미 떠 있음) false — 부르는 쪽이 이전 방식으로 대신한다. */
+    private boolean dlgKind(String kind, Runnable ok, Runnable no) {
+        String js = dlgJson.get(kind);
+        if (js == null) { final String k = kind; Thread t = new Thread(new Runnable() { @Override public void run() { dlgFetch(k); } }, "shell-dlg"); t.setDaemon(true); t.start(); return false; }
+        return dlgOpen(js, ok, no, 0L);
+    }
+    private int dlgColor(String c, int[] pal) {
+        if ("card".equals(c) || c == null || c.length() == 0) return pal[ScreenView.R_CARD];
+        if ("bg".equals(c)) return pal[ScreenView.R_BG];
+        if ("card2".equals(c)) return pal[ScreenView.R_CARD2];
+        return ScreenCore.color(c, pal[ScreenView.R_CARD]);
+    }
+    private boolean dlgOpen(String json, Runnable ok, Runnable no, long autoMs) {
+        if (isFinishing() || (dlgD != null && dlgD.isShowing())) return false;
+        try {
+            final ScreenCore.Screen sc = parsedGet(json);
+            final ScreenCore.Dlg dg = sc.dlg;
+            if (dg == null) return false;
+            final int[] pal = ShellCore.palette(ShellCore.theme(store));
+            final ScreenView v = new ScreenView(this);
+            v.setDpr(dpr); v.setPalette(pal);
+            final android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
+            final float sw = dm.widthPixels / dpr, sh = dm.heightPixels / dpr;
+            final float maxW = Math.max(120f, Math.min(dg.w, sw - 2f * dg.mx));
+            final android.app.Dialog d = new android.app.Dialog(this, android.R.style.Theme_Material_Light_Dialog_NoActionBar);
+            final android.view.Window w = d.getWindow();
+            v.setListener(new ScreenView.Listener() {
+                @Override public void onAction(ScreenCore.Act a) { dlgAct(a == null ? "" : a.v, d); }
+                @Override public void onSet(ScreenCore.Act a, boolean on) { }
+                @Override public void onSearch(ScreenCore.Act a, String q) { }
+                @Override public void onInputFocus(boolean on) { }
+                @Override public void onFirstDraw() { }
+                @Override public void onText(String key, String value, String kind) { }
+                @Override public void onContentH(final float dp) {
+                    main.post(new Runnable() { @Override public void run() {
+                        try {
+                            if (dlgV != v || dp <= 0f) return;
+                            float ww = dg.fit && v.fitWidthDp() > 0f ? Math.min(maxW, v.fitWidthDp()) : maxW, hh = Math.min(dp, sh * dg.maxh);
+                            android.view.WindowManager.LayoutParams lp = w.getAttributes();
+                            lp.width = Math.round(ww * dpr); lp.height = Math.round(hh * dpr);
+                            if (Math.abs(dg.top - 0.5f) < 0.01f) { lp.gravity = android.view.Gravity.CENTER; lp.y = 0; }            // 화면 가운데
+                            else { lp.gravity = android.view.Gravity.TOP | android.view.Gravity.CENTER_HORIZONTAL; lp.y = Math.round((sh * dg.top - hh / 2f) * dpr); }
+                            w.setAttributes(lp);
+                        } catch (Throwable ignored) { }
+                    } });
+                }
+            });
+            FrameLayout box = new FrameLayout(this);
+            android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
+            g.setColor(dlgColor(dg.fill, pal)); g.setCornerRadius(dg.r * dpr);
+            box.setBackground(g);
+            if (Build.VERSION.SDK_INT >= 21) box.setClipToOutline(true);
+            box.addView(v, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            d.setContentView(box);
+            final boolean tapOut = dg.tap != null || autoMs > 0L;
+            d.setCancelable(true); d.setCanceledOnTouchOutside(tapOut);
+            d.setOnCancelListener(new android.content.DialogInterface.OnCancelListener() { @Override public void onCancel(android.content.DialogInterface di) { dlgAct("dl.no", d); } });
+            w.setLayout(Math.round(maxW * dpr), Math.round(100f * dpr));                       // 높이 · 너비는 엔진 화면이 정한 글 크기로 곧 맞춘다(onContentH)
+            w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(0x00000000));
+            if (dg.dim > 0f) { w.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND); w.setDimAmount(dg.dim); }
+            else w.clearFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            dlgV = v; dlgD = d; dlgOk = ok; dlgNo = no;
+            v.setScreen(sc, false);
+            d.show();
+            if (autoMs > 0L) { dlgAuto = new Runnable() { @Override public void run() { dlgAct("dl.close", d); } }; main.postDelayed(dlgAuto, autoMs); }
+            return true;
+        } catch (Throwable t) { dlgD = null; dlgV = null; return false; }
+    }
+    /** 카드의 단추: dl.ok → 확인 쪽 · 그 밖(dl.no · dl.close · 바깥 · 뒤로)은 취소 쪽. 한 번만 처리한다. */
+    private void dlgAct(String v, android.app.Dialog d) {
+        if (d != dlgD) return;
+        Runnable ok = "dl.ok".equals(v) ? dlgOk : null, no = "dl.ok".equals(v) ? null : dlgNo;
+        if (dlgAuto != null) { main.removeCallbacks(dlgAuto); dlgAuto = null; }
+        dlgD = null; dlgV = null; dlgOk = null; dlgNo = null;
+        try { d.dismiss(); } catch (Throwable ignored) { }
+        if (ok != null) ok.run(); else if (no != null) no.run();
+    }
+    /** 값이 정해진 작은 알림(웹 _pickPop · 이 기능은 글만 바뀐다): 엔진에서 받아 잠깐 띄우고, 못 받으면 시스템 확인창. */
+    private void dlgPopSh(final String msg, final String sub) {
+        new Thread(new Runnable() { @Override public void run() {
+            NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/dlg", "{\"cap\":" + ShellCore.CAP + ",\"f\":{\"kind\":\"pop\",\"msg\":" + ShellCore.q(msg) + ",\"sub\":" + ShellCore.q(sub) + ",\"cls\":\"sh\"}}", 6000);
+            final String txt = r.status == 200 && r.body != null ? r.body : "";
+            main.post(new Runnable() { @Override public void run() {
+                if (txt.length() > 2 && dlgOpen(txt, null, null, 2800L)) return;
+                try { new AlertDialog.Builder(ShellActivity.this, android.R.style.Theme_Material_Light_Dialog_Alert).setTitle(msg).setMessage(sub).setPositiveButton("확인", null).show(); } catch (Throwable ignored) { }
+            } });
+        } }, "shell-dlg-pop").start();
+    }
+
     // ───────────── 경로 탐색 로딩 카드(웹 #transitLoading) ─────────────
     // 카드 모양 · 글은 엔진(/screen/dlg kind:rload)이 정하고 뛰어가는 캐릭터는 ScreenView 의 runner 노드가 그린다. 앱은 보이고 숨기기만 한다.
     // 새로 받는 통신이 있고 보여 줄 옛 결과가 없을 때만 뜬다(SWR 로 이미 보이면 뜨지 않는다). 못 받았으면 카드 없이 기존 안내(토스트)만.
@@ -3267,8 +3372,10 @@ public class ShellActivity extends Activity {
         if (r == ShellCore.PG_GWCFG) { try { WidgetCore.setConfigJson(getApplicationContext(), GwCore.configJson(store)); } catch (Throwable ignored) { } }       // 장소 좌표는 이미 적혀 있다 — 돌아다니는 시간만 바뀐 것
         if (r == ShellCore.PG_RENDER && "arr".equals(setPage)) arrStat = true;
         if (r == ShellCore.PG_NEEDPERM) {                              // '다른 앱 위에 표시' 허용 화면(기기 설정)으로 보낸다. 돌아오면 onResume 이 다시 그린다.
-            toast("설정에서 '다른 앱 위에 표시'를 허용해 주세요");
-            try { startActivity(new Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName()))); } catch (Throwable t) { /* 기기가 못 열면 안내 글만 남는다 */ }
+            final Runnable openSet = new Runnable() { @Override public void run() {
+                try { startActivity(new Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName()))); } catch (Throwable t) { /* 기기가 못 열면 안내 글만 남는다 */ }
+            } };
+            if (!dlgKind("perm", openSet, null)) { toast("설정에서 '다른 앱 위에 표시'를 허용해 주세요"); openSet.run(); }      // 웹처럼 "설정 화면을 열까요?"(엔진 카드) — 못 받았으면 안내 글 + 바로 연다
         }
         if (r != ShellCore.PG_NONE) loadSetPage();
     }
