@@ -13,7 +13,7 @@
 // 출력  { ok, v:1, screen:'map'|'mapstn'|'maptt', rev, cover:'tab', head, body, info }
 // 맨 아래 module.exports 는 시험(Node)용이고 Worker 에서는 함수 선언만 쓰인다.
 'use strict';
-var MAP_SCREEN_V = 2;
+var MAP_SCREEN_V = 3;
 var MAP_REGIONS = [['seoul', '수도권'], ['busan', '부산'], ['daegu', '대구'], ['gwangju', '광주'], ['daejeon', '대전']];
 var MAP_REGION_PREFIX = { busan: '부산', daegu: '대구', gwangju: '광주', daejeon: '대전' };
 var MAP_REGION_COLORS = { '부산1호선': '#F06A00', '부산2호선': '#81BF48', '부산3호선': '#BB8C00', '부산4호선': '#217DCB', '대구1호선': '#D93F5C', '대구2호선': '#00AA80', '대구3호선': '#FFB100', '광주1호선': '#009088', '대전1호선': '#007448' };
@@ -85,12 +85,12 @@ function mapNearest(la, lo) {                       // 웹 mapGoToMyLocation: �
 
 function mapFacts(f) {
   f = (f && typeof f === 'object') ? f : {};
-  var part = ['h', 'b', 'stn', 'tt'].indexOf(f.part) >= 0 ? f.part : 'h';
+  var part = ['h', 'b', 'stn', 'tt', 'br'].indexOf(f.part) >= 0 ? f.part : 'h';
   var reg = MAP_REGIONS.some(function (r) { return r[0] === f.reg; }) ? f.reg : 'seoul';
   var flt = MAP_FILTERS.some(function (r) { return r[0] === f.flt; }) ? f.flt : 'ALL';
   var gps = (Array.isArray(f.gps) && f.gps.length >= 2 && isFinite(Number(f.gps[0])) && isFinite(Number(f.gps[1]))) ? [Number(f.gps[0]), Number(f.gps[1])] : null;
   return { part: part, mode: f.mode === 'subway' ? 'subway' : 'bus', reg: reg, flt: flt, th: f.th === 'dark' ? 'dark' : 'pastel',
-           stn: mapCleanName(f.stn), sl: mapStr(f.sl, 30), q: mapStr(f.q, 40), gps: gps, tt: (f.tt && typeof f.tt === 'object') ? f.tt : {}, bus: (f.bus && typeof f.bus === 'object') ? f.bus : null };
+           stn: mapCleanName(f.stn), sl: mapStr(f.sl, 30), q: mapStr(f.q, 40), gps: gps, tt: (f.tt && typeof f.tt === 'object') ? f.tt : {}, bus: (f.bus && typeof f.bus === 'object') ? f.bus : null, br: (f.br && typeof f.br === 'object') ? f.br : null };
 }
 
 function mapSheetPad(n) { var p = Array.isArray(n.pad) ? n.pad.slice() : [0, 0, 0, 0]; p[0] += 16; p[2] += 16; if (n === mapSheetPad.first) p[1] += 10; n.pad = p; return n; }
@@ -240,6 +240,7 @@ function mapScreen(inp, factsIn, dataIn) {
   var f = mapFacts(factsIn), ctx = {};
   if (f.part === 'stn') return mapStationSheet(f);
   if (f.part === 'tt') return mapTimetableSheet(f);
+  if (f.part === 'br') return mapBusRouteSheet(f);
   var info = { mode: f.mode, reg: f.reg, flt: f.flt };
   if (f.q) { var fd = mapFind(f.q); info.find = fd; }
   if (f.gps) info.near = mapNearest(f.gps[0], f.gps[1]);
@@ -364,8 +365,8 @@ function mapGbisArr(text) {
     var n1 = parseInt(it.locationNo1, 10), n2 = parseInt(it.locationNo2, 10);
     if (s1 <= 0) { s1 = s2; s2 = 0; n1 = n2; }
     var dir = String(it.routeDestName || '').trim(), tp = mapGbisRouteType(it.routeTypeCd), low = parseInt(it.lowPlate1, 10) === 1, cg = parseInt(it.crowded1, 10);
-    rows.push({ no: String(rt), sec: s1, prev: isFinite(n1) ? n1 : 0, cong: isFinite(cg) && cg > 0 ? cg : 0, low: low, dir: dir, tp: tp });
-    if (s2 > 0) rows.push({ no: String(rt), sec: s2, prev: isFinite(n2) ? n2 : 0, cong: 0, low: false, dir: dir, tp: tp });
+    rows.push({ no: String(rt), sec: s1, prev: isFinite(n1) ? n1 : 0, cong: isFinite(cg) && cg > 0 ? cg : 0, low: low, dir: dir, tp: tp, rid: it.routeId !== undefined && it.routeId !== null ? String(it.routeId) : '' });
+    if (s2 > 0) rows.push({ no: String(rt), sec: s2, prev: isFinite(n2) ? n2 : 0, cong: 0, low: false, dir: dir, tp: tp, rid: it.routeId !== undefined && it.routeId !== null ? String(it.routeId) : '' });
   });
   return rows;
 }
@@ -425,7 +426,7 @@ function mapSeoulArr(text) {
       var msg = mapXmlVal(ch, 'arrmsg' + n), t = parseInt(mapXmlVal(ch, 'traTime' + n), 10);
       var sec = (isFinite(t) && t > 0) ? t : mapSecOfMsg(msg);
       var pm = /(\d+)\s*번째/.exec(msg), cg = parseInt(mapXmlVal(ch, 'congestion' + n), 10);
-      if (sec > 0) rows.push({ no: rt, sec: sec, prev: pm ? parseInt(pm[1], 10) : 0, cong: isFinite(cg) ? cg : 0, low: parseInt(mapXmlVal(ch, 'busType' + n), 10) === 1, dir: dir });
+      if (sec > 0) rows.push({ no: rt, sec: sec, prev: pm ? parseInt(pm[1], 10) : 0, cong: isFinite(cg) ? cg : 0, low: parseInt(mapXmlVal(ch, 'busType' + n), 10) === 1, dir: dir, rid: mapXmlVal(ch, 'busRouteId'), tp: '' });
     });
   });
   return rows;
@@ -433,7 +434,7 @@ function mapSeoulArr(text) {
 function mapTagoArr(text) {
   return mapJsonItems(text).map(function (a) {
     return { no: String(a.routeno || a.routeNo || ''), sec: parseInt(a.arrtime || a.arrTime || 0, 10) || 0, prev: parseInt(a.arrprevstationcnt || a.arrPrevStationCnt || 0, 10) || 0,
-             cong: parseInt(a.congestion || a.congestionCase || 0, 10) || 0, low: /저상/.test(String(a.vehicletp || '')), dir: '' };
+             cong: parseInt(a.congestion || a.congestionCase || 0, 10) || 0, low: /저상/.test(String(a.vehicletp || '')), dir: '', rid: String(a.routeid || a.routeId || ''), tp: String(a.routetp || a.routeTp || '') };
   }).filter(function (r) { return r.no && r.sec > 0; });
 }
 function mapCdFmt(sec) {                                           // 웹 _busFmtCd: 곧 도착 · N초 · M분 SS초
@@ -481,18 +482,24 @@ function mapBusToggle(vw) {
     { label: '⭐ 즐겨찾기', on: vw === 'fav', act: { a: 'call', v: 'mp.vw.fav' } }],
     rf: { label: '🔄', act: { a: 'call', v: 'mp.rf' } } };
 }
-function mapBusRows(rows) {                                        // 노선+방면마다 한 줄: 노선 번호 · → 방면 · 첫 도착(+둘째 도착)
+function mapBusRows(rows, info, si) {                              // 노선+방면마다 한 줄: 노선 번호 · → 방면 · 첫 도착(+둘째 도착). 노선 id 가 있으면 줄을 눌러 노선 상세(info.rts[si][줄] = [노선 id, 번호, 종류])
   var by = {}, order = [];
   rows.forEach(function (r) { var k = r.no + '|' + r.dir; if (!by[k]) { by[k] = []; order.push(k); } by[k].push(r); });
   order.forEach(function (k) { by[k].sort(function (a, b) { return a.sec - b.sec; }); });
   order.sort(function (a, b) { return by[a][0].sec - by[b][0].sec; });
-  return order.slice(0, 20).map(function (k) {
+  var meta = [];
+  var out = order.slice(0, 20).map(function (k, ri) {
     var g = by[k], r = g[0];
     var arr = g.slice(0, 2).map(function (x) { var o = { s: x.sec <= 1 ? '곧 도착' : mapCdFmt(x.sec), sec: Math.round(x.sec) }; if (x.prev > 0) o.p = x.prev + '번째전'; if (x.sec <= 60) o.soon = 1; return o; });
     var row = { no: r.no, c: mapRouteColor(r.no), a: arr, bell: 1 };
     if (r.dir) row.dir = '→ ' + r.dir + '방향';
+    var rid = mapStr(r.rid, 40);
+    meta.push([rid, mapStr(r.no, 16), mapStr(r.tp, 16)]);
+    if (info && si >= 0 && rid) row.act = { a: 'call', v: 'br.' + si + '.' + ri };
     return row;
   });
+  if (info && si >= 0) { if (!info.rts) info.rts = {}; info.rts[si] = meta; }
+  return out;
 }
 function mapBusCard(s, o) {
   var c = { t: 'bcard', k: s.id, nm: s.nm, mode: o.mode, on: !!o.on, pad: [12, 12, 0, 12], act: { a: 'call', v: 'mp.pc.' + o.i, id: s.id }, edit: { a: 'call', v: 'mp.al.' + o.i } };
@@ -508,10 +515,10 @@ function mapBusCard(s, o) {
   else c.rows = o.rows;
   return c;
 }
-function mapBusArrView(s, res, key) {
+function mapBusArrView(s, res, key, info, si) {
   var txt = String(res[key] || '');
   var rows = s.src === 'topis' ? mapSeoulArr(txt) : s.src === 'gbis' ? mapGbisArr(txt) : mapTagoArr(txt);
-  return mapBusRows(rows);
+  return mapBusRows(rows, info, si);
 }
 function mapBusTmap(pts, foc) {                                    // 고정 지도: 끌기·두 손가락 확대·± 단추·핀 누름은 앱, 핀·선택은 엔진
   return { t: 'tmap', h: 180, r: 0, pad: [0, 0, 0, 0], pts: pts, live: 1, foc: foc, bl: 1, hint: '숫자를 누르면 아래 정류장으로 이동해요' };
@@ -530,7 +537,7 @@ function mapBusBody(f, info) {
     var pend = favs.some(function (s, i) { return fres['f' + i] === undefined; });
     if (pend) info.bus = { st: 'need', vw: 'fav', need: favs.map(function (s, i) { return { k: 'f' + i, url: mapBusArrUrl(s) }; }) };
     var fb = [{ t: 'text', s: '⭐ 즐겨찾기 ' + favs.length + '개 · 30초마다 자동 갱신', size: 12, color: 'sub', pad: [10, 12, 0, 12] }];
-    favs.forEach(function (s, i) { fb.push(mapBusCard(s, { mode: 'fav', i: i, alias: al[s.id], rows: pend ? null : mapBusArrView(s, fres, 'f' + i) })); });
+    favs.forEach(function (s, i) { fb.push(mapBusCard(s, { mode: 'fav', i: i, alias: al[s.id], rows: pend ? null : mapBusArrView(s, fres, 'f' + i, info, i) })); });
     fb.push({ t: 'spacer', h: 16 });
     return { head: head, body: fb };
   }
@@ -567,9 +574,207 @@ function mapBusBody(f, info) {
   else info.bus = { st: 'ok', vw: 'near', n: stops.length };
   var body = [];
   stops.forEach(function (s, i) {
-    body.push(mapBusCard(s, { mode: 'near', i: i, n: i + 1, alias: al[s.id], fav: !!favSet[s.id], pi: pidx[i], on: i === sel, rows: pending ? null : mapBusArrView(s, res, 'a' + i) }));
+    body.push(mapBusCard(s, { mode: 'near', i: i, n: i + 1, alias: al[s.id], fav: !!favSet[s.id], pi: pidx[i], on: i === sel, rows: pending ? null : mapBusArrView(s, res, 'a' + i, info, i) }));
   });
   body.push({ t: 'text', s: '도착 시간은 실시간 정보라 조금씩 달라질 수 있어요.', size: 11, color: 'sub', align: 'center', pad: [10, 16, 18, 16] });
   return { head: head, body: body };
 }
-if (typeof module !== 'undefined' && module.exports) module.exports = { mapCityOf: mapCityOf, mapGGPreferred: mapGGPreferred, mapGbisArr: mapGbisArr, mapScreen: mapScreen, mapFacts: mapFacts, mapLinesOf: mapLinesOf, mapFind: mapFind, mapNearest: mapNearest, mapIsStationLabel: mapIsStationLabel, mapPickRow: mapPickRow, mapRegionLines: mapRegionLines, mapDedupStops: mapDedupStops, mapStopOrder: mapStopOrder, MAP_FILTERS: MAP_FILTERS };
+
+// ═══ 노선 상세(웹 openBusRoute · _loadBusRouteData · _renderBusRoute): 노선 전체 정류장 + 지금 버스 위치 ═══
+// 엔진은 "어느 주소를 받아 와라(need)" 만 말하고, 앱은 그 본문을 res 에 넣어 다시 보낸다(정류장 목록은 한 번 받으면 stn 으로 돌려받아 두고, 8초마다는 위치만 다시 받는다).
+//   정류장: 경기(GBIS)이거나 시 코드를 모르면 GBIS 먼저(실패·빈 결과면 TAGO) · 그 밖은 TAGO.  위치: 정류장을 받은 쪽과 같은 출처.
+var MAP_TAGO_RT_STN = MAP_TAGO_BASE + 'BusRouteInfoInqireService/getRouteAcctoThrghSttnList';
+var MAP_TAGO_BUS_POS = MAP_TAGO_BASE + 'BusLcInfoInqireService/getRouteAcctoBusLcList';
+var MAP_NODE_CITY = { ICB: '23', SEB: '11', BSB: '21', DGB: '22', GWB: '24', DJB: '25', USB: '26', SJB: '12' };
+function mapBrCity(o) {                                            // 웹 _tagoCityCode: 정류장의 시 코드 → nodeId 접두어 → 좌표 상자 → 빈 값
+  if (!o) return '';
+  var cc = mapStr(o.city, 4).trim();
+  if (cc && cc !== '0' && cc !== 'null' && cc !== 'undefined') return cc;
+  var pre = String(o.id || '').toUpperCase().slice(0, 3);
+  if (MAP_NODE_CITY[pre]) return MAP_NODE_CITY[pre];
+  return (isFinite(Number(o.la)) && isFinite(Number(o.lo)) && (Number(o.la) || Number(o.lo))) ? mapCityOf(Number(o.la), Number(o.lo)) : '';
+}
+function mapBrFacts(b) {
+  b = (b && typeof b === 'object') ? b : {};
+  var o = (b.o && typeof b.o === 'object') ? { id: mapStr(b.o.id, 40), nm: mapStr(b.o.nm, 40), la: Number(b.o.la), lo: Number(b.o.lo), city: mapStr(b.o.city, 4) } : null;
+  var stn = null;
+  if (Array.isArray(b.stn) && b.stn.length) {
+    stn = [];
+    b.stn.slice(0, 400).forEach(function (r) {
+      if (!Array.isArray(r) || r.length < 7) return;
+      stn.push([parseInt(r[0], 10) || 0, mapStr(r[1], 40), mapStr(r[2], 40), mapStr(r[3], 20), Number(r[4]), Number(r[5]), r[6] === 0 || r[6] === 1 ? r[6] : -1]);
+    });
+    if (!stn.length) stn = null;
+  }
+  var res = (b.res && typeof b.res === 'object') ? b.res : {};
+  var me = (Array.isArray(b.me) && b.me.length >= 2 && isFinite(Number(b.me[0])) && isFinite(Number(b.me[1]))) ? [Number(b.me[0]), Number(b.me[1])] : null;
+  var pk = (b.pk && typeof b.pk === 'object' && mapStr(b.pk.n, 40)) ? { n: mapStr(b.pk.n, 40), i: mapStr(b.pk.i, 40) } : null;
+  return { rid: mapStr(b.rid, 40), no: mapStr(b.no, 16), tp: mapStr(b.tp, 16), src: b.src === 'gbis' || b.src === 'topis' ? b.src : '', o: o, cc: mapStr(b.cc, 4) || mapBrCity(o),
+           me: me, stn: stn, via: b.via === 'gg' || b.via === 'tago' ? b.via : '', res: res, sel: isFinite(Number(b.sel)) ? Math.floor(Number(b.sel)) : -1, pk: pk };
+}
+function mapBrStnTago(text) {
+  var out = mapJsonItems(text).map(function (it) {
+    return [parseInt(it.nodeord, 10) || 0, String(it.nodeid || it.nodeId || ''), String(it.nodenm || it.nodeNm || ''), it.nodeno === undefined || it.nodeno === null ? '' : String(it.nodeno),
+            parseFloat(it.gpslati), parseFloat(it.gpslong), (String(it.updowncd) === '0' ? 0 : String(it.updowncd) === '1' ? 1 : -1)];
+  }).filter(function (r) { return r[1] || r[2]; });
+  out.sort(function (a, b) { return a[0] - b[0]; });
+  return out.slice(0, 400);
+}
+function mapBrStnGbis(text) {
+  var j = mapGgJson(text), out = [], turn = 0;
+  if (!j || !mapGgOk(j)) return out;
+  var items = mapGgList(j, ['busRouteStationList']);
+  items.forEach(function (it) { var t = parseInt(it.turnSeq, 10); if (isFinite(t) && t > turn) turn = t; });
+  items.forEach(function (it) {
+    var sid = it.stationId, seq = parseInt(it.stationSeq, 10);
+    if (!sid || !isFinite(seq)) return;
+    out.push([seq, 'GG:' + sid, String(it.stationName || ''), it.mobileNo !== undefined && it.mobileNo !== null ? String(it.mobileNo) : '', parseFloat(it.y), parseFloat(it.x), (turn > 0 && seq > turn) ? 1 : 0]);
+  });
+  out.sort(function (a, b) { return a[0] - b[0]; });
+  return out.slice(0, 400);
+}
+function mapBrPos(text, gg) {                                      // → { known, buses:[[순번, 차량번호]…] }  known = 응답을 제대로 받았다(비어 있어도)
+  var t = String(text || '');
+  if (!t) return { known: false, buses: [] };
+  var buses = [];
+  if (gg) {
+    var j = mapGgJson(t);
+    if (!j || !mapGgOk(j)) return { known: false, buses: [] };
+    mapGgList(j, ['busLocationList']).forEach(function (it) { var q = parseInt(it.stationSeq, 10); if (isFinite(q)) buses.push([q, String(it.plateNo || '')]); });
+    return { known: true, buses: buses };
+  }
+  var okJson = false;
+  try { var o = JSON.parse(t); okJson = !!(o && o.response); } catch (e) { okJson = false; }
+  if (!okJson) return { known: false, buses: [] };
+  mapJsonItems(t).forEach(function (it) { buses.push([parseInt(it.nodeord, 10) || 0, String(it.vehicleno || '')]); });
+  return { known: true, buses: buses };
+}
+function mapBrCls(ud) { return ud === 0 ? 'up' : ud === 1 ? 'down' : 'na'; }
+function mapBusRouteSheet(f0) {
+  var b = mapBrFacts(f0.br);
+  if (!b.rid) return { ok: false, error: 'br' };
+  var res = b.res, info = { br: { st: 'ok', need: [] } }, ib = info.br;
+  var tryGG = b.src === 'gbis' || !b.cc;
+  var stn = b.stn, via = b.via;
+  var url = function (k) {
+    var rid = b.rid.replace(/^GG:/, '');
+    if (k === 'gs') return MAP_GBIS_BASE + 'busrouteservice/v2/getBusRouteStationListv2?routeId=' + encodeURIComponent(rid) + '&format=json';
+    if (k === 'gp') return MAP_GBIS_BASE + 'buslocationservice/v2/getBusLocationListv2?routeId=' + encodeURIComponent(rid) + '&format=json';
+    if (k === 'ts') return MAP_TAGO_RT_STN + '?serviceKey=&cityCode=' + encodeURIComponent(b.cc) + '&routeId=' + encodeURIComponent(b.rid) + '&numOfRows=300&pageNo=1&_type=json';
+    return MAP_TAGO_BUS_POS + '?serviceKey=&cityCode=' + encodeURIComponent(b.cc) + '&routeId=' + encodeURIComponent(b.rid) + '&numOfRows=100&pageNo=1&_type=json';
+  };
+  var need = function (ks) { ib.st = 'need'; ib.need = ks.map(function (k) { return { k: k, url: url(k) }; }); };
+  var title = function (rest) { return rest; };
+  if (!stn) {
+    if (tryGG) {
+      if (res.gs === undefined) { need(['gs', 'gp']); }
+      else {
+        var g = mapBrStnGbis(res.gs);
+        if (g.length) { stn = g; via = 'gg'; }
+        else if (!b.cc) ib.st = 'fail';
+        else if (res.ts === undefined) { need(['ts', 'tp']); }
+        else { var t0 = mapBrStnTago(res.ts); if (t0.length) { stn = t0; via = 'tago'; } else ib.st = 'fail'; }
+      }
+    } else if (res.ts === undefined) { need(['ts', 'tp']); }
+    else { var t1 = mapBrStnTago(res.ts); if (t1.length) { stn = t1; via = 'tago'; } else ib.st = 'fail'; }
+  }
+  var head = [{ t: 'brh', no: b.no || '-', tp: b.tp, c: mapRouteColor(b.no), act: { a: 'call', v: 'br.rf' }, bact: { a: 'call', v: 'br.x' } }];
+  if (ib.st === 'fail') {
+    return mapFinish({ ok: true, v: 1, screen: 'mapbr', cover: 'tab', head: head, body: [{ t: 'text', s: '노선 정류장 정보를 불러올 수 없어요.\n(API 응답 없음)', size: 13, color: 'sub', lh: 1.7, align: 'center', pad: [40, 20, 40, 20] }], foot: [], info: info }, 'brfail');
+  }
+  if (!stn) {
+    return mapFinish({ ok: true, v: 1, screen: 'mapbr', cover: 'tab', head: head, body: [{ t: 'text', s: '🚌 노선 정보 불러오는 중...', size: 13, color: 'sub', align: 'center', pad: [40, 20, 40, 20] }], foot: [], info: info }, 'brload');
+  }
+  ib.stn = stn; ib.via = via; ib.cc = b.cc;
+  var posKey = via === 'gg' ? 'gp' : 'tp';
+  if (res[posKey] === undefined) { ib.st = 'need'; ib.need = [{ k: posKey, url: url(posKey) }]; }
+  var P = mapBrPos(res[posKey], via === 'gg');
+  ib.pos = { known: P.known, n: P.buses.length };
+  var busAt = {};
+  P.buses.forEach(function (x) { (busAt[x[0]] = busAt[x[0]] || []).push(x[1]); });
+  // 기준 정류장: 눌러서 들어온 정류장(id → 좌표 300m → 이름) → 없으면 내 위치(800m)
+  var org = b.o, myOrd = null, anchorNm = '', anchorIsStop = false, i, d, bd;
+  if (org) {
+    if (org.id) for (i = 0; i < stn.length; i++) { var sid = String(stn[i][1] || stn[i][3] || ''); if (sid && sid === org.id) { myOrd = stn[i][0]; break; } }
+    if (myOrd === null && isFinite(org.la) && isFinite(org.lo)) {
+      bd = 1e18;
+      stn.forEach(function (r) { if (!isFinite(r[4]) || !isFinite(r[5])) return; d = mapHav(org.la, org.lo, r[4], r[5]); if (d < bd) { bd = d; myOrd = r[0]; } });
+      if (bd > 300) myOrd = null;
+    }
+    if (myOrd === null && org.nm) {
+      var onm = org.nm.replace(/\s/g, '');
+      for (i = 0; i < stn.length; i++) if (String(stn[i][2]).replace(/\s/g, '') === onm) { myOrd = stn[i][0]; break; }
+    }
+    if (myOrd !== null) { anchorNm = org.nm || ''; anchorIsStop = true; }
+  }
+  if (myOrd === null && b.me) {
+    bd = 1e18;
+    stn.forEach(function (r) { if (!isFinite(r[4]) || !isFinite(r[5])) return; d = mapHav(b.me[0], b.me[1], r[4], r[5]); if (d < bd) { bd = d; myOrd = r[0]; } });
+    if (bd > 800) myOrd = null;
+  }
+  var myEta = '', anchorLabel = anchorIsStop ? (anchorNm || '이 정류장') : '📍 내 위치';
+  if (myOrd !== null) {
+    var appr = null;
+    P.buses.forEach(function (x) { if (x[0] <= myOrd && (appr === null || x[0] > appr)) appr = x[0]; });
+    if (appr !== null) { var away = myOrd - appr; if (away <= 0) myEta = '곧 도착'; else myEta = away + '정거장 전 · 약 ' + Math.max(1, Math.round(away * 1.5)) + '분'; }
+    else myEta = '접근 중인 버스 없음';
+  }
+  var groups = [], cur = null;
+  stn.forEach(function (r, idx) { var cls = mapBrCls(r[6]); if (!cur || cur.cls !== cls) { cur = { cls: cls, items: [] }; groups.push(cur); } cur.items.push({ r: r, idx: idx }); });
+  var myCls = '', myDirEnd = '', myDirTxt = '';
+  if (myOrd !== null) {
+    var mine = null; for (i = 0; i < stn.length; i++) if (stn[i][0] === myOrd) { mine = stn[i]; break; }
+    if (mine) {
+      myCls = mapBrCls(mine[6]); myDirTxt = myCls === 'up' ? '상행' : myCls === 'down' ? '하행' : '';
+      for (i = stn.length - 1; i >= 0; i--) if (mapBrCls(stn[i][6]) === myCls) { myDirEnd = stn[i][2] || ''; break; }
+    }
+  }
+  var first = stn[0][2] || '', last = stn[stn.length - 1][2] || '', runN = P.buses.length;
+  var runTxt = P.known ? ('🚌 운행 ' + runN + '대') : (runN ? ('🚌 운행 ' + runN + '대') : '🚌 위치 확인 중...');
+  var chips = [{ s: runTxt, k: runN ? 'on' : '' }, { s: '정류장 ' + stn.length + '개', k: '' }];
+  if (myEta) chips.push({ s: anchorLabel + ' · ' + myEta, k: 'me' });
+  var brt = { t: 'brt', a: anchorIsStop && myDirEnd ? anchorNm : first, b: anchorIsStop && myDirEnd ? myDirEnd : last, fin: anchorIsStop && myDirEnd ? 1 : 0, chips: chips };
+  if (anchorIsStop && myDirEnd && myDirTxt) { brt.tag = myDirTxt; brt.tk = myCls; }
+  head.push(brt);
+  var body = [], sel = b.sel, pk = b.pk;
+  groups.forEach(function (g, gi) {
+    if (gi > 0) body.push({ t: 'brturn', s: '회차 ↻' });
+    var endNm = g.items[g.items.length - 1].r[2] || '';
+    body.push({ t: 'brsec', k: g.cls, s: endNm, tag: g.cls === 'up' ? '상행' : g.cls === 'down' ? '하행' : '운행' });
+    g.items.forEach(function (o, k) {
+      var r = o.r, ord = r[0], here = busAt[ord], isMine = myOrd !== null && ord === myOrd;
+      var row = { t: 'brs', k: g.cls, i: o.idx, nm: r[2] || '', id: r[3] || r[1] || '', act: { a: 'call', v: 'br.p.' + o.idx } };
+      if (k === 0) row.fl = 'f';
+      if (k === g.items.length - 1) row.fl = (row.fl || '') + 'l';
+      if (k < g.items.length - 1 && k % 2 === 0) row.ar = 1;
+      var notes = [];
+      if (here) { row.mk = 'bus'; row.here = 1; var vno = here.filter(Boolean).join(', '); notes.push({ s: '🚌 ' + (vno || '버스 도착'), k: 'bus' }); }
+      else if (isMine) row.mk = 'me';
+      if (isMine) { row.mine = 1; notes.push({ s: anchorLabel + ' 승차' + (myEta ? ' · ' + myEta : ''), k: 'me' }); }
+      if (notes.length) row.notes = notes;
+      var isStart = !!(pk && ((pk.i && pk.i === (r[1] || '')) || (!pk.i && pk.n === (r[2] || ''))));
+      if (isStart) row.ps = 's'; else if (!pk && sel === o.idx) row.ps = 'p';
+      row.lab = isStart ? '출발지' : (pk ? '도착지 ›' : '선택 ›');
+      body.push(row);
+    });
+  });
+  body.push({ t: 'spacer', h: 24 });
+  // 아래 바(웹 _brPickRender): 출발지를 정했으면 안내 + [도착지는 역으로 설정][취소] · 정류장을 눌렀으면 [출발지로 설정]
+  var foot = [];
+  var msgN = function (s, hl) { var n = { t: 'text', s: s, size: 13.5, color: 'text', lh: 1.5, pad: [12, 16, 10, 16] }; if (hl) n.hl = [hl]; return n; };
+  var bar = null;
+  if (pk) {
+    var s1 = '📍 출발지 ' + pk.n + '\n다른 정류장을 누르면 도착지로 설정됩니다', a1 = s1.indexOf(pk.n);
+    var m1 = msgN(s1, [a1, a1 + pk.n.length]); var a2 = s1.indexOf('도착지로 설정'); m1.hl = [[a1, a1 + pk.n.length], [a2, a2 + 6]];
+    bar = [m1, { t: 'row', pad: [0, 16, 14, 16], gap: 8, kids: [
+      { t: 'button', s: '🚇 도착지는 역으로 설정', size: 15, h: 48, r: 14, bold: true, fill: '#2f7cf6', line: 'none', tc: '#ffffff', pad: [0, 0, 0, 0], act: { a: 'call', v: 'br.st' } },
+      { t: 'button', s: '취소', size: 15, h: 48, r: 14, bold: true, fill: 'card2', line: 'border', tc: '', pad: [0, 0, 0, 0], act: { a: 'call', v: 'br.cx' } }] }];
+  } else if (sel >= 0 && sel < stn.length) {
+    var nm = stn[sel][2] || '', mm = msgN(nm, [0, nm.length]);
+    bar = [mm, { t: 'row', pad: [0, 16, 14, 16], gap: 8, kids: [
+      { t: 'button', s: '출발지로 설정', size: 15, h: 48, r: 14, bold: true, fill: '#2f7cf6', line: 'none', tc: '#ffffff', pad: [0, 0, 0, 0], act: { a: 'call', v: 'br.ss' } }] }];
+  }
+  if (bar) foot = [{ t: 'panel', pad: [0, 0, 0, 0], ip: [0, 0, 0, 0], r: 0, fill: 'card', line: 'border', kids: bar }];
+  return mapFinish({ ok: true, v: 1, screen: 'mapbr', cover: 'tab', head: head, body: body, foot: foot, info: info }, 'br' + (pk ? 'p' : '') + sel);
+}
+if (typeof module !== 'undefined' && module.exports) module.exports = { mapCdFmt: mapCdFmt, mapBusRouteSheet: mapBusRouteSheet, mapBrCity: mapBrCity, mapBrStnTago: mapBrStnTago, mapBrStnGbis: mapBrStnGbis, mapBrPos: mapBrPos, mapCityOf: mapCityOf, mapGGPreferred: mapGGPreferred, mapGbisArr: mapGbisArr, mapScreen: mapScreen, mapFacts: mapFacts, mapLinesOf: mapLinesOf, mapFind: mapFind, mapNearest: mapNearest, mapIsStationLabel: mapIsStationLabel, mapPickRow: mapPickRow, mapRegionLines: mapRegionLines, mapDedupStops: mapDedupStops, mapStopOrder: mapStopOrder, MAP_FILTERS: MAP_FILTERS };

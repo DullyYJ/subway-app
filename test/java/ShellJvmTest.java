@@ -508,8 +508,8 @@ public class ShellJvmTest {
             && ShellCore.cchipsBody("board").contains("\"mode\":\"board\"") && ShellCore.cchipsBody("zzz").contains("\"mode\":\"" + ShellCore.MODE_DEFAULT + "\"")
             && "cchips".equals(ShellCore.expectId(ShellCore.cchipsKey("set"))), "칩 줄 미리 받기: 방식마다 본문과 열쇠");
         ok(ShellCore.diskCacheable("shop") && ShellCore.diskCacheable("cchips") && ShellCore.diskCacheable("home") && ShellCore.diskCacheable("news") && ShellCore.diskCacheable("chat") && ShellCore.diskCacheable("food")
-            && !ShellCore.diskCacheable("write") && !ShellCore.diskCacheable("error") && ShellCore.diskTtl("mapb|bus|seoul|ALL") == 5L * 60000L && ShellCore.diskTtl("mapb|subway|seoul|ALL") > 3600000L
-            && ShellCore.diskTtl("tabs|home") > 0L && ShellCore.diskTtl("news|전체") > 0L && ShellCore.diskTtl(null) == 0L, "모든 화면을 디스크에 둔다(버스 도착정보만 5분)");
+            && !ShellCore.diskCacheable("write") && !ShellCore.diskCacheable("error") && ShellCore.diskTtl("mapb|bus|seoul|ALL") == 8000L && ShellCore.diskTtl("mapb|subway|seoul|ALL") > 3600000L
+            && ShellCore.diskTtl("tabs|home") > 0L && ShellCore.diskTtl("news|전체") > 0L && ShellCore.diskTtl(null) == 0L, "모든 화면을 디스크에 둔다(버스 도착정보만 8초 — 실시간이라 옛 것은 쓰레기)");
         {
             ShellCore.MemStore ls = new ShellCore.MemStore();
             ok(ShellCore.lastLocGet(ls) == null, "처음엔 마지막 위치 없음");
@@ -737,6 +737,33 @@ public class ShellJvmTest {
             bm.setAlias("SEOUL:5", ""); ok(!bsv.get(MapCore.K_BUSAL, "").contains("SEOUL:5"), "빈 글이면 별명 삭제");
             bsv.put(MapCore.K_BUSFAV, "깨짐"); bsv.put(MapCore.K_BUSAL, "깨짐"); ok(bm.bodyRequest(18, "dark").contains("\"fav\":[]") && bm.bodyRequest(18, "dark").contains("\"al\":{}"), "깨진 저장값은 비운 것으로 본다");
             bm.setBusLoc(37.4, 127.1); ok(bm.busSel == -1, "위치를 다시 잡으면 선택을 푼다");
+        }
+        // 버스: 노선 상세(줄 → 노선 열기 · 정류장 목록 보관 · 출발지/도착지 고르기 · 8초 갱신은 위치만 비움)
+        {
+            ShellCore.MemStore rsv = new ShellCore.MemStore(); MapCore rm = new MapCore(rsv);
+            rm.onScreen("{\"info\":{\"view\":\"bus\",\"stops\":[{\"nm\":\"가\",\"id\":\"GG:1\",\"src\":\"gbis\",\"la\":37.5,\"lo\":127.0,\"city\":\"\"}],\"rts\":{\"0\":[[\"R1\",\"13-4\",\"일반\"],[\"\",\"7000\",\"직행\"]]}}}");
+            ok(rm.act("br.0.1", null) == MapCore.R_NONE && rm.act("br.5.0", null) == MapCore.R_NONE, "노선 id 가 없거나 범위 밖이면 열지 않는다");
+            ok(rm.act("br.0.0", null) == MapCore.R_BR_OPEN && "R1".equals(rm.brRid) && "13-4".equals(rm.brNo) && "gbis".equals(rm.brSrc), "줄을 누르면 노선 열기(출처는 정류장에서)");
+            String q1 = rm.brRequest(18, "dark");
+            ok(q1.contains("\"part\":\"br\"") && q1.contains("\"rid\":\"R1\"") && q1.contains("\"o\":{\"id\":\"GG:1\"") && !q1.contains("\"stn\""), "요청에 노선·기준 정류장");
+            rm.onBr("{\"info\":{\"br\":{\"st\":\"need\",\"need\":[{\"k\":\"gp\",\"url\":\"https://apis.data.go.kr/6410000/x\"}],\"via\":\"gg\",\"cc\":\"\",\"stn\":[[1,\"GG:1\",\"가\",\"001\",37.5,127.0,0],[2,\"GG:2\",\"나\",\"002\",37.51,127.0,1]],\"pos\":{\"known\":false,\"n\":0}}}}");
+            ok(rm.brStn.size() == 2 && rm.brNeed.size() == 1 && "gp".equals(rm.brNeed.get(0)[0]) && rm.brStnJson.startsWith("[[1,") && "gg".equals(rm.brVia), "정류장 목록을 보관하고 더 받을 주소를 읽는다");
+            rm.addBrRes("gp", "BODY"); String q2 = rm.brRequest(18, "dark");
+            ok(q2.contains("\"stn\":[[1,\"GG:1\"") && q2.contains("\"via\":\"gg\"") && q2.contains("\"res\":{\"gp\":\"BODY\"}"), "이후 요청은 정류장을 다시 받지 않고 보낸다");
+            rm.dropPositions(); ok(!rm.brRequest(18, "dark").contains("BODY") && rm.brRequest(18, "dark").contains("\"stn\""), "8초 갱신: 위치 본문만 비우고 정류장은 둔다");
+            ok(rm.brAct("br.p.1") == MapCore.R_BR_RENDER && rm.brSel == 1 && rm.brRequest(18, "dark").contains("\"sel\":1") && rm.brAct("br.ss") == MapCore.R_BR_START, "정류장을 누르면 선택 → 출발지로 설정");
+            rm.brPickStart(); ok("나".equals(rm.pkName) && rm.brRequest(18, "dark").contains("\"pk\":{\"n\":\"나\",\"i\":\"GG:2\"}") && rm.brSel == -1, "출발지를 정하면 요청에 pk");
+            ok(rm.brAct("br.p.1") == MapCore.R_BR_SAME && rm.brAct("br.p.0") == MapCore.R_BR_FINISH && rm.brAct("br.st") == MapCore.R_BR_TOSTN && rm.brAct("br.cx") == MapCore.R_BR_CANCEL && rm.brAct("br.p.9") == MapCore.R_NONE, "출발지와 같은 정류장은 안내 · 다른 정류장은 도착지 · 역으로 · 취소");
+            HomeCore hh = new HomeCore();
+            hh.loc[0] = new HomeCore.Loc(); hh.loc[0].name = "집"; hh.loc[0].lat = 37.1; hh.loc[0].lng = 127.1; hh.text[0] = "집";
+            hh.loc[1] = new HomeCore.Loc(); hh.loc[1].name = "회사"; hh.loc[1].lat = 37.2; hh.loc[1].lng = 127.2; hh.text[1] = "회사";
+            hh.pickSnap(); hh.setBusStop(HomeCore.START, "나", "GG:2", "", 37.51, 127.0);
+            ok("bus".equals(hh.loc[0].type) && "GG:2".equals(hh.loc[0].nodeId) && hh.loc[1] == null && hh.text[1].isEmpty(), "정류장을 출발지로 · 도착지는 비운다");
+            ok(hh.pickRestore("나") && "집".equals(hh.loc[0].name) && "회사".equals(hh.loc[1].name) && !hh.pickRestore("나"), "도착지를 못 정하고 나가면 고르기 전으로");
+            hh.pickSnap(); hh.setBusStop(HomeCore.START, "나", "GG:2", "", 37.51, 127.0); hh.setStation(HomeCore.START, "역", "2호선", 37.0, 127.0);
+            ok(!hh.pickRestore("나"), "그 사이 출발지를 바꿨다면 건드리지 않는다");
+            hh.setBusStop(HomeCore.START, "나", "GG:2", "", 37.51, 127.0); hh.setBusStop(HomeCore.DEST, "다", "GG:3", "", 37.52, 127.0);
+            ok(hh.bothSet(), "정류장 둘이면 경로를 찾을 수 있다");
         }
         // 결과 카드 보조: 장거리 다시 고르기 · 공지 원자료 · 즐겨찾기
         {

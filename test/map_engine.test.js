@@ -176,6 +176,11 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
     ok(tm.t === 'tmap' && tm.pts.length >= 2 && tm.pts[tm.pts.length - 1].k === 'm' && tm.pts[0].k === 's' && tm.pts[0].n === '1' && tm.pts[0].v === 'mp.pm.0' && tm.pts[0].g === 'GG:203000123' && tm.live === 1 && tm.foc === -1, '정류장 지도: 번호 핀 + 내 위치 핀, 핀을 누르면 그 카드(g)로');
     ok(bb.every(n => n.t !== 'bcard' || (n.act.v.startsWith('mp.pc.') && n.act.id === n.k)) && bb[0].pi === 0, '카드를 누르면 mp.pc.N, 카드는 자기 핀 번호(pi)를 안다');
   }
+  {
+    const mm = mk({ lat: 37.2661, lng: 127.0011, res: { gg: GGS, tn: TAGO, a0: GGA, a1: '' } });
+    const cards = mm.body.filter(n => n.t === 'bcard'), r0 = cards[0].rows.find(r => r.act);
+    ok(r0 && /^br\.0\.\d+$/.test(r0.act.v) && cards[0].rows.every(r => !r.act || mm.info.rts[0][Number(r.act.v.split('.')[2])][0].length > 0) && mm.info.rts[0].length === cards[0].rows.length, '도착정보 줄을 누르면 노선 상세(br.<정류장>.<줄>) · 노선 id 는 info.rts');
+  }
   // 웹과 같은 규칙: 같은 이름 25m 안은 한 곳으로, 출구가 많으면 목록이 늘어난다
   const many = []; for (let i = 0; i < 9; i++) many.push({ nm: '아라역' + (i + 1) + '번 출구', la: 37.5 + i * 1e-3, lo: 127, dist: 100 + i * 10, src: 'tago' });
   for (let i = 0; i < 6; i++) many.push({ nm: '일반' + i, la: 37.4 + i * 1e-2, lo: 127, dist: 50 + i, src: 'tago' });
@@ -219,6 +224,39 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
   ok(colRows.map(r => r.c).join() === '#e74c3c,#0066FF,#00b341,#9b59b6,#7f8c8d,#7f8c8d' && colRows.every(r => r.a[0].s === '59초' && r.a[0].soon === 1), '노선 색(웹 _busNumClass: 광역 빨강·간선 파랑·지선 초록·순환 보라·그 밖 회색) · 60초 안은 임박');
 }
 
+
+// ⑥-2 노선 상세(웹 openBusRoute · _loadBusRouteData · _renderBusRoute)
+{
+  const STN = [[1, 'GG:1', '가', '001', 37.5, 127.0, 0], [2, 'GG:2', '나', '002', 37.51, 127.0, 0], [3, 'GG:3', '다', '003', 37.52, 127.0, 1], [4, 'GG:4', '라', '004', 37.53, 127.0, 1]];
+  const pos = (arr) => JSON.stringify({ response: { msgHeader: { resultCode: 0 }, msgBody: { busLocationList: arr } } });
+  const br = (b) => call({ part: 'br', th: 'pastel', br: Object.assign({ rid: 'GGR1', no: '9', tp: '일반', src: 'gbis', o: { id: 'GG:2', nm: '나', la: 37.51, lo: 127 }, stn: STN, via: 'gg' }, b) });
+  let r = br({ stn: undefined, via: undefined });
+  ok(r.ok && r.info.br.st === 'need' && r.info.br.need.map(n => n.k).join() === 'gs,gp' && /getBusRouteStationListv2\?routeId=GGR1/.test(r.info.br.need[0].url) && /getBusLocationListv2\?routeId=GGR1/.test(r.info.br.need[1].url), '정류장·위치를 동시에 요청한다(경기 노선은 GBIS 먼저)');
+  r = br({ res: { gp: pos([{ stationSeq: 1, plateNo: '경기70' }]) } });
+  ok(r.info.br.st === 'ok' && r.info.br.pos.known && r.info.br.pos.n === 1 && r.body.map(n => n.t).join() === 'brsec,brs,brs,brturn,brsec,brs,brs,spacer', '구간(상행/하행) · 회차 · 정류장 줄');
+  const rows = r.body.filter(n => n.t === 'brs');
+  ok(rows[0].mk === 'bus' && rows[0].here === 1 && rows[0].notes[0].k === 'bus' && /경기70/.test(rows[0].notes[0].s) && rows[1].mk === 'me' && rows[1].mine === 1 && /1정거장 전/.test(rows[1].notes[0].s), '버스 위치와 내 정류장 도착 예상(정거장 수·분)');
+  ok(rows.every((n, i) => n.act.v === 'br.p.' + i) && rows[0].fl === 'f' && rows[3].fl === 'l' && r.head[0].t === 'brh' && r.head[0].act.v === 'br.rf' && r.head[0].bact.v === 'br.x', '줄·머리 눌림');
+  ok(r.head[1].t === 'brt' && r.head[1].a === '나' && r.head[1].b === '가' || r.head[1].b === '다' || r.head[1].fin === 1, '기준 정류장이면 기준 → 방향 종점');
+  const a = br({ res: { gp: pos([{ stationSeq: 1, plateNo: 'A' }]) } }), b2 = br({ res: { gp: pos([{ stationSeq: 3, plateNo: 'A' }]) } });
+  ok(a.rev !== b2.rev, '위치가 바뀌면 rev 가 바뀐다(바뀐 줄만 다시 그리는 근거)');
+  ok(br({ res: { gp: pos([]) } }).info.br.pos.known === true && br({ res: { gp: '' } }).info.br.pos.known === false && br({ res: {} }).info.br.st === 'need', '빈 응답=0대(확정) · 응답 없음=확인 중 · 위치를 아직 안 받으면 요청');
+  r = br({ sel: 2 });
+  ok(r.foot.length === 1 && r.body.filter(n => n.t === 'brs')[2].ps === 'p' && /출발지로 설정/.test(JSON.stringify(r.foot)) && /다/.test(JSON.stringify(r.foot)), '정류장을 누르면 아래 바에 [출발지로 설정]');
+  r = br({ pk: { n: '가', i: 'GG:1' } });
+  ok(r.body.filter(n => n.t === 'brs')[0].ps === 's' && r.body.filter(n => n.t === 'brs')[0].lab === '출발지' && r.body.filter(n => n.t === 'brs')[1].lab === '도착지 ›' && /도착지는 역으로/.test(JSON.stringify(r.foot)) && /br\.cx/.test(JSON.stringify(r.foot)), '출발지를 정하면 다른 줄은 [도착지 ›] · 바에 역으로/취소');
+  r = call({ part: 'br', br: { rid: 'T1', no: '9', src: '', o: { id: '', nm: 'x', la: 0, lo: 0 } } });
+  ok(r.info.br.need.map(n => n.k).join() === 'gs,gp', '시 코드를 모르면 GBIS 먼저');
+  r = call({ part: 'br', br: { rid: 'SL1', no: '146', src: 'topis', o: { id: 'SEOUL:11111', nm: 'x', la: 37.5, lo: 127, city: '11' } } });
+  ok(r.info.br.need.map(n => n.k).join() === 'ts,tp' && /cityCode=11&routeId=SL1/.test(r.info.br.need[0].url), '시 코드가 있으면 TAGO 로');
+  const T1 = JSON.stringify({ response: { body: { items: { item: [{ nodeord: 2, nodeid: 'N2', nodenm: '둘', gpslati: 37.5, gpslong: 127, updowncd: 0 }, { nodeord: 1, nodeid: 'N1', nodenm: '하나', gpslati: 37.5, gpslong: 127, updowncd: 0 }] } } } });
+  r = call({ part: 'br', br: { rid: 'SL1', no: '146', src: 'topis', o: { id: 'N2', nm: '둘', la: 37.5, lo: 127, city: '11' }, res: { ts: T1, tp: JSON.stringify({ response: { body: { items: { item: { nodeord: 1, vehicleno: '서울74' } } } } }) } } });
+  ok(r.info.br.st === 'ok' && r.info.br.via === 'tago' && r.info.br.stn[0][1] === 'N1' && r.body.filter(n => n.t === 'brs')[0].mk === 'bus', 'TAGO 응답 읽기(순번 정렬 · 위치)');
+  r = call({ part: 'br', br: { rid: 'SL1', no: '146', src: 'topis', o: { la: 37.5, lo: 127, city: '11' }, res: { ts: '', tp: '' } } });
+  ok(r.info.br.st === 'fail' && /불러올 수 없어요/.test(JSON.stringify(r.body)), '정류장을 못 받으면 안내');
+  ok(call({ part: 'br', br: {} }).ok === false, '노선 id 없으면 만들지 않는다');
+}
+
 // ⑦ 앱 검증기
 {
   const T = E.mapLinesOf('강남'), lines = [];
@@ -227,6 +265,8 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
   push(call({ part: 'b', mode: 'bus', th: 'dark', bus: null })); push(call({ part: 'b', mode: 'bus', th: 'dark', bus: { lat: 37.5, lng: 127, res: {} } })); push(call({ part: 'b', mode: 'bus', th: 'pastel', bus: { lat: 37.5, lng: 127, res: { tp: SEOUL_POS, gg: '', tn: '', a0: SEOUL_ARR, a1: '', a2: '', a3: '' } } }));
   push(call({ part: 'b', mode: 'bus', th: 'dark', bus: { lat: 37.5, lng: 127, sel: 0, fav: [{ nm: 'a', id: 'SEOUL:11111', src: 'topis', ars: '11111', la: 37.5, lo: 127 }], al: { 'SEOUL:11111': '집' }, res: { tp: SEOUL_POS, gg: '', tn: '', a0: SEOUL_ARR, a1: '', a2: '', a3: '' } } }));
   push(call({ part: 'b', mode: 'bus', th: 'dark', bus: { vw: 'fav', fav: [{ nm: 'a', id: 'SEOUL:11111', src: 'topis', ars: '11111', la: 37.5, lo: 127 }], al: { 'SEOUL:11111': '집' }, res: { f0: SEOUL_ARR } } })); push(call({ part: 'b', mode: 'bus', th: 'dark', bus: { vw: 'fav', fav: [], res: {} } })); push(call({ part: 'b', mode: 'bus', th: 'dark', bus: { vw: 'fav', fav: [{ nm: 'a', id: 'SEOUL:11111', src: 'topis', ars: '11111', la: 37.5, lo: 127 }], res: {} } }));
+  { const STN = [[1, 'GG:1', '가', '001', 37.5, 127.0, 0], [2, 'GG:2', '나', '002', 37.51, 127.0, 0], [3, 'GG:3', '다', '003', 37.52, 127.0, 1]]; const P = JSON.stringify({ response: { msgHeader: { resultCode: 0 }, msgBody: { busLocationList: [{ stationSeq: 1, plateNo: 'x' }] } } });
+    push(call({ part: 'br', br: { rid: 'R', no: '9', src: 'gbis', o: { id: 'GG:2', nm: '나', la: 37.51, lo: 127 }, stn: STN, via: 'gg', res: { gp: P } } })); push(call({ part: 'br', br: { rid: 'R', no: '9', src: 'gbis', stn: STN, via: 'gg', sel: 1, res: { gp: P } } })); push(call({ part: 'br', th: 'dark', br: { rid: 'R', no: '9', src: 'gbis', stn: STN, via: 'gg', pk: { n: '가', i: 'GG:1' }, res: { gp: P } } })); push(call({ part: 'br', br: { rid: 'R', no: '9', src: 'gbis' } })); push(call({ part: 'br', br: { rid: 'R', no: '9', src: 'topis', o: { la: 37.5, lo: 127, city: '11' }, res: { ts: '', tp: '' } } })); }
   push(call({ part: 'stn', stn: '강남' })); push(call({ part: 'stn', stn: '없는역xyz' }));
   const data = { dayCode: 'DAY', today: 'DAY', days: [{ code: 'DAY', label: '평일' }], dirs: [{ dk: '상', toward: '잠실', times: [300, 310, 480, 1450], first: 300, last: 1450, nextMin: 480 }] };
   push(call({ part: 'tt', stn: '강남', tt: { st: 'ok', res: { [T[0] + '|-']: data } } })); push(call({ part: 'tt', stn: '강남', tt: { st: 'loading' } })); push(call({ part: 'tt', stn: '강남', tt: { st: 'fail' } }));

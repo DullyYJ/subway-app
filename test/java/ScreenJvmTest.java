@@ -858,6 +858,29 @@ public class ScreenJvmTest {
             boolean threw = false; try { ScreenCore.load(H + "{\"t\":\"sec\",\"s\":\"\"}]}"); } catch (Exception ex) { threw = true; } ok(threw, "sec: s 가 없으면 거부");
         }
 
+        // ── 노선 상세 노드(brh · brt · brsec · brturn · brs) ──
+        {
+            String H = "{\"ok\":true,\"v\":1,\"screen\":\"mapbr\",\"head\":[{\"t\":\"brh\",\"no\":\"13-4\",\"tp\":\"일반\",\"c\":\"#00b341\",\"act\":{\"a\":\"call\",\"v\":\"br.rf\"},\"bact\":{\"a\":\"call\",\"v\":\"br.x\"}},{\"t\":\"brt\",\"a\":\"가\",\"b\":\"라\",\"tag\":\"상행\",\"tk\":\"up\",\"chips\":[{\"s\":\"운행 2대\",\"k\":\"on\"},{\"s\":\"정류장 40개\"},{\"s\":\"내 위치 · 3정거장 전\",\"k\":\"me\"}]}],\"body\":[";
+            String row = "{\"t\":\"brs\",\"k\":\"up\",\"i\":0,\"nm\":\"가\",\"id\":\"001\",\"fl\":\"f\",\"ar\":1,\"mk\":\"bus\",\"here\":1,\"notes\":[{\"s\":\"🚌 경기70\",\"k\":\"bus\"}],\"lab\":\"선택 ›\",\"act\":{\"a\":\"call\",\"v\":\"br.p.0\"}}";
+            String sec = "{\"t\":\"brsec\",\"k\":\"up\",\"s\":\"라\",\"tag\":\"상행\"},{\"t\":\"brturn\",\"s\":\"회차 ↻\"}";
+            try {
+                ScreenCore.Layout bl = ScreenCore.layout(ScreenCore.load(H + sec + "," + row + "," + row.replace("\"i\":0", "\"i\":1").replace("\"mk\":\"bus\",\"here\":1,\"notes\":[{\"s\":\"🚌 경기70\",\"k\":\"bus\"}],", "").replace("br.p.0", "br.p.1") + "]}"), 360f, M);
+                ScreenCore.Item h = bl.head[0], t = bl.head[1], sc = bl.body[0], bn = bl.body[1], rs0 = bl.body[2], rs1 = bl.body[3];
+                ok(h.kind == ScreenCore.K_BRX && "h".equals(h.dk) && h.h == ScreenCore.BR_HEAD_H && h.za.length == 2 && h.za[0].v.equals("br.rf") && h.za[1].v.equals("br.x") && h.zs[0] < h.zs[4], "brh: 머리 52 · ↻ ✕ 두 자리");
+                ok("t".equals(t.dk) && t.sa.length == 3 && t.h > 40f && t.gf[3] > 0f, "brt: 칩 셋의 자리");
+                ok("c".equals(sc.dk) && "n".equals(bn.dk) && bn.h == ScreenCore.BR_TURN_H, "구간 머리 · 회차");
+                ok("s".equals(rs0.dk) && rs0.h > rs1.h && rs0.sa.length == 1 && rs0.act.v.equals("br.p.0") && "f".equals(rs0.go) && rs0.pub && rs1.sa.length == 0 && rs1.h >= ScreenCore.BR_ROW_MIN, "brs: 알림이 있는 줄이 더 높다 · 눌림 행동 · 첫 줄 표시");
+                ok(bl.part && !rs0.sig.equals(rs1.sig) && rs0.sig.equals(ScreenCore.layout(ScreenCore.load(H + sec + "," + row + "]}"), 360f, M).body[2].sig), "지문: 내용이 같으면 같고 다르면 다르다(바뀐 줄만 다시 그리는 근거)");
+            } catch (Exception ex) { ok(false, "노선 상세 읽기: " + ex); }
+            String[] bads = { "{\"t\":\"brh\",\"no\":\"\",\"act\":{\"a\":\"call\",\"v\":\"x\"},\"bact\":{\"a\":\"call\",\"v\":\"y\"}}", row.replace("\"act\":{\"a\":\"call\",\"v\":\"br.p.0\"}", "\"x\":1") };
+            for (String b : bads) { boolean threw = false; try { ScreenCore.load(H + b + "]}"); } catch (Exception ex) { threw = true; } ok(threw, "노선 상세 엉터리는 거부"); }
+            try {
+                ScreenCore.Layout cl = ScreenCore.layout(ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"maph\",\"head\":[],\"body\":[{\"t\":\"bcard\",\"k\":\"SEOUL:1\",\"nm\":\"가\",\"mode\":\"near\",\"act\":{\"a\":\"call\",\"v\":\"mp.pc.0\"},\"rows\":[{\"no\":\"146\",\"c\":\"#0066FF\",\"a\":[{\"s\":\"1분\",\"sec\":60}],\"act\":{\"a\":\"call\",\"v\":\"br.0.0\"}},{\"no\":\"7\",\"a\":[{\"s\":\"2분\",\"sec\":120}]}]}]}"), 360f, M);
+                ScreenCore.Item bc = cl.body[0];
+                ok(bc.ra.length == 2 && bc.ra[0] != null && "br.0.0".equals(bc.ra[0].v) && bc.ra[1] == null, "bcard: 노선 줄마다 누름 행동");
+            } catch (Exception ex) { ok(false, "bcard 줄 행동: " + ex); }
+        }
+
         // ── 버스 탭 노드(btog · bcard · tmap 확장) ──
         {
             String H = "{\"ok\":true,\"v\":1,\"screen\":\"maph\",\"head\":[],\"body\":[";

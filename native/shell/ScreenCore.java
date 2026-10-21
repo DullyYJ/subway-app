@@ -757,7 +757,7 @@ public final class ScreenCore {
                     Map<String, Object> rm = asObj(rio, "bcard 줄");
                     Node r = new Node(); r.t = "brow";
                     r.name = optStr(rm, "no", "", 16); if (r.name.length() == 0) throw new ParseError("bcard: no 없음");
-                    r.fill = roleOrCss(rm, "c", "#0066FF"); r.title = optStr(rm, "dir", "", 60); r.on = optNum(rm, "bell", 0f, 0f, 1f) > 0f;
+                    r.fill = roleOrCss(rm, "c", "#0066FF"); r.title = optStr(rm, "dir", "", 60); r.on = optNum(rm, "bell", 0f, 0f, 1f) > 0f; r.act = act(rm.get("act"), false);
                     for (Object ao : asArr(rm.get("a"), "bcard.a")) {
                         if (r.items.size() >= 2) break;
                         Map<String, Object> am = asObj(ao, "bcard 도착");
@@ -769,6 +769,39 @@ public final class ScreenCore {
                     n.items.add(r); sc.nodes++;
                     if (sc.nodes > MAX_NODES) throw new ParseError("노드가 너무 많다");
                 }
+            }
+        } else if ("brh".equals(t)) {                                                                       // 노선 상세 머리: 번호 배지 · 종류 · ↻ · ✕
+            pad(m, n);
+            n.name = optStr(m, "no", "", 16); if (n.name.length() == 0) throw new ParseError("brh: no 없음");
+            n.title = optStr(m, "tp", "", 16); n.fill = roleOrCss(m, "c", "#7f8c8d");
+            n.act = act(m.get("act"), true); n.bact = act(m.get("bact"), true);
+        } else if ("brt".equals(t)) {                                                                       // 노선 상세 제목: 기점 → 종점 · (방향 알약) · 요약 칩들
+            pad(m, n);
+            n.name = optStr(m, "a", "", 60); n.label = optStr(m, "b", "", 60); n.on = optNum(m, "fin", 0f, 0f, 1f) > 0f;
+            n.tag = optStr(m, "tag", "", 8); n.value = optStr(m, "tk", "na", 4);
+            Object co = m.get("chips");
+            if (co != null) for (Object x : asArr(co, "brt.chips")) {
+                if (n.items.size() >= 6) break;
+                Map<String, Object> cm = asObj(x, "brt 칩"); Node c = new Node(); c.t = "brtc";
+                c.s = optStr(cm, "s", "", 40); c.value = optStr(cm, "k", "", 4); if (c.s.length() > 0) n.items.add(c);
+            }
+        } else if ("brsec".equals(t)) {                                                                     // 상행/하행 구간 머리
+            pad(m, n);
+            n.value = optStr(m, "k", "na", 4); n.name = optStr(m, "s", "", 60); n.tag = optStr(m, "tag", "", 8);
+        } else if ("brturn".equals(t)) {
+            pad(m, n);
+            n.s = optStr(m, "s", "회차 \u21BB", 12);
+        } else if ("brs".equals(t)) {                                                                       // 노선 상세 정류장 줄
+            pad(m, n);
+            n.value = optStr(m, "k", "na", 4); n.ci = Math.round(optNum(m, "i", 0f, 0f, 1000f)); n.name = optStr(m, "nm", "", 60); n.label = optStr(m, "id", "", 20);
+            n.hint = optStr(m, "fl", "", 2); n.big = optNum(m, "ar", 0f, 0f, 1f) > 0f; n.badge = optStr(m, "mk", "", 4);
+            n.on = optNum(m, "here", 0f, 0f, 1f) > 0f; n.mine = optNum(m, "mine", 0f, 0f, 1f) > 0f; n.tag = optStr(m, "ps", "", 1); n.sub = optStr(m, "lab", "", 10);
+            n.act = act(m.get("act"), true);
+            Object no = m.get("notes");
+            if (no != null) for (Object x : asArr(no, "brs.notes")) {
+                if (n.items.size() >= 3) break;
+                Map<String, Object> nm = asObj(x, "brs 알림"); Node c = new Node(); c.t = "brsn";
+                c.s = optStr(nm, "s", "", 80); c.value = optStr(nm, "k", "", 4); if (c.s.length() > 0) n.items.add(c);
             }
         } else if ("marq".equals(t)) {                                                                     // 맨 위 흐르는 감성 문구: 엔진이 문구 목록을 정하고, 앱은 한 번 지나갈 때마다 다음 문구로 흘리기만 한다
             pad(m, n);
@@ -884,8 +917,12 @@ public final class ScreenCore {
     // ═════════════ ③ 배치 ═════════════
     public static final int SCENE_MAX = 6000;
     public static final float SKEL_ROW_H = 68f, SKEL_CARD_H = 132f, SKEL_MAP_H = 200f, SKEL_GAP = 10f;
-    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14, K_NEWS = 15, K_POSTH = 16, K_CMT = 17, K_RBTN = 18, K_INBAR = 19, K_MSG = 20, K_TAB = 21, K_SUG = 22, K_SWAP = 23, K_RHD = 24, K_TRK = 25, K_CGH = 26, K_GAUGE = 27, K_CHART = 28, K_HBAR = 29, K_CARS = 30, K_AIH = 31, K_LTH = 32, K_LTR = 33, K_PILL = 34, K_SCENE = 35, K_TMAP = 36, K_MARQ = 37, K_SKEL = 38, K_BTOG = 39, K_BCARD = 40, K_SEC = 41, K_TROW = 42;
+    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14, K_NEWS = 15, K_POSTH = 16, K_CMT = 17, K_RBTN = 18, K_INBAR = 19, K_MSG = 20, K_TAB = 21, K_SUG = 22, K_SWAP = 23, K_RHD = 24, K_TRK = 25, K_CGH = 26, K_GAUGE = 27, K_CHART = 28, K_HBAR = 29, K_CARS = 30, K_AIH = 31, K_LTH = 32, K_LTR = 33, K_PILL = 34, K_SCENE = 35, K_TMAP = 36, K_MARQ = 37, K_SKEL = 38, K_BTOG = 39, K_BCARD = 40, K_SEC = 41, K_TROW = 42, K_BRX = 43;
     /** 버스 정류장 카드 치수(웹 .map-bus-stop-card / .kbus-row 와 같다) */
+
+    /** 노선 상세(웹 .brs-*): 머리 52 · 제목 · 구간 머리 34 · 회차 28 · 정류장 줄 56+ (레일 폭 5 · 점 9 · 버스 21 · 내 위치 15). */
+    public static final float BR_HEAD_H = 52f, BR_BADGE_H = 28f, BR_PADX = 16f, BR_TIT = 14f, BR_CHIP = 11.5f, BR_CHIP_PX = 9f, BR_CHIP_PY = 4f, BR_CHIP_GAP = 6f,
+            BR_SEC_H = 34f, BR_TURN_H = 34f, BR_ROW_MIN = 56f, BR_ROW_PY = 10f, BR_NAME = 15f, BR_ID = 11.5f, BR_NOTE = 12f, BR_RAIL_X = 26f, BR_BODY_X = 48f, BR_LAB = 11f;
     public static final float BC_RAD = 18f, BC_PADX = 16f, BC_PADT = 16f, BC_PADB = 12f, BC_NAME = 17f, BC_NAME_LH = 1.3f, BC_BADGE = 21f, BC_BADGE_GAP = 7f, BC_ORIG = 11f, BC_DIST = 11f, BC_DIST_PX = 9f, BC_DIST_H = 20f,
             BC_GAP = 8f, BC_EDIT_W = 18f, BC_STAR_W = 24f, BC_X_W = 20f, BC_MAP_W = 19f, BC_ROW_PY = 11f, BC_ROW_PX = 14f, BC_ROW_GAP = 10f, BC_NO = 17f, BC_NO_LH = 1.1f, BC_DIR = 11f, BC_ARR = 14f, BC_ARR_LH = 1.3f,
             BC_CNT = 11f, BC_CNT_GAP = 6f, BC_ARR_GAP = 3f, BC_BELL = 22f, BC_MSG = 13f, BC_MSG_PY = 14f, BC_LEFT_MIN = 60f, BC_LEFT_MAX = 150f;
@@ -960,6 +997,8 @@ public final class ScreenCore {
         public boolean tb;
         public int ti = -1;                          // 칸: 위치 추적 번호(-1 은 추적 안 함)
         public Act act;
+        public Act[] ra = new Act[0];                // 정류장 카드: 노선 줄마다 누르면 가는 행동(없으면 null)
+        public String sig = "";                      // 노선 상세 줄: 바뀐 줄만 다시 그리려고 붙인 지문(내용이 같으면 같다)
         public String t1 = "", t2 = "", t3 = "";    // 혼잡도 카드: 글 조각들(머리줄 '지하철 '·이름·작은 글 / 차트 제목·출처·피크)
         public float f1, f2, f3;                     // 혼잡도 카드: 수 조각들(글 폭 · 비율 · 높이 · 잘림 왼쪽)
         public String[] sa = new String[0];          // 칸별 혼잡: 칸마다 글 세 줄(칸·단계·%)
@@ -996,6 +1035,7 @@ public final class ScreenCore {
 
     public static final class Layout {
         public Item[] head = new Item[0], body = new Item[0], foot = new Item[0];
+        public boolean part;                                               // 노선 상세 화면 — 새 화면이 와도 바뀐 줄만 다시 그린다
         public float fabW; public String fabLabel = ""; public float[] fabIcon = new float[0]; public Act fabAct;      // 떠 있는 단추(없으면 fabW 0)
         public float headH, headContentW, bodyH, footH, width, chipsTop = -1f, chipsBot = -1f;
         public String bg = "bg";                                          // 화면 바탕 색 역할
@@ -1232,6 +1272,7 @@ public final class ScreenCore {
         y = 0f;
         for (Node n : sc.body) y = stack(n, 0f, width, y, bi, m, openKey);
         L.body = bi.toArray(new Item[0]); L.bodyH = y;
+        for (Item q : L.body) if (q.kind == K_BRX) { L.part = true; break; }
         // 아래 고정 줄
         List<Item> fi = new ArrayList<Item>();
         y = 0f;
@@ -1353,7 +1394,7 @@ public final class ScreenCore {
         float cy = hdrH;
         if (rc > 0) {
             it.gf = new float[rc * 2]; it.gb = new boolean[rc * 3]; it.sa = new String[rc * 6]; it.ca = new Col[rc]; it.rt = new long[rc];
-            it.bs = new float[rc * 2]; it.ck = new String[rc * 2];
+            it.bs = new float[rc * 2]; it.ck = new String[rc * 2]; it.ra = new Act[rc];
             float rowRight = ox + w - 1f - BC_ROW_PX;
             float bellX = rowRight - BC_BELL;
             float maxLeft = Math.max(BC_LEFT_MIN, Math.min(BC_LEFT_MAX, w - 2f - BC_ROW_PX * 2f - BC_ROW_GAP * 2f - BC_BELL - 90f));
@@ -1365,7 +1406,7 @@ public final class ScreenCore {
                 int ac = r.items.size();
                 float rightH = Math.max(1, ac) * BC_ARR * BC_ARR_LH + (Math.max(1, ac) - 1) * BC_ARR_GAP;
                 float rh = 1f + BC_ROW_PY * 2f + Math.max(leftH, rightH);
-                it.gf[i * 2] = cy; it.gf[i * 2 + 1] = rh;
+                it.gf[i * 2] = cy; it.gf[i * 2 + 1] = rh; it.ra[i] = r.act;
                 it.sa[i * 6] = ellipsize(r.name, maxLeft, BC_NO, true, m); it.sa[i * 6 + 1] = dir;
                 it.ca[i] = col(r.fill, new Col(null, 0xFF0066FF));
                 for (int a = 0; a < 2; a++) {
@@ -1381,6 +1422,79 @@ public final class ScreenCore {
             cy += 1f + BC_MSG_PY * 2f + BC_MSG * 1.35f;
         }
         it.h = 2f + cy;
+        out.add(it);
+        return y + it.h + n.padB;
+    }
+
+
+    /** 노선 상세 노드들(머리·제목·구간·회차·정류장 줄)을 한 곳에서 쌓는다. 줄 지문(sig)은 8초마다 받는 새 화면과 비교해 바뀐 줄만 다시 그리게 한다. */
+    private static float brxLayout(Node n, float ox, float w, float y, List<Item> out, Measurer m) {
+        Item it = new Item(); it.kind = K_BRX; it.x = ox; it.y = y; it.w = w; it.act = n.act;
+        if ("brh".equals(n.t)) {
+            it.dk = "h"; it.h = BR_HEAD_H; it.lines = new String[] { n.name }; it.t1 = n.title; it.fill = col(n.fill, new Col(null, 0xFF7F8C8D));
+            it.badgeW = Math.max(46f, m.width(n.name, 15f, true) + 22f);
+            float rx = ox + w - BR_PADX - 36f;
+            it.zs = new float[] { rx - 40f, y + 8f, 36f, 36f, rx, y + 8f, 36f, 36f }; it.za = new Act[] { n.act, n.bact };
+            it.sig = "h|" + n.name + "|" + n.title;
+            out.add(it);
+            return y + it.h + n.padB;
+        }
+        if ("brt".equals(n.t)) {
+            it.dk = "t"; it.value = n.value; it.tag = n.tag; it.on = n.on;
+            float tagW = n.tag.length() > 0 ? m.width(n.tag, 11f, true) + 16f : 0f;
+            float room = Math.max(60f, w - BR_PADX * 2f - (tagW > 0f ? tagW + 8f : 0f) - 26f);
+            float wa = m.width(n.name, BR_TIT, true), wb = m.width(n.label, BR_TIT, true);
+            if (wa + wb > room) { float half = room / 2f; if (wa <= half) wb = room - wa; else if (wb <= half) wa = room - wb; else { wa = half; wb = half; } }
+            String ea = ellipsize(n.name, wa, BR_TIT, true, m), eb = ellipsize(n.label, wb, BR_TIT, true, m);
+            it.lines = new String[] { ea }; it.t1 = eb; it.size = BR_TIT;
+            it.f1 = ox + BR_PADX + m.width(ea, BR_TIT, true) + 8f;
+            it.f2 = it.f1 + 18f;
+            it.sx = ox + w - BR_PADX - tagW; it.sw = tagW;
+            int cn = n.items.size();
+            it.sa = new String[cn]; it.ck = new String[cn]; it.gf = new float[cn * 3];
+            float cx = ox + BR_PADX, cy = 12f + 20f + 8f, chH = BR_CHIP * 1.3f + BR_CHIP_PY * 2f, maxX = ox + w - BR_PADX;
+            StringBuilder sg = new StringBuilder("t|").append(n.name).append('|').append(n.label).append('|').append(n.tag);
+            for (int i = 0; i < cn; i++) {
+                String cs = n.items.get(i).s; float cw = m.width(cs, BR_CHIP, true) + BR_CHIP_PX * 2f + 2f;
+                if (cx + cw > maxX && cx > ox + BR_PADX) { cx = ox + BR_PADX; cy += chH + BR_CHIP_GAP; }
+                it.sa[i] = cs; it.ck[i] = n.items.get(i).value; it.gf[i * 3] = cx; it.gf[i * 3 + 1] = cy; it.gf[i * 3 + 2] = cw;
+                cx += cw + BR_CHIP_GAP; sg.append('|').append(cs).append('/').append(n.items.get(i).value);
+            }
+            it.h = cn > 0 ? cy + chH + 10f + 1f : 12f + 20f + 10f + 1f;
+            it.sig = sg.toString();
+            out.add(it);
+            return y + it.h + n.padB;
+        }
+        if ("brsec".equals(n.t)) {
+            it.dk = "c"; it.value = n.value; it.tag = n.tag; it.h = BR_SEC_H;
+            float tagW = n.tag.length() > 0 ? m.width(n.tag, 11f, true) + 16f : 0f;
+            float room = Math.max(40f, w - BR_PADX * 2f - tagW - 24f - m.width(" \uBC29\uBA74", 12.5f, false) - 8f);
+            it.lines = new String[] { ellipsize(n.name, room, 12.5f, true, m) };
+            it.sx = ox + w - BR_PADX - tagW; it.sw = tagW; it.f1 = ox + BR_PADX + 18f; it.f2 = it.f1 + m.width(it.lines[0], 12.5f, true);
+            it.sig = "c|" + n.value + "|" + n.name;
+            out.add(it);
+            return y + it.h + n.padB;
+        }
+        if ("brturn".equals(n.t)) {
+            it.dk = "n"; it.h = BR_TURN_H; it.lines = new String[] { n.s };
+            it.sw = m.width(n.s, BR_CHIP, true) + 26f; it.sx = ox + (w - it.sw) / 2f; it.sig = "n";
+            out.add(it);
+            return y + it.h + n.padB;
+        }
+        // brs
+        it.dk = "s"; it.value = n.value; it.ti = n.ci; it.go = n.hint; it.pub = n.big; it.badge = n.badge; it.on = n.on; it.top = n.mine; it.tag = n.tag; it.label = n.sub;
+        it.t1 = n.label;
+        float labW = m.width(n.sub, BR_LAB, true) + 16f; it.sw = labW; it.sx = ox + w - BR_PADX - labW;
+        float nameW = Math.max(40f, it.sx - 8f - (ox + BR_BODY_X));
+        it.lines = new String[] { ellipsize(n.name, nameW, BR_NAME, true, m) }; it.size = BR_NAME;
+        int nc = n.items.size();
+        it.sa = new String[nc]; it.ck = new String[nc];
+        float noteW = Math.max(40f, w - BR_BODY_X - BR_PADX);
+        StringBuilder sg = new StringBuilder("s|").append(n.ci).append('|').append(n.name).append('|').append(n.badge).append(n.on ? "h" : "").append(n.mine ? "m" : "").append('|').append(n.tag).append('|').append(n.sub);
+        for (int i = 0; i < nc; i++) { it.sa[i] = ellipsize(n.items.get(i).s, noteW, BR_NOTE, true, m); it.ck[i] = n.items.get(i).value; sg.append('|').append(it.sa[i]); }
+        float bodyH = 20f + (n.label.length() > 0 ? 3f + 15f : 0f) + nc * 17f;
+        it.h = Math.max(BR_ROW_MIN, BR_ROW_PY * 2f + bodyH) + 1f;
+        it.sig = sg.toString();
         out.add(it);
         return y + it.h + n.padB;
     }
@@ -1520,6 +1634,7 @@ public final class ScreenCore {
             return y + n.h + n.padB;
         }
         if ("bcard".equals(n.t)) return bcardLayout(n, ox, innerW, y, out, m);
+        if (n.t.startsWith("br") && ("brh".equals(n.t) || "brt".equals(n.t) || "brsec".equals(n.t) || "brturn".equals(n.t) || "brs".equals(n.t))) return brxLayout(n, ox, innerW, y, out, m);
         if ("tmap".equals(n.t)) {                                                    // 타일 지도 자리(그림은 ScreenView 가 그린다 · 누르면 act)
             Item it = new Item(); it.kind = K_TMAP; it.x = ox; it.y = y; it.w = innerW; it.h = n.h; it.radius = n.r; it.value = n.value; it.act = n.act; it.on = n.on; it.ti = n.ci; it.top = n.top; it.label = n.hint;
             out.add(it);

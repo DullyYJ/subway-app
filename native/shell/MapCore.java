@@ -14,7 +14,8 @@ import java.util.Map;
 public final class MapCore {
     public static final String K_MODE = "map_mode", K_REG = "map_reg", K_FLT = "map_flt";
     public static final String K_BUSVW = "map_busvw", K_BUSFAV = "bus_fav", K_BUSAL = "bus_al", VW_NEAR = "near", VW_FAV = "fav";
-    public static final int R_NONE = 0, R_RENDER = 1, R_FIND = 2, R_LOC = 3, R_STN = 4, R_START = 5, R_DEST = 6, R_TT = 7, R_CLOSE = 8, R_TT_LOAD = 9, R_TT_RENDER = 10, R_BUS_LOC = 11, R_BUS_VIEW = 12, R_BUS_REF = 13, R_BUS_SEL = 14, R_ALIAS = 15;
+    public static final int R_NONE = 0, R_RENDER = 1, R_FIND = 2, R_LOC = 3, R_STN = 4, R_START = 5, R_DEST = 6, R_TT = 7, R_CLOSE = 8, R_TT_LOAD = 9, R_TT_RENDER = 10, R_BUS_LOC = 11, R_BUS_VIEW = 12, R_BUS_REF = 13, R_BUS_SEL = 14, R_ALIAS = 15,
+            R_BR_OPEN = 16, R_BR_RENDER = 17, R_BR_REFRESH = 18, R_BR_CLOSE = 19, R_BR_START = 20, R_BR_FINISH = 21, R_BR_TOSTN = 22, R_BR_CANCEL = 23, R_BR_SAME = 24;
 
     private final ShellCore.Store st;
     public MapCore(ShellCore.Store st) { this.st = st; }
@@ -34,6 +35,7 @@ public final class MapCore {
     /** 주변 정류장 / 즐겨찾기 (웹 _busViewMode). 저장소에 두어 캐시 열쇠가 알아본다. */
     public String busView() { return VW_FAV.equals(st.get(K_BUSVW, VW_NEAR)) ? VW_FAV : VW_NEAR; }
     public int busSel = -1;                                      // 지도·카드에서 고른 정류장 번호(엔진이 핀·카드 강조를 정한다)
+    final java.util.Map<Integer, List<String[]>> rts = new java.util.HashMap<Integer, List<String[]>>();       // 정류장 번호 → 줄마다 [노선 id, 번호, 종류] (엔진이 알려 준다)
     final List<String> stopJson = new ArrayList<String>();       // 엔진이 알려 준 현재 목록(info.stops)의 정류장 값 — 즐겨찾기로 저장할 때 그대로 쓴다
     public String toast = "", aliasKey = "", aliasName = "", aliasCur = "";
     private String favRaw() { String f = st.get(K_BUSFAV, "[]"); return f.startsWith("[") && f.length() < 30000 ? f : "[]"; }
@@ -153,6 +155,13 @@ public final class MapCore {
             stopJson.clear();
             if (im.get("stops") instanceof List) for (Object x : (List<Object>) im.get("stops")) if (x instanceof Map && stopJson.size() < 20) stopJson.add(HomeSearchCore.toJson(x));
             nearName = im.get("near") instanceof Map ? BoardCore.s(((Map<String, Object>) im.get("near")).get("name"), 40) : "";
+            rts.clear();
+            if (im.get("rts") instanceof Map) for (Map.Entry<String, Object> e : ((Map<String, Object>) im.get("rts")).entrySet()) {
+                if (!(e.getValue() instanceof List)) continue;
+                List<String[]> rl = new ArrayList<String[]>();
+                for (Object x : (List<Object>) e.getValue()) if (x instanceof List && ((List<Object>) x).size() >= 3 && rl.size() < 40) { List<Object> xl = (List<Object>) x; rl.add(new String[] { BoardCore.s(xl.get(0), 40), BoardCore.s(xl.get(1), 16), BoardCore.s(xl.get(2), 16) }); }
+                try { rts.put(Integer.parseInt(e.getKey()), rl); } catch (NumberFormatException ignored) { }
+            }
         } catch (Exception e) { /* 이전 값 유지 */ }
     }
     @SuppressWarnings("unchecked")
@@ -216,6 +225,7 @@ public final class MapCore {
             aliasCur = aliasMap().get(aliasKey) instanceof String ? (String) aliasMap().get(aliasKey) : "";
             return aliasKey.length() > 0 ? R_ALIAS : R_NONE;
         }
+        if (v.startsWith("br.")) return openRoute(v);
         if (v.startsWith("mr.")) {
             try { int i = Integer.parseInt(v.substring(3)); if (i >= 0 && i < regionStns.size()) { stn = regionStns.get(i)[0]; stnLine = regionStns.get(i)[1]; return R_STN; } } catch (NumberFormatException e) { /* 무시 */ }
         }
@@ -262,6 +272,104 @@ public final class MapCore {
         if (t.length() == 0) am.remove(key); else am.put(key, t);
         st.put(K_BUSAL, HomeSearchCore.toJson(am));
     }
+
+
+    // ═════════════ 노선 상세(웹 openBusRoute · _loadBusRouteData): 어느 정류장에서 눌렀는지 + 받은 본문. 계산·문구·배치는 모두 엔진(part:'br') ═════════════
+    public String brRid = "", brNo = "", brTp = "", brSrc = "", brO = "", brStnJson = "", brVia = "", brCc = "";
+    public int brSel = -1, brSeq = 0;
+    public String pkName = "", pkId = "";                              // 출발지로 정한 정류장(없으면 빈 글)
+    public double[] brMe = null;
+    final Map<String, String> brRes = new LinkedHashMap<String, String>();
+    public final List<String[]> brNeed = new ArrayList<String[]>();   // [k, 주소]
+    public final List<String[]> brStn = new ArrayList<String[]>();    // [순번, id, 이름, 번호, 위도, 경도, 방향]
+    public boolean brKnown;                                            // 위치 응답을 제대로 받았다
+    public String brSt = "";
+
+    private int openRoute(String v) {
+        String[] pr = v.split("\\.");
+        if (pr.length != 3 || pr[1].equals("p") ) return brAct(v);
+        int si, ri;
+        try { si = Integer.parseInt(pr[1]); ri = Integer.parseInt(pr[2]); } catch (NumberFormatException e) { return brAct(v); }
+        List<String[]> rl = rts.get(si);
+        Map<String, Object> sm = si >= 0 && si < stopJson.size() ? stopAt(si) : null;
+        if (rl == null || ri < 0 || ri >= rl.size() || sm == null || rl.get(ri)[0].length() == 0) return R_NONE;
+        String[] r = rl.get(ri);
+        String id = BoardCore.s(sm.get("id"), 40), src = BoardCore.s(sm.get("src"), 6);
+        brRid = r[0]; brNo = r[1]; brTp = r[2];
+        brSrc = id.startsWith("GG:") || "gbis".equals(src) ? "gbis" : id.startsWith("SEOUL:") || "topis".equals(src) ? "topis" : "";
+        StringBuilder o = new StringBuilder("{\"id\":").append(ShellCore.q(id)).append(",\"nm\":").append(ShellCore.q(BoardCore.s(sm.get("nm"), 40)))
+            .append(",\"la\":").append(BoardCore.d(sm.get("la"))).append(",\"lo\":").append(BoardCore.d(sm.get("lo"))).append(",\"city\":").append(ShellCore.q(BoardCore.s(sm.get("city"), 4))).append('}');
+        brO = o.toString();
+        brStnJson = ""; brVia = ""; brCc = ""; brSel = -1; brRes.clear(); brNeed.clear(); brStn.clear(); brKnown = false; brSt = ""; brSeq++;
+        return R_BR_OPEN;
+    }
+    public void setRouteMe(double la, double lo) { brMe = new double[] { la, lo }; }
+    /** 7일 캐시에서 되살린 정류장 목록(엔진이 준 모양 그대로): 있으면 정류장을 기다리지 않고 바로 그린다. */
+    public void useCachedStations(String stnJson, String via, String cc) { brStnJson = stnJson == null ? "" : stnJson; brVia = via == null ? "" : via; brCc = cc == null ? "" : cc; }
+    public void dropPositions() { brRes.remove("gp"); brRes.remove("tp"); brNeed.clear(); }
+    public void addBrRes(String k, String body) { if (k != null && k.matches("[a-z]{2}")) brRes.put(k, body == null ? "" : (body.length() > 200000 ? body.substring(0, 200000) : body)); }
+    public String brRequest(int cap, String theme) {
+        StringBuilder b = new StringBuilder("{\"cap\":").append(cap).append(",\"f\":{\"part\":\"br\",\"th\":").append(ShellCore.q(theme(theme)));
+        b.append(",\"br\":{\"rid\":").append(ShellCore.q(brRid)).append(",\"no\":").append(ShellCore.q(brNo)).append(",\"tp\":").append(ShellCore.q(brTp)).append(",\"src\":").append(ShellCore.q(brSrc));
+        if (brO.length() > 0) b.append(",\"o\":").append(brO);
+        if (brCc.length() > 0) b.append(",\"cc\":").append(ShellCore.q(brCc));
+        if (brMe != null) b.append(",\"me\":[").append(brMe[0]).append(',').append(brMe[1]).append(']');
+        if (brStnJson.length() > 0) b.append(",\"stn\":").append(brStnJson).append(",\"via\":").append(ShellCore.q(brVia));
+        b.append(",\"sel\":").append(brSel);
+        if (pkName.length() > 0) b.append(",\"pk\":{\"n\":").append(ShellCore.q(pkName)).append(",\"i\":").append(ShellCore.q(pkId)).append('}');
+        b.append(",\"res\":{");
+        boolean first = true;
+        for (Map.Entry<String, String> e : brRes.entrySet()) { if (!first) b.append(','); first = false; b.append(ShellCore.q(e.getKey())).append(':').append(ShellCore.q(e.getValue())); }
+        return b.append("}}}}").toString();
+    }
+    /** 엔진 답을 읽는다: 더 받아야 할 주소 · 정류장 목록(받았으면 두고, 큰 본문은 지운다) · 위치를 제대로 받았는지. */
+    @SuppressWarnings("unchecked")
+    public void onBr(String json) {
+        brNeed.clear();
+        try {
+            Object o = ScreenCore.parse(json);
+            Object i = o instanceof Map ? ((Map<String, Object>) o).get("info") : null;
+            if (!(i instanceof Map) || !(((Map<String, Object>) i).get("br") instanceof Map)) return;
+            Map<String, Object> b = (Map<String, Object>) ((Map<String, Object>) i).get("br");
+            brSt = BoardCore.s(b.get("st"), 6);
+            if (b.get("need") instanceof List) for (Object x : (List<Object>) b.get("need")) if (x instanceof Map && brNeed.size() < 4) brNeed.add(new String[] { BoardCore.s(((Map<String, Object>) x).get("k"), 4), BoardCore.s(((Map<String, Object>) x).get("url"), 600) });
+            if (b.get("stn") instanceof List && brStnJson.length() == 0) {
+                brStnJson = HomeSearchCore.toJson(b.get("stn")); brVia = BoardCore.s(b.get("via"), 6); brCc = BoardCore.s(b.get("cc"), 4);
+                brRes.remove("gs"); brRes.remove("ts");
+            }
+            if (b.get("stn") instanceof List) {
+                brStn.clear();
+                for (Object x : (List<Object>) b.get("stn")) if (x instanceof List && ((List<Object>) x).size() >= 7) { List<Object> xl = (List<Object>) x; brStn.add(new String[] { String.valueOf((long) BoardCore.d(xl.get(0))), BoardCore.s(xl.get(1), 40), BoardCore.s(xl.get(2), 40), BoardCore.s(xl.get(3), 20), String.valueOf(BoardCore.d(xl.get(4))), String.valueOf(BoardCore.d(xl.get(5))), String.valueOf((long) BoardCore.d(xl.get(6))) }); }
+            }
+            brKnown = b.get("pos") instanceof Map && Boolean.TRUE.equals(((Map<String, Object>) b.get("pos")).get("known"));
+        } catch (Exception e) { /* 이전 값 유지 */ }
+    }
+    /** 노선 상세 화면의 눌림. */
+    public int brAct(String v) {
+        if (v == null) return R_NONE;
+        if ("br.x".equals(v)) return R_BR_CLOSE;
+        if ("br.rf".equals(v)) { brRes.clear(); brNeed.clear(); return R_BR_REFRESH; }
+        if ("br.cx".equals(v)) return R_BR_CANCEL;
+        if ("br.st".equals(v)) return pkName.length() > 0 ? R_BR_TOSTN : R_NONE;
+        if ("br.ss".equals(v)) {
+            if (brSel < 0 || brSel >= brStn.size()) return R_NONE;
+            return R_BR_START;
+        }
+        if (v.startsWith("br.p.")) {
+            int i; try { i = Integer.parseInt(v.substring(5)); } catch (NumberFormatException e) { return R_NONE; }
+            if (i < 0 || i >= brStn.size()) return R_NONE;
+            if (pkName.length() > 0) {
+                String[] r = brStn.get(i);
+                if (pkId.length() > 0 ? pkId.equals(r[1]) : pkName.equals(r[2])) return R_BR_SAME;
+                brSel = i; return R_BR_FINISH;
+            }
+            brSel = i; return R_BR_RENDER;
+        }
+        return R_NONE;
+    }
+    public String[] brPicked() { return brSel >= 0 && brSel < brStn.size() ? brStn.get(brSel) : null; }
+    public void brPickStart() { String[] r = brPicked(); if (r != null) { pkName = r[2]; pkId = r[1]; } brSel = -1; }
+    public void brPickClear() { pkName = ""; pkId = ""; brSel = -1; }
 
     /** 노선도에서 역 글자를 눌렀다. 엔진이 역이 아니라고 하면(화면 요청이 거절되면) 앱이 시트를 닫는다. */
     public void tapStation(String labelName) { stn = labelName == null ? "" : labelName.replaceAll("\\s+", "").trim(); stnLine = ""; }

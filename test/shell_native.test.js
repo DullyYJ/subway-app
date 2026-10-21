@@ -129,22 +129,38 @@ function findAndroidJar() {
   await t('버스 도착 초 카운트다운(웹 _busFmtCd/_busArrKeep): 1초마다 줄여 그림 · 흐르던 값 이어감 · 캐시 나이 반영 · 돌아오면 바로 갱신 · 켜면 홈부터 · 교환 단추 맨 위 · 키보드 편집을 배치 동기화가 끝내지 않음', async () => {
     const v = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), sc = fs.readFileSync(N('ScreenCore.java'), 'utf8');
     assert.ok(/public static String cdFmt\(/.test(sc) && /it\.bs\[i \* 2 \+ a\] = ar\.val/.test(sc), '남은 초를 항목에 싣는다');
-    assert.ok(/Math\.abs\(sec - flowed\) <= 45\.0/.test(sv) && /cdDrawn\) postInvalidateDelayed\(1000L/.test(sv) && /rem <= 60\.0/.test(sv), '45초 이내면 이어 가고 · 초마다 다시 그리고 · 60초 이하는 임박색');
+    assert.ok(!/flowed/.test(sv) && /cdState\.put\(it\.ck\[k\], new double\[\] \{ sec, now - age \}\)/.test(sv) && /cdDrawn\) postInvalidateDelayed\(1000L/.test(sv) && /rem <= 60\.0/.test(sv), '새 실시간 값이 오면 옛 카운트다운을 버리고 덮어쓴다 · 초마다 다시 그리고 · 60초 이하는 임박색');
     assert.ok(/setSourceAge\(am > 0L/.test(v) && /diskIdx\.put\(diskName\(key\), System\.currentTimeMillis\(\)\)/.test(v), '캐시 화면은 받은 뒤 흐른 만큼 줄어 있다');
-    assert.ok(/private void busResume\(\)/.test(v) && /busResume\(\); if \(ShellCore\.S_SETPG/.test(v) && /> 20000L/.test(v), '앞으로 돌아오면 20초 넘었을 때 바로 다시 받는다');
+    assert.ok(/private void busResume\(\)/.test(v) && /busResume\(\); brResume\(\); if \(ShellCore\.S_SETPG/.test(v) && /> BUS_POLL_MS/.test(v), '앞으로 돌아오면 8초 넘었을 때 바로 다시 받는다');
     assert.ok(/if \(b == null\) store\.put\(ShellCore\.K_TAB, ShellCore\.DEFAULT_TAB\)/.test(v), '새로 켜면 홈부터');
     assert.ok(/kind != ScreenCore\.K_SWAP\) drawItem/.test(sv) && /kind == ScreenCore\.K_SWAP\) drawItem/.test(sv), '교환 단추는 구분선 위에 그린다');
     const hi = sv.slice(sv.indexOf('private void hideInput()'), sv.indexOf('private void syncInput()'));
     assert.ok(!/endEdit\(\)|blurInput\(\)/.test(hi), '검색칸 숨기기가 글자 입력칸 편집을 끝내지 않는다');
   });
-  await t('버스 탭: 30초 자동 새로고침은 지도 탭이 보일 때만 · 도착정보만 비우고 엔진이 다시 계산 · 앱은 시간표/도착 계산 없음', async () => {
+  await t('버스 탭: 8초 자동 새로고침은 지도 탭이 보일 때만 · 도착정보만 비우고 엔진이 다시 계산 · 앱은 시간표/도착 계산 없음', async () => {
     const v = fs.readFileSync(N('ShellActivity.java'), 'utf8');
     const mc = fs.readFileSync(N('MapCore.java'), 'utf8');
     const bt = v.slice(v.indexOf('private boolean busShowing'), v.indexOf('private void startBusTick'));
-    assert.ok(/30000L/.test(v.slice(v.indexOf('private void startBusTick'), v.indexOf('private void startBusTick') + 200)), '30초 간격');
-    assert.ok(/resumed/.test(bt) && /currentTab\(store\)/.test(bt) && /S_MAPB/.test(bt) && /dropArrivals\(\)/.test(bt) && /loadMapBody\(/.test(bt), '보일 때만 · 도착정보만 비우고 다시 묻는다');
+    assert.ok(/BUS_POLL_MS = 8000L/.test(v) && /postDelayed\(busTick, BUS_POLL_MS\)/.test(v), '8초 간격');
+    assert.ok(/resumed/.test(bt) && /currentTab\(store\)/.test(bt) && /S_MAPB/.test(bt) && /dropArrivals\(\)/.test(bt) && /loadMapBodyRound\(/.test(bt), '보일 때만 · 도착정보만 비우고 다시 묻는다');
+    // 끊겨도 화면을 멈추거나 에러를 띄우지 않는다: 실패한 갱신은 버리고(옛 값을 섞지 않음) 카운트다운이 이어진다 · 느린 통신이 다음 박자에 끊기지 않는다
+    assert.ok(/txt\.length\(\) == 0 && busRefreshing\) \{ busEnd\(\); return; \}/.test(v) && /if \(bad\) \{ map\.busNeed\.clear\(\); busEnd\(\); return; \}/.test(v), '갱신 실패는 조용히 버린다');
+    assert.ok(/if \(busRefreshing && System\.currentTimeMillis\(\) - busRefAt < 20000L\) \{ startBusTick\(\); return; \}/.test(bt), '갱신이 오가는 중이면 겹쳐 시작하지 않는다');
+    assert.ok(/BUS_FRESH_MS/.test(v) && /BUS_FRESH_MS = 8000L/.test(fs.readFileSync(N('ShellCore.java'), 'utf8')), '8초 지난 버스 캐시 화면은 보이지 않는다');
     assert.ok(/\[af\]\[0-9\]/.test(mc.slice(mc.indexOf('dropArrivals'))), '정류장 목록(tp·gg·tn·d1)은 남기고 도착정보(a·f)만 지운다');
     assert.ok(/mp\.pm\./.test(v) || /mp\.pm/.test(mc), '핀·카드 선택 행동');
+  });
+  await t('노선 상세: 정류장은 기기에 7일 · 위치는 항상 새로 받은 값 · 8초 갱신은 이 화면이 앞에 있을 때만 · 벗어나면 즉시 멈춤 · 실패해도 화면 유지 · 바뀐 줄만 다시 그림', async () => {
+    const v = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), sc = fs.readFileSync(N('ScreenCore.java'), 'utf8');
+    const br = v.slice(v.indexOf('private static final long BR_POLL_MS'), v.indexOf('private void closeSheet()'));
+    assert.ok(/BR_POLL_MS = 8000L/.test(br) && /BR_CACHE_MS = 7L \* 24L/.test(br) && /brc_/.test(br), '8초 · 정류장 7일 보관');
+    assert.ok(/private boolean brShowing\(\) \{ return resumed && brAlive/.test(br) && /if \(!brShowing\(\)\) return;/.test(br), '앞에 있을 때만 돈다(없으면 다시 걸지 않는다)');
+    assert.ok(/private void closeSheet\(\) \{ brStop\(\);/.test(v) && /private void brStop\(\) \{ main\.removeCallbacks\(brTick\)/.test(br) && /onPause\(\) \{ resumed = false; main\.removeCallbacks\(brTick\)/.test(v) && /brResume\(\); if \(ShellCore\.S_SETPG/.test(v), '닫기·뒤로가기·onPause 에서 즉시 멈추고 onResume 에서만 다시');
+    assert.ok(/poll && bad\) \{ map\.brNeed\.clear\(\); brBusy = false; return; \}/.test(br) && /txt\.length\(\) == 0\) \{ brBusy = false;/.test(br), '갱신 실패는 버리고 보던 화면을 둔다');
+    assert.ok(/a < \(pos \? 5 : 2\)/.test(br) && /Thread\.sleep\(800\)/.test(br), '위치는 실패하면 0.8초 뒤 다시(최대 4번 더)');
+    assert.ok(/home\.pickRestore\(map\.pkName\)/.test(br) && /home\.setBusStop\(HomeCore\.START/.test(br) && /home\.setBusStop\(HomeCore\.DEST/.test(br) && /goRoute\(\)/.test(br), '출발지/도착지 고르기 · 나가면 되돌림 · 도착지가 정해지면 경로');
+    assert.ok(/dirtyOnly\(partialFrom\)/.test(sv) && /invalidate\(0, Math\.round/.test(sv) && /postInvalidateDelayed\(66L, Math\.round\(brxPing/.test(sv), '바뀐 줄 자리만 invalidate · 마커 맥박도 그 자리만');
+    assert.ok(/K_BRX/.test(sc) && /it\.sig = /.test(sc), '줄 지문');
   });
   await t('순수 네이티브 프로젝트: 소스는 native/shell 뿐 · 매니페스트에 ShellActivity 가 런처 · 웹뷰/Capacitor 흔적 없음', async () => {
     const g = fs.readFileSync(path.join(ROOT, 'shell-android', 'app', 'build.gradle'), 'utf8');

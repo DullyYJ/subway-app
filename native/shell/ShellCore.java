@@ -322,7 +322,7 @@ public final class ShellCore {
     public static String cchipsKey(String m) { return S_CCHIPS + "|" + (isMode(m) ? m : MODE_DEFAULT); }
     public static String mode(Store st) { String m = st.get(K_MODE, MODE_DEFAULT); return isMode(m) ? m : MODE_DEFAULT; }
 
-    public static final String S_SETTINGS = "settings", S_SHOP = "shop", S_NEWS = "news", S_CCHIPS = "cchips", S_PENDING = "pending", S_HOME = "home", S_BOARD = "board", S_WRITE = "write", S_CHAT = "chat", S_FOOD = "food", S_FOODSHEET = "foodsheet", S_MAPH = "maph", S_MAPB = "mapb", S_MAPSTN = "mapstn", S_MAPTT = "maptt", S_FAV = "fav", S_DETAIL = "detail", S_SETPG = "setpg", S_HDR = "hdr";
+    public static final String S_SETTINGS = "settings", S_SHOP = "shop", S_NEWS = "news", S_CCHIPS = "cchips", S_PENDING = "pending", S_HOME = "home", S_BOARD = "board", S_WRITE = "write", S_CHAT = "chat", S_FOOD = "food", S_FOODSHEET = "foodsheet", S_MAPH = "maph", S_MAPB = "mapb", S_MAPSTN = "mapstn", S_MAPTT = "maptt", S_MAPBR = "mapbr", S_FAV = "fav", S_DETAIL = "detail", S_SETPG = "setpg", S_HDR = "hdr";
     public static final String K_OVL = "ovl_on", K_RIDESNAP = "ride_snap", K_GPSASK = "gps_asked", K_PFL = "pf_live", K_SAM = "dev_sam", K_SAMW = "dev_samw";
 
     /** 탭이 보여 줄 화면 칸들(위에서 아래로). 첫 칸이 머리(높이는 그린 내용만큼), 마지막 칸이 본문(남은 높이). 한 칸이면 본문만. */
@@ -655,10 +655,12 @@ public final class ShellCore {
      * 이 화면 글(열쇠)을 디스크에 얼마나 오래 둘지(ms, 0 이면 두지 않는다). 앱을 다시 켜면 마지막 화면이 바로 뜨고, 새 글은 뒤에서 받아 바꾼다.
      * 버스 도착정보는 오래되면 틀린 정보라 짧게(5분) 둔다.
      */
+    /** 버스 도착정보는 실시간이라 이보다 오래된 화면은 보여 주지 않는다(새로 받을 때까지 뼈대) — 이 안이면 받은 뒤 흐른 초만큼 줄어든 채로 바로 뜬다. */
+    public static final long BUS_FRESH_MS = 8000L;
     public static long diskTtl(String key) {
         if (key == null) return 0L;
         String s = key.indexOf('|') > 0 ? key.substring(0, key.indexOf('|')) : key;
-        if (S_MAPB.equals(s)) return key.contains("|bus|") ? 5L * 60000L : 24L * 3600000L;
+        if (S_MAPB.equals(s)) return key.contains("|bus|") ? BUS_FRESH_MS : 24L * 3600000L;
         if (S_SHOP.equals(s) || S_CCHIPS.equals(s) || S_HDR.equals(s) || "tabs".equals(s) || S_NEWS.equals(s) || S_CHAT.equals(s) || S_BOARD.equals(s)
             || S_FOOD.equals(s) || S_MAPH.equals(s) || S_SETTINGS.equals(s)) return 24L * 3600000L;
         if (S_HOME.equals(s)) return 6L * 3600000L;

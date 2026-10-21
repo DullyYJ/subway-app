@@ -397,6 +397,28 @@ public final class HomeCore {
         if (active == f) active = -1;
         last = f;
     }
+
+    /** 노선 상세에서 정류장을 출발/도착으로 둔다(웹 _brStopLoc + _fmapSetLocation). 출발을 새로 고르면 도착은 비운다. */
+    public void setBusStop(int f, String name, String nodeId, String cityCode, double lat, double lng) {
+        Loc l = new Loc();
+        l.type = "bus"; l.name = name; l.nodeId = nodeId == null ? "" : nodeId; l.cityCode = cityCode == null ? "" : cityCode; l.lat = lat; l.lng = lng;
+        loc[f] = l; text[f] = name; cand[f].clear(); pkU.clear();
+        if (f == START) { loc[DEST] = null; text[DEST] = ""; cand[DEST].clear(); }
+        if (active == f) active = -1;
+        last = f;
+    }
+    // 출발지를 정하기 전의 값(웹 _pickSnap): 정류장을 출발지로 정한 뒤 끝내 도착지를 못 정하고 나가면 이 값으로 되돌린다
+    private Loc[] snapLoc; private String[] snapText; private boolean snapped;
+    public void pickSnap() { snapLoc = new Loc[] { loc[START], loc[DEST] }; snapText = new String[] { text[START], text[DEST] }; snapped = true; }
+    public boolean pickRestore(String startName) {
+        if (!snapped) return false;
+        snapped = false;
+        if (loc[START] == null || !startName.equals(loc[START].name) || !"bus".equals(loc[START].type)) return false;      // 그 사이 다른 곳에서 출발지를 바꿨다면 건드리지 않는다
+        loc[START] = snapLoc[0]; loc[DEST] = snapLoc[1]; text[START] = snapText[0]; text[DEST] = snapText[1];
+        cand[START].clear(); cand[DEST].clear(); pkU.clear();
+        return true;
+    }
+    public void pickDone() { snapped = false; }
     /** 출발·도착이 모두 정해졌는가. */
     public boolean bothSet() { return loc[START] != null && loc[START].ok() && loc[DEST] != null && loc[DEST].ok(); }
 

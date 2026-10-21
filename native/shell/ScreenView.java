@@ -162,12 +162,16 @@ public class ScreenView extends View {
                 if (k != null) { ancKey = k; ancOff = q.y - scrollY; break; }
             }
         }
+        final ScreenCore.Layout before = keepScroll && !stick && ancKey == null ? lay : null;      // 노선 상세: 바뀐 줄만 다시 그리려고 이전 배치를 쥔다
         screen = s;
         iconPaths.clear();
         if (!keepScroll) { scrollY = 0f; scrollX = 0f; openKey = null; ctrDone = null; }
-        flingY.forceFinished(true); flingX.forceFinished(true);
-        pressed = null; mode = 0;
+        boolean touching = mode == 1 || mode == 2;
+        if (!touching) { flingY.forceFinished(true); flingX.forceFinished(true); pressed = null; mode = 0; }      // 손가락이 닿은 채 오는 8초 갱신이 스크롤을 끊지 않는다(노선 상세만; 그 밖은 예전과 같다)
+        else if (before == null || !before.part) { flingY.forceFinished(true); flingX.forceFinished(true); pressed = null; mode = 0; }
+        partialFrom = before != null && before.part ? before : null;
         relayout();
+        partialFrom = null;
         syncMk(keepScroll);
         if (stick && lay != null) { scrollY = lay.bodyMaxScroll(bodyViewH()); invalidate(); }
         else if (ancKey != null && lay != null) {
@@ -239,8 +243,35 @@ public class ScreenView extends View {
         if (Math.abs(ch - lastCH) > 0.5f) { lastCH = ch; final float chf = ch; post(new Runnable() { @Override public void run() { if (listener != null) listener.onContentH(chf); } }); }
         if (editKey != null) { ScreenCore.Item f = fieldByKey(editKey); if (f != null) ensureEditVisible(f); }
         if (lay != null && lay.mk != null && !mkHas) syncMk(false);      // 폭이 정해지기 전에 올라온 화면의 마커도 첫 배치 때 놓는다
-        invalidate();
+        if (partialFrom == null || !dirtyOnly(partialFrom)) invalidate();
         syncLater();
+    }
+    // ── 노선 상세: 새 화면이 와도 모양이 같으면(줄 수·자리 그대로) 지문이 달라진 줄의 자리만 다시 그린다 — 버스 위치가 바뀐 줄 둘 정도만 ──
+    private ScreenCore.Layout partialFrom;
+    private static boolean sameBox(ScreenCore.Item a, ScreenCore.Item b) { return a.kind == b.kind && a.x == b.x && a.y == b.y && a.w == b.w && a.h == b.h; }
+    /** 이전 배치와 자리가 모두 같으면 달라진 줄만 invalidate 하고 true. 하나라도 어긋나면 false(전체를 다시 그린다). */
+    private boolean dirtyOnly(ScreenCore.Layout o) {
+        ScreenCore.Layout n = lay;
+        if (n == null || o == null || !n.part || n.head.length != o.head.length || n.body.length != o.body.length || n.foot.length != o.foot.length) return false;
+        if (n.headH != o.headH || n.bodyH != o.bodyH || n.footH != o.footH) return false;
+        for (int i = 0; i < n.foot.length; i++) if (!sameBox(n.foot[i], o.foot[i]) || !n.foot[i].sig.equals(o.foot[i].sig) || !java.util.Arrays.equals(n.foot[i].lines, o.foot[i].lines)) return false;
+        for (int i = 0; i < n.head.length; i++) if (!sameBox(n.head[i], o.head[i])) return false;
+        for (int i = 0; i < n.body.length; i++) if (!sameBox(n.body[i], o.body[i])) return false;
+        int cnt = 0;
+        for (int i = 0; i < n.head.length; i++) {
+            ScreenCore.Item a = n.head[i], b = o.head[i];
+            if (a.sig.equals(b.sig) && java.util.Arrays.equals(a.lines, b.lines)) continue;
+            invalidate(0, Math.round(a.y * dpr), getWidth(), Math.round((a.y + a.h) * dpr) + 1); cnt++;
+        }
+        float top = scrollY, bot = scrollY + (getHeight() / dpr - n.headH - n.footH);
+        for (int i = 0; i < n.body.length; i++) {
+            ScreenCore.Item a = n.body[i], b = o.body[i];
+            if (a.sig.equals(b.sig) && java.util.Arrays.equals(a.lines, b.lines)) continue;
+            cnt++;
+            if (a.y + a.h < top - 4f || a.y > bot + 4f) continue;                                // 안 보이는 줄은 그릴 것이 없다
+            invalidate(0, Math.round((n.headH + a.y - scrollY) * dpr), getWidth(), Math.round((n.headH + a.y + a.h - scrollY) * dpr) + 1);
+        }
+        return true;
     }
     /** 입력칸 글자: 엔진이 준 기본값이 바뀐 때만 덮는다(쓰던 글자가 새 화면에 지워지지 않게). */
     private void syncFieldBases(ScreenCore.Item[] arr) {
@@ -328,6 +359,7 @@ public class ScreenView extends View {
                         else if ((pi.kind == ScreenCore.K_SUG || pi.kind == ScreenCore.K_TROW) && pi.act2 != null && x / dpr >= pi.btx - 6f) { blurInput(); listener.onAction(pi.act2); }
                         else if (pi.kind == ScreenCore.K_RHD) { blurInput(); listener.onAction(ScreenCore.Layout.rhdAct(pi, x / dpr)); }
                         else if (pi.kind == ScreenCore.K_BCARD) tapBcard(pi, x / dpr, y / dpr - lay.headH + scrollY);
+                        else if (pi.kind == ScreenCore.K_BRX && "h".equals(pi.dk)) tapBrh(pi, x / dpr);
                         else if (pi.kind == ScreenCore.K_BTOG) { blurInput(); pickBtog(pi); listener.onAction(a); }
                         else if (pi.kind == ScreenCore.K_TOGGLE) { blurInput(); pi.on = !pi.on; invalidate(); listener.onSet(a, pi.on); }     // 화면은 바로 뒤집는다(엔진 새 화면을 기다리지 않는다)
                         else { blurInput(); if (pi.kind == ScreenCore.K_CHIP && a != null && "cat".equals(a.a)) pickChip(pi); listener.onAction(a); }
@@ -375,6 +407,12 @@ public class ScreenView extends View {
                 if (z == 0 && "s".equals(pi.dk)) { pi.top = !pi.top; invalidate(); }       // 별은 바로 뒤집는다(엔진 새 화면이 오면 그걸로 덮어쓴다)
                 listener.onAction(pi.za[z]);
                 return;
+            }
+        }
+        if (pi.ra.length > 0 && pi.gf.length >= pi.ra.length * 2) {                           // 노선 줄을 눌렀다 → 그 노선의 상세(종 모양 알림 자리는 빼고)
+            float ry = ydp - pi.y;
+            for (int i = 0; i < pi.ra.length; i++) {
+                if (ry >= pi.gf[i * 2] && ry < pi.gf[i * 2] + pi.gf[i * 2 + 1] && pi.ra[i] != null && xdp < pi.f3 - 4f) { listener.onAction(pi.ra[i]); return; }
             }
         }
         focusCard(pi.key, false);
@@ -551,12 +589,7 @@ public class ScreenView extends View {
             for (int k = 0; k < it.bs.length; k++) {
                 float sec = it.bs[k];
                 if (sec <= 0f || it.ck[k] == null) continue;
-                double[] prev = cdState.get(it.ck[k]);
-                if (prev != null) {
-                    double flowed = prev[0] - (now - prev[1]) / 1000.0;
-                    if (Math.abs(sec - flowed) <= 45.0) continue;                                    // 같은 차 — 시작점을 그대로
-                }
-                cdState.put(it.ck[k], new double[] { sec, now - age });
+                cdState.put(it.ck[k], new double[] { sec, now - age });                              // 새로 받은 실시간 값이 오면 줄어들던 옛 값은 버리고 바로 그 값에서 다시 센다
             }
         }
     }
@@ -580,6 +613,126 @@ public class ScreenView extends View {
         }
         if (!any) { seenCards.clear(); seenRows.clear(); seenMode = ""; }
     }
+
+    // ───────────── 노선 상세(웹 .brs-*) ─────────────
+    private static final int C_UP = 0xFF00B341, C_DOWN = 0xFFFF9F0A, C_NA = 0xFF2F7CF6, C_ME = 0xFFFF3B30;
+    private final float[] brxPing = new float[32];         // 맥박이 도는 버스·내 위치 마커의 자리(영역 dp: 왼, 위, 오른, 아래)
+    private int brxPingN;
+    private static int brCls(String k) { return "up".equals(k) ? C_UP : "down".equals(k) ? C_DOWN : C_NA; }
+    private void tapBrh(ScreenCore.Item pi, float xdp) {
+        blurInput();
+        for (int z = 0; z < pi.za.length && z * 4 + 3 < pi.zs.length; z++) {
+            if (pi.za[z] != null && xdp >= pi.zs[z * 4] - 4f && xdp < pi.zs[z * 4] + pi.zs[z * 4 + 2] + 4f) { listener.onAction(pi.za[z]); return; }
+        }
+    }
+    private void pill(Canvas cv, float x, float y, float w, float h, int fill, int stroke) {
+        rf.set(x, y, x + w, y + h);
+        p.setStyle(Paint.Style.FILL); p.setColor(fill); cv.drawRoundRect(rf, h / 2f, h / 2f, p);
+        if (stroke != 0) { p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(stroke); rf2.set(x + 0.5f, y + 0.5f, x + w - 0.5f, y + h - 0.5f); cv.drawRoundRect(rf2, h / 2f, h / 2f, p); p.setStyle(Paint.Style.FILL); }
+    }
+    private void drawBrx(Canvas cv, ScreenCore.Item it) {
+        float x = it.x, y = it.y, w = it.w, h = it.h;
+        String d = it.dk;
+        if ("h".equals(d)) {
+            p.setStyle(Paint.Style.FILL); p.setColor(pal[R_CARD]); cv.drawRect(x, y, x + w, y + h, p);
+            float by = y + (h - ScreenCore.BR_BADGE_H) / 2f;
+            rf.set(x + ScreenCore.BR_PADX, by, x + ScreenCore.BR_PADX + it.badgeW, by + ScreenCore.BR_BADGE_H);
+            p.setColor(cc(it.fill, C_NA)); cv.drawRoundRect(rf, 8f, 8f, p);
+            setText(15f, true, 0xFFFFFFFF); tp.setTextAlign(Paint.Align.CENTER);
+            cv.drawText(it.lines[0], x + ScreenCore.BR_PADX + it.badgeW / 2f, base(by, ScreenCore.BR_BADGE_H, 0), tp);
+            tp.setTextAlign(Paint.Align.LEFT);
+            if (it.t1.length() > 0) { setText(12f, false, pal[R_SUB]); cv.drawText(it.t1, x + ScreenCore.BR_PADX + it.badgeW + 8f, base(y, h, 0), tp); }
+            tp.setTextAlign(Paint.Align.CENTER);
+            setText(18f, false, pal[R_SUB]); cv.drawText("\u21BB", it.zs[0] + it.zs[2] / 2f, base(y, h, 0), tp);
+            setText(17f, false, pal[R_SUB]); cv.drawText("\u2715", it.zs[4] + it.zs[6] / 2f, base(y, h, 0), tp);
+            tp.setTextAlign(Paint.Align.LEFT);
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(pal[R_BORDER]); cv.drawLine(x, y + h - 0.5f, x + w, y + h - 0.5f, p); p.setStyle(Paint.Style.FILL);
+            return;
+        }
+        if ("t".equals(d)) {
+            p.setStyle(Paint.Style.FILL); p.setColor(pal[R_CARD]); cv.drawRect(x, y, x + w, y + h, p);
+            setText(it.size, true, pal[R_TEXT]); cv.drawText(it.lines[0], x + ScreenCore.BR_PADX, base(y + 12f, 20f, 0), tp);
+            setText(it.size, true, pal[R_SUB]); cv.drawText("\u2192", it.f1, base(y + 12f, 20f, 0), tp);
+            setText(it.size, true, pal[R_TEXT]); cv.drawText(it.t1, it.f2, base(y + 12f, 20f, 0), tp);
+            if (it.tag.length() > 0) {
+                int c = brCls(it.value);
+                pill(cv, it.sx, y + 13f, it.sw, 18f, alpha(c, 0.14f), 0);
+                setText(11f, true, c); tp.setTextAlign(Paint.Align.CENTER); cv.drawText(it.tag, it.sx + it.sw / 2f, base(y + 13f, 18f, 0), tp); tp.setTextAlign(Paint.Align.LEFT);
+            }
+            float chH = ScreenCore.BR_CHIP * 1.3f + ScreenCore.BR_CHIP_PY * 2f;
+            for (int i = 0; i < it.sa.length; i++) {
+                String k = it.ck[i]; int tc = "on".equals(k) ? C_NA : "me".equals(k) ? C_ME : pal[R_SUB];
+                int fl = "on".equals(k) ? alpha(C_NA, 0.12f) : "me".equals(k) ? alpha(C_ME, 0.12f) : pal[R_BG], st = "on".equals(k) ? alpha(C_NA, 0.25f) : "me".equals(k) ? alpha(C_ME, 0.25f) : pal[R_BORDER];
+                float cx = it.gf[i * 3], cy = y + it.gf[i * 3 + 1], cw = it.gf[i * 3 + 2];
+                pill(cv, cx, cy, cw, chH, fl, st);
+                setText(ScreenCore.BR_CHIP, true, tc); tp.setTextAlign(Paint.Align.CENTER); cv.drawText(it.sa[i], cx + cw / 2f, base(cy, chH, 0), tp); tp.setTextAlign(Paint.Align.LEFT);
+            }
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(pal[R_BORDER]); cv.drawLine(x, y + h - 0.5f, x + w, y + h - 0.5f, p); p.setStyle(Paint.Style.FILL);
+            return;
+        }
+        if ("c".equals(d)) {
+            int c = brCls(it.value);
+            p.setStyle(Paint.Style.FILL); p.setColor(pal[R_BG]); cv.drawRect(x, y, x + w, y + h, p);
+            setText(13f, true, c); cv.drawText("\u25BC", x + ScreenCore.BR_PADX, base(y, h, 0), tp);
+            setText(12.5f, true, pal[R_TEXT]); cv.drawText(it.lines[0], it.f1, base(y, h, 0), tp);
+            setText(12.5f, false, pal[R_SUB]); cv.drawText(" \uBC29\uBA74", it.f2, base(y, h, 0), tp);
+            if (it.tag.length() > 0) {
+                pill(cv, it.sx, y + (h - 18f) / 2f, it.sw, 18f, alpha(c, 0.14f), 0);
+                setText(11f, true, c); tp.setTextAlign(Paint.Align.CENTER); cv.drawText(it.tag, it.sx + it.sw / 2f, base(y + (h - 18f) / 2f, 18f, 0), tp); tp.setTextAlign(Paint.Align.LEFT);
+            }
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(pal[R_BORDER]); cv.drawLine(x, y + h - 0.5f, x + w, y + h - 0.5f, p); p.setStyle(Paint.Style.FILL);
+            return;
+        }
+        if ("n".equals(d)) {
+            pill(cv, it.sx, y + (h - 22f) / 2f, it.sw, 22f, alpha(C_DOWN, 0.14f), alpha(C_DOWN, 0.30f));
+            setText(ScreenCore.BR_CHIP, true, C_DOWN); tp.setTextAlign(Paint.Align.CENTER); cv.drawText(it.lines[0], it.sx + it.sw / 2f, base(y + (h - 22f) / 2f, 22f, 0), tp); tp.setTextAlign(Paint.Align.LEFT);
+            return;
+        }
+        // s — 정류장 줄
+        int cls = brCls(it.value);
+        float rh = h - 1f, cy = y + rh / 2f, rx = x + ScreenCore.BR_RAIL_X;
+        p.setStyle(Paint.Style.FILL);
+        if (it == pressed) { p.setColor(pal[R_CARD2]); cv.drawRect(x, y, x + w, y + h, p); }
+        else if ("s".equals(it.tag)) { p.setColor(alpha(C_DOWN, 0.14f)); cv.drawRect(x, y, x + w, y + h, p); }
+        else if ("p".equals(it.tag)) { p.setColor(alpha(C_NA, 0.14f)); cv.drawRect(x, y, x + w, y + h, p); }
+        else if (it.top) { p.setColor(alpha(C_ME, 0.09f)); cv.drawRect(x, y, x + w, y + h, p); }
+        else if (it.on) { p.setColor(alpha(C_NA, 0.08f)); cv.drawRect(x, y, x + w, y + h, p); }
+        float lt = it.go.indexOf('f') >= 0 ? cy : y, lb = it.go.indexOf('l') >= 0 ? cy : y + h;
+        p.setColor(cls); cv.drawRect(rx - 2.5f, lt, rx + 2.5f, lb, p);
+        boolean bus = "bus".equals(it.badge), me = "me".equals(it.badge);
+        if (!bus && !me) {
+            p.setColor(cls); cv.drawCircle(rx, cy, 6.5f, p); p.setColor(0xFFFFFFFF); cv.drawCircle(rx, cy, 4.5f, p);
+            if (it.pub) { setText(7f, true, 0xFFFFFFFF); tp.setTextAlign(Paint.Align.CENTER); cv.drawText("\u25BC", rx, base(y + h - 12f, 10f, 0), tp); tp.setTextAlign(Paint.Align.LEFT); }
+        } else if (bus) {
+            long t = SystemClock.uptimeMillis() % 1100L; float ph = t / 1100f;
+            p.setColor(alpha(C_NA, 0.45f * (1f - ph))); cv.drawCircle(rx, cy, 10.5f * (1f + 1.4f * ph), p);       // 웹 brsBusPing: 퍼지며 사라지는 고리
+            float sc = 1f + 0.15f * (float) Math.sin(ph * Math.PI);
+            p.setColor(C_NA); cv.drawCircle(rx, cy, 10.5f * sc, p);
+            p.setColor(0xFFFFFFFF); rf.set(rx - 4.5f, cy - 5f, rx + 4.5f, cy + 4f); cv.drawRoundRect(rf, 2f, 2f, p);               // 버스 몸통
+            p.setColor(C_NA); cv.drawRect(rx - 3.2f, cy - 3.4f, rx + 3.2f, cy - 0.6f, p);
+            p.setColor(0xFFFFFFFF); cv.drawCircle(rx - 2.4f, cy + 4.6f, 1.2f, p); cv.drawCircle(rx + 2.4f, cy + 4.6f, 1.2f, p);
+            if (brxPingN < 8) { float pr = 10.5f * 2.6f; int k = brxPingN++ * 4; brxPing[k] = rx - pr; brxPing[k + 1] = cy - pr; brxPing[k + 2] = rx + pr; brxPing[k + 3] = cy + pr; }
+        } else {
+            if (brxPingN < 8) { float pr = 8.5f * 2.7f; int k = brxPingN++ * 4; brxPing[k] = rx - pr; brxPing[k + 1] = cy - pr; brxPing[k + 2] = rx + pr; brxPing[k + 3] = cy + pr; }
+            long t = SystemClock.uptimeMillis() % 1600L; float ph = t / 1600f;
+            p.setColor(alpha(C_ME, 0.5f * (1f - ph))); cv.drawCircle(rx, cy, 8.5f * (1f + 1.7f * ph), p);               // 웹 brsMePulse
+            p.setColor(0xFFFFFFFF); cv.drawCircle(rx, cy, 9f, p); p.setColor(C_ME); cv.drawCircle(rx, cy, 6.5f, p);
+            p.setColor(0xFFFFFFFF); cv.drawCircle(rx, cy, 2.5f, p);
+        }
+        float bx = x + ScreenCore.BR_BODY_X, ty = y + ScreenCore.BR_ROW_PY;
+        setText(it.size, true, it.top ? C_ME : it.on ? C_NA : pal[R_TEXT]);
+        cv.drawText(it.lines[0], bx, base(ty, 20f, 0), tp);
+        ty += 20f;
+        if (it.t1.length() > 0) { setText(ScreenCore.BR_ID, false, pal[R_SUB]); cv.drawText(it.t1, bx, base(ty + 3f, 15f, 0), tp); ty += 18f; }
+        for (int i = 0; i < it.sa.length; i++) { setText(ScreenCore.BR_NOTE, true, "me".equals(it.ck[i]) ? C_ME : C_NA); cv.drawText(it.sa[i], bx, base(ty, 17f, 0), tp); ty += 17f; }
+        if (it.label.length() > 0) {
+            if ("s".equals(it.tag)) { pill(cv, it.sx, cy - 9f, it.sw, 18f, alpha(C_DOWN, 0.22f), 0); setText(ScreenCore.BR_LAB, true, 0xFFC77700); }
+            else setText(ScreenCore.BR_LAB, true, alpha(C_NA, 0.9f));
+            tp.setTextAlign(Paint.Align.CENTER); cv.drawText(it.label, it.sx + it.sw / 2f, base(cy - 9f, 18f, 0), tp); tp.setTextAlign(Paint.Align.LEFT);
+        }
+        p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(pal[R_BORDER]); cv.drawLine(bx, y + h - 0.5f, x + w - ScreenCore.BR_PADX, y + h - 0.5f, p); p.setStyle(Paint.Style.FILL);
+    }
+
     private void drawBtog(Canvas cv, ScreenCore.Item it) {
         boolean under = "u".equals(it.value), refresh = "r".equals(it.value);
         if (it.top) {                                                        // 줄 바탕 + 아래 선(첫 단추가 한 번 그린다)
@@ -988,7 +1141,7 @@ public class ScreenView extends View {
         cv.drawRect(0, 0, getWidth(), getHeight(), p);
         if (lay == null) return;
         boolean moving = false;
-        sceneDrawn = false; marqDrawn = false; skelDrawn = false; bcAnim = false; tmDrawn = false; cdDrawn = false;
+        sceneDrawn = false; marqDrawn = false; skelDrawn = false; bcAnim = false; tmDrawn = false; cdDrawn = false; brxPingN = 0;
         if (ssOn) {                                                                       // 핀을 눌러 카드로 부드럽게 가는 중
             float f = (now - ssT0) / 350f;
             if (f >= 1f) { f = 1f; ssOn = false; }
@@ -1043,6 +1196,13 @@ public class ScreenView extends View {
         if (!drewOnce) { drewOnce = true; post(firstDrawCb); }
         if (sceneDrawn && scene != null && scene.isRunning() && !scene.isPaused()) postInvalidateOnAnimation();        // 장면이 보이는 동안만 화면 박자로 계속 그린다(안 보이면 저절로 멈춘다)
         if (marqDrawn || skelDrawn) postInvalidateOnAnimation();                                     // 흐르는 문구가 보이는 동안만 화면 박자로 계속 그린다
+        if (brxPingN > 0 && isShown()) {                                                           // 버스·내 위치 마커 맥박: 그 마커 자리만 초당 15번(보이는 동안만; 화면을 벗어나면 저절로 멈춘다)
+            float oy = lay.headH - scrollY;
+            for (int i = 0; i < brxPingN; i++) {
+                int k = i * 4;
+                postInvalidateDelayed(66L, Math.round(brxPing[k] * dpr), Math.round((brxPing[k + 1] + oy) * dpr), Math.round(brxPing[k + 2] * dpr), Math.round((brxPing[k + 3] + oy) * dpr));
+            }
+        }
         if (cdDrawn) postInvalidateDelayed(1000L - (System.currentTimeMillis() % 1000L) + 5L);       // 버스 도착 카운트다운이 보이는 동안 초가 바뀔 때마다 한 번씩
         if (moving || mode == 1 || mode == 2 || mode == 5 || bcAnim || tmAnimOn) postInvalidateOnAnimation();
         else if (tmDrawn) postInvalidateDelayed(50L);                                             // 내 위치 점 뒤로 퍼지는 고리(웹 1.6초 주기)
@@ -1114,6 +1274,7 @@ public class ScreenView extends View {
             case ScreenCore.K_FIELD: drawField(cv, it); break;
             case ScreenCore.K_BAR: drawBar(cv, it); break;
             case ScreenCore.K_SEC: drawSec(cv, it); break;
+            case ScreenCore.K_BRX: drawBrx(cv, it); break;
             case ScreenCore.K_TROW: drawTrow(cv, it); break;
             case ScreenCore.K_PLACE: drawPlace(cv, it); break;
             case ScreenCore.K_DIV: drawDivider(cv, it); break;
