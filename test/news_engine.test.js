@@ -96,7 +96,7 @@ ok(S.ok && S.v === 1 && S.screen === 'news' && S.cover === 'tab' && /^n1:/.test(
   ok(sn.length === 3 && sn[0].title === '코스피 2,700 돌파' && sn[1].title === '뉴욕증시 상승 마감' && /오래된/.test(sn[2].title), '증시 칩: 기간 제한 없이 최신순 전부 ' + sn.map(n => n.title).join('|'));
   ok(sn[2].sub === '증시 · 5일 전', '5일 전 문구');
   ok(sc.head[0].items.filter(i => i.on).length === 1 && sc.head[0].items.find(i => i.on).label === '증시' && sc.head[0].items.map(i => i.label).join() === E.NW_CATS.join(), '칩 줄: 고른 칩만 켜짐');
-  ok(sc.head[0].onc === 'gold' && sc.head[0].onfg === '#121214', '칩 켜진 색');
+  ok(sc.head[0].onc === 'gold' && sc.head[0].onfg === '#ffffff' && sc.head[0].h === 33 && sc.head[0].fs === 12 && sc.head[0].offb === 'border2' && !sc.head[0].offf, '칩 켜진 색 · 웹 분류 칩(33px · 바탕 없음 · 테두리 border2)');
   const all = []; for (let i = 0; i < 500; i++) all.push(['증시 코스피 기사 ' + i, 'https://b.example/' + i, '', NOW - i * MIN, '증시', '']);
   ok(newsN(E.newsScreen({ cap: 5, now: NOW }, { cat: '증시' }, all)).length === 300, '한 번에 300줄까지');
   ok(newsN(E.newsScreen({ cap: 5, now: NOW }, { cat: '전체' }, all)).length === 200, "'전체'는 200줄까지");
@@ -112,8 +112,8 @@ ok(S.ok && S.v === 1 && S.screen === 'news' && S.cover === 'tab' && /^n1:/.test(
 // ── ④ 빈 상태 ──
 {
   const t = (cat, rows) => { const o = E.newsScreen({ cap: 5, now: NOW }, { cat }, rows); return o.body.map(n => n.s || '').join('|'); };
-  ok(t('전체', []) === '뉴스 불러오는 중...' && t('증시', []) === '증시 뉴스를 불러오는 중...' && t('연예', null) === '연예 뉴스를 불러오는 중...', '기사가 없으면 불러오는 중 안내(이모지 없이)');
-  ok(t('IT', ROWS) === 'IT 뉴스를 불러오는 중...', '그 분류 기사가 없을 때도 같은 안내');
+  ok(t('전체', []) === '📰 뉴스 불러오는 중...' && t('증시', []) === '📰 증시 뉴스를 불러오는 중...' && t('연예', null) === '📰 연예 뉴스를 불러오는 중...', '기사가 없으면 불러오는 중 안내(웹과 같은 📰)');
+  ok(t('IT', ROWS) === '📰 IT 뉴스를 불러오는 중...', '그 분류 기사가 없을 때도 같은 안내');
 }
 
 // ── ⑤ 상세 문구 ──

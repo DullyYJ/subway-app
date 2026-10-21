@@ -209,12 +209,12 @@ function nwPick(all, cat, now) {
 function nwScreenOf(now, f, all) {
   var items = nwPick(all, f.cat, now);
   var head = [
-    { t: 'chips', pad: [14, 4, 14, 6], gap: 6, h: 30, onc: 'gold', onfg: '#121214',
+    { t: 'chips', pad: [14, 4, 14, 2], gap: 6, h: 33, fs: 12, px: 14, onc: 'gold', onfg: '#ffffff', offb: 'border2', offt: 'sub',       // 웹 .news-cat-chip: 33px · 12px 굵게 · 바탕 없음 · 테두리 border2
       items: NW_CATS.map(function (c) { return { label: c, on: c === f.cat, act: { a: 'cat', v: c } }; }) }
   ];
   var body = [];
   if (!items.length) {
-    body.push({ t: 'text', s: f.cat === '전체' ? '뉴스 불러오는 중...' : f.cat + ' 뉴스를 불러오는 중...', size: 14, color: 'sub', lh: 1.8, align: 'center', pad: [20, 40, 20, 40] });
+    body.push({ t: 'text', s: f.cat === '전체' ? '📰 뉴스 불러오는 중...' : '📰 ' + f.cat + ' 뉴스를 불러오는 중...', size: 14, color: 'sub', lh: 1.8, align: 'center', pad: [20, 40, 20, 40] });
   } else {
     body.push({ t: 'spacer', h: 8 });
     for (var k = 0; k < items.length && k < NW_MAX_SHOW; k++) {

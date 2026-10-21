@@ -103,13 +103,13 @@ function mapHead(f) {
     { label: '🚌 버스', on: f.mode === 'bus', act: { a: 'cat', v: 'm:bus' } },
     { label: '🚇 지하철', on: f.mode === 'subway', act: { a: 'cat', v: 'm:subway' } }] }];
   if (f.mode === 'subway') {
-    head.push({ t: 'chips', pad: [14, 0, 14, 6], gap: 6, h: 28, onc: 'gold', onfg: '#121214',
+    head.push({ t: 'chips', pad: [14, 8, 14, 9], gap: 6, h: 27, fs: 11, px: 15, onc: 'gold', onfg: '#ffffff', offf: 'card2', offb: 'border', offt: 'sub',       // 웹 .rtab: 27px · 11px 굵게
       items: MAP_REGIONS.map(function (r) { return mapChip(r[1], f.reg === r[0], 'r:' + r[0]); }) });
     if (f.reg === 'seoul') {
-      head.push({ t: 'inbar', pad: [14, 0, 14, 6], key: 'mq', hint: '역 검색 (예: 부평)', value: f.q, maxlen: 20, h: 38, btn: '찾기', act: { a: 'call', v: 'mp.find' }, eact: { a: 'call', v: 'mp.find' } });
-      var items = [{ label: '내 위치', on: false, act: { a: 'call', v: 'mp.loc' } }];
-      MAP_FILTERS.forEach(function (x) { items.push({ label: x[1], on: f.flt === x[0], c: x[2], act: { a: 'cat', v: 'f:' + x[0] } }); });
-      head.push({ t: 'chips', pad: [14, 0, 14, 6], gap: 6, h: 28, onc: 'gold', onfg: '#121214', items: items });
+      head.push({ t: 'inbar', pad: [12, 7, 12, 8], key: 'mq', hint: '🔍 역 검색 (예: 부평)', value: f.q, maxlen: 20, h: 33, btn: '📍 내 위치', act: { a: 'call', v: 'mp.loc' }, eact: { a: 'call', v: 'mp.find' } });      // 웹: 입력칸 + 파란 '📍 내 위치'(엔터 = 찾기)
+      var items = [];
+      MAP_FILTERS.forEach(function (x) { var it = { label: x[1], on: f.flt === x[0], act: { a: 'cat', v: 'f:' + x[0] } }; if (x[0] === 'ALL') it.pl = true; else { it.c = x[2]; it.oc = x[2]; } items.push(it); });     // 웹 .lf-btn: '전체'는 굵은 글자만 · 노선은 노선 색 테두리/글자(켜지면 노선 색으로 채움)
+      head.push({ t: 'chips', pad: [10, 6, 10, 6], gap: 5, h: 27, fs: 11, px: 12, onc: 'gold', onfg: '#ffffff', items: items });
     }
   }
   return head;

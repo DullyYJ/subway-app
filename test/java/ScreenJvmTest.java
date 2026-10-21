@@ -787,6 +787,22 @@ public class ScreenJvmTest {
             ok(threw, "tmap 엉터리는 거부: " + bad);
         }
 
+        // ── 칩 줄 웹 모양(fs · px · offf/offb/offt · oc · pl) ──
+        {
+            String H = "{\"ok\":true,\"v\":1,\"screen\":\"cchips\",\"head\":[";
+            try {
+                ScreenCore.Layout cl = ScreenCore.layout(ScreenCore.load(H + "{\"t\":\"chips\",\"pad\":[14,13,14,2],\"gap\":6,\"h\":27,\"fs\":11,\"px\":13,\"onc\":\"gold\",\"onfg\":\"#ffffff\",\"offf\":\"card2\",\"offb\":\"border\",\"offt\":\"sub\",\"items\":[{\"label\":\"게시판\",\"on\":true,\"act\":{\"a\":\"call\",\"v\":\"chC.board\"}},{\"label\":\"뉴스\",\"act\":{\"a\":\"call\",\"v\":\"chC.news\"}},{\"label\":\"1호선\",\"oc\":\"#0052a4\",\"c\":\"#0052a4\",\"act\":{\"a\":\"cat\",\"v\":\"f:1\"}},{\"label\":\"전체\",\"pl\":true,\"on\":true,\"act\":{\"a\":\"cat\",\"v\":\"f:ALL\"}}]}],\"body\":[]}"), 360f, M);
+                ScreenCore.Item chA = cl.head[0], chB = cl.head[1], chC = cl.head[2], chD = cl.head[3];
+                ok(near(chA.x, 14f) && near(chA.h, 27f) && near(chA.size, 11f) && near(chA.sx, 13f) && near(chA.w, 26f + chA.labelW), "chips: 웹 칩 왼쪽 여백 14 · 높이 27 · 글자 11 · 좌우 13");
+                ok(chB.owc && chB.ofl != null && "card2".equals(chB.ofl.role) && chB.obd != null && "border".equals(chB.obd.role) && chB.otx != null && "sub".equals(chB.otx.role), "chips: 꺼진 칩 바탕/테두리/글자는 엔진이 정한 역할 색");
+                ok(chC.owc && chC.obd != null && chC.obd.role == null && chC.otx != null && chC.otx.role == null && chC.ofl != null, "chips: 칩마다 oc(노선 색 테두리·글자)");
+                ok(chD.plain && chD.on && !chA.plain, "chips: pl 은 켜져도 글자만(plain)");
+                ScreenCore.Layout dl = ScreenCore.layout(ScreenCore.load(H + "{\"t\":\"chips\",\"items\":[{\"label\":\"a\"}]}],\"body\":[]}"), 360f, M);
+                ok(!dl.head[0].owc && near(dl.head[0].size, 12f) && near(dl.head[0].sx, ScreenCore.CHIP_PADX), "chips: 값을 안 주면 옛 모양 그대로(글자 12 · 여백 12 · 꺼진 색 없음)");
+            } catch (Exception ex) { ok(false, "chips 웹 모양: " + ex); }
+            boolean threw = false; try { ScreenCore.load(H + "{\"t\":\"chips\",\"offf\":\"not-a-color\",\"items\":[{\"label\":\"a\"}]}],\"body\":[]}"); } catch (Exception ex) { threw = true; } ok(threw, "chips: 읽을 수 없는 offf 는 거부");
+        }
+
         // ── 버스 탭 노드(btog · bcard · tmap 확장) ──
         {
             String H = "{\"ok\":true,\"v\":1,\"screen\":\"maph\",\"head\":[],\"body\":[";

@@ -13,13 +13,13 @@
 //        chips.items = [{label, on, c?, act:{a:'call', v:'cc.<칸>'}}] — 칸 순서 = 아래 CCHIPS_LIST
 // 맨 아래 module.exports 는 시험(Node)용이고 Worker 에서는 함수 선언만 쓰인다.
 'use strict';
-var CCHIPS_SCREEN_V = 1;
-// 글자는 웹 #filterRow 와 같다(이모지만 뺀다 — 새 네이티브 화면은 이모지를 쓰지 않는다). 시험이 웹과 대조한다.
+var CCHIPS_SCREEN_V = 2;
+// 글자는 웹 #filterRow 와 같다(이모지 포함 — YJ: 웹과 100% 같게). 시험이 웹과 대조한다.
 var CCHIPS_LIST = [
-  { id: 'chat', label: '실시간소통', c: '#ff453a' },
+  { id: 'chat', label: '🔴실시간소통' },
   { id: 'board', label: '게시판' },
-  { id: 'news', label: '뉴스' },
-  { id: 'set', label: '설정' }
+  { id: 'news', label: '📰뉴스' },
+  { id: 'set', label: '⚙️설정' }
 ];
 function cchipsHash(s) {                              // djb2 — 같은 화면이면 같은 rev
   var h = 5381;
@@ -41,7 +41,7 @@ function cchipsScreen(inp, factsIn) {
     if (c.c) it.c = c.c;
     return it;
   });
-  var head = [{ t: 'chips', pad: [0, 0, 0, 0], gap: 6, h: 26, onc: 'gold', onfg: '#121214', items: items }];
+  var head = [{ t: 'chips', pad: [14, 13, 14, 2], gap: 6, h: 27, fs: 11, px: 13, onc: 'gold', onfg: '#ffffff', offf: 'card2', offb: 'border', offt: 'sub', items: items }];       // 웹 .chip: 27px · 11px 굵게 · 바탕 card2 · 테두리 border · 글자 sub
   var out = { ok: true, v: 1, screen: 'cchips', cover: 'tab', head: head, body: [], info: { mode: f.mode } };
   out.rev = 'q' + CCHIPS_SCREEN_V + ':' + cchipsHash(JSON.stringify(head));
   return out;

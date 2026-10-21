@@ -60,12 +60,12 @@ final class TileMapArt {
         P.setStyle(Paint.Style.STROKE); P.setStrokeWidth(2f * dpr); P.setColor(C_WHITE);
         cv.drawCircle(x, y, r, P);
         if (n != null && n.length() > 0) {
-            P.setStyle(Paint.Style.FILL); P.setColor(C_WHITE); P.setTextAlign(Paint.Align.CENTER); P.setTypeface(Typeface.DEFAULT_BOLD);
+            P.setStyle(Paint.Style.FILL); P.setColor(C_WHITE); P.setTextAlign(Paint.Align.CENTER); P.setTypeface(ScreenView.face(true));
             P.setTextSize((n.length() > 2 ? 10f : 12f) * dpr);
             Paint.FontMetrics fm = P.getFontMetrics();
             cv.drawText(n, x, y - (fm.ascent + fm.descent) / 2f, P);
         }
-        P.setTextAlign(Paint.Align.LEFT); P.setTypeface(Typeface.DEFAULT);
+        P.setTextAlign(Paint.Align.LEFT); P.setTypeface(ScreenView.face(false));
     }
     private static void drawMe(Canvas cv, float x, float y, float dpr, long nowMs) {
         P.setStyle(Paint.Style.FILL);
@@ -79,7 +79,7 @@ final class TileMapArt {
         P.setColor(C_ME); cv.drawCircle(x, y, 5.5f * dpr, P);
     }
     private static void drawLabel(Canvas cv, float x, float y, float dpr, String text, int vw) {
-        P.setTextSize(12f * dpr); P.setTypeface(Typeface.DEFAULT_BOLD); P.setTextAlign(Paint.Align.LEFT);
+        P.setTextSize(12f * dpr); P.setTypeface(ScreenView.face(true)); P.setTextAlign(Paint.Align.LEFT);
         float tw = P.measureText(text), padX = 9f * dpr, h = 24f * dpr;
         float l = Math.max(4f * dpr, Math.min(vw - tw - 2 * padX - 4f * dpr, x - tw / 2f - padX));
         R.set(l, y - h, l + tw + 2 * padX, y);
@@ -88,11 +88,11 @@ final class TileMapArt {
         P.setColor(0xFF1A2533);
         Paint.FontMetrics fm = P.getFontMetrics();
         cv.drawText(text, l + padX, (R.top + R.bottom) / 2f - (fm.ascent + fm.descent) / 2f, P);
-        P.setTypeface(Typeface.DEFAULT);
+        P.setTypeface(ScreenView.face(false));
     }
     private static void drawAttribution(Canvas cv, int w, int h, float dpr) {
         String t = "© OpenStreetMap";
-        P.setTextSize(9f * dpr); P.setTypeface(Typeface.DEFAULT); P.setTextAlign(Paint.Align.LEFT);
+        P.setTextSize(9f * dpr); P.setTypeface(ScreenView.face(false)); P.setTextAlign(Paint.Align.LEFT);
         float tw = P.measureText(t), pad = 4f * dpr;
         R.set(w - tw - 2 * pad, h - 14f * dpr, w, h);
         P.setStyle(Paint.Style.FILL); P.setColor(0xB3FFFFFF);

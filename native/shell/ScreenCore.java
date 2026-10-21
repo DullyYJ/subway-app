@@ -179,7 +179,9 @@ public final class ScreenCore {
         public boolean watch;                              // inbar: 글자가 바뀔 때마다 앱이 웹에 알린다(자동완성)
         public boolean multi;                              // field: 여러 줄 입력칸(글쓰기 내용) — 줄바꿈을 받고 글자를 줄바꿔 그린다
         public Act bact;                                   // sug: 오른쪽 작은 단추의 행동
-        public Act eact, mact;                             // bcard: ✏️(별명) · 🗺️(위치) 단추의 행동
+        public Act eact, mact;
+        public float cfs = 12f, cpx = 12f;                  // chips: 글자 크기 · 칩 좌우 안쪽 여백(웹 칩마다 다르다)
+        public String offf = "", offb = "", offt = "";      // chips: 꺼진 칩 바탕 · 테두리 · 글자(없으면 기본 모양)                             // bcard: ✏️(별명) · 🗺️(위치) 단추의 행동
         public boolean bold, on;
         public String color = "text", bg = "", align = "left";
         public String s = "", label = "", badge = "", name = "", tag = "", img = "", fb = "";
@@ -386,11 +388,14 @@ public final class ScreenCore {
             pad(m, n); n.gap = optNum(m, "gap", 6f, 0f, 60f); n.h = optNum(m, "h", 30f, 16f, 80f);
             n.onc = roleOrCss(m, "onc", "orange"); if (n.onc.length() == 0) n.onc = "orange";                   // 켜진 칩 바탕(쇼핑 주황 · 맛집 금색)
             n.tc = roleOrCss(m, "onfg", "white"); if (n.tc.length() == 0) n.tc = "white";                       // 켜진 칩 글자색
+            n.cfs = optNum(m, "fs", 12f, 8f, 24f); n.cpx = optNum(m, "px", 12f, 4f, 30f);                        // 웹 칩 크기(글자 · 좌우 여백)
+            n.offf = roleOrCss(m, "offf", ""); n.offb = roleOrCss(m, "offb", ""); n.offt = roleOrCss(m, "offt", "");
             for (Object io : asArr(m.get("items"), "chips.items")) {
                 Map<String, Object> im = asObj(io, "chip");
                 Node c = new Node(); c.t = "chip";
                 c.label = optStr(im, "label", "", 60); if (c.label.length() == 0) throw new ParseError("chip: label 없음");
-                c.badge = optStr(im, "badge", "", 20); c.on = optBool(im, "on", false); c.act = act(im.get("act"), false);
+                c.badge = optStr(im, "badge", "", 20); c.on = optBool(im, "on", false); c.act = act(im.get("act"), false); c.big = optBool(im, "pl", false);       // pl: 켜져도 바탕·테두리 없이 굵은 글자만(웹 '전체')
+                c.line = roleOrCss(im, "oc", "");                                                                     // 꺼진 칩의 테두리·글자색(노선 칩: 노선 색 테두리)
                 c.fill = roleOrCss(im, "c", "");                                                                      // 칩마다 켜진 바탕색(실시간소통 노선 색)
                 n.items.add(c); sc.nodes++;
                 if (sc.nodes > MAX_NODES) throw new ParseError("노드가 너무 많다");
@@ -922,7 +927,10 @@ public final class ScreenCore {
         public boolean[] gb = new boolean[0];        // bcard: 줄마다 [첫 도착 임박, 둘째 도착 임박, 벨]
         public long[] rt = new long[0];              // bcard: 줄마다 나타난 시각(ms; 0 이면 애니메이션 없음)
         public float[] zs = new float[0];            // bcard: 누르는 자리 [x,y,w,h]×(별·✏️·🗺️)
-        public Act[] za = new Act[0];                // bcard: 그 자리를 눌렀을 때 행동
+        public Act[] za = new Act[0];
+        public boolean plain;                        // chip: 켜졌을 때 바탕·테두리 없음
+        public Col ofl, obd, otx;                    // chip: 꺼진 칩 바탕 · 테두리 · 글자 색(null 이면 기본 모양)
+        public boolean owc;                          // chip: 꺼진 칩 색을 엔진이 정했다(바탕 없음도 포함)                // bcard: 그 자리를 눌렀을 때 행동
     }
 
     /** 배치 결과. */
@@ -1073,10 +1081,14 @@ public final class ScreenCore {
                 y += n.padT;
                 for (Node c : n.items) {
                     Item it = new Item(); it.kind = K_CHIP; it.label = c.label; it.badge = c.badge; it.on = c.on; it.act = c.act;
-                    it.size = 12f; it.bold = true; it.ac = col(c.fill.length() > 0 ? c.fill : n.onc, new Col("orange", 0)); it.tc = col(n.tc, new Col("white", 0));
-                    it.labelW = m.width(c.label, 12f, true);
-                    it.badgeW = c.badge.length() > 0 ? m.width(c.badge, 12f, true) : 0f;
-                    it.w = CHIP_PADX * 2 + it.labelW + (c.badge.length() > 0 ? 6f + it.badgeW : 0f);
+                    it.size = n.cfs; it.bold = true; it.ac = col(c.fill.length() > 0 ? c.fill : n.onc, new Col("orange", 0)); it.tc = col(n.tc, new Col("white", 0));
+                    if (n.offf.length() > 0 || n.offb.length() > 0 || n.offt.length() > 0 || c.line.length() > 0) {
+                        it.owc = true; it.ofl = col(n.offf, null); it.obd = col(c.line.length() > 0 ? c.line : n.offb, null); it.otx = col(c.line.length() > 0 ? c.line : n.offt, null);
+                    }
+                    it.labelW = m.width(c.label, n.cfs, true);
+                    it.badgeW = c.badge.length() > 0 ? m.width(c.badge, n.cfs, true) : 0f;
+                    it.sx = n.cpx; it.plain = c.big;
+                    it.w = n.cpx * 2 + it.labelW + (c.badge.length() > 0 ? 6f + it.badgeW : 0f);
                     it.h = n.h; it.x = x; it.y = y;
                     hi.add(it); x += it.w + n.gap;
                 }

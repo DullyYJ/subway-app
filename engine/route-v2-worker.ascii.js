@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-21s116";
+var ENGINE_VERSION = "route-v2-2026-10-21s117";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -11634,7 +11634,7 @@ function shopScreen(inp, data, cfg, wx) {
   var items = cat === SHOP_REC_CAT ? pick.rec : (pick.byCat[cat] || []);
   var tabs = [{ c: SHOP_REC_CAT, n: pick.rec.length }].concat(pick.order.map(function (cn) { return { c: cn, n: (pick.byCat[cn] || []).length }; }));
   var chips = tabs.map(function (o) {
-    return { label: o.c, badge: String(o.n), on: o.c === cat, act: { a: 'cat', v: o.c } };
+    return { label: (o.c === SHOP_REC_CAT ? '\u2728' : (SHOP_CAT_EMOJI[o.c] || '')) + (o.c === SHOP_REC_CAT || SHOP_CAT_EMOJI[o.c] ? ' ' : '') + o.c, badge: String(o.n), on: o.c === cat, act: { a: 'cat', v: o.c } };
   });
   var cards = [];
   items.forEach(function (it) {
@@ -12301,6 +12301,7 @@ async function handleScreenSettings(request) {
 'use strict';
 var FOOD_SCREEN_V = 1;
 var FOOD_CHIPS = ['\uc804\uccb4', '\uce74\ud398', '\ubc25\uc9d1', '\uc721\uc2dd', '\ud68c\uc9d1', '\uc8fc\uc810'];
+var FOOD_CHIP_EMOJI = { '\uce74\ud398': '\u2615', '\ubc25\uc9d1': '\ud83c\udf5a', '\uc721\uc2dd': '\ud83c\udf56', '\ud68c\uc9d1': '\ud83c\udf63', '\uc8fc\uc810': '\ud83c\udf7a' };     // \uc6f9 .food-chip \uc55e \uadf8\ub9bc
 var FOOD_MAX_SHOW = 150;          // \uc704\u00b7\uc544\ub798 \ubaa9\ub85d \uac01\uac01 \ucd5c\ub300 \uac1c\uc218(\uc6f9\uacfc \uac19\ub2e4)
 var FOOD_MAX_IN_C = 400, FOOD_MAX_IN_P = 1500;
 var FOOD_ALTS_MAX = 12;           // \ud55c \uc694\uccad\uc5d0 \uc2e4\uc744 \uc218 \uc788\ub294 '\ub2e4\ub978 \uce69' \uc218 \uc0c1\ud55c(\uce69 6\uac1c)
@@ -12445,9 +12446,9 @@ function foodScreenOf(f, all, allP) {
 
   var label = f.stn && (f.st === 'ready' || f.st === 'loading' || f.st === 'none') ? f.stn + '\uc5ed \uc778\uadfc' : (f.st === 'locating' ? '\uc704\uce58 \ud655\uc778 \uc911...' : '\ub3c4\ucc29\uc5ed\uc744 \uc124\uc815\ud558\uba74 \ub9db\uc9d1\uc744 \ucd94\ucc9c\ud574\ub4dc\ub824\uc694');
   var head = [
-    { t: 'bar', pad: [16, 16, 16, 8], title: '\ub3c4\ucc29\uc5ed \ub9db\uc9d1', sub: label, btn: '\uc0c8\ub85c\uace0\uce68', act: { a: 'refresh' } },
-    { t: 'chips', pad: [16, 0, 16, 12], gap: 8, h: 30, onc: 'gold', onfg: '#121214',
-      items: FOOD_CHIPS.map(function (c) { return { label: c, on: c === f.flt, act: { a: 'cat', v: c } }; }) }
+    { t: 'bar', pad: [16, 16, 16, 8], title: '\ud83c\udf7d\ufe0f \ub3c4\ucc29\uc5ed \ub9db\uc9d1', sub: label, btn: '\ud83d\udd04 \uc0c8\ub85c\uace0\uce68', act: { a: 'refresh' } },
+    { t: 'chips', pad: [16, 0, 16, 12], gap: 8, h: 31, fs: 12, px: 15, onc: 'gold', onfg: '#ffffff', offf: 'card2', offb: 'border', offt: 'sub',      // \uc6f9 .food-chip: 31px \u00b7 12px \u00b7 \ubc14\ud0d5 card2
+      items: FOOD_CHIPS.map(function (c) { return { label: (FOOD_CHIP_EMOJI[c] ? FOOD_CHIP_EMOJI[c] + ' ' : '') + c, on: c === f.flt, act: { a: 'cat', v: c } }; }) }
   ];
 
   var body = [], go = {};
@@ -12825,12 +12826,12 @@ function nwPick(all, cat, now) {
 function nwScreenOf(now, f, all) {
   var items = nwPick(all, f.cat, now);
   var head = [
-    { t: 'chips', pad: [14, 4, 14, 6], gap: 6, h: 30, onc: 'gold', onfg: '#121214',
+    { t: 'chips', pad: [14, 4, 14, 2], gap: 6, h: 33, fs: 12, px: 14, onc: 'gold', onfg: '#ffffff', offb: 'border2', offt: 'sub',       // \uc6f9 .news-cat-chip: 33px \u00b7 12px \uad75\uac8c \u00b7 \ubc14\ud0d5 \uc5c6\uc74c \u00b7 \ud14c\ub450\ub9ac border2
       items: NW_CATS.map(function (c) { return { label: c, on: c === f.cat, act: { a: 'cat', v: c } }; }) }
   ];
   var body = [];
   if (!items.length) {
-    body.push({ t: 'text', s: f.cat === '\uc804\uccb4' ? '\ub274\uc2a4 \ubd88\ub7ec\uc624\ub294 \uc911...' : f.cat + ' \ub274\uc2a4\ub97c \ubd88\ub7ec\uc624\ub294 \uc911...', size: 14, color: 'sub', lh: 1.8, align: 'center', pad: [20, 40, 20, 40] });
+    body.push({ t: 'text', s: f.cat === '\uc804\uccb4' ? '\ud83d\udcf0 \ub274\uc2a4 \ubd88\ub7ec\uc624\ub294 \uc911...' : '\ud83d\udcf0 ' + f.cat + ' \ub274\uc2a4\ub97c \ubd88\ub7ec\uc624\ub294 \uc911...', size: 14, color: 'sub', lh: 1.8, align: 'center', pad: [20, 40, 20, 40] });
   } else {
     body.push({ t: 'spacer', h: 8 });
     for (var k = 0; k < items.length && k < NW_MAX_SHOW; k++) {
@@ -13095,7 +13096,7 @@ function boardScreen(inp, factsIn, rowsIn) {
   if (!all.length) {
     body.push({ t: 'text', s: f.st === 'loading' ? '\uac8c\uc2dc\uae00 \ubd88\ub7ec\uc624\ub294 \uc911...' : '\uc544\uc9c1 \uc81c\ubcf4\uac00 \uc5c6\uc2b5\ub2c8\ub2e4.\n\uccab \ubc88\uc9f8 \uc81c\ubcf4\uc790\uac00 \ub418\uc5b4\ubcf4\uc138\uc694!', size: 14, color: 'sub', lh: 1.8, align: 'center', pad: [20, 60, 20, 60] });
   } else {
-    body.push({ t: 'spacer', h: 4 });
+    body.push({ t: 'spacer', h: 15 });
     shown.forEach(function (p) { var pid = brdPid(p, used); ids.push(pid); idx.push(p.i); sid.push(p.id); body.push(brdPostNode(p, pid, f, now)); });
     if (all.length > shown.length) body.push({ t: 'button', pad: [12, 4, 12, 0], s: '\ub354 \ubcf4\uae30 \u00b7 \ub0a8\uc740 \uae00 ' + (all.length - shown.length) + '\uac1c', size: 12, h: 40, act: { a: 'call', v: 'bd.more' } });
     body.push({ t: 'spacer', h: 28 });
@@ -13280,8 +13281,8 @@ function chatScreen(inp, factsIn, dataIn) {
     if (l !== 'all' && f.lc[l]) it.c = f.lc[l];
     return it;
   });
-  var head = [{ t: 'chips', pad: [16, 4, 16, 4], gap: 6, h: 30, onc: 'gold', onfg: '#ffffff', items: chips }];
-  if (!f.mine.length) head.push({ t: 'text', s: '\ub0b4\uac00 \ud0c4 \ub178\uc120\uc740 \uc55e\uc5d0 \ud45c\uc2dc\ub3fc\uc694', size: 11, color: 'sub', pad: [18, 0, 16, 4] });
+  var head = [{ t: 'chips', pad: [14, 4, 14, 4], gap: 6, h: 32, fs: 14, px: 15, onc: 'gold', onfg: '#ffffff', offb: 'border2', offt: 'text', items: chips }];       // \uc6f9 \ucc44\ud305 \ub178\uc120 \uce69: 32px \u00b7 14px
+  if (!f.mine.length) head.push({ t: 'text', s: '\ud83d\udccd \ub0b4\uac00 \ud0c4 \ub178\uc120\uc740 \uc55e\uc5d0 \ud45c\uc2dc\ub3fc\uc694', size: 11, color: 'sub', pad: [16, 0, 16, 4] });
   var body = [], n = 0;
   if (f.sel === 'all') {
     var gs = [];
@@ -16496,13 +16497,13 @@ async function handleStoreMerge(request) {
 //        chips.items = [{label, on, c?, act:{a:'call', v:'cc.<\uce78>'}}] \u2014 \uce78 \uc21c\uc11c = \uc544\ub798 CCHIPS_LIST
 // \ub9e8 \uc544\ub798 module.exports \ub294 \uc2dc\ud5d8(Node)\uc6a9\uc774\uace0 Worker \uc5d0\uc11c\ub294 \ud568\uc218 \uc120\uc5b8\ub9cc \uc4f0\uc778\ub2e4.
 'use strict';
-var CCHIPS_SCREEN_V = 1;
-// \uae00\uc790\ub294 \uc6f9 #filterRow \uc640 \uac19\ub2e4(\uc774\ubaa8\uc9c0\ub9cc \ube80\ub2e4 \u2014 \uc0c8 \ub124\uc774\ud2f0\ube0c \ud654\uba74\uc740 \uc774\ubaa8\uc9c0\ub97c \uc4f0\uc9c0 \uc54a\ub294\ub2e4). \uc2dc\ud5d8\uc774 \uc6f9\uacfc \ub300\uc870\ud55c\ub2e4.
+var CCHIPS_SCREEN_V = 2;
+// \uae00\uc790\ub294 \uc6f9 #filterRow \uc640 \uac19\ub2e4(\uc774\ubaa8\uc9c0 \ud3ec\ud568 \u2014 YJ: \uc6f9\uacfc 100% \uac19\uac8c). \uc2dc\ud5d8\uc774 \uc6f9\uacfc \ub300\uc870\ud55c\ub2e4.
 var CCHIPS_LIST = [
-  { id: 'chat', label: '\uc2e4\uc2dc\uac04\uc18c\ud1b5', c: '#ff453a' },
+  { id: 'chat', label: '\ud83d\udd34\uc2e4\uc2dc\uac04\uc18c\ud1b5' },
   { id: 'board', label: '\uac8c\uc2dc\ud310' },
-  { id: 'news', label: '\ub274\uc2a4' },
-  { id: 'set', label: '\uc124\uc815' }
+  { id: 'news', label: '\ud83d\udcf0\ub274\uc2a4' },
+  { id: 'set', label: '\u2699\ufe0f\uc124\uc815' }
 ];
 function cchipsHash(s) {                              // djb2 \u2014 \uac19\uc740 \ud654\uba74\uc774\uba74 \uac19\uc740 rev
   var h = 5381;
@@ -16524,7 +16525,7 @@ function cchipsScreen(inp, factsIn) {
     if (c.c) it.c = c.c;
     return it;
   });
-  var head = [{ t: 'chips', pad: [0, 0, 0, 0], gap: 6, h: 26, onc: 'gold', onfg: '#121214', items: items }];
+  var head = [{ t: 'chips', pad: [14, 13, 14, 2], gap: 6, h: 27, fs: 11, px: 13, onc: 'gold', onfg: '#ffffff', offf: 'card2', offb: 'border', offt: 'sub', items: items }];       // \uc6f9 .chip: 27px \u00b7 11px \uad75\uac8c \u00b7 \ubc14\ud0d5 card2 \u00b7 \ud14c\ub450\ub9ac border \u00b7 \uae00\uc790 sub
   var out = { ok: true, v: 1, screen: 'cchips', cover: 'tab', head: head, body: [], info: { mode: f.mode } };
   out.rev = 'q' + CCHIPS_SCREEN_V + ':' + cchipsHash(JSON.stringify(head));
   return out;
@@ -18795,13 +18796,13 @@ function mapHead(f) {
     { label: '\ud83d\ude8c \ubc84\uc2a4', on: f.mode === 'bus', act: { a: 'cat', v: 'm:bus' } },
     { label: '\ud83d\ude87 \uc9c0\ud558\ucca0', on: f.mode === 'subway', act: { a: 'cat', v: 'm:subway' } }] }];
   if (f.mode === 'subway') {
-    head.push({ t: 'chips', pad: [14, 0, 14, 6], gap: 6, h: 28, onc: 'gold', onfg: '#121214',
+    head.push({ t: 'chips', pad: [14, 8, 14, 9], gap: 6, h: 27, fs: 11, px: 15, onc: 'gold', onfg: '#ffffff', offf: 'card2', offb: 'border', offt: 'sub',       // \uc6f9 .rtab: 27px \u00b7 11px \uad75\uac8c
       items: MAP_REGIONS.map(function (r) { return mapChip(r[1], f.reg === r[0], 'r:' + r[0]); }) });
     if (f.reg === 'seoul') {
-      head.push({ t: 'inbar', pad: [14, 0, 14, 6], key: 'mq', hint: '\uc5ed \uac80\uc0c9 (\uc608: \ubd80\ud3c9)', value: f.q, maxlen: 20, h: 38, btn: '\ucc3e\uae30', act: { a: 'call', v: 'mp.find' }, eact: { a: 'call', v: 'mp.find' } });
-      var items = [{ label: '\ub0b4 \uc704\uce58', on: false, act: { a: 'call', v: 'mp.loc' } }];
-      MAP_FILTERS.forEach(function (x) { items.push({ label: x[1], on: f.flt === x[0], c: x[2], act: { a: 'cat', v: 'f:' + x[0] } }); });
-      head.push({ t: 'chips', pad: [14, 0, 14, 6], gap: 6, h: 28, onc: 'gold', onfg: '#121214', items: items });
+      head.push({ t: 'inbar', pad: [12, 7, 12, 8], key: 'mq', hint: '\ud83d\udd0d \uc5ed \uac80\uc0c9 (\uc608: \ubd80\ud3c9)', value: f.q, maxlen: 20, h: 33, btn: '\ud83d\udccd \ub0b4 \uc704\uce58', act: { a: 'call', v: 'mp.loc' }, eact: { a: 'call', v: 'mp.find' } });      // \uc6f9: \uc785\ub825\uce78 + \ud30c\ub780 '\ud83d\udccd \ub0b4 \uc704\uce58'(\uc5d4\ud130 = \ucc3e\uae30)
+      var items = [];
+      MAP_FILTERS.forEach(function (x) { var it = { label: x[1], on: f.flt === x[0], act: { a: 'cat', v: 'f:' + x[0] } }; if (x[0] === 'ALL') it.pl = true; else { it.c = x[2]; it.oc = x[2]; } items.push(it); });     // \uc6f9 .lf-btn: '\uc804\uccb4'\ub294 \uad75\uc740 \uae00\uc790\ub9cc \u00b7 \ub178\uc120\uc740 \ub178\uc120 \uc0c9 \ud14c\ub450\ub9ac/\uae00\uc790(\ucf1c\uc9c0\uba74 \ub178\uc120 \uc0c9\uc73c\ub85c \ucc44\uc6c0)
+      head.push({ t: 'chips', pad: [10, 6, 10, 6], gap: 5, h: 27, fs: 11, px: 12, onc: 'gold', onfg: '#ffffff', items: items });
     }
   }
   return head;

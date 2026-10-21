@@ -152,8 +152,8 @@ function chatScreen(inp, factsIn, dataIn) {
     if (l !== 'all' && f.lc[l]) it.c = f.lc[l];
     return it;
   });
-  var head = [{ t: 'chips', pad: [16, 4, 16, 4], gap: 6, h: 30, onc: 'gold', onfg: '#ffffff', items: chips }];
-  if (!f.mine.length) head.push({ t: 'text', s: '내가 탄 노선은 앞에 표시돼요', size: 11, color: 'sub', pad: [18, 0, 16, 4] });
+  var head = [{ t: 'chips', pad: [14, 4, 14, 4], gap: 6, h: 32, fs: 14, px: 15, onc: 'gold', onfg: '#ffffff', offb: 'border2', offt: 'text', items: chips }];       // 웹 채팅 노선 칩: 32px · 14px
+  if (!f.mine.length) head.push({ t: 'text', s: '📍 내가 탄 노선은 앞에 표시돼요', size: 11, color: 'sub', pad: [16, 0, 16, 4] });
   var body = [], n = 0;
   if (f.sel === 'all') {
     var gs = [];

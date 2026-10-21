@@ -50,7 +50,7 @@ ok(E.chatScreen({ cap: 5, now: NOW }, base, {}).ok === false && E.chatScreen({},
   ok(chips[0].on && chips.filter(c => c.on).length === 1 && chips[0].act.a === 'cat' && chips[0].act.v === 'all' && chips[1].act.v === '2호선', '고른 칩 · 행동 cat');
   ok(chips[1].c === '#00a84d' && chips[0].c === undefined && /^#[0-9a-f]{6}$/i.test(chips[3].c), '노선 색은 올바른 #rrggbb 만(앱이 안 준 노선은 엔진 기본 색)');
   ok(s.head.length === 1, '내 노선이 있으면 안내 글 없음');
-  ok(chat({ mine: [] }, { g: G }).head[1].s === '내가 탄 노선은 앞에 표시돼요', '내 노선이 없으면 안내 글');
+  ok(chat({ mine: [] }, { g: G }).head[1].s === '📍 내가 탄 노선은 앞에 표시돼요', '내 노선이 없으면 안내 글');
   ok(chat({ mine: ['2호선', '2호선', '없는선', '9호선'] }, {}).head[0].items.length === chips.length, '중복·모르는 노선은 무시');
   ok(chat({ sel: '없는방' }, {}).info.sel === 'all', '모르는 방은 전체');
   // 내 노선이 아닌 방을 열면 그 칩이 켜진다

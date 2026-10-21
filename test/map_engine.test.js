@@ -20,9 +20,9 @@ ok(E.mapScreen({ cap: 17 }, {}, {}).ok === false && E.mapScreen({}, {}, {}).ok =
   ok(h.ok && h.screen === 'map' && h.head.length === 1 && h.head[0].t === 'btog' && h.head[0].v === 'u' && h.head[0].items.map(i => i.label).join() === '🚌 버스,🚇 지하철' && h.head[0].items[0].on, '버스: 밑줄 탭만(웹 .map-inner-tabs · 기본은 버스)');
   h = call({ part: 'h', mode: 'subway', reg: 'seoul', flt: '2호선', q: '부평' });
   ok(h.head.length === 4 && h.head[1].items.map(i => i.label).join() === '수도권,부산,대구,광주,대전', '지하철: 지역 탭');
-  ok(h.head[2].t === 'inbar' && h.head[2].value === '부평' && h.head[2].act.v === 'mp.find', '역 검색 입력줄');
+  ok(h.head[2].t === 'inbar' && h.head[2].value === '부평' && h.head[2].act.v === 'mp.loc' && h.head[2].eact.v === 'mp.find' && h.head[2].btn === '📍 내 위치' && h.head[2].h === 33, '역 검색 입력줄(웹: 📍 내 위치 단추 · 엔터 = 찾기)');
   const ch = h.head[3].items;
-  ok(ch[0].label === '내 위치' && ch.length === 1 + 14 && ch.filter(i => i.on).map(i => i.label).join() === '2호선' && ch[1].act.v === 'f:ALL', '호선 필터 칩 14개 + 내 위치');
+  ok(ch.length === 14 && ch.filter(i => i.on).map(i => i.label).join() === '2호선' && ch[0].act.v === 'f:ALL' && ch[0].pl === true && ch[1].oc === ch[1].c && h.head[3].h === 27 && h.head[3].fs === 11, '호선 필터 칩 14개(웹: 전체는 굵은 글자만 · 노선 색 테두리)');
   h = call({ part: 'h', mode: 'subway', reg: 'busan' });
   ok(h.head.length === 2, '지방은 검색·호선 필터 없음');
   // 웹 필터 이름과 같은가

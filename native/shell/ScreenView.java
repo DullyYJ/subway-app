@@ -1066,22 +1066,26 @@ public class ScreenView extends View {
         float rad = it.h / 2f;
         int onFill = cc(it.ac, pal[R_ORANGE]);
         boolean tinted = it.ac != null && !"orange".equals(it.ac.role);              // 맛집 칩: 꺼진 칩도 카드색 바탕(웹 .food-chip)
-        int border = it.on ? onFill : 0x738C8C8C;
+        boolean web = it.owc;                                                         // 엔진이 꺼진 칩 모양(바탕 · 테두리 · 글자)을 정했다
+        int border = it.on ? onFill : (web ? cc(it.obd, 0x00000000) : 0x738C8C8C);
         rf.set(it.x, it.y, it.x + it.w, it.y + it.h);
-        if (it.on) { p.setStyle(Paint.Style.FILL); p.setColor(onFill); cv.drawRoundRect(rf, rad, rad, p); }
+        if (it.on && it.plain) { border = 0x00000000; }
+        else if (it.on) { p.setStyle(Paint.Style.FILL); p.setColor(onFill); cv.drawRoundRect(rf, rad, rad, p); }
+        else if (web) { if (it.ofl != null) { p.setStyle(Paint.Style.FILL); p.setColor(cc(it.ofl, 0)); cv.drawRoundRect(rf, rad, rad, p); } }
         else if (tinted) { p.setStyle(Paint.Style.FILL); p.setColor(pal[R_CARD]); cv.drawRoundRect(rf, rad, rad, p); }
         if (it == pressed) { p.setStyle(Paint.Style.FILL); p.setColor(0x14808080); cv.drawRoundRect(rf, rad, rad, p); }
         p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(border);
         rf2.set(it.x + 0.5f, it.y + 0.5f, it.x + it.w - 0.5f, it.y + it.h - 0.5f);
         cv.drawRoundRect(rf2, rad - 0.5f, rad - 0.5f, p);
         p.setStyle(Paint.Style.FILL);
-        int fg = it.on ? cc(it.tc, pal[R_WHITE]) : (tinted ? pal[R_SUB] : pal[R_TEXT]);
-        setText(12f, true, fg);
+        int fg = it.on ? cc(it.tc, pal[R_WHITE]) : (web ? cc(it.otx, pal[R_SUB]) : (tinted ? pal[R_SUB] : pal[R_TEXT]));
+        float fs = it.size > 0f ? it.size : 12f, px = it.sx > 0f ? it.sx : ScreenCore.CHIP_PADX;
+        setText(fs, true, fg);
         float b = base(it.y, it.h, 0);
-        cv.drawText(it.label, it.x + ScreenCore.CHIP_PADX, b, tp);
+        cv.drawText(it.label, it.x + px, b, tp);
         if (it.badge.length() > 0) {
             tp.setColor(alpha(fg, 0.7f));
-            cv.drawText(it.badge, it.x + ScreenCore.CHIP_PADX + it.labelW + 6f, b, tp);
+            cv.drawText(it.badge, it.x + px + it.labelW + 6f, b, tp);
         }
     }
 

@@ -78,7 +78,7 @@ console.log('동등성 대조 ' + cases.length + '건');
   ok(s.body.some(n => n.t === 'text' && /쿠팡 파트너스/.test(n.s)), '파트너스 문구');
   const c1 = W.cats[1].c;
   const s2 = E.shopScreen({ nowMs: t, cat: c1 }, data, null, { temp: 14, rain: 20 });
-  ok(s2.cat === c1 && s2.head[0].items.find(c => c.on).label === c1, '카테고리 선택');
+  ok(s2.cat === c1 && s2.head[0].items.find(c => c.on).label.replace(/^\S+ /, '') === c1, '카테고리 선택');
   ok(s2.body[0].items.length === W.cats[1].items.filter(x => /^https?:/.test(x.u)).length, '카테고리 카드 수');
   ok(s2.seed === s.seed, '같은 시각이면 같은 시드(카테고리 바꿔도 순서 일관)');
   const s3 = E.shopScreen({ nowMs: t, cat: '없는카테고리' }, data, null, null);

@@ -119,7 +119,7 @@ ok(S.ok && S.v === 1 && S.screen === 'food' && S.cover === 'tab' && /^f1:/.test(
   ok(cur[0].act.v === 'fm.c.0' && cur[4].act.v === 'fm.c.4' && cur[5].act.v === 'fm.c.5', '번호 = 앱이 보낸 배열의 원래 위치(이름 없는 항목이 있어도 밀리지 않는다)');
   ok(pub.map(p => p.act.v).join() === 'fm.p.0,fm.p.2' && pub.every(p => p.badge === '공공데이터' && p.rank === '' && !p.stars), '공공데이터: 번호 원래 위치 · 딱지 · 순위 없음');
   ok(S.body.some(n => n.t === 'divider') && S.body.some(n => n.t === 'text' && n.s === '공공데이터 · 주변 음식점 2곳'), '구분선 + 제목');
-  ok(S.head[0].t === 'bar' && S.head[0].title === '도착역 맛집' && S.head[0].btn === '새로고침' && S.head[0].act.a === 'refresh', '머리줄');
+  ok(S.head[0].t === 'bar' && S.head[0].title === '🍽️ 도착역 맛집' && S.head[0].btn === '🔄 새로고침' && S.head[0].act.a === 'refresh', '머리줄');
   ok(S.head[1].t === 'chips' && S.head[1].items.length === 6 && S.head[1].items[0].on && S.head[1].items.slice(1).every(c => !c.on) && S.head[1].items[2].act.v === '밥집', '칩 6개 · 켜진 칩');
   // 거르기
   const f1 = E.foodScreen({ cap: 4 }, { stn: '강남', st: 'ready', flt: '카페' }, { c: C, p: P });
@@ -137,7 +137,7 @@ ok(S.ok && S.v === 1 && S.screen === 'food' && S.cover === 'tab' && /^f1:/.test(
   ok(E.foodScreen({ cap: 4 }, null, null).ok, '입력 없이도 화면');
   // 이모지·그림문자 없음 (새 문구)
   const strs = []; (function w(o) { if (typeof o === 'string') strs.push(o); else if (o && typeof o === 'object') Object.keys(o).forEach(k => w(o[k])); })([S.head, S.body]);
-  ok(strs.every(s => !/[\u{1F300}-\u{1FAFF}\u{2600}-\u{26FF}\u{2B50}]/u.test(s.replace(/★/g, ''))), '새 문구에 이모지 없음(★ 별점 글자만)');
+  ok(S.head[1].items.map(i => i.label).join() === '전체,☕ 카페,🍚 밥집,🍖 육식,🍣 회집,🍺 주점' && S.head[1].h === 31 && S.head[1].offf === 'card2', '맛집 칩: 웹과 같은 그림 · 31px · 바탕 card2');
   ok(JSON.stringify(E.foodScreen({ cap: 4 }, { stn: '강남', flt: '전체' }, { c: C, p: P })) === JSON.stringify(E.foodScreen({ cap: 4 }, { stn: '강남', flt: '전체' }, { c: C, p: P })), '같은 입력 → 같은 결과(rev 포함)');
   ok(E.foodScreen({ cap: 4 }, { stn: '강남', flt: '카페' }, { c: C, p: P }).rev !== S.rev, '다른 화면 → 다른 rev');
 }

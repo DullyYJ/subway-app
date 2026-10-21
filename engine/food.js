@@ -17,6 +17,7 @@
 'use strict';
 var FOOD_SCREEN_V = 1;
 var FOOD_CHIPS = ['전체', '카페', '밥집', '육식', '회집', '주점'];
+var FOOD_CHIP_EMOJI = { '카페': '☕', '밥집': '🍚', '육식': '🍖', '회집': '🍣', '주점': '🍺' };     // 웹 .food-chip 앞 그림
 var FOOD_MAX_SHOW = 150;          // 위·아래 목록 각각 최대 개수(웹과 같다)
 var FOOD_MAX_IN_C = 400, FOOD_MAX_IN_P = 1500;
 var FOOD_ALTS_MAX = 12;           // 한 요청에 실을 수 있는 '다른 칩' 수 상한(칩 6개)
@@ -161,9 +162,9 @@ function foodScreenOf(f, all, allP) {
 
   var label = f.stn && (f.st === 'ready' || f.st === 'loading' || f.st === 'none') ? f.stn + '역 인근' : (f.st === 'locating' ? '위치 확인 중...' : '도착역을 설정하면 맛집을 추천해드려요');
   var head = [
-    { t: 'bar', pad: [16, 16, 16, 8], title: '도착역 맛집', sub: label, btn: '새로고침', act: { a: 'refresh' } },
-    { t: 'chips', pad: [16, 0, 16, 12], gap: 8, h: 30, onc: 'gold', onfg: '#121214',
-      items: FOOD_CHIPS.map(function (c) { return { label: c, on: c === f.flt, act: { a: 'cat', v: c } }; }) }
+    { t: 'bar', pad: [16, 16, 16, 8], title: '🍽️ 도착역 맛집', sub: label, btn: '🔄 새로고침', act: { a: 'refresh' } },
+    { t: 'chips', pad: [16, 0, 16, 12], gap: 8, h: 31, fs: 12, px: 15, onc: 'gold', onfg: '#ffffff', offf: 'card2', offb: 'border', offt: 'sub',      // 웹 .food-chip: 31px · 12px · 바탕 card2
+      items: FOOD_CHIPS.map(function (c) { return { label: (FOOD_CHIP_EMOJI[c] ? FOOD_CHIP_EMOJI[c] + ' ' : '') + c, on: c === f.flt, act: { a: 'cat', v: c } }; }) }
   ];
 
   var body = [], go = {};

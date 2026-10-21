@@ -174,7 +174,7 @@ function boardScreen(inp, factsIn, rowsIn) {
   if (!all.length) {
     body.push({ t: 'text', s: f.st === 'loading' ? '게시글 불러오는 중...' : '아직 제보가 없습니다.\n첫 번째 제보자가 되어보세요!', size: 14, color: 'sub', lh: 1.8, align: 'center', pad: [20, 60, 20, 60] });
   } else {
-    body.push({ t: 'spacer', h: 4 });
+    body.push({ t: 'spacer', h: 15 });
     shown.forEach(function (p) { var pid = brdPid(p, used); ids.push(pid); idx.push(p.i); sid.push(p.id); body.push(brdPostNode(p, pid, f, now)); });
     if (all.length > shown.length) body.push({ t: 'button', pad: [12, 4, 12, 0], s: '더 보기 · 남은 글 ' + (all.length - shown.length) + '개', size: 12, h: 40, act: { a: 'call', v: 'bd.more' } });
     body.push({ t: 'spacer', h: 28 });

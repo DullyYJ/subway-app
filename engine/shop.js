@@ -242,7 +242,7 @@ function shopScreen(inp, data, cfg, wx) {
   var items = cat === SHOP_REC_CAT ? pick.rec : (pick.byCat[cat] || []);
   var tabs = [{ c: SHOP_REC_CAT, n: pick.rec.length }].concat(pick.order.map(function (cn) { return { c: cn, n: (pick.byCat[cn] || []).length }; }));
   var chips = tabs.map(function (o) {
-    return { label: o.c, badge: String(o.n), on: o.c === cat, act: { a: 'cat', v: o.c } };
+    return { label: (o.c === SHOP_REC_CAT ? '✨' : (SHOP_CAT_EMOJI[o.c] || '')) + (o.c === SHOP_REC_CAT || SHOP_CAT_EMOJI[o.c] ? ' ' : '') + o.c, badge: String(o.n), on: o.c === cat, act: { a: 'cat', v: o.c } };
   });
   var cards = [];
   items.forEach(function (it) {
