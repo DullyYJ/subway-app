@@ -174,6 +174,7 @@ public final class ScreenCore {
         public float padL, padT, padR, padB;
         public float gap = 6f, h = 0f, size = 12f, lh = 1.35f, alpha = 1f;
         public int cols = 2, maxLines = 0;
+        public float rw = 0f; public boolean mq;           // text/bar: 오른쪽에 남겨 둘 칸(놀이터) · 넘치면 그 칸만큼 줄여 좌우로 흐르게
         public float bh = 0f, bsize = 0f;                  // inbar: 단추 높이·글자 크기(0 이면 줄 높이·입력칸 글자 크기)
         public String dot = "";                            // inbar: 왼쪽 동그라미 색(출발/도착 점)
         public String path = ""; public float fpad = 0f, fzmax = 0f;   // tmap: 걷는 길(위도,경도;…) · 맞춤 여백 · 최대 배율(0 이면 기본)
@@ -446,6 +447,7 @@ public final class ScreenCore {
             n.align = optStr(m, "align", "left", 8); if (!"left".equals(n.align) && !"center".equals(n.align) && !"right".equals(n.align)) throw new ParseError("align");
             n.maxLines = (int) optNum(m, "lines", 0f, 0f, 50f);
             n.hl = hl(m, n.s.length()); n.hlc = hlc(m, n.hl.length);
+            n.rw = optNum(m, "rw", 0f, 0f, 300f); n.mq = optBool(m, "mq", false);
         } else if ("button".equals(t)) {
             pad(m, n); n.s = optStr(m, "s", "", 80); if (n.s.length() == 0) throw new ParseError("button: s 없음");
             n.size = optNum(m, "size", 12f, 6f, 40f); n.h = optNum(m, "h", 40f, 20f, 120f); n.act = act(m.get("act"), true);
@@ -526,6 +528,7 @@ public final class ScreenCore {
             pad(m, n);
             n.title = optStr(m, "title", "", 60); if (n.title.length() == 0) throw new ParseError("bar: title 없음");
             n.sub = optStr(m, "sub", "", 80); n.label = optStr(m, "btn", "", 16);
+            n.rw = optNum(m, "rw", 0f, 0f, 300f); n.mq = optBool(m, "mq", false);
             if (n.label.length() > 0) n.act = act(m.get("act"), true); else n.act = act(m.get("act"), false);
         } else if ("sec".equals(t)) {                                                                       // 카드 위 제목줄(웹 .sec): 제목 · (알약) · (가운데 작은 글) · (오른쪽 테두리 단추)
             pad(m, n);
@@ -1050,6 +1053,7 @@ public final class ScreenCore {
         public float bx, by, btx, bty;               // 검색줄: 배지 · 단추 왼쪽위 (영역 좌표)
         public int maxlen = 60;
         public String label = "", badge = "", tag = "", img = "", fb = "";
+        public boolean mq; public float mqW, mqVis;  // 흐르는 글(넘칠 때만 mq): 글 전체 폭 · 보이는 폭
         public float labelW, badgeW, tagX, tagW;    // 칩: 라벨·뱃지 폭 · 카드: 최저가 글자 자리
         public float ix, iy, iw, ih;                // 카드 그림 자리
         public String go = "", dist = "", stars = "", rank = "";           // 장소 카드: 길찾기 글 · 거리 · 별점 · 순위
@@ -1770,8 +1774,12 @@ public final class ScreenCore {
         }
         if ("text".equals(n.t)) {
             boolean rich = n.hl.length > 0;
-            List<String> ls = wrap(n.s, innerW, n.size, n.bold || rich, n.maxLines, m);        // 굵은 구간이 있으면 줄바꿈은 굵은 폭으로 잰다(넘치지 않게)
-            Item it = new Item(); it.kind = K_TEXT; it.x = ox; it.y = y; it.w = innerW;
+            float vis = n.mq && n.rw > 0f ? Math.max(40f, innerW - n.rw) : innerW;                // 놀이터 칸을 남기고 한 줄로 흐르는 이름
+            float fullW = n.mq && n.rw > 0f ? m.width(n.s, n.size, n.bold) : 0f;
+            List<String> ls;
+            if (n.mq && n.rw > 0f) { ls = new ArrayList<String>(); ls.add(n.s); } else ls = wrap(n.s, innerW, n.size, n.bold || rich, n.maxLines, m);        // 굵은 구간이 있으면 줄바꿈은 굵은 폭으로 잰다(넘치지 않게)
+            Item it = new Item(); it.kind = K_TEXT; it.x = ox; it.y = y; it.w = n.mq && n.rw > 0f ? vis : innerW;
+            if (n.mq && n.rw > 0f) { it.mqW = fullW; it.mqVis = vis; it.mq = fullW > vis + 0.5f; }
             it.lines = ls.toArray(new String[0]); it.size = n.size; it.bold = n.bold; it.color = n.color; it.alpha = n.alpha; it.align = n.align;
             it.lineH = n.size * n.lh; it.h = it.lineH * ls.size(); it.textX = ox; it.textY = y;
             if (rich) richSegs(it, n.s, n.hl, n.hlc);
@@ -1905,8 +1913,12 @@ public final class ScreenCore {
             if (n.label.length() > 0) { btnW = m.width(n.label, BAR_BTN, false) + 28f + 2f; btnH = BAR_BTN * BAR_LH + 12f + 2f; }
             float region = Math.max(40f, innerW - (btnW > 0f ? btnW + 8f : 0f));
             float tlh = BAR_TITLE * BAR_LH, slh = BAR_SUB * BAR_LH;
-            String title = ellipsize(n.title, region, BAR_TITLE, true, m);
+            boolean bmq = n.mq && n.rw > 0f;
+            if (bmq) region = Math.max(40f, region - n.rw);                                      // 놀이터 칸을 남기고 제목이 흐른다
+            String title = bmq ? n.title : ellipsize(n.title, region, BAR_TITLE, true, m);
             float tw = m.width(title, BAR_TITLE, true);
+            boolean bflow = bmq && tw > region + 0.5f;
+            if (bmq) tw = Math.min(tw, region);
             String sub = n.sub.length() > 0 ? ellipsize(n.sub, region, BAR_SUB, true, m) : "";
             float sw = sub.length() > 0 ? m.width(sub, BAR_SUB, true) : 0f;
             boolean same = sub.length() == 0 || tw + 8f + sw <= region;
@@ -1914,6 +1926,7 @@ public final class ScreenCore {
             float h = Math.max(blockH, btnH);
             Item it = new Item(); it.kind = K_BAR; it.x = ox; it.y = y; it.w = innerW; it.h = h; it.act = n.act;
             it.lines = new String[] { title }; it.size = BAR_TITLE; it.bold = true; it.lineH = tlh;
+            if (bmq) { it.mqW = m.width(title, BAR_TITLE, true); it.mqVis = region; it.mq = bflow; }
             it.textX = ox; it.textY = y + (h - blockH) / 2f;
             it.label = sub; it.size2 = BAR_SUB; it.lineH2 = slh; it.top = same;
             it.tagX = same ? ox + tw + 8f : ox; it.tagW = sw; it.subY = same ? it.textY : it.textY + tlh;
