@@ -787,6 +787,38 @@ public class ScreenJvmTest {
             ok(threw, "tmap 엉터리는 거부: " + bad);
         }
 
+        // ── 버스 탭 노드(btog · bcard · tmap 확장) ──
+        {
+            String H = "{\"ok\":true,\"v\":1,\"screen\":\"maph\",\"head\":[],\"body\":[";
+            String card = "{\"t\":\"bcard\",\"k\":\"SEOUL:11111\",\"nm\":\"강남역\",\"mode\":\"near\",\"on\":true,\"pad\":[12,12,0,12],\"act\":{\"a\":\"call\",\"v\":\"mp.pc.0\",\"id\":\"SEOUL:11111\"},\"edit\":{\"a\":\"call\",\"v\":\"mp.al.0\"},\"n\":\"1\",\"dist\":\"60m\",\"fv\":0,\"star\":{\"a\":\"call\",\"v\":\"mp.fv.0\"},\"pi\":0,\"rows\":[{\"no\":\"146\",\"c\":\"#0066FF\",\"a\":[{\"s\":\"3분 30초\",\"sec\":210,\"p\":\"2번째전\"}],\"bell\":1,\"dir\":\"→ 강남역방향\"}]}";
+            try {
+                ScreenCore.Layout bl = ScreenCore.layout(ScreenCore.load(H + "{\"t\":\"btog\",\"v\":\"u\",\"items\":[{\"label\":\"버스\",\"on\":true,\"act\":{\"a\":\"call\",\"v\":\"mp.t.bus\"}},{\"label\":\"지하철\",\"act\":{\"a\":\"call\",\"v\":\"mp.t.sub\"}}]},{\"t\":\"btog\",\"v\":\"p\",\"items\":[{\"label\":\"주변\",\"on\":true,\"act\":{\"a\":\"call\",\"v\":\"mp.vw.near\"}},{\"label\":\"즐겨찾기\",\"act\":{\"a\":\"call\",\"v\":\"mp.vw.fav\"}}],\"rf\":{\"label\":\"새로고침\",\"act\":{\"a\":\"call\",\"v\":\"mp.rf\"}}}," + card + "]}"), 360f, M);
+                int under = 0, pill = 0, refresh = 0, cards = 0; float cardH = 0f;
+                for (ScreenCore.Item it : bl.body) {
+                    if (it.kind == ScreenCore.K_BTOG) { if ("u".equals(it.value)) under++; else if ("r".equals(it.value)) refresh++; else pill++; }
+                    if (it.kind == ScreenCore.K_BCARD) { cards++; cardH = it.h; }
+                }
+                ok(under == 2 && pill == 2 && refresh == 1, "btog: 밑줄 탭 2 · 둥근 단추 2 · 새로고침 1");
+                ok(cards == 1 && cardH > 40f && bl.bodyH > cardH, "bcard: 카드 한 장의 높이를 엔진 글로 잰다");
+            } catch (Exception ex) { ok(false, "btog/bcard 읽기: " + ex); }
+            String[] bads = {
+                "{\"t\":\"btog\",\"items\":[]}",
+                "{\"t\":\"btog\",\"v\":\"z\",\"items\":[{\"label\":\"a\"}]}",
+                "{\"t\":\"btog\",\"items\":[{\"label\":\"\"}]}",
+                card.replace("\"mode\":\"near\"", "\"mode\":\"zzz\""),
+                card.replace("\"k\":\"SEOUL:11111\"", "\"k\":\"\""),
+                card.replace("\"no\":\"146\"", "\"no\":\"\""),
+                card.replace("\"nm\":\"강남역\"", "\"nm\":\"\""),
+            };
+            for (String b : bads) { boolean threw = false; try { ScreenCore.load(H + b + "]}"); } catch (Exception ex) { threw = true; } ok(threw, "btog/bcard 엉터리는 거부: " + b.substring(0, Math.min(60, b.length()))); }
+            try {
+                ScreenCore.Screen lv = ScreenCore.load(H + "{\"t\":\"tmap\",\"h\":210,\"live\":1,\"foc\":0,\"pts\":[{\"la\":37.5,\"lo\":127.0,\"k\":\"s\",\"n\":\"1\",\"v\":\"mp.pm.0\",\"g\":\"SEOUL:11111\"},{\"la\":37.51,\"lo\":127.01,\"k\":\"s\",\"n\":\"2\",\"v\":\"mp.pm.1\",\"g\":\"SEOUL:22222\"}]}]}");
+                ScreenCore.Layout ll = ScreenCore.layout(lv, 360f, M);
+                java.util.List<TileMapCore.Pin> lp = TileMapCore.parsePins(ll.body[0].value);
+                ok(lp.size() == 2 && "mp.pm.1".equals(lp.get(1).v) && "SEOUL:22222".equals(lp.get(1).g), "tmap 확장: 핀 누름 행동(v) · 카드 열쇠(g)");
+            } catch (Exception ex) { ok(false, "tmap 확장 읽기: " + ex); }
+        }
+
         // ── 흐르는 문구 노드(marq) ──
         try {
             ScreenCore.Screen mq = ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"hdr\",\"head\":[],\"body\":[{\"t\":\"marq\",\"h\":26,\"pad\":[8,14,8,14],\"msgs\":[\"오늘도 화이팅!\",\" \",\"좋은 아침이에요\"],\"pass\":16000,\"grad\":6000,\"line\":true}]}");

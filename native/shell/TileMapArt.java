@@ -12,14 +12,17 @@ import java.util.List;
 final class TileMapArt {
     private TileMapArt() { }
 
-    static final int C_STOP = 0xFF1D9BF0, C_FOCUS = 0xFFF07830, C_ME = 0xFF0A84FF, C_WHITE = 0xFFFFFFFF, C_BG = 0xFFE8EEF4;
+    static final int C_STOP = 0xFF0066FF, C_FOCUS = 0xFFE8482E, C_ME = 0xFFFF9F0A, C_WHITE = 0xFFFFFFFF, C_BG = 0xFFE8EEF4;       // 웹 .bus-map-pin(#0066FF) · .on(#e8482e) · .bus-me-dot(#ff9f0a)
     private static final Paint P = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private static final RectF R = new RectF();
 
     /**
      * cv 는 (0,0)~(vw.w, vw.h) 픽셀 영역에 그린다. focus 는 강조할 핀 번호(없으면 -1) — 그 핀은 이름표를 단다.
      */
-    static void draw(Canvas cv, TileLoader tl, TileMapCore.View vw, List<TileMapCore.Pin> pins, float dpr, int focus) {
+    static void draw(Canvas cv, TileLoader tl, TileMapCore.View vw, List<TileMapCore.Pin> pins, float dpr, int focus) { draw(cv, tl, vw, pins, dpr, focus, true, 0L); }
+
+    /** label = 고른 핀에 이름표를 달까 · nowMs > 0 이면 내 위치 점 뒤로 퍼지는 고리(웹 busMePulse 1.6초)를 그린다. */
+    static void draw(Canvas cv, TileLoader tl, TileMapCore.View vw, List<TileMapCore.Pin> pins, float dpr, int focus, boolean label, long nowMs) {
         P.setStyle(Paint.Style.FILL); P.setColor(C_BG);
         cv.drawRect(0, 0, vw.w, vw.h, P);
         for (int[] t : vw.tiles()) {
@@ -38,10 +41,10 @@ final class TileMapArt {
                 if (pass == 2 && !isMe) continue;
                 double[] s = vw.toScreen(p.la, p.lo);
                 if (s[0] < -40 || s[1] < -40 || s[0] > vw.w + 40 || s[1] > vw.h + 40) continue;
-                if (isMe) drawMe(cv, (float) s[0], (float) s[1], dpr); else drawPin(cv, (float) s[0], (float) s[1], dpr, p.n, isF);
+                if (isMe) drawMe(cv, (float) s[0], (float) s[1], dpr, nowMs); else drawPin(cv, (float) s[0], (float) s[1], dpr, p.n, isF);
             }
         }
-        if (focus >= 0 && focus < pins.size() && pins.get(focus).name.length() > 0) {
+        if (label && focus >= 0 && focus < pins.size() && pins.get(focus).name.length() > 0) {
             double[] s = vw.toScreen(pins.get(focus).la, pins.get(focus).lo);
             drawLabel(cv, (float) s[0], (float) s[1] - 22f * dpr, dpr, pins.get(focus).name, vw.w);
         }
@@ -49,7 +52,7 @@ final class TileMapArt {
     }
 
     private static void drawPin(Canvas cv, float x, float y, float dpr, String n, boolean focus) {
-        float r = (focus ? 15f : 12f) * dpr;
+        float r = (focus ? 16.25f : 13f) * dpr;                     // 웹 26px 핀 · 고르면 1.25배
         P.setStyle(Paint.Style.FILL); P.setColor(0x33000000);
         cv.drawCircle(x, y + 1.5f * dpr, r + 1f * dpr, P);
         P.setColor(focus ? C_FOCUS : C_STOP);
@@ -64,11 +67,16 @@ final class TileMapArt {
         }
         P.setTextAlign(Paint.Align.LEFT); P.setTypeface(Typeface.DEFAULT);
     }
-    private static void drawMe(Canvas cv, float x, float y, float dpr) {
-        P.setStyle(Paint.Style.FILL); P.setColor(0x330A84FF);
-        cv.drawCircle(x, y, 18f * dpr, P);
-        P.setColor(C_WHITE); cv.drawCircle(x, y, 8.5f * dpr, P);
-        P.setColor(C_ME); cv.drawCircle(x, y, 6.5f * dpr, P);
+    private static void drawMe(Canvas cv, float x, float y, float dpr, long nowMs) {
+        P.setStyle(Paint.Style.FILL);
+        if (nowMs > 0L) {                                                      // 웹: 점 뒤에서 1배 → 2.8배로 퍼지며 사라지는 같은 색 원(.55 → 0)
+            float f = (nowMs % 1600L) / 1600f, e = 1f - (1f - f) * (1f - f);
+            P.setColor((((int) (255f * 0.55f * (1f - e))) << 24) | (C_ME & 0x00FFFFFF));
+            cv.drawCircle(x, y, 7.5f * dpr * (1f + 1.8f * e), P);
+        }
+        P.setColor(0x4D000000); cv.drawCircle(x, y + 1.2f * dpr, 8.7f * dpr, P);
+        P.setColor(C_WHITE); cv.drawCircle(x, y, 7.5f * dpr, P);               // 15px 점 + 2px 흰 테두리
+        P.setColor(C_ME); cv.drawCircle(x, y, 5.5f * dpr, P);
     }
     private static void drawLabel(Canvas cv, float x, float y, float dpr, String text, int vw) {
         P.setTextSize(12f * dpr); P.setTypeface(Typeface.DEFAULT_BOLD); P.setTextAlign(Paint.Align.LEFT);

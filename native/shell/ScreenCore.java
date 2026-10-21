@@ -179,6 +179,7 @@ public final class ScreenCore {
         public boolean watch;                              // inbar: 글자가 바뀔 때마다 앱이 웹에 알린다(자동완성)
         public boolean multi;                              // field: 여러 줄 입력칸(글쓰기 내용) — 줄바꿈을 받고 글자를 줄바꿔 그린다
         public Act bact;                                   // sug: 오른쪽 작은 단추의 행동
+        public Act eact, mact;                             // bcard: ✏️(별명) · 🗺️(위치) 단추의 행동
         public boolean bold, on;
         public String color = "text", bg = "", align = "left";
         public String s = "", label = "", badge = "", name = "", tag = "", img = "", fb = "";
@@ -298,8 +299,8 @@ public final class ScreenCore {
     }
 
     /** 타일 지도 핀 하나를 글로 — TileMapCore.encodePin 과 같은 모양(la,lo,k,n,name; 쉼표·막대 제거). ScreenCore 는 다른 파일 없이 혼자 컴파일되어야 해서 여기에 따로 둔다. */
-    private static String tmapPin(double la, double lo, String k, String n, String name) {
-        return la + "," + lo + "," + ("m".equals(k) || "f".equals(k) ? k : "s") + "," + tmapClean(n, 4) + "," + tmapClean(name, 24);
+    private static String tmapPin(double la, double lo, String k, String n, String name, String v, String g) {
+        return la + "," + lo + "," + ("m".equals(k) || "f".equals(k) ? k : "s") + "," + tmapClean(n, 4) + "," + tmapClean(name, 24) + "," + tmapClean(v, 40) + "," + tmapClean(g, 40);
     }
     private static String tmapClean(String s, int max) {
         StringBuilder b = new StringBuilder();
@@ -665,6 +666,9 @@ public final class ScreenCore {
         } else if ("tmap".equals(t)) {                                                                     // 타일 지도: 핀(좌표·번호·이름)은 엔진이 정하고, 앱은 타일을 받아 그리기만 한다
             pad(m, n);
             n.h = optNum(m, "h", 200f, 100f, 420f); n.r = optNum(m, "r", 12f, 0f, 40f);
+            n.on = optNum(m, "live", 0f, 0f, 1f) > 0f;                                                          // 끌기 · 두 손가락 확대 · ± 단추 · 핀 누르기를 받는 고정 지도
+            n.ci = Math.round(optNum(m, "foc", -1f, -1f, 39f)); n.top = optNum(m, "bl", 0f, 0f, 1f) > 0f;       // 고른 핀 번호 · 아래 구분선
+            n.hint = optStr(m, "hint", "", 60);
             StringBuilder pv = new StringBuilder();
             int pc = 0;
             for (Object po : asArr(m.get("pts"), "tmap.pts")) {
@@ -673,13 +677,62 @@ public final class ScreenCore {
                 if (la == 0f && lo == 0f) continue;
                 if (pc >= 40) throw new ParseError("tmap: 핀이 너무 많다");
                 double dla = pm.get("la") instanceof Number ? ((Number) pm.get("la")).doubleValue() : la, dlo = pm.get("lo") instanceof Number ? ((Number) pm.get("lo")).doubleValue() : lo;
+                String pvv = optStr(pm, "v", "", 40), pg = optStr(pm, "g", "", 40);
+                if (pvv.length() > 0 && !ident(pvv)) throw new ParseError("tmap: 핀 v 가 올바르지 않다");
+                if (pg.length() > 0 && !ident(pg)) throw new ParseError("tmap: 핀 g 가 올바르지 않다");
                 if (pc > 0) pv.append('|');
-                pv.append(tmapPin(dla, dlo, optStr(pm, "k", "s", 2), optStr(pm, "n", "", 8), optStr(pm, "l", "", 40)));
+                pv.append(tmapPin(dla, dlo, optStr(pm, "k", "s", 2), optStr(pm, "n", "", 8), optStr(pm, "l", "", 40), pvv, pg));
                 pc++;
             }
             if (pc == 0) throw new ParseError("tmap: 핀이 없다");
+            if (n.ci >= pc) throw new ParseError("tmap: foc 가 핀 수를 넘었다");
             n.value = pv.toString();
             n.act = act(m.get("act"), false);
+        } else if ("btog".equals(t)) {                                                                     // 웹 .map-inner-tabs(밑줄 탭, v=u) · .busv-toggle(둥근 단추 + 새로고침, v=p)
+            pad(m, n);
+            n.value = optStr(m, "v", "p", 2); if (!"p".equals(n.value) && !"u".equals(n.value)) throw new ParseError("btog: v 는 p 또는 u");
+            n.h = optNum(m, "h", 38f, 24f, 80f);
+            List<Object> bl = asArr(m.get("items"), "btog.items");
+            if (bl.size() < 1 || bl.size() > 4) throw new ParseError("btog: 단추는 1~4개");
+            for (Object io : bl) {
+                Map<String, Object> im = asObj(io, "btog 단추");
+                Node c = new Node(); c.t = "chip";
+                c.label = optStr(im, "label", "", 40); if (c.label.length() == 0) throw new ParseError("btog: label 없음");
+                c.on = optBool(im, "on", false); c.act = act(im.get("act"), true);
+                n.items.add(c); sc.nodes++;
+            }
+            Object rfo = m.get("rf");
+            if (rfo != null) { Map<String, Object> rm = asObj(rfo, "btog.rf"); n.label = optStr(rm, "label", "", 8); n.bact = act(rm.get("act"), true); if (n.label.length() == 0) throw new ParseError("btog: rf label 없음"); }
+        } else if ("bcard".equals(t)) {                                                                    // 버스 정류장 카드 한 장(웹 .map-bus-stop-card): 머리(번호·이름·✏️·★·거리) + 노선 줄들
+            pad(m, n);
+            n.key = optStr(m, "k", "", 40); if (!ident(n.key)) throw new ParseError("bcard: k 가 올바르지 않다");
+            n.name = optStr(m, "nm", "", 80); if (n.name.length() == 0) throw new ParseError("bcard: nm 없음");
+            n.label = optStr(m, "al", "", 40); n.badge = optStr(m, "n", "", 3); n.tag = optStr(m, "dist", "", 12);
+            n.value = optStr(m, "mode", "near", 5); if (!"near".equals(n.value) && !"fav".equals(n.value)) throw new ParseError("bcard: mode 는 near 또는 fav");
+            n.on = optBool(m, "on", false); n.big = optNum(m, "fv", 0f, 0f, 1f) > 0f; n.ci = Math.round(optNum(m, "pi", -1f, -1f, 39f));
+            n.title = optStr(m, "ld", "", 60); n.sub = optStr(m, "em", "", 60);
+            n.act = act(m.get("act"), true); n.bact = act(m.get("star"), false); n.eact = act(m.get("edit"), false); n.mact = act(m.get("map"), false);
+            Object ro = m.get("rows");
+            if (ro != null) {
+                List<Object> rl = asArr(ro, "bcard.rows");
+                if (rl.size() > 20) throw new ParseError("bcard: 노선 줄이 너무 많다");
+                for (Object rio : rl) {
+                    Map<String, Object> rm = asObj(rio, "bcard 줄");
+                    Node r = new Node(); r.t = "brow";
+                    r.name = optStr(rm, "no", "", 16); if (r.name.length() == 0) throw new ParseError("bcard: no 없음");
+                    r.fill = roleOrCss(rm, "c", "#0066FF"); r.title = optStr(rm, "dir", "", 60); r.on = optNum(rm, "bell", 0f, 0f, 1f) > 0f;
+                    for (Object ao : asArr(rm.get("a"), "bcard.a")) {
+                        if (r.items.size() >= 2) break;
+                        Map<String, Object> am = asObj(ao, "bcard 도착");
+                        Node a = new Node(); a.t = "barr";
+                        a.s = optStr(am, "s", "", 20); if (a.s.length() == 0) throw new ParseError("bcard: 도착 s 없음");
+                        a.badge = optStr(am, "p", "", 12); a.on = optNum(am, "soon", 0f, 0f, 1f) > 0f; a.val = optNum(am, "sec", 0f, 0f, 100000f);
+                        r.items.add(a);
+                    }
+                    n.items.add(r); sc.nodes++;
+                    if (sc.nodes > MAX_NODES) throw new ParseError("노드가 너무 많다");
+                }
+            }
         } else if ("marq".equals(t)) {                                                                     // 맨 위 흐르는 감성 문구: 엔진이 문구 목록을 정하고, 앱은 한 번 지나갈 때마다 다음 문구로 흘리기만 한다
             pad(m, n);
             n.h = optNum(m, "h", 26f, 16f, 60f);
@@ -787,7 +840,11 @@ public final class ScreenCore {
     // ═════════════ ③ 배치 ═════════════
     public static final int SCENE_MAX = 6000;
     public static final float SKEL_ROW_H = 68f, SKEL_CARD_H = 132f, SKEL_MAP_H = 200f, SKEL_GAP = 10f;
-    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14, K_NEWS = 15, K_POSTH = 16, K_CMT = 17, K_RBTN = 18, K_INBAR = 19, K_MSG = 20, K_TAB = 21, K_SUG = 22, K_SWAP = 23, K_RHD = 24, K_TRK = 25, K_CGH = 26, K_GAUGE = 27, K_CHART = 28, K_HBAR = 29, K_CARS = 30, K_AIH = 31, K_LTH = 32, K_LTR = 33, K_PILL = 34, K_SCENE = 35, K_TMAP = 36, K_MARQ = 37, K_SKEL = 38;
+    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14, K_NEWS = 15, K_POSTH = 16, K_CMT = 17, K_RBTN = 18, K_INBAR = 19, K_MSG = 20, K_TAB = 21, K_SUG = 22, K_SWAP = 23, K_RHD = 24, K_TRK = 25, K_CGH = 26, K_GAUGE = 27, K_CHART = 28, K_HBAR = 29, K_CARS = 30, K_AIH = 31, K_LTH = 32, K_LTR = 33, K_PILL = 34, K_SCENE = 35, K_TMAP = 36, K_MARQ = 37, K_SKEL = 38, K_BTOG = 39, K_BCARD = 40;
+    /** 버스 정류장 카드 치수(웹 .map-bus-stop-card / .kbus-row 와 같다) */
+    public static final float BC_RAD = 18f, BC_PADX = 16f, BC_PADT = 16f, BC_PADB = 12f, BC_NAME = 17f, BC_NAME_LH = 1.3f, BC_BADGE = 21f, BC_BADGE_GAP = 7f, BC_ORIG = 11f, BC_DIST = 11f, BC_DIST_PX = 9f, BC_DIST_H = 20f,
+            BC_GAP = 8f, BC_EDIT_W = 18f, BC_STAR_W = 24f, BC_X_W = 20f, BC_MAP_W = 19f, BC_ROW_PY = 11f, BC_ROW_PX = 14f, BC_ROW_GAP = 10f, BC_NO = 17f, BC_NO_LH = 1.1f, BC_DIR = 11f, BC_ARR = 14f, BC_ARR_LH = 1.3f,
+            BC_CNT = 11f, BC_CNT_GAP = 6f, BC_ARR_GAP = 3f, BC_BELL = 22f, BC_MSG = 13f, BC_MSG_PY = 14f, BC_LEFT_MIN = 60f, BC_LEFT_MAX = 150f;
     /** 경로 결과 머리줄 치수(웹 #transitResultHeader 와 같다: 분 숫자 28 · 단위 14 · 구간명 12 · 즐겨찾기 알약 11 · 닫기 ×) */
     /** 구간 타임라인 칸 치수(웹 #transitHtlTrack 과 같다): 이름 30 · 배지 18 · 축 26 · 시각 3+16 */
     public static final float TRK_NAME_H = 30f, TRK_BADGE_H = 18f, TRK_AXIS_H = 26f, TRK_TIME_GAP = 3f, TRK_TIME_H = 16f, TRK_H = 93f, TRK_LINE_Y = 12f, TRK_LINE_H = 3f, TRK_DOT_Y = 13f, TRK_E_R = 7f, TRK_R_R = 6f, TRK_M_R = 3f;
@@ -861,6 +918,11 @@ public final class ScreenCore {
         public Col[] ca = new Col[0];                // 칸별 혼잡: 칸마다 색
         public Col[][] segCol;                       // hl 조각마다 글자색(null 이면 기본 색)
         public long ln;                              // aih: 카운트다운 마감 시각(기기 시계 ms)
+        public float[] gf = new float[0];            // bcard: 줄마다 [위쪽 y(카드 안), 높이]
+        public boolean[] gb = new boolean[0];        // bcard: 줄마다 [첫 도착 임박, 둘째 도착 임박, 벨]
+        public long[] rt = new long[0];              // bcard: 줄마다 나타난 시각(ms; 0 이면 애니메이션 없음)
+        public float[] zs = new float[0];            // bcard: 누르는 자리 [x,y,w,h]×(별·✏️·🗺️)
+        public Act[] za = new Act[0];                // bcard: 그 자리를 눌렀을 때 행동
     }
 
     /** 배치 결과. */
@@ -1155,6 +1217,80 @@ public final class ScreenCore {
         }
     }
 
+    /** 버스 정류장 카드 한 장의 배치(웹 _renderMapBusCard + .kbus-row). 머리: 번호 배지 · 이름(별명이면 별명 크게 + 원래 이름 작게) · ✏️ · ★ · 거리 알약. 아래로 노선 줄(번호 · 방면 · 도착 둘 · 벨). */
+    private static float bcardLayout(Node n, float ox, float w, float y, List<Item> out, Measurer m) {
+        boolean near = "near".equals(n.value);
+        Item it = new Item(); it.kind = K_BCARD; it.x = ox; it.y = y; it.w = w; it.radius = BC_RAD;
+        it.key = n.key; it.act = n.act; it.on = n.on; it.value = n.value; it.ti = n.ci; it.top = n.big;
+        float left = ox + 1f + BC_PADX, right = ox + w - 1f - BC_PADX;
+        float badgeOff = n.badge.length() > 0 ? BC_BADGE + BC_BADGE_GAP : 0f;
+        it.badge = n.badge;
+        // 오른쪽 단추들(오른쪽 끝부터)
+        float rx = right;
+        float dw = 0f;
+        if (near && n.tag.length() > 0) { dw = m.width(n.tag, BC_DIST, false) + BC_DIST_PX * 2f; rx -= dw; it.go = n.tag; it.sx = rx; it.sw = dw; it.sh = BC_DIST_H; rx -= BC_GAP; }
+        float starX = -1f, mapX = -1f, editX = -1f;
+        if (n.bact != null) { float bw = near ? BC_STAR_W : BC_X_W; rx -= bw; starX = rx; rx -= BC_GAP; it.dk = near ? "s" : "x"; }
+        if (!near && n.mact != null) { rx -= BC_MAP_W; mapX = rx; rx -= BC_GAP; }
+        if (n.eact != null) { rx -= BC_EDIT_W; editX = rx; rx -= BC_GAP; }
+        float nameW = Math.max(40f, rx + (n.bact != null || n.eact != null || dw > 0f ? 0f : BC_GAP) - (left + badgeOff));
+        String main = n.label.length() > 0 ? n.label : n.name;
+        List<String> ls = wrap(main, nameW, BC_NAME, true, 0, m);
+        if (ls.isEmpty()) ls.add("");
+        it.lines = ls.toArray(new String[0]); it.size = BC_NAME; it.bold = true; it.lineH = BC_NAME * BC_NAME_LH;
+        it.textX = left + badgeOff; it.textY = y + 1f + BC_PADT;
+        float nameH = it.lineH * ls.size();
+        if (n.label.length() > 0) {                                                  // 별명이면 원래 이름을 작게 같은 줄 끝에
+            String last = ls.get(ls.size() - 1);
+            float used = m.width(last, BC_NAME, true) + 5f, room = nameW - used;
+            if (room >= 30f) { it.t1 = ellipsize(n.name, room, BC_ORIG, true, m); it.f1 = it.textX + used; it.f2 = it.textY + it.lineH * (ls.size() - 1); }
+        }
+        float hdrH = BC_PADT + nameH + BC_PADB;
+        float zy = y + 1f + BC_PADT, zh = Math.min(it.lineH, 24f);
+        List<Float> zz = new ArrayList<Float>();
+        if (starX >= 0f) { zz.add(starX - 4f); zz.add(zy); zz.add((near ? BC_STAR_W : BC_X_W) + 8f); zz.add(zh); }
+        else { zz.add(0f); zz.add(0f); zz.add(0f); zz.add(0f); }
+        if (editX >= 0f) { zz.add(editX - 4f); zz.add(zy); zz.add(BC_EDIT_W + 8f); zz.add(zh); } else { zz.add(0f); zz.add(0f); zz.add(0f); zz.add(0f); }
+        if (mapX >= 0f) { zz.add(mapX - 4f); zz.add(zy); zz.add(BC_MAP_W + 8f); zz.add(zh); } else { zz.add(0f); zz.add(0f); zz.add(0f); zz.add(0f); }
+        it.zs = new float[zz.size()]; for (int i = 0; i < it.zs.length; i++) it.zs[i] = zz.get(i);
+        it.za = new Act[] { n.bact, n.eact, n.mact };
+        it.sy = y + 1f + BC_PADT + nameH / 2f - BC_DIST_H / 2f;                      // 거리 알약: 머리 가운데
+        // 줄
+        int rc = n.items.size();
+        float cy = hdrH;
+        if (rc > 0) {
+            it.gf = new float[rc * 2]; it.gb = new boolean[rc * 3]; it.sa = new String[rc * 6]; it.ca = new Col[rc]; it.rt = new long[rc];
+            float rowRight = ox + w - 1f - BC_ROW_PX;
+            float bellX = rowRight - BC_BELL;
+            float maxLeft = Math.max(BC_LEFT_MIN, Math.min(BC_LEFT_MAX, w - 2f - BC_ROW_PX * 2f - BC_ROW_GAP * 2f - BC_BELL - 90f));
+            for (int i = 0; i < rc; i++) {
+                Node r = n.items.get(i);
+                float noW = m.width(r.name, BC_NO, true);
+                String dir = r.title.length() > 0 ? ellipsize(r.title, maxLeft, BC_DIR, true, m) : "";
+                float leftH = BC_NO * BC_NO_LH + (dir.length() > 0 ? 2f + BC_DIR * 1.35f : 0f);
+                int ac = r.items.size();
+                float rightH = Math.max(1, ac) * BC_ARR * BC_ARR_LH + (Math.max(1, ac) - 1) * BC_ARR_GAP;
+                float rh = 1f + BC_ROW_PY * 2f + Math.max(leftH, rightH);
+                it.gf[i * 2] = cy; it.gf[i * 2 + 1] = rh;
+                it.sa[i * 6] = ellipsize(r.name, maxLeft, BC_NO, true, m); it.sa[i * 6 + 1] = dir;
+                it.ca[i] = col(r.fill, new Col(null, 0xFF0066FF));
+                for (int a = 0; a < 2; a++) {
+                    if (a < ac) { Node ar = r.items.get(a); it.sa[i * 6 + 2 + a * 2] = ar.s; it.sa[i * 6 + 3 + a * 2] = ar.badge; it.gb[i * 3 + a] = ar.on; }
+                    else { it.sa[i * 6 + 2 + a * 2] = ""; it.sa[i * 6 + 3 + a * 2] = ""; }
+                }
+                it.gb[i * 3 + 2] = r.on;
+                cy += rh;
+            }
+            it.f3 = bellX;
+        } else if (n.title.length() > 0 || n.sub.length() > 0) {
+            it.t2 = n.title.length() > 0 ? n.title : n.sub; it.t3 = n.title.length() > 0 ? "l" : "e";
+            cy += 1f + BC_MSG_PY * 2f + BC_MSG * 1.35f;
+        }
+        it.h = 2f + cy;
+        out.add(it);
+        return y + it.h + n.padB;
+    }
+
     /** 노드 하나를 y 에서부터 쌓고 다음 y 를 돌려준다. x0 = 이 노드를 담는 칸의 왼쪽(패널 안이면 패널 안쪽), width = 그 칸의 폭. */
     private static float stack(Node n, float x0, float width, float y, List<Item> out, Measurer m, String ok) {
         float innerW = Math.max(1f, width - n.padL - n.padR);
@@ -1266,8 +1402,30 @@ public final class ScreenCore {
             out.add(it);
             return y + h + n.padB;
         }
+        if ("btog".equals(n.t)) {                                                    // 토글 줄: u = 밑줄 탭(칸 폭 같음) · p = 둥근 단추 + 새로고침
+            int cnt = n.items.size();
+            boolean under = "u".equals(n.value);
+            float bx = under ? x0 : ox, bw = under ? width : innerW;
+            float rfW = (!under && n.bact != null) ? 38f : 0f, gap = 8f;
+            float tabW = under ? bw / cnt : (bw - rfW - gap * (cnt - 1 + (rfW > 0f ? 1 : 0))) / cnt;
+            float th = under ? n.h : Math.min(36f, n.h);
+            for (int i = 0; i < cnt; i++) {
+                Node c = n.items.get(i);
+                Item it = new Item(); it.kind = K_BTOG; it.value = n.value; it.label = c.label; it.on = c.on; it.act = c.act;
+                it.x = bx + i * (tabW + (under ? 0f : gap)); it.y = y + (under ? 0f : (n.h - th) / 2f); it.w = tabW; it.h = th; it.radius = 12f;
+                it.top = i == 0; it.sx = x0; it.sw = width; it.sy = y - n.padT; it.sh = n.padT + n.h + n.padB;
+                out.add(it);
+            }
+            if (rfW > 0f) {
+                Item it = new Item(); it.kind = K_BTOG; it.value = "r"; it.label = n.label; it.act = n.bact;
+                it.x = bx + bw - rfW; it.y = y + (n.h - rfW) / 2f; it.w = rfW; it.h = rfW; it.radius = 12f;
+                out.add(it);
+            }
+            return y + n.h + n.padB;
+        }
+        if ("bcard".equals(n.t)) return bcardLayout(n, ox, innerW, y, out, m);
         if ("tmap".equals(n.t)) {                                                    // 타일 지도 자리(그림은 ScreenView 가 그린다 · 누르면 act)
-            Item it = new Item(); it.kind = K_TMAP; it.x = ox; it.y = y; it.w = innerW; it.h = n.h; it.radius = n.r; it.value = n.value; it.act = n.act;
+            Item it = new Item(); it.kind = K_TMAP; it.x = ox; it.y = y; it.w = innerW; it.h = n.h; it.radius = n.r; it.value = n.value; it.act = n.act; it.on = n.on; it.ti = n.ci; it.top = n.top; it.label = n.hint;
             out.add(it);
             return y + n.h + n.padB;
         }

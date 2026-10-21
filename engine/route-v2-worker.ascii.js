@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-21s115";
+var ENGINE_VERSION = "route-v2-2026-10-21s116";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -18705,7 +18705,7 @@ async function handleScreenResult(request) {
 // \ucd9c\ub825  { ok, v:1, screen:'map'|'mapstn'|'maptt', rev, cover:'tab', head, body, info }
 // \ub9e8 \uc544\ub798 module.exports \ub294 \uc2dc\ud5d8(Node)\uc6a9\uc774\uace0 Worker \uc5d0\uc11c\ub294 \ud568\uc218 \uc120\uc5b8\ub9cc \uc4f0\uc778\ub2e4.
 'use strict';
-var MAP_SCREEN_V = 1;
+var MAP_SCREEN_V = 2;
 var MAP_REGIONS = [['seoul', '\uc218\ub3c4\uad8c'], ['busan', '\ubd80\uc0b0'], ['daegu', '\ub300\uad6c'], ['gwangju', '\uad11\uc8fc'], ['daejeon', '\ub300\uc804']];
 var MAP_REGION_PREFIX = { busan: '\ubd80\uc0b0', daegu: '\ub300\uad6c', gwangju: '\uad11\uc8fc', daejeon: '\ub300\uc804' };
 var MAP_REGION_COLORS = { '\ubd80\uc0b01\ud638\uc120': '#F06A00', '\ubd80\uc0b02\ud638\uc120': '#81BF48', '\ubd80\uc0b03\ud638\uc120': '#BB8C00', '\ubd80\uc0b04\ud638\uc120': '#217DCB', '\ub300\uad6c1\ud638\uc120': '#D93F5C', '\ub300\uad6c2\ud638\uc120': '#00AA80', '\ub300\uad6c3\ud638\uc120': '#FFB100', '\uad11\uc8fc1\ud638\uc120': '#009088', '\ub300\uc8041\ud638\uc120': '#007448' };
@@ -18791,8 +18791,9 @@ function mapChip(label, on, v, c) { var o = { label: label, on: !!on, act: { a: 
 
 // \u2500\u2500 \uba38\ub9ac\uc904 \u2500\u2500
 function mapHead(f) {
-  var head = [{ t: 'chips', pad: [14, 8, 14, 6], gap: 8, h: 32, onc: 'gold', onfg: '#121214',
-    items: [mapChip('\ubc84\uc2a4', f.mode === 'bus', 'm:bus'), mapChip('\uc9c0\ud558\ucca0', f.mode === 'subway', 'm:subway')] }];
+  var head = [{ t: 'btog', v: 'u', h: 42, pad: [0, 0, 0, 0], items: [      // \uc6f9 .map-inner-tabs: \ubc11\uc904 \ud0ed
+    { label: '\ud83d\ude8c \ubc84\uc2a4', on: f.mode === 'bus', act: { a: 'cat', v: 'm:bus' } },
+    { label: '\ud83d\ude87 \uc9c0\ud558\ucca0', on: f.mode === 'subway', act: { a: 'cat', v: 'm:subway' } }] }];
   if (f.mode === 'subway') {
     head.push({ t: 'chips', pad: [14, 0, 14, 6], gap: 6, h: 28, onc: 'gold', onfg: '#121214',
       items: MAP_REGIONS.map(function (r) { return mapChip(r[1], f.reg === r[0], 'r:' + r[0]); }) });
@@ -18938,11 +18939,11 @@ function mapScreen(inp, factsIn, dataIn) {
     var head = mapHead(f);
     return mapFinish({ ok: true, v: 1, screen: 'map', cover: 'tab', head: head, body: [], info: info }, 'h');
   }
-  var body;
+  var body, bhead = [];
   if (f.mode === 'subway' && f.reg === 'seoul') { body = [{ t: 'spacer', h: 1 }]; info.view = 'metro'; }
   else if (f.mode === 'subway') { body = mapRegionBody(f, ctx); info.view = 'list'; info.rs = ctx.regionStns || []; }
-  else { body = mapBusBody(f, info); info.view = 'bus'; }
-  return mapFinish({ ok: true, v: 1, screen: 'map', cover: 'tab', head: [], body: body, info: info }, 'b' + f.mode + f.reg);
+  else { var bb = mapBusBody(f, info); body = bb.body; bhead = bb.head; info.view = 'bus'; }
+  return mapFinish({ ok: true, v: 1, screen: 'map', cover: 'tab', head: bhead, body: body, info: info }, 'b' + f.mode + f.reg);
 }
 // \u2500\u2500 \ubc84\uc2a4: \uadfc\ucc98 \uc815\ub958\uc7a5 + \ub3c4\ucc29\uc815\ubcf4(\uc6f9 loadMapNearStops / _fetchNearStops / _renderBusStop \uc758 \uaddc\uce59) \u2500\u2500
 // \uc5d4\uc9c4\uc740 "\uc5b4\ub290 \uc8fc\uc18c\ub97c \ubc1b\uc544 \uc640\ub77c(need)" \ub9cc \ub9d0\ud558\uace0, \uc571\uc740 \uadf8 \uc8fc\uc18c\uc758 \ubcf8\ubb38\uc744 \uadf8\ub300\ub85c res \uc5d0 \ub123\uc5b4 \ub2e4\uc2dc \ubcf4\ub0b8\ub2e4. \ud574\uc11d\uc740 \ubaa8\ub450 \uc5ec\uae30\uc11c \ud55c\ub2e4.
@@ -19127,74 +19128,141 @@ function mapTagoArr(text) {
              cong: parseInt(a.congestion || a.congestionCase || 0, 10) || 0, low: /\uc800\uc0c1/.test(String(a.vehicletp || '')), dir: '' };
   }).filter(function (r) { return r.no && r.sec > 0; });
 }
-function mapArrFmt(sec) { if (!sec || sec <= 1) return '\uace7 \ub3c4\ucc29'; if (sec < 60) return sec + '\ucd08'; var m = Math.round(sec / 60); return m <= 1 ? '\uace7 \ub3c4\ucc29' : m + '\ubd84'; }
-function mapRouteColor(no) {
+function mapCdFmt(sec) {                                           // \uc6f9 _busFmtCd: \uace7 \ub3c4\ucc29 \u00b7 N\ucd08 \u00b7 M\ubd84 SS\ucd08
+  sec = Math.round(Number(sec));
+  if (!isFinite(sec) || sec <= 0) return '\uace7 \ub3c4\ucc29';
+  if (sec < 60) return sec + '\ucd08';
+  var m = Math.floor(sec / 60), r = sec % 60;
+  return m + '\ubd84 ' + (r < 10 ? '0' : '') + r + '\ucd08';
+}
+function mapRouteColor(no) {                                       // \uc6f9 _busNumClass \uc758 \uc0c9: \uad11\uc5ed(<100) \ube68\uac15 \u00b7 \uac04\uc120(<200) \ud30c\ub791 \u00b7 \uc9c0\uc120(<500) \ucd08\ub85d \u00b7 \uc21c\ud658(<1000) \ubcf4\ub77c \u00b7 \uadf8 \ubc16 \ud68c\uc0c9
   var n = String(no || '');
-  if (/^[0-9]+$/.test(n)) { var v = parseInt(n, 10); if (v < 100) return '#d9433a'; if (v < 200) return '#2f6fdb'; if (v < 500) return '#2e9e5b'; if (v < 1000) return '#e0a020'; }
-  return '#7a7f8c';
+  if (/^[0-9]+$/.test(n)) { var v = parseInt(n, 10); if (v < 100) return '#e74c3c'; if (v < 200) return '#0066FF'; if (v < 500) return '#00b341'; if (v < 1000) return '#9b59b6'; }
+  return '#7f8c8d';
 }
 function mapDistFmt(m) { m = Math.round(m || 0); return m >= 1000 ? (m / 1000).toFixed(1) + 'km' : m + 'm'; }
-function mapBusStopView(s, rows, num, pi) {
-  var kids = [{ t: 'text', s: (num ? num + '. ' : '') + s.nm + '  ' + mapDistFmt(s.dist) + (s.no || s.ars ? '  \u00b7  ' + (s.no || s.ars) : ''), size: 14, bold: true, color: 'text', pad: [12, 14, 6, 2] }];
-  if (isFinite(s.la) && isFinite(s.lo)) {                          // \uc6f9 _busShowMap(\uc815\ub958\uc7a5 \uc704\uce58 \uc9c0\ub3c4) \ub300\uc2e0 \uc678\ubd80 \uc9c0\ub3c4 \uc571\uc73c\ub85c \u2014 \uc704\uce58 \ubcf4\uae30 \u00b7 \uae38\ucc3e\uae30
-    var en = encodeURIComponent(s.nm || '\uc815\ub958\uc7a5');
-    kids.push({ t: 'row', pad: [0, 14, 4, 14], gap: 8, kids: [
-      { t: 'button', s: '\uc704\uce58 \ubcf4\uae30', size: 12, h: 34, r: 9, bold: true, fill: 'card2', line: 'border', tc: 'sub', act: pi >= 0 ? { a: 'call', v: 'mp.f' + pi } : { a: 'open', url: 'https://map.kakao.com/link/map/' + en + ',' + s.la + ',' + s.lo } },
-      { t: 'button', s: '\uae38\ucc3e\uae30', size: 12, h: 34, r: 9, bold: true, fill: 'card2', line: 'border', tc: 'sub', act: { a: 'open', url: 'https://map.kakao.com/link/to/' + en + ',' + s.la + ',' + s.lo } }] });
-  }
+
+// \u2500\u2500 \uc6f9 mapBusPanel: [\uc8fc\ubcc0 \uc815\ub958\uc7a5][\uc990\uaca8\ucc3e\uae30][\uc0c8\ub85c\uace0\uce68] \ud1a0\uae00 \u2192 \uace0\uc815 \uc9c0\ub3c4(\uc8fc\ubcc0\ub9cc) \u2192 \uc815\ub958\uc7a5 \uce74\ub4dc \u2500\u2500
+var MAP_FAV_MAX = 12, MAP_ALIAS_MAX = 10, MAP_SRCS = ['topis', 'gbis', 'tago', 'd1'];
+function mapStopKeep(s) {                                          // \uc990\uaca8\ucc3e\uae30\ub85c \uc800\uc7a5\ud574\ub3c4 \ub3c4\ucc29\uc815\ubcf4\ub97c \ub2e4\uc2dc \ubb3c\uc744 \uc218 \uc788\ub294 \ucd5c\uc18c \uac12
+  var o = { nm: mapStr(s.nm, 40), id: mapStr(s.id, 40), src: s.src, la: Number(s.la), lo: Number(s.lo) };
+  ['ars', 'sid', 'no', 'city'].forEach(function (k) { if (s[k]) o[k] = mapStr(s[k], 30); });
+  return o;
+}
+function mapBusFavs(b) {
+  var out = [], seen = {};
+  (b && Array.isArray(b.fav) ? b.fav : []).forEach(function (s) {
+    if (!s || typeof s !== 'object' || out.length >= MAP_FAV_MAX) return;
+    var id = mapStr(s.id, 40), nm = mapStr(s.nm, 40);
+    if (!id || !nm || seen[id] || MAP_SRCS.indexOf(s.src) < 0) return;
+    seen[id] = 1;
+    var o = { nm: nm, id: id, src: s.src, la: Number(s.la), lo: Number(s.lo) };
+    ['ars', 'sid', 'no', 'city'].forEach(function (k) { if (s[k]) o[k] = mapStr(s[k], 30); });
+    out.push(o);
+  });
+  return out;
+}
+function mapBusAliases(b) {
+  var out = {};
+  if (b && b.al && typeof b.al === 'object' && !Array.isArray(b.al)) Object.keys(b.al).slice(0, 60).forEach(function (k) { var v = mapStr(b.al[k], MAP_ALIAS_MAX).trim(); if (v) out[mapStr(k, 40)] = v; });
+  return out;
+}
+function mapBusToggle(vw) {
+  return { t: 'btog', v: 'p', pad: [10, 12, 10, 12], h: 38, items: [
+    { label: '\ud83d\udccd \uc8fc\ubcc0 \uc815\ub958\uc7a5', on: vw === 'near', act: { a: 'call', v: 'mp.vw.near' } },
+    { label: '\u2b50 \uc990\uaca8\ucc3e\uae30', on: vw === 'fav', act: { a: 'call', v: 'mp.vw.fav' } }],
+    rf: { label: '\ud83d\udd04', act: { a: 'call', v: 'mp.rf' } } };
+}
+function mapBusRows(rows) {                                        // \ub178\uc120+\ubc29\uba74\ub9c8\ub2e4 \ud55c \uc904: \ub178\uc120 \ubc88\ud638 \u00b7 \u2192 \ubc29\uba74 \u00b7 \uccab \ub3c4\ucc29(+\ub458\uc9f8 \ub3c4\ucc29)
   var by = {}, order = [];
   rows.forEach(function (r) { var k = r.no + '|' + r.dir; if (!by[k]) { by[k] = []; order.push(k); } by[k].push(r); });
   order.forEach(function (k) { by[k].sort(function (a, b) { return a.sec - b.sec; }); });
   order.sort(function (a, b) { return by[a][0].sec - by[b][0].sec; });
-  if (!order.length) kids.push({ t: 'text', s: '\ub3c4\ucc29 \uc815\ubcf4 \uc5c6\uc74c', size: 12, color: 'sub', pad: [2, 14, 6, 6] });
-  order.slice(0, 8).forEach(function (k) {
-    var g = by[k], r = g[0], cg = ['', '\uc5ec\uc720', '\ubcf4\ud1b5', '\ud63c\uc7a1', '\ub9e4\uc6b0\ud63c\uc7a1'][r.cong] || '';
-    var s1 = r.no, hl = [[0, s1.length, mapRouteColor(r.no)]];
-    var txt = s1 + (r.tp ? ' ' + r.tp : '') + '  ' + mapArrFmt(r.sec) + (r.prev > 0 ? ' \u00b7 ' + r.prev + '\ubc88\uc9f8 \uc804' : '') + (cg ? ' \u00b7 ' + cg : '') + (r.low ? ' \u00b7 \uc800\uc0c1' : '');
-    if (g[1]) txt += '\n' + ' '.repeat(s1.length + (r.tp ? r.tp.length + 1 : 0) + 2) + mapArrFmt(g[1].sec) + (g[1].prev > 0 ? ' \u00b7 ' + g[1].prev + '\ubc88\uc9f8 \uc804' : '');
-    if (r.dir) txt += '\n' + r.dir + ' \ubc29\uba74';
-    kids.push({ t: 'box', s: txt, hl: hl, size: 13, lh: 1.5, color: 'text', fill: 'card2', line: 'border', r: 9, ip: [10, 7, 10, 7], pad: [0, 14, 4, 14] });
+  return order.slice(0, 20).map(function (k) {
+    var g = by[k], r = g[0];
+    var arr = g.slice(0, 2).map(function (x) { var o = { s: x.sec <= 1 ? '\uace7 \ub3c4\ucc29' : mapCdFmt(x.sec), sec: Math.round(x.sec) }; if (x.prev > 0) o.p = x.prev + '\ubc88\uc9f8\uc804'; if (x.sec <= 60) o.soon = 1; return o; });
+    var row = { no: r.no, c: mapRouteColor(r.no), a: arr, bell: 1 };
+    if (r.dir) row.dir = '\u2192 ' + r.dir + '\ubc29\ud5a5';
+    return row;
   });
-  return kids;
 }
-// \uc815\ub958\uc7a5 \ubc29\uc2dd \uc704\ucabd \uc9c0\ub3c4 \uce78(\ud540\uc740 \uc5d4\uc9c4\uc774 \uc815\ud55c\ub2e4). \ubc1b\ub294 \uc911\uc5d0\ub3c4 \ub0b4 \uc704\uce58 \u00b7 \ucc3e\uc740 \uc815\ub958\uc7a5\uc73c\ub85c \uba3c\uc800 \ubcf4\uc5ec \uc900\ub2e4 \u2014 \ub3c4\ucc29\uc815\ubcf4\ub97c \uae30\ub2e4\ub9ac\ub290\ub77c \uc9c0\ub3c4\uac00 \ub2a6\uac8c \ub728\uc9c0 \uc54a\uac8c.
-function mapBusTmap(pts) { return { t: 'tmap', h: 210, r: 12, pad: [8, 12, 2, 12], pts: pts, act: { a: 'call', v: 'mp.all' } }; }
+function mapBusCard(s, o) {
+  var c = { t: 'bcard', k: s.id, nm: s.nm, mode: o.mode, on: !!o.on, pad: [12, 12, 0, 12], act: { a: 'call', v: 'mp.pc.' + o.i, id: s.id }, edit: { a: 'call', v: 'mp.al.' + o.i } };
+  if (o.n) c.n = String(o.n);
+  if (o.alias) c.al = o.alias;
+  if (o.mode === 'near') { c.dist = mapDistFmt(s.dist); c.fv = o.fav ? 1 : 0; c.star = { a: 'call', v: 'mp.fv.' + o.i }; if (o.pi >= 0) c.pi = o.pi; }
+  else {
+    c.star = { a: 'call', v: 'mp.fv.' + o.i };                      // \uc990\uaca8\ucc3e\uae30 \ud654\uba74\uc758 \u00d7 (\uc81c\uac70)
+    if (isFinite(s.la) && isFinite(s.lo)) c.map = { a: 'open', url: 'https://map.kakao.com/link/map/' + encodeURIComponent(s.nm || '\uc815\ub958\uc7a5') + ',' + s.la + ',' + s.lo };
+  }
+  if (o.rows === null) c.ld = '\ub3c4\ucc29 \uc815\ubcf4 \ubd88\ub7ec\uc624\ub294 \uc911...';
+  else if (!o.rows.length) c.em = '\ub3c4\ucc29\uc815\ubcf4 \uc5c6\uc74c';
+  else c.rows = o.rows;
+  return c;
+}
+function mapBusArrView(s, res, key) {
+  var txt = String(res[key] || '');
+  var rows = s.src === 'topis' ? mapSeoulArr(txt) : s.src === 'gbis' ? mapGbisArr(txt) : mapTagoArr(txt);
+  return mapBusRows(rows);
+}
+function mapBusTmap(pts, foc) {                                    // \uace0\uc815 \uc9c0\ub3c4: \ub04c\uae30\u00b7\ub450 \uc190\uac00\ub77d \ud655\ub300\u00b7\u00b1 \ub2e8\ucd94\u00b7\ud540 \ub204\ub984\uc740 \uc571, \ud540\u00b7\uc120\ud0dd\uc740 \uc5d4\uc9c4
+  return { t: 'tmap', h: 180, r: 0, pad: [0, 0, 0, 0], pts: pts, live: 1, foc: foc, bl: 1, hint: '\uc22b\uc790\ub97c \ub204\ub974\uba74 \uc544\ub798 \uc815\ub958\uc7a5\uc73c\ub85c \uc774\ub3d9\ud574\uc694' };
+}
 function mapBusBody(f, info) {
-  var b = f.bus;
+  var b = f.bus, vw = (b && b.vw === 'fav') ? 'fav' : 'near', al = mapBusAliases(b), sel = (b && isFinite(Number(b.sel))) ? Math.floor(Number(b.sel)) : -1;
+  var head = [mapBusToggle(vw)], note = function (s) { return { t: 'text', s: s, size: 13, color: 'sub', align: 'center', lh: 1.7, pad: [28, 20, 20, 20] }; };
+  if (vw === 'fav') {
+    var favs = mapBusFavs(b), fres = (b && b.res && typeof b.res === 'object') ? b.res : {};
+    info.bus = { st: 'ok', vw: 'fav', n: favs.length }; info.stops = favs.map(mapStopKeep);
+    if (!favs.length) return { head: head, body: [
+      { t: 'text', s: '\u2b50', size: 34, align: 'center', color: 'sub', pad: [44, 20, 6, 20] },
+      { t: 'text', s: '\uc990\uaca8\ucc3e\uae30\ud55c \uc815\ub958\uc7a5\uc774 \uc5c6\uc2b5\ub2c8\ub2e4', size: 14, bold: true, color: 'text', align: 'center', pad: [0, 20, 6, 20] },
+      { t: 'text', s: '\uc8fc\ubcc0 \uc815\ub958\uc7a5\uc5d0\uc11c \ubcc4(\u2606)\uc744 \ub20c\ub7ec\n\uc6d0\ud558\ub294 \uc815\ub958\uc7a5\uc744 \ucd94\uac00\ud558\uc138\uc694', size: 12, color: 'sub', lh: 1.7, align: 'center', pad: [0, 20, 14, 20] },
+      { t: 'button', s: '\uc8fc\ubcc0 \uc815\ub958\uc7a5 \ubcf4\uae30', size: 13, h: 42, r: 12, bold: true, fill: 'gold', line: 'none', tc: '#121214', pad: [4, 80, 8, 80], act: { a: 'call', v: 'mp.vw.near' } }] };
+    var pend = favs.some(function (s, i) { return fres['f' + i] === undefined; });
+    if (pend) info.bus = { st: 'need', vw: 'fav', need: favs.map(function (s, i) { return { k: 'f' + i, url: mapBusArrUrl(s) }; }) };
+    var fb = [{ t: 'text', s: '\u2b50 \uc990\uaca8\ucc3e\uae30 ' + favs.length + '\uac1c \u00b7 30\ucd08\ub9c8\ub2e4 \uc790\ub3d9 \uac31\uc2e0', size: 12, color: 'sub', pad: [10, 12, 0, 12] }];
+    favs.forEach(function (s, i) { fb.push(mapBusCard(s, { mode: 'fav', i: i, alias: al[s.id], rows: pend ? null : mapBusArrView(s, fres, 'f' + i) })); });
+    fb.push({ t: 'spacer', h: 16 });
+    return { head: head, body: fb };
+  }
   if (!b || !isFinite(Number(b.lat)) || !isFinite(Number(b.lng))) {
-    info.bus = { st: 'noloc' };
-    return [{ t: 'text', s: '\ub0b4 \uc8fc\ubcc0 \uc815\ub958\uc7a5 \ub3c4\ucc29\uc815\ubcf4', size: 16, bold: true, color: 'gold', align: 'center', pad: [28, 24, 6, 24] },
+    info.bus = { st: 'noloc', vw: 'near' };
+    return { head: head, body: [{ t: 'text', s: '\ub0b4 \uc8fc\ubcc0 \uc815\ub958\uc7a5 \ub3c4\ucc29\uc815\ubcf4', size: 16, bold: true, color: 'gold', align: 'center', pad: [28, 24, 6, 24] },
             { t: 'text', s: '\uc704 \u2018\ub0b4 \uc704\uce58\u2019 \ub97c \ub204\ub974\uba74\n\uac00\uae4c\uc6b4 \uc815\ub958\uc7a5\uacfc \ubc84\uc2a4 \ub3c4\ucc29 \uc2dc\uac04\uc744 \ubcf4\uc5ec\ub4dc\ub824\uc694.', size: 13, color: 'sub', lh: 1.8, align: 'center', pad: [4, 30, 10, 30] },
-            { t: 'button', s: '\ub0b4 \uc704\uce58\ub85c \ucc3e\uae30', size: 14, h: 46, r: 12, bold: true, fill: 'gold', line: 'none', tc: '#121214', pad: [8, 60, 8, 60], act: { a: 'call', v: 'mp.loc' } }];
+            { t: 'button', s: '\ub0b4 \uc704\uce58\ub85c \ucc3e\uae30', size: 14, h: 46, r: 12, bold: true, fill: 'gold', line: 'none', tc: '#121214', pad: [8, 60, 8, 60], act: { a: 'call', v: 'mp.loc' } }] };
   }
   var la = Number(b.lat), lo = Number(b.lng), res = (b.res && typeof b.res === 'object') ? b.res : {};
   var need0 = mapBusNeedStops(la, lo);
   var mine = { la: la, lo: lo, k: 'm', n: '', l: '\ub0b4 \uc704\uce58' };
-  if (need0.some(function (n) { return res[n.k] === undefined; })) { info.bus = { st: 'need', need: need0 }; return [mapBusTmap([mine]), { t: 'text', s: '\uc8fc\ubcc0 \uc815\ub958\uc7a5 \ucc3e\ub294 \uc911...', size: 13, color: 'sub', align: 'center', pad: [20, 20, 20, 20] }]; }
+  var wait = function (txt) { return { head: head.concat([mapBusTmap([mine], -1)]), body: [note(txt)] }; };
+  if (need0.some(function (n) { return res[n.k] === undefined; })) { info.bus = { st: 'need', vw: 'near', need: need0 }; return wait('\uc8fc\ubcc0 \uc815\ub958\uc7a5 \ucc3e\ub294 \uc911...'); }
   var stops = mapBusStops(f);
   if (!stops.length && res.d1 === undefined) {                                           // \uacf5\uacf5 API \uac00 \ubaa8\ub450 \ube44\uc5c8\uc73c\uba74 \uc11c\ubc84 \uc815\ub958\uc7a5 \ud45c(D1)\ub85c
-    info.bus = { st: 'need', need: [{ k: 'd1', url: MAP_D1_BASE + '/bus-stops?lat=' + la + '&lng=' + lo + '&radius=800' }] };
-    return [mapBusTmap([mine]), { t: 'text', s: '\uc8fc\ubcc0 \uc815\ub958\uc7a5 \ucc3e\ub294 \uc911...', size: 13, color: 'sub', align: 'center', pad: [20, 20, 20, 20] }];
+    info.bus = { st: 'need', vw: 'near', need: [{ k: 'd1', url: MAP_D1_BASE + '/bus-stops?lat=' + la + '&lng=' + lo + '&radius=800' }] };
+    return wait('\uc8fc\ubcc0 \uc815\ub958\uc7a5 \ucc3e\ub294 \uc911...');
   }
-  if (!stops.length) { info.bus = { st: 'empty' }; return [mapBusTmap([mine]), { t: 'text', s: '\uc8fc\ubcc0 800m \uc548\uc5d0 \uc815\ub958\uc7a5\uc744 \ucc3e\uc9c0 \ubabb\ud588\uc5b4\uc694.', size: 13, color: 'sub', align: 'center', lh: 1.7, pad: [20, 20, 20, 20] }]; }
-  // \uc815\ub958\uc7a5 \uc9c0\ub3c4: \uc815\ub958\uc7a5\ub9c8\ub2e4 \ubc88\ud638 \ud540(\uc88c\ud45c\uac00 \uc788\ub294 \uac83\ub9cc) + \ub0b4 \uc704\uce58. \ud540 \uc21c\uc11c = pts \uc21c\uc11c, '\uc704\uce58 \ubcf4\uae30' \ub294 \uadf8 \ud540\uc744 \uac00\uc6b4\ub370 \ub450\uace0 \ud06c\uac8c \uc5f0\ub2e4.
-  var pts = [], pidx = [];
+  if (!stops.length) { info.bus = { st: 'empty', vw: 'near' }; return wait('\uc8fc\ubcc0 800m \uc548\uc5d0 \uc815\ub958\uc7a5\uc744 \ucc3e\uc9c0 \ubabb\ud588\uc5b4\uc694.'); }
+  // \uc815\ub958\uc7a5 \uc9c0\ub3c4: \uc815\ub958\uc7a5\ub9c8\ub2e4 \ubc88\ud638 \ud540(\uc88c\ud45c\uac00 \uc788\ub294 \uac83\ub9cc) + \ub0b4 \uc704\uce58. \ud540\uc744 \ub204\ub974\uba74 \uadf8 \uce74\ub4dc(g)\ub85c, \uce74\ub4dc\ub97c \ub204\ub974\uba74 \uadf8 \ud540(pi)\uc73c\ub85c \uac04\ub2e4.
+  var pts = [], pidx = [], favSet = {};
+  mapBusFavs(b).forEach(function (s) { favSet[s.id] = 1; });
   stops.forEach(function (s, i) {
     var sla = Number(s.la), slo = Number(s.lo);
-    if (isFinite(sla) && isFinite(slo) && (sla !== 0 || slo !== 0)) { pidx[i] = pts.length; pts.push({ la: sla, lo: slo, k: 's', n: String(i + 1), l: s.nm || '\uc815\ub958\uc7a5' }); } else pidx[i] = -1;
+    if (isFinite(sla) && isFinite(slo) && (sla !== 0 || slo !== 0)) { pidx[i] = pts.length; pts.push({ la: sla, lo: slo, k: 's', n: String(i + 1), l: s.nm || '\uc815\ub958\uc7a5', v: 'mp.pm.' + i, g: s.id }); } else pidx[i] = -1;
   });
-  pts.push({ la: la, lo: lo, k: 'm', n: '', l: '\ub0b4 \uc704\uce58' });
-  if (res.a0 === undefined) { info.bus = { st: 'need', need: stops.map(function (s, i) { return { k: 'a' + i, url: mapBusArrUrl(s) }; }) }; return [mapBusTmap(pts), { t: 'text', s: '\ub0b4 \uc8fc\ubcc0 \uc815\ub958\uc7a5 ' + stops.length + '\uacf3', size: 12, color: 'sub', pad: [10, 14, 0, 4] }, { t: 'text', s: '\ub3c4\ucc29\uc815\ubcf4 \uac00\uc838\uc624\ub294 \uc911...', size: 13, color: 'sub', align: 'center', pad: [20, 20, 20, 20] }]; }
-  var body = [mapBusTmap(pts),
-              { t: 'text', s: '\ub0b4 \uc8fc\ubcc0 \uc815\ub958\uc7a5 ' + stops.length + '\uacf3', size: 12, color: 'sub', pad: [10, 14, 0, 4] }];
+  pts.push(mine);
+  info.stops = stops.map(mapStopKeep);
+  var foc = (sel >= 0 && sel < stops.length) ? pidx[sel] : -1;
+  head.push(mapBusTmap(pts, foc));
+  var pending = res.a0 === undefined;
+  if (pending) info.bus = { st: 'need', vw: 'near', need: stops.map(function (s, i) { return { k: 'a' + i, url: mapBusArrUrl(s) }; }) };
+  else info.bus = { st: 'ok', vw: 'near', n: stops.length };
+  var body = [];
   stops.forEach(function (s, i) {
-    var txt = String(res['a' + i] || ''), rows = s.src === 'topis' ? mapSeoulArr(txt) : s.src === 'gbis' ? mapGbisArr(txt) : mapTagoArr(txt);
-    mapBusStopView(s, rows, i + 1, pidx[i]).forEach(function (n) { body.push(n); });
+    body.push(mapBusCard(s, { mode: 'near', i: i, n: i + 1, alias: al[s.id], fav: !!favSet[s.id], pi: pidx[i], on: i === sel, rows: pending ? null : mapBusArrView(s, res, 'a' + i) }));
   });
-  body.push({ t: 'button', s: '\ub0b4 \uc704\uce58\ub85c \ub2e4\uc2dc \ucc3e\uae30', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: '', pad: [10, 60, 4, 60], act: { a: 'call', v: 'mp.loc' } });
-  body.push({ t: 'text', s: '\ub3c4\ucc29 \uc2dc\uac04\uc740 \uc2e4\uc2dc\uac04 \uc815\ubcf4\ub77c \uc870\uae08\uc529 \ub2ec\ub77c\uc9c8 \uc218 \uc788\uc5b4\uc694.', size: 11, color: 'sub', align: 'center', pad: [6, 16, 16, 16] });
-  info.bus = { st: 'ok', n: stops.length };
-  return body;
+  body.push({ t: 'text', s: '\ub3c4\ucc29 \uc2dc\uac04\uc740 \uc2e4\uc2dc\uac04 \uc815\ubcf4\ub77c \uc870\uae08\uc529 \ub2ec\ub77c\uc9c8 \uc218 \uc788\uc5b4\uc694.', size: 11, color: 'sub', align: 'center', pad: [10, 16, 18, 16] });
+  return { head: head, body: body };
 }
 // \uc9c0\ub3c4 \ud0ed \ud654\uba74 \uc5d4\uc9c4 Worker \uc5f0\uacb0\ubd80 \u2014 POST /screen/map (engine/map.js \uc758 mapScreen \uc744 \ubd80\ub978\ub2e4). route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/screen/map") return handleScreenMap(request);` \ub97c \ub123\ub294\ub2e4.
 //   \ubcf8\ubb38(JSON \uae00, Content-Type: text/plain): { cap(18 \uc774\uc0c1), f:{ part:'h'|'b'|'stn'|'tt', mode, reg, flt, th, stn, sl, q, gps, tt, bus } }

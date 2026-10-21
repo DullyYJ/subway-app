@@ -690,7 +690,7 @@ public class ShellJvmTest {
         ok(!mc.addTt("zzz", mc.ttSeq) && "fail".equals(mc.ttState), "깨진 응답은 실패");
         // 버스: 위치 → 엔진이 받아 오라는 주소 → 본문을 그대로 res 로
         mc.cat("m:bus");
-        ok(mc.act("mp.loc", null) == MapCore.R_BUS_LOC && !mc.bodyRequest(18, "dark").contains("\"bus\":{"), "버스 모드의 내 위치는 정류장 찾기 · 위치 전엔 bus 없음");
+        ok(mc.act("mp.loc", null) == MapCore.R_BUS_LOC && mc.bodyRequest(18, "dark").contains("\"bus\":{\"vw\":\"near\"") && !mc.bodyRequest(18, "dark").contains("\"lat\""), "버스 모드의 내 위치는 정류장 찾기 · 위치 전엔 lat/lng 없음(토글·즐겨찾기 값만)");
         mc.setBusLoc(37.5, 127.0);
         mc.onScreen("{\"info\":{\"view\":\"bus\",\"bus\":{\"st\":\"need\",\"need\":[{\"k\":\"tp\",\"url\":\"http://ws.bus.go.kr/api/rest/stationinfo/getStationByPos?tmX=127\"},{\"k\":\"tn\",\"url\":\"https://evil.example/x\"}]}}}");
         ok(mc.busNeed.size() == 2 && "tp".equals(mc.busNeed.get(0)[0]), "엔진이 준 주소 목록 읽기");
@@ -700,8 +700,30 @@ public class ShellJvmTest {
             && MapCore.busFetchUrl(ShellCore.NEWS_BASE + "/bus-stops?lat=1&x=<script>").isEmpty() && MapCore.busFetchUrl(ShellCore.NEWS_BASE + "/other?x=1").isEmpty() && MapCore.busFetchUrl("https://evil.example/bus-stops?lat=1").isEmpty(), "경기 GBIS 주소는 프록시로, 서버 정류장 표(D1)는 직접, 그 밖은 막는다");
         mc.addBusRes("tp", "<a/>"); mc.addBusRes("BAD KEY", "x");
         String bq2 = mc.bodyRequest(18, "dark");
-        ok(bq2.contains("\"bus\":{\"lat\":37.5,\"lng\":127.0,\"res\":{\"tp\":\"<a/>\"}}") && !bq2.contains("BAD"), "받은 본문을 res 로 다시 보낸다");
+        ok(bq2.contains("\"lat\":37.5,\"lng\":127.0,\"res\":{\"tp\":\"<a/>\"}}") && bq2.contains("\"fav\":[]") && bq2.contains("\"al\":{}") && !bq2.contains("BAD"), "받은 본문을 res 로 다시 보낸다(+ 즐겨찾기·별명 값)");
         mc.setBusLoc(37.4, 127.1); ok(!mc.bodyRequest(18, "dark").contains("\"tp\""), "위치를 다시 잡으면 이전 본문은 비운다");
+        // 버스: 주변/즐겨찾기 전환 · 선택 · 즐겨찾기(12곳) · 별명
+        {
+            ShellCore.MemStore bsv = new ShellCore.MemStore(); MapCore bm = new MapCore(bsv);
+            bm.setBusLoc(37.5, 127.0);
+            bm.onScreen("{\"info\":{\"view\":\"bus\",\"stops\":[{\"nm\":\"가\",\"id\":\"SEOUL:1\",\"src\":\"topis\",\"la\":37.5,\"lo\":127.0,\"ars\":\"1\"},{\"nm\":\"나\",\"id\":\"SEOUL:2\",\"src\":\"topis\",\"la\":37.6,\"lo\":127.1,\"ars\":\"2\"}],\"bus\":{\"st\":\"ok\"}}}");
+            ok(bm.stopJson.size() == 2 && bm.busView().equals("near"), "info.stops 를 읽어 둔다 · 처음은 주변");
+            ok(bm.act("mp.pc.1", null) == MapCore.R_BUS_SEL && bm.busSel == 1 && bm.bodyRequest(18, "dark").contains("\"sel\":1") && bm.act("mp.pm.9", null) == MapCore.R_NONE && bm.busSel == 1, "카드·핀 누름 = 선택(범위 밖은 무시)");
+            ok(bm.act("mp.fv.0", null) == MapCore.R_BUS_SEL && "즐겨찾기 추가".equals(bm.toast) && bsv.get(MapCore.K_BUSFAV, "").contains("SEOUL:1") && bm.bodyRequest(18, "dark").contains("\"fav\":[{"), "별 → 즐겨찾기 추가(저장 + 요청에 실림)");
+            ok(bm.act("mp.fv.0", null) == MapCore.R_BUS_SEL && "즐겨찾기 해제".equals(bm.toast) && "[]".equals(bsv.get(MapCore.K_BUSFAV, "")), "다시 누르면 해제");
+            for (int i = 0; i < 12; i++) { bm.stopJson.clear(); bm.stopJson.add("{\"nm\":\"s" + i + "\",\"id\":\"SEOUL:" + (10 + i) + "\",\"src\":\"topis\"}"); bm.act("mp.fv.0", null); }
+            bm.stopJson.clear(); bm.stopJson.add("{\"nm\":\"x\",\"id\":\"SEOUL:99\",\"src\":\"topis\"}");
+            ok(bm.act("mp.fv.0", null) == MapCore.R_NONE && "즐겨찾기는 최대 12개".equals(bm.toast) && !bsv.get(MapCore.K_BUSFAV, "").contains("SEOUL:99"), "즐겨찾기는 12곳까지");
+            ok(bm.act("mp.vw.fav", null) == MapCore.R_BUS_VIEW && bm.busView().equals("fav") && ShellCore.mapKey("mapb", "bus", bsv).endsWith("|fav") && ShellCore.mapKey("maph", "bus", bsv).endsWith("|ALL") && bm.act("mp.vw.fav", null) == MapCore.R_NONE, "즐겨찾기로 전환(캐시 열쇠도 따로 · 머리는 그대로)");
+            ok(bm.act("mp.rf", null) == MapCore.R_BUS_REF && bm.bodyRequest(18, "dark").contains("\"vw\":\"fav\"") && bm.act("mp.vw.near", null) == MapCore.R_BUS_VIEW && bm.act("mp.rf", null) == MapCore.R_BUS_LOC, "새로고침: 즐겨찾기는 도착정보만 · 주변은 위치부터");
+            bm.stopJson.clear(); bm.stopJson.add("{\"nm\":\"한진\",\"id\":\"SEOUL:5\",\"src\":\"topis\"}");
+            ok(bm.act("mp.al.0", null) == MapCore.R_ALIAS && "SEOUL:5".equals(bm.aliasKey) && "한진".equals(bm.aliasName) && bm.aliasCur.isEmpty(), "✏️ → 별명 입력창 값");
+            bm.setAlias("SEOUL:5", "  출근길  "); ok(bm.bodyRequest(18, "dark").contains("\"SEOUL:5\":\"출근길\"") && bm.act("mp.al.0", null) == MapCore.R_ALIAS && "출근길".equals(bm.aliasCur), "별명 저장(앞뒤 공백 제거) → 다음 요청에 실림");
+            bm.setAlias("SEOUL:5", "가나다라마바사아자차카"); ok(bsv.get(MapCore.K_BUSAL, "").contains("가나다라마바사아자차\""), "별명은 10자까지");
+            bm.setAlias("SEOUL:5", ""); ok(!bsv.get(MapCore.K_BUSAL, "").contains("SEOUL:5"), "빈 글이면 별명 삭제");
+            bsv.put(MapCore.K_BUSFAV, "깨짐"); bsv.put(MapCore.K_BUSAL, "깨짐"); ok(bm.bodyRequest(18, "dark").contains("\"fav\":[]") && bm.bodyRequest(18, "dark").contains("\"al\":{}"), "깨진 저장값은 비운 것으로 본다");
+            bm.setBusLoc(37.4, 127.1); ok(bm.busSel == -1, "위치를 다시 잡으면 선택을 푼다");
+        }
         // 결과 카드 보조: 장거리 다시 고르기 · 공지 원자료 · 즐겨찾기
         {
             HomeCore h2 = new HomeCore();

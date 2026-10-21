@@ -15,7 +15,7 @@ public final class TileMapCore {
     public static final double MIN_ZOOM = 2.0, MAX_ZOOM = 19.0, MAX_LAT = 85.0;
 
     /** 핀: k = s(정류장·장소) · m(내 위치) · f(고른 것), n = 핀 안 글자(번호), name = 이름. */
-    public static final class Pin { public double la, lo; public String k = "s", n = "", name = ""; }
+    public static final class Pin { public double la, lo; public String k = "s", n = "", name = "", v = "", g = ""; }   // v = 핀을 눌렀을 때 부를 행동 · g = 같이 움직일 카드의 열쇠(엔진이 정함)
 
     private static String clean(String s, int max) {
         if (s == null) return "";
@@ -28,9 +28,10 @@ public final class TileMapCore {
         return b.toString().trim();
     }
     /** 핀 하나를 글로("la,lo,k,n,name") — 화면 노드 값으로 쓴다. */
-    public static String encodePin(double la, double lo, String k, String n, String name) {
+    public static String encodePin(double la, double lo, String k, String n, String name) { return encodePin(la, lo, k, n, name, "", ""); }
+    public static String encodePin(double la, double lo, String k, String n, String name, String v, String g) {
         String kk = "m".equals(k) || "f".equals(k) ? k : "s";
-        return la + "," + lo + "," + kk + "," + clean(n, 4) + "," + clean(name, 24);
+        return la + "," + lo + "," + kk + "," + clean(n, 4) + "," + clean(name, 24) + "," + clean(v, 40) + "," + clean(g, 40);
     }
     /** encodePin 들을 '|' 로 이은 글을 핀 목록으로. 모양이 이상한 줄은 건너뛴다. */
     public static List<Pin> parsePins(String enc) {
@@ -44,7 +45,7 @@ public final class TileMapCore {
                 p.la = Double.parseDouble(f[0]); p.lo = Double.parseDouble(f[1]);
                 if (!(Math.abs(p.la) <= MAX_LAT) || !(Math.abs(p.lo) <= 180.0) || (p.la == 0.0 && p.lo == 0.0)) continue;
                 p.k = "m".equals(f[2]) || "f".equals(f[2]) ? f[2] : "s";
-                p.n = f.length > 3 ? f[3] : ""; p.name = f.length > 4 ? f[4] : "";
+                p.n = f.length > 3 ? f[3] : ""; p.name = f.length > 4 ? f[4] : ""; p.v = f.length > 5 ? f[5] : ""; p.g = f.length > 6 ? f[6] : "";
                 out.add(p);
                 if (out.size() >= MAX_PINS) break;
             } catch (NumberFormatException e) { /* 건너뜀 */ }

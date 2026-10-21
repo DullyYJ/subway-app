@@ -81,6 +81,15 @@ function findAndroidJar() {
     const od = sv.slice(sv.indexOf('protected void onDraw'));
     assert.ok(!/anchorKey\(/.test(od.slice(0, 3000)), '그리는 중엔 계산하지 않는다');
   });
+  await t('버스 탭: 30초 자동 새로고침은 지도 탭이 보일 때만 · 도착정보만 비우고 엔진이 다시 계산 · 앱은 시간표/도착 계산 없음', async () => {
+    const v = fs.readFileSync(N('ShellActivity.java'), 'utf8');
+    const mc = fs.readFileSync(N('MapCore.java'), 'utf8');
+    const bt = v.slice(v.indexOf('private final Runnable busTick'), v.indexOf('private void startBusTick'));
+    assert.ok(/30000L/.test(v.slice(v.indexOf('private void startBusTick'), v.indexOf('private void startBusTick') + 200)), '30초 간격');
+    assert.ok(/resumed/.test(bt) && /currentTab\(store\)/.test(bt) && /S_MAPB/.test(bt) && /dropArrivals\(\)/.test(bt) && /loadMapBody\(/.test(bt), '보일 때만 · 도착정보만 비우고 다시 묻는다');
+    assert.ok(/\[af\]\[0-9\]/.test(mc.slice(mc.indexOf('dropArrivals'))), '정류장 목록(tp·gg·tn·d1)은 남기고 도착정보(a·f)만 지운다');
+    assert.ok(/mp\.pm\./.test(v) || /mp\.pm/.test(mc), '핀·카드 선택 행동');
+  });
   await t('순수 네이티브 프로젝트: 소스는 native/shell 뿐 · 매니페스트에 ShellActivity 가 런처 · 웹뷰/Capacitor 흔적 없음', async () => {
     const g = fs.readFileSync(path.join(ROOT, 'shell-android', 'app', 'build.gradle'), 'utf8');
     assert.ok(/srcDirs = \['\.\.\/\.\.\/native\/shell'\]/.test(g), '소스 경로');

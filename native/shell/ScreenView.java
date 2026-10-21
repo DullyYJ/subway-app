@@ -200,6 +200,7 @@ public class ScreenView extends View {
         if (lay.ctrSig.length() == 0) ctrDone = null;
         else if (!lay.ctrSig.equals(ctrDone)) { ctrDone = lay.ctrSig; scrollX = lay.initScrollX; }      // 24시간 차트 내용이 새로 오면 지금 시각 막대를 가운데로
         clampScroll();
+        markBcards();
         syncFieldBases(lay.body); syncFieldBases(lay.foot);
         float ch = lay.headH + lay.bodyH + lay.footH;
         if (Math.abs(ch - lastCH) > 0.5f) { lastCH = ch; final float chf = ch; post(new Runnable() { @Override public void run() { if (listener != null) listener.onContentH(chf); } }); }
@@ -238,10 +239,12 @@ public class ScreenView extends View {
         if (vt == null) vt = VelocityTracker.obtain();
         vt.addMovement(e);
         float x = e.getX(), y = e.getY();
+        if (mode == 5 && e.getActionMasked() != MotionEvent.ACTION_DOWN) return tmTouch(e);          // 끌 수 있는 지도 위 손가락
         switch (e.getActionMasked()) {
             case MotionEvent.ACTION_DOWN: {
                 if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
-                flingY.forceFinished(true); flingX.forceFinished(true);
+                flingY.forceFinished(true); flingX.forceFinished(true); ssOn = false;
+                if (liveMapAt(x, y) != null && tmView != null) { mode = 5; pressed = null; tmDX = tmLX = x; tmDY = tmLY = y; tmDT = SystemClock.uptimeMillis(); tmMoved = false; tmScaling = false; tmSg.onTouchEvent(e); return true; }
                 downX = lastX = x; downY = lastY = y; downT = SystemClock.uptimeMillis();
                 inHead = y < lay.headH * dpr;
                 inChips = inHead && lay.chipsTop >= 0f && y >= lay.chipsTop * dpr && y < lay.chipsBot * dpr;
@@ -289,6 +292,8 @@ public class ScreenView extends View {
                         else if (pi.kind == ScreenCore.K_POSTH) toggleOpen(pi);
                         else if (pi.kind == ScreenCore.K_SUG && pi.act2 != null && x / dpr >= pi.btx - 6f) { blurInput(); listener.onAction(pi.act2); }
                         else if (pi.kind == ScreenCore.K_RHD) { blurInput(); listener.onAction(ScreenCore.Layout.rhdAct(pi, x / dpr)); }
+                        else if (pi.kind == ScreenCore.K_BCARD) tapBcard(pi, x / dpr, y / dpr - lay.headH + scrollY);
+                        else if (pi.kind == ScreenCore.K_BTOG) { blurInput(); pickBtog(pi); listener.onAction(a); }
                         else if (pi.kind == ScreenCore.K_TOGGLE) { blurInput(); pi.on = !pi.on; invalidate(); listener.onSet(a, pi.on); }     // 화면은 바로 뒤집는다(엔진 새 화면을 기다리지 않는다)
                         else { blurInput(); if (pi.kind == ScreenCore.K_CHIP && a != null && "cat".equals(a.a)) pickChip(pi); listener.onAction(a); }
                     }
@@ -317,6 +322,29 @@ public class ScreenView extends View {
         for (ScreenCore.Item it : lay.head) if (it.kind == ScreenCore.K_CHIP && it.y == pi.y) it.on = it == pi;
         for (ScreenCore.Item it : lay.body) if (it.kind == ScreenCore.K_CHIP && it.y == pi.y) it.on = it == pi;
         invalidate();
+    }
+
+    /** 토글 줄 단추를 누르면 새 화면이 오기 전에 먼저 그 단추를 켜 보인다(새로고침 단추는 제외). */
+    private void pickBtog(ScreenCore.Item pi) {
+        if (lay == null || "r".equals(pi.value)) return;
+        for (ScreenCore.Item it : lay.head) if (it.kind == ScreenCore.K_BTOG && !"r".equals(it.value) && it.sy == pi.sy) it.on = it == pi;
+        invalidate();
+    }
+    /** 정류장 카드를 눌렀다: ★/×/✏️/🗺️ 자리면 그 행동, 아니면 카드 — 카드는 바로 켜고 지도를 그 핀으로 옮긴 뒤 엔진에 알린다. */
+    private void tapBcard(ScreenCore.Item pi, float xdp, float ydp) {
+        blurInput();
+        ScreenCore.Act a = pi.act;
+        for (int z = 0; z < pi.za.length && z * 4 + 3 < pi.zs.length; z++) {
+            float zx = pi.zs[z * 4], zy = pi.zs[z * 4 + 1], zw = pi.zs[z * 4 + 2], zh = pi.zs[z * 4 + 3];
+            if (zw > 0f && pi.za[z] != null && xdp >= zx && xdp < zx + zw && ydp >= zy - 4f && ydp < zy + zh + 4f) {
+                if (z == 0 && "s".equals(pi.dk)) { pi.top = !pi.top; invalidate(); }       // 별은 바로 뒤집는다(엔진 새 화면이 오면 그걸로 덮어쓴다)
+                listener.onAction(pi.za[z]);
+                return;
+            }
+        }
+        focusCard(pi.key, false);
+        if (pi.ti >= 0 && pi.ti < tmPins.size() && tmView != null) { tmFocus = pi.ti; tmFocApplied = pi.ti; tmLabel = false; tmGoTo(tmPins.get(pi.ti).la, tmPins.get(pi.ti).lo, tmView.zoom); }
+        listener.onAction(a);
     }
 
     // ───────────── 캐릭터 장면(혼잡도 카드) — 엔진이 정한 값을 SceneCore 가 그린다. 여기는 크기·시계·손가락만 이어 준다 ─────────────
@@ -454,6 +482,171 @@ public class ScreenView extends View {
         }
     }
 
+
+    // ───────────── 버스: 토글 줄 · 정류장 카드(내용·모양·색은 엔진, 앱은 그리기) ─────────────
+    private static final int C_BLUE = 0xFF0066FF, C_SOON = 0xFFE74C3C, C_NOARR = 0xFFA0A0A5;
+    private boolean bcAnim;
+    private final Set<String> seenCards = new HashSet<String>(), seenRows = new HashSet<String>();
+    private String seenMode = "";
+    private android.graphics.Path bellPath;
+    /** 새로 올라온 정류장 카드·노선 줄에 등장 시작 시각을 붙인다(이미 본 열쇠는 조용히 — 웹: 처음 그릴 때만 펼친다). */
+    private void markBcards() {
+        if (lay == null) return;
+        long now = SystemClock.uptimeMillis();
+        boolean any = false;
+        for (ScreenCore.Item it : lay.body) {
+            if (it.kind != ScreenCore.K_BCARD) continue;
+            if (!any) { any = true; if (!seenMode.equals(it.value)) { seenCards.clear(); seenRows.clear(); seenMode = it.value; } }
+            if (seenCards.add(it.key)) it.ln = now;
+            for (int i = 0; i < it.rt.length; i++) {
+                String rk = it.key + "|" + it.sa[i * 6] + "|" + it.sa[i * 6 + 1];
+                if (seenRows.add(rk)) it.rt[i] = now + 55L * i;
+            }
+        }
+        if (!any) { seenCards.clear(); seenRows.clear(); seenMode = ""; }
+    }
+    private void drawBtog(Canvas cv, ScreenCore.Item it) {
+        boolean under = "u".equals(it.value), refresh = "r".equals(it.value);
+        if (it.top) {                                                        // 줄 바탕 + 아래 선(첫 단추가 한 번 그린다)
+            p.setStyle(Paint.Style.FILL); p.setColor(under ? pal[R_CARD] : pal[R_BG]);
+            cv.drawRect(it.sx, it.sy, it.sx + it.sw, it.sy + it.sh, p);
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(pal[R_BORDER]);
+            cv.drawLine(it.sx, it.sy + it.sh - 0.5f, it.sx + it.sw, it.sy + it.sh - 0.5f, p);
+            p.setStyle(Paint.Style.FILL);
+        }
+        boolean pr = it == pressed;
+        if (under) {
+            if (pr) { p.setColor(0x14808080); cv.drawRect(it.x, it.y, it.x + it.w, it.y + it.h, p); }
+            setText(14f, true, it.on ? pal[R_TEXT] : pal[R_SUB]); tp.setTextAlign(Paint.Align.CENTER);
+            cv.drawText(it.label, it.x + it.w / 2f, base(it.y, it.h - 2f, 0), tp);
+            tp.setTextAlign(Paint.Align.LEFT);
+            if (it.on) { p.setColor(pal[R_GOLD]); cv.drawRect(it.x, it.y + it.h - 2f, it.x + it.w, it.y + it.h, p); }
+            return;
+        }
+        rf.set(it.x, it.y, it.x + it.w, it.y + it.h);
+        boolean on = it.on && !refresh;
+        p.setStyle(Paint.Style.FILL); p.setColor(on ? C_BLUE : pal[R_CARD]); cv.drawRoundRect(rf, it.radius, it.radius, p);
+        if (pr) { p.setColor(0x14808080); cv.drawRoundRect(rf, it.radius, it.radius, p); }
+        p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(on ? C_BLUE : pal[R_BORDER]);
+        rf2.set(it.x + 0.5f, it.y + 0.5f, it.x + it.w - 0.5f, it.y + it.h - 0.5f); cv.drawRoundRect(rf2, it.radius - 0.5f, it.radius - 0.5f, p);
+        p.setStyle(Paint.Style.FILL);
+        setText(refresh ? 15f : 13f, !refresh, on ? 0xFFFFFFFF : pal[R_SUB]); tp.setTextAlign(Paint.Align.CENTER);
+        cv.drawText(it.label, it.x + it.w / 2f, base(it.y, it.h, 0), tp);
+        tp.setTextAlign(Paint.Align.LEFT);
+    }
+    private static float ease(float f) { return 1f - (1f - f) * (1f - f); }
+    private void drawBcard(Canvas cv, ScreenCore.Item it) {
+        long now = SystemClock.uptimeMillis();
+        float a = 1f, dy = 0f;
+        if (it.ln > 0L) {                                                    // 카드 등장: 아래에서 10dp 올라오며 나타남 .26초
+            float f = (now - it.ln) / 260f;
+            if (f < 1f) { a = ease(Math.max(0f, f)); dy = 10f * (1f - a); bcAnim = true; }
+        }
+        boolean layer = a < 1f;
+        if (layer) cv.saveLayerAlpha(it.x - 4f, it.y - 4f + dy, it.x + it.w + 4f, it.y + it.h + 4f + dy, Math.round(255f * a));
+        cv.save(); cv.translate(0f, dy);
+        float x = it.x, y = it.y, w = it.w, h = it.h, r = it.radius;
+        rf.set(x, y, x + w, y + h);
+        p.setStyle(Paint.Style.FILL); p.setColor(pal[R_CARD]); cv.drawRoundRect(rf, r, r, p);
+        if (it.on) { p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(2f); p.setColor(0x330066FF); rf2.set(x - 1f, y - 1f, x + w + 1f, y + h + 1f); cv.drawRoundRect(rf2, r + 1f, r + 1f, p); }   // 웹 .bus-card-on 바깥 테두리 2px
+        p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(it.on ? C_BLUE : pal[R_BORDER]);
+        rf2.set(x + 0.5f, y + 0.5f, x + w - 0.5f, y + h - 0.5f); cv.drawRoundRect(rf2, r - 0.5f, r - 0.5f, p);
+        p.setStyle(Paint.Style.FILL);
+        // 머리: 번호 배지
+        if (it.badge.length() > 0) {
+            float bcx = x + 1f + ScreenCore.BC_PADX + ScreenCore.BC_BADGE / 2f, bcy = y + 1f + ScreenCore.BC_PADT + ScreenCore.BC_BADGE / 2f;
+            p.setColor(C_BLUE); cv.drawCircle(bcx, bcy, ScreenCore.BC_BADGE / 2f, p);
+            setText(11f, true, 0xFFFFFFFF); tp.setTextAlign(Paint.Align.CENTER);
+            cv.drawText(it.badge, bcx, base(bcy - 7f, 14f, 0), tp); tp.setTextAlign(Paint.Align.LEFT);
+        }
+        setText(it.size, true, pal[R_TEXT]);
+        for (int k = 0; k < it.lines.length; k++) cv.drawText(it.lines[k], it.textX, base(it.textY + k * it.lineH, it.lineH, 0), tp);
+        if (it.t1.length() > 0) { setText(ScreenCore.BC_ORIG, true, pal[R_SUB]); cv.drawText(it.t1, it.f1, base(it.f2, it.lineH, 0), tp); }
+        // 머리 오른쪽: 거리 알약 · ★/× · 🗺️ · ✏️
+        if (it.go.length() > 0) {
+            rf.set(it.sx, it.sy, it.sx + it.sw, it.sy + ScreenCore.BC_DIST_H);
+            p.setColor(pal[R_BG]); cv.drawRoundRect(rf, 11f, 11f, p);
+            setText(ScreenCore.BC_DIST, false, pal[R_SUB]); tp.setTextAlign(Paint.Align.CENTER);
+            cv.drawText(it.go, it.sx + it.sw / 2f, base(it.sy, ScreenCore.BC_DIST_H, 0), tp); tp.setTextAlign(Paint.Align.LEFT);
+        }
+        if (it.zs.length >= 12) {
+            tp.setTextAlign(Paint.Align.CENTER);
+            if (it.zs[2] > 0f) {
+                boolean near = "s".equals(it.dk);
+                if (near) setText(16f, false, it.top ? pal[R_GOLD] : pal[R_SUB]); else setText(20f, false, pal[R_SUB]);
+                cv.drawText(near ? (it.top ? "\u2605" : "\u2606") : "\u00D7", it.zs[0] + it.zs[2] / 2f, base(it.zs[1], it.zs[3], 0), tp);
+            }
+            if (it.zs[10] > 0f) { setText(13f, false, alpha(pal[R_TEXT], 0.7f)); cv.drawText("\uD83D\uDDFA\uFE0F", it.zs[8] + it.zs[10] / 2f, base(it.zs[9], it.zs[11], 0), tp); }
+            if (it.zs[6] > 0f) { setText(12f, false, alpha(pal[R_TEXT], 0.55f)); cv.drawText("\u270F\uFE0F", it.zs[4] + it.zs[6] / 2f, base(it.zs[5], it.zs[7], 0), tp); }
+            tp.setTextAlign(Paint.Align.LEFT);
+        }
+        // 줄
+        int rc = it.gf.length / 2;
+        if (rc > 0) {
+            cv.save();
+            rf.set(x, y, x + w, y + h); bcClip.rewind(); bcClip.addRoundRect(rf, r, r, Path.Direction.CW); cv.clipPath(bcClip);
+            float rowL = x + 1f + ScreenCore.BC_ROW_PX, bellX = it.f3;
+            for (int i = 0; i < rc; i++) {
+                float top = y + 1f + it.gf[i * 2], rh = it.gf[i * 2 + 1];
+                float ra = 1f, rdy = 0f;
+                if (it.rt[i] > 0L) {                                          // 노선 줄 등장: 위에서 10dp 내려오며 나타남 .3초(55ms씩 차례로)
+                    float f = (now - it.rt[i]) / 300f;
+                    if (f < 1f) { ra = f <= 0f ? 0f : ease(f); rdy = -10f * (1f - ra); bcAnim = true; }
+                }
+                if (ra <= 0f) continue;
+                if (ra < 1f) cv.saveLayerAlpha(x, top - 12f, x + w, top + rh + 4f, Math.round(255f * ra));
+                cv.save(); cv.translate(0f, rdy);
+                p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(pal[R_BORDER2]); cv.drawLine(x + 1f, top + 0.5f, x + w - 1f, top + 0.5f, p); p.setStyle(Paint.Style.FILL);
+                float inner = rh - 1f - ScreenCore.BC_ROW_PY * 2f, c0 = top + 1f + ScreenCore.BC_ROW_PY;
+                String dir = it.sa[i * 6 + 1];
+                float noH = ScreenCore.BC_NO * ScreenCore.BC_NO_LH, leftH = noH + (dir.length() > 0 ? 2f + ScreenCore.BC_DIR * 1.35f : 0f), lt = c0 + (inner - leftH) / 2f;
+                setText(ScreenCore.BC_NO, true, cc(it.ca[i], C_BLUE)); cv.drawText(it.sa[i * 6], rowL, base(lt, noH, 0), tp);
+                if (dir.length() > 0) { setText(ScreenCore.BC_DIR, true, pal[R_SUB]); cv.drawText(dir, rowL, base(lt + noH + 2f, ScreenCore.BC_DIR * 1.35f, 0), tp); }
+                boolean bell = it.gb[i * 3 + 2];
+                float xr = bell ? bellX - ScreenCore.BC_ROW_GAP : x + w - 1f - ScreenCore.BC_ROW_PX;
+                int ac = it.sa[i * 6 + 4].length() > 0 ? 2 : 1;
+                float alh = ScreenCore.BC_ARR * ScreenCore.BC_ARR_LH, rt0 = c0 + (inner - (ac * alh + (ac - 1) * ScreenCore.BC_ARR_GAP)) / 2f;
+                for (int k = 0; k < ac; k++) {
+                    String tm = it.sa[i * 6 + 2 + k * 2], cn = it.sa[i * 6 + 3 + k * 2];
+                    float ay = rt0 + k * (alh + ScreenCore.BC_ARR_GAP), rx = xr;
+                    if (cn.length() > 0) {
+                        setText(ScreenCore.BC_CNT, true, pal[R_SUB]); tp.setTextAlign(Paint.Align.RIGHT);
+                        cv.drawText(cn, rx, base(ay, alh, 0), tp); tp.setTextAlign(Paint.Align.LEFT);
+                        rx -= tp.measureText(cn) + ScreenCore.BC_CNT_GAP;
+                    }
+                    setText(ScreenCore.BC_ARR, true, it.gb[i * 3 + k] ? C_SOON : pal[R_TEXT]); tp.setTextAlign(Paint.Align.RIGHT);
+                    cv.drawText(tm, rx, base(ay, alh, 0), tp); tp.setTextAlign(Paint.Align.LEFT);
+                }
+                if (bell) drawBell(cv, bellX, top + 1f + (rh - 1f - ScreenCore.BC_BELL) / 2f);
+                cv.restore();
+                if (ra < 1f) cv.restore();
+            }
+            cv.restore();
+        } else if (it.t2.length() > 0) {
+            float top = y + 1f + (it.h - 2f) - (1f + ScreenCore.BC_MSG_PY * 2f + ScreenCore.BC_MSG * 1.35f);
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(pal[R_BORDER]); cv.drawLine(x + 1f, top + 0.5f, x + w - 1f, top + 0.5f, p); p.setStyle(Paint.Style.FILL);
+            setText(ScreenCore.BC_MSG, false, pal[R_SUB]); tp.setTextAlign(Paint.Align.LEFT);
+            cv.drawText(it.t2, x + 1f + ScreenCore.BC_PADX, base(top + 1f + ScreenCore.BC_MSG_PY, ScreenCore.BC_MSG * 1.35f, 0), tp);
+        }
+        cv.restore();
+        if (layer) cv.restore();
+    }
+    private final Path bcClip = new Path();
+    /** 벨 아이콘(웹 .map-bus-bell: 22px, 보조색, 투명도 .55). 24x24 칸의 경로를 22px 로 줄여 그린다. */
+    private void drawBell(Canvas cv, float x, float y) {
+        if (bellPath == null) {
+            Path b = new Path();
+            b.moveTo(12f, 22f); b.cubicTo(13.1f, 22f, 14f, 21.1f, 14f, 20f); b.lineTo(10f, 20f); b.cubicTo(10f, 21.1f, 10.9f, 22f, 12f, 22f); b.close();
+            b.moveTo(18f, 16f); b.lineTo(18f, 11f); b.cubicTo(18f, 7.93f, 16.36f, 5.36f, 13.5f, 4.68f); b.lineTo(13.5f, 4f); b.cubicTo(13.5f, 3.17f, 12.83f, 2.5f, 12f, 2.5f);
+            b.cubicTo(11.17f, 2.5f, 10.5f, 3.17f, 10.5f, 4f); b.lineTo(10.5f, 4.68f); b.cubicTo(7.63f, 5.36f, 6f, 7.92f, 6f, 11f); b.lineTo(6f, 16f); b.lineTo(4f, 18f); b.lineTo(4f, 19f); b.lineTo(20f, 19f); b.lineTo(20f, 18f); b.close();
+            bellPath = b;
+        }
+        float sc = ScreenCore.BC_BELL / 24f;
+        cv.save(); cv.translate(x, y); cv.scale(sc, sc);
+        p.setStyle(Paint.Style.FILL); p.setColor(alpha(pal[R_SUB], 0.55f)); cv.drawPath(bellPath, p);
+        cv.restore();
+    }
+
     // ───────────── 타일 지도(핀은 엔진이 정한 값 · 앱은 받은 타일에 그리기만) ─────────────
     private TileLoader tiles;
     private final Runnable tileTick = new Runnable() { @Override public void run() { invalidate(); } };
@@ -462,6 +655,16 @@ public class ScreenView extends View {
     private String tmValue = ""; private int tmW = -1, tmH = -1;
     private List<TileMapCore.Pin> tmPins = new ArrayList<TileMapCore.Pin>();
     private TileMapCore.View tmView;
+    private int tmFocus = -1, tmFocApplied = -2;           // 고른 핀(앱이 눌림에 바로 · 엔진이 준 값이 바뀌면 그 값) · 엔진이 마지막으로 준 값
+    private boolean tmLabel;                               // 고른 핀에 이름표를 단다(핀을 손으로 눌렀을 때만 — 웹 팝업)
+    private boolean tmAnimOn;                              // 가운데·확대를 부드럽게 옮기는 중
+    private double tmAnimLa0, tmAnimLo0, tmAnimZ0, tmAnimLa1, tmAnimLo1, tmAnimZ1;
+    private long tmAnimT0;
+    private float tmL, tmT, tmWd, tmHt;                    // 마지막으로 그린 지도 자리(영역 dp)
+    private boolean tmLive, tmDrawn;
+    private static final long TM_ANIM_MS = 260L;
+    private final Paint tmp = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private LinearGradient tmHintGrad; private float tmHintH = -1f;
     private void drawTmap(Canvas cv, ScreenCore.Item it) {
         int pw = Math.round(it.w * dpr), ph = Math.round(it.h * dpr);
         if (pw <= 0 || ph <= 0) return;
@@ -471,16 +674,136 @@ public class ScreenView extends View {
             tmPins = TileMapCore.parsePins(it.value);
             tmView = new TileMapCore.View(pw, ph);
             tmView.fit(tmPins, Math.round(34f * dpr), 3, 17);
+            tmFocApplied = -2; tmAnimOn = false; tmLabel = false;
         }
         if (tmView == null || tmPins.isEmpty()) return;
+        long now = SystemClock.uptimeMillis();
+        if (it.on && it.ti != tmFocApplied) {                                // 엔진이 고른 핀이 바뀌었다 → 그 핀으로 가운데를 옮긴다(웹 panTo)
+            tmFocApplied = it.ti;
+            if (tmFocus != it.ti) { tmFocus = it.ti; tmLabel = false; if (it.ti >= 0 && it.ti < tmPins.size()) tmGoTo(tmPins.get(it.ti).la, tmPins.get(it.ti).lo, tmView.zoom); }
+        }
+        if (tmAnimOn) {
+            float f = (now - tmAnimT0) / (float) TM_ANIM_MS;
+            if (f >= 1f) { f = 1f; tmAnimOn = false; }
+            double e = 1.0 - (1.0 - f) * (1.0 - f);
+            tmView.cla = tmAnimLa0 + (tmAnimLa1 - tmAnimLa0) * e; tmView.clo = tmAnimLo0 + (tmAnimLo1 - tmAnimLo0) * e; tmView.zoom = tmAnimZ0 + (tmAnimZ1 - tmAnimZ0) * e;
+            tmView.clamp();
+            tmDrawn = true;
+        }
+        tmL = it.x; tmT = it.y; tmWd = it.w; tmHt = it.h; tmLive = it.on;
         cv.save();
         tmRect.set(it.x, it.y, it.x + it.w, it.y + it.h);
         tmClip.rewind(); tmClip.addRoundRect(tmRect, it.radius, it.radius, Path.Direction.CW);
         cv.clipPath(tmClip);
         cv.translate(it.x, it.y);
         cv.scale(1f / dpr, 1f / dpr);
-        TileMapArt.draw(cv, tiles, tmView, tmPins, dpr, -1);
+        TileMapArt.draw(cv, tiles, tmView, tmPins, dpr, it.on ? tmFocus : -1, tmLabel, it.on ? now : 0L);
+        if (it.on) {
+            float hh = 26f * dpr;                                            // 아래 안내 글(웹 #mapBusMapHint): 위로 갈수록 투명한 검정 + 흰 글자
+            if (it.label.length() > 0) {
+                if (tmHintGrad == null || tmHintH != hh) { tmHintH = hh; tmHintGrad = new LinearGradient(0f, tmH - hh, 0f, tmH, 0x00000000, 0x73000000, Shader.TileMode.CLAMP); }
+                tmp.setStyle(Paint.Style.FILL); tmp.setShader(tmHintGrad); cv.drawRect(0f, tmH - hh, tmW, tmH, tmp); tmp.setShader(null);
+                tmp.setColor(0xFFFFFFFF); tmp.setTypeface(face(true)); tmp.setTextSize(11f * dpr); tmp.setTextAlign(Paint.Align.CENTER);
+                cv.drawText(it.label, tmW / 2f, tmH - 8f * dpr, tmp);
+                tmp.setTextAlign(Paint.Align.LEFT);
+            }
+            float bsz = 30f * dpr, bm = 10f * dpr, bx = tmW - bm - bsz, by = tmH - bm - 2f * bsz;          // 확대·축소 단추(웹 Leaflet 줌 컨트롤: 오른쪽 아래 30px 두 칸)
+            tmp.setStyle(Paint.Style.FILL); tmp.setColor(0xFFFFFFFF);
+            rf.set(bx, by, bx + bsz, by + 2f * bsz); cv.drawRoundRect(rf, 4f * dpr, 4f * dpr, tmp);
+            tmp.setStyle(Paint.Style.STROKE); tmp.setStrokeWidth(2f * dpr); tmp.setColor(0x33000000); cv.drawRoundRect(rf, 4f * dpr, 4f * dpr, tmp);
+            tmp.setStrokeWidth(dpr); tmp.setColor(0xFFCCCCCC); cv.drawLine(bx, by + bsz, bx + bsz, by + bsz, tmp);
+            tmp.setStyle(Paint.Style.FILL); tmp.setColor(0xFF333333); tmp.setTypeface(face(true)); tmp.setTextSize(18f * dpr); tmp.setTextAlign(Paint.Align.CENTER);
+            Paint.FontMetrics fm = tmp.getFontMetrics();
+            cv.drawText("+", bx + bsz / 2f, by + bsz / 2f - (fm.ascent + fm.descent) / 2f, tmp);
+            cv.drawText("\u2212", bx + bsz / 2f, by + bsz * 1.5f - (fm.ascent + fm.descent) / 2f, tmp);
+            tmp.setTextAlign(Paint.Align.LEFT);
+            tmDrawn = true;
+        }
         cv.restore();
+        if (it.top) {                                                        // 아래 구분선(웹 border-bottom)
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(pal[R_BORDER]);
+            cv.drawLine(it.x, it.y + it.h - 0.5f, it.x + it.w, it.y + it.h - 0.5f, p);
+            p.setStyle(Paint.Style.FILL);
+        }
+    }
+    /** 지도 가운데(와 확대)를 부드럽게 옮긴다. */
+    private void tmGoTo(double la, double lo, double z) {
+        if (tmView == null) return;
+        tmAnimLa0 = tmView.cla; tmAnimLo0 = tmView.clo; tmAnimZ0 = tmView.zoom; tmAnimLa1 = la; tmAnimLo1 = lo; tmAnimZ1 = z; tmAnimT0 = SystemClock.uptimeMillis(); tmAnimOn = true;
+        invalidate();
+    }
+    /** 머리에 있는 끌 수 있는 지도(live)가 이 화면 점 아래에 있으면 그 조각. */
+    private ScreenCore.Item liveMapAt(float px, float py) {
+        if (lay == null) return null;
+        float x = px / dpr, y = py / dpr;
+        if (y >= lay.headH) return null;
+        for (ScreenCore.Item it : lay.head) if (it.kind == ScreenCore.K_TMAP && it.on && x >= it.x && x < it.x + it.w && y >= it.y && y < it.y + it.h) return it;
+        return null;
+    }
+    private boolean tmMoved, tmScaling; private float tmDX, tmDY, tmLX, tmLY; private long tmDT;
+    private final android.view.ScaleGestureDetector tmSg = new android.view.ScaleGestureDetector(getContext(), new android.view.ScaleGestureDetector.SimpleOnScaleGestureListener() {
+        @Override public boolean onScale(android.view.ScaleGestureDetector d) {
+            if (tmView != null && mode == 5) { tmAnimOn = false; tmView.zoomBy(Math.log(d.getScaleFactor()) / Math.log(2.0), d.getFocusX() - tmL * dpr, d.getFocusY() - tmT * dpr); invalidate(); }
+            return true;
+        }
+    });
+    /** 지도 위 손가락: 끌기 · 두 손가락 확대 · ± 단추 · 핀 누르기. 핀은 엔진이 준 행동(v)과 같이 움직일 카드(g)를 갖는다. */
+    private boolean tmTouch(MotionEvent e) {
+        if (tmView == null) { finishTouch(); return true; }
+        tmSg.onTouchEvent(e);
+        float x = e.getX(), y = e.getY();
+        switch (e.getActionMasked()) {
+            case MotionEvent.ACTION_POINTER_DOWN: tmScaling = true; tmMoved = true; return true;
+            case MotionEvent.ACTION_MOVE: {
+                if (tmSg.isInProgress() || e.getPointerCount() > 1) { tmScaling = true; tmLX = x; tmLY = y; return true; }
+                if (tmScaling) { tmLX = x; tmLY = y; tmScaling = false; return true; }                // 두 손가락 뒤 남은 한 손가락이 튀지 않게
+                if (!tmMoved && Math.abs(x - tmDX) < 8f * dpr && Math.abs(y - tmDY) < 8f * dpr) return true;
+                tmMoved = true; tmAnimOn = false; tmView.pan(x - tmLX, y - tmLY); tmLX = x; tmLY = y; invalidate();
+                return true;
+            }
+            case MotionEvent.ACTION_UP: {
+                if (!tmMoved && SystemClock.uptimeMillis() - tmDT < 600L) tmTap(x - tmL * dpr, y - tmT * dpr);
+                finishTouch(); invalidate();
+                return true;
+            }
+            case MotionEvent.ACTION_CANCEL: finishTouch(); invalidate(); return true;
+            default: return true;
+        }
+    }
+    private void tmTap(float lx, float ly) {
+        float bsz = 30f * dpr, bm = 10f * dpr, bx = tmWd * dpr - bm - bsz, by = tmHt * dpr - bm - 2f * bsz;
+        if (lx >= bx && lx < bx + bsz && ly >= by && ly < by + 2f * bsz) {
+            double d = ly < by + bsz ? 1.0 : -1.0;
+            tmGoTo(tmView.cla, tmView.clo, Math.max(TileMapCore.MIN_ZOOM, Math.min(TileMapCore.MAX_ZOOM, Math.round(tmView.zoom) + d)));
+            return;
+        }
+        int best = -1; double bd = 24f * dpr;
+        for (int i = 0; i < tmPins.size(); i++) {
+            TileMapCore.Pin pn = tmPins.get(i);
+            if ("m".equals(pn.k)) continue;
+            double[] sc = tmView.toScreen(pn.la, pn.lo);
+            double dd = Math.hypot(sc[0] - lx, sc[1] - ly);
+            if (dd < bd) { bd = dd; best = i; }
+        }
+        if (best < 0) return;
+        TileMapCore.Pin pn = tmPins.get(best);
+        tmFocus = best; tmFocApplied = best; tmLabel = true;
+        tmGoTo(pn.la, pn.lo, tmView.zoom);
+        if (pn.g.length() > 0) focusCard(pn.g, true);                       // 같은 번호 카드를 켜고 위로 부드럽게 끌어 온다
+        if (pn.v.length() > 0 && listener != null) { ScreenCore.Act a = new ScreenCore.Act(); a.a = "call"; a.v = pn.v; a.id = pn.g; listener.onAction(a); }
+    }
+    /** 열쇠가 key 인 정류장 카드만 켜고(나머지는 끔), 원하면 그 카드가 맨 위에 오게 부드럽게 민다. */
+    private void focusCard(String key, boolean scroll) {
+        if (lay == null) return;
+        ScreenCore.Item target = null;
+        for (ScreenCore.Item q : lay.body) if (q.kind == ScreenCore.K_BCARD) { q.on = key.equals(q.key); if (q.on) target = q; }
+        invalidate();
+        if (scroll && target != null) smoothScrollTo(ScreenCore.clamp(target.y - 4f, lay.bodyMaxScroll(bodyViewH())));
+    }
+    private boolean ssOn; private float ssFrom, ssTo; private long ssT0;
+    private void smoothScrollTo(float to) {
+        flingY.forceFinished(true);
+        ssFrom = scrollY; ssTo = to; ssT0 = SystemClock.uptimeMillis(); ssOn = true; invalidate();
     }
     /** 지금 화면에 올라온 첫 타일 지도의 핀 글(없으면 ""). 앱이 크게 보기를 열 때 쓴다. */
     public String tmapPins() {
@@ -585,7 +908,12 @@ public class ScreenView extends View {
         cv.drawRect(0, 0, getWidth(), getHeight(), p);
         if (lay == null) return;
         boolean moving = false;
-        sceneDrawn = false; marqDrawn = false; skelDrawn = false;
+        sceneDrawn = false; marqDrawn = false; skelDrawn = false; bcAnim = false; tmDrawn = false;
+        if (ssOn) {                                                                       // 핀을 눌러 카드로 부드럽게 가는 중
+            float f = (now - ssT0) / 350f;
+            if (f >= 1f) { f = 1f; ssOn = false; }
+            scrollY = ScreenCore.clamp(ssFrom + (ssTo - ssFrom) * ease(f), lay.bodyMaxScroll(bodyViewH())); moving = true;
+        }
         if (flingY.computeScrollOffset()) { scrollY = ScreenCore.clamp(flingY.getCurrY() / dpr, lay.bodyMaxScroll(bodyViewH())); moving = true; }
         if (flingX.computeScrollOffset()) { scrollX = ScreenCore.clamp(flingX.getCurrX() / dpr, lay.headMaxScroll()); moving = true; }
 
@@ -633,7 +961,8 @@ public class ScreenView extends View {
         if (!drewOnce) { drewOnce = true; post(firstDrawCb); }
         if (sceneDrawn && scene != null && scene.isRunning() && !scene.isPaused()) postInvalidateOnAnimation();        // 장면이 보이는 동안만 화면 박자로 계속 그린다(안 보이면 저절로 멈춘다)
         if (marqDrawn || skelDrawn) postInvalidateOnAnimation();                                     // 흐르는 문구가 보이는 동안만 화면 박자로 계속 그린다
-        if (moving || mode == 1 || mode == 2) postInvalidateOnAnimation();
+        if (moving || mode == 1 || mode == 2 || mode == 5 || bcAnim || tmAnimOn) postInvalidateOnAnimation();
+        else if (tmDrawn) postInvalidateDelayed(50L);                                             // 내 위치 점 뒤로 퍼지는 고리(웹 1.6초 주기)
         else if (pulsing) postInvalidateDelayed(mkMs > 0f && now - mkT0 < mkMs ? 16L : 66L);      // 마커 맥박·고리(마커가 있을 때만; 가만히 있으면 초당 15번)
     }
 
@@ -727,6 +1056,8 @@ public class ScreenView extends View {
             case ScreenCore.K_TMAP: drawTmap(cv, it); break;
             case ScreenCore.K_MARQ: drawMarq(cv, it); break;
             case ScreenCore.K_SKEL: drawSkel(cv, it); break;
+            case ScreenCore.K_BTOG: drawBtog(cv, it); break;
+            case ScreenCore.K_BCARD: drawBcard(cv, it); break;
             default: break;
         }
     }

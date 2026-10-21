@@ -13,7 +13,8 @@ import java.util.Map;
  */
 public final class MapCore {
     public static final String K_MODE = "map_mode", K_REG = "map_reg", K_FLT = "map_flt";
-    public static final int R_NONE = 0, R_RENDER = 1, R_FIND = 2, R_LOC = 3, R_STN = 4, R_START = 5, R_DEST = 6, R_TT = 7, R_CLOSE = 8, R_TT_LOAD = 9, R_TT_RENDER = 10, R_BUS_LOC = 11;
+    public static final String K_BUSVW = "map_busvw", K_BUSFAV = "bus_fav", K_BUSAL = "bus_al", VW_NEAR = "near", VW_FAV = "fav";
+    public static final int R_NONE = 0, R_RENDER = 1, R_FIND = 2, R_LOC = 3, R_STN = 4, R_START = 5, R_DEST = 6, R_TT = 7, R_CLOSE = 8, R_TT_LOAD = 9, R_TT_RENDER = 10, R_BUS_LOC = 11, R_BUS_VIEW = 12, R_BUS_REF = 13, R_BUS_SEL = 14, R_ALIAS = 15;
 
     private final ShellCore.Store st;
     public MapCore(ShellCore.Store st) { this.st = st; }
@@ -29,7 +30,16 @@ public final class MapCore {
     public double[] busLL = null;
     final Map<String, String> busRes = new LinkedHashMap<String, String>();
     public final List<String[]> busNeed = new ArrayList<String[]>();           // [k, 주소]
-    public void setBusLoc(double la, double lo) { busLL = new double[] { la, lo }; busRes.clear(); busNeed.clear(); }
+    public void setBusLoc(double la, double lo) { busLL = new double[] { la, lo }; busRes.clear(); busNeed.clear(); busSel = -1; }
+    /** 주변 정류장 / 즐겨찾기 (웹 _busViewMode). 저장소에 두어 캐시 열쇠가 알아본다. */
+    public String busView() { return VW_FAV.equals(st.get(K_BUSVW, VW_NEAR)) ? VW_FAV : VW_NEAR; }
+    public int busSel = -1;                                      // 지도·카드에서 고른 정류장 번호(엔진이 핀·카드 강조를 정한다)
+    final List<String> stopJson = new ArrayList<String>();       // 엔진이 알려 준 현재 목록(info.stops)의 정류장 값 — 즐겨찾기로 저장할 때 그대로 쓴다
+    public String toast = "", aliasKey = "", aliasName = "", aliasCur = "";
+    private String favRaw() { String f = st.get(K_BUSFAV, "[]"); return f.startsWith("[") && f.length() < 30000 ? f : "[]"; }
+    private String alRaw() { String f = st.get(K_BUSAL, "{}"); return f.startsWith("{") && f.length() < 12000 ? f : "{}"; }
+    /** 30초 자동 새로고침: 정류장 목록(tp·gg·tn·d1)은 두고 도착정보(a0.. · f0..)만 비워 엔진이 다시 받아 오게 한다. */
+    public void dropArrivals() { java.util.Iterator<String> it = busRes.keySet().iterator(); while (it.hasNext()) { if (it.next().matches("[af][0-9]{1,3}")) it.remove(); } busNeed.clear(); }
     public void addBusRes(String k, String body) { if (k != null && k.matches("[a-z][a-z0-9]{0,3}")) busRes.put(k, body == null ? "" : (body.length() > 120000 ? body.substring(0, 120000) : body)); }
     /** 엔진이 준 주소를 공공 API 프록시 주소로 바꾼다 — /tago 는 route-v2 가 아니라 subway-api(gentle-lab) 워커에 있다. 허용 호스트가 아니면 빈 문자열. */
     public static String busFetchUrl(String u) {
@@ -60,8 +70,10 @@ public final class MapCore {
     }
     public String bodyRequest(int cap, String theme) {
         String f = facts("b", theme, "");
-        if ("bus".equals(mode()) && busLL != null) {
-            StringBuilder b = new StringBuilder(f.substring(0, f.length() - 1)).append(",\"bus\":{\"lat\":").append(busLL[0]).append(",\"lng\":").append(busLL[1]).append(",\"res\":{");
+        if ("bus".equals(mode())) {
+            StringBuilder b = new StringBuilder(f.substring(0, f.length() - 1)).append(",\"bus\":{\"vw\":").append(ShellCore.q(busView())).append(",\"sel\":").append(busSel).append(",\"fav\":").append(favRaw()).append(",\"al\":").append(alRaw());
+            if (busLL != null) b.append(",\"lat\":").append(busLL[0]).append(",\"lng\":").append(busLL[1]);
+            b.append(",\"res\":{");
             boolean first = true;
             for (Map.Entry<String, String> e : busRes.entrySet()) { if (!first) b.append(','); first = false; b.append(ShellCore.q(e.getKey())).append(':').append(ShellCore.q(e.getValue())); }
             f = b.append("}}}").toString();
@@ -138,6 +150,8 @@ public final class MapCore {
             busNeed.clear();
             if (im.get("bus") instanceof Map && ((Map<String, Object>) im.get("bus")).get("need") instanceof List)
                 for (Object x : (List<Object>) ((Map<String, Object>) im.get("bus")).get("need")) if (x instanceof Map && busNeed.size() < 12) busNeed.add(new String[] { BoardCore.s(((Map<String, Object>) x).get("k"), 4), BoardCore.s(((Map<String, Object>) x).get("url"), 600) });
+            stopJson.clear();
+            if (im.get("stops") instanceof List) for (Object x : (List<Object>) im.get("stops")) if (x instanceof Map && stopJson.size() < 20) stopJson.add(HomeSearchCore.toJson(x));
             nearName = im.get("near") instanceof Map ? BoardCore.s(((Map<String, Object>) im.get("near")).get("name"), 40) : "";
         } catch (Exception e) { /* 이전 값 유지 */ }
     }
@@ -191,11 +205,64 @@ public final class MapCore {
         if (v == null) return R_NONE;
         if ("mp.find".equals(v)) { String q = fields == null ? null : fields.get("mq"); return q == null || q.replaceAll("\\s+", "").length() < 2 ? R_NONE : R_FIND; }
         if ("mp.loc".equals(v)) return "bus".equals(mode()) ? R_BUS_LOC : R_LOC;
+        if ("mp.vw.near".equals(v) || "mp.vw.fav".equals(v)) { String nv = v.substring(6); if (nv.equals(busView())) return R_NONE; st.put(K_BUSVW, nv); busSel = -1; return R_BUS_VIEW; }
+        if ("mp.rf".equals(v)) { busSel = -1; if (VW_FAV.equals(busView())) { busRes.clear(); busNeed.clear(); return R_BUS_REF; } return R_BUS_LOC; }
+        if (v.startsWith("mp.pc.") || v.startsWith("mp.pm.")) { int i = idx(v, 6); if (i < 0) return R_NONE; busSel = i; return R_BUS_SEL; }
+        if (v.startsWith("mp.fv.")) { int i = idx(v, 6); return i >= 0 && toggleFav(i) ? R_BUS_SEL : R_NONE; }
+        if (v.startsWith("mp.al.")) {
+            int i = idx(v, 6); if (i < 0) return R_NONE;
+            Map<String, Object> sm = stopAt(i); if (sm == null) return R_NONE;
+            aliasKey = BoardCore.s(sm.get("id"), 40); aliasName = BoardCore.s(sm.get("nm"), 40);
+            aliasCur = aliasMap().get(aliasKey) instanceof String ? (String) aliasMap().get(aliasKey) : "";
+            return aliasKey.length() > 0 ? R_ALIAS : R_NONE;
+        }
         if (v.startsWith("mr.")) {
             try { int i = Integer.parseInt(v.substring(3)); if (i >= 0 && i < regionStns.size()) { stn = regionStns.get(i)[0]; stnLine = regionStns.get(i)[1]; return R_STN; } } catch (NumberFormatException e) { /* 무시 */ }
         }
         return R_NONE;
     }
+    private int idx(String v, int from) { try { int i = Integer.parseInt(v.substring(from)); return i >= 0 && i < stopJson.size() ? i : -1; } catch (NumberFormatException e) { return -1; } }
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> stopAt(int i) {
+        try { Object o = ScreenCore.parse(stopJson.get(i)); return o instanceof Map ? (Map<String, Object>) o : null; } catch (Exception e) { return null; }
+    }
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> aliasMap() {
+        try { Object o = ScreenCore.parse(alRaw()); return o instanceof Map ? (Map<String, Object>) o : new LinkedHashMap<String, Object>(); } catch (Exception e) { return new LinkedHashMap<String, Object>(); }
+    }
+    @SuppressWarnings("unchecked")
+    private List<Object> favList() {
+        try { Object o = ScreenCore.parse(favRaw()); return o instanceof List ? (List<Object>) o : new ArrayList<Object>(); } catch (Exception e) { return new ArrayList<Object>(); }
+    }
+    /** 별(주변) 또는 ×(즐겨찾기)를 눌렀다 — 웹 toggleFavBusStop. 12곳까지. 알림 글은 toast. */
+    @SuppressWarnings("unchecked")
+    private boolean toggleFav(int i) {
+        Map<String, Object> sm = stopAt(i);
+        if (sm == null) return false;
+        String id = BoardCore.s(sm.get("id"), 40);
+        if (id.length() == 0) return false;
+        List<Object> fl = favList();
+        int at = -1;
+        for (int k = 0; k < fl.size(); k++) if (fl.get(k) instanceof Map && id.equals(BoardCore.s(((Map<String, Object>) fl.get(k)).get("id"), 40))) { at = k; break; }
+        if (at >= 0) { fl.remove(at); toast = "즐겨찾기 해제"; }
+        else {
+            if (fl.size() >= 12) { toast = "즐겨찾기는 최대 12개"; return false; }
+            fl.add(sm); toast = "즐겨찾기 추가";
+        }
+        st.put(K_BUSFAV, HomeSearchCore.toJson(fl));
+        return true;
+    }
+    /** 별명 저장(빈 글이면 지움). 웹 _busEditAlias. */
+    @SuppressWarnings("unchecked")
+    public void setAlias(String key, String text) {
+        if (key == null || key.length() == 0) return;
+        Map<String, Object> am = aliasMap();
+        String t = text == null ? "" : text.trim();
+        if (t.length() > 10) t = t.substring(0, 10);
+        if (t.length() == 0) am.remove(key); else am.put(key, t);
+        st.put(K_BUSAL, HomeSearchCore.toJson(am));
+    }
+
     /** 노선도에서 역 글자를 눌렀다. 엔진이 역이 아니라고 하면(화면 요청이 거절되면) 앱이 시트를 닫는다. */
     public void tapStation(String labelName) { stn = labelName == null ? "" : labelName.replaceAll("\\s+", "").trim(); stnLine = ""; }
     /** 시트(팝업·시간표) 단추. */

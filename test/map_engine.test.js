@@ -17,7 +17,7 @@ ok(E.mapScreen({ cap: 17 }, {}, {}).ok === false && E.mapScreen({}, {}, {}).ok =
 // ② 머리줄
 {
   let h = call({ part: 'h', mode: 'bus' });
-  ok(h.ok && h.screen === 'map' && h.head.length === 1 && h.head[0].items.map(i => i.label).join() === '버스,지하철' && h.head[0].items[0].on, '버스: 안쪽 탭만(웹 기본은 버스)');
+  ok(h.ok && h.screen === 'map' && h.head.length === 1 && h.head[0].t === 'btog' && h.head[0].v === 'u' && h.head[0].items.map(i => i.label).join() === '🚌 버스,🚇 지하철' && h.head[0].items[0].on, '버스: 밑줄 탭만(웹 .map-inner-tabs · 기본은 버스)');
   h = call({ part: 'h', mode: 'subway', reg: 'seoul', flt: '2호선', q: '부평' });
   ok(h.head.length === 4 && h.head[1].items.map(i => i.label).join() === '수도권,부산,대구,광주,대전', '지하철: 지역 탭');
   ok(h.head[2].t === 'inbar' && h.head[2].value === '부평' && h.head[2].act.v === 'mp.find', '역 검색 입력줄');
@@ -111,33 +111,34 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
 {
   const mk = (bus) => call({ part: 'b', mode: 'bus', th: 'dark', bus });
   let b = mk(null);
-  ok(b.info.view === 'bus' && b.info.bus.st === 'noloc' && JSON.stringify(b.body).includes('mp.loc'), '버스: 위치 없으면 안내 + 내 위치 단추');
+  ok(b.info.view === 'bus' && b.info.bus.st === 'noloc' && JSON.stringify(b.body).includes('mp.loc') && b.head[0].t === 'btog' && b.head[0].v === 'p', '버스: 위치 없으면 안내 + 내 위치 단추(토글 줄은 머리에 고정)');
   b = mk({ lat: 37.5, lng: 127.0, res: {} });
   ok(b.info.bus.st === 'need' && b.info.bus.need.map(n => n.k).join() === 'tp,gg,tn' && /getStationByPos\?tmX=127&tmY=37\.5/.test(b.info.bus.need[0].url) && /busstationservice\/v2\/getBusStationAroundListv2\?x=127&y=37\.5&format=json/.test(b.info.bus.need[1].url) && /gpsLati=37\.5&gpsLong=127/.test(b.info.bus.need[2].url), '버스 1단계: 서울 좌표면 TOPIS + 경기 GBIS + TAGO 주소를 요청');
-  ok(b.body[0].t === 'tmap' && b.body[0].pts.length === 1 && b.body[0].pts[0].k === 'm' && b.body[0].pts[0].la === 37.5, '정류장을 찾는 중에도 내 위치 지도가 먼저 뜬다');
+  ok(b.head[0].items.map(i => i.label).join() === '📍 주변 정류장,⭐ 즐겨찾기' && b.head[0].items[0].on && b.head[0].rf.act.v === 'mp.rf' && b.head[1].t === 'tmap' && b.head[1].live === 1 && b.head[1].pts.length === 1 && b.head[1].pts[0].k === 'm' && b.head[1].pts[0].la === 37.5, '정류장을 찾는 중에도 토글 줄 + 내 위치 지도가 머리에 먼저 뜬다');
   b = mk({ lat: 35.1, lng: 129.0, res: {} });
   ok(b.info.bus.need.map(n => n.k).join() === 'tn', '서울 밖이면 TAGO 만');
   b = mk({ lat: 37.5, lng: 127.0, res: { tp: SEOUL_POS, gg: '', tn: '' } });
   const n2 = b.info.bus.need;
   ok(b.info.bus.st === 'need' && n2.length === 4 && n2[0].k === 'a0' && /getStationByUid\?arsId=11111/.test(n2[0].url), '버스 2단계: 중복·미정차 제거, 출구 우선, 도착 주소 요청 ' + n2.length);
-  ok(b.body[0].t === 'tmap' && b.body[0].pts.length >= 2 && b.body[0].pts[b.body[0].pts.length - 1].k === 'm' && /도착정보 가져오는 중/.test(JSON.stringify(b.body)), '도착정보를 기다리는 동안에도 정류장 지도가 먼저 뜬다(핀: 정류장 + 내 위치)');
+  ok(b.head[1].t === 'tmap' && b.head[1].pts.length >= 2 && b.head[1].pts[b.head[1].pts.length - 1].k === 'm' && b.body.filter(n => n.t === 'bcard').length === 4 && b.body.filter(n => n.t === 'bcard').every(c => c.ld === '도착 정보 불러오는 중...'), '도착정보를 기다리는 동안에도 정류장 지도 + 카드(불러오는 중)가 먼저 뜬다');
   ok(n2.map(n => n.url.match(/arsId=(\d+)/)[1]).join() === '11111,44444,22222,33333', '출구(350m 안) 먼저 → 나머지 가까운 순');
   b = mk({ lat: 37.5, lng: 127.0, res: { tp: SEOUL_POS, gg: '', tn: '', a0: SEOUL_ARR, a1: '', a2: '', a3: '' } });
   const txt = JSON.stringify(b.body);
-  ok(b.info.bus.st === 'ok' && /146 {2}4분 · 2번째 전 · 보통 · 저상/.test(txt) && /강남역 방면/.test(txt) && /N13 {2}곧 도착/.test(txt) && !/운행종료/.test(txt), '버스 3단계: 도착 줄(분·번째 전·혼잡·저상·방면) · 운행종료 제외');
-  ok((txt.match(/도착 정보 없음/g) || []).length === 3, '도착이 비면 "도착 정보 없음"');
+  { const cs = b.body.filter(n => n.t === 'bcard'), r1 = cs[0].rows[1], r2 = cs[0].rows[0];       // 도착이 빠른 줄이 위(N13 곧 도착 → 146)
+    ok(b.info.bus.st === 'ok' && cs.length === 4 && cs[0].n === '1' && cs[0].mode === 'near' && r1.no === '146' && r1.a[0].s === '3분 30초' && r1.a[0].p === '2번째전' && r1.a[1].s === '10분 00초' && r1.dir === '→ 강남역방향' && r1.c === '#0066FF' && r2.no === 'N13' && r2.a[0].s === '곧 도착' && r2.a[0].soon === 1 && !/운행종료/.test(txt), '버스 3단계: 카드(번호·노선·"3분 30초"·n번째전·→ 방면) · 운행종료 제외'); }
+  ok((txt.match(/"em":"도착정보 없음"/g) || []).length === 3, '도착이 비면 "도착정보 없음"');
   // TOPIS 가 비면 TAGO 로
   const TAGO = JSON.stringify({ response: { body: { items: { item: [{ nodeid: 'ICB1', nodenm: '부평역', gpslati: 37.489, gpslong: 126.724, citycode: '23', nodeno: '12345' }] } } } });
   b = mk({ lat: 37.489, lng: 126.724, res: { tp: '', gg: '', tn: TAGO } });
   ok(b.info.bus.need.length === 1 && /cityCode=23&nodeId=ICB1/.test(b.info.bus.need[0].url), 'TOPIS 실패 → TAGO 정류장');
   const TA = JSON.stringify({ response: { body: { items: { item: [{ routeno: '8', arrtime: 240, arrprevstationcnt: 3 }, { routeno: '8', arrtime: 700, arrprevstationcnt: 9 }] } } } });
   b = mk({ lat: 37.489, lng: 126.724, res: { tp: '', gg: '', tn: TAGO, a0: TA } });
-  ok(b.info.bus.st === 'ok' && /8 {2}4분 · 3번째 전/.test(JSON.stringify(b.body)) && /12분/.test(JSON.stringify(b.body)), 'TAGO 도착 두 대');
+  ok(b.info.bus.st === 'ok' && /"no":"8"/.test(JSON.stringify(b.body)) && /4분 00초/.test(JSON.stringify(b.body)) && /11분 40초/.test(JSON.stringify(b.body)) && /3번째전/.test(JSON.stringify(b.body)), 'TAGO 도착 두 대');
   b = mk({ lat: 37.5, lng: 127.0, res: { tp: '', gg: '', tn: '' } });
   ok(b.info.bus.st === 'need' && b.info.bus.need.length === 1 && b.info.bus.need[0].k === 'd1' && /^https:\/\/gentle-lab-7e47subway-api\.phg0643\.workers\.dev\/bus-stops\?lat=37\.5&lng=127&radius=800$/.test(b.info.bus.need[0].url), '공공 API 가 모두 비면 서버 정류장 표(D1)를 요청');
   b = mk({ lat: 37.5, lng: 127.0, res: { tp: '', gg: '', tn: '', d1: '{"stops":[]}' } });
   ok(b.info.bus.st === 'empty', '정류장 없음')
-  ok(b.body[0].t === 'tmap' && b.body[0].pts.length === 1, '정류장이 없어도 내 위치 지도는 보인다');
+  ok(b.head[1].t === 'tmap' && b.head[1].pts.length === 1, '정류장이 없어도 내 위치 지도는 보인다');
   // 경기 GBIS (웹 _fetchNearStopsGG / _ggArrivals 와 같은 규칙)
   const GG = (rows) => JSON.stringify({ response: { msgHeader: { queryTime: 'x', resultCode: 0, resultMessage: '정상' }, msgBody: { busStationAroundList: rows } } });
   const GGS = GG([{ stationId: 203000123, stationName: '수원역', x: 127.0011, y: 37.2661, distance: 120, mobileNo: '31001' }, { stationId: 203000124, stationName: '수원역환승센터', x: 127.0021, y: 37.2671, distance: 260 }]);
@@ -153,9 +154,9 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
   ok(b.info.bus.st === 'need' && n3.length === 2 && /busarrivalservice\/v2\/getBusArrivalListv2\?stationId=203000123&format=json$/.test(n3[0].url), '경기 좌표는 GBIS 정류장이 TAGO 보다 먼저: 도착 주소는 stationId 로 ' + JSON.stringify(n3.map(x => x.url.slice(-40))));
   b = mk({ lat: 37.2661, lng: 127.0011, res: { gg: GGS, tn: TAGO, a0: GGA, a1: '' } });
   const gt = JSON.stringify(b.body);
-  ok(b.info.bus.st === 'ok' && /13-4 일반 {2}4분 · 3번째 전 · 보통 · 저상/.test(gt) && /영통 방면/.test(gt) && /12분 · 8번째 전/.test(gt), 'GBIS 도착: 노선 유형 · 분 · 번째 전 · 혼잡도 · 저상 · 방면 · 둘째 차');
-  ok(/7000 직행좌석 {2}5분 · 2번째 전/.test(gt) && /서울역 방면/.test(gt) && !/99 마을/.test(gt) && !/88 마을/.test(gt), 'GBIS: 분 단위 값은 초로 · 운행종료(STOP)와 1시간 넘는 예측은 뺀다');
-  ok(/수원역 {2}120m {2}·/.test(gt) && /31001/.test(gt), 'GBIS 정류장: 이름 · 거리 · 정류장 번호');
+  ok(b.info.bus.st === 'ok' && /"no":"13-4"/.test(gt) && /4분 00초/.test(gt) && /3번째전/.test(gt) && /→ 영통방향/.test(gt) && /11분 40초/.test(gt) && /8번째전/.test(gt), 'GBIS 도착: 노선 · 분 · 번째전 · 방면 · 둘째 차');
+  ok(/"no":"7000"/.test(gt) && /5분 00초/.test(gt) && /→ 서울역방향/.test(gt) && !/"no":"99"/.test(gt) && !/"no":"88"/.test(gt), 'GBIS: 분 단위 값은 초로 · 운행종료(STOP)와 1시간 넘는 예측은 뺀다');
+  ok(/"nm":"수원역"/.test(gt) && /"dist":"120m"/.test(gt), 'GBIS 정류장: 이름 · 거리');
   b = mk({ lat: 37.2661, lng: 127.0011, res: { gg: JSON.stringify({ response: { msgHeader: { resultCode: 4 } } }), tn: TAGO } });
   ok(b.info.bus.need[0].url.indexOf('ArvlInfoInqireService') > 0, 'GBIS 가 결과 없음(4)이면 TAGO 로');
   b = mk({ lat: 37.2661, lng: 127.0011, res: { gg: '<html>인증 실패</html>', tn: TAGO } });
@@ -169,11 +170,11 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
   b = mk({ lat: 36.333, lng: 127.434, res: { tn: '', d1: D1 } });
   ok(b.info.bus.st === 'need' && b.info.bus.need.length === 2 && /cityCode=25&nodeId=DJB1/.test(b.info.bus.need[0].url) && /cityCode=25&nodeId=XX9/.test(b.info.bus.need[1].url), 'D1 보조 정류장: 시 코드가 0 이면 좌표 상자로 추정(대전 25)');
   ok(E.mapCityOf(35.1, 129.0) === '21' && E.mapCityOf(10, 10) === '' && E.mapGGPreferred(37.2661, 127.0011) === true && E.mapGGPreferred(37.489, 126.724) === false && E.mapGGPreferred(35.1, 129.0) === false, '시 코드 상자 · 경기 우선 판정');
-  ok(JSON.stringify(mk({ lat: 37.2661, lng: 127.0011, res: { gg: GGS, tn: TAGO, a0: GGA, a1: '' } }).body).includes('map.kakao.com/link/to/%EC%88%98%EC%9B%90%EC%97%AD'), '정류장마다 길찾기(외부 지도) 단추');
+  ok(mk({ lat: 37.2661, lng: 127.0011, res: { gg: GGS, tn: TAGO, a0: GGA, a1: '' } }).info.stops[0].sid === '203000123', '즐겨찾기용 정류장 값(info.stops)에 도착정보를 다시 물을 열쇠가 들어 있다');
   {
-    const bb = mk({ lat: 37.2661, lng: 127.0011, res: { gg: GGS, tn: TAGO, a0: GGA, a1: '' } }).body, tm = bb[0];
-    ok(tm.t === 'tmap' && tm.pts.length >= 2 && tm.pts[tm.pts.length - 1].k === 'm' && tm.pts[0].k === 's' && tm.pts[0].n === '1' && tm.act.v === 'mp.all', '정류장 지도: 번호 핀 + 내 위치 핀, 누르면 크게 보기');
-    ok(JSON.stringify(bb).includes('"v":"mp.f0"'), '위치 보기 단추는 그 핀을 가운데 둔 크게 보기(mp.f0)');
+    const m3 = mk({ lat: 37.2661, lng: 127.0011, res: { gg: GGS, tn: TAGO, a0: GGA, a1: '' } }), bb = m3.body, tm = m3.head[1];
+    ok(tm.t === 'tmap' && tm.pts.length >= 2 && tm.pts[tm.pts.length - 1].k === 'm' && tm.pts[0].k === 's' && tm.pts[0].n === '1' && tm.pts[0].v === 'mp.pm.0' && tm.pts[0].g === 'GG:203000123' && tm.live === 1 && tm.foc === -1, '정류장 지도: 번호 핀 + 내 위치 핀, 핀을 누르면 그 카드(g)로');
+    ok(bb.every(n => n.t !== 'bcard' || (n.act.v.startsWith('mp.pc.') && n.act.id === n.k)) && bb[0].pi === 0, '카드를 누르면 mp.pc.N, 카드는 자기 핀 번호(pi)를 안다');
   }
   // 웹과 같은 규칙: 같은 이름 25m 안은 한 곳으로, 출구가 많으면 목록이 늘어난다
   const many = []; for (let i = 0; i < 9; i++) many.push({ nm: '아라역' + (i + 1) + '번 출구', la: 37.5 + i * 1e-3, lo: 127, dist: 100 + i * 10, src: 'tago' });
@@ -182,12 +183,50 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
   ok(ord.length === 12 && ord.slice(0, 9).every(x => /출구/.test(x.nm)) && ord[9].nm === '일반0', '출구 9곳이면 12곳까지, 출구가 먼저');
 }
 
+
+// ⑥-b 버스 — 웹 mapBusPanel: 선택 · 즐겨찾기 · 별명 · 토글
+{
+  const near = (extra, res) => call({ part: 'b', mode: 'bus', th: 'dark', bus: Object.assign({ lat: 37.5, lng: 127.0, res: Object.assign({ tp: SEOUL_POS, gg: '', tn: '', a0: SEOUL_ARR, a1: '', a2: '', a3: '' }, res || {}) }, extra || {}) });
+  let b = near({ sel: 1 });
+  const cs = b.body.filter(n => n.t === 'bcard');
+  ok(cs[1].on === true && cs[0].on === false && b.head[1].foc === cs[1].pi, '고른 정류장(sel): 그 카드가 켜지고 지도도 그 핀을 고른다');
+  ok(near({ sel: 99 }).head[1].foc === -1 && near({ sel: -1 }).body.every(n => n.t !== 'bcard' || n.on === false), '범위 밖 선택은 무시');
+  ok(cs.every(c => c.mode === 'near' && c.fv === 0 && c.star.v === 'mp.fv.' + cs.indexOf(c) && c.edit.v === 'mp.al.' + cs.indexOf(c) && c.dist), '주변 카드: ☆ · ✏️ · 거리');
+  const fv = b.info.stops[0];
+  ok(fv.id === 'SEOUL:11111' && fv.src === 'topis' && fv.ars === '11111' && !('dist' in fv), 'info.stops: 도착정보를 다시 물을 수 있는 최소 값');
+  b = near({ fav: [fv], al: { 'SEOUL:11111': '출근길' } });
+  const c0 = b.body.filter(n => n.t === 'bcard')[0];
+  ok(c0.fv === 1 && c0.al === '출근길', '즐겨찾기한 정류장은 ★, 별명이 있으면 별명');
+  ok(near({ al: { 'SEOUL:11111': '가나다라마바사아자차카' } }).body[0].al === '가나다라마바사아자차', '별명은 10자까지(웹 maxlength)');
+  // 즐겨찾기 화면
+  const fav = (extra) => call({ part: 'b', mode: 'bus', th: 'dark', bus: Object.assign({ vw: 'fav', fav: [fv, { nm: '다른곳', id: 'SEOUL:22222', src: 'topis', ars: '22222', la: 37.501, lo: 127.001 }], res: {} }, extra || {}) });
+  b = fav();
+  ok(b.head.length === 1 && b.head[0].items[1].on && !b.head[0].items[0].on, '즐겨찾기: 지도는 없고 토글만(웹은 주변에서만 지도)');
+  ok(b.info.bus.st === 'need' && b.info.bus.vw === 'fav' && b.info.bus.need.map(n => n.k).join() === 'f0,f1' && /getStationByUid\?arsId=11111/.test(b.info.bus.need[0].url), '즐겨찾기 도착정보 요청(f0.. 열쇠는 주변과 따로)');
+  ok(/즐겨찾기 2개 · 30초마다 자동 갱신/.test(JSON.stringify(b.body)) && b.body.filter(n => n.t === 'bcard').length === 2 && b.body.filter(n => n.t === 'bcard').every(c => c.mode === 'fav' && c.ld && !c.n && !c.dist && c.map.a === 'open'), '즐겨찾기 카드: 번호·거리 없음, ×, 🗺️, 불러오는 중');
+  b = fav({ res: { f0: SEOUL_ARR, f1: '' }, al: { 'SEOUL:22222': '집' } });
+  const fc = b.body.filter(n => n.t === 'bcard');
+  ok(b.info.bus.st === 'ok' && fc[0].rows.length === 2 && fc[1].em === '도착정보 없음' && fc[1].al === '집' && fc[0].star.v === 'mp.fv.0', '즐겨찾기 도착정보 · 별명 · 제거(mp.fv.N)');
+  b = call({ part: 'b', mode: 'bus', bus: { vw: 'fav', fav: [], res: {} } });
+  ok(/즐겨찾기한 정류장이 없습니다/.test(JSON.stringify(b.body)) && JSON.stringify(b.body).includes('mp.vw.near') && b.info.stops.length === 0, '즐겨찾기가 비면 안내 + 주변 정류장 보기 단추');
+  b = call({ part: 'b', mode: 'bus', bus: { vw: 'fav', fav: Array.from({ length: 20 }, (_, i) => ({ nm: 'S' + i, id: 'SEOUL:' + (100 + i), src: 'topis', ars: String(100 + i), la: 37.5, lo: 127 })).concat([{ nm: '이상', id: 'x', src: 'evil' }, null, 5]), res: {} } });
+  ok(b.info.stops.length === 12 && b.info.bus.need.length === 12, '즐겨찾기는 12곳까지 · 이상한 값은 버린다');
+  ok(JSON.stringify(call({ part: 'b', mode: 'bus', bus: { vw: 'fav', fav: 'oops', al: [1], res: {} } }).body).includes('즐겨찾기한 정류장이 없습니다'), '깨진 저장값에도 안 죽는다');
+  // 노선 색 · 시각 글 (웹 _busNumClass · _busFmtCd)
+  const rows = near().body.find(n => n.t === 'bcard').rows;
+  ok(rows.every(r => /^#[0-9a-fA-F]{6}$/.test(r.c)), '노선 색');
+  const colRows = E.mapScreen({ cap: 18 }, { part: 'b', mode: 'bus', bus: { lat: 37.5, lng: 127.0, res: { tp: SEOUL_POS, gg: '', tn: '', a0: '<ServiceResult><msgBody>' + ['5', '150', '300', '700', '3012', 'N13'].map(n => '<itemList><rtNm>' + n + '</rtNm><arrmsg1>2분후</arrmsg1><traTime1>59</traTime1></itemList>').join('') + '</msgBody></ServiceResult>', a1: '', a2: '', a3: '' } } }).body.find(n => n.t === 'bcard').rows;
+  ok(colRows.map(r => r.c).join() === '#e74c3c,#0066FF,#00b341,#9b59b6,#7f8c8d,#7f8c8d' && colRows.every(r => r.a[0].s === '59초' && r.a[0].soon === 1), '노선 색(웹 _busNumClass: 광역 빨강·간선 파랑·지선 초록·순환 보라·그 밖 회색) · 60초 안은 임박');
+}
+
 // ⑦ 앱 검증기
 {
   const T = E.mapLinesOf('강남'), lines = [];
   const push = o => lines.push(JSON.stringify(o));
   ['bus', 'subway'].forEach(m => ['seoul', 'busan', 'daegu', 'gwangju', 'daejeon'].forEach(r => { push(call({ part: 'h', mode: m, reg: r, flt: '3호선', q: '강남' })); push(call({ part: 'b', mode: m, reg: r, th: 'dark' })); }));
   push(call({ part: 'b', mode: 'bus', th: 'dark', bus: null })); push(call({ part: 'b', mode: 'bus', th: 'dark', bus: { lat: 37.5, lng: 127, res: {} } })); push(call({ part: 'b', mode: 'bus', th: 'pastel', bus: { lat: 37.5, lng: 127, res: { tp: SEOUL_POS, gg: '', tn: '', a0: SEOUL_ARR, a1: '', a2: '', a3: '' } } }));
+  push(call({ part: 'b', mode: 'bus', th: 'dark', bus: { lat: 37.5, lng: 127, sel: 0, fav: [{ nm: 'a', id: 'SEOUL:11111', src: 'topis', ars: '11111', la: 37.5, lo: 127 }], al: { 'SEOUL:11111': '집' }, res: { tp: SEOUL_POS, gg: '', tn: '', a0: SEOUL_ARR, a1: '', a2: '', a3: '' } } }));
+  push(call({ part: 'b', mode: 'bus', th: 'dark', bus: { vw: 'fav', fav: [{ nm: 'a', id: 'SEOUL:11111', src: 'topis', ars: '11111', la: 37.5, lo: 127 }], al: { 'SEOUL:11111': '집' }, res: { f0: SEOUL_ARR } } })); push(call({ part: 'b', mode: 'bus', th: 'dark', bus: { vw: 'fav', fav: [], res: {} } })); push(call({ part: 'b', mode: 'bus', th: 'dark', bus: { vw: 'fav', fav: [{ nm: 'a', id: 'SEOUL:11111', src: 'topis', ars: '11111', la: 37.5, lo: 127 }], res: {} } }));
   push(call({ part: 'stn', stn: '강남' })); push(call({ part: 'stn', stn: '없는역xyz' }));
   const data = { dayCode: 'DAY', today: 'DAY', days: [{ code: 'DAY', label: '평일' }], dirs: [{ dk: '상', toward: '잠실', times: [300, 310, 480, 1450], first: 300, last: 1450, nextMin: 480 }] };
   push(call({ part: 'tt', stn: '강남', tt: { st: 'ok', res: { [T[0] + '|-']: data } } })); push(call({ part: 'tt', stn: '강남', tt: { st: 'loading' } })); push(call({ part: 'tt', stn: '강남', tt: { st: 'fail' } }));

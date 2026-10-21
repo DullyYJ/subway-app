@@ -116,6 +116,7 @@ public class ShellActivity extends Activity {
         chat = new ChatCore(store);
         fav = new FavCore(store);
         map = new MapCore(store);
+        store.put(MapCore.K_BUSVW, MapCore.VW_NEAR);                          // 웹은 앱을 켤 때마다 '주변 정류장'부터
         dpr = getResources().getDisplayMetrics().density;
         ScreenView.preloadFaces(this);
         importLegacy();
@@ -246,7 +247,7 @@ public class ShellActivity extends Activity {
         } catch (Throwable t) { /* 못 읽으면 이전 값 */ }
     }
     @Override protected void onDestroy() { if (live == this) live = null; super.onDestroy(); }
-    @Override protected void onResume() { super.onResume(); resumed = true; refreshPower(); if (System.currentTimeMillis() - hdrAt > 300000L) loadHdr(); if (prefetchAt > 0L && System.currentTimeMillis() - prefetchAt > 600000L) prefetchTabs(); if (ShellCore.S_SETPG.equals(sheetName) && sheet != null && sheet.isShowing()) loadSetPage(); if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) startChatPoll(); }
+    @Override protected void onResume() { super.onResume(); resumed = true; refreshPower(); if (System.currentTimeMillis() - hdrAt > 300000L) loadHdr(); if (prefetchAt > 0L && System.currentTimeMillis() - prefetchAt > 600000L) prefetchTabs(); if ("bus".equals(map.view)) startBusTick(); if (ShellCore.S_SETPG.equals(sheetName) && sheet != null && sheet.isShowing()) loadSetPage(); if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) startChatPoll(); }
     @Override protected void onPause() { resumed = false; super.onPause(); }
 
     @Override public void onBackPressed() {
@@ -1454,6 +1455,7 @@ public class ShellActivity extends Activity {
                     if (txt.length() > 0) map.onScreen(txt);
                     if (!(keep && txt.length() > 0 && !map.busNeed.isEmpty())) present(v, txt, keep);          // 버스 도착정보를 더 받아야 하면 캐시 화면을 중간 화면으로 덮지 않는다
                     syncMapView();
+                    if ("bus".equals(map.view)) startBusTick();
                     if (txt.length() > 0 && !map.busNeed.isEmpty() && round < 3) fetchBusNeed(v, keep, round, my);
                 } });
             }
@@ -1506,6 +1508,14 @@ public class ShellActivity extends Activity {
         }
     }
     private boolean mapPermAsked;
+    /** 웹처럼 30초마다 버스 도착정보를 다시 받는다(지도 탭이 보이고 버스 화면일 때만; 정류장 목록·내 위치는 그대로). 계산은 엔진이 한다. */
+    private final Runnable busTick = new Runnable() { @Override public void run() {
+        busTicking = false;
+        if (!resumed || !"bus".equals(map.view) || !"bus".equals(map.mode()) || map.busLL == null || !"map".equals(ShellCore.currentTab(store)) || !ShellCore.S_MAPB.equals(slots.length > 1 ? slots[1] : "")) return;
+        map.dropArrivals(); loadMapBody(body, true); startBusTick();
+    } };
+    private boolean busTicking;
+    private void startBusTick() { if (!busTicking) { busTicking = true; main.postDelayed(busTick, 30000L); } }
     private void reloadMap(boolean headToo) {
         seedMapLoc();
         if (headToo) { keyedShow(head, ShellCore.S_MAPH); loadMapHead(head, true, null, null); }
@@ -1524,7 +1534,7 @@ public class ShellActivity extends Activity {
         }
         if ("open".equals(a.a)) { apply(ShellCore.linkEffect(a.url)); return; }       // 정류장 위치 보기 · 길찾기(외부 지도)
         if (!"call".equals(a.a)) return;
-        if (a.v != null && (a.v.equals("mp.all") || a.v.startsWith("mp.f"))) {          // 정류장 지도 크게 보기(핀은 엔진이 정한 값)
+        if (a.v != null && (a.v.equals("mp.all") || a.v.matches("mp\\.f[0-9]+"))) {          // 정류장 지도 크게 보기(핀은 엔진이 정한 값)
             int fi = -1;
             if (a.v.startsWith("mp.f")) { try { fi = Integer.parseInt(a.v.substring(4)); } catch (NumberFormatException e) { fi = -1; } }
             openTileMap(src.tmapPins(), fi);
@@ -1560,8 +1570,66 @@ public class ShellActivity extends Activity {
                 });
                 break;
             case MapCore.R_STN: openMapSheet(S_STN_H); break;
+            case MapCore.R_BUS_VIEW: reloadMap(false); break;                                  // 주변 ↔ 즐겨찾기: 본 적 있으면 그 화면을 먼저 올리고 새로 받는다
+            case MapCore.R_BUS_REF: loadMapBody(body, true); break;                            // 즐겨찾기 새로고침: 도착정보를 다시 받는다
+            case MapCore.R_BUS_SEL: {
+                loadMapBody(body, true);
+                if (map.toast.length() > 0) { toast(map.toast); map.toast = ""; }
+                break;
+            }
+            case MapCore.R_ALIAS: openAliasDialog(); break;
             default: break;
         }
+    }
+    /** 정류장 이름 설정(웹 _busEditAlias): 이름 + 입력칸(10자) + 삭제(있을 때)·취소·저장. 저장하면 엔진에 다시 그려 달라고 한다. */
+    private void openAliasDialog() {
+        closeSheet();
+        final String key = map.aliasKey, cur = map.aliasCur;
+        final int[] pal = ShellCore.palette(ShellCore.theme(store));
+        final android.app.Dialog dlg = new android.app.Dialog(this, android.R.style.Theme_Material_Light_Dialog_NoActionBar);
+        android.widget.LinearLayout box = new android.widget.LinearLayout(this);
+        box.setOrientation(android.widget.LinearLayout.VERTICAL);
+        int pd = Math.round(18 * dpr);
+        box.setPadding(pd, Math.round(20 * dpr), pd, pd);
+        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+        bg.setColor(pal[ScreenView.R_CARD]); bg.setCornerRadius(16 * dpr); bg.setStroke(Math.max(1, Math.round(dpr)), pal[ScreenView.R_BORDER]);
+        box.setBackground(bg);
+        android.widget.TextView t1 = new android.widget.TextView(this); t1.setText("정류장 이름 설정"); t1.setTextSize(15); t1.setTypeface(ScreenView.face(true)); t1.setTextColor(pal[ScreenView.R_TEXT]);
+        android.widget.TextView t2 = new android.widget.TextView(this); t2.setText(map.aliasName); t2.setTextSize(12); t2.setTextColor(pal[ScreenView.R_SUB]); t2.setPadding(0, Math.round(4 * dpr), 0, Math.round(12 * dpr));
+        final android.widget.EditText ed = new android.widget.EditText(this);
+        ed.setText(cur); ed.setSelection(cur.length()); ed.setHint("예: 출근, 퇴근, 친구집"); ed.setSingleLine(true); ed.setTextSize(14);
+        ed.setFilters(new android.text.InputFilter[] { new android.text.InputFilter.LengthFilter(10) });
+        ed.setTextColor(pal[ScreenView.R_TEXT]); ed.setHintTextColor(pal[ScreenView.R_SUB]);
+        android.graphics.drawable.GradientDrawable eb = new android.graphics.drawable.GradientDrawable();
+        eb.setColor(pal[ScreenView.R_BG]); eb.setCornerRadius(10 * dpr); eb.setStroke(Math.max(1, Math.round(dpr)), pal[ScreenView.R_BORDER2]);
+        ed.setBackground(eb); ed.setPadding(Math.round(11 * dpr), Math.round(11 * dpr), Math.round(11 * dpr), Math.round(11 * dpr));
+        android.widget.LinearLayout row = new android.widget.LinearLayout(this);
+        row.setPadding(0, Math.round(14 * dpr), 0, 0);
+        if (cur.length() > 0) row.addView(aliasBtn("삭제", 0xFFFF5B5B, 0, pal, 1f, new Runnable() { @Override public void run() { map.setAlias(key, ""); dlg.dismiss(); loadMapBody(body, true); } }));
+        row.addView(aliasBtn("취소", pal[ScreenView.R_SUB], 0, pal, 1f, new Runnable() { @Override public void run() { dlg.dismiss(); } }));
+        row.addView(aliasBtn("저장", 0xFF121214, pal[ScreenView.R_GOLD], pal, 2f, new Runnable() { @Override public void run() { map.setAlias(key, String.valueOf(ed.getText())); dlg.dismiss(); loadMapBody(body, true); } }));
+        box.addView(t1); box.addView(t2); box.addView(ed); box.addView(row);
+        dlg.setContentView(box);
+        try {
+            android.view.Window w = dlg.getWindow();
+            w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(0));
+            w.setLayout(Math.round(Math.min(340 * dpr, getResources().getDisplayMetrics().widthPixels - 48 * dpr)), ViewGroup.LayoutParams.WRAP_CONTENT);
+            w.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE);
+            dlg.show();
+        } catch (Throwable t) { toast("이름 설정을 열지 못했어요"); }
+    }
+    private android.widget.TextView aliasBtn(String label, int fg, int fill, int[] pal, float weight, final Runnable on) {
+        android.widget.TextView b = new android.widget.TextView(this);
+        b.setText(label); b.setTextSize(13); b.setTypeface(ScreenView.face(true)); b.setTextColor(fg); b.setGravity(android.view.Gravity.CENTER);
+        android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
+        g.setCornerRadius(10 * dpr);
+        if (fill != 0) g.setColor(fill); else { g.setColor(0); g.setStroke(Math.max(1, Math.round(dpr)), pal[ScreenView.R_BORDER2]); }
+        b.setBackground(g);
+        android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(0, Math.round(44 * dpr), weight);
+        lp.rightMargin = Math.round(8 * dpr);
+        b.setLayoutParams(lp);
+        b.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { on.run(); } });
+        return b;
     }
     private static final int S_STN_H = 330, S_TT_H = -58;
 
