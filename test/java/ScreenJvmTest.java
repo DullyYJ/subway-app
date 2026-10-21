@@ -285,6 +285,7 @@ public class ScreenJvmTest {
         ok(rwL.hitBody(rwB.get(0).x + rwB.get(0).w + 2f, rwB.get(0).y + 5f) == null, "row: 칸 사이 틈은 눌려도 아무 일 없다");
         ok(bad(wrapBody("{\"t\":\"row\",\"kids\":[]}")), "row: 칸이 없으면 거절");
         ok(bad(wrapBody("{\"t\":\"row\",\"kids\":[{\"t\":\"toggle\",\"key\":\"k\",\"title\":\"x\"}]}")), "row 안에 스위치를 둘 수 없다");
+        ok(!bad(wrapBody("{\"t\":\"row\",\"kids\":[{\"t\":\"panel\",\"kids\":[{\"t\":\"text\",\"s\":\"a\"}]},{\"t\":\"panel\",\"kids\":[{\"t\":\"text\",\"s\":\"b\"}]}]}")), "row 안에 panel 을 둘 수 있다(도보 안내 두 칸)");
         ok(bad(wrapBody("{\"t\":\"row\",\"kids\":[{\"t\":\"row\",\"kids\":[{\"t\":\"button\",\"s\":\"a\",\"act\":{\"a\":\"refresh\"}}]}]}")), "row 안에 row 를 둘 수 없다");
         StringBuilder rwNine = new StringBuilder("{\"t\":\"row\",\"kids\":[");
         for (int i = 0; i < 9; i++) { if (i > 0) rwNine.append(','); rwNine.append("{\"t\":\"button\",\"s\":\"a\",\"act\":{\"a\":\"refresh\"}}"); }
