@@ -989,6 +989,21 @@ public class ScreenJvmTest {
             try { ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"x\",\"head\":[" + bad + "],\"body\":[]}"); ok(false, "runner: 잘못된 값은 거절 " + bad); }
             catch (Exception ex) { ok(true, "runner: 잘못된 값은 거절 " + bad); }
         }
+        // ── 세부경로 줄(tdrow) 노드 ──
+        try {
+            String row = "{\"t\":\"tdrow\",\"pos\":\"f\",\"ic\":\"s\",\"col\":\"#2f7cf6\",\"trk\":\"rgba(47,124,246,0.1875)\",\"ibg\":\"rgba(47,124,246,0.157)\",\"lab\":\"수도권 1호선\",\"bbg\":\"rgba(47,124,246,0.133)\",\"bfg\":\"#2f7cf6\",\"path\":\"부평 → 두정\",\"cnt\":\"3정거장 경유\",\"time\":\"12분\",\"tcol\":\"#2f7cf6\",\"rng\":\"12:03~12:15\",\"dep\":1760000000000,\"arr\":1760000720000,\"ex\":true,\"op\":%OP%,\"act\":{\"a\":\"call\",\"v\":\"rd.tg.1\"},\"stops\":[[\"부평\",\"12:03\",1],[\"가\",\"12:07\",0],[\"두정\",\"12:15\",1]]}";
+            ScreenCore.Layout tdl0 = ScreenCore.layout(ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"rdetail\",\"head\":[],\"body\":[" + row.replace("%OP%", "false") + "]}"), 360f, M);
+            ScreenCore.Layout tdl1 = ScreenCore.layout(ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"rdetail\",\"head\":[],\"body\":[" + row.replace("%OP%", "true") + "]}"), 360f, M);
+            ScreenCore.Item tda = tdl0.body.length > 0 ? tdl0.body[0] : null, tdb = tdl1.body.length > 0 ? tdl1.body[0] : null;
+            ok(tda != null && tda.kind == ScreenCore.K_TDROW && tda.act != null && tda.pub && !tda.on && tda.ln == 1760000000000L && tda.ln2 == 1760000720000L, "tdrow: 종류 · 눌림 · 시각(밀리초 그대로)");
+            ok(tda != null && near(tda.sx, 16f + 17f) && near(tda.bx, 16f + 34f + 12f) && tda.f1 >= 26f + 34f && near(tda.h, tda.f1), "tdrow: 레일 가운데 x · 몸통 x · 줄 높이(안쪽 여백 13×2 + 내용)");
+            ok(tdb != null && tdb.on && tdb.gb.length == 3 && tdb.gb[0] && !tdb.gb[1] && tdb.gb[2] && "가".equals(tdb.sa[2]) && near(tdb.h - tdb.f1, ScreenCore.TD_STOP_PAD_T + 3 * ScreenCore.TD_STOP_ROW + ScreenCore.TD_STOP_PAD_B), "tdrow: 펼치면 정거장 줄(끝점 표시) 높이가 더해진다");
+            ok(tda != null && "12분".equals(tda.label) && "12:03~12:15".equals(tda.value) && "3정거장 경유".equals(tda.tag) && tda.lines.length >= 1, "tdrow: 시간 · 시간대 · 경유 · 경로 글");
+        } catch (Exception ex) { ok(false, "tdrow 읽기: " + ex); }
+        for (String bad : new String[] { "{\"t\":\"tdrow\",\"ic\":\"x\"}", "{\"t\":\"tdrow\",\"pos\":\"z\"}", "{\"t\":\"tdrow\",\"dep\":-5}", "{\"t\":\"tdrow\",\"stops\":[[\"a\"]]}", "{\"t\":\"tdrow\",\"col\":\"nope\"}" }) {
+            try { ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"x\",\"head\":[],\"body\":[" + bad + "]}"); ok(false, "tdrow: 잘못된 값은 거절 " + bad); }
+            catch (Exception ex) { ok(true, "tdrow: 잘못된 값은 거절 " + bad); }
+        }
         // ── 스켈레톤(skel) 노드 ──
         for (String sc : new String[] { "cards", "map", "list" }) {
             try {
