@@ -130,7 +130,19 @@ ok(G({ kind: 'x' }).error === 'kind' && G({}).error === 'kind' && G(null).error 
   } catch (e) { ok(false, '워커 블록 실행 오류 ' + e.message); done(); }
 }
 
+function rloadChecks() {
+  // ⑥-1 경로 탐색 로딩 카드(rload) — runner 노드를 아는 앱(cap 19)부터
+  const o = G({ kind: 'rload' }, 19), r = o.head && o.head[0];
+  ok(G({ kind: 'rload' }, 18).error === 'cap' && G({ kind: 'rload' }, 16).error === 'cap' && o.ok === true, 'rload: cap 19 미만이면 만들지 않는다(옛 앱은 runner 를 모른다)');
+  ok(o.screen === 'dlg' && o.dlg.dim === 0.7 && o.dlg.w === 296 && o.dlg.r === 20 && !o.dlg.tap && o.bg === 'card', 'rload: 뒤 70% 어둡게 · 폭 296 · 모서리 20 · 흐린 곳을 눌러도 안 닫힌다');
+  ok(r && r.t === 'runner' && r.ttl === '복합경로 탐색 중' && r.sub === '잠시만 기다려주세요' && JSON.stringify(r.pad) === '[30,24,30,22]', 'rload: 제목 · 안내 · 여백');
+  ok(!EMOJI.test(JSON.stringify(o)) && /^d1:/.test(o.rev) && G({ kind: 'rload' }, 19).rev === o.rev, 'rload: 이모지 없음 · 같은 화면은 같은 rev');
+  ok(/id="transitLoading"/.test(html) && /복합경로 탐색 중/.test(html) && /잠시만 기다려주세요/.test(html), 'rload: 문구가 웹 #transitLoading 과 같다');
+  { const rc = screenCheck([o]); ok(!rc.err && rc.out.length === 1 && /^OK/.test(rc.out[0]), 'rload: 앱 검증기 통과 ' + (rc.err || rc.out.join(' '))); }
+}
+
 function done() {
+  rloadChecks();
   // ⑦ 웹 연결 글
   ok(/id: 'dlg', kp: 'gdm_scrd', ep: '\/screen\/dlg'/.test(html) && /id="scrdSetCard"/.test(html) && /key === 'f\.scrd'/.test(html) && /window\._scrdSetUse = /.test(html), '웹: 틀 · 설정 카드 · 스위치 연결');
   ok(/window\._ndlg\.pop\(msg, sub, cls\)/.test(html) && /window\._ndlg\.perm\(onOk, onCancel\)/.test(html) && /window\._ndlg\.diag\(\)/.test(html) && /function _pickPopWeb/.test(html) && /function _showOvlPermDialogWeb/.test(html) && /function _ovlDiagShowWeb/.test(html) && /window\._ndlg\.exit\(\)/.test(html) && /window\._ndlg\.report\(function/.test(html) && /function _lrReportGo/.test(html), '웹: 팝업 4종이 먼저 네이티브를 시도하고 웹으로 돌아간다');
