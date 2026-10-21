@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-22s139";
+var ENGINE_VERSION = "route-v2-2026-10-22s141";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -18988,7 +18988,7 @@ async function handleScreenResult(request) {
 // \ucd9c\ub825  { ok, v:1, screen:'map'|'mapstn'|'maptt', rev, cover:'tab', head, body, info }
 // \ub9e8 \uc544\ub798 module.exports \ub294 \uc2dc\ud5d8(Node)\uc6a9\uc774\uace0 Worker \uc5d0\uc11c\ub294 \ud568\uc218 \uc120\uc5b8\ub9cc \uc4f0\uc778\ub2e4.
 'use strict';
-var MAP_SCREEN_V = 5;
+var MAP_SCREEN_V = 6;
 var MAP_STN_TOP = 36;                                                   // \uc6f9 \ud31d\uc5c5 \uc704 \uc5ec\ubc31 16 + \uc190\uc7a1\uc774 4 + 16 (\uc190\uc7a1\uc774\ub294 \uc571 \ubdf0\uac00 \uadf8\ub9b0\ub2e4)
 var MAP_REGIONS = [['seoul', '\uc218\ub3c4\uad8c'], ['busan', '\ubd80\uc0b0'], ['daegu', '\ub300\uad6c'], ['gwangju', '\uad11\uc8fc'], ['daejeon', '\ub300\uc804']];
 var MAP_REGION_PREFIX = { busan: '\ubd80\uc0b0', daegu: '\ub300\uad6c', gwangju: '\uad11\uc8fc', daejeon: '\ub300\uc804' };
@@ -19172,7 +19172,7 @@ function mapTimetableSheet(f) {
   var day = mapStr(sel.day, 6);
   var d = res[line + '|' + (day || '-')] || null;
   if (!day && d && d.dayCode) day = d.dayCode;
-  var kids = [{ t: 'bar', pad: [0, 0, 0, 4], title: name + ' \uc2dc\uac04\ud45c', btn: '\ub2eb\uae30', act: { a: 'call', v: 'mp.close' } }];
+  var kids = [{ t: 'bar', pad: [0, MAP_STN_TOP, 0, 4], title: name + ' \uc2dc\uac04\ud45c', btn: '\ub2eb\uae30', act: { a: 'call', v: 'mp.close' } }];
   if (lines.length) kids.push({ t: 'chips', pad: [0, 4, 0, 6], gap: 6, h: 30, onc: 'gold', onfg: '#ffffff', items: lines.map(function (l, i) {
     var kc = res[l + '|-'], nod = !!(kc && kc.noData);
     var o = { label: l, on: l === line, act: { a: 'call', v: 'mt.l.' + i } };
