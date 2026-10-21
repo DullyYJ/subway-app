@@ -164,6 +164,7 @@ public class ScreenView extends View {
         }
         final ScreenCore.Layout before = keepScroll && !stick && ancKey == null ? lay : null;      // 노선 상세: 바뀐 줄만 다시 그리려고 이전 배치를 쥔다
         screen = s;
+        cdFresh = true; pendAgeMs = srcAgeMs; srcAgeMs = 0L;
         iconPaths.clear();
         if (!keepScroll) { scrollY = 0f; scrollX = 0f; openKey = null; ctrDone = null; }
         boolean touching = mode == 1 || mode == 2;
@@ -577,19 +578,20 @@ public class ScreenView extends View {
     // ── 버스 도착 초 카운트다운(웹 _BUSARR · _busArrKeep · _busCdTick): 엔진이 준 남은 초(sec)를 받은 순간부터 1초마다 줄여 그린다.
     //    새 화면이 와도 흐르던 값과 45초 이내면 '같은 차'로 보고 시작점을 이어 가서 숫자가 튀지 않는다. 오래 된 캐시 화면은 그만큼 이미 흐른 것으로 친다(setSourceAge).
     private final Map<String, double[]> cdState = new HashMap<String, double[]>();     // 열쇠 → {시작 초, 시작 시각(uptime ms)}
-    private long srcAgeMs = 0L;
-    private boolean cdDrawn;
+    private long srcAgeMs = 0L, pendAgeMs = 0L;
+    private boolean cdDrawn, cdFresh;       // cdFresh: 새 화면이 막 올라왔다 — 이때만 카운트다운 시작점을 새 값으로 잡는다(지도 만지기·크기 바뀜 같은 다시 배치는 흐르던 값을 건드리지 않는다)
     /** 다음에 올리는 화면이 받은 지 몇 ms 된 것인지(캐시 화면 · 0 이면 방금 받은 것). 한 번 쓰면 0 으로 돌아간다. */
     public void setSourceAge(long ms) { srcAgeMs = Math.max(0L, ms); }
     private void markCountdowns(long now) {
-        long age = srcAgeMs; srcAgeMs = 0L;
+        boolean fresh = cdFresh; cdFresh = false;
+        long age = fresh ? pendAgeMs : 0L; if (fresh) pendAgeMs = 0L;
         if (cdState.size() > 400) { for (java.util.Iterator<Map.Entry<String, double[]>> ii = cdState.entrySet().iterator(); ii.hasNext(); ) if (now - (long) ii.next().getValue()[1] > 600000L) ii.remove(); }
         for (ScreenCore.Item it : lay.body) {
             if (it.kind != ScreenCore.K_BCARD || it.bs.length == 0) continue;
             for (int k = 0; k < it.bs.length; k++) {
                 float sec = it.bs[k];
                 if (sec <= 0f || it.ck[k] == null) continue;
-                cdState.put(it.ck[k], new double[] { sec, now - age });                              // 새로 받은 실시간 값이 오면 줄어들던 옛 값은 버리고 바로 그 값에서 다시 센다
+                if (fresh || !cdState.containsKey(it.ck[k])) cdState.put(it.ck[k], new double[] { sec, now - age });      // 새로 받은 실시간 값이 오면 줄어들던 옛 값은 버리고 바로 그 값에서 다시 센다
             }
         }
     }

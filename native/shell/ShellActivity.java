@@ -1578,7 +1578,7 @@ public class ShellActivity extends Activity {
                     if (my != seqMapB) return;
                     if (txt.length() == 0 && busRefreshing) { busEnd(); return; }                    // 8초 갱신이 실패 — 화면은 그대로 두고(1초 카운트다운 계속) 다음 박자에 다시
                     if (txt.length() > 0) map.onScreen(txt);
-                    if (!(keep && txt.length() > 0 && !map.busNeed.isEmpty())) present(v, txt, keep);          // 버스 도착정보를 더 받아야 하면 캐시 화면을 중간 화면으로 덮지 않는다
+                    if (!(keep && txt.length() > 0 && !map.busNeed.isEmpty())) { v.setSourceAge(map.arrAge()); present(v, txt, keep); }          // 버스 도착정보를 더 받아야 하면 캐시 화면을 중간 화면으로 덮지 않는다
                     syncMapView();
                     if ("bus".equals(map.view)) { if (round == 0) busAt = System.currentTimeMillis(); startBusTick(); }
                     if (txt.length() > 0 && !map.busNeed.isEmpty() && round < 3) fetchBusNeed(v, keep, round, my);
@@ -1964,7 +1964,7 @@ public class ShellActivity extends Activity {
         if (System.currentTimeMillis() - brAt > BR_POLL_MS) brPoll();
         brArm();
     }
-    private void brPoll() { map.dropPositions(); brBusy = true; brBusyAt = System.currentTimeMillis(); brAt = brBusyAt; brRound(brGen, 0, true); }
+    private void brPoll() { map.dropPositions(); brBusy = true; brBusyAt = System.currentTimeMillis(); brAt = brBusyAt; brFlight.remove("gp"); brFlight.remove("tp"); brRound(brGen, true); }
     private String[] brCacheGet(String rid) {
         try {
             String raw = store.get("brc_" + rid, "");
@@ -1977,9 +1977,10 @@ public class ShellActivity extends Activity {
             return new String[] { HomeSearchCore.toJson(m.get("s")), BoardCore.s(m.get("v"), 6), BoardCore.s(m.get("c"), 4) };
         } catch (Throwable e) { return null; }
     }
-    private void brCachePut(String rid) {
-        if (map.brStnJson.length() == 0 || map.brStnJson.length() > 120000 || rid.length() == 0 || rid.length() > 40) return;
-        final String key = "brc_" + rid, val = "{\"t\":" + System.currentTimeMillis() + ",\"v\":" + ShellCore.q(map.brVia) + ",\"c\":" + ShellCore.q(map.brCc) + ",\"s\":" + map.brStnJson + "}";
+    private void brCachePut(MapCore m) {
+        String rid = m.brRid;
+        if (m.brStnJson.length() == 0 || m.brStnJson.length() > 120000 || rid.length() == 0 || rid.length() > 40) return;
+        final String key = "brc_" + rid, val = "{\"t\":" + System.currentTimeMillis() + ",\"v\":" + ShellCore.q(m.brVia) + ",\"c\":" + ShellCore.q(m.brCc) + ",\"s\":" + m.brStnJson + "}";
         if (val.equals(store.get(key, ""))) return;
         String idx = store.get("brc_idx", "");
         java.util.List<String> ids = new ArrayList<String>(java.util.Arrays.asList(idx.length() == 0 ? new String[0] : idx.split(",")));
@@ -2012,8 +2013,8 @@ public class ShellActivity extends Activity {
         if (seed != null) map.setRouteMe(seed[0], seed[1]);
         String[] c = brCacheGet(map.brRid);
         if (c != null) map.useCachedStations(c[0], c[1], c[2]);                          // 정류장은 기기에 둔 것으로 바로 — 위치는 아래에서 새로 받는다
-        brBusy = true; brBusyAt = System.currentTimeMillis(); brAt = brBusyAt;
-        brRound(gen, 0, false);
+        brBusy = true; brBusyAt = System.currentTimeMillis(); brAt = brBusyAt; brFlight.clear(); brCached = "";
+        brRound(gen, false);
         brArm();
     }
     /** 화면을 벗어났다(뒤로 · 닫기 · 다른 곳으로): 출발지만 정하고 끝내 도착지를 못 정했으면 고르기 전 상태로 되돌린다(웹 _pickAbandon). */
@@ -2022,7 +2023,12 @@ public class ShellActivity extends Activity {
         boolean keep = brKeep; brKeep = false;
         if (map.pkName.length() > 0) { if (!keep) home.pickRestore(map.pkName); map.brPickClear(); }
     }
-    private void brRound(final int gen, final int round, final boolean poll) {
+    private volatile int brReq;                                                     // 가장 최근 엔진 요청 번호(늦게 온 옛 답이 새 답을 덮지 않게)
+    private final java.util.HashSet<String> brFlight = new java.util.HashSet<String>();     // 지금 받는 중인 주소 열쇠(같은 것을 두 번 받지 않는다)
+    private String brCached = "";
+    /** 엔진에 지금 상태를 보내 화면을 받는다. 더 받아야 할 주소는 각각 따로 받아, 오는 대로 바로 다시 그린다(정류장 목록이 오면 위치를 기다리지 않고 그린다). */
+    private void brRound(final int gen, final boolean poll) {
+        final int my = ++brReq;
         final String json = map.brRequest(ShellCore.CAP, ShellCore.theme(store));
         new Thread(new Runnable() {
             @Override public void run() {
@@ -2030,58 +2036,50 @@ public class ShellActivity extends Activity {
                 final String txt = r.status == 200 ? r.body : ""; warm(txt);
                 main.post(new Runnable() { @Override public void run() {
                     if (!brAlive(gen)) return;
-                    if (txt.length() == 0) { brBusy = false; if (!brShown && sheetView != null) toast("노선 정보를 받지 못했어요"); return; }      // 갱신이 실패하면 보던 화면을 그대로 둔다
+                    if (txt.length() == 0) { if (my == brReq && brFlight.isEmpty()) brBusy = false; if (!brShown && sheetView != null) toast("노선 정보를 받지 못했어요"); return; }      // 갱신이 실패하면 보던 화면을 그대로 둔다
+                    if (my != brReq) return;                                                // 더 새 요청이 이미 나갔다 — 그 답이 이 내용까지 담는다
                     map.onBr(txt);
-                    boolean more = !map.brNeed.isEmpty() && round < 3;
-                    if (!(poll && more)) {                                                // 위치를 새로 받는 중이면 옛 위치가 그려진 화면 위에 중간 화면을 덮지 않는다
-                        present(sheetView, txt, brShown);
-                        brShown = true;
+                    final List<String[]> need = new ArrayList<String[]>(map.brNeed);
+                    map.brNeed.clear();
+                    if (!(poll && !need.isEmpty())) { present(sheetView, txt, brShown); brShown = true; }       // 위치를 새로 받는 중이면 옛 위치가 그려진 화면 위에 중간 화면을 덮지 않는다
+                    for (String[] nd : need) if (brFlight.add(nd[0])) brFetchOne(gen, nd[0], nd[1], poll);
+                    if (need.isEmpty() && brFlight.isEmpty()) {
+                        brBusy = false;
+                        if (!map.brRid.equals(brCached) && map.brStnJson.length() > 0) { brCached = map.brRid; brCachePut(map); }
                     }
-                    if (more) brFetch(gen, round, poll); else { brBusy = false; brCachePut(map.brRid); }
                 } });
             }
         }, "shell-brr").start();
     }
-    private void brFetch(final int gen, final int round, final boolean poll) {
-        final List<String[]> need = new ArrayList<String[]>(map.brNeed);
+    private void brFetchOne(final int gen, final String k, final String url, final boolean poll) {
         new Thread(new Runnable() {
             @Override public void run() {
-                final String[] got = new String[need.size()];
-                Thread[] ts = new Thread[need.size()];
-                for (int i = 0; i < need.size(); i++) {
-                    final int k = i;
-                    ts[i] = new Thread(new Runnable() { @Override public void run() {
-                        String u = MapCore.busFetchUrl(need.get(k)[1]);
-                        boolean pos = need.get(k)[0].endsWith("p");
-                        String body = "";
-                        for (int a = 0; a < (pos ? 5 : 2) && u.length() > 0 && body.length() == 0; a++) {        // 웹처럼: 위치는 실패하면 0.8초 뒤 다시 (최대 4번 더)
-                            if (a > 0) { try { Thread.sleep(800); } catch (InterruptedException e) { break; } }
-                            if (gen != brGen) return;                                          // 화면을 벗어났다 — 더 받지 않는다
-                            NetPost.Res r = NetPost.get(u, 9000);
-                            body = r.status == 200 && r.body != null ? r.body : "";
-                        }
-                        got[k] = body;
-                    } });
-                    ts[i].start();
+                String u = MapCore.busFetchUrl(url), body = "";
+                boolean pos = k.endsWith("p");
+                for (int a = 0; a < (pos ? 5 : 2) && u.length() > 0 && body.length() == 0; a++) {        // 웹처럼: 위치는 실패하면 0.8초 뒤 다시(최대 4번 더) · 목록은 빨리 실패했을 때만 한 번 더
+                    if (a > 0) { try { Thread.sleep(pos ? 800 : 300); } catch (InterruptedException e) { break; } }
+                    if (gen != brGen) return;                                                  // 화면을 벗어났다 — 더 받지 않는다
+                    long t0 = System.currentTimeMillis();
+                    NetPost.Res r = NetPost.get(u, pos ? 6000 : 9000);
+                    body = r.status == 200 && r.body != null ? r.body : "";
+                    if (body.length() == 0 && !pos && System.currentTimeMillis() - t0 > 3000L) break;      // 느리게 실패했으면 또 기다리지 않는다
                 }
-                for (Thread t : ts) { try { t.join(14000); } catch (InterruptedException e) { /* 무시 */ } }
+                final String got = body;
                 main.post(new Runnable() { @Override public void run() {
+                    brFlight.remove(k);
                     if (!brAlive(gen)) return;
-                    boolean bad = false;
-                    for (int i = 0; i < need.size(); i++) if (got[i] == null || got[i].length() == 0) bad = true;
-                    if (poll && bad) { map.brNeed.clear(); brBusy = false; return; }                // 8초 갱신이 비면 버린다 — 보던 위치를 그대로(옛 화면 덮어쓰기 없음)
-                    for (int i = 0; i < need.size(); i++) map.addBrRes(need.get(i)[0], got[i] == null ? "" : got[i]);
-                    map.brNeed.clear();
-                    brRound(gen, round + 1, poll);
+                    if (poll && got.length() == 0) { if (brFlight.isEmpty()) brBusy = false; return; }      // 8초 갱신이 비면 버린다 — 보던 위치를 그대로
+                    map.addBrRes(k, got);
+                    brRound(gen, poll);
                 } });
             }
         }, "shell-brf").start();
     }
-    private void brRender() { if (sheet != null && brAlive(brGen)) brRound(brGen, 0, false); }
+    private void brRender() { if (sheet != null && brAlive(brGen)) brRound(brGen, false); }
     private void brSheetAct(String v) {
         switch (map.brAct(v)) {
             case MapCore.R_BR_CLOSE: closeSheet(); break;
-            case MapCore.R_BR_REFRESH: brBusy = true; brBusyAt = System.currentTimeMillis(); brAt = brBusyAt; brRound(brGen, 0, false); break;
+            case MapCore.R_BR_REFRESH: brBusy = true; brBusyAt = System.currentTimeMillis(); brAt = brBusyAt; brFlight.clear(); brRound(brGen, false); break;
             case MapCore.R_BR_RENDER: brRender(); break;
             case MapCore.R_BR_SAME: toast("출발지와 다른 정류장을 눌러 주세요"); break;
             case MapCore.R_BR_START: {
