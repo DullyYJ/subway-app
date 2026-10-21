@@ -1943,3 +1943,10 @@ YJ(11:16, 기기 스크린샷 4장 + "모든 탭 화면을 웹과 동일하게")
 - 엔진 `map.js`(`MAP_SCREEN_V 4`, `MAP_STN_TOP 36`): `bar(닫기)` 대신 22px 굵은 이름 `text`(`lines:1`), 알약 h34, 단추 이모지 · size 15 · r14 · 테두리 없음, 파스텔 색은 웹 `--blue/--red`. 워커 `route-v2-2026-10-21s128`.
 - 앱 `ShellActivity.stnSheetBox`: 시트 높이 330 → 276dp(내용 높이), 손잡이 뷰를 맨 위에 얹고 위 44dp 에서 아래로 40dp 끌면 `closeSheet`. 지도 만지기·뒤로가기로도 닫힘(그대로).
 - **남은 차이**: 웹은 위로 끌면 시간표가 따라 올라옴(앱은 단추만) · 이름 오른쪽 놀이터(캐릭터) · 노선 알약 안의 호선 숫자 동그라미 · 올라오는 애니메이션은 앱 기본(Animation_InputMethod). 기기 미확인.
+
+## s129 (2026-10-21) — 하차 뒤 도보 안내(웹 `walkModal`) 네이티브 이식
+- 웹 `openWalkModal('arrive')`(수동 하차 1.2초 뒤 `_tryWalkAutoArrive`)를 이식. 죽은 웹 모달(`boardModal`·`gpsModal`)은 이식 대상이 아님.
+- 엔진 `dialog.js` 새 종류 `walk`(`POST /screen/dlg`, `f.walk={my,dest,mode,nowMs,tzoMin,theme}`): 직선거리(`<1000 → m 반올림, 아니면 x.x km`) · 도보 예상(`round(거리/67)` · 0분이면 "1분 미만" · 목적지 없으면 `-`) · "오전/오후 hh:mm 기준"(KST, 내 위치 있을 때만) · 카카오맵 `kakaomap://route?[sp=…&]ep=…&by=FOOT` · 네이버지도 `nmap://route/walk?…&appname=com.dullyyj.subway` 와 각 웹 주소를 `info.nav`로 준다. 이 종류만 `screen:'walk'`이고 `dlg` 모양이 없다(시트용). 워커 `route-v2-2026-10-21s129` — **Cloudflare 에 `engine/route-v2-worker.ascii.js` 를 붙여 배포해야 앱이 동작**(없으면 400 `kind` → 시트는 뜨지만 비어 있고 토스트).
+- 앱: `WalkCore`(순수) · `ShellActivity.openWalkSheet/walkRefresh/walkLoad/walkAct`(아래 시트 262dp·위 모서리 20·흐림 0.8·최대 너비 520, 30초마다 새 위치로 다시 요청) · `stopRide()` 1.2초 뒤 자동 · `ScreenCore` row 칸에 `panel` 허용(두 칸 타일) · `HomeCore.navAppOk` 가 `nmap://route/walk?` 허용.
+- 규칙: 옛 위치는 쓰지 않는다(웹의 `S.lastGPSFix` 대체 없음) — 위치를 못 받으면 `-`. 웹의 "한 번만 자동"(`_walkAutoFired`)은 이식하지 않음(하차마다 뜸).
+- 시험: `test/dialog_engine.test.js`(72) · `ShellJvmTest`(WalkCore) · `ScreenJvmTest`(row+panel). 안드로이드 계층은 이 환경에 android.jar 가 없어 CI 컴파일로만 확인. **기기 미확인**.
