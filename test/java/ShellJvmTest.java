@@ -989,6 +989,26 @@ public class ShellJvmTest {
             MapCore sp_m3 = new MapCore(sp_ms); sp_m3.modeOverride = "bus";
             ok(sp_m3.speculativeNeed().isEmpty(), "미리 받기: 위치가 없으면 쓰지 않는다");
         }
+        {   // 주변 정류장 끌어서 순서 바꾸기(웹 busNearOrder · _busPersistDomOrder): 저장 · 요청에 실림 · 받아 둔 도착정보 번호 옮김
+            ShellCore.MemStore ro_ms = new ShellCore.MemStore();
+            MapCore ro_m = new MapCore(ro_ms); ro_m.modeOverride = "bus"; ro_m.setBusLoc(37.5, 127.0);
+            ro_m.addBusRes("tp", "<stops a/>"); ro_m.addBusRes("a0", "AAA"); ro_m.addBusRes("a1", "BBB"); ro_m.addBusRes("a2", "CCC");
+            java.util.List<String[]> ro_nd = new java.util.ArrayList<String[]>();
+            ro_nd.add(new String[] { "a0", "http://ws.bus.go.kr/u0" }); ro_nd.add(new String[] { "a1", "http://ws.bus.go.kr/u1" }); ro_nd.add(new String[] { "a2", "http://ws.bus.go.kr/u2" });
+            ro_m.rememberNeed(ro_nd);
+            ok(ro_m.bodyRequest(18, "dark").contains("\"ord\":[]"), "순서 바꾸기: 저장 전에는 ord 가 빈 목록");
+            ok(!ro_m.reorderNear(new String[] { "A", "B" }, new int[] { 0, 0 }) && !ro_m.reorderNear(new String[] { "A", "B", "C" }, new int[] { 0, 1 }) && !ro_m.reorderNear(new String[] { "A", "", "C" }, new int[] { 0, 1, 2 }), "순서 바꾸기: 번호가 겹치거나 · 길이가 다르거나 · 열쇠가 비면 거부");
+            ok(ro_ms.get(MapCore.K_BUSORD, "").length() == 0, "순서 바꾸기: 거부되면 저장하지 않는다");
+            ok(ro_m.reorderNear(new String[] { "C", "A", "B" }, new int[] { 2, 0, 1 }), "순서 바꾸기: 정상 순서는 받는다");
+            String ro_rq = ro_m.bodyRequest(18, "dark");
+            ok(ro_rq.contains("\"ord\":[\"C\",\"A\",\"B\"]") && ro_rq.contains("\"a0\":\"CCC\"") && ro_rq.contains("\"a1\":\"AAA\"") && ro_rq.contains("\"a2\":\"BBB\""), "순서 바꾸기: 새 순서를 요청에 싣고 받아 둔 도착정보 번호를 옮긴다");
+            java.util.List<String[]> ro_sp = ro_m.speculativeNeed();
+            ok(ro_sp.size() == 3 && "a0".equals(ro_sp.get(0)[0]) && "http://ws.bus.go.kr/u2".equals(ro_sp.get(0)[1]) && "http://ws.bus.go.kr/u0".equals(ro_sp.get(1)[1]) && "http://ws.bus.go.kr/u1".equals(ro_sp.get(2)[1]), "순서 바꾸기: 미리 받기 주소도 같은 번호로 옮긴다(다른 정류장 도착정보가 섞이지 않게)");
+            MapCore ro_m2 = new MapCore(ro_ms); ro_m2.modeOverride = "bus"; ro_m2.setBusLoc(37.5, 127.0); ro_m2.addBusRes("tp", "<stops a/>");
+            ok(ro_m2.bodyRequest(18, "dark").contains("\"ord\":[\"C\",\"A\",\"B\"]") && ro_m2.speculativeNeed().size() == 3, "순서 바꾸기: 앱을 껐다 켜도 순서가 남는다");
+            ro_ms.put(MapCore.K_BUSORD, "깨짐");
+            ok(ro_m2.bodyRequest(18, "dark").contains("\"ord\":[]"), "순서 바꾸기: 깨진 저장값은 빈 목록으로 본다");
+        }
         {   // 도보 안내 시트(웹 walkModal) — 엔진이 정한 길안내 주소 · 간격을 꺼내고 눌림을 행동 코드로
             WalkCore w = new WalkCore();
             w.open("arrive", "\uAC15\uB0A8\uC5ED", 37.505, 127.004);
