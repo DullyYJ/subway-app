@@ -2017,3 +2017,5 @@ YJ(11:16, 기기 스크린샷 4장 + "모든 탭 화면을 웹과 동일하게")
 - `shrinkResources` 는 일부러 안 켰다: 위젯이 `getIdentifier` 로 리소스를 이름으로 찾는다.
 - CI(`build-shell.yml`): `assembleRelease` 먼저, 실패하면 경고를 남기고 `assembleDebug` 로 대신(앱이 안 나오는 일 방지). 올림 이름 `gildongmu-native`(release/debug 중 만들어진 것). 로그에 "APK 크기:" 가 찍힌다.
 - **기기 미확인**: R8 이후 지도·위치가 정상인지(MapLibre·Play 서비스 소비자 규칙에 맡김). 이상하면 `proguard-rules.pro` 에 `-keep class org.maplibre.** { *; }` 를 더한다. 이전 앱과 열쇠가 다르면 기존 앱을 지우고 설치해야 할 수 있다.
+- **앱 아이콘 크기(s138 추가, 사용자 요청 "아이콘이 너무 크니 딱 맞게")**: 어댑티브 아이콘 앞 그림(`ic_launcher_fg.png`)이 1024 칸의 74%(가장 먼 점 반지름 378/512)를 차지해 런처 틀(원·둥근 네모)에 크고 잘려 보였다. `mipmap-anydpi-v26/ic_launcher.xml` 의 foreground 를 `<inset android:inset="8.6%">` 로 감싸 가장 먼 점이 안전 영역(지름 66/108 → 반지름 313/512) 안에 들어오게 했다(그림 파일은 그대로). 저장소 맨 위 `proguard-rules.pro` 는 경로 실수로 만든 빈 사본 — 쓰이지 않으니 지워도 된다(진짜는 `shell-android/app/proguard-rules.pro`).
+
