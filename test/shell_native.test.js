@@ -272,6 +272,8 @@ function findAndroidJar() {
     const pr = fs.readFileSync(path.join(ROOT, 'shell-android', 'app', 'proguard-rules.pro'), 'utf8');
     assert.ok(/-keep class com\.dullyyj\.subway\.\*\* \{ \*; \}/.test(pr), '우리 코드는 그대로(이름으로 찾는 위젯 글자·서비스 보호)');
     const y = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'build-shell.yml'), 'utf8');
+    const ic = fs.readFileSync(path.join(ROOT, 'shell-android', 'app', 'src', 'main', 'res', 'mipmap-anydpi-v26', 'ic_launcher.xml'), 'utf8');
+    assert.ok(/<inset android:drawable="@drawable\/ic_launcher_fg" android:inset="8\.6%"/.test(ic), '앱 아이콘 그림은 안전 영역 안으로(너무 커 보이지 않게)');
     assert.ok(/assembleRelease[\s\S]*assembleDebug/.test(y) && /apk\/release\/\*\.apk/.test(y) && /apk\/debug\/\*\.apk/.test(y), '릴리스 먼저 · 실패하면 디버그 · 둘 다 올림 대상');
   });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
