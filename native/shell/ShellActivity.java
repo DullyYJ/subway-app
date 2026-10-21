@@ -2132,7 +2132,20 @@ public class ShellActivity extends Activity {
 
     /** 웹 .nmp 역 팝업의 손잡이(40x4, 위 16)와 아래로 밀어 닫기 — 화면 글은 엔진이 그리고 손잡이는 뷰가 맨 위에 얹는다. */
     private android.view.View stnSheetBox(ScreenView sv, int[] pal) {
-        FrameLayout box = new FrameLayout(this);
+        FrameLayout box = new FrameLayout(this) {
+            // 웹 svgShowPopup: 팝업 어디서든 위로 끌면 시간표가 올라오고, 아래로 끌면 닫힌다(40dp · 세로가 가로의 1.2배 이상). 단추·알약 누르기는 그대로 — 끌기가 확정된 순간에만 가로채고, 한 번만 반응한다.
+            private float dx0, dy0; private boolean fired;
+            @Override public boolean onInterceptTouchEvent(android.view.MotionEvent e) {
+                int a = e.getActionMasked();
+                if (a == android.view.MotionEvent.ACTION_DOWN) { dx0 = e.getRawX(); dy0 = e.getRawY(); fired = false; }
+                else if (a == android.view.MotionEvent.ACTION_MOVE && !fired && ShellCore.S_MAPSTN.equals(sheetName)) {
+                    float dy = e.getRawY() - dy0, dx = e.getRawX() - dx0;
+                    if (Math.abs(dy) > 40f * dpr && Math.abs(dy) > Math.abs(dx) * 1.2f) { fired = true; if (dy < 0f) openTimetable(); else closeSheet(); return true; }
+                }
+                return false;
+            }
+            @Override public boolean onTouchEvent(android.view.MotionEvent e) { return true; }
+        };
         box.addView(sv, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         final android.view.View hd = new android.view.View(this);
         android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
