@@ -28,4 +28,20 @@ function pvlScreen(inp, f) {
   return { ok: true, v: 1, screen: 'pvl', cover: 'tab', bg: 'card', head: [pill], body: [{ t: 'spacer', h: 0 }], info: { kind: kind, mode: mode }, rev: 'v1:' + pvlHash(JSON.stringify(pill)) };
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { pvlScreen: pvlScreen, PVL_CAP: PVL_CAP };
+// 기준시각 글('오늘 오후 2:30' · '내일 오전 9:00' · '10/25(일) 오후 1:05') — 홈 기준시각 줄(homeBaseLabel)과 같은 모양. now = 기기 시계 ms, tz = 동쪽 분.
+function pvlBaseLabel(ms, now, tz) {
+  ms = Number(ms); now = Number(now); tz = Number(tz);
+  if (!isFinite(ms) || !isFinite(tz)) return '';
+  var d = new Date(ms + tz * 60000), t = new Date((isFinite(now) ? now : ms) + tz * 60000);
+  var diff = Math.round((Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) - Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate())) / 86400000), h = d.getUTCHours();
+  var day = diff === 0 ? '오늘' : diff === 1 ? '내일' : (d.getUTCMonth() + 1) + '/' + d.getUTCDate() + '(' + '일월화수목금토'.charAt(d.getUTCDay()) + ')';
+  return day + ' ' + (h < 12 ? '오전' : '오후') + ' ' + ((h % 12) || 12) + ':' + ('0' + d.getUTCMinutes()).slice(-2);
+}
+// 카드 맨 위에 붙는 작은 주황 알약 노드(기준시각을 미래로 바꿨거나 노선도에서 경로를 정했을 때). 둘 다 아니면 null. bt = 기준시각 ms|null.
+function pvlPillNode(kind, bt, metro, now, tz) {
+  var mode = bt != null ? 'custom' : metro === true ? 'metro' : '';
+  if (!mode || !PVL_WORD[kind]) return null;
+  var o = pvlScreen({ cap: PVL_CAP }, { kind: kind, mode: mode, lbl: mode === 'custom' ? pvlBaseLabel(bt, now, tz) : '' });
+  return o && o.ok ? o.head[0] : null;
+}
+if (typeof module !== 'undefined' && module.exports) module.exports = { pvlScreen: pvlScreen, PVL_CAP: PVL_CAP, pvlBaseLabel: pvlBaseLabel, pvlPillNode: pvlPillNode };
