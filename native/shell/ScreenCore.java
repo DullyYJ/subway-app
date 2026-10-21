@@ -199,6 +199,7 @@ public final class ScreenCore {
         public String key = "", title = "", sub = "", value = "";
         public String fill = "", line = "", hint = "", accent = "#e63329", tc = "", sc = "", onc = "", onl = "", chk = "", ckf = "";
         public String[] prev = new String[0];
+        public String rol = "", rod = "";                  // bcard: 순서 바꾸기 줄 글('끌어서 순서 변경' · '완료') — 첫 주변 카드에만 온다
         public boolean mine, right, ind;
         public String nick = "", pre = "", time = "";
         public float[] pathOps = new float[0];
@@ -762,7 +763,7 @@ public final class ScreenCore {
             n.label = optStr(m, "al", "", 40); n.badge = optStr(m, "n", "", 3); n.tag = optStr(m, "dist", "", 12);
             n.value = optStr(m, "mode", "near", 5); if (!"near".equals(n.value) && !"fav".equals(n.value)) throw new ParseError("bcard: mode 는 near 또는 fav");
             n.on = optBool(m, "on", false); n.big = optNum(m, "fv", 0f, 0f, 1f) > 0f; n.ci = Math.round(optNum(m, "pi", -1f, -1f, 39f));
-            n.title = optStr(m, "ld", "", 60); n.sub = optStr(m, "em", "", 60);
+            n.title = optStr(m, "ld", "", 60); n.sub = optStr(m, "em", "", 60); n.rol = optStr(m, "rol", "", 30); n.rod = optStr(m, "rod", "", 10);
             n.act = act(m.get("act"), true); n.bact = act(m.get("star"), false); n.eact = act(m.get("edit"), false); n.mact = act(m.get("map"), false);
             Object ro = m.get("rows");
             if (ro != null) {
@@ -991,6 +992,7 @@ public final class ScreenCore {
         public boolean top;                          // 줄 위에 가는 선
         public Col[] prevC = new Col[0];
         public String key = "", value = "";
+        public String rol = "", rod = "";             // 정류장 카드: 순서 바꾸기 줄 글(첫 주변 카드에만)
         public float radius = 10f;
         public float bx, by, btx, bty;               // 검색줄: 배지 · 단추 왼쪽위 (영역 좌표)
         public int maxlen = 60;
@@ -1371,7 +1373,7 @@ public final class ScreenCore {
     private static float bcardLayout(Node n, float ox, float w, float y, List<Item> out, Measurer m) {
         boolean near = "near".equals(n.value);
         Item it = new Item(); it.kind = K_BCARD; it.x = ox; it.y = y; it.w = w; it.radius = BC_RAD;
-        it.key = n.key; it.act = n.act; it.on = n.on; it.value = n.value; it.ti = n.ci; it.top = n.big;
+        it.key = n.key; it.act = n.act; it.on = n.on; it.value = n.value; it.ti = n.ci; it.top = n.big; it.rol = n.rol; it.rod = n.rod;
         float left = ox + 1f + BC_PADX, right = ox + w - 1f - BC_PADX;
         float badgeOff = n.badge.length() > 0 ? BC_BADGE + BC_BADGE_GAP : 0f;
         it.badge = n.badge;
