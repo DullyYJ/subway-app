@@ -808,10 +808,10 @@ public class ScreenJvmTest {
             ok(i0 != null && "https://x.com/1".equals(i0.id) && "제목".equals(i0.t) && i1 != null && "77".equals(i1.id) && "c.77".equals(i1.key) && i2 != null && i2.id.length() == 0 && i2.t.length() == 0 && i2.key.length() == 0, "행동에 실린 고유 id · 제목 · 열쇠 읽기(없으면 빈 글 — 옛 엔진도 그대로)");
         } catch (Exception ex) { ok(false, "act id 읽기: " + ex); }
         {
-            StringBuilder big = new StringBuilder(); for (int i = 0; i < 500; i++) big.append('a');
+            StringBuilder longId = new StringBuilder(); for (int i = 0; i < 500; i++) longId.append('a');
             try {
-                ScreenCore.Layout bl = ScreenCore.layout(ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"news\",\"head\":[],\"body\":[{\"t\":\"news\",\"title\":\"가\",\"sub\":\"나\",\"act\":{\"a\":\"call\",\"v\":\"nw.1\",\"id\":\"" + big + "\"}}]}"), 360f, M);
-                ok(bl.body[0].act.id.length() <= 400, "너무 긴 id 는 400자에서 자른다");
+                ScreenCore.Layout lgl = ScreenCore.layout(ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"news\",\"head\":[],\"body\":[{\"t\":\"news\",\"title\":\"가\",\"sub\":\"나\",\"act\":{\"a\":\"call\",\"v\":\"nw.1\",\"id\":\"" + longId + "\"}}]}"), 360f, M);
+                ok(lgl.body[0].act.id.length() <= 400, "너무 긴 id 는 400자에서 자른다");
             } catch (Exception ex) { ok(false, "긴 id: " + ex); }
             boolean threw = false;
             try { ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"news\",\"head\":[],\"body\":[{\"t\":\"news\",\"title\":\"가\",\"sub\":\"나\",\"act\":{\"a\":\"call\",\"v\":\"bd.cm.1\",\"key\":\"a b!\"}}]}"); } catch (Exception ex) { threw = true; }
