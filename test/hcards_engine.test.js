@@ -16,52 +16,55 @@ const txt = ns => flat(ns).map(n => n.s || '').join('\n');
 
 ok(E.hcardsScreen({ cap: 17 }, base()).ok === false && call({}).ok === false, 'cap 18 미만 · now 없으면 만들지 않는다');
 let o = call(base());
-ok(o.ok && o.screen === 'hcards' && o.body.length === 3 && o.body.every(p => p.t === 'panel') && /^h1:/.test(o.rev), '카드 세 장(혼잡도 · AI 승무원 · 대화 — 웹 홈과 같은 순서)');
+ok(o.ok && o.screen === 'hcards' && o.body.map(n => n.t).join() === 'sec,panel,sec,panel,panel' && /^h1:/.test(o.rev), '카드 세 장 + 제목줄 둘(혼잡도 · AI 승무원 · 대화 — 웹 홈과 같은 순서)');
+ok(o.body[0].s === '혼잡도' && o.body[0].btn === '\uD83D\uDCCD 위치 공유' && o.body[0].act.v === 'share.loc' && o.body[0].pad.join() === '14,0,14,6' && o.body[2].s === 'AI 승무원' && o.body[2].pad.join() === '14,0,14,6', '제목줄: 혼잡도(+위치 공유 단추) · AI 승무원');
+ok(o.body[1].lb === 4 && o.body[1].pad.join() === '14,0,14,14' && o.body[3].ip.join() === '16,14,16,14' && o.body[3].r === 16 && o.body[4].ip.join() === '12,10,12,10' && o.body[4].r === 14 && o.body[4].pad.join() === '14,0,14,22', '카드 치수: 혼잡도 왼쪽 4px 띠 · AI 14/16 · 대화 10/12 모서리 14 · 맨 아래 22');
 const nodes = flat(o.body);
+const RD_SUB = { here: 1, boarded: true, key: 's', nodes: [{ name: '출발', isOrigin: true }, { name: '부평', isSub: true, lineName: '1호선' }, { name: '강남', isSub: true, lineName: '1호선' }] };      // 지하철 타고 가는 중: 웹은 이때만 장면을 접고 혼잡도 본문을 보인다
+const oRide = call(base({ rd: RD_SUB })), nodesRide = flat(oRide.body);
+ok(!nodes.some(n => n.t === 'cgh' || n.t === 'gauge' || n.t === 'chart') && o.body[1].kids.length === 1 && o.body[1].kids[0].t === 'scene' && o.body[1].ip.join() === '15,10,10,10', '장면이 보일 땐 혼잡도 본문을 숨기고 장면만(웹 .cs-on)');
 const aih = nodes.find(n => n.t === 'aih');
 ok(aih && /부평 → 강남 · 남은시간: 24분/.test(aih.s) && aih.act.v === 'ai.refresh' && aih.to === now + 300000, 'AI 제목: 출발 → 도착 · 남은시간, 새로고침, 다음 갱신 시각');
 ok(o.info.ai === 'brief' && /24분/.test(txt(o.body)) && /1호선/.test(txt(o.body)), 'AI 본문: 소요·노선 문장을 엔진이 만든다');
-const cgh = nodes.find(n => n.t === 'cgh');
-ok(cgh && /부평/.test(cgh.nm + cgh.lab) && nodes.some(n => n.t === 'gauge') && nodes.some(n => n.t === 'chart') && o.info.cong === 'sub' && o.info.stn === '부평', '혼잡도: 처음 타는 역(부평) 기준 게이지·24시간 막대');
+const cgh = nodesRide.find(n => n.t === 'cgh');
+ok(cgh && /부평/.test(cgh.nm + cgh.lab) && nodesRide.some(n => n.t === 'gauge') && nodesRide.some(n => n.t === 'chart') && oRide.info.cong === 'sub' && oRide.info.stn === '부평' && oRide.body[1].ip.join() === '17,14,14,14' && oRide.body[0].badge.length > 0, '혼잡도: 처음 타는 역(부평) 기준 게이지·24시간 막대');
 ok(nodes.some(n => n.t === 'ltr' && n.nick === '하늘') && nodes.some(n => n.t === 'inbar' && n.key === 'talk.in') && nodes.some(n => n.t === 'lth' && n.act.v === 'tk.open'), '대화: 최근 줄 · 입력줄 · 머리줄 누름');
 // 기준시각을 정한 탐색 → 예상 브리핑
 o = call(base({ r: { data: mk([sub('부평', '강남', '수도권 1호선', 18)]), tab: 'fast', a: '부평', b: '강남', bt: now + 3 * 3600000, rb: now } }));
 ok(o.info.ai === 'preview' && /예상/.test(flat(o.body).find(n => n.t === 'aih').s), '기준시각을 정하면 예상 브리핑');
 // 첫 구간이 버스 → 버스 혼잡도 모드
-o = call(base({ r: { data: mk([walk(2), bus('6', 20)]), tab: 'fast', a: '집', b: '회사', bt: null, rb: now } }));
-ok(o.info.cong === 'bus' && o.info.stn === '정류장A' && flat(o.body).some(n => n.t === 'cgh'), '첫 구간이 버스면 버스 혼잡도 안내');
+o = call(base({ r: { data: mk([walk(2), bus('6', 20)]), tab: 'fast', a: '집', b: '회사', bt: null, rb: now }, rd: { here: 1, boarded: true, key: 'b', nodes: [{ name: '출발', isOrigin: true }, { name: 'A정류장', isBus: true, lineName: '6' }, { name: 'B정류장', isBus: true, lineName: '6' }] } }));
+ok(o.info.cong === 'bus' && o.info.stn === '정류장A' && o.body[1].kids[0].t === 'scene', '첫 구간이 버스면 버스 혼잡도 안내');
 // 경로 없음 + 위치 → 가까운 역 기준
 o = call(base({ r: null, gps: [37.4979, 127.0276] }));
 ok(o.info.near === '강남' && o.info.cong === 'sub' && o.info.stn === '강남' && o.info.ai === 'brief' && flat(o.body).some(n => n.t === 'aih' && /강남/.test(n.s)), '경로 없이 위치만: 가까운 역(강남) 기준 브리핑·혼잡도');
-// 내 위치 공유 단추: 앱이 f.sh=1 을 보낼 때만, 혼잡도 카드 안(장면 아래)에
+// 내 위치 공유 단추: 웹처럼 제목줄 오른쪽에 늘 있다(경로가 없으면 앱이 안내창을 띄운다)
 o = call(base({ r: { data: mk([sub('부평', '강남', '수도권 1호선', 18)]), tab: 'fast', a: '부평', b: '강남', bt: null, rb: now } }));
-ok(!flat(o.body).some(n => n.act && n.act.v === 'share.loc'), '공유 단추: 탑승 안내가 아니면 없다');
-o = call(base({ sh: 1, r: { data: mk([sub('부평', '강남', '수도권 1호선', 18)]), tab: 'fast', a: '부평', b: '강남', bt: null, rb: now } }));
-{ const sb = flat(o.body).filter(n => n.act && n.act.v === 'share.loc'); ok(sb.length === 1 && sb[0].t === 'button' && sb[0].s === '내 위치 공유' && sb[0].act.a === 'call', '공유 단추: f.sh 가 있으면 하나'); }
+{ const sb = flat(o.body).filter(n => n.act && n.act.v === 'share.loc'); ok(sb.length === 1 && sb[0].t === 'sec', '공유 단추: 제목줄에 하나'); }
 // 아무 사실도 없음
 o = call(base({ r: null, gps: null }));
-ok(!JSON.stringify(o.body[0]).includes('AI 승무원') && JSON.stringify(o.body[1]).includes('AI 승무원') && JSON.stringify(o.body[2]).includes('실시간'), '순서: 혼잡도 장면 → AI 승무원 → 실시간 대화(웹 홈과 같다)');
-ok(o.ok && o.info.ai === 'empty' && o.info.cong === 'none' && o.body.length === 3, '아무것도 없으면 안내 문구');
+ok(!JSON.stringify(o.body[1]).includes('AI 승무원') && o.body[2].s === 'AI 승무원' && JSON.stringify(o.body[4]).includes('실시간'), '순서: 혼잡도 장면 → AI 승무원 → 실시간 대화(웹 홈과 같다)');
+ok(o.ok && o.info.ai === 'empty' && o.info.cong === 'none' && o.body.length === 5, '아무것도 없으면 안내 문구');
 ok(E.hcNearest(0, 0) === null && E.hcNearest(37.4979, 127.0276)[0] === '강남', '가까운 역 3km 안');
 // 캐릭터 장면: 혼잡도 카드 맨 위에 엔진이 정한 장면(JSON 글)이 실린다
 {
-  const sc = call(base({ wx: { wF: { temp: -3, txt: '눈', rain: 80 } } })).body[0].kids[0];
+  const sc = call(base({ wx: { wF: { temp: -3, txt: '눈', rain: 80 } } })).body[1].kids[0];
   const v = sc && sc.t === 'scene' ? JSON.parse(sc.sc) : null;
   ok(sc && sc.t === 'scene' && sc.h >= 80 && sc.sc.length < 6000 && v && v.mode === 'idle' && v.cast.length === 6 && v.hero && v.look.wk === 'snow', '혼잡도 카드 맨 위에 장면(idle · 눈) 노드가 있다');
-  const a = JSON.stringify(call(base()).body[0].kids[0]), b = JSON.stringify(call(base()).body[0].kids[0]);
+  const a = JSON.stringify(call(base()).body[1].kids[0]), b = JSON.stringify(call(base()).body[1].kids[0]);
   ok(a === b, '같은 사실이면 같은 장면(안 흔들린다)');
   ok(E.hcSceneNode(now, 540, false, null, '').sc.indexOf('"wxKnown":false') > 0, '날씨를 모르면 모른다고 보낸다(지어내지 않는다)');
 }
 // 탑승 중 장면: 앱이 보낸 탑승 재료(rd)로 기다림 · 버스 타고 가는 중 · 내림, 지하철 타고 가는 동안은 장면 없음(혼잡도 카드)
 {
   const nodes = [{ name: '출발', isOrigin: true }, { name: 'A정류장', isBus: true, lineName: '6001' }, { name: 'B정류장', isBus: true, lineName: '6001' }, { name: 'C정류장', isBus: true, lineName: '6001' }];
-  const sn = rd => { const k = call(base({ rd })).body[0].kids[0]; return k && k.t === 'scene' ? JSON.parse(k.sc) : null; };
+  const sn = rd => { const k = call(base({ rd })).body[1].kids[0]; return k && k.t === 'scene' ? JSON.parse(k.sc) : null; };
   const w = sn({ here: 1, boarded: false, key: 'k', nodes }), r = sn({ here: 2, boarded: true, key: 'k', nodes }), a = sn({ here: 3, boarded: true, key: 'k', nodes });
   ok(w && w.mode === 'wait' && w.venue === 'bus' && /기다리는/.test(w.tag), '탑승 재료(승차 전) → 기다리는 중 장면: ' + (w && w.tag));
   ok(r && r.mode === 'ride' && r.venue === 'bus', '버스 타고 가는 중 장면');
   ok(a && a.mode === 'alight', '내릴 정류장에 닿으면 내림 장면');
   const sub = [{ name: '출발', isOrigin: true }, { name: '강남', isSub: true, lineName: '2호선' }, { name: '역삼', isSub: true, lineName: '2호선' }];
-  const sk = call(base({ rd: { here: 1, boarded: true, key: 's', nodes: sub } })).body[0].kids[0];
+  const sk = call(base({ rd: { here: 1, boarded: true, key: 's', nodes: sub } })).body[1].kids[0];
   ok(sk && sk.t !== 'scene', '지하철 타고 가는 동안은 장면 대신 혼잡도 카드가 맨 위');
   const bad = sn({ here: 1, nodes: [1] });
   ok(bad && bad.mode === 'idle', '탑승 재료가 이상하면 평소 대기실 장면');
@@ -99,7 +102,7 @@ ok(E.hcNearest(0, 0) === null && E.hcNearest(37.4979, 127.0276)[0] === '강남',
     const mod = await import(tmp), wk = mod.default;
     const res = await wk.fetch(new Request('https://x/screen/hcards', { method: 'POST', body: JSON.stringify({ cap: 18, f: base() }), headers: { 'Content-Type': 'text/plain;charset=UTF-8' } }), {}, { waitUntil() { } });
     const j = await res.json();
-    ok(res.status === 200 && j.ok && j.body.length === 3 && JSON.stringify(j.body) === JSON.stringify(call(base()).body), '워커 안에서 직접 계산과 같은 카드 세 장');
+    ok(res.status === 200 && j.ok && j.body.length === 5 && JSON.stringify(j.body) === JSON.stringify(call(base()).body), '워커 안에서 직접 계산과 같은 카드 세 장');
     const r2 = await wk.fetch(new Request('https://x/screen/hcards', { method: 'POST', body: JSON.stringify({ cap: 3, f: {} }) }), {}, { waitUntil() { } });
     ok(r2.status === 400, '워커: cap 부족은 400');
     // 날씨: Worker 가 /weather 를 받아 f.wx 로 넣어 준다(받은 주소 · 값 확인)

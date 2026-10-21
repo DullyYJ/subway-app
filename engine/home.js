@@ -21,7 +21,7 @@
 // 맨 아래 module.exports 는 시험(Node)용이고 Worker 에서는 함수 선언만 쓰인다.
 'use strict';
 var HOME_SCREEN_V = 1;
-var HOME_ROW_H = 48, HOME_SUG_H = 44, HOME_MAX_SUG = 7, HOME_PANEL_B = 4;
+var HOME_ROW_H = 57, HOME_TROW_H = 34, HOME_SUG_H = 44, HOME_MAX_SUG = 7, HOME_PANEL_T = 14, HOME_PANEL_B = 18;      // 웹 홈 경로 카드: 입력줄 57(+밑줄 1) · 기준시각 줄 34(+윗줄 1) · 카드 위 14 · 아래 18
 var HOME_STN_MAX = 8, HOME_SX = 1;
 var HOME_STNS;                                                       // Worker 에서는 앞에 붙은 engine/home-stations.js 가 채운다. Node(시험)에서는 아래에서 불러온다.
 if (typeof HOME_STNS === 'undefined' || !HOME_STNS) { try { if (typeof require === 'function') HOME_STNS = require('./home-stations').HOME_STNS; } catch (eHs) {} }
@@ -129,22 +129,24 @@ function homeScreen(inp, factsIn, dataIn) {
   var ready = (f.startSet && f.destSet) || (f.start.trim().length > 0 && f.dest.trim().length > 0);
   var act = function (v) { return { a: 'call', v: v }; };
   var kids = [];
-  kids.push({ t: 'inbar', key: 'start', hint: '출발지 검색', value: f.start, maxlen: 60, h: HOME_ROW_H, size: 15, bold: true, r: 0, fill: '', line: '', dot: '#0a84ff',
-    btn: f.gps ? '감지 중' : '위치 감지', bh: 30, bsize: 12, onc: '#0a84ff', ckf: '#ffffff', watch: true, dim: f.gps, act: act('rt.gps'), eact: act('rt.enter') });
+  var inb = function (key, hint, val, dot, btn, onc, ckf, dim, act) {
+    return { t: 'inbar', key: key, hint: hint, value: val, maxlen: 60, h: HOME_ROW_H, size: 15, bold: true, r: 0, fill: '', line: '', dot: dot, pad: [0, 0, 14, 0],
+      ifill: 'card2', ifh: 17, ifr: 11, btn: btn, bh: 33, bsize: 12, bpx: 16, onc: onc, ckf: ckf, watch: true, dim: dim, act: act, eact: { a: 'call', v: 'rt.enter' } };
+  };
+  var line = { t: 'divider', c: 'border2' };
+  kids.push(inb('start', '출발지 검색', f.start, '#0a84ff', f.gps ? '감지 중' : '위치 감지', '#0a84ff', '#ffffff', f.gps, act('rt.gps')));
   kids.push({ t: 'swap', size: 34, fill: '#0a84ff', line: 'bg', tc: 'white', icon: HOME_SWAP_ICON, act: act('rt.swap') });
   var rowsS = f.active === 'start' ? sugs : [], rowsD = f.active === 'dest' ? sugs : [];
+  kids.push(line);
   rowsS.forEach(function (r) { kids.push(r); });
-  kids.push({ t: 'divider' });
-  kids.push({ t: 'inbar', key: 'dest', hint: '도착지 검색', value: f.dest, maxlen: 60, h: HOME_ROW_H, size: 15, bold: true, r: 0, fill: '', line: '', dot: '#ff3b30',
-    btn: '경로 탐색', bh: 30, bsize: 12, onc: 'gold', ckf: '#121214', watch: true, dim: !ready, act: act('rt.go'), eact: act('rt.enter') });
+  kids.push(inb('dest', '도착지 검색', f.dest, '#ff3b30', '경로 탐색', 'gold', '#121214', !ready, act('rt.go')));
   rowsD.forEach(function (r) { kids.push(r); });
-  kids.push({ t: 'divider' });
+  kids.push(line);
   var custom = f.base.ms != null;
-  var timeRow = { t: 'sug', badge: '기준시각', bc: 'sub', name: homeBaseLabel(f.base), sub: (f.base.hol ? '주말·공휴일' : '평일') + (custom ? '' : ' · 눌러서 시각 변경'), last: true, act: act('bt.pick') };
-  if (custom) { timeRow.btn = '현재'; timeRow.bact = act('bt.now'); }
-  kids.push(timeRow);
-  var body = [{ t: 'panel', pad: [0, 0, 0, HOME_PANEL_B], ip: [0, 0, 0, 0], r: 16, kids: kids }];
-  var h = 2 + HOME_ROW_H + 1 + HOME_ROW_H + 1 + HOME_SUG_H + (rowsS.length + rowsD.length) * HOME_SUG_H + HOME_PANEL_B;
+  kids.push({ t: 'trow', lb: '\uD83D\uDD50 기준시각', s: homeBaseLabel(f.base), cur: !custom, hint: custom ? '' : '(클릭해서 시간을 변경하세요)',
+    day: f.base.hol ? '주말·공휴일' : '평일', dc: f.base.hol ? '#ff9500' : '#30d158', btn: '현재', act: act('bt.pick'), bact: act('bt.now'), h: HOME_TROW_H });
+  var body = [{ t: 'panel', pad: [14, HOME_PANEL_T, 14, HOME_PANEL_B], ip: [0, 0, 0, 0], r: 16, kids: kids }];
+  var h = HOME_PANEL_T + 2 + HOME_ROW_H + 1 + HOME_ROW_H + 1 + HOME_TROW_H + (rowsS.length + rowsD.length) * HOME_SUG_H + HOME_PANEL_B;
   var out = { ok: true, v: 1, screen: 'home', cover: 'chips', head: [], body: body, info: { h: h, active: f.active, ready: ready, rows: rowsS.length + rowsD.length, sx: HOME_SX } };
   if (pk) out.info.pk = pk;
   out.rev = 'h' + HOME_SCREEN_V + ':' + homeHash(JSON.stringify(body));

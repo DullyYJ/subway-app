@@ -803,6 +803,61 @@ public class ScreenJvmTest {
             boolean threw = false; try { ScreenCore.load(H + "{\"t\":\"chips\",\"offf\":\"not-a-color\",\"items\":[{\"label\":\"a\"}]}],\"body\":[]}"); } catch (Exception ex) { threw = true; } ok(threw, "chips: 읽을 수 없는 offf 는 거부");
         }
 
+        // ── 홈 웹 치수 노드(sec · trow · panel lb · inbar bpx/ifill/inh · divider c · scene fit · ltr fo) ──
+        {
+            String H = "{\"ok\":true,\"v\":1,\"screen\":\"hw\",\"head\":[],\"body\":[";
+            try {
+                String hwBody = "{\"t\":\"sec\",\"s\":\"혼잡도\",\"hint\":\"지하철을 타면 혼잡도가 표시돼요\",\"btn\":\"📍 위치 공유\",\"act\":{\"a\":\"call\",\"v\":\"share.loc\"},\"pad\":[14,0,14,6]},"
+                    + "{\"t\":\"panel\",\"pad\":[14,0,14,14],\"ip\":[15,10,10,10],\"r\":16,\"lb\":4,\"lc\":\"#1d9bf0\",\"kids\":[{\"t\":\"scene\",\"h\":150,\"r\":12,\"fit\":true,\"sc\":\"{\\\"ok\\\":true}\"}]},"
+                    + "{\"t\":\"sec\",\"s\":\"AI 승무원\",\"pad\":[14,0,14,6]},"
+                    + "{\"t\":\"panel\",\"pad\":[14,0,14,14],\"ip\":[0,0,0,0],\"r\":16,\"kids\":["
+                    + "{\"t\":\"inbar\",\"key\":\"a\",\"hint\":\"출발지 검색\",\"h\":57,\"pad\":[0,0,14,0],\"ifill\":\"card2\",\"ifh\":17,\"ifr\":11,\"btn\":\"위치 감지\",\"bh\":33,\"bsize\":12,\"bpx\":16,\"dot\":\"#0a84ff\",\"size\":15,\"act\":{\"a\":\"call\",\"v\":\"x\"}},"
+                    + "{\"t\":\"divider\",\"c\":\"border2\"},"
+                    + "{\"t\":\"trow\",\"lb\":\"🕐 기준시각\",\"s\":\"현재\",\"cur\":true,\"hint\":\"(클릭해서 시간을 변경하세요)\",\"day\":\"평일\",\"dc\":\"#30d158\",\"btn\":\"현재\",\"act\":{\"a\":\"call\",\"v\":\"bt.pick\"},\"bact\":{\"a\":\"call\",\"v\":\"bt.now\"},\"h\":34}]},"
+                    + "{\"t\":\"panel\",\"pad\":[14,0,14,22],\"ip\":[12,10,12,10],\"r\":14,\"kids\":["
+                    + "{\"t\":\"ltr\",\"pad\":[0,0,0,5],\"nick\":\"가\",\"s\":\"하나\",\"time\":\"02:30\",\"fo\":1},"
+                    + "{\"t\":\"ltr\",\"pad\":[0,0,0,5],\"nick\":\"나\",\"s\":\"둘\",\"time\":\"02:31\",\"fo\":2},"
+                    + "{\"t\":\"ltr\",\"pad\":[0,0,0,5],\"nick\":\"다\",\"s\":\"셋\",\"time\":\"02:32\",\"fo\":3},"
+                    + "{\"t\":\"ltr\",\"pad\":[0,0,0,5],\"nick\":\"라\",\"s\":\"넷\",\"time\":\"02:33\"},"
+                    + "{\"t\":\"ltr\",\"nick\":\"마\",\"s\":\"다섯\",\"time\":\"02:34\"}]}";
+                ScreenCore.Screen hwS = ScreenCore.load(H + hwBody + "]}");
+                ScreenCore.Layout hwL = ScreenCore.layout(hwS, 411f, M);
+                ScreenCore.Item hwSec = null, hwPan = null, hwScn = null, hwTr = null, hwInb = null, hwDv = null;
+                int hwLtrs = 0;
+                for (ScreenCore.Item it : hwL.body) {
+                    if (it.kind == ScreenCore.K_SEC && hwSec == null) hwSec = it;
+                    if (it.kind == ScreenCore.K_PANEL && hwPan == null) hwPan = it;
+                    if (it.kind == ScreenCore.K_SCENE) hwScn = it;
+                    if (it.kind == ScreenCore.K_TROW) hwTr = it;
+                    if (it.kind == ScreenCore.K_INBAR) hwInb = it;
+                    if (it.kind == ScreenCore.K_DIV) hwDv = it;
+                    if (it.kind == ScreenCore.K_LTR) hwLtrs++;
+                }
+                ok(hwSec != null && near(hwSec.x, 14f) && near(hwSec.w, 383f) && near(hwSec.h, 23f) && hwSec.go.length() > 0 && near(hwSec.sx + hwSec.sw, 397f) && near(hwSec.sh, 23f), "sec: 웹 .sec — 좌우 14 · 단추 높이 23 · 단추는 오른쪽 끝");
+                ok(hwSec != null && hwSec.label.length() > 0 && hwSec.tagX > hwSec.textX + 30f && hwSec.tagX + 10f < hwSec.sx, "sec: 가운데 작은 글은 제목 뒤 8 · 단추 앞에서 끝난다");
+                ok(ScreenCore.Layout.hits(hwSec, hwSec.sx + 5f, hwSec.sy + 5f) && !ScreenCore.Layout.hits(hwSec, 30f, hwSec.y + 5f), "sec: 단추 자리만 눌린다");
+                ok(hwPan != null && near(hwPan.y, 29f) && near(hwPan.sw, 4f) && hwPan.ac != null && near(hwPan.h, 172f), "panel: 왼쪽 띠 4(lb) · 장면 150 + 안쪽 여백 10·10 + 테두리 → 172");
+                ok(hwScn != null && near(hwScn.x, 30f) && near(hwScn.y, 40f) && near(hwScn.w, 356f), "panel ip [15,10,10,10]: 장면은 x 30 · 카드 안 10 아래 · 폭 356");
+                ok(hwInb != null && near(hwInb.h, 57f) && near(hwInb.sh, 33f) && hwInb.fill2 != null && near(hwInb.sfh, 17f) && near(hwInb.sfr, 11f), "inbar: 줄 57 · 단추 33 · 입력 글자 뒤 띠 17/모서리 11");
+                ok(hwInb != null && near(hwInb.x + hwInb.w, 382f) && near(hwInb.btx + hwInb.sw, 382f) && near(hwInb.textX, hwInb.x + 34f), "inbar pad [0,0,14,0]: 단추는 카드 안쪽 오른쪽에서 14 · 글자는 점 뒤 20");
+                ok(hwDv != null && hwDv.line != null && "border2".equals(hwDv.line.role), "divider c=border2");
+                ok(hwTr != null && near(hwTr.h, 34f) && near(hwTr.bx, hwTr.x + 14f) && hwTr.badge.length() > 0 && near(hwTr.sh, 18f) && hwTr.go.length() > 0 && near(hwTr.btx + hwTr.sw2, hwTr.x + hwTr.w - 14f) && hwTr.tag.length() > 0 && hwTr.on, "trow: 웹 기준시각 줄 — 좌우 14 · 알약 18 · 오른쪽 끝 단추 · 안내 글");
+                ok(near(hwTr.sx + hwTr.sw + 8f, hwTr.btx), "trow: 알약과 단추 사이 8");
+                ok(ScreenCore.Layout.hits(hwTr, hwTr.x + 100f, hwTr.y + 10f) && hwLtrs == 5, "trow: 줄 전체가 눌린다 · 대화 줄 5개");
+                // fit: 보이는 높이 791 → 남는 세로를 장면이 채우고(최소 90), 모자라면 오래된 줄부터 접힌다
+                ScreenCore.Layout hwB0 = ScreenCore.layout(hwS, 411f, M, null, 0f);
+                ScreenCore.Layout hwBig = ScreenCore.layout(hwS, 411f, M, null, hwB0.bodyH + 200f);
+                ScreenCore.Item hwSbig = null; for (ScreenCore.Item it : hwBig.body) if (it.kind == ScreenCore.K_SCENE) hwSbig = it;
+                ok(hwSbig != null && near(hwSbig.h, 350f) && near(hwBig.bodyH, hwB0.bodyH + 200f), "scene fit: 남는 세로 200 → 장면 150 + 200 (본문이 보이는 높이에 딱 맞는다)");
+                ScreenCore.Layout hwSmall = ScreenCore.layout(hwS, 411f, M, null, hwB0.bodyH - 60f - 150f + 50f);
+                int hwLs = 0; ScreenCore.Item hwSs = null; for (ScreenCore.Item it : hwSmall.body) { if (it.kind == ScreenCore.K_LTR) hwLs++; if (it.kind == ScreenCore.K_SCENE) hwSs = it; }
+                ok(hwSs != null && near(hwSs.h, 90f) && hwLs < 5 && hwLs >= 2, "scene fit: 모자라면 장면은 최소 90 · 대화 오래된 줄부터 접힌다(2줄은 남김): 줄 " + hwLs);
+                ScreenCore.Layout hwAg = ScreenCore.layout(hwS, 411f, M, null, 0f);
+                ok(near(hwAg.bodyH, hwB0.bodyH), "scene fit: 높이를 모르면(0) 접힘·키움 없이 원래대로");
+            } catch (Exception ex) { ok(false, "홈 웹 치수 노드: " + ex); }
+            boolean threw = false; try { ScreenCore.load(H + "{\"t\":\"sec\",\"s\":\"\"}]}"); } catch (Exception ex) { threw = true; } ok(threw, "sec: s 가 없으면 거부");
+        }
+
         // ── 버스 탭 노드(btog · bcard · tmap 확장) ──
         {
             String H = "{\"ok\":true,\"v\":1,\"screen\":\"maph\",\"head\":[],\"body\":[";

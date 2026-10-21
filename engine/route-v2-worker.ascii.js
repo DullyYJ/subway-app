@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-21s117";
+var ENGINE_VERSION = "route-v2-2026-10-21s118";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -14526,7 +14526,7 @@ var HOME_STNS = [
 // \ub9e8 \uc544\ub798 module.exports \ub294 \uc2dc\ud5d8(Node)\uc6a9\uc774\uace0 Worker \uc5d0\uc11c\ub294 \ud568\uc218 \uc120\uc5b8\ub9cc \uc4f0\uc778\ub2e4.
 'use strict';
 var HOME_SCREEN_V = 1;
-var HOME_ROW_H = 48, HOME_SUG_H = 44, HOME_MAX_SUG = 7, HOME_PANEL_B = 4;
+var HOME_ROW_H = 57, HOME_TROW_H = 34, HOME_SUG_H = 44, HOME_MAX_SUG = 7, HOME_PANEL_T = 14, HOME_PANEL_B = 18;      // \uc6f9 \ud648 \uacbd\ub85c \uce74\ub4dc: \uc785\ub825\uc904 57(+\ubc11\uc904 1) \u00b7 \uae30\uc900\uc2dc\uac01 \uc904 34(+\uc717\uc904 1) \u00b7 \uce74\ub4dc \uc704 14 \u00b7 \uc544\ub798 18
 var HOME_STN_MAX = 8, HOME_SX = 1;
 var HOME_STNS;                                                       // Worker \uc5d0\uc11c\ub294 \uc55e\uc5d0 \ubd99\uc740 engine/home-stations.js \uac00 \ucc44\uc6b4\ub2e4. Node(\uc2dc\ud5d8)\uc5d0\uc11c\ub294 \uc544\ub798\uc5d0\uc11c \ubd88\ub7ec\uc628\ub2e4.
 if (typeof HOME_STNS === 'undefined' || !HOME_STNS) { try { if (typeof require === 'function') HOME_STNS = require('./home-stations').HOME_STNS; } catch (eHs) {} }
@@ -14634,22 +14634,24 @@ function homeScreen(inp, factsIn, dataIn) {
   var ready = (f.startSet && f.destSet) || (f.start.trim().length > 0 && f.dest.trim().length > 0);
   var act = function (v) { return { a: 'call', v: v }; };
   var kids = [];
-  kids.push({ t: 'inbar', key: 'start', hint: '\ucd9c\ubc1c\uc9c0 \uac80\uc0c9', value: f.start, maxlen: 60, h: HOME_ROW_H, size: 15, bold: true, r: 0, fill: '', line: '', dot: '#0a84ff',
-    btn: f.gps ? '\uac10\uc9c0 \uc911' : '\uc704\uce58 \uac10\uc9c0', bh: 30, bsize: 12, onc: '#0a84ff', ckf: '#ffffff', watch: true, dim: f.gps, act: act('rt.gps'), eact: act('rt.enter') });
+  var inb = function (key, hint, val, dot, btn, onc, ckf, dim, act) {
+    return { t: 'inbar', key: key, hint: hint, value: val, maxlen: 60, h: HOME_ROW_H, size: 15, bold: true, r: 0, fill: '', line: '', dot: dot, pad: [0, 0, 14, 0],
+      ifill: 'card2', ifh: 17, ifr: 11, btn: btn, bh: 33, bsize: 12, bpx: 16, onc: onc, ckf: ckf, watch: true, dim: dim, act: act, eact: { a: 'call', v: 'rt.enter' } };
+  };
+  var line = { t: 'divider', c: 'border2' };
+  kids.push(inb('start', '\ucd9c\ubc1c\uc9c0 \uac80\uc0c9', f.start, '#0a84ff', f.gps ? '\uac10\uc9c0 \uc911' : '\uc704\uce58 \uac10\uc9c0', '#0a84ff', '#ffffff', f.gps, act('rt.gps')));
   kids.push({ t: 'swap', size: 34, fill: '#0a84ff', line: 'bg', tc: 'white', icon: HOME_SWAP_ICON, act: act('rt.swap') });
   var rowsS = f.active === 'start' ? sugs : [], rowsD = f.active === 'dest' ? sugs : [];
+  kids.push(line);
   rowsS.forEach(function (r) { kids.push(r); });
-  kids.push({ t: 'divider' });
-  kids.push({ t: 'inbar', key: 'dest', hint: '\ub3c4\ucc29\uc9c0 \uac80\uc0c9', value: f.dest, maxlen: 60, h: HOME_ROW_H, size: 15, bold: true, r: 0, fill: '', line: '', dot: '#ff3b30',
-    btn: '\uacbd\ub85c \ud0d0\uc0c9', bh: 30, bsize: 12, onc: 'gold', ckf: '#121214', watch: true, dim: !ready, act: act('rt.go'), eact: act('rt.enter') });
+  kids.push(inb('dest', '\ub3c4\ucc29\uc9c0 \uac80\uc0c9', f.dest, '#ff3b30', '\uacbd\ub85c \ud0d0\uc0c9', 'gold', '#121214', !ready, act('rt.go')));
   rowsD.forEach(function (r) { kids.push(r); });
-  kids.push({ t: 'divider' });
+  kids.push(line);
   var custom = f.base.ms != null;
-  var timeRow = { t: 'sug', badge: '\uae30\uc900\uc2dc\uac01', bc: 'sub', name: homeBaseLabel(f.base), sub: (f.base.hol ? '\uc8fc\ub9d0\u00b7\uacf5\ud734\uc77c' : '\ud3c9\uc77c') + (custom ? '' : ' \u00b7 \ub20c\ub7ec\uc11c \uc2dc\uac01 \ubcc0\uacbd'), last: true, act: act('bt.pick') };
-  if (custom) { timeRow.btn = '\ud604\uc7ac'; timeRow.bact = act('bt.now'); }
-  kids.push(timeRow);
-  var body = [{ t: 'panel', pad: [0, 0, 0, HOME_PANEL_B], ip: [0, 0, 0, 0], r: 16, kids: kids }];
-  var h = 2 + HOME_ROW_H + 1 + HOME_ROW_H + 1 + HOME_SUG_H + (rowsS.length + rowsD.length) * HOME_SUG_H + HOME_PANEL_B;
+  kids.push({ t: 'trow', lb: '\uD83D\uDD50 \uae30\uc900\uc2dc\uac01', s: homeBaseLabel(f.base), cur: !custom, hint: custom ? '' : '(\ud074\ub9ad\ud574\uc11c \uc2dc\uac04\uc744 \ubcc0\uacbd\ud558\uc138\uc694)',
+    day: f.base.hol ? '\uc8fc\ub9d0\u00b7\uacf5\ud734\uc77c' : '\ud3c9\uc77c', dc: f.base.hol ? '#ff9500' : '#30d158', btn: '\ud604\uc7ac', act: act('bt.pick'), bact: act('bt.now'), h: HOME_TROW_H });
+  var body = [{ t: 'panel', pad: [14, HOME_PANEL_T, 14, HOME_PANEL_B], ip: [0, 0, 0, 0], r: 16, kids: kids }];
+  var h = HOME_PANEL_T + 2 + HOME_ROW_H + 1 + HOME_ROW_H + 1 + HOME_TROW_H + (rowsS.length + rowsD.length) * HOME_SUG_H + HOME_PANEL_B;
   var out = { ok: true, v: 1, screen: 'home', cover: 'chips', head: [], body: body, info: { h: h, active: f.active, ready: ready, rows: rowsS.length + rowsD.length, sx: HOME_SX } };
   if (pk) out.info.pk = pk;
   out.rev = 'h' + HOME_SCREEN_V + ':' + homeHash(JSON.stringify(body));
@@ -17762,10 +17764,11 @@ function talkScreen(inp, f) {
   var rows = list.slice(-LTK_ROWS).slice(-want), n = rows.length;
   var listH = LTK_ROWS * LTK_ROW_H + (LTK_ROWS - 1) * LTK_ROW_GAP - fold * (LTK_ROW_H + LTK_ROW_GAP);        // \uc6f9 .livetalk-list \ub192\uc774 120 / 95 / 70 / 45
   var head = [{ t: 'lth', pad: [0, 0, 0, 0], s: '\uc2e4\uc2dc\uac04 \ub300\ud654', tail: '\u203a', dot: '#ff3b30', act: { a: 'call', v: 'tk.open' } }];
-  for (var r = 0; r < n; r++) head.push({ t: 'ltr', pad: [0, 0, 0, r === n - 1 ? 0 : LTK_ROW_GAP], nick: rows[r].nick, s: rows[r].text, time: rows[r].time });
+  var foldable = Math.min(LTK_MAX_FOLD, Math.max(0, n - 2));                            // \uc6f9 _sceneFit: \uc791\uc740 \ud3f0\uc5d0\uc11c\ub294 \uc624\ub798\ub41c \uc904\ubd80\ud130 \uc811\ub418 2\uc904\uc740 \ub0a8\uae34\ub2e4 \u2014 \uc571\uc774 \uc7b0 \ub0a8\ub294 \uc138\ub85c\ub85c \uba87 \uc904 \uc811\uc744\uc9c0 \uc815\ud558\uace0, \uc5b4\ub290 \uc904\uc774 \uc811\ud790 \uc218 \uc788\ub294\uc9c0(fo)\ub294 \uc5ec\uae30\uc11c \uc815\ud55c\ub2e4
+  for (var r = 0; r < n; r++) head.push({ t: 'ltr', pad: [0, 0, 0, r === n - 1 ? 0 : LTK_ROW_GAP], nick: rows[r].nick, s: rows[r].text, time: rows[r].time, fo: r < foldable ? r + 1 : 0 });
   var rest = listH - (n ? n * LTK_ROW_H + (n - 1) * LTK_ROW_GAP : 0);
   if (rest > 0) head.push({ t: 'spacer', h: rest });
-  var foot = [{ t: 'inbar', pad: [0, LTK_IN_TOP, 0, 0], key: 'talk.in', hint: '\uc2e4\uc2dc\uac04 \ub300\ud654 \ub0a8\uae30\uae30...', btn: '\ubcf4\ub0b4\uae30', bicon: LTK_SEND_ICON, h: LTK_IN_H, bh: LTK_IN_H, r: 19, size: 13, maxlen: 100, fill: 'card', line: 'border2', act: { a: 'call', v: 'tk.send' } }];
+  var foot = [{ t: 'inbar', pad: [0, LTK_IN_TOP, 0, 0], key: 'talk.in', hint: '\uc2e4\uc2dc\uac04 \ub300\ud654 \ub0a8\uae30\uae30...', btn: '\ubcf4\ub0b4\uae30', bicon: LTK_SEND_ICON, h: LTK_IN_H, bh: LTK_IN_H, inh: 35, r: 18, size: 13, maxlen: 100, fill: 'card', line: 'border2', act: { a: 'call', v: 'tk.send' } }];
   var out = { ok: true, v: 1, screen: 'talk', cover: 'tab', bg: 'card', head: head, body: [{ t: 'spacer', h: 0 }], foot: foot, info: { n: n, fold: fold } };
   out.rev = 't1:' + ltkHash(JSON.stringify([head, foot]));
   return out;
@@ -19502,10 +19505,27 @@ function hcRoute(r, now, tz) {
   if (!mins) segs.forEach(function (s) { mins += s.min; });
   return { segs: segs, mins: mins, dist: hcNum(route.summary.distance, 0), base: base };
 }
-function hcPanel(kids, line) {
-  var o = { t: 'panel', pad: [0, 4, 0, 8], ip: [14, 14, 14, 12], r: 16, kids: kids };
-  if (line) o.line = line;
-  return o;
+// \uc6f9 \ud648 \uce74\ub4dc \uce58\uc218(411 \ud3ed\uc5d0\uc11c \uc7b0 \uac12): \uce74\ub4dc \uc88c\uc6b0 14 \u00b7 \uce74\ub4dc \uc0ac\uc774 14 \u00b7 \uc81c\ubaa9\uc904(.sec)\uacfc \uce74\ub4dc \uc0ac\uc774 6 \u00b7 \ub9e8 \uc544\ub798 22.
+//   \ud63c\uc7a1\ub3c4 \uce74\ub4dc = \uc67c\ucabd 4px \uad75\uc740 \ub760(border-left, \uc548\ucabd \uc5ec\ubc31\uc740 \ud14c\ub450\ub9ac 1px \uc744 \ube7c\uace0 \uc801\ub294\ub2e4) \u00b7 AI \uce74\ub4dc padding 14/16 \u00b7 \ub300\ud654 \uce74\ub4dc radius 14 padding 10/12.
+var HC_GAP = 14, HC_SEC_GAP = 6, HC_BOTTOM = 22, HC_ARROW = '#1d9bf0';
+function hcPanel(kids, o) {
+  o = o || {};
+  var p = { t: 'panel', pad: [14, 0, 14, o.pb != null ? o.pb : HC_GAP], ip: o.ip || [16, 14, 16, 14], r: o.r || 16, kids: kids };
+  if (o.lb) { p.lb = o.lb; p.lc = o.lc || HC_ARROW; }
+  return p;
+}
+function hcSec(label, o) {
+  o = o || {};
+  var n = { t: 'sec', s: label, pad: [14, 0, 14, HC_SEC_GAP] };
+  if (o.badge) { n.badge = o.badge; n.bc = o.bc || HC_ARROW; }
+  if (o.hint) n.hint = o.hint;
+  if (o.btn) { n.btn = o.btn; n.act = o.act; }
+  return n;
+}
+function hcCssColor(c) {                                   // \uc5d4\uc9c4 \uc0c9 \uc774\ub984(arex)\uc744 CSS \uc0c9\uc73c\ub85c
+  if (typeof c !== 'string' || !c) return HC_ARROW;
+  if (c === 'arex') return HC_ARROW;
+  return /^#|^rgb/.test(c) ? c : HC_ARROW;
 }
 function hcKids(sc) {                                  // \uce74\ub4dc \ud654\uba74 \ud558\ub098\uc758 \uba38\ub9ac\u00b7\ubcf8\ubb38\u00b7\uc544\ub798 \uc904\uc744 \ud55c \uc904\ub85c \uc774\uc5b4 \ubd99\uc778\ub2e4(\ub192\uc774 0 \ube48\uce78\uc740 \ube80\ub2e4)
   var out = [];
@@ -19534,9 +19554,11 @@ function hcSceneNode(now, tz, routeShown, wx, stn, rd) {
   if (!sc || sc.ok !== true || !sc.mode) return null;
   var js = JSON.stringify(sc);
   if (js.length >= 6000) return null;
-  return { t: 'scene', h: 170, r: 12, pad: [0, 0, 0, 8], sc: js };
+  var node = { t: 'scene', h: 150, r: 12, pad: [0, 0, 0, 0], sc: js };
+  if (sc.fill === true) { node.fit = true; node.fmin = 90; node.fmax = 900; node.frh = 26; }      // \uc6f9 _sceneFit: \uacbd\ub85c\uac00 \uc5c6\uc73c\uba74 \ub0a8\ub294 \uc138\ub85c\ub97c \ucc44\uc6b4\ub2e4(\ucd5c\uc18c 90) \u2014 \uc571\uc740 \uc7b0 \ub192\uc774\ub85c \ube84\uc148\ub9cc \ud55c\ub2e4
+  return node;
 }
-function hcShareBtn() { return { t: 'button', s: '\ub0b4 \uc704\uce58 \uacf5\uc720', size: 12, h: 34, r: 10, bold: true, fill: 'card', line: 'gold', tc: 'gold', pad: [0, 0, 0, 8], act: { a: 'call', v: 'share.loc' } }; }
+var HC_SHARE = { a: 'call', v: 'share.loc' };
 function hcardsScreen(inp, f) {
   if (!(Number(inp && inp.cap) >= 18)) return { ok: false, error: 'cap' };
   if (!hcAi || !hcCong || !hcTalk) return { ok: false, error: 'engine' };
@@ -19581,15 +19603,18 @@ function hcardsScreen(inp, f) {
   var tkf = f.tk && typeof f.tk === 'object' ? f.tk : {};
   var talkS = hcTalk({ cap: 15 }, { m: hcArr(tkf.m).slice(-8), fold: hcNum(tkf.fold, 0), tzo: hcNum(tkf.tzo, -tz) });
   var body = [];
-  // \uc21c\uc11c\ub294 \uc6f9 \ud648\uacfc \uac19\ub2e4: \ud63c\uc7a1\ub3c4(\uce90\ub9ad\ud130 \uc7a5\uba74) \u2192 AI \uc2b9\ubb34\uc6d0 \u2192 \uc2e4\uc2dc\uac04 \ub300\ud654
+  // \uc21c\uc11c\ub294 \uc6f9 \ud648\uacfc \uac19\ub2e4: \ud63c\uc7a1\ub3c4(\uc81c\ubaa9\uc904 + \uce90\ub9ad\ud130 \uc7a5\uba74 \uce74\ub4dc) \u2192 AI \uc2b9\ubb34\uc6d0 \u2192 \uc2e4\uc2dc\uac04 \ub300\ud654
   if (congS && congS.ok) {
     var ck = hcKids(congS), scn = hcSceneNode(now, tz, !!rt, hcWx(f.wx && typeof f.wx === 'object' ? f.wx.wF : null), stn, f.rd);
-    if (scn) ck.unshift(scn);                                           // \ud63c\uc7a1\ub3c4 \uce74\ub4dc \ub9e8 \uc704: \uce90\ub9ad\ud130 \uc7a5\uba74(\uc6f9\uacfc \uac19\uc740 \uc790\ub9ac)
-    if (f.sh) ck.splice(scn ? 1 : 0, 0, hcShareBtn());                    // \ud0d1\uc2b9 \uc548\ub0b4 \uc911\uc774\uba74 '\ub0b4 \uc704\uce58 \uacf5\uc720'(\uc571\uc740 f.sh=1 \ub9cc \ubcf4\ub0b8\ub2e4)
-    body.push(hcPanel(ck, congS.info && congS.info.bc && /^#/.test(congS.info.bc) ? congS.info.bc : ''));
+    var bar = hcCssColor(congS.info && congS.info.bc), sceneHint = '';
+    if (scn) { try { sceneHint = hcStr(JSON.parse(scn.sc).hint, 60); } catch (e) { sceneHint = ''; } }
+    var bd = congS.info && typeof congS.info.badge === 'string' ? congS.info.badge : '';
+    body.push(hcSec('\ud63c\uc7a1\ub3c4', { badge: scn ? '' : bd, bc: hcCssColor(congS.info && congS.info.bbg), hint: scn ? sceneHint : '', btn: '\uD83D\uDCCD \uc704\uce58 \uacf5\uc720', act: HC_SHARE }));
+    if (scn) body.push(hcPanel([scn], { ip: [15, 10, 10, 10], lb: 4, lc: bar }));          // \uc7a5\uba74\ub9cc \ubcf4\uc77c \ub550 \uc548\ucabd \uc5ec\ubc31\uc744 \uc904\uc5ec \uc7a5\uba74\uc5d0 \uc790\ub9ac\ub97c \ub354 \uc900\ub2e4(\uc6f9 .cs-on)
+    else body.push(hcPanel(ck, { ip: [17, 14, 14, 14], lb: 4, lc: bar }));
   }
-  if (aiS && aiS.ok) body.push(hcPanel(hcKids(aiS)));
-  if (talkS && talkS.ok) body.push(hcPanel(hcKids(talkS)));
+  if (aiS && aiS.ok) { body.push(hcSec('AI \uc2b9\ubb34\uc6d0')); body.push(hcPanel(hcKids(aiS), { ip: [16, 14, 16, 14] })); }
+  if (talkS && talkS.ok) body.push(hcPanel(hcKids(talkS), { ip: [12, 10, 12, 10], r: 14, pb: HC_BOTTOM }));
   var out = { ok: true, v: HC_V, screen: 'hcards', cover: 'chips', head: [], body: body, info: { ai: aiS && aiS.ok ? aiS.info.mode : '', cong: cs.mode, stn: stn, near: near ? near[0] : '' } };
   out.rev = 'h' + HC_V + ':' + hcHash(JSON.stringify(body));
   return out;

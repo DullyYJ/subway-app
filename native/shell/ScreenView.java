@@ -196,7 +196,7 @@ public class ScreenView extends View {
 
     private void relayout() {
         if (screen == null || getWidth() <= 0) { lay = null; invalidate(); syncLater(); return; }
-        lay = ScreenCore.layout(screen, getWidth() / dpr, measurer, openKey);
+        lay = ScreenCore.layout(screen, getWidth() / dpr, measurer, openKey, getHeight() / dpr);
         if (lay.ctrSig.length() == 0) ctrDone = null;
         else if (!lay.ctrSig.equals(ctrDone)) { ctrDone = lay.ctrSig; scrollX = lay.initScrollX; }      // 24시간 차트 내용이 새로 오면 지금 시각 막대를 가운데로
         clampScroll();
@@ -290,7 +290,7 @@ public class ScreenView extends View {
                         else if (pi.kind == ScreenCore.K_FIELD) beginEdit(pi);
                         else if (pi.kind == ScreenCore.K_INBAR) tapInbar(pi, x / dpr, pressInFoot);
                         else if (pi.kind == ScreenCore.K_POSTH) toggleOpen(pi);
-                        else if (pi.kind == ScreenCore.K_SUG && pi.act2 != null && x / dpr >= pi.btx - 6f) { blurInput(); listener.onAction(pi.act2); }
+                        else if ((pi.kind == ScreenCore.K_SUG || pi.kind == ScreenCore.K_TROW) && pi.act2 != null && x / dpr >= pi.btx - 6f) { blurInput(); listener.onAction(pi.act2); }
                         else if (pi.kind == ScreenCore.K_RHD) { blurInput(); listener.onAction(ScreenCore.Layout.rhdAct(pi, x / dpr)); }
                         else if (pi.kind == ScreenCore.K_BCARD) tapBcard(pi, x / dpr, y / dpr - lay.headH + scrollY);
                         else if (pi.kind == ScreenCore.K_BTOG) { blurInput(); pickBtog(pi); listener.onAction(a); }
@@ -384,6 +384,17 @@ public class ScreenView extends View {
         cv.scale(1f / dpr, 1f / dpr);                      // 장면은 화면 픽셀 좌표로 그린다(밀도는 SceneCore 가 안다)
         scene.draw(cv);
         cv.restore();
+        String tg = scene.core().tag();                                                        // 웹 .cs-tag: 왼쪽 위 작은 알약(🌙 밤 …)
+        if (tg != null && tg.length() > 0) {
+            setText(10.5f, true, pal[R_WHITE]);
+            float tw = tp.measureText(tg) + 18f;
+            rf.set(it.x + 8f, it.y + 7f, it.x + 8f + tw, it.y + 27f);
+            p.setStyle(Paint.Style.FILL); p.setColor(0x8C0C1222); cv.drawRoundRect(rf, 10f, 10f, p);
+            cv.drawText(tg, it.x + 17f, base(it.y + 7f, 20f, 0), tp);
+        }
+        p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(pal[R_BORDER]);       // 웹 .cong-scene 의 1px 테두리
+        rf2.set(it.x + 0.5f, it.y + 0.5f, it.x + it.w - 0.5f, it.y + it.h - 0.5f); cv.drawRoundRect(rf2, it.radius - 0.5f, it.radius - 0.5f, p);
+        p.setStyle(Paint.Style.FILL);
     }
     // ───────────── 맨 위 흐르는 문구(문구 목록은 엔진이 정한 값 · 앱은 오른쪽에서 왼쪽으로 흘리며 색을 돌리기만) ─────────────
     private boolean skelDrawn;
@@ -1030,6 +1041,8 @@ public class ScreenView extends View {
             case ScreenCore.K_SELECT: drawSelect(cv, it); break;
             case ScreenCore.K_FIELD: drawField(cv, it); break;
             case ScreenCore.K_BAR: drawBar(cv, it); break;
+            case ScreenCore.K_SEC: drawSec(cv, it); break;
+            case ScreenCore.K_TROW: drawTrow(cv, it); break;
             case ScreenCore.K_PLACE: drawPlace(cv, it); break;
             case ScreenCore.K_DIV: drawDivider(cv, it); break;
             case ScreenCore.K_NEWS: drawNews(cv, it); break;
@@ -1114,6 +1127,50 @@ public class ScreenView extends View {
         }
     }
 
+    /** 카드 위 제목줄(웹 .sec): 제목(글자 사이 0.4) · 알약 · 가운데 작은 글 · 오른쪽 테두리 단추. */
+    private void drawSec(Canvas cv, ScreenCore.Item it) {
+        setText(it.size, false, pal[R_SUB]); tp.setLetterSpacing(0.4f / it.size);
+        cv.drawText(it.lines[0], it.textX, base(it.y, it.h, 0), tp);
+        tp.setLetterSpacing(0f);
+        if (it.badge.length() > 0) {
+            float ph = 18f, py = it.y + (it.h - ph) / 2f;
+            rf.set(it.bx, py, it.bx + it.badgeW, py + ph);
+            p.setStyle(Paint.Style.FILL); p.setColor(cc(it.ac, pal[R_GOLD])); cv.drawRoundRect(rf, 6f, 6f, p);
+            setText(ScreenCore.SEC_PILL, true, pal[R_WHITE]); tp.setTextAlign(Paint.Align.CENTER);
+            cv.drawText(it.badge, it.bx + it.badgeW / 2f, base(py, ph, 0), tp); tp.setTextAlign(Paint.Align.LEFT);
+        }
+        if (it.label.length() > 0) {
+            setText(it.size2, true, pal[R_SUB]);
+            cv.drawText(it.label, it.tagX, base(it.y, it.h, 0), tp);
+        }
+        if (it.go.length() > 0) {
+            rf.set(it.sx, it.sy, it.sx + it.sw, it.sy + it.sh);
+            float rad = it.sh / 2f;
+            if (it == pressed) { p.setStyle(Paint.Style.FILL); p.setColor(alpha(pal[R_GOLD], 0.14f)); cv.drawRoundRect(rf, rad, rad, p); }
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(pal[R_GOLD]);
+            rf2.set(it.sx + 0.5f, it.sy + 0.5f, it.sx + it.sw - 0.5f, it.sy + it.sh - 0.5f); cv.drawRoundRect(rf2, rad - 0.5f, rad - 0.5f, p);
+            p.setStyle(Paint.Style.FILL);
+            setText(ScreenCore.SEC_BTN, true, pal[R_GOLD]); tp.setTextAlign(Paint.Align.CENTER);
+            cv.drawText(it.go, it.sx + it.sw / 2f, base(it.sy, it.sh, 0), tp); tp.setTextAlign(Paint.Align.LEFT);
+        }
+    }
+
+    /** 기준시각 줄(웹 홈 경로 카드 맨 아래). */
+    private void drawTrow(Canvas cv, ScreenCore.Item it) {
+        if (it == pressed) { p.setStyle(Paint.Style.FILL); p.setColor(0x0F808080); rf.set(it.x, it.y, it.x + it.w, it.y + it.h); cv.drawRect(rf, p); }
+        if (it.label.length() > 0) { setText(it.size2, false, pal[R_SUB]); cv.drawText(it.label, it.bx, base(it.y, it.h, 0), tp); }
+        setText(it.size, false, it.on ? pal[R_SUB] : pal[R_TEXT]);
+        cv.drawText(it.lines[0], it.textX, base(it.y, it.h, 0), tp);
+        if (it.tag.length() > 0) { setText(it.size2, false, pal[R_SUB]); cv.drawText(it.tag, it.tagX, base(it.y, it.h, 0), tp); }
+        if (it.badge.length() > 0) {
+            rf.set(it.sx, it.sy, it.sx + it.sw, it.sy + it.sh); int c = cc(it.ac, 0xFF30D158);
+            p.setStyle(Paint.Style.FILL); p.setColor(alpha(c, 0.15f)); cv.drawRoundRect(rf, 8f, 8f, p);
+            setText(it.size2, true, c); tp.setTextAlign(Paint.Align.CENTER);
+            cv.drawText(it.badge, it.sx + it.sw / 2f, base(it.sy, it.sh, 0), tp); tp.setTextAlign(Paint.Align.LEFT);
+        }
+        if (it.go.length() > 0) { setText(it.size2, false, pal[R_SUB]); cv.drawText(it.go, it.btx, base(it.y, it.h, 0), tp); }
+    }
+
     /** 맛집 장소 카드: 순위 동그라미 · 이름 · 업종/주소 · (별점|공공데이터 딱지)·거리·길찾기 글. */
     private void drawPlace(Canvas cv, ScreenCore.Item it) {
         float rad = it.radius;
@@ -1167,7 +1224,7 @@ public class ScreenView extends View {
     }
 
     private void drawDivider(Canvas cv, ScreenCore.Item it) {
-        p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor("border2".equals(it.bg) ? pal[R_BORDER2] : pal[R_BORDER]);
+        p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(it.line != null ? cc(it.line, pal[R_BORDER]) : ("border2".equals(it.bg) ? pal[R_BORDER2] : pal[R_BORDER]));
         cv.drawLine(it.x, it.y + 0.5f, it.x + it.w, it.y + 0.5f, p);
         p.setStyle(Paint.Style.FILL);
     }
@@ -1235,8 +1292,22 @@ public class ScreenView extends View {
         tp.setTextAlign(Paint.Align.LEFT);
     }
 
+    private final android.graphics.Path lbOuter = new android.graphics.Path(), lbInner = new android.graphics.Path();
     private void drawPanel(Canvas cv, ScreenCore.Item it) {
         rf.set(it.x, it.y, it.x + it.w, it.y + it.h);
+        if (it.sw > 0f && it.ac != null) {                                                  // 웹 border-left(굵은 색 띠): 바깥 모양에 띠 색을 깔고 안쪽 모양(왼쪽 모서리가 띠만큼 덜 둥글다)을 카드 색으로 덮는다
+            float r = it.radius, bw = it.sw;
+            lbOuter.reset(); lbOuter.addRoundRect(rf, r, r, android.graphics.Path.Direction.CW);
+            p.setStyle(Paint.Style.FILL); p.setColor(it.line != null ? cc(it.line, 0) : pal[R_BORDER]); cv.drawPath(lbOuter, p);
+            cv.save(); cv.clipPath(lbOuter);
+            p.setColor(cc(it.ac, 0)); rf2.set(it.x, it.y, it.x + bw + r, it.y + it.h); cv.drawRoundRect(rf2, r, r, p);
+            cv.restore();
+            rf2.set(it.x + bw, it.y + 1f, it.x + it.w - 1f, it.y + it.h - 1f);
+            float rl = Math.max(0f, r - bw), rr = Math.max(0f, r - 1f), rv = Math.max(0f, r - 1f);
+            lbInner.reset(); lbInner.addRoundRect(rf2, new float[] { rl, rv, rr, rv, rr, rv, rl, rv }, android.graphics.Path.Direction.CW);
+            p.setColor(it.fill != null ? cc(it.fill, 0) : pal[R_CARD]); cv.drawPath(lbInner, p);
+            return;
+        }
         if (it.fill != null) { p.setStyle(Paint.Style.FILL); p.setColor(cc(it.fill, 0)); cv.drawRoundRect(rf, it.radius, it.radius, p); }
         if (it.line != null) {
             p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(cc(it.line, 0));
@@ -1467,6 +1538,10 @@ public class ScreenView extends View {
             p.setStyle(Paint.Style.FILL);
         }
         if (it.dotC != null) { p.setStyle(Paint.Style.FILL); p.setColor(cc(it.dotC, 0)); cv.drawCircle(it.bx, it.by, 5f, p); }
+        if (it.fill2 != null && it.sfh > 0f) {                                              // 웹 입력칸의 바탕 띠(글자 자리만)
+            float sx0 = it.textX, sx1 = it.btx - 10f, sy0 = it.iy + (it.ih - it.sfh) / 2f;
+            if (sx1 > sx0) { rf.set(sx0, sy0, sx1, sy0 + it.sfh); p.setStyle(Paint.Style.FILL); p.setColor(cc(it.fill2, pal[R_CARD2])); cv.drawRoundRect(rf, it.sfr, it.sfr, p); }
+        }
         if (!editing) {
             String v = fieldVals.get(it.key);
             boolean empty = v == null || v.length() == 0;

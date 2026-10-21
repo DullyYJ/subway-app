@@ -19,13 +19,14 @@ const U = n => Array.from({ length: n }, (_, i) => ({ n: '강남' + i, l: '2호�
   const s = E.homeScreen({ cap: 7 }, { start: '', dest: '' }, {});
   ok(s.ok && s.v === 1 && s.screen === 'home' && s.head.length === 0 && s.body.length === 1 && s.body[0].t === 'panel' && /^h1:/.test(s.rev), '기본 모양');
   const k = kids(s);
-  ok(k.map(x => x.t).join() === 'inbar,swap,divider,inbar,divider,sug', '줄 순서: 출발 · 바꾸기 · 선 · 도착 · 선 · 기준시각 ' + k.map(x => x.t));
+  ok(k.map(x => x.t).join() === 'inbar,swap,divider,inbar,divider,trow', '줄 순서: 출발 · 바꾸기 · 선 · 도착 · 선 · 기준시각 ' + k.map(x => x.t));
   ok(k[0].key === 'start' && k[0].hint === '출발지 검색' && k[0].dot === '#0a84ff' && k[0].btn === '위치 감지' && k[0].act.v === 'rt.gps' && k[0].watch === true, '출발 줄');
   ok(k[3].key === 'dest' && k[3].hint === '도착지 검색' && k[3].dot === '#ff3b30' && k[3].btn === '경로 탐색' && k[3].act.v === 'rt.go' && k[3].watch === true, '도착 줄');
   { const g = kids(E.homeScreen({ cap: 7 }, { gps: true }))[0]; ok(g.btn === '감지 중' && g.dim === true && k[0].dim === false, '위치 감지 중이면 단추 글 [감지 중] · 흐림'); }
   ok(k[1].act.v === 'rt.swap' && k[1].icon === E.HOME_SWAP_ICON, '바꾸기 단추');
   ok(k[3].dim === true && s.info.ready === false, '입력이 비면 경로 탐색 단추는 흐림');
-  ok(k[5].badge === '기준시각' && k[5].name === '현재' && k[5].sub.indexOf('평일') === 0 && k[5].act.v === 'bt.pick' && !k[5].btn, '기준시각 줄(현재)');
+  ok(k[5].lb.indexOf('기준시각') > 0 && k[5].s === '현재' && k[5].cur === true && k[5].hint.indexOf('클릭해서') === 1 && k[5].day === '평일' && k[5].dc === '#30d158' && k[5].act.v === 'bt.pick' && k[5].btn === '현재' && k[5].bact.v === 'bt.now' && k[5].h === 34, '기준시각 줄(현재)');
+  ok(s.body[0].pad.join() === '14,14,14,18' && s.body[0].r === 16 && k[0].h === 57 && k[0].bh === 33 && k[0].bpx === 16 && k[0].ifill === 'card2' && k[0].pad.join() === '0,0,14,0' && k[2].c === 'border2', '웹 홈 경로 카드 치수(카드 14 여백 · 입력줄 57 · 단추 33 · 입력 띠)');
   ok(E.homeScreen({ cap: 7 }, { start: '강남', dest: '용두' }).body[0].kids[3].dim === false, '출발·도착 글자가 있으면 경로 탐색 활성');
   ok(E.homeScreen({ cap: 7 }, { startSet: true, destSet: true }).info.ready === true, '고른 출발·도착이 있으면 활성');
   ok(E.homeScreen({ cap: 7 }, { start: '강남', dest: '용두' }).rev !== E.homeScreen({ cap: 7 }, { start: '강', dest: '용두' }).rev, '글자가 다르면 rev 가 다르다');
@@ -36,7 +37,7 @@ const U = n => Array.from({ length: n }, (_, i) => ({ n: '강남' + i, l: '2호�
   let s = E.homeScreen({ cap: 7 }, f('start'), { u: U(8), b: B(5), p: P(5) });
   let k = kids(s);
   let sg = k.filter(x => x.t === 'sug' && x.act.v.startsWith('sg.'));
-  ok(k.map(x => x.t).join() === 'inbar,swap,sug,sug,sug,sug,sug,sug,sug,divider,inbar,divider,sug', '출발 후보는 출발 줄 아래(바꾸기 다음)에 ' + k.map(x => x.t));
+  ok(k.map(x => x.t).join() === 'inbar,swap,divider,sug,sug,sug,sug,sug,sug,sug,inbar,divider,trow', '출발 후보는 출발 줄 아래(바꾸기 다음)에 ' + k.map(x => x.t));
   ok(sg.length === 7 && s.info.rows === 7, '후보는 모두 7줄까지');
   { const q = E.homeScreen({ cap: 7 }, f('start'), { u: U(8), b: [], p: [] }); ok(kids(q).filter(x => x.t === 'sug' && x.act.v.startsWith('sg.')).length === 7, '지하철만 있으면 7줄 모두 지하철'); }
   ok(sg.map(x => x.act.v).join() === 'sg.u.0,sg.u.1,sg.u.2,sg.b.0,sg.b.1,sg.b.2,sg.p.0', '종류마다 3줄씩 먼저(지하철 → 버스 → 장소 순, 7줄까지) ' + sg.map(x => x.act.v));
@@ -47,14 +48,14 @@ const U = n => Array.from({ length: n }, (_, i) => ({ n: '강남' + i, l: '2호�
   const pl = sg.find(x => x.act.v === 'sg.p.0'); ok(pl.badge === '장소' && pl.bc === '#5e5ce6' && pl.sub === '서울 주소0', '장소 줄');
   s = E.homeScreen({ cap: 7 }, { start: '', dest: '용', active: 'dest' }, { u: U(2), b: [], p: P(1) });
   k = kids(s);
-  ok(k.map(x => x.t).join() === 'inbar,swap,divider,inbar,sug,sug,sug,divider,sug', '도착 후보는 도착 줄 아래에 ' + k.map(x => x.t));
+  ok(k.map(x => x.t).join() === 'inbar,swap,divider,inbar,sug,sug,sug,divider,trow', '도착 후보는 도착 줄 아래에 ' + k.map(x => x.t));
   ok(E.homeScreen({ cap: 7 }, { start: '', dest: '', active: 'dest' }, { u: U(3) }).body[0].kids.every(x => !(x.act && x.act.v.startsWith('sg.'))), '글자가 비면 후보를 안 보인다');
   ok(E.homeScreen({ cap: 7 }, { start: '강', active: '' }, { u: U(3) }).body[0].kids.every(x => !(x.act && x.act.v.startsWith('sg.'))), '칸이 눌려 있지 않으면 후보를 안 보인다');
   s = E.homeScreen({ cap: 7 }, f('start'), { u: [{ n: '' }, null, 5, { n: '역', l: 'x'.repeat(200) }], b: 'x', p: undefined });
   sg = kids(s).filter(x => x.t === 'sug' && x.act.v.startsWith('sg.'));
   ok(sg.length === 1 && sg[0].sub.length === 60 && sg[0].act.v === 'sg.u.3', '이상한 후보는 건너뛴다(번호는 원래 배열 순번)');
   s = E.homeScreen({ cap: 7 }, f('start'), { u: U(2) });
-  ok(s.info.h === 2 + 48 + 1 + 48 + 1 + 44 + 2 * 44 + 4, 'info.h 계산');
+  ok(s.info.h === 14 + 2 + 57 + 1 + 57 + 1 + 34 + 2 * 44 + 18, 'info.h 계산');
 }
 // ── ④ 기준시각 문구 ──
 {
@@ -68,7 +69,7 @@ const U = n => Array.from({ length: n }, (_, i) => ({ n: '강남' + i, l: '2호�
   ok(L(ms(2026, 9, 19, 0, 10)) === '오늘 오전 12:10' && L(ms(2026, 9, 19, 12, 0)) === '오늘 오후 12:00', '12시 처리');
   ok(L(ms(2026, 9, 19, 14, 30), null).indexOf('10/19(') === 0, '오늘 날짜를 모르면 날짜 글');
   const s = E.homeScreen({ cap: 7 }, { base: { ms: ms(2026, 9, 19, 14, 30), tzo, today, hol: true } });
-  const t = kids(s)[5]; ok(t.name === '오늘 오후 2:30' && t.sub === '주말·공휴일' && t.btn === '현재' && t.bact.v === 'bt.now', '기준시각을 골랐으면 단추 [현재]가 생긴다');
+  const t = kids(s)[5]; ok(t.s === '오늘 오후 2:30' && t.cur === false && t.hint === '' && t.day === '주말·공휴일' && t.dc === '#ff9500' && t.btn === '현재' && t.bact.v === 'bt.now', '기준시각을 골랐으면 단추 [현재]가 생긴다');
 }
 // ── ⑤ 앱 검증기 + 높이 ──
 {

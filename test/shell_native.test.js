@@ -81,6 +81,19 @@ function findAndroidJar() {
     const od = sv.slice(sv.indexOf('protected void onDraw'));
     assert.ok(!/anchorKey\(/.test(od.slice(0, 3000)), '그리는 중엔 계산하지 않는다');
   });
+  await t('디스크 캐시는 주 스레드에서 열지 않는다: IO 전용 스레드 하나 · 켤 때 미리 읽고 해석(warm) · 메모리 LRU 가 먼저 · 읽히면 빈 칸에 바로 올림', async () => {
+    const v = fs.readFileSync(N('ShellActivity.java'), 'utf8');
+    const cg = v.slice(v.indexOf('private String cacheGet('), v.indexOf('private final java.util.concurrent.ExecutorService ioExec'));
+    assert.ok(/scrCache\.get\(key\)/.test(cg) && /diskPre\.remove\(key\)/.test(cg) && /diskWarmAsync\(key\)/.test(cg) && !/diskGet\(/.test(cg), 'cacheGet: 메모리 → 미리 읽은 것 → IO 에 맡김(파일을 직접 열지 않는다)');
+    assert.ok(/newSingleThreadExecutor/.test(v) && /"shell-io"/.test(v), 'IO 전용 스레드 하나(차례 보장)');
+    const dw = v.slice(v.indexOf('private void diskWarmAsync('), v.indexOf('private void adoptDisk('));
+    assert.ok(/ioExec\.execute/.test(dw) && /diskGet\(key\)/.test(dw) && /warm\(c\)/.test(dw) && /main\.post/.test(dw), '읽기 → 미리 해석 → 주 스레드엔 올리기만');
+    const ad = v.slice(v.indexOf('private void adoptDisk('), v.indexOf('private void preloadDisk('));
+    assert.ok(/scrCache\.get\(key\) != null\) return/.test(ad) && /itemCount\(\) == 0 \|\| skelViews\.contains\(v\)/.test(ad) && /showCached\(v, c\)/.test(ad), '네트워크 글이 먼저 왔으면 지키고 · 빈 칸/뼈대만 갈아 올린다');
+    assert.ok(/preloadDisk\(\);/.test(v.slice(v.indexOf('protected void onCreate'), v.indexOf('protected void onCreate') + 1500)), 'onCreate 에서 바로 미리 읽기');
+    const dp = v.slice(v.indexOf('private void diskPut('), v.indexOf('/** 캐시 글을 조용히 올린다'));
+    assert.ok(/ioExec\.execute/.test(dp) && !/new Thread/.test(dp), '쓰기도 IO 스레드');
+  });
   await t('버스 탭: 30초 자동 새로고침은 지도 탭이 보일 때만 · 도착정보만 비우고 엔진이 다시 계산 · 앱은 시간표/도착 계산 없음', async () => {
     const v = fs.readFileSync(N('ShellActivity.java'), 'utf8');
     const mc = fs.readFileSync(N('MapCore.java'), 'utf8');

@@ -87,10 +87,27 @@ function hcRoute(r, now, tz) {
   if (!mins) segs.forEach(function (s) { mins += s.min; });
   return { segs: segs, mins: mins, dist: hcNum(route.summary.distance, 0), base: base };
 }
-function hcPanel(kids, line) {
-  var o = { t: 'panel', pad: [0, 4, 0, 8], ip: [14, 14, 14, 12], r: 16, kids: kids };
-  if (line) o.line = line;
-  return o;
+// 웹 홈 카드 치수(411 폭에서 잰 값): 카드 좌우 14 · 카드 사이 14 · 제목줄(.sec)과 카드 사이 6 · 맨 아래 22.
+//   혼잡도 카드 = 왼쪽 4px 굵은 띠(border-left, 안쪽 여백은 테두리 1px 을 빼고 적는다) · AI 카드 padding 14/16 · 대화 카드 radius 14 padding 10/12.
+var HC_GAP = 14, HC_SEC_GAP = 6, HC_BOTTOM = 22, HC_ARROW = '#1d9bf0';
+function hcPanel(kids, o) {
+  o = o || {};
+  var p = { t: 'panel', pad: [14, 0, 14, o.pb != null ? o.pb : HC_GAP], ip: o.ip || [16, 14, 16, 14], r: o.r || 16, kids: kids };
+  if (o.lb) { p.lb = o.lb; p.lc = o.lc || HC_ARROW; }
+  return p;
+}
+function hcSec(label, o) {
+  o = o || {};
+  var n = { t: 'sec', s: label, pad: [14, 0, 14, HC_SEC_GAP] };
+  if (o.badge) { n.badge = o.badge; n.bc = o.bc || HC_ARROW; }
+  if (o.hint) n.hint = o.hint;
+  if (o.btn) { n.btn = o.btn; n.act = o.act; }
+  return n;
+}
+function hcCssColor(c) {                                   // 엔진 색 이름(arex)을 CSS 색으로
+  if (typeof c !== 'string' || !c) return HC_ARROW;
+  if (c === 'arex') return HC_ARROW;
+  return /^#|^rgb/.test(c) ? c : HC_ARROW;
 }
 function hcKids(sc) {                                  // 카드 화면 하나의 머리·본문·아래 줄을 한 줄로 이어 붙인다(높이 0 빈칸은 뺀다)
   var out = [];
@@ -119,9 +136,11 @@ function hcSceneNode(now, tz, routeShown, wx, stn, rd) {
   if (!sc || sc.ok !== true || !sc.mode) return null;
   var js = JSON.stringify(sc);
   if (js.length >= 6000) return null;
-  return { t: 'scene', h: 170, r: 12, pad: [0, 0, 0, 8], sc: js };
+  var node = { t: 'scene', h: 150, r: 12, pad: [0, 0, 0, 0], sc: js };
+  if (sc.fill === true) { node.fit = true; node.fmin = 90; node.fmax = 900; node.frh = 26; }      // 웹 _sceneFit: 경로가 없으면 남는 세로를 채운다(최소 90) — 앱은 잰 높이로 뺄셈만 한다
+  return node;
 }
-function hcShareBtn() { return { t: 'button', s: '내 위치 공유', size: 12, h: 34, r: 10, bold: true, fill: 'card', line: 'gold', tc: 'gold', pad: [0, 0, 0, 8], act: { a: 'call', v: 'share.loc' } }; }
+var HC_SHARE = { a: 'call', v: 'share.loc' };
 function hcardsScreen(inp, f) {
   if (!(Number(inp && inp.cap) >= 18)) return { ok: false, error: 'cap' };
   if (!hcAi || !hcCong || !hcTalk) return { ok: false, error: 'engine' };
@@ -166,15 +185,18 @@ function hcardsScreen(inp, f) {
   var tkf = f.tk && typeof f.tk === 'object' ? f.tk : {};
   var talkS = hcTalk({ cap: 15 }, { m: hcArr(tkf.m).slice(-8), fold: hcNum(tkf.fold, 0), tzo: hcNum(tkf.tzo, -tz) });
   var body = [];
-  // 순서는 웹 홈과 같다: 혼잡도(캐릭터 장면) → AI 승무원 → 실시간 대화
+  // 순서는 웹 홈과 같다: 혼잡도(제목줄 + 캐릭터 장면 카드) → AI 승무원 → 실시간 대화
   if (congS && congS.ok) {
     var ck = hcKids(congS), scn = hcSceneNode(now, tz, !!rt, hcWx(f.wx && typeof f.wx === 'object' ? f.wx.wF : null), stn, f.rd);
-    if (scn) ck.unshift(scn);                                           // 혼잡도 카드 맨 위: 캐릭터 장면(웹과 같은 자리)
-    if (f.sh) ck.splice(scn ? 1 : 0, 0, hcShareBtn());                    // 탑승 안내 중이면 '내 위치 공유'(앱은 f.sh=1 만 보낸다)
-    body.push(hcPanel(ck, congS.info && congS.info.bc && /^#/.test(congS.info.bc) ? congS.info.bc : ''));
+    var bar = hcCssColor(congS.info && congS.info.bc), sceneHint = '';
+    if (scn) { try { sceneHint = hcStr(JSON.parse(scn.sc).hint, 60); } catch (e) { sceneHint = ''; } }
+    var bd = congS.info && typeof congS.info.badge === 'string' ? congS.info.badge : '';
+    body.push(hcSec('혼잡도', { badge: scn ? '' : bd, bc: hcCssColor(congS.info && congS.info.bbg), hint: scn ? sceneHint : '', btn: '\uD83D\uDCCD 위치 공유', act: HC_SHARE }));
+    if (scn) body.push(hcPanel([scn], { ip: [15, 10, 10, 10], lb: 4, lc: bar }));          // 장면만 보일 땐 안쪽 여백을 줄여 장면에 자리를 더 준다(웹 .cs-on)
+    else body.push(hcPanel(ck, { ip: [17, 14, 14, 14], lb: 4, lc: bar }));
   }
-  if (aiS && aiS.ok) body.push(hcPanel(hcKids(aiS)));
-  if (talkS && talkS.ok) body.push(hcPanel(hcKids(talkS)));
+  if (aiS && aiS.ok) { body.push(hcSec('AI 승무원')); body.push(hcPanel(hcKids(aiS), { ip: [16, 14, 16, 14] })); }
+  if (talkS && talkS.ok) body.push(hcPanel(hcKids(talkS), { ip: [12, 10, 12, 10], r: 14, pb: HC_BOTTOM }));
   var out = { ok: true, v: HC_V, screen: 'hcards', cover: 'chips', head: [], body: body, info: { ai: aiS && aiS.ok ? aiS.info.mode : '', cong: cs.mode, stn: stn, near: near ? near[0] : '' } };
   out.rev = 'h' + HC_V + ':' + hcHash(JSON.stringify(body));
   return out;

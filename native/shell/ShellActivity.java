@@ -119,6 +119,7 @@ public class ShellActivity extends Activity {
         store.put(MapCore.K_BUSVW, MapCore.VW_NEAR);                          // 웹은 앱을 켤 때마다 '주변 정류장'부터
         dpr = getResources().getDisplayMetrics().density;
         ScreenView.preloadFaces(this);
+        preloadDisk();
         importLegacy();
 
         root = new LinearLayout(this);
@@ -415,10 +416,48 @@ public class ShellActivity extends Activity {
     }
 
     // ── 화면 글 캐시 ──
+    /** 주 스레드는 파일을 열지 않는다: 메모리(scrCache) → IO 스레드가 미리 읽어 둔 것(diskPre) 순서로만 본다. 둘 다 없으면 IO 스레드에 읽기를 맡기고(끝나면 빈 칸에 바로 올린다) null. */
     private String cacheGet(String key, boolean disk) {
         String c = scrCache.get(key);
-        if (c == null && ShellCore.diskTtl(key) > 0L) { c = diskGet(key); if (c != null) scrCache.put(key, c); }
+        if (c == null && ShellCore.diskTtl(key) > 0L) {
+            c = diskPre.remove(key);
+            if (c != null) { scrCache.put(key, c); scrKeys.add(key); } else diskWarmAsync(key);
+        }
         return c;
+    }
+    // ── 디스크 I/O 는 전용 IO 스레드 하나에서만(차례가 보장돼 쓰기 직후 읽어도 맞다) · 읽자마자 글을 미리 해석해 둔다(warm) ──
+    private final java.util.concurrent.ExecutorService ioExec = java.util.concurrent.Executors.newSingleThreadExecutor(new java.util.concurrent.ThreadFactory() {
+        @Override public Thread newThread(Runnable r) { Thread t = new Thread(r, "shell-io"); t.setDaemon(true); t.setPriority(Thread.NORM_PRIORITY - 1); return t; }
+    });
+    private final java.util.concurrent.ConcurrentHashMap<String, String> diskPre = new java.util.concurrent.ConcurrentHashMap<String, String>();
+    private final java.util.Set<String> diskAsked = java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<String, Boolean>());
+    private void diskWarmAsync(final String key) {
+        if (key == null || ShellCore.diskTtl(key) <= 0L || !diskAsked.add(key)) return;
+        ioExec.execute(new Runnable() { @Override public void run() {
+            String c = diskGet(key);
+            if (c == null) { diskAsked.remove(key); return; }
+            warm(c);
+            diskPre.put(key, c);
+            main.post(new Runnable() { @Override public void run() { adoptDisk(key); diskAsked.remove(key); } });
+        } });
+    }
+    /** IO 스레드가 읽어 온 화면을 메모리에 넣고, 그 열쇠를 기다리는(빈 칸 · 뼈대) 칸이 있으면 바로 올린다. 그사이 네트워크 글이 먼저 왔으면 그것을 지키고 버린다. */
+    private void adoptDisk(String key) {
+        String c = diskPre.remove(key);
+        if (c == null || scrCache.get(key) != null) return;
+        scrCache.put(key, c); scrKeys.add(key);
+        for (java.util.Map.Entry<ScreenView, String> e : new java.util.ArrayList<java.util.Map.Entry<ScreenView, String>>(viewKey.entrySet())) {
+            ScreenView v = e.getKey();
+            if (key.equals(e.getValue()) && v != sheetView && (v.itemCount() == 0 || skelViews.contains(v)) && !c.equals(shownJson.get(v))) showCached(v, c);
+        }
+    }
+    /** 켤 때: 지금 탭의 화면 글을 IO 스레드에서 미리 읽고 해석해 둔다(첫 그림이 파일 읽기를 기다리지 않게). */
+    private void preloadDisk() {
+        try {
+            String tab = ShellCore.currentTab(store);
+            diskWarmAsync("tabs|" + tab); diskWarmAsync(ShellCore.S_HDR);
+            for (String sl : ShellCore.slotsOf(store, tab)) diskWarmAsync(ShellCore.cacheKey(sl, store));
+        } catch (Throwable ignored) { }
     }
     private void cachePut(String key, String json) {
         scrCache.put(key, json); scrKeys.add(key);
@@ -432,7 +471,7 @@ public class ShellActivity extends Activity {
         if (old.length() == 0 || old.equals(key)) return;
         scrCache.remove(old); scrKeys.remove(old); store.put(ShellCore.condKey(old), "");
         final File f = diskFile(old);
-        new Thread(new Runnable() { @Override public void run() { try { f.delete(); } catch (Throwable ignored) { } } }, "shell-scrdel").start();
+        ioExec.execute(new Runnable() { @Override public void run() { try { f.delete(); } catch (Throwable ignored) { } } });
     }
     private File diskFile(String key) { return new File(new File(getCacheDir(), "scr"), Integer.toHexString(key.hashCode()) + ".json"); }
     private String diskGet(String key) {
@@ -450,14 +489,14 @@ public class ShellActivity extends Activity {
         } catch (Throwable t) { return null; }
     }
     private void diskPut(final String key, final String json) {
-        new Thread(new Runnable() { @Override public void run() {
+        ioExec.execute(new Runnable() { @Override public void run() {
             try {
                 File d = new File(getCacheDir(), "scr");
                 if (!d.isDirectory()) d.mkdirs();
                 FileOutputStream os = new FileOutputStream(diskFile(key));
                 try { os.write(json.getBytes("UTF-8")); } finally { os.close(); }
             } catch (Throwable ignored) { }
-        } }, "shell-scrput").start();
+        } });
     }
     /** 캐시 글을 조용히 올린다(검증 통과한 것만; 못 읽으면 버린다). */
     private boolean showCached(ScreenView v, String json) {
@@ -1943,7 +1982,7 @@ public class ShellActivity extends Activity {
     /** 내 위치 공유: 엔진이 준 글+그림을 다른 앱(카카오톡 우선)으로 보낸다. 그림은 앱 캐시의 파일 제공자로 읽게 한다. */
     private void shareLoc() {
         final ShareCore.Share sh = RideService.liveShare;
-        if (sh == null) { toast("탑승 안내 중일 때만 공유할 수 있어요"); return; }
+        if (sh == null) { new AlertDialog.Builder(this, android.R.style.Theme_Material_Light_Dialog_Alert).setTitle("경로를 먼저 탐색해 주세요").setMessage("탐색한 경로의 내 위치와 도착 예정을\n친구에게 보낼 수 있어요").setPositiveButton("확인", null).show(); return; }      // 웹 _shareLoc 과 같은 안내
         final int[] pal = ShellCore.palette(ShellCore.theme(store));
         new Thread(new Runnable() {
             @Override public void run() {

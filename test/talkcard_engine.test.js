@@ -25,6 +25,9 @@ ok(G(null).ok === true && G(undefined).head.length === 2 && G('x').ok === true, 
   ok(rs[0].time === '14:43' && rs[4].time === '14:47', '시각은 기기 시간대(KST) HH:MM ' + rs[0].time);
   ok(G({ m: ROWS, tzo: 0 }).head[1].time === '05:43' && G({ m: ROWS, tzo: 300 }).head[1].time === '00:43', '시간대에 따라 시각이 달라진다(UTC·미국 동부)');
   ok(rs.every(r => r.nick && r.pad[3] === (r === rs[4] ? 0 : 5)), '줄 사이 5 · 마지막 줄은 0');
+  ok(rs.map(r => r.fo).join() === '1,2,3,0,0', '접을 수 있는 줄(fo): 오래된 3줄만 1·2·3 — 앱이 잰 남는 세로로 몇 줄 접을지 정한다(웹 _sceneFit)');
+  ok(rowsOf(G({ m: ROWS.slice(0, 3) })).map(r => r.fo).join() === '1,0,0' && rowsOf(G({ m: ROWS.slice(0, 2) })).map(r => r.fo).join() === '0,0', '줄이 적으면 2줄은 늘 남긴다');
+  ok(G({ m: ROWS }).foot[0].inh === 35 && G({ m: ROWS }).foot[0].r === 18, '입력 상자 높이 35 · 모서리 18(웹 입력칸)');
   const o2 = G({ m: [['a', '  공백   많은   글  ', T0], ['b', '', T0], ['c', '   ', T0], ['d', null, T0], 5, ['e', '정상', T0]] });
   ok(rowsOf(o2).map(r => r.s).join('|') === '공백 많은 글|정상', '빈 글은 건너뛰고 공백은 정리한다 ' + rowsOf(o2).map(r => r.s));
   ok(rowsOf(G({ m: [['x'.repeat(100), 'y'.repeat(500), T0]] }))[0].nick.length === 40 && rowsOf(G({ m: [['x', 'y'.repeat(500), T0]] }))[0].s.length === 200, '닉네임 40자 · 글 200자까지');
