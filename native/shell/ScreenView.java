@@ -155,7 +155,7 @@ public class ScreenView extends View {
                 if (it.kind != kind || it.lines.length == 0) continue;
                 setText(it.size, it.bold, 0);
                 float right = kind == ScreenCore.K_BAR && it.sw > 0f ? it.sx - 8f : it.x + it.w;
-                return new float[] { it.textX, oy + it.textY, tp.measureText(it.lines[0]), it.lineH, oy + it.y, it.h, right };
+                return new float[] { it.textX, oy + it.textY, it.mqVis > 0f ? Math.min(it.mqVis, it.mqW) : tp.measureText(it.lines[0]), it.lineH, oy + it.y, it.h, right };
             }
         }
         return null;
@@ -178,6 +178,7 @@ public class ScreenView extends View {
         }
         final ScreenCore.Layout before = keepScroll && !stick && ancKey == null ? lay : null;      // 노선 상세: 바뀐 줄만 다시 그리려고 이전 배치를 쥔다
         screen = s;
+        mqT0 = SystemClock.uptimeMillis();
         hintUntil = 0L;                                                                    // 엔진이 준 실제 상태(감지 중 여부)가 오면 임시 표시는 거둔다
         cdFresh = true; pendAgeMs = srcAgeMs; srcAgeMs = 0L;
         iconPaths.clear();
@@ -610,6 +611,8 @@ public class ScreenView extends View {
         skelDrawn = true;
     }
     private boolean marqDrawn;
+    private boolean mqDrawn;                          // 놀이터 자리를 남기고 흐르는 긴 이름이 보이는 중
+    private long mqT0;                               // 흐름 시작 시각(새 화면이 올라온 때)
     private String marqSrc = "";
     private String[] marqMsgs = new String[0];
     private int marqIdx;
@@ -1547,7 +1550,7 @@ public class ScreenView extends View {
         cv.drawRect(0, 0, getWidth(), getHeight(), p);
         if (lay == null) return;
         boolean moving = false;
-        sceneDrawn = false; hrDrawn = false; glowDrawn = false; tdDrawn = false; tdAct = false; marqDrawn = false; skelDrawn = false; runDrawn = false; bcAnim = false; msgAnimOn = false; tmDrawn = false; cdDrawn = false; brxPingN = 0; inbarBusy = false;
+        sceneDrawn = false; hrDrawn = false; glowDrawn = false; tdDrawn = false; tdAct = false; marqDrawn = false; mqDrawn = false; skelDrawn = false; runDrawn = false; bcAnim = false; msgAnimOn = false; tmDrawn = false; cdDrawn = false; brxPingN = 0; inbarBusy = false;
         if (ssOn) {                                                                       // 핀을 눌러 카드로 부드럽게 가는 중
             float f = (now - ssT0) / 350f;
             if (f >= 1f) { f = 1f; ssOn = false; }
@@ -1604,7 +1607,7 @@ public class ScreenView extends View {
 
         if (!drewOnce) { drewOnce = true; post(firstDrawCb); }
         if (sceneDrawn && scene != null && scene.isRunning() && !scene.isPaused()) postInvalidateOnAnimation();        // 장면이 보이는 동안만 화면 박자로 계속 그린다(안 보이면 저절로 멈춘다)
-        if (marqDrawn || skelDrawn || runDrawn || inbarBusy) postInvalidateOnAnimation();                                     // 흐르는 문구가 보이는 동안만 화면 박자로 계속 그린다
+        if (marqDrawn || mqDrawn || skelDrawn || runDrawn || inbarBusy) postInvalidateOnAnimation();                                     // 흐르는 문구가 보이는 동안만 화면 박자로 계속 그린다
         if (brxPingN > 0 && isShown()) {                                                           // 버스·내 위치 마커 맥박: 그 마커 자리만 초당 15번(보이는 동안만; 화면을 벗어나면 저절로 멈춘다)
             float oy = lay.headH - scrollY;
             for (int i = 0; i < brxPingN; i++) {
@@ -1754,7 +1757,8 @@ public class ScreenView extends View {
     private void drawBar(Canvas cv, ScreenCore.Item it) {
         setText(it.size, true, pal[R_TEXT]);
         float tb = base(it.textY, it.lineH, 0);
-        cv.drawText(it.lines.length > 0 ? it.lines[0] : "", it.textX, tb, tp);
+        if (it.mq) { cv.save(); cv.clipRect(it.textX, it.textY, it.textX + it.mqVis, it.textY + it.lineH + 2f); cv.drawText(it.lines[0], it.textX - mqOff(it), tb, tp); cv.restore(); }
+        else cv.drawText(it.lines.length > 0 ? it.lines[0] : "", it.textX, tb, tp);
         if (it.label.length() > 0) {
             setText(it.size2, true, pal[R_GOLD]);
             float sb = it.top ? tb : base(it.subY, it.lineH2, 0);                    // 한 줄이면 제목과 같은 글자 밑선
@@ -2017,9 +2021,26 @@ public class ScreenView extends View {
         if (it.tag.length() > 0) { setText(it.size, true, pal[R_GOLD]); cv.drawText(it.tag, it.tagX, base(it.textY, it.lineH, 0), tp); }
     }
 
+    /** 넘치는 이름의 흐름(왼쪽으로 넘친 길이만큼 갔다가 오른쪽으로 돌아온다): 처음·끝에서 잠깐 멈춘다. 새 객체 없음. */
+    private float mqOff(ScreenCore.Item it) {
+        float over = it.mqW - it.mqVis;
+        if (over <= 0f) return 0f;
+        float run = over / 30f * 1000f, pause = 1200f, cyc = pause + run + pause + run;       // 초당 30dp
+        float t = (float) ((SystemClock.uptimeMillis() - mqT0) % (long) cyc);
+        mqDrawn = true;
+        if (t < pause) return 0f;
+        t -= pause; if (t < run) return over * (t / run);
+        t -= run; if (t < pause) return over;
+        t -= pause; return over * (1f - t / run);
+    }
     private void drawTextBlock(Canvas cv, ScreenCore.Item it) {
         int c = alpha(roleColor(it.color), it.alpha);
         setText(it.size, it.bold, c);
+        if (it.mq && it.lines.length > 0) {                                                  // 놀이터 칸을 남기고 넘치는 이름: 보이는 칸 안에서 좌우로 흐른다
+            cv.save(); cv.clipRect(it.x, it.y, it.x + it.mqVis, it.y + it.h);
+            cv.drawText(it.lines[0], it.x - mqOff(it), base(it.y, it.lineH, 0), tp);
+            cv.restore(); return;
+        }
         if (it.segs != null) { drawRich(cv, it, it.textX, it.textY, c); return; }
         for (int k = 0; k < it.lines.length; k++) {
             float x = it.x;
