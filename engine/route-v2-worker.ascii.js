@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-21s127";
+var ENGINE_VERSION = "route-v2-2026-10-21s128";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -18827,7 +18827,8 @@ async function handleScreenResult(request) {
 // \ucd9c\ub825  { ok, v:1, screen:'map'|'mapstn'|'maptt', rev, cover:'tab', head, body, info }
 // \ub9e8 \uc544\ub798 module.exports \ub294 \uc2dc\ud5d8(Node)\uc6a9\uc774\uace0 Worker \uc5d0\uc11c\ub294 \ud568\uc218 \uc120\uc5b8\ub9cc \uc4f0\uc778\ub2e4.
 'use strict';
-var MAP_SCREEN_V = 3;
+var MAP_SCREEN_V = 4;
+var MAP_STN_TOP = 36;                                                   // \uc6f9 \ud31d\uc5c5 \uc704 \uc5ec\ubc31 16 + \uc190\uc7a1\uc774 4 + 16 (\uc190\uc7a1\uc774\ub294 \uc571 \ubdf0\uac00 \uadf8\ub9b0\ub2e4)
 var MAP_REGIONS = [['seoul', '\uc218\ub3c4\uad8c'], ['busan', '\ubd80\uc0b0'], ['daegu', '\ub300\uad6c'], ['gwangju', '\uad11\uc8fc'], ['daejeon', '\ub300\uc804']];
 var MAP_REGION_PREFIX = { busan: '\ubd80\uc0b0', daegu: '\ub300\uad6c', gwangju: '\uad11\uc8fc', daejeon: '\ub300\uc804' };
 var MAP_REGION_COLORS = { '\ubd80\uc0b01\ud638\uc120': '#F06A00', '\ubd80\uc0b02\ud638\uc120': '#81BF48', '\ubd80\uc0b03\ud638\uc120': '#BB8C00', '\ubd80\uc0b04\ud638\uc120': '#217DCB', '\ub300\uad6c1\ud638\uc120': '#D93F5C', '\ub300\uad6c2\ud638\uc120': '#00AA80', '\ub300\uad6c3\ud638\uc120': '#FFB100', '\uad11\uc8fc1\ud638\uc120': '#009088', '\ub300\uc8041\ud638\uc120': '#007448' };
@@ -18970,15 +18971,16 @@ function mapStationSheet(f) {
   if (!mapIsStationLabel(name)) return { ok: false, error: 'stn' };
   var lines = f.sl ? [f.sl].concat(mapLinesOf(name).filter(function (l) { return l !== f.sl; })) : mapLinesOf(name);
   if (f.sl && mapLinesOf(name).indexOf(f.sl) < 0) lines = mapLinesOf(name);
+  var dk = f.th === 'dark';                                                                   // \uc6f9 .nmp: \uc774\ub984 22 \uad75\uac8c \u00b7 \ub178\uc120 \uc54c\uc57d \u00b7 \ud83d\ude89/\ud83c\udfc1 \ubc84\ud2bc(\ud328\ub529 15, \ubc18\uc9c0\ub984 14) \u00b7 \ud83d\udd52 \uc2dc\uac04\ud45c(\ud328\ub529 13). \uc190\uc7a1\uc774\ub294 \uc571\uc774 \ub9e8 \uc704\uc5d0 \uadf8\ub9b0\ub2e4.
   var kids = [
-    { t: 'bar', pad: [0, 0, 0, 4], title: name, btn: '\ub2eb\uae30', act: { a: 'call', v: 'mp.close' } }
+    { t: 'text', s: name, size: 22, bold: true, color: 'text', lines: 1, pad: [0, MAP_STN_TOP, 0, 12] }
   ];
-  if (lines.length) kids.push({ t: 'chips', pad: [0, 4, 0, 10], gap: 7, h: 30, onc: 'gold', onfg: '#ffffff', items: lines.slice(0, 12).map(function (l) { return { label: l, on: true, c: mapLineColor(l, f.th), act: { a: 'sel', v: 'mp.line' } }; }) });
-  else kids.push({ t: 'text', s: '\ub178\uc120 \uc815\ubcf4 \uc5c6\uc74c', size: 13, color: 'sub', pad: [0, 4, 0, 10] });
+  if (lines.length) kids.push({ t: 'chips', pad: [0, 0, 0, 20], gap: 7, h: 34, onc: 'gold', onfg: '#ffffff', items: lines.slice(0, 12).map(function (l) { return { label: l, on: true, c: mapLineColor(l, f.th), act: { a: 'sel', v: 'mp.line' } }; }) });
+  else kids.push({ t: 'text', s: '\ub178\uc120 \uc815\ubcf4 \uc5c6\uc74c', size: 12, color: 'sub', pad: [0, 0, 0, 20] });
   kids.push({ t: 'row', pad: [0, 0, 0, 10], gap: 10, kids: [
-    { t: 'button', s: '\ucd9c\ubc1c\uc5ed', size: 14, h: 48, r: 12, bold: true, fill: '#0a84ff', line: 'none', tc: '#ffffff', pad: [0, 0, 0, 0], act: { a: 'call', v: 'mp.start' } },
-    { t: 'button', s: '\ub3c4\ucc29\uc5ed', size: 14, h: 48, r: 12, bold: true, fill: '#ff2d55', line: 'none', tc: '#ffffff', pad: [0, 0, 0, 0], act: { a: 'call', v: 'mp.dest' } }] });
-  kids.push({ t: 'button', s: '\uc2dc\uac04\ud45c', size: 14, h: 44, r: 12, bold: true, fill: 'card2', line: 'border', tc: '', pad: [0, 0, 0, 0], act: { a: 'call', v: 'mp.tt' } });
+    { t: 'button', s: '\ud83d\ude89 \ucd9c\ubc1c\uc5ed', size: 15, h: 48, r: 14, bold: true, fill: dk ? '#0a84ff' : '#1d9bf0', line: 'none', tc: '#ffffff', pad: [0, 0, 0, 0], act: { a: 'call', v: 'mp.start' } },
+    { t: 'button', s: '\ud83c\udfc1 \ub3c4\ucc29\uc5ed', size: 15, h: 48, r: 14, bold: true, fill: dk ? '#ff2d55' : '#e0455a', line: 'none', tc: '#ffffff', pad: [0, 0, 0, 0], act: { a: 'call', v: 'mp.dest' } }] });
+  kids.push({ t: 'button', s: '\ud83d\udd52 \uc2dc\uac04\ud45c', size: 15, h: 44, r: 14, bold: true, fill: 'card2', line: 'none', tc: '', pad: [0, 0, 0, 36], act: { a: 'call', v: 'mp.tt' } });
   var row = mapPickRow(name, f.sl);
   var out = { ok: true, v: 1, screen: 'mapstn', cover: 'tab', head: [], body: kids.map(mapSheetPad),
     info: { name: name, lines: lines, pick: row ? { name: row[0], line: row[1], la: row[2], lo: row[3] } : null } };

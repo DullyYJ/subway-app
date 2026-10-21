@@ -13,7 +13,8 @@
 // 출력  { ok, v:1, screen:'map'|'mapstn'|'maptt', rev, cover:'tab', head, body, info }
 // 맨 아래 module.exports 는 시험(Node)용이고 Worker 에서는 함수 선언만 쓰인다.
 'use strict';
-var MAP_SCREEN_V = 3;
+var MAP_SCREEN_V = 4;
+var MAP_STN_TOP = 36;                                                   // 웹 팝업 위 여백 16 + 손잡이 4 + 16 (손잡이는 앱 뷰가 그린다)
 var MAP_REGIONS = [['seoul', '수도권'], ['busan', '부산'], ['daegu', '대구'], ['gwangju', '광주'], ['daejeon', '대전']];
 var MAP_REGION_PREFIX = { busan: '부산', daegu: '대구', gwangju: '광주', daejeon: '대전' };
 var MAP_REGION_COLORS = { '부산1호선': '#F06A00', '부산2호선': '#81BF48', '부산3호선': '#BB8C00', '부산4호선': '#217DCB', '대구1호선': '#D93F5C', '대구2호선': '#00AA80', '대구3호선': '#FFB100', '광주1호선': '#009088', '대전1호선': '#007448' };
@@ -156,15 +157,16 @@ function mapStationSheet(f) {
   if (!mapIsStationLabel(name)) return { ok: false, error: 'stn' };
   var lines = f.sl ? [f.sl].concat(mapLinesOf(name).filter(function (l) { return l !== f.sl; })) : mapLinesOf(name);
   if (f.sl && mapLinesOf(name).indexOf(f.sl) < 0) lines = mapLinesOf(name);
+  var dk = f.th === 'dark';                                                                   // 웹 .nmp: 이름 22 굵게 · 노선 알약 · 🚉/🏁 버튼(패딩 15, 반지름 14) · 🕒 시간표(패딩 13). 손잡이는 앱이 맨 위에 그린다.
   var kids = [
-    { t: 'bar', pad: [0, 0, 0, 4], title: name, btn: '닫기', act: { a: 'call', v: 'mp.close' } }
+    { t: 'text', s: name, size: 22, bold: true, color: 'text', lines: 1, pad: [0, MAP_STN_TOP, 0, 12] }
   ];
-  if (lines.length) kids.push({ t: 'chips', pad: [0, 4, 0, 10], gap: 7, h: 30, onc: 'gold', onfg: '#ffffff', items: lines.slice(0, 12).map(function (l) { return { label: l, on: true, c: mapLineColor(l, f.th), act: { a: 'sel', v: 'mp.line' } }; }) });
-  else kids.push({ t: 'text', s: '노선 정보 없음', size: 13, color: 'sub', pad: [0, 4, 0, 10] });
+  if (lines.length) kids.push({ t: 'chips', pad: [0, 0, 0, 20], gap: 7, h: 34, onc: 'gold', onfg: '#ffffff', items: lines.slice(0, 12).map(function (l) { return { label: l, on: true, c: mapLineColor(l, f.th), act: { a: 'sel', v: 'mp.line' } }; }) });
+  else kids.push({ t: 'text', s: '노선 정보 없음', size: 12, color: 'sub', pad: [0, 0, 0, 20] });
   kids.push({ t: 'row', pad: [0, 0, 0, 10], gap: 10, kids: [
-    { t: 'button', s: '출발역', size: 14, h: 48, r: 12, bold: true, fill: '#0a84ff', line: 'none', tc: '#ffffff', pad: [0, 0, 0, 0], act: { a: 'call', v: 'mp.start' } },
-    { t: 'button', s: '도착역', size: 14, h: 48, r: 12, bold: true, fill: '#ff2d55', line: 'none', tc: '#ffffff', pad: [0, 0, 0, 0], act: { a: 'call', v: 'mp.dest' } }] });
-  kids.push({ t: 'button', s: '시간표', size: 14, h: 44, r: 12, bold: true, fill: 'card2', line: 'border', tc: '', pad: [0, 0, 0, 0], act: { a: 'call', v: 'mp.tt' } });
+    { t: 'button', s: '🚉 출발역', size: 15, h: 48, r: 14, bold: true, fill: dk ? '#0a84ff' : '#1d9bf0', line: 'none', tc: '#ffffff', pad: [0, 0, 0, 0], act: { a: 'call', v: 'mp.start' } },
+    { t: 'button', s: '🏁 도착역', size: 15, h: 48, r: 14, bold: true, fill: dk ? '#ff2d55' : '#e0455a', line: 'none', tc: '#ffffff', pad: [0, 0, 0, 0], act: { a: 'call', v: 'mp.dest' } }] });
+  kids.push({ t: 'button', s: '🕒 시간표', size: 15, h: 44, r: 14, bold: true, fill: 'card2', line: 'none', tc: '', pad: [0, 0, 0, 36], act: { a: 'call', v: 'mp.tt' } });
   var row = mapPickRow(name, f.sl);
   var out = { ok: true, v: 1, screen: 'mapstn', cover: 'tab', head: [], body: kids.map(mapSheetPad),
     info: { name: name, lines: lines, pick: row ? { name: row[0], line: row[1], la: row[2], lo: row[3] } : null } };

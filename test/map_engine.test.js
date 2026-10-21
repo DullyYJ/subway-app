@@ -58,7 +58,7 @@ ok(E.mapScreen({ cap: 17 }, {}, {}).ok === false && E.mapScreen({}, {}, {}).ok =
   const s = call({ part: 'stn', stn: ' 강 남 ', th: 'dark' });
   ok(s.ok && s.screen === 'mapstn' && s.info.name === '강남' && s.info.lines.indexOf('2호선') >= 0, '팝업 이름·노선');
   const k = s.body;
-  ok(k[0].title === '강남' && k[1].items.length === s.info.lines.length && k[1].items.every(i => /^#[0-9a-fA-F]{6}$/.test(i.c)), '노선 칩(색)');
+  ok(k[0].s === '강남' && k[0].size === 22 && k[1].items.length === s.info.lines.length && k[1].items.every(i => /^#[0-9a-fA-F]{6}$/.test(i.c)), '노선 칩(색)');
   ok(k[2].kids.map(x => x.act.v).join() === 'mp.start,mp.dest' && k[3].act.v === 'mp.tt', '출발역·도착역·시간표 단추');
   ok(s.info.pick && s.info.pick.name === '강남' && s.info.pick.la > 37 && s.info.pick.lo > 127, '출발/도착으로 쓸 행(좌표 포함)');
   const s3 = call({ part: 'stn', stn: '부산', sl: '부산1호선' });

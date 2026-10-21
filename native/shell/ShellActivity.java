@@ -1952,7 +1952,7 @@ public class ShellActivity extends Activity {
         b.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { on.run(); } });
         return b;
     }
-    private static final int S_STN_H = 330, S_TT_H = -58;
+    private static final int S_STN_H = 276, S_TT_H = -58;
 
     /** 타일 지도를 화면 가득 크게 연다(끌기 · 두 손가락 확대 · 핀 누르면 이름). pinsEnc 는 엔진이 준 핀 글, focus 는 처음 가운데 둘 핀(없으면 -1 = 전체). */
     private void openTileMap(String pinsEnc, int focus) {
@@ -2028,7 +2028,7 @@ public class ShellActivity extends Activity {
         sheetView.setPalette(pal);
         sheetView.setListener(new SheetHost());
         sheet = new android.app.Dialog(this, android.R.style.Theme_Material_Light_Dialog_NoActionBar);
-        sheet.setContentView(sheetView);
+        if (hDp == S_STN_H) sheet.setContentView(stnSheetBox(sheetView, pal)); else sheet.setContentView(sheetView);
         try {
             android.view.Window w = sheet.getWindow();
             int hpx = hDp > 0 ? Math.round(hDp * dpr) : Math.round(getResources().getDisplayMetrics().heightPixels * (-hDp) / 100f);
@@ -2054,6 +2054,30 @@ public class ShellActivity extends Activity {
                 } });
             }
         }, "shell-mapstn").start();
+    }
+
+    /** 웹 .nmp 역 팝업의 손잡이(40x4, 위 16)와 아래로 밀어 닫기 — 화면 글은 엔진이 그리고 손잡이는 뷰가 맨 위에 얹는다. */
+    private android.view.View stnSheetBox(ScreenView sv, int[] pal) {
+        FrameLayout box = new FrameLayout(this);
+        box.addView(sv, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        final android.view.View hd = new android.view.View(this);
+        android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
+        g.setColor(ShellCore.theme(store).equals("dark") ? 0xFF555555 : 0xFFC3D6E6); g.setCornerRadius(2f * dpr);
+        hd.setBackground(g);
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(Math.round(40f * dpr), Math.round(4f * dpr), android.view.Gravity.TOP | android.view.Gravity.CENTER_HORIZONTAL);
+        lp.topMargin = Math.round(16f * dpr);
+        box.addView(hd, lp);
+        final float[] y0 = new float[1];
+        android.view.View grab = new android.view.View(this);                         // 손잡이 둘레(위 44dp)에서 아래로 끌면 닫힌다
+        grab.setOnTouchListener(new android.view.View.OnTouchListener() {
+            @Override public boolean onTouch(android.view.View v, android.view.MotionEvent e) {
+                if (e.getActionMasked() == android.view.MotionEvent.ACTION_DOWN) { y0[0] = e.getRawY(); return true; }
+                if (e.getActionMasked() == android.view.MotionEvent.ACTION_MOVE && e.getRawY() - y0[0] > 40f * dpr) { y0[0] = Float.MAX_VALUE; closeSheet(); return true; }
+                return true;
+            }
+        });
+        box.addView(grab, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Math.round(44f * dpr), android.view.Gravity.TOP));
+        return box;
     }
 
     private void mapSheetAct(String v) {
