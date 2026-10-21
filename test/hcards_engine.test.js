@@ -32,6 +32,13 @@ ok(nodes.some(n => n.t === 'ltr' && n.nick === '하늘') && nodes.some(n => n.t 
 // 기준시각을 정한 탐색 → 예상 브리핑
 o = call(base({ r: { data: mk([sub('부평', '강남', '수도권 1호선', 18)]), tab: 'fast', a: '부평', b: '강남', bt: now + 3 * 3600000, rb: now } }));
 ok(o.info.ai === 'preview' && /예상/.test(flat(o.body).find(n => n.t === 'aih').s), '기준시각을 정하면 예상 브리핑');
+{ // 예상(기준시각을 미래로) — 혼잡도·AI 카드 맨 위에 주황 알약 + 무지개 테두리(웹 preview-glow), 현재 기준이면 없다
+  const panels = o.body.filter(n => n.t === 'panel'), pills = flat(o.body).filter(n => n.t === 'pill');
+  ok(panels.length >= 2 && panels[0].glow === true && panels[0].kids[0].t === 'pill' && /^예상 혼잡도 · /.test(panels[0].kids[0].s) && panels[1].glow === true && /^예상 브리핑 · /.test(panels[1].kids[0].s), '예상: 혼잡도·브리핑 카드에 라벨 + glow');
+  ok(/(오늘|내일|\d+\/\d+\(.\)) (오전|오후) \d+:\d\d$/.test(pills[0].s), '예상 라벨의 기준시각 글(오늘/내일/날짜 + 오전/오후 시:분)');
+  const o0 = call(base());
+  ok(!flat(o0.body).some(n => n.t === 'pill') && !o0.body.some(n => n.glow), '현재 기준이면 라벨도 테두리도 없다');
+}
 // 첫 구간이 버스 → 버스 혼잡도 모드
 o = call(base({ r: { data: mk([walk(2), bus('6', 20)]), tab: 'fast', a: '집', b: '회사', bt: null, rb: now }, rd: { here: 1, boarded: true, key: 'b', nodes: [{ name: '출발', isOrigin: true }, { name: 'A정류장', isBus: true, lineName: '6' }, { name: 'B정류장', isBus: true, lineName: '6' }] } }));
 ok(o.info.cong === 'bus' && o.info.stn === '정류장A' && o.body[1].kids[0].t === 'scene', '첫 구간이 버스면 버스 혼잡도 안내');
