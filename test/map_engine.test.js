@@ -75,6 +75,7 @@ ok(E.mapScreen({ cap: 17 }, {}, {}).ok === false && E.mapScreen({}, {}, {}).ok =
   const lines = E.mapLinesOf('강남');
   const res = {}; res[lines[0] + '|-'] = data; if (lines[1]) res[lines[1] + '|-'] = { noData: true };
   let t = call({ part: 'tt', stn: '강남', tt: { st: 'ok', res } });
+  ok(t.body[0].t === 'bar' && t.body[0].pad[1] === 36, '시간표 제목줄은 웹처럼 위 여백 36(손잡이 아래) — 캐릭터 놀이터가 제목 옆에 솟는다');
   ok(t.ok && t.screen === 'maptt' && t.info.line === lines[0] && t.info.day === 'DAY' && t.info.dk === '상', '첫 노선·오늘 요일·첫 방향을 엔진이 고른다');
   const k = t.body;
   ok(k[1].items.length === lines.length && k[1].items[0].on && /자료 없음/.test(k[1].items[1] ? k[1].items[1].label : '자료 없음'), '노선 칩(자료 없는 노선 표시)');
