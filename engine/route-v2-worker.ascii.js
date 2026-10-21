@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-22s141";
+var ENGINE_VERSION = "route-v2-2026-10-22s142";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -18988,7 +18988,8 @@ async function handleScreenResult(request) {
 // \ucd9c\ub825  { ok, v:1, screen:'map'|'mapstn'|'maptt', rev, cover:'tab', head, body, info }
 // \ub9e8 \uc544\ub798 module.exports \ub294 \uc2dc\ud5d8(Node)\uc6a9\uc774\uace0 Worker \uc5d0\uc11c\ub294 \ud568\uc218 \uc120\uc5b8\ub9cc \uc4f0\uc778\ub2e4.
 'use strict';
-var MAP_SCREEN_V = 6;
+var MAP_SCREEN_V = 7;
+var MAP_PLAY_RW = 100;                                                  // \uc774\ub984/\uc81c\ubaa9 \uc624\ub978\ucabd\uc5d0 \ub0a8\uaca8 \ub458 \ub180\uc774\ud130 \uce78(90 + \uc0ac\uc774 10) \u2014 \uc774\ub984\uc774 \uae38\uba74 \uc774 \uce78\ub9cc \ub0a8\uae30\uace0 \uc774\ub984\uc774 \uc88c\uc6b0\ub85c \ud750\ub978\ub2e4(\uc571 s142)
 var MAP_STN_TOP = 36;                                                   // \uc6f9 \ud31d\uc5c5 \uc704 \uc5ec\ubc31 16 + \uc190\uc7a1\uc774 4 + 16 (\uc190\uc7a1\uc774\ub294 \uc571 \ubdf0\uac00 \uadf8\ub9b0\ub2e4)
 var MAP_REGIONS = [['seoul', '\uc218\ub3c4\uad8c'], ['busan', '\ubd80\uc0b0'], ['daegu', '\ub300\uad6c'], ['gwangju', '\uad11\uc8fc'], ['daejeon', '\ub300\uc804']];
 var MAP_REGION_PREFIX = { busan: '\ubd80\uc0b0', daegu: '\ub300\uad6c', gwangju: '\uad11\uc8fc', daejeon: '\ub300\uc804' };
@@ -19141,7 +19142,7 @@ function mapStationSheet(f) {
   if (f.sl && mapLinesOf(name).indexOf(f.sl) < 0) lines = mapLinesOf(name);
   var dk = f.th === 'dark';                                                                   // \uc6f9 .nmp: \uc774\ub984 22 \uad75\uac8c \u00b7 \ub178\uc120 \uc54c\uc57d \u00b7 \ud83d\ude89/\ud83c\udfc1 \ubc84\ud2bc(\ud328\ub529 15, \ubc18\uc9c0\ub984 14) \u00b7 \ud83d\udd52 \uc2dc\uac04\ud45c(\ud328\ub529 13). \uc190\uc7a1\uc774\ub294 \uc571\uc774 \ub9e8 \uc704\uc5d0 \uadf8\ub9b0\ub2e4.
   var kids = [
-    { t: 'text', s: name, size: 22, bold: true, color: 'text', lines: 1, pad: [0, MAP_STN_TOP, 0, 12] }
+    { t: 'text', s: name, size: 22, bold: true, color: 'text', lines: 1, rw: MAP_PLAY_RW, mq: true, pad: [0, MAP_STN_TOP, 0, 12] }
   ];
   if (lines.length) kids.push({ t: 'lpills', pad: [0, 0, 0, 20], gap: 7, items: lines.slice(0, 12).map(function (l) { var o = { s: l, c: mapLineColor(l, f.th) }, nm = mapLineNum(l); if (nm) o.num = nm; return o; }) });      // \uc6f9 _linePillHtml: \ud638\uc120 \uc22b\uc790(GTX \ub294 \uae00\uc790)\uac00 \uc788\uc73c\uba74 \uc67c\ucabd\uc5d0 \ubc18\ud22c\uba85 \ud770 \ub3d9\uadf8\ub77c\ubbf8 \u00b7 \uc904 \ubc14\uafc8 \uc54c\uc57d(\ub204\ub974\ub294 \uc54c\uc57d \uc544\ub2d8)
   else kids.push({ t: 'text', s: '\ub178\uc120 \uc815\ubcf4 \uc5c6\uc74c', size: 12, color: 'sub', pad: [0, 0, 0, 20] });
@@ -19172,7 +19173,7 @@ function mapTimetableSheet(f) {
   var day = mapStr(sel.day, 6);
   var d = res[line + '|' + (day || '-')] || null;
   if (!day && d && d.dayCode) day = d.dayCode;
-  var kids = [{ t: 'bar', pad: [0, MAP_STN_TOP, 0, 4], title: name + ' \uc2dc\uac04\ud45c', btn: '\ub2eb\uae30', act: { a: 'call', v: 'mp.close' } }];
+  var kids = [{ t: 'bar', pad: [0, MAP_STN_TOP, 0, 4], rw: MAP_PLAY_RW, mq: true, title: name + ' \uc2dc\uac04\ud45c', btn: '\ub2eb\uae30', act: { a: 'call', v: 'mp.close' } }];
   if (lines.length) kids.push({ t: 'chips', pad: [0, 4, 0, 6], gap: 6, h: 30, onc: 'gold', onfg: '#ffffff', items: lines.map(function (l, i) {
     var kc = res[l + '|-'], nod = !!(kc && kc.noData);
     var o = { label: l, on: l === line, act: { a: 'call', v: 'mt.l.' + i } };
