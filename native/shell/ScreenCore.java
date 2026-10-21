@@ -184,6 +184,7 @@ public final class ScreenCore {
         public float cfs = 12f, cpx = 12f;                  // chips: 글자 크기 · 칩 좌우 안쪽 여백(웹 칩마다 다르다)
         public float fitH, fmin = 90f, fmax = 900f, frh = 26f;   // scene: 맞춘 높이(배치 때마다 다시 정한다) · 최소 · 최대 · 접을 줄 한 개가 주는 높이(어림)
         public int fo;                                      // ltr: 이 줄은 접는 줄 수가 fo 이상일 때 접힌다(0 이면 안 접힘)
+        public boolean glow;                               // panel: 무지개 테두리가 도는 카드(웹 preview-glow, 예상 경로·혼잡도·브리핑)
         public boolean hide, fit;                           // ltr 접힘(배치 때마다 다시 정한다) · scene 이 남는 세로를 채운다
         public float bw = 0f; public String ob = "";   // chip: 테두리 두께(0 이면 1) · 꺼진 칩의 테두리만 따로 칠하는 색
         public String[] mp = null; public int cm = 0;   // post: 닉네임 뒤에 점(·)으로 이어 그리는 조각들 · 댓글 수(0 이면 숨김)
@@ -452,6 +453,7 @@ public final class ScreenCore {
         } else if ("panel".equals(t)) {
             pad(m, n); n.ipL = n.ipR = 16f; n.ipT = n.ipB = 16f; ip(m, n);
             n.fill = roleOrCss(m, "fill", "card"); n.line = roleOrCss(m, "line", "border"); n.r = optNum(m, "r", 14f, 0f, 40f);
+            n.glow = optBool(m, "glow", false);
             n.lbw = optNum(m, "lb", 0f, 0f, 12f); n.lbc = roleOrCss(m, "lc", "gold"); if (n.lbc.length() == 0) n.lbc = "gold";       // 왼쪽 굵은 띠(웹 border-left)
             for (Object ko : asArr(m.get("kids"), "panel.kids")) {
                 Map<String, Object> km = asObj(ko, "panel 안 노드");
@@ -1791,6 +1793,7 @@ public final class ScreenCore {
         if ("panel".equals(n.t)) {
             Item pn = new Item(); pn.kind = K_PANEL; pn.x = ox; pn.y = y; pn.w = innerW; pn.radius = n.r;
             pn.fill = col(n.fill, null); pn.line = col(n.line, null); pn.sw = n.lbw; if (n.lbw > 0f) pn.ac = col(n.lbc, new Col("gold", 0));
+            pn.pub = n.glow;
             out.add(pn);
             float cy = y + 1f + n.ipT, cx = ox + 1f + n.ipL, cw = Math.max(1f, innerW - 2f - n.ipL - n.ipR);
             Item sbox = null; float sy0 = 0f;
