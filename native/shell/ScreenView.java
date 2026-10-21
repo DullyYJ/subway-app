@@ -479,6 +479,8 @@ public class ScreenView extends View {
     }
     // ───────────── 경로 탐색 로딩: 뛰어가는 캐릭터(웹 #transitLoading · 순수 장식 — 계산은 RunnerCore, 글은 엔진) ─────────────
     private boolean runDrawn;
+    private boolean tdDrawn, tdAct;                    // 세부경로 줄이 보이는 중 · 그중 지금 가는 구간이 있는 중
+    private final Path tdTri = new Path();             // 펼침 동그라미 안 ▾
     private static String runPrev = "";
     private String runId = ""; private long runT0, runLast, runBorn;
     private final RectF runDst = new RectF();
@@ -1525,7 +1527,7 @@ public class ScreenView extends View {
         cv.drawRect(0, 0, getWidth(), getHeight(), p);
         if (lay == null) return;
         boolean moving = false;
-        sceneDrawn = false; marqDrawn = false; skelDrawn = false; runDrawn = false; bcAnim = false; msgAnimOn = false; tmDrawn = false; cdDrawn = false; brxPingN = 0; inbarBusy = false;
+        sceneDrawn = false; tdDrawn = false; tdAct = false; marqDrawn = false; skelDrawn = false; runDrawn = false; bcAnim = false; msgAnimOn = false; tmDrawn = false; cdDrawn = false; brxPingN = 0; inbarBusy = false;
         if (ssOn) {                                                                       // 핀을 눌러 카드로 부드럽게 가는 중
             float f = (now - ssT0) / 350f;
             if (f >= 1f) { f = 1f; ssOn = false; }
@@ -1590,6 +1592,7 @@ public class ScreenView extends View {
                 postInvalidateDelayed(66L, Math.round(brxPing[k] * dpr), Math.round((brxPing[k + 1] + oy) * dpr), Math.round(brxPing[k + 2] * dpr), Math.round((brxPing[k + 3] + oy) * dpr));
             }
         }
+        if (tdAct) postInvalidateOnAnimation(); else if (tdDrawn) postInvalidateDelayed(2000L);                          // 세부경로: 지금 가는 구간이 보이면 현재위치 점이 맥박 치도록 화면 박자로, 아니면 웹처럼 2초마다 진행만 갱신
         if (cdDrawn) postInvalidateDelayed(1000L - (System.currentTimeMillis() % 1000L) + 5L);       // 버스 도착 카운트다운이 보이는 동안 초가 바뀔 때마다 한 번씩
         if (moving || mode == 1 || mode == 2 || mode == 5 || bcAnim || tmAnimOn || msgAnimOn || roAnim) postInvalidateOnAnimation();
         else if (tmDrawn) postInvalidateDelayed(50L);                                             // 내 위치 점 뒤로 퍼지는 고리(웹 1.6초 주기)
@@ -1690,6 +1693,7 @@ public class ScreenView extends View {
             case ScreenCore.K_MARQ: drawMarq(cv, it); break;
             case ScreenCore.K_SKEL: drawSkel(cv, it); break;
             case ScreenCore.K_RUNNER: drawRunner(cv, it); break;
+            case ScreenCore.K_TDROW: drawTdrow(cv, it); break;
             case ScreenCore.K_BTOG: drawBtog(cv, it); break;
             case ScreenCore.K_BCARD: drawBcardRo(cv, it); break;
             default: break;
@@ -1791,6 +1795,113 @@ public class ScreenView extends View {
             cv.drawText(it.badge, it.sx + it.sw / 2f, base(it.sy, it.sh, 0), tp); tp.setTextAlign(Paint.Align.LEFT);
         }
         if (it.go.length() > 0) { setText(it.size2, false, pal[R_SUB]); cv.drawText(it.go, it.btx, base(it.y, it.h, 0), tp); }
+    }
+
+    // ───────────── 세부경로 줄(웹 .tdsec-row): 진행 레일 · 현재위치 점 · 아이콘 · 뱃지 · 펼침 정거장 ─────────────
+    /** 구간 아이콘(손으로 그린 선 모양: w 도보 · s 지하철 · b 버스). 새 객체 없이 중심 (cx,cy) 기준 16dp 안에 그린다. */
+    private void tdIcon(Canvas cv, String k, float cx, float cy, int c) {
+        p.setColor(c); p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1.8f); p.setStrokeCap(Paint.Cap.ROUND);
+        if ("w".equals(k)) {
+            p.setStyle(Paint.Style.FILL); cv.drawCircle(cx + 1f, cy - 6f, 2f, p); p.setStyle(Paint.Style.STROKE);
+            cv.drawLine(cx + 1f, cy - 3.2f, cx - 1f, cy + 1.8f, p);
+            cv.drawLine(cx - 1f, cy + 1.8f, cx - 4f, cy + 6.5f, p); cv.drawLine(cx - 1f, cy + 1.8f, cx + 2.5f, cy + 6.5f, p);
+            cv.drawLine(cx + 0.6f, cy - 2f, cx + 4.2f, cy + 0.2f, p); cv.drawLine(cx + 0.6f, cy - 2f, cx - 3f, cy - 0.8f, p);
+        } else if ("s".equals(k)) {
+            rf.set(cx - 5f, cy - 7f, cx + 5f, cy + 4.5f); cv.drawRoundRect(rf, 3f, 3f, p);
+            cv.drawLine(cx - 5f, cy - 1.5f, cx + 5f, cy - 1.5f, p);
+            cv.drawLine(cx - 3.5f, cy + 4.5f, cx - 5.2f, cy + 7.5f, p); cv.drawLine(cx + 3.5f, cy + 4.5f, cx + 5.2f, cy + 7.5f, p);
+            p.setStyle(Paint.Style.FILL); cv.drawCircle(cx - 2.4f, cy + 1.5f, 1.1f, p); cv.drawCircle(cx + 2.4f, cy + 1.5f, 1.1f, p);
+        } else {
+            rf.set(cx - 6f, cy - 7f, cx + 6f, cy + 5.5f); cv.drawRoundRect(rf, 2.5f, 2.5f, p);
+            cv.drawLine(cx - 6f, cy - 1.5f, cx + 6f, cy - 1.5f, p);
+            cv.drawLine(cx - 3.5f, cy + 5.5f, cx - 3.5f, cy + 7.5f, p); cv.drawLine(cx + 3.5f, cy + 5.5f, cx + 3.5f, cy + 7.5f, p);
+            p.setStyle(Paint.Style.FILL); cv.drawCircle(cx - 3f, cy + 2f, 1.1f, p); cv.drawCircle(cx + 3f, cy + 2f, 1.1f, p);
+        }
+        p.setStyle(Paint.Style.FILL); p.setStrokeCap(Paint.Cap.BUTT);
+    }
+    private void drawTdrow(Canvas cv, ScreenCore.Item it) {
+        final float hh = it.f1, y = it.y, x = it.x;
+        final long now = System.currentTimeMillis();
+        final boolean act = it.ln2 > it.ln && now >= it.ln && now < it.ln2;
+        final float ratio = it.ln2 <= it.ln ? 0f : now >= it.ln2 ? 1f : now <= it.ln ? 0f : (float) (now - it.ln) / (float) (it.ln2 - it.ln);
+        final int col = cc(it.ac, pal[R_SUB]);
+        tdDrawn = true; if (act) tdAct = true;
+        p.setStyle(Paint.Style.FILL);
+        if (act) { p.setColor(pal[R_CARD2]); rf.set(x, y, x + it.w, y + hh); cv.drawRect(rf, p); }
+        else if (it == pressed && it.act != null) { p.setColor(0x0F808080); rf.set(x, y, x + it.w, y + hh); cv.drawRect(rf, p); }
+        // 진행 레일: 바탕 선 + 지나온 만큼 색 채움(첫 줄은 가운데부터 · 마지막 줄은 가운데까지)
+        final String pos = it.gk;
+        final float t0 = ("f".equals(pos) || "o".equals(pos)) ? y + hh / 2f : y, t1 = ("l".equals(pos) || "o".equals(pos)) ? y + hh / 2f : y + hh;
+        p.setColor(cc(it.lc, pal[R_BORDER])); rf.set(it.sx - 1.5f, t0, it.sx + 1.5f, t1); cv.drawRect(rf, p);
+        if (ratio > 0f) { p.setColor(col); rf.set(it.sx - 1.5f, t0, it.sx + 1.5f, t0 + (t1 - t0) * ratio); cv.drawRect(rf, p); }
+        // 아이콘 동그라미(2px 카드색 테두리)
+        final float cy = y + hh / 2f - 0.5f;
+        p.setColor(pal[R_CARD]); cv.drawCircle(it.sx, cy, 17f, p);
+        p.setColor(cc(it.dc, pal[R_CARD2])); cv.drawCircle(it.sx, cy, 15f, p);
+        tdIcon(cv, it.dk, it.sx, cy, col);
+        // 뱃지 + 펼침 동그라미
+        if (it.badgeW > 0f) {
+            rf.set(it.bx, it.sy, it.bx + it.badgeW, it.sy + ScreenCore.TD_BADGE_H);
+            p.setColor(cc(it.fill, pal[R_CARD2])); cv.drawRoundRect(rf, ScreenCore.TD_BADGE_H / 2f, ScreenCore.TD_BADGE_H / 2f, p);
+            setText(ScreenCore.TD_BADGE_TXT, true, cc(it.line, pal[R_SUB])); tp.setTextAlign(Paint.Align.CENTER);
+            cv.drawText(ellipsizeTd(it.badge, it.badgeW - ScreenCore.TD_BADGE_PX * 2f, ScreenCore.TD_BADGE_TXT, true), it.bx + it.badgeW / 2f, base(it.sy, ScreenCore.TD_BADGE_H, 0), tp);
+            tp.setTextAlign(Paint.Align.LEFT);
+        }
+        if (it.pub) {
+            final float cr = ScreenCore.TD_CHEV / 2f;
+            p.setColor(pal[R_CARD2]); cv.drawCircle(it.ix, it.iy, cr, p);
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(pal[R_BORDER]); cv.drawCircle(it.ix, it.iy, cr - 0.5f, p);
+            p.setStyle(Paint.Style.FILL); p.setColor(pal[R_SUB]);
+            final float d = it.on ? -1f : 1f;                                                        // 열리면 위로 뒤집힌다(웹 rotate 180°)
+            tdTri.rewind(); tdTri.moveTo(it.ix - 3.6f, it.iy - 1.6f * d); tdTri.lineTo(it.ix + 3.6f, it.iy - 1.6f * d); tdTri.lineTo(it.ix, it.iy + 2.2f * d); tdTri.close();
+            cv.drawPath(tdTri, p);
+        }
+        for (int i = 0; i < it.lines.length; i++) { setText(ScreenCore.TD_PATH, false, pal[R_SUB]); cv.drawText(it.lines[i], it.bx, base(it.textY + i * ScreenCore.TD_PATH_LH, ScreenCore.TD_PATH_LH, 0), tp); }
+        if (it.tag.length() > 0) { setText(ScreenCore.TD_CNT, false, pal[R_SUB]); cv.drawText(it.tag, it.bx, base(it.f3, ScreenCore.TD_CNT_LH, 0), tp); }
+        // 오른쪽 시간
+        tp.setTextAlign(Paint.Align.RIGHT);
+        if (it.label.length() > 0) { setText(ScreenCore.TD_TIME, true, cc(it.tc, pal[R_SUB])); tp.setTextAlign(Paint.Align.RIGHT); cv.drawText(it.label, it.btx, base(it.by, ScreenCore.TD_TIME_LH, 0), tp); }
+        if (it.value.length() > 0) { setText(ScreenCore.TD_RNG, false, pal[R_SUB]); tp.setTextAlign(Paint.Align.RIGHT); cv.drawText(it.value, it.btx, base(it.bty, ScreenCore.TD_RNG_LH, 0), tp); }
+        tp.setTextAlign(Paint.Align.LEFT);
+        // 줄 아래 가는 선(펼친 줄은 목록 끝에)
+        p.setColor(pal[R_BORDER]); rf.set(x, y + hh - 1f, x + it.w, y + hh); if (!it.on) cv.drawRect(rf, p);
+        // 펼친 정거장 목록
+        if (it.on) {
+            final int ns = it.gb.length;
+            for (int k = 0; k < ns; k++) {
+                final float ry = y + hh + ScreenCore.TD_STOP_PAD_T + k * ScreenCore.TD_STOP_ROW, dcy = ry + ScreenCore.TD_STOP_ROW / 2f, dx = x + ScreenCore.TD_STOP_PAD_L + 4.5f;
+                final boolean end = it.gb[k];
+                if (end) { p.setStyle(Paint.Style.FILL); p.setColor(col); cv.drawCircle(dx, dcy, 4.5f, p); }
+                else {
+                    p.setStyle(Paint.Style.FILL); p.setColor(col); cv.drawCircle(dx, dcy, 4.5f, p);
+                    p.setColor(pal[R_CARD]); cv.drawCircle(dx, dcy, 2.5f, p);
+                }
+                setText(12f, end, end ? pal[R_TEXT] : pal[R_SUB]);
+                cv.drawText(it.sa[k * 2], dx + 4.5f + 10f, base(ry, ScreenCore.TD_STOP_ROW, 0), tp);
+                setText(11f, false, pal[R_SUB]); tp.setTextAlign(Paint.Align.RIGHT);
+                cv.drawText(it.sa[k * 2 + 1], x + it.w - ScreenCore.TD_PADH, base(ry, ScreenCore.TD_STOP_ROW, 0), tp); tp.setTextAlign(Paint.Align.LEFT);
+            }
+            p.setColor(pal[R_BORDER]); p.setStyle(Paint.Style.FILL); rf.set(x, y + it.h - 1f, x + it.w, y + it.h); cv.drawRect(rf, p);
+        }
+        // 현재위치 점: 빨간 점 + 흰 테두리 + 옅은 고리 + 퍼지는 맥박(1.4초, ease-out)
+        if (act) {
+            final float my = t0 + (t1 - t0) * ratio;
+            final float ph = (SystemClock.uptimeMillis() % 1400L) / 1400f, e = 1f - (1f - ph) * (1f - ph);
+            p.setStyle(Paint.Style.FILL);
+            p.setColor(0xFFFF3B30); p.setAlpha(Math.round(255f * 0.65f * (1f - e))); cv.drawCircle(it.sx, my, 6.5f * (1f + 1.5f * e), p);
+            p.setColor(0x4DFF3B30); cv.drawCircle(it.sx, my, 8.5f, p);
+            p.setColor(0xFFFFFFFF); cv.drawCircle(it.sx, my, 6.5f, p);
+            p.setColor(0xFFFF3B30); cv.drawCircle(it.sx, my, 4f, p);
+        }
+        p.setStyle(Paint.Style.FILL); p.setStrokeWidth(1f);
+    }
+    /** 뱃지가 좁으면 … 으로 줄인다(글자 폭은 지금 칠하는 Paint 로). */
+    private String ellipsizeTd(String s, float maxW, float size, boolean bold) {
+        setText(size, bold, 0);
+        if (tp.measureText(s) <= maxW) return s;
+        int n = s.length();
+        while (n > 1 && tp.measureText(s, 0, n) + tp.measureText("\u2026") > maxW) n--;
+        return s.substring(0, n) + "\u2026";
     }
 
     /** 맛집 장소 카드: 순위 동그라미 · 이름 · 업종/주소 · (별점|공공데이터 딱지)·거리·길찾기 글. */
