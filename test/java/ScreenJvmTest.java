@@ -1066,6 +1066,20 @@ public class ScreenJvmTest {
             ScreenCore.Layout cl = ScreenCore.layout(ScreenCore.load(cj), 411f, M, null, 791f);
             ok(near(cl.head[0].bw, 1.5f) && near(cl.head[1].bw, 2f) && cl.head[1].obd != null && near(cl.head[1].h, 31f), "칩 테두리 두께 · 따로 칠한 테두리색");
         }
+        {   // 이름이 길면 놀이터 칸(rw)만 남기고 흐른다(mq) — 짧으면 가만히
+            ScreenCore.Item mq1 = ScreenCore.layout(ScreenCore.load(wrapBody("{\"t\":\"text\",\"s\":\"강남\",\"size\":22,\"bold\":true,\"lines\":1,\"rw\":100,\"mq\":true,\"pad\":[0,36,0,12]}")), 360f, M).body[0];
+            ok(mq1.mq == false && mq1.lines.length == 1 && mq1.lines[0].equals("강남"), "짧은 이름은 흐르지 않는다");
+            ScreenCore.Item mq2 = ScreenCore.layout(ScreenCore.load(wrapBody("{\"t\":\"text\",\"s\":\"아주아주아주 긴 역 이름 아주아주아주 긴 역 이름\",\"size\":22,\"bold\":true,\"lines\":1,\"rw\":100,\"mq\":true,\"pad\":[0,36,0,12]}")), 360f, M).body[0];
+            ok(mq2.mq && mq2.lines.length == 1 && mq2.lines[0].startsWith("아주아주아주") && !mq2.lines[0].endsWith("\u2026"), "긴 이름은 줄이지 않고 통째로 둔다(…없음)");
+            ok(near(mq2.mqVis, 360f - 32f - 100f) || mq2.mqVis > 100f, "보이는 칸 = 너비 − 놀이터 칸");
+            ok(mq2.mqW > mq2.mqVis + 1f && near(mq2.w, mq2.mqVis), "이름 전체 폭이 보이는 칸보다 길다 · 칸 폭 = 보이는 칸");
+            ScreenCore.Item mq3 = ScreenCore.layout(ScreenCore.load(wrapBody("{\"t\":\"text\",\"s\":\"아주아주아주 긴 역 이름 아주아주아주 긴 역 이름\",\"size\":22,\"lines\":1,\"pad\":[0,36,0,12]}")), 360f, M).body[0];
+            ok(!mq3.mq && mq3.lines[0].endsWith("\u2026"), "mq 가 없으면 예전처럼 … 줄임");
+            String bj = "{\"ok\":true,\"v\":1,\"screen\":\"t\",\"head\":[],\"body\":[{\"t\":\"bar\",\"pad\":[0,36,0,4],\"rw\":100,\"mq\":true,\"title\":\"TITLE 시간표\",\"btn\":\"닫기\",\"act\":{\"a\":\"call\",\"v\":\"mp.close\"}}]}";
+            ScreenCore.Item tb1 = ScreenCore.layout(ScreenCore.load(bj.replace("TITLE", "강남")), 360f, M).body[0];
+            ScreenCore.Item tb2 = ScreenCore.layout(ScreenCore.load(bj.replace("TITLE", "아주아주아주 긴 역 이름 아주아주아주 긴 역 이름")), 360f, M).body[0];
+            ok(!tb1.mq && tb2.mq && tb2.mqW > tb2.mqVis + 1f && tb2.mqVis >= 40f, "시간표 제목줄도 길 때만 흐른다");
+        }
         System.out.println(fails == 0 ? "ALL OK (" + oks + ")" : fails + " FAIL");
         System.exit(fails == 0 ? 0 : 1);
     }
