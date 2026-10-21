@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-22s135";
+var ENGINE_VERSION = "route-v2-2026-10-22s136";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -18156,6 +18156,23 @@ function pvlScreen(inp, f) {
   var pill = { t: 'pill', pad: [0, 0, 0, 10], s: s, size: 11, bold: true, tc: '#ff9500', fill: 'rgba(255,149,0,0.14)', ph: 11, pv: 4, r: 9 };
   return { ok: true, v: 1, screen: 'pvl', cover: 'tab', bg: 'card', head: [pill], body: [{ t: 'spacer', h: 0 }], info: { kind: kind, mode: mode }, rev: 'v1:' + pvlHash(JSON.stringify(pill)) };
 }
+
+// \uae30\uc900\uc2dc\uac01 \uae00('\uc624\ub298 \uc624\ud6c4 2:30' \u00b7 '\ub0b4\uc77c \uc624\uc804 9:00' \u00b7 '10/25(\uc77c) \uc624\ud6c4 1:05') \u2014 \ud648 \uae30\uc900\uc2dc\uac01 \uc904(homeBaseLabel)\uacfc \uac19\uc740 \ubaa8\uc591. now = \uae30\uae30 \uc2dc\uacc4 ms, tz = \ub3d9\ucabd \ubd84.
+function pvlBaseLabel(ms, now, tz) {
+  ms = Number(ms); now = Number(now); tz = Number(tz);
+  if (!isFinite(ms) || !isFinite(tz)) return '';
+  var d = new Date(ms + tz * 60000), t = new Date((isFinite(now) ? now : ms) + tz * 60000);
+  var diff = Math.round((Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) - Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate())) / 86400000), h = d.getUTCHours();
+  var day = diff === 0 ? '\uc624\ub298' : diff === 1 ? '\ub0b4\uc77c' : (d.getUTCMonth() + 1) + '/' + d.getUTCDate() + '(' + '\uc77c\uc6d4\ud654\uc218\ubaa9\uae08\ud1a0'.charAt(d.getUTCDay()) + ')';
+  return day + ' ' + (h < 12 ? '\uc624\uc804' : '\uc624\ud6c4') + ' ' + ((h % 12) || 12) + ':' + ('0' + d.getUTCMinutes()).slice(-2);
+}
+// \uce74\ub4dc \ub9e8 \uc704\uc5d0 \ubd99\ub294 \uc791\uc740 \uc8fc\ud669 \uc54c\uc57d \ub178\ub4dc(\uae30\uc900\uc2dc\uac01\uc744 \ubbf8\ub798\ub85c \ubc14\uafe8\uac70\ub098 \ub178\uc120\ub3c4\uc5d0\uc11c \uacbd\ub85c\ub97c \uc815\ud588\uc744 \ub54c). \ub458 \ub2e4 \uc544\ub2c8\uba74 null. bt = \uae30\uc900\uc2dc\uac01 ms|null.
+function pvlPillNode(kind, bt, metro, now, tz) {
+  var mode = bt != null ? 'custom' : metro === true ? 'metro' : '';
+  if (!mode || !PVL_WORD[kind]) return null;
+  var o = pvlScreen({ cap: PVL_CAP }, { kind: kind, mode: mode, lbl: mode === 'custom' ? pvlBaseLabel(bt, now, tz) : '' });
+  return o && o.ok ? o.head[0] : null;
+}
 // \ubbf8\ub9ac\ubcf4\uae30 \ub77c\ubca8 \uc5d4\uc9c4 Worker \uc5f0\uacb0\ubd80 \u2014 POST /screen/pvl (engine/pvlabel.js \uc758 pvlScreen \uc744 \ubd80\ub978\ub2e4). route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/screen/pvl") return handleScreenPvl(request);` \ub97c \ub123\ub294\ub2e4.
 //   \ubcf8\ubb38(JSON \uae00, Content-Type: text/plain \uc73c\ub85c \ubcf4\ub0b4 \uc0ac\uc804 \uc694\uccad\uc744 \ud53c\ud55c\ub2e4): { cap(17 \uc774\uc0c1), f:{kind,mode,lbl} }
 //   \uc5d4\uc9c4\uc740 \uc544\ubb34\uac83\ub3c4 \uc800\uc7a5\ud558\uc9c0 \uc54a\ub294\ub2e4. \uac1c\uc778 \uc2dd\ubcc4 \uc815\ubcf4\ub294 \uc624\uac00\uc9c0 \uc54a\ub294\ub2e4.
@@ -18560,6 +18577,9 @@ var rheadScreen_; if (typeof rheadScreen === 'undefined') { try { if (typeof req
 var resTrkColor = (typeof rheadTrkColor === 'function') ? rheadTrkColor : null;
 if (!resTrkColor) { try { if (typeof require === 'function') resTrkColor = require('./rhead').rheadTrkColor; } catch (eRq2) {} }
 
+var resPvl = (typeof pvlPillNode === 'function') ? pvlPillNode : null;
+if (!resPvl) { try { if (typeof require === 'function') resPvl = require('./pvlabel').pvlPillNode; } catch (eRq3) {} }
+
 function resNum(v, d) { v = Number(v); return isFinite(v) ? v : d; }
 function resArr(v) { return Array.isArray(v) ? v : []; }
 
@@ -18918,7 +18938,10 @@ function resultScreen(opt, r) {
         { t: 'button', s: '\uc548\ub0b4 \uc885\ub8cc', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'orange', act: { a: 'call', v: 'rh.stop' } }] });
     } else nodes.push({ t: 'button', s: '\uc138\ubd80\uacbd\ub85c \ubcf4\uae30', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'gold', pad: [8, 0, 0, 4], act: { a: 'call', v: 'rh.detail' } });
   }
+  var pvPill = (nodes.length && resPvl) ? resPvl('route', r.bt == null ? null : resNum(r.bt, null), r.metro === true, resNum(r.now, 0), resNum(r.tz, 540)) : null;   // \uc608\uc0c1 \uacbd\ub85c \ub77c\ubca8 + \ubb34\uc9c0\uac1c \ud14c\ub450\ub9ac(\uc6f9 preview-glow)
+  if (pvPill) nodes.unshift(pvPill);
   var body = nodes.length ? [{ t: 'panel', pad: [0, 4, 0, 8], ip: [12, 12, 12, 8], r: 16, kids: nodes }] : [];
+  if (pvPill && body.length) body[0].glow = true;
   var sec = [];                                                  // \uc9c0\uae08 \ubcf4\uc774\ub294 \uacbd\ub85c\uc758 \uc9c0\ud558\ucca0 \uad6c\uac04 \uc774\ub984(\uc2e4\uc2dc\uac04\uc18c\ud1b5\uc774 '\ub0b4 \ub178\uc120'\uc744 \uc55e\uc5d0 \ub458 \ub54c \uc4f4\ub2e4)
   if (route) route.sections.forEach(function (sc) { var tr = (sc && sc.transportation) || {}; if (tr.type === 1 && tr.name && sec.length < 6 && sec.indexOf(String(tr.name)) < 0) sec.push(String(tr.name)); });
   var out = { ok: true, v: RESULT_V, screen: 'result', cover: 'chips', head: [], body: body, info: { has: has, tab: tab, m: total, n: paths.length, sec: sec, ld: (route && route.ld && tab === 'longdist') ? resLdQuery(route.ld) : null } };
@@ -19914,6 +19937,7 @@ var hcRes = (typeof resConvertPath === 'function') ? { conv: resConvertPath, rv:
 var hcAi = (typeof aiScreen === 'function') ? aiScreen : (function () { try { return require('./aicard').aiScreen; } catch (e) { return null; } })();
 var hcCong = (typeof congScreen === 'function') ? { screen: congScreen, facts: congFacts, pct: congPctSub } : (function () { try { var m = require('./cong'); return { screen: m.congScreen, facts: m.congFacts, pct: m.congPctSub }; } catch (e) { return null; } })();
 var hcScene = (typeof sceneDecide === 'function') ? sceneDecide : (function () { try { return require('./scene').sceneDecide; } catch (e) { return null; } })();
+var hcPvl = (typeof pvlPillNode === 'function') ? pvlPillNode : (function () { try { return require('./pvlabel').pvlPillNode; } catch (e) { return null; } })();
 var hcTalk = (typeof talkScreen === 'function') ? talkScreen : (function () { try { return require('./talkcard').talkScreen; } catch (e) { return null; } })();
 function hcNum(v, d) { v = Number(v); return isFinite(v) ? v : d; }
 function hcArr(v) { return Array.isArray(v) ? v : []; }
@@ -19993,6 +20017,7 @@ function hcPanel(kids, o) {
   o = o || {};
   var p = { t: 'panel', pad: [14, 0, 14, o.pb != null ? o.pb : HC_GAP], ip: o.ip || [16, 14, 16, 14], r: o.r || 16, kids: kids };
   if (o.lb) { p.lb = o.lb; p.lc = o.lc || HC_ARROW; }
+  if (o.pv) { p.kids = [o.pv].concat(kids); p.glow = true; }                // \uc608\uc0c1 \ub77c\ubca8 + \ubb34\uc9c0\uac1c \ud14c\ub450\ub9ac(\uc6f9 preview-glow)
   return p;
 }
 function hcSec(label, o) {
@@ -20091,10 +20116,12 @@ function hcardsScreen(inp, f) {
     if (scn) { try { sceneHint = hcStr(JSON.parse(scn.sc).hint, 60); } catch (e) { sceneHint = ''; } }
     var bd = congS.info && typeof congS.info.badge === 'string' ? congS.info.badge : '';
     body.push(hcSec('\ud63c\uc7a1\ub3c4', { badge: scn ? '' : bd, bc: hcCssColor(congS.info && congS.info.bbg), hint: scn ? sceneHint : '', btn: '\uD83D\uDCCD \uc704\uce58 \uacf5\uc720', act: HC_SHARE }));
-    if (scn) body.push(hcPanel([scn], { ip: [15, 10, 10, 10], lb: 4, lc: bar }));          // \uc7a5\uba74\ub9cc \ubcf4\uc77c \ub550 \uc548\ucabd \uc5ec\ubc31\uc744 \uc904\uc5ec \uc7a5\uba74\uc5d0 \uc790\ub9ac\ub97c \ub354 \uc900\ub2e4(\uc6f9 .cs-on)
-    else body.push(hcPanel(ck, { ip: [17, 14, 14, 14], lb: 4, lc: bar }));
+    var pvBt = f.r && typeof f.r === 'object' && f.r.bt != null ? hcNum(f.r.bt, null) : null, pvMetro = f.r && typeof f.r === 'object' && f.r.metro === true;
+    var pvC = hcPvl ? hcPvl('cong', pvBt, pvMetro, now, tz) : null, pvA = hcPvl ? hcPvl('ai', pvBt, pvMetro, now, tz) : null;
+    if (scn) body.push(hcPanel([scn], { ip: [15, 10, 10, 10], lb: 4, lc: bar, pv: pvC }));          // \uc7a5\uba74\ub9cc \ubcf4\uc77c \ub550 \uc548\ucabd \uc5ec\ubc31\uc744 \uc904\uc5ec \uc7a5\uba74\uc5d0 \uc790\ub9ac\ub97c \ub354 \uc900\ub2e4(\uc6f9 .cs-on)
+    else body.push(hcPanel(ck, { ip: [17, 14, 14, 14], lb: 4, lc: bar, pv: pvC }));
   }
-  if (aiS && aiS.ok) { body.push(hcSec('AI \uc2b9\ubb34\uc6d0')); body.push(hcPanel(hcKids(aiS), { ip: [16, 14, 16, 14] })); }
+  if (aiS && aiS.ok) { body.push(hcSec('AI \uc2b9\ubb34\uc6d0')); body.push(hcPanel(hcKids(aiS), { ip: [16, 14, 16, 14], pv: hcPvl ? hcPvl('ai', f.r && f.r.bt != null ? hcNum(f.r.bt, null) : null, !!(f.r && f.r.metro === true), now, tz) : null })); }
   if (talkS && talkS.ok) body.push(hcPanel(hcKids(talkS), { ip: [12, 10, 12, 10], r: 14, pb: HC_BOTTOM }));
   var out = { ok: true, v: HC_V, screen: 'hcards', cover: 'chips', head: [], body: body, info: { ai: aiS && aiS.ok ? aiS.info.mode : '', cong: cs.mode, stn: stn, near: near ? near[0] : '' } };
   out.rev = 'h' + HC_V + ':' + hcHash(JSON.stringify(body));
