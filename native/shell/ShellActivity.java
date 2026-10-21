@@ -72,6 +72,7 @@ public class ShellActivity extends Activity {
     private MapCore map;                                   // 지도 탭(안쪽 탭·지역·호선 필터·눌린 역)
     private int seqMapH = 0, seqMapB = 0;
     private FrameLayout holder;
+    private VecMap vec;
     private MetroMapView mapView;
     private MetroMapData mapData;
     private boolean mapDataLoading;
@@ -131,6 +132,8 @@ public class ShellActivity extends Activity {
         body.setDpr(dpr);
         body.setListener(new Host(1));
         holder.addView(body, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        vec = new VecMap(this, holder, body, dpr);       // 정류장 지도: 웹과 같은 벡터 지도(MapLibre · OpenFreeMap Liberty) — 못 받으면 아래 타일 그림이 그대로
+        body.setVecHost(vec);
         root.addView(holder, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
         tabs = new ScreenView(this);
         tabs.setDpr(dpr);
@@ -184,7 +187,9 @@ public class ShellActivity extends Activity {
         WidgetCore.captureLaunch(it);
         widgetLaunch();
     }
-    @Override protected void onStop() { super.onStop(); WidgetCore.onAppLeft(this); }
+    @Override protected void onStart() { super.onStart(); if (vec != null) vec.onStart(); }
+    @Override protected void onStop() { if (vec != null) vec.onStop(); super.onStop(); WidgetCore.onAppLeft(this); }
+    @Override public void onLowMemory() { super.onLowMemory(); if (vec != null) vec.onLowMemory(); }
 
     private boolean resumed;
     /** 위젯 본체 → 커뮤니티 탭 · 위젯 [출근하기]/[퇴근하기] → 설정한 출발·도착으로 길찾기(경로는 엔진이 장소 이름으로 찾아 준 좌표). */
@@ -250,9 +255,9 @@ public class ShellActivity extends Activity {
             store.put(ShellCore.K_SAMW, pi.sam && pi.w ? "1" : "0");
         } catch (Throwable t) { /* 못 읽으면 이전 값 */ }
     }
-    @Override protected void onDestroy() { if (live == this) live = null; super.onDestroy(); }
-    @Override protected void onResume() { super.onResume(); resumed = true; refreshPower(); if (System.currentTimeMillis() - hdrAt > 300000L) loadHdr(); if (prefetchAt > 0L && System.currentTimeMillis() - prefetchAt > 600000L) prefetchTabs(); busResume(); brResume(); if (ShellCore.S_SETPG.equals(sheetName) && sheet != null && sheet.isShowing()) loadSetPage(); if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) startChatPoll(); }
-    @Override protected void onPause() { resumed = false; main.removeCallbacks(brTick); brTicking = false; super.onPause(); }
+    @Override protected void onDestroy() { if (live == this) live = null; if (vec != null) vec.onDestroy(); super.onDestroy(); }
+    @Override protected void onResume() { super.onResume(); resumed = true; if (vec != null) vec.onResume(); refreshPower(); if (System.currentTimeMillis() - hdrAt > 300000L) loadHdr(); if (prefetchAt > 0L && System.currentTimeMillis() - prefetchAt > 600000L) prefetchTabs(); busResume(); brResume(); if (ShellCore.S_SETPG.equals(sheetName) && sheet != null && sheet.isShowing()) loadSetPage(); if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) startChatPoll(); }
+    @Override protected void onPause() { resumed = false; if (vec != null) vec.onPause(); main.removeCallbacks(brTick); brTicking = false; super.onPause(); }
 
     @Override public void onBackPressed() {
         String t = ShellCore.currentTab(store);

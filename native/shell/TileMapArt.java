@@ -31,6 +31,12 @@ final class TileMapArt {
             R.set(t[3], t[4], t[3] + t[5], t[4] + t[5]);
             cv.drawBitmap(b, null, R, P);
         }
+        drawPins(cv, vw, pins, dpr, focus, label, nowMs);
+        drawAttribution(cv, vw.w, vw.h, dpr, "© OpenStreetMap");
+    }
+
+    /** 핀 · 이름표만 그린다(벡터 지도 위 투명 덮개도 같은 그림을 쓴다 — 핀 모양은 한 곳). */
+    static void drawPins(Canvas cv, TileMapCore.View vw, List<TileMapCore.Pin> pins, float dpr, int focus, boolean label, long nowMs) {
         // 정류장·장소 → 고른 핀 → 내 위치 순(내 위치가 맨 위)
         for (int pass = 0; pass < 3; pass++) {
             for (int i = 0; i < pins.size(); i++) {
@@ -48,7 +54,6 @@ final class TileMapArt {
             double[] s = vw.toScreen(pins.get(focus).la, pins.get(focus).lo);
             drawLabel(cv, (float) s[0], (float) s[1] - 22f * dpr, dpr, pins.get(focus).name, vw.w);
         }
-        drawAttribution(cv, vw.w, vw.h, dpr);
     }
 
     private static void drawPin(Canvas cv, float x, float y, float dpr, String n, boolean focus) {
@@ -90,8 +95,7 @@ final class TileMapArt {
         cv.drawText(text, l + padX, (R.top + R.bottom) / 2f - (fm.ascent + fm.descent) / 2f, P);
         P.setTypeface(ScreenView.face(false));
     }
-    private static void drawAttribution(Canvas cv, int w, int h, float dpr) {
-        String t = "© OpenStreetMap";
+    static void drawAttribution(Canvas cv, int w, int h, float dpr, String t) {
         P.setTextSize(9f * dpr); P.setTypeface(ScreenView.face(false)); P.setTextAlign(Paint.Align.LEFT);
         float tw = P.measureText(t), pad = 4f * dpr;
         R.set(w - tw - 2 * pad, h - 14f * dpr, w, h);

@@ -897,6 +897,7 @@ public class ScreenView extends View {
     private long tmAnimT0;
     private float tmL, tmT, tmWd, tmHt;                    // 마지막으로 그린 지도 자리(영역 dp)
     private boolean tmLive, tmDrawn;
+    private String tmHint = "";
     private static final long TM_ANIM_MS = 260L;
     private final Paint tmp = new Paint(Paint.ANTI_ALIAS_FLAG);
     private LinearGradient tmHintGrad; private float tmHintH = -1f;
@@ -910,8 +911,21 @@ public class ScreenView extends View {
             tmView = new TileMapCore.View(pw, ph);
             tmView.fit(tmPins, Math.round(34f * dpr), 3, 17);
             tmFocApplied = -2; tmAnimOn = false; tmLabel = false;
+            vecFresh = true;
+            if (vecHost != null && it.on) {                                         // 웹과 같은 맞춤: 핀이 하나면 17배율 · 여럿이면 여백 36px · 최대 17 · 정수 배율(Leaflet zoomSnap 1)
+                double kk = Math.log(dpr) / Math.log(2.0);
+                tmView.fit(tmPins, Math.round(36f * dpr), 1.0 + kk, 17.0 + kk);
+                if (tmPins.size() == 1) tmView.zoom = 17.0 + kk;
+                else tmView.zoom = Math.max(1.0 + kk, Math.floor(tmView.zoom - kk + 1e-6) + kk);
+            }
         }
         if (tmView == null || tmPins.isEmpty()) return;
+        boolean vec = vecHost != null && it.on;
+        if (vec) {
+            vecPlaced = true;
+            vecHost.place(Math.round(it.x * dpr), Math.round(it.y * dpr), pw, ph);
+            if (vecFresh) { vecFresh = false; vecHost.setCamera(tmView.cla, tmView.clo, tmView.zoom); }
+        }
         long now = SystemClock.uptimeMillis();
         if (it.on && it.ti != tmFocApplied) {                                // 엔진이 고른 핀이 바뀌었다 → 그 핀으로 가운데를 옮긴다(웹 panTo)
             tmFocApplied = it.ti;
@@ -925,7 +939,8 @@ public class ScreenView extends View {
             tmView.clamp();
             tmDrawn = true;
         }
-        tmL = it.x; tmT = it.y; tmWd = it.w; tmHt = it.h; tmLive = it.on;
+        tmL = it.x; tmT = it.y; tmWd = it.w; tmHt = it.h; tmLive = it.on; tmHint = it.label;
+        if (vec && vecHost.ready()) return;                                           // 벡터 지도(위 덮개)가 보인다 — 핀 · 안내 · 단추는 덮개가 그린다
         cv.save();
         tmRect.set(it.x, it.y, it.x + it.w, it.y + it.h);
         tmClip.rewind(); tmClip.addRoundRect(tmRect, it.radius, it.radius, Path.Direction.CW);
@@ -933,13 +948,21 @@ public class ScreenView extends View {
         cv.translate(it.x, it.y);
         cv.scale(1f / dpr, 1f / dpr);
         TileMapArt.draw(cv, tiles, tmView, tmPins, dpr, it.on ? tmFocus : -1, tmLabel, it.on ? now : 0L);
-        if (it.on) {
+        if (it.on) { drawTmapChrome(cv, it.label); tmDrawn = true; }
+        cv.restore();
+        if (it.top) {                                                        // 아래 구분선(웹 border-bottom)
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(pal[R_BORDER]);
+            cv.drawLine(it.x, it.y + it.h - 0.5f, it.x + it.w, it.y + it.h - 0.5f, p);
+            p.setStyle(Paint.Style.FILL);
+        }
+    }
+    private void drawTmapChrome(Canvas cv, String label) {
             float hh = 26f * dpr;                                            // 아래 안내 글(웹 #mapBusMapHint): 위로 갈수록 투명한 검정 + 흰 글자
-            if (it.label.length() > 0) {
+            if (label.length() > 0) {
                 if (tmHintGrad == null || tmHintH != hh) { tmHintH = hh; tmHintGrad = new LinearGradient(0f, tmH - hh, 0f, tmH, 0x00000000, 0x73000000, Shader.TileMode.CLAMP); }
                 tmp.setStyle(Paint.Style.FILL); tmp.setShader(tmHintGrad); cv.drawRect(0f, tmH - hh, tmW, tmH, tmp); tmp.setShader(null);
                 tmp.setColor(0xFFFFFFFF); tmp.setTypeface(face(true)); tmp.setTextSize(11f * dpr); tmp.setTextAlign(Paint.Align.CENTER);
-                cv.drawText(it.label, tmW / 2f, tmH - 8f * dpr, tmp);
+                cv.drawText(label, tmW / 2f, tmH - 8f * dpr, tmp);
                 tmp.setTextAlign(Paint.Align.LEFT);
             }
             float bsz = 30f * dpr, bm = 10f * dpr, bx = tmW - bm - bsz, by = tmH - bm - 2f * bsz;          // 확대·축소 단추(웹 Leaflet 줌 컨트롤: 오른쪽 아래 30px 두 칸)
@@ -952,18 +975,48 @@ public class ScreenView extends View {
             cv.drawText("+", bx + bsz / 2f, by + bsz / 2f - (fm.ascent + fm.descent) / 2f, tmp);
             cv.drawText("\u2212", bx + bsz / 2f, by + bsz * 1.5f - (fm.ascent + fm.descent) / 2f, tmp);
             tmp.setTextAlign(Paint.Align.LEFT);
-            tmDrawn = true;
+    }
+    // ── 벡터 지도(MapLibre · 웹과 같은 OpenFreeMap Liberty): 화면 글 위에 놓인 MapView 가 타일을 그리고, 핀 · 안내 · 단추는 그 위 덮개가 이 안의 그림 · 누름 계산을 그대로 쓴다.
+    //    그림이 준비되기 전(또는 못 받을 때)은 아래 타일 그림이 그대로 보인다.
+    public interface VecHost {
+        void place(int l, int t, int w, int h);               // 이 자리(이 화면 픽셀)에 지도를 놓는다 · w ≤ 0 이면 숨긴다
+        void setCamera(double la, double lo, double zPx);     // 곧바로(움직임 없이) 가운데 · 확대(화면 픽셀 기준 배율)
+        void goTo(double la, double lo, double zPx);          // 부드럽게
+        boolean ready();
+    }
+    private VecHost vecHost; private boolean vecPlaced, vecFresh;
+    public void setVecHost(VecHost h) { vecHost = h; }
+    /** 지도(MapLibre)가 움직였다 — 핀 계산이 같은 가운데 · 배율을 쓰게 맞춘다. */
+    void vecCamera(double la, double lo, double zPx) {
+        if (tmView == null) return;
+        tmView.cla = la; tmView.clo = lo; tmView.zoom = zPx;
+    }
+    /** 덮개 위 한 점이 핀 · 확대 단추 위인가(그러면 덮개가 받고, 아니면 지도가 받는다). */
+    boolean vecHit(float x, float y) {
+        if (tmView == null) return false;
+        float bsz = 30f * dpr, bm = 10f * dpr, bx = tmW - bm - bsz, by = tmH - bm - 2f * bsz;
+        if (x >= bx && x < bx + bsz && y >= by && y < by + 2f * bsz) return true;
+        double bd = 24f * dpr;
+        for (int i = 0; i < tmPins.size(); i++) {
+            TileMapCore.Pin pn = tmPins.get(i);
+            if ("m".equals(pn.k)) continue;
+            double[] sc = tmView.toScreen(pn.la, pn.lo);
+            if (Math.hypot(sc[0] - x, sc[1] - y) < bd) return true;
         }
-        cv.restore();
-        if (it.top) {                                                        // 아래 구분선(웹 border-bottom)
-            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(pal[R_BORDER]);
-            cv.drawLine(it.x, it.y + it.h - 0.5f, it.x + it.w, it.y + it.h - 0.5f, p);
-            p.setStyle(Paint.Style.FILL);
-        }
+        return false;
+    }
+    void vecTap(float x, float y) { if (tmView != null) tmTap(x, y); }
+    boolean vecAnim() { for (TileMapCore.Pin pn : tmPins) if ("m".equals(pn.k)) return true; return false; }
+    void vecDraw(Canvas cv) {
+        if (tmView == null || tmPins.isEmpty()) return;
+        TileMapArt.drawPins(cv, tmView, tmPins, dpr, tmFocus, tmLabel, SystemClock.uptimeMillis());
+        drawTmapChrome(cv, tmHint);
+        TileMapArt.drawAttribution(cv, tmW, tmH, dpr, "\u00A9 OpenFreeMap \u00A9 OpenStreetMap");
     }
     /** 지도 가운데(와 확대)를 부드럽게 옮긴다. */
     private void tmGoTo(double la, double lo, double z) {
         if (tmView == null) return;
+        if (vecHost != null && vecHost.ready()) { vecHost.goTo(la, lo, z); return; }          // 벡터 지도: 지도가 직접 부드럽게 움직이고 그 움직임이 핀 계산에 이어진다
         tmAnimLa0 = tmView.cla; tmAnimLo0 = tmView.clo; tmAnimZ0 = tmView.zoom; tmAnimLa1 = la; tmAnimLo1 = lo; tmAnimZ1 = z; tmAnimT0 = SystemClock.uptimeMillis(); tmAnimOn = true;
         invalidate();
     }
@@ -1137,6 +1190,11 @@ public class ScreenView extends View {
     private int cc(ScreenCore.Col c, int def) { if (c == null) return def; return c.role != null ? roleColor(c.role) : c.argb; }
 
     @Override protected void onDraw(Canvas cv) {
+        vecPlaced = false;
+        drawAll(cv);
+        if (vecHost != null && !vecPlaced) vecHost.place(0, 0, 0, 0);                  // 벡터 지도가 놓일 자리가 이번 그림에 없다 — 숨긴다
+    }
+    private void drawAll(Canvas cv) {
         long now = SystemClock.uptimeMillis();
         lastDraw = now;
         p.setStyle(Paint.Style.FILL); p.setColor(lay == null ? pal[R_BG] : bgNow());      // 바탕: 화면이 정한 색 역할(카드 안 화면은 card · 안내창은 엔진이 준 색)
