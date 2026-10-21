@@ -186,9 +186,9 @@ public final class HomeCore {
         Object a = ((List<Object>) o).get(0), b = ((List<Object>) o).get(1);
         return (a instanceof String && b instanceof String) ? new String[] { (String) a, (String) b } : null;
     }
-    /** 앱 주소가 허용된 모양인지(카카오맵·네이버지도 길찾기만). */
+    /** 앱 주소가 허용된 모양인지(카카오맵·네이버지도 길찾기 · 도보 길안내만). */
     public static boolean navAppOk(String u) {
-        return u != null && u.length() < 1024 && u.indexOf(' ') < 0 && (u.startsWith("kakaomap://route?") || u.startsWith("nmap://route/public?"));
+        return u != null && u.length() < 1024 && u.indexOf(' ') < 0 && (u.startsWith("kakaomap://route?") || u.startsWith("nmap://route/public?") || u.startsWith("nmap://route/walk?"));
     }
     /** 세부경로 시트의 눌림(rd.*). */
     public int actDetail(String v) {
