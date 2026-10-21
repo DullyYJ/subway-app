@@ -414,6 +414,16 @@ public class ShellJvmTest {
         env.nowMs = 99L;
         String rreq = r2.resultRequest(env, 18, "dark", 0);
         ok(rreq.equals("{\"cap\":18,\"r\":{\"data\":{\"result\":{\"path\":[]}},\"tab\":\"fast\",\"a\":\"부평\",\"b\":\"두정\",\"bt\":null,\"rb\":1234,\"now\":99,\"tz\":540,\"th\":\"dark\",\"fav\":1}}"), "결과 요청 본문: " + rreq);
+        // 같은 칸의 변형(방·방식)은 캐시 열쇠가 다르다 · 흐르는 문구 주소
+        {
+            ShellCore.MemStore ks = new ShellCore.MemStore();
+            String k0 = ShellCore.cacheKey("chat", ks); ks.put(ChatCore.K_SEL, "2호선");
+            ok(!k0.equals(ShellCore.cacheKey("chat", ks)) && ShellCore.cacheKey("chat", ks).startsWith("chat|") && "chat".equals(ShellCore.expectId(ShellCore.cacheKey("chat", ks))), "채팅 방마다 다른 캐시 열쇠");
+            String m0 = ShellCore.cacheKey("mapb", ks); ks.put(MapCore.K_MODE, "subway");
+            String m1 = ShellCore.cacheKey("mapb", ks); ks.put(MapCore.K_FLT, "L2");
+            ok(!m0.equals(m1) && !m1.equals(ShellCore.cacheKey("mapb", ks)) && !ShellCore.cacheKey("maph", ks).equals(ShellCore.cacheKey("mapb", ks)) && "map".equals(ShellCore.expectId(m1)), "노선도는 방식 · 분류마다 다른 캐시 열쇠");
+            ok(ShellCore.hdrUrl(540, 1000L).equals("https://route-v2.phg0643.workers.dev/screen/hdr?tz=540&now=1000") && "hdr".equals(ShellCore.expectId("hdr")) && ShellCore.diskCacheable("hdr"), "흐르는 문구 주소 · 열쇠");
+        }
         // 타일 지도 계산
         {
             java.util.List<TileMapCore.Pin> tp = TileMapCore.parsePins(TileMapCore.encodePin(37.5, 127.0, "s", "1", "한진, 정류장|x") + "|" + TileMapCore.encodePin(37.51, 127.01, "m", "", "내 위치") + "|엉터리|0,0,s,,|99,200,s,,");

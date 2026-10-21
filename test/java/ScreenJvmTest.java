@@ -787,6 +787,19 @@ public class ScreenJvmTest {
             ok(threw, "tmap 엉터리는 거부: " + bad);
         }
 
+        // ── 흐르는 문구 노드(marq) ──
+        try {
+            ScreenCore.Screen mq = ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"hdr\",\"head\":[],\"body\":[{\"t\":\"marq\",\"h\":26,\"pad\":[8,14,8,14],\"msgs\":[\"오늘도 화이팅!\",\" \",\"좋은 아침이에요\"],\"pass\":16000,\"grad\":6000,\"line\":true}]}");
+            ScreenCore.Layout ml = ScreenCore.layout(mq, 360f, M);
+            ok(ml.body.length == 1 && ml.body[0].kind == ScreenCore.K_MARQ && near(ml.body[0].h, 26f) && near(ml.body[0].f1, 16000f) && near(ml.body[0].f2, 6000f) && ml.body[0].on, "marq: 자리 · 속도 · 선");
+            ok("오늘도 화이팅!\n좋은 아침이에요".equals(ml.body[0].value), "marq: 빈 문구는 건너뛴다");
+        } catch (Exception ex) { ok(false, "marq 읽기: " + ex); }
+        for (String bad : new String[] { "{\"t\":\"marq\",\"msgs\":[]}", "{\"t\":\"marq\",\"msgs\":[1]}", "{\"t\":\"marq\",\"msgs\":[\"a\"],\"h\":5}", "{\"t\":\"marq\",\"msgs\":[\"a\"],\"pass\":10}" }) {
+            boolean threw = false;
+            try { ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"hdr\",\"head\":[],\"body\":[" + bad + "]}"); } catch (Exception ex) { threw = true; }
+            ok(threw, "marq 엉터리는 거부: " + bad);
+        }
+
         System.out.println(fails == 0 ? "ALL OK (" + oks + ")" : fails + " FAIL");
         System.exit(fails == 0 ? 0 : 1);
     }

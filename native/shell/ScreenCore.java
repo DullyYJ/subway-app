@@ -676,6 +676,24 @@ public final class ScreenCore {
             if (pc == 0) throw new ParseError("tmap: 핀이 없다");
             n.value = pv.toString();
             n.act = act(m.get("act"), false);
+        } else if ("marq".equals(t)) {                                                                     // 맨 위 흐르는 감성 문구: 엔진이 문구 목록을 정하고, 앱은 한 번 지나갈 때마다 다음 문구로 흘리기만 한다
+            pad(m, n);
+            n.h = optNum(m, "h", 26f, 16f, 60f);
+            n.val = optNum(m, "pass", 16000f, 3000f, 60000f); n.max = optNum(m, "grad", 6000f, 1000f, 30000f);
+            n.on = optBool(m, "line", false);
+            StringBuilder mv = new StringBuilder();
+            int mc = 0;
+            for (Object mo : asArr(m.get("msgs"), "marq.msgs")) {
+                if (!(mo instanceof String)) throw new ParseError("marq: 문구는 글자여야 한다");
+                String ms = ((String) mo).replace('\n', ' ').trim();
+                if (ms.length() == 0) continue;
+                if (mc >= 60) throw new ParseError("marq: 문구가 너무 많다");
+                if (ms.length() > 80) ms = ms.substring(0, 80);
+                if (mc > 0) mv.append('\n');
+                mv.append(ms); mc++;
+            }
+            if (mc == 0) throw new ParseError("marq: 문구가 없다");
+            n.value = mv.toString();
         } else if ("cars".equals(t)) {                                                                     // 칸별 혼잡: 제목 + 칸 가로줄(테두리 색 · 글 세 줄), 칸이 없으면 안내 글
             pad(m, n);
             n.title = optStr(m, "ttl", "", 24); n.value = optStr(m, "msg", "", 60);
@@ -759,7 +777,7 @@ public final class ScreenCore {
 
     // ═════════════ ③ 배치 ═════════════
     public static final int SCENE_MAX = 6000;
-    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14, K_NEWS = 15, K_POSTH = 16, K_CMT = 17, K_RBTN = 18, K_INBAR = 19, K_MSG = 20, K_TAB = 21, K_SUG = 22, K_SWAP = 23, K_RHD = 24, K_TRK = 25, K_CGH = 26, K_GAUGE = 27, K_CHART = 28, K_HBAR = 29, K_CARS = 30, K_AIH = 31, K_LTH = 32, K_LTR = 33, K_PILL = 34, K_SCENE = 35, K_TMAP = 36;
+    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14, K_NEWS = 15, K_POSTH = 16, K_CMT = 17, K_RBTN = 18, K_INBAR = 19, K_MSG = 20, K_TAB = 21, K_SUG = 22, K_SWAP = 23, K_RHD = 24, K_TRK = 25, K_CGH = 26, K_GAUGE = 27, K_CHART = 28, K_HBAR = 29, K_CARS = 30, K_AIH = 31, K_LTH = 32, K_LTR = 33, K_PILL = 34, K_SCENE = 35, K_TMAP = 36, K_MARQ = 37;
     /** 경로 결과 머리줄 치수(웹 #transitResultHeader 와 같다: 분 숫자 28 · 단위 14 · 구간명 12 · 즐겨찾기 알약 11 · 닫기 ×) */
     /** 구간 타임라인 칸 치수(웹 #transitHtlTrack 과 같다): 이름 30 · 배지 18 · 축 26 · 시각 3+16 */
     public static final float TRK_NAME_H = 30f, TRK_BADGE_H = 18f, TRK_AXIS_H = 26f, TRK_TIME_GAP = 3f, TRK_TIME_H = 16f, TRK_H = 93f, TRK_LINE_Y = 12f, TRK_LINE_H = 3f, TRK_DOT_Y = 13f, TRK_E_R = 7f, TRK_R_R = 6f, TRK_M_R = 3f;
@@ -1223,6 +1241,11 @@ public final class ScreenCore {
         }
         if ("scene".equals(n.t)) {                                                   // 캐릭터 장면 자리(그림은 ScreenView 의 장면 그리개가 그린다)
             Item it = new Item(); it.kind = K_SCENE; it.x = ox; it.y = y; it.w = innerW; it.h = n.h; it.radius = n.r; it.value = n.value;
+            out.add(it);
+            return y + n.h + n.padB;
+        }
+        if ("marq".equals(n.t)) {                                                    // 흐르는 문구 자리(그림은 ScreenView 가 그린다)
+            Item it = new Item(); it.kind = K_MARQ; it.x = ox; it.y = y; it.w = innerW; it.h = n.h; it.value = n.value; it.f1 = n.val; it.f2 = n.max; it.on = n.on;
             out.add(it);
             return y + n.h + n.padB;
         }

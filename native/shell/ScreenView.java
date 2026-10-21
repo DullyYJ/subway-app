@@ -5,6 +5,9 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.graphics.LinearGradient;
+import android.graphics.Matrix;
+import android.graphics.Shader;
 import android.graphics.Path;
 import android.graphics.RectF;
 import android.graphics.Typeface;
@@ -268,7 +271,7 @@ public class ScreenView extends View {
                         else if (pi.kind == ScreenCore.K_SUG && pi.act2 != null && x / dpr >= pi.btx - 6f) { blurInput(); listener.onAction(pi.act2); }
                         else if (pi.kind == ScreenCore.K_RHD) { blurInput(); listener.onAction(ScreenCore.Layout.rhdAct(pi, x / dpr)); }
                         else if (pi.kind == ScreenCore.K_TOGGLE) { blurInput(); pi.on = !pi.on; invalidate(); listener.onSet(a, pi.on); }     // 화면은 바로 뒤집는다(엔진 새 화면을 기다리지 않는다)
-                        else { blurInput(); listener.onAction(a); }
+                        else { blurInput(); if (pi.kind == ScreenCore.K_CHIP && a != null && "cat".equals(a.a)) pickChip(pi); listener.onAction(a); }
                     }
                 } else if (mode == 1 || mode == 2) {
                     vt.computeCurrentVelocity(1000, maxFling);
@@ -289,6 +292,13 @@ public class ScreenView extends View {
         }
     }
     private boolean pressInFoot;
+    /** 분류 칩을 누르면 새 화면이 오기 전에 먼저 그 칩을 켜 보인다(같은 줄의 다른 칩은 끈다) — 엔진 화면이 오면 그것으로 덮어쓴다. */
+    private void pickChip(ScreenCore.Item pi) {
+        if (lay == null) return;
+        for (ScreenCore.Item it : lay.head) if (it.kind == ScreenCore.K_CHIP && it.y == pi.y) it.on = it == pi;
+        for (ScreenCore.Item it : lay.body) if (it.kind == ScreenCore.K_CHIP && it.y == pi.y) it.on = it == pi;
+        invalidate();
+    }
 
     // ───────────── 캐릭터 장면(혼잡도 카드) — 엔진이 정한 값을 SceneCore 가 그린다. 여기는 크기·시계·손가락만 이어 준다 ─────────────
     private SceneDriver scene;
@@ -328,6 +338,68 @@ public class ScreenView extends View {
         scene.draw(cv);
         cv.restore();
     }
+    // ───────────── 맨 위 흐르는 문구(문구 목록은 엔진이 정한 값 · 앱은 오른쪽에서 왼쪽으로 흘리며 색을 돌리기만) ─────────────
+    private boolean marqDrawn;
+    private String marqSrc = "";
+    private String[] marqMsgs = new String[0];
+    private int marqIdx;
+    private String marqCur = "";
+    private float marqTw = -1f;
+    private long marqT0;
+    private final Paint mqp = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Matrix mqm = new Matrix();
+    private LinearGradient mqGrad, mqFadeL, mqFadeR;
+    private float mqFadeW = -1f; private int mqFadeBg = 0;
+    private static final int C_ORANGE2 = 0xFFFF9F0A, C_BLUE2 = 0xFF2F7CF6;
+    private void drawMarq(Canvas cv, ScreenCore.Item it) {
+        if (!it.value.equals(marqSrc)) {                                   // 새 목록: 지금 흐르는 문구는 끝까지 보여 주고 다음부터 새 목록
+            marqSrc = it.value; marqMsgs = it.value.split("\n");
+            if (marqCur.length() == 0) { marqIdx = 0; marqCur = marqMsgs[0]; marqTw = -1f; marqT0 = SystemClock.uptimeMillis(); }
+        }
+        if (marqCur.length() == 0) return;
+        long now = SystemClock.uptimeMillis();
+        mqp.setTypeface(face(true)); mqp.setTextSize(13.5f * dpr);
+        if (marqTw < 0f) {
+            marqTw = mqp.measureText(marqCur) / dpr;
+            mqGrad = new LinearGradient(0f, 0f, marqTw * 3f * dpr, 0f, new int[] { pal[R_GOLD], C_ORANGE2, C_BLUE2, pal[R_GOLD] }, null, Shader.TileMode.REPEAT);
+        }
+        float pass = Math.max(3000f, it.f1), span = it.w + marqTw, frac = (now - marqT0) / pass;
+        if (frac >= 1f) {                                                  // 한 바퀴 다 흘렀다 → 다음 문구
+            marqIdx = (marqIdx + 1) % marqMsgs.length; marqCur = marqMsgs[marqIdx]; marqTw = -1f; marqT0 = now; marqDrawn = true;
+            return;
+        }
+        float x = it.x + it.w - frac * span;
+        float phase = ((now % (long) Math.max(1000f, it.f2)) / Math.max(1000f, it.f2)) * 2f;           // 6초에 두 번 도는 색(옛 웹 hdrGrad 와 같은 속도)
+        mqm.setTranslate((x - phase * marqTw * 3f) * dpr, 0f);
+        mqGrad.setLocalMatrix(mqm);
+        cv.save();
+        cv.clipRect(it.x, it.y, it.x + it.w, it.y + it.h);
+        mqp.setShader(mqGrad);
+        cv.save(); cv.scale(1f / dpr, 1f / dpr);                           // 글자는 화면 픽셀로 그린다(위 scale(dpr) 를 되돌림)
+        Paint.FontMetrics fm = mqp.getFontMetrics();
+        cv.drawText(marqCur, x * dpr, (it.y + it.h / 2f) * dpr - (fm.ascent + fm.descent) / 2f, mqp);
+        cv.restore();
+        mqp.setShader(null);
+        // 양끝 8% 는 서서히 사라지게(옛 웹 mask-image)
+        float fw = it.w * 0.08f; int bg = bgNow();
+        if (mqFadeL == null || fw != mqFadeW || bg != mqFadeBg) {
+            mqFadeW = fw; mqFadeBg = bg;
+            mqFadeL = new LinearGradient(it.x, 0f, it.x + fw, 0f, bg, bg & 0x00FFFFFF, Shader.TileMode.CLAMP);
+            mqFadeR = new LinearGradient(it.x + it.w - fw, 0f, it.x + it.w, 0f, bg & 0x00FFFFFF, bg, Shader.TileMode.CLAMP);
+        }
+        mqp.setStyle(Paint.Style.FILL);
+        mqp.setShader(mqFadeL); cv.drawRect(it.x, it.y, it.x + fw, it.y + it.h, mqp);
+        mqp.setShader(mqFadeR); cv.drawRect(it.x + it.w - fw, it.y, it.x + it.w, it.y + it.h, mqp);
+        mqp.setShader(null);
+        cv.restore();
+        marqDrawn = true;
+        if (it.on) {                                                       // 아래 구분선
+            mqp.setStyle(Paint.Style.STROKE); mqp.setStrokeWidth(1f); mqp.setColor(pal[R_BORDER]);
+            cv.drawLine(0f, getHeight() / dpr - 0.5f, getWidth() / dpr, getHeight() / dpr - 0.5f, mqp);
+            mqp.setStyle(Paint.Style.FILL);
+        }
+    }
+
     // ───────────── 타일 지도(핀은 엔진이 정한 값 · 앱은 받은 타일에 그리기만) ─────────────
     private TileLoader tiles;
     private final Runnable tileTick = new Runnable() { @Override public void run() { invalidate(); } };
@@ -459,7 +531,7 @@ public class ScreenView extends View {
         cv.drawRect(0, 0, getWidth(), getHeight(), p);
         if (lay == null) return;
         boolean moving = false;
-        sceneDrawn = false;
+        sceneDrawn = false; marqDrawn = false;
         if (flingY.computeScrollOffset()) { scrollY = ScreenCore.clamp(flingY.getCurrY() / dpr, lay.bodyMaxScroll(bodyViewH())); moving = true; }
         if (flingX.computeScrollOffset()) { scrollX = ScreenCore.clamp(flingX.getCurrX() / dpr, lay.headMaxScroll()); moving = true; }
 
@@ -506,6 +578,7 @@ public class ScreenView extends View {
 
         if (!drewOnce) { drewOnce = true; post(firstDrawCb); }
         if (sceneDrawn && scene != null && scene.isRunning() && !scene.isPaused()) postInvalidateOnAnimation();        // 장면이 보이는 동안만 화면 박자로 계속 그린다(안 보이면 저절로 멈춘다)
+        if (marqDrawn) postInvalidateOnAnimation();                                     // 흐르는 문구가 보이는 동안만 화면 박자로 계속 그린다
         if (moving || mode == 1 || mode == 2) postInvalidateOnAnimation();
         else if (pulsing) postInvalidateDelayed(mkMs > 0f && now - mkT0 < mkMs ? 16L : 66L);      // 마커 맥박·고리(마커가 있을 때만; 가만히 있으면 초당 15번)
     }
@@ -598,6 +671,7 @@ public class ScreenView extends View {
             case ScreenCore.K_CARS: drawCars(cv, it); break;
             case ScreenCore.K_SCENE: drawScene(cv, it); break;
             case ScreenCore.K_TMAP: drawTmap(cv, it); break;
+            case ScreenCore.K_MARQ: drawMarq(cv, it); break;
             default: break;
         }
     }

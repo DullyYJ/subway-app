@@ -41,14 +41,29 @@ public class ShellActivity extends Activity {
     private final Handler main = new Handler(Looper.getMainLooper());
     private ShellCore.Store store;
     private LinearLayout root;
-    private ScreenView head, body, tabs;
+    private ScreenView hdr, head, body, tabs;
     private float dpr = 1f;
     private String[] slots = new String[0];            // 지금 탭의 화면 칸들(위 → 아래)
     private final int[] seq = new int[2];              // 칸마다 가장 새 요청 번호(늦게 온 옛 답은 버린다)
-    private int seqTabs = 0;
+    private int seqTabs = 0, seqHdr = 0;
     // 화면 글 캐시: 탭을 오갈 때 마지막으로 받은 화면을 바로 올리고, 새 글은 뒤에서 받아 바꾼다(스크롤은 그대로)
-    private final java.util.HashMap<String, String> scrCache = new java.util.HashMap<String, String>();
+    private final java.util.LinkedHashMap<String, String> scrCache = new java.util.LinkedHashMap<String, String>(32, 0.75f, true) {
+        @Override protected boolean removeEldestEntry(java.util.Map.Entry<String, String> e) { return size() > 28; }       // 오래 안 본 화면부터 버린다(메모리 한도)
+    };
     private final java.util.HashMap<ScreenView, String> viewKey = new java.util.HashMap<ScreenView, String>();
+    private final java.util.HashMap<ScreenView, String> shownJson = new java.util.HashMap<ScreenView, String>();       // 칸이 지금 보여 주는 글(같은 글이면 다시 그리지 않는다)
+    // 검증을 마친 화면 객체: 받는 스레드에서 미리 읽어 두면(warm) 올릴 때 주 스레드가 글을 다시 읽지 않는다
+    private final java.util.LinkedHashMap<String, ScreenCore.Screen> parsedScr = new java.util.LinkedHashMap<String, ScreenCore.Screen>(16, 0.75f, true) {
+        @Override protected boolean removeEldestEntry(java.util.Map.Entry<String, ScreenCore.Screen> e) { return size() > 12; }
+    };
+    private ScreenCore.Screen parsedGet(String json) throws ScreenCore.ParseError {
+        synchronized (parsedScr) { ScreenCore.Screen c = parsedScr.get(json); if (c != null) return c; }
+        ScreenCore.Screen sc = ScreenCore.load(json);
+        synchronized (parsedScr) { parsedScr.put(json, sc); }
+        return sc;
+    }
+    /** 받는 스레드에서 부른다: 글을 미리 검증·해석해 둔다(실패해도 조용히 — 올릴 때 다시 알린다). */
+    private void warm(String json) { if (json == null || json.length() < 3 || json.length() > 600000) return; try { parsedGet(json); } catch (Throwable ignored) { } }
     private volatile ShellCore.NewsRows lastNews = new ShellCore.NewsRows();
     private final HomeCore home = new HomeCore();       // 홈 탭 입력 상태(고른 출발/도착·후보·기준시각)
     private int seqHome = 0, seqCand = 0, seqBoard = 0;
@@ -106,6 +121,10 @@ public class ShellActivity extends Activity {
 
         root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
+        hdr = new ScreenView(this);                      // 맨 위 흐르는 응원 문구(엔진 /screen/hdr)
+        hdr.setDpr(dpr);
+        hdr.setListener(new Host(3));
+        root.addView(hdr, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Math.round(43f * dpr)));
         head = new ScreenView(this);
         head.setDpr(dpr);
         head.setListener(new Host(0));
@@ -132,6 +151,8 @@ public class ShellActivity extends Activity {
         applyTheme();
         restoreRideCard();
         showTab(ShellCore.currentTab(store));
+        loadHdr();
+        main.postDelayed(hdrTick, 600000L);
         WidgetCore.captureLaunch(getIntent());
         widgetLaunch();
         gwSync(false);
@@ -223,7 +244,7 @@ public class ShellActivity extends Activity {
         } catch (Throwable t) { /* 못 읽으면 이전 값 */ }
     }
     @Override protected void onDestroy() { if (live == this) live = null; super.onDestroy(); }
-    @Override protected void onResume() { super.onResume(); resumed = true; refreshPower(); if (ShellCore.S_SETPG.equals(sheetName) && sheet != null && sheet.isShowing()) loadSetPage(); if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) startChatPoll(); }
+    @Override protected void onResume() { super.onResume(); resumed = true; refreshPower(); if (System.currentTimeMillis() - hdrAt > 300000L) loadHdr(); if (ShellCore.S_SETPG.equals(sheetName) && sheet != null && sheet.isShowing()) loadSetPage(); if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) startChatPoll(); }
     @Override protected void onPause() { resumed = false; super.onPause(); }
 
     @Override public void onBackPressed() {
@@ -237,6 +258,7 @@ public class ShellActivity extends Activity {
     // ───────────── 색 ─────────────
     private void applyTheme() {
         int[] pal = ShellCore.palette(ShellCore.theme(store));
+        hdr.setPalette(pal);
         head.setPalette(pal);
         body.setPalette(pal);
         tabs.setPalette(pal);
@@ -308,10 +330,47 @@ public class ShellActivity extends Activity {
         new Thread(new Runnable() {
             @Override public void run() {
                 NetPost.Res r = NetPost.post(url, json, 8000);
-                final String txt = r.status == 200 ? r.body : "";
+                final String txt = r.status == 200 ? r.body : ""; warm(txt);
                 main.post(new Runnable() { @Override public void run() { if (my == seqTabs) present(tabs, txt, false); } });
             }
         }, "shell-tabs").start();
+    }
+
+    // ── 맨 위 흐르는 문구: 켤 때 · 10분마다 · 앞으로 돌아올 때 새로 받는다(시간대가 바뀌면 문구 묶음이 바뀐다) ──
+    private long hdrAt = 0L;
+    private void loadHdr() {
+        final int my = ++seqHdr;
+        hdrAt = System.currentTimeMillis();
+        viewKey.put(hdr, ShellCore.S_HDR);
+        if (hdr.itemCount() == 0) { String c = cacheGet(ShellCore.S_HDR, true); if (c != null) showCached(hdr, c); }
+        final int tz = java.util.TimeZone.getDefault().getOffset(hdrAt) / 60000;
+        final String url = ShellCore.hdrUrl(tz, hdrAt);
+        new Thread(new Runnable() {
+            @Override public void run() {
+                NetPost.Res r = NetPost.get(url, 8000);
+                final String txt = r.status == 200 && r.body != null ? r.body : "";
+                warm(txt);
+                main.post(new Runnable() { @Override public void run() { if (my == seqHdr && txt.length() > 0) present(hdr, txt, true); } });
+            }
+        }, "shell-hdr").start();
+    }
+    private final Runnable hdrTick = new Runnable() {
+        @Override public void run() { if (resumed) loadHdr(); main.postDelayed(this, 600000L); }
+    };
+
+    /** 같은 칸에 다른 변형(방 · 분류 · 방식)을 열 때: 열쇠를 바꾸고, 본 적이 있으면 그 화면을 먼저 올린다(올렸으면 true). */
+    private boolean keyedShow(ScreenView v, String screen) {
+        String ck = ShellCore.cacheKey(screen, store);
+        viewKey.put(v, ck);
+        String c = cacheGet(ck, ShellCore.diskCacheable(screen));
+        return c != null && showCached(v, c);
+    }
+    /** 쇼핑·소식 분류나 테마를 바꿨다: 분류가 바뀐 것이면 본 적 있는 화면을 먼저 올리고 새 글을 받는다. */
+    private void refreshLast() {
+        int li = slots.length - 1;
+        if (li < 0) return;
+        String nk = ShellCore.cacheKey(slots[li], store), ok = viewKey.get(viewOfSlot(li));
+        if (ok != null && !ok.equals(nk)) loadSlotX(li, false, false); else loadSlot(li, true);
     }
 
     // ── 화면 글 캐시 ──
@@ -351,11 +410,13 @@ public class ShellActivity extends Activity {
     }
     /** 캐시 글을 조용히 올린다(검증 통과한 것만; 못 읽으면 버린다). */
     private boolean showCached(ScreenView v, String json) {
-        try { v.setScreen(ScreenCore.load(json), false); return true; } catch (Exception e) { return false; }
+        try { v.setScreen(parsedGet(json), false); shownJson.put(v, json); return true; } catch (Throwable e) { return false; }
     }
 
     /** 칸 i 의 화면을 받아 올린다. 원자료가 있는 화면은 먼저 원자료를 받는다. */
-    private void loadSlot(final int i, final boolean keep0) {
+    private void loadSlot(final int i, final boolean keep0) { loadSlotX(i, keep0, true); }
+    /** clearOnMiss: 캐시가 없을 때 칸을 비울지(다른 탭으로 옮겨 왔으면 비운다 · 같은 화면의 분류만 바꿀 땐 옛 화면을 두고 새 글을 기다린다). */
+    private void loadSlotX(final int i, final boolean keep0, final boolean clearOnMiss) {
         if (i < 0 || i >= slots.length) return;
         final String screen = slots[i];
         final int si = slots.length > 1 ? i : 1;                // seq 번호: 머리 0 · 본문 1
@@ -368,7 +429,7 @@ public class ShellActivity extends Activity {
         if (!keep0) {
             String c = cacheGet(ck, ShellCore.diskCacheable(screen));
             if (c != null && showCached(v, c)) { keepX = true; if (ShellCore.S_MAPB.equals(screen)) syncMapView(); }
-            else v.clearScreen();                                 // 옛 탭 화면이 남아 보이지 않게
+            else if (clearOnMiss) { v.clearScreen(); shownJson.remove(v); }          // 옛 탭 화면이 남아 보이지 않게
         }
         final boolean keep = keepX;
         if (ShellCore.S_HOME.equals(screen)) { loadHome(v, keep); return; }
@@ -379,7 +440,7 @@ public class ShellActivity extends Activity {
         if (ShellCore.S_MAPB.equals(screen)) { loadMapBody(v, keep); return; }
         new Thread(new Runnable() {
             @Override public void run() {
-                final String txt = fetchGeneric(screen);
+                final String txt = fetchGeneric(screen); warm(txt);
                 main.post(new Runnable() { @Override public void run() { if (my == seq[si]) present(v, txt, keep); } });
             }
         }, "shell-slot").start();
@@ -429,18 +490,20 @@ public class ShellActivity extends Activity {
         if (json == null || json.length() == 0) {
             String ck = viewKey.get(v);
             if (ck != null && v != sheetView && v.itemCount() == 0) {          // 빈 칸이면 안내와 [다시 시도]
-                try { v.setScreen(ScreenCore.load(ShellCore.errorScreen()), false); fadeIn(v); return; } catch (Exception ignored) { }
+                try { v.setScreen(ScreenCore.load(ShellCore.errorScreen()), false); shownJson.remove(v); fadeIn(v); return; } catch (Throwable ignored) { }
             }
             toast("화면을 받지 못했어요"); return;
         }
         try {
-            ScreenCore.Screen sc = ScreenCore.load(json);
             String ck = viewKey.get(v);
+            if (keep && v != sheetView && json.equals(shownJson.get(v))) return;      // 이미 이 글을 보여 주는 중 — 다시 읽고 배치하고 그릴 까닭이 없다
+            ScreenCore.Screen sc = parsedGet(json);
             if (ck != null && v != sheetView && !ShellCore.expectId(ck).equals(sc.id)) return;     // 다른 탭 화면의 늦은 답
             v.setScreen(sc, keep);
+            if (v != sheetView) shownJson.put(v, json);
             if (ck != null && v != sheetView) cachePut(ck, json);
             if (!keep && v != sheetView) fadeIn(v);
-        } catch (Exception e) {
+        } catch (Throwable e) {
             toast("화면이 올바르지 않아요: " + String.valueOf(e.getMessage()));
         }
     }
@@ -483,6 +546,7 @@ public class ShellActivity extends Activity {
         Host(int which) { this.which = which; }
 
         private String screenName() {
+            if (which == 3) return "hdr";
             if (which == 2) return "tabs";
             if (slots.length > 1) return slots[which == 0 ? 0 : 1];
             return slots.length > 0 ? slots[0] : "";
@@ -504,6 +568,7 @@ public class ShellActivity extends Activity {
         }
 
         private void handle(ScreenCore.Act a, boolean on) {
+            if (which == 3) return;
             if ("call".equals(a.a) && ShellCore.RETRY_ACT.equals(a.v)) { showTab(ShellCore.currentTab(store)); return; }
             ShellCore.Effect e;
             if (which == 2) e = ShellCore.routeTabs(store, a.a, a.v);
@@ -535,7 +600,7 @@ public class ShellActivity extends Activity {
     private void apply(ShellCore.Effect e) {
         switch (e.kind) {
             case ShellCore.E_TAB: showTab(e.arg); break;
-            case ShellCore.E_REFRESH: applyTheme(); loadSlot(slots.length - 1, true); break;
+            case ShellCore.E_REFRESH: applyTheme(); refreshLast(); break;
             case ShellCore.E_TOAST: toast(e.arg); loadSlot(slots.length - 1, true); break;
             case ShellCore.E_LINK: openLink(e.arg); break;
             case ShellCore.E_NEWS: openNews(e.arg); break;
@@ -567,9 +632,14 @@ public class ShellActivity extends Activity {
         new Thread(new Runnable() {
             @Override public void run() {
                 if (fetch) {
+                    // 공지와 대화(방)를 함께 받는다(차례로 받던 시간 절약)
+                    Thread nt = null;
                     if (System.currentTimeMillis() - chat.noticesAt > 60000) {
-                        NetPost.Res nr = NetPost.get(ChatCore.noticesUrl(), 8000);
-                        if (nr.status == 200) chat.setNotices(nr.body, System.currentTimeMillis());
+                        nt = new Thread(new Runnable() { @Override public void run() {
+                            NetPost.Res nr = NetPost.get(ChatCore.noticesUrl(), 8000);
+                            if (nr.status == 200) chat.setNotices(nr.body, System.currentTimeMillis());
+                        } }, "shell-chat-notice");
+                        nt.start();
                     }
                     if ("all".equals(sel)) {
                         NetPost.Res tr = NetPost.get(chat.talksUrlNow(), 7000);
@@ -578,10 +648,11 @@ public class ShellActivity extends Activity {
                         NetPost.Res rr = NetPost.get(chat.roomUrl(sel), 12000);
                         if (rr.status == 200) chat.addRoom(sel, rr.body); else chat.failed = !chat.loaded;
                     }
+                    if (nt != null) { try { nt.join(9000); } catch (InterruptedException ignored) { } }
                 }
                 final String body = chat.request(ShellCore.CAP, ShellCore.theme(store), -java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 60000, me, System.currentTimeMillis());
                 NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/chat", body, 10000);
-                final String txt = r.status == 200 ? r.body : "";
+                final String txt = r.status == 200 ? r.body : ""; warm(txt);
                 main.post(new Runnable() { @Override public void run() {
                     if (my != seqChat) return;
                     present(v, txt, keep);
@@ -593,7 +664,7 @@ public class ShellActivity extends Activity {
     private void reloadChat() { if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) loadChat(body, true, false); }
 
     private void chatAct(ScreenCore.Act a, final ScreenView src) {
-        if ("cat".equals(a.a)) { chat.select(a.v); loadChat(body, false, true); return; }
+        if ("cat".equals(a.a)) { chat.select(a.v); boolean shown = keyedShow(body, ShellCore.S_CHAT); loadChat(body, shown, true); return; }
         if (!"call".equals(a.a)) return;
         final String me = ShellCore.commId(store);
         int r = chat.act(a.v, src.fields(), me);
@@ -659,7 +730,7 @@ public class ShellActivity extends Activity {
                 }
                 final String body = board.request(ShellCore.CAP, System.currentTimeMillis());
                 NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/board", body, 10000);
-                final String txt = r.status == 200 ? r.body : "";
+                final String txt = r.status == 200 ? r.body : ""; warm(txt);
                 main.post(new Runnable() { @Override public void run() {
                     if (my != seqBoard) return;
                     present(v, txt, keep);
@@ -745,7 +816,7 @@ public class ShellActivity extends Activity {
         new Thread(new Runnable() {
             @Override public void run() {
                 NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/write", json, 8000);
-                final String txt = r.status == 200 ? r.body : "";
+                final String txt = r.status == 200 ? r.body : ""; warm(txt);
                 main.post(new Runnable() { @Override public void run() { if (sheet != null && sheet.isShowing()) present(sheetView, txt, keep); } });
             }
         }, "shell-write").start();
@@ -764,7 +835,7 @@ public class ShellActivity extends Activity {
         new Thread(new Runnable() {
             @Override public void run() {
                 NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/food", json, 12000);
-                final String txt = r.status == 200 ? r.body : "";
+                final String txt = r.status == 200 ? r.body : ""; warm(txt);
                 main.post(new Runnable() { @Override public void run() {
                     if (my != seqFood || txt.length() == 0) { if (txt.length() == 0 && my == seqFood) toast("맛집 화면을 받지 못했어요"); return; }
                     food.onScreen(txt);
@@ -837,7 +908,7 @@ public class ShellActivity extends Activity {
         new Thread(new Runnable() {
             @Override public void run() {
                 NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/food", json, 8000);
-                final String txt = r.status == 200 ? r.body : "";
+                final String txt = r.status == 200 ? r.body : ""; warm(txt);
                 main.post(new Runnable() { @Override public void run() {
                     if (sheet != null && sheet.isShowing() && ShellCore.S_FOODSHEET.equals(sheetName)) { food.onSheet(txt); present(sheetView, txt, false); }
                 } });
@@ -917,7 +988,7 @@ public class ShellActivity extends Activity {
         new Thread(new Runnable() {
             @Override public void run() {
                 NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/map", json, 8000);
-                final String txt = r.status == 200 ? r.body : "";
+                final String txt = r.status == 200 ? r.body : ""; warm(txt);
                 main.post(new Runnable() { @Override public void run() {
                     if (my != seqMapH) return;
                     present(v, txt, keep);
@@ -934,7 +1005,7 @@ public class ShellActivity extends Activity {
         new Thread(new Runnable() {
             @Override public void run() {
                 NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/map", json, 8000);
-                final String txt = r.status == 200 ? r.body : "";
+                final String txt = r.status == 200 ? r.body : ""; warm(txt);
                 main.post(new Runnable() { @Override public void run() {
                     if (my != seqMapB) return;
                     if (txt.length() > 0) map.onScreen(txt);
@@ -971,8 +1042,10 @@ public class ShellActivity extends Activity {
         }, "shell-mapbus").start();
     }
     private void reloadMap(boolean headToo) {
-        if (headToo) loadMapHead(head, true, null, null);
-        loadMapBody(body, false);
+        if (headToo) { keyedShow(head, ShellCore.S_MAPH); loadMapHead(head, true, null, null); }
+        boolean shown = keyedShow(body, ShellCore.S_MAPB);
+        loadMapBody(body, shown);
+        if (shown) syncMapView();
     }
 
     private void mapAct(ScreenCore.Act a, ScreenView src) {
@@ -1112,7 +1185,7 @@ public class ShellActivity extends Activity {
         new Thread(new Runnable() {
             @Override public void run() {
                 NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/map", json, 8000);
-                final String txt = r.status == 200 ? r.body : "";
+                final String txt = r.status == 200 ? r.body : ""; warm(txt);
                 main.post(new Runnable() { @Override public void run() {
                     if (sheet == null || !sheet.isShowing() || !ShellCore.S_MAPSTN.equals(sheetName)) return;
                     if (txt.length() == 0) { closeSheet(); return; }          // 역이 아닌 글자 — 조용히 닫는다
@@ -1158,7 +1231,7 @@ public class ShellActivity extends Activity {
         new Thread(new Runnable() {
             @Override public void run() {
                 NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/map", json, 8000);
-                final String txt = r.status == 200 ? r.body : "";
+                final String txt = r.status == 200 ? r.body : ""; warm(txt);
                 main.post(new Runnable() { @Override public void run() {
                     if (sheet == null || !sheet.isShowing() || !ShellCore.S_MAPTT.equals(sheetName) || txt.length() == 0) return;
                     map.onTt(txt);
@@ -1306,7 +1379,7 @@ public class ShellActivity extends Activity {
                     else main.post(new Runnable() { @Override public void run() { toast("경로 결과를 그리지 못했어요"); } });
                 }
                 if (txt.length() > 0 && cjBox[0].length() > 0) txt = ShellCore.mergeBodies(txt, cjBox[0]);        // 홈 카드 3장(AI 승무원 · 혼잡도 · 실시간 대화)
-                final String fin = txt;
+                final String fin = txt; warm(fin);
                 main.post(new Runnable() { @Override public void run() {
                     if (my != seqHome) return;
                     present(v, fin, keep);
@@ -1763,7 +1836,7 @@ public class ShellActivity extends Activity {
         new Thread(new Runnable() {
             @Override public void run() {
                 NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/result", json, 8000);
-                final String txt = r.status == 200 ? r.body : "";
+                final String txt = r.status == 200 ? r.body : ""; warm(txt);
                 main.post(new Runnable() { @Override public void run() {
                     if (sheet == null || !sheet.isShowing() || !ShellCore.S_DETAIL.equals(sheetName)) return;
                     if (txt.length() == 0) { toast("세부경로를 받지 못했어요"); return; }
@@ -1826,7 +1899,7 @@ public class ShellActivity extends Activity {
         new Thread(new Runnable() {
             @Override public void run() {
                 NetPost.Res r = NetPost.get(url, 8000);
-                final String txt = r.status == 200 ? r.body : "";
+                final String txt = r.status == 200 ? r.body : ""; warm(txt);
                 main.post(new Runnable() { @Override public void run() {
                     if (sheet == null || !sheet.isShowing() || !ShellCore.S_SETPG.equals(sheetName)) return;
                     if (txt.length() == 0) { toast("설정을 받지 못했어요"); return; }
@@ -2007,7 +2080,7 @@ public class ShellActivity extends Activity {
         new Thread(new Runnable() {
             @Override public void run() {
                 NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/fav", json, 8000);
-                final String txt = r.status == 200 ? r.body : "";
+                final String txt = r.status == 200 ? r.body : ""; warm(txt);
                 main.post(new Runnable() { @Override public void run() {
                     if (sheet == null || !sheet.isShowing() || !ShellCore.S_FAV.equals(sheetName)) return;
                     if (txt.length() == 0) { toast("즐겨찾기를 받지 못했어요"); return; }
