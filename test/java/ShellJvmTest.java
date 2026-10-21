@@ -29,7 +29,7 @@ public class ShellJvmTest {
         ok("home".equals(ShellCore.currentTab(st)), "처음엔 홈 탭");
         st.put("tab", "bogus");
         ok("home".equals(ShellCore.currentTab(st)), "모르는 탭 이름은 홈으로");
-        ok(ShellCore.tabsBody("map").equals("{\"cap\":18,\"f\":{\"tab\":\"map\"}}"), "탭 막대 요청 본문");
+        ok(ShellCore.tabsBody("map").equals("{\"cap\":19,\"f\":{\"tab\":\"map\"}}"), "탭 막대 요청 본문");
         ok(ShellCore.tabsBody("x\"y").contains("\"home\""), "엉터리 탭 이름은 요청에 실리지 않는다");
         ok(ShellCore.netOk(ShellCore.tabsUrl()), "탭 주소는 통신 허용 목록 안");
         ShellCore.Effect e = ShellCore.routeTabs(st, "call", "tab.shop");
@@ -319,11 +319,11 @@ public class ShellJvmTest {
         ok("news".equals(ShellCore.mode(s4)), "모르는 칩은 기본으로");
         ok(ShellCore.slotsOf(s4, "shop").length == 1 && "shop".equals(ShellCore.slotsOf(s4, "shop")[0]), "쇼핑 한 칸");
         ShellCore.Req rq = ShellCore.request("shop", s4, new String[0]);
-        ok("GET".equals(rq.method) && rq.url.equals("https://route-v2.phg0643.workers.dev/screen/shop?cap=18") && rq.body == null, "쇼핑 요청(분류 없음)");
+        ok("GET".equals(rq.method) && rq.url.equals("https://route-v2.phg0643.workers.dev/screen/shop?cap=19") && rq.body == null, "쇼핑 요청(분류 없음)");
         s4.put("shop_cat", "식사 & 간식");
         ok(ShellCore.request("shop", s4, new String[0]).url.endsWith("&cat=%EC%8B%9D%EC%82%AC+%26+%EA%B0%84%EC%8B%9D"), "쇼핑 분류 인코딩");
         rq = ShellCore.request("cchips", s4, null);
-        ok("POST".equals(rq.method) && rq.body.equals("{\"cap\":18,\"f\":{\"mode\":\"news\"}}"), "칩 줄 요청: " + rq.body);
+        ok("POST".equals(rq.method) && rq.body.equals("{\"cap\":19,\"f\":{\"mode\":\"news\"}}"), "칩 줄 요청: " + rq.body);
         ok(ShellCore.feedUrls("news").length == 2 && ShellCore.netOk(ShellCore.feedUrls("news")[0]) && ShellCore.netOk(ShellCore.feedUrls("news")[1]), "뉴스 원자료 주소는 허용 목록 안");
         ok(ShellCore.feedUrls("shop").length == 0 && ShellCore.request("pending", s4, null) == null, "원자료 없는 화면 · 모르는 화면은 요청 없음");
 
@@ -383,7 +383,7 @@ public class ShellJvmTest {
         }
         s4.put("news_cat", "증시");
         rq = ShellCore.request("news", s4, new String[] { f0, f1 });
-        ok(rq.body.startsWith("{\"cap\":18,\"f\":{\"cat\":\"증시\"},\"n\":[[") && ShellCore.netOk(rq.url), "뉴스 요청 본문");
+        ok(rq.body.startsWith("{\"cap\":19,\"f\":{\"cat\":\"증시\"},\"n\":[[") && ShellCore.netOk(rq.url), "뉴스 요청 본문");
         ok(ShellCore.decode("a&lt;b&gt;&quot;&#x41;&unknown;&").equals("a<b>\"A&unknown;&"), "이름표 풀기 모음");
 
         // ── 칸별 눌림 ──
@@ -414,7 +414,7 @@ public class ShellJvmTest {
         dt = ShellCore.parseDetail("{\"ok\":true,\"detail\":{\"title\":\"t\",\"desc\":\"d\",\"open\":1}}", "javascript:x");
         ok(dt != null && !dt.open && "d".equals(dt.body), "이상한 링크면 원문 단추를 숨긴다");
         ok(ShellCore.parseDetail("{\"ok\":false}", "") == null && ShellCore.parseDetail("zzz", "") == null, "상세를 못 읽으면 null");
-        ok(ShellCore.newsDetailBody("[\"a\"]").equals("{\"cap\":18,\"d\":[\"a\"]}"), "상세 요청 본문");
+        ok(ShellCore.newsDetailBody("[\"a\"]").equals("{\"cap\":19,\"d\":[\"a\"]}"), "상세 요청 본문");
 
         ok(ShellCore.palette("dark").length == 14 && ShellCore.palette("pastel").length == 14 && ShellCore.palette("zzz")[0] == 0xFFF0F4F8, "팔레트 14칸 · 기본은 파스텔");
         ok(ShellCore.palette("dark")[0] == 0xFF121214 && ShellCore.palette("dark")[5] == 0xFFD4AF37, "다크 배경·금색");
@@ -1092,6 +1092,26 @@ public class ShellJvmTest {
             ok(q1 != null && HomeCore.routeSwrKey(q1, false, 111111L).equals(HomeCore.routeSwrKey(q2, false, 222222L)), "경로 SWR 열쇠: 지금 시각만 다른 같은 출발·도착은 같은 열쇠");
             ok(!HomeCore.routeSwrKey(q1, true, 111111L).equals(HomeCore.routeSwrKey(q2, true, 222222L)), "경로 SWR 열쇠: 고른 시각이 다르면 다른 열쇠");
             ok(HomeCore.routeSwrKey(null, false, 0L) == null && !HomeCore.routeSwrKey(q1, false, 1L).contains("baseMs"), "경로 SWR 열쇠: 없으면 null · 시각 값은 들어가지 않는다");
+        }
+
+        // ── 경로 탐색 로딩 캐릭터(RunnerCore · 웹 _RC) ──
+        {
+            for (String id : RunnerCore.ORDER) {
+                SceneModel.Spec m = SceneModel.D3.get(id); RunnerCore.Spec r = RunnerCore.spec(id);
+                ok(m != null && r != null && m.fps == r.fps && m.cell == r.cell && m.base == r.base && m.ox == r.ox && m.lift == r.lift && m.intro == r.intro && m.introFps == r.introFps, "로딩 캐릭터 " + id + ": 장면 시트 규격(SceneModel.D3)과 같다");
+            }
+            ok(RunnerCore.spec("nope") == null && RunnerCore.spec(null) == null, "로딩 캐릭터: 모르는 이름은 규격 없음");
+            boolean rpk = true;
+            for (String rprev : RunnerCore.ORDER) for (double r = 0d; r < 1d; r += 0.07d) { String n = RunnerCore.pick(rprev, r); if (n.equals(rprev) || RunnerCore.spec(n) == null) rpk = false; }
+            ok(rpk && RunnerCore.pick("", 0.0).equals("dolsom") && RunnerCore.pick("dolsom", 0.0).equals("lovel") && RunnerCore.pick("dolsom", 5d).equals("chaeng") && RunnerCore.pick("dolsom", -1d).equals("lovel"), "로딩 캐릭터: 방금 나온 것은 다시 안 뽑고, 범위 밖 값도 안전하다");
+            RunnerCore.Frame rf0 = RunnerCore.at("dolsom", 0L, 236f), rf1 = RunnerCore.at("dolsom", 1350L, 236f), rf2 = RunnerCore.at("dolsom", 2700L, 236f);
+            ok(!rf0.done && rf0.x < 0f && rf0.idx == 0 && !rf1.done && rf1.x > 0f && rf1.x < 236f && rf2.done, "로딩 캐릭터: 왼쪽 밖에서 시작해 가로지르고 끝나면 done");
+            ok(RunnerCore.at("dolsom", 500L, 236f).idx == (int) (Math.floor(0.5d * 19d) % 16) && RunnerCore.at("dolsom", 100000L, 236f).idx < 16 && RunnerCore.at("dolsom", -50L, 236f).idx == 0, "로딩 캐릭터: 프레임은 fps 로 돌고 0~15 안");
+            RunnerCore.Frame rd0 = RunnerCore.at("dudung", 0L, 236f), rd1 = RunnerCore.at("dudung", 500L, 236f), rd2 = RunnerCore.at("dudung", 1100L, 236f);
+            ok(rd0.intro && rd0.idx == 0 && rd1.intro && rd1.idx == 7 && !rd2.intro && rd2.x > rd1.x - 0.001f && rd1.x == rd0.x, "로딩 캐릭터: 두덩은 제자리에서 솟은 뒤 걸어 나간다");
+            ok(RunnerCore.at("zzz", 0L, 236f).done, "로딩 캐릭터: 모르는 이름은 곧장 done");
+            ok(RunnerCore.wheelPhase(0L) == 0f && Math.abs(RunnerCore.wheelRot(650L) - 540f) < 0.01f && Math.abs(RunnerCore.wheelX(0L, 150f) + 24f) < 0.001f && RunnerCore.wheelPhase(1300L) == 0f, "로딩 바퀴: 1.3초에 한 바퀴 · 1080도");
+            ok(RunnerCore.dotAlpha(0L, 0) == 0f && Math.abs(RunnerCore.dotAlpha(560L, 0) - 1f) < 0.001f && RunnerCore.dotAlpha(1200L, 0) == 0f && RunnerCore.dotAlpha(100L, 1) == 0f && RunnerCore.dotAlpha(760L, 1) > 0.99f && Math.abs(RunnerCore.dotAlpha(280L, 0) - 0.5f) < 0.001f, "로딩 점: 0.2초씩 늦게 켜졌다 꺼진다");
         }
 
         System.out.println(fails == 0 ? "ALL OK " + oks : "FAILED " + fails + " / " + (oks + fails));
