@@ -996,6 +996,18 @@ public class ScreenJvmTest {
             for (ScreenCore.Item q : pl.head) if (q.kind == ScreenCore.K_TRK) { if (q.ps) nps++; if (q.hr) nhr++; }
             ok(nps == 1 && nhr == 1, "trk 칸: 지나간 칸(ps) · 지금 칸(hr) 표시");
         } catch (Exception ex) { ok(false, "trk ps/hr 읽기: " + ex); }
+        // ── 노선 알약(lpills): 숫자 동그라미 · 줄 바꿈 ──
+        try {
+            ScreenCore.Layout ll = ScreenCore.layout(ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"x\",\"head\":[],\"body\":[{\"t\":\"lpills\",\"pad\":[16,0,16,20],\"gap\":7,\"items\":[{\"s\":\"2호선\",\"c\":\"#00a84d\",\"num\":\"2\"},{\"s\":\"신분당선\",\"c\":\"#d4003b\"},{\"s\":\"수도권 광역철도 직통선\",\"c\":\"#0a84ff\"},{\"s\":\"GTX-A\",\"c\":\"#8e44ad\",\"num\":\"A\"}]}]}"), 360f, M);
+            int np = 0; float h0 = -1f, maxY = 0f; boolean fit = true;
+            for (ScreenCore.Item q : ll.body) if (q.kind == ScreenCore.K_LPILL) { np++; if (h0 < 0f) h0 = q.h; if (q.h != h0) fit = false; maxY = Math.max(maxY, q.y); if (q.x + q.w > 360f - 16f + 0.01f) fit = false; }
+            ok(np == 4 && h0 == ScreenCore.LP_H_NUM && fit, "lpills: 알약 4개 · 숫자가 하나라도 있으면 높이 34 · 같은 높이 · 칸 안에 들어옴");
+            ok(maxY > 0f, "lpills: 칸이 모자라면 다음 줄로 넘어간다");
+            ScreenCore.Item first = null; for (ScreenCore.Item q : ll.body) if (q.kind == ScreenCore.K_LPILL) { first = q; break; }
+            ok(first != null && "2".equals(first.t1) && first.w > ScreenCore.LP_PADL_N + ScreenCore.LP_NUM + ScreenCore.LP_NUM_GAP + ScreenCore.LP_PADR, "lpills: 숫자 칸만큼 폭이 늘어난다");
+            ScreenCore.Layout l2 = ScreenCore.layout(ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"x\",\"head\":[],\"body\":[{\"t\":\"lpills\",\"items\":[{\"s\":\"신분당선\",\"c\":\"#d4003b\"}]}]}"), 360f, M);
+            ok(l2.body.length == 1 && l2.body[0].h == ScreenCore.LP_H && l2.body[0].t1.length() == 0, "lpills: 숫자가 없으면 높이 27 · 동그라미 없음");
+        } catch (Exception ex) { ok(false, "lpills: " + ex); }
         // ── 무지개 테두리 카드(panel glow) ──
         try {
             ScreenCore.Layout gl = ScreenCore.layout(ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"x\",\"head\":[],\"body\":[{\"t\":\"panel\",\"glow\":true,\"kids\":[{\"t\":\"text\",\"s\":\"가\"}]},{\"t\":\"panel\",\"kids\":[{\"t\":\"text\",\"s\":\"나\"}]}]}"), 360f, M);
