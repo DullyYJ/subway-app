@@ -45,16 +45,22 @@ public class RideService extends Service {
     private Handler h;
     private RideCore core;
     private LocationManager lm;
+    private LocFused fusedLoc;
     private RideOverlay ov;
     private boolean listening = false, stepping = false;
     private volatile boolean stopped = false;
 
     private final LocationListener ll = new LocationListener() {
-        @Override public void onLocationChanged(Location l) { if (core != null && l != null) core.addFix(l.getTime() > 0 ? l.getTime() : System.currentTimeMillis(), l.getLatitude(), l.getLongitude(), l.hasAccuracy() ? l.getAccuracy() : 0f); }
+        @Override public void onLocationChanged(Location l) { feed(l); }
         @Override public void onStatusChanged(String p, int s, Bundle e) { }
         @Override public void onProviderEnabled(String p) { }
         @Override public void onProviderDisabled(String p) { }
     };
+
+    /** 새 위치 한 점을 엔진 입력(RideCore)에 넣는다 — Fused · LocationManager 어느 쪽에서 와도 같다. */
+    private void feed(Location l) {
+        if (core != null && l != null) core.addFix(l.getTime() > 0 ? l.getTime() : System.currentTimeMillis(), l.getLatitude(), l.getLongitude(), l.hasAccuracy() ? l.getAccuracy() : 0f);
+    }
 
     // ── 밖에서 부르는 곳 ──
     static void save(Context c, RideCore core) {
@@ -99,6 +105,7 @@ public class RideService extends Service {
     @Override public void onDestroy() {
         stopped = true; running = false;
         if (ov != null) ov.hide();
+        try { if (fusedLoc != null) fusedLoc.stopRide(); } catch (Throwable ignored) { }
         try { if (lm != null && listening) lm.removeUpdates(ll); } catch (Throwable ignored) { }
         listening = false;
         if (h != null) h.removeCallbacksAndMessages(null);
@@ -109,12 +116,21 @@ public class RideService extends Service {
     // ── 위치 ──
     private void listen() {
         try {
-            lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
             if (checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) != android.content.pm.PackageManager.PERMISSION_GRANTED) return;
-            android.os.Looper lp = ht.getLooper();
+            final android.os.Looper lp = ht.getLooper();
+            fusedLoc = new LocFused(this);
+            listening = true;
+            fusedLoc.ride(lp, new LocFused.Cb() {                       // ① Fused 고정밀 1초(서비스 스레드로 도착) — 가장 정확하고 빠른 길
+                @Override public void fix(Location l) { feed(l); }
+                @Override public void fail() { if (!stopped) listenLm(lp); }     // ② Play 서비스가 없거나 실패 → GPS + 네트워크
+            });
+        } catch (Throwable ignored) { }
+    }
+    private void listenLm(android.os.Looper lp) {
+        try {
+            lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
             if (lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, ll, lp);
             if (lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 3000L, 0f, ll, lp);
-            listening = true;
         } catch (Throwable ignored) { }
     }
 
