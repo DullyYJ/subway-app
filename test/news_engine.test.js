@@ -82,6 +82,7 @@ ok(S.ok && S.v === 1 && S.screen === 'news' && S.cover === 'tab' && /^n1:/.test(
   // ── 고유 id: 목록이 바뀐 뒤에 눌러도 같은 기사가 열리도록 순번이 아니라 기사의 고유 식별(링크, 없으면 제목)을 싣는다 ──
   ok(ns.every(n => typeof n.act.id === 'string' && n.act.id.length > 0 && n.act.id.length <= 400 && typeof n.act.t === 'string' && n.act.t === n.title.slice(0, 160)), '모든 줄의 행동에 id · 제목');
   ok(ns.every(n => { const r = ROWS[Number(n.act.v.slice(3))]; return n.act.id === (r[1] || n.title); }), 'id = 링크(없으면 제목) — 순번과 같은 줄을 가리킨다');
+  ok(ns.every(n => Number.isInteger(n.act.ix) && n.act.ix === Number(n.act.v.slice(3)) && ROWS[n.act.ix] && (ROWS[n.act.ix][1] || n.title) === n.act.id), '행동에 보낸 목록에서의 원래 위치(ix) — 같은 id 가 여럿이어도 누른 줄을 가리킨다');
   const shuffled = ROWS.slice().reverse(), S2 = E.newsScreen({ cap: 5, now: NOW }, { cat: '전체' }, shuffled);
   const byId = o => new Map(newsN(o).map(n => [n.act.id, n.title]));
   const m1 = byId(S), m2 = byId(S2);

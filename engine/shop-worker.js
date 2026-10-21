@@ -33,13 +33,13 @@ async function handleScreenShop(request) {
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: H });
   var u = new URL(request.url), q = u.searchParams;
   var mem = await shopLoad();
-  if (!mem.data) return new Response(JSON.stringify({ ok: false, error: "no-data" }), { status: 503, headers: H });
+  if (!mem.data) return new Response(JSON.stringify(shopDelayScreen()), { status: 503, headers: H });          // 안내 화면(서버 연결 지연) + 재시도 간격 — 앱은 이것을 그리고 뒤에서 다시 받는다
   var lat = Number(q.get("lat")), lng = Number(q.get("lng")), wx = null;
   if (q.get("lat") != null && q.get("lng") != null) { try { wx = await sceneWeather(lat, lng); } catch (e) { wx = null; } }
   var inp = { nowMs: q.get("now") ? Number(q.get("now")) : Date.now(), tzOffsetMin: q.get("tz") ? Number(q.get("tz")) : 540, cat: q.get("cat") || "", cap: Number(q.get("cap")) || 0 };
   var out;
   try { out = shopScreen(inp, mem.data, mem.cfg, wx); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2) }), { status: 500, headers: H }); }
-  if (!out || !out.ok) return new Response(JSON.stringify(out || { ok: false, error: "fail" }), { status: 503, headers: H });
+  if (!out || !out.ok) return new Response(JSON.stringify(shopDelayScreen()), { status: 503, headers: H });
   out.ver = ENGINE_VERSION; out.shopVer = mem.ver;
   return new Response(JSON.stringify(out), { headers: H });
 }

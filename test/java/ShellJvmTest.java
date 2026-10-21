@@ -348,6 +348,24 @@ public class ShellJvmTest {
             ok(tc.at == 5000L && tc.maxAge == 60 && tc.etag.equals(cd.etag) && ShellCore.condKey("news|x").startsWith("cm_"), "304 를 받으면 받은 시각만 새로 한다");
             ok(NetPost.parseMaxAge("private, max-age=45") == 45 && NetPost.parseMaxAge("no-store") == 0 && NetPost.parseMaxAge(null) == 0 && NetPost.parseMaxAge("max-age=") == 0 && NetPost.parseMaxAge("max-age=99999999999") < 100000000, "Cache-Control max-age 읽기");
         }
+        {
+            // 같은 링크의 줄이 여럿이어도 엔진이 알려 준 원래 위치(ix)에 가장 가까운 줄이 열린다
+            String fd = "{\"ok\":true,\"items\":[{\"title\":\"첫 기사\",\"link\":\"https://dup.com/1\",\"source\":\"가\",\"ts\":1},{\"title\":\"다른 기사\",\"link\":\"https://o.com/2\",\"ts\":2},{\"title\":\"같은 링크 다른 제목\",\"link\":\"https://dup.com/1\",\"source\":\"나\",\"ts\":3}]}";
+            ShellCore.NewsRows dn = ShellCore.NewsRows.from(new String[] { fd });
+            ok(dn.rows.size() == 3, "중복 링크 줄도 앱 목록엔 모두 있다");
+            ok(dn.rowJsonById("https://dup.com/1", "", 2).equals(dn.rowJson(2)) && dn.rowJsonById("https://dup.com/1", "", 0).equals(dn.rowJson(0)) && dn.rowJsonById("https://dup.com/1", "", 1).equals(dn.rowJson(0)) && dn.rowJsonById("https://dup.com/1", "", 9).equals(dn.rowJson(2)) && dn.rowJsonById("https://dup.com/1", "", -1).equals(dn.rowJson(0)), "같은 id 가 여럿이면 원래 위치(ix)에 가장 가까운 줄 · ix 가 없으면 처음 줄");
+        }
+        {
+            int[] rh = ShellCore.retryHint("{\"ok\":true,\"v\":1,\"screen\":\"shop\",\"delayed\":true,\"retry\":[4,8,15,999,0],\"head\":[],\"body\":[]}");
+            ok(rh != null && rh.length == 5 && rh[0] == 4 && rh[3] == 120 && rh[4] == 1, "서버 지연 안내의 재시도 간격은 1~120초로 읽는다");
+            ok(ShellCore.retryHint("{\"ok\":true,\"delayed\":true}").length == ShellCore.DEFAULT_RETRY.length && ShellCore.retryHint("{\"ok\":true,\"v\":1,\"screen\":\"shop\"}") == null && ShellCore.retryHint("{\"delayed\":false}") == null && ShellCore.retryHint("") == null && ShellCore.retryHint(null) == null && ShellCore.retryHint("{\"delayed\":tru") == null, "간격이 없으면 기본값 · 안내가 아니면 null · 깨진 글도 안전");
+            ShellCore.MemStore ss = new ShellCore.MemStore();
+            String k1 = ShellCore.cacheKey("settings", ss);
+            ss.put("ovl_on", "1");
+            String k2 = ShellCore.cacheKey("settings", ss);
+            ShellCore.MemStore ss2 = new ShellCore.MemStore();
+            ok(k1.startsWith("settings|") && !k1.equals(k2) && k1.equals(ShellCore.cacheKey("settings", ss2)) && "settings".equals(ShellCore.expectId(k2)) && ShellCore.diskTtl(k2) > 0L, "설정 화면 캐시 열쇠는 기기 저장값의 지문 — 값이 바뀌면 옛 화면이 나오지 않는다");
+        }
         s4.put("news_cat", "증시");
         rq = ShellCore.request("news", s4, new String[] { f0, f1 });
         ok(rq.body.startsWith("{\"cap\":18,\"f\":{\"cat\":\"증시\"},\"n\":[[") && ShellCore.netOk(rq.url), "뉴스 요청 본문");

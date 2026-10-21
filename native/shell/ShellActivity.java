@@ -384,6 +384,7 @@ public class ShellActivity extends Activity {
         if (ttl > 0L) { File f = diskFile(key); return f.isFile() && f.length() > 2 && System.currentTimeMillis() - f.lastModified() <= ttl; }
         return false;
     }
+    private final java.util.concurrent.ConcurrentHashMap<String, String> delayBodies = new java.util.concurrent.ConcurrentHashMap<String, String>();
     private ShellCore.Cond condOf(String ck) { return ShellCore.Cond.parse(store.get(ShellCore.condKey(ck), "")); }
     /** (스레드 안) 화면 하나를 받는다. 돌려주는 글: 받은 화면 · NOT_MOD(캐시 그대로) · ""(못 받음). 받은 화면은 캐시와 ETag 를 함께 갱신한다. */
     private String screenCall(final String ck, boolean get, String url, String body, String sig, int timeoutMs) {
@@ -392,9 +393,12 @@ public class ShellActivity extends Activity {
         final boolean have = c != null && c.etag.length() > 0 && haveCached(ck);
         final long now = System.currentTimeMillis();
         if (have && c.fresh(now, sg)) return NOT_MOD;
+        delayBodies.remove(ck);
         NetPost.Res r = get ? NetPost.getCond(url, timeoutMs, have ? c.etag : "") : NetPost.postCond(url, body, timeoutMs, have ? c.etag : "");
         if (r.status == 304 && have) { main.post(new Runnable() { @Override public void run() { store.put(ShellCore.condKey(ck), c.touched(System.currentTimeMillis(), 0, sg).enc()); } }); return NOT_MOD; }
+        if (r.status == 503 && r.body != null && ShellCore.retryHint(r.body) != null) { delayBodies.put(ck, r.body); return ""; }          // 엔진이 준 "서버 연결 지연" 안내 — 캐시에 두지 않고 따로 건넨다
         if (r.status != 200 || r.body == null) return "";
+        delayBodies.remove(ck);
         screenStore(ck, r.body, r.etag, r.maxAge, sg);
         return r.body;
     }
@@ -417,7 +421,17 @@ public class ShellActivity extends Activity {
     }
     private void cachePut(String key, String json) {
         scrCache.put(key, json); scrKeys.add(key);
+        if (key.startsWith(ShellCore.S_SETTINGS + "|")) dropOldSettings(key);
         if (ShellCore.diskTtl(key) > 0L && !(ShellCore.S_HOME.equals(key) && home.hasRoute())) diskPut(key, json);        // 경로를 보는 중의 홈은 디스크에 두지 않는다(다시 켜면 그 경로 상태가 없다)
+    }
+    /** 설정 화면은 기기 값마다 열쇠가 달라지므로 지난 값의 글 · 파일 · 메모는 치운다(쌓이지 않게). */
+    private String lastSetKey = "";
+    private void dropOldSettings(String key) {
+        String old = lastSetKey; lastSetKey = key;
+        if (old.length() == 0 || old.equals(key)) return;
+        scrCache.remove(old); scrKeys.remove(old); store.put(ShellCore.condKey(old), "");
+        final File f = diskFile(old);
+        new Thread(new Runnable() { @Override public void run() { try { f.delete(); } catch (Throwable ignored) { } } }, "shell-scrdel").start();
     }
     private File diskFile(String key) { return new File(new File(getCacheDir(), "scr"), Integer.toHexString(key.hashCode()) + ".json"); }
     private String diskGet(String key) {
@@ -484,6 +498,7 @@ public class ShellActivity extends Activity {
         if (ShellCore.S_PENDING.equals(screen)) { viewKey.remove(v); present(v, ShellCore.pendingScreen(ShellCore.currentTab(store)), false); return; }
         final String ck = ShellCore.cacheKey(screen, store);
         viewKey.put(v, ck);
+        if (!keep0) retryN.remove(v);                                 // 사람이 연 로드(탭 · 분류 · 다시 시도)는 자동 재시도를 처음부터
         if (!keep0) {
             String c = cacheGet(ck, ShellCore.diskCacheable(screen));
             if (c != null && showCached(v, c)) { keepX = true; if (ShellCore.S_MAPB.equals(screen)) syncMapView(); }
@@ -513,7 +528,9 @@ public class ShellActivity extends Activity {
         ShellCore.Req rq = ShellCore.request(screen, store, feeds);
         if (rq == null) return "";
         int ms = ShellCore.S_SHOP.equals(screen) ? 16000 : 10000;       // 쇼핑 서버가 처음엔 느리다(엔진이 한 번 더 시도한다)
-        return screenCall(ShellCore.cacheKey(screen, store), "GET".equals(rq.method), rq.url, rq.body, null, ms);
+        String ck = ShellCore.cacheKey(screen, store), t = screenCall(ck, "GET".equals(rq.method), rq.url, rq.body, null, ms);
+        if (t.length() == 0) { String d = delayBodies.remove(ck); if (d != null) return d; }          // 못 받았는데 엔진이 안내 화면을 줬으면 그것
+        return t;
     }
     /** 원자료(뉴스 피드 등) GET: 서버가 ETag 를 주면 If-None-Match 로 묻고 304 면 가진 글을 그대로 쓴다(주지 않는 서버면 평소대로 받는다). */
     private final java.util.concurrent.ConcurrentHashMap<String, String> feedBodies = new java.util.concurrent.ConcurrentHashMap<String, String>();
@@ -582,6 +599,7 @@ public class ShellActivity extends Activity {
     private void prefetchTabs() {
         if (pfPending.get() > 0) return;                                  // 아직 도는 중
         prefetchAt = System.currentTimeMillis();
+        store.put(ShellCore.K_DAY, RulesCore.day(prefetchAt));            // 설정 화면 열쇠에 오늘 날짜가 들어 있어 미리 정해 둔다(나중에 받을 때와 같은 열쇠)
         if (pfChat == null) pfChat = new ChatCore(store);
         if (pfMap == null) pfMap = new MapCore(store);
         if (pfMapB == null) pfMapB = new MapCore(store);
@@ -603,7 +621,7 @@ public class ShellActivity extends Activity {
             if (live.contains(ShellCore.S_CCHIPS) && m.equals(liveMode)) continue;
             ents.add(new String[] { ShellCore.cchipsKey(m), "/screen/cchips", "POST", ShellCore.cchipsBody(m) });
         }
-        if (!live.contains(ShellCore.S_SETTINGS)) ents.add(new String[] { ShellCore.S_SETTINGS, ShellCore.settingsUrl(store).substring(ShellCore.BASE.length()), "GET", "" });
+        if (!live.contains(ShellCore.S_SETTINGS)) ents.add(new String[] { ShellCore.settingsKey(store), ShellCore.settingsUrl(store).substring(ShellCore.BASE.length()), "GET", "" });
         pfAdd(0, new PfJob() { @Override public boolean run() throws Exception {
             pfMapB.modeOverride = "subway";
             if (!("map".equals(cur) && "subway".equals(mapMode))) {
@@ -835,13 +853,16 @@ public class ShellActivity extends Activity {
             if (c != null && !c.equals(shownJson.get(v))) showCached(v, c);
             return;
         }
+        int[] rh = ShellCore.retryHint(json);
+        if (rh != null && v != sheetView && viewKey.get(v) != null) { showDelayed(v, json, keep, rh); return; }
         if (json == null || json.length() == 0) {
             String ck = viewKey.get(v);
-            if (ck != null && v != sheetView && (v.itemCount() == 0 || skelViews.contains(v))) {          // 빈 칸이면 안내와 [다시 시도]
-                try { v.setScreen(ScreenCore.load(ShellCore.errorScreen()), false); shownJson.remove(v); fadeIn(v); return; } catch (Throwable ignored) { }
+            if (ck != null && v != sheetView && (v.itemCount() == 0 || skelViews.contains(v))) {          // 빈 칸이면 안내와 [다시 시도] — 뒤에서 몇 번 더 받아 본다
+                try { v.setScreen(ScreenCore.load(ShellCore.errorScreen()), false); shownJson.remove(v); skelViews.remove(v); fadeIn(v); scheduleRetry(v, ShellCore.DEFAULT_RETRY); return; } catch (Throwable ignored) { }
             }
             toast("화면을 받지 못했어요"); return;
         }
+        retryN.remove(v);
         try {
             String ck = viewKey.get(v);
             if (keep && v != sheetView && json.equals(shownJson.get(v))) return;      // 이미 이 글을 보여 주는 중 — 다시 읽고 배치하고 그릴 까닭이 없다
@@ -857,6 +878,31 @@ public class ShellActivity extends Activity {
         }
     }
 
+    // ── 서버 지연 안내 + 뒤에서 다시 받기: 안내 문구 · 간격은 엔진이 준다. 이미 보이는 내용(캐시)이 있으면 그것을 두고 조용히 다시 받는다 ──
+    private final java.util.HashMap<ScreenView, Integer> retryN = new java.util.HashMap<ScreenView, Integer>();
+    private final java.util.HashMap<ScreenView, Object> retryTok = new java.util.HashMap<ScreenView, Object>();
+    private void showDelayed(ScreenView v, String json, boolean keep, int[] delays) {
+        boolean hasContent = keep && v.itemCount() > 0 && !skelViews.contains(v) && shownJson.get(v) != null;
+        if (!hasContent) {
+            try { v.setScreen(parsedGet(json), false); shownJson.remove(v); skelViews.remove(v); fadeIn(v); }
+            catch (Throwable e) { try { v.setScreen(ScreenCore.load(ShellCore.errorScreen()), false); shownJson.remove(v); skelViews.remove(v); } catch (Throwable ignored) { } }
+        }
+        scheduleRetry(v, delays);
+    }
+    private void scheduleRetry(final ScreenView v, final int[] delays) {
+        Integer cur = retryN.get(v);
+        final int n = cur == null ? 0 : cur;
+        if (n >= delays.length) return;                                        // 정해진 횟수만큼 시도했다 — 이제는 [다시 시도] 단추로
+        final String ck = viewKey.get(v);
+        final Object tok = new Object();
+        retryTok.put(v, tok);
+        main.postDelayed(new Runnable() { @Override public void run() {
+            if (retryTok.get(v) != tok || ck == null || !ck.equals(viewKey.get(v)) || !resumed) return;       // 다른 탭으로 갔거나 앱이 가려졌으면 하지 않는다
+            retryN.put(v, n + 1);
+            int i = v == body ? slots.length - 1 : 0;
+            loadSlotX(i, true, false);
+        } }, delays[n] * 1000L);
+    }
     /** 아직 다 안 채워진 중간 화면(버스 도착정보를 더 받아야 하는 노선도 · 원자료를 기다리는 맛집)은 캐시에 두지 않는다 — 다음에 켰을 때 "받는 중" 화면이 먼저 뜨지 않게. */
     private boolean partialScreen(String ck) {
         String id = ShellCore.expectId(ck);
@@ -935,7 +981,7 @@ public class ShellActivity extends Activity {
                 boardAct(a, which == 0 ? head : body);
                 return;
             } else if (ShellCore.S_NEWS.equals(screenName()) && "call".equals(a.a) && a.v.startsWith("nw.") && (a.id.length() > 0)) {
-                openNewsById(a.id, a.t);                       // 목록이 바뀐 뒤에 눌러도 같은 기사 — 순번이 아니라 기사의 고유 id 로
+                openNewsById(a.id, a.t, a.ix);                       // 목록이 바뀐 뒤에 눌러도 같은 기사 — 순번이 아니라 기사의 고유 id 로
                 return;
             } else if (ShellCore.S_FOOD.equals(screenName())) {
                 foodAct(a);
@@ -2556,9 +2602,9 @@ public class ShellActivity extends Activity {
     }
 
     /** 기사 고유 id(링크, 없으면 제목)로 상세를 연다: 지금 가진 기사 줄에서 같은 것을 찾아 전부 보내고, 없으면(목록이 바뀌어 사라졌으면) 눌린 줄의 제목 · 링크만으로 엔진에 묻는다. */
-    private void openNewsById(String id, String title) {
+    private void openNewsById(String id, String title, int ix) {
         final ShellCore.NewsRows rows = lastNews;
-        final String json = ShellCore.newsDetailBody(rows.rowJsonById(id, title));
+        final String json = ShellCore.newsDetailBody(rows.rowJsonById(id, title, ix));
         final String link = id.startsWith("http") ? id : "";
         new Thread(new Runnable() {
             @Override public void run() {

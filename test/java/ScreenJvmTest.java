@@ -805,8 +805,18 @@ public class ScreenJvmTest {
             String idJ = "{\"ok\":true,\"v\":1,\"screen\":\"news\",\"head\":[],\"body\":[{\"t\":\"news\",\"pad\":[14,0,14,0],\"title\":\"가\",\"sub\":\"나\",\"act\":{\"a\":\"call\",\"v\":\"nw.3\",\"id\":\"https://x.com/1\",\"t\":\"제목\"}},{\"t\":\"news\",\"pad\":[14,0,14,0],\"title\":\"다\",\"sub\":\"라\",\"act\":{\"a\":\"call\",\"v\":\"bd.cm.2\",\"id\":\"77\",\"key\":\"c.77\"}},{\"t\":\"news\",\"pad\":[14,0,14,0],\"title\":\"마\",\"sub\":\"바\",\"act\":{\"a\":\"call\",\"v\":\"nw.1\"}}]}";
             ScreenCore.Layout il = ScreenCore.layout(ScreenCore.load(idJ), 360f, M);
             ScreenCore.Act i0 = il.body[0].act, i1 = il.body[1].act, i2 = il.body[2].act;
+            ok(i0 != null && i0.ix == -1 && i2.ix == -1, "ix 가 없으면 -1");
             ok(i0 != null && "https://x.com/1".equals(i0.id) && "제목".equals(i0.t) && i1 != null && "77".equals(i1.id) && "c.77".equals(i1.key) && i2 != null && i2.id.length() == 0 && i2.t.length() == 0 && i2.key.length() == 0, "행동에 실린 고유 id · 제목 · 열쇠 읽기(없으면 빈 글 — 옛 엔진도 그대로)");
         } catch (Exception ex) { ok(false, "act id 읽기: " + ex); }
+        try {
+            ScreenCore.Layout xl = ScreenCore.layout(ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"news\",\"head\":[],\"body\":[{\"t\":\"news\",\"title\":\"가\",\"sub\":\"나\",\"act\":{\"a\":\"call\",\"v\":\"nw.7\",\"id\":\"u\",\"ix\":7}}]}"), 360f, M);
+            ok(xl.body[0].act.ix == 7, "행동의 원래 위치(ix) 읽기");
+        } catch (Exception ex) { ok(false, "ix 읽기: " + ex); }
+        for (String badIx : new String[] { "-5", "100001", "\"x\"" }) {
+            boolean thr = false;
+            try { ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"news\",\"head\":[],\"body\":[{\"t\":\"news\",\"title\":\"가\",\"sub\":\"나\",\"act\":{\"a\":\"call\",\"v\":\"nw.1\",\"ix\":" + badIx + "}}]}"); } catch (Exception ex) { thr = true; }
+            ok(thr, "엉터리 ix 거부: " + badIx);
+        }
         {
             StringBuilder longId = new StringBuilder(); for (int i = 0; i < 500; i++) longId.append('a');
             try {

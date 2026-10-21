@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-21s113";
+var ENGINE_VERSION = "route-v2-2026-10-21s114";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -11672,6 +11672,19 @@ function shopScreen(inp, data, cfg, wx) {
   }
   return out;
 }
+// \uc1fc\ud551 \uc11c\ubc84\uac00 \ub2a6\uac70\ub098 \uc548 \ub420 \ub54c \uc5d4\uc9c4\uc774 \uc8fc\ub294 \uc548\ub0b4 \ud654\uba74(HTTP 503 \uacfc \ud568\uaed8). \uc571\uc740 \uc774 \ud654\uba74\uc744 \uadf8\ub9ac\uace0, \uce90\uc2dc\uc5d0\ub294 \ub450\uc9c0 \uc54a\uc73c\uba70,
+// retry(\ucd08 \ubaa9\ub85d)\ub9c8\ub2e4 \ub4a4\uc5d0\uc11c \ub2e4\uc2dc \ubc1b\ub294\ub2e4. \ubb38\uad6c \u00b7 \uac04\uaca9\uc740 \ubaa8\ub450 \uc5ec\uae30\uc11c \uc815\ud55c\ub2e4(\uc571\uc5d0 \uae00 \u00b7 \uc22b\uc790\uac00 \uc5c6\ub2e4). \ub2e8\ucd94 act 'gdm_retry' \ub294 \uc571\uc774 \uc54c\uace0 \uc788\ub294 "\uc9c0\uae08 \ub2e4\uc2dc \ubc1b\uae30".
+function shopDelayScreen() {
+  return {
+    ok: true, v: 1, screen: 'shop', delayed: true, retry: [4, 8, 15, 30],
+    head: [],
+    body: [
+      { t: 'text', s: '\uc11c\ubc84 \uc5f0\uacb0\uc774 \uc9c0\uc5f0\ub418\uace0 \uc788\uc2b5\ub2c8\ub2e4', size: 16, bold: true, color: 'text', lh: 1.5, align: 'center', pad: [24, 96, 24, 4] },
+      { t: 'text', s: '\uc0c1\ud488 \uc11c\ubc84\uac00 \uae68\uc5b4\ub098\ub294 \uc911\uc774\uc5d0\uc694.\n\uc7a0\uc2dc \ub4a4 \uc790\ub3d9\uc73c\ub85c \ub2e4\uc2dc \uc2dc\ub3c4\ud569\ub2c8\ub2e4.', size: 13, color: 'sub', lh: 1.6, align: 'center', pad: [24, 0, 24, 14] },
+      { t: 'button', s: '\uc9c0\uae08 \ub2e4\uc2dc \uc2dc\ub3c4', size: 14, h: 44, r: 12, bold: true, fill: 'gold', tc: 'white', act: { a: 'call', v: 'gdm_retry' } }
+    ]
+  };
+}
 // [[\uae00, \uad75\uac8c 0|1], \u2026] \u2192 \uc774\uc5b4 \ubd99\uc778 \uae00 + \uad75\uc740 \uad6c\uac04 [[\uc2dc\uc791,\ub05d],\u2026] (\uc571\uc774 \uad75\uae30\ub9cc \uadf8\ub9b0\ub2e4)
 function shopRich(parts) {
   var s = '', hl = [];
@@ -11713,13 +11726,13 @@ async function handleScreenShop(request) {
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: H });
   var u = new URL(request.url), q = u.searchParams;
   var mem = await shopLoad();
-  if (!mem.data) return new Response(JSON.stringify({ ok: false, error: "no-data" }), { status: 503, headers: H });
+  if (!mem.data) return new Response(JSON.stringify(shopDelayScreen()), { status: 503, headers: H });          // \uc548\ub0b4 \ud654\uba74(\uc11c\ubc84 \uc5f0\uacb0 \uc9c0\uc5f0) + \uc7ac\uc2dc\ub3c4 \uac04\uaca9 \u2014 \uc571\uc740 \uc774\uac83\uc744 \uadf8\ub9ac\uace0 \ub4a4\uc5d0\uc11c \ub2e4\uc2dc \ubc1b\ub294\ub2e4
   var lat = Number(q.get("lat")), lng = Number(q.get("lng")), wx = null;
   if (q.get("lat") != null && q.get("lng") != null) { try { wx = await sceneWeather(lat, lng); } catch (e) { wx = null; } }
   var inp = { nowMs: q.get("now") ? Number(q.get("now")) : Date.now(), tzOffsetMin: q.get("tz") ? Number(q.get("tz")) : 540, cat: q.get("cat") || "", cap: Number(q.get("cap")) || 0 };
   var out;
   try { out = shopScreen(inp, mem.data, mem.cfg, wx); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2) }), { status: 500, headers: H }); }
-  if (!out || !out.ok) return new Response(JSON.stringify(out || { ok: false, error: "fail" }), { status: 503, headers: H });
+  if (!out || !out.ok) return new Response(JSON.stringify(shopDelayScreen()), { status: 503, headers: H });
   out.ver = ENGINE_VERSION; out.shopVer = mem.ver;
   return new Response(JSON.stringify(out), { headers: H });
 }
@@ -12615,7 +12628,7 @@ async function handleScreenFood(request) {
 //        facts = { cat: \uace0\ub978 \uce69('\uc804\uccb4'|'\uc99d\uc2dc'|\u2026) }
 //        rows  = [\uae30\uc0ac\u2026]   \uae30\uc0ac = [\uc81c\ubaa9, \ub9c1\ud06c, \uc5b8\ub860\uc0ac, \uc2dc\uac01(ms), \ubc1b\uc744 \ub54c \uc11c\ubc84\uac00 \ubd99\uc778 \ubd84\ub958, \uc694\uc57d]
 // \ucd9c\ub825  { ok, v:1, screen:'news', rev, cover:'tab', head:[chips], body:[news\u2026|text|spacer], info:{cat,n,all} }
-//        news{title,sub,act:{a:'call',v:'nw.<\ubc88\ud638>',id:<\ub9c1\ud06c \ub610\ub294 \uc81c\ubaa9>,t:<\uc81c\ubaa9>}}  \u2014 id = \uae30\uc0ac\uc758 \uace0\uc720 \uc2dd\ubcc4(\ub9c1\ud06c, \uc5c6\uc73c\uba74 \uc81c\ubaa9)\uc774\ub77c \ubaa9\ub85d\uc774 \ubc14\ub010 \ub4a4\uc5d0 \ub20c\ub7ec\ub3c4 \uac19\uc740 \uae30\uc0ac\uac00 \uc5f4\ub9b0\ub2e4.
+//        news{title,sub,act:{a:'call',v:'nw.<\ubc88\ud638>',id:<\ub9c1\ud06c \ub610\ub294 \uc81c\ubaa9>,t:<\uc81c\ubaa9>,ix:<\ubcf4\ub0b8 \ubaa9\ub85d\uc5d0\uc11c\uc758 \uc6d0\ub798 \uc704\uce58>}}  \u2014 id = \uae30\uc0ac\uc758 \uace0\uc720 \uc2dd\ubcc4(\ub9c1\ud06c, \uc5c6\uc73c\uba74 \uc81c\ubaa9)\uc774\ub77c \ubaa9\ub85d\uc774 \ubc14\ub010 \ub4a4\uc5d0 \ub20c\ub7ec\ub3c4 \uac19\uc740 \uae30\uc0ac\uac00 \uc5f4\ub9b0\ub2e4.
 //          \ubc88\ud638 = \uc571\uc774 \ubcf4\ub0b8 \ubc30\uc5f4\uc758 \uc6d0\ub798 \uc704\uce58(\uc61b \uc571 \ud638\ud658\uc6a9; \uc0c8 \uc571\uc740 id \ub97c \uba3c\uc800 \ubcf8\ub2e4)
 //      newsDetail({ cap, now }, row) \u2192 { ok, v:1, detail:{ cat, title, meta, desc, empty, src, notice, btn } }  \uc0c1\uc138 \ud31d\uc5c5\uc5d0 \uadf8\ub300\ub85c \uc4f8 \ubb38\uad6c
 // \ub9e8 \uc544\ub798 module.exports \ub294 \uc2dc\ud5d8(Node)\uc6a9\uc774\uace0 Worker \uc5d0\uc11c\ub294 \ud568\uc218 \uc120\uc5b8\ub9cc \uc4f0\uc778\ub2e4.
@@ -12822,7 +12835,7 @@ function nwScreenOf(now, f, all) {
     body.push({ t: 'spacer', h: 8 });
     for (var k = 0; k < items.length && k < NW_MAX_SHOW; k++) {
       var it = items[k];
-      body.push({ t: 'news', pad: [14, 0, 14, 0], title: it.title, sub: it.cat + (it.ts ? ' \u00b7 ' + nwAgo(it.ts, now) : ''), act: { a: 'call', v: 'nw.' + it.i, id: String(it.link || it.title).slice(0, 400), t: String(it.title).slice(0, 160) } });
+      body.push({ t: 'news', pad: [14, 0, 14, 0], title: it.title, sub: it.cat + (it.ts ? ' \u00b7 ' + nwAgo(it.ts, now) : ''), act: { a: 'call', v: 'nw.' + it.i, id: String(it.link || it.title).slice(0, 400), t: String(it.title).slice(0, 160), ix: it.i } });
     }
     body.push({ t: 'spacer', h: 72 });
   }

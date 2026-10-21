@@ -4,10 +4,15 @@
 //  ③ route-v2 워커에 내장된 사본이 engine/shop.js 와 같은가(있을 때)
 process.env.TZ = 'Asia/Seoul';
 const fs = require('fs'), path = require('path'), vm = require('vm');
-const E = require('../engine/shop');
+const E = require('../engine/shop'), screenCheck = require('./helpers/screen_check');
 let pass = 0, fail = 0;
 function ok(c, m) { if (c) { pass++; } else { fail++; console.log('  FAIL', m); } }
 
+{
+  const d = E.shopDelayScreen(), r = screenCheck([d]);
+  ok(!r.err && r.out.every(l => /^OK/.test(l)), '서버 지연 안내 화면은 앱 검증기를 통과한다: ' + (r.err || r.out.join(' | ')));
+  ok(d.delayed === true && d.retry.join() === '4,8,15,30', '안내 화면: 재시도 간격은 엔진이 정한다');
+}
 const html = fs.readFileSync(path.join(__dirname, '../ios-reference/index.html'), 'utf8');
 const a = html.indexOf('var SHOP_DATA={');
 const bMark = 'var _shopSlotIdx=_curShopSlot();';
@@ -168,6 +173,13 @@ console.log('동등성 대조 ' + cases.length + '건');
     };
     const r4 = await mod2.default.fetch(new Request('https://x/screen/shop?now=' + t), {}, { waitUntil() {} });
     ok(r4.status === 200 && shopCalls === 2, '첫 실패 뒤 한 번 더 시도해 화면을 준다(호출 ' + shopCalls + ')');
+    // 쇼핑 서버가 계속 안 되면 503 + 엔진이 주는 안내 화면(서버 연결 지연 · 재시도 간격)
+    const mod3 = await import(tmp + '?fresh=2');
+    globalThis.fetch = async () => new Response('x', { status: 503 });
+    const r5 = await mod3.default.fetch(new Request('https://x/screen/shop?now=' + t), {}, { waitUntil() {} });
+    const j5 = await r5.json();
+    ok(r5.status === 503 && j5.ok === true && j5.delayed === true && j5.screen === 'shop' && Array.isArray(j5.retry) && j5.retry.length >= 3 && j5.retry.every(n => n >= 1 && n <= 120), '서버가 계속 안 되면 503 + 안내 화면 + 재시도 간격');
+    ok(/서버 연결이 지연되고 있습니다/.test(JSON.stringify(j5.body)) && j5.body.some(n => n.t === 'button' && n.act.v === 'gdm_retry') && r5.headers.get('cache-control') === 'no-store', '안내 문구 · 다시 시도 단추 · 캐시 금지');
   } catch (e) { fail++; console.log('  FAIL 워커 시험 예외', e && e.stack || e); }
   try { fs.unlinkSync(tmp); } catch (e) { }
   console.log(`shop_engine: ${pass} pass, ${fail} fail`);

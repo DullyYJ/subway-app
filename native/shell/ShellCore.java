@@ -504,8 +504,17 @@ public final class ShellCore {
             return b.append(']').toString();
         }
         /** 기사 고유 id(링크 또는 제목)로 줄을 찾아 엔진에 보낼 모양으로. 없으면 눌린 줄이 알려 준 제목 · 링크만 담은 줄(엔진이 요약 없는 상세를 만든다). */
-        public String rowJsonById(String id, String title) {
-            for (int i = 0; i < rows.size(); i++) { String[] r = rows.get(i); if (id.equals(r[1]) || (r[1].length() == 0 && id.equals(r[0]))) return rowJson(i); }
+        public String rowJsonById(String id, String title) { return rowJsonById(id, title, -1); }
+        /** 같은 id 의 줄이 여럿이면 엔진이 알려 준 원래 위치(ix)에 가장 가까운 줄 — 누른 그 기사. */
+        public String rowJsonById(String id, String title, int ix) {
+            int best = -1;
+            for (int i = 0; i < rows.size(); i++) {
+                String[] r = rows.get(i);
+                if (!(id.equals(r[1]) || (r[1].length() == 0 && id.equals(r[0])))) continue;
+                if (ix < 0) return rowJson(i);
+                if (best < 0 || Math.abs(i - ix) < Math.abs(best - ix)) best = i;
+            }
+            if (best >= 0) return rowJson(best);
             boolean url = id.startsWith("http");
             String t = title != null && title.length() > 0 ? title : (url ? "" : id);
             return "[" + q(t) + "," + q(url ? id : "") + ",\"\",0,\"\",\"\"]";
@@ -583,11 +592,33 @@ public final class ShellCore {
         int rows = "cards".equals(kind) ? 4 : "map".equals(kind) ? 4 : 8;
         return "{\"ok\":true,\"v\":1,\"screen\":\"skel\",\"head\":[],\"body\":[{\"t\":\"skel\",\"kind\":\"" + kind + "\",\"rows\":" + rows + ",\"pad\":[12,12,12,0]}]}";
     }
+    /**
+     * 엔진이 "서버가 늦다"며 준 안내 화면(top-level delayed:true · retry:[초…])의 재시도 간격(초). 아니면 null.
+     * 앱은 이 화면을 그리고(캐시에는 두지 않는다) 이 간격마다 뒤에서 다시 받는다 — 문구와 간격은 엔진이 정한다.
+     */
+    @SuppressWarnings("unchecked")
+    public static int[] retryHint(String json) {
+        if (json == null || json.length() < 10 || json.length() > 20000 || json.indexOf("\"delayed\"") < 0) return null;
+        try {
+            Object o = ScreenCore.parse(json);
+            if (!(o instanceof Map)) return null;
+            Map<String, Object> m = (Map<String, Object>) o;
+            if (!Boolean.TRUE.equals(m.get("delayed"))) return null;
+            Object r = m.get("retry");
+            int n = r instanceof List ? Math.min(6, ((List<Object>) r).size()) : 0;
+            if (n == 0) return DEFAULT_RETRY.clone();
+            int[] out = new int[n];
+            for (int i = 0; i < n; i++) { Object x = ((List<Object>) r).get(i); out[i] = x instanceof Double ? (int) Math.max(1, Math.min(120, ((Double) x).doubleValue())) : 5; }
+            return out;
+        } catch (Exception e) { return null; }
+    }
+    /** 엔진 안내 화면조차 못 받을 때(통신 실패)의 재시도 간격(초) — 짧게 몇 번만. */
+    public static final int[] DEFAULT_RETRY = { 4, 8, 16, 30 };
     /** 화면을 못 받았을 때(서버 응답 없음) 빈 화면 대신 보이는 안내와 [다시 시도] — 행동 이름은 RETRY_ACT. */
     public static final String RETRY_ACT = "gdm_retry";
     public static String errorScreen() {
         return "{\"ok\":true,\"v\":1,\"screen\":\"error\",\"head\":[],\"body\":["
-            + "{\"t\":\"text\",\"s\":\"화면을 받지 못했어요.\\n잠시 뒤 다시 시도해 주세요.\",\"size\":15,\"color\":\"sub\",\"lh\":1.5,\"align\":\"center\",\"pad\":[24,96,24,12]},"
+            + "{\"t\":\"text\",\"s\":\"서버 연결이 지연되고 있습니다.\\n자동으로 다시 시도하고 있어요.\",\"size\":15,\"color\":\"sub\",\"lh\":1.5,\"align\":\"center\",\"pad\":[24,96,24,12]},"
             + "{\"t\":\"button\",\"s\":\"다시 시도\",\"size\":14,\"h\":44,\"r\":12,\"bold\":true,\"fill\":\"gold\",\"tc\":\"white\",\"act\":{\"a\":\"call\",\"v\":\"" + RETRY_ACT + "\"}}]}";
     }
     /** 캐시 열쇠가 가리키는 칸에 올라와야 하는 엔진 화면 이름(다른 탭의 늦은 답이 이 칸을 덮지 못하게 가린다). */
@@ -609,10 +640,16 @@ public final class ShellCore {
         return 0L;
     }
     public static boolean diskCacheable(String screen) { return diskTtl(screen) > 0L; }
+    /**
+     * 설정 화면 캐시 열쇠: 스위치 · 토글 모양이 기기에 저장된 값(settingsFacts)에서 나오므로, 열쇠에 그 값의 지문을 넣는다.
+     * 저장된 값이 바뀌면 열쇠가 달라져 옛 화면이 절대 뜨지 않고(로컬 최신 값 우선), 같은 값일 때만 캐시 화면을 즉시 보여 준다.
+     */
+    public static String settingsKey(Store st) { return S_SETTINGS + "|" + Integer.toHexString(settingsFacts(st).hashCode()); }
     /** 화면 하나를 가리키는 캐시 열쇠(같은 화면이라도 고른 분류·방식이 다르면 다른 글이다). */
     public static String cacheKey(String screen, Store st) {
         if (S_SHOP.equals(screen)) return screen + "|" + st.get(K_SHOP_CAT, "");
         if (S_NEWS.equals(screen)) return screen + "|" + st.get(K_NEWS_CAT, "전체");
+        if (S_SETTINGS.equals(screen)) return settingsKey(st);
         if (S_CCHIPS.equals(screen)) return screen + "|" + mode(st);
         if (S_CHAT.equals(screen)) return screen + "|" + st.get(ChatCore.K_SEL, "all");                       // 방마다 따로
         if (S_MAPH.equals(screen) || S_MAPB.equals(screen)) return screen + "|" + st.get(MapCore.K_MODE, "bus") + "|" + st.get(MapCore.K_REG, "seoul") + "|" + st.get(MapCore.K_FLT, "ALL");

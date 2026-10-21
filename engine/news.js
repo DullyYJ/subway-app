@@ -12,7 +12,7 @@
 //        facts = { cat: 고른 칩('전체'|'증시'|…) }
 //        rows  = [기사…]   기사 = [제목, 링크, 언론사, 시각(ms), 받을 때 서버가 붙인 분류, 요약]
 // 출력  { ok, v:1, screen:'news', rev, cover:'tab', head:[chips], body:[news…|text|spacer], info:{cat,n,all} }
-//        news{title,sub,act:{a:'call',v:'nw.<번호>',id:<링크 또는 제목>,t:<제목>}}  — id = 기사의 고유 식별(링크, 없으면 제목)이라 목록이 바뀐 뒤에 눌러도 같은 기사가 열린다.
+//        news{title,sub,act:{a:'call',v:'nw.<번호>',id:<링크 또는 제목>,t:<제목>,ix:<보낸 목록에서의 원래 위치>}}  — id = 기사의 고유 식별(링크, 없으면 제목)이라 목록이 바뀐 뒤에 눌러도 같은 기사가 열린다.
 //          번호 = 앱이 보낸 배열의 원래 위치(옛 앱 호환용; 새 앱은 id 를 먼저 본다)
 //      newsDetail({ cap, now }, row) → { ok, v:1, detail:{ cat, title, meta, desc, empty, src, notice, btn } }  상세 팝업에 그대로 쓸 문구
 // 맨 아래 module.exports 는 시험(Node)용이고 Worker 에서는 함수 선언만 쓰인다.
@@ -219,7 +219,7 @@ function nwScreenOf(now, f, all) {
     body.push({ t: 'spacer', h: 8 });
     for (var k = 0; k < items.length && k < NW_MAX_SHOW; k++) {
       var it = items[k];
-      body.push({ t: 'news', pad: [14, 0, 14, 0], title: it.title, sub: it.cat + (it.ts ? ' · ' + nwAgo(it.ts, now) : ''), act: { a: 'call', v: 'nw.' + it.i, id: String(it.link || it.title).slice(0, 400), t: String(it.title).slice(0, 160) } });
+      body.push({ t: 'news', pad: [14, 0, 14, 0], title: it.title, sub: it.cat + (it.ts ? ' · ' + nwAgo(it.ts, now) : ''), act: { a: 'call', v: 'nw.' + it.i, id: String(it.link || it.title).slice(0, 400), t: String(it.title).slice(0, 160), ix: it.i } });
     }
     body.push({ t: 'spacer', h: 72 });
   }

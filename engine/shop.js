@@ -280,6 +280,19 @@ function shopScreen(inp, data, cfg, wx) {
   }
   return out;
 }
+// 쇼핑 서버가 늦거나 안 될 때 엔진이 주는 안내 화면(HTTP 503 과 함께). 앱은 이 화면을 그리고, 캐시에는 두지 않으며,
+// retry(초 목록)마다 뒤에서 다시 받는다. 문구 · 간격은 모두 여기서 정한다(앱에 글 · 숫자가 없다). 단추 act 'gdm_retry' 는 앱이 알고 있는 "지금 다시 받기".
+function shopDelayScreen() {
+  return {
+    ok: true, v: 1, screen: 'shop', delayed: true, retry: [4, 8, 15, 30],
+    head: [],
+    body: [
+      { t: 'text', s: '서버 연결이 지연되고 있습니다', size: 16, bold: true, color: 'text', lh: 1.5, align: 'center', pad: [24, 96, 24, 4] },
+      { t: 'text', s: '상품 서버가 깨어나는 중이에요.\n잠시 뒤 자동으로 다시 시도합니다.', size: 13, color: 'sub', lh: 1.6, align: 'center', pad: [24, 0, 24, 14] },
+      { t: 'button', s: '지금 다시 시도', size: 14, h: 44, r: 12, bold: true, fill: 'gold', tc: 'white', act: { a: 'call', v: 'gdm_retry' } }
+    ]
+  };
+}
 // [[글, 굵게 0|1], …] → 이어 붙인 글 + 굵은 구간 [[시작,끝],…] (앱이 굵기만 그린다)
 function shopRich(parts) {
   var s = '', hl = [];
@@ -287,4 +300,4 @@ function shopRich(parts) {
   return { s: s, hl: hl };
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { shopScreen: shopScreen, shopPick: shopPick, shopClock: shopClock, shopSeasonScore: shopSeasonScore, shopSeasonNow: shopSeasonNow, shopRng: shopRng, SHOP_PICK_N: SHOP_PICK_N, SHOP_REC_CAT: SHOP_REC_CAT, SHOP_SEASON_KW: SHOP_SEASON_KW, SHOP_NOWX: SHOP_NOWX };
+if (typeof module !== 'undefined' && module.exports) module.exports = { shopDelayScreen: shopDelayScreen, shopScreen: shopScreen, shopPick: shopPick, shopClock: shopClock, shopSeasonScore: shopSeasonScore, shopSeasonNow: shopSeasonNow, shopRng: shopRng, SHOP_PICK_N: SHOP_PICK_N, SHOP_REC_CAT: SHOP_REC_CAT, SHOP_SEASON_KW: SHOP_SEASON_KW, SHOP_NOWX: SHOP_NOWX };

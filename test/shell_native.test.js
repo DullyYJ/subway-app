@@ -72,6 +72,10 @@ function findAndroidJar() {
     assert.ok(/NOT_MOD/.test(v) && /getCond\(|postCond\(/.test(v) && /If-None-Match/.test(fs.readFileSync(N('NetPost.java'), 'utf8')), 'ETag 를 보내고 304 면 캐시 그대로');
     assert.ok(/openNewsById\(a\.id/.test(v) && /rowJsonById\(/.test(v), '소식은 순번이 아니라 기사 고유 id 로 연다');
     assert.ok(/a\.id/.test(v.slice(v.indexOf('boardAct('))) , '게시판 행동은 글 고유 id 를 쓴다');
+    assert.ok(/rowJsonById\(id, title, ix\)/.test(v) && /openNewsById\(a\.id, a\.t, a\.ix\)/.test(v), '같은 링크가 여럿이어도 엔진이 알려 준 원래 위치(ix)로 그 줄을 연다');
+    assert.ok(/settingsKey\(store\)/.test(v) && /dropOldSettings\(/.test(v), '설정 화면 캐시는 기기 저장값 지문 열쇠(옛 토글 값이 안 나온다)');
+    assert.ok(/retryHint\(/.test(v) && /showDelayed\(/.test(v) && /scheduleRetry\(/.test(v) && /delayBodies/.test(v), '서버 지연 안내(엔진) 그리기 + 뒤에서 재시도');
+    assert.ok(!/cachePut\(ck, json\)/.test(v.slice(v.indexOf('private void showDelayed('), v.indexOf('private void scheduleRetry('))), '지연 안내 화면은 캐시에 두지 않는다');
     const sv = fs.readFileSync(N('ScreenView.java'), 'utf8');
     assert.ok(/anchorKey\(/.test(sv) && /ancKey/.test(sv), '목록이 바뀌어도 보던 글 위치를 id 로 붙잡는다');
     const od = sv.slice(sv.indexOf('protected void onDraw'));
