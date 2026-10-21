@@ -233,6 +233,12 @@ function findAndroidJar() {
     assert.ok(/dlgKind\("report", doReport, null\)/.test(v) && /dlgKind\("perm", openSet, null\)/.test(v) && /dlgPopSh\("경로를 먼저 탐색해 주세요"/.test(v), '신고 · 권한 · 공유 안내가 엔진 카드를 쓴다');
     assert.ok(/"dl\.ok"\.equals\(v\)/.test(v) && /setOnCancelListener/.test(v) && /dg\.tap != null \|\| autoMs > 0L/.test(v) && /dg\.fit && v\.fitWidthDp\(\)/.test(v), '단추 · 바깥/뒤로 취소 · 카드가 정한 바깥 누름 · 글에 맞춘 너비');
   });
+  await t('무지개 테두리 카드(s136): 스윕 그라데이션을 한 번만 만들고 행렬로 돌린다 · 카드 자리만 다시 그린다 · 그릴 때 새 객체 없음', () => {
+    const sv = fs.readFileSync(N('ScreenView.java'), 'utf8');
+    assert.ok(/case ScreenCore\.K_PANEL: drawPanel\(cv, it\); if \(it\.pub\) drawGlow\(cv, it\)/.test(sv) && /glowSh\.setLocalMatrix\(glowMx\)/.test(sv) && /% 3000L/.test(sv), '그리기 · 3초 한 바퀴');
+    assert.ok(!/new Paint|new RectF|new Rect\(|new Path|new SweepGradient|new Matrix|new int\[/.test(sv.slice(sv.indexOf('private void drawGlow('), sv.indexOf('private void drawTopLine('))), '그릴 때 새 객체 없음');
+    assert.ok(/if \(glowDrawn && isShown\(\)\)[^\n]*postInvalidateOnAnimation\(Math\.round\(glX0/.test(sv), '보이는 동안 그 카드 자리만 화면 박자로');
+  });
   await t('세부경로 줄(s135): 레일 · 현재위치 점 · 뱃지 · 펼침을 ScreenView 가 그리고 · 보이는 동안에만 다시 그린다 · 그릴 때 새 객체 없음', () => {
     const sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), sc = fs.readFileSync(N('ScreenCore.java'), 'utf8');
     assert.ok(/case ScreenCore\.K_TDROW: drawTdrow/.test(sv) && /tdDrawn/.test(sv) && /tdAct/.test(sv) && /System\.currentTimeMillis\(\)/.test(sv.slice(sv.indexOf('private void drawTdrow('), sv.indexOf('private String ellipsizeTd('))), '그리기 · 지금 시각으로 진행 비율');
