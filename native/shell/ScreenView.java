@@ -146,6 +146,20 @@ public class ScreenView extends View {
     public Map<String, String> fields() { return new HashMap<String, String>(fieldVals); }
     public long drawAgeMs() { return lastDraw == 0L ? Long.MAX_VALUE : SystemClock.uptimeMillis() - lastDraw; }
     public int itemCount() { return lay == null ? 0 : lay.head.length + lay.body.length; }
+    /** 놀이터 칸을 놓을 자리(dp · 이 뷰 좌표): kind 인 첫 칸(역 이름 K_TEXT · 시간표 머리줄 K_BAR)의 [글 x, 글 y, 글 너비, 글 줄 높이, 칸 y, 칸 높이, 오른쪽 한계]. 없으면 null. 배치가 끝난 뒤 주 스레드에서만(처음 위치 기준 · 스크롤 안 함). */
+    public float[] playAnchor(int kind) {
+        if (lay == null) return null;
+        for (int pass = 0; pass < 2; pass++) {
+            ScreenCore.Item[] arr = pass == 0 ? lay.head : lay.body; float oy = pass == 0 ? 0f : lay.headH;
+            for (ScreenCore.Item it : arr) {
+                if (it.kind != kind || it.lines.length == 0) continue;
+                setText(it.size, it.bold, 0);
+                float right = kind == ScreenCore.K_BAR && it.sw > 0f ? it.sx - 8f : it.x + it.w;
+                return new float[] { it.textX, oy + it.textY, tp.measureText(it.lines[0]), it.lineH, oy + it.y, it.h, right };
+            }
+        }
+        return null;
+    }
     public float scrollPos() { return scrollY; }
     public void setDpr(float d) { if (d > 0f && d != dpr) { dpr = d; relayout(); } }
     public void setPalette(int[] c) { for (int i = 0; i < pal.length && i < c.length; i++) pal[i] = c[i]; styleInput(); invalidate(); }
