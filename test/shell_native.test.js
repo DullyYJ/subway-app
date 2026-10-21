@@ -39,7 +39,7 @@ function findAndroidJar() {
   await t('안드로이드 계층(ShellActivity)을 진짜 android.jar 로 컴파일', async () => {
     const jar = findAndroidJar(); if (!jar) return 'skip';
     const j = path.join(out, 'j'); fs.mkdirSync(j);
-    let r = spawnSync('javac', ['-encoding', 'UTF-8', '-Xlint:all', '-Xlint:-deprecation', '-cp', jar, '-d', j, N('ScreenCore.java'), N('NetPost.java'), N('SceneModel.java'), N('SceneUtil.java'), N('SceneHaptics.java'), N('SceneCv.java'), N('SceneArt.java'), N('SceneActs.java'), N('SceneCore.java'), N('AndroidCv.java'), N('SceneDriver.java'), N('ScreenView.java'), N('RunnerCore.java'), N('RunnerArt.java'), N('ShellCore.java'), N('HomeSearchCore.java'), N('RouteFetchCore.java'), N('HomeCore.java'), N('WalkCore.java'), N('BoardCore.java'), N('ChatCore.java'), N('FoodCore.java'), N('MapCore.java'), N('FavCore.java'), N('HcardsCore.java'), N('RideCore.java'), N('RulesCore.java'), N('LegacyCore.java'), N('RideOverlay.java'), N('PowerInfo.java'), N('RecoNotify.java'), N('CmCore.java'), N('GwCore.java'), N('DevCore.java'), N('ErrCore.java'), N('ErrLog.java'), N('RecoGo.java'), N('ShareCore.java'), N('OvCore.java'), N('ShareArt.java'), N('ShareProvider.java'), N('TileMapCore.java'), N('TileLoader.java'), N('TileMapArt.java'), N('TileMapView.java'), N('WidgetGeo.java'), N('WidgetSim.java'), N('WidgetArt.java'), N('WidgetCore.java'), N('GdmWidgetBase.java'), N('GdmWidgetHB.java'), N('GdmWidgetHW.java'), N('GdmWidgetVB.java'), N('GdmWidgetVW.java'), N('GdmWidgetReceiver.java'), N('CommuteAlarm.java'), N('CommuteReceiver.java'), N('GdmApp.java'), N('RideService.java'), N('RideWidget.java'), N('MetroMapData.java'), N('MetroCamera.java'), N('MetroRenderer.java'), N('MetroMapView.java'), N('VecMap.java'), N('LocFused.java'), N('Debounce.java'), N('Swr.java'), N('ShellActivity.java')].concat(walk(path.join(__dirname, 'java', 'maplibre-stubs'), '.java')), { env: ENV, encoding: 'utf8' });
+    let r = spawnSync('javac', ['-encoding', 'UTF-8', '-Xlint:all', '-Xlint:-deprecation', '-cp', jar, '-d', j, N('ScreenCore.java'), N('NetPost.java'), N('SceneModel.java'), N('SceneUtil.java'), N('SceneHaptics.java'), N('SceneCv.java'), N('SceneArt.java'), N('SceneActs.java'), N('SceneCore.java'), N('AndroidCv.java'), N('SceneDriver.java'), N('ScreenView.java'), N('RunnerCore.java'), N('RunnerArt.java'), N('PlayCore.java'), N('PlayView.java'), N('ShellCore.java'), N('HomeSearchCore.java'), N('RouteFetchCore.java'), N('HomeCore.java'), N('WalkCore.java'), N('BoardCore.java'), N('ChatCore.java'), N('FoodCore.java'), N('MapCore.java'), N('FavCore.java'), N('HcardsCore.java'), N('RideCore.java'), N('RulesCore.java'), N('LegacyCore.java'), N('RideOverlay.java'), N('PowerInfo.java'), N('RecoNotify.java'), N('CmCore.java'), N('GwCore.java'), N('DevCore.java'), N('ErrCore.java'), N('ErrLog.java'), N('RecoGo.java'), N('ShareCore.java'), N('OvCore.java'), N('ShareArt.java'), N('ShareProvider.java'), N('TileMapCore.java'), N('TileLoader.java'), N('TileMapArt.java'), N('TileMapView.java'), N('WidgetGeo.java'), N('WidgetSim.java'), N('WidgetArt.java'), N('WidgetCore.java'), N('GdmWidgetBase.java'), N('GdmWidgetHB.java'), N('GdmWidgetHW.java'), N('GdmWidgetVB.java'), N('GdmWidgetVW.java'), N('GdmWidgetReceiver.java'), N('CommuteAlarm.java'), N('CommuteReceiver.java'), N('GdmApp.java'), N('RideService.java'), N('RideWidget.java'), N('MetroMapData.java'), N('MetroCamera.java'), N('MetroRenderer.java'), N('MetroMapView.java'), N('VecMap.java'), N('LocFused.java'), N('Debounce.java'), N('Swr.java'), N('ShellActivity.java')].concat(walk(path.join(__dirname, 'java', 'maplibre-stubs'), '.java')), { env: ENV, encoding: 'utf8' });
     assert.strictEqual(r.status, 0, (r.stderr || '').split('\n').filter(l => !/^Picked up/.test(l)).join(' / ').slice(0, 1500));
     assert(fs.existsSync(path.join(j, 'com', 'dullyyj', 'subway', 'ShellActivity.class')));
   });
@@ -287,6 +287,41 @@ function findAndroidJar() {
     const ic = fs.readFileSync(path.join(ROOT, 'shell-android', 'app', 'src', 'main', 'res', 'mipmap-anydpi-v26', 'ic_launcher.xml'), 'utf8');
     assert.ok(/<inset android:drawable="@drawable\/ic_launcher_fg" android:inset="8\.6%"/.test(ic), '앱 아이콘 그림은 안전 영역 안으로(너무 커 보이지 않게)');
     assert.ok(/assembleRelease[\s\S]*assembleDebug/.test(y) && /apk\/release\/\*\.apk/.test(y) && /apk\/debug\/\*\.apk/.test(y), '릴리스 먼저 · 실패하면 디버그 · 둘 다 올림 대상');
+  });
+  await t('캐릭터 놀이터(s141): 계산(PlayCore)은 JVM 에서 통과 · 안드로이드 없이 순수 · 시계/무작위는 밖에서 받는다', async () => {
+    const o = fs.mkdtempSync(path.join(os.tmpdir(), 'playjvm-'));
+    let r = spawnSync('javac', ['-encoding', 'UTF-8', '-d', o, N('RunnerCore.java'), N('PlayCore.java'), path.join(__dirname, 'java', 'PlayJvmTest.java')], { env: ENV, encoding: 'utf8' });
+    assert.strictEqual(r.status, 0, (r.stderr || '').slice(0, 1500));
+    r = spawnSync('java', ['-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-cp', o, 'com.dullyyj.subway.PlayJvmTest'], { env: ENV, encoding: 'utf8' });
+    assert.strictEqual(r.status, 0, (r.stdout || '').split('\n').filter(l => /^FAIL/.test(l)).join('\n') || r.stderr);
+    assert.ok(/ALL OK/.test(r.stdout), r.stdout.slice(-300));
+    const src = fs.readFileSync(N('PlayCore.java'), 'utf8');
+    assert.ok(!/import\s+android\.|SystemClock|System\.currentTimeMillis|Math\.random/.test(src), '순수 자바(무작위는 Random 을 밖에서 받는다)');
+  });
+  await t('캐릭터 놀이터(s141): 그림(PlayView) — 30fps · 그릴 때 새 객체 없음 · 아틀라스는 뒤 스레드 · 안 보이면 멈춤 · 만져지지 않음', () => {
+    const v = fs.readFileSync(N('PlayView.java'), 'utf8');
+    const draw = v.slice(v.indexOf('protected void onDraw'), v.indexOf('private void cloud('));
+    const rest = v.slice(v.indexOf('private void cloud('));
+    assert.ok(!/\bnew\s+[A-Z]/.test(draw), 'onDraw/drawWorld 에 new: ' + (draw.match(/\bnew\s+[A-Z]\w*/) || [''])[0]);
+    const body = rest.replace(/\/\/.*$/gm, '');
+    const dd = body.slice(0, body.indexOf('private void drawActors(')) + body.slice(body.indexOf('private void drawActors('));
+    assert.ok(!/\bnew\s+[A-Z]/.test(dd), '장식 · 캐릭터 그리기에 new: ' + (dd.match(/\bnew\s+[A-Z]\w*/) || [''])[0]);
+    assert.ok(/acc >= 0\.030d/.test(v) && /postInvalidateDelayed\(26L\)/.test(v), '30fps (웹과 같다)');
+    assert.ok(/new Thread\(/.test(v) && /shell-play-atlas/.test(v) && /createScaledBitmap/.test(v), '아틀라스는 뒤 스레드에서 한 번만 줄여 만든다');
+    assert.ok(/onDetachedFromWindow\(\) \{ running = false/.test(v) && /onWindowVisibilityChanged/.test(v), '창이 떼어지거나 안 보이면 멈춘다');
+    assert.ok(/setClickable\(false\)/.test(v) && /DST_IN/.test(v) && /saveLayer/.test(v), '만져지지 않는다 · 가장자리를 투명하게(DST_IN)');
+    assert.ok(/RunnerArt\.warm/.test(v) && /dudung_intro/.test(v), '시트는 달리기 로딩과 같은 RunnerArt');
+  });
+  await t('캐릭터 놀이터(s141): 연결 — 팝업 이름 옆 · 시간표 제목 옆 · 팝업→시간표는 같은 장면 이어받기 · 닫으면 끝', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8');
+    const pp = a.slice(a.indexOf('private void playPlace('), a.indexOf('/** 웹 .nmp 역 팝업의 손잡이'));
+    assert.ok(/PlayCore\.popupHost\(/.test(pp) && /PlayCore\.ttHost\(/.test(pp) && /playAnchor\(tt \? ScreenCore\.K_BAR : ScreenCore\.K_TEXT\)/.test(pp), '칸 위치: 팝업 이름 · 시간표 제목');
+    assert.ok(/tt \? pv\.snap\(\) : null/.test(pp) && /pv\.begin\(/.test(pp) && /pv\.end\(\)/.test(pp), '시간표로 올라오면 팝업의 장면을 이어받고 · 칸이 없으면 놓지 않는다');
+    assert.ok(/ANIMATOR_DURATION_SCALE/.test(pp), '동작 줄이기면 한 장면만');
+    assert.ok(/map\.onStn\(txt\);[\s\S]{0,120}playPlace\(\);/.test(a) && /map\.onTt\(txt\);[\s\S]{0,120}playPlace\(\);/.test(a), '팝업 · 시간표 화면이 올라온 뒤 놓는다');
+    assert.ok(/private void closeSheet\(\) \{[^\n]*playView\.end\(\)/.test(a), '시트가 닫히면 놀이터도 끝');
+    assert.ok(/new PlayView\(this, dpr\)/.test(a), '역 팝업 박스에 얹는다');
+    assert.ok(/public float\[\] playAnchor\(int kind\)/.test(sv), 'ScreenView 가 칸 자리를 알려 준다');
   });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
   process.exit(fail ? 1 : 0);
