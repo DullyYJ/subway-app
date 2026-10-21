@@ -1963,3 +1963,14 @@ YJ(11:16, 기기 스크린샷 4장 + "모든 탭 화면을 웹과 동일하게")
 - **앱 `MapCore.reorderNear`**: 열쇠 목록을 `bus_ord` 에 저장 → 요청 `bus.ord` 로 실어 보냄. 이미 받아 둔 도착정보 `a0..`(+stash)와 미리 받기 주소(`lastArrNeed`)는 `perm` 만큼 번호를 옮겨 다시 받는 동안 비지 않게 한다(`arrSig` 에 ord 해시 포함 — 다른 순서의 주소가 섞이지 않게). `ShellActivity.reorderBusNear` → `loadMapBody(body, true)`.
 - 시험: `map_engine`(ord 6건) · `ScreenJvmTest`(rol/rod) · `ShellJvmTest`(reorderNear 9건) · `screen_native`(소스 확인). **기기 미확인**: 끌기 감각·그림자·자동 스크롤 속도(안드로이드 계층은 CI 컴파일만).
 - 웹과 다른 점(알려 둠): 즐겨찾기 보기 순서 바꾸기는 웹에도 없다(주변 정류장만). `kbusSlideDown` 은 이미 이식돼 있다(노선 줄 .3초 슬라이드; `drawBcard` 의 `rt`). 남은 미이식 웹 애니메이션: `delayFadeIn`/`delayFlash`(지연 안내) · `tdNowPulse` · `rsPulse` · `htlWaitPulse` · `pin-pulse` · `rtlRoll` · `pv-flow` (+ `hdrMarquee` 비교 재확인).
+
+## s132 (2026-10-22) — SWR(Stale-While-Revalidate) · 디바운스 · 연타 막기
+- **이미 있던 SWR**(건드리지 않음): 화면 글 캐시(메모리+디스크 `cacheGet/showCached`) · 엔진 ETag/max-age 조건부 요청(`screenCall`) · 켠 직후 미리 받기(`prefetchTabs`) · 버스 도착정보 미리 받기(`busSpeculate`) · 실패해도 1초 카운트다운 유지(`busFail`).
+- **새 순수 코어**(JVM 시험): `Debounce`(trailing 디바운스 · gate 연타 막기, 시계는 `Clock` 으로 받음 — 앱은 `ShellActivity.deb` 에서 `Handler`/`SystemClock.uptimeMillis` 연결) · `Swr`(FRESH/STALE/MISS · LRU · 빈 글은 옛 글을 지우지 않음) · `HomeCore.routeSwrKey`(지금 시각 baseMs 를 뺀 열쇠).
+- **디바운스(300ms = `Debounce.TYPE_MS`)**: 홈 출발/도착 입력(`homeq` — 후보 받기 + 다시 그리기, 후보를 고르면 취소) · 즐겨찾기 시트 입력(`favq`) · 설정 검색 입력(`cmq`) · 탭 위치 이동 170m 넘음(`busloc` — 위치가 연달아 와도 멈춘 뒤 한 번 새 자리 정류장). focus/blur 는 즉시.
+- **탭 SWR**: `loadSlotX` — 캐시 화면을 0초에 올린 뒤에만 새로 받기를 `Debounce.TAB_GAP_MS`(120ms) 미룬다(`slot0/slot1`). 탭을 연달아 옮기면 지나친 탭의 통신은 나가지 않는다. 캐시가 없으면 곧장 받는다.
+- **경로 SWR**: `goRoute` — 같은 출발·도착(·같은 고른 시각)이면 지난 결과를 0초에 먼저 보임(8초 안 `FRESH` 면 통신 없음, 10분 안 `STALE` 면 뒤에서 새로 받아 조용히 바꿈). 옛 결과가 떠 있으면 근사(live=0) 결과로 덮지 않고 전체를 기다린다. 읽을 수 있는 결과만 보관.
+- **조용한 실패**: 뒤에서 받다 실패해도(`present` 빈 글 · 맛집 · 경로) 옛 화면이 떠 있으면 알림 없이 그대로 둔다. 사람이 연 로드(빈 칸)는 안내 화면 그대로.
+- **연타 막기**: 탭 버튼(350ms) · 다시 시도(600ms) · 내 위치(1200ms, 권한 요청 뒤) · 경로 검색(800ms).
+- **엔진은 바꾸지 않았다**: 엔진은 이미 ETag/max-age 를 주고 앱이 그대로 따른다. 디바운스는 입력·연타가 생기는 앱 쪽 일이다.
+- 시험: `ShellJvmTest`(디바운스 · SWR · 경로 열쇠 24건) · `shell_native`(배선 소스 확인). **기기 미확인**: 체감 시간(120/300ms)이 적당한지.
