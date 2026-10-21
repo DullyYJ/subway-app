@@ -57,6 +57,7 @@ ok(E.mapScreen({ cap: 17 }, {}, {}).ok === false && E.mapScreen({}, {}, {}).ok =
 {
   const s = call({ part: 'stn', stn: ' 강 남 ', th: 'dark' });
   ok(s.ok && s.screen === 'mapstn' && s.info.name === '강남' && s.info.lines.indexOf('2호선') >= 0, '팝업 이름·노선');
+  ok(s.body[0].rw === 100 && s.body[0].mq === true && s.body[0].lines === 1, '역 이름은 놀이터 칸(100)을 남기고 길면 흐른다(mq)');
   const k = s.body;
   ok(k[0].s === '강남' && k[0].size === 22 && k[1].t === 'lpills' && k[1].items.length === s.info.lines.length && k[1].items.every(i => /^#[0-9a-fA-F]{6}$/.test(i.c) && !i.act), '노선 알약(색 · 누르는 칸 아님)');
   ok(k[1].items.find(i => i.s === '2호선').num === '2' && E.mapLineNum('GTX-A') === 'A' && E.mapLineNum('gtx b') === 'B' && E.mapLineNum('신분당선') === '' && E.mapLineNum('수인분당선') === '' && E.mapLineNum('부산1호선') === '1', '호선 숫자 동그라미(웹 _lineNumOf: n호선 · GTX 글자 · 그 밖은 없음)');
@@ -75,7 +76,7 @@ ok(E.mapScreen({ cap: 17 }, {}, {}).ok === false && E.mapScreen({}, {}, {}).ok =
   const lines = E.mapLinesOf('강남');
   const res = {}; res[lines[0] + '|-'] = data; if (lines[1]) res[lines[1] + '|-'] = { noData: true };
   let t = call({ part: 'tt', stn: '강남', tt: { st: 'ok', res } });
-  ok(t.body[0].t === 'bar' && t.body[0].pad[1] === 36, '시간표 제목줄은 웹처럼 위 여백 36(손잡이 아래) — 캐릭터 놀이터가 제목 옆에 솟는다');
+  ok(t.body[0].t === 'bar' && t.body[0].pad[1] === 36 && t.body[0].rw === 100 && t.body[0].mq === true, '시간표 제목줄은 웹처럼 위 여백 36(손잡이 아래) — 캐릭터 놀이터가 제목 옆에 솟는다');
   ok(t.ok && t.screen === 'maptt' && t.info.line === lines[0] && t.info.day === 'DAY' && t.info.dk === '상', '첫 노선·오늘 요일·첫 방향을 엔진이 고른다');
   const k = t.body;
   ok(k[1].items.length === lines.length && k[1].items[0].on && /자료 없음/.test(k[1].items[1] ? k[1].items[1].label : '자료 없음'), '노선 칩(자료 없는 노선 표시)');
