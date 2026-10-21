@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-22s130";
+var ENGINE_VERSION = "route-v2-2026-10-22s133";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -17929,7 +17929,8 @@ async function handleScreenTalk(request) {
 // \ucd9c\ub825  { ok, v:1, screen:'dlg', dlg:{\u2026\uce74\ub4dc \ubaa8\uc591}, bg, head:[\u2026], body:[\u2026], foot?:[\u2026], info:{kind}, rev }
 //        \ud589\ub3d9 \uc774\ub984: dl.ok \u00b7 dl.no(perm \u00b7 exit \u00b7 report) \u00b7 dl.copy \u00b7 dl.clear \u00b7 dl.close(diag). \ud750\ub9b0 \uacf3\uc744 \ub204\ub974\uba74 dlg.tap(perm \ub9cc dl.no).
 var DLG_CAP = 16;
-var DLG_KINDS = { perm: 1, diag: 1, pop: 1, exit: 1, report: 1, walk: 1 };
+var RLOAD_CAP = 19;           // rload(\uacbd\ub85c \ud0d0\uc0c9 \ub85c\ub529)\ub294 runner \ub178\ub4dc\ub97c \uc544\ub294 \uc571(CAP 19)\ubd80\ud130 \u2014 \uc61b \uc571\uc740 kind \ub97c \ubab0\ub77c \uadf8\ub0e5 \uc4f0\uc9c0 \uc54a\ub294\ub2e4
+var DLG_KINDS = { perm: 1, diag: 1, pop: 1, exit: 1, report: 1, walk: 1, rload: 1 };
 var DLG_MAXLINES = 600, DLG_CHUNK = 1700;
 var DLG_EMOJI = /[\u2600-\u27bf\u2b00-\u2bff\ufe0f\u200d]|[\uD83C-\uD83E][\uDC00-\uDFFF]/g;
 
@@ -18043,6 +18044,12 @@ function wkClock(nowMs, tzoMin) {
   var d = new Date(t - z * 60000), h = d.getUTCHours(), mi = d.getUTCMinutes();
   return (h < 12 ? '\uc624\uc804 ' : '\uc624\ud6c4 ') + ('0' + (h % 12 || 12)).slice(-2) + ':' + ('0' + mi).slice(-2);
 }
+// \uacbd\ub85c \ud0d0\uc0c9 \ub85c\ub529(\uc6f9 #transitLoading): \uac00\uc6b4\ub370 \uce74\ub4dc \u00b7 \ub4a4 \ud654\uba74 70% \uc5b4\ub461\uac8c \u00b7 \uc81c\ubaa9 + \uc548\ub0b4. \uce90\ub9ad\ud130\ub294 \uc571\uc774 \uadf8\ub9b0\ub2e4(runner \ub178\ub4dc \u2014 \uc7a5\uc2dd).
+function dlgRload() {
+  return { dlg: { w: 296, maxh: 0.9, dim: 0.7, top: 0.5, r: 20, mx: 24 }, bg: 'card',
+    head: [{ t: 'runner', pad: [30, 24, 30, 22], ttl: '\ubcf5\ud569\uacbd\ub85c \ud0d0\uc0c9 \uc911', sub: '\uc7a0\uc2dc\ub9cc \uae30\ub2e4\ub824\uc8fc\uc138\uc694' }],
+    body: [{ t: 'spacer', h: 0 }], foot: null, info: {} };
+}
 function dlgWalk(f) {
   var w = (f.walk && typeof f.walk === 'object') ? f.walk : {};
   var mode = w.mode === 'start' || w.mode === 'arrive' ? w.mode : 'manual';
@@ -18090,7 +18097,8 @@ function dialogScreen(inp, f) {
   f = (f && typeof f === 'object') ? f : {};
   var kind = dlgStr(f.kind, 8);
   if (!DLG_KINDS[kind]) return { ok: false, error: 'kind' };
-  var d = kind === 'perm' ? dlgPerm() : (kind === 'report' ? dlgReport() : kind === 'exit' ? dlgExit() : (kind === 'diag' ? dlgDiag(f) : (kind === 'walk' ? dlgWalk(f) : dlgPop(f))));
+  if (kind === 'rload' && !(Number(inp.cap) >= RLOAD_CAP)) return { ok: false, error: 'cap' };
+  var d = kind === 'perm' ? dlgPerm() : (kind === 'report' ? dlgReport() : kind === 'exit' ? dlgExit() : (kind === 'diag' ? dlgDiag(f) : (kind === 'walk' ? dlgWalk(f) : (kind === 'rload' ? dlgRload() : dlgPop(f)))));
   var out = { ok: true, v: 1, screen: kind === 'walk' ? 'walk' : 'dlg', bg: d.bg, head: d.head, body: d.body, info: d.info };
   if (d.dlg) out.dlg = d.dlg;
   if (d.foot) out.foot = d.foot;
