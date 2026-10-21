@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-22s137";
+var ENGINE_VERSION = "route-v2-2026-10-22s139";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -18988,7 +18988,7 @@ async function handleScreenResult(request) {
 // \ucd9c\ub825  { ok, v:1, screen:'map'|'mapstn'|'maptt', rev, cover:'tab', head, body, info }
 // \ub9e8 \uc544\ub798 module.exports \ub294 \uc2dc\ud5d8(Node)\uc6a9\uc774\uace0 Worker \uc5d0\uc11c\ub294 \ud568\uc218 \uc120\uc5b8\ub9cc \uc4f0\uc778\ub2e4.
 'use strict';
-var MAP_SCREEN_V = 4;
+var MAP_SCREEN_V = 5;
 var MAP_STN_TOP = 36;                                                   // \uc6f9 \ud31d\uc5c5 \uc704 \uc5ec\ubc31 16 + \uc190\uc7a1\uc774 4 + 16 (\uc190\uc7a1\uc774\ub294 \uc571 \ubdf0\uac00 \uadf8\ub9b0\ub2e4)
 var MAP_REGIONS = [['seoul', '\uc218\ub3c4\uad8c'], ['busan', '\ubd80\uc0b0'], ['daegu', '\ub300\uad6c'], ['gwangju', '\uad11\uc8fc'], ['daejeon', '\ub300\uc804']];
 var MAP_REGION_PREFIX = { busan: '\ubd80\uc0b0', daegu: '\ub300\uad6c', gwangju: '\uad11\uc8fc', daejeon: '\ub300\uc804' };
@@ -19010,6 +19010,13 @@ function mapStnTable() {                           // Worker \uc5d0\uc11c\ub294 
 }
 var mapLineColorFn = (typeof rheadTrkColor === 'function') ? rheadTrkColor : null;
 if (!mapLineColorFn) { try { if (typeof require === 'function') mapLineColorFn = require('./rhead').rheadTrkColor; } catch (eRq) { /* \uc5c6\uc74c */ } }
+// \uc6f9 _lineNumOf: '2\ud638\uc120' \u2192 '2', 'GTX-A' \u2192 'A', \uadf8 \ubc16(\uacbd\uc758\uc911\uc559\uc120\u00b7\uc2e0\ubd84\ub2f9\uc120 \ub4f1)\uc740 ''
+function mapLineNum(line) {
+  var l = String(line || '').trim(), m = l.match(/(\d+)\s*\ud638\uc120/);
+  if (m) return m[1];
+  var g = l.match(/GTX[-\s]?([A-Z])/i);
+  return g ? g[1].toUpperCase() : '';
+}
 function mapLineColor(line, th) {
   if (MAP_REGION_COLORS[line]) return MAP_REGION_COLORS[line];
   return mapLineColorFn ? mapLineColorFn(1, line, th === 'dark' ? 'dark' : 'pastel') : '#5a5a5f';
@@ -19136,7 +19143,7 @@ function mapStationSheet(f) {
   var kids = [
     { t: 'text', s: name, size: 22, bold: true, color: 'text', lines: 1, pad: [0, MAP_STN_TOP, 0, 12] }
   ];
-  if (lines.length) kids.push({ t: 'chips', pad: [0, 0, 0, 20], gap: 7, h: 34, onc: 'gold', onfg: '#ffffff', items: lines.slice(0, 12).map(function (l) { return { label: l, on: true, c: mapLineColor(l, f.th), act: { a: 'sel', v: 'mp.line' } }; }) });
+  if (lines.length) kids.push({ t: 'lpills', pad: [0, 0, 0, 20], gap: 7, items: lines.slice(0, 12).map(function (l) { var o = { s: l, c: mapLineColor(l, f.th) }, nm = mapLineNum(l); if (nm) o.num = nm; return o; }) });      // \uc6f9 _linePillHtml: \ud638\uc120 \uc22b\uc790(GTX \ub294 \uae00\uc790)\uac00 \uc788\uc73c\uba74 \uc67c\ucabd\uc5d0 \ubc18\ud22c\uba85 \ud770 \ub3d9\uadf8\ub77c\ubbf8 \u00b7 \uc904 \ubc14\uafc8 \uc54c\uc57d(\ub204\ub974\ub294 \uc54c\uc57d \uc544\ub2d8)
   else kids.push({ t: 'text', s: '\ub178\uc120 \uc815\ubcf4 \uc5c6\uc74c', size: 12, color: 'sub', pad: [0, 0, 0, 20] });
   kids.push({ t: 'row', pad: [0, 0, 0, 10], gap: 10, kids: [
     { t: 'button', s: '\ud83d\ude89 \ucd9c\ubc1c\uc5ed', size: 15, h: 48, r: 14, bold: true, fill: dk ? '#0a84ff' : '#1d9bf0', line: 'none', tc: '#ffffff', pad: [0, 0, 0, 0], act: { a: 'call', v: 'mp.start' } },
