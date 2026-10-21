@@ -317,6 +317,9 @@ public final class ShellCore {
     public static final String MODE_DEFAULT = "news";
     public static final String[] MODES = { "chat", "board", "news", "set" };
     public static boolean isMode(String m) { for (String x : MODES) if (x.equals(m)) return true; return false; }
+    /** 커뮤니티 머리(칩 줄)를 방식 m 으로 그려 달라는 본문과 그 캐시 열쇠(다른 방식을 눌러도 바로 뜨게 미리 받는 데 쓴다). */
+    public static String cchipsBody(String m) { return "{\"cap\":" + CAP + ",\"f\":{\"mode\":" + q(isMode(m) ? m : MODE_DEFAULT) + "}}"; }
+    public static String cchipsKey(String m) { return S_CCHIPS + "|" + (isMode(m) ? m : MODE_DEFAULT); }
     public static String mode(Store st) { String m = st.get(K_MODE, MODE_DEFAULT); return isMode(m) ? m : MODE_DEFAULT; }
 
     public static final String S_SETTINGS = "settings", S_SHOP = "shop", S_NEWS = "news", S_CCHIPS = "cchips", S_PENDING = "pending", S_HOME = "home", S_BOARD = "board", S_WRITE = "write", S_CHAT = "chat", S_FOOD = "food", S_FOODSHEET = "foodsheet", S_MAPH = "maph", S_MAPB = "mapb", S_MAPSTN = "mapstn", S_MAPTT = "maptt", S_FAV = "fav", S_DETAIL = "detail", S_SETPG = "setpg", S_HDR = "hdr";
@@ -357,7 +360,7 @@ public final class ShellCore {
             String c = st.get(K_SHOP_CAT, "");
             return new Req("GET", BASE + "/screen/shop?cap=" + CAP + (c.length() > 0 ? "&cat=" + enc(c) : ""), null);
         }
-        if (S_CCHIPS.equals(screen)) return new Req("POST", BASE + "/screen/cchips", "{\"cap\":" + CAP + ",\"f\":{\"mode\":" + q(mode(st)) + "}}");
+        if (S_CCHIPS.equals(screen)) return new Req("POST", BASE + "/screen/cchips", cchipsBody(mode(st)));
         if (S_NEWS.equals(screen)) {
             NewsRows r = NewsRows.from(feeds);
             return new Req("POST", BASE + "/screen/news", "{\"cap\":" + CAP + ",\"f\":{\"cat\":" + q(st.get(K_NEWS_CAT, "전체")) + "},\"n\":" + r.json() + "}");

@@ -50,6 +50,15 @@ function findAndroidJar() {
     assert.ok(/NetPost\.(post|get)\(/.test(v), '통신은 허용 목록을 지키는 NetPost 로');
     assert.ok(!/HttpURLConnection|new URL\(/.test(v), '직접 통신 없음');
   });
+  await t('모든 탭 미리 받기: 지금 칸의 요청 번호를 올리지 않고 캐시에만 넣는다 · 위치가 필요한 맛집은 건너뛴다', async () => {
+    const v = fs.readFileSync(N('ShellActivity.java'), 'utf8');
+    const m = v.slice(v.indexOf('private void prefetchTabs()'), v.indexOf('private void cachePutAsync('));
+    assert.ok(m.length > 500, 'prefetchTabs 있음');
+    for (const f of ['/screen/home', '/screen/cchips', '/screen/chat', '/screen/board', '/screen/map', 'S_NEWS', 'S_SHOP']) assert.ok(m.includes(f), f + ' 미리 받기');
+    assert.ok(!/\+\+seq/.test(m) && !/present\(/.test(m) && !/onScreen\(/.test(m), '진행 중인 칸과 상태를 건드리지 않는다');
+    assert.ok(!/loadFood|locateForFood/.test(m), '맛집은 위치가 필요해 미리 받지 않는다');
+    assert.ok(/prefetchPut\(/.test(m) && /expectId\(key\)/.test(v), '받은 글은 화면 이름을 확인하고 캐시에 넣는다');
+  });
   await t('순수 네이티브 프로젝트: 소스는 native/shell 뿐 · 매니페스트에 ShellActivity 가 런처 · 웹뷰/Capacitor 흔적 없음', async () => {
     const g = fs.readFileSync(path.join(ROOT, 'shell-android', 'app', 'build.gradle'), 'utf8');
     assert.ok(/srcDirs = \['\.\.\/\.\.\/native\/shell'\]/.test(g), '소스 경로');

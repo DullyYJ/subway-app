@@ -460,6 +460,9 @@ public class ShellJvmTest {
             ok("error".equals(es0.id) && es0.body.size() == 2, "오류 안내 화면은 검증을 통과한다");
         } catch (Exception ex0) { ok(false, "오류 안내 화면: " + ex0); }
         ok("map".equals(ShellCore.expectId("maph")) && "map".equals(ShellCore.expectId("mapb")) && "shop".equals(ShellCore.expectId("shop|추천")) && "tabs".equals(ShellCore.expectId("tabs|home")) && "home".equals(ShellCore.expectId("home")), "칸이 기대하는 화면 이름");
+        ok(ShellCore.cchipsKey("chat").equals("cchips|chat") && ShellCore.cchipsKey("zzz").equals("cchips|" + ShellCore.MODE_DEFAULT)
+            && ShellCore.cchipsBody("board").contains("\"mode\":\"board\"") && ShellCore.cchipsBody("zzz").contains("\"mode\":\"" + ShellCore.MODE_DEFAULT + "\"")
+            && "cchips".equals(ShellCore.expectId(ShellCore.cchipsKey("set"))), "칩 줄 미리 받기: 방식마다 본문과 열쇠");
         ok(ShellCore.diskCacheable("shop") && ShellCore.diskCacheable("cchips") && !ShellCore.diskCacheable("home") && !ShellCore.diskCacheable("news") && !ShellCore.diskCacheable("mapb"), "디스크에 두는 화면은 상태 없는 것만");
         // 앱이 죽었다 살아난 뒤 결과 카드 복원
         HomeCore snapSrc = new HomeCore();
