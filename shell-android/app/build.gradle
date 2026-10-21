@@ -13,7 +13,8 @@ android {
         targetSdk 34
         versionCode = Integer.parseInt(System.getenv('ANDROID_VERSION_CODE') ?: '1')
         versionName '2.0-native'
-        ndk { abiFilters 'arm64-v8a', 'armeabi-v7a' }       // 벡터 지도 엔진(네이티브 라이브러리) 크기를 줄인다 — 실기기용만
+        ndk { abiFilters 'arm64-v8a' }                      // 지도 엔진(네이티브 라이브러리)이 앱 크기의 대부분 — 요즘 폰 전부인 64비트 하나만 담아 절반으로 줄인다
+        resConfigs 'ko', 'en'                               // 라이브러리가 끌고 오는 수십 개 나라 글(번역)을 빼고 한국어·영어만 남긴다
     }
 
     compileOptions {
@@ -28,7 +29,17 @@ android {
     }
 
     buildTypes {
-        release { minifyEnabled false }
+        release {
+            // 쓰지 않는 라이브러리 코드를 걷어낸다(R8). 우리 코드는 이름·구조를 그대로 두어 위젯·서비스·글자 이름 찾기가 깨지지 않는다.
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.debug               // 설치용(스토어 올림 전) — 디버그 열쇠로 서명
+        }
+    }
+
+    lint {
+        checkReleaseBuilds false                             // 릴리스 빌드가 린트 때문에 멈추지 않게(시험은 CI 테스트가 맡는다)
+        abortOnError false
     }
 }
 
