@@ -195,6 +195,18 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
   let b = near({ sel: 1 });
   const cs = b.body.filter(n => n.t === 'bcard');
   ok(cs[1].on === true && cs[0].on === false && b.head[1].foc === cs[1].pi, '고른 정류장(sel): 그 카드가 켜지고 지도도 그 핀을 고른다');
+  {   // 주변 정류장 사용자 순서(웹 busNearOrder): 앱이 끌어서 정한 열쇠 목록을 엔진이 적용한다
+    const ids = cs.map(c => c.k), rev = ids.slice().reverse(), only = ids[2];
+    const kk = x => x.body.filter(n => n.t === 'bcard');
+    ok(ids.length >= 3 && kk(near({ ord: rev })).map(c => c.k).join() === rev.join(), '사용자 순서(ord): 저장된 순서대로 그린다');
+    ok(kk(near({ ord: [only] }))[0].k === only && kk(near({ ord: [only] })).slice(1).map(c => c.k).join() === ids.filter(k => k !== only).join(), '저장된 것은 앞으로 · 저장 안 된 정류장은 뒤에 거리순');
+    ok(kk(near({ ord: ['없는열쇠', 5, null, ''] })).map(c => c.k).join() === ids.join() && kk(near({ ord: 'x' })).map(c => c.k).join() === ids.join(), '엉뚱한 ord 는 무시(기본 거리순)');
+    const bo = kk(near({ ord: rev }));
+    ok(bo[0].rol === '끌어서 순서 변경' && bo[0].rod === '완료' && bo.slice(1).every(c => !c.rol && !c.rod) && kk(near({})).slice(1).every(c => !c.rol), '순서 바꾸기 줄 글은 첫 주변 카드에만 실린다');
+    const ro = near({ ord: rev }, { a0: SEOUL_ARR });
+    ok(ro.info.stops.map(x => x.sid || x.id || '').join() === near({}).info.stops.slice().reverse().map(x => x.sid || x.id || '').join() && ro.head[1].pts.filter(p => p.k === 's').map(p => p.g).join() === rev.join(), '정류장 목록(info.stops)·지도 핀도 같은 순서');
+    ok(call({ part: 'b', mode: 'bus', th: 'dark', bus: { vw: 'fav', fav: [], ord: rev } }).body.every(n => n.t !== 'bcard' || !n.rol), '즐겨찾기 보기에는 순서 바꾸기 줄이 없다');
+  }
   ok(near({ sel: 99 }).head[1].foc === -1 && near({ sel: -1 }).body.every(n => n.t !== 'bcard' || n.on === false), '범위 밖 선택은 무시');
   ok(cs.every(c => c.mode === 'near' && c.fv === 0 && c.star.v === 'mp.fv.' + cs.indexOf(c) && c.edit.v === 'mp.al.' + cs.indexOf(c) && c.dist), '주변 카드: ☆ · ✏️ · 거리');
   const fv = b.info.stops[0];
