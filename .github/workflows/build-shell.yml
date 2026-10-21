@@ -60,7 +60,16 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
       - name: Run ${{ matrix.file }}
-        run: node test/${{ matrix.file }}
+        run: |
+          set +e
+          node test/${{ matrix.file }} > /tmp/t.log 2>&1
+          rc=$?
+          tail -n 80 /tmp/t.log
+          if [ $rc -ne 0 ]; then
+            # 로그를 직접 내려받기 어려우므로 실패 줄을 주석(annotation)으로도 남긴다
+            grep -a -A8 -m3 -E "FAIL|Error|error:" /tmp/t.log | tr '\n' ' ' | cut -c1-1800 | while IFS= read -r l; do echo "::error::$l"; done
+          fi
+          exit $rc
 
   build:
     needs: test
