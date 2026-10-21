@@ -261,9 +261,18 @@ function findAndroidJar() {
     const m = fs.readFileSync(path.join(ROOT, 'shell-android', 'app', 'src', 'main', 'AndroidManifest.xml'), 'utf8');
     assert.ok(/\.ShellActivity/.test(m) && /android\.intent\.category\.LAUNCHER/.test(m), '런처');
     const y = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'build-shell.yml'), 'utf8');
-    assert.ok(/shell_native\.test\.js/.test(y) && /assembleDebug/.test(y) && /Bundle Noto Sans KR/.test(y), '워크플로');
+    assert.ok(/shell_native\.test\.js/.test(y) && /assembleRelease/.test(y) && /assembleDebug/.test(y) && /Bundle Noto Sans KR/.test(y), '워크플로');
     for (const f of [g, m, y].concat(walk(path.join(ROOT, 'native', 'shell'), '.java').map(x => fs.readFileSync(x, 'utf8')))) assert.ok(!/capacitor|WebView|BridgeActivity|webDir/i.test(f), '웹 흔적');
     assert.ok(!fs.existsSync(path.join(ROOT, 'www')), 'www 폴더가 없어야 한다(웹 기준본은 ios-reference/)');
+  });
+  await t('앱 크기(s138): 64비트 한 가지 · 한국어·영어만 · 릴리스에서 라이브러리 코드 줄이기 · 실패하면 디버그로 대신', () => {
+    const g = fs.readFileSync(path.join(ROOT, 'shell-android', 'app', 'build.gradle'), 'utf8');
+    assert.ok(/abiFilters 'arm64-v8a' \}/.test(g) && !/armeabi/.test(g), '지도 엔진 네이티브 라이브러리는 64비트만');
+    assert.ok(/resConfigs 'ko', 'en'/.test(g) && /minifyEnabled true/.test(g) && /proguard-rules\.pro/.test(g) && /signingConfig signingConfigs\.debug/.test(g), '글 두 가지 · R8 · 설치용 서명');
+    const pr = fs.readFileSync(path.join(ROOT, 'shell-android', 'app', 'proguard-rules.pro'), 'utf8');
+    assert.ok(/-keep class com\.dullyyj\.subway\.\*\* \{ \*; \}/.test(pr), '우리 코드는 그대로(이름으로 찾는 위젯 글자·서비스 보호)');
+    const y = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'build-shell.yml'), 'utf8');
+    assert.ok(/assembleRelease[\s\S]*assembleDebug/.test(y) && /apk\/release\/\*\.apk/.test(y) && /apk\/debug\/\*\.apk/.test(y), '릴리스 먼저 · 실패하면 디버그 · 둘 다 올림 대상');
   });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
   process.exit(fail ? 1 : 0);
