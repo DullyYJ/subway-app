@@ -46,6 +46,14 @@ public class ShellActivity extends Activity {
     private String[] slots = new String[0];            // 지금 탭의 화면 칸들(위 → 아래)
     private final int[] seq = new int[2];              // 칸마다 가장 새 요청 번호(늦게 온 옛 답은 버린다)
     private int seqTabs = 0, seqHdr = 0;
+    // ── 디바운스 · 연타 막기 · SWR 보관함(s132) — 입력이 멈춘 뒤 한 번만 통신하고, 같은 요청은 지난 결과를 먼저 보인다 ──
+    private final Debounce deb = new Debounce(new Debounce.Clock() {
+        @Override public long now() { return android.os.SystemClock.uptimeMillis(); }
+        @Override public void post(Runnable r, long ms) { main.postDelayed(r, ms); }
+        @Override public void cancel(Runnable r) { main.removeCallbacks(r); }
+    });
+    private final Swr routeSwr = new Swr(12);
+    private static final long ROUTE_FRESH_MS = 8000L, ROUTE_STALE_MS = 600000L;
     // 화면 글 캐시: 탭을 오갈 때 마지막으로 받은 화면을 바로 올리고, 새 글은 뒤에서 받아 바꾼다(스크롤은 그대로)
     private final java.util.Set<String> scrKeys = java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<String, Boolean>());      // 메모리 캐시에 든 열쇠(다른 스레드에서 "캐시가 있나" 볼 때)
     private final java.util.LinkedHashMap<String, String> scrCache = new java.util.LinkedHashMap<String, String>(32, 0.75f, true) {
@@ -593,18 +601,23 @@ public class ShellActivity extends Activity {
             }       // 머리 칸(칩 줄)은 뼈대 없이 비운다(높이가 그린 만큼이라)          // 옛 탭 화면이 남아 보이지 않게 — 받는 동안은 뼈대
         }
         final boolean keep = keepX;
-        if (ShellCore.S_HOME.equals(screen)) { loadHome(v, keep); return; }
-        if (ShellCore.S_BOARD.equals(screen)) { loadBoard(v, keep, true); return; }
-        if (ShellCore.S_CHAT.equals(screen)) { loadChat(v, keep, true); return; }
-        if (ShellCore.S_FOOD.equals(screen)) { loadFood(v, keep, false); return; }
-        if (ShellCore.S_MAPH.equals(screen)) { loadMapHead(v, keep, null, null); return; }
-        if (ShellCore.S_MAPB.equals(screen)) { loadMapBody(v, keep); return; }
-        new Thread(new Runnable() {
-            @Override public void run() {
-                final String txt = fetchGeneric(screen); warm(txt);
-                main.post(new Runnable() { @Override public void run() { if (my == seq[si]) present(v, txt, keep); } });
-            }
-        }, "shell-slot").start();
+        final Runnable go = new Runnable() { @Override public void run() {
+            if (my != seq[si]) return;                               // 그 사이 다른 탭 · 더 새 요청이 시작됐다 — 이 받기는 보내지 않는다
+            if (ShellCore.S_HOME.equals(screen)) { loadHome(v, keep); return; }
+            if (ShellCore.S_BOARD.equals(screen)) { loadBoard(v, keep, true); return; }
+            if (ShellCore.S_CHAT.equals(screen)) { loadChat(v, keep, true); return; }
+            if (ShellCore.S_FOOD.equals(screen)) { loadFood(v, keep, false); return; }
+            if (ShellCore.S_MAPH.equals(screen)) { loadMapHead(v, keep, null, null); return; }
+            if (ShellCore.S_MAPB.equals(screen)) { loadMapBody(v, keep); return; }
+            new Thread(new Runnable() {
+                @Override public void run() {
+                    final String txt = fetchGeneric(screen); warm(txt);
+                    main.post(new Runnable() { @Override public void run() { if (my == seq[si]) present(v, txt, keep); } });
+                }
+            }, "shell-slot").start();
+        } };
+        // SWR: 캐시 화면은 위에서 0초에 이미 올렸다. 탭을 연달아 옮기는 동안은 새로 받기를 잠깐 미뤄(디바운스) 지나친 탭의 통신을 보내지 않는다. 캐시가 없으면 곧장.
+        if (!keep0 && keep) deb.trailing("slot" + si, Debounce.TAB_GAP_MS, go); else { deb.cancel("slot" + si); go.run(); }
     }
 
     /** 상태 없이 엔진에서 한 번에 받는 화면(쇼핑·소식·칩 줄·설정)의 글. 못 받으면 "". */
@@ -1000,6 +1013,7 @@ public class ShellActivity extends Activity {
             if (ck != null && v != sheetView && (v.itemCount() == 0 || skelViews.contains(v))) {          // 빈 칸이면 안내와 [다시 시도] — 뒤에서 몇 번 더 받아 본다
                 try { String dg = netDiag.get(ck); v.setScreen(ScreenCore.load(ShellCore.errorScreen(dg)), false); shownJson.remove(v); skelViews.remove(v); fadeIn(v); scheduleRetry(v, ShellCore.DEFAULT_RETRY); return; } catch (Throwable ignored) { }
             }
+            if (keep && v.itemCount() > 0) return;                // 뒤에서 조용히 새로 받던 중 실패 — 떠 있는 옛 화면을 그대로 둔다(SWR: 알림도 띄우지 않는다)
             toast("화면을 받지 못했어요"); return;
         }
         retryN.remove(v);
@@ -1111,7 +1125,8 @@ public class ShellActivity extends Activity {
 
         private void handle(ScreenCore.Act a, boolean on) {
             if (which == 3) return;
-            if ("call".equals(a.a) && ShellCore.RETRY_ACT.equals(a.v)) { showTab(ShellCore.currentTab(store)); return; }
+            if (which == 2 && !deb.gate("tab:" + a.a + ":" + a.v, Debounce.TAP_MS)) return;          // 같은 탭 버튼 연타는 한 번으로
+            if ("call".equals(a.a) && ShellCore.RETRY_ACT.equals(a.v)) { if (deb.gate("retry", 600L)) showTab(ShellCore.currentTab(store)); return; }
             ShellCore.Effect e;
             if (which == 2) e = ShellCore.routeTabs(store, a.a, a.v);
             else if (ShellCore.S_CHAT.equals(screenName())) {
@@ -1398,7 +1413,7 @@ public class ShellActivity extends Activity {
                 final String txt = r.status == 200 ? r.body : ""; warm(txt);
                 final FoodCore.Parsed fpar = txt.length() > 0 ? FoodCore.parseScreen(txt) : null;          // 큰 화면 읽기는 통신 스레드에서
                 main.post(new Runnable() { @Override public void run() {
-                    if (my != seqFood || txt.length() == 0) { if (txt.length() == 0 && my == seqFood) toast("맛집 화면을 받지 못했어요"); return; }
+                    if (my != seqFood || txt.length() == 0) { if (txt.length() == 0 && my == seqFood && !(keep && v.itemCount() > 0)) toast("맛집 화면을 받지 못했어요"); return; }
                     food.apply(fpar);
                     if (!(keep && food.needData())) foodPresent(v, txt, keep);          // 캐시 화면이 떠 있으면 "받는 중" 중간 화면으로 덮지 않는다(깜빡임)
                     if (food.needData()) fetchFoodData(my, v);
@@ -1654,7 +1669,11 @@ public class ShellActivity extends Activity {
                 liveSet(l);
                 if (!resumed || !"bus".equals(map.mode()) || !"map".equals(ShellCore.currentTab(store)) || map.busLL == null) return;
                 if (Math.abs(map.busLL[0] - l.getLatitude()) > 0.0015 || Math.abs(map.busLL[1] - l.getLongitude()) > 0.0015) {
-                    map.setBusLoc(l.getLatitude(), l.getLongitude()); loadMapBody(body, true);                // 170m 넘게 움직였다 — 새 자리의 정류장
+                    final double la = l.getLatitude(), lo = l.getLongitude();          // 170m 넘게 움직였다 — 위치가 연달아 와도 멈춘 뒤 한 번만 새 자리의 정류장을 받는다(디바운스)
+                    deb.trailing("busloc", Debounce.TYPE_MS, new Runnable() { @Override public void run() {
+                        if (!resumed || !"bus".equals(map.mode()) || !"map".equals(ShellCore.currentTab(store)) || map.busLL == null) return;
+                        map.setBusLoc(la, lo); loadMapBody(body, true);
+                    } });
                 }
             }
             @Override public void fail() { }
@@ -2386,13 +2405,13 @@ public class ShellActivity extends Activity {
         @Override public void onInputFocus(boolean on) { }
         @Override public void onFirstDraw() { }
         @Override public void onText(String key, String value, String kind) {
-            if (ShellCore.S_SETPG.equals(sheetName) && "cm".equals(setPage)) { if ("cmq".equals(key) && "edit".equals(kind)) cmQuery(value); return; }
+            if (ShellCore.S_SETPG.equals(sheetName) && "cm".equals(setPage)) { if ("cmq".equals(key) && "edit".equals(kind)) { final String cq = value; deb.trailing("cmq", Debounce.TYPE_MS, new Runnable() { @Override public void run() { cmQuery(cq); } }); } return; }
             if (!ShellCore.S_FAV.equals(sheetName)) return;
             if ("blur".equals(kind)) {                                   // 후보 줄을 누르는 동안 잠깐 기다렸다 닫는다
                 main.postDelayed(new Runnable() { @Override public void run() { if (ShellCore.S_FAV.equals(sheetName) && fav.endActive()) { fav.sync(sheetView == null ? null : sheetView.fields()); loadFav(); } } }, 250);
                 return;
             }
-            if (fav.onText(key, value, kind)) { fav.sync(sheetView == null ? null : sheetView.fields()); fav.fs = "fvs".equals(key) ? value : fav.fs; fav.fd = "fvd".equals(key) ? value : fav.fd; loadFav(); }
+            if (fav.onText(key, value, kind)) { fav.sync(sheetView == null ? null : sheetView.fields()); fav.fs = "fvs".equals(key) ? value : fav.fs; fav.fd = "fvd".equals(key) ? value : fav.fd; if ("edit".equals(kind)) deb.trailing("favq", Debounce.TYPE_MS, new Runnable() { @Override public void run() { if (ShellCore.S_FAV.equals(sheetName)) loadFav(); } }); else loadFav(); }
         }
         @Override public void onContentH(float dp) { }
     }
@@ -2627,6 +2646,10 @@ public class ShellActivity extends Activity {
             return;
         }
         if (!home.onText(key, value, kind)) return;
+        if ("edit".equals(kind)) {                       // 글자를 치는 동안은 기다렸다가, 멈춘 뒤 한 번만 후보를 받고 다시 그린다(디바운스)
+            deb.trailing("homeq", Debounce.TYPE_MS, new Runnable() { @Override public void run() { fetchCands(); reloadHome(); } });
+            return;
+        }
         fetchCands();
         reloadHome();
     }
@@ -2650,6 +2673,7 @@ public class ShellActivity extends Activity {
     }
 
     private void homeAct(String v, Map<String, String> fields) {
+        deb.cancel("homeq");                             // 후보를 고르거나 버튼을 눌렀다 — 기다리던 입력 갱신은 필요 없다
         int r = home.act(v, fields);
         switch (r) {
             case HomeCore.R_RESULT: reloadHome(); break;
@@ -2683,6 +2707,7 @@ public class ShellActivity extends Activity {
                 new Runnable() { @Override public void run() { toast("위치 정보 이용에 동의하지 않아 내 위치를 쓸 수 없어요"); } });
             return;
         }
+        if (!deb.gate("gps", 1200L)) return;               // 내 위치 버튼 연타 — 한 번만(권한을 받는 순간은 막지 않는다)
         home.gps = true; reloadHome();
         Location recent = liveRecent(30000L);
         if (recent != null) gotGps(recent);                                      // 방금 받은 현재 위치는 0초에 먼저 채우고
@@ -2746,21 +2771,34 @@ public class ShellActivity extends Activity {
         if (qs == null) { toast("출발지와 도착지를 목록에서 골라 주세요"); return; }
         final String url = HomeCore.routeUrl(qs), a = home.text[HomeCore.START], b = home.text[HomeCore.DEST];
         final long bt = picked ? base : -1, rb = System.currentTimeMillis();
+        if (!deb.gate("route", 800L)) return;                                       // 검색 버튼 연타 — 한 번만
+        final String sk = HomeCore.routeSwrKey(qs, picked, base);
+        // SWR: 같은 출발·도착을 다시 찾으면 지난 결과를 0초에 먼저 보인다. 8초 안이면 그대로 쓰고, 지났으면 뒤에서 새로 받아 조용히 바꾼다.
+        final Swr.Hit hit = routeSwr.get(sk, rb, ROUTE_FRESH_MS, ROUTE_STALE_MS);
+        boolean shown0 = false;
+        if (hit.state != Swr.MISS) {
+            int nl = hit.body.indexOf('\n'); long rb0 = rb;
+            if (nl > 0) { try { rb0 = Long.parseLong(hit.body.substring(0, nl)); } catch (NumberFormatException ignored) { nl = -1; } }
+            if (nl > 0 && home.setRoute(hit.body.substring(nl + 1), a, b, bt, rb0)) { shown0 = true; reloadHome(); } else routeSwr.drop(sk);
+        }
+        final boolean shown = shown0;
+        if (shown && hit.state == Swr.FRESH) { home.lastQs = qs; return; }          // 방금 받은 결과 — 통신 없이 끝
         final int my = ++seqRoute;
         home.lastQs = qs;
-        toast("경로를 찾는 중이에요");
+        if (!shown) toast("경로를 찾는 중이에요");
         new Thread(new Runnable() {
             @Override public void run() {
                 NetPost.Res r1 = NetPost.get(RouteFetchCore.liveZero(url), 15000);
                 String b1 = (r1.status == 200 && r1.body != null) ? r1.body : "";
                 Map<String, Object> fo = RouteFetchCore.extractFollow(b1);
                 boolean draw = b1.length() > 2 && RouteFetchCore.draws(fo);
-                if (draw) postRoute(my, b1, a, b, bt, rb);
+                boolean full1 = draw && !RouteFetchCore.wantsFull(fo);
+                if (draw && (full1 || !shown)) postRoute(my, b1, a, b, bt, rb, full1 ? sk : null);       // 옛 결과가 떠 있으면 근사 결과로 덮지 않고 전체를 기다린다
                 if (!draw || RouteFetchCore.wantsFull(fo)) {
                     NetPost.Res r2 = NetPost.get(url, 30000);
                     String b2 = (r2.status == 200 && r2.body != null) ? r2.body : "";
-                    if (b2.length() > 2) { postRoute(my, b2, a, b, bt, rb); fo = RouteFetchCore.extractFollow(b2); }
-                    else if (!draw) { postFail(my); return; }
+                    if (b2.length() > 2) { postRoute(my, b2, a, b, bt, rb, sk); fo = RouteFetchCore.extractFollow(b2); }
+                    else if (!draw) { postFail(my, shown); return; }
                 }
                 if (bt < 0) retryEstimated(my, url, fo);                       // 기준시각을 직접 고르지 않았을 때만(고르면 실시간 도착을 못 쓴다)
             }
@@ -3282,14 +3320,16 @@ public class ShellActivity extends Activity {
         }
     }
     private int seqRoute = 0;
-    private void postRoute(final int my, final String raw, final String a, final String b, final long bt, final long rb) {
+    /** sk: 이 결과를 SWR 보관함에 남길 열쇠(null 이면 남기지 않는다 — 근사 결과). 읽을 수 있는 결과만 남긴다. */
+    private void postRoute(final int my, final String raw, final String a, final String b, final long bt, final long rb, final String sk) {
         main.post(new Runnable() { @Override public void run() {
             if (my != seqRoute) return;
-            if (home.setRoute(raw, a, b, bt, rb)) reloadHome(); else toast("경로 응답을 읽지 못했어요");
+            if (home.setRoute(raw, a, b, bt, rb)) { if (sk != null) routeSwr.put(sk, rb + "\n" + raw, System.currentTimeMillis()); reloadHome(); } else toast("경로 응답을 읽지 못했어요");
         } });
     }
-    private void postFail(final int my) {
-        main.post(new Runnable() { @Override public void run() { if (my == seqRoute) toast("경로를 받지 못했어요"); } });
+    /** quiet: 옛 결과가 이미 떠 있다 — 뒤에서 새로 받다 실패해도 알림 없이 옛 결과를 그대로 둔다. */
+    private void postFail(final int my, final boolean quiet) {
+        main.post(new Runnable() { @Override public void run() { if (my == seqRoute && !quiet) toast("경로를 받지 못했어요"); } });
     }
 
     private void openLink(String url) {
