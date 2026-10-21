@@ -13,7 +13,8 @@
 // 출력  { ok, v:1, screen:'map'|'mapstn'|'maptt', rev, cover:'tab', head, body, info }
 // 맨 아래 module.exports 는 시험(Node)용이고 Worker 에서는 함수 선언만 쓰인다.
 'use strict';
-var MAP_SCREEN_V = 6;
+var MAP_SCREEN_V = 7;
+var MAP_PLAY_RW = 100;                                                  // 이름/제목 오른쪽에 남겨 둘 놀이터 칸(90 + 사이 10) — 이름이 길면 이 칸만 남기고 이름이 좌우로 흐른다(앱 s142)
 var MAP_STN_TOP = 36;                                                   // 웹 팝업 위 여백 16 + 손잡이 4 + 16 (손잡이는 앱 뷰가 그린다)
 var MAP_REGIONS = [['seoul', '수도권'], ['busan', '부산'], ['daegu', '대구'], ['gwangju', '광주'], ['daejeon', '대전']];
 var MAP_REGION_PREFIX = { busan: '부산', daegu: '대구', gwangju: '광주', daejeon: '대전' };
@@ -166,7 +167,7 @@ function mapStationSheet(f) {
   if (f.sl && mapLinesOf(name).indexOf(f.sl) < 0) lines = mapLinesOf(name);
   var dk = f.th === 'dark';                                                                   // 웹 .nmp: 이름 22 굵게 · 노선 알약 · 🚉/🏁 버튼(패딩 15, 반지름 14) · 🕒 시간표(패딩 13). 손잡이는 앱이 맨 위에 그린다.
   var kids = [
-    { t: 'text', s: name, size: 22, bold: true, color: 'text', lines: 1, pad: [0, MAP_STN_TOP, 0, 12] }
+    { t: 'text', s: name, size: 22, bold: true, color: 'text', lines: 1, rw: MAP_PLAY_RW, mq: true, pad: [0, MAP_STN_TOP, 0, 12] }
   ];
   if (lines.length) kids.push({ t: 'lpills', pad: [0, 0, 0, 20], gap: 7, items: lines.slice(0, 12).map(function (l) { var o = { s: l, c: mapLineColor(l, f.th) }, nm = mapLineNum(l); if (nm) o.num = nm; return o; }) });      // 웹 _linePillHtml: 호선 숫자(GTX 는 글자)가 있으면 왼쪽에 반투명 흰 동그라미 · 줄 바꿈 알약(누르는 알약 아님)
   else kids.push({ t: 'text', s: '노선 정보 없음', size: 12, color: 'sub', pad: [0, 0, 0, 20] });
@@ -197,7 +198,7 @@ function mapTimetableSheet(f) {
   var day = mapStr(sel.day, 6);
   var d = res[line + '|' + (day || '-')] || null;
   if (!day && d && d.dayCode) day = d.dayCode;
-  var kids = [{ t: 'bar', pad: [0, MAP_STN_TOP, 0, 4], title: name + ' 시간표', btn: '닫기', act: { a: 'call', v: 'mp.close' } }];
+  var kids = [{ t: 'bar', pad: [0, MAP_STN_TOP, 0, 4], rw: MAP_PLAY_RW, mq: true, title: name + ' 시간표', btn: '닫기', act: { a: 'call', v: 'mp.close' } }];
   if (lines.length) kids.push({ t: 'chips', pad: [0, 4, 0, 6], gap: 6, h: 30, onc: 'gold', onfg: '#ffffff', items: lines.map(function (l, i) {
     var kc = res[l + '|-'], nod = !!(kc && kc.noData);
     var o = { label: l, on: l === line, act: { a: 'call', v: 'mt.l.' + i } };
