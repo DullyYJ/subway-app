@@ -50,14 +50,18 @@ function findAndroidJar() {
     assert.ok(/NetPost\.(post|get)\(/.test(v), '통신은 허용 목록을 지키는 NetPost 로');
     assert.ok(!/HttpURLConnection|new URL\(/.test(v), '직접 통신 없음');
   });
-  await t('모든 탭 미리 받기: 지금 칸의 요청 번호를 올리지 않고 캐시에만 넣는다 · 위치가 필요한 맛집은 건너뛴다', async () => {
+  await t('모든 탭 미리 받기(0초 병렬 · 예외 탭 없음): 지금 칸의 요청 번호를 올리지 않고 캐시에만 넣는다 · 스켈레톤 · 마지막 위치', async () => {
     const v = fs.readFileSync(N('ShellActivity.java'), 'utf8');
     const m = v.slice(v.indexOf('private void prefetchTabs()'), v.indexOf('private void cachePutAsync('));
-    assert.ok(m.length > 500, 'prefetchTabs 있음');
-    for (const f of ['/screen/home', '/screen/cchips', '/screen/chat', '/screen/board', '/screen/map', 'S_NEWS', 'S_SHOP']) assert.ok(m.includes(f), f + ' 미리 받기');
-    assert.ok(!/\+\+seq/.test(m) && !/present\(/.test(m) && !/onScreen\(/.test(m), '진행 중인 칸과 상태를 건드리지 않는다');
-    assert.ok(!/loadFood|locateForFood/.test(m), '맛집은 위치가 필요해 미리 받지 않는다');
+    assert.ok(m.length > 2000, 'prefetchTabs 있음');
+    for (const f of ['/screen/home', '/screen/cchips', '/screen/chat', '/screen/board', '/screen/map', '/screen/food', 'prefetchNews', 'shopUrl', 'S_SETTINGS', 'catValues', 'modeOverride']) assert.ok(m.includes(f), f + ' 미리 받기');
+    assert.ok(!/\+\+seq/.test(m) && !/present\(/.test(m), '진행 중인 칸을 건드리지 않는다');
+    assert.ok(!/loadFood\(|locateForFood|locateOnce\(/.test(m), '미리 받기가 권한 안내를 띄우지 않는다');
+    assert.ok(!/postDelayed\([^)]*prefetchTabs/.test(v) && /captureLastLoc\(\);\s*prefetchTabs\(\);/.test(v), '지연 없이 켜는 즉시 시작');
     assert.ok(/prefetchPut\(/.test(m) && /expectId\(key\)/.test(v), '받은 글은 화면 이름을 확인하고 캐시에 넣는다');
+    assert.ok(/showSkeleton\(v, screen\)/.test(v) && /skeletonScreen/.test(v), '캐시가 없으면 뼈대를 먼저 띄운다');
+    assert.ok(/restoreState\(ck, json\)/.test(v) && /diskTtl\(key\)/.test(v), '캐시 화면은 눌림 상태까지 되살리고 모든 화면을 디스크에 둔다');
+    assert.ok(/seedMapLoc\(\)/.test(v) && /lastLocGet\(store\)/.test(v) && /locateQuiet\(/.test(v), '지도 · 맛집은 마지막 위치로 먼저 그리고 조용히 새 위치를 받는다');
   });
   await t('순수 네이티브 프로젝트: 소스는 native/shell 뿐 · 매니페스트에 ShellActivity 가 런처 · 웹뷰/Capacitor 흔적 없음', async () => {
     const g = fs.readFileSync(path.join(ROOT, 'shell-android', 'app', 'build.gradle'), 'utf8');

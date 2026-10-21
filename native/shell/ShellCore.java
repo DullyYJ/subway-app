@@ -338,6 +338,43 @@ public final class ShellCore {
         return new String[] { S_PENDING };
     }
 
+    // ── 마지막으로 안 내 위치: 지도 · 맛집을 위치 대기 없이 바로 그리는 데 쓴다(새 위치는 뒤에서 받아 바꾼다) ──
+    public static final String K_LASTLOC = "last_loc";
+    public static void lastLocPut(Store st, double la, double lo, long now) {
+        if (Double.isNaN(la) || Double.isNaN(lo) || (la == 0 && lo == 0)) return;
+        st.put(K_LASTLOC, la + "," + lo + "," + now);
+    }
+    /** {위도, 경도} 또는 null. */
+    public static double[] lastLocGet(Store st) {
+        try {
+            String[] p = st.get(K_LASTLOC, "").split(",");
+            if (p.length < 2) return null;
+            double la = Double.parseDouble(p[0]), lo = Double.parseDouble(p[1]);
+            return (la == 0 && lo == 0) || Math.abs(la) > 90 || Math.abs(lo) > 180 ? null : new double[] { la, lo };
+        } catch (Exception e) { return null; }
+    }
+    /** 화면 글 안의 분류 칩(act.a == "cat")들의 값 — 다른 분류 · 방을 미리 받을 때 어떤 것들이 있는지 화면에서 읽는다. */
+    public static List<String> catValues(String json) {
+        List<String> out = new ArrayList<String>();
+        try { collectCat(ScreenCore.parse(json), out, 0); } catch (Exception e) { /* 없음 */ }
+        return out;
+    }
+    @SuppressWarnings("unchecked")
+    private static void collectCat(Object o, List<String> out, int depth) {
+        if (depth > 14 || out.size() >= 24) return;
+        if (o instanceof Map) {
+            Map<String, Object> m = (Map<String, Object>) o;
+            Object v = m.get("v");
+            if ("cat".equals(m.get("a")) && v instanceof String && ((String) v).length() > 0 && ((String) v).length() < 20 && !out.contains(v)) out.add((String) v);
+            for (Object x : m.values()) collectCat(x, out, depth + 1);
+        } else if (o instanceof List) {
+            for (Object x : (List<Object>) o) collectCat(x, out, depth + 1);
+        }
+    }
+    public static String shopUrl(String cat) { return BASE + "/screen/shop?cap=" + CAP + (cat != null && cat.length() > 0 ? "&cat=" + enc(cat) : ""); }
+    /** 노선도 화면 열쇠(방식 · 지역 · 필터를 직접 줘서 — 지금 고른 방식이 아닌 쪽도 미리 받아 두려고). */
+    public static String mapKey(String screen, String mode, Store st) { return screen + "|" + mode + "|" + st.get(MapCore.K_REG, "seoul") + "|" + st.get(MapCore.K_FLT, "ALL"); }
+
     /** 요청 하나(GET 이면 body 가 null). */
     public static final class Req {
         public final String method, url, body;
@@ -357,8 +394,7 @@ public final class ShellCore {
     public static Req request(String screen, Store st, String[] feeds) {
         if (S_SETTINGS.equals(screen)) return new Req("GET", settingsUrl(st), null);
         if (S_SHOP.equals(screen)) {
-            String c = st.get(K_SHOP_CAT, "");
-            return new Req("GET", BASE + "/screen/shop?cap=" + CAP + (c.length() > 0 ? "&cat=" + enc(c) : ""), null);
+            return new Req("GET", shopUrl(st.get(K_SHOP_CAT, "")), null);
         }
         if (S_CCHIPS.equals(screen)) return new Req("POST", BASE + "/screen/cchips", cchipsBody(mode(st)));
         if (S_NEWS.equals(screen)) {
@@ -366,6 +402,10 @@ public final class ShellCore {
             return new Req("POST", BASE + "/screen/news", "{\"cap\":" + CAP + ",\"f\":{\"cat\":" + q(st.get(K_NEWS_CAT, "전체")) + "},\"n\":" + r.json() + "}");
         }
         return null;
+    }
+    /** 소식 요청 본문. withAlts 면 엔진이 가진 모든 분류 화면을 한 번에 같이 돌려준다(미리 받기용). */
+    public static String newsBody(Store st, NewsRows rows, boolean withAlts) {
+        return "{\"cap\":" + CAP + ",\"f\":{\"cat\":" + q(st.get(K_NEWS_CAT, "전체")) + "},\"n\":" + rows.json() + (withAlts ? ",\"alts\":\"chips\"" : "") + "}";
     }
     /** 화면 둘을 위아래로 이어 붙인다(첫 화면의 head·cover·info 를 쓰고 본문만 이어 붙임). 내용은 건드리지 않는다. 못 읽으면 첫 화면 그대로. */
     @SuppressWarnings("unchecked")
@@ -511,6 +551,12 @@ public final class ShellCore {
             + "\"size\":14,\"color\":\"sub\",\"lh\":1.5,\"align\":\"center\",\"pad\":[24,80,24,0]}]}";
     }
 
+    /** 화면을 기다리는 동안 보이는 스켈레톤(뼈대) — 앱이 스스로 그리는 자리표시(내용 없음). 화면마다 모양만 다르다. */
+    public static String skeletonScreen(String screen) {
+        String kind = S_HOME.equals(screen) || S_SHOP.equals(screen) ? "cards" : S_MAPB.equals(screen) ? "map" : "list";
+        int rows = "cards".equals(kind) ? 4 : "map".equals(kind) ? 4 : 8;
+        return "{\"ok\":true,\"v\":1,\"screen\":\"skel\",\"head\":[],\"body\":[{\"t\":\"skel\",\"kind\":\"" + kind + "\",\"rows\":" + rows + ",\"pad\":[12,12,12,0]}]}";
+    }
     /** 화면을 못 받았을 때(서버 응답 없음) 빈 화면 대신 보이는 안내와 [다시 시도] — 행동 이름은 RETRY_ACT. */
     public static final String RETRY_ACT = "gdm_retry";
     public static String errorScreen() {
@@ -523,8 +569,20 @@ public final class ShellCore {
         String s = key.indexOf('|') > 0 ? key.substring(0, key.indexOf('|')) : key;
         return S_MAPH.equals(s) || S_MAPB.equals(s) ? "map" : s;
     }
-    /** 이 화면은 마지막으로 받은 글을 디스크에도 둔다(상태 없이 글만으로 그려지는 화면 — 소식은 눌림이 목록 상태에 묶여 있어 메모리에만 둔다). */
-    public static boolean diskCacheable(String screen) { return S_SHOP.equals(screen) || S_CCHIPS.equals(screen) || S_HDR.equals(screen); }
+    /**
+     * 이 화면 글(열쇠)을 디스크에 얼마나 오래 둘지(ms, 0 이면 두지 않는다). 앱을 다시 켜면 마지막 화면이 바로 뜨고, 새 글은 뒤에서 받아 바꾼다.
+     * 버스 도착정보는 오래되면 틀린 정보라 짧게(5분) 둔다.
+     */
+    public static long diskTtl(String key) {
+        if (key == null) return 0L;
+        String s = key.indexOf('|') > 0 ? key.substring(0, key.indexOf('|')) : key;
+        if (S_MAPB.equals(s)) return key.contains("|bus|") ? 5L * 60000L : 24L * 3600000L;
+        if (S_SHOP.equals(s) || S_CCHIPS.equals(s) || S_HDR.equals(s) || "tabs".equals(s) || S_NEWS.equals(s) || S_CHAT.equals(s) || S_BOARD.equals(s)
+            || S_FOOD.equals(s) || S_MAPH.equals(s) || S_SETTINGS.equals(s)) return 24L * 3600000L;
+        if (S_HOME.equals(s)) return 6L * 3600000L;
+        return 0L;
+    }
+    public static boolean diskCacheable(String screen) { return diskTtl(screen) > 0L; }
     /** 화면 하나를 가리키는 캐시 열쇠(같은 화면이라도 고른 분류·방식이 다르면 다른 글이다). */
     public static String cacheKey(String screen, Store st) {
         if (S_SHOP.equals(screen)) return screen + "|" + st.get(K_SHOP_CAT, "");

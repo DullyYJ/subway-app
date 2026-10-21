@@ -339,6 +339,41 @@ public class ScreenView extends View {
         cv.restore();
     }
     // ───────────── 맨 위 흐르는 문구(문구 목록은 엔진이 정한 값 · 앱은 오른쪽에서 왼쪽으로 흘리며 색을 돌리기만) ─────────────
+    private boolean skelDrawn;
+    private final RectF skr = new RectF();
+    /** 스켈레톤: 카드 모양 자리표시가 숨 쉬듯 옅어졌다 짙어진다(1.3초). 새 객체 없이 그린다. */
+    private void drawSkel(Canvas cv, ScreenCore.Item it) {
+        float ph = (SystemClock.uptimeMillis() % 1300L) / 1300f;
+        float pulse = 0.5f + 0.5f * (float) Math.sin(ph * 6.2831853f);
+        int bar = (pal[R_BORDER] & 0x00FFFFFF) | (((int) (110f + 100f * pulse)) << 24);
+        int rows = Math.round(it.f1);
+        float y = it.y;
+        if ("map".equals(it.value)) {
+            p.setStyle(Paint.Style.FILL); p.setColor(bar);
+            skr.set(it.x, y, it.x + it.w, y + ScreenCore.SKEL_MAP_H); cv.drawRoundRect(skr, 14f, 14f, p);
+            y += ScreenCore.SKEL_MAP_H + ScreenCore.SKEL_GAP;
+        }
+        boolean cards = "cards".equals(it.value);
+        float rh = cards ? ScreenCore.SKEL_CARD_H : ScreenCore.SKEL_ROW_H;
+        for (int i = 0; i < rows; i++) {
+            p.setStyle(Paint.Style.FILL); p.setColor(pal[R_CARD]);
+            skr.set(it.x, y, it.x + it.w, y + rh); cv.drawRoundRect(skr, 14f, 14f, p);
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(pal[R_BORDER]); cv.drawRoundRect(skr, 14f, 14f, p);
+            p.setStyle(Paint.Style.FILL); p.setColor(bar);
+            if (cards) {
+                skr.set(it.x + 14f, y + 14f, it.x + it.w * 0.55f, y + 28f); cv.drawRoundRect(skr, 6f, 6f, p);
+                skr.set(it.x + 14f, y + 44f, it.x + it.w - 14f, y + 58f); cv.drawRoundRect(skr, 6f, 6f, p);
+                skr.set(it.x + 14f, y + 68f, it.x + it.w * 0.8f, y + 82f); cv.drawRoundRect(skr, 6f, 6f, p);
+                skr.set(it.x + 14f, y + 98f, it.x + 96f, y + 118f); cv.drawRoundRect(skr, 10f, 10f, p);
+            } else {
+                cv.drawCircle(it.x + 14f + 18f, y + rh / 2f, 18f, p);
+                skr.set(it.x + 62f, y + 16f, it.x + 62f + (it.w - 90f) * 0.62f, y + 30f); cv.drawRoundRect(skr, 6f, 6f, p);
+                skr.set(it.x + 62f, y + 40f, it.x + 62f + (it.w - 90f) * 0.9f, y + 52f); cv.drawRoundRect(skr, 6f, 6f, p);
+            }
+            y += rh + ScreenCore.SKEL_GAP;
+        }
+        skelDrawn = true;
+    }
     private boolean marqDrawn;
     private String marqSrc = "";
     private String[] marqMsgs = new String[0];
@@ -531,7 +566,7 @@ public class ScreenView extends View {
         cv.drawRect(0, 0, getWidth(), getHeight(), p);
         if (lay == null) return;
         boolean moving = false;
-        sceneDrawn = false; marqDrawn = false;
+        sceneDrawn = false; marqDrawn = false; skelDrawn = false;
         if (flingY.computeScrollOffset()) { scrollY = ScreenCore.clamp(flingY.getCurrY() / dpr, lay.bodyMaxScroll(bodyViewH())); moving = true; }
         if (flingX.computeScrollOffset()) { scrollX = ScreenCore.clamp(flingX.getCurrX() / dpr, lay.headMaxScroll()); moving = true; }
 
@@ -578,7 +613,7 @@ public class ScreenView extends View {
 
         if (!drewOnce) { drewOnce = true; post(firstDrawCb); }
         if (sceneDrawn && scene != null && scene.isRunning() && !scene.isPaused()) postInvalidateOnAnimation();        // 장면이 보이는 동안만 화면 박자로 계속 그린다(안 보이면 저절로 멈춘다)
-        if (marqDrawn) postInvalidateOnAnimation();                                     // 흐르는 문구가 보이는 동안만 화면 박자로 계속 그린다
+        if (marqDrawn || skelDrawn) postInvalidateOnAnimation();                                     // 흐르는 문구가 보이는 동안만 화면 박자로 계속 그린다
         if (moving || mode == 1 || mode == 2) postInvalidateOnAnimation();
         else if (pulsing) postInvalidateDelayed(mkMs > 0f && now - mkT0 < mkMs ? 16L : 66L);      // 마커 맥박·고리(마커가 있을 때만; 가만히 있으면 초당 15번)
     }
@@ -672,6 +707,7 @@ public class ScreenView extends View {
             case ScreenCore.K_SCENE: drawScene(cv, it); break;
             case ScreenCore.K_TMAP: drawTmap(cv, it); break;
             case ScreenCore.K_MARQ: drawMarq(cv, it); break;
+            case ScreenCore.K_SKEL: drawSkel(cv, it); break;
             default: break;
         }
     }

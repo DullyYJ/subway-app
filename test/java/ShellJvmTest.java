@@ -1,6 +1,7 @@
 package com.dullyyj.subway;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /** ShellCore(네이티브 껍데기의 순수 계산) 시험 — 안드로이드 없이 JVM. 사용: java ShellJvmTest */
@@ -463,7 +464,33 @@ public class ShellJvmTest {
         ok(ShellCore.cchipsKey("chat").equals("cchips|chat") && ShellCore.cchipsKey("zzz").equals("cchips|" + ShellCore.MODE_DEFAULT)
             && ShellCore.cchipsBody("board").contains("\"mode\":\"board\"") && ShellCore.cchipsBody("zzz").contains("\"mode\":\"" + ShellCore.MODE_DEFAULT + "\"")
             && "cchips".equals(ShellCore.expectId(ShellCore.cchipsKey("set"))), "칩 줄 미리 받기: 방식마다 본문과 열쇠");
-        ok(ShellCore.diskCacheable("shop") && ShellCore.diskCacheable("cchips") && !ShellCore.diskCacheable("home") && !ShellCore.diskCacheable("news") && !ShellCore.diskCacheable("mapb"), "디스크에 두는 화면은 상태 없는 것만");
+        ok(ShellCore.diskCacheable("shop") && ShellCore.diskCacheable("cchips") && ShellCore.diskCacheable("home") && ShellCore.diskCacheable("news") && ShellCore.diskCacheable("chat") && ShellCore.diskCacheable("food")
+            && !ShellCore.diskCacheable("write") && !ShellCore.diskCacheable("error") && ShellCore.diskTtl("mapb|bus|seoul|ALL") == 5L * 60000L && ShellCore.diskTtl("mapb|subway|seoul|ALL") > 3600000L
+            && ShellCore.diskTtl("tabs|home") > 0L && ShellCore.diskTtl("news|전체") > 0L && ShellCore.diskTtl(null) == 0L, "모든 화면을 디스크에 둔다(버스 도착정보만 5분)");
+        {
+            ShellCore.MemStore ls = new ShellCore.MemStore();
+            ok(ShellCore.lastLocGet(ls) == null, "처음엔 마지막 위치 없음");
+            ShellCore.lastLocPut(ls, 37.5665, 126.978, 1000L); ShellCore.lastLocPut(ls, 0, 0, 2000L); ShellCore.lastLocPut(ls, Double.NaN, 1, 3L);
+            double[] g = ShellCore.lastLocGet(ls);
+            ok(g != null && Math.abs(g[0] - 37.5665) < 1e-9 && Math.abs(g[1] - 126.978) < 1e-9, "마지막 위치 저장 · 읽기(0,0 · NaN 은 무시)");
+            ls.put(ShellCore.K_LASTLOC, "999,5,1"); ok(ShellCore.lastLocGet(ls) == null, "엉터리 좌표는 버린다");
+            ShellCore.lastLocPut(ls, 37.5, 127.0, 5L);
+            ok(ShellCore.skeletonScreen("home").contains("\"kind\":\"cards\"") && ShellCore.skeletonScreen("mapb").contains("\"kind\":\"map\"") && ShellCore.skeletonScreen("chat").contains("\"kind\":\"list\""), "스켈레톤 모양은 화면마다");
+        }
+        {
+            List<String> cv = ShellCore.catValues("{\"body\":[{\"t\":\"chip\",\"act\":{\"a\":\"cat\",\"v\":\"패션\"}},{\"t\":\"chip\",\"act\":{\"a\":\"cat\",\"v\":\"식품\"}},{\"t\":\"chip\",\"act\":{\"a\":\"cat\",\"v\":\"패션\"}},{\"t\":\"b\",\"act\":{\"a\":\"call\",\"v\":\"x\"}}]}");
+            ok(cv.size() == 2 && "패션".equals(cv.get(0)) && "식품".equals(cv.get(1)) && ShellCore.catValues("zzz").isEmpty(), "화면에서 분류 칩 값만 읽는다(중복 · 다른 행동 제외)");
+            ok(ShellCore.shopUrl("").endsWith("/screen/shop?cap=" + ShellCore.CAP) && ShellCore.shopUrl("패션").contains("&cat=") && ShellCore.shopUrl(null).indexOf("cat=") < 0, "쇼핑 주소");
+            ShellCore.MemStore ms9 = new ShellCore.MemStore();
+            ok(ShellCore.mapKey("mapb", "subway", ms9).equals("mapb|subway|seoul|ALL") && ShellCore.newsBody(ms9, new ShellCore.NewsRows(), true).contains("\"alts\":\"chips\"") && !ShellCore.newsBody(ms9, new ShellCore.NewsRows(), false).contains("alts"), "노선도 열쇠 · 소식 본문(모든 분류 요청)");
+            MapCore mc9 = new MapCore(ms9); mc9.modeOverride = "subway";
+            ok("subway".equals(mc9.mode()) && mc9.bodyRequest(1, "pastel").contains("subway") || "subway".equals(mc9.mode()), "노선도 미리 받기는 고른 방식과 따로 방식을 정한다");
+            ChatCore c2 = new ChatCore(ms9);
+            c2.addRoom("1호선", "{\"ok\":true,\"msgs\":[{\"id\":\"m1\",\"ts\":50,\"nick\":\"영희\",\"text\":\"지연\",\"kind\":\"delay\"}]}");
+            String rq9 = c2.requestFor("1호선", false, 18, "pastel", -540, "나", 1000L);
+            ok(rq9.contains("\"sel\":\"1호선\"") && rq9.contains("\"st\":\"ready\"") && rq9.contains("영희") && c2.act("ch.x.0", new java.util.HashMap<String, String>(), "나") == ChatCore.R_NONE, "고스트 요청: 방을 직접 정하고 눌림 번호표는 안 건드린다");
+            ok(c2.requestFor("2호선", false, 18, "pastel", -540, "나", 1000L).contains("\"st\":\"fail\""), "받은 적 없는 방은 실패로 표시");
+        }
         // 앱이 죽었다 살아난 뒤 결과 카드 복원
         HomeCore snapSrc = new HomeCore();
         snapSrc.setRoute("{\"result\":{\"path\":[],\"q\":\"a\\\"b\"}}", "부평", "두정", 777L, 55L);

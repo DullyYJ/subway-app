@@ -18,7 +18,9 @@ public final class MapCore {
     private final ShellCore.Store st;
     public MapCore(ShellCore.Store st) { this.st = st; }
 
-    public String mode() { return "subway".equals(st.get(K_MODE, "bus")) ? "subway" : "bus"; }
+    /** 미리 받기 전용: 고른 방식과 상관없이 이 방식으로 요청을 만든다(null 이면 고른 방식). */
+    public String modeOverride = null;
+    public String mode() { return modeOverride != null ? modeOverride : "subway".equals(st.get(K_MODE, "bus")) ? "subway" : "bus"; }
     public String reg() { String r = st.get(K_REG, "seoul"); return r.matches("seoul|busan|daegu|gwangju|daejeon") ? r : "seoul"; }
     public String flt() { String f = st.get(K_FLT, "ALL"); return f.length() > 0 && f.length() < 12 ? f : "ALL"; }
     public double[] gps = null;

@@ -102,19 +102,21 @@ public final class ChatCore {
 
     // ── 엔진 요청 ──
     @SuppressWarnings("unchecked")
-    public String request(int cap, String theme, int tzoMin, String me, long now) {
-        String sel = sel();
+    public String request(int cap, String theme, int tzoMin, String me, long now) { return requestFor(sel(), true, cap, theme, tzoMin, me, now); }
+    /** 방 sel 의 요청. live=false 면 눌림 번호표(ridsR)를 건드리지 않는다(미리 받기용 별도 상태기에서 쓴다). */
+    public String requestFor(String sel, boolean live, int cap, String theme, int tzoMin, String me, long now) {
         StringBuilder b = new StringBuilder("{\"cap\":").append(cap).append(",\"f\":{\"sel\":").append(ShellCore.q(sel));
         b.append(",\"sec\":").append(HomeSearchCore.toJson(new ArrayList<Object>(routeSec)));
         b.append(",\"my\":").append(st.get(K_MY, "[]"));
         b.append(",\"th\":").append(ShellCore.q("dark".equals(theme) ? "dark" : "pastel"));
-        b.append(",\"st\":").append(ShellCore.q(loaded ? "ready" : failed ? "fail" : "loading"));
+        b.append(",\"st\":").append(ShellCore.q(live ? (loaded ? "ready" : failed ? "fail" : "loading") : ("all".equals(sel) ? !talk.isEmpty() : room.containsKey(sel)) ? "ready" : "fail"));
         b.append(",\"tzo\":").append(tzoMin).append(",\"me\":").append(ShellCore.q(me)).append(",\"hid\":").append(st.get(K_HID, "[]")).append("},\"d\":{");
         List<Object> g = new ArrayList<Object>(talk.values());
         b.append("\"g\":").append(HomeSearchCore.toJson(g));
-        ridsR = new ArrayList<String>();
+        List<String> rids = new ArrayList<String>();
         List<Object> r = new ArrayList<Object>();
-        if (!"all".equals(sel) && room.containsKey(sel)) for (Map.Entry<String, List<Object>> e : room.get(sel).entrySet()) { r.add(e.getValue()); ridsR.add(e.getKey()); }
+        if (!"all".equals(sel) && room.containsKey(sel)) for (Map.Entry<String, List<Object>> e : room.get(sel).entrySet()) { r.add(e.getValue()); rids.add(e.getKey()); }
+        if (live) ridsR = rids;
         b.append(",\"r\":").append(HomeSearchCore.toJson(r));
         Object off = null; boolean offOk = false;
         try {

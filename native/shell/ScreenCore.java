@@ -694,6 +694,11 @@ public final class ScreenCore {
             }
             if (mc == 0) throw new ParseError("marq: 문구가 없다");
             n.value = mv.toString();
+        } else if ("skel".equals(t)) {                                                                     // 스켈레톤(뼈대): 화면을 기다리는 동안 앱이 스스로 보이는 자리표시. 글이 아니라 모양만 그린다.
+            pad(m, n);
+            n.value = optStr(m, "kind", "list", 8);
+            if (!"list".equals(n.value) && !"cards".equals(n.value) && !"map".equals(n.value)) n.value = "list";
+            n.val = optNum(m, "rows", 6f, 1f, 14f);
         } else if ("cars".equals(t)) {                                                                     // 칸별 혼잡: 제목 + 칸 가로줄(테두리 색 · 글 세 줄), 칸이 없으면 안내 글
             pad(m, n);
             n.title = optStr(m, "ttl", "", 24); n.value = optStr(m, "msg", "", 60);
@@ -777,7 +782,8 @@ public final class ScreenCore {
 
     // ═════════════ ③ 배치 ═════════════
     public static final int SCENE_MAX = 6000;
-    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14, K_NEWS = 15, K_POSTH = 16, K_CMT = 17, K_RBTN = 18, K_INBAR = 19, K_MSG = 20, K_TAB = 21, K_SUG = 22, K_SWAP = 23, K_RHD = 24, K_TRK = 25, K_CGH = 26, K_GAUGE = 27, K_CHART = 28, K_HBAR = 29, K_CARS = 30, K_AIH = 31, K_LTH = 32, K_LTR = 33, K_PILL = 34, K_SCENE = 35, K_TMAP = 36, K_MARQ = 37;
+    public static final float SKEL_ROW_H = 68f, SKEL_CARD_H = 132f, SKEL_MAP_H = 200f, SKEL_GAP = 10f;
+    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14, K_NEWS = 15, K_POSTH = 16, K_CMT = 17, K_RBTN = 18, K_INBAR = 19, K_MSG = 20, K_TAB = 21, K_SUG = 22, K_SWAP = 23, K_RHD = 24, K_TRK = 25, K_CGH = 26, K_GAUGE = 27, K_CHART = 28, K_HBAR = 29, K_CARS = 30, K_AIH = 31, K_LTH = 32, K_LTR = 33, K_PILL = 34, K_SCENE = 35, K_TMAP = 36, K_MARQ = 37, K_SKEL = 38;
     /** 경로 결과 머리줄 치수(웹 #transitResultHeader 와 같다: 분 숫자 28 · 단위 14 · 구간명 12 · 즐겨찾기 알약 11 · 닫기 ×) */
     /** 구간 타임라인 칸 치수(웹 #transitHtlTrack 과 같다): 이름 30 · 배지 18 · 축 26 · 시각 3+16 */
     public static final float TRK_NAME_H = 30f, TRK_BADGE_H = 18f, TRK_AXIS_H = 26f, TRK_TIME_GAP = 3f, TRK_TIME_H = 16f, TRK_H = 93f, TRK_LINE_Y = 12f, TRK_LINE_H = 3f, TRK_DOT_Y = 13f, TRK_E_R = 7f, TRK_R_R = 6f, TRK_M_R = 3f;
@@ -1248,6 +1254,13 @@ public final class ScreenCore {
             Item it = new Item(); it.kind = K_MARQ; it.x = ox; it.y = y; it.w = innerW; it.h = n.h; it.value = n.value; it.f1 = n.val; it.f2 = n.max; it.on = n.on;
             out.add(it);
             return y + n.h + n.padB;
+        }
+        if ("skel".equals(n.t)) {                                                    // 스켈레톤 자리(그림은 ScreenView 가 그린다)
+            int rows = Math.round(n.val);
+            float h = "cards".equals(n.value) ? rows * (SKEL_CARD_H + SKEL_GAP) : "map".equals(n.value) ? SKEL_MAP_H + SKEL_GAP + rows * (SKEL_ROW_H + SKEL_GAP) : rows * (SKEL_ROW_H + SKEL_GAP);
+            Item it = new Item(); it.kind = K_SKEL; it.x = ox; it.y = y; it.w = innerW; it.h = h; it.value = n.value; it.f1 = rows;
+            out.add(it);
+            return y + h + n.padB;
         }
         if ("tmap".equals(n.t)) {                                                    // 타일 지도 자리(그림은 ScreenView 가 그린다 · 누르면 act)
             Item it = new Item(); it.kind = K_TMAP; it.x = ox; it.y = y; it.w = innerW; it.h = n.h; it.radius = n.r; it.value = n.value; it.act = n.act;

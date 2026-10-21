@@ -800,6 +800,24 @@ public class ScreenJvmTest {
             ok(threw, "marq 엉터리는 거부: " + bad);
         }
 
+        // ── 스켈레톤(skel) 노드 ──
+        for (String sc : new String[] { "cards", "map", "list" }) {
+            try {
+                ScreenCore.Screen sk = ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"skel\",\"head\":[],\"body\":[{\"t\":\"skel\",\"kind\":\"" + sc + "\",\"rows\":4,\"pad\":[12,12,12,0]}]}");
+                ScreenCore.Layout kl = ScreenCore.layout(sk, 360f, M);
+                ok(kl.body.length == 1 && kl.body[0].kind == ScreenCore.K_SKEL && kl.body[0].h > 200f && kl.body[0].w > 300f, "skel: " + sc + " 자리");
+            } catch (Exception ex) { ok(false, "skel 읽기 " + sc + ": " + ex); }
+        }
+        try {
+            ScreenCore.Layout k1 = ScreenCore.layout(ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"skel\",\"head\":[],\"body\":[{\"t\":\"skel\",\"kind\":\"map\",\"rows\":3}]}"), 360f, M);
+            ok(near(k1.body[0].h, ScreenCore.SKEL_MAP_H + ScreenCore.SKEL_GAP + 3 * (ScreenCore.SKEL_ROW_H + ScreenCore.SKEL_GAP)) && "map".equals(k1.body[0].value), "skel: 지도형 높이");
+        } catch (Exception ex) { ok(false, "skel map: " + ex); }
+        for (String bad : new String[] { "{\"t\":\"skel\",\"rows\":0}", "{\"t\":\"skel\",\"rows\":99}", "{\"t\":\"skel\",\"kind\":7}" }) {
+            boolean threw = false;
+            try { ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"skel\",\"head\":[],\"body\":[" + bad + "]}"); } catch (Exception ex) { threw = true; }
+            ok(threw, "skel 엉터리는 거부: " + bad);
+        }
+
         System.out.println(fails == 0 ? "ALL OK (" + oks + ")" : fails + " FAIL");
         System.exit(fails == 0 ? 0 : 1);
     }
