@@ -389,6 +389,8 @@ public class ShellActivity extends Activity {
     private final java.util.concurrent.ConcurrentHashMap<String, String> delayBodies = new java.util.concurrent.ConcurrentHashMap<String, String>();
     private ShellCore.Cond condOf(String ck) { return ShellCore.Cond.parse(store.get(ShellCore.condKey(ck), "")); }
     /** (스레드 안) 화면 하나를 받는다. 돌려주는 글: 받은 화면 · NOT_MOD(캐시 그대로) · ""(못 받음). 받은 화면은 캐시와 ETag 를 함께 갱신한다. */
+    /** 화면 열쇠별 마지막 실패 이유(HTTP 코드 · 통신 오류) — 안내 화면에 작게 보인다. */
+    private final java.util.concurrent.ConcurrentHashMap<String, String> netDiag = new java.util.concurrent.ConcurrentHashMap<String, String>();
     private String screenCall(final String ck, boolean get, String url, String body, String sig, int timeoutMs) {
         final int sg = (sig != null ? sig : (get ? url : body)).hashCode();
         final ShellCore.Cond c = condOf(ck);
@@ -399,8 +401,8 @@ public class ShellActivity extends Activity {
         NetPost.Res r = get ? NetPost.getCond(url, timeoutMs, have ? c.etag : "") : NetPost.postCond(url, body, timeoutMs, have ? c.etag : "");
         if (r.status == 304 && have) { main.post(new Runnable() { @Override public void run() { store.put(ShellCore.condKey(ck), c.touched(System.currentTimeMillis(), 0, sg).enc()); } }); return NOT_MOD; }
         if (r.status == 503 && r.body != null && ShellCore.retryHint(r.body) != null) { delayBodies.put(ck, r.body); return ""; }          // 엔진이 준 "서버 연결 지연" 안내 — 캐시에 두지 않고 따로 건넨다
-        if (r.status != 200 || r.body == null) return "";
-        delayBodies.remove(ck);
+        if (r.status != 200 || r.body == null) { netDiag.put(ck, r.status > 0 ? "HTTP " + r.status : String.valueOf(r.err)); return ""; }
+        delayBodies.remove(ck); netDiag.remove(ck);
         screenStore(ck, r.body, r.etag, r.maxAge, sg);
         return r.body;
     }
@@ -561,19 +563,61 @@ public class ShellActivity extends Activity {
 
     /** 상태 없이 엔진에서 한 번에 받는 화면(쇼핑·소식·칩 줄·설정)의 글. 못 받으면 "". */
     private String fetchGeneric(String screen) {
-        String[] urls = ShellCore.feedUrls(screen), feeds = new String[urls.length];
-        for (int k = 0; k < urls.length; k++) feeds[k] = feedGet(urls[k], 8000);
+        String[] feeds = feedsAll(ShellCore.feedUrls(screen), 8000);
         if (ShellCore.S_NEWS.equals(screen)) lastNews = ShellCore.NewsRows.from(feeds);
         store.put(ShellCore.K_DAY, RulesCore.day(System.currentTimeMillis()));
         ShellCore.Req rq = ShellCore.request(screen, store, feeds);
         if (rq == null) return "";
-        int ms = ShellCore.S_SHOP.equals(screen) ? 16000 : 10000;       // 쇼핑 서버가 처음엔 느리다(엔진이 한 번 더 시도한다)
-        String ck = ShellCore.cacheKey(screen, store), t = screenCall(ck, "GET".equals(rq.method), rq.url, rq.body, null, ms);
+        String ck = ShellCore.cacheKey(screen, store);
+        String t = ShellCore.S_SHOP.equals(screen) ? shopCall(ck, store.get(ShellCore.K_SHOP_CAT, "")) : screenCall(ck, "GET".equals(rq.method), rq.url, rq.body, null, 10000);          // 쇼핑: 엔진이 상품 서버를 못 받으면 앱이 직접 받아 실어 보낸다(계산은 여전히 엔진)
         if (t.length() == 0) { String d = delayBodies.remove(ck); if (d != null) return d; }          // 못 받았는데 엔진이 안내 화면을 줬으면 그것
         return t;
     }
+    /** 쇼핑 화면 한 번 받기: 엔진에 묻고(상품 서버는 엔진이 받는다), 엔진이 상품 서버를 못 받았다고 하면 앱이 직접 받아 실어 보낸다. */
+    private String shopCall(String ck, String cat) {
+        if ("1".equals(store.get("shop_direct", ""))) {                    // 엔진이 상품 서버를 못 받는 것으로 확인됐다 — 처음부터 앱이 받아 실어 보낸다(엔진이 헛되이 13초 기다리지 않게)
+            String d = shopDirect(ck, cat);
+            if (d.length() > 0) return d;
+        }
+        String t = screenCall(ck, true, ShellCore.shopUrl(cat), null, null, 16000);
+        if (t.length() == 0 && delayBodies.containsKey(ck)) {
+            String d = shopDirect(ck, cat);
+            if (d.length() > 0) { main.post(new Runnable() { @Override public void run() { store.put("shop_direct", "1"); } }); return d; }
+        }
+        return t;
+    }
+    /** 쇼핑: 상품 서버(gildongmu-shop)와 운영 설정(gildongmu-food)을 앱이 동시에 직접 받아 POST /screen/shop 에 실어 보낸다. 못 받으면 "". */
+    private String shopDirect(String ck, String cat) {
+        final String[] raw = new String[] { "", "" };
+        Thread a = new Thread(new Runnable() { @Override public void run() { NetPost.Res r = NetPost.get(ShellCore.SHOP_BASE + "/shop", 9000); if (r.status == 200 && r.body != null) raw[0] = r.body; } }, "shell-shopsrc");
+        Thread b = new Thread(new Runnable() { @Override public void run() { NetPost.Res r = NetPost.get(FoodCore.FOOD_BASE + "/app-config?k=shop", 4000); if (r.status == 200 && r.body != null) raw[1] = r.body; } }, "shell-shopcfg");
+        a.start(); b.start();
+        try { a.join(11000L); b.join(1500L); } catch (InterruptedException e) { Thread.currentThread().interrupt(); return ""; }
+        try { if (!(ScreenCore.parse(raw[0]) instanceof java.util.Map)) return ""; } catch (Throwable e) { return ""; }
+        boolean cfgOk = false;
+        try { cfgOk = ScreenCore.parse(raw[1]) instanceof java.util.Map; } catch (Throwable e) { cfgOk = false; }
+        String body = "{\"cap\":" + ShellCore.CAP + ",\"cat\":" + ShellCore.q(cat == null ? "" : cat) + ",\"shop\":" + raw[0] + (cfgOk ? ",\"cfg\":" + raw[1] : "") + "}";
+        NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/shop", body, 12000);
+        if (r.status != 200 || r.body == null) { netDiag.put(ck, r.status > 0 ? "shop POST HTTP " + r.status : "shop POST " + r.err); return ""; }
+        delayBodies.remove(ck); netDiag.remove(ck);
+        screenStore(ck, r.body, "", 0, body.hashCode());
+        return r.body;
+    }
     /** 원자료(뉴스 피드 등) GET: 서버가 ETag 를 주면 If-None-Match 로 묻고 304 면 가진 글을 그대로 쓴다(주지 않는 서버면 평소대로 받는다). */
     private final java.util.concurrent.ConcurrentHashMap<String, String> feedBodies = new java.util.concurrent.ConcurrentHashMap<String, String>();
+    /** 원자료 여러 곳을 동시에 받는다(차례로 받으면 느린 한 곳이 다른 곳까지 붙잡는다). 못 받은 곳은 빈 글. */
+    private String[] feedsAll(final String[] urls, final int timeoutMs) {
+        final String[] out = new String[urls.length];
+        java.util.Arrays.fill(out, "");
+        Thread[] th = new Thread[urls.length];
+        for (int k = 0; k < urls.length; k++) {
+            final int kk = k;
+            th[k] = new Thread(new Runnable() { @Override public void run() { try { out[kk] = feedGet(urls[kk], timeoutMs); } catch (Throwable ignored) { } } }, "shell-feed");
+            th[k].start();
+        }
+        for (Thread t : th) { try { t.join(timeoutMs + 3000L); } catch (InterruptedException e) { Thread.currentThread().interrupt(); break; } }
+        return out;
+    }
     private String feedGet(String url, int timeoutMs) {
         String fk = "feed|" + url, old = feedBodies.get(fk);
         ShellCore.Cond c = condOf(fk);
@@ -770,7 +814,7 @@ public class ShellActivity extends Activity {
         pfAdd(3, new PfJob() { @Override public boolean run() throws Exception {                // 쇼핑: 지금 분류 → 나머지 분류(서버가 느려서 차례로 · 연달아 두 번 못 받으면 멈춘다)
             String key = ShellCore.cacheKey(ShellCore.S_SHOP, store);
             boolean net = false;
-            String base = pfNeeds(key) ? screenCall(key, true, ShellCore.shopUrl(store.get(ShellCore.K_SHOP_CAT, "")), null, null, 16000) : "";
+            String base = pfNeeds(key) ? shopCall(key, store.get(ShellCore.K_SHOP_CAT, "")) : "";
             if (base.length() > 0) net = true;
             String src = base.length() > 0 && !isNotMod(base) ? base : onMainWait(new java.util.concurrent.Callable<String>() { @Override public String call() { return cacheGet(ShellCore.cacheKey(ShellCore.S_SHOP, store), true); } });
             if (src == null || src.length() == 0) return net;
@@ -779,7 +823,7 @@ public class ShellActivity extends Activity {
                 String ck = "shop|" + c;
                 if (ck.equals(key) || !pfNeeds(ck)) continue;
                 pfGap();
-                String cr = screenCall(ck, true, ShellCore.shopUrl(c), null, null, 16000);
+                String cr = shopCall(ck, c);
                 net = true;
                 if (cr.length() > 0) fails = 0; else if (++fails >= 2) break;
             }
@@ -844,8 +888,7 @@ public class ShellActivity extends Activity {
         ShellCore.Cond nc = condOf("newsalts");
         long nowMs = System.currentTimeMillis();
         if (nc != null && nowMs - nc.at < PF_SKIP_MS && haveCached(curKey)) return false;
-        String[] urls = ShellCore.feedUrls(ShellCore.S_NEWS), feeds = new String[urls.length];
-        for (int k = 0; k < urls.length; k++) feeds[k] = feedGet(urls[k], 8000);
+        String[] feeds = feedsAll(ShellCore.feedUrls(ShellCore.S_NEWS), 8000);
         ShellCore.NewsRows rows = ShellCore.NewsRows.from(feeds);
         String body = ShellCore.newsBody(store, rows, true);
         final int sg = body.hashCode();
@@ -898,7 +941,7 @@ public class ShellActivity extends Activity {
         if (json == null || json.length() == 0) {
             String ck = viewKey.get(v);
             if (ck != null && v != sheetView && (v.itemCount() == 0 || skelViews.contains(v))) {          // 빈 칸이면 안내와 [다시 시도] — 뒤에서 몇 번 더 받아 본다
-                try { v.setScreen(ScreenCore.load(ShellCore.errorScreen()), false); shownJson.remove(v); skelViews.remove(v); fadeIn(v); scheduleRetry(v, ShellCore.DEFAULT_RETRY); return; } catch (Throwable ignored) { }
+                try { String dg = netDiag.get(ck); v.setScreen(ScreenCore.load(ShellCore.errorScreen(dg)), false); shownJson.remove(v); skelViews.remove(v); fadeIn(v); scheduleRetry(v, ShellCore.DEFAULT_RETRY); return; } catch (Throwable ignored) { }
             }
             toast("화면을 받지 못했어요"); return;
         }
@@ -1307,15 +1350,24 @@ public class ShellActivity extends Activity {
     }
     /** 서버 맛집 + 공공데이터(최대 3쪽)를 받아 FoodCore 에 넣고 엔진에 다시 묻는다. */
     /** (스레드 안) 맛집 원자료 — 서버 가게와 공공데이터 쪽을 받아 읽는다. */
-    private FoodCore.Data foodDataNow(String su, String[] pu) {
-        NetPost.Res sr = NetPost.get(su, 8000);
-        List<String> pubs = new ArrayList<String>();
-        for (int i = 0; i < pu.length; i++) {
-            NetPost.Res pr = NetPost.get(pu[i], 10000);
-            pubs.add(pr.status == 200 ? pr.body : "");
-            if (FoodCore.pageCount(pr.status == 200 ? pr.body : "") < FoodCore.PUB_PAGE_SIZE) break;
+    private FoodCore.Data foodDataNow(final String su, final String[] pu) {
+        // 서버 가게와 공공데이터 쪽을 동시에 받는다(차례로 받으면 느린 공공 서버 3쪽이 30초까지 늘어진다) — 늦게 온 쪽 때문에 먼저 온 쪽이 기다리지 않는다.
+        final NetPost.Res[] res = new NetPost.Res[1 + pu.length];
+        Thread[] th = new Thread[res.length];
+        for (int i = 0; i < res.length; i++) {
+            final int ii = i;
+            th[i] = new Thread(new Runnable() { @Override public void run() { res[ii] = ii == 0 ? NetPost.get(su, 8000) : NetPost.get(pu[ii - 1], 10000); } }, "shell-foodpart");
+            th[i].start();
         }
-        return FoodCore.parseData(sr.status == 200 ? sr.body : "", pubs);
+        for (Thread t : th) { try { t.join(13000L); } catch (InterruptedException e) { Thread.currentThread().interrupt(); break; } }
+        List<String> pubs = new ArrayList<String>();
+        for (int i = 1; i < res.length; i++) {
+            NetPost.Res pr = res[i];
+            String t = pr != null && pr.status == 200 ? pr.body : "";
+            pubs.add(t);
+            if (FoodCore.pageCount(t) < FoodCore.PUB_PAGE_SIZE) break;
+        }
+        return FoodCore.parseData(res[0] != null && res[0].status == 200 ? res[0].body : "", pubs);
     }
     private void fetchFoodData(final int my, final ScreenView v) {
         final String su = food.serverUrl();

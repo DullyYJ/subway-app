@@ -6,11 +6,13 @@
 var SHOP_API_URL = "https://gildongmu-shop.phg0643.workers.dev";
 var SHOP_CFG_URL = "https://gildongmu-food.phg0643.workers.dev/app-config?k=shop";
 var SHOP_MEM = { data: null, ts: 0, ver: "", cfg: null, cfgTs: 0 };
+var SHOP_WHY = "";                                          // 마지막으로 상품 서버를 못 받은 이유(안내 화면에 작게 보인다 — 화면만 봐도 원인을 알 수 있게)
 async function shopFetchJson(u, ms) {
   var ac = new AbortController(), t = setTimeout(function () { ac.abort(); }, ms);
-  try { var r = await fetch(u, { signal: ac.signal }); clearTimeout(t); return r.ok ? await r.json() : null; }
-  catch (e) { clearTimeout(t); return null; }
+  try { var r = await fetch(u, { signal: ac.signal }); clearTimeout(t); if (!r.ok) { SHOP_WHY = "HTTP " + r.status; return null; } return await r.json(); }
+  catch (e) { clearTimeout(t); SHOP_WHY = String(e && e.message || e).slice(0, 60); return null; }
 }
+function shopPostedOk(j) { return !!(j && j.ok && j.data && j.data.CATS && j.data.CATS.length && j.data.WEEKDAY && j.data.WEEKDAY.length); }
 async function shopLoad() {
   var now = Date.now();
   var needShop = !SHOP_MEM.data || now - SHOP_MEM.ts > 60000, needCfg = now - SHOP_MEM.cfgTs > 600000;
@@ -29,17 +31,28 @@ async function shopLoad() {
   return SHOP_MEM;
 }
 async function handleScreenShop(request) {
-  var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Cache-Control": "no-store" };
+  var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET, POST, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Cache-Control": "no-store" };
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: H });
   var u = new URL(request.url), q = u.searchParams;
+  // POST: 앱이 상품 서버·운영 설정을 직접 받아 함께 보낸다(워커끼리 부르는 길이 막혀 있어도 화면이 뜨게). { cat, lat, lng, tz, now, cap, shop:{ok,data,version}, cfg:{ok,v} }
+  if (request.method === "POST") {
+    var pb = null;
+    try { pb = JSON.parse(await request.text()); } catch (eP) { pb = null; }
+    if (!pb || typeof pb !== "object") return new Response(JSON.stringify({ ok: false, error: "bad-json" }), { status: 400, headers: H });
+    ["cat", "lat", "lng", "tz", "now", "cap"].forEach(function (k) { if (pb[k] != null) q.set(k, String(pb[k])); });
+    if (shopPostedOk(pb.shop)) {
+      SHOP_MEM.data = pb.shop.data; SHOP_MEM.ver = String(pb.shop.version || ""); SHOP_MEM.ts = Date.now();
+      if (pb.cfg && pb.cfg.ok && pb.cfg.v && typeof pb.cfg.v === "object") { SHOP_MEM.cfg = pb.cfg.v; SHOP_MEM.cfgTs = Date.now(); }
+    }
+  } else if (request.method !== "GET") return new Response(JSON.stringify({ ok: false, error: "method" }), { status: 405, headers: H });
   var mem = await shopLoad();
-  if (!mem.data) return new Response(JSON.stringify(shopDelayScreen()), { status: 503, headers: H });          // 안내 화면(서버 연결 지연) + 재시도 간격 — 앱은 이것을 그리고 뒤에서 다시 받는다
+  if (!mem.data) return new Response(JSON.stringify(shopDelayScreen(SHOP_WHY)), { status: 503, headers: H });          // 안내 화면(서버 연결 지연) + 재시도 간격 — 앱은 이것을 그리고 뒤에서 다시 받는다
   var lat = Number(q.get("lat")), lng = Number(q.get("lng")), wx = null;
   if (q.get("lat") != null && q.get("lng") != null) { try { wx = await sceneWeather(lat, lng); } catch (e) { wx = null; } }
   var inp = { nowMs: q.get("now") ? Number(q.get("now")) : Date.now(), tzOffsetMin: q.get("tz") ? Number(q.get("tz")) : 540, cat: q.get("cat") || "", cap: Number(q.get("cap")) || 0 };
   var out;
   try { out = shopScreen(inp, mem.data, mem.cfg, wx); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2) }), { status: 500, headers: H }); }
-  if (!out || !out.ok) return new Response(JSON.stringify(shopDelayScreen()), { status: 503, headers: H });
+  if (!out || !out.ok) return new Response(JSON.stringify(shopDelayScreen(SHOP_WHY || 'screen')), { status: 503, headers: H });
   out.ver = ENGINE_VERSION; out.shopVer = mem.ver;
   return new Response(JSON.stringify(out), { headers: H });
 }

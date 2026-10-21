@@ -282,8 +282,8 @@ function shopScreen(inp, data, cfg, wx) {
 }
 // 쇼핑 서버가 늦거나 안 될 때 엔진이 주는 안내 화면(HTTP 503 과 함께). 앱은 이 화면을 그리고, 캐시에는 두지 않으며,
 // retry(초 목록)마다 뒤에서 다시 받는다. 문구 · 간격은 모두 여기서 정한다(앱에 글 · 숫자가 없다). 단추 act 'gdm_retry' 는 앱이 알고 있는 "지금 다시 받기".
-function shopDelayScreen() {
-  return {
+function shopDelayScreen(why) {
+  var sc = {
     ok: true, v: 1, screen: 'shop', delayed: true, retry: [4, 8, 15, 30],
     head: [],
     body: [
@@ -292,6 +292,8 @@ function shopDelayScreen() {
       { t: 'button', s: '지금 다시 시도', size: 14, h: 44, r: 12, bold: true, fill: 'gold', tc: 'white', act: { a: 'call', v: 'gdm_retry' } }
     ]
   };
+  if (why) sc.body.splice(2, 0, { t: 'text', s: '(' + String(why).slice(0, 80) + ')', size: 11, color: 'sub', alpha: 0.7, lh: 1.4, align: 'center', pad: [24, 0, 24, 12] });          // 못 받은 이유(HTTP 코드 · 통신 오류)
+  return sc;
 }
 // [[글, 굵게 0|1], …] → 이어 붙인 글 + 굵은 구간 [[시작,끝],…] (앱이 굵기만 그린다)
 function shopRich(parts) {

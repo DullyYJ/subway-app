@@ -868,8 +868,8 @@ public final class ScreenCore {
 
     // ═════════════ 통신 보호(앱 본체가 대신 보내는 요청의 허용 범위) ═════════════
     /** 앱 본체가 웹 대신 보낼 수 있는 곳: 길동무 서버 네 곳(https, 기본 포트)뿐. 주소에 사용자 정보·포트·역슬래시가 있으면 거절. */
-    private static final String[] NET_HOSTS = { "route-v2.phg0643.workers.dev", "board-writer.phg0643.workers.dev", "gentle-lab-7e47subway-api.phg0643.workers.dev", "gildongmu-food.phg0643.workers.dev" };
-    public static final int NET_MAX_REQ = 200000, NET_MAX_RES = 2 * 1024 * 1024;
+    private static final String[] NET_HOSTS = { "route-v2.phg0643.workers.dev", "board-writer.phg0643.workers.dev", "gentle-lab-7e47subway-api.phg0643.workers.dev", "gildongmu-food.phg0643.workers.dev", "gildongmu-shop.phg0643.workers.dev" };
+    public static final int NET_MAX_REQ = 800000, NET_MAX_RES = 2 * 1024 * 1024;
     public static boolean netAllowed(String u) {
         if (u == null || u.length() > 2048 || !u.startsWith("https://") || u.indexOf('\\') >= 0 || u.indexOf(' ') >= 0) return false;
         int a = 8, b = a;

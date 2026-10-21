@@ -404,6 +404,7 @@ public final class ShellCore {
 
     public static final String BOARD_BASE = "https://board-writer.phg0643.workers.dev";
     public static final String NEWS_BASE = "https://gentle-lab-7e47subway-api.phg0643.workers.dev";
+    public static final String SHOP_BASE = "https://gildongmu-shop.phg0643.workers.dev";
 
     /** 이 화면을 계산하려면 먼저 받아야 하는 원자료 주소들(없으면 바로 엔진에 요청). */
     public static String[] feedUrls(String screen) {
@@ -461,7 +462,8 @@ public final class ShellCore {
     /** 엔진 /screen/news 가 받는 기사 줄 [제목, 링크, 언론사, 시각(ms), 서버 분류, 요약]. 분류·거르기·중복 정리는 엔진이 하고, 여기는 모양만 맞춘다. */
     public static final class NewsRows {
         public final List<String[]> rows = new ArrayList<String[]>();
-        public static final int MAX = 1200;
+        public static final int MAX = 900;                               // 엔진은 분류마다 100건만 쓴다 — 엔진 요청 본문이 한도(NET_MAX_REQ)를 넘지 않게 기사 줄 수를 묶는다
+        private final java.util.HashSet<String> seen = new java.util.HashSet<String>();      // 같은 기사(엔진 key: 공백 뺀 제목)는 한 번만 — 원자료 두 곳이 겹친다
 
         @SuppressWarnings("unchecked")
         public static NewsRows from(String[] feeds) {
@@ -491,8 +493,9 @@ public final class ShellCore {
             Map<String, Object> m = (Map<String, Object>) it;
             String title = decode(str(m.get("title"))).replaceAll("\\s+", " ").trim();
             if (title.length() == 0) return;
+            if (!seen.add(title.replaceAll("\\s", ""))) return;
             String desc = decode(str(m.get("desc")));
-            if (desc.length() > 400) desc = desc.substring(0, 400);
+            if (desc.length() > 240) desc = desc.substring(0, 240);
             long ts = m.get("ts") instanceof Double ? (long) ((Double) m.get("ts")).doubleValue() : 0L;
             String cat = srv.length() > 0 ? srv : str(m.get("cat"));
             rows.add(new String[] { title, str(m.get("link")), decode(str(m.get("source"))).trim(), String.valueOf(ts), cat, desc });
@@ -618,9 +621,12 @@ public final class ShellCore {
     public static final int[] DEFAULT_RETRY = { 4, 8, 16, 30 };
     /** 화면을 못 받았을 때(서버 응답 없음) 빈 화면 대신 보이는 안내와 [다시 시도] — 행동 이름은 RETRY_ACT. */
     public static final String RETRY_ACT = "gdm_retry";
-    public static String errorScreen() {
+    public static String errorScreen() { return errorScreen(""); }
+    /** diag: 왜 못 받았는지 짧은 글(HTTP 코드 · 통신 오류 · 너무 긴 본문 …) — 작은 글씨로 덧붙여 화면만 봐도 원인을 알 수 있게 한다. */
+    public static String errorScreen(String diag) {
+        String dg = diag == null || diag.length() == 0 ? "" : "{\"t\":\"text\",\"s\":" + q(diag.length() > 90 ? diag.substring(0, 90) : diag) + ",\"size\":11,\"color\":\"sub\",\"alpha\":0.7,\"lh\":1.4,\"align\":\"center\",\"pad\":[24,0,24,12]},";
         return "{\"ok\":true,\"v\":1,\"screen\":\"error\",\"head\":[],\"body\":["
-            + "{\"t\":\"text\",\"s\":\"서버 연결이 지연되고 있습니다.\\n자동으로 다시 시도하고 있어요.\",\"size\":15,\"color\":\"sub\",\"lh\":1.5,\"align\":\"center\",\"pad\":[24,96,24,12]},"
+            + "{\"t\":\"text\",\"s\":\"서버 연결이 지연되고 있습니다.\\n자동으로 다시 시도하고 있어요.\",\"size\":15,\"color\":\"sub\",\"lh\":1.5,\"align\":\"center\",\"pad\":[24,96,24,12]}," + dg
             + "{\"t\":\"button\",\"s\":\"다시 시도\",\"size\":14,\"h\":44,\"r\":12,\"bold\":true,\"fill\":\"gold\",\"tc\":\"white\",\"act\":{\"a\":\"call\",\"v\":\"" + RETRY_ACT + "\"}}]}";
     }
     /** 캐시 열쇠가 가리키는 칸에 올라와야 하는 엔진 화면 이름(다른 탭의 늦은 답이 이 칸을 덮지 못하게 가린다). */

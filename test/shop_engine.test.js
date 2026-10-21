@@ -180,6 +180,18 @@ console.log('동등성 대조 ' + cases.length + '건');
     const j5 = await r5.json();
     ok(r5.status === 503 && j5.ok === true && j5.delayed === true && j5.screen === 'shop' && Array.isArray(j5.retry) && j5.retry.length >= 3 && j5.retry.every(n => n >= 1 && n <= 120), '서버가 계속 안 되면 503 + 안내 화면 + 재시도 간격');
     ok(/서버 연결이 지연되고 있습니다/.test(JSON.stringify(j5.body)) && j5.body.some(n => n.t === 'button' && n.act.v === 'gdm_retry') && r5.headers.get('cache-control') === 'no-store', '안내 문구 · 다시 시도 단추 · 캐시 금지');
+    ok(j5.body.some(n => n.t === 'text' && /HTTP 503/.test(n.s)), '안내 화면에 못 받은 이유(HTTP 503)가 작게 붙는다');
+    // 워커끼리 부르는 길이 막혀도(예: error code 1042) 앱이 직접 받아 POST 로 실어 보내면 화면이 뜬다(계산은 엔진)
+    const mod4 = await import(tmp + '?fresh=3');
+    globalThis.fetch = async () => { throw new Error('error code: 1042'); };
+    const rg = await mod4.default.fetch(new Request('https://x/screen/shop?now=' + t), {}, { waitUntil() {} });
+    const jg = await rg.json();
+    ok(rg.status === 503 && jg.body.some(n => n.t === 'text' && /1042/.test(n.s)), '워커끼리 호출이 막히면 안내 화면에 이유(1042)가 보인다');
+    const rp = await mod4.default.fetch(new Request('https://x/screen/shop', { method: 'POST', body: JSON.stringify({ cap: 2, cat: '', now: t, shop: { ok: true, version: 'p1', data }, cfg: { ok: false } }) }), {}, { waitUntil() {} });
+    const jp = await rp.json();
+    ok(rp.status === 200 && jp.ok && jp.screen === 'shop' && jp.cover === 'tab' && jp.shopVer === 'p1', '앱이 실어 보낸 상품 자료로 화면을 만든다(POST)');
+    const rb = await mod4.default.fetch(new Request('https://x/screen/shop', { method: 'POST', body: 'not json' }), {}, { waitUntil() {} });
+    ok(rb.status === 400, 'POST 본문이 깨졌으면 400');
   } catch (e) { fail++; console.log('  FAIL 워커 시험 예외', e && e.stack || e); }
   try { fs.unlinkSync(tmp); } catch (e) { }
   console.log(`shop_engine: ${pass} pass, ${fail} fail`);

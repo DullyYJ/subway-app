@@ -337,6 +337,18 @@ public class ShellJvmTest {
         ok(nr.rowJson(9).equals("[]"), "없는 번호");
         try { ScreenCore.parse(nr.json()); ok(true, "기사 목록은 올바른 JSON"); } catch (ScreenCore.ParseError pe) { ok(false, "기사 목록 JSON 오류"); }
         ok(ShellCore.NewsRows.from(new String[] { "", "not json" }).rows.isEmpty() && ShellCore.NewsRows.from(null).rows.isEmpty(), "원자료가 없거나 깨져도 빈 목록");
+        {
+            String fdup = "{\"ok\":true,\"cats\":{\"경제\":[{\"title\":\"코스피  &amp; 환율 급등\",\"link\":\"https://a.com/1\"}]}}";
+            ok(ShellCore.NewsRows.from(new String[] { f0, fdup }).rows.size() == 1, "원자료 두 곳에 같은 기사(공백 뺀 제목)가 있으면 한 번만");
+            StringBuilder big = new StringBuilder("{\"ok\":true,\"items\":[");
+            String dsc = new String(new char[600]).replace('\0', '가');
+            for (int i = 0; i < 1500; i++) { if (i > 0) big.append(','); big.append("{\"title\":\"기사 번호 ").append(i).append(" 제목입니다 아주 길게\",\"link\":\"https://news.example.com/article/2026/10/21/").append(i).append("\",\"source\":\"연합뉴스\",\"ts\":1700000000000,\"desc\":\"").append(dsc).append("\"}"); }
+            big.append("]}");
+            ShellCore.NewsRows bn = ShellCore.NewsRows.from(new String[] { big.toString() });
+            ok(bn.rows.size() == ShellCore.NewsRows.MAX && bn.json().length() < ScreenCore.NET_MAX_REQ - 2000, "기사가 아주 많아도 엔진 요청 본문은 한도 안: " + bn.json().length());
+            try { ScreenCore.Screen es = ScreenCore.load(ShellCore.errorScreen("HTTP 503")); ok(es.body.size() == 3 && ShellCore.errorScreen("").length() < ShellCore.errorScreen("HTTP 503").length(), "안내 화면에 못 받은 이유가 작게 붙는다"); }
+            catch (ScreenCore.ParseError pe2) { ok(false, "안내 화면 JSON 오류: " + pe2.getMessage()); }
+        }
         ok(nr.rowJsonById("https://b.com/2", "x").equals(nr.rowJson(1)) && nr.rowJsonById("https://a.com/1", "").equals(nr.rowJson(0)), "기사 고유 id(링크)로 줄 찾기 — 순서가 바뀌어도 같은 기사");
         ok(nr.rowJsonById("https://gone.com/9", "사라진 기사").equals("[\"사라진 기사\",\"https://gone.com/9\",\"\",0,\"\",\"\"]") && nr.rowJsonById("제목만", "").startsWith("[\"제목만\",\"\""), "목록에서 사라진 기사도 눌린 줄이 준 제목 · 링크로 연다");
         {

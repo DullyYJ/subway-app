@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-21s119";
+var ENGINE_VERSION = "route-v2-2026-10-21s120";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -11674,8 +11674,8 @@ function shopScreen(inp, data, cfg, wx) {
 }
 // \uc1fc\ud551 \uc11c\ubc84\uac00 \ub2a6\uac70\ub098 \uc548 \ub420 \ub54c \uc5d4\uc9c4\uc774 \uc8fc\ub294 \uc548\ub0b4 \ud654\uba74(HTTP 503 \uacfc \ud568\uaed8). \uc571\uc740 \uc774 \ud654\uba74\uc744 \uadf8\ub9ac\uace0, \uce90\uc2dc\uc5d0\ub294 \ub450\uc9c0 \uc54a\uc73c\uba70,
 // retry(\ucd08 \ubaa9\ub85d)\ub9c8\ub2e4 \ub4a4\uc5d0\uc11c \ub2e4\uc2dc \ubc1b\ub294\ub2e4. \ubb38\uad6c \u00b7 \uac04\uaca9\uc740 \ubaa8\ub450 \uc5ec\uae30\uc11c \uc815\ud55c\ub2e4(\uc571\uc5d0 \uae00 \u00b7 \uc22b\uc790\uac00 \uc5c6\ub2e4). \ub2e8\ucd94 act 'gdm_retry' \ub294 \uc571\uc774 \uc54c\uace0 \uc788\ub294 "\uc9c0\uae08 \ub2e4\uc2dc \ubc1b\uae30".
-function shopDelayScreen() {
-  return {
+function shopDelayScreen(why) {
+  var sc = {
     ok: true, v: 1, screen: 'shop', delayed: true, retry: [4, 8, 15, 30],
     head: [],
     body: [
@@ -11684,6 +11684,8 @@ function shopDelayScreen() {
       { t: 'button', s: '\uc9c0\uae08 \ub2e4\uc2dc \uc2dc\ub3c4', size: 14, h: 44, r: 12, bold: true, fill: 'gold', tc: 'white', act: { a: 'call', v: 'gdm_retry' } }
     ]
   };
+  if (why) sc.body.splice(2, 0, { t: 'text', s: '(' + String(why).slice(0, 80) + ')', size: 11, color: 'sub', alpha: 0.7, lh: 1.4, align: 'center', pad: [24, 0, 24, 12] });          // \ubabb \ubc1b\uc740 \uc774\uc720(HTTP \ucf54\ub4dc \u00b7 \ud1b5\uc2e0 \uc624\ub958)
+  return sc;
 }
 // [[\uae00, \uad75\uac8c 0|1], \u2026] \u2192 \uc774\uc5b4 \ubd99\uc778 \uae00 + \uad75\uc740 \uad6c\uac04 [[\uc2dc\uc791,\ub05d],\u2026] (\uc571\uc774 \uad75\uae30\ub9cc \uadf8\ub9b0\ub2e4)
 function shopRich(parts) {
@@ -11699,11 +11701,13 @@ function shopRich(parts) {
 var SHOP_API_URL = "https://gildongmu-shop.phg0643.workers.dev";
 var SHOP_CFG_URL = "https://gildongmu-food.phg0643.workers.dev/app-config?k=shop";
 var SHOP_MEM = { data: null, ts: 0, ver: "", cfg: null, cfgTs: 0 };
+var SHOP_WHY = "";                                          // \ub9c8\uc9c0\ub9c9\uc73c\ub85c \uc0c1\ud488 \uc11c\ubc84\ub97c \ubabb \ubc1b\uc740 \uc774\uc720(\uc548\ub0b4 \ud654\uba74\uc5d0 \uc791\uac8c \ubcf4\uc778\ub2e4 \u2014 \ud654\uba74\ub9cc \ubd10\ub3c4 \uc6d0\uc778\uc744 \uc54c \uc218 \uc788\uac8c)
 async function shopFetchJson(u, ms) {
   var ac = new AbortController(), t = setTimeout(function () { ac.abort(); }, ms);
-  try { var r = await fetch(u, { signal: ac.signal }); clearTimeout(t); return r.ok ? await r.json() : null; }
-  catch (e) { clearTimeout(t); return null; }
+  try { var r = await fetch(u, { signal: ac.signal }); clearTimeout(t); if (!r.ok) { SHOP_WHY = "HTTP " + r.status; return null; } return await r.json(); }
+  catch (e) { clearTimeout(t); SHOP_WHY = String(e && e.message || e).slice(0, 60); return null; }
 }
+function shopPostedOk(j) { return !!(j && j.ok && j.data && j.data.CATS && j.data.CATS.length && j.data.WEEKDAY && j.data.WEEKDAY.length); }
 async function shopLoad() {
   var now = Date.now();
   var needShop = !SHOP_MEM.data || now - SHOP_MEM.ts > 60000, needCfg = now - SHOP_MEM.cfgTs > 600000;
@@ -11722,17 +11726,28 @@ async function shopLoad() {
   return SHOP_MEM;
 }
 async function handleScreenShop(request) {
-  var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Cache-Control": "no-store" };
+  var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET, POST, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Cache-Control": "no-store" };
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: H });
   var u = new URL(request.url), q = u.searchParams;
+  // POST: \uc571\uc774 \uc0c1\ud488 \uc11c\ubc84\u00b7\uc6b4\uc601 \uc124\uc815\uc744 \uc9c1\uc811 \ubc1b\uc544 \ud568\uaed8 \ubcf4\ub0b8\ub2e4(\uc6cc\ucee4\ub07c\ub9ac \ubd80\ub974\ub294 \uae38\uc774 \ub9c9\ud600 \uc788\uc5b4\ub3c4 \ud654\uba74\uc774 \ub728\uac8c). { cat, lat, lng, tz, now, cap, shop:{ok,data,version}, cfg:{ok,v} }
+  if (request.method === "POST") {
+    var pb = null;
+    try { pb = JSON.parse(await request.text()); } catch (eP) { pb = null; }
+    if (!pb || typeof pb !== "object") return new Response(JSON.stringify({ ok: false, error: "bad-json" }), { status: 400, headers: H });
+    ["cat", "lat", "lng", "tz", "now", "cap"].forEach(function (k) { if (pb[k] != null) q.set(k, String(pb[k])); });
+    if (shopPostedOk(pb.shop)) {
+      SHOP_MEM.data = pb.shop.data; SHOP_MEM.ver = String(pb.shop.version || ""); SHOP_MEM.ts = Date.now();
+      if (pb.cfg && pb.cfg.ok && pb.cfg.v && typeof pb.cfg.v === "object") { SHOP_MEM.cfg = pb.cfg.v; SHOP_MEM.cfgTs = Date.now(); }
+    }
+  } else if (request.method !== "GET") return new Response(JSON.stringify({ ok: false, error: "method" }), { status: 405, headers: H });
   var mem = await shopLoad();
-  if (!mem.data) return new Response(JSON.stringify(shopDelayScreen()), { status: 503, headers: H });          // \uc548\ub0b4 \ud654\uba74(\uc11c\ubc84 \uc5f0\uacb0 \uc9c0\uc5f0) + \uc7ac\uc2dc\ub3c4 \uac04\uaca9 \u2014 \uc571\uc740 \uc774\uac83\uc744 \uadf8\ub9ac\uace0 \ub4a4\uc5d0\uc11c \ub2e4\uc2dc \ubc1b\ub294\ub2e4
+  if (!mem.data) return new Response(JSON.stringify(shopDelayScreen(SHOP_WHY)), { status: 503, headers: H });          // \uc548\ub0b4 \ud654\uba74(\uc11c\ubc84 \uc5f0\uacb0 \uc9c0\uc5f0) + \uc7ac\uc2dc\ub3c4 \uac04\uaca9 \u2014 \uc571\uc740 \uc774\uac83\uc744 \uadf8\ub9ac\uace0 \ub4a4\uc5d0\uc11c \ub2e4\uc2dc \ubc1b\ub294\ub2e4
   var lat = Number(q.get("lat")), lng = Number(q.get("lng")), wx = null;
   if (q.get("lat") != null && q.get("lng") != null) { try { wx = await sceneWeather(lat, lng); } catch (e) { wx = null; } }
   var inp = { nowMs: q.get("now") ? Number(q.get("now")) : Date.now(), tzOffsetMin: q.get("tz") ? Number(q.get("tz")) : 540, cat: q.get("cat") || "", cap: Number(q.get("cap")) || 0 };
   var out;
   try { out = shopScreen(inp, mem.data, mem.cfg, wx); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2) }), { status: 500, headers: H }); }
-  if (!out || !out.ok) return new Response(JSON.stringify(shopDelayScreen()), { status: 503, headers: H });
+  if (!out || !out.ok) return new Response(JSON.stringify(shopDelayScreen(SHOP_WHY || 'screen')), { status: 503, headers: H });
   out.ver = ENGINE_VERSION; out.shopVer = mem.ver;
   return new Response(JSON.stringify(out), { headers: H });
 }

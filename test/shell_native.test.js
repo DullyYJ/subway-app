@@ -54,7 +54,7 @@ function findAndroidJar() {
     const v = fs.readFileSync(N('ShellActivity.java'), 'utf8');
     const m = v.slice(v.indexOf('private void prefetchTabs()'), v.indexOf('private void cachePutAsync('));
     assert.ok(m.length > 2000, 'prefetchTabs 있음');
-    for (const f of ['/screen/home', '/screen/cchips', '/screen/chat', '/screen/board', '/screen/map', '/screen/food', 'prefetchNews', 'shopUrl', 'S_SETTINGS', 'catValues', 'modeOverride']) assert.ok(m.includes(f), f + ' 미리 받기');
+    for (const f of ['/screen/home', '/screen/cchips', '/screen/chat', '/screen/board', '/screen/map', '/screen/food', 'prefetchNews', 'shopCall(', 'S_SETTINGS', 'catValues', 'modeOverride']) assert.ok(m.includes(f), f + ' 미리 받기');
     assert.ok(!/\+\+seq/.test(m) && !/present\(/.test(m), '진행 중인 칸을 건드리지 않는다');
     assert.ok(!/loadFood\(|locateForFood|locateOnce\(/.test(m), '미리 받기가 권한 안내를 띄우지 않는다');
     assert.ok(!/postDelayed\([^)]*prefetchTabs/.test(v) && /captureLastLoc\(\);\s*prefetchTabs\(\);/.test(v), '지연 없이 켜는 즉시 시작');
