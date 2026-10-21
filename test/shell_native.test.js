@@ -272,6 +272,11 @@ function findAndroidJar() {
     assert.ok(/case ScreenCore\.K_LPILL: drawLpill/.test(sv) && /0x47FFFFFF/.test(d) && /drawCircle/.test(d) && /it\.t1\.length\(\) > 0/.test(d), '그리기 · 동그라미 알파 .28');
     assert.ok(!/new Paint|new RectF|new Rect\(|new Path|new int\[|new String/.test(d), '그릴 때 새 객체 없음');
   });
+  await t('역 팝업 위로 끌면 시간표 · 아래로 끌면 닫힘(s140): 박스가 끌기가 확정된 순간에만 가로채고 한 번만 반응한다', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), d = a.slice(a.indexOf('private android.view.View stnSheetBox('), a.indexOf('private void mapSheetAct('));
+    assert.ok(/onInterceptTouchEvent/.test(d) && /40f \* dpr/.test(d) && /Math\.abs\(dy\) > Math\.abs\(dx\) \* 1\.2f/.test(d) && /dy < 0f\) openTimetable\(\); else closeSheet\(\)/.test(d), '위/아래 끌기 규칙(웹과 같은 40 · 1.2배)');
+    assert.ok(/ShellCore\.S_MAPSTN\.equals\(sheetName\)/.test(d) && /fired = true/.test(d) && /return false;/.test(d), '역 팝업일 때만 · 한 번만 · 평소엔 가로채지 않는다');
+  });
   await t('앱 크기(s138): 64비트 한 가지 · 한국어·영어만 · 릴리스에서 라이브러리 코드 줄이기 · 실패하면 디버그로 대신', () => {
     const g = fs.readFileSync(path.join(ROOT, 'shell-android', 'app', 'build.gradle'), 'utf8');
     assert.ok(/abiFilters 'arm64-v8a' \}/.test(g) && !/armeabi/.test(g), '지도 엔진 네이티브 라이브러리는 64비트만');
