@@ -104,7 +104,7 @@ function findAndroidJar() {
   });
   await t('게시판·채팅·탭 노드: 펼침 카드(post)·댓글·단추 줄·입력줄·말풍선·탭 막대·아래 고정 줄을 그리고 코어가 안다 · 그릴 때 새 객체 없음', async () => {
     const v = fs.readFileSync(N('ScreenView.java'), 'utf8'), c = fs.readFileSync(N('ScreenCore.java'), 'utf8'), p = '';
-    for (const k of ['POSTH:drawPostHead', 'CMT:drawCmt', 'RBTN:drawRbtn', 'INBAR:drawInbar', 'MSG:drawMsg', 'TAB:drawTab']) {
+    for (const k of ['POSTH:drawPostHead', 'CMT:drawCmt', 'RBTN:drawRbtn', 'INBAR:drawInbar', 'MSG:drawMsgAnim', 'TAB:drawTab']) {
       const [kind, fn] = k.split(':');
       assert.ok(new RegExp('case ScreenCore\\.K_' + kind + ': ' + fn + '\\(').test(v), 'drawItem 연결 ' + k);
       assert.ok(new RegExp('private void ' + fn + '\\(').test(v), fn + ' 정의');
