@@ -449,14 +449,14 @@ public final class ScreenCore {
                 Node kn = node(ko, sc);
                 if (kn != null) n.kids.add(kn);
             }
-        } else if ("row".equals(t)) {                                                                       // 한 줄에 같은 폭으로 나란히(요일·시각 칸·시험 단추) — 안에는 button·box·text 만
+        } else if ("row".equals(t)) {                                                                       // 한 줄에 같은 폭으로 나란히(요일·시각 칸·시험 단추) — 안에는 button·box·text·panel 만
             pad(m, n); n.gap = optNum(m, "gap", 8f, 0f, 40f);
             List<Object> rk = asArr(m.get("kids"), "row.kids");
             if (rk.size() < 1 || rk.size() > MAX_ROW) throw new ParseError("row: 칸은 1~" + MAX_ROW + "개");
             for (Object ko : rk) {
                 Map<String, Object> km = asObj(ko, "row 안 노드");
                 String kt = optStr(km, "t", "", 20);
-                if (!"button".equals(kt) && !"box".equals(kt) && !"text".equals(kt)) throw new ParseError("row 안에 " + kt + " 를 둘 수 없다");
+                if (!"button".equals(kt) && !"box".equals(kt) && !"text".equals(kt) && !"panel".equals(kt)) throw new ParseError("row 안에 " + kt + " 를 둘 수 없다");
                 Node kn = node(ko, sc);
                 if (kn != null) n.kids.add(kn);
             }
