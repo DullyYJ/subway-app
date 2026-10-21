@@ -65,7 +65,7 @@ const ROWS = [
 const S = E.newsScreen({ cap: 5, now: NOW }, { cat: '전체' }, ROWS);
 const newsN = o => o.body.filter(x => x.t === 'news');
 ok(E.newsScreen({ cap: 4, now: NOW }, {}, ROWS).ok === false && E.newsScreen({}, {}, ROWS).ok === false && E.newsScreen(null, null, null).ok === false, 'cap 5 미만이면 만들지 않는다');
-ok(S.ok && S.v === 1 && S.screen === 'news' && S.cover === 'tab' && /^n1:/.test(S.rev), '기본 모양');
+ok(S.ok && S.v === 1 && S.screen === 'news' && S.cover === 'tab' && /^n2:/.test(S.rev), '기본 모양');
 
 // ── ③ 거르기·골고루·3일 컷·번호 ──
 {

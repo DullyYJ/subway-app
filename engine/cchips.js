@@ -41,7 +41,7 @@ function cchipsScreen(inp, factsIn) {
     if (c.c) it.c = c.c;
     return it;
   });
-  var head = [{ t: 'chips', pad: [14, 13, 14, 2], gap: 6, h: 27, fs: 11, px: 13, onc: 'gold', onfg: '#ffffff', offf: 'card2', offb: 'border', offt: 'sub', items: items }];       // 웹 .chip: 27px · 11px 굵게 · 바탕 card2 · 테두리 border · 글자 sub
+  var head = [{ t: 'chips', pad: [14, 12, 14, 6], gap: 6, h: 27, fs: 11, px: 13, onc: 'gold', onfg: '#ffffff', offf: 'card2', offb: 'border', offt: 'sub', items: items }];       // 웹 .chip: 27px · 11px 굵게 · 바탕 card2 · 테두리 border · 글자 sub
   var out = { ok: true, v: 1, screen: 'cchips', cover: 'tab', head: head, body: [], info: { mode: f.mode } };
   out.rev = 'q' + CCHIPS_SCREEN_V + ':' + cchipsHash(JSON.stringify(head));
   return out;

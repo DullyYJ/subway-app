@@ -71,14 +71,14 @@ public class ScreenView extends View {
     }
 
     // 색 역할 (ScreenCore 의 color 이름과 같은 순서)
-    public static final int R_BG = 0, R_CARD = 1, R_BORDER = 2, R_TEXT = 3, R_SUB = 4, R_GOLD = 5, R_ORANGE = 6, R_IMGBG = 7, R_WHITE = 8, R_BORDER2 = 9, R_CARD2 = 10, R_NAV = 11;
+    public static final int R_BG = 0, R_CARD = 1, R_BORDER = 2, R_TEXT = 3, R_SUB = 4, R_GOLD = 5, R_ORANGE = 6, R_IMGBG = 7, R_WHITE = 8, R_BORDER2 = 9, R_CARD2 = 10, R_NAV = 11, R_GOLD2 = 12, R_ONGOLD = 13;
 
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final TextPaint tp = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final RectF rf = new RectF(), rf2 = new RectF();
     private final Runnable firstDrawCb = new Runnable() { @Override public void run() { if (listener != null) listener.onFirstDraw(); } };
     private final Paint bmpPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
-    private final int[] pal = { 0xFF0B0F14, 0xFF1B2129, 0x33FFFFFF, 0xFFF2F4F7, 0xFF9AA4B2, 0xFFF0B429, 0xFFF07830, 0xFF252528, 0xFFFFFFFF, 0x4DFFFFFF, 0xFF2C2C2E, 0xFF161618 };
+    private final int[] pal = { 0xFF0B0F14, 0xFF1B2129, 0x33FFFFFF, 0xFFF2F4F7, 0xFF9AA4B2, 0xFFF0B429, 0xFFF07830, 0xFF252528, 0xFFFFFFFF, 0x4DFFFFFF, 0xFF2C2C2E, 0xFF161618, 0xFF0E7DD6, 0xFFFFFFFF };
     private ScreenCore.Screen screen;
     private ScreenCore.Layout lay;
     private float dpr = 1f, scrollY = 0f, scrollX = 0f;
@@ -194,6 +194,38 @@ public class ScreenView extends View {
     public float contentHdp() { return lay == null ? 0f : lay.headH + lay.bodyH + lay.footH; }
     public float fitWidthDp() { return lay == null ? 0f : lay.fitW; }
 
+    // ── 떠 있는 단추(웹 .fab): 그라데이션은 배치 때 한 번만 만든다(그릴 때 새 객체 없음) ──
+    private android.graphics.LinearGradient fabShader; private float fabSX = -1f, fabSY = -1f, fabSW = -1f; private boolean fabDown;
+    private void buildFab() {
+        if (lay == null || lay.fabW <= 0f) { fabShader = null; return; }
+        float w = getWidth() / dpr, h = getHeight() / dpr, fx = (w - lay.fabW) / 2f, fy = h - lay.footH - ScreenCore.FAB_B - ScreenCore.FAB_H;
+        if (fabShader != null && fx == fabSX && fy == fabSY && lay.fabW == fabSW) return;
+        fabSX = fx; fabSY = fy; fabSW = lay.fabW;
+        fabShader = new android.graphics.LinearGradient(fx, fy, fx + lay.fabW, fy + ScreenCore.FAB_H, pal[R_GOLD2], pal[R_GOLD], android.graphics.Shader.TileMode.CLAMP);
+    }
+    private boolean fabAt(float px, float py) {
+        if (lay == null || lay.fabW <= 0f) return false;
+        float x = px / dpr, y = py / dpr, w = getWidth() / dpr, h = getHeight() / dpr, fx = (w - lay.fabW) / 2f, fy = h - lay.footH - ScreenCore.FAB_B - ScreenCore.FAB_H;
+        return x >= fx - 4f && x < fx + lay.fabW + 4f && y >= fy - 4f && y < fy + ScreenCore.FAB_H + 4f;
+    }
+    private void drawFab(Canvas cv, float w, float h) {
+        if (lay == null || lay.fabW <= 0f || fabShader == null) return;
+        float fw = lay.fabW, fh = ScreenCore.FAB_H, fx = (w - fw) / 2f, fy = h - lay.footH - ScreenCore.FAB_B - fh, rad = 30f;
+        p.setStyle(Paint.Style.FILL); p.setShader(null);
+        for (int i = 5; i >= 1; i--) { p.setColor(0x0AD4AF37); float e = i * 1.4f; rf.set(fx - e, fy + 4f - e, fx + fw + e, fy + fh + 4f + e); cv.drawRoundRect(rf, rad + e, rad + e, p); }       // 웹 box-shadow 0 4px 14px rgba(212,175,55,.4) 흉내
+        rf.set(fx, fy, fx + fw, fy + fh);
+        p.setShader(fabShader); cv.drawRoundRect(rf, fh / 2f, fh / 2f, p); p.setShader(null);
+        if (fabDown) { p.setColor(0x22000000); cv.drawRoundRect(rf, fh / 2f, fh / 2f, p); }
+        float tx = fx + ScreenCore.FAB_PX;
+        if (lay.fabIcon.length > 0) {
+            android.graphics.Path ph = pathOf(lay.fabIcon);
+            cv.save(); cv.translate(tx, fy + (fh - ScreenCore.FAB_ICON) / 2f); cv.scale(ScreenCore.FAB_ICON / 24f, ScreenCore.FAB_ICON / 24f);
+            p.setColor(0xFF121214); cv.drawPath(ph, p); cv.restore();
+            tx += ScreenCore.FAB_ICON + ScreenCore.FAB_GAP;
+        }
+        setText(ScreenCore.FAB_TXT, true, pal[R_ONGOLD]);
+        cv.drawText(lay.fabLabel, tx, base(fy, fh, 0), tp);
+    }
     private void relayout() {
         if (screen == null || getWidth() <= 0) { lay = null; invalidate(); syncLater(); return; }
         lay = ScreenCore.layout(screen, getWidth() / dpr, measurer, openKey, getHeight() / dpr);
@@ -201,6 +233,7 @@ public class ScreenView extends View {
         else if (!lay.ctrSig.equals(ctrDone)) { ctrDone = lay.ctrSig; scrollX = lay.initScrollX; }      // 24시간 차트 내용이 새로 오면 지금 시각 막대를 가운데로
         clampScroll();
         markBcards();
+        buildFab();
         syncFieldBases(lay.body); syncFieldBases(lay.foot);
         float ch = lay.headH + lay.bodyH + lay.footH;
         if (Math.abs(ch - lastCH) > 0.5f) { lastCH = ch; final float chf = ch; post(new Runnable() { @Override public void run() { if (listener != null) listener.onContentH(chf); } }); }
@@ -250,7 +283,8 @@ public class ScreenView extends View {
                 inChips = inHead && lay.chipsTop >= 0f && y >= lay.chipsTop * dpr && y < lay.chipsBot * dpr;
                 inFoot = lay.footH > 0f && !inHead && y >= footTop() * dpr;
                 mode = 3;
-                pressed = findItem(x, y);
+                fabDown = fabAt(x, y);
+                pressed = fabDown ? null : findItem(x, y);
                 if (pressed != null && pressed.act == null && pressed.kind != ScreenCore.K_FIELD) pressed = null;
                 pressInFoot = inFoot;
                 sceneTouch = false;
@@ -270,7 +304,7 @@ public class ScreenView extends View {
                 if (mode == 4) return true;
                 if (mode == 3) {
                     if (Math.abs(x - downX) > slop || Math.abs(y - downY) > slop) {
-                        pressed = null;
+                        pressed = null; fabDown = false;
                         mode = inHead ? (inChips ? 2 : 0) : (inFoot ? 0 : 1);   // 머리는 칩 줄만 가로로 민다(안내 상자·검색줄은 고정) · 아래 고정 줄은 안 밀린다
                         if (inHead && Math.abs(y - downY) > Math.abs(x - downX) * 2f) mode = 0;     // 머리를 위아래로 쓸면 무시
                         if (mode == 1) blurInput();                                              // 목록을 밀기 시작하면 키보드를 내린다
@@ -283,6 +317,7 @@ public class ScreenView extends View {
             case MotionEvent.ACTION_UP: {
                 if (sceneTouch && scene != null) { scene.touchUp(); sceneTouch = false; }
                 if (mode == 4) { finishTouch(); invalidate(); return true; }
+                if (mode == 3 && fabDown) { fabDown = false; if (SystemClock.uptimeMillis() - downT < 600 && listener != null && lay != null && lay.fabAct != null) { blurInput(); listener.onAction(lay.fabAct); } finishTouch(); invalidate(); return true; }
                 if (mode == 3) {
                     if (SystemClock.uptimeMillis() - downT < 600 && pressed != null && listener != null) {
                         ScreenCore.Item pi = pressed; ScreenCore.Act a = pi.act; pressed = null; invalidate();
@@ -866,7 +901,7 @@ public class ScreenView extends View {
         if (editor != null && key.equals(editKey)) { editSilent = true; editor.setText(v); editor.setSelection(editor.getText().length()); editSilent = false; }
         invalidate();
     }
-    private void finishTouch() { pressed = null; mode = 0; if (vt != null) { vt.recycle(); vt = null; } }
+    private void finishTouch() { pressed = null; fabDown = false; mode = 0; if (vt != null) { vt.recycle(); vt = null; } }
 
     private ScreenCore.Item findItem(float px, float py) {
         float x = px / dpr, y = py / dpr;
@@ -902,7 +937,7 @@ public class ScreenView extends View {
         if ("bg".equals(r)) return pal[R_BG]; if ("card".equals(r)) return pal[R_CARD]; if ("border".equals(r)) return pal[R_BORDER];
         if ("text".equals(r)) return pal[R_TEXT]; if ("sub".equals(r)) return pal[R_SUB]; if ("gold".equals(r)) return pal[R_GOLD];
         if ("orange".equals(r)) return pal[R_ORANGE]; if ("imgbg".equals(r)) return pal[R_IMGBG]; if ("white".equals(r)) return pal[R_WHITE];
-        if ("border2".equals(r)) return pal[R_BORDER2]; if ("card2".equals(r)) return pal[R_CARD2]; if ("nav".equals(r)) return pal[R_NAV];
+        if ("border2".equals(r)) return pal[R_BORDER2]; if ("card2".equals(r)) return pal[R_CARD2]; if ("nav".equals(r)) return pal[R_NAV]; if ("gold2".equals(r)) return pal[R_GOLD2]; if ("ongold".equals(r)) return pal[R_ONGOLD];
         return 0;
     }
 
@@ -961,6 +996,7 @@ public class ScreenView extends View {
             for (int i = 0; i < lay.foot.length; i++) drawItem(cv, lay.foot[i]);
             cv.restore();
         }
+        drawFab(cv, w, h);
         cv.restore();
         if (lay.lineCol != null) {                                                               // 안내창 카드 테두리(1dp)
             p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(dpr); p.setColor(cc(lay.lineCol, 0));
@@ -1087,9 +1123,10 @@ public class ScreenView extends View {
         else if (web) { if (it.ofl != null) { p.setStyle(Paint.Style.FILL); p.setColor(cc(it.ofl, 0)); cv.drawRoundRect(rf, rad, rad, p); } }
         else if (tinted) { p.setStyle(Paint.Style.FILL); p.setColor(pal[R_CARD]); cv.drawRoundRect(rf, rad, rad, p); }
         if (it == pressed) { p.setStyle(Paint.Style.FILL); p.setColor(0x14808080); cv.drawRoundRect(rf, rad, rad, p); }
-        p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(border);
-        rf2.set(it.x + 0.5f, it.y + 0.5f, it.x + it.w - 0.5f, it.y + it.h - 0.5f);
-        cv.drawRoundRect(rf2, rad - 0.5f, rad - 0.5f, p);
+        float bwd = it.bw > 0f ? it.bw : 1f;
+        p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(bwd); p.setColor(border);
+        rf2.set(it.x + bwd / 2f, it.y + bwd / 2f, it.x + it.w - bwd / 2f, it.y + it.h - bwd / 2f);
+        cv.drawRoundRect(rf2, rad - bwd / 2f, rad - bwd / 2f, p);
         p.setStyle(Paint.Style.FILL);
         int fg = it.on ? cc(it.tc, pal[R_WHITE]) : (web ? cc(it.otx, pal[R_SUB]) : (tinted ? pal[R_SUB] : pal[R_TEXT]));
         float fs = it.size > 0f ? it.size : 12f, px = it.sx > 0f ? it.sx : ScreenCore.CHIP_PADX;
@@ -1495,7 +1532,7 @@ public class ScreenView extends View {
     }
 
     private void drawPostHead(Canvas cv, ScreenCore.Item it) {
-        if (it == pressed) { rf.set(it.x, it.y, it.x + it.w, it.y + it.h); p.setStyle(Paint.Style.FILL); p.setColor(0x14808080); cv.drawRoundRect(rf, 11f, 11f, p); }
+        if (it == pressed) { rf.set(it.x, it.y, it.x + it.w, it.y + it.h); p.setStyle(Paint.Style.FILL); p.setColor(pal[R_CARD2]); cv.drawRoundRect(rf, 11f, 11f, p); }       // 웹 .dc-post:active { background: card2 }
         if (it.badge.length() > 0) {
             float bh = ScreenCore.POST_BADGE * 1.4f + 4f;
             rf.set(it.bx, it.by, it.bx + it.badgeW, it.by + bh);
@@ -1508,6 +1545,16 @@ public class ScreenView extends View {
         for (int k = 0; k < it.lines.length; k++) cv.drawText(it.lines[k], it.textX, base(it.textY + k * it.lineH, it.lineH, k), tp);
         if (it.tag.length() > 0) { setText(it.size2, true, pal[R_GOLD]); cv.drawText(it.tag, it.tagX, base(it.metaY, it.lineH2, 0), tp); }
         if (it.label.length() > 0) { setText(it.size2, false, pal[R_SUB]); cv.drawText(it.label, it.distX, base(it.metaY, it.lineH2, 0), tp); }
+        if (it.mp != null) {
+            for (int k = 0; k < it.mp.length; k++) {
+                setText(ScreenCore.POST_DOT, false, pal[R_BORDER2]); cv.drawText("\u00b7", it.mpx[k] - ScreenCore.POST_MGAP - it.dotW, base(it.metaY, it.lineH2, 0), tp);
+                setText(it.size2, false, pal[R_SUB]); cv.drawText(it.mp[k], it.mpx[k], base(it.metaY, it.lineH2, 0), tp);
+            }
+            if (it.cmS.length() > 0) {
+                setText(ScreenCore.POST_DOT, false, pal[R_BORDER2]); cv.drawText("\u00b7", it.dotX0, base(it.metaY, it.lineH2, 0), tp);
+                setText(ScreenCore.POST_CMT_SIZE, false, pal[R_TEXT]); cv.drawText(it.cmS, it.cmX, base(it.metaY - (it.rowH - it.lineH2) / 2f, it.rowH, 0), tp);
+            }
+        }
     }
     private void drawCmt(Canvas cv, ScreenCore.Item it) {
         setText(it.size2, true, cc(it.ac, 0xFF5E5CE6));
@@ -1517,9 +1564,14 @@ public class ScreenView extends View {
         for (int k = 0; k < it.lines.length; k++) cv.drawText(it.lines[k], it.textX, base(it.textY + k * it.lineH, it.lineH, k), tp);
     }
     private void drawRbtn(Canvas cv, ScreenCore.Item it) {
+        boolean sq = it == pressed;                                                    // 웹 .dc-react-btn:active { transform: scale(.95) }
+        if (sq) { cv.save(); cv.scale(0.95f, 0.95f, it.x + it.w / 2f, it.y + it.h / 2f); }
+        drawRbtn0(cv, it);
+        if (sq) cv.restore();
+    }
+    private void drawRbtn0(Canvas cv, ScreenCore.Item it) {
         rf.set(it.x, it.y, it.x + it.w, it.y + it.h);
         p.setStyle(Paint.Style.FILL); p.setColor(cc(it.fill, pal[R_CARD2])); cv.drawRoundRect(rf, it.radius, it.radius, p);
-        if (it == pressed) { p.setColor(0x22808080); cv.drawRoundRect(rf, it.radius, it.radius, p); }
         p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(cc(it.line, pal[R_BORDER2]));
         rf2.set(it.x + 0.5f, it.y + 0.5f, it.x + it.w - 0.5f, it.y + it.h - 0.5f); cv.drawRoundRect(rf2, it.radius - 0.5f, it.radius - 0.5f, p);
         p.setStyle(Paint.Style.FILL);
@@ -1889,11 +1941,12 @@ public class ScreenView extends View {
 
     // ───────────── 검색 입력칸(진짜 EditText) ─────────────
     /** 아이콘 경로(M/L/C/Z 풀어 둔 배열)를 안드로이드 Path 로. 처음 한 번만 만들고 화면이 바뀔 때까지 쓴다. */
-    private android.graphics.Path pathFor(ScreenCore.Item it) {
-        android.graphics.Path ph = iconPaths.get(it.pathOps);
+    private android.graphics.Path pathFor(ScreenCore.Item it) { return pathOf(it.pathOps); }
+    private android.graphics.Path pathOf(float[] ops) {
+        android.graphics.Path ph = iconPaths.get(ops);
         if (ph != null) return ph;
         ph = new android.graphics.Path();
-        float[] o = it.pathOps; int i = 0;
+        float[] o = ops; int i = 0;
         while (i < o.length) {
             int op = (int) o[i++];
             if (op == ScreenCore.OP_M) { ph.moveTo(o[i], o[i + 1]); i += 2; }
@@ -1902,7 +1955,7 @@ public class ScreenView extends View {
             else if (op == ScreenCore.OP_Z) ph.close();
             else break;
         }
-        iconPaths.put(it.pathOps, ph);
+        iconPaths.put(ops, ph);
         return ph;
     }
     private ScreenCore.Item searchItem() {

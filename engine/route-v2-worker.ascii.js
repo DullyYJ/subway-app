@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-21s118";
+var ENGINE_VERSION = "route-v2-2026-10-21s119";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -11759,7 +11759,7 @@ async function handleScreenShop(request) {
 //          pf = \uadf8 \ud654\uba74\uc758 \uae30\uae30 \uc0ac\uc2e4(\ucf1c\uc9d0\u00b7\uac12\u00b7\uace0\ub978 \uc0c1\ud0dc\ub9cc; \ubb38\uad6c\u00b7\uc694\uc77c \uacc4\uc0b0\u00b7\uc2dc\uac01 \uae00\u00b7\ud1f4\uadfc \uc548\ub0b4\ub294 \uc5d4\uc9c4). \ud589\ub3d9\uc740 call(v: pg.back \u00b7 sam.open \u00b7 cm.day.N \u2026) \ud5c8\uc6a9 \ubaa9\ub85d\ub9cc.
 // \ub9e8 \uc544\ub798 module.exports \ub294 \uc2dc\ud5d8(Node)\uc6a9\uc774\uace0 Worker \uc5d0\uc11c\ub294 \ud568\uc218 \uc120\uc5b8\ub9cc \uc4f0\uc778\ub2e4.
 'use strict';
-var SETTINGS_SCREEN_V = 1;
+var SETTINGS_SCREEN_V = 2;
 var SETTINGS_PAGE_CAP = 8;
 // \uc9c0\ud558\ucca0 \uc5ed \ud45c(HOME_STNS)\ub294 Worker \uc5d0\uc11c\ub294 \uc55e/\ub4a4\uc5d0 \ubd99\uc740 engine/home-stations.js \uac00 \ucc44\uc6b0\ub294 \uacf5\uc6a9 \uc804\uc5ed\uc774\uace0(\uc5ec\uae30\uc11c \ub2e4\uc2dc \uc120\uc5b8\ud558\uc9c0 \uc54a\ub294\ub2e4), Node(\uc2dc\ud5d8)\uc5d0\uc11c\ub294 \ud30c\uc77c\uc744 \ubd88\ub7ec\uc628\ub2e4. \uc694\uccad \ub54c \uc77d\ub294\ub2e4(Worker \uc5d0\uc11c \uc774 \ube14\ub85d\uc774 \uba3c\uc800 \ud3c9\uac00\ub418\ubbc0\ub85c).
 function settingsStns() {
@@ -11799,7 +11799,7 @@ function settingsHash(s) {                       // djb2 \u2014 \uac19\uc740 \ud
 // \u2500\u2500 \ub178\ub4dc \ub9cc\ub4e4\uae30(\ubaa8\uc591 \ud55c \uacf3) \u2500\u2500
 function settingsTitleN(s, mb) { return { t: 'text', s: s, size: 15, bold: true, color: 'text', pad: [0, 0, 0, mb == null ? 4 : mb], lh: 1.3 }; }
 function settingsDescN(s, mb, hl) { var n = { t: 'text', s: s, size: 12, color: 'sub', lh: 1.5, pad: [0, 0, 0, mb == null ? 12 : mb] }; if (hl) n.hl = hl; return n; }
-function settingsPanelN(kids, mt) { return { t: 'panel', pad: [14, mt == null ? 12 : mt, 14, 0], ip: [16, 16, 16, 16], fill: 'card', line: 'border', r: 14, kids: kids }; }
+function settingsPanelN(kids, mt) { return { t: 'panel', pad: [16, mt == null ? 12 : mt, 16, 0], ip: [16, 16, 16, 16], fill: 'card', line: 'border', r: 14, kids: kids }; }
 function settingsBoldN(parts) {                           // [[\uae00, \uad75\uac8c 0|1], \u2026] \u2192 { s, hl }
   var s = '', hl = [];
   parts.forEach(function (p) { if (p[1]) hl.push([s.length, s.length + p[0].length]); s += p[0]; });
@@ -11825,8 +11825,8 @@ function settingsScreen(inp, factsIn) {
     var cur = settingsBoldN([['\ud604\uc7ac \uc544\uc774\ub514  ', 0], [f.id, 1]]);
     idKids.push({ t: 'box', s: cur.s, hl: cur.hl, size: 14, lh: 1.4, color: 'gold', fill: '#1c1c1e', line: '', tc: 'gold', r: 10, ip: [13, 11, 13, 11], pad: [0, 0, 0, 12] });
   }
-  idKids.push({ t: 'field', key: 'cid', hint: '\uc544\uc774\ub514 \uc785\ub825 (2~12\uc790, \ud55c\uae00/\uc601\ubb38/\uc22b\uc790)', value: f.id, maxlen: 12, h: 44, size: 14, r: 9, pad: [0, 0, 0, 10] });
-  idKids.push({ t: 'button', s: '\uc544\uc774\ub514 \uc800\uc7a5', size: 14, h: 44, r: 10, bold: true, fill: 'gold', line: 'none', tc: '#121214', act: { a: 'call', v: 'saveId' } });
+  idKids.push({ t: 'field', key: 'cid', hint: '\uc544\uc774\ub514 \uc785\ub825 (2~12\uc790, \ud55c\uae00/\uc601\ubb38/\uc22b\uc790)', value: f.id, maxlen: 12, h: 40, size: 14, r: 9, pad: [0, 0, 0, 10] });
+  idKids.push({ t: 'button', s: '\uc544\uc774\ub514 \uc800\uc7a5', size: 14, h: 42, r: 10, bold: true, fill: 'gold', line: 'none', tc: '#121214', act: { a: 'call', v: 'saveId' } });
   if (f.id) idKids.push({ t: 'button', s: '\uc544\uc774\ub514 \uc0ad\uc81c', size: 12, h: 38, r: 10, bold: true, fill: 'none', line: 'border2', tc: '#ff453a', pad: [0, 8, 0, 0], act: { a: 'call', v: 'clearId' } });
   body.push(settingsPanelN(idKids, 16));
   body.push({ t: 'text', s: '\uc544\uc774\ub514\ub294 \uc774 \uae30\uae30\uc5d0\ub9cc \uc800\uc7a5\ub418\uba70,\n\uc791\uc131\ud55c \uae00\u00b7\ucc44\ud305\uc5d0 \ud45c\uc2dc\ub429\ub2c8\ub2e4.', size: 11, color: 'sub', lh: 1.5, align: 'center', pad: [16, 14, 16, 0] });
@@ -11894,7 +11894,7 @@ function settingsScreen(inp, factsIn) {
   ]));
   body.push({ t: 'spacer', h: 28 });
 
-  var out = { ok: true, v: 1, screen: 'settings', cover: 'tab', head: [], body: body };
+  var out = { ok: true, v: 1, screen: 'settings', cover: 'tab', head: [{ t: 'divider', pad: [0, 0, 0, 0], c: 'border' }], body: body };
   out.rev = 's' + SETTINGS_SCREEN_V + ':' + settingsHash(JSON.stringify(body));
   return out;
 }
@@ -12634,7 +12634,7 @@ async function handleScreenFood(request) {
 //      newsDetail({ cap, now }, row) \u2192 { ok, v:1, detail:{ cat, title, meta, desc, empty, src, notice, btn } }  \uc0c1\uc138 \ud31d\uc5c5\uc5d0 \uadf8\ub300\ub85c \uc4f8 \ubb38\uad6c
 // \ub9e8 \uc544\ub798 module.exports \ub294 \uc2dc\ud5d8(Node)\uc6a9\uc774\uace0 Worker \uc5d0\uc11c\ub294 \ud568\uc218 \uc120\uc5b8\ub9cc \uc4f0\uc778\ub2e4.
 'use strict';
-var NEWS_SCREEN_V = 1;
+var NEWS_SCREEN_V = 2;
 var NW_CATS = ['\uc804\uccb4','\uc99d\uc2dc','\uacbd\uc81c','\uc0ac\ud68c','\uc815\uce58','\uc5f0\uc608','\uc2a4\ud3ec\uce20','IT'];
 var NW_QUOTE_MAX = 200;                 // \uc694\uc57d \ub178\ucd9c \uc0c1\ud55c(\uc6f9 _NEWS_POLICY.quoteMaxChars)
 var NW_MAX_IN = 1200;                   // \ubc1b\ub294 \uae30\uc0ac \uc218 \uc0c1\ud55c(\uc6f9 \uc800\uc7a5\uc18c \uc0c1\ud55c\uacfc \uac19\ub2e4)
@@ -12826,14 +12826,15 @@ function nwPick(all, cat, now) {
 function nwScreenOf(now, f, all) {
   var items = nwPick(all, f.cat, now);
   var head = [
-    { t: 'chips', pad: [14, 4, 14, 2], gap: 6, h: 33, fs: 12, px: 14, onc: 'gold', onfg: '#ffffff', offb: 'border2', offt: 'sub',       // \uc6f9 .news-cat-chip: 33px \u00b7 12px \uad75\uac8c \u00b7 \ubc14\ud0d5 \uc5c6\uc74c \u00b7 \ud14c\ub450\ub9ac border2
-      items: NW_CATS.map(function (c) { return { label: c, on: c === f.cat, act: { a: 'cat', v: c } }; }) }
+    { t: 'chips', pad: [14, 0, 14, 6], gap: 6, h: 33, fs: 12, px: 14, onc: 'gold', onfg: '#ffffff', offb: 'border2', offt: 'sub',       // \uc6f9 .news-cat-chip: 33px \u00b7 12px \uad75\uac8c \u00b7 \ubc14\ud0d5 \uc5c6\uc74c \u00b7 \ud14c\ub450\ub9ac border2
+      items: NW_CATS.map(function (c) { return { label: c, on: c === f.cat, act: { a: 'cat', v: c } }; }) },
+    { t: 'divider', pad: [0, 0, 0, 0], c: 'border' }                            // \uc6f9 .comm-fixed-top \uc544\ub798 1px \uc904
   ];
   var body = [];
   if (!items.length) {
     body.push({ t: 'text', s: f.cat === '\uc804\uccb4' ? '\ud83d\udcf0 \ub274\uc2a4 \ubd88\ub7ec\uc624\ub294 \uc911...' : '\ud83d\udcf0 ' + f.cat + ' \ub274\uc2a4\ub97c \ubd88\ub7ec\uc624\ub294 \uc911...', size: 14, color: 'sub', lh: 1.8, align: 'center', pad: [20, 40, 20, 40] });
   } else {
-    body.push({ t: 'spacer', h: 8 });
+    body.push({ t: 'spacer', h: 12 });
     for (var k = 0; k < items.length && k < NW_MAX_SHOW; k++) {
       var it = items[k];
       body.push({ t: 'news', pad: [14, 0, 14, 0], title: it.title, sub: it.cat + (it.ts ? ' \u00b7 ' + nwAgo(it.ts, now) : ''), act: { a: 'call', v: 'nw.' + it.i, id: String(it.link || it.title).slice(0, 400), t: String(it.title).slice(0, 160), ix: it.i } });
@@ -12941,7 +12942,7 @@ async function handleScreenNews(request) {
 //        \ud589\ub3d9 \uc774\ub984(\ubc88\ud638 = \uc571\uc774 \ubcf4\ub0b8 \ubc30\uc5f4\uc758 \uc6d0\ub798 \uc704\uce58): bd.lk.<i> \uc88b\uc544\uc694 \u00b7 bd.lo.<i> \u314b\u314b \u00b7 bd.sd.<i> \u3160\u3160 \u00b7 bd.dl.<i> \uc0ad\uc81c \u00b7 bd.rp.<i> \uc2e0\uace0 \u00b7 bd.cm.<i> \ub313\uae00 \ub4f1\ub85d \u00b7 bd.more \ub354 \ubcf4\uae30 \u00b7 bd.write \uae00\uc4f0\uae30
 // \ub9e8 \uc544\ub798 module.exports \ub294 \uc2dc\ud5d8(Node)\uc6a9\uc774\uace0 Worker \uc5d0\uc11c\ub294 \ud568\uc218 \uc120\uc5b8\ub9cc \uc4f0\uc778\ub2e4.
 'use strict';
-var BOARD_SCREEN_V = 1;
+var BOARD_SCREEN_V = 2;
 var BRD_SHOW0 = 30, BRD_SHOW_MAX = 300, BRD_MAX_IN = 400, BRD_MAX_CMT = 60, BRD_MAX_REPLY = 10;
 var BRD_CAT_COLOR = { '\ub274\uc2a4': '#0a84ff', '\uc77c\uc0c1': '#34c759', '\uc9c0\uc5f0': '#ff9f0a', '\ud63c\uc7a1': '#ff6b35', '\uc815\ubcf4': '#5e5ce6', '\uc81c\ubcf4': '#ff375f' };   // \uc6f9 _renderPost \uc758 CAT_COLOR \uc640 \uac19\ub2e4
 var BRD_OTHER_COLOR = '#8e8e93';
@@ -13036,10 +13037,9 @@ function brdPid(p, used) {
 function brdPostNode(p, pid, f, now) {
   var hide = (!p.cat || p.cat === '\uc7a1\ub2f4' || p.cat === '\uc77c\uc0c1');      // \uc7a1\ub2f4\u00b7\ube48 \ubd84\ub958\ub294 \ub531\uc9c0 \uc228\uae40(\uac8c\uc2dc\ud310\uc740 \ub531\uc9c0 \uc5c6\uc774 \uc81c\ubaa9\ub9cc)
   var cnt = Math.max(p.srv, p.cmts.length);
-  var parts = [];
-  if (p.pending) parts.push('\uc804\uc1a1 \ub300\uae30');
-  parts.push(brdAgo(p.time, now)); parts.push('\uc870\ud68c ' + p.views);
-  if (cnt > 0) parts.push('\ub313\uae00 ' + cnt);
+  var parts = [];                                                 // \uc6f9 .dc-post-meta: \ub2c9\ub124\uc784 \u00b7 (\u23f3 \uc804\uc1a1 \ub300\uae30) \u00b7 \uc2dc\uac04 \u00b7 \ud83d\udc41 \uc870\ud68c \u00b7 \ud83d\udcac \ub313\uae00 \u2014 \uc810(\u00b7)\uc740 \uc571\uc774 border2 \uc0c9\uc73c\ub85c \uadf8\ub9b0\ub2e4
+  if (p.pending) parts.push('\u23f3 \uc804\uc1a1 \ub300\uae30');
+  parts.push(brdAgo(p.time, now)); parts.push('\ud83d\udc41 ' + p.views);
   var kids = [];
   var body = String(p.body || '').replace(/\n{2,}/g, '\n').trim();
   if (body) kids.push({ t: 'text', s: body, size: 13, lh: 1.8, pad: [0, 0, 0, 12] });
@@ -13067,7 +13067,7 @@ function brdPostNode(p, pid, f, now) {
     });
   }
   kids.push({ t: 'inbar', pad: [0, p.cmts.length ? 6 : 0, 0, 0], key: 'c.' + pid.slice(1), hint: '\ub313\uae00 \ub0a8\uae30\uae30', btn: '\ub4f1\ub85d', h: 36, r: 8, maxlen: 200, fill: 'card', line: 'border2', onc: BRD_BLUE, ckf: '#ffffff', act: { a: 'call', v: 'bd.cm.' + p.i, id: p.id, key: 'c.' + pid.slice(1) } });
-  var n = { t: 'post', pad: [12, 0, 12, 8], id: pid, title: p.title, nick: p.nick, meta: parts.join(' \u00b7 '), kids: kids };
+  var n = { t: 'post', pad: [14, 0, 14, 8], id: pid, title: p.title, nick: p.nick, mp: parts, cm: cnt > 0 ? cnt : 0, meta: parts.join(' \u00b7 '), kids: kids };
   if (!hide) { n.cat = p.cat; n.catc = BRD_CAT_COLOR[p.cat] || BRD_OTHER_COLOR; }
   return n;
 }
@@ -13091,17 +13091,17 @@ function boardScreen(inp, factsIn, rowsIn) {
   }
   all.sort(function (a, b) { return (b.time - a.time) || (a.i - b.i); });
   var shown = all.slice(0, f.n), used = {}, ids = [], idx = [], sid = [];
-  var head = [{ t: 'bar', pad: [16, 10, 16, 8], title: '\uac8c\uc2dc\ud310', btn: '\uae00\uc4f0\uae30', act: { a: 'call', v: 'bd.write' } }];
+  var head = [{ t: 'divider', pad: [0, 0, 0, 0], c: 'border' }];                  // \uc6f9 .comm-fixed-top \uc544\ub798 1px \uc904 (\uae00\uc4f0\uae30\ub294 \uc544\ub798 \ub5a0 \uc788\ub294 \ub2e8\ucd94)
   var body = [];
   if (!all.length) {
     body.push({ t: 'text', s: f.st === 'loading' ? '\uac8c\uc2dc\uae00 \ubd88\ub7ec\uc624\ub294 \uc911...' : '\uc544\uc9c1 \uc81c\ubcf4\uac00 \uc5c6\uc2b5\ub2c8\ub2e4.\n\uccab \ubc88\uc9f8 \uc81c\ubcf4\uc790\uac00 \ub418\uc5b4\ubcf4\uc138\uc694!', size: 14, color: 'sub', lh: 1.8, align: 'center', pad: [20, 60, 20, 60] });
   } else {
-    body.push({ t: 'spacer', h: 15 });
+    body.push({ t: 'spacer', h: 12 });
     shown.forEach(function (p) { var pid = brdPid(p, used); ids.push(pid); idx.push(p.i); sid.push(p.id); body.push(brdPostNode(p, pid, f, now)); });
-    if (all.length > shown.length) body.push({ t: 'button', pad: [12, 4, 12, 0], s: '\ub354 \ubcf4\uae30 \u00b7 \ub0a8\uc740 \uae00 ' + (all.length - shown.length) + '\uac1c', size: 12, h: 40, act: { a: 'call', v: 'bd.more' } });
-    body.push({ t: 'spacer', h: 28 });
+    if (all.length > shown.length) body.push({ t: 'button', pad: [14, 4, 14, 0], s: '\ub354 \ubcf4\uae30 \u00b7 \ub0a8\uc740 \uae00 ' + (all.length - shown.length) + '\uac1c', size: 12, h: 40, act: { a: 'call', v: 'bd.more' } });
+    body.push({ t: 'spacer', h: 72 });                                    // \uc6f9 .comm-scroll \uc544\ub798 \uc5ec\ubc31 72
   }
-  var out = { ok: true, v: 1, screen: 'board', cover: 'tab', head: head, body: body, info: { n: shown.length, all: all.length, ids: ids, idx: idx, sid: sid } };
+  var out = { ok: true, v: 1, screen: 'board', cover: 'tab', head: head, body: body, fab: { s: '\u270f\ufe0f \uc81c\ubcf4 \uae00\uc4f0\uae30', icon: 'M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z', act: { a: 'call', v: 'bd.write' } }, info: { n: shown.length, all: all.length, ids: ids, idx: idx, sid: sid } };
   out.rev = 'b' + BOARD_SCREEN_V + ':' + brdHash(JSON.stringify([head, body]));
   return out;
 }
@@ -13146,7 +13146,7 @@ async function handleScreenBoard(request) {
 //        \ud589\ub3d9 \uc774\ub984: ch.send \ubcf4\ub0b4\uae30 \u00b7 ch.x.<\ubc88\ud638> \ub178\uc120 \ubc29 \uae00 \uc2e0\uace0(\ubc88\ud638 = \uc571\uc774 \ubcf4\ub0b8 r \ubc30\uc5f4\uc758 \uc6d0\ub798 \uc704\uce58 \u00b7 act.id = \uadf8 \uae00\uc758 \uace0\uc720 id \u2014 \uc0c8 \uc571\uc740 id \ub97c \uba3c\uc800 \uc4f4\ub2e4) \u00b7 \uce69\uc740 {a:'cat', v:\ub178\uc120|'all'}
 // \ub9e8 \uc544\ub798 module.exports \ub294 \uc2dc\ud5d8(Node)\uc6a9\uc774\uace0 Worker \uc5d0\uc11c\ub294 \ud568\uc218 \uc120\uc5b8\ub9cc \uc4f0\uc778\ub2e4.
 'use strict';
-var CHAT_SCREEN_V = 1;
+var CHAT_SCREEN_V = 2;
 var chtTrkColor = (typeof rheadTrkColor === 'function') ? rheadTrkColor : null;      // \ub178\uc120 \uc0c9\uc740 \ud0c0\uc784\ub77c\uc778(rhead)\uacfc \uac19\uc740 \ud45c\ub97c \uc4f4\ub2e4. Node \uc2dc\ud5d8\uc5d0\uc11c\ub294 \uc544\ub798\uc5d0\uc11c \ubd88\ub7ec\uc628\ub2e4.
 if (!chtTrkColor) { try { if (typeof require === 'function') chtTrkColor = require('./rhead').rheadTrkColor; } catch (eRq) {} }
 var CHT_ALTS_MAX = 24;                // \ud55c \uc694\uccad\uc5d0 \uc2e4\uc744 \uc218 \uc788\ub294 '\ub2e4\ub978 \ubc29' \uc218 \uc0c1\ud55c(\uc804\uccb4 + \ud638\uc120 18\uac1c)
@@ -13277,12 +13277,15 @@ function chatScreen(inp, factsIn, dataIn) {
   var now = Number(inp.now) > 0 ? Number(inp.now) : Date.now();
   var f = chtFacts(factsIn), d = (dataIn && typeof dataIn === 'object') ? dataIn : {}, i;
   var chips = chtItems(f).map(function (l) {
-    var it = { label: l === 'all' ? '\uc804\uccb4' : (f.mine.indexOf(l) >= 0 ? '\ub0b4 ' + l : l), on: l === f.sel, act: { a: 'cat', v: l } };
-    if (l !== 'all' && f.lc[l]) it.c = f.lc[l];
+    var mine = l !== 'all' && f.mine.indexOf(l) >= 0, col = l !== 'all' && f.lc[l] ? f.lc[l] : '';
+    var it = { label: l === 'all' ? '\uc804\uccb4' : (mine ? '\ud83d\udccd ' + l : l), on: l === f.sel, act: { a: 'cat', v: l } };       // \uc6f9: \ub0b4\uac00 \ud0c4 \ub178\uc120\uc740 \ud83d\udccd + \ub178\uc120 \uc0c9 2px \ud14c\ub450\ub9ac \u00b7 \ucf1c\uc9c4 \uce78\uc740 1.5px
+    if (col) it.c = col;
+    if (it.on) it.bw = 1.5; else if (mine) { it.bw = 2; if (col) it.ob = col; }
     return it;
   });
-  var head = [{ t: 'chips', pad: [14, 4, 14, 4], gap: 6, h: 32, fs: 14, px: 15, onc: 'gold', onfg: '#ffffff', offb: 'border2', offt: 'text', items: chips }];       // \uc6f9 \ucc44\ud305 \ub178\uc120 \uce69: 32px \u00b7 14px
-  if (!f.mine.length) head.push({ t: 'text', s: '\ud83d\udccd \ub0b4\uac00 \ud0c4 \ub178\uc120\uc740 \uc55e\uc5d0 \ud45c\uc2dc\ub3fc\uc694', size: 11, color: 'sub', pad: [16, 0, 16, 4] });
+  var head = [{ t: 'chips', pad: [14, 0, 14, 2], gap: 6, h: 31, fs: 12.5, px: 15, onc: 'gold', onfg: '#ffffff', offb: 'border2', offt: 'text', items: chips }];       // \uc6f9 .chat-line-chip: 12.5px \u00b7 \ub192\uc774 31 \u00b7 \uc544\ub798 2
+  if (!f.mine.length) head.push({ t: 'text', s: '\ud83d\udccd \ub0b4\uac00 \ud0c4 \ub178\uc120\uc740 \uc55e\uc5d0 \ud45c\uc2dc\ub3fc\uc694', size: 11, color: 'sub', lh: 1.4, pad: [16, 3, 16, 2] });
+  head.push({ t: 'divider', pad: [0, f.mine.length ? 6 : 4, 0, 0], c: 'border' });                    // \uc6f9 .comm-fixed-top \uc544\ub798 1px \uc904 (\uba38\ub9ac 103)
   var body = [], n = 0;
   if (f.sel === 'all') {
     var gs = [];
@@ -13305,7 +13308,8 @@ function chatScreen(inp, factsIn, dataIn) {
       body.push({ t: 'text', s: s, size: 13, color: 'sub', lh: 1.7, align: 'center', pad: [20, 40, 20, 40] });
     } else body = [{ t: 'spacer', h: 4 }].concat(rs.map(function (x) { return x.node; }), [{ t: 'spacer', h: 4 }]);
   }
-  var foot = [{ t: 'inbar', pad: [12, 10, 12, 10], key: f.sel === 'all' ? 'chat.all' : 'chat.room', hint: f.sel === 'all' ? '\uba54\uc2dc\uc9c0\ub97c \uc785\ub825\ud558\uc138\uc694...' : '\uc774 \ub178\uc120 \uc774\uc6a9\uc790\uc5d0\uac8c \ud55c\ub9c8\ub514\u2026', btn: '\uc804\uc1a1', h: 38, r: 19, maxlen: f.sel === 'all' ? 200 : 120, fill: 'card', line: 'border2', act: { a: 'call', v: 'ch.send' } }];
+  var foot = [{ t: 'inbar', pad: [12, 10, 12, 10], key: f.sel === 'all' ? 'chat.all' : 'chat.room', hint: f.sel === 'all' ? '\uba54\uc2dc\uc9c0\ub97c \uc785\ub825\ud558\uc138\uc694...' : '\uc774 \ub178\uc120 \uc774\uc6a9\uc790\uc5d0\uac8c \ud55c\ub9c8\ub514\u2026', btn: '\uc804\uc1a1', h: 38, inh: 37, bh: 38, bicon: 'M5 3L21 12L5 21L8.5 12Z', ckf: '#121214', r: 18.5, maxlen: f.sel === 'all' ? 200 : 120, fill: 'card', line: 'border2', act: { a: 'call', v: 'ch.send' } }];       // \uc6f9 .chat-inputbar: \uc785\ub825 37 + \ud30c\ub780 \ub3d9\uadf8\ub77c\ubbf8 \u27a4 38 \u00b7 \uc704 1px \uc904 + \uc704\uc544\ub798 10
+  foot.unshift({ t: 'divider', pad: [0, 0, 0, 0], c: 'border' });
   var out = { ok: true, v: 1, screen: 'chat', cover: 'tab', anchor: 'bottom', head: head, body: body, foot: foot, info: { sel: f.sel, n: n, pl: chtMineLines(null, f.my)[0] || '' } };
   out.rev = 'c' + CHAT_SCREEN_V + ':' + chtHash(JSON.stringify([head, body, foot]));
   return out;
@@ -16527,7 +16531,7 @@ function cchipsScreen(inp, factsIn) {
     if (c.c) it.c = c.c;
     return it;
   });
-  var head = [{ t: 'chips', pad: [14, 13, 14, 2], gap: 6, h: 27, fs: 11, px: 13, onc: 'gold', onfg: '#ffffff', offf: 'card2', offb: 'border', offt: 'sub', items: items }];       // \uc6f9 .chip: 27px \u00b7 11px \uad75\uac8c \u00b7 \ubc14\ud0d5 card2 \u00b7 \ud14c\ub450\ub9ac border \u00b7 \uae00\uc790 sub
+  var head = [{ t: 'chips', pad: [14, 12, 14, 6], gap: 6, h: 27, fs: 11, px: 13, onc: 'gold', onfg: '#ffffff', offf: 'card2', offb: 'border', offt: 'sub', items: items }];       // \uc6f9 .chip: 27px \u00b7 11px \uad75\uac8c \u00b7 \ubc14\ud0d5 card2 \u00b7 \ud14c\ub450\ub9ac border \u00b7 \uae00\uc790 sub
   var out = { ok: true, v: 1, screen: 'cchips', cover: 'tab', head: head, body: [], info: { mode: f.mode } };
   out.rev = 'q' + CCHIPS_SCREEN_V + ':' + cchipsHash(JSON.stringify(head));
   return out;

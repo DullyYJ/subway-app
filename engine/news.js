@@ -17,7 +17,7 @@
 //      newsDetail({ cap, now }, row) → { ok, v:1, detail:{ cat, title, meta, desc, empty, src, notice, btn } }  상세 팝업에 그대로 쓸 문구
 // 맨 아래 module.exports 는 시험(Node)용이고 Worker 에서는 함수 선언만 쓰인다.
 'use strict';
-var NEWS_SCREEN_V = 1;
+var NEWS_SCREEN_V = 2;
 var NW_CATS = ['전체','증시','경제','사회','정치','연예','스포츠','IT'];
 var NW_QUOTE_MAX = 200;                 // 요약 노출 상한(웹 _NEWS_POLICY.quoteMaxChars)
 var NW_MAX_IN = 1200;                   // 받는 기사 수 상한(웹 저장소 상한과 같다)
@@ -209,14 +209,15 @@ function nwPick(all, cat, now) {
 function nwScreenOf(now, f, all) {
   var items = nwPick(all, f.cat, now);
   var head = [
-    { t: 'chips', pad: [14, 4, 14, 2], gap: 6, h: 33, fs: 12, px: 14, onc: 'gold', onfg: '#ffffff', offb: 'border2', offt: 'sub',       // 웹 .news-cat-chip: 33px · 12px 굵게 · 바탕 없음 · 테두리 border2
-      items: NW_CATS.map(function (c) { return { label: c, on: c === f.cat, act: { a: 'cat', v: c } }; }) }
+    { t: 'chips', pad: [14, 0, 14, 6], gap: 6, h: 33, fs: 12, px: 14, onc: 'gold', onfg: '#ffffff', offb: 'border2', offt: 'sub',       // 웹 .news-cat-chip: 33px · 12px 굵게 · 바탕 없음 · 테두리 border2
+      items: NW_CATS.map(function (c) { return { label: c, on: c === f.cat, act: { a: 'cat', v: c } }; }) },
+    { t: 'divider', pad: [0, 0, 0, 0], c: 'border' }                            // 웹 .comm-fixed-top 아래 1px 줄
   ];
   var body = [];
   if (!items.length) {
     body.push({ t: 'text', s: f.cat === '전체' ? '📰 뉴스 불러오는 중...' : '📰 ' + f.cat + ' 뉴스를 불러오는 중...', size: 14, color: 'sub', lh: 1.8, align: 'center', pad: [20, 40, 20, 40] });
   } else {
-    body.push({ t: 'spacer', h: 8 });
+    body.push({ t: 'spacer', h: 12 });
     for (var k = 0; k < items.length && k < NW_MAX_SHOW; k++) {
       var it = items[k];
       body.push({ t: 'news', pad: [14, 0, 14, 0], title: it.title, sub: it.cat + (it.ts ? ' · ' + nwAgo(it.ts, now) : ''), act: { a: 'call', v: 'nw.' + it.i, id: String(it.link || it.title).slice(0, 400), t: String(it.title).slice(0, 160), ix: it.i } });

@@ -40,7 +40,7 @@ const S = E.boardScreen({ cap: 6, now: NOW }, { rep: ['d'] }, ROWS);
 
 // ── ① ③ ──
 ok(E.boardScreen({ cap: 5, now: NOW }, {}, ROWS).ok === false && E.boardScreen({}, {}, ROWS).ok === false && E.boardScreen(null, null, null).ok === false, 'cap 6 미만이면 만들지 않는다');
-ok(S.ok && S.v === 1 && S.screen === 'board' && S.cover === 'tab' && /^b1:/.test(S.rev) && S.head[0].t === 'bar' && S.head[0].title === '게시판' && S.head[0].btn === '글쓰기' && S.head[0].act.v === 'bd.write', '기본 모양 · 글쓰기 단추');
+ok(S.ok && S.v === 1 && S.screen === 'board' && S.cover === 'tab' && /^b2:/.test(S.rev) && S.head.length === 1 && S.head[0].t === 'divider' && S.head[0].c === 'border' && S.fab && S.fab.s === '✏️ 제보 글쓰기' && S.fab.act.v === 'bd.write' && S.body[0].t === 'spacer' && S.body[0].h === 12 && S.body[S.body.length - 1].h === 72, '기본 모양 · 머리 구분선 · 떠 있는 글쓰기 단추 · 위 12/아래 72');
 {
   const ps = post(S);
   ok(ps.length === 4, '뉴스 글 3개 · 신고한 글 · 제목 없는 글을 뺀다 ' + ps.map(p => p.title).join('|'));
@@ -51,8 +51,8 @@ ok(S.ok && S.v === 1 && S.screen === 'board' && S.cover === 'tab' && /^b1:/.test
   const wc = html.slice(html.indexOf('var CAT_COLOR = {'), html.indexOf('};', html.indexOf('var CAT_COLOR = {')));
   Object.keys(E.BRD_CAT_COLOR).forEach(k => ok(wc.indexOf("'" + k + "'") >= 0 || wc.indexOf(k) >= 0, '웹 CAT_COLOR 에도 있다: ' + k));
   ok(ps[2].cat === undefined && ps[3].cat === undefined, '일상·빈 분류는 딱지를 숨긴다');
-  ok(ps[0].meta === '3분 전 · 조회 12' && ps[1].meta === '10분 전 · 조회 12 · 댓글 5', '메타 줄: ' + ps[0].meta + ' / ' + ps[1].meta);
-  ok(ps[3].meta.startsWith('전송 대기 · 4시간 20분 전'), '전송 대기 표시 ' + ps[3].meta);
+  ok(ps[0].meta === '3분 전 · 👁 12' && ps[0].mp.join('|') === '3분 전|👁 12' && !ps[0].cm && ps[1].mp.join('|') === '10분 전|👁 12' && ps[1].cm === 5 && ps[0].pad[0] === 14 && ps[0].pad[2] === 14, '메타 줄: ' + ps[0].meta + ' / ' + ps[1].meta);
+  ok(ps[3].meta.startsWith('⏳ 전송 대기 · 4시간 20분 전'), '전송 대기 표시 ' + ps[3].meta);
   ok(ps[0].nick === '빨간모자', '글쓴이');
   const sparse = E.boardScreen({ cap: 6, now: NOW }, {}, [row('z', { 4: '  ' })]);
   ok(post(sparse)[0].nick === '익명', '글쓴이 없으면 익명');
@@ -145,8 +145,8 @@ ok(S.ok && S.v === 1 && S.screen === 'board' && S.cover === 'tab' && /^b1:/.test
   const ts2 = post(S2).map(n => n.title);
   ok(ts2.indexOf('1호선 또 지연이네요') >= 0 && ts2.indexOf('2호선 또 지연이네요') < 0, '서버 글: 숫자만 다른 같은 글은 하나만');
   ok(ts2.indexOf('대통령 얘기 금지') < 0 && ts2.indexOf('정상 글') >= 0, '서버 글: 정치 소재는 뺀다');
-  ok(/조회 \d+/.test(post(S2).find(n => n.title === '1호선 또 지연이네요').meta) && !/조회 0\b/.test(post(S2).find(n => n.title === '1호선 또 지연이네요').meta), '서버 글: 조회수 0 이면 보정값');
-  ok(/조회 55/.test(post(S2).find(n => n.title === '정상 글').meta), '서버가 준 조회수는 그대로');
+  ok(/👁 \d+/.test(post(S2).find(n => n.title === '1호선 또 지연이네요').meta) && !/👁 0\b/.test(post(S2).find(n => n.title === '1호선 또 지연이네요').meta), '서버 글: 조회수 0 이면 보정값');
+  ok(/👁 55/.test(post(S2).find(n => n.title === '정상 글').meta), '서버가 준 조회수는 그대로');
   const S3 = E.boardScreen({ cap: 6, now: NOW }, {}, [row('x1', { 2: '대통령 관련 내 글' })]);
   ok(post(S3).length === 1, '내 글·로컬 글에는 서버 글 규칙을 적용하지 않는다');
 }

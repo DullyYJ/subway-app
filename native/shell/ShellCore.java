@@ -661,8 +661,8 @@ public final class ShellCore {
     // ═════════════ 색 ═════════════
     /** ScreenView 의 역할 번호 순서(bg·card·border·text·sub·gold·orange·imgbg·white·border2·card2·nav)와 같다. */
     public static int[] palette(String theme) {
-        if ("dark".equals(theme)) return new int[] { 0xFF121214, 0xFF1C1C1E, 0xFF2C2C2E, 0xFFF2F2F7, 0xFF8E8E93, 0xFFD4AF37, 0xFFFF9F0A, 0xFF252528, 0xFFFFFFFF, 0xFF3A3A3C, 0xFF2C2C2E, 0xFF1C1C1E };
-        return new int[] { 0xFFF0F4F8, 0xFFFFFFFF, 0xFFDCE8F0, 0xFF1A2533, 0xFF6B8299, 0xFF1D9BF0, 0xFFF07830, 0xFFE8F4FF, 0xFFFFFFFF, 0xFFC8DCEA, 0xFFE8F0F8, 0xFFFFFFFF };
+        if ("dark".equals(theme)) return new int[] { 0xFF121214, 0xFF1C1C1E, 0xFF2C2C2E, 0xFFF2F2F7, 0xFF8E8E93, 0xFFD4AF37, 0xFFFF9F0A, 0xFF252528, 0xFFFFFFFF, 0xFF3A3A3C, 0xFF2C2C2E, 0xFF1C1C1E, 0xFFB8922F, 0xFF121214 };
+        return new int[] { 0xFFF0F4F8, 0xFFFFFFFF, 0xFFDCE8F0, 0xFF1A2533, 0xFF6B8299, 0xFF1D9BF0, 0xFFF07830, 0xFFE8F4FF, 0xFFFFFFFF, 0xFFC8DCEA, 0xFFE8F0F8, 0xFFFFFFFF, 0xFF0E7DD6, 0xFFFFFFFF };
     }
 
     // ═════════════ 작은 도구 ═════════════

@@ -401,7 +401,7 @@ public class ShellJvmTest {
         ok(ShellCore.parseDetail("{\"ok\":false}", "") == null && ShellCore.parseDetail("zzz", "") == null, "상세를 못 읽으면 null");
         ok(ShellCore.newsDetailBody("[\"a\"]").equals("{\"cap\":18,\"d\":[\"a\"]}"), "상세 요청 본문");
 
-        ok(ShellCore.palette("dark").length == 12 && ShellCore.palette("pastel").length == 12 && ShellCore.palette("zzz")[0] == 0xFFF0F4F8, "팔레트 12칸 · 기본은 파스텔");
+        ok(ShellCore.palette("dark").length == 14 && ShellCore.palette("pastel").length == 14 && ShellCore.palette("zzz")[0] == 0xFFF0F4F8, "팔레트 14칸 · 기본은 파스텔");
         ok(ShellCore.palette("dark")[0] == 0xFF121214 && ShellCore.palette("dark")[5] == 0xFFD4AF37, "다크 배경·금색");
 
         // ── 홈 탭 입력 ──

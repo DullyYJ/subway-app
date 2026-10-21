@@ -23,7 +23,7 @@ const EMOJI = /[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE0F}]/u;
   ok(s.ok && s.v === 1 && s.screen === 'cchips' && s.cover === 'tab' && s.head.length === 1 && s.body.length === 0 && s.head[0].t === 'chips' && /^q2:/.test(s.rev), '기본 모양');
   const it = s.head[0].items;
   ok(it.length === 4 && it.filter(x => x.on).length === 1 && it[2].on && it.every((x, i) => x.act.a === 'call' && x.act.v === 'cc.' + E.CCHIPS_LIST[i].id), '켜진 칩 하나 · 행동 cc.<이름>');
-  ok(s.head[0].h === 27 && s.head[0].fs === 11 && s.head[0].pad[0] === 14 && s.head[0].pad[1] === 13 && s.head[0].offf === 'card2' && s.head[0].offb === 'border' && s.head[0].offt === 'sub' && !s.head[0].items.some(x => x.c), '웹 칩 크기·여백·꺼진 칩 색(27px · 11px · 왼쪽 14)');
+  ok(s.head[0].h === 27 && s.head[0].fs === 11 && s.head[0].pad[0] === 14 && s.head[0].pad[1] === 12 && s.head[0].pad[3] === 6 && s.head[0].offf === 'card2' && s.head[0].offb === 'border' && s.head[0].offt === 'sub' && !s.head[0].items.some(x => x.c), '웹 칩 크기·여백·꺼진 칩 색(27px · 11px · 왼쪽 14)');
   ok(E.cchipsScreen({ cap: 6 }, { mode: '없는칸' }).info.mode === 'board' && E.cchipsScreen({ cap: 6 }, null).info.mode === 'board', '모르는 값은 게시판');
   ok(E.cchipsScreen({ cap: 6 }, { mode: 'news' }).rev === s.rev && E.cchipsScreen({ cap: 6 }, { mode: 'set' }).rev !== s.rev, '같은 입력 → 같은 rev, 켜진 칸이 다르면 다름');
 }

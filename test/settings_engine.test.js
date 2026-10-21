@@ -18,8 +18,8 @@ const full = { id: '길동', np: { arrive: 1, transfer: 0, arrive_reco: 1 }, npd
 // ① cap
 ok(E.settingsScreen({}, full).ok === false && E.settingsScreen({ cap: 2 }, full).ok === false, 'cap 3 미만이면 만들지 않는다');
 const s = E.settingsScreen({ cap: 3 }, full);
-ok(s.ok && s.v === 1 && s.screen === 'settings' && s.cover === 'tab' && Array.isArray(s.head) && s.head.length === 0, '기본 모양: v1 · settings · cover=tab · head 없음');
-ok(/^s1:[0-9a-z]+$/.test(s.rev), 'rev 형식 ' + s.rev);
+ok(s.ok && s.v === 1 && s.screen === 'settings' && s.cover === 'tab' && Array.isArray(s.head) && s.head.length === 1 && s.head[0].t === 'divider', '기본 모양: v1 · settings · cover=tab · head 는 아래 구분선뿐');
+ok(/^s2:[0-9a-z]+$/.test(s.rev), 'rev 형식 ' + s.rev);
 
 // ② 내용
 const nodes = all(s), toggles = nodes.filter(n => n.t === 'toggle');
@@ -124,7 +124,7 @@ ok(odd.ok && all(odd).find(n => n.t === 'field').value.length === 12, '이상한
   const names = Object.keys(E.SETTINGS_PAGES);
   names.forEach(p => {
     const sc = PG(p, {});
-    ok(sc.ok && sc.screen === 'settings' && sc.cover === 'tab' && sc.info.page === p && /^s1p:/.test(sc.rev), p + ': 기본 모양/정보/rev');
+    ok(sc.ok && sc.screen === 'settings' && sc.cover === 'tab' && sc.info.page === p && /^s2p:/.test(sc.rev), p + ': 기본 모양/정보/rev');
     if (p === 'locd') ok(sc.body[0].t === 'panel' && !JSON.stringify(sc).includes('pg.back'), 'locd: 동의 안내는 뒤로 가기 단추가 없다(동의/거부만)');
     else ok(sc.body[0].t === 'button' && sc.body[0].s === '\u2039 \uc124\uc815' && sc.body[0].act.v === 'pg.back', p + ': 맨 위가 ‹ 설정(pg.back)');
     ok(!texts(sc).some(x => EMOJI.test(x)), p + ': 이모지 없음');

@@ -184,6 +184,8 @@ public final class ScreenCore {
         public float fitH, fmin = 90f, fmax = 900f, frh = 26f;   // scene: 맞춘 높이(배치 때마다 다시 정한다) · 최소 · 최대 · 접을 줄 한 개가 주는 높이(어림)
         public int fo;                                      // ltr: 이 줄은 접는 줄 수가 fo 이상일 때 접힌다(0 이면 안 접힘)
         public boolean hide, fit;                           // ltr 접힘(배치 때마다 다시 정한다) · scene 이 남는 세로를 채운다
+        public float bw = 0f; public String ob = "";   // chip: 테두리 두께(0 이면 1) · 꺼진 칩의 테두리만 따로 칠하는 색
+        public String[] mp = null; public int cm = 0;   // post: 닉네임 뒤에 점(·)으로 이어 그리는 조각들 · 댓글 수(0 이면 숨김)
         public float bpx = 0f, ifh = 0f, ifr = 0f, lbw = 0f, inh = 0f;   // inh: inbar 입력 테두리 상자 높이(0 이면 줄 높이)   // inbar: 단추 좌우 안쪽 여백 · 입력 글자 뒤 바탕 띠 높이·모서리 / panel: 왼쪽 띠 두께
         public String ifill = "", lbc = "";                   // inbar: 입력 글자 뒤 바탕 띠 색 / panel: 왼쪽 띠 색
         public String offf = "", offb = "", offt = "";      // chips: 꺼진 칩 바탕 · 테두리 · 글자(없으면 기본 모양)                             // bcard: ✏️(별명) · 🗺️(위치) 단추의 행동
@@ -223,11 +225,12 @@ public final class ScreenCore {
         public List<Node> head = new ArrayList<Node>(), body = new ArrayList<Node>(), foot = new ArrayList<Node>();
         public String anchor = "", bg = "bg";                  // bg: 화면 바탕 색 역할(기본 bg = 페이지 바탕 · card = 카드 안에 놓이는 화면)
         public int skipped = 0, nodes = 0;
+        public Node fab;                                   // 화면 아래 가운데에 떠 있는 둥근 단추(웹 .fab '제보 글쓰기')
         public Node fitNode;                               // 남는 세로를 채우는 장면 노드(웹 _sceneFit) — 엔진이 fit 을 켠 것만
         public List<Node> foldRows = new ArrayList<Node>();   // 작은 폰에서 오래된 것부터 접히는 실시간 대화 줄(fo 1~3)
     }
 
-    private static final String[] ROLES = { "bg", "card", "border", "text", "sub", "gold", "orange", "imgbg", "white", "border2", "none", "card2", "nav" };
+    private static final String[] ROLES = { "bg", "card", "border", "text", "sub", "gold", "orange", "imgbg", "white", "border2", "none", "card2", "nav", "gold2", "ongold" };
     private static boolean role(String s) { for (String r : ROLES) if (r.equals(s)) return true; return false; }
     private static boolean httpUrl(String u) {
         if (u == null || u.length() == 0 || u.length() > 1500) return false;
@@ -403,6 +406,7 @@ public final class ScreenCore {
                 c.label = optStr(im, "label", "", 60); if (c.label.length() == 0) throw new ParseError("chip: label 없음");
                 c.badge = optStr(im, "badge", "", 20); c.on = optBool(im, "on", false); c.act = act(im.get("act"), false); c.big = optBool(im, "pl", false);       // pl: 켜져도 바탕·테두리 없이 굵은 글자만(웹 '전체')
                 c.line = roleOrCss(im, "oc", "");                                                                     // 꺼진 칩의 테두리·글자색(노선 칩: 노선 색 테두리)
+                c.bw = optNum(im, "bw", 0f, 0f, 4f); c.ob = roleOrCss(im, "ob", "");
                 c.fill = roleOrCss(im, "c", "");                                                                      // 칩마다 켜진 바탕색(실시간소통 노선 색)
                 n.items.add(c); sc.nodes++;
                 if (sc.nodes > MAX_NODES) throw new ParseError("노드가 너무 많다");
@@ -555,6 +559,9 @@ public final class ScreenCore {
             n.title = optStr(m, "title", "", 300); if (n.title.length() == 0) throw new ParseError("post: title 없음");
             n.badge = optStr(m, "cat", "", 12); n.tc = roleOrCss(m, "catc", "#8e8e93");
             n.tag = optStr(m, "nick", "", 40); n.sub = optStr(m, "meta", "", 160); n.on = optBool(m, "open", false);
+            n.cm = (int) optNum(m, "cm", 0f, 0f, 99999f);
+            Object mpo = m.get("mp");
+            if (mpo != null) { List<Object> ml = asArr(mpo, "post.mp"); if (ml.size() > 6) throw new ParseError("post.mp 가 너무 길다"); n.mp = new String[ml.size()]; for (int i = 0; i < n.mp.length; i++) n.mp[i] = ml.get(i) == null ? "" : String.valueOf(ml.get(i)); }
             n.fill = roleOrCss(m, "fill", "card"); n.line = roleOrCss(m, "line", "border");
             for (Object ko : asArr(m.get("kids"), "post.kids")) {
                 Map<String, Object> km = asObj(ko, "post 안 노드");
@@ -846,6 +853,13 @@ public final class ScreenCore {
         for (Object o : asArr(m.get("head"), "head")) { Node n = node(o, sc); if (n != null) sc.head.add(n); }
         for (Object o : asArr(m.get("body"), "body")) { Node n = node(o, sc); if (n != null) sc.body.add(n); }
         if (m.get("foot") != null) for (Object o : asArr(m.get("foot"), "foot")) { Node n = node(o, sc); if (n != null) sc.foot.add(n); }
+        Object fabO = m.get("fab");
+        if (fabO != null) {                                                          // 떠 있는 단추: 글 · (아이콘) · 행동 — 자리·색은 앱이 웹 .fab 과 같게 그린다
+            Map<String, Object> fm = asObj(fabO, "fab");
+            Node fn = new Node(); fn.t = "fab"; fn.s = optStr(fm, "s", "", 24); if (fn.s.length() == 0) throw new ParseError("fab: s 없음");
+            fn.act = act(fm.get("act"), true); fn.pathOps = pathOps(optStr(fm, "icon", "", 900));
+            sc.fab = fn;
+        }
         if (sc.head.isEmpty() && sc.body.isEmpty() && sc.foot.isEmpty()) throw new ParseError("그릴 것이 없다");
         return sc;
     }
@@ -890,14 +904,16 @@ public final class ScreenCore {
     /** 홈 경로 입력 치수(웹 홈 탭 출발/도착 카드·자동완성과 같다) */
     public static final float SUG_H = 44f, SUG_PADX = 14f, SUG_BADGE = 11f, SUG_NAME = 14f, SUG_SUB = 11f, SUG_PILL_PX = 6f, SUG_GAP = 6f, SUG_BTN = 11f, SUG_BTN_PADX = 9f, SUG_BTN_H = 26f;
     /** 게시글 카드·댓글·말풍선 치수(웹 .dc-* / .chat-bub-* 와 같다) */
+    public static final float POST_CMT_ROW = 19.4f, POST_DOT = 10f, POST_MGAP = 5f, POST_CMT_SIZE = 16f;
     public static final float POST_PADX = 14f, POST_PADT = 12f, POST_META_GAP = 8f, POST_PADB = 10f, POST_TITLE = 14f, POST_TITLE_LH = 1.4f, POST_BADGE = 10f, POST_BADGE_PX = 7f, POST_BADGE_GAP = 8f, POST_META = 11f, POST_BODYPAD = 14f,
             CMT_NICK = 11f, CMT_TXT = 12f, CMT_TIME = 10f, CMT_IND = 14f, RBTN_PADX = 12f, RBTN_SIZE = 12f,
-            MSG_MAXF = 0.74f, MSG_PADX = 11f, MSG_PADY = 8f, MSG_TXT = 13f, MSG_LH = 1.45f, MSG_NICK = 11f, MSG_TIME = 9f, MSG_RAD = 13f, INBAR_BTN_PADX = 14f, INBAR_GAP = 8f, TAB_ICON = 20f, TAB_LABEL = 10f;
+            MSG_MAXF = 0.74f, MSG_PADX = 11f, MSG_PADY = 8f, MSG_TXT = 13f, MSG_LH = 1.45f, MSG_NICK = 11f, MSG_TIME = 9f, MSG_TIME_H = 10f, MSG_RAD = 13f, INBAR_BTN_PADX = 14f, INBAR_GAP = 8f, TAB_ICON = 20f, TAB_LABEL = 10f;
     /** 맛집 머리줄·장소 카드 치수(웹 .food-* 와 같다) */
     public static final float BAR_TITLE = 18f, BAR_SUB = 13f, BAR_BTN = 12f, BAR_LH = 1.4f, PLACE_PAD = 14f, PLACE_RANK = 24f, PLACE_GAP = 12f, PLACE_NAME = 15f, PLACE_SUB = 12f, PLACE_META = 11f, PLACE_STAR = 13f, PLACE_PILL_H = 20f,
-            NEWS_PADV = 13f, NEWS_PADX = 4f, NEWS_BARW = 3f, NEWS_GAP = 10f, NEWS_TITLE = 14f, NEWS_SUB = 11f, NEWS_LH = 1.45f, NEWS_CHEV = 13f;
+            NEWS_PADV = 13f, NEWS_PADX = 4f, NEWS_BARW = 3f, NEWS_GAP = 10f, NEWS_TITLE = 14f, NEWS_SUB = 11f, NEWS_LH = 1.45f, NEWS_CHEV = 13f, NEWS_SUB_LH = 15f;
     public static final int NEWS_MAXLINES = 4;
     /** 검색줄 치수(웹 쿠팡 검색줄과 같다): 알약 높이 · 왼쪽 배지 · 오른쪽 단추 · 안쪽 여백 */
+    public static final float FAB_PX = 24f, FAB_H = 40f, FAB_B = 16f, FAB_TXT = 13f, FAB_ICON = 14f, FAB_GAP = 6f;
     public static final float SEC_BTN = 11f, SEC_BTN_PX = 14f, SEC_BTN_H = 23f, SEC_HINT = 11.5f, SEC_PILL = 10f, SEC_PILL_PX = 8f, SEC_GAP = 8f;
     public static final float TROW_PX = 14f, TROW_TXT = 12f, TROW_SMALL = 10f, TROW_PILL_PX = 7f, TROW_PILL_H = 18f;
     public static final float SEARCH_H = 44f, SEARCH_BADGE = 20f, SEARCH_BTN = 30f, SEARCH_PADL = 14f, SEARCH_PADR = 8f, SEARCH_GAP = 8f;
@@ -956,6 +972,8 @@ public final class ScreenCore {
         public float[] zs = new float[0];            // bcard: 누르는 자리 [x,y,w,h]×(별·✏️·🗺️)
         public Act[] za = new Act[0];
         public float sw2;                            // trow: 단추 글 폭
+        public float bw = 0f;   // chip: 테두리 두께
+        public String[] mp = null; public float[] mpx = null; public float dotX0 = 0f, dotW = 0f, rowH = 0f, cmX = 0f; public String cmS = "";   // post 머리줄: 조각들 · 점 폭 · 한 줄 높이 · 💬 댓글 수
         public float sfh, sfr;                       // inbar: 입력 글자 뒤 바탕 띠(색은 fill2) 높이 · 모서리
         public boolean plain;                        // chip: 켜졌을 때 바탕·테두리 없음
         public Col ofl, obd, otx;                    // chip: 꺼진 칩 바탕 · 테두리 · 글자 색(null 이면 기본 모양)
@@ -976,6 +994,7 @@ public final class ScreenCore {
 
     public static final class Layout {
         public Item[] head = new Item[0], body = new Item[0], foot = new Item[0];
+        public float fabW; public String fabLabel = ""; public float[] fabIcon = new float[0]; public Act fabAct;      // 떠 있는 단추(없으면 fabW 0)
         public float headH, headContentW, bodyH, footH, width, chipsTop = -1f, chipsBot = -1f;
         public String bg = "bg";                                          // 화면 바탕 색 역할
         public Col bgCol, lineCol;                                        // 안내창: 카드 바탕·테두리 색(없으면 null = bg 역할 · 테두리 없음)
@@ -1132,12 +1151,12 @@ public final class ScreenCore {
                 for (Node c : n.items) {
                     Item it = new Item(); it.kind = K_CHIP; it.label = c.label; it.badge = c.badge; it.on = c.on; it.act = c.act;
                     it.size = n.cfs; it.bold = true; it.ac = col(c.fill.length() > 0 ? c.fill : n.onc, new Col("orange", 0)); it.tc = col(n.tc, new Col("white", 0));
-                    if (n.offf.length() > 0 || n.offb.length() > 0 || n.offt.length() > 0 || c.line.length() > 0) {
-                        it.owc = true; it.ofl = col(n.offf, null); it.obd = col(c.line.length() > 0 ? c.line : n.offb, null); it.otx = col(c.line.length() > 0 ? c.line : n.offt, null);
+                    if (n.offf.length() > 0 || n.offb.length() > 0 || n.offt.length() > 0 || c.line.length() > 0 || c.ob.length() > 0) {
+                        it.owc = true; it.ofl = col(n.offf, null); it.obd = col(c.ob.length() > 0 ? c.ob : (c.line.length() > 0 ? c.line : n.offb), null); it.otx = col(c.line.length() > 0 ? c.line : n.offt, null);
                     }
                     it.labelW = m.width(c.label, n.cfs, true);
                     it.badgeW = c.badge.length() > 0 ? m.width(c.badge, n.cfs, true) : 0f;
-                    it.sx = n.cpx; it.plain = c.big;
+                    it.sx = n.cpx; it.plain = c.big; it.bw = c.bw;
                     it.w = n.cpx * 2 + it.labelW + (c.badge.length() > 0 ? 6f + it.badgeW : 0f);
                     it.h = n.h; it.x = x; it.y = y;
                     hi.add(it); x += it.w + n.gap;
@@ -1216,6 +1235,7 @@ public final class ScreenCore {
         y = 0f;
         for (Node n : sc.foot) y = stack(n, 0f, width, y, fi, m, openKey);
         L.foot = fi.toArray(new Item[0]); L.footH = y;
+        if (sc.fab != null) { L.fabLabel = sc.fab.s; L.fabIcon = sc.fab.pathOps; L.fabAct = sc.fab.act; L.fabW = FAB_PX * 2f + (sc.fab.pathOps.length > 0 ? FAB_ICON + FAB_GAP : 0f) + m.width(sc.fab.s, FAB_TXT, true); }
         L.headMaxB = maxB(L.head); L.bodyMaxB = maxB(L.body);
         if (sc.dlg != null && sc.dlg.fit) {                                          // 안내창 너비 맞춤: 글 줄마다 (카드 너비 - 줄 칸 너비 + 줄 글 너비) 중 가장 큰 값
             float fw = 0f;
@@ -1708,7 +1728,7 @@ public final class ScreenCore {
         if ("news".equals(n.t)) {
             float chevW = m.width("\u203A", NEWS_CHEV, false);
             float tx = ox + NEWS_PADX + NEWS_BARW + NEWS_GAP, tw = Math.max(40f, innerW - NEWS_PADX * 2f - NEWS_BARW - NEWS_GAP * 2f - chevW);
-            float tlh = NEWS_TITLE * NEWS_LH, slh = NEWS_SUB * NEWS_LH;
+            float tlh = NEWS_TITLE * NEWS_LH, slh = NEWS_SUB_LH;                  // 웹 보조줄 높이 15
             List<String> tl = wrap(n.title, tw, NEWS_TITLE, true, NEWS_MAXLINES, m);
             Item it = new Item(); it.kind = K_NEWS; it.x = ox; it.y = y; it.w = innerW; it.act = n.act;
             it.lines = tl.toArray(new String[0]); it.size = NEWS_TITLE; it.bold = true; it.lineH = tlh;
@@ -1757,6 +1777,7 @@ public final class ScreenCore {
             List<String> tl = wrap(n.title, titleW, POST_TITLE, true, 4, m);
             float titleH = Math.max(tl.size() * tlh, badgePw > 0f ? POST_BADGE * 1.4f + 4f : 0f);
             float metaLH = POST_META * 1.4f;
+            float rowH = n.cm > 0 ? POST_CMT_ROW : metaLH;                 // 웹: 💬 숫자가 16px 글자라 그 줄만 19px
             Item hd = new Item(); hd.kind = K_POSTH; hd.x = hx; hd.y = hy; hd.w = hw; hd.key = n.key; hd.on = open;
             hd.act = new Act(); hd.act.a = "tog"; hd.act.v = n.key;
             hd.lines = tl.toArray(new String[0]); hd.size = POST_TITLE; hd.bold = true; hd.lineH = tlh;
@@ -1768,7 +1789,15 @@ public final class ScreenCore {
             hd.labelW = Math.max(20f, hx + hw - POST_PADX - hd.distX);
             if (n.sub.length() > 0) hd.label = ellipsize(n.sub, hd.labelW, POST_META, false, m);
             hd.metaY = hd.textY + titleH + POST_META_GAP;
-            hd.h = POST_PADT + titleH + POST_META_GAP + metaLH + POST_PADB;
+            if (n.mp != null) {
+                hd.mp = n.mp; hd.mpx = new float[n.mp.length]; hd.rowH = rowH;
+                hd.metaY += (rowH - metaLH) / 2f;
+                float dw = m.width("\u00b7", POST_DOT, false), cx2 = hd.tagX + hd.tagW;
+                hd.dotW = dw; hd.label = "";
+                for (int i = 0; i < n.mp.length; i++) { cx2 += POST_MGAP + dw + POST_MGAP; hd.mpx[i] = cx2; cx2 += m.width(n.mp[i], POST_META, false); }
+                if (n.cm > 0) { hd.cmS = "\ud83d\udcac " + n.cm; hd.cmX = cx2 + POST_MGAP + dw + POST_MGAP; hd.dotX0 = cx2 + POST_MGAP; }
+            }
+            hd.h = POST_PADT + titleH + POST_META_GAP + rowH + POST_PADB;
             out.add(hd);
             float cy = hy + hd.h;
             if (open && !n.kids.isEmpty()) {
@@ -1848,7 +1877,7 @@ public final class ScreenCore {
             float bw = Math.min(maxBub, Math.max(tw, badgeW) + MSG_PADX * 2f), lh = MSG_TXT * MSG_LH;
             String nickLine = n.mine ? "" : ellipsize((n.pre.length() > 0 ? n.pre + " " : "") + n.nick, innerW, MSG_NICK, false, m);
             float nickH = nickLine.length() > 0 ? MSG_NICK * 1.35f + 3f : 0f;
-            float bubH = MSG_PADY * 2f + badgeH + lh * tl.size(), timeH = 3f + MSG_TIME * 1.35f;
+            float bubH = MSG_PADY * 2f + badgeH + lh * tl.size(), timeH = 3f + MSG_TIME_H;                                  // 웹 시각줄: 위 3 + 높이 10
             Item it = new Item(); it.kind = K_MSG; it.y = y; it.w = bw; it.x = n.mine ? ox + innerW - bw : ox; it.on = n.mine; it.act = n.act; it.radius = MSG_RAD;
             it.lines = tl.toArray(new String[0]); it.size = MSG_TXT; it.lineH = lh;
             it.tag = nickLine; it.size2 = MSG_NICK; it.lineH2 = MSG_NICK * 1.35f;

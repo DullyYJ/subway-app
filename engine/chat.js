@@ -17,7 +17,7 @@
 //        행동 이름: ch.send 보내기 · ch.x.<번호> 노선 방 글 신고(번호 = 앱이 보낸 r 배열의 원래 위치 · act.id = 그 글의 고유 id — 새 앱은 id 를 먼저 쓴다) · 칩은 {a:'cat', v:노선|'all'}
 // 맨 아래 module.exports 는 시험(Node)용이고 Worker 에서는 함수 선언만 쓰인다.
 'use strict';
-var CHAT_SCREEN_V = 1;
+var CHAT_SCREEN_V = 2;
 var chtTrkColor = (typeof rheadTrkColor === 'function') ? rheadTrkColor : null;      // 노선 색은 타임라인(rhead)과 같은 표를 쓴다. Node 시험에서는 아래에서 불러온다.
 if (!chtTrkColor) { try { if (typeof require === 'function') chtTrkColor = require('./rhead').rheadTrkColor; } catch (eRq) {} }
 var CHT_ALTS_MAX = 24;                // 한 요청에 실을 수 있는 '다른 방' 수 상한(전체 + 호선 18개)
@@ -148,12 +148,15 @@ function chatScreen(inp, factsIn, dataIn) {
   var now = Number(inp.now) > 0 ? Number(inp.now) : Date.now();
   var f = chtFacts(factsIn), d = (dataIn && typeof dataIn === 'object') ? dataIn : {}, i;
   var chips = chtItems(f).map(function (l) {
-    var it = { label: l === 'all' ? '전체' : (f.mine.indexOf(l) >= 0 ? '내 ' + l : l), on: l === f.sel, act: { a: 'cat', v: l } };
-    if (l !== 'all' && f.lc[l]) it.c = f.lc[l];
+    var mine = l !== 'all' && f.mine.indexOf(l) >= 0, col = l !== 'all' && f.lc[l] ? f.lc[l] : '';
+    var it = { label: l === 'all' ? '전체' : (mine ? '\ud83d\udccd ' + l : l), on: l === f.sel, act: { a: 'cat', v: l } };       // 웹: 내가 탄 노선은 📍 + 노선 색 2px 테두리 · 켜진 칸은 1.5px
+    if (col) it.c = col;
+    if (it.on) it.bw = 1.5; else if (mine) { it.bw = 2; if (col) it.ob = col; }
     return it;
   });
-  var head = [{ t: 'chips', pad: [14, 4, 14, 4], gap: 6, h: 32, fs: 14, px: 15, onc: 'gold', onfg: '#ffffff', offb: 'border2', offt: 'text', items: chips }];       // 웹 채팅 노선 칩: 32px · 14px
-  if (!f.mine.length) head.push({ t: 'text', s: '📍 내가 탄 노선은 앞에 표시돼요', size: 11, color: 'sub', pad: [16, 0, 16, 4] });
+  var head = [{ t: 'chips', pad: [14, 0, 14, 2], gap: 6, h: 31, fs: 12.5, px: 15, onc: 'gold', onfg: '#ffffff', offb: 'border2', offt: 'text', items: chips }];       // 웹 .chat-line-chip: 12.5px · 높이 31 · 아래 2
+  if (!f.mine.length) head.push({ t: 'text', s: '📍 내가 탄 노선은 앞에 표시돼요', size: 11, color: 'sub', lh: 1.4, pad: [16, 3, 16, 2] });
+  head.push({ t: 'divider', pad: [0, f.mine.length ? 6 : 4, 0, 0], c: 'border' });                    // 웹 .comm-fixed-top 아래 1px 줄 (머리 103)
   var body = [], n = 0;
   if (f.sel === 'all') {
     var gs = [];
@@ -176,7 +179,8 @@ function chatScreen(inp, factsIn, dataIn) {
       body.push({ t: 'text', s: s, size: 13, color: 'sub', lh: 1.7, align: 'center', pad: [20, 40, 20, 40] });
     } else body = [{ t: 'spacer', h: 4 }].concat(rs.map(function (x) { return x.node; }), [{ t: 'spacer', h: 4 }]);
   }
-  var foot = [{ t: 'inbar', pad: [12, 10, 12, 10], key: f.sel === 'all' ? 'chat.all' : 'chat.room', hint: f.sel === 'all' ? '메시지를 입력하세요...' : '이 노선 이용자에게 한마디…', btn: '전송', h: 38, r: 19, maxlen: f.sel === 'all' ? 200 : 120, fill: 'card', line: 'border2', act: { a: 'call', v: 'ch.send' } }];
+  var foot = [{ t: 'inbar', pad: [12, 10, 12, 10], key: f.sel === 'all' ? 'chat.all' : 'chat.room', hint: f.sel === 'all' ? '메시지를 입력하세요...' : '이 노선 이용자에게 한마디…', btn: '전송', h: 38, inh: 37, bh: 38, bicon: 'M5 3L21 12L5 21L8.5 12Z', ckf: '#121214', r: 18.5, maxlen: f.sel === 'all' ? 200 : 120, fill: 'card', line: 'border2', act: { a: 'call', v: 'ch.send' } }];       // 웹 .chat-inputbar: 입력 37 + 파란 동그라미 ➤ 38 · 위 1px 줄 + 위아래 10
+  foot.unshift({ t: 'divider', pad: [0, 0, 0, 0], c: 'border' });
   var out = { ok: true, v: 1, screen: 'chat', cover: 'tab', anchor: 'bottom', head: head, body: body, foot: foot, info: { sel: f.sel, n: n, pl: chtMineLines(null, f.my)[0] || '' } };
   out.rev = 'c' + CHAT_SCREEN_V + ':' + chtHash(JSON.stringify([head, body, foot]));
   return out;

@@ -18,7 +18,7 @@
 //          pf = 그 화면의 기기 사실(켜짐·값·고른 상태만; 문구·요일 계산·시각 글·퇴근 안내는 엔진). 행동은 call(v: pg.back · sam.open · cm.day.N …) 허용 목록만.
 // 맨 아래 module.exports 는 시험(Node)용이고 Worker 에서는 함수 선언만 쓰인다.
 'use strict';
-var SETTINGS_SCREEN_V = 1;
+var SETTINGS_SCREEN_V = 2;
 var SETTINGS_PAGE_CAP = 8;
 // 지하철 역 표(HOME_STNS)는 Worker 에서는 앞/뒤에 붙은 engine/home-stations.js 가 채우는 공용 전역이고(여기서 다시 선언하지 않는다), Node(시험)에서는 파일을 불러온다. 요청 때 읽는다(Worker 에서 이 블록이 먼저 평가되므로).
 function settingsStns() {
@@ -58,7 +58,7 @@ function settingsHash(s) {                       // djb2 — 같은 화면이면
 // ── 노드 만들기(모양 한 곳) ──
 function settingsTitleN(s, mb) { return { t: 'text', s: s, size: 15, bold: true, color: 'text', pad: [0, 0, 0, mb == null ? 4 : mb], lh: 1.3 }; }
 function settingsDescN(s, mb, hl) { var n = { t: 'text', s: s, size: 12, color: 'sub', lh: 1.5, pad: [0, 0, 0, mb == null ? 12 : mb] }; if (hl) n.hl = hl; return n; }
-function settingsPanelN(kids, mt) { return { t: 'panel', pad: [14, mt == null ? 12 : mt, 14, 0], ip: [16, 16, 16, 16], fill: 'card', line: 'border', r: 14, kids: kids }; }
+function settingsPanelN(kids, mt) { return { t: 'panel', pad: [16, mt == null ? 12 : mt, 16, 0], ip: [16, 16, 16, 16], fill: 'card', line: 'border', r: 14, kids: kids }; }
 function settingsBoldN(parts) {                           // [[글, 굵게 0|1], …] → { s, hl }
   var s = '', hl = [];
   parts.forEach(function (p) { if (p[1]) hl.push([s.length, s.length + p[0].length]); s += p[0]; });
@@ -84,8 +84,8 @@ function settingsScreen(inp, factsIn) {
     var cur = settingsBoldN([['현재 아이디  ', 0], [f.id, 1]]);
     idKids.push({ t: 'box', s: cur.s, hl: cur.hl, size: 14, lh: 1.4, color: 'gold', fill: '#1c1c1e', line: '', tc: 'gold', r: 10, ip: [13, 11, 13, 11], pad: [0, 0, 0, 12] });
   }
-  idKids.push({ t: 'field', key: 'cid', hint: '아이디 입력 (2~12자, 한글/영문/숫자)', value: f.id, maxlen: 12, h: 44, size: 14, r: 9, pad: [0, 0, 0, 10] });
-  idKids.push({ t: 'button', s: '아이디 저장', size: 14, h: 44, r: 10, bold: true, fill: 'gold', line: 'none', tc: '#121214', act: { a: 'call', v: 'saveId' } });
+  idKids.push({ t: 'field', key: 'cid', hint: '아이디 입력 (2~12자, 한글/영문/숫자)', value: f.id, maxlen: 12, h: 40, size: 14, r: 9, pad: [0, 0, 0, 10] });
+  idKids.push({ t: 'button', s: '아이디 저장', size: 14, h: 42, r: 10, bold: true, fill: 'gold', line: 'none', tc: '#121214', act: { a: 'call', v: 'saveId' } });
   if (f.id) idKids.push({ t: 'button', s: '아이디 삭제', size: 12, h: 38, r: 10, bold: true, fill: 'none', line: 'border2', tc: '#ff453a', pad: [0, 8, 0, 0], act: { a: 'call', v: 'clearId' } });
   body.push(settingsPanelN(idKids, 16));
   body.push({ t: 'text', s: '아이디는 이 기기에만 저장되며,\n작성한 글·채팅에 표시됩니다.', size: 11, color: 'sub', lh: 1.5, align: 'center', pad: [16, 14, 16, 0] });
@@ -153,7 +153,7 @@ function settingsScreen(inp, factsIn) {
   ]));
   body.push({ t: 'spacer', h: 28 });
 
-  var out = { ok: true, v: 1, screen: 'settings', cover: 'tab', head: [], body: body };
+  var out = { ok: true, v: 1, screen: 'settings', cover: 'tab', head: [{ t: 'divider', pad: [0, 0, 0, 0], c: 'border' }], body: body };
   out.rev = 's' + SETTINGS_SCREEN_V + ':' + settingsHash(JSON.stringify(body));
   return out;
 }

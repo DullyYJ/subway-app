@@ -44,12 +44,12 @@ const chat = (f, d) => E.chatScreen({ cap: 6, now: NOW }, Object.assign({}, base
 ok(E.chatScreen({ cap: 5, now: NOW }, base, {}).ok === false && E.chatScreen({}, base, {}).ok === false && E.chatScreen(null, null, null).ok === false, 'cap 6 미만이면 만들지 않는다');
 {
   const s = chat({}, { g: G });
-  ok(s.ok && s.v === 1 && s.screen === 'chat' && s.cover === 'tab' && s.anchor === 'bottom' && /^c1:/.test(s.rev), '기본 모양 · anchor bottom');
+  ok(s.ok && s.v === 1 && s.screen === 'chat' && s.cover === 'tab' && s.anchor === 'bottom' && /^c2:/.test(s.rev), '기본 모양 · anchor bottom');
   const chips = s.head[0].items;
-  ok(chips.map(c => c.label).slice(0, 4).join() === '전체,내 2호선,내 9호선,1호선' && chips.length === 1 + E.CHT_KNOWN.length, '칩 순서: 전체 → 내 노선 → 나머지(웹 _chatItems)');
+  ok(chips.map(c => c.label).slice(0, 4).join() === '전체,📍 2호선,📍 9호선,1호선' && chips.length === 1 + E.CHT_KNOWN.length, '칩 순서: 전체 → 내 노선 → 나머지(웹 _chatItems)');
   ok(chips[0].on && chips.filter(c => c.on).length === 1 && chips[0].act.a === 'cat' && chips[0].act.v === 'all' && chips[1].act.v === '2호선', '고른 칩 · 행동 cat');
   ok(chips[1].c === '#00a84d' && chips[0].c === undefined && /^#[0-9a-f]{6}$/i.test(chips[3].c), '노선 색은 올바른 #rrggbb 만(앱이 안 준 노선은 엔진 기본 색)');
-  ok(s.head.length === 1, '내 노선이 있으면 안내 글 없음');
+  ok(s.head.length === 2 && s.head[1].t === 'divider' && !s.head.some(h => h.t === 'text'), '내 노선이 있으면 안내 글 없음(머리 구분선만)');
   ok(chat({ mine: [] }, { g: G }).head[1].s === '📍 내가 탄 노선은 앞에 표시돼요', '내 노선이 없으면 안내 글');
   ok(chat({ mine: ['2호선', '2호선', '없는선', '9호선'] }, {}).head[0].items.length === chips.length, '중복·모르는 노선은 무시');
   ok(chat({ sel: '없는방' }, {}).info.sel === 'all', '모르는 방은 전체');
@@ -113,7 +113,8 @@ ok(E.chatScreen({ cap: 5, now: NOW }, base, {}).ok === false && E.chatScreen({},
 }
 // ── ⑦ 아래 입력줄 ──
 {
-  const a = chat({}, {}).foot[0], r = chat({ sel: '2호선' }, {}).foot[0];
+  const a = chat({}, {}).foot[1], r = chat({ sel: '2호선' }, {}).foot[1];
+  ok(chat({}, {}).foot[0].t === 'divider' && a.bh === 38 && a.inh === 37 && a.bicon.length > 10, '입력줄: 위 구분선 · 입력 37 + 동그라미 보내기 38');
   ok(a.t === 'inbar' && a.key === 'chat.all' && a.btn === '전송' && a.act.v === 'ch.send' && a.hint === '메시지를 입력하세요...' && a.maxlen === 200, '전체 방 입력줄');
   ok(r.key === 'chat.room' && r.act.v === 'ch.send' && r.maxlen === 120 && /한마디/.test(r.hint), '노선 방 입력줄');
   ok(chat({}, { g: G }).rev !== chat({ sel: '2호선' }, { g: G }).rev && chat({}, { g: G }).rev === chat({}, { g: G }).rev, '같은 입력 → 같은 rev');
@@ -170,7 +171,7 @@ ok(E.chatScreen({ cap: 5, now: NOW }, base, {}).ok === false && E.chatScreen({},
   ok(JSON.stringify(ml([], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(i => ({ l: i + '호선', n: i, t: 0 }))).length) === '8', '최대 8개');
   const o = E.chatScreen({ cap: 6, now: 1 }, { sel: 'all', sec: ['수도권 4호선'], my: [{ l: '2호선', n: 3, t: 1 }], th: 'pastel' }, {});
   const chips = o.head.find(n => n.t === 'chips').items;
-  ok(chips[1].label === '내 4호선' && chips[2].label === '내 2호선' && /^#/.test(chips[1].c), '칩: 지금 경로 노선이 앞 · 노선 색 기본값 ' + chips[1].c);
+  ok(chips[1].label === '📍 4호선' && chips[2].label === '📍 2호선' && /^#/.test(chips[1].c), '칩: 지금 경로 노선이 앞 · 노선 색 기본값 ' + chips[1].c);
   ok(o.info.pl === '2호선', '글을 붙일 노선은 많이 탄 노선(경로와 무관)');
   const dk = E.chatScreen({ cap: 6, now: 1 }, { sel: 'all', th: 'dark' }, {}).head.find(n => n.t === 'chips').items.find(x => x.label === '2호선').c;
   const pa = E.chatScreen({ cap: 6, now: 1 }, { sel: 'all', th: 'pastel' }, {}).head.find(n => n.t === 'chips').items.find(x => x.label === '2호선').c;

@@ -398,9 +398,9 @@ public class ScreenJvmTest {
         float chevW = M.width("\u203A", 13f, false);
         ok(n0.kind == ScreenCore.K_NEWS && near(n0.x, 14f) && near(n0.w, 332f) && near(n0.y, 8f), "뉴스 줄 자리: 좌우 14, 위 간격 8");
         ok(near(n0.textX, 14f + 4f + 3f + 10f) && near(n0.bx, 14f + 4f), "제목은 금색 막대 오른쪽 10 띄움");
-        ok(n0.lines.length == 1 && n0.lines2.length == 1 && near(n0.h, 13f + 14f * 1.45f + 4f + 11f * 1.45f + 13f + 1f), "한 줄 제목 높이 = 위아래 13 + 제목 + 4 + 작은 글 + 선 1");
+        ok(n0.lines.length == 1 && n0.lines2.length == 1 && near(n0.h, 13f + 14f * 1.45f + 4f + 15f + 13f + 1f), "한 줄 제목 높이 = 위아래 13 + 제목 + 4 + 작은 글 + 선 1");
         ok(near(n0.tagX, 14f + 332f - 4f - chevW), "› 는 오른쪽 끝(안쪽 4)");
-        ok(n1.lines.length == ScreenCore.NEWS_MAXLINES && n1.lines[n1.lines.length - 1].endsWith("\u2026") && near(n1.h, 13f + 14f * 1.45f * 4f + 4f + 11f * 1.45f + 13f + 1f), "긴 제목은 4줄까지 … 로 줄임");
+        ok(n1.lines.length == ScreenCore.NEWS_MAXLINES && n1.lines[n1.lines.length - 1].endsWith("\u2026") && near(n1.h, 13f + 14f * 1.45f * 4f + 4f + 15f + 13f + 1f), "긴 제목은 4줄까지 … 로 줄임");
         ok(near(n1.y, n0.y + n0.h) && near(NL.bodyH, 8f + n0.h + n1.h + 72f), "줄은 이어 붙고 아래 간격 72");
         ScreenCore.Act na = NL.hitBody(n0.x + 40f, n0.y + 10f);
         ok(na != null && na.a.equals("call") && na.v.equals("nw.4"), "뉴스 줄을 누르면 그 번호");
@@ -505,7 +505,7 @@ public class ScreenJvmTest {
         ok(near(m0.x, 12f) && m0.w <= (336f * 0.74f) + 0.01f && m0.lines.length >= 2, "남의 말풍선: 왼쪽 12, 폭은 336 의 74% 이하, 긴 글은 줄바꿈");
         ok(near(m1.x + m1.w, 12f + 336f) && near(m1.w, M.width("안녕하세요", 13f, false) + 22f), "내 말풍선: 오른쪽 끝, 폭은 글 + 좌우 11");
         ok(m0.tag.equals("(2호선) 지하철러") && m1.tag.length() == 0, "남의 것에만 글쓴이 줄");
-        ok(near(m0.h, 11f * 1.35f + 3f + 16f + 13f * 1.45f * m0.lines.length + 3f + 9f * 1.35f) && near(m1.y, m0.h + 10f), "말풍선 높이 = 글쓴이 + 풀 + 글 + 시각, 사이 10");
+        ok(near(m0.h, 11f * 1.35f + 3f + 16f + 13f * 1.45f * m0.lines.length + 3f + 10f) && near(m1.y, m0.h + 10f), "말풍선 높이 = 글쓴이 + 풀 + 글 + 시각, 사이 10");
         ScreenCore.Act ra = CHL.hitBody(m0.zoneX + 2f, m0.zoneY + 3f), rb2 = CHL.hitBody(m0.x + 5f, m0.sy + 8f);
         ok(ra != null && ra.v.equals("ch.x.7") && rb2 == null, "'신고' 글자 자리만 눌리고 말풍선 몸통은 안 눌린다");
         ok(CHL.hitBody(m1.x + 3f, m1.sy + 3f) == null, "act 없는 내 말풍선은 안 눌린다");
@@ -791,7 +791,7 @@ public class ScreenJvmTest {
         {
             String H = "{\"ok\":true,\"v\":1,\"screen\":\"cchips\",\"head\":[";
             try {
-                ScreenCore.Layout cl = ScreenCore.layout(ScreenCore.load(H + "{\"t\":\"chips\",\"pad\":[14,13,14,2],\"gap\":6,\"h\":27,\"fs\":11,\"px\":13,\"onc\":\"gold\",\"onfg\":\"#ffffff\",\"offf\":\"card2\",\"offb\":\"border\",\"offt\":\"sub\",\"items\":[{\"label\":\"게시판\",\"on\":true,\"act\":{\"a\":\"call\",\"v\":\"chC.board\"}},{\"label\":\"뉴스\",\"act\":{\"a\":\"call\",\"v\":\"chC.news\"}},{\"label\":\"1호선\",\"oc\":\"#0052a4\",\"c\":\"#0052a4\",\"act\":{\"a\":\"cat\",\"v\":\"f:1\"}},{\"label\":\"전체\",\"pl\":true,\"on\":true,\"act\":{\"a\":\"cat\",\"v\":\"f:ALL\"}}]}],\"body\":[]}"), 360f, M);
+                ScreenCore.Layout cl = ScreenCore.layout(ScreenCore.load(H + "{\"t\":\"chips\",\"pad\":[14,12,14,6],\"gap\":6,\"h\":27,\"fs\":11,\"px\":13,\"onc\":\"gold\",\"onfg\":\"#ffffff\",\"offf\":\"card2\",\"offb\":\"border\",\"offt\":\"sub\",\"items\":[{\"label\":\"게시판\",\"on\":true,\"act\":{\"a\":\"call\",\"v\":\"chC.board\"}},{\"label\":\"뉴스\",\"act\":{\"a\":\"call\",\"v\":\"chC.news\"}},{\"label\":\"1호선\",\"oc\":\"#0052a4\",\"c\":\"#0052a4\",\"act\":{\"a\":\"cat\",\"v\":\"f:1\"}},{\"label\":\"전체\",\"pl\":true,\"on\":true,\"act\":{\"a\":\"cat\",\"v\":\"f:ALL\"}}]}],\"body\":[]}"), 360f, M);
                 ScreenCore.Item chA = cl.head[0], chB = cl.head[1], chC = cl.head[2], chD = cl.head[3];
                 ok(near(chA.x, 14f) && near(chA.h, 27f) && near(chA.size, 11f) && near(chA.sx, 13f) && near(chA.w, 26f + chA.labelW), "chips: 웹 칩 왼쪽 여백 14 · 높이 27 · 글자 11 · 좌우 13");
                 ok(chB.owc && chB.ofl != null && "card2".equals(chB.ofl.role) && chB.obd != null && "border".equals(chB.obd.role) && chB.otx != null && "sub".equals(chB.otx.role), "chips: 꺼진 칩 바탕/테두리/글자는 엔진이 정한 역할 색");
@@ -948,6 +948,24 @@ public class ScreenJvmTest {
             ok(threw, "skel 엉터리는 거부: " + bad);
         }
 
+        // ── 게시판 글 머리줄(점 · 👁 · 💬) · 떠 있는 단추 · 칩 테두리 두께 (웹 .dc-post-meta · .fab · .chat-line-chip)
+        {
+            String bj = "{\"v\":1,\"screen\":\"board\",\"head\":[{\"t\":\"divider\",\"c\":\"border\"}],\"body\":["
+                + "{\"t\":\"post\",\"id\":\"pa\",\"pad\":[14,0,14,8],\"title\":\"제목\",\"nick\":\"닉\",\"mp\":[\"3분 전\",\"\ud83d\udc41 12\"],\"cm\":2,\"kids\":[]},"
+                + "{\"t\":\"post\",\"id\":\"pb\",\"pad\":[14,0,14,8],\"title\":\"제목2\",\"nick\":\"닉\",\"mp\":[\"3분 전\"],\"kids\":[]}],"
+                + "\"fab\":{\"s\":\"✏️ 제보 글쓰기\",\"icon\":\"M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25z\",\"act\":{\"a\":\"call\",\"v\":\"bd.write\"}}}";
+            ScreenCore.Screen bs = ScreenCore.load(bj);
+            ScreenCore.Layout bl = ScreenCore.layout(bs, 411f, M, null, 791f);
+            ScreenCore.Item pa = null, pb = null;
+            for (ScreenCore.Item q : bl.body) if (q.kind == ScreenCore.K_POSTH) { if (pa == null) pa = q; else pb = q; }
+            ok(pa != null && pb != null && pa.mp != null && pa.cmS.length() > 0 && pb.cmS.length() == 0, "글 머리줄: 조각 · 댓글 수가 있을 때만 💬");
+            ok(near(pa.h, 1f * 0f + 12f + 14f * 1.4f + 8f + 19.4f + 10f) && near(pb.h, 12f + 14f * 1.4f + 8f + 11f * 1.4f + 10f), "글 머리줄 높이: 댓글 있으면 19.4, 없으면 15.4 (웹 71 · 67 에서 테두리 2 뺀 값)");
+            ok(pa.mpx[0] > pa.tagX + pa.tagW && pa.cmX > pa.mpx[1] && pa.dotX0 > pa.mpx[1], "점(·)은 닉네임 · 조각 사이에 5px 간격으로 놓임");
+            ok(bl.fabLabel != null && bl.fabW > 80f && bl.fabAct != null, "떠 있는 글쓰기 단추 자리");
+            String cj = "{\"v\":1,\"screen\":\"chat\",\"head\":[{\"t\":\"chips\",\"h\":31,\"fs\":12.5,\"px\":15,\"items\":[{\"label\":\"전체\",\"on\":true,\"bw\":1.5,\"act\":{\"a\":\"cat\",\"v\":\"all\"}},{\"label\":\"2호선\",\"bw\":2,\"ob\":\"#00a84d\",\"act\":{\"a\":\"cat\",\"v\":\"2\"}}]}],\"body\":[{\"t\":\"spacer\",\"h\":4}]}";
+            ScreenCore.Layout cl = ScreenCore.layout(ScreenCore.load(cj), 411f, M, null, 791f);
+            ok(near(cl.head[0].bw, 1.5f) && near(cl.head[1].bw, 2f) && cl.head[1].obd != null && near(cl.head[1].h, 31f), "칩 테두리 두께 · 따로 칠한 테두리색");
+        }
         System.out.println(fails == 0 ? "ALL OK (" + oks + ")" : fails + " FAIL");
         System.exit(fails == 0 ? 0 : 1);
     }
