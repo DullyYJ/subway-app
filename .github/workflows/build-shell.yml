@@ -120,20 +120,31 @@ jobs:
           PYEOF
           ls -la shell-android/app/src/main/assets/fonts
 
-      - name: Build Debug APK
+      - name: Build APK (release, shrunk) — falls back to debug if R8 fails
         run: |
           set +e
-          gradle -p shell-android assembleDebug --no-daemon --stacktrace > /tmp/gradle.log 2>&1
+          gradle -p shell-android assembleRelease --no-daemon --stacktrace > /tmp/gradle.log 2>&1
           rc=$?
           tail -40 /tmp/gradle.log
           if [ $rc -ne 0 ]; then
-            # 로그를 직접 내려받기 어려우므로 실패 원인 줄을 주석(annotation)으로도 남긴다
-            grep -a -A8 -m3 -E "What went wrong|error:" /tmp/gradle.log | tr '\n' ' ' | cut -c1-1500 | while IFS= read -r l; do echo "::error::$l"; done
-            exit $rc
+            # 줄이기(R8)가 실패해도 앱은 나와야 한다 — 원인은 주석으로 남기고 디버그 빌드로 대신한다
+            grep -a -A8 -m3 -E "What went wrong|error:" /tmp/gradle.log | tr '\n' ' ' | cut -c1-1500 | while IFS= read -r l; do echo "::warning::release 실패 → debug 로 대신: $l"; done
+            gradle -p shell-android assembleDebug --no-daemon --stacktrace > /tmp/gradle2.log 2>&1
+            rc=$?
+            tail -40 /tmp/gradle2.log
+            if [ $rc -ne 0 ]; then
+              grep -a -A8 -m3 -E "What went wrong|error:" /tmp/gradle2.log | tr '\n' ' ' | cut -c1-1500 | while IFS= read -r l; do echo "::error::$l"; done
+              exit $rc
+            fi
           fi
+          ls -la shell-android/app/build/outputs/apk/*/*.apk
+          echo "APK 크기:" $(du -h shell-android/app/build/outputs/apk/*/*.apk | cut -f1)
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: gildongmu-native-debug
-          path: shell-android/app/build/outputs/apk/debug/*.apk
+          name: gildongmu-native
+          path: |
+            shell-android/app/build/outputs/apk/release/*.apk
+            shell-android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
