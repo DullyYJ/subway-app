@@ -581,7 +581,11 @@ function rheadTrackScreen(inp) {
   cells.forEach(function (c) { w += c.w; });
   var node = { t: 'trk', pad: [14, 6, 14, 6], cells: cells };
   var mk = rheadTrkMark(lv, cells);
-  if (mk) node.mk = mk;
+  if (mk) {
+    node.mk = mk;
+    var here = mk.r >= 0.9 ? mk.t : mk.f;                    // 웹 htl-passed · htl-gps-here: 시간 기준은 역에 90% 다가가야 다음 칸으로 넘어간다(출발 칸은 건드리지 않는다)
+    if (here > 0 && here < cells.length) { for (var pi2 = 1; pi2 < here; pi2++) cells[pi2].ps = true; cells[here].hr = true; }
+  }
   var out = { ok: true, v: 1, screen: 'rhead', cover: 'tab', bg: 'card', head: [node], body: [{ t: 'spacer', h: 0 }], info: { part: 'k', n: cells.length, w: w } };
   out.rev = 'r' + RHEAD_SCREEN_V + 'k:' + rheadHash(JSON.stringify(cells) + (mk ? JSON.stringify(mk) : ''));
   return out;
