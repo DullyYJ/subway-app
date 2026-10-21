@@ -40,7 +40,7 @@ final class LocFused {
     private FusedLocationProviderClient client;
     private boolean fusedBroken;
     private final List<Runnable> cancels = new ArrayList<Runnable>();       // 진행 중인 한 번짜리 요청들의 정리
-    private LocationCallback trackCb; private LocationListener trackLm;
+    private LocationCallback trackCb, rideCb; private LocationListener trackLm;
 
     LocFused(Context c) { ctx = c.getApplicationContext(); }
 
@@ -173,6 +173,32 @@ final class LocFused {
             lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 15000L, 30f, trackLm, Looper.getMainLooper());
         } catch (Throwable ignored) { trackLm = null; }
     }
+    /**
+     * 탑승 중 연속 위치(하차 · 환승 판정용): Fused 고정밀 1초 간격(GPS + 네트워크 + 센서를 Play 서비스가 합친 값) + 시작하자마자 현재 위치 한 번.
+     * 콜백은 부른 쪽이 준 Looper(서비스 스레드)로 온다 — 주 스레드를 쓰지 않는다. 마지막으로 알려진 위치는 쓰지 않는다.
+     * Fused 가 안 되면 fail() 한 번 — 부르는 쪽이 LocationManager 로 대신한다. stopRide() 로 해제.
+     */
+    @SuppressWarnings("MissingPermission")
+    void ride(final Looper lp, final Cb cb) {
+        FusedLocationProviderClient fc = fused();
+        if (fc == null) { cb.fail(); return; }
+        try {
+            rideCb = new LocationCallback() { @Override public void onLocationResult(LocationResult r) {
+                if (r == null) return;
+                List<Location> ls = r.getLocations();
+                for (int i = 0; i < ls.size(); i++) { Location l = ls.get(i); if (l != null) cb.fix(l); }
+            } };
+            fc.requestLocationUpdates(new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1000L).setMinUpdateIntervalMillis(500L).setMaxUpdateDelayMillis(0L).setWaitForAccurateLocation(false).build(), rideCb, lp)
+                .addOnFailureListener(new OnFailureListener() { @Override public void onFailure(Exception e) { fusedBroken = true; stopRide(); cb.fail(); } });
+            fc.getCurrentLocation(new CurrentLocationRequest.Builder().setPriority(Priority.PRIORITY_HIGH_ACCURACY).setMaxUpdateAgeMillis(0L).setDurationMillis(3000L).build(), new CancellationTokenSource().getToken())
+                .addOnSuccessListener(new OnSuccessListener<Location>() { @Override public void onSuccess(Location l) { if (l != null && rideCb != null) cb.fix(l); } });
+        } catch (Throwable t) { fusedBroken = true; rideCb = null; cb.fail(); }
+    }
+    void stopRide() {
+        try { if (rideCb != null && client != null) client.removeLocationUpdates(rideCb); } catch (Throwable ignored) { }
+        rideCb = null;
+    }
+
     /** 화면을 벗어나면(백그라운드 · 닫기) 연속 위치 · 진행 중인 한 번짜리 요청을 모두 즉시 해제한다. */
     boolean tracking() { return trackCb != null || trackLm != null; }
     void untrack() {
