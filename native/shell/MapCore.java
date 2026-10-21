@@ -318,6 +318,15 @@ public final class MapCore {
         brStnJson = ""; brVia = ""; brCc = ""; brSel = -1; brRes.clear(); brNeed.clear(); brStn.clear(); brKnown = false; brSt = ""; brSeq++;
         return R_BR_OPEN;
     }
+    /** 미리 받기용 복제: 지금 목록의 si번 정류장 · ri번째 노선을 연 상태의 새 MapCore(화면에 보이는 것과 따로 돈다). 못 열면 null. */
+    public MapCore routeClone(int si, int ri) {
+        MapCore m = new MapCore(st);
+        m.rts.putAll(rts); m.stopJson.addAll(stopJson);
+        return m.openRoute("br." + si + "." + ri) == R_BR_OPEN ? m : null;
+    }
+    /** si번 정류장에 도착정보가 있는 노선 수. */
+    public String rtsSig() { StringBuilder b = new StringBuilder(); List<String[]> rl = rts.get(0); if (rl != null) for (String[] r : rl) b.append(r[0]).append(','); return b.toString(); }
+    public int routeCount(int si) { List<String[]> rl = rts.get(si); return rl == null ? 0 : rl.size(); }
     public void setRouteMe(double la, double lo) { brMe = new double[] { la, lo }; }
     /** 7일 캐시에서 되살린 정류장 목록(엔진이 준 모양 그대로): 있으면 정류장을 기다리지 않고 바로 그린다. */
     public void useCachedStations(String stnJson, String via, String cc) { brStnJson = stnJson == null ? "" : stnJson; brVia = via == null ? "" : via; brCc = cc == null ? "" : cc; }

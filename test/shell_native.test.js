@@ -161,6 +161,7 @@ function findAndroidJar() {
     assert.ok(/private void closeSheet\(\) \{ brStop\(\);/.test(v) && /private void brStop\(\) \{ main\.removeCallbacks\(brTick\)/.test(br) && /onPause\(\) \{ resumed = false; main\.removeCallbacks\(brTick\)/.test(v) && /brResume\(\); if \(ShellCore\.S_SETPG/.test(v), '닫기·뒤로가기·onPause 에서 즉시 멈추고 onResume 에서만 다시');
     assert.ok(/poll && got\.length\(\) == 0\) \{ if \(brFlight\.isEmpty\(\)\) brBusy = false; return; \}/.test(br) && /txt\.length\(\) == 0\) \{ if \(my == brReq/.test(br), '갱신 실패는 버리고 보던 화면을 둔다');
     assert.ok(/for \(String\[\] nd : need\) if \(brFlight\.add\(nd\[0\]\)\) brFetchOne\(/.test(br) && /brFlight\.remove\(k\);[\s\S]*?brRound\(gen, poll\)/.test(br), '주소마다 따로 받아 오는 대로 바로 다시 그린다(목록이 위치를 기다리지 않는다)');
+    assert.ok(/brPrefetch\(\)/.test(v) && /routeClone\(0, ri\)/.test(v) && /nd\[0\]\.endsWith\("s"\)/.test(v), '도착정보가 뜬 가까운 정류장의 앞 노선은 목록을 미리 받아 둔다(위치는 열 때 새로)');
     assert.ok(/a < \(pos \? 5 : 2\)/.test(br) && /Thread\.sleep\(pos \? 800 : 300\)/.test(br), '위치는 실패하면 0.8초 뒤 다시(최대 4번 더)');
     assert.ok(/home\.pickRestore\(map\.pkName\)/.test(br) && /home\.setBusStop\(HomeCore\.START/.test(br) && /home\.setBusStop\(HomeCore\.DEST/.test(br) && /goRoute\(\)/.test(br), '출발지/도착지 고르기 · 나가면 되돌림 · 도착지가 정해지면 경로');
     assert.ok(/dirtyOnly\(partialFrom\)/.test(sv) && /invalidate\(0, Math\.round/.test(sv) && /postInvalidateDelayed\(66L, Math\.round\(brxPing/.test(sv), '바뀐 줄 자리만 invalidate · 마커 맥박도 그 자리만');

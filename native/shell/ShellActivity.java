@@ -1582,10 +1582,49 @@ public class ShellActivity extends Activity {
                     syncMapView();
                     if ("bus".equals(map.view)) { if (round == 0) busAt = System.currentTimeMillis(); startBusTick(); }
                     if (txt.length() > 0 && !map.busNeed.isEmpty() && round < 3) fetchBusNeed(v, keep, round, my);
-                    else if (busRefreshing) busOk();
+                    else { if (busRefreshing) busOk(); if (txt.length() > 0 && "bus".equals(map.view) && map.busNeed.isEmpty()) brPrefetch(); }
                 } });
             }
         }, "shell-mapb").start();
+    }
+    // ── 노선 정류장 목록 미리 받기: 도착정보가 뜬 가장 가까운 정류장의 앞 몇 개 노선은 목록을 기기에 7일 두어, 누르면 바로 그린다(정류장 목록은 거의 안 바뀐다) ──
+    private long brPfAt; private String brPfSig = "";
+    private void brPrefetch() {
+        if (map.routeCount(0) == 0) return;
+        String sig = map.busView() + "|" + map.rtsSig();
+        long now = System.currentTimeMillis();
+        if (sig.equals(brPfSig) && now - brPfAt < 600000L) return;
+        brPfSig = sig; brPfAt = now;
+        final List<MapCore> jobs = new ArrayList<MapCore>();
+        for (int ri = 0, n = Math.min(4, map.routeCount(0)); ri < n; ri++) {
+            MapCore m = map.routeClone(0, ri);
+            if (m != null && brCacheGet(m.brRid) == null) jobs.add(m);
+        }
+        if (jobs.isEmpty()) return;
+        final String th = ShellCore.theme(store);
+        new Thread(new Runnable() {
+            @Override public void run() {
+                for (final MapCore m : jobs) {
+                    try {
+                        for (int round = 0; round < 3 && m.brStnJson.length() == 0; round++) {
+                            NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/map", m.brRequest(ShellCore.CAP, th), 8000);
+                            if (r.status != 200) break;
+                            m.onBr(r.body);
+                            if (m.brStnJson.length() > 0) break;
+                            boolean any = false;
+                            for (String[] nd : new ArrayList<String[]>(m.brNeed)) {
+                                if (!nd[0].endsWith("s")) continue;                                   // 목록만(위치는 열 때 새로 받는다)
+                                String u = MapCore.busFetchUrl(nd[1]);
+                                NetPost.Res g = u.length() == 0 ? null : NetPost.get(u, 9000);
+                                m.addBrRes(nd[0], g != null && g.status == 200 && g.body != null ? g.body : ""); any = true;
+                            }
+                            if (!any) break;
+                        }
+                    } catch (Throwable ignored) { }
+                    if (m.brStnJson.length() > 0) main.post(new Runnable() { @Override public void run() { brCachePut(m); } });
+                }
+            }
+        }, "shell-brpf").start();
     }
     private void fetchBusNeed(final ScreenView v, final boolean keep, final int round, final int my) {
         final List<String[]> need = new ArrayList<String[]>(map.busNeed);
