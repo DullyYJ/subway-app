@@ -440,6 +440,11 @@ public final class HomeCore {
             + "&SN=" + HomeSearchCore.enc(cut(s.name, 60)) + "&EN=" + HomeSearchCore.enc(cut(d.name, 60));
     }
     public static String routeUrl(String qs) { return ShellCore.BASE + "/route-v2-app?" + qs; }
+    /** 같은 출발·도착(고른 시각이면 같은 시각)을 다시 찾을 때 지난 결과를 먼저 보이기 위한 열쇠 — "지금 시각"(baseMs)은 빼고 만든다(안 빼면 매번 달라 못 쓴다). */
+    public static String routeSwrKey(String qs, boolean pickedBase, long base) {
+        if (qs == null) return null;
+        return qs.replaceFirst("&baseMs=\\d+", "") + (pickedBase ? "&pb=" + base : "");
+    }
 
     static String num(double v) { return (v == Math.rint(v) && Math.abs(v) < 1e15) ? String.valueOf((long) v) : String.valueOf(v); }
     static String cut(String s, int n) { return s.length() > n ? s.substring(0, n) : s; }
