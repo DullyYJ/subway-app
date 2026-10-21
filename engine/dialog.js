@@ -7,14 +7,15 @@
 //     report 글 신고 확인(취소 / 신고)
 //     exit  앱 종료 확인(아니요 / 종료)
 //     pop   잠깐 떴다 사라지는 작은 알림(_pickPop: 출발지/도착지 설정 안내 · 공유 안내 …)
+//     walk  하차 뒤 도보 안내 아래 시트(웹 walkModal): 직선거리 · 도보 예상 · 카카오맵/네이버지도 길안내 주소 · 기준 시각 — 안내창이 아니라 시트라 dlg 모양은 없다
 //   앱(웹)은 사실만 보낸다: kind · (diag) 기록 줄 목록과 복사 결과 · (pop) 글 두 줄과 모양(cls). 앱(기기)은 받은 화면을 그린다.
 //
 // 입력  dialogScreen({ cap }, f)   cap 16 이상
-//   f = { kind:'perm'|'diag'|'pop', lines:[기록 줄…](오래된 것부터, diag), cp:0|1|2(diag 복사 결과: 0 없음 · 1 됨 · 2 실패), msg, sub, cls:''|'sh'(pop) }
+//   f = { kind:'perm'|'diag'|'pop'|'walk', walk: { my:{lat,lng}|null, dest:{lat,lng,name}|null, mode:'start'|'arrive'|'manual', nowMs, tzoMin, theme },  lines:[기록 줄…](오래된 것부터, diag), cp:0|1|2(diag 복사 결과: 0 없음 · 1 됨 · 2 실패), msg, sub, cls:''|'sh'(pop) }
 // 출력  { ok, v:1, screen:'dlg', dlg:{…카드 모양}, bg, head:[…], body:[…], foot?:[…], info:{kind}, rev }
 //        행동 이름: dl.ok · dl.no(perm · exit · report) · dl.copy · dl.clear · dl.close(diag). 흐린 곳을 누르면 dlg.tap(perm 만 dl.no).
 var DLG_CAP = 16;
-var DLG_KINDS = { perm: 1, diag: 1, pop: 1, exit: 1, report: 1 };
+var DLG_KINDS = { perm: 1, diag: 1, pop: 1, exit: 1, report: 1, walk: 1 };
 var DLG_MAXLINES = 600, DLG_CHUNK = 1700;
 var DLG_EMOJI = /[☀-➿⬀-⯿️‍]|[\uD83C-\uD83E][\uDC00-\uDFFF]/g;
 
@@ -114,14 +115,70 @@ function dlgPop(f) {
   };
 }
 
+// ── 도보 안내 시트(웹 openWalkModal · _walkUpdateMap · openKakaoNav · openNaverNav 와 같은 계산) ──
+var WALK_MPM = 67, WALK_REFRESH_MS = 30000;
+function wkNum(v) { var n = typeof v === 'string' ? parseFloat(v) : v; return typeof n === 'number' && isFinite(n) ? n : null; }
+function wkHav(a1, o1, a2, o2) {
+  var R = 6371000, r = Math.PI / 180, dA = (a2 - a1) * r, dO = (o2 - o1) * r;
+  var h = Math.sin(dA / 2) * Math.sin(dA / 2) + Math.cos(a1 * r) * Math.cos(a2 * r) * Math.sin(dO / 2) * Math.sin(dO / 2);
+  return 2 * R * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+}
+function wkClock(nowMs, tzoMin) {
+  var t = wkNum(nowMs); if (t === null) return '';
+  var z = wkNum(tzoMin); if (z === null) z = -540;
+  var d = new Date(t - z * 60000), h = d.getUTCHours(), mi = d.getUTCMinutes();
+  return (h < 12 ? '오전 ' : '오후 ') + ('0' + (h % 12 || 12)).slice(-2) + ':' + ('0' + mi).slice(-2);
+}
+function dlgWalk(f) {
+  var w = (f.walk && typeof f.walk === 'object') ? f.walk : {};
+  var mode = w.mode === 'start' || w.mode === 'arrive' ? w.mode : 'manual';
+  var my = w.my && wkNum(w.my.lat) !== null && wkNum(w.my.lng) !== null ? { lat: wkNum(w.my.lat), lng: wkNum(w.my.lng) } : null;
+  var dst = w.dest && wkNum(w.dest.lat) && wkNum(w.dest.lng) ? { lat: wkNum(w.dest.lat), lng: wkNum(w.dest.lng), name: dlgClean(w.dest.name, 40) } : null;
+  var dName = dst ? dst.name : dlgClean(w.dest && w.dest.name, 40);
+  var title = mode === 'start' ? '출발역까지 도보 안내' : (mode === 'arrive' ? '목적지까지 도보 안내' : '현재 위치 지도');
+  var dist = my ? wkHav(my.lat, my.lng, dst ? dst.lat : my.lat, dst ? dst.lng : my.lng) : null;
+  var min = dist === null ? null : Math.round(dist / WALK_MPM);
+  var distS = dist === null ? '-' : (dist < 1000 ? Math.round(dist) + 'm' : (dist / 1000).toFixed(1) + 'km');
+  var timeS = dist === null || !dst ? '-' : (min < 1 ? '1분 미만' : min + '분');
+  var clock = dist === null ? '' : wkClock(w.nowMs, w.tzoMin);
+  var green = w.theme === 'light' ? '#29b96a' : '#34c759';
+  var nm = dName || '목적지', enc = encodeURIComponent;
+  var nav = null;
+  if (dst) {
+    var k = 'kakaomap://route?' + (my ? 'sp=' + my.lat + ',' + my.lng + '&' : '') + 'ep=' + dst.lat + ',' + dst.lng + '&by=FOOT';
+    var kw = 'https://map.kakao.com/link/to/' + enc(nm) + ',' + dst.lat + ',' + dst.lng;
+    var n = 'nmap://route/walk?' + (my ? 'slat=' + my.lat + '&slng=' + my.lng + '&sname=' + enc('내위치') + '&' : '') + 'dlat=' + dst.lat + '&dlng=' + dst.lng + '&dname=' + enc(nm) + '&appname=com.dullyyj.subway';
+    var nw = 'https://map.naver.com/p/directions/' + (my ? my.lng + ',' + my.lat + ',%EB%82%B4%EC%9C%84%EC%B9%98,,-1/' : '-/') + dst.lng + ',' + dst.lat + ',' + enc(nm) + ',,-1/walk';
+    nav = { kakao: [k, kw], naver: [n, nw] };
+  }
+  var tile = function (label, val, hc) {
+    var kids = [{ t: 'text', pad: [0, 0, 0, 3], s: label, size: 10, align: 'center', color: 'sub' },
+      { t: 'text', s: val, size: 18, bold: true, align: 'center', color: 'text', lh: 1.3 }];
+    if (hc) kids[1].hl = [[0, val.length, hc]];
+    return { t: 'panel', fill: 'card2', line: 'card2', r: 10, ip: [12, 12, 12, 12], kids: kids };
+  };
+  var head = [
+    { t: 'bar', pad: [16, 14, 16, 10], title: title, sub: dName ? '→ ' + dName : '', btn: '닫기', act: { a: 'call', v: 'wk.close' } },
+    { t: 'row', pad: [12, 4, 12, 14], gap: 8, kids: [tile('직선거리', distS, ''), tile('도보 예상', timeS, green)] },
+    { t: 'btnrow', pad: [12, 0, 12, 0], gap: 8, h: 48, eq: true, bsize: 14, r: 14, items: [
+      { label: '카카오맵', fill: '#FEE500', line: '#FEE500', tc: '#3A1D1D', act: { a: 'call', v: 'wk.kakao' } },
+      { label: '네이버지도', fill: '#03C75A', line: '#03C75A', tc: '#ffffff', act: { a: 'call', v: 'wk.naver' } }
+    ] },
+    { t: 'text', pad: [12, 8, 12, 24], s: clock ? clock + ' 기준' : ' ', size: 10, align: 'center', color: 'sub' }
+  ];
+  return { dlg: null, bg: 'card', head: head, body: [{ t: 'spacer', h: 0 }], foot: null,
+    info: { nav: nav, msg: dst ? '' : '목적지 좌표를 찾을 수 없습니다', refresh: WALK_REFRESH_MS, dist: dist === null ? -1 : Math.round(dist), min: min === null ? -1 : min } };
+}
+
 function dialogScreen(inp, f) {
   inp = inp || {};
   if (!(Number(inp.cap) >= DLG_CAP)) return { ok: false, error: 'cap' };
   f = (f && typeof f === 'object') ? f : {};
   var kind = dlgStr(f.kind, 8);
   if (!DLG_KINDS[kind]) return { ok: false, error: 'kind' };
-  var d = kind === 'perm' ? dlgPerm() : (kind === 'report' ? dlgReport() : kind === 'exit' ? dlgExit() : (kind === 'diag' ? dlgDiag(f) : dlgPop(f)));
-  var out = { ok: true, v: 1, screen: 'dlg', dlg: d.dlg, bg: d.bg, head: d.head, body: d.body, info: d.info };
+  var d = kind === 'perm' ? dlgPerm() : (kind === 'report' ? dlgReport() : kind === 'exit' ? dlgExit() : (kind === 'diag' ? dlgDiag(f) : (kind === 'walk' ? dlgWalk(f) : dlgPop(f))));
+  var out = { ok: true, v: 1, screen: kind === 'walk' ? 'walk' : 'dlg', bg: d.bg, head: d.head, body: d.body, info: d.info };
+  if (d.dlg) out.dlg = d.dlg;
   if (d.foot) out.foot = d.foot;
   out.info.kind = kind;
   out.rev = 'd1:' + dlgHash(JSON.stringify([kind, d.dlg, d.head, d.body, d.foot || 0]));
