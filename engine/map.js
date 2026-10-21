@@ -465,6 +465,8 @@ function mapBusStopView(s, rows, num, pi) {
   });
   return kids;
 }
+// 정류장 방식 위쪽 지도 칸(핀은 엔진이 정한다). 받는 중에도 내 위치 · 찾은 정류장으로 먼저 보여 준다 — 도착정보를 기다리느라 지도가 늦게 뜨지 않게.
+function mapBusTmap(pts) { return { t: 'tmap', h: 210, r: 12, pad: [8, 12, 2, 12], pts: pts, act: { a: 'call', v: 'mp.all' } }; }
 function mapBusBody(f, info) {
   var b = f.bus;
   if (!b || !isFinite(Number(b.lat)) || !isFinite(Number(b.lng))) {
@@ -475,14 +477,14 @@ function mapBusBody(f, info) {
   }
   var la = Number(b.lat), lo = Number(b.lng), res = (b.res && typeof b.res === 'object') ? b.res : {};
   var need0 = mapBusNeedStops(la, lo);
-  if (need0.some(function (n) { return res[n.k] === undefined; })) { info.bus = { st: 'need', need: need0 }; return [{ t: 'text', s: '주변 정류장 찾는 중...', size: 13, color: 'sub', align: 'center', pad: [40, 20, 40, 20] }]; }
+  var mine = { la: la, lo: lo, k: 'm', n: '', l: '내 위치' };
+  if (need0.some(function (n) { return res[n.k] === undefined; })) { info.bus = { st: 'need', need: need0 }; return [mapBusTmap([mine]), { t: 'text', s: '주변 정류장 찾는 중...', size: 13, color: 'sub', align: 'center', pad: [20, 20, 20, 20] }]; }
   var stops = mapBusStops(f);
   if (!stops.length && res.d1 === undefined) {                                           // 공공 API 가 모두 비었으면 서버 정류장 표(D1)로
     info.bus = { st: 'need', need: [{ k: 'd1', url: MAP_D1_BASE + '/bus-stops?lat=' + la + '&lng=' + lo + '&radius=800' }] };
-    return [{ t: 'text', s: '주변 정류장 찾는 중...', size: 13, color: 'sub', align: 'center', pad: [40, 20, 40, 20] }];
+    return [mapBusTmap([mine]), { t: 'text', s: '주변 정류장 찾는 중...', size: 13, color: 'sub', align: 'center', pad: [20, 20, 20, 20] }];
   }
-  if (!stops.length) { info.bus = { st: 'empty' }; return [{ t: 'text', s: '주변 800m 안에 정류장을 찾지 못했어요.', size: 13, color: 'sub', align: 'center', lh: 1.7, pad: [40, 20, 20, 20] }]; }
-  if (res.a0 === undefined) { info.bus = { st: 'need', need: stops.map(function (s, i) { return { k: 'a' + i, url: mapBusArrUrl(s) }; }) }; return [{ t: 'text', s: '도착정보 가져오는 중...', size: 13, color: 'sub', align: 'center', pad: [40, 20, 40, 20] }]; }
+  if (!stops.length) { info.bus = { st: 'empty' }; return [mapBusTmap([mine]), { t: 'text', s: '주변 800m 안에 정류장을 찾지 못했어요.', size: 13, color: 'sub', align: 'center', lh: 1.7, pad: [20, 20, 20, 20] }]; }
   // 정류장 지도: 정류장마다 번호 핀(좌표가 있는 것만) + 내 위치. 핀 순서 = pts 순서, '위치 보기' 는 그 핀을 가운데 두고 크게 연다.
   var pts = [], pidx = [];
   stops.forEach(function (s, i) {
@@ -490,7 +492,8 @@ function mapBusBody(f, info) {
     if (isFinite(sla) && isFinite(slo) && (sla !== 0 || slo !== 0)) { pidx[i] = pts.length; pts.push({ la: sla, lo: slo, k: 's', n: String(i + 1), l: s.nm || '정류장' }); } else pidx[i] = -1;
   });
   pts.push({ la: la, lo: lo, k: 'm', n: '', l: '내 위치' });
-  var body = [{ t: 'tmap', h: 210, r: 12, pad: [8, 12, 2, 12], pts: pts, act: { a: 'call', v: 'mp.all' } },
+  if (res.a0 === undefined) { info.bus = { st: 'need', need: stops.map(function (s, i) { return { k: 'a' + i, url: mapBusArrUrl(s) }; }) }; return [mapBusTmap(pts), { t: 'text', s: '내 주변 정류장 ' + stops.length + '곳', size: 12, color: 'sub', pad: [10, 14, 0, 4] }, { t: 'text', s: '도착정보 가져오는 중...', size: 13, color: 'sub', align: 'center', pad: [20, 20, 20, 20] }]; }
+  var body = [mapBusTmap(pts),
               { t: 'text', s: '내 주변 정류장 ' + stops.length + '곳', size: 12, color: 'sub', pad: [10, 14, 0, 4] }];
   stops.forEach(function (s, i) {
     var txt = String(res['a' + i] || ''), rows = s.src === 'topis' ? mapSeoulArr(txt) : s.src === 'gbis' ? mapGbisArr(txt) : mapTagoArr(txt);

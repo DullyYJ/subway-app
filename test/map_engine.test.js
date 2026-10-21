@@ -114,11 +114,13 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
   ok(b.info.view === 'bus' && b.info.bus.st === 'noloc' && JSON.stringify(b.body).includes('mp.loc'), '버스: 위치 없으면 안내 + 내 위치 단추');
   b = mk({ lat: 37.5, lng: 127.0, res: {} });
   ok(b.info.bus.st === 'need' && b.info.bus.need.map(n => n.k).join() === 'tp,gg,tn' && /getStationByPos\?tmX=127&tmY=37\.5/.test(b.info.bus.need[0].url) && /busstationservice\/v2\/getBusStationAroundListv2\?x=127&y=37\.5&format=json/.test(b.info.bus.need[1].url) && /gpsLati=37\.5&gpsLong=127/.test(b.info.bus.need[2].url), '버스 1단계: 서울 좌표면 TOPIS + 경기 GBIS + TAGO 주소를 요청');
+  ok(b.body[0].t === 'tmap' && b.body[0].pts.length === 1 && b.body[0].pts[0].k === 'm' && b.body[0].pts[0].la === 37.5, '정류장을 찾는 중에도 내 위치 지도가 먼저 뜬다');
   b = mk({ lat: 35.1, lng: 129.0, res: {} });
   ok(b.info.bus.need.map(n => n.k).join() === 'tn', '서울 밖이면 TAGO 만');
   b = mk({ lat: 37.5, lng: 127.0, res: { tp: SEOUL_POS, gg: '', tn: '' } });
   const n2 = b.info.bus.need;
   ok(b.info.bus.st === 'need' && n2.length === 4 && n2[0].k === 'a0' && /getStationByUid\?arsId=11111/.test(n2[0].url), '버스 2단계: 중복·미정차 제거, 출구 우선, 도착 주소 요청 ' + n2.length);
+  ok(b.body[0].t === 'tmap' && b.body[0].pts.length >= 2 && b.body[0].pts[b.body[0].pts.length - 1].k === 'm' && /도착정보 가져오는 중/.test(JSON.stringify(b.body)), '도착정보를 기다리는 동안에도 정류장 지도가 먼저 뜬다(핀: 정류장 + 내 위치)');
   ok(n2.map(n => n.url.match(/arsId=(\d+)/)[1]).join() === '11111,44444,22222,33333', '출구(350m 안) 먼저 → 나머지 가까운 순');
   b = mk({ lat: 37.5, lng: 127.0, res: { tp: SEOUL_POS, gg: '', tn: '', a0: SEOUL_ARR, a1: '', a2: '', a3: '' } });
   const txt = JSON.stringify(b.body);
@@ -135,6 +137,7 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
   ok(b.info.bus.st === 'need' && b.info.bus.need.length === 1 && b.info.bus.need[0].k === 'd1' && /^https:\/\/gentle-lab-7e47subway-api\.phg0643\.workers\.dev\/bus-stops\?lat=37\.5&lng=127&radius=800$/.test(b.info.bus.need[0].url), '공공 API 가 모두 비면 서버 정류장 표(D1)를 요청');
   b = mk({ lat: 37.5, lng: 127.0, res: { tp: '', gg: '', tn: '', d1: '{"stops":[]}' } });
   ok(b.info.bus.st === 'empty', '정류장 없음')
+  ok(b.body[0].t === 'tmap' && b.body[0].pts.length === 1, '정류장이 없어도 내 위치 지도는 보인다');
   // 경기 GBIS (웹 _fetchNearStopsGG / _ggArrivals 와 같은 규칙)
   const GG = (rows) => JSON.stringify({ response: { msgHeader: { queryTime: 'x', resultCode: 0, resultMessage: '정상' }, msgBody: { busStationAroundList: rows } } });
   const GGS = GG([{ stationId: 203000123, stationName: '수원역', x: 127.0011, y: 37.2661, distance: 120, mobileNo: '31001' }, { stationId: 203000124, stationName: '수원역환승센터', x: 127.0021, y: 37.2671, distance: 260 }]);

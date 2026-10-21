@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-21s114";
+var ENGINE_VERSION = "route-v2-2026-10-21s115";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -19157,6 +19157,8 @@ function mapBusStopView(s, rows, num, pi) {
   });
   return kids;
 }
+// \uc815\ub958\uc7a5 \ubc29\uc2dd \uc704\ucabd \uc9c0\ub3c4 \uce78(\ud540\uc740 \uc5d4\uc9c4\uc774 \uc815\ud55c\ub2e4). \ubc1b\ub294 \uc911\uc5d0\ub3c4 \ub0b4 \uc704\uce58 \u00b7 \ucc3e\uc740 \uc815\ub958\uc7a5\uc73c\ub85c \uba3c\uc800 \ubcf4\uc5ec \uc900\ub2e4 \u2014 \ub3c4\ucc29\uc815\ubcf4\ub97c \uae30\ub2e4\ub9ac\ub290\ub77c \uc9c0\ub3c4\uac00 \ub2a6\uac8c \ub728\uc9c0 \uc54a\uac8c.
+function mapBusTmap(pts) { return { t: 'tmap', h: 210, r: 12, pad: [8, 12, 2, 12], pts: pts, act: { a: 'call', v: 'mp.all' } }; }
 function mapBusBody(f, info) {
   var b = f.bus;
   if (!b || !isFinite(Number(b.lat)) || !isFinite(Number(b.lng))) {
@@ -19167,14 +19169,14 @@ function mapBusBody(f, info) {
   }
   var la = Number(b.lat), lo = Number(b.lng), res = (b.res && typeof b.res === 'object') ? b.res : {};
   var need0 = mapBusNeedStops(la, lo);
-  if (need0.some(function (n) { return res[n.k] === undefined; })) { info.bus = { st: 'need', need: need0 }; return [{ t: 'text', s: '\uc8fc\ubcc0 \uc815\ub958\uc7a5 \ucc3e\ub294 \uc911...', size: 13, color: 'sub', align: 'center', pad: [40, 20, 40, 20] }]; }
+  var mine = { la: la, lo: lo, k: 'm', n: '', l: '\ub0b4 \uc704\uce58' };
+  if (need0.some(function (n) { return res[n.k] === undefined; })) { info.bus = { st: 'need', need: need0 }; return [mapBusTmap([mine]), { t: 'text', s: '\uc8fc\ubcc0 \uc815\ub958\uc7a5 \ucc3e\ub294 \uc911...', size: 13, color: 'sub', align: 'center', pad: [20, 20, 20, 20] }]; }
   var stops = mapBusStops(f);
   if (!stops.length && res.d1 === undefined) {                                           // \uacf5\uacf5 API \uac00 \ubaa8\ub450 \ube44\uc5c8\uc73c\uba74 \uc11c\ubc84 \uc815\ub958\uc7a5 \ud45c(D1)\ub85c
     info.bus = { st: 'need', need: [{ k: 'd1', url: MAP_D1_BASE + '/bus-stops?lat=' + la + '&lng=' + lo + '&radius=800' }] };
-    return [{ t: 'text', s: '\uc8fc\ubcc0 \uc815\ub958\uc7a5 \ucc3e\ub294 \uc911...', size: 13, color: 'sub', align: 'center', pad: [40, 20, 40, 20] }];
+    return [mapBusTmap([mine]), { t: 'text', s: '\uc8fc\ubcc0 \uc815\ub958\uc7a5 \ucc3e\ub294 \uc911...', size: 13, color: 'sub', align: 'center', pad: [20, 20, 20, 20] }];
   }
-  if (!stops.length) { info.bus = { st: 'empty' }; return [{ t: 'text', s: '\uc8fc\ubcc0 800m \uc548\uc5d0 \uc815\ub958\uc7a5\uc744 \ucc3e\uc9c0 \ubabb\ud588\uc5b4\uc694.', size: 13, color: 'sub', align: 'center', lh: 1.7, pad: [40, 20, 20, 20] }]; }
-  if (res.a0 === undefined) { info.bus = { st: 'need', need: stops.map(function (s, i) { return { k: 'a' + i, url: mapBusArrUrl(s) }; }) }; return [{ t: 'text', s: '\ub3c4\ucc29\uc815\ubcf4 \uac00\uc838\uc624\ub294 \uc911...', size: 13, color: 'sub', align: 'center', pad: [40, 20, 40, 20] }]; }
+  if (!stops.length) { info.bus = { st: 'empty' }; return [mapBusTmap([mine]), { t: 'text', s: '\uc8fc\ubcc0 800m \uc548\uc5d0 \uc815\ub958\uc7a5\uc744 \ucc3e\uc9c0 \ubabb\ud588\uc5b4\uc694.', size: 13, color: 'sub', align: 'center', lh: 1.7, pad: [20, 20, 20, 20] }]; }
   // \uc815\ub958\uc7a5 \uc9c0\ub3c4: \uc815\ub958\uc7a5\ub9c8\ub2e4 \ubc88\ud638 \ud540(\uc88c\ud45c\uac00 \uc788\ub294 \uac83\ub9cc) + \ub0b4 \uc704\uce58. \ud540 \uc21c\uc11c = pts \uc21c\uc11c, '\uc704\uce58 \ubcf4\uae30' \ub294 \uadf8 \ud540\uc744 \uac00\uc6b4\ub370 \ub450\uace0 \ud06c\uac8c \uc5f0\ub2e4.
   var pts = [], pidx = [];
   stops.forEach(function (s, i) {
@@ -19182,7 +19184,8 @@ function mapBusBody(f, info) {
     if (isFinite(sla) && isFinite(slo) && (sla !== 0 || slo !== 0)) { pidx[i] = pts.length; pts.push({ la: sla, lo: slo, k: 's', n: String(i + 1), l: s.nm || '\uc815\ub958\uc7a5' }); } else pidx[i] = -1;
   });
   pts.push({ la: la, lo: lo, k: 'm', n: '', l: '\ub0b4 \uc704\uce58' });
-  var body = [{ t: 'tmap', h: 210, r: 12, pad: [8, 12, 2, 12], pts: pts, act: { a: 'call', v: 'mp.all' } },
+  if (res.a0 === undefined) { info.bus = { st: 'need', need: stops.map(function (s, i) { return { k: 'a' + i, url: mapBusArrUrl(s) }; }) }; return [mapBusTmap(pts), { t: 'text', s: '\ub0b4 \uc8fc\ubcc0 \uc815\ub958\uc7a5 ' + stops.length + '\uacf3', size: 12, color: 'sub', pad: [10, 14, 0, 4] }, { t: 'text', s: '\ub3c4\ucc29\uc815\ubcf4 \uac00\uc838\uc624\ub294 \uc911...', size: 13, color: 'sub', align: 'center', pad: [20, 20, 20, 20] }]; }
+  var body = [mapBusTmap(pts),
               { t: 'text', s: '\ub0b4 \uc8fc\ubcc0 \uc815\ub958\uc7a5 ' + stops.length + '\uacf3', size: 12, color: 'sub', pad: [10, 14, 0, 4] }];
   stops.forEach(function (s, i) {
     var txt = String(res['a' + i] || ''), rows = s.src === 'topis' ? mapSeoulArr(txt) : s.src === 'gbis' ? mapGbisArr(txt) : mapTagoArr(txt);
@@ -19509,13 +19512,14 @@ function hcardsScreen(inp, f) {
   var tkf = f.tk && typeof f.tk === 'object' ? f.tk : {};
   var talkS = hcTalk({ cap: 15 }, { m: hcArr(tkf.m).slice(-8), fold: hcNum(tkf.fold, 0), tzo: hcNum(tkf.tzo, -tz) });
   var body = [];
-  if (aiS && aiS.ok) body.push(hcPanel(hcKids(aiS)));
+  // \uc21c\uc11c\ub294 \uc6f9 \ud648\uacfc \uac19\ub2e4: \ud63c\uc7a1\ub3c4(\uce90\ub9ad\ud130 \uc7a5\uba74) \u2192 AI \uc2b9\ubb34\uc6d0 \u2192 \uc2e4\uc2dc\uac04 \ub300\ud654
   if (congS && congS.ok) {
     var ck = hcKids(congS), scn = hcSceneNode(now, tz, !!rt, hcWx(f.wx && typeof f.wx === 'object' ? f.wx.wF : null), stn, f.rd);
     if (scn) ck.unshift(scn);                                           // \ud63c\uc7a1\ub3c4 \uce74\ub4dc \ub9e8 \uc704: \uce90\ub9ad\ud130 \uc7a5\uba74(\uc6f9\uacfc \uac19\uc740 \uc790\ub9ac)
     if (f.sh) ck.splice(scn ? 1 : 0, 0, hcShareBtn());                    // \ud0d1\uc2b9 \uc548\ub0b4 \uc911\uc774\uba74 '\ub0b4 \uc704\uce58 \uacf5\uc720'(\uc571\uc740 f.sh=1 \ub9cc \ubcf4\ub0b8\ub2e4)
     body.push(hcPanel(ck, congS.info && congS.info.bc && /^#/.test(congS.info.bc) ? congS.info.bc : ''));
   }
+  if (aiS && aiS.ok) body.push(hcPanel(hcKids(aiS)));
   if (talkS && talkS.ok) body.push(hcPanel(hcKids(talkS)));
   var out = { ok: true, v: HC_V, screen: 'hcards', cover: 'chips', head: [], body: body, info: { ai: aiS && aiS.ok ? aiS.info.mode : '', cong: cs.mode, stn: stn, near: near ? near[0] : '' } };
   out.rev = 'h' + HC_V + ':' + hcHash(JSON.stringify(body));

@@ -16,7 +16,7 @@ const txt = ns => flat(ns).map(n => n.s || '').join('\n');
 
 ok(E.hcardsScreen({ cap: 17 }, base()).ok === false && call({}).ok === false, 'cap 18 미만 · now 없으면 만들지 않는다');
 let o = call(base());
-ok(o.ok && o.screen === 'hcards' && o.body.length === 3 && o.body.every(p => p.t === 'panel') && /^h1:/.test(o.rev), '카드 세 장(AI · 혼잡도 · 대화)');
+ok(o.ok && o.screen === 'hcards' && o.body.length === 3 && o.body.every(p => p.t === 'panel') && /^h1:/.test(o.rev), '카드 세 장(혼잡도 · AI 승무원 · 대화 — 웹 홈과 같은 순서)');
 const nodes = flat(o.body);
 const aih = nodes.find(n => n.t === 'aih');
 ok(aih && /부평 → 강남 · 남은시간: 24분/.test(aih.s) && aih.act.v === 'ai.refresh' && aih.to === now + 300000, 'AI 제목: 출발 → 도착 · 남은시간, 새로고침, 다음 갱신 시각');
@@ -40,27 +40,28 @@ o = call(base({ sh: 1, r: { data: mk([sub('부평', '강남', '수도권 1호선
 { const sb = flat(o.body).filter(n => n.act && n.act.v === 'share.loc'); ok(sb.length === 1 && sb[0].t === 'button' && sb[0].s === '내 위치 공유' && sb[0].act.a === 'call', '공유 단추: f.sh 가 있으면 하나'); }
 // 아무 사실도 없음
 o = call(base({ r: null, gps: null }));
+ok(!JSON.stringify(o.body[0]).includes('AI 승무원') && JSON.stringify(o.body[1]).includes('AI 승무원') && JSON.stringify(o.body[2]).includes('실시간'), '순서: 혼잡도 장면 → AI 승무원 → 실시간 대화(웹 홈과 같다)');
 ok(o.ok && o.info.ai === 'empty' && o.info.cong === 'none' && o.body.length === 3, '아무것도 없으면 안내 문구');
 ok(E.hcNearest(0, 0) === null && E.hcNearest(37.4979, 127.0276)[0] === '강남', '가까운 역 3km 안');
 // 캐릭터 장면: 혼잡도 카드 맨 위에 엔진이 정한 장면(JSON 글)이 실린다
 {
-  const sc = call(base({ wx: { wF: { temp: -3, txt: '눈', rain: 80 } } })).body[1].kids[0];
+  const sc = call(base({ wx: { wF: { temp: -3, txt: '눈', rain: 80 } } })).body[0].kids[0];
   const v = sc && sc.t === 'scene' ? JSON.parse(sc.sc) : null;
   ok(sc && sc.t === 'scene' && sc.h >= 80 && sc.sc.length < 6000 && v && v.mode === 'idle' && v.cast.length === 6 && v.hero && v.look.wk === 'snow', '혼잡도 카드 맨 위에 장면(idle · 눈) 노드가 있다');
-  const a = JSON.stringify(call(base()).body[1].kids[0]), b = JSON.stringify(call(base()).body[1].kids[0]);
+  const a = JSON.stringify(call(base()).body[0].kids[0]), b = JSON.stringify(call(base()).body[0].kids[0]);
   ok(a === b, '같은 사실이면 같은 장면(안 흔들린다)');
   ok(E.hcSceneNode(now, 540, false, null, '').sc.indexOf('"wxKnown":false') > 0, '날씨를 모르면 모른다고 보낸다(지어내지 않는다)');
 }
 // 탑승 중 장면: 앱이 보낸 탑승 재료(rd)로 기다림 · 버스 타고 가는 중 · 내림, 지하철 타고 가는 동안은 장면 없음(혼잡도 카드)
 {
   const nodes = [{ name: '출발', isOrigin: true }, { name: 'A정류장', isBus: true, lineName: '6001' }, { name: 'B정류장', isBus: true, lineName: '6001' }, { name: 'C정류장', isBus: true, lineName: '6001' }];
-  const sn = rd => { const k = call(base({ rd })).body[1].kids[0]; return k && k.t === 'scene' ? JSON.parse(k.sc) : null; };
+  const sn = rd => { const k = call(base({ rd })).body[0].kids[0]; return k && k.t === 'scene' ? JSON.parse(k.sc) : null; };
   const w = sn({ here: 1, boarded: false, key: 'k', nodes }), r = sn({ here: 2, boarded: true, key: 'k', nodes }), a = sn({ here: 3, boarded: true, key: 'k', nodes });
   ok(w && w.mode === 'wait' && w.venue === 'bus' && /기다리는/.test(w.tag), '탑승 재료(승차 전) → 기다리는 중 장면: ' + (w && w.tag));
   ok(r && r.mode === 'ride' && r.venue === 'bus', '버스 타고 가는 중 장면');
   ok(a && a.mode === 'alight', '내릴 정류장에 닿으면 내림 장면');
   const sub = [{ name: '출발', isOrigin: true }, { name: '강남', isSub: true, lineName: '2호선' }, { name: '역삼', isSub: true, lineName: '2호선' }];
-  const sk = call(base({ rd: { here: 1, boarded: true, key: 's', nodes: sub } })).body[1].kids[0];
+  const sk = call(base({ rd: { here: 1, boarded: true, key: 's', nodes: sub } })).body[0].kids[0];
   ok(sk && sk.t !== 'scene', '지하철 타고 가는 동안은 장면 대신 혼잡도 카드가 맨 위');
   const bad = sn({ here: 1, nodes: [1] });
   ok(bad && bad.mode === 'idle', '탑승 재료가 이상하면 평소 대기실 장면');

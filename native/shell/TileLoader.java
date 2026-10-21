@@ -24,7 +24,7 @@ import java.util.concurrent.Executors;
  * OSM 타일 이용 규칙: 앱을 알리는 User-Agent 를 보내고, 받은 타일을 다시 받지 않게 캐시하며, 한 번에 많이 받지 않는다(동시 3개).
  */
 final class TileLoader {
-    private static final long DISK_MAX_AGE = 7L * 24L * 3600000L, RETRY_AFTER = 20000L;
+    private static final long DISK_MAX_AGE = 7L * 24L * 3600000L, RETRY_AFTER = 8000L; private static final int MAX_TRIES = 4;
     private static TileLoader inst;
 
     static synchronized TileLoader get(Context c) {
@@ -36,6 +36,7 @@ final class TileLoader {
     private final LruCache<String, Bitmap> mem = new LruCache<String, Bitmap>(96);
     private final HashSet<String> pending = new HashSet<String>();
     private final HashMap<String, Long> failedAt = new HashMap<String, Long>();
+    private final HashMap<String, Integer> tries = new HashMap<String, Integer>();
     private final ExecutorService pool = Executors.newFixedThreadPool(3);
     private final Handler main = new Handler(Looper.getMainLooper());
     private final java.util.ArrayList<Runnable> watchers = new java.util.ArrayList<Runnable>();
@@ -63,7 +64,8 @@ final class TileLoader {
         synchronized (pending) {
             if (pending.contains(key)) return null;
             Long f = failedAt.get(key);
-            if (f != null && System.currentTimeMillis() - f < RETRY_AFTER) return null;
+            Integer nt = tries.get(key);
+            if (f != null && System.currentTimeMillis() - f < (nt != null && nt >= MAX_TRIES ? 60000L : RETRY_AFTER)) return null;          // 몇 번 안 되면 한참 뒤에야 다시(배터리 · 데이터)
             pending.add(key);
         }
         pool.execute(new Runnable() { @Override public void run() { load(key, url); } });
@@ -83,8 +85,17 @@ final class TileLoader {
                 }
             }
         } catch (Throwable ignored) { b = null; }
-        synchronized (pending) { pending.remove(key); if (b == null) failedAt.put(key, System.currentTimeMillis()); }
+        boolean again = false;
+        synchronized (pending) {
+            pending.remove(key);
+            if (b == null) {
+                failedAt.put(key, System.currentTimeMillis());
+                Integer n = tries.get(key); n = n == null ? 1 : n + 1; tries.put(key, n);
+                again = n <= MAX_TRIES;
+            } else tries.remove(key);
+        }
         if (b != null) { mem.put(key, b); notifyWatchers(); }
+        else if (again) main.postDelayed(new Runnable() { @Override public void run() { notifyWatchers(); } }, RETRY_AFTER + 500L);          // 받지 못한 타일은 잠시 뒤 다시 그리면서 다시 받는다(몇 번만)
     }
 
     private static byte[] fetch(String url) {

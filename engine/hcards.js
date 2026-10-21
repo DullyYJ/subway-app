@@ -166,13 +166,14 @@ function hcardsScreen(inp, f) {
   var tkf = f.tk && typeof f.tk === 'object' ? f.tk : {};
   var talkS = hcTalk({ cap: 15 }, { m: hcArr(tkf.m).slice(-8), fold: hcNum(tkf.fold, 0), tzo: hcNum(tkf.tzo, -tz) });
   var body = [];
-  if (aiS && aiS.ok) body.push(hcPanel(hcKids(aiS)));
+  // 순서는 웹 홈과 같다: 혼잡도(캐릭터 장면) → AI 승무원 → 실시간 대화
   if (congS && congS.ok) {
     var ck = hcKids(congS), scn = hcSceneNode(now, tz, !!rt, hcWx(f.wx && typeof f.wx === 'object' ? f.wx.wF : null), stn, f.rd);
     if (scn) ck.unshift(scn);                                           // 혼잡도 카드 맨 위: 캐릭터 장면(웹과 같은 자리)
     if (f.sh) ck.splice(scn ? 1 : 0, 0, hcShareBtn());                    // 탑승 안내 중이면 '내 위치 공유'(앱은 f.sh=1 만 보낸다)
     body.push(hcPanel(ck, congS.info && congS.info.bc && /^#/.test(congS.info.bc) ? congS.info.bc : ''));
   }
+  if (aiS && aiS.ok) body.push(hcPanel(hcKids(aiS)));
   if (talkS && talkS.ok) body.push(hcPanel(hcKids(talkS)));
   var out = { ok: true, v: HC_V, screen: 'hcards', cover: 'chips', head: [], body: body, info: { ai: aiS && aiS.ok ? aiS.info.mode : '', cong: cs.mode, stn: stn, near: near ? near[0] : '' } };
   out.rev = 'h' + HC_V + ':' + hcHash(JSON.stringify(body));

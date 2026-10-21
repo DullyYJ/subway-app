@@ -1496,7 +1496,16 @@ public class ShellActivity extends Activity {
             }
             @Override public void fail(boolean noperm) { }
         });
+        // 위치도 마지막 위치도 없고 권한이 아직 없으면, 지도를 보러 온 사람에게 앱을 켠 뒤 한 번 권한을 묻는다(받으면 바로 지도와 정류장을 그린다)
+        if (map.busLL == null && !mapPermAsked && locOk == null && pendingLoc == null && checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            mapPermAsked = true;
+            locateOnce(REQ_MAP_LOC, new LocCb() {
+                @Override public void fix(Location l) { map.setBusLoc(l.getLatitude(), l.getLongitude()); loadMapBody(body, true); }
+                @Override public void fail(boolean noperm) { }
+            });
+        }
     }
+    private boolean mapPermAsked;
     private void reloadMap(boolean headToo) {
         seedMapLoc();
         if (headToo) { keyedShow(head, ShellCore.S_MAPH); loadMapHead(head, true, null, null); }
