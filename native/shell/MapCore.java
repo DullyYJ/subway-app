@@ -13,7 +13,7 @@ import java.util.Map;
  */
 public final class MapCore {
     public static final String K_MODE = "map_mode", K_REG = "map_reg", K_FLT = "map_flt";
-    public static final String K_BUSVW = "map_busvw", K_BUSFAV = "bus_fav", K_BUSAL = "bus_al", VW_NEAR = "near", VW_FAV = "fav";
+    public static final String K_BUSVW = "map_busvw", K_BUSFAV = "bus_fav", K_BUSAL = "bus_al", K_BUSORD = "bus_ord", VW_NEAR = "near", VW_FAV = "fav";
     public static final int R_NONE = 0, R_RENDER = 1, R_FIND = 2, R_LOC = 3, R_STN = 4, R_START = 5, R_DEST = 6, R_TT = 7, R_CLOSE = 8, R_TT_LOAD = 9, R_TT_RENDER = 10, R_BUS_LOC = 11, R_BUS_VIEW = 12, R_BUS_REF = 13, R_BUS_SEL = 14, R_ALIAS = 15,
             R_BR_OPEN = 16, R_BR_RENDER = 17, R_BR_REFRESH = 18, R_BR_CLOSE = 19, R_BR_START = 20, R_BR_FINISH = 21, R_BR_TOSTN = 22, R_BR_CANCEL = 23, R_BR_SAME = 24;
 
@@ -87,6 +87,7 @@ public final class MapCore {
     final List<String> stopJson = new ArrayList<String>();       // 엔진이 알려 준 현재 목록(info.stops)의 정류장 값 — 즐겨찾기로 저장할 때 그대로 쓴다
     public String toast = "", aliasKey = "", aliasName = "", aliasCur = "";
     private String favRaw() { String f = st.get(K_BUSFAV, "[]"); return f.startsWith("[") && f.length() < 30000 ? f : "[]"; }
+    private String ordRaw() { String f = st.get(K_BUSORD, "[]"); return f.startsWith("[") && f.length() < 6000 ? f : "[]"; }
     private String alRaw() { String f = st.get(K_BUSAL, "{}"); return f.startsWith("{") && f.length() < 12000 ? f : "{}"; }
     /** 30초 자동 새로고침: 정류장 목록(tp·gg·tn·d1)은 두고 도착정보(a0.. · f0..)만 비워 엔진이 다시 받아 오게 한다. */
     private long arrAt;       // 도착정보(a·f)를 마지막으로 받은 시각 — 엔진이 이 값으로 다시 그린 화면의 초는 그만큼 이미 흐른 것
@@ -112,7 +113,7 @@ public final class MapCore {
     private String lastArrSig = "";
     static final String K_BSN = "bsn";
     private String arrSig() {
-        StringBuilder b = new StringBuilder(busView()).append('|').append(favRaw().hashCode()).append('|').append(stopsKey());
+        StringBuilder b = new StringBuilder(busView()).append('|').append(favRaw().hashCode()).append('|').append(ordRaw().hashCode()).append('|').append(stopsKey());
         for (String k : new String[] { "tp", "gg", "tn", "d1" }) { String v = busRes.get(k); b.append('|').append(v == null ? -1 : v.length()).append(':').append(v == null ? 0 : v.hashCode()); }
         return b.toString();
     }
@@ -122,9 +123,42 @@ public final class MapCore {
         for (String[] n : need) if (n != null && n.length == 2 && n[0].matches("[af][0-9]{1,3}") && n[1].length() > 0 && n[1].length() < 600 && n[1].indexOf('\t') < 0 && n[1].indexOf('\n') < 0) keep.add(n);
         if (keep.isEmpty()) return;
         lastArrNeed.clear(); lastArrNeed.addAll(keep); lastArrSig = arrSig();
+        saveNeed();
+    }
+    private void saveNeed() {
         StringBuilder o = new StringBuilder().append(lastArrSig.hashCode());
-        for (String[] n : keep) o.append('\n').append(n[0]).append('\t').append(n[1]);
+        for (String[] n : lastArrNeed) o.append('\n').append(n[0]).append('\t').append(n[1]);
         if (o.length() < 20000) st.put(K_BSN, o.toString());
+    }
+    /**
+     * 주변 정류장 카드를 끌어서 순서를 바꿨다(웹 _busPersistDomOrder · busNearOrder). keys = 새 순서의 정류장 열쇠, perm[j] = 새 j 번째 카드가 옛 화면에서 몇 번째였나.
+     * 열쇠 목록은 기기에 저장해 다음 요청에 실어 보낸다(엔진이 그 순서로 그린다). 이미 받아 둔 도착정보(a0 ·a1 …)와 미리 받기 주소는 번호가 바뀐 만큼 옮겨 두어, 다시 받는 동안 비어 보이지 않게 한다.
+     * @return 저장했으면 true(모양이 이상하면 아무것도 바꾸지 않는다)
+     */
+    public boolean reorderNear(String[] keys, int[] perm) {
+        if (keys == null || perm == null || keys.length != perm.length || keys.length < 2 || keys.length > 40) return false;
+        boolean[] seen = new boolean[perm.length];
+        for (int i = 0; i < perm.length; i++) { if (perm[i] < 0 || perm[i] >= perm.length || seen[perm[i]] || keys[i] == null || keys[i].length() == 0 || keys[i].length() > 64) return false; seen[perm[i]] = true; }
+        StringBuilder o = new StringBuilder("[");
+        for (int i = 0; i < keys.length; i++) { if (i > 0) o.append(','); o.append(ShellCore.q(keys[i])); }
+        st.put(K_BUSORD, o.append(']').toString());
+        permuteArr(busRes, perm); permuteArr(arrStash, perm);
+        if (!lastArrNeed.isEmpty()) {
+            String[] old = new String[perm.length];
+            List<String[]> rest = new ArrayList<String[]>();
+            for (String[] n : lastArrNeed) { int ix = n[0].matches("a[0-9]{1,3}") ? Integer.parseInt(n[0].substring(1)) : -1; if (ix >= 0 && ix < old.length) old[ix] = n[1]; else rest.add(n); }
+            lastArrNeed.clear();
+            for (int j = 0; j < perm.length; j++) if (old[perm[j]] != null) lastArrNeed.add(new String[] { "a" + j, old[perm[j]] });
+            lastArrNeed.addAll(rest);
+            lastArrSig = arrSig(); saveNeed();
+        }
+        busSel = -1; busNeed.clear();
+        return true;
+    }
+    private static void permuteArr(Map<String, String> m, int[] perm) {
+        String[] old = new String[perm.length];
+        for (int i = 0; i < perm.length; i++) old[i] = m.get("a" + i);
+        for (int j = 0; j < perm.length; j++) { if (old[perm[j]] != null) m.put("a" + j, old[perm[j]]); else m.remove("a" + j); }
     }
     /** 지금 상태에서 바로 받아도 되는 도착정보 주소들([k, 주소]) — 없으면 빈 목록(평소처럼 엔진에게 묻는다). */
     public List<String[]> speculativeNeed() {
@@ -173,7 +207,7 @@ public final class MapCore {
     public String bodyRequest(int cap, String theme) {
         String f = facts("b", theme, "");
         if ("bus".equals(mode())) {
-            StringBuilder b = new StringBuilder(f.substring(0, f.length() - 1)).append(",\"bus\":{\"vw\":").append(ShellCore.q(busView())).append(",\"sel\":").append(busSel).append(",\"fav\":").append(favRaw()).append(",\"al\":").append(alRaw());
+            StringBuilder b = new StringBuilder(f.substring(0, f.length() - 1)).append(",\"bus\":{\"vw\":").append(ShellCore.q(busView())).append(",\"sel\":").append(busSel).append(",\"fav\":").append(favRaw()).append(",\"al\":").append(alRaw()).append(",\"ord\":").append(ordRaw());
             if (busLL != null) b.append(",\"lat\":").append(busLL[0]).append(",\"lng\":").append(busLL[1]);
             b.append(",\"res\":{");
             boolean first = true;
