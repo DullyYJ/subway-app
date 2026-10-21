@@ -2124,10 +2124,31 @@ public class ShellActivity extends Activity {
                     if (txt.length() == 0) { closeSheet(); return; }          // 역이 아닌 글자 — 조용히 닫는다
                     map.onStn(txt); map.setLinesFromStn(txt);
                     present(sheetView, txt, false);
+                    playPlace();
                     if (mapView != null) mapView.ensureVisible(map.stn);
                 } });
             }
         }, "shell-mapstn").start();
+    }
+
+    // ── 캐릭터 놀이터(웹 _RC.playStart): 역 팝업 이름 오른쪽 · 시간표 제목 오른쪽 빈 칸. 팝업 → 시간표로 올라올 땐 같은 장면이 이어진다 ──
+    private PlayView playView;
+    private void playPlace() {
+        final PlayView pv = playView;
+        if (pv == null || sheetView == null || sheet == null || !sheet.isShowing()) return;
+        boolean tt = ShellCore.S_MAPTT.equals(sheetName);
+        if (!tt && !ShellCore.S_MAPSTN.equals(sheetName)) return;
+        float[] a = sheetView.playAnchor(tt ? ScreenCore.K_BAR : ScreenCore.K_TEXT);
+        float w = sheetView.getWidth() / dpr;
+        float[] h = a == null || w <= 0f ? null : (tt ? PlayCore.ttHost(a[4], a[5], a[0], a[2], a[6]) : PlayCore.popupHost(w, a[0], a[0], a[2], a[1], a[3]));
+        if (h == null) { pv.end(); return; }                                         // 이름이 길어 빈 칸이 없으면 놀이터는 없다(웹과 같다)
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) pv.getLayoutParams();
+        int wp = Math.round(h[2] * dpr), hp = Math.round(h[3] * dpr), lx = Math.round(h[0] * dpr), ty = Math.round(Math.max(0f, h[1]) * dpr);
+        if (lp.width != wp || lp.height != hp || lp.leftMargin != lx || lp.topMargin != ty) { lp.width = wp; lp.height = hp; lp.leftMargin = lx; lp.topMargin = ty; pv.setLayoutParams(lp); }
+        boolean reduce = false;
+        try { reduce = android.provider.Settings.Global.getFloat(getContentResolver(), android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f; } catch (Throwable ignored) { }
+        PlayCore.Snap snap = tt ? pv.snap() : null;                                  // 시간표로 올라오면 팝업에서 놀던 그대로
+        pv.begin(wp, hp, ShellCore.theme(store).equals("dark"), reduce, snap);
     }
 
     /** 웹 .nmp 역 팝업의 손잡이(40x4, 위 16)와 아래로 밀어 닫기 — 화면 글은 엔진이 그리고 손잡이는 뷰가 맨 위에 얹는다. */
@@ -2147,6 +2168,8 @@ public class ShellActivity extends Activity {
             @Override public boolean onTouchEvent(android.view.MotionEvent e) { return true; }
         };
         box.addView(sv, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        playView = new PlayView(this, dpr);                                           // 역 이름 옆 빈 칸의 캐릭터 놀이터(웹 #nmPopPlay · #nmTtPlay) — 화면 글 위에 얹고, 만져지지 않는다
+        box.addView(playView, new FrameLayout.LayoutParams(1, 1, android.view.Gravity.TOP | android.view.Gravity.LEFT));
         final android.view.View hd = new android.view.View(this);
         android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
         g.setColor(ShellCore.theme(store).equals("dark") ? 0xFF555555 : 0xFFC3D6E6); g.setCornerRadius(2f * dpr);
@@ -2206,6 +2229,7 @@ public class ShellActivity extends Activity {
                     if (sheet == null || !sheet.isShowing() || !ShellCore.S_MAPTT.equals(sheetName) || txt.length() == 0) return;
                     map.onTt(txt);
                     present(sheetView, txt, true);
+                    playPlace();
                 } });
             }
         }, "shell-maptt").start();
@@ -2400,7 +2424,7 @@ public class ShellActivity extends Activity {
         }
     }
 
-    private void closeSheet() { brStop(); main.removeCallbacks(walkTick); try { if (sheet != null) sheet.dismiss(); } catch (Throwable ignored) { } sheet = null; sheetView = null; sheetName = ""; }
+    private void closeSheet() { brStop(); main.removeCallbacks(walkTick); if (playView != null) { playView.end(); playView = null; } try { if (sheet != null) sheet.dismiss(); } catch (Throwable ignored) { } sheet = null; sheetView = null; sheetName = ""; }
 
     private final class SheetHost implements ScreenView.Listener {
         @Override public void onAction(ScreenCore.Act a) {
