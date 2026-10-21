@@ -7,6 +7,7 @@ import java.util.Map;
 /** ShellCore(네이티브 껍데기의 순수 계산) 시험 — 안드로이드 없이 JVM. 사용: java ShellJvmTest */
 public class ShellJvmTest {
     static int fails = 0, oks = 0;
+    static HomeCore.Loc swLoc(String n, double la, double lo) { HomeCore.Loc l = new HomeCore.Loc(); l.name = n; l.lat = la; l.lng = lo; l.type = "p"; return l; }
     static void ok(boolean c, String name) { System.out.println((c ? "ok   " : "FAIL ") + name); if (c) oks++; else fails++; }
 
     /** 시험용 쓰기 기록 한 줄: 종류 · 열쇠 길이 · 열쇠 · 값 길이(varint) · 값(UTF-16LE, 첫 바이트 0). */
@@ -1029,6 +1030,68 @@ public class ShellJvmTest {
             ok(w.navKakao == null && w.msg.length() == 0 && w.refreshMs == WalkCore.REFRESH_DEF_MS, "도보: 엉터리 응답은 안전하게 비운다");
             w.open("zzz", null, 0, 0);
             ok("arrive".equals(w.mode) && !w.hasDest && !w.hasMe && w.request(18, 1L, 0, "dark").contains("\"dest\":{\"name\":\"\"}"), "도보: 좌표 없는 목적지는 이름만 보낸다");
+        }
+
+        // ── 디바운스 · 연타 막기 · SWR 보관함 (s132) ──
+        {
+            final long[] t = { 1000L };
+            final java.util.List<Object[]> q = new java.util.ArrayList<Object[]>();            // {실행 시각, Runnable}
+            Debounce d = new Debounce(new Debounce.Clock() {
+                public long now() { return t[0]; }
+                public void post(Runnable r, long ms) { q.add(new Object[] { t[0] + ms, r }); }
+                public void cancel(Runnable r) { for (int i = q.size() - 1; i >= 0; i--) if (q.get(i)[1] == r) q.remove(i); }
+            });
+            final java.util.List<String> ran = new java.util.ArrayList<String>();
+            // 시계를 ms 만큼 앞으로: 시각이 된 예약을 순서대로 실행
+            class Adv { void by(long ms) { long end = t[0] + ms; while (true) { Object[] nx = null; for (Object[] e : q) if ((Long) e[0] <= end && (nx == null || (Long) e[0] < (Long) nx[0])) nx = e; if (nx == null) break; q.remove(nx); t[0] = Math.max(t[0], (Long) nx[0]); ((Runnable) nx[1]).run(); } t[0] = end; } }
+            Adv adv2 = new Adv();
+            d.trailing("q", 300L, new Runnable() { public void run() { ran.add("a"); } });
+            adv2.by(200L);
+            d.trailing("q", 300L, new Runnable() { public void run() { ran.add("b"); } });       // 200ms 뒤 또 입력 — 앞의 것은 사라진다
+            adv2.by(200L);
+            ok(ran.isEmpty() && d.pending("q"), "디바운스: 입력이 이어지는 동안은 실행하지 않는다");
+            adv2.by(150L);
+            ok(ran.size() == 1 && "b".equals(ran.get(0)) && !d.pending("q"), "디바운스: 마지막 입력 300ms 뒤 마지막 것만 한 번 실행한다");
+            d.trailing("x", 300L, new Runnable() { public void run() { ran.add("x"); } });
+            d.cancel("x"); adv2.by(1000L);
+            ok(ran.size() == 1, "디바운스: 취소하면 실행하지 않는다");
+            d.trailing("y", 300L, new Runnable() { public void run() { ran.add("y"); } });
+            d.trailing("z", 300L, new Runnable() { public void run() { ran.add("z"); } });
+            adv2.by(300L);
+            ok(ran.size() == 3 && ran.contains("y") && ran.contains("z"), "디바운스: 다른 열쇠는 서로 영향이 없다");
+            d.trailing("w", 300L, new Runnable() { public void run() { ran.add("w"); } });
+            d.cancelAll(); adv2.by(1000L);
+            ok(ran.size() == 3, "디바운스: cancelAll 은 기다리던 것을 모두 없앤다");
+            final int[] again = { 0 };
+            d.trailing("r", 100L, new Runnable() { public void run() { again[0]++; } });
+            adv2.by(100L);
+            ok(again[0] == 1 && !d.pending("r"), "디바운스: 실행한 뒤에는 대기 목록에서 빠진다");
+            t[0] = 5000L;
+            ok(d.gate("tap", 350L) && !d.gate("tap", 350L), "연타 막기: 처음만 통과한다");
+            t[0] = 5200L; ok(!d.gate("tap", 350L), "연타 막기: 350ms 안의 같은 버튼은 막는다");
+            t[0] = 5350L; ok(d.gate("tap", 350L), "연타 막기: 350ms 뒤에는 다시 통과한다");
+            ok(d.gate("other", 350L), "연타 막기: 다른 버튼은 따로 센다");
+            t[0] = 100L; ok(d.gate("tap", 350L), "연타 막기: 시계가 뒤로 가도 막히지 않는다");
+
+            Swr sw = new Swr(2);
+            sw.put("k1", "AAA", 1000L);
+            ok(sw.get("k1", 1000L + 5000L, 8000L, 600000L).state == Swr.FRESH, "SWR: 신선 시간 안이면 FRESH(통신 없이 쓴다)");
+            Swr.Hit swSt = sw.get("k1", 1000L + 60000L, 8000L, 600000L);
+            ok(swSt.state == Swr.STALE && "AAA".equals(swSt.body), "SWR: 신선 시간이 지나도 낡은 한도 안이면 STALE(먼저 보이고 뒤에서 새로 받는다)");
+            ok(sw.get("none", 2000L, 8000L, 600000L).state == Swr.MISS && sw.get("none", 2000L, 8000L, 600000L).body.length() == 0, "SWR: 없으면 MISS");
+            ok(sw.get("k1", 1000L + 700000L, 8000L, 600000L).state == Swr.MISS && sw.size() == 0, "SWR: 너무 낡으면 MISS 로 보고 지운다");
+            sw.put("k1", "AAA", 1000L); sw.put("k1", "", 2000L); sw.put("k1", null, 2000L);
+            ok("AAA".equals(sw.get("k1", 1500L, 8000L, 600000L).body), "SWR: 빈 글을 넣어도 옛 글이 지워지지 않는다(받기 실패가 캐시를 비우지 않는다)");
+            ok(sw.get("k1", 500L, 8000L, 600000L).state == Swr.MISS, "SWR: 시계가 뒤로 간 글은 믿지 않는다");
+            sw.put("a", "1", 1000L); sw.put("b", "2", 1000L); sw.get("a", 1100L, 8000L, 600000L); sw.put("c", "3", 1000L);
+            ok(sw.size() == 2 && sw.get("a", 1100L, 8000L, 600000L).state == Swr.FRESH && sw.get("b", 1100L, 8000L, 600000L).state == Swr.MISS, "SWR: 용량이 차면 가장 오래 안 쓴 것부터 버린다");
+            sw.drop("a"); ok(sw.get("a", 1100L, 8000L, 600000L).state == Swr.MISS, "SWR: drop 하면 없어진다");
+
+            String q1 = HomeCore.routeQuery(swLoc("강남", 37.5, 127.0), swLoc("서울역", 37.55, 126.97), 111111L, false);
+            String q2 = HomeCore.routeQuery(swLoc("강남", 37.5, 127.0), swLoc("서울역", 37.55, 126.97), 222222L, false);
+            ok(q1 != null && HomeCore.routeSwrKey(q1, false, 111111L).equals(HomeCore.routeSwrKey(q2, false, 222222L)), "경로 SWR 열쇠: 지금 시각만 다른 같은 출발·도착은 같은 열쇠");
+            ok(!HomeCore.routeSwrKey(q1, true, 111111L).equals(HomeCore.routeSwrKey(q2, true, 222222L)), "경로 SWR 열쇠: 고른 시각이 다르면 다른 열쇠");
+            ok(HomeCore.routeSwrKey(null, false, 0L) == null && !HomeCore.routeSwrKey(q1, false, 1L).contains("baseMs"), "경로 SWR 열쇠: 없으면 null · 시각 값은 들어가지 않는다");
         }
 
         System.out.println(fails == 0 ? "ALL OK " + oks : "FAILED " + fails + " / " + (oks + fails));
