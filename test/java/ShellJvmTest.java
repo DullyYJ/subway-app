@@ -908,6 +908,20 @@ public class ShellJvmTest {
         hm.setStation(HomeCore.START, "사당", "2호선", 37.476, 126.981);
         ok(!hm.bothSet() && hm.text[HomeCore.DEST].isEmpty(), "출발역을 다시 고르면 도착역은 비운다(웹과 같다)");
 
+        {   // SWR: 켤 때 모든 탭의 마지막 화면을 미리 읽는 열쇠 목록
+            ShellCore.MemStore ws = new ShellCore.MemStore();
+            java.util.List<String> wk = ShellCore.warmKeys(ws, "shop");
+            ok(wk.size() > 5 && wk.get(0).equals(ShellCore.S_HDR) && wk.get(1).equals("tabs|shop") && wk.get(2).startsWith(ShellCore.S_SHOP), "미리 읽기: 머리글 → 지금 탭 → 그 탭 화면 순서");
+            boolean all = true;
+            for (String t : ShellCore.TABS) all &= wk.contains("tabs|" + t);
+            ok(all && wk.contains(ShellCore.S_HOME) && wk.contains(ShellCore.S_FOOD) && wk.contains(ShellCore.S_CCHIPS + "|" + ShellCore.mode(ws)), "미리 읽기: 모든 탭의 탭바와 화면이 들어간다");
+            ok(new java.util.HashSet<String>(wk).size() == wk.size(), "미리 읽기: 중복 없음");
+            boolean disk = true;
+            for (String k : wk) disk &= ShellCore.diskTtl(k) > 0L;
+            ok(disk && !wk.contains(ShellCore.S_PENDING), "미리 읽기: 디스크에 두지 않는 화면은 뺀다");
+            ok(ShellCore.warmKeys(ws, "zzz").get(1).equals("tabs|" + ShellCore.DEFAULT_TAB), "미리 읽기: 모르는 탭이면 기본 탭부터");
+        }
+
         System.out.println(fails == 0 ? "ALL OK " + oks : "FAILED " + fails + " / " + (oks + fails));
         if (fails > 0) System.exit(1);
     }

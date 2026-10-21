@@ -50,6 +50,22 @@ function findAndroidJar() {
     assert.ok(/NetPost\.(post|get)\(/.test(v), '통신은 허용 목록을 지키는 NetPost 로');
     assert.ok(!/HttpURLConnection|new URL\(/.test(v), '직접 통신 없음');
   });
+  await t('SWR: 켜기·탭 전환은 디스크/설정 읽기를 주 스레드에서 기다리지 않고, 캐시를 먼저 보이고 같은 글이면 다시 그리지 않는다', async () => {
+    const v = fs.readFileSync(N('ShellActivity.java'), 'utf8');
+    const oc = v.slice(v.indexOf('protected void onCreate('), v.indexOf('private void autoGps('));
+    const pd = v.slice(v.indexOf('private void preloadDisk()'), v.indexOf('private void cachePut('));
+    assert.ok(/ioExec\.execute/.test(pd) && /ShellCore\.warmKeys\(/.test(pd), '모든 탭 열쇠를 IO 스레드에서 미리 읽는다');
+    assert.ok(oc.indexOf('preloadDisk();') > 0 && oc.indexOf('preloadDisk();') < oc.indexOf('setContentView(root)'), '미리 읽기를 화면 만들기보다 먼저 시작');
+    assert.ok(oc.indexOf('setContentView(root)') < oc.indexOf('new BoardCore(store)') && oc.indexOf('setContentView(root)') < oc.indexOf('CmCore.on(store)'), '설정 값이 필요한 준비는 칸을 만든 뒤에');
+    assert.ok(oc.indexOf('showTab(ShellCore.currentTab(store))') > oc.indexOf('setContentView(root)'), '캐시 화면 올리기는 칸을 만든 뒤');
+    const lt = v.slice(v.indexOf('private void loadTabs('), v.indexOf('// ── 맨 위 흐르는 문구'));
+    assert.ok(/present\(tabs, txt, shown\)/.test(lt), '탭바: 캐시를 보였으면 같은 글은 다시 그리지 않는다');
+    assert.ok(/diskAsked\.contains\(ck\)/.test(v) && /postDelayed\([\s\S]{0,260}showSkeleton\(v, screen\)/.test(v), '디스크에서 읽는 중이면 뼈대를 미뤄 깜빡임을 없앤다');
+    assert.ok(/if \(keep && v != sheetView && json\.equals\(shownJson\.get\(v\)\)\) return;/.test(v), '같은 글이면 다시 읽지도 그리지도 않는다');
+    assert.ok(/if \(c != null && showCached\(v, c\)\) \{ keepX = true;/.test(v), '캐시를 먼저 올리고 그 위에 새 글을 갱신(위치 유지)');
+    const dg = v.slice(v.indexOf('private String cacheGet('), v.indexOf('private final java.util.concurrent.ExecutorService ioExec'));
+    assert.ok(!/diskGet\(/.test(dg), '주 스레드 캐시 읽기는 파일을 열지 않는다');
+  });
   await t('모든 탭 미리 받기(0초 병렬 · 예외 탭 없음): 지금 칸의 요청 번호를 올리지 않고 캐시에만 넣는다 · 스켈레톤 · 마지막 위치', async () => {
     const v = fs.readFileSync(N('ShellActivity.java'), 'utf8');
     const m = v.slice(v.indexOf('private void prefetchTabs()'), v.indexOf('private void cachePutAsync('));

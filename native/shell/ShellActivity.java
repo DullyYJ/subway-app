@@ -109,18 +109,11 @@ public class ShellActivity extends Activity {
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
         live = this;
-        store = new PrefStore(getSharedPreferences(PREFS, Context.MODE_PRIVATE));
-        ErrLog.install(this);
-        if (CmCore.on(store)) CommuteAlarm.rescheduleAsync(this);                 // 출퇴근 브리핑: 앞으로 4주 창을 다시 민다
-        board = new BoardCore(store);
-        chat = new ChatCore(store);
-        fav = new FavCore(store);
-        map = new MapCore(store);
-        store.put(MapCore.K_BUSVW, MapCore.VW_NEAR);                          // 웹은 앱을 켤 때마다 '주변 정류장'부터
+        store = new PrefStore(getSharedPreferences(PREFS, Context.MODE_PRIVATE));      // 설정 파일 읽기는 시스템이 따로 시작한다 — 아래 일을 하는 동안 저절로 끝난다
         dpr = getResources().getDisplayMetrics().density;
+        preloadDisk();                                                               // 모든 탭의 마지막 화면을 IO 스레드가 읽고 해석해 둔다(주 스레드는 파일을 열지 않는다)
+        ErrLog.install(this);
         ScreenView.preloadFaces(this);
-        preloadDisk();
-        importLegacy();
 
         root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -143,6 +136,15 @@ public class ShellActivity extends Activity {
         tabs.setListener(new Host(2));
         root.addView(tabs, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Math.round(56f * dpr)));
         setContentView(root);
+
+        // 설정 값이 필요한 준비는 칸을 만든 뒤에(그때쯤 설정 파일 읽기가 끝나 있어 기다림이 없다)
+        if (CmCore.on(store)) CommuteAlarm.rescheduleAsync(this);                 // 출퇴근 브리핑: 앞으로 4주 창을 다시 민다
+        board = new BoardCore(store);
+        chat = new ChatCore(store);
+        fav = new FavCore(store);
+        map = new MapCore(store);
+        store.put(MapCore.K_BUSVW, MapCore.VW_NEAR);                          // 웹은 앱을 켤 때마다 '주변 정류장'부터
+        importLegacy();
 
         // 상태 표시줄·내비게이션 막대 자리만큼 비운다
         root.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
@@ -331,11 +333,11 @@ public class ShellActivity extends Activity {
         final String url = ShellCore.tabsUrl(), json = ShellCore.tabsBody(tab), ck = "tabs|" + tab;
         viewKey.put(tabs, ck);
         String c = cacheGet(ck, true);
-        if (c != null) showCached(tabs, c);
+        final boolean shown = c != null && showCached(tabs, c);
         new Thread(new Runnable() {
             @Override public void run() {
                 final String txt = screenCall(ck, false, url, json, null, 8000); warm(txt);
-                main.post(new Runnable() { @Override public void run() { if (my == seqTabs) present(tabs, txt, false); } });
+                main.post(new Runnable() { @Override public void run() { if (my == seqTabs) present(tabs, txt, shown); } });       // 캐시를 이미 보여 줬으면 같은 글은 다시 그리지 않고, 다르면 자리·깜빡임 없이 바꾼다
             }
         }, "shell-tabs").start();
     }
@@ -455,11 +457,9 @@ public class ShellActivity extends Activity {
     }
     /** 켤 때: 지금 탭의 화면 글을 IO 스레드에서 미리 읽고 해석해 둔다(첫 그림이 파일 읽기를 기다리지 않게). */
     private void preloadDisk() {
-        try {
-            String tab = ShellCore.currentTab(store);
-            diskWarmAsync("tabs|" + tab); diskWarmAsync(ShellCore.S_HDR);
-            for (String sl : ShellCore.slotsOf(store, tab)) diskWarmAsync(ShellCore.cacheKey(sl, store));
-        } catch (Throwable ignored) { }
+        ioExec.execute(new Runnable() { @Override public void run() {          // 설정 값으로 열쇠를 만드는 일도 IO 스레드에서(설정 파일이 덜 읽혔어도 주 스레드가 기다리지 않는다)
+            try { for (String k : ShellCore.warmKeys(store, ShellCore.currentTab(store))) diskWarmAsync(k); } catch (Throwable ignored) { }
+        } });
     }
     private void cachePut(String key, String json) {
         scrCache.put(key, json); scrKeys.add(key);
@@ -544,7 +544,14 @@ public class ShellActivity extends Activity {
         if (!keep0) {
             String c = cacheGet(ck, ShellCore.diskCacheable(screen));
             if (c != null && showCached(v, c)) { keepX = true; if (ShellCore.S_MAPB.equals(screen)) syncMapView(); }
-            else if (clearOnMiss) { if (v == body) showSkeleton(v, screen); else { v.clearScreen(); shownJson.remove(v); } }       // 머리 칸(칩 줄)은 뼈대 없이 비운다(높이가 그린 만큼이라)          // 옛 탭 화면이 남아 보이지 않게 — 받는 동안은 뼈대
+            else if (clearOnMiss) {
+                if (v == body && diskAsked.contains(ck)) {                  // 디스크에서 읽는 중 — 곧(수십 ms) 마지막 화면이 올라오므로 뼈대를 잠깐 미뤄 깜빡임을 없앤다
+                    v.clearScreen(); shownJson.remove(v);
+                    final String wk = ck; final int wmy = my;
+                    main.postDelayed(new Runnable() { @Override public void run() { if (wmy == seq[si] && v.itemCount() == 0 && wk.equals(viewKey.get(v))) showSkeleton(v, screen); } }, 120L);
+                }
+                else if (v == body) showSkeleton(v, screen); else { v.clearScreen(); shownJson.remove(v); }
+            }       // 머리 칸(칩 줄)은 뼈대 없이 비운다(높이가 그린 만큼이라)          // 옛 탭 화면이 남아 보이지 않게 — 받는 동안은 뼈대
         }
         final boolean keep = keepX;
         if (ShellCore.S_HOME.equals(screen)) { loadHome(v, keep); return; }
@@ -1457,13 +1464,15 @@ public class ShellActivity extends Activity {
     private void saveLoc(Location l) { if (l != null) ShellCore.lastLocPut(store, l.getLatitude(), l.getLongitude(), System.currentTimeMillis()); }
     /** 켤 때: 권한이 이미 있으면 기기가 기억하는 마지막 위치를 조용히 저장한다(권한 안내를 띄우지 않는다). */
     private void captureLastLoc() {
-        try {
-            if (!hasLocPerm()) return;
-            LocationManager lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-            Location best = null;
-            for (String pv : lm.getProviders(true)) { Location l = lm.getLastKnownLocation(pv); if (l != null && (best == null || l.getTime() > best.getTime())) best = l; }
-            if (best != null) saveLoc(best);
-        } catch (Throwable ignored) { }
+        if (!hasLocPerm()) return;
+        ioExec.execute(new Runnable() { @Override public void run() {            // 위치 서비스 호출(프로세스 간 통신)도 주 스레드에서 하지 않는다
+            try {
+                LocationManager lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+                Location best = null;
+                for (String pv : lm.getProviders(true)) { Location l = lm.getLastKnownLocation(pv); if (l != null && (best == null || l.getTime() > best.getTime())) best = l; }
+                if (best != null) saveLoc(best);
+            } catch (Throwable ignored) { }
+        } });
     }
     /** 권한이 이미 있을 때만 위치를 조용히 새로 받는다(없으면 아무것도 안 한다 — 권한 안내는 사용자가 위치 단추를 눌렀을 때만). */
     private void locateQuiet(LocCb cb) { if (hasLocPerm()) locateOnce(REQ_MAP_LOC, cb); }

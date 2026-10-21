@@ -664,6 +664,23 @@ public final class ShellCore {
         if (S_HOME.equals(s)) return 6L * 3600000L;
         return 0L;
     }
+    /** 켤 때 디스크에서 미리 읽어 둘 화면 열쇠(SWR): 지금 탭의 것을 먼저, 그다음 나머지 모든 탭 — 어느 탭을 눌러도 파일 읽기를 기다리지 않는다. 중복 없음 · 디스크에 두지 않는 화면은 뺀다. */
+    public static java.util.List<String> warmKeys(Store st, String cur) {
+        java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<String>();
+        String c = isTab(cur) ? cur : DEFAULT_TAB;
+        java.util.List<String> order = new java.util.ArrayList<String>();
+        order.add(c);
+        for (String t : TABS) if (!t.equals(c)) order.add(t);
+        out.add(S_HDR);
+        for (int i = 0; i < order.size(); i++) {
+            String t = order.get(i);
+            out.add("tabs|" + t);
+            for (String sl : slotsOf(st, t)) out.add(cacheKey(sl, st));
+        }
+        java.util.List<String> r = new java.util.ArrayList<String>();
+        for (String k : out) if (diskTtl(k) > 0L) r.add(k);
+        return r;
+    }
     public static boolean diskCacheable(String screen) { return diskTtl(screen) > 0L; }
     /**
      * 설정 화면 캐시 열쇠: 스위치 · 토글 모양이 기기에 저장된 값(settingsFacts)에서 나오므로, 열쇠에 그 값의 지문을 넣는다.
