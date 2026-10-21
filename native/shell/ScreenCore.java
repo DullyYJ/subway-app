@@ -184,6 +184,7 @@ public final class ScreenCore {
         public float cfs = 12f, cpx = 12f;                  // chips: 글자 크기 · 칩 좌우 안쪽 여백(웹 칩마다 다르다)
         public float fitH, fmin = 90f, fmax = 900f, frh = 26f;   // scene: 맞춘 높이(배치 때마다 다시 정한다) · 최소 · 최대 · 접을 줄 한 개가 주는 높이(어림)
         public int fo;                                      // ltr: 이 줄은 접는 줄 수가 fo 이상일 때 접힌다(0 이면 안 접힘)
+        public boolean ps, hr;                             // trk 칸: 지나간 칸(흐리게) · 지금 칸(금색 강조)
         public boolean glow;                               // panel: 무지개 테두리가 도는 카드(웹 preview-glow, 예상 경로·혼잡도·브리핑)
         public boolean hide, fit;                           // ltr 접힘(배치 때마다 다시 정한다) · scene 이 남는 세로를 채운다
         public float bw = 0f; public String ob = "";   // chip: 테두리 두께(0 이면 1) · 꺼진 칩의 테두리만 따로 칠하는 색
@@ -666,7 +667,7 @@ public final class ScreenCore {
                 c.dot = optStr(im, "dk", "", 2); if (c.dot.length() > 0 && !"e".equals(c.dot) && !"r".equals(c.dot) && !"m".equals(c.dot)) throw new ParseError("cell: dk 는 e r m");
                 c.onc = roleOrCss(im, "dc", ""); c.onl = roleOrCss(im, "dc2", "");
                 c.time = optStr(im, "t", "", 40); c.sc = roleOrCss(im, "tc", "sub"); c.lh = optNum(im, "ts", 9f, 6f, 20f); c.big = optBool(im, "tb", false);
-                c.cols = (int) optNum(im, "ti", -1f, -1f, 9999f);
+                c.cols = (int) optNum(im, "ti", -1f, -1f, 9999f); c.ps = optBool(im, "ps", false); c.hr = optBool(im, "hr", false);
                 n.items.add(c); sc.nodes++;
                 if (sc.nodes > MAX_NODES) throw new ParseError("노드가 너무 많다");
             }
@@ -1053,6 +1054,7 @@ public final class ScreenCore {
         public Col lc, rc, dc, dc2, gc, nc, timec;   // 칸: 왼/오른 선 · 점 · 점 둘째 색 · 배지 · 이름 · 시각 글자 색
         public float tsz, gsz, gx, badgeTw, nameBot; // 칸: 시각 글 크기 · 배지 글 크기 · 알약 좌우 여백 · 배지 글 폭 · 이름 마지막 줄 아래쪽
         public boolean tb;
+        public boolean ps, hr;                       // 칸: 지나간 칸(흐리게) · 지금 칸(금색 강조)
         public int ti = -1;                          // 칸: 위치 추적 번호(-1 은 추적 안 함)
         public Act act;
         public Act[] ra = new Act[0];                // 정류장 카드: 노선 줄마다 누르면 가는 행동(없으면 null)
@@ -1282,7 +1284,7 @@ public final class ScreenCore {
                         it.badgeTw = m.width(it.label, c.ssize, true);
                     }
                     it.lc = col(c.line, null); it.rc = col(c.accent, null); it.dk = c.dot; it.dc = col(c.onc, null); it.dc2 = col(c.onl, null);
-                    it.time = ellipsize(c.time, c.max - 2f, c.lh, c.big, m); it.timec = col(c.sc, new Col("sub", 0)); it.tsz = c.lh; it.tb = c.big; it.ti = c.cols;
+                    it.time = ellipsize(c.time, c.max - 2f, c.lh, c.big, m); it.timec = col(c.sc, new Col("sub", 0)); it.tsz = c.lh; it.tb = c.big; it.ti = c.cols; it.ps = c.ps; it.hr = c.hr;
                     hi.add(it); x += c.max;
                 }
                 contentW = Math.max(contentW, x + n.padR);
