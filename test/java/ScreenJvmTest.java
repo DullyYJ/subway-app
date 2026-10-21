@@ -894,6 +894,14 @@ public class ScreenJvmTest {
                 ScreenCore.Item bc = cl.body[0];
                 ok(bc.ra.length == 2 && bc.ra[0] != null && "br.0.0".equals(bc.ra[0].v) && bc.ra[1] == null, "bcard: 노선 줄마다 누름 행동");
             } catch (Exception ex) { ok(false, "bcard 줄 행동: " + ex); }
+            try {                                                                       // 순서 바꾸기 줄 글(첫 주변 카드에만 오는 rol · rod)
+                String ro_c = "{\"t\":\"bcard\",\"k\":\"SEOUL:%d\",\"nm\":\"가\",\"mode\":\"near\",\"act\":{\"a\":\"call\",\"v\":\"mp.pc.%d\"}%s}";
+                String ro_j = "{\"ok\":true,\"v\":1,\"screen\":\"maph\",\"head\":[],\"body\":[" + String.format(ro_c, 1, 0, ",\"rol\":\"끌어서 순서 변경\",\"rod\":\"완료\"") + "," + String.format(ro_c, 2, 1, "") + "]}";
+                ScreenCore.Layout ro_l = ScreenCore.layout(ScreenCore.load(ro_j), 360f, M);
+                ScreenCore.Item ro_a = ro_l.body[0], ro_b = ro_l.body[1];
+                ok(ro_a.kind == ScreenCore.K_BCARD && "끌어서 순서 변경".equals(ro_a.rol) && "완료".equals(ro_a.rod) && ro_b.rol.length() == 0 && ro_b.rod.length() == 0, "bcard: 순서 바꾸기 줄 글은 첫 카드에만 실린다(rol · rod)");
+                ok(ro_b.y >= ro_a.y + ro_a.h && ro_b.y - (ro_a.y + ro_a.h) < 40f, "bcard: 카드 사이 간격이 있어 끌기가 칸 계산을 한다");
+            } catch (Exception ex) { ok(false, "bcard 순서 바꾸기 글: " + ex); }
         }
 
         // ── 버스 탭 노드(btog · bcard · tmap 확장) ──
