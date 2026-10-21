@@ -223,6 +223,7 @@ function findAndroidJar() {
     assert.ok(/setDimAmount\(0\.7f\)/.test(v) && /setCornerRadius\(20f \* dpr\)/.test(v), '웹과 같은 70% 어둡게 · 모서리 20');
     assert.ok(/rloadFetch\(\); \} \}\);\s*\/\/ 경로 탐색 로딩 카드/.test(v) || /return rloadFetch\(\);/.test(v), '켜자마자 미리 받아 둔다(탐색 때 기다리지 않게)');
     assert.ok(/case ScreenCore\.K_RUNNER: drawRunner/.test(sv) && /runDrawn/.test(sv) && !/new Paint|new RectF|new Rect\(|new android\.graphics\.DashPathEffect/.test(sv.slice(sv.indexOf('private void drawRunner('), sv.indexOf('private boolean skelDrawn;'))), '캐릭터를 그리고 그리는 동안 새 그림 도구를 만들지 않는다');
+    assert.ok(/private float mqOff\(ScreenCore\.Item it\)/.test(sv) && /mqDrawn = true/.test(sv) && /\|\| mqDrawn/.test(sv) && /it\.mq && it\.lines\.length > 0/.test(sv) && /clipRect\(it\.x, it\.y, it\.x \+ it\.mqVis/.test(sv) && /it\.mqVis > 0f \? Math\.min\(it\.mqVis, it\.mqW\)/.test(sv) && !/new Paint|new RectF|new Rect\(/.test(sv.slice(sv.indexOf('private float mqOff('), sv.indexOf('private void drawTextBlock('))), '긴 이름은 놀이터 칸만 남기고 좌우로 흐른다(mqOff · 그리는 동안 새 도구 없음 · 놀이터 칸은 흐르는 칸 기준)');
     assert.ok(!/import\s+android\./.test(rc) && /sheet|Sheet/.test(ra) && /SoftReference/.test(ra) && /new Thread\(/.test(ra), 'RunnerCore 는 순수 · 시트는 뒤 스레드에서 읽고 메모리가 모자라면 시스템이 버릴 수 있게 쥔다');
   });
   await t('엔진 안내 카드 호스트(s134): 종료 · 신고 · 권한 · 작은 알림 카드는 엔진이 그리고 앱은 띄우고 단추만 되돌려 준다 · 미리 받아 두고 못 받았으면 이전 방식으로 대신', () => {
