@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-21s129";
+var ENGINE_VERSION = "route-v2-2026-10-22s130";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -19374,11 +19374,33 @@ function mapBusRows(rows, info, si) {                              // \ub178\uc1
   if (info && si >= 0) { if (!info.rts) info.rts = {}; info.rts[si] = meta; }
   return out;
 }
+// \u2500\u2500 \uc8fc\ubcc0 \uc815\ub958\uc7a5 \uc0ac\uc6a9\uc790 \uc21c\uc11c(\uc6f9 _applyBusNearOrder \u00b7 busNearOrder): \uc571\uc774 \ub04c\uc5b4\uc11c \ubc14\uafbc \uc815\ub958\uc7a5 \uc5f4\uc1e0 \ubaa9\ub85d(b.ord)\uc744 \ubc1b\uc544, \uc800\uc7a5\ub41c \uac83\uc740 \uadf8 \uc21c\uc11c\ub85c \u00b7 \uc800\uc7a5 \uc548 \ub41c \uc0c8 \uc815\ub958\uc7a5\uc740 \ub4a4\uc5d0 \uac70\ub9ac\uc21c.
+function mapBusOrd(b) {
+  var o = (b && Array.isArray(b.ord)) ? b.ord : [], out = [], i;
+  for (i = 0; i < o.length && out.length < 60; i++) if (typeof o[i] === 'string' && o[i].length > 0 && o[i].length <= 64) out.push(o[i]);
+  return out;
+}
+function mapApplyNearOrder(stops, ord) {
+  if (!ord.length) return stops;
+  var pos = {}, i, hit = false;
+  for (i = 0; i < ord.length; i++) if (pos[ord[i]] === undefined) pos[ord[i]] = i;
+  for (i = 0; i < stops.length; i++) if (pos[stops[i].id] !== undefined) hit = true;
+  if (!hit) return stops;                                                         // \uc800\uc7a5\ub41c \uc5f4\uc1e0\uac00 \ud558\ub098\ub3c4 \uc548 \ub9de\uc73c\uba74(\ub2e4\ub978 \ub3d9\ub124) \uc6d0\ub798 \uc21c\uc11c
+  return stops.map(function (s, k) { return { s: s, k: k }; }).sort(function (a, b) {
+    var ia = pos[a.s.id], ib = pos[b.s.id];
+    if (ia === undefined && ib === undefined) return a.k - b.k;                       // \ub458 \ub2e4 \ubaa8\ub974\uba74 \uc5d4\uc9c4\uc774 \uc815\ud55c \uc6d0\ub798 \uc21c\uc11c(\uac00\uae4c\uc6b4 \uc21c \u00b7 \uc5ed \ucd9c\uad6c \uba3c\uc800)
+    if (ia === undefined) return 1;
+    if (ib === undefined) return -1;
+    return ia - ib;
+  }).map(function (x) { return x.s; });
+}
 function mapBusCard(s, o) {
   var c = { t: 'bcard', k: s.id, nm: s.nm, mode: o.mode, on: !!o.on, pad: [12, 12, 0, 12], act: { a: 'call', v: 'mp.pc.' + o.i, id: s.id }, edit: { a: 'call', v: 'mp.al.' + o.i } };
   if (o.n) c.n = String(o.n);
   if (o.alias) c.al = o.alias;
-  if (o.mode === 'near') { c.dist = mapDistFmt(s.dist); c.fv = o.fav ? 1 : 0; c.star = { a: 'call', v: 'mp.fv.' + o.i }; if (o.pi >= 0) c.pi = o.pi; }
+  if (o.mode === 'near') { c.dist = mapDistFmt(s.dist); c.fv = o.fav ? 1 : 0; c.star = { a: 'call', v: 'mp.fv.' + o.i }; if (o.pi >= 0) c.pi = o.pi;
+    if (o.i === 0) { c.rol = '\ub04c\uc5b4\uc11c \uc21c\uc11c \ubcc0\uacbd'; c.rod = '\uc644\ub8cc'; }                              // \uafb9 \ub20c\ub7ec \uc21c\uc11c \ubc14\uafb8\uae30 \uc904 \uae00(\uc6f9 #busReorderBar) \u2014 \uccab \uce74\ub4dc\uc5d0\ub9cc; \uc904\uc744 \uadf8\ub9ac\ub294 \uac83\uc740 \uc571
+  }
   else {
     c.star = { a: 'call', v: 'mp.fv.' + o.i };                      // \uc990\uaca8\ucc3e\uae30 \ud654\uba74\uc758 \u00d7 (\uc81c\uac70)
     if (isFinite(s.la) && isFinite(s.lo)) c.map = { a: 'open', url: 'https://map.kakao.com/link/map/' + encodeURIComponent(s.nm || '\uc815\ub958\uc7a5') + ',' + s.la + ',' + s.lo };
@@ -19425,7 +19447,7 @@ function mapBusBody(f, info) {
   var mine = { la: la, lo: lo, k: 'm', n: '', l: '\ub0b4 \uc704\uce58' };
   var wait = function (txt) { return { head: head.concat([mapBusTmap([mine], -1)]), body: [note(txt)] }; };
   if (need0.some(function (n) { return res[n.k] === undefined; })) { info.bus = { st: 'need', vw: 'near', need: need0 }; return wait('\uc8fc\ubcc0 \uc815\ub958\uc7a5 \ucc3e\ub294 \uc911...'); }
-  var stops = mapBusStops(f);
+  var stops = mapApplyNearOrder(mapBusStops(f), mapBusOrd(b));                          // \uc0ac\uc6a9\uc790\uac00 \ub04c\uc5b4\uc11c \uc815\ud55c \uc21c\uc11c(b.ord) \uba3c\uc800 \u00b7 \uc0c8 \uc815\ub958\uc7a5\uc740 \ub4a4\uc5d0 \uac70\ub9ac\uc21c
   if (!stops.length && res.d1 === undefined) {                                           // \uacf5\uacf5 API \uac00 \ubaa8\ub450 \ube44\uc5c8\uc73c\uba74 \uc11c\ubc84 \uc815\ub958\uc7a5 \ud45c(D1)\ub85c
     info.bus = { st: 'need', vw: 'near', need: [{ k: 'd1', url: MAP_D1_BASE + '/bus-stops?lat=' + la + '&lng=' + lo + '&radius=800' }] };
     return wait('\uc8fc\ubcc0 \uc815\ub958\uc7a5 \ucc3e\ub294 \uc911...');
