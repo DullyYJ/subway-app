@@ -305,7 +305,7 @@ const web = new Function(
     ok((await (await post(JSON.stringify({ cap: 9, f: {} }))).json()).ok === false, '워커: cap 부족이면 거절');
     ok((await post('{oops')).status === 400 && (await post('x'.repeat(40001))).status === 413 && (await call('https://x/screen/rhead')).status === 405, '워커: 깨진 본문 400 · 큰 본문 413 · GET 405');
     const ro = await call('https://x/screen/rhead', { method: 'OPTIONS' }), rr = await post(JSON.stringify({ cap: 10, f }));
-    ok(ro.status === 204 && rr.headers.get('access-control-allow-origin') === '*' && rr.headers.get('cache-control') === 'no-store', '워커: OPTIONS 204 · CORS · no-store');
+    ok(ro.status === 204 && rr.headers.get('access-control-allow-origin') === '*' && /^(no-store|private, max-age=\d+)$/.test(rr.headers.get('cache-control')), '워커: OPTIONS 204 · CORS · no-store');
   } catch (e) { fail++; console.log('  FAIL 워커 시험 예외', e && e.stack || e); }
   try { fs.unlinkSync(tmp); } catch (e) { }
   if (html.indexOf('window._scrRhead = ') >= 0) {

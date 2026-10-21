@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-20s112";
+var ENGINE_VERSION = "route-v2-2026-10-21s113";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -8131,7 +8131,7 @@ var route_v2_worker_default = { async scheduled(event, env, ctx) {
   }));
 }, async fetch(request, env, ctx) {
   try {
-    return await handleFetch(request, env, ctx);
+    return await handleFetchCond(request, env, ctx);
   } catch (e) {
     return new Response(JSON.stringify({
       error: String(e && e.message || e),
@@ -12615,7 +12615,8 @@ async function handleScreenFood(request) {
 //        facts = { cat: \uace0\ub978 \uce69('\uc804\uccb4'|'\uc99d\uc2dc'|\u2026) }
 //        rows  = [\uae30\uc0ac\u2026]   \uae30\uc0ac = [\uc81c\ubaa9, \ub9c1\ud06c, \uc5b8\ub860\uc0ac, \uc2dc\uac01(ms), \ubc1b\uc744 \ub54c \uc11c\ubc84\uac00 \ubd99\uc778 \ubd84\ub958, \uc694\uc57d]
 // \ucd9c\ub825  { ok, v:1, screen:'news', rev, cover:'tab', head:[chips], body:[news\u2026|text|spacer], info:{cat,n,all} }
-//        news{title,sub,act:{a:'call',v:'nw.<\ubc88\ud638>'}}  \u2014 \ubc88\ud638 = \uc571\uc774 \ubcf4\ub0b8 \ubc30\uc5f4\uc758 \uc6d0\ub798 \uc704\uce58(\ub204\ub974\uba74 \uc571\uc774 \uadf8 \uae30\uc0ac\uc758 \uc0c1\uc138\ub97c \uc5d4\uc9c4\uc5d0 \ubb3b\ub294\ub2e4)
+//        news{title,sub,act:{a:'call',v:'nw.<\ubc88\ud638>',id:<\ub9c1\ud06c \ub610\ub294 \uc81c\ubaa9>,t:<\uc81c\ubaa9>}}  \u2014 id = \uae30\uc0ac\uc758 \uace0\uc720 \uc2dd\ubcc4(\ub9c1\ud06c, \uc5c6\uc73c\uba74 \uc81c\ubaa9)\uc774\ub77c \ubaa9\ub85d\uc774 \ubc14\ub010 \ub4a4\uc5d0 \ub20c\ub7ec\ub3c4 \uac19\uc740 \uae30\uc0ac\uac00 \uc5f4\ub9b0\ub2e4.
+//          \ubc88\ud638 = \uc571\uc774 \ubcf4\ub0b8 \ubc30\uc5f4\uc758 \uc6d0\ub798 \uc704\uce58(\uc61b \uc571 \ud638\ud658\uc6a9; \uc0c8 \uc571\uc740 id \ub97c \uba3c\uc800 \ubcf8\ub2e4)
 //      newsDetail({ cap, now }, row) \u2192 { ok, v:1, detail:{ cat, title, meta, desc, empty, src, notice, btn } }  \uc0c1\uc138 \ud31d\uc5c5\uc5d0 \uadf8\ub300\ub85c \uc4f8 \ubb38\uad6c
 // \ub9e8 \uc544\ub798 module.exports \ub294 \uc2dc\ud5d8(Node)\uc6a9\uc774\uace0 Worker \uc5d0\uc11c\ub294 \ud568\uc218 \uc120\uc5b8\ub9cc \uc4f0\uc778\ub2e4.
 'use strict';
@@ -12821,7 +12822,7 @@ function nwScreenOf(now, f, all) {
     body.push({ t: 'spacer', h: 8 });
     for (var k = 0; k < items.length && k < NW_MAX_SHOW; k++) {
       var it = items[k];
-      body.push({ t: 'news', pad: [14, 0, 14, 0], title: it.title, sub: it.cat + (it.ts ? ' \u00b7 ' + nwAgo(it.ts, now) : ''), act: { a: 'call', v: 'nw.' + it.i } });
+      body.push({ t: 'news', pad: [14, 0, 14, 0], title: it.title, sub: it.cat + (it.ts ? ' \u00b7 ' + nwAgo(it.ts, now) : ''), act: { a: 'call', v: 'nw.' + it.i, id: String(it.link || it.title).slice(0, 400), t: String(it.title).slice(0, 160) } });
     }
     body.push({ t: 'spacer', h: 72 });
   }
@@ -13031,17 +13032,17 @@ function brdPostNode(p, pid, f, now) {
   var mineRx = f.rx[p.id] || {};
   function rb(label, n, type, verb) {
     var on = !!mineRx[type];
-    var b = { label: label + ' ' + (n + (on ? 1 : 0)), act: { a: 'call', v: 'bd.' + verb + '.' + p.i } };
+    var b = { label: label + ' ' + (n + (on ? 1 : 0)), act: { a: 'call', v: 'bd.' + verb + '.' + p.i, id: p.id } };
     if (on) { b.on = true; b.fill = 'rgba(10,132,255,0.13)'; b.line = BRD_BLUE; b.tc = BRD_BLUE; }
     return b;
   }
   var items = [rb('\uc88b\uc544\uc694', p.like, 'like', 'lk'), rb('\u314b\u314b', p.lol, 'lol', 'lo'), rb('\u3160\u3160', p.sad, 'sad', 'sd')];
   if (p.mine) {
     var armD = f.arm && f.arm.k === 'dl' && f.arm.id === p.id;
-    items.push({ label: armD ? '\uc0ad\uc81c \ud655\uc778' : '\uc0ad\uc81c', right: true, tc: armD ? BRD_RED : 'sub', line: armD ? BRD_RED : 'border2', act: { a: 'call', v: 'bd.dl.' + p.i } });
+    items.push({ label: armD ? '\uc0ad\uc81c \ud655\uc778' : '\uc0ad\uc81c', right: true, tc: armD ? BRD_RED : 'sub', line: armD ? BRD_RED : 'border2', act: { a: 'call', v: 'bd.dl.' + p.i, id: p.id } });
   } else if (p.user) {
     var armR = f.arm && f.arm.k === 'rp' && f.arm.id === p.id;
-    items.push({ label: armR ? '\uc2e0\uace0 \ud655\uc778' : '\uc2e0\uace0', right: true, tc: armR ? BRD_RED : 'sub', line: armR ? BRD_RED : 'border2', act: { a: 'call', v: 'bd.rp.' + p.i } });
+    items.push({ label: armR ? '\uc2e0\uace0 \ud655\uc778' : '\uc2e0\uace0', right: true, tc: armR ? BRD_RED : 'sub', line: armR ? BRD_RED : 'border2', act: { a: 'call', v: 'bd.rp.' + p.i, id: p.id } });
   }
   kids.push({ t: 'btnrow', pad: [0, 0, 0, 12], gap: 8, h: 30, items: items });
   if (p.cmts.length) {
@@ -13051,7 +13052,7 @@ function brdPostNode(p, pid, f, now) {
       c.replies.forEach(function (r) { kids.push({ t: 'cmt', pad: [0, 0, 0, 7], nick: r.nick, s: r.text, time: r.time ? brdAgo(r.time, now) : '', ind: true }); });
     });
   }
-  kids.push({ t: 'inbar', pad: [0, p.cmts.length ? 6 : 0, 0, 0], key: 'c.' + pid.slice(1), hint: '\ub313\uae00 \ub0a8\uae30\uae30', btn: '\ub4f1\ub85d', h: 36, r: 8, maxlen: 200, fill: 'card', line: 'border2', onc: BRD_BLUE, ckf: '#ffffff', act: { a: 'call', v: 'bd.cm.' + p.i } });
+  kids.push({ t: 'inbar', pad: [0, p.cmts.length ? 6 : 0, 0, 0], key: 'c.' + pid.slice(1), hint: '\ub313\uae00 \ub0a8\uae30\uae30', btn: '\ub4f1\ub85d', h: 36, r: 8, maxlen: 200, fill: 'card', line: 'border2', onc: BRD_BLUE, ckf: '#ffffff', act: { a: 'call', v: 'bd.cm.' + p.i, id: p.id, key: 'c.' + pid.slice(1) } });
   var n = { t: 'post', pad: [12, 0, 12, 8], id: pid, title: p.title, nick: p.nick, meta: parts.join(' \u00b7 '), kids: kids };
   if (!hide) { n.cat = p.cat; n.catc = BRD_CAT_COLOR[p.cat] || BRD_OTHER_COLOR; }
   return n;
@@ -13075,18 +13076,18 @@ function boardScreen(inp, factsIn, rowsIn) {
     all.push(p);
   }
   all.sort(function (a, b) { return (b.time - a.time) || (a.i - b.i); });
-  var shown = all.slice(0, f.n), used = {}, ids = [], idx = [];
+  var shown = all.slice(0, f.n), used = {}, ids = [], idx = [], sid = [];
   var head = [{ t: 'bar', pad: [16, 10, 16, 8], title: '\uac8c\uc2dc\ud310', btn: '\uae00\uc4f0\uae30', act: { a: 'call', v: 'bd.write' } }];
   var body = [];
   if (!all.length) {
     body.push({ t: 'text', s: f.st === 'loading' ? '\uac8c\uc2dc\uae00 \ubd88\ub7ec\uc624\ub294 \uc911...' : '\uc544\uc9c1 \uc81c\ubcf4\uac00 \uc5c6\uc2b5\ub2c8\ub2e4.\n\uccab \ubc88\uc9f8 \uc81c\ubcf4\uc790\uac00 \ub418\uc5b4\ubcf4\uc138\uc694!', size: 14, color: 'sub', lh: 1.8, align: 'center', pad: [20, 60, 20, 60] });
   } else {
     body.push({ t: 'spacer', h: 4 });
-    shown.forEach(function (p) { var pid = brdPid(p, used); ids.push(pid); idx.push(p.i); body.push(brdPostNode(p, pid, f, now)); });
+    shown.forEach(function (p) { var pid = brdPid(p, used); ids.push(pid); idx.push(p.i); sid.push(p.id); body.push(brdPostNode(p, pid, f, now)); });
     if (all.length > shown.length) body.push({ t: 'button', pad: [12, 4, 12, 0], s: '\ub354 \ubcf4\uae30 \u00b7 \ub0a8\uc740 \uae00 ' + (all.length - shown.length) + '\uac1c', size: 12, h: 40, act: { a: 'call', v: 'bd.more' } });
     body.push({ t: 'spacer', h: 28 });
   }
-  var out = { ok: true, v: 1, screen: 'board', cover: 'tab', head: head, body: body, info: { n: shown.length, all: all.length, ids: ids, idx: idx } };
+  var out = { ok: true, v: 1, screen: 'board', cover: 'tab', head: head, body: body, info: { n: shown.length, all: all.length, ids: ids, idx: idx, sid: sid } };
   out.rev = 'b' + BOARD_SCREEN_V + ':' + brdHash(JSON.stringify([head, body]));
   return out;
 }
@@ -13128,7 +13129,7 @@ async function handleScreenBoard(request) {
 //        data  = { g: [[\uae00\uc4f4\uc774, \uae00, \uc2dc\uac01(ms), \ub0b4\uac83(0|1), \ub178\uc120]\u2026](\uc804\uccb4 \ubc29) \u00b7 r: [[\ubc88\ud638, \uc2dc\uac01, \uae00\uc4f4\uc774, \uae00, \uc885\ub958('delay'|'crowd'|'')]\u2026](\ub178\uc120 \ubc29) \u00b7
 //                  off: \uc774 \ub178\uc120\uc758 \uacf5\uc2dd \uacf5\uc9c0 { text, title, ts, estimated, suspect } | null \u00b7 offOk: \uacf5\uc9c0 \uc870\ud68c\uac00 \ub410\ub098(0|1) \u00b7 offAt: \uc870\ud68c \uc2dc\uac01 \u00b7 al: { reporters, stations:[{stn,n}] } | null }
 // \ucd9c\ub825  { ok, v:1, screen:'chat', rev, cover:'tab', anchor:'bottom', head:[chips, text?, box?, box?], body:[msg\u2026|text], foot:[inbar], info:{ sel, n } }
-//        \ud589\ub3d9 \uc774\ub984: ch.send \ubcf4\ub0b4\uae30 \u00b7 ch.x.<\ubc88\ud638> \ub178\uc120 \ubc29 \uae00 \uc2e0\uace0(\ubc88\ud638 = \uc571\uc774 \ubcf4\ub0b8 r \ubc30\uc5f4\uc758 \uc6d0\ub798 \uc704\uce58) \u00b7 \uce69\uc740 {a:'cat', v:\ub178\uc120|'all'}
+//        \ud589\ub3d9 \uc774\ub984: ch.send \ubcf4\ub0b4\uae30 \u00b7 ch.x.<\ubc88\ud638> \ub178\uc120 \ubc29 \uae00 \uc2e0\uace0(\ubc88\ud638 = \uc571\uc774 \ubcf4\ub0b8 r \ubc30\uc5f4\uc758 \uc6d0\ub798 \uc704\uce58 \u00b7 act.id = \uadf8 \uae00\uc758 \uace0\uc720 id \u2014 \uc0c8 \uc571\uc740 id \ub97c \uba3c\uc800 \uc4f4\ub2e4) \u00b7 \uce69\uc740 {a:'cat', v:\ub178\uc120|'all'}
 // \ub9e8 \uc544\ub798 module.exports \ub294 \uc2dc\ud5d8(Node)\uc6a9\uc774\uace0 Worker \uc5d0\uc11c\ub294 \ud568\uc218 \uc120\uc5b8\ub9cc \uc4f0\uc778\ub2e4.
 'use strict';
 var CHAT_SCREEN_V = 1;
@@ -13251,7 +13252,7 @@ function chtMsgR(a, i, f) {
   if (!text || f.hid[id]) return null;
   var ts = Number(a[1]) || 0, nick = chtStr(a[2], 40) || '\uc775\uba85', mine = !!(f.me && nick === f.me), kind = chtStr(a[4], 10);
   var n = { t: 'msg', pad: [12, 0, 12, 10], s: text, time: chtTime(ts, f.tzo) };
-  if (mine) n.mine = true; else { n.nick = nick; n.go = '\uc2e0\uace0'; n.act = { a: 'call', v: 'ch.x.' + i }; }
+  if (mine) n.mine = true; else { n.nick = nick; n.go = '\uc2e0\uace0'; n.act = { a: 'call', v: 'ch.x.' + i, id: id }; }
   if (kind === 'delay') { n.badge = '\uc9c0\uc5f0'; n.bc = '#ff453a'; } else if (kind === 'crowd') { n.badge = '\ud63c\uc7a1'; n.bc = '#ff9f0a'; }
   return { ts: ts, i: i, node: n };
 }
@@ -20319,6 +20320,92 @@ async function handleScreenHdr(request) {
 }
 // ===== HDR ENGINE END =====
 
+// ===== SCACHE ENGINE BEGIN =====
+// \ud654\uba74 \uce90\uc2dc \uaddc\uce59(\uc5d4\uc9c4) \u2014 /screen/* \uc751\ub2f5\uc758 ETag \u00b7 \uc2e0\uc120 \uc2dc\uac04(max-age) \u00b7 304 \ud310\ub2e8. 2026-10-21 (s113).
+// \u2605 \uc6d0\uce59(YJ): "\ubaa8\ub4e0 \uacc4\uc0b0\uc740 \uc5d4\uc9c4\uc774 \ud55c\ub2e4. \uc571\uc740 \uadf8\ub9bc\ub9cc \uadf8\ub9b0\ub2e4." \u2014 \uc5b4\ub290 \ud654\uba74\uc744 \uc5bc\ub9c8 \ub3d9\uc548 \ub2e4\uc2dc \uc548 \ubc1b\uc544\ub3c4 \ub418\ub294\uc9c0(max-age)\uc640
+//   '\ub0b4\uc6a9\uc774 \uac19\uc740\uac00'(ETag)\ub294 \uc5d4\uc9c4\uc774 \uc815\ud55c\ub2e4. \uc571\uc740 \ud5e4\ub354\ub97c \uadf8\ub300\ub85c \ub530\ub97c \ubfd0(\uc2e0\uc120\ud558\uba74 \uc694\uccad\uc744 \uac74\ub108\ub6f0\uace0, \uac19\uc73c\uba74 304 \ub9cc \ubc1b\uace0 \ud654\uba74\uc744 \uadf8\ub300\ub85c \ub454\ub2e4).
+// \uc785\ub825  scCond(path, bodyText, ifNoneMatch) \u2192 { etag, maxAge, notModified }
+// \uaddc\uce59  ETag = \uc751\ub2f5 \uae00 \ud574\uc2dc + \uae38\uc774(\uac19\uc740 \uae00\uc774\uba74 \uac19\ub2e4) \u00b7 max-age = \ud654\uba74 \uc885\ub958\ubcc4 \ud45c(\uc544\ub798) \u00b7 If-None-Match \uac00 ETag \uc640 \uac19\uc73c\uba74 notModified.
+var SC_MAXAGE = {
+  '/screen/tabs': 600, '/screen/cchips': 600, '/screen/hdr': 300, '/screen/shop': 300, '/screen/settings': 30,
+  '/screen/news': 60, '/screen/board': 15, '/screen/chat': 4, '/screen/home': 15, '/screen/hcards': 60,
+  '/screen/map': 20, '/screen/food': 120, '/screen/fav': 30, '/screen/cong': 60, '/screen/ai': 60, '/screen/talk': 15
+};
+function scHash(str) {                                   // cyrb53 \u2014 \uac19\uc740 \uae00\uc774\uba74 \uac19\uc740 \uac12(\uc554\ud638\uc6a9 \uc544\ub2d8)
+  var h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+  for (var i = 0, ch; i < str.length; i++) {
+    ch = str.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+}
+function scEtag(text) { var t = String(text == null ? '' : text); return '"' + scHash(t) + '.' + t.length.toString(36) + '"'; }
+function scMaxAge(path) { var m = SC_MAXAGE[String(path || '')]; return typeof m === 'number' ? m : 0; }
+function scMatches(inm, etag) {
+  if (!inm) return false;
+  var parts = String(inm).split(',');
+  for (var i = 0; i < parts.length; i++) {
+    var p = parts[i].trim().replace(/^W\//, '');
+    if (p === '*' || p === etag) return true;
+  }
+  return false;
+}
+function scCond(path, text, inm) {
+  var etag = scEtag(text);
+  return { etag: etag, maxAge: scMaxAge(path), notModified: scMatches(inm, etag) };
+}
+// \ud654\uba74 \uce90\uc2dc \u00b7 \ubb36\uc74c \uc694\uccad Worker \uc5f0\uacb0\ubd80 \u2014 \ubaa8\ub4e0 /screen/* \uc751\ub2f5\uc5d0 ETag \u00b7 Cache-Control: max-age \ub97c \ubd99\uc774\uace0(If-None-Match \uac00 \uac19\uc73c\uba74 304),
+//   POST /screen/batch \ub85c \uc5ec\ub7ec \ud654\uba74 \uc694\uccad\uc744 \ud55c \ubc88\uc5d0 \ubc1b\ub294\ub2e4. route-v2 \uc758 fetch \uac00 handleFetchCond \ub97c \ubd80\ub978\ub2e4.
+//   \ubb36\uc74c \ubcf8\ubb38: { r:[ { k:\uc5f4\uc1e0, u:"/screen/\u2026(\ucffc\ub9ac \ud3ec\ud568)", m:"POST"|"GET", b:\ubcf8\ubb38 \uae00(POST), t:\uc571\uc774 \uac00\uc9c4 ETag(\uc788\uc73c\uba74) } ] }  (\ucd5c\ub300 16\uac1c)
+//   \ubb36\uc74c \uc751\ub2f5: { ok:true, res:{ \uc5f4\uc1e0:{ s:\uc0c1\ud0dc(200|304|\uc624\ub958), e:ETag, m:max-age(\ucd08), b:\uc751\ub2f5 \uae00(200 \uc77c \ub54c) } } }
+//   \uc548\ucabd \uc694\uccad\uc740 \ubcf4\ud1b5 \uc694\uccad\uacfc \uac19\uc740 \uae38(handleFetch)\ub85c \ucc98\ub9ac\ud558\ubbc0\ub85c \uae00\uc790 \ud558\ub098\uae4c\uc9c0 \uac19\uc740 \ud654\uba74\uc774\ub2e4. \ubb36\uc74c \uc548\uc758 \ubb36\uc74c\uc740 \uac70\uc808\ud55c\ub2e4.
+async function handleFetchCond(request, env, ctx) {
+  var res = await handleFetch(request, env, ctx);
+  var path;
+  try { path = new URL(request.url).pathname; } catch (e) { return res; }
+  if (path.indexOf("/screen/") !== 0 || path === "/screen/batch" || res.status !== 200 || request.method === "OPTIONS") return res;
+  var text = await res.text();
+  var c = scCond(path, text, request.headers.get("If-None-Match"));
+  var h = new Headers(res.headers);
+  h.set("ETag", c.etag); h.set("Cache-Control", "private, max-age=" + c.maxAge);
+  h.set("Access-Control-Expose-Headers", "ETag, Cache-Control"); h.set("Access-Control-Allow-Headers", "content-type, if-none-match");
+  if (c.notModified) return new Response(null, { status: 304, headers: h });
+  return new Response(text, { status: 200, headers: h });
+}
+async function handleScreenBatch(request) {
+  var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "content-type, if-none-match", "Cache-Control": "no-store" };
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: H });
+  if (request.method !== "POST") return new Response(JSON.stringify({ ok: false, error: "post-only" }), { status: 405, headers: H });
+  var raw = await request.text();
+  if (raw.length > 400000) return new Response(JSON.stringify({ ok: false, error: "body-too-long" }), { status: 413, headers: H });
+  var body;
+  try { body = JSON.parse(raw); } catch (e) { return new Response(JSON.stringify({ ok: false, error: "bad-json" }), { status: 400, headers: H }); }
+  var reqs = body && Array.isArray(body.r) ? body.r.slice(0, 16) : null;
+  if (!reqs) return new Response(JSON.stringify({ ok: false, error: "bad-body" }), { status: 400, headers: H });
+  var origin = new URL(request.url).origin, out = {};
+  await Promise.all(reqs.map(async function (q) {
+    var k = q && typeof q.k === "string" ? q.k.slice(0, 80) : "";
+    if (!k) return;
+    var u = typeof q.u === "string" ? q.u : "";
+    if (u.indexOf("/screen/") !== 0 || u.indexOf("/screen/batch") === 0 || u.length > 600) { out[k] = { s: 400 }; return; }
+    var method = q.m === "GET" ? "GET" : "POST";
+    try {
+      var init = { method: method, headers: {} };
+      if (typeof q.t === "string" && q.t) init.headers["If-None-Match"] = q.t.slice(0, 80);
+      if (method === "POST") init.body = typeof q.b === "string" ? q.b : JSON.stringify(q.b == null ? {} : q.b);
+      var r = await handleFetchCond(new Request(origin + u, init));
+      var e = r.headers.get("ETag") || "", ma = /max-age=(\d+)/.exec(r.headers.get("Cache-Control") || "");
+      var o = { s: r.status, e: e, m: ma ? Number(ma[1]) : 0 };
+      if (r.status === 200) o.b = await r.text();
+      out[k] = o;
+    } catch (err) { out[k] = { s: 500 }; }
+  }));
+  return new Response(JSON.stringify({ ok: true, res: out }), { headers: H });
+}
+// ===== SCACHE ENGINE END =====
+
 async function handleFetch(request, env, ctx) {
   try { await holEnsure(env); } catch (e) {}
   const url = new URL(request.url);
@@ -20362,6 +20449,7 @@ async function handleFetch(request, env, ctx) {
   if (url.pathname === "/rules") return handleRules(request);
   if (url.pathname === "/commute-brief") return handleCommuteBrief(request);
   if (url.pathname === "/screen/hdr") return handleScreenHdr(request);
+  if (url.pathname === "/screen/batch") return handleScreenBatch(request);
   if (url.pathname === "/stops-near") {
     const lat = parseFloat(url.searchParams.get("lat"));
     const lng = parseFloat(url.searchParams.get("lng"));

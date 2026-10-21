@@ -47,8 +47,9 @@ public class ShellActivity extends Activity {
     private final int[] seq = new int[2];              // 칸마다 가장 새 요청 번호(늦게 온 옛 답은 버린다)
     private int seqTabs = 0, seqHdr = 0;
     // 화면 글 캐시: 탭을 오갈 때 마지막으로 받은 화면을 바로 올리고, 새 글은 뒤에서 받아 바꾼다(스크롤은 그대로)
+    private final java.util.Set<String> scrKeys = java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<String, Boolean>());      // 메모리 캐시에 든 열쇠(다른 스레드에서 "캐시가 있나" 볼 때)
     private final java.util.LinkedHashMap<String, String> scrCache = new java.util.LinkedHashMap<String, String>(32, 0.75f, true) {
-        @Override protected boolean removeEldestEntry(java.util.Map.Entry<String, String> e) { return size() > 40; }       // 오래 안 본 화면부터 버린다(메모리 한도)
+        @Override protected boolean removeEldestEntry(java.util.Map.Entry<String, String> e) { boolean over = size() > 40; if (over) scrKeys.remove(e.getKey()); return over; }       // 오래 안 본 화면부터 버린다(메모리 한도)
     };
     private final java.util.HashMap<ScreenView, String> viewKey = new java.util.HashMap<ScreenView, String>();
     private final java.util.HashMap<ScreenView, String> shownJson = new java.util.HashMap<ScreenView, String>();       // 칸이 지금 보여 주는 글(같은 글이면 다시 그리지 않는다)
@@ -63,7 +64,7 @@ public class ShellActivity extends Activity {
         return sc;
     }
     /** 받는 스레드에서 부른다: 글을 미리 검증·해석해 둔다(실패해도 조용히 — 올릴 때 다시 알린다). */
-    private void warm(String json) { if (json == null || json.length() < 3 || json.length() > 600000) return; try { parsedGet(json); } catch (Throwable ignored) { } }
+    private void warm(String json) { if (json == null || json.length() < 5 || json.length() > 600000 || isNotMod(json)) return; try { parsedGet(json); } catch (Throwable ignored) { } }
     private volatile ShellCore.NewsRows lastNews = new ShellCore.NewsRows();
     private final HomeCore home = new HomeCore();       // 홈 탭 입력 상태(고른 출발/도착·후보·기준시각)
     private int seqHome = 0, seqCand = 0, seqBoard = 0;
@@ -331,8 +332,7 @@ public class ShellActivity extends Activity {
         if (c != null) showCached(tabs, c);
         new Thread(new Runnable() {
             @Override public void run() {
-                NetPost.Res r = NetPost.post(url, json, 8000);
-                final String txt = r.status == 200 ? r.body : ""; warm(txt);
+                final String txt = screenCall(ck, false, url, json, null, 8000); warm(txt);
                 main.post(new Runnable() { @Override public void run() { if (my == seqTabs) present(tabs, txt, false); } });
             }
         }, "shell-tabs").start();
@@ -349,8 +349,7 @@ public class ShellActivity extends Activity {
         final String url = ShellCore.hdrUrl(tz, hdrAt);
         new Thread(new Runnable() {
             @Override public void run() {
-                NetPost.Res r = NetPost.get(url, 8000);
-                final String txt = r.status == 200 && r.body != null ? r.body : "";
+                final String txt = screenCall(ShellCore.S_HDR, true, url, null, "tz" + tz, 8000);
                 warm(txt);
                 main.post(new Runnable() { @Override public void run() { if (my == seqHdr && txt.length() > 0) present(hdr, txt, true); } });
             }
@@ -375,6 +374,41 @@ public class ShellActivity extends Activity {
         if (ok != null && !ok.equals(nk)) loadSlotX(li, false, false); else loadSlot(li, true);
     }
 
+    // ───────────── 조건부 요청: 엔진이 준 ETag · max-age 를 그대로 따른다 ─────────────
+    // 신선 시간(max-age) 안이고 같은 요청이면 네트워크 없이 캐시를 쓰고, 지났으면 If-None-Match 로 묻는다. 엔진이 "같다"(304)고 하면 화면은 그대로 둔다(다시 읽지도 그리지도 않아 깜빡임이 없다).
+    static final String NOT_MOD = "\u0000304";
+    static boolean isNotMod(String t) { return t != null && t.length() == 4 && t.charAt(0) == 0 && NOT_MOD.equals(t); }
+    private boolean haveCached(String key) {
+        if (scrKeys.contains(key)) return true;
+        long ttl = ShellCore.diskTtl(key);
+        if (ttl > 0L) { File f = diskFile(key); return f.isFile() && f.length() > 2 && System.currentTimeMillis() - f.lastModified() <= ttl; }
+        return false;
+    }
+    private ShellCore.Cond condOf(String ck) { return ShellCore.Cond.parse(store.get(ShellCore.condKey(ck), "")); }
+    /** (스레드 안) 화면 하나를 받는다. 돌려주는 글: 받은 화면 · NOT_MOD(캐시 그대로) · ""(못 받음). 받은 화면은 캐시와 ETag 를 함께 갱신한다. */
+    private String screenCall(final String ck, boolean get, String url, String body, String sig, int timeoutMs) {
+        final int sg = (sig != null ? sig : (get ? url : body)).hashCode();
+        final ShellCore.Cond c = condOf(ck);
+        final boolean have = c != null && c.etag.length() > 0 && haveCached(ck);
+        final long now = System.currentTimeMillis();
+        if (have && c.fresh(now, sg)) return NOT_MOD;
+        NetPost.Res r = get ? NetPost.getCond(url, timeoutMs, have ? c.etag : "") : NetPost.postCond(url, body, timeoutMs, have ? c.etag : "");
+        if (r.status == 304 && have) { main.post(new Runnable() { @Override public void run() { store.put(ShellCore.condKey(ck), c.touched(System.currentTimeMillis(), 0, sg).enc()); } }); return NOT_MOD; }
+        if (r.status != 200 || r.body == null) return "";
+        screenStore(ck, r.body, r.etag, r.maxAge, sg);
+        return r.body;
+    }
+    /** 받은 화면을 검증해 캐시와 ETag 메타를 함께 갱신한다(어느 스레드에서든). 다른 화면이 오면 버린다. */
+    private void screenStore(final String ck, final String json, final String etag, final int maxAge, final int sg) {
+        if (json == null || json.length() < 3) return;
+        try { if (!ShellCore.expectId(ck).equals(parsedGet(json).id)) return; } catch (Throwable e) { return; }
+        main.post(new Runnable() { @Override public void run() {
+            cachePut(ck, json);
+            if (etag != null && etag.length() > 0) store.put(ShellCore.condKey(ck), new ShellCore.Cond(etag, System.currentTimeMillis(), maxAge, sg).enc());
+            else store.put(ShellCore.condKey(ck), "");
+        } });
+    }
+
     // ── 화면 글 캐시 ──
     private String cacheGet(String key, boolean disk) {
         String c = scrCache.get(key);
@@ -382,7 +416,7 @@ public class ShellActivity extends Activity {
         return c;
     }
     private void cachePut(String key, String json) {
-        scrCache.put(key, json);
+        scrCache.put(key, json); scrKeys.add(key);
         if (ShellCore.diskTtl(key) > 0L && !(ShellCore.S_HOME.equals(key) && home.hasRoute())) diskPut(key, json);        // 경로를 보는 중의 홈은 디스크에 두지 않는다(다시 켜면 그 경로 상태가 없다)
     }
     private File diskFile(String key) { return new File(new File(getCacheDir(), "scr"), Integer.toHexString(key.hashCode()) + ".json"); }
@@ -427,6 +461,7 @@ public class ShellActivity extends Activity {
             else if (ShellCore.S_CHAT.equals(id)) chat.onScreen(json);
             else if (ShellCore.S_FOOD.equals(id)) food.onScreen(json);
             else if ("map".equals(id)) map.onScreen(json);
+            else if (ShellCore.S_BOARD.equals(id) && json.contains("\"sid\":")) board.onScreen(json);       // 엔진이 글 고유 id 를 준 화면은 보낸 목록 순서와 상관없이 맞는다
         } catch (Throwable ignored) { }
     }
     // 스켈레톤: 캐시도 없고 아직 못 받은 칸에 먼저 보이는 뼈대
@@ -472,16 +507,25 @@ public class ShellActivity extends Activity {
     /** 상태 없이 엔진에서 한 번에 받는 화면(쇼핑·소식·칩 줄·설정)의 글. 못 받으면 "". */
     private String fetchGeneric(String screen) {
         String[] urls = ShellCore.feedUrls(screen), feeds = new String[urls.length];
-        for (int k = 0; k < urls.length; k++) {
-            NetPost.Res fr = NetPost.get(urls[k], 8000);
-            feeds[k] = fr.status == 200 ? fr.body : "";
-        }
+        for (int k = 0; k < urls.length; k++) feeds[k] = feedGet(urls[k], 8000);
         if (ShellCore.S_NEWS.equals(screen)) lastNews = ShellCore.NewsRows.from(feeds);
         store.put(ShellCore.K_DAY, RulesCore.day(System.currentTimeMillis()));
         ShellCore.Req rq = ShellCore.request(screen, store, feeds);
+        if (rq == null) return "";
         int ms = ShellCore.S_SHOP.equals(screen) ? 16000 : 10000;       // 쇼핑 서버가 처음엔 느리다(엔진이 한 번 더 시도한다)
-        NetPost.Res r = rq == null ? null : ("GET".equals(rq.method) ? NetPost.get(rq.url, ms) : NetPost.post(rq.url, rq.body, ms));
-        return (r != null && r.status == 200 && r.body != null) ? r.body : "";
+        return screenCall(ShellCore.cacheKey(screen, store), "GET".equals(rq.method), rq.url, rq.body, null, ms);
+    }
+    /** 원자료(뉴스 피드 등) GET: 서버가 ETag 를 주면 If-None-Match 로 묻고 304 면 가진 글을 그대로 쓴다(주지 않는 서버면 평소대로 받는다). */
+    private final java.util.concurrent.ConcurrentHashMap<String, String> feedBodies = new java.util.concurrent.ConcurrentHashMap<String, String>();
+    private String feedGet(String url, int timeoutMs) {
+        String fk = "feed|" + url, old = feedBodies.get(fk);
+        ShellCore.Cond c = condOf(fk);
+        if (old != null && c != null && c.fresh(System.currentTimeMillis(), 0)) return old;
+        NetPost.Res r = NetPost.getCond(url, timeoutMs, old != null && c != null ? c.etag : "");
+        if (r.status == 304 && old != null) { if (c != null) store.put(ShellCore.condKey(fk), c.touched(System.currentTimeMillis(), r.maxAge, 0).enc()); return old; }
+        if (r.status != 200 || r.body == null) return "";
+        if (r.body.length() < 2000000) { feedBodies.put(fk, r.body); store.put(ShellCore.condKey(fk), new ShellCore.Cond(r.etag, System.currentTimeMillis(), r.maxAge, 0).enc()); }
+        return r.body;
     }
 
     /**
@@ -491,19 +535,56 @@ public class ShellActivity extends Activity {
      *  · 위치가 필요한 지도 · 맛집은 마지막으로 안 위치로 받는다(위치가 한 번도 없으면 그 안내 화면이 캐시된다).
      */
     private long prefetchAt = 0L;
-    private final java.util.concurrent.atomic.AtomicInteger pfLeft = new java.util.concurrent.atomic.AtomicInteger(0);
-    private ChatCore pfChat; private MapCore pfMap; private final FoodCore pfFood = new FoodCore();
-    private void pfGo(String name, final Runnable r) {
-        pfLeft.incrementAndGet();
-        new Thread(new Runnable() { @Override public void run() {
-            try { r.run(); } catch (Throwable ignored) { } finally { pfLeft.decrementAndGet(); }
-        } }, "shell-pf-" + name).start();
+    private static final long PF_SKIP_MS = 120000L;                  // 이보다 최근에 받아 둔 화면은 미리 받기에서 건너뛴다(데이터 · 배터리)
+    private ChatCore pfChat; private MapCore pfMap, pfMapB; private final FoodCore pfFood = new FoodCore();
+
+    // ── 우선순위 큐: 지금 보는 탭은 평소 로더가 바로 받고, 나머지는 여기서 순서(우선순위)대로 100~300ms 간격으로 받는다(동시 2개 · 낮은 스레드 우선순위) ──
+    private interface PfJob { boolean run() throws Exception; }          // 돌려주는 값: 네트워크를 썼는가(썼으면 다음 일 전에 쉰다)
+    private static final class PfTask implements Comparable<PfTask> {
+        final int prio; final long seq; final PfJob job;
+        PfTask(int p, long s, PfJob j) { prio = p; seq = s; job = j; }
+        @Override public int compareTo(PfTask o) { return prio != o.prio ? (prio < o.prio ? -1 : 1) : (seq < o.seq ? -1 : seq > o.seq ? 1 : 0); }
     }
+    private final java.util.concurrent.PriorityBlockingQueue<PfTask> pfQueue = new java.util.concurrent.PriorityBlockingQueue<PfTask>();
+    private final java.util.concurrent.atomic.AtomicLong pfSeq = new java.util.concurrent.atomic.AtomicLong();
+    private final java.util.concurrent.atomic.AtomicInteger pfPending = new java.util.concurrent.atomic.AtomicInteger(), pfWorkers = new java.util.concurrent.atomic.AtomicInteger();
+    private void pfAdd(int prio, PfJob job) { pfPending.incrementAndGet(); pfQueue.add(new PfTask(prio, pfSeq.incrementAndGet(), job)); pfKick(); }
+    private void pfGap() { try { Thread.sleep(100 + rng.nextInt(200)); } catch (InterruptedException ignored) { } }
+    private void pfKick() {
+        while (true) {
+            int w = pfWorkers.get();
+            if (w >= 2 || pfQueue.isEmpty()) return;
+            if (!pfWorkers.compareAndSet(w, w + 1)) continue;
+            new Thread(new Runnable() { @Override public void run() {
+                try {
+                    android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND);
+                    PfTask t;
+                    while ((t = pfQueue.poll()) != null) {
+                        boolean net = false;
+                        try { net = t.job.run(); } catch (Throwable ignored) { } finally { pfPending.decrementAndGet(); }
+                        if (net) pfGap();
+                    }
+                } finally { pfWorkers.decrementAndGet(); if (!pfQueue.isEmpty()) pfKick(); }
+            } }, "shell-pf").start();
+        }
+    }
+    /** 캐시에 둔 지 얼마나 됐나(ms). 없으면 아주 큰 값. */
+    private long cacheAge(String key) {
+        if (!haveCached(key)) return Long.MAX_VALUE;
+        long now = System.currentTimeMillis();
+        ShellCore.Cond c = condOf(key);
+        if (c != null && c.at > 0) return Math.max(0L, now - c.at);
+        File f = diskFile(key);
+        return f.isFile() ? Math.max(0L, now - f.lastModified()) : Long.MAX_VALUE / 2;
+    }
+    private boolean pfNeeds(String key) { return cacheAge(key) >= PF_SKIP_MS; }
+
     private void prefetchTabs() {
-        if (pfLeft.get() > 0) return;                                    // 아직 도는 중
+        if (pfPending.get() > 0) return;                                  // 아직 도는 중
         prefetchAt = System.currentTimeMillis();
         if (pfChat == null) pfChat = new ChatCore(store);
         if (pfMap == null) pfMap = new MapCore(store);
+        if (pfMapB == null) pfMapB = new MapCore(store);
         final String cur = ShellCore.currentTab(store);
         final java.util.HashSet<String> live = new java.util.HashSet<String>();
         for (String sc : slots) live.add(sc);
@@ -514,66 +595,50 @@ public class ShellActivity extends Activity {
         final String dName = d != null && d.ok() ? d.name : ""; final double dLa = d != null && d.ok() ? d.lat : 0, dLo = d != null && d.ok() ? d.lng : 0;
         final boolean hasRoute = home.hasRoute();
 
-        pfGo("tabs", new Runnable() { @Override public void run() {                // 탭 막대
-            for (String t : ShellCore.TABS) {
-                if (t.equals(cur)) continue;
-                NetPost.Res r = NetPost.post(ShellCore.tabsUrl(), ShellCore.tabsBody(t), 8000);
-                if (r.status == 200) prefetchPut("tabs|" + t, r.body, false);
+        // 0순위: 가볍고 상태 없는 화면들(탭 막대 · 칩 줄 · 설정 · 노선도 지하철 방식)은 /screen/batch 한 번으로
+        final java.util.ArrayList<String[]> ents = new java.util.ArrayList<String[]>();       // {열쇠, 경로, GET|POST, 본문}
+        for (String t : ShellCore.TABS) if (!t.equals(cur)) ents.add(new String[] { "tabs|" + t, "/screen/tabs", "POST", ShellCore.tabsBody(t) });
+        for (String m : ShellCore.MODES) {
+            if (m.equals("set") && live.contains(ShellCore.S_SETTINGS)) continue;
+            if (live.contains(ShellCore.S_CCHIPS) && m.equals(liveMode)) continue;
+            ents.add(new String[] { ShellCore.cchipsKey(m), "/screen/cchips", "POST", ShellCore.cchipsBody(m) });
+        }
+        if (!live.contains(ShellCore.S_SETTINGS)) ents.add(new String[] { ShellCore.S_SETTINGS, ShellCore.settingsUrl(store).substring(ShellCore.BASE.length()), "GET", "" });
+        pfAdd(0, new PfJob() { @Override public boolean run() throws Exception {
+            pfMapB.modeOverride = "subway";
+            if (!("map".equals(cur) && "subway".equals(mapMode))) {
+                ents.add(new String[] { ShellCore.mapKey(ShellCore.S_MAPH, "subway", store), "/screen/map", "POST", pfMapB.headRequest(ShellCore.CAP, theme, "") });
+                ents.add(new String[] { ShellCore.mapKey(ShellCore.S_MAPB, "subway", store), "/screen/map", "POST", pfMapB.bodyRequest(ShellCore.CAP, theme) });
             }
+            if (!("map".equals(cur) && "bus".equals(mapMode))) { pfMapB.modeOverride = "bus"; ents.add(new String[] { ShellCore.mapKey(ShellCore.S_MAPH, "bus", store), "/screen/map", "POST", pfMapB.headRequest(ShellCore.CAP, theme, "") }); }
+            pfMapB.modeOverride = null;
+            return pfBatch(ents);
         } });
-        if (!"home".equals(cur) && !hasRoute) pfGo("home", new Runnable() { @Override public void run() {
+        if (!"home".equals(cur) && !hasRoute) pfAdd(0, new PfJob() { @Override public boolean run() throws Exception {                 // 홈
+            if (!pfNeeds(ShellCore.S_HOME)) return false;
             String body = onMainWait(new java.util.concurrent.Callable<String>() { @Override public String call() { return home.request(homeEnv(), ShellCore.CAP); } });
-            if (body == null || body.length() == 0) return;
+            if (body == null || body.length() == 0) return false;
             NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/home", body, 8000);
             String txt = r.status == 200 && r.body != null ? r.body : "";
             String hc0 = hcJson;
             if (txt.length() > 0 && hc0 != null && hc0.length() > 0) txt = ShellCore.mergeBodies(txt, hc0);
             prefetchPut(ShellCore.S_HOME, txt, true);
+            return true;
         } });
-        pfGo("comm", new Runnable() { @Override public void run() {                // 커뮤니티: 칩 줄(방식마다) · 게시판 · 소식(모든 분류)
-            for (String m : ShellCore.MODES) {
-                if (live.contains(ShellCore.S_CCHIPS) && m.equals(liveMode)) continue;
-                NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/cchips", ShellCore.cchipsBody(m), 8000);
-                if (r.status == 200) prefetchPut(ShellCore.cchipsKey(m), r.body, false);
-            }
-            if (!live.contains(ShellCore.S_BOARD)) {
-                String bb = boardBody(true);
-                NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/board", bb, 10000);
-                if (r.status == 200) prefetchPut(ShellCore.S_BOARD, r.body, true);
-            }
-            prefetchNews(live.contains(ShellCore.S_NEWS));
+        if (!live.contains(ShellCore.S_BOARD)) pfAdd(1, new PfJob() { @Override public boolean run() throws Exception {              // 게시판
+            if (!pfNeeds(ShellCore.S_BOARD)) return false;
+            String bb = boardBody(true);
+            final String txt = screenCall(ShellCore.S_BOARD, false, ShellCore.BASE + "/screen/board", bb, null, 10000);
+            if (txt.length() > 0 && !isNotMod(txt)) main.post(new Runnable() { @Override public void run() { board.onScreen(txt); } });
+            return true;
         } });
-        pfGo("chat", new Runnable() { @Override public void run() {                // 대화방 전부(고스트 상태기)
-            String me = ShellCore.commId(store), th = theme;
-            int tzo = -java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 60000;
-            pfChat.routeSec = new ArrayList<String>(sec);
-            ArrayList<String> sels = new ArrayList<String>(); sels.add("all");
-            for (int i = 0; i < sels.size() && i < 24; i++) {
-                String sel = sels.get(i);
-                if (System.currentTimeMillis() - pfChat.noticesAt > 60000) {
-                    NetPost.Res nr = NetPost.get(ChatCore.noticesUrl(), 8000);
-                    if (nr.status == 200) pfChat.setNotices(nr.body, System.currentTimeMillis());
-                }
-                if ("all".equals(sel)) { NetPost.Res tr = NetPost.get(pfChat.talksUrlNow(), 7000); if (tr.status == 200) pfChat.addTalks(tr.body, me); }
-                else { NetPost.Res rr = NetPost.get(pfChat.roomUrl(sel), 12000); if (rr.status == 200) pfChat.addRoom(sel, rr.body); }
-                String body = pfChat.requestFor(sel, false, ShellCore.CAP, th, tzo, me, System.currentTimeMillis());
-                NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/chat", body, 10000);
-                if (r.status != 200 || r.body == null) continue;
-                boolean isLive = live.contains(ShellCore.S_CHAT) && sel.equals(liveSel);
-                if (!isLive) prefetchPut(ShellCore.S_CHAT + "|" + sel, r.body, false);
-                if (i == 0) for (String c : ShellCore.catValues(r.body)) if (!sels.contains(c)) sels.add(c);
-            }
-        } });
-        pfGo("map", new Runnable() { @Override public void run() {                 // 노선도: 버스 · 지하철 두 방식 모두(고스트 상태기)
-            String[] modes = "bus".equals(mapMode) ? new String[] { "bus", "subway" } : new String[] { "subway", "bus" };
-            for (String md : modes) {
-                boolean isLive = "map".equals(cur) && md.equals(mapMode);
-                if (isLive) continue;
-                pfMap.modeOverride = md;
-                String hk = ShellCore.mapKey(ShellCore.S_MAPH, md, store), bk = ShellCore.mapKey(ShellCore.S_MAPB, md, store);
-                NetPost.Res hr = NetPost.post(ShellCore.BASE + "/screen/map", pfMap.headRequest(ShellCore.CAP, theme, ""), 8000);
-                if (hr.status == 200) prefetchPut(hk, hr.body, false);
-                if ("bus".equals(md) && ll != null) pfMap.setBusLoc(ll[0], ll[1]);
+        pfAdd(1, new PfJob() { @Override public boolean run() throws Exception { return prefetchNews(live.contains(ShellCore.S_NEWS)); } });    // 소식(모든 분류)
+        pfAdd(1, new PfJob() { @Override public boolean run() throws Exception {                // 노선도 버스(위치 → 정류장 → 도착정보 왕복이라 묶지 못한다)
+            if (("map".equals(cur) && "bus".equals(mapMode)) || !pfNeeds(ShellCore.mapKey(ShellCore.S_MAPB, "bus", store))) return false;
+            pfMap.modeOverride = "bus";
+            try {
+                String bk = ShellCore.mapKey(ShellCore.S_MAPB, "bus", store);
+                if (ll != null) pfMap.setBusLoc(ll[0], ll[1]);
                 for (int round = 0; round < 4; round++) {
                     NetPost.Res br = NetPost.post(ShellCore.BASE + "/screen/map", pfMap.bodyRequest(ShellCore.CAP, theme), 8000);
                     if (br.status != 200 || br.body == null) break;
@@ -596,14 +661,43 @@ public class ShellActivity extends Activity {
                     for (int i = 0; i < need.size(); i++) pfMap.addBusRes(need.get(i)[0], got[i] == null ? "" : got[i]);
                     pfMap.busNeed.clear();
                 }
-                pfMap.modeOverride = null;
-            }
+            } finally { pfMap.modeOverride = null; }
+            return true;
         } });
-        if (!"food".equals(cur)) pfGo("food", new Runnable() { @Override public void run() {       // 맛집: 도착지 또는 마지막 위치(고스트 상태기)
+        pfAdd(2, new PfJob() { @Override public boolean run() throws Exception {                // 대화방 전부(고스트 상태기) — 엔진이 칩으로 준 순서대로
+            String me = ShellCore.commId(store);
+            int tzo = -java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 60000;
+            pfChat.routeSec = new ArrayList<String>(sec);
+            ArrayList<String> sels = new ArrayList<String>(); sels.add("all");
+            boolean net = false;
+            for (int i = 0; i < sels.size() && i < 24; i++) {
+                String sel = sels.get(i), key = ShellCore.S_CHAT + "|" + sel;
+                boolean isLive = live.contains(ShellCore.S_CHAT) && sel.equals(liveSel);
+                if (i > 0 && (isLive || !pfNeeds(key))) continue;
+                if (System.currentTimeMillis() - pfChat.noticesAt > 60000) {
+                    NetPost.Res nr = NetPost.get(ChatCore.noticesUrl(), 8000);
+                    if (nr.status == 200) pfChat.setNotices(nr.body, System.currentTimeMillis());
+                }
+                if ("all".equals(sel)) { NetPost.Res tr = NetPost.get(pfChat.talksUrlNow(), 7000); if (tr.status == 200) pfChat.addTalks(tr.body, me); }
+                else { NetPost.Res rr = NetPost.get(pfChat.roomUrl(sel), 12000); if (rr.status == 200) pfChat.addRoom(sel, rr.body); }
+                String body = pfChat.requestFor(sel, false, ShellCore.CAP, theme, tzo, me, System.currentTimeMillis());
+                String txt = screenCall(key, false, ShellCore.BASE + "/screen/chat", body, null, 10000);
+                net = true;
+                if (i == 0) {
+                    String src = txt.length() > 0 && !isNotMod(txt) ? txt : null;
+                    if (src == null) { NetPost.Res r0 = NetPost.post(ShellCore.BASE + "/screen/chat", body, 10000); src = r0.status == 200 ? r0.body : ""; }
+                    for (String c : ShellCore.catValues(src)) if (!sels.contains(c)) sels.add(c);
+                }
+                pfGap();
+            }
+            return net;
+        } });
+        if (!"food".equals(cur)) pfAdd(3, new PfJob() { @Override public boolean run() throws Exception {                // 맛집: 도착지 또는 마지막 위치(고스트 상태기)
+            if (!pfNeeds(ShellCore.S_FOOD)) return false;
             pfFood.setDest(dName, dLa, dLo);
-            if (pfFood.needGps()) { if (ll != null) pfFood.setGps(ll[0], ll[1]); else return; }
+            if (pfFood.needGps()) { if (ll != null) pfFood.setGps(ll[0], ll[1]); else return false; }
             NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/food", pfFood.request(ShellCore.CAP, true), 12000);
-            if (r.status != 200 || r.body == null) return;
+            if (r.status != 200 || r.body == null) return true;
             pfFood.onScreen(r.body);
             if (pfFood.needData()) {
                 String su = pfFood.serverUrl();
@@ -613,41 +707,106 @@ public class ShellActivity extends Activity {
                 NetPost.Res r2 = NetPost.post(ShellCore.BASE + "/screen/food", pfFood.request(ShellCore.CAP, true), 20000);
                 if (r2.status == 200 && r2.body != null) { pfFood.onScreen(r2.body); prefetchPut(ShellCore.S_FOOD, r2.body, false); }
             } else prefetchPut(ShellCore.S_FOOD, r.body, false);
+            return true;
         } });
-        pfGo("shop", new Runnable() { @Override public void run() {                // 쇼핑: 지금 분류 → 나머지 분류(서버가 느려서 차례로 · 연달아 두 번 못 받으면 멈춘다)
+        pfAdd(3, new PfJob() { @Override public boolean run() throws Exception {                // 쇼핑: 지금 분류 → 나머지 분류(서버가 느려서 차례로 · 연달아 두 번 못 받으면 멈춘다)
             String key = ShellCore.cacheKey(ShellCore.S_SHOP, store);
-            NetPost.Res r = NetPost.get(ShellCore.shopUrl(store.get(ShellCore.K_SHOP_CAT, "")), 16000);
-            if (r.status != 200 || r.body == null) return;
-            prefetchPut(key, r.body, false);
+            boolean net = false;
+            String base = pfNeeds(key) ? screenCall(key, true, ShellCore.shopUrl(store.get(ShellCore.K_SHOP_CAT, "")), null, null, 16000) : "";
+            if (base.length() > 0) net = true;
+            String src = base.length() > 0 && !isNotMod(base) ? base : onMainWait(new java.util.concurrent.Callable<String>() { @Override public String call() { return cacheGet(ShellCore.cacheKey(ShellCore.S_SHOP, store), true); } });
+            if (src == null || src.length() == 0) return net;
             int fails = 0;
-            for (String c : ShellCore.catValues(r.body)) {
-                if (("shop|" + c).equals(key)) continue;
-                NetPost.Res cr = NetPost.get(ShellCore.shopUrl(c), 16000);
-                if (cr.status == 200 && cr.body != null) { prefetchPut("shop|" + c, cr.body, false); fails = 0; } else if (++fails >= 2) break;
+            for (String c : ShellCore.catValues(src)) {
+                String ck = "shop|" + c;
+                if (ck.equals(key) || !pfNeeds(ck)) continue;
+                pfGap();
+                String cr = screenCall(ck, true, ShellCore.shopUrl(c), null, null, 16000);
+                net = true;
+                if (cr.length() > 0) fails = 0; else if (++fails >= 2) break;
             }
-            if (!live.contains(ShellCore.S_SETTINGS)) prefetchPut(ShellCore.S_SETTINGS, fetchGeneric(ShellCore.S_SETTINGS), false);
+            return net;
         } });
+    }
+    /** 묶음 요청: 여러 화면을 /screen/batch 한 번에 받는다. 신선하거나 최근에 받아 둔 것은 빼고, 앱이 가진 ETag 를 실어 같으면 항목만 304 를 받는다. 묶음이 안 되는 워커(옛 버전)면 하나씩. */
+    @SuppressWarnings("unchecked")
+    private boolean pfBatch(java.util.List<String[]> ents) {
+        final long now = System.currentTimeMillis();
+        final java.util.ArrayList<String[]> todo = new java.util.ArrayList<String[]>();
+        for (String[] e : ents) {
+            String key = e[0];
+            if (!pfNeeds(key)) continue;
+            ShellCore.Cond c = condOf(key);
+            if (c != null && haveCached(key) && c.fresh(now, ("GET".equals(e[2]) ? e[1] : e[3]).hashCode())) continue;
+            todo.add(e);
+        }
+        if (todo.isEmpty()) return false;
+        StringBuilder b = new StringBuilder("{\"r\":[");
+        for (int i = 0; i < todo.size(); i++) {
+            String[] e = todo.get(i);
+            ShellCore.Cond c = condOf(e[0]);
+            if (i > 0) b.append(',');
+            b.append("{\"k\":").append(ShellCore.q(e[0])).append(",\"u\":").append(ShellCore.q(e[1])).append(",\"m\":").append(ShellCore.q(e[2]));
+            if ("POST".equals(e[2])) b.append(",\"b\":").append(ShellCore.q(e[3]));
+            if (c != null && c.etag.length() > 0 && haveCached(e[0])) b.append(",\"t\":").append(ShellCore.q(c.etag));
+            b.append('}');
+        }
+        b.append("]}");
+        NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/batch", b.toString(), 15000);
+        Object parsed = null;
+        try { if (r.status == 200 && r.body != null) parsed = ScreenCore.parse(r.body); } catch (Exception ignored) { }
+        if (!(parsed instanceof java.util.Map) || !(((java.util.Map<String, Object>) parsed).get("res") instanceof java.util.Map)) {
+            for (final String[] e : todo) pfAdd(1, new PfJob() { @Override public boolean run() throws Exception {      // 옛 워커: 하나씩(큐가 간격을 둔다)
+                screenCall(e[0], "GET".equals(e[2]), ShellCore.BASE + e[1], e[3], null, 10000);
+                return true;
+            } });
+            return true;
+        }
+        java.util.Map<String, Object> res = (java.util.Map<String, Object>) ((java.util.Map<String, Object>) parsed).get("res");
+        for (String[] e : todo) {
+            Object o = res.get(e[0]);
+            if (!(o instanceof java.util.Map)) continue;
+            java.util.Map<String, Object> m = (java.util.Map<String, Object>) o;
+            int st = m.get("s") instanceof Double ? (int) ((Double) m.get("s")).doubleValue() : 0;
+            String et = m.get("e") instanceof String ? (String) m.get("e") : "";
+            int ma = m.get("m") instanceof Double ? (int) ((Double) m.get("m")).doubleValue() : 0;
+            final int sg = ("GET".equals(e[2]) ? e[1] : e[3]).hashCode();
+            if (st == 200 && m.get("b") instanceof String) { warm((String) m.get("b")); screenStore(e[0], (String) m.get("b"), et, ma, sg); }
+            else if (st == 304) {
+                final String ck = e[0]; final ShellCore.Cond c = condOf(ck); final int fma = ma;
+                if (c != null) main.post(new Runnable() { @Override public void run() { store.put(ShellCore.condKey(ck), c.touched(System.currentTimeMillis(), fma, sg).enc()); } });
+            }
+        }
+        return true;
     }
     /** 소식: 엔진이 모든 분류의 화면을 한 번에 계산해 주므로(alts) 한 번 받아 분류마다 캐시에 둔다. live 면 지금 분류 화면은 건드리지 않는다(눌림이 목록과 묶여 있어서). */
     @SuppressWarnings("unchecked")
-    private void prefetchNews(boolean live) {
+    private boolean prefetchNews(boolean live) {
+        String curKey = ShellCore.cacheKey(ShellCore.S_NEWS, store);
+        ShellCore.Cond nc = condOf("newsalts");
+        long nowMs = System.currentTimeMillis();
+        if (nc != null && nowMs - nc.at < PF_SKIP_MS && haveCached(curKey)) return false;
         String[] urls = ShellCore.feedUrls(ShellCore.S_NEWS), feeds = new String[urls.length];
-        for (int k = 0; k < urls.length; k++) { NetPost.Res fr = NetPost.get(urls[k], 8000); feeds[k] = fr.status == 200 ? fr.body : ""; }
+        for (int k = 0; k < urls.length; k++) feeds[k] = feedGet(urls[k], 8000);
         ShellCore.NewsRows rows = ShellCore.NewsRows.from(feeds);
-        NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/news", ShellCore.newsBody(store, rows, true), 15000);
-        if (r.status != 200 || r.body == null) return;
+        String body = ShellCore.newsBody(store, rows, true);
+        final int sg = body.hashCode();
+        if (nc != null && nc.sig == sg && haveCached(curKey) && nowMs - nc.at < 60000L) return false;            // 같은 기사 목록이고 엔진이 말한 신선 시간(1분) 안
+        NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/news", body, 15000);
+        if (r.status != 200 || r.body == null) return true;
         try {
             Object o = ScreenCore.parse(r.body);
-            if (!(o instanceof java.util.Map)) return;
+            if (!(o instanceof java.util.Map)) return true;
             java.util.Map<String, Object> m = (java.util.Map<String, Object>) o;
             Object alts = m.remove("alts");
-            String curKey = ShellCore.cacheKey(ShellCore.S_NEWS, store);
             if (!live) { lastNews = rows; prefetchPut(curKey, HomeSearchCore.toJson(m), false); }
             if (alts instanceof java.util.Map) for (java.util.Map.Entry<String, Object> e : ((java.util.Map<String, Object>) alts).entrySet()) {
                 String k = ShellCore.S_NEWS + "|" + e.getKey();
                 if (!k.equals(curKey)) prefetchPut(k, HomeSearchCore.toJson(e.getValue()), false);
             }
+            main.post(new Runnable() { @Override public void run() { store.put(ShellCore.condKey("newsalts"), new ShellCore.Cond("alts", System.currentTimeMillis(), 60, sg).enc()); } });
         } catch (Throwable ignored) { }
+        return true;
     }
     /** 주 스레드에서 한 번 돌리고 결과를 기다린다(3초 안에 못 받으면 null). */
     private <T> T onMainWait(java.util.concurrent.Callable<T> c) {
@@ -661,6 +820,7 @@ public class ShellActivity extends Activity {
         try { if (!ShellCore.expectId(key).equals(parsedGet(txt).id)) return; } catch (Throwable e) { return; }
         main.post(new Runnable() { @Override public void run() {
             cachePut(key, txt);
+            store.put(ShellCore.condKey(key), "");                          // 이 글은 ETag 없이 들어왔다 — 옛 ETag 와 짝이 어긋나지 않게 비운다
             if (restore) { if (ShellCore.S_BOARD.equals(ShellCore.expectId(key))) board.onScreen(txt); else restoreState(key, txt); }
         } });
     }
@@ -670,6 +830,11 @@ public class ShellActivity extends Activity {
 
     /** 받은 글을 검증해 올린다. 못 읽으면 지금 화면을 그대로 두고 알린다. */
     private void present(ScreenView v, String json, boolean keep) {
+        if (isNotMod(json)) {                                           // 엔진이 "같다" — 캐시 화면이 이미 맞는 글이다. 안 떠 있으면 그것을 올린다.
+            String ck = viewKey.get(v), c = ck == null ? null : cacheGet(ck, true);
+            if (c != null && !c.equals(shownJson.get(v))) showCached(v, c);
+            return;
+        }
         if (json == null || json.length() == 0) {
             String ck = viewKey.get(v);
             if (ck != null && v != sheetView && (v.itemCount() == 0 || skelViews.contains(v))) {          // 빈 칸이면 안내와 [다시 시도]
@@ -685,13 +850,20 @@ public class ShellActivity extends Activity {
             v.setScreen(sc, keep && !skelViews.contains(v));
             skelViews.remove(v);
             if (v != sheetView) shownJson.put(v, json);
-            if (ck != null && v != sheetView) cachePut(ck, json);
+            if (ck != null && v != sheetView && !partialScreen(ck)) cachePut(ck, json);
             if (!keep && v != sheetView) fadeIn(v);
         } catch (Throwable e) {
             toast("화면이 올바르지 않아요: " + String.valueOf(e.getMessage()));
         }
     }
 
+    /** 아직 다 안 채워진 중간 화면(버스 도착정보를 더 받아야 하는 노선도 · 원자료를 기다리는 맛집)은 캐시에 두지 않는다 — 다음에 켰을 때 "받는 중" 화면이 먼저 뜨지 않게. */
+    private boolean partialScreen(String ck) {
+        String id = ShellCore.expectId(ck);
+        if ("map".equals(id) && ck.startsWith(ShellCore.S_MAPB)) return !map.busNeed.isEmpty();
+        if (ShellCore.S_FOOD.equals(id)) return food.needData();
+        return false;
+    }
     /** 웹 slideUp 과 같은 움직임: 시트가 아래에서 올라온다(220ms, 감속). 뷰 속성만 쓴다. */
     private void slideIn(View v) {
         if (v == null) return;
@@ -762,6 +934,9 @@ public class ShellActivity extends Activity {
             } else if (ShellCore.S_BOARD.equals(screenName())) {
                 boardAct(a, which == 0 ? head : body);
                 return;
+            } else if (ShellCore.S_NEWS.equals(screenName()) && "call".equals(a.a) && a.v.startsWith("nw.") && (a.id.length() > 0)) {
+                openNewsById(a.id, a.t);                       // 목록이 바뀐 뒤에 눌러도 같은 기사 — 순번이 아니라 기사의 고유 id 로
+                return;
             } else if (ShellCore.S_FOOD.equals(screenName())) {
                 foodAct(a);
                 return;
@@ -816,12 +991,11 @@ public class ShellActivity extends Activity {
         new Thread(new Runnable() {
             @Override public void run() {
                 final String body = chatBody(fetch, sel, me);
-                NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/chat", body, 10000);
-                final String txt = r.status == 200 ? r.body : ""; warm(txt);
+                final String txt = screenCall(ShellCore.S_CHAT + "|" + sel, false, ShellCore.BASE + "/screen/chat", body, null, 10000); warm(txt);
                 main.post(new Runnable() { @Override public void run() {
                     if (my != seqChat) return;
                     present(v, txt, keep);
-                    if (txt.length() > 0) chat.onScreen(txt);
+                    if (txt.length() > 0 && !isNotMod(txt)) chat.onScreen(txt);
                 } });
             }
         }, "shell-chat").start();
@@ -854,7 +1028,7 @@ public class ShellActivity extends Activity {
         if ("cat".equals(a.a)) { chat.select(a.v); boolean shown = keyedShow(body, ShellCore.S_CHAT); loadChat(body, shown, true); return; }
         if (!"call".equals(a.a)) return;
         final String me = ShellCore.commId(store);
-        int r = chat.act(a.v, src.fields(), me);
+        int r = chat.act(a.v, a.id, src.fields(), me);
         switch (r) {
             case ChatCore.R_NEED_ID: toast("설정에서 커뮤니티 아이디를 등록하면 글과 제보를 남길 수 있어요"); break;
             case ChatCore.R_SEND: {
@@ -911,12 +1085,11 @@ public class ShellActivity extends Activity {
         new Thread(new Runnable() {
             @Override public void run() {
                 final String body = boardBody(fetch);
-                NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/board", body, 10000);
-                final String txt = r.status == 200 ? r.body : ""; warm(txt);
+                final String txt = screenCall(ShellCore.S_BOARD, false, ShellCore.BASE + "/screen/board", body, null, 10000); warm(txt);
                 main.post(new Runnable() { @Override public void run() {
                     if (my != seqBoard) return;
                     present(v, txt, keep);
-                    if (txt.length() > 0) board.onScreen(txt);
+                    if (txt.length() > 0 && !isNotMod(txt)) board.onScreen(txt);
                 } });
             }
         }, "shell-board").start();
@@ -950,7 +1123,7 @@ public class ShellActivity extends Activity {
         }
         if (!"call".equals(a.a)) return;
         final long now = System.currentTimeMillis();
-        int r = board.act(a.v, src.fields(), now);
+        int r = board.act(a.v, a.id, a.key, src.fields(), now);
         final String id = board.pendingId;
         switch (r) {
             case BoardCore.R_RENDER: reloadBoard(); break;
@@ -1040,7 +1213,7 @@ public class ShellActivity extends Activity {
                 main.post(new Runnable() { @Override public void run() {
                     if (my != seqFood || txt.length() == 0) { if (txt.length() == 0 && my == seqFood) toast("맛집 화면을 받지 못했어요"); return; }
                     food.onScreen(txt);
-                    present(v, txt, keep);
+                    if (!(keep && food.needData())) present(v, txt, keep);          // 캐시 화면이 떠 있으면 "받는 중" 중간 화면으로 덮지 않는다(깜빡임)
                     if (food.needData()) fetchFoodData(my, v);
                 } });
             }
@@ -1209,14 +1382,14 @@ public class ShellActivity extends Activity {
         final int my = ++seqMapH;
         final String typed = q != null ? q : (head.fields().get("mq") == null ? "" : head.fields().get("mq"));
         final String json = map.headRequest(ShellCore.CAP, ShellCore.theme(store), typed);
+        final String hk = typed.length() > 0 ? "maph|q" : ShellCore.cacheKey(ShellCore.S_MAPH, store);       // 찾기(글자 검색)는 캐시와 따로
         new Thread(new Runnable() {
             @Override public void run() {
-                NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/map", json, 8000);
-                final String txt = r.status == 200 ? r.body : ""; warm(txt);
+                final String txt = screenCall(hk, false, ShellCore.BASE + "/screen/map", json, null, 8000); warm(txt);
                 main.post(new Runnable() { @Override public void run() {
                     if (my != seqMapH) return;
                     present(v, txt, keep);
-                    if (txt.length() > 0) { map.onScreen(txt); if (after != null) after.run(); }
+                    if (txt.length() > 0) { if (!isNotMod(txt)) map.onScreen(txt); if (after != null) after.run(); }
                 } });
             }
         }, "shell-maph").start();
@@ -1233,7 +1406,7 @@ public class ShellActivity extends Activity {
                 main.post(new Runnable() { @Override public void run() {
                     if (my != seqMapB) return;
                     if (txt.length() > 0) map.onScreen(txt);
-                    present(v, txt, keep);
+                    if (!(keep && txt.length() > 0 && !map.busNeed.isEmpty())) present(v, txt, keep);          // 버스 도착정보를 더 받아야 하면 캐시 화면을 중간 화면으로 덮지 않는다
                     syncMapView();
                     if (txt.length() > 0 && !map.busNeed.isEmpty() && round < 3) fetchBusNeed(v, keep, round, my);
                 } });
@@ -2373,6 +2546,20 @@ public class ShellActivity extends Activity {
         if (i < 0 || i >= rows.rows.size()) return;
         final String link = rows.rows.get(i)[1];
         final String json = ShellCore.newsDetailBody(rows.rowJson(i));
+        new Thread(new Runnable() {
+            @Override public void run() {
+                NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/news", json, 8000);
+                final ShellCore.Detail d = r.status == 200 ? ShellCore.parseDetail(r.body, link) : null;
+                main.post(new Runnable() { @Override public void run() { if (d == null) toast("기사 내용을 받지 못했어요"); else showDetail(d); } });
+            }
+        }, "shell-news").start();
+    }
+
+    /** 기사 고유 id(링크, 없으면 제목)로 상세를 연다: 지금 가진 기사 줄에서 같은 것을 찾아 전부 보내고, 없으면(목록이 바뀌어 사라졌으면) 눌린 줄의 제목 · 링크만으로 엔진에 묻는다. */
+    private void openNewsById(String id, String title) {
+        final ShellCore.NewsRows rows = lastNews;
+        final String json = ShellCore.newsDetailBody(rows.rowJsonById(id, title));
+        final String link = id.startsWith("http") ? id : "";
         new Thread(new Runnable() {
             @Override public void run() {
                 NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/news", json, 8000);

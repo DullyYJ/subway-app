@@ -124,17 +124,17 @@ function brdPostNode(p, pid, f, now) {
   var mineRx = f.rx[p.id] || {};
   function rb(label, n, type, verb) {
     var on = !!mineRx[type];
-    var b = { label: label + ' ' + (n + (on ? 1 : 0)), act: { a: 'call', v: 'bd.' + verb + '.' + p.i } };
+    var b = { label: label + ' ' + (n + (on ? 1 : 0)), act: { a: 'call', v: 'bd.' + verb + '.' + p.i, id: p.id } };
     if (on) { b.on = true; b.fill = 'rgba(10,132,255,0.13)'; b.line = BRD_BLUE; b.tc = BRD_BLUE; }
     return b;
   }
   var items = [rb('좋아요', p.like, 'like', 'lk'), rb('ㅋㅋ', p.lol, 'lol', 'lo'), rb('ㅠㅠ', p.sad, 'sad', 'sd')];
   if (p.mine) {
     var armD = f.arm && f.arm.k === 'dl' && f.arm.id === p.id;
-    items.push({ label: armD ? '삭제 확인' : '삭제', right: true, tc: armD ? BRD_RED : 'sub', line: armD ? BRD_RED : 'border2', act: { a: 'call', v: 'bd.dl.' + p.i } });
+    items.push({ label: armD ? '삭제 확인' : '삭제', right: true, tc: armD ? BRD_RED : 'sub', line: armD ? BRD_RED : 'border2', act: { a: 'call', v: 'bd.dl.' + p.i, id: p.id } });
   } else if (p.user) {
     var armR = f.arm && f.arm.k === 'rp' && f.arm.id === p.id;
-    items.push({ label: armR ? '신고 확인' : '신고', right: true, tc: armR ? BRD_RED : 'sub', line: armR ? BRD_RED : 'border2', act: { a: 'call', v: 'bd.rp.' + p.i } });
+    items.push({ label: armR ? '신고 확인' : '신고', right: true, tc: armR ? BRD_RED : 'sub', line: armR ? BRD_RED : 'border2', act: { a: 'call', v: 'bd.rp.' + p.i, id: p.id } });
   }
   kids.push({ t: 'btnrow', pad: [0, 0, 0, 12], gap: 8, h: 30, items: items });
   if (p.cmts.length) {
@@ -144,7 +144,7 @@ function brdPostNode(p, pid, f, now) {
       c.replies.forEach(function (r) { kids.push({ t: 'cmt', pad: [0, 0, 0, 7], nick: r.nick, s: r.text, time: r.time ? brdAgo(r.time, now) : '', ind: true }); });
     });
   }
-  kids.push({ t: 'inbar', pad: [0, p.cmts.length ? 6 : 0, 0, 0], key: 'c.' + pid.slice(1), hint: '댓글 남기기', btn: '등록', h: 36, r: 8, maxlen: 200, fill: 'card', line: 'border2', onc: BRD_BLUE, ckf: '#ffffff', act: { a: 'call', v: 'bd.cm.' + p.i } });
+  kids.push({ t: 'inbar', pad: [0, p.cmts.length ? 6 : 0, 0, 0], key: 'c.' + pid.slice(1), hint: '댓글 남기기', btn: '등록', h: 36, r: 8, maxlen: 200, fill: 'card', line: 'border2', onc: BRD_BLUE, ckf: '#ffffff', act: { a: 'call', v: 'bd.cm.' + p.i, id: p.id, key: 'c.' + pid.slice(1) } });
   var n = { t: 'post', pad: [12, 0, 12, 8], id: pid, title: p.title, nick: p.nick, meta: parts.join(' · '), kids: kids };
   if (!hide) { n.cat = p.cat; n.catc = BRD_CAT_COLOR[p.cat] || BRD_OTHER_COLOR; }
   return n;
@@ -168,18 +168,18 @@ function boardScreen(inp, factsIn, rowsIn) {
     all.push(p);
   }
   all.sort(function (a, b) { return (b.time - a.time) || (a.i - b.i); });
-  var shown = all.slice(0, f.n), used = {}, ids = [], idx = [];
+  var shown = all.slice(0, f.n), used = {}, ids = [], idx = [], sid = [];
   var head = [{ t: 'bar', pad: [16, 10, 16, 8], title: '게시판', btn: '글쓰기', act: { a: 'call', v: 'bd.write' } }];
   var body = [];
   if (!all.length) {
     body.push({ t: 'text', s: f.st === 'loading' ? '게시글 불러오는 중...' : '아직 제보가 없습니다.\n첫 번째 제보자가 되어보세요!', size: 14, color: 'sub', lh: 1.8, align: 'center', pad: [20, 60, 20, 60] });
   } else {
     body.push({ t: 'spacer', h: 4 });
-    shown.forEach(function (p) { var pid = brdPid(p, used); ids.push(pid); idx.push(p.i); body.push(brdPostNode(p, pid, f, now)); });
+    shown.forEach(function (p) { var pid = brdPid(p, used); ids.push(pid); idx.push(p.i); sid.push(p.id); body.push(brdPostNode(p, pid, f, now)); });
     if (all.length > shown.length) body.push({ t: 'button', pad: [12, 4, 12, 0], s: '더 보기 · 남은 글 ' + (all.length - shown.length) + '개', size: 12, h: 40, act: { a: 'call', v: 'bd.more' } });
     body.push({ t: 'spacer', h: 28 });
   }
-  var out = { ok: true, v: 1, screen: 'board', cover: 'tab', head: head, body: body, info: { n: shown.length, all: all.length, ids: ids, idx: idx } };
+  var out = { ok: true, v: 1, screen: 'board', cover: 'tab', head: head, body: body, info: { n: shown.length, all: all.length, ids: ids, idx: idx, sid: sid } };
   out.rev = 'b' + BOARD_SCREEN_V + ':' + brdHash(JSON.stringify([head, body]));
   return out;
 }

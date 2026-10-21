@@ -69,6 +69,7 @@ ok(E.chatScreen({ cap: 5, now: NOW }, base, {}).ok === false && E.chatScreen({},
   ok(rm.length === 3 && rs.info.n === 3 && rm.map(x => x.s).join() === '사람 많아요,지금 지연이에요,저도요', '노선 방: 숨긴 글·빈 글 제외 · 시간순');
   ok(rm[0].badge === '혼잡' && rm[0].bc === '#ff9f0a' && rm[1].badge === '지연' && rm[1].bc === '#ff453a' && rm[2].badge === undefined, '지연/혼잡 딱지');
   ok(rm[1].go === '신고' && rm[1].act.v === 'ch.x.0' && rm[0].act.v === 'ch.x.2' && rm[2].mine && rm[2].act === undefined && rm[2].go === undefined, '신고 단추: 남의 글만 · 번호 = 보낸 배열의 원래 위치');
+  ok(rm[1].act.id && rm[0].act.id && rm[1].act.id !== rm[0].act.id && rm[2].act === undefined, '신고 단추에 글 고유 id');
   const many = []; for (let i = 0; i < 400; i++) many.push(['n' + i, NOW - (400 - i) * MIN, '닉', '글 ' + i, '']);
   const ml = chat({ sel: '2호선' }, { r: many }).body.filter(n => n.t === 'msg');
   ok(ml.length === 150 && ml[ml.length - 1].s === '글 399', '노선 방은 최근 150개');
@@ -188,7 +189,7 @@ ok(E.chatScreen({ cap: 5, now: NOW }, base, {}).ok === false && E.chatScreen({},
     ok((await (await post(JSON.stringify({ cap: 5, f: {}, d: {} }))).json()).ok === false, '워커: cap 부족이면 거절');
     ok((await post('{oops')).status === 400 && (await post('x'.repeat(1500001))).status === 413 && (await call('https://x/screen/chat')).status === 405, '워커: 깨진 본문 400 · 큰 본문 413 · GET 405');
     const ro = await call('https://x/screen/chat', { method: 'OPTIONS' });
-    ok(ro.status === 204 && r.headers.get('access-control-allow-origin') === '*' && r.headers.get('cache-control') === 'no-store', '워커: OPTIONS 204 · CORS · no-store');
+    ok(ro.status === 204 && r.headers.get('access-control-allow-origin') === '*' && /^private, max-age=\d+$/.test(r.headers.get('cache-control')), '워커: OPTIONS 204 · CORS · no-store');
   } catch (e) { fail++; console.log('  FAIL 워커 시험 예외', e && e.stack || e); }
   try { fs.unlinkSync(tmp); } catch (e) { }
   console.log(`chat_engine: ${pass} pass, ${fail} fail`);

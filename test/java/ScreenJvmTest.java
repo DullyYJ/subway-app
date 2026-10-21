@@ -800,6 +800,23 @@ public class ScreenJvmTest {
             ok(threw, "marq 엉터리는 거부: " + bad);
         }
 
+        // ── 행동에 실린 고유 id · 제목 · 입력칸 열쇠 ──
+        try {
+            String idJ = "{\"ok\":true,\"v\":1,\"screen\":\"news\",\"head\":[],\"body\":[{\"t\":\"news\",\"pad\":[14,0,14,0],\"title\":\"가\",\"sub\":\"나\",\"act\":{\"a\":\"call\",\"v\":\"nw.3\",\"id\":\"https://x.com/1\",\"t\":\"제목\"}},{\"t\":\"news\",\"pad\":[14,0,14,0],\"title\":\"다\",\"sub\":\"라\",\"act\":{\"a\":\"call\",\"v\":\"bd.cm.2\",\"id\":\"77\",\"key\":\"c.77\"}},{\"t\":\"news\",\"pad\":[14,0,14,0],\"title\":\"마\",\"sub\":\"바\",\"act\":{\"a\":\"call\",\"v\":\"nw.1\"}}]}";
+            ScreenCore.Layout il = ScreenCore.layout(ScreenCore.load(idJ), 360f, M);
+            ScreenCore.Act i0 = il.body[0].act, i1 = il.body[1].act, i2 = il.body[2].act;
+            ok(i0 != null && "https://x.com/1".equals(i0.id) && "제목".equals(i0.t) && i1 != null && "77".equals(i1.id) && "c.77".equals(i1.key) && i2 != null && i2.id.length() == 0 && i2.t.length() == 0 && i2.key.length() == 0, "행동에 실린 고유 id · 제목 · 열쇠 읽기(없으면 빈 글 — 옛 엔진도 그대로)");
+        } catch (Exception ex) { ok(false, "act id 읽기: " + ex); }
+        {
+            StringBuilder big = new StringBuilder(); for (int i = 0; i < 500; i++) big.append('a');
+            try {
+                ScreenCore.Layout bl = ScreenCore.layout(ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"news\",\"head\":[],\"body\":[{\"t\":\"news\",\"title\":\"가\",\"sub\":\"나\",\"act\":{\"a\":\"call\",\"v\":\"nw.1\",\"id\":\"" + big + "\"}}]}"), 360f, M);
+                ok(bl.body[0].act.id.length() <= 400, "너무 긴 id 는 400자에서 자른다");
+            } catch (Exception ex) { ok(false, "긴 id: " + ex); }
+            boolean threw = false;
+            try { ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"news\",\"head\":[],\"body\":[{\"t\":\"news\",\"title\":\"가\",\"sub\":\"나\",\"act\":{\"a\":\"call\",\"v\":\"bd.cm.1\",\"key\":\"a b!\"}}]}"); } catch (Exception ex) { threw = true; }
+            ok(threw, "엉터리 입력칸 열쇠는 거부");
+        }
         // ── 스켈레톤(skel) 노드 ──
         for (String sc : new String[] { "cards", "map", "list" }) {
             try {

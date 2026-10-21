@@ -52,7 +52,7 @@ const r = screenCheck([call({ list: [], form: { s: '강', d: '시', act: 'd' } }
 ok(!r.err && r.out.every(l => /^OK/.test(l)), '앱 검증기 통과: ' + (r.err || r.out.join(' | ')));
 {
   const w = fs.readFileSync(R('engine/route-v2-worker.ascii.js'), 'utf8');
-  ok(/\/\/ ===== FAV ENGINE BEGIN =====/.test(w) && w.indexOf('if (url.pathname === "/screen/fav") return handleScreenFav(request);') > 0 && /ENGINE_VERSION = "route-v2-2026-10-20s\d+"/.test(w), '워커에 내장됨');
+  ok(/\/\/ ===== FAV ENGINE BEGIN =====/.test(w) && w.indexOf('if (url.pathname === "/screen/fav") return handleScreenFav(request);') > 0 && /ENGINE_VERSION = "route-v2-2026-10-\d\ds\d+"/.test(w), '워커에 내장됨');
 }
 console.log(pass + ' 통과 / ' + fail + ' 실패');
 if (fail) process.exit(1);

@@ -153,6 +153,15 @@ public class ScreenView extends View {
     /** 새 화면을 올린다. keepScroll 이면 위치를 유지(같은 목록 갱신), 아니면 맨 위로. */
     public void setScreen(ScreenCore.Screen s, boolean keepScroll) {
         boolean stick = s != null && "bottom".equals(s.anchor) && (!keepScroll || nearBottom());
+        // 키 기준 갱신: 새 데이터로 목록이 바뀌어도 보던 글(엔진이 준 고유 id)이 같은 자리에 남도록 위치를 맞춘다
+        String ancKey = null; float ancOff = 0f;
+        if (keepScroll && !stick && lay != null && scrollY > 1f) {
+            for (ScreenCore.Item q : lay.body) {
+                if (q.y + q.h <= scrollY) continue;
+                String k = anchorKey(q);
+                if (k != null) { ancKey = k; ancOff = q.y - scrollY; break; }
+            }
+        }
         screen = s;
         iconPaths.clear();
         if (!keepScroll) { scrollY = 0f; scrollX = 0f; openKey = null; ctrDone = null; }
@@ -161,6 +170,16 @@ public class ScreenView extends View {
         relayout();
         syncMk(keepScroll);
         if (stick && lay != null) { scrollY = lay.bodyMaxScroll(bodyViewH()); invalidate(); }
+        else if (ancKey != null && lay != null) {
+            for (ScreenCore.Item q : lay.body) {
+                if (ancKey.equals(anchorKey(q))) { scrollY = ScreenCore.clamp(q.y - ancOff, lay.bodyMaxScroll(bodyViewH())); invalidate(); break; }
+            }
+        }
+    }
+    /** 위치를 붙잡을 키: 엔진이 준 고유 id 가 있는 칸만(없으면 null — 번호로는 붙잡지 않는다). */
+    private static String anchorKey(ScreenCore.Item q) {
+        if (q == null || q.act == null || q.act.id == null || q.act.id.length() == 0) return null;
+        return q.act.id;
     }
     /** 그린 화면을 비운다(다른 탭의 옛 화면이 새 탭 자리에 남아 보이지 않게). */
     public void clearScreen() { screen = null; lay = null; scrollY = 0f; scrollX = 0f; openKey = null; ctrDone = null; pressed = null; mode = 0; mkHas = false; invalidate(); syncLater(); }

@@ -25,7 +25,7 @@ function findAndroidJar() {
   const out = fs.mkdtempSync(path.join(os.tmpdir(), 'shjvm-'));
   await t('ShellCore 를 JVM 에서 컴파일하고 자체 점검(ShellJvmTest)이 모두 통과한다', async () => {
     const core = path.join(out, 'core'); fs.mkdirSync(core);
-    let r = spawnSync('javac', ['-encoding', 'UTF-8', '-d', core, N('ScreenCore.java'), N('ShellCore.java'), N('HomeSearchCore.java'), N('HomeCore.java'), N('BoardCore.java'), N('ChatCore.java'), N('FoodCore.java'), N('MapCore.java'), N('FavCore.java'), N('HcardsCore.java'), N('RideCore.java'), N('RulesCore.java'), N('LegacyCore.java'), N('CmCore.java'), N('GwCore.java'), N('DevCore.java'), N('ErrCore.java'), N('ShareCore.java'), N('OvCore.java'), N('TileMapCore.java'), path.join(__dirname, 'java', 'ShellJvmTest.java')], { env: ENV, encoding: 'utf8' });
+    let r = spawnSync('javac', ['-encoding', 'UTF-8', '-d', core, N('ScreenCore.java'), N('ShellCore.java'), N('HomeSearchCore.java'), N('HomeCore.java'), N('BoardCore.java'), N('ChatCore.java'), N('FoodCore.java'), N('MapCore.java'), N('FavCore.java'), N('HcardsCore.java'), N('RideCore.java'), N('RulesCore.java'), N('LegacyCore.java'), N('CmCore.java'), N('GwCore.java'), N('DevCore.java'), N('ErrCore.java'), N('ShareCore.java'), N('OvCore.java'), N('TileMapCore.java'), N('NetPost.java'), path.join(__dirname, 'java', 'ShellJvmTest.java')], { env: ENV, encoding: 'utf8' });
     assert.strictEqual(r.status, 0, (r.stderr || '').slice(0, 1500));
     r = spawnSync('java', ['-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-cp', core, 'com.dullyyj.subway.ShellJvmTest'], { env: ENV, encoding: 'utf8' });
     assert.strictEqual(r.status, 0, (r.stdout || '').split('\n').filter(l => /^FAIL/.test(l)).join('\n') || r.stderr);
@@ -62,6 +62,20 @@ function findAndroidJar() {
     assert.ok(/showSkeleton\(v, screen\)/.test(v) && /skeletonScreen/.test(v), '캐시가 없으면 뼈대를 먼저 띄운다');
     assert.ok(/restoreState\(ck, json\)/.test(v) && /diskTtl\(key\)/.test(v), '캐시 화면은 눌림 상태까지 되살리고 모든 화면을 디스크에 둔다');
     assert.ok(/seedMapLoc\(\)/.test(v) && /lastLocGet\(store\)/.test(v) && /locateQuiet\(/.test(v), '지도 · 맛집은 마지막 위치로 먼저 그리고 조용히 새 위치를 받는다');
+  });
+  await t('고유 id 행동 · 우선순위 큐 · 배치 · 조건부 요청(ETag/304): 앱은 엔진이 준 id/ETag 를 따르기만 한다', async () => {
+    const v = fs.readFileSync(N('ShellActivity.java'), 'utf8');
+    const pf = v.slice(v.indexOf('private void prefetchTabs()'), v.indexOf('private void cachePutAsync('));
+    assert.ok(/PriorityBlockingQueue<PfTask>/.test(v) && /pfAdd\(/.test(pf) && /pfBatch\(/.test(v), '우선순위 큐와 한 번에 묶어 받기');
+    assert.ok(/\/screen\/batch/.test(v) && /\/screen\/batch/.test(fs.readFileSync(path.join(ROOT, 'engine', 'screen-cache-worker.js'), 'utf8')), '배치 길은 엔진 쪽에도 있다');
+    assert.ok(/pfGap\(\);/.test(v.slice(v.indexOf('private void pfKick'), v.indexOf('private boolean pfNeeds'))) && /Thread\.sleep\(/.test(v.slice(v.indexOf('void pfGap'), v.indexOf('void pfGap') + 600)), '낮은 순위 요청은 100~300ms 간격을 둔다');
+    assert.ok(/NOT_MOD/.test(v) && /getCond\(|postCond\(/.test(v) && /If-None-Match/.test(fs.readFileSync(N('NetPost.java'), 'utf8')), 'ETag 를 보내고 304 면 캐시 그대로');
+    assert.ok(/openNewsById\(a\.id/.test(v) && /rowJsonById\(/.test(v), '소식은 순번이 아니라 기사 고유 id 로 연다');
+    assert.ok(/a\.id/.test(v.slice(v.indexOf('boardAct('))) , '게시판 행동은 글 고유 id 를 쓴다');
+    const sv = fs.readFileSync(N('ScreenView.java'), 'utf8');
+    assert.ok(/anchorKey\(/.test(sv) && /ancKey/.test(sv), '목록이 바뀌어도 보던 글 위치를 id 로 붙잡는다');
+    const od = sv.slice(sv.indexOf('protected void onDraw'));
+    assert.ok(!/anchorKey\(/.test(od.slice(0, 3000)), '그리는 중엔 계산하지 않는다');
   });
   await t('순수 네이티브 프로젝트: 소스는 native/shell 뿐 · 매니페스트에 ShellActivity 가 런처 · 웹뷰/Capacitor 흔적 없음', async () => {
     const g = fs.readFileSync(path.join(ROOT, 'shell-android', 'app', 'build.gradle'), 'utf8');

@@ -14,7 +14,7 @@
 //        data  = { g: [[글쓴이, 글, 시각(ms), 내것(0|1), 노선]…](전체 방) · r: [[번호, 시각, 글쓴이, 글, 종류('delay'|'crowd'|'')]…](노선 방) ·
 //                  off: 이 노선의 공식 공지 { text, title, ts, estimated, suspect } | null · offOk: 공지 조회가 됐나(0|1) · offAt: 조회 시각 · al: { reporters, stations:[{stn,n}] } | null }
 // 출력  { ok, v:1, screen:'chat', rev, cover:'tab', anchor:'bottom', head:[chips, text?, box?, box?], body:[msg…|text], foot:[inbar], info:{ sel, n } }
-//        행동 이름: ch.send 보내기 · ch.x.<번호> 노선 방 글 신고(번호 = 앱이 보낸 r 배열의 원래 위치) · 칩은 {a:'cat', v:노선|'all'}
+//        행동 이름: ch.send 보내기 · ch.x.<번호> 노선 방 글 신고(번호 = 앱이 보낸 r 배열의 원래 위치 · act.id = 그 글의 고유 id — 새 앱은 id 를 먼저 쓴다) · 칩은 {a:'cat', v:노선|'all'}
 // 맨 아래 module.exports 는 시험(Node)용이고 Worker 에서는 함수 선언만 쓰인다.
 'use strict';
 var CHAT_SCREEN_V = 1;
@@ -137,7 +137,7 @@ function chtMsgR(a, i, f) {
   if (!text || f.hid[id]) return null;
   var ts = Number(a[1]) || 0, nick = chtStr(a[2], 40) || '익명', mine = !!(f.me && nick === f.me), kind = chtStr(a[4], 10);
   var n = { t: 'msg', pad: [12, 0, 12, 10], s: text, time: chtTime(ts, f.tzo) };
-  if (mine) n.mine = true; else { n.nick = nick; n.go = '신고'; n.act = { a: 'call', v: 'ch.x.' + i }; }
+  if (mine) n.mine = true; else { n.nick = nick; n.go = '신고'; n.act = { a: 'call', v: 'ch.x.' + i, id: id }; }
   if (kind === 'delay') { n.badge = '지연'; n.bc = '#ff453a'; } else if (kind === 'crowd') { n.badge = '혼잡'; n.bc = '#ff9f0a'; }
   return { ts: ts, i: i, node: n };
 }

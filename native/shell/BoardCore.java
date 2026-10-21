@@ -177,7 +177,11 @@ public final class BoardCore {
             Object o = ScreenCore.parse(json);
             Object info = o instanceof Map ? ((Map<String, Object>) o).get("info") : null;
             if (!(info instanceof Map)) return;
-            Object ids = ((Map<String, Object>) info).get("ids"), idx = ((Map<String, Object>) info).get("idx");
+            Object ids = ((Map<String, Object>) info).get("ids"), idx = ((Map<String, Object>) info).get("idx"), sid = ((Map<String, Object>) info).get("sid");
+            if (ids instanceof List && sid instanceof List && ((List<Object>) sid).size() == ((List<Object>) ids).size()) {        // 엔진이 글 고유 id 를 직접 준다 — 보낸 목록의 순서와 상관없이 이 화면만으로 맞는다
+                for (int k = 0; k < ((List<Object>) ids).size(); k++) { String real = s(((List<Object>) sid).get(k), 60); if (real.length() > 0) pidById.put(real, s(((List<Object>) ids).get(k), 60)); }
+                return;
+            }
             if (!(ids instanceof List) || !(idx instanceof List)) return;
             for (int k = 0; k < ((List<Object>) ids).size() && k < ((List<Object>) idx).size(); k++) {
                 int i = (int) d(((List<Object>) idx).get(k));
@@ -216,13 +220,15 @@ public final class BoardCore {
         st.put(K_REP, HomeSearchCore.toJson(rep));
     }
     /** v: 'bd.lk.3' 같은 이름. fields: 화면 입력칸 글자(댓글). */
-    public int act(String v, Map<String, String> fields, long now) {
+    public int act(String v, Map<String, String> fields, long now) { return act(v, "", "", fields, now); }
+    /** id: 엔진이 행동에 실어 준 글 고유 id(있으면 순번 대신 이것으로 가리킨다) · key: 댓글 입력칸 열쇠. */
+    public int act(String v, String actId, String actKey, Map<String, String> fields, long now) {
         if (v == null || !v.startsWith("bd.")) return R_NONE;
         if ("bd.more".equals(v)) { n = Math.min(300, n + SHOW_STEP); return R_RENDER; }
         if ("bd.write".equals(v)) return R_WRITE;
         String[] p = v.split("\\.");
         if (p.length != 3) return R_NONE;
-        String id = idAt(p[2]);
+        String id = actId != null && actId.length() > 0 ? actId : idAt(p[2]);
         if (id.length() == 0) return R_NONE;
         String kind = p[1];
         if ("lk".equals(kind)) { toggleRx(id, "like"); return R_RENDER; }
@@ -239,7 +245,8 @@ public final class BoardCore {
             armK = kind; armId = id; armAt = now; return R_RENDER;
         }
         if ("cm".equals(kind)) {
-            String key = commentKey(id), t = fields == null ? null : fields.get(key);
+            String key = actKey != null && actKey.length() > 0 ? actKey : commentKey(id), t = fields == null ? null : fields.get(key);
+            if (key.length() == 0) return R_NONE;
             if (t == null || t.trim().length() == 0) return R_NONE;
             pendingId = id; pendingText = t.trim().length() > 200 ? t.trim().substring(0, 200) : t.trim();
             return R_COMMENT;

@@ -144,7 +144,7 @@ const U = n => Array.from({ length: n }, (_, i) => ({ n: '강남' + i, l: '2호�
     { const j3 = await (await post(JSON.stringify({ cap: 7, f: { start: '강남', active: 'start' }, d: { u: [{ n: 'X', l: 'y' }] } }))).json(); ok(j3.info.pk === undefined && j3.body[0].kids.some(x => x.t === 'sug' && x.name === 'X'), '워커: u 를 보내면 예전 그대로'); }
     ok((await post('{oops')).status === 400 && (await post('x'.repeat(40001))).status === 413 && (await call('https://x/screen/home')).status === 405, '워커: 깨진 본문 400 · 큰 본문 413 · GET 405');
     const ro = await call('https://x/screen/home', { method: 'OPTIONS' });
-    ok(ro.status === 204 && r.headers.get('access-control-allow-origin') === '*' && r.headers.get('cache-control') === 'no-store', '워커: OPTIONS 204 · CORS · no-store');
+    ok(ro.status === 204 && r.headers.get('access-control-allow-origin') === '*' && /^(no-store|private, max-age=\d+)$/.test(r.headers.get('cache-control')), '워커: OPTIONS 204 · CORS · no-store');
   } catch (e) { fail++; console.log('  FAIL 워커 시험 예외', e && e.stack || e); }
   try { fs.unlinkSync(tmp); } catch (e) { }
   // ── ⑧ 웹 연결부 규약 (연결부를 쓴 뒤에 켜진다 — 없으면 건너뜀) ──

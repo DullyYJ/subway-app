@@ -337,6 +337,17 @@ public class ShellJvmTest {
         ok(nr.rowJson(9).equals("[]"), "없는 번호");
         try { ScreenCore.parse(nr.json()); ok(true, "기사 목록은 올바른 JSON"); } catch (ScreenCore.ParseError pe) { ok(false, "기사 목록 JSON 오류"); }
         ok(ShellCore.NewsRows.from(new String[] { "", "not json" }).rows.isEmpty() && ShellCore.NewsRows.from(null).rows.isEmpty(), "원자료가 없거나 깨져도 빈 목록");
+        ok(nr.rowJsonById("https://b.com/2", "x").equals(nr.rowJson(1)) && nr.rowJsonById("https://a.com/1", "").equals(nr.rowJson(0)), "기사 고유 id(링크)로 줄 찾기 — 순서가 바뀌어도 같은 기사");
+        ok(nr.rowJsonById("https://gone.com/9", "사라진 기사").equals("[\"사라진 기사\",\"https://gone.com/9\",\"\",0,\"\",\"\"]") && nr.rowJsonById("제목만", "").startsWith("[\"제목만\",\"\""), "목록에서 사라진 기사도 눌린 줄이 준 제목 · 링크로 연다");
+        {
+            ShellCore.Cond cd = new ShellCore.Cond("\"abc\"", 1000L, 60, 7);
+            ok(cd.fresh(1000L + 59000L, 7) && !cd.fresh(1000L + 60000L, 7) && !cd.fresh(2000L, 8) && !cd.fresh(500L, 7) && !new ShellCore.Cond("", 1000L, 60, 7).fresh(1500L, 7) && !new ShellCore.Cond("\"a\"", 1000L, 0, 7).fresh(1500L, 7), "신선 시간 안 · 같은 요청 · ETag 있음일 때만 네트워크 없이 쓴다");
+            ShellCore.Cond rt = ShellCore.Cond.parse(cd.enc());
+            ok(rt != null && rt.etag.equals("\"abc\"") && rt.at == 1000L && rt.maxAge == 60 && rt.sig == 7 && ShellCore.Cond.parse("") == null && ShellCore.Cond.parse("a\nb") == null && ShellCore.Cond.parse("a\nx\n1\n2") == null, "조건부 요청 메모 저장 · 읽기(깨진 글은 버린다)");
+            ShellCore.Cond tc = cd.touched(5000L, 0, 7);
+            ok(tc.at == 5000L && tc.maxAge == 60 && tc.etag.equals(cd.etag) && ShellCore.condKey("news|x").startsWith("cm_"), "304 를 받으면 받은 시각만 새로 한다");
+            ok(NetPost.parseMaxAge("private, max-age=45") == 45 && NetPost.parseMaxAge("no-store") == 0 && NetPost.parseMaxAge(null) == 0 && NetPost.parseMaxAge("max-age=") == 0 && NetPost.parseMaxAge("max-age=99999999999") < 100000000, "Cache-Control max-age 읽기");
+        }
         s4.put("news_cat", "증시");
         rq = ShellCore.request("news", s4, new String[] { f0, f1 });
         ok(rq.body.startsWith("{\"cap\":18,\"f\":{\"cat\":\"증시\"},\"n\":[[") && ShellCore.netOk(rq.url), "뉴스 요청 본문");
@@ -532,6 +543,15 @@ public class ShellJvmTest {
         ok(BoardCore.reportBody("11").equals("{\"post_id\":\"11\"}") && BoardCore.commentBody("11", "나", "안녕").equals("{\"post_id\":\"11\",\"nick\":\"나\",\"body\":\"안녕\"}"), "서버 본문");
         java.util.Map<String, String> ff = new java.util.HashMap<String, String>(); ff.put("c.11", "  좋은 글 ");
         ok(bc.act("bd.cm.0", ff, 500L) == BoardCore.R_COMMENT && "좋은 글".equals(bc.pendingText) && bc.act("bd.cm.0", new java.util.HashMap<String, String>(), 501L) == BoardCore.R_NONE, "댓글 등록(빈 글은 무시)");
+        {
+            BoardCore b2 = new BoardCore(new ShellCore.MemStore());
+            b2.setPosts("{\"posts\":[{\"id\":11,\"title\":\"가\"},{\"id\":13,\"title\":\"나\"}]}");
+            b2.onScreen("{\"info\":{\"ids\":[\"p13\",\"p11\"],\"idx\":[9,9],\"sid\":[\"13\",\"11\"]}}");
+            ok("p13".equals(b2.pidById.get("13")) && "p11".equals(b2.pidById.get("11")) && "c.13".equals(b2.commentKey("13")), "화면이 글 고유 id(sid)를 주면 번호표 없이 맞춘다");
+            ok(b2.act("bd.lk.0", "13", "", null, 5L) == BoardCore.R_RENDER && b2.act("bd.rp.0", "13", "", null, 100L) == BoardCore.R_RENDER && b2.act("bd.rp.0", "13", "", null, 200L) == BoardCore.R_REPORT && "13".equals(b2.pendingId), "눌린 글의 고유 id 로 가리킨다(목록이 바뀌어도 엉뚱한 글이 안 눌린다)");
+            java.util.Map<String, String> f2 = new java.util.HashMap<String, String>(); f2.put("c.99", "답글");
+            ok(b2.act("bd.cm.0", "13", "c.99", f2, 300L) == BoardCore.R_COMMENT && "답글".equals(b2.pendingText) && "13".equals(b2.pendingId), "댓글 입력칸 열쇠도 행동이 알려 준다");
+        }
         bc.addLocalComment("11", "나", "좋은 글", 600L);
         ok(bc.request(18, 700L).contains("[\"loc600\",\"나\",\"좋은 글\",600,[]]"), "방금 쓴 댓글이 줄에 실린다");
         ok(bc.setComments("13", "{\"comments\":[{\"id\":7,\"nick\":\"영희\",\"body\":\"서버 댓글\",\"ts\":900}]}") && bc.request(18, 1000L).contains("[\"srv7\",\"영희\",\"서버 댓글\",900,[]]"), "서버 댓글 붙이기");
@@ -565,6 +585,7 @@ public class ShellJvmTest {
         ok(cc.act("ch.send", cf, "") == ChatCore.R_NEED_ID && cc.act("ch.send", cf, "나") == ChatCore.R_SEND && "안녕하세요".equals(cc.pendingText) && "1호선".equals(cc.pendingLine), "보내기(아이디 없으면 안내)");
         ok(cc.act("ch.send", new java.util.HashMap<String, String>(), "나") == ChatCore.R_NONE, "빈 글은 무시");
         ok(cc.act("ch.x.0", null, "나") == ChatCore.R_REPORT && "m1".equals(cc.pendingId) && cc.act("ch.x.9", null, "나") == ChatCore.R_NONE, "노선 방 글 신고(번호 → 글번호)");
+        ok(cc.act("ch.x.0", "m77", null, "나") == ChatCore.R_REPORT && "m77".equals(cc.pendingId) && cc.act("ch.x.9", "m5", null, "나") == ChatCore.R_REPORT && "m5".equals(cc.pendingId), "신고는 행동이 준 글 고유 id 를 우선(번호가 바뀌어도 그 글)");
         cc.hide("m1"); ok(cs.get("lrHidden", "").equals("[\"m1\"]"), "신고한 글 숨김 기록");
         cc.onScreen("{\"info\":{\"sel\":\"all\",\"pl\":\"4호선\"}}"); ok("4호선".equals(cc.postLine), "전체 방 글에 붙일 노선(엔진이 정함)");
         ok(ChatCore.sendBody("나", "안녕", "1호선").equals("{\"nick\":\"나\",\"text\":\"안녕\",\"line\":\"1호선\"}"), "보내기 본문");

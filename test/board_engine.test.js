@@ -66,6 +66,8 @@ ok(S.ok && S.v === 1 && S.screen === 'board' && S.cover === 'tab' && /^b1:/.test
   const my = E.boardScreen({ cap: 6, now: NOW }, {}, [row('m', { 11: 1 | 2 })]);
   const m = brow(my, 'pm');
   ok(m[3].label === '삭제' && m[3].act.v === 'bd.dl.0', '내 글: 삭제 단추(신고 없음)');
+  ok(a[0].act.id === 'a' && a[3].act.id === 'a' && m[3].act.id === 'm' && kidsOf(S, 'pa').slice(-1)[0].act.id === 'a' && kidsOf(S, 'pa').slice(-1)[0].act.key === kidsOf(S, 'pa').slice(-1)[0].key, '단추 · 댓글 등록 행동에 글 고유 id(와 댓글 입력칸 열쇠)');
+  ok(S.info.sid.length === S.info.ids.length && S.info.sid.every((x, i) => S.info.ids[i] === 'p' + x), '정보: 글 고유 id 가 화면 id 와 같은 줄에 정렬된다');
   const sys = E.boardScreen({ cap: 6, now: NOW }, {}, [row('s', { 11: 0 })]);
   ok(brow(sys, 'ps').length === 3, '이용자 글이 아니면(자동 글) 오른쪽 단추 없음');
   const rx = brow(E.boardScreen({ cap: 6, now: NOW }, { rx: { a: { like: 1, sad: 1 } } }, ROWS), 'pa');
@@ -160,7 +162,7 @@ ok(S.ok && S.v === 1 && S.screen === 'board' && S.cover === 'tab' && /^b1:/.test
     ok((await (await post_(JSON.stringify({ cap: 5, f: {}, p: [] }))).json()).ok === false, '워커: cap 부족이면 거절');
     ok((await post_('{oops')).status === 400 && (await post_('x'.repeat(1500001))).status === 413 && (await call('https://x/screen/board')).status === 405, '워커: 깨진 본문 400 · 큰 본문 413 · GET 405');
     const ro = await call('https://x/screen/board', { method: 'OPTIONS' });
-    ok(ro.status === 204 && /POST/.test(ro.headers.get('access-control-allow-methods')) && r.headers.get('access-control-allow-origin') === '*' && r.headers.get('cache-control') === 'no-store', '워커: OPTIONS 204 · CORS · no-store');
+    ok(ro.status === 204 && /POST/.test(ro.headers.get('access-control-allow-methods')) && r.headers.get('access-control-allow-origin') === '*' && /^private, max-age=\d+$/.test(r.headers.get('cache-control')), '워커: OPTIONS 204 · CORS · no-store');
     const big = []; for (let i = 0; i < 400; i++) big.push(row('w' + i, { 3: '본문 '.repeat(100), 13: [['c', '닉', '댓글 '.repeat(20), Date.now(), []]] }));
     const body = JSON.stringify({ cap: 6, f: { n: 300 }, p: big }), t0 = Date.now(), rb = await post_(body), jb = await rb.json();
     ok(rb.status === 200 && jb.ok && Date.now() - t0 < 1500, '워커: 큰 목록(' + Math.round(body.length / 1024) + 'KB)도 빠르게 ' + (Date.now() - t0) + 'ms');

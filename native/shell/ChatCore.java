@@ -147,7 +147,9 @@ public final class ChatCore {
 
     // ── 눌림 ──
     /** v: ch.send · ch.x.<번호>.  cat 눌림(칩)은 select 로 따로. */
-    public int act(String v, Map<String, String> fields, String me) {
+    public int act(String v, Map<String, String> fields, String me) { return act(v, "", fields, me); }
+    /** actId: 엔진이 행동에 실어 준 글 고유 id(있으면 번호표 대신 이것으로 신고 대상을 정한다). */
+    public int act(String v, String actId, Map<String, String> fields, String me) {
         if (v == null) return R_NONE;
         if ("ch.send".equals(v)) {
             String key = "all".equals(sel()) ? "chat.all" : "chat.room";
@@ -159,6 +161,7 @@ public final class ChatCore {
             return R_SEND;
         }
         if (v.startsWith("ch.x.")) {
+            if (actId != null && actId.length() > 0) { pendingId = actId; return R_REPORT; }
             try { int i = Integer.parseInt(v.substring(5)); if (i >= 0 && i < ridsR.size()) { pendingId = ridsR.get(i); return R_REPORT; } } catch (NumberFormatException e) { /* 무시 */ }
         }
         return R_NONE;

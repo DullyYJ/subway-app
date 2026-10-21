@@ -199,7 +199,7 @@ const parseBars = (h) => h.split('<div class="bar24-col').slice(1).map(c => {
     ok((await (await post(JSON.stringify({ cap: 12, f: S() }))).json()).ok === false, '워커: cap 부족이면 거절');
     ok((await post('{oops')).status === 400 && (await post('x'.repeat(40001))).status === 413 && (await call('https://x/screen/cong')).status === 405, '워커: 깨진 본문 400 · 큰 본문 413 · GET 405');
     const ro = await call('https://x/screen/cong', { method: 'OPTIONS' }), rr = await post(JSON.stringify({ cap: 13, f: S() }));
-    ok(ro.status === 204 && rr.headers.get('access-control-allow-origin') === '*' && rr.headers.get('cache-control') === 'no-store', '워커: OPTIONS 204 · CORS · no-store');
+    ok(ro.status === 204 && rr.headers.get('access-control-allow-origin') === '*' && /^(no-store|private, max-age=\d+)$/.test(rr.headers.get('cache-control')), '워커: OPTIONS 204 · CORS · no-store');
   } catch (e) { fail++; console.log('  FAIL 워커 시험 예외', e && e.stack || e); }
   try { fs.unlinkSync(tmp); } catch (e) { }
   const has = t => html.indexOf(t) >= 0;

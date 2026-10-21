@@ -246,7 +246,7 @@ ok(S.ok && S.v === 1 && S.screen === 'food' && S.cover === 'tab' && /^f1:/.test(
     ok((await call('https://x/screen/food')).status === 405, '워커: GET 은 405');
     const ro = await call('https://x/screen/food', { method: 'OPTIONS' });
     ok(ro.status === 204 && /POST/.test(ro.headers.get('access-control-allow-methods')), '워커: OPTIONS 204 + POST 허용');
-    ok(r.headers.get('access-control-allow-origin') === '*' && r.headers.get('cache-control') === 'no-store', '워커: CORS · no-store');
+    ok(r.headers.get('access-control-allow-origin') === '*' && /^(no-store|private, max-age=\d+)$/.test(r.headers.get('cache-control')), '워커: CORS · no-store');
     const big = []; for (let i = 0; i < 1500; i++) big.push(['가게' + i, '음식 > 한식 > 국밥', '서울 강남구 역삼로 ' + i, i]);
     const t0 = Date.now(); const rb = await post(JSON.stringify({ cap: 4, f: { stn: '강남', flt: '전체' }, c: big.slice(0, 300), p: big })); const jb = await rb.json();
     ok(rb.status === 200 && jb.ok && Date.now() - t0 < 1500, '워커: 큰 목록(1800곳)도 빠르게 ' + (Date.now() - t0) + 'ms');

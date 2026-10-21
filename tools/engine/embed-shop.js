@@ -30,7 +30,8 @@ const SETS = [
   { name: 'RIDESTART', src: 'engine/ride-start.js', glue: 'engine/ride-start-worker.js', path: '/ride/start', fn: 'handleRideStart', anchor: '  if (url.pathname === "/screen/hcards") return handleScreenHcards(request);\n' },
   { name: 'RULES', src: 'engine/rules.js', glue: 'engine/rules-worker.js', path: '/rules', fn: 'handleRules', anchor: '  if (url.pathname === "/ride/start") return handleRideStart(request);\n' },
   { name: 'CBRIEF', src: 'engine/commute-brief.js', glue: 'engine/commute-brief-worker.js', path: '/commute-brief', fn: 'handleCommuteBrief', anchor: '  if (url.pathname === "/rules") return handleRules(request);\n' },
-  { name: 'HDR', src: 'engine/hdr.js', glue: 'engine/hdr-worker.js', path: '/screen/hdr', fn: 'handleScreenHdr', anchor: '  if (url.pathname === "/commute-brief") return handleCommuteBrief(request);\n' }
+  { name: 'HDR', src: 'engine/hdr.js', glue: 'engine/hdr-worker.js', path: '/screen/hdr', fn: 'handleScreenHdr', anchor: '  if (url.pathname === "/commute-brief") return handleCommuteBrief(request);\n' },
+  { name: 'SCACHE', src: 'engine/screen-cache.js', glue: 'engine/screen-cache-worker.js', path: '/screen/batch', fn: 'handleScreenBatch', anchor: '  if (url.pathname === "/screen/hdr") return handleScreenHdr(request);\n' }
 ];
 let all = '';
 for (const S of SETS) {
@@ -50,6 +51,11 @@ for (const S of SETS) {
     if (w.indexOf(S.anchor) < 0) throw new Error(S.path + ' 앞 경로 없음');
     w = w.replace(S.anchor, S.anchor + route);
   }
+}
+// 모든 /screen/* 응답에 ETag · max-age · 304 를 붙이는 바깥 껍질(handleFetchCond)을 fetch 에 연결(한 번만)
+if (w.indexOf('return await handleFetchCond(request, env, ctx);') < 0) {
+  if (w.indexOf('return await handleFetch(request, env, ctx);') < 0) throw new Error('fetch 연결 지점 없음');
+  w = w.replace('return await handleFetch(request, env, ctx);', 'return await handleFetchCond(request, env, ctx);');
 }
 const vi = process.argv.indexOf('--version');
 if (vi > 0) w = w.replace(/var ENGINE_VERSION = "[^"]+";/, 'var ENGINE_VERSION = "' + process.argv[vi + 1] + '";');

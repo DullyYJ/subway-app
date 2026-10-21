@@ -160,6 +160,7 @@ public final class ScreenCore {
     // ═════════════ ② 모델 + 검증 ═════════════
     public static final class Act {
         public String a = "", v = "", url = "", tpl = "", empty = "", key = "";
+        public String id = "", t = "";            // call 행동의 고유 식별(글 · 기사의 id)과 제목 — 순서가 아니라 이것으로 대상을 가리키면 목록이 바뀐 뒤에 눌러도 같은 글이다. key = 댓글 입력칸 열쇠
     }
     /** 색: 역할 이름(role)이거나 CSS 색을 읽은 ARGB. */
     public static final class Col {
@@ -290,6 +291,8 @@ public final class ScreenCore {
             if (!httpUrl(a.empty)) throw new ParseError("act search: empty 가 http(s) 가 아니다");
         }
         else throw new ParseError("모르는 행동 " + a.a);
+        a.id = optStr(m, "id", "", 400); a.t = optStr(m, "t", "", 160);
+        if ("call".equals(a.a)) { String kk = optStr(m, "key", "", 40); if (kk.length() > 0) { if (!ident(kk)) throw new ParseError("act call: key 가 올바르지 않다"); a.key = kk; } }
         return a;
     }
 

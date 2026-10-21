@@ -338,6 +338,25 @@ public final class ShellCore {
         return new String[] { S_PENDING };
     }
 
+    // ── 조건부 요청 메타: 엔진이 준 ETag · max-age 를 화면 열쇠마다 기억한다(앱은 따르기만 한다) ──
+    /** etag · 받은 시각 · 엔진이 말한 신선 시간(초) · 그때 보낸 요청의 서명(같은 요청인지 가린다). */
+    public static final class Cond {
+        public final String etag; public final long at; public final int maxAge; public final int sig;
+        public Cond(String etag, long at, int maxAge, int sig) { this.etag = etag == null ? "" : etag; this.at = at; this.maxAge = Math.max(0, maxAge); this.sig = sig; }
+        /** 신선 시간 안이고 같은 요청이면 참 — 네트워크 없이 캐시를 그대로 쓴다. */
+        public boolean fresh(long now, int sig) { return etag.length() > 0 && maxAge > 0 && this.sig == sig && now >= at && now - at < maxAge * 1000L; }
+        /** 같다는 답(304)을 받았다: 받은 시각만 새로 한다. */
+        public Cond touched(long now, int maxAge, int sig) { return new Cond(etag, now, maxAge > 0 ? maxAge : this.maxAge, sig); }
+        public String enc() { return etag.replace('\n', ' ') + "\n" + at + "\n" + maxAge + "\n" + sig; }
+        public static Cond parse(String s) {
+            if (s == null || s.length() == 0) return null;
+            String[] p = s.split("\n", -1);
+            if (p.length != 4) return null;
+            try { return new Cond(p[0], Long.parseLong(p[1]), Integer.parseInt(p[2]), Integer.parseInt(p[3])); } catch (NumberFormatException e) { return null; }
+        }
+    }
+    public static String condKey(String ck) { return "cm_" + Integer.toHexString(ck.hashCode()); }
+
     // ── 마지막으로 안 내 위치: 지도 · 맛집을 위치 대기 없이 바로 그리는 데 쓴다(새 위치는 뒤에서 받아 바꾼다) ──
     public static final String K_LASTLOC = "last_loc";
     public static void lastLocPut(Store st, double la, double lo, long now) {
@@ -483,6 +502,13 @@ public final class ShellCore {
                 b.append(rowJson(i));
             }
             return b.append(']').toString();
+        }
+        /** 기사 고유 id(링크 또는 제목)로 줄을 찾아 엔진에 보낼 모양으로. 없으면 눌린 줄이 알려 준 제목 · 링크만 담은 줄(엔진이 요약 없는 상세를 만든다). */
+        public String rowJsonById(String id, String title) {
+            for (int i = 0; i < rows.size(); i++) { String[] r = rows.get(i); if (id.equals(r[1]) || (r[1].length() == 0 && id.equals(r[0]))) return rowJson(i); }
+            boolean url = id.startsWith("http");
+            String t = title != null && title.length() > 0 ? title : (url ? "" : id);
+            return "[" + q(t) + "," + q(url ? id : "") + ",\"\",0,\"\",\"\"]";
         }
         public String rowJson(int i) {
             if (i < 0 || i >= rows.size()) return "[]";

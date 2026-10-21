@@ -79,6 +79,13 @@ ok(S.ok && S.v === 1 && S.screen === 'news' && S.cover === 'tab' && /^n1:/.test(
   ok(S.info.all === 7 && S.info.n === ns.length && ns.length === 6, '정보: 거른 뒤 기사 수 ' + JSON.stringify(S.info));
   const idx = ns.map(n => Number(n.act.v.slice(3)));
   ok(idx.every(i => ROWS[i] && Array.isArray(ROWS[i])) && ns[0].title === '코스피 2,700 돌파' && ns[0].act.v === 'nw.0', '번호 = 보낸 배열의 원래 위치');
+  // ── 고유 id: 목록이 바뀐 뒤에 눌러도 같은 기사가 열리도록 순번이 아니라 기사의 고유 식별(링크, 없으면 제목)을 싣는다 ──
+  ok(ns.every(n => typeof n.act.id === 'string' && n.act.id.length > 0 && n.act.id.length <= 400 && typeof n.act.t === 'string' && n.act.t === n.title.slice(0, 160)), '모든 줄의 행동에 id · 제목');
+  ok(ns.every(n => { const r = ROWS[Number(n.act.v.slice(3))]; return n.act.id === (r[1] || n.title); }), 'id = 링크(없으면 제목) — 순번과 같은 줄을 가리킨다');
+  const shuffled = ROWS.slice().reverse(), S2 = E.newsScreen({ cap: 5, now: NOW }, { cat: '전체' }, shuffled);
+  const byId = o => new Map(newsN(o).map(n => [n.act.id, n.title]));
+  const m1 = byId(S), m2 = byId(S2);
+  ok(m1.size === newsN(S).length && [...m2].filter(([id, t]) => m1.get(id) === t).length >= 4, '보낸 순서가 달라도 같은 기사는 같은 id(같은 링크의 중복 기사만 어느 쪽이 남느냐가 다르다)');
   const subs = ns.map(n => n.sub);
   ok(subs[0] === '증시 · 5분 전', '작은 글: 분류 · N분 전 → ' + subs[0]);
   // 골고루: 처음 몇 개는 서로 다른 분류
@@ -220,7 +227,7 @@ ok(S.ok && S.v === 1 && S.screen === 'news' && S.cover === 'tab' && /^n1:/.test(
     ok((await call('https://x/screen/news')).status === 405, '워커: GET 은 405');
     const ro = await call('https://x/screen/news', { method: 'OPTIONS' });
     ok(ro.status === 204 && /POST/.test(ro.headers.get('access-control-allow-methods')), '워커: OPTIONS 204 + POST 허용');
-    ok(r.headers.get('access-control-allow-origin') === '*' && r.headers.get('cache-control') === 'no-store', '워커: CORS · no-store');
+    ok(r.headers.get('access-control-allow-origin') === '*' && /^private, max-age=\d+$/.test(r.headers.get('cache-control')), '워커: CORS · no-store');
     const big = []; for (let i = 0; i < 1200; i++) big.push(['코스피 주가 기사 제목 ' + i + ' 가나다라마바사아자차카타파하', 'https://news.example.com/article/' + i + '/long/path/segment', '언론사' + (i % 9), Date.now() - i * MIN, ['', '사회', '증시'][i % 3], i % 20 === 0 ? '요약 글 '.repeat(30) : '']);
     const body = JSON.stringify({ cap: 5, f: { cat: '전체' }, n: big });
     const t0 = Date.now(); const rb = await post(body); const jb = await rb.json();
