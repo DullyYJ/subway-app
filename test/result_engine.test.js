@@ -104,6 +104,25 @@ const flat = ns => { const o = []; (function f(a) { a.forEach(n => { o.push(n); 
   const r = screenCheck([o, o2, n1]);
   ok(!r.err && r.out.every(l => /^OK/.test(l)), '앱 검증기 통과(장거리·공지): ' + (r.err || r.out.join(' | ')));
 }
+// ⑤-a 세부경로 줄(tdrow) — cap 20 이상 앱
+{
+  const c20 = (extra) => E.resultScreen({ cap: 20 }, Object.assign({ data: DATA, tab: 'fast', a: '부평', b: '두정', bt: null, rb: now, now, tz: 540, th: 'pastel', fav: 1, view: 'detail', dl: { la: 36.5, lo: 127.1, n: '두정역' }, me: [37.49, 126.72] }, extra || {}));
+  const o = c20(), rows = flat(o.body).filter(n => n.t === 'tdrow');
+  ok(o.ok && rows.length >= 2 && !flat(o.body).some(n => n.t === 'navrow'), 'tdrow: cap 20 은 줄 노드로 보낸다(옛 글 줄 없음)');
+  ok(rows[0].pos === 'f' && rows[rows.length - 1].pos === 'l' && rows.slice(1, -1).every(r => r.pos === 'm'), 'tdrow: 첫 줄 f · 마지막 줄 l · 나머지 m');
+  const sub = rows.find(r => r.ic === 's'), walk = rows.find(r => r.ic === 'w');
+  ok(sub && /^#[0-9a-f]{6}$/i.test(sub.col) && /^rgba\(\d+,\d+,\d+,0\.1875\)$/.test(sub.trk) && /,0\.157\)$/.test(sub.ibg) && /,0\.133\)$/.test(sub.bbg) && sub.bfg === sub.col, 'tdrow: 지하철 색 · 레일(.1875) · 아이콘(.157) · 뱃지(.133) 투명도가 웹과 같다');
+  ok(sub && sub.act && /^rd\.tg\.\d+$/.test(sub.act.v) && sub.ex === true && sub.dep > 0 && sub.arr > sub.dep && /\d\d:\d\d~\d\d:\d\d/.test(sub.rng), 'tdrow: 펼침 행동 · 구간 시각(ms) · 시간대');
+  ok(walk && walk.col === 'sub' && walk.trk === 'border' && walk.ibg === 'card2' && !walk.act && /^도보|^환승/.test(walk.lab), 'tdrow: 도보는 sub/border/card2 색이고 눌러도 안 열린다');
+  const o1 = c20({ open: [1], bt: now }), sr = flat(o1.body).filter(n => n.t === 'tdrow' && n.op === true)[0];
+  ok(sr && sr.stops.length === 3 && sr.stops[0][2] === 1 && sr.stops[1][2] === 0 && sr.stops[2][2] === 1 && /^\d\d:\d\d$/.test(sr.stops[0][1]), 'tdrow: 펼치면 정거장 [이름, 시각, 끝점]');
+  const leg = E.resultScreen({ cap: 19 }, { data: DATA, tab: 'fast', a: '부평', b: '두정', now, tz: 540, th: 'pastel', view: 'detail' });
+  ok(leg.ok && !flat(leg.body).some(n => n.t === 'tdrow') && flat(leg.body).some(n => n.t === 'navrow'), 'tdrow: cap 20 미만 옛 앱은 예전 글 줄 모양');
+  const dk = E.resultScreen({ cap: 20 }, { data: DATA, tab: 'bus', a: '부평', b: '두정', now, tz: 540, th: 'dark', view: 'detail' }), bs = flat(dk.body).filter(n => n.t === 'tdrow' && n.ic === 'b');
+  ok(bs.length >= 1 && (bs.length >= 2 || bs[0].col === '#ffffff'), 'tdrow: 버스가 하나면 어두운 테마에서 흰색 · 둘 이상이면 웹 색 순서');
+  const rs = screenCheck([o, o1]);
+  ok(!rs.err && rs.out.every(l => /^OK/.test(l)), '앱 검증기 통과(tdrow): ' + (rs.err || rs.out.join(' | ')));
+}
 // ⑤-b 세부경로 시트
 {
   const dl = { la: 36.5, lo: 127.1, n: '두정역' };
