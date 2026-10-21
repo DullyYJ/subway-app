@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-21s128";
+var ENGINE_VERSION = "route-v2-2026-10-21s129";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -17921,14 +17921,15 @@ async function handleScreenTalk(request) {
 //     report \uae00 \uc2e0\uace0 \ud655\uc778(\ucde8\uc18c / \uc2e0\uace0)
 //     exit  \uc571 \uc885\ub8cc \ud655\uc778(\uc544\ub2c8\uc694 / \uc885\ub8cc)
 //     pop   \uc7a0\uae50 \ub5b4\ub2e4 \uc0ac\ub77c\uc9c0\ub294 \uc791\uc740 \uc54c\ub9bc(_pickPop: \ucd9c\ubc1c\uc9c0/\ub3c4\ucc29\uc9c0 \uc124\uc815 \uc548\ub0b4 \u00b7 \uacf5\uc720 \uc548\ub0b4 \u2026)
+//     walk  \ud558\ucc28 \ub4a4 \ub3c4\ubcf4 \uc548\ub0b4 \uc544\ub798 \uc2dc\ud2b8(\uc6f9 walkModal): \uc9c1\uc120\uac70\ub9ac \u00b7 \ub3c4\ubcf4 \uc608\uc0c1 \u00b7 \uce74\uce74\uc624\ub9f5/\ub124\uc774\ubc84\uc9c0\ub3c4 \uae38\uc548\ub0b4 \uc8fc\uc18c \u00b7 \uae30\uc900 \uc2dc\uac01 \u2014 \uc548\ub0b4\ucc3d\uc774 \uc544\ub2c8\ub77c \uc2dc\ud2b8\ub77c dlg \ubaa8\uc591\uc740 \uc5c6\ub2e4
 //   \uc571(\uc6f9)\uc740 \uc0ac\uc2e4\ub9cc \ubcf4\ub0b8\ub2e4: kind \u00b7 (diag) \uae30\ub85d \uc904 \ubaa9\ub85d\uacfc \ubcf5\uc0ac \uacb0\uacfc \u00b7 (pop) \uae00 \ub450 \uc904\uacfc \ubaa8\uc591(cls). \uc571(\uae30\uae30)\uc740 \ubc1b\uc740 \ud654\uba74\uc744 \uadf8\ub9b0\ub2e4.
 //
 // \uc785\ub825  dialogScreen({ cap }, f)   cap 16 \uc774\uc0c1
-//   f = { kind:'perm'|'diag'|'pop', lines:[\uae30\ub85d \uc904\u2026](\uc624\ub798\ub41c \uac83\ubd80\ud130, diag), cp:0|1|2(diag \ubcf5\uc0ac \uacb0\uacfc: 0 \uc5c6\uc74c \u00b7 1 \ub428 \u00b7 2 \uc2e4\ud328), msg, sub, cls:''|'sh'(pop) }
+//   f = { kind:'perm'|'diag'|'pop'|'walk', walk: { my:{lat,lng}|null, dest:{lat,lng,name}|null, mode:'start'|'arrive'|'manual', nowMs, tzoMin, theme },  lines:[\uae30\ub85d \uc904\u2026](\uc624\ub798\ub41c \uac83\ubd80\ud130, diag), cp:0|1|2(diag \ubcf5\uc0ac \uacb0\uacfc: 0 \uc5c6\uc74c \u00b7 1 \ub428 \u00b7 2 \uc2e4\ud328), msg, sub, cls:''|'sh'(pop) }
 // \ucd9c\ub825  { ok, v:1, screen:'dlg', dlg:{\u2026\uce74\ub4dc \ubaa8\uc591}, bg, head:[\u2026], body:[\u2026], foot?:[\u2026], info:{kind}, rev }
 //        \ud589\ub3d9 \uc774\ub984: dl.ok \u00b7 dl.no(perm \u00b7 exit \u00b7 report) \u00b7 dl.copy \u00b7 dl.clear \u00b7 dl.close(diag). \ud750\ub9b0 \uacf3\uc744 \ub204\ub974\uba74 dlg.tap(perm \ub9cc dl.no).
 var DLG_CAP = 16;
-var DLG_KINDS = { perm: 1, diag: 1, pop: 1, exit: 1, report: 1 };
+var DLG_KINDS = { perm: 1, diag: 1, pop: 1, exit: 1, report: 1, walk: 1 };
 var DLG_MAXLINES = 600, DLG_CHUNK = 1700;
 var DLG_EMOJI = /[\u2600-\u27bf\u2b00-\u2bff\ufe0f\u200d]|[\uD83C-\uD83E][\uDC00-\uDFFF]/g;
 
@@ -18028,14 +18029,70 @@ function dlgPop(f) {
   };
 }
 
+// \u2500\u2500 \ub3c4\ubcf4 \uc548\ub0b4 \uc2dc\ud2b8(\uc6f9 openWalkModal \u00b7 _walkUpdateMap \u00b7 openKakaoNav \u00b7 openNaverNav \uc640 \uac19\uc740 \uacc4\uc0b0) \u2500\u2500
+var WALK_MPM = 67, WALK_REFRESH_MS = 30000;
+function wkNum(v) { var n = typeof v === 'string' ? parseFloat(v) : v; return typeof n === 'number' && isFinite(n) ? n : null; }
+function wkHav(a1, o1, a2, o2) {
+  var R = 6371000, r = Math.PI / 180, dA = (a2 - a1) * r, dO = (o2 - o1) * r;
+  var h = Math.sin(dA / 2) * Math.sin(dA / 2) + Math.cos(a1 * r) * Math.cos(a2 * r) * Math.sin(dO / 2) * Math.sin(dO / 2);
+  return 2 * R * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+}
+function wkClock(nowMs, tzoMin) {
+  var t = wkNum(nowMs); if (t === null) return '';
+  var z = wkNum(tzoMin); if (z === null) z = -540;
+  var d = new Date(t - z * 60000), h = d.getUTCHours(), mi = d.getUTCMinutes();
+  return (h < 12 ? '\uc624\uc804 ' : '\uc624\ud6c4 ') + ('0' + (h % 12 || 12)).slice(-2) + ':' + ('0' + mi).slice(-2);
+}
+function dlgWalk(f) {
+  var w = (f.walk && typeof f.walk === 'object') ? f.walk : {};
+  var mode = w.mode === 'start' || w.mode === 'arrive' ? w.mode : 'manual';
+  var my = w.my && wkNum(w.my.lat) !== null && wkNum(w.my.lng) !== null ? { lat: wkNum(w.my.lat), lng: wkNum(w.my.lng) } : null;
+  var dst = w.dest && wkNum(w.dest.lat) && wkNum(w.dest.lng) ? { lat: wkNum(w.dest.lat), lng: wkNum(w.dest.lng), name: dlgClean(w.dest.name, 40) } : null;
+  var dName = dst ? dst.name : dlgClean(w.dest && w.dest.name, 40);
+  var title = mode === 'start' ? '\ucd9c\ubc1c\uc5ed\uae4c\uc9c0 \ub3c4\ubcf4 \uc548\ub0b4' : (mode === 'arrive' ? '\ubaa9\uc801\uc9c0\uae4c\uc9c0 \ub3c4\ubcf4 \uc548\ub0b4' : '\ud604\uc7ac \uc704\uce58 \uc9c0\ub3c4');
+  var dist = my ? wkHav(my.lat, my.lng, dst ? dst.lat : my.lat, dst ? dst.lng : my.lng) : null;
+  var min = dist === null ? null : Math.round(dist / WALK_MPM);
+  var distS = dist === null ? '-' : (dist < 1000 ? Math.round(dist) + 'm' : (dist / 1000).toFixed(1) + 'km');
+  var timeS = dist === null || !dst ? '-' : (min < 1 ? '1\ubd84 \ubbf8\ub9cc' : min + '\ubd84');
+  var clock = dist === null ? '' : wkClock(w.nowMs, w.tzoMin);
+  var green = w.theme === 'light' ? '#29b96a' : '#34c759';
+  var nm = dName || '\ubaa9\uc801\uc9c0', enc = encodeURIComponent;
+  var nav = null;
+  if (dst) {
+    var k = 'kakaomap://route?' + (my ? 'sp=' + my.lat + ',' + my.lng + '&' : '') + 'ep=' + dst.lat + ',' + dst.lng + '&by=FOOT';
+    var kw = 'https://map.kakao.com/link/to/' + enc(nm) + ',' + dst.lat + ',' + dst.lng;
+    var n = 'nmap://route/walk?' + (my ? 'slat=' + my.lat + '&slng=' + my.lng + '&sname=' + enc('\ub0b4\uc704\uce58') + '&' : '') + 'dlat=' + dst.lat + '&dlng=' + dst.lng + '&dname=' + enc(nm) + '&appname=com.dullyyj.subway';
+    var nw = 'https://map.naver.com/p/directions/' + (my ? my.lng + ',' + my.lat + ',%EB%82%B4%EC%9C%84%EC%B9%98,,-1/' : '-/') + dst.lng + ',' + dst.lat + ',' + enc(nm) + ',,-1/walk';
+    nav = { kakao: [k, kw], naver: [n, nw] };
+  }
+  var tile = function (label, val, hc) {
+    var kids = [{ t: 'text', pad: [0, 0, 0, 3], s: label, size: 10, align: 'center', color: 'sub' },
+      { t: 'text', s: val, size: 18, bold: true, align: 'center', color: 'text', lh: 1.3 }];
+    if (hc) kids[1].hl = [[0, val.length, hc]];
+    return { t: 'panel', fill: 'card2', line: 'card2', r: 10, ip: [12, 12, 12, 12], kids: kids };
+  };
+  var head = [
+    { t: 'bar', pad: [16, 14, 16, 10], title: title, sub: dName ? '\u2192 ' + dName : '', btn: '\ub2eb\uae30', act: { a: 'call', v: 'wk.close' } },
+    { t: 'row', pad: [12, 4, 12, 14], gap: 8, kids: [tile('\uc9c1\uc120\uac70\ub9ac', distS, ''), tile('\ub3c4\ubcf4 \uc608\uc0c1', timeS, green)] },
+    { t: 'btnrow', pad: [12, 0, 12, 0], gap: 8, h: 48, eq: true, bsize: 14, r: 14, items: [
+      { label: '\uce74\uce74\uc624\ub9f5', fill: '#FEE500', line: '#FEE500', tc: '#3A1D1D', act: { a: 'call', v: 'wk.kakao' } },
+      { label: '\ub124\uc774\ubc84\uc9c0\ub3c4', fill: '#03C75A', line: '#03C75A', tc: '#ffffff', act: { a: 'call', v: 'wk.naver' } }
+    ] },
+    { t: 'text', pad: [12, 8, 12, 24], s: clock ? clock + ' \uae30\uc900' : ' ', size: 10, align: 'center', color: 'sub' }
+  ];
+  return { dlg: null, bg: 'card', head: head, body: [{ t: 'spacer', h: 0 }], foot: null,
+    info: { nav: nav, msg: dst ? '' : '\ubaa9\uc801\uc9c0 \uc88c\ud45c\ub97c \ucc3e\uc744 \uc218 \uc5c6\uc2b5\ub2c8\ub2e4', refresh: WALK_REFRESH_MS, dist: dist === null ? -1 : Math.round(dist), min: min === null ? -1 : min } };
+}
+
 function dialogScreen(inp, f) {
   inp = inp || {};
   if (!(Number(inp.cap) >= DLG_CAP)) return { ok: false, error: 'cap' };
   f = (f && typeof f === 'object') ? f : {};
   var kind = dlgStr(f.kind, 8);
   if (!DLG_KINDS[kind]) return { ok: false, error: 'kind' };
-  var d = kind === 'perm' ? dlgPerm() : (kind === 'report' ? dlgReport() : kind === 'exit' ? dlgExit() : (kind === 'diag' ? dlgDiag(f) : dlgPop(f)));
-  var out = { ok: true, v: 1, screen: 'dlg', dlg: d.dlg, bg: d.bg, head: d.head, body: d.body, info: d.info };
+  var d = kind === 'perm' ? dlgPerm() : (kind === 'report' ? dlgReport() : kind === 'exit' ? dlgExit() : (kind === 'diag' ? dlgDiag(f) : (kind === 'walk' ? dlgWalk(f) : dlgPop(f))));
+  var out = { ok: true, v: 1, screen: kind === 'walk' ? 'walk' : 'dlg', bg: d.bg, head: d.head, body: d.body, info: d.info };
+  if (d.dlg) out.dlg = d.dlg;
   if (d.foot) out.foot = d.foot;
   out.info.kind = kind;
   out.rev = 'd1:' + dlgHash(JSON.stringify([kind, d.dlg, d.head, d.body, d.foot || 0]));
