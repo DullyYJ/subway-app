@@ -1950,3 +1950,9 @@ YJ(11:16, 기기 스크린샷 4장 + "모든 탭 화면을 웹과 동일하게")
 - 앱: `WalkCore`(순수) · `ShellActivity.openWalkSheet/walkRefresh/walkLoad/walkAct`(아래 시트 262dp·위 모서리 20·흐림 0.8·최대 너비 520, 30초마다 새 위치로 다시 요청) · `stopRide()` 1.2초 뒤 자동 · `ScreenCore` row 칸에 `panel` 허용(두 칸 타일) · `HomeCore.navAppOk` 가 `nmap://route/walk?` 허용.
 - 규칙: 옛 위치는 쓰지 않는다(웹의 `S.lastGPSFix` 대체 없음) — 위치를 못 받으면 `-`. 웹의 "한 번만 자동"(`_walkAutoFired`)은 이식하지 않음(하차마다 뜸).
 - 시험: `test/dialog_engine.test.js`(72) · `ShellJvmTest`(WalkCore) · `ScreenJvmTest`(row+panel). 안드로이드 계층은 이 환경에 android.jar 가 없어 CI 컴파일로만 확인. **기기 미확인**.
+
+## s130 (2026-10-21) — 탑승 위치 Fused 고정밀 · 버스 도착정보 엔진 왕복 1회 절약 · 새 말풍선 등장 애니메이션
+- **탑승 중 위치(하차·환승 판정)**: `RideService.listen()` 이 `LocFused.ride()`(Fused 고정밀 1초 간격 + 시작 즉시 `getCurrentLocation`, 콜백은 서비스 스레드 Looper — 주 스레드 IPC 없음, 마지막 알려진 위치 안 씀)를 쓴다. Play 서비스 실패 시에만 옛 방식(GPS 1초 + 네트워크 3초)으로 대신한다(`fail()`). 도보 안내 시트는 원래부터 `locateNow`(Fused fast-path, 20초 안 연속 위치 또는 새 현재 위치) — 옛 위치 없음.
+- **버스 탭 "엔진에게 묻지 않고 곧장 받기"**: `MapCore.rememberNeed/speculativeNeed` — 엔진이 지난번에 받아 오라고 한 도착정보 주소(a0.. · f0..)를 기억(+기기 `bsn`)하고, 정류장 목록·보기·즐겨찾기 열쇠(`arrSig`)가 같으면 `ShellActivity.busRefresh()` 가 그 주소들을 병렬로 먼저 받고(`busSpeculate`) 엔진을 **한 번만** 부른다(전: 엔진→받기→엔진 3단계, 후: 받기→엔진 2단계). 하나라도 비거나 열쇠가 다르면 옛 길로. 주소는 계속 엔진이 만든 것만 쓴다. 버스 탭 진입(`reloadMap`)에서도 도착정보가 8초 넘었으면 같은 길. 미리 받기(`pfBusRun`)도 주소를 남긴다. 효과는 **기기 미확인**(측정 필요).
+- **새 말풍선 등장**(웹 `.chat-bubble.anim-l/.anim-r` 0.34초, 타인 왼쪽·내 글 오른쪽 24dp 슬라이드+페이드): `ScreenView.trackMsgs/drawMsgAnim` — 같은 화면 갱신에서 새로 생긴 글(≤3개)만, 첫 로드·화면 전환엔 없음.
+- 남은 웹 애니메이션(미이식 확인): `kbusSlideDown`(0.3s) · `busJiggle`(즐겨찾기 순서 바꾸기 모드) · `delayFadeIn`/`delayFlash`(지연 안내) · `hdrMarquee` 비교(이식 여부 재확인) · `tdNowPulse`·`rsPulse`·`htlWaitPulse`·`pin-pulse`·`rtlRoll`·`pv-flow`.
