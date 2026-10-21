@@ -573,7 +573,7 @@ public class ScreenJvmTest {
         ok(sg1 != null && sg1.go.equals("현재") && sg1.act2 != null && sg1.sw > 0f && sg1.btx + sg1.sw <= sg1.x + sg1.w && sg1.on, "목록줄: 오른쪽 작은 단추 · 마지막 표시");
         ok(bad(wrapBody("{\"t\":\"swap\",\"size\":34}")) && bad(wrapBody("{\"t\":\"sug\",\"act\":" + hAct + "}")) && bad(wrapBody("{\"t\":\"sug\",\"name\":\"a\",\"btn\":\"x\",\"act\":" + hAct + "}")), "swap/sug 모양이 틀리면 거절");
         ok(bad(wrapBody("{\"t\":\"inbar\",\"key\":\"k\",\"btn\":\"x\",\"bh\":10,\"act\":" + hAct + "}")), "inbar bh 10 은 거절");
-        float expectH = 2f + 48f + 1f + 48f + ScreenCore.SUG_H * 2f + 4f;
+        float expectH = 2f + 48f + 1f + 48f + ScreenCore.SUG_H * 2f + ScreenCore.SUG_BOX_GAP * 2f + 4f;
         ok(near(HL.bodyH, expectH), "홈 카드 높이 = 줄 높이의 합 (" + HL.bodyH + " vs " + expectH + ")");
         ScreenCore.Item hit = null;
         for (int i = HL.body.length - 1; i >= 0; i--) { ScreenCore.Item q = HL.body[i]; if (q.act != null && ScreenCore.Layout.hits(q, swI.x + swI.w / 2f, in0.y + in0.h)) { hit = q; break; } }

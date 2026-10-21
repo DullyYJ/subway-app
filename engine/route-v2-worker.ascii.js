@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-21s126";
+var ENGINE_VERSION = "route-v2-2026-10-21s127";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -14643,8 +14643,8 @@ var HOME_STNS = [
 //   info.sx = 1 \uc740 '\uc774 \uc5d4\uc9c4\uc740 \uc5ed\uc744 \uc9c1\uc811 \uac70\ub978\ub2e4'\ub294 \ud45c\uc2dc(\uc6f9\uc774 \uc61b \uc5d4\uc9c4\uc778\uc9c0 \uc54c\uc544\ubcf4\ub294 \ub370 \uc4f4\ub2e4).
 // \ub9e8 \uc544\ub798 module.exports \ub294 \uc2dc\ud5d8(Node)\uc6a9\uc774\uace0 Worker \uc5d0\uc11c\ub294 \ud568\uc218 \uc120\uc5b8\ub9cc \uc4f0\uc778\ub2e4.
 'use strict';
-var HOME_SCREEN_V = 1;
-var HOME_ROW_H = 57, HOME_TROW_H = 34, HOME_SUG_H = 44, HOME_MAX_SUG = 7, HOME_PANEL_T = 14, HOME_PANEL_B = 18;      // \uc6f9 \ud648 \uacbd\ub85c \uce74\ub4dc: \uc785\ub825\uc904 57(+\ubc11\uc904 1) \u00b7 \uae30\uc900\uc2dc\uac01 \uc904 34(+\uc717\uc904 1) \u00b7 \uce74\ub4dc \uc704 14 \u00b7 \uc544\ub798 18
+var HOME_SCREEN_V = 2;
+var HOME_ROW_H = 57, HOME_TROW_H = 34, HOME_SUG_H = 44, HOME_SUG_GAP = 3, HOME_MAX_SUG = 7, HOME_PANEL_T = 14, HOME_PANEL_B = 18;      // \uc6f9 \ud648 \uacbd\ub85c \uce74\ub4dc: \uc785\ub825\uc904 57(+\ubc11\uc904 1) \u00b7 \uae30\uc900\uc2dc\uac01 \uc904 34(+\uc717\uc904 1) \u00b7 \uce74\ub4dc \uc704 14 \u00b7 \uc544\ub798 18
 var HOME_STN_MAX = 8, HOME_SX = 1;
 var HOME_STNS;                                                       // Worker \uc5d0\uc11c\ub294 \uc55e\uc5d0 \ubd99\uc740 engine/home-stations.js \uac00 \ucc44\uc6b4\ub2e4. Node(\uc2dc\ud5d8)\uc5d0\uc11c\ub294 \uc544\ub798\uc5d0\uc11c \ubd88\ub7ec\uc628\ub2e4.
 if (typeof HOME_STNS === 'undefined' || !HOME_STNS) { try { if (typeof require === 'function') HOME_STNS = require('./home-stations').HOME_STNS; } catch (eHs) {} }
@@ -14769,7 +14769,7 @@ function homeScreen(inp, factsIn, dataIn) {
   kids.push({ t: 'trow', lb: '\uD83D\uDD50 \uae30\uc900\uc2dc\uac01', s: homeBaseLabel(f.base), cur: !custom, hint: custom ? '' : '(\ud074\ub9ad\ud574\uc11c \uc2dc\uac04\uc744 \ubcc0\uacbd\ud558\uc138\uc694)',
     day: f.base.hol ? '\uc8fc\ub9d0\u00b7\uacf5\ud734\uc77c' : '\ud3c9\uc77c', dc: f.base.hol ? '#ff9500' : '#30d158', btn: '\ud604\uc7ac', act: act('bt.pick'), bact: act('bt.now'), h: HOME_TROW_H });
   var body = [{ t: 'panel', pad: [14, HOME_PANEL_T, 14, HOME_PANEL_B], ip: [0, 0, 0, 0], r: 16, kids: kids }];
-  var h = HOME_PANEL_T + 2 + HOME_ROW_H + 1 + HOME_ROW_H + 1 + HOME_TROW_H + (rowsS.length + rowsD.length) * HOME_SUG_H + HOME_PANEL_B;
+  var h = HOME_PANEL_T + 2 + HOME_ROW_H + 1 + HOME_ROW_H + 1 + HOME_TROW_H + (rowsS.length + rowsD.length) * HOME_SUG_H + (rowsS.length ? 2 * HOME_SUG_GAP : 0) + (rowsD.length ? 2 * HOME_SUG_GAP : 0) + HOME_PANEL_B;
   var out = { ok: true, v: 1, screen: 'home', cover: 'chips', head: [], body: body, info: { h: h, active: f.active, ready: ready, rows: rowsS.length + rowsD.length, sx: HOME_SX } };
   if (pk) out.info.pk = pk;
   out.rev = 'h' + HOME_SCREEN_V + ':' + homeHash(JSON.stringify(body));

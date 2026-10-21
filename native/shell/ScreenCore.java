@@ -954,7 +954,7 @@ public final class ScreenCore {
             CHART_PADL = 11f, CHART_PADT = 11f, CHART_PADB = 11f, CHART_HDR = 11f, CHART_SRC = 9f, CHART_HDR_H = 15f, CHART_HDR_GAP = 9f, CHART_SCROLL_PB = 4f, CHART_COL_W = 28f, CHART_FILL_W = 16f, CHART_LBL = 8f, CHART_LBL_H = 13f, CHART_R = 11f,
             CARS_TTL = 11f, CARS_TTL_H = 15f, CARS_TTL_GAP = 6f, CARS_GAP = 4f, CARS_CELL_H = 58f, CARS_MSG_H = 26f;
     /** 홈 경로 입력 치수(웹 홈 탭 출발/도착 카드·자동완성과 같다) */
-    public static final float SUG_H = 44f, SUG_PADX = 14f, SUG_BADGE = 11f, SUG_NAME = 14f, SUG_SUB = 11f, SUG_PILL_PX = 6f, SUG_GAP = 6f, SUG_BTN = 11f, SUG_BTN_PADX = 9f, SUG_BTN_H = 26f;
+    public static final float SUG_BOX_GAP = 3f, SUG_BOX_R = 11f, SUG_H = 44f, SUG_PADX = 14f, SUG_BADGE = 11f, SUG_NAME = 14f, SUG_SUB = 11f, SUG_PILL_PX = 6f, SUG_GAP = 6f, SUG_BTN = 11f, SUG_BTN_PADX = 9f, SUG_BTN_H = 26f;
     /** 게시글 카드·댓글·말풍선 치수(웹 .dc-* / .chat-bub-* 와 같다) */
     public static final float POST_CMT_ROW = 19.4f, POST_DOT = 10f, POST_MGAP = 5f, POST_CMT_SIZE = 16f;
     public static final float POST_PADX = 14f, POST_PADT = 12f, POST_META_GAP = 8f, POST_PADB = 10f, POST_TITLE = 14f, POST_TITLE_LH = 1.4f, POST_BADGE = 10f, POST_BADGE_PX = 7f, POST_BADGE_GAP = 8f, POST_META = 11f, POST_BODYPAD = 14f,
@@ -1747,7 +1747,17 @@ public final class ScreenCore {
             pn.fill = col(n.fill, null); pn.line = col(n.line, null); pn.sw = n.lbw; if (n.lbw > 0f) pn.ac = col(n.lbc, new Col("gold", 0));
             out.add(pn);
             float cy = y + 1f + n.ipT, cx = ox + 1f + n.ipL, cw = Math.max(1f, innerW - 2f - n.ipL - n.ipR);
-            for (Node k : n.kids) cy = stack(k, cx, cw, cy, out, m, ok);
+            Item sbox = null; float sy0 = 0f;
+            for (Node k : n.kids) {
+                boolean sg = "sug".equals(k.t);
+                if (sg && sbox == null) {                                                  // 웹 .sug 상자: 연속한 추천어 줄은 둥근 테두리 상자 하나로 묶는다(배경 card2 · 테두리 border2 · 반지름 11)
+                    cy += SUG_BOX_GAP; sy0 = cy;
+                    sbox = new Item(); sbox.kind = K_PANEL; sbox.x = cx; sbox.y = cy; sbox.w = cw; sbox.radius = SUG_BOX_R; sbox.fill = col("card2", null); sbox.line = col("border2", null);
+                    out.add(sbox);
+                } else if (!sg && sbox != null) { sbox.h = cy - sy0; cy += SUG_BOX_GAP; sbox = null; }
+                cy = stack(k, cx, cw, cy, out, m, ok);
+            }
+            if (sbox != null) { sbox.h = cy - sy0; cy += SUG_BOX_GAP; }
             pn.h = (cy + n.ipB + 1f) - y;
             return y + pn.h + n.padB;
         }

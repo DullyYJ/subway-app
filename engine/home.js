@@ -20,8 +20,8 @@
 //   info.sx = 1 은 '이 엔진은 역을 직접 거른다'는 표시(웹이 옛 엔진인지 알아보는 데 쓴다).
 // 맨 아래 module.exports 는 시험(Node)용이고 Worker 에서는 함수 선언만 쓰인다.
 'use strict';
-var HOME_SCREEN_V = 1;
-var HOME_ROW_H = 57, HOME_TROW_H = 34, HOME_SUG_H = 44, HOME_MAX_SUG = 7, HOME_PANEL_T = 14, HOME_PANEL_B = 18;      // 웹 홈 경로 카드: 입력줄 57(+밑줄 1) · 기준시각 줄 34(+윗줄 1) · 카드 위 14 · 아래 18
+var HOME_SCREEN_V = 2;
+var HOME_ROW_H = 57, HOME_TROW_H = 34, HOME_SUG_H = 44, HOME_SUG_GAP = 3, HOME_MAX_SUG = 7, HOME_PANEL_T = 14, HOME_PANEL_B = 18;      // 웹 홈 경로 카드: 입력줄 57(+밑줄 1) · 기준시각 줄 34(+윗줄 1) · 카드 위 14 · 아래 18
 var HOME_STN_MAX = 8, HOME_SX = 1;
 var HOME_STNS;                                                       // Worker 에서는 앞에 붙은 engine/home-stations.js 가 채운다. Node(시험)에서는 아래에서 불러온다.
 if (typeof HOME_STNS === 'undefined' || !HOME_STNS) { try { if (typeof require === 'function') HOME_STNS = require('./home-stations').HOME_STNS; } catch (eHs) {} }
@@ -146,7 +146,7 @@ function homeScreen(inp, factsIn, dataIn) {
   kids.push({ t: 'trow', lb: '\uD83D\uDD50 기준시각', s: homeBaseLabel(f.base), cur: !custom, hint: custom ? '' : '(클릭해서 시간을 변경하세요)',
     day: f.base.hol ? '주말·공휴일' : '평일', dc: f.base.hol ? '#ff9500' : '#30d158', btn: '현재', act: act('bt.pick'), bact: act('bt.now'), h: HOME_TROW_H });
   var body = [{ t: 'panel', pad: [14, HOME_PANEL_T, 14, HOME_PANEL_B], ip: [0, 0, 0, 0], r: 16, kids: kids }];
-  var h = HOME_PANEL_T + 2 + HOME_ROW_H + 1 + HOME_ROW_H + 1 + HOME_TROW_H + (rowsS.length + rowsD.length) * HOME_SUG_H + HOME_PANEL_B;
+  var h = HOME_PANEL_T + 2 + HOME_ROW_H + 1 + HOME_ROW_H + 1 + HOME_TROW_H + (rowsS.length + rowsD.length) * HOME_SUG_H + (rowsS.length ? 2 * HOME_SUG_GAP : 0) + (rowsD.length ? 2 * HOME_SUG_GAP : 0) + HOME_PANEL_B;
   var out = { ok: true, v: 1, screen: 'home', cover: 'chips', head: [], body: body, info: { h: h, active: f.active, ready: ready, rows: rowsS.length + rowsD.length, sx: HOME_SX } };
   if (pk) out.info.pk = pk;
   out.rev = 'h' + HOME_SCREEN_V + ':' + homeHash(JSON.stringify(body));

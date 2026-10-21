@@ -17,7 +17,7 @@ const U = n => Array.from({ length: n }, (_, i) => ({ n: '강남' + i, l: '2호�
 // ── ② 기본 모양 ──
 {
   const s = E.homeScreen({ cap: 7 }, { start: '', dest: '' }, {});
-  ok(s.ok && s.v === 1 && s.screen === 'home' && s.head.length === 0 && s.body.length === 1 && s.body[0].t === 'panel' && /^h1:/.test(s.rev), '기본 모양');
+  ok(s.ok && s.v === 1 && s.screen === 'home' && s.head.length === 0 && s.body.length === 1 && s.body[0].t === 'panel' && /^h2:/.test(s.rev), '기본 모양');
   const k = kids(s);
   ok(k.map(x => x.t).join() === 'inbar,swap,divider,inbar,divider,trow', '줄 순서: 출발 · 바꾸기 · 선 · 도착 · 선 · 기준시각 ' + k.map(x => x.t));
   ok(k[0].key === 'start' && k[0].hint === '출발지 검색' && k[0].dot === '#0a84ff' && k[0].btn === '위치 감지' && k[0].act.v === 'rt.gps' && k[0].watch === true, '출발 줄');
@@ -55,7 +55,7 @@ const U = n => Array.from({ length: n }, (_, i) => ({ n: '강남' + i, l: '2호�
   sg = kids(s).filter(x => x.t === 'sug' && x.act.v.startsWith('sg.'));
   ok(sg.length === 1 && sg[0].sub.length === 60 && sg[0].act.v === 'sg.u.3', '이상한 후보는 건너뛴다(번호는 원래 배열 순번)');
   s = E.homeScreen({ cap: 7 }, f('start'), { u: U(2) });
-  ok(s.info.h === 14 + 2 + 57 + 1 + 57 + 1 + 34 + 2 * 44 + 18, 'info.h 계산');
+  ok(s.info.h === 14 + 2 + 57 + 1 + 57 + 1 + 34 + 2 * 44 + 6 + 18, 'info.h 계산');
 }
 // ── ④ 기준시각 문구 ──
 {
