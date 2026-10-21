@@ -265,6 +265,13 @@ function findAndroidJar() {
     for (const f of [g, m, y].concat(walk(path.join(ROOT, 'native', 'shell'), '.java').map(x => fs.readFileSync(x, 'utf8')))) assert.ok(!/capacitor|WebView|BridgeActivity|webDir/i.test(f), '웹 흔적');
     assert.ok(!fs.existsSync(path.join(ROOT, 'www')), 'www 폴더가 없어야 한다(웹 기준본은 ios-reference/)');
   });
+  await t('노선 알약 숫자 동그라미(s138): 엔진이 알약 + 숫자를 주고 · 앱은 색 알약 안에 반투명 동그라미를 그린다 · 그릴 때 새 객체 없음', () => {
+    const sc = fs.readFileSync(N('ScreenCore.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8');
+    assert.ok(/K_LPILL = 46/.test(sc) && /"lpills"\.equals\(t\)/.test(sc) && /"lpills"\.equals\(n\.t\)/.test(sc), '파싱 · 배치');
+    const d = sv.slice(sv.indexOf('private void drawLpill('), sv.indexOf('private void drawPill('));
+    assert.ok(/case ScreenCore\.K_LPILL: drawLpill/.test(sv) && /0x47FFFFFF/.test(d) && /drawCircle/.test(d) && /it\.t1\.length\(\) > 0/.test(d), '그리기 · 동그라미 알파 .28');
+    assert.ok(!/new Paint|new RectF|new Rect\(|new Path|new int\[|new String/.test(d), '그릴 때 새 객체 없음');
+  });
   await t('앱 크기(s138): 64비트 한 가지 · 한국어·영어만 · 릴리스에서 라이브러리 코드 줄이기 · 실패하면 디버그로 대신', () => {
     const g = fs.readFileSync(path.join(ROOT, 'shell-android', 'app', 'build.gradle'), 'utf8');
     assert.ok(/abiFilters 'arm64-v8a' \}/.test(g) && !/armeabi/.test(g), '지도 엔진 네이티브 라이브러리는 64비트만');
