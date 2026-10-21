@@ -105,6 +105,43 @@ public final class MapCore {
     }
     public void restoreArrivals() { if (!arrStash.isEmpty()) { busRes.putAll(arrStash); arrAt = arrStashAt; arrStash.clear(); } busNeed.clear(); }
     public void commitArrivals() { arrStash.clear(); }
+    // ── 도착정보 미리 받기(투기적 선(先)받기): 엔진이 지난번에 "이 주소들을 받아 와라" 한 도착정보 주소(a0.. · f0..)를 기억해 두었다가, 같은 정류장 목록 · 같은 보기이면
+    //    엔진에게 "무엇을 받을까"를 다시 묻지 않고 곧장 받아 한 번에 그리게 한다(엔진 왕복 1회 절약). 주소를 만드는 것은 여전히 엔진 — 앱은 엔진이 준 주소를 되쓸 뿐이다.
+    //    정류장 목록 · 보기 · 즐겨찾기가 하나라도 달라졌으면(열쇠가 다르면) 쓰지 않는다 — 다른 정류장의 도착정보가 섞이지 않게.
+    private final List<String[]> lastArrNeed = new ArrayList<String[]>();
+    private String lastArrSig = "";
+    static final String K_BSN = "bsn";
+    private String arrSig() {
+        StringBuilder b = new StringBuilder(busView()).append('|').append(favRaw().hashCode()).append('|').append(stopsKey());
+        for (String k : new String[] { "tp", "gg", "tn", "d1" }) { String v = busRes.get(k); b.append('|').append(v == null ? -1 : v.length()).append(':').append(v == null ? 0 : v.hashCode()); }
+        return b.toString();
+    }
+    /** 엔진이 받아 오라고 한 목록 중 도착정보(a · f) 주소만 기억한다(기기에도 보관 — 앱을 껐다 켜도 첫 갱신이 빠르다). */
+    public void rememberNeed(List<String[]> need) {
+        List<String[]> keep = new ArrayList<String[]>();
+        for (String[] n : need) if (n != null && n.length == 2 && n[0].matches("[af][0-9]{1,3}") && n[1].length() > 0 && n[1].length() < 600 && n[1].indexOf('\t') < 0 && n[1].indexOf('\n') < 0) keep.add(n);
+        if (keep.isEmpty()) return;
+        lastArrNeed.clear(); lastArrNeed.addAll(keep); lastArrSig = arrSig();
+        StringBuilder o = new StringBuilder().append(lastArrSig.hashCode());
+        for (String[] n : keep) o.append('\n').append(n[0]).append('\t').append(n[1]);
+        if (o.length() < 20000) st.put(K_BSN, o.toString());
+    }
+    /** 지금 상태에서 바로 받아도 되는 도착정보 주소들([k, 주소]) — 없으면 빈 목록(평소처럼 엔진에게 묻는다). */
+    public List<String[]> speculativeNeed() {
+        if (busLL == null) return new ArrayList<String[]>();
+        if (lastArrNeed.isEmpty()) {
+            String raw = st.get(K_BSN, "");
+            if (raw.length() > 0) {
+                String[] ln = raw.split("\n");
+                if (ln.length >= 2 && ln[0].equals(String.valueOf(arrSig().hashCode()))) {
+                    for (int i = 1; i < ln.length; i++) { String[] kv = ln[i].split("\t", 2); if (kv.length == 2 && kv[0].matches("[af][0-9]{1,3}") && kv[1].length() > 0) lastArrNeed.add(kv); }
+                    lastArrSig = arrSig();
+                }
+            }
+        }
+        if (lastArrNeed.isEmpty() || !lastArrSig.equals(arrSig())) return new ArrayList<String[]>();
+        return new ArrayList<String[]>(lastArrNeed);
+    }
     public void addBusRes(String k, String body) { if (k != null && k.matches("[af][0-9]{1,3}")) arrAt = System.currentTimeMillis(); if (k != null && k.matches("[a-z][a-z0-9]{0,3}")) busRes.put(k, body == null ? "" : (body.length() > 120000 ? body.substring(0, 120000) : body)); }
     /** 엔진이 준 주소를 공공 API 프록시 주소로 바꾼다 — /tago 는 route-v2 가 아니라 subway-api(gentle-lab) 워커에 있다. 허용 호스트가 아니면 빈 문자열. */
     public static String busFetchUrl(String u) {
