@@ -976,6 +976,19 @@ public class ScreenJvmTest {
             try { ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"news\",\"head\":[],\"body\":[{\"t\":\"news\",\"title\":\"가\",\"sub\":\"나\",\"act\":{\"a\":\"call\",\"v\":\"bd.cm.1\",\"key\":\"a b!\"}}]}"); } catch (Exception ex) { threw = true; }
             ok(threw, "엉터리 입력칸 열쇠는 거부");
         }
+        // ── 경로 탐색 로딩(runner) 노드 ──
+        try {
+            ScreenCore.Screen rn = ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"dlg\",\"bg\":\"card\",\"dlg\":{\"w\":296,\"maxh\":0.9,\"dim\":0.7,\"top\":0.5,\"r\":20,\"mx\":24},\"head\":[{\"t\":\"runner\",\"pad\":[30,24,30,22],\"ttl\":\"복합경로 탐색 중\",\"sub\":\"잠시만 기다려주세요\"}],\"body\":[{\"t\":\"spacer\",\"h\":0}]}");
+            ScreenCore.Layout rl = ScreenCore.layout(rn, 296f, M);
+            ScreenCore.Item ri = rl.head.length > 0 ? rl.head[0] : null;
+            ok(ri != null && ri.kind == ScreenCore.K_RUNNER && "복합경로 탐색 중".equals(ri.label) && "잠시만 기다려주세요".equals(ri.value), "runner: 제목 · 안내 글");
+            ok(ri != null && near(ri.w, 236f) && near(ri.h, ScreenCore.RUN_H) && near(ri.x, 30f) && near(ri.y, 24f), "runner: 달리는 칸 너비 236 · 안쪽 여백 30/24");
+            ok(near(rl.headH, 24f + ScreenCore.RUN_H + 22f) && near(ScreenCore.RUN_H, 98f + 8f + 19f + 4f + 14f), "runner: 카드 높이 = 위 24 + 칸 98 + 제목 + 안내 + 아래 22");
+        } catch (Exception ex) { ok(false, "runner 읽기: " + ex); }
+        for (String bad : new String[] { "{\"t\":\"runner\",\"sub\":\"x\"}", "{\"t\":\"runner\",\"ttl\":\"\"}", "{\"t\":\"runner\",\"ttl\":7}" }) {
+            try { ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"x\",\"head\":[" + bad + "],\"body\":[]}"); ok(false, "runner: 잘못된 값은 거절 " + bad); }
+            catch (Exception ex) { ok(true, "runner: 잘못된 값은 거절 " + bad); }
+        }
         // ── 스켈레톤(skel) 노드 ──
         for (String sc : new String[] { "cards", "map", "list" }) {
             try {
