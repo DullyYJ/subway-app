@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <background android:drawable="@drawable/ic_launcher_bg" />
-    <foreground android:drawable="@drawable/ic_launcher_fg" />
+    <!-- 그림이 칸을 가득 채워 런처 모양 틀에 잘리고 커 보였다 → 안전 영역(지름 66/108) 안에 들어가게 사방 8.6% 안쪽으로 줄인다 -->
+    <foreground>
+        <inset android:drawable="@drawable/ic_launcher_fg" android:inset="8.6%" />
+    </foreground>
 </adaptive-icon>
