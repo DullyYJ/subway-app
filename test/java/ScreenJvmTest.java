@@ -989,6 +989,13 @@ public class ScreenJvmTest {
             try { ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"x\",\"head\":[" + bad + "],\"body\":[]}"); ok(false, "runner: 잘못된 값은 거절 " + bad); }
             catch (Exception ex) { ok(true, "runner: 잘못된 값은 거절 " + bad); }
         }
+        // ── 무지개 테두리 카드(panel glow) ──
+        try {
+            ScreenCore.Layout gl = ScreenCore.layout(ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"x\",\"head\":[],\"body\":[{\"t\":\"panel\",\"glow\":true,\"kids\":[{\"t\":\"text\",\"s\":\"가\"}]},{\"t\":\"panel\",\"kids\":[{\"t\":\"text\",\"s\":\"나\"}]}]}"), 360f, M);
+            ScreenCore.Item g0 = null, g1 = null;
+            for (ScreenCore.Item q : gl.body) if (q.kind == ScreenCore.K_PANEL) { if (g0 == null) g0 = q; else if (g1 == null) g1 = q; }
+            ok(g0 != null && g0.pub && g1 != null && !g1.pub, "panel glow: 켠 카드만 무지개 테두리");
+        } catch (Exception ex) { ok(false, "panel glow 읽기: " + ex); }
         // ── 세부경로 줄(tdrow) 노드 ──
         try {
             String row = "{\"t\":\"tdrow\",\"pos\":\"f\",\"ic\":\"s\",\"col\":\"#2f7cf6\",\"trk\":\"rgba(47,124,246,0.1875)\",\"ibg\":\"rgba(47,124,246,0.157)\",\"lab\":\"수도권 1호선\",\"bbg\":\"rgba(47,124,246,0.133)\",\"bfg\":\"#2f7cf6\",\"path\":\"부평 → 두정\",\"cnt\":\"3정거장 경유\",\"time\":\"12분\",\"tcol\":\"#2f7cf6\",\"rng\":\"12:03~12:15\",\"dep\":1760000000000,\"arr\":1760000720000,\"ex\":true,\"op\":%OP%,\"act\":{\"a\":\"call\",\"v\":\"rd.tg.1\"},\"stops\":[[\"부평\",\"12:03\",1],[\"가\",\"12:07\",0],[\"두정\",\"12:15\",1]]}";
