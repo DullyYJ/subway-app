@@ -31,7 +31,55 @@ public final class MapCore {
     public double[] busLL = null;
     final Map<String, String> busRes = new LinkedHashMap<String, String>();
     public final List<String[]> busNeed = new ArrayList<String[]>();           // [k, 주소]
-    public void setBusLoc(double la, double lo) { busLL = new double[] { la, lo }; busRes.clear(); busNeed.clear(); busSel = -1; }
+    public void setBusLoc(double la, double lo) { busLL = new double[] { la, lo }; busRes.clear(); busNeed.clear(); busSel = -1; stopsSaved = false; loadStopsCache(); }
+    // ── 주변 정류장 목록(tp · gg · tn · d1)은 거의 안 바뀐다 — 같은 곳(약 110m 칸)이면 기기에 24시간 두고 바로 쓴다(SWR: 도착정보만 새로). 도착정보(a · f)는 절대 두지 않는다.
+    private static final long STOPS_TTL_MS = 24L * 3600L * 1000L;
+    private boolean stopsSaved;
+    private String stopsKey() { return busLL == null ? "" : "bsc_" + Math.round(busLL[0] * 1000.0) + "_" + Math.round(busLL[1] * 1000.0); }
+    @SuppressWarnings("unchecked")
+    private void loadStopsCache() {
+        String k = stopsKey();
+        if (k.length() == 0) return;
+        try {
+            String raw = st.get(k, "");
+            if (raw.length() == 0) return;
+            Object o = ScreenCore.parse(raw);
+            if (!(o instanceof Map)) return;
+            Map<String, Object> m = (Map<String, Object>) o;
+            if (!(m.get("t") instanceof Double) || System.currentTimeMillis() - ((Double) m.get("t")).longValue() > STOPS_TTL_MS || !(m.get("r") instanceof Map)) return;
+            for (Map.Entry<String, Object> e : ((Map<String, Object>) m.get("r")).entrySet())
+                if (e.getKey().matches("tp|gg|tn|d1") && e.getValue() instanceof String) busRes.put(e.getKey(), (String) e.getValue());
+            stopsSaved = true;                                                                  // 방금 읽은 것을 다시 쓰지 않는다
+        } catch (Exception e) { /* 못 읽으면 새로 받는다 */ }
+    }
+    /** 정류장 목록을 다 받았다 — 이 자리 칸에 보관한다(처음 한 번). 호출하는 쪽이 정류장이 있는 화면일 때만 부른다. */
+    public int stopCount() { return stopJson.size(); }
+    public boolean saveStopsCache() {
+        if (!VW_NEAR.equals(busView()) || stopJson.isEmpty()) return false;
+        String k = stopsKey();
+        if (k.length() == 0 || stopsSaved) return false;
+        StringBuilder b = new StringBuilder("{\"t\":").append(System.currentTimeMillis()).append(",\"r\":{");
+        boolean first = true; int total = 0;
+        for (String key : new String[] { "tp", "gg", "tn", "d1" }) {
+            String v = busRes.get(key);
+            if (v == null) continue;
+            total += v.length();
+            if (!first) b.append(','); first = false;
+            b.append(ShellCore.q(key)).append(':').append(ShellCore.q(v));
+        }
+        if (first || total > 200000) return false;
+        b.append("}}");
+        String idx = st.get("bsc_idx", "");
+        List<String> ids = new ArrayList<String>(java.util.Arrays.asList(idx.length() == 0 ? new String[0] : idx.split(",")));
+        ids.remove(k); ids.add(k);
+        while (ids.size() > 4) st.put(ids.remove(0), "");                                         // 최근 4곳만
+        st.put(k, b.toString());
+        StringBuilder ix = new StringBuilder();
+        for (String id : ids) { if (ix.length() > 0) ix.append(','); ix.append(id); }
+        st.put("bsc_idx", ix.toString());
+        stopsSaved = true;
+        return true;
+    }
     /** 주변 정류장 / 즐겨찾기 (웹 _busViewMode). 저장소에 두어 캐시 열쇠가 알아본다. */
     public String busView() { return VW_FAV.equals(st.get(K_BUSVW, VW_NEAR)) ? VW_FAV : VW_NEAR; }
     public int busSel = -1;                                      // 지도·카드에서 고른 정류장 번호(엔진이 핀·카드 강조를 정한다)

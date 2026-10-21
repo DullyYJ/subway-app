@@ -255,9 +255,9 @@ public class ShellActivity extends Activity {
             store.put(ShellCore.K_SAMW, pi.sam && pi.w ? "1" : "0");
         } catch (Throwable t) { /* 못 읽으면 이전 값 */ }
     }
-    @Override protected void onDestroy() { if (live == this) live = null; if (vec != null) vec.onDestroy(); super.onDestroy(); }
-    @Override protected void onResume() { super.onResume(); resumed = true; if (vec != null) vec.onResume(); refreshPower(); if (System.currentTimeMillis() - hdrAt > 300000L) loadHdr(); if (prefetchAt > 0L && System.currentTimeMillis() - prefetchAt > 600000L) prefetchTabs(); busResume(); brResume(); if (ShellCore.S_SETPG.equals(sheetName) && sheet != null && sheet.isShowing()) loadSetPage(); if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) startChatPoll(); }
-    @Override protected void onPause() { resumed = false; if (vec != null) vec.onPause(); main.removeCallbacks(brTick); brTicking = false; super.onPause(); }
+    @Override protected void onDestroy() { if (live == this) live = null; if (locf != null) locf.cancelAll(); if (vec != null) vec.onDestroy(); super.onDestroy(); }
+    @Override protected void onResume() { super.onResume(); resumed = true; if (vec != null) vec.onResume(); trackStart(); refreshPower(); if (System.currentTimeMillis() - hdrAt > 300000L) loadHdr(); if (prefetchAt > 0L && System.currentTimeMillis() - prefetchAt > 600000L) prefetchTabs(); busResume(); brResume(); if (ShellCore.S_SETPG.equals(sheetName) && sheet != null && sheet.isShowing()) loadSetPage(); if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) startChatPoll(); }
+    @Override protected void onPause() { resumed = false; trackStop(); if (vec != null) vec.onPause(); main.removeCallbacks(brTick); brTicking = false; super.onPause(); }
 
     @Override public void onBackPressed() {
         String t = ShellCore.currentTab(store);
@@ -727,7 +727,7 @@ public class ShellActivity extends Activity {
         final java.util.HashSet<String> live = new java.util.HashSet<String>();
         for (String sc : slots) live.add(sc);
         final String liveMode = ShellCore.mode(store), liveSel = chat.sel(), mapMode = map.mode(), theme = ShellCore.theme(store);
-        final double[] ll = ShellCore.lastLocGet(store);
+        final double[] ll = liveLL();
         final ArrayList<String> sec = new ArrayList<String>(chat.routeSec);
         final HomeCore.Loc d = home.loc[HomeCore.DEST];
         final String dName = d != null && d.ok() ? d.name : ""; final double dLa = d != null && d.ok() ? d.lat : 0, dLo = d != null && d.ok() ? d.lng : 0;
@@ -795,7 +795,7 @@ public class ShellActivity extends Activity {
                         } });
                         ts[i].start();
                     }
-                    for (Thread t : ts) { try { t.join(12000); } catch (InterruptedException e) { /* 무시 */ } }
+                    for (Thread t : ts) { try { t.join(10000); } catch (InterruptedException e) { /* 무시 */ } }
                     for (int i = 0; i < need.size(); i++) pfMap.addBusRes(need.get(i)[0], got[i] == null ? "" : got[i]);
                     pfMap.busNeed.clear();
                 }
@@ -1360,7 +1360,7 @@ public class ShellActivity extends Activity {
         if (d != null && d.ok()) food.setDest(d.name, d.lat, d.lng); else food.setDest("", 0, 0);
         if (force) food.refresh();
         if (food.needGps() && !food.noperm) {                                   // 위치를 기다리지 않고 마지막 위치로 먼저 그린다
-            double[] seed = ShellCore.lastLocGet(store);
+            double[] seed = liveLL();
             if (seed != null) {
                 food.setGps(seed[0], seed[1]);
                 locateQuiet(new LocCb() {
@@ -1518,31 +1518,39 @@ public class ShellActivity extends Activity {
                 new Runnable() { @Override public void run() { LocCb c = pendingLoc; pendingLoc = null; if (c != null) c.fail(true); } });
             return;
         }
-        final LocationManager lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-        try {
-            Location best = null;
-            for (String p : lm.getProviders(true)) {
-                Location l = lm.getLastKnownLocation(p);
-                if (l != null && (best == null || l.getTime() > best.getTime())) best = l;
-            }
-            if (best != null && System.currentTimeMillis() - best.getTime() < 5 * 60 * 1000L) { cb.fix(best); return; }
-            String prov = lm.isProviderEnabled(LocationManager.GPS_PROVIDER) ? LocationManager.GPS_PROVIDER : LocationManager.NETWORK_PROVIDER;
-            final Location fallback = best;
-            final boolean[] done = { false };
-            final LocationListener ll = new LocationListener() {
-                @Override public void onLocationChanged(Location l) { if (done[0]) return; done[0] = true; try { lm.removeUpdates(this); } catch (Throwable ignored) { } cb.fix(l); }
-                @Override public void onProviderEnabled(String p) { }
-                @Override public void onProviderDisabled(String p) { }
-                @Override @SuppressWarnings("deprecation") public void onStatusChanged(String p, int s, Bundle b) { }
-            };
-            lm.requestSingleUpdate(prov, ll, Looper.getMainLooper());
-            main.postDelayed(new Runnable() { @Override public void run() {
-                if (done[0]) return; done[0] = true;
-                try { lm.removeUpdates(ll); } catch (Throwable ignored) { }
-                if (fallback != null) cb.fix(fallback); else cb.fail(false);
-            } }, 8000);
-        } catch (Throwable t) { cb.fail(false); }
+        locateFast(8000L, cb);
     }
+    // ── 현재 위치(마지막으로 알려진 위치는 쓰지 않는다): 고정밀 현재 위치 + 네트워크 위치를 동시에 · 먼저 오는 것을 바로 반영 · GPS 가 더 정확하면 한 번 더. 화면이 켜져 있는 동안은 가볍게 이어 받는다.
+    private LocFused locf;
+    private Location liveLoc; private long liveAt;
+    private static final long LIVE_FRESH_MS = 20000L;
+    private void liveSet(Location l) { if (l != null) { liveLoc = l; liveAt = System.currentTimeMillis(); saveLoc(l); if (resumed && (locf == null || !locf.tracking())) trackStart(); } }
+    /** 방금(20초 안) 받은 현재 위치의 좌표(없으면 null) — 오래된 위치는 절대 돌려주지 않는다. */
+    private double[] liveLL() { return liveLoc != null && System.currentTimeMillis() - liveAt < 60000L ? new double[] { liveLoc.getLatitude(), liveLoc.getLongitude() } : null; }
+    private void locateFast(final long waitMs, final LocCb cb) {
+        if (liveLoc != null && System.currentTimeMillis() - liveAt < LIVE_FRESH_MS) { cb.fix(liveLoc); return; }      // 연속 위치가 방금 받은 현재 위치
+        if (locf == null) locf = new LocFused(this);
+        locf.current(2000L, waitMs, new LocFused.Cb() {
+            @Override public void fix(Location l) { liveSet(l); cb.fix(l); }
+            @Override public void fail() { cb.fail(false); }
+        });
+    }
+    /** 앞에 있는 동안만: 15초 · 30m 마다 현재 위치를 이어 받고, 버스 정류장 탐색이 이동을 따라가게 한다. onPause 에서 즉시 해제. */
+    private void trackStart() {
+        if (!hasLocPerm() || !resumed) return;
+        if (locf == null) locf = new LocFused(this);
+        locf.track(new LocFused.Cb() {
+            @Override public void fix(Location l) {
+                liveSet(l);
+                if (!resumed || !"bus".equals(map.mode()) || !"map".equals(ShellCore.currentTab(store)) || map.busLL == null) return;
+                if (Math.abs(map.busLL[0] - l.getLatitude()) > 0.0015 || Math.abs(map.busLL[1] - l.getLongitude()) > 0.0015) {
+                    map.setBusLoc(l.getLatitude(), l.getLongitude()); loadMapBody(body, true);                // 170m 넘게 움직였다 — 새 자리의 정류장
+                }
+            }
+            @Override public void fail() { }
+        });
+    }
+    private void trackStop() { if (locf != null) locf.untrack(); }                       // 한 번짜리 요청은 제한 시간(최대 12초)에 스스로 끝난다 — 연속 요청만 즉시 해제
     private void locateForFood() {
         food.locating = true;
         locateOnce(REQ_FOOD_LOC, new LocCb() {
@@ -1585,7 +1593,7 @@ public class ShellActivity extends Activity {
                     if (txt.length() > 0) map.onScreen(txt);
                     if (!(keep && txt.length() > 0 && !map.busNeed.isEmpty())) { v.setSourceAge(map.arrAge()); present(v, txt, keep); }          // 버스 도착정보를 더 받아야 하면 캐시 화면을 중간 화면으로 덮지 않는다
                     syncMapView();
-                    if ("bus".equals(map.view)) { if (round == 0) busAt = System.currentTimeMillis(); startBusTick(); }
+                    if ("bus".equals(map.view)) { if (round == 0) busAt = System.currentTimeMillis(); startBusTick(); if (txt.length() > 0 && map.stopCount() > 0) map.saveStopsCache(); }
                     if (txt.length() > 0 && !map.busNeed.isEmpty() && round < 3) fetchBusNeed(v, keep, round, my);
                     else { if (busRefreshing) busOk(); if (txt.length() > 0 && "bus".equals(map.view) && map.busNeed.isEmpty()) brPrefetch(); }
                 } });
@@ -1641,8 +1649,14 @@ public class ShellActivity extends Activity {
                     final int k = i;
                     ts[i] = new Thread(new Runnable() { @Override public void run() {
                         String u = MapCore.busFetchUrl(need.get(k)[1]);
-                        NetPost.Res r = u.length() == 0 ? null : NetPost.get(u, 9000);
-                        got[k] = r != null && r.status == 200 ? r.body : "";
+                        String body = "";
+                        for (int a = 0; a < 2 && u.length() > 0 && body.length() == 0; a++) {          // 한 곳이 느려 전체가 9초 걸리지 않게: 5초 안에 못 받으면 한 번 더(빨리 실패했을 때만 — 느린 서버에 또 매달리지 않는다)
+                            long t0 = System.currentTimeMillis();
+                            NetPost.Res r = NetPost.get(u, a == 0 ? 5000 : 4000);
+                            body = r.status == 200 && r.body != null ? r.body : "";
+                            if (body.length() == 0 && System.currentTimeMillis() - t0 > 2500L) break;
+                        }
+                        got[k] = body;
                     } });
                     ts[i].start();
                 }
@@ -1664,7 +1678,7 @@ public class ShellActivity extends Activity {
     /** 버스 방식 노선도: 위치를 기다리지 않고 마지막 위치로 먼저 그리고, 권한이 있으면 새 위치를 조용히 받아 바뀌었을 때만 다시 그린다. */
     private void seedMapLoc() {
         if (!"bus".equals(map.mode()) || map.busLL != null) return;
-        final double[] seed = ShellCore.lastLocGet(store);
+        final double[] seed = liveLL();
         if (seed != null) map.setBusLoc(seed[0], seed[1]);
         locateQuiet(new LocCb() {
             @Override public void fix(Location l) {
@@ -2055,7 +2069,7 @@ public class ShellActivity extends Activity {
             sheet.show(); slideIn(sheetView);
         } catch (Throwable t) { toast("노선도를 열지 못했어요"); return; }
         final int gen = ++brGen;
-        double[] seed = ShellCore.lastLocGet(store);
+        double[] seed = liveLL();
         if (seed != null) map.setRouteMe(seed[0], seed[1]);
         String[] c = brCacheGet(map.brRid);
         if (c != null) map.useCachedStations(c[0], c[1], c[2]);                          // 정류장은 기기에 둔 것으로 바로 — 위치는 아래에서 새로 받는다
@@ -2481,33 +2495,17 @@ public class ShellActivity extends Activity {
             return;
         }
         home.gps = true; reloadHome();
-        final LocationManager lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-        try {
-            Location best = null;
-            for (String p : lm.getProviders(true)) {
-                Location l = lm.getLastKnownLocation(p);
-                if (l != null && (best == null || l.getTime() > best.getTime())) best = l;
-            }
-            if (best != null && System.currentTimeMillis() - best.getTime() < 120000) { gotGps(best); return; }
-            String prov = lm.isProviderEnabled(LocationManager.GPS_PROVIDER) ? LocationManager.GPS_PROVIDER : LocationManager.NETWORK_PROVIDER;
-            final Location fallback = best;
-            final LocationListener ll = new LocationListener() {
-                @Override public void onLocationChanged(Location l) { try { lm.removeUpdates(this); } catch (Throwable ignored) { } gotGps(l); }
-                @Override public void onProviderEnabled(String p) { }
-                @Override public void onProviderDisabled(String p) { }
-                @Override @SuppressWarnings("deprecation") public void onStatusChanged(String p, int s, Bundle b) { }
-            };
-            lm.requestSingleUpdate(prov, ll, Looper.getMainLooper());
-            main.postDelayed(new Runnable() { @Override public void run() {
-                if (!home.gps) return;
-                try { lm.removeUpdates(ll); } catch (Throwable ignored) { }
-                if (fallback != null) gotGps(fallback); else { home.gps = false; toast("현재 위치를 찾지 못했어요"); reloadHome(); }
-            } }, 12000);
-        } catch (Throwable t) { home.gps = false; toast("위치를 쓸 수 없어요"); reloadHome(); }
+        locateFast(12000L, new LocCb() {
+            @Override public void fix(Location l) { gotGps(l); }
+            @Override public void fail(boolean noperm) { if (!home.gps) return; home.gps = false; toast("현재 위치를 찾지 못했어요"); reloadHome(); }
+        });
     }
     private void gotGps(Location l) {
         saveLoc(l);
-        if (!home.gps) return;
+        HomeCore.Loc cur = home.loc[HomeCore.START];
+        if (!home.gps) {                                                               // 이미 내 위치로 잡혀 있다 — 더 정확한 위치가 90m 넘게 다를 때만 다시 잡는다
+            if (cur == null || !"gps".equals(cur.type) || (Math.abs(cur.lat - l.getLatitude()) < 0.0008 && Math.abs(cur.lng - l.getLongitude()) < 0.0008)) return;
+        }
         home.setGpsStart(l.getLatitude(), l.getLongitude());
         setHomeFields(); reloadHome();
     }

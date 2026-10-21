@@ -35,4 +35,6 @@ android {
 dependencies {
     // 정류장 지도: 웹(_addBaseTiles)과 같은 OpenFreeMap Liberty 벡터 타일을 그리는 MapLibre Native. 화면 글은 여전히 네이티브 Java Views 가 그린다.
     implementation 'org.maplibre.gl:android-sdk:11.8.0'
+    // 현재 위치: 고정밀 현재 위치 한 번(getCurrentLocation) · 연속 위치(Fused). Play 서비스가 없으면 LocationManager 로 대신한다.
+    implementation 'com.google.android.gms:play-services-location:21.3.0'
 }
