@@ -970,6 +970,25 @@ public class ShellJvmTest {
             ok("\uACE7 \uB3C4\uCC29".equals(ScreenCore.cdFmt(0)) && "\uACE7 \uB3C4\uCC29".equals(ScreenCore.cdFmt(-3)) && "1\uCD08".equals(ScreenCore.cdFmt(1)) && "59\uCD08".equals(ScreenCore.cdFmt(59)), "카운트다운 글자: 곧 도착 · N초");
             ok("1\uBD84 00\uCD08".equals(ScreenCore.cdFmt(60)) && "2\uBD84 05\uCD08".equals(ScreenCore.cdFmt(125)) && "12\uBD84 50\uCD08".equals(ScreenCore.cdFmt(770)) && "60\uBD84 00\uCD08".equals(ScreenCore.cdFmt(3600)) && "1\uBD84 22\uCD08".equals(ScreenCore.cdFmt(81.6)), "카운트다운 글자: M분 SS초(반올림)");
         }
+        {   // 버스 도착정보 미리 받기(엔진이 준 주소를 되쓴다 · 정류장/보기가 바뀌면 쓰지 않는다)
+            ShellCore.MemStore sp_ms = new ShellCore.MemStore();
+            MapCore sp_m = new MapCore(sp_ms); sp_m.modeOverride = "bus"; sp_m.setBusLoc(37.5, 127.0);
+            ok(sp_m.speculativeNeed().isEmpty(), "미리 받기: 처음엔 기억한 주소가 없다");
+            sp_m.addBusRes("tp", "<stops a/>");
+            java.util.List<String[]> sp_nd = new java.util.ArrayList<String[]>();
+            sp_nd.add(new String[] { "a0", "http://ws.bus.go.kr/x?1" }); sp_nd.add(new String[] { "a1", "http://ws.bus.go.kr/x?2" }); sp_nd.add(new String[] { "tp", "http://ws.bus.go.kr/s" }); sp_nd.add(new String[] { "a2", "bad\turl" });
+            sp_m.rememberNeed(sp_nd);
+            java.util.List<String[]> sp_sp = sp_m.speculativeNeed();
+            ok(sp_sp.size() == 2 && "a0".equals(sp_sp.get(0)[0]) && "http://ws.bus.go.kr/x?2".equals(sp_sp.get(1)[1]), "미리 받기: 도착정보(a · f) 주소만 · 이상한 글자 든 것은 뺀다");
+            MapCore sp_m2 = new MapCore(sp_ms); sp_m2.modeOverride = "bus"; sp_m2.setBusLoc(37.5, 127.0); sp_m2.addBusRes("tp", "<stops a/>");
+            ok(sp_m2.speculativeNeed().size() == 2, "미리 받기: 앱을 껐다 켜도(기기 보관) 같은 정류장 목록이면 쓴다");
+            sp_m2.addBusRes("tp", "<stops b/>");
+            ok(sp_m2.speculativeNeed().isEmpty(), "미리 받기: 정류장 목록이 달라지면 쓰지 않는다(다른 정류장 도착정보가 섞이지 않게)");
+            sp_m.addBusRes("tp", "<stops a/>"); sp_ms.put(MapCore.K_BUSVW, MapCore.VW_FAV);
+            ok(sp_m.speculativeNeed().isEmpty(), "미리 받기: 보기(주변 → 즐겨찾기)가 바뀌면 쓰지 않는다");
+            MapCore sp_m3 = new MapCore(sp_ms); sp_m3.modeOverride = "bus";
+            ok(sp_m3.speculativeNeed().isEmpty(), "미리 받기: 위치가 없으면 쓰지 않는다");
+        }
         {   // 도보 안내 시트(웹 walkModal) — 엔진이 정한 길안내 주소 · 간격을 꺼내고 눌림을 행동 코드로
             WalkCore w = new WalkCore();
             w.open("arrive", "\uAC15\uB0A8\uC5ED", 37.505, 127.004);
