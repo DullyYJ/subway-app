@@ -1701,6 +1701,7 @@ public class ScreenView extends View {
             case ScreenCore.K_SKEL: drawSkel(cv, it); break;
             case ScreenCore.K_RUNNER: drawRunner(cv, it); break;
             case ScreenCore.K_TDROW: drawTdrow(cv, it); break;
+            case ScreenCore.K_LPILL: drawLpill(cv, it); break;
             case ScreenCore.K_BTOG: drawBtog(cv, it); break;
             case ScreenCore.K_BCARD: drawBcardRo(cv, it); break;
             default: break;
@@ -2460,6 +2461,21 @@ public class ScreenView extends View {
         if (it.t2.length() > 0) { setText(ScreenCore.LTH_TITLE, false, pal[R_SUB]); cv.drawText(it.t2, it.f2, base(it.y, it.h - 4f, 0), tp); }
     }
     /** 알약 글자: 둥근 바탕 + 글(위치·말줄임은 배치가 정했다). */
+    /** 노선 알약(웹 _linePillHtml): 노선 색 알약 + 흰 글자, 호선 숫자가 있으면 왼쪽에 반투명 흰 동그라미(알파 .28) 안에 숫자. */
+    private void drawLpill(Canvas cv, ScreenCore.Item it) {
+        p.setStyle(Paint.Style.FILL); p.setColor(cc(it.fill, 0xFF8E8E93));
+        rf.set(it.x, it.y, it.x + it.w, it.y + it.h); cv.drawRoundRect(rf, it.h / 2f, it.h / 2f, p);
+        float tx = it.x + ScreenCore.LP_PADL;
+        if (it.t1.length() > 0) {
+            float cx = it.x + ScreenCore.LP_PADL_N + ScreenCore.LP_NUM / 2f, cy = it.y + it.h / 2f;
+            p.setColor(0x47FFFFFF); cv.drawCircle(cx, cy, ScreenCore.LP_NUM / 2f, p);
+            setText(ScreenCore.LP_NUM_FS, true, 0xFFFFFFFF); tp.setTextAlign(Paint.Align.CENTER);
+            cv.drawText(it.t1, cx, base(cy - ScreenCore.LP_NUM / 2f, ScreenCore.LP_NUM, 0), tp); tp.setTextAlign(Paint.Align.LEFT);
+            tx = it.x + ScreenCore.LP_PADL_N + ScreenCore.LP_NUM + ScreenCore.LP_NUM_GAP;
+        }
+        setText(ScreenCore.LP_FS, true, 0xFFFFFFFF);
+        cv.drawText(it.label, tx, base(it.y, it.h, 0), tp);
+    }
     private void drawPill(Canvas cv, ScreenCore.Item it) {
         p.setStyle(Paint.Style.FILL); p.setColor(cc(it.fill, pal[R_CARD2]));
         rf.set(it.x, it.y, it.x + it.w, it.y + it.h); cv.drawRoundRect(rf, it.f3, it.f3, p);
