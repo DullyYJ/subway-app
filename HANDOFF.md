@@ -1888,3 +1888,10 @@ YJ(11:16, 기기 스크린샷 4장 + "모든 탭 화면을 웹과 동일하게")
 - **마지막 위치(`captureLastLoc`)**: IO 스레드.
 - **시험**: shell_native +1(Application 등록 · 설정/글꼴 미리 · 파일 안 여는 haveCached/cacheAge · 주 스레드 비대기 · 훑기는 IO) · 기존 '켜는 즉시 prefetch' 점검을 새 순서로 고침 · widget/scene native 통과 · android.jar 컴파일 통과.
 - **남은 주 스레드 일(피할 수 없는 것)**: 처음 화면 배치(relayout), 메모리 값 읽기, 화면 올리기(그리기). 기기 미확인: 실제 첫 화면 시간. APK 는 push 하면 CI(`build-shell.yml`) 가 `gildongmu-native-debug` 로 만든다.
+
+## s124 (2026-10-21) — 홈부터 · 키보드 · 교환 단추 · 버스 초 카운트다운
+- **켜면 홈부터**: `onCreate` 에서 `savedInstanceState == null`(새로 켬)이면 저장된 탭을 `home` 으로(회전 등 다시 만들기는 보던 탭 유지).
+- **도착지 키보드가 올라오다 사라짐 — 원인**: 배치가 바뀔 때마다(키보드가 올라와 창이 줄어들 때 포함) `syncInput()` 이 불리는데, 검색줄이 없는 화면(홈)에서는 `hideInput()` 이 `endEdit()` 로 글자 입력칸 편집까지 끝냈다. 이제 `hideInput()` 은 검색 입력칸만 내린다(보이지 않게 될 때만 `endEdit()`).
+- **교환 단추 가운데 줄**: 단추를 먼저 그리고 그 밑의 구분선(`divider`)이 나중에 그려져 단추를 가로질렀다. 본문 그리기에서 `K_SWAP` 을 맨 마지막 패스로(웹 z-index 20).
+- **버스 도착 시간이 안 줄던 것**: 웹은 1초마다 로컬로 `_busFmtCd` 카운트다운(+ `_busArrKeep`: 흐르던 값과 45초 이내면 시작점 유지)을 하는데 앱에는 없었다. 엔진이 준 `sec`(brow 도착의 `a.val`)를 `Item.bs/ck` 로 싣고, `ScreenView.markCountdowns/cdRem` 이 받은 순간(캐시 화면은 `setSourceAge` 로 받은 뒤 흐른 만큼 먼저 줄임)부터 1초마다 다시 그린다. 글자 규칙 `ScreenCore.cdFmt` = 엔진 `mapCdFmt` = 웹 `_busFmtCd`(JVM 시험). 60초 이하는 임박색. 앞으로 돌아오면(`busResume`) 마지막 갱신이 20초 넘었을 때 30초 박자를 기다리지 않고 바로 다시 받는다.
+- 엔진/워커 변경 없음.

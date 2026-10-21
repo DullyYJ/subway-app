@@ -922,6 +922,10 @@ public class ShellJvmTest {
             ok(ShellCore.warmKeys(ws, "zzz").get(1).equals("tabs|" + ShellCore.DEFAULT_TAB), "미리 읽기: 모르는 탭이면 기본 탭부터");
         }
 
+        {   // 버스 도착 초 카운트다운 글자(웹 _busFmtCd)
+            ok("\uACE7 \uB3C4\uCC29".equals(ScreenCore.cdFmt(0)) && "\uACE7 \uB3C4\uCC29".equals(ScreenCore.cdFmt(-3)) && "1\uCD08".equals(ScreenCore.cdFmt(1)) && "59\uCD08".equals(ScreenCore.cdFmt(59)), "카운트다운 글자: 곧 도착 · N초");
+            ok("1\uBD84 00\uCD08".equals(ScreenCore.cdFmt(60)) && "2\uBD84 05\uCD08".equals(ScreenCore.cdFmt(125)) && "12\uBD84 50\uCD08".equals(ScreenCore.cdFmt(770)) && "60\uBD84 00\uCD08".equals(ScreenCore.cdFmt(3600)) && "1\uBD84 22\uCD08".equals(ScreenCore.cdFmt(81.6)), "카운트다운 글자: M분 SS초(반올림)");
+        }
         System.out.println(fails == 0 ? "ALL OK " + oks : "FAILED " + fails + " / " + (oks + fails));
         if (fails > 0) System.exit(1);
     }

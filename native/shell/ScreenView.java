@@ -536,9 +536,38 @@ public class ScreenView extends View {
     private String seenMode = "";
     private android.graphics.Path bellPath;
     /** 새로 올라온 정류장 카드·노선 줄에 등장 시작 시각을 붙인다(이미 본 열쇠는 조용히 — 웹: 처음 그릴 때만 펼친다). */
+    // ── 버스 도착 초 카운트다운(웹 _BUSARR · _busArrKeep · _busCdTick): 엔진이 준 남은 초(sec)를 받은 순간부터 1초마다 줄여 그린다.
+    //    새 화면이 와도 흐르던 값과 45초 이내면 '같은 차'로 보고 시작점을 이어 가서 숫자가 튀지 않는다. 오래 된 캐시 화면은 그만큼 이미 흐른 것으로 친다(setSourceAge).
+    private final Map<String, double[]> cdState = new HashMap<String, double[]>();     // 열쇠 → {시작 초, 시작 시각(uptime ms)}
+    private long srcAgeMs = 0L;
+    private boolean cdDrawn;
+    /** 다음에 올리는 화면이 받은 지 몇 ms 된 것인지(캐시 화면 · 0 이면 방금 받은 것). 한 번 쓰면 0 으로 돌아간다. */
+    public void setSourceAge(long ms) { srcAgeMs = Math.max(0L, ms); }
+    private void markCountdowns(long now) {
+        long age = srcAgeMs; srcAgeMs = 0L;
+        if (cdState.size() > 400) { for (java.util.Iterator<Map.Entry<String, double[]>> ii = cdState.entrySet().iterator(); ii.hasNext(); ) if (now - (long) ii.next().getValue()[1] > 600000L) ii.remove(); }
+        for (ScreenCore.Item it : lay.body) {
+            if (it.kind != ScreenCore.K_BCARD || it.bs.length == 0) continue;
+            for (int k = 0; k < it.bs.length; k++) {
+                float sec = it.bs[k];
+                if (sec <= 0f || it.ck[k] == null) continue;
+                double[] prev = cdState.get(it.ck[k]);
+                if (prev != null) {
+                    double flowed = prev[0] - (now - prev[1]) / 1000.0;
+                    if (Math.abs(sec - flowed) <= 45.0) continue;                                    // 같은 차 — 시작점을 그대로
+                }
+                cdState.put(it.ck[k], new double[] { sec, now - age });
+            }
+        }
+    }
+    private double cdRem(String key, float sec0, long now) {
+        double[] st = key == null ? null : cdState.get(key);
+        return st == null ? sec0 : st[0] - (now - (long) st[1]) / 1000.0;
+    }
     private void markBcards() {
         if (lay == null) return;
         long now = SystemClock.uptimeMillis();
+        markCountdowns(now);
         boolean any = false;
         for (ScreenCore.Item it : lay.body) {
             if (it.kind != ScreenCore.K_BCARD) continue;
@@ -654,13 +683,18 @@ public class ScreenView extends View {
                 float alh = ScreenCore.BC_ARR * ScreenCore.BC_ARR_LH, rt0 = c0 + (inner - (ac * alh + (ac - 1) * ScreenCore.BC_ARR_GAP)) / 2f;
                 for (int k = 0; k < ac; k++) {
                     String tm = it.sa[i * 6 + 2 + k * 2], cn = it.sa[i * 6 + 3 + k * 2];
+                    boolean soonNow = it.gb[i * 3 + k];
+                    if (it.bs.length > i * 2 + k && it.bs[i * 2 + k] > 0f) {                                  // 초 카운트다운: 받은 뒤 흐른 만큼 줄인 값을 그린다
+                        double rem = cdRem(it.ck[i * 2 + k], it.bs[i * 2 + k], now);
+                        tm = ScreenCore.cdFmt(rem); soonNow = rem <= 60.0; cdDrawn = true;
+                    }
                     float ay = rt0 + k * (alh + ScreenCore.BC_ARR_GAP), rx = xr;
                     if (cn.length() > 0) {
                         setText(ScreenCore.BC_CNT, true, pal[R_SUB]); tp.setTextAlign(Paint.Align.RIGHT);
                         cv.drawText(cn, rx, base(ay, alh, 0), tp); tp.setTextAlign(Paint.Align.LEFT);
                         rx -= tp.measureText(cn) + ScreenCore.BC_CNT_GAP;
                     }
-                    setText(ScreenCore.BC_ARR, true, it.gb[i * 3 + k] ? C_SOON : pal[R_TEXT]); tp.setTextAlign(Paint.Align.RIGHT);
+                    setText(ScreenCore.BC_ARR, true, soonNow ? C_SOON : pal[R_TEXT]); tp.setTextAlign(Paint.Align.RIGHT);
                     cv.drawText(tm, rx, base(ay, alh, 0), tp); tp.setTextAlign(Paint.Align.LEFT);
                 }
                 if (bell) drawBell(cv, bellX, top + 1f + (rh - 1f - ScreenCore.BC_BELL) / 2f);
@@ -954,7 +988,7 @@ public class ScreenView extends View {
         cv.drawRect(0, 0, getWidth(), getHeight(), p);
         if (lay == null) return;
         boolean moving = false;
-        sceneDrawn = false; marqDrawn = false; skelDrawn = false; bcAnim = false; tmDrawn = false;
+        sceneDrawn = false; marqDrawn = false; skelDrawn = false; bcAnim = false; tmDrawn = false; cdDrawn = false;
         if (ssOn) {                                                                       // 핀을 눌러 카드로 부드럽게 가는 중
             float f = (now - ssT0) / 350f;
             if (f >= 1f) { f = 1f; ssOn = false; }
@@ -971,7 +1005,8 @@ public class ScreenView extends View {
         cv.clipRect(0f, lay.headH, w, h - lay.footH);
         cv.translate(0f, lay.headH - scrollY);
         int[] r = lay.bodyRange(scrollY - 4f, scrollY + (h - lay.headH - lay.footH) + 4f);
-        for (int i = r[0]; i < r[1]; i++) drawItem(cv, lay.body[i]);
+        for (int i = r[0]; i < r[1]; i++) if (lay.body[i].kind != ScreenCore.K_SWAP) drawItem(cv, lay.body[i]);
+        for (int i = r[0]; i < r[1]; i++) if (lay.body[i].kind == ScreenCore.K_SWAP) drawItem(cv, lay.body[i]);       // 두 줄 경계에 얹는 둥근 단추는 맨 위에(웹 z-index 20) — 그 밑의 구분선이 단추를 가로지르지 않게
         cv.restore();
         // 머리(위에 고정, 본문 위에 덮음)
         p.setStyle(Paint.Style.FILL); p.setColor(bgNow());
@@ -1008,6 +1043,7 @@ public class ScreenView extends View {
         if (!drewOnce) { drewOnce = true; post(firstDrawCb); }
         if (sceneDrawn && scene != null && scene.isRunning() && !scene.isPaused()) postInvalidateOnAnimation();        // 장면이 보이는 동안만 화면 박자로 계속 그린다(안 보이면 저절로 멈춘다)
         if (marqDrawn || skelDrawn) postInvalidateOnAnimation();                                     // 흐르는 문구가 보이는 동안만 화면 박자로 계속 그린다
+        if (cdDrawn) postInvalidateDelayed(1000L - (System.currentTimeMillis() % 1000L) + 5L);       // 버스 도착 카운트다운이 보이는 동안 초가 바뀔 때마다 한 번씩
         if (moving || mode == 1 || mode == 2 || mode == 5 || bcAnim || tmAnimOn) postInvalidateOnAnimation();
         else if (tmDrawn) postInvalidateDelayed(50L);                                             // 내 위치 점 뒤로 퍼지는 고리(웹 1.6초 주기)
         else if (pulsing) postInvalidateDelayed(mkMs > 0f && now - mkT0 < mkMs ? 16L : 66L);      // 마커 맥박·고리(마커가 있을 때만; 가만히 있으면 초당 15번)
@@ -2013,10 +2049,13 @@ public class ScreenView extends View {
         try { ((InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(input.getWindowToken(), 0); } catch (Throwable ignored) { }
         input.clearFocus();
     }
+    /** 검색 입력칸만 내린다. 글자 입력칸(field)의 편집은 건드리지 않는다 — 배치가 바뀔 때마다(키보드가 올라와 크기가 줄 때 포함) 불리므로, 여기서 편집을 끝내면 키보드가 올라오다 사라진다. */
     private void hideInput() {
-        endEdit();
         if (input == null) return;
-        blurInput();
+        if (input.hasFocus()) {
+            try { ((InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(input.getWindowToken(), 0); } catch (Throwable ignored) { }
+            input.clearFocus();
+        }
         if (input.getVisibility() != View.GONE) input.setVisibility(View.GONE);
         inShown = false;
     }
@@ -2061,7 +2100,7 @@ public class ScreenView extends View {
     @Override protected void onVisibilityChanged(View changedView, int vis) {
         super.onVisibilityChanged(changedView, vis);
         if (changedView != this) return;
-        if (vis != View.VISIBLE) hideInput(); else { inShown = false; syncLater(); }
+        if (vis != View.VISIBLE) { endEdit(); hideInput(); } else { inShown = false; syncLater(); }
     }
     @Override protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();

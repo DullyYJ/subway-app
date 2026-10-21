@@ -126,10 +126,21 @@ function findAndroidJar() {
     const dp = v.slice(v.indexOf('private void diskPut('), v.indexOf('/** 캐시 글을 조용히 올린다'));
     assert.ok(/ioExec\.execute/.test(dp) && !/new Thread/.test(dp), '쓰기도 IO 스레드');
   });
+  await t('버스 도착 초 카운트다운(웹 _busFmtCd/_busArrKeep): 1초마다 줄여 그림 · 흐르던 값 이어감 · 캐시 나이 반영 · 돌아오면 바로 갱신 · 켜면 홈부터 · 교환 단추 맨 위 · 키보드 편집을 배치 동기화가 끝내지 않음', async () => {
+    const v = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), sc = fs.readFileSync(N('ScreenCore.java'), 'utf8');
+    assert.ok(/public static String cdFmt\(/.test(sc) && /it\.bs\[i \* 2 \+ a\] = ar\.val/.test(sc), '남은 초를 항목에 싣는다');
+    assert.ok(/Math\.abs\(sec - flowed\) <= 45\.0/.test(sv) && /cdDrawn\) postInvalidateDelayed\(1000L/.test(sv) && /rem <= 60\.0/.test(sv), '45초 이내면 이어 가고 · 초마다 다시 그리고 · 60초 이하는 임박색');
+    assert.ok(/setSourceAge\(am > 0L/.test(v) && /diskIdx\.put\(diskName\(key\), System\.currentTimeMillis\(\)\)/.test(v), '캐시 화면은 받은 뒤 흐른 만큼 줄어 있다');
+    assert.ok(/private void busResume\(\)/.test(v) && /busResume\(\); if \(ShellCore\.S_SETPG/.test(v) && /> 20000L/.test(v), '앞으로 돌아오면 20초 넘었을 때 바로 다시 받는다');
+    assert.ok(/if \(b == null\) store\.put\(ShellCore\.K_TAB, ShellCore\.DEFAULT_TAB\)/.test(v), '새로 켜면 홈부터');
+    assert.ok(/kind != ScreenCore\.K_SWAP\) drawItem/.test(sv) && /kind == ScreenCore\.K_SWAP\) drawItem/.test(sv), '교환 단추는 구분선 위에 그린다');
+    const hi = sv.slice(sv.indexOf('private void hideInput()'), sv.indexOf('private void syncInput()'));
+    assert.ok(!/endEdit\(\)|blurInput\(\)/.test(hi), '검색칸 숨기기가 글자 입력칸 편집을 끝내지 않는다');
+  });
   await t('버스 탭: 30초 자동 새로고침은 지도 탭이 보일 때만 · 도착정보만 비우고 엔진이 다시 계산 · 앱은 시간표/도착 계산 없음', async () => {
     const v = fs.readFileSync(N('ShellActivity.java'), 'utf8');
     const mc = fs.readFileSync(N('MapCore.java'), 'utf8');
-    const bt = v.slice(v.indexOf('private final Runnable busTick'), v.indexOf('private void startBusTick'));
+    const bt = v.slice(v.indexOf('private boolean busShowing'), v.indexOf('private void startBusTick'));
     assert.ok(/30000L/.test(v.slice(v.indexOf('private void startBusTick'), v.indexOf('private void startBusTick') + 200)), '30초 간격');
     assert.ok(/resumed/.test(bt) && /currentTab\(store\)/.test(bt) && /S_MAPB/.test(bt) && /dropArrivals\(\)/.test(bt) && /loadMapBody\(/.test(bt), '보일 때만 · 도착정보만 비우고 다시 묻는다');
     assert.ok(/\[af\]\[0-9\]/.test(mc.slice(mc.indexOf('dropArrivals'))), '정류장 목록(tp·gg·tn·d1)은 남기고 도착정보(a·f)만 지운다');

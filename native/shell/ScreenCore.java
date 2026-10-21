@@ -969,6 +969,8 @@ public final class ScreenCore {
         public float[] gf = new float[0];            // bcard: 줄마다 [위쪽 y(카드 안), 높이]
         public boolean[] gb = new boolean[0];        // bcard: 줄마다 [첫 도착 임박, 둘째 도착 임박, 벨]
         public long[] rt = new long[0];              // bcard: 줄마다 나타난 시각(ms; 0 이면 애니메이션 없음)
+        public float[] bs = new float[0];            // bcard: 줄마다 도착 둘의 남은 초(엔진이 준 값; 0 이면 카운트다운 없음) — 앱은 1초마다 줄여 그린다(웹 _busFmtCd)
+        public String[] ck = new String[0];          // bcard: 줄마다 도착 둘의 카운트다운 열쇠(카드 열쇠|노선|방면|칸) — 새로 그려도 흐르던 값을 이어 가려고
         public float[] zs = new float[0];            // bcard: 누르는 자리 [x,y,w,h]×(별·✏️·🗺️)
         public Act[] za = new Act[0];
         public float sw2;                            // trow: 단추 글 폭
@@ -1300,6 +1302,15 @@ public final class ScreenCore {
     }
 
     /** 버스 정류장 카드 한 장의 배치(웹 _renderMapBusCard + .kbus-row). 머리: 번호 배지 · 이름(별명이면 별명 크게 + 원래 이름 작게) · ✏️ · ★ · 거리 알약. 아래로 노선 줄(번호 · 방면 · 도착 둘 · 벨). */
+    /** 버스 도착 남은 초 → 글자(웹 _busFmtCd 와 같다): 0 이하 '곧 도착' · 60 미만 'N초' · 'M분 SS초'. 엔진 mapCdFmt 와 같은 값이어야 한다(시험이 맞춰 본다). */
+    public static String cdFmt(double sec) {
+        if (Double.isNaN(sec)) return "-";
+        long s = Math.round(sec);
+        if (s <= 0) return "\uACE7 \uB3C4\uCC29";
+        if (s < 60) return s + "\uCD08";
+        long m = s / 60, r = s % 60;
+        return m + "\uBD84 " + (r < 10 ? "0" + r : String.valueOf(r)) + "\uCD08";
+    }
     private static float bcardLayout(Node n, float ox, float w, float y, List<Item> out, Measurer m) {
         boolean near = "near".equals(n.value);
         Item it = new Item(); it.kind = K_BCARD; it.x = ox; it.y = y; it.w = w; it.radius = BC_RAD;
@@ -1342,6 +1353,7 @@ public final class ScreenCore {
         float cy = hdrH;
         if (rc > 0) {
             it.gf = new float[rc * 2]; it.gb = new boolean[rc * 3]; it.sa = new String[rc * 6]; it.ca = new Col[rc]; it.rt = new long[rc];
+            it.bs = new float[rc * 2]; it.ck = new String[rc * 2];
             float rowRight = ox + w - 1f - BC_ROW_PX;
             float bellX = rowRight - BC_BELL;
             float maxLeft = Math.max(BC_LEFT_MIN, Math.min(BC_LEFT_MAX, w - 2f - BC_ROW_PX * 2f - BC_ROW_GAP * 2f - BC_BELL - 90f));
@@ -1357,7 +1369,7 @@ public final class ScreenCore {
                 it.sa[i * 6] = ellipsize(r.name, maxLeft, BC_NO, true, m); it.sa[i * 6 + 1] = dir;
                 it.ca[i] = col(r.fill, new Col(null, 0xFF0066FF));
                 for (int a = 0; a < 2; a++) {
-                    if (a < ac) { Node ar = r.items.get(a); it.sa[i * 6 + 2 + a * 2] = ar.s; it.sa[i * 6 + 3 + a * 2] = ar.badge; it.gb[i * 3 + a] = ar.on; }
+                    if (a < ac) { Node ar = r.items.get(a); it.sa[i * 6 + 2 + a * 2] = ar.s; it.sa[i * 6 + 3 + a * 2] = ar.badge; it.gb[i * 3 + a] = ar.on; it.bs[i * 2 + a] = ar.val; it.ck[i * 2 + a] = n.key + "|" + r.name + "|" + r.title + "|" + a; }
                     else { it.sa[i * 6 + 2 + a * 2] = ""; it.sa[i * 6 + 3 + a * 2] = ""; }
                 }
                 it.gb[i * 3 + 2] = r.on;

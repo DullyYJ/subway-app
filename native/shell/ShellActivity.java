@@ -111,6 +111,7 @@ public class ShellActivity extends Activity {
         live = this;
         store = new PrefStore(getSharedPreferences(PREFS, Context.MODE_PRIVATE));      // 설정 파일 읽기는 시스템이 따로 시작한다 — 아래 일을 하는 동안 저절로 끝난다
         dpr = getResources().getDisplayMetrics().density;
+        if (b == null) store.put(ShellCore.K_TAB, ShellCore.DEFAULT_TAB);            // 껐다 켜면 늘 홈부터(웹과 같다) — 화면 회전 같은 다시 만들기(b != null)는 보던 탭 그대로
         preloadDisk();                                                               // 모든 탭의 마지막 화면을 IO 스레드가 읽고 해석해 둔다(주 스레드는 파일을 열지 않는다)
         ErrLog.install(this);
         ScreenView.preloadFaces(this);
@@ -250,7 +251,7 @@ public class ShellActivity extends Activity {
         } catch (Throwable t) { /* 못 읽으면 이전 값 */ }
     }
     @Override protected void onDestroy() { if (live == this) live = null; super.onDestroy(); }
-    @Override protected void onResume() { super.onResume(); resumed = true; refreshPower(); if (System.currentTimeMillis() - hdrAt > 300000L) loadHdr(); if (prefetchAt > 0L && System.currentTimeMillis() - prefetchAt > 600000L) prefetchTabs(); if ("bus".equals(map.view)) startBusTick(); if (ShellCore.S_SETPG.equals(sheetName) && sheet != null && sheet.isShowing()) loadSetPage(); if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) startChatPoll(); }
+    @Override protected void onResume() { super.onResume(); resumed = true; refreshPower(); if (System.currentTimeMillis() - hdrAt > 300000L) loadHdr(); if (prefetchAt > 0L && System.currentTimeMillis() - prefetchAt > 600000L) prefetchTabs(); busResume(); if (ShellCore.S_SETPG.equals(sheetName) && sheet != null && sheet.isShowing()) loadSetPage(); if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) startChatPoll(); }
     @Override protected void onPause() { resumed = false; super.onPause(); }
 
     @Override public void onBackPressed() {
@@ -478,6 +479,7 @@ public class ShellActivity extends Activity {
     }
     private void cachePut(String key, String json) {
         scrCache.put(key, json); scrKeys.add(key);
+        if (ShellCore.diskTtl(key) > 0L) diskIdx.put(diskName(key), System.currentTimeMillis());          // 받은 시각(캐시 나이 · 파일 목록)을 바로 맞춘다
         if (key.startsWith(ShellCore.S_SETTINGS + "|")) dropOldSettings(key);
         if (ShellCore.diskTtl(key) > 0L && !(ShellCore.S_HOME.equals(key) && home.hasRoute())) diskPut(key, json);        // 경로를 보는 중의 홈은 디스크에 두지 않는다(다시 켜면 그 경로 상태가 없다)
     }
@@ -519,6 +521,8 @@ public class ShellActivity extends Activity {
     /** 캐시 글을 조용히 올린다(검증 통과한 것만; 못 읽으면 버린다). */
     private boolean showCached(ScreenView v, String json) {
         try {
+            String ak = viewKey.get(v); long am = ak == null ? -1L : diskMtime(ak);
+            v.setSourceAge(am > 0L ? System.currentTimeMillis() - am : 0L);                 // 캐시 화면의 버스 초 카운트다운은 받은 뒤 흐른 만큼 이미 줄어 있다
             v.setScreen(parsedGet(json), false); shownJson.put(v, json); skelViews.remove(v);
             String ck = viewKey.get(v);
             if (ck != null && v != sheetView) restoreState(ck, json);
@@ -1571,7 +1575,7 @@ public class ShellActivity extends Activity {
                     if (txt.length() > 0) map.onScreen(txt);
                     if (!(keep && txt.length() > 0 && !map.busNeed.isEmpty())) present(v, txt, keep);          // 버스 도착정보를 더 받아야 하면 캐시 화면을 중간 화면으로 덮지 않는다
                     syncMapView();
-                    if ("bus".equals(map.view)) startBusTick();
+                    if ("bus".equals(map.view)) { if (round == 0) busAt = System.currentTimeMillis(); startBusTick(); }
                     if (txt.length() > 0 && !map.busNeed.isEmpty() && round < 3) fetchBusNeed(v, keep, round, my);
                 } });
             }
@@ -1625,11 +1629,21 @@ public class ShellActivity extends Activity {
     }
     private boolean mapPermAsked;
     /** 웹처럼 30초마다 버스 도착정보를 다시 받는다(지도 탭이 보이고 버스 화면일 때만; 정류장 목록·내 위치는 그대로). 계산은 엔진이 한다. */
+    private boolean busShowing() {
+        return resumed && "bus".equals(map.view) && "bus".equals(map.mode()) && map.busLL != null && "map".equals(ShellCore.currentTab(store)) && ShellCore.S_MAPB.equals(slots.length > 1 ? slots[1] : "");
+    }
+    private long busAt = 0L;
     private final Runnable busTick = new Runnable() { @Override public void run() {
         busTicking = false;
-        if (!resumed || !"bus".equals(map.view) || !"bus".equals(map.mode()) || map.busLL == null || !"map".equals(ShellCore.currentTab(store)) || !ShellCore.S_MAPB.equals(slots.length > 1 ? slots[1] : "")) return;
-        map.dropArrivals(); loadMapBody(body, true); startBusTick();
+        if (!busShowing()) return;
+        busAt = System.currentTimeMillis(); map.dropArrivals(); loadMapBody(body, true); startBusTick();
     } };
+    /** 앞으로 돌아왔을 때: 마지막 도착정보를 받은 지 20초가 넘었으면 바로 다시 받는다(30초 박자를 기다리지 않는다). */
+    private void busResume() {
+        if (!busShowing()) return;
+        if (System.currentTimeMillis() - busAt > 20000L) { busAt = System.currentTimeMillis(); map.dropArrivals(); loadMapBody(body, true); }
+        startBusTick();
+    }
     private boolean busTicking;
     private void startBusTick() { if (!busTicking) { busTicking = true; main.postDelayed(busTick, 30000L); } }
     private void reloadMap(boolean headToo) {
