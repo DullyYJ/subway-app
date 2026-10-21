@@ -20,6 +20,9 @@ var rheadScreen_; if (typeof rheadScreen === 'undefined') { try { if (typeof req
 var resTrkColor = (typeof rheadTrkColor === 'function') ? rheadTrkColor : null;
 if (!resTrkColor) { try { if (typeof require === 'function') resTrkColor = require('./rhead').rheadTrkColor; } catch (eRq2) {} }
 
+var resPvl = (typeof pvlPillNode === 'function') ? pvlPillNode : null;
+if (!resPvl) { try { if (typeof require === 'function') resPvl = require('./pvlabel').pvlPillNode; } catch (eRq3) {} }
+
 function resNum(v, d) { v = Number(v); return isFinite(v) ? v : d; }
 function resArr(v) { return Array.isArray(v) ? v : []; }
 
@@ -378,7 +381,10 @@ function resultScreen(opt, r) {
         { t: 'button', s: '안내 종료', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'orange', act: { a: 'call', v: 'rh.stop' } }] });
     } else nodes.push({ t: 'button', s: '세부경로 보기', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'gold', pad: [8, 0, 0, 4], act: { a: 'call', v: 'rh.detail' } });
   }
+  var pvPill = (nodes.length && resPvl) ? resPvl('route', r.bt == null ? null : resNum(r.bt, null), r.metro === true, resNum(r.now, 0), resNum(r.tz, 540)) : null;   // 예상 경로 라벨 + 무지개 테두리(웹 preview-glow)
+  if (pvPill) nodes.unshift(pvPill);
   var body = nodes.length ? [{ t: 'panel', pad: [0, 4, 0, 8], ip: [12, 12, 12, 8], r: 16, kids: nodes }] : [];
+  if (pvPill && body.length) body[0].glow = true;
   var sec = [];                                                  // 지금 보이는 경로의 지하철 구간 이름(실시간소통이 '내 노선'을 앞에 둘 때 쓴다)
   if (route) route.sections.forEach(function (sc) { var tr = (sc && sc.transportation) || {}; if (tr.type === 1 && tr.name && sec.length < 6 && sec.indexOf(String(tr.name)) < 0) sec.push(String(tr.name)); });
   var out = { ok: true, v: RESULT_V, screen: 'result', cover: 'chips', head: [], body: body, info: { has: has, tab: tab, m: total, n: paths.length, sec: sec, ld: (route && route.ld && tab === 'longdist') ? resLdQuery(route.ld) : null } };
