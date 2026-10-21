@@ -477,6 +477,80 @@ public class ScreenView extends View {
         rf2.set(it.x + 0.5f, it.y + 0.5f, it.x + it.w - 0.5f, it.y + it.h - 0.5f); cv.drawRoundRect(rf2, it.radius - 0.5f, it.radius - 0.5f, p);
         p.setStyle(Paint.Style.FILL);
     }
+    // ───────────── 경로 탐색 로딩: 뛰어가는 캐릭터(웹 #transitLoading · 순수 장식 — 계산은 RunnerCore, 글은 엔진) ─────────────
+    private boolean runDrawn;
+    private static String runPrev = "";
+    private String runId = ""; private long runT0, runLast, runBorn;
+    private final RectF runDst = new RectF();
+    private final Rect runSrc = new Rect();
+    /** 8 그림 · 8 비움 점선(새 객체 없이). off 만큼 오른쪽으로 밀린다. */
+    private void dashLine(Canvas cv, float x0, float x1, float y, float off) {
+        for (float x = x0 - 16f + off; x < x1; x += 16f) { float a = Math.max(x0, x), b = Math.min(x1, x + 8f); if (b > a) cv.drawLine(a, y, b, y, p); }
+    }
+    private final Runnable runReady = new Runnable() { @Override public void run() { invalidate(); } };
+    private void drawRunner(Canvas cv, ScreenCore.Item it) {
+        long now = SystemClock.uptimeMillis();
+        if (runId.length() == 0 || now - runLast > 400L) {                                   // 새로 보이기 시작 — 방금 나온 것이 아닌 캐릭터를 하나 뽑는다
+            runId = RunnerCore.pick(runPrev, Math.random()); runPrev = runId; runT0 = now; runBorn = now;
+            RunnerArt.warm(getContext(), runId, new Handler(Looper.getMainLooper()), new RunnerArt.Ready() { @Override public void onSheet() { post(runReady); } });
+        }
+        runLast = now;
+        float wc = it.w, hc = ScreenCore.RUN_TRACK_H;
+        RunnerCore.Frame f = RunnerCore.at(runId, now - runT0, wc);
+        if (f.done) {                                                                            // 화면을 다 가로질렀다 → 다음 캐릭터
+            runId = RunnerCore.pick(runId, Math.random()); runPrev = runId; runT0 = now;
+            f = RunnerCore.at(runId, 0L, wc);
+        }
+        String key = f.intro ? runId + "_intro" : runId;
+        Bitmap sheet = RunnerArt.get(key);
+        long t = now - runBorn;
+        int lineCol = pal[R_BORDER2];
+        if (sheet != null) {
+            RunnerCore.Spec d = RunnerCore.spec(runId);
+            float sc = (float) (d.cell / 256d), gy = it.y + hc - 12f;
+            float gx = it.x;
+            cv.save(); cv.clipRect(it.x, it.y, it.x + it.w, it.y + hc);
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(2f); p.setColor(lineCol);                                  // 바닥 점선(웹 dashoffset -t·40: 초당 40dp 로 흐른다)
+            dashLine(cv, it.x, it.x + it.w, gy + 3f, ((t / 1000f) * 40f) % 16f);
+            p.setStyle(Paint.Style.FILL);
+            p.setColor(0x33000000);                                                              // 그림자
+            float sw = (float) (d.cell * d.sh);
+            rf.set(gx + f.shadowX - sw / 2f, gy + 3f - 3f, gx + f.shadowX + sw / 2f, gy + 3f + 3f); cv.drawOval(rf, p);
+            int col = f.idx % 4, row = f.idx / 4;
+            runSrc.set(col * 256, row * 256, col * 256 + 256, row * 256 + 256);
+            float left = gx + f.x - (float) (d.ox * sc), top = gy + 3f - (float) d.lift - (float) (d.base * sc);
+            runDst.set(left, top, left + (float) d.cell, top + (float) d.cell);
+            cv.drawBitmap(sheet, runSrc, runDst, bmpPaint);
+            cv.restore();
+        } else {                                                                                 // 시트를 아직 못 읽었다 → 굴러가는 바퀴
+            float tx = it.x + (it.w - RunnerCore.WHEEL_TRACK_W) / 2f, ty = it.y + (hc - RunnerCore.WHEEL_TRACK_H) / 2f;
+            float cy = ty + RunnerCore.WHEEL_TRACK_H / 2f + 1f;
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(2f); p.setColor(lineCol);
+            dashLine(cv, tx, tx + RunnerCore.WHEEL_TRACK_W, ty + RunnerCore.WHEEL_TRACK_H, 0f);
+            cv.save(); cv.clipRect(tx, ty - 4f, tx + RunnerCore.WHEEL_TRACK_W, ty + RunnerCore.WHEEL_TRACK_H + 4f);
+            float wx = tx + RunnerCore.wheelX(t, RunnerCore.WHEEL_TRACK_W) + 12f;
+            p.setColor(pal[R_GOLD]); p.setStrokeWidth(3f); cv.drawCircle(wx, cy - 2f, 10f, p);
+            cv.save(); cv.rotate(RunnerCore.wheelRot(t), wx, cy - 2f); p.setStrokeWidth(2f); cv.drawLine(wx - 10f, cy - 2f, wx + 10f, cy - 2f, p); cv.restore();
+            cv.restore();
+            p.setStyle(Paint.Style.FILL);
+        }
+        // 제목 + 말줄임표 점 3개(0.2초씩 늦게 깜박) · 안내 글
+        float ty0 = it.y + hc + ScreenCore.RUN_TTL_GAP;
+        setText(14f, true, pal[R_TEXT]);
+        float tw = tp.measureText(it.label), dw = tp.measureText("."), all = tw + dw * 3f, x0 = it.x + (it.w - all) / 2f;
+        float by = base(ty0, ScreenCore.RUN_TTL_H, 0);
+        cv.drawText(it.label, x0, by, tp);
+        for (int i = 0; i < 3; i++) {
+            tp.setColor(alpha(pal[R_TEXT], RunnerCore.dotAlpha(t, i)));
+            cv.drawText(".", x0 + tw + dw * i, by, tp);
+        }
+        if (it.value.length() > 0) {
+            setText(11f, false, pal[R_SUB]); tp.setTextAlign(Paint.Align.CENTER);
+            cv.drawText(it.value, it.x + it.w / 2f, base(ty0 + ScreenCore.RUN_TTL_H + ScreenCore.RUN_SUB_GAP, ScreenCore.RUN_SUB_H, 0), tp);
+            tp.setTextAlign(Paint.Align.LEFT);
+        }
+        runDrawn = true;
+    }
     // ───────────── 맨 위 흐르는 문구(문구 목록은 엔진이 정한 값 · 앱은 오른쪽에서 왼쪽으로 흘리며 색을 돌리기만) ─────────────
     private boolean skelDrawn;
     private final RectF skr = new RectF();
@@ -1451,7 +1525,7 @@ public class ScreenView extends View {
         cv.drawRect(0, 0, getWidth(), getHeight(), p);
         if (lay == null) return;
         boolean moving = false;
-        sceneDrawn = false; marqDrawn = false; skelDrawn = false; bcAnim = false; msgAnimOn = false; tmDrawn = false; cdDrawn = false; brxPingN = 0; inbarBusy = false;
+        sceneDrawn = false; marqDrawn = false; skelDrawn = false; runDrawn = false; bcAnim = false; msgAnimOn = false; tmDrawn = false; cdDrawn = false; brxPingN = 0; inbarBusy = false;
         if (ssOn) {                                                                       // 핀을 눌러 카드로 부드럽게 가는 중
             float f = (now - ssT0) / 350f;
             if (f >= 1f) { f = 1f; ssOn = false; }
@@ -1508,7 +1582,7 @@ public class ScreenView extends View {
 
         if (!drewOnce) { drewOnce = true; post(firstDrawCb); }
         if (sceneDrawn && scene != null && scene.isRunning() && !scene.isPaused()) postInvalidateOnAnimation();        // 장면이 보이는 동안만 화면 박자로 계속 그린다(안 보이면 저절로 멈춘다)
-        if (marqDrawn || skelDrawn || inbarBusy) postInvalidateOnAnimation();                                     // 흐르는 문구가 보이는 동안만 화면 박자로 계속 그린다
+        if (marqDrawn || skelDrawn || runDrawn || inbarBusy) postInvalidateOnAnimation();                                     // 흐르는 문구가 보이는 동안만 화면 박자로 계속 그린다
         if (brxPingN > 0 && isShown()) {                                                           // 버스·내 위치 마커 맥박: 그 마커 자리만 초당 15번(보이는 동안만; 화면을 벗어나면 저절로 멈춘다)
             float oy = lay.headH - scrollY;
             for (int i = 0; i < brxPingN; i++) {
@@ -1615,6 +1689,7 @@ public class ScreenView extends View {
             case ScreenCore.K_TMAP: drawTmap(cv, it); break;
             case ScreenCore.K_MARQ: drawMarq(cv, it); break;
             case ScreenCore.K_SKEL: drawSkel(cv, it); break;
+            case ScreenCore.K_RUNNER: drawRunner(cv, it); break;
             case ScreenCore.K_BTOG: drawBtog(cv, it); break;
             case ScreenCore.K_BCARD: drawBcardRo(cv, it); break;
             default: break;
