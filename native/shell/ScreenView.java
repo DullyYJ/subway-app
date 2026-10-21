@@ -174,6 +174,7 @@ public class ScreenView extends View {
         partialFrom = before != null && before.part ? before : null;
         relayout();
         partialFrom = null;
+        trackMsgs(keepScroll);
         syncMk(keepScroll);
         if (stick && lay != null) { scrollY = lay.bodyMaxScroll(bodyViewH()); invalidate(); }
         else if (ancKey != null && lay != null) {
@@ -188,7 +189,7 @@ public class ScreenView extends View {
         return q.act.id;
     }
     /** 그린 화면을 비운다(다른 탭의 옛 화면이 새 탭 자리에 남아 보이지 않게). */
-    public void clearScreen() { screen = null; lay = null; scrollY = 0f; scrollX = 0f; openKey = null; ctrDone = null; pressed = null; mode = 0; mkHas = false; invalidate(); syncLater(); }
+    public void clearScreen() { msgSeen.clear(); msgBorn.clear(); screen = null; lay = null; scrollY = 0f; scrollX = 0f; openKey = null; ctrDone = null; pressed = null; mode = 0; mkHas = false; invalidate(); syncLater(); }
     /** 맨 아래에서 80dp 안에 있으면 참(채팅 자동 따라가기 판단). 아직 배치 전이면 참. */
     private boolean nearBottom() {
         if (lay == null) return true;
@@ -572,6 +573,22 @@ public class ScreenView extends View {
     // ───────────── 버스: 토글 줄 · 정류장 카드(내용·모양·색은 엔진, 앱은 그리기) ─────────────
     private static final int C_BLUE = 0xFF0066FF, C_SOON = 0xFFE74C3C, C_NOARR = 0xFFA0A0A5;
     private boolean bcAnim;
+    // ── 새 말풍선 등장 애니메이션(웹 .chat-bubble.anim-l/anim-r: 0.34초 · 타인은 왼쪽에서, 내 글은 오른쪽에서 24px 미끄러지며 나타남). 처음 그린 화면·다른 화면으로 바뀐 뒤 처음에는 쓰지 않는다(기존 글은 다시 움직이지 않음).
+    private final java.util.HashSet<String> msgSeen = new java.util.HashSet<String>();
+    private final java.util.HashMap<String, Long> msgBorn = new java.util.HashMap<String, Long>();
+    private boolean msgAnimOn;
+    private static final long MSG_ANIM_MS = 340L;
+    private static String msgKey(ScreenCore.Item q) { return q.act != null && q.act.id != null && q.act.id.length() > 0 ? "i:" + q.act.id : "t:" + (q.on ? 1 : 0) + (q.lines != null && q.lines.length > 0 ? q.lines[0] : "") + "|" + q.label; }
+    private void trackMsgs(boolean keepScroll) {
+        java.util.HashSet<String> now = new java.util.HashSet<String>();
+        if (lay != null) for (ScreenCore.Item q : lay.body) if (q.kind == ScreenCore.K_MSG) now.add(msgKey(q));
+        if (keepScroll && !msgSeen.isEmpty() && !now.isEmpty()) {
+            java.util.ArrayList<String> fresh = new java.util.ArrayList<String>();
+            for (String k : now) if (!msgSeen.contains(k)) fresh.add(k);
+            if (fresh.size() > 0 && fresh.size() <= 3) { long t = SystemClock.uptimeMillis(); for (String k : fresh) msgBorn.put(k, t); invalidate(); }         // 한꺼번에 많이 바뀌면(처음 불러오기) 움직이지 않는다
+        } else msgBorn.clear();
+        msgSeen.clear(); msgSeen.addAll(now);
+    }
     private final Set<String> seenCards = new HashSet<String>(), seenRows = new HashSet<String>();
     private String seenMode = "";
     private android.graphics.Path bellPath;
@@ -1224,7 +1241,7 @@ public class ScreenView extends View {
         cv.drawRect(0, 0, getWidth(), getHeight(), p);
         if (lay == null) return;
         boolean moving = false;
-        sceneDrawn = false; marqDrawn = false; skelDrawn = false; bcAnim = false; tmDrawn = false; cdDrawn = false; brxPingN = 0; inbarBusy = false;
+        sceneDrawn = false; marqDrawn = false; skelDrawn = false; bcAnim = false; msgAnimOn = false; tmDrawn = false; cdDrawn = false; brxPingN = 0; inbarBusy = false;
         if (ssOn) {                                                                       // 핀을 눌러 카드로 부드럽게 가는 중
             float f = (now - ssT0) / 350f;
             if (f >= 1f) { f = 1f; ssOn = false; }
@@ -1287,7 +1304,7 @@ public class ScreenView extends View {
             }
         }
         if (cdDrawn) postInvalidateDelayed(1000L - (System.currentTimeMillis() % 1000L) + 5L);       // 버스 도착 카운트다운이 보이는 동안 초가 바뀔 때마다 한 번씩
-        if (moving || mode == 1 || mode == 2 || mode == 5 || bcAnim || tmAnimOn) postInvalidateOnAnimation();
+        if (moving || mode == 1 || mode == 2 || mode == 5 || bcAnim || tmAnimOn || msgAnimOn) postInvalidateOnAnimation();
         else if (tmDrawn) postInvalidateDelayed(50L);                                             // 내 위치 점 뒤로 퍼지는 고리(웹 1.6초 주기)
         else if (pulsing) postInvalidateDelayed(mkMs > 0f && now - mkT0 < mkMs ? 16L : 66L);      // 마커 맥박·고리(마커가 있을 때만; 가만히 있으면 초당 15번)
     }
@@ -1366,7 +1383,7 @@ public class ScreenView extends View {
             case ScreenCore.K_CMT: drawCmt(cv, it); break;
             case ScreenCore.K_RBTN: drawRbtn(cv, it); break;
             case ScreenCore.K_INBAR: drawInbar(cv, it); break;
-            case ScreenCore.K_MSG: drawMsg(cv, it); break;
+            case ScreenCore.K_MSG: drawMsgAnim(cv, it); break;
             case ScreenCore.K_TAB: drawTab(cv, it); break;
             case ScreenCore.K_SUG: drawSug(cv, it); break;
             case ScreenCore.K_SWAP: drawSwap(cv, it); break;
@@ -2190,6 +2207,19 @@ public class ScreenView extends View {
             p.setColor(cc(it.tc, pal[R_WHITE])); cv.drawPath(ph, p);
             cv.restore();
         }
+    }
+    private void drawMsgAnim(Canvas cv, ScreenCore.Item it) {
+        Long b = msgBorn.isEmpty() ? null : msgBorn.get(msgKey(it));
+        if (b == null) { drawMsg(cv, it); return; }
+        float f = (SystemClock.uptimeMillis() - b) / (float) MSG_ANIM_MS;
+        if (f >= 1f) { msgBorn.remove(msgKey(it)); drawMsg(cv, it); return; }
+        float e = 1f - (1f - f) * (1f - f) * (1f - f);                                          // 웹 cubic-bezier(.22,.8,.3,1) 에 가까운 빨리 나오고 천천히 멈춤
+        msgAnimOn = true;
+        cv.save();
+        cv.translate((it.on ? 24f : -24f) * (1f - e), 0f);
+        cv.saveLayerAlpha(it.x - 30f, it.y - 2f, it.x + it.w + 30f, it.y + it.h + 2f, Math.round(255f * e));
+        drawMsg(cv, it);
+        cv.restore(); cv.restore();
     }
     private void drawMsg(Canvas cv, ScreenCore.Item it) {
         if (it.tag.length() > 0) { setText(it.size2, false, pal[R_SUB]); cv.drawText(it.tag, it.x, base(it.y, it.lineH2, 0), tp); }
