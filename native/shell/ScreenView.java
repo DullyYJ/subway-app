@@ -88,7 +88,7 @@ public class ScreenView extends View {
     private final int slop, minFling, maxFling;
     private float downX, downY, lastX, lastY, downBodyY;
     private long downT;
-    private int mode = 0;                                  // 0 없음 · 1 본문 세로 · 2 머리 가로 · 3 눌러보는 중
+    private int mode = 0;                                  // 0 없음 · 1 본문 세로 · 2 머리 가로 · 3 눌러보는 중 · 6 순서 바꾸기 줄 · 7 카드 끄는 중
     private boolean inHead, inChips, inFoot;
     private String openKey;                                // 펼친 게시글 id (null = 엔진이 준 표시를 따름 · "" = 모두 접음)
     private final Map<float[], android.graphics.Path> iconPaths = new HashMap<float[], android.graphics.Path>();
@@ -189,7 +189,7 @@ public class ScreenView extends View {
         return q.act.id;
     }
     /** 그린 화면을 비운다(다른 탭의 옛 화면이 새 탭 자리에 남아 보이지 않게). */
-    public void clearScreen() { msgSeen.clear(); msgBorn.clear(); screen = null; lay = null; scrollY = 0f; scrollX = 0f; openKey = null; ctrDone = null; pressed = null; mode = 0; mkHas = false; invalidate(); syncLater(); }
+    public void clearScreen() { msgSeen.clear(); msgBorn.clear(); roMode = false; roReset(); dgCards = new ScreenCore.Item[0]; screen = null; lay = null; scrollY = 0f; scrollX = 0f; openKey = null; ctrDone = null; pressed = null; mode = 0; mkHas = false; invalidate(); syncLater(); }
     /** 맨 아래에서 80dp 안에 있으면 참(채팅 자동 따라가기 판단). 아직 배치 전이면 참. */
     private boolean nearBottom() {
         if (lay == null) return true;
@@ -240,6 +240,7 @@ public class ScreenView extends View {
         else if (!lay.ctrSig.equals(ctrDone)) { ctrDone = lay.ctrSig; scrollX = lay.initScrollX; }      // 24시간 차트 내용이 새로 오면 지금 시각 막대를 가운데로
         clampScroll();
         markBcards();
+        roSync();                                                                         // 주변 정류장 카드 목록을 다시 모은다(새 배치 = 끌던 상태는 끝)
         buildFab();
         syncFieldBases(lay.body); syncFieldBases(lay.foot);
         float ch = lay.headH + lay.bodyH + lay.footH;
@@ -307,10 +308,12 @@ public class ScreenView extends View {
         vt.addMovement(e);
         float x = e.getX(), y = e.getY();
         if (mode == 5 && e.getActionMasked() != MotionEvent.ACTION_DOWN) return tmTouch(e);          // 끌 수 있는 지도 위 손가락
+        if ((mode == 6 || mode == 7) && e.getActionMasked() != MotionEvent.ACTION_DOWN) return roTouch(e);       // 주변 정류장 카드 끌어서 순서 바꾸기
         switch (e.getActionMasked()) {
             case MotionEvent.ACTION_DOWN: {
                 if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
                 flingY.forceFinished(true); flingX.forceFinished(true); ssOn = false;
+                if (roMode && roDown(x, y)) { downX = lastX = x; downY = lastY = y; return true; }
                 if (liveMapAt(x, y) != null && tmView != null) { mode = 5; pressed = null; tmDX = tmLX = x; tmDY = tmLY = y; tmDT = SystemClock.uptimeMillis(); tmMoved = false; tmScaling = false; tmSg.onTouchEvent(e); return true; }
                 downX = lastX = x; downY = lastY = y; downT = SystemClock.uptimeMillis();
                 inHead = y < lay.headH * dpr;
@@ -321,6 +324,8 @@ public class ScreenView extends View {
                 pressed = fabDown ? null : findItem(x, y);
                 if (pressed != null && pressed.act == null && pressed.kind != ScreenCore.K_FIELD) pressed = null;
                 pressInFoot = inFoot;
+                ui.removeCallbacks(lpRun);
+                if (pressed != null && pressed.kind == ScreenCore.K_BCARD && "near".equals(pressed.value) && !inHead && !inFoot && roEnabled()) ui.postDelayed(lpRun, RO_LP_MS);       // 꾹 누르면 순서 바꾸기
                 sceneTouch = false;
                 { ScreenCore.Item si = sceneAt(x, y); if (si != null && scene.touchDown(sceneX(x, si), sceneY(y, si))) { sceneTouch = true; pressed = null; } }
                 invalidate();
@@ -338,7 +343,7 @@ public class ScreenView extends View {
                 if (mode == 4) return true;
                 if (mode == 3) {
                     if (Math.abs(x - downX) > slop || Math.abs(y - downY) > slop) {
-                        pressed = null; fabDown = false;
+                        pressed = null; fabDown = false; ui.removeCallbacks(lpRun);
                         mode = inHead ? (inChips ? 2 : 0) : (inFoot ? 0 : 1);   // 머리는 칩 줄만 가로로 민다(안내 상자·검색줄은 고정) · 아래 고정 줄은 안 밀린다
                         if (inHead && Math.abs(y - downY) > Math.abs(x - downX) * 2f) mode = 0;     // 머리를 위아래로 쓸면 무시
                         if (mode == 1) blurInput();                                              // 목록을 밀기 시작하면 키보드를 내린다
@@ -569,6 +574,211 @@ public class ScreenView extends View {
         }
     }
 
+
+    // ───────────── 주변 정류장 카드 끌어서 순서 바꾸기(웹 _busReorderEnter · _bdBeginDrag · _bdMove · _bdEnd · .bus-reorder-mode · busJiggle) ─────────────
+    //  꾹(0.42초) 누르면 편집 모드: 카드가 흔들리고(.24초 ±0.8°) 위에 '끌어서 순서 변경 [완료]' 줄이 뜬다. 끌면 그 카드가 손가락을 따라오고(1.03배 + 그림자) 다른 카드는 .18초쯤에 한 칸씩 비킨다.
+    //  목록 위·아래 끝(90dp)에 닿으면 목록이 따라 밀린다. 놓으면 새 순서(정류장 열쇠 목록)를 앱에 알린다 — 저장하고 다시 그리는 것은 앱 · 엔진(글도 엔진이 준 것: 첫 카드의 rol · rod).
+    //  새 화면이 오면(엔진이 새 순서로 다시 그린 것) 끌던 상태는 끝난다.
+    public interface ReorderHost { void onReorder(String[] keys, int[] perm); }
+    private ReorderHost reorderHost;
+    public void setReorderHost(ReorderHost h) { reorderHost = h; }
+    private static final long RO_LP_MS = 420L, RO_SETTLE_MAX_MS = 1500L;
+    private static final float RO_EDGE = 90f, RO_MAXV = 18f, RO_ZOOM = 1.03f;
+    private boolean roMode, dragOn, settleOn, dgCommit, roAnim, roBtnDown;
+    private ScreenCore.Item[] dgCards = new ScreenCore.Item[0];            // 주변 정류장 카드들(위 → 아래)
+    private int dgIdx = -1, dgTo = -1;
+    private float dgDown, dgY, dgScroll0, dgDyCur, dgSlot, dgScaleCur = 1f, dgGap = 12f;
+    private float[] shCur = new float[0], shTgt = new float[0];            // 다른 카드가 비킨 정도(dp): 지금 · 목표
+    private long dgT;
+    private float roBx0, roBy0, roBx1, roBy1, roBtx0, roBty0, roBtx1, roBty1;       // 완료 줄 · 그 안의 완료 단추(dp, 화면 기준)
+    private final Runnable lpRun = new Runnable() { @Override public void run() {
+        if (mode != 3 || pressed == null || lay == null || pressed.kind != ScreenCore.K_BCARD || !"near".equals(pressed.value) || !roEnabled()) return;
+        ScreenCore.Item it = pressed; pressed = null;
+        roMode = true;
+        performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+        downT = 0L;                                                        // 꾹 누른 뒤 놓는 것은 '누름'이 아니다
+        if (roBegin(it, downY)) mode = 7; else mode = 0;
+        invalidate();
+    } };
+    private final Runnable roGuard = new Runnable() { @Override public void run() { if (settleOn) { roReset(); invalidate(); } } };     // 새 화면이 끝내 안 오면 제자리로
+    private boolean roEnabled() { return reorderHost != null && dgCards.length >= 2 && dgCards[0].rol != null && dgCards[0].rol.length() > 0; }
+    /** 새 화면이 왔다: 끌던 상태를 끝내고 주변 정류장 카드 목록을 다시 모은다. 카드가 둘 미만이면 편집 모드도 끝. */
+    private void roSync() {
+        roReset();
+        if (reorderHost == null || lay == null) { dgCards = new ScreenCore.Item[0]; roMode = false; return; }
+        int n = 0;
+        for (ScreenCore.Item q : lay.body) if (q.kind == ScreenCore.K_BCARD && "near".equals(q.value)) n++;
+        if (n < 2) { dgCards = new ScreenCore.Item[0]; roMode = false; return; }
+        ScreenCore.Item[] a = new ScreenCore.Item[n]; int k = 0;
+        for (ScreenCore.Item q : lay.body) if (q.kind == ScreenCore.K_BCARD && "near".equals(q.value)) a[k++] = q;
+        dgCards = a;
+        dgGap = Math.max(0f, a[1].y - (a[0].y + a[0].h));
+        if (!roEnabled()) roMode = false;
+    }
+    private void roReset() {
+        ui.removeCallbacks(roGuard);
+        dragOn = false; settleOn = false; dgCommit = false; roAnim = false; dgIdx = -1; dgTo = -1; dgDyCur = 0f; dgSlot = 0f; dgScaleCur = 1f;
+        for (int i = 0; i < shCur.length; i++) { shCur[i] = 0f; shTgt[i] = 0f; }
+    }
+    private boolean roBegin(ScreenCore.Item it, float yPx) {
+        int idx = -1;
+        for (int i = 0; i < dgCards.length; i++) if (dgCards[i] == it) idx = i;
+        if (idx < 0) return false;
+        ui.removeCallbacks(roGuard);
+        if (shCur.length != dgCards.length) { shCur = new float[dgCards.length]; shTgt = new float[dgCards.length]; }
+        else for (int i = 0; i < shCur.length; i++) { shCur[i] = 0f; shTgt[i] = 0f; }
+        dgIdx = idx; dgTo = idx; dgDown = yPx; dgY = yPx; dgScroll0 = scrollY; dgDyCur = 0f; dgSlot = 0f; dgScaleCur = RO_ZOOM;
+        dragOn = true; settleOn = false; dgCommit = false; dgT = SystemClock.uptimeMillis();
+        return true;
+    }
+    /** 손가락 · 목록 밀림에 맞춰 끌린 카드의 자리와 놓을 칸(dgTo)을 다시 정하고, 다른 카드가 비킬 목표를 계산한다. */
+    private void roUpdate() {
+        if (!dragOn || dgIdx < 0) return;
+        ScreenCore.Item d = dgCards[dgIdx];
+        float dy = (dgY - dgDown) / dpr + (scrollY - dgScroll0);        // 손가락이 움직인 만큼 + 그동안 목록이 밀린 만큼
+        dgDyCur = dy;
+        float c = d.y + d.h / 2f + dy;
+        int ti = 0;
+        for (int i = 0; i < dgCards.length; i++) if (i != dgIdx && dgCards[i].y + dgCards[i].h / 2f < c) ti++;
+        dgTo = ti;
+        roTargets();
+    }
+    /** 끌린 카드를 dgTo 칸에 끼운 새 순서로 위에서부터 쌓았을 때 카드마다 있어야 할 자리(높이가 달라도 맞다). */
+    private void roTargets() {
+        float y = dgCards[0].y; int n = dgCards.length, k = 0;
+        for (int slot = 0; slot < n; slot++) {
+            int who;
+            if (slot == dgTo) who = dgIdx; else { while (k == dgIdx) k++; who = k++; }
+            if (who == dgIdx) dgSlot = y - dgCards[who].y; else shTgt[who] = y - dgCards[who].y;
+            y += dgCards[who].h + dgGap;
+        }
+    }
+    private void roEnd(boolean commit) {
+        if (!dragOn) return;
+        dragOn = false; settleOn = true; dgT = SystemClock.uptimeMillis(); dgCommit = false;
+        if (commit && dgTo != dgIdx && reorderHost != null) {
+            int n = dgCards.length, k = 0;
+            int[] perm = new int[n]; String[] keys = new String[n];
+            for (int slot = 0; slot < n; slot++) {
+                int who;
+                if (slot == dgTo) who = dgIdx; else { while (k == dgIdx) k++; who = k++; }
+                perm[slot] = who; keys[slot] = dgCards[who].key;
+            }
+            dgCommit = true;
+            ui.removeCallbacks(roGuard); ui.postDelayed(roGuard, RO_SETTLE_MAX_MS);
+            performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP);
+            reorderHost.onReorder(keys, perm);
+        } else { dgTo = dgIdx; roTargets(); }                           // 제자리로 돌아간다
+        invalidate();
+    }
+    /** 완료 줄·끌기 중의 손가락. mode 6 = 완료 줄(또는 놓은 뒤 기다리는 중)을 누르는 중 · mode 7 = 카드를 끄는 중. */
+    private boolean roTouch(MotionEvent e) {
+        float x = e.getX(), y = e.getY();
+        switch (e.getActionMasked()) {
+            case MotionEvent.ACTION_MOVE:
+                if (mode == 7) { dgY = y; roUpdate(); invalidate(); }
+                return true;
+            case MotionEvent.ACTION_UP:
+                if (mode == 7) {
+                    if (dgIdx >= 0 && Math.abs(y - dgDown) <= slop && SystemClock.uptimeMillis() - downT < 600L && listener != null && lay != null) {       // 안 움직이고 바로 뗐다 = 그냥 누름
+                        ScreenCore.Item it = dgCards[dgIdx]; roEnd(false); finishTouch(); tapBcard(it, x / dpr, y / dpr - lay.headH + scrollY); invalidate(); return true;
+                    }
+                    roEnd(true);
+                } else if (mode == 6 && roBtnDown && roEnabled() && x / dpr >= roBtx0 && x / dpr <= roBtx1 && y / dpr >= roBty0 - 8f && y / dpr <= roBty1 + 8f) { roMode = false; roReset(); }
+                roBtnDown = false; finishTouch(); invalidate(); return true;
+            case MotionEvent.ACTION_CANCEL:
+                if (mode == 7) roEnd(false);
+                roBtnDown = false; finishTouch(); invalidate(); return true;
+            default: return true;
+        }
+    }
+    /** 손가락이 닿았다: 편집 모드에서 완료 줄이면 눌림 시작, 주변 카드면 바로 끌기 시작. 먹었으면 true. */
+    private boolean roDown(float x, float y) {
+        float dx = x / dpr, dy = y / dpr;
+        if (settleOn) { mode = 6; roBtnDown = false; pressed = null; return true; }              // 놓은 뒤 새 화면이 올 때까지 잠깐 손가락을 받지 않는다
+        if (roEnabled() && dy >= roBy0 && dy <= roBy1 && dx >= roBx0 && dx <= roBx1) {
+            mode = 6; pressed = null; downT = SystemClock.uptimeMillis();
+            roBtnDown = dx >= roBtx0 && dx <= roBtx1 && dy >= roBty0 - 8f && dy <= roBty1 + 8f;
+            return true;
+        }
+        if (dy < lay.headH || (lay.footH > 0f && dy >= footTop())) return false;
+        ScreenCore.Item it = findItem(x, y);
+        if (it != null && it.kind == ScreenCore.K_BCARD && "near".equals(it.value) && roBegin(it, y)) { mode = 7; pressed = null; downT = SystemClock.uptimeMillis(); invalidate(); return true; }
+        return false;
+    }
+    /** 프레임마다: 끌 때는 가장자리 자동 스크롤 · 비키는 카드 이동, 놓은 뒤에는 제자리로 앉기. */
+    private void roStep(long now) {
+        roAnim = false;
+        if (!(dragOn || settleOn) || dgIdx < 0 || dgCards.length == 0) return;
+        float dt = Math.min(64f, Math.max(1f, now - dgT)), k = 1f - (float) Math.exp(-dt / 55f);       // 약 .18초에 따라붙는다(웹 transform .18s)
+        dgT = now;
+        boolean busy = false;
+        if (dragOn) {
+            float top = lay.headH, bot = getHeight() / dpr - lay.footH, fy = dgY / dpr, v = 0f;
+            if (fy < top + RO_EDGE) v = -RO_MAXV * Math.min(1f, (top + RO_EDGE - fy) / RO_EDGE);
+            else if (fy > bot - RO_EDGE) v = RO_MAXV * Math.min(1f, (fy - (bot - RO_EDGE)) / RO_EDGE);
+            if (v != 0f) scrollY = ScreenCore.clamp(scrollY + v * dt / 16.7f, lay.bodyMaxScroll(bodyViewH()));
+            roUpdate(); busy = true;
+        } else {
+            dgDyCur += (dgSlot - dgDyCur) * k; dgScaleCur += (1f - dgScaleCur) * k;
+            if (Math.abs(dgSlot - dgDyCur) > 0.3f || Math.abs(1f - dgScaleCur) > 0.002f) busy = true; else { dgDyCur = dgSlot; dgScaleCur = 1f; }
+        }
+        for (int i = 0; i < shCur.length; i++) {
+            float d = shTgt[i] - shCur[i];
+            if (Math.abs(d) > 0.3f) { shCur[i] += d * k; busy = true; } else shCur[i] = shTgt[i];
+        }
+        if (settleOn && !dgCommit && !busy) { roReset(); return; }                                 // 제자리로 앉았다
+        roAnim = busy;
+    }
+    /** 편집 모드의 카드: 끄는 중이면 비킨 만큼 옮겨 그리고(끌리는 카드는 맨 위에 따로), 아니면 흔들며 그린다. */
+    private void drawBcardRo(Canvas cv, ScreenCore.Item it) {
+        if (!roMode || !"near".equals(it.value)) { drawBcard(cv, it); return; }
+        boolean drag = dragOn || settleOn;
+        int idx = -1;
+        if (drag) { for (int i = 0; i < dgCards.length; i++) if (dgCards[i] == it) idx = i; if (idx == dgIdx) return; }
+        cv.save();
+        if (drag) { if (idx >= 0 && idx < shCur.length) cv.translate(0f, shCur[idx]); }
+        else {
+            float deg = -0.8f * (float) Math.cos(2.0 * Math.PI * (SystemClock.uptimeMillis() % 240L) / 240.0);             // 웹 busJiggle .24초 ±0.8°
+            cv.rotate(deg, it.x + it.w / 2f, it.y + it.h / 2f); roAnim = true;
+        }
+        drawBcard(cv, it);
+        cv.restore();
+    }
+    private void roDrawDragged(Canvas cv) {
+        if (dgIdx < 0 || dgIdx >= dgCards.length) return;
+        ScreenCore.Item it = dgCards[dgIdx];
+        float cx = it.x + it.w / 2f, cy = it.y + it.h / 2f;
+        cv.save();
+        cv.translate(0f, dgDyCur);
+        float sh = Math.max(0f, Math.min(1f, (dgScaleCur - 1f) / (RO_ZOOM - 1f)));                      // 그림자는 떠 있는 동안만(웹 box-shadow 0 10px 26px)
+        if (sh > 0.02f) {
+            p.setStyle(Paint.Style.FILL);
+            for (int i = 6; i >= 1; i--) {
+                float e = 2f + i * 4f;
+                p.setColor(((int) (13f * sh)) << 24);
+                rf.set(it.x - e + 2f, it.y + 4f - e + 6f, it.x + it.w + e - 2f, it.y + it.h + 16f + e - 6f);
+                cv.drawRoundRect(rf, it.radius + e, it.radius + e, p);
+            }
+        }
+        cv.scale(dgScaleCur, dgScaleCur, cx, cy);
+        drawBcard(cv, it);
+        cv.restore();
+    }
+    /** 위에 붙어 있는 '끌어서 순서 변경 [완료]' 줄(웹 #busReorderBar: sticky · 카드 바탕 · 테두리 · 파란 완료 단추). 글은 엔진이 준 것. */
+    private void roDrawBar(Canvas cv, float w) {
+        String lbl = dgCards[0].rol, done = dgCards[0].rod;
+        float x0 = 12f, x1 = w - 12f, y0 = lay.headH + 8f, y1 = y0 + 46f;
+        roBx0 = x0; roBy0 = y0; roBx1 = x1; roBy1 = y1;
+        float bw = measurer.width(done, 13f, true) + 32f;
+        roBtx1 = x1 - 12f; roBtx0 = roBtx1 - bw; roBty0 = y0 + 8f; roBty1 = y1 - 8f;
+        p.setStyle(Paint.Style.FILL); p.setColor(0x16000000); rf.set(x0, y0 + 2f, x1, y1 + 3f); cv.drawRoundRect(rf, 12f, 12f, p);
+        p.setColor(pal[R_CARD]); rf.set(x0, y0, x1, y1); cv.drawRoundRect(rf, 12f, 12f, p);
+        p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(pal[R_BORDER]); rf.set(x0 + 0.5f, y0 + 0.5f, x1 - 0.5f, y1 - 0.5f); cv.drawRoundRect(rf, 12f, 12f, p);
+        p.setStyle(Paint.Style.FILL); p.setColor(0xFF2F7CF6); rf.set(roBtx0, roBty0, roBtx1, roBty1); cv.drawRoundRect(rf, 8f, 8f, p);
+        setText(13f, false, pal[R_SUB]); cv.drawText(lbl, x0 + 12f, base(y0, y1 - y0, 0), tp);
+        setText(13f, true, 0xFFFFFFFF); tp.setTextAlign(Paint.Align.CENTER); cv.drawText(done, (roBtx0 + roBtx1) / 2f, base(roBty0, roBty1 - roBty0, 0), tp); tp.setTextAlign(Paint.Align.LEFT);
+    }
 
     // ───────────── 버스: 토글 줄 · 정류장 카드(내용·모양·색은 엔진, 앱은 그리기) ─────────────
     private static final int C_BLUE = 0xFF0066FF, C_SOON = 0xFFE74C3C, C_NOARR = 0xFFA0A0A5;
@@ -1183,7 +1393,7 @@ public class ScreenView extends View {
         if (editor != null && key.equals(editKey)) { editSilent = true; editor.setText(v); editor.setSelection(editor.getText().length()); editSilent = false; }
         invalidate();
     }
-    private void finishTouch() { pressed = null; fabDown = false; mode = 0; if (vt != null) { vt.recycle(); vt = null; } }
+    private void finishTouch() { ui.removeCallbacks(lpRun); pressed = null; fabDown = false; mode = 0; if (vt != null) { vt.recycle(); vt = null; } }
 
     private ScreenCore.Item findItem(float px, float py) {
         float x = px / dpr, y = py / dpr;
@@ -1249,6 +1459,7 @@ public class ScreenView extends View {
         }
         if (flingY.computeScrollOffset()) { scrollY = ScreenCore.clamp(flingY.getCurrY() / dpr, lay.bodyMaxScroll(bodyViewH())); moving = true; }
         if (flingX.computeScrollOffset()) { scrollX = ScreenCore.clamp(flingX.getCurrX() / dpr, lay.headMaxScroll()); moving = true; }
+        roStep(now);                                                                      // 카드를 끄는 중이면 가장자리 자동 스크롤 · 비키는 카드 이동
 
         cv.save();
         cv.scale(dpr, dpr);
@@ -1260,7 +1471,9 @@ public class ScreenView extends View {
         int[] r = lay.bodyRange(scrollY - 4f, scrollY + (h - lay.headH - lay.footH) + 4f);
         for (int i = r[0]; i < r[1]; i++) if (lay.body[i].kind != ScreenCore.K_SWAP) drawItem(cv, lay.body[i]);
         for (int i = r[0]; i < r[1]; i++) if (lay.body[i].kind == ScreenCore.K_SWAP) drawItem(cv, lay.body[i]);       // 두 줄 경계에 얹는 둥근 단추는 맨 위에(웹 z-index 20) — 그 밑의 구분선이 단추를 가로지르지 않게
+        if (dragOn || settleOn) roDrawDragged(cv);                                        // 끌리는 카드는 맨 위에
         cv.restore();
+        if (roMode && roEnabled()) { cv.save(); cv.clipRect(0f, lay.headH, w, h - lay.footH); roDrawBar(cv, w); cv.restore(); }       // 위에 붙은 '끌어서 순서 변경 · 완료' 줄
         // 머리(위에 고정, 본문 위에 덮음)
         p.setStyle(Paint.Style.FILL); p.setColor(bgNow());
         cv.drawRect(0f, 0f, w, lay.headH, p);
@@ -1304,7 +1517,7 @@ public class ScreenView extends View {
             }
         }
         if (cdDrawn) postInvalidateDelayed(1000L - (System.currentTimeMillis() % 1000L) + 5L);       // 버스 도착 카운트다운이 보이는 동안 초가 바뀔 때마다 한 번씩
-        if (moving || mode == 1 || mode == 2 || mode == 5 || bcAnim || tmAnimOn || msgAnimOn) postInvalidateOnAnimation();
+        if (moving || mode == 1 || mode == 2 || mode == 5 || bcAnim || tmAnimOn || msgAnimOn || roAnim) postInvalidateOnAnimation();
         else if (tmDrawn) postInvalidateDelayed(50L);                                             // 내 위치 점 뒤로 퍼지는 고리(웹 1.6초 주기)
         else if (pulsing) postInvalidateDelayed(mkMs > 0f && now - mkT0 < mkMs ? 16L : 66L);      // 마커 맥박·고리(마커가 있을 때만; 가만히 있으면 초당 15번)
     }
@@ -1403,7 +1616,7 @@ public class ScreenView extends View {
             case ScreenCore.K_MARQ: drawMarq(cv, it); break;
             case ScreenCore.K_SKEL: drawSkel(cv, it); break;
             case ScreenCore.K_BTOG: drawBtog(cv, it); break;
-            case ScreenCore.K_BCARD: drawBcard(cv, it); break;
+            case ScreenCore.K_BCARD: drawBcardRo(cv, it); break;
             default: break;
         }
     }
