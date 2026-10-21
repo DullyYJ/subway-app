@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-22s136";
+var ENGINE_VERSION = "route-v2-2026-10-22s137";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -17356,7 +17356,11 @@ function rheadTrackScreen(inp) {
   cells.forEach(function (c) { w += c.w; });
   var node = { t: 'trk', pad: [14, 6, 14, 6], cells: cells };
   var mk = rheadTrkMark(lv, cells);
-  if (mk) node.mk = mk;
+  if (mk) {
+    node.mk = mk;
+    var here = mk.r >= 0.9 ? mk.t : mk.f;                    // \uc6f9 htl-passed \u00b7 htl-gps-here: \uc2dc\uac04 \uae30\uc900\uc740 \uc5ed\uc5d0 90% \ub2e4\uac00\uac00\uc57c \ub2e4\uc74c \uce78\uc73c\ub85c \ub118\uc5b4\uac04\ub2e4(\ucd9c\ubc1c \uce78\uc740 \uac74\ub4dc\ub9ac\uc9c0 \uc54a\ub294\ub2e4)
+    if (here > 0 && here < cells.length) { for (var pi2 = 1; pi2 < here; pi2++) cells[pi2].ps = true; cells[here].hr = true; }
+  }
   var out = { ok: true, v: 1, screen: 'rhead', cover: 'tab', bg: 'card', head: [node], body: [{ t: 'spacer', h: 0 }], info: { part: 'k', n: cells.length, w: w } };
   out.rev = 'r' + RHEAD_SCREEN_V + 'k:' + rheadHash(JSON.stringify(cells) + (mk ? JSON.stringify(mk) : ''));
   return out;
