@@ -970,6 +970,28 @@ public class ShellJvmTest {
             ok("\uACE7 \uB3C4\uCC29".equals(ScreenCore.cdFmt(0)) && "\uACE7 \uB3C4\uCC29".equals(ScreenCore.cdFmt(-3)) && "1\uCD08".equals(ScreenCore.cdFmt(1)) && "59\uCD08".equals(ScreenCore.cdFmt(59)), "카운트다운 글자: 곧 도착 · N초");
             ok("1\uBD84 00\uCD08".equals(ScreenCore.cdFmt(60)) && "2\uBD84 05\uCD08".equals(ScreenCore.cdFmt(125)) && "12\uBD84 50\uCD08".equals(ScreenCore.cdFmt(770)) && "60\uBD84 00\uCD08".equals(ScreenCore.cdFmt(3600)) && "1\uBD84 22\uCD08".equals(ScreenCore.cdFmt(81.6)), "카운트다운 글자: M분 SS초(반올림)");
         }
+        {   // 도보 안내 시트(웹 walkModal) — 엔진이 정한 길안내 주소 · 간격을 꺼내고 눌림을 행동 코드로
+            WalkCore w = new WalkCore();
+            w.open("arrive", "\uAC15\uB0A8\uC5ED", 37.505, 127.004);
+            String r0 = w.request(18, 1760000000000L, -540, "dark");
+            ok(r0.equals("{\"cap\":18,\"f\":{\"kind\":\"walk\",\"walk\":{\"mode\":\"arrive\",\"dest\":{\"name\":\"\uAC15\uB0A8\uC5ED\",\"lat\":37.505,\"lng\":127.004},\"nowMs\":1760000000000,\"tzoMin\":-540,\"theme\":\"dark\"}}}"), "도보: 내 위치가 아직 없으면 목적지와 시각만 보낸다 " + r0);
+            w.setMe(37.5, 127.0);
+            String r1 = w.request(18, 1L, -540, "light");
+            ok(r1.contains("\"my\":{\"lat\":37.5,\"lng\":127}") && r1.contains("\"theme\":\"light\"") && w.hasMe, "도보: 내 위치가 생기면 함께 보낸다");
+            w.setMe(0, 0);
+            ok(w.hasMe && w.myLat == 37.5, "도보: 위치를 못 받으면 이 시트에서 앞서 받은 위치를 그대로 둔다");
+            ok(w.act("wk.close") == WalkCore.W_CLOSE && w.act("wk.kakao") == WalkCore.W_KAKAO && w.act("wk.naver") == WalkCore.W_NAVER && w.act("rd.close") == WalkCore.W_NONE && w.act(null) == WalkCore.W_NONE, "도보: 눌림 → 행동 코드");
+            w.onScreen("{\"ok\":true,\"v\":1,\"screen\":\"walk\",\"head\":[],\"body\":[],\"info\":{\"nav\":{\"kakao\":[\"kakaomap://route?sp=1,2&ep=3,4&by=FOOT\",\"https://map.kakao.com/link/to/x,3,4\"],\"naver\":[\"nmap://route/walk?dlat=3&dlng=4\",\"https://map.naver.com/p/directions/-/4,3,x,,-1/walk\"]},\"msg\":\"\",\"refresh\":30000}}");
+            ok(w.navKakao != null && w.navNaver != null && HomeCore.navAppOk(w.navKakao[0]) && HomeCore.navAppOk(w.navNaver[0]) && w.refreshMs == 30000L, "도보: 길안내 주소 읽기 · 앱 주소 허용(도보 길안내 포함)");
+            ok(!HomeCore.navAppOk("nmap://route/walk?a b") && !HomeCore.navAppOk("nmap://route/car?x=1") && !HomeCore.navAppOk("intent://x"), "도보: 허용 목록 밖은 거절");
+            w.onScreen("{\"ok\":true,\"v\":1,\"screen\":\"walk\",\"head\":[],\"body\":[],\"info\":{\"nav\":null,\"msg\":\"\uBAA9\uC801\uC9C0 \uC88C\uD45C\uB97C \uCC3E\uC744 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4\",\"refresh\":1}}");
+            ok(w.navKakao == null && w.navNaver == null && w.msg.length() > 0 && w.refreshMs == WalkCore.REFRESH_MIN_MS, "도보: 목적지 좌표가 없으면 길안내 없음 · 간격은 최소 10초로 막는다");
+            w.onScreen("not json");
+            ok(w.navKakao == null && w.msg.length() == 0 && w.refreshMs == WalkCore.REFRESH_DEF_MS, "도보: 엉터리 응답은 안전하게 비운다");
+            w.open("zzz", null, 0, 0);
+            ok("arrive".equals(w.mode) && !w.hasDest && !w.hasMe && w.request(18, 1L, 0, "dark").contains("\"dest\":{\"name\":\"\"}"), "도보: 좌표 없는 목적지는 이름만 보낸다");
+        }
+
         System.out.println(fails == 0 ? "ALL OK " + oks : "FAILED " + fails + " / " + (oks + fails));
         if (fails > 0) System.exit(1);
     }
