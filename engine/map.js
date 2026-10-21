@@ -13,7 +13,7 @@
 // 출력  { ok, v:1, screen:'map'|'mapstn'|'maptt', rev, cover:'tab', head, body, info }
 // 맨 아래 module.exports 는 시험(Node)용이고 Worker 에서는 함수 선언만 쓰인다.
 'use strict';
-var MAP_SCREEN_V = 4;
+var MAP_SCREEN_V = 5;
 var MAP_STN_TOP = 36;                                                   // 웹 팝업 위 여백 16 + 손잡이 4 + 16 (손잡이는 앱 뷰가 그린다)
 var MAP_REGIONS = [['seoul', '수도권'], ['busan', '부산'], ['daegu', '대구'], ['gwangju', '광주'], ['daejeon', '대전']];
 var MAP_REGION_PREFIX = { busan: '부산', daegu: '대구', gwangju: '광주', daejeon: '대전' };
@@ -35,6 +35,13 @@ function mapStnTable() {                           // Worker 에서는 HOME 블�
 }
 var mapLineColorFn = (typeof rheadTrkColor === 'function') ? rheadTrkColor : null;
 if (!mapLineColorFn) { try { if (typeof require === 'function') mapLineColorFn = require('./rhead').rheadTrkColor; } catch (eRq) { /* 없음 */ } }
+// 웹 _lineNumOf: '2호선' → '2', 'GTX-A' → 'A', 그 밖(경의중앙선·신분당선 등)은 ''
+function mapLineNum(line) {
+  var l = String(line || '').trim(), m = l.match(/(\d+)\s*호선/);
+  if (m) return m[1];
+  var g = l.match(/GTX[-\s]?([A-Z])/i);
+  return g ? g[1].toUpperCase() : '';
+}
 function mapLineColor(line, th) {
   if (MAP_REGION_COLORS[line]) return MAP_REGION_COLORS[line];
   return mapLineColorFn ? mapLineColorFn(1, line, th === 'dark' ? 'dark' : 'pastel') : '#5a5a5f';
@@ -161,7 +168,7 @@ function mapStationSheet(f) {
   var kids = [
     { t: 'text', s: name, size: 22, bold: true, color: 'text', lines: 1, pad: [0, MAP_STN_TOP, 0, 12] }
   ];
-  if (lines.length) kids.push({ t: 'chips', pad: [0, 0, 0, 20], gap: 7, h: 34, onc: 'gold', onfg: '#ffffff', items: lines.slice(0, 12).map(function (l) { return { label: l, on: true, c: mapLineColor(l, f.th), act: { a: 'sel', v: 'mp.line' } }; }) });
+  if (lines.length) kids.push({ t: 'lpills', pad: [0, 0, 0, 20], gap: 7, items: lines.slice(0, 12).map(function (l) { var o = { s: l, c: mapLineColor(l, f.th) }, nm = mapLineNum(l); if (nm) o.num = nm; return o; }) });      // 웹 _linePillHtml: 호선 숫자(GTX 는 글자)가 있으면 왼쪽에 반투명 흰 동그라미 · 줄 바꿈 알약(누르는 알약 아님)
   else kids.push({ t: 'text', s: '노선 정보 없음', size: 12, color: 'sub', pad: [0, 0, 0, 20] });
   kids.push({ t: 'row', pad: [0, 0, 0, 10], gap: 10, kids: [
     { t: 'button', s: '🚉 출발역', size: 15, h: 48, r: 14, bold: true, fill: dk ? '#0a84ff' : '#1d9bf0', line: 'none', tc: '#ffffff', pad: [0, 0, 0, 0], act: { a: 'call', v: 'mp.start' } },
@@ -801,4 +808,4 @@ function mapBusRouteSheet(f0) {
   if (bar) foot = [{ t: 'panel', pad: [0, 0, 0, 0], ip: [0, 0, 0, 0], r: 0, fill: 'card', line: 'border', kids: bar }];
   return mapFinish({ ok: true, v: 1, screen: 'mapbr', cover: 'tab', head: head, body: body, foot: foot, info: info }, 'br' + (pk ? 'p' : '') + sel);
 }
-if (typeof module !== 'undefined' && module.exports) module.exports = { mapCdFmt: mapCdFmt, mapBusRouteSheet: mapBusRouteSheet, mapBrCity: mapBrCity, mapBrStnTago: mapBrStnTago, mapBrStnGbis: mapBrStnGbis, mapBrPos: mapBrPos, mapCityOf: mapCityOf, mapGGPreferred: mapGGPreferred, mapGbisArr: mapGbisArr, mapScreen: mapScreen, mapFacts: mapFacts, mapLinesOf: mapLinesOf, mapFind: mapFind, mapNearest: mapNearest, mapIsStationLabel: mapIsStationLabel, mapPickRow: mapPickRow, mapRegionLines: mapRegionLines, mapDedupStops: mapDedupStops, mapStopOrder: mapStopOrder, mapApplyNearOrder: mapApplyNearOrder, mapBusOrd: mapBusOrd, MAP_FILTERS: MAP_FILTERS };
+if (typeof module !== 'undefined' && module.exports) module.exports = { mapLineNum: mapLineNum, mapCdFmt: mapCdFmt, mapBusRouteSheet: mapBusRouteSheet, mapBrCity: mapBrCity, mapBrStnTago: mapBrStnTago, mapBrStnGbis: mapBrStnGbis, mapBrPos: mapBrPos, mapCityOf: mapCityOf, mapGGPreferred: mapGGPreferred, mapGbisArr: mapGbisArr, mapScreen: mapScreen, mapFacts: mapFacts, mapLinesOf: mapLinesOf, mapFind: mapFind, mapNearest: mapNearest, mapIsStationLabel: mapIsStationLabel, mapPickRow: mapPickRow, mapRegionLines: mapRegionLines, mapDedupStops: mapDedupStops, mapStopOrder: mapStopOrder, mapApplyNearOrder: mapApplyNearOrder, mapBusOrd: mapBusOrd, MAP_FILTERS: MAP_FILTERS };
