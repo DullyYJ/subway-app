@@ -15,7 +15,8 @@
 // 출력  { ok, v:1, screen:'dlg', dlg:{…카드 모양}, bg, head:[…], body:[…], foot?:[…], info:{kind}, rev }
 //        행동 이름: dl.ok · dl.no(perm · exit · report) · dl.copy · dl.clear · dl.close(diag). 흐린 곳을 누르면 dlg.tap(perm 만 dl.no).
 var DLG_CAP = 16;
-var DLG_KINDS = { perm: 1, diag: 1, pop: 1, exit: 1, report: 1, walk: 1 };
+var RLOAD_CAP = 19;           // rload(경로 탐색 로딩)는 runner 노드를 아는 앱(CAP 19)부터 — 옛 앱은 kind 를 몰라 그냥 쓰지 않는다
+var DLG_KINDS = { perm: 1, diag: 1, pop: 1, exit: 1, report: 1, walk: 1, rload: 1 };
 var DLG_MAXLINES = 600, DLG_CHUNK = 1700;
 var DLG_EMOJI = /[☀-➿⬀-⯿️‍]|[\uD83C-\uD83E][\uDC00-\uDFFF]/g;
 
@@ -129,6 +130,12 @@ function wkClock(nowMs, tzoMin) {
   var d = new Date(t - z * 60000), h = d.getUTCHours(), mi = d.getUTCMinutes();
   return (h < 12 ? '오전 ' : '오후 ') + ('0' + (h % 12 || 12)).slice(-2) + ':' + ('0' + mi).slice(-2);
 }
+// 경로 탐색 로딩(웹 #transitLoading): 가운데 카드 · 뒤 화면 70% 어둡게 · 제목 + 안내. 캐릭터는 앱이 그린다(runner 노드 — 장식).
+function dlgRload() {
+  return { dlg: { w: 296, maxh: 0.9, dim: 0.7, top: 0.5, r: 20, mx: 24 }, bg: 'card',
+    head: [{ t: 'runner', pad: [30, 24, 30, 22], ttl: '복합경로 탐색 중', sub: '잠시만 기다려주세요' }],
+    body: [{ t: 'spacer', h: 0 }], foot: null, info: {} };
+}
 function dlgWalk(f) {
   var w = (f.walk && typeof f.walk === 'object') ? f.walk : {};
   var mode = w.mode === 'start' || w.mode === 'arrive' ? w.mode : 'manual';
@@ -176,7 +183,8 @@ function dialogScreen(inp, f) {
   f = (f && typeof f === 'object') ? f : {};
   var kind = dlgStr(f.kind, 8);
   if (!DLG_KINDS[kind]) return { ok: false, error: 'kind' };
-  var d = kind === 'perm' ? dlgPerm() : (kind === 'report' ? dlgReport() : kind === 'exit' ? dlgExit() : (kind === 'diag' ? dlgDiag(f) : (kind === 'walk' ? dlgWalk(f) : dlgPop(f))));
+  if (kind === 'rload' && !(Number(inp.cap) >= RLOAD_CAP)) return { ok: false, error: 'cap' };
+  var d = kind === 'perm' ? dlgPerm() : (kind === 'report' ? dlgReport() : kind === 'exit' ? dlgExit() : (kind === 'diag' ? dlgDiag(f) : (kind === 'walk' ? dlgWalk(f) : (kind === 'rload' ? dlgRload() : dlgPop(f)))));
   var out = { ok: true, v: 1, screen: kind === 'walk' ? 'walk' : 'dlg', bg: d.bg, head: d.head, body: d.body, info: d.info };
   if (d.dlg) out.dlg = d.dlg;
   if (d.foot) out.foot = d.foot;
