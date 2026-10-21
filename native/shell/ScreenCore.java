@@ -842,6 +842,10 @@ public final class ScreenCore {
             n.value = optStr(m, "kind", "list", 8);
             if (!"list".equals(n.value) && !"cards".equals(n.value) && !"map".equals(n.value)) n.value = "list";
             n.val = optNum(m, "rows", 6f, 1f, 14f);
+        } else if ("runner".equals(t)) {                                                                   // 경로 탐색 로딩: 뛰어가는 캐릭터 + 제목(점 셋이 차례로 깜빡) + 안내. 모양·움직임은 앱, 글은 엔진
+            pad(m, n);
+            n.title = optStr(m, "ttl", "", 24); n.value = optStr(m, "sub", "", 30);
+            if (n.title.length() == 0) throw new ParseError("runner: ttl 없음");
         } else if ("cars".equals(t)) {                                                                     // 칸별 혼잡: 제목 + 칸 가로줄(테두리 색 · 글 세 줄), 칸이 없으면 안내 글
             pad(m, n);
             n.title = optStr(m, "ttl", "", 24); n.value = optStr(m, "msg", "", 60);
@@ -932,8 +936,9 @@ public final class ScreenCore {
 
     // ═════════════ ③ 배치 ═════════════
     public static final int SCENE_MAX = 6000;
+    public static final float RUN_TRACK_H = 98f, RUN_TTL_GAP = 8f, RUN_TTL_H = 19f, RUN_SUB_GAP = 4f, RUN_SUB_H = 14f, RUN_H = RUN_TRACK_H + RUN_TTL_GAP + RUN_TTL_H + RUN_SUB_GAP + RUN_SUB_H;      // 경로 탐색 로딩(웹 #transitLoading): 달리는 칸 98 · 제목 14px · 안내 11px
     public static final float SKEL_ROW_H = 68f, SKEL_CARD_H = 132f, SKEL_MAP_H = 200f, SKEL_GAP = 10f;
-    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14, K_NEWS = 15, K_POSTH = 16, K_CMT = 17, K_RBTN = 18, K_INBAR = 19, K_MSG = 20, K_TAB = 21, K_SUG = 22, K_SWAP = 23, K_RHD = 24, K_TRK = 25, K_CGH = 26, K_GAUGE = 27, K_CHART = 28, K_HBAR = 29, K_CARS = 30, K_AIH = 31, K_LTH = 32, K_LTR = 33, K_PILL = 34, K_SCENE = 35, K_TMAP = 36, K_MARQ = 37, K_SKEL = 38, K_BTOG = 39, K_BCARD = 40, K_SEC = 41, K_TROW = 42, K_BRX = 43;
+    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14, K_NEWS = 15, K_POSTH = 16, K_CMT = 17, K_RBTN = 18, K_INBAR = 19, K_MSG = 20, K_TAB = 21, K_SUG = 22, K_SWAP = 23, K_RHD = 24, K_TRK = 25, K_CGH = 26, K_GAUGE = 27, K_CHART = 28, K_HBAR = 29, K_CARS = 30, K_AIH = 31, K_LTH = 32, K_LTR = 33, K_PILL = 34, K_SCENE = 35, K_TMAP = 36, K_MARQ = 37, K_SKEL = 38, K_BTOG = 39, K_BCARD = 40, K_SEC = 41, K_TROW = 42, K_BRX = 43, K_RUNNER = 44;
     /** 버스 정류장 카드 치수(웹 .map-bus-stop-card / .kbus-row 와 같다) */
 
     /** 노선 상세(웹 .brs-*): 머리 52 · 제목 · 구간 머리 34 · 회차 28 · 정류장 줄 56+ (레일 폭 5 · 점 9 · 버스 21 · 내 위치 15). */
@@ -1622,6 +1627,11 @@ public final class ScreenCore {
             Item it = new Item(); it.kind = K_MARQ; it.x = ox; it.y = y; it.w = innerW; it.h = n.h; it.value = n.value; it.f1 = n.val; it.f2 = n.max; it.on = n.on;
             out.add(it);
             return y + n.h + n.padB;
+        }
+        if ("runner".equals(n.t)) {                                                  // 경로 탐색 로딩 자리(그림은 ScreenView 가 그린다)
+            Item it = new Item(); it.kind = K_RUNNER; it.x = ox; it.y = y; it.w = innerW; it.h = RUN_H; it.label = n.title; it.value = n.value;
+            out.add(it);
+            return y + RUN_H + n.padB;
         }
         if ("skel".equals(n.t)) {                                                    // 스켈레톤 자리(그림은 ScreenView 가 그린다)
             int rows = Math.round(n.val);
