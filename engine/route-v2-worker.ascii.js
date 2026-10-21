@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-22s133";
+var ENGINE_VERSION = "route-v2-2026-10-22s135";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -18743,7 +18743,76 @@ function resNavUrls(r) {
             'https://map.naver.com/p/directions/' + (me ? me[1] + ',' + me[0] + ',' + e('\ub0b4 \uc704\uce58') + ',,-1/' : '-/') + lo + ',' + la + ',' + e(nm) + ',,-1/transit']
   };
 }
-function resDetailScreen(route, r, tab) {
+function resRgba(hex, a) {                                       // '#rrggbb' + \ud22c\uba85\ub3c4 \u2192 'rgba(r,g,b,a)' (\uc6f9 col+'28' \uac19\uc740 8\uc790\ub9ac hex \uc640 \uac19\uc740 \uc0c9)
+  var m = /^#([0-9a-fA-F]{6})$/.exec(String(hex || ''));
+  if (!m) return '';
+  var n = parseInt(m[1], 16);
+  return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
+}
+var RES_TD_CAP = 20;                                             // tdrow(\uc138\ubd80\uacbd\ub85c \uc904) \ub178\ub4dc\ub97c \uc544\ub294 \uc571
+var RES_BUS_LEG_COLS = ['#30d158', '#bf5af2', '#ff6482', '#40c8e0', '#ffd60a'];   // \uc6f9 _BUS_LEG_COLS
+function resDetailScreen(route, r, tab, cap) {
+  if (cap < RES_TD_CAP) return resDetailLegacy(route, r, tab);
+  var tz = resNum(r.tz, 540), now = resNum(r.now, 0), base = r.bt != null ? resNum(r.bt, now) : (resNum(r.rb, 0) || now), th = r.th === 'pastel' ? 'pastel' : 'dark';
+  var total = Math.round(resNum(route.summary.duration, 0) / 60), open = {};
+  resArr(r.open).forEach(function (i) { i = Math.floor(Number(i)); if (i >= 0 && i < 40) open[i] = 1; });
+  var kids = [{ t: 'bar', pad: [16, 0, 0, 8], title: total + '\ubd84 \u00b7 ' + String(r.a || '') + ' \u2192 ' + String(r.b || ''), btn: '\ub2eb\uae30', act: { a: 'call', v: 'rd.close' } }];
+  var cum = base, busN = 0, busIdx = {}, exp = [], rows = [];
+  route.sections.forEach(function (s, i) { if (s && s.transportation && s.transportation.type === 2) busIdx[i] = busN++; });
+  route.sections.forEach(function (sec, si) {                    // \uc6f9 \uc138\ubd80\uacbd\ub85c \uc904(.tdsec-row)\uacfc \uac19\uc740 \uac12: \uc0c9 \u00b7 \uc544\uc774\ucf58 \u00b7 \ubc43\uc9c0 \u00b7 \uacbd\uc720 \u00b7 \uc2dc\uac04\ub300
+    sec = sec || {};
+    var tr = sec.transportation || {}, ty = tr.type, secSec = resNum(sec.duration, 0), secMin = Math.round(secSec / 60), dep = cum, arr = cum + secSec * 1000;
+    cum = arr;
+    var mt = secMin < 1 ? '1\ubd84 \ubbf8\ub9cc' : secMin + '\ubd84';
+    var row = { t: 'tdrow', dep: dep, arr: arr, time: mt };
+    if (ty === 3) {
+      var dist = Math.round(resNum(sec.distance, 0));
+      row.ic = 'w'; row.col = 'sub'; row.lab = (typeof sec.distance === 'number' && dist <= 0) ? '\ud658\uc2b9 \uc774\ub3d9' : '\ub3c4\ubcf4 ' + (dist >= 1000 ? (dist / 1000).toFixed(1) + 'km' : dist + 'm');
+      row.trk = 'border'; row.ibg = 'card2'; row.bbg = 'card2'; row.bfg = 'sub'; row.tcol = 'sub';
+    } else {
+      var isSub = ty === 1, isBus = ty === 2;
+      var col = isSub ? (resTrkColor ? resTrkColor(1, tr.name, th) : '#2f7cf6') : isBus ? (busN >= 2 ? RES_BUS_LEG_COLS[busIdx[si] % RES_BUS_LEG_COLS.length] : (th === 'pastel' ? '#1a1a1a' : '#ffffff')) : 'sub';
+      var hex = /^#[0-9a-fA-F]{6}$/.test(col);
+      row.ic = isSub ? 's' : isBus ? 'b' : 'w'; row.col = col; row.tcol = hex ? col : 'sub';
+      row.trk = hex ? resRgba(col, 0.1875) : 'border'; row.ibg = hex ? resRgba(col, 0.157) : 'card2'; row.bbg = hex ? resRgba(col, 0.133) : 'card2'; row.bfg = hex ? col : 'sub';
+      row.lab = String(tr.name || '\uc774\ub3d9').slice(0, 24);
+      var stops = ((sec.passStopList || {}).stationList) || [], from = stops.length ? String(stops[0].stationName || '') : '', to = stops.length > 1 ? String(stops[stops.length - 1].stationName || '') : '';
+      if (from) row.path = (from + (to ? ' \u2192 ' + to : '')).slice(0, 60);
+      if (stops.length > 2) row.cnt = (stops.length - 2) + '\uc815\uac70\uc7a5 \uacbd\uc720';
+      row.rng = resClock(dep, tz) + '~' + resClock(arr, tz);
+      if (stops.length >= 2) {                                    // \ud3bc\uce60 \uc218 \uc788\ub294 \uad6c\uac04\ub9cc \ub20c\ub9bc \u00b7 \uc815\uac70\uc7a5 \ubaa9\ub85d
+        exp.push(si);
+        row.act = { a: 'call', v: 'rd.tg.' + si };
+        row.ex = true;
+        if (open[si]) {
+          row.op = true;
+          var ss = (ty === 1 && Array.isArray(sec.stopSec) && sec.stopSec.length === stops.length) ? sec.stopSec : null, even = secSec * 1000 / (stops.length - 1), cm = 0;
+          row.stops = stops.slice(0, 60).map(function (st, k) {
+            var off;
+            if (k === 0) off = 0;
+            else if (ss && isFinite(ss[k]) && isFinite(ss[0])) { cm = Math.max(cm, (ss[k] - ss[0]) * 1000); off = cm; }
+            else { cm += even; off = cm; }
+            return [String(st.stationName || '').slice(0, 30), resClock(dep + off, tz), (k === 0 || k === stops.length - 1) ? 1 : 0];
+          });
+        }
+      }
+    }
+    rows.push(row);
+  });
+  rows.forEach(function (row, i) { row.pos = rows.length === 1 ? 'o' : i === 0 ? 'f' : i === rows.length - 1 ? 'l' : 'm'; kids.push(row); });
+  var nav = resNavUrls(r);
+  if (nav) kids.push({ t: 'row', pad: [10, 0, 0, 14], gap: 8, kids: [
+    { t: 'button', s: '\uce74\uce74\uc624\ub9f5 \uae38\uc548\ub0b4', size: 13, h: 46, r: 12, bold: true, fill: '#fee500', line: 'none', tc: '#3a1d1d', act: { a: 'call', v: 'rd.kakao' } },
+    { t: 'button', s: '\ub124\uc774\ubc84\uc9c0\ub3c4', size: 13, h: 46, r: 12, bold: true, fill: '#03c75a', line: 'none', tc: '#ffffff', act: { a: 'call', v: 'rd.naver' } }] });
+  var onRide = !!(r.ride && r.ride.on);
+  kids.push(onRide ? { t: 'button', s: '\ud0d1\uc2b9 \uc548\ub0b4 \uc885\ub8cc', size: 14, h: 48, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'orange', pad: [10, 0, 0, 14], act: { a: 'call', v: 'rd.stop' } }
+    : { t: 'button', s: '\uc774 \uacbd\ub85c\ub85c \ud0d1\uc2b9 \uc2dc\uc791', size: 14, h: 48, r: 12, bold: true, fill: 'gold', line: 'none', tc: '#121214', pad: [10, 0, 0, 14], act: { a: 'call', v: 'rd.confirm' } });
+  var out = { ok: true, v: RESULT_V, screen: 'rdetail', cover: 'tab', head: [], body: kids, info: { exp: exp, nav: nav, m: total, tab: tab } };
+  out.rev = 'd' + RESULT_V + ':' + resHash(JSON.stringify(kids));
+  return out;
+}
+
+function resDetailLegacy(route, r, tab) {   // cap 20 \ubbf8\ub9cc \uc571(tdrow \ub97c \ubaa8\ub974\ub294 \uc61b \uc571)\uc6a9 \u2014 \uae00 \uc904 \ubaa8\uc591
   var tz = resNum(r.tz, 540), now = resNum(r.now, 0), base = r.bt != null ? resNum(r.bt, now) : (resNum(r.rb, 0) || now), th = r.th === 'pastel' ? 'pastel' : 'dark';
   var total = Math.round(resNum(route.summary.duration, 0) / 60), open = {};
   resArr(r.open).forEach(function (i) { i = Math.floor(Number(i)); if (i >= 0 && i < 40) open[i] = 1; });
@@ -18823,7 +18892,7 @@ function resultScreen(opt, r) {
   var has = {};
   RESULT_TABS.forEach(function (t) { has[t] = !!(pick[t] && resConvertPath(pick[t])); });
   var route = has[tab] ? resConvertPath(pick[tab]) : null;
-  if (r.view === 'detail') return route ? resDetailScreen(route, r, tab) : { ok: false, error: 'route' };
+  if (r.view === 'detail') return route ? resDetailScreen(route, r, tab, cap) : { ok: false, error: 'route' };
   var nodes = [], total = 0;
   var anyRoute = RESULT_TABS.some(function (t) { return has[t]; });
   var h = anyRoute ? resPart(cap, 'h', resHeadFacts(route, r, tab)) : null;
