@@ -755,6 +755,7 @@ public class ShellActivity extends Activity {
                     }
                     for (Thread t : ts) { try { t.join(10000); } catch (InterruptedException e) { /* 무시 */ } }
                     for (int i = 0; i < need.size(); i++) pfMap.addBusRes(need.get(i)[0], got[i] == null ? "" : got[i]);
+                    pfMap.rememberNeed(need);                                               // 미리 받을 때 본 도착정보 주소도 기기에 남겨, 처음 열어도 엔진 왕복 없이 갱신한다
                     pfMap.busNeed.clear();
                 }
             } finally { pfMap.modeOverride = null; }
@@ -1778,6 +1779,7 @@ public class ShellActivity extends Activity {
                         if (bad) { busFail(); return; }
                     }
                     for (int i = 0; i < need.size(); i++) map.addBusRes(need.get(i)[0], got[i] == null ? "" : got[i]);
+                    map.rememberNeed(need);                                                       // 다음 갱신은 이 주소들을 엔진에게 묻지 않고 곧장 받는다
                     map.busNeed.clear();
                     loadMapBodyRound(v, true, round + 1);
                 } });
@@ -1820,7 +1822,48 @@ public class ShellActivity extends Activity {
     private void busRefresh() {
         if (busRefreshing && System.currentTimeMillis() - busRefAt < 20000L) return;
         busRefreshing = true; busRefAt = System.currentTimeMillis(); busAt = busRefAt;
-        map.dropArrivals(); loadMapBodyRound(body, true, 0);
+        map.dropArrivals();
+        final List<String[]> spec = map.speculativeNeed();
+        if (spec.isEmpty()) { loadMapBodyRound(body, true, 0); return; }
+        busSpeculate(spec);
+    }
+    /** 엔진 왕복 하나를 건너뛴다: 지난번 도착정보 주소들을 곧장 받고(병렬) 한 번에 그린다. 하나라도 비면 평소 길(엔진에게 묻기)로 돌아간다. */
+    private void busSpeculate(final List<String[]> spec) {
+        final int sq = seqMapB;
+        new Thread(new Runnable() {
+            @Override public void run() {
+                final String[] got = fetchAll(spec, 5000, 4000);
+                main.post(new Runnable() { @Override public void run() {
+                    if (sq != seqMapB) return;                                                    // 그 사이 다른 요청이 시작됐다
+                    boolean bad = false;
+                    for (String g : got) if (g == null || g.length() == 0) bad = true;
+                    if (bad) { loadMapBodyRound(body, true, 0); return; }
+                    for (int i = 0; i < spec.size(); i++) map.addBusRes(spec.get(i)[0], got[i]);
+                    loadMapBodyRound(body, true, 1);
+                } });
+            }
+        }, "shell-busspec").start();
+    }
+    /** 주소들을 동시에 받는다(한 곳이 느려도 전체가 늦지 않게 5초 → 빨리 실패했을 때만 한 번 더). */
+    private String[] fetchAll(final List<String[]> need, final int firstMs, final int retryMs) {
+        final String[] got = new String[need.size()];
+        Thread[] ts = new Thread[need.size()];
+        for (int i = 0; i < need.size(); i++) {
+            final int k = i;
+            ts[i] = new Thread(new Runnable() { @Override public void run() {
+                String u = MapCore.busFetchUrl(need.get(k)[1]), b = "";
+                for (int a = 0; a < 2 && u.length() > 0 && b.length() == 0; a++) {
+                    long t0 = System.currentTimeMillis();
+                    NetPost.Res r = NetPost.get(u, a == 0 ? firstMs : retryMs);
+                    b = r.status == 200 && r.body != null ? r.body : "";
+                    if (b.length() == 0 && System.currentTimeMillis() - t0 > 2500L) break;
+                }
+                got[k] = b;
+            } });
+            ts[i].start();
+        }
+        for (Thread t : ts) { try { t.join(12000); } catch (InterruptedException e) { /* 무시 */ } }
+        return got;
     }
     private final Runnable busTick = new Runnable() { @Override public void run() {
         busTicking = false;
@@ -1840,7 +1883,8 @@ public class ShellActivity extends Activity {
         seedMapLoc();
         if (headToo) { keyedShow(head, ShellCore.S_MAPH); loadMapHead(head, true, null, null); }
         boolean shown = keyedShow(body, ShellCore.S_MAPB);
-        loadMapBody(body, shown);
+        if (shown && busShowing() && System.currentTimeMillis() - busAt > BUS_POLL_MS) busRefresh();        // 버스 탭에 들어오면 캐시 화면을 먼저 보이고, 도착정보는 곧장(엔진 왕복 없이) 새로 받는다
+        else loadMapBody(body, shown);
         if (shown) syncMapView();
     }
 
@@ -2902,7 +2946,7 @@ public class ShellActivity extends Activity {
         walkRefresh();
     }
     private static final int WALK_SHEET_H = 262;
-    /** 내 위치를 받아(권한이 없으면 마지막으로 알려진 위치로) 엔진에게 다시 그려 달라고 한다. 같은 때 겹쳐도 가장 나중 것만 쓴다. */
+    /** 내 위치를 받아(권한이 없거나 못 받으면 - 로 그린다 — 옛 위치는 쓰지 않는다) 엔진에게 다시 그려 달라고 한다. 같은 때 겹쳐도 가장 나중 것만 쓴다. */
     private void walkRefresh() {
         final int seq = ++walkSeq;
         main.removeCallbacks(walkTick);
