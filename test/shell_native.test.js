@@ -233,6 +233,13 @@ function findAndroidJar() {
     assert.ok(/dlgKind\("report", doReport, null\)/.test(v) && /dlgKind\("perm", openSet, null\)/.test(v) && /dlgPopSh\("경로를 먼저 탐색해 주세요"/.test(v), '신고 · 권한 · 공유 안내가 엔진 카드를 쓴다');
     assert.ok(/"dl\.ok"\.equals\(v\)/.test(v) && /setOnCancelListener/.test(v) && /dg\.tap != null \|\| autoMs > 0L/.test(v) && /dg\.fit && v\.fitWidthDp\(\)/.test(v), '단추 · 바깥/뒤로 취소 · 카드가 정한 바깥 누름 · 글에 맞춘 너비');
   });
+  await t('세부경로 줄(s135): 레일 · 현재위치 점 · 뱃지 · 펼침을 ScreenView 가 그리고 · 보이는 동안에만 다시 그린다 · 그릴 때 새 객체 없음', () => {
+    const sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), sc = fs.readFileSync(N('ScreenCore.java'), 'utf8');
+    assert.ok(/case ScreenCore\.K_TDROW: drawTdrow/.test(sv) && /tdDrawn/.test(sv) && /tdAct/.test(sv) && /System\.currentTimeMillis\(\)/.test(sv.slice(sv.indexOf('private void drawTdrow('), sv.indexOf('private String ellipsizeTd('))), '그리기 · 지금 시각으로 진행 비율');
+    assert.ok(!/new Paint|new RectF|new Rect\(|new Path|new String|new int\[/.test(sv.slice(sv.indexOf('private void tdIcon('), sv.indexOf('private String ellipsizeTd('))), '그릴 때 새 객체 없음');
+    assert.ok(/if \(tdAct\) postInvalidateOnAnimation\(\); else if \(tdDrawn\) postInvalidateDelayed\(2000L\)/.test(sv), '지금 가는 구간이 보이면 화면 박자 · 아니면 2초마다');
+    assert.ok(/CAP = 20/.test(fs.readFileSync(N('ShellCore.java'), 'utf8')) && /K_TDROW = 45/.test(sc) && /"tdrow"\.equals\(t\)/.test(sc), 'cap 20 · tdrow 파싱');
+  });
   await t('순수 네이티브 프로젝트: 소스는 native/shell 뿐 · 매니페스트에 ShellActivity 가 런처 · 웹뷰/Capacitor 흔적 없음', async () => {
     const g = fs.readFileSync(path.join(ROOT, 'shell-android', 'app', 'build.gradle'), 'utf8');
     assert.ok(/srcDirs = \['\.\.\/\.\.\/native\/shell'\]/.test(g), '소스 경로');
