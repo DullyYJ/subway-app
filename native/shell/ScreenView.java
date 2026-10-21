@@ -164,6 +164,7 @@ public class ScreenView extends View {
         }
         final ScreenCore.Layout before = keepScroll && !stick && ancKey == null ? lay : null;      // 노선 상세: 바뀐 줄만 다시 그리려고 이전 배치를 쥔다
         screen = s;
+        hintUntil = 0L;                                                                    // 엔진이 준 실제 상태(감지 중 여부)가 오면 임시 표시는 거둔다
         cdFresh = true; pendAgeMs = srcAgeMs; srcAgeMs = 0L;
         iconPaths.clear();
         if (!keepScroll) { scrollY = 0f; scrollX = 0f; openKey = null; ctrDone = null; }
@@ -1152,9 +1153,11 @@ public class ScreenView extends View {
     private void fireInbar(ScreenCore.Item it, boolean inFootRegion, ScreenCore.Act act) {
         if (editKey != null && editor != null) fieldVals.put(editKey, String.valueOf(editor.getText()));
         if (!inFootRegion) blurInput();
+        if (act != null && "call".equals(act.a) && act.v != null && act.v.startsWith("rt.gps")) { hintAct = act.v; hintUntil = SystemClock.uptimeMillis() + 1500L; lastTapScale = hintUntil - 1500L; }      // 엔진 답을 기다리지 않고 누른 즉시 돌아가는 표시(0초 반응)
         invalidate();
         if (listener != null && act != null) listener.onAction(act);
     }
+    private String hintAct = ""; private long hintUntil; private boolean inbarBusy;
     /** 웹이 입력칸 글자를 바꾼다(보낸 뒤 비우기 등). 편집 중이면 진짜 입력칸도 같이. */
     public void setField(String key, String value) {
         if (key == null) return;
@@ -1221,7 +1224,7 @@ public class ScreenView extends View {
         cv.drawRect(0, 0, getWidth(), getHeight(), p);
         if (lay == null) return;
         boolean moving = false;
-        sceneDrawn = false; marqDrawn = false; skelDrawn = false; bcAnim = false; tmDrawn = false; cdDrawn = false; brxPingN = 0;
+        sceneDrawn = false; marqDrawn = false; skelDrawn = false; bcAnim = false; tmDrawn = false; cdDrawn = false; brxPingN = 0; inbarBusy = false;
         if (ssOn) {                                                                       // 핀을 눌러 카드로 부드럽게 가는 중
             float f = (now - ssT0) / 350f;
             if (f >= 1f) { f = 1f; ssOn = false; }
@@ -1275,7 +1278,7 @@ public class ScreenView extends View {
 
         if (!drewOnce) { drewOnce = true; post(firstDrawCb); }
         if (sceneDrawn && scene != null && scene.isRunning() && !scene.isPaused()) postInvalidateOnAnimation();        // 장면이 보이는 동안만 화면 박자로 계속 그린다(안 보이면 저절로 멈춘다)
-        if (marqDrawn || skelDrawn) postInvalidateOnAnimation();                                     // 흐르는 문구가 보이는 동안만 화면 박자로 계속 그린다
+        if (marqDrawn || skelDrawn || inbarBusy) postInvalidateOnAnimation();                                     // 흐르는 문구가 보이는 동안만 화면 박자로 계속 그린다
         if (brxPingN > 0 && isShown()) {                                                           // 버스·내 위치 마커 맥박: 그 마커 자리만 초당 15번(보이는 동안만; 화면을 벗어나면 저절로 멈춘다)
             float oy = lay.headH - scrollY;
             for (int i = 0; i < brxPingN; i++) {
@@ -1893,12 +1896,29 @@ public class ScreenView extends View {
             return;
         }
         float br = it.radius > 0f ? it.radius : INBAR_BTN_R;      // 입력칸을 네모(r:0)로 두는 홈 줄도 단추는 웹처럼 둥글게
-        p.setStyle(Paint.Style.FILL); p.setColor(it.on ? alpha(cc(it.ac, pal[R_GOLD]), 0.5f) : cc(it.ac, pal[R_GOLD])); cv.drawRoundRect(rf, br, br, p);
-        if (it == pressed && !it.on) { p.setColor(0x33000000); cv.drawRoundRect(rf, br, br, p); }
-        setText(it.size2 > 0f ? it.size2 : it.size, true, it.on ? alpha(cc(it.ac2, 0xFF121214), 0.6f) : cc(it.ac2, 0xFF121214)); tp.setTextAlign(Paint.Align.CENTER);
-        cv.drawText(it.badge, it.btx + it.sw / 2f, base(it.bty, it.sh, 0), tp);
+        long nowI = SystemClock.uptimeMillis();
+        boolean busy = it.on || (it.act != null && it.act.v != null && it.act.v.equals(hintAct) && nowI < hintUntil);        // 감지 중(엔진이 준 흐린 단추) 또는 방금 눌러 엔진 답을 기다리는 동안
+        boolean down = it == pressed && !busy;
+        float bcx = it.btx + it.sw / 2f, bcy = it.bty + it.sh / 2f;
+        cv.save();
+        if (down || (busy && nowI - lastTapScale < 160L)) cv.scale(0.94f, 0.94f, bcx, bcy);                                  // 누르는 순간 살짝 작아지는 반응
+        p.setStyle(Paint.Style.FILL); p.setColor(busy ? alpha(cc(it.ac, pal[R_GOLD]), 0.5f) : cc(it.ac, pal[R_GOLD])); cv.drawRoundRect(rf, br, br, p);
+        if (down) { p.setColor(0x33000000); cv.drawRoundRect(rf, br, br, p); }
+        setText(it.size2 > 0f ? it.size2 : it.size, true, busy ? alpha(cc(it.ac2, 0xFF121214), 0.6f) : cc(it.ac2, 0xFF121214)); tp.setTextAlign(Paint.Align.CENTER);
+        float tw = tp.measureText(it.badge), spR = 5f, gap = 6f;
+        if (busy && it.sw >= tw + 2f * (spR + gap) + 6f) {                                                                    // 글자 왼쪽에서 도는 작은 스피너
+            float sx = bcx - (tw + gap + 2f * spR) / 2f + spR;
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(2f); p.setStrokeCap(Paint.Cap.ROUND); p.setColor(alpha(cc(it.ac2, 0xFF121214), 0.75f));
+            rf2.set(sx - spR, bcy - spR, sx + spR, bcy + spR);
+            cv.drawArc(rf2, (nowI % 900L) / 900f * 360f, 250f, false, p);
+            p.setStrokeCap(Paint.Cap.BUTT); p.setStyle(Paint.Style.FILL);
+            cv.drawText(it.badge, bcx + (gap + 2f * spR) / 2f, base(it.bty, it.sh, 0), tp);
+        } else cv.drawText(it.badge, bcx, base(it.bty, it.sh, 0), tp);
+        if (busy) inbarBusy = true;
+        cv.restore();
         tp.setTextAlign(Paint.Align.LEFT);
     }
+    private long lastTapScale;
     /** 경로 결과 머리줄: 큰 분 숫자 + 단위 + 구간명(같은 글자 밑선) + 오른쪽 즐겨찾기 알약 + 닫기 ×. */
     /** 구간 타임라인 칸: 이름(아래 맞춤, 두 줄까지) · 배지 · 선+점 · 시각. 무엇을 어떤 색·크기로 쓸지는 전부 엔진이 정했다. */
     private void drawTrk(Canvas cv, ScreenCore.Item it) {

@@ -44,7 +44,10 @@ final class VecMap implements ScreenView.VecHost {
     private boolean styleOk, ready, failed, started, resumed, destroyed;
     private int rl, rt, rw, rh, appliedL = -1, appliedT = -1, appliedW = -1, appliedH = -1;
     private boolean hasPend; private double pendLa, pendLo, pendZ;
-    private boolean applyQueued;
+    private boolean applyQueued, createQueued;
+
+    /** 앱을 켠 뒤 한가할 때: 지도 엔진(네이티브 라이브러리 · 싱글턴)을 미리 올려 둔다. 첫 지도 진입에서 이 비용이 사라진다. */
+    static void warmUp(android.content.Context c) { try { MapLibre.getInstance(c.getApplicationContext()); } catch (Throwable ignored) { } }
 
     VecMap(Activity a, FrameLayout holder, ScreenView sv, float dpr) {
         this.act = a; this.holder = holder; this.sv = sv; this.dpr = dpr;
@@ -97,7 +100,7 @@ final class VecMap implements ScreenView.VecHost {
     @Override public void place(int l, int t, int w, int hh) {
         if (destroyed || failed) return;
         rl = l; rt = t; rw = w; rh = hh;
-        if (w > 0 && box == null) create();
+        if (w > 0 && box == null && !createQueued) { createQueued = true; h.post(new Runnable() { @Override public void run() { if (!destroyed && box == null) create(); applyRect.run(); } }); }      // 그리는 도중이 아니라 다음 박자에 만든다(첫 진입이 끊기지 않게)
         if (box == null || applyQueued) return;
         if (l == appliedL && t == appliedT && w == appliedW && hh == appliedH) return;
         applyQueued = true;

@@ -29,6 +29,7 @@ public final class FoodCore {
     String centerKey = "";                       // 원자료가 받아진 중심(소수 셋째 자리)
     long loadedAt = 0;
     List<Object> srv = new ArrayList<Object>();  // 서버 가게(원자료 그대로)
+    String srvJ = "", pubJ = "";                  // srv · pub 을 엔진에 보낼 글로 바꾼 것
     List<Object> pub = new ArrayList<Object>();  // 공공데이터 행 [상호, 중분류, 소분류, 도로명, 지번, 위도, 경도]
 
     // ── 마지막 화면에서 읽은 것 ──
@@ -61,7 +62,7 @@ public final class FoodCore {
         gps = new double[] { lat, lng }; locating = false; noperm = false;
         if (far && dest.length() == 0) invalidate();
     }
-    public void invalidate() { loaded = false; failed = false; alts.clear(); go.clear(); ctr = null; centerKey = ""; srv = new ArrayList<Object>(); pub = new ArrayList<Object>(); }
+    public void invalidate() { loaded = false; failed = false; alts.clear(); go.clear(); ctr = null; centerKey = ""; srv = new ArrayList<Object>(); pub = new ArrayList<Object>(); srvJ = ""; pubJ = ""; }
     public void refresh() { closePanel(); invalidate(); loadedAt = 0; if (dest.length() == 0) gps = null; }
 
     /** 위치가 필요한데 아직 없는가(도착지가 없고 기기 위치도 없을 때). */
@@ -79,6 +80,7 @@ public final class FoodCore {
     public static final class Data {
         public boolean srvOk = false;
         public List<Object> srv = new ArrayList<Object>(), pub = new ArrayList<Object>();
+        public String srvJ = "", pubJ = "";            // 엔진에 보낼 글(통신 스레드에서 미리 만들어 둔다 — 주 스레드에서 수천 줄을 글로 바꾸지 않게)
     }
     @SuppressWarnings("unchecked")
     public static Data parseData(String serverJson, List<String> pubPages) {   // 서버: {items:[{n,c,a,d,lo,la}…]}
@@ -92,6 +94,7 @@ public final class FoodCore {
             }
         } catch (Exception e) { d.srvOk = false; }
         for (String p : pubPages) rows(p, d.pub);
+        d.srvJ = HomeSearchCore.toJson(d.srv); d.pubJ = HomeSearchCore.toJson(d.pub);
         return d;
     }
     /** 공공데이터 한 쪽의 항목 수(못 읽으면 -1). 200 미만이면 마지막 쪽. */
@@ -121,7 +124,7 @@ public final class FoodCore {
         } catch (Exception e) { return -1; }
     }
     public void setData(Data d) {
-        srv = d.srv; pub = d.pub; failed = !d.srvOk;
+        srv = d.srv; pub = d.pub; srvJ = d.srvJ; pubJ = d.pubJ; failed = !d.srvOk;
         loaded = true; centerKey = ctr == null ? "" : key(ctr); loadedAt = System.currentTimeMillis();
     }
 
@@ -140,7 +143,7 @@ public final class FoodCore {
         b.append("\"stn\":").append(ShellCore.q(dest)).append(",\"st\":").append(ShellCore.q(withData && loaded ? "done" : state()));
         b.append(",\"flt\":").append(ShellCore.q(flt)).append(",\"fail\":").append(failed ? 1 : 0);
         b.append(",\"gps\":").append(ll(gps)).append(",\"dl\":").append(ll(dl)).append("}");
-        if (withData && loaded) b.append(",\"s\":").append(HomeSearchCore.toJson(srv)).append(",\"u\":").append(HomeSearchCore.toJson(pub));
+        if (withData && loaded) b.append(",\"s\":").append(srvJ.length() > 0 ? srvJ : HomeSearchCore.toJson(srv)).append(",\"u\":").append(pubJ.length() > 0 ? pubJ : HomeSearchCore.toJson(pub));
         b.append(",\"alts\":\"chips\"}");
         return b.toString();
     }
@@ -160,26 +163,38 @@ public final class FoodCore {
     }
 
     // ── 받은 화면에서 읽기 ──
+    /** 받은 목록 화면에서 읽은 것(무거운 읽기는 통신 스레드에서 하고, 주 스레드는 apply 로 값만 옮긴다). */
+    public static final class Parsed {
+        boolean ok; double[] ctr; String stn; Map<String, Object> go = new LinkedHashMap<String, Object>(); Map<String, String> alts = new LinkedHashMap<String, String>();
+    }
     @SuppressWarnings("unchecked")
-    public void onScreen(String json) {
+    public static Parsed parseScreen(String json) {
+        Parsed pr = new Parsed();
         try {
             Object o = ScreenCore.parse(json);
-            if (!(o instanceof Map)) return;
+            if (!(o instanceof Map)) return pr;
             Map<String, Object> m = (Map<String, Object>) o;
             Object i = m.get("info");
-            go.clear();
             if (i instanceof Map) {
                 Map<String, Object> im = (Map<String, Object>) i;
                 Object c = im.get("ctr");
-                if (c instanceof List && ((List<Object>) c).size() == 2) { List<Object> cl = (List<Object>) c; ctr = new double[] { BoardCore.d(cl.get(0)), BoardCore.d(cl.get(1)) }; }
-                else ctr = null;
-                if (im.get("go") instanceof Map) go.putAll((Map<String, Object>) im.get("go"));
-                if (im.get("stn") instanceof String) stnName = BoardCore.s(im.get("stn"), 30);
+                if (c instanceof List && ((List<Object>) c).size() == 2) { List<Object> cl = (List<Object>) c; pr.ctr = new double[] { BoardCore.d(cl.get(0)), BoardCore.d(cl.get(1)) }; }
+                if (im.get("go") instanceof Map) pr.go.putAll((Map<String, Object>) im.get("go"));
+                if (im.get("stn") instanceof String) pr.stn = BoardCore.s(im.get("stn"), 30);
             }
-            alts.clear();
-            if (m.get("alts") instanceof Map) for (Map.Entry<String, Object> e : ((Map<String, Object>) m.get("alts")).entrySet()) alts.put(e.getKey(), HomeSearchCore.toJson(e.getValue()));
-        } catch (Exception e) { /* 이전 값 유지 */ }
+            if (m.get("alts") instanceof Map) for (Map.Entry<String, Object> e : ((Map<String, Object>) m.get("alts")).entrySet()) pr.alts.put(e.getKey(), HomeSearchCore.toJson(e.getValue()));
+            pr.ok = true;
+        } catch (Exception e) { pr.ok = false; }
+        return pr;
     }
+    public void apply(Parsed pr) {
+        if (pr == null || !pr.ok) return;                                   // 읽을 수 없으면 이전 값 유지
+        go.clear(); go.putAll(pr.go);
+        ctr = pr.ctr;
+        if (pr.stn != null) stnName = pr.stn;
+        alts.clear(); alts.putAll(pr.alts);
+    }
+    public void onScreen(String json) { apply(parseScreen(json)); }
     /** 이 칩의 화면 글(엔진이 한꺼번에 계산해 보낸 것). 없으면 null. */
     public String altOf(String chip) { return alts.get(chip); }
 

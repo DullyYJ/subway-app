@@ -165,6 +165,15 @@ public class ShellActivity extends Activity {
         WidgetCore.captureLaunch(getIntent());
         widgetLaunch();
         gwSync(false);
+        launchLocate();
+        main.postDelayed(new Runnable() { @Override public void run() {                // 켠 직후 바쁜 시간이 지나 한가해지면 무거운 준비물(지도 엔진 · 노선도 그림)을 미리 만들어 둔다 — 탭에 들어갈 때 버벅이지 않게
+            android.os.Looper.myQueue().addIdleHandler(new android.os.MessageQueue.IdleHandler() { @Override public boolean queueIdle() {
+                if (isFinishing()) return false;
+                VecMap.warmUp(ShellActivity.this);
+                ensureMetro();
+                return false;
+            } });
+        } }, 1500L);
         captureLastLoc();
         ioExec.execute(new Runnable() { @Override public void run() { main.post(new Runnable() { @Override public void run() { prefetchTabs(); } }); } });     // 켜는 즉시(0초) 모든 탭 화면을 병렬로 미리 받는다 — 캐시 파일 목록 훑기가 끝난 뒤(주 스레드가 파일을 확인하지 않게)
     }
@@ -544,7 +553,7 @@ public class ShellActivity extends Activity {
         try {
             if (ShellCore.S_HOME.equals(id)) home.onScreen(json);
             else if (ShellCore.S_CHAT.equals(id)) chat.onScreen(json);
-            else if (ShellCore.S_FOOD.equals(id)) food.onScreen(json);
+            else if (ShellCore.S_FOOD.equals(id)) { final String fj = json; ioExec.execute(new Runnable() { @Override public void run() { final FoodCore.Parsed fp = FoodCore.parseScreen(fj); main.post(new Runnable() { @Override public void run() { food.apply(fp); } }); } }); }       // 큰 목록(6칩 화면)은 주 스레드에서 읽지 않는다
             else if ("map".equals(id)) map.onScreen(json);
             else if (ShellCore.S_BOARD.equals(id) && json.contains("\"sid\":")) board.onScreen(json);       // 엔진이 글 고유 id 를 준 화면은 보낸 목록 순서와 상관없이 맞는다
         } catch (Throwable ignored) { }
@@ -716,6 +725,43 @@ public class ShellActivity extends Activity {
     }
     private boolean pfNeeds(String key) { return cacheAge(key) >= PF_SKIP_MS; }
 
+    private final Object pfBusLock = new Object();
+    /** (뒤 스레드) 버스 탭 미리 받기: 위치 → 정류장 → 도착정보 왕복을 돌려 화면을 캐시에 두고, 가까운 정류장의 앞 노선 목록도 이어서 받아 둔다. 위치가 있어야 한다. */
+    private boolean pfBusRun(double[] ll, String theme) throws Exception {
+        if (ll == null) return false;                                               // 위치 없이 받은 '위치 없음' 화면을 캐시에 넣지 않는다
+        boolean done = false;
+        synchronized (pfBusLock) {
+            pfMap.modeOverride = "bus";
+            try {
+                String bk = ShellCore.mapKey(ShellCore.S_MAPB, "bus", store);
+                if (ll != null) pfMap.setBusLoc(ll[0], ll[1]);
+                for (int round = 0; round < 4; round++) {
+                    NetPost.Res br = NetPost.post(ShellCore.BASE + "/screen/map", pfMap.bodyRequest(ShellCore.CAP, theme), 8000);
+                    if (br.status != 200 || br.body == null) break;
+                    pfMap.onScreen(br.body);
+                    if (pfMap.busNeed.isEmpty()) { prefetchPut(bk, br.body, false); done = true; break; }
+                    if (round == 3) break;
+                    final List<String[]> need = new ArrayList<String[]>(pfMap.busNeed);
+                    final String[] got = new String[need.size()];
+                    Thread[] ts = new Thread[need.size()];
+                    for (int i = 0; i < need.size(); i++) {
+                        final int k = i;
+                        ts[i] = new Thread(new Runnable() { @Override public void run() {
+                            String u = MapCore.busFetchUrl(need.get(k)[1]);
+                            NetPost.Res r = u.length() == 0 ? null : NetPost.get(u, 9000);
+                            got[k] = r != null && r.status == 200 ? r.body : "";
+                        } });
+                        ts[i].start();
+                    }
+                    for (Thread t : ts) { try { t.join(10000); } catch (InterruptedException e) { /* 무시 */ } }
+                    for (int i = 0; i < need.size(); i++) pfMap.addBusRes(need.get(i)[0], got[i] == null ? "" : got[i]);
+                    pfMap.busNeed.clear();
+                }
+            } finally { pfMap.modeOverride = null; }
+            if (done) brPrefetch(pfMap);
+        }
+        return true;
+    }
     private void prefetchTabs() {
         if (pfPending.get() > 0) return;                                  // 아직 도는 중
         prefetchAt = System.currentTimeMillis();
@@ -773,34 +819,7 @@ public class ShellActivity extends Activity {
         pfAdd(1, new PfJob() { @Override public boolean run() throws Exception { return prefetchNews(live.contains(ShellCore.S_NEWS)); } });    // 소식(모든 분류)
         pfAdd(1, new PfJob() { @Override public boolean run() throws Exception {                // 노선도 버스(위치 → 정류장 → 도착정보 왕복이라 묶지 못한다)
             if (("map".equals(cur) && "bus".equals(mapMode)) || !pfNeeds(ShellCore.mapKey(ShellCore.S_MAPB, "bus", store))) return false;
-            pfMap.modeOverride = "bus";
-            try {
-                String bk = ShellCore.mapKey(ShellCore.S_MAPB, "bus", store);
-                if (ll != null) pfMap.setBusLoc(ll[0], ll[1]);
-                for (int round = 0; round < 4; round++) {
-                    NetPost.Res br = NetPost.post(ShellCore.BASE + "/screen/map", pfMap.bodyRequest(ShellCore.CAP, theme), 8000);
-                    if (br.status != 200 || br.body == null) break;
-                    pfMap.onScreen(br.body);
-                    if (pfMap.busNeed.isEmpty()) { prefetchPut(bk, br.body, false); break; }
-                    if (round == 3) break;
-                    final List<String[]> need = new ArrayList<String[]>(pfMap.busNeed);
-                    final String[] got = new String[need.size()];
-                    Thread[] ts = new Thread[need.size()];
-                    for (int i = 0; i < need.size(); i++) {
-                        final int k = i;
-                        ts[i] = new Thread(new Runnable() { @Override public void run() {
-                            String u = MapCore.busFetchUrl(need.get(k)[1]);
-                            NetPost.Res r = u.length() == 0 ? null : NetPost.get(u, 9000);
-                            got[k] = r != null && r.status == 200 ? r.body : "";
-                        } });
-                        ts[i].start();
-                    }
-                    for (Thread t : ts) { try { t.join(10000); } catch (InterruptedException e) { /* 무시 */ } }
-                    for (int i = 0; i < need.size(); i++) pfMap.addBusRes(need.get(i)[0], got[i] == null ? "" : got[i]);
-                    pfMap.busNeed.clear();
-                }
-            } finally { pfMap.modeOverride = null; }
-            return true;
+            return pfBusRun(ll, theme);
         } });
         pfAdd(2, new PfJob() { @Override public boolean run() throws Exception {                // 대화방 전부(고스트 상태기) — 엔진이 칩으로 준 순서대로
             String me = ShellCore.commId(store);
@@ -1375,9 +1394,10 @@ public class ShellActivity extends Activity {
             @Override public void run() {
                 NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/food", json, 12000);
                 final String txt = r.status == 200 ? r.body : ""; warm(txt);
+                final FoodCore.Parsed fpar = txt.length() > 0 ? FoodCore.parseScreen(txt) : null;          // 큰 화면 읽기는 통신 스레드에서
                 main.post(new Runnable() { @Override public void run() {
                     if (my != seqFood || txt.length() == 0) { if (txt.length() == 0 && my == seqFood) toast("맛집 화면을 받지 못했어요"); return; }
-                    food.onScreen(txt);
+                    food.apply(fpar);
                     if (!(keep && food.needData())) foodPresent(v, txt, keep);          // 캐시 화면이 떠 있으면 "받는 중" 중간 화면으로 덮지 않는다(깜빡임)
                     if (food.needData()) fetchFoodData(my, v);
                 } });
@@ -1419,11 +1439,12 @@ public class ShellActivity extends Activity {
                     new Thread(new Runnable() {
                         @Override public void run() {
                             NetPost.Res r2 = NetPost.post(ShellCore.BASE + "/screen/food", json, 20000);
-                            final String txt2 = r2.status == 200 ? r2.body : "";
+                            final String txt2 = r2.status == 200 ? r2.body : ""; warm(txt2);
+                            final FoodCore.Parsed fpar2 = txt2.length() > 0 ? FoodCore.parseScreen(txt2) : null;
                             main.post(new Runnable() { @Override public void run() {
                                 if (my != seqFood) return;
                                 if (txt2.length() == 0) { toast("맛집 화면을 받지 못했어요"); return; }
-                                food.onScreen(txt2); foodPresent(v, txt2, true);
+                                food.apply(fpar2); foodPresent(v, txt2, true);
                             } });
                         }
                     }, "shell-food2").start();
@@ -1453,15 +1474,24 @@ public class ShellActivity extends Activity {
     }
     /** 목록 화면 글을 보이되, 가게 지도가 펼쳐져 있으면 엔진이 만든 펼침을 그 카드 뒤에 끼운다(캐시에는 펼침 없는 글만 남는다). */
     private String foodBase = "";
-    private void foodPresent(ScreenView v, String txt, boolean keep) {
+    private int seqFoodP; private Runnable foodAfter;          // 끼운 글이 올라온 직후 한 번 할 일(펼침이 보이게 스크롤)
+    private void foodPresent(final ScreenView v, final String txt, final boolean keep) {
         if (txt == null || txt.length() == 0) { present(v, txt, keep); return; }
         if (!isNotMod(txt)) foodBase = txt;
-        String withP = food.openKey.length() > 0 ? food.withPanel(foodBase) : foodBase;
-        if (!withP.equals(foodBase) && !isNotMod(txt)) {
-            try { v.setScreen(parsedGet(withP), keep); shownJson.put(v, withP); return; }
-            catch (Throwable e) { /* 끼운 글이 올바르지 않으면 펼침 없이 */ }
-        }
-        present(v, txt, keep);
+        if (food.openKey.length() == 0 || isNotMod(txt)) { present(v, txt, keep); return; }
+        final int my = ++seqFoodP;
+        final String base = foodBase;
+        ioExec.execute(new Runnable() { @Override public void run() {                       // 목록 화면에 펼침을 끼우는 읽기·글 만들기는 주 스레드 밖에서
+            final String withP = food.withPanel(base);
+            ScreenCore.Screen pre = null;
+            if (!withP.equals(base)) { try { pre = parsedGet(withP); } catch (Throwable e) { pre = null; } }        // 읽기까지 여기서
+            final ScreenCore.Screen scr = pre;
+            main.post(new Runnable() { @Override public void run() {
+                if (my != seqFoodP) return;
+                if (scr != null) { v.setScreen(scr, keep); shownJson.put(v, withP); Runnable fa = foodAfter; foodAfter = null; if (fa != null) fa.run(); return; }
+                present(v, txt, keep);
+            } });
+        } });
     }
     private void foodRedraw() { if (foodBase.length() > 0) foodPresent(body, foodBase, true); }
     private int seqPanel;
@@ -1477,8 +1507,8 @@ public class ShellActivity extends Activity {
                     if (my != seqPanel || !key.equals(food.openKey)) return;
                     final boolean first = food.panelNodes == null;
                     if (!food.onPanel(txt)) { if (food.panelNodes == null) { food.closePanel(); toast("가게 지도를 열지 못했어요"); } return; }
+                    if (first) foodAfter = new Runnable() { @Override public void run() { body.revealBelow("fm." + key); } };
                     foodRedraw();
-                    if (first) body.revealBelow("fm." + key);
                     final java.util.List<String[]> need = new java.util.ArrayList<String[]>(food.panelNeed);
                     if (need.isEmpty()) return;
                     for (final String[] nd : need) {
@@ -1578,12 +1608,39 @@ public class ShellActivity extends Activity {
     private void liveSet(Location l) { if (l != null) { liveLoc = l; liveAt = System.currentTimeMillis(); saveLoc(l); if (resumed && (locf == null || !locf.tracking())) trackStart(); } }
     /** 방금(20초 안) 받은 현재 위치의 좌표(없으면 null) — 오래된 위치는 절대 돌려주지 않는다. */
     private double[] liveLL() { return liveLoc != null && System.currentTimeMillis() - liveAt < 60000L ? new double[] { liveLoc.getLatitude(), liveLoc.getLongitude() } : null; }
-    private void locateFast(final long waitMs, final LocCb cb) {
-        if (liveLoc != null && System.currentTimeMillis() - liveAt < LIVE_FRESH_MS) { cb.fix(liveLoc); return; }      // 연속 위치가 방금 받은 현재 위치
+    /** 같은 때 들어온 위치 요청은 한 번의 요청을 같이 쓴다(켤 때 · 탭 · 위치감지가 겹쳐도 위성/네트워크 요청은 하나). */
+    private static final class LocBatch { final java.util.ArrayList<LocCb> ws = new java.util.ArrayList<LocCb>(); long endAt; }
+    private LocBatch locBatch;
+    private void locateFast(final long waitMs, final LocCb cb) { locateNow(waitMs, 2000L, LIVE_FRESH_MS, cb); }
+    /** 현재 위치: maxAge 안에 받은 연속 위치가 있으면 그것을 바로, 아니면 고정밀 현재 위치(fastMs)+네트워크 위치를 동시에 요청한다. */
+    private void locateNow(final long waitMs, final long fastMs, final long maxAge, final LocCb cb) {
+        if (liveLoc != null && System.currentTimeMillis() - liveAt < maxAge) { cb.fix(liveLoc); return; }
+        if (locBatch != null && System.currentTimeMillis() < locBatch.endAt) { locBatch.ws.add(cb); return; }
         if (locf == null) locf = new LocFused(this);
-        locf.current(2000L, waitMs, new LocFused.Cb() {
-            @Override public void fix(Location l) { liveSet(l); cb.fix(l); }
-            @Override public void fail() { cb.fail(false); }
+        final LocBatch b = new LocBatch(); b.ws.add(cb); b.endAt = System.currentTimeMillis() + waitMs + 500L; locBatch = b;
+        locf.current(fastMs, waitMs, new LocFused.Cb() {
+            @Override public void fix(Location l) { liveSet(l); for (LocCb c : new java.util.ArrayList<LocCb>(b.ws)) c.fix(l); }
+            @Override public void fail() { if (locBatch == b) locBatch = null; for (LocCb c : new java.util.ArrayList<LocCb>(b.ws)) c.fail(false); }
+        });
+    }
+    /** 방금(maxAge 안) 받은 현재 위치가 있으면 그것, 없으면 null — 오래된 위치는 돌려주지 않는다. */
+    private Location liveRecent(long maxAge) { return liveLoc != null && System.currentTimeMillis() - liveAt < maxAge ? liveLoc : null; }
+    /** 앱을 켜는 순간: 권한이 있으면 곧바로 현재 위치를 잡고, 주변 버스 정류장과 노선 정보를 뒤에서 미리 받아 둔다(지도 탭이 열려 있으면 바로 그린다). */
+    private void launchLocate() {
+        if (!hasLocPerm()) return;
+        if (pfMap == null) pfMap = new MapCore(store);
+        locateNow(10000L, 1500L, 0L, new LocCb() {
+            private double[] last;
+            @Override public void fix(Location l) {
+                if (last != null && Math.abs(last[0] - l.getLatitude()) < 0.0003 && Math.abs(last[1] - l.getLongitude()) < 0.0003) return;       // 같은 자리의 다듬기는 다시 받지 않는다
+                last = new double[] { l.getLatitude(), l.getLongitude() };
+                final double[] ll = last;
+                final String theme = ShellCore.theme(store);
+                final boolean onBusNow = "map".equals(ShellCore.currentTab(store)) && "bus".equals(map.mode());
+                if (farFrom(map.busLL, l)) { map.setBusLoc(ll[0], ll[1]); if (onBusNow && resumed) loadMapBody(body, true); }
+                if (!onBusNow) pfAdd(0, new PfJob() { @Override public boolean run() throws Exception { return pfBusRun(ll, theme); } });
+            }
+            @Override public void fail(boolean noperm) { }
         });
     }
     /** 앞에 있는 동안만: 15초 · 30m 마다 현재 위치를 이어 받고, 버스 정류장 탐색이 이동을 따라가게 한다. onPause 에서 즉시 해제. */
@@ -1653,15 +1710,16 @@ public class ShellActivity extends Activity {
     }
     // ── 노선 정류장 목록 미리 받기: 도착정보가 뜬 가장 가까운 정류장의 앞 몇 개 노선은 목록을 기기에 7일 두어, 누르면 바로 그린다(정류장 목록은 거의 안 바뀐다) ──
     private long brPfAt; private String brPfSig = "";
-    private void brPrefetch() {
-        if (map.routeCount(0) == 0) return;
-        String sig = map.busView() + "|" + map.rtsSig();
+    private void brPrefetch() { brPrefetch(map); }
+    private void brPrefetch(final MapCore src) {
+        if (src.routeCount(0) == 0) return;
+        String sig = src.busView() + "|" + src.rtsSig();
         long now = System.currentTimeMillis();
         if (sig.equals(brPfSig) && now - brPfAt < 600000L) return;
         brPfSig = sig; brPfAt = now;
         final List<MapCore> jobs = new ArrayList<MapCore>();
-        for (int ri = 0, n = Math.min(4, map.routeCount(0)); ri < n; ri++) {
-            MapCore m = map.routeClone(0, ri);
+        for (int ri = 0, n = Math.min(4, src.routeCount(0)); ri < n; ri++) {
+            MapCore m = src.routeClone(0, ri);
             if (m != null && brCacheGet(m.brRid) == null) jobs.add(m);
         }
         if (jobs.isEmpty()) return;
@@ -1920,9 +1978,13 @@ public class ShellActivity extends Activity {
     // 노선도 View: 수도권 지하철일 때만 본문 위에 얹는다
     private void syncMapView() {
         boolean want = "metro".equals(map.view) && ShellCore.S_MAPB.equals(slots.length > 1 ? slots[1] : "");
-        if (!want) { if (mapView != null) mapView.setVisibility(View.GONE); return; }
+        if (!want) { if (mapView != null) mapView.setVisibility(View.INVISIBLE); return; }          // 숨겨도 그려 둔 그림을 쥔다 — 다시 열 때 바로 보인다
         if (mapView != null) { mapView.setVisibility(View.VISIBLE); mapView.setFilter(map.flt()); return; }
-        if (mapDataLoading) return;
+        ensureMetro();
+    }
+    /** 노선도 자료를 읽고(통신 스레드) 숨긴 채로 만들어 둔다 — 앱을 켠 직후 한가할 때 한 번 해 두면 노선도 탭은 그린 그림을 바로 보여 준다. */
+    private void ensureMetro() {
+        if (mapView != null || mapDataLoading) return;
         mapDataLoading = true;
         new Thread(new Runnable() {
             @Override public void run() {
@@ -1953,7 +2015,7 @@ public class ShellActivity extends Activity {
     }
     private void hideMapView() {
         closeSheet();
-        if (mapView != null) mapView.setVisibility(View.GONE);
+        if (mapView != null) mapView.setVisibility(View.INVISIBLE);
     }
 
     /** 아래에서 올라오는 팝업(역 정보·시간표). hDp > 0 이면 그 높이(dp), 음수면 화면 높이의 -hDp %. */
@@ -2546,7 +2608,9 @@ public class ShellActivity extends Activity {
             return;
         }
         home.gps = true; reloadHome();
-        locateFast(12000L, new LocCb() {
+        Location recent = liveRecent(30000L);
+        if (recent != null) gotGps(recent);                                      // 방금 받은 현재 위치는 0초에 먼저 채우고
+        locateNow(12000L, 1000L, 2500L, new LocCb() {                             // 곧바로 새로 받은 현재 위치(약 1초)로 바로잡는다
             @Override public void fix(Location l) { gotGps(l); }
             @Override public void fail(boolean noperm) { if (!home.gps) return; home.gps = false; toast("현재 위치를 찾지 못했어요"); reloadHome(); }
         });
@@ -2576,7 +2640,7 @@ public class ShellActivity extends Activity {
         }
         if (code != REQ_LOC) return;
         boolean ok = res.length > 0 && res[0] == PackageManager.PERMISSION_GRANTED;
-        if (ok) startGps(); else toast("위치 권한이 필요해요");
+        if (ok) { startGps(); launchLocate(); } else toast("위치 권한이 필요해요");
     }
 
     // 기준시각: 날짜 → 시각 고르기(네이티브 대화상자)

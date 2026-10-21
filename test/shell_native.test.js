@@ -179,6 +179,20 @@ function findAndroidJar() {
     assert.ok(/foodBase = txt/.test(sa) && /shownJson\.put\(v, withP\)/.test(sa) && !/cachePut\([^)]*withP/.test(sa), '펼친 글은 보이기만 하고 캐시에는 펼침 없는 목록만');
     assert.ok(/static void drawPath/.test(ta) && /DashPathEffect/.test(ta) && /C_ROUTE = 0xFFF07830/.test(ta) && /C_FROM = 0xFF2B7CFF/.test(ta) && /C_TO = 0xFFE8482E/.test(ta), '웹 경로 주황 점선 · 출발 파랑 · 도착 빨강');
   });
+  await t('0초 체감: 켜자마자 현재 위치 · 위치감지 1초 · 누르는 즉시 스피너 · 무거운 준비물은 켠 직후 미리 · 맛집 큰 목록은 주 스레드에서 읽지 않음', async () => {
+    const v = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), vm = fs.readFileSync(N('VecMap.java'), 'utf8'), fc = fs.readFileSync(N('FoodCore.java'), 'utf8');
+    assert.ok(/launchLocate\(\);/.test(v.slice(v.indexOf('captureLastLoc();') - 900, v.indexOf('captureLastLoc();') + 20)) && /locateNow\(10000L, 1500L, 0L/.test(v), '켜는 순간 캐시 없이(maxAge 0) 현재 위치를 요청');
+    const ll = v.slice(v.indexOf('private void launchLocate()'), v.indexOf('private void launchLocate()') + 1400);
+    assert.ok(/map\.setBusLoc/.test(ll) && /pfBusRun\(ll, theme\)/.test(ll), '위치가 오면 정류장 기준을 잡고 주변 버스를 뒤에서 미리 받는다');
+    assert.ok(/brPrefetch\(pfMap\)/.test(v) && /private boolean pfBusRun\(double\[\] ll/.test(v), '가까운 정류장의 노선 목록까지 미리');
+    assert.ok(/locBatch/.test(v) && /locateNow\(12000L, 1000L, 2500L/.test(v) && /Location recent = liveRecent\(30000L\);\s*if \(recent != null\) gotGps\(recent\)/.test(v), '위치감지: 방금 받은 위치를 0초에 먼저 · 새 위치는 1초 제한 · 겹친 요청은 하나로');
+    assert.ok(/hintAct/.test(sv) && /cv\.drawArc\(rf2/.test(sv) && /0\.94f, 0\.94f/.test(sv) && /inbarBusy\) postInvalidateOnAnimation/.test(sv), '위치 버튼: 누르면 작아지고 즉시 도는 스피너(엔진 답을 기다리지 않는다)');
+    assert.ok(/addIdleHandler/.test(v) && /VecMap\.warmUp/.test(v) && /ensureMetro\(\);/.test(v) && /static void warmUp/.test(vm), '지도 엔진 · 노선도 자료를 켠 직후 한가할 때 미리');
+    assert.ok(/h\.post\(new Runnable\(\) \{ @Override public void run\(\) \{ if \(!destroyed && box == null\) create\(\)/.test(vm), '지도 뷰는 그리는 도중이 아니라 다음 박자에 만든다');
+    assert.ok(/mapView\.setVisibility\(View\.INVISIBLE\)/.test(v) && !/mapView\.setVisibility\(View\.GONE\)/.test(v), '노선도는 숨겨도 그림을 쥔다(다시 열면 바로)');
+    assert.ok(/FoodCore\.parseScreen\(txt\)/.test(v) && /FoodCore\.parseScreen\(txt2\)/.test(v) && !/food\.onScreen\(/.test(v.slice(v.indexOf('private void loadFood('), v.indexOf('private void reloadFood()'))), '맛집 큰 화면 읽기는 통신 스레드');
+    assert.ok(/srvJ/.test(fc) && /d\.srvJ = HomeSearchCore\.toJson/.test(fc), '엔진에 보낼 글은 받을 때 미리 만든다');
+  });
   await t('순수 네이티브 프로젝트: 소스는 native/shell 뿐 · 매니페스트에 ShellActivity 가 런처 · 웹뷰/Capacitor 흔적 없음', async () => {
     const g = fs.readFileSync(path.join(ROOT, 'shell-android', 'app', 'build.gradle'), 'utf8');
     assert.ok(/srcDirs = \['\.\.\/\.\.\/native\/shell'\]/.test(g), '소스 경로');
