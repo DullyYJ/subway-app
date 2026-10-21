@@ -15,6 +15,7 @@ var hcRes = (typeof resConvertPath === 'function') ? { conv: resConvertPath, rv:
 var hcAi = (typeof aiScreen === 'function') ? aiScreen : (function () { try { return require('./aicard').aiScreen; } catch (e) { return null; } })();
 var hcCong = (typeof congScreen === 'function') ? { screen: congScreen, facts: congFacts, pct: congPctSub } : (function () { try { var m = require('./cong'); return { screen: m.congScreen, facts: m.congFacts, pct: m.congPctSub }; } catch (e) { return null; } })();
 var hcScene = (typeof sceneDecide === 'function') ? sceneDecide : (function () { try { return require('./scene').sceneDecide; } catch (e) { return null; } })();
+var hcPvl = (typeof pvlPillNode === 'function') ? pvlPillNode : (function () { try { return require('./pvlabel').pvlPillNode; } catch (e) { return null; } })();
 var hcTalk = (typeof talkScreen === 'function') ? talkScreen : (function () { try { return require('./talkcard').talkScreen; } catch (e) { return null; } })();
 function hcNum(v, d) { v = Number(v); return isFinite(v) ? v : d; }
 function hcArr(v) { return Array.isArray(v) ? v : []; }
@@ -94,6 +95,7 @@ function hcPanel(kids, o) {
   o = o || {};
   var p = { t: 'panel', pad: [14, 0, 14, o.pb != null ? o.pb : HC_GAP], ip: o.ip || [16, 14, 16, 14], r: o.r || 16, kids: kids };
   if (o.lb) { p.lb = o.lb; p.lc = o.lc || HC_ARROW; }
+  if (o.pv) { p.kids = [o.pv].concat(kids); p.glow = true; }                // 예상 라벨 + 무지개 테두리(웹 preview-glow)
   return p;
 }
 function hcSec(label, o) {
@@ -192,10 +194,12 @@ function hcardsScreen(inp, f) {
     if (scn) { try { sceneHint = hcStr(JSON.parse(scn.sc).hint, 60); } catch (e) { sceneHint = ''; } }
     var bd = congS.info && typeof congS.info.badge === 'string' ? congS.info.badge : '';
     body.push(hcSec('혼잡도', { badge: scn ? '' : bd, bc: hcCssColor(congS.info && congS.info.bbg), hint: scn ? sceneHint : '', btn: '\uD83D\uDCCD 위치 공유', act: HC_SHARE }));
-    if (scn) body.push(hcPanel([scn], { ip: [15, 10, 10, 10], lb: 4, lc: bar }));          // 장면만 보일 땐 안쪽 여백을 줄여 장면에 자리를 더 준다(웹 .cs-on)
-    else body.push(hcPanel(ck, { ip: [17, 14, 14, 14], lb: 4, lc: bar }));
+    var pvBt = f.r && typeof f.r === 'object' && f.r.bt != null ? hcNum(f.r.bt, null) : null, pvMetro = f.r && typeof f.r === 'object' && f.r.metro === true;
+    var pvC = hcPvl ? hcPvl('cong', pvBt, pvMetro, now, tz) : null, pvA = hcPvl ? hcPvl('ai', pvBt, pvMetro, now, tz) : null;
+    if (scn) body.push(hcPanel([scn], { ip: [15, 10, 10, 10], lb: 4, lc: bar, pv: pvC }));          // 장면만 보일 땐 안쪽 여백을 줄여 장면에 자리를 더 준다(웹 .cs-on)
+    else body.push(hcPanel(ck, { ip: [17, 14, 14, 14], lb: 4, lc: bar, pv: pvC }));
   }
-  if (aiS && aiS.ok) { body.push(hcSec('AI 승무원')); body.push(hcPanel(hcKids(aiS), { ip: [16, 14, 16, 14] })); }
+  if (aiS && aiS.ok) { body.push(hcSec('AI 승무원')); body.push(hcPanel(hcKids(aiS), { ip: [16, 14, 16, 14], pv: hcPvl ? hcPvl('ai', f.r && f.r.bt != null ? hcNum(f.r.bt, null) : null, !!(f.r && f.r.metro === true), now, tz) : null })); }
   if (talkS && talkS.ok) body.push(hcPanel(hcKids(talkS), { ip: [12, 10, 12, 10], r: 14, pb: HC_BOTTOM }));
   var out = { ok: true, v: HC_V, screen: 'hcards', cover: 'chips', head: [], body: body, info: { ai: aiS && aiS.ok ? aiS.info.mode : '', cong: cs.mode, stn: stn, near: near ? near[0] : '' } };
   out.rev = 'h' + HC_V + ':' + hcHash(JSON.stringify(body));
