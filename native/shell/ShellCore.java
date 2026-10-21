@@ -18,7 +18,7 @@ public final class ShellCore {
 
     public static final String BASE = "https://route-v2.phg0643.workers.dev";
     /** 껍데기가 아는 화면 규격(ScreenNativePlugin 의 status cap 과 같은 단계). */
-    public static final int CAP = 19;
+    public static final int CAP = 20;
     /** 설정 화면 요청의 cap — 3 이면 하위 화면 행동이 'web' 이라 껍데기가 안 열 수 있는 것은 '아직 안 옮겼어요'로 알린다. */
     public static final int SETTINGS_CAP = 8;
 
