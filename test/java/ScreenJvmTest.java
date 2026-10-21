@@ -989,6 +989,13 @@ public class ScreenJvmTest {
             try { ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"x\",\"head\":[" + bad + "],\"body\":[]}"); ok(false, "runner: 잘못된 값은 거절 " + bad); }
             catch (Exception ex) { ok(true, "runner: 잘못된 값은 거절 " + bad); }
         }
+        // ── 타임라인 칸 흐림(ps) · 지금 칸(hr) ──
+        try {
+            ScreenCore.Layout pl = ScreenCore.layout(ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"x\",\"head\":[{\"t\":\"trk\",\"cells\":[{\"n\":\"가\",\"dk\":\"e\",\"dc\":\"#0a84ff\"},{\"n\":\"나\",\"dk\":\"r\",\"dc\":\"#0a84ff\",\"ps\":true},{\"n\":\"다\",\"dk\":\"r\",\"dc\":\"#0a84ff\",\"hr\":true}]}],\"body\":[]}"), 360f, M);
+            int nps = 0, nhr = 0;
+            for (ScreenCore.Item q : pl.head) if (q.kind == ScreenCore.K_TRK) { if (q.ps) nps++; if (q.hr) nhr++; }
+            ok(nps == 1 && nhr == 1, "trk 칸: 지나간 칸(ps) · 지금 칸(hr) 표시");
+        } catch (Exception ex) { ok(false, "trk ps/hr 읽기: " + ex); }
         // ── 무지개 테두리 카드(panel glow) ──
         try {
             ScreenCore.Layout gl = ScreenCore.layout(ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"x\",\"head\":[],\"body\":[{\"t\":\"panel\",\"glow\":true,\"kids\":[{\"t\":\"text\",\"s\":\"가\"}]},{\"t\":\"panel\",\"kids\":[{\"t\":\"text\",\"s\":\"나\"}]}]}"), 360f, M);
