@@ -39,7 +39,7 @@ function findAndroidJar() {
   await t('안드로이드 계층(ShellActivity)을 진짜 android.jar 로 컴파일', async () => {
     const jar = findAndroidJar(); if (!jar) return 'skip';
     const j = path.join(out, 'j'); fs.mkdirSync(j);
-    let r = spawnSync('javac', ['-encoding', 'UTF-8', '-Xlint:all', '-Xlint:-deprecation', '-cp', jar, '-d', j, N('ScreenCore.java'), N('NetPost.java'), N('SceneModel.java'), N('SceneUtil.java'), N('SceneHaptics.java'), N('SceneCv.java'), N('SceneArt.java'), N('SceneActs.java'), N('SceneCore.java'), N('AndroidCv.java'), N('SceneDriver.java'), N('ScreenView.java'), N('ShellCore.java'), N('HomeSearchCore.java'), N('RouteFetchCore.java'), N('HomeCore.java'), N('BoardCore.java'), N('ChatCore.java'), N('FoodCore.java'), N('MapCore.java'), N('FavCore.java'), N('HcardsCore.java'), N('RideCore.java'), N('RulesCore.java'), N('LegacyCore.java'), N('RideOverlay.java'), N('PowerInfo.java'), N('RecoNotify.java'), N('CmCore.java'), N('GwCore.java'), N('DevCore.java'), N('ErrCore.java'), N('ErrLog.java'), N('RecoGo.java'), N('ShareCore.java'), N('OvCore.java'), N('ShareArt.java'), N('ShareProvider.java'), N('TileMapCore.java'), N('TileLoader.java'), N('TileMapArt.java'), N('TileMapView.java'), N('WidgetGeo.java'), N('WidgetSim.java'), N('WidgetArt.java'), N('WidgetCore.java'), N('GdmWidgetBase.java'), N('GdmWidgetHB.java'), N('GdmWidgetHW.java'), N('GdmWidgetVB.java'), N('GdmWidgetVW.java'), N('GdmWidgetReceiver.java'), N('CommuteAlarm.java'), N('CommuteReceiver.java'), N('RideService.java'), N('RideWidget.java'), N('MetroMapData.java'), N('MetroCamera.java'), N('MetroRenderer.java'), N('MetroMapView.java'), N('ShellActivity.java')], { env: ENV, encoding: 'utf8' });
+    let r = spawnSync('javac', ['-encoding', 'UTF-8', '-Xlint:all', '-Xlint:-deprecation', '-cp', jar, '-d', j, N('ScreenCore.java'), N('NetPost.java'), N('SceneModel.java'), N('SceneUtil.java'), N('SceneHaptics.java'), N('SceneCv.java'), N('SceneArt.java'), N('SceneActs.java'), N('SceneCore.java'), N('AndroidCv.java'), N('SceneDriver.java'), N('ScreenView.java'), N('ShellCore.java'), N('HomeSearchCore.java'), N('RouteFetchCore.java'), N('HomeCore.java'), N('BoardCore.java'), N('ChatCore.java'), N('FoodCore.java'), N('MapCore.java'), N('FavCore.java'), N('HcardsCore.java'), N('RideCore.java'), N('RulesCore.java'), N('LegacyCore.java'), N('RideOverlay.java'), N('PowerInfo.java'), N('RecoNotify.java'), N('CmCore.java'), N('GwCore.java'), N('DevCore.java'), N('ErrCore.java'), N('ErrLog.java'), N('RecoGo.java'), N('ShareCore.java'), N('OvCore.java'), N('ShareArt.java'), N('ShareProvider.java'), N('TileMapCore.java'), N('TileLoader.java'), N('TileMapArt.java'), N('TileMapView.java'), N('WidgetGeo.java'), N('WidgetSim.java'), N('WidgetArt.java'), N('WidgetCore.java'), N('GdmWidgetBase.java'), N('GdmWidgetHB.java'), N('GdmWidgetHW.java'), N('GdmWidgetVB.java'), N('GdmWidgetVW.java'), N('GdmWidgetReceiver.java'), N('CommuteAlarm.java'), N('CommuteReceiver.java'), N('GdmApp.java'), N('RideService.java'), N('RideWidget.java'), N('MetroMapData.java'), N('MetroCamera.java'), N('MetroRenderer.java'), N('MetroMapView.java'), N('ShellActivity.java')], { env: ENV, encoding: 'utf8' });
     assert.strictEqual(r.status, 0, (r.stderr || '').split('\n').filter(l => !/^Picked up/.test(l)).join(' / ').slice(0, 1500));
     assert(fs.existsSync(path.join(j, 'com', 'dullyyj', 'subway', 'ShellActivity.class')));
   });
@@ -66,6 +66,22 @@ function findAndroidJar() {
     const dg = v.slice(v.indexOf('private String cacheGet('), v.indexOf('private final java.util.concurrent.ExecutorService ioExec'));
     assert.ok(!/diskGet\(/.test(dg), '주 스레드 캐시 읽기는 파일을 열지 않는다');
   });
+  await t('주 스레드 잔여 I/O 제거: 설정 · 글꼴은 Application 에서 미리 · 캐시 파일 "있나?" 는 메모리 목록으로 · 위치 읽기는 IO', async () => {
+    const v = fs.readFileSync(N('ShellActivity.java'), 'utf8'), a = fs.readFileSync(N('GdmApp.java'), 'utf8');
+    const man = fs.readFileSync(path.join(ROOT, 'shell-android', 'app', 'src', 'main', 'AndroidManifest.xml'), 'utf8');
+    assert.ok(/android:name="\.GdmApp"/.test(man), '매니페스트에 Application 등록');
+    assert.ok(/new Thread\(/.test(a) && /preloadFaces\(/.test(a) && /getSharedPreferences\(ShellActivity\.PREFS/.test(a) && /getSharedPreferences\(RideService\.PREFS/.test(a), '설정 2개 · 글꼴을 뒤 스레드에서 미리');
+    const hc = v.slice(v.indexOf('private boolean haveCached('), v.indexOf('private final java.util.concurrent.ConcurrentHashMap<String, String> delayBodies'));
+    assert.ok(!/isFile\(|\.length\(\)|lastModified\(/.test(hc) && /diskMtime\(/.test(hc), 'haveCached 는 파일을 보지 않는다');
+    const ca = v.slice(v.indexOf('private long cacheAge('), v.indexOf('private boolean pfNeeds('));
+    assert.ok(!/isFile\(|lastModified\(/.test(ca), 'cacheAge 도 파일을 보지 않는다');
+    const dm = v.slice(v.indexOf('private long diskMtime('), v.indexOf('private void cachePut('));
+    assert.ok(/Looper\.myLooper\(\) != Looper\.getMainLooper\(\)/.test(dm) && /idxReady\.await/.test(dm), '주 스레드는 기다리지 않는다(다른 스레드만 목록 훑기를 기다림)');
+    assert.ok(/listFiles\(\)/.test(v.slice(v.indexOf('private void preloadDisk()'), v.indexOf('private final java.util.concurrent.ConcurrentHashMap<String, Long> diskIdx'))), '캐시 폴더 훑기는 IO 스레드 안');
+    const cl = v.slice(v.indexOf('private void captureLastLoc()'), v.indexOf('private void captureLastLoc()') + 400);
+    assert.ok(/ioExec\.execute/.test(cl), '위치 읽기는 IO 스레드');
+    assert.ok(/diskIdx\.put\(diskName\(key\)/.test(v) && /diskIdx\.remove\(diskName\(old\)\)/.test(v), '쓰기 · 지우기가 목록을 맞춘다');
+  });
   await t('모든 탭 미리 받기(0초 병렬 · 예외 탭 없음): 지금 칸의 요청 번호를 올리지 않고 캐시에만 넣는다 · 스켈레톤 · 마지막 위치', async () => {
     const v = fs.readFileSync(N('ShellActivity.java'), 'utf8');
     const m = v.slice(v.indexOf('private void prefetchTabs()'), v.indexOf('private void cachePutAsync('));
@@ -73,7 +89,7 @@ function findAndroidJar() {
     for (const f of ['/screen/home', '/screen/cchips', '/screen/chat', '/screen/board', '/screen/map', '/screen/food', 'prefetchNews', 'shopCall(', 'S_SETTINGS', 'catValues', 'modeOverride']) assert.ok(m.includes(f), f + ' 미리 받기');
     assert.ok(!/\+\+seq/.test(m) && !/present\(/.test(m), '진행 중인 칸을 건드리지 않는다');
     assert.ok(!/loadFood\(|locateForFood|locateOnce\(/.test(m), '미리 받기가 권한 안내를 띄우지 않는다');
-    assert.ok(!/postDelayed\([^)]*prefetchTabs/.test(v) && /captureLastLoc\(\);\s*prefetchTabs\(\);/.test(v), '지연 없이 켜는 즉시 시작');
+    assert.ok(!/postDelayed\([^)]*prefetchTabs/.test(v) && /captureLastLoc\(\);\s*ioExec\.execute\([^;]*main\.post\([^;]*prefetchTabs\(\);/.test(v), '지연 타이머 없이 켜는 즉시 시작(캐시 파일 목록 훑기 직후)');
     assert.ok(/prefetchPut\(/.test(m) && /expectId\(key\)/.test(v), '받은 글은 화면 이름을 확인하고 캐시에 넣는다');
     assert.ok(/showSkeleton\(v, screen\)/.test(v) && /skeletonScreen/.test(v), '캐시가 없으면 뼈대를 먼저 띄운다');
     assert.ok(/restoreState\(ck, json\)/.test(v) && /diskTtl\(key\)/.test(v), '캐시 화면은 눌림 상태까지 되살리고 모든 화면을 디스크에 둔다');

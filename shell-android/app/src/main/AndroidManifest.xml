@@ -16,6 +16,7 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
+        android:name=".GdmApp"
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="길동무"

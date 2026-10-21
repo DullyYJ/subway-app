@@ -162,7 +162,7 @@ public class ShellActivity extends Activity {
         widgetLaunch();
         gwSync(false);
         captureLastLoc();
-        prefetchTabs();                                   // 켜는 즉시(0초) 모든 탭 화면을 병렬로 미리 받는다
+        ioExec.execute(new Runnable() { @Override public void run() { main.post(new Runnable() { @Override public void run() { prefetchTabs(); } }); } });     // 켜는 즉시(0초) 모든 탭 화면을 병렬로 미리 받는다 — 캐시 파일 목록 훑기가 끝난 뒤(주 스레드가 파일을 확인하지 않게)
     }
 
     /** 앱을 켜면 출발지를 내 위치로 자동으로 잡는다(이미 경로를 보고 있거나 출발지를 골랐으면 건드리지 않는다). 권한 안내는 처음 한 번만 묻는다. */
@@ -385,7 +385,7 @@ public class ShellActivity extends Activity {
     private boolean haveCached(String key) {
         if (scrKeys.contains(key)) return true;
         long ttl = ShellCore.diskTtl(key);
-        if (ttl > 0L) { File f = diskFile(key); return f.isFile() && f.length() > 2 && System.currentTimeMillis() - f.lastModified() <= ttl; }
+        if (ttl > 0L) { long m = diskMtime(key); return m > 0L && System.currentTimeMillis() - m <= ttl; }
         return false;
     }
     private final java.util.concurrent.ConcurrentHashMap<String, String> delayBodies = new java.util.concurrent.ConcurrentHashMap<String, String>();
@@ -458,8 +458,23 @@ public class ShellActivity extends Activity {
     /** 켤 때: 지금 탭의 화면 글을 IO 스레드에서 미리 읽고 해석해 둔다(첫 그림이 파일 읽기를 기다리지 않게). */
     private void preloadDisk() {
         ioExec.execute(new Runnable() { @Override public void run() {          // 설정 값으로 열쇠를 만드는 일도 IO 스레드에서(설정 파일이 덜 읽혔어도 주 스레드가 기다리지 않는다)
+            try {                                                              // 캐시 폴더를 한 번 훑어 파일 목록(이름 · 수정 시각)을 메모리에 둔다 — 이후 "있나?" 는 파일을 열지 않고 메모리에서 답한다
+                File[] fs = new File(getCacheDir(), "scr").listFiles();
+                if (fs != null) for (File f : fs) { String n = f.getName(); if (n.endsWith(".json") && f.length() > 2) diskIdx.put(n.substring(0, n.length() - 5), f.lastModified()); }
+            } catch (Throwable ignored) { }
+            idxReady.countDown();
             try { for (String k : ShellCore.warmKeys(store, ShellCore.currentTab(store))) diskWarmAsync(k); } catch (Throwable ignored) { }
         } });
+    }
+    /** 캐시 파일 목록(파일 이름 → 수정 시각). IO 스레드가 채우고(훑기 · 쓰기 · 지우기) 모든 스레드가 읽는다. */
+    private final java.util.concurrent.ConcurrentHashMap<String, Long> diskIdx = new java.util.concurrent.ConcurrentHashMap<String, Long>();
+    private final java.util.concurrent.CountDownLatch idxReady = new java.util.concurrent.CountDownLatch(1);
+    private static String diskName(String key) { return Integer.toHexString(key.hashCode()); }
+    /** 캐시 파일의 수정 시각(없으면 -1). 파일을 열지 않는다 — 주 스레드가 아닌 곳에서는 처음 훑기가 끝나기를 잠깐(최대 1초) 기다린다. */
+    private long diskMtime(String key) {
+        if (idxReady.getCount() > 0 && Looper.myLooper() != Looper.getMainLooper()) { try { idxReady.await(1, java.util.concurrent.TimeUnit.SECONDS); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); } }
+        Long m = diskIdx.get(diskName(key));
+        return m == null ? -1L : m;
     }
     private void cachePut(String key, String json) {
         scrCache.put(key, json); scrKeys.add(key);
@@ -472,10 +487,10 @@ public class ShellActivity extends Activity {
         String old = lastSetKey; lastSetKey = key;
         if (old.length() == 0 || old.equals(key)) return;
         scrCache.remove(old); scrKeys.remove(old); store.put(ShellCore.condKey(old), "");
-        final File f = diskFile(old);
+        final File f = diskFile(old); diskIdx.remove(diskName(old));
         ioExec.execute(new Runnable() { @Override public void run() { try { f.delete(); } catch (Throwable ignored) { } } });
     }
-    private File diskFile(String key) { return new File(new File(getCacheDir(), "scr"), Integer.toHexString(key.hashCode()) + ".json"); }
+    private File diskFile(String key) { return new File(new File(getCacheDir(), "scr"), diskName(key) + ".json"); }
     private String diskGet(String key) {
         try {
             File f = diskFile(key);
@@ -497,6 +512,7 @@ public class ShellActivity extends Activity {
                 if (!d.isDirectory()) d.mkdirs();
                 FileOutputStream os = new FileOutputStream(diskFile(key));
                 try { os.write(json.getBytes("UTF-8")); } finally { os.close(); }
+                diskIdx.put(diskName(key), System.currentTimeMillis());
             } catch (Throwable ignored) { }
         } });
     }
@@ -682,8 +698,8 @@ public class ShellActivity extends Activity {
         long now = System.currentTimeMillis();
         ShellCore.Cond c = condOf(key);
         if (c != null && c.at > 0) return Math.max(0L, now - c.at);
-        File f = diskFile(key);
-        return f.isFile() ? Math.max(0L, now - f.lastModified()) : Long.MAX_VALUE / 2;
+        long m = diskMtime(key);
+        return m > 0L ? Math.max(0L, now - m) : Long.MAX_VALUE / 2;
     }
     private boolean pfNeeds(String key) { return cacheAge(key) >= PF_SKIP_MS; }
 

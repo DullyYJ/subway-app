@@ -1881,3 +1881,10 @@ YJ(11:16, 기기 스크린샷 4장 + "모든 탭 화면을 웹과 동일하게")
   5. `captureLastLoc`(위치 서비스 IPC)를 IO 스레드로.
 - **시험**: ShellJvmTest +5(warmKeys 순서·모든 탭·중복 없음·디스크 가능한 것만·모르는 탭) · shell_native +1(순서·keep·뼈대 미룸·cacheGet 에 diskGet 없음) · android.jar 컴파일 통과. 엔진/워커 변경 없음(워커 s121 그대로).
 - **정직(기기 미확인)**: 시간은 JVM 기준. 남은 주 스레드 일: 설정 값 읽기(메모리, 파일 읽기가 끝난 뒤), 글꼴 2개 불러오기(`preloadFaces`, 글자 폭이 글꼴에 달려 먼저 있어야 배치가 맞는다), 처음 한 번의 배치(relayout), `prefetchTabs` 의 캐시 파일 존재 확인 몇 번. "바뀐 칸만 갱신"은 화면 전체가 한 캔버스라 글이 같으면 건너뛰고(위 3), 다르면 보던 글 위치를 id 로 붙잡아 전체를 다시 배치한다(칸 단위 부분 배치는 아님).
+
+## s123 (2026-10-21) — 주 스레드 잔여 I/O 제거
+- **`GdmApp`(새 Application, 매니페스트 `android:name=".GdmApp"`)**: 프로세스가 시작되는 순간 뒤 스레드가 설정 파일 2개(`gdm_shell` · `gdm_ride`)와 글꼴 2개(`ScreenView.preloadFaces`)를 미리 읽는다. 화면이 같은 것을 부르면 이미 끝나 있거나 잠깐만 기다린다(`preloadFaces` 는 synchronized).
+- **캐시 파일 "있나?"(`haveCached` · `cacheAge`)**: 파일을 열지 않고 메모리 목록 `diskIdx`(파일 이름 → 수정 시각)에서 답한다. 목록은 IO 스레드가 켤 때 폴더를 한 번 훑어 채우고(`preloadDisk`), 쓰기(`diskPut`)·지우기가 맞춘다. 주 스레드 밖에서 부르면 첫 훑기가 끝나기를 최대 1초 기다린다(주 스레드는 기다리지 않음). `prefetchTabs` 는 훑기가 끝난 직후(IO 큐 순서) 주 스레드에서 시작.
+- **마지막 위치(`captureLastLoc`)**: IO 스레드.
+- **시험**: shell_native +1(Application 등록 · 설정/글꼴 미리 · 파일 안 여는 haveCached/cacheAge · 주 스레드 비대기 · 훑기는 IO) · 기존 '켜는 즉시 prefetch' 점검을 새 순서로 고침 · widget/scene native 통과 · android.jar 컴파일 통과.
+- **남은 주 스레드 일(피할 수 없는 것)**: 처음 화면 배치(relayout), 메모리 값 읽기, 화면 올리기(그리기). 기기 미확인: 실제 첫 화면 시간. APK 는 push 하면 CI(`build-shell.yml`) 가 `gildongmu-native-debug` 로 만든다.
