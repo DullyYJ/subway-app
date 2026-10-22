@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-22s148";
+var ENGINE_VERSION = "route-v2-2026-10-22s150";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -15105,7 +15105,7 @@ function homeFacts(f) {
   return {
     start: homeStr(f.start, 120), dest: homeStr(f.dest, 120),
     active: f.active === 'start' || f.active === 'dest' ? f.active : '',
-    startSet: !!f.startSet, destSet: !!f.destSet, gps: !!f.gps,
+    startSet: !!f.startSet, destSet: !!f.destSet, gps: !!f.gps, rs: !!f.rs,
     base: { ms: ms, tzo: tzo, today: today, hol: !!b.hol }
   };
 }
@@ -15189,17 +15189,17 @@ function homeScreen(inp, factsIn, dataIn) {
   var ready = (f.startSet && f.destSet) || (f.start.trim().length > 0 && f.dest.trim().length > 0);
   var act = function (v) { return { a: 'call', v: v }; };
   var kids = [];
-  var inb = function (key, hint, val, dot, btn, onc, ckf, dim, act) {
+  var inb = function (key, hint, val, dot, btn, onc, ckf, dim, act, spin) {
     return { t: 'inbar', key: key, hint: hint, value: val, maxlen: 60, h: HOME_ROW_H, size: 15, bold: true, r: 0, fill: '', line: '', dot: dot, pad: [0, 0, 14, 0],
-      ifill: 'card2', ifh: 17, ifr: 11, btn: btn, bh: 33, bsize: 12, bpx: 16, onc: onc, ckf: ckf, watch: true, dim: dim, act: act, eact: { a: 'call', v: 'rt.enter' } };
+      ifill: 'card2', ifh: 17, ifr: 11, btn: btn, bh: 33, bsize: 12, bpx: 16, onc: onc, ckf: ckf, watch: true, dim: dim, spin: !!spin, act: act, eact: { a: 'call', v: 'rt.enter' } };
   };
   var line = { t: 'divider', c: 'border2' };
-  kids.push(inb('start', '\ucd9c\ubc1c\uc9c0 \uac80\uc0c9', f.start, '#0a84ff', f.gps ? '\uac10\uc9c0 \uc911' : '\uc704\uce58 \uac10\uc9c0', '#0a84ff', '#ffffff', f.gps, act('rt.gps')));
+  kids.push(inb('start', '\ucd9c\ubc1c\uc9c0 \uac80\uc0c9', f.start, '#0a84ff', f.gps ? '\uac10\uc9c0 \uc911' : '\uc704\uce58 \uac10\uc9c0', '#0a84ff', '#ffffff', f.gps, act('rt.gps'), f.gps));
   kids.push({ t: 'swap', size: 34, fill: '#0a84ff', line: 'bg', tc: 'white', icon: HOME_SWAP_ICON, act: act('rt.swap') });
   var rowsS = f.active === 'start' ? sugs : [], rowsD = f.active === 'dest' ? sugs : [];
   kids.push(line);
   rowsS.forEach(function (r) { kids.push(r); });
-  kids.push(inb('dest', '\ub3c4\ucc29\uc9c0 \uac80\uc0c9', f.dest, '#ff3b30', '\uacbd\ub85c \ud0d0\uc0c9', 'gold', '#121214', !ready, act('rt.go')));
+  kids.push(inb('dest', '\ub3c4\ucc29\uc9c0 \uac80\uc0c9', f.dest, '#ff3b30', '\uacbd\ub85c \ud0d0\uc0c9', 'gold', '#121214', !ready || f.rs, act('rt.go'), f.rs));       // \ub3c4\ucc29\uc9c0 \ubbf8\uc785\ub825 \ud750\ub9bc(\ub3cc\uc9c0 \uc54a\uc74c) \u2260 \uacbd\ub85c \ucc3e\ub294 \uc911(\ub3cc\uc544\uac04\ub2e4 \u2014 f.rs)
   rowsD.forEach(function (r) { kids.push(r); });
   kids.push(line);
   var custom = f.base.ms != null;
@@ -19674,7 +19674,7 @@ function mapTimetableSheet(f) {
         txt += mm + (i < r.m.length - 1 ? '  ' : '');
       });
       var n = { t: 'box', s: txt, size: 13, lh: 1.5, color: 'text', fill: 'card2', line: 'border', r: 9, ip: [10, 7, 10, 7], pad: [0, 0, 0, 4] };
-      if (hl.length) n.hl = hl;
+      if (hl.length) { n.hl = hl; n.fc = 'n' + mapHash(line + '|' + (day || '-') + '|' + (dir ? dir.dk : '')); }      // \uc9c0\uae08 \uc2dc\uac01 \ub2e4\uc74c \uc5f4\ucc28\uac00 \ub4e0 \uc904 \u2014 \uc571\uc774 \uc2dc\uac04\ud45c\ub97c \uc5f4 \ub54c \uadf8 \uc904\ub85c \ub0b4\ub824 \ubcf4\uc778\ub2e4
       kids.push(n);
     });
   }
@@ -20048,12 +20048,14 @@ function mapBusBody(f, info) {
   info.stops = stops.map(mapStopKeep);
   var foc = (sel >= 0 && sel < stops.length) ? pidx[sel] : -1;
   head.push(mapBusTmap(pts, foc));
-  var pending = res.a0 === undefined;
-  if (pending) info.bus = { st: 'need', vw: 'near', need: stops.map(function (s, i) { return { k: 'a' + i, url: mapBusArrUrl(s) }; }) };
+  // \uc815\ub958\uc7a5\ub9c8\ub2e4 \ub530\ub85c \ubcf8\ub2e4: \uc544\uc9c1 \ubabb \ubc1b\uc740 \uc815\ub958\uc7a5\uc740 '\ub3c4\ucc29\uc815\ubcf4 \uc5c6\uc74c'\uc774 \uc544\ub2c8\ub77c '\ubd88\ub7ec\uc624\ub294 \uc911'\uc73c\ub85c \ub450\uace0, \ubabb \ubc1b\uc740 \uac83\ub9cc \ub2e4\uc2dc \ubc1b\uc73c\ub77c\uace0 \ud55c\ub2e4(\ubc1b\uc740 \uac83\uae4c\uc9c0 \ub2e4\uc2dc \ubc1b\uc9c0 \uc54a\ub294\ub2e4)
+  var miss = [];
+  stops.forEach(function (s, i) { if (res['a' + i] === undefined) miss.push({ k: 'a' + i, url: mapBusArrUrl(s) }); });
+  if (miss.length) info.bus = { st: 'need', vw: 'near', need: miss };
   else info.bus = { st: 'ok', vw: 'near', n: stops.length };
   var body = [];
   stops.forEach(function (s, i) {
-    body.push(mapBusCard(s, { mode: 'near', i: i, n: i + 1, alias: al[s.id], fav: !!favSet[s.id], pi: pidx[i], on: i === sel, rows: pending ? null : mapBusArrView(s, res, 'a' + i, info, i) }));
+    body.push(mapBusCard(s, { mode: 'near', i: i, n: i + 1, alias: al[s.id], fav: !!favSet[s.id], pi: pidx[i], on: i === sel, rows: res['a' + i] === undefined ? null : mapBusArrView(s, res, 'a' + i, info, i) }));
   });
   body.push({ t: 'text', s: '\ub3c4\ucc29 \uc2dc\uac04\uc740 \uc2e4\uc2dc\uac04 \uc815\ubcf4\ub77c \uc870\uae08\uc529 \ub2ec\ub77c\uc9c8 \uc218 \uc788\uc5b4\uc694.', size: 11, color: 'sub', align: 'center', pad: [10, 16, 18, 16] });
   return { head: head, body: body };
