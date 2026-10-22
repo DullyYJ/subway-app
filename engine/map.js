@@ -269,7 +269,10 @@ function mapScreen(inp, factsIn, dataIn) {
 var MAP_TAGO_BASE = 'https://apis.data.go.kr/1613000/';
 var MAP_SEOUL_BOX = [37.41, 37.72, 126.76, 127.19];
 var MAP_EXIT_RE = /역\s*\d*\s*번?\s*출구|역\s*출구/;
-var MAP_STOP_DUP_M = 25, MAP_EXIT_NEAR_M = 350, MAP_NEAR_BASE = 6, MAP_NEAR_MAX = 16;
+var MAP_STOP_DUP_M = 3, MAP_EXIT_NEAR_M = 350;
+var MAP_NEAR_R = 300, MAP_NEAR_CAP = 40, MAP_NEAR_MIN = 3;       // 내 주변 정류장: 반경 300m 안은 전부(최대 40곳) — 하나도 없으면 가까운 순 3곳
+var MAP_Q = 1000, MAP_QR = 450;                                    // 조회 좌표는 0.001°(약 100m) 칸의 가운데로 맞춘다(서버·기기 캐시가 같은 칸에서 맞는다) — 그만큼 반경을 300 → 450m 로 넉넉히 받고, 거리는 늘 내 진짜 좌표로 다시 잰다
+function mapQ(v) { return Math.round(Number(v) * MAP_Q) / MAP_Q; }
 function mapInSeoul(la, lo) { return la >= MAP_SEOUL_BOX[0] && la <= MAP_SEOUL_BOX[1] && lo >= MAP_SEOUL_BOX[2] && lo <= MAP_SEOUL_BOX[3]; }
 function mapXmlItems(text, tag) {
   var out = [], re = new RegExp('<' + tag + '[^>]*>([\\s\\S]*?)<\\/' + tag + '>', 'g'), m;
@@ -290,8 +293,9 @@ function mapSeoulStops(text, la, lo) {
     var ars = mapXmlVal(ch, 'arsId'), nm = mapXmlVal(ch, 'stationNm');
     if (!ars || !nm || String(ars).replace(/^0+/, '') === '') return;       // arsId 0 = 미정차
     var gx = parseFloat(mapXmlVal(ch, 'gpsX')), gy = parseFloat(mapXmlVal(ch, 'gpsY')), d = parseFloat(mapXmlVal(ch, 'dist'));
-    if (isNaN(gx) || isNaN(gy)) { gx = lo; gy = la; }
-    stops.push({ nm: nm, id: 'SEOUL:' + ars, ars: ars, la: gy, lo: gx, dist: isFinite(d) ? d : mapHav(la, lo, gy, gx), src: 'topis' });
+    var hasXY = !(isNaN(gx) || isNaN(gy));
+    if (!hasXY) { gx = lo; gy = la; }
+    stops.push({ nm: nm, id: 'SEOUL:' + ars, ars: ars, la: gy, lo: gx, dist: (hasXY || !isFinite(d)) ? mapHav(la, lo, gy, gx) : d, src: 'topis' });
   });
   return stops;
 }
@@ -339,8 +343,7 @@ function mapGbisStops(text, la, lo) {
   mapGgList(j, ['busStationAroundList', 'busStationList']).forEach(function (it) {
     var id = it.stationId, a = parseFloat(it.y), b = parseFloat(it.x);
     if (!id || isNaN(a) || isNaN(b)) return;
-    var d = parseFloat(it.distance);
-    stops.push({ nm: String(it.stationName || ''), id: 'GG:' + id, sid: String(id), no: it.mobileNo ? String(it.mobileNo) : '', la: a, lo: b, dist: isFinite(d) ? d : mapHav(la, lo, a, b), src: 'gbis' });
+    stops.push({ nm: String(it.stationName || ''), id: 'GG:' + id, sid: String(id), no: it.mobileNo ? String(it.mobileNo) : '', la: a, lo: b, dist: mapHav(la, lo, a, b), src: 'gbis' });
   });
   return stops;
 }
@@ -385,17 +388,22 @@ function mapDedupStops(stops) {
   var key = function (v) { return String(v || '').replace(/\s/g, ''); }, out = [];
   stops.forEach(function (st) {
     var dup = null;
-    for (var i = 0; i < out.length; i++) if (key(out[i].nm) === key(st.nm) && mapHav(out[i].la, out[i].lo, st.la, st.lo) <= MAP_STOP_DUP_M) { dup = out[i]; break; }
+    for (var i = 0; i < out.length; i++) if (out[i].id === st.id || (key(out[i].nm) === key(st.nm) && mapHav(out[i].la, out[i].lo, st.la, st.lo) <= MAP_STOP_DUP_M)) { dup = out[i]; break; }   // 같은 정류장(같은 열쇠 · 같은 이름이 3m 안)만 하나로 — 길 건너편은 다른 방향이라 따로 둔다
     if (!dup) out.push(st); else if (st.dist < dup.dist) out[out.indexOf(dup)] = st;
   });
   return out;
 }
-function mapStopOrder(stops) {                       // 가까운 순 + 역 출구(350m 안)는 전부 앞으로, 길이는 출구 수만큼 늘림
-  var byD = function (a, b) { return a.dist - b.dist; }, ex = [], rest = [];
-  stops.forEach(function (s) { if (mapStopExit(s) && s.dist <= MAP_EXIT_NEAR_M) ex.push(s); else rest.push(s); });
-  ex.sort(byD); rest.sort(byD);
-  var lim = ex.length ? Math.min(MAP_NEAR_MAX, Math.max(MAP_NEAR_BASE, ex.length + 3)) : MAP_NEAR_BASE;
-  return ex.concat(rest).slice(0, lim);
+function mapStopOrder(stops) {                       // 반경 300m 안은 전부(역 출구는 350m 안까지, 먼저) · 가까운 순 · 최대 40곳. 안에 하나도 없으면 가까운 순 3곳
+  var byD = function (a, b) { return a.dist - b.dist; }, ex = [], rest = [], far = [];
+  stops.forEach(function (s) {
+    if (mapStopExit(s) && s.dist <= MAP_EXIT_NEAR_M) ex.push(s);
+    else if (s.dist <= MAP_NEAR_R) rest.push(s);
+    else far.push(s);
+  });
+  ex.sort(byD); rest.sort(byD); far.sort(byD);
+  var out = ex.concat(rest);
+  if (!out.length) out = far.slice(0, MAP_NEAR_MIN);
+  return out.slice(0, MAP_NEAR_CAP);
 }
 function mapBusStops(f) {
   var b = f.bus, res = b.res || {}, la = Number(b.lat), lo = Number(b.lng);
@@ -408,10 +416,10 @@ function mapBusStops(f) {
   return mapStopOrder(mapDedupStops(s));
 }
 function mapBusNeedStops(la, lo) {
-  var need = [];
-  if (mapInSeoul(la, lo)) need.push({ k: 'tp', url: 'http://ws.bus.go.kr/api/rest/stationinfo/getStationByPos?tmX=' + lo + '&tmY=' + la + '&radius=800' });
-  if (mapInGG(la, lo)) need.push({ k: 'gg', url: MAP_GBIS_BASE + 'busstationservice/v2/getBusStationAroundListv2?x=' + lo + '&y=' + la + '&format=json' });
-  need.push({ k: 'tn', url: MAP_TAGO_BASE + 'BusSttnInfoInqireService/getCrdntPrxmtSttnList?serviceKey=&gpsLati=' + la + '&gpsLong=' + lo + '&numOfRows=50&pageNo=1&_type=json' });
+  var need = [], ql = mapQ(la), qo = mapQ(lo);                     // 조회는 0.001° 칸의 가운데 좌표로(같은 칸이면 서버·기기 캐시가 바로 맞는다)
+  if (mapInSeoul(la, lo)) need.push({ k: 'tp', url: 'http://ws.bus.go.kr/api/rest/stationinfo/getStationByPos?tmX=' + qo + '&tmY=' + ql + '&radius=' + MAP_QR });
+  if (mapInGG(la, lo)) need.push({ k: 'gg', url: MAP_GBIS_BASE + 'busstationservice/v2/getBusStationAroundListv2?x=' + qo + '&y=' + ql + '&format=json' });
+  need.push({ k: 'tn', url: MAP_TAGO_BASE + 'BusSttnInfoInqireService/getCrdntPrxmtSttnList?serviceKey=&gpsLati=' + ql + '&gpsLong=' + qo + '&numOfRows=50&pageNo=1&_type=json' });
   return need;
 }
 function mapBusArrUrl(s) {
@@ -586,10 +594,10 @@ function mapBusBody(f, info) {
   if (need0.some(function (n) { return res[n.k] === undefined; })) { info.bus = { st: 'need', vw: 'near', need: need0 }; return wait('주변 정류장 찾는 중...'); }
   var stops = mapApplyNearOrder(mapBusStops(f), mapBusOrd(b));                          // 사용자가 끌어서 정한 순서(b.ord) 먼저 · 새 정류장은 뒤에 거리순
   if (!stops.length && res.d1 === undefined) {                                           // 공공 API 가 모두 비었으면 서버 정류장 표(D1)로
-    info.bus = { st: 'need', vw: 'near', need: [{ k: 'd1', url: MAP_D1_BASE + '/bus-stops?lat=' + la + '&lng=' + lo + '&radius=800' }] };
+    info.bus = { st: 'need', vw: 'near', need: [{ k: 'd1', url: MAP_D1_BASE + '/bus-stops?lat=' + mapQ(la) + '&lng=' + mapQ(lo) + '&radius=' + MAP_QR }] };
     return wait('주변 정류장 찾는 중...');
   }
-  if (!stops.length) { info.bus = { st: 'empty', vw: 'near' }; return wait('주변 800m 안에 정류장을 찾지 못했어요.'); }
+  if (!stops.length) { info.bus = { st: 'empty', vw: 'near' }; return wait('주변에 정류장을 찾지 못했어요.'); }
   // 정류장 지도: 정류장마다 번호 핀(좌표가 있는 것만) + 내 위치. 핀을 누르면 그 카드(g)로, 카드를 누르면 그 핀(pi)으로 간다.
   var pts = [], pidx = [], favSet = {};
   mapBusFavs(b).forEach(function (s) { favSet[s.id] = 1; });
@@ -809,4 +817,4 @@ function mapBusRouteSheet(f0) {
   if (bar) foot = [{ t: 'panel', pad: [0, 0, 0, 0], ip: [0, 0, 0, 0], r: 0, fill: 'card', line: 'border', kids: bar }];
   return mapFinish({ ok: true, v: 1, screen: 'mapbr', cover: 'tab', head: head, body: body, foot: foot, info: info }, 'br' + (pk ? 'p' : '') + sel);
 }
-if (typeof module !== 'undefined' && module.exports) module.exports = { mapLineNum: mapLineNum, mapCdFmt: mapCdFmt, mapBusRouteSheet: mapBusRouteSheet, mapBrCity: mapBrCity, mapBrStnTago: mapBrStnTago, mapBrStnGbis: mapBrStnGbis, mapBrPos: mapBrPos, mapCityOf: mapCityOf, mapGGPreferred: mapGGPreferred, mapGbisArr: mapGbisArr, mapScreen: mapScreen, mapFacts: mapFacts, mapLinesOf: mapLinesOf, mapFind: mapFind, mapNearest: mapNearest, mapIsStationLabel: mapIsStationLabel, mapPickRow: mapPickRow, mapRegionLines: mapRegionLines, mapDedupStops: mapDedupStops, mapStopOrder: mapStopOrder, mapApplyNearOrder: mapApplyNearOrder, mapBusOrd: mapBusOrd, MAP_FILTERS: MAP_FILTERS };
+if (typeof module !== 'undefined' && module.exports) module.exports = { mapQ: mapQ, mapLineNum: mapLineNum, mapCdFmt: mapCdFmt, mapBusRouteSheet: mapBusRouteSheet, mapBrCity: mapBrCity, mapBrStnTago: mapBrStnTago, mapBrStnGbis: mapBrStnGbis, mapBrPos: mapBrPos, mapCityOf: mapCityOf, mapGGPreferred: mapGGPreferred, mapGbisArr: mapGbisArr, mapScreen: mapScreen, mapFacts: mapFacts, mapLinesOf: mapLinesOf, mapFind: mapFind, mapNearest: mapNearest, mapIsStationLabel: mapIsStationLabel, mapPickRow: mapPickRow, mapRegionLines: mapRegionLines, mapDedupStops: mapDedupStops, mapStopOrder: mapStopOrder, mapApplyNearOrder: mapApplyNearOrder, mapBusOrd: mapBusOrd, MAP_FILTERS: MAP_FILTERS };
