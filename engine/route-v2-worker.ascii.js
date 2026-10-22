@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-22s143";
+var ENGINE_VERSION = "route-v2-2026-10-22s144";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -9744,11 +9744,55 @@ function rsAlightGps(st, tr, bi) {
   if (!o || q[0] - o[0] > 120000) return false;
   return rsHav(o[1], o[2], q[1], q[2]) / ((q[0] - o[0]) / 1000) <= 2.5;
 }
+// \u2500\u2500 \ud0d1\uc2b9 \ubc84\ud2bc \ubcf4\uc815(\uc6f9 _rsLateCheck \u00b7 _rsPressTrain \u00b7 _rsPressVerify \ub97c \uc5d4\uc9c4\uc73c\ub85c) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+//   \u00b7 \uc5b4\ub290 \ucc28\ub97c \ud0d4\ub098: \ub204\ub978 \uc2dc\uac01 \uae30\uc900 \uc2dc\uac01\ud45c\uc0c1 '\ubc29\uae08(1\ubd84 \uc548\uc5d0) \ub5a0\ub09c \ucc28'\uac00 \uc788\uc73c\uba74 \uadf8 \ucc28, \uc5c6\uc73c\uba74 \ub2e4\uc74c \ucc28(12\ubd84 \uc548) \u2014 \ucd9c\ubc1c \uc2dc\uac01(:30)\uc744 \uc2b9\ucc28 \ud1b5\uacfc \uc2dc\uac01\uc73c\ub85c \uc801\ub294\ub2e4.
+//   \u00b7 \uc77c\ucc0d \ub20c\ub7ec \uc608\uc57d\uc774 \ub420 \uac83\uc774\ub77c\ub3c4 \ubc29\uae08 \ub5a0\ub09c \ucc28\uac00 \uc788\uc73c\uba74 \uc608\uc57d\ud558\uc9c0 \uc54a\uace0 \ubc14\ub85c \ud655\uc815\ud55c\ub2e4(\uc2e4\uc2dc\uac04 \uc704\uce58\uac00 \uc5c6\ub294 \ub178\uc120\uc5d0\uc11c \uc870\uae08 \ub2a6\uac8c \ub204\ub978 \uacbd\uc6b0).
+//   \u00b7 \uc2b9\ucc28\uc5ed\uc5d0\uc11c \ubd84\uba85\ud788 \uba3c \uacf3(800m \ubc16)\uc5d0\uc11c \ub20c\ub800\uc73c\uba74 \ubc84\ud2bc\uc744 \uac70\ub450\uace0 \uc54c\ub9b0\ub2e4(ride-track press).
+//   \uc2dc\uac01\ud45c\ub294 \ube44\ub3d9\uae30\ub77c \uc21c\uc218 \ud568\uc218\uc5d0\uc11c \ubabb \uc77d\ub294\ub2e4 \u2192 \uc6cc\ucee4 \uc5f0\uacb0\ubd80(handleRideStandby)\uac00 rsPressQuery \ub85c \ubb3c\uc744 \uac83\uc744 \uc815\ud574 \uc2dc\uac01\ud45c\uc5d0\uc11c \uc77d\uc5b4 req.pressTT \ub85c \ub123\uc5b4 \uc900\ub2e4.
+var RS_NEAR_M = 600;          // \uc2b9\ucc28\uc5ed\uc5d0\uc11c \uc774\ubcf4\ub2e4 \uba40\uba74 '\ubc29\uae08 \ub5a0\ub09c \ucc28' \uc778\uc815\uc744 \ud558\uc9c0 \uc54a\ub294\ub2e4
+var RS_LATE_BACK_MIN = 1;     // \ubc29\uae08 = \uc9c0\uae08 \ubd84 \u00b7 \ud55c \ubd84 \uc804
+var RS_PICK_MAX_MIN = 12;     // \ub2e4\uc74c \ucc28\uac00 \uc774\ubcf4\ub2e4 \uba40\uba74 \uac74\ub4dc\ub9ac\uc9c0 \uc54a\ub294\ub2e4
+// \uc9c0\uae08 \ub204\ub974\uba74 \ub300\uc0c1\uc774 \ub418\ub294 \uc815\ub958\uc7a5 \ubc88\ud638(\uccab \uad6c\uac04 \ub300\uae30 \u2192 st.wait, \uc544\ub2c8\uba74 \ud658\uc2b9 \ub300\uae30 \u2192 st.xw)
+function rsPressTarget(st) { if (!st) return -1; if (st.wait) return st.wait.i; if (st.xw && !st.xPend) return st.xw.i; return -1; }
+// \uc2dc\uac01\ud45c\uc5d0 \ubb3c\uc744 \uac83: { i, line, from, to, atMin, baseMs } \u2014 \uc9c0\ud558\ucca0 \uad6c\uac04\uc774 \uc544\ub2c8\uac70\ub098 \ub204\ub974\ub294 \uc190\uc9d3\uc774 \uc544\ub2c8\uba74 null
+function rsPressQuery(req) {
+  if (!req || req.act !== 'press' || !req.state || !req.state.eta || !isFinite(+req.nowMs)) return null;
+  var st = req.state, i = rsPressTarget(st), nodes = st.eta.nodes || [], n = nodes[i], nx = nodes[i + 1];
+  if (i < 0 || !n || !n.isSub || n.isBus || !n.lineName || !n.name) return null;
+  var tz = st.eta.tzOffsetMin != null && isFinite(+st.eta.tzOffsetMin) ? +st.eta.tzOffsetMin : 540;
+  var atMin = Math.floor((((+req.nowMs / 60000 + tz) % 1440) + 1440) % 1440);
+  return { i: i, line: n.lineName, from: n.name, to: (nx && nx.name) || '', atMin: atMin, baseMs: +req.nowMs };
+}
+// \uc2dc\uac01\ud45c(nt.boardTable)\uc5d0\uc11c \ub2f5\uc744 \uc77d\uc5b4 req.pressTT = { i, nowM, depMin, late } \ub85c \ubd99\uc778\ub2e4. late = \ubc29\uae08 \ub5a0\ub09c \ucc28\uc758 \ucd9c\ubc1c \ubd84(\uc5c6\uc73c\uba74 null)
+function rsAttachPressTT(req, nt) {
+  try {
+    var q = rsPressQuery(req); if (!q || !nt || typeof nt.boardTable !== 'function') return false;
+    var bl = nt.boardTable({ line: q.line, from: q.from, to: q.to, atMin: q.atMin - RS_LATE_BACK_MIN, baseMs: q.baseMs });
+    var dep = bl && bl.depMin, ok = dep != null && isFinite(dep) && dep <= q.atMin && dep >= q.atMin - RS_LATE_BACK_MIN;
+    req.pressTT = { i: q.i, nowM: q.atMin, depMin: dep != null && isFinite(dep) ? dep : null, late: ok ? dep : null };
+    return true;
+  } catch (e) { return false; }
+}
+// \uc2b9\ucc28 \ud1b5\uacfc \uc2dc\uac01(ms): \ubc29\uae08 \ub5a0\ub09c \ucc28(late) \u2192 \uadf8 \ucd9c\ubc1c \uc2dc\uac01 \u00b7 \uc5c6\uc73c\uba74 \ub2e4\uc74c \ucc28(depMin, 12\ubd84 \uc548) \u2192 \uadf8 \uc2dc\uac01 \u00b7 \uc544\ub2c8\uba74 \ub204\ub978 \uc2dc\uac01
+function rsPickMs(tt, i, now) {
+  if (!tt || tt.i !== i) return now;
+  var m = tt.late != null && isFinite(tt.late) ? tt.late : (tt.depMin != null && isFinite(tt.depMin) ? tt.depMin : null);
+  if (m == null) return now;
+  var d = m - tt.nowM; if (d < -720) d += 1440; if (d > 720) d -= 1440;
+  if (d > RS_PICK_MAX_MIN) return now;
+  return now - (now % 60000) + d * 60000 + 30000;       // \uc2dc\uac01\ud45c 06:17 \u2192 06:17:30 \ucd9c\ubc1c(\uc601\uc810\uc758 :30 \uaddc\uce59\uacfc \uac19\ub2e4)
+}
+function rsStopOf(st, i) { var stops = st.stops || [], k; for (k = 0; k < stops.length; k++) if (stops[k].i === i) return stops[k]; return null; }
+// \uc2b9\ucc28\uc5ed\uae4c\uc9c0\uc758 \uac70\ub9ac(m) \u2014 \uc704\uce58\ub098 \uc88c\ud45c\ub97c \ubaa8\ub974\uba74 null
+function rsDistToStop(st, tr, i) {
+  var s = rsStopOf(st, i); if (!s || !tr.length || !isFinite(s.lat) || !isFinite(s.lng)) return null;
+  var q = tr[tr.length - 1]; return rsHav(q[1], q[2], s.lat, s.lng);
+}
 // \ub20c\ub7ec\uc11c(\ub610\ub294 \uc608\uc57d \uc2dc\uac01\uc774 \ub418\uc5b4) \uadf8 \uad6c\uac04 \ucc28\ub7c9\uc744 \ud0d4\ub2e4\uace0 \uae30\ub85d\ud55c\ub2e4. \ub418\ub3cc\ub9b4 \ub54c \uc4f8 \uc774\uc804 \ud1b5\uacfc \uae30\ub85d\uc744 \ub3cc\ub824\uc900\ub2e4.
-function rsXCommit(st, i, now) {
+function rsXCommit(st, i, now, ms) {
   var eta = st.eta, passes = eta.passes = eta.passes || [], hit = -1, k;
   for (k = 0; k < passes.length; k++) if (passes[k].idx === i) { hit = k; break; }
-  var prev = hit >= 0 ? passes[hit] : null, np = { idx: i, ms: now, src: 'gps' };
+  var prev = hit >= 0 ? passes[hit] : null, np = { idx: i, ms: ms != null ? ms : now, src: 'gps' };
   if (hit >= 0) passes[hit] = np; else passes.push(np);
   (st.rsDone = st.rsDone || {})[i] = 1;
   delete st.xw; delete st.xPend; st.rsOpen = 0;
@@ -9788,17 +9832,36 @@ function rsActs(st, req, now, notes) {
   if (a === 'open' || a === 'pill') { st.rsOpen = now + 20000; if (st.xw) st.xw.shr = false; }
   else if (a === 'close') { st.rsOpen = 0; if (st.xw && st.xw.arrMs != null && st.xw.arrMs - now <= RS_LEAD_MS) st.xw.shr = true; }   // \ub3c4\ucc29 2\ubd84 \uc548\uc5d0 \ub2eb\uc740 \ucc28\ub7c9\uc740 \ub300\uae30 \uc54c\uc57d\uc73c\ub85c(\ub2e4\uc2dc \uc62c\ub9ac\uc9c0 \uc54a\uc74c) \u00b7 2\ubd84\ubcf4\ub2e4 \uba3c \ub54c \ub2eb\uc740 \uac83\uc740 2\ubd84 \uc548\uc774 \ub418\uba74 \uc790\ub3d9\uc73c\ub85c \ub2e4\uc2dc \uc62c\ub77c\uc628\ub2e4
   else if (a === 'press' && !st.wait && st.xw && !st.xPend) {
-    var x = st.xw;
-    if (x.arrMs != null && x.arrMs - now > RS_EARLY_MS) {      // \ub3c4\ucc29 1\ubd84 \ubc18\ubcf4\ub2e4 \uc77c\ucc0d \ub204\ub978 \uac83\uc740 \uc608\uc57d\ub9cc(\ub9c8\ucee4\uac00 \ud280\uc9c0 \uc54a\uac8c) \u2014 \uadf8 \uc2dc\uac01\uc774 \ub418\uac70\ub098 \ud0c4 \uc99d\uac70\uac00 \uc7a1\ud788\uba74 \ud655\uc815
+    var x = st.xw, tt = req.pressTT && req.pressTT.i === x.i ? req.pressTT : null, dN = rsDistToStop(st, st.trail || [], x.i);
+    var lateHit = !!(tt && tt.late != null && !(dN != null && dN > RS_NEAR_M));      // \ubc29\uae08 \ub5a0\ub09c \ucc28\uac00 \uc788\uc73c\uba74 \uc608\uc57d\ud558\uc9c0 \uc54a\uace0 \ubc14\ub85c \ud655\uc815
+    if (!lateHit && x.arrMs != null && x.arrMs - now > RS_EARLY_MS) {      // \ub3c4\ucc29 1\ubd84 \ubc18\ubcf4\ub2e4 \uc77c\ucc0d \ub204\ub978 \uac83\uc740 \uc608\uc57d\ub9cc(\ub9c8\ucee4\uac00 \ud280\uc9c0 \uc54a\uac8c) \u2014 \uadf8 \uc2dc\uac01\uc774 \ub418\uac70\ub098 \ud0c4 \uc99d\uac70\uac00 \uc7a1\ud788\uba74 \ud655\uc815
       st.xPend = { i: x.i, at: now }; st.rsOpen = 0; x.seen = true;
       st.rsUndo = { w: { i: x.i }, x: true, pend: true, prev: null, until: now + 20000 };
       notes.push('\ud658\uc2b9 \uc608\uc57d(' + x.i + '\ubc88 \u00b7 \ub3c4\ucc29 ' + Math.round((x.arrMs - now) / 1000) + '\ucd08 \uc804)');
     } else {
-      st.rsUndo = { w: { i: x.i }, x: true, prev: rsXCommit(st, x.i, now), until: now + 20000 };
-      notes.push('\ud658\uc2b9 \uc218\ub3d9 \ud655\uc815(' + x.i + '\ubc88)');
+      st.rsUndo = { w: { i: x.i }, x: true, prev: rsXCommit(st, x.i, now, rsPickMs(tt && (dN == null || dN <= RS_NEAR_M || tt.late == null) ? tt : null, x.i, now)), until: now + 20000 };
+      notes.push('\ud658\uc2b9 \uc218\ub3d9 \ud655\uc815(' + x.i + '\ubc88)' + (lateHit ? ' \u00b7 \ubc29\uae08 \ub5a0\ub09c \ucc28 \uc778\uc815' : ''));
+      rsPressVerify(st, x.i, now, notes);
     }
-  } else if (a === 'undo' && st.rsUndo && now < st.rsUndo.until && st.rsUndo.x) {
-    var ux = st.rsUndo, pxs = eta.passes || [], ki;
+  } else if (a === 'undo' && st.rsUndo && now < st.rsUndo.until && st.rsUndo.x) rsDoUndo(st, now, notes);
+  else if (a === 'press' && st.wait) {
+    w = st.wait; passes = eta.passes = eta.passes || [];
+    var tw = req.pressTT && req.pressTT.i === w.i ? req.pressTT : null, dW = rsDistToStop(st, st.trail || [], w.i);
+    var hit = -1;
+    for (k = 0; k < passes.length; k++) if (passes[k].idx === w.i) { hit = k; break; }
+    st.rsUndo = { w: w, prev: hit >= 0 ? passes[hit] : null, until: now + 20000 };
+    var np = { idx: w.i, ms: rsPickMs(tw && !(dW != null && dW > RS_NEAR_M && tw.late != null) ? tw : null, w.i, now), src: 'gps' };
+    if (hit >= 0) passes[hit] = np; else passes.push(np);
+    eta.boarded = true; eta.notDeparted = false; delete st.wait; st.rsOpen = 0;
+    notes.push('\uc2b9\ucc28 \uc218\ub3d9 \ud655\uc815(\uc624\ubc84\ub808\uc774 \ud0d1\uc2b9 \ubc84\ud2bc)' + (np.ms !== now ? ' \u00b7 \uc2dc\uac01\ud45c ' + Math.round((np.ms - now) / 1000) + '\ucd08' : ''));
+    rsPressVerify(st, w.i, now, notes);
+  } else if (a === 'undo' && st.rsUndo && now < st.rsUndo.until && !st.rsUndo.x) rsDoUndo(st, now, notes);
+}
+// \ub418\ub3cc\ub9ac\uae30: \ud658\uc2b9 \ud655\uc815(\uc608\uc57d \ud3ec\ud568) \ub610\ub294 \uccab \uad6c\uac04 \ud0d1\uc2b9 \ud655\uc815\uc744 \uc774\uc804 \uae30\ub85d\uc73c\ub85c \ub3cc\ub9b0\ub2e4
+function rsDoUndo(st, now, notes) {
+  var eta = st.eta, ux = st.rsUndo, pxs = eta.passes || [], ki;
+  if (!ux) return;
+  if (ux.x) {
     if (ux.pend) delete st.xPend;
     else {
       for (ki = pxs.length - 1; ki >= 0; ki--) if (pxs[ki].idx === ux.w.i) { if (ux.prev) pxs[ki] = ux.prev; else pxs.splice(ki, 1); }
@@ -9806,22 +9869,27 @@ function rsActs(st, req, now, notes) {
     }
     delete st.rsUndo; st.rsOpen = now + 20000; rsXwait(st, st.trail || [], now, notes); if (st.xw) { st.xw.shr = false; st.xw.seen = true; }
     notes.push('\ud658\uc2b9 \ud655\uc815 \ub418\ub3cc\ub9bc');
-  }
-  else if (a === 'press' && st.wait) {
-    w = st.wait; passes = eta.passes = eta.passes || [];
-    var hit = -1;
-    for (k = 0; k < passes.length; k++) if (passes[k].idx === w.i) { hit = k; break; }
-    st.rsUndo = { w: w, prev: hit >= 0 ? passes[hit] : null, until: now + 20000 };
-    var np = { idx: w.i, ms: now, src: 'gps' };
-    if (hit >= 0) passes[hit] = np; else passes.push(np);
-    eta.boarded = true; eta.notDeparted = false; delete st.wait; st.rsOpen = 0;
-    notes.push('\uc2b9\ucc28 \uc218\ub3d9 \ud655\uc815(\uc624\ubc84\ub808\uc774 \ud0d1\uc2b9 \ubc84\ud2bc)');
-  } else if (a === 'undo' && st.rsUndo && now < st.rsUndo.until && !st.rsUndo.x) {
-    var u = st.rsUndo, ps = eta.passes || [];
-    for (k = ps.length - 1; k >= 0; k--) if (ps[k].idx === u.w.i) { if (u.prev) ps[k] = u.prev; else ps.splice(k, 1); }
-    eta.boarded = false; eta.notDeparted = true; st.wait = u.w; delete st.rsUndo; st.rsOpen = 0;
+  } else {
+    for (ki = pxs.length - 1; ki >= 0; ki--) if (pxs[ki].idx === ux.w.i) { if (ux.prev) pxs[ki] = ux.prev; else pxs.splice(ki, 1); }
+    eta.boarded = false; eta.notDeparted = true; st.wait = ux.w; delete st.rsUndo; st.rsOpen = 0;
     notes.push('\uc2b9\ucc28 \ud655\uc815 \ub418\ub3cc\ub9bc(\uc624\ubc84\ub808\uc774)');
   }
+}
+// \ub204\ub978 \uc21c\uac04 \uc2b9\ucc28\uc5ed\uc5d0 \uc788\ub098(ride-track press): 800m \ubc16('away')\uc774\uba74 \ubc84\ud2bc\uc744 \uac70\ub450\uace0 \uc54c\ub9b0\ub2e4. \uac00\uae5d\uac70\ub098 \uc704\uce58\ub97c \ubaa8\ub974\uba74(\uc9c0\ud558) \uadf8\ub300\ub85c \uc2dc\uac01\ud45c\ub97c \ub530\ub978\ub2e4.
+function rsPressVerify(st, i, now, notes) {
+  try {
+    var s = rsStopOf(st, i), tr = st.trail || [];
+    if (!s || !isFinite(s.lat) || !isFinite(s.lng) || !tr.length || !st.rsUndo) return;
+    var res = rsTrackFn()({ nowMs: now, trail: tr, plan: { pts: [], pressPt: { lat: s.lat, lng: s.lng } }, want: { off: false, ridden: false, miss: false, bus: false, press: true } });
+    var pr = res && res.press;
+    if (!pr) return;
+    notes.push('\uc2b9\ucc28\uc5ed\ud655\uc778 ' + pr.state + (pr.distM != null ? ' ' + pr.distM + 'm' : '') + (pr.why ? ' (' + pr.why + ')' : ''));
+    if (pr.state === 'away') {
+      rsDoUndo(st, now, notes);
+      st.rsToast = { t: '\uc2b9\ucc28\uc5ed\uc5d0\uc11c ' + pr.distM + 'm \ub5a8\uc5b4\uc838 \uc788\uc5b4\uc694. \ub3c4\ucc29\ud574\uc11c \ub2e4\uc2dc \ub20c\ub7ec \uc8fc\uc138\uc694', until: now + 8000 };
+      notes.push('\uc2b9\ucc28\uc5ed\uc5d0\uc11c \uba40\uc5b4 \ubc84\ud2bc\uc744 \uac70\ub460');
+    }
+  } catch (e) { notes.push('\uc2b9\ucc28\uc5ed\ud655\uc778 \uc2e4\ud328: ' + (e && e.message)); }
 }
 // \ud0d1\uc2b9 \uc904(\uc571 \ud0d1\uc2b9 \uc2dc\ud2b8 \u00b7 \uc624\ubc84\ub808\uc774 \uacf5\ud1b5): \ub300\uae30 \uc911\uc774\uba74 \ub3c4\ucc29 2\ubd84 \uc804\ubd80\ud130(\ub610\ub294 \uc190\uc7a1\uc774\u00b7\uc54c\uc57d\uc744 \ub20c\ub7ec 20\ucd08) 'board', \uc544\ub2c8\uba74 'wait'(\uc54c\uc57d). \ud0d1\uc2b9\uc744 \ub204\ub978 \uc9c1\ud6c4 20\ucd08\ub294 'undo'. \uc544\ub2c8\uba74 'hidden'.
 //   \uc571 \uc2dc\ud2b8\uac00 \uadf8\ub9b4 \uac12: kick(\uace7 \ub3c4\ucc29 \ubb38\uad6c) \u00b7 mode('sub'|'bus') \u00b7 chip(\ub178\uc120 \uae00) \u00b7 cbg/cfg(\ub178\uc120 \uc0c9) \u00b7 bar(\ucd9c\ubc1c \ub4a4 \uc904\uc5b4\ub4dc\ub294 \ub9c9\ub300 0~1, \uc5c6\uc73c\uba74 -1) \u00b7 x(\ud658\uc2b9 \uad6c\uac04\uc774\uba74 1) \u00b7 late(\ucd9c\ubc1c 3\ubd84 \ub4a4)
@@ -9834,6 +9902,12 @@ function rsKick(dt, late, x) {
   return '\ub3c4\ucc29\ud588\uc5b4\uc694';
 }
 function rsRsState(st, r, now) {
+  var o = rsRsState0(st, r, now);
+  if (st.rsToast && now < st.rsToast.until && o && o.st && o.st !== 'hidden' && o.st !== 'undo') { o.kick = st.rsToast.t; o.late = false; }
+  else if (st.rsToast && now >= st.rsToast.until) delete st.rsToast;
+  return o;
+}
+function rsRsState0(st, r, now) {
   var base = { bar: -1, cbg: '', cfg: '#0a84ff', ch: '', um: '', kick: '', mode: '', chip: '', x: 0, late: false };
   var mk = function (stt, k, nm, bt) { var o = {}, q; for (q in base) o[q] = base[q]; o.st = stt; o.k = k; o.nm = nm; o.bt = bt; return o; };
   var nodes = (st.eta && st.eta.nodes) || [];
@@ -10260,7 +10334,7 @@ function rideStandby(req) {
   return { v: 1, state: st, ongoing: { title: O.ongoingTitle, text: text }, alert: al.alert, done: done, quit: quit, curIdx: curIdx, overlay: overlay, reco: reco, view: view, pos: r.pos ? { from: r.pos.from, to: r.pos.to, ratio: r.pos.ratio, moving: !!r.pos.moving } : null, arr: r.arr || null, zero: zero, nextMs: done ? O.stepMs : nextMs, motion: tk && tk.motion ? tk.motion : null, notes: notes };
 }
 
-function handleRideStandby(request) {
+function handleRideStandby(request, env) {
   var H = { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'access-control-allow-methods': 'POST, OPTIONS', 'access-control-allow-headers': 'content-type' };
   if (request.method === 'OPTIONS') return Promise.resolve(new Response(null, { status: 204, headers: H }));
   if (request.method !== 'POST') return Promise.resolve(new Response(JSON.stringify({ error: 'POST only' }), { status: 405, headers: H }));
@@ -10272,8 +10346,15 @@ function handleRideStandby(request) {
   }).then(function (txt) {
     var body, out;
     try { body = JSON.parse(txt); } catch (e0) { return new Response(JSON.stringify({ error: 'JSON \uc544\ub2d8' }), { status: 400, headers: H }); }
-    try { out = rideStandby(body); } catch (e) { return new Response(JSON.stringify({ error: String(e && e.message || e) }), { status: 500, headers: H }); }
-    return new Response(JSON.stringify(out), { headers: H });
+    var run = function () {
+      try { out = rideStandby(body); } catch (e) { return new Response(JSON.stringify({ error: String(e && e.message || e) }), { status: 500, headers: H }); }
+      return new Response(JSON.stringify(out), { headers: H });
+    };
+    // \ud0d1\uc2b9 \ubc84\ud2bc\uc744 \ub20c\ub800\uace0 \uc9c0\ud558\ucca0 \uad6c\uac04\uc774\uba74 \uc2dc\uac01\ud45c(\ubc29\uae08 \ub5a0\ub09c \ucc28 \u00b7 \ub2e4\uc74c \ucc28)\ub97c \uc77d\uc5b4 \ubd99\uc778\ub2e4 \u2014 \uc2dc\uac01\ud45c\ub97c \ubabb \ubd88\ub7ec\uc640\ub3c4 \uadf8\ub0e5 \ub204\ub978 \uc2dc\uac01\uc73c\ub85c \ud655\uc815\ud55c\ub2e4
+    if (typeof ntEnsure === 'function' && rsPressQuery(body)) {
+      return Promise.resolve().then(function () { return ntEnsure(env); }).then(function (nt) { rsAttachPressTT(body, nt); return run(); }, function () { return run(); });
+    }
+    return run();
   }, function () { return new Response(JSON.stringify({ error: '\uc694\uccad\uc744 \uc77d\uc9c0 \ubabb\ud568' }), { status: 400, headers: H }); });
 }
 
@@ -21384,7 +21465,7 @@ async function handleFetch(request, env, ctx) {
   const url = new URL(request.url);
   if (url.pathname === "/ride-eta") return handleRideEtaNT(request, env);
   if (url.pathname === "/ride-track") return handleRideTrack(request);
-  if (url.pathname === "/ride-standby") return handleRideStandby(request);
+  if (url.pathname === "/ride-standby") return handleRideStandby(request, env);
   if (url.pathname === "/store-policy") return handleStorePolicy(request);
   if (url.pathname === "/store-merge") return handleStoreMerge(request);
   if (url.pathname === "/ride-alert") return handleRideAlert(request);
