@@ -53,6 +53,7 @@ var RIDE_STANDBY_DEFAULTS = {
 };
 
 function rsTrackFn() { return (typeof rideTrack === 'function') ? rideTrack : require('./ride-track').rideTrack; }
+function rsRowFn() { return (typeof rideRow === 'function') ? rideRow : require('./ride-eta').rideRow; }
 function rsEtaFn() { return (typeof rideEta === 'function') ? rideEta : require('./ride-eta').rideEta; }
 function rsClone(o) { return JSON.parse(JSON.stringify(o)); }
 
@@ -262,6 +263,18 @@ function rsDoUndo(st, now, notes) {
     eta.boarded = false; eta.notDeparted = true; st.wait = ux.w; delete st.rsUndo; st.rsOpen = 0;
     notes.push('승차 확정 되돌림(오버레이)');
   }
+}
+// ── 경로 카드 버튼 줄의 오른쪽 칸(웹 routeSlotBtn): 탑승 → 환승 → 도착. 칸의 뜻·전환 연출은 ride-eta 의 rideRow 가 정하고, 여기서는 탑승 확정 증거(구간별 done)만 모아 넘긴다.
+//   출력 row = { slot, label, leg, can(지금 누르면 먹히나), anim:{kind,ms,ease,sq(전환이 일어난 시각 ms),o(바뀌기 전 칸)} } — 전환은 한 번 정해지면 다음 전환까지 그대로 들고 있고, 앱은 sq 가 방금(2초 안)일 때만 연출한다.
+function rsRowOut(st, now) {
+  try {
+    var legs = rsLegsOf(st.eta), pm = rsMaxPass(st.eta), done = st.rsDone || {}, ev = [], k;
+    for (k = 0; k < legs.length; k++) ev.push({ done: (k === 0 ? !st.wait : false) || pm >= legs[k].bi || !!done[legs[k].bi], mode: legs[k].mode });
+    var prev = st.rowSlot || 'none', r = rsRowFn()({ op: 'row', locked: true, legs: ev, prev: prev });
+    if (r.slot !== prev) { st.rowAnim = { kind: r.anim.kind, ms: r.anim.ms, ease: r.anim.ease, sq: now, o: prev }; st.rowSlot = r.slot; }
+    var an = st.rowAnim || { kind: 'none', ms: 0, ease: r.anim.ease, sq: 0, o: 'none' };
+    return { slot: r.slot, label: r.label, leg: r.leg, can: r.slot === 'arrive' || !!(st.wait || (st.xw && !st.xPend)), anim: an };
+  } catch (e) { return null; }
 }
 // 누른 순간 승차역에 있나(ride-track press): 800m 밖('away')이면 버튼을 거두고 알린다. 가깝거나 위치를 모르면(지하) 그대로 시각표를 따른다.
 function rsPressVerify(st, i, now, notes) {
@@ -719,7 +732,8 @@ function rideStandby(req) {
   var reco = { fire: false };
   try { if (!done) reco = rsReco(st, r, dest, cfg.destName || (dest && dest.name) || '', now, offActive); } catch (eRc) { notes.push('추천 판단 실패: ' + (eRc && eRc.message)); }
   var view = { text: text, line1: overlay && overlay.line1 || '', line2: overlay && overlay.line2 || '', curIdx: curIdx, at: now };
-  return { v: 1, state: st, ongoing: { title: O.ongoingTitle, text: text }, alert: al.alert, done: done, quit: quit, curIdx: curIdx, overlay: overlay, reco: reco, view: view, pos: r.pos ? { from: r.pos.from, to: r.pos.to, ratio: r.pos.ratio, moving: !!r.pos.moving } : null, arr: r.arr || null, zero: zero, nextMs: done ? O.stepMs : nextMs, motion: tk && tk.motion ? tk.motion : null, notes: notes };
+  var row = done ? null : rsRowOut(st, now);
+  return { v: 1, state: st, ongoing: { title: O.ongoingTitle, text: text }, row: row, alert: al.alert, done: done, quit: quit, curIdx: curIdx, overlay: overlay, reco: reco, view: view, pos: r.pos ? { from: r.pos.from, to: r.pos.to, ratio: r.pos.ratio, moving: !!r.pos.moving } : null, arr: r.arr || null, zero: zero, nextMs: done ? O.stepMs : nextMs, motion: tk && tk.motion ? tk.motion : null, notes: notes };
 }
 
 function handleRideStandby(request, env) {
