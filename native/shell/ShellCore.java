@@ -18,7 +18,7 @@ public final class ShellCore {
 
     public static final String BASE = "https://route-v2.phg0643.workers.dev";
     /** 껍데기가 아는 화면 규격(ScreenNativePlugin 의 status cap 과 같은 단계). */
-    public static final int CAP = 22;
+    public static final int CAP = 23;
     /** 설정 화면 요청의 cap — 3 이면 하위 화면 행동이 'web' 이라 껍데기가 안 열 수 있는 것은 '아직 안 옮겼어요'로 알린다. */
     public static final int SETTINGS_CAP = 8;
 
@@ -370,6 +370,16 @@ public final class ShellCore {
             if (p.length < 2) return null;
             double la = Double.parseDouble(p[0]), lo = Double.parseDouble(p[1]);
             return (la == 0 && lo == 0) || Math.abs(la) > 90 || Math.abs(lo) > 180 ? null : new double[] { la, lo };
+        } catch (Exception e) { return null; }
+    }
+    /** maxAgeMs 안에 안 마지막 위치(없거나 오래됐으면 null) — 첫 화면을 위치 대기 없이 그리는 데만 쓴다(새 위치가 오면 곧바로 바로잡는다). */
+    public static double[] lastLocFresh(Store st, long maxAgeMs, long now) {
+        try {
+            String[] p = st.get(K_LASTLOC, "").split(",");
+            if (p.length < 3) return null;
+            long at = Long.parseLong(p[2]);
+            if (now - at > maxAgeMs || at > now + 60000L) return null;
+            return lastLocGet(st);
         } catch (Exception e) { return null; }
     }
     /** 화면 글 안의 분류 칩(act.a == "cat")들의 값 — 다른 분류 · 방을 미리 받을 때 어떤 것들이 있는지 화면에서 읽는다. */
