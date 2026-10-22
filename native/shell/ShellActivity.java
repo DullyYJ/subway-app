@@ -1772,7 +1772,7 @@ public class ShellActivity extends Activity {
                 final double[] ll = last;
                 final String theme = ShellCore.theme(store);
                 final boolean onBusNow = "map".equals(ShellCore.currentTab(store)) && "bus".equals(map.mode());
-                if (farFrom(map.busLL, l, BUS_MOVE_DEG)) { map.setBusLoc(ll[0], ll[1]); if (onBusNow && resumed) loadMapBody(body, true); }
+                if (farFrom(map.busLL, l, BUS_MOVE_DEG)) { if (onBusNow && resumed) busMove(ll[0], ll[1]); else map.setBusLoc(ll[0], ll[1]); }
                 if (!onBusNow) pfAdd(0, new PfJob() { @Override public boolean run() throws Exception { return pfBusRun(ll, theme); } });
             }
             @Override public void fail(boolean noperm) { }
@@ -1790,7 +1790,7 @@ public class ShellActivity extends Activity {
                     final double la = l.getLatitude(), lo = l.getLongitude();          // 90m 넘게 움직였다 — 위치가 연달아 와도 멈춘 뒤 한 번만 새 자리의 정류장을 받는다(디바운스)
                     deb.trailing("busloc", Debounce.TYPE_MS, new Runnable() { @Override public void run() {
                         if (!resumed || !"bus".equals(map.mode()) || !"map".equals(ShellCore.currentTab(store)) || map.busLL == null) return;
-                        map.setBusLoc(la, lo); loadMapBody(body, true);
+                        busMove(la, lo);
                     } });
                 }
             }
@@ -1982,7 +1982,7 @@ public class ShellActivity extends Activity {
         locateQuiet(new LocCb() {
             @Override public void fix(Location l) {
                 if (!"bus".equals(map.mode()) || !"map".equals(ShellCore.currentTab(store))) return;
-                if (farFrom(map.busLL, l, BUS_MOVE_DEG)) { map.setBusLoc(l.getLatitude(), l.getLongitude()); loadMapBody(body, true); }
+                if (farFrom(map.busLL, l, BUS_MOVE_DEG)) busMove(l.getLatitude(), l.getLongitude());
             }
             @Override public void fail(boolean noperm) { }
         });
@@ -2001,7 +2001,7 @@ public class ShellActivity extends Activity {
         return resumed && "bus".equals(map.view) && "bus".equals(map.mode()) && map.busLL != null && "map".equals(ShellCore.currentTab(store)) && ShellCore.S_MAPB.equals(slots.length > 1 ? slots[1] : "");
     }
     private long busAt = 0L;
-    private static final long BUS_POLL_MS = 8000L;                      // 실시간 도착정보 갱신 박자
+    private static final long BUS_POLL_MS = 60000L;                     // 실시간 도착정보 갱신 박자(1분에 한 번 — 그 사이 초는 기기에서 줄어든다, 화면은 깜박이지 않는다)
     private boolean busRefreshing; private long busRefAt;                // 갱신 한 번이 오가는 중인가(느린 통신이 다음 박자에 끊기지 않게 · 20초가 지나면 포기)
     private void busEnd() { busRefreshing = false; startBusTick(); }
     private void busFail() { map.restoreArrivals(); busEnd(); }                               // 받기 실패: 보던 도착정보를 그대로 돌려놓고 다음 박자에
@@ -2012,6 +2012,57 @@ public class ShellActivity extends Activity {
         if (!"map".equals(ShellCore.currentTab(store)) || !"bus".equals(map.mode()) || !MapCore.VW_NEAR.equals(map.busView())) return;
         if (!map.reorderNear(keys, perm)) return;
         loadMapBody(body, true);
+    }
+    // ── 위치가 바뀌었을 때: 보던 정류장 · 도착정보를 비우지 않는다. 뒤에서 새 자리의 정류장 · 도착정보를 끝까지 받은 뒤 한 번에 바꿔 끼운다(중간에 사라지거나 깜박이지 않는다) ──
+    private boolean busQuiet; private long busQuietAt;
+    private void busMove(final double la, final double lo) {
+        final boolean quiet = busShowing() && map.stopCount() > 0 && MapCore.VW_NEAR.equals(map.busView());
+        if (!quiet) { map.setBusLoc(la, lo); loadMapBody(body, true); return; }
+        long now = System.currentTimeMillis();
+        if (busQuiet && now - busQuietAt < 25000L) return;
+        if (now - busQuietAt < 15000L) return;                                                  // 위치가 연달아 와도 15초에 한 번만
+        busQuiet = true; busQuietAt = now;
+        final String theme = ShellCore.theme(store), curSig = map.stopSig();
+        final double[] from = map.busLL == null ? null : map.busLL.clone();
+        new Thread(new Runnable() {
+            @Override public void run() {
+                String fin = ""; String sig = ""; final List<String[]> arrNeed = new ArrayList<String[]>(); final java.util.Map<String, String> res = new java.util.LinkedHashMap<String, String>();
+                try {
+                    MapCore w = new MapCore(store); w.modeOverride = "bus"; w.setBusLoc(la, lo);
+                    for (int round = 0; round < 4 && fin.length() == 0; round++) {
+                        NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/map", w.bodyRequest(ShellCore.CAP, theme), 12000);
+                        if (r.status != 200 || r.body == null || r.body.length() == 0) break;
+                        w.onScreen(r.body);
+                        if (w.busNeed.isEmpty()) { if (w.svFail == 0 && w.stopCount() > 0) fin = r.body; break; }
+                        List<String[]> need = new ArrayList<String[]>(w.busNeed);
+                        String[] got = fetchAll(need, 5000, 4000);
+                        boolean bad = false;
+                        for (int i = 0; i < need.size(); i++) { if (got[i] == null || got[i].length() == 0) bad = true; w.addBusRes(need.get(i)[0], got[i] == null ? "" : got[i]); }
+                        for (String[] n : need) arrNeed.add(n);
+                        w.busNeed.clear();
+                        if (bad) break;                                                         // 한 곳이라도 못 받았으면 보던 화면을 그대로 둔다
+                    }
+                    if (fin.length() > 0) { sig = w.stopSig(); res.putAll(w.busRes); }
+                } catch (Throwable ignored) { }
+                final String txt = fin, nsig = sig;
+                main.post(new Runnable() { @Override public void run() {
+                    busQuiet = false;
+                    if (txt.length() == 0 || !busShowing() || !MapCore.VW_NEAR.equals(map.busView()) || busRefreshing) return;      // 못 받았거나 그 사이 화면이 바뀜 — 아무것도 건드리지 않는다(다음 위치 때 다시)
+                    if (from != null && map.busLL != null && (map.busLL[0] != from[0] || map.busLL[1] != from[1])) return;       // 그 사이 다른 곳으로 이미 옮겨졌다
+                    seqMapB++;                                                                  // 이 받기보다 먼저 시작한 화면 응답은 버린다
+                    boolean same = nsig.equals(curSig);
+                    map.setBusLoc(la, lo);
+                    for (java.util.Map.Entry<String, String> e : res.entrySet()) map.addBusRes(e.getKey(), e.getValue());
+                    if (!arrNeed.isEmpty()) map.rememberNeed(arrNeed);
+                    map.onScreen(txt);
+                    body.setSourceAge(map.arrAge());
+                    present(body, txt, true);                                                   // 같은 정류장이면 값만 바뀌고, 다른 정류장이면 새 정류장이 차례로 내려앉는다
+                    busAt = System.currentTimeMillis();
+                    syncMapView();
+                    if (map.stopCount() > 0) map.saveStopsCache();
+                } });
+            }
+        }, "shell-busmove").start();
     }
     private void busRefresh() {
         if (busRefreshing && System.currentTimeMillis() - busRefAt < 20000L) return;
@@ -2862,8 +2913,9 @@ public class ShellActivity extends Activity {
         if (hasRes && !home.riding()) for (String tb : HomeCore.RTABS) {              // 탑승 중엔 추적이 자주 바뀌므로 미리 받지 않는다
             if ("longdist".equals(tb) || tb.equals(home.resTab)) continue;
             String k2 = home.dataRev + ":" + tb + ":" + themeNow;
-            if (resGet(k2) == null) otherBodies.put(k2, home.resultRequestTab(homeEnv(), ShellCore.CAP, themeNow, tb));
+            if (resGet(k2) == null) otherBodies.put(k2, tb);                          // 요청 본문은 뒤 스레드에서 만든다(주 스레드에서 큰 글을 여러 번 잇지 않는다)
         }
+        final String curTab = home.resTab;
         final long nowH = System.currentTimeMillis();
         hc.ensureNext(nowH);
         hc.rideScene = RideService.running ? RideService.liveScene : "";
@@ -2887,9 +2939,13 @@ public class ShellActivity extends Activity {
                 }
                 for (final java.util.Map.Entry<String, String> ob : otherBodies.entrySet()) {
                     synchronized (resFly) { if (!resFly.add(ob.getKey())) continue; }
+                    final String pat = ",\"tab\":\"" + curTab + "\",\"a\":";
+                    final int at = resBody.lastIndexOf(pat);
+                    if (at < 0) { synchronized (resFly) { resFly.remove(ob.getKey()); } continue; }
+                    final String body2 = resBody.substring(0, at) + ",\"tab\":\"" + ob.getValue() + "\",\"a\":" + resBody.substring(at + pat.length());          // 같은 사실에 탭만 바꾼다
                     new Thread(new Runnable() { @Override public void run() {
                         try {
-                            NetPost.Res rr = NetPost.post(ShellCore.BASE + "/screen/result", ob.getValue(), 15000);
+                            NetPost.Res rr = NetPost.post(ShellCore.BASE + "/screen/result", body2, 15000);
                             if (rr.status == 200 && rr.body != null && rr.body.length() > 0) resPut(ob.getKey(), rr.body);
                         } finally { synchronized (resFly) { resFly.remove(ob.getKey()); } }
                     } }, "shell-home-res-pre").start();
