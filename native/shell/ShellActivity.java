@@ -99,7 +99,24 @@ public class ShellActivity extends Activity {
     private String sheetName = "", writeErr = "", writeT = "", writeB = "";
     private boolean writeBusy;
     private final java.util.Map<String, Long> cmtAt = new java.util.HashMap<String, Long>();
-    private volatile String resCacheKey = "", resCacheJson = "";   // 결과 화면 캐시(같은 경로·같은 탭이면 엔진에 다시 묻지 않는다)
+    /** 결과 화면 캐시: 같은 경로 자료 · 같은 탭이면 엔진에 다시 묻지 않는다. 경로가 나오면 다른 탭(최소환승 · 지하철 · 버스)도 뒤에서 미리 받아 두어, 칩을 누르면 웹처럼 바로 바뀐다. */
+    private final java.util.LinkedHashMap<String, String> resCache = new java.util.LinkedHashMap<String, String>();
+    private final java.util.HashSet<String> resFly = new java.util.HashSet<String>();
+    private final java.util.LinkedHashMap<String, String> homeCache = new java.util.LinkedHashMap<String, String>();     // 홈 화면(검색 영역) 응답: 요청이 같으면 그대로
+    private boolean homeChip;                                                    // 방금 결과 칩을 눌렀다(홈 화면 응답은 그대로 쓴다)
+    private final java.util.HashMap<String, Long> resAt = new java.util.HashMap<String, Long>();
+    /** 결과 화면 캐시에서 꺼낸다 — 2분이 지난 것은 쓰지 않는다(결과 속 시각이 낡지 않게). */
+    private String resGet(String k) {
+        String v = lruGet(resCache, k);
+        if (v == null) return null;
+        Long at; synchronized (resAt) { at = resAt.get(k); }
+        return at != null && System.currentTimeMillis() - at < 120000L ? v : null;
+    }
+    private void resPut(String k, String v) { lruPut(resCache, k, v, 16); synchronized (resAt) { resAt.put(k, System.currentTimeMillis()); if (resAt.size() > 64) resAt.clear(); } }
+    private static String lruGet(java.util.LinkedHashMap<String, String> m, String k) { synchronized (m) { return m.get(k); } }
+    private static void lruPut(java.util.LinkedHashMap<String, String> m, String k, String v, int cap) {
+        synchronized (m) { m.remove(k); m.put(k, v); while (m.size() > cap) { java.util.Iterator<String> it = m.keySet().iterator(); it.next(); it.remove(); } }
+    }
 
     /** SharedPreferences 를 ShellCore.Store 로 감싼다. */
     private static final class PrefStore implements ShellCore.Store {
@@ -358,7 +375,16 @@ public class ShellActivity extends Activity {
     }
 
     // ───────────── 화면 받기 ─────────────
+    /** 키보드가 올라올 때 화면을 줄이지(눌러 찌그러뜨리지) 않는다 — 웹처럼 화면은 그대로 두고 키보드만 위로 뜬다(adjustPan: 입력칸이 키보드에 가릴 때만 창을 밀어 올린다).
+     *  단 채팅(아래 입력줄이 화면 밑에 붙은 화면)은 입력줄이 키보드 위에 붙어야 하므로 예전처럼 줄인다. */
+    private void applyIme() {
+        try {
+            boolean chat = "community".equals(ShellCore.currentTab(store)) && "chat".equals(ShellCore.mode(store));
+            getWindow().setSoftInputMode(chat ? android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE : android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN);
+        } catch (Throwable ignored) { }
+    }
     private void showTab(String tab) {
+        applyIme();
         hideMapView();
         slots = ShellCore.slotsOf(store, tab);
         head.setVisibility(slots.length > 1 ? View.VISIBLE : View.GONE);
@@ -1142,7 +1168,7 @@ public class ShellActivity extends Activity {
         @Override public void onAction(ScreenCore.Act a) { handle(a, false); }
         @Override public void onSet(ScreenCore.Act a, boolean on) { handle(a, on); }
         @Override public void onSearch(ScreenCore.Act a, String q) { apply(ShellCore.routeSearch(a.tpl, a.empty, q)); }
-        @Override public void onInputFocus(boolean on) { }
+        @Override public void onInputFocus(boolean on) { if (on) applyIme(); }
         @Override public void onFirstDraw() { }
         @Override public void onText(String key, String value, String kind) {
             if (!ShellCore.S_HOME.equals(screenName())) return;
@@ -1654,7 +1680,23 @@ public class ShellActivity extends Activity {
     /** 위치 한 번 받기(홈의 위치 감지와 따로 — 홈 입력칸은 건드리지 않는다). 결과는 cb 로. */
     private interface LocCb { void fix(Location l); void fail(boolean noperm); }
     private boolean hasLocPerm() { return checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED || checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED; }
-    private void saveLoc(Location l) { if (l != null) ShellCore.lastLocPut(store, l.getLatitude(), l.getLongitude(), System.currentTimeMillis()); }
+    private void saveLoc(Location l) { if (l != null) { ShellCore.lastLocPut(store, l.getLatitude(), l.getLongitude(), System.currentTimeMillis()); warmBus(l.getLatitude(), l.getLongitude()); } }
+    /** 위치를 잡는 순간 뒤에서 '주변 정류장' 화면을 미리 받아 둔다 — 버스 탭에 들어가면 뼈대만 오래 보이지 않고 곧바로 정류장이 내려앉는다(요청이 같을 때만 쓴다). */
+    private volatile String warmBusJson = "", warmBusTxt = ""; private volatile long warmBusAt; private double[] warmBusLL;
+    private void warmBus(final double la, final double lo) {
+        try {
+            if (!"bus".equals(map.mode()) || !MapCore.VW_NEAR.equals(map.busView()) || "map".equals(ShellCore.currentTab(store))) return;
+            long now = System.currentTimeMillis();
+            if (warmBusLL != null && now - warmBusAt < 90000L && Math.abs(warmBusLL[0] - la) < BUS_MOVE_DEG && Math.abs(warmBusLL[1] - lo) < BUS_MOVE_DEG) return;
+            warmBusLL = new double[] { la, lo }; warmBusAt = now;
+            final MapCore w = new MapCore(store); w.modeOverride = "bus"; w.setBusLoc(la, lo);
+            final String json = w.bodyRequest(ShellCore.CAP, ShellCore.theme(store));
+            new Thread(new Runnable() { @Override public void run() {
+                NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/map", json, 12000);
+                if (r.status == 200 && r.body != null && r.body.length() > 0) { warmBusTxt = r.body; warmBusJson = json; warmBusAt = System.currentTimeMillis(); }
+            } }, "shell-buswarm").start();
+        } catch (Throwable ignored) { }
+    }
     /** 켤 때: 권한이 이미 있으면 기기가 기억하는 마지막 위치를 조용히 저장한다(권한 안내를 띄우지 않는다). */
     private void captureLastLoc() {
         if (!hasLocPerm()) return;
@@ -1789,10 +1831,14 @@ public class ShellActivity extends Activity {
         final int my = ++seqMapB;
         final String json = map.bodyRequest(ShellCore.CAP, ShellCore.theme(store));
         final String modeNow = map.mode();
+        final String wtxt = round == 0 && "bus".equals(modeNow) && json.equals(warmBusJson) && System.currentTimeMillis() - warmBusAt < 45000L ? warmBusTxt : "";          // 위치를 잡을 때 뒤에서 미리 받아 둔 정류장 화면이 있으면 기다리지 않고 바로
+        if (wtxt.length() > 0) warmBusJson = "";
         new Thread(new Runnable() {
             @Override public void run() {
-                NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/map", json, "bus".equals(modeNow) ? 12000 : 8000);          // 버스는 서버가 정류장·도착정보를 한 번에 받아 오므로 조금 더 기다린다
-                final String txt = r.status == 200 ? r.body : ""; warm(txt);
+                String got0;
+                if (wtxt.length() > 0) got0 = wtxt;
+                else { NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/map", json, "bus".equals(modeNow) ? 12000 : 8000); got0 = r.status == 200 && r.body != null ? r.body : ""; }          // 버스는 서버가 정류장·도착정보를 한 번에 받아 오므로 조금 더 기다린다
+                final String txt = got0; warm(txt);
                 main.post(new Runnable() { @Override public void run() {
                     if (my != seqMapB) return;
                     if (txt.length() == 0 && busRefreshing) { busFail(); return; }                    // 8초 갱신이 실패 — 화면은 그대로 두고(1초 카운트다운 계속) 다음 박자에 다시
@@ -2809,7 +2855,15 @@ public class ShellActivity extends Activity {
         final String json = home.request(homeEnv(), ShellCore.CAP);
         final boolean hasRes = home.hasRoute();
         final String resBody = hasRes ? home.resultRequest(homeEnv(), ShellCore.CAP, ShellCore.theme(store), 0) : "";
-        final String resKey = home.resRev + ":" + home.resTab;
+        final boolean chip = homeChip; homeChip = false;
+        final String themeNow = ShellCore.theme(store);
+        final String resKey = home.dataRev + ":" + home.resTab + ":" + themeNow;
+        final java.util.LinkedHashMap<String, String> otherBodies = new java.util.LinkedHashMap<String, String>();               // 다른 탭 결과를 뒤에서 미리 받는다(칩을 누르면 바로 바뀌게)
+        if (hasRes && !home.riding()) for (String tb : HomeCore.RTABS) {              // 탑승 중엔 추적이 자주 바뀌므로 미리 받지 않는다
+            if ("longdist".equals(tb) || tb.equals(home.resTab)) continue;
+            String k2 = home.dataRev + ":" + tb + ":" + themeNow;
+            if (resGet(k2) == null) otherBodies.put(k2, home.resultRequestTab(homeEnv(), ShellCore.CAP, themeNow, tb));
+        }
         final long nowH = System.currentTimeMillis();
         hc.ensureNext(nowH);
         hc.rideScene = RideService.running ? RideService.liveScene : "";
@@ -2820,15 +2874,25 @@ public class ShellActivity extends Activity {
             @Override public void run() {
                 // 경로 결과 · 홈 카드는 홈 화면 응답을 기다리지 않고 함께 받는다(셋이 차례로 걸리던 시간을 가장 느린 하나로)
                 final boolean staleCards = hBody.length() > 0 && hcJson.length() > 0;                              // 지난 카드가 있으면 그것을 0초에 먼저 그리고, 새 카드는 뒤에서 받아 바뀐 것만 다시 그린다(SWR)
-                final String[] rsBox = { resKey.equals(resCacheKey) ? resCacheJson : "" }, cjBox = { hBody.length() == 0 || staleCards ? hcJson : "" };
+                final String cachedRes = resGet(resKey), cachedHome = chip ? lruGet(homeCache, json) : null;
+                final String[] rsBox = { cachedRes == null ? "" : cachedRes }, cjBox = { hBody.length() == 0 || staleCards ? hcJson : "" };
                 Thread tr = null, tc = null;
                 if (hasRes && rsBox[0].length() == 0) {
                     tr = new Thread(new Runnable() { @Override public void run() {
                         NetPost.Res rr = NetPost.post(ShellCore.BASE + "/screen/result", resBody, 15000);
                         rsBox[0] = rr.status == 200 && rr.body != null ? rr.body : "";
-                        if (rsBox[0].length() > 0) { resCacheKey = resKey; resCacheJson = rsBox[0]; }
+                        if (rsBox[0].length() > 0) resPut(resKey, rsBox[0]);
                     } }, "shell-home-res");
                     tr.start();
+                }
+                for (final java.util.Map.Entry<String, String> ob : otherBodies.entrySet()) {
+                    synchronized (resFly) { if (!resFly.add(ob.getKey())) continue; }
+                    new Thread(new Runnable() { @Override public void run() {
+                        try {
+                            NetPost.Res rr = NetPost.post(ShellCore.BASE + "/screen/result", ob.getValue(), 15000);
+                            if (rr.status == 200 && rr.body != null && rr.body.length() > 0) resPut(ob.getKey(), rr.body);
+                        } finally { synchronized (resFly) { resFly.remove(ob.getKey()); } }
+                    } }, "shell-home-res-pre").start();
                 }
                 if (hBody.length() > 0) {
                     tc = new Thread(new Runnable() { @Override public void run() {
@@ -2843,8 +2907,13 @@ public class ShellActivity extends Activity {
                     } }, "shell-home-cards");
                     tc.start();
                 }
-                NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/home", json, 8000);
-                String txt = r.status == 200 ? r.body : "";
+                String txt;
+                if (cachedHome != null) txt = cachedHome;                                                     // 칩만 바꿨다 — 검색 영역은 그대로라 서버에 다시 묻지 않는다
+                else {
+                    NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/home", json, 8000);
+                    txt = r.status == 200 && r.body != null ? r.body : "";
+                    if (txt.length() > 0) lruPut(homeCache, json, txt, 6);
+                }
                 try { if (tr != null) tr.join(16000); if (tc != null && !staleCards) tc.join(16000); } catch (InterruptedException ignored) { }
                 if (hasRes && txt.length() > 0) {
                     String rs = rsBox[0];
@@ -3030,7 +3099,7 @@ public class ShellActivity extends Activity {
         deb.cancel("homeq");                             // 후보를 고르거나 버튼을 눌렀다 — 기다리던 입력 갱신은 필요 없다
         int r = home.act(v, fields);
         switch (r) {
-            case HomeCore.R_RESULT: reloadHome(); break;
+            case HomeCore.R_RESULT: homeChip = true; reloadHome(); break;
             case HomeCore.R_FAV: openFavSheet(); break;
             case HomeCore.R_LD: ldReselect(); break;
             case HomeCore.R_ROOM: goRoom(); break;
@@ -3385,7 +3454,7 @@ public class ShellActivity extends Activity {
                 final String b = r.status == 200 && r.body != null ? r.body.trim() : "";
                 main.post(new Runnable() { @Override public void run() {
                     if (my != seqRoute) return;
-                    if (b.length() > 2 && b.charAt(0) == '{' && b.charAt(b.length() - 1) == '}') { home.ld2Raw = b; home.resRev++; reloadHome(); }
+                    if (b.length() > 2 && b.charAt(0) == '{' && b.charAt(b.length() - 1) == '}') { home.ld2Raw = b; home.touch(); reloadHome(); }
                     else toast("다른 편을 받지 못했어요");
                 } });
             }
