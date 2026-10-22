@@ -612,12 +612,23 @@ public class ScreenJvmTest {
         ok(near(TKL.headContentW, 14f + 64f + 64f + 108f + 14f), "타임라인: 내용 폭 = 여백 + 칸 폭의 합");
         ok(TKL.chipsTop >= 0f && TKL.chipsBot > TKL.chipsTop, "타임라인: 가로로 미는 줄 범위가 잡힌다");
         ok(TKL.head[0].lines.length == 1 && TKL.head[0].lines[0].equals("도보") && near(TKL.head[0].nameBot, ScreenCore.TRK_NAME_H - 2f), "타임라인: 도보 이름은 아래 여백 2");
-        ok(TKL.head[1].lines.length == 2 && TKL.head[1].lines[1].endsWith("\u2026"), "타임라인: 긴 이름은 두 줄까지, 넘으면 …");
+        ok(TKL.head[1].lines.length == 1 && TKL.head[1].lines[0].endsWith("\u2026"), "타임라인: 긴 이름은 한 줄(웹 nowrap), 넘으면 …");
         ok(TKL.head[1].label.equals("6번") && "t".equals(TKL.head[1].gk) && TKL.head[1].lc != null && TKL.head[1].rc != null && "r".equals(TKL.head[1].dk) && TKL.head[1].ti == 1, "타임라인: 배지 · 선 · 점 종류 · 추적 번호를 엔진 값 그대로");
         ok(TKL.head[0].lc == null && TKL.head[0].rc != null && "e".equals(TKL.head[0].dk), "타임라인: 맨앞 칸은 왼쪽 선 없음");
         ok(TKL.head[2].dc2 != null && TKL.head[2].badgeTw > 0f && TKL.head[2].badgeTw + 2f * TKL.head[2].gx <= TKL.head[2].w && TKL.head[2].time.contains("3시간"), "타임라인: 도보 가운데 점의 둘째 색 · 알약은 칸 안 · 시각 글");
         ok(TKL.head[2].tb && near(TKL.head[2].tsz, 10f) && TKL.head[1].ti == 1 && TKL.head[2].ti == -1, "타임라인: 시각 글 크기·굵기 · 추적 안 하는 칸은 -1");
         ok(TKL.body.length == 0 && near(TKL.bodyH, 0f) && near(TKL.headMaxScroll(), 264f - 200f), "타임라인: 본문은 높이 0 · 넘친 폭만큼 가로로 밀린다");
+        String tmJson = "{\"ok\":true,\"v\":1,\"screen\":\"t\",\"head\":[],\"body\":[{\"t\":\"tmap\",\"h\":213,\"hv\":24,\"hmin\":137,\"hmax\":231,\"pts\":[{\"la\":37.5,\"lo\":127.0,\"k\":\"m\"}]}]}";
+        try {
+            ScreenCore.winH = 800f; ScreenCore.Layout TML = ScreenCore.layout(ScreenCore.load(tmJson), 360f, M);
+            ok(near(TML.body[0].h, 192f), "지도: 높이 = 창 높이의 24% (800 → 192)");
+            ScreenCore.winH = 300f; TML = ScreenCore.layout(ScreenCore.load(tmJson), 360f, M);
+            ok(near(TML.body[0].h, 137f), "지도: 작은 창은 최소 137");
+            ScreenCore.winH = 2000f; TML = ScreenCore.layout(ScreenCore.load(tmJson), 360f, M);
+            ok(near(TML.body[0].h, 231f), "지도: 큰 창은 최대 231");
+            ScreenCore.winH = 0f; TML = ScreenCore.layout(ScreenCore.load(tmJson), 360f, M);
+            ok(near(TML.body[0].h, 213f), "지도: 창 높이를 모르면 엔진 h");
+        } catch (Exception e) { ok(false, "지도 hv 테스트 예외: " + e); } finally { ScreenCore.winH = 0f; }
         ok(bad(trkJson.replace("\"gk\":\"t\"", "\"gk\":\"z\"")) && bad(trkJson.replace("\"dk\":\"e\"", "\"dk\":\"q\"")) && bad(trkJson.replace("\"w\":64,\"n\":\"도보\"", "\"w\":9999,\"n\":\"도보\"")), "타임라인: 모르는 배지·점 종류·칸 폭은 거절");
         ok(bad("{\"ok\":true,\"v\":1,\"screen\":\"t\",\"head\":[{\"t\":\"trk\",\"cells\":[]}],\"body\":[]}"), "타임라인: 칸이 없으면 거절");
         ok(bad(trkJson.replace("\"nc\":\"sub\"", "\"nc\":\"nope\"")), "타임라인: 읽을 수 없는 색은 거절");
