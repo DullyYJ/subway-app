@@ -61,7 +61,16 @@ const base = (sv, cap) => ({ cap: cap == null ? 23 : cap, f: { part: 'b', mode: 
   // ⑤ 도착정보 일부 실패 → svf
   {
     const log = [], c = load(), r = await post(c.H, { BUSAPI: binding(log, u => /arsId=22222/.test(u)) }, base(true));
-    ok(r.j.info.svf === 1 && r.j.info.bus.st === 'ok', '도착정보가 하나 안 오면 svf=1 (기기가 갱신이면 버린다)');
+    const nd = r.j.info.bus.need || [];
+    ok(r.j.info.svf === 1 && r.j.info.bus.st === 'need' && nd.length === 1 && /arsId=22222/.test(nd[0].url) && r.j.info.bres[nd[0].k] === undefined && r.j.info.bres.a0 && r.j.info.bres.a2, '도착정보가 하나 안 오면 svf=1 · 그 곳만 need 로 남긴다(빈 값으로 굳혀 "도착정보 없음"이 되지 않게 — 기기가 직접 받는다)');
+    const cs = r.j.body.filter(n => n.t === 'bcard');
+    ok(cs.filter(x => x.ld).length === 1 && cs.filter(x => x.em).length === 0, '못 받은 곳은 "불러오는 중", "도착정보 없음"이 아니다');
+  }
+  // ⑤-b 도착정보가 시간 안에 안 오면(느린 공공 API) 온 것만 싣고 나머지는 need
+  {
+    const log = [], b0 = binding(log), slow = { fetch: async (req) => { const inner = new URL(req.url).searchParams.get('url') || ''; if (/arsId=22222/.test(inner)) await new Promise(r => setTimeout(r, 3000)); return b0.fetch(req); } };
+    const c = load(), t0 = Date.now(), r = await post(c.H, { BUSAPI: slow }, base(true));
+    ok(Date.now() - t0 < 2900 && r.j.info.bus.st === 'need' && r.j.info.bus.need.length === 1 && r.j.info.bres.a0, '느린 한 곳 때문에 전체가 기다리지 않는다(2.2초 안에 온 것만) ' + (Date.now() - t0) + 'ms');
   }
   // ⑥ 정류장도 못 받으면(전부 실패) need 그대로
   {
