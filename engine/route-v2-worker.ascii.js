@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-22s147";
+var ENGINE_VERSION = "route-v2-2026-10-22s148";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -19708,7 +19708,10 @@ function mapScreen(inp, factsIn, dataIn) {
 var MAP_TAGO_BASE = 'https://apis.data.go.kr/1613000/';
 var MAP_SEOUL_BOX = [37.41, 37.72, 126.76, 127.19];
 var MAP_EXIT_RE = /\uc5ed\s*\d*\s*\ubc88?\s*\ucd9c\uad6c|\uc5ed\s*\ucd9c\uad6c/;
-var MAP_STOP_DUP_M = 25, MAP_EXIT_NEAR_M = 350, MAP_NEAR_BASE = 6, MAP_NEAR_MAX = 16;
+var MAP_STOP_DUP_M = 3, MAP_EXIT_NEAR_M = 350;
+var MAP_NEAR_R = 300, MAP_NEAR_CAP = 40, MAP_NEAR_MIN = 3;       // \ub0b4 \uc8fc\ubcc0 \uc815\ub958\uc7a5: \ubc18\uacbd 300m \uc548\uc740 \uc804\ubd80(\ucd5c\ub300 40\uacf3) \u2014 \ud558\ub098\ub3c4 \uc5c6\uc73c\uba74 \uac00\uae4c\uc6b4 \uc21c 3\uacf3
+var MAP_Q = 1000, MAP_QR = 450;                                    // \uc870\ud68c \uc88c\ud45c\ub294 0.001\u00b0(\uc57d 100m) \uce78\uc758 \uac00\uc6b4\ub370\ub85c \ub9de\ucd98\ub2e4(\uc11c\ubc84\u00b7\uae30\uae30 \uce90\uc2dc\uac00 \uac19\uc740 \uce78\uc5d0\uc11c \ub9de\ub294\ub2e4) \u2014 \uadf8\ub9cc\ud07c \ubc18\uacbd\uc744 300 \u2192 450m \ub85c \ub109\ub109\ud788 \ubc1b\uace0, \uac70\ub9ac\ub294 \ub298 \ub0b4 \uc9c4\uc9dc \uc88c\ud45c\ub85c \ub2e4\uc2dc \uc7b0\ub2e4
+function mapQ(v) { return Math.round(Number(v) * MAP_Q) / MAP_Q; }
 function mapInSeoul(la, lo) { return la >= MAP_SEOUL_BOX[0] && la <= MAP_SEOUL_BOX[1] && lo >= MAP_SEOUL_BOX[2] && lo <= MAP_SEOUL_BOX[3]; }
 function mapXmlItems(text, tag) {
   var out = [], re = new RegExp('<' + tag + '[^>]*>([\\s\\S]*?)<\\/' + tag + '>', 'g'), m;
@@ -19729,8 +19732,9 @@ function mapSeoulStops(text, la, lo) {
     var ars = mapXmlVal(ch, 'arsId'), nm = mapXmlVal(ch, 'stationNm');
     if (!ars || !nm || String(ars).replace(/^0+/, '') === '') return;       // arsId 0 = \ubbf8\uc815\ucc28
     var gx = parseFloat(mapXmlVal(ch, 'gpsX')), gy = parseFloat(mapXmlVal(ch, 'gpsY')), d = parseFloat(mapXmlVal(ch, 'dist'));
-    if (isNaN(gx) || isNaN(gy)) { gx = lo; gy = la; }
-    stops.push({ nm: nm, id: 'SEOUL:' + ars, ars: ars, la: gy, lo: gx, dist: isFinite(d) ? d : mapHav(la, lo, gy, gx), src: 'topis' });
+    var hasXY = !(isNaN(gx) || isNaN(gy));
+    if (!hasXY) { gx = lo; gy = la; }
+    stops.push({ nm: nm, id: 'SEOUL:' + ars, ars: ars, la: gy, lo: gx, dist: (hasXY || !isFinite(d)) ? mapHav(la, lo, gy, gx) : d, src: 'topis' });
   });
   return stops;
 }
@@ -19778,8 +19782,7 @@ function mapGbisStops(text, la, lo) {
   mapGgList(j, ['busStationAroundList', 'busStationList']).forEach(function (it) {
     var id = it.stationId, a = parseFloat(it.y), b = parseFloat(it.x);
     if (!id || isNaN(a) || isNaN(b)) return;
-    var d = parseFloat(it.distance);
-    stops.push({ nm: String(it.stationName || ''), id: 'GG:' + id, sid: String(id), no: it.mobileNo ? String(it.mobileNo) : '', la: a, lo: b, dist: isFinite(d) ? d : mapHav(la, lo, a, b), src: 'gbis' });
+    stops.push({ nm: String(it.stationName || ''), id: 'GG:' + id, sid: String(id), no: it.mobileNo ? String(it.mobileNo) : '', la: a, lo: b, dist: mapHav(la, lo, a, b), src: 'gbis' });
   });
   return stops;
 }
@@ -19824,17 +19827,22 @@ function mapDedupStops(stops) {
   var key = function (v) { return String(v || '').replace(/\s/g, ''); }, out = [];
   stops.forEach(function (st) {
     var dup = null;
-    for (var i = 0; i < out.length; i++) if (key(out[i].nm) === key(st.nm) && mapHav(out[i].la, out[i].lo, st.la, st.lo) <= MAP_STOP_DUP_M) { dup = out[i]; break; }
+    for (var i = 0; i < out.length; i++) if (out[i].id === st.id || (key(out[i].nm) === key(st.nm) && mapHav(out[i].la, out[i].lo, st.la, st.lo) <= MAP_STOP_DUP_M)) { dup = out[i]; break; }   // \uac19\uc740 \uc815\ub958\uc7a5(\uac19\uc740 \uc5f4\uc1e0 \u00b7 \uac19\uc740 \uc774\ub984\uc774 3m \uc548)\ub9cc \ud558\ub098\ub85c \u2014 \uae38 \uac74\ub108\ud3b8\uc740 \ub2e4\ub978 \ubc29\ud5a5\uc774\ub77c \ub530\ub85c \ub454\ub2e4
     if (!dup) out.push(st); else if (st.dist < dup.dist) out[out.indexOf(dup)] = st;
   });
   return out;
 }
-function mapStopOrder(stops) {                       // \uac00\uae4c\uc6b4 \uc21c + \uc5ed \ucd9c\uad6c(350m \uc548)\ub294 \uc804\ubd80 \uc55e\uc73c\ub85c, \uae38\uc774\ub294 \ucd9c\uad6c \uc218\ub9cc\ud07c \ub298\ub9bc
-  var byD = function (a, b) { return a.dist - b.dist; }, ex = [], rest = [];
-  stops.forEach(function (s) { if (mapStopExit(s) && s.dist <= MAP_EXIT_NEAR_M) ex.push(s); else rest.push(s); });
-  ex.sort(byD); rest.sort(byD);
-  var lim = ex.length ? Math.min(MAP_NEAR_MAX, Math.max(MAP_NEAR_BASE, ex.length + 3)) : MAP_NEAR_BASE;
-  return ex.concat(rest).slice(0, lim);
+function mapStopOrder(stops) {                       // \ubc18\uacbd 300m \uc548\uc740 \uc804\ubd80(\uc5ed \ucd9c\uad6c\ub294 350m \uc548\uae4c\uc9c0, \uba3c\uc800) \u00b7 \uac00\uae4c\uc6b4 \uc21c \u00b7 \ucd5c\ub300 40\uacf3. \uc548\uc5d0 \ud558\ub098\ub3c4 \uc5c6\uc73c\uba74 \uac00\uae4c\uc6b4 \uc21c 3\uacf3
+  var byD = function (a, b) { return a.dist - b.dist; }, ex = [], rest = [], far = [];
+  stops.forEach(function (s) {
+    if (mapStopExit(s) && s.dist <= MAP_EXIT_NEAR_M) ex.push(s);
+    else if (s.dist <= MAP_NEAR_R) rest.push(s);
+    else far.push(s);
+  });
+  ex.sort(byD); rest.sort(byD); far.sort(byD);
+  var out = ex.concat(rest);
+  if (!out.length) out = far.slice(0, MAP_NEAR_MIN);
+  return out.slice(0, MAP_NEAR_CAP);
 }
 function mapBusStops(f) {
   var b = f.bus, res = b.res || {}, la = Number(b.lat), lo = Number(b.lng);
@@ -19847,10 +19855,10 @@ function mapBusStops(f) {
   return mapStopOrder(mapDedupStops(s));
 }
 function mapBusNeedStops(la, lo) {
-  var need = [];
-  if (mapInSeoul(la, lo)) need.push({ k: 'tp', url: 'http://ws.bus.go.kr/api/rest/stationinfo/getStationByPos?tmX=' + lo + '&tmY=' + la + '&radius=800' });
-  if (mapInGG(la, lo)) need.push({ k: 'gg', url: MAP_GBIS_BASE + 'busstationservice/v2/getBusStationAroundListv2?x=' + lo + '&y=' + la + '&format=json' });
-  need.push({ k: 'tn', url: MAP_TAGO_BASE + 'BusSttnInfoInqireService/getCrdntPrxmtSttnList?serviceKey=&gpsLati=' + la + '&gpsLong=' + lo + '&numOfRows=50&pageNo=1&_type=json' });
+  var need = [], ql = mapQ(la), qo = mapQ(lo);                     // \uc870\ud68c\ub294 0.001\u00b0 \uce78\uc758 \uac00\uc6b4\ub370 \uc88c\ud45c\ub85c(\uac19\uc740 \uce78\uc774\uba74 \uc11c\ubc84\u00b7\uae30\uae30 \uce90\uc2dc\uac00 \ubc14\ub85c \ub9de\ub294\ub2e4)
+  if (mapInSeoul(la, lo)) need.push({ k: 'tp', url: 'http://ws.bus.go.kr/api/rest/stationinfo/getStationByPos?tmX=' + qo + '&tmY=' + ql + '&radius=' + MAP_QR });
+  if (mapInGG(la, lo)) need.push({ k: 'gg', url: MAP_GBIS_BASE + 'busstationservice/v2/getBusStationAroundListv2?x=' + qo + '&y=' + ql + '&format=json' });
+  need.push({ k: 'tn', url: MAP_TAGO_BASE + 'BusSttnInfoInqireService/getCrdntPrxmtSttnList?serviceKey=&gpsLati=' + ql + '&gpsLong=' + qo + '&numOfRows=50&pageNo=1&_type=json' });
   return need;
 }
 function mapBusArrUrl(s) {
@@ -20025,10 +20033,10 @@ function mapBusBody(f, info) {
   if (need0.some(function (n) { return res[n.k] === undefined; })) { info.bus = { st: 'need', vw: 'near', need: need0 }; return wait('\uc8fc\ubcc0 \uc815\ub958\uc7a5 \ucc3e\ub294 \uc911...'); }
   var stops = mapApplyNearOrder(mapBusStops(f), mapBusOrd(b));                          // \uc0ac\uc6a9\uc790\uac00 \ub04c\uc5b4\uc11c \uc815\ud55c \uc21c\uc11c(b.ord) \uba3c\uc800 \u00b7 \uc0c8 \uc815\ub958\uc7a5\uc740 \ub4a4\uc5d0 \uac70\ub9ac\uc21c
   if (!stops.length && res.d1 === undefined) {                                           // \uacf5\uacf5 API \uac00 \ubaa8\ub450 \ube44\uc5c8\uc73c\uba74 \uc11c\ubc84 \uc815\ub958\uc7a5 \ud45c(D1)\ub85c
-    info.bus = { st: 'need', vw: 'near', need: [{ k: 'd1', url: MAP_D1_BASE + '/bus-stops?lat=' + la + '&lng=' + lo + '&radius=800' }] };
+    info.bus = { st: 'need', vw: 'near', need: [{ k: 'd1', url: MAP_D1_BASE + '/bus-stops?lat=' + mapQ(la) + '&lng=' + mapQ(lo) + '&radius=' + MAP_QR }] };
     return wait('\uc8fc\ubcc0 \uc815\ub958\uc7a5 \ucc3e\ub294 \uc911...');
   }
-  if (!stops.length) { info.bus = { st: 'empty', vw: 'near' }; return wait('\uc8fc\ubcc0 800m \uc548\uc5d0 \uc815\ub958\uc7a5\uc744 \ucc3e\uc9c0 \ubabb\ud588\uc5b4\uc694.'); }
+  if (!stops.length) { info.bus = { st: 'empty', vw: 'near' }; return wait('\uc8fc\ubcc0\uc5d0 \uc815\ub958\uc7a5\uc744 \ucc3e\uc9c0 \ubabb\ud588\uc5b4\uc694.'); }
   // \uc815\ub958\uc7a5 \uc9c0\ub3c4: \uc815\ub958\uc7a5\ub9c8\ub2e4 \ubc88\ud638 \ud540(\uc88c\ud45c\uac00 \uc788\ub294 \uac83\ub9cc) + \ub0b4 \uc704\uce58. \ud540\uc744 \ub204\ub974\uba74 \uadf8 \uce74\ub4dc(g)\ub85c, \uce74\ub4dc\ub97c \ub204\ub974\uba74 \uadf8 \ud540(pi)\uc73c\ub85c \uac04\ub2e4.
   var pts = [], pidx = [], favSet = {};
   mapBusFavs(b).forEach(function (s) { favSet[s.id] = 1; });
@@ -20248,10 +20256,83 @@ function mapBusRouteSheet(f0) {
   if (bar) foot = [{ t: 'panel', pad: [0, 0, 0, 0], ip: [0, 0, 0, 0], r: 0, fill: 'card', line: 'border', kids: bar }];
   return mapFinish({ ok: true, v: 1, screen: 'mapbr', cover: 'tab', head: head, body: body, foot: foot, info: info }, 'br' + (pk ? 'p' : '') + sel);
 }
-// \uc9c0\ub3c4 \ud0ed \ud654\uba74 \uc5d4\uc9c4 Worker \uc5f0\uacb0\ubd80 \u2014 POST /screen/map (engine/map.js \uc758 mapScreen \uc744 \ubd80\ub978\ub2e4). route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/screen/map") return handleScreenMap(request);` \ub97c \ub123\ub294\ub2e4.
+// \uc9c0\ub3c4 \ud0ed \ud654\uba74 \uc5d4\uc9c4 Worker \uc5f0\uacb0\ubd80 \u2014 POST /screen/map (engine/map.js \uc758 mapScreen \uc744 \ubd80\ub978\ub2e4). route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/screen/map") return handleScreenMap(request, env);` \ub97c \ub123\ub294\ub2e4.
 //   \ubcf8\ubb38(JSON \uae00, Content-Type: text/plain): { cap(18 \uc774\uc0c1), f:{ part:'h'|'b'|'stn'|'tt', mode, reg, flt, th, stn, sl, q, gps, tt, bus } }
 //   \uc5d4\uc9c4\uc740 \uc544\ubb34\uac83\ub3c4 \uc800\uc7a5\ud558\uc9c0 \uc54a\ub294\ub2e4(\uc774 \uae30\uae30\uac00 \ubcf4\ub0b8 \uc0ac\uc2e4\ub85c \ud654\uba74\uc744 \uacc4\uc0b0\ud574 \ub3cc\ub824\uc904 \ubfd0).
-async function handleScreenMap(request) {
+//
+// \u2605 s148 \u2014 \ubc84\uc2a4 '\ud55c \ubc88\uc5d0 \ubc1b\uae30'(f.bus.sv === 1, cap 23 \uc774\uc0c1): \uc5d4\uc9c4\uc774 "\uc774 \uc8fc\uc18c\ub4e4\uc744 \ubc1b\uc544 \uc640\ub77c(info.bus.need)" \ud558\uba74 \uc9c0\uae08\uae4c\uc9c4 \uae30\uae30\uac00 \ubc1b\uc544 \ub2e4\uc2dc \ubb3c\uc5c8\ub2e4(\uae30\uae30 \u2192 \uc11c\ubc84 \u2192 \uacf5\uacf5 API \u2192 \uae30\uae30 \u2192 \uc11c\ubc84 \u2026, \uc655\ubcf5 3\ubc88).
+//   \uc774\uc81c\ub294 \uc774 \uc11c\ubc84\uac00 gentle-lab(BUSAPI \ubc14\uc778\ub529)\ub85c \uc8fc\uc18c\ub4e4\uc744 \ub3d9\uc2dc\uc5d0 \ubc1b\uc544 \uc5d4\uc9c4\uc5d0 \ub2e4\uc2dc \ub123\ub294\ub2e4 \u2014 \uae30\uae30\ub294 \ud55c \ubc88\ub9cc \ubb3b\uace0 \uc644\uc131\ub41c \ud654\uba74\uc744 \ubc1b\ub294\ub2e4.
+//   \u00b7 \uc815\ub958\uc7a5 \ubaa9\ub85d(tp\u00b7gg\u00b7tn\u00b7d1)\uc740 0.001\u00b0 \uce78\ub9c8\ub2e4 \uc5e3\uc9c0 \uce90\uc2dc\uc5d0 12\uc2dc\uac04 \ub454\ub2e4(\uc870\ud68c \uc88c\ud45c\uac00 \uce78 \uac00\uc6b4\ub370\ub77c \uac19\uc740 \uce78\uc774\uba74 \ubc14\ub85c \ub9de\ub294\ub2e4). \ub3c4\ucc29\uc815\ubcf4\ub294 \uce90\uc2dc\ud558\uc9c0 \uc54a\ub294\ub2e4.
+//   \u00b7 \ubc1b\uc740 \ubcf8\ubb38\uc740 info.bres({ \uc5f4\uc1e0: \ubcf8\ubb38 }) \ub85c \ud568\uaed8 \ub3cc\ub824\uc900\ub2e4(\uae30\uae30\uac00 \ub2e4\uc74c \uac31\uc2e0\u00b7\uc990\uaca8\ucc3e\uae30\uc5d0 \uadf8\ub300\ub85c \uc4f4\ub2e4). \ubc1b\uc9c0 \ubabb\ud55c \ub3c4\ucc29\uc815\ubcf4 \uc218\ub294 info.svf.
+//   \u00b7 \ubc14\uc778\ub529\uc774 \uc5c6\uac70\ub098 \ubabb \ubc1b\uc73c\uba74 \uadf8\ub0e5 need \uac00 \ub0a8\uc740 \ud654\uba74\uc744 \ub3cc\ub824\uc900\ub2e4 \u2014 \uae30\uae30\uac00 \uc608\uc804 \ubc29\uc2dd(\uc9c1\uc811 \ubc1b\uc544 \ub2e4\uc2dc \ubb3b\uae30)\uc73c\ub85c \uc774\uc5b4 \uac04\ub2e4.
+var MAPSV_HOSTS = /^https?:\/\/(apis\.data\.go\.kr|ws\.bus\.go\.kr)\//;
+var MAPSV_D1 = /^https:\/\/gentle-lab-7e47subway-api\.phg0643\.workers\.dev(\/bus-stops\?[A-Za-z0-9=&._-]{1,80})$/;
+function mapSvOkBody(k, t) {                              // \uce90\uc2dc\uc5d0 \ub458 \ub9cc\ud55c \uc815\uc0c1 \ubcf8\ubb38\uc778\uac00(\uc815\ub958\uc7a5 \ubaa9\ub85d\ub9cc)
+  if (typeof t !== 'string' || t.length < 40) return false;
+  if (k === 'tp') return t.indexOf('<itemList>') >= 0 && !/Key\uc778\uc99d\uc2e4\ud328|SERVICE\s*KEY\s*IS\s*NOT\s*REGISTERED/i.test(t) && !/<headerCd>\s*[1-9]/.test(t);
+  if (k === 'gg') return t.indexOf('busStationAroundList') >= 0;
+  if (k === 'tn') { try { var o = JSON.parse(t); var it = o.response.body.items; return !!(it && it.item); } catch (e) { return false; } }
+  if (k === 'd1') return t.indexOf('"stops":[{') >= 0 || t.indexOf('"stops": [{') >= 0;
+  return false;
+}
+function mapSvViaBinding(env, url) {                       // \u2192 Promise<Response> \ub610\ub294 null(\ud5c8\uc6a9\ud558\uc9c0 \uc54a\ub294 \uc8fc\uc18c \u00b7 \ubc14\uc778\ub529 \uc5c6\uc74c)
+  if (!env || !env.BUSAPI || typeof env.BUSAPI.fetch !== 'function') return null;
+  var u = String(url || ''), m;
+  if (u.length > 700) return null;
+  if (MAPSV_HOSTS.test(u)) return env.BUSAPI.fetch(new Request('https://busapi.internal/tago?url=' + encodeURIComponent(u)));
+  if ((m = MAPSV_D1.exec(u))) return env.BUSAPI.fetch(new Request('https://busapi.internal' + m[1]));
+  return null;
+}
+async function mapSvOne(env, k, url) {                     // \u2192 \ubcf8\ubb38 \uae00(\uc2e4\ud328\ub294 '')
+  var cacheable = k === 'tp' || k === 'gg' || k === 'tn' || k === 'd1', cache = null, ck = null;
+  if (cacheable) {
+    try {
+      if (typeof caches !== 'undefined' && caches.default) {
+        cache = caches.default; ck = new Request('https://map-sv-cache.internal/s?k=' + k + '&u=' + encodeURIComponent(url));
+        var hit = await cache.match(ck);
+        if (hit) { var ht = await hit.text(); if (mapSvOkBody(k, ht)) return ht; }
+      }
+    } catch (e0) { cache = null; }
+  }
+  for (var a = 0; a < 2; a++) {
+    var t0 = Date.now(), body = '';
+    try {
+      var p = mapSvViaBinding(env, url);
+      if (!p) return '';
+      var res = await Promise.race([p, new Promise(function (_, rej) { setTimeout(function () { rej(new Error('timeout')); }, a === 0 ? 3500 : 2500); })]);
+      if (res && res.status === 200) body = await res.text();
+    } catch (e1) { body = ''; }
+    if (body) {
+      if (cache && ck && mapSvOkBody(k, body)) { try { await cache.put(ck, new Response(body, { headers: { 'Cache-Control': 'public, max-age=43200', 'Content-Type': 'text/plain; charset=utf-8' } })); } catch (e2) { /* \uce90\uc2dc \uc2e4\ud328\ub294 \ubb34\uc2dc */ } }
+      return body;
+    }
+    if (Date.now() - t0 > 1500) break;                      // \ub290\ub9b0 \uc11c\ubc84\uc5d0 \ub610 \ub9e4\ub2ec\ub9ac\uc9c0 \uc54a\ub294\ub2e4(\ube68\ub9ac \uc2e4\ud328\ud588\uc744 \ub54c\ub9cc \ud55c \ubc88 \ub354)
+  }
+  return '';
+}
+async function mapSvResolve(env, cap, body, out) {          // need \ub97c \uc11c\ubc84\uac00 \ubc1b\uc544 \ucc44\uc6b4\ub2e4(\ucd5c\ub300 3\ubc14\ud034: \uc815\ub958\uc7a5 \u2192 \ub3c4\ucc29\uc815\ubcf4 \u2026)
+  var f = body.f, b = f.bus, res = (b.res && typeof b.res === 'object') ? b.res : (b.res = {}), got = {}, failA = 0, anyEver = false, round, ib;
+  for (round = 0; round < 3; round++) {
+    ib = out && out.info && out.info.bus;
+    if (!ib || ib.st !== 'need' || !Array.isArray(ib.need) || !ib.need.length) break;
+    var need = ib.need.slice(0, 60);
+    var texts = await Promise.all(need.map(function (n) { return mapSvOne(env, String(n.k || ''), String(n.url || '')); }));
+    var any = false;
+    failA = 0;
+    need.forEach(function (n, i) {
+      var k = String(n.k || ''), t = texts[i] || '';
+      if (t) any = true; else if (/^[af][0-9]{1,3}$/.test(k)) failA++;
+      res[k] = t; got[k] = t.length > 120000 ? t.slice(0, 120000) : t;
+    });
+    if (any) anyEver = true;
+    if (!any) break;                                        // \uc544\ubb34\uac83\ub3c4 \ubabb \ubc1b\uc558\ub2e4 \u2014 \uadf8\ub300\ub85c \ub3cc\ub824\uc918 \uae30\uae30\uac00 \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \uc774\uc5b4 \uac00\uac8c
+    out = mapScreen({ cap: cap }, f, body.d);
+    if (!out || !out.ok) return out;
+  }
+  if (anyEver && out && out.info) { out.info.bres = got; out.info.svf = failA; }
+  return out;
+}
+async function handleScreenMap(request, env) {
   var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Cache-Control": "no-store" };
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: H });
   if (request.method !== "POST") return new Response(JSON.stringify({ ok: false, error: "post-only" }), { status: 405, headers: H });
@@ -20260,9 +20341,16 @@ async function handleScreenMap(request) {
   var body;
   try { body = JSON.parse(raw); } catch (e) { return new Response(JSON.stringify({ ok: false, error: "bad-json" }), { status: 400, headers: H }); }
   if (!body || typeof body !== "object") return new Response(JSON.stringify({ ok: false, error: "bad-body" }), { status: 400, headers: H });
-  var out;
-  try { out = mapScreen({ cap: Number(body.cap) || 0 }, body.f, body.d); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2).slice(0, 120) }), { status: 500, headers: H }); }
+  var out, cap = Number(body.cap) || 0;
+  try { out = mapScreen({ cap: cap }, body.f, body.d); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2).slice(0, 120) }), { status: 500, headers: H }); }
   if (!out || !out.ok) return new Response(JSON.stringify(out || { ok: false, error: "fail" }), { status: 400, headers: H });
+  try {
+    var bf = body.f && body.f.bus;
+    if (cap >= 23 && bf && bf.sv === 1 && out.info && out.info.bus && out.info.bus.st === 'need') {
+      var o2 = await mapSvResolve(env, cap, body, out);
+      if (o2 && o2.ok) out = o2;
+    }
+  } catch (e3) { /* \uc11c\ubc84\uac00 \ubabb \ubc1b\uc73c\uba74 need \uac00 \ub0a8\uc740 \uccab \ud654\uba74 \uadf8\ub300\ub85c \u2014 \uae30\uae30\uac00 \uc774\uc5b4 \uac04\ub2e4 */ }
   out.ver = ENGINE_VERSION;
   return new Response(JSON.stringify(out), { headers: H });
 }
@@ -21537,7 +21625,7 @@ async function handleFetch(request, env, ctx) {
   if (url.pathname === "/screen/dlg") return handleScreenDlg(request);
   if (url.pathname === "/screen/pvl") return handleScreenPvl(request);
   if (url.pathname === "/pos-fuse") return handlePosFuse(request);
-  if (url.pathname === "/screen/map") return handleScreenMap(request);
+  if (url.pathname === "/screen/map") return handleScreenMap(request, env);
   if (url.pathname === "/screen/fav") return handleScreenFav(request);
   if (url.pathname === "/screen/hcards") return handleScreenHcards(request);
   if (url.pathname === "/ride/start") return handleRideStart(request);
