@@ -52,24 +52,35 @@ async function mapSvOne(env, k, url) {                     // → 본문 글(실
   }
   return '';
 }
-async function mapSvResolve(env, cap, body, out) {          // need 를 서버가 받아 채운다(최대 3바퀴: 정류장 → 도착정보 …)
+var MAPSV_ARR_MS = 2200, MAPSV_ARR_MIN = 300, MAPSV_ARR_MAX = 3500;                                   // 도착정보는 이 시간 안에 온 것만 싣는다 — 늦거나 못 받은 정류장은 비워 두어(= need 로 남겨) 기기가 직접 받게 한다
+async function mapSvResolve(env, cap, body, out) {
+  var svb = Number(body.f && body.f.bus && body.f.bus.svb), budget = isFinite(svb) && svb > 0 ? Math.max(MAPSV_ARR_MIN, Math.min(MAPSV_ARR_MAX, Math.floor(svb))) : MAPSV_ARR_MS;       // 기기가 정한 기다림(처음 그리기는 짧게 — 정류장부터 먼저 보이고 도착정보는 이어서 채운다)          // need 를 서버가 받아 채운다(최대 3바퀴: 정류장 → 도착정보 …)
   var f = body.f, b = f.bus, res = (b.res && typeof b.res === 'object') ? b.res : (b.res = {}), got = {}, failA = 0, anyEver = false, round, ib;
   for (round = 0; round < 3; round++) {
     ib = out && out.info && out.info.bus;
     if (!ib || ib.st !== 'need' || !Array.isArray(ib.need) || !ib.need.length) break;
     var need = ib.need.slice(0, 60);
-    var texts = await Promise.all(need.map(function (n) { return mapSvOne(env, String(n.k || ''), String(n.url || '')); }));
+    var arrWave = need.every(function (n) { return /^[af][0-9]{1,3}$/.test(String(n.k || '')); });
+    var slot = new Array(need.length);
+    var ps = need.map(function (n, i) { return mapSvOne(env, String(n.k || ''), String(n.url || '')).then(function (t) { slot[i] = t; return t; }); });
+    if (arrWave) await Promise.race([Promise.all(ps), new Promise(function (r) { setTimeout(r, budget); })]);
+    else await Promise.all(ps);
     var any = false;
     failA = 0;
     need.forEach(function (n, i) {
-      var k = String(n.k || ''), t = texts[i] || '';
-      if (t) any = true; else if (/^[af][0-9]{1,3}$/.test(k)) failA++;
+      var k = String(n.k || ''), t = slot[i] || '';
+      if (arrWave) {                                          // 도착정보: 받은 것만 넣고, 못 받았거나 늦은 곳은 아예 두지 않는다 → 엔진이 다시 need 로 알려 기기가 받는다('도착정보 없음'으로 굳지 않는다)
+        if (t) { any = true; res[k] = t; got[k] = t.length > 120000 ? t.slice(0, 120000) : t; } else failA++;
+        return;
+      }
+      if (t) any = true;
       res[k] = t; got[k] = t.length > 120000 ? t.slice(0, 120000) : t;
     });
     if (any) anyEver = true;
-    if (!any) break;                                        // 아무것도 못 받았다 — 그대로 돌려줘 기기가 예전 방식으로 이어 가게
+    if (!any) break;                                        // 아무것도 못 받았다 — 그대로 돌려줘 기기가 예전 방식으로 이어 간다
     out = mapScreen({ cap: cap }, f, body.d);
     if (!out || !out.ok) return out;
+    if (arrWave) break;                                     // 도착정보는 한 번만(못 받은 곳은 기기가 이어 받는다)
   }
   if (anyEver && out && out.info) { out.info.bres = got; out.info.svf = failA; }
   return out;
