@@ -51,6 +51,20 @@ final class LocFused {
     }
     private static boolean moved(Location a, Location b, double deg) { return a == null || Math.abs(a.getLatitude() - b.getLatitude()) > deg || Math.abs(a.getLongitude() - b.getLongitude()) > deg; }
 
+    /** 기기가 방금(maxAgeMs 안에) 알던 위치 — Play 서비스가 합쳐 둔 값을 비동기로 즉시. 없으면 아무것도 부르지 않는다(첫 화면을 위치 대기 없이 그리는 용도 — 오래된 위치는 쓰지 않는다). */
+    @SuppressWarnings("MissingPermission")
+    void lastKnown(final long maxAgeMs, final Cb cb) {
+        FusedLocationProviderClient fc = fused();
+        if (fc == null) return;
+        try {
+            fc.getLastLocation().addOnSuccessListener(new OnSuccessListener<Location>() { @Override public void onSuccess(Location l) {
+                if (l == null) return;
+                long ageMs = (android.os.SystemClock.elapsedRealtimeNanos() - l.getElapsedRealtimeNanos()) / 1000000L;
+                if (ageMs < 0L || ageMs > maxAgeMs || (l.hasAccuracy() && l.getAccuracy() > 500f)) return;
+                cb.fix(l);
+            } });
+        } catch (Throwable t) { fusedBroken = true; }
+    }
     /** 현재 위치 한 번. 권한은 부르는 쪽이 이미 확인했다. */
     @SuppressWarnings("MissingPermission")
     void current(final long fastMs, final long totalMs, final Cb cb) {
