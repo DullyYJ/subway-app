@@ -684,6 +684,18 @@ public class ShellJvmTest {
         MapCore mc = new MapCore(ms);
         ok("bus".equals(mc.mode()) && "seoul".equals(mc.reg()) && "ALL".equals(mc.flt()), "지도 처음엔 버스 · 수도권 · 전체");
         ok(mc.cat("m:subway") == MapCore.R_RENDER && "subway".equals(mc.mode()) && mc.cat("r:busan") == MapCore.R_RENDER && "busan".equals(mc.reg()) && "ALL".equals(mc.flt()), "안쪽 탭 · 지역 고르기(호선 필터는 초기화)");
+        {   // 버스 도착정보: 한 정류장 응답이 잠깐 비어 와도 보던 줄을 지키고(45초), 값이 있으면 새 값으로 바꾼다
+            MapCore bm = new MapCore(new ShellCore.MemStore());
+            String good = "{\"response\":{\"body\":{\"items\":{\"item\":[{\"routeno\":\"991\",\"arrtime\":589,\"arrprevstationcnt\":8}]}}}}", empty = "{\"response\":{\"header\":{\"resultCode\":\"00\"},\"body\":{\"items\":\"\",\"totalCount\":0}}}", fresh = good.replace("589", "120");
+            bm.addBusRes("a0", good); bm.addBusRes("a1", good);
+            bm.dropArrivals();
+            bm.addBusRes("a0", empty); bm.addBusRes("a1", fresh);
+            ok(good.equals(bm.busRes.get("a0")) && fresh.equals(bm.busRes.get("a1")), "도착정보: 빈 응답은 보던 줄을 지키고 새 값은 바꾼다");
+            ok(MapCore.hasArr(good) && !MapCore.hasArr(empty) && !MapCore.hasArr(null), "도착정보 판별");
+            MapCore bn = new MapCore(new ShellCore.MemStore());
+            bn.addBusRes("a0", empty); bn.dropArrivals(); bn.addBusRes("a0", empty);
+            ok(empty.equals(bn.busRes.get("a0")), "처음부터 비어 있던 정류장은 그대로 비어 있다");
+        }
         mc.cat("r:seoul"); ok(mc.cat("f:2호선") == MapCore.R_RENDER && "2호선".equals(mc.flt()) && mc.cat("zz") == MapCore.R_NONE, "호선 필터");
         String mh = mc.headRequest(18, "dark", "부평");
         ok(mh.contains("\"part\":\"h\"") && mh.contains("\"mode\":\"subway\"") && mh.contains("\"flt\":\"2호선\"") && mh.contains("\"th\":\"dark\"") && mh.contains("\"q\":\"부평\"") && !mh.contains("\"gps\""), "머리 요청 본문");
