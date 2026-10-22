@@ -47,6 +47,8 @@ jobs:
           - ride_eta.test.js
           - ride_standby.test.js
           - ride_track.test.js
+          - ride_local.test.js
+          - map_server_fetch.test.js
           - route_follow.test.js
           - route_view.test.js
           - store_sync.test.js
