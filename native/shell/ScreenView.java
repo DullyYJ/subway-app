@@ -965,16 +965,20 @@ public class ScreenView extends View {
         long now = SystemClock.uptimeMillis();
         markCountdowns(now);
         boolean any = false;
+        int order = 0;                                                      // 이번에 처음 나온 카드의 차례(뼈대 위에 첫 정류장부터 아래로 하나씩 스프링으로 내려앉는다)
         for (ScreenCore.Item it : lay.body) {
             if (it.kind != ScreenCore.K_BCARD) continue;
-            if (!any) { any = true; if (!seenMode.equals(it.value)) { seenCards.clear(); seenRows.clear(); seenMode = it.value; } }
-            if (seenCards.add(it.key)) it.ln = now;
+            if (!any) { any = true; if (!seenMode.equals(it.value)) { seenCards.clear(); seenRows.clear(); cardLn.clear(); rowLn.clear(); seenMode = it.value; } }
+            long rowBase = now;
+            if (seenCards.add(it.key)) { it.ln = now + CARD_STAGGER_MS * Math.min(order, 8); order++; rowBase = it.ln + 140L; cardLn.put(it.key, it.ln); }
+            else { Long c0 = cardLn.get(it.key); if (c0 != null) { if (now - c0 < 1200L) it.ln = c0; else cardLn.remove(it.key); } }          // 내려앉는 도중에 화면이 다시 와도(도착정보가 하나씩 채워질 때) 멈추지 않고 이어서
             for (int i = 0; i < it.rt.length; i++) {
                 String rk = it.key + "|" + it.sa[i * 6] + "|" + it.sa[i * 6 + 1];
-                if (seenRows.add(rk)) it.rt[i] = now + 55L * i;
+                if (seenRows.add(rk)) { it.rt[i] = rowBase + 55L * i; rowLn.put(rk, it.rt[i]); }
+                else { Long r0 = rowLn.get(rk); if (r0 != null) { if (now - r0 < 1200L) it.rt[i] = r0; else rowLn.remove(rk); } }
             }
         }
-        if (!any) { seenCards.clear(); seenRows.clear(); seenMode = ""; }
+        if (!any) { seenCards.clear(); seenRows.clear(); cardLn.clear(); rowLn.clear(); seenMode = ""; }
     }
 
     // ───────────── 노선 상세(웹 .brs-*) ─────────────
@@ -1129,9 +1133,9 @@ public class ScreenView extends View {
     private void drawBcard(Canvas cv, ScreenCore.Item it) {
         long now = SystemClock.uptimeMillis();
         float a = 1f, dy = 0f;
-        if (it.ln > 0L) {                                                    // 카드 등장: 아래에서 10dp 올라오며 나타남 .26초
-            float f = (now - it.ln) / 260f;
-            if (f < 1f) { a = ease(Math.max(0f, f)); dy = 10f * (1f - a); bcAnim = true; }
+        if (it.ln > 0L) {                                                    // 카드 등장: 위에서 18dp 스프링으로 내려앉으며(살짝 지나쳤다 되돌아) 나타남 .56초 — 첫 정류장부터 차례로
+            float f = (now - it.ln) / CARD_SPRING_MS;
+            if (f < 1f) { a = f <= 0f ? 0f : Math.min(1f, f * 3.2f); dy = f <= 0f ? -18f : -18f * (1f - spring(f)); bcAnim = true; }
         }
         boolean layer = a < 1f;
         if (layer) cv.saveLayerAlpha(it.x - 4f, it.y - 4f + dy, it.x + it.w + 4f, it.y + it.h + 4f + dy, Math.round(255f * a));
@@ -1228,7 +1232,9 @@ public class ScreenView extends View {
         if (layer) cv.restore();
     }
     private final Path bcClip = new Path();
-    private static final float ROW_SPRING_MS = 520f;
+    private static final float ROW_SPRING_MS = 520f, CARD_SPRING_MS = 560f;
+    private static final long CARD_STAGGER_MS = 90L;
+    private final java.util.HashMap<String, Long> cardLn = new java.util.HashMap<String, Long>(), rowLn = new java.util.HashMap<String, Long>();
     /** 감쇠 스프링 0 → 1(중간에 약 15% 지나쳤다가 되돌아와 1 에 닿는다). f = 0..1 */
     private static float spring(float f) { return 1f - (float) (Math.exp(-6.0 * f) * Math.cos(10.0 * f)); }
     /** 벨 아이콘(웹 .map-bus-bell: 22px, 보조색, 투명도 .55). 24x24 칸의 경로를 22px 로 줄여 그린다. */
