@@ -165,7 +165,7 @@ function findAndroidJar() {
     const br = v.slice(v.indexOf('private static final long BR_POLL_MS'), v.indexOf('private void closeSheet()'));
     assert.ok(/BR_POLL_MS = 8000L/.test(br) && /BR_CACHE_MS = 7L \* 24L/.test(br) && /brc_/.test(br), '8초 · 정류장 7일 보관');
     assert.ok(/private boolean brShowing\(\) \{ return resumed && brAlive/.test(br) && /if \(!brShowing\(\)\) return;/.test(br), '앞에 있을 때만 돈다(없으면 다시 걸지 않는다)');
-    assert.ok(/private void closeSheet\(\) \{ detLoading = null; brStop\(\);/.test(v) && /private void brStop\(\) \{ main\.removeCallbacks\(brTick\)/.test(br) && /onPause\(\) \{ resumed = false; trackStop\(\); if \(vec != null\) vec\.onPause\(\); main\.removeCallbacks\(brTick\)/.test(v) && /brResume\(\); if \(ShellCore\.S_SETPG/.test(v), '닫기·뒤로가기·onPause 에서 즉시 멈추고 onResume 에서만 다시');
+    assert.ok(/private void closeSheet\(\) \{ if \(mapView != null\) mapView\.setCover\(0f\); detLoading = null; brStop\(\);/.test(v) && /private void brStop\(\) \{ main\.removeCallbacks\(brTick\)/.test(br) && /onPause\(\) \{ resumed = false; trackStop\(\); if \(vec != null\) vec\.onPause\(\); main\.removeCallbacks\(brTick\)/.test(v) && /brResume\(\); if \(ShellCore\.S_SETPG/.test(v), '닫기·뒤로가기·onPause 에서 즉시 멈추고 onResume 에서만 다시');
     assert.ok(/poll && got\.length\(\) == 0\) \{ if \(brFlight\.isEmpty\(\)\) brBusy = false; return; \}/.test(br) && /txt\.length\(\) == 0\) \{ if \(my == brReq/.test(br), '갱신 실패는 버리고 보던 화면을 둔다');
     assert.ok(/for \(String\[\] nd : need\) if \(brFlight\.add\(nd\[0\]\)\) brFetchOne\(/.test(br) && /brFlight\.remove\(k\);[\s\S]*?brRound\(gen, poll\)/.test(br), '주소마다 따로 받아 오는 대로 바로 다시 그린다(목록이 위치를 기다리지 않는다)');
     assert.ok(/brPrefetch\(\)/.test(v) && /routeClone\(0, ri\)/.test(v) && /nd\[0\]\.endsWith\("s"\)/.test(v), '도착정보가 뜬 가까운 정류장의 앞 노선은 목록을 미리 받아 둔다(위치는 열 때 새로)');
@@ -325,6 +325,14 @@ function findAndroidJar() {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), d = a.slice(a.indexOf('private android.view.View stnSheetBox('), a.indexOf('private void mapSheetAct('));
     assert.ok(/onInterceptTouchEvent/.test(d) && /10f \* dpr/.test(d) && /Math\.abs\(dy\) > Math\.abs\(dx\) \* 1\.2f/.test(d) && /openTimetable\(curH,/.test(d) && /setTranslationY\(Math\.max\(0f, d\)\)/.test(d), '위/아래 끌기 규칙(10dp · 1.2배) + 손가락을 따라가기(창 높이 · 창 이동)');
     assert.ok(/ShellCore\.S_MAPSTN\.equals\(sheetName\)/.test(d) && /fired = true/.test(d) && /return false;/.test(d), '역 팝업일 때만 · 한 번만 · 평소엔 가로채지 않는다');
+  });
+  await t('시간표를 내리면 역 팝업이 되돌아옴 · 지도는 시트가 덮은 만큼을 빼고 역을 맞춤(s155)', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), m = fs.readFileSync(N('MetroMapView.java'), 'utf8');
+    const b = a.slice(a.indexOf('private void backToStation('), a.indexOf('private void animSheetH('));
+    assert.ok(/stnCache\.get\(json\)/.test(b) && /cached == null[\s\S]*openMapSheet\(S_STN_H\)/.test(b) && /map\.ttSeq\+\+/.test(b) && /sheetName = ShellCore\.S_MAPSTN/.test(b) && /setLayout\(ViewGroup\.LayoutParams\.MATCH_PARENT, from\)/.test(b) && /alpha\(0f\)\.setDuration\(200L\)/.test(b), '캐시된 역 화면으로 되돌아오고 없으면 새로 연다');
+    assert.ok(/tt && \(ty >= 56f \* dpr[\s\S]*backToStation\(dv/.test(a), '시간표를 놓을 때 내려갔으면 역 팝업으로');
+    assert.ok(/public void setCover\(float px\)/.test(m) && /cam\.viewH - cover - m/.test(m) && /\(cam\.viewH - cover\) \/ 2f/.test(m), '지도: 덮인 높이를 뺀 영역에 역을 맞춘다');
+    assert.ok(/mapView\.setCover\(hpx\)/.test(a) && /mapView\.setCover\(to\)/.test(a) && /mapView\.setCover\(0f\)/.test(a), '열 때 · 시간표로 커질 때 · 닫을 때 덮개 높이');
   });
   await t('앱 크기(s138): 64비트 한 가지 · 한국어·영어만 · 릴리스에서 라이브러리 코드 줄이기 · 실패하면 디버그로 대신', () => {
     const g = fs.readFileSync(path.join(ROOT, 'shell-android', 'app', 'build.gradle'), 'utf8');
