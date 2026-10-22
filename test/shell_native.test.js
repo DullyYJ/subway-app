@@ -148,7 +148,7 @@ function findAndroidJar() {
     const v = fs.readFileSync(N('ShellActivity.java'), 'utf8');
     const mc = fs.readFileSync(N('MapCore.java'), 'utf8');
     const bt = v.slice(v.indexOf('private boolean busShowing'), v.indexOf('private void startBusTick'));
-    assert.ok(/BUS_POLL_MS = 8000L/.test(v) && /postDelayed\(busTick, BUS_POLL_MS\)/.test(v), '8초 간격');
+    assert.ok(/BUS_POLL_MS = 60000L/.test(v) && /postDelayed\(busTick, BUS_POLL_MS\)/.test(v), '1분 간격(그 사이 초는 기기에서 줄어든다)');
     assert.ok(/resumed/.test(bt) && /currentTab\(store\)/.test(bt) && /S_MAPB/.test(bt) && /dropArrivals\(\)/.test(bt) && /loadMapBodyRound\(/.test(bt), '보일 때만 · 도착정보만 비우고 다시 묻는다');
     // 끊겨도 화면을 멈추거나 에러를 띄우지 않는다: 실패한 갱신은 버리고(옛 값을 섞지 않음) 카운트다운이 이어진다 · 느린 통신이 다음 박자에 끊기지 않는다
     assert.ok(/txt\.length\(\) == 0 && busRefreshing\) \{ busFail\(\); return; \}/.test(v) && /if \(bad\) \{ busFail\(\); return; \}/.test(v) && /private void busFail\(\) \{ map\.restoreArrivals\(\); busEnd\(\); \}/.test(v), '갱신 실패는 조용히 버리고 보던 도착정보를 되돌려 놓는다(비어서 "도착정보 없음"이 되지 않는다)');
@@ -209,7 +209,7 @@ function findAndroidJar() {
     assert.ok(/private void homeAct\([^)]*\) \{\s*deb\.cancel\("homeq"\)/.test(v), '후보를 고르면 기다리던 입력 갱신은 취소');
     assert.ok(/deb\.trailing\("favq", Debounce\.TYPE_MS/.test(v) && /deb\.trailing\("cmq", Debounce\.TYPE_MS/.test(v), '즐겨찾기 · 설정 검색 입력도 디바운스');
     const ts = v.slice(v.indexOf('private void trackStart()'), v.indexOf('private void trackStop()'));
-    assert.ok(/deb\.trailing\("busloc", Debounce\.TYPE_MS/.test(ts) && /map\.setBusLoc\(la, lo\); loadMapBody\(body, true\)/.test(ts), '위치가 연달아 와도 멈춘 뒤 한 번만 새 자리의 정류장');
+    assert.ok(/deb\.trailing\("busloc", Debounce\.TYPE_MS/.test(ts) && /busMove\(la, lo\);/.test(ts), '위치가 연달아 와도 멈춘 뒤 한 번만 새 자리의 정류장(보던 화면은 두고 뒤에서 받아 한 번에 바꿔 끼운다)');
     assert.ok(/which == 2 && !deb\.gate\("tab:"/.test(v) && /deb\.gate\("retry"/.test(v) && /deb\.gate\("gps", 1200L\)/.test(v) && /deb\.gate\("route", 800L\)/.test(v), '탭 · 다시 시도 · 내 위치 · 경로 검색 버튼 연타 막기');
     assert.ok(v.indexOf('requestPermissions(new String[] { android.Manifest.permission.ACCESS_FINE_LOCATION', v.indexOf('private void startGps()')) < v.indexOf('deb.gate("gps"'), '내 위치: 권한을 받는 순간은 막지 않는다(권한 뒤에 연타를 센다)');
     const gr = v.slice(v.indexOf('private void goRoute()'), v.indexOf('/** \'예상\'으로 남은 버스 구간'));
@@ -403,6 +403,18 @@ function findAndroidJar() {
     assert.ok(/private void closeSheet\(\) \{[^\n]*playView\.end\(\)/.test(a), '시트가 닫히면 놀이터도 끝');
     assert.ok(/new PlayView\(this, dpr\)/.test(a), '역 팝업 박스에 얹는다');
     assert.ok(/public float\[\] playAnchor\(int kind\)/.test(sv), 'ScreenView 가 칸 자리를 알려 준다');
+  });
+  await t('s159: 버스 정보 몰래 갱신(busMove) · 1분 폴링 · 지도 vh 높이 · 이름 한 줄 · 칩 즉시 강조', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), sc = fs.readFileSync(N('ScreenCore.java'), 'utf8'), mc = fs.readFileSync(N('MapCore.java'), 'utf8');
+    const bm = a.slice(a.indexOf('private void busMove('), a.indexOf('private void busMove(') + 6000);
+    assert.ok(/busShowing\(\)/.test(bm) && /stopCount\(\) > 0/.test(bm) && /new Thread\(/.test(bm) && /map\.addBusRes\(/.test(bm) && /present\(body, txt, true\)/.test(bm), '비우지 않고 뒤 스레드에서 받아 한 번에 바꿔 끼운다');
+    assert.ok(/busMove\(ll\[0\], ll\[1\]\)/.test(a) && /busMove\(la, lo\);/.test(a), '위치가 바뀌면 busMove');
+    assert.ok(/BUS_POLL_MS = 60000L/.test(a), '1분에 한 번');
+    assert.ok(/public String stopSig\(\)/.test(mc), '정류장 구성 서명');
+    assert.ok(/hv = optNum\(m, "hv"/.test(sc) && /winH \* n\.hv \/ 100f/.test(sc) && /public static volatile float winH/.test(sc), '지도 높이는 창 높이 vh');
+    assert.ok(/ScreenCore\.winH = /.test(sv), 'ScreenView 가 창 높이를 알려 준다');
+    assert.ok(/pickRtab\(/.test(sv), '경로 방식 칩은 누르는 즉시 강조');
+    assert.ok(/nameBot = TRK_NAME_H - c\.ipB/.test(sc) && /ellipsize\(c\.name\.replace/.test(sc), '타임라인 이름은 한 줄');
   });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
   process.exit(fail ? 1 : 0);
