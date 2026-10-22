@@ -282,6 +282,13 @@ function findAndroidJar() {
     assert.ok(/private boolean busReturnQuiet\(\)/.test(v) && /keep && !keep0 && busReturnQuiet\(\)/.test(v) && /map\.speculativeNeed\(\)\.isEmpty\(\)/.test(v), '버스 탭 복귀: 정류장 · 엔진 왕복 없이 도착정보만');
     assert.ok(/private static float spring\(float f\)/.test(sv) && /ROW_SPRING_MS/.test(sv) && /spring\(f\)/.test(sv), '새 버스 줄 스프링');
   });
+  await t('역 시트·맛집·전환(s152): 시트는 내용이 찬 채 올라옴 · 위로 쓸면 시간표/아래로 쓸면 닫힘(시간표 맨 위 포함) · 맛집 원자료는 병렬·서버 먼저 · 전환 곡선', async () => {
+    const v = fs.readFileSync(N('ShellActivity.java'), 'utf8');
+    assert.ok(/stnCache\.get\(json\)/.test(v) && /private void stnCachePut/.test(v) && /main\.postDelayed\(startSlide, 450L\)/.test(v), '역 시트: 본 역은 먼저 채우고, 처음 보는 역은 내용이 올 때까지 잠깐 기다렸다 올린다');
+    assert.ok(/ShellCore\.S_MAPTT\.equals\(sheetName\) && top0 && vert && dy > 36f \* dpr/.test(v) && /Math\.abs\(dy\) > 28f \* dpr/.test(v), '시간표 맨 위에서 아래로 쓸면 닫힘 · 한 번 쓸면 시간표');
+    assert.ok(/private void foodStage\(/.test(v) && /if \(food\.ctr != null && food\.needData\(\)\) fetchFoodData\(my, v\);/.test(v) && /FoodCore\.parseData\(res\[0\]\.body, new ArrayList<String>\(\)\)/.test(v), '맛집: 중심을 알면 엔진 왕복과 동시에 · 서버 가게 먼저 그린 뒤 공공데이터까지');
+    assert.ok(/PathInterpolator\(0\.32f, 0\.72f, 0f, 1f\)/.test(v) && /ValueAnimator\.ofInt\(from, to\)/.test(v), '아이폰 곡선 · 시간표 시트가 자란다');
+  });
   await t('순수 네이티브 프로젝트: 소스는 native/shell 뿐 · 매니페스트에 ShellActivity 가 런처 · 웹뷰/Capacitor 흔적 없음', async () => {
     const g = fs.readFileSync(path.join(ROOT, 'shell-android', 'app', 'build.gradle'), 'utf8');
     assert.ok(/srcDirs = \['\.\.\/\.\.\/native\/shell'\]/.test(g), '소스 경로');
